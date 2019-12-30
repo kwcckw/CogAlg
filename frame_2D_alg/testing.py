@@ -4,11 +4,12 @@ Change quickly in parallel with development.
 Currently testing: intra_blob.form_P__
 """
 
-import frame_blobs_ternary
+import frame_blobs
+import numpy as np
 
 from utils import imread, draw
-from intra_comp_ts import comp_i
-from intra_blob_draft import form_P__, scan_P__
+from comp_param import comp_i
+from intra_blob import form_P__, scan_P__
 
 # -----------------------------------------------------------------------------
 # Adjustable parameters
@@ -28,7 +29,7 @@ if __name__ == "__main__":
     print('Done!')
 
     print('Doing first comp...')
-    frame = frame_blobs_ternary.image_to_blobs(image)
+    frame = frame_blobs.image_to_blobs(image)
     print('Done!')
 
     print('Extracting best blob...')
@@ -57,7 +58,7 @@ if __name__ == "__main__":
     Cderts
     -------
     Compute gradient of 2D input array.
-    See frame_2D_alg/frame_blobs_ternary.py for more information.
+    See frame_2D_alg/frame_blobs.py for more information.
     """
 
     import operator as op
@@ -65,7 +66,7 @@ if __name__ == "__main__":
     import numpy as np
     import numpy.ma as ma
 
-    from intra_comp_ts import (
+    from comp_param import (
         Y_COEFFS, X_COEFFS,
         central_slice,
         rim_mask,

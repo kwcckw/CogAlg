@@ -3,9 +3,9 @@ from collections import deque, defaultdict
 from itertools import groupby, starmap
 import numpy as np
 import numpy.ma as ma
-from intra_comp_ts import comp_param
+from comp_param import comp_param
 from utils import pairwise, flatten
-
+from functools import reduce
 '''
     2D version of 1st-level algorithm is a combination of frame_blobs, intra_blob, and comp_P: optional raster-to-vector conversion.
     intra_blob recursively evaluates for extended internal cross-comp and divisive sub-clustering within each blob.
@@ -30,7 +30,7 @@ from utils import pairwise, flatten
     box,  # boundary box: y0, yn, x0, xn; selective map, box in lower Layers
     dert__, # comp_v inputs
        
-    stack_[ stack_params, Py_ [(P_params, dert_)]],
+    segment_[ seg_params, Py_ [(P_params, dert_)]],
     # references down blob formation tree in vertical (horizontal) order, accumulating Dert params
     
     fork_ # refs down sub_blob derivation trees, 1|2: g,m sub_blob_s / intensity layer | g sub_blob_ / angle layer
@@ -38,6 +38,7 @@ from utils import pairwise, flatten
          layer_ [(Dert, sub_blob_)]  # alternating g (even) | a (odd) layers across derivation tree
         ]
         # deeper layers are mixed-fork with nested sub_blob_, Dert params are for layer-parallel comp_blob
+
 
     Angle is a direction of gradient, its predictive value is proportional to the magnitude of gradient.
     Thus, angle computation is selective to high-gradient blobs: angle blobs layer is below gradient blobs layer. 
@@ -84,20 +85,21 @@ Current filters are represented in forks if tree reorder, else redefined at each
 # -----------------------------------------------------------------------------------------------------------------------
 # functions, ALL WORK-IN-PROGRESS:
 
-def intra_fork(blob, rng, newI, fig):  # recursive version of frame_blobs
+def intra_fork(blob, AveF, AveC, AveB, Ave, rng, nI, fig, fa):  # a recursive version of frame_blobs
 
-    dert__ = comp_param(blob['dert__'], newI, rng)  # dert = i, g, dy, dx -> cos comp_g, no pre-select by ga: res loss
+    dert__ = comp_param(blob['dert__'], nI, rng)  # dert = i, g, dy, dx, ?(idy, idx, m, ?(a, ga, day, dax)):
+    # fork' new input nI: index of comparand in dert: 0 if r+, 1 if g+, (4,5) if a+, 7 if ra+, 8 if ga+
 
-    if newI in (0, 1): crit = 1  #  r+ or g+ fork: primary clustering by g
+    if nI in (0, 1): crit = 1  #  r+ or g+ fork: primary clustering by g
     else: crit = 8       # a+ or ra+ fork: primary clustering by ga
-    sub_blob_, AveB = cluster(blob, crit, fig)
+    sub_blob_, AveB = cluster(blob, AveB, Ave, crit, fig, fa)
 
     for sub_blob in sub_blob_:  # evaluate der+ and rng+ sub-clustering forks, rng is incremented in cluster_eval
         I, G, M = op.itemgetter('I', 'G', 'M')(sub_blob['Dert'])
 
         if G > AveB + AveC:  # +G > clustering cost (variable cluster size) + eval cost (fixed layer rep)
 
-            if fig and newI == 0: # rdn sub-clustering by g and m, eval comp_a|g per g_sub_blob, comp_i per m_sub_blob
+            if fig and nI == 0: # rdn sub-clustering by g and m, eval comp_a|g per g_sub_blob, comp_i per m_sub_blob
                                 # r+ comp_g eval by 0+6, not ra+ | ga+: fig = 0;   or g+ only, low m value?
                 if G > M + I:
                     cluster_eval(sub_blob, AveF, AveC, AveB, Ave, rng, 1, fig, ~fa)  # g+ prior, redundant r+ eval:
@@ -604,11 +606,7 @@ def feedback(blob, fork=None):  # Add each Dert param to corresponding param of 
         blob['Dert'] = 'G'=0, 'Gg'=0, 'Dy'=0, 'Dx'=0, 'L'=0, 'Ly'=0
         dert___[:] = dert___[:][:], 0, 0, 0, 0  # g -> (g, gg, m, dy, dx)
 
-    kwidth = 3  # kernel width, if starting with 2
+    kwidth = 3   # kernel width, if starting with 2
     if kwidth != 2:  # ave is an opportunity cost per comp:
     ave *= (kwidth ** 2 - 1) / 2  # ave *= ncomp_per_kernel / 2 (base ave is for ncomp = 2 in 2x2)
-    
-    no 1x1 comp_a: segment per input vs. comparand
-    separate comp_a, comp_g in comp_P: known oriented, low value per kernel: not dir selective?
-    ?(idy, idx, m, ?(a, ga, day, dax)); newI: index in dert: 0 if r+, 1 if g+, (4,5) if a+, 7 if ra+, 8 if ga+
 '''
