@@ -6,15 +6,16 @@ Currently testing: intra_blob.form_P__
 
 import frame_blobs
 
-from utils import imread, draw
+from utils import imread
+#from utils import imread, draw
 from intra_comp import comp_i
 from intra_blob import form_P__, scan_P__
 
 # -----------------------------------------------------------------------------
 # Adjustable parameters
 
-image_path = "../images/raccoon_eye.jpg"
-output_path = "../visualization/images/2D_alg_test_out"
+image_path = "./images/raccoon_eye.jpg"
+output_path = "./visualization/images/2D_alg_test_out"
 
 # -----------------------------------------------------------------------------
 # Adjustable parameters
