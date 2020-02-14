@@ -1,79 +1,30 @@
 from time import time
 from collections import deque, defaultdict
 import numpy as np
+import cv2
 from comp_pixel import comp_pixel
-from utils import *
+from f_p import form_P_
 
-'''
-    2D version of first-level core algorithm will have frame_blobs, intra_blob (recursive search within blobs), and comp_P.
-    frame_blobs() forms parameterized blobs: contiguous areas of positive or negative deviation of gradient per pixel.    
-
-    comp_pixel (lateral, vertical, diagonal) forms dert, queued in dert__: tuples of pixel + derivatives, over whole image. 
-    Then pixel-level and external parameters are accumulated in row segment Ps, vertical blob segment, and blobs,
-    adding a level of encoding per row y, defined relative to y of current input row, with top-down scan:
-
-    1Le, line y-1: form_P( dert_) -> 1D pattern P: contiguous row segment, a slice of a blob
-    2Le, line y-2: scan_P_(P, hP) -> hP, up_fork_, down_fork_count: vertical connections per stack of Ps 
-    3Le, line y-3: form_stack(hP, stack) -> stack: merge vertically-connected _Ps into non-forking stacks of Ps
-    4Le, line y-4+ stack depth: form_blob(stack, blob): merge connected stacks in blobs referred by up_fork_, recursively
-
-    Higher-row elements include additional parameters, derived while they were lower-row elements. Processing is bottom-up:
-    from input-row to higher-row structures, sequential because blobs are irregular, not suited for matrix operations.
-    Resulting blob structure (fixed set of parameters per blob): 
-
-    - root_fork = frame,  # replaced by blob-level fork in sub_blobs
-    - Dert = dict(I, G, Dy, Dx, S, Ly), # summed pixel dert params (I, G, Dy, Dx), surface area S, vertical depth Ly
-    - sign = s,  # sign of gradient deviation
-    - box  = [y0, yn, x0, xn], 
-    - map, # inverted mask
-    - dert__,  # 2D array of pixel-level derts: (p, g, dy, dx) tuples
-    - stack_,  # contains intermediate blob composition structures: stacks and Ps, not meaningful on their own
-    ( intra_blob structure extends Dert, adds crit, rng, fork_)
-
-    Blob is 2D pattern: connectivity cluster defined by the sign of gradient deviation. Gradient represents 2D variation
-    per pixel. It is used as inverse measure of partial match (predictive value) because direct match (min intensity) 
-    is not meaningful in vision. Intensity of reflected light doesn't correlate with predictive value of observed object: 
-    some physical density, hardness, inertia that represent resistance to change in positional parameters.  
-
-    This is clustering by connectivity because distance between clustered pixels should not exceed cross-comparison range.
-    That range is fixed for each layer of search, to enable encoding of input pose parameters: coordinates, dimensions, 
-    orientation. These params are essential because value of prediction = precision of what * precision of where. 
-
-    frame_blobs is a complex function with a simple purpose: to sum pixel-level params in blob-level params. These params 
-    were derived by pixel cross-comparison (cross-correlation) to represent predictive value per pixel, so they are also
-    predictive on a blob level, and should be cross-compared between blobs on the next level of search and composition.
-
-    Please see diagrams of frame_blobs on https://kwcckw.github.io/CogAlg/
-'''
 # Adjustable parameters:
 
 kwidth = 3  # smallest input-centered kernel: frame | blob shrink by 2 pixels per row
-ave_2x2 = 12  # filters or hyper-parameter, set as a guess, latter adjusted by feedback
-ave_3x3 = 20
+ave = 50  # filter or hyper-parameter, set as a guess, latter adjusted by feedback
 
 # ----------------------------------------------------------------------------------------------------------------------------------------
 # Functions
-
 # prefix '_' denotes higher-line variable or structure, vs. same-type lower-line variable or structure
 # postfix '_' denotes array name, vs. same-name elements of that array
 
-def image_to_blobs(image):
-    gdert__, rdert__ = comp_pixel(image)  # 2x2 and 3x3 cross-comparison / cross-correlation
-    gblob_ = cluster_derts(gdert__, ave_2x2)
-    rblob_ = cluster_derts(rdert__, ave_3x3)
+def image_to_blobs(image):  # root function, postfix '_' denotes array, prefix '_' denotes higher- vs lower-line variable
 
-    return gblob_, rblob_
-
-
-def cluster_derts(dert__, ave):  # root function, segments frame into same-sign blobs
-
+    dert__ = comp_pixel(image)  # comparison of central pixel to rim pixels in 3x3 kernel
     frame = dict(rng=1, dert__=dert__, mask=None, I=0, G=0, Dy=0, Dx=0, blob_=[])
-    stack_ = deque()  # buffer of running vertical stacks of Ps
-    height, width = dert__.shape[1:]
+    stack_ = deque()  # buffer of running stacks of Ps
+    height, width = image.shape
 
-    for y in range(height):  # first and last row are discarded
-        P_ = form_P_(dert__[:, y].T, ave)      # horizontal clustering
-        P_ = scan_P_(P_, stack_, frame)   # vertical clustering, adds up_forks per P and down_fork_cnt per stack
+    for y in range(height - kwidth + 1):  # first and last row are discarded
+        P_ = deque(form_P_(dert__[:, y].T))  # horizontal clustering
+        P_ = scan_P_(P_, stack_, frame)  # vertical clustering, adds up_forks per P and down_fork_cnt per stack
         stack_ = form_stack_(y, P_, frame)
 
     while stack_:  # frame ends, last-line stacks are merged into their blobs:
@@ -91,36 +42,6 @@ Parameterized connectivity clustering functions below:
 dert is a tuple of derivatives per pixel, initially (p, dy, dx, g), will be extended in intra_blob
 Dert is params of a composite structure (P, stack, blob): summed dert params + dimensions: vertical Ly and area S
 '''
-
-def form_P_(dert_, ave):  # horizontal clustering and summation of dert params into P params, per row of a frame
-    # P is a segment of same-sign derts in horizontal slice of a blob
-
-    P_ = deque()  # row of Ps
-    I, G, Dy, Dx, L, x0 = *dert_[0], 1, 0  # initialize P params with 1st dert params
-    G -= ave
-    _s = G > 0  # sign
-
-    for x, (p, g, dy, dx) in enumerate(dert_[1:], start=1):
-        vg = g - ave
-        s = vg > 0
-        if s != _s:
-            # terminate and pack P:
-            P = dict(I=I, G=G, Dy=Dy, Dx=Dx, L=L, x0=x0, dert_=dert_[x0:x0 + L], sign=_s)
-            P_.append(P)
-            # initialize new P:
-            I, G, Dy, Dx, L, x0 = 0, 0, 0, 0, 0, x
-        # accumulate P params:
-        I += p
-        G += vg  # M += m only within negative vg blobs
-        Dy += dy
-        Dx += dx
-        L += 1
-        _s = s  # prior sign
-
-    P = dict(I=I, G=G, Dy=Dy, Dx=Dx, L=L, x0=x0, dert_=dert_[x0:x0 + L], sign=_s)
-    P_.append(P)  # terminate last P in a row
-    return P_
-
 
 def scan_P_(P_, stack_, frame):  # merge P into higher-row stack of Ps which have same sign and overlap by x_coordinate
     '''
@@ -301,42 +222,16 @@ if __name__ == '__main__':
     argument_parser = argparse.ArgumentParser()
     argument_parser.add_argument('-i', '--image', help='path to image file', default='./images//raccoon.jpg')
     arguments = vars(argument_parser.parse_args())
-    image = imread(arguments['image'])
+    image = cv2.imread(arguments['image'], 0).astype(int)
 
     start_time = time()
-    gblob_, rblob_ = image_to_blobs(image)
-    '''
-    from intra_blob import cluster_eval, intra_fork, cluster, aveF, aveC, aveB, etc.
-    frame_of_deep_blobs = {  # initialize frame_of_deep_blobs
-        'blob_': [],
-        'params': {  # Initial Derts are summed between rblobs and gblobs?
-            'I': rblob_['I'] + gblob['I'],
-            'G': rblob_['G'] + gblob['G'],
-            'Dy': rblob_['Dy'] + gblob['Dy'],
-            'Dx': rblob_['Dx'] + gblob['Dx'],
-            # deeper params are initialized when they are fetched
-        },
-    }
-    # evaluate each blob per intra_fork: rng+ per 3x3 blob and der+ per 2x2 blob:
-    
-    for gblob in gblob_['blob_']: # 2x2 gblobs
-        if gblob['Dert']['G'] > aveB:  # +G blob, dert = g, 0, 0, 0
-            gg_blob_ = intra_blob(gblob, rdn+1, rng=1, fig=1, fder=1)  # der_comp(g) -> cosine gg
-            # project missing d: = diametrically opposed d * .5?
-        frame_of_deep_blobs['blob_'].append(blob)
-        frame_of_deep_blobs['params'][1:] += blob['params'][1:]  # incorrect, for selected blob params only?
-    
-    for rblob in gblob_['blob_']: # 3x3 rblobs
-        if -rblob['Dert']['G'] > aveB: # -G blob, dert = dert
-            rg_blob_ = intra_blob(rblob, rdn+1, rng+1, fig, fder=0)  # rng_comp(i)
-            # also calls parallel cluster_eval(rng+) and cluster_eval(der+)?
-        frame_of_deep_blobs['blob_'].append(blob)
-        frame_of_deep_blobs['params'][1:] += blob['params'][1:]
-    '''
-    end_time = time() - start_time
-    print(end_time)
+    frame_of_blobs = image_to_blobs(image)
 
     # DEBUG -------------------------------------------------------------------
-    imwrite("./images/gblobs.bmp", map_frame(gblob_))
-    imwrite("./images/rblobs.bmp", map_frame(rblob_))
+    from utils import map_frame
+
+    cv2.imwrite("./images/blobs.bmp", map_frame(frame_of_blobs))
     # END DEBUG ---------------------------------------------------------------
+
+    end_time = time() - start_time
+    print(end_time)
