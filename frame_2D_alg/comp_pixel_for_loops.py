@@ -15,7 +15,7 @@ kwidth = 2: co-centered, grid shift, 1-pixel row shrink, no deriv overlap, 1/4 c
 kwidth = 2: quadrant g = ((dx + dy) * .705 + d_diag) / 2, no i res decrement, ders co-location, + orthogonal quadrant for full rep?
 '''
 # Constants:
-MAX_G = 255  # 721.2489168102785 without normalization.
+MAX_G = 255  # 721.2489168102785 without normalization
 
 G_NORMALIZER_3x3 = 255.9 / (255 * 2 ** 0.5 * 2)
 G_NORMALIZER_2x2 = 255.9 / (255 * 2 ** 0.5)
