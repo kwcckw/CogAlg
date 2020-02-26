@@ -64,9 +64,9 @@ def image_to_blobs(image):  # root function, segments frame into blobs of same t
     stack_ = deque()  # buffer of running vertical stacks of Ps
     height, width = gdert__.shape[1:]
 
-    for y in range(height):  # first and last row are discarded
+    for y in range(height-1):  # first and last row are discarded
         print(f'Processing line {y}...')
-        P_ = form_P_(gdert__[:, y].T, rdert__[:, y].T)  # horizontal clustering,
+        P_ = form_P_(gdert__[:, y+1].T, rdert__[:, y].T)  # horizontal clustering,
         # or rdert__[-1:, y-1].T, for 2x2 gdert in lower-right?
         P_ = scan_P_(P_, stack_, frame)   # vertical clustering, adds up_forks per P and down_fork_cnt per stack
         stack_ = form_stack_(y, P_, frame)
@@ -91,19 +91,31 @@ def form_P_(gdert_, rdert_):  # horizontal clustering and summation of dert para
     # P is a segment of same-sign derts in horizontal slice of a blob
 
     P_ = deque()  # row of Ps
+    
+    # initialization of 2x2 kernel
     p, g, dy, dx = gdert_[0]  # 2x2 kernels
+    vg = g - ave_2x2
+    if vg > 0:   # sign check for 2x2 kernels:
+        s = 0; I, G, Dy, Dx, L, x0 = *gdert_[0], 1, 0  # initialize P params with 1st dert 2x2 params
+    else:
+        s = 2; I, G, Dy, Dx, L, x0 = *gdert_[0], 1, 0  # initialize P params with 1st dert 2x2 params
+    # initialize first P of 2x2 kernel
+    P = dict(I=I, G=G, Dy=Dy, Dx=Dx, L=L, x0=x0, dert_=gdert_[x0:x0 + L], sign=s)
+    P_.append(P)    
+
+    p, g, dy, dx = gdert_[1]  # 2x2 kernels
     p3, g3, dy3, dx3 = rdert_[0]  # 3x3 kernels
     g -= ave_2x2
     g3 = ave_3x3 - g3  # initial 3x3 match is inverse deviation of g3
     if g > 0:   # ternary sign:
-        _s = 0; I, G, Dy, Dx, L, x0 = *gdert_[0], 1, 0  # initialize P params with 1st dert 2x2 params
+        _s = 0; I, G, Dy, Dx, L, x0 = *gdert_[1], 1, 0  # initialize P params with 1st dert 2x2 params
     elif g3 > 0: # and gdert_[1][1] <= 0 and gdert__[1, 0][1] <= 0 and gdert__[1, 1][1] <= 0: four 2x2 gs per 3x3 g
         _s = 1; I, G, Dy, Dx, L, x0 = *rdert_[0], 1, 0  # initialize P params with 1st dert 3x3 params
     else:
-        _s = 2; I, G, Dy, Dx, L, x0 = *gdert_[0], 1, 0  # initialize P params with 1st dert 2x2 params
+        _s = 2; I, G, Dy, Dx, L, x0 = *gdert_[1], 1, 0  # initialize P params with 1st dert 2x2 params
 
-    for x, (p, g, dy, dx) in enumerate(gdert_[1:], start=1):
-        p3, g3, dy3, dx3 = rdert_[x]
+    for x, (p, g, dy, dx) in enumerate(gdert_[2:], start=2):
+        p3, g3, dy3, dx3 = rdert_[x-1]
         # rdert_ is shifted at [y-1, x-1] in line 70, for gdert in lower-right quadrant?
         # or use zip(gdert_[1:], start=1), rdert_[1:], start=1)?
         vg = g - ave_2x2  # gdert_[x][1] = vg?
@@ -361,3 +373,6 @@ if __name__ == '__main__':
                           2: GREY,   # 2x2 nblobs
                       }))
     # END DEBUG ---------------------------------------------------------------
+    
+    
+    #    P = dict(I=I, G=G, Dy=Dy, Dx=Dx, L=L, x0=x0, dert_=gdert_[x0:x0 + L], sign=_s)
