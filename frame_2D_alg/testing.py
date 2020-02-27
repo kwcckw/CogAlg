@@ -4,7 +4,7 @@ Change quickly in parallel with development.
 Currently testing: intra_blob.form_P__
 """
 
-import frame_blobs
+import frame_blobs_ternary
 
 from utils import imread
 #from utils import imread, draw
@@ -29,7 +29,7 @@ if __name__ == "__main__":
     print('Done!')
 
     print('Doing first comp...')
-    frame = frame_blobs.image_to_blobs(image)
+    frame = frame_blobs_ternary.image_to_blobs(image)
     print('Done!')
 
     print('Extracting best blob...')
@@ -58,7 +58,7 @@ if __name__ == "__main__":
     Cderts
     -------
     Compute gradient of 2D input array.
-    See frame_2D_alg/frame_blobs.py for more information.
+    See frame_2D_alg/frame_blobs_ternary.py for more information.
     """
 
     import operator as op
