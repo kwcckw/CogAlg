@@ -4,17 +4,17 @@ Change quickly in parallel with development.
 Currently testing: intra_blob.form_P__
 """
 
-import frame_blobs
+import frame_blobs_ternary
 
 from utils import imread
 #from utils import imread, draw
-from intra_comp import comp_i
-from intra_blob import form_P__, scan_P__
+from intra_comp import comp_a
+from intra_blob_draft import form_P__, scan_P__
 
 # -----------------------------------------------------------------------------
 # Adjustable parameters
 
-image_path = "./images/raccoon_eye.jpg"
+image_path = "./images/raccoon.jpg"
 output_path = "./visualization/images/2D_alg_test_out"
 
 # -----------------------------------------------------------------------------
@@ -29,7 +29,7 @@ if __name__ == "__main__":
     print('Done!')
 
     print('Doing first comp...')
-    frame = frame_blobs.image_to_blobs(image)
+    frame = frame_blobs_ternary.image_to_blobs(image)
     print('Done!')
 
     print('Extracting best blob...')
@@ -38,7 +38,8 @@ if __name__ == "__main__":
     print('Done!')
 
     print('Doing angle comp on best blob...')
-    derts = comp_i(best_blob['dert__'], 1, fa=1)
+#    derts = comp_a(best_blob['dert__'], 1, fa=1)
+    derts = comp_a(best_blob['dert__'])
     print('Done!')
 
     print('Outputting derts...')
@@ -58,7 +59,7 @@ if __name__ == "__main__":
     Cderts
     -------
     Compute gradient of 2D input array.
-    See frame_2D_alg/frame_blobs.py for more information.
+    See frame_2D_alg/frame_blobs_ternary.py for more information.
     """
 
     import operator as op
