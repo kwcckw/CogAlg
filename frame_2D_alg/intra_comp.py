@@ -157,7 +157,7 @@ def comp_a(dert__, inp):
     else:
         raise ValueError("'inp' should contain the index/indices "
                          "for g, dy, dx in that order.")
-    return comp_angle(a__)
+    return comp_angle(a__,inp)
 
 
 def calc_a(dert__, inp):
@@ -173,8 +173,11 @@ def calc_aga(dert__, inp):
     return np.stack((day__, dax__)) / g__
 
 
-def comp_angle(a__):
+def comp_angle(a__,inp):
     """Compare angles."""
+
+    # compute rng based on inp
+    rng = 0 if len(inp) == 3 else 1
 
     # handle mask
     if isinstance(a__, ma.masked_array):
