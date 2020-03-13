@@ -79,9 +79,9 @@ X_COEFFS = [
 # -----------------------------------------------------------------------------
 # Functions
 
-def comp_g(dert__, rng, inp):
-    g__ = dert__[inp[0]]
-    a__ = dert__[inp[1:]]
+def comp_g(dert__, odd):
+    g__ = dert__[0]
+    a__ = dert__[1:]
 
     # loop through each pair of comparands in a kernel
     dgy__ = ma.zeros(np.subtract(g.shape, rng))
@@ -99,14 +99,14 @@ def comp_g(dert__, rng, inp):
         dgx__ += dg__ * x_coeff
         dgy__ += dg__ * y_coeff
 
-    gg__ = ma.hypot()
+    gg__ = ma.hypot(dgy__, dgx__)
 
-    return ma.stack((g__, gg_, dgy__, dgx__))
+    return ma.stack((g__, gg__, dgy__, dgx__))
 
 
-def comp_r(dert__, rng, inp):
+def comp_r(dert__, fig):
 
-    g__, dy__, dx__ = dert__[inp]
+    i__, g__, dy__, dx__ = dert__[:]
     dy__ = dy__[:, rng:-rng, rng:-rng]
     dx__ = dx__[:, rng:-rng, rng:-rng]
 
@@ -118,12 +118,12 @@ def comp_r(dert__, rng, inp):
     dx__ += (d__ * X_COEFFS[rng]).sum(axis=-1)
 
     # compute gradient magnitudes
-    g__ = ma.hypot(dy, dx)
+    g__ = ma.hypot(dy__, dx__)
 
     return ma.stack((i__, g__, dy__, dx__))
 
 
-def comp_a(dert__, rng, inp):
+def comp_a(dert__, inp):
     """
     Compare angles within specified rng.
     Parameters
@@ -153,11 +153,11 @@ def comp_a(dert__, rng, inp):
     if len(inp) == 3:
         a__ = calc_a(dert__, inp)
     elif len(inp) == 5:
-        a__ = calc_aa(dert__, inp)
+        a__ = calc_aga(dert__, inp)
     else:
         raise ValueError("'inp' should contain the index/indices "
                          "for g, dy, dx in that order.")
-    return comp_angle(a__, rng)
+    return comp_angle(a__,inp)
 
 
 def calc_a(dert__, inp):
@@ -165,16 +165,19 @@ def calc_a(dert__, inp):
     return dert__[inp[1:]] / dert__[inp[0]]
 
 
-def calc_aa(dert__, inp):
-    """Compute angles of angles of gradient."""
+def calc_aga(dert__, inp):
+    """Compute angles of angle gradients."""
     g__ = dert__[inp[1]]
     day__ = np.arctan2(*dert__[inp[1:3]])
     dax__ = np.arctan2(*dert__[inp[3:]])
     return np.stack((day__, dax__)) / g__
 
 
-def comp_angle(a__, rng):
+def comp_angle(a__,inp):
     """Compare angles."""
+
+    # compute rng based on inp
+    rng = 0 if len(inp) == 3 else 1
 
     # handle mask
     if isinstance(a__, ma.masked_array):
@@ -223,11 +226,11 @@ def translated_operation(a, rng, operator):
         to each pair of translated slice.
     """
 
-    
+
     # get centered pixels for 2x2 and 3x3 based on rng
     a__ = a[:,1:-1,1:-1] if rng != 0 \
     else (a[:,:-1,:-1]+a[:,:-1,1:]+a[:,1:,1:]+a[:,1:,:-1]) /4
-    
+
     # compute angle difference
     out = ma.masked_array([operator(a__, a[ts]) for ts in
                            TRANSLATING_SLICES_[rng]])

@@ -270,4 +270,4 @@ def test_calc_a(
 if __name__ == "__main__":
     pass
     # Put tests here
-    print(comp_a(gderts[2], rng=0, inp=(1, 2, 3)))
+    print(comp_a(gderts[2], inp=(1, 2, 3)))
