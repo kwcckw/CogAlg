@@ -7,6 +7,18 @@ import numpy.ma as ma
 
 # -----------------------------------------------------------------------------
 # Constants
+
+
+Y_COEFFS = [
+    np.array([-1, -1, 1, 1]),
+    np.array([-0.5, -0.5, -0.5,  0. ,  0.5,  0.5,  0.5,  0. ]),
+]
+
+X_COEFFS = [
+    np.array([-1, 1, 1, -1]),
+    np.array([-0.5,  0. ,  0.5,  0.5,  0.5,  0. , -0.5, -0.5]),
+]
+
 # -----------------------------------------------------------------------------
 # Functions
 
@@ -107,7 +119,98 @@ def comp_a(dert__, fga, fc3):
     >>> comp_a(dert__, fga, fc3)
     'specific output'
     """
-    pass
+        
+    # input is rdert (ir, gr, dry, drx, mr)
+    if fc3:
+        gr,dry,drx = dert__[1:4,:]
+        a__ = [dry,drx]/gr
+        a__ = a__[:,::2,::2]  # skip odd angle`
+        
+    # input is gdert (g, gg, gdy, gdx, gm, iga, iday, idax)
+    elif fga:
+        gg,gdy,gdx = dert__[1:4,:]
+        a__ = [gdy,gdx]/gg
+        
+#    # input is dert (i, g, dy, dx, m)
+#    elif fig:
+#        g,dy,dx = dert__[1:4,:]
+#        a__ = [gdy,gdx]/gg
+      
+    # input is adert (ga, day, dax)
+    else :
+        ga,day,dax = dert__[0:3,:]
+        a__ = [day,dax]/ga
+    
+    if isinstance(a__, ma.masked_array):
+        a__.data[a__.mask] = np.nan
+        a__.mask = ma.nomask
+      
+    # input is rdert,rng = 1
+    if fc3:
+        
+        # each shifted a
+        a__topleft      = a__[:,:-2,:-2]
+        a__top          = a__[:,:-2,1:-1]
+        a__topright     = a__[:,:-2,2:]
+        a__right        = a__[:,1:-1,2:]
+        a__bottomright  = a__[:,2:,2:]
+        a__bottom       = a__[:,2:,1:-1]
+        a__bottomleft   = a__[:,2:,:-2]
+        a__left         = a__[:,1:-1,:-2]
+        
+        # central of a
+        a__= a__[:,1:-1,1:-1]
+        
+        # get angle difference of each direction
+        da__ = np.stack((angle_diff(a__,a__topleft),
+                         angle_diff(a__,a__top),
+                         angle_diff(a__,a__topright),
+                         angle_diff(a__,a__right),
+                         angle_diff(a__,a__bottomright),
+                         angle_diff(a__,a__bottom),
+                         angle_diff(a__,a__bottomleft),
+                         angle_diff(a__,a__left)));
+        
+        da__ = np.rollaxis(da__,0,4)               
+           
+        # compute day and dax              
+        day__ = (da__ * Y_COEFFS[1]).sum(axis=-1)
+        dax__ = (da__ * X_COEFFS[1]).sum(axis=-1)
+        
+        # compute gradient magnitudes (how fast angles are changing)
+        ga__ = np.hypot(np.arctan2(*day__), np.arctan2(*dax__))
+        
+    # input is dert, gdert or adert,rng = 0
+    else:
+        
+        # each shifted a
+        a__topleft = a__[:,:-1,:-1]
+        a__topright = a__[:,:-1,1:]
+        a__bottomright = a__[:,1:,1:]
+        a__bottomleft = a__[:,1:,:-1]
+        
+        # central of a
+        a__ = (a__topleft + a__topright + a__bottomright + a__bottomleft)/4
+        
+        # get angle difference of each direction
+        da__ = np.stack((angle_diff(a__,a__topleft),
+                         angle_diff(a__,a__topright),
+                         angle_diff(a__,a__bottomright),
+                         angle_diff(a__,a__bottomleft)))
+            
+        da__ = np.rollaxis(da__,0,4)    
+            
+        # compute day and dax
+        day__ = (da__ * Y_COEFFS[0]).sum(axis=-1)
+        dax__ = (da__ * X_COEFFS[0]).sum(axis=-1)
+        
+        # compute gradient magnitudes (how fast angles are changing)
+        ga__ = np.hypot(np.arctan2(*day__), np.arctan2(*dax__))
+
+
+    adert = ma.stack((ga__,*day__,*dax__))
+
+    return adert
 
 
 def calc_a(dert__):
@@ -178,3 +281,14 @@ def angle_diff(a2, a1):
 
 # ----------------------------------------------------------------------
 # -----------------------------------------------------------------------------
+    
+    
+#from test_sets import (
+#comp_pixel_test_pairs,
+#calc_a_test_pairs,
+#pixels, rderts, gderts, angles)
+#
+#dert__ = gderts[2]
+#fga = 0
+#fc3 = 0
+#comp_a(dert__, fga, fc3)
