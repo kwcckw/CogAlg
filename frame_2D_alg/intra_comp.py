@@ -89,18 +89,73 @@ def comp_r(dert__, fig):
     - Results are accumulated in the input dert.
     - Comparand is dert[0].
     """
-    pass
+    
+    # input is gdert (g,  gg, gdy, gdx, gm, iga, iday, idax)
+    if fig:
+        g__, gg__, gdy__, gdx__,gm = dert__[0:5,:]
+          
+        # get sparsed value
+        rg__   = g__[1::2,1::2]
+        rgg__  = gg__[1::2,1::2]
+        rgdy__ = gdy__[1::2,1::2]
+        rgdx__ = gdx__[1::2,1::2]
+        rgm__ = gm__[1::2,1::2]
+        
+        # how to compute range g? 
+        # get range gg, gdy and gdx?
+        
+        
+    # input is dert  (i,  g,  dy,  dx,  m)  or
+    # input is rdert (ir, gr, dry, drx, mr)
+    else:
+        
+        i__, g__, dy__, dx__, m__ = dert__[0:5,:]
+    
+        # get sparsed value
+        ri__   = i__[1::2,1::2]
+        rg__   = g__[1::2,1::2]
+        rdy__  = dy__[1::2,1::2]
+        rdx__  = dx__[1::2,1::2]
+        rm__   = m__[1::2,1::2]
+        
+        
+        # each shifted ri in 2x2 kernel
+        ri__topleft = ri__[:-1,:-1]
+        ri__topright = ri__[:-1,1:]
+        ri__bottomright = ri__[1:,1:]
+        ri__bottomleft = ri__[1:,:-1]
+        
+         # central of ri
+        ri__ = (ri__topleft + ri__topright + ri__bottomright + ri__bottomleft)/4
+        
+        # get range difference of pixels for each direction
+        dri__ = np.stack((ri__ - ri__topleft,
+                          ri__ - ri__topright,
+                          ri__ - ri__bottomright,
+                          ri__ - ri__bottomleft))
+    
+        dri__ = np.rollaxis(dri__,0,3)   
+    
+        # compute dry and drx
+        dry__ = (dri__ * Y_COEFFS[0]).sum(axis=-1)
+        drx__ = (dri__ * X_COEFFS[0]).sum(axis=-1)
+        
+        # compute gradient magnitudes
+        drg__ = ma.hypot(dry__, drx__)
+    
+        # how to compute mr?
+        rdert = ma.stack((dri__, drg__, dry__, drx__))
+
+    return rdert
 
 
-def comp_a(dert__, fga, fc3):
+def comp_a(dert__, fga):
     """
     cross-comp of a or aga, in 2x2 kernels unless root fork is comp_r: fc3=True.
     Parameters
     ----------
     dert__ : array-like
         dert's structure depends on fga
-    fc3 : bool
-        Is True if root fork is comp_r.
     fga : bool
         If True, dert's structure is interpreted as:
         (g, gg, gdy, gdx, gm, iga, iday, idax)
@@ -120,92 +175,46 @@ def comp_a(dert__, fga, fc3):
     'specific output'
     """
         
-    # input is rdert (ir, gr, dry, drx, mr)
-    if fc3:
-        gr,dry,drx = dert__[1:4,:]
-        a__ = [dry,drx]/gr
-        a__ = a__[:,::2,::2]  # skip odd angle`
         
-    # input is gdert (g, gg, gdy, gdx, gm, iga, iday, idax)
-    elif fga:
-        gg,gdy,gdx = dert__[1:4,:]
-        a__ = [gdy,gdx]/gg
-        
-#    # input is dert (i, g, dy, dx, m)
-#    elif fig:
-#        g,dy,dx = dert__[1:4,:]
-#        a__ = [gdy,gdx]/gg
+    # input is gdert (g,  gg, gdy, gdx, gm, iga, iday, idax) or
+    # input is rdert (ir, gr, dry, drx, mr) or
+    # input is dert  (i,  g,  dy,  dx,  m)
+    if fga:
+        g__,dy__,dx__ = dert__[1:4,:]
+        a__ = [dy__,dx__]/g__ # similar with calc_a
       
     # input is adert (ga, day, dax)
     else :
-        ga,day,dax = dert__[0:3,:]
-        a__ = [day,dax]/ga
+        ga__,day__,dax__ = dert__[0:3,:]
+        a__ = [day__,dax__]/ga__ # similar with calc_a
     
     if isinstance(a__, ma.masked_array):
         a__.data[a__.mask] = np.nan
         a__.mask = ma.nomask
-      
-    # input is rdert,rng = 1
-    if fc3:
+  
+    # each shifted a in 2x2 kernel
+    a__topleft = a__[:,:-1,:-1]
+    a__topright = a__[:,:-1,1:]
+    a__bottomright = a__[:,1:,1:]
+    a__bottomleft = a__[:,1:,:-1]
+    
+    # central of a
+    a__ = (a__topleft + a__topright + a__bottomright + a__bottomleft)/4
+    
+    # get angle difference of each direction
+    da__ = np.stack((angle_diff(a__,a__topleft),
+                     angle_diff(a__,a__topright),
+                     angle_diff(a__,a__bottomright),
+                     angle_diff(a__,a__bottomleft)))
         
-        # each shifted a
-        a__topleft      = a__[:,:-2,:-2]
-        a__top          = a__[:,:-2,1:-1]
-        a__topright     = a__[:,:-2,2:]
-        a__right        = a__[:,1:-1,2:]
-        a__bottomright  = a__[:,2:,2:]
-        a__bottom       = a__[:,2:,1:-1]
-        a__bottomleft   = a__[:,2:,:-2]
-        a__left         = a__[:,1:-1,:-2]
+    da__ = np.rollaxis(da__,0,4)    
         
-        # central of a
-        a__= a__[:,1:-1,1:-1]
-        
-        # get angle difference of each direction
-        da__ = np.stack((angle_diff(a__,a__topleft),
-                         angle_diff(a__,a__top),
-                         angle_diff(a__,a__topright),
-                         angle_diff(a__,a__right),
-                         angle_diff(a__,a__bottomright),
-                         angle_diff(a__,a__bottom),
-                         angle_diff(a__,a__bottomleft),
-                         angle_diff(a__,a__left)));
-        
-        da__ = np.rollaxis(da__,0,4)               
-           
-        # compute day and dax              
-        day__ = (da__ * Y_COEFFS[1]).sum(axis=-1)
-        dax__ = (da__ * X_COEFFS[1]).sum(axis=-1)
-        
-        # compute gradient magnitudes (how fast angles are changing)
-        ga__ = np.hypot(np.arctan2(*day__), np.arctan2(*dax__))
-        
-    # input is dert, gdert or adert,rng = 0
-    else:
-        
-        # each shifted a
-        a__topleft = a__[:,:-1,:-1]
-        a__topright = a__[:,:-1,1:]
-        a__bottomright = a__[:,1:,1:]
-        a__bottomleft = a__[:,1:,:-1]
-        
-        # central of a
-        a__ = (a__topleft + a__topright + a__bottomright + a__bottomleft)/4
-        
-        # get angle difference of each direction
-        da__ = np.stack((angle_diff(a__,a__topleft),
-                         angle_diff(a__,a__topright),
-                         angle_diff(a__,a__bottomright),
-                         angle_diff(a__,a__bottomleft)))
-            
-        da__ = np.rollaxis(da__,0,4)    
-            
-        # compute day and dax
-        day__ = (da__ * Y_COEFFS[0]).sum(axis=-1)
-        dax__ = (da__ * X_COEFFS[0]).sum(axis=-1)
-        
-        # compute gradient magnitudes (how fast angles are changing)
-        ga__ = np.hypot(np.arctan2(*day__), np.arctan2(*dax__))
+    # compute day and dax
+    day__ = (da__ * Y_COEFFS[0]).sum(axis=-1)
+    dax__ = (da__ * X_COEFFS[0]).sum(axis=-1)
+    
+    # compute gradient magnitudes (how fast angles are changing)
+    ga__ = np.hypot(np.arctan2(*day__), np.arctan2(*dax__))
 
 
     adert = ma.stack((ga__,*day__,*dax__))
@@ -289,6 +298,11 @@ def angle_diff(a2, a1):
 #pixels, rderts, gderts, angles)
 #
 #dert__ = gderts[2]
-#fga = 0
-#fc3 = 0
-#comp_a(dert__, fga, fc3)
+#
+#fga = 1
+#fig = 0
+#
+#adert = comp_a(dert__, fga)
+#
+#dert__ = np.repeat(dert__,2,axis=0)
+#rdert = comp_r(dert__, fig)
