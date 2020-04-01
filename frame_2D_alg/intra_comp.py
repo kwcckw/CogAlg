@@ -28,25 +28,33 @@ def comp_g(dert__, odd):
     input dert = (i, g, dy, dx, ga, day, dax, da0, da1)
     output dert = (g, gg, dgy, dgx, gm, ga, day, dax)
     """
-    g__, da0__, da1__ = dert__[1, -2, -1]  # input
+    
+#    a__directions[0] = a__topleft
+#    a__directions[1] = a__topright
+#    a__directions[2] = a__bottomright
+#    a__directions[3] = a__bottomleft
+    g__, a__directions = dert__[1],dert__[-1]  # input
+    
+    g__topleft     = g__[:-1, :-1]
+    g__topright    = g__[:-1, 1: ]
+    g__bottomleft  = g__[1: , :-1]
+    g__bottomright = g__[1: , 1: ]
 
-    topleft__ = g__[:-1, :-1]
-    topright__ = g__[:-1, 1:]
-    botleft__ = g__[1:, :-1]
-    botright__ = g__[1:, 1:]
 
-    dgy__ = ((botleft__ + botright__) - (topleft__ * cos(da0__) + topright__ * cos(da1__))) * 0.5
-    # diagonal from left
-    dgx__ = ((topright__ + botright__) - (topleft__ * cos(da0__) + botleft__ * cos(da1__))) * 0.5
-    # diagonal from right
-    gg__ = np.hypot(dgy__, dgx__)
-    # gradient of gradient
+    # dy of g (angle is in the form of [sin(angle), cos (angle)], no need to use cos(angle))
+    dgy__ = ((g__bottomleft + g__bottomright) - (g__topleft * (a__directions[0]) + g__topright * (a__directions[1]))) * 0.5
 
-    gm0__ = min(botleft__, topright__ * cos(da0__))  # g match = min(g, _g*cos(da))
-    gm1__ = min(botright__, topleft__ * cos(da1__))
+    # dx of g
+    dgx__ = ((g__topright + g__bottomright) - (g__topleft * (a__directions[0]) + g__bottomleft * (a__directions[3]))) * 0.5
+    
+    gg__ = np.hypot(dgy__, dgx__) # gradient of gradient
+
+    gm0__ = min( g__bottomleft.min() , (g__topright * (a__directions[1])).min() )  # g match = min(g, _g*cos(da))
+    gm1__ = min(g__bottomright.min() , (g__topleft  * (a__directions[0])).min() )
     gm__ = gm0__ + gm1__
 
-    gdert = ma.stack(g__, gg__, dgy__, dgx__, gm__, ga__=dert__[4], day_=dert__[5], dax=dert__[6])
+#    ga__=dert__[5], day_=dert__[6], dax=dert__[7]
+    gdert = g__, gg__, dgy__, dgx__, gm__, dert__[5], dert__[6], dert__[7]
     '''
     next comp_rg will use g, dgy, dgx
     next comp_agg will use ga, day, dax
@@ -94,38 +102,45 @@ def comp_r_draft(dert__, fig):
     """
 
     # input is gdert (g,  gg, gdy, gdx, gm, iga, iday, idax)
-    # input is dert  (i,  g,  dy,  dx,  m)  or
+    # input is dert  (i,  g,  dy,  dx,  m)
     # input is rdert (ir, gr, dry, drx, mr)
     i__, g__, dy__, dx__, m__ = dert__[0:5]
 
     # get sparsed value
-    ri__   = i__[1::2,1::2]
-    rg__   = g__[1::2,1::2]
-    rdy__  = dy__[1::2,1::2]
-    rdx__  = dx__[1::2,1::2]
-    rm__   = m__[1::2,1::2]
+    ir__   = i__ [::2,::2]
+    gr__   = g__ [::2,::2]
+    dry__  = dy__[::2,::2]
+    drx__  = dx__[::2,::2]
+    mr__   = m__ [::2,::2]
 
     # get each direction
-    ri__topleft      = ri__[:-2,:-2]
-    ri__top          = ri__[:-2,1:-1]
-    ri__topright     = ri__[:-2,2:]
-    ri__right        = ri__[1:-1,2:]
-    ri__bottomright  = ri__[2:,2:]
-    ri__bottom       = ri__[2:,1:-1]
-    ri__bottomleft   = ri__[2:,:-2]
-    ri__left         = ri__[1:-1,:-2]
+    ir__topleft      = ir__[:-2,:-2]
+    ir__top          = ir__[:-2,1:-1]
+    ir__topright     = ir__[:-2,2:]
+    ir__right        = ir__[1:-1,2:]
+    ir__bottomright  = ir__[2:,2:]
+    ir__bottom       = ir__[2:,1:-1]
+    ir__bottomleft   = ir__[2:,:-2]
+    ir__left         = ir__[1:-1,:-2]
 
-    if fig:  # input is g
-        # OUTDATED:
+    if fig:  # input is g (need further update on how to utilize iday and idax on this section)
 
-        # compute diagonal differences for g in 3x3 kernel
-        drg__ = np.stack((ri__topleft- ri__bottomright,
-                          ri__top-     ri__bottom,
-                          ri__topright-ri__bottomleft,
-                          ri__right-   ri__left))
+        #  central of g in sparsed g
+        ir__ = ir__[1:-1,1:-1]
+        
+        # difference in 8 directions
+        drg__ = np.stack((ir__ - ir__topleft,
+                          ir__ - ir__top,
+                          ir__ - ir__topright,
+                          ir__ - ir__right,
+                          ir__ - ir__bottomright,
+                          ir__ - ir__bottom,
+                          ir__ - ir__bottomleft,
+                          ir__ - ir__left))
 
-        # compute a from the range dy,dx and g
-        a__ = [rdy__,rdx__] / rg__
+        # compute range a from the range dy,dx and g
+        a__ = [dry__,drx__] / gr__
+        
         # angles per direction:
         a__topleft      = a__[:,:-2,:-2]
         a__top          = a__[:,:-2,1:-1]
@@ -136,37 +151,58 @@ def comp_r_draft(dert__, fig):
         a__bottomleft   = a__[:,2:,:-2]
         a__left         = a__[:,1:-1,:-2]
 
+        # central of a in sparsed a
+        a__ = a__[:,1:-1,1:-1]
+
         # compute da s in 3x3 kernel
-        dra__ = np.stack((angle_diff(a__topleft, a__bottomright),
-                          angle_diff(a__top,     a__bottom),
-                          angle_diff(a__topright,a__bottomleft),
-                          angle_diff(a__right,   a__left)))
+        dra__ = np.stack((angle_diff(a__,a__topleft),
+                          angle_diff(a__,a__top),
+                          angle_diff(a__,a__topright),
+                          angle_diff(a__,a__right),
+                          angle_diff(a__,a__bottomright),
+                          angle_diff(a__,a__bottom),
+                          angle_diff(a__,a__bottomleft),
+                          angle_diff(a__,a__left)))
 
         # g difference  = g - g * cos(da) at each opposing
         dri__ = np.stack( (drg__[0] - drg__[0] * dra__[0][1],
                            drg__[1] - drg__[1] * dra__[1][1],
                            drg__[2] - drg__[2] * dra__[2][1],
-                           drg__[3] - drg__[3] * dra__[3][1]) )
+                           drg__[3] - drg__[3] * dra__[3][1],
+                           drg__[4] - drg__[4] * dra__[4][1],
+                           drg__[5] - drg__[5] * dra__[5][1],
+                           drg__[6] - drg__[6] * dra__[6][1],
+                           drg__[7] - drg__[7] * dra__[7][1]) )
 
-    else:  # input is pixel, diagonal p differences:
-        dri__ = np.stack((ri__topleft - ri__bottomright,
-                          ri__top - ri__bottom,
-                          ri__topright - ri__bottomleft,
-                          ri__right - ri__left))
+    else:  # input is pixel (should we use diagonal difference or 8 directional difference here?)
+        
+        # central of p in sparsed p
+        ir__ =  ir__[1:-1,1:-1]
+        
+        # difference in 8 directions
+        dri__ = np.stack((ir__ - ir__topleft,
+                          ir__ - ir__top,
+                          ir__ - ir__topright,
+                          ir__ - ir__right,
+                          ir__ - ir__bottomright,
+                          ir__ - ir__bottom,
+                          ir__ - ir__bottomleft,
+                          ir__ - ir__left))
+    
     dri__ = np.rollaxis(dri__,0,3)
 
     # compute dry and drx
-    dry__ = (dri__ * Y_COEFFS[0][0:4]).sum(axis=-1)
-    drx__ = (dri__ * X_COEFFS[0][0:4]).sum(axis=-1)
+    dry__ = (dri__ * Y_COEFFS[1]).sum(axis=-1)
+    drx__ = (dri__ * X_COEFFS[1]).sum(axis=-1)
 
     # compute gradient magnitudes
     drg__ = ma.hypot(dry__, drx__)
 
     # pending m computation
-    drm = []
+    drm__ = []
 
     # rdert
-    rdert = dri__, drg__, dry__, drx__,drm
+    rdert = dri__, drg__, dry__, drx__, drm__, dy__, dx__
 
     return rdert
 
@@ -186,7 +222,7 @@ def comp_a(dert__, fga):
     Returns
     -------
     adert : masked_array
-        adert's structure is (ga, day, dax).
+        adert's structure is (i, g, dy, dx, m, ga, day, dax, da).
     Examples
     --------
     >>> # actual python console code
@@ -203,7 +239,8 @@ def comp_a(dert__, fga):
         a__ = [day__,dax__] / ga__ # similar to calc_a
     else :
         a__ = [dy__,dx__] / g__ # similar to calc_a
-
+        
+    # this mask section would need further test later with actual input from frame_blobs
     if isinstance(a__, ma.masked_array):
         a__.data[a__.mask] = np.nan
         a__.mask = ma.nomask
@@ -213,24 +250,27 @@ def comp_a(dert__, fga):
     a__topright = a__[:,:-1,1:]
     a__bottomright = a__[:,1:,1:]
     a__bottomleft = a__[:,1:,:-1]
+    
+    a__directions = np.stack((a__topleft,
+                              a__topright,
+                              a__bottomright,
+                              a__bottomleft))
 
     # diagonal angle differences
     da__ = np.stack((angle_diff(a__topleft,  a__bottomright),
                      angle_diff(a__topright, a__bottomleft)))
-    day__ = (
-            Y_COEFFS[0][0] * angle_diff(a__topleft, a__bottomright) +
-            Y_COEFFS[0][1] * angle_diff(a__topright, a__bottomleft)
-    )
-    dax__ = (
-            X_COEFFS[0][0] * angle_diff(a__topleft, a__bottomright) +
-            X_COEFFS[0][1] * angle_diff(a__topright, a__bottomleft)
-    )
+    
+    # rate of change in y direction for the angles
+    day__ = (Y_COEFFS[0][0] * da__[0]) + (Y_COEFFS[0][1] * da__[1])
+    
+    # rate of change in x direction for the angles
+    dax__ = (X_COEFFS[0][0] * da__[0]) + (X_COEFFS[0][1] * da__[1])
+    
     # compute gradient magnitudes (how fast angles are changing)
-
     ga__ = np.hypot(np.arctan2(*day__), np.arctan2(*dax__))
 
     # change adert to tuple as ga__,day__,dax__ would have different dimension compared to inputs
-    adert__ = i__, g__, dy__, dx__, m__, ga__, day__, dax__, dat__
+    adert__ = i__, g__, dy__, dx__, m__, ga__, day__, dax__, a__directions
 
     return adert__
 
@@ -324,10 +364,14 @@ fga = 0
 adert1 = comp_a(dert__, fga)
 fga = 1
 adert2 = comp_a(adert__, fga)
+
 fig = 0
-rdert1 = comp_r(dert__, fig)
+rdert1 = comp_r_draft(dert__, fig)
 fig = 1
-rdert2 = comp_r(rdert__, fig)
+rdert2 = comp_r_draft(rdert__, fig)
+
+
+gdert1 = comp_g(adert1,0)
 
 # from test_sets import (
 # comp_pixel_test_pairs,
