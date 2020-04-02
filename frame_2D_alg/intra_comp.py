@@ -27,7 +27,7 @@ def comp_g(dert__):
     input dert = (i, g, dy, dx, ga, day, dax, cos_da0, cos_da1)
     output dert = (g, gg, dgy, dgx, gm, ga, day, dax)
     """
-    g__, cos_da0__, cos_da1__ = dert__[1, -2, -1]
+    g__, cos_da0__, cos_da1__ = dert__[1], dert__[-2], dert__[-1]
 
     g_topleft__ = g__[:-1, :-1]
     g_topright__ = g__[:-1, 1:]
@@ -40,11 +40,11 @@ def comp_g(dert__):
     # x-decomposed difference between gs
     gg__ = np.hypot(dgy__, dgx__)  # gradient of gradient
 
-    mg0__ = min(g_botleft__.min(), g_topright__ * cos_da0__.min())  # g match = min(g, _g*cos(da))
-    mg1__ = min(g_botright__.min(), g_topleft__ * cos_da1__.min())
+    mg0__ = min(g_botleft__.min(), (g_topright__ * cos_da0__).min())  # g match = min(g, _g*cos(da))
+    mg1__ = min(g_botright__.min(), (g_topleft__ * cos_da1__).min())
     mg__  = mg0__ + mg1__
 
-    gdert = ma.stack(g__, gg__, dgy__, dgx__, mg__, dert__[4], dert__[5], dert__[6])
+    gdert = g__, gg__, dgy__, dgx__, mg__, dert__[4], dert__[5], dert__[6]
     # ga__=dert__[5], day_=dert__[6], dax=dert__[7]
     '''
     next comp_rg will use g, dgy, dgx
@@ -248,12 +248,16 @@ def comp_a(dert__, fga):
                   angle_diff(a__bottomright, a__topright)))
 
     # rate of angle change in y direction
-    # suggested form, please check:
-    day__ = (sin_da0__, sin_da1__ *.5) + (cos_da0__, cos_da1__ *.5)
+    # day = (sin_da0__, cos_da0__)*-1  + (sin_da1__, cos_da1__)*-1
+    #     = (sin_da0__*-1   +   sin_da1__*-1),(cos_da0__*-1   +   cos_da1__*-1),
+    day__ = ((sin_da0__*(-1))+(sin_da1__*(-1)), 
+             (cos_da0__*(-1))+(cos_da1__*(-1)))
 
     # rate of angle change in y direction
-    # current form:
-    dax__ = (X_COEFFS[0][0] * da__[0]) + (X_COEFFS[0][1] * da__[1])
+    # dax = (sin_da0__, cos_da0__)*-1  + (sin_da1__, cos_da1__)*1
+    #     = (sin_da0__*-1   +   sin_da1__*1),(cos_da0__*-1   +   cos_da1__*1),
+    dax__ = ((sin_da0__*(-1))+(sin_da1__*(1)), 
+             (cos_da0__*(-1))+(cos_da1__*(1)))
 
     # compute angle gradient (rate of change):
     ga__ = np.hypot(np.arctan2(*day__), np.arctan2(*dax__))
@@ -311,4 +315,3 @@ def angle_diff(a2, a1):
     cos_da = (sin_1 * cos_1) + (sin_2 * cos_2)
 
     return ma.array([sin_da, cos_da])
-
