@@ -77,12 +77,12 @@ def comp_r_draft(dert__, fig, root_fcr):
 
     if not fig:
         # compare four diametrically opposed pairs of rim pixels:
-
-        dt__ = np.stack(i__topleft - i__bottomright,
+        # we need extra bracket for np.stack
+        dt__ = np.stack((i__topleft - i__bottomright,
                         i__top - i__bottom,
                         i__topright - i__bottomleft,
                         i__right - i__left
-                        )
+                        ))
         for d__, YCOEF, XCOEF in zip(dt__, YCOEFs[:4], XCOEFs[:4]):
             # decompose differences into dy and dx, same as conventional Gy and Gx,
             # accumulate them across all ranges:
@@ -108,8 +108,8 @@ def comp_r_draft(dert__, fig, root_fcr):
             idx__ = np.zeros((i__.shape[0], i__.shape[1]))
 
         a__ = [idy__, idx__] / i__  # i is input gradient
-
-        a__center = a__[:, 1:-1:2, 1:-1:2]
+        
+        a__center= a__[:, 1:-1:2, 1:-1:2]
         a__topleft = a__[:, :-2:2, :-2:2]
         a__top = a__[:, :-2:2, 1:-1: 2]
         a__topright = a__[:, :-2:2, 2::2]
@@ -120,17 +120,26 @@ def comp_r_draft(dert__, fig, root_fcr):
         a__left = a__[:, 1:-1:2, :-2:2]
 
         # tuple of angle differences per direction:
-        dat__ = np.stack(angle_diff(a__center, a__topleft),
+        # we need extra brackets for np.stack
+        dat__ = np.stack((angle_diff(a__center, a__topleft),
                          angle_diff(a__center, a__top),
                          angle_diff(a__center, a__topright),
                          angle_diff(a__center, a__right),
                          angle_diff(a__center, a__bottomright),
                          angle_diff(a__center, a__bottom),
                          angle_diff(a__center, a__bottomleft),
-                         angle_diff(a__center, a__left))
+                         angle_diff(a__center, a__left)))
 
-        # roll axis to align COEFFs with dat__,
-        # add comment: what is 0, 4?
+        # unfolded version of day and dax computation 
+        # similar with line 141 to 149
+        day__ = np.zeros((a__center.shape[0],a__center.shape[1],a__center.shape[2]))
+        dax__ = np.zeros((a__center.shape[0],a__center.shape[1],a__center.shape[2]))
+        for dat_,YCOEF,XCOEF in zip(dat__,YCOEFs,XCOEFs):
+            day__ += dat_*YCOEF
+            dax__ += dat_*YCOEF
+
+        # roll axis to align COEFFs with dat__ 
+        # move 1st channel/axis (8 directionals) to the 4th channel/axis to enable broadcasted operation with coefficients at later stage
         dat__ = np.rollaxis(dat__, 0, 4)
 
         # y-decomposed difference between angles to center
@@ -162,10 +171,11 @@ def comp_r_draft(dert__, fig, root_fcr):
                          (i__center - i__bottomleft * dat__[1][:, :, 6]),
                          (i__center - i__left * dat__[1][:, :, 7])))
 
+
         dt__ = np.rollaxis(dt__, 0, 3)
 
         # accumulate derivatives across all ranges:
-        # is this correct with new COEFFs?
+        # is this correct with new COEFFs? yes
         dy__ += (dt__ * YCOEFs).sum(axis=-1)
         dx__ += (dt__ * XCOEFs).sum(axis=-1)
 
@@ -351,7 +361,8 @@ def comp_a(dert__, fga):
     ga__ = np.hypot(np.arctan2(*day__), np.arctan2(*dax__))
     # angle gradient, a scalar
 
-    adert__ = ma.stack(i__, g__, dy__, dx__, m__, ga__, day__, dax__, cos_da0__, cos_da1__)
+    # we need extra brackets for np.stack
+    adert__ = ma.stack((i__[:-1,:-1], g__[:-1,:-1], dy__[:-1,:-1], dx__[:-1,:-1], m__[:-1,:-1], ga__, *day__, *dax__, cos_da0__, cos_da1__))
     # i, dy, dx, m is for summation in Dert only?
     '''
     next comp_g will use g, cos_da0__, cos_da1__
@@ -423,8 +434,12 @@ def comp_g(dert__):  # add fga if processing in comp_ga is different?
     g_bottomleft__ = g__[1:, :-1]
     g_bottomright__ = g__[1:, 1:]
 
-    # please check, not sure this in the right order, also need to add sign COEFFS:
+    # remove last row and column so that it would be in same size with directional g s
+    cos_da0__ = cos_da0__[:-1,:-1]
+    cos_da1__ = cos_da1__[:-1,:-1]
 
+    # please check, not sure this in the right order, also need to add sign COEFFS:
+    # are we using 2x2 signed coefficients here?
     dgy__ = ((g_bottomleft__ + g_bottomright__) -
              (g_topleft__ * cos_da0__ + g_topright__ * cos_da1__))
     # y-decomposed difference between gs
@@ -439,7 +454,9 @@ def comp_g(dert__):  # add fga if processing in comp_ga is different?
     mg1__ = np.minimum(g_topright__, (g_bottomleft__ * cos_da1__))
     mg__  = mg0__ + mg1__
 
-    gdert = ma.stack(g__, gg__, dgy__, dgx__, mg__, dert__[4], dert__[5], dert__[6])
+    # size of gg,dgy,dgx and mg__ would be always smaller than the others by 1
+    # we need extra brackets for np.stack 
+    gdert = ma.stack((g__[:-1,:-1], gg__, dgy__, dgx__, mg__, dert__[4][:-1,:-1], dert__[5][:-1,:-1], dert__[6][:-1,:-1]))
     # ga__=dert__[5], day_=dert__[6], dax=dert__[7]
     '''
     next comp_r will use g, dgy, dgx   # comp_rg
@@ -471,3 +488,36 @@ def comp_3x3(image):  # Deprecated, from frame_blobs' comp_pixel, Khanh
     g__ = np.hypot(dy__, dx__)  # compute gradients per kernel, converted to 0-255 range
 
     return ma.stack((p__, g__, dy__, dx__))
+
+
+
+
+from test_sets import (
+comp_pixel_test_pairs,
+calc_a_test_pairs,
+pixels, rderts, gderts, angles)
+
+dert__ = gderts[2]
+dert__ = np.repeat(dert__,2,axis=0)
+adert__ = dert__[0:8]
+dert__ = dert__[0:5]
+
+rdert__tem = np.uint8(np.random.rand(25,25)*255)
+rdert__ = np.zeros((8,25,25))
+rdert__[0:8,:,:] = rdert__tem
+
+fga = 0
+adert1 = comp_a(dert__, fga)
+fga = 1
+adert2 = comp_a(adert__, fga)
+
+fig = 0
+rdert1 = comp_r_draft(rdert__, fig,0)
+rdert1 = comp_r_draft(rdert__, fig,1)
+
+fig = 1
+rdert2 = comp_r_draft(rdert__, fig,0)
+rdert2 = comp_r_draft(rdert__, fig,1)
+
+
+gdert1 = comp_g(adert1)
