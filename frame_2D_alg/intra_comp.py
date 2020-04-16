@@ -172,9 +172,18 @@ def comp_r(dert__, fig, root_fcr):
         g__ = np.hypot(dy__, dx__)
 
     if fig:
-        rdert = i__, g__, dy__, dx__, m__, ga__, *day__, *dax__
+        rdert = np.stack((i__center,
+                          g__,
+                          dy__,dx__,m__,
+                          ga__,
+                          *day__,
+                          *dax__))
     else:
-        rdert = i__, g__, dy__, dx__, m__
+        rdert = np.stack((i__center,
+                          g__,
+                          dy__,
+                          dx__,
+                          m__))
     '''
     return input dert__ with accumulated derivatives,
     next comp_r will use full dert        # comp_rr
@@ -202,7 +211,8 @@ def comp_a(dert__, fga):
     >>> comp_a(dert__, fga)
     """
     # input dert = (i, g, dy, dx, m, ?(ga, day, dax))
-    i__, g__, dy__, dx__, m__ = dert__[0:5]
+    # remove m since we are gonna recompute it
+    i__, g__, dy__, dx__ = dert__[0:4]
 
     if fga:  # input is adert
         ga__, day__, dax__ = dert__[5:8]
@@ -220,7 +230,7 @@ def comp_a(dert__, fga):
     sin_da0__, cos_da0__ = angle_diff(a__topleft, a__botright)
     sin_da1__, cos_da1__ = angle_diff(a__topright, a__botleft)
 
-    m__ = (sin_da0__ + cos_da0__) + (sin_da1__ + cos_da1__)
+    m__ = (abs(sin_da0__) + abs(sin_da1__))
     # is this correct as a measure of angle variation?
     # inverse m, all positive, compute inverse deviation to evaluate for comp_g
 
@@ -240,7 +250,7 @@ def comp_a(dert__, fga):
                         g__[:-1, :-1],   # for summation in Dert
                         dy__[:-1, :-1],  # passed on as idy
                         dx__[:-1, :-1],  # passed on as idx
-                        m__[:-1, :-1],   # next fork criterion
+                        m__,   # next fork criterion
                         ga__,
                         *day__,
                         *dax__,
@@ -303,6 +313,10 @@ def comp_g(dert__):  # add fga if processing in comp_ga is different?
     """
     g__, cos_da0__, cos_da1__ = dert__[[1, -2, -1]]  # top dimension of numpy stack must be a list
 
+    # remove last row and column enable dgy and dgx computation
+    cos_da0__ = cos_da0__[:-1,:-1]
+    cos_da1__ = cos_da1__[:-1,:-1]
+    
     g_topleft__ = g__[:-1, :-1]
     g_topright__ = g__[:-1, 1:]
     g_bottomleft__ = g__[1:, :-1]
@@ -322,17 +336,17 @@ def comp_g(dert__):  # add fga if processing in comp_ga is different?
     mg1__ = np.minimum(g_topright__, (g_bottomleft__ * cos_da1__))
     mg__  = mg0__ + mg1__
 
-    gdert = ma.stack(g__[:-1, :-1],  # remove last row and column to align with derived params
+    gdert = ma.stack((g__[:-1, :-1],  # remove last row and column to align with derived params
                      gg__,
                      dgy__,
                      dgx__,
                      mg__,
-                     dert__[5],  # ga__
-                     dert__[6],  # day__
-                     dert__[7],  # dax__
+                     dert__[5][:-1, :-1],  # ga__
+                     dert__[6][:-1, :-1],  # day__
+                     dert__[7][:-1, :-1],  # dax__
                      dert__[8][:-1, :-1],  # idy__
                      dert__[9][:-1, :-1]   # idx__
-                    )
+                    ))
     '''
     next comp_r will use g, idy, idx   # comp_rg
     next comp_a will use ga, day, dax  # comp_agg, also dgy__, dgx__ as idy, idx?
