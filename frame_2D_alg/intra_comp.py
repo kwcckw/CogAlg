@@ -302,12 +302,15 @@ def angle_diff(a2, a1):
 def comp_g(dert__):  # add fga if processing in comp_ga is different?
     """
     Cross-comp of g or ga in 2x2 kernels, between derts in ma.stack dert__:
-    input dert  = (i, g, dy, dx, m, ga, day, dax, cos_da0, cos_da1)
+    input dert  = (i, g, dy, dx, m, ga, day-sin,day-cos, dax-sin,dax-cos, ma, cos_da0, cos_da1)
     output dert = (g, gg, dgy, dgx, gm, ga, day, dax, dy, dx)
     """
 
     dert__ = shape_check(dert__)  # remove derts of incomplete kernels
     g__, cos_da0__, cos_da1__ = dert__[[1, -2, -1]]  # top dimension of numpy stack must be a list
+
+    cos_da0__ = cos_da0__[:-1,:-1]
+    cos_da1__ = cos_da1__[:-1,:-1]
 
     g_topleft__ = g__[:-1, :-1]
     g_topright__ = g__[:-1, 1:]
@@ -328,25 +331,27 @@ def comp_g(dert__):  # add fga if processing in comp_ga is different?
     mg1__ = np.minimum(g_topright__, (g_bottomleft__ * cos_da1__))
     mg__  = mg0__ + mg1__
 
-    gdert = ma.stack(g__[:-1, :-1],  # remove last row and column to align with derived params
+    gdert = ma.stack((g__[:-1, :-1],  # remove last row and column to align with derived params
                      gg__,
                      dgy__,
                      dgx__,
                      mg__,
-                     dert__[5],  # ga__
-                     dert__[6],  # day__
-                     dert__[7],  # dax__
-                     dert__[8],  # ma__
-                     dert__[8][:-1, :-1],  # idy__
-                     dert__[9][:-1, :-1]   # idx__
-                    )
+                     dert__[5][:-1, :-1],  # ga__
+                     dert__[6][:-1, :-1],  # day__sine
+                     dert__[7][:-1, :-1],  # day__cosine
+                     dert__[8][:-1, :-1],  # dax__sine
+                     dert__[9][:-1, :-1],  # dax__cosine
+                     dert__[10][:-1, :-1],  # ma__
+                     dert__[2][:-1, :-1],  # idy__
+                     dert__[3][:-1, :-1]   # idx__
+                    ))
     '''
     next comp_r will use g, idy, idx   # comp_rg
     next comp_a will use ga, day, dax  # comp_agg, also dgy__, dgx__ as idy, idx?
     '''
     return gdert
 
-
+# why do we need this?
 def shape_check(dert__):
     # for 2x2 kernel comparison
 
