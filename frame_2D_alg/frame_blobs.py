@@ -1,13 +1,14 @@
 from time import time
 from collections import deque, defaultdict
+import numpy as np
 from comp_pixel import comp_pixel
 from utils import *
 
 '''
     2D version of first-level core algorithm will have frame_blobs, intra_blob (recursive search within blobs), and comp_P.
     frame_blobs() forms parameterized blobs: contiguous areas of positive or negative deviation of gradient per pixel.    
-
     comp_pixel (lateral, vertical, diagonal) forms dert, queued in dert__: tuples of pixel + derivatives, over whole image. 
+
     Then pixel-level and external parameters are accumulated in row segment Ps, vertical blob segment, and blobs,
     adding a level of encoding per row y, defined relative to y of current input row, with top-down scan:
 
@@ -18,11 +19,11 @@ from utils import *
 
     Higher-row elements include additional parameters, derived while they were lower-row elements. Processing is bottom-up:
     from input-row to higher-row structures, sequential because blobs are irregular, not suited for matrix operations.
-    Resulting blob structure (set of parameters per blob): 
+    Resulting blob structure (fixed set of parameters per blob): 
 
     - root_fork = frame,  # replaced by blob-level fork in sub_blobs
-    - Dert = dict(I, G, Dy, Dx, S, Ly), # summed pixel dert params (I, G, Dy, Dx), surface area S, vertical depth Ly
-    - sign = s,  # sign of gradient deviation
+    - Dert = I, G, Dy, Dx, S, Ly: summed pixel-level dert params I, G, Dy, Dx, surface area S, vertical depth Ly
+    - sign = s: sign of gradient deviation
     - box  = [y0, yn, x0, xn], 
     - map, # inverted mask
     - dert__,  # 2D array of pixel-level derts: (p, g, dy, dx) tuples
@@ -31,8 +32,8 @@ from utils import *
 
     Blob is 2D pattern: connectivity cluster defined by the sign of gradient deviation. Gradient represents 2D variation
     per pixel. It is used as inverse measure of partial match (predictive value) because direct match (min intensity) 
-    is not meaningful in vision. Intensity of reflected light doesn't correlate with predictive value of observed object: 
-    some physical density, hardness, inertia that represent resistance to change in positional parameters.  
+    is not meaningful in vision. Intensity of reflected light doesn't correlate with predictive value of observed object 
+    (predictive value is physical density, hardness, inertia that represent resistance to change in positional parameters)  
 
     This is clustering by connectivity because distance between clustered pixels should not exceed cross-comparison range.
     That range is fixed for each layer of search, to enable encoding of input pose parameters: coordinates, dimensions, 
@@ -41,14 +42,12 @@ from utils import *
     frame_blobs is a complex function with a simple purpose: to sum pixel-level params in blob-level params. These params 
     were derived by pixel cross-comparison (cross-correlation) to represent predictive value per pixel, so they are also
     predictive on a blob level, and should be cross-compared between blobs on the next level of search and composition.
-
     Please see diagrams of frame_blobs on https://kwcckw.github.io/CogAlg/
 '''
 # Adjustable parameters:
 
 kwidth = 3  # smallest input-centered kernel: frame | blob shrink by 2 pixels per row
-ave_2x2 = 20  # filters or hyper-parameters, set as a guess, latter adjusted by feedback
-ave_3x3 = 8
+ave = 30  # filter or hyper-parameter, set as a guess, latter adjusted by feedback
 
 # ----------------------------------------------------------------------------------------------------------------------------------------
 # Functions
@@ -56,22 +55,19 @@ ave_3x3 = 8
 # prefix '_' denotes higher-line variable or structure, vs. same-type lower-line variable or structure
 # postfix '_' denotes array name, vs. same-name elements of that array
 
-def image_to_blobs(image):  # root function, segments frame into blobs of same ternary sign: der+ | rng+ | null
+def image_to_blobs(image):
 
-    gdert__, rdert__ = comp_pixel(image)  # gderts from 2x2 and rderts from 3x3 cross-comparison / cross-correlation
+    dert__ = comp_pixel(image)  # 2x2 cross-comparison / cross-correlation
 
-    frame = dict(rng=1, gdert__=gdert__, rdert__=rdert__, mask=None, I=0, G=0, Dy=0, Dx=0, blob_=[])
+    frame = dict(rng=1, dert__=dert__, mask=None, I=0, G=0, Dy=0, Dx=0, blob__=[])
     stack_ = deque()  # buffer of running vertical stacks of Ps
-    height, width = gdert__.shape[1:]
+    height, width = dert__.shape[1:]
 
-    init = 1
     for y in range(height):  # first and last row are discarded
         print(f'Processing line {y}...')
-        P_ = form_P_(gdert__[:, y].T, rdert__[:, y-1].T, init)  # horizontal clustering,
-        # or rdert__[-1:, y-1].T, for 2x2 gdert in lower-right?
+        P_ = form_P_(dert__[:, y].T)      # horizontal clustering
         P_ = scan_P_(P_, stack_, frame)   # vertical clustering, adds up_forks per P and down_fork_cnt per stack
         stack_ = form_stack_(y, P_, frame)
-        init = 0
 
     while stack_:  # frame ends, last-line stacks are merged into their blobs:
         form_blob(stack_.popleft(), frame)
@@ -85,98 +81,37 @@ Parameterized connectivity clustering functions below:
 - form_stack combines these overlapping Ps into vertical stacks of Ps, with 1 up_P to 1 down_P
 - form_blob merges terminated or forking stacks into blob, removes redundant representations of the same blob 
   by multiple forked P stacks, then checks for blob termination and merger into whole-frame representation.
-dert is a tuple of derivatives per pixel, to be extended in intra_blob
-Dert is params of a composite structure (P, stack, blob): summed dert params + dimensions: vertical Ly and area S
+  
+dert: tuple of derivatives per pixel, initially (p, dy, dx, g, i), will be extended in intra_blob
+Dert: params of composite structures (P, stack, blob): summed dert params + dimensions: vertical Ly and area S
 '''
 
-def form_P_(gdert_, rdert_, init):  # horizontal clustering and summation of dert params into P params, per row of a frame
+def form_P_(dert__):  # horizontal clustering and summation of dert params into P params, per row of a frame
     # P is a segment of same-sign derts in horizontal slice of a blob
 
     P_ = deque()  # row of Ps
-    
-    # initialization for 1st 2x2 gdert row
-    if init == 1:
-        p, g, dy, dx = gdert_[0]  # 2x2 kernels
-        g -= ave_2x2
-        if g > 0:   # ternary sign:
-            _s = 0; I, G, Dy, Dx, L, x0 = *gdert_[0], 1, 0  # initialize P params with 1st dert 2x2 params
-        else:
-            _s = 2; I, G, Dy, Dx, L, x0 = *gdert_[0], 1, 0  # initialize P params with 1st dert 2x2 params
-    
-        for x, (p, g, dy, dx) in enumerate(gdert_[1:], start=1):
+    I, G, Dy, Dx, L, x0 = *dert__[0], 1, 0  # initialize P params with 1st dert params
+    G = int(G) - ave
+    _s = G > 0  # sign
+    for x, (p, g, dy, dx) in enumerate(dert__[1:], start=1):
+        vg = int(g) - ave  # deviation of g
+        s = vg > 0
+        if s != _s:
+            # terminate and pack P:
+            P = dict(I=I, G=G, Dy=Dy, Dx=Dx, L=L, x0=x0, dert__=dert__[x0:x0 + L], sign=_s)
+            P_.append(P)
+            # initialize new P:
+            I, G, Dy, Dx, L, x0 = 0, 0, 0, 0, 0, x
+        # accumulate P params:
+        I += p
+        G += vg
+        Dy += dy
+        Dx += dx
+        L += 1
+        _s = s  # prior sign
 
-            vg = g - ave_2x2
-            if vg > 0:
-                s = 0; dert_ = gdert_  # ternary sign
-            else:
-                s = 2; dert_ = gdert_
-                
-            if s != _s:
-                # terminate and pack P:
-                P = dict(I=I, G=G, Dy=Dy, Dx=Dx, L=L, x0=x0, dert_=dert_[x0:x0 + L], sign=_s)
-                P_.append(P)
-                # initialize new P:
-                I, G, Dy, Dx, L, x0 = 0, 0, 0, 0, 0, x
-                
-            # accumulate P params:
-            I += p; G += vg; Dy += dy; Dx += dx
-            L += 1
-            _s = s  # prior sign
-     
-    elif init == 0:
-        # initialization of 2x2 kernel
-        p, g, dy, dx = gdert_[0]  # 2x2 kernels
-        vg = g - ave_2x2
-        if vg > 0:   # sign check for 2x2 kernels:
-            s = 0; I, G, Dy, Dx, L, x0 = *gdert_[0], 1, 0  # initialize P params with 1st dert 2x2 params
-        else:
-            s = 2; I, G, Dy, Dx, L, x0 = *gdert_[0], 1, 0  # initialize P params with 1st dert 2x2 params
-        # initialize first P of 2x2 kernel
-        P = dict(I=I, G=G, Dy=Dy, Dx=Dx, L=L, x0=x0, dert_=gdert_[x0:x0 + L], sign=s)
-        P_.append(P)    
-    
-        p, g, dy, dx = gdert_[1]  # 2x2 kernels
-        p3, g3, dy3, dx3 = rdert_[0]  # 3x3 kernels
-        g -= ave_2x2
-        g3 = ave_3x3 - g3  # initial 3x3 match is inverse deviation of g3
-        if g > 0:   # ternary sign:
-            _s = 0; I, G, Dy, Dx, L, x0 = *gdert_[1], 1, 0  # initialize P params with 1st dert 2x2 params
-        elif g3 > 0: # and gdert_[1][1] <= 0 and gdert__[1, 0][1] <= 0 and gdert__[1, 1][1] <= 0: four 2x2 gs per 3x3 g
-            _s = 1; I, G, Dy, Dx, L, x0 = *rdert_[0], 1, 0  # initialize P params with 1st dert 3x3 params
-        else:
-            _s = 2; I, G, Dy, Dx, L, x0 = *gdert_[1], 1, 0  # initialize P params with 1st dert 2x2 params
-    
-        for x, (p, g, dy, dx) in enumerate(gdert_[2:], start=2):
-            p3, g3, dy3, dx3 = rdert_[x-1]
-            # rdert_ is shifted at [y-1, x-1] in line 70, for gdert in lower-right quadrant?
-            # or use zip(gdert_[1:], start=1), rdert_[1:], start=1)?
-            vg = g - ave_2x2  # gdert_[x][1] = vg?
-            vg3 = ave_3x3 - g3  # rdert_[x][1] = vg3? initial 3x3 match is inverse deviation of g3, ave_3x3
-            if vg > 0:
-                s = 0; dert_ = gdert_  # ternary sign
-            elif vg3 > 0:
-                # and gdert_[x+1][1] <= 0 and gdert__[y+1, x][1] <= 0 and gdert__[y+1, x+1][1] <= 0: four 2x2 gs per 3x3 g are <= 0
-                # use map of previously computed vg signs?
-                s = 1; dert_ = rdert_
-            else:
-                s = 2; dert_ = gdert_
-            if s != _s:
-                # terminate and pack P:
-                P = dict(I=I, G=G, Dy=Dy, Dx=Dx, L=L, x0=x0, dert_=dert_[x0:x0 + L], sign=_s)
-                P_.append(P)
-                # initialize new P:
-                I, G, Dy, Dx, L, x0 = 0, 0, 0, 0, 0, x
-            # accumulate P params:
-            if s == 1:
-                I += p3; G += vg3; Dy += dy3; Dx += dx3
-            else:
-                I += p; G += vg; Dy += dy; Dx += dx
-            L += 1
-            _s = s  # prior sign
-
-    P = dict(I=I, G=G, Dy=Dy, Dx=Dx, L=L, x0=x0, dert_=dert_[x0:x0 + L], sign=_s)
+    P = dict(I=I, G=G, Dy=Dy, Dx=Dx, L=L, x0=x0, dert__=dert__[x0:x0 + L], sign=_s)
     P_.append(P)  # terminate last P in a row
-
     return P_
 
 
@@ -247,7 +182,7 @@ def form_stack_(y, P_, frame):  # Convert or merge every P into its stack of Ps,
     while P_:
         P, up_fork_ = P_.popleft()
         s = P.pop('sign')
-        I, G, Dy, Dx, L, x0, dert_ = P.values()
+        I, G, Dy, Dx, L, x0, dert__ = P.values()
         xn = x0 + L  # next-P x0
         if not up_fork_:
             # initialize new stack for each input-row P that has no connections in higher row:
@@ -310,7 +245,8 @@ def form_blob(stack, frame):  # increment blob with terminated stack, check for 
     blob['open_stacks'] += down_fork_cnt - 1  # incomplete stack cnt + terminated stack down_fork_cnt - 1: stack itself
     # open stacks contain Ps of a current row and may be extended with new x-overlapping Ps in next run of scan_P_
 
-    if blob['open_stacks'] == 0:  # if number of incomplete stacks == 0: blob is terminated and packed in frame
+    if blob['open_stacks'] == 0:  # if number of incomplete stacks == 0
+        # blob is terminated and packed in frame:
         last_stack = stack
 
         Dert, [y0, x0, xn], stack_, s, open_stacks = blob.values()
@@ -324,15 +260,12 @@ def form_blob(stack, frame):  # increment blob with terminated stack, check for 
                 x_start = P['x0'] - x0
                 x_stop = x_start + P['L']
                 mask[y, x_start:x_stop] = False
-        dert__ = frame['rdert__'][:, y0:yn, x0:xn] \
-            if sign == 1 else \
-            frame['gdert__'][:, y0:yn, x0:xn]
+        dert__ = frame['dert__'][:, y0:yn, x0:xn]
         dert__.mask[:] = mask  # default mask is all 0s
 
         blob.pop('open_stacks')
         blob.update(box=(y0, yn, x0, xn),  # boundary box
                     map=~mask,  # to compute overlap in comp_blob
-                    crit=1,  # clustering criterion is g
                     rng=1,  # if 3x3 kernel
                     dert__=dert__,  # dert__ + box replace slices=(Ellipsis, slice(y0, yn), slice(x0, xn))
                     root_fork=frame,
@@ -343,7 +276,7 @@ def form_blob(stack, frame):  # increment blob with terminated stack, check for 
                      Dy=frame['Dy'] + blob['Dert']['Dy'],
                      Dx=frame['Dx'] + blob['Dert']['Dx'])
 
-        frame['blob_'].append(blob)
+        frame['blob__'].append(blob)
 
 
 # -----------------------------------------------------------------------------
@@ -369,120 +302,36 @@ if __name__ == '__main__':
     intra=0
     if intra:  # Tentative call to intra_blob, omit for testing frame_blobs:
 
-        from intra_blob import *
-        frame_deep = frame  # initialize frame_of_deep_blobs, deeper params are initialized when fetched
+        from intra_blob_draft import *
+        deep_frame = frame, frame  # initialize deep_frame with root=frame, ini params=frame, initialize deeper params when fetched
 
-        for blob in frame['blob_']:  # interlaced 2x2 gblobs, 3x3 rblobs, 2x2 nblobs
-            if blob['sign'] == 0:
-                if blob['Dert']['G'] > aveB:  # +G blob, dert = g, 0, 0, 0
-                    intra_blob(frame, blob, rdn=1, rng=1, fig=0, fca=1)  # comp_a, then comp_g if -Ga, else comp_ga if +Ga3?
+        for blob in frame['blob__']:
+            if blob['sign']:
+                if blob['Dert']['G'] > aveB and blob['Dert']['S'] > 20:
+                    intra_blob(blob, rdn=1, rng=.0, fig=0, fca=1, fcr=0, fga=0)
+                    # +G blob' comp_a, form 2x2 aderts = ga, day, dax, -> comp_ga if +Ga, else comp_g if -Ga
+
+            elif -blob['Dert']['G'] > aveB and blob['Dert']['S'] > 30:
+                    intra_blob(blob, rdn=1, rng=1, fig=0, fca=0, fcr=1, fga=0)
+                    # -G blob' comp_r, form 3x3 rderts = dert, -> comp_a if +G, else comp_rng if -G
                     '''
-                    ga_dert__ = comp_a(blob['dert__'], rng=1)  # 2x2, no 3x3 -> ra_dert__: comp with g only?
-                    frame_deep['gsub_'] = cluster_eval(blob, ga_dert__, rng=1, rdn=1, fig=0, fca=0)  # cluster by 2x2 g
-                    frame_deep['gblob_'].append(blob)  # extended by cluster_eval
-                    frame_deep['gparams'][1:] += blob['params'][1:]  # incorrect, for selected blob params only?
+                    with feedback:
+                    dert__ = comp_a|r(blob['dert__'], rng=1)  
+                    deep_frame['layer_'] = intra_blob(blob, dert__, rng=3, rdn=1, fig=0, fca=0)  
+                    deep_frame['blob_'].append(blob)  # extended by cluster_eval
+                    deep_frame['params'][1:] += blob['params'][1:]  # incorrect, for selected blob params only?
                     '''
-            elif blob['sign'] == 1:
-                if -blob['Dert']['G'] > aveB:  # 3x3 -G blob, dert = dert
-                    intra_blob(frame, blob, rdn=1, rng=7, fig=0, fca=0)  # comp_rng, then comp_a if G, else comp_rng if -G3
-                    '''
-                    gdert__, rdert__ = comp_i(blob['dert__'], rng=7)  # 6x6? + 7x7 comp_i, angle is not computed
-                    frame_deep['rsub_'] = cluster_eval(blob, rdert__, rng=7, rdn=1, fig=0, fca=0)  # cluster by 3x3 -g
-                    frame_deep['rblob_'].append(blob)  # extended by cluster_eval
-                    frame_deep['rparams'][1:] += blob['params'][1:]  # incorrect, for selected blob params only?
-                    '''
-            # else blob['sign'] == 2: no intra_blob call
+            # else no intra_blob call
 
     end_time = time() - start_time
     print(end_time)
 
     # DEBUG -------------------------------------------------------------------
-    imwrite("./images/comb_blobs.bmp",
-            map_frame(frame,
-                      sign_map={
-                          0: WHITE,  # 2x2 gblobs
-                          1: BLACK,  # 3x3 rblobs
-                          2: GREY,   # 2x2 nblobs
-                      }))
+    imwrite("./images/gblobs.bmp",
+    map_frame_binary(frame,
+              sign_map={
+                  1: WHITE,  # 2x2 gblobs
+                  0: BLACK
+              }))
+
     # END DEBUG ---------------------------------------------------------------
-    
-    
-#def image_to_blobs(image):  # root function, segments frame into blobs of same ternary sign: der+ | rng+ | null
-#
-#    gdert__, rdert__ = comp_pixel(image)  # gderts from 2x2 and rderts from 3x3 cross-comparison / cross-correlation
-#
-#    frame = dict(rng=1, gdert__=gdert__, rdert__=rdert__, mask=None, I=0, G=0, Dy=0, Dx=0, blob_=[])
-#    stack_ = deque()  # buffer of running vertical stacks of Ps
-#    height, width = gdert__.shape[1:]
-#
-#    for y in range(1,height):  # first and last row are discarded
-#        print(f'Processing line {y}...')
-#        P_ = form_P_(gdert__[:, y].T, rdert__[:, y-1].T)  # horizontal clustering,
-#        # or rdert__[-1:, y-1].T, for 2x2 gdert in lower-right?
-#        P_ = scan_P_(P_, stack_, frame)   # vertical clustering, adds up_forks per P and down_fork_cnt per stack
-#        stack_ = form_stack_(y, P_, frame)
-#
-#    while stack_:  # frame ends, last-line stacks are merged into their blobs:
-#        form_blob(stack_.popleft(), frame)
-#
-#    return frame  # frame of blobs
-#
-#def form_P_(gdert_, rdert_):  # horizontal clustering and summation of dert params into P params, per row of a frame
-#    # P is a segment of same-sign derts in horizontal slice of a blob
-#
-#    P_ = deque()  # row of Ps
-#    
-#    # initialization of 2x2 kernel
-#    p, g, dy, dx = gdert_[0]  # 2x2 kernels
-#    vg = g - ave_2x2
-#    if vg > 0:   # sign check for 2x2 kernels:
-#        s = 0; I, G, Dy, Dx, L, x0 = *gdert_[0], 1, 0  # initialize P params with 1st dert 2x2 params
-#    else:
-#        s = 2; I, G, Dy, Dx, L, x0 = *gdert_[0], 1, 0  # initialize P params with 1st dert 2x2 params
-#    # initialize first P of 2x2 kernel
-#    P = dict(I=I, G=G, Dy=Dy, Dx=Dx, L=L, x0=x0, dert_=gdert_[x0:x0 + L], sign=s)
-#    P_.append(P)    
-#
-#    p, g, dy, dx = gdert_[1]  # 2x2 kernels
-#    p3, g3, dy3, dx3 = rdert_[0]  # 3x3 kernels
-#    g -= ave_2x2
-#    g3 = ave_3x3 - g3  # initial 3x3 match is inverse deviation of g3
-#    if g > 0:   # ternary sign:
-#        _s = 0; I, G, Dy, Dx, L, x0 = *gdert_[1], 1, 0  # initialize P params with 1st dert 2x2 params
-#    elif g3 > 0: # and gdert_[1][1] <= 0 and gdert__[1, 0][1] <= 0 and gdert__[1, 1][1] <= 0: four 2x2 gs per 3x3 g
-#        _s = 1; I, G, Dy, Dx, L, x0 = *rdert_[0], 1, 0  # initialize P params with 1st dert 3x3 params
-#    else:
-#        _s = 2; I, G, Dy, Dx, L, x0 = *gdert_[1], 1, 0  # initialize P params with 1st dert 2x2 params
-#
-#    for x, (p, g, dy, dx) in enumerate(gdert_[2:], start=2):
-#        p3, g3, dy3, dx3 = rdert_[x-1]
-#        # rdert_ is shifted at [y-1, x-1] in line 70, for gdert in lower-right quadrant?
-#        # or use zip(gdert_[1:], start=1), rdert_[1:], start=1)?
-#        vg = g - ave_2x2  # gdert_[x][1] = vg?
-#        vg3 = ave_3x3 - g3  # rdert_[x][1] = vg3? initial 3x3 match is inverse deviation of g3, ave_3x3
-#        if vg > 0:
-#            s = 0; dert_ = gdert_  # ternary sign
-#        elif vg3 > 0:
-#            # and gdert_[x+1][1] <= 0 and gdert__[y+1, x][1] <= 0 and gdert__[y+1, x+1][1] <= 0: four 2x2 gs per 3x3 g are <= 0
-#            # use map of previously computed vg signs?
-#            s = 1; dert_ = rdert_
-#        else:
-#            s = 2; dert_ = gdert_
-#        if s != _s:
-#            # terminate and pack P:
-#            P = dict(I=I, G=G, Dy=Dy, Dx=Dx, L=L, x0=x0, dert_=dert_[x0:x0 + L], sign=_s)
-#            P_.append(P)
-#            # initialize new P:
-#            I, G, Dy, Dx, L, x0 = 0, 0, 0, 0, 0, x
-#        # accumulate P params:
-#        if s == 1:
-#            I += p3; G += vg3; Dy += dy3; Dx += dx3
-#        else:
-#            I += p; G += vg; Dy += dy; Dx += dx
-#        L += 1
-#        _s = s  # prior sign
-#
-#    P = dict(I=I, G=G, Dy=Dy, Dx=Dx, L=L, x0=x0, dert_=dert_[x0:x0 + L], sign=_s)
-#    P_.append(P)  # terminate last P in a row
-#
-#    return P_

@@ -175,6 +175,32 @@ def map_sub_blobs(blob, traverse_path=[]):  # currently a draft
     return image    # return filled image
 
 
+def map_frame_binary(frame, *args, **kwargs):
+    '''
+    Map partitioned blobs into a 2D array.
+    Parameters
+    ----------
+    frame : dict
+        Contains blobs that need to be mapped.
+    raw : bool
+        Draw raw values instead of boolean.
+    Return
+    ------
+    out : ndarray
+        2D array of image's pixel.
+    '''
+    height, width = frame['dert__'].shape[1:]
+    box = (0, height, 0, width)
+    image = blank_image(box)
+
+    for i, blob in enumerate(frame['blob__']):
+        blob_map = draw_blob(blob, *args, **kwargs)
+
+        over_draw(image, blob_map, blob['box'], box)
+
+    return image
+
+
 def map_frame(frame, *args, **kwargs):
     '''
     Map partitioned blobs into a 2D array.
@@ -194,7 +220,7 @@ def map_frame(frame, *args, **kwargs):
     box = (0, height, 0, width)
     image = blank_image(box)
 
-    for i, blob in enumerate(frame['blob_']):
+    for i, blob in enumerate(frame['blob__']):
         blob_map = draw_blob(blob, *args, **kwargs)
 
         over_draw(image, blob_map, blob['box'], box)
@@ -227,10 +253,10 @@ def draw_stack(stack, box, sign,
     y0, yn, x0, xn = box
 
     for y, P in enumerate(stack['Py_'], start= stack['y0'] - y0):
-        for x, dert in enumerate(P['dert_'], start=P['x0']-x0):
+        for x, dert in enumerate(P['dert__'], start=P['x0']-x0):
             if sign_map is None:
                 stack_img[y, x] = dert[0]
-            else:  
+            else:
                 stack_img[y, x] = sign_map[sign]
 
     return stack_img

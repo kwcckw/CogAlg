@@ -1,7 +1,7 @@
 from time import time
 from collections import deque, defaultdict
 import numpy as np
-from comp_pixel import comp_pixel
+from comp_pixel import comp_pixel_m
 from utils import *
 
 '''
@@ -47,7 +47,7 @@ from utils import *
 # Adjustable parameters:
 
 kwidth = 3  # smallest input-centered kernel: frame | blob shrink by 2 pixels per row
-ave_g = 15  # filter or hyper-parameter, set as a guess, latter adjusted by feedback
+ave_g = 28  # filter or hyper-parameter, set as a guess, latter adjusted by feedback
 ave = 28    # main criterion for forking
 
 # ----------------------------------------------------------------------------------------------------------------------------------------
@@ -58,9 +58,9 @@ ave = 28    # main criterion for forking
 
 def image_to_blobs(image):
 
-    dert__ = comp_pixel(image)  # 2x2 cross-comparison / cross-correlation
+    dert__ = comp_pixel_m(image)  # 2x2 cross-comparison / cross-correlation
 
-    frame = dict(rng=1, dert__=dert__, mask=None, I=0, G=0, Dy=0, Dx=0, M=0, blob_=[])
+    frame = dict(rng=1, dert__=dert__, mask=None, I=0, G=0, Dy=0, Dx=0, M=0, blob__=[])
     stack_ = deque()  # buffer of running vertical stacks of Ps
     height, width = dert__.shape[1:]
 
@@ -87,21 +87,21 @@ dert: tuple of derivatives per pixel, initially (p, dy, dx, g, i), will be exten
 Dert: params of composite structures (P, stack, blob): summed dert params + dimensions: vertical Ly and area S
 '''
 
-def form_P_(dert_):  # horizontal clustering and summation of dert params into P params, per row of a frame
+def form_P_(dert__):  # horizontal clustering and summation of dert params into P params, per row of a frame
     # P is a segment of same-sign derts in horizontal slice of a blob
 
     P_ = deque()  # row of Ps
-    I, G, Dy, Dx, M, L, x0 = *dert_[0], 1, 0  # initialize P params with 1st dert params
-    G -= ave_g
+    I, G, Dy, Dx, M, L, x0 = *dert__[0], 1, 0  # initialize P params with 1st dert params
+    G = int(G) - ave_g
     M = ave - M
     _s = M > 0  # sign
-    for x, (p, g, dy, dx, m) in enumerate(dert_[1:], start=1):
-        vg = g - ave_g  # deviation of g
+    for x, (p, g, dy, dx, m) in enumerate(dert__[1:], start=1):
+        vg = int(g) - ave_g  # deviation of g
         vm = ave - m  # inverse deviation of variation
         s = vm > 0
         if s != _s:
             # terminate and pack P:
-            P = dict(I=I, G=G, Dy=Dy, Dx=Dx, M=M, L=L, x0=x0, dert_=dert_[x0:x0 + L], sign=_s)
+            P = dict(I=I, G=G, Dy=Dy, Dx=Dx, M=M, L=L, x0=x0, dert__=dert__[x0:x0 + L], sign=_s)
             P_.append(P)
             # initialize new P:
             I, G, Dy, Dx, M, L, x0 = 0, 0, 0, 0, 0, 0, x
@@ -114,7 +114,7 @@ def form_P_(dert_):  # horizontal clustering and summation of dert params into P
         L += 1
         _s = s  # prior sign
 
-    P = dict(I=I, G=G, Dy=Dy, Dx=Dx, M=M, L=L, x0=x0, dert_=dert_[x0:x0 + L], sign=_s)
+    P = dict(I=I, G=G, Dy=Dy, Dx=Dx, M=M, L=L, x0=x0, dert__=dert__[x0:x0 + L], sign=_s)
     P_.append(P)  # terminate last P in a row
     return P_
 
@@ -186,10 +186,10 @@ def form_stack_(y, P_, frame):  # Convert or merge every P into its stack of Ps,
     while P_:
         P, up_fork_ = P_.popleft()
         s = P.pop('sign')
-        I, G, Dy, Dx, M, L, x0, dert_ = P.values()
+        I, G, Dy, Dx, M, L, x0, dert__ = P.values()
         xn = x0 + L  # next-P x0
         if not up_fork_:
-            # initialize new stack for each input-row P that has no connections in higher row:
+            # initialize blob for each input-row P that has no connections in higher row:
             blob = dict(Dert=dict(I=0, G=0, Dy=0, Dx=0, M=0, S=0, Ly=0), box=[y, x0, xn], stack_=[], sign=s, open_stacks=1)
             new_stack = dict(I=I, G=G, Dy=0, Dx=Dx, M=M, S=L, Ly=1, y0=y, Py_=[P], blob=blob, down_fork_cnt=0, sign=s)
             blob['stack_'].append(new_stack)
@@ -249,7 +249,8 @@ def form_blob(stack, frame):  # increment blob with terminated stack, check for 
     blob['open_stacks'] += down_fork_cnt - 1  # incomplete stack cnt + terminated stack down_fork_cnt - 1: stack itself
     # open stacks contain Ps of a current row and may be extended with new x-overlapping Ps in next run of scan_P_
 
-    if blob['open_stacks'] == 0:  # if number of incomplete stacks == 0: blob is terminated and packed in frame
+    if blob['open_stacks'] == 0:  # if number of incomplete stacks == 0:
+        # blob is terminated and packed in frame
         last_stack = stack
 
         Dert, [y0, x0, xn], stack_, s, open_stacks = blob.values()
@@ -280,7 +281,7 @@ def form_blob(stack, frame):  # increment blob with terminated stack, check for 
                      Dx=frame['Dx'] + blob['Dert']['Dx'],
                      M =frame['M'] + blob['Dert']['M'])
 
-        frame['blob_'].append(blob)
+        frame['blob__'].append(blob)
 
 # -----------------------------------------------------------------------------
 # Utilities
@@ -309,7 +310,7 @@ if __name__ == '__main__':
         from intra_blob_draft import *
         deep_frame = frame, frame  # initialize deep_frame with root=frame, ini params=frame, initialize deeper params when fetched
 
-        for blob in frame['blob_']:
+        for blob in frame['blob__']:
             if blob['sign']:
                 if blob['Dert']['G'] > aveB and blob['Dert']['S'] > 20:
                     intra_blob(blob, rdn=1, rng=0, fig=0, fca=1, fcr=0, fga=0)
