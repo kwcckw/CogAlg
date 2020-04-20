@@ -13,7 +13,7 @@ import numpy as np
 # Input:
 IMAGE_PATH = "./images/raccoon.jpg"
 # Outputs:
-OUTPUT_PATH = "./visualization/images/"
+OUTPUT_PATH = "./images/intra_comp/"
 
 # -----------------------------------------------------------------------------
 # Functions
@@ -119,36 +119,24 @@ if __name__ == "__main__":
     g_rrr_   = draw_gr(ini_,  g_rrr_dert_[1], rng=8)
 
     # save to disk
-    cv2.imwrite('./images/intra_comp/0_g.png', g_)
-    cv2.imwrite('./images/intra_comp/1_ga.png', ga_)
-    cv2.imwrite('./images/intra_comp/2_gr.png', gr_)
-    cv2.imwrite('./images/intra_comp/3_gaga.png', gaga_)
-    cv2.imwrite('./images/intra_comp/4_gg.png', gg_)
-    cv2.imwrite('./images/intra_comp/5_gagr.png', gagr_)
-    cv2.imwrite('./images/intra_comp/6_grr.png', grr_)
-    cv2.imwrite('./images/intra_comp/7_ga_gaga.png', ga_gaga_)
-    cv2.imwrite('./images/intra_comp/8_g_ga.png', g_ga_)
-    cv2.imwrite('./images/intra_comp/9_ga_gg.png', ga_gg_)
-    cv2.imwrite('./images/intra_comp/10_g_rg.png', g_rg_)
-    cv2.imwrite('./images/intra_comp/11_ga_gagr.png', ga_gagr_)
-    cv2.imwrite('./images/intra_comp/12_g_gr.png', g_gr_)
-    cv2.imwrite('./images/intra_comp/13_ga_grr.png', ga_grr_)
-    cv2.imwrite('./images/intra_comp/14_g_rrr.png', g_rrr_)
+    cv2.imwrite(OUTPUT_PATH+'0_g.png', g_)
+    cv2.imwrite(OUTPUT_PATH+'1_ga.png', ga_)
+    cv2.imwrite(OUTPUT_PATH+'2_gr.png', gr_)
+    cv2.imwrite(OUTPUT_PATH+'3_gaga.png', gaga_)
+    cv2.imwrite(OUTPUT_PATH+'4_gg.png', gg_)
+    cv2.imwrite(OUTPUT_PATH+'5_gagr.png', gagr_)
+    cv2.imwrite(OUTPUT_PATH+'6_grr.png', grr_)
+    cv2.imwrite(OUTPUT_PATH+'7_ga_gaga.png', ga_gaga_)
+    cv2.imwrite(OUTPUT_PATH+'8_g_ga.png', g_ga_)
+    cv2.imwrite(OUTPUT_PATH+'9_ga_gg.png', ga_gg_)
+    cv2.imwrite(OUTPUT_PATH+'10_g_rg.png', g_rg_)
+    cv2.imwrite(OUTPUT_PATH+'11_ga_gagr.png', ga_gagr_)
+    cv2.imwrite(OUTPUT_PATH+'12_g_gr.png', g_gr_)
+    cv2.imwrite(OUTPUT_PATH+'13_ga_grr.png', ga_grr_)
+    cv2.imwrite(OUTPUT_PATH+'14_g_rrr.png', g_rrr_)
 
     print('Terminating...')
 
-
-def add_colour(img_comp,size_y,size_x):
-    img_colour = np.zeros((3,size_y,size_x))
-    img_colour[2] = img_comp
-    img_colour[2][img_colour[2]<255] = 0
-    img_colour[2][img_colour[2]>0] = 205
-    img_colour[1] = img_comp
-    img_colour[1][img_colour[1]==255] = 0
-    img_colour[1][img_colour[1]>0] = 255
-    img_colour = np.rollaxis(img_colour,0,3).astype('uint8')
-
-    return img_colour
 
 ''' 
     dertm_ = np.zeros((5, dert_.shape[1], dert_.shape[2])) # add extra m channel 
@@ -194,8 +182,26 @@ def add_colour(img_comp,size_y,size_x):
     img_g_rrr   = draw_gr(g_rrr, grr_dert_[1], rng=8)
 
 '''
+
+# this section of codes visualize the current fork & previous root fork with +-g by using fixed aves 
+
 # -----------------------------------------------------------------------------
 # -----------------------------------------------------------------------------
+
+
+
+#def add_colour(img_comp,size_y,size_x):
+#    img_colour = np.zeros((3,size_y,size_x))
+#    img_colour[2] = img_comp
+#    img_colour[2][img_colour[2]<255] = 0
+#    img_colour[2][img_colour[2]>0] = 205
+#    img_colour[1] = img_comp
+#    img_colour[1][img_colour[1]==255] = 0
+#    img_colour[1][img_colour[1]>0] = 255
+#    img_colour = np.rollaxis(img_colour,0,3).astype('uint8')
+#
+#    return img_colour
+
 #    # size of image
 #    size_y = image.shape[0]
 #    size_x = image.shape[1]
