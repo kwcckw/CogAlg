@@ -20,8 +20,8 @@ OUTPUT_PATH = "./images/intra_comp/"
 
 def draw_g(img_out, g_):
 
-    for y in range(g_.shape[0]):  # loop rows, skip 1st row
-        for x in range(g_.shape[1]):  # loop columns
+    for y in range(g_.shape[0]):  # loop rows, skip last row
+        for x in range(g_.shape[1]):  # loop columns, skip last column
             img_out[y,x] = g_[y,x]
 
     return img_out.astype('uint8')
