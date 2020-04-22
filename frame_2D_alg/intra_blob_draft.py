@@ -160,29 +160,32 @@ def form_P__(dert__, Ave, fca, fcr, fig, x0=0, y0=0):  # cluster dert__ into P__
     s_x_L__ = [*map(
         lambda crit_:  # Each line
             [(sign, next(group)[0], len(list(group)) + 1)  # (s, x, L)
-             for sign, group in groupby(enumerate(crit_ > 0),
-                                        op.itemgetter(1))  # (x, s): return s
+             for sign, group in groupby(enumerate(crit_ > 0),op.itemgetter(1))  # (x, s): return s
              if sign is not ma.masked],  # Ignore gaps.
         crit__,  # blob slices in line
-    )]
+               )]
+            
+            
     Pdert__ = [[dert_[:, x : x+L].T for s, x, L in s_x_L_]
                 for dert_, s_x_L_ in zip(dert__.swapaxes(0, 1), s_x_L__)]
 
+
     # Accumulate Dert = P param_keys:
     PDert__ = map(lambda Pdert_:
-                       map(lambda Pdert_: Pdert_.sum(axis=0),
-                           Pdert_),
-                   Pdert__)
+              map(lambda Pdert_: Pdert_.sum(axis=0), Pdert_), Pdert__)
+        
+        
+        
     P__ = [
-        [
+          [
             dict(zip( # Key-value pairs:
                 param_keys,
                 [*PDerts, L, x+x0, Pderts, [], [], y, s]  # why Pderts?
-            ))
+                 ))
             for PDerts, Pderts, (s, x, L) in zip(*Pparams_)
-        ]
-        for y, Pparams_ in enumerate(zip(PDert__, Pdert__, s_x_L__), start=y0)
-    ]
+          ]
+            for y, Pparams_ in enumerate(zip(PDert__, Pdert__, s_x_L__), start=y0)
+          ]
 
     return P__
 

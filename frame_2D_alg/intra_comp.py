@@ -195,8 +195,8 @@ def comp_a(dert__, fga):
     i__, g__, dy__, dx__, = dert__[0:4]
 
     if fga:  # input is adert
-        ga__, day__, dax__ = dert__[5:8]
-        a__ = [[day__], [dax__]] / ga__
+        ga__, day__, dax__ = dert__[5],dert__[6:8],dert__[8:10]
+        a__ = [day__[0],day__[1],dax__[0],dax__[1]] / ga__ # enable a flat dimension of [4,y,x], instead of [2,2,y,x]
     else:
         a__ = [dy__, dx__] / g__  # similar to calc_a
 
@@ -246,14 +246,30 @@ def comp_a(dert__, fga):
 def angle_diff(a2, a1, fga):  # compare angle_1 to angle_2
 
     if fga:
-        dyy1, dxy1, dyx1, dxx1 = a1[:]
-        dyy2, dxy2, dyx2, dxx2 = a2[:]
-        # replace: sine and cosine of difference between angles of angles:
-        sin_da = (cos_1 * sin_2) - (sin_1 * cos_2)
-        cos_da = (sin_1 * cos_1) + (sin_2 * cos_2)
+        
+        #dyy1, dxy1, dyx1, dxx1 = a1[:]
+        #dyy2, dxy2, dyx2, dxx2 = a2[:]
+        # equivalent to above
+        sin_11,cos_11, sin_12,cos_12 = a1[:]
+        sin_21,cos_21, sin_22,cos_22 = a2[:]
+        
+        #sin_da = ( [sin_12,cos_12] * [sin_21,cos_21]) - ([sin_11,cos_11] * [sin_22,cos_22])
+        #cos_da = ( [sin_11,cos_11] * [sin_12,cos_12]) + ([sin_21,cos_21] * [sin_22,cos_22])
+        # equivalent to above
+        sin_da = np.subtract(np.multiply([sin_12,cos_12] , [sin_21,cos_21]) , np.multiply([sin_11,cos_11] , [sin_22,cos_22]))
+        cos_da = np.add(np.multiply([sin_11,cos_11] , [sin_12,cos_12]) , np.multiply([sin_21,cos_21] , [sin_22,cos_22]))
+        
+        # right now each sin_da and cos_da is having sin and cos components
+        # we need to find a way to reduce the sin&cos components into 1 component only
+        # probably take the sine part of sin_da (since sine = direction info) , and cosine part of cos_da (cosine = magnitude info)?
+        # or any other suggestion?
+        sin_da = sin_da[0]
+        cos_da = cos_da[1]
+        
 
     else:
-        sin_1, cos_1 = a1[:];  sin_2, cos_2 = a2[:]
+        sin_1, cos_1 = a1[:]  
+        sin_2, cos_2 = a2[:]
         # sine and cosine of difference between angles:
 
         sin_da = (cos_1 * sin_2) - (sin_1 * cos_2)
@@ -265,7 +281,7 @@ def angle_diff(a2, a1, fga):  # compare angle_1 to angle_2
 def comp_g(dert__):  # add fga if processing in comp_ga is different?
     """
     Cross-comp of g or ga in 2x2 kernels, between derts in ma.stack dert__:
-    input dert  = (i, g, dy, dx, m, ga, day, dax, cos_da0, cos_da1)
+    input dert  = (i, g, dy, dx, ga, dayy, daxy, dayx, daxx, ma, cos_da0, cos_da1)
     output dert = (g, gg, dgy, dgx, gm, ga, day, dax, dy, dx)
     """
 
@@ -300,9 +316,11 @@ def comp_g(dert__):  # add fga if processing in comp_ga is different?
                      dgx__,
                      mg__,
                      dert__[4][:-1, :-1],  # ga__
-                     dert__[5][:-1, :-1],  # day
-                     dert__[6][:-1, :-1],  # dax
-                     dert__[7][:-1, :-1],  # ma__
+                     dert__[5][:-1, :-1],  # dayy
+                     dert__[6][:-1, :-1],  # daxy
+                     dert__[7][:-1, :-1],  # dayx
+                     dert__[8][:-1, :-1],  # daxx
+                     dert__[9][:-1, :-1],  # ma__
                      dert__[2][:-1, :-1],  # idy__
                      dert__[3][:-1, :-1]   # idx__
                     ))

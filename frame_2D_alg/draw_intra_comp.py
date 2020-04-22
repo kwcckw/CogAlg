@@ -139,41 +139,42 @@ if __name__ == "__main__":
 
     print('Drawing forks...')
     ini_ = np.zeros((image.shape[0], image.shape[1]))  # initialize image y, x
-
+    # in each draw, we need to use copy version of ini_ , otherwise values would be written to ini_
+    
     # 0th layer
-    g_ = draw_g(ini_, dert_[1])
-    m_ = draw_g(ini_, dert_[4])
+    g_ = draw_g(ini_.copy(), dert_[1]) # draw g of dert
+    m_ = draw_g(ini_.copy(), dert_[4]) # draw m of dert
     # 1st layer
-    ga_ = draw_ga(ini_, ga_dert_[4])  # angle doesn't output m
-    ma_ = draw_ma(ini_, ga_dert_[7])
-    gr_ = draw_gr(ini_, gr_dert_[1], rng=2)
-    mr_ = draw_mr(ini_, gr_dert_[4], rng=2)
+    ga_ = draw_ga(ini_.copy(), ga_dert_[4])  # draw g of adert
+    ma_ = draw_ma(ini_.copy(), ga_dert_[9])  # draw m of adert
+    gr_ = draw_gr(ini_.copy(), gr_dert_[1], rng=2) # draw g of rdert
+    mr_ = draw_mr(ini_.copy(), gr_dert_[4], rng=2) # draw m of rdert
     # 2nd layer
-    gaga_ = draw_ga(ini_, gaga_dert_[4])
-    maga_ = draw_ma(ini_, gaga_dert_[7])
-    gg_ =   draw_g(ini_,  gg_dert_[1])
-    mg_ =   draw_m(ini_,  gg_dert_[4])
-    gagr_ = draw_gar(ini_, gagr_dert_[4], rng=2)
-    magr_ = draw_mar(ini_, gagr_dert_[7], rng=2)
-    grr_ =  draw_gr(ini_,  grr_dert_[1], rng=4)
-    mrr_ =  draw_mr(ini_,  grr_dert_[4], rng=4)
+    gaga_ = draw_ga(ini_.copy(), gaga_dert_[4]) # draw g of adert
+    maga_ = draw_ma(ini_.copy(), gaga_dert_[9]) # draw m of adert
+    gg_ =   draw_g(ini_.copy(),  gg_dert_[1]) # draw g of gdert
+    mg_ =   draw_m(ini_.copy(),  gg_dert_[4]) # draw m of gdert
+    gagr_ = draw_gar(ini_.copy(), gagr_dert_[4], rng=2) # draw g of adert
+    magr_ = draw_mar(ini_.copy(), gagr_dert_[9], rng=2) # draw m of adert
+    grr_ =  draw_gr(ini_.copy(),  grr_dert_[1], rng=4) # draw g of rdert
+    mrr_ =  draw_mr(ini_.copy(),  grr_dert_[4], rng=4) # draw m of rdert
     # 3rd layer
-    ga_gaga_ = draw_ga(ini_, ga_gaga_dert_[4])
-    ma_gaga_ = draw_ma(ini_, ga_gaga_dert_[7])
-    g_ga_    = draw_g(ini_,  g_ga_dert_[1])
-    m_ga_    = draw_m(ini_, g_ga_dert_[4])
-    ga_gg_   = draw_ga(ini_, ga_gg_dert_[4])
-    ma_gg_   = draw_ma(ini_, ga_gg_dert_[7])
-    g_rg_    = draw_gr(ini_, g_rg_dert_[1], rng=2)
-    m_rg_    = draw_mr(ini_, g_rg_dert_[4], rng=2)
-    ga_gagr_ = draw_gar(ini_, ga_gagr_dert_[4], rng=2)
-    ma_gagr_ = draw_mar(ini_, ga_gagr_dert_[7], rng=2)
-    g_gr_    = draw_gr(ini_,  g_gr_dert_[1], rng=2)
-    m_gr_    = draw_mr(ini_,  g_gr_dert_[4], rng=2)
-    ga_grr_  = draw_gar(ini_, ga_grr_dert_[4], rng=4)
-    ma_grr_  = draw_mar(ini_, ga_grr_dert_[7], rng=4)
-    g_rrr_   = draw_gr(ini_,  g_rrr_dert_[1], rng=8)
-    m_rrr_   = draw_mr(ini_,  g_rrr_dert_[4], rng=8)
+    ga_gaga_ = draw_ga(ini_.copy(), ga_gaga_dert_[4]) # draw g of adert
+    ma_gaga_ = draw_ma(ini_.copy(), ga_gaga_dert_[9]) # draw m of adert
+    g_ga_    = draw_g(ini_.copy(),  g_ga_dert_[1]) # draw g of gdert
+    m_ga_    = draw_m(ini_.copy(), g_ga_dert_[4]) # draw m of gdert
+    ga_gg_   = draw_ga(ini_.copy(), ga_gg_dert_[4]) # draw g of adert
+    ma_gg_   = draw_ma(ini_.copy(), ga_gg_dert_[9]) # draw m of adert
+    g_rg_    = draw_gr(ini_.copy(), g_rg_dert_[1], rng=2) # draw g of rdert
+    m_rg_    = draw_mr(ini_.copy(), g_rg_dert_[4], rng=2) # draw m of rdert
+    ga_gagr_ = draw_gar(ini_.copy(), ga_gagr_dert_[4], rng=2) # draw g of adert
+    ma_gagr_ = draw_mar(ini_.copy(), ga_gagr_dert_[9], rng=2) # draw  of adert
+    g_gr_    = draw_gr(ini_.copy(),  g_gr_dert_[1], rng=2) # draw g of gdert
+    m_gr_    = draw_mr(ini_.copy(),  g_gr_dert_[4], rng=2) # draw m of gdert
+    ga_grr_  = draw_gar(ini_.copy(), ga_grr_dert_[4], rng=4) # draw g of adert
+    ma_grr_  = draw_mar(ini_.copy(), ga_grr_dert_[9], rng=4) # draw m of adert
+    g_rrr_   = draw_gr(ini_.copy(),  g_rrr_dert_[1], rng=8) # draw g of rdert
+    m_rrr_   = draw_mr(ini_.copy(),  g_rrr_dert_[4], rng=8) # draw m of rdert
 
     # save to disk
     cv2.imwrite(OUTPUT_PATH+'0_g.png', g_)
