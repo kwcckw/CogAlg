@@ -25,7 +25,6 @@ def comp_r(dert__, fig, root_fcr):
     where input intensity didn't vary much in shorter-range cross-comparison.
     Such input is predictable enough for selective sampling: skipping current
     rim derts as kernel-central derts in following comparison kernels.
-
     Skipping forms increasingly sparse output dert__ for greater-range cross-comp, hence
     rng (distance between centers of compared derts) increases as 2^n, starting at 0:
     rng = 1: 3x3 kernel,
@@ -185,18 +184,17 @@ def comp_r(dert__, fig, root_fcr):
     return rdert
 
 
-def comp_a(dert__, fga):
+def comp_a(dert__, fga):  # cross-comp of a or aga in 2x2 kernels
     '''
-    cross-comp of a or aga in 2x2 kernels
     if fga: dert = (g, gg, dgy, dgx, gm, ?(iga, iday, idax)
-    else: dert = (i, g, dy, dx, ?m)
+    else:   dert = (i, g, dy, dx, ?m)
     '''
     dert__ = shape_check(dert__)  # remove derts of incomplete kernels
     i__, g__, dy__, dx__, = dert__[0:4]
 
     if fga:  # input is adert
-        ga__, day__, dax__ = dert__[5],dert__[6:8],dert__[8:10]
-        a__ = [day__[0],day__[1],dax__[0],dax__[1]] / ga__ # enable a flat dimension of [4,y,x], instead of [2,2,y,x]
+        ga__, day__, dax__ = dert__[4], dert__[5:7], dert__[7:9]
+        a__ = [day__[0], day__[1], dax__[0], dax__[1]] / ga__
     else:
         a__ = [dy__, dx__] / g__  # similar to calc_a
 
@@ -246,29 +244,24 @@ def comp_a(dert__, fga):
 def angle_diff(a2, a1, fga):  # compare angle_1 to angle_2
 
     if fga:
-        
-        #dyy1, dxy1, dyx1, dxx1 = a1[:]
-        #dyy2, dxy2, dyx2, dxx2 = a2[:]
-        # equivalent to above
-        sin_11,cos_11, sin_12,cos_12 = a1[:]
-        sin_21,cos_21, sin_22,cos_22 = a2[:]
-        
-        #sin_da = ( [sin_12,cos_12] * [sin_21,cos_21]) - ([sin_11,cos_11] * [sin_22,cos_22])
-        #cos_da = ( [sin_11,cos_11] * [sin_12,cos_12]) + ([sin_21,cos_21] * [sin_22,cos_22])
-        # equivalent to above
+        sin_11,cos_11, sin_12,cos_12 = a1[:]  # dyy1, dxy1, dyx1, dxx1 = a1[:]
+        sin_21,cos_21, sin_22,cos_22 = a2[:]  # dyy2, dxy2, dyx2, dxx2 = a2[:]
+
         sin_da = np.subtract(np.multiply([sin_12,cos_12] , [sin_21,cos_21]) , np.multiply([sin_11,cos_11] , [sin_22,cos_22]))
         cos_da = np.add(np.multiply([sin_11,cos_11] , [sin_12,cos_12]) , np.multiply([sin_21,cos_21] , [sin_22,cos_22]))
-        
+        # =
+        # sin_da = ( [sin_12,cos_12] * [sin_21,cos_21]) - ([sin_11,cos_11] * [sin_22,cos_22])
+        # cos_da = ( [sin_11,cos_11] * [sin_12,cos_12]) + ([sin_21,cos_21] * [sin_22,cos_22])
+
         # right now each sin_da and cos_da is having sin and cos components
-        # we need to find a way to reduce the sin&cos components into 1 component only
+        # we need to find a way to reduce the sin & cos components into 1 component only
         # probably take the sine part of sin_da (since sine = direction info) , and cosine part of cos_da (cosine = magnitude info)?
-        # or any other suggestion?
+
         sin_da = sin_da[0]
         cos_da = cos_da[1]
-        
 
     else:
-        sin_1, cos_1 = a1[:]  
+        sin_1, cos_1 = a1[:]
         sin_2, cos_2 = a2[:]
         # sine and cosine of difference between angles:
 
@@ -281,7 +274,7 @@ def angle_diff(a2, a1, fga):  # compare angle_1 to angle_2
 def comp_g(dert__):  # add fga if processing in comp_ga is different?
     """
     Cross-comp of g or ga in 2x2 kernels, between derts in ma.stack dert__:
-    input dert  = (i, g, dy, dx, ga, dayy, daxy, dayx, daxx, ma, cos_da0, cos_da1)
+    input dert  = (i, g, dy, dx, ga, dyy, dxy, dyx, dxx, ma, cos_da0, cos_da1)
     output dert = (g, gg, dgy, dgx, gm, ga, day, dax, dy, dx)
     """
 
@@ -370,7 +363,6 @@ def calc_a(dert__):
 
 
 ''' old comp_a:
-
 day__ = ( Y_COEFFS[0][0] * angle_diff(a__topleft, a__bottomright) +
           Y_COEFFS[0][1] * angle_diff(a__topright, a__bottomleft)
         )
@@ -381,14 +373,12 @@ dax__ = ( X_COEFFS[0][0] * angle_diff(a__topleft, a__bottomright) +
 2x2 COEFFS:
 Y: np.array([-2, -2, 2, 2])
 X: np.array([-2, 2, 2, -2])
-
 roll axis to align COEFFs with dat__: move 1st axis to 4th axis,
 for broadcasting 4 pairs of 8 directionals with coefficients:
         
     dat__ = np.rollaxis(dat__, 0, 4)
     day__ = (dat__ * YCOEFs).sum(axis=-1)
     dax__ = (dat__ * XCOEFs).sum(axis=-1)
-
     dt__ = np.rollaxis(dt__, 0, 3)
     gy__ += (dt__ * YCOEFs).sum(axis=-1)
     gx__ += (dt__ * XCOEFs).sum(axis=-1)
