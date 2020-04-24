@@ -177,7 +177,10 @@ def comp_r(dert__, fig, root_fcr):
         g__ = np.hypot(dy__, dx__)
 
     if fig:
-        rdert = ma.stack((i__center, g__, dy__, dx__, m__, idy__, idx__))
+        
+        idy__center = idy__[1:-1:2, 1:-1:2]
+        idx__center = idx__[1:-1:2, 1:-1:2]
+        rdert = ma.stack((i__center, g__, dy__, dx__, m__, idy__center, idx__center))
     else:
         rdert = ma.stack((i__center, g__, dy__, dx__, m__))
     '''
