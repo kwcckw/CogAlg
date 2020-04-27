@@ -103,11 +103,11 @@ def form_P__(dert__, Ave, fcr, fig):  # segment dert__ into P__, in horizontal )
     for y in range(dert__.shape[1]):  # segment row dert_ into same-sign Ps:
 
         mask_ = dert__.mask[0][y, :]
-        i_  = dert__[1][y, :]
-        g_  = dert__[2][y, :]
-        dy_ = dert__[3][y, :]
-        dx_ = dert__[4][y, :]
-        m_  = dert__[5][y, :]
+        i_  = dert__[0][y, :]
+        g_  = dert__[1][y, :]
+        dy_ = dert__[2][y, :]
+        dx_ = dert__[3][y, :]
+        m_  = dert__[4][y, :]
         if fig:
             idy_ = dert__[6][y, :]
             idx_ = dert__[7][y, :]
@@ -123,7 +123,9 @@ def form_P__(dert__, Ave, fcr, fig):  # segment dert__ into P__, in horizontal )
         for x in range(1, dert__.shape[2]):  # loop left to right in each row
             sign = sign_[x]
             mask = mask_[x]
-            if (~_mask and mask) or sign_ != _sign:
+            
+            # current dert is masked, while previous dert is not masked or there is change of sign, then we terminate P?
+            if (mask == True and _mask == False) or sign != _sign:
                 # (P exists and input is not in blob) or sign changed, terminate and pack P:
 
                 P = dict(I=I, G=G, Dy=Dy, Dx=Dx, M=M, L=L, x0=x0, sign=_sign)
@@ -149,7 +151,8 @@ def form_P__(dert__, Ave, fcr, fig):  # segment dert__ into P__, in horizontal )
         P = dict(I=I, G=G, Dy=Dy, Dx=Dx, M=M, L=L, x0=x0, sign=_sign)
         if fig: P.update(iDy=iDy, iDx=iDx)
         P_.append(P)
-        P__[y] = P_  # pack P_row in P_blob
+        
+        P__.append(P_)  # pack P_row in P_blob
 
     return P__
 
@@ -562,3 +565,20 @@ def feedback(blob, fork=None):  # Add each Dert param to corresponding param of 
     """
     if root_fork['root_blob'] is not None:  # Stop recursion if false.
         feedback(root_fork['root_blob'])
+
+
+
+
+
+## quick testing and debug ####################################################
+
+import numpy
+dert__ = numpy.load('dert__.npy',allow_pickle=True)
+
+Ave = 50
+fcr = 1
+fig = 0
+x0 = 0
+y0 = 0
+
+dert_ = form_P__(dert__, Ave, fcr, fig)

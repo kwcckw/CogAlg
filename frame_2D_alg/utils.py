@@ -253,7 +253,7 @@ def draw_stack(stack, box, sign,
     y0, yn, x0, xn = box
 
     for y, P in enumerate(stack['Py_'], start= stack['y0'] - y0):
-        for x, dert in enumerate(P['dert__'], start=P['x0']-x0):
+        for x, dert in enumerate(P['dert_'], start=P['x0']-x0):
             if sign_map is None:
                 stack_img[y, x] = dert[0]
             else:
