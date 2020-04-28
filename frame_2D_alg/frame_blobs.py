@@ -325,6 +325,46 @@ if __name__ == '__main__':
     end_time = time() - start_time
     print(end_time)
 
+    # Check if all blobs are contiguous ---------------------------------------
+
+    i_non_contiguous = []
+    blob_non_contiguous = []
+    i_empty = []
+    blob_empty = []
+    
+    # loop across all blobs
+    for i, blob in enumerate(frame['blob__']):
+            dert__ = blob['dert__']
+            # loop in each row
+            for y in range(dert__.shape[0]):
+            
+                # if there is no unmasked dert in the row but there is some unmasked dert within the blob
+                if (False in dert__.mask[0][y,:]) == False and (False in dert__.mask[0]) == True:
+        
+    
+                    blob_non_contiguous.append(blob)
+                    i_non_contiguous.append(i)
+                    
+                    break
+                
+                # if there is totally no unmasked dert in the blob
+                if (False in dert__.mask[0]) == False:
+        
+    
+                    blob_empty.append(blob)
+                    i_empty.append(i)
+                    
+                    break
+                
+                break
+
+    # from my checking here, there are some blob with all masked value, is that normal?
+    # you may check 'blob_empty' on this
+    
+    # also there some blobs with masked value on first 1 row or last row, but why we would include those masked row in the blob? We could just remove those rows from the blob
+    # you may check 'blob_non_contiguous' on this
+            
+    
     # DEBUG -------------------------------------------------------------------
     imwrite("images/gblobs.bmp",
         map_frame_binary(frame,

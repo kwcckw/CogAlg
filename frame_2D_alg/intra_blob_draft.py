@@ -101,7 +101,7 @@ def form_P__(dert__, Ave, fcr, fig):  # segment dert__ into P__, in horizontal )
         crit__ = dert__[4] - Ave  # comp_g output eval by m, or clustering is always by m?
 
     P__ = []
-    new_mask = np.ones[dert__.shape]
+    new_mask = np.ones((dert__.shape[1],dert__.shape[2])) # we need double brackets here
 
     for y in range(dert__.shape[1]):  # segment row dert_ into same-sign Ps:
 
@@ -117,51 +117,66 @@ def form_P__(dert__, Ave, fcr, fig):  # segment dert__ into P__, in horizontal )
         P_ = []
         sign_ = crit__[y, :] > 0
 
-        for x in range(len(i_)-1):  # -1 because x starts with 0
-            if not i_.mask[x]:
+        
+        x0 = -1
+        for x in range(len(i_)):  # index of range(len(i_)) would start with 0 as well, we no need to use -1 here
+            if ~i_.mask[x]: # if mask = false (there is value)
                 x0 = x  # coordinate of first not-masked dert in line
                 break
-        # initialize P params:
-        I, G, Dy, Dx, M, L = i_[x0], g_[x0], dy_[x0], dx_[x0], m_[x0], 1
-        if fig:
-            iDy, iDx = idy_[x0], idx_[x0]
-        _sign = sign_[x0]
-        _mask = False
-
-        for x in range(x0+1, dert__.shape[2]):  # loop left to right in each row
-            sign = sign_[x]
-            mask = mask_[x]
-            if (~_mask and mask) or sign_ != _sign:
-                # (P exists and input is not in blob) or sign changed, terminate and pack P:
-
-                P = dict(I=I, G=G, Dy=Dy, Dx=Dx, M=M, L=L, x0=x0, sign=_sign)
-                if fig:
-                    P.update(iDy=iDy, iDx=iDx)
-                new_mask[x0: x0+L-1] = np.zeros  # for terminated blob' dert__.mask = new_mask
-                # no dert_, derts are accessed from blob.dert__
-                P_.append(P)
-                # initialize P params:
-                I, G, Dy, Dx, M, L, x0 = 0, 0, 0, 0, 0, 0, x
-                if fig: iDy, iDx = 0, 0
-
-            if ~mask:  # accumulate P params:
-                I += i_[x]
-                G += g_[x]
-                Dy += dy_[x]
-                Dx += dx_[x]
-                M += m_[x]
-                if fig: iDy, iDx = idy_[x], idx_[x]
-                L += 1
-                _sign = sign  # prior sign
-            _mask = mask
-
-        # terminate last P in a row
-        P = dict(I=I, G=G, Dy=Dy, Dx=Dx, M=M, L=L, x0=x0, sign=_sign)
-        if fig:
-            P.update(iDy=iDy, iDx=iDx)
-        new_mask[x0: x0+L-1] = np.zeros
-        P_.append(P)
-        P__[y] = P_  # pack P row in P box
+        
+        # condition where whole line is masked
+        # blob or stoack is contiguous, but the dert output from comps operation may not contiguous anymore
+        if x0 == -1:
+            
+            P_= []
+            
+        # if there is at least 1 unmasked dert
+        else:
+                
+            # initialize P params:
+            I, G, Dy, Dx, M, L = i_[x0], g_[x0], dy_[x0], dx_[x0], m_[x0], 1
+            if fig:
+                iDy, iDx = idy_[x0], idx_[x0]
+            _sign = sign_[x0]
+            _mask = False
+    
+            for x in range(x0+1, dert__.shape[2]):  # loop left to right in each row
+                sign = sign_[x]
+                mask = mask_[x]
+                if (~_mask and mask) or sign != _sign: # current sign should be 'sign' instead of  sign_
+                    # (P exists and input is not in blob) or sign changed, terminate and pack P:
+    
+                    P = dict(I=I, G=G, Dy=Dy, Dx=Dx, M=M, L=L, x0=x0, sign=_sign)
+                    if fig:
+                        P.update(iDy=iDy, iDx=iDx)
+                        
+                    # we can just add 0 here, assume 1 = masked, 0 = unmask
+                    new_mask[y,x0: x0+L] = 0  # for terminated blob' dert__.mask = new_mask  # why there is a -1?
+                    # no dert_, derts are accessed from blob.dert__
+                    P_.append(P)
+                    # initialize P params:
+                    I, G, Dy, Dx, M, L, x0 = 0, 0, 0, 0, 0, 0, x
+                    if fig: iDy, iDx = 0, 0
+    
+                if ~mask:  # accumulate P params:
+                    I += i_[x]
+                    G += g_[x]
+                    Dy += dy_[x]
+                    Dx += dx_[x]
+                    M += m_[x]
+                    if fig: iDy, iDx = idy_[x], idx_[x]
+                    L += 1
+                    _sign = sign  # prior sign
+                _mask = mask
+    
+            # terminate last P in a row
+            P = dict(I=I, G=G, Dy=Dy, Dx=Dx, M=M, L=L, x0=x0, sign=_sign)
+            if fig:
+                P.update(iDy=iDy, iDx=iDx)
+            new_mask[y,x0: x0+L] = 0 # why there is a -1?
+            P_.append(P)
+        
+        P__.append(P_)  # pack P row in P box
 
     return P__
 
@@ -574,3 +589,17 @@ def feedback(blob, fork=None):  # Add each Dert param to corresponding param of 
     """
     if root_fork['root_blob'] is not None:  # Stop recursion if false.
         feedback(root_fork['root_blob'])
+
+
+
+# quick testing and debug #####################################################
+
+dert__ = np.load('dert__.npy',allow_pickle=True)
+
+
+Ave = 50
+fcr = 0
+fig = 0
+
+p = form_P__(dert__, Ave, fcr, fig)
+
