@@ -8,19 +8,15 @@ from utils import *
     2D version of first-level core algorithm will have frame_blobs, intra_blob (recursive search within blobs), and comp_P.
     frame_blobs() forms parameterized blobs: contiguous areas of positive or negative deviation of gradient per pixel.    
     comp_pixel (lateral, vertical, diagonal) forms dert, queued in dert__: tuples of pixel + derivatives, over whole image. 
-
     Then pixel-level and external parameters are accumulated in row segment Ps, vertical blob segment, and blobs,
     adding a level of encoding per row y, defined relative to y of current input row, with top-down scan:
-
     1Le, line y-1: form_P( dert_) -> 1D pattern P: contiguous row segment, a slice of a blob
     2Le, line y-2: scan_P_(P, hP) -> hP, up_fork_, down_fork_count: vertical connections per stack of Ps 
     3Le, line y-3: form_stack(hP, stack) -> stack: merge vertically-connected _Ps into non-forking stacks of Ps
     4Le, line y-4+ stack depth: form_blob(stack, blob): merge connected stacks in blobs referred by up_fork_, recursively
-
     Higher-row elements include additional parameters, derived while they were lower-row elements. Processing is bottom-up:
     from input-row to higher-row structures, sequential because blobs are irregular, not suited for matrix operations.
     Resulting blob structure (fixed set of parameters per blob): 
-
     - root_fork = frame,  # replaced by blob-level fork in sub_blobs
     - Dert = I, G, Dy, Dx, S, Ly: summed pixel-level dert params I, G, Dy, Dx, surface area S, vertical depth Ly
     - sign = s: sign of gradient deviation
@@ -29,16 +25,13 @@ from utils import *
     - dert__,  # 2D array of pixel-level derts: (p, g, dy, dx) tuples
     - stack_,  # contains intermediate blob composition structures: stacks and Ps, not meaningful on their own
     ( intra_blob structure extends Dert, adds crit, rng, fork_)
-
     Blob is 2D pattern: connectivity cluster defined by the sign of gradient deviation. Gradient represents 2D variation
     per pixel. It is used as inverse measure of partial match (predictive value) because direct match (min intensity) 
     is not meaningful in vision. Intensity of reflected light doesn't correlate with predictive value of observed object 
     (predictive value is physical density, hardness, inertia that represent resistance to change in positional parameters)  
-
     This is clustering by connectivity because distance between clustered pixels should not exceed cross-comparison range.
     That range is fixed for each layer of search, to enable encoding of input pose parameters: coordinates, dimensions, 
     orientation. These params are essential because value of prediction = precision of what * precision of where. 
-
     frame_blobs is a complex function with a simple purpose: to sum pixel-level params in blob-level params. These params 
     were derived by pixel cross-comparison (cross-correlation) to represent predictive value per pixel, so they are also
     predictive on a blob level, and should be cross-compared between blobs on the next level of search and composition.
@@ -263,7 +256,9 @@ def form_blob(stack, frame):  # increment blob with terminated stack, check for 
                 mask[y, x_start:x_stop] = False
 
         dert__ = frame['dert__'][:, y0:yn, x0:xn]
-        dert__.mask[:] = mask  # overwrite default mask=0s
+        # logical NOT + OR to prevent overwriting of current masked area to previous blob unmasked area
+        # with this method, frame['dert__'] mask is preserved as well
+        dert__.mask[:] = ~np.logical_or(~dert__.mask[:],~mask)  # overwrite default mask=0s
 
         blob.pop('open_stacks')
         blob.update(root=frame,
@@ -326,46 +321,41 @@ if __name__ == '__main__':
     end_time = time() - start_time
     print(end_time)
 
-    # Check if all blobs are contiguous ---------------------------------------
 
-    i_non_contiguous = []
-    blob_non_contiguous = []
+     # Check if all blobs are contiguous ---------------------------------------
+
+    i_non_contiguous_top_bottom = []
+    blob_non_contiguous_top_bottom = []
     i_empty = []
     blob_empty = []
+    i_non_contiguous_within_dert= []
+    blob_non_contiguous_within_dert = []
     
+
     # loop across all blobs
     for i, blob in enumerate(frame['blob__']):
             dert__ = blob['dert__']
             # loop in each row
             for y in range(dert__.shape[0]):
-            
                 # if there is no unmasked dert in the row but there is some unmasked dert within the blob
                 if (False in dert__.mask[0][y,:]) == False and (False in dert__.mask[0]) == True:
-        
-    
-                    blob_non_contiguous.append(blob)
-                    i_non_contiguous.append(i)
-                    
+                    if y == 0 or y == dert__.shape[0]:
+                        # non-contiguous in top or bottom row of dert
+                        blob_non_contiguous_top_bottom.append(blob)
+                        i_non_contiguous_top_bottom.append(i)
+                    else:     
+                        # non-contiguous in rows other than top and bottom row
+                        blob_non_contiguous_within_dert.append(blob)
+                        i_non_contiguous_within_dert.append(i)
                     break
-                
                 # if there is totally no unmasked dert in the blob
                 if (False in dert__.mask[0]) == False:
-        
-    
                     blob_empty.append(blob)
                     i_empty.append(i)
-                    
                     break
-                
                 break
 
-    # from my checking here, there are some blob with all masked value, is that normal?
-    # you may check 'blob_empty' on this
-    
-    # also there some blobs with masked value on first 1 row or last row, but why we would include those masked row in the blob? We could just remove those rows from the blob
-    # you may check 'blob_non_contiguous' on this
-            
-    
+
     # DEBUG -------------------------------------------------------------------
     imwrite("images/gblobs.bmp",
         map_frame_binary(frame,

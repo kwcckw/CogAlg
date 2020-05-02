@@ -35,6 +35,7 @@ def draw_blobs(frame, param):
             dert__ = blob['dert__'][param].data
             mask_index = np.where(blob['dert__'][0].mask == True)
             dert__[mask_index] = 0
+            dert__ = dert__*255
 
             # draw blobs into image
             img_blob_[ blob['box'][0]:blob['box'][1], blob['box'][2]:blob['box'][3] ] += dert__
@@ -64,9 +65,11 @@ gblob_, gbox_ = draw_blobs(frame, param=1)
 
 for i in range(len(gbox_)):
 
-    iblob_ = cv2.rectangle(iblob_, (ibox_[i][0], ibox_[i][2]), (ibox_[i][1], ibox_[i][3]), color=(750, 0 ,0),
+    # cv2 rectangle (xstart,ystart) (xstop, ystop)
+    # box = [ystart, ystop, xstart,xstop]
+    iblob_ = cv2.rectangle(iblob_, (ibox_[i][2], ibox_[i][0]), (ibox_[i][3], ibox_[i][1]), color=(750, 0 ,0),
                   thickness=1)
-    gblob_ = cv2.rectangle(gblob_, (gbox_[i][0], gbox_[i][2]), (gbox_[i][1], gbox_[i][3]), color=(750, 0 ,0),
+    gblob_ = cv2.rectangle(gblob_, (gbox_[i][2], gbox_[i][0]), (gbox_[i][3], gbox_[i][1]), color=(750, 0 ,0),
                   thickness=1)
 
 # save to disk
