@@ -9,7 +9,7 @@ import argparse
 # Main #
 
 argument_parser = argparse.ArgumentParser()
-argument_parser.add_argument('-i', '--image', help='path to image file', default='./images//raccoon.jpg')
+argument_parser.add_argument('-i', '--image', help='path to image file', default='./images//raccoon_eye.jpeg')
 arguments = vars(argument_parser.parse_args())
 image = imread(arguments['image'])
 
@@ -19,7 +19,7 @@ frame = image_to_blobs(image)
 
 from matplotlib import pyplot as plt
 
-IMAGE_PATH = "./images/raccoon.jpg"
+IMAGE_PATH = "./images/raccoon_eye.jpeg"
 image = imread(IMAGE_PATH)
 
 def draw_blobs(frame, param):
@@ -41,11 +41,11 @@ def draw_blobs(frame, param):
             img_blob_[ blob['box'][0]:blob['box'][1], blob['box'][2]:blob['box'][3] ] += dert__
             box_.append(blob['box'])
 
-    # uncomment to enable draw animation
-    # plt.figure(dert__select); plt.clf()
-    # plt.imshow(img_blobs.astype('uint8'))
-    # plt.title('Blob Number ' + str(i))
-    # plt.pause(0.001)
+#     uncomment to enable draw animation
+#     plt.figure(dert__select); plt.clf()
+#     plt.imshow(img_blobs.astype('uint8'))
+#     plt.title('Blob Number ' + str(i))
+#     plt.pause(0.001)
 
     return img_blob_.astype('uint8'), box_
 
@@ -75,5 +75,22 @@ for i in range(len(gbox_)):
 # save to disk
 cv2.imwrite("images/blobs0.png", iblob_)
 cv2.imwrite("images/blobs1.png", gblob_)
+
+
+# Save each individual blobs and their mask to disk  --------------------------
+
+for i in range(len(frame['blob__'])):
+    
+    # masked = black
+    # unmasked = white
+    mask = 255-(frame['blob__'][i]['dert__'].mask[0] * 255)
+    img_mask = mask.astype('uint8')
+    
+    cv2.imwrite("images/blob_mask/masks"+str(i)+".bmp", img_mask)
+
+
+
+
+
 
 

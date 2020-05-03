@@ -3,6 +3,7 @@ from collections import deque, defaultdict
 import numpy as np
 from comp_pixel import comp_pixel
 from utils import *
+from copy import copy
 
 '''
     2D version of first-level core algorithm will have frame_blobs, intra_blob (recursive search within blobs), and comp_P.
@@ -255,10 +256,14 @@ def form_blob(stack, frame):  # increment blob with terminated stack, check for 
                 x_stop = x_start + P['L']
                 mask[y, x_start:x_stop] = False
 
-        dert__ = frame['dert__'][:, y0:yn, x0:xn]
-        # logical NOT + OR to prevent overwriting of current masked area to previous blob unmasked area
-        # with this method, frame['dert__'] mask is preserved as well
-        dert__.mask[:] = ~np.logical_or(~dert__.mask[:],~mask)  # overwrite default mask=0s
+        # copy mask into dert's mask in blob
+        dert__ = (frame['dert__'][:, y0:yn, x0:xn]).copy()
+        dert__.mask[:] = True
+        dert__.mask[:] = mask  # overwrite default mask=0s
+        
+        # assign mask back to dert's mask in frame
+        frame['dert__'][:, y0:yn, x0:xn] = dert__.copy()
+        
 
         blob.pop('open_stacks')
         blob.update(root=frame,
@@ -286,7 +291,7 @@ if __name__ == '__main__':
     import argparse
 
     argument_parser = argparse.ArgumentParser()
-    argument_parser.add_argument('-i', '--image', help='path to image file', default='./images//raccoon.jpg')
+    argument_parser.add_argument('-i', '--image', help='path to image file', default='./images//raccoon_eye.jpeg')
     arguments = vars(argument_parser.parse_args())
     image = imread(arguments['image'])
 
@@ -324,36 +329,58 @@ if __name__ == '__main__':
 
      # Check if all blobs are contiguous ---------------------------------------
 
-    i_non_contiguous_top_bottom = []
-    blob_non_contiguous_top_bottom = []
+
+    # initialization
     i_empty = []
     blob_empty = []
+
+    # y direction
+    i_non_contiguous_top_bottom = []
+    blob_non_contiguous_top_bottom = []
     i_non_contiguous_within_dert= []
     blob_non_contiguous_within_dert = []
     
-
+    # x direction
+    i_non_contiguous_top_bottom2 = []
+    blob_non_contiguous_top_bottom2 = []
+    i_non_contiguous_within_dert2= []
+    blob_non_contiguous_within_dert2 = []
+    
     # loop across all blobs
     for i, blob in enumerate(frame['blob__']):
-            dert__ = blob['dert__']
-            # loop in each row
-            for y in range(dert__.shape[0]):
-                # if there is no unmasked dert in the row but there is some unmasked dert within the blob
-                if (False in dert__.mask[0][y,:]) == False and (False in dert__.mask[0]) == True:
-                    if y == 0 or y == dert__.shape[0]:
-                        # non-contiguous in top or bottom row of dert
-                        blob_non_contiguous_top_bottom.append(blob)
-                        i_non_contiguous_top_bottom.append(i)
-                    else:     
-                        # non-contiguous in rows other than top and bottom row
-                        blob_non_contiguous_within_dert.append(blob)
-                        i_non_contiguous_within_dert.append(i)
-                    break
-                # if there is totally no unmasked dert in the blob
-                if (False in dert__.mask[0]) == False:
-                    blob_empty.append(blob)
-                    i_empty.append(i)
-                    break
-                break
+        dert__ = blob['dert__']
+        # loop in each row
+        for y in range(dert__.shape[1]):
+            # if there is no unmasked dert in the row but there is some unmasked dert within the blob
+            if ((False in dert__.mask[0][y,:]) == False) and ((False in dert__.mask[0]) == True):
+                if y == 0 or y == dert__.shape[1]:
+                    # non-contiguous in top or bottom row of dert
+                    blob_non_contiguous_top_bottom.append(blob)
+                    i_non_contiguous_top_bottom.append(i)       
+                if y != 0 or y != dert__.shape[1]:
+                    # non-contiguous in rows other than top and bottom row
+                    blob_non_contiguous_within_dert.append(blob)
+                    i_non_contiguous_within_dert.append(i)
+            # if there is totally no unmasked dert in the blob
+            if (False in dert__.mask[0]) == False:
+                blob_empty.append(blob)
+                i_empty.append(i)
+
+        # loop in each column
+        for x in range(dert__.shape[2]):
+            
+            # if there is no unmasked dert in the column but there is some unmasked dert within the blob 
+            if ((False in dert__.mask[0][:,x]) == False) and ((False in dert__.mask[0]) == True):       
+                   
+                if x == 0 or x == dert__.shape[2]:
+                    # non-contiguous in 1st or last column of dert
+                    blob_non_contiguous_top_bottom2.append(blob)
+                    i_non_contiguous_top_bottom2.append(i)
+                         
+                if x != 0 or x != dert__.shape[2]:
+                    # non-contiguous in columns other than 1st and last column
+                    blob_non_contiguous_within_dert2.append(blob)
+                    i_non_contiguous_within_dert2.append(i)
 
 
     # DEBUG -------------------------------------------------------------------
