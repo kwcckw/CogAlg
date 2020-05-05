@@ -58,11 +58,15 @@ def comp_r(dert__, fig, root_fcr):
 
     else:  # root fork is comp_g or comp_pixel, initialize sparse derivatives:
 
-        dy__ = np.zeros((i__center.shape[0], i__center.shape[1]))  # row, column
-        dx__ = np.zeros((i__center.shape[0], i__center.shape[1]))
-        m__ = np.zeros((i__center.shape[0], i__center.shape[1]))
+        dy__ = np.zeros_like(i__center)  # initialize with same row & column size as i__center
+        dx__ = np.zeros_like(i__center)
+        m__ = np.zeros_like(i__center)
 
     if not fig:  # compare four diametrically opposed pairs of rim pixels:
+
+        # initialize idy and idx as 0 if fig = False
+        idy__ = np.zeros_like(i__)
+        idx__ = np.zeros_like(i__)
 
         dt__ = np.stack((i__topleft - i__bottomright,
                          i__top - i__bottom,
@@ -89,11 +93,9 @@ def comp_r(dert__, fig, root_fcr):
               + abs(i__center - i__left)
               )
     else:  # fig is TRUE, compare angle and then magnitude of 8 center-rim pairs
-        if not root_fcr:
-            idy__, idx__ = dert__[[-2, -1]]  # root fork is comp_g, not sparse
-
-            dy__ = np.zeros((i__center.shape[0], i__center.shape[1]))  # row, column
-            dx__ = np.zeros((i__center.shape[0], i__center.shape[1]))
+        
+        # root_fcr == true or root_fcr = false, idy and idx also should be the last 2 element?
+        idy__, idx__ = dert__[[-2, -1]]  # root fork is comp_g, not sparse
 
         a__ = [idy__, idx__] / i__  # sin, cos;  i = ig
         '''
@@ -188,8 +190,6 @@ def comp_g(dert__):  # cross-comp of g in 2x2 kernels, between derts in ma.stack
     cos_da0__ = (sin0__ * cos0__) + (sin2__ * cos2__)  # top left to bottom right
     cos_da1__ = (sin1__ * cos1__) + (sin3__ * cos3__)  # top right to bottom left
 
-    print(cos_da1__.shape, type(cos_da1__))
-
     dgy__ = ((g3__ + g2__) - (g0__ * cos_da0__ + g1__ * cos_da1__))
     # y-decomposed cosine difference between gs
 
@@ -227,3 +227,15 @@ def shape_check(dert__):
 
     return dert__
 
+
+
+
+dert__ = np.load('dert__.npy',allow_pickle=True)
+
+
+gdert__ = comp_g(dert__)
+rdert__ = comp_r(dert__, 0, 0)
+
+d2=comp_r(dert__, 0, 1)
+d3=comp_r(dert__, 1, 0)
+d4=comp_r(dert__, 1, 1)

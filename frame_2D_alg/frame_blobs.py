@@ -80,7 +80,7 @@ def image_to_blobs(image):
     stack_ = deque()  # buffer of running vertical stacks of Ps
     height, width = dert__.shape[1:]
 
-    for y in range(height):  # first and last row are discarded
+    for y in range(height-740):  # first and last row are discarded
         print(f'Processing line {y}...')
         P_ = form_P_(dert__[:, y].T)      # horizontal clustering
         P_ = scan_P_(P_, stack_, frame)   # vertical clustering, adds up_forks per P and down_fork_cnt per stack
@@ -316,7 +316,7 @@ if __name__ == '__main__':
     start_time = time()
     frame = image_to_blobs(image)
 
-    intra = 0
+    intra = 1
     if intra:  # Tentative call to intra_blob, omit for testing frame_blobs:
 
         from intra_blob_draft import *
@@ -355,3 +355,8 @@ if __name__ == '__main__':
                          }))
 '''
     # END DEBUG ---------------------------------------------------------------
+    
+    
+    
+    
+    
