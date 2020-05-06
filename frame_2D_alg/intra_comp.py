@@ -49,7 +49,14 @@ def comp_r(dert__, fig, root_fcr):
     i__bottomleft =  i__[2::2, :-2:2]
     i__left =        i__[1:-1:2, :-2:2]
 
-    idy__, idx__ = dert__[[5, 6]]  # skip g: recomputed, output for Dert only
+
+    if fig:
+        idy__, idx__ = dert__[[5, 6]]  # skip g: recomputed, output for Dert only
+    
+    else:
+        idy__ = np.zeros_like(i__)
+        idx__ = np.zeros_like(i__)
+    
     idy__ = idy__[1:-1:2, 1:-1:2]
     idx__ = idx__[1:-1:2, 1:-1:2]
 
