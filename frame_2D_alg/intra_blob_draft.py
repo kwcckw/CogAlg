@@ -19,11 +19,11 @@ from functools import reduce
     Blob structure, for all layers of blob hierarchy:
     
     root,  # reference to root blob, for feedback of blob Dert params and sub_blob_, up to frame
-    Dert = I, G, Dy, Dx, M, if fig: + [iDy, iDx], A (area), Ly (vertical dimension)
-    # I: input, G: gradient, (Dy, Dx): vertical and lateral Ds, M: match, Ga: angle G, Day, Dax: angle Ds  
+    Dert = I, iDy, iDx, G, Dy, Dx, M, S (area), Ly (vertical dimension)
+    # I: input, (iDy, iDx): angle of input gradient, if any, G: gradient, (Dy, Dx): vertical and lateral Ds, M: match  
     sign, 
     box,  # y0, yn, x0, xn
-    dert__,  # box of derts, each = i, g, dy, dx, m, ? idy, idx 
+    dert__,  # box of derts, each = i, idy, idx, g, dy, dx, m
     stack_[ stack_params, Py_ [(P_params, dert_)]]: refs down blob formation tree, in vertical (horizontal) order
     
     # fork structure of next layer:
@@ -45,27 +45,17 @@ aveB = 10000  # fixed cost per intra_blob comp and clustering
 def intra_blob(blob, rdn, rng, fig, fcr):  # recursive input rng+ | der+ cross-comp within blob
     # fig: flag input is g, fcr: flag comp over rng+
 
-    # add extra dict fcr to blob['root']
-    # why fcr is specific to blob['root'] but not blob? 
-    blob['root'].update({'fcr':0})
-    
-    # add extra dict blob_root to blob
-    blob.update({'blob_root':[]})
-    
-    # add extra dict sub_blob to blob
-    blob.update({'sub_blob':[]})
-    
-
     if fcr: dert__ = comp_r(blob['dert__'], fig, blob['root']['fcr'])  #-> m sub_blobs
     else:   dert__ = comp_g(blob['dert__'])  #-> g sub_blobs:
 
     cluster_derts(blob, dert__, ave*rdn, fcr, fig)
     # feedback: root['layer_'] += [[(lL, fig, fcr, rdn, rng, blob['sub_blob_'])]]  # 1st layer
 
-    for sub_blob in blob['sub_blob']:  # eval intra_blob comp_a | comp_rng if low gradient
+    for sub_blob in blob['blob_']:  # eval intra_blob comp_g | comp_rng if low gradient
         if sub_blob['sign']:
             if sub_blob['Dert']['M'] > aveB * rdn:  # -> comp_r:
                 intra_blob(sub_blob, rdn + 1, rng**2, fig=fig, fcr=1)  # rng=1 in first call
+
         elif sub_blob['Dert']['G'] > aveB * rdn:
             intra_blob(sub_blob, rdn + 1, rng=rng, fig=1, fcr=0)  # -> comp_g
     '''
@@ -76,15 +66,10 @@ def intra_blob(blob, rdn, rng, fig, fcr):  # recursive input rng+ | der+ cross-c
 
 def cluster_derts(blob, dert__, Ave, fcr, fig):  # analog of frame_to_blobs
 
-    
     stack_ = deque()  # buffer of running vertical stacks of Ps
     height, width = dert__.shape[1:]
     dert__ = ma.transpose(dert__, axes=(1, 2, 0))  # transpose dert__ into shape [y,x,params]
-    
-    # in frame_blobs, root of blob is frame
-    # in intra_blobs, root of each sub blob is blob root ?
-    blob_root = dict(rng=1, dert__=dert__, mask=None, I=0, G=0, Dy=0, Dx=0, M=0, iDy=0, iDx=0,blob__=[])
-   
+
     # compute fork clustering criterion:
     if fcr:   # comp_r output
         if fig: crit__ = dert__[:,:,0] + dert__[:,:,4] - Ave  # eval by i + m, accumulated in rng
@@ -96,18 +81,13 @@ def cluster_derts(blob, dert__, Ave, fcr, fig):  # analog of frame_to_blobs
         print(f'Processing line {y}...')
 
         P_ = form_P_(dert__[y,:], crit__[y,:])  # horizontal clustering
-        P_ = scan_P_(P_, stack_, blob_root)   # vertical clustering, adds P up_forks and down_fork_cnt
-        stack_ = form_stack_(P_, blob_root, y)
+        P_ = scan_P_(P_, stack_, blob['root'])   # vertical clustering, adds P up_forks and down_fork_cnt
+        stack_ = form_stack_(P_, blob['root'], y)
 
     while stack_:  # root box ends, last-line stacks are merged into their blobs:
-        sub_blob_ = form_blob(stack_.popleft(), blob_root)  # with feedback to root_fork at blob['fork_']
+        sub_blob_ = form_blob(stack_.popleft(), blob['root'])  # with feedback to root_fork at blob['fork_']
 
-
-    # add each sub blobs into current blob 
-    blob_root['blob__'].append(sub_blob_)
-    
-    # add current blob as blob_root
-    blob['blob_root'].append(blob_root)
+    return sub_blob_  # not needed, feedback to root is in form_blob?
 
 
 # clustering functions:
@@ -123,14 +103,14 @@ def form_P_(dert_, crit_):  # segment dert__ into P__, in horizontal ) vertical 
         if ~mask_[x]:
             x0 = x  # coordinate of first unmasked dert in line
             break
-    I, G, Dy, Dx, M, iDy, iDx, L = *dert_[x0], 1  # initialize P params
+    I, iDy, iDx, G, Dy, Dx, M, L = *dert_[x0], 1  # initialize P params
     _sign = sign_[x0]
     _mask = False  # mask bit per dert
 
     for x in range(x0+1, dert_.shape[0]):  # loop left to right in each row of derts
         sign = sign_[x]
         mask = mask_[x]
-        if (~_mask and mask) or sign != _sign: # sign_ should be sign?
+        if (~_mask and mask) or sign != _sign:
             # (P exists and input is not in blob) or sign changed, terminate and pack P:
             P = dict(I=I, G=G, Dy=Dy, Dx=Dx, M=M, iDy=iDy, iDx=iDx, L=L, x0=x0, sign=_sign)
             P_.append(P)
@@ -155,6 +135,47 @@ def form_P_(dert_, crit_):  # segment dert__ into P__, in horizontal ) vertical 
 
     return P_
 
+
+def pairwise(iterable):  # s -> (s0,s1), (s1,s2), (s2, s3), ...
+    a, b = tee(iterable)
+    next(b, None)
+    return zip(a, b)
+
+def scan_P_(P__, stack_, frame):
+    """ add up_forks per P and down_forks per _P."""
+
+    for _P_, P_ in pairwise(P__):  # Iterate through pairs of lines.
+        _iter_P_, iter_P_ = iter(_P_), iter(P_)  # Convert to iterators.
+        try:
+            _P, P = next(_iter_P_), next(iter_P_)  # First pair to check.
+        except StopIteration:  # No more up_fork-down_fork pair.
+            continue  # To next pair of _P_, P_.
+        while True:
+            isleft, olp = comp_end(_P, P)  # Check for 4 different cases.
+            if olp and _P['sign'] == P['sign']:
+                _P['down_fork_'].append(P)
+                P['up_fork_'].append(_P)
+            try:  # Check for stopping:
+                _P, P = (next(_iter_P_), P) if isleft else (_P, next(iter_P_))
+            except StopIteration:  # No more up_fork - down_fork pair.
+                break  # To next pair of _P_, P_.
+
+    return [*flatten(P__)]  # Flatten P__ before return.
+
+
+def comp_end(_P, P):  # Used in scan_P_().
+    """
+    Check for end-point relative position and overlap
+    """
+    _x0 = _P['x0']
+    _xn = _x0 + _P['L']
+    x0 = P['x0']
+    xn = x0 + P['L']
+
+    if _xn < xn:  # End-point relative position.
+        return True, x0 < _xn  # Overlap.
+    else:
+        return False, _x0 < xn
 
 
 def scan_P_(P_, stack_, blob_root):  # merge P into higher-row stack of Ps which have same sign and overlap by x_coordinate
@@ -207,167 +228,7 @@ def scan_P_(P_, stack_, blob_root):  # merge P into higher-row stack of Ps which
     return next_P_  # each element is P + up_fork_ refs
 
 
-def form_stack_(P_, blob_root, y):  # Convert or merge every P into its stack of Ps, merge blobs
-
-    next_stack_ = deque()  # converted to stack_ in the next run of scan_P_
-
-    while P_:
-        P, up_fork_ = P_.popleft()
-        s = P.pop('sign')
-        I, G, Dy, Dx, M, iDy, iDx, L, x0 = P.values()
-        xn = x0 + L  # next-P x0
-        if not up_fork_:
-            # initialize new stack for each input-row P that has no connections in higher row:
-            blob = dict(Dert=dict(I=0, G=0, Dy=0, Dx=0, M=0, iDy=0, iDx=0, S=0, Ly=0), box=[y, x0, xn], stack_=[], sign=s, open_stacks=1)
-            new_stack = dict(I=I, G=G, Dy=0, Dx=Dx, M=M, iDy=iDy, iDx=iDx, S=L, Ly=1, y0=y, Py_=[P], blob=blob, down_fork_cnt=0, sign=s)
-            blob['stack_'].append(new_stack)
-        else:
-            if len(up_fork_) == 1 and up_fork_[0]['down_fork_cnt'] == 1:
-                # P has one up_fork and that up_fork has one down_fork=P: merge P into up_fork stack:
-                new_stack = up_fork_[0]
-                accum_Dert(new_stack, I=I, G=G, Dy=Dy, Dx=Dx, M=M, iDy=iDy, iDx=iDx, S=L, Ly=1)
-                new_stack['Py_'].append(P)  # Py_: vertical buffer of Ps
-                new_stack['down_fork_cnt'] = 0  # reset down_fork_cnt
-                blob = new_stack['blob']
-
-            else:  # if > 1 up_forks, or 1 up_fork that has > 1 down_fork_cnt:
-                blob = up_fork_[0]['blob']
-                # initialize new_stack with up_fork blob:
-                new_stack = dict(I=I, G=G, Dy=0, Dx=Dx, M=M, iDy=iDy, iDx=iDx,S=L, Ly=1, y0=y, Py_=[P], blob=blob, down_fork_cnt=0, sign=s)
-                blob['stack_'].append(new_stack)  # stack is buffered into blob
-
-                if len(up_fork_) > 1:  # merge blobs of all up_forks
-                    if up_fork_[0]['down_fork_cnt'] == 1:  # up_fork is not terminated
-                        form_blob(up_fork_[0], blob_root)      # merge stack of 1st up_fork into its blob
-
-                    for up_fork in up_fork_[1:len(up_fork_)]:  # merge blobs of other up_forks into blob of 1st up_fork
-                        if up_fork['down_fork_cnt'] == 1:
-                            form_blob(up_fork, blob_root)
-                        
-                        if not up_fork['blob'] is blob:
-                            Dert, box, stack_, s, open_stacks = up_fork['blob'].values()  # merged blob
-                            I, G, Dy, Dx, M, iDy, iDx, S, Ly = Dert.values()
-                            accum_Dert(blob['Dert'], I=I, G=G, Dy=Dy, Dx=Dx, M=M, iDy=iDy, iDx=iDx, S=S, Ly=Ly)
-                            blob['open_stacks'] += open_stacks
-                            blob['box'][0] = min(blob['box'][0], box[0])  # extend box y0
-                            blob['box'][1] = min(blob['box'][1], box[1])  # extend box x0
-                            blob['box'][2] = max(blob['box'][2], box[2])  # extend box xn
-                            for stack in stack_:
-                                if not stack is up_fork:
-                                    stack[
-                                        'blob'] = blob  # blobs in other up_forks are references to blob in the first up_fork.
-                                    blob['stack_'].append(stack)  # buffer of merged root stacks.
-                            up_fork['blob'] = blob
-                            blob['stack_'].append(up_fork)
-                        blob['open_stacks'] -= 1  # overlap with merged blob.
-
-        blob['box'][1] = min(blob['box'][1], x0)  # extend box x0
-        blob['box'][2] = max(blob['box'][2], xn)  # extend box xn
-        next_stack_.append(new_stack)
-
-    return next_stack_
-
-def form_blob(stack, blob_root):  # increment blob with terminated stack, check for blob termination and merger into blob root
-
-    I, G, Dy, Dx, M, iDy, iDx, S, Ly, y0, Py_, blob, down_fork_cnt, sign = stack.values()
-    accum_Dert(blob['Dert'], I=I, G=G, Dy=Dy, Dx=Dx, M=M, iDy=iDy, iDx=iDx, S=S, Ly=Ly)
-    # terminated stack is merged into continued or initialized blob (all connected stacks):
-
-    blob['open_stacks'] += down_fork_cnt - 1  # incomplete stack cnt + terminated stack down_fork_cnt - 1: stack itself
-    # open stacks contain Ps of a current row and may be extended with new x-overlapping Ps in next run of scan_P_
-
-    if blob['open_stacks'] == 0:  # if number of incomplete stacks == 0
-        # blob is terminated and packed in blob root:
-        last_stack = stack
-
-        Dert, [y0, x0, xn], stack_, s, open_stacks = blob.values()
-        yn = last_stack['y0'] + last_stack['Ly']
-
-        mask = np.ones((yn - y0, xn - x0), dtype=bool)  # mask box, then unmask Ps:
-        for stack in stack_:
-            stack.pop('sign')
-            stack.pop('down_fork_cnt')
-            for y, P in enumerate(stack['Py_'], start=stack['y0'] - y0):
-                x_start = P['x0'] - x0
-                x_stop = x_start + P['L']
-                mask[y, x_start:x_stop] = False
-
-        dert__ = (blob_root['dert__'][y0:yn, x0:xn,:]).copy()  # copy mask as dert.mask
-        dert__.mask[:] = True
-        dert__.mask[:,:,0] = mask  # overwrite default mask 0s
-        blob_root['dert__'][y0:yn, x0:xn,:] = dert__.copy()  # assign mask back to blob root dert__
-
-        blob.pop('open_stacks')
-        blob.update(root=blob_root,
-                    box=(y0, yn, x0, xn),   # boundary box
-                    dert__=dert__,          # includes mask
-                    fork=defaultdict(dict)  # will contain fork params, layer_
-                    )
-
-        blob_root.update(I=blob_root['I'] + blob['Dert']['I'],
-                     G=blob_root['G'] + blob['Dert']['G'],
-                     Dy=blob_root['Dy'] + blob['Dert']['Dy'],
-                     Dx=blob_root['Dx'] + blob['Dert']['Dx'],
-                     iDy=blob_root['iDy'] + blob['Dert']['iDy'],
-                     iDx=blob_root['iDx'] + blob['Dert']['iDx'],
-                     M=blob_root['M'] + blob['Dert']['M'])
-
-        blob_root['blob__'].append(blob)
-
-
-def accum_Dert(Dert: dict, **params) -> None:
-    Dert.update({param: Dert[param] + value for param, value in params.items()})
-
-
-
-## older version ##############################################################
-
-
-
-def pairwise(iterable):  # s -> (s0,s1), (s1,s2), (s2, s3), ...
-    a, b = tee(iterable)
-    next(b, None)
-    return zip(a, b)
-
-def scan_P_old(P__, stack_, frame):
-    """ Detect up_forks and down_forks per P."""
-
-    for _P_, P_ in pairwise(P__):  # Iterate through pairs of lines.
-        _iter_P_, iter_P_ = iter(_P_), iter(P_)  # Convert to iterators.
-        try:
-            _P, P = next(_iter_P_), next(iter_P_)  # First pair to check.
-        except StopIteration:  # No more up_fork-down_fork pair.
-            continue  # To next pair of _P_, P_.
-        while True:
-            isleft, olp = comp_edge(_P, P)  # Check for 4 different cases.
-            if olp and _P['sign'] == P['sign']:
-                _P['down_fork_'].append(P)
-                P['up_fork_'].append(_P)
-            try:  # Check for stopping:
-                _P, P = (next(_iter_P_), P) if isleft else (_P, next(iter_P_))
-            except StopIteration:  # No more up_fork - down_fork pair.
-                break  # To next pair of _P_, P_.
-
-    return [*flatten(P__)]  # Flatten P__ before return.
-
-
-def comp_edge(_P, P):  # Used in scan_P_().
-    """
-    Check for end-point relative position and overlap
-    """
-    _x0 = _P['x0']
-    _xn = _x0 + _P['L']
-    x0 = P['x0']
-    xn = x0 + P['L']
-
-    if _xn < xn:  # End-point relative position.
-        return True, x0 < _xn  # Overlap.
-    else:
-        return False, _x0 < xn
-
-
-
-def form_stack_old(P_, fig):
+def form_stack_(P_, fig):
     """Form stacks of vertically contiguous Ps."""
     # list of first Ps in stacks:
     P0_ = [*filter(lambda P: (len(P['up_fork_']) != 1
@@ -401,8 +262,6 @@ def form_stack_old(P_, fig):
         del seg['Py_'][0]['seg']
 
     return seg_
-
-
 
 # constants:
 
@@ -456,7 +315,7 @@ def form_P__group(dert__, Ave, x0=0, y0=0):  # cluster dert__ into P__, in horiz
     return P__
 
 
-def form_stack_old(P_, fa):
+def form_stack_(P_, fa):
     """Form segments of vertically contiguous Ps."""
     # Determine params type:
     if "M" not in P_[0]:
@@ -584,7 +443,7 @@ def form_blob_old(seg_, root_blob, dert___, rng, fork_type):
     return blob_
 
 
-def form_blob_old(seg_, root_fork):
+def form_blob(seg_, root_fork):
     """
     Form blobs from given list of segments.
     Each blob is formed from a number of connected segments.
