@@ -45,7 +45,7 @@ aveB = 10000  # fixed cost per intra_blob comp and clustering
 def intra_blob(blob, rdn, rng, fig, fcr):  # recursive input rng+ | der+ cross-comp within blob
     # fig: flag input is g, fcr: flag comp over rng+
 
-    if fcr: dert__ = comp_r(blob['dert__'], fig, blob['root']['fcr'])  #-> m sub_blobs
+    if fcr: dert__ = comp_r(blob['dert__'], fig, 1)  #-> m sub_blobs
     else:   dert__ = comp_g(blob['dert__'])  #-> g sub_blobs:
 
     cluster_derts(blob, dert__, ave*rdn, fcr, fig)
@@ -66,7 +66,6 @@ def intra_blob(blob, rdn, rng, fig, fcr):  # recursive input rng+ | der+ cross-c
 
 def cluster_derts(blob, dert__, Ave, fcr, fig):  # analog of frame_to_blobs
 
-    stack_ = deque()  # buffer of running vertical stacks of Ps
     height, width = dert__.shape[1:]
     dert__ = ma.transpose(dert__, axes=(1, 2, 0))  # transpose dert__ into shape [y,x,params]
 
@@ -77,12 +76,13 @@ def cluster_derts(blob, dert__, Ave, fcr, fig):  # analog of frame_to_blobs
     else:     # comp_g output
         crit__ = dert__[:,:,4] - Ave  # comp_g output eval by m, or clustering is always by m?
 
-    for y in range(height):  # last row is discarded
-        print(f'Processing line {y}...')
+    # compute P from each line
+    P__ = []
+    for y in range(height):
+        P__.append(form_P_(dert__[y,:], crit__[y,:]))
 
-        P_ = form_P_(dert__[y,:], crit__[y,:])  # horizontal clustering
-        P_ = scan_P_(P_, stack_, blob['root'])   # vertical clustering, adds P up_forks and down_fork_cnt
-        stack_ = form_stack_(P_, blob['root'], y)
+    P__ = scan_P_(P__)   # vertical clustering, adds P up_forks and down_fork_cnt
+    stack_ = form_stack_(P__)
 
     while stack_:  # root box ends, last-line stacks are merged into their blobs:
         sub_blob_ = form_blob(stack_.popleft(), blob['root'])  # with feedback to root_fork at blob['fork_']
@@ -112,7 +112,7 @@ def form_P_(dert_, crit_):  # segment dert__ into P__, in horizontal ) vertical 
         mask = mask_[x]
         if (~_mask and mask) or sign != _sign:
             # (P exists and input is not in blob) or sign changed, terminate and pack P:
-            P = dict(I=I, G=G, Dy=Dy, Dx=Dx, M=M, iDy=iDy, iDx=iDx, L=L, x0=x0, sign=_sign)
+            P = dict(I=I, G=G, Dy=Dy, Dx=Dx, M=M, iDy=iDy, iDx=iDx, L=L, x0=x0, sign=_sign, down_fork_ = [], up_fork_ = [])
             P_.append(P)
             # initialize P params:
             I, G, Dy, Dx, M, iDy, iDx, L, x0 = 0, 0, 0, 0, 0, 0, 0, 0, x
@@ -130,18 +130,99 @@ def form_P_(dert_, crit_):  # segment dert__ into P__, in horizontal ) vertical 
         _mask = mask
 
     # terminate and pack last P in a row
-    P = dict(I=I, G=G, Dy=Dy, Dx=Dx, M=M, iDy=iDy, iDx=iDx, L=L, x0=x0, sign=_sign)
+    P = dict(I=I, G=G, Dy=Dy, Dx=Dx, M=M, iDy=iDy, iDx=iDx, L=L, x0=x0, sign=_sign,  down_fork_ = [], up_fork_ = [])
     P_.append(P)
 
     return P_
 
 
-def pairwise(iterable):  # s -> (s0,s1), (s1,s2), (s2, s3), ...
-    a, b = tee(iterable)
-    next(b, None)
-    return zip(a, b)
+def scan_P_(P__):
+    """ add up_forks per P and down_forks per _P."""
 
-def scan_P_(P__, stack_, frame):
+    # loop in each line of P_
+    for i in range(1,len(P__)):
+        
+        # _P_ = prior line Ps
+        #  P_ = current line Ps 
+        _P_ = P__[i-1]
+        P_ = P__[i]
+                  
+        for j in range(len(P_)): # loop each P in current line Ps 
+            # get current index P
+            P = P_[j]
+            
+            for k in range(len(_P_)): # loop each P in prior line Ps 
+                # get current index P
+                _P = _P_[k]
+                
+                # check whether P and P_ overlap
+                _, folp = comp_end(_P, P)
+                # if same sign and overlap
+                if folp and _P['sign'] == P['sign']:
+                    _P['down_fork_'].append(P)
+                    P['up_fork_'].append(_P)  
+    return P__
+
+def comp_end(_P, P):  # Used in scan_P_().
+    """
+    Check for end-point relative position and overlap
+    """
+    _x0 = _P['x0']
+    _xn = _x0 + _P['L']
+    x0 = P['x0']
+    xn = x0 + P['L']
+
+    if _xn < xn:  # End-point relative position.
+        return True, x0 < _xn  # Overlap.
+    else:
+        return False, _x0 < xn
+
+
+def form_stack_(P__):
+   """Form stacks of vertically contiguous Ps."""
+   """ Work in progress """
+    
+    # initialization
+    stack_ = []
+    Py = []
+    
+    # loop in each line 
+    for i in range(len(P__)):
+        # get current line of Ps
+        P_ = P__[i]
+        
+        # loop in each Ps
+        for j in range (len(P_)):
+            # get current P
+            P = P_[j]
+        
+            # may need recrusive function to recursively check up fork and down fork of each P
+            # if down fork or up fork not empty
+            if len(P['down_fork_'])>0 or len(P['up_fork_'])>0:
+                
+                # accumulate params  
+                # set up fork of down fork to empty
+                if len(P['down_fork_'])>0:
+                    # add P and down fork P to stack's Py
+                    Py.append(P)
+                    Py.append(P['down_fork_'])
+                    
+                   
+                # accumulate params
+                # set down fork of up fork to empty
+                elif len(P['up_fork_'])>0:
+                    # add P and up fork P to stack's Py
+                    Py.append(P)
+                    Py.append(P['down_fork_'])
+                     
+            # terminate stack
+            else :
+                
+                stack_.append(new_stack)
+    
+
+
+def scan_P_2(P__):
     """ add up_forks per P and down_forks per _P."""
 
     for _P_, P_ in pairwise(P__):  # Iterate through pairs of lines.
@@ -163,22 +244,8 @@ def scan_P_(P__, stack_, frame):
     return [*flatten(P__)]  # Flatten P__ before return.
 
 
-def comp_end(_P, P):  # Used in scan_P_().
-    """
-    Check for end-point relative position and overlap
-    """
-    _x0 = _P['x0']
-    _xn = _x0 + _P['L']
-    x0 = P['x0']
-    xn = x0 + P['L']
 
-    if _xn < xn:  # End-point relative position.
-        return True, x0 < _xn  # Overlap.
-    else:
-        return False, _x0 < xn
-
-
-def scan_P_(P_, stack_, blob_root):  # merge P into higher-row stack of Ps which have same sign and overlap by x_coordinate
+def scan_P_2(P_, stack_, blob_root):  # merge P into higher-row stack of Ps which have same sign and overlap by x_coordinate
 
     next_P_ = deque()  # to recycle P + up_fork_ that finished scanning _P, will be converted into next_stack_
 
@@ -613,3 +680,6 @@ def feedback(blob, fork=None):  # Add each Dert param to corresponding param of 
     """
     if root_fork['root_blob'] is not None:  # Stop recursion if false.
         feedback(root_fork['root_blob'])
+
+
+
