@@ -45,7 +45,7 @@ aveB = 10000  # fixed cost per intra_blob comp and clustering
 def intra_blob(blob, rdn, rng, fig, fcr):  # recursive input rng+ | der+ cross-comp within blob
     # fig: flag input is g, fcr: flag comp over rng+
 
-    if fcr: dert__ = comp_r(blob['dert__'], fig, 1)  #-> m sub_blobs
+    if fcr: dert__ = comp_r(blob['dert__'], fig, blob['root']['fcr'])  #-> m sub_blobs
     else:   dert__ = comp_g(blob['dert__'])  #-> g sub_blobs:
 
     cluster_derts(blob, dert__, ave*rdn, fcr, fig)
@@ -70,18 +70,17 @@ def cluster_derts(blob, dert__, Ave, fcr, fig):  # analog of frame_to_blobs
     dert__ = ma.transpose(dert__, axes=(1, 2, 0))  # transpose dert__ into shape [y,x,params]
 
     # compute fork clustering criterion:
-    if fcr:   # comp_r output
-        if fig: crit__ = dert__[:,:,0] + dert__[:,:,4] - Ave  # eval by i + m, accumulated in rng
-        else:   crit__ = Ave - dert__[:,:,1]              # eval by -g, accumulated in rng
-    else:     # comp_g output
-        crit__ = dert__[:,:,4] - Ave  # comp_g output eval by m, or clustering is always by m?
+    if fcr:  # comp_r output
+        if fig: crit__ = dert__[:, :, 0] + dert__[:, :, 4] - Ave  # eval by i + m, accumulated in rng
+        else:   crit__ = Ave - dert__[:, :, 1]  # eval by -g, accumulated in rng
+    else:  # comp_g output
+        crit__ = dert__[:, :, 4] - Ave  # comp_g output eval by m, or clustering is always by m?
 
-    # compute P from each line
     P__ = []
     for y in range(height):
-        P__.append(form_P_(dert__[y,:], crit__[y,:]))
+        P__.append(form_P_(dert__[y, :], crit__[y, :]))  # horizontal clustering, adds a row of Ps
 
-    P__ = scan_P_(P__)   # vertical clustering, adds P up_forks and down_fork_cnt
+    P__ = scan_P_(P__)  # vertical clustering, adds P up_forks and down_fork_cnt
     stack_ = form_stack_(P__)
 
     while stack_:  # root box ends, last-line stacks are merged into their blobs:
@@ -115,58 +114,49 @@ def form_P_(dert_, crit_):  # segment dert__ into P__, in horizontal ) vertical 
             P = dict(I=I, G=G, Dy=Dy, Dx=Dx, M=M, iDy=iDy, iDx=iDx, L=L, x0=x0, sign=_sign, down_fork_ = [], up_fork_ = [])
             P_.append(P)
             # initialize P params:
-            I, G, Dy, Dx, M, iDy, iDx, L, x0 = 0, 0, 0, 0, 0, 0, 0, 0, x
+            I, iDy, iDx, G, Dy, Dx, M, L, x0 = 0, 0, 0, 0, 0, 0, 0, 0, x
 
         if ~mask:  # accumulate P params:
             I += dert_[x][0]
-            G += dert_[x][1]
-            Dy += dert_[x][2]
-            Dx += dert_[x][3]
-            M += dert_[x][4]
-            iDy += dert_[x][5]
-            iDx += dert_[x][6]
+            iDy += dert_[x][1]
+            iDx += dert_[x][2]
+            G += dert_[x][3]
+            Dy += dert_[x][4]
+            Dx += dert_[x][5]
+            M += dert_[x][6]
             L += 1
             _sign = sign  # prior sign
         _mask = mask
 
     # terminate and pack last P in a row
-    P = dict(I=I, G=G, Dy=Dy, Dx=Dx, M=M, iDy=iDy, iDx=iDx, L=L, x0=x0, sign=_sign,  down_fork_ = [], up_fork_ = [])
+    P = dict(I=I, G=G, Dy=Dy, Dx=Dx, M=M, iDy=iDy, iDx=iDx, L=L, x0=x0, sign=_sign, down_fork_ = [], up_fork_ = [])
     P_.append(P)
 
     return P_
 
 
-def scan_P_(P__):
-    """ add up_forks per P and down_forks per _P."""
+def scan_P_(P__):  # add up_forks per P and down_forks per _P
 
-    # loop in each line of P_
-    for i in range(1,len(P__)):
-        
-        # _P_ = prior line Ps
-        #  P_ = current line Ps 
-        _P_ = P__[i-1]
-        P_ = P__[i]
-                  
-        for j in range(len(P_)): # loop each P in current line Ps 
-            # get current index P
-            P = P_[j]
-            
-            for k in range(len(_P_)): # loop each P in prior line Ps 
-                # get current index P
-                _P = _P_[k]
-                
-                # check whether P and P_ overlap
-                _, folp = comp_end(_P, P)
-                # if same sign and overlap
-                if folp and _P['sign'] == P['sign']:
+    for y in range(1, len(P__)):  # loop vertically
+        _P_ = P__[y - 1]  # current line Ps
+        P_ = P__[y]  # prior line Ps
+
+        for i in range(len(P_)):  # loop in current line Ps
+            P = P_[i]
+
+            for j in range(len(_P_)):  # loop in prior line _Ps
+                _P = _P_[j]
+
+                _, folp = comp_end(_P, P)  # test for x overlap between P and P_
+                if folp and _P['sign'] == P['sign']:  # if same sign and overlap
+
                     _P['down_fork_'].append(P)
-                    P['up_fork_'].append(_P)  
+                    P['up_fork_'].append(_P)
     return P__
 
-def comp_end(_P, P):  # Used in scan_P_().
-    """
-    Check for end-point relative position and overlap
-    """
+
+def comp_end(_P, P):  # Check for end-point relative position and overlap
+
     _x0 = _P['x0']
     _xn = _x0 + _P['L']
     x0 = P['x0']
@@ -179,73 +169,45 @@ def comp_end(_P, P):  # Used in scan_P_().
 
 
 def form_stack_(P__):
-   """Form stacks of vertically contiguous Ps."""
-   """ Work in progress """
-    
-    # initialization
+    """Form stacks of vertically contiguous Ps."""
+    """ Work in progress """
+
     stack_ = []
     Py = []
+
+    for y in range(len(P__)):  # loop vertically
+        P_ = P__[y]
+        for i in range(len(P_)):  # loop horizontally
+            P = P_[i]
+'''
+    We need to add looping in stack_, same as in frame_blobs. 
+    The rest of form_stack should be very similar too
     
-    # loop in each line 
-    for i in range(len(P__)):
-        # get current line of Ps
-        P_ = P__[i]
-        
-        # loop in each Ps
-        for j in range (len(P_)):
-            # get current P
-            P = P_[j]
-        
-            # may need recrusive function to recursively check up fork and down fork of each P
+    
             # if down fork or up fork not empty
-            if len(P['down_fork_'])>0 or len(P['up_fork_'])>0:
-                
-                # accumulate params  
+            if len(P['down_fork_']) > 0 or len(P['up_fork_']) > 0:
+
+                # accumulate params
                 # set up fork of down fork to empty
-                if len(P['down_fork_'])>0:
+                if len(P['down_fork_']) > 0:
                     # add P and down fork P to stack's Py
                     Py.append(P)
                     Py.append(P['down_fork_'])
-                    
-                   
+
                 # accumulate params
                 # set down fork of up fork to empty
-                elif len(P['up_fork_'])>0:
+                elif len(P['up_fork_']) > 0:
                     # add P and up fork P to stack's Py
                     Py.append(P)
                     Py.append(P['down_fork_'])
-                     
+
             # terminate stack
-            else :
-                
+            else:
+
                 stack_.append(new_stack)
-    
+'''
 
-
-def scan_P_2(P__):
-    """ add up_forks per P and down_forks per _P."""
-
-    for _P_, P_ in pairwise(P__):  # Iterate through pairs of lines.
-        _iter_P_, iter_P_ = iter(_P_), iter(P_)  # Convert to iterators.
-        try:
-            _P, P = next(_iter_P_), next(iter_P_)  # First pair to check.
-        except StopIteration:  # No more up_fork-down_fork pair.
-            continue  # To next pair of _P_, P_.
-        while True:
-            isleft, olp = comp_end(_P, P)  # Check for 4 different cases.
-            if olp and _P['sign'] == P['sign']:
-                _P['down_fork_'].append(P)
-                P['up_fork_'].append(_P)
-            try:  # Check for stopping:
-                _P, P = (next(_iter_P_), P) if isleft else (_P, next(iter_P_))
-            except StopIteration:  # No more up_fork - down_fork pair.
-                break  # To next pair of _P_, P_.
-
-    return [*flatten(P__)]  # Flatten P__ before return.
-
-
-
-def scan_P_2(P_, stack_, blob_root):  # merge P into higher-row stack of Ps which have same sign and overlap by x_coordinate
+def scan_P_(P_, stack_, blob_root):  # merge P into higher-row stack of Ps which have same sign and overlap by x_coordinate
 
     next_P_ = deque()  # to recycle P + up_fork_ that finished scanning _P, will be converted into next_stack_
 
@@ -680,6 +642,3 @@ def feedback(blob, fork=None):  # Add each Dert param to corresponding param of 
     """
     if root_fork['root_blob'] is not None:  # Stop recursion if false.
         feedback(root_fork['root_blob'])
-
-
-
