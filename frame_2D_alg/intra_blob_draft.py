@@ -41,7 +41,11 @@ aveB = 10000  # fixed cost per intra_blob comp and clustering
 def intra_blob(blob, rdn, rng, fig, fcr):  # recursive input rng+ | der+ cross-comp within blob
     # fig: flag input is g, fcr: flag comp over rng+
 
-    if fcr: dert__ = comp_r(blob['dert__'], fig, blob['root']['fcr'])  #-> m sub_blobs
+    # update dicts if there is no sub blobs
+    if not 'sub_blobs' in blob:
+        blob.update({'fcr':0,'sub_blobs':[],'layers':[]})
+
+    if fcr: dert__ = comp_r(blob['dert__'], fig, blob['fcr'])  #-> m sub_blobs
     else:   dert__ = comp_g(blob['dert__'])  #-> g sub_blobs:
 
     cluster_derts(blob, dert__, ave*rdn, fcr, fig)
@@ -50,31 +54,36 @@ def intra_blob(blob, rdn, rng, fig, fcr):  # recursive input rng+ | der+ cross-c
     for sub_blob in blob['sub_blobs']:  # eval intra_blob comp_g | comp_rng if low gradient
         if sub_blob['sign']:
             if sub_blob['Dert']['M'] > aveB * rdn:  # -> comp_r:
+                
                 intra_blob(sub_blob, rdn + 1, rng**2, fig=fig, fcr=1)  # rng=1 in first call
-
+                lA = len(blob['layers'])+1 # dummy number
+                blob['layers'].append(sub_blob)
+                
         elif sub_blob['Dert']['G'] > aveB * rdn:
+            
             intra_blob(sub_blob, rdn + 1, rng=rng, fig=1, fcr=0)  # -> comp_g
-    '''
-    feedback:
-    for sub_blob in blob['sub_blobs']:
-        blob['layers'] += intra_blob(sub_blob, rdn + 1 + 1 / lA, rng, fig, fcr) 
-    '''
+            lA = len(blob['layers'])+1 # dummy number
+            blob['layers'].append(sub_blob)
+            
+            
+     # most probably need zip_longest here to find the depth of the sub_blobs recursion  , similar with line_pattern     
+
+#    feedback:
+
 
 def cluster_derts(blob, dert__, Ave, fcr, fig):  # analog of frame_to_blobs
     # clustering criterion per fork:
 
+    # dert__[0] instead of dert__[:,:,0] for non transpose dert
     if fcr:  # comp_r output
-        if fig: crit__ = dert__[:, :, 0] + dert__[:, :, 4] - Ave  # eval by i + m, accumulated in rng
-        else:   crit__ = Ave - dert__[:, :, 1]  # eval by -g, accumulated in rng
+        if fig: crit__ = dert__[0] + dert__[4] - Ave  # eval by i + m, accumulated in rng
+        else:   crit__ = Ave - dert__[1]  # eval by -g, accumulated in rng
     else:  # comp_g output
-        crit__ = dert__[:, :, 4] - Ave  # comp_g output eval by m, or clustering is always by m?
+        crit__ = dert__[4] - Ave  # comp_g output eval by m, or clustering is always by m?
 
     height, width = dert__.shape[1:]
     dert__ = ma.transpose(dert__, axes=(1, 2, 0))  # transpose dert__ into shape [y,x,params]
     stack_ = deque()  # buffer of running vertical stacks of Ps
-
-    # add extra dicts to blob
-    blob.update({'fcr':0,'blob_':[],'I':0,'G':0,'Dy':0,'Dx':0,'iDy':0,'iDx':0,'M':0})
 
     for y in range(height):  # first and last row are discarded
 
@@ -84,9 +93,9 @@ def cluster_derts(blob, dert__, Ave, fcr, fig):  # analog of frame_to_blobs
         stack_ = form_stack_(P_, blob, y)
 
     while stack_:  # frame ends, last-line stacks are merged into their blobs:
-        form_blob(stack_.popleft(), blob['root'])
+        form_blob(stack_.popleft(), blob)
 
-    # return sub_blob_  # not needed, feedback to root is in form_blob?
+    # return sub_blob_  # not needed, feedback to root is in form_blob? # no need return here, sub_blob is updated in blob
 
 
 # clustering functions:
@@ -97,12 +106,17 @@ def form_P_(dert_, crit_):  # segment dert__ into P__, in horizontal ) vertical 
     P_ = deque()  # row of Ps
     mask_ = dert_[:,0].mask
     sign_ = crit_ > 0
-    x0 = -1
+    x0 = 0
     for x in range(len(dert_)):
         if ~mask_[x]:
             x0 = x  # coordinate of first unmasked dert in line
             break
-    I, iDy, iDx, G, Dy, Dx, M, L = *dert_[x0], 1  # initialize P params
+    
+    try:    
+        I, iDy, iDx, G, Dy, Dx, M, L = *dert_[x0], 1  # initialize P params
+    except:
+        print('error') # put a breakpoint here, y size of dert is 0, need check further on this
+
     _sign = sign_[x0]
     _mask = False  # mask bit per dert
 
@@ -285,7 +299,7 @@ def form_blob(stack, blob_root):  # increment blob with terminated stack, check 
                     fork=defaultdict(dict)  # will contain fork params, layer_
                     )
 
-        blob_root['blob_'].append(blob)  # this maybe replaced by return, as in line_patterns and line 52
+        blob_root['sub_blobs'].append(blob)  # this maybe replaced by return, as in line_patterns and line 52
 
 
 def accum_Dert(Dert: dict, **params) -> None:

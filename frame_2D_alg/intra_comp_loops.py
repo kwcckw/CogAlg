@@ -12,8 +12,12 @@ XCOEFs = [[-1, 0, 1],
           [-2, 1, 2],
           [-1, 0, 1]]
 
+# why max value of sin and cos = 55? Or it is just a dummy number?
 max = 55
 
+# change dert__ into list
+# where length of list = length of y
+# and number of element in list = length of x
 def dert_lists(dert__):
 
     mask__ = dert__[0].mask.astype('int').tolist()
@@ -45,17 +49,19 @@ def comp_g(dert__):  # cross-comp of g in 2x2 kernels, between derts in ma.stack
 
     if isinstance(dert__, np.ndarray):
         dert__ = dert_lists(dert__)
-    dert__ = shape_check(dert__)  # remove derts of incomplete kernels
+    
+    dert__ = shape_check_list(dert__)  # remove derts of incomplete kernels
 
     g__, dy__, dx__ = dert__[4:7]
-    mask__ = dert__[0]
-
+    mask__ = dert__[0] # index 0 = mask, created in dert_lists
+    
     dgy__, dgx__, gg__, mg__ = [],[],[],[]
 
     for y in range((len(g__) - 1)):
         dgy_, dgx_, gg_, mg_ = [],[],[],[]
 
         for x in range(len(g__[y]) - 1):
+            dgy, dgx, gg, mg = [],[],[],[]
             '''
             no dgy = dgx = gg = mg = 0:  masked values should be skipped, here and in the future
             '''
@@ -89,11 +95,28 @@ def comp_g(dert__):  # cross-comp of g in 2x2 kernels, between derts in ma.stack
                 dgx_.append(dgx)
                 gg_.append(gg)
                 mg_.append(mg)
+                
+            # i think we need an else loop here for mask = true
+            # so that we can assign the masked value as empty list
+            # if we skip the masked value, we would lost their coordinate information within the dert
+            else:
+                
+                # remove masked value
+                g__[y][x] = []
+                dy__[y][x] = []
+                dx__[y][x] = []
+                dgy_.append(dgy)
+                dgx_.append(dgx)
+                gg_.append(gg)
+                mg_.append(mg)
+
 
         # remove last column from every row of input parameters
         g__[y].pop()
         dy__[y].pop()
         dx__[y].pop()
+        mask__[y].pop() # we need remove last column for mask as well to enable a consistent dimension
+        
 
         # add a new row into list of rows
         dgy__.append(dgy_)
@@ -105,6 +128,7 @@ def comp_g(dert__):  # cross-comp of g in 2x2 kernels, between derts in ma.stack
     g__.pop()
     dy__.pop()
     dx__.pop()
+    mask__.pop() # we need remove last row for mask as well to enable a consistent dimension
 
     return [mask__, g__, dy__, dx__, gg__, dgy__, dgx__, mg__]
 
@@ -113,6 +137,10 @@ def comp_r_loop(dert__, fig, root_fcr):
 
     if isinstance(dert__, np.ndarray):
         dert__ = dert_lists(dert__)
+
+    # why no shape check in comp_r?        
+    dert__ = shape_check_list(dert__)  # remove derts of incomplete kernels
+
 
     i__ = dert__[1]  # i is ig if fig else pixel
     idy__ = dert__[2]
@@ -125,7 +153,7 @@ def comp_r_loop(dert__, fig, root_fcr):
     if root_fcr:  # root fork is comp_r, accumulate derivatives:
         dy__, dx__, m__ = dert__[5:8]
 
-    for y in range(0, len(i__ - 2), 2):
+    for y in range(0, len(i__)- 2, 2):   # len(i__) - 2 instead of len(i__-2)?
 
         i_cent_, idy_cent_, idx_cent_ = [],[],[]
         g_, dy_, dx_, m_ = [],[],[],[]
@@ -144,7 +172,7 @@ def comp_r_loop(dert__, fig, root_fcr):
                     m = m__[y][x]
                 else:
                     m = 0
-
+                    
                 if not fig:
 
                     dt1 = i__[y][x]     - i__[y + 2][x + 2]    # i__topleft - i__bottomright
@@ -243,6 +271,16 @@ def comp_r_loop(dert__, fig, root_fcr):
                 dx_.append(dx)
                 m_.append(m)
 
+            # if masked
+            else:  
+                i_cent_.append([])
+                idy_cent_.append([])
+                idx_cent_.append([])
+                g_.append([])
+                dy_.append([])
+                dx_.append([])
+                m_.append([])
+
         i__center.append(i_cent_)
         idy__center.append(idy_cent_)
         idx__center.append(idx_cent_)
@@ -254,9 +292,12 @@ def comp_r_loop(dert__, fig, root_fcr):
     return [ i__center, idy__center, idx__center, g__, dy__, dx__, new_m__]
 
 
+# should we set condition for shape check where size of x or y is >=2?
+# in some cases,length of  y = 1, and if we delete the line y, the length would be 0     
+# shape check for numpy input
 def shape_check(dert__):
     # remove derts of 2x2 kernels that are missing some other derts
-
+    
     if dert__[0].shape[0] % 2 != 0:
         dert__ = dert__[:, :-1, :]
     if dert__[0].shape[1] % 2 != 0:
@@ -264,7 +305,23 @@ def shape_check(dert__):
 
     return dert__
 
+# shape check for list input
+def shape_check_list(dert__):
+    # remove derts of 2x2 kernels that are missing some other derts
+    
+    # if length of y is not multiple of 2
+    if len(dert__[0]) % 2 != 0:
+        # remove last y elemet
+        dert__ = [ydert[:-1] for ydert in dert__]
+        
+    # if length of x is not multiple of 2    
+    if len(dert__[0][0]) % 2 != 0:
+        # remove last x element
+        dert__ = [[xdert[:-1] for xdert in ydert] for ydert in dert__]
 
+    return dert__
+
+# what is the purpose of this function?
 def decompose_difference(g1, g2, g3, g4, cos0, cos1):
     dec_diff = ((g1 + g2) - (g3 * cos0 + g4 * cos1))
     '''
@@ -274,3 +331,16 @@ def decompose_difference(g1, g2, g3, g4, cos0, cos1):
     dgx = dec_diff(g__[y][x + 1], g__[y + 1][x + 1], g__[y][x], g__[y + 1][x], cos0, cos1)
     '''
     return dec_diff
+
+
+
+
+
+dert__ = np.load('dert2__.npy',allow_pickle=True)
+
+gdert = comp_g(dert__)
+
+rdert= comp_r_loop(dert__,0,0)
+rdert= comp_r_loop(dert__,0,1)
+rdert= comp_r_loop(dert__,1,0)
+rdert= comp_r_loop(dert__,1,1)
