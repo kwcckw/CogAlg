@@ -96,20 +96,6 @@ def comp_g(dert__):  # cross-comp of g in 2x2 kernels, between derts in ma.stack
                 gg_.append(gg)
                 mg_.append(mg)
                 
-            # i think we need an else loop here for mask = true
-            # so that we can assign the masked value as empty list
-            # if we skip the masked value, we would lost their coordinate information within the dert
-            else:
-                
-                # remove masked value
-                g__[y][x] = []
-                dy__[y][x] = []
-                dx__[y][x] = []
-                dgy_.append(dgy)
-                dgx_.append(dgx)
-                gg_.append(gg)
-                mg_.append(mg)
-
 
         # remove last column from every row of input parameters
         g__[y].pop()
@@ -137,10 +123,6 @@ def comp_r_loop(dert__, fig, root_fcr):
 
     if isinstance(dert__, np.ndarray):
         dert__ = dert_lists(dert__)
-
-    # why no shape check in comp_r?        
-    dert__ = shape_check_list(dert__)  # remove derts of incomplete kernels
-
 
     i__ = dert__[1]  # i is ig if fig else pixel
     idy__ = dert__[2]
@@ -271,15 +253,6 @@ def comp_r_loop(dert__, fig, root_fcr):
                 dx_.append(dx)
                 m_.append(m)
 
-            # if masked
-            else:  
-                i_cent_.append([])
-                idy_cent_.append([])
-                idx_cent_.append([])
-                g_.append([])
-                dy_.append([])
-                dx_.append([])
-                m_.append([])
 
         i__center.append(i_cent_)
         idy__center.append(idy_cent_)
@@ -298,9 +271,9 @@ def comp_r_loop(dert__, fig, root_fcr):
 def shape_check(dert__):
     # remove derts of 2x2 kernels that are missing some other derts
     
-    if dert__[0].shape[0] % 2 != 0:
+    if dert__[0].shape[0] % 2 != 0 and dert__[0].shape[0]>2:
         dert__ = dert__[:, :-1, :]
-    if dert__[0].shape[1] % 2 != 0:
+    if dert__[0].shape[1] % 2 != 0 and dert__[0].shape[1]>2:
         dert__ = dert__[:, :, :-1]
 
     return dert__
@@ -309,13 +282,14 @@ def shape_check(dert__):
 def shape_check_list(dert__):
     # remove derts of 2x2 kernels that are missing some other derts
     
-    # if length of y is not multiple of 2
-    if len(dert__[0]) % 2 != 0:
+    
+    # if length of y is not multiple of 2 and >2
+    if len(dert__[0]) % 2 != 0 and len(dert__[0]) >2:
         # remove last y elemet
         dert__ = [ydert[:-1] for ydert in dert__]
         
-    # if length of x is not multiple of 2    
-    if len(dert__[0][0]) % 2 != 0:
+    # if length of x is not multiple of 2 and >2
+    if len(dert__[0][0]) % 2 != 0 and len(dert__[0][0])>2:
         # remove last x element
         dert__ = [[xdert[:-1] for xdert in ydert] for ydert in dert__]
 
@@ -332,15 +306,3 @@ def decompose_difference(g1, g2, g3, g4, cos0, cos1):
     '''
     return dec_diff
 
-
-
-
-
-dert__ = np.load('dert2__.npy',allow_pickle=True)
-
-gdert = comp_g(dert__)
-
-rdert= comp_r_loop(dert__,0,0)
-rdert= comp_r_loop(dert__,0,1)
-rdert= comp_r_loop(dert__,1,0)
-rdert= comp_r_loop(dert__,1,1)

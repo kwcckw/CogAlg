@@ -1,7 +1,7 @@
 import cv2
 import argparse
 from time import time
-from line_1D_alg.utils import *
+from utils import *
 from itertools import zip_longest
 
 ''' 
