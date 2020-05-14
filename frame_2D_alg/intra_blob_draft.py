@@ -59,44 +59,9 @@ def intra_blob(blob, rdn, rng, fig, fcr):  # recursive input rng+ | der+ cross-c
             if sub_blob['sign']:
                 if sub_blob['Dert']['M'] > aveB * rdn:  # -> comp_r:
                     
-                    blob['sub_layers']+=intra_blob2(sub_blob, rdn + 1, rng**2, fig=fig, fcr=1)  # rng=1 in first call
-
-                    
-            elif sub_blob['Dert']['G'] > aveB * rdn:
-                
-                blob['sub_layers']+=intra_blob2(sub_blob, rdn + 1, rng=rng, fig=1, fcr=0)  # -> comp_g
-   
-        blob['deep_sub_layers'] = [deep_sub_layers + sub_layers for deep_sub_layers, sub_layers in zip_longest(blob['deep_sub_layers'], blob['sub_layers'], fillvalue=[])]
-        
-    return blob['deep_sub_layers']
-
-
-def intra_blob2(blob, rdn, rng, fig, fcr):  # recursive input rng+ | der+ cross-comp within blob
-    # fig: flag input is g, fcr: flag comp over rng+
-
-    # pack fork params in each sub blobs
-    blob.update({'fcr':fcr, 'fig':fig, 'rdn':rdn, 'rng':rng, 'ls':0})
-
-    if fcr: dert__ = comp_r(blob['dert__'], fig, blob['fcr'])  #-> m sub_blobs
-    else:   dert__ = comp_g(blob['dert__'])  #-> g sub_blobs:
-
-    # if the size is too small, comps operation may get into error when x or y size = 0
-    if dert__.shape[1] >2 and dert__.shape[2] >2: 
-
-        #form sub blobs
-        cluster_derts(blob, dert__, ave*rdn, fcr, fig)
-        # update ls after forming sub blobs
-        blob['ls'] = len(blob['sub_blobs'])
-        
-        # add sub blobs to current sub layer
-        blob['sub_layers'] += [[blob['sub_blobs']]]  
-    
-        for sub_blob in blob['sub_blobs']:  # eval intra_blob comp_g | comp_rng if low gradient
-            if sub_blob['sign']:
-                if sub_blob['Dert']['M'] > aveB * rdn:  # -> comp_r:
-                    
                     blob['sub_layers']+=intra_blob(sub_blob, rdn + 1, rng**2, fig=fig, fcr=1)  # rng=1 in first call
-  
+
+                    
             elif sub_blob['Dert']['G'] > aveB * rdn:
                 
                 blob['sub_layers']+=intra_blob(sub_blob, rdn + 1, rng=rng, fig=1, fcr=0)  # -> comp_g
