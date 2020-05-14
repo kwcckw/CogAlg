@@ -80,7 +80,7 @@ def image_to_blobs(image):
     stack_ = deque()  # buffer of running vertical stacks of Ps
     height, width = dert__.shape[1:]
 
-    for y in range(height):  # first and last row are discarded
+    for y in range(height-350):  # first and last row are discarded
         print(f'Processing line {y}...')
         P_ = form_P_(dert__[:, y].T)      # horizontal clustering
         P_ = scan_P_(P_, stack_, frame)   # vertical clustering, adds up_forks per P and down_fork_cnt per stack
@@ -115,7 +115,7 @@ def form_P_(dert__):  # horizontal clustering and summation of dert params into 
         s = vg > 0
         if s != _s:
             # terminate and pack P:
-            P = dict(I=I, G=G, Dy=Dy, Dx=Dx, L=L, x0=x0, dert__=dert__[x0:x0 + L], sign=_s)  # no need for dert_
+            P = dict(I=I, G=G, Dy=Dy, Dx=Dx, L=L, x0=x0, dert_=dert__[x0:x0 + L], sign=_s)  # no need for dert_
             P_.append(P)
             # initialize new P params:
             I, G, Dy, Dx, L, x0 = 0, 0, 0, 0, 0, x
@@ -127,7 +127,7 @@ def form_P_(dert__):  # horizontal clustering and summation of dert params into 
         L += 1
         _s = s  # prior sign
 
-    P = dict(I=I, G=G, Dy=Dy, Dx=Dx, L=L, x0=x0, dert__=dert__[x0:x0 + L], sign=_s)
+    P = dict(I=I, G=G, Dy=Dy, Dx=Dx, L=L, x0=x0, dert_=dert__[x0:x0 + L], sign=_s)
     P_.append(P)  # terminate last P in a row
     return P_
 
@@ -316,8 +316,8 @@ if __name__ == '__main__':
     start_time = time()
     frame = image_to_blobs(image)
 
-
-    bcount = 0
+    deep_blob_number = []
+    bcount = -1
     intra = 1
     if intra:  # Tentative call to intra_blob, omit for testing frame_blobs:
 
@@ -330,31 +330,29 @@ if __name__ == '__main__':
         check_deeper_layers = 0
         for blob in frame['blob__']:
             
-            print('Processing blob number '+str(bcount))
             bcount+=1
+            print('Processing blob number '+str(bcount))
+            
+
+            blob.update({'fcr':0, 'fig':0, 'rdn':0, 'rng':1, 'ls':0, 'deep_sub_layers':[], 'sub_layers':[],'sub_blobs':[]})
+
 
             if blob['sign']:
                 if blob['Dert']['G'] > aveB and blob['Dert']['S'] > 20 and blob['dert__'].shape[1]>4 and blob['dert__'].shape[2]>4: 
                     
-
+                   
                     intra_blob(blob, rdn=1, rng=.0, fig=0, fcr=0)  # +G blob' dert__' comp_g
 
-                    # check if there are deeper layers
-                    if len(blob['sub_layers'])>0:
-                        if len(blob['sub_layers'][0])>1:
-                            check_deeper_layers = 1
-            
             elif -blob['Dert']['G'] > aveB and blob['Dert']['S'] > 6 and blob['dert__'].shape[1]>4 and blob['dert__'].shape[2]>4:
                 
+          
                 intra_blob(blob, rdn=1, rng=1, fig=0, fcr=1)  # -G blob' dert__' comp_r in 3x3 kernels
                 
-                # check if there are deeper layers
-                if len(blob['sub_layers'])>0:
-                    if len(blob['sub_layers'][0])>1:
-                        check_deeper_layers = 1
-                    
-
-
+            
+            # find blob number with deep layers
+            if len(blob['deep_sub_layers']) > 0:
+                
+                deep_blob_number.append(bcount)
 
                 '''
                 with feedback:
