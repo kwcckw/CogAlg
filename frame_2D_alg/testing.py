@@ -6,16 +6,15 @@ Currently testing: intra_blob.form_P__
 
 import frame_blobs_ternary
 
-from utils import imread
-#from utils import imread, draw
-from intra_comp import comp_a
-from intra_blob_draft import form_P__, scan_P__
+from utils import imread, draw
+from intra_comp_ts import comp_i
+from intra_blob import form_P__, scan_P__
 
 # -----------------------------------------------------------------------------
 # Adjustable parameters
 
-image_path = "./images/raccoon.jpg"
-output_path = "./visualization/images/2D_alg_test_out"
+image_path = "../images/raccoon_eye.jpg"
+output_path = "../visualization/images/2D_alg_test_out"
 
 # -----------------------------------------------------------------------------
 # Adjustable parameters
@@ -38,8 +37,7 @@ if __name__ == "__main__":
     print('Done!')
 
     print('Doing angle comp on best blob...')
-#    derts = comp_a(best_blob['dert__'], 1, fa=1)
-    derts = comp_a(best_blob['dert__'])
+    derts = comp_i(best_blob['dert__'], 1, fa=1)
     print('Done!')
 
     print('Outputting derts...')
@@ -67,7 +65,7 @@ if __name__ == "__main__":
     import numpy as np
     import numpy.ma as ma
 
-    from intra_comp import (
+    from intra_comp_ts import (
         Y_COEFFS, X_COEFFS,
         central_slice,
         rim_mask,
