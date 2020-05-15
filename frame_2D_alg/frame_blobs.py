@@ -79,7 +79,7 @@ def image_to_blobs(image):
     stack_ = deque()  # buffer of running vertical stacks of Ps
     height, width = dert__.shape[1:]
 
-    for y in range(height):  # first and last row are discarded
+    for y in range(height-750):  # first and last row are discarded
         print(f'Processing line {y}...')
 
         P_ = form_P_(dert__[:, y].T)      # horizontal clustering
@@ -315,30 +315,35 @@ if __name__ == '__main__':
     start_time = time()
     frame = image_to_blobs(image)
 
-    intra = 0
+    intra = 1
     if intra:  # Tentative call to intra_blob, omit for testing frame_blobs:
 
         from intra_blob import *
         deep_frame = frame, frame
         bcount=0
         deep_blob_i_ = []
+        deep_sub_layers = []
+        subcount = 0
 
         for blob in frame['blob__']:
             bcount += 1
-            print('Processing blob number ' + str(bcount))
+#            print('Processing blob number ' + str(bcount))
 
-            blob.update({'fcr': 0, 'fig': 0, 'rdn': 0, 'rng': 1, 'ls': 0, 'deep_sub_layers': [], 'sub_layers': [], 'sub_blobs': []})
+            blob.update({'fcr': 0, 'fig': 0, 'rdn': 0, 'rng': 1, 'ls': 0, 'sub_layers': []})
 
             if blob['sign']:
                 if blob['Dert']['G'] > aveB and blob['Dert']['S'] > 20 and blob['dert__'].shape[1] > 4 and blob['dert__'].shape[2] > 4:
-                    intra_blob(blob, rdn=1, rng=.0, fig=0, fcr=0)  # +G blob' dert__' comp_g
-
+                    deep_sub_layers.append(intra_blob(blob, rdn=1, rng=.0, fig=0, fcr=0, fip = 0))  # +G blob' dert__' comp_g
+                    subcount+=1
+                    
             elif -blob['Dert']['G'] > aveB and blob['Dert']['S'] > 6 and blob['dert__'].shape[1] > 4 and blob['dert__'].shape[2] > 4:
 
-                intra_blob(blob, rdn=1, rng=1, fig=0, fcr=1)  # -G blob' dert__' comp_r in 3x3 kernels
-
-            if len(blob['deep_sub_layers']) > 0:
-                deep_blob_i_.append(bcount)  # indices of blob with deep layers
+                deep_sub_layers.append(intra_blob(blob, rdn=1, rng=1, fig=0, fcr=1, fip = 0))  # -G blob' dert__' comp_r in 3x3 kernels
+                subcount+=1
+                
+            if len(deep_sub_layers) > 0:
+                if len(deep_sub_layers[subcount-1]) > 2:
+                    deep_blob_i_.append(bcount)  # indices of blob with deep layers
 
 
     end_time = time() - start_time

@@ -32,21 +32,21 @@ from itertools import zip_longest
 # filters, All *= rdn:
 
 ave  = 50  # fixed cost per dert, from average m, reflects blob definition cost, may be different for comp_a?
-aveB = 1  # fixed cost per intra_blob comp and clustering
+aveB = 0  # fixed cost per intra_blob comp and clustering
 
 # --------------------------------------------------------------------------------------------------------------
 # functions, ALL WORK-IN-PROGRESS:
 
+def intra_blob(blob, rdn, rng, fig, fcr, fip):  # recursive input rng+ | der+ cross-comp within blob
 
-def intra_blob(blob, rdn, rng, fig, fcr):  # recursive input rng+ | der+ cross-comp within blob
-
-<<<<<<<< HEAD:frame_2D_alg/intra_blob.py
     # fig: flag input is g | p, fcr: flag comp over rng+ | der+
     deep_sub_layers = []  # to extend root_blob sub_layers
 
     if fcr: dert__ = comp_r(blob['dert__'], fig, blob['fcr'])  # -> m sub_blobs
-    else:   dert__ = comp_g(blob['dert__'])  # -> g sub_blobs:
+    else:   dert__ = comp_g(blob['dert__'], fip)  # -> g sub_blobs:
 
+    # there is always 2 layer of recursion only, need check of comps operations dert output
+    # the deeper layer couldn't fullfil due to the conditions below couldn't satisfy
     if dert__.shape[1] >2 and dert__.shape[2] >2:
 
         sub_blobs = cluster_derts(blob, dert__, ave*rdn, fcr, fig)
@@ -59,53 +59,26 @@ def intra_blob(blob, rdn, rng, fig, fcr):  # recursive input rng+ | der+ cross-c
             if sub_blob['sign']:
                 if sub_blob['Dert']['M'] > aveB * rdn:  # -> comp_r:
                     blob['sub_layers'] += \
-                        intra_blob(sub_blob, rdn + 1 + 1 / blob['Ls'], rng*2, fig=fig, fcr=1)
+                    intra_blob(sub_blob, rdn + 1 + 1 / blob['Ls'], rng*2, fig=fig, fcr=1, fip=0) # not sure on the fip value here
 
             elif sub_blob['Dert']['G'] > aveB * rdn:  # -> comp_g
                 blob['sub_layers'] += \
-                    intra_blob(sub_blob, rdn + 1 + 1 / blob['Ls'], rng=rng, fig=1, fcr=0)
+                intra_blob(sub_blob, rdn + 1 + 1 / blob['Ls'], rng=rng, fig=1, fcr=0, fip=0) # not sure on the fip value here
 
         deep_sub_layers = [deep_sub_layers + sub_layers for deep_sub_layers, sub_layers in
-                          zip_longest(blob['deep_sub_layers'], blob['sub_layers'], fillvalue=[])]
+                          zip_longest(deep_sub_layers, blob['sub_layers'], fillvalue=[])]
 
     return deep_sub_layers
-========
-    blob.update({'fcr':fcr, 'fig':fig, 'rdn':rdn, 'rng':rng, 'ls':0})
 
-    if fcr: dert__ = comp_r(blob['dert__'], fig, blob['fcr'])  #-> m sub_blobs
-    else:   dert__ = comp_g(blob['dert__'])  #-> g sub_blobs:
 
-    # if the size is too small, comps operation may get into error when x or y size = 0
-    if dert__.shape[1] >2 and dert__.shape[2] >2: 
 
-        # first layer of sub blobs
-        cluster_derts(blob, dert__, ave*rdn, fcr, fig)
-        blob['ls'] = len(blob['sub_blobs'])
-        blob['sub_layers'] += [blob['sub_blobs']]  # 1st layer
-    
-        for sub_blob in blob['sub_blobs']:  # eval intra_blob comp_g | comp_rng if low gradient
-            if sub_blob['sign']:
-                if sub_blob['Dert']['M'] > aveB * rdn:  # -> comp_r:
-                    
-                    blob['sub_layers']+=intra_blob(sub_blob, rdn + 1, rng**2, fig=fig, fcr=1)  # rng=1 in first call
-
-                    
-            elif sub_blob['Dert']['G'] > aveB * rdn:
-                
-                blob['sub_layers']+=intra_blob(sub_blob, rdn + 1, rng=rng, fig=1, fcr=0)  # -> comp_g
-   
-        blob['deep_sub_layers'] = [deep_sub_layers + sub_layers for deep_sub_layers, sub_layers in zip_longest(blob['deep_sub_layers'], blob['sub_layers'], fillvalue=[])]
-        
-    return blob['deep_sub_layers']
-
->>>>>>>> c64156f44d4f19b42a79f139d642a6047539c901:frame_2D_alg/intra_blob_draft.py
 
 
 def cluster_derts(blob, dert__, Ave, fcr, fig):  # analog of frame_to_blobs
 
     # clustering criterion per fork, dert__[:,:,0] for non transposed dert:
 
-    # dert__[0] instead of dert__[:,:,0] for non transpose dert
+    
     if fcr:  # comp_r output
         if fig: crit__ = dert__[0] + dert__[4] - Ave  # eval by i + m, accumulated in rng
         else:   crit__ = Ave - dert__[1]  # eval by -g, accumulated in rng
@@ -115,15 +88,9 @@ def cluster_derts(blob, dert__, Ave, fcr, fig):  # analog of frame_to_blobs
     dert__ = ma.transpose(dert__, axes=(1, 2, 0))  # transpose dert__ into shape [y,x,params]
     stack_ = deque()  # buffer of running vertical stacks of Ps
 
-<<<<<<<< HEAD:frame_2D_alg/intra_blob.py
-    for y in range(dert__.shape[1]):  # in height, first and last row are discarded
+    # dert__.shape[0] is y size
+    for y in range(dert__.shape[0]):  # in height, first and last row are discarded
         # print(f'Processing intra line {y}...')
-
-========
-    for y in range(height):  # first and last row are discarded
-
-#        print(f'Processing intra line {y}...')
->>>>>>>> c64156f44d4f19b42a79f139d642a6047539c901:frame_2D_alg/intra_blob_draft.py
         P_ = form_P_(dert__[y, :], crit__[y, :])  # horizontal clustering, adds a row of Ps
         P_ = scan_P_(P_, stack_, blob)    # vertical clustering, adds up_connects per P and down_connect_cnt per stack
         stack_ = form_stack_(P_, blob, y)
@@ -131,13 +98,9 @@ def cluster_derts(blob, dert__, Ave, fcr, fig):  # analog of frame_to_blobs
     sub_blobs =[]  # from form_blob:
 
     while stack_:  # frame ends, last-line stacks are merged into their blobs:
-<<<<<<<< HEAD:frame_2D_alg/intra_blob.py
         sub_blobs.append ( form_blob(stack_.popleft(), blob))
 
     return sub_blobs
-========
-        sub_blobs = form_blob(stack_.popleft(), blob)
->>>>>>>> c64156f44d4f19b42a79f139d642a6047539c901:frame_2D_alg/intra_blob_draft.py
 
 
 # clustering functions:
@@ -153,8 +116,6 @@ def form_P_(dert_, crit_):  # segment dert__ into P__, in horizontal ) vertical 
         if ~mask_[x]:
             x0 = x  # coordinate of first unmasked dert in line
             break
-    
-
     I, iDy, iDx, G, Dy, Dx, M, L = *dert_[x0], 1  # initialize P params
 
     _sign = sign_[x0]
@@ -334,25 +295,10 @@ def form_blob(stack, root_blob):  # increment blob with terminated stack, check 
         root_blob['dert__'][:,y0:yn, x0:xn] = dert__.copy()  # assign mask back to blob root dert__
 
         blob.pop('open_stacks')
-<<<<<<<< HEAD:frame_2D_alg/intra_blob.py
-        blob.update( root_blob=root_blob, box=(y0, yn, x0, xn), dert__=dert__)
+        blob.update( root_blob=root_blob, box=(y0, yn, x0, xn), dert__=dert__,fcr = 0) 
 
     return blob
-========
-        blob.update(root=blob_root,
-                    box=(y0, yn, x0, xn),   # boundary box
-                    dert__=dert__,          # includes mask
-                    fork=defaultdict(dict),  # will contain fork params, layer_
-                    deep_sub_layers=[], 
-                    sub_layers=[],
-                    sub_blobs = []
-                    )
 
-        blob_root['sub_blobs'].append(blob)  # this maybe replaced by return, as in line_patterns and line 52
->>>>>>>> c64156f44d4f19b42a79f139d642a6047539c901:frame_2D_alg/intra_blob_draft.py
-
-        # return the sub blobs
-        return blob
 
 def accum_Dert(Dert: dict, **params) -> None:
     Dert.update({param: Dert[param] + value for param, value in params.items()})
