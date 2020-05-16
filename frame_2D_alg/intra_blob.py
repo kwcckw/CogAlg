@@ -39,11 +39,53 @@ aveB = 0  # fixed cost per intra_blob comp and clustering
 
 def intra_blob(blob, rdn, rng, fig, fcr, fip):  # recursive input rng+ | der+ cross-comp within blob
 
+    # extend dert borders
+    # get bounding box of current dert
+    y0,yn,x0,xn = blob['box']
+    # get image dert size
+    _, fysize,fxsize = blob['root']['dert__'].shape
+    # get dert size
+    _, dysize,dxsize = blob['dert__'].shape
+    
+    # extend dert boundary by 1
+    y0e = y0-1 
+    yne = yn+1 
+    x0e = x0-1
+    xne = xn+1
+       
+    # prevent boundary <0 or >image size
+    if y0e < 0: 
+        y0e = 0
+        ystart = 0
+    else:
+        ystart = 1
+    if yne > fysize: 
+        yne = fysize; 
+        yend = ystart+dysize
+    else:
+        yend = ystart+dysize 
+    if x0e < 0: 
+        x0e = 0; 
+        xstart = 0
+    else:
+        xstart =1  
+    if xne > fxsize: 
+        xne = fxsize; 
+        xend = xstart+dxsize
+    else:
+        xend = xstart+dxsize
+        
+    # get extended dert boundary, where boundary is masked
+    dert__extend = blob['root']['dert__'][:,y0e:yne,x0e:xne]
+    dert__extend.mask = True # set all mask to true
+    dert__extend[:,ystart:yend,xstart:xend] = blob['dert__'].copy()
+
+        
     # fig: flag input is g | p, fcr: flag comp over rng+ | der+
     deep_sub_layers = []  # to extend root_blob sub_layers
 
-    if fcr: dert__ = comp_r(blob['dert__'], fig, blob['fcr'])  # -> m sub_blobs
-    else:   dert__ = comp_g(blob['dert__'], fip)  # -> g sub_blobs:
+    if fcr: dert__ = comp_r(dert__extend, fig, fcr)  # -> m sub_blobs
+    else:   dert__ = comp_g(dert__extend, fip)  # -> g sub_blobs:
 
     # there is always 2 layer of recursion only, need check of comps operations dert output
     # the deeper layer couldn't fullfil due to the conditions below couldn't satisfy
@@ -59,11 +101,11 @@ def intra_blob(blob, rdn, rng, fig, fcr, fip):  # recursive input rng+ | der+ cr
             if sub_blob['sign']:
                 if sub_blob['Dert']['M'] > aveB * rdn:  # -> comp_r:
                     blob['sub_layers'] += \
-                    intra_blob(sub_blob, rdn + 1 + 1 / blob['Ls'], rng*2, fig=fig, fcr=1, fip=0) # not sure on the fip value here
+                    intra_blob(sub_blob, rdn + 1 + 1 / blob['Ls'], rng*2, fig=fig, fcr=1, fip=0) 
 
             elif sub_blob['Dert']['G'] > aveB * rdn:  # -> comp_g
                 blob['sub_layers'] += \
-                intra_blob(sub_blob, rdn + 1 + 1 / blob['Ls'], rng=rng, fig=1, fcr=0, fip=0) # not sure on the fip value here
+                intra_blob(sub_blob, rdn + 1 + 1 / blob['Ls'], rng=rng, fig=1, fcr=0, fip=0) 
 
         deep_sub_layers = [deep_sub_layers + sub_layers for deep_sub_layers, sub_layers in
                           zip_longest(deep_sub_layers, blob['sub_layers'], fillvalue=[])]
