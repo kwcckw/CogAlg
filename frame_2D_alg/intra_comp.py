@@ -254,10 +254,6 @@ def normalization(array):
 
 
 def mask_OR(list_or_arrays):
-
-    # make separate numpy version: a lot simpler? 
-    # yea, looks like the loop version looks quite confusing
-
     # for comp_g
     if len(list_or_arrays) == 4:
         for y in range(len(list_or_arrays[0])):
@@ -267,20 +263,39 @@ def mask_OR(list_or_arrays):
                     list_or_arrays[0][y][x] = list_or_arrays[1][y][x] = \
                         list_or_arrays[2][y][x] = list_or_arrays[3][y][x] = True
 
-    # facing issue here when each list element out of the 9 element is having size of [2,y,x] instead of [y,x]
-    # and that happened when comp_r, fig = 1
     # for comp_r
     if len(list_or_arrays) == 9:
-        for y in range(len(list_or_arrays[0])):
-            for x in range(len(list_or_arrays[0][y])):
-                if list_or_arrays[0][y][x] or list_or_arrays[1][y][x] or list_or_arrays[2][y][x] or \
-                        list_or_arrays[3][y][x] or list_or_arrays[4][y][x] or list_or_arrays[5][y][x] or \
-                        list_or_arrays[6][y][x] or list_or_arrays[7][y][x] or list_or_arrays[8][y][x]:
-                    list_or_arrays[0][y][x] = list_or_arrays[1][y][x] = list_or_arrays[2][y][x] = \
-                        list_or_arrays[3][y][x] = list_or_arrays[4][y][x] = list_or_arrays[5][y][x] = \
-                        list_or_arrays[6][y][x] = list_or_arrays[7][y][x] = list_or_arrays[8][y][x] = True
-
+        for y in range(len(list_or_arrays[0][0])):
+            for x in range(len(list_or_arrays[0][0][y])):
+                if list_or_arrays[0][0][y][x] or list_or_arrays[1][0][y][x] or list_or_arrays[2][0][y][x] or \
+                        list_or_arrays[3][0][y][x] or list_or_arrays[4][0][y][x] or list_or_arrays[5][0][y][x] or \
+                        list_or_arrays[6][0][y][x] or list_or_arrays[7][0][y][x] or list_or_arrays[8][0][y][x]:
+                    list_or_arrays[0][:][y][x] = list_or_arrays[1][:][y][x] = list_or_arrays[2][:][y][x] = \
+                        list_or_arrays[3][:][y][x] = list_or_arrays[4][:][y][x] = list_or_arrays[5][:][y][x] = \
+                        list_or_arrays[6][:][y][x] = list_or_arrays[7][:][y][x] = list_or_arrays[8][:][y][x] = True
 
     return list_or_arrays
 
 
+def mask_projection(list_of_arrays):
+    # top_left, top_right, bottom_right, bottom_left
+
+    for y in range(len(list_of_arrays[0])):
+        for x in range(len(list_of_arrays[0][y])):
+            if [list_of_arrays[0].mask[y][x], list_of_arrays[1].mask[y][x], list_of_arrays[2].mask[y][x],
+                    list_of_arrays[3].mask[y][x]].count(True) == 1:
+
+                    if list_of_arrays[0].mask[y][x] == True:
+                        list_of_arrays[0][y][x] = list_of_arrays[2][y][x] / 2
+                        list_of_arrays[0].mask[y][x] = list_of_arrays[1].mask[y][x] = \
+                            list_of_arrays[2].mask[y][x] = list_of_arrays[3].mask[y][x] = False
+
+                    elif list_of_arrays[3].mask[y][x] == True:
+                        list_of_arrays[3][y][x] = list_of_arrays[1][y][x] / 2
+                        list_of_arrays[0].mask[y][x] = list_of_arrays[1].mask[y][x] = \
+                            list_of_arrays[2].mask[y][x] = list_of_arrays[3].mask[y][x] = False
+                    else:
+                        list_of_arrays[0].mask[y][x] = list_of_arrays[1].mask[y][x] = \
+                            list_of_arrays[2].mask[y][x] = list_of_arrays[3].mask[y][x] = True
+
+    return list_of_arrays
