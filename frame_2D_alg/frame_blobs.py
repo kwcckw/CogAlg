@@ -78,7 +78,7 @@ def image_to_blobs(image):
     stack_ = deque()  # buffer of running vertical stacks of Ps
     height, width = dert__.shape[1:]
 
-    for y in range(height):  # first and last row are discarded
+    for y in range(height-750):  # first and last row are discarded
         print(f'Processing line {y}...')
 
         P_ = form_P_(dert__[:, y].T)      # horizontal clustering
@@ -300,6 +300,37 @@ def form_blob(stack, frame):  # increment blob with terminated stack, check for 
 def accum_Dert(Dert: dict, **params) -> None:
     Dert.update({param: Dert[param] + value for param, value in params.items()})
 
+
+
+
+
+def init_intra_dert(blob):
+    # Update blob dert with new param #
+    
+    new_dert__ = np.zeros((7, blob['dert__'].shape[1], blob['dert__'].shape[2])) # initialize with 0
+    new_dert__ = ma.array(new_dert__,mask=True) # create mask array
+    mask = blob['dert__'][0].mask               # get mask
+    new_dert__.mask = mask                      # apply mask
+    
+    new_dert__[0] = blob['dert__'][0]   # i
+    new_dert__[1] = 0                   # idy
+    new_dert__[2] = 0                   # idx
+    new_dert__[3] = blob['dert__'][1]   # g
+    new_dert__[4] = blob['dert__'][2]   # dy
+    new_dert__[5] = blob['dert__'][3]   # dx
+    new_dert__[6] = 0                   # m
+    
+    blob['dert__'] = new_dert__.copy()
+    
+    return blob
+
+'''
+or:
+for (p, dy, dx, g), i in enumerate( blob['dert__'] ):
+    blob['dert__'][i] = p, 0, 0, g, dy, dx, 0  # idt, idx, m = 0
+'''
+
+
 # -----------------------------------------------------------------------------
 # Main
 
@@ -314,7 +345,7 @@ if __name__ == '__main__':
     start_time = time()
     frame = image_to_blobs(image)
 
-    intra = 0
+    intra = 1
     if intra:  # Tentative call to intra_blob, omit for testing frame_blobs:
 
         from intra_blob import *
@@ -332,40 +363,14 @@ if __name__ == '__main__':
             if blob['sign']:
                 if blob['Dert']['G'] > aveB and blob['Dert']['S'] > 20 and blob['dert__'].shape[1] > 4 and blob['dert__'].shape[2] > 4:
 
-                    new_dert__ = np.zeros((7, blob['dert__'].shape[1], blob['dert__'].shape[2]))
-                    mask = blob['dert__'][0].mask
+                    blob = init_intra_dert(blob)
 
-                    new_dert__[0] = blob['dert__'][0]  # i
-                    new_dert__[1] = 0; new_dert__[1].mask = mask  # idy
-                    new_dert__[2] = 0; new_dert__[2].mask = mask  # idx
-                    new_dert__[3] = blob['dert__'][1]  # g
-                    new_dert__[4] = blob['dert__'][2]  # dy
-                    new_dert__[5] = blob['dert__'][3]  # dx
-                    new_dert__[6] = 0; new_dert__[6].mask = mask  # m
-
-                    blob['dert__'] = new_dert__.copy()
-                    '''
-                    or:
-                    for (p, dy, dx, g), i in enumerate( blob['dert__'] ):
-                        blob['dert__'][i] = p, 0, 0, g, dy, dx, 0  # idt, idx, m = 0
-                    '''
                     deep_layers.append(intra_blob(blob, rdn=1, rng=.0, fig=0, fcr=0))  # +G blob' dert__' comp_g
                     layer_count+=1
 
             elif -blob['Dert']['G'] > aveB and blob['Dert']['S'] > 6 and blob['dert__'].shape[1] > 4 and blob['dert__'].shape[2] > 4:
 
-                new_dert__ = np.zeros((7, blob['dert__'].shape[1], blob['dert__'].shape[2]))
-                mask = blob['dert__'][0].mask
-
-                new_dert__[0] = blob['dert__'][0]  # i
-                new_dert__[1] = 0; new_dert__[1].mask = mask  # idy
-                new_dert__[2] = 0; new_dert__[2].mask = mask  # idx
-                new_dert__[3] = blob['dert__'][1]  # g
-                new_dert__[4] = blob['dert__'][2]  # dy
-                new_dert__[5] = blob['dert__'][3]  # dx
-                new_dert__[6] = 0; new_dert__[6].mask = mask  # m
-
-                blob['dert__'] = new_dert__.copy()
+                blob = init_intra_dert(blob)
 
                 deep_layers.append(intra_blob(blob, rdn=1, rng=1, fig=0, fcr=1))  # -G blob' dert__' comp_r in 3x3 kernels
                 layer_count+=1
@@ -377,6 +382,10 @@ if __name__ == '__main__':
 
     end_time = time() - start_time
     print(end_time)
+    
+    
+    
+    
 
     # DEBUG -------------------------------------------------------------------
 

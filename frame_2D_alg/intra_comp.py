@@ -5,6 +5,7 @@ Cross-comparison of pixels or gradients, in 2x2 or 3x3 kernels
 
 import numpy as np
 import numpy.ma as ma
+import functools
 
 # Sobel coefficients to decompose ds into dy and dx:
 
@@ -50,11 +51,22 @@ def comp_r(dert__, fig, root_fcr):
 
     idy__, idx__ = dert__[[1, 2]]
 
-    i__center.mask, i__topleft.mask, i__top.mask, i__topright.mask, i__right.mask, i__bottomright.mask, i__bottom.mask, \
-    i__bottomleft.mask, i__left.mask = \
-        mask_OR(
-        [i__center.mask, i__topleft.mask, i__top.mask, i__topright.mask, i__right.mask, i__bottomright.mask,
-         i__bottom.mask, i__bottomleft.mask, i__left.mask])
+    # OR the masks with numpy approach (equivalent to mask_OR for numpy array)
+    OR_mask=  functools.reduce(np.logical_or, (i__center, i__topleft, i__top,\
+                                               i__topright, i__right, i__bottomright,\
+                                               i__bottom, i__bottomleft, i__left ))
+
+    # update mask
+    i__center.mask = OR_mask
+    i__topleft.mask = OR_mask
+    i__top.mask = OR_mask
+    i__topright.mask = OR_mask
+    i__right.mask = OR_mask
+    i__bottomright.mask = OR_mask
+    i__bottom.mask = OR_mask
+    i__bottomleft.mask = OR_mask
+    i__left.mask = OR_mask
+
 
     if root_fcr:  # root fork is comp_r, accumulate derivatives:
 
@@ -115,11 +127,23 @@ def comp_r(dert__, fig, root_fcr):
         a__bottomleft =  a__[:, 2::2, :-2:2]
         a__left =        a__[:, 1:-1:2, :-2:2]
 
-        a__center.mask, a__topleft.mask, a__top.mask, a__topright.mask, a__right.mask, a__bottomright.mask, \
-        a__bottom.mask, a__bottomleft.mask, a__left.mask = \
-            mask_OR(
-            [a__center.mask, a__topleft.mask, a__top.mask, a__topright.mask, a__right.mask, a__bottomright.mask,
-             a__bottom.mask, a__bottomleft.mask, a__left.mask])
+
+        # OR the masks with numpy approach (equivalent to mask_OR for numpy array)
+        OR_mask_a =  functools.reduce(np.logical_or, (a__center, a__topleft, a__top,\
+                                                      a__topright, a__right, a__bottomright,\
+                                                      a__bottom, a__bottomleft, a__left ))
+
+        # update mask
+        a__center.mask = OR_mask_a
+        a__topleft.mask = OR_mask_a
+        a__top.mask = OR_mask_a
+        a__topright.mask = OR_mask_a
+        a__right.mask = OR_mask_a
+        a__bottomright.mask = OR_mask_a
+        a__bottom.mask = OR_mask_a
+        a__bottomleft.mask = OR_mask_a
+        a__left.mask = OR_mask_a
+
 
         '''
         8-tuple of differences between center dert angle and rim dert angle:
@@ -191,10 +215,25 @@ def comp_g(dert__):  # cross-comp of g in 2x2 kernels, between derts in ma.stack
     g2__, dy2__, dx2__ = g__[1:, 1:],   dy__[1:, 1:],   dx__[1:, 1:]    # bottom right
     g3__, dy3__, dx3__ = g__[1:, :-1],  dy__[1:, :-1],  dx__[1:, :-1]   # bottom left
 
-    g0__.mask, g1__.mask, g2__.mask, g3__.mask = \
-        mask_OR([g0__.mask, g1__.mask, g2__.mask, g3__.mask])
-    dy0__.mask = dx0__.mask = dy1__.mask = dx1__.mask = dy2__.mask = dx2__.mask = dy3__.mask = dx3__.mask = g0__.mask
 
+    # OR the masks with numpy approach (equivalent to mask_OR for numpy array)
+    OR_mask=  functools.reduce(np.logical_or, (g0__.mask, g1__.mask, g2__.mask, g3__.mask))
+
+    # update mask with the OR mask
+    g0__.mask = OR_mask;dy0__.mask = OR_mask;dx0__.mask = OR_mask
+    g1__.mask = OR_mask;dy1__.mask = OR_mask;dx1__.mask = OR_mask
+    g2__.mask = OR_mask;dy2__.mask = OR_mask;dx2__.mask = OR_mask
+    g3__.mask = OR_mask;dy3__.mask = OR_mask;dx3__.mask = OR_mask
+  
+    # update g,dy,dx
+    g__ = g__ [:-1, :-1] # remove last row and column to align with derived params
+    dy__ = dx__ [:-1, :-1]
+    dx__ = dx__ [:-1, :-1]
+    g__.mask = OR_mask
+    dy__.mask = OR_mask
+    dx__.mask = OR_mask
+    
+    
     sin0__ = dy0__ / g0__;  cos0__ = dx0__ / g0__
     sin1__ = dy1__ / g1__;  cos1__ = dx1__ / g1__
     sin2__ = dy2__ / g2__;  cos2__ = dx2__ / g2__
@@ -222,9 +261,9 @@ def comp_g(dert__):  # cross-comp of g in 2x2 kernels, between derts in ma.stack
     next comp_rg will use g, dy, dx     
     next comp_gg will use gg, dgy, dgx  
     '''
-    return  ma.stack((g__ [:-1, :-1],  # remove last row and column to align with derived params
-                      dy__[:-1, :-1],
-                      dx__[:-1, :-1],  # -> idy, idx to compute cos for comp rg
+    return  ma.stack((g__ ,  
+                      dy__,
+                      dx__,  # -> idy, idx to compute cos for comp rg
                       gg__,
                       dgy__,
                       dgx__,
@@ -274,6 +313,7 @@ def mask_OR(list_or_arrays):
     return list_or_arrays
 
 
+# where and how should we use this?
 def mask_projection(list_of_arrays):
     # top_left, top_right, bottom_right, bottom_left
 
