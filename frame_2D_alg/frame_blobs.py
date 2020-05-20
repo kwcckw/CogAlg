@@ -73,7 +73,7 @@ def image_to_blobs(image):
     stack_ = deque()  # buffer of running vertical stacks of Ps
     height, width = dert__.shape[1:]
 
-    for y in range(height):  # first and last row are discarded
+    for y in range(height-750):  # first and last row are discarded
         print(f'Processing line {y}...')
 
         P_ = form_P_(dert__[:, y].T)      # horizontal clustering
@@ -82,9 +82,110 @@ def image_to_blobs(image):
 
     while stack_:  # frame ends, last-line stacks are merged into their blobs:
         form_blob(stack_.popleft(), frame)
+        
+    # get adjacent blobs of same sign and different sign
+    link_blobs(frame)
 
     return frame  # frame of blobs
 
+
+
+# temporary function name, please suggest a better function name
+def link_blobs(frame):
+# this function loops across the blobs, find adjacent blobs with different/same sign and store them
+    
+    total_blobs = len(frame['blob__']) # total blobs number for looping purpose
+    
+    # loop all the blobs (current blob)
+    for i in range(total_blobs):
+        
+        print(f'Processing blobs {i}...')
+        # add adjacent blob param into current blob
+        # adj_blob[0] = different sign blobs
+        # adj_blob[1] = same sign blobs
+        frame['blob__'][i].update({'adj_blob': [[],[]]})
+        
+        curent_box = frame['blob__'][i]['box'] # box coordinates = y0,yn,x0,xn 
+        
+        # extend 1 pixel to borders to enable the intersection of surrounding blobs
+        current_box_ext = (curent_box[0]-1,curent_box[1]+1,curent_box[2]-1,curent_box[3]+1)
+        
+        # loop all the blobs (target blob)
+        for j in range(total_blobs):
+            if i != j: # if current blob is not the target blob
+                target_box = frame['blob__'][j]['box'] 
+                f_intersects = check_intersects(current_box_ext, target_box) # check intersects
+                
+                # if boxes intersect
+                if f_intersects:
+                    
+                    # get current blob derts and their unmasked dert location
+                    current_blob_dert = frame['blob__'][i]['dert__']
+                    # c_dert_loc[0] = y
+                    # c_dert_loc[1] = x
+                    c_dert_loc = np.where(current_blob_dert.mask[0] == False) 
+                
+                    # extend each dert by 1 for 8 different directions
+                    c_dert_loc_topleft      = (c_dert_loc[0]-1,c_dert_loc[1]-1)
+                    c_dert_loc_top          = (c_dert_loc[0]-1,c_dert_loc[1])
+                    c_dert_loc_topright     = (c_dert_loc[0]-1,c_dert_loc[1]+1)
+                    c_dert_loc_right        = (c_dert_loc[0]  ,c_dert_loc[1]+1)
+                    c_dert_loc_bottomright  = (c_dert_loc[0]+1,c_dert_loc[1]+1)
+                    c_dert_loc_bottom       = (c_dert_loc[0]+1,c_dert_loc[1])
+                    c_dert_loc_bottomleft   = (c_dert_loc[0]+1,c_dert_loc[1]-1)
+                    c_dert_loc_left         = (c_dert_loc[0]  ,c_dert_loc[1]-1)
+                    
+                    # pack all extended dert location into a list
+                    c_dert_loc_all = [c_dert_loc_topleft,c_dert_loc_top,\
+                                      c_dert_loc_topright,c_dert_loc_right,\
+                                      c_dert_loc_bottomright,c_dert_loc_bottom,\
+                                      c_dert_loc_bottomleft,c_dert_loc_left]
+                    
+                    # get target blob derts and their unmasked dert location
+                    target_blob_dert = frame['blob__'][j]['dert__']
+                    t_dert_loc = np.where(target_blob_dert.mask[0] == False)
+                    
+                    # flag to break from loops
+                    f_break = 0
+                    for lc_dert_loc in c_dert_loc_all: # loop each extended dert location
+                        for k in range(len(c_dert_loc[0])): # loop current dert location
+                            for l in range(len(t_dert_loc[0])): # loop target dert location
+                                
+                                # check for derts intersect since in some cases, boxes are intersect but derts don't intersect
+                                # if derts intersect, their coordinates would be the same
+                                # if (current dert y = target dert y) and (current dert x = target dert x)
+                                if lc_dert_loc[0][k] == t_dert_loc[0][l] and lc_dert_loc[1][k] == t_dert_loc[1][l]:
+                                    
+                                    # if different sign blobs intersect
+                                    if frame['blob__'][i]['sign'] != frame['blob__'][j]['sign']:
+                                        frame['blob__'][i]['adj_blob'][0].append(frame['blob__'][j])   
+                                        f_break = 1
+                                    # if same sign blobs intersect
+                                    else:
+                                        frame['blob__'][i]['adj_blob'][1].append(frame['blob__'][j])
+                                        f_break = 1
+                                # break from loop if derts in those blobs are intersect 
+                                if f_break == 1:
+                                    break
+                            if f_break == 1:
+                                break
+                        if f_break == 1:
+                            break
+                    
+                            
+                    
+                    
+                    
+# used in link_blobs function             
+def check_intersects(current_box, target_box):   
+    # check if 2 boxes are overlap or not
+    # the concept adapted from - > https://stackoverflow.com/questions/40795709/checking-whether-two-rectangles-overlap-in-python-using-two-bottom-left-corners
+    return not (current_box[3]<target_box[2] or \
+                current_box[2]>target_box[3] or \
+                current_box[1]<target_box[0] or \
+                current_box[0]>target_box[1])
+        
+    
 ''' 
 Parameterized connectivity clustering functions below:
 - form_P sums dert params within P and increments its L: horizontal length.
@@ -329,7 +430,7 @@ if __name__ == '__main__':
     start_time = time()
     frame = image_to_blobs(image)
 
-    intra = 1
+    intra = 0
     if intra:  # Tentative call to intra_blob, omit for testing frame_blobs:
 
         from intra_blob import *
@@ -346,13 +447,13 @@ if __name__ == '__main__':
             # blob.update({'fcr': 0, 'fig': 0, 'rdn': 0, 'rng': 1, 'ls': 0, 'sub_layers': []})
 
             if blob['sign']:
-                if blob['Dert']['G'] > aveB and blob['Dert']['S'] > 20 and blob['dert__'].shape[1] > 4 and blob['dert__'].shape[2] > 4:
+                if blob['Dert']['G'] > aveB and blob['Dert']['S'] > 20 and blob['dert__'].shape[1] > 3 and blob['dert__'].shape[2] > 3:
                     blob = convert_dert(blob)
 
                     deep_layers.append(intra_blob(blob, rdn=1, rng=.0, fig=0, fcr=0))  # +G blob' dert__' comp_g
                     layer_count += 1
 
-            elif -blob['Dert']['G'] > aveB and blob['Dert']['S'] > 6 and blob['dert__'].shape[1] > 4 and blob['dert__'].shape[2] > 4:
+            elif -blob['Dert']['G'] > aveB and blob['Dert']['S'] > 6 and blob['dert__'].shape[1] > 3 and blob['dert__'].shape[2] > 3:
 
                 blob = convert_dert(blob)
 
