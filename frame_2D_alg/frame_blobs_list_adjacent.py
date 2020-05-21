@@ -82,120 +82,11 @@ def image_to_blobs(image):
 
     while stack_:  # frame ends, last-line stacks are merged into their blobs:
         form_blob(stack_.popleft(), frame)
-        
-    # get adjacent blobs of same sign and different sign
-#    list_adjacent(frame)
+
 
     return frame  # frame of blobs
 
 
-
-# temporary function name, please suggest a better function name
-def list_adjacent(frame):
-# this function loops across the blobs, find adjacent blobs with different/same sign and store them
-    
-    total_blobs = len(frame['blob__']) # total blobs number for looping purpose
-    
-    # loop all the blobs (current blob)
-    for i in range(total_blobs):
-        
-        print(f'Processing blobs {i}...')
-        # add adjacent blob param into current blob
-        # adj_blob[0] = different sign blobs
-        # adj_blob[1] = same sign blobs
-        frame['blob__'][i].update({'adj_blob': [[],[]]})
-        
-        current_box = frame['blob__'][i]['box'] # box coordinates = y0,yn,x0,xn 
-        
-        # extend 1 pixel to borders to enable the intersection of surrounding blobs
-        current_box_ext = (current_box[0]-1,current_box[1],current_box[2]-1,current_box[3])
-        
-        # loop all the blobs (target blob)
-        for j in range(total_blobs):
-            if i != j: # if current blob is not the target blob
-                target_box = frame['blob__'][j]['box'] 
-                f_intersects = check_intersects(current_box_ext, target_box) # check intersects
-                
-                # if boxes intersect
-                if f_intersects:
-                    
-                    # get current blob derts and their unmasked dert location
-                    current_blob_dert = frame['blob__'][i]['dert__']
-                    # get target blob derts and their unmasked dert location
-                    target_blob_dert = frame['blob__'][j]['dert__']
-                    
-                    
-                    
-                    # map current blob dert and target blob dert to same location 
-                    empty_map = np.ones((frame['dert__'].shape[1],frame['dert__'].shape[2])).astype('bool')
-                    current_blob_dert_map = empty_map.copy()
-                    current_blob_dert_map[current_box[0]:current_box[1],current_box[2]:current_box[3]] = frame['blob__'][i]['dert__'].mask[0]
-                    
-                    target_blob_dert_map = empty_map.copy()
-                    target_blob_dert_map[target_box[0]:target_box[1],target_box[2]:target_box[3]] = frame['blob__'][j]['dert__'].mask[0]
-                    
-                    
-                    # c_dert_loc[0] = y
-                    # c_dert_loc[1] = x
-                    c_dert_loc = np.where(current_blob_dert_map == False) 
-                
-                    # extend each dert by 1 for 4 different directions (excluding diagonal directions)
-                    c_dert_loc_top          = (c_dert_loc[0]-1,c_dert_loc[1])
-                    c_dert_loc_right        = (c_dert_loc[0]  ,c_dert_loc[1]+1)
-                    c_dert_loc_bottom       = (c_dert_loc[0]+1,c_dert_loc[1])
-                    c_dert_loc_left         = (c_dert_loc[0]  ,c_dert_loc[1]-1)
-                    
-                    # pack all extended dert location into a list
-                    c_dert_loc_all = [c_dert_loc_top,\
-                                      c_dert_loc_right,\
-                                      c_dert_loc_bottom,\
-                                      c_dert_loc_left]
-                    
-                    
-                    t_dert_loc = np.where(target_blob_dert_map == False)
-                    
-                    # flag to break from loops
-                    f_break = 0
-                    for lc_dert_loc in c_dert_loc_all: # loop each extended dert location
-                        for k in range(len(c_dert_loc[0])): # loop current dert location
-                            for l in range(len(t_dert_loc[0])): # loop target dert location
-                                
-                                # check for derts intersect since in some cases, boxes are intersect but derts don't intersect
-                                # if derts intersect, their coordinates would be the same
-                                # if (current dert y = target dert y) and (current dert x = target dert x)
-                                if lc_dert_loc[0][k] == t_dert_loc[0][l] and lc_dert_loc[1][k] == t_dert_loc[1][l]:
-                                    
-                                    # if different sign blobs intersect
-                                    if frame['blob__'][i]['sign'] != frame['blob__'][j]['sign']:
-                                        frame['blob__'][i]['adj_blob'][0].append(frame['blob__'][j])   
-                                        f_break = 1
-                                    # if same sign blobs intersect
-                                    else:
-                                        frame['blob__'][i]['adj_blob'][1].append(frame['blob__'][j])
-                                        f_break = 1
-                                        
-                                # break from loop if derts in those blobs are intersect 
-                                if f_break == 1:
-                                    break
-                            if f_break == 1:
-                                break
-                        if f_break == 1:
-                            break
-                    
-                            
-                    
-                    
-                    
-# used in link_blobs function             
-def check_intersects(current_box, target_box):   
-    # check if 2 boxes are overlap or not
-    # the concept adapted from - > https://stackoverflow.com/questions/40795709/checking-whether-two-rectangles-overlap-in-python-using-two-bottom-left-corners
-    return not (current_box[3]<target_box[2] or \
-                current_box[2]>target_box[3] or \
-                current_box[1]<target_box[0] or \
-                current_box[0]>target_box[1])
-        
-    
 ''' 
 Parameterized connectivity clustering functions below:
 - form_P sums dert params within P and increments its L: horizontal length.
@@ -220,10 +111,19 @@ def form_P_(dert__):  # horizontal clustering and summation of dert params into 
         s = vg > 0
         if s != _s:
             # terminate and pack P:
-            P = dict(I=I, G=G, Dy=Dy, Dx=Dx, L=L, x0=x0, dert_=dert__[x0:x0 + L], sign=_s)  # no need for dert_
-            P_.append(P)
+            P = dict(I=I, G=G, Dy=Dy, Dx=Dx, L=L, x0=x0, dert_=dert__[x0:x0 + L], sign=_s, adj_P=[], blob=[])  # no need for dert_
             # initialize new P params:
             I, G, Dy, Dx, L, x0 = 0, 0, 0, 0, 0, x
+            
+            if P_: # if there is prior P
+                _P = P_.pop() # get prior P
+                _P['adj_P'].append(P) # append adjacent P to  prior P
+                P['adj_P'].append(_P) # append adjacent prior P to P
+                P_.append(_P) # pack _P back to P_
+                P_.append(P) # pack P to P_
+            else: # empty P_ deque
+                P_.append(P)
+            
         # accumulate P params:
         I += p
         G += vg
@@ -232,10 +132,16 @@ def form_P_(dert__):  # horizontal clustering and summation of dert params into 
         L += 1
         _s = s  # prior sign
 
-    P = dict(I=I, G=G, Dy=Dy, Dx=Dx, L=L, x0=x0, dert_=dert__[x0:x0 + L], sign=_s)
+    # last P in a row
+    P = dict(I=I, G=G, Dy=Dy, Dx=Dx, L=L, x0=x0, dert_=dert__[x0:x0 + L], sign=_s, adj_P=[], blob=[])
+    _P = P_.pop() # get prior P
+    _P['adj_P'].append(P) # append adjacent P to  prior P
+    P['adj_P'].append(_P) # append adjacent prior P to P
+    P_.append(_P) # pack _P back to P_    
     P_.append(P)  # terminate last P in a row
+    
     return P_
-
+    
 
 def scan_P_(P_, stack_, frame):  # merge P into higher-row stack of Ps which have same sign and overlap by x_coordinate
     '''
@@ -304,7 +210,7 @@ def form_stack_(y, P_, frame):  # Convert or merge every P into its stack of Ps,
     while P_:
         P, up_fork_ = P_.popleft()
         s = P.pop('sign')
-        I, G, Dy, Dx, L, x0, dert__ = P.values()
+        I, G, Dy, Dx, L, x0, dert__, _, _ = P.values()
         xn = x0 + L  # next-P x0
         if not up_fork_:
             # initialize new stack for each input-row P that has no connections in higher row:
