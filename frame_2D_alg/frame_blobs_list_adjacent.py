@@ -73,7 +73,7 @@ def image_to_blobs(image):
     stack_ = deque()  # buffer of running vertical stacks of Ps
     height, width = dert__.shape[1:]
 
-    for y in range(height-750):  # first and last row are discarded
+    for y in range(height):  # first and last row are discarded
         print(f'Processing line {y}...')
 
         P_ = form_P_(dert__[:, y].T)      # horizontal clustering
@@ -175,6 +175,12 @@ def scan_P_(P_, stack_, frame):  # merge P into higher-row stack of Ps which hav
                 stack['down_fork_cnt'] += 1
                 up_fork_.append(stack)  # P-connected higher-row stacks are buffered into up_fork_ per P
 
+            # adjacent Ps in vertical direction
+            else:  # different sign P and _P
+                P['adj_P'].append(_P) # add to adjacent P
+                _P['adj_P'].append(P)
+                
+
             if xn < _xn:  # _P overlaps next P in P_
                 next_P_.append((P, up_fork_))  # recycle _P for the next run of scan_P_
                 up_fork_ = []
@@ -214,7 +220,7 @@ def form_stack_(y, P_, frame):  # Convert or merge every P into its stack of Ps,
         xn = x0 + L  # next-P x0
         if not up_fork_:
             # initialize new stack for each input-row P that has no connections in higher row:
-            blob = dict(Dert=dict(I=0, G=0, Dy=0, Dx=0, S=0, Ly=0), box=[y, x0, xn], stack_=[], sign=s, open_stacks=1)
+            blob = dict(Dert=dict(I=0, G=0, Dy=0, Dx=0, S=0, Ly=0), box=[y, x0, xn], stack_=[], sign=s, open_stacks=1, adj_blob=[])
             new_stack = dict(I=I, G=G, Dy=0, Dx=Dx, S=L, Ly=1, y0=y, Py_=[P], blob=blob, down_fork_cnt=0, sign=s)
             blob['stack_'].append(new_stack)
         else:
@@ -241,7 +247,7 @@ def form_stack_(y, P_, frame):  # Convert or merge every P into its stack of Ps,
                             form_blob(up_fork, frame)
 
                         if not up_fork['blob'] is blob:
-                            Dert, box, stack_, s, open_stacks = up_fork['blob'].values()  # merged blob
+                            Dert, box, stack_, s, open_stacks,_ = up_fork['blob'].values()  # merged blob
                             I, G, Dy, Dx, S, Ly = Dert.values()
                             accum_Dert(blob['Dert'], I=I, G=G, Dy=Dy, Dx=Dx, S=S, Ly=Ly)
                             blob['open_stacks'] += open_stacks
@@ -277,7 +283,16 @@ def form_blob(stack, frame):  # increment blob with terminated stack, check for 
         # blob is terminated and packed in frame:
         last_stack = stack
 
-        Dert, [y0, x0, xn], stack_, s, open_stacks = blob.values()
+        Dert, [y0, x0, xn], stack_, s, open_stacks, adj_blob = blob.values()
+        
+        for i in range(len(stack_)): # loop in stack to retrieve all Ps
+            for j in range(len(stack_[i]['Py_'])): # loop in each P 
+                stack_[i]['Py_'][j]['blob'] = blob # assign current blob to each P
+                for k in range(len(stack_[i]['Py_'][j]['adj_P'])): # loop in each adj P and retrieve their blob as adj blob
+                     # check if the adjacent blob is not the current blob and blob is not empty
+                    if stack_[i]['Py_'][j]['adj_P'][k]['blob'] != blob and len(stack_[i]['Py_'][j]['adj_P'][k]['blob']) >0:
+                        adj_blob.append(stack_[i]['Py_'][j]['adj_P'][k]['blob'])
+                
         yn = last_stack['y0'] + last_stack['Ly']
 
         mask = np.ones((yn - y0, xn - x0), dtype=bool)  # mask box, then unmask Ps:
@@ -297,7 +312,8 @@ def form_blob(stack, frame):  # increment blob with terminated stack, check for 
         blob.pop('open_stacks')
         blob.update(root_dert__=frame['dert__'],
                     box=(y0, yn, x0, xn),
-                    dert__=dert__
+                    dert__=dert__,
+                    adj_blob = adj_blob
                     )
         frame.update(I=frame['I'] + blob['Dert']['I'],
                      G=frame['G'] + blob['Dert']['G'],
@@ -345,8 +361,14 @@ if __name__ == '__main__':
 
     start_time = time()
     frame = image_to_blobs(image)
+    
+    # find index of blob which have adjacent blob number >0
+    blob_index=[]
+    for i in range(len(frame['blob__'])):
+        if len(frame['blob__'][i]['adj_blob'])>0:
+            blob_index.append(i)
 
-    intra = 1
+    intra = 0
     if intra:  # Tentative call to intra_blob, omit for testing frame_blobs:
 
         from intra_blob import *
