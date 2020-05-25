@@ -12,7 +12,6 @@ from itertools import zip_longest
     Please see diagram: https://github.com/boris-kz/CogAlg/blob/master/frame_2D_alg/Illustrations/intra_blob_2_fork_scheme.png
     
     Blob structure, for all layers of blob hierarchy:
-    
     root_dert__,  
     Dert = I, iDy, iDx, G, Dy, Dx, M, S (area), Ly (vertical dimension)
     # I: input, (iDy, iDx): angle of input gradient, G: gradient, (Dy, Dx): vertical and lateral Ds, M: match  
@@ -20,12 +19,11 @@ from itertools import zip_longest
     box,  # y0, yn, x0, xn
     dert__,  # box of derts, each = i, idy, idx, g, dy, dx, m
     stack_[ stack_params, Py_ [(P_params, dert_)]]: refs down blob formation tree, in vertical (horizontal) order
-    
-    # next-fork params:
-    fcr, # flag comp rng, also clustering criterion in dert and Dert: g in der+ fork, i+m in rng+ fork? 
-    fig, # flag input is gradient
-    rdn, # redundancy to higher layers
-    rng, # comp range
+    # next fork:
+    fcr,  # flag comp rng, also clustering criterion in dert and Dert: g in der+ fork, i+m in rng+ fork? 
+    fig,  # flag input is gradient
+    rdn,  # redundancy to higher layers
+    rng,  # comp range
     sub_layers  # [sub_blobs ]: list of layers across sub_blob derivation tree
                 # deeper layers are nested, multiple forks: no single set of fork params?
 '''
@@ -209,7 +207,7 @@ def scan_P_(P_, stack_, root_dert__):  # merge P into higher-row stack of Ps wit
                 else:  # overlapping P is vertically adjacent opposite-sign P
                     P['adj_P_'].append(_P)
                     _P['adj_P_'].append(P)
-                    
+
             if xn < _xn:  # _P overlaps next P in P_
                 next_P_.append((P, up_connect_))  # recycle _P for the next run of scan_P_
                 up_connect_ = []
@@ -314,7 +312,7 @@ def form_blob(stack, root_dert__):  # increment blob with terminated stack, chec
         last_stack = stack
 
         Dert, [y0, x0, xn], stack_, s, open_stacks, adj_blob_ = blob.values()
-        
+
         for i in range(len(stack_)):
             for j in range(len(stack_[i]['Py_'])):  # retrieve Ps
                 stack_[i]['Py_'][j]['blob'] = blob  # assign current blob to each P
