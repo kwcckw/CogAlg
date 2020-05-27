@@ -74,7 +74,7 @@ def image_to_blobs(image):
     stack_ = deque()  # buffer of running vertical stacks of Ps
     height, width = dert__.shape[1:]
 
-    for y in range(height-750):  # first and last row are discarded
+    for y in range(height):  # first and last row are discarded
         print(f'Processing line {y}...')
 
         P_ = form_P_(dert__[:, y].T)      # horizontal clustering
@@ -167,15 +167,34 @@ def scan_P_(P_, stack_, frame):  # merge P into higher-row stack of Ps which hav
             _x0 = _P['x0']       # first x in _P
             _xn = _x0 + _P['L']  # first x in next _P
 
-            if _x0 < xn and x0 < _xn:  # x overlap between loaded P and _P
-                if P['sign'] == stack['sign']:  # sign match
-                    stack['down_connect_cnt'] += 1
-                    up_connect_.append(stack)  # buffer P-connected higher-row stacks into P' up_connect_
-
-                else:  # overlapping P is vertically adjacent opposite-sign P
-                    P['adj_P_'].append(_P)
-                    _P['adj_P_'].append(P)
-
+#            if _x0 < xn and x0 < _xn:  # x overlap between loaded P and _P
+#                if P['sign'] == stack['sign']:  # sign match
+#                    stack['down_connect_cnt'] += 1
+#                    up_connect_.append(stack)  # buffer P-connected higher-row stacks into P' up_connect_
+#
+#                else:  # overlapping P is vertically adjacent opposite-sign P
+#                    P['adj_P_'].append(_P)
+#                    _P['adj_P_'].append(P)
+#                    
+            # +G
+            if stack['G']>0:
+ 
+                # check for orthogonal + diagonal directions overlap (8 directions)
+                if _x0-1 < xn and x0 < _xn+1:  # x overlap between loaded P and _P
+                    if P['sign'] == stack['sign']:  # sign match
+                        stack['down_connect_cnt'] += 1
+                        up_connect_.append(stack)  # buffer P-connected higher-row stacks into P' up_connect_
+    
+            # -G
+            else:
+                
+                # check for orthogonal direction overlap (4 directions)
+                if _x0 < xn and x0 < _xn:  # x overlap between loaded P and _P
+                    if P['sign'] == stack['sign']:  # sign match
+                        stack['down_connect_cnt'] += 1
+                        up_connect_.append(stack)  # buffer P-connected higher-row stacks into P' up_connect_
+            
+            
             if xn < _xn:  # _P overlaps next P in P_
                 next_P_.append((P, up_connect_))  # recycle _P for the next run of scan_P_
                 up_connect_ = []
@@ -293,6 +312,9 @@ def form_blob(stack, frame):  # increment blob with terminated stack, check for 
                              if blob not in stack_[i]['Py_'][j]['adj_P_'][k]['blob']['adj_blob_']:  # if P'blob is not in adj_P adj_blob_
                                  stack_[i]['Py_'][j]['adj_P_'][k]['blob']['adj_blob_'].append(blob)
 
+        # remove repeating blobs
+        adj_blob_ = list({blob['box']:blob for blob in adj_blob_}.values())
+        
         yn = last_stack['y0'] + last_stack['Ly']
 
         mask = np.ones((yn - y0, xn - x0), dtype=bool)  # mask box, then unmask Ps:

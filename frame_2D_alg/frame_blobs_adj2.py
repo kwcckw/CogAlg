@@ -74,7 +74,7 @@ def image_to_blobs(image):
     stack_ = deque()  # buffer of running vertical stacks of Ps
     height, width = dert__.shape[1:]
 
-    for y in range(height-750):  # first and last row are discarded
+    for y in range(height):  # first and last row are discarded
         print(f'Processing line {y}...')
 
         P_ = form_P_(dert__[:, y].T)      # horizontal clustering
