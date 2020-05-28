@@ -302,7 +302,7 @@ def form_blob(stack, frame):  # increment blob with terminated stack, check for 
                 stack_[i]['Py_'][j]['blob'] = blob  # assign current blob to each P
                 for k in range(len(stack_[i]['Py_'][j]['adj_P_'])):  # retrieve P'blobs as adjacent blobs
 
-                    if stack_[i]['Py_'][j]['adj_P_'][k]['blob']:  # if adj_P'blob_ is not empty; no need for >0?
+                    if stack_[i]['Py_'][j]['adj_P_'][k]['blob']:  # if adj_P'blob_ is not empty
                         if stack_[i]['Py_'][j]['adj_P_'][k]['blob'] != blob:  # if the adjacent blob is not the current blob
                             adj_blob_.append(stack_[i]['Py_'][j]['adj_P_'][k]['blob'])  # add adj_P' blobs to current P' adj_blob_
 
@@ -311,9 +311,8 @@ def form_blob(stack, frame):  # increment blob with terminated stack, check for 
                         else:
                              if blob not in stack_[i]['Py_'][j]['adj_P_'][k]['blob']['adj_blob_']:  # if P'blob is not in adj_P adj_blob_
                                  stack_[i]['Py_'][j]['adj_P_'][k]['blob']['adj_blob_'].append(blob)
-
         # remove repeating blobs
-        adj_blob_ = list({blob['box']:blob for blob in adj_blob_}.values())
+        adj_blob_ = list({id(blob):blob for blob in adj_blob_}.values())
         
         yn = last_stack['y0'] + last_stack['Ly']
 

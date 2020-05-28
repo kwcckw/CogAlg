@@ -84,7 +84,8 @@ def image_to_blobs(image):
     while stack_:  # frame ends, last-line stacks are merged into their blobs:
         form_blob(stack_.popleft(), frame)
 
-
+    remove_merged_stack(frame)
+    
     return frame  # frame of blobs
 
 
@@ -210,7 +211,6 @@ def form_stack_(y, P_, frame):  # Convert or merge every P into its stack of Ps,
     
     while P_:
         P, up_connect_ = P_.popleft()
-        # s = P.pop('sign')
         I, G, Dy, Dx, L, x0, s = P.values()
         xn = x0 + L  # next-P x0
         if not up_connect_:
@@ -254,12 +254,11 @@ def form_stack_(y, P_, frame):  # Convert or merge every P into its stack of Ps,
                                 if not stack is up_connect:
                                     stack['blob'] = blob  # blobs in other up_connects are refs to blob in first up_connect
                                     blob['stack_'].append(stack)  # buffer of merged root stacks.
-                                    blob['adj_blob_'].append(stack['blob']) # add merged stack blob to adj blob
-                                    
+                                     
                                     for adj_stack in stack['adj_stack_']: # add merged stack' adj stack' blob into current blob
                                         if adj_stack['blob'] is not blob:
                                             blob['adj_blob_'].append(adj_stack['blob']) 
-                                    
+                                            adj_stack['blob']['adj_blob_'].append(blob) 
                                     
                             up_connect['blob'] = blob
                             blob['stack_'].append(up_connect)
@@ -267,7 +266,7 @@ def form_stack_(y, P_, frame):  # Convert or merge every P into its stack of Ps,
 
         blob['box'][1] = min(blob['box'][1], x0)  # extend box x0
         blob['box'][2] = max(blob['box'][2], xn)  # extend box xn
-        
+
         if next_stack_: # if stack not empty
             prior_stack = next_stack_.pop() # retrieve prior stack
             new_stack['adj_stack_'].append(prior_stack) #  store prior stack as adjacent stack in current stack
@@ -277,6 +276,22 @@ def form_stack_(y, P_, frame):  # Convert or merge every P into its stack of Ps,
         next_stack_.append(new_stack)
 
     return next_stack_
+
+def remove_merged_stack(frame):
+# temporary function #
+# to remove repeating blob or incomplete blob (incomplete blob formed in line 218, doesn't have extra param such as 'dert__'   
+    
+    
+    for blob in frame['blob__']:
+         adj_blob_new = []
+         for adj_blob in blob['adj_blob_']:
+             if 'dert__' in adj_blob: # get complete blob only
+                 adj_blob_new.append(adj_blob) 
+         blob['adj_blob_'] = adj_blob_new     
+         
+         # remove repeating blobs
+         blob['adj_blob_'] = list({id(blob):blob for blob in blob['adj_blob_']}.values())   
+    return frame
 
 
 def form_blob(stack, frame):  # increment blob with terminated stack, check for blob termination and merger into frame
@@ -296,8 +311,9 @@ def form_blob(stack, frame):  # increment blob with terminated stack, check for 
         for stack in stack_:# get each stack from stack array
             for adj_stack in stack['adj_stack_']:  # get each adjacent stack from stack
                 if adj_stack['blob'] is not blob: # check if adjacent stack's blob is the current blob or not
-                    blob['adj_blob_'].append(adj_stack['blob'])  # add adjacent stack's blob to current blob's adjacent blob
-            
+                    adj_blob_.append(adj_stack['blob'])  # add adjacent stack's blob to current blob's adjacent blob
+                    adj_stack['blob']['adj_blob_'].append(blob)  # add current blob to adjacent stack' blob' adjacent blob
+
         yn = last_stack['y0'] + last_stack['Ly']
 
         mask = np.ones((yn - y0, xn - x0), dtype=bool)  # mask box, then unmask Ps:
