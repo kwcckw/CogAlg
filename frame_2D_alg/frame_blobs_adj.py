@@ -14,9 +14,9 @@ from utils import *
     adding a level of encoding per row y, defined relative to y of current input row, with top-down scan:
 
     1Le, line y-1: form_P( dert_) -> 1D pattern P: contiguous row segment, a slice of a blob
-    2Le, line y-2: scan_P_(P, hP) -> hP, up_connect_, down_connect_count: vertical connections per stack of Ps 
+    2Le, line y-2: scan_P_(P, hP) -> hP, up_fork_, down_fork_count: vertical connections per stack of Ps 
     3Le, line y-3: form_stack(hP, stack) -> stack: merge vertically-connected _Ps into non-forking stacks of Ps
-    4Le, line y-4+ stack depth: form_blob(stack, blob): merge connected stacks in blobs referred by up_connect_, recursively
+    4Le, line y-4+ stack depth: form_blob(stack, blob): merge connected stacks in blobs referred by up_fork_, recursively
 
     Higher-row elements include additional parameters, derived while they were lower-row elements. Processing is bottom-up:
     from input-row to higher-row structures, sequential because blobs are irregular, not suited for matrix operations.
@@ -128,14 +128,15 @@ def form_P_(dert__):  # horizontal clustering and summation of dert params into 
         Dx += dx
         L += 1
         _s = s  # prior sign
-    # last P in a row
+
+    # terminate last P in a row
     P = dict(I=I, G=G, Dy=Dy, Dx=Dx, L=L, x0=x0, sign=_s, adj_P_=[], blob=[])
-    if P_: # need this to prevent error on single P on 1 line where there are no prior P
-        _P = P_.pop() # get prior P
-        _P['adj_P_'].append(P) # append adjacent P to  prior P
-        P['adj_P_'].append(_P) # append adjacent prior P to P
-        P_.append(_P) # pack _P back to P_
-    P_.append(P)  # terminate last P in a row
+    if P_:
+        _P = P_.pop()  # get prior P
+        _P['adj_P_'].append(P)  # append adjacent P to  prior P
+        P['adj_P_'].append(_P)  # append adjacent prior P to P
+        P_.append(_P)  # pack _P back to P_
+    P_.append(P)
 
     return P_
 
@@ -158,7 +159,7 @@ def scan_P_(P_, stack_, frame):  # merge P into higher-row stack of Ps which hav
         P = P_.popleft()          # load left-most (lowest-x) input-row P
         stack = stack_.popleft()  # higher-row stacks
         _P = stack['Py_'][-1]     # last element of each stack is higher-row P
-        up_connect_ = []             # list of same-sign x-overlapping _Ps per P
+        up_connect_ = []          # list of same-sign x-overlapping _Ps per P
 
         while True:  # while both P_ and stack_ are not empty
 
@@ -167,34 +168,20 @@ def scan_P_(P_, stack_, frame):  # merge P into higher-row stack of Ps which hav
             _x0 = _P['x0']       # first x in _P
             _xn = _x0 + _P['L']  # first x in next _P
 
-#            if _x0 < xn and x0 < _xn:  # x overlap between loaded P and _P
-#                if P['sign'] == stack['sign']:  # sign match
-#                    stack['down_connect_cnt'] += 1
-#                    up_connect_.append(stack)  # buffer P-connected higher-row stacks into P' up_connect_
-#
-#                else:  # overlapping P is vertically adjacent opposite-sign P
-#                    P['adj_P_'].append(_P)
-#                    _P['adj_P_'].append(P)
-#                    
-            # +G
-            if stack['G']>0:
- 
-                # check for orthogonal + diagonal directions overlap (8 directions)
+            if stack['G']>0:  # check for orthogonal + diagonal directions overlap (8 directions)
+
                 if _x0-1 < xn and x0 < _xn+1:  # x overlap between loaded P and _P
                     if P['sign'] == stack['sign']:  # sign match
                         stack['down_connect_cnt'] += 1
                         up_connect_.append(stack)  # buffer P-connected higher-row stacks into P' up_connect_
-    
-            # -G
-            else:
-                
-                # check for orthogonal direction overlap (4 directions)
+
+            else: # -G, check for orthogonal direction overlap (4 directions)
+
                 if _x0 < xn and x0 < _xn:  # x overlap between loaded P and _P
                     if P['sign'] == stack['sign']:  # sign match
                         stack['down_connect_cnt'] += 1
                         up_connect_.append(stack)  # buffer P-connected higher-row stacks into P' up_connect_
-            
-            
+
             if xn < _xn:  # _P overlaps next P in P_
                 next_P_.append((P, up_connect_))  # recycle _P for the next run of scan_P_
                 up_connect_ = []
@@ -313,7 +300,7 @@ def form_blob(stack, frame):  # increment blob with terminated stack, check for 
                                  stack_[i]['Py_'][j]['adj_P_'][k]['blob']['adj_blob_'].append(blob)
         # remove repeating blobs
         adj_blob_ = list({id(blob):blob for blob in adj_blob_}.values())
-        
+
         yn = last_stack['y0'] + last_stack['Ly']
 
         mask = np.ones((yn - y0, xn - x0), dtype=bool)  # mask box, then unmask Ps:
