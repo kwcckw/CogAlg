@@ -78,7 +78,7 @@ def image_to_blobs(image):
 
         P_ = form_P_(dert__[:, y].T)      # horizontal clustering
         P_ = scan_P_(P_, stack_, frame)   # vertical clustering, adds up_forks per P and down_fork_cnt per stack
-        stack_ = form_stack_(y, P_, frame)
+        stack_ = form_stack_(P_, frame, y)
 
     while stack_:  # frame ends, last-line stacks are merged into their blobs:
         form_blob(stack_.popleft(), frame)
@@ -249,6 +249,7 @@ def scan_P_(P_, stack_, frame):  # merge P into higher-row stack of Ps which hav
     It's a form of breadth-first flood fill, with forks as vertices per stack of Ps: a node in connectivity graph.
     '''
     next_P_ = deque()  # to recycle P + up_fork_ that finished scanning _P, will be converted into next_stack_
+    pri_blob = []  # passed from prior stack, assigned as internal or external adj_blob
 
     if P_ and stack_:  # if both input row and higher row have any Ps / _Ps left
 
@@ -289,15 +290,15 @@ def scan_P_(P_, stack_, frame):  # merge P into higher-row stack of Ps which hav
                     next_P_.append((P, up_fork_))
                     break
 
-    while P_:  # terminate Ps and stacks that continue at row's end
+    while P_:  # terminate Ps and stacks in top row, or those that continue at row's end
         next_P_.append((P_.popleft(), []))  # no up_fork
     while stack_:
         form_blob(stack_.popleft(), frame)  # down_fork_cnt always == 0
 
-    return next_P_  # each element is P + up_fork_ refs
+    return next_P_  # each element is P + up_fork_ refs, converted to stacks in following form_stack_:
 
 
-def form_stack_(y, P_, frame):  # Convert or merge every P into its stack of Ps, merge blobs
+def form_stack_(P_, frame, y):  # Convert or merge every P into its stack of Ps, merge blobs
 
     next_stack_ = deque()  # converted to stack_ in the next run of scan_P_
 
@@ -307,7 +308,7 @@ def form_stack_(y, P_, frame):  # Convert or merge every P into its stack of Ps,
         I, G, Dy, Dx, L, x0, dert__ = P.values()
         xn = x0 + L  # next-P x0
         if not up_fork_:
-            # initialize new stack for each input-row P that has no connections in higher row:
+            # initialize new stack for each input-row P that has no connections in higher row, including all in top row:
             blob = dict(Dert=dict(I=0, G=0, Dy=0, Dx=0, S=0, Ly=0), box=[y, x0, xn], stack_=[], sign=s, open_stacks=1)
             new_stack = dict(I=I, G=G, Dy=0, Dx=Dx, S=L, Ly=1, y0=y, Py_=[P], blob=blob, down_fork_cnt=0, sign=s)
             blob['stack_'].append(new_stack)
@@ -326,7 +327,7 @@ def form_stack_(y, P_, frame):  # Convert or merge every P into its stack of Ps,
                 new_stack = dict(I=I, G=G, Dy=0, Dx=Dx, S=L, Ly=1, y0=y, Py_=[P], blob=blob, down_fork_cnt=0, sign=s)
                 blob['stack_'].append(new_stack)  # stack is buffered into blob
 
-                if len(up_fork_) > 1:  # merge blobs of all up_forks
+                if len(up_fork_) > 1:                      # merge blobs of all up_forks
                     if up_fork_[0]['down_fork_cnt'] == 1:  # up_fork is not terminated
                         form_blob(up_fork_[0], frame)      # merge stack of 1st up_fork into its blob
 
@@ -367,8 +368,7 @@ def form_blob(stack, frame):  # increment blob with terminated stack, check for 
     blob['open_stacks'] += down_fork_cnt - 1  # incomplete stack cnt + terminated stack down_fork_cnt - 1: stack itself
     # open stacks contain Ps of a current row and may be extended with new x-overlapping Ps in next run of scan_P_
 
-    if blob['open_stacks'] == 0:  # if number of incomplete stacks == 0
-        # blob is terminated and packed in frame:
+    if blob['open_stacks'] == 0:  # if number of incomplete stacks == 0, blob is terminated and packed in frame:
         last_stack = stack
 
         Dert, [y0, x0, xn], stack_, s, open_stacks = blob.values()

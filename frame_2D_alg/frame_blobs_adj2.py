@@ -66,7 +66,6 @@ def comp_pixel(image):  # current version of 2x2 pixel cross-correlation within 
 
 
 def image_to_blobs(image):
-
     dert__ = comp_pixel(image)  # 2x2 cross-comparison / cross-correlation
 
     frame = dict(rng=1, dert__=dert__, mask=None, I=0, G=0, Dy=0, Dx=0, blob__=[])
@@ -76,16 +75,17 @@ def image_to_blobs(image):
     for y in range(height):  # first and last row are discarded
         print(f'Processing line {y}...')
 
-        P_ = form_P_(dert__[:, y].T)      # horizontal clustering
-        P_ = scan_P_(P_, stack_, frame)   # vertical clustering, adds up_connects per P and down_connect_cnt per stack
-        stack_= form_stack_(y, P_, frame)
+        P_ = form_P_(dert__[:, y].T)  # horizontal clustering
+        P_ = scan_P_(P_, stack_, frame)  # vertical clustering, adds up_connects per P and down_connect_cnt per stack
+        stack_ = form_stack_(y, P_, frame)
 
     while stack_:  # frame ends, last-line stacks are merged into their blobs:
         form_blob(stack_.popleft(), frame)
 
-    update_blob_adjacency(frame) # add external adjacent blob and remove incomplete blob
+    update_blob_adjacency(frame)  # add external adjacent blob and remove incomplete blob
 
     return frame  # frame of blobs
+
 
 ''' 
 Parameterized connectivity clustering functions below:
@@ -94,10 +94,11 @@ Parameterized connectivity clustering functions below:
 - form_stack combines these overlapping Ps into vertical stacks of Ps, with 1 up_P to 1 down_P
 - form_blob merges terminated or forking stacks into blob, removes redundant representations of the same blob 
   by multiple forked P stacks, then checks for blob termination and merger into whole-frame representation.
-  
+
 dert: tuple of derivatives per pixel, initially (p, dy, dx, g), will be extended in intra_blob
 Dert: params of composite structures (P, stack, blob): summed dert params + dimensions: vertical Ly and area S
 '''
+
 
 def form_P_(dert__):  # horizontal clustering and summation of dert params into P params, per row of a frame
     # P is a segment of same-sign derts in horizontal slice of a blob
@@ -144,20 +145,20 @@ def scan_P_(P_, stack_, frame):  # merge P into higher-row stack of Ps which hav
 
     if P_ and stack_:  # if both input row and higher row have any Ps / _Ps left
 
-        P = P_.popleft()          # load left-most (lowest-x) input-row P
+        P = P_.popleft()  # load left-most (lowest-x) input-row P
         stack = stack_.popleft()  # higher-row stacks
-        _P = stack['Py_'][-1]     # last element of each stack is higher-row P
-        up_connect_ = []             # list of same-sign x-overlapping _Ps per P
+        _P = stack['Py_'][-1]  # last element of each stack is higher-row P
+        up_connect_ = []  # list of same-sign x-overlapping _Ps per P
 
         while True:  # while both P_ and stack_ are not empty
 
-            x0 = P['x0']         # first x in P
-            xn = x0 + P['L']     # first x in next P
-            _x0 = _P['x0']       # first x in _P
+            x0 = P['x0']  # first x in P
+            xn = x0 + P['L']  # first x in next P
+            _x0 = _P['x0']  # first x in _P
             _xn = _x0 + _P['L']  # first x in next _P
 
-            if stack['G']>0:  # check for orthogonal + diagonal directions overlap (8 directions)
-                if _x0-1 < xn and x0 < _xn+1:  # x overlap between loaded P and _P
+            if stack['G'] > 0:  # check for orthogonal + diagonal directions overlap (8 directions)
+                if _x0 - 1 < xn and x0 < _xn + 1:  # x overlap between loaded P and _P
                     if P['sign'] == stack['sign']:  # sign match
                         stack['down_connect_cnt'] += 1
                         up_connect_.append(stack)  # buffer P-connected higher-row stacks into P' up_connect_
@@ -200,7 +201,6 @@ def form_stack_(y, P_, frame):  # Convert or merge every P into its stack of Ps,
 
     next_stack_ = deque()  # converted to stack_ in the next run of scan_P_
 
-
     while P_:
         P, up_connect_ = P_.popleft()
         s = P.pop('sign')  # we don't need this sign anymore?
@@ -209,8 +209,8 @@ def form_stack_(y, P_, frame):  # Convert or merge every P into its stack of Ps,
         if not up_connect_:
             # initialize new stack for each input-row P that has no connections in higher row:
             blob = dict(Dert=dict(I=0, G=0, Dy=0, Dx=0, S=0, Ly=0),
-                        box=[y, x0, xn], stack_=[], sign=s, open_stacks=1, adj_blob_=[],adj_blob_ext_ =[] )
-            new_stack = dict(I=I, G=G, Dy=0, Dx=Dx, S=L, Ly=1, y0=y, Py_=[P], blob=blob, down_connect_cnt=0, sign=s, prior_stack = [])
+                        box=[y, x0, xn], stack_=[], sign=s, open_stacks=1, adj_blob_=[], adj_blob_ext_=[])
+            new_stack = dict(I=I, G=G, Dy=0, Dx=Dx, S=L, Ly=1, y0=y, Py_=[P], blob=blob, down_connect_cnt=0, sign=s, prior_stack=[])
             blob['stack_'].append(new_stack)
 
         else:
@@ -225,12 +225,12 @@ def form_stack_(y, P_, frame):  # Convert or merge every P into its stack of Ps,
             else:  # if > 1 up_connects, or 1 up_connect that has > 1 down_connect_cnt:
                 blob = up_connect_[0]['blob']
                 # initialize new_stack with up_connect blob:
-                new_stack = dict(I=I, G=G, Dy=0, Dx=Dx, S=L, Ly=1, y0=y, Py_=[P], blob=blob, down_connect_cnt=0, sign=s, prior_stack = [])
+                new_stack = dict(I=I, G=G, Dy=0, Dx=Dx, S=L, Ly=1, y0=y, Py_=[P], blob=blob, down_connect_cnt=0, sign=s, prior_stack=[])
                 blob['stack_'].append(new_stack)  # stack is buffered into blob
 
                 if len(up_connect_) > 1:  # merge blobs of all up_connects
                     if up_connect_[0]['down_connect_cnt'] == 1:  # up_connect is not terminated
-                        form_blob(up_connect_[0], frame)      # merge stack of 1st up_connect into its blob
+                        form_blob(up_connect_[0], frame)  # merge stack of 1st up_connect into its blob
 
                     for up_connect in up_connect_[1:len(up_connect_)]:  # merge blobs of other up_connects into blob of 1st up_connect
                         if up_connect['down_connect_cnt'] == 1:
@@ -256,26 +256,27 @@ def form_stack_(y, P_, frame):  # Convert or merge every P into its stack of Ps,
         blob['box'][1] = min(blob['box'][1], x0)  # extend box x0
         blob['box'][2] = max(blob['box'][2], xn)  # extend box xn
         if next_stack_:
-            new_stack['prior_stack'].append(next_stack_[-1]) # get prior stack
+            new_stack['prior_stack'].append(next_stack_[-1])  # get prior stack
         next_stack_.append(new_stack)
 
     return next_stack_
 
+
 def update_blob_adjacency(frame):
-# add external adjacent blob and remove incomplete blob, which doesn't have extra param such as 'dert__'
+    # add external adjacent blob and remove incomplete blob, which doesn't have extra param such as 'dert__'
 
     for blob in frame['blob__']:
-    
+
         adj_blob_new = []
         for adj_blob in blob['adj_blob_']:
-            if 'dert__' in adj_blob: # get complete blob only
+            if 'dert__' in adj_blob:  # get complete blob only
                 adj_blob_new.append(adj_blob)
-         
-        if adj_blob_new: # last adjacent blob is the external adjacent blob
+
+        if adj_blob_new:  # last adjacent blob is the external adjacent blob
             blob['adj_blob_ext_'].append(adj_blob_new.pop())
 
-        blob['adj_blob_'] = adj_blob_new # repack adj_blob to blob
-        
+        blob['adj_blob_'] = adj_blob_new  # repack adj_blob to blob
+
     return frame
 
 
@@ -293,16 +294,15 @@ def form_blob(stack, frame):  # increment blob with terminated stack, check for 
         Dert, [y0, x0, xn], stack_, s, open_stacks, adj_blob_, adj_blob_ext_ = blob.values()
 
         # add prior stack' blob into current blob
-        for stack in stack_: # get each stack from stack array
-            
-            if stack['prior_stack']:
-                
-                if stack['prior_stack'][0]['blob'] not in adj_blob_ : # if prior stack's blob not in current blob' adjacent blob
-                    adj_blob_.append(stack['prior_stack'][0]['blob'])  # add prior stack's blob to current blob's adjacent blob
-                
-                if blob not in stack['prior_stack'][0]['blob']['adj_blob_']: # if current blob is not in prior stack' blob' adjacent blob
-                    stack['prior_stack'][0]['blob']['adj_blob_'].append(blob)  # add current blob to prior stack' blob' adjacent blob
+        for stack in stack_:  # get each stack from stack array
 
+            if stack['prior_stack']:
+
+                if stack['prior_stack'][0]['blob'] not in adj_blob_:  # if prior stack's blob not in current blob' adjacent blob
+                    adj_blob_.append(stack['prior_stack'][0]['blob'])  # add prior stack's blob to current blob's adjacent blob
+
+                if blob not in stack['prior_stack'][0]['blob']['adj_blob_']:  # if current blob is not in prior stack' blob' adjacent blob
+                    stack['prior_stack'][0]['blob']['adj_blob_'].append(blob)  # add current blob to prior stack' blob' adjacent blob
 
         yn = last_stack['y0'] + last_stack['Ly']
 
@@ -324,7 +324,7 @@ def form_blob(stack, frame):  # increment blob with terminated stack, check for 
         blob.update(root_dert__=frame['dert__'],
                     box=(y0, yn, x0, xn),
                     dert__=dert__,
-                    adj_blob_ = adj_blob_
+                    adj_blob_=adj_blob_
                     )
         frame.update(I=frame['I'] + blob['Dert']['I'],
                      G=frame['G'] + blob['Dert']['G'],
@@ -332,6 +332,7 @@ def form_blob(stack, frame):  # increment blob with terminated stack, check for 
                      Dx=frame['Dx'] + blob['Dert']['Dx'])
 
         frame['blob__'].append(blob)
+
 
 # -----------------------------------------------------------------------------
 # Utilities
@@ -420,4 +421,4 @@ if __name__ == '__main__':
                              0: BLACK
                          }))
 '''
-    # END DEBUG ---------------------------------------------------------------
+# END DEBUG ---------------------------------------------------------------
