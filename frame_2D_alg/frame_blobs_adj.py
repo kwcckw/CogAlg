@@ -251,9 +251,19 @@ def form_stack_(P_, frame, y):  # Convert or merge every P into its stack of Ps,
                         if not up_connect['blob'] is blob:
                             Dert, box, stack_, s, open_stacks, adj_blob_ = up_connect['blob'].values()  # merged blob
                             
-                            if adj_blob_ not in blob['adj_blob_']: # check to make sure no repeating blobs
-                                blob['adj_blob_'] += adj_blob_  # adjacent blobs are always unique
-                            
+                            if adj_blob_: 
+                                for adj_blob in adj_blob_: # loop in merging blob's adjacent blob
+                                    if adj_blob not in blob['adj_blob_']: # check to make sure no repeating blobs
+                                        blob['adj_blob_'].append(adj_blob)  # adjacent blobs are always unique  
+                                    
+                                    if adj_blob:
+                                        if adj_blob['adj_blob_']:
+                                            for adj_blob2 in adj_blob['adj_blob_']:  # loop in adjacent blob of adjacent blob
+                                                if adj_blob2 is up_connect['blob']: # if the adjacent blob of adjacent blob is the merging blob
+                                                    adj_blob2 = blob # update the adjacent blob of adjacent blob from the merging blob to the merged blob
+                                            if blob not in adj_blob['adj_blob_']: # if current blob not in the merging blob' adjacent blob' adjacent blob 
+                                                    adj_blob['adj_blob_'].append(blob) # add current blob to merging blob' adjacent blob' adjacent blob
+           
                             I, G, Dy, Dx, S, Ly = Dert.values()
                             accum_Dert(blob['Dert'], I=I, G=G, Dy=Dy, Dx=Dx, S=S, Ly=Ly)
                             blob['open_stacks'] += open_stacks
@@ -301,6 +311,7 @@ def form_blob(stack, pri_blob, pri_term, frame):  # increment blob with terminat
                 next_pri_term = 0  # no further assignment
             else:
                 next_pri_term = 1  # else next blob will be external, in ln 327
+        
         else: next_pri_term = 1
 
         Dert, [y0, x0, xn], stack_, s, open_stacks, adj_blob_ = blob.values()
