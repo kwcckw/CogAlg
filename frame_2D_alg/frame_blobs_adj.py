@@ -153,7 +153,7 @@ def scan_P_(P_, stack_, frame):  # merge P into higher-row stack of Ps which hav
         up_connect_ = []          # list of same-sign x-overlapping _Ps per P
 
         while True:  # while both P_ and stack_ are not empty
-
+  
             x0 = P['x0']         # first x in P
             xn = x0 + P['L']     # first x in next P
             _x0 = _P['x0']       # first x in _P
@@ -185,13 +185,16 @@ def scan_P_(P_, stack_, frame):  # merge P into higher-row stack of Ps which hav
                     pri_term = form_blob(stack, pri_blob, pri_term, frame)
 
                 if stack_:  # load stack with next _P
+                    pri_blob = stack['blob'] # need to assign prior blob here before popping the next stack
                     stack = stack_.popleft()
+                    
                     _P = stack['Py_'][-1]
                 else:  # no stack left: terminate loop
                     next_P_.append((P, up_connect_))
                     break
 
-            pri_blob = stack['blob']  # for the next loop instance
+        pri_blob = stack['blob']  # for the next loop instance
+            
 
     # terminate Ps and stacks that continue at row's end
     while P_:
@@ -247,7 +250,10 @@ def form_stack_(P_, frame, y):  # Convert or merge every P into its stack of Ps,
 
                         if not up_connect['blob'] is blob:
                             Dert, box, stack_, s, open_stacks, adj_blob_ = up_connect['blob'].values()  # merged blob
-                            blob['adj_blob_'] += adj_blob_  # adjacent blobs are always unique
+                            
+                            if adj_blob_ not in blob['adj_blob_']: # check to make sure no repeating blobs
+                                blob['adj_blob_'] += adj_blob_  # adjacent blobs are always unique
+                            
                             I, G, Dy, Dx, S, Ly = Dert.values()
                             accum_Dert(blob['Dert'], I=I, G=G, Dy=Dy, Dx=Dx, S=S, Ly=Ly)
                             blob['open_stacks'] += open_stacks
@@ -285,8 +291,12 @@ def form_blob(stack, pri_blob, pri_term, frame):  # increment blob with terminat
     if blob['open_stacks'] == 0:  # number of incomplete stacks == 0: blob is terminated and packed in frame:
         last_stack = stack
         if pri_blob:
-            pri_blob['adj_blob_'].append(blob)  # assign blob as internal to pri_blob;  else no internal blobs
-            if not pri_term:
+            
+            if blob not in pri_blob['adj_blob_']: # check to make sure no repeating blobs
+                pri_blob['adj_blob_'].append(blob)  # assign blob as internal to pri_blob;  else no internal blobs
+            
+            if not pri_term and pri_blob not in blob['adj_blob_'] : # check to make sure no repeating blobs
+                
                 blob['adj_blob_'].append(pri_blob)  # assign pri_blob as external to blob, always the last one
                 next_pri_term = 0  # no further assignment
             else:
@@ -325,7 +335,7 @@ def form_blob(stack, pri_blob, pri_term, frame):  # increment blob with terminat
 
     else:
         next_pri_term = 0  # blob was not terminated
-        if pri_term:
+        if pri_term and pri_blob not in blob['adj_blob_']: # check to make sure no repeating blobs
             blob['adj_blob_'].append(pri_blob)  # terminated prior blob is internal to current blob
 
     return next_pri_term
@@ -363,7 +373,7 @@ if __name__ == '__main__':
     import argparse
 
     argument_parser = argparse.ArgumentParser()
-    argument_parser.add_argument('-i', '--image', help='path to image file', default='./images//raccoon.jpg')
+    argument_parser.add_argument('-i', '--image', help='path to image file', default='./images//raccoon_eye.jpeg')
     arguments = vars(argument_parser.parse_args())
     image = imread(arguments['image'])
 
