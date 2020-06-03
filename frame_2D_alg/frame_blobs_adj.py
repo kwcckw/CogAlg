@@ -81,8 +81,7 @@ def image_to_blobs(image):
 
     pri_term = 0  # frame ends, last-line stacks are merged into their blobs:
     while stack_:
-        stack = stack_.popleft()
-        pri_term = form_blob(stack, pri_term, frame)  # prior blob can be internal or external
+        pri_term = form_blob(stack_.popleft(), pri_term, frame)
 
     return frame  # frame of blobs
 
@@ -150,19 +149,19 @@ def scan_P_(P_, stack_, frame):  # merge P into higher-row stack of Ps which hav
         up_connect_ = []          # list of same-sign x-overlapping _Ps per P
 
         while True:  # while both P_ and stack_ are not empty
-  
+
             x0 = P['x0']         # first x in P
             xn = x0 + P['L']     # first x in next P
             _x0 = _P['x0']       # first x in _P
             _xn = _x0 + _P['L']  # first x in next _P
 
-            if stack['G'] > 0:  # check for orthogonal and diagonal overlaps (8 directions)
+            if stack['G'] > 0:  # check for overlaps in 8 directions, else a blob may leak through its external blob
                 if _x0 - 1 < xn and x0 < _xn + 1:  # x overlap between loaded P and _P
                     if P['sign'] == stack['sign']:  # sign match
                         stack['down_connect_cnt'] += 1
                         up_connect_.append(stack)  # buffer P-connected higher-row stacks into P' up_connect_
 
-            else:  # -G, check for orthogonal overlaps only (4 directions)
+            else:  # -G, check for orthogonal overlaps only: 4 directions, edge blobs are more selective
                 if _x0 < xn and x0 < _xn:  # x overlap between loaded P and _P
                     if P['sign'] == stack['sign']:  # sign match
                         stack['down_connect_cnt'] += 1
@@ -181,9 +180,8 @@ def scan_P_(P_, stack_, frame):  # merge P into higher-row stack of Ps which hav
                 if stack['down_connect_cnt'] != 1:  # terminate stack, merge it into up_connects' blobs
                     pri_term = form_blob(stack, pri_term, frame)
                 if stack_:  # load stack with next _P
-                    pri_blob = stack['blob']
                     stack = stack_.popleft()
-                    _P = stack['Py_'][-1]
+                    P = stack['Py_'][-1]
                 else:  # no stack left: terminate loop
                     next_P_.append((P, up_connect_))
                     break
@@ -192,9 +190,7 @@ def scan_P_(P_, stack_, frame):  # merge P into higher-row stack of Ps which hav
     while P_:
         next_P_.append((P_.popleft(), []))  # no up_connect
     while stack_:
-        stack = stack_.popleft()
-        pri_term = form_blob(stack, pri_term, frame)  # down_connect_cnt==0
-        
+        pri_term = form_blob(stack_.popleft(), pri_term, frame)  # down_connect_cnt==0
 
     return next_P_  # each element is P + up_connect_ refs
 
@@ -241,20 +237,14 @@ def form_stack_(P_, frame, y):  # Convert or merge every P into its stack of Ps,
 
                         if not up_connect['blob'] is blob:
                             Dert, box, stack_, s, open_stacks, adj_blob_ = up_connect['blob'].values()  # merged blob
-                            
-                            if adj_blob_: 
-                                for adj_blob in adj_blob_: # loop in merging blob's adjacent blob
-                                    if adj_blob not in blob['adj_blob_']: # check to make sure no repeating blobs
-                                        blob['adj_blob_'].append(adj_blob)  # adjacent blobs are always unique  
-                                    
+                            if adj_blob_:  # merge adjacent blobs
+                                for adj_blob in adj_blob_:
+                                    if adj_blob not in blob['adj_blob_']:   # check for repeating blobs
+                                        blob['adj_blob_'].append(adj_blob)
                                     if adj_blob:
-#                                        if adj_blob['adj_blob_']:
-#                                            for adj_blob2 in adj_blob['adj_blob_']:  # loop in adjacent blob of adjacent blob
-#                                                if adj_blob2 is up_connect['blob']: # if the adjacent blob of adjacent blob is the merging blob
-#                                                    adj_blob2 = blob # update the adjacent blob of adjacent blob from the merging blob to the merged blob
-                                        if blob not in adj_blob['adj_blob_']: # if current blob not in the merging blob' adjacent blob' adjacent blob 
-                                            adj_blob['adj_blob_'].append(blob) # add current blob to merging blob' adjacent blob' adjacent blob
-           
+                                        if blob not in adj_blob['adj_blob_']:  # current blob is not merging blob' adjacent blob
+                                            adj_blob['adj_blob_'].append(blob)  # add current blob as adjacent blob
+
                             I, G, Dy, Dx, S, Ly = Dert.values()
                             accum_Dert(blob['Dert'], I=I, G=G, Dy=Dy, Dx=Dx, S=S, Ly=Ly)
                             blob['open_stacks'] += open_stacks
@@ -265,12 +255,10 @@ def form_stack_(P_, frame, y):  # Convert or merge every P into its stack of Ps,
                                 if not stack is up_connect:
                                     stack['blob'] = blob  # blobs in other up_connects are refs to blob in first up_connect
                                     blob['stack_'].append(stack)  # buffer of merged root stacks.
-                            
+
                             up_connect['blob'] = blob
                             blob['stack_'].append(up_connect)
                         blob['open_stacks'] -= 1  # overlap with merged blob.
-
-
 
         blob['box'][1] = min(blob['box'][1], x0)  # extend box x0
         blob['box'][2] = max(blob['box'][2], xn)  # extend box xn
@@ -283,28 +271,24 @@ def form_stack_(P_, frame, y):  # Convert or merge every P into its stack of Ps,
 
 
 def form_blob(stack, pri_term, frame):  # increment blob with terminated stack, check for blob termination and merger into frame
-    
+
     I, G, Dy, Dx, S, Ly, y0, Py_, blob, down_connect_cnt, sign, pri_blob = stack.values()
     # terminated stack is merged into continued or initialized blob (all connected stacks):
     accum_Dert(blob['Dert'], I=I, G=G, Dy=Dy, Dx=Dx, S=S, Ly=Ly)
 
     blob['open_stacks'] += down_connect_cnt - 1  # incomplete stack cnt + terminated stack down_connect_cnt - 1: stack itself
     # open stacks contain Ps of a current row and may be extended with new x-overlapping Ps in next run of scan_P_
-    
     next_pri_term = 0
     if blob['open_stacks'] == 0:  # number of incomplete stacks == 0: blob is terminated and packed in frame:
         last_stack = stack
         if pri_blob:
-            
             if not pri_term :
-                if blob not in pri_blob['adj_blob_']: # check to make sure no repeating blobs
-                    pri_blob['adj_blob_'].append(blob)  # assign blob as internal to pri_blob;  else no internal blobs
-                    next_pri_term = 0  # no further assignment
-    
-                if pri_blob not in blob['adj_blob_'] : # check to make sure no repeating blobs
+                if blob not in pri_blob['adj_blob_']:   # check for repeating blobs
+                    pri_blob['adj_blob_'].append(blob)  # assign blob as internal to pri_blob
+                    next_pri_term = 0
+                if pri_blob not in blob['adj_blob_'] :
                     blob['adj_blob_'].append(pri_blob)  # assign pri_blob as external to blob, always the last one
                     next_pri_term = 0  # no further assignment
-           
 
         Dert, [y0, x0, xn], stack_, s, open_stacks, adj_blob_ = blob.values()
         yn = last_stack['y0'] + last_stack['Ly']
@@ -337,16 +321,16 @@ def form_blob(stack, pri_term, frame):  # increment blob with terminated stack, 
         frame['blob__'].append(blob)
 
     else:
-        
+
         next_pri_term = 0  # blob was not terminated
-        
+
         if pri_term and pri_blob:
             if pri_blob not in blob['adj_blob_']:
                 blob['adj_blob_'].append(pri_blob)  # terminated prior blob is internal to current blob
-    
+
             if blob not in pri_blob['adj_blob_']:
                 pri_blob['adj_blob_'].append(blob)
-            
+
     return next_pri_term
 
 # -----------------------------------------------------------------------------
