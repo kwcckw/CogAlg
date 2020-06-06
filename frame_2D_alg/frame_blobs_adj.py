@@ -208,7 +208,7 @@ def form_stack_(P_, frame, y):  # Convert or merge every P into its stack of Ps,
             # initialize new stack for each input-row P that has no connections in higher row, as in the whole top row:
             blob = dict(Dert=dict(I=0, G=0, Dy=0, Dx=0, S=0, Ly=0),
                         box=[y, x0, xn], stack_=[], sign=s, open_stacks=1, adj_blob_=[[],[]])
-            new_stack = dict(I=I, G=G, Dy=0, Dx=Dx, S=L, Ly=1, y0=y, Py_=[P], blob=blob, down_connect_cnt=0, sign=s, pri_blob=[])
+            new_stack = dict(I=I, G=G, Dy=0, Dx=Dx, S=L, Ly=1, y0=y, Py_=[P], blob=blob, down_connect_cnt=0, sign=s, pri_blob_=[])
             blob['stack_'].append(new_stack)
 
         else:
@@ -223,7 +223,7 @@ def form_stack_(P_, frame, y):  # Convert or merge every P into its stack of Ps,
             else:  # if > 1 up_connects, or 1 up_connect that has > 1 down_connect_cnt:
                 blob = up_connect_[0]['blob']
                 # initialize new_stack with up_connect blob:
-                new_stack = dict(I=I, G=G, Dy=0, Dx=Dx, S=L, Ly=1, y0=y, Py_=[P], blob=blob, down_connect_cnt=0, sign=s, pri_blob=[])
+                new_stack = dict(I=I, G=G, Dy=0, Dx=Dx, S=L, Ly=1, y0=y, Py_=[P], blob=blob, down_connect_cnt=0, sign=s, pri_blob_=[])
                 blob['stack_'].append(new_stack)  # stack is buffered into blob
 
                 if len(up_connect_) > 1:  # merge blobs of all up_connects
@@ -255,6 +255,7 @@ def form_stack_(P_, frame, y):  # Convert or merge every P into its stack of Ps,
                             blob['box'][2] = max(blob['box'][2], box[2])  # extend box xn
                             for stack in stack_:
                                 if not stack is up_connect:
+                                    # need to solve blob assignment issue here
                                     stack['blob'] = blob  # blobs in other up_connects are refs to blob in first up_connect
                                     blob['stack_'].append(stack)  # buffer of merged root stacks.
 
@@ -266,7 +267,7 @@ def form_stack_(P_, frame, y):  # Convert or merge every P into its stack of Ps,
         blob['box'][2] = max(blob['box'][2], xn)  # extend box xn
 
         if next_stack_:
-            new_stack['pri_blob'] = next_stack_[-1]['blob']
+            new_stack['pri_blob_'].append(next_stack_[-1]['blob'])
         next_stack_.append(new_stack)
 
     return next_stack_  # input for the next line of scan_P_
@@ -274,7 +275,7 @@ def form_stack_(P_, frame, y):  # Convert or merge every P into its stack of Ps,
 
 def form_blob(stack, pri_term, frame):  # increment blob with terminated stack, check for blob termination and merger into frame
 
-    I, G, Dy, Dx, S, Ly, y0, Py_, blob, down_connect_cnt, sign, pri_blob = stack.values()
+    I, G, Dy, Dx, S, Ly, y0, Py_, blob, down_connect_cnt, sign, _= stack.values()
     # terminated stack is merged into continued or initialized blob (all connected stacks):
     accum_Dert(blob['Dert'], I=I, G=G, Dy=Dy, Dx=Dx, S=S, Ly=Ly)
 
@@ -283,19 +284,29 @@ def form_blob(stack, pri_term, frame):  # increment blob with terminated stack, 
     next_pri_term = 0
     if blob['open_stacks'] == 0:  # number of incomplete stacks == 0: blob is terminated and packed in frame:
         last_stack = stack
-        if pri_blob:
-            if not pri_term :
-                if blob not in pri_blob['adj_blob_'][0]:   # check for repeating blobs
-                    pri_blob['adj_blob_'][0].append(blob)  # assign blob as internal to pri_blob
-                    pri_blob['adj_blob_'][1].append(0)  # ext = 0 by default
-                    
-                    next_pri_term = 0
-                if pri_blob not in blob['adj_blob_'][0] :
-                    blob['adj_blob_'][0].append(pri_blob)  # assign pri_blob as external to blob, always the last one
-                    blob['adj_blob_'][1].append(0)  # ext = 0 by default
-                    next_pri_term = 0  # no further assignment
-
         Dert, [y0, x0, xn], stack_, s, open_stacks, adj_blob_and_ext = blob.values()
+        
+        # check in each stack' prior blob and add them as current blob's adj blob
+        for stack in stack_:
+            if stack['pri_blob_']:
+                pri_blob_ = stack['pri_blob_']
+                
+                for pri_blob in pri_blob_:
+                    if pri_blob:
+                        if not pri_term :
+                            if blob not in pri_blob['adj_blob_'][0]:   # check for repeating blobs
+                                pri_blob['adj_blob_'][0].append(blob)  # assign blob as internal to pri_blob
+                                pri_blob['adj_blob_'][1].append(0)  # ext = 0 by default
+                                
+                                next_pri_term = 0
+                            if pri_blob not in blob['adj_blob_'][0] :
+                                blob['adj_blob_'][0].append(pri_blob)  # assign pri_blob as external to blob, always the last one
+                                blob['adj_blob_'][1].append(0)  # ext = 0 by default
+                                next_pri_term = 0  # no further assignment
+            
+                        else:
+                            next_pri_term = 1
+        
         yn = last_stack['y0'] + last_stack['Ly']
 
         mask = np.ones((yn - y0, xn - x0), dtype=bool)  # mask box, then unmask Ps:
@@ -324,7 +335,7 @@ def form_blob(stack, pri_term, frame):  # increment blob with terminated stack, 
                      Dy=frame['Dy'] + blob['Dert']['Dy'],
                      Dx=frame['Dx'] + blob['Dert']['Dx'])
 
-        
+        # from the latest output images, we may need include more checking conditions to identify the external adjacent blobs
         # check whether blob is in boundary at each blob termination
         # adj_blob_and_ext[0] = adj blob
         # adj_blob_and_ext[1] = fext
@@ -343,9 +354,6 @@ def form_blob(stack, pri_term, frame):  # increment blob with terminated stack, 
                             ccounter+=1
         
         frame['blob__'].append(blob)
-        
-        
-        
         
     else:
         
