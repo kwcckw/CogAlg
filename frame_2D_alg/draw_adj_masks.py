@@ -45,41 +45,39 @@ for i, blob in enumerate(frame['blob__']):
 
         for j, adj_blob in enumerate(blob['adj_blob_'][0]):
 
-            if adj_blob:
+            if 'dert__' in adj_blob:
 
-                if 'dert__' in adj_blob:
+                # check if there are unmasked values
+                if False in adj_blob['dert__'][0].mask:
+                    adj_dert__mask = ~adj_blob['dert__'][0].mask  # get inverted mask value (we need plot mask = false)
+                    adj_dert__mask = adj_dert__mask * 255  # set intensity of colour
 
-                    # check if there are unmasked values
-                    if False in adj_blob['dert__'][0].mask:
-                        adj_dert__mask = ~adj_blob['dert__'][0].mask  # get inverted mask value (we need plot mask = false)
-                        adj_dert__mask = adj_dert__mask * 255  # set intensity of colour
+                    if blob['adj_blob_'][1][j] == 1: # external blob, colour = green
+                        # draw blobs into image
+                        img_blob_[adj_blob['box'][0]:adj_blob['box'][1], adj_blob['box'][2]:adj_blob['box'][3], 1] += adj_dert__mask
+                        img_blob_box[adj_blob['box'][0]:adj_blob['box'][1], adj_blob['box'][2]:adj_blob['box'][3], 1] += adj_dert__mask
 
-                        if blob['adj_blob_'][1][j] == 1: # external blob, colour = green
-                            # draw blobs into image
-                            img_blob_[adj_blob['box'][0]:adj_blob['box'][1], adj_blob['box'][2]:adj_blob['box'][3], 1] += adj_dert__mask
-                            img_blob_box[adj_blob['box'][0]:adj_blob['box'][1], adj_blob['box'][2]:adj_blob['box'][3], 1] += adj_dert__mask
-
-                            # draw bounding box
-                            cv2.rectangle(img_blob_box, (adj_blob['box'][2], adj_blob['box'][0]),
-                                          (adj_blob['box'][3], adj_blob['box'][1]),
-                                          color=(0, 155, 0), thickness=1)
-                        
-                        else: # internal blob, colour = red
-                            # draw blobs into image
-                            img_blob_[adj_blob['box'][0]:adj_blob['box'][1], adj_blob['box'][2]:adj_blob['box'][3], 2] += adj_dert__mask
-                            img_blob_box[adj_blob['box'][0]:adj_blob['box'][1], adj_blob['box'][2]:adj_blob['box'][3], 2] += adj_dert__mask
-
-                            # draw bounding box
-                            cv2.rectangle(img_blob_box, (adj_blob['box'][2], adj_blob['box'][0]),
-                                          (adj_blob['box'][3], adj_blob['box'][1]),
-                                          color=(0, 0, 155), thickness=1)
-
-                    else:
-                        break
-
+                        # draw bounding box
+                        cv2.rectangle(img_blob_box, (adj_blob['box'][2], adj_blob['box'][0]),
+                                      (adj_blob['box'][3], adj_blob['box'][1]),
+                                      color=(0, 155, 0), thickness=1)
                     
-                    cv2.imwrite("./images/adj_blob_masks/mask_adj_blob_" + str(i) + ".png", img_blob_.astype('uint8'))
-                    cv2.imwrite("./images/adj_blob_masks/mask_adj_blob_" + str(i) + "_box.png", img_blob_box.astype('uint8'))
+                    else: # internal blob, colour = red
+                        # draw blobs into image
+                        img_blob_[adj_blob['box'][0]:adj_blob['box'][1], adj_blob['box'][2]:adj_blob['box'][3], 2] += adj_dert__mask
+                        img_blob_box[adj_blob['box'][0]:adj_blob['box'][1], adj_blob['box'][2]:adj_blob['box'][3], 2] += adj_dert__mask
+
+                        # draw bounding box
+                        cv2.rectangle(img_blob_box, (adj_blob['box'][2], adj_blob['box'][0]),
+                                      (adj_blob['box'][3], adj_blob['box'][1]),
+                                      color=(0, 0, 155), thickness=1)
+
+                else:
+                    break
+
+                
+        cv2.imwrite("./images/adj_blob_masks/mask_adj_blob_" + str(i) + ".png", img_blob_.astype('uint8'))
+        cv2.imwrite("./images/adj_blob_masks/mask_adj_blob_" + str(i) + "_box.png", img_blob_box.astype('uint8'))
 
 
 
