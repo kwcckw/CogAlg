@@ -66,12 +66,18 @@ def comp_pixel(image):  # current version of 2x2 pixel cross-correlation within 
 
 
 def image_to_blobs(image):
+    
+
     dert__ = comp_pixel(image)  # 2x2 cross-comparison / cross-correlation
-
-    frame = dict(rng=1, dert__=dert__, mask=None, I=0, G=0, Dy=0, Dx=0, blob__=[])
-    stack_ = deque()  # buffer of running vertical stacks of Ps
     height, width = dert__.shape[1:]
-
+ 
+    emptyblob__ = list() # initialize empty list
+    for i in range(0,height):
+        emptyblob__.append(list()) 
+    
+    frame = dict(rng=1, dert__=dert__, mask=None, I=0, G=0, Dy=0, Dx=0, blob__= emptyblob__)
+    stack_ = deque()  # buffer of running vertical stacks of Ps
+    
     for y in range(height):  # first and last row are discarded
         print(f'Processing line {y}...')
 
@@ -81,6 +87,8 @@ def image_to_blobs(image):
 
     while stack_:  # frame ends, last-line stacks are merged into their blobs
         form_blob(stack_.popleft(), frame)
+
+    frame = find_adjacent(frame)
 
     return frame  # frame of blobs
 
@@ -204,7 +212,7 @@ def form_stack_(P_, frame, y):  # Convert or merge every P into its stack of Ps,
         xn = x0 + L  # next-P x0
         if not up_connect_:
             # initialize new stack for each input-row P that has no connections in higher row, as in the whole top row:
-            blob = dict(Dert=dict(I=0, G=0, Dy=0, Dx=0, S=0, Ly=0), box=[y, x0, xn], stack_=[], sign=s, open_stacks=1)
+            blob = dict(Dert=dict(I=0, G=0, Dy=0, Dx=0, S=0, Ly=0), box=[y, x0, xn], stack_=[], sign=s, open_stacks=1,adj_blob_ = [[],[]])
             new_stack = dict(I=I, G=G, Dy=0, Dx=Dx, S=L, Ly=1, y0=y, Py_=[P], blob=blob, down_connect_cnt=0, sign=s)
             blob['stack_'].append(new_stack)
 
@@ -232,7 +240,7 @@ def form_stack_(P_, frame, y):  # Convert or merge every P into its stack of Ps,
                             form_blob(up_connect, frame)
 
                         if not up_connect['blob'] is blob:
-                            Dert, box, stack_, s, open_stacks, adj_blob_ = up_connect['blob'].values()  # merged blob
+                            Dert, box, stack_, s, open_stacks,_ = up_connect['blob'].values()  # merged blob
                             I, G, Dy, Dx, S, Ly = Dert.values()
                             accum_Dert(blob['Dert'], I=I, G=G, Dy=Dy, Dx=Dx, S=S, Ly=Ly)
                             blob['open_stacks'] += open_stacks
@@ -251,8 +259,6 @@ def form_stack_(P_, frame, y):  # Convert or merge every P into its stack of Ps,
         blob['box'][1] = min(blob['box'][1], x0)  # extend box x0
         blob['box'][2] = max(blob['box'][2], xn)  # extend box xn
 
-        if next_stack_:
-            new_stack['pri_blob'] = next_stack_[-1]['blob']
         next_stack_.append(new_stack)
 
     return next_stack_  # input for the next line of scan_P_
@@ -268,7 +274,7 @@ def form_blob(stack, frame):  # increment blob with terminated stack, check for 
     # open stacks contain Ps of a current row and may be extended with new x-overlapping Ps in next run of scan_P_
     if blob['open_stacks'] == 0:  # number of incomplete stacks == 0: blob is terminated and packed in frame:
         last_stack = stack
-        Dert, [y0, x0, xn], stack_, s, open_stacks = blob.values()
+        Dert, [y0, x0, xn], stack_, s, open_stacks,_ = blob.values()
         yn = last_stack['y0'] + last_stack['Ly']
 
         mask = np.ones((yn - y0, xn - x0), dtype=bool)  # mask box, then unmask Ps:
@@ -294,34 +300,76 @@ def form_blob(stack, frame):  # increment blob with terminated stack, check for 
                      G=frame['G'] + blob['Dert']['G'],
                      Dy=frame['Dy'] + blob['Dert']['Dy'],
                      Dx=frame['Dx'] + blob['Dert']['Dx'])
+        
+        # blobs are appended into each line frame['blob__']
+        frame['blob__'][y0].append(blob)
 
-        frame['blob__'].append(blob)
 
-
-def find_adjacent(blob__):  # scan_blob__? draft, adjacents are blobs directly next to _blob
+def find_adjacent(frame):  # scan_blob__? draft, adjacents are blobs directly next to _blob
     '''
     2D version of scan_P_, but primarily vertical and checking for opposite-sign adjacency vs. same-sign overlap
     '''
     y0, yn, x0, xn = 0, 0, 0, 0
-    # add checking for x overlap in 1D blob_, if min n blobs per line?
 
-    for _blob in blob__.popleft:  # get core blob, in increasing yn (xn)
-        _y0, _yn, _x0, _xn = _blob['box']
-        adj_blob_ = [[], []]  # [adj_blobs], [positions]: 0 = internal to current blob, 1 = external, 2 = open
+    # remove empty list in blob__ (empty list = no blobs in the particular line y0)
+    blob__ = [blob_ for blob_ in frame['blob__'] if blob_]
 
-        while(_y0 < xn+1 and y0 < _yn+1):  # vertical overlap between _blob and blob, including border
-            for i, blob in enumerate(blob__):  # get proximate blob
-                if blob['sign'] != _blob['sign']:  # adjacent must have opposite sign
-                    y0, yn, x0, xn = blob['box']
-                    # resizing draft:
-                    # blob['dert__'] = root dert__[min(y0,_y0), max(yn,_yn), min(x0,_x0), max(xn,_xn)]?
+    for i in range(1,len(blob__)): # start from 2nd index
 
-                    if np.logical_or( ~blob['dert__'].mask, ~_blob['border'].mask):
-                        # if any mask bit is false in unmasked area of _blob' border?
+        _blob_ = blob__[i-1] # prior line blobs
+        blob_ = blob__[i] # current line blobs
+        
+        for _blob in _blob_: # loop prior line blobs
+            _y0, _yn, _x0, _xn = _blob['box']
+            adj_blob_ = [[], []]  # [adj_blobs], [positions]: 0 = internal to current blob, 1 = external, 2 = open
+
+            for blob in blob_: # loop current line blobs
+                y0, yn, x0, xn = blob['box']
+
+                #  adjacent must have opposite sign and vertical overlap between _blob and blob, including border
+                if blob['sign'] != _blob['sign'] and  (_x0 < xn+1 and y0 < _yn+1) :  
+                     
+
+                    # map blob and _blob into similar location
+                    empty_map = np.ones((frame['dert__'].shape[1],frame['dert__'].shape[2])).astype('bool')
+                    blob_map = empty_map.copy()
+                    _blob_map = empty_map.copy()
+                    
+                    blob_map[blob['box'][0]:blob['box'][1],blob['box'][2]:blob['box'][3]] = blob['dert__'].mask[0]
+                    _blob_map[_blob['box'][0]:_blob['box'][1],_blob['box'][2]:_blob['box'][3]] = _blob['dert__'].mask[0]
+
+                    # get unmask area
+                    c_dert_loc = np.where(blob_map == False)
+                    # extend each dert by 1 for 4 different directions (excluding diagonal directions)
+                    c_dert_loc_top          = (c_dert_loc[0]-1,c_dert_loc[1])
+                    c_dert_loc_right        = (c_dert_loc[0]  ,c_dert_loc[1]+1)
+                    c_dert_loc_bottom       = (c_dert_loc[0]+1,c_dert_loc[1])
+                    c_dert_loc_left         = (c_dert_loc[0]  ,c_dert_loc[1]-1)
+                    
+                    # remove location of <0 or > image boundary
+                    c_dert_loc_top[0][c_dert_loc_top[0]<0] = 0
+                    c_dert_loc_right[1][c_dert_loc_right[1]>frame['dert__'].shape[2]-1] = frame['dert__'].shape[2]-1
+                    c_dert_loc_bottom[0][c_dert_loc_bottom[1]>frame['dert__'].shape[1]-1] = frame['dert__'].shape[1]-1
+                    c_dert_loc_left[1][c_dert_loc_left[1]<0] = 0
+                    
+                    
+                    # set extended boundary as false
+                    blob_map[c_dert_loc_top] = False
+                    blob_map[c_dert_loc_right] = False
+                    blob_map[c_dert_loc_bottom] = False
+                    blob_map[c_dert_loc_left] = False
+                    
+                    # OR the blob boundary and _blob
+                    if np.logical_or(~blob_map.all(), ~_blob_map.all()):
                         adj_blob_[0].append(blob)
-                        blob['adj_blob'][0].append(_blob)
+                        adj_blob_[1].append(1)
+                        blob['adj_blob_'][0].append(_blob)
+                        blob['adj_blob_'][1].append(1)
 
-        _blob.update(adj_blob_ = adj_blob_)  # pack adj_blob_ to blob
+            _blob.update(adj_blob_ = adj_blob_)  # pack adj_blob_ to blob
+
+            # flatten blob
+            frame['blob__'] = [item for sublist in frame['blob__'] for item in sublist]
 
     return frame
 
