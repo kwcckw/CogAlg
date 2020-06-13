@@ -70,12 +70,7 @@ def image_to_blobs(image):
 
     dert__ = comp_pixel(image)  # 2x2 cross-comparison / cross-correlation
     height, width = dert__.shape[1:]
- 
-    emptyblob__ = list() # initialize empty list
-    for i in range(0,height):
-        emptyblob__.append(list()) 
-    
-    frame = dict(rng=1, dert__=dert__, mask=None, I=0, G=0, Dy=0, Dx=0, blob__= emptyblob__)
+    frame = dict(rng=1, dert__=dert__, mask=None, I=0, G=0, Dy=0, Dx=0, blob__= [])
     stack_ = deque()  # buffer of running vertical stacks of Ps
     
     for y in range(height):  # first and last row are discarded
@@ -300,9 +295,10 @@ def form_blob(stack, frame):  # increment blob with terminated stack, check for 
                      G=frame['G'] + blob['Dert']['G'],
                      Dy=frame['Dy'] + blob['Dert']['Dy'],
                      Dx=frame['Dx'] + blob['Dert']['Dx'])
-        
-        # blobs are appended into each line frame['blob__']
-        frame['blob__'][y0].append(blob)
+
+        frame['blob__'].append(blob)
+
+
 
 
 def find_adjacent(frame):  # scan_blob__? draft, adjacents are blobs directly next to _blob
@@ -311,65 +307,63 @@ def find_adjacent(frame):  # scan_blob__? draft, adjacents are blobs directly ne
     '''
     y0, yn, x0, xn = 0, 0, 0, 0
 
-    # remove empty list in blob__ (empty list = no blobs in the particular line y0)
-    blob__ = [blob_ for blob_ in frame['blob__'] if blob_]
 
-    for i in range(1,len(blob__)): # start from 2nd index
+    for j, _blob in enumerate(frame['blob__']): # start from 2nd index
+        _y0, _yn, _x0, _xn = _blob['box']
+        adj_blob_ = [[], []]  # [adj_blobs], [positions]: 0 = internal to current blob, 1 = external, 2 = open
+       
+        # if we loop all blobs, this section may not needed now, otherwise we will go into infinity loop
+#        while(_y0 < xn+1 and y0 < _yn+1):  # vertical overlap between _blob and blob, including border
+              
+        for i, blob in enumerate(frame['blob__']): # loop in all blobs to get proximate blob
 
-        _blob_ = blob__[i-1] # prior line blobs
-        blob_ = blob__[i] # current line blobs
-        
-        for _blob in _blob_: # loop prior line blobs
-            _y0, _yn, _x0, _xn = _blob['box']
-            adj_blob_ = [[], []]  # [adj_blobs], [positions]: 0 = internal to current blob, 1 = external, 2 = open
+            y0, yn, x0, xn = blob['box']
 
-            for blob in blob_: # loop current line blobs
-                y0, yn, x0, xn = blob['box']
+            #  adjacent must have opposite sign and vertical overlap between _blob and blob, including border
+            if i !=j and blob['sign'] != _blob['sign']:
+                 
+                # initialization to map blob and _blob into similar location
+                empty_map = np.ones((frame['dert__'].shape[1],frame['dert__'].shape[2])).astype('bool')
+                blob_map = empty_map.copy()
+                _blob_map = empty_map.copy()
+                
+                # map blob
+                blob_map[blob['box'][0]:blob['box'][1],blob['box'][2]:blob['box'][3]] = blob['dert__'].mask[0]
+                # map _blob
+                _blob_map[_blob['box'][0]:_blob['box'][1],_blob['box'][2]:_blob['box'][3]] = _blob['dert__'].mask[0]
 
-                #  adjacent must have opposite sign and vertical overlap between _blob and blob, including border
-                if blob['sign'] != _blob['sign'] and  (_x0 < xn+1 and y0 < _yn+1) :  
-                     
+                # get unmask area
+                c_dert_loc = np.where(blob_map == False)
+                # extend each dert by 1 for 4 different directions (excluding diagonal directions)
+                c_dert_loc_top          = (c_dert_loc[0]-1,c_dert_loc[1])
+                c_dert_loc_right        = (c_dert_loc[0]  ,c_dert_loc[1]+1)
+                c_dert_loc_bottom       = (c_dert_loc[0]+1,c_dert_loc[1])
+                c_dert_loc_left         = (c_dert_loc[0]  ,c_dert_loc[1]-1)
+                
+                # remove location of <0 or > image boundary
+                c_dert_loc_top[0][c_dert_loc_top[0]<0] = 0
+                c_dert_loc_right[1][c_dert_loc_right[1]>frame['dert__'].shape[2]-1] = frame['dert__'].shape[2]-1
+                c_dert_loc_bottom[0][c_dert_loc_bottom[0]>frame['dert__'].shape[1]-1] = frame['dert__'].shape[1]-1
+                c_dert_loc_left[1][c_dert_loc_left[1]<0] = 0
 
-                    # map blob and _blob into similar location
-                    empty_map = np.ones((frame['dert__'].shape[1],frame['dert__'].shape[2])).astype('bool')
-                    blob_map = empty_map.copy()
-                    _blob_map = empty_map.copy()
+                # set extended boundary as false
+                blob_map[c_dert_loc_top] = False
+                blob_map[c_dert_loc_right] = False
+                blob_map[c_dert_loc_bottom] = False
+                blob_map[c_dert_loc_left] = False
+                
+                # OR the blob boundary and _blob
+                if np.logical_and(~blob_map, ~_blob_map).any():
                     
-                    blob_map[blob['box'][0]:blob['box'][1],blob['box'][2]:blob['box'][3]] = blob['dert__'].mask[0]
-                    _blob_map[_blob['box'][0]:_blob['box'][1],_blob['box'][2]:_blob['box'][3]] = _blob['dert__'].mask[0]
-
-                    # get unmask area
-                    c_dert_loc = np.where(blob_map == False)
-                    # extend each dert by 1 for 4 different directions (excluding diagonal directions)
-                    c_dert_loc_top          = (c_dert_loc[0]-1,c_dert_loc[1])
-                    c_dert_loc_right        = (c_dert_loc[0]  ,c_dert_loc[1]+1)
-                    c_dert_loc_bottom       = (c_dert_loc[0]+1,c_dert_loc[1])
-                    c_dert_loc_left         = (c_dert_loc[0]  ,c_dert_loc[1]-1)
-                    
-                    # remove location of <0 or > image boundary
-                    c_dert_loc_top[0][c_dert_loc_top[0]<0] = 0
-                    c_dert_loc_right[1][c_dert_loc_right[1]>frame['dert__'].shape[2]-1] = frame['dert__'].shape[2]-1
-                    c_dert_loc_bottom[0][c_dert_loc_bottom[1]>frame['dert__'].shape[1]-1] = frame['dert__'].shape[1]-1
-                    c_dert_loc_left[1][c_dert_loc_left[1]<0] = 0
-                    
-                    
-                    # set extended boundary as false
-                    blob_map[c_dert_loc_top] = False
-                    blob_map[c_dert_loc_right] = False
-                    blob_map[c_dert_loc_bottom] = False
-                    blob_map[c_dert_loc_left] = False
-                    
-                    # OR the blob boundary and _blob
-                    if np.logical_or(~blob_map.all(), ~_blob_map.all()):
+                    if blob not in adj_blob_[0]:
                         adj_blob_[0].append(blob)
                         adj_blob_[1].append(1)
+                        
+                    if _blob not in blob['adj_blob_'][0]:
                         blob['adj_blob_'][0].append(_blob)
                         blob['adj_blob_'][1].append(1)
-
-            _blob.update(adj_blob_ = adj_blob_)  # pack adj_blob_ to blob
-
-            # flatten blob
-            frame['blob__'] = [item for sublist in frame['blob__'] for item in sublist]
+                    frame['blob__'][i] = blob
+                    frame['blob__'][j]['adj_blob_'] = adj_blob_  # pack adj_blob_ to blob
 
     return frame
 
