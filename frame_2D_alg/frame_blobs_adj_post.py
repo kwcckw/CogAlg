@@ -298,30 +298,24 @@ def form_blob(stack, frame):  # increment blob with terminated stack, check for 
 
         frame['blob__'].append(blob)
 
-
-
-
 def find_adjacent(frame):  # scan_blob__? draft, adjacents are blobs directly next to _blob
     '''
     2D version of scan_P_, but primarily vertical and checking for opposite-sign adjacency vs. same-sign overlap
     '''
-    y0, yn, x0, xn = 0, 0, 0, 0
-
-
     for j, _blob in enumerate(frame['blob__']): # start from 2nd index
         _y0, _yn, _x0, _xn = _blob['box']
         adj_blob_ = [[], []]  # [adj_blobs], [positions]: 0 = internal to current blob, 1 = external, 2 = open
        
-        # if we loop all blobs, this section may not needed now, otherwise we will go into infinity loop
-#        while(_y0 < xn+1 and y0 < _yn+1):  # vertical overlap between _blob and blob, including border
-              
-        for i, blob in enumerate(frame['blob__']): # loop in all blobs to get proximate blob
-
+        y0, yn, x0, xn = 0, 0, 0, 0 # initialization
+        i = 0 # counter for inner loop 
+        while (y0 < _yn-1) and i<= len(frame['blob__']):  # vertical overlap between _blob and blob, including border
+            
+            blob = frame['blob__'][i] # inner loop's blob
             y0, yn, x0, xn = blob['box']
 
             #  adjacent must have opposite sign and vertical overlap between _blob and blob, including border
             if i !=j and blob['sign'] != _blob['sign']:
-                 
+                
                 # initialization to map blob and _blob into similar location
                 empty_map = np.ones((frame['dert__'].shape[1],frame['dert__'].shape[2])).astype('bool')
                 blob_map = empty_map.copy()
@@ -352,19 +346,22 @@ def find_adjacent(frame):  # scan_blob__? draft, adjacents are blobs directly ne
                 blob_map[c_dert_loc_bottom] = False
                 blob_map[c_dert_loc_left] = False
                 
-                # OR the blob boundary and _blob
+                # AND the blob boundary and _blob
                 if np.logical_and(~blob_map, ~_blob_map).any():
                     
                     if blob not in adj_blob_[0]:
                         adj_blob_[0].append(blob)
-                        adj_blob_[1].append(1)
+                        adj_blob_[1].append(0)
                         
                     if _blob not in blob['adj_blob_'][0]:
                         blob['adj_blob_'][0].append(_blob)
                         blob['adj_blob_'][1].append(1)
-                    frame['blob__'][i] = blob
-                    frame['blob__'][j]['adj_blob_'] = adj_blob_  # pack adj_blob_ to blob
-
+            
+            frame['blob__'][i] = blob
+            frame['blob__'][j]['adj_blob_'] = adj_blob_  # pack adj_blob_ to blob
+                
+            i+=1 # increase inner loop counter
+            
     return frame
 
 
