@@ -286,10 +286,15 @@ def form_blob(stack, frame):  # increment blob with terminated stack, check for 
         dert__.mask[:] = mask  # overwrite default mask 0s
         frame['dert__'][:, y0:yn, x0:xn] = dert__.copy()  # assign mask back to frame dert__
 
+        fopen = 0
+        if x0 == 0 or xn ==frame['dert__'].shape[2]  or y0 == 0 or yn ==frame['dert__'].shape[1]: 
+            fopen = 1
+        
         blob.pop('open_stacks')
         blob.update(root_dert__=frame['dert__'],
                     box=(y0, yn, x0, xn),
                     dert__=dert__,
+                    fopen=fopen
                     )
         frame.update(I=frame['I'] + blob['Dert']['I'],
                      G=frame['G'] + blob['Dert']['G'],
@@ -340,23 +345,48 @@ def find_adjacent(frame):  # scan_blob__? draft, adjacents are blobs directly ne
                 c_dert_loc_bottom[0][c_dert_loc_bottom[0]>frame['dert__'].shape[1]-1] = frame['dert__'].shape[1]-1
                 c_dert_loc_left[1][c_dert_loc_left[1]<0] = 0
 
+                # get original copy
+                blob_map_original  = blob_map.copy()
                 # set extended boundary as false
                 blob_map[c_dert_loc_top] = False
                 blob_map[c_dert_loc_right] = False
                 blob_map[c_dert_loc_bottom] = False
                 blob_map[c_dert_loc_left] = False
                 
-                # AND the blob boundary and _blob
-                if np.logical_and(~blob_map, ~_blob_map).any():
+                # get boundary of unmasked area only
+                blob_map_boundary = np.logical_xor(blob_map,blob_map_original)
+                
+                # AND boundary and blob
+                boundary_check = np.logical_and(blob_map_boundary, ~_blob_map)
+                
+                # AND to check adjacency
+                if boundary_check.any():
                     
-                    if blob not in adj_blob_[0]:
-                        adj_blob_[0].append(blob)
-                        adj_blob_[1].append(0)
+                    # can blob with 'open' and 'external' or 'open' and 'internal' exists at a same time?
+                    # if blob['fopen'] == 1:
+                    # if _blob['fopen'] == 1:   
+                    
+                    if np.count_nonzero(boundary_check) == np.count_nonzero(blob_map_boundary) and np.count_nonzero(boundary_check)!=0: # if all blob boundaries are in _blob, _blob is external
                         
-                    if _blob not in blob['adj_blob_'][0]:
-                        blob['adj_blob_'][0].append(_blob)
-                        blob['adj_blob_'][1].append(1)
+                        if blob not in adj_blob_[0]:
+                            adj_blob_[0].append(blob)
+                            adj_blob_[1].append(0) # 0 for internal
+                        
+                        if _blob not in blob['adj_blob_'][0]:
+                            blob['adj_blob_'][0].append(_blob)
+                            blob['adj_blob_'][1].append(1) # 1 for external
             
+                    else:# _blob is internal
+                        
+                        if blob not in adj_blob_[0]:
+                            adj_blob_[0].append(blob)
+                            adj_blob_[1].append(1) # 1 for external
+                        
+                        if _blob not in blob['adj_blob_'][0]:
+                            blob['adj_blob_'][0].append(_blob)
+                            blob['adj_blob_'][1].append(0) # 0 for internal
+                        
+                    
             frame['blob__'][i] = blob
             frame['blob__'][j]['adj_blob_'] = adj_blob_  # pack adj_blob_ to blob
                 
