@@ -307,7 +307,7 @@ def find_adjacent(frame):  # scan_blob__? draft, adjacents are blobs directly ne
     '''
     2D version of scan_P_, but primarily vertical and checking for opposite-sign adjacency vs. same-sign overlap
     '''
-    for j, _blob in enumerate(frame['blob__']): # start from 2nd index
+    for j, _blob in enumerate(frame['blob__']): # outer loop
         _y0, _yn, _x0, _xn = _blob['box']
         adj_blob_ = [[], []]  # [adj_blobs], [positions]: 0 = internal to current blob, 1 = external, 2 = open
        
@@ -339,12 +339,12 @@ def find_adjacent(frame):  # scan_blob__? draft, adjacents are blobs directly ne
                 c_dert_loc_bottom       = (c_dert_loc[0]+1,c_dert_loc[1])
                 c_dert_loc_left         = (c_dert_loc[0]  ,c_dert_loc[1]-1)
                 
-                # remove location of <0 or > image boundary
-                c_dert_loc_top[0][c_dert_loc_top[0]<0] = 0
-                c_dert_loc_right[1][c_dert_loc_right[1]>frame['dert__'].shape[2]-1] = frame['dert__'].shape[2]-1
-                c_dert_loc_bottom[0][c_dert_loc_bottom[0]>frame['dert__'].shape[1]-1] = frame['dert__'].shape[1]-1
-                c_dert_loc_left[1][c_dert_loc_left[1]<0] = 0
-
+                # remove location of <0 or > image boundary (we cannot set the value to 0 or image boundary since those area is not the margin)
+                c_dert_loc_top = (c_dert_loc_top[0][~c_dert_loc_top[0]<0] , c_dert_loc_top[1][~c_dert_loc_top[0]<0]) # (y,x)
+                c_dert_loc_right = (c_dert_loc_right[0][~c_dert_loc_right[1]>frame['dert__'].shape[2]-1],c_dert_loc_right[1][~c_dert_loc_right[1]>frame['dert__'].shape[2]-1] )  # -1 because index start from 0, while shape start from 1
+                c_dert_loc_bottom = (c_dert_loc_bottom[0][~c_dert_loc_bottom[0]>frame['dert__'].shape[1]-1] ,c_dert_loc_bottom[1][~c_dert_loc_bottom[0]>frame['dert__'].shape[1]-1])
+                c_dert_loc_left = (c_dert_loc_left[0][~c_dert_loc_left[1]<0],c_dert_loc_left[1][~c_dert_loc_left[1]<0])
+                  
                 # get original copy
                 blob_map_original  = blob_map.copy()
                 # set extended boundary as false
@@ -356,36 +356,34 @@ def find_adjacent(frame):  # scan_blob__? draft, adjacents are blobs directly ne
                 # get boundary of unmasked area only
                 blob_map_boundary = np.logical_xor(blob_map,blob_map_original)
                 
-                # AND boundary and blob
+                # AND blob's unmasked area's marging and _blob's unmasked area
                 boundary_check = np.logical_and(blob_map_boundary, ~_blob_map)
                 
-                # AND to check adjacency
+                # .any() to check whether at least 1 element in boundary_check is true
                 if boundary_check.any():
                     
-                    # can blob with 'open' and 'external' or 'open' and 'internal' exists at a same time?
-                    # if blob['fopen'] == 1:
-                    # if _blob['fopen'] == 1:   
-                    
+                    # check if all blob's margins are in _blob's unmasked area
                     if np.count_nonzero(boundary_check) == np.count_nonzero(blob_map_boundary) and np.count_nonzero(boundary_check)!=0: # if all blob boundaries are in _blob, _blob is external
-                        
                         if blob not in adj_blob_[0]:
                             adj_blob_[0].append(blob)
-                            adj_blob_[1].append(0) # 0 for internal
-                        
+                            if blob['fopen'] == 1:  # check open blob
+                                adj_blob_[1].append(2) # open blob cannot be internal
+                            else:
+                                adj_blob_[1].append(0) # 0 for internal
                         if _blob not in blob['adj_blob_'][0]:
                             blob['adj_blob_'][0].append(_blob)
                             blob['adj_blob_'][1].append(1) # 1 for external
             
                     else:# _blob is internal
-                        
                         if blob not in adj_blob_[0]:
                             adj_blob_[0].append(blob)
                             adj_blob_[1].append(1) # 1 for external
-                        
                         if _blob not in blob['adj_blob_'][0]:
                             blob['adj_blob_'][0].append(_blob)
-                            blob['adj_blob_'][1].append(0) # 0 for internal
-                        
+                            if _blob['fopen'] == 1: # check open _blob
+                                blob['adj_blob_'][1].append(2) # open _blob cannot be internal
+                            else:
+                                blob['adj_blob_'][1].append(0) # 0 for internal
                     
             frame['blob__'][i] = blob
             frame['blob__'][j]['adj_blob_'] = adj_blob_  # pack adj_blob_ to blob
