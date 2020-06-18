@@ -286,7 +286,15 @@ def form_blob(stack, frame):  # increment blob with terminated stack, check for 
         dert__.mask[:] = mask  # overwrite default mask 0s
         frame['dert__'][:, y0:yn, x0:xn] = dert__.copy()  # assign mask back to frame dert__
 
-        fopen = 0
+        # get extended margin of each blob' derts' mask
+        mask_margin = np.ones((frame['dert__'].shape[1],frame['dert__'].shape[2])).astype('bool')
+        mask_margin[y0:yn, x0:xn] = mask
+        if blob['sign']: # +sign, diagonal margin
+            mask_margin, mask_margin_pre = extend_derts_margin(frame,mask_margin,diag=1)
+        else: # -sign, orthogonal margin
+            mask_margin, mask_margin_pre = extend_derts_margin(frame,mask_margin,diag=0)
+
+        fopen = 0 # flag for open blob, 1 = open
         if x0 == 0 or xn ==frame['dert__'].shape[2]  or y0 == 0 or yn ==frame['dert__'].shape[1]: 
             fopen = 1
         
@@ -294,7 +302,8 @@ def form_blob(stack, frame):  # increment blob with terminated stack, check for 
         blob.update(root_dert__=frame['dert__'],
                     box=(y0, yn, x0, xn),
                     dert__=dert__,
-                    fopen=fopen
+                    fopen=fopen,
+                    mask_margin = mask_margin
                     )
         frame.update(I=frame['I'] + blob['Dert']['I'],
                      G=frame['G'] + blob['Dert']['G'],
@@ -307,19 +316,25 @@ def find_adjacent(frame):  # scan_blob__? draft, adjacents are blobs directly ne
     '''
     2D version of scan_P_, but primarily vertical and checking for opposite-sign adjacency vs. same-sign overlap
     '''
-    for j, _blob in enumerate(frame['blob__']): # outer loop
+    blob__ = [] # initialization
+    while frame['blob__']: # outer loop
+        
+        _blob = frame['blob__'].pop(0) # pop left outer loop's blob
         _y0, _yn, _x0, _xn = _blob['box']
-        adj_blob_ = [[], []]  # [adj_blobs], [positions]: 0 = internal to current blob, 1 = external, 2 = open
+        _adj_blob_ = [[], []]  # [adj_blobs], [positions]: 0 = internal to current blob, 1 = external, 2 = open
        
         y0, yn, x0, xn = 0, 0, 0, 0 # initialization
         i = 0 # counter for inner loop 
-        while (y0 < _yn-1) and i<= len(frame['blob__']):  # vertical overlap between _blob and blob, including border
-            
+        
+        # buggy on this condition, need to recheck or redefine
+#        while (y0 < _yn-1) and i<= len(frame['blob__'])-1:  # vertical overlap between _blob and blob, including border
+        while i<= len(frame['blob__'])-1:  # vertical overlap between _blob and blob, including border
+                
             blob = frame['blob__'][i] # inner loop's blob
             y0, yn, x0, xn = blob['box']
 
             #  adjacent must have opposite sign and vertical overlap between _blob and blob, including border
-            if i !=j and blob['sign'] != _blob['sign']:
+            if blob['sign'] != _blob['sign']:
                 
                 # initialization to map blob and _blob into similar location
                 empty_map = np.ones((frame['dert__'].shape[1],frame['dert__'].shape[2])).astype('bool')
@@ -331,27 +346,11 @@ def find_adjacent(frame):  # scan_blob__? draft, adjacents are blobs directly ne
                 # map _blob
                 _blob_map[_blob['box'][0]:_blob['box'][1],_blob['box'][2]:_blob['box'][3]] = _blob['dert__'].mask[0]
 
-                # get unmask area
-                c_dert_loc = np.where(blob_map == False)
-                # extend each dert by 1 for 4 different directions (excluding diagonal directions)
-                c_dert_loc_top          = (c_dert_loc[0]-1,c_dert_loc[1])
-                c_dert_loc_right        = (c_dert_loc[0]  ,c_dert_loc[1]+1)
-                c_dert_loc_bottom       = (c_dert_loc[0]+1,c_dert_loc[1])
-                c_dert_loc_left         = (c_dert_loc[0]  ,c_dert_loc[1]-1)
                 
-                # remove location of <0 or > image boundary (we cannot set the value to 0 or image boundary since those area is not the margin)
-                c_dert_loc_top = (c_dert_loc_top[0][~c_dert_loc_top[0]<0] , c_dert_loc_top[1][~c_dert_loc_top[0]<0]) # (y,x)
-                c_dert_loc_right = (c_dert_loc_right[0][~c_dert_loc_right[1]>frame['dert__'].shape[2]-1],c_dert_loc_right[1][~c_dert_loc_right[1]>frame['dert__'].shape[2]-1] )  # -1 because index start from 0, while shape start from 1
-                c_dert_loc_bottom = (c_dert_loc_bottom[0][~c_dert_loc_bottom[0]>frame['dert__'].shape[1]-1] ,c_dert_loc_bottom[1][~c_dert_loc_bottom[0]>frame['dert__'].shape[1]-1])
-                c_dert_loc_left = (c_dert_loc_left[0][~c_dert_loc_left[1]<0],c_dert_loc_left[1][~c_dert_loc_left[1]<0])
-                  
-                # get original copy
-                blob_map_original  = blob_map.copy()
-                # set extended boundary as false
-                blob_map[c_dert_loc_top] = False
-                blob_map[c_dert_loc_right] = False
-                blob_map[c_dert_loc_bottom] = False
-                blob_map[c_dert_loc_left] = False
+                if blob['sign']: # + sign blob, diagonal + orthogonal extension
+                    blob_map, blob_map_original = extend_derts_margin(frame,blob_map,diag=1)
+                else: # - sign blob, orthogonal extension
+                    blob_map, blob_map_original = extend_derts_margin(frame,blob_map,diag=0)
                 
                 # get boundary of unmasked area only
                 blob_map_boundary = np.logical_xor(blob_map,blob_map_original)
@@ -359,25 +358,25 @@ def find_adjacent(frame):  # scan_blob__? draft, adjacents are blobs directly ne
                 # AND blob's unmasked area's marging and _blob's unmasked area
                 boundary_check = np.logical_and(blob_map_boundary, ~_blob_map)
                 
-                # .any() to check whether at least 1 element in boundary_check is true
+                # .any() to check whether at least 1 element in boundary_check is true (check adjacency)
                 if boundary_check.any():
                     
                     # check if all blob's margins are in _blob's unmasked area
                     if np.count_nonzero(boundary_check) == np.count_nonzero(blob_map_boundary) and np.count_nonzero(boundary_check)!=0: # if all blob boundaries are in _blob, _blob is external
-                        if blob not in adj_blob_[0]:
-                            adj_blob_[0].append(blob)
+                        if blob not in _adj_blob_[0]:
+                            _adj_blob_[0].append(blob)
                             if blob['fopen'] == 1:  # check open blob
-                                adj_blob_[1].append(2) # open blob cannot be internal
+                                _adj_blob_[1].append(2) # open blob cannot be internal
                             else:
-                                adj_blob_[1].append(0) # 0 for internal
+                                _adj_blob_[1].append(0) # 0 for internal
                         if _blob not in blob['adj_blob_'][0]:
                             blob['adj_blob_'][0].append(_blob)
                             blob['adj_blob_'][1].append(1) # 1 for external
             
                     else:# _blob is internal
-                        if blob not in adj_blob_[0]:
-                            adj_blob_[0].append(blob)
-                            adj_blob_[1].append(1) # 1 for external
+                        if blob not in _adj_blob_[0]:
+                            _adj_blob_[0].append(blob)
+                            _adj_blob_[1].append(1) # 1 for external
                         if _blob not in blob['adj_blob_'][0]:
                             blob['adj_blob_'][0].append(_blob)
                             if _blob['fopen'] == 1: # check open _blob
@@ -385,12 +384,80 @@ def find_adjacent(frame):  # scan_blob__? draft, adjacents are blobs directly ne
                             else:
                                 blob['adj_blob_'][1].append(0) # 0 for internal
                     
-            frame['blob__'][i] = blob
-            frame['blob__'][j]['adj_blob_'] = adj_blob_  # pack adj_blob_ to blob
-                
-            i+=1 # increase inner loop counter
-            
+            frame['blob__'][i] = blob # reassign blob in inner loop
+            _blob['adj_blob_'] = _adj_blob_  # pack _adj_blob_ to _blob
+            i+=1 # increase inner loop counter   
+        blob__.append(_blob) # repack processed _blob into blob__
+    frame['blob__'] = blob__ # update empty frame['blob__'] with blob__
     return frame
+
+
+def extend_derts_margin(frame,blob_map,diag):
+    # used in find_adjacent to get +1 margin of derts' unmasked area
+    # margin can be extended in orthogonal or diagonal direction
+    
+    ## orthogonal
+    # get unmask area
+    c_dert_loc = np.where(blob_map == False)
+    
+    # extend each dert by 1 for 4 different directions (excluding diagonal directions)
+    c_dert_loc_top          = (c_dert_loc[0]-1,c_dert_loc[1])
+    c_dert_loc_right        = (c_dert_loc[0]  ,c_dert_loc[1]+1)
+    c_dert_loc_bottom       = (c_dert_loc[0]+1,c_dert_loc[1])
+    c_dert_loc_left         = (c_dert_loc[0]  ,c_dert_loc[1]-1)
+    
+    # remove location of <0 or > image boundary (we cannot set the value to 0 or image boundary since those area is not the margin)
+    ind_top = ~(c_dert_loc_top[0]<0) # check y <0
+    c_dert_loc_top = (c_dert_loc_top[0][ind_top] , c_dert_loc_top[1][ind_top]) # (y,x) 
+    
+    ind_right = ~(c_dert_loc_right[1]>frame['dert__'].shape[2]-1) # check x>frame's x size # -1 because index start from 0, while shape start from 1
+    c_dert_loc_right = (c_dert_loc_right[0][ind_right],c_dert_loc_right[1][ind_right] )  
+    
+    ind_bottom = ~(c_dert_loc_bottom[0]>frame['dert__'].shape[1]-1) # check y>frame's y size
+    c_dert_loc_bottom = (c_dert_loc_bottom[0][ind_bottom] ,c_dert_loc_bottom[1][ind_bottom])
+    
+    ind_left = ~(c_dert_loc_left[1]<0) # check x<0
+    c_dert_loc_left = (c_dert_loc_left[0][ind_left],c_dert_loc_left[1][ind_left])
+      
+    # get original copy
+    blob_map_original  = blob_map.copy()
+    # set extended boundary as false
+    blob_map[c_dert_loc_top] = False
+    blob_map[c_dert_loc_right] = False
+    blob_map[c_dert_loc_bottom] = False
+    blob_map[c_dert_loc_left] = False
+    
+    # if diagonal direction included
+    if diag:
+    
+        # extend each dert by 1 for diagonal directions
+        c_dert_loc_topleft          = (c_dert_loc[0]-1,c_dert_loc[1]-1)
+        c_dert_loc_topright          = (c_dert_loc[0]-1,c_dert_loc[1]+1)
+        c_dert_loc_bottomleft       = (c_dert_loc[0]+1,c_dert_loc[1]-1)
+        c_dert_loc_bottomright       = (c_dert_loc[0]+1,c_dert_loc[1]+1)
+        
+        ind_topleft = ~np.logical_or(c_dert_loc_topleft[0]<0, c_dert_loc_topleft[1]<0) # check y<0 or x<0
+        c_dert_loc_topleft  = (c_dert_loc_topleft[0][ind_topleft] ,c_dert_loc_topleft[1][ind_topleft])
+        
+        ind_topright = ~np.logical_or(c_dert_loc_topright[0]<0, c_dert_loc_topright[1]>frame['dert__'].shape[2]-1 ) # check y<0 or x > frame's x size
+        c_dert_loc_topright  = (c_dert_loc_topright[0][ind_topright] ,c_dert_loc_topright[1][ind_topright])
+        
+        ind_bottomleft = ~np.logical_or(c_dert_loc_bottomleft[0]>frame['dert__'].shape[1]-1, c_dert_loc_bottomleft[1]<0) # check y>frame's y size or x<0
+        c_dert_loc_bottomleft  = (c_dert_loc_bottomleft[0][ind_bottomleft] ,c_dert_loc_bottomleft[1][ind_bottomleft])
+        
+        ind_bottomright = ~np.logical_or(c_dert_loc_bottomright[0]>frame['dert__'].shape[1]-1, c_dert_loc_bottomright[1]>frame['dert__'].shape[2]-1) # check y>frame's y size or x>frame's x size
+        c_dert_loc_bottomright  = (c_dert_loc_bottomright[0][ind_bottomright] ,c_dert_loc_bottomright[1][ind_bottomright])
+    
+        # set extended boundary as false
+        blob_map[c_dert_loc_topleft] = False
+        blob_map[c_dert_loc_topright] = False
+        blob_map[c_dert_loc_bottomleft] = False
+        blob_map[c_dert_loc_bottomright] = False
+    
+    return blob_map,blob_map_original
+
+
+
 
 
 # -----------------------------------------------------------------------------
