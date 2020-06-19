@@ -82,6 +82,8 @@ def image_to_blobs(image):
     while stack_:  # frame ends, last-line stacks are merged into their blobs
         form_blob(stack_.popleft(), frame)
 
+    find_adjacent(frame)
+
     return frame  # frame of blobs
 
 ''' 
@@ -231,7 +233,7 @@ def form_stack_(P_, frame, y):  # Convert or merge every P into its stack of Ps,
                             form_blob(up_connect, frame)
 
                         if not up_connect['blob'] is blob:
-                            Dert, box, stack_, s, open_stacks, _ = up_connect['blob'].values()  # merged blob
+                            Dert, box, stack_, s, open_stacks = up_connect['blob'].values()  # merged blob
                             I, G, Dy, Dx, S, Ly = Dert.values()
                             accum_Dert(blob['Dert'], I=I, G=G, Dy=Dy, Dx=Dx, S=S, Ly=Ly)
                             blob['open_stacks'] += open_stacks
@@ -265,7 +267,7 @@ def form_blob(stack, frame):  # increment blob with terminated stack, check for 
     # open stacks contain Ps of a current row and may be extended with new x-overlapping Ps in next run of scan_P_
     if blob['open_stacks'] == 0:  # number of incomplete stacks == 0: blob is terminated and packed in frame:
         last_stack = stack
-        Dert, [y0, x0, xn], stack_, s, open_stacks, _ = blob.values()
+        Dert, [y0, x0, xn], stack_, s, open_stacks= blob.values()
         yn = last_stack['y0'] + last_stack['Ly']
 
         mask = np.ones((yn - y0, xn - x0), dtype=bool)  # mask box, then unmask Ps:
@@ -299,8 +301,9 @@ def form_blob(stack, frame):  # increment blob with terminated stack, check for 
                     dert__=dert__,
                     adj_blob_ = [[], []],
                     fopen=fopen,
-                    extended_map=extended_map
+                    margin_map=[extended_map,blob_map]
                     # shouldn't this be margin alone?
+                    # yea, it could be margin alone, right now it is the mapped margin so that find_adjacent can use this without extra processing
                     )
         frame.update(I=frame['I'] + blob['Dert']['I'],
                      G=frame['G'] + blob['Dert']['G'],
@@ -319,34 +322,31 @@ def find_adjacent(frame):  # scan_blob__? draft, adjacents are blobs directly ne
 
         _blob = frame['blob__'].pop(0)  # pop left outer loop's blob
         _y0, _yn, _x0, _xn = _blob['box']
-        _adj_blob_ = [[], []]  # [adj_blobs], [positions]: 0 = internal to current blob, 1 = external, 2 = open
+        if 'adj_blob_' in _blob: # if there's already adj_blob_, we reuse the adj_blob_ from _blob, else we will wipe out the existing adj_blob_
+            _adj_blob_ = _blob['adj_blob_']
+        else:
+            _adj_blob_ = [[], []]  # [adj_blobs], [positions]: 0 = internal to current blob, 1 = external, 2 = open
 
         y0, yn, x0, xn = 0, 0, 0, 0  # initialization
         i = 0  # counter for inner loop
-        # buggy on this condition, need to recheck or redefine
-        # while (y0 < _yn-1) and i<= len(frame['blob__'])-1:  # vertical overlap between _blob and blob, including border
         while i <= len(frame['blob__']) - 1:  # vertical overlap between _blob and blob, including border
 
             blob = frame['blob__'][i]  # inner loop's blob
+            if 'adj_blob_' in blob:
+                adj_blob_ = blob['adj_blob_']
+            else:
+                adj_blob_ = [[], []]  # [adj_blobs], [positions]: 0 = internal to current blob, 1 = external, 2 = open
             y0, yn, x0, xn = blob['box']
 
-            if blob['sign'] != _blob['sign']: #  adjacent blobs have opposite sign and vertical overlap with _blob + margin
-                # form common map for blob and _blob
-                empty_map = np.ones((frame['dert__'].shape[1], frame['dert__'].shape[2])).astype('bool')
-                blob_map = empty_map.copy(); _blob_map = empty_map.copy()
+            if y0 <= _yn and blob['sign'] != _blob['sign']: #  adjacent blobs have opposite sign and vertical overlap with _blob + margin
+                
+                _blob_map = _blob['margin_map'][1] # _blob's map
+                extended_map, blob_map = blob['margin_map'] # blob's margin and map 
 
-                blob_map[blob['box'][0]:blob['box'][1], blob['box'][2]:blob['box'][3]] = blob['dert__'].mask[0]
-                _blob_map[_blob['box'][0]:_blob['box'][1], _blob['box'][2]:_blob['box'][3]] = _blob['dert__'].mask[0]
-
-                if blob['sign']:
-                    extended_map, blob_map = add_margin(frame, blob_map, diag=1)  # add diagonal + orthogonal margin
-                else:
-                    extended_map, blob_map = add_margin(frame, blob_map, diag=0)  # add orthogonal margin
-
-                margin_map = np.logical_xor(extended_map, blob_map)
+                margin_map = np.logical_xor(extended_map, blob_map) # get blob's margin area only
                 margin_AND = np.logical_and(margin_map, ~ _blob_map)  # AND blob margin and _blob area
 
-                if margin_AND.any():  # at least one margin element is in _blob: blob is adjacent
+                if margin_AND.any():  # at least one blob's margin element is in _blob: blob is adjacent
                     if np.count_nonzero(margin_AND) == np.count_nonzero(margin_map) and np.count_nonzero(margin_AND) != 0:
                         # all of blob margin is in _blob: _blob is external
                         if blob not in _adj_blob_[0]:
@@ -355,21 +355,22 @@ def find_adjacent(frame):  # scan_blob__? draft, adjacents are blobs directly ne
                                 _adj_blob_[1].append(2)  # open blob cannot be internal
                             else:
                                 _adj_blob_[1].append(0)  # 0 for internal
-                        if _blob not in blob['adj_blob_'][0]:
-                            blob['adj_blob_'][0].append(_blob)
-                            blob['adj_blob_'][1].append(1)  # 1 for external
+                        if _blob not in adj_blob_[0]:
+                            adj_blob_[0].append(_blob)
+                            adj_blob_[1].append(1)  # 1 for external
 
                     else:  # _blob is internal
                         if blob not in _adj_blob_[0]:
                             _adj_blob_[0].append(blob)
                             _adj_blob_[1].append(1)  # 1 for external
-                        if _blob not in blob['adj_blob_'][0]:
-                            blob['adj_blob_'][0].append(_blob)
+                        if _blob not in adj_blob_[0]:
+                            adj_blob_[0].append(_blob)
                             if _blob['fopen'] == 1:  # check open _blob
-                                blob['adj_blob_'][1].append(2)  # open _blob cannot be internal
+                                adj_blob_[1].append(2)  # open _blob cannot be internal
                             else:
-                                blob['adj_blob_'][1].append(0)  # 0 for internal
-
+                                adj_blob_[1].append(0)  # 0 for internal
+             
+            blob['adj_blob_'] =  adj_blob_ # pack adj_blob_ to _blob
             frame['blob__'][i] = blob  # reassign blob in inner loop
             _blob['adj_blob_'] = _adj_blob_  # pack _adj_blob_ to _blob
             i += 1  # increase inner loop counter
@@ -381,7 +382,7 @@ def find_adjacent(frame):  # scan_blob__? draft, adjacents are blobs directly ne
 
 def add_margin(frame, blob_map, diag):  # get 1-pixel margin of blob, orthogonally or orthogonally and diagonally
 
-    c_dert_loc = np.where(blob_map == False)  # masked area
+    c_dert_loc = np.where(blob_map == False)  # get unmasked area (unmasked area = false)
 
     # extend each dert by 1 for 4 different directions (excluding diagonal directions)
     c_dert_loc_top = (c_dert_loc[0] - 1, c_dert_loc[1])
