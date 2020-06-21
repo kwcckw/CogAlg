@@ -287,9 +287,9 @@ def form_blob(stack, frame):  # increment blob with terminated stack, check for 
         blob_map = np.ones((frame['dert__'].shape[1], frame['dert__'].shape[2])).astype('bool')
         blob_map[y0:yn, x0:xn] = mask
         if blob['sign']:
-            extended_map, blob_map = add_margin(frame, blob_map, diag=1)  # orthogonal + diagonal margin
+            margin_map, margin_coords = add_margin(frame, blob_map, diag=1)  # orthogonal + diagonal margin
         else:
-            extended_map, blob_map = add_margin(frame, blob_map, diag=0)  # orthogonal margin
+            margin_map, margin_coords = add_margin(frame, blob_map, diag=0)  # orthogonal margin
 
         fopen = 0  # flag for blobs on frame boundary
         if x0 == 0 or xn == frame['dert__'].shape[2] or y0 == 0 or yn == frame['dert__'].shape[1]:
@@ -301,9 +301,7 @@ def form_blob(stack, frame):  # increment blob with terminated stack, check for 
                     dert__=dert__,
                     adj_blob_ = [[], []],
                     fopen=fopen,
-                    margin_map=[extended_map,blob_map]
-                    # shouldn't this be margin alone?
-                    # yea, it could be margin alone, right now it is the mapped margin so that find_adjacent can use this without extra processing
+                    margins=[blob_map, margin_map, margin_coords] # margin related data -> [ [map of blob], [map of margin], [margin coordinates]] margin coordinates not used in the codes yet
                     )
         frame.update(I=frame['I'] + blob['Dert']['I'],
                      G=frame['G'] + blob['Dert']['G'],
@@ -340,10 +338,9 @@ def find_adjacent(frame):  # scan_blob__? draft, adjacents are blobs directly ne
 
             if y0 <= _yn and blob['sign'] != _blob['sign']: #  adjacent blobs have opposite sign and vertical overlap with _blob + margin
                 
-                _blob_map = _blob['margin_map'][1] # _blob's map
-                extended_map, blob_map = blob['margin_map'] # blob's margin and map 
+                _blob_map = _blob['margins'][0] # _blob's map
+                margin_map = blob['margins'][1] # blob' margin's map 
 
-                margin_map = np.logical_xor(extended_map, blob_map) # get blob's margin area only
                 margin_AND = np.logical_and(margin_map, ~ _blob_map)  # AND blob margin and _blob area
 
                 if margin_AND.any():  # at least one blob's margin element is in _blob: blob is adjacent
@@ -433,7 +430,10 @@ def add_margin(frame, blob_map, diag):  # get 1-pixel margin of blob, orthogonal
         extended_map[c_dert_loc_bottomleft] = False
         extended_map[c_dert_loc_bottomright] = False
 
-    return extended_map, blob_map
+    margin_map = np.logical_xor(extended_map, blob_map) # get blob's margin area only
+    margin_coords = np.where(margin_map == True) # get margin only coordinates
+
+    return margin_map, margin_coords
 
 
 # -----------------------------------------------------------------------------
