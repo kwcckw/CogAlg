@@ -373,45 +373,39 @@ def find_adjacent(frame):  # scan_blob__? draft, adjacents are blobs directly ne
 
 
 def form_margin(blob_map, diag):  # get 1-pixel margin of blob, in 4 or 8 directions, to find adjacent blobs
-    '''
-    why not get the margin directly, something like this:
-    up_margin = np.ones_like(blob_map)
-    up_margin = np.where( np.logical_and( blob_map, ~blob_map[1:, :]) )
-    ?
-    we need consistent variable size to AND blob_map and blob_map[1:, :] (size of shifted blob_map is smaller)
-    By using only AND operation with blob_map and shifted blob_map, this is not sufficient to get the margin area, we may need several operations at once
-    '''
-    up_map = np.zeros_like(blob_map);     
-    up_map[:-1, :] = (~blob_map[1:, :] + ~blob_map[:-1, :])^~blob_map[:-1, :]
-    
-    down_map = np.zeros_like(blob_map); 
-    down_map[1:, :]= (~blob_map[:-1, :] + ~blob_map[1:, :])^~blob_map[1:, :]
-    
-    left_map = np.zeros_like(blob_map); 
-    left_map[:, :-1]= (~blob_map[:, 1:] + ~blob_map[:, :-1])^~blob_map[:, :-1]
-    
-    right_map = np.zeros_like(blob_map); 
-    right_map[:, 1:]  = (~blob_map[:, :-1] + ~blob_map[:, 1:])^~blob_map[:, 1:]
 
+    up_margin = np.zeros_like(blob_map)    
+    up_margin[:-1, :] = np.logical_and(blob_map[:-1, :], ~blob_map[1:, :])
+    
+    down_margin = np.zeros_like(blob_map)
+    down_margin[1:, :] = np.logical_and(blob_map[1:, :], ~blob_map[:-1, :])
+    
+    left_margin = np.zeros_like(blob_map); 
+    left_margin[:, :-1] = np.logical_and(blob_map[:, :-1], ~blob_map[:, 1:])
+    
+    right_margin = np.zeros_like(blob_map); 
+    right_margin[:, 1:]  = np.logical_and(blob_map[:, 1:], ~blob_map[:, :-1])
+    
+    
     # combine margins:
-    mapped_margin = up_map + down_map + left_map + right_map
+    mapped_margin = up_margin + down_margin + left_margin + right_margin
 
     if diag:  # add diagonal margins
  
-        upleft_map = np.zeros_like(blob_map);  
-        upleft_map[:-1, :-1] = (~blob_map[1:, 1:] + ~blob_map[:-1, :-1])^~blob_map[:-1, :-1]
+        upleft_margin = np.zeros_like(blob_map)
+        upleft_margin[:-1, :-1] = np.logical_and(blob_map[:-1, :-1], ~blob_map[1:, 1:])
         
-        upright_map = np.zeros_like(blob_map);    
-        upright_map [:-1, 1:] = (~blob_map[1:, :-1] + ~upright_map [:-1, 1:])^~upright_map [:-1, 1:]
-        
-        downleft_map = np.zeros_like(blob_map);   
-        downleft_map[1:, :-1] = (~blob_map[:-1, 1:] + ~downleft_map[1:, :-1])^~downleft_map[1:, :-1]
-        
-        downright_map = np.zeros_like(blob_map);  
-        downright_map[1:, 1:] = (~blob_map[:-1, :-1] + ~downright_map[1:, 1:])^~downright_map[1:, 1:]
+        upright_margin = np.zeros_like(blob_map)  
+        upright_margin [:-1, 1:] = np.logical_and(blob_map[:-1, 1:], ~blob_map[1:, :-1])
+         
+        downleft_margin = np.zeros_like(blob_map)  
+        downleft_margin[1:, :-1] = np.logical_and(blob_map[1:, :-1] , ~blob_map[:-1, 1:])
+          
+        downright_margin = np.zeros_like(blob_map)
+        downright_margin[1:, 1:] = np.logical_and(blob_map[1:, 1:] , ~blob_map[:-1, :-1])
         
         # combine:
-        mapped_margin = mapped_margin + upleft_map + upright_map + downleft_map + downright_map
+        mapped_margin = mapped_margin + upleft_margin + upright_margin + downleft_margin + downright_margin
 
     return mapped_margin
 
