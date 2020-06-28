@@ -82,6 +82,8 @@ def image_to_blobs(image):
     while stack_:  # frame ends, last-line stacks are merged into their blobs
         form_blob(stack_.popleft(), frame)
 
+    find_adjacent(frame)
+    
     return frame  # frame of blobs
 
 ''' 
@@ -376,29 +378,42 @@ def form_margin(blob_map, diag):  # get 1-pixel margin of blob, in 4 or 8 direct
     up_margin = np.ones_like(blob_map)
     up_margin = np.where( np.logical_and( blob_map, ~blob_map[1:, :]) )
     ?
+    we need consistent variable size to AND blob_map and blob_map[1:, :] (size of shifted blob_map is smaller)
+    By using only AND operation with blob_map and shifted blob_map, this is not sufficient to get the margin area, we may need several operations at once
     '''
-    up_map = np.ones_like(blob_map);     up_map  [:-1, :] = blob_map[1:, :].copy()
-    down_map = np.ones_like(blob_map);   down_map [1:, :] = blob_map[:-1, :].copy()
-    left_map = np.ones_like(blob_map);   left_map[:, :-1] = blob_map[:, 1:].copy()
-    right_map = np.ones_like(blob_map);  right_map[:, 1:] = blob_map[:, :-1].copy()
-    # combine:
-    mapped_margin = ~blob_map + ~up_map + ~down_map + ~left_map + ~right_map
-    # + blob_map for consistent output in both 1-pixel and >1-pixel unmasked areas:
-    # if unmasked area = 1 pixel, shifted pixel doesn't cover unshifted area
-    # if unmasked area > 1 pixel, shifted pixels cover some of unshifted area
+    up_map = np.zeros_like(blob_map);     
+    up_map[:-1, :] = (~blob_map[1:, :] + ~blob_map[:-1, :])^~blob_map[:-1, :]
+    
+    down_map = np.zeros_like(blob_map); 
+    down_map[1:, :]= (~blob_map[:-1, :] + ~blob_map[1:, :])^~blob_map[1:, :]
+    
+    left_map = np.zeros_like(blob_map); 
+    left_map[:, :-1]= (~blob_map[:, 1:] + ~blob_map[:, :-1])^~blob_map[:, :-1]
+    
+    right_map = np.zeros_like(blob_map); 
+    right_map[:, 1:]  = (~blob_map[:, :-1] + ~blob_map[:, 1:])^~blob_map[:, 1:]
+
+    # combine margins:
+    mapped_margin = up_map + down_map + left_map + right_map
 
     if diag:  # add diagonal margins
-
-        upleft_map = np.ones_like(blob_map);     upleft_map [:-1, :-1] = blob_map[1:, 1:].copy()
-        upright_map = np.ones_like(blob_map);    upright_map [:-1, 1:] = blob_map[1:, :-1].copy()
-        downleft_map = np.ones_like(blob_map);   downleft_map[1:, :-1] = blob_map[:-1, 1:].copy()
-        downright_map = np.ones_like(blob_map);  downright_map[1:, 1:] = blob_map[:-1, :-1].copy()
+ 
+        upleft_map = np.zeros_like(blob_map);  
+        upleft_map[:-1, :-1] = (~blob_map[1:, 1:] + ~blob_map[:-1, :-1])^~blob_map[:-1, :-1]
+        
+        upright_map = np.zeros_like(blob_map);    
+        upright_map [:-1, 1:] = (~blob_map[1:, :-1] + ~upright_map [:-1, 1:])^~upright_map [:-1, 1:]
+        
+        downleft_map = np.zeros_like(blob_map);   
+        downleft_map[1:, :-1] = (~blob_map[:-1, 1:] + ~downleft_map[1:, :-1])^~downleft_map[1:, :-1]
+        
+        downright_map = np.zeros_like(blob_map);  
+        downright_map[1:, 1:] = (~blob_map[:-1, :-1] + ~downright_map[1:, 1:])^~downright_map[1:, 1:]
+        
         # combine:
-        mapped_margin = mapped_margin + ~upleft_map + ~upright_map + ~downleft_map + ~downright_map
+        mapped_margin = mapped_margin + upleft_map + upright_map + downleft_map + downright_map
 
-    margin_map = ~(mapped_margin ^ blob_map)  # bitwise xor to get the margin only
-
-    return margin_map
+    return mapped_margin
 
 # -----------------------------------------------------------------------------
 # Utilities
