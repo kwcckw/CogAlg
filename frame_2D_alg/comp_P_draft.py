@@ -1,6 +1,8 @@
 from collections import deque
 from math import hypot
 from time import time
+import numpy as np
+
 '''
    comp_P_ is a terminal fork of intra_blob.
     
@@ -54,6 +56,43 @@ ave = 20
 div_ave = 200
 flip_ave = 1000
 ave_dX = 10
+
+def comp_P_all(blob):
+# function to get P and _P before calling comp_P    
+    
+    # initialization
+    P_ = []
+    y = []
+    
+    # loop py in each stack and get their Ps and y location
+    for stack in blob['stack_']:
+        for iter_num, Py in enumerate(stack['Py_']):
+            P_.append(Py)
+            y.append(stack['y0']+(iter_num)) 
+
+    # sort ps based on y location
+    sort_index = np.argsort(y)   
+    y = [y[i] for i in sort_index]
+    P_ = [P_[i] for i in sort_index]
+    ## questions ## -----------------
+    # there are multiple Ps with same y but separated with certain x value
+    # need to merge them into single P?
+    
+ 
+    # call comp_P
+    for i in range(len(P_)-1):
+        
+        _P = P_[i]
+        P = P_[i+1]
+        
+        # compute ortho
+        # compute Ddx
+        
+        comp_P(ortho, P, _P, DdX)
+    
+    
+
+
 
 def comp_P(ortho, P, _P, DdX):  # forms vertical derivatives of P params, and conditional ders from norm and DIV comp
 
@@ -317,10 +356,10 @@ def form_par_P(typ, param_):  # forming parameter patterns within par_:
             Ip, Mp, Dp, par_ = par_dP
             Ip += p; Mp += mp; Dp += dp; par_.append(par)
             par_dP = Ip, Mp, Dp, par_
-        else:
-            par_dP = term_par_P(1, par_dP)
             IpS, MpS, DpS, par_dP_ = par_dPS
             IpS += Ip; MpS += Mp; DpS += Dp; par_dP_.append(par_dP)
+        else:
+            par_dP = term_par_P(1, par_dP)
             par_vPS = IpS, MpS, DpS, par_dP_
             par_dP = 0, 0, 0, []
 

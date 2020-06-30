@@ -1,6 +1,7 @@
 from collections import deque, defaultdict
 from intra_comp import *
 from itertools import zip_longest
+from comp_P_draft import comp_P_all
 
 '''
     2D version of 1st-level algorithm is a combination of frame_blobs, intra_blob, and comp_P: optional raster-to-vector conversion.
@@ -69,6 +70,8 @@ def intra_blob(blob, rdn, rng, fig, fcr):  # recursive input rng+ | der+ cross-c
 
     # fig: flag input is g | p, fcr: flag comp over rng+ | der+
 
+    ffork = 1 # flag to check end of fork
+
     spliced_layers = []  # to extend root_blob sub_layers
     ext_dert__ = extend_dert(blob)
 
@@ -88,10 +91,16 @@ def intra_blob(blob, rdn, rng, fig, fcr):  # recursive input rng+ | der+ cross-c
                 if sub_blob['Dert']['M'] > aveB * rdn:  # -> comp_r:
                     blob['sub_layers'] += \
                         intra_blob(sub_blob, rdn + 1 + 1 / blob['Ls'], rng*2, fig=fig, fcr=1)
-
+                    ffork = 0 # set to 0 if there are deeper forks
             elif sub_blob['Dert']['G'] > aveB * rdn:  # -> comp_g
                 blob['sub_layers'] += \
                     intra_blob(sub_blob, rdn + 1 + 1 / blob['Ls'], rng=rng, fig=1, fcr=0)
+                ffork = 0 # set to 0 if there are deeper forks
+            
+        if ffork: # end of fork if ffork = 1
+            comp_P_all(blob) # call comp_P
+                
+                
 
         spliced_layers = [spliced_layers + sub_layers for spliced_layers, sub_layers in
                           zip_longest(spliced_layers, blob['sub_layers'], fillvalue=[])
