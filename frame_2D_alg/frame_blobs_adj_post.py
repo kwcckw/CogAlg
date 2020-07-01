@@ -242,7 +242,6 @@ def form_stack_(P_, frame, y):  # Convert or merge every P into its stack of Ps,
                                 if not stack is up_connect:
                                     stack['blob'] = blob  # blobs in other up_connects are refs to blob in first up_connect
                                     blob['stack_'].append(stack)  # buffer of merged root stacks.
-
                             up_connect['blob'] = blob
                             blob['stack_'].append(up_connect)
                         blob['open_stacks'] -= 1  # overlap with merged blob.

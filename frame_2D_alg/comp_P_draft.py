@@ -88,7 +88,7 @@ def comp_P_all(blob):
         # compute ortho
         # compute Ddx
         
-        comp_P(ortho, P, _P, DdX)
+        # comp_P(ortho, P, _P, DdX)
     
     
 
