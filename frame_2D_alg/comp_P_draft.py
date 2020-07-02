@@ -25,26 +25,25 @@ import numpy as np
    secondary cross-comp of low-deviation blobs?   P comb -> intra | inter comp eval?
    
    radial comp x co-internal blobs: 
-   ! sign comp x sum( adj_blob_) -> isolation, ?intra_comp, cross-sign merge if weak, else:
+   ! sign comp x sum( adj_blob_) -> intra_comp value, isolation value, cross-sign merge if weak, else:
    = sign comp x ind( adj_adj_blob_) -> same-sign merge | composition:
    
-   isolation = rS: relative area ? trans-projection, * G: borrow, vs raG: contrast for merge|compos?  
-   core params comp only: S distance and G contrast, global decay rate * local cancel rate? 
-   -> 
-   blob merger if internal match - isolation, rdn external match:  
-   blob compos if external match + isolation, 
+   borrow = adj_G * rS: default sum div_comp S -> relative area = distance to adjj_blob_
+   internal sum comp if mS: in thin lines?, div_comp G -> raG: local contrast,
+   isolation = G + (rS * decay) * raG? adjj blob merge | composition:
+   ->
+   blob merger if internal match (~raG) - isolation, rdn external match:  
+   blob compos if external match (~rS?) + isolation, 
    
    Aves (integer filters) and coefs (ratio filters) per parameter type trigger formation of parameter_Ps, 
    after full-blob comp_P_ sums match and miss per parameter. 
    Also coefs per sub_blob from comp_blob_: potential parts of a higher object?  
 
    orientation = (Ly / Lx) * (|Dx| / |Dy|): vert ! horiz match coef = elongation * ddirection?
-   or after comp_P: initial partial edge tracing to segment by primary orientation?
-     
+   or after comp_P: initial edge segmentation by primary axis?
    if orientation < 1: 
-       orientation = 1 / orientation; flip_cost = flip_ave
-   else: flip_cost = 0;  # vs. separate L, D max/min orientation
-
+       orientation = 1 / orientation; flip_cost = flip_ave  # no separate L, D orientation?
+   else: flip_cost = 0
    comp_P_ if (G + M) * orientation - flip_cost > Ave_comp_P
     
    rng+ should preserve resolution: rng+_dert_ is dert layers, 
@@ -99,6 +98,9 @@ def comp_P(ortho, P, _P, DdX):  # forms vertical derivatives of P params, and co
     s, x0, (G, M, Dx, Dy, L), derts_ = P  # ext: X, new: L, dif: Dx, Dy -> G, no comp of inp I in top dert?
     _s, _x0, (_G, _M, _Dx, _Dy, _L), _derts_, _dX = _P  # params per comp_branch, S x branch if min n?
 
+    # or redefine Ps by recomputed dx: different from decomposed, no vertical comp?
+    # no immediate redirection by input P d_ave_x: may not be in blob? then skip?
+
     xn = x0 + L-1;  _xn = _x0 + _L-1
     mX = min(xn, _xn) - max(x0, _x0)  # overlap: abs proximity, cumulative binary positional match | miss:
     dX = abs(x0 - _x0) + abs(xn - _xn)  # offset, or max_L - overlap: abs distance?
@@ -115,7 +117,7 @@ def comp_P(ortho, P, _P, DdX):  # forms vertical derivatives of P params, and co
         hyp = hypot(dX, 1)  # long axis increment (vertical distance), to adjust params of orthogonal slice:
         L /= hyp
         Dx = (Dx * hyp + Dy / hyp) / 2 / hyp
-        Dy = (Dy / hyp - Dx * hyp) / 2 / hyp  # est D over vert_L, Ders summed in vert / lat ratio?
+        Dy = (Dy / hyp - Dx * hyp) / 2 / hyp  # recompute? est D over vert_L, Ders summed in vert / lat ratio?
 
     dL = L - _L; mL = min(L, _L)  # L: positions / sign, dderived: magnitude-proportional value
     dM = M - _M; mM = min(M, _M)  # no Mx, My: non-core, lesser and redundant bias?

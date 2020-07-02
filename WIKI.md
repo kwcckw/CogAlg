@@ -1,25 +1,23 @@
 Welcome to the CogAlg wiki!
 
-Much of the programming was done by [Khanh Nguyen](https://github.com/khanh93vn/CogAlg), according to the principles introduced in README.
-The code is divided into three self-contained folders:
+Much of the coding was done by [Khanh Nguyen](https://github.com/khanh93vn/CogAlg) and [Kok Wei Chee](https://github.com/kwcckw/CogAlg), according to the principles introduced in README.
+We have three self-contained folders:
 
 **line_1D_alg:**
 
-- [line_POC](https://github.com/boris-kz/CogAlg/blob/master/line_1D_alg/line_POC.py) is 1st-level core algorithm for 1D input: horizontal rows of pixels within an image, to demonstrate basic principles. It works, but 1D patterns are not very predictive in our 4D space-time.
+- [line_patterns](https://github.com/boris-kz/CogAlg/blob/master/line_1D_alg/line_patterns.py) is 1st-level core algorithm for 1D input: horizontal rows of pixels within an image, to demonstrate basic principles. But 1D patterns are not terribly informative / predictive in our 4D space-time.
 
 **frame_2D_alg:** currently a work-in-progress, will process still images:
 
  1st level:
 - [frame_blobs](https://github.com/boris-kz/CogAlg/blob/master/frame_2D_alg/frame_blobs.py) defines initial blobs: contiguous areas of same-sign deviation of gradient per pixel. It's a basic cross-correlation and connectivity clustering within an image, but resulting blobs also contain comparison-derived parameters for future comparison between blobs, which I haven't seen elsewhere. This code is functional.
 
-- [intra_blob](https://github.com/boris-kz/CogAlg/tree/master/frame_2D_alg/intra_blob): conditional recursively extended search within selected blobs and then sub_blobs, which converts them into root blob and respective sub_blobs, work-in-progress:
-
-  intra_fork() and cluster_eval() recursively call each other to perform fork-specific comparison of input parameter or its angle, over extended range or higher derivation. This comparison is followed by clustering, which forms corresponding root blob + sub_blobs: contiguous areas of same-sign deviation of resulting gradient.
+- [intra_blob](https://github.com/boris-kz/CogAlg/tree/master/frame_2D_alg/intra_blob): Recursive calls to cluster_eval() cross-comparison (intra_comp) at extended range or higher derivation within selected blobs and then sub_blobs.  convert input blob into root blob and form respective sub_blobs: contiguous areas of same-sign deviation of new gradient.
    
-  - [comp_param](https://github.com/boris-kz/CogAlg/blob/master/frame_2D_alg/comp_param.py) compares input parameter, or computes and compares angle of resulting gradient, to compute corresponding input gradient or angle gradient, over defined range (also buffer kernel layers per rng+, forming micro-blobs if min rng?).
-  - [comp_param_frame](https://github.com/boris-kz/CogAlg/blob/master/frame_2D_alg/comp_param_frame.py) computes gradients of the first three layers of forks over the whole frame, for visualization only.
+  - [intra_comp](https://github.com/boris-kz/CogAlg/blob/master/frame_2D_alg/intra_comp.py) cross-compares input parameter over extended range and forms new gradient.
+  - [draw_intra_comp](https://github.com/boris-kz/CogAlg/blob/master/frame_2D_alg/draw_intra_comp.py) computes gradients of the first three layers of forks over the whole frame, for visualization only.
   
-  [comp_P_draft](https://github.com/boris-kz/CogAlg/blob/master/frame_2D_alg/comp_P_draft.py): pseudo code for additional fork that cross-compares between vertically consecutive Ps: horizontal slices of blob segments. This will be selective for highly elongated blobs: likely edge contours. It will perform a version line-tracing: 2D -> 1D dimensionality reduction, converting such blobs into vector representations. This is similar to higher levels of 1D alg (not implemented in line_POC).
+  [comp_P_draft](https://github.com/boris-kz/CogAlg/blob/master/frame_2D_alg/comp_P_draft.py): pseudo code for additional fork that cross-compares between vertically consecutive Ps: horizontal slices of blob segments. This will be selective for highly elongated blobs: likely edge contours. It will perform a version line-tracing: 2D -> 1D dimensionality reduction, converting such blobs into vector representations. This is similar to higher levels of 1D alg (not implemented in line_patterns).
   
  2nd level and a prototype for recursive meta-level 2D algorithm, to be added:
  
@@ -35,7 +33,7 @@ The code is divided into three self-contained folders:
 - [video_draft()](https://github.com/boris-kz/CogAlg/blob/master/video_3D_alg/video_draft.py) is obsolete 3D extension of pixel-level cross-correlation, as in frame_blobs. Eventually, it will extend all of 2D alg with time dimension. This version will be made fully recursive and hopefully effective in real world.
 
 
-Higher levels for each D-cycle alg will process discontinuous search among full-D patterns.
+Higher levels for each D-cycle alg will process discontinuous search among dimensionally-complete patterns.
 Complete hierarchical algorithm will have two-level code: 
 - 1st level algorithm: contiguous cross-comparison over full-D cycle, plus feedback to adjust most and least significant bits of the input. 
 - Recurrent increment in complexity, extending current-level alg to next-level alg. This increment will account for increasing internal complexity of input patterns on higher levels, unfolding them for cross-comparison and re-combining the results for evaluation and feedback.
