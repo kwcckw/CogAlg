@@ -85,10 +85,10 @@ def cluster_derts(blob, dert__, Ave, fcr, fig):  # similar to frame_to_blobs
     stack_ = deque()  # buffer of running vertical stacks of Ps
 
     for y in range(dert__.shape[0]):  # in height, first and last row are discarded;  print(f'Processing intra line {y}...')
-
-        P_ = form_P_(dert__[y, :], crit__[y, :])  # horizontal clustering, adds a row of Ps
-        P_ = scan_P_(P_, stack_, blob['dert__'])  # vertical clustering, adds up_connects per P and down_connect_cnt per stack
-        stack_ = form_stack_(P_, blob['dert__'], y)
+        if False in dert__[0,y,:].mask: # make sure there are at least 1 unmasked dert in line of derts 
+            P_ = form_P_(dert__[y, :], crit__[y, :])  # horizontal clustering, adds a row of Ps
+            P_ = scan_P_(P_, stack_, blob['dert__'])  # vertical clustering, adds up_connects per P and down_connect_cnt per stack
+            stack_ = form_stack_(P_, blob['dert__'], y)
 
     sub_blobs =[]  # from form_blob:
 
@@ -96,7 +96,7 @@ def cluster_derts(blob, dert__, Ave, fcr, fig):  # similar to frame_to_blobs
         sub_blobs.append ( form_blob(stack_.popleft(), blob['dert__']))
 
 
-    find_adjacent(sub_blobs)
+    sub_blobs = find_adjacent(sub_blobs)
 
     return sub_blobs
 
@@ -167,11 +167,17 @@ def scan_P_(P_, stack_, root_dert__):  # merge P into higher-row stack of Ps wit
             _x0 = _P['x0']       # first x in _P
             _xn = _x0 + _P['L']  # first x beyond _P
 
-            # we need to check for overlaps in 8 directions here, as in frame_blobs
-            if _x0 < xn and x0 < _xn:  # x overlap between loaded P and _P
-                if P['sign'] == stack['sign']:  # sign match
-                    stack['down_connect_cnt'] += 1
-                    up_connect_.append(stack)  # buffer P-connected higher-row stacks into P' up_connect_
+            if stack['G'] > 0:  # check for overlaps in 8 directions, else a blob may leak through its external blob
+                if _x0 - 1 < xn and x0 < _xn + 1:  # x overlap between loaded P and _P
+                    if P['sign'] == stack['sign']:  # sign match
+                        stack['down_connect_cnt'] += 1
+                        up_connect_.append(stack)  # buffer P-connected higher-row stacks into P' up_connect_
+
+            else:  # -G, check for orthogonal overlaps only: 4 directions, edge blobs are more selective
+                if _x0 < xn and x0 < _xn:  # x overlap between loaded P and _P
+                    if P['sign'] == stack['sign']:  # sign match
+                        stack['down_connect_cnt'] += 1
+                        up_connect_.append(stack)  # buffer P-connected higher-row stacks into P' up_connect_
 
             if xn < _xn:  # _P overlaps next P in P_
                 next_P_.append((P, up_connect_))  # recycle _P for the next run of scan_P_
@@ -287,16 +293,17 @@ def form_blob(stack, root_dert__):  # increment blob with terminated stack, chec
                 mask[y, x_start:x_stop] = False
 
         dert__ = (root_dert__[:,y0:yn, x0:xn]).copy()  # copy mask as dert.mask
-        dert__.mask[:] = True
-        dert__.mask[:] = mask  # overwrite default mask 0s
+        dert__.mask = True
+        dert__.mask = mask  # overwrite default mask 0s
         root_dert__[:,y0:yn, x0:xn] = dert__.copy()  # assign mask back to blob root dert__
 
         fopen = 0  # flag: blob on frame boundary
         if x0 == 0 or xn == root_dert__.shape[2] or y0 == 0 or yn == root_dert__.shape[1]:
             fopen = 1
-
+        # need to check here, where value of xn > blob_map's x size
         blob_map = np.ones((root_dert__.shape[1], root_dert__.shape[2])).astype('bool')
         blob_map[y0:yn, x0:xn] = mask
+
         margin = form_margin(blob_map, diag=blob['sign'])
 
         blob.pop('open_stacks')

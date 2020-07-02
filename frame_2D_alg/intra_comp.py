@@ -209,6 +209,16 @@ def comp_g(dert__):  # cross-comp of g in 2x2 kernels, between derts in ma.stack
     sin1__ = dy1__ / g1__;  cos1__ = dx1__ / g1__
     sin2__ = dy2__ / g2__;  cos2__ = dx2__ / g2__
     sin3__ = dy3__ / g3__;  cos3__ = dx3__ / g3__
+    
+    # combine masks
+    sin0__.mask = sin1__.mask = sin2__.mask = sin3__.mask =\
+    cos0__.mask = cos1__.mask = cos2__.mask = cos3__.mask =\
+    g0__.mask = g1__.mask = g2__.mask = g3__.mask = \
+    functools.reduce(lambda x1, x2:
+                     x1.astype('int') + x2.astype('int'),
+                     [sin0__.mask,sin1__.mask,sin2__.mask,sin3__.mask,\
+                      cos0__.mask,cos1__.mask,cos2__.mask,cos3__.mask,
+                      ]) > 1
 
     '''
     cosine of difference between diagonally opposed angles, in vector representation
@@ -232,6 +242,9 @@ def comp_g(dert__):  # cross-comp of g in 2x2 kernels, between derts in ma.stack
     g__ = g__ [:-1, :-1].copy()  # remove last row and column to align with derived params
     dy__= dy__[:-1, :-1].copy()
     dx__= dx__[:-1, :-1].copy()  # -> idy, idx to compute cos for comp rg
+    g__.mask = gg__.mask.copy() # update mask to the combined mask
+    dy__.mask = gg__.mask.copy()
+    dx__.mask = gg__.mask.copy()
 
     # no longer needed: g__.mask = dy__.mask = dx__.mask = gg__.mask?
     '''
