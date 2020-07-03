@@ -46,7 +46,8 @@ def intra_blob(blob, rdn, rng, fig, fcr):  # recursive input rng+ | der+ cross-c
     if fcr: dert__ = comp_r(ext_dert__, fig, fcr)  # -> m sub_blobs
     else:   dert__ = comp_g(ext_dert__)  # -> g sub_blobs:
 
-    if dert__.shape[1] >2 and dert__.shape[2] >2:  # min size in y and x
+    # added False in dert__.mask to make sure there are at least 1 unmasked dert, but it is still possible for certain line of dert is masked, so line 89 below is still needed
+    if dert__.shape[1] >2 and dert__.shape[2] >2 and False in dert__.mask:  # min size in y and x
 
         sub_blobs = cluster_derts(blob, dert__, ave*rdn, fcr, fig)
 
@@ -105,7 +106,8 @@ def cluster_derts(blob, dert__, Ave, fcr, fig):  # similar to frame_to_blobs
 #-------------------------------------------------------------------------------------------------------------------
 
 def form_P_(dert_, crit_):  # segment dert__ into P__, in horizontal ) vertical order
-
+    # this function is still under development to solve the dimension mismatch issue in form_blob
+    # from the investigation in mismatch value of xn with dert size, this issue may originated in form_P  
     P_ = deque()  # row of Ps
     mask_ = dert_[:,0].mask
     sign_ = crit_ > 0
@@ -115,17 +117,23 @@ def form_P_(dert_, crit_):  # segment dert__ into P__, in horizontal ) vertical 
             x0 = x  # coordinate of first unmasked dert in line
             break
     I, iDy, iDx, G, Dy, Dx, M, L = *dert_[x0], 1  # initialize P params
-    # need to find solution where all dert's are masked, the sign would be empty if all derts are masked
-    # probably the unmasked area are removed in comps operation
     _sign = sign_[x0]
     _mask = False  # mask bit per dert
 
+    # why x0+1 here?
     for x in range(x0+1, dert_.shape[0]):  # loop left to right in each row of derts
         sign = sign_[x]
         mask = mask_[x]
-        if (~_mask and mask) or sign != _sign:
-            # (P exists and input is not in blob) or sign changed, terminate and pack P:
-            P = dict(I=I, G=G, Dy=Dy, Dx=Dx, M=M, iDy=iDy, iDx=iDx, L=L, x0=x0, sign=_sign)
+        if  sign != _sign:
+            
+            if (~_mask and mask):
+                # (P exists and input is not in blob) or sign changed, terminate and pack P:
+                P = dict(I=I, G=G, Dy=Dy, Dx=Dx, M=M, iDy=iDy, iDx=iDx, L=L, x0=x, sign=_sign)
+            
+            else:
+                # (P exists and input is not in blob) or sign changed, terminate and pack P:
+                P = dict(I=I, G=G, Dy=Dy, Dx=Dx, M=M, iDy=iDy, iDx=iDx, L=L, sign=_sign)
+            
             P_.append(P)
             # initialize P params:
             I, iDy, iDx, G, Dy, Dx, M, L, x0 = 0, 0, 0, 0, 0, 0, 0, 0, x
@@ -141,11 +149,11 @@ def form_P_(dert_, crit_):  # segment dert__ into P__, in horizontal ) vertical 
             L += 1
             _sign = sign  # prior sign
         _mask = mask
-
+        
     # terminate and pack last P in a row
     P = dict(I=I, G=G, Dy=Dy, Dx=Dx, M=M, iDy=iDy, iDx=iDx, L=L, x0=x0, sign=_sign)
     P_.append(P)
-
+    
     return P_
 
 
@@ -300,10 +308,11 @@ def form_blob(stack, root_dert__):  # increment blob with terminated stack, chec
         fopen = 0  # flag: blob on frame boundary
         if x0 == 0 or xn == root_dert__.shape[2] or y0 == 0 or yn == root_dert__.shape[1]:
             fopen = 1
-        # need to check here, where value of xn > blob_map's x size
         blob_map = np.ones((root_dert__.shape[1], root_dert__.shape[2])).astype('bool')
+#        try:
         blob_map[y0:yn, x0:xn] = mask
-
+#        except:
+#            a = 1
         margin = form_margin(blob_map, diag=blob['sign'])
 
         blob.pop('open_stacks')
