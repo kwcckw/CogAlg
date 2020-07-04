@@ -46,9 +46,8 @@ def intra_blob(blob, rdn, rng, fig, fcr):  # recursive input rng+ | der+ cross-c
     if fcr: dert__ = comp_r(ext_dert__, fig, fcr)  # -> m sub_blobs
     else:   dert__ = comp_g(ext_dert__)  # -> g sub_blobs:
 
-    # added False in dert__.mask to make sure there are at least 1 unmasked dert, but it is still possible for certain line of dert is masked, so line 89 below is still needed
-    if dert__.shape[1] >2 and dert__.shape[2] >2 and False in dert__.mask:  # min size in y and x
-
+    if dert__.shape[1] >2 and dert__.shape[2] >2 and False in dert__.mask:
+        # min size in y and x, at least 1 unmasked dert dert__
         sub_blobs = cluster_derts(blob, dert__, ave*rdn, fcr, fig)
 
         blob.update({'fcr': fcr, 'fig': fig, 'rdn': rdn, 'rng': rng,  # fork params
@@ -86,7 +85,8 @@ def cluster_derts(blob, dert__, Ave, fcr, fig):  # similar to frame_to_blobs
     stack_ = deque()  # buffer of running vertical stacks of Ps
 
     for y in range(dert__.shape[0]):  # in height, first and last row are discarded;  print(f'Processing intra line {y}...')
-        if False in dert__[0,y,:].mask: # make sure there are at least 1 unmasked dert in line of derts 
+        if False in dert__[0,y,:].mask:  # there is at least one dert in line
+
             P_ = form_P_(dert__[y, :], crit__[y, :])  # horizontal clustering, adds a row of Ps
             P_ = scan_P_(P_, stack_, blob['dert__'])  # vertical clustering, adds up_connects per P and down_connect_cnt per stack
             stack_ = form_stack_(P_, blob['dert__'], y)
@@ -96,18 +96,15 @@ def cluster_derts(blob, dert__, Ave, fcr, fig):  # similar to frame_to_blobs
     while stack_:  # frame ends, last-line stacks are merged into their blobs:
         sub_blobs.append ( form_blob(stack_.popleft(), blob['dert__']))
 
-
     sub_blobs = find_adjacent(sub_blobs)
 
     return sub_blobs
-
 
 # clustering functions:
 #-------------------------------------------------------------------------------------------------------------------
 
 def form_P_(dert_, crit_):  # segment dert__ into P__, in horizontal ) vertical order
-    # this function is still under development to solve the dimension mismatch issue in form_blob
-    # from the investigation in mismatch value of xn with dert size, this issue may originated in form_P  
+
     P_ = deque()  # row of Ps
     mask_ = dert_[:,0].mask
     sign_ = crit_ > 0
@@ -120,20 +117,17 @@ def form_P_(dert_, crit_):  # segment dert__ into P__, in horizontal ) vertical 
     _sign = sign_[x0]
     _mask = False  # mask bit per dert
 
-    # why x0+1 here?
     for x in range(x0+1, dert_.shape[0]):  # loop left to right in each row of derts
-        sign = sign_[x]
+        term = 0  # P termination flag
         mask = mask_[x]
-        if  sign != _sign:
-            
-            if (~_mask and mask):
-                # (P exists and input is not in blob) or sign changed, terminate and pack P:
-                P = dict(I=I, G=G, Dy=Dy, Dx=Dx, M=M, iDy=iDy, iDx=iDx, L=L, x0=x, sign=_sign)
-            
-            else:
-                # (P exists and input is not in blob) or sign changed, terminate and pack P:
-                P = dict(I=I, G=G, Dy=Dy, Dx=Dx, M=M, iDy=iDy, iDx=iDx, L=L, sign=_sign)
-            
+        if ~mask:  # input is in blob
+            sign = sign_[x]
+            if ~_mask and sign != _sign:  # P exists and sign changed
+                term = 1
+        else: term = 1  # input is not in blob
+        if term:
+            # terminate and pack P:
+            P = dict(I=I, G=G, Dy=Dy, Dx=Dx, M=M, iDy=iDy, iDx=iDx, L=L, x0=x0, sign=_sign)
             P_.append(P)
             # initialize P params:
             I, iDy, iDx, G, Dy, Dx, M, L, x0 = 0, 0, 0, 0, 0, 0, 0, 0, x
@@ -149,11 +143,11 @@ def form_P_(dert_, crit_):  # segment dert__ into P__, in horizontal ) vertical 
             L += 1
             _sign = sign  # prior sign
         _mask = mask
-        
+
     # terminate and pack last P in a row
     P = dict(I=I, G=G, Dy=Dy, Dx=Dx, M=M, iDy=iDy, iDx=iDx, L=L, x0=x0, sign=_sign)
     P_.append(P)
-    
+
     return P_
 
 
@@ -301,18 +295,19 @@ def form_blob(stack, root_dert__):  # increment blob with terminated stack, chec
                 mask[y, x_start:x_stop] = False
 
         dert__ = (root_dert__[:,y0:yn, x0:xn]).copy()  # copy mask as dert.mask
-        dert__.mask = True
-        dert__.mask = mask  # overwrite default mask 0s
+        dert__.mask[:] = True
+        dert__.mask[:] = mask  # overwrite default mask 0s
         root_dert__[:,y0:yn, x0:xn] = dert__.copy()  # assign mask back to blob root dert__
 
         fopen = 0  # flag: blob on frame boundary
         if x0 == 0 or xn == root_dert__.shape[2] or y0 == 0 or yn == root_dert__.shape[1]:
             fopen = 1
+
         blob_map = np.ones((root_dert__.shape[1], root_dert__.shape[2])).astype('bool')
-#        try:
+        #  try:
         blob_map[y0:yn, x0:xn] = mask
-#        except:
-#            a = 1
+        #  except:
+        #  a = 1
         margin = form_margin(blob_map, diag=blob['sign'])
 
         blob.pop('open_stacks')
@@ -346,7 +341,7 @@ def find_adjacent(sub_blobs):  # adjacents are blobs connected to _blob
             if 'adj_blob_' in blob:
                 adj_blob_ = blob['adj_blob_']
             else:
-                adj_blob_ = [[], []]  # [adj_blobs], [positions]: 0 = internal to current blob, 1 = external, 2 = open
+                adj_blob_ = [[], []]  # [adj_blobs], [positions: 0 = internal to current blob, 1 = external, 2 = open]
             y0, yn, x0, xn = blob['box']
 
             if y0 <= _yn and blob['sign'] != _blob['sign']:  # adjacent blobs have opposite sign and vertical overlap with _blob + margin
@@ -430,10 +425,9 @@ def extend_dert(blob):  # extend dert borders (+1 dert to boundaries)
 
     y0, yn, x0, xn = blob['box']  # extend dert box:
     _, rY, rX = blob['root_dert__'].shape  # higher dert size
-    cP, cY, cX = blob['dert__'].shape  # current dert size
+    cP, cY, cX = blob['dert__'].shape  # current dert params and size
 
     y0e = y0 - 1; yne = yn + 1; x0e = x0 - 1; xne = xn + 1  # e is for extended
-
     # prevent boundary <0 or >image size:
     if y0e < 0:  y0e = 0; ystart = 0
     else:        ystart = 1

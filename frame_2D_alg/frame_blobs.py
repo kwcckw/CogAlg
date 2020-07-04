@@ -1,6 +1,6 @@
 from time import time
 # from comp_pixel import comp_pixel
-from utils import * 
+from utils import *
 from collections import deque
 
 '''
@@ -79,8 +79,7 @@ def image_to_blobs(image):
 
     while stack_:  # frame ends, last-line stacks are merged into their blobs
         form_blob(stack_.popleft(), frame)
-        
-    find_adjacent(frame)
+    find_adjacent(frame)  # add adj_blob_ to each blob
 
     return frame  # frame of blobs
 
@@ -445,7 +444,7 @@ if __name__ == '__main__':
     start_time = time()
     frame = image_to_blobs(image)
 
-    intra = 1
+    intra = 0
     if intra:  # Tentative call to intra_blob, omit for testing frame_blobs:
 
         from intra_blob import *
