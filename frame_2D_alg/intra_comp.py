@@ -38,15 +38,18 @@ def comp_r(dert__, fig, root_fcr):
     '''
     sparse aligned i__center and i__rim arrays:
     '''
-    i__center =      i__[1:-1:2, 1:-1:2].copy()
-    i__topleft =     i__[:-2:2, :-2:2].copy()
-    i__top =         i__[:-2:2, 1:-1:2].copy()
-    i__topright =    i__[:-2:2, 2::2].copy()
-    i__right =       i__[1:-1:2, 2::2].copy()
-    i__bottomright = i__[2::2, 2::2].copy()
-    i__bottom =      i__[2::2, 1:-1:2].copy()
-    i__bottomleft =  i__[2::2, :-2:2].copy()
-    i__left =        i__[1:-1:2, :-2:2].copy()
+    
+    nskip = 2
+    
+    i__center =      i__[1:-1:nskip, 1:-1:nskip].copy()
+    i__topleft =     i__[:-2:nskip, :-2:nskip].copy()
+    i__top =         i__[:-2:nskip, 1:-1:nskip].copy()
+    i__topright =    i__[:-2:nskip, 2::nskip].copy()
+    i__right =       i__[1:-1:nskip, 2::nskip].copy()
+    i__bottomright = i__[2::nskip, 2::nskip].copy()
+    i__bottom =      i__[2::nskip, 1:-1:nskip].copy()
+    i__bottomleft =  i__[2::nskip, :-2:nskip].copy()
+    i__left =        i__[1:-1:nskip, :-2:nskip].copy()
     ''' 
     remove mask from kernels with only one masked dert 
     '''
@@ -62,9 +65,9 @@ def comp_r(dert__, fig, root_fcr):
     if root_fcr:  # root fork is comp_r, accumulate derivatives:
 
         dy__, dx__, m__ = dert__[[4, 5, 6]]
-        dy__ = dy__[1:-1:2, 1:-1:2].copy()  # sparse to align with i__center
-        dx__ = dx__[1:-1:2, 1:-1:2].copy()
-        m__  =  m__[1:-1:2, 1:-1:2].copy()
+        dy__ = dy__[1:-1:nskip, 1:-1:nskip].copy()  # sparse to align with i__center
+        dx__ = dx__[1:-1:nskip, 1:-1:nskip].copy()
+        m__  =  m__[1:-1:nskip, 1:-1:nskip].copy()
         dy__.mask = dx__.mask = m__.mask = mask_i
 
     else:   # root fork is comp_g or comp_pixel, initialize sparse derivatives:
@@ -110,15 +113,15 @@ def comp_r(dert__, fig, root_fcr):
         '''
         sparse aligned a__center and a__rim arrays:
         '''
-        a__center = a__[:, 1:-1:2, 1:-1:2].copy()
-        a__topleft = a__[:, :-2:2, :-2:2].copy()
-        a__top = a__[:, :-2:2, 1:-1: 2].copy()
-        a__topright = a__[:, :-2:2, 2::2].copy()
-        a__right = a__[:, 1:-1:2, 2::2].copy()
-        a__bottomright = a__[:, 2::2, 2::2].copy()
-        a__bottom = a__[:, 2::2, 1:-1:2].copy()
-        a__bottomleft = a__[:, 2::2, :-2:2].copy()
-        a__left = a__[:, 1:-1:2, :-2:2].copy()
+        a__center = a__[:, 1:-1:nskip, 1:-1:nskip].copy()
+        a__topleft = a__[:, :-2:nskip, :-2:nskip].copy()
+        a__top = a__[:, :-2:nskip, 1:-1:nskip].copy()
+        a__topright = a__[:, :-2:nskip, 2::nskip].copy()
+        a__right = a__[:, 1:-1:nskip, 2::nskip].copy()
+        a__bottomright = a__[:, 2::nskip, 2::nskip].copy()
+        a__bottom = a__[:, 2::nskip, 1:-1:nskip].copy()
+        a__bottomleft = a__[:, 2::nskip, :-2:nskip].copy()
+        a__left = a__[:, 1:-1:nskip, :-2:nskip].copy()
 
         ''' 
         mask kernels with more than one masked dert 
@@ -177,8 +180,8 @@ def comp_r(dert__, fig, root_fcr):
             '''
         g__ = np.hypot(dy__, dx__)
 
-    idy__ = idy__[1:-1:2, 1:-1:2].copy()  # i__center.shape, add .copy()?
-    idx__ = idx__[1:-1:2, 1:-1:2].copy()  # i__center.shape
+    idy__ = idy__[1:-1:nskip, 1:-1:nskip].copy()  # i__center.shape, add .copy()?
+    idx__ = idx__[1:-1:nskip, 1:-1:nskip].copy()  # i__center.shape
     idy__.mask = idx__.mask = i__center.mask  # align shifted masks
     '''
     next comp_r will use full dert       
