@@ -43,8 +43,10 @@ def intra_blob(blob, rdn, rng, fig, fcr):  # recursive input rng+ | der+ cross-c
     spliced_layers = []  # to extend root_blob sub_layers
     ext_dert__ = extend_dert(blob)
 
-    if fcr: dert__ = comp_r(ext_dert__, fig, fcr)  # -> m sub_blobs
-    else:   dert__ = comp_g(ext_dert__)  # -> g sub_blobs:
+    if fcr: 
+        dert__ = comp_r(ext_dert__, fig, fcr)  # -> m sub_blobs
+    else:   
+        dert__ = comp_g(ext_dert__)  # -> g sub_blobs:
 
     if dert__.shape[1] >2 and dert__.shape[2] >2 and False in dert__.mask:
         # min size in y and x, at least 1 unmasked dert dert__
@@ -81,8 +83,8 @@ def cluster_derts(dert__, Ave, fcr, fig):  # similar to frame_to_blobs
     else:    # comp_g output
         crit__ = dert__[4] - Ave  # comp_g output eval by m, or clustering is always by m?
 
-    # temporary fix, need to be optimized later
-    blob_dert__ = dert__.copy() # blob's derts after the comps operation
+
+    root_dert__ = dert__.copy() # derts after the comps operation, which is the root_dert__
     dert__ = ma.transpose(dert__, axes=(1, 2, 0))  # transpose dert__ into shape [y,x,params]
     
     stack_ = deque()  # buffer of running vertical stacks of Ps
@@ -91,13 +93,13 @@ def cluster_derts(dert__, Ave, fcr, fig):  # similar to frame_to_blobs
         if False in dert__[0,y,:].mask:  # there is at least one dert in line
 
             P_ = form_P_(dert__[y, :], crit__[y, :])  # horizontal clustering, adds a row of Ps
-            P_ = scan_P_(P_, stack_,blob_dert__)  # vertical clustering, adds up_connects per P and down_connect_cnt per stack
-            stack_ = form_stack_(P_, blob_dert__, y)
+            P_ = scan_P_(P_, stack_,root_dert__)  # vertical clustering, adds up_connects per P and down_connect_cnt per stack
+            stack_ = form_stack_(P_, root_dert__, y)
 
     sub_blobs =[]  # from form_blob:
 
     while stack_:  # frame ends, last-line stacks are merged into their blobs:
-        sub_blobs.append ( form_blob(stack_.popleft(),blob_dert__))
+        sub_blobs.append ( form_blob(stack_.popleft(),root_dert__))
 
     sub_blobs = find_adjacent(sub_blobs)
 
@@ -124,24 +126,18 @@ def form_P_(dert_, crit_):  # segment dert__ into P__, in horizontal ) vertical 
     for x in range(x0+1, dert_.shape[0]):  # loop left to right in each row of derts
 
         mask = mask_[x]
-        
-         # current dert is not masked
         if ~mask:  # current dert is not masked
-            
             sign = sign_[x]
             
             if ~_mask and sign != _sign:  # prior dert is not masked and sign changed
-                
                 # pack P
                 P = dict(I=I, G=G, Dy=Dy, Dx=Dx, M=M, iDy=iDy, iDx=iDx, L=L,x0=x0, sign=_sign)
                 P_.append(P)
                 # initialize P params:
                 I, iDy, iDx, G, Dy, Dx, M, L, x0 = 0, 0, 0, 0, 0, 0, 0, 0, x
-                
-                    
+                 
          # current dert is masked     
         elif ~_mask: # prior dert is not masked
-            
             # pack P
             P = dict(I=I, G=G, Dy=Dy, Dx=Dx, M=M, iDy=iDy, iDx=iDx, L=L,x0=x0, sign=_sign)
             P_.append(P)
@@ -150,7 +146,6 @@ def form_P_(dert_, crit_):  # segment dert__ into P__, in horizontal ) vertical 
       
         
         if ~mask:  # accumulate P params:
-            
             I += dert_[x][0]
             iDy += dert_[x][1]
             iDx += dert_[x][2]
@@ -164,8 +159,7 @@ def form_P_(dert_, crit_):  # segment dert__ into P__, in horizontal ) vertical 
         _mask = mask
     
     
-    if ~_mask: # pack last P if prior dert is unmasked
-        # terminate and pack last P in a row
+    if ~_mask: # terminate and pack last P in a row if prior dert is unmasked
         P = dict(I=I, G=G, Dy=Dy, Dx=Dx, M=M, iDy=iDy, iDx=iDx, L=L, x0=x0, sign=_sign)
         P_.append(P)
 
@@ -326,8 +320,6 @@ def form_blob(stack, root_dert__):  # increment blob with terminated stack, chec
 
         blob_map = np.ones((root_dert__.shape[1], root_dert__.shape[2])).astype('bool')
         blob_map[y0:yn, x0:xn] = mask
-
-            
         margin = form_margin(blob_map, diag=blob['sign'])
 
         blob.pop('open_stacks')
@@ -461,12 +453,13 @@ def extend_dert(blob):  # extend dert borders (+1 dert to boundaries)
     ini_dert = blob['root_dert__'][:, y0e:yne, x0e:xne]  # extended dert where boundary is masked
 
     ext_dert__ = ma.array(np.zeros((cP, ini_dert.shape[1], ini_dert.shape[2])))
+    ext_dert__.mask = True
     ext_dert__[0, ystart:yend, xstart:xend] = blob['dert__'][0].copy() # update i
     ext_dert__[3, ystart:yend, xstart:xend] = blob['dert__'][1].copy() # update g
     ext_dert__[4, ystart:yend, xstart:xend] = blob['dert__'][2].copy() # update dy
     ext_dert__[5, ystart:yend, xstart:xend] = blob['dert__'][3].copy() # update dx
-    ext_dert__.mask = blob['dert__'].mask   # set all masks to blob dert mask
-
+    ext_dert__.mask = ext_dert__[0].mask # set all masks to blob dert mask
+    
     return ext_dert__
 
 

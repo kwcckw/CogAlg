@@ -419,12 +419,15 @@ def update_dert(blob):  # Update blob dert with new params
     new_dert__.mask = blob['dert__'][0].mask
 
     new_dert__[0] = blob['dert__'][0]  # i
-    new_dert__[1] = 0  # idy
-    new_dert__[2] = 0  # idx
+    # we cannot assign to 0 here because this will remove the mask. 
+    # Either we don't put the line below, or reassign the mask:
+    # new_dert__[1] .mask = blob['dert__'][0].mask
+#    new_dert__[1] = 0  # idy 
+#    new_dert__[2] = 0  # idx
     new_dert__[3] = blob['dert__'][1]  # g
     new_dert__[4] = blob['dert__'][2]  # dy
     new_dert__[5] = blob['dert__'][3]  # dx
-    new_dert__[6] = 0  # m
+#    new_dert__[6] = 0  # m
 
     blob['dert__'] = new_dert__.copy()
 
