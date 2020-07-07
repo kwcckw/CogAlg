@@ -89,10 +89,11 @@ def cluster_derts(dert__, Ave, fcr, fig):  # similar to frame_to_blobs
     
     stack_ = deque()  # buffer of running vertical stacks of Ps
 
-    for y in range(dert__.shape[0]):  # in height, first and last row are discarded;  print(f'Processing intra line {y}...')
-        if False in dert__[0,y,:].mask:  # there is at least one dert in line
 
-            P_ = form_P_(dert__[y, :], crit__[y, :])  # horizontal clustering, adds a row of Ps
+    for y in range(dert__.shape[0]):  # in height, first and last row are discarded;  print(f'Processing intra line {y}...')
+        if False in dert__[y,:,:].mask:  # there is at least one dert in line
+
+            P_ = form_P_(dert__[y,:,:], crit__[y, :])  # horizontal clustering, adds a row of Ps
             P_ = scan_P_(P_, stack_,root_dert__)  # vertical clustering, adds up_connects per P and down_connect_cnt per stack
             stack_ = form_stack_(P_, root_dert__, y)
 
@@ -109,7 +110,7 @@ def cluster_derts(dert__, Ave, fcr, fig):  # similar to frame_to_blobs
 #-------------------------------------------------------------------------------------------------------------------
 
 def form_P_(dert_, crit_):  # segment dert__ into P__, in horizontal ) vertical order
-
+        
     P_ = deque()  # row of Ps
     mask_ = dert_[:,0].mask
     sign_ = crit_ > 0
@@ -121,7 +122,7 @@ def form_P_(dert_, crit_):  # segment dert__ into P__, in horizontal ) vertical 
         
     I, iDy, iDx, G, Dy, Dx, M, L = *dert_[x0], 1  # initialize P params
     _sign = sign_[x0]
-    _mask = True  # mask bit per dert
+    _mask = False  # mask bit per dert
 
     for x in range(x0+1, dert_.shape[0]):  # loop left to right in each row of derts
 
@@ -135,14 +136,17 @@ def form_P_(dert_, crit_):  # segment dert__ into P__, in horizontal ) vertical 
                 P_.append(P)
                 # initialize P params:
                 I, iDy, iDx, G, Dy, Dx, M, L, x0 = 0, 0, 0, 0, 0, 0, 0, 0, x
-                 
+            
+            elif _mask: # prior dert is masked, current dert is not masked
+                x0 = x # update x0 to current unmasked x
+                
          # current dert is masked     
         elif ~_mask: # prior dert is not masked
             # pack P
             P = dict(I=I, G=G, Dy=Dy, Dx=Dx, M=M, iDy=iDy, iDx=iDx, L=L,x0=x0, sign=_sign)
             P_.append(P)
             # initialize P params:
-            I, iDy, iDx, G, Dy, Dx, M, L, x0 = 0, 0, 0, 0, 0, 0, 0, 0, x+1
+            I, iDy, iDx, G, Dy, Dx, M, L = 0, 0, 0, 0, 0, 0, 0, 0
       
         
         if ~mask:  # accumulate P params:

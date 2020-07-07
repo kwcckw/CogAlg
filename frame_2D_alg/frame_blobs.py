@@ -293,7 +293,7 @@ def form_blob(stack, frame):  # increment blob with terminated stack, check for 
         blob.update(root_dert__=frame['dert__'],
                     box=(y0, yn, x0, xn),
                     dert__=dert__,
-                    adj_blob_=[[], []],
+                    adj_blob_ = [[], []],
                     fopen=fopen,
                     margin=[blob_map, margin]
                     )
@@ -419,15 +419,12 @@ def update_dert(blob):  # Update blob dert with new params
     new_dert__.mask = blob['dert__'][0].mask
 
     new_dert__[0] = blob['dert__'][0]  # i
-    # we cannot assign to 0 here because this will remove the mask. 
-    # Either we don't put the line below, or reassign the mask:
-    # new_dert__[1] .mask = blob['dert__'][0].mask
-#    new_dert__[1] = 0  # idy 
-#    new_dert__[2] = 0  # idx
+  # new_dert__[1] = idy 
+  # new_dert__[2] = idx
     new_dert__[3] = blob['dert__'][1]  # g
     new_dert__[4] = blob['dert__'][2]  # dy
     new_dert__[5] = blob['dert__'][3]  # dx
-#    new_dert__[6] = 0  # m
+  # new_dert__[6] = m
 
     blob['dert__'] = new_dert__.copy()
 
@@ -440,7 +437,7 @@ if __name__ == '__main__':
     import argparse
 
     argument_parser = argparse.ArgumentParser()
-    argument_parser.add_argument('-i', '--image', help='path to image file', default='./images//raccoon_eye.jpeg')
+    argument_parser.add_argument('-i', '--image', help='path to image file', default='./images//raccoon_head.jpg')
     arguments = vars(argument_parser.parse_args())
     image = imread(arguments['image'])
 
