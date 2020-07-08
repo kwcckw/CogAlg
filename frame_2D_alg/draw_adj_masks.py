@@ -1,5 +1,5 @@
 from utils import *
-from frame_blobs_adj_pri import *
+from frame_blobs import *
 import argparse
 
 # Main #
@@ -15,13 +15,14 @@ frame = image_to_blobs(image)
 
 
 for i, blob in enumerate(frame['blob__']):
-
+    print(i)
+    
     # initialize image with 3 channels (colour image)
     img_blob_ = np.zeros((frame['dert__'].shape[1], frame['dert__'].shape[2], 3))
     img_blob_box = img_blob_.copy()
 
     # check if there are adjacent blobs and there are unmasked values
-    if blob['adj_blob_'] and False in blob['dert__'][0].mask:
+    if blob['adj_blobs'] and False in blob['dert__'][0].mask:
         dert__mask = ~blob['dert__'][0].mask  # get inverted mask value (we need plot mask = false)
         dert__mask = dert__mask * 255  # set intensity of colour
 
@@ -39,14 +40,14 @@ for i, blob in enumerate(frame['blob__']):
                       (blob['box'][3], blob['box'][1]),
                       color=(255, 255, 255), thickness=1)
 
-        for j, adj_blob in enumerate(blob['adj_blob_'][0]):
+        for j, adj_blob in enumerate(blob['adj_blobs'][0]):
 
             # check if there are unmasked values
             if False in adj_blob['dert__'][0].mask:
                 adj_dert__mask = ~adj_blob['dert__'][0].mask  # get inverted mask value (we need plot mask = false)
                 adj_dert__mask = adj_dert__mask * 255  # set intensity of colour
 
-                if blob['adj_blob_'][1][j] == 1:  # external blob, colour = green
+                if blob['adj_blobs'][1][j] == 1:  # external blob, colour = green
                     # draw blobs into image
                     img_blob_[adj_blob['box'][0]:adj_blob['box'][1], adj_blob['box'][2]:adj_blob['box'][3], 1] += adj_dert__mask
                     img_blob_box[adj_blob['box'][0]:adj_blob['box'][1], adj_blob['box'][2]:adj_blob['box'][3], 1] += adj_dert__mask
@@ -56,7 +57,7 @@ for i, blob in enumerate(frame['blob__']):
                                   (adj_blob['box'][3], adj_blob['box'][1]),
                                   color=(0, 155, 0), thickness=1)
 
-                elif blob['adj_blob_'][1][j] == 0:  # internal blob, colour = red
+                elif blob['adj_blobs'][1][j] == 0:  # internal blob, colour = red
                     # draw blobs into image
                     img_blob_[adj_blob['box'][0]:adj_blob['box'][1], adj_blob['box'][2]:adj_blob['box'][3], 2] += adj_dert__mask
                     img_blob_box[adj_blob['box'][0]:adj_blob['box'][1], adj_blob['box'][2]:adj_blob['box'][3], 2] += adj_dert__mask

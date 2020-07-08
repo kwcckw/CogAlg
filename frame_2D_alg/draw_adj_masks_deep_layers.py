@@ -13,39 +13,27 @@ frame = image_to_blobs(image)
 
 print('processing intra blobs..')
 
-intra = 1
-if intra:  # Tentative call to intra_blob, omit for testing frame_blobs:
+from intra_blob import *
 
-    from intra_blob import *
+deep_frame = frame, frame
+deep_blob_i_ = [] # initialization to get index of blob with deep layer
+deep_layers = [[]]*len(frame['blob__']) # initialization, so that later if deep_layer is empty, we would know the blob doesn't having any deep layers
 
-    deep_frame = frame, frame
-    bcount = 0
-    deep_blob_i_ = []
-    deep_layers = []
-    layer_count = 0
+for i, blob in enumerate(frame['blob__']):
+    
+    # print('Processing blob number ' + str(bcount))
 
-    for blob in frame['blob__']:
-        bcount += 1
-        # print('Processing blob number ' + str(bcount))
-        # blob.update({'fcr': 0, 'fig': 0, 'rdn': 0, 'rng': 1, 'ls': 0, 'sub_layers': []})
+    if blob['sign']:
+        if blob['Dert']['G'] > aveB and blob['Dert']['S'] > 20 and blob['dert__'].shape[1] > 3 and blob['dert__'].shape[2] > 3:
+            blob = update_dert(blob) # update blob with new params such as idy,idx and m
+            deep_layers[i] = intra_blob(blob, rdn=1, rng=.0, fig=0, fcr=0)  # +G blob' dert__' comp_g
 
-        if blob['sign']:
-            if blob['Dert']['G'] > aveB and blob['Dert']['S'] > 20 and blob['dert__'].shape[1] > 3 and blob['dert__'].shape[2] > 3:
-                blob = update_dert(blob)
+    elif -blob['Dert']['G'] > aveB and blob['Dert']['S'] > 6 and blob['dert__'].shape[1] > 3 and blob['dert__'].shape[2] > 3:
+        blob = update_dert(blob) # update blob with new params such as idy,idx and m
+        deep_layers[i] = intra_blob(blob, rdn=1, rng=1, fig=0, fcr=1)  # -G blob' dert__' comp_r in 3x3 kernels
 
-                deep_layers.append(intra_blob(blob, rdn=1, rng=.0, fig=0, fcr=0))  # +G blob' dert__' comp_g
-                layer_count += 1
-
-        elif -blob['Dert']['G'] > aveB and blob['Dert']['S'] > 6 and blob['dert__'].shape[1] > 3 and blob['dert__'].shape[2] > 3:
-
-            blob = update_dert(blob)
-
-            deep_layers.append(intra_blob(blob, rdn=1, rng=1, fig=0, fcr=1))  # -G blob' dert__' comp_r in 3x3 kernels
-            layer_count += 1
-
-        if len(deep_layers) > 0:
-            if len(deep_layers[layer_count - 1]) > 2:
-                deep_blob_i_.append(bcount)  # indices of blobs with deep layers
+    if deep_layers[i]: # if there are deeper layers
+        deep_blob_i_.append(i)  # indices of blobs with deep layers
 
 # Draw blobs --------------------------------------------------------------
 
@@ -53,7 +41,7 @@ print('drawing blobs..')
 
 for root_blob_count, blob__ in enumerate(deep_layers):
    
-    if len(blob__)>0:
+    if blob__: # check if there are deep layers
     
         for layer_count, blob_ in enumerate(blob__):
     
@@ -64,7 +52,7 @@ for root_blob_count, blob__ in enumerate(deep_layers):
                 img_blob_box = img_blob_.copy()
             
                 # check if there are adjacent blobs and there are unmasked values
-                if blob['adj_blob_'] and False in blob['dert__'][0].mask:
+                if blob['adj_blobs'] and False in blob['dert__'][0].mask:
                     dert__mask = ~blob['dert__'][0].mask  # get inverted mask value (we need plot mask = false)
                     dert__mask = dert__mask * 255  # set intensity of colour
             
@@ -82,14 +70,14 @@ for root_blob_count, blob__ in enumerate(deep_layers):
                                   (blob['box'][3], blob['box'][1]),
                                   color=(255, 255, 255), thickness=1)
             
-                    for j, adj_blob in enumerate(blob['adj_blob_'][0]):
+                    for j, adj_blob in enumerate(blob['adj_blobs'][0]):
             
                         # check if there are unmasked values
                         if False in adj_blob['dert__'][0].mask:
                             adj_dert__mask = ~adj_blob['dert__'][0].mask  # get inverted mask value (we need plot mask = false)
                             adj_dert__mask = adj_dert__mask * 255  # set intensity of colour
             
-                            if blob['adj_blob_'][1][j] == 1:  # external blob, colour = green
+                            if blob['adj_blobs'][1][j] == 1:  # external blob, colour = green
                                 # draw blobs into image
                                 img_blob_[adj_blob['box'][0]:adj_blob['box'][1], adj_blob['box'][2]:adj_blob['box'][3], 1] += adj_dert__mask
                                 img_blob_box[adj_blob['box'][0]:adj_blob['box'][1], adj_blob['box'][2]:adj_blob['box'][3], 1] += adj_dert__mask
@@ -99,7 +87,7 @@ for root_blob_count, blob__ in enumerate(deep_layers):
                                               (adj_blob['box'][3], adj_blob['box'][1]),
                                               color=(0, 155, 0), thickness=1)
             
-                            elif blob['adj_blob_'][1][j] == 0:  # internal blob, colour = red
+                            elif blob['adj_blobs'][1][j] == 0:  # internal blob, colour = red
                                 # draw blobs into image
                                 img_blob_[adj_blob['box'][0]:adj_blob['box'][1], adj_blob['box'][2]:adj_blob['box'][3], 2] += adj_dert__mask
                                 img_blob_box[adj_blob['box'][0]:adj_blob['box'][1], adj_blob['box'][2]:adj_blob['box'][3], 2] += adj_dert__mask
