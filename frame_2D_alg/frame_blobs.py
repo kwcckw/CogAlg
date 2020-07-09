@@ -283,19 +283,30 @@ def form_blob(stack, frame):  # increment blob with terminated stack, check for 
         fopen = 0  # flag: blob on frame boundary
         if x0 == 0 or xn == frame['dert__'].shape[2] or y0 == 0 or yn == frame['dert__'].shape[1]:
             fopen = 1
-
+ 
         blob_map = np.ones((frame['dert__'].shape[1], frame['dert__'].shape[2])).astype('bool')
         blob_map[y0:yn, x0:xn] = mask
+        
+        # unmasked area is false
+        blob_map_y,blob_map_x = np.where(blob_map==False)
+        # get x and y coordinates of unmasked area
+        blob_map_yx = [ [y,x] for y,x in zip(blob_map_y,blob_map_x)]
+        
         margin = form_margin(blob_map, diag=blob['sign'])
+        
+        # margin is true
+        margin_y,margin_x = np.where(margin==True)
+        # get x and y coordinates of margin
+        margin_yx = [[y,x] for y,x in zip(margin_y,margin_x)]
 
         blob.pop('open_stacks')
         blob.update(root_dert__=frame['dert__'],
                     box=(y0, yn, x0, xn),
                     dert__=dert__,
-                    adj_blobs = [[], [], [0], [0]],
+                    adj_blobs = [[], [], 0, 0],
                     fopen=fopen,
-                    margin=[blob_map, margin]
-                    )
+                    margin=[blob_map_yx, margin_yx])
+        
         frame.update(I=frame['I'] + blob['Dert']['I'],
                      G=frame['G'] + blob['Dert']['G'],
                      Dy=frame['Dy'] + blob['Dert']['Dy'],
@@ -319,8 +330,10 @@ def find_adjacent(frame):  # scan_blob__? draft, adjacents are blobs directly ne
             _adj_blobs = [[], [], 0, 0]  # [adj_blobs], [positions]: 0 = internal to current blob, 1 = external, 2 = open
 
         i = 0  # inner loop counter
-        while i <= len(frame['blob__']) - 1:  # vertical overlap between _blob and blob + margin
-
+        yn = frame['dert__'].shape[1] # initialize with image y size
+        # added _yn<=yn so that the loop will not check through all blobs , it will break when _blob and blob doesn't overlap in y
+        while i <= len(frame['blob__']) - 1 and _yn<=yn:  # vertical overlap between _blob and blob + margin
+            
             blob = frame['blob__'][i]  # inner loop's blob
             if 'adj_blobs' in blob:
                 adj_blobs = blob['adj_blobs']
@@ -331,16 +344,16 @@ def find_adjacent(frame):  # scan_blob__? draft, adjacents are blobs directly ne
             if y0 <= _yn and blob['sign'] != _blob['sign']:  # adjacent blobs have opposite sign and vertical overlap with _blob + margin
                 _blob_map = _blob['margin'][0]
                 margin_map = blob['margin'][1]
-                margin_AND = np.logical_and(margin_map, ~_blob_map)
-                if margin_AND.any():  # at least one blob's margin element is in _blob: blob is adjacent
+                check_overlap = any(margin in _blob_map  for margin in margin_map) # check if any of the blob's margin is in _blob's derts             
+                if check_overlap:  # at least one blob's margin element is in _blob: blob is adjacent
 
-                    if np.count_nonzero(margin_AND) == np.count_nonzero(margin_map) and np.count_nonzero(margin_AND) != 0:
+                    check_external = all(margin in _blob_map  for margin in margin_map) # check if all blob's margin is in _blob's dert
+                    if check_external:
                         # all of blob margin is in _blob: _blob is external
                         if blob not in _adj_blobs[0]:
                             _adj_blobs[0].append(blob)
-                            _adj_blobs[2][0]+=blob['Dert']['S'] # sum adjacent blob's S
-                            _adj_blobs[3][0]+=blob['Dert']['G'] # sum adjacent blob's G
-
+                            _adj_blobs[2]+=blob['Dert']['S'] # sum adjacent blob's S
+                            _adj_blobs[3]+=blob['Dert']['G'] # sum adjacent blob's G
                             if blob['fopen'] == 1:  # this should not happen, internal blob cannot be open?
                                 _adj_blobs[1].append(2)  # 2 for open
                             else:
@@ -348,8 +361,8 @@ def find_adjacent(frame):  # scan_blob__? draft, adjacents are blobs directly ne
                         if _blob not in adj_blobs[0]:
                             adj_blobs[0].append(_blob)
                             adj_blobs[1].append(1)  # 1 for external
-                            adj_blobs[2][0]+=_blob['Dert']['S'] # sum adjacent blob's S
-                            adj_blobs[3][0]+=_blob['Dert']['G'] # sum adjacent blob's G
+                            adj_blobs[2]+=_blob['Dert']['S'] # sum adjacent blob's S
+                            adj_blobs[3]+=_blob['Dert']['G'] # sum adjacent blob's G
 
                     else:  # _blob is internal or open
                         if blob not in _adj_blobs[0]:
@@ -445,7 +458,7 @@ if __name__ == '__main__':
     import argparse
 
     argument_parser = argparse.ArgumentParser()
-    argument_parser.add_argument('-i', '--image', help='path to image file', default='./images//raccoon_eye.jpeg')
+    argument_parser.add_argument('-i', '--image', help='path to image file', default='./images//raccoon_head.jpg')
     arguments = vars(argument_parser.parse_args())
     image = imread(arguments['image'])
 
