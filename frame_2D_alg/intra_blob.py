@@ -47,8 +47,7 @@ def intra_blob(blob, rdn, rng, fig, fcr):  # recursive input rng+ | der+ cross-c
     else:
         dert__ = comp_g(ext_dert__)  # -> g sub_blobs:
 
-    if dert__.shape[1] >2 and dert__.shape[2] >2 and False in dert__.mask:
-        # min size in y and x, at least 1 unmasked dert dert__
+    if dert__.shape[1] >2 and dert__.shape[2] >2 and False in dert__.mask:  # min size in y and x, least one dert in dert__
         sub_blobs = cluster_derts(dert__, ave*rdn, fcr, fig)
 
         blob.update({'fcr': fcr, 'fig': fig, 'rdn': rdn, 'rng': rng,  # fork params
@@ -57,14 +56,16 @@ def intra_blob(blob, rdn, rng, fig, fcr):  # recursive input rng+ | der+ cross-c
 
         for sub_blob in sub_blobs:  # evaluate for intra_blob comp_g | comp_r:
             if sub_blob['sign']:
-                if sub_blob['Dert']['M'] > aveB * rdn:  # -> comp_r:
-                    blob['sub_layers'] += \
-                        intra_blob(sub_blob, rdn + 1 + 1 / blob['Ls'], rng*2, fig=fig, fcr=1)
-                # else: comp_P_blob(blob)
-            elif sub_blob['Dert']['G'] > aveB * rdn:  # -> comp_g
-                blob['sub_layers'] += \
-                    intra_blob(sub_blob, rdn + 1 + 1 / blob['Ls'], rng=rng, fig=1, fcr=0)
-            # else: comp_P_blob(blob)
+                if sub_blob['Dert']['M'] - sub_blob['adj_blobs'][3] * (sub_blob['adj_blobs'][2] / sub_blob['Dert']['S']) \
+                    > aveB * rdn:  # M - (intra_comp value lend to edge blob = adj_G * (area-proportional: adj_S / blob S))
+                    # comp_r fork:
+                    blob['sub_layers'] += intra_blob(sub_blob, rdn + 1 + 1 / blob['Ls'], rng*2, fig=fig, fcr=1)
+                # else: comp_P_
+            elif sub_blob['Dert']['G'] + sub_blob['adj_blobs'][3] * (sub_blob['adj_blobs'][2] / sub_blob['Dert']['S']) \
+                > aveB * rdn:  # G + (intra_comp value borrow from flat blob: adj_M * (area-proportional: adj_S / blob S))
+                # comp_g fork:
+                blob['sub_layers'] += intra_blob(sub_blob, rdn + 1 + 1 / blob['Ls'], rng=rng, fig=1, fcr=0)
+            # else: comp_P_
 
         spliced_layers = [spliced_layers + sub_layers for spliced_layers, sub_layers in
                           zip_longest(spliced_layers, blob['sub_layers'], fillvalue=[])
@@ -86,8 +87,7 @@ def cluster_derts(dert__, Ave, fcr, fig):  # similar to frame_to_blobs
     stack_ = deque()  # buffer of running vertical stacks of Ps
 
     for y in range(dert__.shape[0]):  # in height, first and last row are discarded;  print(f'Processing intra line {y}...')
-        # dert__ is in [y,x,params] format, [y,:,:] to get each y line
-        if False in dert__[y,:,:].mask:  # there is at least one dert in line
+        if False in dert__[y, :, :].mask:  # [y,x,params], there is at least one dert in line
 
             P_ = form_P_(dert__[y,:,:], crit__[y, :])  # horizontal clustering, adds a row of Ps
             P_ = scan_P_(P_, stack_,root_dert__)  # vertical clustering, adds up_connects per P and down_connect_cnt per stack
@@ -310,18 +310,13 @@ def form_blob(stack, root_dert__):  # increment blob with terminated stack, chec
 
         blob_map = np.ones((root_dert__.shape[1], root_dert__.shape[2])).astype('bool')
         blob_map[y0:yn, x0:xn] = mask
-        
         # unmasked area is false
         blob_map_y,blob_map_x = np.where(blob_map==False)
-        # get x and y coordinates of unmasked area
-        blob_map_yx = [ [y,x] for y,x in zip(blob_map_y,blob_map_x)]
-        
+        blob_map_yx = [ [y,x] for y,x in zip(blob_map_y,blob_map_x)]  # x and y coordinates of dert__
+
         margin = form_margin(blob_map, diag=blob['sign'])
-        
-        # margin is true
-        margin_y,margin_x = np.where(margin==True)
-        # get x and y coordinates of margin
-        margin_yx = [[y,x] for y,x in zip(margin_y,margin_x)]
+        margin_y,margin_x = np.where(margin==True)  # set margin=true
+        margin_yx = [[y,x] for y,x in zip(margin_y,margin_x)]  # x and y coordinates of margin
 
         blob.pop('open_stacks')
         blob.update(root_dert__=root_dert__,
@@ -346,9 +341,9 @@ def find_adjacent(sub_blobs):  # adjacents are blobs connected to _blob
             _adj_blobs = _blob['adj_blobs']
         else:
             _adj_blobs = [[], []]  # [adj_blobs], [positions]: 0 = internal to current blob, 1 = external, 2 = open
-
+            # don't we need to initialize adj_S and adj_G?
         i = 0  # inner loop counter
-        yn = 9999 # initialize with big value
+        yn = 9999  # > _yn
         while i <= len(sub_blobs) - 1 and _yn<=yn:  # vertical overlap between _blob and blob + margin
 
             blob = sub_blobs[i]  # inner loop's blob
@@ -361,10 +356,10 @@ def find_adjacent(sub_blobs):  # adjacents are blobs connected to _blob
             if y0 <= _yn and blob['sign'] != _blob['sign']:  # adjacent blobs have opposite sign and vertical overlap with _blob + margin
                 _blob_map = _blob['margin'][0]
                 margin_map = blob['margin'][1]
-                check_overlap = any(margin in _blob_map  for margin in margin_map) # check if any of the blob's margin is in _blob's derts             
+                check_overlap = any(margin in _blob_map  for margin in margin_map)  # any of blob's margin is in _blob's derts
                 if check_overlap:  # at least one blob's margin element is in _blob: blob is adjacent
 
-                    check_external = all(margin in _blob_map  for margin in margin_map) # check if all blob's margin is in _blob's dert
+                    check_external = all(margin in _blob_map  for margin in margin_map)  # all of blob's margin is in _blob's dert
                     if check_external:
                         # all of blob margin is in _blob: _blob is external
                         if blob not in _adj_blobs[0]:
@@ -381,9 +376,8 @@ def find_adjacent(sub_blobs):  # adjacents are blobs connected to _blob
                             adj_blobs[1].append(1)  # 1 for external
                             adj_blobs[2]+=_blob['Dert']['S'] # sum adjacent blob's S
                             adj_blobs[3]+=_blob['Dert']['G'] # sum adjacent blob's G
-
-
-                    else:  # _blob is internal or open
+                    else:
+                        # _blob is internal or open
                         if blob not in _adj_blobs[0]:
                             _adj_blobs[0].append(blob)
                             _adj_blobs[1].append(1)  # 1 for external
