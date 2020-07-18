@@ -104,6 +104,7 @@ class CBlob(ClusterStructure):
     adj_blobs = list
     fopen = bool
     margin = list
+    borrow_G = int
 
 # Functions:
 # prefix '_' denotes higher-line variable or structure, vs. same-type lower-line variable or structure
@@ -172,6 +173,7 @@ def image_to_blobs(image, verbose=False, render=False):
     blob_binder = AdjBinder(CBlob)
     blob_binder.bind_from_lower(stack_binder)
     assign_adjacent(blob_binder)  # add adj_blobs to each blob
+    compute_borrow_G(frame)
 
     if verbose:
         nblobs = len(frame['blob__'])
@@ -438,15 +440,34 @@ def assign_adjacent(blob_binder):  # adjacents are connected opposite-sign blobs
             else:
                 pose1, pose2 = 1, 0
 
+        pair_min_G = min(blob1.Dert['G'], blob2.Dert['G']) # min G per blob pair
+
         # bilateral assignments
-        blob1.adj_blobs[0].append((blob2, pose2))
-        blob2.adj_blobs[0].append((blob1, pose1))
+        blob1.adj_blobs[0].append((blob2, pose2, pair_min_G))
+        blob2.adj_blobs[0].append((blob1, pose1, pair_min_G))
         blob1.adj_blobs[1] += blob2.Dert['S']
         blob2.adj_blobs[1] += blob1.Dert['S']
         blob1.adj_blobs[2] += blob2.Dert['G']
         blob2.adj_blobs[2] += blob1.Dert['G']
 
+        
+def compute_borrow_G(frame):
+    '''
+    Compute borrow_G of each blob by using ratio of min(current G & adj G) to the sum of all adj blob' adj blob's min(G and adj G)
+    '''
 
+    for blob in frame['blob__']:
+        sum_min_G_pair = 0
+        for adj_blob in blob.adj_blobs[0]: # loop in each adj blob
+            for adj_adj_blob in adj_blob[0].adj_blobs[0]: # loop in each adj adj blob
+                sum_min_G_pair += adj_adj_blob[2] # get sum of min G per adj adj blob pair
+    
+        # borrow G = current min G per pair / sum of all adj adj blob's min G per pair
+        if sum_min_G_pair:
+            blob.borrow_G = blob.adj_blobs[2] * (blob.adj_blobs[2] / sum_min_G_pair)
+        else: # sum_min_G_pair = 0
+            blob.borrow_G  = blob.adj_blobs[2] # value divided by zero should be very large, in this case, borrow G will getting the highest (G/sum G) ratio which is 1
+            
 # -----------------------------------------------------------------------------
 # Utilities
 
@@ -481,7 +502,7 @@ if __name__ == '__main__':
     argument_parser = argparse.ArgumentParser()
     argument_parser.add_argument('-i', '--image', help='path to image file', default='./images//raccoon_eye.jpeg')
     argument_parser.add_argument('-v', '--verbose', help='print details, useful for debugging', type=int, default=0)
-    argument_parser.add_argument('-n', '--intra', help='run intra_blobs after frame_blobs', type=int, default=0)
+    argument_parser.add_argument('-n', '--intra', help='run intra_blobs after frame_blobs', type=int, default=1)
     argument_parser.add_argument('-r', '--render', help='render the process', type=int, default=0)
     arguments = vars(argument_parser.parse_args())
     image = imread(arguments['image'])
@@ -506,19 +527,14 @@ if __name__ == '__main__':
             +G "edge" blobs are low-match, they are only valuable as contrast: to the extent that 
             their negative value cancels the value of adjacent -G "flat" blobs:
             '''
-            G = blob.Dert.G; adj_G = blob.adj_blobs[2]
-
-            borrow_G = min(abs(G), abs(adj_G))  # comp(G,_G): value present in both parties can be borrowed from one to another
-            if blob.sign:
-                borrow_G /= 4  # borrow from adj_blobs to blob /= len(adj_blob_) / n_adj_adj_blobs they may lend to, init at 4
-            # borrow_G may also be reduced by potential lending beyond adj_blobs?
+            G = blob.Dert['G'];
 
             if blob.sign:
-                if G + borrow_G > aveB and blob.dert__.shape[1] > 3 and blob.dert__.shape[2] > 3:  # min blob dimensions
+                if G + blob.borrow_G > aveB and blob.dert__.shape[1] > 3 and blob.dert__.shape[2] > 3:  # min blob dimensions
                     blob = update_dert(blob)
                     deep_layers[i] = intra_blob(blob, rdn=1, rng=.0, fig=0, fcr=0)  # +G blob' dert__' comp_g
 
-            elif -G - borrow_G > aveB and blob.dert__.shape[1] > 3 and blob.dert__.shape[2] > 3:  # min blob dimensions
+            elif -G - blob.borrow_G > aveB and blob.dert__.shape[1] > 3 and blob.dert__.shape[2] > 3:  # min blob dimensions
                 blob = update_dert(blob)
                 deep_layers[i] = intra_blob(blob, rdn=1, rng=1, fig=0, fcr=1)  # -G blob' dert__' comp_r in 3x3 kernels
 
