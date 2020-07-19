@@ -73,6 +73,8 @@ class CDeepBlob(ClusterStructure):
     adj_blobs = list
     fopen = bool
     margin = list
+    adj_Min_G = int
+    adj_adj_Min_G = int
     fcr = bool
     fig = bool
     rdn = float

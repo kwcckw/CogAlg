@@ -104,6 +104,8 @@ class CBlob(ClusterStructure):
     adj_blobs = list
     fopen = bool
     margin = list
+    adj_Min_G = int
+    adj_adj_Min_G = int
 
 # Functions:
 # prefix '_' denotes higher-line variable or structure, vs. same-type lower-line variable or structure
@@ -438,6 +440,8 @@ def assign_adjacent(blob_binder):  # adjacents are connected opposite-sign blobs
             else:
                 pose1, pose2 = 1, 0
 
+        pair_min_G = min(blob1.Dert['G'], blob2.Dert['G']) # min G per blob pair
+
         # bilateral assignments
         blob1.adj_blobs[0].append((blob2, pose2))
         blob2.adj_blobs[0].append((blob1, pose1))
@@ -445,24 +449,14 @@ def assign_adjacent(blob_binder):  # adjacents are connected opposite-sign blobs
         blob2.adj_blobs[1] += blob1.Dert['S']
         blob1.adj_blobs[2] += blob2.Dert['G']
         blob2.adj_blobs[2] += blob1.Dert['G']
-
-def compute_borrow_G(frame):
-    '''
-    Compute borrow_G of each blob by using ratio of min(current G & adj G) to the sum of all adj blob' adj blob's min(G and adj G)
-    '''
-    for blob in frame['blob__']:
-        sum_min_G_pair = 0
-        for adj_blob in blob.adj_blobs[0]: # loop in each adj blob
-            for adj_adj_blob in adj_blob[0].adj_blobs[0]: # loop in each adj adj blob
-                sum_min_G_pair += adj_adj_blob[2] # get sum of min G per adj adj blob pair
-
-        # borrow G = current min G per pair / sum of all adj adj blob's min G per pair
-        if sum_min_G_pair:
-            blob.borrow_G = blob.adj_blobs[2] * (blob.adj_blobs[2] / sum_min_G_pair)
-        else: # sum_min_G_pair = 0
-            blob.borrow_G  = blob.adj_blobs[2]
-            # value divided by zero should be very large, in this case, borrow G will getting the highest (G/sum G) ratio which is 1
-
+        
+        blob1.adj_Min_G += pair_min_G # get sum of adj Min G 
+        blob2.adj_Min_G += pair_min_G
+        
+        blob1.adj_adj_Min_G += blob2.adj_Min_G # get sum of adj adj Min G 
+        blob2.adj_adj_Min_G += blob1.adj_Min_G
+        
+        
 # -----------------------------------------------------------------------------
 # Utilities
 
@@ -495,9 +489,9 @@ if __name__ == '__main__':
     import argparse
 
     argument_parser = argparse.ArgumentParser()
-    argument_parser.add_argument('-i', '--image', help='path to image file', default='./images//raccoon_eye.jpeg')
-    argument_parser.add_argument('-v', '--verbose', help='print details, useful for debugging', type=int, default=0)
-    argument_parser.add_argument('-n', '--intra', help='run intra_blobs after frame_blobs', type=int, default=0)
+    argument_parser.add_argument('-i', '--image', help='path to image file', default='./images//raccoon_head.jpg')
+    argument_parser.add_argument('-v', '--verbose', help='print details, useful for debugging', type=int, default=1)
+    argument_parser.add_argument('-n', '--intra', help='run intra_blobs after frame_blobs', type=int, default=1)
     argument_parser.add_argument('-r', '--render', help='render the process', type=int, default=0)
     arguments = vars(argument_parser.parse_args())
     image = imread(arguments['image'])
@@ -513,7 +507,7 @@ if __name__ == '__main__':
         if verbose:
             print("\nRunning intra_blob...")
 
-        from intra_blob_dict import (
+        from intra_blob import (
             intra_blob, CDeepBlob, aveB,
         )
 
@@ -532,12 +526,15 @@ if __name__ == '__main__':
             blob = CDeepBlob(Dert=blob.Dert, box=blob.box, stack_=blob.stack_,
                              sign=blob.sign, root_dert__=frame['dert__'],
                              dert__=blob.dert__, adj_blobs=blob.adj_blobs,
-                             fopen=blob.fopen, margin=blob.margin)
+                             fopen=blob.fopen, margin=blob.margin,
+                             adj_Min_G = blob.adj_Min_G, adj_adj_Min_G = blob.adj_adj_Min_G, )
 
-            borrow_G = min(abs(G), abs(adj_G))  # comp(G,_G): value present in both parties can be borrowed from one to another
-            if blob.sign:
-                borrow_G /= 4  # to be replaced with borrow_G *= min_G / Min_G (min_Gs summed for adj_blobs)
-
+            # positive blob
+            borrow_G = min(abs(G), abs(adj_G))  
+            if ~blob.sign: # negative blob  
+                if blob.adj_adj_Min_G != 0: # Min_G cannot be 0, else borrow G remained as min(G,adj G)
+                    borrow_G *= borrow_G / blob.adj_adj_Min_G # borrow G = min_G*(min_G/Min_G)
+                    
             if blob.sign:
                 if G + borrow_G > aveB and blob.dert__.shape[1] > 3 and blob.dert__.shape[2] > 3:  # min blob dimensions
                     blob = update_dert(blob)
