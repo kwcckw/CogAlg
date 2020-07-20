@@ -104,8 +104,6 @@ class CBlob(ClusterStructure):
     adj_blobs = list
     fopen = bool
     margin = list
-    adj_Min_G = int
-    adj_adj_Min_G = int
 
 # Functions:
 # prefix '_' denotes higher-line variable or structure, vs. same-type lower-line variable or structure
@@ -126,7 +124,7 @@ def comp_pixel(image):  # 2x2 pixel cross-correlation within image, as in edge d
     G__ = np.hypot(Gy__, Gx__)  # central gradient per kernel, between its four vertex pixels
 
     return ma.stack((topleft__, G__, Gy__, Gx__))  # tuple of 2D arrays per param of dert (derivatives' tuple)
-    # renamed dert__= (p__, g__, dy__, dx__) for readability in functions below
+    # renamed as dert__ = (p__, g__, dy__, dx__) for readability in functions below
 
 
 def image_to_blobs(image, verbose=False, render=False):
@@ -440,8 +438,6 @@ def assign_adjacent(blob_binder):  # adjacents are connected opposite-sign blobs
             else:
                 pose1, pose2 = 1, 0
 
-        pair_min_G = min(blob1.Dert['G'], blob2.Dert['G']) # min G per blob pair
-
         # bilateral assignments
         blob1.adj_blobs[0].append((blob2, pose2))
         blob2.adj_blobs[0].append((blob1, pose1))
@@ -449,14 +445,8 @@ def assign_adjacent(blob_binder):  # adjacents are connected opposite-sign blobs
         blob2.adj_blobs[1] += blob1.Dert['S']
         blob1.adj_blobs[2] += blob2.Dert['G']
         blob2.adj_blobs[2] += blob1.Dert['G']
-        
-        blob1.adj_Min_G += pair_min_G # get sum of adj Min G 
-        blob2.adj_Min_G += pair_min_G
-        
-        blob1.adj_adj_Min_G += blob2.adj_Min_G # get sum of adj adj Min G 
-        blob2.adj_adj_Min_G += blob1.adj_Min_G
-        
-        
+
+
 # -----------------------------------------------------------------------------
 # Utilities
 
@@ -489,9 +479,9 @@ if __name__ == '__main__':
     import argparse
 
     argument_parser = argparse.ArgumentParser()
-    argument_parser.add_argument('-i', '--image', help='path to image file', default='./images//raccoon_head.jpg')
-    argument_parser.add_argument('-v', '--verbose', help='print details, useful for debugging', type=int, default=1)
-    argument_parser.add_argument('-n', '--intra', help='run intra_blobs after frame_blobs', type=int, default=1)
+    argument_parser.add_argument('-i', '--image', help='path to image file', default='./images//raccoon_eye.jpeg')
+    argument_parser.add_argument('-v', '--verbose', help='print details, useful for debugging', type=int, default=0)
+    argument_parser.add_argument('-n', '--intra', help='run intra_blobs after frame_blobs', type=int, default=0)
     argument_parser.add_argument('-r', '--render', help='render the process', type=int, default=0)
     arguments = vars(argument_parser.parse_args())
     image = imread(arguments['image'])
@@ -507,7 +497,7 @@ if __name__ == '__main__':
         if verbose:
             print("\nRunning intra_blob...")
 
-        from intra_blob import (
+        from intra_blob_dict import (
             intra_blob, CDeepBlob, aveB,
         )
 
@@ -522,19 +512,19 @@ if __name__ == '__main__':
             their negative value cancels the value of adjacent -G "flat" blobs:
             '''
             G = blob.Dert['G']; adj_G = blob.adj_blobs[2]
+            borrow_G = min(abs(G), abs(adj_G))  # comp(G,_G): value present in both parties can be borrowed from one to another
+
+            if blob.sign:  # borrowing is from adj_blobs to blob, needs to be divided by Min_G: total lending by adj_blobs:
+                Min_G = 0
+                for adj_blob in blob.adj_blobs[0]:  # adj_blob_
+                    Min_G += min(abs(adj_blob.Dert['G']), abs(adj_blob.adj_blobs[2]))  # adj_G of adj_blob
+                    # total lending by adj_G?
+                borrow_G *= borrow_G / Min_G  # borrow_G *= min_G / Min_G (min_Gs summed for adj_blobs)
 
             blob = CDeepBlob(Dert=blob.Dert, box=blob.box, stack_=blob.stack_,
                              sign=blob.sign, root_dert__=frame['dert__'],
                              dert__=blob.dert__, adj_blobs=blob.adj_blobs,
-                             fopen=blob.fopen, margin=blob.margin,
-                             adj_Min_G = blob.adj_Min_G, adj_adj_Min_G = blob.adj_adj_Min_G, )
-
-            # positive blob
-            borrow_G = min(abs(G), abs(adj_G))  
-            if ~blob.sign: # negative blob  
-                if blob.adj_adj_Min_G != 0: # Min_G cannot be 0, else borrow G remained as min(G,adj G)
-                    borrow_G *= borrow_G / blob.adj_adj_Min_G # borrow G = min_G*(min_G/Min_G)
-                    
+                             fopen=blob.fopen, margin=blob.margin)
             if blob.sign:
                 if G + borrow_G > aveB and blob.dert__.shape[1] > 3 and blob.dert__.shape[2] > 3:  # min blob dimensions
                     blob = update_dert(blob)
