@@ -155,14 +155,14 @@ def comp_r(dert__, fig, root_fcr):
         '''
         8-tuple of cosine matches per direction:
         '''
-        m__ += (  ma.minimum(i__center.data, i__topleft.data)    * cos_da[0]
-                + ma.minimum(i__center.data, i__top .data)       * cos_da[1]
-                + ma.minimum(i__center.data, i__topright.data)   * cos_da[2]
-                + ma.minimum(i__center.data, i__right.data)      * cos_da[3]
-                + ma.minimum(i__center.data, i__bottomright.data)* cos_da[4]
-                + ma.minimum(i__center.data, i__bottom.data)     * cos_da[5]
-                + ma.minimum(i__center.data, i__bottomleft.data) * cos_da[6]
-                + ma.minimum(i__center.data, i__left.data)       * cos_da[7]
+        m__ += (  ma.minimum(i__center.data, i__topleft.data)    * abs(cos_da[0])
+                + ma.minimum(i__center.data, i__top .data)       * abs(cos_da[1])
+                + ma.minimum(i__center.data, i__topright.data)   * abs(cos_da[2])
+                + ma.minimum(i__center.data, i__right.data)      * abs(cos_da[3])
+                + ma.minimum(i__center.data, i__bottomright.data)* abs(cos_da[4])
+                + ma.minimum(i__center.data, i__bottom.data)     * abs(cos_da[5])
+                + ma.minimum(i__center.data, i__bottomleft.data) * abs(cos_da[6])
+                + ma.minimum(i__center.data, i__left.data)       * abs(cos_da[7])
                 )
         '''
         8-tuple of cosine differences per direction:
@@ -235,14 +235,15 @@ def comp_g(dert__):  # cross-comp of g in 2x2 kernels, between derts in ma.stack
 
     gg__[:] = ma.hypot(dgy__, dgx__)  # gradient of gradient
 
-    mg0__ = ma.minimum(g0__, g2__) * cos_da0__  # g match = min(g, _g) *cos(da)
-    mg1__ = ma.minimum(g1__, g3__) * cos_da1__
+    mg0__ = ma.minimum(g0__, g2__) * abs(cos_da0__)  # g match = min(g, _g) *cos(da)
+    mg1__ = ma.minimum(g1__, g3__) * abs(cos_da1__)
     mg__[:]  = mg0__ + mg1__
 
     ig__[:] = g__ [:-1, :-1]  # remove last row and column to align with derived params
     idy__[:] = dy__[:-1, :-1]
     idx__[:] = dx__[:-1, :-1]  # -> idy, idx to compute cos for comp rg
     gg__.mask = mg__.mask = dgy__.mask = dgx__.mask = summed_mask
+
 
     '''
     next comp_rg will use g, dy, dx
@@ -467,10 +468,10 @@ def shape_check(dert__):  # deprecated,
 
 
 def normalization(array):
-    start = 1
+    start = 0
     end = 255
     width = end - start
-    res = (array - array.min()) / (array.max() - array.min()) * width + start
+    res = (array - 0) / (array.max() - 0) * width + start # previously scale from min-max to 0-255, now scale from 0-max to 0-255
     return res
 
 
