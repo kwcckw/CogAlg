@@ -65,15 +65,15 @@ def comp_r(dert__, fig, root_fcr):
     to avoid extreme blob shrinking and loss of info in other derts of partially masked kernels
     unmasked derts were computed due to extend_dert() in intra_blob   
     '''
-    majority_mask = ( i__[:, 1:-1:2, 1:-1:2].mask.astype(int)
-                    + i__[:, :-2:2, :-2:2].mask.astype(int)
-                    + i__[:, :-2:2, 1:-1: 2].mask.astype(int)
-                    + i__[:, :-2:2, 2::2].mask.astype(int)
-                    + i__[:, 1:-1:2, 2::2].mask.astype(int)
-                    + i__[:, 2::2, 2::2].mask.astype(int)
-                    + i__[:, 2::2, 1:-1:2].mask.astype(int)
-                    + i__[:, 2::2, :-2:2].mask.astype(int)
-                    + i__[:, 1:-1:2, :-2:2].mask.astype(int)
+    majority_mask = ( i__[1:-1:2, 1:-1:2].mask.astype(int)
+                    + i__[:-2:2, :-2:2].mask.astype(int)
+                    + i__[:-2:2, 1:-1: 2].mask.astype(int)
+                    + i__[:-2:2, 2::2].mask.astype(int)
+                    + i__[1:-1:2, 2::2].mask.astype(int)
+                    + i__[2::2, 2::2].mask.astype(int)
+                    + i__[2::2, 1:-1:2].mask.astype(int)
+                    + i__[2::2, :-2:2].mask.astype(int)
+                    + i__[1:-1:2, :-2:2].mask.astype(int)
                     ) > 1
     i__center.mask = i__topleft.mask = i__top.mask = i__topright.mask = i__right.mask = i__bottomright.mask = \
     i__bottom.mask = i__bottomleft.mask = i__left.mask = majority_mask  # not only i__center
@@ -220,6 +220,12 @@ def comp_g(dert__):  # cross-comp of g in 2x2 kernels, between derts in ma.stack
     # Unpack relevant params
     g__, dy__, dx__ = dert__[[3, 4, 5]]    # g, dy, dx -> local i, idy, idx
     g__.data[np.where(g__.data == 0)] = 1  # replace 0 values with 1 to avoid error, not needed in high-g blobs?
+    
+    # ig, idy and idx preserve dert's mask
+    ig__[:] = g__ [:-1, :-1]  # remove last row and column to align with derived params
+    idy__[:] = dy__[:-1, :-1]
+    idx__[:] = dx__[:-1, :-1]  # -> idy, idx to compute cos for comp rg
+    
     ''' 
     for all operations below: only mask kernels with more than one masked dert 
     '''
@@ -228,7 +234,6 @@ def comp_g(dert__):  # cross-comp of g in 2x2 kernels, between derts in ma.stack
                      g__[1:, 1:].mask.astype(int) +
                      g__[1:, :-1].mask.astype(int)
                      ) > 1
-    g__.mask, dy__.mask, dx__.mask = majority_mask
 
     g0__, dy0__, dx0__ = g__[:-1, :-1].data, dy__[:-1, :-1].data, dx__[:-1, :-1].data  # top left
     g1__, dy1__, dx1__ = g__[:-1, 1:].data,  dy__[:-1, 1:].data,  dx__[:-1, 1:].data   # top right
@@ -258,10 +263,7 @@ def comp_g(dert__):  # cross-comp of g in 2x2 kernels, between derts in ma.stack
     mg1__ = ma.minimum(g1__, g3__) * (cos_da1__+1)
     mg__[:]  = mg0__ + mg1__  # match of gradient
 
-    ig__[:] = g__ [:-1, :-1]  # remove last row and column to align with derived params
-    idy__[:] = dy__[:-1, :-1]
-    idx__[:] = dx__[:-1, :-1]  # -> idy, idx to compute cos for comp rg
-    # unnecessary?:
+    # update masks to majority mask
     gg__.mask = mg__.mask = dgy__.mask = dgx__.mask = majority_mask
 
     '''
