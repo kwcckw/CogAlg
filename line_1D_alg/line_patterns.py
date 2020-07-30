@@ -1,7 +1,7 @@
 import cv2
 import argparse
 from time import time
-from line_1D_alg.utils import *
+from utils import *
 from itertools import zip_longest
 ''' 
   line_patterns is a principal version of 1st-level 1D algorithm
@@ -63,6 +63,14 @@ def cross_comp(frame_of_pixels_):  # converts frame_of_pixels to frame_of_patter
         mP_ = form_mP_(dert_)  # forms m-sign patterns
         adj_M_ = form_adjacent_M_(mP_)  # compute adjacent Ms for borrowing
         intra_mP_(mP_, adj_M_ , fid=False, rdn=1, rng=3)  # evaluates for sub-recursion per mP
+        
+        # not sure on this section
+        # get rel_adj_M from adj_M_?
+        # or we need form_adjacent_D_?
+        dP_ = form_dP_(dert_)  # forms d-sign patterns
+        rel_adj_M_ = [adj_M / -m for adj_M in adj_M_] # rel_adj_M_ is array, get the average for intra_dp_?
+        intra_dP_(dP_, rel_adj_M_ , rdn=1, rng=3)  # evaluates for sub-recursion per dP
+        
 
         frame_of_patterns_.append( [mP_] )  # line of patterns is added to frame of patterns
 
@@ -115,14 +123,17 @@ def form_dP_(P_dert_):  # cluster by d sign, min mag is already selected for as 
 def form_adjacent_M_(mP_):  # compute adjacent Ms, for neg_mP borrow evaluation
 
     pri_M = mP_[0][4]  # comp_g value is borrowed from adjacent opposite-sign Ms
-    M = mP_[1][4]
-    adj_M_ = [abs(M)]  # initial next_M, no / 2: projection for first P, abs for bilateral adjustment
+    adj_M_ = [] # init adj_M_
+    if len(mP_)>1: # at least 2 mPs find adjacency
+        M = mP_[1][4]
+        adj_M_.append(abs(M))  # initial next_M, no / 2: projection for first P, abs for bilateral adjustment
+    
+        for _, _, _, _, next_M, _, _ in mP_[2:]:
+            # pri_M will project into all the other M?
+            adj_M_.append((abs(pri_M / 2) + abs(next_M / 2)))  # exclude M
+            pri_M = M
 
-    for _, _, _, _, next_M, _, _ in mP_[2:]:
-        adj_M_.append((abs(pri_M / 2) + abs(next_M / 2)))  # exclude M
-        pri_M = M
-
-    adj_M_.append(abs(pri_M))  # no / 2: projection for last P
+        adj_M_.append(abs(pri_M))  # no / 2: projection for last P
     return adj_M_
 
 ''' 
@@ -186,7 +197,7 @@ def intra_dP_(dP_, rel_adj_M, rdn, rng):  # evaluate for sub-recursion in line P
             sub_layers += intra_mP_(sub_mP_, sub_adj_M_, 1, rdn + 1 + 1 / Ls, rng+1)
             comb_layers = [comb_layers + sub_layers for comb_layers, sub_layers in
                            zip_longest(comb_layers, sub_layers, fillvalue=[])]
-
+    
     return comb_layers
 
 ''' maximal M adjustment is initial cross-sign comb, doesn't affect primary rng+ eval per mP
