@@ -1,7 +1,7 @@
 import cv2
 import argparse
 from time import time
-from line_1D_alg.utils import *
+from utils import *
 from itertools import zip_longest
 ''' 
   line_patterns is a principal version of 1st-level 1D algorithm
@@ -122,6 +122,7 @@ def form_adjacent_M_(mP_):  # compute array of adjacent Ms, for contrastive borr
     for _, _, _, _, next_M, _, _ in mP_[2:]:
         adj_M_.append((abs(pri_M / 2) + abs(next_M / 2)))  # exclude M
         pri_M = M
+        M = next_M
 
     adj_M_.append(abs(pri_M))  # no / 2: projection for last P
     return adj_M_
@@ -264,7 +265,7 @@ if __name__ == "__main__":
     argument_parser = argparse.ArgumentParser()
     argument_parser.add_argument('-i', '--image',
                                  help='path to image file',
-                                 default='.//raccoon.jpg')
+                                 default='raccoon.jpg')
     arguments = vars(argument_parser.parse_args())
     # Read image
     image = cv2.imread(arguments['image'], 0).astype(int)  # load pix-mapped image
