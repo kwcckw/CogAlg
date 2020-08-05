@@ -69,8 +69,8 @@ def cross_comp(frame_of_pixels_):  # converts frame_of_pixels to frame_of_patter
             adj_M_ = form_adjacent_M_(mP_)  # compute adjacent Ms for borrowing
             comb_layers_.append(intra_mP_(mP_, adj_M_ , fid=False, rdn=1, rng=3))  # evaluates for sub-recursion per mP
 
-        if 1: # conditions here, not sure yet for now
-            PP_.append(comp_P(mP_))
+        # 1st layer PP
+        PP_.append(line_PP_(mP_))
 
         frame_of_patterns_.append( [mP_] )
         # line of patterns is added to frame of patterns
@@ -78,7 +78,7 @@ def cross_comp(frame_of_pixels_):  # converts frame_of_pixels to frame_of_patter
     return frame_of_patterns_  # frame of patterns will be output to level 2
 
 
-def comp_P(mP_):
+def line_PP_(mP_):
     
     # get same sign Ps
     if mP_[0][0]: # first mp is +ve
@@ -89,14 +89,15 @@ def comp_P(mP_):
         neg_mP_ = mP_[::2]
         
     # compute patterns of patterns
-    pos_PP_ = comp(pos_mP_)
-    neg_PP_ = comp(neg_mP_)
+    pos_PP_ = form_PP_(pos_mP_,1)
+    neg_PP_ = form_PP_(neg_mP_,0)
 
     return pos_PP_,neg_PP_
 
-def comp(P_):
+def form_PP_(P_,fsign):
         
-    PP_ = [] # patterns of patterns
+    
+    PP_ = [] # initialize patterns of patterns
     
     # get 1st index params
     sign = P_[0][0] # sign should be similar across all Ps
@@ -117,18 +118,33 @@ def comp(P_):
         dert_ = P[5]
         sub_H = P[6]
         
-        # rL
-        rL = L/_L        
-        # comparisons
-        dI = I - (rL*_I) 
-        dD = D - (rL*_D)
-        dM = M - (rL*_M) # do we need abs here?
-
-        # not sure where to include to divison comparison:
-        # M + abs(dL + dI + dD + dM)
+        # there is no sign change here, but do we need some conditional based accumulation and termination?
+        
+        if fsign: # positive Ps
+            # rL
+            rL = L/_L    
+            # comparisons
+            dI = I - (rL*_I)
+            dD = D - (rL*_D)
+            dM = M - (rL*_M) 
+            mI = min(I, rL*_I)
+            mD = min(D, rL*_M)
+            mM = min(abs(M), (rL*abs(_M)))
+        else: # negative Ps 
+            # different computation for negative Ps? Add ave?
+            # rL
+            rL = L/_L    
+            # comparisons
+            dI = I - (rL*_I)
+            dD = D - (rL*_D)
+            dM = M - (rL*_M) 
+            mI = min(I, rL*_I)
+            mD = min(D, rL*_M)
+            mM = min(abs(M), (rL*abs(_M)))
 
         # pack into PP_
-        PP_.append([sign,[dI,dD,dM,rL],_dert_,_sub_H])
+        PP_.append([sign,rL,[dI,dD,dM],[mI,mD,mM],_dert_,_sub_H])
+        # [sign, Rl, [ds], [ms], derts, sub_H]
         
         # update prior index
         _L = L
