@@ -30,22 +30,19 @@ This is different from 1st level connectivity clustering, where all distances be
 ave_dI = 20
 div_ave = 50
 ave_mP = 50
-max_miss = 1
-ave_roLM = 10
+max_miss = 50
 
 def comp_P(P_):
     dert_P_ = []  # array of alternating-sign Ps with derivatives from comp_P
 
     for i, P in enumerate(P_):
         sign, L, I, D, M, dert_, sub_H = P
-        oL = omP = 0
+        oL = omP = roL = roM = 0
+
         for _P in (P_[i+1 :]):  # no last-P displacement, just shifting first _P for variable-range comp
             _sign, _L, _I, _D, _M, _dert_, _sub_H = _P
-            oL += _L # first oL
-            roL = oL / L  # relative distance to _P
-            roM = omP / (abs(M)+1)  # relative miss or contrast between _P: also search blocker, roD for dPP
-            
-            if (roL + roM) *ave_roLM > max_miss:  # accumulated over -mPs before first +mP, no select by M sign
+
+            if roL * roM > max_miss:  # initially false, accumulated over -mPs before first +mP, no select by M sign
                 dL = L - _L
                 mL = min(L, _L)  # L: positions / sign, derived: magnitude-proportional value
                 dI = I - _I
@@ -61,13 +58,15 @@ def comp_P(P_):
                     dert_P_.append( (ms, mP, roL, roM, mL, dL, mI, dI, mD, dD, mM, dM, P))
                     break  # nearest-neighbour search is terminated by first match
                 else:
-                    omP += mP  # other derivatives and oP_ are not significant if neg mP, optional in dert_P?
+                    oL += _L
+                    omP += mP
+                    roL = oL / L  # relative distance to _P
+                    roM = omP / (abs(M) + 1)  # relative miss or contrast between _P: also search blocker, roD for dPP
+                    # other derivatives and oP_ are not significant in neg mP, optional in dert_P?
             else:
-                
-                dert_P_.append((0, 0, roL, roM, 0, 0, 0, 0, 0, 0, 0, 0, P))
-                #        ms, mP, roL, roM, mL, dL, mI, dI, mD, dD, mM, dM, P
+                dert_P_.append((ms, mP, roL, roM, None, None, None, None, None, None, None, None, P))
                 # at least one comp per loop, derivatives preserved if +mP only
-                break
+                break  # reached maximal accumulated miss, stop search
 
     return dert_P_
 
@@ -75,7 +74,7 @@ def comp_P(P_):
 def form_PPm(dert_P_):  # cluster dert_Ps by mP sign
 
     PPm_ = []
-#    for ms, mP, roL, roM, mL, dL, mI, dI, mD, dD, mM, dM, P in dert_P_:
+    for ms, mP, roL, roM, mL, dL, mI, dI, mD, dD, mM, dM, P in dert_P_:
         # in form_PPd:
         # dP = dL + dM + dD  # -> directional PPd, equal-weight params, no rdn?
         # ds = 1 if Pd > 0 else 0
