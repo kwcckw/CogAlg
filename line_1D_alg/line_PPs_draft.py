@@ -37,12 +37,15 @@ def comp_P(P_):
 
     for i, P in enumerate(P_):
         sign, L, I, D, M, dert_, sub_H = P
-        oL = omP = roL = roM = 0
+        oL = omP = roL = roM = ms = mP = 0 # initialization
+        
 
         for _P in (P_[i+1 :]):  # no last-P displacement, just shifting first _P for variable-range comp
             _sign, _L, _I, _D, _M, _dert_, _sub_H = _P
 
-            if roL * roM > max_miss:  # initially false, accumulated over -mPs before first +mP, no select by M sign
+            # miss < max miss, search continues
+            if roL * roM < max_miss: # accumulated over -mPs before first +mP, no select by M sign
+
                 dL = L - _L
                 mL = min(L, _L)  # L: positions / sign, derived: magnitude-proportional value
                 dI = I - _I
@@ -55,15 +58,16 @@ def comp_P(P_):
                 ms = 1 if mP > ave_mP * 7 > 0 else 0  # comp cost = ave * 7, or rep cost: n vars per P?
                 if ms:
                     # add comp over deeper layers, adjust and evaluate updated mP
-                    dert_P_.append( (ms, mP, roL, roM, mL, dL, mI, dI, mD, dD, mM, dM, P))
+                    dert_P_.append( (ms, mP, roL, roM, mL, dL, mI, dI, mD, dD, mM, dM, P)) # match sign >0, pack derts of Ps
                     break  # nearest-neighbour search is terminated by first match
-                else:
+                else: # accumulate params and search continues
                     oL += _L
                     omP += mP
                     roL = oL / L  # relative distance to _P
                     roM = omP / (abs(M) + 1)  # relative miss or contrast between _P: also search blocker, roD for dPP
                     # other derivatives and oP_ are not significant in neg mP, optional in dert_P?
-            else:
+            
+            else: # miss >= max_miss, pack derts of Ps
                 dert_P_.append((ms, mP, roL, roM, None, None, None, None, None, None, None, None, P))
                 # at least one comp per loop, derivatives preserved if +mP only
                 break  # reached maximal accumulated miss, stop search
@@ -74,7 +78,7 @@ def comp_P(P_):
 def form_PPm(dert_P_):  # cluster dert_Ps by mP sign
 
     PPm_ = []
-    for ms, mP, roL, roM, mL, dL, mI, dI, mD, dD, mM, dM, P in dert_P_:
+#    for ms, mP, roL, roM, mL, dL, mI, dI, mD, dD, mM, dM, P in dert_P_:
         # in form_PPd:
         # dP = dL + dM + dD  # -> directional PPd, equal-weight params, no rdn?
         # ds = 1 if Pd > 0 else 0
