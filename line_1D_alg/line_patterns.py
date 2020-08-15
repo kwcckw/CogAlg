@@ -69,11 +69,17 @@ def cross_comp(frame_of_pixels_):  # converts frame_of_pixels to frame_of_patter
             adj_M_ = form_adjacent_M_(mP_)  # compute adjacent Ms for borrowing
             intra_mP_(mP_, adj_M_ , fid=False, rdn=1, rng=3)  # evaluates for sub-recursion per mP
 
-        from line_PPs_draft import comp_P,form_mPP
+        # debug purpose
+        from line_PPs_draft import comp_P,form_PPm
         dert_P_ = comp_P(mP_)
-
-        form_mPP(dert_P_)
-
+        PPm_ = form_PPm(dert_P_)
+        
+        # check if there is false sign
+        for derts in dert_P_:
+            if derts[0] == 0: # check false sign
+                print('False sign in line'+str(y))
+        
+        
         frame_of_patterns_.append( [mP_] )
         # line of patterns is added to frame of patterns
 
@@ -93,14 +99,14 @@ def form_mP_(P_dert_):  # initialization, accumulation, termination
     for p, d, m in P_dert_[1:]:
         sign = m > 0
         if sign != _sign:  # sign change: terminate P
-            P_.append((_sign, L, I, D, M, dert_, sub_H))
+            P_.append([_sign, L, I, D, M, dert_, sub_H,0])
             L, I, D, M, dert_, sub_H = 0, 0, 0, 0, [], []
             # reset params
         L += 1; I += p; D += d; M += m  # accumulate params, bilateral m: for eval per pixel
         dert_ += [(p, d, m)]
         _sign = sign
 
-    P_.append((_sign, L, I, D, M, dert_, sub_H))  # incomplete P
+    P_.append([_sign, L, I, D, M, dert_, sub_H,0])  # incomplete P
     return P_
 
 def form_dP_(P_dert_):  # cluster by d sign, within -mPs: min neg m spans
@@ -113,14 +119,14 @@ def form_dP_(P_dert_):  # cluster by d sign, within -mPs: min neg m spans
     for p, d, m in P_dert_[2:]:
         sign = d > 0
         if sign != _sign:  # sign change: terminate P
-            P_.append((_sign, L, I, D, M, dert_, sub_H))
+            P_.append([_sign, L, I, D, M, dert_, sub_H, 0])
             L, I, D, M, dert_, sub_H = 0, 0, 0, 0, [], []
             # reset accumulated params
         L += 1; I += p; D += d; M += m  # accumulate params, bilateral m: for eval per pixel
         dert_ += [(p, d, m)]
         _sign = sign
 
-    P_.append((_sign, L, I, D, M, dert_, sub_H))  # incomplete P
+    P_.append([_sign, L, I, D, M, dert_, sub_H,0])  # incomplete P
     return P_
 
 
@@ -130,7 +136,7 @@ def form_adjacent_M_(mP_):  # compute array of adjacent Ms, for contrastive borr
     M = mP_[1][4]
     adj_M_ = [abs(M)]  # initial next_M, no / 2: projection for first P, abs for bilateral adjustment
 
-    for _, _, _, _, next_M, _, _ in mP_[2:]:
+    for _, _, _, _, next_M, _, _, _ in mP_[2:]:
         adj_M_.append((abs(pri_M / 2) + abs(next_M / 2)))  # exclude M
         pri_M = M
         M = next_M
@@ -157,7 +163,7 @@ def form_adjacent_M_(mP_):  # compute array of adjacent Ms, for contrastive borr
 def intra_mP_(P_, adj_M_, fid, rdn, rng):  # evaluate for sub-recursion in line mP_, pack results into sub_mP_
 
     comb_layers = []  # combine into root P sub_layers[1:]
-    for (sign, L, I, D, M, dert_, sub_layers), adj_M in zip(P_, adj_M_):  # each sub_layer is nested to depth = sub_layers[n]
+    for (sign, L, I, D, M, dert_, sub_layers,_), adj_M in zip(P_, adj_M_):  # each sub_layer is nested to depth = sub_layers[n]
 
         if sign:  # +mP: low-variation span, eval comp at rng=2^n: 2, 4., kernel: 5, 9., rng=1 cross-comp is kernels 2 and 3
             if M - adj_M > ave_M * rdn and L > 4:  # reduced by lending to contrast: all comps form params for hLe comp?
@@ -188,7 +194,7 @@ def intra_mP_(P_, adj_M_, fid, rdn, rng):  # evaluate for sub-recursion in line 
 def intra_dP_(dP_, rel_adj_M, rdn, rng):  # evaluate for sub-recursion in line P_, packing results in sub_P_
 
     comb_layers = []
-    for sign, L, I, D, M, dert_, sub_layers in dP_:  # each sub in sub_ is nested to depth = sub_[n]
+    for sign, L, I, D, M, dert_, sub_layers, _ in dP_:  # each sub in sub_ is nested to depth = sub_[n]
         if min( abs(D), abs(D) * rel_adj_M) > ave_D * rdn and L > 3:  # abs(D) * rel_adj_M: allocated adj_M
             # if fid: abs(D), else: M + ave*L: complementary m is more precise than inverted diff?
 

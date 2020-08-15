@@ -29,8 +29,8 @@ This is different from 1st level connectivity clustering, where all distances be
 
 ave_dI = 20
 div_ave = 50
-ave_mP = 20
-max_miss = 1
+ave_mP = 10
+max_miss = -50
 
 def comp_P(P_):
     dert_P_ = []  # array of alternating-sign Ps with derivatives from comp_P
@@ -41,8 +41,8 @@ def comp_P(P_):
 
         for j, _P in enumerate(P_[i+1 :]):  # no last-P displacement, just shifting first _P for variable-range comp
             _sign, _L, _I, _D, _M, _dert_, _sub_H, __smP = _P
-
-            if neg_M < max_miss:  # miss accumulated while mP < max miss: search continues, no select by M sign
+            
+            if neg_M < max_miss or neg_M == 0:  # miss accumulated while mP < max miss: search continues, no select by M sign
                 dL = L - _L
                 mL = min(L, _L)  # L: positions / sign, derived: magnitude-proportional value
                 dI = I - _I
@@ -56,7 +56,7 @@ def comp_P(P_):
                 smP = mP > 0  # ave_mP = ave * 3: comp cost, or rep cost: n vars per P?
 
                 if smP:  # dert_P sign is positive if match is found, else negative
-                    P_[j][-1] = True  # __smP: backward match, is True, stored in each P
+                    P_[i+1+j][-1] = True  # __smP: backward match, is True, stored in each P
 
                     # add comp over deeper layers, adjust and evaluate updated mP
                     dert_P_.append( (smP, mP, neg_M, neg_L, mL, dL, mI, dI, mD, dD, mM, dM, P))
@@ -90,7 +90,8 @@ def form_PPm(dert_P_):  # cluster dert_Ps by mP sign, positive only: no contrast
         if smP != _smP:
             PPm_.append([_smP, MP, Neg_M, Neg_L, ML, DL, MI, DI, MD, DD, MM, DM, P_])
             # initialize PPm with current dert_P:
-            _sm, MP, Neg_M, Neg_L, ML, DL, MI, DI, MD, DD, MM, DM, _P = dert_P[1:]
+            # do we need _sm here?
+            MP, Neg_M, Neg_L, ML, DL, MI, DI, MD, DD, MM, DM, _P = dert_P[1:]
             P_ = [_P]
         else:
             # accumulate params
