@@ -29,7 +29,7 @@ import argparse
 from time import time
 from utils import *
 from itertools import zip_longest
-from line_1D_alg.line_PPs_draft import comp_P, form_PPm
+from line_PPs_draft import comp_P, form_PPm
 
 # pattern filters or hyper-parameters: eventually from higher-level feedback, initialized here as constants:
 
@@ -39,11 +39,11 @@ ave_M = 50   # min M for initial incremental-range comparison(t_), higher cost t
 ave_D = 5    # min |D| for initial incremental-derivation comparison(d_)
 ave_nP = 5   # average number of sub_Ps in P, to estimate intra-costs? ave_rdn_inc = 1 + 1 / ave_nP # 1.2
 ave_rdm =.5  # average dm / m, to project bi_m = m * 1.5
-ini_y = 500
+ini_y = 650
 
 def cross_comp(frame_of_pixels_):  # converts frame_of_pixels to frame_of_patterns, each pattern maybe nested
 
-    Y, X = image.shape  # Y: frame height, X: frame width
+    Y, X = frame_of_pixels_.shape  # Y: frame height, X: frame width
     frame_of_patterns_ = []
 
     for y in range(ini_y + 1, Y):  # y is index of new line pixel_
