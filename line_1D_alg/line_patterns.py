@@ -39,7 +39,7 @@ ave_M = 50   # min M for initial incremental-range comparison(t_), higher cost t
 ave_D = 5    # min |D| for initial incremental-derivation comparison(d_)
 ave_nP = 5   # average number of sub_Ps in P, to estimate intra-costs? ave_rdn_inc = 1 + 1 / ave_nP # 1.2
 ave_rdm =.5  # average dm / m, to project bi_m = m * 1.5
-ini_y = 650
+ini_y = 0
 
 def cross_comp(frame_of_pixels_):  # converts frame_of_pixels to frame_of_patterns, each pattern maybe nested
 
