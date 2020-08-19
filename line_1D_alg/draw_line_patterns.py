@@ -51,22 +51,27 @@ def draw_frame_patterns(image, arguments, frame_of_patterns_):
                 x+=1
     
     # normalize value (scale from min to max) on negative or big numbers
-    # remove 4 lines below to observe non-normalized images
-    img_d = (img_d - img_d.min()) /(img_d.max()-img_d.min() )*255
-    img_m = (img_m - img_m.min()) /(img_m.max()-img_m.min() )*255
-    img_mI = (img_mI - img_mI.min()) /(img_mI.max()-img_mI.min() )*255
-    img_mD = (img_mD - img_mD.min()) /(img_mD.max()-img_mD.min() )*255
-    img_mM = (img_mM - img_mM.min()) /(img_mM.max()-img_mM.min() )*255
-    
-    
+    img_d_norm = (img_d - img_d.min()) /(img_d.max()-img_d.min() )*255
+    img_m_norm = (img_m - img_m.min()) /(img_m.max()-img_m.min() )*255
+    img_mI_norm = (img_mI - img_mI.min()) /(img_mI.max()-img_mI.min() )*255
+    img_mD_norm = (img_mD - img_mD.min()) /(img_mD.max()-img_mD.min() )*255
+    img_mM_norm = (img_mM - img_mM.min()) /(img_mM.max()-img_mM.min() )*255
+
     # save images to disk
-    cv2.imwrite(arguments['output_path'] + 'p.jpg',  img_p.astype('uint8'))
-    cv2.imwrite(arguments['output_path'] + 'd.jpg',  img_d.astype('uint8'))
-    cv2.imwrite(arguments['output_path'] + 'm.jpg',  img_m.astype('uint8'))
-    cv2.imwrite(arguments['output_path'] + 'mPS.jpg',  img_mS.astype('uint8'))
-    cv2.imwrite(arguments['output_path'] + 'mPI.jpg',  img_mI.astype('uint8'))
-    cv2.imwrite(arguments['output_path'] + 'mPD.jpg',  img_mD.astype('uint8'))
-    cv2.imwrite(arguments['output_path'] + 'mPM.jpg',  img_mM.astype('uint8'))
+    cv2.imwrite(arguments['output_path'] + '1_p.jpg',  img_p.astype('uint8'))
+    cv2.imwrite(arguments['output_path'] + '2_d.jpg',  img_d.astype('uint8'))
+    cv2.imwrite(arguments['output_path'] + '4_m.jpg',  img_m.astype('uint8'))
+    cv2.imwrite(arguments['output_path'] + '6_mPS.jpg',  img_mS.astype('uint8'))
+    cv2.imwrite(arguments['output_path'] + '7_mPI.jpg',  img_mI.astype('uint8'))
+    cv2.imwrite(arguments['output_path'] + '9_mPD.jpg',  img_mD.astype('uint8'))
+    cv2.imwrite(arguments['output_path'] + '11_mPM.jpg',  img_mM.astype('uint8'))
+    
+    # save normalized images to disk
+    cv2.imwrite(arguments['output_path'] + '3_d_norm.jpg',  img_d_norm.astype('uint8'))
+    cv2.imwrite(arguments['output_path'] + '5_m_norm.jpg',  img_m_norm.astype('uint8'))
+    cv2.imwrite(arguments['output_path'] + '8_mPI_norm.jpg',  img_mI_norm.astype('uint8'))
+    cv2.imwrite(arguments['output_path'] + '10_mPD_norm.jpg',  img_mD_norm.astype('uint8'))
+    cv2.imwrite(arguments['output_path'] + '12_mPM_norm.jpg',  img_mM_norm.astype('uint8'))   
 
 
 def draw_frame_dert_P(image, arguments, frame_of_patterns_):
@@ -112,18 +117,45 @@ def draw_frame_dert_P(image, arguments, frame_of_patterns_):
             # loop each Ps' dert to get next x starting location
             for dert_num, (p,d,m) in enumerate(dert_P[12][5]):
                 x+=1
-                   
-    cv2.imwrite(arguments['output_path'] + 'smP.jpg',  img_smP.astype('uint8')*255)
-    cv2.imwrite(arguments['output_path'] + 'MP.jpg',  img_MP.astype('uint8'))
-    cv2.imwrite(arguments['output_path'] + 'Neg_M.jpg',  img_Neg_M.astype('uint8'))
-    cv2.imwrite(arguments['output_path'] + 'ML.jpg',  img_ML.astype('uint8'))
-    cv2.imwrite(arguments['output_path'] + 'DL.jpg',  img_DL.astype('uint8'))
-    cv2.imwrite(arguments['output_path'] + 'MI.jpg',  img_MI.astype('uint8'))
-    cv2.imwrite(arguments['output_path'] + 'DI.jpg',  img_DI.astype('uint8'))
-    cv2.imwrite(arguments['output_path'] + 'MD.jpg',  img_MD.astype('uint8'))
-    cv2.imwrite(arguments['output_path'] + 'DD.jpg',  img_DD.astype('uint8'))
-    cv2.imwrite(arguments['output_path'] + 'MM.jpg',  img_MM.astype('uint8'))
-    cv2.imwrite(arguments['output_path'] + 'DM.jpg',  img_DM.astype('uint8'))
+                
+          
+            
+    # normalize value (scale from min to max) on negative or big numbers
+    img_MP_norm = (img_MP - img_MP.min()) /(img_MP.max()-img_MP.min() )*255
+    img_Neg_M_norm = (img_Neg_M - img_Neg_M.min()) /(img_Neg_M.max()-img_Neg_M.min() )*255
+    img_ML_norm = (img_ML - img_ML.min()) /(img_ML.max()-img_ML.min() )*255
+    img_DL_norm = (img_DL - img_DL.min()) /(img_DL.max()-img_DL.min() )*255
+    img_MI_norm = (img_MI - img_MI.min()) /(img_MI.max()-img_MI.min() )*255
+    img_DI_norm = (img_DI - img_DI.min()) /(img_DI.max()-img_DI.min() )*255
+    img_MD_norm = (img_MD - img_MD.min()) /(img_MD.max()-img_MD.min() )*255
+    img_DD_norm = (img_DD - img_DD.min()) /(img_DD.max()-img_DD.min() )*255
+    img_MM_norm = (img_MM - img_MM.min()) /(img_MM.max()-img_MM.min() )*255
+    img_DM_norm = (img_DM - img_DM.min()) /(img_DM.max()-img_DM.min() )*255
+                
+    # save images to disk
+    cv2.imwrite(arguments['output_path'] + '13_smP.jpg',  img_smP.astype('uint8')*255)
+    cv2.imwrite(arguments['output_path'] + '14_MP.jpg',  img_MP.astype('uint8'))
+    cv2.imwrite(arguments['output_path'] + '16_Neg_M.jpg',  img_Neg_M.astype('uint8'))
+    cv2.imwrite(arguments['output_path'] + '18_ML.jpg',  img_ML.astype('uint8'))
+    cv2.imwrite(arguments['output_path'] + '20_DL.jpg',  img_DL.astype('uint8'))
+    cv2.imwrite(arguments['output_path'] + '22_MI.jpg',  img_MI.astype('uint8'))
+    cv2.imwrite(arguments['output_path'] + '24_DI.jpg',  img_DI.astype('uint8'))
+    cv2.imwrite(arguments['output_path'] + '26_MD.jpg',  img_MD.astype('uint8'))
+    cv2.imwrite(arguments['output_path'] + '28_DD.jpg',  img_DD.astype('uint8'))
+    cv2.imwrite(arguments['output_path'] + '30_MM.jpg',  img_MM.astype('uint8'))
+    cv2.imwrite(arguments['output_path'] + '32_DM.jpg',  img_DM.astype('uint8'))
+    
+    # save normalized images to disk
+    cv2.imwrite(arguments['output_path'] + '15_MP_norm.jpg',  img_MP_norm.astype('uint8'))
+    cv2.imwrite(arguments['output_path'] + '17_Neg_M_norm.jpg',  img_Neg_M_norm.astype('uint8'))
+    cv2.imwrite(arguments['output_path'] + '19_ML_norm.jpg',  img_ML_norm.astype('uint8'))
+    cv2.imwrite(arguments['output_path'] + '21_DL_norm.jpg',  img_DL_norm.astype('uint8'))
+    cv2.imwrite(arguments['output_path'] + '23_MI_norm.jpg',  img_MI_norm.astype('uint8'))
+    cv2.imwrite(arguments['output_path'] + '25_DI_norm.jpg',  img_DI_norm.astype('uint8'))
+    cv2.imwrite(arguments['output_path'] + '27_MD_norm.jpg',  img_MD_norm.astype('uint8'))
+    cv2.imwrite(arguments['output_path'] + '29_DD_norm.jpg',  img_DD_norm.astype('uint8'))
+    cv2.imwrite(arguments['output_path'] + '31_MM_norm.jpg',  img_MM_norm.astype('uint8'))
+    cv2.imwrite(arguments['output_path'] + '33_DM_norm.jpg',  img_DM_norm.astype('uint8'))
 
 if __name__ == "__main__":
     # Parse argument (image)

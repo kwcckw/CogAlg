@@ -27,10 +27,10 @@ Resulting PPs will be more like 1D graphs, with explicit distances between neare
 This is different from 1st level connectivity clustering, where all distances between nearest elements = 1.
 '''
 
-ave_dI = 20
+ave_dI = 1000                                                                # higher value = more sign change in a line, and lesser positive sign dert_P (observe 13_smP.jpg)
 ave_div = 50
-ave_rM = .7   # average relative match per input magnitude, at rl=1 or .5?
-ave_net_M = 20  # search stop
+ave_rM = .5   # average relative match per input magnitude, at rl=1 or .5?  # lower value = more sign change in a line, and lesser positive sign dert_P(observe 13_smP.jpg)
+ave_net_M = 100  # search stop                                              # higher value = more positive sign dert_P (observe 13_smP.jpg)
 # no ave_mP: deviation computed via rM  # ave_mP = ave*3: comp cost, or n vars per P: rep cost?
 
 
