@@ -36,6 +36,7 @@ ave_net_M = 100  # search stop                                              # hi
 
 def comp_P(P_):
     dert_P_ = []  # array of alternating-sign Ps with derivatives from comp_P
+    deep_dert_P_ = []
 
     for i, P in enumerate(P_):
         sign, L, I, D, M, dert_, sub_H, _smP = P  # _smP = 0 in line_patterns, M: deviation even if min
@@ -61,8 +62,18 @@ def comp_P(P_):
 
                 if smP:  # dert_P sign is positive if forward match is found, else negative
                     P_[i+1+j][-1] = True  # backward match per P: __smP = True
+                    
+                    # deeper layer dert_P_
+                    # p[6] = sub_H
+                    # p[6][0] = sub_layers
+                    # P[6][0][0][5] = sub_mP
+                    if P[6]:
+                        sub_mP_ = P[6][0][0][5]
+                        deep_dert_P_ = comp_P(sub_mP_)
+                    
                     # add deeper comp
-                    dert_P_.append( (smP, vmP, neg_M, neg_L, mL, dL, mI, dI, mD, dD, mM, dM, P))
+                    dert_P_.append( (smP, vmP, neg_M, neg_L, mL, dL, mI, dI, mD, dD, mM, dM, P, deep_dert_P_)) # should we pack deep_dert_P_ in dert_P_, or somewhere else?
+
                     break  # nearest-neighbour search, terminated by first match
                 else:
                     # accumulate negative-mP params:
@@ -72,12 +83,12 @@ def comp_P(P_):
                     # if conditions in line 62 and 78 not met and it is the end of the line, add empty dert_P_ for this input P
                     # this is to prevent lossing derts info in P
                     if _P is P_[-1]: 
-                        dert_P_.append((smP or _smP, vmP, neg_M, neg_L, 0, 0, 0, 0, 0, 0, 0, 0, P))
+                        dert_P_.append((smP or _smP, vmP, neg_M, neg_L, 0, 0, 0, 0, 0, 0, 0, 0, P, deep_dert_P_))
                     '''                     
                     no contrast value in neg dert_Ps and PPs: initial opposite-sign P miss is expected
                     neg dert_P derivatives are not significant;  actual decay = neg_M obviates distance * decay '''
             else:
-                dert_P_.append((smP or _smP, vmP, neg_M, neg_L, 0, 0, 0, 0, 0, 0, 0, 0, P))  # ignore 0s if ~smP
+                dert_P_.append((smP or _smP, vmP, neg_M, neg_L, 0, 0, 0, 0, 0, 0, 0, 0, P, deep_dert_P_))  # ignore 0s if ~smP
                 # smP is ORed bilaterally, negative for single (weak) dert_Ps only
                 break  # neg net_M: stop search
 
@@ -87,24 +98,26 @@ def comp_P(P_):
 def form_PPm(dert_P_):  # cluster dert_Ps by mP sign, positive only: no contrast in overlapping comp?
     PPm_ = []
     # initialize PPm with first dert_P:
-    _smP, MP, Neg_M, Neg_L, ML, DL, MI, DI, MD, DD, MM, DM, _P = dert_P_[0]  # positive only, no contrast?
+    _smP, MP, Neg_M, Neg_L, ML, DL, MI, DI, MD, DD, MM, DM, _P, _deep_dert_P = dert_P_[0]  # positive only, no contrast?
     P_ = [_P]
+    deep_dert_P_ = [_deep_dert_P]
 
     for i, dert_P in enumerate(dert_P_, start=1):
         smP = dert_P[0]
         if smP != _smP:
-            PPm_.append([_smP, MP, Neg_M, Neg_L, ML, DL, MI, DI, MD, DD, MM, DM, P_])
+            PPm_.append([_smP, MP, Neg_M, Neg_L, ML, DL, MI, DI, MD, DD, MM, DM, P_, deep_dert_P_])
             # initialize PPm with current dert_P:
-            _smP, MP, Neg_M, Neg_L, ML, DL, MI, DI, MD, DD, MM, DM, _P = dert_P
+            _smP, MP, Neg_M, Neg_L, ML, DL, MI, DI, MD, DD, MM, DM, _P, _deep_dert_P  = dert_P
             P_ = [_P]
         else:
             # accumulate PPm with current dert_P:
-            smP, mP, neg_M, neg_L, mL, dL, mI, dI, mD, dD, mM, dM, P = dert_P
+            smP, mP, neg_M, neg_L, mL, dL, mI, dI, mD, dD, mM, dM, P, deep_dert_P = dert_P
             MP+=mP; Neg_M+=neg_M; Neg_L+=neg_L; ML+=mL; DL+=dL; MI+=mI; DI+=dI; MD+=mD; DD+=dD; MM+=mM; DM+=dM
             P_.append(P)
+            deep_dert_P_.append(deep_dert_P)
         _smP = smP
 
-    PPm_.append([_smP, MP, Neg_M, Neg_L, ML, DL, MI, DI, MD, DD, MM, DM, P_])  # pack last PP
+    PPm_.append([_smP, MP, Neg_M, Neg_L, ML, DL, MI, DI, MD, DD, MM, DM, P_, deep_dert_P_])  # pack last PP
 
     # in form_PPd:
     # dP = dL + dM + dD  # -> directional PPd, equal-weight params, no rdn?

@@ -269,14 +269,15 @@ if __name__ == "__main__":
     image = image.astype(int)
 
     start_time = time()
-    fline_PPs = 0
+    fline_PPs = 1
     # Main
     frame_of_patterns_ = cross_comp(image)
 
     if fline_PPs:  # debug line_PPs
         for y, P_ in enumerate(frame_of_patterns_):
-            dert_P_ = comp_P(P_)
+            dert_P_ = comp_P(P_[0])
             PPm_ = form_PPm(dert_P_)
+            
             # check if there is false sign
             for derts in dert_P_:
                 if derts[0] == 0:  # check false sign
