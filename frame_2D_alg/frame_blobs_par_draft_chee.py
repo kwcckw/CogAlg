@@ -8,12 +8,12 @@ from utils import (
     pairwise,
     imread, )
 import multiprocessing as mp
-from frame_blobs_ma import comp_pixel
 from time import time
 import numpy as np
 from utils import *
 from multiprocessing.pool import ThreadPool
 from matplotlib import pyplot as plt
+import numpy.ma as ma
 
 ave = 30  # filter or hyper-parameter, set as a guess, latter adjusted by feedback
 
@@ -49,6 +49,23 @@ class CBlob(ClusterStructure):
     adj_blobs = list
     fopen = bool
     dert = object
+    
+def comp_pixel(image):  # 2x2 pixel cross-correlation within image, as in edge detection operators
+    # see comp_pixel_versions file for other versions and more explanation
+
+    # input slices into sliding 2x2 kernel, each slice is a shifted 2D frame of grey-scale pixels:
+    topleft__ = image[:-1, :-1]
+    topright__ = image[:-1, 1:]
+    bottomleft__ = image[1:, :-1]
+    bottomright__ = image[1:, 1:]
+
+    Gy__ = ((bottomleft__ + bottomright__) - (topleft__ + topright__))  # same as decomposition of two diagonal differences into Gy
+    Gx__ = ((topright__ + bottomright__) - (topleft__ + bottomleft__))  # same as decomposition of two diagonal differences into Gx
+
+    G__ = np.hypot(Gy__, Gx__)  # central gradient per kernel, between its four vertex pixels
+
+    return ma.stack((topleft__, G__, Gy__, Gx__))  # tuple of 2D arrays per param of dert (derivatives' tuple)    
+        
     
 def generate_blobs(dert_input,y,x):
     '''
@@ -196,7 +213,6 @@ def frame_blobs_parallel(dert__):
     # save output image
     cv2.imwrite("./images/parallel/id_cycle_0.png", ((np.fliplr(np.rot90(np.array(id_map_np__),3))*255)/(width*height)).astype('uint8'))
         
-    
     while f_cycle:
         
         print("Running cycle "+str(cycle_count+1))
@@ -216,7 +232,7 @@ def frame_blobs_parallel(dert__):
         # save image
         cv2.imwrite("./images/parallel/id_cycle_" + str(cycle_count+1) + ".png", ((np.fliplr(np.rot90(np.array(id_map_np__),3))*255)/(width*height)).astype('uint8'))
         
-        # increase interation count
+        # increase iteration count
         cycle_count +=1
         
     print("total cycle= "+str(cycle_count))
