@@ -29,7 +29,7 @@ import argparse
 from time import time
 from utils import *
 from itertools import zip_longest
-from line_PPs_draft import comp_P, form_PPm
+from line_PPs_draft import *
 
 # pattern filters or hyper-parameters: eventually from higher-level feedback, initialized here as constants:
 
@@ -261,7 +261,7 @@ if __name__ == "__main__":
     argument_parser = argparse.ArgumentParser()
     argument_parser.add_argument('-i', '--image',
                                  help='path to image file',
-                                 default='.//raccoon.jpg')
+                                 default='.//raccoon_eye.jpeg')
     arguments = vars(argument_parser.parse_args())
     # Read image
     image = cv2.imread(arguments['image'], 0).astype(int)  # load pix-mapped image
@@ -273,15 +273,20 @@ if __name__ == "__main__":
     # Main
     frame_of_patterns_ = cross_comp(image)
 
+    frame_dert_P_ = []
+    frame_PPm_ = []
     if fline_PPs:  # debug line_PPs
         for y, P_ in enumerate(frame_of_patterns_):
-            dert_P_ = comp_P(P_[0])
-            PPm_ = form_PPm(dert_P_)
+            dert_P_ = comp_P_(P_[0])
+            frame_dert_P_.append(dert_P_)
+            frame_PPm_.append(form_PPm(dert_P_))
             
+
             # check if there is false sign
-            for derts in dert_P_:
-                if derts[0] == 0:  # check false sign
-                    print('False sign in line' + str(y))
+            if dert_P_:
+                for dert_P in dert_P_:      
+                    if dert_P[0] == 0:  # check false sign
+                            print('False sign in line' + str(y))
 
     end_time = time() - start_time
     print(end_time)
