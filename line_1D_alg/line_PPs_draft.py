@@ -45,16 +45,21 @@ def comp_P_(P_):  # cross-compare patterns within horizontal line
             if M - neg_M > ave_net_M:
                 # search while net_M > ave, True for 1st _P, no select by M sign
                 dert_P, _L, _smP = comp_P(P, _P, neg_M, neg_L)
-                smP, vmP, neg_M, neg_L, P = dert_P[:5]
-                dert_P_.append(dert_P)
+                smP, vmP, neg_M, neg_L, _P = dert_P[:5] # neg_M, neg_L, _P may not need for parsing now, unless the accumulation is added in comp_P
+                
                 if smP:
+                    # i think we should only add dert_P when there is match, so moving 'dert_P_.append(dert_P) ' to this section 
+                    # otherwise, we would get multiple dert_P per P whenever _P fulfills the search condition in line 45 above
+                    dert_P_.append(dert_P) 
                     P_[i + 1 + j][-1] = True  # backward match per P: __smP = True
                     break  # nearest-neighbour search is terminated by first match
                 else:
                     neg_M += vmP  # accumulate contiguous miss: negative mP
                     neg_L += _L   # accumulate distance to match
+                    
                     if j == len(P_):  # last P
                         dert_P_.append((smP or _smP, vmP, neg_M, neg_L, P, 0, 0, 0, 0, 0, 0, 0, 0))
+                    
                     '''                     
                     no contrast value in neg dert_Ps and PPs: initial opposite-sign P miss is expected
                     neg_dert_P derivatives are not significant; neg_M obviates distance * decay_rate * M '''
@@ -88,26 +93,31 @@ def comp_P(P, _P, neg_M, neg_L):
     if smP:  # forward match, compare sub_layers between P.sub_H and _P.sub_H (sub_hierarchies):
         dert_sub_H = []
         if P[6] and _P[6]: # not empty sub layers
-            for (Ls, fdP, fid, rdn, rng, sub_P_), (_Ls, _fdP, _fid, _rdn, _rng, _sub_P_) in zip(*P[6], *_P[6]):
-                # fork comparison:
-                if fdP == _fdP and rng == _rng and min(Ls, _Ls) > ave_Ls:
-                    dert_sub_P_ = []
-                    sub_MP = 0
-                    # compare all sub_Ps to each _sub_P, form dert_sub_P per compared pair
-                    for sub_P in sub_P_:
-                        for _sub_P in _sub_P_:
-                            dert_sub_P, _, _ = comp_P(sub_P, _sub_P, neg_M=0, neg_L=0)  # ignore _sub_L, _sub_smP?
-                            sub_MP += dert_sub_P[1]  # sum sub_vmPs in dert_P_layer
-                            dert_sub_P_.append(dert_sub_P)
-
-                    dert_sub_H.append((fdP, fid, rdn, rng, dert_sub_P_))  # only layers that have been compared
-                    vmP += sub_MP  # of compared H, no specific mP?
-                    if sub_MP < ave_net_M:
-                        # or mH: trans-layer induction?
-                        break  # low vertical induction, deeper sub_layers are not compared
-                else:
-                    break  # deeper P and _P sub_layers are from different intra_comp forks, not comparable?
-
+            for (sub_layer_P, _sub_layer_P) in zip(P[6], _P[6]):
+                if sub_layer_P and _sub_layer_P: # not empty pair of forks
+                    
+                    Ls, fdP, fid, rdn, rng, sub_P_ = sub_layer_P[0]
+                    _Ls, _fdP, _fid, _rdn, _rng, _sub_P_ = _sub_layer_P[0] 
+                    
+                    # fork comparison and distance comparison:
+                    if fdP == _fdP and rng == _rng and min(Ls, _Ls) > ave_Ls:
+                        dert_sub_P_ = []
+                        sub_MP = 0
+                        # compare all sub_Ps to each _sub_P, form dert_sub_P per compared pair
+                        for sub_P in sub_P_:
+                            for _sub_P in _sub_P_:
+                                dert_sub_P, _, _ = comp_P(sub_P, _sub_P, neg_M=0, neg_L=0)  # ignore _sub_L, _sub_smP?
+                                sub_MP += dert_sub_P[1]  # sum sub_vmPs in dert_P_layer
+                                dert_sub_P_.append(dert_sub_P)
+    
+                        dert_sub_H.append((fdP, fid, rdn, rng, dert_sub_P_))  # only layers that have been compared
+                        vmP += sub_MP  # of compared H, no specific mP?
+                        if sub_MP < ave_net_M:
+                            # or mH: trans-layer induction?
+                            break  # low vertical induction, deeper sub_layers are not compared
+                    else:
+                        break  # deeper P and _P sub_layers are from different intra_comp forks, not comparable?
+   
     return (smP, vmP, neg_M, neg_L, P, mL, dL, mI, dI, mD, dD, mM, dM), _L, _smP
 
 
