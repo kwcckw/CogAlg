@@ -30,7 +30,7 @@ import argparse
 from time import time
 from utils import *
 from itertools import zip_longest
-from line_PPs_draft import *
+from line_PPs_class_draft import *
 from class_cluster import ClusterStructure, NoneType
 
 # class initialization
@@ -49,6 +49,7 @@ class CP(ClusterStructure):
     sub_layers = list
     I = int
     smP = NoneType
+    fdert = NoneType
 
 # pattern filters or hyper-parameters: eventually from higher-level feedback, initialized here as constants:
 
@@ -108,14 +109,14 @@ def form_Pm_(P_dert_):  # initialization, accumulation, termination
     for dert in P_dert_[1:]:
         sign = dert.m > 0
         if sign != _sign:  # sign change: terminate P
-            P_.append(CP(sign=_sign, L=L, I=I, D=D, M=M, dert_=dert_, sub_layers=sub_H, smP=False))
+            P_.append(CP(sign=_sign, L=L, I=I, D=D, M=M, dert_=dert_, sub_layers=sub_H, smP=False, fdert=False))
             L, I, D, M, dert_, sub_H = 0, 0, 0, 0, [], []
             # reset params
         L += 1; I += dert.p; D += dert.d; M += dert.m  # accumulate params, bilateral m: for eval per pixel
         dert_ += [dert]
         _sign = sign
 
-    P_.append(CP(sign=_sign, L=L, I=I, D=D, M=M, dert_=dert_, sub_layers=sub_H, smP=False))  # incomplete P
+    P_.append(CP(sign=_sign, L=L, I=I, D=D, M=M, dert_=dert_, sub_layers=sub_H, smP=False, fdert=False))  # incomplete P
     return P_
 
 
@@ -129,14 +130,14 @@ def form_Pd_(P_dert_):  # cluster by d sign, within -Pms: min neg m spans
     for dert in P_dert_[2:]:
         sign = dert.d > 0
         if sign != _sign:  # sign change: terminate P
-            P_.append(CP(sign=_sign, L=L, I=I, D=D, M=M, dert_=dert_, sub_layers=sub_H, smP=False))
+            P_.append(CP(sign=_sign, L=L, I=I, D=D, M=M, dert_=dert_, sub_layers=sub_H, smP=False, fdert=False))
             L, I, D, M, dert_, sub_H = 0, 0, 0, 0, [], []
             # reset accumulated params
         L += 1; I += dert.p; D += dert.d; M += dert.m  # accumulate params, bilateral m: for eval per pixel
         dert_ += [dert]
         _sign = sign
 
-    P_.append(CP(sign=_sign, L=L, I=I, D=D, M=M, dert_=dert_, sub_layers=sub_H, smP=False))  # incomplete P
+    P_.append(CP(sign=_sign, L=L, I=I, D=D, M=M, dert_=dert_, sub_layers=sub_H, smP=False, fdert=False))  # incomplete P
     return P_
 
 
@@ -309,7 +310,7 @@ if __name__ == "__main__":
     image = image.astype(int)
 
     start_time = time()
-    fline_PPs = 0
+    fline_PPs = 1
     # Main
     frame_of_patterns_ = cross_comp(image)
 
@@ -325,7 +326,7 @@ if __name__ == "__main__":
             # check if there is false sign
             if dert_P_:
                 for dert_P in dert_P_:
-                    if dert_P[0] == 0:  # check false sign
+                    if not dert_P.smP:  # check false sign
                         print('False sign in line' + str(y))
 
     end_time = time() - start_time
