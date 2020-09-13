@@ -1,29 +1,30 @@
 '''
   line_patterns is a principal version of 1st-level 1D algorithm
-  Operations: 
+  Operations:
 
-- Cross-compare consecutive pixels within each row of image, forming dert_: queue of derts, each a tuple of derivatives per pixel. 
-  dert_ is then segmented into patterns Pms and Pds: contiguous sequences of pixels forming same-sign match or difference. 
-  Initial match is inverse deviation of variation: m = ave_|d| - |d|, rather than minimum for directly defined match: 
+- Cross-compare consecutive pixels within each row of image, forming dert_: queue of derts, each a tuple of derivatives per pixel.
+  dert_ is then segmented into patterns Pms and Pds: contiguous sequences of pixels forming same-sign match or difference.
+  Initial match is inverse deviation of variation: m = ave_|d| - |d|, rather than minimum for directly defined match:
   albedo or intensity of reflected light doesn't correlate with predictive value of the object that reflects it.
 
-- Match patterns Pms are spans of inputs forming same-sign match. Positive Pms contain high-match pixels, which are likely 
+- Match patterns Pms are spans of inputs forming same-sign match. Positive Pms contain high-match pixels, which are likely
   to match more distant pixels. Thus, positive Pms are evaluated for cross-comp of pixels over incremented range.
 - Difference patterns Pds are spans of inputs forming same-sign ds. d sign match is a precondition for d match, so only
   same-sign spans (Pds) are evaluated for cross-comp of constituent differences, which forms higher derivatives.
   (d match = min: rng+ comp value: predictive value of difference is proportional to its magnitude, although inversely so)
-  
+
   Both extended cross-comp forks are recursive: resulting sub-patterns are evaluated for deeper cross-comp, same as top patterns.
-  Both forks are currently exclusive per P to avoid redundancy, but they can be made partly or fully overlapping.  
+  Both forks are currently exclusive per P to avoid redundancy, but they can be made partly or fully overlapping.
 
   Initial bi-lateral cross-comp here is 1D slice of 2D 3x3 kernel, while uni-lateral d is equivalent to 2x2 kernel.
   Odd kernels preserve resolution of pixels, while 2x2 kernels preserve resolution of derivatives, in resulting derts.
   The former should be used in rng_comp and the latter in der_comp, which may alternate with intra_P.
-  
+
   postfix '_' denotes array name, vs. same-name elements
   prefix '_' denotes prior of two same-name variables
   prefix 'f' denotes binary flag
   '''
+
 import cv2
 import argparse
 from time import time
@@ -32,15 +33,14 @@ from itertools import zip_longest
 from line_PPs_draft import *
 from class_cluster import ClusterStructure, NoneType
 
-
 # class initialization
 class Cdert(ClusterStructure):
-    p = int 
+    p = int
     d = int
     m = int
 
 class CP(ClusterStructure):
-    sign = NoneType 
+    sign = NoneType
     L = int
     I = int
     D = int
@@ -48,8 +48,7 @@ class CP(ClusterStructure):
     dert_ = list
     sub_layers = list
     I = int
-    smP = NoneType 
-    
+    smP = NoneType
 
 # pattern filters or hyper-parameters: eventually from higher-level feedback, initialized here as constants:
 
@@ -148,7 +147,7 @@ def form_adjacent_M_(Pm_):  # compute array of adjacent Ms, for contrastive borr
     adj_M_ = [abs(Pm_[1].M)]   # initial next_M, no / 2: projection for first P, abs for bilateral adjustment
 
     for Pm in Pm_[2:]:
-        
+
         next_M = Pm.M
         adj_M_.append((abs(pri_M / 2) + abs(next_M / 2)))  # exclude M
         pri_M = M
@@ -210,7 +209,7 @@ def intra_Pd_(Pd_, rel_adj_M, rdn, rng):  # evaluate for sub-recursion in line P
 
     comb_layers = []
     for P in Pd_:  # each sub in sub_ is nested to depth = sub_[n]
-        
+
         if min(abs(P.D), abs(P.D) * rel_adj_M) > ave_D * rdn and P.L > 3:  # abs(D) * rel_adj_M: allocated adj_M
             # if fid: abs(D), else: M + ave*L: complementary m is more precise than inverted diff?
 
@@ -234,16 +233,16 @@ def intra_Pd_(Pd_, rel_adj_M, rdn, rng):  # evaluate for sub-recursion in line P
 def range_comp(dert_, fid):  # skip odd derts for sparse rng+ comp: 1 skip / 1 add, to maintain 2x overlap
 
     rdert_ = []  # prefix '_' denotes the prior of same-name variables, initialization:
-    
+
     __dert = dert_[0]
     __i = __dert.p
-    
+
     _dert = dert_[2]
     _i = _dert.p
     _short_rng_d = _dert.d
     _short_rng_m = _dert.m
-    
-    
+
+
     _d = _i - __i
     if fid:
         _m = min(__i, _i) - ave_min
@@ -258,7 +257,7 @@ def range_comp(dert_, fid):  # skip odd derts for sparse rng+ comp: 1 skip / 1 a
         i = dert.p
         short_rng_d = dert.d
         short_rng_m = dert.m
-        
+
         d = i - _i
         if fid:
             m = min(i, _i) - ave_min  # match = min: magnitude of derived vars correlates with stability
@@ -280,7 +279,7 @@ def deriv_comp(dert_):  # cross-comp consecutive uni_ds in same-sign dert_: sign
     ddert_ = []  # initialization:
     __i = dert_[1].d # each prefix '_' denotes prior
     _i  = dert_[2].d
-    
+
     __i = abs(__i); _i = abs(_i)
     _d = _i - __i  # initial comp
     _m = min(__i, _i) - ave_min

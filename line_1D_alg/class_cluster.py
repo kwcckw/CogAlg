@@ -1,4 +1,6 @@
 """
+Chee's implementation
+
 Provide a base class for cluster objects in 1D implementation of CogAlg.
 Features:
 - Unique instance ids per class.
@@ -12,18 +14,17 @@ differences in interfaces are mostly eliminated.
 import weakref
 from numbers import Number
 
-
 NoneType = type(None)
 
 _methods_template = '''
 @property
 def id(self):
     return self._id
-    
+
 def pack(self{pack_args}):
     """Pack all fields/params back into {typename}."""
     {pack_assignments}
-    
+
 def unpack(self):
     """Unpack all fields/params back into the cluster."""
     return ({param_vals})
@@ -39,10 +40,12 @@ def __repr__(self):
     return "{typename}({repr_fmt})" % ({numeric_param_vals})
 '''
 
+
 class MetaCluster(type):
     """
     Serve as a factory for creating new cluster classes.
     """
+
     def __new__(mcs, typename, bases, attrs):  # called right before a new class is created
         # get fields/params and numeric params
         params = tuple(attr for attr in attrs
@@ -61,12 +64,12 @@ class MetaCluster(type):
                                          for param in numeric_params),
             pack_args=', '.join(param for param in ('', *params)),
             pack_assignments='; '.join(f'self.{param} = {param}'
-                                  for param in params)
-                             if params else 'pass',
+                                       for param in params)
+            if params else 'pass',
             accumulations='; '.join(f"self.{param} += "
                                     f"kwargs.get('{param}', 0)"
                                     for param in numeric_params)
-                          if params else 'pass',
+            if params else 'pass',
             repr_fmt=', '.join(f'{param}=%r' for param in numeric_params),
         )
         # Generate methods
@@ -170,6 +173,8 @@ class ClusterStructure(metaclass=MetaCluster):
     def __init__(self, **kwargs):
         pass
 
+
 if __name__ == "__main__":  # for debugging
     from sys import getsizeof as size
+
     size(ClusterStructure)
