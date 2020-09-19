@@ -170,7 +170,7 @@ class ClusterStructure(metaclass=MetaCluster):
     CP(L='something', I=10)
     """
 
-    def __init__(self, **kwargs):
+    def __init__(self, **kwargs):    
         pass
 
 

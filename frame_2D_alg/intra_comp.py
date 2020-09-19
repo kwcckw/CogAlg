@@ -249,3 +249,95 @@ def comp_g(dert__, mask=None):  # cross-comp of g in 2x2 kernels, between derts 
     next comp_gg will use gg, dgy, dgx
     '''
     return (ig__, idy__, idx__, gg__, dgy__, dgx__, mg__), majority_mask  # return new dert, along with summed mask
+
+
+def comp_a(dert__, fga, mask=None):  # cross-comp of a or aga in 2x2 kernels
+    '''
+    if fga: dert = (ig__, idy__, idx__, gg__, dgy__, dgx__, mg__)
+    else:   dert = (i, g, dy, dx, m)
+    '''
+    
+    if mask is not None:
+        majority_mask = (mask[:-1, :-1].astype(int) +
+                         mask[:-1, 1:].astype(int) +
+                         mask[1:, 1:].astype(int) +
+                         mask[1:, :-1].astype(int)
+                         ) > 1
+    else:
+        majority_mask = None
+        
+    i__, g__, dy__, dx__ = dert__[0:4]
+
+    if fga:  # input is adert
+        ga__, day__, dax__ = dert__[3:6]
+        a__ = [day__[0], day__[1], dax__[0], dax__[1]] / ga__
+    else:
+        a__ = [dy__, dx__] / g__  # similar to calc_a
+
+    # each shifted a in 2x2 kernel
+    a__topleft = a__[:,:-1, :-1]
+    a__topright = a__[:, :-1, 1:]
+    a__botright = a__[:, 1:, 1:]
+    a__botleft = a__[:, 1:, :-1]
+
+    # diagonal angle differences:
+    sin_da0__, cos_da0__ = angle_diff(a__topleft, a__botright, fga)
+    sin_da1__, cos_da1__ = angle_diff(a__topright, a__botleft, fga)
+
+    ma__ = np.hypot(sin_da0__ + 1, cos_da0__ + 1) + np.hypot(sin_da1__ + 1, cos_da1__ + 1)
+    # ma = inverse angle match = SAD: covert sin and cos da to 0->2 range
+
+    day__ = (-sin_da0__ - sin_da1__), (cos_da0__ + cos_da1__)
+    # angle change in y, sines are sign-reversed because da0 and da1 are top-down, no reversal in cosines
+
+    dax__ = (-sin_da0__ + sin_da1__), (cos_da0__ + cos_da1__)
+    # angle change in x, positive sign is right-to-left, so only sin_da0__ is sign-reversed
+    '''
+    sin(-θ) = -sin(θ), cos(-θ) = cos(θ): 
+    sin(da) = -sin(-da), cos(da) = cos(-da) => (sin(-da), cos(-da)) = (-sin(da), cos(da))
+    '''
+    ga__ = np.hypot(np.arctan2(*day__), np.arctan2(*dax__))
+    # angle gradient, a scalar, to evaluate for comp_aga
+
+    '''
+    next comp_g will use g, cos_da0__, cos_da1__, dy, dx (passed to comp_rg as idy, idx)
+    next comp_a will use ga, day, dax  # comp_aga
+    '''
+    i__ = i__[:-1, :-1]  # for summation in Dert
+    g__ = g__[:-1, :-1]  # for summation in Dert
+    dy__ = dy__[:-1, :-1]  # passed on as idy
+    dx__ = dx__[:-1, :-1]  # passed on as idx
+    
+    return (i__,g__,dy__,dx__,ga__,day__,dax__,ma__,cos_da0__,cos_da1__), majority_mask
+
+# copy paste from intra_comp_a
+def angle_diff(a2, a1, fga):  # compare angle_1 to angle_2
+
+    if fga:
+        sin_11, cos_11, sin_12, cos_12 = a1[:]  # dyy1, dxy1, dyx1, dxx1 = a1[:]
+        sin_21, cos_21, sin_22, cos_22 = a2[:]  # dyy2, dxy2, dyx2, dxx2 = a2[:]
+
+        sin_da = np.subtract(np.multiply([sin_12, cos_12], [sin_21, cos_21]), np.multiply([sin_11, cos_11], [sin_22, cos_22]))
+        cos_da = np.add(np.multiply([sin_11, cos_11], [sin_12, cos_12]), np.multiply([sin_21, cos_21], [sin_22, cos_22]))
+        # =
+        # sin_da = ( [sin_12,cos_12] * [sin_21,cos_21]) - ([sin_11,cos_11] * [sin_22,cos_22])
+        # cos_da = ( [sin_11,cos_11] * [sin_12,cos_12]) + ([sin_21,cos_21] * [sin_22,cos_22])
+
+        # right now each sin_da and cos_da is having sin and cos components
+        # we need to find a way to reduce the sin & cos components into 1 component only
+        # probably take the sine part of sin_da (since sine = direction info) , and cosine part of cos_da (cosine = magnitude info)?
+
+        sin_da = sin_da[0]
+        cos_da = cos_da[1]
+
+    else:
+        sin_1, cos_1 = a1[:]
+        sin_2, cos_2 = a2[:]
+        # sine and cosine of difference between angles:
+
+        sin_da = (cos_1 * sin_2) - (sin_1 * cos_2)
+        cos_da = (sin_1 * cos_1) + (sin_2 * cos_2)
+
+    return sin_da, cos_da
+
+

@@ -26,7 +26,7 @@ from collections import deque, defaultdict
 from frame_blobs_defs import CDeepBlob
 from class_bind import AdjBinder
 from frame_blobs import assign_adjacents, flood_fill
-from intra_comp import comp_g, comp_r
+from intra_comp import comp_g, comp_r, comp_a
 from frame_blobs_imaging import visualize_blobs
 from itertools import zip_longest
 from utils import pairwise
@@ -40,7 +40,7 @@ aveB = 50  # fixed cost per intra_blob comp and clustering
 # --------------------------------------------------------------------------------------------------------------
 # functions, ALL WORK-IN-PROGRESS:
 
-def intra_blob(blob, rdn, rng, fig, fcr, **kwargs):  # recursive input rng+ | der+ cross-comp within blob
+def intra_blob(blob, rdn, rng, fig, fcr, fca, fga, **kwargs):  # recursive input rng+ | der+ cross-comp within blob
     # fig: flag input is g | p, fcr: flag comp over rng+ | der+
     if kwargs.get('render') is not None:  # stop rendering sub-blobs when blob is too small
         if blob.S < 100:
@@ -48,13 +48,15 @@ def intra_blob(blob, rdn, rng, fig, fcr, **kwargs):  # recursive input rng+ | de
 
     spliced_layers = []  # to extend root_blob sub_layers
     ext_dert__, ext_mask = extend_dert(blob)
-    if fcr:
+    if fca:
+        dert__,mask = comp_a(ext_dert__,fga, ext_mask)
+    elif fcr:
         dert__, mask = comp_r(ext_dert__, fig, fcr, ext_mask)  # -> m sub_blobs
     else:
         dert__, mask = comp_g(ext_dert__, ext_mask)  # -> g sub_blobs:
 
-    if dert__[0].shape[0] > 2 and dert__[0].shape[1] > 2 and False in mask:  # min size in y and x, least one dert in dert__
-        sub_blobs = cluster_derts(dert__, mask, ave * rdn, fcr, fig, False, **kwargs)
+    if mask.shape[0] > 2 and mask.shape[1] > 2 and False in mask:  # min size in y and x, least one dert in dert__
+        sub_blobs = cluster_derts(dert__, mask, ave * rdn, fcr, fig, fca, fga, False, **kwargs)
         # fork params:
         blob.fcr = fcr
         blob.fig = fig
@@ -69,23 +71,34 @@ def intra_blob(blob, rdn, rng, fig, fcr, **kwargs):  # recursive input rng+ | de
             borrow = min(abs(G), abs(adj_G) / 2)  # or adjacent M if negative sign?
 
             if sub_blob.sign:
+                if sub_blob.M: # temporary condition to run comp_a fork
+                    # comp_a fork:
+                    blob.sub_layers += intra_blob(sub_blob, rdn + 1 + 1 / blob.Ls, rng=rng, fig=fig, fcr=0, fca=1, fga=fga, **kwargs)
+                    # comp_P here?
+                
                 if sub_blob.M - borrow > aveB * rdn:  # M - (intra_comp value lend to edge blob)
                     # comp_r fork:
-                    blob.sub_layers += intra_blob(sub_blob, rdn + 1 + 1 / blob.Ls, rng * 2, fig=fig, fcr=1, **kwargs)
-                # else: comp_P_
+                    blob.sub_layers += intra_blob(sub_blob, rdn + 1 + 1 / blob.Ls, rng * 2, fig=fig, fcr=0, fca=0, fga=0, **kwargs)
+
             elif sub_blob.G + borrow > aveB * rdn:  # G + (intra_comp value borrow from flat blob)
                 # comp_g fork:
-                blob.sub_layers += intra_blob(sub_blob, rdn + 1 + 1 / blob.Ls, rng=rng, fig=1, fcr=0, **kwargs)
-            # else: comp_P_
+                blob.sub_layers += intra_blob(sub_blob, rdn + 1 + 1 / blob.Ls, rng=rng, fig=1, fcr=0,fca=0, fga=1, **kwargs)
+
 
         spliced_layers = [spliced_layers + sub_layers for spliced_layers, sub_layers in
                           zip_longest(spliced_layers, blob.sub_layers, fillvalue=[])]
     return spliced_layers
 
 
-def cluster_derts(dert__, mask, Ave, fcr, fig, verbose=False, **kwargs):
+def cluster_derts(dert__, mask, Ave, fcr, fig, fca, fga, verbose=False, **kwargs):
 
-    if fcr:  # comp_r output;  form clustering criterion:
+    if fca:
+        if fga:
+            crit__ = Ave - dert__[5] # temporary crit  
+        else:
+            crit__ = Ave - dert__[3] # temporary crit 
+    
+    elif fcr:  # comp_r output;  form clustering criterion:
         if fig:
             crit__ = dert__[0] + dert__[6] - Ave  # eval by i + m, accum in rng; dert__[:,:,0] if not transposed
         else:
@@ -130,16 +143,27 @@ def extend_dert(blob):  # extend dert borders (+1 dert to boundaries)
     ext_mask = np.pad(blob.mask,
                       ((y0 - y0e, yne - yn),
                        (x0 - x0e, xne - xn)),
-                      constant_values=True)
+                      constant_values=True,mode='constant')
 
     return ext_dert__, ext_mask
 
 
 def accum_blob_Dert(blob, dert__, y, x):
-    blob.I += dert__[0][y, x]
-    blob.iDy += dert__[1][y, x]
-    blob.iDx += dert__[2][y, x]
-    blob.G += dert__[3][y, x]
-    blob.Dy += dert__[4][y, x]
-    blob.Dx += dert__[5][y, x]
-    blob.M += dert__[6][y, x]
+    
+    if len(dert__)<10:
+        blob.I += dert__[0][y, x]
+        blob.iDy += dert__[1][y, x]
+        blob.iDx += dert__[2][y, x]
+        blob.G += dert__[3][y, x]
+        blob.Dy += dert__[4][y, x]
+        blob.Dx += dert__[5][y, x]
+        blob.M += dert__[6][y, x]
+    else:
+        blob.I += dert__[0][y, x]
+        blob.iDy += dert__[2][y, x]
+        blob.iDx += dert__[3][y, x]
+        blob.G += dert__[4][y, x]
+        blob.Dy += dert__[2][y, x] # this part this further modification, day and dax from comp_a is having 2 element, dyy and dyx, dxy and dxx
+        blob.Dx += dert__[3][y, x]
+        blob.M += dert__[7][y, x]
+        
