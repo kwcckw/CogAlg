@@ -94,7 +94,7 @@ def cluster_derts(dert__, mask, Ave, fcr, fig, fca, fga, verbose=False, **kwargs
 
     if fca:
         if fga:
-            crit__ = Ave - dert__[5] # temporary crit  
+            crit__ = Ave - dert__[1] # temporary crit  
         else:
             crit__ = Ave - dert__[3] # temporary crit 
     
@@ -135,10 +135,20 @@ def extend_dert(blob):  # extend dert borders (+1 dert to boundaries)
     x0e = max(0, x0 - 1)
     xne = min(rX, xn + 1)  # e is for extended
 
-    # take ext_dert__ from part of root_dert__
-    ext_dert__ = [derts[y0e:yne, x0e:xne] if derts is not None else None
-                  for derts in blob.root_dert__]
 
+    # take ext_dert__ from part of root_dert__
+    ext_dert__ = [] 
+    for derts in blob.root_dert__:
+        if derts is not None:
+            if type(derts)==tuple: # tuple of 2 for day, dax - (Dyy, Dyx) or (Dxy, Dxx) 
+                ext_dert__.append(derts[0][y0e:yne, x0e:xne])
+                ext_dert__.append(derts[1][y0e:yne, x0e:xne])
+            else:
+                ext_dert__.append(derts[y0e:yne, x0e:xne])
+        else:
+            ext_dert__.append(None)
+    ext_dert__ = tuple(ext_dert__) # change list to tuple
+    
     # extended mask
     ext_mask = np.pad(blob.mask,
                       ((y0 - y0e, yne - yn),
@@ -150,7 +160,7 @@ def extend_dert(blob):  # extend dert borders (+1 dert to boundaries)
 
 def accum_blob_Dert(blob, dert__, y, x):
     
-    if len(dert__)<10:
+    if len(dert__)<10: # comp_g, comp_r fork
         blob.I += dert__[0][y, x]
         blob.iDy += dert__[1][y, x]
         blob.iDx += dert__[2][y, x]
@@ -158,12 +168,15 @@ def accum_blob_Dert(blob, dert__, y, x):
         blob.Dy += dert__[4][y, x]
         blob.Dx += dert__[5][y, x]
         blob.M += dert__[6][y, x]
-    else:
+    else: # comp_a fork
         blob.I += dert__[0][y, x]
         blob.iDy += dert__[2][y, x]
         blob.iDx += dert__[3][y, x]
         blob.G += dert__[4][y, x]
-        blob.Dy += dert__[2][y, x] # this part this further modification, day and dax from comp_a is having 2 element, dyy and dyx, dxy and dxx
+        blob.Dyy += dert__[5][0][y, x] 
+        blob.Dyx += dert__[5][1][y, x] 
+        blob.Dxy += dert__[6][0][y, x] 
+        blob.Dxx += dert__[6][1][y, x] 
         blob.Dx += dert__[3][y, x]
         blob.M += dert__[7][y, x]
         

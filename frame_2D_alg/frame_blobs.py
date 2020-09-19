@@ -276,9 +276,6 @@ if __name__ == "__main__":
             blob_height = blob.box[1] - blob.box[0]
             blob_width = blob.box[3] - blob.box[2]
             
-            
-            
-            
             if blob.sign:
                 if G: # temporary condition to run comp_a fork
                     deep_layers[i] = intra_blob(blob, rdn=1, rng=.0, fig=0, fcr=0, fca=1, fga=0,

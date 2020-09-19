@@ -270,7 +270,7 @@ def comp_a(dert__, fga, mask=None):  # cross-comp of a or aga in 2x2 kernels
 
     if fga:  # input is adert
         ga__, day__, dax__ = dert__[3:6]
-        a__ = [day__[0], day__[1], dax__[0], dax__[1]] / ga__
+        a__ = [day__, dax__] / ga__
     else:
         a__ = [dy__, dx__] / g__  # similar to calc_a
 
@@ -281,8 +281,8 @@ def comp_a(dert__, fga, mask=None):  # cross-comp of a or aga in 2x2 kernels
     a__botleft = a__[:, 1:, :-1]
 
     # diagonal angle differences:
-    sin_da0__, cos_da0__ = angle_diff(a__topleft, a__botright, fga)
-    sin_da1__, cos_da1__ = angle_diff(a__topright, a__botleft, fga)
+    sin_da0__, cos_da0__ = angle_diff(a__topleft, a__botright)
+    sin_da1__, cos_da1__ = angle_diff(a__topright, a__botleft)
 
     ma__ = np.hypot(sin_da0__ + 1, cos_da0__ + 1) + np.hypot(sin_da1__ + 1, cos_da1__ + 1)
     # ma = inverse angle match = SAD: covert sin and cos da to 0->2 range
@@ -310,33 +310,15 @@ def comp_a(dert__, fga, mask=None):  # cross-comp of a or aga in 2x2 kernels
     
     return (i__,g__,dy__,dx__,ga__,day__,dax__,ma__,cos_da0__,cos_da1__), majority_mask
 
-# copy paste from intra_comp_a
-def angle_diff(a2, a1, fga):  # compare angle_1 to angle_2
 
-    if fga:
-        sin_11, cos_11, sin_12, cos_12 = a1[:]  # dyy1, dxy1, dyx1, dxx1 = a1[:]
-        sin_21, cos_21, sin_22, cos_22 = a2[:]  # dyy2, dxy2, dyx2, dxx2 = a2[:]
+def angle_diff(a2, a1):  # compare angle_1 to angle_2
 
-        sin_da = np.subtract(np.multiply([sin_12, cos_12], [sin_21, cos_21]), np.multiply([sin_11, cos_11], [sin_22, cos_22]))
-        cos_da = np.add(np.multiply([sin_11, cos_11], [sin_12, cos_12]), np.multiply([sin_21, cos_21], [sin_22, cos_22]))
-        # =
-        # sin_da = ( [sin_12,cos_12] * [sin_21,cos_21]) - ([sin_11,cos_11] * [sin_22,cos_22])
-        # cos_da = ( [sin_11,cos_11] * [sin_12,cos_12]) + ([sin_21,cos_21] * [sin_22,cos_22])
+    sin_1, cos_1 = a1[:]
+    sin_2, cos_2 = a2[:]
+    # sine and cosine of difference between angles:
 
-        # right now each sin_da and cos_da is having sin and cos components
-        # we need to find a way to reduce the sin & cos components into 1 component only
-        # probably take the sine part of sin_da (since sine = direction info) , and cosine part of cos_da (cosine = magnitude info)?
-
-        sin_da = sin_da[0]
-        cos_da = cos_da[1]
-
-    else:
-        sin_1, cos_1 = a1[:]
-        sin_2, cos_2 = a2[:]
-        # sine and cosine of difference between angles:
-
-        sin_da = (cos_1 * sin_2) - (sin_1 * cos_2)
-        cos_da = (sin_1 * cos_1) + (sin_2 * cos_2)
+    sin_da = (cos_1 * sin_2) - (sin_1 * cos_2)
+    cos_da = (sin_1 * cos_1) + (sin_2 * cos_2)
 
     return sin_da, cos_da
 
