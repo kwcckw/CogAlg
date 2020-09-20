@@ -212,7 +212,7 @@ if __name__ == "__main__":
 
     # Parse arguments
     argument_parser = argparse.ArgumentParser()
-    argument_parser.add_argument('-i', '--image', help='path to image file', default='./images//raccoon_eye.jpeg')
+    argument_parser.add_argument('-i', '--image', help='path to image file', default='./images//raccoon_head.jpg')
     argument_parser.add_argument('-v', '--verbose', help='print details, useful for debugging', type=int, default=1)
     argument_parser.add_argument('-n', '--intra', help='run intra_blobs after frame_blobs', type=int, default=1)
     argument_parser.add_argument('-r', '--render', help='render the process', type=int, default=0)
@@ -276,18 +276,19 @@ if __name__ == "__main__":
             blob_height = blob.box[1] - blob.box[0]
             blob_width = blob.box[3] - blob.box[2]
             
+            # not sure on the conditions here, please update
             if blob.sign:
                 if G: # temporary condition to run comp_a fork
-                    deep_layers[i] = intra_blob(blob, rdn=1, rng=.0, fig=0, fcr=0, fca=1, fga=0,
-                                                render=args.render) 
+                    blob.rdn = 1;blob.fca = 1
+                    deep_layers[i] = intra_blob(blob, render=args.render) 
       
-                if G + borrow_G > aveB and blob_height > 3 and blob_width  > 3:  # min blob dimensions
-                    deep_layers[i] = intra_blob(blob, rdn=1, rng=.0, fig=0, fcr=0, fca=0, fga=0,
-                                                render=args.render)  # +G blob' dert__' comp_g
+                elif G + borrow_G > aveB and blob_height > 3 and blob_width  > 3:  # min blob dimensions
+                    blob.rdn = 1;blob.fca = 0
+                    deep_layers[i] = intra_blob(blob, render=args.render)  # +G blob' dert__' comp_g
 
             elif -G - borrow_G > aveB and blob_height > 3 and blob_width  > 3:  # min blob dimensions
-                deep_layers[i] = intra_blob(blob, rdn=1, rng=1, fig=0, fcr=1, fca=0, fga=0,
-                                            render=args.render)  # -G blob' dert__' comp_r in 3x3 kernels
+                blob.rdn = 1;blob.rng = 1;blob.fcr = 1
+                deep_layers[i] = intra_blob(blob, render=args.render)  # -G blob' dert__' comp_r in 3x3 kernels
 
             if deep_layers[i]:  # if there are deeper layers
                 deep_blob_i_.append(i)  # indices of blobs with deep layers
