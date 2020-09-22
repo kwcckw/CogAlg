@@ -31,6 +31,7 @@ from frame_blobs_imaging import visualize_blobs
 from itertools import zip_longest
 from utils import pairwise
 import numpy as np
+from xy_blobs import image_to_blobs
 # from comp_P_draft import comp_P_blob
 
 # filters, All *= rdn:
@@ -48,12 +49,11 @@ def intra_blob(blob, **kwargs):  # recursive input rng+ | der+ cross-comp within
 
     spliced_layers = []  # to extend root_blob sub_layers
     ext_dert__, ext_mask = extend_dert(blob)
-    if blob.fca:
-        dert__,mask = comp_a(ext_dert__,blob.figa, ext_mask)
-    elif blob.fcr:
+    if blob.fca: # comp_a
+        dert__,mask = comp_a(ext_dert__,blob.figa, ext_mask) # -> xy_blos (comp_d, comp_P)
+    else: # comp_r
         dert__, mask = comp_r(ext_dert__, blob.fig, blob.fcr, ext_mask)  # -> m sub_blobs
-    else:
-        dert__, mask = comp_g(ext_dert__, ext_mask)  # -> g sub_blobs:
+
 
     if mask.shape[0] > 2 and mask.shape[1] > 2 and False in mask:  # min size in y and x, least one dert in dert__
         sub_blobs = cluster_derts(dert__, mask, ave *blob.rdn, blob.fcr, blob.fig, blob.fca, blob.figa, verbose=False, **kwargs)
@@ -62,40 +62,28 @@ def intra_blob(blob, **kwargs):  # recursive input rng+ | der+ cross-comp within
         blob.Ls = len(sub_blobs)  # for visibility and next-fork rdn
         blob.sub_layers = [sub_blobs]  # 1st layer of sub_blobs
 
-        for sub_blob in sub_blobs:  # evaluate for intra_blob comp_g | comp_r:
+        for sub_blob in sub_blobs:  # evaluate for intra_blob comp_a | comp_r | xy_blobs:
 
             G = blob.G; adj_G = blob.adj_blobs[2]
             borrow = min(abs(G), abs(adj_G) / 2)  # or adjacent M if negative sign?
 
-            # forking is following the information in intra_comp_a, please correct this section if there is any problem
-            
-            if blob.fca and sub_blob.sign and sub_blob.G + borrow > ave*blob.rdn: # G + (intra_comp value borrow from flat blob)
-                # comp_g -> dert = g, dy, dx, gg, gdy, gdx, mg:
+            # +Ga, +Gaga, +Gr, +Gagr, +Grr and so on
+            if sub_blob.G + borrow > ave*blob.rdn: # comp_a
                 sub_blob.rdn = sub_blob.rdn + 1 + 1 / blob.Ls
-                sub_blob.figa = 1
-                sub_blob.fig = 1
-                blob.sub_layers += intra_blob(sub_blob, **kwargs)
-
-            elif blob.fca and sub_blob.G > ave*blob.rdn: # need + or - borrow here?
-                # +Ga -> comp_aga -> dert + gaga, ga_day, ga_dax:
-                sub_blob.rdn = sub_blob.rdn + 1 + 1 / blob.Ls
-                sub_blob.fca = 1
                 sub_blob.figa = 1
                 sub_blob.fig = 1
                 blob.sub_layers += intra_blob(sub_blob, **kwargs)
                 
-            elif ~blob.fca and sub_blob.sign and  sub_blob.M - borrow > ave*blob.rdn: 
-                # M - (intra_comp value lend to edge blob)
+            # +Ma, +Maga, +Magr and so on (root fork of xy_blobs always = comp_a)                
+            elif blob.fca == 1 and sub_blob.M> ave*blob.rdn: # xy_blobs
+                image_to_blobs(sub_blob.root_dert__, verbose=False, render=False)
+            
+            # +Mr, +Mrr and so on
+            elif sub_blob.M> ave*blob.rdn: # comp_r
                 sub_blob.rdn = sub_blob.rdn + 1 + 1 / blob.Ls
                 sub_blob.fcr = 1
                 sub_blob.rng = blob.rng*2
                 sub_blob.fig = blob.fig
-                blob.sub_layers += intra_blob(sub_blob, **kwargs)
-
-            elif sub_blob.G + borrow > aveB * blob.rdn:  # G + (intra_comp value borrow from flat blob)
-                # +G -> comp_a -> dert + a, ga=0, day=0, dax=0:
-                sub_blob.rdn = sub_blob.rdn + 1 + 1 / blob.Ls
-                sub_blob.fig = 1
                 blob.sub_layers += intra_blob(sub_blob, **kwargs)
 
 
@@ -119,6 +107,8 @@ def cluster_derts(dert__, mask, Ave, fcr, fig, fca, fga, verbose=False, **kwargs
             crit__ = Ave - dert__[3]  # eval by -g, accum in rng
     else:  # comp_g output
         crit__ = dert__[6] - Ave  # comp_g output eval by m, or clustering is always by m?
+        
+        
     if kwargs.get('use_c'):
         raise NotImplementedError
         (_, _, _, blob_, _), idmap, adj_pairs = flood_fill()

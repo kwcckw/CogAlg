@@ -276,17 +276,14 @@ if __name__ == "__main__":
             blob_height = blob.box[1] - blob.box[0]
             blob_width = blob.box[3] - blob.box[2]
             
-            # not sure on the conditions here, please update
             if blob.sign:
-                if G: # temporary condition to run comp_a fork
-                    blob.rdn = 1;blob.fca = 1
+                # +G on first fork
+                if G + borrow_G > aveB and blob_height > 3 and blob_width  > 3:  # min blob dimensions
+                    blob.rdn = 1;blob.fca = 1 # +G blob' dert' comp_a
                     deep_layers[i] = intra_blob(blob, render=args.render) 
-      
-                elif G + borrow_G > aveB and blob_height > 3 and blob_width  > 3:  # min blob dimensions
-                    blob.rdn = 1;blob.fca = 0
-                    deep_layers[i] = intra_blob(blob, render=args.render)  # +G blob' dert__' comp_g
-
-            elif -G - borrow_G > aveB and blob_height > 3 and blob_width  > 3:  # min blob dimensions
+            
+            # +M on first fork (+M is represented by -G?)            
+            elif -G - borrow_G > aveB > aveB and blob_height > 3 and blob_width  > 3:  # min blob dimensions
                 blob.rdn = 1;blob.rng = 1;blob.fcr = 1
                 deep_layers[i] = intra_blob(blob, render=args.render)  # -G blob' dert__' comp_r in 3x3 kernels
 
