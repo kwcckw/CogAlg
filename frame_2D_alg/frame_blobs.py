@@ -1,5 +1,5 @@
 '''
-    2D version of first-level core algorithm will have frame_blobs, intra_blob (recursive search within blobs), and comp_P.
+    2D version of first-level core algorithm will have frame_blobs, intra_blob (recursive search within blobs), and xy_blobs.
     frame_blobs() performs three types of operations:
     - comp_pixel:
     Comparison between diagonal pixels in 2x2 kernels of image forms derts: tuples of pixel + derivatives per kernel.
@@ -16,7 +16,7 @@ import numpy as np
 
 from collections import deque
 from frame_blobs_defs import CBlob, FrameOfBlobs
-#from frame_blobs_wrapper import wrapped_flood_fill
+# from frame_blobs_wrapper import wrapped_flood_fill
 from frame_blobs_imaging import visualize_blobs
 from utils import minmax
 
@@ -84,7 +84,7 @@ def flood_fill(dert__, sign__, verbose=False,
                mask=None, blob_cls=CBlob,
                accum_func=accum_blob_Dert):
 
-    if mask is None: # non intra dert 
+    if mask is None: # non intra dert
         height, width = dert__[0].shape
 
     else: # intra dert
@@ -275,14 +275,14 @@ if __name__ == "__main__":
 
             blob_height = blob.box[1] - blob.box[0]
             blob_width = blob.box[3] - blob.box[2]
-            
+
             if blob.sign:
                 # +G on first fork
                 if G + borrow_G > aveB and blob_height > 3 and blob_width  > 3:  # min blob dimensions
                     blob.rdn = 1;blob.fca = 1 # +G blob' dert' comp_a
-                    deep_layers[i] = intra_blob(blob, render=args.render) 
-            
-            # +M on first fork (+M is represented by -G?)            
+                    deep_layers[i] = intra_blob(blob, render=args.render)
+
+            # +M on first fork (+M is represented by -G?)
             elif -G - borrow_G > aveB > aveB and blob_height > 3 and blob_width  > 3:  # min blob dimensions
                 blob.rdn = 1;blob.rng = 1;blob.fcr = 1
                 deep_layers[i] = intra_blob(blob, render=args.render)  # -G blob' dert__' comp_r in 3x3 kernels

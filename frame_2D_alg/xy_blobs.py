@@ -471,7 +471,7 @@ if __name__ == '__main__':
     dert__ = comp_pixel(image)  # 2x2 cross-comparison / cross-correlation
     if verbose:
         print(f"Done in {(time() - start_time):f} seconds")
-        
+
     frame = image_to_blobs(dert__, verbose, render)
 
     if intra:  # Tentative call to intra_blob, omit for testing frame_blobs:
