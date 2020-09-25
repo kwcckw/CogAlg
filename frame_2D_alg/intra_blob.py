@@ -31,7 +31,7 @@ from frame_blobs_imaging import visualize_blobs
 from itertools import zip_longest
 from utils import pairwise
 import numpy as np
-from xy_blobs import image_to_blobs
+from xy_blobs import image_to_blobs, comp_d
 # from comp_P_draft import comp_P_blob
 
 # filters, All *= rdn:
@@ -54,7 +54,6 @@ def intra_blob(blob, **kwargs):  # recursive input rng+ | der+ cross-comp within
     else: # comp_r
         dert__, mask = comp_r(ext_dert__, blob.fig, blob.fcr, ext_mask)  # -> m sub_blobs
 
-
     if mask.shape[0] > 2 and mask.shape[1] > 2 and False in mask:  # min size in y and x, least one dert in dert__
         sub_blobs = cluster_derts(dert__, mask, ave *blob.rdn, blob.fcr, blob.fig, blob.fca, blob.figa, verbose=False, **kwargs)
 
@@ -76,6 +75,8 @@ def intra_blob(blob, **kwargs):  # recursive input rng+ | der+ cross-comp within
                 
             # +Ma, +Maga, +Magr and so on (root fork of xy_blobs always = comp_a)                
             elif blob.fca == 1 and sub_blob.M> ave*blob.rdn: # xy_blobs
+                
+                comp_d(sub_blob) # testing purpose
                 image_to_blobs(sub_blob.root_dert__, verbose=False, render=False)
             
             # +Mr, +Mrr and so on
@@ -85,6 +86,7 @@ def intra_blob(blob, **kwargs):  # recursive input rng+ | der+ cross-comp within
                 sub_blob.rng = blob.rng*2
                 sub_blob.fig = blob.fig
                 blob.sub_layers += intra_blob(sub_blob, **kwargs)
+
 
 
         spliced_layers = [spliced_layers + sub_layers for spliced_layers, sub_layers in

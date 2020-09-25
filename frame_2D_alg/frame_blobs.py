@@ -212,7 +212,7 @@ if __name__ == "__main__":
 
     # Parse arguments
     argument_parser = argparse.ArgumentParser()
-    argument_parser.add_argument('-i', '--image', help='path to image file', default='./images//raccoon_head.jpg')
+    argument_parser.add_argument('-i', '--image', help='path to image file', default='./images//raccoon_eye.jpeg')
     argument_parser.add_argument('-v', '--verbose', help='print details, useful for debugging', type=int, default=1)
     argument_parser.add_argument('-n', '--intra', help='run intra_blobs after frame_blobs', type=int, default=1)
     argument_parser.add_argument('-r', '--render', help='render the process', type=int, default=0)
@@ -282,8 +282,8 @@ if __name__ == "__main__":
                     blob.rdn = 1;blob.fca = 1 # +G blob' dert' comp_a
                     deep_layers[i] = intra_blob(blob, render=args.render)
 
-            # +M on first fork (+M is represented by -G?)
-            elif -G - borrow_G > aveB > aveB and blob_height > 3 and blob_width  > 3:  # min blob dimensions
+            # +M on first fork 
+            elif -G - borrow_G > aveB  and blob_height > 3 and blob_width  > 3:  # min blob dimensions
                 blob.rdn = 1;blob.rng = 1;blob.fcr = 1
                 deep_layers[i] = intra_blob(blob, render=args.render)  # -G blob' dert__' comp_r in 3x3 kernels
 

@@ -107,6 +107,111 @@ class CBlob(ClusterStructure):
 # prefix '_' denotes higher-line variable or structure, vs. same-type lower-line variable or structure
 # postfix '_' denotes array name, vs. same-name elements of that array
 
+
+Y_COEFFS = np.array([-0.125  , -0.125  , -0.125  , -0.125  , -0.125  , -0.125  ,
+       -0.125  , -0.125  , -0.125  , -0.16667, -0.25   , -0.5    ,
+        0.     ,  0.5    ,  0.25   ,  0.16667,  0.125  ,  0.125  ,
+        0.125  ,  0.125  ,  0.125  ,  0.125  ,  0.125  ,  0.125  ,
+        0.125  ,  0.16667,  0.25   ,  0.5    ,  0.     , -0.5    ,
+       -0.25   , -0.16667])
+
+X_COEFFS = np.array([-0.125  , -0.16667, -0.25   , -0.5    ,  0.     ,  0.5    ,
+        0.25   ,  0.16667,  0.125  ,  0.125  ,  0.125  ,  0.125  ,
+        0.125  ,  0.125  ,  0.125  ,  0.125  ,  0.125  ,  0.16667,
+        0.25   ,  0.5    ,  0.     , -0.5    , -0.25   , -0.16667,
+       -0.125  , -0.125  , -0.125  , -0.125  , -0.125  , -0.125  ,
+       -0.125  , -0.125  ])
+
+
+def shift_img(img,rng):
+    '''
+    shift image based on the rng directions
+    '''
+
+    minimum_input_size = (rng*2)+1 # minimum input size based on rng
+    output_size_y = img.shape[0] - (rng*2) # expected output size after shifting
+    output_size_x = img.shape[1] - (rng*2) # expected output size after shifting
+    
+    total_shift_direction = rng*8 # total shifting direction based on rng
+    
+    # initialization
+    img_shift_ = []
+    x = -rng
+    y = -rng
+    
+    # get shifted images if output size >0
+    if output_size_y>0 and output_size_x>0:
+    
+        for i in range(total_shift_direction):
+           
+            # get images in shifted direction    
+            if (x<=0 and y<=0) :
+                if y == -rng:    
+                    img_shift = img[:y*2, rng+x:(x*2)-(rng+x)]
+                elif x == -rng:
+                    img_shift = img[rng+y:(y*2)-(rng+y),:x*2]          
+            elif x>0 and y<=0:
+                if x == rng:
+                    img_shift = img[rng+y:(y*2)-(rng+y), rng+x:]         
+                else:
+                    img_shift = img[rng+y:(y*2)-(rng+y), rng+x:x-rng]
+            elif x<=0 and y>0:  
+                if y == rng:
+                    img_shift = img[rng+y:, rng+x:(x*2)-(rng+x)]       
+                else:
+                    img_shift = img[rng+y:y-rng, rng+x:(x*2)-(rng+x)]  
+            elif x>0 and y>0:  
+                if x == rng and y == rng:
+                    img_shift = img[rng+y:, rng+x:]
+                elif x == rng:
+                    img_shift = img[rng+y:y-rng, rng+x:]
+                elif y == rng:
+                    img_shift = img[rng+y:, rng+x:x-rng]
+        
+        
+            # update x and y shifting value
+            if x == -rng and y>-rng:
+                y-=1
+            elif x < rng and y < rng:
+                x+=1 
+            elif x >= rng and y < rng:
+                y+=1   
+            elif y >= rng and x >-rng:
+                x-=1
+            
+            img_shift_.append(img_shift)
+
+    return img_shift_
+
+
+def comp_d(blob):
+    
+    # retrieve root dert and mask
+    dert__ = blob.root_dert__
+    mask = blob.mask
+    
+    #comp_a output = i__,g__,dy__,dx__,ga__,day__,dax__,ma__,cos_da0__,cos_da1__
+    a_dy,a_dx = (dert__[2],dert__[3])/dert__[1] # (dy,dx)/g
+  
+    a_shift_dy_ = shift_img(a_dy,4) # shift angle of dy
+    a_shift_dx_ = shift_img(a_dx,4) # shift angle of dx
+
+    a_center_dy = np.average(np.array(a_shift_dy_),axis=0) # center of dy
+    a_center_dx = np.average(np.array(a_shift_dx_),axis=0) # center of dx
+
+    # initialization
+    a_shift_dy_coef = np.zeros((a_center_dy.shape))
+    a_shift_dx_coef = np.zeros((a_center_dx.shape))
+    
+    # sum of -> (each shifted direction - center) * each direction coefficients
+    for i,(a_shift_dy,a_shift_dx) in enumerate(zip(a_shift_dy_,a_shift_dx_)):
+        a_shift_dy_coef += (a_shift_dy - a_center_dy) *Y_COEFFS[i]
+        a_shift_dx_coef += (a_shift_dx - a_center_dx) *X_COEFFS[i]
+
+
+    return a_shift_dy_coef, a_shift_dx_coef # what are the other values should we return here?
+
+
 def comp_pixel(image):  # 2x2 pixel cross-correlation within image, as in edge detection operators
     # see comp_pixel_versions file for other versions and more explanation
 

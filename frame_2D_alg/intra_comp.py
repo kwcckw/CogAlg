@@ -157,7 +157,8 @@ def comp_r(dert__, fig, root_fcr, mask=None):
         '''
         8-tuple of cosine matches per direction:
         '''
-        m__ += (  np.minimum(i__center, i__topleft     * cos_da[0])
+        m__ = m__.astype('float') # m should be int or float? if m should = int, we need cast cos_da into int
+        m__ += (  np.minimum(i__center, i__topleft     * cos_da[0]) 
                 + np.minimum(i__center, i__top         * cos_da[1])
                 + np.minimum(i__center, i__topright    * cos_da[2])
                 + np.minimum(i__center, i__right       * cos_da[3])
@@ -165,7 +166,8 @@ def comp_r(dert__, fig, root_fcr, mask=None):
                 + np.minimum(i__center, i__bottom      * cos_da[5])
                 + np.minimum(i__center, i__bottomleft  * cos_da[6])
                 + np.minimum(i__center, i__left        * cos_da[7])
-                  )
+              ) 
+
         '''
         8-tuple of cosine differences per direction:
         '''
@@ -179,6 +181,9 @@ def comp_r(dert__, fig, root_fcr, mask=None):
             (i__center - i__bottomleft  * cos_da[6]),
             (i__center - i__left        * cos_da[7])
         ]
+        
+        dy__ = dy__.astype('float')
+        dx__ = dx__.astype('float')
         for d__, YCOEF, XCOEF in zip(dt__, YCOEFs, XCOEFs):
 
             dy__ += d__ * YCOEF  # decompose differences into dy and dx,
