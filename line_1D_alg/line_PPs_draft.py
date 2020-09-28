@@ -24,7 +24,7 @@ Resulting PPs will be more like 1D graphs, with explicit distances between neare
 This is different from 1st level connectivity clustering, where all distances between nearest elements = 1.
 '''
 import numpy as np
-from class_cluster import ClusterStructure, NoneType
+from line_patterns_defs import Cdert_P, CPP
 
 ave_dI = 1000
 ave_div = 50
@@ -33,37 +33,6 @@ ave_net_M = 100  # search stop
 ave_Ls = 3
 
 # no ave_mP: deviation computed via rM  # ave_mP = ave*3: comp cost, or n vars per P: rep cost?
-
-class Cdert_P(ClusterStructure):
-    smP = NoneType
-    MP = int
-    Neg_M = int
-    Neg_L = int
-    P = list
-    ML = int
-    DL = int
-    MI = int
-    DI = int
-    MD = int
-    DD = int
-    MM = int
-    DM = int
-
-class CPP(ClusterStructure):
-    smP = NoneType
-    MP = int
-    Neg_M = int
-    Neg_L = int
-    P_ = list
-    ML = int
-    DL = int
-    MI = int
-    DI = int
-    MD = int
-    DD = int
-    MM = int
-    DM = int
-
 
 def comp_P_(P_):  # cross-compare patterns within horizontal line
     dert_P_ = []  # comp_P_ forms array of alternating-sign dert_Ps (derivatives + P): output of pair-wise comp_P
@@ -84,13 +53,12 @@ def comp_P_(P_):  # cross-compare patterns within horizontal line
                     neg_M += vmP  # accumulate contiguous miss: negative mP
                     neg_L += _L  # accumulate distance to match
                     if j == len(P_):  # last P
-                        dert_P_.append(Cdert_P(smP=smP or _smP, MP=vmP, Neg_M=neg_M, Neg_L=neg_L, P=P,
-                                               ML=0, DL=0, MI=0, DI=0, MD=0, DD=0, MM=0, DM=0))  # unconnected P, derivatives are ignored
+                        dert_P_.append(Cdert_P(smP=smP or _smP, MP=vmP, Neg_M=neg_M, Neg_L=neg_L, P=P ))  # unconnected P, derivatives are ignored
                     '''                     
                     no contrast value in neg dert_Ps and PPs: initial opposite-sign P miss is expected
                     neg_dert_P derivatives are not significant; neg_M obviates distance * decay_rate * M '''
             else:
-                dert_P_.append(Cdert_P(smP=smP or _smP, MP=vmP, Neg_M=neg_M, Neg_L=neg_L, P=P, ML=0, DL=0, MI=0, DI=0, MD=0, DD=0, MM=0, DM=0))
+                dert_P_.append(Cdert_P(smP=smP or _smP, MP=vmP, Neg_M=neg_M, Neg_L=neg_L, P=P))
                 # smP is ORed bilaterally, negative for single (weak) dert_Ps only
                 break  # neg net_M: stop search
 
@@ -245,7 +213,7 @@ def div_comp_P(PP_):  # draft, check all PPs for div_comp among their element Ps
 
 
 ''' non-class versions: '''
-
+'''
 def accum_PP(PP: dict, **params) -> None:
     PP.update({param: PP[param] + value for param, value in params.items()})
 
@@ -269,10 +237,9 @@ def comp_P_(P_):  # cross-compare patterns within horizontal line
                     neg_M += vmP  # accumulate contiguous miss: negative mP
                     neg_L += _L   # accumulate distance to match
                     if j == len(P_):  # last P
-                        dert_P_.append((smP or _smP, vmP, neg_M, neg_L, P, 0, 0, 0, 0, 0, 0, 0, 0))
-                    '''                     
-                    no contrast value in neg dert_Ps and PPs: initial opposite-sign P miss is expected
-                    neg_dert_P derivatives are not significant; neg_M obviates distance * decay_rate * M '''
+                        dert_P_.append((smP or _smP, vmP, neg_M, neg_L, P, 0, 0, 0, 0, 0, 0, 0, 0))          
+                    # no contrast value in neg dert_Ps and PPs: initial opposite-sign P miss is expected
+                    # neg_dert_P derivatives are not significant; neg_M obviates distance * decay_rate * M 
             else:
                 dert_P_.append((smP or _smP, vmP, neg_M, neg_L, P, 0, 0, 0, 0, 0, 0, 0, 0))
                 # smP is ORed bilaterally, negative for single (weak) dert_Ps
@@ -356,3 +323,5 @@ def form_PPm(dert_P_):  # cluster dert_Ps by mP sign, positive only: no contrast
 
 def accum_PP(PP: dict, **params) -> None:
     PP.update({param: PP[param] + value for param, value in params.items()})
+
+'''
