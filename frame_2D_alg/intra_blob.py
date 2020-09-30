@@ -76,8 +76,7 @@ def intra_blob(blob, **kwargs):  # recursive input rng+ | der+ cross-comp within
             # +Ma, +Maga, +Magr and so on (root fork of xy_blobs always = comp_a)                
             elif blob.fca == 1 and sub_blob.M> ave*blob.rdn: # xy_blobs
                 
-                comp_d(sub_blob) # testing purpose
-                image_to_blobs(sub_blob.root_dert__, verbose=False, render=False)
+                image_to_blobs(sub_blob.root_dert__, fxy=True, verbose=False, render=False)
             
             # +Mr, +Mrr and so on
             elif sub_blob.M> ave*blob.rdn: # comp_r

@@ -229,7 +229,7 @@ def comp_pixel(image):  # 2x2 pixel cross-correlation within image, as in edge d
     # renamed dert__ = (p__, g__, dy__, dx__) for readability in functions below
 
 
-def image_to_blobs(dert__, verbose=False, render=False):
+def image_to_blobs(dert__, fxy=False, verbose=False, render=False):
 
     frame = dict(rng=1, dert__=dert__, mask=None, I=0, G=0, Dy=0, Dx=0, blob__=[])
     stack_ = deque()  # buffer of running vertical stacks of Ps
@@ -258,12 +258,12 @@ def image_to_blobs(dert__, verbose=False, render=False):
 
         if render:
             render = streamer.update_blob_conversion(y, P_)
-        P_ = scan_P_(P_, stack_, frame, P_binder)  # vertical clustering, adds P up_connects and _P down_connect_cnt
-        stack_ = form_stack_(P_, frame, y)
+        P_ = scan_P_(P_, stack_, fxy, frame, P_binder)  # vertical clustering, adds P up_connects and _P down_connect_cnt
+        stack_ = form_stack_(P_, fxy, frame, y)
         stack_binder.bind_from_lower(P_binder)
 
     while stack_:  # frame ends, last-line stacks are merged into their blobs
-        form_blob(stack_.popleft(), frame)
+        form_blob(stack_.popleft(), fxy, frame)
 
     blob_binder = AdjBinder(CBlob)
     blob_binder.bind_from_lower(stack_binder)
@@ -302,8 +302,9 @@ def form_P_(dert__, binder):  # horizontal clustering and summation of dert para
     this needs to be updated for comp_a dert params: g, idy, idx, ga, day, dax, also p?
     '''
     P_ = deque()  # row of Ps
+    
     I, G, Dy, Dx, L, x0 = *next(dert__), 1, 0  # initialize P params with 1st dert params
-    dert_ = [*next(dert__)]
+    dert_ = [[I,G,Dy,Dx]] # initialize dert_ with first dert
     G = int(G) - ave
     _s = G > 0  # sign
     for x, (p, g, dy, dx) in enumerate(dert__, start=1):    # dert__ is now a generator/iterator, no need for [1:]
@@ -315,13 +316,14 @@ def form_P_(dert__, binder):  # horizontal clustering and summation of dert para
             # initialize new P params:
             I, G, Dy, Dx, L, x0, dert_ = 0, 0, 0, 0, 0, x, []
             P_.append(P)
+
         # accumulate P params:
         I += p
         G += vg
         Dy += dy
         Dx += dx
         L += 1
-        dert_.append(*next(dert__))
+        dert_.append([p,g,dy,dx]) # accumulate dert into dert_ if no sign change
         _s = s  # prior sign
 
     P = CP(I=I, G=G, Dy=Dy, Dx=Dx, L=L, x0=x0, sign=_s, dert_=dert_)  # last P in a row
@@ -361,7 +363,7 @@ def comp_d_draft(blob):  # needs to be redone
     return a_shift_dy_coef, a_shift_dx_coef # what are the other values should we return here?
 
 
-def scan_P_(P_, stack_, frame, binder):  # merge P into higher-row stack of Ps which have same sign and overlap by x_coordinate
+def scan_P_(P_, stack_, fxy, frame, binder):  # merge P into higher-row stack of Ps which have same sign and overlap by x_coordinate
     '''
     Each P in P_ scans higher-row _Ps (in stack_) left-to-right, testing for x-overlaps between Ps and same-sign _Ps.
     Overlap is represented as up_connect in P and is added to down_connect_cnt in _P. Scan continues until P.x0 >= _P.xn:
@@ -412,11 +414,11 @@ def scan_P_(P_, stack_, frame, binder):  # merge P into higher-row stack of Ps w
                     P = P_.popleft()  # load next P
                 else:  # terminate loop
                     if stack.down_connect_cnt != 1:  # terminate stack, merge it into up_connects' blobs
-                        form_blob(stack, frame)
+                        form_blob(stack, fxy, frame)
                     break
             else:  # no next-P overlap
                 if stack.down_connect_cnt != 1:  # terminate stack, merge it into up_connects' blobs
-                    form_blob(stack, frame)
+                    form_blob(stack, fxy, frame)
                 if stack_:  # load stack with next _P
                     stack = stack_.popleft()
                     _P = stack.Py_[-1]
@@ -428,26 +430,24 @@ def scan_P_(P_, stack_, frame, binder):  # merge P into higher-row stack of Ps w
     while P_:
         next_P_.append((P_.popleft(), []))  # no up_connect
     while stack_:
-        form_blob(stack_.popleft(), frame)  # down_connect_cnt==0
+        form_blob(stack_.popleft(), fxy, frame)  # down_connect_cnt==0
 
     return next_P_  # each element is P + up_connect_ refs
 
 
-def form_stack_(P_, frame, y):  # Convert or merge every P into its stack of Ps, merge blobs
+def form_stack_(P_, fxy, frame, y):  # Convert or merge every P into its stack of Ps, merge blobs
 
     next_stack_ = deque()  # converted to stack_ in the next run of scan_P_
 
     while P_:
         P, up_connect_ = P_.popleft()
-        I, G, Dy, Dx, L, x0, s = P.unpack()
+        I, G, Dy, Dx, L, x0, s, dert_ = P.unpack()
         xn = x0 + L  # next-P x0
         if not up_connect_:
             # initialize new stack for each input-row P that has no connections in higher row, as in the whole top row:
             blob = CBlob(Dert=dict(I=0, G=0, Dy=0, Dx=0, S=0, Ly=0), box=[y, x0, xn], stack_=[], sign=s, open_stacks=1)
             new_stack = Cstack(I=I, G=G, Dy=0, Dx=Dx, S=L, Ly=1, y0=y, Py_=[P], blob=blob, down_connect_cnt=0, sign=s)
             new_stack.hid = blob.id
-
-
             blob.stack_.append(new_stack)
 
         else:
@@ -468,11 +468,11 @@ def form_stack_(P_, frame, y):  # Convert or merge every P into its stack of Ps,
 
                 if len(up_connect_) > 1:  # merge blobs of all up_connects
                     if up_connect_[0].down_connect_cnt == 1:  # up_connect is not terminated
-                        form_blob(up_connect_[0], frame)  # merge stack of 1st up_connect into its blob
+                        form_blob(up_connect_[0], fxy, frame)  # merge stack of 1st up_connect into its blob
 
                     for up_connect in up_connect_[1:len(up_connect_)]:  # merge blobs of other up_connects into blob of 1st up_connect
                         if up_connect.down_connect_cnt == 1:
-                            form_blob(up_connect, frame)
+                            form_blob(up_connect, fxy, frame)
 
                         if not up_connect.blob is blob:
                             Dert, box, stack_, s, open_stacks = up_connect.blob.unpack()[:5]  # merged blob
@@ -501,7 +501,7 @@ def form_stack_(P_, frame, y):  # Convert or merge every P into its stack of Ps,
     return next_stack_  # input for the next line of scan_P_
 
 
-def form_blob(stack, frame):  # increment blob with terminated stack, check for blob termination and merger into frame
+def form_blob(stack, fxy, frame):  # increment blob with terminated stack, check for blob termination and merger into frame
 
     I, G, Dy, Dx, S, Ly, y0, Py_, blob, down_connect_cnt, sign = stack.unpack()
     # terminated stack is merged into continued or initialized blob (all connected stacks):
@@ -538,6 +538,13 @@ def form_blob(stack, frame):  # increment blob with terminated stack, check for 
                      G=frame['G'] + blob.Dert['G'],
                      Dy=frame['Dy'] + blob.Dert['Dy'],
                      Dx=frame['Dx'] + blob.Dert['Dx'])
+             
+        if fxy: # if call from intra_blob
+            for stack in blob.stack_:
+#                comp_d_(stack) # draft: unpack each stack get Ps, and unpack each P get derts for comp_d?
+#                comp_P(stack) # draft: unpack each stack get Ps and perform comp_P
+               pass
+                
         frame['blob__'].append(blob)
 
 
@@ -611,7 +618,7 @@ if __name__ == '__main__':
     if verbose:
         print(f"Done in {(time() - start_time):f} seconds")
 
-    frame = image_to_blobs(dert__, verbose, render)
+    frame = image_to_blobs(dert__, True, verbose, render)
 
     if intra:  # Tentative call to intra_blob, omit for testing frame_blobs:
 
