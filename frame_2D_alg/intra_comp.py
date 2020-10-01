@@ -259,7 +259,7 @@ def comp_g(dert__, mask=None):  # cross-comp of g in 2x2 kernels, between derts 
 def comp_a(dert__, fga, mask=None):  # cross-comp of a or aga in 2x2 kernels
     '''
     if fga: dert = (ig__, idy__, idx__, gg__, dgy__, dgx__, mg__)
-    else:   dert = (i, g, dy, dx, m)
+    else:   dert = (i, idy, idx, g, dy, dx, m)
     '''
     
     if mask is not None:
@@ -271,13 +271,10 @@ def comp_a(dert__, fga, mask=None):  # cross-comp of a or aga in 2x2 kernels
     else:
         majority_mask = None
         
-    i__, g__, dy__, dx__ = dert__[0:4]
+    i__, _, _, g__, dy__, dx__, = dert__[:-1]
 
-    if fga:  # input is adert
-        ga__, day__, dax__ = dert__[3:6]
-        a__ = [day__, dax__] / ga__
-    else:
-        a__ = [dy__, dx__] / g__  # similar to calc_a
+    g__[np.where(g__ == 0)] = 1 # to avoid / 0
+    a__ = [dy__, dx__] / g__  # similar to calc_a 
 
     # each shifted a in 2x2 kernel
     a__topleft = a__[:,:-1, :-1]

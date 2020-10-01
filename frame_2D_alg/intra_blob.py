@@ -31,11 +31,11 @@ from frame_blobs_imaging import visualize_blobs
 from itertools import zip_longest
 from utils import pairwise
 import numpy as np
-from xy_blobs import image_to_blobs, comp_d
+from xy_blobs import sub_blob_to_blobs
 # from comp_P_draft import comp_P_blob
 
 # filters, All *= rdn:
-ave = 50  # fixed cost per dert, from average m, reflects blob definition cost, may be different for comp_a?
+ave = 200  # fixed cost per dert, from average m, reflects blob definition cost, may be different for comp_a?
 aveB = 50  # fixed cost per intra_blob comp and clustering
 
 # --------------------------------------------------------------------------------------------------------------
@@ -75,8 +75,7 @@ def intra_blob(blob, **kwargs):  # recursive input rng+ | der+ cross-comp within
                 
             # +Ma, +Maga, +Magr and so on (root fork of xy_blobs always = comp_a)                
             elif blob.fca == 1 and sub_blob.M> ave*blob.rdn: # xy_blobs
-                
-                image_to_blobs(sub_blob.root_dert__, fxy=True, verbose=False, render=False)
+                sub_frame = sub_blob_to_blobs(sub_blob, verbose=False, render=False)
             
             # +Mr, +Mrr and so on
             elif sub_blob.M> ave*blob.rdn: # comp_r
