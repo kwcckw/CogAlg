@@ -71,29 +71,16 @@ class CP(ClusterStructure):
     G = int
     Dy = int
     Dx = int
-    Ga = int
-    Dayy = int
-    Dayx = int
-    Daxy = int
-    Daxx = int
-    Ma = int
     L = int
     x0 = int
     sign = NoneType
     dert_ = list
-
 
 class Cstack(ClusterStructure):
     I = int
     G = int
     Dy = int
     Dx = int
-    Ga = int
-    Dayy = int
-    Dayx = int
-    Daxy = int
-    Daxx = int
-    Ma = int
     S = int
     Ly = int
     y0 = int
@@ -119,114 +106,6 @@ class CBlob(ClusterStructure):
 # prefix '_' denotes higher-line variable or structure, vs. same-type lower-line variable or structure
 # postfix '_' denotes array name, vs. same-name elements of that array
 
-
-Y_COEFFS = np.array([-0.125  , -0.125  , -0.125  , -0.125  , -0.125  , -0.125  ,
-       -0.125  , -0.125  , -0.125  , -0.16667, -0.25   , -0.5    ,
-        0.     ,  0.5    ,  0.25   ,  0.16667,  0.125  ,  0.125  ,
-        0.125  ,  0.125  ,  0.125  ,  0.125  ,  0.125  ,  0.125  ,
-        0.125  ,  0.16667,  0.25   ,  0.5    ,  0.     , -0.5    ,
-       -0.25   , -0.16667])
-
-X_COEFFS = np.array([-0.125  , -0.16667, -0.25   , -0.5    ,  0.     ,  0.5    ,
-        0.25   ,  0.16667,  0.125  ,  0.125  ,  0.125  ,  0.125  ,
-        0.125  ,  0.125  ,  0.125  ,  0.125  ,  0.125  ,  0.16667,
-        0.25   ,  0.5    ,  0.     , -0.5    , -0.25   , -0.16667,
-       -0.125  , -0.125  , -0.125  , -0.125  , -0.125  , -0.125  ,
-       -0.125  , -0.125  ])
-
-
-def shift_img(img,rng):
-    '''
-    shift image based on the rng directions
-    '''
-
-    minimum_input_size = (rng*2)+1 # minimum input size based on rng
-    output_size_y = img.shape[0] - (rng*2) # expected output size after shifting
-    output_size_x = img.shape[1] - (rng*2) # expected output size after shifting
-    
-    total_shift_direction = rng*8 # total shifting direction based on rng
-    
-    # initialization
-    img_shift_ = []
-    x = -rng
-    y = -rng
-    
-    # get shifted images if output size >0
-    if output_size_y>0 and output_size_x>0:
-    
-        for i in range(total_shift_direction):
-           
-            # get images in shifted direction    
-            if (x<=0 and y<=0) :
-                if y == -rng:    
-                    img_shift = img[:y*2, rng+x:(x*2)-(rng+x)]
-                elif x == -rng:
-                    img_shift = img[rng+y:(y*2)-(rng+y),:x*2]          
-            elif x>0 and y<=0:
-                if x == rng:
-                    img_shift = img[rng+y:(y*2)-(rng+y), rng+x:]         
-                else:
-                    img_shift = img[rng+y:(y*2)-(rng+y), rng+x:x-rng]
-            elif x<=0 and y>0:  
-                if y == rng:
-                    img_shift = img[rng+y:, rng+x:(x*2)-(rng+x)]       
-                else:
-                    img_shift = img[rng+y:y-rng, rng+x:(x*2)-(rng+x)]  
-            elif x>0 and y>0:  
-                if x == rng and y == rng:
-                    img_shift = img[rng+y:, rng+x:]
-                elif x == rng:
-                    img_shift = img[rng+y:y-rng, rng+x:]
-                elif y == rng:
-                    img_shift = img[rng+y:, rng+x:x-rng]
-        
-        
-            # update x and y shifting value
-            if x == -rng and y>-rng:
-                y-=1
-            elif x < rng and y < rng:
-                x+=1 
-            elif x >= rng and y < rng:
-                y+=1   
-            elif y >= rng and x >-rng:
-                x-=1
-            
-            img_shift_.append(img_shift)
-
-    return img_shift_
-
-# this function is no longer needed now
-def comp_d(blob):
-    
-    # retrieve root dert and mask
-    dert__ = blob.root_dert__
-    mask = blob.mask
-    
-    #comp_a output = i__,g__,dy__,dx__,ga__,day__,dax__,ma__,cos_da0__,cos_da1__
-    a_dy,a_dx = (dert__[2],dert__[3])/dert__[1] # (dy,dx)/g
-  
-    a_shift_dy_ = shift_img(a_dy,4) # shift angle of dy
-    a_shift_dx_ = shift_img(a_dx,4) # shift angle of dx
-
-    a_center_dy = np.average(np.array(a_shift_dy_),axis=0) # center of dy
-    a_center_dx = np.average(np.array(a_shift_dx_),axis=0) # center of dx
-
-    # initialization
-    a_shift_dy_coef = np.zeros((a_center_dy.shape))
-    a_shift_dx_coef = np.zeros((a_center_dx.shape))
-    
-    # sum of -> (each shifted direction - center) * each direction coefficients
-    for i,(a_shift_dy,a_shift_dx) in enumerate(zip(a_shift_dy_,a_shift_dx_)):
-        a_shift_dy_coef += (a_shift_dy - a_center_dy) *Y_COEFFS[i]
-        a_shift_dx_coef += (a_shift_dx - a_center_dx) *X_COEFFS[i]
-
-
-    return a_shift_dy_coef, a_shift_dx_coef # what are the other values should we return here?
-
-# draft
-def comp_g_xy(P_):
-    pass
-
 def comp_pixel(image):  # 2x2 pixel cross-correlation within image, as in edge detection operators
     # see comp_pixel_versions file for other versions and more explanation
 
@@ -244,24 +123,10 @@ def comp_pixel(image):  # 2x2 pixel cross-correlation within image, as in edge d
     return (topleft__, G__, Gy__, Gx__)  # tuple of 2D arrays per param of dert (derivatives' tuple)
     # renamed dert__ = (p__, g__, dy__, dx__) for readability in functions below
 
-# please suggest a better name
-def sub_blob_to_blobs(blob, verbose=False, render=False):
-    
-    ys = blob.box[0] # y start
-    ye = blob.box[1] # y end
-    xs = blob.box[2] # x start
-    xe = blob.box[3] # x end
-    
-    # extract dert from root_dert and sort them into 12 elements
-    root_dert__ = list(blob.root_dert__)
-    dert__ = [root_dert__[0][ys:ye,xs:xe],root_dert__[1][ys:ye,xs:xe],root_dert__[2][ys:ye,xs:xe],\
-              root_dert__[3][ys:ye,xs:xe],root_dert__[4][ys:ye,xs:xe],root_dert__[5][0][ys:ye,xs:xe],\
-              root_dert__[5][1][ys:ye,xs:xe],root_dert__[6][0][ys:ye,xs:xe],root_dert__[6][1][ys:ye,xs:xe],\
-              root_dert__[7][ys:ye,xs:xe],root_dert__[8][ys:ye,xs:xe],root_dert__[9][ys:ye,xs:xe]]
-    # i__,g__,dy__,dx__,ga__,day__(y),day__(x),dax__(y),dax__(x),ma__
-    
-    
-    frame = dict(rng=1, dert__=dert__, mask=None, I=0, G=0, Dy=0, Dx=0, Ga=0, Dayy=0, Dayx=0, Daxy=0, Daxx=0, Ma=0, blob__=[])
+
+def image_to_blobs(dert__, verbose=False, render=False):
+
+    frame = dict(rng=1, dert__=dert__, mask=None, I=0, G=0, Dy=0, Dx=0, blob__=[])
     stack_ = deque()  # buffer of running vertical stacks of Ps
     height, width = dert__[0].shape
 
@@ -285,8 +150,6 @@ def sub_blob_to_blobs(blob, verbose=False, render=False):
 
         P_binder = AdjBinder(CP)  # binder needs data about clusters of the same level
         P_ = form_P_(zip(*dert_), P_binder)  # horizontal clustering
-
-        comp_g_xy(P_) # draft
 
         if render:
             render = streamer.update_blob_conversion(y, P_)
@@ -328,81 +191,49 @@ dert: tuple of derivatives per pixel, initially (p, dy, dx, g), will be extended
 Dert: params of cluster structures (P, stack, blob): summed dert params + dimensions: vertical Ly and area S
 '''
 
+
 def form_P_(Dert_, binder):  # horizontal clustering and summation of dert params into P params, per row of a frame
-    # P is a segment of same-sign derts in horizontal slice of a blob
-    '''
-    this needs to be updated for comp_a dert params: g, idy, idx, ga, day, dax, also p?
-    '''
+    # P is a segment of derts with same-sign g in horizontal slice of a blob
+
     P_ = deque()  # row of Ps
-    dert_ = [[*next(Dert_)][:10]] # get first dert (without cosda0 and cosda1)
-    
+    dert_ = [[*next(Dert_)][:10]]  # get first dert (without cos_da0 and cos_da1), dert__ is a generator/iterator
+
     # initialize P params with 1st dert params
-    (I, G, Dy, Dx, Ga, Dayy, Dayx, Daxy, Daxx, Ma), L, x0 = dert_[0], 1, 0 
-    G = int(Ga) - ave # should we use Ga here?
+    (I, G, Dy, Dx, Ga, Dyy, Dyx, Dxy, Dxx, Ma), L, x0 = dert_[0], 1, 0
+    G = int(G) - ave  # should we use Ga here?
     _s = G > 0  # sign
-    for x, (p, g, dy, dx, ga, dayy, dayx, daxy, daxx, ma, _, _) in enumerate(Dert_, start=1):    # dert__ is now a generator/iterator, no need for [1:]
+    for x, (p, g, dy, dx, ga, dyy, dyx, dxy, dxx, ma, _, _) in enumerate(Dert_, start=1):
         vg = int(g) - ave  # deviation of g
         s = vg > 0
         if s != _s:
             # terminate and pack P:
-            P = CP(I=I, G=G, Dy=Dy, Dx=Dx, Ga=Ga, Dayy=Dayy, Dayx=Dayx, Daxy=Daxy, \
-                   Daxx=Daxx, Ma=Ma, L=L, x0=x0, sign=_s, dert_=dert_)
+            P = CP(I=I, G=G, Dy=Dy, Dx=Dx, Ga=Ga, Dyy=Dyy, Dyx=Dyx, Dxy=Dxy, Dxx=Dxx, Ma=Ma, L=L, x0=x0, sign=_s, dert_=dert_)
             # initialize new P params:
-            I, G, Dy, Dx, Ga, Dayy, Dayx, Daxy, Daxx, Ma, L, x0, dert_ = 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, x, []
+            I, G, Dy, Dx, Ga, Dyy, Dyx, Dxy, Dxx, Ma, L, x0, dert_ = 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, x, []
             P_.append(P)
-            
         # accumulate P params:
         I += p
         G += vg
         Dy += dy
         Dx += dx
         Ga += ga
-        Dayy += dayy
-        Dayx += dayx
-        Daxy += daxy
-        Daxx += daxx
+        Dyy += dyy
+        Dyx += dyx
+        Dxy += dxy
+        Dxx += dxx
         Ma += Ma
         L += 1
-        dert_.append([p, g, dy, dx, ga, dayy, dayx, daxy, daxx, ma]) # accumulate dert into dert_ if no sign change
+        dert_.append([p, g, dy, dx, ga, dyy, dyx, dxy, dxx, ma])  # accumulate dert into dert_ if no sign change
         _s = s  # prior sign
 
     # last P in a row
-    P = CP(I=I, G=G, Dy=Dy, Dx=Dx, Ga=Ga, Dayy=Dayy, Dayx=Dayx, Daxy=Daxy, \
-           Daxx=Daxx, Ma=Ma, L=L, x0=x0, sign=_s, dert_=dert_)
+    P = CP(I=I, G=G, Dy=Dy, Dx=Dx, Ga=Ga, Dyy=Dyy, Dyx=Dyx, Dxy=Dxy, Dxx=Dxx, Ma=Ma, L=L, x0=x0, sign=_s, dert_=dert_)
     P_.append(P)
 
     for _P, P in pairwise(P_):
         binder.bind(_P, P)
 
     return P_
-
-
-def comp_d_draft(blob):  # needs to be redone
-
-    # retrieve root dert__ and mask
-    dert__ = blob.root_dert__
-    mask = blob.mask
-
-    #comp_a output = i__,g__,dy__,dx__,ga__,day__,dax__,ma__,cos_da0__,cos_da1__
-    a_dy, a_dx = (dert__[2], dert__[3]) / dert__[1]  # (dy,dx) / g
-
-    a_shift_dy_ = shift_img(a_dy,4) # shift angle of dy
-    a_shift_dx_ = shift_img(a_dx,4) # shift angle of dx
-
-    a_center_dy = np.average(np.array(a_shift_dy_),axis=0) # center of dy
-    a_center_dx = np.average(np.array(a_shift_dx_),axis=0) # center of dx
-
-    # initialization
-    a_shift_dy_coef = np.zeros((a_center_dy.shape))
-    a_shift_dx_coef = np.zeros((a_center_dx.shape))
-
-    # sum of -> (each shifted direction - center) * each direction coefficients
-    for i,(a_shift_dy, a_shift_dx) in enumerate(zip(a_shift_dy_,a_shift_dx_)):
-        a_shift_dy_coef += (a_shift_dy - a_center_dy) *Y_COEFFS[i]
-        a_shift_dx_coef += (a_shift_dx - a_center_dx) *X_COEFFS[i]
-
-
-    return a_shift_dy_coef, a_shift_dx_coef # what are the other values should we return here?
 
 
 def scan_P_(P_, stack_, frame, binder):  # merge P into higher-row stack of Ps which have same sign and overlap by x_coordinate
@@ -483,21 +314,22 @@ def form_stack_(P_, frame, y):  # Convert or merge every P into its stack of Ps,
 
     while P_:
         P, up_connect_ = P_.popleft()
-        I, G, Dy, Dx, Ga, Dayy, Dayx, Daxy, Daxx, Ma, L, x0, s, dert_ = P.unpack()
+        I, G, Dy, Dx, L, x0, s = P.unpack()
         xn = x0 + L  # next-P x0
         if not up_connect_:
             # initialize new stack for each input-row P that has no connections in higher row, as in the whole top row:
-            blob = CBlob(Dert=dict(I=0, G=0, Dy=0, Dx=0, Ga=0, Dayy=0, Dayx=0, Daxy=0, Daxx=0, Ma=0, S=0, Ly=0), box=[y, x0, xn], stack_=[], sign=s, open_stacks=1)
-            # why initialize new stack with Dy=0 and Dx=Dx previously?
-            new_stack = Cstack(I=I, G=G, Dy=Dy, Dx=Dx, Ga=Ga, Dayy=Dayy, Dayx=Dayx, Daxy=Daxy, Daxx=Daxx, Ma=Ma, S=L, Ly=1, y0=y, Py_=[P], blob=blob, down_connect_cnt=0, sign=s)
+            blob = CBlob(Dert=dict(I=0, G=0, Dy=0, Dx=0, S=0, Ly=0), box=[y, x0, xn], stack_=[], sign=s, open_stacks=1)
+            new_stack = Cstack(I=I, G=G, Dy=0, Dx=Dx, S=L, Ly=1, y0=y, Py_=[P], blob=blob, down_connect_cnt=0, sign=s)
             new_stack.hid = blob.id
+            # if stack.G - stack.Ga > ave * coeff * len(stack.Py):
+            # comp_d_(stack)
             blob.stack_.append(new_stack)
 
         else:
             if len(up_connect_) == 1 and up_connect_[0].down_connect_cnt == 1:
                 # P has one up_connect and that up_connect has one down_connect=P: merge P into up_connect stack:
                 new_stack = up_connect_[0]
-                new_stack.accumulate(I=I, G=G, Dy=Dy, Dx=Dx, Ga=Ga, Dayy=Dayy, Dayx=Dayx, Daxy=Daxy, Daxx=Daxx, Ma=Ma, S=L, Ly=1)
+                new_stack.accumulate(I=I, G=G, Dy=Dy, Dx=Dx, S=L, Ly=1)
                 new_stack.Py_.append(P)  # Py_: vertical buffer of Ps
                 new_stack.down_connect_cnt = 0  # reset down_connect_cnt
                 blob = new_stack.blob
@@ -505,7 +337,7 @@ def form_stack_(P_, frame, y):  # Convert or merge every P into its stack of Ps,
             else:  # P has >1 up_connects, or 1 up_connect that has >1 down_connect_cnt:
                 blob = up_connect_[0].blob
                 # initialize new_stack with up_connect blob:
-                new_stack = Cstack(I=I, G=G, Dy=Dy, Dx=Dx, Ga=Ga, Dayy=Dayy, Dayx=Dayx, Daxy=Daxy, Daxx=Daxx, Ma=Ma, S=L, Ly=1, y0=y, Py_=[P], blob=blob, down_connect_cnt=0, sign=s)
+                new_stack = Cstack(I=I, G=G, Dy=0, Dx=Dx, S=L, Ly=1, y0=y, Py_=[P], blob=blob, down_connect_cnt=0, sign=s)
                 new_stack.hid = blob.id
                 blob.stack_.append(new_stack)  # stack is buffered into blob
 
@@ -519,8 +351,8 @@ def form_stack_(P_, frame, y):  # Convert or merge every P into its stack of Ps,
 
                         if not up_connect.blob is blob:
                             Dert, box, stack_, s, open_stacks = up_connect.blob.unpack()[:5]  # merged blob
-                            I, G, Dy, Dx, Ga, Dayy, Dayx, Daxy, Daxx, Ma, S, Ly = Dert.values()
-                            accum_Dert(blob.Dert, I=I, G=G, Dy=Dy, Dx=Dx, Ga=Ga, Dayy=Dayy, Dayx=Dayx, Daxy=Daxy, Daxx=Daxx, Ma=Ma, S=S, Ly=Ly)
+                            I, G, Dy, Dx, S, Ly = Dert.values()
+                            accum_Dert(blob.Dert, I=I, G=G, Dy=Dy, Dx=Dx, S=S, Ly=Ly)
                             blob.open_stacks += open_stacks
                             blob.box[0] = min(blob.box[0], box[0])  # extend box y0
                             blob.box[1] = min(blob.box[1], box[1])  # extend box x0
@@ -546,9 +378,9 @@ def form_stack_(P_, frame, y):  # Convert or merge every P into its stack of Ps,
 
 def form_blob(stack, frame):  # increment blob with terminated stack, check for blob termination and merger into frame
 
-    I, G, Dy, Dx, Ga, Dayy, Dayx, Daxy, Daxx, Ma, S, Ly, y0, Py_, blob, down_connect_cnt, sign = stack.unpack()
+    I, G, Dy, Dx, S, Ly, y0, Py_, blob, down_connect_cnt, sign = stack.unpack()
     # terminated stack is merged into continued or initialized blob (all connected stacks):
-    accum_Dert(blob.Dert, I=I, G=G, Dy=Dy, Dx=Dx, Ga=Ga, Dayy=Dayy, Dayx=Dayx, Daxy=Daxy, Daxx=Daxx, Ma=Ma, S=S, Ly=Ly)
+    accum_Dert(blob.Dert, I=I, G=G, Dy=Dy, Dx=Dx, S=S, Ly=Ly)
 
     blob.open_stacks += down_connect_cnt - 1  # incomplete stack cnt + terminated stack down_connect_cnt - 1: stack itself
     # open stacks contain Ps of a current row and may be extended with new x-overlapping Ps in next run of scan_P_
@@ -580,20 +412,7 @@ def form_blob(stack, frame):  # increment blob with terminated stack, check for 
         frame.update(I=frame['I'] + blob.Dert['I'],
                      G=frame['G'] + blob.Dert['G'],
                      Dy=frame['Dy'] + blob.Dert['Dy'],
-                     Dx=frame['Dx'] + blob.Dert['Dx'],
-                     Ga=frame['Ga'] + blob.Dert['Ga'],
-                     Dayy=frame['Dayy'] + blob.Dert['Dayy'],
-                     Dayx=frame['Dayx'] + blob.Dert['Dayx'],
-                     Daxy=frame['Daxy'] + blob.Dert['Daxy'],
-                     Daxx=frame['Daxx'] + blob.Dert['Daxx'],
-                     Ma=frame['Ma'] + blob.Dert['Ma'])
-             
-        
-        for stack in blob.stack_:
-#                comp_d_(stack) # draft: unpack each stack get Ps, and unpack each P get derts for comp_d?
-#                comp_P(stack) # draft: unpack each stack get Ps and perform comp_P
-           pass
-                
+                     Dx=frame['Dx'] + blob.Dert['Dx'])
         frame['blob__'].append(blob)
 
 
@@ -645,8 +464,6 @@ def update_dert(blob):  # add idy, idx, m to dert__
 # -----------------------------------------------------------------------------
 # Main
 
-# xy_blobs must be called from intra_blob
-'''
 if __name__ == '__main__':
     import argparse
 
@@ -669,7 +486,7 @@ if __name__ == '__main__':
     if verbose:
         print(f"Done in {(time() - start_time):f} seconds")
 
-    frame = image_to_blobs(dert__, True, verbose, render)
+    frame = image_to_blobs(dert__, verbose, render)
 
     if intra:  # Tentative call to intra_blob, omit for testing frame_blobs:
 
@@ -693,19 +510,19 @@ if __name__ == '__main__':
         )
 
         for i, blob in enumerate(frame['blob__']):  # print('Processing blob number ' + str(bcount))
-            
-            #Blob G: -|+ predictive value, positive value of -G blobs is lent to the value of their adjacent +G blobs. 
-            #+G "edge" blobs are low-match, valuable only as contrast: to the extent that their negative value cancels 
-            #positive value of adjacent -G "flat" blobs.
-            
+            '''
+            Blob G: -|+ predictive value, positive value of -G blobs is lent to the value of their adjacent +G blobs. 
+            +G "edge" blobs are low-match, valuable only as contrast: to the extent that their negative value cancels 
+            positive value of adjacent -G "flat" blobs.
+            '''
             G = blob.Dert['G']; adj_G = blob.adj_blobs[2]
             borrow_G = min(abs(G), abs(adj_G) / 2)
-            
-            #int_G / 2 + ext_G / 2, because both borrow or lend bilaterally, 
-            #same as pri_M and next_M in line patterns but direction here is radial: inside-out
-            #borrow_G = min, ~ comp(G,_G): only value present in both parties can be borrowed from one to another
-            #Add borrow_G -= inductive leaking across external blob?
-            
+            '''
+            int_G / 2 + ext_G / 2, because both borrow or lend bilaterally, 
+            same as pri_M and next_M in line patterns but direction here is radial: inside-out
+            borrow_G = min, ~ comp(G,_G): only value present in both parties can be borrowed from one to another
+            Add borrow_G -= inductive leaking across external blob?
+            '''
             blob = CDeepBlob(Dert=blob.Dert, box=blob.box, stack_=blob.stack_,
                              sign=blob.sign, root_dert__=deep_root_dert__,
                              dert__=blob.dert__, mask=blob.mask,
@@ -730,4 +547,3 @@ if __name__ == '__main__':
         print(f"\nSession ended in {end_time:.2} seconds", end="")
     else:
         print(end_time)
-'''
