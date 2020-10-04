@@ -236,7 +236,7 @@ if __name__ == "__main__":
         if args.verbose:
             print("\rRunning intra_blob...")
 
-        from intra_blob import (
+        from intra_blob_xy import (
             intra_blob, aveB,
         )
         from frame_blobs_defs import CDeepBlob
@@ -247,10 +247,10 @@ if __name__ == "__main__":
         empty = np.zeros_like(frame.dert__[0])
         deep_root_dert__ = (  # update root dert__
             frame.dert__[0],  # i
-            empty,  # idy
-            empty,  # idx
-            *frame.dert__[1:],  # g, dy, dx
-            empty,  # m
+            frame.dert__[2], # dy
+            frame.dert__[3], # dx
+            frame.dert__[1], # g
+            empty  # m
         )
 
         for i, blob in enumerate(frame.blob_):  # print('Processing blob number ' + str(bcount))

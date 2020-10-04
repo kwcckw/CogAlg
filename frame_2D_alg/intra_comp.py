@@ -36,7 +36,7 @@ def comp_r(dert__, root_fcr, mask=None):
     Due to skipping, configuration of input derts in next-rng kernel will always be 3x3, see:
     https://github.com/boris-kz/CogAlg/blob/master/frame_2D_alg/Illustrations/intra_comp_diagrams.png
     '''
-    i__ = dert__[0]  # i is ig if fig else pixel
+    i__ = dert__[0]  # i is p
 
     '''
     sparse aligned i__center and i__rim arrays:
@@ -70,9 +70,9 @@ def comp_r(dert__, root_fcr, mask=None):
         majority_mask = None  # returned at the end of function
 
     if root_fcr:  # root fork is comp_r, accumulate derivatives:
-        dy__ = dert__[4][1:-1:2, 1:-1:2].copy()  # sparse to align with i__center
-        dx__ = dert__[5][1:-1:2, 1:-1:2].copy()
-        m__ = dert__[6][1:-1:2, 1:-1:2].copy()
+        dy__ = dert__[1][1:-1:2, 1:-1:2].copy()  # sparse to align with i__center
+        dx__ = dert__[2][1:-1:2, 1:-1:2].copy()
+        m__ = dert__[4][1:-1:2, 1:-1:2].copy()
 
     else: # initialize derivatives:
         dy__ = np.zeros_like(i__center)  # sparse to align with i__center
@@ -125,7 +125,8 @@ def comp_a(dert__, mask=None):  # cross-comp of angle in 2x2 kernels
     else:
         majority_mask = None
 
-    i__, dy__, dx__, g__, m__ = dert__[:4]  # day__,dax__,ga__,ma__ are recomputed
+    i__, dy__, dx__, g__, m__ = dert__[:5]  # day__,dax__,ga__,ma__ are recomputed    
+    g__[np.where(g__ == 0)] = 1 # to avoid / 0
     a__ = [dy__, dx__] / g__  # similar to calc_a
 
     # each shifted a in 2x2 kernel
