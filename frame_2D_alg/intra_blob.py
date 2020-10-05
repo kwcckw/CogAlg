@@ -52,46 +52,70 @@ def intra_blob(blob, **kwargs):  # recursive input rng+ | angle cross-comp withi
 
     spliced_layers = []  # to extend root_blob sub_layers
     ext_dert__, ext_mask = extend_dert(blob)
-    if blob.fca:  # comp_a
+    
+
+    if blob.fca: # comp_a -> P_blobs
         dert__, mask = comp_a(ext_dert__, ext_mask)  # -> ga sub_blobs -> P_blobs (comp_d, comp_P)
-    else:  # comp_r
+    
+        if mask.shape[0] > 2 and mask.shape[1] > 2 and False in mask:  # min size in y and x, least one dert in dert__
+
+
+            dert__ = list(dert__)
+            dert__ = (dert__[0],dert__[1],dert__[2],dert__[3],dert__[4],
+                      dert__[5][0],dert__[5][1],dert__[6][0],dert__[6][1], 
+                      dert__[7],dert__[8])
+
+            sub_blobs = cluster_derts_P(dert__, mask, ave * blob.rdn)
+
+            for sub_blob in sub_blobs:  # evaluate for intra_blob comp_a | comp_r | P_blobs:
+                G = blob.G; adj_G = blob.adj_blobs[2]
+                borrow = min(abs(G), abs(adj_G) / 2)  # or adjacent M if negative sign?
+    
+                # no comp_aga for now
+                '''
+                if sub_blob.G + borrow > ave * blob.rdn:  # also if +Ga, +Gaga, +Gr, +Gagr, +Grr...
+                    # comp_aga:
+                    sub_blob.rdn = sub_blob.rdn + 1 + 1 / blob.Ls
+                    blob.sub_layers += intra_blob(sub_blob, **kwargs)
+                '''   
+                    
+    else: # comp_r -> comp_r or comp_a
         dert__, mask = comp_r(ext_dert__, blob.fcr, ext_mask)  # -> m sub_blobs
+        
+        
+        if mask.shape[0] > 2 and mask.shape[1] > 2 and False in mask:  # min size in y and x, least one dert in dert__
 
-    if mask.shape[0] > 2 and mask.shape[1] > 2 and False in mask:  # min size in y and x, least one dert in dert__
-        sub_blobs = cluster_derts(dert__, mask, ave * blob.rdn, blob.fcr, blob.fca, verbose=False, **kwargs)
+            sub_blobs = cluster_derts(dert__, mask, ave * blob.rdn, blob.fcr, blob.fca, verbose=False, **kwargs)
 
-        # fork params:
-        blob.Ls = len(sub_blobs)  # for visibility and next-fork rdn
-        blob.sub_layers = [sub_blobs]  # 1st layer of sub_blobs
+            # fork params:
+            blob.Ls = len(sub_blobs)  # for visibility and next-fork rdn
+            blob.sub_layers = [sub_blobs]  # 1st layer of sub_blobs
+    
+            for sub_blob in sub_blobs:  # evaluate for intra_blob comp_a | comp_r | P_blobs:
+                G = blob.G; adj_G = blob.adj_blobs[2]
+                borrow = min(abs(G), abs(adj_G) / 2)  # or adjacent M if negative sign?
+    
+                if sub_blob.G + borrow > ave * blob.rdn:  # also if +Ga, +Gaga, +Gr, +Gagr, +Grr...
+                    # comp_a:
+                    sub_blob.rdn = sub_blob.rdn + 1 + 1 / blob.Ls
+                    blob.sub_layers += intra_blob(sub_blob, **kwargs)
 
-        for sub_blob in sub_blobs:  # evaluate for intra_blob comp_a | comp_r | P_blobs:
-            G = blob.G; adj_G = blob.adj_blobs[2]
-            borrow = min(abs(G), abs(adj_G) / 2)  # or adjacent M if negative sign?
-
-            if sub_blob.G + borrow > ave * blob.rdn:  # also if +Ga, +Gaga, +Gr, +Gagr, +Grr...
-                # comp_a:
-                sub_blob.rdn = sub_blob.rdn + 1 + 1 / blob.Ls
-                blob.sub_layers += intra_blob(sub_blob, **kwargs)
-
-            elif blob.fca == 1 and sub_blob.M > ave * blob.rdn:  # if +Ma, +Maga, +Magr...
-                # trace edges:
-                form_P_blobs(sub_blob.root_dert__, verbose=False, render=False)
-
-            elif sub_blob.M > ave * blob.rdn:  # if +Mr, +Mrr...
-                # comp_r:
-                sub_blob.rdn = sub_blob.rdn + 1 + 1 / blob.Ls
-                sub_blob.fcr = 1
-                sub_blob.rng = blob.rng * 2
-                blob.sub_layers += intra_blob(sub_blob, **kwargs)
-
-        spliced_layers = [spliced_layers + sub_layers for spliced_layers, sub_layers in
-                          zip_longest(spliced_layers, blob.sub_layers, fillvalue=[])]
-    return spliced_layers
+                elif sub_blob.M > ave * blob.rdn:  # if +Mr, +Mrr...
+                    # comp_r:
+                    sub_blob.rdn = sub_blob.rdn + 1 + 1 / blob.Ls
+                    sub_blob.fcr = 1
+                    sub_blob.rng = blob.rng * 2
+                    blob.sub_layers += intra_blob(sub_blob, **kwargs)
+    
+            spliced_layers = [spliced_layers + sub_layers for spliced_layers, sub_layers in
+                              zip_longest(spliced_layers, blob.sub_layers, fillvalue=[])]
+        return spliced_layers
 
 
 def cluster_derts(dert__, mask, Ave, fcr, fca, verbose=False, **kwargs):
-    if fca:
-        crit__ = Ave - dert__[6]  # comp_r | P_blobs eval by ga
+    
+    if fca: # ga index is 7: i__, dy__, dx__, g__, m__, day__, dax__, ga__, ma__
+        crit__ = Ave - dert__[7]  # comp_r | P_blobs eval by ga
     elif fcr:  # comp_r output;  form clustering criterion:
         crit__ = dert__[4] - Ave  # comp_r eval by m
     else:
@@ -114,6 +138,19 @@ def cluster_derts(dert__, mask, Ave, fcr, fca, verbose=False, **kwargs):
                         winname=f"Deep blobs (fcr = {fcr}, fca = {fca})")
 
     return blob_
+
+
+
+def cluster_derts_P(dert__, mask, Ave):
+ 
+    # crit will be computed in the P_blobs
+    # crit__ = Ave - dert__[7]  # comp_r | P_blobs eval by ga
+    
+    # trace edges:
+    frame_P__ = form_P_blobs(dert__, Ave=Ave)
+        
+    return frame_P__['blob__']
+
 
 
 def extend_dert(blob):  # extend dert borders (+1 dert to boundaries)

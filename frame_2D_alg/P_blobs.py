@@ -68,19 +68,34 @@ ave = 30  # filter or hyper-parameter, set as a guess, latter adjusted by feedba
 
 class CP(ClusterStructure):
     I = int  # default type at initialization
-    G = int
     Dy = int
     Dx = int
+    G = int
+    M = int
+    Dyy = int
+    Dyx = int
+    Dxy = int
+    Dxx = int
+    Ga = int
+    Ma = int
     L = int
     x0 = int
     sign = NoneType
     dert_ = list
 
+
 class Cstack(ClusterStructure):
     I = int
-    G = int
     Dy = int
     Dx = int
+    G = int
+    M = int
+    Dyy = int
+    Dyx = int
+    Dxy = int
+    Dxx = int
+    Ga = int
+    Ma = int
     S = int
     Ly = int
     y0 = int
@@ -106,27 +121,11 @@ class CBlob(ClusterStructure):
 # prefix '_' denotes higher-line variable or structure, vs. same-type lower-line variable or structure
 # postfix '_' denotes array name, vs. same-name elements of that array
 
-def comp_pixel(image):  # 2x2 pixel cross-correlation within image, as in edge detection operators
-    # see comp_pixel_versions file for other versions and more explanation
 
-    # input slices into sliding 2x2 kernel, each slice is a shifted 2D frame of grey-scale pixels:
-    topleft__ = image[:-1, :-1]
-    topright__ = image[:-1, 1:]
-    bottomleft__ = image[1:, :-1]
-    bottomright__ = image[1:, 1:]
+def form_P_blobs(dert__, Ave, verbose=False, render=False):
 
-    Gy__ = ((bottomleft__ + bottomright__) - (topleft__ + topright__))  # same as decomposition of two diagonal differences into Gy
-    Gx__ = ((topright__ + bottomright__) - (topleft__ + bottomleft__))  # same as decomposition of two diagonal differences into Gx
-
-    G__ = np.hypot(Gy__, Gx__)  # central gradient per kernel, between its four vertex pixels
-
-    return (topleft__, G__, Gy__, Gx__)  # tuple of 2D arrays per param of dert (derivatives' tuple)
-    # renamed dert__ = (p__, g__, dy__, dx__) for readability in functions below
-
-
-def form_P_blobs(dert__, verbose=False, render=False):
-
-    frame = dict(rng=1, dert__=dert__, mask=None, I=0, G=0, Dy=0, Dx=0, blob__=[])
+    ave = Ave
+    frame = dict(rng=1, dert__=dert__, mask=None, I=0, Dy=0, Dx=0, G=0, M=0, Dyy=0, Dyx=0, Dxy=0, Dxx=0, Ga=0, Ma=0, blob__=[])
     stack_ = deque()  # buffer of running vertical stacks of Ps
     height, width = dert__[0].shape
 
@@ -196,38 +195,38 @@ def form_P_(Dert_, binder):  # horizontal clustering and summation of dert param
     # P is a segment of derts with same-sign g in horizontal slice of a blob
 
     P_ = deque()  # row of Ps
-    dert_ = [[*next(Dert_)][:10]]  # get first dert (without cos_da0 and cos_da1), dert__ is a generator/iterator
+    dert_ = [*next(Dert_)]  # get first dert, dert_ is a generator/iterator
 
     # initialize P params with 1st dert params
-    (I, G, Dy, Dx, Ga, Dyy, Dyx, Dxy, Dxx, Ma), L, x0 = dert_[0], 1, 0
-    G = int(G) - ave  # should we use Ga here?
-    _s = G > 0  # sign
-    for x, (p, g, dy, dx, ga, dyy, dyx, dxy, dxx, ma, _, _) in enumerate(Dert_, start=1):
-        vg = int(g) - ave  # deviation of g
-        s = vg > 0
+    (I, Dy, Dx, G, M, Dyy, Dyx, Dxy, Dxx, Ga, Ma), L, x0 = dert_, 1, 0
+    _s = (ave - Ga) > 0  # sign (crit = ave - Ga)
+    for x, (p, dy, dx, g, m, dyy, dyx, dxy, dxx, ga, ma) in enumerate(Dert_, start=1):
+        vga = (ave - ga)  # deviation of ga
+        s = vga > 0
         if s != _s:
             # terminate and pack P:
-            P = CP(I=I, G=G, Dy=Dy, Dx=Dx, Ga=Ga, Dyy=Dyy, Dyx=Dyx, Dxy=Dxy, Dxx=Dxx, Ma=Ma, L=L, x0=x0, sign=_s, dert_=dert_)
+            P = CP(I=I, Dy=Dy, Dx=Dx, G=G, M=M, Dyy=Dyy, Dyx=Dyx, Dxy=Dxy, Dxx=Dxx, Ga=Ga, Ma=Ma, L=L, x0=x0, sign=_s, dert_=dert_)
             # initialize new P params:
-            I, G, Dy, Dx, Ga, Dyy, Dyx, Dxy, Dxx, Ma, L, x0, dert_ = 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, x, []
+            I, Dy, Dx, G, M, Dyy, Dyx, Dxy, Dxx, Ga, Ma, L, x0, dert_ = 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, x, []
             P_.append(P)
         # accumulate P params:
         I += p
-        G += vg
         Dy += dy
         Dx += dx
-        Ga += ga
+        G += g
+        M += m
         Dyy += dyy
         Dyx += dyx
         Dxy += dxy
         Dxx += dxx
+        Ga += vga
         Ma += Ma
         L += 1
-        dert_.append([p, g, dy, dx, ga, dyy, dyx, dxy, dxx, ma])  # accumulate dert into dert_ if no sign change
+        dert_.append([p, dy, dx, g, m, dyy, dyx, dxy, dxx, ga, ma])  # accumulate dert into dert_ if no sign change
         _s = s  # prior sign
 
     # last P in a row
-    P = CP(I=I, G=G, Dy=Dy, Dx=Dx, Ga=Ga, Dyy=Dyy, Dyx=Dyx, Dxy=Dxy, Dxx=Dxx, Ma=Ma, L=L, x0=x0, sign=_s, dert_=dert_)
+    P = CP(I=I, Dy=Dy, Dx=Dx, G=G, M=M, Dyy=Dyy, Dyx=Dyx, Dxy=Dxy, Dxx=Dxx, Ga=Ga, Ma=Ma, L=L, x0=x0, sign=_s, dert_=dert_)
     P_.append(P)
 
     for _P, P in pairwise(P_):
@@ -314,12 +313,12 @@ def form_stack_(P_, frame, y):  # Convert or merge every P into its stack of Ps,
 
     while P_:
         P, up_connect_ = P_.popleft()
-        I, G, Dy, Dx, L, x0, s = P.unpack()
+        I, Dy, Dx, G, M, Dyy, Dyx, Dxy, Dxx, Ga, Ma, L, x0, s, dert_ = P.unpack()
         xn = x0 + L  # next-P x0
         if not up_connect_:
             # initialize new stack for each input-row P that has no connections in higher row, as in the whole top row:
-            blob = CBlob(Dert=dict(I=0, G=0, Dy=0, Dx=0, S=0, Ly=0), box=[y, x0, xn], stack_=[], sign=s, open_stacks=1)
-            new_stack = Cstack(I=I, G=G, Dy=0, Dx=Dx, S=L, Ly=1, y0=y, Py_=[P], blob=blob, down_connect_cnt=0, sign=s)
+            blob = CBlob(Dert=dict(I=0, Dy=0, Dx=0, G=0, M=0, Dyy=0, Dyx=0, Dxy=0, Dxx=0, Ga=0, Ma=0, S=0, Ly=0), box=[y, x0, xn], stack_=[], sign=s, open_stacks=1)
+            new_stack = Cstack(I=I, Dy=Dy, Dx=Dx, G=G, M=M, Dyy=Dyy, Dyx=Dyx, Dxy=Dxy, Dxx=Dxx, Ga=Ga, Ma=Ma, S=L, Ly=1, y0=y, Py_=[P], blob=blob, down_connect_cnt=0, sign=s)
             new_stack.hid = blob.id
             # if stack.G - stack.Ga > ave * coeff * len(stack.Py):
             # comp_d_(stack)
@@ -329,7 +328,7 @@ def form_stack_(P_, frame, y):  # Convert or merge every P into its stack of Ps,
             if len(up_connect_) == 1 and up_connect_[0].down_connect_cnt == 1:
                 # P has one up_connect and that up_connect has one down_connect=P: merge P into up_connect stack:
                 new_stack = up_connect_[0]
-                new_stack.accumulate(I=I, G=G, Dy=Dy, Dx=Dx, S=L, Ly=1)
+                new_stack.accumulate(I=I, Dy=Dy, Dx=Dx, G=G, M=M, Dyy=Dyy, Dyx=Dyx, Dxy=Dxy, Dxx=Dxx, Ga=Ga, Ma=Ma, S=L, Ly=1)
                 new_stack.Py_.append(P)  # Py_: vertical buffer of Ps
                 new_stack.down_connect_cnt = 0  # reset down_connect_cnt
                 blob = new_stack.blob
@@ -337,7 +336,7 @@ def form_stack_(P_, frame, y):  # Convert or merge every P into its stack of Ps,
             else:  # P has >1 up_connects, or 1 up_connect that has >1 down_connect_cnt:
                 blob = up_connect_[0].blob
                 # initialize new_stack with up_connect blob:
-                new_stack = Cstack(I=I, G=G, Dy=0, Dx=Dx, S=L, Ly=1, y0=y, Py_=[P], blob=blob, down_connect_cnt=0, sign=s)
+                new_stack = Cstack(I=I, Dy=Dy, Dx=Dx, G=G, M=M, Dyy=Dyy, Dyx=Dyx, Dxy=Dxy, Dxx=Dxx, Ga=Ga, Ma=Ma, S=L, Ly=1, y0=y, Py_=[P], blob=blob, down_connect_cnt=0, sign=s)
                 new_stack.hid = blob.id
                 blob.stack_.append(new_stack)  # stack is buffered into blob
 
@@ -351,8 +350,8 @@ def form_stack_(P_, frame, y):  # Convert or merge every P into its stack of Ps,
 
                         if not up_connect.blob is blob:
                             Dert, box, stack_, s, open_stacks = up_connect.blob.unpack()[:5]  # merged blob
-                            I, G, Dy, Dx, S, Ly = Dert.values()
-                            accum_Dert(blob.Dert, I=I, G=G, Dy=Dy, Dx=Dx, S=S, Ly=Ly)
+                            I, Dy, Dx, G, M, Dyy, Dyx, Dxy, Dxx, Ga, Ma, S, Ly = Dert.values()
+                            accum_Dert(blob.Dert, I=I, Dy=Dy, Dx=Dx, G=G, M=M, Dyy=Dyy, Dyx=Dyx, Dxy=Dxy, Dxx=Dxx, Ga=Ga, Ma=Ma, S=S, Ly=Ly)
                             blob.open_stacks += open_stacks
                             blob.box[0] = min(blob.box[0], box[0])  # extend box y0
                             blob.box[1] = min(blob.box[1], box[1])  # extend box x0
@@ -378,9 +377,9 @@ def form_stack_(P_, frame, y):  # Convert or merge every P into its stack of Ps,
 
 def form_blob(stack, frame):  # increment blob with terminated stack, check for blob termination and merger into frame
 
-    I, G, Dy, Dx, S, Ly, y0, Py_, blob, down_connect_cnt, sign = stack.unpack()
+    I, Dy, Dx, G, M, Dyy, Dyx, Dxy, Dxx, Ga, Ma, S, Ly, y0, Py_, blob, down_connect_cnt, sign = stack.unpack()
     # terminated stack is merged into continued or initialized blob (all connected stacks):
-    accum_Dert(blob.Dert, I=I, G=G, Dy=Dy, Dx=Dx, S=S, Ly=Ly)
+    accum_Dert(blob.Dert, I=I, Dy=Dy, Dx=Dx, G=G, M=M, Dyy=Dyy, Dyx=Dyx, Dxy=Dxy, Dxx=Dxx, Ga=Ga, Ma=Ma, S=S, Ly=Ly)
 
     blob.open_stacks += down_connect_cnt - 1  # incomplete stack cnt + terminated stack down_connect_cnt - 1: stack itself
     # open stacks contain Ps of a current row and may be extended with new x-overlapping Ps in next run of scan_P_
@@ -409,10 +408,19 @@ def form_blob(stack, frame):  # increment blob with terminated stack, check for 
         blob.adj_blobs = [[], 0, 0]
         blob.fopen = fopen
 
+
         frame.update(I=frame['I'] + blob.Dert['I'],
-                     G=frame['G'] + blob.Dert['G'],
                      Dy=frame['Dy'] + blob.Dert['Dy'],
-                     Dx=frame['Dx'] + blob.Dert['Dx'])
+                     Dx=frame['Dx'] + blob.Dert['Dx'],
+                     G=frame['G'] + blob.Dert['G'],
+                     M=frame['M'] + blob.Dert['M'],
+                     Dyy=frame['Dyy'] + blob.Dert['Dyy'],
+                     Dyx=frame['Dyx'] + blob.Dert['Dyx'],
+                     Dxy=frame['Dxy'] + blob.Dert['Dxy'],
+                     Dxx=frame['Dxx'] + blob.Dert['Dxx'],
+                     Ga=frame['Ga'] + blob.Dert['Ga'],
+                     Ma=frame['Ma'] + blob.Dert['Ma'])
+        
         frame['blob__'].append(blob)
 
 
