@@ -63,19 +63,26 @@ def intra_blob(blob, **kwargs):  # recursive input rng+ | angle cross-comp withi
             dert__ = (dert__[0], dert__[1], dert__[2], dert__[3], dert__[4],
                       dert__[5][0], dert__[5][1], dert__[6][0], dert__[6][1],
                       dert__[7], dert__[8])
-            sub_blobs = cluster_derts_P(dert__, mask, ave * blob.rdn)
-            # no comp_aga for now:
-            '''
+            
+            sub_frame = cluster_derts_P(dert__, mask, ave * blob.rdn)
+            sub_blobs = sub_frame['blob__']
+            blob.Ls = len(sub_blobs)  # for visibility and next-fork rd
+            blob.sub_layers = [sub_blobs]  # 1st layer of sub_blobs
+            
             for sub_blob in sub_blobs:  # evaluate for intra_blob comp_a | comp_r | P_blobs:
                 G = blob.G
                 adj_G = blob.adj_blobs[2]
                 borrow = min(abs(G), abs(adj_G) / 2)  # or adjacent M if negative sign?
-               
-                if sub_blob.G + borrow > ave * blob.rdn:  # also if +Ga, +Gaga, +Gr, +Gagr, +Grr...
-                    # comp_aga:
+                
+                if sub_blob.G + borrow > ave * blob.rdn:  # also if +Ga, +Gaga, +Gr, +Gagr, +Grr... 
+                    # comp_aga: runable but not correct, the issue of nested day and dax need to be fixed first
+                    sub_blob.fca = 1
                     sub_blob.rdn = sub_blob.rdn + 1 + 1 / blob.Ls
                     blob.sub_layers += intra_blob(sub_blob, **kwargs)
-            '''
+
+            spliced_layers = [spliced_layers + sub_layers for spliced_layers, sub_layers in
+                              zip_longest(spliced_layers, blob.sub_layers, fillvalue=[])]
+      
     else:  # comp_r -> comp_r or comp_a
         dert__, mask = comp_r(ext_dert__, blob.fcr, ext_mask)  # -> m sub_blobs
 
@@ -104,7 +111,7 @@ def intra_blob(blob, **kwargs):  # recursive input rng+ | angle cross-comp withi
 
             spliced_layers = [spliced_layers + sub_layers for spliced_layers, sub_layers in
                               zip_longest(spliced_layers, blob.sub_layers, fillvalue=[])]
-        return spliced_layers
+    return spliced_layers
 
 
 def cluster_derts(dert__, mask, Ave, fcr, fca, verbose=False, **kwargs):
