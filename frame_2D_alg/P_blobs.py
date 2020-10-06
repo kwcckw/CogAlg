@@ -1,6 +1,5 @@
 '''
-    comp_pixel (lateral, vertical, diagonal) forms dert, queued in dert__: tuples of pixel + derivatives, over whole image
-    These pixel-level parameters are accumulated in contiguous spans of same-sign gradient, first horizontally then vertically.
+    Pixel-level parameters are accumulated in contiguous spans of same-sign gradient, first horizontally then vertically.
     Horizontal spans are Ps: 1D patterns, and vertical spans are first stacks of Ps, then blobs of stacks.
 
     This processing adds a level of encoding per row y, defined relative to y of current input row, with top-down scan:
@@ -9,14 +8,12 @@
     3Le, line y-3: form_stack(hP, stack) -> stack: merge vertically-connected _Ps into non-forking stacks of Ps
     4Le, line y-4+ stack depth: form_blob(stack, blob): merge connected stacks in blobs referred by up_connect_, recursively
 
-    Higher-row elements include additional parameters, derived while they were lower-row elements. Processing is bottom-up:
-    from input-row to higher-row structures, sequential because blobs are irregular, not suited for matrix operations.
+    Higher-row elements include additional parameters, derived while they were lower-row elements.
     Resulting blob structure (fixed set of parameters per blob): 
-
-    - Dert = I, G, Dy, Dx, S, Ly: summed pixel-level dert params I, G, Dy, Dx, surface area S, vertical depth Ly
+    - Dert: summed pixel-level dert params, Dx, surface area S, vertical depth Ly
     - sign = s: sign of gradient deviation
     - box  = [y0, yn, x0, xn], 
-    - dert__,  # 2D array of pixel-level derts: (p, g, dy, dx) tuples
+    - dert__,  # 2D array of pixel-level derts: (p, dy, dx, g, m) tuples
     - stack_,  # contains intermediate blob composition structures: stacks and Ps, not meaningful on their own
     ( intra_blob structure extends Dert, adds fork params and sub_layers)
 
@@ -32,7 +29,7 @@
     frame_blobs is a complex function with a simple purpose: to sum pixel-level params in blob-level params. These params 
     were derived by pixel cross-comparison (cross-correlation) to represent predictive value per pixel, so they are also
     predictive on a blob level, and should be cross-compared between blobs on the next level of search and composition.
-    Please see diagrams of frame_blobs on https://kwcckw.github.io/CogAlg/
+    Old diagrams are on https://kwcckw.github.io/CogAlg/
 '''
 """
 usage: frame_blobs_find_adj.py [-h] [-i IMAGE] [-v VERBOSE] [-n INTRA] [-r RENDER]
@@ -83,7 +80,6 @@ class CP(ClusterStructure):
     sign = NoneType
     dert_ = list
 
-
 class Cstack(ClusterStructure):
     I = int
     Dy = int
@@ -122,9 +118,8 @@ class CBlob(ClusterStructure):
 # postfix '_' denotes array name, vs. same-name elements of that array
 
 
-def form_P_blobs(dert__, Ave, verbose=False, render=False):
+def cluster_derts_P(dert__, Ave, verbose=False, render=False):
 
-    ave = Ave
     frame = dict(rng=1, dert__=dert__, mask=None, I=0, Dy=0, Dx=0, G=0, M=0, Dyy=0, Dyx=0, Dxy=0, Dxx=0, Ga=0, Ma=0, blob__=[])
     stack_ = deque()  # buffer of running vertical stacks of Ps
     height, width = dert__[0].shape
@@ -163,7 +158,7 @@ def form_P_blobs(dert__, Ave, verbose=False, render=False):
     blob_binder.bind_from_lower(stack_binder)
     assign_adjacents(blob_binder)  # add adj_blobs to each blob
 
-    if verbose:  # print infos at the end
+    if verbose:  # print out at the end
         nblobs = len(frame['blob__'])
         print(f"\rImage has been successfully converted to "
               f"{nblobs} blob{'s' if nblobs != 1 else 0} in "
@@ -191,17 +186,18 @@ Dert: params of cluster structures (P, stack, blob): summed dert params + dimens
 '''
 
 
-def form_P_(Dert_, binder):  # horizontal clustering and summation of dert params into P params, per row of a frame
+def form_P_(idert_, binder):  # horizontal clustering and summation of dert params into P params, per row of a frame
     # P is a segment of derts with same-sign g in horizontal slice of a blob
 
     P_ = deque()  # row of Ps
-    dert_ = [*next(Dert_)]  # get first dert, dert_ is a generator/iterator
+    dert_ = [*next(idert_)]  # get first dert, dert_ is a generator/iterator
 
     # initialize P params with 1st dert params
     (I, Dy, Dx, G, M, Dyy, Dyx, Dxy, Dxx, Ga, Ma), L, x0 = dert_, 1, 0
-    _s = (ave - Ga) > 0  # sign (crit = ave - Ga)
-    for x, (p, dy, dx, g, m, dyy, dyx, dxy, dxx, ga, ma) in enumerate(Dert_, start=1):
-        vga = (ave - ga)  # deviation of ga
+    _s = ave - Ga > 0  # sign crit = ave - Ga  # should reduce g but not significantly as these are low-ga blobs
+
+    for x, (p, dy, dx, g, m, dyy, dyx, dxy, dxx, ga, ma) in enumerate(idert_, start=1):
+        vga = (ave - ga)  # inverse deviation of ga
         s = vga > 0
         if s != _s:
             # terminate and pack P:
@@ -420,7 +416,7 @@ def form_blob(stack, frame):  # increment blob with terminated stack, check for 
                      Dxx=frame['Dxx'] + blob.Dert['Dxx'],
                      Ga=frame['Ga'] + blob.Dert['Ga'],
                      Ma=frame['Ma'] + blob.Dert['Ma'])
-        
+
         frame['blob__'].append(blob)
 
 
@@ -459,18 +455,9 @@ def accum_Dert(Dert: dict, **params) -> None:
     Dert.update({param: Dert[param] + value for param, value in params.items()})
 
 
-def update_dert(blob):  # add idy, idx, m to dert__
-    i, g, dy, dx = blob.dert__
-    blob.dert__ = (i,
-                   np.zeros(i.shape),  # idy
-                   np.zeros(i.shape),  # idx
-                   g, dy, dx,
-                   np.zeros(i.shape))  # m
-
-    # no need to return, changes are applied to blob
-
 # -----------------------------------------------------------------------------
 # Main
+# There should be no main here, cluster_derts_P will be called from intra_blob
 
 if __name__ == '__main__':
     import argparse
@@ -494,7 +481,7 @@ if __name__ == '__main__':
     if verbose:
         print(f"Done in {(time() - start_time):f} seconds")
 
-    frame = form_P_blobs(dert__, verbose, render)
+    frame = cluster_derts_P(dert__, verbose, render)
 
     if intra:  # Tentative call to intra_blob, omit for testing frame_blobs:
 
