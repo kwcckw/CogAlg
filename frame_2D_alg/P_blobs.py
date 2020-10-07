@@ -124,7 +124,7 @@ class CBlob(ClusterStructure):
     adj_blobs = list
     fopen = bool
     fcr = bool
-    fca = bool
+    fia = bool
     rdn = float
     rng = int
     Ls = int  # for visibility and next-fork rdn
@@ -472,20 +472,20 @@ def assign_adjacents(blob_binder):  # adjacents are connected opposite-sign blob
 # -----------------------------------------------------------------------------
 # Utilities
 
-def accum_Dert(blob, adding_object):
+def accum_Dert(blob, element):
     
-    blob.I += adding_object.I
-    blob.Dy += adding_object.Dy
-    blob.Dx += adding_object.Dx
-    blob.G += adding_object.G
-    blob.M += adding_object.M
-    blob.Dyy += adding_object.Dyy
-    blob.Dyx += adding_object.Dyx
-    blob.Dxy += adding_object.Dxy
-    blob.Dxx += adding_object.Dxx
-    blob.Ga += adding_object.Ga
-    blob.Ma += adding_object.Ma
-    blob.S += adding_object.S
-    blob.Ly += adding_object.Ly
+    blob.I += element.I
+    blob.Dy += element.Dy
+    blob.Dx += element.Dx
+    blob.G += element.G
+    blob.M += element.M
+    blob.Dyy += element.Dyy
+    blob.Dyx += element.Dyx
+    blob.Dxy += element.Dxy
+    blob.Dxx += element.Dxx
+    blob.Ga += element.Ga
+    blob.Ma += element.Ma
+    blob.S += element.S
+    blob.Ly += element.Ly
     
     

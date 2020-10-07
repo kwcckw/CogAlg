@@ -18,7 +18,7 @@
     dert__,  # box of derts, each = i, dy, dx, g, m, day, dax, ga, ma
     # next fork:
     fcr,  # flag comp rng
-    fca,  # flag comp angle
+    fia,  # flag comp angle
     rdn,  # redundancy to higher layers
     rng,  # comparison range
     sub_layers  # [sub_blobs ]: list of layers across sub_blob derivation tree
@@ -54,31 +54,40 @@ def intra_blob(blob, **kwargs):  # recursive input rng+ | angle cross-comp withi
     spliced_layers = []  # to extend root_blob sub_layers
     ext_dert__, ext_mask = extend_dert(blob)
 
-    if blob.fca:  # comp_a -> P_blobs
+    if blob.fia:  # comp_a -> P_blobs or comp_aga
         dert__, mask = comp_a(ext_dert__, ext_mask)  # -> ga sub_blobs -> P_blobs (comp_d, comp_P)
 
         if mask.shape[0] > 2 and mask.shape[1] > 2 and False in mask:  # min size in y and x, least one dert in dert__
 
-            dert__ = list(dert__)
-            dert__ = (dert__[0], dert__[1], dert__[2], dert__[3], dert__[4],
-                      dert__[5][0], dert__[5][1], dert__[6][0], dert__[6][1],
-                      dert__[7], dert__[8])
-            
-            sub_frame = cluster_derts_P(dert__, mask, ave * blob.rdn)
-            sub_blobs = sub_frame['blob__']
-            blob.Ls = len(sub_blobs)  # for visibility and next-fork rd
-            blob.sub_layers = [sub_blobs]  # 1st layer of sub_blobs
-            
-            for sub_blob in sub_blobs:  # evaluate for intra_blob comp_a | comp_r | P_blobs:
-                G = blob.G
-                adj_G = blob.adj_blobs[2]
-                borrow = min(abs(G), abs(adj_G) / 2)  # or adjacent M if negative sign?
+            # temporary condition for P_blobs, please update
+            if blob.G-ave>0: # cluster_derts_P terminate the fork
                 
-                if sub_blob.G + borrow > ave * blob.rdn:  # also if +Ga, +Gaga, +Gr, +Gagr, +Grr... 
-                    # comp_aga: runable but not correct, the issue of nested day and dax need to be fixed first
-                    sub_blob.fca = 1
-                    sub_blob.rdn = sub_blob.rdn + 1 + 1 / blob.Ls
-                    blob.sub_layers += intra_blob(sub_blob, **kwargs)
+                # flatten day and dax for cluster_derts_P
+                dert__ = list(dert__)
+                dert__ = (dert__[0], dert__[1], dert__[2], dert__[3], dert__[4],
+                          dert__[5][0], dert__[5][1], dert__[6][0], dert__[6][1],
+                          dert__[7], dert__[8]) 
+                
+                sub_frame = cluster_derts_P(dert__, mask, ave * blob.rdn)
+                sub_blobs = sub_frame['blob__']
+                blob.Ls = len(sub_blobs)  # for visibility and next-fork rd
+                blob.sub_layers = [sub_blobs]  # 1st layer of sub_blobs
+            
+            else: # comp_aga, calling intra_blob recursively
+                sub_blobs = cluster_derts(dert__, mask, ave * blob.rdn, blob.fcr, blob.fia)
+                blob.Ls = len(sub_blobs)  # for visibility and next-fork rd
+                blob.sub_layers = [sub_blobs]  # 1st layer of sub_blobs
+            
+                for sub_blob in sub_blobs:  # evaluate for intra_blob comp_a | comp_r | P_blobs:
+                    G = blob.G
+                    adj_G = blob.adj_blobs[2]
+                    borrow = min(abs(G), abs(adj_G) / 2)  # or adjacent M if negative sign?
+                    
+                    if sub_blob.G + borrow > ave * blob.rdn:  # also if +Ga, +Gaga, +Gr, +Gagr, +Grr... 
+                        # comp_aga: runable but not correct, the issue of nested day and dax need to be fixed first
+                        sub_blob.fia = 1
+                        sub_blob.rdn = sub_blob.rdn + 1 + 1 / blob.Ls
+                        blob.sub_layers += intra_blob(sub_blob, **kwargs)
 
             spliced_layers = [spliced_layers + sub_layers for spliced_layers, sub_layers in
                               zip_longest(spliced_layers, blob.sub_layers, fillvalue=[])]
@@ -88,7 +97,7 @@ def intra_blob(blob, **kwargs):  # recursive input rng+ | angle cross-comp withi
 
         if mask.shape[0] > 2 and mask.shape[1] > 2 and False in mask:  # min size in y and x, least one dert in dert__
 
-            sub_blobs = cluster_derts(dert__, mask, ave * blob.rdn, blob.fcr, blob.fca, verbose=False, **kwargs)
+            sub_blobs = cluster_derts(dert__, mask, ave * blob.rdn, blob.fcr, blob.fia, verbose=False, **kwargs)
             blob.Ls = len(sub_blobs)  # for visibility and next-fork rdn
             blob.sub_layers = [sub_blobs]  # 1st layer of sub_blobs
 
@@ -114,10 +123,10 @@ def intra_blob(blob, **kwargs):  # recursive input rng+ | angle cross-comp withi
     return spliced_layers
 
 
-def cluster_derts(dert__, mask, Ave, fcr, fca, verbose=False, **kwargs):
+def cluster_derts(dert__, mask, Ave, fcr, fia, verbose=False, **kwargs):
 
     # define clustering criterion:
-    if fca:      # from comp_a
+    if fia:      # from comp_a
         if fcr:  # comp_r eval by ma
             crit__ = Ave - dert__[8]
         else:    # P_blobs eval by ga
@@ -142,7 +151,7 @@ def cluster_derts(dert__, mask, Ave, fcr, fca, verbose=False, **kwargs):
     assign_adjacents(adj_pairs, CDeepBlob)
     if kwargs.get('render', False):
         visualize_blobs(idmap, blob_,
-                        winname=f"Deep blobs (fcr = {fcr}, fca = {fca})")
+                        winname=f"Deep blobs (fcr = {fcr}, fia = {fia})")
 
     return blob_
 
@@ -180,18 +189,13 @@ def extend_dert(blob):  # extend dert borders (+1 dert to boundaries)
     return ext_dert__, ext_mask
 
 
+# i don't see we need this function now, may remove it
+# deep_root_dert is updated in frame_blobs
+'''
 def update_dert(blob):
     # add idy, idx, m to dert__
     # this is a mess, only needs to be used in first comp_a call?
-
-    i, g, dy, dx = blob.dert__
-    blob.dert__ = (i,
-                   np.zeros(i.shape),  # idy
-                   np.zeros(i.shape),  # idx
-                   g, dy, dx,
-                   np.zeros(i.shape))  # m
-
-    # no need to return, changes are applied to blob
+'''
 
 
 def accum_blob_Dert(blob, dert__, y, x):

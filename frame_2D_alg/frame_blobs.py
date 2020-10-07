@@ -44,10 +44,12 @@ def comp_pixel(image):  # 2x2 pixel cross-correlation within image, as in edge d
     Gx__ = ((topright__ + bottomright__) - (topleft__ + bottomleft__))  # same as decomposition of two diagonal differences into Gx
 
     G__ = (np.hypot(Gy__, Gx__) - ave).astype('int')  # central gradient per kernel, between its four vertex pixels
+    # where would we need this M?
+    M__ = ( abs(topleft__ - bottomright__) + abs(topright__ - bottomleft__)) # inverse match = SAD: measure of variation within kernel
 
-    return (topleft__, G__, Gy__, Gx__)  # tuple of 2D arrays per param of dert (derivatives' tuple)
+    return (topleft__, G__, Gy__, Gx__, M__)  # tuple of 2D arrays per param of dert (derivatives' tuple)
     # renamed dert__ = (p__, g__, dy__, dx__) for readability in functions below
-    # add m?
+
 
 
 def derts2blobs(dert__, verbose=False, render=False, use_c=False):
@@ -62,13 +64,14 @@ def derts2blobs(dert__, verbose=False, render=False, use_c=False):
         blob_, idmap, adj_pairs = flood_fill(dert__,
                                              sign__=dert__[1] > 0,
                                              verbose=verbose)
-        I = 0; G = 0; Dy = 0; Dx = 0
+        I = 0; G = 0; Dy = 0; Dx = 0; M = 0
         for blob in blob_:
             I += blob.I
             G += blob.G
             Dy += blob.Dy
             Dx += blob.Dx
-        frame = FrameOfBlobs(I=I, G=G, Dy=Dy, Dx=Dx, blob_=blob_, dert__=dert__)
+            M += blob.M
+        frame = FrameOfBlobs(I=I, G=G, Dy=Dy, Dx=Dx, M=M, blob_=blob_, dert__=dert__)
 
     assign_adjacents(adj_pairs)
 
@@ -214,7 +217,7 @@ if __name__ == "__main__":
 
     # Parse arguments
     argument_parser = argparse.ArgumentParser()
-    argument_parser.add_argument('-i', '--image', help='path to image file', default='./images//raccoon_eye.jpeg')
+    argument_parser.add_argument('-i', '--image', help='path to image file', default='./images//raccoon.jpg')
     argument_parser.add_argument('-v', '--verbose', help='print details, useful for debugging', type=int, default=1)
     argument_parser.add_argument('-n', '--intra', help='run intra_blobs after frame_blobs', type=int, default=1)
     argument_parser.add_argument('-r', '--render', help='render the process', type=int, default=0)
@@ -249,10 +252,10 @@ if __name__ == "__main__":
         empty = np.zeros_like(frame.dert__[0])
         deep_root_dert__ = (  # update root dert__
             frame.dert__[0],  # i
-            empty,  # idy
-            empty,  # idx
-            *frame.dert__[1:],  # g, dy, dx
-            empty,  # m
+            frame.dert__[2],  # dy
+            frame.dert__[3],  # dx
+            frame.dert__[1],  # g
+            frame.dert__[4],  # m
         )
 
         for i, blob in enumerate(frame.blob_):  # print('Processing blob number ' + str(bcount))
@@ -281,7 +284,7 @@ if __name__ == "__main__":
             if blob.sign:
                 # +G on first fork
                 if G + borrow_G > aveB and blob_height > 3 and blob_width  > 3:  # min blob dimensions
-                    blob.rdn = 1; blob.fca = 1 # +G blob' dert' comp_a
+                    blob.rdn = 1; blob.fia = 1 # +G blob' dert' comp_a
                     deep_layers[i] = intra_blob(blob, render=args.render)
 
             # +M on first fork (+M is represented by -G?)

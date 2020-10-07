@@ -156,6 +156,7 @@ def comp_a(dert__, mask=None):  # cross-comp of angle in 2x2 kernels
 
     i__ = i__[:-1, :-1]  # for summation in Dert
     g__ = g__[:-1, :-1]  # for summation in Dert
+    m__ = m__[:-1, :-1]  # this line was missed out earlier   
     dy__ = dy__[:-1, :-1]  # passed on as idy
     dx__ = dx__[:-1, :-1]  # passed on as idx
 
