@@ -100,41 +100,19 @@ class Cstack(ClusterStructure):
     down_connect_cnt = int
     sign = NoneType
 
-# similar structure with CDeepBlob
-# dert is flattened here so that the structure is consistent with CDeepBlob, and we need consistent structure for recursive operation later
-class CBlob(ClusterStructure): 
-    # Dert params
-    I = int
-    Dy = int
-    Dx = int
-    G = int
-    M = int
-    Dyy = int
-    Dyx = int
-    Dxy = int
-    Dxx = int
-    Ga = int
-    Ma = int
-    # blob params
-    Ly = int
-    sign = NoneType
-    mask = object
-    root_dert__ = object
-    dert__ = object
-    adj_blobs = list
-    fopen = bool
-    fcr = bool
-    fia = bool
-    rdn = float
-    rng = int
-    Ls = int  # for visibility and next-fork rdn
-    sub_layers = list
-    margin = list
+class CBlob(ClusterStructure):
+    Dert = dict
     box = list
     stack_ = list
-    S = int
+    sign = NoneType
     open_stacks = int
-    
+    root_dert__ = object
+    dert__ = object
+    mask = object
+    adj_blobs = list
+    fopen = bool
+    margin = list
+
 # Functions:
 # prefix '_' denotes higher-line variable or structure, vs. same-type lower-line variable or structure
 # postfix '_' denotes array name, vs. same-name elements of that array
@@ -335,7 +313,7 @@ def form_stack_(P_, frame, y):  # Convert or merge every P into its stack of Ps,
         xn = x0 + L  # next-P x0
         if not up_connect_:
             # initialize new stack for each input-row P that has no connections in higher row, as in the whole top row:
-            blob = CBlob(I=0, Dy=0, Dx=0, G=0, M=0, Dyy=0, Dyx=0, Dxy=0, Dxx=0, Ga=0, Ma=0, S=0, Ly=0, box=[y, x0, xn], stack_=[], sign=s, open_stacks=1)
+            blob = CBlob(Dert=dict(I=0, Dy=0, Dx=0, G=0, M=0, Dyy=0, Dyx=0, Dxy=0, Dxx=0, Ga=0, Ma=0, S=0, Ly=0), box=[y, x0, xn], stack_=[], sign=s, open_stacks=1)
             new_stack = Cstack(I=I, Dy=Dy, Dx=Dx, G=G, M=M, Dyy=Dyy, Dyx=Dyx, Dxy=Dxy, Dxx=Dxx, Ga=Ga, Ma=Ma, S=L, Ly=1, y0=y, Py_=[P], blob=blob, down_connect_cnt=0, sign=s)
             new_stack.hid = blob.id
             # if stack.G - stack.Ga > ave * coeff * len(stack.Py):
@@ -367,8 +345,9 @@ def form_stack_(P_, frame, y):  # Convert or merge every P into its stack of Ps,
                             form_blob(up_connect, frame)
 
                         if not up_connect.blob is blob:
-                            box, stack_, s, open_stacks = up_connect.blob.unpack()[-4:]  # merged blob
-                            accum_Dert(blob, up_connect.blob)
+                            Dert, box, stack_, s, open_stacks = up_connect.blob.unpack()[:5]  # merged blob
+                            I, Dy, Dx, G, M, Dyy, Dyx, Dxy, Dxx, Ga, Ma, S, Ly = Dert.values()
+                            accum_Dert(blob.Dert, I=I, Dy=Dy, Dx=Dx, G=G, M=M, Dyy=Dyy, Dyx=Dyx, Dxy=Dxy, Dxx=Dxx, Ga=Ga, Ma=Ma, S=S, Ly=Ly)
                             blob.open_stacks += open_stacks
                             blob.box[0] = min(blob.box[0], box[0])  # extend box y0
                             blob.box[1] = min(blob.box[1], box[1])  # extend box x0
@@ -394,15 +373,14 @@ def form_stack_(P_, frame, y):  # Convert or merge every P into its stack of Ps,
 
 def form_blob(stack, frame):  # increment blob with terminated stack, check for blob termination and merger into frame
 
-    blob, down_connect_cnt = stack.unpack()[-3:-1]
+    I, Dy, Dx, G, M, Dyy, Dyx, Dxy, Dxx, Ga, Ma, S, Ly, y0, Py_, blob, down_connect_cnt, sign = stack.unpack()
     # terminated stack is merged into continued or initialized blob (all connected stacks):
-    accum_Dert(blob,stack)
+    accum_Dert(blob.Dert, I=I, Dy=Dy, Dx=Dx, G=G, M=M, Dyy=Dyy, Dyx=Dyx, Dxy=Dxy, Dxx=Dxx, Ga=Ga, Ma=Ma, S=S, Ly=Ly)
 
     blob.open_stacks += down_connect_cnt - 1  # incomplete stack cnt + terminated stack down_connect_cnt - 1: stack itself
     # open stacks contain Ps of a current row and may be extended with new x-overlapping Ps in next run of scan_P_
     if blob.open_stacks == 0:  # number of incomplete stacks == 0: blob is terminated and packed in frame:
         last_stack = stack
-        Dert = blob.unpack()[0]
         [y0, x0, xn], stack_, s, open_stacks = blob.unpack()[-4:]
         yn = last_stack.y0 + last_stack.Ly
 
@@ -426,17 +404,18 @@ def form_blob(stack, frame):  # increment blob with terminated stack, check for 
         blob.adj_blobs = [[], 0, 0]
         blob.fopen = fopen
 
-        frame.update(I=frame['I'] + blob.I,
-                     Dy=frame['Dy'] + blob.Dy,
-                     Dx=frame['Dx'] + blob.Dx,
-                     G=frame['G'] + blob.G,
-                     M=frame['M'] + blob.M,
-                     Dyy=frame['Dyy'] + blob.Dyy,
-                     Dyx=frame['Dyx'] + blob.Dyx,
-                     Dxy=frame['Dxy'] + blob.Dxy,
-                     Dxx=frame['Dxx'] + blob.Dxx,
-                     Ga=frame['Ga'] + blob.Ga,
-                     Ma=frame['Ma'] + blob.Ma)
+
+        frame.update(I=frame['I'] + blob.Dert['I'],
+                     Dy=frame['Dy'] + blob.Dert['Dy'],
+                     Dx=frame['Dx'] + blob.Dert['Dx'],
+                     G=frame['G'] + blob.Dert['G'],
+                     M=frame['M'] + blob.Dert['M'],
+                     Dyy=frame['Dyy'] + blob.Dert['Dyy'],
+                     Dyx=frame['Dyx'] + blob.Dert['Dyx'],
+                     Dxy=frame['Dxy'] + blob.Dert['Dxy'],
+                     Dxx=frame['Dxx'] + blob.Dert['Dxx'],
+                     Ga=frame['Ga'] + blob.Dert['Ga'],
+                     Ma=frame['Ma'] + blob.Dert['Ma'])
 
         frame['blob__'].append(blob)
 
@@ -472,20 +451,94 @@ def assign_adjacents(blob_binder):  # adjacents are connected opposite-sign blob
 # -----------------------------------------------------------------------------
 # Utilities
 
-def accum_Dert(blob, element):
-    
-    blob.I += element.I
-    blob.Dy += element.Dy
-    blob.Dx += element.Dx
-    blob.G += element.G
-    blob.M += element.M
-    blob.Dyy += element.Dyy
-    blob.Dyx += element.Dyx
-    blob.Dxy += element.Dxy
-    blob.Dxx += element.Dxx
-    blob.Ga += element.Ga
-    blob.Ma += element.Ma
-    blob.S += element.S
-    blob.Ly += element.Ly
-    
-    
+def accum_Dert(Dert: dict, **params) -> None:
+    Dert.update({param: Dert[param] + value for param, value in params.items()})
+
+
+# -----------------------------------------------------------------------------
+# Main
+# There should be no main here, cluster_derts_P will be called from intra_blob
+
+if __name__ == '__main__':
+    import argparse
+
+    argument_parser = argparse.ArgumentParser()
+    argument_parser.add_argument('-i', '--image', help='path to image file', default='./images//raccoon_eye.jpeg')
+    argument_parser.add_argument('-v', '--verbose', help='print details, useful for debugging', type=int, default=1)
+    argument_parser.add_argument('-n', '--intra', help='run intra_blobs after frame_blobs', type=int, default=0)
+    argument_parser.add_argument('-r', '--render', help='render the process', type=int, default=1)
+    arguments = vars(argument_parser.parse_args())
+    image = imread(arguments['image'])
+    verbose = arguments['verbose']
+    intra = arguments['intra']
+    render = arguments['render']
+
+    start_time = time()
+    if verbose:
+        start_time = time()
+        print("Doing comparison...", end=" ")
+    dert__ = comp_pixel(image)  # 2x2 cross-comparison / cross-correlation
+    if verbose:
+        print(f"Done in {(time() - start_time):f} seconds")
+
+    frame = cluster_derts_P(dert__, verbose, render)
+
+    if intra:  # Tentative call to intra_blob, omit for testing frame_blobs:
+
+        if verbose:
+            print("\rRunning intra_blob...")
+
+        from intra_blob import (
+            intra_blob, CDeepBlob, aveB,
+        )
+
+        deep_frame = frame, frame  # 1st frame initializes summed representation of hierarchy, 2nd is individual top layer
+        deep_blob_i_ = []  # index of a blob with deep layers
+        deep_layers = [[]]*len(frame['blob__'])  # for visibility only
+        empty = np.zeros_like(frame['dert__'][0])
+        deep_root_dert__ = (  # update root dert__
+            frame['dert__'][0],    # i
+            empty,                 # idy
+            empty,                 # idx
+            *frame['dert__'][1:],  # g, dy, dx
+            empty,                 # m
+        )
+
+        for i, blob in enumerate(frame['blob__']):  # print('Processing blob number ' + str(bcount))
+            '''
+            Blob G: -|+ predictive value, positive value of -G blobs is lent to the value of their adjacent +G blobs. 
+            +G "edge" blobs are low-match, valuable only as contrast: to the extent that their negative value cancels 
+            positive value of adjacent -G "flat" blobs.
+            '''
+            G = blob.Dert['G']; adj_G = blob.adj_blobs[2]
+            borrow_G = min(abs(G), abs(adj_G) / 2)
+            '''
+            int_G / 2 + ext_G / 2, because both borrow or lend bilaterally, 
+            same as pri_M and next_M in line patterns but direction here is radial: inside-out
+            borrow_G = min, ~ comp(G,_G): only value present in both parties can be borrowed from one to another
+            Add borrow_G -= inductive leaking across external blob?
+            '''
+            blob = CDeepBlob(Dert=blob.Dert, box=blob.box, stack_=blob.stack_,
+                             sign=blob.sign, root_dert__=deep_root_dert__,
+                             dert__=blob.dert__, mask=blob.mask,
+                             adj_blobs=blob.adj_blobs, fopen=blob.fopen) #, margin=blob.margin)
+            if blob.sign:
+                if G + borrow_G > aveB and blob.dert__[0].shape[0] > 3 and blob.dert__[0].shape[1] > 3:  # min blob dimensions
+                    update_dert(blob)
+                    deep_layers[i] = intra_blob(blob, rdn=1, rng=.0, fig=0, fcr=0, render=render)  # +G blob' dert__' comp_g
+
+            elif -G - borrow_G > aveB and blob.dert__[0].shape[0] > 3 and blob.dert__[0].shape[1] > 3:  # min blob dimensions
+                update_dert(blob)
+                deep_layers[i] = intra_blob(blob, rdn=1, rng=1, fig=0, fcr=1, render=render)  # -G blob' dert__' comp_r in 3x3 kernels
+
+            if deep_layers[i]:  # if there are deeper layers
+                deep_blob_i_.append(i)  # indices of blobs with deep layers
+
+        if verbose:
+            print("\rFinished running intra_blob")
+
+    end_time = time() - start_time
+    if verbose:
+        print(f"\nSession ended in {end_time:.2} seconds", end="")
+    else:
+        print(end_time)
