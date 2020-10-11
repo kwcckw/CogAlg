@@ -288,7 +288,7 @@ if __name__ == "__main__":
 
             # +M on first fork (+M is represented by -G?)
             elif -G - borrow_G > aveB > aveB and blob_height > 3 and blob_width  > 3:  # min blob dimensions
-                blob.rdn = 1; blob.rng = 1; blob.fcr = 1
+                blob.rdn = 1; blob.rng = 1; blob.fia = 0
                 deep_layers[i] = intra_blob(blob, render=args.render)  # -G blob' dert__' comp_r in 3x3 kernels
 
             if deep_layers[i]:  # if there are deeper layers
