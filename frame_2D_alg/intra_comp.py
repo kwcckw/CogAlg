@@ -78,9 +78,9 @@ def comp_r(dert__, root_fia, mask=None):
         dy__ = dert__[1][1:-1:2, 1:-1:2].copy()  # sparse to align with i__center
         dx__ = dert__[2][1:-1:2, 1:-1:2].copy()
         m__ = dert__[4][1:-1:2, 1:-1:2].copy()
-        
-        
-        
+
+
+
 
     # compare four diametrically opposed pairs of rim pixels:
 
@@ -163,7 +163,7 @@ def comp_a(dert__, mask=None):  # cross-comp of angle in 2x2 kernels
     dy__ = dy__[:-1, :-1]  # passed on as idy
     dx__ = dx__[:-1, :-1]  # passed on as idx
 
-    
+
     return (i__, dy__, dx__, g__, m__, day__, dax__, ga__, ma__), majority_mask
 
 
