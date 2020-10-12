@@ -118,7 +118,7 @@ class CBlob(ClusterStructure):
 # postfix '_' denotes array name, vs. same-name elements of that array
 
 
-def cluster_derts_P(dert__, Ave, verbose=False, render=False):
+def cluster_derts_P(dert__, mask, crit__, Ave, verbose=False, render=False):
 
     frame = dict(rng=1, dert__=dert__, mask=None, I=0, Dy=0, Dx=0, G=0, M=0, Dyy=0, Dyx=0, Dxy=0, Dxx=0, Ga=0, Ma=0, blob__=[])
     stack_ = deque()  # buffer of running vertical stacks of Ps
@@ -143,7 +143,7 @@ def cluster_derts_P(dert__, Ave, verbose=False, render=False):
             sys.stdout.flush()
 
         P_binder = AdjBinder(CP)  # binder needs data about clusters of the same level
-        P_ = form_P_(zip(*dert_), P_binder)  # horizontal clustering
+        P_ = form_P_(zip(*dert_), crit__[y], mask[y], P_binder)  # horizontal clustering
 
         if render:
             render = streamer.update_blob_conversion(y, P_)
@@ -186,49 +186,75 @@ Dert: params of cluster structures (P, stack, blob): summed dert params + dimens
 '''
 
 
-def form_P_(idert_, binder):  # horizontal clustering and summation of dert params into P params, per row of a frame
-    # P is a segment of derts with same-sign g in horizontal slice of a blob
+def form_P_(idert_, crit_, mask_, binder):  # segment dert__ into P__, in horizontal ) vertical order
 
     P_ = deque()  # row of Ps
-    dert_ = [*next(idert_)]  # get first dert, dert_ is a generator/iterator
+    s_ = crit_ > 0
+    x0 = 0
+    try:
+        while mask_[x0]:  # skip until not masked
+            next(idert_)
+            x0 += 1
+    except IndexError:
+        return P_  # the whole line is masked, return an empty P
 
-    # initialize P params with 1st dert params
-    (I, Dy, Dx, G, M, Dyy, Dyx, Dxy, Dxx, Ga, Ma), L, x0 = dert_, 1, 0
-    _s = ave - Ga > 0  # sign crit = ave - Ga  # should reduce g but not significantly as these are low-ga blobs
+    dert_ = [*next(idert_)] # get first dert, dert_ is a generator/iterator
+    (I, Dy, Dx, G, M, Dyy, Dyx, Dxy, Dxx, Ga, Ma), L = dert_, 1 # initialize P params
 
-    for x, (p, dy, dx, g, m, dyy, dyx, dxy, dxx, ga, ma) in enumerate(idert_, start=1):
-        vga = (ave - ga)  # inverse deviation of ga
-        s = vga > 0
-        if s != _s:
-            # terminate and pack P:
+    _s = s_[x0]
+    _mask = mask_[x0]  # mask bit per dert
+
+    for x, (p, dy, dx, g, m, dyy, dyx, dxy, dxx, ga, ma) in enumerate(idert_, start=x0+1):  # loop left to right in each row of derts
+        mask = mask_[x]
+        if ~mask:  # current dert is not masked
+            s = s_[x]
+            if ~_mask and s != _s:  # prior dert is not masked and sign changed
+                # pack P
+                # terminate and pack P:
+                P = CP(I=I, Dy=Dy, Dx=Dx, G=G, M=M, Dyy=Dyy, Dyx=Dyx, Dxy=Dxy, Dxx=Dxx, Ga=Ga, Ma=Ma, L=L, x0=x0, sign=_s, dert_=dert_)
+                P_.append(P)
+                # initialize P params:
+                # initialize new P params:
+                I, Dy, Dx, G, M, Dyy, Dyx, Dxy, Dxx, Ga, Ma, L, x0, dert_ = 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, x, []
+            elif _mask:
+                # initialize new P params:
+                I, Dy, Dx, G, M, Dyy, Dyx, Dxy, Dxx, Ga, Ma, L, x0, dert_ = 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, x, []
+        # current dert is masked
+        elif ~_mask:  # prior dert is not masked
+            # pack P
             P = CP(I=I, Dy=Dy, Dx=Dx, G=G, M=M, Dyy=Dyy, Dyx=Dyx, Dxy=Dxy, Dxx=Dxx, Ga=Ga, Ma=Ma, L=L, x0=x0, sign=_s, dert_=dert_)
-            # initialize new P params:
-            I, Dy, Dx, G, M, Dyy, Dyx, Dxy, Dxx, Ga, Ma, L, x0, dert_ = 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, x, []
             P_.append(P)
-        # accumulate P params:
-        I += p
-        Dy += dy
-        Dx += dx
-        G += g
-        M += m
-        Dyy += dyy
-        Dyx += dyx
-        Dxy += dxy
-        Dxx += dxx
-        Ga += vga
-        Ma += Ma
-        L += 1
-        dert_.append([p, dy, dx, g, m, dyy, dyx, dxy, dxx, ga, ma])  # accumulate dert into dert_ if no sign change
-        _s = s  # prior sign
+            # initialize P params: (redundant)
+            # I, iDy, iDx, G, Dy, Dx, M, L, x0 = 0, 0, 0, 0, 0, 0, 0, 0, x + 1
 
-    # last P in a row
-    P = CP(I=I, Dy=Dy, Dx=Dx, G=G, M=M, Dyy=Dyy, Dyx=Dyx, Dxy=Dxy, Dxx=Dxx, Ga=Ga, Ma=Ma, L=L, x0=x0, sign=_s, dert_=dert_)
-    P_.append(P)
+        if ~mask:  # accumulate P params:
+            # accumulate P params:
+            I += p
+            Dy += dy
+            Dx += dx
+            G += g
+            M += m
+            Dyy += dyy
+            Dyx += dyx
+            Dxy += dxy
+            Dxx += dxx
+            Ga += ga
+            Ma += Ma
+            L += 1
+            dert_.append([p, dy, dx, g, m, dyy, dyx, dxy, dxx, ga, ma])  # accumulate dert into dert_ if no sign change
+            _s = s  # prior sign
+        _mask = mask
+
+    if ~_mask:  # terminate and pack last P in a row if prior dert is unmasked
+        P = CP(I=I, Dy=Dy, Dx=Dx, G=G, M=M, Dyy=Dyy, Dyx=Dyx, Dxy=Dxy, Dxx=Dxx, Ga=Ga, Ma=Ma, L=L, x0=x0, sign=_s, dert_=dert_)
+        P_.append(P)
 
     for _P, P in pairwise(P_):
-        binder.bind(_P, P)
+        if _P.x0 + _P.L == P.x0:  # check if Ps are adjacents
+            binder.bind(_P, P)
 
     return P_
+
 
 
 def scan_P_(P_, stack_, frame, binder):  # merge P into higher-row stack of Ps which have same sign and overlap by x_coordinate
@@ -381,7 +407,7 @@ def form_blob(stack, frame):  # increment blob with terminated stack, check for 
     # open stacks contain Ps of a current row and may be extended with new x-overlapping Ps in next run of scan_P_
     if blob.open_stacks == 0:  # number of incomplete stacks == 0: blob is terminated and packed in frame:
         last_stack = stack
-        [y0, x0, xn], stack_, s, open_stacks = blob.unpack()[-4:]
+        [y0, x0, xn], stack_, s, open_stacks = blob.unpack()[1:5]
         yn = last_stack.y0 + last_stack.Ly
 
         mask = np.ones((yn - y0, xn - x0), dtype=bool)  # mask box, then unmask Ps:
@@ -542,3 +568,50 @@ if __name__ == '__main__':
         print(f"\nSession ended in {end_time:.2} seconds", end="")
     else:
         print(end_time)
+        
+        
+'''
+def form_P_(idert_, crit_, mask_, binder):  # horizontal clustering and summation of dert params into P params, per row of a frame
+    # P is a segment of derts with same-sign g in horizontal slice of a blob
+
+    P_ = deque()  # row of Ps
+    dert_ = [*next(idert_)]  # get first dert, dert_ is a generator/iterator
+
+    # initialize P params with 1st dert params
+    (I, Dy, Dx, G, M, Dyy, Dyx, Dxy, Dxx, Ga, Ma), L, x0 = dert_, 1, 0
+    _s = ave - Ga > 0  # sign crit = ave - Ga  # should reduce g but not significantly as these are low-ga blobs
+
+    for x, (p, dy, dx, g, m, dyy, dyx, dxy, dxx, ga, ma) in enumerate(idert_, start=1):
+        vga = (ave - ga)  # inverse deviation of ga
+        s = vga > 0
+        if s != _s:
+            # terminate and pack P:
+            P = CP(I=I, Dy=Dy, Dx=Dx, G=G, M=M, Dyy=Dyy, Dyx=Dyx, Dxy=Dxy, Dxx=Dxx, Ga=Ga, Ma=Ma, L=L, x0=x0, sign=_s, dert_=dert_)
+            # initialize new P params:
+            I, Dy, Dx, G, M, Dyy, Dyx, Dxy, Dxx, Ga, Ma, L, x0, dert_ = 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, x, []
+            P_.append(P)
+        # accumulate P params:
+        I += p
+        Dy += dy
+        Dx += dx
+        G += g
+        M += m
+        Dyy += dyy
+        Dyx += dyx
+        Dxy += dxy
+        Dxx += dxx
+        Ga += vga
+        Ma += Ma
+        L += 1
+        dert_.append([p, dy, dx, g, m, dyy, dyx, dxy, dxx, ga, ma])  # accumulate dert into dert_ if no sign change
+        _s = s  # prior sign
+
+    # last P in a row
+    P = CP(I=I, Dy=Dy, Dx=Dx, G=G, M=M, Dyy=Dyy, Dyx=Dyx, Dxy=Dxy, Dxx=Dxx, Ga=Ga, Ma=Ma, L=L, x0=x0, sign=_s, dert_=dert_)
+    P_.append(P)
+
+    for _P, P in pairwise(P_):
+        binder.bind(_P, P)
+
+    return P_
+'''
