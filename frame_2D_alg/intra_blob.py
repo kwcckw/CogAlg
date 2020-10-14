@@ -46,7 +46,7 @@ aveB = 50  # fixed cost per intra_blob comp and clustering
 
 def intra_blob(blob, **kwargs):  # recursive input rng+ | angle cross-comp within blob
 
-    Ave = ave * blob.rdn; AveB = aveB * blob.rdn
+    Ave = int(ave * blob.rdn); AveB = int(aveB * blob.rdn)
 
     if kwargs.get('render') is not None:  # stop rendering sub-blobs when blob is too small
         if blob.S < 100:
@@ -61,7 +61,7 @@ def intra_blob(blob, **kwargs):  # recursive input rng+ | angle cross-comp withi
         if mask.shape[0] > 2 and mask.shape[1] > 2 and False in mask:  # min size in y and x, least one dert in dert__
 
             # cluster_derts_P eval, tentative, no cluster_derts_P yet:
-            if blob.G * (1 - blob.Ga / (6 * blob.S)) - AveB > 0:  # max_ga=6?
+            if blob.G * (1 - blob.Ga / (4.45 * blob.S)) - AveB > 0:  # max_ga=6? max ga = 4.4428, we use 4.45 so that max possible value is less than 1 (4.4428/4.45<1)
                 # G reduced by Ga value, base G is second deviation or specific borrow value?
                 # flatten day and dax, not generalized for nested day and dax yet:
                 dert__ = list(dert__)
@@ -69,15 +69,15 @@ def intra_blob(blob, **kwargs):  # recursive input rng+ | angle cross-comp withi
                           dert__[5][0], dert__[5][1], dert__[6][0], dert__[6][1],
                           dert__[7], dert__[8])
 
-                crit__ = dert__[3] * (1 - dert__[7] / 6) - Ave  # max_ga=6, record separately from g and ga?
+                crit__ = dert__[3] * (1 - dert__[7] / 4.45) - Ave  # max_ga=6, record separately from g and ga?
                 # ga is not signed, thus additional eval, different Ave?
                 blob.fca=0
                 sub_eval(blob, dert__, crit__, mask, **kwargs)
 
             # comp_aga eval, inverse relative ga value, tentative, no comp_aga yet:
-            elif blob.G / (1 - blob.Ga / (6 * blob.S)) - AveB > 0:  # max_ga=6, init G is 2nd deviation or specific borrow value?
+            elif blob.G / (1 - blob.Ga / (4.45 * blob.S)) - AveB > 0:  # max_ga=6, init G is 2nd deviation or specific borrow value?
                 # G increased by Ga value,  flatten day and dax?
-                crit__ = dert__[3] / (1 - dert__[7] / 6) - Ave  # ~ eval per blob, record separately from g and ga?
+                crit__ = dert__[3] / (1 - dert__[7] / 4.45) - Ave  # ~ eval per blob, record separately from g and ga?
                 # ga is not signed, thus additional eval, different Ave?
                 blob.fca = 1
                 sub_eval(blob, dert__, crit__, mask, **kwargs)
@@ -235,3 +235,75 @@ def accum_blob_Dert(blob, dert__, y, x):
         blob.Dxx += dert__[6][1][y, x]
         blob.Ga += dert__[7][y, x]
         blob.Ma += dert__[8][y, x]
+        
+        
+        
+        
+# calculation to get max ga
+'''
+1. From frame_blobs' comp_pixel
+Given:
+Gy__ = ((bottomleft__ + bottomright__) - (topleft__ + topright__))
+Gx__ = ((topright__ + bottomright__) - (topleft__ + bottomleft__))  # same as decomposition of two diagonal differences into Gx
+
+Calculation：
+max of gy or gx = (255+255)-(0+0) = 510
+min of gy or gx = (0+0)-(255+255) = -510
+
+2. From frame_blobs' comp_pixel
+Given:
+G__ = (np.hypot(Gy__, Gx__) - ave).astype('int')
+ave = 30
+
+Calculations:
+max of g = sqrt( (510^2) + (510^2) ) = 721.24891681 - ave = 691.24891681
+min of g = sqrt( (0^2) + (0^2) ) = 0 - ave = -30
+
+3. From intra_comp's comp_a
+Given:
+a__ = [gy__, gx__] / g__
+
+Calculations:
+max of a = 510 / 1 = 510 
+min of a = -510 / 1  = -510
+
+4.
+Given:
+sin_da0__, cos_da0__ = angle_diff(a1, a2)
+sin_da1__, cos_da1__ = angle_diff(a1, a2)
+sin_1, cos_1 = a1[:]
+sin_2, cos_2 = a2[:]
+sin_da = (cos_1 * sin_2) - (sin_1 * cos_2)
+cos_da = (cos_1 * cos_2) + (sin_1 * sin_2)
+
+Calculations:
+max of sin_da or cos_da =  (510*510)-(-510*510) = 520200
+min of sin_da or cos_da = (-510*510)+(-510*510) = -520200
+
+5. 
+Given:
+day__ = (-sin_da0__ - sin_da1__), (cos_da0__ + cos_da1__)
+dax__ = (-sin_da0__ + sin_da1__), (cos_da0__ + cos_da1__)
+
+Calculations:
+max of day or dax = (-520200-(-520200)) , (520200+520200) = (1040400,1040400)
+min of day or dax = (-(520200)+(-520200)) , ((-520200)+(-520200)) = (-1040400,-1040400)
+
+6. 
+Given:
+np.arctan2(*day__)
+np.arctan2(*dax__)
+
+Calculations:
+max of np.arctan2(day or dax) = np.arctan2(0,-1040400) = 3.141592653589793
+min of np.arctan2(day or dax) = np.arctan2(-1040400,-1040400) = -2.356194490192345
+
+7. 
+Given:
+ga__ = np.hypot(np.arctan2(*day__), np.arctan2(*dax__))
+
+Calculations:
+max of ga = sqrt( (3.141592653589793^2) + (3.141592653589793^2) ) = 4.442882938158366
+min of ga = sqrt( (0^2) + (0^2) ) = 0
+
+'''
