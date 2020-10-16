@@ -45,7 +45,7 @@ def comp_pixel(image):  # 2x2 pixel cross-correlation within image, as in edge d
     Gx__ = ((topright__ + bottomright__) - (topleft__ + bottomleft__))  # same as decomposition of two diagonal differences into Gx
 
     G__ = (np.hypot(Gy__, Gx__) - ave).astype('int')  # deviation of central gradient per kernel, between four vertex pixels
-    M__ = ave - (abs(topleft__ - bottomright__) + abs(topright__ - bottomleft__))   # inverse match = SAD: variation within kernel
+    M__ = ave - (abs(topleft__ - bottomright__) + abs(topright__ - bottomleft__))  # inverse deviation of SAD: variation in kernel
 
     return (topleft__, Gy__, Gx__, G__, M__)  # tuple of 2D arrays per param of dert (derivatives' tuple)
     # renamed dert__ = (p__, dy__, dx__, g__, m__) for readability in functions below
@@ -217,7 +217,7 @@ if __name__ == "__main__":
 
     # Parse arguments
     argument_parser = argparse.ArgumentParser()
-    argument_parser.add_argument('-i', '--image', help='path to image file', default='./images//raccoon_head.jpg')
+    argument_parser.add_argument('-i', '--image', help='path to image file', default='./images//raccoon.jpg')
     argument_parser.add_argument('-v', '--verbose', help='print details, useful for debugging', type=int, default=1)
     argument_parser.add_argument('-n', '--intra', help='run intra_blobs after frame_blobs', type=int, default=1)
     argument_parser.add_argument('-r', '--render', help='render the process', type=int, default=0)
