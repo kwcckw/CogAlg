@@ -31,6 +31,8 @@ class CDeepBlob(ClusterStructure):
     Dyx = int
     Dxy = int
     Dxx = int
+    Ga = int
+    Ma = int
     # blob params
     S = int
     sign = NoneType

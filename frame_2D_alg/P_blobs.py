@@ -431,7 +431,7 @@ def form_blob(stack, frame):  # increment blob with terminated stack, check for 
         blob.box = (y0, yn, x0, xn)
         blob.dert__ = dert__
         blob.mask = mask
-        blob.adj_blobs = [[], 0, 0]
+        blob.adj_blobs = [[], 0, 0, 0, 0]
         blob.fopen = fopen
 
         frame.update(I=frame['I'] + blob.Dert['I'],
@@ -475,6 +475,10 @@ def assign_adjacents(blob_binder):  # adjacents are connected opposite-sign blob
         blob2.adj_blobs[1] += blob1.Dert['S']
         blob1.adj_blobs[2] += blob2.Dert['G']
         blob2.adj_blobs[2] += blob1.Dert['G']
+        blob1.adj_blobs[3] += blob2.Dert['M']
+        blob2.adj_blobs[3] += blob1.Dert['M']
+        blob1.adj_blobs[4] += blob2.Dert['Ma']
+        blob2.adj_blobs[4] += blob1.Dert['Ma']
 
 
 # -----------------------------------------------------------------------------

@@ -124,12 +124,12 @@ def sub_eval(blob, dert__, crit__, mask, **kwargs):
 
         for sub_blob in sub_blobs:  # evaluate sub_blob
             G = blob.G  # or Gr, Grr..?
-            adj_M = blob.adj_blobs[2]  # replace with adjacent M?
+            adj_M = blob.adj_blobs[3]  # replace with adjacent M?
             borrow_M = min(G, adj_M / 2)
-            if blob.fia:
+            if blob.fia and blob.fca:
                 # comp_aga
                 Ga = blob.Ga
-                adj_Ma = blob.adj_blobs[2]  # replace with adjacent Ma?
+                adj_Ma = blob.adj_blobs[4]  # replace with adjacent Ma?
                 borrow_Ma = min(Ga, adj_Ma / 2)
 
                 if borrow_M / (1 - borrow_Ma / (4.45 * blob.S)) > AveB:  # combine G with Ga, need to re-check
