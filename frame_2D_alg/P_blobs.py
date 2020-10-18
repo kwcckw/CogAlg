@@ -203,9 +203,10 @@ def form_P_(idert_, crit_, mask_, binder):  # segment dert__ into P__, in horizo
     except IndexError:
         return P_  # the whole line is masked, return an empty P
 
-    dert_ = [*next(idert_)]  # get first dert, dert_ is a generator/iterator
-    (I, Dy, Dx, G, M, Dyy, Dyx, Dxy, Dxx, Ga, Ma), L = dert_, 1  # initialize P params
-
+    # need double bracket
+    dert_ = [[*next(idert_)]]  # get first dert, dert_ is a generator/iterator
+    (I, Dy, Dx, G, M, Dyy, Dyx, Dxy, Dxx, Ga, Ma), L = dert_[0], 1  # initialize P params
+    
     _s = s_[x0]
     _mask = mask_[x0]  # mask bit per dert
 
@@ -420,7 +421,9 @@ def form_blob(stack, frame):  # increment blob with terminated stack, check for 
                 x_start = P.x0 - x0
                 x_stop = x_start + P.L
                 mask[y, x_start:x_stop] = False
-
+                
+                dert_G = comp_g(P) # pack this dert_G into stack or blob?
+                
         dert__ = tuple(derts[y0:yn, x0:xn] for derts in frame['dert__'])  # slice each dert array of the whole frame
 
         fopen = 0  # flag: blob on frame boundary
@@ -487,3 +490,30 @@ def assign_adjacents(blob_binder):  # adjacents are connected opposite-sign blob
 def accum_Dert(Dert: dict, **params) -> None:
     Dert.update({param: Dert[param] + value for param, value in params.items()})
 
+# -----------------------------------------------------------------------------
+
+def comp_g(P):
+    
+    '''
+    draft of comp_g in P_blobs
+    '''
+    
+    ave_g = 50
+    
+    dert_G = []
+    
+    _g = P.dert_[0][3] # initial g
+    
+    for i, dert in enumerate(P.dert_,start=1):
+            
+        g = dert[3]
+        
+        dg = g - _g # cross comp between prior g and current g, but should this be bilateral?
+        
+        mg = ave_g -abs(dg)
+    
+        dert_G.append([g,dg,mg]) # pack derts of gs
+        
+
+    return dert_G
+    
