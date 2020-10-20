@@ -83,6 +83,10 @@ class CP(ClusterStructure):
     x0 = int
     sign = NoneType
     dert_ = list
+    # CgP
+    gdert_ = list
+    Dg = int
+    Mg = int
 
 class Cstack(ClusterStructure):
     I = int
@@ -160,7 +164,7 @@ def P_blobs(dert__, mask, crit__, verbose=False, render=False):
         P_ = scan_P_(P_, stack_, frame, P_binder)  # vertical clustering, adds P up_connects and _P down_connect_cnt
         stack_ = form_stack_(P_, frame, y)
         stack_binder.bind_from_lower(P_binder)
-
+            
     while stack_:  # frame ends, last-line stacks are merged into their blobs
         form_blob(stack_.popleft(), frame)
 
@@ -333,7 +337,7 @@ def form_stack_(P_, frame, y):  # Convert or merge every P into its stack of Ps,
 
     while P_:
         P, up_connect_ = P_.popleft()
-        I, Dy, Dx, G, M, Dyy, Dyx, Dxy, Dxx, Ga, Ma, L, x0, s, dert_ = P.unpack()
+        I, Dy, Dx, G, M, Dyy, Dyx, Dxy, Dxx, Ga, Ma, L, x0, s, dert_, _, _, _ = P.unpack()
         xn = x0 + L  # next-P x0
         if not up_connect_:
             # initialize new stack for each input-row P that has no connections in higher row, as in the whole top row:
@@ -415,24 +419,21 @@ def form_blob(stack, frame):  # increment blob with terminated stack, check for 
         for stack in stack_:
             # draft form gP_:
             if stack.G > aveG:  # and min(stack.Py_, key=attrgetter("L")).L > 1:
-                Py_ = stack.Py_
-                gP_G = Py_[0].G
-                gP_ = []
-                _gP_s = gP_G > aveG and Py_[0].L > 1
-                for P in Py_[1:]:
-                    gP_s = P.G > aveG and P.L > 1
-                    if _gP_s == gP_s:
-                        gP_G += P.G; gP_.append(P)  # accum gP
-                    else:
+                gP_G = stack.Py_[0].G # initial G of P
+                gP_ = [] # initialization
+                _gP_s = gP_G > aveG and stack.Py_[0].L > 1 # initial sign
+                
+                for P in stack.Py_[1:]:
+                    gP_s = P.G > aveG and P.L > 1 # consecutive sign
+                    if _gP_s == gP_s: # no sign change
+                        gP_G += P.G  # accum gP
+                    else: # sign change, compute gP
                         if gP_G > aveG:
                             gP = comp_g(P)  # adds gdert_, Dg, Mg per P
-                        else:
-                            gP = P
-                        gP_.append(gP)
-                gP_.append(gP)
-                stack.Py_ = gP_
-                # flag fg?
-                # add Dg, Mg to stack?
+                            P = gP
+                
+                # flag fg? 
+                # add Dg, Mg to stack? 
             for y, P in enumerate(stack.Py_, start=stack.y0 - y0):
                 x_start = P.x0 - x0
                 x_stop = x_start + P.L
@@ -524,5 +525,9 @@ def comp_g(P):
         Mg+=mg
         _g = g
 
-    return CgP(P=P, gdert_=gdert_, Dg=Dg, Mg=Mg)
+    P.gdert_= gdert_
+    P.Dg = Dg
+    P.Mg = Mg
+    
+    return P
 
