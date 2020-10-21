@@ -412,12 +412,21 @@ def form_blob(stack, frame):  # increment blob with terminated stack, check for 
         mask = np.ones((yn - y0, xn - x0), dtype=bool)  # mask box, then unmask Ps:
         for stack in stack_:
             form_gPy_(stack)  # evaluate to convert stack.Py_ to stack.gPy_
-
-            for y, P in enumerate(stack.Py_, start=stack.y0 - y0):
-                x_start = P.x0 - x0
-                x_stop = x_start + P.L
-                mask[y, x_start:x_stop] = False
-
+            
+            if stack.fgP: # gdert in P
+                for y, (gP_sign, gP_G, gP_) in enumerate(stack.Py_, start=stack.y0 - y0):
+                    for gP in gP_:
+                        x_start = gP.x0 - x0
+                        x_stop = x_start + gP.L
+                        mask[y, x_start:x_stop] = False  
+            else:
+                for y, P in enumerate(stack.Py_, start=stack.y0 - y0):
+                    x_start = P.x0 - x0
+                    x_stop = x_start + P.L
+                    mask[y, x_start:x_stop] = False
+                    
+                    
+                    
         dert__ = tuple(derts[y0:yn, x0:xn] for derts in frame['dert__'])  # slice each dert array of the whole frame
 
         fopen = 0  # flag: blob on frame boundary
