@@ -84,6 +84,7 @@ class CP(ClusterStructure):
     sign = NoneType
     dert_ = list
     gdert_ = list
+    gPP_ = list
     Dg = int
     Mg = int
 
@@ -331,7 +332,7 @@ def form_stack_(P_, frame, y):  # Convert or merge every P into its stack of Ps,
 
     while P_:
         P, up_connect_ = P_.popleft()
-        I, Dy, Dx, G, M, Dyy, Dyx, Dxy, Dxx, Ga, Ma, L, x0, s, dert_, _, _, _ = P.unpack()
+        I, Dy, Dx, G, M, Dyy, Dyx, Dxy, Dxx, Ga, Ma, L, x0, s, dert_, _, _, _, _ = P.unpack()
         xn = x0 + L  # next-P x0
         if not up_connect_:
             # initialize new stack for each input-row P that has no connections in higher row, as in the whole top row:
@@ -411,11 +412,13 @@ def form_blob(stack, frame):  # increment blob with terminated stack, check for 
 
         mask = np.ones((yn - y0, xn - x0), dtype=bool)  # mask box, then unmask Ps:
         for stack in stack_:
+            
             form_PPy_(stack)  # evaluate to convert stack.Py_ to stack.PPy_
             
             if stack.fPP:  # Py_ is PPy_
                 for y, (PP_sign, PP_G, P_) in enumerate(stack.Py_, start=stack.y0 - y0):
                     for P in P_:
+                        
                         x_start = P.x0 - x0
                         x_stop = x_start + P.L
                         mask[y, x_start:x_stop] = False  
@@ -478,7 +481,7 @@ def form_PPy_(stack):
                 Py_ = [P]; PP_G = P.G  # initialize PP params
             _PP_sign = PP_sign
 
-        PP = _PP_sign, PP_G, Py_  # terminate last PP
+        PP = (_PP_sign, PP_G, Py_)  # terminate last PP
         if PP_G > aveG:
             Py_, Dg, Mg = comp_g(Py_)  # adds gdert_, Dg, Mg per P
             stack_Dg += abs(Dg)  # stack params?
@@ -501,10 +504,15 @@ def comp_g(Py_):  # cross-comp of gs in P.dert_, in PP.Py_
             g = dert[3]
             dg = g - _g
             mg = min(g, _g)
-            gdert_.append((dg, mg))  # no g: already in dert_
+             
+            gdert_.append((g, dg, mg))  # put in g to form gP
             Dg+=dg  # P-wide cross-sign, P.L is too short to form sub_Ps, but possibly double edge | waves?
             Mg+=mg
             _g = g
+            
+        if len(gdert_)>0: # process only non empty gdert  
+            gPP_ = form_gPP_(gdert_)
+            P.gPP_ = gPP_
         P.gdert_ = gdert_
         P.Dg = Dg
         P.Mg = Mg
@@ -513,6 +521,34 @@ def comp_g(Py_):  # cross-comp of gs in P.dert_, in PP.Py_
         gP_Mg += Mg  # positive, for stack evaluation to set fPP
 
     return gP_, gP_Dg, gP_Mg
+
+
+def form_gPP_(gdert_):
+    
+    gP_ = [] # initialization
+    _g, _Dg, _Mg = gdert_[0] # first gdert
+    _s = _Mg >0 # initial sign, should we use ave here?
+
+    for (g, Dg, Mg) in gdert_[1:]:
+        
+        s = Mg>0 # current sign
+        
+        if _s != s: # sign change   
+            gP_.append([_s, _Dg, _Mg]) # pack gP
+            # update params
+            _s = s
+            _Dg = Dg
+            _Mg = Mg
+            
+        else: # accumulate params
+            _Dg += Dg# should we abs the value here?
+            _Mg += Mg
+            
+    gP_.append([_s, _Dg, _Mg]) # pack last gP
+    
+    return gP_
+        
+
 
 
 def assign_adjacents(blob_binder):  # adjacents are connected opposite-sign blobs
