@@ -57,7 +57,7 @@ def intra_blob(blob, **kwargs):  # recursive input rng+ | angle cross-comp withi
 
     if blob.fia:  # input from comp_a -> P_blobs or comp_aga
 
-        dert__, mask = comp_a(ext_dert__, Ave, ext_mask)  # -> ga sub_blobs -> P_blobs (comp_g, comp_P)
+        dert__, mask = comp_a(ext_dert__, 1, Ave, ext_mask)  # -> ga sub_blobs -> P_blobs (comp_g, comp_P)
         if mask.shape[0] > 2 and mask.shape[1] > 2 and False in mask:  # min size in y and x, at least one dert in dert__
 
             # P_blobs eval, tentative:
@@ -96,7 +96,7 @@ def intra_blob(blob, **kwargs):  # recursive input rng+ | angle cross-comp withi
                                   zip_longest(spliced_layers, blob.sub_layers, fillvalue=[])]
 
         elif blob.G > AveB:
-            dert__, mask = comp_a(ext_dert__, Ave, ext_mask)  # -> m sub_blobs
+            dert__, mask = comp_a(ext_dert__, 0, Ave, ext_mask)  # -> m sub_blobs
             crit__ = dert__[3]  # deviation of g
 
             if mask.shape[0] > 2 and mask.shape[1] > 2 and False in mask:  # min size in y and x, least one dert in dert__
@@ -218,6 +218,37 @@ def extend_dert(blob):  # extend dert borders (+1 dert to boundaries)
     return ext_dert__, ext_mask
 
 
+
+
+def nested_process(element__,process_function,*args):
+    '''
+    nested operation on 1 variable based on the provided fucntion
+    '''
+    if isinstance(element__ ,list):
+        if len(element__)>1 and isinstance(element__[0],list):
+            for i, element_ in enumerate(element__):
+                element__[i] = nested_process(element_,process_function,*args)
+        else:
+            element__ = process_function(element__,*args)
+    else:
+        element__ = process_function(element__,*args)
+    return element__
+
+
+def nested_accum_blob_Dert(element_,*args):
+    
+    param = args[0]
+    y = args[1]
+    x = args[2]
+    
+    if isinstance(element_,list):
+        for i,element in enumerate(element_):
+            element[i][y,x] += param
+    else:
+        element_[y,x] += param
+
+    return element_
+
 def accum_blob_Dert(blob, dert__, y, x):
     blob.I += dert__[0][y, x]
     blob.Dy += dert__[1][y, x]
@@ -226,9 +257,11 @@ def accum_blob_Dert(blob, dert__, y, x):
     blob.M += dert__[4][y, x]
 
     if len(dert__) > 5:  # past comp_a fork
-        blob.Dyy += dert__[5][0][y, x]
-        blob.Dyx += dert__[5][1][y, x]
-        blob.Dxy += dert__[6][0][y, x]
-        blob.Dxx += dert__[6][1][y, x]
-        blob.Ga += dert__[7][y, x]
-        blob.Ma += dert__[8][y, x]
+
+        nested_process(dert__[4],nested_accum_blob_Dert, blob.Dyy, y,x)
+        nested_process(dert__[5],nested_accum_blob_Dert, blob.Dyx, y,x)
+        nested_process(dert__[6],nested_accum_blob_Dert, blob.Dxy, y,x)
+        nested_process(dert__[7],nested_accum_blob_Dert, blob.Dxx, y,x)
+        nested_process(dert__[8],nested_accum_blob_Dert, blob.Ga, y,x)
+        nested_process(dert__[9],nested_accum_blob_Dert, blob.Ma, y,x)
+
