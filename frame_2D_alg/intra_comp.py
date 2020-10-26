@@ -115,263 +115,6 @@ def comp_r(dert__, ave, root_fia, mask=None):
     return (i__center, dy__, dx__, g__, m__), majority_mask
 
 
-def comp_a(dert__, fga, ave, mask=None):  # cross-comp of angle in 2x2 kernels
-
-    if mask is not None:
-        majority_mask = (mask[:-1, :-1].astype(int) +
-                         mask[:-1, 1:].astype(int) +
-                         mask[1:, 1:].astype(int) +
-                         mask[1:, :-1].astype(int)
-                         ) > 1
-    else:
-        majority_mask = None
-
-
-    if fga: # prior fork is comp_a
-        i__ = dert__[0]
-        dy__, dx__, g__, m__  = dert__[5:]
-    else: # prior fork is not comp_a
-        i__, dy__, dx__, g__, m__ = dert__[:5]  # day__,dax__,ga__,ma__ are recomputed
-
-    # to avoid / 0
-    g__ = nested_process(g__, nested_replace_zero)
-    
-    # compute g + ave
-    
-    
-    ady__ = nested_compute_a(dy__, g__, ave) # angle, restore g to abs, similar to calc_a
-    adx__ = nested_compute_a(dx__, g__, ave) # angle, restore g to abs, similar to calc_a
-    a__ = [ady__,adx__]
-    
-    # shift directions
-    a__topleft = nested_process(dcopy(a__), shift_topleft)
-    a__topright = nested_process(dcopy(a__), shift_topright)
-    a__botright = nested_process(dcopy(a__), shift_botright)
-    a__botleft = nested_process(dcopy(a__), shift_botleft)
-
-    # diagonal angle differences:
-    sin_da0__, cos_da0__ = nested_process2(a__topleft,a__botright,nested_angle_diff)
-    sin_da1__, cos_da1__ = nested_process2(a__topright, a__botleft,nested_angle_diff)
-
-    ma1__ = nested_process2(sin_da0__, cos_da0__, nested_hypot_add_1)
-    ma2__ = nested_process2(sin_da0__, cos_da0__, nested_hypot_add_1)
-    ma__ = nested_process2(ma1__,ma2__,nested_add)
-    # ma = inverse angle match = SAD: covert sin and cos da to 0->2 range
-
-    # negative nested sin_da0
-    n_sin_da0__ = nested_process(dcopy(sin_da0__), nested_negative)
-
-    # day__ = (-sin_da0__ - sin_da1__), (cos_da0__ + cos_da1__)
-    day__ = [nested_process2(n_sin_da0__, cos_da0__, nested_subtract),\
-             nested_process2(cos_da0__, cos_da1__, nested_add)]
-    # angle change in y, sines are sign-reversed because da0 and da1 are top-down, no reversal in cosines
-
-    # dax__ = (-sin_da0__ + sin_da1__), (cos_da0__ + cos_da1__)
-    dax__ = [nested_process2(n_sin_da0__, cos_da0__, nested_add),\
-             nested_process2(cos_da0__, cos_da1__, nested_add)]
-    # angle change in x, positive sign is right-to-left, so only sin_da0__ is sign-reversed
-    
-    '''
-    sin(-θ) = -sin(θ), cos(-θ) = cos(θ): 
-    sin(da) = -sin(-da), cos(da) = cos(-da) => (sin(-da), cos(-da)) = (-sin(da), cos(da))
-    '''
-    
-    # np.arctan2(*day__)
-    arctan_day__ = nested_process2(day__[0], day__[1], nested_arctan2)
-    # np.arctan2(*dax__)
-    arctan_dax__ = nested_process2(dax__[0], dax__[1], nested_arctan2)
-    
-    #ga__ = np.hypot(np.arctan2(*day__), np.arctan2(*dax__))
-    ga__ = nested_process2(arctan_day__, arctan_dax__, nested_hypot)   
-    # angle gradient, a scalar evaluated for comp_aga
-
-    i__ = nested_process(i__, shift_topleft) # for summation in Dert
-    g__ = nested_process(g__, shift_topleft) # for summation in Dert
-    m__ = nested_process(m__, shift_topleft) 
-    dy__ = nested_process(dy__, shift_topleft) # passed on as idy
-    dx__ = nested_process(dx__, shift_topleft) # passed on as idy
-    
-    return (i__, dy__, dx__, g__, m__, day__, dax__, ga__, ma__), majority_mask
-
-# -----------------------------------------------------------------------------
-# Utilities
-    
-def angle_diff(a2, a1):  # compare angle_1 to angle_2
-
-    sin_1, cos_1 = a1[:]
-    sin_2, cos_2 = a2[:]
-
-    # sine and cosine of difference between angles:
-
-    sin_da = (cos_1 * sin_2) - (sin_1 * cos_2)
-    cos_da = (cos_1 * cos_2) + (sin_1 * sin_2)
-
-    return [sin_da, cos_da]
-
-# -----------------------------------------------------------------------------
-# Utilities for nested operations
-    
-def nested_process(element__,process_function,*args):
-    '''
-    nested operation on 1 variable based on the provided function
-    '''
-    if isinstance(element__ ,list):
-        if len(element__)>1 and isinstance(element__[0],list):
-            for i, element_ in enumerate(element__):
-                element__[i] = nested_process(element_,process_function,*args)
-        else:
-            element__ = process_function(element__,*args)
-    else:
-        element__ = process_function(element__,*args)
-    return element__
-
-def nested_process2(element1__,element2__,process_function):
-    '''
-    nested operation on 2 variables based on the provided function
-    '''
-    element__ = dcopy(element1__)
-    if isinstance(element1__[0],list):
-        for i, (element1_,element2_) in enumerate(zip(element1__,element2__)):
-                element__[i] = nested_process2(element1_,element2_, process_function)
-    else:
-        element__ = process_function(element1__,element2__)
-    return element__
-
-
-
-def nested_compute_a(element1__, element2__, ave):
-    '''
-    nested operation to compute a from gy,gx, g and ave
-    '''
-    element__ = dcopy(element1__)
-    if isinstance(element2__[0],list):
-        for i, (element1_,element2_) in enumerate(zip(element1__,element2__)):
-                element__[i] = nested_compute_a(element1_,element2_, ave)
-    else:
-        if isinstance(element2__,list):
-            for i, (element1_,element2_) in enumerate(zip(element1__,element2__)):
-                element__[i] = [element1_[0]/element2_,element1_[1]/element2_]
-        else:
-                element__ = [element1__[0]/element2__,element1__[1]/element2__]
-
-    return element__
-
-def shift_topleft(element_):
-    '''
-    shift variable in top left direction
-    '''
-    if isinstance(element_,list):
-        for i, element in enumerate(element_):
-            element_[i] = element[:-1, :-1]
-    else:
-        element_ = element_[:-1, :-1]
-    return element_
-
-def shift_topright(element_):
-    '''
-    shift variable in top right direction
-    '''
-    if isinstance(element_,list):
-        for i, element in enumerate(element_):
-            element_[i] = element[:-1, 1:]
-    else:
-        element_ = element_[:-1, 1:]
-    return element_
-
-def shift_botright(element_):
-    '''
-    shift variable in bottom right direction
-    '''
-    if isinstance(element_,list):
-        for i, element in enumerate(element_):
-            element_[i] = element[1:, 1:]
-    else:
-        element_ = element_[1:, 1:]
-    return element_
-
-def shift_botleft(element_):
-    '''
-    shift variable in bottom left direction
-    '''
-    if isinstance(element_,list):
-        for i, element in enumerate(element_):
-            element_[i] = element[1:, :-1]
-    else:
-        element_ = element_[1:, :-1]
-    return element_
-
-def nested_negative(element_):
-    '''
-    complement all values in the variable
-    '''
-    if isinstance(element_,list):
-        for i, element in enumerate(element_):
-            element_[i] = -element
-    else:
-        element_ = -element_   
-    return element_
-
-def nested_replace_zero(element_):
-    '''
-    replace all 0 values in the variable with 1
-    '''
-    if isinstance(element_,list):
-        for i, element in enumerate(element_):
-            element[np.where(element == 0)] = 1
-            element_[i] = element
-    else:
-        element_[np.where(element_ == 0)] = 1
-    return element_
-    
-
-def nested_angle_diff(a2, a1):  
-    '''
-    compare angle_1 to angle_2
-    '''
-    
-    sin_1, cos_1 = a1[:]
-    sin_2, cos_2 = a2[:]
-
-    # sine and cosine of difference between angles:
-
-    sin_da = (cos_1 * sin_2) - (sin_1 * cos_2)
-    cos_da = (cos_1 * cos_2) + (sin_1 * sin_2)
-
-    return [sin_da, cos_da]
-
-def nested_hypot(element1,element2):
-    '''
-    hypot of 2 elements
-    '''
-    return [np.hypot(element1[0], element2[0]),np.hypot(element1[1], element2[1])]
-
-def nested_hypot_add_1(element1,element2):
-    '''
-    hypot of 2 (elements+1)
-    '''
-    return [np.hypot(element1[0] + 1, element2[0] + 1),np.hypot(element1[1] + 1, element2[1] + 1)]
-
-def nested_add(element1,element2):
-    '''
-    sum of 2 variables
-    '''
-    return [element1[0] + element2[0] , element1[1] + element2[1]]
-
-def nested_subtract(element1,element2):
-    '''
-    difference of 2 variables
-    '''
-    return [element1[0] - element2[0] , element1[1] - element2[1]]
-
-def nested_arctan2(element1,element2):
-    '''
-    arc tan of 2 variables
-    '''
-    return [np.arctan2(element1[0], element2[0]), np.arctan2(element1[1], element2[1])]
-
-
-'''
-
 def comp_a(dert__, ave, mask=None):  # cross-comp of angle in 2x2 kernels
 
     if mask is not None:
@@ -397,8 +140,8 @@ def comp_a(dert__, ave, mask=None):  # cross-comp of angle in 2x2 kernels
     sin_da0__, cos_da0__ = angle_diff(a__topleft, a__botright)
     sin_da1__, cos_da1__ = angle_diff(a__topright, a__botleft)
 
-
-    ma__ = np.hypot(sin_da0__ + 1, cos_da0__ + 1) + np.hypot(sin_da1__ + 1, cos_da1__ + 1)
+    ma__ = np.hypot(sin_da0__ + 1, cos_da0__ + 1) \
+         + np.hypot(sin_da1__ + 1, cos_da1__ + 1)
     # ma = inverse angle match = SAD: covert sin and cos da to 0->2 range
 
     day__ = (-sin_da0__ - sin_da1__), (cos_da0__ + cos_da1__)
@@ -406,12 +149,15 @@ def comp_a(dert__, ave, mask=None):  # cross-comp of angle in 2x2 kernels
 
     dax__ = (-sin_da0__ + sin_da1__), (cos_da0__ + cos_da1__)
     # angle change in x, positive sign is right-to-left, so only sin_da0__ is sign-reversed
-    
-    # sin(-θ) = -sin(θ), cos(-θ) = cos(θ): 
-    # sin(da) = -sin(-da), cos(da) = cos(-da) => (sin(-da), cos(-da)) = (-sin(da), cos(da))
-    
-    ga__ = np.hypot(np.arctan2(*day__), np.arctan2(*dax__))
-    # angle gradient, a scalar evaluated for comp_aga
+    '''
+    sin(-θ) = -sin(θ), cos(-θ) = cos(θ): 
+    sin(da) = -sin(-da), cos(da) = cos(-da) => (sin(-da), cos(-da)) = (-sin(da), cos(da))
+    '''
+    ga__ = np.hypot( np.arctan2(*day__), np.arctan2(*dax__) )
+    '''
+    gradient of angle, initial deviation: ga - 90_degree, primary sign comp? 
+    comp_aga val = 2nd deviation, sign-agnostic interruption | wave: expected reversion, same for d sign?
+    '''
 
     i__ = i__[:-1, :-1]  # for summation in Dert
     g__ = g__[:-1, :-1]  # for summation in Dert
@@ -419,13 +165,236 @@ def comp_a(dert__, ave, mask=None):  # cross-comp of angle in 2x2 kernels
     dy__ = dy__[:-1, :-1]  # passed on as idy
     dx__ = dx__[:-1, :-1]  # passed on as idx
 
-    ## temporary section for debug purpose
-    dert__ga, mask__ga = comp_a_nested(dert__,fga=0,ave=ave) # comp_a
-    dert__aga, mask__aga = comp_a_nested(dert__ga,fga=1,ave=ave) # comp_aga
-    dert__aga_ga, mask__aga_ga = comp_a_nested(dert__aga,fga=1,ave=ave) # comp_aga_ga
 
     return (i__, dy__, dx__, g__, m__, day__, dax__, ga__, ma__), majority_mask
 
-'''
+
+def comp_aga(dert__, ave, mask=None):  # prior fork is comp_a, cross-comp of angle in 2x2 kernels
+
+    # replace nested operations by looping through a list of layers in each variable,
+    # only operate on the last element, which itself is a list?
+
+    if mask is not None:
+        majority_mask = (mask[:-1, :-1].astype(int) +
+                         mask[:-1, 1:].astype(int) +
+                         mask[1:, 1:].astype(int) +
+                         mask[1:, :-1].astype(int)
+                         ) > 1
+    else:
+        majority_mask = None
+
+    i__ = dert__[1.2]
+    dy__, dx__, g__, m__ = dert__[5:]  # day__,dax__,ga__,ma__ are recomputed
+    g__ = nested(g__, replace_zero_nested)  # to avoid / 0
+
+    # compute g + ave
+    day__ = calc_a(dy__, g__, ave)  # sin, restore g to abs
+    dax__ = calc_a(dx__, g__, ave)  # cos, restore g to abs
+    a__ = [day__, dax__]
+
+    # shift directions
+    a__topleft = nested(dcopy(a__), shift_topleft)
+    a__topright = nested(dcopy(a__), shift_topright)
+    a__botright = nested(dcopy(a__), shift_botright)
+    a__botleft = nested(dcopy(a__), shift_botleft)
+
+    # diagonal angle differences:
+    sin_da0__, cos_da0__ = nested2(a__topleft, a__botright, angle_diff_nested)
+    sin_da1__, cos_da1__ = nested2(a__topright, a__botleft, angle_diff_nested)
+
+    ma1__ = nested2(sin_da0__, cos_da0__, hypot_add1_nested)
+    ma2__ = nested2(sin_da0__, cos_da0__, hypot_add1_nested)
+    ma__ = nested2(ma1__, ma2__, add_nested)
+    # ma = inverse angle match = SAD: covert sin and cos da to 0->2 range
+
+    # negative nested sin_da0
+    n_sin_da0__ = nested(dcopy(sin_da0__), negative_nested)
+
+    # day__ = (-sin_da0__ - sin_da1__), (cos_da0__ + cos_da1__)
+    day__ = [nested2(n_sin_da0__, cos_da0__, subtract_nested),
+             nested2(cos_da0__, cos_da1__, add_nested)]
+    # angle change in y, sines are sign-reversed because da0 and da1 are top-down, no reversal in cosines
+
+    # dax__ = (-sin_da0__ + sin_da1__), (cos_da0__ + cos_da1__)
+    dax__ = [nested2(n_sin_da0__, cos_da0__, add_nested),
+             nested2(cos_da0__, cos_da1__, add_nested)]
+    # angle change in x, positive sign is right-to-left, so only sin_da0__ is sign-reversed
+
+    # np.arctan2(*day__)
+    arctan_day__ = nested2(day__[0], day__[1], arctan2_nested)
+    # np.arctan2(*dax__)
+    arctan_dax__ = nested2(dax__[0], dax__[1], arctan2_nested)
+
+    # ga__ = np.hypot(np.arctan2(*day__), np.arctan2(*dax__))
+    ga__ = nested2(arctan_day__, arctan_dax__, hypot_nested)
+    # angle gradient, a scalar evaluated for comp_aga
+
+    i__ = nested(i__, shift_topleft)  # for summation in Dert
+    g__ = nested(g__, shift_topleft)  # for summation in Dert
+    m__ = nested(m__, shift_topleft)
+    dy__ = nested(dy__, shift_topleft)  # passed on as idy
+    dx__ = nested(dx__, shift_topleft)  # passed on as idy
+
+    return (i__, dy__, dx__, g__, m__, day__, dax__, ga__, ma__), majority_mask
 
 
+
+# -----------------------------------------------------------------------------
+# Utilities
+
+def angle_diff(a2, a1):  # compare angle_1 to angle_2
+
+    sin_1, cos_1 = a1[:]
+    sin_2, cos_2 = a2[:]
+
+    # sine and cosine of difference between angles:
+
+    sin_da = (cos_1 * sin_2) - (sin_1 * cos_2)
+    cos_da = (cos_1 * cos_2) + (sin_1 * sin_2)
+
+    return [sin_da, cos_da]
+
+# same as above?:
+
+def angle_diff_nested(a2, a1):
+
+    sin_1, cos_1 = a1[:]
+    sin_2, cos_2 = a2[:]
+
+    # sine and cosine of difference between angles:
+
+    sin_da = (cos_1 * sin_2) - (sin_1 * cos_2)
+    cos_da = (cos_1 * cos_2) + (sin_1 * sin_2)
+
+    return [sin_da, cos_da]
+
+# -----------------------------------------------------------------------------
+# Utilities for nested operations
+
+def nested(element__, function, *args):  # provided function operates on nested variable
+
+    if isinstance(element__, list):
+        if len(element__) > 1 and isinstance(element__[0], list):
+            for i, element_ in enumerate(element__):
+                element__[i] = nested(element_, function, *args)
+        else:
+            element__ = function(element__, *args)
+    else:
+        element__ = function(element__, *args)
+    return element__
+
+
+def nested2(element1__, element2__, function):  # provided function operates on 2 nested variables
+
+    element__ = dcopy(element1__)
+    if isinstance(element1__[0], list):
+        for i, (element1_, element2_) in enumerate(zip(element1__, element2__)):
+            element__[i] = nested2(element1_, element2_, function)
+    else:
+        element__ = function(element1__, element2__)
+    return element__
+
+
+# How about unpacking these one-line nested functions?
+# I think they just make things more complex and opaque, never mind slower.
+
+def calc_a(element1__, element2__, ave):  # nested compute a from gy,gx, g and ave
+
+    element__ = dcopy(element1__)
+    if isinstance(element2__[0], list):
+        for i, (element1_, element2_) in enumerate(zip(element1__, element2__)):
+            element__[i] = calc_a(element1_, element2_, ave)
+    else:
+        if isinstance(element2__, list):
+            for i, (element1_, element2_) in enumerate(zip(element1__, element2__)):
+                element__[i] = [element1_[0] / element2_, element1_[1] / element2_]
+        else:
+            element__ = [element1__[0] / element2__, element1__[1] / element2__]
+
+    return element__
+
+
+def shift_topleft(element_):  # shift variable in top left direction
+
+    if isinstance(element_, list):
+        for i, element in enumerate(element_):
+            element_[i] = element[:-1, :-1]
+    else:
+        element_ = element_[:-1, :-1]
+    return element_
+
+
+def shift_topright(element_):  # shift variable in top right direction
+
+    if isinstance(element_, list):
+        for i, element in enumerate(element_):
+            element_[i] = element[:-1, 1:]
+    else:
+        element_ = element_[:-1, 1:]
+    return element_
+
+
+def shift_botright(element_):  # shift variable in bottom right direction
+
+    if isinstance(element_, list):
+        for i, element in enumerate(element_):
+            element_[i] = element[1:, 1:]
+    else:
+        element_ = element_[1:, 1:]
+    return element_
+
+
+def shift_botleft(element_):  # shift variable in bottom left direction
+
+    if isinstance(element_, list):
+        for i, element in enumerate(element_):
+            element_[i] = element[1:, :-1]
+    else:
+        element_ = element_[1:, :-1]
+    return element_
+
+
+def negative_nested(element_):  # complement all values in the variable
+
+    if isinstance(element_, list):
+        for i, element in enumerate(element_):
+            element_[i] = -element
+    else:
+        element_ = -element_
+    return element_
+
+
+def replace_zero_nested(element_):  # replace all 0 values in the variable with 1
+
+    if isinstance(element_, list):
+        for i, element in enumerate(element_):
+            element[np.where(element == 0)] = 1
+            element_[i] = element
+    else:
+        element_[np.where(element_ == 0)] = 1
+    return element_
+
+
+def hypot_nested(element1, element2):  # hypot of 2 elements
+
+    return [np.hypot(element1[0], element2[0]), np.hypot(element1[1], element2[1])]
+
+
+def hypot_add1_nested(element1, element2):  # hypot of 2 (elements+1)
+
+    return [np.hypot(element1[0] + 1, element2[0] + 1), np.hypot(element1[1] + 1, element2[1] + 1)]
+
+
+def add_nested(element1, element2):  # sum of 2 variables
+
+    return [element1[0] + element2[0], element1[1] + element2[1]]
+
+
+def subtract_nested(element1, element2):  # difference of 2 variables
+
+    return [element1[0] - element2[0], element1[1] - element2[1]]
+
+
+def arctan2_nested(element1, element2): # arctan of 2 variables
+
+    return [np.arctan2(element1[0], element2[0]), np.arctan2(element1[1], element2[1])]
