@@ -124,6 +124,7 @@ def flood_fill(dert__, sign__, verbose=False,
 
                     # add dert to blob
                     accum_func(blob, dert__, y1, x1)
+                    
                     blob.S += 1
                     if y1 < y0:
                         y0 = y1
@@ -291,12 +292,12 @@ if __name__ == "__main__":
                 # +G on first fork
                 if min(G, borrow_G) > aveB and blob_height > 3 and blob_width  > 3:  # min blob dimensions
                     blob.rdn = 1; blob.fca = 1 # +G blob' dert' comp_a
-                    deep_layers[i] = intra_blob(blob, render=args.render)
+                    deep_layers[i] = intra_blob(blob, render=args.render, verbose=args.verbose)
 
             # +M on first fork
             elif M - borrow_G > aveB and blob_height > 3 and blob_width  > 3:  # min blob dimensions
                 blob.rdn = 1; blob.rng = 1; blob.fia = 0
-                deep_layers[i] = intra_blob(blob, render=args.render)  # -G blob' dert__' comp_r in 3x3 kernels
+                deep_layers[i] = intra_blob(blob, render=args.render, verbose=args.verbose)  # -G blob' dert__' comp_r in 3x3 kernels
 
             if deep_layers[i]:  # if there are deeper layers
                 deep_blob_i_.append(i)  # indices of blobs with deep layers
