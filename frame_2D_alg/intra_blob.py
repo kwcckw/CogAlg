@@ -33,17 +33,15 @@ from itertools import zip_longest
 from utils import pairwise
 import numpy as np
 from P_blobs import P_blobs
-from nested_utils import *
-
+from utils_nested import *
 # from comp_P_draft import comp_P_blob
 
 # filters, All *= rdn:
 ave = 50  # fixed cost per dert, from average m, reflects blob definition cost, may be different for comp_a?
 aveB = 50  # fixed cost per intra_blob comp and clustering
 
-
 # --------------------------------------------------------------------------------------------------------------
-# functions, ALL WORK-IN-PROGRESS:
+# functions:
 
 def intra_blob(blob, **kwargs):  # recursive input rng+ | angle cross-comp within blob
 
@@ -202,7 +200,7 @@ def extend_dert(blob):  # extend dert borders (+1 dert to boundaries)
     ext_dert__ = []
     for derts in blob.root_dert__:
         if derts is not None:
-            
+
             params = [y0e,yne,x0e,xne]
             ext_dert__.append(nested(derts,nested_crop,params))
 
@@ -216,8 +214,8 @@ def extend_dert(blob):  # extend dert borders (+1 dert to boundaries)
                        (x0 - x0e, xne - xn)),
                       constant_values=True, mode='constant')
 
-
     return ext_dert__, ext_mask
+
 
 def accum_blob_Dert(blob, dert__, y, x):
     blob.I += dert__[0][y, x]
@@ -227,7 +225,7 @@ def accum_blob_Dert(blob, dert__, y, x):
     blob.M += dert__[4][y, x]
 
     if len(dert__) > 5:  # past comp_a fork
-          
+
         # this function applicable to conditions if depth = 0 or depth >=1
         nested(dert__[5][0], nested_accum_blob_Dert, blob.Dyy, y, x)
         nested(dert__[5][1], nested_accum_blob_Dert, blob.Dyx, y, x)
@@ -235,4 +233,23 @@ def accum_blob_Dert(blob, dert__, y, x):
         nested(dert__[6][1], nested_accum_blob_Dert, blob.Dxx, y, x)
         nested(dert__[7], nested_accum_blob_Dert, blob.Ga, y, x)
         nested(dert__[8], nested_accum_blob_Dert, blob.Ma, y, x)
-        
+
+'''
+    if len(dert__) > 5:  # past comp_a fork
+        if a_depth == 1:
+
+            blob.Dyy += dert__[5][0][y, x]
+            blob.Dyx += dert__[5][1][y, x]
+            blob.Dxy += dert__[6][0][y, x]
+            blob.Dxx += dert__[6][1][y, x]
+            blob.Ga += dert__[7][y, x]
+            blob.Ma += dert__[8][y, x]
+
+        else:  # a_depth > 1:
+            nested_process(dert__[4], nested_accum_blob_Dert, blob.Dyy, y, x)
+            nested_process(dert__[5], nested_accum_blob_Dert, blob.Dyx, y, x)
+            nested_process(dert__[6], nested_accum_blob_Dert, blob.Dxy, y, x)
+            nested_process(dert__[7], nested_accum_blob_Dert, blob.Dxx, y, x)
+            nested_process(dert__[8], nested_accum_blob_Dert, blob.Ga, y, x)
+            nested_process(dert__[9], nested_accum_blob_Dert, blob.Ma, y, x)
+'''

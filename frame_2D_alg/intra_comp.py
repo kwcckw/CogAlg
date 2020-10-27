@@ -4,8 +4,7 @@ Cross-comparison of pixels or gradients, in 2x2 or 3x3 kernels
 
 import numpy as np
 import functools
-from nested_utils import *
-
+from utils_nested import *
 
 # Sobel coefficients to decompose ds into dy and dx:
 
@@ -170,15 +169,12 @@ def comp_a(dert__, ave, mask=None):  # cross-comp of angle in 2x2 kernels
     dert__ga = dcopy((i__, dy__, dx__, g__, m__, day__, dax__, ga__, ma__))
     dert__aga, mask__aga = comp_aga(dcopy(dert__ga),ave=ave) # comp_aga
     dert__aga_ga, mask__aga_ga = comp_aga(dcopy(dert__aga),ave=ave) # comp_aga_ga
-    
+
 
     return (i__, dy__, dx__, g__, m__, day__, dax__, ga__, ma__), majority_mask
 
 
 def comp_aga(dert__, ave, mask=None):  # prior fork is comp_a, cross-comp of angle in 2x2 kernels
-
-    # replace nested operations by looping through a list of layers in each variable,
-    # only operate on the last element, which itself is a list?
 
     if mask is not None:
         majority_mask = (mask[:-1, :-1].astype(int) +
@@ -214,15 +210,15 @@ def comp_aga(dert__, ave, mask=None):  # prior fork is comp_a, cross-comp of ang
     # ma = inverse angle match = SAD: covert sin and cos da to 0->2 range
 
     # negative nested sin_da0
-    n_sin_da0__ = nested(dcopy(sin_da0__), negative_nested)
+    sin_da0_nested__ = nested(dcopy(sin_da0__), negative_nested)
 
     # day__ = (-sin_da0__ - sin_da1__), (cos_da0__ + cos_da1__)
-    day__ = [nested2(n_sin_da0__, cos_da0__, subtract_nested),
+    day__ = [nested2(sin_da0_nested__, cos_da0__, subtract_nested),
              nested2(cos_da0__, cos_da1__, add_nested)]
     # angle change in y, sines are sign-reversed because da0 and da1 are top-down, no reversal in cosines
 
     # dax__ = (-sin_da0__ + sin_da1__), (cos_da0__ + cos_da1__)
-    dax__ = [nested2(n_sin_da0__, cos_da0__, add_nested),
+    dax__ = [nested2(sin_da0_nested__, cos_da0__, add_nested),
              nested2(cos_da0__, cos_da1__, add_nested)]
     # angle change in x, positive sign is right-to-left, so only sin_da0__ is sign-reversed
 
@@ -257,5 +253,3 @@ def angle_diff(a2, a1):  # compare angle_1 to angle_2
     cos_da = (cos_1 * cos_2) + (sin_1 * sin_2)
 
     return [sin_da, cos_da]
-
-
