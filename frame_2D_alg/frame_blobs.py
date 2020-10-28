@@ -60,9 +60,7 @@ def derts2blobs(dert__, verbose=False, render=False, use_c=False):
         dert__ = dert__[0], np.empty(0), np.empty(0), *dert__[1:], np.empty(0)
         frame, idmap, adj_pairs = wrapped_flood_fill(dert__)
     else:
-        blob_, idmap, adj_pairs = flood_fill(dert__,
-                                             sign__=dert__[3] > 0,  # sign of deviation of gradient
-                                             # g__ was not signed, we used dy__ sign instead
+        blob_, idmap, adj_pairs = flood_fill(dert__, sign__=dert__[3] > 0,  # sign of deviation of gradient
                                              verbose=verbose)
         I = Dy = Dx = G = M = 0
         for blob in blob_:
