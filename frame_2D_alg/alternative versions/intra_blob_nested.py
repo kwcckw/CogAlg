@@ -27,27 +27,25 @@ from collections import deque, defaultdict
 from frame_blobs_defs import CDeepBlob
 from class_bind import AdjBinder
 from frame_blobs import assign_adjacents, flood_fill
-from intra_comp import comp_r, comp_a
+from intra_comp import comp_r, comp_a, comp_aga
 from frame_blobs_imaging import visualize_blobs
 from itertools import zip_longest
 from utils import pairwise
 import numpy as np
 from P_blobs import P_blobs
-
+from utils_nested import *
 # from comp_P_draft import comp_P_blob
 
 # filters, All *= rdn:
 ave = 50  # fixed cost per dert, from average m, reflects blob definition cost, may be different for comp_a?
 aveB = 50  # fixed cost per intra_blob comp and clustering
 
-
 # --------------------------------------------------------------------------------------------------------------
 # functions:
 
 def intra_blob(blob, **kwargs):  # recursive input rng+ | angle cross-comp within blob
 
-    Ave = int(ave * blob.rdn);
-    AveB = int(aveB * blob.rdn)
+    Ave = int(ave * blob.rdn); AveB = int(aveB * blob.rdn)
 
     if kwargs.get('render') is not None:  # stop rendering sub-blobs when blob is too small
         if blob.S < 100:
@@ -58,26 +56,31 @@ def intra_blob(blob, **kwargs):  # recursive input rng+ | angle cross-comp withi
 
     if blob.fia:  # input from comp_a -> P_blobs or comp_aga
 
-        dert__, mask = comp_a(ext_dert__, blob.a_depth, Ave, ext_mask)  # -> ga sub_blobs -> P_blobs (comp_g, comp_P)
-        blob.a_depth += 1 # increase a depth
+        dert__, mask = comp_a(ext_dert__, Ave, ext_mask)  # -> ga sub_blobs -> P_blobs (comp_g, comp_P)
         if mask.shape[0] > 2 and mask.shape[1] > 2 and False in mask:  # min size in y and x, at least one dert in dert__
 
             # P_blobs eval, tentative:
             if blob.G * (1 - blob.Ga / (4.45 * blob.S)) - AveB > 0:  # max_ga=4.45
                 # G reduced by relative Ga value, base G is second deviation or specific borrow value
+                dert__ = list(dert__)
+                dert__ = (dert__[0], dert__[1], dert__[2], dert__[3], dert__[4],
+                          dert__[5][0], dert__[5][1], dert__[6][0], dert__[6][1],  # flatten day and dax, no nested yet
+                          dert__[7], dert__[8])
                 crit__ = dert__[3] * (1 - dert__[7] / 4.45) - Ave  # max_ga=4.45, record separately from g and ga?
                 # ga is not signed, use Ave_ga?
-                blob.fca = 0
+                blob.fca=0
                 sub_eval(blob, dert__, crit__, mask, **kwargs)  # includes re-clustering by P_blobs
 
-            # comp_aga eval, tentative: 
+            # comp_aga eval, tentative: # why condition is the same as P_blobs eval?
             elif blob.G / (1 - blob.Ga / (4.45 * blob.S)) - AveB < 0:  # max_ga=4.45, init G is 2nd deviation or borrow value
                 if kwargs.get('verbose'):
                     print(' ')
                     print('aga fork')
-                    print("a depth=" + str(blob.a_depth ))
-
+                    print("a depth="+str(blob.a_depth+1))
+                    
                 # G increased by relative Ga value,
+                # flatten day and dax?
+                blob.a_depth += 1 # increase a depth
                 crit__ = dert__[3] / (1 - dert__[7] / 4.45) - Ave  # ~ eval per blob, record separately from g and ga?
                 # ga is not signed, use Ave_ga?
                 blob.fca = 1
@@ -91,7 +94,7 @@ def intra_blob(blob, **kwargs):  # recursive input rng+ | angle cross-comp withi
             if kwargs.get('verbose'):
                 print(' ')
                 print('r fork')
-
+                
             dert__, mask = comp_r(ext_dert__, Ave, blob.fia, ext_mask)
             crit__ = dert__[4]  # m__: inverse deviation of SAD
 
@@ -104,11 +107,10 @@ def intra_blob(blob, **kwargs):  # recursive input rng+ | angle cross-comp withi
             if kwargs.get('verbose'):
                 print(' ')
                 print('a fork')
-                print("a depth=" + str(blob.a_depth + 1))
-
+                print("a depth="+str(blob.a_depth+1))
             
-            dert__, mask = comp_a(ext_dert__, blob.a_depth, Ave, ext_mask)  # -> m sub_blobs
-            blob.a_depth += 1  # increase a depth
+            blob.a_depth += 1 # increase a depth
+            dert__, mask = comp_a(ext_dert__, Ave, ext_mask)  # -> m sub_blobs
             crit__ = dert__[3]  # deviation of g
 
             if mask.shape[0] > 2 and mask.shape[1] > 2 and False in mask:  # min size in y and x, least one dert in dert__
@@ -120,15 +122,15 @@ def intra_blob(blob, **kwargs):  # recursive input rng+ | angle cross-comp withi
 
 
 def sub_eval(blob, dert__, crit__, mask, **kwargs):
-    Ave = ave * blob.rdn;
-    AveB = aveB * blob.rdn
+    Ave = ave * blob.rdn;  AveB = aveB * blob.rdn
 
     if blob.fia and not blob.fca:  # terminal P_blobs
         if kwargs.get('verbose'):
             print(' ')
             print('dert_P fork')
 
-        sub_frame = P_blobs(dert__, mask, crit__, Ave, verbose=kwargs.get('verbose'))
+
+        sub_frame = P_blobs(dert__, mask, crit__, Ave, verbose = kwargs.get('verbose'))
         sub_blobs = sub_frame['blob__']
         blob.Ls = len(sub_blobs)  # for visibility and next-fork rd
         blob.sub_layers = [sub_blobs]  # 1st layer of sub_blobs
@@ -161,7 +163,7 @@ def sub_eval(blob, dert__, crit__, mask, **kwargs):
                 if borrow_M / (1 - borrow_Ma / (4.45 * blob.S)) > AveB:  # combine G with Ga, need to re-check
                     sub_blob.fia = 1
                     sub_blob.rdn = sub_blob.rdn + 1 + 1 / blob.Ls
-                    sub_blob.a_depth += blob.a_depth  # accumulate a depth from blob to sub blob
+                    sub_blob.a_depth += blob.a_depth # accumulate a depth from blob to sub blob
                     blob.sub_layers += intra_blob(sub_blob, **kwargs)  # comp_aga, not correct, need to fix nested day and dax
 
             else:
@@ -169,7 +171,7 @@ def sub_eval(blob, dert__, crit__, mask, **kwargs):
                     # comp_a:
                     sub_blob.rdn = sub_blob.rdn + 1 + 1 / blob.Ls
                     sub_blob.fia = 1
-                    sub_blob.a_depth += blob.a_depth  # accumulate a depth from blob to sub blob
+                    sub_blob.a_depth += blob.a_depth # accumulate a depth from blob to sub blob
                     blob.sub_layers += intra_blob(sub_blob, **kwargs)
 
                 elif sub_blob.M - borrow_M > AveB:
@@ -178,6 +180,7 @@ def sub_eval(blob, dert__, crit__, mask, **kwargs):
                     sub_blob.fia = 0
                     sub_blob.rng = blob.rng * 2
                     blob.sub_layers += intra_blob(sub_blob, **kwargs)
+
 
 
 def cluster_derts(dert__, crit__, mask, verbose=False, **kwargs):
@@ -217,7 +220,13 @@ def extend_dert(blob):  # extend dert borders (+1 dert to boundaries)
     # take ext_dert__ from part of root_dert__
     ext_dert__ = []
     for derts in blob.root_dert__:
-        ext_dert__.append(derts[y0e:yne, x0e:xne])
+        if derts is not None:
+
+            params = [y0e,yne,x0e,xne]
+            ext_dert__.append(nested(derts,nested_crop,params))
+
+        else:
+            ext_dert__.append(None)
     ext_dert__ = tuple(ext_dert__)  # change list to tuple
 
     # extended mask
@@ -235,10 +244,12 @@ def accum_blob_Dert(blob, dert__, y, x):
     blob.Dx += dert__[2][y, x]
     blob.G += dert__[3][y, x]
     blob.M += dert__[4][y, x]
+    
+    if blob.a_depth>0: # past comp_a fork
 
-    if blob.a_depth > 0:  # past comp_a fork
-
-        blob.Ddy += dert__[5][y, x]
-        blob.Ddx += dert__[6][y, x]
-        blob.Ga += dert__[7][y, x]
-        blob.Ma += dert__[8][y, x]
+        nested(dert__[5][0], nested_accum_blob_Dert, blob.Dyy, y, x)
+        nested(dert__[5][1], nested_accum_blob_Dert, blob.Dyx, y, x)
+        nested(dert__[6][0], nested_accum_blob_Dert, blob.Dxy, y, x)
+        nested(dert__[6][1], nested_accum_blob_Dert, blob.Dxx, y, x)
+        nested(dert__[7], nested_accum_blob_Dert, blob.Ga, y, x)
+        nested(dert__[8], nested_accum_blob_Dert, blob.Ma, y, x)
