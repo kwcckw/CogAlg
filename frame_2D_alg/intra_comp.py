@@ -114,7 +114,7 @@ def comp_r(dert__, ave, root_fia, mask=None):
     return (i__center, dy__, dx__, g__, m__), majority_mask
 
 
-def comp_a(dert__, a_depth, ave, mask=None):  # cross-comp of angle in 2x2 kernels
+def comp_a(dert__, ave, mask=None):  # cross-comp of angle in 2x2 kernels
 
     if mask is not None:
         majority_mask = (mask[:-1, :-1].astype(int) +
@@ -124,15 +124,11 @@ def comp_a(dert__, a_depth, ave, mask=None):  # cross-comp of angle in 2x2 kerne
                          ) > 1
     else:
         majority_mask = None
-    
-    if a_depth>0:
-        dy__, dx__, g__, m__ = dert__[1:5]  # day__,dax__,ga__,ma__ are recomputed
 
-    else:
-        i__, dy__, dx__, g__, m__ = dert__[:5]
-
+    i__, dy__, dx__, g__, m__ = dert__[:5]  # day__,dax__,ga__,ma__ are recomputed
     g__[np.where(g__ == 0)] = 1  # to avoid / 0
     a__ = [dy__, dx__] / (g__ + ave)  # angle, restore g to abs, similar to calc_a
+
     # each shifted a in 2x2 kernel
     a__topleft = a__[:, :-1, :-1]
     a__topright = a__[:, :-1, 1:]
@@ -143,7 +139,6 @@ def comp_a(dert__, a_depth, ave, mask=None):  # cross-comp of angle in 2x2 kerne
     sin_da0__, cos_da0__ = angle_diff(a__topleft, a__botright)
     sin_da1__, cos_da1__ = angle_diff(a__topright, a__botleft)
 
-    # should we accumulate ma with the input m? Otherwise m would be useless
     ma__ = np.hypot(sin_da0__ + 1, cos_da0__ + 1) \
          + np.hypot(sin_da1__ + 1, cos_da1__ + 1)
     # ma = inverse angle match = SAD: covert sin and cos da to 0->2 range
@@ -153,35 +148,23 @@ def comp_a(dert__, a_depth, ave, mask=None):  # cross-comp of angle in 2x2 kerne
 
     dax__ = [-sin_da0__ + sin_da1__, cos_da0__ + cos_da1__]
     # angle change in x, positive sign is right-to-left, so only sin_da0__ is sign-reversed
-    
     '''
     sin(-θ) = -sin(θ), cos(-θ) = cos(θ): 
     sin(da) = -sin(-da), cos(da) = cos(-da) => (sin(-da), cos(-da)) = (-sin(da), cos(da))
     '''
-    ga__ = np.hypot(day__[0],day__[1]) + np.hypot(dax__[0],dax__[1]) 
+    ga__ = np.hypot( np.arctan2(*day__), np.arctan2(*dax__) )
     '''
-    compute dydy, dxdy, dydx, dxdx (ga direction, instead of day, dax)
-    by decomposing corresponding diffs per dert in kernel, then
-    ga__ = np.hypot(dydy, dxdy) + np.hypot(dydx, dxdx)
-    
     ga value is deviation; interruption | wave is sign-agnostic: expected reversion, same for d sign?
+    compute extended-kernel gradient from decomposed diffs: dydy, dxdy, dydx, dxdx,
+    g__ = np.hypot(dydy, dxdy) + np.hypot(dydx, dxdx)?
     '''
 
-    # flatten day and dax after ga__ computation
-    day__ = day__[0] + day__[1] # need divide by 2 to get average?
-    dax__ = dax__[0] + dax__[1]
-    
-    if a_depth>0:
-        # i = (dy,dx)
-        i__ = dert__[1][:-1, :-1] + dert__[2][:-1, :-1] # need divide by 2 to get average?
-    else:
-        i__ = i__[:-1, :-1]
+    i__ = i__[:-1, :-1]  # for summation in Dert
     g__ = g__[:-1, :-1]  # for summation in Dert
     m__ = m__[:-1, :-1]
     dy__ = dy__[:-1, :-1]  # passed on as idy
     dx__ = dx__[:-1, :-1]  # passed on as idx
 
-    
     return (i__, dy__, dx__, g__, m__, day__, dax__, ga__, ma__), majority_mask
 
 
