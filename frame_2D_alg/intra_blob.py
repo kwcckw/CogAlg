@@ -106,7 +106,12 @@ def sub_eval(blob, dert__, crit__, mask, **kwargs):
         if kwargs.get('verbose'):
             print(' '); print('dert_P fork')
 
-        sub_frame = P_blobs(dert__, mask, crit__, Ave, verbose=kwargs.get('verbose'))
+        dert__ = list(dert__)  # flatten day and dax
+        dert__ = (dert__[0], dert__[1], dert__[2], dert__[3], dert__[4],
+                  dert__[5][0], dert__[5][1], dert__[6][0], dert__[6][1],
+                  dert__[7], dert__[8])
+
+        sub_frame = P_blobs(dert__, mask, crit__, verbose=kwargs.get('verbose'))
         sub_blobs = sub_frame['blob__']
         blob.Ls = len(sub_blobs)  # for visibility and next-fork rd
         blob.sub_layers = [sub_blobs]  # 1st layer of sub_blobs
@@ -170,7 +175,14 @@ def extend_dert(blob):  # extend dert borders (+1 dert to boundaries)
     # take ext_dert__ from part of root_dert__
     ext_dert__ = []
     for derts in blob.root_dert__:
-        ext_dert__.append(derts[y0e:yne, x0e:xne])
+        if derts is not None:
+            if type(derts) == list:  # tuple of 2 for day, dax - (Dyy, Dyx) or (Dxy, Dxx)
+                ext_dert__.append(derts[0][y0e:yne, x0e:xne])
+                ext_dert__.append(derts[1][y0e:yne, x0e:xne])
+            else:
+                ext_dert__.append(derts[y0e:yne, x0e:xne])
+        else:
+            ext_dert__.append(None)
     ext_dert__ = tuple(ext_dert__)  # change list to tuple
 
     # extended mask
