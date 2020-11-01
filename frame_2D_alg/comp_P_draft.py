@@ -80,13 +80,21 @@ class Cstack(ClusterStructure):
 
 def cluster_P_(stack, Ave):
     # scan of vertical Py_ -> comp_P -> form_PP -> 2D PPd_, PPm_: clusters of same-sign Pd | Pm deviation
-
+        
+    Py_ = [] # initialize Py
+    if stack.fPP: # retrieve Ps from each PP if fPP
+        for PP in stack.Py_: # loop each PP in Py_
+            for P in PP[2]: # loop each P in PP
+                Py_.append(P)
+    else:
+        Py_ = stack.Py_
+        
     DdX = 0
     y0 = stack.y0
     yn = stack.y0 + stack.Ly
-    x0 = min([P.x0 for P in stack.Py_])
-    xn = max([P.x0 + P.L for P in stack.Py_])
-
+    x0 = min([P.x0 for P in Py_])
+    xn = max([P.x0 + P.L for P in Py_])
+        
     L_bias = (xn - x0 + 1) / (yn - y0 + 1)  # elongation: width / height, pref. comp over long dimension
     G_bias = max(abs(stack.Dx), abs(stack.Dy)) / min(abs(stack.Dx), abs(stack.Dy))
     # ddirection: max(Gy,Gx) / min(Gy,Gx), pref. comp over low G
@@ -99,21 +107,22 @@ def cluster_P_(stack, Ave):
        else: flip_cost = 0
        comp_P_ if (G + M) * orientation - flip_cost > Ave_comp_P? '''
 
-    if stack.G * (stack.Dx / stack.Dy) * stack.Ly_  > Ave: ort = 1
+    if stack.G * (stack.Dx / stack.Dy) * stack.Ly  > Ave: ort = 1
     # virtual rotation: if G * L_bias * L_bias after any rescan: estimate params of Ps as orthogonal to long axis, to increase PM
     else: ort = 0
 
     mPP_, dPP_, CmPP_, CdPP_, Cm_, Cd_ = [],[],[],[],[],[]  # "C" is for combined comparable params and their derivatives
     mPP = 0, [], []  # per dev of M_params, dderived: match = min, G+=Ave?
     dPP = 0, [], []  # per dev of D_params: abs or co-signed?
-    _P = stack.Py_.popleft()  # initial comparand
+    
+    _P = Py_.pop(0)  # pop left to get initial comparand
 
-    while stack.Py_:  # comp_P starts from 2nd P, top-down
-        P = stack.Py_.popleft()
+    while Py_:  # comp_P starts from 2nd P, top-down
+        P = Py_.pop(0)
         _P, _ms, _ds = comp_P(ort, P, _P, DdX)
 
-        while stack.Py_:  # form_PP starts from 3rd P
-            P = stack.Py_.popleft()
+        while Py_:  # form_PP starts from 3rd P
+            P = Py_.pop(0)
             P, ms, ds = comp_P(ort, P, _P, DdX)  # P: S_vars += S_ders in comp_P
             if ms == _ms:
                 mPP = form_PP(1, P, mPP)
@@ -151,8 +160,16 @@ def cluster_P_(stack, Ave):
 
 def comp_P(ortho, P, _P, DdX):  # forms vertical derivatives of P params, and conditional ders from norm and DIV comp
 
-    s, x0, (G, M, Dx, Dy, L), dert_ = P  # ext: X, new: L, dif: Dx, Dy -> G, no comp of inp I in top dert?
-    _s, _x0, (_G, _M, _Dx, _Dy, _L), _dert_, _dX = _P  # params per comp_branch, S x branch if min n?
+    # should we unpack gdert instead of dert if fPP= 1?
+    s, x0, G, M, Dx, Dy, L, dert_ = P.sign, P.x0, P.G, P.M, P.Dx, P.Dy, P.L, P.dert_   # ext: X, new: L, dif: Dx, Dy -> G, no comp of inp I in top dert?
+        
+    if type(_P) is tuple: # if _P is the resulting P from prior comp_P
+        _P, _P_ders = _P    
+        # where we get dX value?
+        _s, _x0, _G, _M, _Dx, _Dy, _L, _dert_, _dX = _P.sign, _P.x0, _P.G, _P.M, _P.Dx, _P.Dy, _P.L, _P.dert_,0  # params per comp_branch, S x branch if min n?
+    else:
+        _s, _x0, _G, _M, _Dx, _Dy, _L, _dert_, _dX = _P.sign, _P.x0, _P.G, _P.M, _P.Dx, _P.Dy, _P.L, _P.dert_,0  # params per comp_branch, S x branch if min n?
+    
     '''
     redefine Ps by dx in dert_, rescan dert by input P d_ave_x: skip if not in blob?
     '''
@@ -182,7 +199,8 @@ def comp_P(ortho, P, _P, DdX):  # forms vertical derivatives of P params, and co
 
     Pd = ddX + dL + dM + dDx + dDy  # -> directional dPP, equal-weight params, no rdn?
     # correlation: dX -> L, oDy, !oDx, ddX -> dL, odDy ! odDx? dL -> dDx, dDy?  G = hypot(Dy, Dx) for 2D structures comp?
-    Pm = mX + mL + mM, mDx + mDy  # -> complementary vPP, rdn *= Pd | Pm rolp?
+    # comma is typo, it should be plus?
+    Pm = mX + mL + mM + mDx + mDy  # -> complementary vPP, rdn *= Pd | Pm rolp?
 
     P_ders = Pm, Pd, mX, dX, mL, dL, mDx, dDx, mDy, dDy  # div_f, nvars
 
@@ -228,6 +246,7 @@ def comp_P(ortho, P, _P, DdX):  # forms vertical derivatives of P params, and co
 
 def form_PP(typ, P, PP):  # increments continued vPPs or dPPs (not pPs): incr_blob + P_ders?
 
+    # where do we get the S_ders?
     P, P_ders, S_ders = P
     s, ix, x, I, D, Dy, M, My, G, oG, Olp, t2_ = P
     L2, I2, D2, Dy2, M2, My2, G2, OG, Olp2, Py_ = PP
