@@ -55,6 +55,19 @@ class CP(ClusterStructure):
     gdert_ = list
     Dg = int
     Mg = int
+    
+class CPP(ClusterStructure):
+    Pm = int  # default type at initialization
+    Pd = int
+    mX = int
+    dX = int
+    mL = int
+    dL = int
+    mDx = int
+    dDx = int
+    mDy = int
+    dDy = int
+
 
 class Cstack(ClusterStructure):
     I = int
@@ -78,17 +91,9 @@ class Cstack(ClusterStructure):
     fPP = bool  # PPy_ if 1, else Py_
 
 
-def cluster_P_(stack, Ave):
+def cluster_P_(stack, Py_, Ave):
     # scan of vertical Py_ -> comp_P -> form_PP -> 2D PPd_, PPm_: clusters of same-sign Pd | Pm deviation
-        
-    Py_ = [] # initialize Py
-    if stack.fPP: # retrieve Ps from each PP if fPP
-        for PP in stack.Py_: # loop each PP in Py_
-            for P in PP[2]: # loop each P in PP
-                Py_.append(P)
-    else:
-        Py_ = stack.Py_
-        
+                
     DdX = 0
     y0 = stack.y0
     yn = stack.y0 + stack.Ly
@@ -112,6 +117,8 @@ def cluster_P_(stack, Ave):
     else: ort = 0
 
     mPP_, dPP_, CmPP_, CdPP_, Cm_, Cd_ = [],[],[],[],[],[]  # "C" is for combined comparable params and their derivatives
+    
+    # what is the param on each mPP and dPP? each of '0,[],[]' representing what parameter? 
     mPP = 0, [], []  # per dev of M_params, dderived: match = min, G+=Ave?
     dPP = 0, [], []  # per dev of D_params: abs or co-signed?
     
@@ -119,11 +126,11 @@ def cluster_P_(stack, Ave):
 
     while Py_:  # comp_P starts from 2nd P, top-down
         P = Py_.pop(0)
-        _P, _ms, _ds = comp_P(ort, P, _P, DdX)
+        (_P, _P_ders), _ms, _ds = comp_P(ort, P, _P, DdX)
 
         while Py_:  # form_PP starts from 3rd P
             P = Py_.pop(0)
-            P, ms, ds = comp_P(ort, P, _P, DdX)  # P: S_vars += S_ders in comp_P
+            (P, P_ders), ms, ds = comp_P(ort, P, _P, DdX)  # P: S_vars += S_ders in comp_P
             if ms == _ms:
                 mPP = form_PP(1, P, mPP)
             else:
@@ -160,25 +167,22 @@ def cluster_P_(stack, Ave):
 
 def comp_P(ortho, P, _P, DdX):  # forms vertical derivatives of P params, and conditional ders from norm and DIV comp
 
-    # should we unpack gdert instead of dert if fPP= 1?
-    s, x0, G, M, Dx, Dy, L, dert_ = P.sign, P.x0, P.G, P.M, P.Dx, P.Dy, P.L, P.dert_   # ext: X, new: L, dif: Dx, Dy -> G, no comp of inp I in top dert?
-        
-    if type(_P) is tuple: # if _P is the resulting P from prior comp_P
-        _P, _P_ders = _P    
-        # where we get dX value?
-        _s, _x0, _G, _M, _Dx, _Dy, _L, _dert_, _dX = _P.sign, _P.x0, _P.G, _P.M, _P.Dx, _P.Dy, _P.L, _P.dert_,0  # params per comp_branch, S x branch if min n?
-    else:
-        _s, _x0, _G, _M, _Dx, _Dy, _L, _dert_, _dX = _P.sign, _P.x0, _P.G, _P.M, _P.Dx, _P.Dy, _P.L, _P.dert_,0  # params per comp_branch, S x branch if min n?
-    
+    # why we unpack dert_ while there is no further usage of it here?
+    s, x0, G, M, Dx, Dy, L, Dg, Mg  = P.sign, P.x0, P.G, P.M, P.Dx, P.Dy, P.L, P.Dg, P.Mg   # ext: X, new: L, dif: Dx, Dy -> G, no comp of inp I in top dert?          
+    _s, _x0, _G, _M, _Dx, _Dy, _L, _Dg, _Mg = _P.sign, _P.x0, _P.G, _P.M, _P.Dx, _P.Dy, _P.L, _P.Dg, _P.Mg  # params per comp_branch, S x branch if min n?
+
     '''
     redefine Ps by dx in dert_, rescan dert by input P d_ave_x: skip if not in blob?
     '''
     xn = x0 + L-1;  _xn = _x0 + _L-1
     mX = min(xn, _xn) - max(x0, _x0)  # overlap: abs proximity, cumulative binary positional match | miss:
+    _dX = (xn - L/2) - (_xn - _L/2) # why the prior dx is obtained xn and their L?
     dX = abs(x0 - _x0) + abs(xn - _xn)  # offset, or max_L - overlap: abs distance?
 
+
     if dX > ave_dX:  # internal comp is higher-power, else two-input comp not compressive?
-       rX = dX / mX  # average dist/prox, | prox/dist, | mX / max_L?
+        # any purpose of rX and ave_dx?
+        rX = dX / mX  # average dist/prox, | prox/dist, | mX / max_L?
     ave_dx = (x0 + (L-1)//2) - (_x0 + (_L-1)//2)  # d_ave_x, median vs. summed, or for distant-P comp only?
 
     ddX = dX - _dX  # for ortho eval if first-run ave_DdX * Pm: += compensated angle change,
@@ -197,12 +201,15 @@ def comp_P(ortho, P, _P, DdX):  # forms vertical derivatives of P params, and co
     dDx = abs(Dx) - abs(_Dx); mDx = min(abs(Dx), abs(_Dx))  # same-sign Dx in vxP
     dDy = Dy - _Dy; mDy = min(Dy, _Dy)  # Dy per sub_P by intra_comp(dx), vs. less vertically specific dI
 
+    # gdert param comparison, pack in Pd and Pm?
+    dMd = Mg - _Mg; mMd = min(Mg, _Mg),
+    dDd = Dg - _Dg; mDd = min(Dg, _Dg),
+
     Pd = ddX + dL + dM + dDx + dDy  # -> directional dPP, equal-weight params, no rdn?
     # correlation: dX -> L, oDy, !oDx, ddX -> dL, odDy ! odDx? dL -> dDx, dDy?  G = hypot(Dy, Dx) for 2D structures comp?
-    # comma is typo, it should be plus?
     Pm = mX + mL + mM + mDx + mDy  # -> complementary vPP, rdn *= Pd | Pm rolp?
 
-    P_ders = Pm, Pd, mX, dX, mL, dL, mDx, dDx, mDy, dDy  # div_f, nvars
+    P_ders = CPP(Pm=Pm, Pd=Pd, mX=mX, dX=dX, mL=mL, dL=dL, mDx=mDx, dDx=dDx, mDy=mDy, dDy=dDy)  # div_f, nvars
 
     vs = 1 if Pm > ave * 7 > 0 else 0  # comp cost = ave * 7, or rep cost: n vars per P?
     ds = 1 if Pd > 0 else 0
@@ -245,9 +252,8 @@ def comp_P(ortho, P, _P, DdX):  # forms vertical derivatives of P params, and co
     '''
 
 def form_PP(typ, P, PP):  # increments continued vPPs or dPPs (not pPs): incr_blob + P_ders?
-
-    # where do we get the S_ders?
-    P, P_ders, S_ders = P
+    
+    # if PP is empty, initialize PP param as 0?
     s, ix, x, I, D, Dy, M, My, G, oG, Olp, t2_ = P
     L2, I2, D2, Dy2, M2, My2, G2, OG, Olp2, Py_ = PP
 

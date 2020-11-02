@@ -110,7 +110,6 @@ class CBlob(ClusterStructure):
     root_dert__ = object
     dert__ = object
     mask = object
-    adj_blobs = list
     fopen = bool
     margin = list
 
@@ -131,7 +130,6 @@ def P_blobs(dert__, mask, crit__, verbose=False, render=False):
         streamer = BlobStreamer(CBlob, dert__[1],
                                 record_path=output_path(arguments['image'],
                                                         suffix='.im2blobs.avi'))
-    stack_binder = AdjBinder(Cstack)
 
     if verbose:
         start_time = time()
@@ -143,21 +141,16 @@ def P_blobs(dert__, mask, crit__, verbose=False, render=False):
             print(f"{len(frame['blob__'])} blobs converted", end="")
             sys.stdout.flush()
 
-        P_binder = AdjBinder(CP)  # binder needs data about clusters of the same level
-        P_ = form_P_(zip(*dert_), crit__[y], mask[y], P_binder)  # horizontal clustering
+        P_ = form_P_(zip(*dert_), crit__[y], mask[y])  # horizontal clustering
 
         if render:
             render = streamer.update_blob_conversion(y, P_)
-        P_ = scan_P_(P_, stack_, frame, P_binder)  # vertical clustering, adds P up_connects and _P down_connect_cnt
+        P_ = scan_P_(P_, stack_, frame)  # vertical clustering, adds P up_connects and _P down_connect_cnt
         stack_ = form_stack_(P_, frame, y)
-        stack_binder.bind_from_lower(P_binder)
+
 
     while stack_:  # frame ends, last-line stacks are merged into their blobs
         form_blob(stack_.popleft(), frame)
-
-    blob_binder = AdjBinder(CBlob)
-    blob_binder.bind_from_lower(stack_binder)
-    assign_adjacents(blob_binder)  # add adj_blobs to each blob
 
     if verbose:  # print out at the end
         nblobs = len(frame['blob__'])
@@ -186,7 +179,7 @@ dert: tuple of derivatives per pixel, initially (p, dy, dx, g), will be extended
 Dert: params of cluster structures (P, stack, blob): summed dert params + dimensions: vertical Ly and area S
 '''
 
-def form_P_(idert_, crit_, mask_, binder):  # segment dert__ into P__, in horizontal ) vertical order
+def form_P_(idert_, crit_, mask_):  # segment dert__ into P__, in horizontal ) vertical order
 
     P_ = deque()  # row of Ps
     s_ = crit_ > 0
@@ -239,14 +232,10 @@ def form_P_(idert_, crit_, mask_, binder):  # segment dert__ into P__, in horizo
         P = CP(I=I, Dy=Dy, Dx=Dx, G=G, M=M, Dyy=Dyy, Dyx=Dyx, Dxy=Dxy, Dxx=Dxx, Ga=Ga, Ma=Ma, L=L, x0=x0, sign=_s, dert_=dert_)
         P_.append(P)
 
-    for _P, P in pairwise(P_):
-        if _P.x0 + _P.L == P.x0:  # check if Ps are adjacents
-            binder.bind(_P, P)
-
     return P_
 
 
-def scan_P_(P_, stack_, frame, binder):  # merge P into higher-row stack of Ps which have same sign and overlap by x_coordinate
+def scan_P_(P_, stack_, frame):  # merge P into higher-row stack of Ps which have same sign and overlap by x_coordinate
     '''
     Each P in P_ scans higher-row _Ps (in stack_) left-to-right, testing for x-overlaps between Ps and same-sign _Ps.
     Overlap is represented as up_connect in P and is added to down_connect_cnt in _P. Scan continues until P.x0 >= _P.xn:
@@ -278,16 +267,12 @@ def scan_P_(P_, stack_, frame, binder):  # merge P into higher-row stack of Ps w
                     if P.sign == stack.sign:  # sign match
                         stack.down_connect_cnt += 1
                         up_connect_.append(stack)  # buffer P-connected higher-row stacks into P' up_connect_
-                    else:
-                        binder.bind(_P, P)
 
             else:  # -G, check for orthogonal overlaps only: 4 directions, edge blobs are more selective
                 if _x0 < xn and x0 < _xn:  # x overlap between loaded P and _P
                     if P.sign == stack.sign:  # sign match
                         stack.down_connect_cnt += 1
                         up_connect_.append(stack)  # buffer P-connected higher-row stacks into P' up_connect_
-                    else:
-                        binder.bind(_P, P)
 
             if (xn < _xn or  # _P overlaps next P in P_
                     xn == _xn and stack.sign):  # check in 8 directions
@@ -401,10 +386,18 @@ def form_blob(stack, frame):  # increment blob with terminated stack, check for 
         yn = last_stack.y0 + last_stack.Ly
 
         mask = np.ones((yn - y0, xn - x0), dtype=bool)  # mask box, then unmask Ps:
+        
         for stack in stack_:
             form_PPy_(stack)  # evaluate to convert stack.Py_ to stack.PPy_
 
-            cluster_P_(stack, ave)  # root function of comp_P: edge tracing and vectorization function
+            # cluster_P_ and comp_P
+            PP_ = [] # please suggest a better name 
+            if stack.fPP:
+                for PP in stack.Py_:
+                   PP_.append(cluster_P_(stack, PP[2], ave))
+            else:
+                PP_ = cluster_P_(stack, stack.Py_, ave)  # root function of comp_P: edge tracing and vectorization function
+            
             
             if stack.fPP:  # Py_ is PPy_
                 for y, (PP_sign, PP_G, P_) in enumerate(stack.Py_, start=stack.y0 - y0):
@@ -428,7 +421,6 @@ def form_blob(stack, frame):  # increment blob with terminated stack, check for 
         blob.box = (y0, yn, x0, xn)
         blob.dert__ = dert__
         blob.mask = mask
-        blob.adj_blobs = [[], 0, 0, 0, 0]
         blob.fopen = fopen
 
         frame.update(I=frame['I'] + blob.Dert['I'],
