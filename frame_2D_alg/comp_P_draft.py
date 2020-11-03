@@ -30,43 +30,25 @@ from time import time
 from collections import deque
 from class_cluster import ClusterStructure, NoneType
 from math import hypot
+import numpy as np
 
 ave = 20
 div_ave = 200
 flip_ave = 1000
 ave_dX = 10  # difference between median x coords of consecutive Ps
 
-class CP(ClusterStructure):
-    I = int  # default type at initialization
-    Dy = int
-    Dx = int
-    G = int
-    M = int
-    Dyy = int
-    Dyx = int
-    Dxy = int
-    Dxx = int
-    Ga = int
-    Ma = int
-    L = int
-    x0 = int
-    sign = NoneType
-    dert_ = list
-    gdert_ = list
-    Dg = int
-    Mg = int
     
 class CPP(ClusterStructure):
-    Pm = int  # default type at initialization
-    Pd = int
-    mX = int
-    dX = int
-    mL = int
-    dL = int
-    mDx = int
-    dDx = int
-    mDy = int
-    dDy = int
+    PM = int  # default type at initialization
+    PD = int
+    MX = int
+    DX = int
+    ML = int
+    DL = int
+    MDx = int
+    DDx = int
+    MDy = int
+    DDy = int
 
 
 class Cstack(ClusterStructure):
@@ -91,7 +73,7 @@ class Cstack(ClusterStructure):
     fPP = bool  # PPy_ if 1, else Py_
 
 
-def cluster_P_(stack, Py_, Ave):
+def cluster_Py_(stack, Py_, Ave):
     # scan of vertical Py_ -> comp_P -> form_PP -> 2D PPd_, PPm_: clusters of same-sign Pd | Pm deviation
                 
     DdX = 0
@@ -105,7 +87,7 @@ def cluster_P_(stack, Py_, Ave):
     # ddirection: max(Gy,Gx) / min(Gy,Gx), pref. comp over low G
 
     if stack.G * L_bias / G_bias > flip_ave:
-        flip(stack)  # 90 degree rotation, vertical blob rescan -> comp_Px_ if projected PM gain
+        Py_flip = flip_90(Py_)  # 90 degree rotation, vertical blob rescan -> comp_Px_ if projected PM gain
     '''
        if orientation < 1: 
           orientation = 1 / orientation; flip_cost = flip_ave  # no separate L, D orientation?
@@ -122,25 +104,35 @@ def cluster_P_(stack, Py_, Ave):
     mPP = 0, [], []  # per dev of M_params, dderived: match = min, G+=Ave?
     dPP = 0, [], []  # per dev of D_params: abs or co-signed?
     
+    # initialization
+    mPP_ = []
+    dPP_ = []
+    mPP = CPP()
+    dPP = CPP()
+    
     _P = Py_.pop(0)  # pop left to get initial comparand
 
     while Py_:  # comp_P starts from 2nd P, top-down
         P = Py_.pop(0)
-        (_P, _P_ders), _ms, _ds = comp_P(ort, P, _P, DdX)
-
+        _P, _ms, _ds = comp_P(ort, P, _P, DdX)
+        
         while Py_:  # form_PP starts from 3rd P
             P = Py_.pop(0)
-            (P, P_ders), ms, ds = comp_P(ort, P, _P, DdX)  # P: S_vars += S_ders in comp_P
+            P, ms, ds = comp_P(ort, P, _P, DdX)  # P: S_vars += S_ders in comp_P
             if ms == _ms:
                 mPP = form_PP(1, P, mPP)
             else:
                 mPP = term_PP(1, mPP)  # SPP += S, PP eval for orient, incr_comp_P, scan_par..?
                 mPP_.append(mPP)
+                
+                # what would be the purpose of CmPP_?
+                # is it sum all the mPP params into 1 values?
                 for par, C in zip(mPP[1], CmPP_):  # blob-wide summation of 16 summed vars from incr_PP
-                    C += par
+                    C += par 
                     Cm_.append(C)  # or C is directly modified in CvPP?
                 CmPP_ = Cm_  # but CPP is redundant, if len(PP_) > ave?
-                mPP = ms, [], []  # s, PP, Py_ init
+                mPP = CPP()
+                
             if ds == _ds:
                 dPP = form_PP(0, P, dPP)
             else:
@@ -150,7 +142,7 @@ def cluster_P_(stack, Py_, Ave):
                     C += var
                     Cd_.append(C)
                 CdPP_ = Cd_
-                dPP = ds, [], []
+                dPP = CPP()
 
             _P = P; _ms = ms; _ds = ds
 
@@ -167,7 +159,6 @@ def cluster_P_(stack, Py_, Ave):
 
 def comp_P(ortho, P, _P, DdX):  # forms vertical derivatives of P params, and conditional ders from norm and DIV comp
 
-    # why we unpack dert_ while there is no further usage of it here?
     s, x0, G, M, Dx, Dy, L, Dg, Mg  = P.sign, P.x0, P.G, P.M, P.Dx, P.Dy, P.L, P.Dg, P.Mg   # ext: X, new: L, dif: Dx, Dy -> G, no comp of inp I in top dert?          
     _s, _x0, _G, _M, _Dx, _Dy, _L, _Dg, _Mg = _P.sign, _P.x0, _P.G, _P.M, _P.Dx, _P.Dy, _P.L, _P.Dg, _P.Mg  # params per comp_branch, S x branch if min n?
 
@@ -176,7 +167,7 @@ def comp_P(ortho, P, _P, DdX):  # forms vertical derivatives of P params, and co
     '''
     xn = x0 + L-1;  _xn = _x0 + _L-1
     mX = min(xn, _xn) - max(x0, _x0)  # overlap: abs proximity, cumulative binary positional match | miss:
-    _dX = (xn - L/2) - (_xn - _L/2) # why the prior dx is obtained xn and their L?
+    _dX = (xn - L/2) - (_xn - _L/2) 
     dX = abs(x0 - _x0) + abs(xn - _xn)  # offset, or max_L - overlap: abs distance?
 
 
@@ -201,20 +192,21 @@ def comp_P(ortho, P, _P, DdX):  # forms vertical derivatives of P params, and co
     dDx = abs(Dx) - abs(_Dx); mDx = min(abs(Dx), abs(_Dx))  # same-sign Dx in vxP
     dDy = Dy - _Dy; mDy = min(Dy, _Dy)  # Dy per sub_P by intra_comp(dx), vs. less vertically specific dI
 
-    # gdert param comparison, pack in Pd and Pm?
-    dMd = Mg - _Mg; mMd = min(Mg, _Mg),
-    dDd = Dg - _Dg; mDd = min(Dg, _Dg),
+    # gdert param comparison, if not fPP, values would be 0
+    dMg = Mg - _Mg; mMg = min(Mg, _Mg),
+    dDg = Dg - _Dg; mDg = min(Dg, _Dg),
 
-    Pd = ddX + dL + dM + dDx + dDy  # -> directional dPP, equal-weight params, no rdn?
+    Pd = ddX + dL + dM + dDx + dDy + dMg + dDg # -> directional dPP, equal-weight params, no rdn?
     # correlation: dX -> L, oDy, !oDx, ddX -> dL, odDy ! odDx? dL -> dDx, dDy?  G = hypot(Dy, Dx) for 2D structures comp?
-    Pm = mX + mL + mM + mDx + mDy  # -> complementary vPP, rdn *= Pd | Pm rolp?
+    Pm = mX + mL + mM + mDx + mDy + mMg + mDg  # -> complementary vPP, rdn *= Pd | Pm rolp?
 
-    P_ders = CPP(Pm=Pm, Pd=Pd, mX=mX, dX=dX, mL=mL, dL=dL, mDx=mDx, dDx=dDx, mDy=mDy, dDy=dDy)  # div_f, nvars
+    # update derivative params in P
+    P.PM=Pm; P.PD=Pd; P.MX=mX; P.DX=dX; P.ML=mL; P.DL=dL; P.MDx=mDx; P.DDx=dDx; P.MDy=mDy; P.DDy=dDy  # div_f, nvars
 
     vs = 1 if Pm > ave * 7 > 0 else 0  # comp cost = ave * 7, or rep cost: n vars per P?
     ds = 1 if Pd > 0 else 0
 
-    return (P, P_ders), vs, ds
+    return P, vs, ds
 
 '''
     aS compute if positive eV (not qD?) = mx + mL -ave? :
@@ -253,9 +245,10 @@ def comp_P(ortho, P, _P, DdX):  # forms vertical derivatives of P params, and co
 
 def form_PP(typ, P, PP):  # increments continued vPPs or dPPs (not pPs): incr_blob + P_ders?
     
-    # if PP is empty, initialize PP param as 0?
-    s, ix, x, I, D, Dy, M, My, G, oG, Olp, t2_ = P
-    L2, I2, D2, Dy2, M2, My2, G2, OG, Olp2, Py_ = PP
+    # what would be the operation for form PP here?
+    # is it just accumulate ders params from P to PP?
+    Pm, Pd, mX, dX, mL, dL, mDx, dDx, mdy, dDy = P.PM, P.PD, P.MX, P.DX, P.ML, P.DL, P.MDx, P.DDx, P.MDy, P.DDy
+    PM, PD, MX, DX, ML, DL, MDx, DDx, Mdy, DDy = PP.PM, PP.PD, PP.MX, PP.DX, PP.ML, PP.DL, PP.MDx, PP.DDx, PP.MDy, PP.DDy
 
     L2 += len(t2_)
     I2 += I
@@ -413,8 +406,41 @@ def scan_PP_(PP_):  # within a blob, also within a segment?
 def comp_PP(PP, _PP):  # compares PPs within a blob | segment, -> forking PPP_: very rare?
     return PP
 
-def flip(blob):  # vertical-first run of form_P and deeper functions over blob's ders__
-    return blob
+def flip_90(Py_):  # vertical-first run of form_P and deeper functions over blob's ders__
+    
+    y0 = 0
+    yn = len(Py_)
+    x0 = min([P.x0 for P in Py_])
+    xn = max([P.x0 + P.L for P in Py_])
+    
+    # initialize list containing y and x size, number of sublist = number of params
+    dert__ = [(np.zeros((yn-y0, xn-x0))-1) for _ in range(len(Py_[0].dert_[0]))]
+    mask__ = np.zeros((yn-y0, xn-x0))>0
+    
+    # insert Py_ value into dert__
+    for y, P in enumerate(Py_):
+        for x, idert in enumerate(P.dert_):
+            for i, (param, dert) in enumerate(zip(idert,dert__)):
+                dert[y,x] = param
+
+    # create mask and set masked area = True         
+    mask__[np.where(dert__[0] == -1)] = True
+    
+    # rotate 90 degree clockwise, is it matter if we rotate anti clockwise? Suppose should be the same
+    dert__flip = tuple([np.rot90(dert) for dert in dert__])
+    mask__flip = np.rot90(mask__)
+    
+    Py_flip = []
+    # form pattern again after the rotation
+    from blob2P_blob import form_P_
+    for y, dert_ in enumerate(zip(*dert__flip)):
+        crit_ = dert_[3] >0 # compute crit from G? dert_[3] is G        
+        P_ = form_P_(zip(*dert_), crit_, mask__flip[y])
+        
+        if len([P for P in P_])>0: # empty P, when mask is masked for whole row or column, need check further on this
+            Py_flip.append([P for P in P_][0]) # change deque of P_ into list
+        
+    return Py_flip
 
 def cluster_P_blob(val_PP_, blob, Ave, xD):  # scan of vertical Py_ -> comp_P -> 2D mPPs and dPPs, recursive?
     # val_PP_: combined value of PP_

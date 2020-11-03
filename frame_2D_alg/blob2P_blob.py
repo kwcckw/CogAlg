@@ -51,7 +51,7 @@ from class_bind import AdjBinder
 # from comp_pixel import comp_pixel
 from class_stream import BlobStreamer
 from utils import (pairwise, imread)
-from comp_P_draft import cluster_P_
+from comp_P_draft import cluster_Py_
 
 ave = 30  # filter or hyper-parameter, set as a guess, latter adjusted by feedback
 aveG = 50  # filter for comp_g, assumed constant direction
@@ -75,6 +75,17 @@ class CP(ClusterStructure):
     gdert_ = list
     Dg = int
     Mg = int
+    # P derivatives
+    PM = int  
+    PD = int
+    MX = int
+    DX = int
+    ML = int
+    DL = int
+    MDx = int
+    DDx = int
+    MDy = int
+    DDy = int
 
 class Cstack(ClusterStructure):
     I = int
@@ -305,7 +316,7 @@ def form_stack_(P_, frame, y):  # Convert or merge every P into its stack of Ps,
 
     while P_:
         P, up_connect_ = P_.popleft()
-        I, Dy, Dx, G, M, Dyy, Dyx, Dxy, Dxx, Ga, Ma, L, x0, s, dert_, _, _, _ = P.unpack()
+        I, Dy, Dx, G, M, Dyy, Dyx, Dxy, Dxx, Ga, Ma, L, x0, s, dert_ = P.I, P.Dy, P.Dx, P.G, P.M, P.Dyy, P.Dyx, P.Dxy, P.Dxx, P.Ga, P.Ma, P.L, P.x0, P.sign, P.dert_ 
         xn = x0 + L  # next-P x0
         if not up_connect_:
             # initialize new stack for each input-row P that has no connections in higher row, as in the whole top row:
@@ -386,13 +397,13 @@ def form_blob(stack, frame):  # increment blob with terminated stack, check for 
         for stack in stack_:
             form_PPy_(stack)  # evaluate to convert stack.Py_ to stack.PPy_
 
-            # cluster_P_ and comp_P
-            PP_ = [] # please suggest a better name
+            # cluster_Py_ and comp_P
+            PPy_ = [] # please suggest a better name
             if stack.fPP:
                 for PP in stack.Py_:
-                   PP_.append(cluster_P_(stack, PP[2], ave))
+                   PPy_.append(cluster_Py_(stack, PP[2], ave))
             else:
-                PP_ = cluster_P_(stack, stack.Py_, ave)  # root function of comp_P: edge tracing and vectorization function
+                PPy_ = cluster_Py_(stack, stack.Py_, ave)  # root function of comp_P: edge tracing and vectorization function
 
 
             if stack.fPP:  # Py_ is PPy_

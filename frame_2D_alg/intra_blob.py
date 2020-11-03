@@ -29,7 +29,7 @@ from intra_comp import comp_r, comp_a
 from frame_blobs_imaging import visualize_blobs
 from itertools import zip_longest
 import numpy as np
-from P_blobs import P_blobs
+from blob2P_blob import P_blobs
 
 # from comp_P_draft import comp_P_blob
 
