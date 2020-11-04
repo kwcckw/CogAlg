@@ -89,9 +89,12 @@ class Cdert_P(ClusterStructure):
     dDx = int
     mDy = int
     dDy = int
-    dert_ = list
+    P_ = list
+    dert_ = list # do we need this? dert should be in Ps already
     ms = bool
     ds = bool
+    
+    
 
 class CPP(ClusterStructure):
     PM = int
@@ -108,7 +111,7 @@ class CPP(ClusterStructure):
     P_ = list
 
 
-def cluster_Py_(stack, Ave):
+def cluster_Py_(Py_, stack, Ave):
     # scan of vertical Py_ -> comp_P -> form_PP -> 2D PPd_, PPm_: clusters of same-sign Pd | Pm deviation
     DdX = 0
     y0 = stack.y0
@@ -122,31 +125,50 @@ def cluster_Py_(stack, Ave):
     # or y/x (L_bias * G_bias) max / min?
 
     if stack.G * L_bias * G_bias > flip_ave:
-        flip_yx(stack)  # 90 degree rotation, vertical blob rescan -> comp_Px_ if projected PM gain
+        Py_ = flip_yx(Py_)  # 90 degree rotation, vertical blob rescan -> comp_Px_ if projected PM gain
     '''
        if orientation < 1: 
           orientation = 1 / orientation; flip_cost = flip_ave  # no separate L, D orientation?
        else: flip_cost = 0
        comp_P_ if (G + M) * orientation - flip_cost > Ave_comp_P? '''
 
-    if stack.G * (stack.Dx / stack.Dy) * stack.Ly_  > Ave: ort = 1
+    if stack.G * (stack.Dx / stack.Dy) * stack.Ly  > Ave: ort = 1
     # virtual rotation: if G * L_bias * L_bias after any rescan: estimate params of Ps as orthogonal to long axis, to increase PM
     else: ort = 0
 
-    mPP_, dPP_, CmPP_, CdPP_, Cm_, Cd_ = [], [], [], [], [], []  # "C" is for combined comparable params and their derivatives
+    # initialization
+    mPP_ = []
+    dPP_ = []
     mPP = CPP()
     dPP = CPP()
 
-    while stack.Py_:  # comp_P starts from 2nd P, top-down
-        P = stack.Py_.pop(0)
+    _P = Py_.pop(0) # 1st P
+    while Py_:  # comp_P starts from 2nd P, top-down
+        P = Py_.pop(0) # 2nd P 
         _dert_P = comp_P(ort, P, _P, DdX)
 
-        while stack.Py_:  # form_PP starts from 3rd P
-            P = stack.Py_.pop(0)
+        while Py_:  # form_PP starts from 3rd P
+            P = Py_.pop(0) # 3rd P
             dert_P = comp_P(ort, P, _P, DdX)  # P: S_vars += S_ders in comp_P
-            if dert_P.ms == _dert_P.ms:
-                mPP = form_PP(1, P, mPP)
-            else:
+            
+            # accumulate dert_Ps into mPP
+            accum_PP(_dert_P, mPP)
+            if dert_P.ms != _dert_P.ms: # sign change
+                mPP_.append(mPP) # pack mPP into mPP_
+                mPP = CPP() # reinitialize new PP
+
+            # accumulate dert_Ps into dPP
+            accum_PP(_dert_P, dPP)
+            if dert_P.ds != _dert_P.ds: # sign change
+                dPP_.append(dPP) # pack dPP into dPP_
+                dPP = CPP() # reinitialize new PP
+            # what happen if sign change in ds but not ms? And they need to use a same dert_P, which i'm not sure whether we should update _P to P?
+            if  dert_P.ms != _dert_P.ms or dert_P.ds != _dert_P.ds:
+                _P = P
+                break # end the inner while loop
+
+
+            ''' 
             # under review, disregard
                 mPP = term_PP(1, mPP)  # SPP += S, PP eval for orient, incr_comp_P, scan_par..?
                 mPP_.append(mPP)
@@ -155,6 +177,7 @@ def cluster_Py_(stack, Ave):
                     Cm_.append(C)  # or C is directly modified in CvPP?
                 CmPP_ = Cm_  # but CPP is redundant, if len(PP_) > ave?
                 mPP = dert_P.ms, [], []  # s, PP, Py_ init
+            
             if dert_P.ds == _ds:
                 dPP = form_PP(0, P, dPP)
             else:
@@ -167,9 +190,66 @@ def cluster_Py_(stack, Ave):
                 dPP = dert_P.ds, [], []
 
             _P = P; _ms = dert_P.ms; _ds = dert_P.ds
+            '''
+            
+            
+    return mPP_, dPP_
 
-    return stack, CmPP_, mPP_, CdPP_, dPP_
 
+
+
+def accum_PP(dert_P, PP):  # increments continued vPPs or dPPs (not pPs): incr_blob + P_ders?
+
+    Pm, Pd, mx, dx, mL, dL, mDx, dDx, mDy, dDy, P_ , dert_, ms, ds = dert_P.unpack()
+    # PM, PD, MX, DX, ML, DL, MDx, DDx, MDy, DDy, fdiv, P_ = PP.unpack() # unpack if we need the param for more operations
+    
+    PP.PM += Pm
+    PP.PD += Pd
+    PP.MX += mx
+    PP.DX += dx
+    PP.ML += mL
+    PP.DL += dL
+    PP.MDx += mDx
+    PP.DDx += dDx
+    PP.MDy += mDy
+    PP.DDy += dDy
+    PP.P_.append(dert_P.P_)
+    
+    # how to get fdiv?
+    
+    # no need return PP, PP is updated in this function
+    
+    '''
+    
+    P, P_ders, S_ders = P
+    s, ix, x, I, D, Dy, M, My, G, oG, Olp, t2_ = P
+    L2, I2, D2, Dy2, M2, My2, G2, OG, Olp2, Py_ = PP
+
+    L2 += len(t2_)
+    I2 += I
+    D2 += D; Dy2 += Dy
+    M2 += M; My2 += My
+    G2 += G
+    OG += oG
+    Olp2 += Olp
+
+    Pm, Pd, mx, dx, mL, dL, mI, dI, mD, dD, mDy, dDy, mM, dM, mMy, dMy, div_f, nvars = P_ders
+    _dx, Ddx, \
+    PM, PD, Mx, Dx, ML, DL, MI, DI, MD, DD, MDy, DDy, MM, DM, MMy, DMy, div_f, nVars = S_ders
+
+    Py_.appendleft((s, ix, x, I, D, Dy, M, My, G, oG, Olp, t2_, Pm, Pd, mx, dx, mL, dL, mI, dI, mD, dD, mDy, dDy, mM, dM, mMy, dMy, div_f, nvars))
+
+    ddx = dx - _dx  # no ddxP_ or mdx: olp of dxPs?
+    Ddx += abs(ddx)  # PP value of P norm | orient per indiv dx: m (ddx, dL, dS)?
+
+    # summed per PP, then per blob, for form_pP_ or orient eval?
+
+    PM += Pm; PD += Pd  # replace by zip (S_ders, P_ders)
+    Mx += mx; Dx += dx; ML += mL; DL += dL; ML += mI; DL += dI
+    MD += mD; DD += dD; MDy += mDy; DDy += dDy; MM += mM; DM += dM; MMy += mMy; DMy += dMy
+
+    '''
+    
 
 def flip_yx(Py_):  # vertical-first run of form_P and deeper functions over blob's ders__
 
@@ -191,7 +271,7 @@ def flip_yx(Py_):  # vertical-first run of form_P and deeper functions over blob
     # create mask and set masked area = True
     mask__[np.where(dert__[0] == -1)] = True
 
-    # rotate 90 degree clockwise, anti-clockwise is better for consistency?
+    # rotate 90 degree anti-clockwise (np.rot90 rotate 90 degree in anticlockwise direction)
     dert__flip = tuple([np.rot90(dert) for dert in dert__])
     mask__flip = np.rot90(mask__)
 
@@ -232,6 +312,7 @@ def comp_P(ortho, P, _P, DdX):  # forms vertical derivatives of P params, and co
     ave_dx = (x0 + (L-1)//2) - (_x0 + (_L-1)//2)  # d_ave_x, median vs. summed, or for distant-P comp only?
 
     ddX = dX - _dX  # for ortho eval if first-run ave_DdX * Pm: += compensated angle change,
+    # what is this Ddx and where we would use this later?
     DdX += ddX  # mag correlation: dX-> L, ddX-> dL, neutral to Dx: mixed with anti-correlated oDy?
 
     if ortho:  # if ave_dX * val_PP_: estimate params of P orthogonal to long axis, maximizing lat diff, vert match
@@ -251,12 +332,13 @@ def comp_P(ortho, P, _P, DdX):  # forms vertical derivatives of P params, and co
     # correlation: dX -> L, oDy, !oDx, ddX -> dL, odDy ! odDx? dL -> dDx, dDy?  G = hypot(Dy, Dx) for 2D structures comp?
     Pm = mX + mL + mM, mDx + mDy  # -> complementary vPP, rdn *= Pd | Pm rolp?
 
-    P_ders = Pm, Pd, mX, dX, mL, dL, mDx, dDx, mDy, dDy  # div_f, nvars
+    dert_P = Cdert_P(Pm=Pm, Pd=Pd, mX=mX, dX=dX, mL=mL, dL=dL, mDx=mDx, dDx=dDx, mDy=mDy, dDy=dDy, P_ = [_P,P])  # div_f, nvars
+
 
     vs = 1 if Pm > ave * 7 > 0 else 0  # comp cost = ave * 7, or rep cost: n vars per P?
     ds = 1 if Pd > 0 else 0
 
-    return (P, P_ders), vs, ds
+    return dert_P, vs, ds
 
 '''
     aS compute if positive eV (not qD?) = mx + mL -ave? :

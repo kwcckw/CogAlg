@@ -388,12 +388,12 @@ def form_blob(stack, frame):  # increment blob with terminated stack, check for 
         for stack in stack_:
             form_gPPy_(stack)  # evaluate for comp_g, converting stack.Py_ to stack.PPy_
 
-            gPPy_ = []  # comp_P eval, do this per blob instead?:
+            gPPy_ = []  # comp_P eval, do this per blob instead?: Is the same thing? Blob get-> stack get->P
             if stack.fPP:
                 for gPP in stack.Py_:
-                   gPPy_.append(cluster_Py_(gPP.Py_, ave))
+                   gPPy_.append(cluster_Py_(gPP[2],stack, ave))
             else:
-                stack.Py_ = cluster_Py_(stack.Py_, ave)  # root function of comp_P: edge tracing and vectorization function
+                mPP, dPP = cluster_Py_(stack.Py_,stack, ave)  # root function of comp_P: edge tracing and vectorization function
 
             if stack.fPP:  # Py_ is gPPy_
                 for y, (PP_sign, PP_G, P_) in enumerate(stack.Py_, start=stack.y0 - y0):
