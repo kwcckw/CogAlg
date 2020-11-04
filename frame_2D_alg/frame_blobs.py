@@ -136,7 +136,6 @@ def flood_fill(dert__, sign__, verbose=False,
 
                     # add dert to blob
                     accum_func(blob, dert__, y1, x1)
-                    
                     blob.S += 1
                     if y1 < y0:
                         y0 = y1
@@ -261,7 +260,7 @@ if __name__ == "__main__":
         from intra_blob import (
             intra_blob, aveB,
         )
-        from blobs_defs import CDeepBlob
+        from blob_defs import CDeepBlob
 
         deep_frame = frame, frame  # 1st frame initializes summed representation of hierarchy, 2nd is individual top layer
         deep_blob_i_ = []  # index of a blob with deep layers
