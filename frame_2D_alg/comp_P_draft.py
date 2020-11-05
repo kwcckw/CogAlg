@@ -111,7 +111,7 @@ class CPP(ClusterStructure):
     P_ = list
 
 
-def cluster_Py_(Py_, stack, Ave):
+def cluster_Py_(stack, Ave):
     # scan of vertical Py_ -> comp_P -> form_PP -> 2D PPd_, PPm_: clusters of same-sign Pd | Pm deviation
     DdX = 0
     y0 = stack.y0
@@ -125,7 +125,7 @@ def cluster_Py_(Py_, stack, Ave):
     # or y/x (L_bias * G_bias) max / min?
 
     if stack.G * L_bias * G_bias > flip_ave:
-        Py_ = flip_yx(Py_)  # 90 degree rotation, vertical blob rescan -> comp_Px_ if projected PM gain
+        stack.Py_ = flip_yx(stack.Py_)  # 90 degree rotation, vertical blob rescan -> comp_Px_ if projected PM gain
     '''
        if orientation < 1: 
           orientation = 1 / orientation; flip_cost = flip_ave  # no separate L, D orientation?
@@ -142,13 +142,13 @@ def cluster_Py_(Py_, stack, Ave):
     mPP = CPP()
     dPP = CPP()
 
-    _P = Py_.pop(0) # 1st P
-    while Py_:  # comp_P starts from 2nd P, top-down
-        P = Py_.pop(0) # 2nd P 
+    _P = stack.Py_.pop(0) # 1st P
+    while stack.Py_:  # comp_P starts from 2nd P, top-down
+        P = stack.Py_.pop(0) # 2nd P 
         _dert_P = comp_P(ort, P, _P, DdX)
 
-        while Py_:  # form_PP starts from 3rd P
-            P = Py_.pop(0) # 3rd P
+        while stack.Py_:  # form_PP starts from 3rd P
+            P = stack.Py_.pop(0) # 3rd P
             dert_P = comp_P(ort, P, _P, DdX)  # P: S_vars += S_ders in comp_P
             
             # accumulate dert_Ps into mPP
@@ -162,6 +162,7 @@ def cluster_Py_(Py_, stack, Ave):
             if dert_P.ds != _dert_P.ds: # sign change
                 dPP_.append(dPP) # pack dPP into dPP_
                 dPP = CPP() # reinitialize new PP
+                
             # what happen if sign change in ds but not ms? And they need to use a same dert_P, which i'm not sure whether we should update _P to P?
             if  dert_P.ms != _dert_P.ms or dert_P.ds != _dert_P.ds:
                 _P = P
@@ -200,7 +201,7 @@ def cluster_Py_(Py_, stack, Ave):
 
 def accum_PP(dert_P, PP):  # increments continued vPPs or dPPs (not pPs): incr_blob + P_ders?
 
-    Pm, Pd, mx, dx, mL, dL, mDx, dDx, mDy, dDy, P_ , dert_, ms, ds = dert_P.unpack()
+    Pm, Pd, mx, dx, mL, dL, mDx, dDx, mDy, dDy, P_ , dert_, ms, ds = dert_P.unpack()[0:15]
     # PM, PD, MX, DX, ML, DL, MDx, DDx, MDy, DDy, fdiv, P_ = PP.unpack() # unpack if we need the param for more operations
     
     PP.PM += Pm
@@ -298,13 +299,14 @@ def flip_yx(Py_):  # vertical-first run of form_P and deeper functions over blob
 
 def comp_P(ortho, P, _P, DdX):  # forms vertical derivatives of P params, and conditional ders from norm and DIV comp
 
-    s, x0, (G, M, Dx, Dy, L), dert_ = P  # ext: X, new: L, dif: Dx, Dy -> G, no comp of inp I in top dert?
-    _s, _x0, (_G, _M, _Dx, _Dy, _L), _dert_, _dX = _P  # params per comp_branch, S x branch if min n?
+    s, x0, G, M, Dx, Dy, L, Dg, Mg  = P.sign, P.x0, P.G, P.M, P.Dx, P.Dy, P.L, P.Dg, P.Mg   # ext: X, new: L, dif: Dx, Dy -> G, no comp of inp I in top dert?
+    _s, _x0, _G, _M, _Dx, _Dy, _L, _Dg, _Mg = _P.sign, _P.x0, _P.G, _P.M, _P.Dx, _P.Dy, _P.L, _P.Dg, _P.Mg  # params per comp_branch, S x branch if min n?
     '''
     redefine Ps by dx in dert_, rescan dert by input P d_ave_x: skip if not in blob?
     '''
     xn = x0 + L-1;  _xn = _x0 + _L-1
     mX = min(xn, _xn) - max(x0, _x0)  # overlap: abs proximity, cumulative binary positional match | miss:
+    _dX = (xn - L/2) - (_xn - _L/2)
     dX = abs(x0 - _x0) + abs(xn - _xn)  # offset, or max_L - overlap: abs distance?
 
     if dX > ave_dX:  # internal comp is higher-power, else two-input comp not compressive?
@@ -328,17 +330,17 @@ def comp_P(ortho, P, _P, DdX):  # forms vertical derivatives of P params, and co
     dDx = abs(Dx) - abs(_Dx); mDx = min(abs(Dx), abs(_Dx))  # same-sign Dx in vxP
     dDy = Dy - _Dy; mDy = min(Dy, _Dy)  # Dy per sub_P by intra_comp(dx), vs. less vertically specific dI
 
-    Pd = ddX + dL + dM + dDx + dDy  # -> directional dPP, equal-weight params, no rdn?
+    # gdert param comparison, if not fPP, values would be 0
+    dMg = Mg - _Mg; mMg = min(Mg, _Mg)
+    dDg = Dg - _Dg; mDg = min(Dg, _Dg)
+
+    Pd = ddX + dL + dM + dDx + dDy + dMg + dDg # -> directional dPP, equal-weight params, no rdn?
     # correlation: dX -> L, oDy, !oDx, ddX -> dL, odDy ! odDx? dL -> dDx, dDy?  G = hypot(Dy, Dx) for 2D structures comp?
-    Pm = mX + mL + mM, mDx + mDy  # -> complementary vPP, rdn *= Pd | Pm rolp?
+    Pm = mX + mL + mM + mDx + mDy + mMg + mDg # -> complementary vPP, rdn *= Pd | Pm rolp?
 
     dert_P = Cdert_P(Pm=Pm, Pd=Pd, mX=mX, dX=dX, mL=mL, dL=dL, mDx=mDx, dDx=dDx, mDy=mDy, dDy=dDy, P_ = [_P,P])  # div_f, nvars
 
-
-    vs = 1 if Pm > ave * 7 > 0 else 0  # comp cost = ave * 7, or rep cost: n vars per P?
-    ds = 1 if Pd > 0 else 0
-
-    return dert_P, vs, ds
+    return dert_P
 
 '''
     aS compute if positive eV (not qD?) = mx + mL -ave? :

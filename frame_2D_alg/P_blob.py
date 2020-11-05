@@ -97,6 +97,28 @@ class Cstack(ClusterStructure):
     sign = NoneType
     fPP = bool  # PPy_ if 1, else Py_
 
+
+
+class CgPPy(ClusterStructure):
+    I = int
+    Dy = int
+    Dx = int
+    G = int
+    M = int
+    Dyy = int
+    Dyx = int
+    Dxy = int
+    Dxx = int
+    Ga = int
+    Ma = int
+    S = int
+    Ly = int
+    y0 = int
+    Py_ = list
+    sign = NoneType
+
+
+
 class CBlob(ClusterStructure):
     Dert = dict
     box = list
@@ -148,6 +170,10 @@ def P_blob(dert__, mask, crit__, verbose=False, render=False):
     while stack_:  # frame ends, last-line stacks are merged into their blobs
         form_blob(stack_.popleft(), frame)
 
+    # please suggest a better name
+    evaluate_P(frame['blob__'])
+    
+
     if verbose:  # print out at the end
         nblobs = len(frame['blob__'])
         print(f"\rImage has been successfully converted to "
@@ -163,6 +189,23 @@ def P_blob(dert__, mask, crit__, verbose=False, render=False):
         streamer.end_blob_conversion(y, img_out_path=path)
 
     return frame  # frame of blobs
+
+
+def evaluate_P(blob_):
+
+    for blob in blob_: # loop each blob
+        for stack in blob.stack_: # loop each stack in blob
+    
+            gPPy_ = []  # comp_P eval
+            if stack.fPP:
+                for gPPy in stack.Py_:
+                   gPPy_.append(cluster_Py_(gPPy, ave))
+            else:
+                gPPy_ = cluster_Py_(stack, ave)  # root function of comp_P: edge tracing and vectorization function
+
+    
+
+
 
 ''' 
 Parameterized connectivity clustering functions below:
@@ -388,19 +431,19 @@ def form_blob(stack, frame):  # increment blob with terminated stack, check for 
         for stack in stack_:
             form_gPPy_(stack)  # evaluate for comp_g, converting stack.Py_ to stack.PPy_
 
-            gPPy_ = []  # comp_P eval, do this per blob instead?: Is the same thing? Blob get-> stack get->P
-            if stack.fPP:
-                for gPP in stack.Py_:
-                   gPPy_.append(cluster_Py_(gPP[2],stack, ave))
-            else:
-                mPP, dPP = cluster_Py_(stack.Py_,stack, ave)  # root function of comp_P: edge tracing and vectorization function
-
+            
             if stack.fPP:  # Py_ is gPPy_
-                for y, (PP_sign, PP_G, P_) in enumerate(stack.Py_, start=stack.y0 - y0):
-                    for P in P_:
+                y_count_out = 0
+                y_count_in = 0
+                for i, gPPy in enumerate(stack.Py_, start=stack.y0 - y0):
+                    y_count_out += y_count_in
+                    y_count_in = 0 # reset inner y count to 0
+                    for y, P in enumerate(gPPy.Py_):
+                        y_start = y + y_count_out # gPPy may contain multiple Ps
                         x_start = P.x0 - x0
                         x_stop = x_start + P.L
-                        mask[y, x_start:x_stop] = False
+                        mask[y_start, x_start:x_stop] = False
+                        y_count_in += 1 # increase y count of prior gPPy
             else:
                 for y, P in enumerate(stack.Py_, start=stack.y0 - y0):
                     x_start = P.x0 - x0
@@ -439,33 +482,79 @@ def form_gPPy_(stack):
 
     if stack.G > aveG:
         stack_Dg = stack_Mg = 0
-        PPy_ = []  # may replace stack.Py_
+        gPPy_ = []  # may replace stack.Py_
         P = stack.Py_[0]
-        Py_ = [P]; PP_G = P.G   # initialize PP params
+        
+        # initialize PP params
+        Py_ = [P]; 
+        PP_I = P.I
+        PP_Dy = P.Dy
+        PP_Dx = P.Dx
+        PP_G = P.G   
+        PP_M = P.M
+        PP_Dyy = P.Dyy
+        PP_Dyx = P.Dyx
+        PP_Dxy = P.Dxy
+        PP_Dxx = P.Dxx
+        PP_Ga = P.Ga
+        PP_Ma = P.Ma
+        PP_S = P.L
+        PP_Ly = 1
+        PP_y0 = stack.y0
+
         _PP_sign = PP_G > aveG and P.L > 1
 
         for P in stack.Py_[1:]:
             PP_sign = P.G > aveG and P.L > 1  # PP sign
             if _PP_sign == PP_sign:  # accum PP:
                 Py_.append(P)
-                PP_G += P.G
+                PP_I += P.I
+                PP_Dy += P.Dy
+                PP_Dx += P.Dx
+                PP_G += P.G   
+                PP_M += P.M
+                PP_Dyy += P.Dyy
+                PP_Dyx += P.Dyx
+                PP_Dxy += P.Dxy
+                PP_Dxx += P.Dxx
+                PP_Ga += P.Ga
+                PP_Ma += P.Ma
+                PP_S += P.L
+                PP_Ly += 1
+                
             else:  # sign change, terminate PP:
                 if PP_G > aveG:
                     Py_, Dg, Mg = comp_g(Py_)  # adds gdert_, Dg, Mg per P in Py_
                     stack_Dg += abs(Dg)  # in all high-G Ps, regardless of direction
                     stack_Mg += Mg
-                PPy_.append((_PP_sign, PP_G, Py_))  # pack PP
-                Py_ = [P]; PP_G = P.G  # initialize PP params
+                gPPy_.append(CgPPy(I=PP_I, Dy = PP_Dy, Dx = PP_Dx, G = PP_G, M = PP_M, Dyy = PP_Dyy, Dyx = PP_Dyx, Dxy = PP_Dxy, Dxx = PP_Dxx, Ga = PP_Ga, Ma = PP_Ma, S = PP_S, y0 = PP_y0, Ly = PP_Ly, Py_=Py_, sign =_PP_sign ))  # pack PP
+                # initialize PP params
+                Py_ = [P]; 
+                PP_I = P.I
+                PP_Dy = P.Dy
+                PP_Dx = P.Dx
+                PP_G = P.G   
+                PP_M = P.M
+                PP_Dyy = P.Dyy
+                PP_Dyx = P.Dyx
+                PP_Dxy = P.Dxy
+                PP_Dxx = P.Dxx
+                PP_Ga = P.Ga
+                PP_Ma = P.Ma
+                PP_S = P.L
+                PP_y0 = stack.y0 + PP_Ly
+                PP_Ly = 1 
+                
             _PP_sign = PP_sign
 
-        PP = _PP_sign, PP_G, Py_  # terminate last PP
         if PP_G > aveG:
             Py_, Dg, Mg = comp_g(Py_)  # adds gdert_, Dg, Mg per P
             stack_Dg += abs(Dg)  # stack params?
             stack_Mg += Mg
         if stack_Dg + stack_Mg < ave_PP:  # separate comp_P values, revert to Py_ if below-cost
-            PPy_.append(PP)
-            stack.Py_ = PPy_
+             # terminate last PP
+            gPPy_.append(CgPPy(I=PP_I, Dy = PP_Dy, Dx = PP_Dx, G = PP_G, M = PP_M, Dyy = PP_Dyy, Dyx = PP_Dyx, Dxy = PP_Dxy, Dxx = PP_Dxx, Ga = PP_Ga, Ma = PP_Ma, S = PP_S, y0 = PP_y0, Ly = PP_Ly, Py_=Py_, sign =_PP_sign ))
+            stack.Py_ = gPPy_
             stack.fPP = 1  # flag PPy_ vs. Py_ in stack
 
 
