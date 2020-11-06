@@ -111,7 +111,7 @@ class CPP(ClusterStructure):
     P_ = list
 
 
-def cluster_Py_(stack, Ave):
+def comp_Py_(stack, Ave):
     # scan of vertical Py_ -> comp_P -> form_PP -> 2D PPd_, PPm_: clusters of same-sign Pd | Pm deviation
     DdX = 0
     y0 = stack.y0
@@ -142,7 +142,41 @@ def cluster_Py_(stack, Ave):
     mPP = CPP()
     dPP = CPP()
 
+    _P = stack.Py_[0]
+    for i, P in enumerate(stack.Py_[1:]): # outer P loop (P on the left)
+    
+        _dert_P = comp_P(ort, P, _P, DdX)
+        accum_PP(_dert_P, mPP)  # accumulate first mPP
+        accum_PP(_dert_P, dPP) # accumulate first dPP
+    
+        for j, _P in enumerate(stack.Py_[i+1:]): # inner P loop (consecutive Ps on the right)
+            
+            dert_P = comp_P(ort, P, _P, DdX)
+    
+            accum_PP(dert_P, mPP) # accumulate consecutive dert_Ps into mPP
+            accum_PP(dert_P, dPP) # accumulate consecutive dert_Ps into dPP
+    
+            # sign change in dPP or mPP, terminate mPP and dPP
+            if  dert_P.ms != _dert_P.ms or dert_P.ds != _dert_P.ds:
+                mPP_.append(mPP) # pack mPP into mPP_
+                dPP_.append(dPP) # pack mPP into dPP_
+                mPP = CPP() # reinitialize new mPP
+                dPP = CPP() # reinitialize new dPP
+                break # break from inner loop
+
+            elif j == len(stack.Py_)-1: # pack last _P in inner loop
+                mPP_.append(mPP) # pack mPP into mPP_
+                dPP_.append(dPP) # pack mPP into dPP_
+                mPP = CPP() # reinitialize new mPP
+                dPP = CPP() # reinitialize new dPP
+                
+        _P = P # update _P for next outer loop comp_P computation
+            
+            
+            
+    '''
     _P = stack.Py_.pop(0) # 1st P
+    
     while stack.Py_:  # comp_P starts from 2nd P, top-down
         P = stack.Py_.pop(0) # 2nd P 
         _dert_P = comp_P(ort, P, _P, DdX)
@@ -167,32 +201,7 @@ def cluster_Py_(stack, Ave):
             if  dert_P.ms != _dert_P.ms or dert_P.ds != _dert_P.ds:
                 _P = P
                 break # end the inner while loop
-
-
-            ''' 
-            # under review, disregard
-                mPP = term_PP(1, mPP)  # SPP += S, PP eval for orient, incr_comp_P, scan_par..?
-                mPP_.append(mPP)
-                for par, C in zip(mPP[1], CmPP_):  # blob-wide summation of 16 summed vars from incr_PP
-                    C += par
-                    Cm_.append(C)  # or C is directly modified in CvPP?
-                CmPP_ = Cm_  # but CPP is redundant, if len(PP_) > ave?
-                mPP = dert_P.ms, [], []  # s, PP, Py_ init
-            
-            if dert_P.ds == _ds:
-                dPP = form_PP(0, P, dPP)
-            else:
-                dPP = term_PP(0, dPP)
-                dPP_.append(dPP)
-                for var, C in zip(dPP[1], CdPP_):
-                    C += var
-                    Cd_.append(C)
-                CdPP_ = Cd_
-                dPP = dert_P.ds, [], []
-
-            _P = P; _ms = dert_P.ms; _ds = dert_P.ds
-            '''
-            
+    '''
             
     return mPP_, dPP_
 
@@ -310,7 +319,9 @@ def comp_P(ortho, P, _P, DdX):  # forms vertical derivatives of P params, and co
     dX = abs(x0 - _x0) + abs(xn - _xn)  # offset, or max_L - overlap: abs distance?
 
     if dX > ave_dX:  # internal comp is higher-power, else two-input comp not compressive?
-       rX = dX / mX  # average dist/prox, | prox/dist, | mX / max_L?
+        if mX == 0: # solve zero division problem
+           mX = 1
+        rX = dX / mX  # average dist/prox, | prox/dist, | mX / max_L?
     ave_dx = (x0 + (L-1)//2) - (_x0 + (_L-1)//2)  # d_ave_x, median vs. summed, or for distant-P comp only?
 
     ddX = dX - _dX  # for ortho eval if first-run ave_DdX * Pm: += compensated angle change,

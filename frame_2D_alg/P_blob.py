@@ -51,7 +51,7 @@ from class_bind import AdjBinder
 # from comp_pixel import comp_pixel
 from class_stream import BlobStreamer
 from utils import (pairwise, imread)
-from comp_P_draft import cluster_Py_
+from comp_P_draft import comp_Py_
 
 ave = 30  # filter or hyper-parameter, set as a guess, latter adjusted by feedback
 aveG = 50  # filter for comp_g, assumed constant direction
@@ -96,27 +96,6 @@ class Cstack(ClusterStructure):
     down_connect_cnt = int
     sign = NoneType
     fPP = bool  # PPy_ if 1, else Py_
-
-
-
-class CgPPy(ClusterStructure):
-    I = int
-    Dy = int
-    Dx = int
-    G = int
-    M = int
-    Dyy = int
-    Dyx = int
-    Dxy = int
-    Dxx = int
-    Ga = int
-    Ma = int
-    S = int
-    Ly = int
-    y0 = int
-    Py_ = list
-    sign = NoneType
-
 
 
 class CBlob(ClusterStructure):
@@ -169,9 +148,9 @@ def P_blob(dert__, mask, crit__, verbose=False, render=False):
 
     while stack_:  # frame ends, last-line stacks are merged into their blobs
         form_blob(stack_.popleft(), frame)
-
-    # please suggest a better name
-    evaluate_P(frame['blob__'])
+        
+    # evaluate P blobs
+    comp_P_blob(frame['blob__'])
     
 
     if verbose:  # print out at the end
@@ -191,7 +170,7 @@ def P_blob(dert__, mask, crit__, verbose=False, render=False):
     return frame  # frame of blobs
 
 
-def evaluate_P(blob_):
+def comp_P_blob(blob_):
 
     for blob in blob_: # loop each blob
         for stack in blob.stack_: # loop each stack in blob
@@ -199,9 +178,9 @@ def evaluate_P(blob_):
             gPPy_ = []  # comp_P eval
             if stack.fPP:
                 for gPPy in stack.Py_:
-                   gPPy_.append(cluster_Py_(gPPy, ave))
+                   gPPy_.append(comp_Py_(gPPy, ave))
             else:
-                gPPy_ = cluster_Py_(stack, ave)  # root function of comp_P: edge tracing and vectorization function
+                gPPy_ = comp_Py_(stack, ave)  # root function of comp_P: edge tracing and vectorization function
 
     
 
@@ -429,26 +408,15 @@ def form_blob(stack, frame):  # increment blob with terminated stack, check for 
         mask = np.ones((yn - y0, xn - x0), dtype=bool)  # mask box, then unmask Ps:
 
         for stack in stack_:
+            
+            for y, P in enumerate(stack.Py_, start=stack.y0 - y0):
+                x_start = P.x0 - x0
+                x_stop = x_start + P.L
+                mask[y, x_start:x_stop] = False
+                
+            # form gPP after forming mask
             form_gPPy_(stack)  # evaluate for comp_g, converting stack.Py_ to stack.PPy_
 
-            
-            if stack.fPP:  # Py_ is gPPy_
-                y_count_out = 0
-                y_count_in = 0
-                for i, gPPy in enumerate(stack.Py_, start=stack.y0 - y0):
-                    y_count_out += y_count_in
-                    y_count_in = 0 # reset inner y count to 0
-                    for y, P in enumerate(gPPy.Py_):
-                        y_start = y + y_count_out # gPPy may contain multiple Ps
-                        x_start = P.x0 - x0
-                        x_stop = x_start + P.L
-                        mask[y_start, x_start:x_stop] = False
-                        y_count_in += 1 # increase y count of prior gPPy
-            else:
-                for y, P in enumerate(stack.Py_, start=stack.y0 - y0):
-                    x_start = P.x0 - x0
-                    x_stop = x_start + P.L
-                    mask[y, x_start:x_stop] = False
 
         dert__ = tuple(derts[y0:yn, x0:xn] for derts in frame['dert__'])  # slice each dert array of the whole frame
 
@@ -527,7 +495,7 @@ def form_gPPy_(stack):
                     Py_, Dg, Mg = comp_g(Py_)  # adds gdert_, Dg, Mg per P in Py_
                     stack_Dg += abs(Dg)  # in all high-G Ps, regardless of direction
                     stack_Mg += Mg
-                gPPy_.append(CgPPy(I=PP_I, Dy = PP_Dy, Dx = PP_Dx, G = PP_G, M = PP_M, Dyy = PP_Dyy, Dyx = PP_Dyx, Dxy = PP_Dxy, Dxx = PP_Dxx, Ga = PP_Ga, Ma = PP_Ma, S = PP_S, y0 = PP_y0, Ly = PP_Ly, Py_=Py_, sign =_PP_sign ))  # pack PP
+                gPPy_.append(Cstack(I=PP_I, Dy = PP_Dy, Dx = PP_Dx, G = PP_G, M = PP_M, Dyy = PP_Dyy, Dyx = PP_Dyx, Dxy = PP_Dxy, Dxx = PP_Dxx, Ga = PP_Ga, Ma = PP_Ma, S = PP_S, y0 = PP_y0, Ly = PP_Ly, Py_=Py_, sign =_PP_sign ))  # pack PP
                 # initialize PP params
                 Py_ = [P]; 
                 PP_I = P.I
@@ -553,7 +521,7 @@ def form_gPPy_(stack):
             stack_Mg += Mg
         if stack_Dg + stack_Mg < ave_PP:  # separate comp_P values, revert to Py_ if below-cost
              # terminate last PP
-            gPPy_.append(CgPPy(I=PP_I, Dy = PP_Dy, Dx = PP_Dx, G = PP_G, M = PP_M, Dyy = PP_Dyy, Dyx = PP_Dyx, Dxy = PP_Dxy, Dxx = PP_Dxx, Ga = PP_Ga, Ma = PP_Ma, S = PP_S, y0 = PP_y0, Ly = PP_Ly, Py_=Py_, sign =_PP_sign ))
+            gPPy_.append(Cstack(I=PP_I, Dy = PP_Dy, Dx = PP_Dx, G = PP_G, M = PP_M, Dyy = PP_Dyy, Dyx = PP_Dyx, Dxy = PP_Dxy, Dxx = PP_Dxx, Ga = PP_Ga, Ma = PP_Ma, S = PP_S, y0 = PP_y0, Ly = PP_Ly, Py_=Py_, sign =_PP_sign ))
             stack.Py_ = gPPy_
             stack.fPP = 1  # flag PPy_ vs. Py_ in stack
 
