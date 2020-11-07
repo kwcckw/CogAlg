@@ -57,6 +57,26 @@ class CP(ClusterStructure):
     Dg = int
     Mg = int
 
+
+class Cdert_P(ClusterStructure):
+
+    I, Dy, Dx, G, M, Dyy, Dyx, Dxy, Dxx, Ga, Ma, L, x0, sign, dert_, gdert_, Dg, Mg = CP()
+    # is this correct?
+    Pm = int
+    Pd = int
+    mx = int
+    dx = int
+    mL = int
+    dL = int
+    mDx = int
+    dDx = int
+    mDy = int
+    dDy = int
+    mDg = int
+    dDg = int
+    mMg = int
+    dMg = int
+
 class Cstack(ClusterStructure):
     I = int
     Dy = int
@@ -76,25 +96,7 @@ class Cstack(ClusterStructure):
     blob = NoneType
     down_connect_cnt = int
     sign = NoneType
-    fPP = bool  # PPy_ if 1, else Py_
-
-class Cdert_P(ClusterStructure):
-    Pm = int
-    Pd = int
-    mx = int
-    dx = int
-    mL = int
-    dL = int
-    mDx = int
-    dDx = int
-    mDy = int
-    dDy = int
-    P_ = list
-    dert_ = list # do we need this? dert should be in Ps already
-    ms = bool
-    ds = bool
-    
-    
+    fPP = NoneType  # PPy_ if 1, else Py_
 
 class CPP(ClusterStructure):
     PM = int
@@ -107,12 +109,36 @@ class CPP(ClusterStructure):
     DDx = int
     MDy = int
     DDy = int
-    fdiv = bool
+    fdiv = NoneType
     P_ = list
 
 
+def comp_P_blob(blob_, AveB):  # comp_P eval per blob
+    # still tentative:
+
+    for blob in blob_:
+        if blob.G * (1 - blob.Ga / (4.45 * blob.S)) - AveB > 0:
+
+            for i, stack in enumerate(blob.stack_):
+                if stack.G * (1 - stack.Ga / (4.45 * stack.S)) - AveB / 10 > 0:
+                    if stack.fPP:
+                        # stack is gstack (renamed gPP)
+                        istack_ = []
+                        for j, istack in enumerate(stack.Py_):
+                            # input stack, packed in gstack
+                            if stack.G * (1 - stack.Ga / (4.45 * stack.S)) - AveB / 10 > 0:
+                                istack_.append(comp_Py_(istack, ave))
+                                # need to add istack params accumulation here
+                                stack.Py_[j] = istack
+                    else:
+                        # stack is original istack
+                        stack = comp_Py_(stack, ave)  # root function of comp_P: edge tracing and vectorization function
+
+                blob.stack_[i] = stack  # return as PP_stack, formed by comp_Py_
+
+
 def comp_Py_(stack, Ave):
-    # scan of vertical Py_ -> comp_P -> form_PP -> 2D PPd_, PPm_: clusters of same-sign Pd | Pm deviation
+    # scan of vertical Py_ -> comp_P -> form_PP -> 2D dPP_, mPP_: clusters of same-sign Pd | Pm deviation
     DdX = 0
     y0 = stack.y0
     yn = stack.y0 + stack.Ly
@@ -120,67 +146,56 @@ def comp_Py_(stack, Ave):
     xn = max([P.x0 + P.L for P in stack.Py_])
 
     L_bias = (xn - x0 + 1) / (yn - y0 + 1)  # elongation: width / height, pref. comp over long dimension
-    G_bias = min(abs(stack.Dx), abs(stack.Dy)) / max(abs(stack.Dx), abs(stack.Dy))
-    # ddirection: max(Gy,Gx) / min(Gy,Gx), pref. comp over low G
-    # or y/x (L_bias * G_bias) max / min?
+    G_bias = abs(stack.Dy) / abs(stack.Dx)  # ddirection: max(Gy,Gx) / min(Gy,Gx), pref. comp over low G
 
-    if stack.G * L_bias * G_bias > flip_ave:
-        stack.Py_ = flip_yx(stack.Py_)  # 90 degree rotation, vertical blob rescan -> comp_Px_ if projected PM gain
-    '''
-       if orientation < 1: 
-          orientation = 1 / orientation; flip_cost = flip_ave  # no separate L, D orientation?
-       else: flip_cost = 0
-       comp_P_ if (G + M) * orientation - flip_cost > Ave_comp_P? '''
+    if stack.G * L_bias * G_bias > flip_ave:  # y_bias = L_bias * G_bias
+        flip_yx(stack)  # 90 degree rotation, vertical blob rescan -> comp_Px_ if projected PM gain
+    # comp_Py_ if G + M + fflip * (flip_gain - flip_cost) > Ave_comp_P?
 
-    if stack.G * (stack.Dx / stack.Dy) * stack.Ly  > Ave: ort = 1
-    # virtual rotation: if G * L_bias * L_bias after any rescan: estimate params of Ps as orthogonal to long axis, to increase PM
-    else: ort = 0
-
+    if stack.G * (stack.Dy / stack.Dx) * stack.Ly_ > Ave:  # if y_bias after any rescan, also L_bias?
+        ort = 1  # virtual rotation: estimate P params as orthogonal to long axis, to increase Pm
+    else:
+        ort = 0
     # initialization
-    mPP_ = []
-    dPP_ = []
-    mPP = CPP()
-    dPP = CPP()
+    mPP_ = dPP_ = []
+    mPP = dPP = CPP()
 
     _P = stack.Py_[0]
     for i, P in enumerate(stack.Py_[1:]): # outer P loop (P on the left)
-    
+
         _dert_P = comp_P(ort, P, _P, DdX)
+
+        # The below should be packed in form_PP, similar to form_P:
+
         accum_PP(_dert_P, mPP)  # accumulate first mPP
-        accum_PP(_dert_P, dPP) # accumulate first dPP
-    
+        accum_PP(_dert_P, dPP)  # accumulate first dPP
+
         for j, _P in enumerate(stack.Py_[i+1:]): # inner P loop (consecutive Ps on the right)
-            
+
             dert_P = comp_P(ort, P, _P, DdX)
-    
             accum_PP(dert_P, mPP) # accumulate consecutive dert_Ps into mPP
             accum_PP(dert_P, dPP) # accumulate consecutive dert_Ps into dPP
-    
+
             # sign change in dPP or mPP, terminate mPP and dPP
             if  dert_P.ms != _dert_P.ms or dert_P.ds != _dert_P.ds:
                 mPP_.append(mPP) # pack mPP into mPP_
                 dPP_.append(dPP) # pack mPP into dPP_
-                mPP = CPP() # reinitialize new mPP
-                dPP = CPP() # reinitialize new dPP
+                mPP = dPP = CPP() # reinitialize PPs
                 break # break from inner loop
 
             elif j == len(stack.Py_)-1: # pack last _P in inner loop
                 mPP_.append(mPP) # pack mPP into mPP_
                 dPP_.append(dPP) # pack mPP into dPP_
-                mPP = CPP() # reinitialize new mPP
-                dPP = CPP() # reinitialize new dPP
-                
+                mPP = dPP = CPP() # reinitialize PPs
+
         _P = P # update _P for next outer loop comp_P computation
-            
-            
-            
+
     '''
     _P = stack.Py_.pop(0) # 1st P
     
     while stack.Py_:  # comp_P starts from 2nd P, top-down
         P = stack.Py_.pop(0) # 2nd P 
         _dert_P = comp_P(ort, P, _P, DdX)
-
         while stack.Py_:  # form_PP starts from 3rd P
             P = stack.Py_.pop(0) # 3rd P
             dert_P = comp_P(ort, P, _P, DdX)  # P: S_vars += S_ders in comp_P
@@ -190,29 +205,23 @@ def comp_Py_(stack, Ave):
             if dert_P.ms != _dert_P.ms: # sign change
                 mPP_.append(mPP) # pack mPP into mPP_
                 mPP = CPP() # reinitialize new PP
-
             # accumulate dert_Ps into dPP
             accum_PP(_dert_P, dPP)
             if dert_P.ds != _dert_P.ds: # sign change
                 dPP_.append(dPP) # pack dPP into dPP_
                 dPP = CPP() # reinitialize new PP
-                
-            # what happen if sign change in ds but not ms? And they need to use a same dert_P, which i'm not sure whether we should update _P to P?
             if  dert_P.ms != _dert_P.ms or dert_P.ds != _dert_P.ds:
                 _P = P
                 break # end the inner while loop
     '''
-            
     return mPP_, dPP_
 
 
+def accum_PP(dert_P, PP):  # accumulate mPPs or dPPs
 
-
-def accum_PP(dert_P, PP):  # increments continued vPPs or dPPs (not pPs): incr_blob + P_ders?
-
-    Pm, Pd, mx, dx, mL, dL, mDx, dDx, mDy, dDy, P_ , dert_, ms, ds = dert_P.unpack()[0:15]
+    _, Pm, Pd, mx, dx, mL, dL, mDx, dDx, mDy, dDy, dert_ = dert_P.unpack()
     # PM, PD, MX, DX, ML, DL, MDx, DDx, MDy, DDy, fdiv, P_ = PP.unpack() # unpack if we need the param for more operations
-    
+
     PP.PM += Pm
     PP.PD += Pd
     PP.MX += mx
@@ -223,18 +232,12 @@ def accum_PP(dert_P, PP):  # increments continued vPPs or dPPs (not pPs): incr_b
     PP.DDx += dDx
     PP.MDy += mDy
     PP.DDy += dDy
-    PP.P_.append(dert_P.P_)
-    
-    # how to get fdiv?
-    
-    # no need return PP, PP is updated in this function
-    
+    PP.P_.append(dert_P)
+
     '''
-    
     P, P_ders, S_ders = P
     s, ix, x, I, D, Dy, M, My, G, oG, Olp, t2_ = P
     L2, I2, D2, Dy2, M2, My2, G2, OG, Olp2, Py_ = PP
-
     L2 += len(t2_)
     I2 += I
     D2 += D; Dy2 += Dy
@@ -242,24 +245,17 @@ def accum_PP(dert_P, PP):  # increments continued vPPs or dPPs (not pPs): incr_b
     G2 += G
     OG += oG
     Olp2 += Olp
-
     Pm, Pd, mx, dx, mL, dL, mI, dI, mD, dD, mDy, dDy, mM, dM, mMy, dMy, div_f, nvars = P_ders
     _dx, Ddx, \
     PM, PD, Mx, Dx, ML, DL, MI, DI, MD, DD, MDy, DDy, MM, DM, MMy, DMy, div_f, nVars = S_ders
-
     Py_.appendleft((s, ix, x, I, D, Dy, M, My, G, oG, Olp, t2_, Pm, Pd, mx, dx, mL, dL, mI, dI, mD, dD, mDy, dDy, mM, dM, mMy, dMy, div_f, nvars))
-
     ddx = dx - _dx  # no ddxP_ or mdx: olp of dxPs?
     Ddx += abs(ddx)  # PP value of P norm | orient per indiv dx: m (ddx, dL, dS)?
-
     # summed per PP, then per blob, for form_pP_ or orient eval?
-
     PM += Pm; PD += Pd  # replace by zip (S_ders, P_ders)
     Mx += mx; Dx += dx; ML += mL; DL += dL; ML += mI; DL += dI
     MD += mD; DD += dD; MDy += mDy; DDy += dDy; MM += mM; DM += dM; MMy += mMy; DMy += dMy
-
     '''
-    
 
 def flip_yx(Py_):  # vertical-first run of form_P and deeper functions over blob's ders__
 
@@ -319,7 +315,7 @@ def comp_P(ortho, P, _P, DdX):  # forms vertical derivatives of P params, and co
     dX = abs(x0 - _x0) + abs(xn - _xn)  # offset, or max_L - overlap: abs distance?
 
     if dX > ave_dX:  # internal comp is higher-power, else two-input comp not compressive?
-        if mX == 0: # solve zero division problem
+        if mX == 0:  # no division by zero
            mX = 1
         rX = dX / mX  # average dist/prox, | prox/dist, | mX / max_L?
     ave_dx = (x0 + (L-1)//2) - (_x0 + (_L-1)//2)  # d_ave_x, median vs. summed, or for distant-P comp only?
@@ -358,30 +354,21 @@ def comp_P(ortho, P, _P, DdX):  # forms vertical derivatives of P params, and co
     aI = I / L; dI = aI - _aI; mI = min(aI, _aI)  
     aD = D / L; dD = aD - _aD; mD = min(aD, _aD)  
     aM = M / L; dM = aM - _aM; mM = min(aM, _aM)
-
     d_aS comp if cs D_aS, iter dS - S -> (n, M, diff): var precision or modulo + remainder? 
     pP_ eval in +vPPs only, per rdn = alt_rdn * fork_rdn * norm_rdn, then cost of adjust for pP_rdn? 
-
     eval_div(PP):
     if dL * Pm > div_ave:  # dL = potential compression by ratio vs diff, or decremental to Pd and incremental to Pm?
-
         rL  = L / _L  # DIV comp L, SUB comp (summed param * rL) -> scale-independent d, neg if cross-sign:
         nDx = Dx * rL; ndDx = nDx - _Dx; nmDx = min(nDx, _Dx)  # vs. nI = dI * rL or aI = I / L?
         nDy = Dy * rL; ndDy = nDy - _Dy; nmDy = min(nDy, _Dy)
-
         Pnm = mX + nmDx + nmDy  # defines norm_mPP, no ndx: single, but nmx is summed
-
         if Pm > Pnm: nmPP_rdn = 1; mPP_rdn = 0  # added to rdn, or diff alt, olp, div rdn?
         else: mPP_rdn = 1; nmPP_rdn = 0
-
         Pnd = ddX + ndDx + ndDy  # normalized d defines norm_dPP or ndPP
-
         if Pd > Pnd: ndPP_rdn = 1; dPP_rdn = 0  # value = D | nD
         else: dPP_rdn = 1; ndPP_rdn = 0
-
         div_f = 1
         nvars = Pnm, nmDx, nmDy, mPP_rdn, nmPP_rdn,  Pnd, ndDx, ndDy, dPP_rdn, ndPP_rdn
-
     else:
         div_f = 0  # DIV comp flag
         nvars = 0  # DIV + norm derivatives
@@ -552,7 +539,6 @@ def comp_PP(PP, _PP):  # compares PPs within a blob | segment, -> forking PPP_: 
 '''  
     rL: elongation = max(ave_Lx, Ly) / min(ave_Lx, Ly): match rate in max | min dime, also max comp_P rng?    
     rD: ddirection = max(Dy, Dx) / min(Dy, Dx);  low bias, indirect Mx, My: = M/2 *|/ ddirection?
-
     horiz_dim_val = ave_Lx - |Dx| / 2  # input res and coord res are adjusted so mag approximates predictive value,
     vertical_dim_val  = Ly - |Dy| / 2  # or proj M = M - (|D| / M) / 2: no neg? 
     
@@ -561,7 +547,6 @@ def comp_PP(PP, _PP):  # compares PPs within a blob | segment, -> forking PPP_: 
     eval per blob, too expensive for seg? no abs_Dx, abs_Dy for comp dert eval: mostly redundant?
     
     # Dert is None if len | Var < min, for blob_, fork_, and layers?  
-
     colors will be defined as color / sum-of-colors, color Ps are defined within sum_Ps: reflection object?
     relative colors may match across reflecting objects, forming color | lighting objects?     
     comp between color patterns within an object: segmentation?
