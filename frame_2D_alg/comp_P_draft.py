@@ -60,8 +60,11 @@ class CP(ClusterStructure):
 
 class Cdert_P(ClusterStructure):
 
-    I, Dy, Dx, G, M, Dyy, Dyx, Dxy, Dxx, Ga, Ma, L, x0, sign, dert_, gdert_, Dg, Mg = CP()
+    # P instance, accumulation can be done with the param in the P instance
+    # for example Cdert_P.Pi.I += 1
+    Pi = object
     # is this correct?
+    # we need define each of them or we define it as the CP class object
     Pm = int
     Pd = int
     mx = int
@@ -109,6 +112,10 @@ class CPP(ClusterStructure):
     DDx = int
     MDy = int
     DDy = int
+    MDg = int
+    DDg = int
+    MMg = int
+    DMg = int
     fdiv = NoneType
     P_ = list
 
@@ -117,22 +124,31 @@ def comp_P_blob(blob_, AveB):  # comp_P eval per blob
     # still tentative:
 
     for blob in blob_:
-        if blob.G * (1 - blob.Ga / (4.45 * blob.S)) - AveB > 0:
+        if blob.Dert['G'] * (1 - blob.Dert['Ga'] / (4.45 * blob.Dert['S'])) - AveB > 0:
 
             for i, stack in enumerate(blob.stack_):
                 if stack.G * (1 - stack.Ga / (4.45 * stack.S)) - AveB / 10 > 0:
                     if stack.fPP:
                         # stack is gstack (renamed gPP)
-                        istack_ = []
-                        for j, istack in enumerate(stack.Py_):
+
+                        
+                        for j, gP_stack in enumerate(stack.Py_): # Py is gP with stack class instance
                             # input stack, packed in gstack
-                            if stack.G * (1 - stack.Ga / (4.45 * stack.S)) - AveB / 10 > 0:
-                                istack_.append(comp_Py_(istack, ave))
+                            if gP_stack.G * (1 - gP_stack.Ga / (4.45 * gP_stack.S)) - AveB / 10 > 0:
+                                
+#                                for k, istack in enumerate(gP_stack.Py_):
+                                dert_P_ = comp_Py_(gP_stack, ave)
+                                if len(dert_P_)>1:
+                                    PP_ = form_PP_(dert_P_)
+    
+                
                                 # need to add istack params accumulation here
-                                stack.Py_[j] = istack
+                                # or we pack dert_P_ and PP_ as additional param into current gP_stack?
                     else:
                         # stack is original istack
-                        stack = comp_Py_(stack, ave)  # root function of comp_P: edge tracing and vectorization function
+                        dert_P_ = comp_Py_(stack, ave) # root function of comp_P: edge tracing and vectorization function
+                        if len(dert_P_)>1:
+                            PP_ = form_PP_(dert_P_)
 
                 blob.stack_[i] = stack  # return as PP_stack, formed by comp_Py_
 
@@ -149,23 +165,71 @@ def comp_Py_(stack, Ave):
     G_bias = abs(stack.Dy) / abs(stack.Dx)  # ddirection: max(Gy,Gx) / min(Gy,Gx), pref. comp over low G
 
     if stack.G * L_bias * G_bias > flip_ave:  # y_bias = L_bias * G_bias
-        flip_yx(stack)  # 90 degree rotation, vertical blob rescan -> comp_Px_ if projected PM gain
+        flip_yx(stack.Py_)  # 90 degree rotation, vertical blob rescan -> comp_Px_ if projected PM gain
     # comp_Py_ if G + M + fflip * (flip_gain - flip_cost) > Ave_comp_P?
 
-    if stack.G * (stack.Dy / stack.Dx) * stack.Ly_ > Ave:  # if y_bias after any rescan, also L_bias?
+    if stack.G * (stack.Dy / stack.Dx) * stack.Ly > Ave:  # if y_bias after any rescan, also L_bias?
         ort = 1  # virtual rotation: estimate P params as orthogonal to long axis, to increase Pm
     else:
         ort = 0
+        
     # initialization
-    mPP_ = dPP_ = []
-    mPP = dPP = CPP()
+    dert_P_ = []
+    neg_L = 0
+    
+    _P = stack.Py_[0]
+    for i, P in enumerate(stack.Py_[1:]): # outer P loop (P on the left)
+        
+        _dert_P = comp_P(ort, P, _P, DdX)
+        
+        for j, _P in enumerate(stack.Py_[i+1:]): # inner P loop (consecutive Ps on the right)
+
+            dert_P = comp_P(ort, P, _P, DdX)
+            
+            # sign change in _dert_P&dert_P, pack _dert_P
+            if  dert_P.Pm>0 != _dert_P.Pm>0 or dert_P.Pd>0 != _dert_P.Pd>0:
+                dert_P_.append(_dert_P) # pack dert_P
+                neg_L = 0
+                break # break from inner loop
+
+            else: # do we need negative L and M information here?
+                neg_L +=1 
+
+        _P = P # update _P for next outer loop comp_P computation
+
+    return dert_P_
+
+
+def form_PP_(dert_P_):  # increments continued vPPs or dPPs (not pPs): incr_blob + P_ders?
+
+    # initialization
+    PP_ = []
+    _dert_P = dert_P_[0] # 1st dert_P
+    
+    for i, dert_P in enumerate(dert_P_[1:]): # consecutive dert_P
+        
+        PP = CPP() # initialization
+        accum_PP(_dert_P, PP) #accumulate _dert_P param into PP
+            
+        if _dert_P.Pm >0 != dert_P.Pd>0: # sign change between _dert_P and dert_P
+            
+            PP_.append(PP) # pack PP in PP_
+            PP=CPP() # reinitialize PP
+                       
+        elif i == len(dert_P_):
+            PP_.append(PP) # pack last PP in PP_
+        
+        _dert_P = dert_P# update _dert_P
+
+    return PP_
+
+
+    '''
 
     _P = stack.Py_[0]
     for i, P in enumerate(stack.Py_[1:]): # outer P loop (P on the left)
 
         _dert_P = comp_P(ort, P, _P, DdX)
-
-        # The below should be packed in form_PP, similar to form_P:
 
         accum_PP(_dert_P, mPP)  # accumulate first mPP
         accum_PP(_dert_P, dPP)  # accumulate first dPP
@@ -190,38 +254,13 @@ def comp_Py_(stack, Ave):
 
         _P = P # update _P for next outer loop comp_P computation
 
-    '''
-    _P = stack.Py_.pop(0) # 1st P
-    
-    while stack.Py_:  # comp_P starts from 2nd P, top-down
-        P = stack.Py_.pop(0) # 2nd P 
-        _dert_P = comp_P(ort, P, _P, DdX)
-        while stack.Py_:  # form_PP starts from 3rd P
-            P = stack.Py_.pop(0) # 3rd P
-            dert_P = comp_P(ort, P, _P, DdX)  # P: S_vars += S_ders in comp_P
-            
-            # accumulate dert_Ps into mPP
-            accum_PP(_dert_P, mPP)
-            if dert_P.ms != _dert_P.ms: # sign change
-                mPP_.append(mPP) # pack mPP into mPP_
-                mPP = CPP() # reinitialize new PP
-            # accumulate dert_Ps into dPP
-            accum_PP(_dert_P, dPP)
-            if dert_P.ds != _dert_P.ds: # sign change
-                dPP_.append(dPP) # pack dPP into dPP_
-                dPP = CPP() # reinitialize new PP
-            if  dert_P.ms != _dert_P.ms or dert_P.ds != _dert_P.ds:
-                _P = P
-                break # end the inner while loop
-    '''
-    return mPP_, dPP_
 
+        '''
 
 def accum_PP(dert_P, PP):  # accumulate mPPs or dPPs
 
-    _, Pm, Pd, mx, dx, mL, dL, mDx, dDx, mDy, dDy, dert_ = dert_P.unpack()
-    # PM, PD, MX, DX, ML, DL, MDx, DDx, MDy, DDy, fdiv, P_ = PP.unpack() # unpack if we need the param for more operations
-
+    Pi, Pm, Pd, mx, dx, mL, dL, mDx, dDx, mDy, dDy, mDg, dDg, mMg, dMg = dert_P.unpack()
+   
     PP.PM += Pm
     PP.PD += Pd
     PP.MX += mx
@@ -232,6 +271,12 @@ def accum_PP(dert_P, PP):  # accumulate mPPs or dPPs
     PP.DDx += dDx
     PP.MDy += mDy
     PP.DDy += dDy
+    PP.MDg += mDg
+    PP.DDg += dDg
+    PP.MMg += mMg
+    PP.DMg += dMg
+
+    
     PP.P_.append(dert_P)
 
     '''
@@ -345,7 +390,8 @@ def comp_P(ortho, P, _P, DdX):  # forms vertical derivatives of P params, and co
     # correlation: dX -> L, oDy, !oDx, ddX -> dL, odDy ! odDx? dL -> dDx, dDy?  G = hypot(Dy, Dx) for 2D structures comp?
     Pm = mX + mL + mM + mDx + mDy + mMg + mDg # -> complementary vPP, rdn *= Pd | Pm rolp?
 
-    dert_P = Cdert_P(Pm=Pm, Pd=Pd, mX=mX, dX=dX, mL=mL, dL=dL, mDx=mDx, dDx=dDx, mDy=mDy, dDy=dDy, P_ = [_P,P])  # div_f, nvars
+    # do we need P param in dert_P?
+    dert_P = Cdert_P(Pm=Pm, Pd=Pd, mX=mX, dX=dX, mL=mL, dL=dL, mDx=mDx, dDx=dDx, mDy=mDy, dDy=dDy, mDg=mDg, dDg=dDg, mMg=mMg, dMg=dMg)  # div_f, nvars
 
     return dert_P
 
@@ -373,6 +419,7 @@ def comp_P(ortho, P, _P, DdX):  # forms vertical derivatives of P params, and co
         div_f = 0  # DIV comp flag
         nvars = 0  # DIV + norm derivatives
     '''
+
 
 def form_PP(typ, P, PP):  # increments continued vPPs or dPPs (not pPs): incr_blob + P_ders?
 
