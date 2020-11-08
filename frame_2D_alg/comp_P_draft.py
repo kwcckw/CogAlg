@@ -57,14 +57,9 @@ class CP(ClusterStructure):
     Dg = int
     Mg = int
 
-
 class Cdert_P(ClusterStructure):
 
-    # P instance, accumulation can be done with the param in the P instance
-    # for example Cdert_P.Pi.I += 1
-    Pi = object
-    # is this correct?
-    # we need define each of them or we define it as the CP class object
+    Pi = object  # P instance, accumulation: Cdert_P.Pi.I += 1, etc.
     Pm = int
     Pd = int
     mx = int
@@ -127,30 +122,24 @@ def comp_P_blob(blob_, AveB):  # comp_P eval per blob
         if blob.Dert['G'] * (1 - blob.Dert['Ga'] / (4.45 * blob.Dert['S'])) - AveB > 0:
 
             for i, stack in enumerate(blob.stack_):
-                if stack.G * (1 - stack.Ga / (4.45 * stack.S)) - AveB / 10 > 0:
+                if stack.G * (1 - stack.Ga / (4.45 * stack.S)) - AveB / 10 > 0:  # / 10: ratio AveB to AveS
                     if stack.fPP:
-                        # stack is gstack (renamed gPP)
+                        for j, istack in enumerate(stack.Py_):
+                            # istack is original stack, higher-level stack is actually a gstack
+                            if istack.G * (1 - istack.Ga / (4.45 * istack.S)) - AveB / 10 > 0 and len(istack.Py_) > 1:
 
-                        
-                        for j, gP_stack in enumerate(stack.Py_): # Py is gP with stack class instance
-                            # input stack, packed in gstack
-                            if gP_stack.G * (1 - gP_stack.Ga / (4.45 * gP_stack.S)) - AveB / 10 > 0:
-                                
-#                                for k, istack in enumerate(gP_stack.Py_):
-                                dert_P_ = comp_Py_(gP_stack, ave)
-                                if len(dert_P_)>1:
-                                    PP_ = form_PP_(dert_P_)
-    
-                
-                                # need to add istack params accumulation here
-                                # or we pack dert_P_ and PP_ as additional param into current gP_stack?
+                                PP_stack = comp_Py_(istack, ave)  # root function of comp_P: edge tracing and vectorization
+                                istack.Py_[j] = PP_stack  # PP_stack has accumulated PP params and PP_
+
+                                # add accumulation of istack params into blob stack params here,
+                                # then that stack will replace blob.stack below
                     else:
-                        # stack is original istack
-                        dert_P_ = comp_Py_(stack, ave) # root function of comp_P: edge tracing and vectorization function
-                        if len(dert_P_)>1:
-                            PP_ = form_PP_(dert_P_)
+                        # stack is original stack
+                        if stack.G * (1 - stack.Ga / (4.45 * stack.S)) - AveB / 10 > 0 and len(stack.Py_) > 1:
 
-                blob.stack_[i] = stack  # return as PP_stack, formed by comp_Py_
+                            stack = comp_Py_(stack, ave)  # stack is PP_stack, with accumulated PP params and PP_
+
+            blob.stack_[i] = stack  # return as PP_stack from form_PP
 
 
 def comp_Py_(stack, Ave):
@@ -172,95 +161,52 @@ def comp_Py_(stack, Ave):
         ort = 1  # virtual rotation: estimate P params as orthogonal to long axis, to increase Pm
     else:
         ort = 0
-        
-    # initialization
     dert_P_ = []
-    neg_L = 0
-    
     _P = stack.Py_[0]
-    for i, P in enumerate(stack.Py_[1:]): # outer P loop (P on the left)
-        
-        _dert_P = comp_P(ort, P, _P, DdX)
-        
-        for j, _P in enumerate(stack.Py_[i+1:]): # inner P loop (consecutive Ps on the right)
 
-            dert_P = comp_P(ort, P, _P, DdX)
-            
-            # sign change in _dert_P&dert_P, pack _dert_P
-            if  dert_P.Pm>0 != _dert_P.Pm>0 or dert_P.Pd>0 != _dert_P.Pd>0:
-                dert_P_.append(_dert_P) # pack dert_P
-                neg_L = 0
-                break # break from inner loop
+    for P in stack.Py_[1:]:
+        dert_P = comp_P(ort, P, _P, DdX)
+        dert_P_.append( dert_P)
+        _P = P
 
-            else: # do we need negative L and M information here?
-                neg_L +=1 
-
-        _P = P # update _P for next outer loop comp_P computation
-
-    return dert_P_
+    return form_PP_(dert_P_)  # PP_stack
 
 
 def form_PP_(dert_P_):  # increments continued vPPs or dPPs (not pPs): incr_blob + P_ders?
 
-    # initialization
-    PP_ = []
-    _dert_P = dert_P_[0] # 1st dert_P
-    
+    PP_stack = CPP_stack  # need to define object and accum_PP_stack()
+    mPP_ = dPP_ = []
+    mPP = dPP = CPP()
+    _dert_P = dert_P_[0]
+
     for i, dert_P in enumerate(dert_P_[1:]): # consecutive dert_P
-        
-        PP = CPP() # initialization
-        accum_PP(_dert_P, PP) #accumulate _dert_P param into PP
-            
-        if _dert_P.Pm >0 != dert_P.Pd>0: # sign change between _dert_P and dert_P
-            
-            PP_.append(PP) # pack PP in PP_
-            PP=CPP() # reinitialize PP
-                       
-        elif i == len(dert_P_):
-            PP_.append(PP) # pack last PP in PP_
-        
-        _dert_P = dert_P# update _dert_P
 
-    return PP_
+        if _dert_P.Pm > 0 != dert_P.Pm > 0: # sign change between _dert_P and dert_P
+            mPP_.append(mPP)
+            accum_PP_stack(mPP)  # PP_stack contains accumulated params, mPP_, dPP_
+            mPP=CPP()
+        accum_PP(_dert_P, mPP)  # accumulate _dert_P params into PP params
 
+        if _dert_P.Pd > 0 != dert_P.Pd > 0:  # sign change between _dert_P and dert_P
+            dPP_.append(dPP)
+            accum_PP_stack(mPP)  # PP_stack contains accumulated params, mPP_, dPP_
+            dPP=CPP()
+        accum_PP(_dert_P, dPP)  # accumulate _dert_P params into PP params
 
-    '''
+        _dert_P = dert_P  # update _dert_P
 
-    _P = stack.Py_[0]
-    for i, P in enumerate(stack.Py_[1:]): # outer P loop (P on the left)
+    mPP_.append(mPP)  # pack last PP in PP_
+    dPP_.append(dPP)
 
-        _dert_P = comp_P(ort, P, _P, DdX)
+    accum_PP_stack(mPP)  # PP_stack contains accumulated params, mPP_, dPP_
 
-        accum_PP(_dert_P, mPP)  # accumulate first mPP
-        accum_PP(_dert_P, dPP)  # accumulate first dPP
+    return PP_stack
 
-        for j, _P in enumerate(stack.Py_[i+1:]): # inner P loop (consecutive Ps on the right)
-
-            dert_P = comp_P(ort, P, _P, DdX)
-            accum_PP(dert_P, mPP) # accumulate consecutive dert_Ps into mPP
-            accum_PP(dert_P, dPP) # accumulate consecutive dert_Ps into dPP
-
-            # sign change in dPP or mPP, terminate mPP and dPP
-            if  dert_P.ms != _dert_P.ms or dert_P.ds != _dert_P.ds:
-                mPP_.append(mPP) # pack mPP into mPP_
-                dPP_.append(dPP) # pack mPP into dPP_
-                mPP = dPP = CPP() # reinitialize PPs
-                break # break from inner loop
-
-            elif j == len(stack.Py_)-1: # pack last _P in inner loop
-                mPP_.append(mPP) # pack mPP into mPP_
-                dPP_.append(dPP) # pack mPP into dPP_
-                mPP = dPP = CPP() # reinitialize PPs
-
-        _P = P # update _P for next outer loop comp_P computation
-
-
-        '''
 
 def accum_PP(dert_P, PP):  # accumulate mPPs or dPPs
 
     Pi, Pm, Pd, mx, dx, mL, dL, mDx, dDx, mDy, dDy, mDg, dDg, mMg, dMg = dert_P.unpack()
-   
+
     PP.PM += Pm
     PP.PD += Pd
     PP.MX += mx
@@ -276,7 +222,7 @@ def accum_PP(dert_P, PP):  # accumulate mPPs or dPPs
     PP.MMg += mMg
     PP.DMg += dMg
 
-    
+
     PP.P_.append(dert_P)
 
     '''
@@ -596,5 +542,5 @@ def comp_PP(PP, _PP):  # compares PPs within a blob | segment, -> forking PPP_: 
     # Dert is None if len | Var < min, for blob_, fork_, and layers?  
     colors will be defined as color / sum-of-colors, color Ps are defined within sum_Ps: reflection object?
     relative colors may match across reflecting objects, forming color | lighting objects?     
-    comp between color patterns within an object: segmentation?
+    comp between color patterns within an object: segmentation? 
 '''
