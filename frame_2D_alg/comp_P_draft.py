@@ -127,10 +127,10 @@ def comp_P_blob(blob_, AveB):  # comp_P eval per blob
                     else:
                         # stack is original stack
                         if stack.G * (1 - stack.Ga / (4.45 * stack.S)) - AveB / 10 > 0 and len(stack.Py_) > 2:
-
+                        
                             stack = comp_Py_(stack, ave)  # stack is PP_stack, with accumulated PP params and PP_
 
-            blob.stack_[i] = stack  # return as PP_stack from form_PP
+                blob.stack_[i] = stack  # return as PP_stack from form_PP
 
 
 def comp_Py_(stack, Ave):
@@ -146,7 +146,13 @@ def comp_Py_(stack, Ave):
 
     if stack.G * L_bias * G_bias > flip_ave:  # y_bias = L_bias * G_bias: projected PM net gain:
         # rotate stack.Py_ by 90 degree, rescan blob vertically -> comp_Px_
-        stack.Py_ = flip_yx(stack.Py_)
+        Py_flip= flip_yx(stack.Py_)
+        
+        if len(Py_flip) >2: # at least 3 Ps to form 2 dert_P and 1 PP
+            stack.Py_ = Py_flip
+        else: # less than 2 P
+            return stack
+        
     # comp_Py_ if G + M + fflip * (flip_gain - flip_cost) > Ave_comp_P?
 
     if stack.G * (stack.Dy / stack.Dx) * stack.Ly > Ave:  # if y_bias after any rescan, also L_bias?
@@ -166,101 +172,85 @@ def comp_Py_(stack, Ave):
 
 def form_PP_(dert_P_):  # terminate, initialize, increment mPPs and dPPs
 
-    PP_stack = CPP_stack  # need to define object and accum_PP_stack()
+    PP_stack = CPP_stack(dert_Pi = Cdert_P()) 
+    
     # not sure it belongs here, maybe in comp_PP_blob?
     mPP_ = dPP_ = []
-    mPP = dPP = CPP()
+    mPP = dPP = CPP(dert_Pi = Cdert_P())
+    
     _dert_P = dert_P_[0]
+    accum_PP_stack(_dert_P, PP_stack) # accumulate 1st dert_P
 
     for i, dert_P in enumerate(dert_P_[1:]): # consecutive dert_P
 
         if _dert_P.Pm > 0 != dert_P.Pm > 0: # sign change between _dert_P and dert_P
             mPP_.append(mPP)
-            mPP=CPP()
+            mPP=CPP(dert_Pi = Cdert_P())
         accum_PP(_dert_P, mPP)  # accumulate _dert_P params into PP params
 
         if _dert_P.Pd > 0 != dert_P.Pd > 0:  # sign change between _dert_P and dert_P
             dPP_.append(dPP)
-            dPP=CPP()
+            dPP=CPP(dert_Pi = Cdert_P())
         accum_PP(_dert_P, dPP)  # accumulate _dert_P params into PP params
 
-        PP_params = accum_PP_stack(dert_P)  # accumulate dert_P params into PP_stack params
+        accum_PP_stack(dert_P, PP_stack)  # accumulate dert_P params into PP_stack params
         _dert_P = dert_P  # update _dert_P
 
     mPP_.append(mPP)  # pack last PP in PP_
     dPP_.append(dPP)
 
-    return (PP_params, mPP_, dPP, dert_P_)  # PP_stack
+    # compute fmPP and fdiv of mPP and dPP?
+
+    PP_stack.mPP_ = mPP_ # pack mPP_ into PP_stack
+    PP_stack.dPP_ = dPP_ # pack dPP_ into PP_stack
+    
+    # compute fdiv of PP_stack?
+    
+    return PP_stack
 
 
-# The below needs to be reviewed, use dertP params, and class defs have changed
+def accum_PP_stack(dert_P, PP_stack):  # accumulate mPPs or dPPs
+    
+    # dert_P params
+    _, Pm, Pd, mx, dx, mL, dL, mDx, dDx, mDy, dDy, mDg, dDg, mMg, dMg = dert_P.unpack()
 
-def accum_PP_stack(PP, PP_stack):  # accumulate mPPs or dPPs
-
-    PM, PD, MX, DX, ML, DL, MDx, DDx, MDy, DDy, MDg, DDg, MMg, DMg, fdiv, P_, dert_P_ = PP.unpack()
-    # accumulate PP params into PP_stack
-    PP_stack.PM += PM
-    PP_stack.PD += PD
-    PP_stack.MX += MX
-    PP_stack.DX += DX
-    PP_stack.ML += ML
-    PP_stack.DL += DL
-    PP_stack.MDx += MDx
-    PP_stack.DDx += DDx
-    PP_stack.MDy += MDy
-    PP_stack.DDy += DDy
-    PP_stack.MDg += MDg
-    PP_stack.DDg += DDg
-    PP_stack.MMg += MMg
-    PP_stack.DMg += DMg
-    PP_stack.P_.extend(P_) # similar with append, but P_ is flatten first before appended into PP_stack.P_
-    PP_stack.dert_P_.extend(dert_P_)
-
-    for P in P_:
-        # P params
-        I, Dy, Dx, G, M, Dyy, Dyx, Dxy, Dxx, Ga, Ma, L, x0, sign, dert_, gdert_, Dg, Mg = P.unpack()
-
-        # accumulate P params into PP_stack
-        PP_stack.I += I
-        PP_stack.Dy += Dy
-        PP_stack.Dx += Dx
-        PP_stack.G += G
-        PP_stack.M += M
-        PP_stack.Dyy += Dyy
-        PP_stack.Dyx += Dyx
-        PP_stack.Dxy += Dxy
-        PP_stack.Dxx += Dxx
-        PP_stack.Ga += Ga
-        PP_stack.Ma += Ma
-        PP_stack.S += L
-        PP_stack.Ly += 1
-        PP_stack.y0 += 1 # not sure how to get y0 from PP here, need to think further on this
-        PP_stack.Py_.append(P)
-        PP_stack.sign = sign
-        PP_stack.Dg += Dg
-        PP_stack.Mg += Mg
-
+    # accumulate dert_P params into PP_stack
+    PP_stack.dert_Pi.Pm += Pm
+    PP_stack.dert_Pi.Pd += Pd
+    PP_stack.dert_Pi.mx += mx
+    PP_stack.dert_Pi.dx += dx
+    PP_stack.dert_Pi.mL += mL
+    PP_stack.dert_Pi.dL += dL
+    PP_stack.dert_Pi.mDx += mDx
+    PP_stack.dert_Pi.dDx += dDx
+    PP_stack.dert_Pi.mDy += mDy
+    PP_stack.dert_Pi.dDy += dDy
+    PP_stack.dert_Pi.mDg += mDg
+    PP_stack.dert_Pi.dDg += dDg
+    PP_stack.dert_Pi.mMg += mMg
+    PP_stack.dert_Pi.dMg += dMg
+    PP_stack.dert_P_.append(dert_P)
 
 def accum_PP(dert_P, PP):  # accumulate mPPs or dPPs
 
-    Pi, Pm, Pd, mx, dx, mL, dL, mDx, dDx, mDy, dDy, mDg, dDg, mMg, dMg = dert_P.unpack()
+    # dert_P params
+    _, Pm, Pd, mx, dx, mL, dL, mDx, dDx, mDy, dDy, mDg, dDg, mMg, dMg = dert_P.unpack()
 
-    PP.PM += Pm
-    PP.PD += Pd
-    PP.MX += mx
-    PP.DX += dx
-    PP.ML += mL
-    PP.DL += dL
-    PP.MDx += mDx
-    PP.DDx += dDx
-    PP.MDy += mDy
-    PP.DDy += dDy
-    PP.MDg += mDg
-    PP.DDg += dDg
-    PP.MMg += mMg
-    PP.DMg += dMg
-
-    PP.P_ .append(Pi) # dert_P should always contain 1 P, so append Pi(P instance of dert_P) into PP's P_
+    # accumulate dert_P params into PP
+    PP.dert_Pi.Pm += Pm
+    PP.dert_Pi.Pd += Pd
+    PP.dert_Pi.mx += mx
+    PP.dert_Pi.dx += dx
+    PP.dert_Pi.mL += mL
+    PP.dert_Pi.dL += dL
+    PP.dert_Pi.mDx += mDx
+    PP.dert_Pi.dDx += dDx
+    PP.dert_Pi.mDy += mDy
+    PP.dert_Pi.dDy += dDy
+    PP.dert_Pi.mDg += mDg
+    PP.dert_Pi.dDg += dDg
+    PP.dert_Pi.mMg += mMg
+    PP.dert_Pi.dMg += dMg
     PP.dert_P_.append(dert_P)
 
     '''
