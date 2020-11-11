@@ -302,7 +302,7 @@ def extension_cycle(pool, blob_, height, width, render):
     id_map__ = get_id_map(blob_, height, width)  # get map of dert's id
     
     if render:
-        cv2.imshow("ids", (((id_map__)*255)/(width*height)).astype('uint8'))
+        cv2.imshow("ids", (255-((cv2.resize(id_map__,(id_map__.shape[0]*10,id_map__.shape[1]*10)))*255)/(width*height)).astype('uint8'))
         cv2.waitKey(1)
 
     return blob_, id_map__
@@ -376,7 +376,7 @@ if __name__ == '__main__':
 
     argument_parser = argparse.ArgumentParser()
     argument_parser.add_argument('-i', '--image', help='path to image file', default='./images//raccoon_eye.jpeg')
-    argument_parser.add_argument('-r', '--render', help='render id output', type=int, default=0)
+    argument_parser.add_argument('-r', '--render', help='render id output', type=int, default=1)
     arguments = vars(argument_parser.parse_args())
     image = imread(arguments['image'])
     render = arguments['render']

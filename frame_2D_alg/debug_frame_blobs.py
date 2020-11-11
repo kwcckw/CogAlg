@@ -5,11 +5,7 @@ work in progress
 '''
 
 import numpy as np
-
 from utils import imread
-
-
-
 from frame_blobs import comp_pixel, derts2blobs
 from xy_blobs import image_to_blobs
 from matplotlib import pyplot as plt
@@ -17,6 +13,19 @@ from matplotlib import pyplot as plt
 
 if __name__ == "__main__":
     
+    image = imread('./images/raccoon_eye.jpeg')
+    dert__ = comp_pixel(image)
+    frame_ff = derts2blobs(dert__,
+                        verbose=0,
+                        render=0,
+                        use_c=0)
+
+    blob_ff_ = frame_ff.blob_ # flood fill blobs
+    for iff, blob_ff in enumerate(blob_ff_):
+        print(blob_ff.Dert)
+    
+    
+    '''
     image = imread('./images/raccoon_eye.jpeg')
     img_blobs_ff = np.zeros((image.shape[0]-1,image.shape[1]-1,))
     img_blobs_xy = np.zeros((image.shape[0]-1,image.shape[1]-1,))
@@ -106,4 +115,4 @@ if __name__ == "__main__":
     plt.figure()
     plt.imshow(img_blobs_dif)
     plt.title('differences')
-    
+    '''
