@@ -367,7 +367,6 @@ def form_stack_(P_, frame, y):  # Convert or merge every P into its stack of Ps,
 
 def form_blob(stack, frame):  # increment blob with terminated stack, check for blob termination and merger into frame
 
-    # need to follow the unpack sequence following the class definition
     I, Dy, Dx, G, M, Dyy, Dyx, Dxy, Dxx, Ga, Ma, A, Ly, y0, Py_, sign, fPP, down_connect_cnt, blob = stack.unpack()
     # terminated stack is merged into continued or initialized blob (all connected stacks):
     accum_Dert(blob.Dert, I=I, Dy=Dy, Dx=Dx, G=G, M=M, Dyy=Dyy, Dyx=Dyx, Dxy=Dxy, Dxx=Dxx, Ga=Ga, Ma=Ma, A=A, Ly=Ly)

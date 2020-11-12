@@ -31,7 +31,6 @@ from collections import deque
 from class_cluster import ClusterStructure, NoneType
 from math import hypot
 import numpy as np
-#from P_blob import CP, CStack, CBlob # why we need this line?
 
 ave = 20
 div_ave = 200
@@ -83,6 +82,7 @@ def comp_P_blob(blob_, AveB):  # comp_P eval per blob
 
             for i, stack in enumerate(blob.stack_):
                 if stack.G * (1 - stack.Ga / (4.45 * stack.A)) - AveB / 10 > 0:  # / 10: ratio AveB to AveS
+                    # also check for long / thin edges: len(py_) / A?
                     if stack.fPP:
                         # stack is actually a nested gstack
                         for j, istack in enumerate(stack.Py_):
@@ -100,9 +100,6 @@ def comp_P_blob(blob_, AveB):  # comp_P eval per blob
                         if stack.G * (1 - stack.Ga / (4.45 * stack.A)) - AveB / 10 > 0 and len(stack.Py_) > 2:
 
                             stack = comp_Py_(stack, ave)  # stack is PP_stack, with accumulated PP params and PP_
-
-
-
 
                 blob.stack_[i] = stack  # return as PP_stack from form_PP
 
@@ -251,7 +248,7 @@ def flip_yx(Py_):  # vertical-first run of form_P and deeper functions over blob
         crit_ = dert_[3] > 0  # compute crit from G? dert_[3] is G
         P_ = form_P_(zip(*dert_), crit_, mask__flip[y])
 
-        if len([P for P in P_]) > 0:  # empty P, when mask is masked for whole row or column.
+        if len([P for P in P_]) > 0:  # empty P, when mask is masked for whole row or column
             flipped_Py_.append([P for P in P_][0])  # change deque of P_ into list
 
     return flipped_Py_

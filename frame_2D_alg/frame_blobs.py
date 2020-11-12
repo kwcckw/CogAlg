@@ -136,7 +136,7 @@ def derts2blobs(dert__, verbose=False, render=False, use_c=False):
 
     return frame
 
-# move before flood_fill so that flood_fill can call this function
+
 def accum_blob_Dert(blob, dert__, y, x):
 
     blob.I += dert__[0][y, x]
@@ -144,7 +144,6 @@ def accum_blob_Dert(blob, dert__, y, x):
     blob.Dx += dert__[2][y, x]
     blob.G += dert__[3][y, x]
     blob.M += dert__[4][y, x]
-
 
 
 def flood_fill(dert__, sign__, verbose=False, mask=None, blob_cls=CBlob, accum_func=accum_blob_Dert):
@@ -270,7 +269,6 @@ def assign_adjacents(adj_pairs, blob_cls=CBlob):  # adjacents are connected oppo
             blob2.adj_blobs[4] += blob1.Ma
 
 
-
 if __name__ == "__main__":
     # Imports
     import argparse
@@ -279,7 +277,7 @@ if __name__ == "__main__":
 
     # Parse arguments
     argument_parser = argparse.ArgumentParser()
-    argument_parser.add_argument('-i', '--image', help='path to image file', default='./images//raccoon_eye.jpeg')
+    argument_parser.add_argument('-i', '--image', help='path to image file', default='./images//raccoon_head.jpg')
     argument_parser.add_argument('-v', '--verbose', help='print details, useful for debugging', type=int, default=1)
     argument_parser.add_argument('-n', '--intra', help='run intra_blobs after frame_blobs', type=int, default=1)
     argument_parser.add_argument('-r', '--render', help='render the process', type=int, default=0)
@@ -327,10 +325,8 @@ if __name__ == "__main__":
             borrow_G = min, ~ comp(G,_G): only value present in both parties can be borrowed from one to another
             Add borrow_G -= inductive leaking across external blob?
             '''
-            blob = CDeepBlob(I=blob.I, Dy=blob.Dy, Dx=blob.Dx, G=blob.G, M=blob.M,
-                             A=blob.A, box=blob.box, sign=blob.sign,
-                             mask=blob.mask, root_dert__=deep_root_dert__,
-                             adj_blobs=blob.adj_blobs, fopen=blob.fopen)
+            blob = CDeepBlob(I=blob.I, Dy=blob.Dy, Dx=blob.Dx, G=blob.G, M=blob.M, A=blob.A, box=blob.box, sign=blob.sign,
+                             mask=blob.mask, root_dert__=deep_root_dert__, adj_blobs=blob.adj_blobs, fopen=blob.fopen)
 
             blob_height = blob.box[1] - blob.box[0]
             blob_width = blob.box[3] - blob.box[2]
