@@ -37,7 +37,6 @@ div_ave = 200
 flip_ave = 1000
 ave_dX = 10  # difference between median x coords of consecutive Ps
 
-
 class Cdert_P(ClusterStructure):
 
     Pi = object  # P instance, accumulation: Cdert_P.Pi.I += 1, etc.
@@ -90,7 +89,7 @@ class CStack(ClusterStructure):
     y0 = int
     Py_ = list  # Py_ or dPPy_
     sign = NoneType
-    fPP = NoneType  # PPy_ if 1, else Py_
+    f_gstack = NoneType  # gPPy_ if 1, else Py_
     down_connect_cnt = int
     blob = NoneType
     PP_stack = object
@@ -105,33 +104,29 @@ def comp_P_blob(blob_, AveB):  # comp_P eval per blob
             for i, stack in enumerate(blob.stack_):
                 if stack.G * (1 - stack.Ga / (4.45 * stack.A)) - AveB / 10 > 0:  # / 10: ratio AveB to AveS
                     # also check for long / thin edges: len(py_) / A?
-                    
-                    if stack.fPP:
-                        
+                    if stack.f_gstack:  # stack is actually a nested gstack
                         new_stack = CStack(PP_stack = CPP_stack())
-                        
-                        # stack is actually a nested gstack
+
                         for j, istack in enumerate(stack.Py_):
                             # istack is original stack
                             if istack.G * (1 - istack.Ga / (4.45 * istack.A)) - AveB / 10 > 0 and len(istack.Py_) > 2:
                                 # PP_stack has accumulated PP params and PP_
-                                PP_stack, fstack = comp_Py_(istack, ave)  # root function of comp_P: edge tracing and vectorization
-                                accum_stack(new_stack,istack,PP_stack,fstack)
+                                PP_stack, f_istack = comp_Py_(istack, ave)  # root function of comp_P: edge tracing and vectorization
+                                accum_nested_stack(new_stack, istack, PP_stack, f_istack)
                         blob.stack_[i] = new_stack  # return as PP_stack from form_PP
 
                     else:
                         # stack is original stack
                         if stack.G * (1 - stack.Ga / (4.45 * stack.A)) - AveB / 10 > 0 and len(stack.Py_) > 2:
 
-                            new_stack, fstack = comp_Py_(stack, ave)  # stack is PP_stack, with accumulated PP params and PP_
+                            new_stack, f_istack = comp_Py_(stack, ave)  # stack is PP_stack, with accumulated PP params and PP_
                             blob.stack_[i] = new_stack  # return as PP_stack from form_PP
 
 
 def comp_Py_(stack, Ave):
     # scan of vertical Py_ -> comp_P -> form_PP -> 2D dPP_, mPP_: clusters of same-sign Pd | Pm deviation
-    fstack = 0 # flag to know whether output is stack, instead of PP_stack
-    # output could be stack instead of PP_stack if condition not meet in line 147
-    
+    f_istack = 1  # flag: output is input stack vs. PP_stack
+
     DdX = 0
     y0 = stack.y0
     yn = stack.y0 + stack.Ly
@@ -147,8 +142,9 @@ def comp_Py_(stack, Ave):
         if len(flipped_Py_) > 2:  # at least 3 Ps to form 2 dert_P and 1 PP
             stack.Py_ = flipped_Py_
         else:
-            fstack = 1
-            return stack,fstack  # comp_P if G + M + fflip * (flip_gain - flip_cost) > Ave_comp_P?
+            f_istack = 1
+            return stack, f_istack  # comp_P if G + M + fflip * (flip_gain - flip_cost) > Ave_comp_P?        
+        # evaluate for arbitrary-angle rotation here? 
 
     if stack.G * (stack.Dy / stack.Dx) * stack.Ly > Ave:  # if y_bias after any rescan, also L_bias?
         ort = 1  # virtual rotation: estimate P params as orthogonal to long axis, to increase Pm
@@ -162,7 +158,7 @@ def comp_Py_(stack, Ave):
         dert_P_.append( dert_P)
         _P = P
 
-    return form_PP_(dert_P_), fstack  # PP_stack
+    return form_PP_(dert_P_), f_istack  # PP_stack
 
 
 def form_PP_(dert_P_):  # terminate, initialize, increment mPPs and dPPs
@@ -200,8 +196,7 @@ def form_PP_(dert_P_):  # terminate, initialize, increment mPPs and dPPs
 
 
 # accumulate istack and PP_stack into stack
-# please suggest a better definition name
-def accum_stack(new_stack, istack,PP_stack, fstack):
+def accum_nested_stack(new_stack, istack, PP_stack, f_istack):
     
     # istack params
     I, Dy, Dx, G, M, Dyy, Dyx, Dxy, Dxx, Ga, Ma, A, Ly, y0, Py_, sign, _, _, _  = istack.unpack()
@@ -225,7 +220,7 @@ def accum_stack(new_stack, istack,PP_stack, fstack):
     new_stack.Py_.extend(Py_)
     new_stack.sign = sign # sign should be same across istack
 
-    if not fstack:# input is not stack, so input is PP_stack
+    if not f_istack:# input is not stack, so input is PP_stack
         # PP_stack params
         dert_Pi, mPP_, dPP_ , dert_P_, fdiv = PP_stack.unpack()
         # do we need to accumulate dert_P? Since that is already included in PP_
@@ -372,7 +367,6 @@ def comp_P(ortho, P, _P, DdX):  # forms vertical derivatives of P params, and co
     - resulting vertically adjacent dPPs and vPPs are evaluated for cross-comparison, to form PPPs and so on
     - resulting param derivatives form par_Ps, which are evaluated for der+ and rng+ cross-comparison
     | default top+ P level: if PD | PM: add par_Ps: sub_layer, rdn ele_Ps: deeper layer? 
-
     aS compute if positive eV (not qD?) = mx + mL -ave? :
     aI = I / L; dI = aI - _aI; mI = min(aI, _aI)  
     aD = D / L; dD = aD - _aD; mD = min(aD, _aD)  
