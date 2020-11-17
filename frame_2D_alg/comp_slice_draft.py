@@ -114,6 +114,8 @@ def comp_slice_blob(blob_, AveB):  # comp_slice eval per blob
 
                                 stack_PP = comp_slice_(istack, ave)  # root function of comp_slice: edge tracing and vectorization
                                 accum_nested_stack(stack_stack_PP, istack, stack_PP)
+                                stack_stack_PP.f_stack_PP = 1
+                                
                                 # stack_PP = accumulated PP params and PP_
                         blob.stack_[i] = stack_stack_PP
                         # return as stack_PP from form_PP
@@ -121,27 +123,12 @@ def comp_slice_blob(blob_, AveB):  # comp_slice eval per blob
                         # stack is original stack
                         if stack.G * (1 - stack.Ga / (4.45 * stack.A)) - AveB / 10 > 0 and len(stack.Py_) > 2:
 
-                            stack_stack_PP = comp_slice_(stack, ave)  # stack is stack_PP, with accumulated PP params and PP_
-                            stack_stack_PP.f_stack_PP = 1
-                            blob.stack_[i] = stack_stack_PP  # return as stack_PP from form_PP
-''' 
-    This should be done in slice_blob:
-    
-    y0 = stack.y0
-    yn = stack.y0 + stack.Ly
-    x0 = min([P.x0 for P in stack.Py_])
-    xn = max([P.x0 + P.L for P in stack.Py_])
+                            # comp slice return stack_PP, but not stack_stack_PP
+                            stack_PP = comp_slice_(stack, ave)  # stack is stack_PP, with accumulated PP params and PP_
+                            stack.stack_PP = stack_PP
+                            stack.f_stack_PP = 1
+                           
 
-    L_bias = (xn - x0 + 1) / (yn - y0 + 1)  # elongation: width / height, pref. comp over long dimension
-    G_bias = abs(stack.Dy) / abs(stack.Dx)  # ddirection: Gy / Gx, preferential comp over low G
-
-    if stack.G * L_bias * G_bias > flip_ave:  # y_bias = L_bias * G_bias: projected PM net gain:
-
-        flipped_Py_ = flip_yx(stack.Py_)  # rotate stack.Py_ by 90 degree, rescan blob vertically -> comp_slice_
-            return stack, f_istack  # comp_slice if G + M + fflip * (flip_gain - flip_cost) > Ave_comp_slice?        
-
-        # evaluate for arbitrary-angle rotation here? 
-'''
 
 def comp_slice_(stack, Ave):
     
@@ -253,6 +240,10 @@ def accum_nested_stack(stack_stack_PP, istack, stack_PP):
     This looks wrong, accum_nested_stack should be an add-on to accum_stack_PP
     only called if istack.f_stack_PP?
     '''
+    # both function accumulate different params
+    # accum_stack_PP -> accumulate dert_P into stack_PP
+    # accum_nested_stack -> accumulate stack and stack_PP into stack_stack_PP
+    
     if istack.f_stack_PP:  # input stack is stack_PP
         # stack_PP params
         dert_Pi, mPP_, dPP_, dert_P_, fdiv = stack_PP.unpack()
@@ -265,7 +256,7 @@ def accum_nested_stack(stack_stack_PP, istack, stack_PP):
         stack_stack_PP.stack_PP.fdiv = fdiv
 
     # istack params
-    I, Dy, Dx, G, M, Dyy, Dyx, Dxy, Dxx, Ga, Ma, A, Ly, y0, Py_, sign, _, _, _  = istack.unpack()
+    I, Dy, Dx, G, M, Dyy, Dyx, Dxy, Dxx, Ga, Ma, A, Ly, y0, Py_, sign, _, _, _, _, _  = istack.unpack()
     
     # accumulate istack param into stack_stack_PP
     stack_stack_PP.I += I
@@ -332,38 +323,6 @@ def accum_PP(dert_P, PP):  # accumulate mPPs or dPPs
     PP.dert_P_.append(dert_P)
 
 
-def flip_yx(Py_):  # vertical-first run of form_P and deeper functions over blob's ders__
-
-    y0 = 0
-    yn = len(Py_)
-    x0 = min([P.x0 for P in Py_])
-    xn = max([P.x0 + P.L for P in Py_])
-
-    # initialize list containing y and x size, number of sublist = number of params
-    dert__ = [(np.zeros((yn - y0, xn - x0)) - 1) for _ in range(len(Py_[0].dert_[0]))]
-    mask__ = np.zeros((yn - y0, xn - x0)) > 0
-
-    # insert Py_ value into dert__
-    for y, P in enumerate(Py_):
-        for x, idert in enumerate(P.dert_):
-            for i, (param, dert) in enumerate(zip(idert, dert__)):
-                dert[y, x+(P.x0-x0)] = param
-
-    # create mask and set masked area = True
-    mask__[np.where(dert__[0] == -1)] = True
-
-    # rotate 90 degree anti-clockwise (np.rot90 rotate 90 degree in anticlockwise direction)
-    dert__flip = tuple([np.rot90(dert) for dert in dert__])
-    mask__flip = np.rot90(mask__)
-
-    flipped_Py_ = []
-    # form vertical patterns after rotation
-    from slice_blob import form_P_
-    for y, dert_ in enumerate(zip(*dert__flip)):
-        crit_ = dert_[3] > 0  # compute crit from G? dert_[3] is G
-        P_ = list(form_P_(zip(*dert_), crit_, mask__flip[y])) # convert P_ to list , so that structure is same with Py_
-
-    return flipped_Py_
 
 '''
     Pd and Pm are ds | ms per param summed in P. Primary comparison is by subtraction, div if par * rL compression: 
