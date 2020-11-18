@@ -146,47 +146,43 @@ def slice_blob(dert__, mask, crit__, AveB, verbose=False, render=False):
     while stack_:  # frame ends, last-line stacks are merged into their blobs
         form_blob(stack_.popleft(), frame)
 
-    
     # tentative section #
-    
-    # loop each stack in blob 
+
+    # loop each stack in blob
     for blob in frame['blob__']:
         for stack in blob.stack_:
-    
+
             if stack.f_gstack:
-                
+
                 for istack in stack.Py_:
                     y0 = istack.y0
                     yn = istack.y0 + stack.Ly
                     x0 = min([P.x0 for P in istack.Py_])
                     xn = max([P.x0 + P.L for P in istack.Py_])
-                
+
                     L_bias = (xn - x0 + 1) / (yn - y0 + 1)  # elongation: width / height, pref. comp over long dimension
                     G_bias = abs(istack.Dy) / abs(istack.Dx)  # ddirection: Gy / Gx, preferential comp over low G
-                
+
                     if istack.G * L_bias * G_bias > flip_ave:  # y_bias = L_bias * G_bias: projected PM net gain:
-                
+
                         flipped_Py_ = flip_yx(istack.Py_)  # rotate stack.Py_ by 90 degree, rescan blob vertically -> comp_slice_
-    #                return stack, f_istack  # comp_slice if G + M + fflip * (flip_gain - flip_cost) > Ave_comp_slice?        
-    
-            # evaluate for arbitrary-angle rotation here? 
-            # arbitrary angle rotation should replace flip_yx?
-    
+    #                return stack, f_istack  # comp_slice if G + M + fflip * (flip_gain - flip_cost) > Ave_comp_slice?
+
+            # evaluate for arbitrary-angle rotation here,
+            # to replace flip if both vertical and horizontal dimensions are significantly different from the angle of blob axis.
+
             else:
                 y0 = stack.y0
                 yn = stack.y0 + stack.Ly
                 x0 = min([P.x0 for P in stack.Py_])
                 xn = max([P.x0 + P.L for P in stack.Py_])
-            
+
                 L_bias = (xn - x0 + 1) / (yn - y0 + 1)  # elongation: width / height, pref. comp over long dimension
                 G_bias = abs(stack.Dy) / abs(stack.Dx)  # ddirection: Gy / Gx, preferential comp over low G
-            
+
                 if stack.G * L_bias * G_bias > flip_ave:  # y_bias = L_bias * G_bias: projected PM net gain:
-            
                     flipped_Py_ = flip_yx(stack.Py_)  # rotate stack.Py_ by 90 degree, rescan blob vertically -> comp_slice_
-            
-                
-    
+
     # evaluate P blobs
     comp_slice_blob(frame['blob__'], AveB)
 
@@ -205,10 +201,6 @@ def slice_blob(dert__, mask, crit__, AveB, verbose=False, render=False):
         streamer.end_blob_conversion(y, img_out_path=path)
 
     return frame  # frame of blobs
-
-
-
-
 
 ''' 
 Parameterized connectivity clustering functions below:
@@ -608,8 +600,7 @@ def assign_adjacents(blob_binder):  # adjacents are connected opposite-sign blob
 
 def accum_Dert(Dert: dict, **params) -> None:
     Dert.update({param: Dert[param] + value for param, value in params.items()})
-    
-    
+
 
 def flip_yx(Py_):  # vertical-first run of form_P and deeper functions over blob's ders__
 
