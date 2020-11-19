@@ -103,30 +103,66 @@ def comp_slice_blob(blob_, AveB):  # comp_slice eval per blob
     for blob in blob_:
         if blob.Dert['G'] * (1 - blob.Dert['Ga'] / (4.45 * blob.Dert['A'])) - AveB > 0:
 
+            # initialization
+            P_ = []
+            ort = []
+            f_comp_slice = []
+            
             for i, stack in enumerate(blob.stack_):
-                if stack.G * (1 - stack.Ga / (4.45 * stack.A)) - AveB / 10 > 0:  # / 10: ratio AveB to AveS
+                
+                # duplicated checking?
+#                if stack.G * (1 - stack.Ga / (4.45 * stack.A)) - AveB / 10 > 0:  # / 10: ratio AveB to AveS
                     # also check for long / thin edges: len(py_) / A?
+                    
                     if stack.f_gstack:  # stack is a nested gP_stack
-                        gstack_PP = CStack(stack_PP = CStack_PP())
 
                         for j, istack in enumerate(stack.Py_):  # istack is original stack
+                            
+                            P_.extend(istack.Py_)
+                            
+                            # scan of vertical Py_ -> comp_slice -> form_PP -> 2D dPP_, mPP_: clusters of same-sign Pd | Pm deviation
+                            if istack.G * (istack.Dy / istack.Dx) * istack.Ly > ave:  # if y_bias after any rescan, also L_bias?
+                                ort.extend([1]*len(istack.Py_))  # virtual rotation: estimate P params as orthogonal to long axis, to increase Pm
+                            else:
+                                ort.extend([0]*len(istack.Py_))
+                            
                             if istack.G * (1 - istack.Ga / (4.45 * istack.A)) - AveB / 10 > 0 and len(istack.Py_) > 2:
-
-                                stack_PP = comp_slice_(istack, ave)  # root function of comp_slice: edge tracing and vectorization
-                                accum_gstack(gstack_PP, istack, stack_PP)
-                                gstack_PP.f_stack_PP = 1  # stack_PP = accumulated PP params and PP_
-
-                        blob.stack_[i] = gstack_PP
-                        # return as stack_PP from form_PP
+                                f_comp_slice.extend([1]*len(istack.Py_))
+                            else:
+                                f_comp_slice.extend([0]*len(istack.Py_))
+                                
                     else:
+                        
+                        P_.extend(stack.Py_)
+                        
+                        # scan of vertical Py_ -> comp_slice -> form_PP -> 2D dPP_, mPP_: clusters of same-sign Pd | Pm deviation
+                        if stack.G * (stack.Dy / stack.Dx) * stack.Ly > ave:  # if y_bias after any rescan, also L_bias?
+                            ort.extend([1]*len(stack.Py_))  # virtual rotation: estimate P params as orthogonal to long axis, to increase Pm
+                        else:
+                            ort.extend([0]*len(stack.Py_))
+                           
                         # stack is original stack
                         if stack.G * (1 - stack.Ga / (4.45 * stack.A)) - AveB / 10 > 0 and len(stack.Py_) > 2:
+                            f_comp_slice.extend([1]*len(stack.Py_))
+                        else:
+                            f_comp_slice.extend([0]*len(stack.Py_))
+                   
+                    
+            # maybe splice the adjacent Ps first before perform comp_slice_?
+            # comp_slice_           
+            DdX = 0
+            dert_P_ = []
+            _P = P_[0]
+            for i, P in enumerate(P_[1:]):
+                if f_comp_slice[i]:
+                    dert_P = comp_slice(ort[i], P, _P, DdX)
+                    dert_P_.append( dert_P)
+                _P = P
 
-                            stack_PP = comp_slice_(stack, ave)  # stack is stack_PP, with accumulated PP params and PP_
-                            stack_PP.f_stack_PP = 1  # stack_PP = accumulated PP params and PP_
-                            blob.stack_[i] = stack_PP  # return as stack_PP from form_PP
+            if len(dert_P_)>1:
+                stack_PP = form_PP_(dert_P_) # stack_PP is formed from all the Ps in blob (per blob), or it should be per stack?
 
-
+'''
 def comp_slice_(stack, Ave):
 
     # scan of vertical Py_ -> comp_slice -> form_PP -> 2D dPP_, mPP_: clusters of same-sign Pd | Pm deviation
@@ -145,7 +181,7 @@ def comp_slice_(stack, Ave):
         _P = P
 
     return form_PP_(dert_P_)  # stack_PP
-
+'''
 
 def comp_slice(ortho, P, _P, DdX):  # forms vertical derivatives of P params, and conditional ders from norm and DIV comp
 
