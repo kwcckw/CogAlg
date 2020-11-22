@@ -50,6 +50,7 @@ from class_cluster import ClusterStructure, NoneType
 from class_stream import BlobStreamer
 from frame_blobs import CDeepBlob
 from comp_slice_draft import comp_slice_blob
+from frame_blobs import CDeepBlob
 
 ave = 30  # filter or hyper-parameter, set as a guess, latter adjusted by feedback
 aveG = 50  # filter for comp_g, assumed constant direction
@@ -115,7 +116,7 @@ class CBlob(ClusterStructure):
 # postfix '_' denotes array name, vs. same-name elements of that array. '__' is a 2D array
 
 
-def slice_blob(dert__, mask, crit__, AveB, verbose=False, render=False):
+def slice_blob(blob, dert__, mask, crit__, AveB, verbose=False, render=False):
     frame = dict(rng=1, dert__=dert__, mask=None, I=0, Dy=0, Dx=0, G=0, M=0, Dyy=0, Dyx=0, Dxy=0, Dxx=0, Ga=0, Ma=0, blob__=[])
     stack_ = deque()  # buffer of running vertical stacks of Ps
     height, width = dert__[0].shape
@@ -145,6 +146,13 @@ def slice_blob(dert__, mask, crit__, AveB, verbose=False, render=False):
 
     while stack_:  # frame ends, last-line stacks are merged into their blobs
         form_blob(stack_.popleft(), frame)
+
+    # update blob to deep blob and add prior fork information
+    for i, iblob in enumerate(frame['blob__']):
+        frame['blob__'][i] = CDeepBlob(I=iblob.Dert['I'], Dy=iblob.Dert['Dy'], Dx=iblob.Dert['Dx'], G=iblob.Dert['G'], M=iblob.Dert['M'], A=iblob.Dert['A'],
+                                       Ga = iblob.Dert['Ga'],Ma = iblob.Dert['Ma'],Dyy = iblob.Dert['Dyy'],Dyx = iblob.Dert['Dyx'],Dxy = iblob.Dert['Dxy'],Dxx = iblob.Dert['Dxx'],
+                                       box=iblob.box, sign=iblob.sign,mask=iblob.mask, root_dert__=dert__, fopen=iblob.fopen, prior_fork=blob.prior_fork.copy(), stack_ = iblob.stack_)
+
 
     # tentative section #
 
@@ -183,9 +191,8 @@ def slice_blob(dert__, mask, crit__, AveB, verbose=False, render=False):
                 if stack.G * L_bias * G_bias > flip_ave:  # y_bias = L_bias * G_bias: projected PM net gain:
                     flipped_Py_ = flip_yx(stack.Py_)  # rotate stack.Py_ by 90 degree, rescan blob vertically -> comp_slice_
 
-    
     # draw low ga' blob's stacks
-    draw_stacks(frame)
+#    draw_stacks(frame)
 
     # evaluate P blobs
     comp_slice_blob(frame['blob__'], AveB)

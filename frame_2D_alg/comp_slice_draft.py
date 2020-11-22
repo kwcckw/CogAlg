@@ -101,7 +101,7 @@ def comp_slice_blob(blob_, AveB):  # comp_slice eval per blob
     # still tentative, not sure we need evaluation per stack:
 
     for blob in blob_:
-        if blob.Dert['G'] * (1 - blob.Dert['Ga'] / (4.45 * blob.Dert['A'])) - AveB > 0:
+        if blob.G * (1 - blob.Ga / (4.45 * blob.A)) - AveB > 0:
 
             # initialization
             P_ = []
@@ -110,7 +110,6 @@ def comp_slice_blob(blob_, AveB):  # comp_slice eval per blob
             
             for i, stack in enumerate(blob.stack_):
                 
-                # duplicated checking?
 #                if stack.G * (1 - stack.Ga / (4.45 * stack.A)) - AveB / 10 > 0:  # / 10: ratio AveB to AveS
                     # also check for long / thin edges: len(py_) / A?
                     
@@ -148,7 +147,6 @@ def comp_slice_blob(blob_, AveB):  # comp_slice eval per blob
                             f_comp_slice.extend([0]*len(stack.Py_))
                    
                     
-            # maybe splice the adjacent Ps first before perform comp_slice_?
             # comp_slice_           
             DdX = 0
             dert_P_ = []
