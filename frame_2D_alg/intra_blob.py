@@ -50,19 +50,11 @@ def intra_blob(blob, **kwargs):  # recursive input rng+ | angle cross-comp withi
 
     if blob.fia:
         # input from comp_a -> P_blobs
-        
-        # flatten day and dax
-        root_dert__ = list(blob.root_dert__)
-        root_dert__ = [root_dert__[0], root_dert__[1], root_dert__[2], root_dert__[3], root_dert__[4],
-                       root_dert__[5][0], root_dert__[5][1], root_dert__[6][0], root_dert__[6][1],
-                       root_dert__[7], root_dert__[8]]
-        
-        # get dert and mask
-        dert__=  [root_dert[blob.box[0]:blob.box[1],blob.box[2]:blob.box[3]] for root_dert in root_dert__]
+
+        # get dert and mask from root_dert
+        dert__=  tuple([root_dert[blob.box[0]:blob.box[1],blob.box[2]:blob.box[3]] for root_dert in blob.root_dert__])
         mask = blob.mask
         
-        # not need this line? Since comp_a already computed in prior fork
-#        dert__, mask = comp_a(ext_dert__, Ave, ext_mask)  # -> ga sub_blobs -> P_blobs (comp_g, comp_P)
         if mask.shape[0] > 2 and mask.shape[1] > 2 and False in mask:  # min size in y and x, at least one dert in dert__
 
             # P_blobs eval, tentative:
@@ -94,12 +86,19 @@ def intra_blob(blob, **kwargs):  # recursive input rng+ | angle cross-comp withi
         elif blob.G > AveB:
             if kwargs.get('verbose'):
                 print(' '); print('a fork')
-
+            
             blob.prior_forks.extend('a')
-            dert__, mask = comp_a(ext_dert__, Ave, ext_mask)  # -> m sub_blobs
-            crit__ = dert__[3]  # deviation of g
+            
+            adert__, mask = comp_a(ext_dert__, Ave, ext_mask)  # -> m sub_blobs
+            crit__ = adert__[3]  # deviation of g
 
             if mask.shape[0] > 2 and mask.shape[1] > 2 and False in mask:  # min size in y and x, least one dert in dert__
+
+                # flatten adert
+                dert__ = tuple([adert__[0], adert__[1], adert__[2], adert__[3], adert__[4],
+                                adert__[5][0], adert__[5][1], adert__[6][0], adert__[6][1],
+                                adert__[7], adert__[8]])
+                blob.fia = 1   
                 sub_eval(blob, dert__, crit__, mask, **kwargs)
                 spliced_layers = [spliced_layers + sub_layers for spliced_layers, sub_layers in
                                   zip_longest(spliced_layers, blob.sub_layers, fillvalue=[])]
@@ -202,9 +201,9 @@ def accum_blob_Dert(blob, dert__, y, x):
 
     if len(dert__) > 5:  # past comp_a fork
 
-        blob.Dyy += dert__[5][0][y, x]
-        blob.Dyx += dert__[5][1][y, x]
-        blob.Dxy += dert__[6][0][y, x]
-        blob.Dxx += dert__[6][1][y, x]
-        blob.Ga += dert__[7][y, x]
-        blob.Ma += dert__[8][y, x]
+        blob.Dyy += dert__[5][y, x]
+        blob.Dyx += dert__[6][y, x]
+        blob.Dxy += dert__[7][y, x]
+        blob.Dxx += dert__[8][y, x]
+        blob.Ga += dert__[9][y, x]
+        blob.Ma += dert__[10][y, x]

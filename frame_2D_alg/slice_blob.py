@@ -151,7 +151,7 @@ def slice_blob(blob, dert__, mask, crit__, AveB, verbose=False, render=False):
     for i, iblob in enumerate(frame['blob__']):
         frame['blob__'][i] = CDeepBlob(I=iblob.Dert['I'], Dy=iblob.Dert['Dy'], Dx=iblob.Dert['Dx'], G=iblob.Dert['G'], M=iblob.Dert['M'], A=iblob.Dert['A'],
                                        Ga = iblob.Dert['Ga'],Ma = iblob.Dert['Ma'],Dyy = iblob.Dert['Dyy'],Dyx = iblob.Dert['Dyx'],Dxy = iblob.Dert['Dxy'],Dxx = iblob.Dert['Dxx'],
-                                       box=iblob.box, sign=iblob.sign,mask=iblob.mask, root_dert__=dert__, fopen=iblob.fopen, prior_fork=blob.prior_fork.copy(), stack_ = iblob.stack_)
+                                       box=iblob.box, sign=iblob.sign,mask=iblob.mask, root_dert__=dert__, fopen=iblob.fopen, prior_forks=blob.prior_forks.copy(), stack_ = iblob.stack_)
 
 
     # tentative, flip_yx should operate on whole blob first
