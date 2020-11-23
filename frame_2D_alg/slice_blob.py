@@ -154,9 +154,8 @@ def slice_blob(blob, dert__, mask, crit__, AveB, verbose=False, render=False):
                                        box=iblob.box, sign=iblob.sign,mask=iblob.mask, root_dert__=dert__, fopen=iblob.fopen, prior_fork=blob.prior_fork.copy(), stack_ = iblob.stack_)
 
 
-    # tentative section #
+    # tentative, flip_yx should operate on whole blob first
 
-    # loop each stack in blob
     for blob in frame['blob__']:
         for stack in blob.stack_:
             if stack.f_gstack:
@@ -179,7 +178,6 @@ def slice_blob(blob, dert__, mask, crit__, AveB, verbose=False, render=False):
             # to replace flip if both vertical and horizontal dimensions are significantly different from the angle of blob axis.
 
             else:
-                
                 y0 = stack.y0
                 yn = stack.y0 + stack.Ly
                 x0 = min([P.x0 for P in stack.Py_])
@@ -191,8 +189,7 @@ def slice_blob(blob, dert__, mask, crit__, AveB, verbose=False, render=False):
                 if stack.G * L_bias * G_bias > flip_ave:  # y_bias = L_bias * G_bias: projected PM net gain:
                     flipped_Py_ = flip_yx(stack.Py_)  # rotate stack.Py_ by 90 degree, rescan blob vertically -> comp_slice_
 
-    # draw low ga' blob's stacks
-#    draw_stacks(frame)
+    # draw low-ga blob' stacks, draw_stacks(frame)
 
     # evaluate P blobs
     comp_slice_blob(frame['blob__'], AveB)
@@ -223,9 +220,6 @@ Parameterized connectivity clustering functions below:
 dert: tuple of derivatives per pixel, initially (p, dy, dx, g), will be extended in intra_blob
 Dert: params of cluster structures (P, stack, blob): summed dert params + dimensions: vertical Ly and area S
 '''
-
-
-
 
 def form_P_(idert_, crit_, mask_):  # segment dert__ into P__, in horizontal ) vertical order
 
@@ -654,21 +648,20 @@ def draw_stacks(frame):
     '''
     draw stacks per blob
     '''
-    
-    
+
     import cv2
-    
+
     for blob_num, blob in enumerate(frame['blob__']):
-        
+
         # initialization
         y0_ = []
         yn_ = []
         x0_ = []
         xn_ = []
-        
+
         # loop eachstack
         if len(blob.stack_)>1:
-            
+
             # retrieve region size of all stacks
             for stack in blob.stack_:
                 y0_.append(stack.y0)
@@ -679,7 +672,7 @@ def draw_stacks(frame):
             yn = max(yn_)
             x0 = min(x0_)
             xn = max(xn_)
-                
+
             # initialize image and insert value into each stack.
             # image value is start with 1 hence order of stack can be viewed from image value
             img = np.zeros((yn - y0, xn - x0))
@@ -689,7 +682,7 @@ def draw_stacks(frame):
                     for x, dert in enumerate(P.dert_):
                         img[y+(stack.y0-y0), x+(P.x0-x0)] = img_value
                 img_value +=1 # increase image value at the end of current stack
-                
+
             # list of colour for visualization purpose
             colour_list = [ ]
             colour_list.append([255,255,255]) # white
@@ -702,21 +695,19 @@ def draw_stacks(frame):
             colour_list.append([48,130,245]) # orange
             colour_list.append([180,30,145]) # purple
             colour_list.append([40,110,175]) # brown
-            
+
             # initialization
             img_colour = np.zeros((yn - y0, xn - x0,3)).astype('uint8')
             img_index  = np.zeros((yn - y0, xn - x0,3)).astype('uint8')
 
             total_stacks = len(blob.stack_)
             for i in range(1,total_stacks+1):
-                
+
                 colour_index = i%10
                 img_colour[np.where(img==i)] = colour_list[colour_index]
                 i_float = float(i)
                 img_index[np.where(img==i)] = (((i_float/total_stacks))*205) + 40
-            
-            
+
+
             cv2.imwrite('./images/stacks/stacks_blob_'+str(blob_num)+'_colour.bmp',img_colour)
             cv2.imwrite('./images/stacks/stacks_blob_'+str(blob_num)+'_index.bmp',img_index)
-            
-

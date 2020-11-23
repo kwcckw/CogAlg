@@ -82,7 +82,7 @@ def intra_blob(blob, **kwargs):  # recursive input rng+ | angle cross-comp withi
                 print(' ')
                 print('r fork')
                 
-            blob.prior_fork.extend('r')
+            blob.prior_forks.extend('r')
             dert__, mask = comp_r(ext_dert__, Ave, blob.fia, ext_mask)
             crit__ = dert__[4]  # m__ is inverse deviation of SAD
 
@@ -95,7 +95,7 @@ def intra_blob(blob, **kwargs):  # recursive input rng+ | angle cross-comp withi
             if kwargs.get('verbose'):
                 print(' '); print('a fork')
 
-            blob.prior_fork.extend('a')
+            blob.prior_forks.extend('a')
             dert__, mask = comp_a(ext_dert__, Ave, ext_mask)  # -> m sub_blobs
             crit__ = dert__[3]  # deviation of g
 
@@ -115,7 +115,7 @@ def sub_eval(blob, dert__, crit__, mask, **kwargs):
             print(' '); print('dert_P fork')
         
 
-        blob.prior_fork.extend('p')
+        blob.prior_forks.extend('p')
         sub_frame = slice_blob(blob, dert__, mask, crit__, AveB, verbose=kwargs.get('verbose'))
         
         sub_blobs = sub_frame['blob__']
@@ -138,7 +138,7 @@ def sub_eval(blob, dert__, crit__, mask, **kwargs):
         for i, sub_blob in enumerate(sub_blobs):
             # generate instance of deep blob from flood fill's blobs
             sub_blobs[i] = CDeepBlob(I=sub_blob.I, Dy=sub_blob.Dy, Dx=sub_blob.Dx, G=sub_blob.G, M=sub_blob.M, A=sub_blob.A, box=sub_blob.box, sign=sub_blob.sign,
-                                     mask=sub_blob.mask, root_dert__=dert__, adj_blobs=sub_blob.adj_blobs, fopen=sub_blob.fopen, prior_fork = blob.prior_fork.copy())
+                                     mask=sub_blob.mask, root_dert__=dert__, adj_blobs=sub_blob.adj_blobs, fopen=sub_blob.fopen, prior_forks = blob.prior_forks.copy())
 
         blob.Ls = len(sub_blobs)  # for visibility and next-fork rdn
         blob.sub_layers = [sub_blobs]  # 1st layer of sub_blobs
@@ -161,7 +161,6 @@ def sub_eval(blob, dert__, crit__, mask, **kwargs):
                 sub_blob.fia = 0
                 sub_blob.rng = blob.rng * 2
                 blob.sub_layers += intra_blob(sub_blob, **kwargs)
-                
 
 
 def extend_dert(blob):  # extend dert borders (+1 dert to boundaries)
