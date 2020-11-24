@@ -135,7 +135,6 @@ def derts2blobs(dert__, verbose=False, render=False, use_c=False):
 
     if verbose:
         print(f"{len(frame.blob_)} blobs formed in {time() - start_time} seconds")
-
     if render:
         visualize_blobs(idmap, frame.blob_)
 
@@ -274,11 +273,8 @@ def assign_adjacents(adj_pairs, blob_cls=CBlob):  # adjacents are connected oppo
             blob2.adj_blobs[4] += blob1.Ma
 
 
-
 def print_deep_blob_forking(deep_layer):
-    '''
-    print forking of deep blob
-    '''
+
     def check_deep_blob(deep_layer,i):
         for deep_blob_layer in deep_layer:
             if isinstance(deep_blob_layer,list):
