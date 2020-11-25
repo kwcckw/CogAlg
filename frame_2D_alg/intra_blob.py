@@ -32,6 +32,7 @@ from slice_blob import slice_blob
 # filters, All *= rdn:
 ave = 50  # fixed cost per dert, from average m, reflects blob definition cost, may be different for comp_a?
 aveB = 50  # fixed cost per intra_blob comp and clustering
+flip_ave = 1000
 
 # --------------------------------------------------------------------------------------------------------------
 # functions:
@@ -110,6 +111,16 @@ def sub_eval(blob, dert__, crit__, mask, **kwargs):
         if kwargs.get('verbose'):
             print(' '); print('dert_P fork')
 
+        # blob.box = [y0,yn,x0,xn]
+        L_bias = (blob.box[3] - blob.box[2] + 1) / (blob.box[1] - blob.box[0] + 1)
+        G_bias = abs(blob.Dy) / abs(blob.Dx)  # ddirection: Gy / Gx, preferential comp over low G
+
+        # check and flip derts
+        if blob.G * L_bias * G_bias > flip_ave:
+            dert__ = tuple([np.rot90(dert) for dert in dert__])
+            crit__ = np.rot90(crit__)
+            mask = np.rot90(mask)
+            
         blob.prior_forks.extend('p')
         sub_frame = slice_blob(blob, dert__, mask, crit__, AveB, verbose=kwargs.get('verbose'))
 

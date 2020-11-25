@@ -156,8 +156,54 @@ def slice_blob(blob, dert__, mask, crit__, AveB, verbose=False, render=False):
                                        box=iblob.box, sign=iblob.sign,mask=iblob.mask, root_dert__=dert__, fopen=iblob.fopen, prior_forks=blob.prior_forks.copy(),
                                        stack_ = iblob.stack_)
 
-    # tentative, flip_yx should operate on whole blob first
 
+    # compute sstack
+    sstack__ = []
+    for blob in frame['blob__']:
+        
+        # initialization
+        sstack_ = []
+        
+        # 1st stack
+        _stack = blob.stack_[0]
+        
+        _f_up = _stack.up_connect_cnt>0
+        _f_ex = _stack.down_connect_cnt == 0
+        
+        # initialize 1st sstack with _stack
+        sstack = [_stack]
+        
+        for stack in blob.stack_[1:]:
+
+            f_up = stack.up_connect_cnt>0
+            f_ex = stack.down_connect_cnt == 0
+                
+            
+            if f_up != _f_up and f_ex != _f_ex:
+            # terminate sstack and append it into sstack_
+                
+                sstack_.append(sstack)
+                sstack = [stack] # reinitialize sstack
+                
+            else: # append the horizontal stacks
+                sstack.append(stack) # merge andadd up their params or just append all stacks into a list? 
+                
+            _f_up = f_up
+            _f_ex = f_ex
+            
+        sstack__.append(sstack_)
+        
+        
+    # flip partial sstack
+#    for sstack_ in sstack__:
+#        for sstack in sstack_:
+#            flip_yx(sstack)
+#            form_gPPy_(sstack) # form gPPy after flipping?
+        
+    
+
+    '''
+    # tentative, flip_yx should operate on whole blob first
     for blob in frame['blob__']:
         for stack in blob.stack_:
             if stack.f_gstack:
@@ -190,8 +236,10 @@ def slice_blob(blob, dert__, mask, crit__, AveB, verbose=False, render=False):
 
                 if stack.G * L_bias * G_bias > flip_ave:  # y_bias = L_bias * G_bias: projected PM net gain:
                     flipped_Py_ = flip_yx(stack.Py_)  # rotate stack.Py_ by 90 degree, rescan blob vertically -> comp_slice_
+    '''
 
-    # draw low-ga blob' stacks, draw_stacks(frame)
+    # draw low-ga blob' stacks
+    # draw_stacks(frame)
 
     # evaluate P blobs
     comp_slice_blob(frame['blob__'], AveB)
@@ -383,9 +431,11 @@ def form_stack_(P_, frame, y):  # Convert or merge every P into its stack of Ps,
 
                 if len(up_connect_) > 1:  # merge blobs of all up_connects
                     if up_connect_[0].down_connect_cnt == 1:  # up_connect is not terminated
+                        blob.stack_[-1].up_connect_cnt +=1 # add up connect connect count
                         form_blob(up_connect_[0], frame)  # merge stack of 1st up_connect into its blob
 
                     for up_connect in up_connect_[1:len(up_connect_)]:  # merge blobs of other up_connects into blob of 1st up_connect
+                        blob.stack_[-1].up_connect_cnt +=1
                         if up_connect.down_connect_cnt == 1:
                             form_blob(up_connect, frame)
 
@@ -418,7 +468,7 @@ def form_stack_(P_, frame, y):  # Convert or merge every P into its stack of Ps,
 
 def form_blob(stack, frame):  # increment blob with terminated stack, check for blob termination and merger into frame
 
-    I, Dy, Dx, G, M, Dyy, Dyx, Dxy, Dxx, Ga, Ma, A, Ly, y0, Py_, sign, f_gstack, f_stack_PP, down_connect_cnt, blob, stack_PP = stack.unpack()
+    I, Dy, Dx, G, M, Dyy, Dyx, Dxy, Dxx, Ga, Ma, A, Ly, y0, Py_, sign, f_gstack, f_stack_PP, up_connect_cnt, down_connect_cnt, blob, stack_PP = stack.unpack()
     # terminated stack is merged into continued or initialized blob (all connected stacks):
     accum_Dert(blob.Dert, I=I, Dy=Dy, Dx=Dx, G=G, M=M, Dyy=Dyy, Dyx=Dyx, Dxy=Dxy, Dxx=Dxx, Ga=Ga, Ma=Ma, A=A, Ly=Ly)
 
@@ -710,6 +760,10 @@ def draw_stacks(frame):
                 i_float = float(i)
                 img_index[np.where(img==i)] = (((i_float/total_stacks))*205) + 40
 
-
+            # for debug purpose
+            #from matplotlib import pyplot as plt
+            #plt.imshow(img_colour)
+            #plt.pause(1)
+            
             cv2.imwrite('./images/stacks/stacks_blob_'+str(blob_num)+'_colour.bmp',img_colour)
             cv2.imwrite('./images/stacks/stacks_blob_'+str(blob_num)+'_index.bmp',img_index)
