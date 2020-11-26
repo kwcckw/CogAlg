@@ -170,9 +170,17 @@ def slice_blob(blob, dert__, mask, crit__, AveB, verbose=False, render=False):
         _f_up = _stack.up_connect_cnt>0
         _f_ex = _stack.down_connect_cnt == 0
         
-        # initialize 1st sstack with _stack
-        sstack = [_stack]
-        
+        # initialize 1st sstack and accumulate with _stack, move to new accumulation function?
+        sstack = CStack()
+        sstack.accumulate(I=_stack.I, Dy=_stack.Dy, Dx=_stack.Dx, G=_stack.G, M=_stack.M, Dyy=_stack.Dyy, Dyx=_stack.Dyx, Dxy=_stack.Dxy, Dxx=_stack.Dxx, Ga=_stack.Ga, Ma=_stack.Ma, A=_stack.A, Ly = _stack.Ly)
+        sstack.y0 = _stack.y0
+        sstack.Py_.extend(_stack.Py_)
+        sstack.sign = _stack.sign
+        sstack.f_stack_PP = sstack.f_stack_PP or _stack.f_stack_PP
+        sstack.blob = _stack.blob 
+        if _stack.f_stack_PP: # stack_PP may not relevant now if we only form gPPy after this section
+            sstack.stack_PP.append(_stack.stack_PP)
+
         for stack in blob.stack_[1:]:
 
             f_up = stack.up_connect_cnt>0
@@ -180,14 +188,32 @@ def slice_blob(blob, dert__, mask, crit__, AveB, verbose=False, render=False):
                 
             
             if f_up != _f_up and f_ex != _f_ex:
-            # terminate sstack and append it into sstack_
-                
+                # terminate sstack and append it into sstack_
                 sstack_.append(sstack)
-                sstack = [stack] # reinitialize sstack
+                # reinitialize 1st sstack
+                sstack = CStack()
+                sstack.accumulate(I=stack.I, Dy=stack.Dy, Dx=stack.Dx, G=stack.G, M=stack.M, Dyy=stack.Dyy, Dyx=stack.Dyx, Dxy=stack.Dxy, Dxx=stack.Dxx, Ga=stack.Ga, Ma=stack.Ma, A=stack.A, Ly = stack.Ly)
+                sstack.y0 = _stack.y0
+                sstack.Py_.extend(_stack.Py_)
+                sstack.sign = _stack.sign
+                sstack.f_stack_PP = sstack.f_stack_PP or _stack.f_stack_PP
+                sstack.blob = _stack.blob
+                if stack.f_stack_PP:
+                    sstack.stack_PP.append(stack.stack_PP)
                 
-            else: # append the horizontal stacks
-                sstack.append(stack) # merge andadd up their params or just append all stacks into a list? 
+
                 
+            else: # append the horizontal stacks and merge it into sstack
+                
+                sstack.accumulate(I=stack.I, Dy=stack.Dy, Dx=stack.Dx, G=stack.G, M=stack.M, Dyy=stack.Dyy, Dyx=stack.Dyx, Dxy=stack.Dxy, Dxx=stack.Dxx, Ga=stack.Ga, Ma=stack.Ma, A=stack.A)
+                sstack.Ly = max(sstack.y0+sstack.Ly,stack.y0+stack.Ly)-min(sstack.y0,stack.y0) # 1 line may contain multiple Ps, hence Ly need to be computed from max of y and min of y
+                sstack.y0 = min(sstack.y0,stack.y0) # y0 is min of stacks' y0
+                sstack.Py_.extend(stack.Py_)
+                sstack.f_stack_PP = sstack.f_stack_PP or stack.f_stack_PP
+                if stack.f_stack_PP:
+                    sstack.stack_PP.append(stack.stack_PP)
+
+
             _f_up = f_up
             _f_ex = f_ex
             
@@ -425,13 +451,12 @@ def form_stack_(P_, frame, y):  # Convert or merge every P into its stack of Ps,
                 blob = up_connect_[0].blob
                 # initialize new_stack with up_connect blob:
                 new_stack = CStack(I=I, Dy=Dy, Dx=Dx, G=G, M=M, Dyy=Dyy, Dyx=Dyx, Dxy=Dxy, Dxx=Dxx, Ga=Ga, Ma=Ma, A=L, Ly=1,
-                                   y0=y, Py_=[P], blob=blob, down_connect_cnt=0, sign=s, fPP=0)
+                                   y0=y, Py_=[P], blob=blob, down_connect_cnt=0, up_connect_cnt=1, sign=s, fPP=0)
                 new_stack.hid = blob.id
                 blob.stack_.append(new_stack)  # stack is buffered into blob
 
                 if len(up_connect_) > 1:  # merge blobs of all up_connects
                     if up_connect_[0].down_connect_cnt == 1:  # up_connect is not terminated
-                        blob.stack_[-1].up_connect_cnt +=1 # add up connect connect count
                         form_blob(up_connect_[0], frame)  # merge stack of 1st up_connect into its blob
 
                     for up_connect in up_connect_[1:len(up_connect_)]:  # merge blobs of other up_connects into blob of 1st up_connect
@@ -516,7 +541,6 @@ def form_blob(stack, frame):  # increment blob with terminated stack, check for 
                      Ma=frame['Ma'] + blob.Dert['Ma'])
 
         frame['blob__'].append(blob)
-
 
 def form_gPPy_(stack):
     ave_PP = 100  # min summed value of gdert params
@@ -760,10 +784,10 @@ def draw_stacks(frame):
                 i_float = float(i)
                 img_index[np.where(img==i)] = (((i_float/total_stacks))*205) + 40
 
-            # for debug purpose
-            #from matplotlib import pyplot as plt
-            #plt.imshow(img_colour)
-            #plt.pause(1)
+#             for debug purpose
+#            from matplotlib import pyplot as plt
+#            plt.imshow(img_colour)
+#            plt.pause(1)
             
             cv2.imwrite('./images/stacks/stacks_blob_'+str(blob_num)+'_colour.bmp',img_colour)
             cv2.imwrite('./images/stacks/stacks_blob_'+str(blob_num)+'_index.bmp',img_index)

@@ -101,7 +101,7 @@ def comp_slice_blob(blob_, AveB):  # comp_slice eval per blob
     # still tentative, not sure we need evaluation per stack:
 
     for blob in blob_:
-        if blob.Dert['G'] * (1 - blob.Dert['Ga'] / (4.45 * blob.Dert['A'])) - AveB > 0:
+        if blob.G * (1 - blob.Ga / (4.45 * blob.A)) - AveB > 0:
 
             for i, stack in enumerate(blob.stack_):
                 if stack.G * (1 - stack.Ga / (4.45 * stack.A)) - AveB / 10 > 0:  # / 10: ratio AveB to AveS
@@ -123,7 +123,7 @@ def comp_slice_blob(blob_, AveB):  # comp_slice eval per blob
                         if stack.G * (1 - stack.Ga / (4.45 * stack.A)) - AveB / 10 > 0 and len(stack.Py_) > 2:
 
                             stack_PP = comp_slice_(stack, ave)  # stack is stack_PP, with accumulated PP params and PP_
-                            stack_PP.f_stack_PP = 1  # stack_PP = accumulated PP params and PP_
+                            stack.f_stack_PP = 1  # stack_PP = accumulated PP params and PP_
                             stack.stack_PP = stack_PP  # blob.stack_[i] = stack_PP
 
 def comp_slice_(stack, Ave):
