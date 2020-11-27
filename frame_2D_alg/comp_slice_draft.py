@@ -123,7 +123,7 @@ def comp_slice_blob(blob_, AveB):  # comp_slice eval per blob
                         if stack.G * (1 - stack.Ga / (4.45 * stack.A)) - AveB / 10 > 0 and len(stack.Py_) > 2:
 
                             stack_PP = comp_slice_(stack, ave)  # stack is stack_PP, with accumulated PP params and PP_
-                            stack_PP.f_stack_PP = 1  # stack_PP = accumulated PP params and PP_
+                            stack.f_stack_PP = 1  # stack_PP = accumulated PP params and PP_
                             stack.stack_PP = stack_PP  # blob.stack_[i] = stack_PP
 
 def comp_slice_(stack, Ave):
