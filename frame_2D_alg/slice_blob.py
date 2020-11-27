@@ -153,121 +153,64 @@ def slice_blob(blob, dert__, mask, crit__, AveB, verbose=False, render=False):
         frame['blob__'][i] = CDeepBlob(I=iblob.Dert['I'], Dy=iblob.Dert['Dy'], Dx=iblob.Dert['Dx'], G=iblob.Dert['G'], M=iblob.Dert['M'], A=iblob.Dert['A'],
                                        Ga = iblob.Dert['Ga'],Ma = iblob.Dert['Ma'],Dyy = iblob.Dert['Dyy'],Dyx = iblob.Dert['Dyx'],Dxy = iblob.Dert['Dxy'],
                                        Dxx = iblob.Dert['Dxx'],
-                                       box=iblob.box, sign=iblob.sign,mask=iblob.mask, root_dert__=dert__, fopen=iblob.fopen, prior_forks=blob.prior_forks.copy(),
-                                       stack_ = iblob.stack_)
-
-
-    # compute sstack
+                                       box=iblob.box, sign=iblob.sign,mask=iblob.mask, root_dert__=dert__, fopen=iblob.fopen,
+                                       prior_forks=blob.prior_forks.copy(), stack_ = iblob.stack_)
+    # pack the below into form_sstack_()
     sstack__ = []
     for blob in frame['blob__']:
-        
-        # initialization
         sstack_ = []
-        
-        # 1st stack
         _stack = blob.stack_[0]
-        
         _f_up = _stack.up_connect_cnt>0
-        _f_ex = _stack.down_connect_cnt == 0
-        
+        _f_ex = _f_up ^ _stack.down_connect_cnt > 0
         # initialize 1st sstack and accumulate with _stack, move to new accumulation function?
         sstack = CStack()
-        sstack.accumulate(I=_stack.I, Dy=_stack.Dy, Dx=_stack.Dx, G=_stack.G, M=_stack.M, Dyy=_stack.Dyy, Dyx=_stack.Dyx, Dxy=_stack.Dxy, Dxx=_stack.Dxx, Ga=_stack.Ga, Ma=_stack.Ma, A=_stack.A, Ly = _stack.Ly)
+        sstack.accumulate(I=_stack.I, Dy=_stack.Dy, Dx=_stack.Dx, G=_stack.G, M=_stack.M, Dyy=_stack.Dyy, Dyx=_stack.Dyx, Dxy=_stack.Dxy, Dxx=_stack.Dxx,
+                          Ga=_stack.Ga, Ma=_stack.Ma, A=_stack.A, Ly = _stack.Ly)
         sstack.y0 = _stack.y0
         sstack.Py_.extend(_stack.Py_)
         sstack.sign = _stack.sign
         sstack.f_stack_PP = sstack.f_stack_PP or _stack.f_stack_PP
-        sstack.blob = _stack.blob 
-        if _stack.f_stack_PP: # stack_PP may not relevant now if we only form gPPy after this section
+        sstack.blob = _stack.blob
+        if _stack.f_stack_PP:  # stack_PP may not relevant now if we only form gPPy after this section
             sstack.stack_PP.append(_stack.stack_PP)
 
         for stack in blob.stack_[1:]:
-
             f_up = stack.up_connect_cnt>0
-            f_ex = stack.down_connect_cnt == 0
-                
-            
-            if f_up != _f_up and f_ex != _f_ex:
-                # terminate sstack and append it into sstack_
+            f_ex = _f_up ^ _stack.down_connect_cnt > 0
+
+            if (f_up != _f_up) and (f_ex and _f_ex):
+                # terminate sstack and append it to sstack_
                 sstack_.append(sstack)
-                # reinitialize 1st sstack
+                # reinitialize new sstack, all values = 0 or []
                 sstack = CStack()
-                sstack.accumulate(I=stack.I, Dy=stack.Dy, Dx=stack.Dx, G=stack.G, M=stack.M, Dyy=stack.Dyy, Dyx=stack.Dyx, Dxy=stack.Dxy, Dxx=stack.Dxx, Ga=stack.Ga, Ma=stack.Ma, A=stack.A, Ly = stack.Ly)
-                sstack.y0 = _stack.y0
-                sstack.Py_.extend(_stack.Py_)
-                sstack.sign = _stack.sign
-                sstack.f_stack_PP = sstack.f_stack_PP or _stack.f_stack_PP
-                sstack.blob = _stack.blob
-                if stack.f_stack_PP:
-                    sstack.stack_PP.append(stack.stack_PP)
-                
 
-                
-            else: # append the horizontal stacks and merge it into sstack
-                
-                sstack.accumulate(I=stack.I, Dy=stack.Dy, Dx=stack.Dx, G=stack.G, M=stack.M, Dyy=stack.Dyy, Dyx=stack.Dyx, Dxy=stack.Dxy, Dxx=stack.Dxx, Ga=stack.Ga, Ma=stack.Ma, A=stack.A)
-                sstack.Ly = max(sstack.y0+sstack.Ly,stack.y0+stack.Ly)-min(sstack.y0,stack.y0) # 1 line may contain multiple Ps, hence Ly need to be computed from max of y and min of y
-                sstack.y0 = min(sstack.y0,stack.y0) # y0 is min of stacks' y0
-                sstack.Py_.extend(stack.Py_)
-                sstack.f_stack_PP = sstack.f_stack_PP or stack.f_stack_PP
-                if stack.f_stack_PP:
-                    sstack.stack_PP.append(stack.stack_PP)
+            # append the horizontal stack_ and accumulate sstack params, regardless of termination
 
+            sstack.accumulate(I=stack.I, Dy=stack.Dy, Dx=stack.Dx, G=stack.G, M=stack.M, Dyy=stack.Dyy, Dyx=stack.Dyx, Dxy=stack.Dxy, Dxx=stack.Dxx,
+                              Ga=stack.Ga, Ma=stack.Ma, A=stack.A)
+            sstack.Ly = max(sstack.y0+sstack.Ly,stack.y0+stack.Ly)-min(sstack.y0,stack.y0)
+            # 1 line may contain multiple Ps, hence Ly need to be computed from max of y and min of y
+            sstack.y0 = min(sstack.y0,stack.y0) # y0 is min of stacks' y0
+            sstack.Py_.extend(stack.Py_)
+            sstack.f_stack_PP = sstack.f_stack_PP or stack.f_stack_PP
+            if stack.f_stack_PP:
+                sstack.stack_PP.append(stack.stack_PP)
 
             _f_up = f_up
             _f_ex = f_ex
-            
+
         sstack__.append(sstack_)
-        
-        
-    # flip partial sstack
-#    for sstack_ in sstack__:
-#        for sstack in sstack_:
-#            flip_yx(sstack)
-#            form_gPPy_(sstack) # form gPPy after flipping?
-        
-    
 
-    '''
-    # tentative, flip_yx should operate on whole blob first
-    for blob in frame['blob__']:
-        for stack in blob.stack_:
-            if stack.f_gstack:
+#   flip partial sstack
+#   for sstack_ in sstack__:
+#       for sstack in sstack_:
+#           flip_yx(sstack)
+#           form_gPPy_(sstack) # form gPPy after flipping?
 
-                for istack in stack.Py_:
-                    y0 = istack.y0
-                    yn = istack.y0 + stack.Ly
-                    x0 = min([P.x0 for P in istack.Py_])
-                    xn = max([P.x0 + P.L for P in istack.Py_])
+#   draw low-ga blob' stacks
+#   draw_stacks(frame)
+#   evaluate P blobs
 
-                    L_bias = (xn - x0 + 1) / (yn - y0 + 1)  # elongation: width / height, pref. comp over long dimension
-                    G_bias = abs(istack.Dy) / abs(istack.Dx)  # ddirection: Gy / Gx, preferential comp over low G
-
-                    if istack.G * L_bias * G_bias > flip_ave:  # y_bias = L_bias * G_bias: projected PM net gain:
-
-                        flipped_Py_ = flip_yx(istack.Py_)  # rotate stack.Py_ by 90 degree, rescan blob vertically -> comp_slice_
-    #                return stack, f_istack  # comp_slice if G + M + fflip * (flip_gain - flip_cost) > Ave_comp_slice?
-
-            # evaluate for arbitrary-angle rotation here,
-            # to replace flip if both vertical and horizontal dimensions are significantly different from the angle of blob axis.
-
-            else:
-                y0 = stack.y0
-                yn = stack.y0 + stack.Ly
-                x0 = min([P.x0 for P in stack.Py_])
-                xn = max([P.x0 + P.L for P in stack.Py_])
-
-                L_bias = (xn - x0 + 1) / (yn - y0 + 1)  # elongation: width / height, pref. comp over long dimension
-                G_bias = abs(stack.Dy) / abs(stack.Dx)  # ddirection: Gy / Gx, preferential comp over low G
-
-                if stack.G * L_bias * G_bias > flip_ave:  # y_bias = L_bias * G_bias: projected PM net gain:
-                    flipped_Py_ = flip_yx(stack.Py_)  # rotate stack.Py_ by 90 degree, rescan blob vertically -> comp_slice_
-    '''
-
-    # draw low-ga blob' stacks
-    # draw_stacks(frame)
-
-    # evaluate P blobs
     comp_slice_blob(frame['blob__'], AveB)
 
     if verbose:  # print out at the end
@@ -286,12 +229,12 @@ def slice_blob(blob, dert__, mask, crit__, AveB, verbose=False, render=False):
 
     return frame  # frame of blobs
 
-''' 
+'''
 Parameterized connectivity clustering functions below:
 - form_P sums dert params within P and increments its L: horizontal length.
 - scan_P_ searches for horizontal (x) overlap between Ps of consecutive (in y) rows.
 - form_stack combines these overlapping Ps into vertical stacks of Ps, with one up_P to one down_P
-- form_blob merges terminated or forking stacks into blob, removes redundant representations of the same blob 
+- form_blob merges terminated or forking stacks into blob, removes redundant representations of the same blob
   by multiple forked P stacks, then checks for blob termination and merger into whole-frame representation.
 dert: tuple of derivatives per pixel, initially (p, dy, dx, g), will be extended in intra_blob
 Dert: params of cluster structures (P, stack, blob): summed dert params + dimensions: vertical Ly and area S
@@ -788,6 +731,6 @@ def draw_stacks(frame):
 #            from matplotlib import pyplot as plt
 #            plt.imshow(img_colour)
 #            plt.pause(1)
-            
+
             cv2.imwrite('./images/stacks/stacks_blob_'+str(blob_num)+'_colour.bmp',img_colour)
             cv2.imwrite('./images/stacks/stacks_blob_'+str(blob_num)+'_index.bmp',img_index)
