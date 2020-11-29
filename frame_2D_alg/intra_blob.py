@@ -120,7 +120,7 @@ def sub_eval(blob, dert__, crit__, mask, **kwargs):
         blob.prior_forks.extend('p')
         sub_frame = slice_blob(blob, dert__, mask, crit__, AveB, verbose=kwargs.get('verbose'))
 
-        sub_blobs = sub_frame['blob__']
+        sub_blobs = sub_frame.sub_layers[0]
 
         blob.Ls = len(sub_blobs)  # for visibility and next-fork rd
         blob.sub_layers = [sub_blobs]  # 1st layer of sub_blobs
