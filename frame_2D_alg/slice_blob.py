@@ -109,7 +109,7 @@ class CBlob(ClusterStructure):
     mask = object
     fopen = bool
     margin = list
-    f_sstack = bool  # true if stack_ is sstack_.
+    f_sstack = NoneType  # true if stack_ is sstack_.
 
 # Functions:
 # prefix '_' denotes higher-line variable or structure, vs. same-type lower-line variable or structure
@@ -118,8 +118,13 @@ class CBlob(ClusterStructure):
 
 
 def slice_blob(blob, dert__, mask, crit__, AveB, verbose=False, render=False):
-    frame = dict(rng=1, dert__=dert__, mask=None, I=0, Dy=0, Dx=0, G=0, M=0, Dyy=0, Dyx=0, Dxy=0, Dxx=0, Ga=0, Ma=0, blob__=[])
-    stack_ = deque()  # buffer of running vertical stacks of Ps
+    sliced_blob = CDeepBlob
+    '''
+    sliced_blob = CDeepBlob(I=blob.Dert['I'], Dy=iblob.Dert['Dy'], Dx=iblob.Dert['Dx'], G=iblob.Dert['G'], M=iblob.Dert['M'], A=iblob.Dert['A'],
+                            Ga = iblob.Dert['Ga'],Ma = iblob.Dert['Ma'],Dyy = iblob.Dert['Dyy'],Dyx = iblob.Dert['Dyx'],Dxy = iblob.Dert['Dxy'],
+                            Dxx = iblob.Dert['Dxx'], box=iblob.box, sign=iblob.sign,mask=iblob.mask, root_dert__=dert__, fopen=iblob.fopen,
+                            prior_forks=blob.prior_forks.copy(), stack_ = iblob.stack_)
+    '''
     height, width = dert__[0].shape
 
     if render:
@@ -135,29 +140,30 @@ def slice_blob(blob, dert__, mask, crit__, AveB, verbose=False, render=False):
     for y, dert_ in enumerate(zip(*dert__)):  # first and last row are discarded
         if verbose:
             print(f"\rProcessing line {y + 1}/{height}, ", end="")
-            print(f"{len(frame['blob__'])} blobs converted", end="")
+            # print(f"{len(frame['blob__'])} blobs converted", end="")
+            # do you actually get multiple blobs here?
             sys.stdout.flush()
 
         P_ = form_P_(zip(*dert_), crit__[y], mask[y])  # horizontal clustering
         if render:
             render = streamer.update_blob_conversion(y, P_)
-        P_ = scan_P_(P_, stack_, frame)  # vertical clustering, adds P up_connects and _P down_connect_cnt
-        stack_ = form_stack_(P_, frame, y)
+        P_ = scan_P_(P_, stack_, sliced_blob)  # vertical clustering, adds P up_connects and _P down_connect_cnt
+        stack_ = form_stack_(P_, sliced_blob, y)
 
     while stack_:  # frame ends, last-line stacks are merged into their blobs
-        form_blob(stack_.popleft(), frame)
+        form_blob(stack_.popleft(), sliced_blob)
 
-    # update blob to deep blob, add prior_forks
-    # it's a single blob, there is no frame
-    for i, iblob in enumerate(frame['blob__']):
-        frame['blob__'][i] = CDeepBlob(I=iblob.Dert['I'], Dy=iblob.Dert['Dy'], Dx=iblob.Dert['Dx'], G=iblob.Dert['G'], M=iblob.Dert['M'], A=iblob.Dert['A'],
-                                       Ga = iblob.Dert['Ga'],Ma = iblob.Dert['Ma'],Dyy = iblob.Dert['Dyy'],Dyx = iblob.Dert['Dyx'],Dxy = iblob.Dert['Dxy'],
-                                       Dxx = iblob.Dert['Dxx'],
-                                       box=iblob.box, sign=iblob.sign,mask=iblob.mask, root_dert__=dert__, fopen=iblob.fopen,
-                                       prior_forks=blob.prior_forks.copy(), stack_ = iblob.stack_, f_sstack=iblob.f_sstack)
+    form_sstack_(sliced_blob)  # cluster stacks into horizontally-oriented super-stack
 
+    flip_sstack_(sliced_blob)  # vertical-first re-scanning of selected sstacks
 
-    for blob in frame['blob__']:
+    comp_slice_blob(sliced_blob, AveB)  # cross-comp of vertically consecutive Ps in selected stacks
+
+    if verbose:  # print out at the end
+        '''
+        No idea what any of that is for:
+        
+        for blob in frame['blob__']:
         
         # cluster stacks into horizontally-oriented super-stack
         form_sstack_(blob)
@@ -201,7 +207,6 @@ def slice_blob(blob, dert__, mask, crit__, AveB, verbose=False, render=False):
                     # update mask
                     mask__[np.where(dert__[0] == -1)] = True
 
-
             else: # check and flip stack's derts if neccessary
  
                 x0 = min([Py.x0 for Py in stack.Py_])
@@ -236,8 +241,8 @@ def slice_blob(blob, dert__, mask, crit__, AveB, verbose=False, render=False):
                     # form stack at here and replace the input stack?
 
                     
-    # need update comp_slice_blob for sstack new structure
-#    comp_slice_blob(frame['blob__'], AveB)  # cross-comp of vertically consecutive Ps in selected stacks
+#   need update comp_slice_blob for sstack new structure
+#   comp_slice_blob(frame['blob__'], AveB)  # cross-comp of vertically consecutive Ps in selected stacks
 
     if verbose:  # print out at the end
         nblobs = len(frame['blob__'])
@@ -254,6 +259,20 @@ def slice_blob(blob, dert__, mask, crit__, AveB, verbose=False, render=False):
         streamer.end_blob_conversion(y, img_out_path=path)
 
     return frame  # frame of blobs
+        nblobs = len(frame['blob__'])
+        print(f"\rImage has been successfully converted to "
+              f"{nblobs} blob{'s' if nblobs != 1 else 0} in "
+              f"{time() - start_time:.3} seconds", end="")
+        blob_ids = [blob_id for blob_id in range(CBlob.instance_cnt)]
+        merged_percentage = len([*filter(lambda bid: CBlob.get_instance(bid) is None, blob_ids)]) / len(blob_ids)
+        print(f"\nPercentage of merged blobs: {merged_percentage}")
+        '''
+    if render:  # rendering mode after blob conversion
+        path = output_path(arguments['image'],
+                           suffix='.im2blobs.jpg')
+        streamer.end_blob_conversion(y, img_out_path=path)
+
+    return sliced_blob
 
 '''
 Parameterized connectivity clustering functions below:
@@ -654,9 +673,6 @@ def assign_adjacents(blob_binder):  # adjacents are connected opposite-sign blob
 def accum_Dert(Dert: dict, **params) -> None:
     Dert.update({param: Dert[param] + value for param, value in params.items()})
 
-
-
-
 '''
 def flip_yx(Py_):  # vertical-first run of form_P and deeper functions over blob's ders__
     y0 = 0
@@ -758,13 +774,12 @@ def draw_stacks(frame):
             cv2.imwrite('./images/stacks/stacks_blob_'+str(blob_num)+'_index.bmp',img_index)
 
 
-
-def form_sstack_(blob):
+def form_sstack_(sliced_blob):
     '''
-    form horizontal stacks of stacks in selected blobs
+    form horizontal stacks of stacks
     '''
     sstack_ = []
-    _stack = blob.stack_[0]
+    _stack = sliced_blob.stack_[0]
     _f_up = _stack.up_connect_cnt > 0
     _f_ex = _f_up ^ _stack.down_connect_cnt > 0
 
@@ -776,7 +791,7 @@ def form_sstack_(blob):
                     Ga=_stack.Ga, Ma=_stack.Ma, A=_stack.A, Ly=_stack.Ly, y0=_stack.y0,
                     Py_=[_stack], sign=_stack.sign, blob=_stack.blob)
 
-    for stack in blob.stack_[1:]:
+    for stack in sliced_blob.stack_[1:]:
         f_up = stack.up_connect_cnt > 0
         f_ex = _f_up ^ _stack.down_connect_cnt > 0
 
@@ -800,15 +815,15 @@ def form_sstack_(blob):
 
     # stack_ = sstack_ if length of sstack_ >0
     if len(sstack_)>0:
-        blob.stack_ = sstack_
-        blob.f_sstack = 1
+        sliced_blob.stack_ = sstack_
+        sliced_blob.f_sstack = 1
 
-'''
-def flip_stack_(frame):  # vertical-first run of form_P and deeper functions over blob's ders__
+
+def flip_sstack_(sliced_blob):  # vertical-first run of form_P and deeper functions over blob's ders__
     '''
     flip selected sstacks in selected blobs
     '''
-    for sstack_ in frame['sstack__']:
+    for sstack_ in sliced_blob['sstack__']:
         for sstack in sstack_:
 
             x0 = min([Py.x0 for Py in sstack.Py_])
@@ -829,5 +844,5 @@ def flip_stack_(frame):  # vertical-first run of form_P and deeper functions ove
         # draw low-ga blob' stacks
         # draw_stacks(frame)
         # evaluate P blobs
-'''
+
 
