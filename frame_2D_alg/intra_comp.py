@@ -102,7 +102,9 @@ def comp_r(dert__, ave, root_fia, mask=None):
     (all diagonal derivatives can be imported from prior 2x2 comp)
     ave SAD = ave g * 1.418:
     '''
-    m__ += ave * 1.418 - ( abs(i__center - i__topleft)
+    
+    # m is int while 1.418 is float, we need change either one of them to enable the arithmetic operation
+    m__ += int(ave * 1.418) - ( abs(i__center - i__topleft)
                          + abs(i__center - i__top)
                          + abs(i__center - i__topright)
                          + abs(i__center - i__right)

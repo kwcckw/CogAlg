@@ -31,7 +31,7 @@ from slice_blob import slice_blob
 
 # filters, All *= rdn:
 ave = 50  # fixed cost per dert, from average m, reflects blob definition cost, may be different for comp_a?
-aveB = 50  # fixed cost per intra_blob comp and clustering
+aveB = -50  # fixed cost per intra_blob comp and clustering
 flip_ave = 1000
 
 # --------------------------------------------------------------------------------------------------------------
@@ -75,7 +75,8 @@ def intra_blob(blob, **kwargs):  # recursive input rng+ | angle cross-comp withi
                 sub_eval(blob, dert__, crit__, mask, **kwargs)
                 spliced_layers = [spliced_layers + sub_layers for spliced_layers, sub_layers in
                                   zip_longest(spliced_layers, blob.sub_layers, fillvalue=[])]
-
+        
+        # if root fork is 'g' from frame_blobs, ma is always 0 and this condition will never be fulfilled unless AveB <0
         elif blob.G * blob.Ma > AveB:
             if kwargs.get('verbose'): print('a fork\n')
             blob.prior_forks.extend('a')
@@ -89,7 +90,7 @@ def intra_blob(blob, **kwargs):  # recursive input rng+ | angle cross-comp withi
                 dert__ = tuple([adert__[0], adert__[1], adert__[2], adert__[3], adert__[4],
                                 adert__[5][0], adert__[5][1], adert__[6][0], adert__[6][1],
                                 adert__[7], adert__[8]])
-                blob.fia = 1
+                blob.fia = 1; blob.fca = 0
                 sub_eval(blob, dert__, crit__, mask, **kwargs)
                 spliced_layers = [spliced_layers + sub_layers for spliced_layers, sub_layers in
                                   zip_longest(spliced_layers, blob.sub_layers, fillvalue=[])]
@@ -114,7 +115,7 @@ def sub_eval(blob, dert__, crit__, mask, **kwargs):
 
         blob.prior_forks.extend('p')
 
-        sub_frame = slice_blob(dert__, mask, crit__, AveB, verbose=kwargs.get('verbose'))
+        sub_frame = slice_blob(dert__, mask, crit__, AveB, blob.prior_forks, verbose=kwargs.get('verbose'))
         sub_blobs = sub_frame.sub_layers[0]
 
         blob.Ls = len(sub_blobs)  # for visibility and next-fork rd
@@ -144,11 +145,13 @@ def sub_eval(blob, dert__, crit__, mask, **kwargs):
             G = blob.G  # Gr, Grr..
             adj_M = blob.adj_blobs[3]
             borrow_M = min(G, adj_M / 2)
-
+            
+            # from my checking, borrow M is always negative, so this condition will never be true, unless we change AveB to value <0
             if borrow_M > AveB:
                 # comp_a:
                 sub_blob.rdn = sub_blob.rdn + 1 + 1 / blob.Ls
-                sub_blob.fia = 1
+                sub_blob.fia = 0
+                sub_blob.fca = 1 # fca = 1 to run comp_a
                 sub_blob.a_depth += blob.a_depth  # accumulate a depth from blob to sub blob
                 blob.sub_layers += intra_blob(sub_blob, **kwargs)
 
