@@ -351,12 +351,15 @@ if __name__ == "__main__":
             if blob.sign:
                 # +G on first fork
                 if min(G, borrow_G) > aveB and blob_height > 3 and blob_width  > 3:  # min blob dimensions
-                    blob.rdn = 1; blob.fca = 1 # +G blob' dert' comp_a
+                    blob.rdn = 1
+                    blob.fca = 1  # +G blob' dert' comp_a
                     deep_layers[i] = intra_blob(blob, render=args.render, verbose=args.verbose)
 
             # +M on first fork
             elif M - borrow_G > aveB and blob_height > 3 and blob_width  > 3:  # min blob dimensions
-                blob.rdn = 1; blob.rng = 1; blob.fia = 0
+                blob.rdn = 1
+                blob.rng = 1
+                blob.fia = 0
                 deep_layers[i] = intra_blob(blob, render=args.render, verbose=args.verbose)  # -G blob' dert__' comp_r in 3x3 kernels
 
             if deep_layers[i]:  # if there are deeper layers
