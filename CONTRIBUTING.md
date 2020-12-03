@@ -1,5 +1,5 @@
 We need help with design and implementation of this algorithm, in Python. All contributions must be consistent with the principles introduced here. Unless you find some conceptual flaws or omissions, which would be even more valuable.  
-This is an open project, but I will pay per contribution, or monthly once there is a track record. I have ~1M in liquid assets and fully expect to spend it on this project, although it could take a long time.
+This is an open project, I pay per contribution, or monthly once there is a track record. I have ~1M in liquid assets and fully expect to spend it on this project, although it's likely to be back-loaded.
 
 Contributions:
 
@@ -45,9 +45,12 @@ Khanh Nguyen, $10100, lead debugger and co-designer, January-December
 
 Mayukh Sarkar, $600 for frame_blobs performance analysis and porting form_P to C++, January
 
-Kok Wei Chee, $2800, team developer, January-March
+Maria Parshakova, $1600, team developer, March-May 
 
-Khanh Nguyen, $3100, senior developer, January-March
+Khanh Nguyen, $7600, team developer, January-September
+
+Kok Wei Chee, $13100, team developer, January-October
+
 
 
 
