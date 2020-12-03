@@ -151,7 +151,7 @@ def accum_blob_Dert(blob, dert__, y, x):
     blob.M += dert__[4][y, x]
 
 
-def flood_fill(dert__, sign__, verbose=False, mask=None, blob_cls=CBlob, accum_func=accum_blob_Dert):
+def flood_fill(dert__, sign__, verbose=False, mask=None, blob_cls=CBlob, accum_func=accum_blob_Dert, prior_forks=[]):
 
     if mask is None: # non intra dert
         height, width = dert__[0].shape
@@ -175,6 +175,8 @@ def flood_fill(dert__, sign__, verbose=False, mask=None, blob_cls=CBlob, accum_f
             if idmap[y, x] == UNFILLED:  # ignore filled/clustered derts
                 # initialize new blob
                 blob = blob_cls(sign=sign__[y, x], root_dert__=dert__)
+                if prior_forks: # update prior forks in deep blob
+                    blob.prior_forks= prior_forks.copy()
                 blob_.append(blob)
                 idmap[y, x] = blob.id
                 y0, yn = y, y
@@ -360,7 +362,6 @@ if __name__ == "__main__":
             elif M - borrow_G > aveB and blob_height > 3 and blob_width  > 3:  # min blob dimensions
                 blob.rdn = 1
                 blob.rng = 1
-                blob.fia = 0
                 deep_layers[i] = intra_blob(blob, render=args.render, verbose=args.verbose)  # -G blob' dert__' comp_r in 3x3 kernels
 
             if deep_layers[i]:  # if there are deeper layers
