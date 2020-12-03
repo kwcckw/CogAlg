@@ -14,8 +14,8 @@
     box,  # y0, yn, x0, xn
     dert__,  # box of derts, each = i, dy, dx, g, m, day, dax, ga, ma
     # next fork:
-    fia,  # flag: input is from comp angle
-    fca,  # flag: current fork is comp angle
+    f_root_a,  # flag: input is from comp angle
+    fa,  # flag: current fork is comp angle
     rdn,  # redundancy to higher layers
     rng,  # comparison range
     sub_layers  # [sub_blobs ]: list of layers across sub_blob derivation tree
@@ -47,7 +47,7 @@ def intra_blob(blob, **kwargs):  # recursive input rng+ | angle cross-comp withi
     spliced_layers = []  # to extend root_blob sub_layers
     ext_dert__, ext_mask = extend_dert(blob)
 
-    if blob.fia and not blob.fca:  # input from comp_a -> slice_blobs
+    if blob.f_root_a:  # input from comp_a -> slice_blobs
 
         dert__= tuple([root_dert[blob.box[0]:blob.box[1],blob.box[2]:blob.box[3]] for root_dert in blob.root_dert__])
         mask = blob.mask
@@ -57,7 +57,7 @@ def intra_blob(blob, **kwargs):  # recursive input rng+ | angle cross-comp withi
             if blob.G * blob.Ma - AveB > 0:  # G: borrow value, Ma vs G reduced by Ga: * (1 - Ga / (4.45 * A)), max_ga=4.45
 
                 crit__ = dert__[3] * dert__[8] - Ave  # add to params in adert, no need to recompute?
-                # not sure we need fca at all   blob.fca = 0
+
                 if kwargs.get('verbose'): print('dert_P fork/n')
 
                 L_bias = (blob.box[3] - blob.box[2] + 1) / (blob.box[1] - blob.box[0] + 1)  # Lx / Ly, blob.box = [y0,yn,x0,xn]
@@ -94,7 +94,6 @@ def intra_blob(blob, **kwargs):  # recursive input rng+ | angle cross-comp withi
                                 adert__[5][0], adert__[5][1], adert__[6][0], adert__[6][1],
                                 adert__[7], adert__[8]])
 
-                blob.fia = 1 # set blob fia after comp_a
                 sub_eval(blob, dert__, crit__, mask, **kwargs)
                 spliced_layers = [spliced_layers + sub_layers for spliced_layers, sub_layers in
                                   zip_longest(spliced_layers, blob.sub_layers, fillvalue=[])]
@@ -104,7 +103,7 @@ def intra_blob(blob, **kwargs):  # recursive input rng+ | angle cross-comp withi
             if kwargs.get('verbose'): print('r fork\n')
             blob.prior_forks.extend('r')
 
-            dert__, mask = comp_r(ext_dert__, Ave, blob.fia, ext_mask)
+            dert__, mask = comp_r(ext_dert__, Ave, blob.f_root_a, ext_mask)
             crit__ = dert__[4]  # m__ is inverse deviation of SAD
 
             if mask.shape[0] > 2 and mask.shape[1] > 2 and False in mask:
@@ -123,14 +122,7 @@ def sub_eval(blob, dert__, crit__, mask, **kwargs):
     sub_blobs, idmap, adj_pairs = flood_fill(dert__, sign__=crit__ > 0, verbose=False, mask=mask, blob_cls=CDeepBlob, accum_func=accum_blob_Dert_intra, prior_forks=blob.prior_forks)
     assign_adjacents(adj_pairs, CDeepBlob)
     if kwargs.get('render', False):
-        visualize_blobs(idmap, sub_blobs, winname=f"Deep blobs (fca = {blob.fca}, fia = {blob.fia})")
-
-    # this section is not needed, sub blob class should be already deep blob from blob_cls input param at line 123 above
-#    for i, sub_blob in enumerate(sub_blobs):
-#        # convert flat sub_blob into multi-layer sub_blobs:
-#        sub_blobs[i] = CDeepBlob(I=sub_blob.I, Dy=sub_blob.Dy, Dx=sub_blob.Dx, G=sub_blob.G, M=sub_blob.M, A=sub_blob.A, box=sub_blob.box, sign=sub_blob.sign,
-#                                 mask=sub_blob.mask, root_dert__=dert__, adj_blobs=sub_blob.adj_blobs, fopen=sub_blob.fopen, prior_forks = blob.prior_forks.copy())
-
+        visualize_blobs(idmap, sub_blobs, winname=f"Deep blobs (fa = {blob.fa}, f_root_a = {blob.f_root_a})")
 
     blob.Ls = len(sub_blobs)  # for visibility and next-fork rdn
     blob.sub_layers = [sub_blobs]  # 1st layer of sub_blobs
@@ -144,17 +136,14 @@ def sub_eval(blob, dert__, crit__, mask, **kwargs):
 
         if G - AveB*2 > 0:
             # comp_a:
-            sub_blob.fia = 1
-            # if prior fork's blob is comp_a, next fork (sub_blob) should be slice_blob, so sub_blob.fca remain as 0
-            # else if prior fork's blob is comp_r, next fork (sub_blob) should be comp_a, so sub_blob.fca set as 1
-            if not blob.fia: sub_blob.fca = 1 
+            sub_blob.f_root_a = 1
             sub_blob.a_depth += blob.a_depth  # accumulate a depth from blob to sub blob
             sub_blob.rdn = sub_blob.rdn + 1 + 1 / blob.Ls
             blob.sub_layers += intra_blob(sub_blob, **kwargs)
 
         elif sub_blob.M - borrow_M > AveB:
             # comp_r:
-            sub_blob.fia = 0
+            sub_blob.f_root_a = 0 # this may not needed, sub_blob.f_root_a is 0 by default
             sub_blob.rng = blob.rng * 2
             sub_blob.rdn = sub_blob.rdn + 1 + 1 / blob.Ls
             blob.sub_layers += intra_blob(sub_blob, **kwargs)

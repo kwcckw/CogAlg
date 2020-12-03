@@ -127,9 +127,9 @@ def comp_a(dert__, ave, mask=None):  # cross-comp of angle in 2x2 kernels
         majority_mask = None
 
     i__, dy__, dx__, g__, m__ = dert__[:5]  # day__,dax__,ga__,ma__ are recomputed
-    g_ave__ = g__ + ave # avoid g__+ave = 0
-    g_ave__[np.where(g_ave__ == 0)] = 1  # to avoid / 0
-    a__ = [dy__, dx__] / (g_ave__)  # angle, restore g to abs, similar to calc_a
+    abs_g = g__ + ave # avoid g__+ave = 0
+    abs_g[np.where(abs_g == 0)] = 1  # to avoid / 0
+    a__ = [dy__, dx__] / (abs_g)  # angle, restore g to abs, similar to calc_a
 
     # each shifted a in 2x2 kernel
     a__topleft = a__[:, :-1, :-1]
@@ -141,9 +141,8 @@ def comp_a(dert__, ave, mask=None):  # cross-comp of angle in 2x2 kernels
     sin_da0__, cos_da0__ = angle_diff(a__topleft, a__botright)
     sin_da1__, cos_da1__ = angle_diff(a__topright, a__botleft)
 
-    ma__ = 2 / (cos_da0__ + 1) + (cos_da1__ + 1)
+    ma__ = 2 / (cos_da0__ + 1.001) + (cos_da1__ + 1.001)
     # angle match = inverse deviation rate of SAD of angles from ave ma: (2 + 2) / 2
-    # there is possiblity (cos_da0__ + 1) or (cos_da1__ + 1) = 0 (when cos_da = -1), replace 0 with 1?
 
     day__ = [-sin_da0__ - sin_da1__, cos_da0__ + cos_da1__]
     # angle change in y, sines are sign-reversed because da0 and da1 are top-down, no reversal in cosines
