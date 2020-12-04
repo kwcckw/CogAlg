@@ -153,7 +153,7 @@ def slice_blob(dert__, mask__, prior_forks, verbose=False, render=False):
     # temporary, for debug purpose to prevent error:
     for i, sub_blob in enumerate(sliced_blob.sub_layers[0]):
         # update blob to deep blob
-        sliced_blob.sub_layers[0][i] = CBlob(I=sub_blob.Dert['I'], Dy=sub_blob.Dert['Dy'], Dx=sub_blob.Dert['Dx'], G=sub_blob.Dert['G'], M=sub_blob.Dert['M'],
+        sliced_blob.sub_layers[0][i] = CDeepBlob(I=sub_blob.Dert['I'], Dy=sub_blob.Dert['Dy'], Dx=sub_blob.Dert['Dx'], G=sub_blob.Dert['G'], M=sub_blob.Dert['M'],
                                              Ga=sub_blob.Dert['Ga'], Ma=sub_blob.Dert['Ma'], Dyy=sub_blob.Dert['Dyy'], Dyx=sub_blob.Dert['Dyx'],
                                              Dxy=sub_blob.Dert['Dxy'], Dxx=sub_blob.Dert['Dxx'], A=sub_blob.Dert['A'],
                                              box=sub_blob.box, sign=sub_blob.sign, mask=sub_blob.mask, root_dert__=sub_blob.root_dert__, fopen=sub_blob.fopen,
@@ -161,7 +161,7 @@ def slice_blob(dert__, mask__, prior_forks, verbose=False, render=False):
 
     form_sstack_(sliced_blob)  # cluster stacks into horizontally-oriented super-stacks
 
-    flip_sstack_(sliced_blob)  # vertical-first re-scanning of selected sstacks
+#    flip_sstack_(sliced_blob)  # vertical-first re-scanning of selected sstacks
     # evaluation is always per sstack
     # need update comp_slice_blob for new sstack structure
     # comp_slice_blob(sliced_blob, AveB)  # cross-comp of vertically consecutive Ps in selected stacks
@@ -194,7 +194,6 @@ Dert: params of cluster structures (P, stack, blob): summed dert params + dimens
 def form_P_(idert_, mask_):  # segment dert__ into P__, in horizontal ) vertical order
 
     P_ = deque()  # row of Ps
-    s_ = idert_[3] * idert_[8] > 0  # g * ma
     x0 = 0
     try:
         while mask_[x0]:  # skip until not masked
@@ -205,13 +204,13 @@ def form_P_(idert_, mask_):  # segment dert__ into P__, in horizontal ) vertical
 
     dert_ = [[*next(idert_)]]  # get first dert from idert_ (generator/iterator)
     (I, Dy, Dx, G, M, Dyy, Dyx, Dxy, Dxx, Ga, Ma), L = dert_[0], 1  # initialize P params
-    _s = s_[x0]
+    _s = (G * Ma) >0 # g * ma
     _mask = mask_[x0]  # mask bit per dert
 
     for x, (p, dy, dx, g, m, dyy, dyx, dxy, dxx, ga, ma) in enumerate(idert_, start=x0 + 1):  # loop left to right in each row of derts
         mask = mask_[x]
         if ~mask:  # current dert is not masked
-            s = s_[x]
+            s = (g * ma) > 0
             if ~_mask and s != _s:  # prior dert is not masked and sign changed, terminate P:
                 P = CP(I=I, Dy=Dy, Dx=Dx, G=G, M=M, Dyy=Dyy, Dyx=Dyx, Dxy=Dxy, Dxx=Dxx, Ga=Ga, Ma=Ma, L=L, x0=x0, sign=_s, dert_=dert_)
                 P_.append(P)

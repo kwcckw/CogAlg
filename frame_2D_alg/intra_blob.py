@@ -67,7 +67,8 @@ def intra_blob(blob, **kwargs):  # recursive input rng+ | angle cross-comp withi
                     mask = np.rot90(mask)
                 blob.prior_forks.extend('p')
 
-                blob[:] = slice_blob(dert__, mask, blob.prior_forks, verbose=kwargs.get('verbose'))
+                # not sure but slice_blob's blob should be already added to splice_layers in prior fork right?
+                blob = slice_blob(dert__, mask, blob.prior_forks, verbose=kwargs.get('verbose'))
 
     else:  # root fork is frame_blobs or comp_r
 
@@ -112,7 +113,7 @@ def cluster_sub_eval(blob, dert__, crit__, mask, **kwargs):  # comp_r or comp_a 
     AveB = aveB * blob.rdn
                              
     sub_blobs, idmap, adj_pairs = flood_fill(dert__, sign__=crit__ > 0, verbose=False, mask=mask, blob_cls=CDeepBlob, accum_func=accum_blob_Dert)
-    assign_adjacents(adj_pairs, CBlob)
+    assign_adjacents(adj_pairs, CDeepBlob)
 
     if kwargs.get('render', False):
         visualize_blobs(idmap, sub_blobs, winname=f"Deep blobs (f_comp_a = {blob.f_comp_a}, f_root_a = {blob.f_root_a})")

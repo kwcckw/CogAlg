@@ -79,7 +79,7 @@ class CDeepBlob(ClusterStructure):
     adj_blobs = list
     fopen = bool
     f_root_a = bool  # flag: input is from comp angle
-    fa = bool  # flag: current fork is comp angle
+    f_comp_a = bool  # flag: current fork is comp angle
     rdn = float
     rng = int
     Ls = int  # for visibility and next-fork rdn
@@ -355,7 +355,7 @@ if __name__ == "__main__":
                 # +G on first fork
                 if min(G, borrow_G) > aveB and blob_height > 3 and blob_width  > 3:  # min blob dimensions
                     blob.rdn = 1
-                    blob.fa = 1  # +G blob' dert' comp_a
+                    blob.f_comp_a = 1  # +G blob' dert' comp_a
                     deep_layers[i] = intra_blob(blob, render=args.render, verbose=args.verbose)
 
             # +M on first fork
