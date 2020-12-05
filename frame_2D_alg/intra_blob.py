@@ -45,8 +45,6 @@ def intra_blob(blob, **kwargs):  # recursive input rng+ | angle cross-comp withi
         if blob.A < 100: kwargs['render'] = False
 
     spliced_layers = []  # to extend root_blob sub_layers
-    ext_dert__, ext_mask = extend_dert(blob)
-
     if blob.f_root_a:  # root fork is comp_a -> slice_blobs
 
         dert__= tuple([root_dert[blob.box[0]:blob.box[1],blob.box[2]:blob.box[3]] for root_dert in blob.root_dert__])
@@ -56,7 +54,7 @@ def intra_blob(blob, **kwargs):  # recursive input rng+ | angle cross-comp withi
             # slice_blob eval:
             if blob.G * blob.Ma - AveB > 0:  # Ma vs. G reduced by Ga: * (1 - Ga / (4.45 * A)), max_ga=4.45
                 blob.f_comp_a = 0  # blob id
-                if kwargs.get('verbose'): print('slice_blob fork/n')
+                if kwargs.get('verbose'): print('\nslice_blob fork\n') # we need backslash for new line, instead of forward slash
 
                 L_bias = (blob.box[3] - blob.box[2] + 1) / (blob.box[1] - blob.box[0] + 1)  # Lx / Ly, blob.box = [y0,yn,x0,xn]
                 G_bias = abs(blob.Dy) / abs(blob.Dx)  # ddirection: Gy / Gx, preferential comp over low G
@@ -67,15 +65,16 @@ def intra_blob(blob, **kwargs):  # recursive input rng+ | angle cross-comp withi
                     mask = np.rot90(mask)
                 blob.prior_forks.extend('p')
 
-                # not sure but slice_blob's blob should be already added to splice_layers in prior fork right?
-                blob = slice_blob(dert__, mask, blob.prior_forks, verbose=kwargs.get('verbose'))
+                slice_blob(blob, dert__, mask, blob.prior_forks, verbose=kwargs.get('verbose'))
 
     else:  # root fork is frame_blobs or comp_r
+
+        ext_dert__, ext_mask = extend_dert(blob)
 
         if blob.G > AveB:  # comp_a fork, replace G with borrow_M when known
             blob.f_comp_a = 1
             # blob id
-            if kwargs.get('verbose'): print('a fork\n')
+            if kwargs.get('verbose'): print('\na fork\n')
             blob.prior_forks.extend('a')
 
             adert__, mask = comp_a(ext_dert__, Ave, ext_mask)  # -> m sub_blobs
@@ -93,7 +92,7 @@ def intra_blob(blob, **kwargs):  # recursive input rng+ | angle cross-comp withi
 
         elif blob.M > AveB * 1.418:  # comp_r fork, ave M = ave G * 1.418
 
-            if kwargs.get('verbose'): print('r fork\n')
+            if kwargs.get('verbose'): print('\nr fork\n')
             blob.prior_forks.extend('r')
             blob.f_comp_a = 0  # blob id
             dert__, mask = comp_r(ext_dert__, Ave, blob.f_root_a, ext_mask)
@@ -126,6 +125,7 @@ def cluster_sub_eval(blob, dert__, crit__, mask, **kwargs):  # comp_r or comp_a 
         G = blob.G  # Gr, Grr..
         adj_M = blob.adj_blobs[3]
         borrow_M = min(G, adj_M / 2)
+        sub_blob.prior_forks = blob.prior_forks.copy() # we need this line to show the sequence of forking, for eg: from blob (g->a) to sub_blob (g->a->p)
         # borrow M is always negative?
 
         if sub_blob.G > AveB:  # replace with borrow_M when known

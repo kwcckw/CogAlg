@@ -75,6 +75,7 @@ class CDeepBlob(ClusterStructure):
     sign = NoneType
     box = list
     mask = object
+    dert__ = list
     root_dert__ = object
     adj_blobs = list
     fopen = bool
