@@ -141,7 +141,8 @@ def slice_blob(sliced_blob, dert__, sign__, mask__, prior_forks, verbose=False, 
 
     form_sstack_(sliced_blob)  # cluster stacks into horizontally-oriented super-stacks
 
-#    flip_sstack_(sliced_blob)  # vertical-first re-scanning of selected sstacks
+    flip_stack_(sliced_blob)  # vertical-first re-scanning of selected sstacks
+   
     # evaluation is always per sstack
     # need update comp_slice_blob for new sstack structure
     # comp_slice_blob(sliced_blob, AveB)  # cross-comp of vertically consecutive Ps in selected stacks
@@ -172,7 +173,7 @@ def form_P_(idert_, sign_, mask_):  # segment dert__ into P__, in horizontal ) v
     except IndexError:
         return P_  # the whole line is masked, return an empty P
 
-    dert_ = [[*next(idert_)]]  # get first dert from idert_ (generator/iterator)
+    dert_ = [list(idert_[x0])]  # get first dert from idert_ (generator/iterator)
     (I, Dy, Dx, G, M, Dyy, Dyx, Dxy, Dxx, Ga, Ma), L = dert_[0], 1  # initialize P params
     _s = sign_[x0]
     _mask = mask_[x0]  # mask bit per dert
@@ -642,24 +643,124 @@ def form_sstack_(sliced_blob):
         sliced_blob.f_sstack = 1
 
 
-def flip_sstack_(sliced_blob):  # vertical-first run of form_P and deeper functions over blob's ders__
+
+
+def flip_stack_(sliced_blob):  # vertical-first run of form_P and deeper functions over blob's ders__
     '''
-    flip selected sstacks
-     not updated from Chee's version
+    flip selected stacks in selected sub_blobs
     '''
-    for sstack_ in sliced_blob['sstack__']:  # should not be needed
-        for sstack in sstack_:
+    for stack in sliced_blob.stack_:
+            
+        f_flip = 0
+        
+        # vertical-first re-scanning of selected sstacks
+        if sliced_blob.f_sstack: # stack is sstack
+            
+            # get x0,xn,y0,yn from multiple stacks
+            x0_ = []
+            xn_ = []
+            y0_ = []
+            yn_ = []
+            for istack in stack.Py_:
+                x0_.append(min([Py.x0 for Py in istack.Py_]))
+                xn_.append(max([Py.x0 + Py.L for Py in istack.Py_]))
+                y0_.append(istack.y0)
+                yn_.append(istack.y0 + istack.Ly)
+            x0 = min(x0_)
+            xn = max(xn_)
+            y0 = min(y0_)
+            yn = max(yn_)
+            
+            L_bias = (xn - x0 + 1) / (stack.Ly)
+            abs_Dx = abs(stack.Dx); 
+            if abs_Dx == 0: abs_Dx = 1 # prevent /0      
+            G_bias = abs(stack.Dy) /abs_Dx # ddirection: Gy / Gx, preferential comp over low G
+            if stack.G * stack.Ma * L_bias * G_bias > flip_ave:
+                f_flip = 1
+                # initialize
+                dert__ = [(np.zeros((yn - y0, xn - x0)) - 1) for _ in range(len(istack.Py_[0].dert_[0]))] # or we can replace 'len(istack.Py_[0].dert_[0])' with 11, since we would always having 11 params here
+                mask__ = np.zeros((yn - y0, xn - x0)) > 0
+                
+                
+                # loop each stack and update derts' value
+                for istack in stack.Py_:
+                    for y, P in enumerate(istack.Py_):
+                        for x, idert in enumerate(P.dert_):
+                            for i, (param, dert) in enumerate(zip(idert, dert__)):
+                                dert[y+(istack.y0-y0), x+(P.x0-x0)] = param
+                # update mask
+                mask__[np.where(dert__[0] == -1)] = True
+                # get sign
+                sign__ = dert__[3]*dert__[10]>0 
 
-            x0 = min([Py.x0 for Py in sstack.Py_])
-            xn = max([Py.x0 + Py.L for Py in sstack.Py_])
-            y0 = sstack.y0
-            yn = y0 + sstack.Ly
+        # do we need to flip non sstack?
+        else: # check and flip stack's derts if neccessary
+ 
+            x0 = min([Py.x0 for Py in stack.Py_])
+            xn = max([Py.x0 + Py.L for Py in stack.Py_])
+            y0 = stack.y0
+            yn = y0 + stack.Ly
 
-            L_bias = (xn - x0 + 1) / (sstack.Ly)
-            G_bias = abs(sstack.Dy) / abs(sstack.Dx)  # ddirection: Gy / Gx, preferential comp over low G
+            L_bias = (xn - x0 + 1) / (stack.Ly)
+            abs_Dx = abs(stack.Dx); 
+            if abs_Dx == 0: abs_Dx = 1 # prevent /0
+            G_bias = abs(stack.Dy) / abs_Dx  # ddirection: Gy / Gx, preferential comp over low G
 
-            if sstack.G * sstack.Ma * L_bias * G_bias > flip_ave:
-                dert__ = [(np.zeros((yn - y0, xn - x0)) - 1) for _ in range(sstack.Ly)]
+            if stack.G * stack.Ma * L_bias * G_bias > flip_ave:
+                f_flip = 1
+                # initialize
+                dert__ = [(np.zeros((yn - y0, xn - x0)) - 1) for _ in range(len(stack.Py_[0].dert_[0]))]
+                mask__ = np.zeros((yn - y0, xn - x0)) > 0
+                # update derts' value
+                for y, P in enumerate(stack.Py_):
+                    for x, idert in enumerate(P.dert_):
+                        for i, (param, dert) in enumerate(zip(idert, dert__)):
+                            dert[y+(stack.y0-y0), x+(P.x0-x0)] = param
+                # update mask
+                mask__[np.where(dert__[0] == -1)] = True
+                # get sign
+                sign__ = dert__[3]*dert__[10]>0 
+
+        # if f_flip, flip dert, then form P 
+        if f_flip:
+            dert__flip = tuple([np.rot90(dert) for dert in dert__])
+            mask__flip = np.rot90(mask__)
+            sign__flip = np.rot90(sign__)
+            
+            # this section is still tentative
+            stack_ = deque()  # buffer of running vertical stacks of Ps
+            for y, dert_ in enumerate(zip(*dert__)):  # first and last row are discarded
+
+                P_ = form_P_(list(zip(*dert_)), sign__[y], mask__[y])  # horizontal clustering
+                P_ = scan_P_(P_, stack_, sliced_blob)  # vertical clustering, adds P up_connects and _P down_connect_cnt
+                stack_ = form_stack_(P_, sliced_blob, y)
+        
+            while stack_:  # dert__ ends, last-line stacks are merged into blob
+                form_blob(stack_.popleft(), sliced_blob)
+
+
+
+#def flip_sstack_(sliced_blob):  # vertical-first run of form_P and deeper functions over blob's ders__
+#    '''
+#    flip selected sstacks
+#     not updated from Chee's version
+#    '''
+#    for sstack_ in sliced_blob['sstack__']:  # should not be needed
+#        for sstack in sstack_:
+#
+#            x0 = min([Py.x0 for Py in sstack.Py_])
+#            xn = max([Py.x0 + Py.L for Py in sstack.Py_])
+#            y0 = sstack.y0
+#            yn = y0 + sstack.Ly
+#
+#            L_bias = (xn - x0 + 1) / (sstack.Ly)
+#            G_bias = abs(sstack.Dy) / abs(sstack.Dx)  # ddirection: Gy / Gx, preferential comp over low G
+#
+#            if sstack.G * sstack.Ma * L_bias * G_bias > flip_ave:
+#                dert__ = [(np.zeros((yn - y0, xn - x0)) - 1) for _ in range(sstack.Ly)]
+
+
+
 
         # we need to run form_gPPy per stack after flipping.
         # old comments:

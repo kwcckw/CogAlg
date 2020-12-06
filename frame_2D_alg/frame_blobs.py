@@ -52,7 +52,7 @@ class CBlob(ClusterStructure):
     A = int  # blob area
     sign = NoneType
     box = list
-    mask = object
+    mask__ = object
     root_dert__ = object
     adj_blobs = list
     fopen = bool
@@ -228,7 +228,7 @@ def flood_fill(dert__, sign__, verbose=False, mask__=None, blob_cls=CBlob, accum
                 yn += 1
                 xn += 1
                 blob.box = y0, yn, x0, xn
-                blob.mask = (idmap[y0:yn, x0:xn] != blob.id)
+                blob.mask__ = (idmap[y0:yn, x0:xn] != blob.id)
                 blob.adj_blobs = [[], 0, 0, 0, 0]
 
                 if verbose:
@@ -346,7 +346,7 @@ if __name__ == "__main__":
             Add borrow_G -= inductive leaking across external blob?
             '''
             blob = CDeepBlob(I=blob.I, Dy=blob.Dy, Dx=blob.Dx, G=blob.G, M=blob.M, A=blob.A, box=blob.box, sign=blob.sign,
-                             mask=blob.mask, root_dert__=deep_root_dert__, adj_blobs=blob.adj_blobs, fopen=blob.fopen, prior_forks=['g'])
+                             mask__=blob.mask__, root_dert__=deep_root_dert__, adj_blobs=blob.adj_blobs, fopen=blob.fopen, prior_forks=['g'])
 
             blob_height = blob.box[1] - blob.box[0]
             blob_width = blob.box[3] - blob.box[2]

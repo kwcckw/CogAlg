@@ -128,7 +128,8 @@ def comp_a(dert__, ave, mask=None):  # cross-comp of angle in 2x2 kernels
 
     i__, dy__, dx__, g__, m__ = dert__[:5]  # day__,dax__,ga__,ma__ are recomputed
 
-    a__ = [float(dy__)], [float(dx__)] / [(g__ + ave + 0.001)]  # + ave to restore abs g, + .001 to avoid / 0
+    # a is float now, convert back to int?
+    a__ = [dy__,dx__] / (g__ + ave + 0.001)  # + ave to restore abs g, + .001 to avoid / 0
 
     # each shifted a in 2x2 kernel
     a__topleft = a__[:, :-1, :-1]
