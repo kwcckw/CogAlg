@@ -178,7 +178,8 @@ def form_P_(idert_, sign_, mask_):  # segment dert__ into P__, in horizontal ) v
     _s = sign_[x0]
     _mask = mask_[x0]  # mask bit per dert
 
-    for x, (p, dy, dx, g, m, dyy, dyx, dxy, dxx, ga, ma) in enumerate(idert_[x0:], start=x0):  # left to right in each row of derts
+    # the previous issue of different blob values is due to we forgot to put x0+1 in the subsequent dert
+    for x, (p, dy, dx, g, m, dyy, dyx, dxy, dxx, ga, ma) in enumerate(idert_[x0+1:], start=x0+1):  # left to right in each row of derts
         mask = mask_[x]
         if ~mask:  # current dert is not masked
             s = sign_[x]
@@ -379,13 +380,6 @@ def form_blob(stack, sliced_blob):  # increment blob with terminated stack, chec
                 mask__[y, x_start:x_stop] = False
 
         dert__ = [derts[y0:yn, x0:xn] for derts in sliced_blob.root_dert__]  # slice all dert array
-        '''
-        This should be done in flood_fill:
-        
-        fopen = 0  # flag: blob on frame boundary
-        if x0 == 0 or xn == sliced_blob.root_dert__[0].shape[1] or y0 == 0 or yn == sliced_blob.root_dert__[0].shape[0]:
-            fopen = 1
-        '''
 
         sliced_blob.stack_ = blob.stack_
         sliced_blob.dert__ = dert__

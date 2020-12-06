@@ -372,6 +372,14 @@ if __name__ == "__main__":
             print_deep_blob_forking(deep_layers)
             print("\rFinished intra_blob")
 
+    if args.verbose:
+        for i, blob in enumerate(frame.blob_):
+        # simple check on correctness of fopen
+            # if fopen, y0 = 0, or x0 = 0, or yn = frame's y size or xn = frame's x size
+            if blob.box[0] == 0 or blob.box[2] == 0 or blob.box[1] == blob.root_dert__[0].shape[0] or blob.box[3] == blob.root_dert__[0].shape[1]:
+                if not blob.fopen: # fopen should be true when blob touches the frame boundaries
+                    print('fopen is wrong on blob '+str(i))
+
     end_time = time() - start_time
 
     if args.verbose:

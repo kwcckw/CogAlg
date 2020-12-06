@@ -50,6 +50,7 @@ def intra_blob(blob, sign__, **kwargs):  # recursive input rng+ | angle cross-co
 
         dert__= tuple([root_dert[blob.box[0]:blob.box[1],blob.box[2]:blob.box[3]] for root_dert in blob.root_dert__])
         mask__ = blob.mask__
+        sign__ = sign__[blob.box[0]:blob.box[1],blob.box[2]:blob.box[3]] # extract only sign within the blob's box
 
         if mask__.shape[0] > 2 and mask__.shape[1] > 2 and False in mask__:  # min size in y and x, at least one dert in dert__
             # slice_blob eval:
