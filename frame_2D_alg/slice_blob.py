@@ -600,11 +600,11 @@ def form_sstack_(sliced_blob):
         # update prior f_up and f_ex
         _f_up = f_up
         _f_ex = f_ex
+        
+    sstack_.append(sstack) # terminate last sstack
 
-    # stack_ = sstack_ if length of sstack_ >0
-    if len(sstack_)>0:
-        sliced_blob.stack_ = sstack_
-        sliced_blob.f_sstack = 1
+    sliced_blob.stack_ = sstack_
+#    sliced_blob.f_sstack = 1 # this may not needed
 
 
 def flip_sstack_(sliced_blob):  # vertical-first run of form_P and deeper functions over blob's ders__
@@ -627,39 +627,47 @@ def flip_sstack_(sliced_blob):  # vertical-first run of form_P and deeper functi
         yn = max(yn_)
 
         L_bias = (xn - x0 + 1) / (sstack.Ly)
-        abs_Dx = abs(sstack.Dx);  if abs_Dx == 0: abs_Dx = 1  # prevent /0
+        abs_Dx = abs(sstack.Dx); abs_Dx = 1 if abs_Dx == 0 else abs_Dx # prevent /0
+        
         G_bias = abs(sstack.Dy) / abs_Dx  # ddirection: Gy / Gx, preferential comp over low G
 
         if sstack.G * sstack.Ma * L_bias * G_bias > flip_ave:  # vertical-first re-scanning of selected sstacks
             f_flip = 1
-            dert__ = [(np.zeros((yn - y0, xn - x0)) - 1) for _ in range(len(sstack.Py_[0].dert_[0]))]
+            dert__ = [(np.zeros((yn - y0, xn - x0)) - 1) for _ in range(11)]
             # or we can replace 'len(stack.Py_[0].dert_[0])' with 11, since we would always having 11 params here
             mask__ = np.zeros((yn - y0, xn - x0)) > 0
 
-            for stack in sstack.Py_:
-                for y, P in enumerate(sstack.Py_):
+            for stack in sstack.Py_: # outer loop is sstack, stack is inner loop, since sstack.Py_ = stack_
+                for y, P in enumerate(stack.Py_):
                     for x, idert in enumerate(P.dert_):
                         for i, (param, dert) in enumerate(zip(idert, dert__)):
-                                dert[y + (sstack.y0 - y0), x + (P.x0 - x0)] = param
+                                dert[y + (stack.y0 - y0), x + (P.x0 - x0)] = param
+
             # update mask__
             mask__[np.where(dert__[0] == -1)] = True
             sign__ = dert__[3] * dert__[10] > 0
 
         if f_flip:  # flip dert, form P
-            dert__flip = tuple([np.rot90(dert) for dert in dert__])
-            mask__flip = np.rot90(mask__)
-            sign__flip = np.rot90(sign__)
+            dert__ = tuple([np.rot90(dert) for dert in dert__])
+            mask__ = np.rot90(mask__)
+            sign__ = np.rot90(sign__)
 
             # this section is still tentative
             stack_ = deque()  # buffer of running vertical stacks of Ps
             for y, dert_ in enumerate(zip(*dert__)):  # first and last row are discarded
 
                 P_ = form_P_(list(zip(*dert_)), sign__[y], mask__[y])  # horizontal clustering
-                P_ = scan_P_(P_, stack_, sliced_blob)  # vertical clustering, adds P up_connects and _P down_connect_cnt
-                stack_ = form_stack_(P_, sliced_blob, y)
-
-            while stack_:  # dert__ ends, last-line stacks are merged into blob
-                form_blob(stack_.popleft(), sliced_blob)
+                
+            # then we just replace the stack.Py_with the P_ above? Since we would forming back 1 stack, and the other params would be the same, except for Ly which we can recompute them from yn and y0
+            # for example:
+            sstack.Py_ = P_
+            sstack.Ly = yn-y0
+                
+#                P_ = scan_P_(P_, stack_, sliced_blob)  # vertical clustering, adds P up_connects and _P down_connect_cnt
+#                stack_ = form_stack_(P_, sliced_blob, y)
+#
+#            while stack_:  # dert__ ends, last-line stacks are merged into blob
+#                form_blob(stack_.popleft(), sliced_blob)
 
         # we need to run form_gPPy per stack after flipping.
         # old comments:
