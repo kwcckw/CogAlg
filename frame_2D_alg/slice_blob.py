@@ -174,15 +174,18 @@ def form_P_(idert_, mask_):  # segment dert__ into P__, in horizontal ) vertical
 
     for x, (p, dy, dx, g, m, dyy, dyx, dxy, dxx, ga, ma) in enumerate(idert_[x0 + 1:], start=x0 + 1):  # left to right in each row of derts
         mask = mask_[x]
-        if mask:
-            if ~_mask:  # ~s and _s: prior dert is not masked and sign changed, terminate P:
+        if ~mask:
+            if ~_mask and mask != _mask:  #  prior dert is not masked and sign changed, terminate P:
                 P = CP(I=I, Dy=Dy, Dx=Dx, G=G, M=M, Dyy=Dyy, Dyx=Dyx, Dxy=Dxy, Dxx=Dxx, Ga=Ga, Ma=Ma, L=L, x0=x0, dert_=dert_)
                 P_.append(P)
-                I= Dy= Dx= G= M= Dyy= Dyx= Dxy= Dxx= Ga= Ma= L= 0; x0 = x; dert_ = []  # initialize P params
+                I= Dy= Dx= G= M= Dyy= Dyx= Dxy= Dxx= Ga= Ma= L= 0; x0 = x+1; dert_ = []  # initialize P params
+#            elif mask:# this is not necessary, since line 177 =~mask, here will never be reached
+#                I= Dy= Dx= G= M= Dyy= Dyx= Dxy= Dxx= Ga= Ma= L= 0; x0 = x; dert_ = []  # initialize P params
         elif ~_mask:
             # dert is masked, prior dert is not masked, terminate P:
             P = CP(I=I, Dy=Dy, Dx=Dx, G=G, M=M, Dyy=Dyy, Dyx=Dyx, Dxy=Dxy, Dxx=Dxx, Ga=Ga, Ma=Ma, L=L, x0=x0, dert_=dert_)
             P_.append(P)
+            I= Dy= Dx= G= M= Dyy= Dyx= Dxy= Dxx= Ga= Ma= L= 0; x0 = x+1; dert_ = []  # initialize P params
 
         if ~mask:  # accumulate P params:
             I += p
@@ -588,7 +591,7 @@ def form_sstack_(sliced_blob):
         _f_ex = f_ex
 
     sstack_.append(sstack)  # terminate last sstack
-
+    sliced_blob.stack_ = sstack_ # we need this to update blob's stack to sstack
 
 def flip_sstack_(sliced_blob):  # vertical-first run of form_P and deeper functions over blob's ders__
     '''
@@ -609,20 +612,20 @@ def flip_sstack_(sliced_blob):  # vertical-first run of form_P and deeper functi
         yn = max(yn_)
 
         L_bias = (xn - x0 + 1) / (sstack.Ly)
-        abs_Dx = abs(sstack.Dx);  if abs_Dx == 0: abs_Dx = 1  # prevent /0
+        abs_Dx = abs(sstack.Dx);  abs_Dx = 1 if abs_Dx == 0 else abs_Dx  # prevent /0
         G_bias = abs(sstack.Dy) / abs_Dx  # ddirection: Gy / Gx, preferential comp over low G
 
         if sstack.G * sstack.Ma * L_bias * G_bias > flip_ave:  # vertical-first re-scanning of selected sstacks
             f_flip = 1
-            dert__ = [(np.zeros((yn - y0, xn - x0)) - 1) for _ in range(len(sstack.Py_[0].dert_[0]))]
+            dert__ = [(np.zeros((yn - y0, xn - x0)) - 1) for _ in range(len(sstack.Py_[0].Py_[0].dert_[0]))] # len(sstack.Py_[0].Py_[0].dert_[0]) = number of params in derts, which is 11
             mask__ = np.zeros((yn - y0, xn - x0)) > 0
 
-            for stack_ in sstack.Py_:
-                for stack in stack_:  # need to check below:
-                    for y, P in enumerate(stack.Py_):
-                        for x, idert in enumerate(P.dert_):
-                            for i, (param, dert) in enumerate(zip(idert, dert__)):
-                                dert[y + (stack.y0 - y0), x + (P.x0 - x0)] = param
+            for stack in sstack.Py_: # each Py in sstack is a stack
+                for y, P in enumerate(stack.Py_):
+                    for x, idert in enumerate(P.dert_):
+                        for i, (param, dert) in enumerate(zip(idert, dert__)):
+                            dert[y + (stack.y0 - y0), x + (P.x0 - x0)] = param
+            
             # update mask__
             mask__[np.where(dert__[0] == -1)] = True
 

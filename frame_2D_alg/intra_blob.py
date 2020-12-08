@@ -70,7 +70,7 @@ def intra_blob(blob, sign__, **kwargs):  # recursive input rng+ | angle cross-co
 
                 blob.prior_forks.extend('p')
 
-                slice_blob(blob, dert__, mask__, blob.prior_forks, verbose=kwargs.get('verbose'))
+                slice_blob(blob, dert__, mask__, verbose=kwargs.get('verbose'))
 
     else:  # root fork is frame_blobs or comp_r
         ext_dert__, ext_mask__ = extend_dert(blob)
