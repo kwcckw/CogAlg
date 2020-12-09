@@ -179,7 +179,7 @@ def form_P_(idert_, mask_):  # segment dert__ into P__, in horizontal ) vertical
             if ~_mask:  # prior dert is not masked, current dert is masked, terminate P (if both are masked, nothing happens):
                 P = CP(I=I, Dy=Dy, Dx=Dx, G=G, M=M, Dyy=Dyy, Dyx=Dyx, Dxy=Dxy, Dxx=Dxx, Ga=Ga, Ma=Ma, L=L, x0=x0, dert_=dert_)
                 P_.append(P)
-                I= Dy= Dx= G= M= Dyy= Dyx= Dxy= Dxx= Ga= Ma= L= 0; x0 = x; dert_ = []  # initialize P params
+                I= Dy= Dx= G= M= Dyy= Dyx= Dxy= Dxx= Ga= Ma= L= 0; x0 = x+1; dert_ = []  # initialize P params, we need x0 = x+1, since if current dert is masked, it should start from next x, which is x+1
         else:
             # accumulate P params:
             I += p
@@ -344,7 +344,7 @@ def form_stack_(P_, sliced_blob, y):  # Convert or merge every P into its stack 
 
 def form_blob(stack, sliced_blob):  # increment blob with terminated stack, check for blob termination and merger into frame
 
-    I, Dy, Dx, G, M, Dyy, Dyx, Dxy, Dxx, Ga, Ma, A, Ly, y0, Py_, sign, f_gstack, f_stack_PP, up_connect_cnt, down_connect_cnt, blob, stack_PP = stack.unpack()
+    I, Dy, Dx, G, M, Dyy, Dyx, Dxy, Dxx, Ga, Ma, A, Ly, y0, Py_, sign, f_gstack, f_stack_PP, f_flip, up_connect_cnt, down_connect_cnt, blob, stack_PP = stack.unpack()
     # terminated stack is merged into continued or initialized blob (all connected stacks):
     accum_Dert(blob.Dert, I=I, Dy=Dy, Dx=Dx, G=G, M=M, Dyy=Dyy, Dyx=Dyx, Dxy=Dxy, Dxx=Dxx, Ga=Ga, Ma=Ma, A=A, Ly=Ly)
 
@@ -607,9 +607,6 @@ def flip_sstack_(sliced_blob):  # vertical-first run of form_P and deeper functi
 
         if sstack.G * sstack.Ma * L_bias * G_bias > flip_ave:  # vertical-first re-scan of selected sstacks
             sstack.f_flip = 1
-
-            ''' just extract sstack dert__ from blob dert__ and forget about input stacks and Ps?
-            
             dert__ = [(np.zeros((yn - y0, xn - x0)) - 1) for _ in range(len(sstack.Py_[0].Py_[0].dert_[0]))]
             # len(sstack.Py_[0].Py_[0].dert_[0]) = number of params in derts, which is 11
             mask__ = np.zeros((yn - y0, xn - x0)) > 0
@@ -623,17 +620,17 @@ def flip_sstack_(sliced_blob):  # vertical-first run of form_P and deeper functi
             # update mask__
             mask__[np.where(dert__[0] == -1)] = True
 
-        mask__ = np.zeros((yn - y0, xn - x0)) > 0
+            mask__ = np.zeros((yn - y0, xn - x0)) > 0
 
             for stack_ in sstack.Py_:
-                for stack in stack_:  # need to check below:
                     for y, P in enumerate(stack.Py_):
                         for x, idert in enumerate(P.dert_):
                             for i, (param, dert) in enumerate(zip(idert, dert__)):
                                 dert[y + (stack.y0 - y0), x + (P.x0 - x0)] = param
+           
             # update mask__
             mask__[np.where(dert__[0] == -1)] = True
-        '''
+        
         if sstack.f_flip:  # flip dert, form P
             dert__flip = tuple([np.rot90(dert) for dert in dert__])
             mask__flip = np.rot90(mask__)
