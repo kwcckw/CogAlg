@@ -37,7 +37,7 @@ flip_ave = 1000
 # --------------------------------------------------------------------------------------------------------------
 # functions:
 
-def intra_blob(blob, sign__=[], **kwargs):  # slice_blob or recursive input rng+ | angle cross-comp within input blob
+def intra_blob(blob, **kwargs):  # slice_blob or recursive input rng+ | angle cross-comp within input blob
 
     Ave = int(ave * blob.rdn)
     AveB = int(aveB * blob.rdn)
