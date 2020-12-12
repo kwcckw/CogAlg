@@ -137,12 +137,19 @@ def slice_blob(sliced_blob, dert__, mask__, verbose=False, render=False):
         stack_ = form_stack_(P_, sliced_blob, y)
 
     while stack_:  # dert__ ends, last-line stacks are merged into blob
-        form_blob(stack_.popleft(), sliced_blob)
+        update_stack_(stack_.popleft(), sliced_blob)
 
     form_sstack_(sliced_blob)  # cluster stacks into horizontally-oriented super-stacks
+    
+    draw_stacks(sliced_blob)# draw stacks per sliced_blob
+        
     flip_sstack_(sliced_blob)  # vertical-first re-scanning of selected sstacks
-
-    # comp_slice_blob(sliced_blob, AveB)  # cross-comp of vertically consecutive Ps in selected stacks, need to add sstacks
+    
+    # is this the correct sequence? we form gPPy first and then call comp_slice_blob after that
+    for sstack in sliced_blob.stack_: # convert selected stacks into gstacks
+        form_gPPy_(sstack.Py_) # sstack.Py_ = stack_
+            
+    comp_slice_blob(sliced_blob, ave)  # cross-comp of vertically consecutive Ps in selected stacks, need to add sstacks
 
     if render: path = output_path(arguments['image'], suffix='.im2blobs.jpg'); streamer.end_blob_conversion(y, img_out_path=path)
 
@@ -246,11 +253,11 @@ def scan_P_(P_, stack_, sliced_blob):  # merge P into higher-row stack of Ps whi
                     P = P_.popleft()  # load next P
                 else:  # terminate loop
                     if stack.down_connect_cnt != 1:  # terminate stack, merge it into up_connects' blobs
-                        form_blob(stack, sliced_blob)
+                        update_stack_(stack, sliced_blob)
                     break
             else:  # no next-P overlap
                 if stack.down_connect_cnt != 1:  # terminate stack, merge it into up_connects' blobs
-                    form_blob(stack, sliced_blob)
+                    update_stack_(stack, sliced_blob)
                 if stack_:  # load stack with next _P
                     stack = stack_.popleft()
                     _P = stack.Py_[-1]
@@ -262,7 +269,7 @@ def scan_P_(P_, stack_, sliced_blob):  # merge P into higher-row stack of Ps whi
     while P_:
         next_P_.append((P_.popleft(), []))  # no up_connect
     while stack_:
-        form_blob(stack_.popleft(), sliced_blob)  # down_connect_cnt==0
+        update_stack_(stack_.popleft(), sliced_blob)  # down_connect_cnt==0
 
     return next_P_  # each element is P + up_connect_ refs
 
@@ -303,12 +310,12 @@ def form_stack_(P_, sliced_blob, y):  # Convert or merge every P into its stack 
 
                 if len(up_connect_) > 1:  # merge blobs of all up_connects
                     if up_connect_[0].down_connect_cnt == 1:  # up_connect is not terminated
-                        form_blob(up_connect_[0], sliced_blob)  # merge stack of 1st up_connect into its blob
+                        update_stack_(up_connect_[0], sliced_blob)  # merge stack of 1st up_connect into its blob
 
                     for up_connect in up_connect_[1:len(up_connect_)]:  # merge blobs of other up_connects into blob of 1st up_connect
                         blob.stack_[-1].up_connect_cnt +=1
                         if up_connect.down_connect_cnt == 1:
-                            form_blob(up_connect, sliced_blob)
+                            update_stack_(up_connect, sliced_blob)
 
                         if not up_connect.blob is blob:
                             Dert, box, stack_, s, open_stacks = up_connect.blob.unpack()[:5]  # merged blob
@@ -336,9 +343,10 @@ def form_stack_(P_, sliced_blob, y):  # Convert or merge every P into its stack 
 
     return next_stack_  # input for the next line of scan_P_
 
-# rename the form_blob? Since we just update the newly formed stack_ into sliced_blob.stack_ or sstack.Py_, instead of forming new blob
-def form_blob(stack, sliced_blob):  # increment blob with terminated stack, check for blob termination and merger into frame
+# better to put the code below as function ,since we need to call them at least 6 times, otherwise the code would be messy
+def update_stack_(stack, sliced_blob):  # increment blob with terminated stack
 
+    # terminate stack
     I, Dy, Dx, G, M, Dyy, Dyx, Dxy, Dxx, Ga, Ma, A, Ly, y0, Py_, sign, f_gstack, f_stack_PP, f_flip, up_connect_cnt, down_connect_cnt, \
     blob, stack_PP = stack.unpack()   # terminated stack is merged into continued or initialized blob (all connected stacks):
     accum_Dert(blob.Dert, I=I, Dy=Dy, Dx=Dx, G=G, M=M, Dyy=Dyy, Dyx=Dyx, Dxy=Dxy, Dxx=Dxx, Ga=Ga, Ma=Ma, A=A, Ly=Ly)
@@ -346,12 +354,9 @@ def form_blob(stack, sliced_blob):  # increment blob with terminated stack, chec
     blob.open_stacks += down_connect_cnt - 1  # incomplete stack cnt + terminated stack down_connect_cnt - 1: stack itself
     # open stacks contain Ps of a current row and may be extended with new x-overlapping Ps in next run of scan_P_
    
-#    not needed, we only have one blob and mask__ is not modified? Right, but i think we still update blob.stack_ into sliced_blob.stack_
-    
-    if blob.open_stacks == 0:  # number of incomplete stacks == 0: blob is terminated:
-        if hasattr(sliced_blob,'f_flip'): # sliced_blob is sstack, called from flip_sstack_
+    if blob.open_stacks == 0:  # number of incomplete stacks == 0: update stack_
+        if isinstance(sliced_blob, CStack): # check if input is sstack, and called from flip_sstack_
             sliced_blob.Py_ = blob.stack_ # if sliced_blob is sstack, update sstack.Py_ to blob.stack_ (each Pys in Py_ is a stack)
-            # after rotation, their y0 and Ly also would be different, should we update that? But the y0 may not be correct since we already rotated them
         else:
             sliced_blob.stack_ = blob.stack_ # update the newly formed stacks into sliced_blob.stack_
         
@@ -469,66 +474,62 @@ def form_gP_(gdert_):
 def accum_Dert(Dert: dict, **params) -> None:
     Dert.update({param: Dert[param] + value for param, value in params.items()})
 
-
-def draw_stacks(frame):
+# tentative, still buggy
+def draw_stacks(sliced_blob):
     '''
     draw stacks per blob
     '''
     import cv2
-    for blob_num, blob in enumerate(frame['blob__']):
-        y0_ = yn_ = x0_ = xn_ = []
-
-        if len(blob.stack_)>1:
+        
+    y0_ = yn_ = x0_ = xn_ = []
+    
+    for sstack in sliced_blob.stack_:
+        for stack in sstack.Py_:
             # retrieve region size of all stacks
-            for stack in blob.stack_:
-                y0_.append(stack.y0)
-                yn_.append(stack.y0 + len(stack.Py_))
-                x0_.append(min([P.x0 for P in stack.Py_]))
-                xn_.append(max([P.x0 + P.L for P in stack.Py_]))
-            y0 = min(y0_)
-            yn = max(yn_)
-            x0 = min(x0_)
-            xn = max(xn_)
-            # initialize image and insert value into each stack.
-            # image value is start with 1 hence order of stack can be viewed from image value
-            img = np.zeros((yn - y0, xn - x0))
-            img_value = 1
-            for stack in blob.stack_:
-                for y, P in enumerate(stack.Py_):
-                    for x, dert in enumerate(P.dert_):
-                        img[y+(stack.y0-y0), x+(P.x0-x0)] = img_value
-                img_value +=1 # increase image value at the end of current stack
+            y0_.append(stack.y0)
+            yn_.append(stack.y0 + len(stack.Py_))
+            x0_.append(min([P.x0 for P in stack.Py_]))
+            xn_.append(max([P.x0 + P.L for P in stack.Py_]))
+                
+                
+    y0 = min(y0_)
+    yn = max(yn_)
+    x0 = min(x0_)
+    xn = max(xn_)
+    # initialize image and insert value into each stack.
+    # image value is start with 1 hence order of stack can be viewed from image value
+    img = np.zeros((yn - y0, xn - x0))
+    img_value = 1
+    for sstack in sliced_blob.stack_:
+        for stack in sstack.Py_:
+            for y, P in enumerate(stack.Py_):
+                for x, dert in enumerate(P.dert_):
+                    img[y+(stack.y0-y0), x+(P.x0-x0)] = img_value
+            img_value +=1 # increase image value at the end of current stack
+    
+    # list of colour for visualization purpose
+    colour_list = [ ]
+    colour_list.append([255,255,255]) # white
+    colour_list.append([200,130,0]) # blue
+    colour_list.append([75,25,230]) # red
+    colour_list.append([25,255,255]) # yellow
+    colour_list.append([75,180,60]) # green
+    colour_list.append([212,190,250]) # pink
+    colour_list.append([240,250,70]) # cyan
+    colour_list.append([48,130,245]) # orange
+    colour_list.append([180,30,145]) # purple
+    colour_list.append([40,110,175]) # brown
+    
+    # initialization
+    img_colour = np.zeros((yn - y0, xn - x0,3)).astype('uint8')
+    total_stacks = img_value
 
-            # list of colour for visualization purpose
-            colour_list = [ ]
-            colour_list.append([255,255,255]) # white
-            colour_list.append([200,130,0]) # blue
-            colour_list.append([75,25,230]) # red
-            colour_list.append([25,255,255]) # yellow
-            colour_list.append([75,180,60]) # green
-            colour_list.append([212,190,250]) # pink
-            colour_list.append([240,250,70]) # cyan
-            colour_list.append([48,130,245]) # orange
-            colour_list.append([180,30,145]) # purple
-            colour_list.append([40,110,175]) # brown
+    for i in range(1,total_stacks+1):
+        colour_index = i%10
+        img_colour[np.where(img==i)] = colour_list[colour_index]
+        
+    cv2.imwrite('./images/stacks/stacks_blob_'+str(sliced_blob.id)+'_colour.bmp',img_colour)
 
-            # initialization
-            img_colour = np.zeros((yn - y0, xn - x0,3)).astype('uint8')
-            img_index  = np.zeros((yn - y0, xn - x0,3)).astype('uint8')
-            total_stacks = len(blob.stack_)
-
-            for i in range(1,total_stacks+1):
-                colour_index = i%10
-                img_colour[np.where(img==i)] = colour_list[colour_index]
-                i_float = float(i)
-                img_index[np.where(img==i)] = (((i_float/total_stacks))*205) + 40
-
-#           for debug purpose
-#           from matplotlib import pyplot as plt
-#           plt.imshow(img_colour)
-#           plt.pause(1)
-            cv2.imwrite('./images/stacks/stacks_blob_'+str(blob_num)+'_colour.bmp',img_colour)
-            cv2.imwrite('./images/stacks/stacks_blob_'+str(blob_num)+'_index.bmp',img_index)
 
 
 def form_sstack_(sliced_blob):
@@ -630,15 +631,5 @@ def flip_sstack_(sliced_blob):  # vertical-first run of form_P and deeper functi
                 stack_ = form_stack_(P_, sstack, y)
 
             while stack_:  # dert__ ends, last-line stacks are merged into blob
-                form_blob(stack_.popleft(), sstack)
+                update_stack_(stack_.popleft(), sstack)
                 
-                
-        # we need to run form_gPPy per stack after flipping.
-        # old comments:
-        # form gPPy in sstack
-        # form_gPPy_(sstack) # form gPPy after flipping?
-        # draw low-ga blob' stacks
-        # draw_stacks(frame)
-        # evaluate P blobs
-
-
