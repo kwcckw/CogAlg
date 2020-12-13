@@ -1,9 +1,9 @@
 '''
    comp_slice_ is a terminal fork of intra_blob.
     
-   It traces blob axis by cross-comparing vertically adjacent Ps: laterally contiguous slices across edge blob.
-   These high-G low Ga edge blobs are vectorized into outlines of adjacent flats: low-G blobs.
-   This is a form of incremental-dimensionality cross-comp and clustering.
+   It traces blob axis by cross-comparing vertically adjacent Ps: horizontal slices across an edge blob.
+   These high-G high-Ma blobs are vectorized into outlines of adjacent flat or low-G blobs.
+   Vectorization is clustering of Ps + derivatives into PPs: patterns of Ps that describe an edge.
 
    Double edge lines: assumed match between edges of high-deviation intensity, no need for cross-comp?
    secondary cross-comp of low-deviation blobs?   P comb -> intra | inter comp eval?
@@ -104,32 +104,32 @@ def comp_slice_blob(blob, AveB):  # comp_slice eval per blob
                 # * len(Py_) / A: length ratio?
                 if stack.f_gstack:  # stack is a nested gP_stack
                     gstack_PP = CStack(stack_PP = CStack_PP())
-    
+
                     for j, istack in enumerate(stack.Py_):  # istack is original stack
                         if istack.G * istack.Ma - AveB / 10 > 0 and len(istack.Py_) > 2:
-    
+
                             stack_PP = comp_slice_(istack, ave)  # root function of comp_slice: edge tracing and vectorization
                             accum_gstack(gstack_PP, istack, stack_PP)
                             istack.f_stack_PP = 1  # stack_PP = accumulated PP params and PP_
-    
+
                     sstack.Py_[i] = gstack_PP
                     # return as stack_PP from form_PP
                 else:
                     # stack is original stack
                     if stack.G * stack.Ma - AveB / 10 > 0 and len(stack.Py_) > 2:
-    
+
                         stack_PP = comp_slice_(stack, ave)  # stack is stack_PP, with accumulated PP params and PP_
                         stack.f_stack_PP = 1  # stack_PP = accumulated PP params and PP_
                         stack.stack_PP = stack_PP  # blob.stack_[i] = stack_PP
+
 
 def comp_slice_(stack, Ave):
     # scan of vertical Py_ -> comp_slice -> form_PP -> 2D dPP_, mPP_: clusters of same-sign Pd | Pm deviation
     DdX = 0
 
-    if stack.G * (stack.Dy / (stack.Dx+1)) * (stack.Ly / stack.A) > Ave:  # if G_bias * L_bias after rescan?
+    if stack.G * (stack.Dy / (stack.Dx+1)) * (stack.Ly_ / stack.A) > Ave:  # if G_bias * L_bias after rescan?
         # eval for rotation = blob axis angle - current vertical direction, if > min?
-        # else virtual rotation:
-
+        # else virtual rotation eval:
         ort = 1  # virtual rotation: estimate P params as orthogonal to long axis, to increase mP
     else:
         ort = 0
