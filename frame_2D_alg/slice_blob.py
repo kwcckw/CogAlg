@@ -171,7 +171,8 @@ def form_P_(idert_, mask_):  # segment dert__ into P__, in horizontal ) vertical
     if ~_mask:
         I, Dy, Dx, G, M, Dyy, Dyx, Dxy, Dxx, Ga, Ma = dert_[0]; L = 1; x0=0  # initialize P params with first dert
 
-    for x, dert in enumerate(idert_[1:]):  # left to right in each row of derts
+    # we need add start=1 here, to let x iterate from 1
+    for x, dert in enumerate(idert_[1:], start=1):  # left to right in each row of derts
         mask = mask_[x]  # masks = 1,_0: P termination, 0,_1: P initialization, 0,_0: P accumulation:
         if mask:
             if ~_mask:  # _dert is not masked, dert is masked, terminate P:
@@ -569,7 +570,10 @@ def flip_sstack_(sliced_blob):  # vertical-first run of form_P and deeper functi
     flip selected sstacks
     '''
     for sstack in sliced_blob.stack_:
-        x0_ = xn_ = y0_ = yn_ = []
+        
+        # we cannot use single line here, it would having same memory and causing issue:
+        # please refer here: https://stackoverflow.com/questions/2402646/python-initializing-multiple-lists-line
+        x0_, xn_, y0_, yn_ = ([] for i in range(4))
 
         # find min and max x and y in sstack:
         for stack in sstack.Py_:
@@ -587,23 +591,32 @@ def flip_sstack_(sliced_blob):  # vertical-first run of form_P and deeper functi
 
         if sstack.G * sstack.Ma * L_bias * G_bias > flip_ave:  # vertical-first re-scan of selected sstacks
             sstack.f_flip = 1
-
-            sstack_mask__ = np.ones((yn - y0, xn - x0))
+    
+            # we need bool here , the mask need to be in 'bool' to run form_P_ later
+            sstack_mask__ = np.zeros((yn - y0, xn - x0)) == 0
+            dert__ = [(np.zeros((yn - y0, xn - x0)) - 1) for _ in range(11)]
+            
             # unmask sstack:
             for stack in sstack.Py_:
                 for y, P in enumerate(stack.Py_):
-                    sstack_mask__[y, P.x0 : (P.x0+P.L-1)] = np.ones
-                    # or sstack_mask__ = np.ones([y, P.x0 : (P.x0+P.L-1)])?
-
-            # this section is still tentative
+                    sstack_mask__[y + (stack.y0-y0), P.x0 : (P.x0+P.L)] = False
+                    for x, idert in enumerate(P.dert_):
+                        for i, (param, dert) in enumerate(zip(idert, dert__)):
+                            dert[y + (stack.y0-y0), x + (P.x0 - x0)] = param # we still need to retrieve each derts from each stack in sstack, since we do not have box information on derts per sstack
+    
+            # since we already performed the rotation at comp_pixel, we wouldn't need to rotate here anymore?
             stack_ = deque()  # buffer of running vertical stacks of Ps
 
-            for y, dert_ in enumerate(zip(*sliced_blob.dert__[(y0+1):(yn-1), x0:0] )):  # first and last row are discarded
+            if sstack_mask__.shape[0]>2: # first and last row are discarded when y size >=3, but why we need this?
+                sstack_mask__ = sstack_mask__[1:-1,:]
+                dert__ = tuple([idert__[1:-1,:] for idert__ in dert__])
+                
+            for y, dert_ in enumerate(zip(*dert__)):  
 
                 P_ = form_P_(list(zip(*dert_)), sstack_mask__[y])  # horizontal clustering
                 P_ = scan_P_(P_, stack_, sstack)  # vertical clustering, adds P up_connects and _P down_connect_cnt
                 stack_ = form_stack_(P_, sstack, y)
-
+    
             while stack_:  # dert__ ends, last-line stacks are merged into blob
                 term_stack(stack_.popleft(), sstack)
 
