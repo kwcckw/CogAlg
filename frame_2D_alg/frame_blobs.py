@@ -81,6 +81,7 @@ class CDeepBlob(ClusterStructure):
     fopen = bool
     f_root_a = bool  # flag: input is from comp angle
     f_comp_a = bool  # flag: current fork is comp angle
+    f_flip = bool
     rdn = float
     rng = int
     Ls = int  # for visibility and next-fork rdn

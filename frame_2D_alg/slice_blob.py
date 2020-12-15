@@ -594,25 +594,24 @@ def flip_sstack_(sliced_blob):  # vertical-first run of form_P and deeper functi
     
             # we need bool here , the mask need to be in 'bool' to run form_P_ later
             sstack_mask__ = np.zeros((yn - y0, xn - x0)) == 0
-            dert__ = [(np.zeros((yn - y0, xn - x0)) - 1) for _ in range(11)]
             
             # unmask sstack:
             for stack in sstack.Py_:
                 for y, P in enumerate(stack.Py_):
                     sstack_mask__[y + (stack.y0-y0), P.x0 : (P.x0+P.L)] = False
-                    for x, idert in enumerate(P.dert_):
-                        for i, (param, dert) in enumerate(zip(idert, dert__)):
-                            dert[y + (stack.y0-y0), x + (P.x0 - x0)] = param # we still need to retrieve each derts from each stack in sstack, since we do not have box information on derts per sstack
-    
-            # since we already performed the rotation at comp_pixel, we wouldn't need to rotate here anymore?
-            stack_ = deque()  # buffer of running vertical stacks of Ps
-
-            if sstack_mask__.shape[0]>2: # first and last row are discarded when y size >=3, but why we need this?
-                sstack_mask__ = sstack_mask__[1:-1,:]
-                dert__ = tuple([idert__[1:-1,:] for idert__ in dert__])
+            
+            if sliced_blob.f_flip: 
+                # get dert__ per sliced blob and rotate it
+                dert__= tuple([np.rot90(root_dert[sliced_blob.box[0]:sliced_blob.box[1],sliced_blob.box[2]:sliced_blob.box[3]]) for root_dert in sliced_blob.root_dert__])
+            else:
+                # get dert__ per sliced blob
+                dert__= tuple([root_dert[sliced_blob.box[0]:sliced_blob.box[1],sliced_blob.box[2]:sliced_blob.box[3]] for root_dert in sliced_blob.root_dert__])
+            # get dert__ per sstack
+            sstack_dert__ = tuple([dert[y0:yn,x0:xn] for dert in dert__])
+            
+            stack_ = deque()  # buffer of running vertical stacks of Ps 
+            for y, dert_ in enumerate(zip(*sstack_dert__)):  
                 
-            for y, dert_ in enumerate(zip(*dert__)):  
-
                 P_ = form_P_(list(zip(*dert_)), sstack_mask__[y])  # horizontal clustering
                 P_ = scan_P_(P_, stack_, sstack)  # vertical clustering, adds P up_connects and _P down_connect_cnt
                 stack_ = form_stack_(P_, sstack, y)
