@@ -48,6 +48,10 @@ class CBlob(ClusterStructure):
     Dx = int
     G = int
     M = int
+    Dyy = int
+    Dyx = int
+    Dxy = int
+    Dxx = int
     # blob params
     A = int  # blob area
     sign = NoneType
@@ -92,6 +96,7 @@ class CDeepBlob(ClusterStructure):
     stack_ = list
     f_sstack = NoneType
 
+
 def comp_pixel(image):  # 2x2 pixel cross-correlation within image, as in edge detection operators
     # see comp_pixel_versions file for other versions and more explanation
 
@@ -107,11 +112,11 @@ def comp_pixel(image):  # 2x2 pixel cross-correlation within image, as in edge d
     # rotate dert__ 45 degrees to convert diagonals into orthogonals: avoid summation which degrades accuracy
     # used in comp_a only, resulting day and dax are back to orthogonal?
 
-    rot_Gy__ = bottomright__ - topleft__  # bottom__ - top__
-    rot_Gx__ = topright__ - bottomleft__  # right__ - left__
+    rot_Gy__ = bottomright__ - topleft__  # rotated to bottom__ - top__
+    rot_Gx__ = topright__ - bottomleft__  # rotated to right__ - left__
 
     G__ = (np.hypot(rot_Gy__, rot_Gx__) - ave).astype('int')  # deviation of central gradient per kernel, between four vertex pixels
-    # G and M are rotation invariant, just more accurate from rot_Gy__ and rot_Gx__
+    # G and M are rotation invariant, but more accurate from rot_Gy__ and rot_Gx__?
 
     M__ = int(ave * 1.41)  - (abs(bottomright__ - topleft__) + abs(topright__ - bottomleft__))
     # inverse deviation of SAD: variation, ave SAD = ave g * 1.41
@@ -230,7 +235,7 @@ def flood_fill(dert__, sign__, verbose=False, mask__=None, blob_cls=CBlob, accum
                 yn += 1
                 xn += 1
                 blob.box = y0, yn, x0, xn
-                blob.dert__ = tuple([param_dert__[y0:yn,x0:xn] for param_dert__ in blob.root_dert__])
+                blob.dert__ = tuple([param_dert__[y0:yn, x0:xn] for param_dert__ in blob.root_dert__])
                 blob.mask__ = (idmap[y0:yn, x0:xn] != blob.id)
                 blob.adj_blobs = [[], 0, 0, 0, 0]
 
@@ -345,7 +350,7 @@ if __name__ == "__main__":
             '''
             int_G / 2 + ext_G / 2, because both borrow or lend bilaterally, 
             same as pri_M and next_M in line patterns but direction here is radial: inside-out
-            borrow_G = min, ~ comp(G,_G): only value present in both parties can be borrowed from one to another
+            borrow_G = min, ~ comp(G, _G): only the value present in both parties can be borrowed from one to another
             Add borrow_G -= inductive leaking across external blob?
             '''
             blob = CDeepBlob(I=blob.I, Dy=blob.Dy, Dx=blob.Dx, G=blob.G, M=blob.M, A=blob.A, box=blob.box, sign=blob.sign,
@@ -374,14 +379,6 @@ if __name__ == "__main__":
         if args.verbose:
             print_deep_blob_forking(deep_layers)
             print("\rFinished intra_blob")
-
-    if args.verbose:
-        for i, blob in enumerate(frame.blob_):
-        # simple check on correctness of fopen
-            # if fopen, y0 = 0, or x0 = 0, or yn = frame's y size or xn = frame's x size
-            if blob.box[0] == 0 or blob.box[2] == 0 or blob.box[1] == blob.root_dert__[0].shape[0] or blob.box[3] == blob.root_dert__[0].shape[1]:
-                if not blob.fopen: # fopen should be true when blob touches the frame boundaries
-                    print('fopen is wrong on blob '+str(i))
 
     end_time = time() - start_time
 
