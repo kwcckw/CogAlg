@@ -64,7 +64,7 @@ def intra_blob(blob, **kwargs):  # slice_blob or recursive input rng+ | angle cr
                     blob.dert__ = tuple([np.rot90(dert) for dert in blob.dert__])
                     mask__ = np.rot90(mask__)
 
-                slice_blob(blob, blob.dert__, mask__, AveB, verbose=kwargs.get('verbose'))
+                slice_blob(blob, mask__, AveB, verbose=kwargs.get('verbose'))
 
     else:  # root fork is frame_blobs or comp_r
         ext_dert__, ext_mask__ = extend_dert(blob)  # dert__ boundaries += 1, to compute correlation in larger kernels
@@ -109,8 +109,8 @@ def cluster_sub_eval(blob, dert__, sign__, mask__, **kwargs):  # comp_r or comp_
     AveB = aveB * blob.rdn
                              
     sub_blobs, idmap, adj_pairs = \
-        flood_fill(dert__, sign__, verbose=False, mask__=mask__, blob_cls=CDeepBlob, accum_func=accum_blob_Dert)
-    assign_adjacents(adj_pairs, CDeepBlob)
+        flood_fill(dert__, sign__, verbose=False, mask__=mask__, blob_cls=CBlob, accum_func=accum_blob_Dert)
+    assign_adjacents(adj_pairs, CBlob)
 
     if kwargs.get('render', False):
         visualize_blobs(idmap, sub_blobs, winname=f"Deep blobs (f_comp_a = {blob.f_comp_a}, f_root_a = {blob.f_root_a})")
@@ -118,7 +118,7 @@ def cluster_sub_eval(blob, dert__, sign__, mask__, **kwargs):  # comp_r or comp_
     blob.Ls = len(sub_blobs)  # for visibility and next-fork rdn
     blob.sub_layers = [sub_blobs]  # 1st layer of sub_blobs
 
-    for sub_blob in sub_blobs:  # evaluate sub_blob
+    for i, sub_blob in enumerate(sub_blobs):  # evaluate sub_blob
 
         G = blob.G  # Gr, Grr..
         adj_M = blob.adj_blobs[3]  # adj_M is incomplete, computed within current dert_only, use root blobs instead:
@@ -131,17 +131,31 @@ def cluster_sub_eval(blob, dert__, sign__, mask__, **kwargs):  # comp_r or comp_
 
         if sub_blob.G > AveB:  # replace with borrow_M when known
             # comp_a:
-            sub_blob.f_root_a = 1
-            sub_blob.a_depth += blob.a_depth  # accumulate a depth from blob to sub_blob, currently not used
-            sub_blob.rdn = sub_blob.rdn + 1 + 1 / blob.Ls
-            blob.sub_layers += intra_blob(sub_blob, **kwargs)
+            # update blob to deep blob before calling intra_blob 
+            sub_deep_blob = CDeepBlob(I=sub_blob.I, Dy=sub_blob.Dy, Dx=sub_blob.Dx, G=sub_blob.G, M=sub_blob.M,
+                                      Dyy=sub_blob.Dyy, Dyx=sub_blob.Dyx, Dxy=sub_blob.Dxy, Dxx=sub_blob.Dxx, 
+                                      Ga=sub_blob.Ga, Ma=sub_blob.Ma, A=sub_blob.A, box=sub_blob.box, 
+                                      sign=sub_blob.sign, dert__ = sub_blob.dert__, mask__=sub_blob.mask__, 
+                                      root_dert__=sub_blob.root_dert__, adj_blobs=sub_blob.adj_blobs, prior_forks=blob.prior_forks.copy(),
+                                      fopen=sub_blob.fopen, f_root_a=1)
+            sub_blobs[i] = sub_deep_blob
+            sub_deep_blob.a_depth += blob.a_depth  # accumulate a depth from blob to sub_blob, currently not used
+            sub_deep_blob.rdn = sub_deep_blob.rdn + 1 + 1 / blob.Ls
+            blob.sub_layers += intra_blob(sub_deep_blob, **kwargs)
 
         elif sub_blob.M - borrow_M > AveB:
             # comp_r:
-            sub_blob.f_root_a = 0
-            sub_blob.rng = blob.rng * 2
-            sub_blob.rdn = sub_blob.rdn + 1 + 1 / blob.Ls
-            blob.sub_layers += intra_blob(sub_blob, **kwargs)
+            # update blob to deep blob before calling intra_blob 
+            sub_deep_blob = CDeepBlob(I=sub_blob.I, Dy=sub_blob.Dy, Dx=sub_blob.Dx, G=sub_blob.G, M=sub_blob.M,
+                                      Dyy=sub_blob.Dyy, Dyx=sub_blob.Dyx, Dxy=sub_blob.Dxy, Dxx=sub_blob.Dxx, 
+                                      Ga=sub_blob.Ga, Ma=sub_blob.Ma, A=sub_blob.A, box=sub_blob.box, 
+                                      sign=sub_blob.sign, dert__ = sub_blob.dert__, mask__=sub_blob.mask__, 
+                                      root_dert__=sub_blob.root_dert__, adj_blobs=sub_blob.adj_blobs, prior_forks=blob.prior_forks.copy(),
+                                      fopen=sub_blob.fopen, f_root_a=0)
+            sub_blobs[i] = sub_deep_blob
+            sub_deep_blob.rng = blob.rng * 2
+            sub_deep_blob.rdn = sub_deep_blob.rdn + 1 + 1 / blob.Ls
+            blob.sub_layers += intra_blob(sub_deep_blob, **kwargs)
 
 
 def extend_dert(blob):  # extend dert borders (+1 dert to boundaries)
