@@ -62,6 +62,7 @@ class CBlob(ClusterStructure):
     dert__ = object
     root_dert__ = object
     adj_blobs = list
+    prior_forks = list
     fopen = bool
     prior_forks = list
 

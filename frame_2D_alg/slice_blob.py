@@ -585,7 +585,7 @@ def flip_sstack_(sliced_blob):
         L_bias = (xn - x0 + 1) / (sstack.Ly)  # ratio of lx to Ly
         G_bias = abs(sstack.Dy) / (abs(sstack.Dx) + 1)  # ddirection: Gy / Gx, preferential comp over low G
 
-        if sstack.G * sstack.Ma * L_bias * G_bias > flip_ave:  # vertical-first re-scan of selected sstacks
+        if sstack.G * sstack.Ma * L_bias * G_bias > flip_ave:  # vertical-first rescan of selected sstacks
             sstack.f_flip = 1
 
             sstack_mask__ = np.ones((yn - y0, xn - x0)).astype(bool)
@@ -593,9 +593,9 @@ def flip_sstack_(sliced_blob):
             for stack in sstack.Py_:
                 for y, P in enumerate(stack.Py_):
                     sstack_mask__[y, P.x0: (P.x0 + P.L)] = False  # unmask P
-                    
-            # no need +1 for [y0:yn, x0:xn]
-            sstack_dert__ = tuple([ param_dert__[y0:yn, x0:xn] for param_dert__ in sliced_blob.dert__ ])
+
+            sstack_dert__ = tuple([param_dert__[y0:yn, x0:xn] for param_dert__ in sliced_blob.dert__])
+            sstack_dert__ = tuple([ np.rot90(sstack_dert__) ])  # flip sstack
             stack_ = deque()  # vertical stacks of Ps
 
             for y, dert_ in enumerate(zip(*sstack_dert__)):   # first and last row are discarded
