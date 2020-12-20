@@ -41,31 +41,6 @@ EXCLUDED_ID = -2
 
 FrameOfBlobs = namedtuple('FrameOfBlobs', 'I, Dy, Dx, G, M, blob_, dert__')
 
-class CFlatBlob(ClusterStructure):
-    # Dert params
-    I = int
-    Dy = int
-    Dx = int
-    G = int
-    M = int
-    Dyy = int
-    Dyx = int
-    Dxy = int
-    Dxx = int
-    Ga = int
-    Ma = int
-    # blob params
-    A = int  # blob area
-    sign = NoneType
-    box = list
-    mask__ = object
-    dert__ = object
-    root_dert__ = object
-    adj_blobs = list
-    prior_forks = list
-    fopen = bool
-    prior_forks = list
-
 class CBlob(ClusterStructure):
     # Dert params
     I = int
@@ -85,9 +60,17 @@ class CBlob(ClusterStructure):
     box = list
     mask__ = object
     dert__ = object
+    stack_ = object
     root_dert__ = object
     adj_blobs = list
+    prior_forks = list
     fopen = bool
+    # deep params
+    fdeep = bool # flag to indicate blob is deep blob
+    deep = object # object to store all deep blob params
+
+class deep(ClusterStructure): # class of deep blob parameters
+
     f_root_a = bool  # flag: input is from comp angle
     f_comp_a = bool  # flag: current fork is comp angle
     f_flip = bool
@@ -96,10 +79,7 @@ class CBlob(ClusterStructure):
     Ls = int  # for visibility and next-fork rdn
     sub_layers = list
     a_depth = int
-    prior_forks = list
-    stack_ = list
     f_sstack = NoneType
-
 
 def comp_pixel(image):  # 2x2 pixel cross-correlation within image, as in edge detection operators
     # see comp_pixel_versions file for other versions and more explanation
@@ -137,7 +117,7 @@ def derts2blobs(dert__, verbose=False, render=False, use_c=False):
         dert__ = dert__[0], np.empty(0), np.empty(0), *dert__[1:], np.empty(0)
         frame, idmap, adj_pairs = wrapped_flood_fill(dert__)
     else:
-        blob_, idmap, adj_pairs = flood_fill(dert__, sign__=dert__[3] > 0,  verbose=verbose)
+        blob_, idmap, adj_pairs = flood_fill(dert__, sign__=dert__[3] > 0,  blob_cls=CBlob, verbose=verbose)
         I = Dy = Dx = G = M = 0
         for blob in blob_:
             I += blob.I
@@ -186,7 +166,7 @@ def flood_fill(dert__, sign__, verbose=False, mask__=None, blob_cls=CBlob, accum
         for x in range(width):
             if idmap[y, x] == UNFILLED:  # ignore filled/clustered derts
                 # initialize new blob
-                blob = blob_cls(sign=sign__[y, x], root_dert__=dert__)
+                blob = blob_cls(sign=sign__[y, x], root_dert__=dert__, deep=deep())
                 if prior_forks: # update prior forks in deep blob
                     blob.prior_forks= prior_forks.copy()
                 blob_.append(blob)
@@ -288,14 +268,15 @@ def assign_adjacents(adj_pairs, blob_cls=CBlob):  # adjacents are connected oppo
             blob2.adj_blobs[4] += blob1.Ma
 
 
-def print_deep_blob_forking(deep_layer):
 
-    def check_deep_blob(deep_layer,i):
-        for deep_blob_layer in deep_layer:
-            if isinstance(deep_blob_layer,list):
-                check_deep_blob(deep_blob_layer,i)
-            else:
-                print('blob num = '+str(i)+', forking = '+'->'.join(deep_blob_layer.prior_forks))
+def check_deep_blob(deep_layer,i):
+    for deep_blob_layer in deep_layer:
+        if isinstance(deep_blob_layer,list):
+            check_deep_blob(deep_blob_layer,i)
+        else:
+            print('blob num = '+str(i)+', forking = '+'->'.join(deep_blob_layer.prior_forks))
+
+def print_deep_blob_forking(deep_layer):
 
     for i, deep_layer in enumerate(deep_layers):
         if len(deep_layer)>0:
@@ -363,15 +344,14 @@ if __name__ == "__main__":
 
             if blob.sign:  # +G on first fork
                 if min(G, borrow_G) > aveB and blob_height > 3 and blob_width  > 3:  # min blob dimensions
-                    blob.rdn = 1
-                    blob.f_comp_a = 1
+                    blob.fdeep=1; # enable flag for deep blob before calling intra_blob
+                    blob.deep.rdn = 1; blob.deep.f_comp_a = 1
                     deep_layers[i] = intra_blob(blob, render=args.render, verbose=args.verbose)
                     # dert__ comp_a in 2x2 kernels
 
             elif M - borrow_G > aveB and blob_height > 3 and blob_width  > 3:  # min blob dimensions
-                blob.rdn = 1
-                blob.rng = 1
-                blob.f_root_a = 0
+                blob.fdeep=1; # enable flag for deep blob before calling intra_blob
+                blob.deep.rdn = 1; blob.deep.rng = 1; blob.deep.f_root_a = 0
                 deep_layers[i] = intra_blob(blob, render=args.render, verbose=args.verbose)
                 # dert__ comp_r in 3x3 kernels
 
