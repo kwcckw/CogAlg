@@ -64,7 +64,8 @@ def intra_blob(blob, **kwargs):  # slice_blob or recursive input rng+ | angle cr
                     blob.dert__ = tuple([np.rot90(dert) for dert in blob.dert__])
                     mask__ = np.rot90(mask__)
 
-                slice_blob(blob, mask__, AveB, verbose=kwargs.get('verbose'))
+                blob.stack_ = slice_blob(blob, mask__, AveB, verbose=kwargs.get('verbose'))
+                # stack_ should be the only thing slice_blob adds to blob?
 
     else:  # root fork is frame_blobs or comp_r
         ext_dert__, ext_mask__ = extend_dert(blob)  # dert__ boundaries += 1, to compute correlation in larger kernels
