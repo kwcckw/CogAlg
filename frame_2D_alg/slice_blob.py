@@ -103,6 +103,7 @@ class CStack(ClusterStructure):
     up_connect_cnt = int
     down_connect_cnt = int
     stack_PP = object
+    blob = object
 
     '''
     the whole CSlicedBlob should not be needed, use root CBlob.
@@ -111,7 +112,7 @@ class CStack(ClusterStructure):
 # Functions:
 
 def slice_blob(sliced_blob, mask__, AveB, verbose=False, render=False):
-
+    
     stack_ = deque()  # buffer of running vertical stacks of Ps
     height, width = sliced_blob.dert__[0].shape
     if render:     # diagnostic code should be as few lines as possible
@@ -129,12 +130,9 @@ def slice_blob(sliced_blob, mask__, AveB, verbose=False, render=False):
         P_ = scan_P_(P_, stack_, sliced_blob)  # vertical clustering, adds P up_connects and _P down_connect_cnt
         stack_ = form_stack_(P_, sliced_blob, y)
 
-    while stack_:  # dert__ ends, last-line stacks are merged into blob
-        term_stack(stack_.popleft(), sliced_blob)
-
     form_sstack_(sliced_blob)  # cluster stacks into horizontally-oriented super-stacks
     draw_stacks (sliced_blob)  # visualization
-    flip_sstack_(sliced_blob)  # vertical-first re-scanning of selected sstacks
+#    flip_sstack_(sliced_blob)  # vertical-first re-scanning of selected sstacks
 
     for sstack in sliced_blob.stack_:  # convert selected stacks into gstacks
         form_gPPy_(sstack.Py_)  # sstack.Py_ = stack_
@@ -228,13 +226,15 @@ def scan_P_(P_, stack_, sliced_blob):  # merge P into higher-row stack of Ps whi
                     if P.sign == stack.sign:  # sign match
                         stack.down_connect_cnt += 1
                         up_connect_.append(stack)  # buffer P-connected higher-row stacks into P' up_connect_
-
+            
+            ''' we shouldn't have -G in sliced_blob since edges is +G area
             else:  # -G, check for orthogonal overlaps only: 4 directions, edge blobs are more selective
                 if _x0 < xn and x0 < _xn:  # x overlap between loaded P and _P
                     if P.sign == stack.sign:  # sign match
                         stack.down_connect_cnt += 1
                         up_connect_.append(stack)  # buffer P-connected higher-row stacks into P' up_connect_
-
+            '''
+            
             if (xn < _xn or  # _P overlaps next P in P_
                     xn == _xn and stack.sign):  # check in 8 directions
                 next_P_.append((P, up_connect_))  # recycle _P for the next run of scan_P_
@@ -242,12 +242,8 @@ def scan_P_(P_, stack_, sliced_blob):  # merge P into higher-row stack of Ps whi
                 if P_:
                     P = P_.popleft()  # load next P
                 else:  # terminate loop
-                    if stack.down_connect_cnt != 1:  # terminate stack, merge it into up_connects' blobs
-                        term_stack(stack, sliced_blob)
                     break
             else:  # no next-P overlap
-                if stack.down_connect_cnt != 1:  # terminate stack, merge it into up_connects' blobs
-                    term_stack(stack, sliced_blob)
                 if stack_:  # load stack with next _P
                     stack = stack_.popleft()
                     _P = stack.Py_[-1]
@@ -255,11 +251,9 @@ def scan_P_(P_, stack_, sliced_blob):  # merge P into higher-row stack of Ps whi
                     next_P_.append((P, up_connect_))
                     break
 
-    # terminate Ps and stacks that continue at row's end
+    # terminate Ps that continue at row's end
     while P_:
         next_P_.append((P_.popleft(), []))  # no up_connect
-    while stack_:
-        term_stack(stack_.popleft(), sliced_blob)  # down_connect_cnt==0
 
     return next_P_  # each element is P + up_connect_ refs
 
@@ -274,11 +268,11 @@ def form_stack_(P_, sliced_blob, y):  # Convert or merge every P into its stack 
         xn = x0 + L  # next-P x0
         if not up_connect_:
             # initialize new stack for each input-row P that has no connections in higher row, as in the whole top row:
-            open_stacks = 1
+            sliced_blob.open_stacks = 1
             new_stack = CStack(I=I, Dy=Dy, Dx=Dx, G=G, M=M, Dyy=Dyy, Dyx=Dyx, Dxy=Dxy, Dxx=Dxx, Ga=Ga, Ma=Ma, A=L, Ly=1,
-                               y0=y, Py_=[P], down_connect_cnt=0, sign=s, fPP=0)
-            new_stack.hid = blob.id
-            blob.stack_.append(new_stack)
+                               y0=y, Py_=[P], blob=sliced_blob, down_connect_cnt=0, sign=s, fPP=0)
+            new_stack.hid = sliced_blob.id
+            sliced_blob.stack_.append(new_stack)
 
         else:
             if len(up_connect_) == 1 and up_connect_[0].down_connect_cnt == 1:
@@ -287,26 +281,29 @@ def form_stack_(P_, sliced_blob, y):  # Convert or merge every P into its stack 
                 new_stack.accumulate(I=I, Dy=Dy, Dx=Dx, G=G, M=M, Dyy=Dyy, Dyx=Dyx, Dxy=Dxy, Dxx=Dxx, Ga=Ga, Ma=Ma, A=L, Ly=1)
                 new_stack.Py_.append(P)  # Py_: vertical buffer of Ps
                 new_stack.down_connect_cnt = 0  # reset down_connect_cnt
-                blob = new_stack.blob
 
             else:  # P has >1 up_connects, or 1 up_connect that has >1 down_connect_cnt:
                 blob = up_connect_[0].blob
                 # initialize new_stack with up_connect blob:
                 new_stack = CStack(I=I, Dy=Dy, Dx=Dx, G=G, M=M, Dyy=Dyy, Dyx=Dyx, Dxy=Dxy, Dxx=Dxx, Ga=Ga, Ma=Ma, A=L, Ly=1,
-                                   y0=y, Py_=[P], down_connect_cnt=0, up_connect_cnt=1, sign=s, fPP=0)
+                                   y0=y, Py_=[P], blob=blob, down_connect_cnt=0, up_connect_cnt=1, sign=s, fPP=0)
                 new_stack.hid = blob.id
                 blob.stack_.append(new_stack)  # stack is buffered into blob
 
                 if len(up_connect_) > 1:  # merge blobs of all up_connects
-                    if up_connect_[0].down_connect_cnt == 1:  # up_connect is not terminated
-                        term_stack(up_connect_[0], sliced_blob)  # merge stack of 1st up_connect into its blob
+                    # section below is not needed
+#                    if up_connect_[0].down_connect_cnt == 1:  # up_connect is not terminated
+#                        term_stack(up_connect_[0], sliced_blob)  # merge stack of 1st up_connect into its blob
 
                     for up_connect in up_connect_[1:len(up_connect_)]:  # merge blobs of other up_connects into blob of 1st up_connect
                         blob.stack_[-1].up_connect_cnt +=1
-                        if up_connect.down_connect_cnt == 1:
-                            term_stack(up_connect, sliced_blob)
+                        # section below is not needed
+#                        if up_connect.down_connect_cnt == 1:
+#                            term_stack(up_connect, sliced_blob)
+                        
+                        
                         '''
-                        not needed:?
+                        not needed:? Not needed, up_connect's blob is always the same blob since we only have 1 blob in slice_blob
                         if not up_connect.blob is blob:
                             Dert, box, stack_, s, open_stacks = up_connect.blob.unpack()[:5]  # merged blob
                             I, Dy, Dx, G, M, Dyy, Dyx, Dxy, Dxx, Ga, Ma, A, Ly = Dert.values()
@@ -325,30 +322,18 @@ def form_stack_(P_, sliced_blob, y):  # Convert or merge every P into its stack 
                             up_connect.hid = blob.id
                             blob.stack_.append(up_connect)
                         '''
-                        open_stacks -= 1  # overlap with merged blob.
 
-        blob.box[1] = min(blob.box[1], x0)  # extend box x0
-        blob.box[2] = max(blob.box[2], xn)  # extend box xn
         P.hid = new_stack.id
         next_stack_.append(new_stack)
 
     return next_stack_  # input for the next line of scan_P_
 
 
+''' not needed, stack will be appended into sliced_blob when they are initialized
 def term_stack(stack, sliced_blob):  # increment blob with terminated stack
 
-    I, Dy, Dx, G, M, Dyy, Dyx, Dxy, Dxx, Ga, Ma, A, Ly, y0, Py_, sign, f_gstack, f_stack_PP, f_flip, up_connect_cnt, down_connect_cnt, \
-    stack_PP = stack.unpack()  # terminated stack is merged into continued or initialized blob (all connected stacks):
-
-    open_stacks += down_connect_cnt - 1  # incomplete stack cnt + terminated stack down_connect_cnt - 1: stack itself
-    # open stacks contain Ps of a current row and may be extended with new x-overlapping Ps in next run of scan_P_
-
-    if open_stacks == 0:  # number of incomplete stacks == 0: update stack_
-        if isinstance(sliced_blob, CStack):  # check if input is sstack, and called from flip_sstack_
-            sliced_blob.Py_ = stack_  # if sliced_blob is sstack, update sstack.Py_ to blob.stack_ (each Pys in Py_ is a stack)
-        else:
-            sliced_blob.stack_ = stack_  # update the newly formed stacks into sliced_blob.stack_
-
+    sliced_blob.open_stacks += stack.down_connect_cnt - 1  # incomplete stack cnt + terminated stack down_connect_cnt - 1: stack itself
+'''
 
 def form_gPPy_(stack_):  # convert selected stacks into gstacks, should be run over the whole stack_
 

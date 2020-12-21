@@ -39,20 +39,20 @@ flip_ave = 1000
 
 def intra_blob(blob, **kwargs):  # slice_blob or recursive input rng+ | angle cross-comp within input blob
 
-    Ave = int(ave * blob.deep.rdn)
-    AveB = int(aveB * blob.deep.rdn)
+    Ave = int(ave * blob.rdn)
+    AveB = int(aveB * blob.rdn)
     if kwargs.get('render') is not None:  # don't render small blobs
         if blob.A < 100: kwargs['render'] = False
     spliced_layers = []  # to extend root_blob sub_layers
 
-    if blob.deep.f_root_a:  # root fork is comp_a -> slice_blobs
+    if blob.f_root_a:  # root fork is comp_a -> slice_blobs
         # dert__= tuple([root_dert[blob.box[0]:blob.box[1],blob.box[2]:blob.box[3]] for root_dert in blob.root_dert__])
         mask__ = blob.mask__
 
         if mask__.shape[0] > 2 and mask__.shape[1] > 2 and False in mask__:  # min size in y and x, at least one dert in dert__
             # slice_blob eval:
             if blob.G * blob.Ma - AveB > 0:  # Ma vs. G reduced by Ga: * (1 - Ga / (4.45 * A)), max_ga=4.45
-                blob.deep.f_comp_a = 0
+                blob.f_comp_a = 0
                 blob.prior_forks.extend('p')
                 if kwargs.get('verbose'): print('\nslice_blob fork\n')
 
@@ -60,7 +60,7 @@ def intra_blob(blob, **kwargs):  # slice_blob or recursive input rng+ | angle cr
                 G_bias = abs(blob.Dy) / abs(blob.Dx)  # ddirection: Gy / Gx, preferential comp over low G
 
                 if blob.G * blob.Ma * L_bias * G_bias > flip_ave:
-                    blob.deep.f_flip = 1   # flip dert__:
+                    blob.f_flip = 1   # flip dert__:
                     blob.dert__ = tuple([np.rot90(dert) for dert in blob.dert__])
                     mask__ = np.rot90(mask__)
 
@@ -73,7 +73,7 @@ def intra_blob(blob, **kwargs):  # slice_blob or recursive input rng+ | angle cr
         if blob.G > AveB:  # comp_a fork, replace G with borrow_M when known
 
             adert__, mask__ = comp_a(ext_dert__, Ave, ext_mask__)  # compute ma and ga
-            blob.deep.f_comp_a = 1
+            blob.f_comp_a = 1
             if kwargs.get('verbose'): print('\na fork\n')
             blob.prior_forks.extend('a')
 
@@ -86,12 +86,12 @@ def intra_blob(blob, **kwargs):  # slice_blob or recursive input rng+ | angle cr
 
                 cluster_sub_eval(blob, dert__, sign__, mask__, **kwargs)  # forms sub_blobs of sign in unmasked area
                 spliced_layers = [spliced_layers + sub_layers for spliced_layers, sub_layers in
-                                  zip_longest(spliced_layers, blob.deep.sub_layers, fillvalue=[])]
+                                  zip_longest(spliced_layers, blob.sub_layers, fillvalue=[])]
 
         elif blob.M > AveB * 1.41:  # comp_r fork, ave M = ave G * 1.41
 
-            dert__, mask__ = comp_r(ext_dert__, Ave, blob.deep.f_root_a, ext_mask__)
-            blob.deep.f_comp_a = 0
+            dert__, mask__ = comp_r(ext_dert__, Ave, blob.f_root_a, ext_mask__)
+            blob.f_comp_a = 0
             if kwargs.get('verbose'): print('\na fork\n')
             blob.prior_forks.extend('r')
 
@@ -100,14 +100,14 @@ def intra_blob(blob, **kwargs):  # slice_blob or recursive input rng+ | angle cr
 
                 cluster_sub_eval( blob, dert__, sign__, mask__, **kwargs)        # forms sub_blobs of sign in unmasked area
                 spliced_layers = [spliced_layers + sub_layers for spliced_layers, sub_layers in
-                                  zip_longest(spliced_layers, blob.deep.sub_layers, fillvalue=[])]
+                                  zip_longest(spliced_layers, blob.sub_layers, fillvalue=[])]
 
     return spliced_layers
 
 
 def cluster_sub_eval(blob, dert__, sign__, mask__, **kwargs):  # comp_r or comp_a eval per sub_blob:
     
-    AveB = aveB * blob.deep.rdn
+    AveB = aveB * blob.rdn
 
     sub_blobs, idmap, adj_pairs = flood_fill(dert__, sign__, verbose=False, mask__=mask__, blob_cls=CBlob, accum_func=accum_blob_Dert)
     assign_adjacents(adj_pairs, CBlob)
@@ -115,8 +115,8 @@ def cluster_sub_eval(blob, dert__, sign__, mask__, **kwargs):  # comp_r or comp_
     if kwargs.get('render', False):
         visualize_blobs(idmap, sub_blobs, winname=f"Deep blobs (f_comp_a = {blob.f_comp_a}, f_root_a = {blob.f_root_a})")
 
-    blob.deep.Ls = len(sub_blobs)  # for visibility and next-fork rdn
-    blob.deep.sub_layers = [sub_blobs]  # 1st layer of sub_blobs
+    blob.Ls = len(sub_blobs)  # for visibility and next-fork rdn
+    blob.sub_layers = [sub_blobs]  # 1st layer of sub_blobs
 
     for sub_blob in sub_blobs:  # evaluate sub_blob
 
@@ -131,18 +131,16 @@ def cluster_sub_eval(blob, dert__, sign__, mask__, **kwargs):  # comp_r or comp_
 
         if sub_blob.G > AveB:  # replace with borrow_M when known
             # comp_a:
-            sub_blob.fdeep = 1 # enable flag for deep blob before calling intra_blob
-            sub_blob.deep.f_root_a = 1
-            sub_blob.deep.a_depth += blob.deep.a_depth  # accumulate a depth from blob to sub_blob, currently not used
-            sub_blob.deep.rdn = sub_blob.deep.rdn + 1 + 1 / blob.deep.Ls
-            blob.deep.sub_layers += intra_blob(sub_blob, **kwargs)
+            sub_blob.f_root_a = 1
+            sub_blob.a_depth += blob.a_depth  # accumulate a depth from blob to sub_blob, currently not used
+            sub_blob.rdn = sub_blob.rdn + 1 + 1 / blob.Ls
+            blob.sub_layers += intra_blob(sub_blob, **kwargs)
 
         elif sub_blob.M - borrow_M > AveB:
             # comp_r:
-            sub_blob.fdeep = 1 # enable flag for deep blob before calling intra_blob
-            sub_blob.deep.rng = blob.deep.rng * 2
-            sub_blob.deep.rdn = sub_blob.deep.rdn + 1 + 1 / blob.deep.Ls
-            blob.deep.sub_layers += intra_blob(sub_blob, **kwargs)
+            sub_blob.rng = blob.rng * 2
+            sub_blob.rdn = sub_blob.rdn + 1 + 1 / blob.Ls
+            blob.sub_layers += intra_blob(sub_blob, **kwargs)
 
 
 def extend_dert(blob):  # extend dert borders (+1 dert to boundaries)
