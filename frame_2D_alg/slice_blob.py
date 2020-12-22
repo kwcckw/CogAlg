@@ -54,8 +54,8 @@ from comp_slice_draft import comp_slice_blob
 ave = 30  # filter or hyper-parameter, set as a guess, latter adjusted by feedback, not needed here
 aveG = 50  # filter for comp_g, assumed constant direction
 flip_ave = 1000
-open_stacks = 0  # not needed for single blob?
-term_stack_ = []
+open_stacks = 0  # not needed for single blob? i think not needed, since we are not gonna terminate stack here
+term_stack_ = [] # not needed
 
 # prefix '_' denotes higher-line variable or structure, vs. same-type lower-line variable or structure
 # postfix '_' denotes array name, vs. same-name elements of that array. '__' is a 2D array
@@ -108,30 +108,34 @@ class CStack(ClusterStructure):
 
 # Functions:
 
+# no need blob reference for the stack_ formed here?
 def slice_blob(dert__, mask__, verbose=False):
-
-    stack_ = deque()  # buffer of running vertical stacks of Ps
+    
+    stack_ = []
+    stack_buffer_ = deque()  # buffer of running vertical stacks of Ps
     height, width = dert__[0].shape
     if verbose: print("Converting to image...")
 
     for y, dert_ in enumerate(zip(*dert__)):  # first and last row are discarded?
         if verbose: print(f"\rProcessing line {y + 1}/{height}, ", end=""); sys.stdout.flush()
-
         P_ = form_P_(list(zip(*dert_)), mask__[y])  # horizontal clustering
-        P_ = scan_P_(P_, stack_)  # vertical clustering, adds P up_connects and _P down_connect_cnt
-        stack_ = form_stack_(P_, stack_, term_stack_, open_stacks, y)  # accumulate and terminate stacks
+        P_ = scan_P_(P_, stack_buffer_)  # vertical clustering, adds P up_connects and _P down_connect_cnt
+        stack_buffer_ = form_stack_(P_, stack_, y)  # accumulate and terminate stacks
 
     # last line form_stack_()?
     # term_stack_ for direct access? or no explicit termination, sequential access through last-row stack_?
+    # from my checking, last line of P is formed in form_P_ and their up_connect are added in the next line scan_P_
+    # then the last line P is added to up_connect's stack in the next form_stack_
 
-    form_sstack_(stack_)  # cluster stacks into horizontally-oriented super-stacks
-    draw_stacks (stack_)  # visualization
+    sstack_ = form_sstack_(stack_)  # cluster stacks into horizontally-oriented super-stacks
+
+#    draw_stacks (stack_)  # visualization
 #   flip_sstack_(stack_)  # vertical-first re-scanning of selected sstacks
 
-    for sstack in stack_:  # convert selected stacks into gstacks
+    for sstack in sstack_:  # convert selected stacks into gstacks
         form_gPPy_(sstack.Py_)  # sstack.Py_ = stack_
 
-    return stack_  # added to blob, sequential access to higher stacks?
+    return sstack_  # added to blob, sequential access to higher stacks?
 
 '''
 Parameterized connectivity clustering functions below:
@@ -237,7 +241,7 @@ def scan_P_(P_, stack_):  # merge P into higher-row stack of Ps which have same 
     return next_P_  # each element is P + up_connect_ refs
 
 
-def form_stack_(P_, stack_, term_stack_, open_stacks, y):
+def form_stack_(P_, stack_, y):
 
     # Convert or merge every P into its higher-row stack of Ps, possibly terminate stacks?
     next_stack_ = deque()  # converted to stack_ in the next run of scan_P_
@@ -245,12 +249,12 @@ def form_stack_(P_, stack_, term_stack_, open_stacks, y):
     while P_:
         P, up_connect_ = P_.popleft()
         I, Dy, Dx, G, M, Dyy, Dyx, Dxy, Dxx, Ga, Ma, L, x0, s, dert_, _, _, _ = P.unpack()
-        xn = x0 + L  # next-P x0?
         if not up_connect_:
             # initialize new stack for each input-row P that has no connections in higher row, as in the whole top row:
-            open_stacks += 1
             new_stack = CStack(I=I, Dy=Dy, Dx=Dx, G=G, M=M, Dyy=Dyy, Dyx=Dyx, Dxy=Dxy, Dxx=Dxx, Ga=Ga, Ma=Ma, A=L, Ly=1,
                                y0=y, Py_=[P], down_connect_cnt=0, up_connect_cnt=0, sign=s, fPP=0)
+            stack_.append(new_stack)
+        
         else:
             if len(up_connect_) == 1 and up_connect_[0].down_connect_cnt == 1:
                 # P has one up_connect and that up_connect has one down_connect=P: merge P into up_connect stack:
@@ -258,20 +262,24 @@ def form_stack_(P_, stack_, term_stack_, open_stacks, y):
                 new_stack.accumulate(I=I, Dy=Dy, Dx=Dx, G=G, M=M, Dyy=Dyy, Dyx=Dyx, Dxy=Dxy, Dxx=Dxx, Ga=Ga, Ma=Ma, A=L, Ly=1)
                 new_stack.Py_.append(P)   # Py_: vertical buffer of Ps
                 new_stack.down_connect_cnt = 0  # reset down_connect_cnt
+                # no need to add new_stack to stack_ here, since up_connect's stack is alrready added to stack_ when we initialized them in 256 above
 
             else:  # P has >1 up_connects, or 1 up_connect that has >1 down_connect_cnt:
                 # initialize stack with P:
                 new_stack = CStack(I=I, Dy=Dy, Dx=Dx, G=G, M=M, Dyy=Dyy, Dyx=Dyx, Dxy=Dxy, Dxx=Dxx, Ga=Ga, Ma=Ma, A=L, Ly=1,
                                    y0=y, Py_=[P], down_connect_cnt=0, up_connect_cnt=1, sign=s, fPP=0)
-
+                stack_.append(new_stack)
+                
                 if len(up_connect_) > 1:
-                    if up_connect_[0].down_connect_cnt == 1:  # up_connect is not terminated
-                        stack_.append(new_stack)
                     for up_connect in up_connect_[1:len(up_connect_)]:
                         stack_[-1].up_connect_cnt +=1
 
                     # wrong, just pick 1st up_connect with 1 down_connect, the rest refer to that stack?
                     # same as before, but with stacks, not blobs?
+                    # do you mean merging the up_connects here?
+                    # All stacks in up_connect are already added to stack_ when we initialized them
+                    # so there is no further action needed here unless we want t0 merge the up_connect's stacks and the current newly formed new_stack, but should we do this?
+                    
 
         P.hid = new_stack.id
         next_stack_.append(new_stack)
@@ -448,12 +456,12 @@ def draw_stacks(sliced_blob):
     cv2.imwrite('./images/stacks/stacks_blob_' + str(sliced_blob.id) + '_colour.bmp', img_colour)
 
 
-def form_sstack_(sliced_blob):
+def form_sstack_(stack_):
     '''
     form horizontal stacks of stacks
     '''
     sstack_ = []
-    _stack = sliced_blob.stack_[0]
+    _stack = stack_[0]
     _f_up = _stack.up_connect_cnt > 0
     _f_ex = _f_up ^ _stack.down_connect_cnt > 0
     # initialize 1st sstack with _stack params:
@@ -461,9 +469,9 @@ def form_sstack_(sliced_blob):
     sstack = CStack(I=_stack.I, Dy=_stack.Dy, Dx=_stack.Dx, G=_stack.G, M=_stack.M,
                     Dyy=_stack.Dyy, Dyx=_stack.Dyx, Dxy=_stack.Dxy, Dxx=_stack.Dxx,
                     Ga=_stack.Ga, Ma=_stack.Ma, A=_stack.A, Ly=_stack.Ly, y0=_stack.y0,
-                    Py_=[_stack], sign=_stack.sign, blob=_stack.blob)
+                    Py_=[_stack], sign=_stack.sign)
 
-    for stack in sliced_blob.stack_[1:]:
+    for stack in stack_[1:]:
         f_up = stack.up_connect_cnt > 0
         f_ex = _f_up ^ _stack.down_connect_cnt > 0
 
@@ -483,7 +491,8 @@ def form_sstack_(sliced_blob):
         _f_ex = f_ex
 
     sstack_.append(sstack)  # terminate last sstack
-    sliced_blob.stack_ = sstack_
+
+    return sstack_
 
 
 def flip_sstack_(sliced_blob):

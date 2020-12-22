@@ -99,7 +99,6 @@ class CBlob(ClusterStructure):
     prior_forks = list
     adj_blobs = list  # for borrowing
     stack_ = list  # sliced_blob if not empty
-    open_stacks = int
 
 
 def comp_pixel(image):  # 2x2 pixel cross-correlation within image, as in edge detection operators
