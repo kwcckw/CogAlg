@@ -4,8 +4,10 @@
       <w>ablob</w>
       <w>ablobs</w>
       <w>adert</w>
+      <w>adjacents</w>
       <w>afilter</w>
       <w>afork</w>
+      <w>agglomerative</w>
       <w>alayer</w>
       <w>alti</w>
       <w>appendleft</w>
@@ -34,6 +36,7 @@
       <w>derts</w>
       <w>diag</w>
       <w>discr</w>
+      <w>downconnect</w>
       <w>dsub</w>
       <w>dterm</w>
       <w>dxax</w>
@@ -102,6 +105,8 @@
       <w>parameterization</w>
       <w>pblob</w>
       <w>pdert</w>
+      <w>prevaluation</w>
+      <w>prevalue</w>
       <w>priori</w>
       <w>rblob</w>
       <w>rblobs</w>
@@ -128,8 +133,11 @@
       <w>tseg</w>
       <w>tsegment</w>
       <w>tsegments</w>
+      <w>unshifted</w>
+      <w>upconnect</w>
       <w>vals</w>
       <w>vdert</w>
+      <w>vectorize</w>
       <w>vectorizes</w>
       <w>verti</w>
       <w>vterm</w>
