@@ -94,6 +94,7 @@ class CStack(ClusterStructure):
     sign = NoneType
     f_gstack = NoneType  # gPPy_ if 1, else Py_
     f_stack_PP = NoneType  # PPy_ if 1, else gPPy_ or Py_
+    # don't quite get how term_stack__ work here, mind to elaborate?
     term_stack__ = list  # also replaces f_flip: vertical if empty, else horizontal
     downconnect_cnt = int
     upconnect_ = list
@@ -104,7 +105,8 @@ class CStack(ClusterStructure):
 
 def slice_blob(dert__, mask__, verbose=False):
 
-    row_stack_ = deque()  # higher-row vertical stacks of Ps
+    # change to list for consistency?
+    row_stack_ = []  # higher-row vertical stacks of Ps
     height, width = dert__[0].shape
     if verbose: print("Converting to image...")
 
@@ -113,21 +115,24 @@ def slice_blob(dert__, mask__, verbose=False):
 
         P_ = form_P_(list(zip(*dert_)), mask__[y])  # horizontal clustering
         P_ = scan_P_(P_, row_stack_)    # vertical clustering, adds P upconnects and _P downconnect_cnt
+        next_row_stack_ = form_stack_(P_, term_stack__, y)  # initialize and accumulate stacks with Ps
+        
+        term_stack_(row_stack_, term_stack__)  # terminate stacks with downconnects != 1
+        
+        for next_row_stack in next_row_stack_:
+            row_stack_.append(next_row_stack) # accumulate the non terminated row_stack into next_row_stack
 
-        next_row_stack_ = form_stack_(P_, y)  # initialize and accumulate stacks with Ps
-        term_stack_(row_stack_, term_stack__, y)  # terminate stacks with downconnects != 1
-        row_stack_ = next_row_stack_
+    term_stack_(row_stack_, term_stack__)  # dert__ ends, last-row stacks are merged into blob
 
-    term_stack_(row_stack_, term_stack__, y)  # dert__ ends, last-row stacks are merged into blob
-
-    sstack_ = form_sstack_(row_stack_)  # cluster stacks into horizontally-oriented super-stacks
+#    sstack_ = form_sstack_(term_stack__)  # cluster stacks into horizontally-oriented super-stacks
 #   draw_stacks (row_stack_)  # visualization
 #   flip_sstack_(row_stack_)  # vertical-first re-scanning of selected sstacks
 
-    for sstack in sstack_:  # convert selected stacks into gstacks
-        form_gPPy_(sstack.Py_)  # sstack.Py_ = stack_
+    
+#    for i, sstack in enumerate(sstack_):  # convert selected stacks into gstacks
+#        form_gPPy_(sstack.Py_)  # sstack.Py_ = stack_
 
-    return sstack_  # partially rotated and gP-forming term_stack__
+#    return sstack_  # partially rotated and gP-forming term_stack__
 
 '''
 Parameterized connectivity clustering functions below:
@@ -142,7 +147,7 @@ Dert: params of cluster structures (P, stack, blob): summed dert params + dimens
 
 def form_P_(idert_, mask_):  # segment dert__ into P__, in horizontal ) vertical order
 
-    P_ = deque()  # row of Ps
+    P_ = []  # row of Ps
     dert_ = [list(idert_[0])]  # get first dert from idert_ (generator/iterator)
     _mask = mask_[0]  # mask bit per dert
     if ~_mask:
@@ -191,12 +196,12 @@ def scan_P_(P_, row_stack_):  # merge P into higher-row stack of Ps which have s
     else the stack is recycled into next_stack_, for next-row run of scan_P_.
     It's a form of breadth-first flood fill, with connects as vertices per stack of Ps: a node in connectivity graph.
     '''
-    next_P_ = deque()  # to recycle P + upconnect_ that finished scanning _P, will be converted into next_stack_
+    next_P_ = []  # to recycle P + upconnect_ that finished scanning _P, will be converted into next_stack_
 
     if P_ and row_stack_:  # if both input row and higher row have any Ps / _Ps left
 
-        P = P_.popleft()  # load left-most (lowest-x) input-row P
-        stack = row_stack_.popleft()  # higher-row stacks
+        P = P_.pop(0)  # load left-most (lowest-x) input-row P
+        stack = row_stack_.pop(0)  # higher-row stacks, pop(0) = popleft
         _P = stack.Py_[-1]  # last element of each stack is higher-row P
         upconnect_ = []  # list of same-sign x-overlapping _Ps per P
 
@@ -216,35 +221,35 @@ def scan_P_(P_, row_stack_):  # merge P into higher-row stack of Ps which have s
                 next_P_.append((P, upconnect_))  # recycle _P for the next run of scan_P_
                 upconnect_ = []
                 if P_:
-                    P = P_.popleft()  # load next P
+                    P = P_.pop(0)  # load next P
                 else:  # terminate loop
                     break
             else:  # no next-P overlap
                 if row_stack_:  # load stack with next _P
-                    stack = row_stack_.popleft()
+                    stack = row_stack_.pop(0)
                     _P = stack.Py_[-1]
                 else:  # no stack left: terminate loop
                     next_P_.append((P, upconnect_))
                     break
 
     while P_:  # terminate Ps that continue at row's end
-        next_P_.append((P_.popleft(), []))  # no upconnect
+        next_P_.append((P_.pop(0), []))  # no upconnect
 
     return next_P_  # each element is P + upconnect_ refs
 
 
-def form_stack_(P_, y):
+def form_stack_(P_, term_stack__, y):
 
     # Convert or merge every P into higher-row stack of Ps, terminate stack if downconnects != 1
-    next_row_stack_ = deque()  # converted to row_stack_ in the next run of scan_P_
+    next_row_stack_ = []  # converted to row_stack_ in the next run of scan_P_
 
     while P_:
-        P, upconnect_ = P_.popleft()
+        P, upconnect_ = P_.pop(0)
         I, Dy, Dx, G, M, Dyy, Dyx, Dxy, Dxx, Ga, Ma, L, x0, s, dert_, _, _, _ = P.unpack()
         if not upconnect_:
             # initialize new stack for each input-row P that has no connections in higher row, as in the whole top row:
             stack = CStack(I=I, Dy=Dy, Dx=Dx, G=G, M=M, Dyy=Dyy, Dyx=Dyx, Dxy=Dxy, Dxx=Dxx, Ga=Ga, Ma=Ma, A=L, Ly=1,
-                           y0=y, Py_=[P], downconnect_cnt=0, upconnect_=upconnect_, sign=s, fPP=0),
+                           y0=y, Py_=[P], downconnect_cnt=0, upconnect_=upconnect_, sign=s, fPP=0)
         else:
             if len(upconnect_) == 1 and upconnect_[0].downconnect_cnt == 1:
                 # P has one upconnect and that upconnect has one downconnect=P: merge P into upconnect' stack:
@@ -255,25 +260,35 @@ def form_stack_(P_, y):
 
             else:  # P has >1 upconnects, or 1 upconnect that has >1 downconnects:  initialize stack with P:
                 stack = CStack(I=I, Dy=Dy, Dx=Dx, G=G, M=M, Dyy=Dyy, Dyx=Dyx, Dxy=Dxy, Dxx=Dxx, Ga=Ga, Ma=Ma, A=L, Ly=1,
-                               y0=y, Py_=[P], downconnect_cnt=0, upconnect_=upconnect_, sign=s, fPP=0),
-
+                               y0=y, Py_=[P], downconnect_cnt=0, upconnect_=upconnect_, sign=s, fPP=0)
+                # add the upconnect to term_stack__ so that we wouldn't need to recursively add it later?
+                for upconnect in upconnect_:
+                    if upconnect not in term_stack__:
+                        term_stack__.append(upconnect)
         next_row_stack_.append(stack)
 
     return next_row_stack_  # input for the next line of scan_P_
 
 
-def term_stack_(row_stack_, term_stack__, y):
+def term_stack_(row_stack_, term_stack__):
 
     # for each stack in row_stack_: if complete downconnect_cnt != 1 (or = 0?): include stack in term_stack__:
+    # why we need y information? We can get it from y0 +Ly anyway 
+    '''
     term_stacks = y, []  # a row of terminated stacks
 
-    for stack in row_stack_:
+    for i, stack in enumerate(row_stack_):
         if stack.downconnect_cnt != 1:  # separate trace-by-connect for stacks with downconnect_cnt > 1, out of order?
-            term_stacks[1].append(stack)
+            term_stacks[1].append(row_stack_.pop(i))
 
     if term_stacks[1]:  # add a not-empty x-ordered row of terminated stacks to 2D term_stack__:
         term_stack__.append(term_stacks)
-
+    '''
+    
+    for i, stack in enumerate(row_stack_):
+        if stack.downconnect_cnt != 1 and stack not in term_stack__:
+            term_stack__.append(row_stack_.pop(i))
+            
 
 def form_gPPy_(stack_):  # convert selected stacks into gstacks, should be run over the whole stack_
 
@@ -460,7 +475,7 @@ def form_sstack_(stack_):
                     Py_=[_stack], sign=_stack.sign)
 
     for stack in stack_[1:]:
-        f_up = stack.upconnect_cnt > 0
+        f_up = len(stack.upconnect_) > 0
         f_ex = _f_up ^ _stack.downconnect_cnt > 0
 
         if (f_up != _f_up) and (f_ex and _f_ex):
