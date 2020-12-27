@@ -113,15 +113,24 @@ def slice_blob(dert__, mask__, verbose=False):
 
         P_ = form_P_(list(zip(*dert_)), mask__[y])  # horizontal clustering
         P_ = scan_P_(P_, row_stack_)    # vertical clustering, adds P upconnects and _P downconnect_cnt
-        next_row_stack_ = form_stack_(P_, y)  # initialize and accumulate stacks with Ps
+        [term_stack_.append(row_stack) for row_stack in row_stack_ if row_stack not in term_stack_]
+        row_stack_ = form_stack_(P_, y)  # initialize and accumulate stacks with Ps
 
+        '''
         for stack in row_stack_:  # terminate stacks:
-            if stack.downconnect_cnt != 1:  # separate trace-by-connect for stacks with downconnect_cnt > 1, out of order?
+            # when some stacks added as upconnect, they are having downconnects_cnt == 1 and hence we might missed out some stacks here if the condition is downconnect_cnt != 1
+            if stack not in term_stack_:  # separate trace-by-connect for stacks with downconnect_cnt > 1, out of order?
                 term_stack_.append(stack)
+                
         row_stack_ = next_row_stack_  # row_stack_ + initialized stacks - terminated stacks
 
-    term_stack_ += row_stack_  # dert__ ends, all last-row stacks are moved to term_stack_
-
+    # we cannot just add row_stack_ into term_stack_ here. 
+    # From my checking, if last line P is merged into stack (when downconnect_cnt == 1), row_stack_ is already added to term_stack_ in secnd last time processing.
+    term_stack_ += row_stack_
+    '''
+    # last line termination (if any)
+    [term_stack_.append(row_stack) for row_stack in row_stack_ if row_stack not in term_stack_]
+    
     # below is for debugging, to check whether we miss out any stack from the mask
     img_colour = draw_stacks(term_stack_)  # visualization
     from matplotlib import pyplot as plt
@@ -131,8 +140,7 @@ def slice_blob(dert__, mask__, verbose=False):
     plt.subplot(1,2,2)
     plt.imshow(mask__*255)
 
-    sstack_ = form_sstack_(row_stack_)  # cluster stacks into horizontally-oriented super-stacks
-#   draw_stacks (row_stack_)  # visualization
+    sstack_ = form_sstack_(term_stack_)  # cluster stacks into horizontally-oriented super-stacks
 #   flip_sstack_(row_stack_)  # vertical-first re-scanning of selected sstacks
 
     for sstack in sstack_:  # convert selected stacks into gstacks
@@ -204,14 +212,14 @@ def scan_P_(P_, row_stack_):  # merge P into higher-row stack of Ps which have s
     '''
     next_P_ = deque()  # to recycle P + upconnect_ that finished scanning _P, will be converted into next_stack_
 
+    i = 0
     if P_ and row_stack_:  # there are next P and next stack
-        i = 0  # stack index
         P = P_.popleft()  # load left-most (lowest-x) input-row P
         stack = row_stack_[i]  # higher-row stacks
         _P = stack.Py_[-1]  # last element of each stack is higher-row P
         upconnect_ = []  # list of same-sign x-overlapping _Ps per P
 
-        while P_ and i < len(row_stack_):  # there are next P and next row_stack
+        while True:  # there are next P and next row_stack
             x0 = P.x0         # first x in P
             xn = x0 + P.L     # first x in next P
             _x0 = _P.x0       # first x in _P
