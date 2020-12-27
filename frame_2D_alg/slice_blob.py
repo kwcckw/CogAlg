@@ -111,10 +111,10 @@ def slice_blob(dert__, mask__, verbose=False):
         if verbose: print(f"\rProcessing line {y + 1}/{height}, ", end=""); sys.stdout.flush()
 
         P_ = form_P_(list(zip(*dert_)), mask__[y])  # horizontal clustering
-        P_ = scan_P_(P_, term_stack_, row_stack_)    # vertical clustering, adds P upconnects and _P downconnect_cnt
+        P_ = scan_P_(P_, term_stack_, row_stack_)    # vertical clustering, adds P upconnects and _P downconnect_cnt 
         row_stack_ = form_stack_(P_, term_stack_, y)  # initialize and accumulate stacks with Ps
 
-    term_stack_.extend(row_stack_)  # dert__ ends, all last-row stacks are moved to term_stack_
+    term_stack_ += row_stack_  # dert__ ends, all last-row stacks are moved to term_stack_
     
     # this section is for debug porpose, to check whether we miss out any stack from the mask
     img_colour = draw_stacks(term_stack_)  # visualization
@@ -216,15 +216,15 @@ def scan_P_(P_, term_stack_, row_stack_):  # merge P into higher-row stack of Ps
                 upconnect_.append(stack)  # P-connected higher-row stacks
             if xn <= _xn:  # _P overlaps next P in P_ in 8 directions, if (xn < _xn) for 4 directions
                 next_P_.append((P, upconnect_))  # recycle _P for the next run of scan_P_
-                upconnect_ = []  # reset for next P once upconnect_ is added to next_P_
                 if P_:
+                    upconnect_ = []  # reset for next P once upconnect_ is added to next_P_
                     P = P_.popleft()  # load next P
                 else:  # terminate loop
                     break
             else:  # no next-P overlap
+                if  stack.downconnect_cnt != 1: # add stack to terminated stack before popping new stack
+                    term_stack_.append(stack)
                 if row_stack_:  # load stack with next _P
-                    if  stack.downconnect_cnt != 1: # add stack to terminated stack before popping new stack
-                        term_stack_.append(stack)
                     stack = row_stack_.popleft()
                     _P = stack.Py_[-1]
                 else:  # no stack left: terminate loop
@@ -255,14 +255,11 @@ def form_stack_(P_, term_stack_, y):
             # initialize new stack for each input-row P that has no connections in higher row, as in the whole top row:
             stack = CStack(I=I, Dy=Dy, Dx=Dx, G=G, M=M, Dyy=Dyy, Dyx=Dyx, Dxy=Dxy, Dxx=Dxx, Ga=Ga, Ma=Ma, A=L, Ly=1,
                            y0=y, Py_=[P], downconnect_cnt=0, upconnect_=upconnect_, sign=s, fPP=0)
-            
-            # line 261 and 276 are temporary solution, still need to find a better way to add upconnects to term_stack_
-            # add stack's upconnects into term_stack_
-            [term_stack_.append(upconnect) for upconnect in upconnect_ if upconnect not in term_stack_ ]
-
+        
         else:
             if len(upconnect_) == 1 and upconnect_[0].downconnect_cnt == 1:
                 # P has one upconnect and that upconnect has one downconnect=P: merge P into upconnect' stack:
+                
                 stack = upconnect_[0]
                 stack.accumulate(I=I, Dy=Dy, Dx=Dx, G=G, M=M, Dyy=Dyy, Dyx=Dyx, Dxy=Dxy, Dxx=Dxx, Ga=Ga, Ma=Ma, A=L, Ly=1)
                 stack.Py_.append(P)   # Py_: vertical buffer of Ps
@@ -273,25 +270,12 @@ def form_stack_(P_, term_stack_, y):
                                y0=y, Py_=[P], downconnect_cnt=0, upconnect_=upconnect_, sign=s, fPP=0)
                 
                 # add stack's upconnects into term_stack_
-                [term_stack_.append(upconnect) for upconnect in upconnect_ if upconnect not in term_stack_ ]
+                [term_stack_.append(upconnect) for upconnect in upconnect_ if upconnect not in term_stack_]
 
         next_row_stack_.append(stack)
 
     return next_row_stack_  # input for the next line of scan_P_
 
-# not in used
-'''
-def terminate_stack_(row_stack_, term_stack_):
-
-    # for each stack in row_stack_: if complete downconnect_cnt != 1 (or = 0?): include stack in term_stack__:
-
-    for stack in row_stack_:
-        if stack.downconnect_cnt != 1:  # separate trace-by-connect for stacks with downconnect_cnt > 1, out of order?
-            term_stack_.append(stack)
-
-#    if term_stack_:  # add a not-empty x-ordered row of terminated stacks to 2D term_stack__:
-#        term_stack_.append(term_stack_)
-'''
 
 def form_gPPy_(stack_):  # convert selected stacks into gstacks, should be run over the whole stack_
 
