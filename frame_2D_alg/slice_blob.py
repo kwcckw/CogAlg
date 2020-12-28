@@ -112,25 +112,19 @@ def slice_blob(dert__, mask__, verbose=False):
         if verbose: print(f"\rProcessing line {y + 1}/{height}, ", end=""); sys.stdout.flush()
 
         P_ = form_P_(list(zip(*dert_)), mask__[y])  # horizontal clustering
-        P_ = scan_P_(P_, row_stack_)    # vertical clustering, adds P upconnects and _P downconnect_cnt
-        [term_stack_.append(row_stack) for row_stack in row_stack_ if row_stack not in term_stack_]
-        row_stack_ = form_stack_(P_, y)  # initialize and accumulate stacks with Ps
+        P_ = scan_P_(P_, row_stack_)    # vertical clustering, adds P upconnects and stack downconnect_cnt
+        next_row_stack_ = form_stack_(P_, y)  # initialize and accumulate stacks with Ps, including the whole 1st row_stack_
 
-        '''
-        for stack in row_stack_:  # terminate stacks:
-            # when some stacks added as upconnect, they are having downconnects_cnt == 1 and hence we might missed out some stacks here if the condition is downconnect_cnt != 1
-            if stack not in term_stack_:  # separate trace-by-connect for stacks with downconnect_cnt > 1, out of order?
-                term_stack_.append(stack)
-                
-        row_stack_ = next_row_stack_  # row_stack_ + initialized stacks - terminated stacks
+        for stack in row_stack_:  # terminate stacks with downconnects added by scan_P_:
+            if stack.downconnect_cnt != 1:
+                term_stack_.append(stack)  # separate trace-by-upconnect if any, in different order?
+            elif stack.downconnect_cnt == 1:
+                stack.downconnect_cnt = 0  # reset to last P downconnects=0
 
-    # we cannot just add row_stack_ into term_stack_ here. 
-    # From my checking, if last line P is merged into stack (when downconnect_cnt == 1), row_stack_ is already added to term_stack_ in secnd last time processing.
-    term_stack_ += row_stack_
-    '''
-    # last line termination (if any)
-    [term_stack_.append(row_stack) for row_stack in row_stack_ if row_stack not in term_stack_]
-    
+        row_stack_ = next_row_stack_  # stacks initialized or accumulated in form_stack, no terminated stacks
+
+    term_stack_ += row_stack_  # dert__ ends, all last-row stacks have downconnects=0 and are moved to term_stack_
+
     # below is for debugging, to check whether we miss out any stack from the mask
     img_colour = draw_stacks(term_stack_)  # visualization
     from matplotlib import pyplot as plt
@@ -140,7 +134,8 @@ def slice_blob(dert__, mask__, verbose=False):
     plt.subplot(1,2,2)
     plt.imshow(mask__*255)
 
-    sstack_ = form_sstack_(term_stack_)  # cluster stacks into horizontally-oriented super-stacks
+    sstack_ = form_sstack_(row_stack_)  # cluster stacks into horizontally-oriented super-stacks
+#   draw_stacks (row_stack_)  # visualization
 #   flip_sstack_(row_stack_)  # vertical-first re-scanning of selected sstacks
 
     for sstack in sstack_:  # convert selected stacks into gstacks
@@ -212,14 +207,14 @@ def scan_P_(P_, row_stack_):  # merge P into higher-row stack of Ps which have s
     '''
     next_P_ = deque()  # to recycle P + upconnect_ that finished scanning _P, will be converted into next_stack_
 
-    i = 0
     if P_ and row_stack_:  # there are next P and next stack
+        i = 0  # stack index
         P = P_.popleft()  # load left-most (lowest-x) input-row P
         stack = row_stack_[i]  # higher-row stacks
         _P = stack.Py_[-1]  # last element of each stack is higher-row P
         upconnect_ = []  # list of same-sign x-overlapping _Ps per P
 
-        while True:  # there are next P and next row_stack
+        while i < len(row_stack_):  # there is next row_stack
             x0 = P.x0         # first x in P
             xn = x0 + P.L     # first x in next P
             _x0 = _P.x0       # first x in _P
@@ -251,10 +246,10 @@ def scan_P_(P_, row_stack_):  # merge P into higher-row stack of Ps which have s
     return next_P_  # each element is P + upconnect_ refs
 
 
-def form_stack_(P_, y):
+def form_stack_(P_, y):  # Convert or merge every P into higher-row stack of Ps
 
-    # Convert or merge every P into higher-row stack of Ps, terminate stack if downconnects != 1
-    next_row_stack_ = deque()  # converted to row_stack_ in the next run of scan_P_
+    # no termination test: P upconnects don't include stacks with 0 downconnects
+    next_row_stack_ = []  # converted to row_stack_ in the next run of scan_P_
 
     while P_:
         P, upconnect_ = P_.popleft()
@@ -269,9 +264,9 @@ def form_stack_(P_, y):
                 stack = upconnect_[0]
                 stack.accumulate(I=I, Dy=Dy, Dx=Dx, G=G, M=M, Dyy=Dyy, Dyx=Dyx, Dxy=Dxy, Dxx=Dxx, Ga=Ga, Ma=Ma, A=L, Ly=1)
                 stack.Py_.append(P)   # Py_: vertical buffer of Ps
-                stack.downconnect_cnt = 0  # reset downconnect_cnt
+                stack.downconnect_cnt = 1  # reset downconnect_cnt to 0 after termination test
 
-            else:  # P has >1 upconnects, or 1 upconnect that has >1 downconnects:  initialize stack with P:
+            else:  # P has >1 upconnects, or 1 upconnect that has >1 downconnects: initialize stack with P:
                 stack = CStack(I=I, Dy=Dy, Dx=Dx, G=G, M=M, Dyy=Dyy, Dyx=Dyx, Dxy=Dxy, Dxx=Dxx, Ga=Ga, Ma=Ma, A=L, Ly=1,
                                y0=y, Py_=[P], downconnect_cnt=0, upconnect_=upconnect_, sign=s, fPP=0)
 
