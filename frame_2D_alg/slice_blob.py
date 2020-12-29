@@ -93,7 +93,6 @@ class CStack(ClusterStructure):
     sign = NoneType
     f_gstack = NoneType  # gPPy_ if 1, else Py_
     f_stack_PP = NoneType  # PPy_ if 1, else gPPy_ or Py_
-    f_upconnect = bool # stack is upconnect of other stack if 1
     term_stack_ = list  # also replaces f_flip: vertical if empty, else horizontal
     downconnect_cnt = int
     upconnect_ = list
@@ -114,10 +113,10 @@ def slice_blob(dert__, mask__, verbose=False):
 
         P_ = form_P_(list(zip(*dert_)), mask__[y])  # horizontal clustering
         P_ = scan_P_(P_, row_stack_)    # vertical clustering, adds P upconnects and stack downconnect_cnt
-        next_row_stack_ = form_stack_(P_, y)  # initialize and accumulate stacks with Ps, including the whole 1st row_stack_
+        next_row_stack_ = form_stack_(P_, term_stack_, y)  # initialize and accumulate stacks with Ps, including the whole 1st row_stack_
 
         for stack in row_stack_:  # terminate stacks with downconnects added by scan_P_:
-            if stack.downconnect_cnt != 1 or stack.f_upconnect: # if row_stack is upconnect, we add them to term_stack_ 
+            if stack.downconnect_cnt != 1:# if row_stack is upconnect, we add them to term_stack_ 
                 term_stack_.append(stack)  # separate trace-by-upconnect if any, in different order?
             elif stack.downconnect_cnt == 1:
                 stack.downconnect_cnt = 0  # reset to last P downconnects=0
@@ -222,7 +221,6 @@ def scan_P_(P_, row_stack_):  # merge P into higher-row stack of Ps which have s
 
             if _x0 - 1 < xn and _xn + 1 > x0:  # x overlap between P and _P in 8 directions: +ma blob is less selective
                 stack.downconnect_cnt += 1
-                stack.f_upconnect = 1
                 upconnect_.append(stack)  # P-connected higher-row stacks
 
             if xn <= _xn:  # _P overlaps next P in P_ in 8 directions, if (xn < _xn) for 4 directions
@@ -247,7 +245,7 @@ def scan_P_(P_, row_stack_):  # merge P into higher-row stack of Ps which have s
     return next_P_  # each element is P + upconnect_ refs
 
 
-def form_stack_(P_, y):  # Convert or merge every P into higher-row stack of Ps
+def form_stack_(P_, term_stack_, y):  # Convert or merge every P into higher-row stack of Ps
 
     # no termination test: P upconnects don't include stacks with 0 downconnects
     next_row_stack_ = []  # converted to row_stack_ in the next run of scan_P_
@@ -266,9 +264,14 @@ def form_stack_(P_, y):  # Convert or merge every P into higher-row stack of Ps
                 stack.accumulate(I=I, Dy=Dy, Dx=Dx, G=G, M=M, Dyy=Dyy, Dyx=Dyx, Dxy=Dxy, Dxx=Dxx, Ga=Ga, Ma=Ma, A=L, Ly=1)
                 stack.Py_.append(P)   # Py_: vertical buffer of Ps
                 stack.downconnect_cnt = 1  # reset downconnect_cnt to 0 after termination test
-                stack.f_upconnect = 0
 
             else:  # P has >1 upconnects, or 1 upconnect that has >1 downconnects: initialize stack with P:
+                if len(upconnect_)>1:
+                    for upconnect in upconnect_:
+                        if upconnect.downconnect_cnt == 1:
+                            term_stack_.append(upconnect)
+                
+                
                 stack = CStack(I=I, Dy=Dy, Dx=Dx, G=G, M=M, Dyy=Dyy, Dyx=Dyx, Dxy=Dxy, Dxx=Dxx, Ga=Ga, Ma=Ma, A=L, Ly=1,
                                y0=y, Py_=[P], downconnect_cnt=0, upconnect_=upconnect_, sign=s, fPP=0)
 
