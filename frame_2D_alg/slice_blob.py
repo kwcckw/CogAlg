@@ -94,7 +94,8 @@ class CStack(ClusterStructure):
     f_gstack = NoneType  # gPPy_ if 1, else Py_
     f_stack_PP = NoneType  # PPy_ if 1, else gPPy_ or Py_
     term_stack_ = list  # also replaces f_flip: vertical if empty, else horizontal
-    downconnect_cnt = int
+    downconnect_cnt = int # change to py_count? Since this only have py info for now
+    downconnect_ = list
     upconnect_ = list
     stack_PP = object
 
@@ -116,10 +117,10 @@ def slice_blob(dert__, mask__, verbose=False):
         next_row_stack_ = form_stack_(P_, term_stack_, y)  # initialize and accumulate stacks with Ps, including the whole 1st row_stack_
 
         for stack in row_stack_:  # terminate stacks with downconnects added by scan_P_:
-            if stack.downconnect_cnt != 1:# if row_stack is upconnect, we add them to term_stack_ 
-                term_stack_.append(stack)  # separate trace-by-upconnect if any, in different order?
-            elif stack.downconnect_cnt == 1:
-                stack.downconnect_cnt = 0  # reset to last P downconnects=0
+            if stack.downconnect_cnt != 1:
+                term_stack_.append(stack)
+            elif stack.downconnect_cnt == 1 and not stack.downconnect_: # reset only when their downconnect_ is empty, or they are not upconnect of any stack
+                stack.downconnect_cnt = 0
 
         row_stack_ = next_row_stack_  # stacks initialized or accumulated in form_stack, no terminated stacks
 
@@ -263,17 +264,19 @@ def form_stack_(P_, term_stack_, y):  # Convert or merge every P into higher-row
                 stack = upconnect_[0]
                 stack.accumulate(I=I, Dy=Dy, Dx=Dx, G=G, M=M, Dyy=Dyy, Dyx=Dyx, Dxy=Dxy, Dxx=Dxx, Ga=Ga, Ma=Ma, A=L, Ly=1)
                 stack.Py_.append(P)   # Py_: vertical buffer of Ps
-                stack.downconnect_cnt = 1  # reset downconnect_cnt to 0 after termination test
+                stack.downconnect_cnt = 1 # reset downconnect_cnt to 0 after termination test
 
             else:  # P has >1 upconnects, or 1 upconnect that has >1 downconnects: initialize stack with P:
-                if len(upconnect_)>1:
-                    for upconnect in upconnect_:
-                        if upconnect.downconnect_cnt == 1:
-                            term_stack_.append(upconnect)
                 
                 
                 stack = CStack(I=I, Dy=Dy, Dx=Dx, G=G, M=M, Dyy=Dyy, Dyx=Dyx, Dxy=Dxy, Dxx=Dxx, Ga=Ga, Ma=Ma, A=L, Ly=1,
                                y0=y, Py_=[P], downconnect_cnt=0, upconnect_=upconnect_, sign=s, fPP=0)
+                if len(upconnect_)>1:
+                    for upconnect in upconnect_:
+                        if upconnect.downconnect_cnt == 1:
+                            term_stack_.append(upconnect)
+                            upconnect.downconnect_.append(stack)
+                
 
         next_row_stack_.append(stack)
 
