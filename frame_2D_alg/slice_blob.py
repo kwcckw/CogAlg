@@ -121,12 +121,11 @@ def slice_blob(dert__, mask__, verbose=False):
 
     stack_ += row_stack_  # dert__ ends, all last-row stacks have no downconnects
 
-    img_colour = draw_stacks(stack_)  # visualization to check if we miss out any stack from the mask
-    from matplotlib import pyplot as plt
-    plt.figure(); plt.subplot(1,2,1); plt.imshow(img_colour); plt.subplot(1,2,2); plt.imshow(mask__*255)
+    # to check whether all stacks present 
+    check_stack_visualization_(stack_, mask__, f_plot=0)
 
     sstack_ = form_sstack_(stack_)  # cluster stacks into horizontally-oriented super-stacks
-#   flip_sstack_(row_stack_)  # vertical-first re-scanning of selected sstacks
+    flip_sstack_(sstack_, dert__)  # vertical-first re-scanning of selected sstacks
 
     for sstack in sstack_:  # convert selected stacks into gstacks
         form_gPPy_(sstack.Py_)  # sstack.Py_ = stack_
@@ -143,6 +142,32 @@ Parameterized connectivity clustering functions below:
 dert: tuple of derivatives per pixel, initially (p, dy, dx, g), extended in intra_blob
 Dert: params of cluster structures (P, stack, blob): summed dert params + dimensions: vertical Ly and area A
 '''
+
+
+def check_stack_visualization_(stack_, mask__, f_plot=0):
+    '''
+    function to check whether all stacks present by comparing with the mask
+    '''
+    
+    img_colour = draw_stacks(stack_)  # visualization to check if we miss out any stack from the mask
+    img_sum = img_colour[:,:,0]+img_colour[:,:,1]+img_colour[:,:,2]
+    
+    # check if all unmasked area is filled in plotted image
+    check_ok_y = np.where(img_sum>0)[0].all() == np.where(mask__==False)[0].all()
+    check_ok_x = np.where(img_sum>0)[1].all() == np.where(mask__==False)[1].all()
+
+    # check if their shape is the same
+    check_ok_shape_y = img_colour.shape[0] == mask__.shape[0]
+    check_ok_shape_x = img_colour.shape[1] == mask__.shape[1]
+
+    if  not check_ok_y or  not check_ok_x or  not check_ok_shape_y or not check_ok_shape_x:
+        print("----------------Missing stacks----------------") 
+    
+    if f_plot:
+        from matplotlib import pyplot as plt
+        plt.figure(); plt.subplot(1,2,1); plt.imshow(img_colour); plt.subplot(1,2,2); plt.imshow(mask__*255)
+
+    
 
 def form_P_(idert_, mask_):  # segment dert__ into P__, in horizontal ) vertical order
 
@@ -413,11 +438,11 @@ def form_sstack_(stack_):
     return sstack_
 
 
-def flip_sstack_(sliced_blob):
+def flip_sstack_(sstack_, dert__):
     '''
     flip and re-form Ps and stacks in selected sstacks
     '''
-    for sstack in sliced_blob.stack_:
+    for sstack in sstack_:
         x0_, xn_, y0_, yn_ = [],[],[],[]
         # find min and max x and y in sstack:
         for stack in sstack.Py_:
@@ -439,10 +464,10 @@ def flip_sstack_(sliced_blob):
             # unmask sstack:
             for stack in sstack.Py_:
                 for y, P in enumerate(stack.Py_):
-                    sstack_mask__[y, P.x0: (P.x0 + P.L)] = False  # unmask P
+                    sstack_mask__[y+(stack.y0-y0), P.x0: (P.x0 + P.L)] = False  # unmask P
 
             # extract and flip sstack's dert__
-            sstack_dert__ = tuple([np.rot90(param_dert__[y0:yn, x0:xn]) for param_dert__ in sliced_blob.dert__])
+            sstack_dert__ = tuple([np.rot90(param_dert__[y0:yn, x0:xn]) for param_dert__ in dert__])
             sstack_mask__ = np.rot90(sstack_mask__)  # flip mask
 
             row_stack_ = []
@@ -451,11 +476,10 @@ def flip_sstack_(sliced_blob):
                 P_ = form_P_(list(zip(*dert_)), sstack_mask__[y])  # horizontal clustering
                 P_ = scan_P_(P_, row_stack_)  # vertical clustering, adds P upconnects and _P downconnect_cnt
                 next_row_stack_ = form_stack_(P_, y)  # initialize and accumulate stacks with Ps
-
                 [sstack.stack_.append(stack) for stack in row_stack_ if not stack in next_row_stack_]  # buffer terminated stacks
                 row_stack_ = next_row_stack_
 
-            sstack.term_stack_ += row_stack_   # dert__ ends, all last-row stacks have no downconnects
+            sstack.stack_ += row_stack_   # dert__ ends, all last-row stacks have no downconnects
 
 # -----------------------------------------------------------------------------
 # Utilities
