@@ -127,7 +127,7 @@ def slice_blob(dert__, mask__, verbose=False):
     flip_sstack_(sstack_, dert__)  # vertical-first re-scanning of selected sstacks
 
     for sstack in sstack_:  # convert selected stacks into gstacks
-        form_gPPy_(sstack.Py_)  # sstack.Py_ = stack_
+        form_gPPy_(sstack.stack_)  # sstack.Py_ = stack_
 
     return sstack_  # partially rotated and gP-forming term_stack__
 

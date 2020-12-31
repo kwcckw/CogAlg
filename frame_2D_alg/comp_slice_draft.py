@@ -99,7 +99,7 @@ class CStack(ClusterStructure):
 def comp_slice_blob(blob, AveB):  # comp_slice eval per blob
 
     for sstack in blob.stack_:
-        for i, stack in enumerate(sstack.Py_):
+        for i, stack in enumerate(sstack.stack_):
 
             if stack.G * stack.Ma - AveB / 10 > 0:  # / 10: ratio AveB to AveS, or not needed?
                 # * len(Py_) / A: length ratio?
@@ -113,7 +113,7 @@ def comp_slice_blob(blob, AveB):  # comp_slice eval per blob
                             accum_gstack(gstack_PP, istack, stack_PP)
                             istack.f_stack_PP = 1  # stack_PP = accumulated PP params and PP_
 
-                    sstack.Py_[i] = gstack_PP
+                    sstack.stack_[i] = gstack_PP
                     # return as stack_PP from form_PP
                 else:
                     # stack is original stack
@@ -255,7 +255,7 @@ def accum_gstack(gstack_PP, istack, stack_PP):
         gstack_PP.stack_PP.fdiv = fdiv
 
     # istack params
-    I, Dy, Dx, G, M, Dyy, Dyx, Dxy, Dxx, Ga, Ma, A, Ly, y0, Py_, sign, _, _, _, _, _, _, _  = istack.unpack()
+    I, Dy, Dx, G, M, Dyy, Dyx, Dxy, Dxx, Ga, Ma, A, Ly, y0, Py_, sign, _, _, _, _, _, _  = istack.unpack()
 
     # accumulate istack param into stack_stack_PP
     gstack_PP.I += I
