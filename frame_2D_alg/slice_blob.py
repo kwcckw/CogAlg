@@ -437,7 +437,8 @@ def flip_sstack_(sstack_, dert__):
             # unmask sstack:
             for stack in sstack.Py_:
                 for y, P in enumerate(stack.Py_):
-                    sstack_mask__[y+(stack.y0-y0), P.x0: (P.x0 + P.L)] = False  # unmask P
+                    # we need -x0 in x index so that P.x0 is relative to x0
+                    sstack_mask__[y+(stack.y0-y0), P.x0-x0: (P.x0-x0 + P.L)] = False  # unmask P
 
             # extract and flip sstack's dert__
             sstack_dert__ = tuple([np.rot90(param_dert__[y0:yn, x0:xn]) for param_dert__ in dert__])
@@ -455,6 +456,7 @@ def flip_sstack_(sstack_, dert__):
 
             sstack.stack_ += row_stack_   # dert__ ends, all last-row stacks have no downconnects
 
+            check_stacks_presence(sstack.stack_, sstack_mask__, f_plot=0)
 # -----------------------------------------------------------------------------
 # Utilities
 
@@ -465,6 +467,7 @@ def accum_Dert(Dert: dict, **params) -> None:
 def draw_stacks(stack_):
 
     import cv2
+    
     # retrieve region size of all stacks
     y0 = min([stack.y0 for stack in stack_])
     yn = max([stack.y0 + stack.Ly for stack in stack_])
@@ -528,3 +531,87 @@ def check_stacks_presence(stack_, mask__, f_plot=0):
         plt.imshow(img_colour)
         plt.subplot(1, 2, 2)
         plt.imshow(mask__ * 255)
+  
+''' To visualize the flipped stacks, work in progress and still tentative '''      
+def plot_flip_sstack():
+    # https://math.stackexchange.com/questions/270194/how-to-find-the-vertices-angle-after-rotation
+    # (p,q) =  origin of rotation
+    # θ = angle of rotation in radian (-90 degree in our case = -1.5708)
+    # x′=(x−p)cos(θ)−(y−q)sin(θ)+p,
+    # y′=(x−p)sin(θ)+(y−q)cos(θ)+q.
+
+#    from matplotlib import pyplot as plt
+#    img_colour = draw_stacks(stack_)
+    
+    for sstack in sstack_:
+        x0_, xn_, y0_, yn_ = [],[],[],[]
+        for stack in sstack.Py_:
+            x0_.append(min([Py.x0 for Py in stack.Py_]))
+            xn_.append(max([Py.x0 + Py.L for Py in stack.Py_]))
+            y0_.append(stack.y0)
+            yn_.append(stack.y0 + stack.Ly)
+
+
+        x0 = min(x0_)
+        xn = max(xn_)
+        y0 = min(y0_)
+        yn = max(yn_)
+
+        x_mid = round(x0+ ((xn-x0)/2))  # mid x
+        y_mid = round(y0+ ((yn-y0)/2))  # mid y
+            
+        img = np.zeros((yn - y0, xn - x0))
+        stack_index = 1
+        for stack in sstack.Py_:
+            for y, P in enumerate(stack.Py_):
+                for x, dert in enumerate(P.dert_):
+                    img[y + (stack.y0 - y0), x + (P.x0 - x0)] = stack_index
+            stack_index += 1  # for next stack
+                 
+            
+        if sstack.stack_:
+            
+            x0_rot, xn_rot, y0_rot, yn_rot = [],[],[],[]
+            for stack in sstack.stack_:
+                x0_rot.append(min([Py.x0 for Py in stack.Py_]))
+                xn_rot.append(max([Py.x0 + Py.L for Py in stack.Py_]))
+                y0_rot.append(stack.y0)
+                yn_rot.append(stack.y0 + stack.Ly)
+                  
+            x0_rot = min(x0_rot)
+            xn_rot = max(xn_rot)
+            y0_rot = min(y0_rot)
+            yn_rot = max(yn_rot)
+            
+            x_mid_rot = round(x0_rot+ ((xn_rot-x0_rot)/2)) # mid rot x
+            y_mid_rot = round(y0_rot+ ((yn_rot-y0_rot)/2))  # mid rot y
+            
+            img_rot = np.zeros((yn_rot - y0_rot, xn_rot - x0_rot))
+            stack_index = 1
+            for stack in sstack.stack_:
+                for y, P in enumerate(stack.Py_):
+                    for x, dert in enumerate(P.dert_):
+                        img_rot[y + (stack.y0 - y0_rot), x + (P.x0 - x0_rot)] = stack_index
+                stack_index += 1  # for next stack
+                 
+            x0_common = min([x0,x0_rot])
+            xn_common = max([xn,xn_rot])
+            y0_common = min([y0,y0_rot])
+            yn_common = max([yn,yn_rot])
+             
+            x_shift = x_mid - x_mid_rot
+            y_shift = y_mid - y_mid_rot
+            
+            img_common = np.zeros((yn_common - y0_common, xn_common - x0_common)) 
+            img_common_rot = np.zeros((yn_common - y0_common, xn_common - x0_common)) 
+            
+            if y_shift<0:
+                img_common[-y_shift:-y_shift+img.shape[0],:] = img
+            else:
+                img_common[y_shift:y_shift+img.shape[0],:] = img
+            
+            if x_shift<0:
+                img_common_rot[:,-x_shift:-x_shift+img_rot.shape[1]] = img_rot
+            else:
+                img_common_rot[:,x_shift:x_shift+img_rot.shape[1]] = img_rot
+
