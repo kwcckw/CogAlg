@@ -64,6 +64,8 @@ def intra_blob(blob, **kwargs):  # slice_blob or recursive input rng+ | angle cr
                     blob.dert__ = tuple([np.rot90(dert) for dert in blob.dert__])
                     mask__ = np.rot90(mask__)
 
+                # blob.stack_ is mixing of sstack and flipped sstack now
+                # if sstack.stack_, the sstack is flipped. Original stack_ is not needed anymore.
                 blob.stack_ = slice_blob(blob.dert__, mask__, verbose=kwargs.get('verbose'))  # adds stack_ to blob
                 comp_slice_blob(blob, AveB)  # cross-comp of vertically consecutive Ps in selected stacks
     else:
