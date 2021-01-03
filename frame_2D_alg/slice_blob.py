@@ -102,12 +102,16 @@ class CStack(ClusterStructure):
 
 # Functions:
 
-def slice_blob(dert__, mask__, verbose=False):
+def slice_blob(dert__, mask__, f_flip, verbose=False):
 
     row_stack_ = []  # higher-row vertical stacks of Ps
     stack_ = []  # all terminated stacks
     height, width = dert__[0].shape
     if verbose: print("Converting to image...")
+    
+    if f_flip: # rotate for scanning in vertical direction
+        dert__ = tuple([np.rot90(dert) for dert in dert__])
+        mask__ = np.rot90(mask__)
 
     for y, dert_ in enumerate(zip(*dert__)):  # first and last row are discarded?
         if verbose: print(f"\rProcessing line {y + 1}/{height}, ", end=""); sys.stdout.flush()
@@ -125,9 +129,9 @@ def slice_blob(dert__, mask__, verbose=False):
 
     sstack_ = form_sstack_(stack_)  # cluster stacks into horizontally-oriented super-stacks
 
+    draw_sstack_(f_flip, stack_,sstack_) # draw stacks, sstacks and # draw stacks, sstacks and the rotated sstacks
+        
     flip_sstack_(sstack_, dert__)  # vertical-first re-scanning of selected sstacks
-
-    draw_sstack_(sstack_) # draw stacks, sstacks and the rotated sstacks
 
     for sstack in sstack_:  # convert selected stacks into gstacks
         form_gPPy_(sstack.stack_)  # sstack.Py_ = stack_
@@ -536,7 +540,125 @@ def check_stacks_presence(stack_, mask__, f_plot=0):
         plt.imshow(mask__ * 255)
 
 
-def draw_sstack_(sstack_):
+
+def draw_sstack_(f_flip, stack_,sstack_):
+    '''visualize stacks and sstacks and their scanning direction'''
+    from matplotlib import pyplot as plt
+    colour_list = []  # list of colours:
+    colour_list.append([200, 130, 0])  # blue
+    colour_list.append([75, 25, 230])  # red
+    colour_list.append([25, 255, 255])  # yellow
+    colour_list.append([75, 180, 60])  # green
+    colour_list.append([212, 190, 250])  # pink
+    colour_list.append([240, 250, 70])  # cyan
+    colour_list.append([48, 130, 245])  # orange
+    colour_list.append([180, 30, 145])  # purple
+    colour_list.append([40, 110, 175])  # brown
+    colour_list.append([255, 255, 255])  # white
+
+    
+    if f_flip: # if stacks are flipped and scanned vertically
+
+        # get boundary - x0,xn, y0, yn
+        x0_rot, xn_rot, y0_rot, yn_rot = [], [], [], []
+        for sstack in sstack_:
+            for stack in sstack.Py_:
+                x0_rot.append(min([Py.x0 for Py in stack.Py_]))
+                xn_rot.append(max([Py.x0 + Py.L for Py in stack.Py_]))
+                y0_rot.append(stack.y0)
+                yn_rot.append(stack.y0 + stack.Ly)
+                
+        x0 = min(y0_rot)
+        xn = max(yn_rot) 
+        y0 = min(x0_rot)
+        yn = max(xn_rot)
+        
+        img_index_stacks = np.zeros((yn - y0, xn - x0))
+        img_index_sstacks = np.zeros((yn - y0, xn - x0))
+    
+        stack_index = 1
+        sstack_index = 1
+        
+        for sstack in sstack_:
+            for stack in sstack.Py_:
+                for y, P in enumerate(stack.Py_): 
+                    for x, dert in enumerate(P.dert_):
+                        img_index_stacks[x + (P.x0 - x0),y + (stack.y0 - y0)] = stack_index
+                        img_index_sstacks[x + (P.x0 - x0),y + (stack.y0 - y0)] = sstack_index   
+                stack_index += 1 # for next stack
+            sstack_index += 1  # for next sstack
+        
+        # initialize colour image
+        img_colour_stacks = np.zeros((yn-y0, xn-x0, 3)).astype('uint8')
+        img_colour_sstacks = np.zeros((yn-y0, xn-x0, 3)).astype('uint8')
+        # draw stacks and sstacks
+        for i in range(1, stack_index):
+            colour_index = i % 10
+            img_colour_stacks[np.where(img_index_stacks == i)] = colour_list[colour_index]   
+        for i in range(1, sstack_index):
+            colour_index = i % 10
+            img_colour_sstacks[np.where(img_index_sstacks == i)] = colour_list[colour_index]
+                
+    else: # if stacks are not flipped and scanned horizontally
+        
+        # get boundary - x0,xn, y0, yn
+        x0_, xn_, y0_, yn_ = [], [], [], []
+        for sstack in sstack_:
+            for stack in sstack.Py_:
+                x0_.append(min([Py.x0 for Py in stack.Py_]))
+                xn_.append(max([Py.x0 + Py.L for Py in stack.Py_]))
+                y0_.append(stack.y0)
+                yn_.append(stack.y0 + stack.Ly)
+                
+        x0 = min(x0_)
+        xn = max(xn_) 
+        y0 = min(y0_)
+        yn = max(yn_)
+        
+        img_index_stacks = np.zeros((yn - y0, xn - x0))
+        img_index_sstacks = np.zeros((yn - y0, xn - x0))
+    
+        stack_index = 1
+        sstack_index = 1
+        
+        for sstack in sstack_:
+            for stack in sstack.Py_:
+                for y, P in enumerate(stack.Py_): 
+                    for x, dert in enumerate(P.dert_):
+                        img_index_stacks[y + (stack.y0 - y0), x + (P.x0 - x0)] = stack_index
+                        img_index_sstacks[y + (stack.y0 - y0), x + (P.x0 - x0)] = sstack_index   
+                stack_index += 1  # for next stack          
+            sstack_index += 1  # for next sstack
+        
+        # initialize colour image
+        img_colour_stacks = np.zeros((yn-y0, xn-x0, 3)).astype('uint8')
+        img_colour_sstacks = np.zeros((yn-y0, xn-x0, 3)).astype('uint8')
+        # draw stacks and sstacks
+        for i in range(1, stack_index):
+            colour_index = i % 10
+            img_colour_stacks[np.where(img_index_stacks == i)] = colour_list[colour_index] 
+        for i in range(1, sstack_index):
+            colour_index = i % 10
+            img_colour_sstacks[np.where(img_index_sstacks == i)] = colour_list[colour_index]
+              
+            
+    # draw image to figure and save it to disk
+    plt.figure(1)
+    plt.subplot(1,2,1)
+    plt.imshow(np.uint8(img_colour_stacks))
+    if f_flip: plt.title('stacks (vertical scan)')
+    else: plt.title('stacks (horizontal scan)')
+    plt.subplot(1,2,2)
+    plt.imshow(img_colour_sstacks)
+    if f_flip: plt.title('sstacks (vertical scan)')
+    else: plt.title('sstacks (horizontal scan)')
+    plt.savefig('./images/slice_blob/sstack_'+str(id(sstack_))+'.png')
+    plt.close()            
+
+
+
+# outdated and not correct
+def draw_rotated_sstack_(sstack_):
 
     ''' visualize the stacks, sstacks and flipped sstacks'''
 
