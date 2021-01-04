@@ -42,6 +42,8 @@ optional arguments:
 
 from collections import deque
 import sys
+import cv2
+from matplotlib import pyplot as plt
 import numpy as np
 from class_cluster import ClusterStructure, NoneType
 
@@ -102,17 +104,25 @@ class CStack(ClusterStructure):
 
 # Functions:
 
-def slice_blob(dert__, mask__, f_flip, verbose=False):
+def slice_blob(blob, verbose=False):
+ 
+    L_bias = (blob.box[3] - blob.box[2] + 1) / (blob.box[1] - blob.box[0] + 1)  # Lx / Ly, blob.box = [y0,yn,x0,xn]
+    G_bias = abs(blob.Dy) / abs(blob.Dx)  # ddirection: Gy / Gx, preferential comp over low G
+
+    # evaluate this using A as well?
+    if blob.G * blob.Ma * L_bias * G_bias > flip_ave: # rotate for scanning in vertical direction
+        blob.f_flip = 1   # flip dert__:
+        dert__ = tuple([np.rot90(dert) for dert in blob.dert__])
+        mask__ = np.rot90(blob.mask__)
+    else:
+        dert__ = tuple([dert for dert in blob.dert__])
+        mask__ = blob.mask__
 
     row_stack_ = []  # higher-row vertical stacks of Ps
     stack_ = []  # all terminated stacks
     height, width = dert__[0].shape
     if verbose: print("Converting to image...")
     
-    if f_flip: # rotate for scanning in vertical direction
-        dert__ = tuple([np.rot90(dert) for dert in dert__])
-        mask__ = np.rot90(mask__)
-
     for y, dert_ in enumerate(zip(*dert__)):  # first and last row are discarded?
         if verbose: print(f"\rProcessing line {y + 1}/{height}, ", end=""); sys.stdout.flush()
 
@@ -128,10 +138,10 @@ def slice_blob(dert__, mask__, f_flip, verbose=False):
     check_stacks_presence(stack_, mask__, f_plot=0)  # visualize stack_ and mask__
 
     sstack_ = form_sstack_(stack_)  # cluster stacks into horizontally-oriented super-stacks
+ 
+    flip_sstack_(sstack_, dert__, blob.f_flip)  # vertical-first re-scanning of selected sstacks
 
-    draw_sstack_(f_flip, stack_,sstack_) # draw stacks, sstacks and # draw stacks, sstacks and the rotated sstacks
-        
-    flip_sstack_(sstack_, dert__)  # vertical-first re-scanning of selected sstacks
+    draw_sstack_(blob.f_flip, stack_,sstack_) # draw stacks, sstacks and # draw stacks, sstacks and the rotated sstacks
 
     for sstack in sstack_:  # convert selected stacks into gstacks
         form_gPPy_(sstack.stack_)  # sstack.Py_ = stack_
@@ -417,7 +427,7 @@ def form_sstack_(stack_):
     return sstack_
 
 
-def flip_sstack_(sstack_, dert__):
+def flip_sstack_(sstack_, dert__, f_flip):
     '''
     evaluate for flipping dert__ and re-forming Ps and stacks per sstack
     '''
@@ -472,9 +482,6 @@ def accum_Dert(Dert: dict, **params) -> None:
 
 
 def draw_stacks(stack_):
-
-    import cv2
-
     # retrieve region size of all stacks
     y0 = min([stack.y0 for stack in stack_])
     yn = max([stack.y0 + stack.Ly for stack in stack_])
@@ -512,7 +519,6 @@ def draw_stacks(stack_):
 
     return img_colour
 
-
 def check_stacks_presence(stack_, mask__, f_plot=0):
     '''
     visualize stack_ and mask__ to ensure that they cover the same area
@@ -543,7 +549,7 @@ def check_stacks_presence(stack_, mask__, f_plot=0):
 
 def draw_sstack_(f_flip, stack_,sstack_):
     '''visualize stacks and sstacks and their scanning direction'''
-    from matplotlib import pyplot as plt
+    ''' runnable but not fully optimized yet '''
     colour_list = []  # list of colours:
     colour_list.append([200, 130, 0])  # blue
     colour_list.append([75, 25, 230])  # red
@@ -556,8 +562,8 @@ def draw_sstack_(f_flip, stack_,sstack_):
     colour_list.append([40, 110, 175])  # brown
     colour_list.append([255, 255, 255])  # white
 
-    
-    if f_flip: # if stacks are flipped and scanned vertically
+    mix_flip = 0
+    if f_flip: # if stacks are flipped and scanned vertically in blob's derts
 
         # get boundary - x0,xn, y0, yn
         x0_rot, xn_rot, y0_rot, yn_rot = [], [], [], []
@@ -575,31 +581,52 @@ def draw_sstack_(f_flip, stack_,sstack_):
         
         img_index_stacks = np.zeros((yn - y0, xn - x0))
         img_index_sstacks = np.zeros((yn - y0, xn - x0))
+        img_index_sstacks_flipped = np.zeros((yn - y0, xn - x0))
     
         stack_index = 1
         sstack_index = 1
+        sstack_flipped_index = 1
         
         for sstack in sstack_:
             for stack in sstack.Py_:
                 for y, P in enumerate(stack.Py_): 
                     for x, dert in enumerate(P.dert_):
-                        img_index_stacks[x + (P.x0 - x0),y + (stack.y0 - y0)] = stack_index
-                        img_index_sstacks[x + (P.x0 - x0),y + (stack.y0 - y0)] = sstack_index   
+                            img_index_stacks[x + (P.x0 - x0),xn-1-(y + (stack.y0 - y0))] = stack_index
+                            img_index_sstacks[x + (P.x0 - x0),xn-1-(y + (stack.y0 - y0))] = sstack_index   
                 stack_index += 1 # for next stack
             sstack_index += 1  # for next sstack
-        
-        # initialize colour image
-        img_colour_stacks = np.zeros((yn-y0, xn-x0, 3)).astype('uint8')
-        img_colour_sstacks = np.zeros((yn-y0, xn-x0, 3)).astype('uint8')
-        # draw stacks and sstacks
-        for i in range(1, stack_index):
-            colour_index = i % 10
-            img_colour_stacks[np.where(img_index_stacks == i)] = colour_list[colour_index]   
-        for i in range(1, sstack_index):
-            colour_index = i % 10
-            img_colour_sstacks[np.where(img_index_sstacks == i)] = colour_list[colour_index]
+            
+        for sstack in sstack_:
+            if sstack.stack_: # if sstack is flipped (blob's derts are flipped, and sstack is flipped too)
+                mix_flip = 1
+                sx0_, sxn_, sy0_, syn_ = [], [], [], []
+                for stack in sstack.Py_:
+                    sx0_.append(min([Py.x0 for Py in stack.Py_]))
+                    sxn_.append(max([Py.x0 + Py.L for Py in stack.Py_]))
+                    sy0_.append(stack.y0)
+                    syn_.append(stack.y0 + stack.Ly)
+                    
+                sx0 = min(sy0_)
+                sxn = max(syn_) 
+                sy0 = min(sx0_)
+                syn = max(sxn_)
                 
-    else: # if stacks are not flipped and scanned horizontally
+                for stack in sstack.stack_:
+                    for y, P in enumerate(stack.Py_): 
+                        for x, dert in enumerate(P.dert_):
+                            img_index_sstacks_flipped[syn-1-(y + (stack.y0 - y0)), xn-sx0-1-(x + (P.x0 - x0))] = sstack_flipped_index 
+                    sstack_flipped_index += 1  # for next stack of flipped sstack
+                
+
+            else: # if sstack is not flipped (blob's derts are flipped, but sstack is not flipped)
+                for stack in sstack.Py_:
+                    for y, P in enumerate(stack.Py_): 
+                        for x, dert in enumerate(P.dert_):
+                            img_index_sstacks_flipped[x + (P.x0 - x0),xn-1-(y + (stack.y0 - y0))] = sstack_flipped_index
+                    sstack_flipped_index += 1  # for next stack of sstack
+        
+
+    else: # if stacks are not flipped and scanned horizontally in blob's derts
         
         # get boundary - x0,xn, y0, yn
         x0_, xn_, y0_, yn_ = [], [], [], []
@@ -617,9 +644,11 @@ def draw_sstack_(f_flip, stack_,sstack_):
         
         img_index_stacks = np.zeros((yn - y0, xn - x0))
         img_index_sstacks = np.zeros((yn - y0, xn - x0))
+        img_index_sstacks_flipped = np.zeros((yn - y0, xn - x0))
     
         stack_index = 1
         sstack_index = 1
+        sstack_flipped_index = 1
         
         for sstack in sstack_:
             for stack in sstack.Py_:
@@ -630,224 +659,71 @@ def draw_sstack_(f_flip, stack_,sstack_):
                 stack_index += 1  # for next stack          
             sstack_index += 1  # for next sstack
         
-        # initialize colour image
-        img_colour_stacks = np.zeros((yn-y0, xn-x0, 3)).astype('uint8')
-        img_colour_sstacks = np.zeros((yn-y0, xn-x0, 3)).astype('uint8')
-        # draw stacks and sstacks
-        for i in range(1, stack_index):
-            colour_index = i % 10
-            img_colour_stacks[np.where(img_index_stacks == i)] = colour_list[colour_index] 
-        for i in range(1, sstack_index):
-            colour_index = i % 10
-            img_colour_sstacks[np.where(img_index_sstacks == i)] = colour_list[colour_index]
-              
+        
+        for sstack in sstack_:
+            if sstack.stack_: # if sstack is flipped (blob's derts are not flipped, but sstack is flipped)
+                mix_flip = 1
+                sx0_, sxn_, sy0_, syn_ = [], [], [], []
+                for stack in sstack.Py_:
+                    sx0_.append(min([Py.x0 for Py in stack.Py_]))
+                    sxn_.append(max([Py.x0 + Py.L for Py in stack.Py_]))
+                    sy0_.append(stack.y0)
+                    syn_.append(stack.y0 + stack.Ly)
+                    
+                sx0 = min(sx0_)
+                sxn = max(sxn_) 
+                sy0 = min(sy0_)
+                syn = max(syn_)
+                
+                for stack in sstack.stack_:
+                    for y, P in enumerate(stack.Py_): 
+                        for x, dert in enumerate(P.dert_):
+                            img_index_sstacks_flipped[sy0+(x + (P.x0 - x0)),sxn-1-(y + (stack.y0 - y0))] = sstack_flipped_index 
+             
+                    sstack_flipped_index += 1  # for next stack of flipped sstack
+                
+
+            else: # if sstack is not flipped (blob's derts are not flipped,  sstack is also not flipped)
+                for stack in sstack.Py_:
+                    for y, P in enumerate(stack.Py_): 
+                        for x, dert in enumerate(P.dert_):
+                            img_index_sstacks_flipped[y + (stack.y0 - y0),x + (P.x0 - x0)] = sstack_flipped_index
+                    sstack_flipped_index += 1  # for next stack of sstack
+        
+
+    # initialize colour image
+    img_colour_stacks = np.zeros((yn-y0, xn-x0, 3)).astype('uint8')
+    img_colour_sstacks = np.zeros((yn-y0, xn-x0, 3)).astype('uint8')
+    img_colour_sstacks_flipped = np.zeros((yn-y0, xn-x0, 3)).astype('uint8')
+    
+    # draw stacks and sstacks
+    for i in range(1, stack_index):
+        colour_index = i % 10
+        img_colour_stacks[np.where(img_index_stacks == i)] = colour_list[colour_index]   
+    for i in range(1, sstack_index):
+        colour_index = i % 10
+        img_colour_sstacks[np.where(img_index_sstacks == i)] = colour_list[colour_index]
+    for i in range(1, sstack_flipped_index):
+        colour_index = i % 10
+        img_colour_sstacks_flipped[np.where(img_index_sstacks_flipped == i)] = colour_list[colour_index]
+        
             
-    # draw image to figure and save it to disk
-    plt.figure(1)
-    plt.subplot(1,2,1)
-    plt.imshow(np.uint8(img_colour_stacks))
-    if f_flip: plt.title('stacks (vertical scan)')
-    else: plt.title('stacks (horizontal scan)')
-    plt.subplot(1,2,2)
-    plt.imshow(img_colour_sstacks)
-    if f_flip: plt.title('sstacks (vertical scan)')
-    else: plt.title('sstacks (horizontal scan)')
-    plt.savefig('./images/slice_blob/sstack_'+str(id(sstack_))+'.png')
-    plt.close()            
-
-
-
-# outdated and not correct
-def draw_rotated_sstack_(sstack_):
-
-    ''' visualize the stacks, sstacks and flipped sstacks'''
-
-    from matplotlib import pyplot as plt
-
-    # initialization
-    x0_all, xn_all, y0_all, yn_all = [],[],[],[]
-    x_offset_all = []
-    y_offset_all = []
-    img_ori_all = []
-    img_rot_all = []
-    box_ori_all = []
-    box_rot_all = []
-
-    for sstack in sstack_:
-
-        # get local x0,xn, y0, yn
-        x0_, xn_, y0_, yn_ = [],[],[],[]
-        for stack in sstack.Py_:
-            x0_.append(min([Py.x0 for Py in stack.Py_]))
-            xn_.append(max([Py.x0 + Py.L for Py in stack.Py_]))
-            y0_.append(stack.y0)
-            yn_.append(stack.y0 + stack.Ly)
-
-        x0 = min(x0_)
-        xn = max(xn_)
-        y0 = min(y0_)
-        yn = max(yn_)
-
-        x_mid = round(x0+ ((xn-x0)/2))  # mid local x (common point for the rotated and non rotated derts)
-        y_mid = round(y0+ ((yn-y0)/2))  # mid local y (common point for the rotated and non rotated derts)
-
-        # get non-rotated derts from their stacks
-        img = np.zeros((yn - y0, xn - x0))
-        stack_index = 1
-        for stack in sstack.Py_:
-            for y, P in enumerate(stack.Py_):
-                for x, dert in enumerate(P.dert_):
-                    img[y + (stack.y0 - y0), x + (P.x0 - x0)] = stack_index
-            stack_index += 1  # for next stack
-
-        # accumulation of params
-        x0_all.append(x0)
-        xn_all.append(xn)
-        y0_all.append(y0)
-        yn_all.append(yn)
-        box_ori_all.append([y0,yn,x0,xn])
-        img_ori_all.append(img)
-
-        if sstack.stack_: # for flipped sstack and their stacks
-
-            # get rotated x0,xn, y0, yn
-            x0_rot, xn_rot, y0_rot, yn_rot = [],[],[],[]
-            for stack in sstack.stack_:
-                x0_rot.append(min([Py.x0 for Py in stack.Py_]))
-                xn_rot.append(max([Py.x0 + Py.L for Py in stack.Py_]))
-                y0_rot.append(stack.y0)
-                yn_rot.append(stack.y0 + stack.Ly)
-
-            x0_rot = min(x0_rot)
-            xn_rot = max(xn_rot)
-            y0_rot = min(y0_rot)
-            yn_rot = max(yn_rot)
-
-            # get rotated derts from their stacks
-            img_rot = np.zeros((yn_rot - y0_rot, xn_rot - x0_rot))
-            stack_index = 1
-            for stack in sstack.stack_:
-                for y, P in enumerate(stack.Py_):
-                    for x, dert in enumerate(P.dert_):
-                        img_rot[y + (stack.y0 - y0_rot), x + (P.x0 - x0_rot)] = stack_index
-                stack_index += 1  # for next stack
-            # get rotated x0, xn, y0, yn
-            # https://math.stackexchange.com/questions/270194/how-to-find-the-vertices-angle-after-rotation
-            # (p,q) =  origin of rotation
-            # θ = angle of rotation in radian (-90 degree in our case = -1.5708)
-            # x′=(x−p)cos(θ)−(y−q)sin(θ)+p
-            # y′=(x−p)sin(θ)+(y−q)cos(θ)+q
-            x0_rot_common = int(round((x0-x_mid)* np.cos(-1.5708) - (y0-y_mid)*np.sin(-1.5708)+x_mid))
-            xn_rot_common = int(round((xn-x_mid)* np.cos(-1.5708) - (yn-y_mid)*np.sin(-1.5708)+x_mid))
-            y0_rot_common = int(round((x0-x_mid)* np.sin(-1.5708) + (y0-y_mid)*np.cos(-1.5708)+y_mid))
-            yn_rot_common = int(round((xn-x_mid)* np.sin(-1.5708) + (yn-y_mid)*np.cos(-1.5708)+y_mid))
-
-
-            # if the rotated location ending point is before the starting point (negative value), we need to invert their location
-            if y0_rot_common > yn_rot_common:
-                y0_rot_common, yn_rot_common = yn_rot_common+1, y0_rot_common+1  # + 1 because starting index is inclusive, while ending is not
-            if x0_rot_common > xn_rot_common:
-                x0_rot_common, xn_rot_common = xn_rot_common+1, x0_rot_common+1 # + 1 because starting index is inclusive, while ending is not
-
-            # if the rotated location is beyond the current mask boundary (negative index), we extend the boundary by adding offset
-            y_offset = 0
-            if y0_rot_common <0:
-                y_offset = -y0_rot_common
-            x_offset = 0
-            if x0_rot_common <0:
-                x_offset = -x0_rot_common
-
-            # bounding box of derts from original derts and rotated derts
-            x0_common = min([x0,x0_rot_common])
-            xn_common = max([xn,xn_rot_common])
-            y0_common = min([y0,y0_rot_common])
-            yn_common = max([yn,yn_rot_common])
-
-            # accumulation of params
-            x0_all.append(x0_common+x_offset)
-            xn_all.append(xn_common+x_offset)
-            y0_all.append(y0_common+y_offset)
-            yn_all.append(yn_common+y_offset)
-            x_offset_all.append(x_offset)
-            y_offset_all.append(y_offset)
-            img_rot_all.append(img_rot)
-            box_rot_all.append([y0_rot_common,yn_rot_common,x0_rot_common,xn_rot_common])
-
-        else: # no rotated stacks, set value as 0 or empty
-            x_offset_all.append(0)
-            y_offset_all.append(0)
-            img_rot_all.append([])
-            box_rot_all.append([])
-
-    # initialize image from max yn and max xn
-    img_stacks = np.zeros((np.max(yn_all), np.max(xn_all)))
-    img_common = np.zeros((np.max(yn_all), np.max(xn_all)))
-    img_common_rot = np.zeros((np.max(yn_all), np.max(xn_all)))
-
-    for i,(img_ori,img_rot,box_ori,box_rot,x_offset,y_offset) in enumerate(zip(img_ori_all,img_rot_all,box_ori_all, box_rot_all, x_offset_all, y_offset_all)):
-
-        y0,yn,x0,xn = box_ori
-        # set index for stacks
-        img_stacks[y0+y_offset:yn+y_offset,x0+x_offset:xn+x_offset] += img_ori
-
-        # generate common index for sstack's derts and rotated sstack's derts
-        img_ori[img_ori>0] = i+1
-        img_common[y0+y_offset:yn+y_offset,x0+x_offset:xn+x_offset] += img_ori # assign common index for non-rotated sstacks
-
-        if len(img_rot)>0:
-            y0_rot,yn_rot,x0_rot,xn_rot = box_rot
-            # generate common index for sstack's derts and rotated sstack's derts
-            img_rot[img_rot>0] = i+1
-            img_common_rot[y0_rot+y_offset:yn_rot+y_offset,x0_rot+x_offset:xn_rot+x_offset] += img_rot # assign common index for rotated sstacks
-        else: # no rotated sstacks, # assign common index
-            img_common_rot[y0+y_offset:yn+y_offset,x0+x_offset:xn+x_offset] += img_ori
-
-        # set index of overlapping area = 255. There might be some overlapping area when some sstacks are rotated, while some are not.
-        img_common_rot[img_common_rot>i+1] = 255
-
-    colour_list = []  # list of colours:
-    colour_list.append([200, 130, 0])  # blue
-    colour_list.append([75, 25, 230])  # red
-    colour_list.append([25, 255, 255])  # yellow
-    colour_list.append([75, 180, 60])  # green
-    colour_list.append([212, 190, 250])  # pink
-    colour_list.append([240, 250, 70])  # cyan
-    colour_list.append([48, 130, 245])  # orange
-    colour_list.append([180, 30, 145])  # purple
-    colour_list.append([40, 110, 175])  # brown
-    colour_white = ([255, 255, 255])  # white
-
-    # initialization
-    img_colour_stacks = np.zeros((np.max(yn_all), np.max(xn_all), 3)).astype('uint8')
-    img_colour_sstacks = np.zeros((np.max(yn_all), np.max(xn_all), 3)).astype('uint8')
-    img_colour_sstacks_rot = np.zeros((np.max(yn_all), np.max(xn_all), 3)).astype('uint8')
-
-    # draw stacks' image
-    total_stacks = int(np.max(img_stacks))
-    for i in range(1, total_stacks+1):
-        colour_index = i % 9
-        img_colour_stacks[np.where(img_stacks == i)] = colour_list[colour_index]
-
-    # draw sstack and the rotated sstack/s image
-    total_sstacks = int(np.max(img_common))
-    for i in range(1, total_sstacks+1):
-        colour_index = i % 9
-        img_colour_sstacks[np.where(img_common == i)] = colour_list[colour_index]
-        img_colour_sstacks_rot[np.where(img_common_rot == i)] = colour_list[colour_index]
-
-    # set overlapping area = white
-    img_colour_sstacks_rot[np.where(img_common_rot >= 255)] = colour_white
-
     # draw image to figure and save it to disk
     plt.figure(1)
     plt.subplot(1,3,1)
     plt.imshow(np.uint8(img_colour_stacks))
-    plt.title('stacks')
+    if f_flip: plt.title('Y stacks')
+    else: plt.title('X stacks')
     plt.subplot(1,3,2)
     plt.imshow(img_colour_sstacks)
-    plt.title('sstacks')
+    if f_flip: plt.title('Y sstacks')
+    else: plt.title('X sstacks')
     plt.subplot(1,3,3)
-    plt.imshow(img_colour_sstacks_rot)
-    plt.title('rotated sstacks')
+    plt.imshow(img_colour_sstacks_flipped)
+    if mix_flip: plt.title('Mix XY sstacks')
+    elif f_flip: plt.title('Y sstacks')
+    else: plt.title('X sstacks')
     plt.savefig('./images/slice_blob/sstack_'+str(id(sstack_))+'.png')
-    plt.close()
+    plt.close()            
+
+
