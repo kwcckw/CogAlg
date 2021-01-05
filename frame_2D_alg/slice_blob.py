@@ -105,24 +105,24 @@ class CStack(ClusterStructure):
 # Functions:
 
 def slice_blob(blob, verbose=False):
- 
-    L_bias = (blob.box[3] - blob.box[2] + 1) / (blob.box[1] - blob.box[0] + 1)  # Lx / Ly, blob.box = [y0,yn,x0,xn]
-    G_bias = abs(blob.Dy) / abs(blob.Dx)  # ddirection: Gy / Gx, preferential comp over low G
 
-    # evaluate this using A as well?
-    if blob.G * blob.Ma * L_bias * G_bias > flip_ave: # rotate for scanning in vertical direction
-        blob.f_flip = 1   # flip dert__:
-        dert__ = tuple([np.rot90(dert) for dert in blob.dert__])
-        mask__ = np.rot90(blob.mask__)
-    else:
-        dert__ = tuple([dert for dert in blob.dert__])
-        mask__ = blob.mask__
+    horizontal_bias = ( blob.box[3] - blob.box[2] + 1) / (blob.box[1] - blob.box[0] + 1) \
+                      * (abs(blob.Dy) / abs(blob.Dx))
+        # L_bias (Lx / Ly) * G_bias (Gy / Gx), blob.box = [y0,yn,x0,xn], ddirection: , preferential comp over low G
 
+    if horizontal_bias > 1 and (blob.G * blob.Ma * horizontal_bias > flip_ave / 10):
+        # rotate for scanning in vertical direction
+        blob.fflip = 1   # flip dert__:
+        blob.dert__ = tuple([np.rot90(dert) for dert in blob.dert__])
+        blob.mask__ = np.rot90(blob.mask__)
+
+    dert__ = blob.dert__
+    mask__ = blob.mask__
     row_stack_ = []  # higher-row vertical stacks of Ps
     stack_ = []  # all terminated stacks
     height, width = dert__[0].shape
     if verbose: print("Converting to image...")
-    
+
     for y, dert_ in enumerate(zip(*dert__)):  # first and last row are discarded?
         if verbose: print(f"\rProcessing line {y + 1}/{height}, ", end=""); sys.stdout.flush()
 
@@ -138,10 +138,10 @@ def slice_blob(blob, verbose=False):
     check_stacks_presence(stack_, mask__, f_plot=0)  # visualize stack_ and mask__
 
     sstack_ = form_sstack_(stack_)  # cluster stacks into horizontally-oriented super-stacks
- 
-    flip_sstack_(sstack_, dert__, blob.f_flip)  # vertical-first re-scanning of selected sstacks
 
-    draw_sstack_(blob.f_flip, stack_,sstack_) # draw stacks, sstacks and # draw stacks, sstacks and the rotated sstacks
+    flip_sstack_(sstack_, dert__)  # vertical-first re-scanning of selected sstacks
+
+    draw_sstack_(blob.fflip, stack_,sstack_) # draw stacks, sstacks and # draw stacks, sstacks and the rotated sstacks
 
     for sstack in sstack_:  # convert selected stacks into gstacks
         form_gPPy_(sstack.stack_)  # sstack.Py_ = stack_
@@ -154,6 +154,7 @@ Parameterized connectivity clustering functions below:
 - scan_P_ searches for horizontal (x) overlap between Ps of consecutive (in y) rows.
 - form_stack combines these overlapping Ps into vertical stacks of Ps, with one up_P to one down_P
 - term_stack merges terminated stacks into blob
+
 dert: tuple of derivatives per pixel, initially (p, dy, dx, g), extended in intra_blob
 Dert: params of cluster structures (P, stack, blob): summed dert params + dimensions: vertical Ly and area A
 '''
@@ -390,33 +391,50 @@ def form_gP_(gdert_):
 
 def form_sstack_(stack_):
     '''
-    form horizontal stacks of stacks
+    just a draft
+    form horizontal stacks of stacks, read backwards, sub-access by upconnects?
     '''
     sstack_ = []
-    _stack = stack_[0]
+    '''
+    _stack = stack_.copy.pop
     _f_up = len(_stack.upconnect_) > 0
-    _f_ex = _f_up ^ _stack.downconnect_cnt > 0
-    # initialize 1st sstack with _stack params:
+    _f_ex = _f_up ^ _stack.downconnect_cnt > 0  # exclusive up- or down- connectivity
 
+    # initialize 1st sstack with _stack params:
     sstack = CStack(I=_stack.I, Dy=_stack.Dy, Dx=_stack.Dx, G=_stack.G, M=_stack.M,
                     Dyy=_stack.Dyy, Dyx=_stack.Dyx, Dxy=_stack.Dxy, Dxx=_stack.Dxx,
                     Ga=_stack.Ga, Ma=_stack.Ma, A=_stack.A, Ly=_stack.Ly, y0=_stack.y0,
                     Py_=[_stack], sign=_stack.sign)
+    '''
+    for _stack in stack_.copy.pop:  # access in termination order
 
-    for stack in stack_[1:]:
-        f_up = len(stack.upconnect_) > 0
-        f_ex = _f_up ^ _stack.downconnect_cnt > 0
+        if _stack.downconnect_cnt == 0:  # else skip, this stack is upconnect of prior _stack
+            _f_up = len(_stack.upconnect_) > 0
+            _f_ex = _f_up ^ _stack.downconnect_cnt > 0  # exclusive up- or down- connectivity
 
-        if (f_up != _f_up) and (f_ex and _f_ex):
-            sstack_.append(sstack)  # terminate sstack and append it to sstack_
-            sstack = CStack()       # initialize sstack, all values = 0 or []
+            sstack = CStack(I=_stack.I, Dy=_stack.Dy, Dx=_stack.Dx, G=_stack.G, M=_stack.M,
+                            Dyy=_stack.Dyy, Dyx=_stack.Dyx, Dxy=_stack.Dxy, Dxx=_stack.Dxx,
+                            Ga=_stack.Ga, Ma=_stack.Ma, A=_stack.A, Ly=_stack.Ly, y0=_stack.y0,
+                            Py_=[_stack], sign=_stack.sign)
 
-        # append the horizontal stack_ and accumulate sstack params, regardless of termination
-        sstack.accumulate(I=stack.I, Dy=stack.Dy, Dx=stack.Dx, G=stack.G, M=stack.M, Dyy=stack.Dyy, Dyx=stack.Dyx, Dxy=stack.Dxy, Dxx=stack.Dxx,
-                          Ga=stack.Ga, Ma=stack.Ma, A=stack.A)
-        sstack.Ly = max(sstack.y0 + sstack.Ly, stack.y0 + stack.Ly) - min(sstack.y0, stack.y0)  # Ly = max y - min y: line may contain multiple Ps
-        sstack.y0 = min(sstack.y0, stack.y0)  # y0 is min of stacks' y0
-        sstack.Py_.append(stack)
+        for stack in _stack.upconnect_:  # access connected stacks only
+            f_up = len(stack.upconnect_) > 0
+            f_ex = f_up ^ stack.downconnect_cnt > 0
+
+            if (f_up != _f_up) and (f_ex and _f_ex):
+                # one of consecutive stacks is upconnected, the other is downconnected, both of are exclusively connected:
+                # direction is reversed, which means the stacks are ordered horizontally
+
+                # accumulate instead of termination:
+                sstack.accumulate(I=stack.I, Dy=stack.Dy, Dx=stack.Dx, G=stack.G, M=stack.M, Dyy=stack.Dyy, Dyx=stack.Dyx, Dxy=stack.Dxy, Dxx=stack.Dxx,
+                                  Ga=stack.Ga, Ma=stack.Ma, A=stack.A)
+                sstack.Ly = max(sstack.y0 + sstack.Ly, stack.y0 + stack.Ly) - min(sstack.y0, stack.y0)  # Ly = max y - min y: line may contain multiple Ps
+                sstack.y0 = min(sstack.y0, stack.y0)  # y0 is min of stacks' y0
+                sstack.Py_.append(stack)
+
+            else:  # needs a review:
+                sstack_.append(sstack)  # terminate sstack and append it to sstack_
+                sstack = CStack()       # initialize sstack, all values = 0 or []
 
         # update prior f_up and f_ex
         _f_up = f_up
@@ -427,7 +445,7 @@ def form_sstack_(stack_):
     return sstack_
 
 
-def flip_sstack_(sstack_, dert__, f_flip):
+def flip_sstack_(sstack_, dert__):
     '''
     evaluate for flipping dert__ and re-forming Ps and stacks per sstack
     '''
@@ -573,29 +591,29 @@ def draw_sstack_(f_flip, stack_,sstack_):
                 xn_rot.append(max([Py.x0 + Py.L for Py in stack.Py_]))
                 y0_rot.append(stack.y0)
                 yn_rot.append(stack.y0 + stack.Ly)
-                
+
         x0 = min(y0_rot)
-        xn = max(yn_rot) 
+        xn = max(yn_rot)
         y0 = min(x0_rot)
         yn = max(xn_rot)
-        
+
         img_index_stacks = np.zeros((yn - y0, xn - x0))
         img_index_sstacks = np.zeros((yn - y0, xn - x0))
         img_index_sstacks_flipped = np.zeros((yn - y0, xn - x0))
-    
+
         stack_index = 1
         sstack_index = 1
         sstack_flipped_index = 1
-        
+
         for sstack in sstack_:
             for stack in sstack.Py_:
-                for y, P in enumerate(stack.Py_): 
+                for y, P in enumerate(stack.Py_):
                     for x, dert in enumerate(P.dert_):
                             img_index_stacks[x + (P.x0 - x0),xn-1-(y + (stack.y0 - y0))] = stack_index
-                            img_index_sstacks[x + (P.x0 - x0),xn-1-(y + (stack.y0 - y0))] = sstack_index   
+                            img_index_sstacks[x + (P.x0 - x0),xn-1-(y + (stack.y0 - y0))] = sstack_index
                 stack_index += 1 # for next stack
             sstack_index += 1  # for next sstack
-            
+
         for sstack in sstack_:
             if sstack.stack_: # if sstack is flipped (blob's derts are flipped, and sstack is flipped too)
                 mix_flip = 1
@@ -605,29 +623,29 @@ def draw_sstack_(f_flip, stack_,sstack_):
                     sxn_.append(max([Py.x0 + Py.L for Py in stack.Py_]))
                     sy0_.append(stack.y0)
                     syn_.append(stack.y0 + stack.Ly)
-                    
+
                 sx0 = min(sy0_)
-                sxn = max(syn_) 
+                sxn = max(syn_)
                 sy0 = min(sx0_)
                 syn = max(sxn_)
-                
+
                 for stack in sstack.stack_:
-                    for y, P in enumerate(stack.Py_): 
+                    for y, P in enumerate(stack.Py_):
                         for x, dert in enumerate(P.dert_):
-                            img_index_sstacks_flipped[syn-1-(y + (stack.y0 - y0)), xn-sx0-1-(x + (P.x0 - x0))] = sstack_flipped_index 
+                            img_index_sstacks_flipped[syn-1-(y + (stack.y0 - y0)), xn-sx0-1-(x + (P.x0 - x0))] = sstack_flipped_index
                     sstack_flipped_index += 1  # for next stack of flipped sstack
-                
+
 
             else: # if sstack is not flipped (blob's derts are flipped, but sstack is not flipped)
                 for stack in sstack.Py_:
-                    for y, P in enumerate(stack.Py_): 
+                    for y, P in enumerate(stack.Py_):
                         for x, dert in enumerate(P.dert_):
                             img_index_sstacks_flipped[x + (P.x0 - x0),xn-1-(y + (stack.y0 - y0))] = sstack_flipped_index
                     sstack_flipped_index += 1  # for next stack of sstack
-        
+
 
     else: # if stacks are not flipped and scanned horizontally in blob's derts
-        
+
         # get boundary - x0,xn, y0, yn
         x0_, xn_, y0_, yn_ = [], [], [], []
         for sstack in sstack_:
@@ -636,30 +654,30 @@ def draw_sstack_(f_flip, stack_,sstack_):
                 xn_.append(max([Py.x0 + Py.L for Py in stack.Py_]))
                 y0_.append(stack.y0)
                 yn_.append(stack.y0 + stack.Ly)
-                
+
         x0 = min(x0_)
-        xn = max(xn_) 
+        xn = max(xn_)
         y0 = min(y0_)
         yn = max(yn_)
-        
+
         img_index_stacks = np.zeros((yn - y0, xn - x0))
         img_index_sstacks = np.zeros((yn - y0, xn - x0))
         img_index_sstacks_flipped = np.zeros((yn - y0, xn - x0))
-    
+
         stack_index = 1
         sstack_index = 1
         sstack_flipped_index = 1
-        
+
         for sstack in sstack_:
             for stack in sstack.Py_:
-                for y, P in enumerate(stack.Py_): 
+                for y, P in enumerate(stack.Py_):
                     for x, dert in enumerate(P.dert_):
                         img_index_stacks[y + (stack.y0 - y0), x + (P.x0 - x0)] = stack_index
-                        img_index_sstacks[y + (stack.y0 - y0), x + (P.x0 - x0)] = sstack_index   
-                stack_index += 1  # for next stack          
+                        img_index_sstacks[y + (stack.y0 - y0), x + (P.x0 - x0)] = sstack_index
+                stack_index += 1  # for next stack
             sstack_index += 1  # for next sstack
-        
-        
+
+
         for sstack in sstack_:
             if sstack.stack_: # if sstack is flipped (blob's derts are not flipped, but sstack is flipped)
                 mix_flip = 1
@@ -669,45 +687,45 @@ def draw_sstack_(f_flip, stack_,sstack_):
                     sxn_.append(max([Py.x0 + Py.L for Py in stack.Py_]))
                     sy0_.append(stack.y0)
                     syn_.append(stack.y0 + stack.Ly)
-                    
+
                 sx0 = min(sx0_)
-                sxn = max(sxn_) 
+                sxn = max(sxn_)
                 sy0 = min(sy0_)
                 syn = max(syn_)
-                
+
                 for stack in sstack.stack_:
-                    for y, P in enumerate(stack.Py_): 
+                    for y, P in enumerate(stack.Py_):
                         for x, dert in enumerate(P.dert_):
-                            img_index_sstacks_flipped[sy0+(x + (P.x0 - x0)),sxn-1-(y + (stack.y0 - y0))] = sstack_flipped_index 
-             
+                            img_index_sstacks_flipped[sy0+(x + (P.x0 - x0)),sxn-1-(y + (stack.y0 - y0))] = sstack_flipped_index
+
                     sstack_flipped_index += 1  # for next stack of flipped sstack
-                
+
 
             else: # if sstack is not flipped (blob's derts are not flipped,  sstack is also not flipped)
                 for stack in sstack.Py_:
-                    for y, P in enumerate(stack.Py_): 
+                    for y, P in enumerate(stack.Py_):
                         for x, dert in enumerate(P.dert_):
                             img_index_sstacks_flipped[y + (stack.y0 - y0),x + (P.x0 - x0)] = sstack_flipped_index
                     sstack_flipped_index += 1  # for next stack of sstack
-        
+
 
     # initialize colour image
     img_colour_stacks = np.zeros((yn-y0, xn-x0, 3)).astype('uint8')
     img_colour_sstacks = np.zeros((yn-y0, xn-x0, 3)).astype('uint8')
     img_colour_sstacks_flipped = np.zeros((yn-y0, xn-x0, 3)).astype('uint8')
-    
+
     # draw stacks and sstacks
     for i in range(1, stack_index):
         colour_index = i % 10
-        img_colour_stacks[np.where(img_index_stacks == i)] = colour_list[colour_index]   
+        img_colour_stacks[np.where(img_index_stacks == i)] = colour_list[colour_index]
     for i in range(1, sstack_index):
         colour_index = i % 10
         img_colour_sstacks[np.where(img_index_sstacks == i)] = colour_list[colour_index]
     for i in range(1, sstack_flipped_index):
         colour_index = i % 10
         img_colour_sstacks_flipped[np.where(img_index_sstacks_flipped == i)] = colour_list[colour_index]
-        
-            
+
+
     # draw image to figure and save it to disk
     plt.figure(1)
     plt.subplot(1,3,1)
@@ -724,6 +742,4 @@ def draw_sstack_(f_flip, stack_,sstack_):
     elif f_flip: plt.title('Y sstacks')
     else: plt.title('X sstacks')
     plt.savefig('./images/slice_blob/sstack_'+str(id(sstack_))+'.png')
-    plt.close()            
-
-
+    plt.close()
