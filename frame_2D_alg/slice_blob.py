@@ -390,56 +390,71 @@ def form_gP_(gdert_):
 
 
 def form_sstack_(stack_):
-    '''
-    a draft: form horizontal stacks of stacks, read backwards, sub-access by upconnects?
-    '''
-    sstack_ = []
-    _f_horizontal = True  # accumulate sstack with first stack
+    
+    
+    def form_sstack_recursive(_stack, sstack, sstack_, id_, _f_horizontal):
+        ''' function to check _stack and their upconnects  to form sstack recursively '''
 
-    for _stack in reversed(stack_):  # access in termination order
-
-        if _stack.downconnect_cnt == 0:  # else skip, this stack is upconnect of prior _stack
-            _f_up = len(_stack.upconnect_) > 0
-            _f_ex = _f_up ^ _stack.downconnect_cnt > 0  # exclusive up- or down- connectivity
-            '''
-            one of consecutive stacks is upconnected, the other is downconnected, both exclusively connected:
-            direction is reversed, which means the stacks are ordered horizontally
-            no _f_horizontal = f_up != _f_up and (f_ex and _f_ex):
-            init True, no f_up and f_ex yet
-            '''
+        _f_up = len(_stack.upconnect_) > 0
+        _f_ex = _f_up ^ _stack.downconnect_cnt > 0  # exclusive up- or down- connectivity
+        '''
+        one of consecutive stacks is upconnected, the other is downconnected, both exclusively connected:
+        direction is reversed, which means the stacks are ordered horizontally
+        no _f_horizontal = f_up != _f_up and (f_ex and _f_ex):
+        init True, no f_up and f_ex yet
+        '''
+        
+        if not sstack and _stack.id not in id_: # if sstack is empty, initialize it with _stack
+            
             sstack = CStack(I=_stack.I, Dy=_stack.Dy, Dx=_stack.Dx, G=_stack.G, M=_stack.M,
                             Dyy=_stack.Dyy, Dyx=_stack.Dyx, Dxy=_stack.Dxy, Dxx=_stack.Dxx,
                             Ga=_stack.Ga, Ma=_stack.Ma, A=_stack.A, Ly=_stack.Ly, y0=_stack.y0,
                             Py_=[_stack], sign=_stack.sign)
+            id_.append(_stack.id)
+            
 
-        for stack in _stack.upconnect_:  # access connected stacks only
-            f_up = len(stack.upconnect_) > 0
-            f_ex = f_up ^ stack.downconnect_cnt > 0
-            f_horizontal = f_up != _f_up and (f_ex and _f_ex)
+        if _stack.upconnect_: # there are upconnects in _stack
+            
+            for stack in _stack.upconnect_:  # access upper connected stacks only
+                f_up = len(stack.upconnect_) > 0
+                f_ex = f_up ^ stack.downconnect_cnt > 0
+                f_horizontal = f_up != _f_up and (f_ex and _f_ex)
 
-            if f_horizontal and _f_horizontal:  # both stacks are horizontal
+                if f_horizontal and _f_horizontal and stack.id not in id_:  # both stacks are horizontal
+                    # accumulate stack into sstack
+                    sstack.accumulate(I=stack.I, Dy=stack.Dy, Dx=stack.Dx, G=stack.G, M=stack.M, Dyy=stack.Dyy, Dyx=stack.Dyx, Dxy=stack.Dxy, Dxx=stack.Dxx,
+                                      Ga=stack.Ga, Ma=stack.Ma, A=stack.A)
+                    sstack.Ly = max(sstack.y0 + sstack.Ly, stack.y0 + stack.Ly) - min(sstack.y0, stack.y0)  # Ly = max y - min y: line may contain multiple Ps
+                    sstack.y0 = min(sstack.y0, stack.y0)  # y0 is min of stacks' y0
+                    sstack.Py_.append(stack)
+                    id_.append(stack.id)
+                    # check stack's upconnects to form sstack
+                    form_sstack_recursive(stack, sstack, sstack_, id_, f_horizontal) 
+                    
+                else: # change in stack direction, pack stack to check their upconnect in the next iteration
+                    
+                    if sstack and sstack not in sstack_: # sstack maybe already terminated in other upconnect
+                        sstack_.append(sstack) 
+                    # check stack's upconnects to form sstack
+                    form_sstack_recursive(stack, [], sstack_, id_, f_horizontal) 
+                    
+        else: # no upconnect in input _stack   
+    
+            if sstack and sstack not in sstack_: # sstack maybe already terminated in other upconnect
+                sstack_.append(sstack)
+    
+    
+    '''
+    a draft: form horizontal stacks of stacks, read backwards, sub-access by upconnects?
+    '''
+    sstack = []
+    sstack_ = []
+    _f_horizontal = True  # accumulate sstack with first stack
+    id_ = [] # to indicate whether stack is already appended into sstack.Py_
 
-                sstack.accumulate(I=stack.I, Dy=stack.Dy, Dx=stack.Dx, G=stack.G, M=stack.M, Dyy=stack.Dyy, Dyx=stack.Dyx, Dxy=stack.Dxy, Dxx=stack.Dxx,
-                                  Ga=stack.Ga, Ma=stack.Ma, A=stack.A)
-                sstack.Ly = max(sstack.y0 + sstack.Ly, stack.y0 + stack.Ly) - min(sstack.y0, stack.y0)  # Ly = max y - min y: line may contain multiple Ps
-                sstack.y0 = min(sstack.y0, stack.y0)  # y0 is min of stacks' y0
-                sstack.Py_.append(stack)
-
-                if _stack.Py_[0].x0 > stack.Py_[-1].x0:
-                    _stack = stack
-                # unfinished, need to explore higher upconnects, etc.
-
-            else:
-                if sstack.A:  # not empty
-                   sstack_.append(sstack)  # terminate sstack, not-horizontal stacks don't form sstacks.
-                   sstack = CStack
-                f_horizontal = True  # same as init, to accumulate next horizontal stack
-
-        _f_up = f_up
-        _f_ex = f_ex
-        _f_horizontal = f_horizontal
-
-    sstack_.append(sstack)  # terminate last sstack
+    for _stack in reversed(stack_):  # access in termination order
+        if _stack.downconnect_cnt == 0: # if this stack is not upconnect of prior _stack, form sstack
+            form_sstack_recursive(_stack, sstack, sstack_, id_, _f_horizontal) 
 
     return sstack_
 
