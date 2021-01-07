@@ -104,7 +104,7 @@ class CStack(ClusterStructure):
     upconnect_ = list
     stack_PP = object
     stack_ = list  # ultimately all stacks, also replaces f_flip: vertical if empty, else horizontal
-
+    check_up = int # as a flag to know whether upconnect is already go through the recursive form_sstack function or not
 
 # Functions:
 
@@ -133,6 +133,7 @@ def slice_blob(blob, verbose=False):
     check_stacks_presence(stack_, mask__, f_plot=0)  # visualize stack_ and mask__
 
     sstack_ = form_sstack_(stack_)  # cluster stacks into horizontally-oriented super-stacks
+    
     flip_sstack_(sstack_, dert__)  # vertical-first re-scanning of selected sstacks
 
     draw_sstack_(blob.fflip, stack_,sstack_) # draw stacks, sstacks and # draw stacks, sstacks and the rotated sstacks
@@ -386,7 +387,6 @@ def form_gP_(gdert_):
 def form_sstack_(stack_):
 
     def form_sstack_recursive(_stack, sstack, sstack_, id_, _f_up_reverse):
-
         ''' evaluate upconnects of incremental elevation to form sstack recursively, depth-first '''
 
         _f_up = len(_stack.upconnect_) > 0
@@ -398,7 +398,6 @@ def form_sstack_(stack_):
         init True, no f_up and f_ex yet
         '''
         if not sstack and _stack.id not in id_:  # if sstack is empty, initialize it with _stack
-
             sstack = CStack(I=_stack.I, Dy=_stack.Dy, Dx=_stack.Dx, G=_stack.G, M=_stack.M,
                             Dyy=_stack.Dyy, Dyx=_stack.Dyx, Dxy=_stack.Dxy, Dxx=_stack.Dxx,
                             Ga=_stack.Ga, Ma=_stack.Ma, A=_stack.A, Ly=_stack.Ly, y0=_stack.y0,
@@ -409,12 +408,6 @@ def form_sstack_(stack_):
 
             for stack in _stack.upconnect_:  # access upper connected stacks only
 
-                x0_, xn_, yn_ = [], [], []
-                # find min and max x and y in sstack:
-                stack.x0 = min( x0_.append(min([Py.x0 for Py in stack.Py_])) )
-                stack.xn = max( xn_.append(max([Py.x0 + Py.L for Py in stack.Py_])) )
-                stack.yn = max( yn_.append(stack.y0 + stack.Ly) )
-
                 horizontal_bias = ((stack.xn - stack.x0 + 1) / stack.Ly) * (abs(stack.Dy) / (abs(stack.Dx) + 1))
                 # horizontal_bias = L_bias (lx / Ly) * G_bias (Gy / Gx, preferential comp over low G)
 
@@ -422,25 +415,36 @@ def form_sstack_(stack_):
                 f_ex = f_up ^ stack.downconnect_cnt > 0
                 f_up_reverse = f_up != _f_up and (f_ex and _f_ex)
 
-                if horizontal_bias > 1 and (stack.G * stack.Ma * horizontal_bias > flip_ave) \
-                    or f_up_reverse and _f_up_reverse and stack.id not in id_:
+                if (((horizontal_bias) > 1 and (stack.G * stack.Ma * horizontal_bias > flip_ave)) \
+                    or (f_up_reverse and _f_up_reverse)) \
+                    and stack.id not in id_:
                     # current stack is horizontal or exclusive connectivity reversal: accumulate stack into sstack
-
-                    sstack.accumulate(I=stack.I, Dy=stack.Dy, Dx=stack.Dx, G=stack.G, M=stack.M, Dyy=stack.Dyy, Dyx=stack.Dyx, Dxy=stack.Dxy, Dxx=stack.Dxx,
-                                      Ga=stack.Ga, Ma=stack.Ma, A=stack.A)
-                    sstack.Ly = max(sstack.y0 + sstack.Ly, stack.y0 + stack.Ly) - min(sstack.y0, stack.y0)  # Ly = max y - min y: maybe multiple Ps in line
-                    sstack.y0 = min(sstack.y0, stack.y0)  # y0 is min of stacks' y0
-                    sstack.Py_.append(stack)
-                    id_.append(stack.id)
-                    # check stack's upconnects to form sstack
-                    form_sstack_recursive(stack, sstack, sstack_, id_, f_up_reverse)
+                    
+                    if sstack: # accumulate only if sstack not empty
+                        sstack.accumulate(I=stack.I, Dy=stack.Dy, Dx=stack.Dx, G=stack.G, M=stack.M, Dyy=stack.Dyy, Dyx=stack.Dyx, Dxy=stack.Dxy, Dxx=stack.Dxx,
+                                          Ga=stack.Ga, Ma=stack.Ma, A=stack.A)
+                        sstack.Ly = max(sstack.y0 + sstack.Ly, stack.y0 + stack.Ly) - min(sstack.y0, stack.y0)  # Ly = max y - min y: maybe multiple Ps in line
+                        sstack.y0 = min(sstack.y0, stack.y0)  # y0 is min of stacks' y0
+                        sstack.Py_.append(stack)
+                        id_.append(stack.id)
+                        # check stack's upconnects to form sstack
+                        if not stack.check_up: # if stack didn't check through the upconnect previously
+                            form_sstack_recursive(stack, sstack, sstack_, id_, f_up_reverse)
+                            stack.check_up = 1
+                    elif not stack.check_up: # if stack didn't check through the upconnect previously
+                        # check stack's upconnects to form sstack
+                        form_sstack_recursive(stack, [], sstack_, id_, f_up_reverse)
+                        stack.check_up = 1
 
                 else: # change in stack direction, pack stack to check their upconnect in the next iteration
 
                     if sstack and sstack not in sstack_: # sstack maybe already terminated in other upconnect
                         sstack_.append(sstack)
                     # check stack's upconnects to form sstack
-                    form_sstack_recursive(stack, [], sstack_, id_, f_up_reverse)
+                    if not stack.check_up: # if stack didn't check through the upconnect previously
+                        form_sstack_recursive(stack, [], sstack_, id_, f_up_reverse)
+                        stack.check_up = 1
+                    
 
         else: # no upconnect in input _stack
 
@@ -456,6 +460,13 @@ def form_sstack_(stack_):
     id_ = [] # to indicate whether stack is already appended into sstack.Py_
 
     for _stack in reversed(stack_):  # access in termination order
+        
+        # put this here to ensure we compute and x0, xn, yn of all stacks
+        # find min and max x and y in stack:
+        _stack.x0 = min([Py.x0 for Py in _stack.Py_])
+        _stack.xn = max([Py.x0 + Py.L for Py in _stack.Py_])
+        _stack.yn = _stack.y0 + _stack.Ly
+        
         if _stack.downconnect_cnt == 0: # if this stack is not upconnect of prior _stack, form sstack
             form_sstack_recursive(_stack, sstack, sstack_, id_, _f_up_reverse)
 
@@ -477,7 +488,7 @@ def flip_sstack_(sstack_, dert__):
         x0 = min(x0_)
         xn = max(xn_)
         y0 = min(y0_)
-        yn = max(x0_)
+        yn = max(yn_) # typo, should be yn
         sstack.x0, sstack.xn, sstack.y0, sstack.yn = x0, xn, y0, yn
 
         horizontal_bias = ((xn - x0 + 1) / sstack.Ly) * (abs(sstack.Dy) / (abs(sstack.Dx) + 1))
