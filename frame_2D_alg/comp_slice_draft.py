@@ -98,11 +98,14 @@ class CStack(ClusterStructure):
 
 def comp_slice_blob(blob, AveB):  # comp_slice eval per blob
 
-        for stack in blob.stack_:
-#            if stack.fflip: # temporary comment out. To check whether sstack is flipped, we can use 'if stack.stack_:'
+        for sstack in blob.stack_:
+            
+            if sstack.stack_:
+                stack_ = sstack.stack_ # flipped stack_
+            else:   
+                stack_ = sstack.Py_ # non-flipped stack_
 
-
-            for i, stack in enumerate(stack.Py_):
+            for i, stack in enumerate(stack_):
 
                 if stack.G * stack.Ma - AveB / 10 > 0:  # / 10: ratio AveB to AveS, or not needed?
                     # * len(Py_) / A: length ratio?
