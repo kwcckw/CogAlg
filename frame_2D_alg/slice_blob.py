@@ -270,14 +270,6 @@ def form_sstack_(stack_):
     _f_up_reverse = True  # accumulate sstack with first stack
 
     for _stack in reversed(stack_):  # access in termination order
-        # do we still need this?:
-        x0 = min([P.x0 for P in _stack.Py_])
-        xn = max([P.x0+P.L for P in _stack.Py_])
-        if _stack.x0 != x0:
-            print('------------x0 error in stack------------')
-        if _stack.xn != xn:
-            print('------------xn error in stack------------')
-
         if _stack.downconnect_cnt == 0:  # this stack is not upconnect of lower _stack
             form_sstack_recursive(_stack, sstack, sstack_, _f_up_reverse)
         # else this _stack is accessed via upconnect_
@@ -324,16 +316,18 @@ def form_sstack_recursive(_stack, sstack, sstack_, _f_up_reverse):
                 stack.f_checked = 1
 
             else:  # change in stack orientation, pack to check upconnect_ in the next loop
-                if sstack not in sstack_:  # sstack was not terminated as some other upconnect
+                # we need to check whether sstack is empty here
+                if sstack and sstack not in sstack_:  # sstack was not terminated as some other upconnect
                     sstack_.append(sstack)
 
                 if not stack.f_checked:  # check stack upconnect_ to form sstack, unless already done
                     form_sstack_recursive(stack, [], sstack_, f_up_reverse)
                     stack.f_checked = 1
 
-        # upconnect_ ends, pack the sstack, unless it was terminated as some other upconnect:
-        if sstack and sstack not in sstack_:
-            sstack_.append(sstack)
+    # need to decrease 1 level of indent here
+    # upconnect_ ends, pack the sstack, unless it was terminated as some other upconnect:
+    if sstack and sstack not in sstack_:
+        sstack_.append(sstack)
 
 
 def flip_sstack_(sstack_, dert__):
@@ -357,7 +351,8 @@ def flip_sstack_(sstack_, dert__):
         if horizontal_bias > 1 and (sstack.G * sstack.Ma * horizontal_bias > flip_ave):
             # vertical-first rescan of selected sstacks:
 
-            sstack_mask__ = np.ones(sstack.Ly, xn - x0).astype(bool)  # is this correct, default y0 and x0 = 0?
+            # need double bracket here
+            sstack_mask__ = np.ones((sstack.Ly, xn - x0)).astype(bool)  # is this correct, default y0 and x0 = 0?
             # unmask sstack:
             for stack in sstack.Py_:
                 for y, P in enumerate(stack.Py_):
