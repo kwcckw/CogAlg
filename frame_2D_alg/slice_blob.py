@@ -113,12 +113,12 @@ def slice_blob(blob, verbose=False):
 
     stack_ += row_stack_  # dert__ ends, all last-row stacks have no downconnects
 
-    check_stacks_presence(stack_, mask__, f_plot=0)  # visualize stack_ and mask__ to see if they cover the same area
+    if verbose: check_stacks_presence(stack_, mask__, f_plot=0)  # visualize stack_ and mask__ to see if they cover the same area
 
     sstack_ = form_sstack_(stack_)  # cluster horizontally-oriented stacks into super-stacks
-    flip_sstack_(sstack_, dert__)  # vertical-first re-scanning of selected sstacks
+    flip_sstack_(sstack_, dert__, verbose)  # vertical-first re-scanning of selected sstacks
 
-    draw_sstack_(blob.fflip, sstack_) # draw stacks, sstacks and # draw stacks, sstacks and the rotated sstacks
+    if verbose: draw_sstack_(blob.fflip, sstack_) # draw stacks, sstacks and # draw stacks, sstacks and the rotated sstacks
 
     for sstack in sstack_:  # convert selected stacks into gstacks
         form_gPPy_(sstack.stack_)  # sstack.Py_ = stack_
@@ -280,15 +280,17 @@ def form_sstack_recursive(_stack, sstack, sstack_, _f_up_reverse):
     '''
     evaluate upconnect_s of incremental elevation to form sstack recursively, depth-first
     '''
+    
+    id_current_layer = -1
     _f_up = len(_stack.upconnect_) > 0
     _f_ex = _f_up ^ _stack.downconnect_cnt > 0  # one of stacks is upconnected, the other is downconnected, both are exclusive
 
     if not sstack and not _stack.f_checked:  # if sstack is empty, initialize it with _stack
-
         sstack = CStack(I=_stack.I, Dy=_stack.Dy, Dx=_stack.Dx, G=_stack.G, M=_stack.M,
                         Dyy=_stack.Dyy, Dyx=_stack.Dyx, Dxy=_stack.Dxy, Dxx=_stack.Dxx,
                         Ga=_stack.Ga, Ma=_stack.Ma, A=_stack.A, Ly=_stack.Ly, y0=_stack.y0,
                         Py_=[_stack], sign=_stack.sign)
+        id_current_layer = sstack.id
 
     for stack in _stack.upconnect_:  # upward access only
         if sstack and not stack.f_checked:
@@ -311,21 +313,17 @@ def form_sstack_recursive(_stack, sstack, sstack_, _f_up_reverse):
                 # recursively form sstack from stack
                 form_sstack_recursive(stack, sstack, sstack_, f_up_reverse)
                 stack.f_checked = 1
+            
+            # change in stack orientation, check upconnect_ in the next loop
+            elif not stack.f_checked:  # check stack upconnect_ to form sstack
+                form_sstack_recursive(stack, [], sstack_, f_up_reverse)
+                stack.f_checked = 1
 
-            else:  # change in stack orientation, pack to check upconnect_ in the next loop
-                if sstack and sstack not in sstack_:  # sstack is not initialized and was not terminated as some other upconnect
-                    sstack_.append(sstack)
+    # upconnect_ ends, pack sstack in current layer
+    if sstack.id == id_current_layer:
+        sstack_.append(sstack) # pack sstack only after scan through all their stacks' upconnect
 
-                if not stack.f_checked:  # check stack upconnect_ to form sstack, unless already done
-                    form_sstack_recursive(stack, [], sstack_, f_up_reverse)
-                    stack.f_checked = 1
-
-    # upconnect_ ends, pack the sstack, unless it was terminated as some other upconnect:
-    if sstack and sstack not in sstack_:
-        sstack_.append(sstack)
-
-
-def flip_sstack_(sstack_, dert__):
+def flip_sstack_(sstack_, dert__, verbose):
     '''
     evaluate for flipping dert__ and re-forming Ps and stacks per sstack
     '''
@@ -366,7 +364,7 @@ def flip_sstack_(sstack_, dert__):
 
             sstack.stack_ += row_stack_   # dert__ ends, all last-row stacks have no downconnects
 
-            check_stacks_presence(sstack.stack_, sstack_mask__, f_plot=0)
+            if verbose: check_stacks_presence(sstack.stack_, sstack_mask__, f_plot=0)
 
 
 def form_gPPy_(stack_):  # convert selected stacks into gstacks, should be run over the whole stack_
