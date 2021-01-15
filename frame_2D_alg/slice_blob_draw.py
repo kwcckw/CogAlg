@@ -185,6 +185,7 @@ def draw_sstack_(blob_fflip, sstack_):
         colour_index = i % 10
         img_colour_sstacks_mix[np.where(img_index_sstacks_mix == i)] = colour_list[colour_index]
 
+
     # draw image to figure and save it to disk
     plt.figure(1)
 
@@ -207,5 +208,28 @@ def draw_sstack_(blob_fflip, sstack_):
         plt.title('XY stacks')
 
 
-    plt.savefig('./images/slice_blob/sstack_'+str(id(sstack_))+'.png')
+    plt.savefig('./images/slice_blob/sstacks/sstack_'+str(id(sstack_))+'.png')
     plt.close()
+
+    ## fo debug purpose ##
+    # save individual sstack's #
+
+    for sstack in sstack_:
+        if sstack.stack_: # if sstack flipped
+            
+            img_non_flipped = draw_stacks(sstack.Py_)
+            img_flipped = draw_stacks(sstack.stack_)
+
+            horizontal_bias = ((sstack.xn - sstack.x0) / sstack.Ly) * (abs(sstack.Dy) / ((abs(sstack.Dx)+1)))
+            
+            plt.figure(1)
+            plt.subplot(1,2,1)
+            plt.imshow(img_non_flipped)
+            plt.title('X stacks, \n HBias='+str(round(horizontal_bias,2))+', \n Lx/Ly='+str(round((sstack.xn - sstack.x0)/sstack.Ly,2))+', abs(Dy)/abs(Dx)='+str(round(abs(sstack.Dy)/(abs(sstack.Dx)+1),2))+', \n abs(Dy)='+str(round(abs(sstack.Dy),2))+', abs(Dx)='+str(round(abs(sstack.Dx),2)))
+            
+            plt.subplot(1,2,2)
+            plt.imshow(np.rot90(img_flipped,3))
+            plt.title('Y stacks, \n (sstack.G*Ma*Hbias)='+str(round(sstack.G * sstack.Ma * horizontal_bias,2))+', \n sstack.G='+str(round(sstack.G,2))+', \n sstack.Ma='+str(round(sstack.Ma,2)) )
+            
+            plt.savefig('./images/slice_blob/stacks/sstack_'+str(id(sstack_))+'_'+str(sstack.id)+'.png')
+            plt.close()
