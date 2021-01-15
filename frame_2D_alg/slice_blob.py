@@ -131,7 +131,6 @@ Parameterized connectivity clustering functions below:
 - scan_P_ searches for horizontal (x) overlap between Ps of consecutive (in y) rows.
 - form_stack combines these overlapping Ps into vertical stacks of Ps, with one up_P to one down_P
 - term_stack merges terminated stacks into blob
-
 dert: tuple of derivatives per pixel, initially (p, dy, dx, g), extended in intra_blob
 Dert: params of cluster structures (P, stack, blob): summed dert params + dimensions: vertical Ly and area A
 '''
@@ -280,8 +279,8 @@ def form_sstack_recursive(_stack, sstack, sstack_, _f_up_reverse):
     '''
     evaluate upconnect_s of incremental elevation to form sstack recursively, depth-first
     '''
-    
-    id_current_layer = -1
+
+    id_in_layer = -1
     _f_up = len(_stack.upconnect_) > 0
     _f_ex = _f_up ^ _stack.downconnect_cnt > 0  # one of stacks is upconnected, the other is downconnected, both are exclusive
 
@@ -290,16 +289,17 @@ def form_sstack_recursive(_stack, sstack, sstack_, _f_up_reverse):
                         Dyy=_stack.Dyy, Dyx=_stack.Dyx, Dxy=_stack.Dxy, Dxx=_stack.Dxx,
                         Ga=_stack.Ga, Ma=_stack.Ma, A=_stack.A, Ly=_stack.Ly, y0=_stack.y0,
                         Py_=[_stack], sign=_stack.sign)
-        id_current_layer = sstack.id
+        id_in_layer = sstack.id
 
     for stack in _stack.upconnect_:  # upward access only
         if sstack and not stack.f_checked:
 
-            horizontal_bias = ((stack.xn - stack.x0 + 1) / stack.Ly)  # * (abs(stack.Dy) / (abs(stack.Dx) + 1))
+            horizontal_bias = ((stack.xn - stack.x0) / stack.Ly) * (abs(stack.Dy) / ((abs(stack.Dx)+1)))
             # horizontal_bias = L_bias (lx / Ly) * G_bias (Gy / Gx, preferential comp over low G)
+            # Y*X / A: fill~elongation, flip value?
             f_up = len(stack.upconnect_) > 0
             f_ex = f_up ^ stack.downconnect_cnt > 0
-            f_up_reverse = f_up != _f_up and (f_ex and _f_ex)
+            f_up_reverse = f_up != _f_up and (f_ex and _f_ex)  # unreliable, relative value of connects are not known?
 
             if horizontal_bias > 1:  # or f_up_reverse:  # stack is horizontal or vertical connectivity is reversed: stack combination is horizontal
                 # or horizontal value += reversal value: vertical value cancel - excess: non-rdn value only?
@@ -313,15 +313,16 @@ def form_sstack_recursive(_stack, sstack, sstack_, _f_up_reverse):
                 # recursively form sstack from stack
                 form_sstack_recursive(stack, sstack, sstack_, f_up_reverse)
                 stack.f_checked = 1
-            
+
             # change in stack orientation, check upconnect_ in the next loop
             elif not stack.f_checked:  # check stack upconnect_ to form sstack
                 form_sstack_recursive(stack, [], sstack_, f_up_reverse)
                 stack.f_checked = 1
 
     # upconnect_ ends, pack sstack in current layer
-    if sstack.id == id_current_layer:
+    if sstack.id == id_in_layer:
         sstack_.append(sstack) # pack sstack only after scan through all their stacks' upconnect
+
 
 def flip_sstack_(sstack_, dert__, verbose):
     '''
@@ -338,12 +339,12 @@ def flip_sstack_(sstack_, dert__, verbose):
         y0 = min(y0_)
         sstack.x0, sstack.xn, sstack.y0 = x0, xn, y0
 
-        horizontal_bias = ((xn - x0 + 1) / sstack.Ly) * (abs(sstack.Dy) / (abs(sstack.Dx) + 1))
+        horizontal_bias = ((xn - x0) / sstack.Ly) * (abs(sstack.Dy) / ((abs(sstack.Dx)+1)))
         # horizontal_bias = L_bias (lx / Ly) * G_bias (Gy / Gx, preferential comp over low G)
 
         if horizontal_bias > 1 and (sstack.G * sstack.Ma * horizontal_bias > flip_ave):
             # vertical-first rescan of selected sstacks:
-            sstack_mask__ = np.ones((sstack.Ly, xn - x0)).astype(bool)  # is this correct, default y0 and x0 = 0?
+            sstack_mask__ = np.ones((sstack.Ly, xn - x0)).astype(bool)
             # unmask sstack:
             for stack in sstack.Py_:
                 for y, P in enumerate(stack.Py_):
@@ -452,12 +453,10 @@ def comp_g(Py_):  # cross-comp of gs in P.dert_, in gPP.Py_
     return gP_, gP_Dg, gP_Mg
 
 
-def form_gP_(gdert_):
-    # probably not needed.
-
-    gP_ = []  # initialization
+def form_gP_(gdert_):  # probably not needed.
+    gP_ = []
     _g, _Dg, _Mg = gdert_[0]  # first gdert
-    _s = _Mg > 0  # initial sign, should we use ave here?
+    _s = _Mg > 0  # initial sign
 
     for (g, Dg, Mg) in gdert_[1:]:
         s = Mg > 0  # current sign
@@ -477,7 +476,7 @@ def form_gP_(gdert_):
 
 def flip_eval(blob):
 
-    horizontal_bias = ( blob.box[3] - blob.box[2] + 1) / (blob.box[1] - blob.box[0] + 1) \
+    horizontal_bias = ( blob.box[3] - blob.box[2]) / (blob.box[1] - blob.box[0]) \
                       * (abs(blob.Dy) / abs(blob.Dx))
         # L_bias (Lx / Ly) * G_bias (Gy / Gx), blob.box = [y0,yn,x0,xn], ddirection: , preferential comp over low G
 
@@ -490,5 +489,3 @@ def flip_eval(blob):
 
 def accum_Dert(Dert: dict, **params) -> None:
     Dert.update({param: Dert[param] + value for param, value in params.items()})
-
-
