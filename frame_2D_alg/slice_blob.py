@@ -121,9 +121,11 @@ def slice_blob(blob, verbose=False):
     if verbose: draw_sstack_(blob.fflip, sstack_) # draw stacks, sstacks and # draw stacks, sstacks and the rotated sstacks
 
     for sstack in sstack_:  # convert selected stacks into gstacks
-        form_gPPy_(sstack.stack_)  # sstack.Py_ = stack_
+        if sstack.stack_: form_gPPy_(sstack.stack_)  
+        else: form_gPPy_(sstack.Py_) # sstack.Py_ = stack_
 
-    return sstack_  # partially rotated and gP-forming stack__
+    blob.stack_ = sstack_ # update partially rotated and gP-forming stack__ to blob
+
 
 '''
 Parameterized connectivity clustering functions below:
