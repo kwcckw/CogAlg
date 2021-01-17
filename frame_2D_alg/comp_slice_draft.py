@@ -78,30 +78,50 @@ def comp_slice_blob(blob, AveB):  # comp_slice eval per blob
 
         for stack in blob.stack_:
             if stack.stack_:  # stack is sstack
-                for i, stack in enumerate(stack.Py_):
+                for i, istack in enumerate(stack.stack_):
 
-                    if stack.G * stack.Ma - AveB / 10 > 0:  # / 10: ratio AveB to AveS, or not needed?
+                    if istack.G * istack.Ma - AveB / 10 > 0:  # / 10: ratio AveB to AveS, or not needed?
                         # * len(Py_) / A: length ratio?
-                        if stack.f_gstack:  # stack is a nested gP_stack
+                        if istack.f_gstack:  # stack is a nested gP_stack, stack.Py_ is gPPy
                             gstack_PP = CStack(stack_PP = CStack_PP())
 
-                            for j, istack in enumerate(stack.Py_):  # istack is original stack
-                                if istack.G * istack.Ma - AveB / 10 > 0 and len(istack.Py_) > 2:
+                            for j, jstack in enumerate(istack.Py_):  # istack is original stack
+                                if jstack.G * jstack.Ma - AveB / 10 > 0 and len(istack.Py_) > 2:
 
-                                    stack_PP = comp_slice_(istack, ave)  # root function of comp_slice: edge tracing and vectorization
-                                    accum_gstack(gstack_PP, istack, stack_PP)
-                                    istack.f_stack_PP = 1  # stack_PP = accumulated PP params and PP_
+                                    stack_PP = comp_slice_(jstack, ave)  # root function of comp_slice: edge tracing and vectorization
+                                    accum_gstack(gstack_PP, jstack, stack_PP)
+                                    jstack.f_stack_PP = 1  # stack_PP = accumulated PP params and PP_
 
-                            stack.Py_[i] = gstack_PP
+                            stack.stack_[i] = gstack_PP # gstack_PP should replace the input stack or input stack.Py_?
+
                             # return as stack_PP from form_PP
-                        else:
-                            # stack is original stack
-                            if stack.G * stack.Ma - AveB / 10 > 0 and len(stack.Py_) > 2:
-
-                                stack_PP = comp_slice_(stack, ave)  # stack is stack_PP, with accumulated PP params and PP_
-                                stack.f_stack_PP = 1  # stack_PP = accumulated PP params and PP_
-                                stack.stack_PP = stack_PP  # blob.stack_[i] = stack_PP
-
+                            
+                        # stack is original stack
+                        elif istack.G * istack.Ma - AveB / 10 > 0 and len(istack.Py_) > 2:
+                            stack_PP = comp_slice_(istack, ave)  # stack is stack_PP, with accumulated PP params and PP_
+                            istack.f_stack_PP = 1  # stack_PP = accumulated PP params and PP_
+                            istack.stack_PP = stack_PP  # blob.stack[i].stack_PP = stack_PP
+        
+            # should we apply comp_slice to original stack (non sstack's stacks)?
+            else: # stack is not sstack 
+                if stack.G * stack.Ma - AveB / 10 > 0:  # / 10: ratio AveB to AveS, or not needed?
+                    if stack.f_gstack: # stack is a nested gP_stack, stack.Py_ is gPPy
+                        gstack_PP = CStack(stack_PP = CStack_PP())
+    
+                        for i, istack in enumerate(stack.Py_):  # istack is original stack
+                            if istack.G * istack.Ma - AveB / 10 > 0 and len(istack.Py_) > 2:
+    
+                                stack_PP = comp_slice_(istack, ave)  # root function of comp_slice: edge tracing and vectorization
+                                accum_gstack(gstack_PP, istack, stack_PP)
+                                istack.f_stack_PP = 1  # stack_PP = accumulated PP params and PP_
+    
+                        stack = gstack_PP 
+    
+                    # stack is original stack
+                    elif stack.G * stack.Ma - AveB / 10 > 0 and len(stack.Py_) > 2:
+                        stack_PP = comp_slice_(stack, ave)  # stack is stack_PP, with accumulated PP params and PP_
+                        stack.f_stack_PP = 1  # stack_PP = accumulated PP params and PP_
+                        stack.stack_PP = stack_PP  # blob.stack[i].stack_PP = stack_PP
 
 def comp_slice_(stack, Ave):
     # scan of vertical Py_ -> comp_slice -> form_PP -> 2D dPP_, mPP_: clusters of same-sign Pd | Pm deviation

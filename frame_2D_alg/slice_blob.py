@@ -118,14 +118,14 @@ def slice_blob(blob, verbose=False):
     sstack_ = form_sstack_(stack_)  # cluster horizontally-oriented stacks into super-stacks
     blob.stack_ = flip_sstack_(sstack_, dert__, verbose)  # vertical-first re-scanning of selected sstacks
 
-    if verbose: draw_sstack_(blob.fflip, sstack_) # draw stacks, sstacks and # draw stacks, sstacks and the rotated sstacks
-
-    for stack in stack_:  # convert selected stacks into gstacks
-        if stack.stack_: form_gPPy_(stack.stack_)
-        else: form_gPPy_(stack.Py_)  # sstack.Py_ = stack_
-
-    blob.stack_ = sstack_ # update partially rotated and gP-forming stack__ to blob
-    return sstack_  # partially rotated and gP-forming stack__
+#    if verbose: draw_sstack_(blob.fflip, sstack_) # draw stacks, sstacks and # draw stacks, sstacks and the rotated sstacks
+    
+    for stack in blob.stack_:  # convert selected stacks into gstacks
+        if stack.stack_: # stack is sstack
+            for stack in stack.stack_: # loop each stack in sstack and apply form_gPPy
+                form_gPPy(stack) 
+        else: # stack is not sstack
+            form_gPPy(stack)
 
 '''
 Parameterized connectivity clustering functions below:
@@ -289,7 +289,7 @@ def form_sstack_recursive(_stack, sstack, sstack_, _f_up_reverse):
         sstack = CStack(I=_stack.I, Dy=_stack.Dy, Dx=_stack.Dx, G=_stack.G, M=_stack.M,
                         Dyy=_stack.Dyy, Dyx=_stack.Dyx, Dxy=_stack.Dxy, Dxx=_stack.Dxx,
                         Ga=_stack.Ga, Ma=_stack.Ma, A=_stack.A, Ly=_stack.Ly, y0=_stack.y0,
-                        Py_=[_stack], sign=_stack.sign)
+                        stack_=[_stack], sign=_stack.sign)
         id_in_layer = sstack.id
 
     for stack in _stack.upconnect_:  # upward access only
@@ -333,7 +333,7 @@ def flip_sstack_(sstack_, dert__, verbose):
 
     for sstack in sstack_:
         x0_, xn_, y0_ = [],[],[]
-        for stack in sstack.Py_:  # find min and max x and y in sstack:
+        for stack in sstack.stack_:  # find min and max x and y in sstack:
             x0_.append(stack.x0)
             xn_.append(stack.xn)
             y0_.append(stack.y0)
@@ -371,68 +371,67 @@ def flip_sstack_(sstack_, dert__, verbose):
 
             out_stack_.append(sstack)
         else:
-            out_stack_.append([sstack.stack_])  # non-flipped sstack is deconstructed, stack.stack_ s are still empty
+            out_stack_.extend(sstack.stack_)  # non-flipped sstack is deconstructed, stack.stack_ s are still empty
 
     return out_stack_
 
 
-def form_gPPy_(stack_):  # convert selected stacks into gstacks, should be run over the whole stack_
+def form_gPPy(stack):  # convert selected stacks into gstacks, should be run over the whole stack_
 
     ave_PP = 100  # min summed value of gdert params
 
-    for stack in stack_:
-        if stack.G > aveG:
-            stack_Dg = stack_Mg = 0
-            gPPy_ = []  # may replace stack.Py_
-            P = stack.Py_[0]
+    if stack.G > aveG:
+        stack_Dg = stack_Mg = 0
+        gPPy_ = []  # may replace stack.Py_
+        P = stack.Py_[0]
 
-            # initialize PP params:
-            Py_ = [P]; PP_I = P.I; PP_Dy = P.Dy; PP_Dx = P.Dx; PP_G = P.G; PP_M = P.M; PP_Dyy = P.Dyy; PP_Dyx = P.Dyx; PP_Dxy = P.Dxy; PP_Dxx = P.Dxx
-            PP_Ga = P.Ga; PP_Ma = P.Ma; PP_A = P.L; PP_Ly = 1; PP_y0 = stack.y0
+        # initialize PP params:
+        Py_ = [P]; PP_I = P.I; PP_Dy = P.Dy; PP_Dx = P.Dx; PP_G = P.G; PP_M = P.M; PP_Dyy = P.Dyy; PP_Dyx = P.Dyx; PP_Dxy = P.Dxy; PP_Dxx = P.Dxx
+        PP_Ga = P.Ga; PP_Ma = P.Ma; PP_A = P.L; PP_Ly = 1; PP_y0 = stack.y0
 
-            _PP_sign = PP_G > aveG and P.L > 1
+        _PP_sign = PP_G > aveG and P.L > 1
 
-            for P in stack.Py_[1:]:
-                PP_sign = P.G > aveG and P.L > 1  # PP sign
-                if _PP_sign == PP_sign:  # accum PP:
-                    Py_.append(P)
-                    PP_I += P.I
-                    PP_Dy += P.Dy
-                    PP_Dx += P.Dx
-                    PP_G += P.G
-                    PP_M += P.M
-                    PP_Dyy += P.Dyy
-                    PP_Dyx += P.Dyx
-                    PP_Dxy += P.Dxy
-                    PP_Dxx += P.Dxx
-                    PP_Ga += P.Ga
-                    PP_Ma += P.Ma
-                    PP_A += P.L
-                    PP_Ly += 1
+        for P in stack.Py_[1:]:
+            PP_sign = P.G > aveG and P.L > 1  # PP sign
+            if _PP_sign == PP_sign:  # accum PP:
+                Py_.append(P)
+                PP_I += P.I
+                PP_Dy += P.Dy
+                PP_Dx += P.Dx
+                PP_G += P.G
+                PP_M += P.M
+                PP_Dyy += P.Dyy
+                PP_Dyx += P.Dyx
+                PP_Dxy += P.Dxy
+                PP_Dxx += P.Dxx
+                PP_Ga += P.Ga
+                PP_Ma += P.Ma
+                PP_A += P.L
+                PP_Ly += 1
 
-                else:  # sign change, terminate PP:
-                    if PP_G > aveG:
-                        Py_, Dg, Mg = comp_g(Py_)  # adds gdert_, Dg, Mg per P in Py_
-                        stack_Dg += abs(Dg)  # in all high-G Ps, regardless of direction
-                        stack_Mg += Mg
-                    gPPy_.append(CStack(I=PP_I, Dy = PP_Dy, Dx = PP_Dx, G = PP_G, M = PP_M, Dyy = PP_Dyy, Dyx = PP_Dyx, Dxy = PP_Dxy, Dxx = PP_Dxx,
-                                        Ga = PP_Ga, Ma = PP_Ma, A = PP_A, y0 = PP_y0, Ly = PP_Ly, Py_=Py_, sign =_PP_sign ))  # pack PP
-                    # initialize PP params:
-                    Py_ = [P]; PP_I = P.I; PP_Dy = P.Dy; PP_Dx = P.Dx; PP_G = P.G; PP_M = P.M; PP_Dyy = P.Dyy; PP_Dyx = P.Dyx; PP_Dxy = P.Dxy
-                    PP_Dxx = P.Dxx; PP_Ga = P.Ga; PP_Ma = P.Ma; PP_A = P.L; PP_Ly = 1; PP_y0 = stack.y0
-
-                _PP_sign = PP_sign
-
-            if PP_G > aveG:
-                Py_, Dg, Mg = comp_g(Py_)  # adds gdert_, Dg, Mg per P
-                stack_Dg += abs(Dg)  # stack params?
-                stack_Mg += Mg
-            if stack_Dg + stack_Mg < ave_PP:  # separate comp_P values, revert to Py_ if below-cost
-                # terminate last PP
+            else:  # sign change, terminate PP:
+                if PP_G > aveG:
+                    Py_, Dg, Mg = comp_g(Py_)  # adds gdert_, Dg, Mg per P in Py_
+                    stack_Dg += abs(Dg)  # in all high-G Ps, regardless of direction
+                    stack_Mg += Mg
                 gPPy_.append(CStack(I=PP_I, Dy = PP_Dy, Dx = PP_Dx, G = PP_G, M = PP_M, Dyy = PP_Dyy, Dyx = PP_Dyx, Dxy = PP_Dxy, Dxx = PP_Dxx,
                                     Ga = PP_Ga, Ma = PP_Ma, A = PP_A, y0 = PP_y0, Ly = PP_Ly, Py_=Py_, sign =_PP_sign ))  # pack PP
-                stack.Py_ = gPPy_
-                stack.f_gstack = 1  # flag gPPy_ vs. Py_ in stack
+                # initialize PP params:
+                Py_ = [P]; PP_I = P.I; PP_Dy = P.Dy; PP_Dx = P.Dx; PP_G = P.G; PP_M = P.M; PP_Dyy = P.Dyy; PP_Dyx = P.Dyx; PP_Dxy = P.Dxy
+                PP_Dxx = P.Dxx; PP_Ga = P.Ga; PP_Ma = P.Ma; PP_A = P.L; PP_Ly = 1; PP_y0 = stack.y0
+
+            _PP_sign = PP_sign
+
+        if PP_G > aveG:
+            Py_, Dg, Mg = comp_g(Py_)  # adds gdert_, Dg, Mg per P
+            stack_Dg += abs(Dg)  # stack params?
+            stack_Mg += Mg
+        if stack_Dg + stack_Mg < ave_PP:  # separate comp_P values, revert to Py_ if below-cost
+            # terminate last PP
+            gPPy_.append(CStack(I=PP_I, Dy = PP_Dy, Dx = PP_Dx, G = PP_G, M = PP_M, Dyy = PP_Dyy, Dyx = PP_Dyx, Dxy = PP_Dxy, Dxx = PP_Dxx,
+                                Ga = PP_Ga, Ma = PP_Ma, A = PP_A, y0 = PP_y0, Ly = PP_Ly, Py_=Py_, sign =_PP_sign ))  # pack PP
+            stack.Py_ = gPPy_
+            stack.f_gstack = 1  # flag gPPy_ vs. Py_ in stack
 
 
 def comp_g(Py_):  # cross-comp of gs in P.dert_, in gPP.Py_
