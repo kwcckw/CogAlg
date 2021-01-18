@@ -31,54 +31,19 @@ from collections import deque
 from class_cluster import ClusterStructure, NoneType
 from math import hypot
 import numpy as np
+from slice_classes import *
 
 ave = 20
 div_ave = 200
 flip_ave = 1000
 ave_dX = 10  # difference between median x coords of consecutive Ps
 
-class Cdert_P(ClusterStructure):
-
-    Pi = object  # P instance, accumulation: Cdert_P.Pi.I += 1, etc.
-    Pm = int
-    Pd = int
-    mx = int
-    dx = int
-    mL = int
-    dL = int
-    mDx = int
-    dDx = int
-    mDy = int
-    dDy = int
-    mDg = int
-    dDg = int
-    mMg = int
-    dMg = int
-
-class CPP(ClusterStructure):
-
-    dert_Pi = object  # PP params = accumulated dert_P params:
-    # PM, PD, MX, DX, ML, DL, MDx, DDx, MDy, DDy, MDg, DDg, MMg, DMg; also accumulate P params?
-    dert_P_ = list   # only refs to stack_PP dert_Ps
-    fmPP = NoneType  # mPP if 1, else dPP; not needed if packed in PP_?
-    fdiv = NoneType  # or defined per stack?
-
-class CStack_PP(ClusterStructure):
-
-    dert_Pi = object  # stack_PP params = accumulated dert_P params:
-    # sPM, sPD, sMX, sDX, sML, sDL, sMDx, sDDx, sMDy, sDDy, sMDg, sDDg, sMMg, sDMg
-    mPP_ = list
-    dPP_ = list
-    dert_P_ = list
-    fdiv = NoneType
-
-
 def comp_slice_(blob, AveB):  # comp_slice eval per blob, simple stack_
 
         for stack in blob.stack_:
             if stack.G * stack.Ma - AveB / 10 > 0:  # / 10: ratio AveB to AveS, or not needed?
 
-                stack.f_stack_PP = 1  # stack_PP = accumulated PP params and PP_
+#                stack.f_stack_PP = 1  # stack_PP = accumulated PP params and PP_
                 # scan of vertical Py_ -> comp_slice -> form_PP -> 2D dPP_, mPP_: clusters of same-sign Pd | Pm deviation
                 DdX = 0
 
@@ -95,7 +60,8 @@ def comp_slice_(blob, AveB):  # comp_slice eval per blob, simple stack_
                     dert_P_.append(dert_P)
                     _P = P
 
-                stack.stack_PP = form_PP_(dert_P_)  # stack_PP
+                if dert_P_: 
+                    stack.stack_PP = form_PP_(dert_P_)  # stack_PP
 
         '''
         Add comparison of forking adjacent P between stacks.
@@ -198,7 +164,7 @@ def comp_slice(ortho, P, _P, DdX):  # forms vertical derivatives of P params, an
 def form_PP_(dert_P_):  # terminate, initialize, increment mPPs and dPPs
 
     stack_PP = CStack_PP(dert_Pi = Cdert_P())  # need to define object and accum_stack_PP()
-    mPP_ = dPP_ = []
+    mPP_, dPP_ = [], []
     mPP = dPP = CPP(dert_Pi = Cdert_P())
     _dert_P = dert_P_[0]
 
