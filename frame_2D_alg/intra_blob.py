@@ -40,9 +40,11 @@ aveB = 50  # fixed cost per intra_blob comp and clustering
 # functions:
 
 def intra_blob(blob, **kwargs):  # slice_blob or recursive input rng+ | angle cross-comp within input blob
-    verbose=kwargs.get('verbose')
+
     Ave = int(ave * blob.rdn)
     AveB = int(aveB * blob.rdn)
+    verbose = kwargs.get('verbose')
+
     if kwargs.get('render') is not None:  # don't render small blobs
         if blob.A < 100: kwargs['render'] = False
     spliced_layers = []  # to extend root_blob sub_layers
@@ -56,15 +58,8 @@ def intra_blob(blob, **kwargs):  # slice_blob or recursive input rng+ | angle cr
                 blob.prior_forks.extend('p')
                 if kwargs.get('verbose'): print('\nslice_blob fork\n')
 
-                slice_blob(blob,verbose)  # adds stack_ to blob
+                slice_blob(blob, verbose)  # adds stack_ to blob
                 comp_slice_(blob, AveB)  # cross-comp of vertically consecutive Ps in selected stacks
-                
-                form_gPPy_(blob.stack_) # or we should form gPPy only after flipping of sstack?
-                
-                blob.stack_ = form_sstack_(blob.stack_)
-                flip_sstack_(blob.stack_, blob.dert__, verbose)
-                
-    
     else:
         # root fork is frame_blobs or comp_r
         ext_dert__, ext_mask__ = extend_dert(blob)  # dert__ boundaries += 1, for cross-comp in larger kernels

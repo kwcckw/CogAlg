@@ -19,11 +19,11 @@ import numpy as np
 from matplotlib import pyplot as plt
 import matplotlib
 matplotlib.use('Agg')  # disable visible figure during the processing to speed up the process
-from slice_classes import *
-from slice_blob import form_P_, scan_P_, form_stack_
+from slice_blob import *
 
 aveG = 50
 flip_ave = 2000
+
 
 def rescan(blob, verbose=False):  # temporary code container, this should probably be in comp_slice
 
@@ -38,6 +38,7 @@ def rescan(blob, verbose=False):  # temporary code container, this should probab
         elif stack.G > aveG:
             stack.f_gstack = 1  # flag: gPPy_ vs. Py_ in stack
             comp_g(stack.Py_)
+
 
 def form_sstack_(stack_):
     '''
@@ -147,7 +148,7 @@ def flip_sstack_(sstack_, dert__, verbose):
                 row_stack_ = next_row_stack_
 
             sstack.stack_ += row_stack_   # dert__ ends, all last-row stacks have no downconnects
-#            if verbose: check_stacks_presence(sstack.stack_, sstack_mask__, f_plot=0)
+            if verbose: check_stacks_presence(sstack.stack_, sstack_mask__, f_plot=0)
 
             out_stack_.append(sstack)
         else:
@@ -260,7 +261,7 @@ def form_gP_(gdert_):  # probably not needed.
     gP_.append([_s, _Dg, _Mg])  # pack last gP
     return gP_
 
-# need to update this function again after we updated the form_gPPy_, form_sstack_ and flip_sstack
+
 def draw_stacks(stack_):
     # retrieve region size of all stacks
     y0 = min([stack.y0 for stack in stack_])
@@ -299,7 +300,6 @@ def draw_stacks(stack_):
 
     return img_colour
 
-# need to update this function again after we updated the form_gPPy_, form_sstack_ and flip_sstack
 def check_stacks_presence(stack_, mask__, f_plot=0):
     '''
     visualize stack_ and mask__ to ensure that they cover the same area
@@ -326,7 +326,7 @@ def check_stacks_presence(stack_, mask__, f_plot=0):
         plt.subplot(1, 2, 2)
         plt.imshow(mask__ * 255)
 
-# need to update this function again after we updated the form_gPPy_, form_sstack_ and flip_sstack
+
 def draw_sstack_(blob_fflip, sstack_):
 
     '''visualize stacks and sstacks and their scanning direction, runnable but not fully optimized '''
