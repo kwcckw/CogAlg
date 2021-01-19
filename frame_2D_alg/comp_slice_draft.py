@@ -73,35 +73,73 @@ class CStack_PP(ClusterStructure):
     fdiv = NoneType
 
 
+
+def comp_slice_recursive(_P_in, upconnect_):
+    '''
+    form PP across Ps of stack's upconnects
+    '''                
+    for stack in upconnect_:
+        if not stack.f_checked:
+            
+            stack.f_checked = 1
+            dert_P_ = []
+            _P = _P_in # same _P for all upconnects
+            DdX = 0
+    
+            if stack.G * (stack.Ly / stack.A) * (abs(stack.Dy) / (abs(stack.Dx) + 1)) > ave:  # G_bias * L_bias -> virt.rotation:
+                # or default min comp, eval per PP?
+                ortho = 1  # estimate params of P orthogonal to long axis at P' y and ave_x, to increase mP
+            else:
+                ortho = 0
+    
+            for P in stack.Py_:
+                dert_P = comp_slice(ortho, P, _P, DdX)
+                dert_P_.append(dert_P)
+                _P = P
+                
+            if dert_P_:
+                stack.stack_PP_ = form_PP_(dert_P_)  # stack_PP
+        
+            comp_slice_recursive(_P, stack.upconnect_)
+
+
 def comp_slice_(blob, AveB):  # comp_slice eval per blob, simple stack_
 
-        for stack in blob.stack_:
-            if stack.G * stack.Ma - AveB / 10 > 0:  # / 10: ratio AveB to AveS, or not needed?
+    for stack in blob.stack_:
+        if stack.G * stack.Ma - AveB / 10 > 0 and stack.downconnect_cnt == 0:  # / 10: ratio AveB to AveS, or not needed? What would be the purpose of this evaluation?
 
-                # or default (L, Dy, Dx, G) min comp for rotation,
-                # primary comp L | overlap, the rest is conditional?
-                # init cross-dimension div_comp: Dx/Dy, but separate val for comp G, no default G/L?
-                # comp -> min Dx/Dy for rotation, min G for comp_g?
+            # or default (L, Dy, Dx, G) min comp for rotation,
+            # primary comp L | overlap, the rest is conditional?
+            # init cross-dimension div_comp: Dx/Dy, but separate val for comp G, no default G/L?
+            # comp -> min Dx/Dy for rotation, min G for comp_g?
 
-                # also default min comp to upconnect_ Ps -> forking / merging PPs -> stack_ per PP!
+            # also default min comp to upconnect_ Ps -> forking / merging PPs -> stack_ per PP!
 
-                # stack.f_stackPP = 1  # scan Py_ -> comp_slice -> form_PP -> 2D PP_: clusters of same-sign dP | mP
-                DdX = 0
+            # stack.f_stackPP = 1  # scan Py_ -> comp_slice -> form_PP -> 2D PP_: clusters of same-sign dP | mP
+            DdX = 0
+                                                                # we need abs(stack.Dx) +1 to prevent /0
+            if stack.G * (stack.Ly / stack.A) * (abs(stack.Dy) / (abs(stack.Dx) + 1)) > ave:  # G_bias * L_bias -> virt.rotation:
+                # or default min comp, eval per PP?
+                ortho = 1  # estimate params of P orthogonal to long axis at P' y and ave_x, to increase mP
+            else:
+                ortho = 0
+            dert_P_ = []
+            stack.f_checked = 1
+            _P = stack.Py_[0]
+            
+            for P in stack.Py_[1:]:
+                dert_P = comp_slice(ortho, P, _P, DdX)
+                dert_P_.append(dert_P)
+                _P = P
+                
+            if dert_P_:
+                # stack is the macro object storing PP now? Where PP is the finer unit
+                stack.stack_PP_ = form_PP_(dert_P_)  # stack_PP
 
-                if stack.G * (stack.Ly / stack.A) * (abs(stack.Dy) / abs((stack.Dx) + 1)) > ave:  # G_bias * L_bias -> virt.rotation:
-                    # or default min comp, eval per PP?
-                    ortho = 1  # estimate params of P orthogonal to long axis at P' y and ave_x, to increase mP
-                else:
-                    ortho = 0
-                dert_P_ = []
-                _P = stack.Py_[0]
-
-                for P in stack.Py_[1:]:
-                    dert_P = comp_slice(ortho, P, _P, DdX)
-                    dert_P_.append(dert_P)
-                    _P = P
-                if dert_P_:
-                    stack.stack_PP_ = form_PP_(dert_P_)  # stack_PP
+            # in current code, last P in stack.Py_ will be re-assigned as _P and parse into comp_slice_recursive
+            # this P will be forming dert_P in the upconnect's stack and it may form multiple dert_P with same P if there are more than 1 upconnect.
+            # is this correct or we should terminate the P first?
+            comp_slice_recursive(_P, stack.upconnect_) 
 
         '''
         Add comparison of forking adjacent P between stacks.

@@ -30,7 +30,6 @@ import sys
 import numpy as np
 from class_cluster import ClusterStructure, NoneType
 #from slice_utils import  check_stacks_presence
-from slice_classes import *
 
 ave = 30  # filter or hyper-parameter, set as a guess, latter adjusted by feedback, not needed here
 aveG = 50  # filter for comp_g, assumed constant direction
@@ -39,6 +38,59 @@ flip_ave = 2000
 # prefix '_' denotes higher-line variable or structure, vs. same-type lower-line variable or structure
 # postfix '_' denotes array name, vs. same-name elements of that array. '__' is a 2D array
 # prefix 'f' denotes flag
+
+
+class CP(ClusterStructure):
+    I = int
+    Dy = int
+    Dx = int
+    G = int
+    M = int
+    Dyy = int
+    Dyx = int
+    Dxy = int
+    Dxx = int
+    Ga = int
+    Ma = int
+    L = int
+    x0 = int
+    sign = NoneType
+    dert_ = list
+    gdert_ = list
+    Dg = int
+    Mg = int
+
+class CStack(ClusterStructure):
+    # Dert:
+    I = int
+    Dy = int
+    Dx = int
+    G = int
+    M = int
+    Dyy = int
+    Dyx = int
+    Dxy = int
+    Dxx = int
+    Ga = int
+    Ma = int
+    A = int  # stack area
+    Ly = int
+    # box:
+    x0 = int
+    xn = int
+    y0 = int
+    # stack:
+    Py_ = list  # Py_, dPPy_, or stack_
+    sign = NoneType
+    f_gstack = NoneType  # gPPy_ if 1, else Py_
+    f_stackPP = NoneType  # for comp_slice: PPy_ if 1, else gPPy_ or Py_
+    downconnect_cnt = int
+    upconnect_ = list
+    stack_PP = object  # replaces f_stackPP?
+    stack_ = list  # ultimately all stacks, also replaces fflip: vertical if empty, else horizontal
+    f_checked = int  # flag: stack has gone through form_sstack_recursive as upconnect
+    # PP
+    stack_PP_= list
 
 # Functions:
 def slice_blob(blob, verbose=False):
