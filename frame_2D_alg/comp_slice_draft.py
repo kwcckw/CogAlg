@@ -54,7 +54,6 @@ class Cdert_P(ClusterStructure):
     dDg = int
     mMg = int
     dMg = int
-    f_acc = int
 
 class CPP(ClusterStructure):
 
@@ -78,7 +77,7 @@ def comp_slice_(stack_, _P_in, AveB):
     '''
     form PP in Ps of stack, including Ps of adjacent stacks
     '''           
-    f_acc = 0 # flag to identify whether we should accumulate the dert_P with duplicated P params
+    f_acc = 1 # flag to identify whether we should accumulate the dert_P with duplicated P params
     for stack in stack_:
         if stack.G * stack.Ma - AveB / 10 > 0 and not stack.f_checked:
             
@@ -88,13 +87,13 @@ def comp_slice_(stack_, _P_in, AveB):
             # comp -> min Dx/Dy for rotation, min G for comp_g?
 
             # also default min comp to upconnect_ Ps -> forking / merging PPs -> stack_ per PP!
-
-            dert_P_ = []
+            
             stack.f_checked = 1 
+            dert_P_ = []
             i = 0 # starting index for stack.Py_
             _P = _P_in # same _P for all upconnects
             if not _P_in: # if no prior P, reinitialize P
-                _P = stack.Py_[0]
+                _P = stack.Py_[-1]
                 i = 1
                    
             # stack.f_stackPP = 1  # scan Py_ -> comp_slice -> form_PP -> 2D PP_: clusters of same-sign dP | mP
@@ -104,19 +103,36 @@ def comp_slice_(stack_, _P_in, AveB):
                 # or default min comp, eval per PP?
                 ortho = 1  # estimate params of P orthogonal to long axis at P' y and ave_x, to increase mP
                 
-            for ind, P in enumerate(stack.Py_[i:]):     
+            for P in reversed(stack.Py_[:-i]):     
                 dert_P = comp_slice(ortho, P, _P, DdX)
-                if f_acc and ind == 0: dert_P.f_acc = 1 #  After forming 1st dert_P with _P_in, set dert_P.f_acc to 1 on each consecutive dert_P formed from _P_in to prevent the duplicated accumulation 
+                
+                if f_acc and dert_P_: # if f_cc and there is _dert_P to make sure it is second pass
+                    f_acc = 0 # set f_acc to 0 after checking through 1st and 2nd dert_P of 1st stack
+                    _dert_P = dert_P_.pop() # pop 1st dert_P for accumulation
+                    # sign determined by Pm?
+                    if (_dert_P.Pm>0) == (dert_P.Pm>0):# if _dert_P and dert_P having same sign, sum _dert_P params into stack's PP
+                        mPP = CPP(dert_Pi = Cdert_P())
+                        accum_PP(_dert_P, mPP)
+                
                 dert_P_.append(dert_P)
                 _P = P
                 
-            f_acc = 1 # set f_acc to 1 after forming 1st dert_P
-                
+            # stack_PP section
             if dert_P_:
-                stack.stack_PP_ = form_PP_(dert_P_)  # stack_PP
+                stack.stack_PP_ = form_PP_(dert_P_)  
+                if 'mPP' in globals(): # if _dert_P params is summed into stack's PP
+                    stack.stack_PP_.dert_P_.insert(_dert_P,0) # insert is similar with appendleft
+                    stack.stack_PP_.mPP_.insert(mPP,0)
+                    stack.stack_PP_.dert_Pi.accumulate(Pm=_dert_P.Pm, Pd=_dert_P.Pd, mx=_dert_P.mx, dx=_dert_P.dx,
+                                                       mL=_dert_P.mL, dL=_dert_P.dL, mDx=_dert_P.mDx, dDx=_dert_P.dDx, 
+                                                       mDy=_dert_P.mDy, dDy=_dert_P.dDy, mDg=_dert_P.mDg, dDg=_dert_P.dDg,
+                                                       mMg=_dert_P.mMg, dMg=_dert_P.dMg)
+            elif 'mPP' in globals(): # if _dert_P params is summed into stack's PP
+                stack_PP_ = CStack_PP(dert_Pi = _dert_P)
+                stack_PP_.dert_P_.append(_dert_P)
+                stack_PP_.mPP_.append(mPP)
+                stack.stack_PP_ = stack_PP_
         
-            # last _P is parse to next comp_slice_ call to form dert_P and eventually PP
-            # not sure we should parse the last p to next comp_slice_ or we should use the next upconnect's P and form dert_P->PP with last P here
             comp_slice_(stack.upconnect_, _P, AveB)
 
 
@@ -317,23 +333,21 @@ def accum_gstack(gstack_PP, istack, stack_PP):
 
 def accum_stack_PP(stack_PP, dert_P_):  # accumulate mPPs or dPPs
 
+    # accumulate dert_P params into stack_PP
     for dert_P in dert_P_:
-        # accumulate dert_P params into stack_PP
-        if not dert_P.f_acc: # if dert_P with duplicated P is not accumulated previously
-            stack_PP.dert_Pi.accumulate(Pm=dert_P.Pm, Pd=dert_P.Pd, mx=dert_P.mx, dx=dert_P.dx,
-                                  mL=dert_P.mL, dL=dert_P.dL, mDx=dert_P.mDx, dDx=dert_P.dDx, 
-                                  mDy=dert_P.mDy, dDy=dert_P.dDy, mDg=dert_P.mDg, dDg=dert_P.dDg,
-                                  mMg=dert_P.mMg, dMg=dert_P.dMg)
+        stack_PP.dert_Pi.accumulate(Pm=dert_P.Pm, Pd=dert_P.Pd, mx=dert_P.mx, dx=dert_P.dx,
+                              mL=dert_P.mL, dL=dert_P.dL, mDx=dert_P.mDx, dDx=dert_P.dDx, 
+                              mDy=dert_P.mDy, dDy=dert_P.dDy, mDg=dert_P.mDg, dDg=dert_P.dDg,
+                              mMg=dert_P.mMg, dMg=dert_P.dMg)
 
 
 def accum_PP(dert_P, PP):  # accumulate mPPs or dPPs
 
-    if not dert_P.f_acc: # if dert_P with duplicated P is not accumulated previously
-        PP.dert_Pi.accumulate(Pm=dert_P.Pm, Pd=dert_P.Pd, mx=dert_P.mx, dx=dert_P.dx,
-                              mL=dert_P.mL, dL=dert_P.dL, mDx=dert_P.mDx, dDx=dert_P.dDx, 
-                              mDy=dert_P.mDy, dDy=dert_P.dDy, mDg=dert_P.mDg, dDg=dert_P.dDg,
-                              mMg=dert_P.mMg, dMg=dert_P.dMg)
-        PP.dert_P_.append(dert_P)
+    PP.dert_Pi.accumulate(Pm=dert_P.Pm, Pd=dert_P.Pd, mx=dert_P.mx, dx=dert_P.dx,
+                          mL=dert_P.mL, dL=dert_P.dL, mDx=dert_P.mDx, dDx=dert_P.dDx, 
+                          mDy=dert_P.mDy, dDy=dert_P.dDy, mDg=dert_P.mDg, dDg=dert_P.dDg,
+                          mMg=dert_P.mMg, dMg=dert_P.dMg)
+    PP.dert_P_.append(dert_P)
 
 
 
