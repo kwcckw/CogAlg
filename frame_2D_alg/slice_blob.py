@@ -86,7 +86,7 @@ class CStack(ClusterStructure):
     f_stackPP = NoneType  # for comp_slice: PPy_ if 1, else gPPy_ or Py_
     downconnect_cnt = int
     upconnect_ = list
-    stack_PP = object  # replaces f_stackPP?
+    PP_ = list  
     stack_ = list  # ultimately all stacks, also replaces fflip: vertical if empty, else horizontal
     f_checked = int  # flag: stack has gone through form_sstack_recursive as upconnect
     # PP
