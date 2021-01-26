@@ -57,130 +57,52 @@ class Cdert_P(ClusterStructure):
 
 class CPP(ClusterStructure):
 
-    dert_Pi = object  # PP params = accumulated dert_P params:
-    # PM, PD, MX, DX, ML, DL, MDx, DDx, MDy, DDy, MDg, DDg, MMg, DMg; also accumulate P params?
-    dert_P_ = list   # only refs to stack_PP dert_Ps
-    fmPP = NoneType  # mPP if 1, else dPP; not needed if packed in PP_?
-    fdiv = NoneType  # or defined per stack?
+    stack_ = list
+    # possibly multiple between PPs
+    upconnect_ = list
+    downconnect_cnt = int
+    fPPm = NoneType  # PPm if 1, else PPd; not needed if packed in PP_?
+    fdiv = NoneType
 
 class CStack_PP(ClusterStructure):
-
+    # needs to be revised, this is now an element of stack_ in PP,
+    # add all params of CStack?
+    dert_Py_ = list
+    fdiv = NoneType
     dert_Pi = object  # stack_PP params = accumulated dert_P params:
     # sPM, sPD, sMX, sDX, sML, sDL, sMDx, sDDx, sMDy, sDDy, sMDg, sDDg, sMMg, sDMg
-    PPm_ = list
-    PPd_ = list
-    dert_P_ = list
-    fdiv = NoneType
+    # PPm_ = list
+    # PPd_ = list  # these are now primary blob-level structures,
+    # blob.stack_ is replaced by PP_?
 
 
 def comp_slice_(stack_, _P):
     '''
-    cross-compare connected Ps of stack_, including Ps of adjacent stacks
+    cross-compare connected Ps of stack_, including Ps of adjacent stacks (upconnects)
     '''
     for stack in reversed(stack_):
-        if not stack.f_checked:
+
+        if not stack.f_checked :
             stack.f_checked = 1
-            
-            if not _P:  # if no prior P, first call to the blob:
-                _P = stack.Py_.pop(-1) # pop last P
-    
-            dert_Py_ = [Cdert_P(Pi=_P)]  #  initialize dert_P with _P only, other params are 0
-    
+            DdX = 0  # this may also have to be accumulated across stacks
+
+            if not _P:  # no prior P: first call to the blob:
+                _P = stack.Py_.pop()
+                dert_Py_ = [Cdert_P(Pi=_P)]  # initialize dert_P with _P only, other params are 0
+            else:
+                dert_Py_ = []
+
             for P in reversed(stack.Py_):
-                dert_P = comp_slice(P, _P)  # ortho and other conditional operations are evaluated per PP
-                dert_Py_.append(dert_P) # no need double bracket here, otherwise it would be [ dert_P, dert_P, [dert_P]]
+                dert_P = comp_slice(P, _P, DdX)  # ortho and other conditional operations are evaluated per PP
+                dert_Py_.append(dert_P)  # dert_P should be converted to Cdert_P in comp_slice
                 _P = P
             stack.Py_ = dert_Py_
-            # _stack = stack # why we need update _stack here?
-            
-            # by calling the line below, all upconnects' Pys should be replaced by dert_Py_
-            comp_slice_(stack.upconnect_, _P) # recursive compare _P to all upconnected P
-        
-            '''
-            # use istack to avoid same name as the stack in outer loop
-            # but the entire section below should be in the next loop call
-            for istack in stack.upconnect_:  # recursive compare _P to all upconnected P
-                if istack and not _stack.f_checked:
-                    # why we need append the result to stack_
-                    # and parse in single stack?
-                    stack_.append(comp_slice_(stack, _P))  # recursive call to upconnects
-            '''
 
-def comp_slice_old(blob, AveB):  # comp_slice eval per blob, simple stack_
+            # recursive compare _P to all upconnected P
+            comp_slice_(stack.upconnect_, _P)
 
-        for stack in blob.stack_:
-            if stack.G * stack.Ma - AveB / 10 > 0:  # / 10: ratio AveB to AveS, or not needed?
 
-                # or default (L, Dy, Dx, G) min comp for rotation,
-                # primary comp L, the rest is normalized?
-                # overlap vs. shift:
-                # init cross-dimension div_comp: Dx/Dy, but separate val for comp G, no default G/L?
-                # comp -> min Dx/Dy for rotation, min G for comp_g?
-
-                # also default min comp to upconnect_ Ps -> forking / merging PPs -> stack_ per PP!
-
-                # stack.f_stackPP = 1  # scan Py_ -> comp_slice -> form_PP -> 2D PP_: clusters of same-sign dP | mP
-                DdX = 0
-
-                if stack.G * (stack.Ly / stack.A) * (abs(stack.Dy) / abs((stack.Dx) + 1)) > ave:  # G_bias * L_bias -> virt.rotation:
-                    # or default min comp, eval per PP?
-                    ortho = 1  # estimate params of P orthogonal to long axis at P' y and ave_x, to increase mP
-                else:
-                    ortho = 0
-                dert_P_ = []
-                _P = stack.Py_[0]
-
-                for P in stack.Py_[1:]:
-                    dert_P = comp_slice(ortho, P, _P, DdX)
-                    dert_P_.append(dert_P)
-                    _P = P
-                if dert_P_:
-                    stack.stack_PP_ = form_PP_(dert_P_)  # stack_PP
-
-        '''
-        Add comparison of forking adjacent P between stacks.
-        
-        old, for complex stacks:
-            if stack.f_gstack:  # stack is a nested gP_stack
-                gstack_PP = CStack(stack_PP=CStack_PP())
-
-                for j, istack in enumerate(stack.Py_):  # istack is original stack
-                    if istack.G * istack.Ma - AveB / 10 > 0 and len(istack.Py_) > 2:
-                        stack_PP = comp_slice_(istack, ave)  # root function of comp_slice: edge tracing and vectorization
-                        accum_gstack(gstack_PP, istack, stack_PP)
-                        istack.f_stack_PP = 1  # stack_PP = accumulated PP params and PP_
-
-                stack.Py_[i] = gstack_PP
-
-            if stack.stack_:  # stack is sstack
-                for i, stack in enumerate(stack.Py_):
-
-                    if stack.G * stack.Ma - AveB / 10 > 0:  # / 10: ratio AveB to AveS, or not needed?
-                        # * len(Py_) / A: length ratio?
-                        if stack.f_gstack:  # stack is a nested gP_stack
-                            gstack_PP = CStack(stack_PP = CStack_PP())
-
-                            for j, istack in enumerate(stack.Py_):  # istack is original stack
-                                if istack.G * istack.Ma - AveB / 10 > 0 and len(istack.Py_) > 2:
-
-                                    stack_PP = comp_slice_(istack, ave)  # root function of comp_slice: edge tracing and vectorization
-                                    accum_gstack(gstack_PP, istack, stack_PP)
-                                    istack.f_stack_PP = 1  # stack_PP = accumulated PP params and PP_
-
-                            stack.Py_[i] = gstack_PP
-                            # return as stack_PP from form_PP
-                        else:
-                            # stack is original stack
-                            if stack.G * stack.Ma - AveB / 10 > 0 and len(stack.Py_) > 2:
-
-                                stack_PP = comp_slice_(stack, ave)  # stack is stack_PP, with accumulated PP params and PP_
-                                stack.f_stack_PP = 1  # stack_PP = accumulated PP params and PP_
-                                stack.stack_PP = stack_PP  # blob.stack_[i] = stack_PP
-        
-also eval for P rotation = blob axis angle - current vertical direction, if > min?
-'''
-
-def comp_slice(P, _P):  # forms vertical derivatives of P params, and conditional ders from norm and DIV comp
+def comp_slice(P, _P, DdX):  # forms vertical derivatives of P params, and conditional ders from norm and DIV comp
 
     s, x0, G, M, Dx, Dy, L, Dg, Mg = P.sign, P.x0, P.G, P.M, P.Dx, P.Dy, P.L, P.Dg, P.Mg
     # params per comp branch, add angle params, ext: X, new: L,
@@ -200,23 +122,19 @@ def comp_slice(P, _P):  # forms vertical derivatives of P params, and conditiona
     ave_dx = (x0 + (L-1)//2) - (_x0 + (_L-1)//2)  # d_ave_x, median vs. summed, or for distant-P comp only?
 
     ddX = dX - _dX  # long axis curvature
-    
-    # temporary remove
-#    DdX += ddX  # if > ave: ortho eval per P, else per PP_dX?
-#     param correlations: dX-> L, ddX-> dL, neutral to Dx: mixed with anti-correlated oDy?
+    DdX += ddX  # if > ave: ortho eval per P, else per PP_dX?
+    # param correlations: dX-> L, ddX-> dL, neutral to Dx: mixed with anti-correlated oDy?
+    '''
+    if ortho:  # estimate params of P locally orthogonal to long axis, maximizing lateral diff and vertical match
+        Long axis is a curve, consisting of connections between mid-points of consecutive Ps.
+        Ortho virtually rotates each P to make it orthogonal to its connection:
 
-    # temporary remove
-#    if ortho:  # estimate params of P locally orthogonal to long axis, maximizing lateral diff and vertical match
-#        '''
-#        Long axis is a curve, consisting of connections between mid-points of consecutive Ps. 
-#        Ortho virtually rotates each P to make it orthogonal to its connection:
-#        '''
-#        hyp = hypot(dX, 1)  # long axis increment (vertical distance), to adjust params of orthogonal slice:
-#        L /= hyp
-#        # re-orient derivatives by combining them in proportion to their decomposition on new axes:
-#        Dx = (Dx * hyp + Dy / hyp) / 2  # no / hyp: kernel doesn't matter on P level?
+        hyp = hypot(dX, 1)  # long axis increment (vertical distance), to adjust params of orthogonal slice:
+        L /= hyp
+        # re-orient derivatives by combining them in proportion to their decomposition on new axes:
+        Dx = (Dx * hyp + Dy / hyp) / 2  # no / hyp: kernel doesn't matter on P level?
         Dy = (Dy / hyp - Dx * hyp) / 2  # estimated D over vert_L
-
+    '''
     dL = L - _L; mL = min(L, _L)  # L: positions / sign, dderived: magnitude-proportional value
     dM = M - _M; mM = min(M, _M)  # no Mx, My: non-core, lesser and redundant bias?
 
@@ -236,36 +154,77 @@ def comp_slice(P, _P):  # forms vertical derivatives of P params, and conditiona
 
     return dert_P
 
-''' this is currently a mess, please do after comp_slice_: '''
+
+def comp_slice_old(blob, AveB):  # comp_slice eval per blob, simple stack_
+
+        for stack in blob.stack_:
+            if stack.G * stack.Ma - AveB / 10 > 0:  # / 10: ratio AveB to AveS, or not needed?
+
+                # or default (L, Dy, Dx, G) min comp for rotation,
+                # primary comp L, the rest is normalized?
+                # overlap vs. shift:
+                # init cross-dimension div_comp: Dx/Dy, but separate val for comp G, no default G/L?
+                # comp -> min Dx/Dy for rotation, min G for comp_g?
+
+                # also default min comp to upconnect_ Ps -> forking / merging PPs -> stack_ per PP!
+                # stack.f_stackPP = 1  # scan Py_ -> comp_slice -> form_PP -> 2D PP_: clusters of same-sign dP | mP
+                DdX = 0
+
+                if stack.G * (stack.Ly / stack.A) * (abs(stack.Dy) / abs((stack.Dx) + 1)) > ave:  # G_bias * L_bias -> virt.rotation:
+                    # or default min comp, eval per PP?
+                    ortho = 1  # estimate params of P orthogonal to long axis at P' y and ave_x, to increase mP
+                else:
+                    ortho = 0
+                dert_P_ = []
+                _P = stack.Py_[0]
+
+                for P in stack.Py_[1:]:
+                    dert_P = comp_slice(ortho, P, _P, DdX)
+                    dert_P_.append(dert_P)
+                    _P = P
+                if dert_P_:
+                    stack.stack_PP_ = form_PP_(dert_P_)  # stack_PP
+
 
 def form_PP_(stack_, _dert_P):  # terminate, initialize, increment PPs
-    
+
     # cluster all connected dert_Ps of same-sign mP
-    # cluster same sign dert_Ps into PPm and PPd?
     for stack in reversed(stack_):
 
         f_acc = 1  # accumulate 1st P in upconnect_, per stack
-        if not _dert_P: # if no _dert_P, indicated 1st pass, else 2nd pass (2nd pass = connected dert_P)
+        if not _dert_P:  # input is blob.stack_
             _dert_P = stack.Py_.pop()
-
             stack_PP = CStack_PP(dert_Pi = _dert_P)  # define object and accum_stack_PP()
-            PP_ = []
-            PP = CPP(dert_Pi=Cdert_P(_dert_P)) # how should we accumulate this PP? PPm or PPd?
-        _dert_P = dert_P_[0]
+        else:
+            stack_PP = CStack_PP()  # stack_PP.PP_ = []?
+            PP_ = []  # will replace blob.stack_
+            PP = CPP(dert_Pi=Cdert_P(_dert_P))
+
+        _dert_P = stack_PP.dert_Py_[0]
+
+        for dert_P in reversed(stack.Py_):
+                accum_stack_PP(stack_PP, dert_P)
+                _dert_P = dert_P
+
+            form_PP_(stack.upconnect_, _dert_P)  # recursive clustering in all upconnects
+
+'''
+Below is not reviewed:
+'''
 
         for i, dert_P in enumerate(dert_P_[1:]): # consecutive dert_P
 
-            if _dert_P.Pm > 0 != dert_P.Pm > 0: # sign change between _dert_P and dert_P
-                mPP_.append(mPP)
-                mPP=CPP(dert_Pi = Cdert_P())
-            accum_PP(_dert_P, mPP)  # accumulate _dert_P params into PP params
-    
-            if _dert_P.Pd > 0 != dert_P.Pd > 0:  # sign change between _dert_P and dert_P
-                dPP_.append(dPP)
-                dPP=CPP(dert_Pi = Cdert_P())
-            accum_PP(_dert_P, dPP)  # accumulate _dert_P params into PP params
-    
-            _dert_P = dert_P  # update _dert_P
+        if _dert_P.Pm > 0 != dert_P.Pm > 0: # sign change between _dert_P and dert_P
+            mPP_.append(mPP)
+            mPP=CPP(dert_Pi = Cdert_P())
+        accum_PP(_dert_P, mPP)  # accumulate _dert_P params into PP params
+
+        if _dert_P.Pd > 0 != dert_P.Pd > 0:  # sign change between _dert_P and dert_P
+            dPP_.append(dPP)
+            dPP=CPP(dert_Pi = Cdert_P())
+        accum_PP(_dert_P, dPP)  # accumulate _dert_P params into PP params
+
+        _dert_P = dert_P  # update _dert_P
 
     accum_stack_PP(stack_PP, dert_P_)  # accumulate dert_P params into stack_PP params, in batch
     mPP_.append(mPP)  # pack last PP in PP_
@@ -277,52 +236,50 @@ def form_PP_(stack_, _dert_P):  # terminate, initialize, increment PPs
     stack_PP.dert_P_ = dert_P_
     # compute fdiv of stack_PP?
 
-    Cdert_P = _dert_P  # pseudo
-    PPm = CPP(PP_stack_[0].Py = [Cdert_P])  # need to be extended to full PP initialization
-    # add accum_PP_stack
+            Cdert_P = _dert_P  # pseudo
+            PPm = CPP(PP_stack_[0].Py = [Cdert_P])  # need to be extended to full PP initialization
+            # add accum_PP_stack
 
-    for i, dert_P in enumerate(reversed(stack.Py_[1:])):
+            for i, dert_P in enumerate(reversed(stack.Py_[1:])):
 
-        if (_dert_P.mP > 0) == (dert_P.mP > 0):
-            accum_PP(dert_P, PPm)
-            _dert_P = dert_P
+                if (_dert_P.mP > 0) == (dert_P.mP > 0):
+                    accum_PP(dert_P, PPm)
+                    _dert_P = dert_P
 
-    # to recursively scan upconnect, it is better if we just call:  form_PP_(stack.upconnect_, _dert_P)
-    if i == len(stack.Py_):  # dert_P is top P
-        for upconnect in stack.upconnect_:  # cluster connected dert_Ps between connected stacks
+            if i == len(stack.Py_):  # dert_P is top P
+                for upconnect in stack.upconnect_:  # cluster connected dert_Ps between connected stacks
 
-    # unfinished, add PP accum across PP_stacks, or continue accum_PP_stack if single same-sign upconnect
+            # unfinished, add PP accum across PP_stacks, or continue accum_PP_stack if single same-sign upconnect
 
-    # duplicated section below?
 
-#    stack_PP = CStack_PP(dert_Pi = Cdert_P())  # need to define object and accum_stack_PP()
-#    mPP_, dPP_ = [], []
-#    mPP = dPP = CPP(dert_Pi = Cdert_P())
-#    _dert_P = dert_P_[0]
-#
-#    for i, dert_P in enumerate(dert_P_[1:]): # consecutive dert_P
-#
-#        if _dert_P.Pm > 0 != dert_P.Pm > 0: # sign change between _dert_P and dert_P
-#            mPP_.append(mPP)
-#            mPP=CPP(dert_Pi = Cdert_P())
-#        accum_PP(_dert_P, mPP)  # accumulate _dert_P params into PP params
-#
-#        if _dert_P.Pd > 0 != dert_P.Pd > 0:  # sign change between _dert_P and dert_P
-#            dPP_.append(dPP)
-#            dPP=CPP(dert_Pi = Cdert_P())
-#        accum_PP(_dert_P, dPP)  # accumulate _dert_P params into PP params
-#
-#        _dert_P = dert_P  # update _dert_P
-#
-#    accum_stack_PP(stack_PP, dert_P_)  # accumulate dert_P params into stack_PP params, in batch
-#    mPP_.append(mPP)  # pack last PP in PP_
-#    dPP_.append(dPP)
-#    # compute fmPP and fdiv of mPP and dPP?
-#
-#    stack_PP.mPP_ = mPP_
-#    stack_PP.dPP_ = dPP_
-#    stack_PP.dert_P_ = dert_P_
-#    # compute fdiv of stack_PP?
+    stack_PP = CStack_PP(dert_Pi = Cdert_P())  # need to define object and accum_stack_PP()
+    mPP_, dPP_ = [], []
+    mPP = dPP = CPP(dert_Pi = Cdert_P())
+    _dert_P = dert_P_[0]
+
+    for i, dert_P in enumerate(dert_P_[1:]): # consecutive dert_P
+
+        if _dert_P.Pm > 0 != dert_P.Pm > 0: # sign change between _dert_P and dert_P
+            mPP_.append(mPP)
+            mPP=CPP(dert_Pi = Cdert_P())
+        accum_PP(_dert_P, mPP)  # accumulate _dert_P params into PP params
+
+        if _dert_P.Pd > 0 != dert_P.Pd > 0:  # sign change between _dert_P and dert_P
+            dPP_.append(dPP)
+            dPP=CPP(dert_Pi = Cdert_P())
+        accum_PP(_dert_P, dPP)  # accumulate _dert_P params into PP params
+
+        _dert_P = dert_P  # update _dert_P
+
+    accum_stack_PP(stack_PP, dert_P_)  # accumulate dert_P params into stack_PP params, in batch
+    mPP_.append(mPP)  # pack last PP in PP_
+    dPP_.append(dPP)
+    # compute fmPP and fdiv of mPP and dPP?
+
+    stack_PP.mPP_ = mPP_
+    stack_PP.dPP_ = dPP_
+    stack_PP.dert_P_ = dert_P_
+    # compute fdiv of stack_PP?
 
     return stack_PP
 
@@ -433,12 +390,9 @@ def accum_PP(dert_P, PP):  # accumulate mPPs or dPPs
     PP.dert_Pi.dMg += dMg
     PP.dert_P_.append(dert_P)
 
-
-
 '''
     Pd and Pm are ds | ms per param summed in P. Primary comparison is by subtraction, div if par * rL compression:
     DL * DS > min: must be both, eval per dPP PD, signed? comp d?
-
     - resulting vertically adjacent dPPs and vPPs are evaluated for cross-comparison, to form PPPs and so on
     - resulting param derivatives form par_Ps, which are evaluated for der+ and rng+ cross-comparison
     | default top+ P level: if PD | PM: add par_Ps: sub_layer, rdn ele_Ps: deeper layer?
