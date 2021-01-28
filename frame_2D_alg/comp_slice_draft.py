@@ -65,7 +65,7 @@ class CPP(ClusterStructure):
     downconnect_cnt = int
     fPPm = NoneType  # PPm if 1, else PPd; not needed if packed in PP_?
     fdiv = NoneType
-    
+
 
 class CStack_PP(ClusterStructure):
     # needs to be revised, this is now an element of stack_ in PP,
@@ -73,7 +73,6 @@ class CStack_PP(ClusterStructure):
     dert_Py_ = list
     fdiv = NoneType
     dert_Pi = object  # stack_PP params = accumulated dert_P params:
-    
     # sPM, sPD, sMX, sDX, sML, sDL, sMDx, sDDx, sMDy, sDDy, sMDg, sDDg, sMMg, sDMg
     # PPm_ = list
     # PPd_ = list  # these are now primary blob-level structures,
@@ -90,21 +89,21 @@ def comp_slice_(stack_, _P):
             stack.f_checked = 1
             DdX = 0  # this may also have to be accumulated across stacks
 
-            if not _P:  # no prior P: first call to the blob:
-                _P = stack.Py_.pop()
+            if _P:  # stack_ = upconnect_
                 dert_Py_ = [Cdert_P(Pi=_P)]  # initialize dert_P with _P only, other params are 0
-            else:
+                i = 1
+            else:  # stack_ = blob.stack_, no prior P
                 dert_Py_ = []
-
-            for P in reversed(stack.Py_):
+                i = 0
+            for P in reversed(stack.Py_[i:]):
                 dert_P = comp_slice(P, _P, DdX)  # ortho and other conditional operations are evaluated per PP
                 dert_Py_.append(dert_P)  # dert_P should be converted to Cdert_P in comp_slice
                 _P = P
             stack.Py_ = dert_Py_
 
-            # recursive compare _P to all upconnected P
-            comp_slice_(stack.upconnect_, _P) 
-  
+            # recursive compare _P to all upconnected Ps
+            comp_slice_(stack.upconnect_, _P)
+
 
 def comp_slice(P, _P, DdX):  # forms vertical derivatives of P params, and conditional ders from norm and DIV comp
 
@@ -132,7 +131,6 @@ def comp_slice(P, _P, DdX):  # forms vertical derivatives of P params, and condi
     if ortho:  # estimate params of P locally orthogonal to long axis, maximizing lateral diff and vertical match
         Long axis is a curve, consisting of connections between mid-points of consecutive Ps.
         Ortho virtually rotates each P to make it orthogonal to its connection:
-
         hyp = hypot(dX, 1)  # long axis increment (vertical distance), to adjust params of orthogonal slice:
         L /= hyp
         # re-orient derivatives by combining them in proportion to their decomposition on new axes:
@@ -186,59 +184,47 @@ def comp_slice_old(blob, AveB):  # comp_slice eval per blob, simple stack_
                     dert_P = comp_slice(ortho, P, _P, DdX)
                     dert_P_.append(dert_P)
                     _P = P
-                if dert_P_:
-                    stack.stack_PP_ = form_PP_(dert_P_)  # stack_PP
 
 
+def form_PP_(stack_, PP_, PP):  # terminate, initialize, increment PPs
 
-
-
-# initial draft to test on the concept, buggy and not complete yet
-def form_PP_(PP_, PP, stack_, stack_PP, _dert_P):  # terminate, initialize, increment PPs
-
-
-    if not PP:
-        PP = CPP()
-    
+    # initial draft to test on the concept, buggy and not complete yet
     # cluster all connected dert_Ps of same-sign mP
     for stack in reversed(stack_):
-        
+
         if stack.f_checked: # stack.f_checked value is equal to 1 after comp_slice_
             stack.f_checked = 0
-            
-            
-            if _dert_P and stack_PP: # second pass
+
+            if PP:  # stack_ = upconnect_
+                stack_PP = PP.stack_PP_[-1]  # how do we add getitem in CPP?
+                _dert_P = stack_PP.Py_[-1]
+                i = 1
+            else:  # stack_ - blob.stack_
+                _dert_P = stack.Py_[0]
+                stack_PP_ = [ CStack_PP(dert_Pi=_dert_P, dert_Py_=[_dert_P]) ]
+                PP = CPP(stack_PP_=stack_PP_)
                 i = 0
 
-            else: # 1st pass
-                _dert_P = stack.Py_[0] # get 1st dert_P
-                stack_PP = CStack_PP(dert_Pi=_dert_P, dert_Py_=[_dert_P]) # initialize stack_PP
-                i = 1
+            for dert_P in stack.Py_[i:]:
+                # cluster dert_Ps into PPs
+                if _dert_P.Pm > 0 != dert_P.Pm > 0:  # sign change
+                    PP.stack_PP_.append(stack_PP)      # pack stack_PP
+                    stack_PP = CStack_PP(dert_Pi=Cdert_P())  # reinitialize
 
-                
-            # accumulate the rest of dert_P
-            for dert_P in stack.Py_[i:]: # no need reversed here, dert_Py_ is stored from bottom up
-                if _dert_P.Pm > 0 != dert_P.Pm > 0: # sign change between _dert_P and dert_P
-                    accum_stack_PP(stack_PP, _dert_P)       # pack _dert_P
-                    PP.stack_PP_.append(stack_PP)              # terminate stack_PP into PP.stack_PP_
-                    stack_PP = CStack_PP(dert_Pi=Cdert_P()) # reinitialize stack_PP
-                accum_stack_PP(stack_PP, dert_P)            # accumulate dert_P into stack_PP
+                accum_stack_PP(stack_PP, _dert_P)  # pack _dert_P into stack_PP, regardless of termination
                 _dert_P = dert_P
-                
 
             PP.stack_.append(stack)
+            # recursively cluster stack upconnects:
+            form_PP_(stack.upconnect_, PP_, PP)
 
-            # parse stack_PP, _dert_P to upconnects
-            form_PP_(PP_, PP, stack.upconnect_, stack_PP, _dert_P)
-            
-            PP_.append(PP) # PP terminated after scanning through all upconnects
-            PP = CPP()
-            
+            PP_.append(PP)  # PP terminated after scanning through all upconnects
+            PP = CPP()  # what is this for, we should always initialize PP with the first dert_P -> stack_PP?
+
     return PP_
 
 
-# accumulate istack and stack_PP into stack
-def accum_gstack(gstack_PP, istack, stack_PP):
+def accum_gstack(gstack_PP, istack, stack_PP):   # accumulate istack and stack_PP into stack
     '''
     This looks wrong, accum_nested_stack should be an add-on to accum_stack_PP
     only called if istack.f_stack_PP:
