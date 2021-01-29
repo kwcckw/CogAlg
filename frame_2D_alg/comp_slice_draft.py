@@ -194,18 +194,20 @@ def comp_slice_old(blob, AveB):  # comp_slice eval per blob, simple stack_
 
 def form_PP_(stack_, PP_, PP, stack_PP, _dert_P):  # terminate, initialize, increment PPs
 
-    # initial draft to test on the concept, buggy and not complete yet
+    PP_id = -1
     # cluster all connected dert_Ps of same-sign mP
     for stack in reversed(stack_):
 
         if stack.f_checked: # stack.f_checked value is equal to 1 after comp_slice_
             stack.f_checked = 0
+            
             if _dert_P:  # stack_ = upconnect_  # stack_PP = PP.stack_PP_[-1]; _dert_P = stack_PP.dert_Py_[-1]
                 i = 0
             else:  # stack_ = blob.stack_
+                stack_PP = CStack_PP(dert_Pi=Cdert_P()) # stack_PP may empty, and accumulation in line 224 below need an initialized stack_PP
                 _dert_P = stack.Py_[0]
                 i = 1
-
+                
             for dert_P in stack.Py_[i:]:
                 # cluster dert_Ps into PPs
                 if _dert_P.Pm > 0 != dert_P.Pm > 0:  # sign change
@@ -213,21 +215,31 @@ def form_PP_(stack_, PP_, PP, stack_PP, _dert_P):  # terminate, initialize, incr
                     if PP and stack_PP:
                         PP.stack_PP_.append(stack_PP)  # pack stack_PP
                     else:
-                        stack_PP_ = [ CStack_PP(dert_Py_=[_dert_P]) ]
+                        stack_PP_ = [CStack_PP(dert_Py_=[_dert_P]) ]
                         PP = CPP(stack_PP_=stack_PP_)
+                        PP_id = PP.id
                     stack_PP = CStack_PP(dert_Pi=Cdert_P())  # reinitialize
 
                 accum_stack_PP(stack_PP, _dert_P)  # pack _dert_P into stack_PP, regardless of termination
                 _dert_P = dert_P
 
-            PP.stack_PP_.append(stack_PP)
+            #  PP may empty
+            if PP: 
+                PP.stack_PP_.append(stack_PP)
+            else: # if PP is empty, reinitialize it
+                PP = CPP(stack_PP_=[CStack_PP(dert_Py_=[_dert_P])]) # reinitialize PP
+                PP_id = PP.id                
+                    
+            # append stack to PP.stack_
+            PP.stack_.append(stack)
+            
             # recursively cluster stack upconnects:
             form_PP_(stack.upconnect_, PP_, PP, stack_PP, _dert_P)
 
-            # temporary fix, to avoid duplicated PP
-            if PP not in PP_:
+            # terminate PP after it scanning through all upconnects
+            if PP.id == PP_id:
                 PP_.append(PP)  # PP is terminated after scanning through all upconnects
-            PP = []  # we need this to terminate PP
+            PP = []  # we need this to terminate PP, otherwise same PP would be reuse in the next loop
 
     return PP_
 
