@@ -197,42 +197,24 @@ def form_PP_(stack_, PP_, PP, stack_PP, _dert_P):  # terminate, initialize, incr
                 i = 0
             else:  # stack_ = blob.stack_
                 _dert_P = stack.Py_[0]
+                # if stack_PP doesn't continue across original stacks, which is possible
+                stack_PP = CStack_PP(dert_Pi=Cdert_P()) # only need to reinitialize stack_PP when stacks = blob.stack_
                 i = 1
-            if not stack_PP:  # if stack_PP doesn't continue across original stacks, which is possible
-                Cdert_P=_dert_P
-                stack_PP_ = [ CStack_PP(Py_= [Cdert_P] ) ]
+
             if not PP:
-                PP = CPP(stack_PP_=stack_PP_)  # not sure about this?
+                PP = CPP(stack_PP_=[stack_PP])  
+                PP_id = PP.id
 
             for dert_P in stack.Py_[i:]:
                 # cluster dert_Ps into PPs
                 if _dert_P.Pm > 0 != dert_P.Pm > 0:  # sign change
-                    '''
-                    this is done in line 203 now? 
-                    if PP and stack_PP:
-                        PP.stack_PP_.append(stack_PP)  # pack stack_PP, PP may continue in other stack_PPs
-                    else:
-                        stack_PP_ = [CStack_PP(dert_Py_=[_dert_P]) ]
-                        PP = CPP(stack_PP_=stack_PP_)
-                        PP_id = PP.id
-                    '''
-                    Cdert_Pi = dert_P
-                    stack_PP = CStack_PP(Py_= [Cdert_Pi] )  # reinitialize
-
+                    PP.stack_PP_.append(stack_PP) # terminate stack_PP
+                    stack_PP = CStack_PP(dert_Pi=Cdert_P())  # reinitialize, Py_ will be accumulated in next line - accum_stack_PP
                 accum_stack_PP(stack_PP, _dert_P)  # pack _dert_P into stack_PP, regardless of termination
                 _dert_P = dert_P
 
-            '''
-            This should be done at initialization, line 204?
-            #  PP may empty
-            if PP:
-                PP.stack_PP_.append(stack_PP)
-            else: # if PP is empty, reinitialize it
-                PP = CPP(stack_PP_=[CStack_PP(dert_Py_=[_dert_P])]) # reinitialize PP
-                PP_id = PP.id
-            '''
-            # this is also conditional: if len(_dert_P.upconnect_) != 1?:
-            PP.stack_PP_.append(stack_PP)  # append last stack
+            # this is also conditional: if len(_dert_P.upconnect_) != 1?:    
+            # PP.stack_PP_.append(stack_PP)  # append last stack
 
             # recursively cluster stack upconnects:
             form_PP_(stack.upconnect_, PP_, PP, stack_PP, _dert_P)
@@ -308,7 +290,7 @@ def accum_stack_PP(stack_PP, dert_P):  # accumulate mPPs or dPPs
     stack_PP.dert_Pi.mMg += mMg
     stack_PP.dert_Pi.dMg += dMg
 
-    stack_PP.dert_Py_.append(dert_P)
+    stack_PP.Py_.append(dert_P)
 
 
 def accum_PP(dert_P, PP):  # accumulate mPPs or dPPs
