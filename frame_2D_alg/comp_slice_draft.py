@@ -32,6 +32,12 @@ from class_cluster import ClusterStructure, NoneType
 from math import hypot
 import numpy as np
 
+from time import time
+from collections import deque
+from class_cluster import ClusterStructure, NoneType
+from math import hypot
+import numpy as np
+
 ave = 20
 div_ave = 200
 flip_ave = 1000
@@ -58,9 +64,9 @@ class Cdert_P(ClusterStructure):
 class CPP(ClusterStructure):
 
     stack_ = list
-    stack_PPi = object
     stack_PP_ = list
-    # possibly multiple between PPs
+    stack_PPi = object
+    # between PPs:
     upconnect_ = list
     downconnect_cnt = int
     fPPm = NoneType  # PPm if 1, else PPd; not needed if packed in PP_?
@@ -68,13 +74,14 @@ class CPP(ClusterStructure):
 
 
 class CStack_PP(ClusterStructure):
-    # needs to be revised, this is now an element of stack_ in PP,
+    # an element of stack_PP in PP
     upconnect_ = list
     downconnect_cnt = int
     #+ other params of CStack?
     Py_ = list
+    dert_Pi = object
     fdiv = NoneType
-    dert_Pi = object  # stack_PP params = accumulated dert_P params:
+    # stack_PP params = accumulated dert_P params:
     # sPM, sPD, sMX, sDX, sML, sDL, sMDx, sDDx, sMDy, sDDy, sMDg, sDDg, sMMg, sDMg
     # add to blob:
     # PPm_ = list
@@ -184,10 +191,10 @@ def comp_slice_old(blob, AveB):  # comp_slice eval per blob, simple stack_
                     _P = P
 
 
-def form_PP_(stack_, PP_, PP, _dert_P, _stack_PP, upconnect_cnt):  # terminate, initialize, increment PPs
+def form_PP_(stack_, PP_, PP, _dert_P, _stack_PP):  # terminate, initialize, increment PPs
 
     # in blob: cluster all connected dert_Ps of same-sign mP
-    PP_id = -1  # probably not here
+    PP_id = -1
 
     if _dert_P:  # stack_ = _stack.upconnect_
         upconnect_ = []  # same-sign upconnects
@@ -195,15 +202,12 @@ def form_PP_(stack_, PP_, PP, _dert_P, _stack_PP, upconnect_cnt):  # terminate, 
         for i, stack in enumerate(stack_):  # breadth-first, upconnect_ is not reversed
             if stack.f_checked:  # stack.f_checked = 1 after comp_slice_, redundant if 0: was tested before
                 stack.f_checked = 0
-                dert_P = stack.Py_[0]  # reversed by comp_slice_?
+                dert_P = stack.Py_[0]
 
                 if _dert_P.Pm > 0 == dert_P.Pm > 0:
-                    upconnect_.append(stack_.pop(i))
-                      # now contains unconnected stacks only, accum after full scan
-                else:
-                    upconnect_cnt -= 1
+                    upconnect_.append(stack_.pop(i))  # now contains unconnected stacks only, accum after full scan
 
-        if upconnect_cnt == 1 and upconnect_: # need to check further on this, when upconnect_cnt == 1, but upconnect_ is empty
+        if len(upconnect_) == 1:
             _dert_P = upconnect_[0].Py_[0]  # sole upconnect' 1st dert_P
             accum_stack_PP(_stack_PP, _dert_P)
 
@@ -212,8 +216,7 @@ def form_PP_(stack_, PP_, PP, _dert_P, _stack_PP, upconnect_cnt):  # terminate, 
                     PP.stack_PP_.append(stack_PP)
                     stack_PP = CStack_PP(dert_Pi=_dert_P,Py_=[_dert_P])  # reinitialize
                 accum_stack_PP(stack_PP, dert_P)
-                _dert_P = dert_P
-                # anything else here? # update _stack_PP with stack_PP here?
+                _dert_P = dert_P  # same _stack_PP all upconnects
         else:
             if _stack_PP:
                 PP.stack_PP_.append(_stack_PP)  # terminate _stack_PP
@@ -222,34 +225,32 @@ def form_PP_(stack_, PP_, PP, _dert_P, _stack_PP, upconnect_cnt):  # terminate, 
                     scan_stack_(upconnect_, PP_, PP)
 
         if not PP:
-            PP = CPP(stack_PPi=CStack_PP(dert_Pi=Cdert_P()))    
+            PP = CPP(stack_PPi=CStack_PP(dert_Pi=Cdert_P()))
             PP_id = PP.id
-        # why would be the purpose of scan_stack on stack_ again?
-        scan_stack_(stack_, PP_, PP)   # stack_: unconnected to _stack_PP
- 
-    else:  # stack_ = blob.stack_
-        
-        PP = CPP(stack_PPi=CStack_PP(dert_Pi=Cdert_P()))  # if not upconnects, should always reinitialize PP
-        PP_id = PP.id
-        scan_stack_(stack_, PP_, PP)  # or form_PP? i think form_PP on the upconnects after scan stack
 
+        scan_stack_(stack_, PP_, PP)   # stack_ now contains only stacks unconnected to _stack_PP
+
+    else:  # stack_ = blob.stack_
+        scan_stack_(stack_, PP_, [])  # form_PP only if stack_ may be upconnect_?
 
     if PP.id == PP_id:
-        PP_.append(PP) # append PP into PP_ after scanning through all upconnects
+        PP_.append(PP)  # after scanning through all upconnects
 
     return PP_
 
 
-def scan_stack_(stack_, PP_, PP):
+def scan_stack_(stack_, PP_, iPP):
     '''
     Draft:
     '''
     for stack in stack_:
+        if not iPP:
+            PP = CPP(stack_PPi=CStack_PP(dert_Pi=Cdert_P()))
 
         _dert_P = stack.Py_[0]
-        stack_PP = CStack_PP(dert_Pi=_dert_P, Py_=[_dert_P]) # usage of Cdert_P is not necessary here
-
+        stack_PP = CStack_PP(dert_Pi=_dert_P, Py_=[_dert_P])
         for dert_P in stack.Py_[1:]:
+
             if _dert_P.Pm > 0 != dert_P.Pm > 0:
                 PP.stack_PP_.append(stack_PP)
                 stack_PP = CStack_PP(dert_Pi=_dert_P, Py_=[_dert_P])  # reinitialize
@@ -257,9 +258,9 @@ def scan_stack_(stack_, PP_, PP):
             accum_stack_PP(stack_PP, dert_P)  # regardless of termination
             _dert_P = dert_P
 
-        PP.stack_PP_.append(stack_PP)  # last stack_PP
-        
-        form_PP_(stack.upconnect_, PP_, PP, _dert_P, stack_PP, len(stack.upconnect_))
+        PP.stack_PP_.append(stack_PP)  # terminate  last stack_PP
+
+        form_PP_(stack.upconnect_, PP_, PP, _dert_P, stack_PP)
 
 
 def accum_gstack(gstack_PP, istack, stack_PP):   # accumulate istack and stack_PP into stack
@@ -334,9 +335,9 @@ def accum_PP(stack_PP, PP):  # accumulate PP
     PP.stack_PPi.dert_Pi.accumulate(Pm=stack_PP.dert_Pi.Pm, Pd=stack_PP.dert_Pi.Pd, mx=stack_PP.dert_Pi.mx, dx=stack_PP.dert_Pi.dx,
                                     mL=stack_PP.dert_Pi.mL, dL=stack_PP.dert_Pi.dL, mDx=stack_PP.dert_Pi.mDx, dDx=stack_PP.dert_Pi.dDx,
                                     mDy=stack_PP.dert_Pi.mDy, dDy=stack_PP.dert_Pi.dDy, mDg=stack_PP.dert_Pi.mDg, dDg=stack_PP.dert_Pi.dDg,
-                                    mMg=stack_PP.dert_Pi.mMg, dMg=stack_PP.dert_Pi.dMg)                         
+                                    mMg=stack_PP.dert_Pi.mMg, dMg=stack_PP.dert_Pi.dMg)
 
-    
+
     PP.stack_.append(stack_PP)
 
 '''
