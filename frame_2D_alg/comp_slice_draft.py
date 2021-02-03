@@ -65,6 +65,7 @@ class CPP(ClusterStructure):
     stack_PPi = object
     # between PPs:
     upconnect_ = list
+    upconnect_cnt = int
     downconnect_cnt = int
     fPPm = NoneType  # PPm if 1, else PPd; not needed if packed in PP_?
     fdiv = NoneType
@@ -196,33 +197,42 @@ def form_PP_(stack_, PP_, PP, _dert_P, _stack_PP):  # terminate, initialize, inc
         upconnect_ = []  # same-sign upconnects
 
         for i, stack in enumerate(stack_):  # breadth-first, upconnect_ is not reversed
-            if stack.f_checked:  # stack.f_checked = 1 after comp_slice_, redundant if 0: was tested before
-                stack.f_checked = 0
-                dert_P = stack.Py_[0]
-                if _dert_P.Pm > 0 == dert_P.Pm > 0:
-                    upconnect_.append(stack_.pop(i))  # now contains unconnected stacks only, accum after full scan
+            dert_P = stack.Py_[0]
+            if (_dert_P.Pm > 0) == (dert_P.Pm > 0): # need bracket here, otherwise it would be unconditionally false
+                upconnect_.append(stack_.pop(i))  # now contains unconnected stacks only, accum after full scan
 
-        if len(upconnect_) == 1:
+        # get upconnect count per PP
+        PP.upconnect_cnt = len(upconnect_)
+
+        # case of 1 upconnect per PP
+        if PP.upconnect_cnt == 1 and upconnect_[0].f_checked:
             _dert_P = upconnect_[0].Py_[0]  # sole upconnect' 1st dert_P
+            upconnect_[0].f_checked = 0
             stack_PP = _stack_PP  # it seems there is no need for _stack_PP in this case
             accum_stack_PP(stack_PP, _dert_P)
 
             for dert_P in upconnect_[0].Py_[1:]:  # scan stack.Py_
                 if _dert_P.Pm > 0 != dert_P.Pm > 0:
                     accum_PP(stack_PP, PP)  # terminate stack_PP and PP
-                    PP_.append(PP)  # only one upconnect, no need to buffer
-                    # reinitialize PP:
-                    stack_PP = CStack_PP(dert_Pi=_dert_P,Py_=[_dert_P])
-                    PP = CPP(stack_PP_=[stack_PP])
+                    PP.upconnect_cnt -= 1
+                    # check PP's upconnect count for termination 
+                    PP = term_PP(PP,PP_)  # only one upconnect, no need to buffer
+                    # reinitialize stack_PP:
+                    stack_PP = CStack_PP(dert_Pi=_dert_P,Py_=[_dert_P]) # stack_PP will added to PP in the next line
+                
                 accum_stack_PP(stack_PP, dert_P)  # regardless of termination
                 _dert_P = dert_P                  # _stack_PP is no longer relevant
 
-        elif _stack_PP: # terminate _stack_PP if there is no upconnect_
+        # terminate _stack_PP if there is no upconnect_, and reinitialize new PP
+        elif _stack_PP:
             PP.stack_PP_.append(_stack_PP)  # terminate _stack_PP
             accum_PP(_stack_PP, PP)  # accumulate stack_PP into PP
-            if upconnect_:
-                scan_stack_(upconnect_, PP_, PP)
+            
+        # if there are more than 1 upconnects
+        if PP.upconnect_cnt:
+            scan_stack_(upconnect_, PP_, PP)
 
+        PP = term_PP(PP, PP_)
         scan_stack_(stack_, PP_, [])   # stack_ now contains only stacks unconnected to _stack_PP
 
     else:  # stack_ = blob.stack_
@@ -230,6 +240,16 @@ def form_PP_(stack_, PP_, PP, _dert_P, _stack_PP):  # terminate, initialize, inc
 
     return PP_
 
+
+def term_PP(PP, PP_):
+    
+    if PP.upconnect_cnt == 0: # after check through all upconnects    
+        PP.upconnect_cnt = -1 # prevent duplicated termination
+        PP_.append(PP)
+        PP = CPP(upconnect_cnt =-1,stack_PPi=CStack_PP(dert_Pi=Cdert_P())) # reinitialize PP after termination
+        # upconnect_cnt initialized with -1, to prevent unwanted termination right after the initialization and before getting the upconnect_cnt
+    
+    return PP # need to return the newly reinitialized PP instance
 
 def scan_stack_(stack_, PP_, iPP):
     '''
@@ -239,40 +259,30 @@ def scan_stack_(stack_, PP_, iPP):
         if stack.f_checked: # stack.f_checked = 1 after comp_slice_, redundant if 0: was tested before
             stack.f_checked = 0
 
-            # PP id need to be retrieved in the function where we initialize PP
-            PP_id = -1
-            if not iPP:
-                PP = CPP(stack_PPi=CStack_PP(dert_Pi=Cdert_P()))
-                PP_id = PP.id
+            # always initialize PP in new stack
+            PP = CPP(stack_PPi=CStack_PP(dert_Pi=Cdert_P()))
+            if iPP: # for 2nd pass, PP is iPP
+                PP = iPP
 
             _dert_P = stack.Py_[0]
             stack_PP = CStack_PP(dert_Pi=_dert_P, Py_=[_dert_P])
+            
             for dert_P in stack.Py_[1:]:
-
                 if _dert_P.Pm > 0 != dert_P.Pm > 0:
                     PP.stack_PP_.append(stack_PP)
-                    '''
-                    PP termination draft:
-                    PP_buff.append(PP)
-
-                    for i, PP in enumerate PP_buff:
-                        PP.upconnect_cnt -= 1
-                        if upconnect_cnt == 0:
-                            PP_.append(PP_buff[i].pop())?
-                    '''
+                    PP.upconnect_cnt -= 1 # reduce upconnect count
+                    # check PP's upconnect count for termination 
+                    PP = term_PP(PP, PP_)
                     stack_PP = CStack_PP(dert_Pi=_dert_P, Py_=[_dert_P])  # reinitialize
-
                 accum_stack_PP(stack_PP, dert_P)  # regardless of termination
                 _dert_P = dert_P
 
             PP.stack_PP_.append(stack_PP)  # terminate  last stack_PP
 
             form_PP_(stack.upconnect_, PP_, PP, _dert_P, stack_PP) # form PP across upconnects
-
-            if PP.id == PP_id:
-                PP_.append(PP)  # after scanning through all upconnects
-
-
+    
+            PP = term_PP(PP, PP_)
+            
 def accum_gstack(gstack_PP, istack, stack_PP):   # accumulate istack and stack_PP into stack
     '''
     This looks wrong, accum_nested_stack should be an add-on to accum_stack_PP
@@ -380,7 +390,7 @@ def accum_PP(stack_PP, PP):  # accumulate PP
         nvars = 0  # DIV + norm derivatives
     '''
 
-def term_PP(typ, PP):  # eval for orient (as term_blob), incr_comp_slice, scan_par_:
+def term_PP2(typ, PP):  # eval for orient (as term_blob), incr_comp_slice, scan_par_:
 
     s, L2, I2, D2, Dy2, M2, My2, G2, Olp2, Py_, PM, PD, Mx, Dx, ML, DL, MI, DI, MD, DD, MDy, DDy, MM, DM, MMy, DMy, nVars = PP
 
