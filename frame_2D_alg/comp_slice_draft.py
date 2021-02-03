@@ -26,20 +26,13 @@
    rng_sum-> rng+, der+: whole rng, rng_incr-> angle / past vs next g, 
    rdn Rng | rng_ eval at rng term, Rng -= lost coord bits mag, always > discr? 
 '''
-from time import time
-from collections import deque
-from class_cluster import ClusterStructure, NoneType
-from math import hypot
-import numpy as np
 
 from time import time
 from collections import deque
 from class_cluster import ClusterStructure, NoneType
 from math import hypot
 import numpy as np
-
-# to detect overflow issue, in case there are infinity loop in the recursive function
-import warnings
+import warnings  # to detect overflow issue, in case of infinity loop
 warnings.filterwarnings('error')
 
 ave = 20
@@ -197,7 +190,7 @@ def comp_slice_old(blob, AveB):  # comp_slice eval per blob, simple stack_
 
 def form_PP_(stack_, PP_, PP, _dert_P, _stack_PP):  # terminate, initialize, increment PPs
 
-    # in blob: cluster all connected dert_Ps of same-sign mP
+    # cluster all connected dert_Ps of same-sign mP in the blob
 
     if _dert_P:  # stack_ = _stack.upconnect_
         upconnect_ = []  # same-sign upconnects
@@ -206,31 +199,31 @@ def form_PP_(stack_, PP_, PP, _dert_P, _stack_PP):  # terminate, initialize, inc
             if stack.f_checked:  # stack.f_checked = 1 after comp_slice_, redundant if 0: was tested before
                 stack.f_checked = 0
                 dert_P = stack.Py_[0]
-
                 if _dert_P.Pm > 0 == dert_P.Pm > 0:
                     upconnect_.append(stack_.pop(i))  # now contains unconnected stacks only, accum after full scan
 
         if len(upconnect_) == 1:
             _dert_P = upconnect_[0].Py_[0]  # sole upconnect' 1st dert_P
-            accum_stack_PP(_stack_PP, _dert_P)
+            stack_PP = _stack_PP  # it seems there is no need for _stack_PP in this case
+            accum_stack_PP(stack_PP, _dert_P)
 
-            for dert_P in upconnect_[0].Py_[1:]:  # depth-first though stack.Py_
+            for dert_P in upconnect_[0].Py_[1:]:  # scan stack.Py_
                 if _dert_P.Pm > 0 != dert_P.Pm > 0:
-                    PP.stack_PP_.append(_stack_PP)
-                    stack_PP = CStack_PP(dert_Pi=_dert_P,Py_=[_dert_P])  # reinitialize
-                accum_stack_PP(_stack_PP, dert_P)
-                _dert_P = dert_P  # same _stack_PP all upconnects
-                
+                    accum_PP(stack_PP, PP)  # terminate stack_PP and PP
+                    PP_.append(PP)  # only one upconnect, no need to buffer
+                    # reinitialize PP:
+                    stack_PP = CStack_PP(dert_Pi=_dert_P,Py_=[_dert_P])
+                    PP = CPP(stack_PP_=[stack_PP])
+                accum_stack_PP(stack_PP, dert_P)  # regardless of termination
+                _dert_P = dert_P                  # _stack_PP is no longer relevant
+
         elif _stack_PP: # terminate _stack_PP if there is no upconnect_
             PP.stack_PP_.append(_stack_PP)  # terminate _stack_PP
             accum_PP(_stack_PP, PP)  # accumulate stack_PP into PP
-                
-            # no need scan_stack_ here? from my testing, i don't see any upconnect_>1
-            # if upconnect_: 
-            #    scan_stack_(upconnect_, PP_, PP)
+            if upconnect_:
+                scan_stack_(upconnect_, PP_, PP)
 
-        # continue to form new stack_PP with the same PP
-        scan_stack_(stack_, PP_, PP)   # stack_ now contains only stacks unconnected to _stack_PP
+        scan_stack_(stack_, PP_, [])   # stack_ now contains only stacks unconnected to _stack_PP
 
     else:  # stack_ = blob.stack_
         scan_stack_(stack_, PP_, [])  # form_PP only if stack_ may be upconnect_?
@@ -251,26 +244,34 @@ def scan_stack_(stack_, PP_, iPP):
             if not iPP:
                 PP = CPP(stack_PPi=CStack_PP(dert_Pi=Cdert_P()))
                 PP_id = PP.id
-            else:
-                PP = iPP # actually we can remove this step if we are just using the name 'PP'
-    
+
             _dert_P = stack.Py_[0]
             stack_PP = CStack_PP(dert_Pi=_dert_P, Py_=[_dert_P])
             for dert_P in stack.Py_[1:]:
-    
+
                 if _dert_P.Pm > 0 != dert_P.Pm > 0:
                     PP.stack_PP_.append(stack_PP)
+                    '''
+                    PP termination draft:
+                    PP_buff.append(PP)
+
+                    for i, PP in enumerate PP_buff:
+                        PP.upconnect_cnt -= 1
+                        if upconnect_cnt == 0:
+                            PP_.append(PP_buff[i].pop())?
+                    '''
                     stack_PP = CStack_PP(dert_Pi=_dert_P, Py_=[_dert_P])  # reinitialize
-    
+
                 accum_stack_PP(stack_PP, dert_P)  # regardless of termination
                 _dert_P = dert_P
-    
+
             PP.stack_PP_.append(stack_PP)  # terminate  last stack_PP
-    
+
             form_PP_(stack.upconnect_, PP_, PP, _dert_P, stack_PP) # form PP across upconnects
-    
+
             if PP.id == PP_id:
                 PP_.append(PP)  # after scanning through all upconnects
+
 
 def accum_gstack(gstack_PP, istack, stack_PP):   # accumulate istack and stack_PP into stack
     '''
