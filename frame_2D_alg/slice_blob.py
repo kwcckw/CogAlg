@@ -90,7 +90,7 @@ class CStack(ClusterStructure):
     stack_ = list  # ultimately all stacks, also replaces fflip: vertical if empty, else horizontal
     f_checked = int  # flag: stack has gone through form_sstack_recursive as upconnect
     # PP
-    stack_PP_= list
+    PP = object
 
 # Functions:
 def slice_blob(blob, verbose=False):

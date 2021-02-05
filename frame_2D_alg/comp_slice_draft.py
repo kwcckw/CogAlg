@@ -197,14 +197,16 @@ def stack_2_PP_(stack_, PP_):
             stack.f_checked = 0
             _dert_P = stack.Py_[0]
             stack_PP = CStack_PP(dert_Pi=_dert_P, Py_=[_dert_P])
-            PP = CPP(stack_PPi=CStack_PP(dert_Pi=Cdert_P()), stack_PP = [stack_PP])
+            PP = CPP(stack_PPi=CStack_PP(dert_Pi=Cdert_P())) # stack_PP will be added in accum_PP later
+            stack.PP = PP # update stack's PP
+
 
             for dert_P in stack.Py_[1:]:   # scan_Py_(): same as in upconnect_2_PP_, still better unpacked?
                 if (_dert_P.Pm > 0) != (dert_P.Pm > 0):
                     accum_PP(stack_PP, PP)
                     PP_.append(PP)  # terminate stack_PP and PP
                     stack_PP = CStack_PP(dert_Pi=Cdert_P())
-                    PP = CPP(stack_PPi=stack_PP)  # initialize stack_PP and PP
+                    PP = CPP(stack_PPi=CStack_PP(dert_Pi=Cdert_P()))  # initialize stack_PP and PP
 
                 accum_stack_PP(stack_PP, dert_P)  # regardless of termination
                 _dert_P = dert_P
@@ -213,8 +215,11 @@ def stack_2_PP_(stack_, PP_):
 
             upconnect_2_PP_(stack.upconnect_, PP_, PP, _dert_P, stack_PP, fchecksign=1)  # form PPs across upconnects
 
-        else: # if upconnect of iPP is checked previously merge the upconnect's PP to iPP?
-            pass
+        # no need to merge PP here, since stack is always blob.stack_ here, which we will always initialize PP per stack
+#        else: # if upconnect of iPP is checked previously merge the upconnect's PP to iPP?
+#            pass
+
+    return PP_
 
 
 def upconnect_2_PP_(stack_, PP_, PP, _dert_P, _stack_PP, fchecksign):  # terminate, initialize, increment PPs
@@ -222,10 +227,11 @@ def upconnect_2_PP_(stack_, PP_, PP, _dert_P, _stack_PP, fchecksign):  # termina
     # cluster all connected dert_Ps of same-sign mP in the blob
 
     if fchecksign:
+        upconnect_= [] # we need this init, else we might not having variable of upconnect_ if 'if (_dert_P.Pm > 0) == (dert_P.Pm > 0)' is false later
         for i, stack in enumerate(stack_):  # breadth-first, upconnect_ is not reversed
             dert_P = stack.Py_[0]
             if (_dert_P.Pm > 0) == (dert_P.Pm > 0):
-                upconnect_ = stack_.pop(i)  # now contains unconnected stacks only, accum after full scan:
+                upconnect_.append(stack_.pop(i))  # now contains unconnected stacks only, accum after full scan:
     else:
         upconnect_=stack_
         stack_=[]
@@ -233,6 +239,7 @@ def upconnect_2_PP_(stack_, PP_, PP, _dert_P, _stack_PP, fchecksign):  # termina
     # 1 same-sign upconnect per PP:
     if len(upconnect_) == 1:
         if upconnect_[0].f_checked:
+            upconnect_[0].PP = PP # update upconnect's PP
             upconnect_[0].f_checked = 0
             accum_stack_PP(_stack_PP, _dert_P) # accumulate the input _dert_P
 
@@ -246,19 +253,39 @@ def upconnect_2_PP_(stack_, PP_, PP, _dert_P, _stack_PP, fchecksign):  # termina
                 accum_stack_PP(_stack_PP, dert_P)  # regardless of termination
                 _dert_P = dert_P
 
-        else: # if upconnect is already checked, merge upconnect's PP with the current P?
-             pass
+        elif upconnect_[0].PP is not PP: # if upconnect is already checked, merge PP to upconnect's PP 
+
+            # merge upconnect's PP to current PP
+            '''
+            uPP = upconnect_[0].PP  # the merged PP
+            uPP.stack_PP_.extend(PP.stack_PP_)
+            uPP.stack_PPi.dert_Pi.accumulate(Pm=PP.stack_PPi.dert_Pi.Pm, Pd=PP.stack_PPi.dert_Pi.Pd, mx=PP.stack_PPi.dert_Pi.mx, dx=PP.stack_PPi.dert_Pi.dx,
+                                            mL=PP.stack_PPi.dert_Pi.mL, dL=PP.stack_PPi.dert_Pi.dL, mDx=PP.stack_PPi.dert_Pi.mDx, dDx=PP.stack_PPi.dert_Pi.dDx,
+                                            mDy=PP.stack_PPi.dert_Pi.mDy, dDy=PP.stack_PPi.dert_Pi.dDy, mDg=PP.stack_PPi.dert_Pi.mDg, dDg=PP.stack_PPi.dert_Pi.dDg,
+                                            mMg=PP.stack_PPi.dert_Pi.mMg, dMg=PP.stack_PPi.dert_Pi.dMg)
+            '''
+           
+            
+            # merge current PP to upconnect's PP 
+            # not sure if we need merge upconnect's PP to current PP or the other way around
+            mPP = upconnect_[0].PP  # the merged PP
+            PP.stack_PP_.extend(mPP.stack_PP_)
+            PP.stack_PPi.dert_Pi.accumulate(Pm=mPP.stack_PPi.dert_Pi.Pm, Pd=mPP.stack_PPi.dert_Pi.Pd, mx=mPP.stack_PPi.dert_Pi.mx, dx=mPP.stack_PPi.dert_Pi.dx,
+                                            mL=mPP.stack_PPi.dert_Pi.mL, dL=mPP.stack_PPi.dert_Pi.dL, mDx=mPP.stack_PPi.dert_Pi.mDx, dDx=mPP.stack_PPi.dert_Pi.dDx,
+                                            mDy=mPP.stack_PPi.dert_Pi.mDy, dDy=mPP.stack_PPi.dert_Pi.dDy, mDg=mPP.stack_PPi.dert_Pi.mDg, dDg=mPP.stack_PPi.dert_Pi.dDg,
+                                            mMg=mPP.stack_PPi.dert_Pi.mMg, dMg=mPP.stack_PPi.dert_Pi.dMg)
+            if mPP in PP_: 
+                PP_.remove(mPP) # remove the merged PP
+                
     else:
         if upconnect_:  # >1 same-sign upconnects per PP
-            upconnect_2_PP_(upconnect_, PP_, PP, _dert_P, _stack_PP, fchecksign=0)
+            upconnect_2_PP_(upconnect_, PP_, PP, _dert_P, _stack_PP, fchecksign=1) # i think fchecksign is not necessary, it will be always 1. Otherwisem the same >1 upconnect_ will parse back to line 236 above, and eventually back to here again, causing endless loop. 
 
-        else:  # 0 same-sign upconnects per PP; always _stack_PP?
+        else:  # 0 same-sign upconnects per PP; always _stack_PP? Yes, if 0 upconnect, should be always _stack_PP. This would be the section we terminate the last upconnect.
             accum_PP(_stack_PP, PP)  # accumulate stack_PP into PP
             PP_.append(PP)
 
     stack_2_PP_(stack_, PP_)  # stack_ now contains only stacks unconnected to _stack_PP
-
-    return PP_
 
 
 def accum_gstack(gstack_PP, istack, stack_PP):   # accumulate istack and stack_PP into stack
