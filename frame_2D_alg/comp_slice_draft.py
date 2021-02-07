@@ -65,7 +65,6 @@ class CPP(ClusterStructure):
     stack_PPi = object
     # between PPs:
     upconnect_ = list
-    upconnect_cnt = int
     downconnect_cnt = int
     fPPm = NoneType  # PPm if 1, else PPd; not needed if packed in PP_?
     fdiv = NoneType
@@ -79,6 +78,8 @@ class CStack_PP(ClusterStructure):
     Py_ = list
     dert_Pi = object
     fdiv = NoneType
+    ## PP reference
+    PP = object
     # stack_PP params = accumulated dert_P params:
     # sPM, sPD, sMX, sDX, sML, sDL, sMDx, sDDx, sMDy, sDDy, sMDg, sDDg, sMMg, sDMg
     # add to blob:
@@ -199,8 +200,6 @@ def stack_2_PP_(stack_, PP_):
             _dert_P = stack.Py_[0]
             stack_PP = CStack_PP(dert_Pi=_dert_P, Py_=[_dert_P])
             PP = CPP(stack_PPi=CStack_PP(dert_Pi=Cdert_P())) # stack_PP will be added in accum_PP later
-            stack.PP = PP # update stack's PP
-
 
             for dert_P in stack.Py_[1:]:   # scan_Py_(): same as in upconnect_2_PP_, still better unpacked?
                 if (_dert_P.Pm > 0) != (dert_P.Pm > 0):
@@ -230,13 +229,12 @@ def upconnect_2_PP_(stack_, PP_, PP, _dert_P, _stack_PP):  # terminate, initiali
             upconnect_.append(stack_.pop(i))  # now contains unconnected stacks only, accum after full scan:
             
     # get upconnect count per PP
-    PP.upconnect_cnt = len(upconnect_)
+    upconnect_cnt = len(upconnect_)
     # i think we need get upconnect_cnt per PP, else we wouldn't have any upconnect info of newly form PP if len(upconnect_)>1, line 278 below
 
     # 1 same-sign upconnect per PP:
     if len(upconnect_) == 1 and upconnect_[0].f_checked:
-        PP.upconnect_cnt -= 1
-        upconnect_[0].PP = PP # update upconnect's PP
+        upconnect_cnt -= 1
         upconnect_[0].f_checked = 0
         accum_stack_PP(_stack_PP, _dert_P) # accumulate the input _dert_P
 
@@ -259,7 +257,7 @@ def upconnect_2_PP_(stack_, PP_, PP, _dert_P, _stack_PP):  # terminate, initiali
         
         for upconnect in upconnect_: # form PP across every upconnects
             
-            iPP.upconnect_cnt -= 1 # upconnect count -1 for every loopped upconnect
+            upconnect_cnt -= 1 # upconnect count -1 for every loopped upconnect
             # for each new upconnect, PP, stack_PP and dert_P should be the input PP, stack_PP and dert_P
             PP = iPP 
             _stack_PP = istack_PP
@@ -274,11 +272,12 @@ def upconnect_2_PP_(stack_, PP_, PP, _dert_P, _stack_PP):  # terminate, initiali
                 for dert_P in upconnect.Py_:  # scan_Py_(): similar but not totally same with stack_2_PP_
                     if (_dert_P.Pm > 0) != (dert_P.Pm > 0):
                         accum_PP(_stack_PP, PP)  # terminate stack_PP and PP
-                        if PP.upconnect_cnt == 0: # terminate PP if upconnect cnt = 0
+                        if PP != iPP or (upconnect_cnt == 0 and PP is iPP): # upconnect ==0 valid only if PP = iPP
                             PP_.append(PP)
                         _stack_PP = CStack_PP(dert_Pi=_dert_P, Py_=[_dert_P]) 
                         PP = CPP(stack_PPi = _stack_PP, stack_PP_=[_stack_PP])
-    
+                        _stack_PP.PP = PP # updte PP reference 
+                        
                     accum_stack_PP(_stack_PP, dert_P)  # regardless of termination
                     _dert_P = dert_P
         
@@ -367,6 +366,7 @@ def accum_PP(stack_PP, PP):  # accumulate PP
 
 
     PP.stack_.append(stack_PP)
+    stack_PP.PP = PP
 
 '''
     Pd and Pm are ds | ms per param summed in P. Primary comparison is by subtraction, div if par * rL compression:
