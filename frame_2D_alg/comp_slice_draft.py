@@ -203,11 +203,15 @@ def stack_2_PP_(stack_, PP_):
             stack_PP = CStack_PP(dert_Pi=_dert_P, Py_=[_dert_P])
             PP = CPP(stack_PPi=CStack_PP(dert_Pi=Cdert_P()))
             stack_PP.PP = PP  # initialize upward reference
+            stack.stack_PP_.append(stack_PP) # update stack_PP to stack
 
             for dert_P in stack.Py_[1:]:
                 if (_dert_P.Pm > 0) != (dert_P.Pm > 0):
                     accum_PP(stack_PP, PP); PP_.append(PP)  # terminate stack_PP and PP
-                    stack_PP = CStack_PP(dert_Pi=Cdert_P()); PP = CPP(stack_PPi=CStack_PP(dert_Pi=Cdert_P())); stack_PP.PP = PP
+                    stack_PP = CStack_PP(dert_Pi=Cdert_P())
+                    PP = CPP(stack_PPi=CStack_PP(dert_Pi=Cdert_P()))
+                    stack_PP.PP = PP
+                    stack.stack_PP_.append(stack_PP) # update stack_PP to stack
                     # init stack_PP and PP
                 accum_stack_PP(stack_PP, dert_P)  # regardless of termination
                 _dert_P = dert_P
@@ -219,7 +223,7 @@ def stack_2_PP_(stack_, PP_):
     return PP_
 
 
-def upconnect_2_PP_(stack_, PP_, iPP, _dert_P, stack_PP):  # terminate, initialize, increment PPs
+def upconnect_2_PP_(stack_, PP_, iPP, _dert_P, istack_PP):  # terminate, initialize, increment PPs
 
     # in the blob, cluster all connected dert_Ps of same-sign mP into PPs
     upconnect_= []
@@ -230,10 +234,13 @@ def upconnect_2_PP_(stack_, PP_, iPP, _dert_P, stack_PP):  # terminate, initiali
             upconnect_.append(stack_.pop(i))  # separate stack_ into sign-connected stacks: upconnect_, and unconnected stacks: popped stack_
 
     if len(upconnect_) == 1:  # 1 same-sign upconnect per PP
+        PP = iPP  # no difference in single stack
+        stack_PP = istack_PP # no difference in single stack
+        
         if upconnect_[0].f_checked:
             upconnect_[0].f_checked = 0
-            accum_stack_PP(stack_PP, _dert_P)  # accumulate the input _dert_P
-            PP = iPP  # no difference in single stack
+            accum_stack_PP(istack_PP, _dert_P)  # accumulate the input _dert_P
+            stack.stack_PP_.append(stack_PP) # update stack_PP to stack
 
             for dert_P in upconnect_[0].Py_:
                 if (_dert_P.Pm > 0) != (dert_P.Pm > 0):
@@ -242,20 +249,45 @@ def upconnect_2_PP_(stack_, PP_, iPP, _dert_P, stack_PP):  # terminate, initiali
                     stack_PP = CStack_PP(dert_Pi=Cdert_P())  # init empty stack_PP, then accum_stack_PP
                     PP = CPP(stack_PPi=CStack_PP(dert_Pi=Cdert_P()))
                     stack_PP.PP = PP
+                    stack.stack_PP_.append(stack_PP) # update stack_PP to stack
 
                 accum_stack_PP(stack_PP, dert_P)  # regardless of termination
                 _dert_P = dert_P
+                
+        elif upconnect_[0].stack_PP_: # there is existing stack_PP on the upconnect, merge it to current PP   
+            for ustack_PP in upconnect_[0].stack_PP_: # ustack_PP = upconnect's stack_PP
+                
+                # need further review:
+                # check same sign and make sure stack_PP.PP is not current PP (bracket each condition for clarity)
+                if ((ustack_PP.Py_[-1].Pm>0) == (stack_PP.Py_[0].Pm>0)) and (ustack_PP not in PP.stack_PP_) and (ustack_PP.PP is not PP):
+
+                    mPP = ustack_PP.PP  # the merged PP
+                    PP.stack_PP_.extend(mPP.stack_PP_)
+                    PP.stack_PPi.dert_Pi.accumulate(Pm=mPP.stack_PPi.dert_Pi.Pm, Pd=mPP.stack_PPi.dert_Pi.Pd, mx=mPP.stack_PPi.dert_Pi.mx, dx=mPP.stack_PPi.dert_Pi.dx,
+                                                    mL=mPP.stack_PPi.dert_Pi.mL, dL=mPP.stack_PPi.dert_Pi.dL, mDx=mPP.stack_PPi.dert_Pi.mDx, dDx=mPP.stack_PPi.dert_Pi.dDx,
+                                                    mDy=mPP.stack_PPi.dert_Pi.mDy, dDy=mPP.stack_PPi.dert_Pi.dDy, mDg=mPP.stack_PPi.dert_Pi.mDg, dDg=mPP.stack_PPi.dert_Pi.dDg,
+                                                    mMg=mPP.stack_PPi.dert_Pi.mMg, dMg=mPP.stack_PPi.dert_Pi.dMg)
+                    if mPP in PP_: 
+                        PP_.remove(mPP) # remove the merged PP
+                        
+            # save the merged PP into PP_, else it wouldn't be save in any of the section later (it will proceed to 'stack_2_PP_(stack_, PP_)')
+            # if upconnect_cnt is a parameter in PP, then we can perform further check on the upcnnect_cnt before terminate it
+            PP_.append(PP)           
 
     elif upconnect_:  # >1 same-sign upconnects per PP
-        istack_PP = stack_PP  # downconnected stack_PP
         idert_P = _dert_P     # downconnected dert_P
         curr_upconnect_cnt = len(upconnect_)
         accum_stack_PP(istack_PP, idert_P)  # accumulate the input _dert_P
 
         for upconnect in upconnect_:  # form PPs across stacks
-            curr_upconnect_cnt -=1
+ 
             PP = iPP  # then redefined per stack
             _dert_P = idert_P
+            stack_PP = istack_PP
+            
+            # get stack per stack_PP
+            upconnect.stack_PP_.append(stack_PP)
+            
             if upconnect.f_checked:
                 upconnect.f_checked = 0
 
@@ -271,14 +303,35 @@ def upconnect_2_PP_(stack_, PP_, iPP, _dert_P, stack_PP):  # terminate, initiali
                         # init PP regardless of iPP:
                         stack_PP = CStack_PP(dert_Pi=Cdert_P())  # init empty
                         PP = CPP(stack_PPi=CStack_PP(dert_Pi=Cdert_P()))  # we don't know if PP will fork at stack term
+                        upconnect.stack_PP_.append(stack_PP)
 
                     accum_stack_PP(stack_PP, dert_P)  # regardless of termination
                     _dert_P = dert_P
 
                 upconnect_2_PP_(upconnect.upconnect_, PP_, PP, _dert_P, stack_PP)
 
+            elif upconnect.stack_PP_: # there is existing stack_PP on the upconnect, merge it to current PP   
+                for ustack_PP in upconnect.stack_PP_: # ustack_PP = upconnect's stack_PP
+                    
+                    # need further review:
+                    # check same sign and make sure stack_PP.PP is not current PP (bracket each condition for clarity)
+                    if ((ustack_PP.Py_[-1].Pm>0) == (stack_PP.Py_[0].Pm>0)) and (ustack_PP not in PP.stack_PP_) and (ustack_PP.PP is not PP):
+    
+                        mPP = ustack_PP.PP  # the merged PP
+                        PP.stack_PP_.extend(mPP.stack_PP_)
+                        PP.stack_PPi.dert_Pi.accumulate(Pm=mPP.stack_PPi.dert_Pi.Pm, Pd=mPP.stack_PPi.dert_Pi.Pd, mx=mPP.stack_PPi.dert_Pi.mx, dx=mPP.stack_PPi.dert_Pi.dx,
+                                                        mL=mPP.stack_PPi.dert_Pi.mL, dL=mPP.stack_PPi.dert_Pi.dL, mDx=mPP.stack_PPi.dert_Pi.mDx, dDx=mPP.stack_PPi.dert_Pi.dDx,
+                                                        mDy=mPP.stack_PPi.dert_Pi.mDy, dDy=mPP.stack_PPi.dert_Pi.dDy, mDg=mPP.stack_PPi.dert_Pi.mDg, dDg=mPP.stack_PPi.dert_Pi.dDg,
+                                                        mMg=mPP.stack_PPi.dert_Pi.mMg, dMg=mPP.stack_PPi.dert_Pi.dMg)
+                        if mPP in PP_: 
+                            PP_.remove(mPP) # remove the merged PP
+                            
+                # save the merged PP into PP_, else it wouldn't be save in any of the section later (it will proceed to 'stack_2_PP_(stack_, PP_)')
+                # if upconnect_cnt is a parameter in PP, then we can perform further check on the upcnnect_cnt before terminate it
+                PP_.append(PP)
+
     else:  # 0 same-sign upconnects per PP:
-        accum_PP(stack_PP, iPP)  # accumulate stack_PP into PP
+        accum_PP(istack_PP, iPP)  # accumulate stack_PP into PP
         PP_.append(iPP)
 
     stack_2_PP_(stack_, PP_)  # stack_ now contains only stacks unconnected to _stack_PP
