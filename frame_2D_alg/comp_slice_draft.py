@@ -217,17 +217,24 @@ def upconnect_2_PP_(stack_, PP_, iPP, isstack, _dert_P):  # terminate, initializ
 
     # in the blob, cluster all connected dert_Ps of same-sign mP into PPs
     upconnect_= []
-    isstack.PP = iPP
+    isstack.PP = iPP # update PP object reference of isstack
 
     for i, stack in enumerate(stack_):  # breadth-first, upconnect_ is not reversed
         dert_P = stack.Py_[0]
-        if (_dert_P.Pm > 0) == (dert_P.Pm > 0):
+
+        # get x start and end point
+        _x0 = _dert_P.Pi.x0
+        _xn = _dert_P.Pi.x0+_dert_P.Pi.L
+        x0 = dert_P.Pi.x0
+        xn = dert_P.Pi.x0+dert_P.Pi.L
+        
+        # upconnect with same sign and having at least 1 contact point
+        if (_dert_P.Pm > 0) == (dert_P.Pm > 0) and (_xn>=x0) and (_x0 <= xn):
             upconnect_.append(stack_.pop(i))  # separate stack_ into sign-connected stacks: upconnect_, and unconnected stacks: popped stack_
 
     if len(upconnect_) == 1:  # 1 same-sign upconnect per PP
-        if upconnect_[0].f_checked:
-        # replace with if upconnect_[0].sstack_?
-            upconnect_[0].f_checked = 0
+
+        if not upconnect_[0].sstack_: # sstack_ will having element of sstack only if PP s terminated 
             accum_sstack(isstack, _dert_P)  # accumulate the input _dert_P
             PP = iPP  # no difference in single stack
 
@@ -242,39 +249,22 @@ def upconnect_2_PP_(stack_, PP_, iPP, isstack, _dert_P):  # terminate, initializ
                 accum_sstack(isstack, dert_P)  # regardless of termination
                 _dert_P = dert_P
 
-        elif upconnect_[0].sstack_:  # if checked before, stack must have not empty sstack_?
-
-            # the only direct contact to input sstack is at upconnect_[0].sstack_[0]:
-            # that's the only PP we need to check?:
-
-            if (upconnect_[0].sstack_[0].PP is not isstack.PP):
-                merge_PP(upconnect_[0].sstack_[0].PP, isstack.PP, PP_)
-            '''
-            for sstack in upconnect_[0].sstack_: # sstacks may have different PP
-
-                # get start and end x to check overlapping in sstack
-                _x0 = min([dert_P.Pi.x0 for dert_P in sstack.Py_])
-                _xn = max([dert_P.Pi.x0+dert_P.Pi.L for dert_P in sstack.Py_])
-                x0 = min([dert_P.Pi.x0 for dert_P in isstack.Py_])
-                xn = max([dert_P.Pi.x0+dert_P.Pi.L for dert_P in isstack.Py_])
-
-                if (sstack.PP is not isstack.PP) and (_xn>=x0) and (_x0 <= xn): 
-                # i think we need set overlapping condition and check x overlap in sstack as well
-                    merge_PP(sstack.PP, isstack.PP, PP_)
-            '''
+        # merge contacted PPs
+        elif (upconnect_[0].sstack_[0].PP is not isstack.PP):
+            merge_PP(upconnect_[0].sstack_[0].PP, isstack.PP, PP_)
+            
+            
     elif upconnect_:  # >1 same-sign upconnects per PP
         idert_P = _dert_P     # downconnected dert_P
         curr_upconnect_cnt = len(upconnect_)
         accum_sstack(isstack, idert_P)  # accumulate the input _dert_P
-        ffirst = 1  # first upconnect
 
         for upconnect in upconnect_:  # form PPs across stacks
             sstack = isstack  # downconnected sstack
             PP = iPP  # then redefined per stack
             _dert_P = idert_P
-            if upconnect.f_checked:  # means *not* checked here
-                upconnect.f_checked = 0
-
+            
+            if not upconnect_[0].sstack_: 
                 for dert_P in upconnect.Py_:
                     if (_dert_P.Pm > 0) != (dert_P.Pm > 0):
                         accum_PP(upconnect, sstack, PP)  # term. sstack
@@ -293,32 +283,10 @@ def upconnect_2_PP_(stack_, PP_, iPP, isstack, _dert_P):  # terminate, initializ
                     _dert_P = dert_P
                 upconnect_2_PP_(upconnect.upconnect_, PP_, PP, sstack, _dert_P)
 
-            else:  # checked before: sstack has already been assigned PP, merge iPP into it
-                if ffirst:
-                    up_sstack_ = upconnect_[0].sstack_
-                    sstack = isstack
-                else:
-                    up_sstack_ = upconnect.sstack_
+            # ffirst may not need now, all upconnects are checked and having direct contact to iPP before forming them
+            elif (upconnect_[0].sstack_[0].PP  is not isstack.PP):
+                    merge_PP(upconnect_[0].sstack_[0].PP , isstack.PP, PP_)
 
-                # the only direct contact to input sstack is at upconnect_[0].sstack_[0]:
-                # that's the only PP we need to check?
-                if (up_sstack_[0].PP is not isstack.PP):
-                    merge_PP(up_sstack_[0].PP, isstack.PP, PP_)
-                '''
-                for up_sstack in up_sstack_:  # sstacks may have different PP
-
-                    # get start and end x to check overlapping in sstack
-                    _x0 = min([dert_P.Pi.x0 for dert_P in up_sstack.Py_])
-                    _xn = max([dert_P.Pi.x0+dert_P.Pi.L for dert_P in up_sstack.Py_])
-                    x0 = min([dert_P.Pi.x0 for dert_P in sstack.Py_])
-                    xn = max([dert_P.Pi.x0+dert_P.Pi.L for dert_P in sstack.Py_])
-
-                    if (up_sstack.PP is not sstack.PP) and (_xn>=x0) and (_x0 <= xn): 
-                        # i think we need set overlapping condition based on x overlap in sstack as well
-                        merge_PP(up_sstack.PP, sstack.PP, PP_)
-
-                        if ffirst: ffirst = 0 # reset ffirst to 0 after checking 1st upconnect
-                '''
     else:  # 0 same-sign upconnects per PP:
         accum_PP([], isstack, iPP)  # accumulate sstack into PP
         PP_.append(iPP)
