@@ -19,7 +19,6 @@ OUTPUT_PATH = "./images/intra_comp0/"
 # -----------------------------------------------------------------------------
 # Functions
 
-
 def shift_img(img,rng):
     '''
     shift image based on the rng directions
@@ -35,17 +34,19 @@ def shift_img(img,rng):
     img_shift_ = []
     x = -rng
     y = -rng
-    sstep = rng+1
+    sstep = 1
+    # sstep = rng+1 # skip version
     
     # get shifted images if output size >0
     if output_size_y>0 and output_size_x>0:
     
         
-        img_center__ = img[rng:-(rng):rng+1,rng:-(rng):rng+1]
+        img_center__ = img[rng:-(rng):sstep,rng:-(rng):sstep]
+        # img_center__ = img[rng:-(rng):rng+1,rng:-(rng):rng+1] # skip version 
         
         
         for i in range(total_shift_direction):
-           
+
             # get images in shifted direction    
             if (x<=0 and y<=0) :
                 if y == -rng:    
@@ -87,6 +88,8 @@ def shift_img(img,rng):
 
 
 def comp_r_rng(dert__, ave, root_fia, rng, mask__=None):
+    
+    print('rng = '+str(rng))
     '''
     Cross-comparison of input param (dert[0]) over rng passed from intra_blob.
     This fork is selective for blobs with below-average gradient,
@@ -132,9 +135,9 @@ def comp_r_rng(dert__, ave, root_fia, rng, mask__=None):
         m__ = np.zeros_like(dy__)
 
     else:  # root fork is comp_r, accumulate derivatives:
-        dy__ = dert__[1][rng:-(rng):rng+1, rng:-(rng):rng+1].copy()  # sparse to align with i__center
-        dx__ = dert__[2][rng:-(rng):rng+1, rng:-(rng):rng+1].copy()
-        m__  = dert__[4][rng:-(rng):rng+1, rng:-(rng):rng+1].copy()
+        dy__ = dert__[1][rng:-(rng):1, rng:-(rng):1].copy()  # sparse to align with i__center
+        dx__ = dert__[2][rng:-(rng):1, rng:-(rng):1].copy()
+        m__  = dert__[4][rng:-(rng):1, rng:-(rng):1].copy()
 
     # compare diametrically opposed pairs of rim pixels:
 
