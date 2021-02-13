@@ -96,7 +96,7 @@ def comp_slice_(stack_, _P):
             DdX = 0  # accumulate across stacks?
 
             dert_Py_ = []
-            if not _P: # stack is from blob.stack_
+            if not _P:  # stack is from blob.stack_
                 _P = stack.Py_.pop()
                 dert_Py_.append(Cdert_P(Pi=_P))  # _P only, no derivatives in 1st dert_P
 
@@ -205,8 +205,7 @@ def stack_2_PP_(stack_, PP_):
             for dert_P in stack.Py_[1:]:
                 if (_dert_P.Pm > 0) != (dert_P.Pm > 0):
                     accum_PP(stack, sstack, PP); PP_.append(PP)  # terminate sstack and PP
-                    sstack = CSstack(dert_Pi=Cdert_P()); PP = CPP(sstacki=CSstack(dert_Pi=Cdert_P()))
-                    # init sstack and PP
+                    sstack = CSstack(dert_Pi=Cdert_P()); PP = CPP(sstacki=CSstack(dert_Pi=Cdert_P()))  # init sstack and PP
                 accum_sstack(sstack, dert_P)  # regardless of termination
                 _dert_P = dert_P
 
@@ -219,36 +218,31 @@ def upconnect_2_PP_(stack_, PP_, iPP, isstack, _dert_P):  # terminate, initializ
 
     # in the blob, cluster all connected dert_Ps of same-sign mP into PPs
     upconnect_= []
-    isstack.PP = iPP # update PP object reference of isstack
+    isstack.PP = iPP  # update reference
 
     for i, stack in enumerate(stack_):  # breadth-first, upconnect_ is not reversed
         dert_P = stack.Py_[0]
-        # upconnect with same sign
-        if (_dert_P.Pm > 0) == (dert_P.Pm > 0):
+        if (_dert_P.Pm > 0) == (dert_P.Pm > 0):  # upconnect has same sign
             upconnect_.append(stack_.pop(i))  # separate stack_ into sign-connected stacks: upconnect_, and unconnected stacks: popped stack_
 
     if len(upconnect_) == 1:  # 1 same-sign upconnect per PP
-
-        if not upconnect_[0].sstack_: # sstack_ will having element of sstack only if PP s terminated 
+        if not upconnect_[0].sstack_:  # sstack_ is empty until stack is scanned over
             accum_sstack(isstack, _dert_P)  # accumulate the input _dert_P
             PP = iPP  # no difference in single stack
 
             for dert_P in upconnect_[0].Py_:
                 if (_dert_P.Pm > 0) != (dert_P.Pm > 0):
-                    isstack.upconnect_cnt += 1 # increase upconnect count when terminated in upconnect section
                     accum_PP(upconnect_[0], isstack, PP)
                     PP_.append(PP)  # terminate sstack and PP
-                    isstack = CSstack(dert_Pi=Cdert_P(), downconnect_cnt=1)  # init empty sstack (downconnect start with 1 in upconnect loop), then accum_sstack
+                    isstack = CSstack(dert_Pi=Cdert_P())  # init empty sstack, then accum_sstack
                     PP = CPP(sstacki=CSstack(dert_Pi=Cdert_P()))
                     isstack.PP = PP
-
+                # else isstack is not terminated, no need to update connects
                 accum_sstack(isstack, dert_P)  # regardless of termination
                 _dert_P = dert_P
-
-        # merge contacted PPs
         else:
-            merge_PP(upconnect_[0].sstack_[0].PP, iPP, PP_)
-            
+            merge_PP(upconnect_[0].sstack_[0].PP, iPP, PP_)  # merge connected PPs
+
     elif upconnect_:  # >1 same-sign upconnects per PP
         idert_P = _dert_P     # downconnected dert_P
         curr_upconnect_cnt = len(upconnect_)
@@ -258,34 +252,47 @@ def upconnect_2_PP_(stack_, PP_, iPP, isstack, _dert_P):  # terminate, initializ
             sstack = isstack  # downconnected sstack
             PP = iPP  # then redefined per stack
             _dert_P = idert_P
-            
+            ffirst = 1  # first upconnect, with PP that other PPs are merged into
+
             if not upconnect.sstack_:
                 for dert_P in upconnect.Py_:
                     if (_dert_P.Pm > 0) != (dert_P.Pm > 0):
-                        sstack.upconnect_cnt += 1 # increase upconnect count when terminated in upconnect section
                         accum_PP(upconnect, sstack, PP)  # term. sstack
-                        if (PP is iPP) and (curr_upconnect_cnt-1 == 0):  # separate iPP termination test
+                        if PP is iPP:  # separate iPP termination test
                             curr_upconnect_cnt -= 1
-                            PP_.append(PP)
+                            if curr_upconnect_cnt == 0:
+                                PP_.append(PP)
                         else:  # terminate stack-local PP
                             PP_.append(PP)
                         # init PP regardless of iPP:
-                        sstack = CSstack(dert_Pi=Cdert_P(), downconnect_cnt=1)  # init empty
+                        sstack = CSstack(dert_Pi=Cdert_P())  # init empty
                         PP = CPP(sstacki=CSstack(dert_Pi=Cdert_P()))  # we don't know if PP will fork at stack term
                         sstack.PP = PP
 
+                    else:  # not sure, this needs to be checked
+                        sstack = CSstack(dert_Pi=Cdert_P)  # maybe initialized elsewhere?
+                        isstack.upconnect_.append(sstack)
+                        sstack.downconnect_cnt += 1
+
                     accum_sstack(sstack, dert_P)  # regardless of termination
                     _dert_P = dert_P
-                    
+
                 upconnect_2_PP_(upconnect.upconnect_, PP_, PP, sstack, _dert_P)
 
-            else:
-                merge_PP(upconnect.sstack_[0].PP , iPP, PP_)
+            else:  # need to review this: upconnect was scanned before, assigned to PP, merge iPP into it
+                if ffirst:
+                    up_sstack_ = upconnect_[0].sstack_
+                    sstack = isstack
+                else:
+                    up_sstack_ = upconnect.sstack_
+
+                if (up_sstack_[0].PP is not isstack.PP):  # this maybe redundant
+                    merge_PP(upconnect.up_sstack_[0].PP, iPP, PP_)
 
     else:  # 0 same-sign upconnects per PP:
         accum_PP([], isstack, iPP)  # accumulate sstack into PP
         PP_.append(iPP)
-        
+
 
     stack_2_PP_(stack_, PP_)  # stack_ now contains only stacks unconnected to isstack
 
