@@ -12,7 +12,7 @@ import numpy as np
 
 # -----------------------------------------------------------------------------
 # Input:
-IMAGE_PATH = "./images/toucan.jpg"
+IMAGE_PATH = "./images/raccoon.jpg"
 # Outputs:
 OUTPUT_PATH = "./images/intra_comp0/"
 
@@ -179,13 +179,27 @@ def comp_r_rng(dert__, ave, root_fia, rng, mask__=None):
     for i__directional in i__directional_:
         m__dif.append(abs(i__center - i__directional))
         
+    # compute m
     m__ += int(ave * 1.41) - sum(m__dif)
     m__abs += sum(m__dif)
     
-    gratio = 2/len(i__directional_) 
+    # g multiplcation ratio in computing e__
+    gratio = (2/len(i__directional_) ) * 3
     
+    # e = m - (g_ratio * g)
     e__ = m__abs - (gratio*g__abs)
     
+    # invert to enable dark contour and bright edges
+    m__ = np.max(m__) - m__
+    
+    # scale negative values to positive
+    if np.min(g__)<0:
+        g__ += abs(np.min(g__))
+        
+    # scale negative values to positive
+    if np.min(e__)<0:
+        e__ += abs(np.min(e__))
+        
     return (i__center, dy__, dx__, g__, m__, e__), majority_mask__
 
 
@@ -302,43 +316,43 @@ if __name__ == "__main__":
     
     cv2.imwrite(arguments.output + 'rng1_gr.jpg',  gr_1)
     cv2.imwrite(arguments.output + 'rng1_mr.jpg',  mr_1)
-    cv2.imwrite(arguments.output + 'rgn1_e.jpg',  e_1)
+    cv2.imwrite(arguments.output + 'rng1_e.jpg',  e_1)
     
     cv2.imwrite(arguments.output + 'rng2_gr.jpg',  gr_2)
     cv2.imwrite(arguments.output + 'rng2_mr.jpg',  mr_2)
-    cv2.imwrite(arguments.output + 'rgn2_e.jpg',  e_2)
+    cv2.imwrite(arguments.output + 'rng2_e.jpg',  e_2)
     
     cv2.imwrite(arguments.output + 'rng3_gr.jpg',  gr_3)
     cv2.imwrite(arguments.output + 'rng3_mr.jpg',  mr_3)
-    cv2.imwrite(arguments.output + 'rgn3_e.jpg',  e_3)
+    cv2.imwrite(arguments.output + 'rng3_e.jpg',  e_3)
     
     cv2.imwrite(arguments.output + 'rng4_gr.jpg',  gr_4)
     cv2.imwrite(arguments.output + 'rng4_mr.jpg',  mr_4)
-    cv2.imwrite(arguments.output + 'rgn4_e.jpg',  e_4)
+    cv2.imwrite(arguments.output + 'rng4_e.jpg',  e_4)
     
     cv2.imwrite(arguments.output + 'rng5_gr.jpg',  gr_5)
     cv2.imwrite(arguments.output + 'rng5_mr.jpg',  mr_5)
-    cv2.imwrite(arguments.output + 'rgn5_e.jpg',  e_5)
+    cv2.imwrite(arguments.output + 'rng5_e.jpg',  e_5)
     
     cv2.imwrite(arguments.output + 'rng6_gr.jpg',  gr_6)
     cv2.imwrite(arguments.output + 'rng6_mr.jpg',  mr_6)
-    cv2.imwrite(arguments.output + 'rgn6_e.jpg',  e_6)
+    cv2.imwrite(arguments.output + 'rng6_e.jpg',  e_6)
     
     cv2.imwrite(arguments.output + 'rng7_gr.jpg',  gr_7)
     cv2.imwrite(arguments.output + 'rng7_mr.jpg',  mr_7)
-    cv2.imwrite(arguments.output + 'rgn7_e.jpg',  e_7)
+    cv2.imwrite(arguments.output + 'rng7_e.jpg',  e_7)
     
     cv2.imwrite(arguments.output + 'rng8_gr.jpg',  gr_8)
     cv2.imwrite(arguments.output + 'rng8_mr.jpg',  mr_8)
-    cv2.imwrite(arguments.output + 'rgn8_e.jpg',  e_8)
+    cv2.imwrite(arguments.output + 'rng8_e.jpg',  e_8)
     
     cv2.imwrite(arguments.output + 'rng9_gr.jpg',  gr_9)
     cv2.imwrite(arguments.output + 'rng9_mr.jpg',  mr_9)
-    cv2.imwrite(arguments.output + 'rgn9_e.jpg',  e_9)
+    cv2.imwrite(arguments.output + 'rng9_e.jpg',  e_9)
     
     cv2.imwrite(arguments.output + 'rng10_gr.jpg',  gr_10)
     cv2.imwrite(arguments.output + 'rng10_mr.jpg',  mr_10)
-    cv2.imwrite(arguments.output + 'rgn10_e.jpg',  e_10)
+    cv2.imwrite(arguments.output + 'rng10_e.jpg',  e_10)
 
     print('Done...')
 
