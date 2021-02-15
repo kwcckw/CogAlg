@@ -61,6 +61,7 @@ class CPP(ClusterStructure):
     sstacki = object
     # between PPs:
     upconnect_ = list
+    tent_upconnect_cnt = int # tentative upconnect count before getting the confirmed upconnect
     downconnect_cnt = int
     fPPm = NoneType  # PPm if 1, else PPd; not needed if packed in PP_?
     fdiv = NoneType
@@ -198,16 +199,20 @@ def stack_2_PP_(stack_, PP_):
         if stack.downconnect_cnt == 0:  # root stacks were not checked, upconnects always are
             _dert_P = stack.Py_[0]
             sstack = CSstack(dert_Pi=_dert_P, Py_=[_dert_P])  # sstack: secondary stack, dert_P sigh-confirmed
-            PP = CPP(sstacki=CSstack(dert_Pi=Cdert_P()))
+            _dert_P.sstack = sstack
+            PP = CPP(sstacki=sstack,sstack_=[sstack])
             sstack.PP = PP  # initialize upward reference
 
             for dert_P in stack.Py_[1:]:
                 if (_dert_P.Pm > 0) != (dert_P.Pm > 0):
-                    accum_PP(stack, sstack, PP); PP_.append(PP)  # terminate sstack and PP
-                    sstack = CSstack(dert_Pi=Cdert_P()); PP = CPP(sstacki=CSstack(dert_Pi=Cdert_P()))  # init sstack and PP
+                    stack.sstack_.append(sstack)
+                    stack.PP = PP
+                    # accum_PP(stack, sstack, PP);  # accum_PP may not needed, since we always initialize new PP and sstack together
+                    PP_.append(PP)  # terminate sstack and PP
+                    sstack = CSstack(dert_Pi=Cdert_P()) # init sstack 
+                    PP = CPP(sstacki=sstack,sstack_=[sstack])  # init PP with the initialized sstack
                     sstack.PP = PP
-                    PP.sstack_[0] = sstack  # add setitem to CPP?
-
+                    
                 accum_sstack(sstack, dert_P)  # regardless of termination
                 _dert_P = dert_P
 
@@ -218,17 +223,26 @@ def stack_2_PP_(stack_, PP_):
 
 def upconnect_2_PP_(stack_, PP_, iPP):  # terminate, initialize, increment PPs
 
+    # reduce upconnect count if iPP is called from prior functions, because the upconnect is already reached this section
+    if iPP.tent_upconnect_cnt>0:
+        iPP.tent_upconnect_cnt -= 1
     # in the blob, cluster all connected dert_Ps of same-sign mP into PPs
     upconnect_= []
-    isstack = iPP.sstack[-1]
-    _dert_P = isstack.Py[-1]
-    isstack.PP = iPP  # update reference; do it at initialization?
+    
+    isstack = iPP.sstack_[-1]
+    _dert_P = isstack.Py_[-1]
+    # isstack.PP = iPP  # update reference; do it at initialization? # this should be already done in line 214
 
 
     for i, stack in enumerate(stack_):  # breadth-first, upconnect_ is not reversed
         dert_P = stack.Py_[0]
         if (_dert_P.Pm > 0) == (dert_P.Pm > 0):  # upconnect has same sign
             upconnect_.append(stack_.pop(i))  # separate stack_ into sign-connected stacks: upconnect_, and unconnected stacks: popped stack_
+        
+    # upconnect count should be a param in PP so that we can track them across different function calls
+    # iPP initial upconnect count may not be zero here so we need add them instead of reassign them
+    # this is because they may still having non-terminated upconnect in other loop
+    iPP.tent_upconnect_cnt += len(upconnect_)
 
     if len(upconnect_) == 1:  # 1 same-sign upconnect per PP
         if not upconnect_[0].sstack_:  # sstack_ is empty until stack is scanned over
@@ -237,26 +251,31 @@ def upconnect_2_PP_(stack_, PP_, iPP):  # terminate, initialize, increment PPs
 
             for dert_P in upconnect_[0].Py_:
                 if (_dert_P.Pm > 0) != (dert_P.Pm > 0):
-                    accum_PP(upconnect_[0], isstack, PP)
-                    PP_.append(PP)  # terminate sstack and PP
+                    # accum_PP(upconnect_[0], isstack, PP)
+                    upconnect_[0].sstack_.append(isstack)
+                    upconnect_[0].PP = PP
+                    PP.tent_upconnect_cnt -= 1
+                    if PP.tent_upconnect_cnt == 0: 
+                        PP_.append(PP)  # terminate sstack and PP
                     isstack = CSstack(dert_Pi=Cdert_P())  # init empty sstack, then accum_sstack
-                    PP = CPP(sstacki=CSstack(dert_Pi=Cdert_P()))
+                    PP = CPP(sstacki=isstack, sstack_=[isstack])
                     isstack.PP = PP
-                    PP.sstack_[0] = isstack  # add setitem to CPP?
 
                 # else isstack is not terminated: only one upconnect, no need to update connects
                 accum_sstack(isstack, dert_P)  # regardless of termination
                 _dert_P = dert_P
 
-                upconnect_2_PP_(upconnect_[0].upconnect_, PP_, PP)
+            upconnect_2_PP_(upconnect_[0].upconnect_, PP_, PP)
         else:
             merge_PP(iPP, upconnect_[0].sstack_[0].PP, PP_)  # merge connected PPs
+            iPP.tent_upconnect_cnt -= 1
+            if iPP.tent_upconnect_cnt <= 0:
+                PP_.append(iPP)
 
     elif upconnect_:  # >1 same-sign upconnects per PP
 
         idert_P = _dert_P  # downconnected dert_P
-        curr_upconnect_cnt = len(upconnect_)
-        accum_sstack(isstack, idert_P)  # accumulate the input _dert_P
+        # accum_sstack(isstack, idert_P)  # accumulate the input _dert_P not needed now, since _dert_P = isstack.Py[-1]
         confirmed_upconnect_ = []  # same dert_P sign
 
         for upconnect in upconnect_:  # form PPs across stacks
@@ -268,46 +287,53 @@ def upconnect_2_PP_(stack_, PP_, iPP):  # terminate, initialize, increment PPs
             if not upconnect.sstack_:
                 for dert_P in upconnect.Py_:
                     if (_dert_P.Pm > 0) != (dert_P.Pm > 0):
-                        accum_PP(upconnect, sstack, PP)  # term. sstack
+                        # accum_PP(upconnect, sstack, PP)  # term. sstack
+                        upconnect.sstack_.append(sstack)
+                        upconnect.PP = PP
                         # separate iPP termination test
                         if PP is iPP:
-                            curr_upconnect_cnt -= 1
-                            if curr_upconnect_cnt == 0:
+                            PP.tent_upconnect_cnt -= 1
+                            if PP.tent_upconnect_cnt == 0:
                                 PP_.append(PP)
                         else:  # terminate stack-local PP
                             PP_.append(PP)
                         sstack = CSstack(dert_Pi=Cdert_P())  # init empty PP, regardless of iPP termination
-                        PP = CPP(sstacki=CSstack(dert_Pi=Cdert_P()))  # we don't know if PP will fork at stack term
+                        PP = CPP(sstacki=sstack,sstack_=[sstack])  # we don't know if PP will fork at stack term
                         sstack.PP = PP
-                        PP.sstack_[0] = isstack  # add setitem to CPP?
 
                     accum_sstack(sstack, dert_P)  # regardless of termination
                     if (PP is iPP) and ffirst and ((_dert_P.Pm > 0) == (dert_P.Pm > 0)):
                         confirmed_upconnect_.append(dert_P)  # to access dert_P.sstack
                     _dert_P = dert_P
                     ffirst = 0
+                    
                 upconnect_2_PP_(upconnect.upconnect_, PP_, PP)
 
             else:
                 merge_PP(iPP, upconnect.sstack_[0].PP, PP_)
+                iPP.tent_upconnect_cnt -= 1
+                if iPP.tent_upconnect_cnt <= 0:
+                    PP_.append(iPP)
 
         # after all upconnects are checked:
         if confirmed_upconnect_:  # at least one first (_dert_P.Pm > 0) == (dert_P.Pm > 0) in upconnect_
 
             if len(confirmed_upconnect_) == 1:  # sstacks merge:
                 dert_P = confirmed_upconnect_[0]
-                iPP.sstack_ += dert_P.sstack
+                iPP.sstack_.append(dert_P.sstack) # += not suitable here, since dert_P.sstack is an object. += only applicable to list or tuple
             else:
                 for dert_P in confirmed_upconnect_:
                     # iPP is accumulated and isstack is downconnect of new sstack
                     iPP.sstack_[-1].upconnect_.append(dert_P.sstack)
                     dert_P.sstack.downconnect_cnt += 1
 
-    else:  # 0 same-sign upconnects per PP:
-        accum_PP([], isstack, iPP)  # accumulate sstack into PP
-        PP_.append(iPP)
-
-
+    else:
+        iPP.tent_upconnect_cnt -= 1 # reduce upconnect count at the end of upconnect
+        # tentative upconnect count may <0, due to it is initialized with 0, and <0 means it should be get terminated
+        if iPP.tent_upconnect_cnt <= 0:  # 0 same-sign upconnects per PP: 
+            PP_.append(iPP)
+        # accum_PP([], isstack, iPP)  # accumulate sstack into PP
+        
     stack_2_PP_(stack_, PP_)  # stack_ now contains only stacks unconnected to isstack
 
 
