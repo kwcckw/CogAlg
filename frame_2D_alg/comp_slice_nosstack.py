@@ -54,6 +54,9 @@ class Cdert_P(ClusterStructure):
     dMg = int
     upconnect_ = list
     downconnect_cnt = int
+    # stack and PP object reference
+    stack = object 
+    PP = object
 
 class CPP(ClusterStructure):
 
@@ -64,6 +67,7 @@ class CPP(ClusterStructure):
     # between PPs:
     upconnect_ = list
     downconnect_cnt = int
+    upconnect_cnt = int
 
 
 def comp_slice_(stack_, _P):
@@ -80,21 +84,25 @@ def comp_slice_(stack_, _P):
 
             if not _P:  # stack is from blob.stack_
                 _P = stack.Py_.pop()
-                dert_P_.append(Cdert_P(Pi=_P, downconnect_cnt = downconnect_cnt))
+                # 1st dert_P will not run through comp_slice
+                dert_P_.append(Cdert_P(Pi=_P, downconnect_cnt = downconnect_cnt, stack = stack))
                 # assign stack.downconnect_cnt to dert_P.downconnect_cnt, no derivatives in 1st dert_P
 
             for P in reversed(stack.Py_):
                 dert_P = comp_slice(P, _P, DdX)  # ortho and other conditional operations are evaluated per PP
                 dert_P.downconnect_cnt = downconnect_cnt
-                dert_P_[-1].upconnect_ = dert_P  # next
+                if dert_P_:
+                    dert_P_[-1].upconnect_.append(dert_P)  # next
                 dert_P_.append(dert_P)  # dert_P is converted to Cdert_P in comp_slice
                 _P = P
                 downconnect_cnt = 1  # always 1 inside Py_
 
-            dert_P_[-1].upconnect_ = stack.upconnect_
+#            dert_P_[-1].upconnect_ = stack.upconnect_
 
             if stack.upconnect_:
-                comp_slice_(stack.upconnect_, _P)  # recursive compare _P to all upconnected Ps
+                dert_P_ += comp_slice_(stack.upconnect_, _P)  # recursive compare _P to all upconnected Ps
+                
+    return dert_P_
 
 
 def comp_slice(P, _P, DdX):  # forms vertical derivatives of P params, and conditional ders from norm and DIV comp
@@ -149,25 +157,76 @@ def comp_slice(P, _P, DdX):  # forms vertical derivatives of P params, and condi
     return dert_P
 
 
-def dert_P_2_PP_(dert_P_, PP_):
+def accum_PP(PP, dert_P):  # accumulate PP
+
+    # accumulate sstack params into PP
+    PP.dert_Pi.accumulate(Pm=dert_P.Pm, Pd=dert_P.Pd, mx=dert_P.mx, dx=dert_P.dx,
+                          mL=dert_P.mL, dL=dert_P.dL, mDx=dert_P.mDx, dDx=dert_P.dDx,
+                          mDy=dert_P.mDy, dDy=dert_P.dDy, mDg=dert_P.mDg, dDg=dert_P.dDg,
+                          mMg=dert_P.mMg, dMg=dert_P.dMg)
+
+def dert_P_2_PP_(dert_P_, PP, PP_):
     '''
     just a draft,
     first row of dert_P_ has downconnect_cnt == 0, higher rows may also have them
     '''
-    for i, dert_P in enumerate(dert_P_):  # bottom-up to follow upconnects
+    
+    if not PP: # from dert_P_
+        
+        re_init = 0
+        _dert_P = dert_P_[0]
+        PP = CPP(dert_Pi=_dert_P, dert_P_= [_dert_P])
+        
+        for i, dert_P in enumerate(dert_P_):  # bottom-up to follow upconnects
+            if dert_P.downconnect_cnt == 0:  # root dert_Ps were not checked, upconnects always checked
+                # i think the section below is not necessary , since each dert_P with downconnect_cnt == 0 should start 1 new PP
+                # unless those PP should be connected as well
+                
+                if re_init:
+                    PP = CPP(dert_Pi=dert_P, dert_P_= [dert_P])
+                
+                elif (_dert_P.Pm > 0) != (dert_P.Pm > 0): # check for sin change only if both prior and current dert_P are base dert_P
+                    PP_.append(PP)
+                    PP = CPP(dert_Pi=Cdert_P(), dert_P_= [dert_P])
+                    dert_P.PP = PP
+                    accum_PP(PP, dert_P)  # regardless of termination
+                    
+                _dert_P = dert_P
+                dert_P_2_PP_(dert_P.upconnect_, PP, PP_ )  # form PPs across upconnects
+            else:
+                re_init = 1 # reinitialize PP if prior dert_P is base dert_P, while current one is not
 
-        if dert_P.downconnect_cnt == 0:  # root dert_Ps were not checked, upconnects always checked
-            PP = CPP(dert_P_= [dert_P])
-            dert_P.PP = PP
-            _dert_P = dert_P
+    else: # from recursive loop  
 
-            if (_dert_P.Pm > 0) != (dert_P.Pm > 0):
-                PP = CPP(dert_P_= [dert_P])
-                dert_P.PP = PP
-            accum_PP(PP, dert_P)  # regardless of termination
-            _dert_P = dert_P
+        if PP.upconnect_cnt: PP.upconnect_cnt -= 1 
+            
+        upconnect_ = []
+        if dert_P_: # there is upconnects and PP from prior function
+            _dert_P = PP.dert_P_[-1]
+            for i, dert_P in enumerate(dert_P_):
+                if (_dert_P.Pm > 0) != (dert_P.Pm > 0):
+                    PP.upconnect_.append(dert_P_.pop(i))
 
-            upconnect_2_PP_(dert_P.upconnect_, PP_, PP)  # form PPs across upconnects
+        PP.upconnect_cnt += len(upconnect_) 
+        
+        if len(PP.upconnect_)>0: # if there is any upconnect for current PP
 
-    return PP_
+            _dert_P = PP.dert_P_[-1]
+            for i, dert_P in enumerate(upconnect_):  # bottom-up to follow upconnects
+                if not isinstance(dert_P.PP, CPP):  # checked dert_P should have PP object instance
+                    if (_dert_P.Pm > 0) != (dert_P.Pm > 0): 
+                        PP = CPP(dert_Pi=Cdert_P(), dert_P_= [dert_P])
+                        dert_P.PP = PP
+                        
+                    accum_PP(PP, dert_P)  # regardless of termination
+                    dert_P_2_PP_(dert_P.upconnect_, PP, PP_ )  # form PPs across upconnects
+        
+        else: # terminate PP when upconnect = 0, should be at the end of the upconnect
+            if PP.upconnect_cnt == 0:
+                PP_.append(PP)
+
+        # form PP again with the non upconnect's dert_Ps
+        for dert_P in dert_P_: 
+            PP = CPP(dert_Pi=Cdert_P(), dert_P_= [dert_P]) # form new PP for new non upconnect's dert_Ps
+            dert_P_2_PP_(dert_P.upconnect_, PP, PP_)
 
