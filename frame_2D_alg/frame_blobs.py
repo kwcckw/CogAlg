@@ -100,6 +100,8 @@ class CBlob(ClusterStructure):
     adj_blobs = list  # for borrowing
     stack_ = list  # sliced_blob if not empty
 
+    # PP
+    PP_ = list
 
 def comp_pixel(image):  # 2x2 pixel cross-correlation within image, a standard edge detection operator
     # see comp_pixel_versions file for other versions and more explanation
