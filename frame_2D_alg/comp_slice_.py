@@ -67,8 +67,6 @@ class CPP(ClusterStructure):
     # between PPs:
     upconnect_ = list
     downconnect_cnt = int
-    upconnect_cnt = int
-
 
 def comp_slice_(stack_, _P):
     '''
@@ -165,11 +163,13 @@ def accum_PP(PP, derP):
 
 def merge_PP(_PP, PP, PP_):  # merge PP into _PP
 
-    _PP.derP_.extend(PP.derP_)
-    _PP.dert_Pi.accumulate(Pm=PP.dert_Pi.Pm, Pd=PP.dert_Pi.Pd, mx=PP.dert_Pi.mx, dx=PP.dert_Pi.dx,
-                           mL=PP.dert_Pi.mL, dL=PP.dert_Pi.dL, mDx=PP.dert_Pi.mDx, dDx=PP.dert_Pi.dDx,
-                           mDy=PP.dert_Pi.mDy, dDy=PP.dert_Pi.dDy, mDg=PP.dert_Pi.mDg,
-                           dDg=PP.dert_Pi.dDg, mMg=PP.dert_Pi.mMg, dMg=PP.dert_Pi.dMg)
+    _PP.derP_ += PP.derP_
+    _PP.derPi.accumulate(Pm=PP.derPi.Pm, Pd=PP.derPi.Pd, mx=PP.derPi.mx, dx=PP.derPi.dx,
+                         mL=PP.derPi.mL, dL=PP.derPi.dL, mDx=PP.derPi.mDx, dDx=PP.derPi.dDx,
+                         mDy=PP.derPi.mDy, dDy=PP.derPi.dDy, mDg=PP.derPi.mDg,
+                         dDg=PP.derPi.dDg, mMg=PP.derPi.mMg, dMg=PP.derPi.dMg)
+
+    _PP.upconnect_ += PP.upconnect_ # merge upconnects
 
     for derP in PP.derP_: # update PP reference
         derP.PP = _PP
@@ -198,57 +198,32 @@ def upconnect_2_PP_(iderP, PP_):
     '''
     # if _derP.upconnect_cnt: _derP.upconnect_cnt -= 1  # remaining upconnects
     # this is done by: PP.upconnect_cnt += len(confirmed_upconnect_)
-    # or not needed at all: each prior upconnect_ is followed until termination?
+    # or not needed at all: each prior upconnect_ is followed until termination? 
+    # ( Looks like this is the case (followed until the end), i checked and all derP is having only 1 upconnect, and forking should be already resolved by merging of PP)
 
-    confirmed_upconnect_ = []
-    for derP in iderP.upconnect_:  # upconnects from previous call
+    if not iderP.upconnect_:  # end of continuous chain of derP
+        PP_.append(iderP.PP)  # PP termination;  upconnects are called from derP, not PP
 
-        if (iderP.Pm > 0) == (derP.Pm > 0):
-            if derP.PP and (derP.PP is not iderP.PP):
-                # if derP.PP may be sufficient: checked derP.PP must be different from iderP.PP?
+    else:
+        # all iderP is having only 1 upconnect
+        derP = iderP.upconnect_[0] # derP is potential upconnect of iderP
+    
+        if (iderP.Pm > 0) == (derP.Pm > 0): # no sign change, accumulate params
+            if isinstance(derP.PP,CPP) and (derP.PP is not iderP.PP):
+                 # if derP.PP may be sufficient: checked derP.PP must be different from iderP.PP? 
+                 # From my checking, the answer is no, because if upconnect's PP (derP.PP) exists, they might be merged to other PP, and that 'other PP' might be the current iderP.PP
                 merge_PP(iderP.PP, derP.PP, PP_)
             else:
                 derP.PP = iderP.PP
-            confirmed_upconnect_.append(derP)
             accum_PP(iderP.PP, derP)
-        else:
-            # unconfirmed: derP is root derP
-            derP.downconnect_cnt = 0
+            
+        else: # sign changed, derP is root derP now
+            iderP.upconnect_.pop() # remove the non upconnect's derP
+            derP.downconnect_cnt = 0 # root derP is having - downconnect_cnt
             derP.PP = CPP(derPi=derP, derP_=[derP])  # init
+            derP_2_PP_(derP.upconnect_, PP_) # check derP's upconnect again
+    
+        # if derP.upconnect_:  # need to make it conditional, else an infinite loop? (no need for the condition, 0 upconnect will be terminated in next function call)
+        upconnect_2_PP_(derP, PP_)  # form PPs across dertP upconnects
 
-        if derP.upconnect_:  # need to make it conditional, else an infinite loop?
-            upconnect_2_PP_(derP, PP_)  # form PPs across dertP upconnects
-
-    iderP.upconnect_ = confirmed_upconnect_
-    iderP.PP.upconnect_cnt += len(confirmed_upconnect_)
-    # PP.upconnect_cnt should not be needed: each prior upconnect_ is followed until termination,
-    # so initial upconnect_cnt per upconnect is always 0?
-
-    if iderP.PP.upconnect_cnt == 0:  # if above, replace with if not confirmed_upconnect_:
-        PP_.append(iderP.PP)  # PP termination;  upconnects are called from derP, not PP
-
-'''
-    if len(PP.upconnect_) > 0:
-        _derP = PP.derP_[-1]
-
-        for i, derP in enumerate(upconnect_):  # bottom-up to follow upconnects
-            if not isinstance(derP.PP, CPP):  # checked derP should have PP object instance
-                if (_derP.Pm > 0) != (derP.Pm > 0):
-                    PP = CPP(derPi=CderP(), derP_= [derP])
-                    derP.PP = PP
-
-                accum_PP(PP, derP)  # regardless of termination
-                derP_2_PP_(derP.upconnect_, PP, PP_ )  # form PPs across upconnects
-
-            elif derP.PP is not PP: # if there is PP in derP and they are not the same PP, merge them
-                merge_PP(PP, derP.PP, PP_)
-
-                PP.upconnect_cnt -= 1 # reduce upconnect count and check termination, because this section will not call the recursvie function to further check on upconnect
-                if PP.upconnect_cnt == 0: PP_.append(PP)
-
-    # terminate PP when upconnect = 0, should be at the end of the upconnect
-    elif PP.upconnect_cnt == 0: PP_.append(PP)
-
-    # form PP again with the non upconnect's derPs
-    derP_2_PP_(derP_, PP_)
-'''
+    # upconnect_cnt is not needed now
