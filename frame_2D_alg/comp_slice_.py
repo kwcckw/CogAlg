@@ -187,8 +187,10 @@ def derP_2_PP_(derP_, PP_):
         if derP.downconnect_cnt == 0:  # root derP
             PP = CPP(derPi=derP, derP_= [derP])  # init
             derP.PP = PP
-            upconnect_2_PP_(derP, PP_)  # form PPs across dertP upconnects
-
+            if derP.upconnect_:
+                upconnect_2_PP_(derP, PP_)  # form PPs across dertP upconnects
+            else:
+                PP_.append(derP.PP)
     return PP_
 
 
@@ -196,34 +198,25 @@ def upconnect_2_PP_(iderP, PP_):
     '''
     check derPs' upconnects to form continuous same-sign PPs
     '''
-    # if _derP.upconnect_cnt: _derP.upconnect_cnt -= 1  # remaining upconnects
-    # this is done by: PP.upconnect_cnt += len(confirmed_upconnect_)
-    # or not needed at all: each prior upconnect_ is followed until termination? 
-    # ( Looks like this is the case (followed until the end), i checked and all derP is having only 1 upconnect, and forking should be already resolved by merging of PP)
+    # all iderP is having only 1 upconnect
+    derP = iderP.upconnect_[0] # derP is potential upconnect of iderP
 
-    if not iderP.upconnect_:  # end of continuous chain of derP
-        PP_.append(iderP.PP)  # PP termination;  upconnects are called from derP, not PP
-
+    if (iderP.Pm > 0) == (derP.Pm > 0): # no sign change, accumulate params
+        if isinstance(derP.PP,CPP) and (derP.PP is not iderP.PP):
+            merge_PP(iderP.PP, derP.PP, PP_)
+        else:
+            derP.PP = iderP.PP
+        accum_PP(iderP.PP, derP)
+        
+    else: # sign changed, derP is root derP now
+        PP_.append(iderP.PP) # terminate downconnect PP
+        iderP.upconnect_.pop() # remove the non upconnect's derP
+        derP.downconnect_cnt = 0 # root derP is having - downconnect_cnt
+        derP.PP = CPP(derPi=derP, derP_=[derP])  # init
+    
+    if derP.upconnect_:
+        upconnect_2_PP_(derP, PP_) # check derP's upconnect again
     else:
-        # all iderP is having only 1 upconnect
-        derP = iderP.upconnect_[0] # derP is potential upconnect of iderP
-    
-        if (iderP.Pm > 0) == (derP.Pm > 0): # no sign change, accumulate params
-            if isinstance(derP.PP,CPP) and (derP.PP is not iderP.PP):
-                 # if derP.PP may be sufficient: checked derP.PP must be different from iderP.PP? 
-                 # From my checking, the answer is no, because if upconnect's PP (derP.PP) exists, they might be merged to other PP, and that 'other PP' might be the current iderP.PP
-                merge_PP(iderP.PP, derP.PP, PP_)
-            else:
-                derP.PP = iderP.PP
-            accum_PP(iderP.PP, derP)
-            
-        else: # sign changed, derP is root derP now
-            iderP.upconnect_.pop() # remove the non upconnect's derP
-            derP.downconnect_cnt = 0 # root derP is having - downconnect_cnt
-            derP.PP = CPP(derPi=derP, derP_=[derP])  # init
-            derP_2_PP_(derP.upconnect_, PP_) # check derP's upconnect again
-    
-        # if derP.upconnect_:  # need to make it conditional, else an infinite loop? (no need for the condition, 0 upconnect will be terminated in next function call)
-        upconnect_2_PP_(derP, PP_)  # form PPs across dertP upconnects
+        PP_.append(derP.PP)
 
-    # upconnect_cnt is not needed now
+    
