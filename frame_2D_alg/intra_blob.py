@@ -54,7 +54,7 @@ def intra_blob(blob, **kwargs):  # slice_blob or recursive input rng+ | angle cr
         # root fork is comp_a -> slice_blob
         if blob.mask__.shape[0] > 2 and blob.mask__.shape[1] > 2 and False in blob.mask__:  # min size in y and x, at least one dert in dert__
 
-            if blob.G * blob.Ma - AveB > 0:  # vs. G reduced by Ga: * (1 - Ga / (4.45 * A)), max_ga=4.45
+            if -blob.M * blob.Ma - AveB > 0:  # vs. G reduced by Ga: * (1 - Ga / (4.45 * A)), max_ga=4.45
                 blob.f_comp_a = 0
                 blob.prior_forks.extend('p')
                 if kwargs.get('verbose'): print('\nslice_blob fork\n')
