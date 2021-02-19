@@ -68,6 +68,7 @@ class CPP(ClusterStructure):
     upconnect_ = list
     downconnect_cnt = int
 
+
 def comp_slice_(stack_, _P):
     '''
     cross-compare connected Ps of stack_, including Ps of adjacent stacks (upconnects)
@@ -82,25 +83,27 @@ def comp_slice_(stack_, _P):
 
             if not _P:  # stack is from blob.stack_
                 _P = stack.Py_.pop()
-                derP_.append(CderP(Pi=_P, downconnect_cnt = downconnect_cnt, stack = stack))
-                # no derivatives, assign stack.downconnect_cnt to derP.downconnect_cnt
+            _derP = CderP(Pi=_P, downconnect_cnt = downconnect_cnt, stack = stack)
+            derP_.append(_derP)  # no derivatives in 1st derP, assign stack.downconnect_cnt to derP.downconnect_cnt
 
             for P in reversed(stack.Py_):
                 derP = comp_slice(P, _P, DdX)  # ortho and other conditional operations are evaluated per PP
                 derP.downconnect_cnt = downconnect_cnt
-                if derP_:
-                    derP_[-1].upconnect_.append(derP)  # next
+                _derP.upconnect_.append(derP)  # next
                 derP_.append(derP)  # derP is converted to CderP in comp_slice
                 _P = P
+                _derP = derP
                 downconnect_cnt = 1  # always 1 inside Py_
 
+            _derP.upconnect_ = stack.upconnect_
             if stack.upconnect_:
                 derP_ += comp_slice_(stack.upconnect_, _P)  # recursive compare _P to all upconnected Ps
 
     return derP_
 
 '''
-Special value of branching points: at least one angle miss, or that's corner?
+Value of branching points: at least one angle miss, or that's a corner?
+PP across branching has to be 2D, no reduction?
 '''
 
 def comp_slice(P, _P, DdX):  # forms vertical derivatives of P params, and conditional ders from norm and DIV comp
@@ -196,27 +199,29 @@ def derP_2_PP_(derP_, PP_):
 
 def upconnect_2_PP_(iderP, PP_):
     '''
-    check derPs' upconnects to form continuous same-sign PPs
+    compare sign of lower-layer iderP to the sign of its upconnects to form contiguous same-sign PPs
     '''
-    # all iderP is having only 1 upconnect
-    derP = iderP.upconnect_[0] # derP is potential upconnect of iderP
+    confirmed_upconnect_ = []  # easier than popping upconnect_
+    for derP in iderP.upconnect_:  # potential upconnects from previous call
 
-    if (iderP.Pm > 0) == (derP.Pm > 0): # no sign change, accumulate params
-        if isinstance(derP.PP,CPP) and (derP.PP is not iderP.PP):
-            merge_PP(iderP.PP, derP.PP, PP_)
+        if (iderP.Pm > 0) == (derP.Pm > 0):  # no sign change, accumulate PP
+            if isinstance(derP.PP, CPP) and (derP.PP is not iderP.PP):  # different previously assigned derP.PP
+                merge_PP(iderP.PP, derP.PP, PP_)
+            else:
+                derP.PP = iderP.PP
+            accum_PP(iderP.PP, derP)
+            confirmed_upconnect_.append(derP)
+
+        else:  # sign changed, derP became root derP
+            derP.downconnect_cnt = 0  # root derP
+            derP.PP = CPP(derPi=derP, derP_=[derP])  # init
+
+        if derP.upconnect_:
+            upconnect_2_PP_(derP, PP_)  # recursive compare sign of next-layer upconnects
         else:
-            derP.PP = iderP.PP
-        accum_PP(iderP.PP, derP)
-        
-    else: # sign changed, derP is root derP now
-        PP_.append(iderP.PP) # terminate downconnect PP
-        iderP.upconnect_.pop() # remove the non upconnect's derP
-        derP.downconnect_cnt = 0 # root derP is having - downconnect_cnt
-        derP.PP = CPP(derPi=derP, derP_=[derP])  # init
-    
-    if derP.upconnect_:
-        upconnect_2_PP_(derP, PP_) # check derP's upconnect again
-    else:
-        PP_.append(derP.PP)
+            PP_.append(derP.PP)
 
-    
+    iderP.upconnect_ = confirmed_upconnect_
+
+    if not confirmed_upconnect_:
+        PP_.append(iderP.PP)  # iPP termination, only after all upconnects are checked (called from derP, not PP)
