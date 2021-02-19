@@ -59,7 +59,7 @@ def intra_blob(blob, **kwargs):  # slice_blob or recursive input rng+ | angle cr
                 blob.prior_forks.extend('p')
                 if kwargs.get('verbose'): print('\nslice_blob fork\n')
                 slice_blob(blob, verbose)  # adds stack_ to blob
-                derP_ = comp_slice_(blob.stack_, [])  # cross-comp of vertically consecutive Ps in selected stacks
+                derP_ = comp_slice_(blob.stack_, [], [])  # cross-comp of vertically consecutive Ps in selected stacks
                 blob.PP_ = derP_2_PP_(derP_, blob.PP_)
     else:
         # root fork is frame_blobs or comp_r
