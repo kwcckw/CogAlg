@@ -67,8 +67,6 @@ class CPP(ClusterStructure):
     # between PPs:
     upconnect_ = list
     downconnect_cnt = int
-    in_upconnect_cnt = int
-
 
 def comp_slice_(stack_, _derP, _P):
     '''
@@ -208,13 +206,9 @@ def upconnect_2_PP_(iderP, PP_):
     compare sign of lower-layer iderP to the sign of its upconnects to form contiguous same-sign PPs
     '''
     confirmed_upconnect_ = []
-    iderP.PP.in_upconnect_cnt += len(iderP.upconnect_)  # unconfirmed upconnect count
 
     for derP in iderP.upconnect_:  # potential upconnects from previous call
-        iderP.PP.in_upconnect_cnt -= 1  # reduce unconfirmed upconnect count after loop through each derP
-
         if derP not in iderP.PP.derP_:  # derP should not in current iPP derP_ list, but this may occur after the PP merging
-
             if (iderP.Pm > 0) == (derP.Pm > 0):  # no sign change, accumulate PP
                 if isinstance(derP.PP, CPP) and (derP.PP is not iderP.PP):  # different previously assigned derP.PP
                     merge_PP(iderP.PP, derP.PP, PP_)
@@ -229,11 +223,10 @@ def upconnect_2_PP_(iderP, PP_):
 
             if derP.upconnect_:
                 upconnect_2_PP_(derP, PP_)  # recursive compare sign of next-layer upconnects
-            # terminate PP if:
-            elif (derP.PP is not iderP.PP) or (derP.PP is iderP.PP and iderP.PP.in_upconnect_cnt == 0):
-                PP_.append(derP.PP)
+            elif derP.PP is not iderP.PP: # we do not terminate iPP here, only new PP after the sign changed is terminated here
+                PP_.append(derP.PP) # terminate PP
 
     iderP.upconnect_ = confirmed_upconnect_
 
-    if not confirmed_upconnect_ and iderP.PP.in_upconnect_cnt == 0:  # I don't think in_upconnect_cnt is needed
+    if not confirmed_upconnect_ and iderP.downconnect_cnt == 0: # terminate at root derP after 
         PP_.append(iderP.PP)  # iPP termination, only after all upconnects are checked or no more unconfirmed upconnect
