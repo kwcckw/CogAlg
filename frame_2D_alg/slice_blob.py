@@ -29,7 +29,7 @@ from collections import deque
 import sys
 import numpy as np
 from class_cluster import ClusterStructure, NoneType
-#from slice_utils import  check_stacks_presence
+from slice_utils import *
 
 ave = 30  # filter or hyper-parameter, set as a guess, latter adjusted by feedback, not needed here
 aveG = 50  # filter for comp_g, assumed constant direction
@@ -38,7 +38,6 @@ flip_ave = 2000
 # prefix '_' denotes higher-line variable or structure, vs. same-type lower-line variable or structure
 # postfix '_' denotes array name, vs. same-name elements of that array. '__' is a 2D array
 # prefix 'f' denotes flag
-
 
 class CP(ClusterStructure):
     I = int
@@ -59,7 +58,6 @@ class CP(ClusterStructure):
     gdert_ = list
     Dg = int
     Mg = int
-    # downconnects
     downconnect_ = list
 
 class CStack(ClusterStructure):
@@ -88,14 +86,12 @@ class CStack(ClusterStructure):
     f_stackPP = NoneType  # for comp_slice: PPy_ if 1, else gPPy_ or Py_
     downconnect_cnt = int
     upconnect_ = list
-    PP_ = list  
+    stack_PP = object  # replaces f_stackPP?
     stack_ = list  # ultimately all stacks, also replaces fflip: vertical if empty, else horizontal
     f_checked = int  # flag: stack has gone through form_sstack_recursive as upconnect
-    # PP 
-    sstack_ = list 
-    PP = object
 
 # Functions:
+
 def slice_blob(blob, verbose=False):
 
     flip_eval(blob)
