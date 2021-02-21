@@ -19,7 +19,7 @@ import numpy as np
 from matplotlib import pyplot as plt
 import matplotlib
 matplotlib.use('Agg')  # disable visible figure during the processing to speed up the process
-from slice_blob import *
+from slice_blob_stack import *
 
 aveG = 50
 flip_ave = 2000

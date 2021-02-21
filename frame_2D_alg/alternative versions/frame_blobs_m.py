@@ -63,7 +63,7 @@ def image_to_blobs(image):
     stack_ = deque()  # buffer of running vertical stacks of Ps
     height, width = dert__.shape[1:]
 
-    for y in range(height):  # first and last row are discarded
+    for y in range(height-700):  # first and last row are discarded
         print(f'Processing line {y}...')
         P_ = form_P_(dert__[:, y].T)      # horizontal clustering
         P_ = scan_P_(P_, stack_, frame)   # vertical clustering, adds up_forks per P and down_fork_cnt per stack
@@ -303,21 +303,22 @@ if __name__ == '__main__':
     frame = image_to_blobs(image)
     from intra_blob_alone import *
 
-    intra=0
+    intra=1
     if intra:  # Tentative call to intra_blob, omit for testing frame_blobs:
 
         from intra_blob_alone import *
         deep_frame = frame, frame  # initialize deep_frame with root=frame, ini params=frame, initialize deeper params when fetched
 
+
         for blob in frame['blob__']:
             if blob['sign']:
                 if blob['Dert']['G'] > aveB and blob['Dert']['S'] > 20:
-                    intra_blob(blob, rdn=1, rng=0, fig=0, fca=1, fcr=0, fga=0)
+                    intra_blob(blob, rdn=1, rng=0, fig=0, fcr=0)
                     # +G blob' comp_a, form 2x2 aderts = ga, day, dax, -> comp_ga if +Ga, else comp_g if -Ga
 
-            # elif -blob['Dert']['G'] > aveB and blob['Dert']['S'] > 30:
-            #         intra_blob(blob, rdn=1, rng=1, fig=0, fca=0, fcr=1, fga=0)
-            #         # -G blob' comp_r, form 3x3 rderts = dert, -> comp_a if +G, else comp_rng if -G
+                elif -blob['Dert']['G'] > aveB and blob['Dert']['S'] > 30:
+                    intra_blob(blob, rdn=1, rng=1, fig=0, fcr=1)
+                     # -G blob' comp_r, form 3x3 rderts = dert, -> comp_a if +G, else comp_rng if -G
                     '''
                     with feedback:
                     dert__ = comp_a|r(blob['dert__'], rng=1)  
