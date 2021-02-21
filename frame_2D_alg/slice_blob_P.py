@@ -53,6 +53,7 @@ class CP(ClusterStructure):
     Ma = int
     L = int
     x0 = int
+    y = int # for reconstruction of image in case we need it later for visualization
     sign = NoneType
     dert_ = list
     gdert_ = list
@@ -62,6 +63,8 @@ class CP(ClusterStructure):
     # upconnect & upconnect
     downconnect_ = list
     upconnect_ = list
+    derP = object
+    f_checked = int
 
 class CStack(ClusterStructure):
     # Dert:
@@ -111,7 +114,7 @@ def slice_blob(blob, verbose=False):
     for y, dert_ in enumerate(zip(*dert__)):  # first and last row are discarded?
         if verbose: print(f"\rProcessing line {y + 1}/{height}, ", end=""); sys.stdout.flush()
 
-        P_ = form_P_(list(zip(*dert_)), mask__[y])  # horizontal clustering
+        P_ = form_P_(list(zip(*dert_)), mask__[y], y)  # horizontal clustering
         # upper row is not empty
         if _P_: scan_P_(_P_, P_) # check connectivity between Ps
         _P_ = P_ # set current row P as next row's upper row P
@@ -143,7 +146,7 @@ dert: tuple of derivatives per pixel, initially (p, dy, dx, g), extended in intr
 Dert: params of cluster structures (P, stack, blob): summed dert params + dimensions: vertical Ly and area A
 '''
 
-def form_P_(idert_, mask_):  # segment dert__ into P__, in horizontal ) vertical order
+def form_P_(idert_, mask_, y):  # segment dert__ into P__, in horizontal ) vertical order
 
     P_ = deque()  # row of Ps
     dert_ = [list(idert_[0])]  # get first dert from idert_ (generator/iterator)
@@ -155,7 +158,7 @@ def form_P_(idert_, mask_):  # segment dert__ into P__, in horizontal ) vertical
         mask = mask_[x]  # masks = 1,_0: P termination, 0,_1: P initialization, 0,_0: P accumulation:
         if mask:
             if ~_mask:  # _dert is not masked, dert is masked, terminate P:
-                P = CP(I=I, Dy=Dy, Dx=Dx, G=G, M=M, Dyy=Dyy, Dyx=Dyx, Dxy=Dxy, Dxx=Dxx, Ga=Ga, Ma=Ma, L=L, x0=x0, dert_=dert_)
+                P = CP(I=I, Dy=Dy, Dx=Dx, G=G, M=M, Dyy=Dyy, Dyx=Dyx, Dxy=Dxy, Dxx=Dxx, Ga=Ga, Ma=Ma, L=L, x0=x0, dert_=dert_, y=y)
                 P_.append(P)
         else:  # dert is not masked
             if _mask:  # _dert is masked, initialize P params:
@@ -177,7 +180,7 @@ def form_P_(idert_, mask_):  # segment dert__ into P__, in horizontal ) vertical
         _mask = mask
 
     if ~_mask:  # terminate last P in a row
-        P = CP(I=I, Dy=Dy, Dx=Dx, G=G, M=M, Dyy=Dyy, Dyx=Dyx, Dxy=Dxy, Dxx=Dxx, Ga=Ga, Ma=Ma, L=L, x0=x0, dert_=dert_)
+        P = CP(I=I, Dy=Dy, Dx=Dx, G=G, M=M, Dyy=Dyy, Dyx=Dyx, Dxy=Dxy, Dxx=Dxx, Ga=Ga, Ma=Ma, L=L, x0=x0, dert_=dert_, y=y)
         P_.append(P)
 
     return P_

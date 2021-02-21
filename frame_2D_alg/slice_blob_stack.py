@@ -92,7 +92,7 @@ class CStack(ClusterStructure):
 
 # Functions:
 
-def slice_blob(blob, verbose=False):
+def slice_blob_stack(blob, verbose=False):
 
     flip_eval(blob)
     dert__ = blob.dert__
