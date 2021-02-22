@@ -59,8 +59,7 @@ def intra_blob(blob, **kwargs):  # slice_blob or recursive input rng+ | angle cr
                 if kwargs.get('verbose'): print('\nslice_blob fork\n')
                 
                 slice_blob(blob, verbose)  # adds stack_ to blob
-                derP_ = comp_slice_(blob.P__)  # cross-comp of vertically consecutive Ps in selected stacks
-                blob.PP_ = derP_2_PP_(derP_, blob.PP_)
+                blob.PP_ = derP_2_PP_(blob.derP_, blob.PP_)
                 
                 ## for debug purpose ##
                 # to check whether there is duplicated PP
@@ -69,7 +68,7 @@ def intra_blob(blob, **kwargs):  # slice_blob or recursive input rng+ | angle cr
                     raise ValueError("Duplicated PP")
                 
                 # to check whether there is duplicated derP in PP or not all derP found in PPs
-                _derP_id = [derP.id for derP in derP_]
+                _derP_id = [derP.id for derP in blob.derP_]
                 derP_id =sorted([derP.id for PP in blob.PP_ for derP in PP.derP_ ])
                 if len(_derP_id) != len(derP_id) or not all(dp_id in derP_id for dp_id in _derP_id):  
                     raise ValueError("Something is wrong with assignment/merging of derP")

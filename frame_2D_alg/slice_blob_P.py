@@ -34,6 +34,9 @@ from slice_utils import *
 ave = 30  # filter or hyper-parameter, set as a guess, latter adjusted by feedback, not needed here
 aveG = 50  # filter for comp_g, assumed constant direction
 flip_ave = 2000
+div_ave = 200
+flip_ave = 1000
+ave_dX = 10  # difference between median x coords of consecutive Ps
 
 # prefix '_' denotes higher-line variable or structure, vs. same-type lower-line variable or structure
 # postfix '_' denotes array name, vs. same-name elements of that array. '__' is a 2D array
@@ -64,6 +67,29 @@ class CP(ClusterStructure):
     downconnect_ = list
     upconnect_ = list
     derP = object
+    f_checked = int
+
+class CderP(ClusterStructure):
+
+    Pi = object  # P instance, accumulation: CderP.Pi.I += 1, etc.
+    Pm = int
+    Pd = int
+    mx = int
+    dx = int
+    mL = int
+    dL = int
+    mDx = int
+    dDx = int
+    mDy = int
+    dDy = int
+    mDg = int
+    dDg = int
+    mMg = int
+    dMg = int
+    upconnect_ = list
+    downconnect_ = list
+    # PP object reference
+    PP = object
     f_checked = int
 
 class CStack(ClusterStructure):
@@ -106,32 +132,49 @@ def slice_blob(blob, verbose=False):
 
     height, width = dert__[0].shape
     if verbose: print("Converting to image...")
-
-    P__ = []    
     
-    # upper row Ps
-    _P_ = []
+    _P_ = [] # upper row Ps
+    derP_ = []
+    DdX = 0
+    
+    # flip dert__ upside down so that we scan from bottom up
+    dert__ = [np.flipud(dert_) for dert_ in dert__]
+    
     for y, dert_ in enumerate(zip(*dert__)):  # first and last row are discarded?
         if verbose: print(f"\rProcessing line {y + 1}/{height}, ", end=""); sys.stdout.flush()
 
         P_ = form_P_(list(zip(*dert_)), mask__[y], y)  # horizontal clustering
         # upper row is not empty
-        if _P_: scan_P_(_P_, P_) # check connectivity between Ps
+        if _P_: scan_P_(_P_, P_, DdX, derP_) # check connectivity between Ps
         _P_ = P_ # set current row P as next row's upper row P
-        P__.append(P_) 
         
-    blob.P__ = P__ # update blob's P__ reference
+    blob.derP_ = derP_ # update blob's derP_ reference
     
 
-def scan_P_(_P_, P_):
- 
-    for _P in _P_: # upper row Ps
-        for P in P_:# lower row Ps
+def scan_P_(_P_, P_, DdX, derP_):
 
+    for P in P_:# lower row Ps
+        
+        if not isinstance(P.derP, CderP):
+            derP = CderP(Pi=P) # root derP
+            P.derP = derP      # update derP reference in P
+            derP_.append(derP)
+
+        for _P in _P_: # upper row Ps
             if _P.x0 - 1 < (P.x0 + P.L) and (_P.x0 + _P.L) + 1 > P.x0:   # x overlap between P and _P in 8 directions:                 
-                _P.downconnect_.append(P)
-                P.upconnect_.append(_P)
+                
+                if not isinstance(_P.derP, CderP): # if upper row _P is not having derP yet
+                    _derP = comp_slice(_P, P, DdX) 
+                    _P.derP = _derP                # update derP reference in _P
+                    derP_.append(_derP)
 
+                else: # if there is existing derP in _P but _P.derP is formed with different P (not the P in current loop), what should we do here?
+                    pass
+                
+                # update upconnect and downconnect reference
+                derP.upconnect_.append(_P.derP)
+                _P.derP.downconnect_.append(derP)                
+                
             elif (_P.x0 + _P.L) < P.x0: # stop scanning the rest of lower row Ps if there is no overlap
                 break
 
@@ -186,7 +229,6 @@ def form_P_(idert_, mask_, y):  # segment dert__ into P__, in horizontal ) verti
     return P_
 
 
-
 def flip_eval(blob):
 
     horizontal_bias = ( blob.box[3] - blob.box[2]) / (blob.box[1] - blob.box[0]) \
@@ -202,3 +244,55 @@ def flip_eval(blob):
 
 def accum_Dert(Dert: dict, **params) -> None:
     Dert.update({param: Dert[param] + value for param, value in params.items()})
+    
+
+def comp_slice(P, _P, DdX):  # forms vertical derivatives of P params, and conditional ders from norm and DIV comp
+
+    s, x0, G, M, Dx, Dy, L, Dg, Mg = P.sign, P.x0, P.G, P.M, P.Dx, P.Dy, P.L, P.Dg, P.Mg
+    # params per comp branch, add angle params, ext: X, new: L,
+    # no input I comp in top dert?
+    _s, _x0, _G, _M, _Dx, _Dy, _L, _Dg, _Mg = _P.sign, _P.x0, _P.G, _P.M, _P.Dx, _P.Dy, _P.L, _P.Dg, _P.Mg
+    '''
+    redefine Ps by dx in dert_, rescan dert by input P d_ave_x: skip if not in blob?
+    '''
+    xn = x0 + L-1;  _xn = _x0 + _L-1
+    mX = min(xn, _xn) - max(x0, _x0)  # overlap: abs proximity, cumulative binary positional match | miss:
+    _dX = (xn - L/2) - (_xn - _L/2)
+    dX = abs(x0 - _x0) + abs(xn - _xn)  # offset, or max_L - overlap: abs distance?
+
+    if dX > ave_dX:  # internal comp is higher-power, else two-input comp not compressive?
+        rX = dX / (mX)  # average dist/prox, | prox/dist, | mX / max_L?
+
+    ave_dx = (x0 + (L-1)//2) - (_x0 + (_L-1)//2)  # d_ave_x, median vs. summed, or for distant-P comp only?
+
+    ddX = dX - _dX  # long axis curvature
+    DdX += ddX  # if > ave: ortho eval per P, else per PP_dX?
+    # param correlations: dX-> L, ddX-> dL, neutral to Dx: mixed with anti-correlated oDy?
+    '''
+    if ortho:  # estimate params of P locally orthogonal to long axis, maximizing lateral diff and vertical match
+        Long axis is a curve, consisting of connections between mid-points of consecutive Ps.
+        Ortho virtually rotates each P to make it orthogonal to its connection:
+        hyp = hypot(dX, 1)  # long axis increment (vertical distance), to adjust params of orthogonal slice:
+        L /= hyp
+        # re-orient derivatives by combining them in proportion to their decomposition on new axes:
+        Dx = (Dx * hyp + Dy / hyp) / 2  # no / hyp: kernel doesn't matter on P level?
+        Dy = (Dy / hyp - Dx * hyp) / 2  # estimated D over vert_L
+    '''
+    dL = L - _L; mL = min(L, _L)  # L: positions / sign, dderived: magnitude-proportional value
+    dM = M - _M; mM = min(M, _M)  # no Mx, My: non-core, lesser and redundant bias?
+
+    dDx = abs(Dx) - abs(_Dx); mDx = min(abs(Dx), abs(_Dx))  # same-sign Dx in vxP
+    dDy = Dy - _Dy; mDy = min(Dy, _Dy)  # Dy per sub_P by intra_comp(dx), vs. less vertically specific dI
+
+    # gdert param comparison, if not fPP, values would be 0
+    dMg = Mg - _Mg; mMg = min(Mg, _Mg)
+    dDg = Dg - _Dg; mDg = min(Dg, _Dg)
+
+    Pd = ddX + dL + dM + dDx + dDy + dMg + dDg # -> directional dPP, equal-weight params, no rdn?
+    # correlation: dX -> L, oDy, !oDx, ddX -> dL, odDy ! odDx? dL -> dDx, dDy?  G = hypot(Dy, Dx) for 2D structures comp?
+    Pm = mX + mL + mM + mDx + mDy + mMg + mDg # -> complementary vPP, rdn *= Pd | Pm rolp?
+
+    derP = CderP(Pi=P, Pm=Pm, Pd=Pd, mX=mX, dX=dX, mL=mL, dL=dL, mDx=mDx, dDx=dDx, mDy=mDy, dDy=dDy, mDg=mDg, dDg=dDg, mMg=mMg, dMg=dMg)
+    # div_f, nvars
+
+    return derP
