@@ -27,8 +27,8 @@ from frame_blobs import assign_adjacents, flood_fill, CBlob
 from intra_comp import comp_r, comp_a
 from frame_blobs_imaging import visualize_blobs
 from itertools import zip_longest
-from slice_blob_P import slice_blob
-from comp_slice_P import comp_slice_, derP_2_PP_
+from comp_slice_ import slice_blob
+from comp_slice_ import derP_2_PP_
 from slice_utils import *
 
 # filters, All *= rdn:
@@ -57,23 +57,9 @@ def intra_blob(blob, **kwargs):  # slice_blob or recursive input rng+ | angle cr
                 blob.f_comp_a = 0
                 blob.prior_forks.extend('p')
                 if kwargs.get('verbose'): print('\nslice_blob fork\n')
-                
                 slice_blob(blob, verbose)  # adds stack_ to blob
-                blob.PP_ = derP_2_PP_(blob.derP_, blob.PP_)
-                
-                ## for debug purpose ##
-                # to check whether there is duplicated PP
-                PP_id = [PP.id for PP in blob.PP_]
-                if len(PP_id) != len(np.unique(PP_id)):
-                    raise ValueError("Duplicated PP")
-                
-                # to check whether there is duplicated derP in PP or not all derP found in PPs
-                _derP_id = [derP.id for derP in blob.derP_]
-                derP_id =sorted([derP.id for PP in blob.PP_ for derP in PP.derP_ ])
-                if len(_derP_id) != len(derP_id) or not all(dp_id in derP_id for dp_id in _derP_id):  
-                    raise ValueError("Something is wrong with assignment/merging of derP")
-
-
+                derP_ = comp_slice_(blob.stack_, [])  # cross-comp of vertically consecutive Ps in selected stacks
+                blob.PP_ = derP_2_PP_(derP_, blob.PP_)
     else:
         # root fork is frame_blobs or comp_r
         ext_dert__, ext_mask__ = extend_dert(blob)  # dert__ boundaries += 1, for cross-comp in larger kernels
