@@ -60,9 +60,8 @@ class CderP(ClusterStructure):
     dDg = int
     mMg = int
     dMg = int
-    upconnect_ = list
-    downconnect_ = list
-    _derP = object  # ref to template _P, if compared
+    PderP = object # derP pair , naming of _derP facing some error, not sure why yet, maybe is due to same instance&param name , for eg: _derP._derP
+    # ref to template _P, if compared
     PP = object
 
 # Functions:
@@ -77,26 +76,32 @@ def slice_blob(blob, verbose=False):
     mask__ = blob.mask__
     height, width = dert__[0].shape
     if verbose: print("Converting to image...")
+    
+    derP__ = []
     DdX = 0
-
-    dert__ = [np.flipud(dert_) for dert_ in dert__]  # flips dert__ upside down to scan it bottom-up
-    _derP_ = form_P_(list(zip(*dert__[0])), mask__[0], 0)  # 1st row
-
-    for y, dert_ in enumerate(zip(*dert__[1:])):  # last row is discarded?
+    dert__ = [np.flipud(dert_) for dert_ in dert__] # flip dert__ upside down so that we scan from bottom up
+    
+    zip_dert__ = zip(*dert__)
+    _derP_ = form_derP_(list(zip(*next(zip_dert__))), mask__[0], 0)  # bottom 1st row
+    derP__ += _derP_
+    
+    for y, dert_ in enumerate(zip_dert__, start=1):  
         if verbose: print(f"\rProcessing line {y + 1}/{height}, ", end=""); sys.stdout.flush()
 
-        derP_ = form_P_(list(zip(*dert_)), mask__[y+1], y+1)  # horizontal clustering
-        scan_P_(_derP_, derP_, DdX, )  # test for x overlap between Ps
-        _derP_ = derP_  # set current row P_ as next upper row _P_
+        # upper row of _derP_
+        derP_ = form_derP_(list(zip(*dert_)), mask__[y], y)  # horizontal clustering
+        scan_derP_(_derP_, derP_, DdX)  # test for x overlap between derPs and apply comp_slice
+        derP__ += derP_
+        _derP_ = derP_  # set current row P_ as next bottom row _P_
 
-    blob.derP_ = derP_
+    blob.derP__ = derP__
 
 
-def form_P_(idert_, mask_):  # segment dert__ into P__, in horizontal ) vertical order
+def form_derP_(idert_, mask_, y):  # segment dert__ into P__, in horizontal ) vertical order
     '''
     sums dert params within Ps and increments L: horizontal length.
     '''
-    P_ = deque()  # row of Ps
+    derP_ = [] # rows of derPs
     dert_ = [list(idert_[0])]  # get first dert from idert_ (generator/iterator)
     _mask = mask_[0]  # mask bit per dert
     if ~_mask:
@@ -106,8 +111,8 @@ def form_P_(idert_, mask_):  # segment dert__ into P__, in horizontal ) vertical
         mask = mask_[x]  # masks = 1,_0: P termination, 0,_1: P initialization, 0,_0: P accumulation:
         if mask:
             if ~_mask:  # _dert is not masked, dert is masked, terminate P:
-                P = CP(I=I, Dy=Dy, Dx=Dx, G=G, M=M, Dyy=Dyy, Dyx=Dyx, Dxy=Dxy, Dxx=Dxx, Ga=Ga, Ma=Ma, L=L, x0=x0, dert_=dert_)
-                P_.append(CderP(Pi=P))
+                P = CP(I=I, Dy=Dy, Dx=Dx, G=G, M=M, Dyy=Dyy, Dyx=Dyx, Dxy=Dxy, Dxx=Dxx, Ga=Ga, Ma=Ma, L=L, x0=x0, dert_=dert_, y=y)
+                derP_.append(CderP(Pi=P))
         else:  # dert is not masked
             if _mask:  # _dert is masked, initialize P params:
                 I, Dy, Dx, G, M, Dyy, Dyx, Dxy, Dxx, Ga, Ma = dert; L = 1; x0 = x; dert_ = [dert]
@@ -128,28 +133,23 @@ def form_P_(idert_, mask_):  # segment dert__ into P__, in horizontal ) vertical
         _mask = mask
 
     if ~_mask:  # terminate last P in a row
-        P = CP(I=I, Dy=Dy, Dx=Dx, G=G, M=M, Dyy=Dyy, Dyx=Dyx, Dxy=Dxy, Dxx=Dxx, Ga=Ga, Ma=Ma, L=L, x0=x0, dert_=dert_)
-        P_.append(CderP(Pi=P))
+        P = CP(I=I, Dy=Dy, Dx=Dx, G=G, M=M, Dyy=Dyy, Dyx=Dyx, Dxy=Dxy, Dxx=Dxx, Ga=Ga, Ma=Ma, L=L, x0=x0, dert_=dert_, y=y)
+        derP_.append(CderP(Pi=P))
 
-    return P_
+    return derP_
 
 
-def scan_P_(_derP_, derP_, DdX):
+def scan_derP_(_derP_, derP_, DdX): # _derP = lower row, derP = upper row
 
-    for derP in derP_:  # lower row
-        for _derP in _derP_:  # upper row
+    for _derP in _derP_:  # lower row
+        for derP in derP_:  # upper row
             # test for x overlap between P and _P in 8 directions:
-            if derP.P.x0 - 1 < (derP.P.x0 + derP.L) and (_derP.P.x0 + _derP.P.L) + 1 > derP.P.x0:
+            if derP.Pi.x0 - 1 < (derP.Pi.x0 + derP.Pi.L) and (_derP.Pi.x0 + _derP.Pi.L) + 1 > derP.Pi.x0:
+                if _derP is not derP.PderP :  # derP has not been compared yet, or it was compared to different _derP  
+                    comp_slice(derP, _derP, DdX) # accumulate vertical derivative params in derP
+                    _derP.PderP = derP  # take only upconnect ref as _P&P pair, else we wouldn't know whether the _P&P pair is upconnect or downconnect
 
-                if derP._derP is not _derP:  # derP has not been compared yet, or it was compared to different _derP
-                # needs a review
-                    _derP = comp_slice(_derP, derP, DdX)
-                    _derP._derP = _derP  # ref to compared derP
-                    derP_.append(_derP)
-                    derP.upconnect_.append(_derP)
-                    _derP.downconnect_.append(derP)
-
-            elif (_derP.P.x0 + _derP.P.L) < derP.P.x0: # stop scanning the rest of lower row Ps if there is no overlap
+            elif (_derP.Pi.x0 + _derP.Pi.L) < derP.Pi.x0: # stop scanning the rest of lower row Ps if there is no overlap
                 break
 
 
@@ -168,8 +168,11 @@ def accum_Dert(Dert: dict, **params) -> None:
     Dert.update({param: Dert[param] + value for param, value in params.items()})
 
 
-def comp_slice(P, _P, DdX):  # forms vertical derivatives of P params, and conditional ders from norm and DIV comp
+def comp_slice(derP, _derP, DdX):  # forms vertical derivatives of derP params, and conditional ders from norm and DIV comp
 
+    P = derP.Pi
+    _P = derP.Pi
+    
     s, x0, G, M, Dx, Dy, L, Dg, Mg = P.sign, P.x0, P.G, P.M, P.Dx, P.Dy, P.L, P.Dg, P.Mg
     # params per comp branch, add angle params, ext: X, new: L,
     # no input I comp in top dert?
@@ -215,7 +218,7 @@ def comp_slice(P, _P, DdX):  # forms vertical derivatives of P params, and condi
     # correlation: dX -> L, oDy, !oDx, ddX -> dL, odDy ! odDx? dL -> dDx, dDy?  G = hypot(Dy, Dx) for 2D structures comp?
     Pm = mX + mL + mM + mDx + mDy + mMg + mDg # -> complementary vPP, rdn *= Pd | Pm rolp?
 
-    derP = CderP(Pi=P, Pm=Pm, Pd=Pd, mX=mX, dX=dX, mL=mL, dL=dL, mDx=mDx, dDx=dDx, mDy=mDy, dDy=dDy, mDg=mDg, dDg=dDg, mMg=mMg, dMg=dMg)
+    derP.accumulate(Pm=Pm, Pd=Pd, mX=mX, dX=dX, mL=mL, dL=dL, mDx=mDx, dDx=dDx, mDy=mDy, dDy=dDy, mDg=mDg, dDg=dDg, mMg=mMg, dMg=dMg)
     # div_f, nvars
 
     return derP
