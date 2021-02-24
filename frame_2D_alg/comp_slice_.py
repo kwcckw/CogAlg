@@ -6,6 +6,7 @@ Vectorization is clustering of Ps + derivatives into PPs: patterns of Ps that de
 Double edge lines: assumed match between edges of high-deviation intensity, no need for cross-comp?
 secondary cross-comp of low-deviation blobs?   P comb -> intra | inter comp eval?
 '''
+
 from collections import deque
 import sys
 import numpy as np
@@ -43,8 +44,12 @@ class CP(ClusterStructure):
     gdert_ = list
     Dg = int
     Mg = int
+    upconnect_ = list
+    downconnect_ = list
+
 
 class CderP(ClusterStructure):
+
     Pi = object  # P instance, for accumulation: CderP.Pi.I += 1, etc.
     Pm = int
     Pd = int
@@ -60,9 +65,9 @@ class CderP(ClusterStructure):
     dDg = int
     mMg = int
     dMg = int
-    PderP = object # derP pair , naming of _derP facing some error, not sure why yet, maybe is due to same instance&param name , for eg: _derP._derP
-    # ref to template _P, if compared
-    PP = object
+    P = object   # lower comparand
+    _P = object  # higher comparand
+    PP = object  # contains derP
 
 # Functions:
 
@@ -71,37 +76,37 @@ def slice_blob(blob, verbose=False):
     Slice_blob converts selected smooth-edge blobs (high G, low Ga) into sliced blobs,
     adding horizontal blob slices: Ps or 1D patterns
     '''
+
     flip_eval(blob)
     dert__ = blob.dert__
     mask__ = blob.mask__
     height, width = dert__[0].shape
     if verbose: print("Converting to image...")
-    
+    P__ = []
     derP__ = []
-    DdX = 0
-    dert__ = [np.flipud(dert_) for dert_ in dert__] # flip dert__ upside down so that we scan from bottom up
-    
+    dert__ = [np.flipud(dert_) for dert_ in dert__]  # flip dert__ upside down so that we scan from bottom up
+
     zip_dert__ = zip(*dert__)
-    _derP_ = form_derP_(list(zip(*next(zip_dert__))), mask__[0], 0)  # bottom 1st row
-    derP__ += _derP_
-    
-    for y, dert_ in enumerate(zip_dert__, start=1):  
+    _P_ = form_P_(list(zip(*next(zip_dert__))), mask__[0], 0)  # bottom 1st row
+    P__ += _P_  # frame of Ps
+
+    for y, dert_ in enumerate(zip_dert__, start=1):
         if verbose: print(f"\rProcessing line {y + 1}/{height}, ", end=""); sys.stdout.flush()
 
-        # upper row of _derP_
-        derP_ = form_derP_(list(zip(*dert_)), mask__[y], y)  # horizontal clustering
-        scan_derP_(_derP_, derP_, DdX)  # test for x overlap between derPs and apply comp_slice
-        derP__ += derP_
-        _derP_ = derP_  # set current row P_ as next bottom row _P_
+        P_ = form_P_(list(zip(*dert_)), mask__[y], y)  # horizontal clustering
+        derP_ = scan_P_(_P_, P_)  # test x overlap between Ps, call comp_slice
+        derP__ += derP_  # frame of derPs
+        _P_ = P_  # set current row P_ as next lower row _P_
 
+    blob.P__ = P__
     blob.derP__ = derP__
 
 
-def form_derP_(idert_, mask_, y):  # segment dert__ into P__, in horizontal ) vertical order
+def form_P_(idert_, mask_, y):  # segment dert__ into P__, in horizontal ) vertical order
     '''
     sums dert params within Ps and increments L: horizontal length.
     '''
-    derP_ = [] # rows of derPs
+    P_ = [] # rows of derPs
     dert_ = [list(idert_[0])]  # get first dert from idert_ (generator/iterator)
     _mask = mask_[0]  # mask bit per dert
     if ~_mask:
@@ -112,7 +117,7 @@ def form_derP_(idert_, mask_, y):  # segment dert__ into P__, in horizontal ) ve
         if mask:
             if ~_mask:  # _dert is not masked, dert is masked, terminate P:
                 P = CP(I=I, Dy=Dy, Dx=Dx, G=G, M=M, Dyy=Dyy, Dyx=Dyx, Dxy=Dxy, Dxx=Dxx, Ga=Ga, Ma=Ma, L=L, x0=x0, dert_=dert_, y=y)
-                derP_.append(CderP(Pi=P))
+                P_.append(P)
         else:  # dert is not masked
             if _mask:  # _dert is masked, initialize P params:
                 I, Dy, Dx, G, M, Dyy, Dyx, Dxy, Dxx, Ga, Ma = dert; L = 1; x0 = x; dert_ = [dert]
@@ -134,22 +139,29 @@ def form_derP_(idert_, mask_, y):  # segment dert__ into P__, in horizontal ) ve
 
     if ~_mask:  # terminate last P in a row
         P = CP(I=I, Dy=Dy, Dx=Dx, G=G, M=M, Dyy=Dyy, Dyx=Dyx, Dxy=Dxy, Dxx=Dxx, Ga=Ga, Ma=Ma, L=L, x0=x0, dert_=dert_, y=y)
-        derP_.append(CderP(Pi=P))
+        P_.append(P)
 
-    return derP_
+    return P_
 
 
-def scan_derP_(_derP_, derP_, DdX): # _derP = lower row, derP = upper row
+def scan_P_(_P_, P_): # _derP = lower row, derP = upper row
 
-    for _derP in _derP_:  # lower row
-        for derP in derP_:  # upper row
+    for _P in _P_:  # lower row
+        for P in P_:  # upper row
             # test for x overlap between P and _P in 8 directions:
-            if derP.Pi.x0 - 1 < (derP.Pi.x0 + derP.Pi.L) and (_derP.Pi.x0 + _derP.Pi.L) + 1 > derP.Pi.x0:
-                if _derP is not derP.PderP :  # derP has not been compared yet, or it was compared to different _derP  
-                    comp_slice(derP, _derP, DdX) # accumulate vertical derivative params in derP
-                    _derP.PderP = derP  # take only upconnect ref as _P&P pair, else we wouldn't know whether the _P&P pair is upconnect or downconnect
 
-            elif (_derP.Pi.x0 + _derP.Pi.L) < derP.Pi.x0: # stop scanning the rest of lower row Ps if there is no overlap
+            if P.x0 - 1 < (P.x0 + P.L) and (_P.x0 + _P.L) + 1 > P.x0:
+                fcomp = 1
+                for derP in P.upconnect_:  # not sure if this can be done any simpler?
+                    if P is derP.P:  # _P has been compared to P before
+                        fcomp = 0
+                        break
+                if fcomp:
+                    derP = comp_slice(P, _P)  # form vertical derivatives
+                    P.upconnect_.append(derP)
+                    _P.downconnect_.append(derP)  # refs to the same derP, may not be needed?
+
+            elif (_P.x0 + _P.L) < P.x0: # stop scanning the rest of lower row Ps if there is no overlap
                 break
 
 
@@ -168,11 +180,8 @@ def accum_Dert(Dert: dict, **params) -> None:
     Dert.update({param: Dert[param] + value for param, value in params.items()})
 
 
-def comp_slice(derP, _derP, DdX):  # forms vertical derivatives of derP params, and conditional ders from norm and DIV comp
+def comp_slice(P, _P):  # forms vertical derivatives of derP params, and conditional ders from norm and DIV comp
 
-    P = derP.Pi
-    _P = derP.Pi
-    
     s, x0, G, M, Dx, Dy, L, Dg, Mg = P.sign, P.x0, P.G, P.M, P.Dx, P.Dy, P.L, P.Dg, P.Mg
     # params per comp branch, add angle params, ext: X, new: L,
     # no input I comp in top dert?
@@ -191,8 +200,7 @@ def comp_slice(derP, _derP, DdX):  # forms vertical derivatives of derP params, 
 
     ave_dx = (x0 + (L-1)//2) - (_x0 + (_L-1)//2)  # d_ave_x, median vs. summed, or for distant-P comp only?
 
-    ddX = dX - _dX  # long axis curvature
-    DdX += ddX  # if > ave: ortho eval per P, else per PP_dX?
+    ddX = dX - _dX  # long axis curvature, if > ave: ortho eval per P, else per PP_dX?
     # param correlations: dX-> L, ddX-> dL, neutral to Dx: mixed with anti-correlated oDy?
     '''
     if ortho:  # estimate params of P locally orthogonal to long axis, maximizing lateral diff and vertical match
@@ -218,7 +226,7 @@ def comp_slice(derP, _derP, DdX):  # forms vertical derivatives of derP params, 
     # correlation: dX -> L, oDy, !oDx, ddX -> dL, odDy ! odDx? dL -> dDx, dDy?  G = hypot(Dy, Dx) for 2D structures comp?
     Pm = mX + mL + mM + mDx + mDy + mMg + mDg # -> complementary vPP, rdn *= Pd | Pm rolp?
 
-    derP.accumulate(Pm=Pm, Pd=Pd, mX=mX, dX=dX, mL=mL, dL=dL, mDx=mDx, dDx=dDx, mDy=mDy, dDy=dDy, mDg=mDg, dDg=dDg, mMg=mMg, dMg=dMg)
+    derP = CderP(P=P, _P=_P, Pm=Pm, Pd=Pd, mX=mX, dX=dX, mL=mL, dL=dL, mDx=mDx, dDx=dDx, mDy=mDy, dDy=dDy, mDg=mDg, dDg=dDg, mMg=mMg, dMg=dMg)
     # div_f, nvars
 
     return derP
