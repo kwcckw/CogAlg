@@ -46,7 +46,6 @@ class CP(ClusterStructure):
     Mg = int
     derP_ = list
     upconnect_ = list
-    downconnect_cnt = int
     downconnect_ = list
 
 
@@ -150,33 +149,17 @@ def scan_P_(_P_, P_ ): # _derP = lower row, derP = upper row
 
     derP_ = []
     for _P in _P_:  # lower row
-            
-        # if lower row _P is not having derP yet, create 1 root derP
-        if not _P.derP_: 
-            _derP = CderP(Pi = _P)
-            _P.derP_.append(_derP)
-            derP_.append(_derP) # accumulate _derP in derP_
-
         for P in P_:  # upper row
             # test for x overlap between P and _P in 8 directions:
             if _P.x0 - 1 < (P.x0 + P.L) and (_P.x0 + _P.L) + 1 > P.x0: # need to take note on the sign _P and P
-                
                 fcomp = 0        
-                if P.derP_: # P is already having derP
-                    # check if P.derP is in _P.upconnect_ or not
-                    # fcomp = 1 if any of P.derP_ is in _P.upconnects, else it would be empty
-                    fcomp = [1 for _derP in _P.upconnect_ for derP in P.derP if derP is _derP]
-                    
+                fcomp = [1 for derP in P.downconnect_ if P is derP.P or _P is derP._P] # fcomp is 1 if the _P&P pair is compared before
+
                 if not fcomp:
-                    P.derP_.append(comp_slice(P, _P))  # form vertical derivatives
-                    derP_.append(P.derP_[-1]) # accumulate derP in derP_
-                    
-                    # update _P's upconnect with current initialized derP
-                    _P.upconnect_.append(P.derP_[-1])
-                    P.downconnect_cnt += 1
-                    
-                    # update P's downconnect with all instances of _P.derP_
-                    P.downconnect_ += _P.derP_ 
+                    derP_.append(comp_slice(P, _P))  # form vertical derivatives
+                    # update upconnect and downconnect with current initialized derP
+                    _P.upconnect_.append(derP_[-1])
+                    P.downconnect_.append(derP_[-1])
 
             elif (_P.x0 + _P.L) < P.x0: # stop scanning the rest of lower row Ps if there is no overlap
                 break
