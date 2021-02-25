@@ -11,7 +11,6 @@ from collections import deque
 import sys
 import numpy as np
 from class_cluster import ClusterStructure, NoneType
-from slice_utils import *
 
 ave = 30  # filter or hyper-parameter, set as a guess, latter adjusted by feedback, not needed here
 aveG = 50  # filter for comp_g, assumed constant direction
@@ -67,8 +66,21 @@ class CderP(ClusterStructure):
     mMg = int
     dMg = int
     P = object   # lower comparand
-    _P = object  # higher comparand
+    uP = object  # higher comparand
     PP = object  # contains derP
+
+
+class CPP(ClusterStructure):
+
+    derPi = object
+    derP_ = list
+    # between PPs:
+    upconnect_ = list
+    in_upconnect_cnt = int # tentative upconnect count before getting the confirmed upconnect
+    downconnect_cnt = int
+    fPPm = NoneType  # PPm if 1, else PPd; not needed if packed in PP_?
+    fdiv = NoneType
+
 
 # Functions:
 
@@ -88,16 +100,16 @@ def slice_blob(blob, verbose=False):
     dert__ = [np.flipud(dert_) for dert_ in dert__]  # flip dert__ upside down so that we scan from bottom up
 
     zip_dert__ = zip(*dert__)
-    _P_ = form_P_(list(zip(*next(zip_dert__))), mask__[0], 0)  # bottom 1st row
-    P__ += _P_  # frame of Ps
+    P_ = form_P_(list(zip(*next(zip_dert__))), mask__[0], 0)  # bottom 1st row
+    P__ += P_  # frame of Ps
 
     for y, dert_ in enumerate(zip_dert__, start=1):
         if verbose: print(f"\rProcessing line {y + 1}/{height}, ", end=""); sys.stdout.flush()
 
-        P_ = form_P_(list(zip(*dert_)), mask__[y], y)  # horizontal clustering
-        derP_ = scan_P_(_P_, P_)  # test x overlap between Ps, call comp_slice
+        _P_ = form_P_(list(zip(*dert_)), mask__[y], y)  # horizontal clustering
+        derP_ = scan_P_(P_, _P_)  # test x overlap between Ps, call comp_slice
         derP__ += derP_  # frame of derPs
-        _P_ = P_  # set current row P_ as next lower row _P_
+        P_ = _P_  # set current row P_ as next lower row _P_
 
     blob.P__ = P__
     blob.derP__ = derP__
@@ -145,23 +157,26 @@ def form_P_(idert_, mask_, y):  # segment dert__ into P__, in horizontal ) verti
     return P_
 
 
-def scan_P_(_P_, P_ ): # _derP = lower row, derP = upper row
+def scan_P_(P_, _P_ ): # _derP = lower row, derP = upper row
 
     derP_ = []
-    for _P in _P_:  # lower row
-        for P in P_:  # upper row
+    for P in P_:  # lower row
+        for _P in _P_:  # upper row
+            
             # test for x overlap between P and _P in 8 directions:
-            if _P.x0 - 1 < (P.x0 + P.L) and (_P.x0 + _P.L) + 1 > P.x0: # need to take note on the sign _P and P
-                fcomp = 0        
-                fcomp = [1 for derP in P.downconnect_ if P is derP.P or _P is derP._P] # fcomp is 1 if the _P&P pair is compared before
+            if P.x0 - 1 < (_P.x0 + _P.L) and (P.x0 + P.L) + 1 > _P.x0: # need to take note on the sign _P and P
+   
+                # fcomp is 1 if the _P&P pair is compared before else it would be empty
+                fcomp = [1 for derP in P.upconnect_ if P is derP.P] 
 
                 if not fcomp:
-                    derP_.append(comp_slice(P, _P))  # form vertical derivatives
+                    derP = comp_slice(P, _P) # form vertical derivatives
+                    derP_.append(derP)
                     # update upconnect and downconnect with current initialized derP
-                    _P.upconnect_.append(derP_[-1])
-                    P.downconnect_.append(derP_[-1])
-
-            elif (_P.x0 + _P.L) < P.x0: # stop scanning the rest of lower row Ps if there is no overlap
+                    _P.downconnect_.append(derP)
+                    P.upconnect_.append(derP)
+                    
+            elif (P.x0 + P.L) < _P.x0: # stop scanning the rest of lower row Ps if there is no overlap
                 break
 
     return derP_
@@ -227,7 +242,7 @@ def comp_slice(P, _P):  # forms vertical derivatives of derP params, and conditi
     # correlation: dX -> L, oDy, !oDx, ddX -> dL, odDy ! odDx? dL -> dDx, dDy?  G = hypot(Dy, Dx) for 2D structures comp?
     Pm = mX + mL + mM + mDx + mDy + mMg + mDg # -> complementary vPP, rdn *= Pd | Pm rolp?
 
-    derP = CderP(P=P, _P=_P, Pm=Pm, Pd=Pd, mX=mX, dX=dX, mL=mL, dL=dL, mDx=mDx, dDx=dDx, mDy=mDy, dDy=dDy, mDg=mDg, dDg=dDg, mMg=mMg, dMg=dMg)
+    derP = CderP(P=P, uP=_P, Pm=Pm, Pd=Pd, mX=mX, dX=dX, mL=mL, dL=dL, mDx=mDx, dDx=dDx, mDy=mDy, dDy=dDy, mDg=mDg, dDg=dDg, mMg=mMg, dMg=dMg)
     # div_f, nvars
 
     return derP
@@ -255,12 +270,13 @@ def derP_2_PP_(derP_, PP_):
     first row of derP_ has downconnect_cnt == 0, higher rows may also have them
     '''
     for derP in derP_:  # bottom-up to follow upconnects
-
-        if derP.downconnect_cnt == 0:  # root derP
+        if not derP.P.downconnect_ and not isinstance(derP.PP, CPP):  # root derP and not terminated in prior call of upconnect
+            
             PP = CPP(derPi=derP, derP_= [derP])  # init
             derP.PP = PP
-            if derP.upconnect_:
-                upconnect_2_PP_(derP, PP_)  # form PPs across dertP upconnects
+
+            if derP.uP.upconnect_: # if there is upconnect in upper row _P
+                upconnect_2_PP_(derP, PP_)  # form PPs across _P upconnects
             else:
                 PP_.append(derP.PP)
     return PP_
@@ -272,26 +288,50 @@ def upconnect_2_PP_(iderP, PP_):
     '''
     confirmed_upconnect_ = []
 
-    for derP in iderP.upconnect_:  # potential upconnects from previous call
-        if derP not in iderP.PP.derP_:  # derP should not in current iPP derP_ list, but this may occur after the PP merging
+    for derP in iderP.uP.upconnect_:  # potential upconnects from previous call
+        
+        if derP not in iderP.PP.derP_:  # derP should not in current iPP derP_ list, but this may occur after the PP merging            
             if (iderP.Pm > 0) == (derP.Pm > 0):  # no sign change, accumulate PP
-                if isinstance(derP.PP, CPP) and (derP.PP is not iderP.PP):  # different previously assigned derP.PP
+                
+                if isinstance(derP.PP, CPP) and (derP.PP is not iderP.PP): # upconnect derP is having existing PP, merge them
                     merge_PP(iderP.PP, derP.PP, PP_)
-                else:
+                else: # accumulate derP to current PP
                     derP.PP = iderP.PP
-                accum_PP(iderP.PP, derP)
-                confirmed_upconnect_.append(derP)
-
+                    accum_PP(iderP.PP, derP)
+                    confirmed_upconnect_.append(derP)
+                    
             else:  # sign changed, derP became root derP
-                derP.downconnect_cnt = 0  # root derP
                 derP.PP = CPP(derPi=derP, derP_=[derP])  # init
 
-            if derP.upconnect_:
+            if derP.uP.upconnect_:
                 upconnect_2_PP_(derP, PP_)  # recursive compare sign of next-layer upconnects
             elif derP.PP is not iderP.PP: # we do not terminate iPP here, only new PP after the sign changed is terminated here
                 PP_.append(derP.PP) # terminate PP
 
-    iderP.upconnect_ = confirmed_upconnect_
+    iderP.uP.upconnect_ = confirmed_upconnect_
 
-    if not confirmed_upconnect_ and iderP.downconnect_cnt == 0: # terminate at root derP after
+    if not iderP.P.downconnect_: # terminate root derP 
         PP_.append(iderP.PP)  # iPP termination, only after all upconnects are checked or no more unconfirmed upconnect
+        
+        
+def accum_PP(PP, derP):
+
+    PP.derPi.accumulate(Pm=derP.Pm, Pd=derP.Pd, mx=derP.mx, dx=derP.dx, mL=derP.mL, dL=derP.dL, mDx=derP.mDx, dDx=derP.dDx,
+                          mDy=derP.mDy, dDy=derP.dDy, mDg=derP.mDg, dDg=derP.dDg, mMg=derP.mMg, dMg=derP.dMg)
+    PP.derP_.append(derP)
+
+def merge_PP(_PP, PP, PP_):  # merge PP into _PP
+     
+    for derP in PP.derP_:
+        if derP not in _PP.derP_: 
+            _PP.derP_ .append(derP) # append PP's derPs to _PP if it is not in _PP's derP_
+            derP.PP = _PP # update PP reference
+            
+            # accumulate only if PP's derP not in _PP
+            _PP.derPi.accumulate(Pm=derP.Pm, Pd=derP.Pd, mx=derP.mx, dx=derP.dx,
+                                 mL=derP.mL, dL=derP.dL, mDx=derP.mDx, dDx=derP.dDx,
+                                 mDy=derP.mDy, dDy=derP.dDy, mDg=derP.mDg,
+                                 dDg=derP.dDg, mMg=derP.mMg, dMg=derP.dMg)    
+
+    if PP in PP_:
+        PP_.remove(PP)  # remove the merged PP
