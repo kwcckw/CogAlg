@@ -45,7 +45,13 @@ class MetaCluster(type):
     """
     def __new__(mcs, typename, bases, attrs):  # called right before a new class is created
         # get fields/params and numeric params
-        params = tuple(attr for attr in attrs if not callable(attr))  # callable: _id, hid and weakref (see attrs['slots']
+        
+        # params = tuple(attr for attr in attrs if not callable(attr))  # callable: _id, hid and weakref (see attrs['slots']
+
+        # only ignore param name start with double underscore
+        params = tuple(attr for attr in attrs
+                   if not attr.startswith('__')
+                   and not callable(attr))
 
         numeric_params = tuple(param for param in params
                                if issubclass(attrs[param], Number))
