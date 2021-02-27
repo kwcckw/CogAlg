@@ -292,7 +292,6 @@ def upconnect_2_PP_(iderP, PP_):
     confirmed_upconnect_ = []
 
     for derP in iderP._P.upconnect_:  # potential upconnects from previous call
-
         if derP not in iderP.PP.derP_:  # derP should not in current iPP derP_ list, but this may occur after the PP merging
             if (iderP.Pm > 0) == (derP.Pm > 0):  # no sign change, accumulate PP
 
@@ -302,13 +301,14 @@ def upconnect_2_PP_(iderP, PP_):
                     accum_PP(iderP.PP, derP)
                     confirmed_upconnect_.append(derP)
 
-            else:  # sign changed, derP became root derP
+            # sign changed, derP became root derP if they do not having PP yet (from my checking, they might be already associated with other PP in other forking's accumulation section)
+            elif not isinstance(derP.PP, CPP): # derP is not having PP yet
                 derP.PP = CPP(derPP=derP, derP_=[derP])  # init
                 derP.P.downconnect_cnt = 0 # reset downconnect count for root derP (we missed out this line fo code previously)
 
             if derP._P.upconnect_:
                 upconnect_2_PP_(derP, PP_)  # recursive compare sign of next-layer upconnects
-            elif derP.PP is not iderP.PP:
+            elif derP.PP is not iderP.PP and derP.P.downconnect_cnt == 0:
                 PP_.append(derP.PP)  # terminate PP (not iPP) at the sign change
 
     iderP._P.upconnect_ = confirmed_upconnect_
