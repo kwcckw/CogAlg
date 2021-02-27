@@ -61,6 +61,7 @@ class CderP(ClusterStructure):
     mMg = int
     dMg = int
     P = object   # lower comparand
+    _P = object  # upper comparand
     PP = object  # contains this derP
 
 class CPP(ClusterStructure):
@@ -235,7 +236,7 @@ def comp_slice(P, _P):  # forms vertical derivatives of derP params, and conditi
     # correlation: dX -> L, oDy, !oDx, ddX -> dL, odDy ! odDx? dL -> dDx, dDy?  G = hypot(Dy, Dx) for 2D structures comp?
     Pm = mX + mL + mM + mDx + mDy + mMg + mDg # -> complementary vPP, rdn *= Pd | Pm rolp?
 
-    derP = CderP(P=P, Pm=Pm, Pd=Pd, mX=mX, dX=dX, mL=mL, dL=dL, mDx=mDx, dDx=dDx, mDy=mDy, dDy=dDy, mDg=mDg, dDg=dDg, mMg=mMg, dMg=dMg)
+    derP = CderP(P=P, _P=_P, Pm=Pm, Pd=Pd, mX=mX, dX=dX, mL=mL, dL=dL, mDx=mDx, dDx=dDx, mDy=mDy, dDy=dDy, mDg=mDg, dDg=dDg, mMg=mMg, dMg=dMg)
     # div_f, nvars
 
     return derP
@@ -303,6 +304,7 @@ def upconnect_2_PP_(iderP, PP_):
 
             else:  # sign changed, derP became root derP
                 derP.PP = CPP(derPP=derP, derP_=[derP])  # init
+                derP.P.downconnect_cnt = 0 # reset downconnect count for root derP (we missed out this line fo code previously)
 
             if derP._P.upconnect_:
                 upconnect_2_PP_(derP, PP_)  # recursive compare sign of next-layer upconnects
@@ -324,11 +326,6 @@ def accum_PP(PP, derP):
 
 
 def merge_PP(_PP, PP, PP_):  # merge PP into _PP
-
-    ## for testing only, there are some overlapping derP between PPs
-    for derP in PP.derP_:
-        if derP in _PP.derP_:
-            print("Overlapping derP between PPs")
 
     for derP in PP.derP_:
         if derP not in _PP.derP_:
