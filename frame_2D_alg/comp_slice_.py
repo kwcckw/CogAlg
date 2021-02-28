@@ -73,6 +73,8 @@ class CPP(ClusterStructure):
     downconnect_cnt = int
     fPPm = NoneType  # PPm if 1, else PPd; not needed if packed in PP_?
     fdiv = NoneType
+    flipPP = object
+    f_checked = int
 
 # Functions:
 
@@ -284,7 +286,7 @@ def derP_2_PP_(derP_, PP_):
                 upconnect_2_PP_(derP, PP_)  # form PPs across _P upconnects
             else:
                 PP_.append(derP.PP)
-    return PP_
+
 
 
 def upconnect_2_PP_(iderP, PP_):
@@ -331,7 +333,7 @@ def accum_PP(PP, derP):
 def merge_PP(_PP, PP, PP_):  # merge PP into _PP
 
     for derP in PP.derP_:
-        if derP not in _PP.derP_:  # there may be overlapping derP between PPs
+        if derP not in _PP.derP_:
             _PP.derP_.append(derP)
             derP.PP = _PP  # update reference
 

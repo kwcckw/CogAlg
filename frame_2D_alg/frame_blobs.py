@@ -102,6 +102,7 @@ class CBlob(ClusterStructure):
     PP_ = list  # comp_slice_ if not empty
     derP__ = list
     P__ = list
+    flipPP_ = list
 
 def comp_pixel(image):  # 2x2 pixel cross-correlation within image, a standard edge detection operator
     # see comp_pixel_versions file for other versions and more explanation
