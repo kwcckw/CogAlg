@@ -61,7 +61,7 @@ class CderP(ClusterStructure):
     mMg = int
     dMg = int
     P = object   # lower comparand
-    _P = object  # upper comparand
+    _P = object  # higher comparand
     PP = object  # contains this derP
 
 class CPP(ClusterStructure):
@@ -241,15 +241,17 @@ def comp_slice(P, _P):  # forms vertical derivatives of derP params, and conditi
 
     return derP
 
-''' Positional miss is positive: lower filters, no match: always inverse?
+''' Positional miss is positive: lower filters, no match: always inverse miss?
 
-    skip to hLe prediction limits: search for termination that defines and borrows from P,
-    form complemented and composite Ps: 
-    project over contrast, hierarchically, implied stability?
-    edge is more concentrated than flat for stable shape -> stable contents' patterns?
+    skip to prediction limits: search for termination that defines and borrows from P,
+    form complemented ) composite Ps: ave proximate projected match cross sign ) composition level:
+     
+    comp at ave m, but not specifically projected m? 
+    or at ave m/d: current / higher order of composition? 
+    1Le: fixed binary Cf, 2Le: skip to individual integer Cf, variable pattern L vs. pixel res?
 
+    edge is more concentrated than flat for stable shape -> stable contents patterns?
     differential feedback per target level: @filters, but not pattern
-    feedforward is fixed at average p-prediction limits, by p size or skip?
     
     radial comp extension for co-internal blobs:
     != sign comp x sum( adj_blob_) -> intra_comp value, isolation value, cross-sign merge if weak, else:
@@ -290,8 +292,8 @@ def upconnect_2_PP_(iderP, PP_):
     compare sign of lower-layer iderP to the sign of its upconnects to form contiguous same-sign PPs
     '''
     confirmed_upconnect_ = []
-
     for derP in iderP._P.upconnect_:  # potential upconnects from previous call
+
         if derP not in iderP.PP.derP_:  # derP should not in current iPP derP_ list, but this may occur after the PP merging
             if (iderP.Pm > 0) == (derP.Pm > 0):  # no sign change, accumulate PP
 
@@ -301,13 +303,14 @@ def upconnect_2_PP_(iderP, PP_):
                     accum_PP(iderP.PP, derP)
                     confirmed_upconnect_.append(derP)
 
-            # sign changed, derP became root derP if they do not having PP yet (from my checking, they might be already associated with other PP in other forking's accumulation section)
-            elif not isinstance(derP.PP, CPP): # derP is not having PP yet
+            elif not isinstance(derP.PP, CPP):  # sign changed, derP is root derP unless it already has PP
+
                 derP.PP = CPP(derPP=derP, derP_=[derP])  # init
-                derP.P.downconnect_cnt = 0 # reset downconnect count for root derP (we missed out this line fo code previously)
+                derP.P.downconnect_cnt = 0  # reset downconnect count for root derP
 
             if derP._P.upconnect_:
                 upconnect_2_PP_(derP, PP_)  # recursive compare sign of next-layer upconnects
+
             elif derP.PP is not iderP.PP and derP.P.downconnect_cnt == 0:
                 PP_.append(derP.PP)  # terminate PP (not iPP) at the sign change
 
@@ -328,8 +331,8 @@ def accum_PP(PP, derP):
 def merge_PP(_PP, PP, PP_):  # merge PP into _PP
 
     for derP in PP.derP_:
-        if derP not in _PP.derP_:
-            _PP.derP_ .append(derP)
+        if derP not in _PP.derP_:  # there may be overlapping derP between PPs
+            _PP.derP_.append(derP)
             derP.PP = _PP  # update reference
 
             # accumulate if PP' derP not in _PP
@@ -337,6 +340,5 @@ def merge_PP(_PP, PP, PP_):  # merge PP into _PP
                                  mL=derP.mL, dL=derP.dL, mDx=derP.mDx, dDx=derP.dDx,
                                  mDy=derP.mDy, dDy=derP.dDy, mDg=derP.mDg,
                                  dDg=derP.dDg, mMg=derP.mMg, dMg=derP.dMg)
-
     if PP in PP_:
         PP_.remove(PP)  # remove the merged PP
