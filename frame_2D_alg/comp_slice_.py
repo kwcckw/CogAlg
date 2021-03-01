@@ -40,7 +40,7 @@ class CP(ClusterStructure):
     derP_ = list
     upconnect_ = list
     downconnect_cnt = int
-
+    FPP = object
 
 class CderP(ClusterStructure):
 
@@ -75,6 +75,11 @@ class CPP(ClusterStructure):
     fdiv = NoneType
     flipPP = object
     f_checked = int
+    
+    
+class CFPP(ClusterStructure):
+    Pi = object
+    P_ = list
 
 # Functions:
 
@@ -95,6 +100,7 @@ def slice_blob(blob, verbose=False):
     if verbose: print("Converting to image...")
     P__ = []
     derP__ = []
+    FPP__ = []
 
     zip_dert__ = zip(*dert__)
     _P_ = form_P_(list(zip(*next(zip_dert__))), mask__[0], 0)  # 1st upper row
@@ -104,12 +110,19 @@ def slice_blob(blob, verbose=False):
         if verbose: print(f"\rProcessing line {y + 1}/{height}, ", end=""); sys.stdout.flush()
 
         P_ = form_P_(list(zip(*dert_)), mask__[y], y)  # horizontal clustering - lower row
-        derP_ = scan_P_(P_, _P_)  # test x overlap between Ps, call comp_slice
+        derP_, FPP_ = scan_P_(P_, _P_)  # test x overlap between Ps, call comp_slice
         derP__ += derP_  # frame of derPs
+        FPP__ += FPP_ # frame of FPPs
         _P_ = P_  # set current lower row P_ as next upper row _P_
+
+    # terminate last row's FPPs
+    for P in P_:
+        if isinstance(P.FPP, CFPP):
+            FPP__.append(P.FPP)
 
     blob.P__ = P__
     blob.derP__ = derP__
+    blob.FPP__ = FPP__
 
 
 def form_P_(idert_, mask_, y):  # segment dert__ into P__, in horizontal ) vertical order
@@ -158,22 +171,61 @@ def form_P_(idert_, mask_, y):  # segment dert__ into P__, in horizontal ) verti
 def scan_P_(P_, _P_):  # test for x overlap between Ps, call comp_slice
 
     derP_ = []
+    FPP_ = []
     for P in P_:  # lower row
         for _P in _P_:  # upper row
-            # test for x overlap between P and _P in 8 directions:
-            if P.x0 - 1 < (_P.x0 + _P.L) and (P.x0 + P.L) + 1 > _P.x0:  # all Ps here are positive
-
-                fcomp = [1 for derP in P.upconnect_ if P is derP.P]
-                if not fcomp:
-                    derP = comp_slice(P, _P)  # form vertical derivatives
-                    derP_.append(derP)
-                    _P.downconnect_cnt += 1
-                    P.upconnect_.append(derP)
+            
+            # 1. test for x overlap between P and _P in 8 directions
+            if (P.x0 - 1 < (_P.x0 + _P.L) and (P.x0 + P.L) + 1 > _P.x0): # all Ps here are positive  
+                
+                d_ave_x = (P.x0 + (P.L-1)/2) - (_P.x0 + (_P.L-1)/2)
+                if P.Dx == 0: P.Dx = 1 # avoid zero division
+                
+                # need further review:
+                # 2. test for flip per P
+                if (d_ave_x * (P.Dy / P.Dx) - flip_ave):  # form postive FPP
+                         
+                    if not isinstance(P.FPP, CFPP): # P is not having FPP, init new FPP
+                        P.FPP = CFPP(Pi=P, P_=[P])
+                           
+                    if isinstance(_P.FPP, CFPP): # upper row _P is having FPP, merge lower row FPP to it
+                        if _P.FPP is not P.FPP: 
+                            merge_FPP(P.FPP, _P.FPP)
+                    elif _P not in P.FPP.P_: # upper row _P is not having FPP, add _P to FPP
+                        accum_FPP(P.FPP, _P)
+                            
+                else: # form derP
+                    if isinstance(P.FPP, CFPP): # P is having FPP, terminate it
+                        FPP_.append(P.FPP)
+                        
+                    fcomp = [1 for derP in P.upconnect_ if P is derP.P]
+                    if not fcomp:
+                        derP = comp_slice(P, _P)  # form vertical derivatives
+                        derP_.append(derP)
+                        _P.downconnect_cnt += 1
+                        P.upconnect_.append(derP)
 
             elif (P.x0 + P.L) < _P.x0:  # stop scanning the rest of lower P_ if there is no overlap
+                if isinstance(P.FPP, CFPP): # P is having FPP, terminate it
+                    FPP_.append(P.FPP)
                 break
 
-    return derP_
+    return derP_, FPP_
+
+
+def merge_FPP(_FPP, FPP):
+    
+    for P in FPP.P_:
+        if P not in _FPP.P_:
+            _FPP.P_.append(P) # add FPP's P into _FPP
+            P.FPP = _FPP # update FPP reference
+            accum_FPP(_FPP, P) # accumulate P params into _FPP
+            
+def accum_FPP(FPP,P):
+    
+    FPP.Pi.accumulate(I=P.I, Dy=P.Dy, Dx=P.Dx, G=P.G, Dyy=P.Dyy, Dyx=P.Dyx, Dxy=P.Dxy, Dxx=P.Dxx, Ga=P.Ga, Ma=P.Ma);
+    FPP.P_.append(P)
+    P.FPP = FPP
 
 
 def flip_eval(blob):

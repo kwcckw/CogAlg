@@ -28,7 +28,7 @@ from intra_comp import comp_r, comp_a
 from frame_blobs_imaging import visualize_blobs
 from itertools import zip_longest
 from comp_slice_ import *
-from comp_PP_ import *
+from flip_PP_ import *
 
 
 # filters, All *= rdn:
