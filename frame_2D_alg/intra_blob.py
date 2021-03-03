@@ -57,9 +57,8 @@ def intra_blob(blob, **kwargs):  # slice_blob or recursive input rng+ | angle cr
                 blob.f_comp_a = 0
                 blob.prior_forks.extend('p')
                 if kwargs.get('verbose'): print('\nslice_blob fork\n')
-                slice_blob(blob, [])  # cross-comp of vertically consecutive Ps in selected stacks
-                derP_2_PP_(blob.derP__, blob.PP_)  # form vertically contiguous patterns of patterns
-
+                slice_blob(blob, verbose=True)  # cross-comp of vertically consecutive Ps in selected stacks
+                
     else:
         # root fork is frame_blobs or comp_r
         ext_dert__, ext_mask__ = extend_dert(blob)  # dert__ boundaries += 1, for cross-comp in larger kernels
