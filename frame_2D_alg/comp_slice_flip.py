@@ -9,6 +9,7 @@ from collections import deque
 import sys
 import numpy as np
 from class_cluster import ClusterStructure, NoneType
+import cv2
 import warnings  # to detect overflow issue, in case of infinity loop
 warnings.filterwarnings('error')
 
@@ -39,7 +40,6 @@ class CP(ClusterStructure):
     gdert_ = list
     Dg = int
     Mg = int
-    derP_ = list
     upconnect_ = list
     downconnect_cnt = int
 
@@ -75,8 +75,9 @@ class CPP(ClusterStructure):
     downconnect_cnt = int
     fPPm = NoneType  # PPm if 1, else PPd; not needed if packed in PP_?
     fdiv = NoneType
+    box = list # for visualization only, original box before flipping
     # FPP params
-    flip_val = NoneType  # Ps are vertically biased
+    flip_val = int  # Ps are vertically biased
     dert__ = list
     mask__ = bool
     P__ = list
@@ -102,6 +103,7 @@ def slice_blob(blob, verbose=False):
     adding horizontal blob slices: Ps or 1D patterns
     '''
 
+
     fflip = 0
     if not isinstance(blob, CPP):  # input is blob
         flip_eval_blob(blob)
@@ -124,11 +126,15 @@ def slice_blob(blob, verbose=False):
         P_ = form_P_(list(zip(*dert_)), mask__[y], y)  # horizontal clustering - lower row
         derP_ = scan_P_(P_, _P_)  # test x overlap between Ps, call comp_slice
         derP__ += derP_  # frame of derPs
+        P__ += P_
         _P_ = P_  # set current lower row P_ as next upper row _P_
 
     blob.P__ = P__
     blob.derP__ = derP__
     derP_2_PP_(blob.derP__, blob.PP_, fflip)  # form vertically contiguous patterns of patterns
+
+    if not isinstance(blob, CPP):
+        draw_PP_(blob)
 
 
 def form_P_(idert_, mask_, y):  # segment dert__ into P__, in horizontal ) vertical order
@@ -246,7 +252,8 @@ def comp_slice(_P, P):  # forms vertical derivatives of derP params, and conditi
     d_ave_x = (P.x0 + (P.L - 1) / 2) - (_P.x0 + (_P.L - 1) / 2)
     flip_val = (d_ave_x * (P.Dy / (P.Dx+.001)) - flip_ave)  # avoid division by zero
 
-    derP = CderP(P=P, _P=_P, flip_val=flip_val,
+    from copy import copy
+    derP = CderP(P=P, _P=_P, flip_val=copy(flip_val),
                  Pm=Pm, Pd=Pd, mX=mX, dX=dX, mL=mL, dL=dL, mDx=mDx, dDx=dDx, mDy=mDy, dDy=dDy, mDg=mDg, dDg=dDg, mMg=mMg, dMg=dMg)
     # div_f, nvars
 
@@ -293,7 +300,7 @@ def derP_2_PP_(derP_, PP_, fflip):
             if derP._P.upconnect_:  # derP has upconnects
                 upconnect_2_PP_(derP, PP_, fflip)  # form PPs across _P upconnects
             else:
-                if derP.PP.flip_val and fflip:  # flip FPP
+                if (derP.PP.flip_val>0) and fflip:  # flip FPP
                     flip_FPP(derP.PP)
                 PP_.append(derP.PP)
 
@@ -302,20 +309,32 @@ def upconnect_2_PP_(iderP, PP_, fflip):
     '''
     compare sign of lower-layer iderP to the sign of its upconnects to form contiguous same-sign PPs
     '''
+    
     confirmed_upconnect_ = []
     for derP in iderP._P.upconnect_:  # potential upconnects from previous call
 
         if derP not in iderP.PP.derP_:  # derP should not in current iPP derP_ list, but this may occur after the PP merging
 
-            if (derP.flip_val and iderP.flip_val) or ((iderP.Pm > 0) == (derP.Pm > 0)) : # same flip_val or m sign
-                if isinstance(derP.PP, CPP) and (derP.PP is not iderP.PP):  # upconnect derP has different FPP/PP, merge them
-                    merge_PP(iderP.PP, derP.PP, PP_)
-                else: # accumulate derP to current FPP/PP
+            # flip_val could be negative, we need explicitly insert >0, else negative value will be true if we use only 'if derP.flip_val'. 
+            # 'if derP.flip_val' will be false only when the flip val is zero, but not positive or negative values.
+            if (derP.flip_val>0 and iderP.flip_val>0 and iderP.PP.flip_val>0)  : # same flip_val 
+                # upconnect derP has different FPP, merge them
+                if isinstance(derP.PP, CPP) and (derP.PP is not iderP.PP):
+                    merge_PP(iderP.PP, derP.PP, PP_)     
+                else: # accumulate derP to current FPP
+                    accum_PP(iderP.PP, derP)
+                    confirmed_upconnect_.append(derP)
+
+            # same m sign and neither of them is FPP's derP
+            elif ((iderP.Pm > 0) == (derP.Pm > 0)) and not (iderP.flip_val>0) and not (derP.flip_val>0):
+                # upconnect derP has different PP 
+                if isinstance(derP.PP, CPP) and (derP.PP is not iderP.PP):
+                    merge_PP(iderP.PP, derP.PP, PP_)       
+                else: # accumulate derP to current PP
                     accum_PP(iderP.PP, derP)
                     confirmed_upconnect_.append(derP)
 
             elif not isinstance(derP.PP, CPP):  # sign changed, derP is root derP unless it already has FPP/PP
-
                 PP = CPP(derPP=CderP())
                 accum_PP(PP,derP)
                 derP.P.downconnect_cnt = 0  # reset downconnect count for root derP
@@ -324,15 +343,15 @@ def upconnect_2_PP_(iderP, PP_, fflip):
                 upconnect_2_PP_(derP, PP_, fflip)  # recursive compare sign of next-layer upconnects
 
             elif derP.PP is not iderP.PP and derP.P.downconnect_cnt == 0:
-                if derP.PP.flip_val and fflip:
+                if (derP.PP.flip_val>0) and fflip:
                     flip_FPP(derP.PP)
                 PP_.append(derP.PP)  # terminate PP (not iPP) at the sign change
 
     iderP._P.upconnect_ = confirmed_upconnect_
 
     if not iderP.P.downconnect_cnt:
-        if derP.PP.flip_val and fflip:
-            flip_FPP(derP.PP)
+        if (iderP.PP.flip_val>0) and fflip:
+            flip_FPP(iderP.PP)
         PP_.append(iderP.PP)  # iPP termination after all upconnects are checked
 
 
@@ -355,11 +374,13 @@ def accum_Dert(Dert: dict, **params) -> None:
 def accum_PP(PP, derP):
 
     # accumulate derP params into PP
-    PP.derPP.accumulate(flip_val=derP.flip_val,Pm=derP.Pm, Pd=derP.Pd, mx=derP.mx, dx=derP.dx, mL=derP.mL, dL=derP.dL, mDx=derP.mDx, dDx=derP.dDx,
+    PP.derPP.accumulate(Pm=derP.Pm, Pd=derP.Pd, mx=derP.mx, dx=derP.dx, mL=derP.mL, dL=derP.dL, mDx=derP.mDx, dDx=derP.dDx,
                           mDy=derP.mDy, dDy=derP.dDy, mDg=derP.mDg, dDg=derP.dDg, mMg=derP.mMg, dMg=derP.dMg)
+    
+    PP.flip_val += derP.flip_val
     PP.derP_.append(derP) # add derP to PP's derP list
     derP.PP = PP          # update PP reference
-
+    
 
 def merge_PP(_PP, PP, PP_):  # merge PP into _PP
 
@@ -373,6 +394,8 @@ def merge_PP(_PP, PP, PP_):  # merge PP into _PP
                                  mL=derP.mL, dL=derP.dL, mDx=derP.mDx, dDx=derP.dDx,
                                  mDy=derP.mDy, dDy=derP.dDy, mDg=derP.mDg,
                                  dDg=derP.dDg, mMg=derP.mMg, dMg=derP.dMg)
+            _PP.flip_val += derP.flip_val
+            
     if PP in PP_:
         PP_.remove(PP)  # remove the merged PP
 
@@ -386,7 +409,8 @@ def flip_FPP(FPP):
     x0 = min(min([derP.P.x0 for derP in FPP.derP_]), min([derP._P.x0 for derP in FPP.derP_]))
     xn = max(max([derP.P.x0+derP.P.L for derP in FPP.derP_]), max([derP._P.x0+derP._P.L for derP in FPP.derP_]))
     y0 = min(min([derP.P.y for derP in FPP.derP_]), min([derP._P.y for derP in FPP.derP_]))
-    yn = max(max([derP.P.y for derP in FPP.derP_]), max([derP._P.y for derP in FPP.derP_]))
+    yn = max(max([derP.P.y for derP in FPP.derP_]), max([derP._P.y for derP in FPP.derP_])) +1 # +1 because yn is not inclusive, else we will lost last y value
+    FPP.box = [y0,yn,x0,xn]
 
     # init empty dert, 11 params in dert
     dert__ = [np.zeros((yn-y0, xn-x0)) for _ in range(11)]
@@ -397,13 +421,13 @@ def flip_FPP(FPP):
         # _P
         for _x, _dert in enumerate(derP._P.dert_):
             for i, _param in enumerate(_dert):
-                dert__[i][derP._P.y-y0-1, derP._P.x0-x0+_x] = _param
-                mask__[derP._P.y-y0-1, derP._P.x0-x0+_x] = False
+                dert__[i][derP._P.y-y0, derP._P.x0-x0+_x] = _param
+                mask__[derP._P.y-y0, derP._P.x0-x0+_x] = False
         # P
         for x, dert in enumerate(derP.P.dert_):
             for j, param in enumerate(dert):
-                dert__[j][derP.P.y-y0-1, derP.P.x0-x0+x] = param
-                mask__[derP.P.y-y0-1, derP.P.x0-x0+x] = False
+                dert__[j][derP.P.y-y0, derP.P.x0-x0+x] = param
+                mask__[derP.P.y-y0, derP.P.x0-x0+x] = False
 
     # rotate dert
     dert__flip = [np.rot90(dert) for dert in dert__]
@@ -414,3 +438,118 @@ def flip_FPP(FPP):
 
     # form PP with the flipped FPP
     slice_blob(FPP, verbose=True)
+
+
+def draw_PP_(blob):
+    
+    colour_list = []  # list of colours:
+    colour_list.append([192, 192, 192])  # silver
+    colour_list.append([200, 130, 1])  # blue
+    colour_list.append([75, 25, 230])  # red
+    colour_list.append([25, 255, 255])  # yellow
+    colour_list.append([75, 180, 60])  # green
+    colour_list.append([212, 190, 250])  # pink
+    colour_list.append([240, 250, 70])  # cyan
+    colour_list.append([48, 130, 245])  # orange
+    colour_list.append([180, 30, 145])  # purple
+    colour_list.append([40, 110, 175])  # brown
+    
+    img_dir_path = "./images/PPs/"
+    
+    # get box
+    if blob.fflip:
+        x0 = blob.box[0]
+        xn = blob.box[1]
+        y0 = blob.box[2]
+        yn = blob.box[3] 
+    else:
+        x0 = blob.box[2]
+        xn = blob.box[3]
+        y0 = blob.box[0]
+        yn = blob.box[1]
+        
+    # init
+    img_colour_P = np.zeros((yn-y0, xn-x0,3)).astype('uint8')
+    img_separator = (np.ones((yn-y0, 1,3)).astype('uint8'))*255
+    img_colour_PP = np.zeros((yn-y0, xn-x0,3)).astype('uint8')
+    img_colour_PP_Ps = np.zeros((yn-y0, xn-x0,3)).astype('uint8')
+    img_colour_FPP = np.zeros((yn-y0, xn-x0,3)).astype('uint8')
+    img_colour_FPP_Ps = np.zeros((yn-y0, xn-x0,3)).astype('uint8')
+    
+    
+    # colour index
+    c_ind_P = 0  # P
+    c_ind_PP = 0  # PP
+    c_ind_PP_Ps = 0  # PP's Ps
+    c_ind_FPP_section = 0 # FPP
+    c_ind_FPP_section_Ps = 0 # FPP's Ps
+    
+    # draw Ps
+    for P in blob.P__:
+        for x, _ in enumerate(P.dert_):
+            img_colour_P[P.y, P.x0+x] = colour_list[c_ind_P%10]
+        c_ind_P += 1
+
+
+    for blob_PP in blob.PP_:
+        
+        # draw PPs
+        for derP in blob_PP.derP_:
+            if derP.flip_val <=0:
+                # _P
+                for _x, _dert in enumerate(derP._P.dert_): 
+                    img_colour_PP[derP._P.y, derP._P.x0+_x,:] = colour_list[c_ind_PP%10]
+                    img_colour_PP_Ps[derP._P.y, derP._P.x0+_x,:] = colour_list[c_ind_PP_Ps%10]
+                c_ind_PP_Ps += 1
+                # P
+                for x, dert in enumerate(derP.P.dert_):
+                    img_colour_PP[derP.P.y, derP.P.x0+x,:] = colour_list[c_ind_PP%10]
+                    img_colour_PP_Ps[derP.P.y, derP.P.x0+x,:] = colour_list[c_ind_PP_Ps%10]
+                c_ind_PP_Ps += 1
+                    
+        c_ind_PP += 1 # increase P index
+
+        # draw FPPs
+        if blob_PP.flip_val>0:
+                
+            # get box
+            x0FPP = min([P.x0 for P in blob_PP.P__])
+            xnFPP = max([P.x0 + P.L for P in blob_PP.P__])
+            y0FPP = min([P.y for P in blob_PP.P__])
+            ynFPP = max([P.y for P in blob_PP.P__])+1 # +1 because yn is not inclusive, else we will lost last y value
+            
+            # init smaller image contains the flipped section only
+            img_colour_FPP_section = np.zeros((ynFPP-y0FPP, xnFPP-x0FPP,3))
+            img_colour_FPP_section_Ps = np.zeros((ynFPP-y0FPP, xnFPP-x0FPP,3))
+            
+            # fill colour
+            for P in blob_PP.P__:
+                for x, _ in enumerate(P.dert_):
+                    img_colour_FPP_section[P.y, P.x0+x] = colour_list[c_ind_FPP_section%10]
+                    img_colour_FPP_section_Ps[P.y, P.x0+x] = colour_list[c_ind_FPP_section_Ps%10]
+                c_ind_FPP_section_Ps += 1
+            c_ind_FPP_section += 1
+                
+            # flip back
+            img_colour_FPP_section = np.rot90(img_colour_FPP_section,k=3) 
+            img_colour_FPP_section_Ps = np.rot90(img_colour_FPP_section_Ps,k=3)
+            
+            # fill back the bigger image
+            img_colour_FPP[blob_PP.box[0]:blob_PP.box[1],blob_PP.box[2]:blob_PP.box[3]] = img_colour_FPP_section
+            img_colour_FPP_Ps[blob_PP.box[0]:blob_PP.box[1],blob_PP.box[2]:blob_PP.box[3]] = img_colour_FPP_section_Ps
+            
+            
+        # combine images with Ps, PPs and FPPs into 1 single image
+        img_combined = np.concatenate((img_colour_P, img_separator), axis=1)
+        img_combined = np.concatenate((img_combined, img_colour_PP), axis=1)
+        img_combined = np.concatenate((img_combined, img_separator), axis=1)
+        img_combined = np.concatenate((img_combined, img_colour_FPP), axis=1)
+        img_combined = np.concatenate((img_combined, img_separator), axis=1)
+        img_combined = np.concatenate((img_combined, img_colour_PP_Ps), axis=1)
+        img_combined = np.concatenate((img_combined, img_separator), axis=1)
+        img_combined = np.concatenate((img_combined, img_colour_FPP_Ps), axis=1)
+        
+        # save image to disk
+        cv2.imwrite(img_dir_path+'img_b'+str(blob.id)+'.bmp', img_combined)
+
+    
