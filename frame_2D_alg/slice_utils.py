@@ -22,7 +22,8 @@ matplotlib.use('Agg')  # disable visible figure during the processing to speed u
 from comp_slice_ import *
 
 aveG = 50
-flip_ave = 2000
+flip_ave = 0.1
+flip_ave_FPP = 5
 
 
 def draw_PP_(blob):
@@ -67,13 +68,13 @@ def draw_PP_(blob):
     c_ind_FPP_section = 0  # FPP
     c_ind_FPP_section_Ps = 0  # FPP's Ps
 
-    # draw Ps
-    for P in blob.P__:
+    # draw mPs, dPs should be the same
+    for P in blob.mP__:
         for x, _ in enumerate(P.dert_):
             img_colour_P[P.y, P.x0 + x] = colour_list[c_ind_P % 10]
         c_ind_P += 1
 
-    for blob_PP in blob.PP_:
+    for blob_PP in blob.mPP_: # draw mPP
 
         # draw PPs
         for derP in blob_PP.derP_:
@@ -92,20 +93,20 @@ def draw_PP_(blob):
         c_ind_PP += 1  # increase P index
 
         # draw FPPs
-        if blob_PP.flip_val > 0:
+        if blob_PP.derPP.flip_val > flip_ave_FPP :
 
             # get box
-            x0FPP = min([P.x0 for P in blob_PP.P__])
-            xnFPP = max([P.x0 + P.L for P in blob_PP.P__])
-            y0FPP = min([P.y for P in blob_PP.P__])
-            ynFPP = max([P.y for P in blob_PP.P__]) + 1  # +1 because yn is not inclusive, else we will lost last y value
+            x0FPP = min([P.x0 for P in blob_PP.mP__])
+            xnFPP = max([P.x0 + P.L for P in blob_PP.mP__])
+            y0FPP = min([P.y for P in blob_PP.mP__])
+            ynFPP = max([P.y for P in blob_PP.mP__]) + 1  # +1 because yn is not inclusive, else we will lost last y value
 
             # init smaller image contains the flipped section only
             img_colour_FPP_section = np.zeros((ynFPP - y0FPP, xnFPP - x0FPP, 3))
             img_colour_FPP_section_Ps = np.zeros((ynFPP - y0FPP, xnFPP - x0FPP, 3))
 
             # fill colour
-            for P in blob_PP.P__:
+            for P in blob_PP.mP__:
                 for x, _ in enumerate(P.dert_):
                     img_colour_FPP_section[P.y, P.x0 + x] = colour_list[c_ind_FPP_section % 10]
                     img_colour_FPP_section_Ps[P.y, P.x0 + x] = colour_list[c_ind_FPP_section_Ps % 10]
