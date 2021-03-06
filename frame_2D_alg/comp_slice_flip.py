@@ -81,10 +81,13 @@ class CPP(ClusterStructure):
     flip_val = int  # Ps are vertically biased
     dert__ = list
     mask__ = bool
-    P__ = list
-    derP__ = list
-    PP_  = list
-
+    dPP_ = list
+    dP__ = list
+    mPP_  = list
+    mP__ = list    
+    # gPP params
+    gPPy_ = list
+    
 # Functions:
 
 # leading '_' denotes higher-line variable or structure, vs. same-type lower-line variable or structure
@@ -97,7 +100,7 @@ if flip_val(PP is FPP): pack FPP in blob.PP_ -> flip FPP.dert__ -> slice_blob(FP
 else       (PP is PP):  pack PP in blob.PP_
 '''
 
-def slice_blob(blob, verbose=False):
+def slice_blob(blob, fPd, verbose=False):
     '''
     Slice_blob converts selected smooth-edge blobs (high G, low Ga) into sliced blobs,
     adding horizontal blob slices: Ps or 1D patterns
@@ -129,10 +132,15 @@ def slice_blob(blob, verbose=False):
         P__ += P_
         _P_ = P_  # set current lower row P_ as next upper row _P_
 
-    blob.P__ = P__
-    blob.derP__ = derP__
-    derP_2_PP_(blob.derP__, blob.PP_, fflip)  # form vertically contiguous patterns of patterns
-
+    if fPd:
+        blob.dderP__ = derP__
+        blob.dP__ = P__
+        derP_2_PP_(blob.dderP__, blob.dPP_, fPd, fflip)  # form vertically contiguous patterns of patterns
+    else:
+        blob.mderP__ = derP__
+        blob.mP__ = P__
+        derP_2_PP_(blob.mderP__, blob.mPP_, fPd, fflip)  # form vertically contiguous patterns of patterns
+        
     if not isinstance(blob, CPP):
         draw_PP_(blob)
 
@@ -252,8 +260,7 @@ def comp_slice(_P, P):  # forms vertical derivatives of derP params, and conditi
     d_ave_x = (P.x0 + (P.L - 1) / 2) - (_P.x0 + (_P.L - 1) / 2)
     flip_val = (d_ave_x * (P.Dy / (P.Dx+.001)) - flip_ave)  # avoid division by zero
 
-    from copy import copy
-    derP = CderP(P=P, _P=_P, flip_val=copy(flip_val),
+    derP = CderP(P=P, _P=_P, flip_val=flip_val,
                  Pm=Pm, Pd=Pd, mX=mX, dX=dX, mL=mL, dL=dL, mDx=mDx, dDx=dDx, mDy=mDy, dDy=dDy, mDg=mDg, dDg=dDg, mMg=mMg, dMg=dMg)
     # div_f, nvars
 
@@ -287,7 +294,7 @@ def comp_slice(_P, P):  # forms vertical derivatives of derP params, and conditi
     rdn Rng | rng_ eval at rng term, Rng -= lost coord bits mag, always > discr?
 '''
 
-def derP_2_PP_(derP_, PP_, fflip):
+def derP_2_PP_(derP_, PP_, fPd, fflip):
     '''
     first row of derP_ has downconnect_cnt == 0, higher rows may also have them
     '''
@@ -298,14 +305,14 @@ def derP_2_PP_(derP_, PP_, fflip):
             accum_PP(PP,derP)
 
             if derP._P.upconnect_:  # derP has upconnects
-                upconnect_2_PP_(derP, PP_, fflip)  # form PPs across _P upconnects
+                upconnect_2_PP_(derP, PP_, fPd, fflip)  # form PPs across _P upconnects
             else:
-                if (derP.PP.flip_val > flip_ave_FPP) and fflip:
-                    flip_FPP(derP.PP)
+                if (derP.PP.derPP.flip_val > flip_ave_FPP) and fflip:
+                    flip_FPP(derP.PP, fPd)
                 PP_.append(derP.PP)
 
 
-def upconnect_2_PP_(iderP, PP_, fflip):
+def upconnect_2_PP_(iderP, PP_, fPd, fflip):
     '''
     compare sign of lower-layer iderP to the sign of its upconnects to form contiguous same-sign PPs
     '''
@@ -314,16 +321,21 @@ def upconnect_2_PP_(iderP, PP_, fflip):
     for derP in iderP._P.upconnect_:  # potential upconnects from previous call
 
         if derP not in iderP.PP.derP_:  # derP should not in current iPP derP_ list, but this may occur after the PP merging
+            
+            # Pd and Pm sign check
+            if fPd: 
+                P_sign = (iderP.Pd > 0) == (derP.Pd > 0)
+            else: P_sign = (iderP.Pm > 0) == (derP.Pm > 0)
 
-            if (derP.flip_val>0 and iderP.flip_val>0 and iderP.PP.flip_val>0):
+            if (derP.flip_val>0 and iderP.flip_val>0 and iderP.PP.derPP.flip_val>0):
                 # upconnect derP has different FPP, merge them
                 if isinstance(derP.PP, CPP) and (derP.PP is not iderP.PP):
                     merge_PP(iderP.PP, derP.PP, PP_)
                 else: # accumulate derP to current FPP
                     accum_PP(iderP.PP, derP)
                     confirmed_upconnect_.append(derP)
-            # same m sign and not FPP
-            elif ((iderP.Pm > 0) == (derP.Pm > 0)) and not (iderP.flip_val>0) and not (derP.flip_val>0):
+            # same sign and not FPP
+            elif (P_sign) and not (iderP.flip_val>0) and not (derP.flip_val>0):
                 # upconnect derP has different PP
                 if isinstance(derP.PP, CPP) and (derP.PP is not iderP.PP):
                     merge_PP(iderP.PP, derP.PP, PP_)
@@ -337,18 +349,18 @@ def upconnect_2_PP_(iderP, PP_, fflip):
                 derP.P.downconnect_cnt = 0  # reset downconnect count for root derP
 
             if derP._P.upconnect_:
-                upconnect_2_PP_(derP, PP_, fflip)  # recursive compare sign of next-layer upconnects
+                upconnect_2_PP_(derP, PP_, fPd, fflip)  # recursive compare sign of next-layer upconnects
 
             elif derP.PP is not iderP.PP and derP.P.downconnect_cnt == 0:
-                if (derP.PP.flip_val > flip_ave_FPP) and fflip:  #
-                    flip_FPP(derP.PP)
+                if (derP.PP.derPP.flip_val > flip_ave_FPP) and fflip:  #
+                    flip_FPP(derP.PP,fPd)
                 PP_.append(derP.PP)  # terminate PP (not iPP) at the sign change
 
     iderP._P.upconnect_ = confirmed_upconnect_
 
     if not iderP.P.downconnect_cnt:
-        if (iderP.PP.flip_val > flip_ave_FPP) and fflip:
-            flip_FPP(iderP.PP)
+        if (iderP.PP.derPP.flip_val > flip_ave_FPP) and fflip:
+            flip_FPP(iderP.PP, fPd)
         PP_.append(iderP.PP)  # iPP termination after all upconnects are checked
 
 
@@ -371,10 +383,8 @@ def accum_Dert(Dert: dict, **params) -> None:
 def accum_PP(PP, derP):
 
     # accumulate derP params into PP
-    PP.derPP.accumulate(Pm=derP.Pm, Pd=derP.Pd, mx=derP.mx, dx=derP.dx, mL=derP.mL, dL=derP.dL, mDx=derP.mDx, dDx=derP.dDx,
+    PP.derPP.accumulate(flip_val=derP.flip_val, Pm=derP.Pm, Pd=derP.Pd, mx=derP.mx, dx=derP.dx, mL=derP.mL, dL=derP.dL, mDx=derP.mDx, dDx=derP.dDx,
                           mDy=derP.mDy, dDy=derP.dDy, mDg=derP.mDg, dDg=derP.dDg, mMg=derP.mMg, dMg=derP.dMg)
-
-    PP.flip_val += derP.flip_val
     PP.derP_.append(derP)
     derP.PP = PP  # update reference
 
@@ -387,17 +397,16 @@ def merge_PP(_PP, PP, PP_):  # merge PP into _PP
             derP.PP = _PP  # update reference
 
             # accumulate if PP' derP not in _PP
-            _PP.derPP.accumulate(Pm=derP.Pm, Pd=derP.Pd, mx=derP.mx, dx=derP.dx,
+            _PP.derPP.accumulate(flip_val=derP.flip_val, Pm=derP.Pm, Pd=derP.Pd, mx=derP.mx, dx=derP.dx,
                                  mL=derP.mL, dL=derP.dL, mDx=derP.mDx, dDx=derP.dDx,
                                  mDy=derP.mDy, dDy=derP.dDy, mDg=derP.mDg,
                                  dDg=derP.dDg, mMg=derP.mMg, dMg=derP.dMg)
-            _PP.flip_val += derP.flip_val
 
     if PP in PP_:
         PP_.remove(PP)  # remove merged PP
 
 
-def flip_FPP(FPP):
+def flip_FPP(FPP, fPd):
     '''
     flip derts of FPP and call again slice_blob to get PPs of FPP
     '''
@@ -432,4 +441,4 @@ def flip_FPP(FPP):
     FPP.mask__ = mask__flip
 
     # form PP with the flipped FPP
-    slice_blob(FPP, verbose=True)
+    slice_blob(FPP, fPd, verbose=True)

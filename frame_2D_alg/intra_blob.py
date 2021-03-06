@@ -28,7 +28,7 @@ from intra_comp import comp_r, comp_a
 from draw_frame_blobs import visualize_blobs
 from itertools import zip_longest
 from comp_slice_flip import *
-from flip_PP_ import *
+from form_PP_dx import form_PP_dx_
 
 
 # filters, All *= rdn:
@@ -57,8 +57,12 @@ def intra_blob(blob, **kwargs):  # slice_blob or recursive input rng+ | angle cr
                 blob.f_comp_a = 0
                 blob.prior_forks.extend('p')
                 if kwargs.get('verbose'): print('\nslice_blob fork\n')
-                slice_blob(blob, verbose=True)  # cross-comp of vertically consecutive Ps in selected stacks
-                
+                # mPP
+                slice_blob(blob, 0, verbose=True)  # cross-comp of vertically consecutive Ps in selected stacks
+                # dPP
+                slice_blob(blob, 1, verbose=True)  
+
+                form_PP_dx_(blob.dPP_)
     else:
         # root fork is frame_blobs or comp_r
         ext_dert__, ext_mask__ = extend_dert(blob)  # dert__ boundaries += 1, for cross-comp in larger kernels
