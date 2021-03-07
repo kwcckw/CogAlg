@@ -10,6 +10,8 @@ from slice_utils import draw_PP_
 import sys
 import numpy as np
 from class_cluster import ClusterStructure, NoneType
+from form_PP_dx import form_PP_dx_
+
 import warnings  # to detect overflow issue, in case of infinity loop
 warnings.filterwarnings('error')
 
@@ -38,11 +40,14 @@ class CP(ClusterStructure):
     y = int  # for visualization only
     sign = NoneType  # sign of gradient deviation
     dert_ = list   # array of pixel-level derts: (p, dy, dx, g, m), extended in intra_blob
-    gdert_ = list
-    Dg = int
-    Mg = int
     upconnect_ = list
     downconnect_cnt = int
+    Dg = int
+    Mg = int
+    # Dx
+    dxdert_ = list
+    Ddx = int
+    Mdx = int
 
 class CderP(ClusterStructure):
     ## derP
@@ -70,7 +75,6 @@ class CderP(ClusterStructure):
 class CPP(ClusterStructure):
 
     derPP = object  # set of derP params accumulated in PP
-    derP_ = list
     # between PPs:
     upconnect_ = list
     downconnect_cnt = int
@@ -81,12 +85,16 @@ class CPP(ClusterStructure):
     flip_val = int  # Ps are vertically biased
     dert__ = list
     mask__ = bool
-    dPP_ = list
-    dP__ = list
-    mPP_  = list
-    mP__ = list    
-    # gPP params
-    gPPy_ = list
+    
+    derPd__ = list
+    PPd_ = list
+    Pd__ = list
+    
+    derPm__ = list
+    PPm_  = list
+    Pm__ = list   
+    # PP_dx params
+    PP_dx = list
     
 # Functions:
 
@@ -132,17 +140,22 @@ def slice_blob(blob, fPd, verbose=False):
         P__ += P_
         _P_ = P_  # set current lower row P_ as next upper row _P_
 
+    # comp_PP_dx -> comp_dx
+    if not isinstance(blob, CPP) and fPd:  # input is blob and Pd 
+        form_PP_dx_(P__)
+
     if fPd:
-        blob.dderP__ = derP__
-        blob.dP__ = P__
-        derP_2_PP_(blob.dderP__, blob.dPP_, fPd, fflip)  # form vertically contiguous patterns of patterns
+        blob.derPd__ = derP__
+        blob.Pd__ = P__
+        derP_2_PP_(blob.derPd__, blob.PPd_, fPd, fflip)  # form vertically contiguous patterns of patterns
     else:
-        blob.mderP__ = derP__
-        blob.mP__ = P__
-        derP_2_PP_(blob.mderP__, blob.mPP_, fPd, fflip)  # form vertically contiguous patterns of patterns
+        blob.derPm__ = derP__
+        blob.Pm__ = P__
+        derP_2_PP_(blob.derPm__, blob.PPm_, fPd, fflip)  # form vertically contiguous patterns of patterns
         
     if not isinstance(blob, CPP):
-        draw_PP_(blob)
+#        draw_PP_(blob) # buggy and yet to be updated for PPm and PPd
+        pass
 
 
 def form_P_(idert_, mask_, y):  # segment dert__ into P__, in horizontal ) vertical order
@@ -302,7 +315,7 @@ def derP_2_PP_(derP_, PP_, fPd, fflip):
         if not derP.P.downconnect_cnt and not isinstance(derP.PP, CPP):  # root derP was not terminated in prior call
 
             PP = CPP(derPP=CderP())  # init
-            accum_PP(PP,derP)
+            accum_PP(PP,derP, fPd)
 
             if derP._P.upconnect_:  # derP has upconnects
                 upconnect_2_PP_(derP, PP_, fPd, fflip)  # form PPs across _P upconnects
@@ -320,32 +333,34 @@ def upconnect_2_PP_(iderP, PP_, fPd, fflip):
     confirmed_upconnect_ = []
     for derP in iderP._P.upconnect_:  # potential upconnects from previous call
 
-        if derP not in iderP.PP.derP_:  # derP should not in current iPP derP_ list, but this may occur after the PP merging
+        if fPd: derP_ = iderP.PP.derPd__
+        else: derP_ = iderP.PP.derPm__
+
+        if derP not in derP_:  # derP should not in current iPP derP_ list, but this may occur after the PP merging
             
             # Pd and Pm sign check
-            if fPd: 
-                P_sign = (iderP.Pd > 0) == (derP.Pd > 0)
+            if fPd: P_sign = (iderP.Pd > 0) == (derP.Pd > 0)
             else: P_sign = (iderP.Pm > 0) == (derP.Pm > 0)
 
             if (derP.flip_val>0 and iderP.flip_val>0 and iderP.PP.derPP.flip_val>0):
                 # upconnect derP has different FPP, merge them
                 if isinstance(derP.PP, CPP) and (derP.PP is not iderP.PP):
-                    merge_PP(iderP.PP, derP.PP, PP_)
+                    merge_PP(iderP.PP, derP.PP, PP_, fPd)
                 else: # accumulate derP to current FPP
-                    accum_PP(iderP.PP, derP)
+                    accum_PP(iderP.PP, derP, fPd)
                     confirmed_upconnect_.append(derP)
             # same sign and not FPP
             elif (P_sign) and not (iderP.flip_val>0) and not (derP.flip_val>0):
                 # upconnect derP has different PP
                 if isinstance(derP.PP, CPP) and (derP.PP is not iderP.PP):
-                    merge_PP(iderP.PP, derP.PP, PP_)
+                    merge_PP(iderP.PP, derP.PP, PP_, fPd)
                 else: # accumulate derP to current PP
-                    accum_PP(iderP.PP, derP)
+                    accum_PP(iderP.PP, derP, fPd)
                     confirmed_upconnect_.append(derP)
 
             elif not isinstance(derP.PP, CPP):  # sign changed, derP is root derP unless it already has FPP/PP
                 PP = CPP(derPP=CderP())
-                accum_PP(PP,derP)
+                accum_PP(PP,derP, fPd)
                 derP.P.downconnect_cnt = 0  # reset downconnect count for root derP
 
             if derP._P.upconnect_:
@@ -380,20 +395,27 @@ def accum_Dert(Dert: dict, **params) -> None:
     Dert.update({param: Dert[param] + value for param, value in params.items()})
 
 
-def accum_PP(PP, derP):
+def accum_PP(PP, derP, fPd):
 
     # accumulate derP params into PP
     PP.derPP.accumulate(flip_val=derP.flip_val, Pm=derP.Pm, Pd=derP.Pd, mx=derP.mx, dx=derP.dx, mL=derP.mL, dL=derP.dL, mDx=derP.mDx, dDx=derP.dDx,
                           mDy=derP.mDy, dDy=derP.dDy, mDg=derP.mDg, dDg=derP.dDg, mMg=derP.mMg, dMg=derP.dMg)
-    PP.derP_.append(derP)
+    if fPd: PP.derPd__.append(derP)
+    else: PP.derPm__.append(derP)
     derP.PP = PP  # update reference
 
 
-def merge_PP(_PP, PP, PP_):  # merge PP into _PP
+def merge_PP(_PP, PP, PP_, fPd):  # merge PP into _PP
 
-    for derP in PP.derP_:
-        if derP not in _PP.derP_:
-            _PP.derP_.append(derP)
+    if fPd: derP_ = PP.derPd__; _derP_ = _PP.derPd__
+    else: derP_ = PP.derPm__; _derP_ = _PP.derPm__
+    
+    for derP in derP_:
+        if derP not in _derP_:
+            
+            if fPd: _PP.derPd__.append(derP)
+            else:_PP.derPm__.append(derP)
+            
             derP.PP = _PP  # update reference
 
             # accumulate if PP' derP not in _PP
@@ -410,19 +432,22 @@ def flip_FPP(FPP, fPd):
     '''
     flip derts of FPP and call again slice_blob to get PPs of FPP
     '''
+    
+    if fPd: derP_ = FPP.derPd__
+    else: derP_ = FPP.derPm__
 
     # get box from P and P
-    x0 = min(min([derP.P.x0 for derP in FPP.derP_]), min([derP._P.x0 for derP in FPP.derP_]))
-    xn = max(max([derP.P.x0+derP.P.L for derP in FPP.derP_]), max([derP._P.x0+derP._P.L for derP in FPP.derP_]))
-    y0 = min(min([derP.P.y for derP in FPP.derP_]), min([derP._P.y for derP in FPP.derP_]))
-    yn = max(max([derP.P.y for derP in FPP.derP_]), max([derP._P.y for derP in FPP.derP_])) +1  # +1 because yn is not inclusive
+    x0 = min(min([derP.P.x0 for derP in derP_]), min([derP._P.x0 for derP in derP_]))
+    xn = max(max([derP.P.x0+derP.P.L for derP in derP_]), max([derP._P.x0+derP._P.L for derP in derP_]))
+    y0 = min(min([derP.P.y for derP in derP_]), min([derP._P.y for derP in derP_]))
+    yn = max(max([derP.P.y for derP in derP_]), max([derP._P.y for derP in derP_])) +1  # +1 because yn is not inclusive
     FPP.box = [y0,yn,x0,xn]
     # init empty derts, 11 params each
     dert__ = [np.zeros((yn-y0, xn-x0)) for _ in range(11)]
     mask__ = np.ones((yn-y0, xn-x0)).astype('bool')
 
     # fill empty dert with current FPP derts
-    for derP in FPP.derP_:
+    for derP in derP_:
         # _P
         for _x, _dert in enumerate(derP._P.dert_):
             for i, _param in enumerate(_dert):
