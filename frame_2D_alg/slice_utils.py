@@ -6,11 +6,15 @@ matplotlib.use('Agg')  # disable visible figure during the processing to speed u
 from comp_slice_ import *
 
 aveG = 50
+# flip ave
 flip_ave = 0.1
 flip_ave_FPP = 5
+# dx ave
+ave_Dx = 10
+ave_PP_Dx = 100
 
 
-def draw_PP_(blob):
+def draw_PP_(blob, fPd):
     colour_list = []  # list of colours:
     colour_list.append([192, 192, 192])  # silver
     colour_list.append([200, 130, 1])  # blue
@@ -52,16 +56,26 @@ def draw_PP_(blob):
     c_ind_FPP_section = 0  # FPP
     c_ind_FPP_section_Ps = 0  # FPP's Ps
 
-    # draw mPs, dPs should be the same
-    for P in blob.mP__:
+    # draw Ps
+    if fPd: 
+        P__ = blob.Pd__
+        PP_ = blob.PPd_
+    else: 
+        P__ = blob.Pm__
+        PP_ = blob.PPm_
+        
+    for P in P__:
         for x, _ in enumerate(P.dert_):
             img_colour_P[P.y, P.x0 + x] = colour_list[c_ind_P % 10]
         c_ind_P += 1
 
-    for blob_PP in blob.mPP_: # draw mPP
+    for blob_PP in PP_: # draw PP
+
+        if fPd: derP__ = blob_PP.derPd__
+        else: derP__ = blob_PP.derPm__
 
         # draw PPs
-        for derP in blob_PP.derP_:
+        for derP in derP__:
             if derP.flip_val <= 0:
                 # _P
                 for _x, _dert in enumerate(derP._P.dert_):
@@ -79,18 +93,22 @@ def draw_PP_(blob):
         # draw FPPs
         if blob_PP.derPP.flip_val > flip_ave_FPP :
 
+            if fPd: P__ = blob_PP.fPd__
+            else: P__ = blob_PP.fPm__
+            
+            
             # get box
-            x0FPP = min([P.x0 for P in blob_PP.mP__])
-            xnFPP = max([P.x0 + P.L for P in blob_PP.mP__])
-            y0FPP = min([P.y for P in blob_PP.mP__])
-            ynFPP = max([P.y for P in blob_PP.mP__]) + 1  # +1 because yn is not inclusive, else we will lost last y value
+            x0FPP = min([P.x0 for P in P__])
+            xnFPP = max([P.x0 + P.L for P in P__])
+            y0FPP = min([P.y for P in P__])
+            ynFPP = max([P.y for P in P__]) + 1  # +1 because yn is not inclusive, else we will lost last y value
 
             # init smaller image contains the flipped section only
             img_colour_FPP_section = np.zeros((ynFPP - y0FPP, xnFPP - x0FPP, 3))
             img_colour_FPP_section_Ps = np.zeros((ynFPP - y0FPP, xnFPP - x0FPP, 3))
 
             # fill colour
-            for P in blob_PP.mP__:
+            for P in P__:
                 for x, _ in enumerate(P.dert_):
                     img_colour_FPP_section[P.y, P.x0 + x] = colour_list[c_ind_FPP_section % 10]
                     img_colour_FPP_section_Ps[P.y, P.x0 + x] = colour_list[c_ind_FPP_section_Ps % 10]
@@ -115,25 +133,28 @@ def draw_PP_(blob):
         img_combined = np.concatenate((img_combined, img_separator), axis=1)
         img_combined = np.concatenate((img_combined, img_colour_FPP_Ps), axis=1)
 
-        # save image to disk
-        cv2.imwrite(img_dir_path + 'img_b' + str(blob.id) + '.bmp', img_combined)
-
-ave_Dx = 10
-ave_PP_Dx = 100
+    # save image to disk
+    if fPd:
+        cv2.imwrite(img_dir_path + 'img_Pd_b' + str(blob.id) + '.bmp', img_combined)
+    else:
+        cv2.imwrite(img_dir_path + 'img_Pm_b' + str(blob.id) + '.bmp', img_combined)
 
 
 def form_PP_dx_(P__):
     '''
     Cross-comp of dx (incremental derivation) within Pd s of PP_dx, defined by > ave_Dx
     '''
-    for P in P__:  # start from root P
 
-        PPDx = 0    # comp_dx criterion per PP
-        PPDx_ = []  # list of criteria
-        P_dx_ = []  # list of selected Ps
-        PP_dx_ = [] # list of PPs
+    # the params below should be preserved for comp_dx but not reinitialized on each new P with 0 downconnect count
+    P_dx_ = []  # list of selected Ps
+    PP_dx_ = [] # list of PPs
 
-        if P.downconnect_cnt == 0:
+    for P in P__:  
+        if P.downconnect_cnt == 0: # start from root P 
+            
+            PPDx = 0    # comp_dx criterion per PP
+            PPDx_ = []  # list of criteria
+            
             if P.Dx > ave_Dx:
                 PPDx += P.Dx
                 P_dx_.append(P)
@@ -141,48 +162,46 @@ def form_PP_dx_(P__):
             if P.upconnect_:  # recursively process upconnects
                 comp_PP_dx(P.upconnect_, PPDx, PPDx_, P_dx_, PP_dx_)
 
-                PPDx_.append(PPDx)
-                PP_dx_.append(P_dx_)  # after scanning all upconnects
-
-            elif PPDx != 0:  # terminate PP_Dx and Dx if Dx != 0, else nothing to terminate
+            # after scanning all upconnects or not having upconnects
+            if PPDx != 0:  # terminate PP_Dx and Dx if Dx != 0, else nothing to terminate
                 PPDx_.append(PPDx)
                 PP_dx_.append(P_dx_)
-
+        
     # comp_dx
     for i, (PPDx, P_dx_) in enumerate(zip(PPDx_, PP_dx_)):
         if PPDx > ave_PP_Dx:
+            # what would be the usage of Ddx and Mdx?
             Pdx_, Ddx, Mdx = comp_dx_(P_dx_)
 
     # we need to splice Pdx_ back into original Pd_, replacing Ps that were included into PP_dx s?
-
+    # Ps here should be inside Pd__ as well, since they are the same object, and we are not creating any new P object here (we are just selectively update the P's params with dx params)
+    
 
 def comp_PP_dx(derP_, iPPDx, iPPDx_, P_dx_, PP_dx_):
     '''
-    below is not edited, please check
+    Updated
     '''
 
-    Dx = iDx
-    PDx_ = iPDx_
+    PPDx = iPPDx
+    PPDx_ = iPPDx_
 
     for derP in derP_:
-        P = derP._P
+        P = derP._P # get upconnect _P
 
         if P.Dx > ave_Dx:  # accumulate dx and Ps
-            Dx += P.Dx
-            PDx_.append(P)
+            PPDx += P.Dx
+            P_dx_.append(P)
 
-        else:  # terminate and reset Pdx and Dx
-            PP_Dx_.append(PDx_)
-            Dx_.append(Dx)
-            Dx = 0
-            PDx_ = []
+        elif PPDx != 0  :  # reset Pdx and Dx if PPDx is not zero, termination is done from the root after calling all upconnects
+            PPDx = 0
+            P_dx_ = []
 
         if P.upconnect_:  # recursively process upconnects
-            comp_PP_dx(P.upconnect_, Dx, PDx_, PP_Dx_, Dx_)
+            comp_PP_dx(P.upconnect_, PPDx, PPDx_, P_dx_, PP_dx_)
 
-        elif Dx != 0 and id(PDx_) != id(iPDx_):  # terminate newly created PDx and Dx in current function call after processed their upconnects
-            PP_Dx_.append(PDx_)
-            Dx_.append(Dx)
+        elif PPDx != 0 and id(PPDx_) != id(iPPDx_):  # terminate newly created PDx and Dx in current function call after processed their upconnects
+            PP_dx_.append(P_dx_)
+            PPDx_.append(PPDx)
 
 
 def comp_dx_(P_):  # cross-comp of dx s in P.dert_

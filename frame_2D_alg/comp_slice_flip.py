@@ -10,7 +10,7 @@ from slice_utils import draw_PP_
 import sys
 import numpy as np
 from class_cluster import ClusterStructure, NoneType
-from form_PP_dx import form_PP_dx_
+from slice_utils import form_PP_dx_
 
 import warnings  # to detect overflow issue, in case of infinity loop
 warnings.filterwarnings('error')
@@ -85,14 +85,24 @@ class CPP(ClusterStructure):
     flip_val = int  # Ps are vertically biased
     dert__ = list
     mask__ = bool
-    
+    # PP param
     derPd__ = list
     PPd_ = list
     Pd__ = list
-    
     derPm__ = list
     PPm_  = list
-    Pm__ = list   
+    Pm__ = list
+    
+    # took me a while to find out this issue. So we need new flipped params, otherwise it will replaced the non-flipped params, which is not correct and causing error (found out this error when draw the Ps).
+    # so i think it will be less messy if we use different param name. If we pack them into tuple (For eg: PP_[0] = PPd, PP_[1] = PPm), it will be more complicated and harder to troubleshoot.
+    
+    # FPP params
+    fderPd__ = list
+    fPPd_ = list
+    fPd__ = list
+    fderPm__ = list
+    fPPm_  = list
+    fPm__ = list
     # PP_dx params
     PP_dx = list
     
@@ -144,19 +154,31 @@ def slice_blob(blob, fPd, verbose=False):
     if not isinstance(blob, CPP) and fPd:  # input is blob and Pd 
         form_PP_dx_(P__)
 
+    # pack section below into new function specifically for derP_2_PP?
+    # PPm
     if fPd:
-        blob.derPd__ = derP__
-        blob.Pd__ = P__
-        derP_2_PP_(blob.derPd__, blob.PPd_, fPd, fflip)  # form vertically contiguous patterns of patterns
+        if not isinstance(blob, CPP):  # input is blob 
+            blob.derPd__ = derP__
+            blob.Pd__ = P__
+            derP_2_PP_(blob.derPd__, blob.PPd_, fPd, fflip)  # form vertically contiguous patterns of patterns
+        else: # input is FPP
+            blob.fderPd__ = derP__
+            blob.fPd__ = P__
+            derP_2_PP_(blob.fderPd__, blob.fPPd_, fPd, fflip)  # form vertically contiguous patterns of patterns
+    # PPd
     else:
-        blob.derPm__ = derP__
-        blob.Pm__ = P__
-        derP_2_PP_(blob.derPm__, blob.PPm_, fPd, fflip)  # form vertically contiguous patterns of patterns
-        
+        if not isinstance(blob, CPP):  # input is blob 
+            blob.derPm__ = derP__
+            blob.Pm__ = P__
+            derP_2_PP_(blob.derPm__, blob.PPm_, fPd, fflip)  # form vertically contiguous patterns of patterns
+        else: # input is FPP
+            blob.fderPm__ = derP__
+            blob.fPm__ = P__
+            derP_2_PP_(blob.fderPm__, blob.fPPm_, fPd, fflip)  # form vertically contiguous patterns of patterns
+    
+    # draw PPs and FPPs
     if not isinstance(blob, CPP):
-#        draw_PP_(blob) # buggy and yet to be updated for PPm and PPd
-        pass
-
+        draw_PP_(blob, fPd)
 
 def form_P_(idert_, mask_, y):  # segment dert__ into P__, in horizontal ) vertical order
     '''
@@ -381,14 +403,16 @@ def upconnect_2_PP_(iderP, PP_, fPd, fflip):
 
 def flip_eval_blob(blob):
 
-    # L_bias (Lx / Ly) * G_bias (Gy / Gx), blob.box = [y0,yn,x0,xn], ddirection: , preferential comp over low G
-    horizontal_bias = (blob.box[3] - blob.box[2]) / (blob.box[1] - blob.box[0]) \
-                      * (abs(blob.Dy) / abs(blob.Dx))
-
-    if horizontal_bias > 1 and (blob.G * blob.Ma * horizontal_bias > flip_ave / 10):
-        blob.fflip = 1  # rotate 90 degrees for scanning in vertical direction
-        blob.dert__ = tuple([np.rot90(dert) for dert in blob.dert__])
-        blob.mask__ = np.rot90(blob.mask__)
+    # blbo not flipped in prior call (to prevent we flip the blob again)
+    if not blob.fflip:
+        # L_bias (Lx / Ly) * G_bias (Gy / Gx), blob.box = [y0,yn,x0,xn], ddirection: , preferential comp over low G
+        horizontal_bias = (blob.box[3] - blob.box[2]) / (blob.box[1] - blob.box[0]) \
+                          * (abs(blob.Dy) / abs(blob.Dx))
+    
+        if horizontal_bias > 1 and (blob.G * blob.Ma * horizontal_bias > flip_ave / 10):
+            blob.fflip = 1  # rotate 90 degrees for scanning in vertical direction
+            blob.dert__ = tuple([np.rot90(dert) for dert in blob.dert__])
+            blob.mask__ = np.rot90(blob.mask__)
 
 
 def accum_Dert(Dert: dict, **params) -> None:
