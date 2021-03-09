@@ -13,8 +13,7 @@ flip_ave_FPP = 5
 ave_Dx = 10
 ave_PP_Dx = 100
 
-
-def draw_PP_(blob, fPd):
+def draw_PP_(blob):
     colour_list = []  # list of colours:
     colour_list.append([192, 192, 192])  # silver
     colour_list.append([200, 130, 1])  # blue
@@ -57,25 +56,15 @@ def draw_PP_(blob, fPd):
     c_ind_FPP_section_Ps = 0  # FPP's Ps
 
     # draw Ps
-    if fPd:
-        P__ = blob.Pd__
-        PP_ = blob.PPd_
-    else:
-        P__ = blob.Pm__
-        PP_ = blob.PPm_
-
-    for P in P__:
+    for P in blob.P__:
         for x, _ in enumerate(P.dert_):
             img_colour_P[P.y, P.x0 + x] = colour_list[c_ind_P % 10]
         c_ind_P += 1
 
-    for blob_PP in PP_: # draw PP
-
-        if fPd: derP__ = blob_PP.derPd__
-        else: derP__ = blob_PP.derPm__
+    for blob_PP in blob.PP_: # draw PP
 
         # draw PPs
-        for derP in derP__:
+        for derP in blob_PP.derP__:
             if derP.flip_val <= 0:
                 # _P
                 for _x, _dert in enumerate(derP._P.dert_):
@@ -93,22 +82,18 @@ def draw_PP_(blob, fPd):
         # draw FPPs
         if blob_PP.derPP.flip_val > flip_ave_FPP :
 
-            if fPd: P__ = blob_PP.fPd__
-            else: P__ = blob_PP.fPm__
-
-
             # get box
-            x0FPP = min([P.x0 for P in P__])
-            xnFPP = max([P.x0 + P.L for P in P__])
-            y0FPP = min([P.y for P in P__])
-            ynFPP = max([P.y for P in P__]) + 1  # +1 because yn is not inclusive, else we will lost last y value
+            x0FPP = min([P.x0 for P in blob_PP.Pf__])
+            xnFPP = max([P.x0 + P.L for P in blob_PP.Pf__])
+            y0FPP = min([P.y for P in blob_PP.Pf__])
+            ynFPP = max([P.y for P in blob_PP.Pf__]) + 1  # +1 because yn is not inclusive, else we will lost last y value
 
             # init smaller image contains the flipped section only
             img_colour_FPP_section = np.zeros((ynFPP - y0FPP, xnFPP - x0FPP, 3))
             img_colour_FPP_section_Ps = np.zeros((ynFPP - y0FPP, xnFPP - x0FPP, 3))
 
             # fill colour
-            for P in P__:
+            for P in blob_PP.Pf__:
                 for x, _ in enumerate(P.dert_):
                     img_colour_FPP_section[P.y, P.x0 + x] = colour_list[c_ind_FPP_section % 10]
                     img_colour_FPP_section_Ps[P.y, P.x0 + x] = colour_list[c_ind_FPP_section_Ps % 10]
@@ -134,10 +119,7 @@ def draw_PP_(blob, fPd):
         img_combined = np.concatenate((img_combined, img_colour_FPP_Ps), axis=1)
 
     # save image to disk
-    if fPd:
-        cv2.imwrite(img_dir_path + 'img_Pd_b' + str(blob.id) + '.bmp', img_combined)
-    else:
-        cv2.imwrite(img_dir_path + 'img_Pm_b' + str(blob.id) + '.bmp', img_combined)
+    cv2.imwrite(img_dir_path + 'img_b' + str(blob.id) + '.bmp', img_combined)
 
 
 def form_PP_dx_(P__):
@@ -173,14 +155,13 @@ def form_PP_dx_(P__):
             comp_dx_(P_dx_)  # no need to return?
 
 
-def comp_PP_dx(derP_, iPPDx, iPPDx_, P_dx_, PP_dx_):
+def comp_PP_dx(P_, iPPDx, iPPDx_, P_dx_, PP_dx_):
     '''
     '''
     PPDx = iPPDx
     PPDx_ = iPPDx_
 
-    for derP in derP_:
-        P = derP._P # get upconnect _P
+    for P in P_:
 
         if P.Dx > ave_Dx:  # accumulate dx and Ps
             PPDx += P.Dx
@@ -226,8 +207,7 @@ def comp_dx_(P_):  # cross-comp of dx s in P.dert_
         dxP_Ddx += Ddx
         dxP_Mdx += Mdx
 
-    return dxP_, dxP_Ddx, dxP_Mdx  # no need to return?
-
+    return dxP_, dxP_Ddx, dxP_Mdx  # no need to return? # since Ddx and Mdx are packed into P, how about dxP_Ddx, dxP_Mdx ? Where should we pack this?
 
 """
 usage: frame_blobs_find_adj.py [-h] [-i IMAGE] [-v VERBOSE] [-n INTRA] [-r RENDER]

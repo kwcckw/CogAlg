@@ -99,15 +99,10 @@ class CBlob(ClusterStructure):
     prior_forks = list
     adj_blobs = list  # for borrowing
     stack_ = list  # sliced_blob if not empty
-    # we need new derP and P , otherwise those param will be shared among dPP and mPP, and this will causing issue when we change their downconnect_cnt, especially in P.
-    # PPm
-    PPm_ = list  # comp_slice_ if not empty
-    derPm__ = list
-    Pm__ = list
-    # PPd
-    PPd_ = list
-    derPd__ = list
-    Pd__ = list
+    # PP
+    PP_ = list  # comp_slice_ if not empty
+    derP__ = list
+    P__ = list
 
 def comp_pixel(image):  # 2x2 pixel cross-correlation within image, a standard edge detection operator
     # see comp_pixel_versions file for other versions and more explanation
