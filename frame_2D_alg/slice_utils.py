@@ -57,13 +57,13 @@ def draw_PP_(blob, fPd):
     c_ind_FPP_section_Ps = 0  # FPP's Ps
 
     # draw Ps
-    if fPd: 
+    if fPd:
         P__ = blob.Pd__
         PP_ = blob.PPd_
-    else: 
+    else:
         P__ = blob.Pm__
         PP_ = blob.PPm_
-        
+
     for P in P__:
         for x, _ in enumerate(P.dert_):
             img_colour_P[P.y, P.x0 + x] = colour_list[c_ind_P % 10]
@@ -95,8 +95,8 @@ def draw_PP_(blob, fPd):
 
             if fPd: P__ = blob_PP.fPd__
             else: P__ = blob_PP.fPm__
-            
-            
+
+
             # get box
             x0FPP = min([P.x0 for P in P__])
             xnFPP = max([P.x0 + P.L for P in P__])
@@ -149,12 +149,12 @@ def form_PP_dx_(P__):
     P_dx_ = []  # list of selected Ps
     PP_dx_ = [] # list of PPs
 
-    for P in P__:  
-        if P.downconnect_cnt == 0: # start from root P 
-            
+    for P in P__:
+        if P.downconnect_cnt == 0: # start from root P
+
             PPDx = 0    # comp_dx criterion per PP
             PPDx_ = []  # list of criteria
-            
+
             if P.Dx > ave_Dx:
                 PPDx += P.Dx
                 P_dx_.append(P)
@@ -166,22 +166,16 @@ def form_PP_dx_(P__):
             if PPDx != 0:  # terminate PP_Dx and Dx if Dx != 0, else nothing to terminate
                 PPDx_.append(PPDx)
                 PP_dx_.append(P_dx_)
-        
+
     # comp_dx
     for i, (PPDx, P_dx_) in enumerate(zip(PPDx_, PP_dx_)):
         if PPDx > ave_PP_Dx:
-            # what would be the usage of Ddx and Mdx?
-            Pdx_, Ddx, Mdx = comp_dx_(P_dx_)
+            comp_dx_(P_dx_)  # no need to return?
 
-    # we need to splice Pdx_ back into original Pd_, replacing Ps that were included into PP_dx s?
-    # Ps here should be inside Pd__ as well, since they are the same object, and we are not creating any new P object here (we are just selectively update the P's params with dx params)
-    
 
 def comp_PP_dx(derP_, iPPDx, iPPDx_, P_dx_, PP_dx_):
     '''
-    Updated
     '''
-
     PPDx = iPPDx
     PPDx_ = iPPDx_
 
@@ -199,7 +193,7 @@ def comp_PP_dx(derP_, iPPDx, iPPDx_, P_dx_, PP_dx_):
         if P.upconnect_:  # recursively process upconnects
             comp_PP_dx(P.upconnect_, PPDx, PPDx_, P_dx_, PP_dx_)
 
-        elif PPDx != 0 and id(PPDx_) != id(iPPDx_):  # terminate newly created PDx and Dx in current function call after processed their upconnects
+        elif PPDx != 0 and id(PPDx_) != id(iPPDx_):  # terminate newly created PDx and Dx
             PP_dx_.append(P_dx_)
             PPDx_.append(PPDx)
 
@@ -213,7 +207,6 @@ def comp_dx_(P_):  # cross-comp of dx s in P.dert_
     for P in P_:
         Ddx = 0
         Mdx = 0
-
         dxdert_ = []
         _dx = P.dert_[0][2]  # first dx
         for dert in P.dert_[1:]:
@@ -233,7 +226,7 @@ def comp_dx_(P_):  # cross-comp of dx s in P.dert_
         dxP_Ddx += Ddx
         dxP_Mdx += Mdx
 
-    return dxP_, dxP_Ddx, dxP_Mdx
+    return dxP_, dxP_Ddx, dxP_Mdx  # no need to return?
 
 
 """
