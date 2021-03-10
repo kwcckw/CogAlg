@@ -127,42 +127,44 @@ def form_PP_dx_(P__):
     Cross-comp of dx (incremental derivation) within Pd s of PP_dx, defined by > ave_Dx
     '''
 
-    # the params below should be preserved for comp_dx but not reinitialized on each new P with 0 downconnect count
-    P_dx_ = []  # list of selected Ps
-    PP_dx_ = [] # list of PPs
+    for Pm in P__: # P__ contains Pm s
+        
+        PPDx_ = []  # list of criteria
+        PP_dx_ = [] # list of PPs
 
-    for P in P__:
-        if P.downconnect_cnt == 0: # start from root P
+        for P in Pm.Pd_: # Pm.Pd_ contains Pd s
+            if P.downconnect_cnt == 0: # start from root P
+    
+                PPDx = 0    # comp_dx criterion per PP
+                P_dx_ = []  # list of selected Ps
+                
+                if P.Dx > ave_Dx:
+                    PPDx += P.Dx
+                    P_dx_.append(P)
+    
+                if P.upconnect_:  # recursively process upconnects
+                    comp_PP_dx(P.upconnect_, PPDx, PPDx_, P_dx_, PP_dx_)
+    
+                # after scanning all upconnects or not having upconnects
+                if PPDx != 0:  # terminate PP_Dx and Dx if Dx != 0, else nothing to terminate
+                    PPDx_.append(PPDx)
+                    PP_dx_.append(P_dx_)
 
-            PPDx = 0    # comp_dx criterion per PP
-            PPDx_ = []  # list of criteria
-
-            if P.Dx > ave_Dx:
-                PPDx += P.Dx
-                P_dx_.append(P)
-
-            if P.upconnect_:  # recursively process upconnects
-                comp_PP_dx(P.upconnect_, PPDx, PPDx_, P_dx_, PP_dx_)
-
-            # after scanning all upconnects or not having upconnects
-            if PPDx != 0:  # terminate PP_Dx and Dx if Dx != 0, else nothing to terminate
-                PPDx_.append(PPDx)
-                PP_dx_.append(P_dx_)
-
-    # comp_dx
-    for i, (PPDx, P_dx_) in enumerate(zip(PPDx_, PP_dx_)):
-        if PPDx > ave_PP_Dx:
-            comp_dx_(P_dx_)  # no need to return?
+        # comp_dx
+        for i, (PPDx, P_dx_) in enumerate(zip(PPDx_, PP_dx_)):
+            if PPDx > ave_PP_Dx:
+                comp_dx_(P_dx_)  # no need to return?
 
 
-def comp_PP_dx(P_, iPPDx, iPPDx_, P_dx_, PP_dx_):
+def comp_PP_dx(derP_, iPPDx, iPPDx_, P_dx_, PP_dx_):
     '''
     '''
     PPDx = iPPDx
     PPDx_ = iPPDx_
 
-    for P in P_:
-
+    for derP in derP_:
+        P = derP._P 
+        
         if P.Dx > ave_Dx:  # accumulate dx and Ps
             PPDx += P.Dx
             P_dx_.append(P)
