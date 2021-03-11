@@ -13,6 +13,7 @@ flip_ave_FPP = 5
 ave_Dx = 10
 ave_PP_Dx = 100
 
+
 def draw_PP_(blob):
     colour_list = []  # list of colours:
     colour_list.append([192, 192, 192])  # silver
@@ -124,47 +125,47 @@ def draw_PP_(blob):
 
 def form_PP_dx_(P__):
     '''
+    Obsolete
     Cross-comp of dx (incremental derivation) within Pd s of PP_dx, defined by > ave_Dx
     '''
 
-    for Pm in P__: # P__ contains Pm s
-        
-        PPDx_ = []  # list of criteria
-        PP_dx_ = [] # list of PPs
+    # the params below should be preserved for comp_dx but not reinitialized on each new P with 0 downconnect count
+    P_dx_ = []  # list of selected Ps
+    PP_dx_ = [] # list of PPs
 
-        for P in Pm.Pd_: # Pm.Pd_ contains Pd s
-            if P.downconnect_cnt == 0: # start from root P
-    
-                PPDx = 0    # comp_dx criterion per PP
-                P_dx_ = []  # list of selected Ps
-                
-                if P.Dx > ave_Dx:
-                    PPDx += P.Dx
-                    P_dx_.append(P)
-    
-                if P.upconnect_:  # recursively process upconnects
-                    comp_PP_dx(P.upconnect_, PPDx, PPDx_, P_dx_, PP_dx_)
-    
-                # after scanning all upconnects or not having upconnects
-                if PPDx != 0:  # terminate PP_Dx and Dx if Dx != 0, else nothing to terminate
-                    PPDx_.append(PPDx)
-                    PP_dx_.append(P_dx_)
+    for P in P__:
+        if P.downconnect_cnt == 0: # start from root P
 
-        # comp_dx
-        for i, (PPDx, P_dx_) in enumerate(zip(PPDx_, PP_dx_)):
-            if PPDx > ave_PP_Dx:
-                comp_dx_(P_dx_)  # no need to return?
+            PPDx = 0    # comp_dx criterion per PP
+            PPDx_ = []  # list of criteria
+
+            if P.Dx > ave_Dx:
+                PPDx += P.Dx
+                P_dx_.append(P)
+
+            if P.upconnect_:  # recursively process upconnects
+                comp_PP_dx(P.upconnect_, PPDx, PPDx_, P_dx_, PP_dx_)
+
+            # after scanning all upconnects or not having upconnects
+            if PPDx != 0:  # terminate PP_Dx and Dx if Dx != 0, else nothing to terminate
+                PPDx_.append(PPDx)
+                PP_dx_.append(P_dx_)
+
+    # comp_dx
+    for i, (PPDx, P_dx_) in enumerate(zip(PPDx_, PP_dx_)):
+        if PPDx > ave_PP_Dx:
+            comp_dx_(P_dx_)  # no need to return?
 
 
-def comp_PP_dx(derP_, iPPDx, iPPDx_, P_dx_, PP_dx_):
+def comp_PP_dx(P_, iPPDx, iPPDx_, P_dx_, PP_dx_):
     '''
+    Obsolete
     '''
     PPDx = iPPDx
     PPDx_ = iPPDx_
 
-    for derP in derP_:
-        P = derP._P 
-        
+    for P in P_:
+
         if P.Dx > ave_Dx:  # accumulate dx and Ps
             PPDx += P.Dx
             P_dx_.append(P)
@@ -210,6 +211,7 @@ def comp_dx_(P_):  # cross-comp of dx s in P.dert_
         dxP_Mdx += Mdx
 
     return dxP_, dxP_Ddx, dxP_Mdx  # no need to return? # since Ddx and Mdx are packed into P, how about dxP_Ddx, dxP_Mdx ? Where should we pack this?
+
 
 """
 usage: frame_blobs_find_adj.py [-h] [-i IMAGE] [-v VERBOSE] [-n INTRA] [-r RENDER]
@@ -257,6 +259,7 @@ def form_sstack_recursive(_stack, sstack, sstack_, _f_up_reverse):
                         Dyy=_stack.Dyy, Dyx=_stack.Dyx, Dxy=_stack.Dxy, Dxx=_stack.Dxx,
                         Ga=_stack.Ga, Ma=_stack.Ma, A=_stack.A, Ly=_stack.Ly, y0=_stack.y0,
                         stack_=[_stack], sign=_stack.sign)
+
         id_in_layer = sstack.id
 
     for stack in _stack.upconnect_:  # upward access only
@@ -383,6 +386,7 @@ def draw_stacks(stack_):
 
     return img_colour
 
+
 def check_stacks_presence(stack_, mask__, f_plot=0):
     '''
     visualize stack_ and mask__ to ensure that they cover the same area
@@ -437,99 +441,21 @@ def draw_sstack_(blob_fflip, sstack_):
     x0 = min(x0_)
     xn = max(xn_)
     y0 = min(y0_)
-    yn = max(yn_)
-
-    img_index_stacks = np.zeros((yn - y0, xn - x0))
-    img_index_sstacks = np.zeros((yn - y0, xn - x0))
-    img_index_sstacks_flipped = np.zeros((yn - y0, xn - x0)) # show flipped stacks of sstack only
-    img_index_sstacks_mix = np.zeros((yn - y0, xn - x0)) # shows flipped and non flipped stacks
-
-    stack_index = 1
-    sstack_index = 1
-    sstack_flipped_index = 1
-    sstack_mix_index = 1
-
-    # insert stack index and sstack index to X stacks
-    for sstack in sstack_:
-        for stack in sstack.Py_:
-            for y, P in enumerate(stack.Py_):
-                for x, dert in enumerate(P.dert_):
-                    img_index_stacks[y + (stack.y0 - y0), x + (P.x0 - x0)] = stack_index
-                    img_index_sstacks[y + (stack.y0 - y0), x + (P.x0 - x0)] = sstack_index
-            stack_index += 1  # for next stack
-        sstack_index += 1  # for next sstack
-
-    # insert stack index and sstack index to flipped X stacks
-    for sstack in sstack_:
-        if sstack.stack_:  # sstack is flipped
-            sx0_, sxn_, sy0_, syn_ = [], [], [], []
-            for stack in sstack.Py_:
-                sx0_.append(min([Py.x0 for Py in stack.Py_]))
-                sxn_.append(max([Py.x0 + Py.L for Py in stack.Py_]))
-                sy0_.append(stack.y0)
-                syn_.append(stack.y0 + stack.Ly)
-            # sstack box:
-            # sx0 = min(sx0_)
-            sxn = max(sxn_)
-            sy0 = min(sy0_)
-            # syn = max(syn_)
-
-            for stack in sstack.stack_:
-                for y, P in enumerate(stack.Py_):
-                    for x, dert in enumerate(P.dert_):
-                        img_index_sstacks_flipped[sy0+(x + (P.x0 - x0)),sxn-1-(y + (stack.y0 - y0))] = sstack_flipped_index
-                        img_index_sstacks_mix[sy0+(x + (P.x0 - x0)),sxn-1-(y + (stack.y0 - y0))] = sstack_mix_index
-                sstack_flipped_index += 1  # for next stack of flipped sstack
-                sstack_mix_index += 1  # for next stack of flipped sstack
-
-        else:  # sstack is not flipped
-            for stack in sstack.Py_:
-                for y, P in enumerate(stack.Py_):
-                    for x, dert in enumerate(P.dert_):
-                        img_index_sstacks_mix[y + (stack.y0 - y0),x + (P.x0 - x0)] = sstack_mix_index
-                sstack_mix_index += 1  # for next stack of sstack
-
-    # initialize colour image
-    img_colour_stacks = np.zeros((yn-y0, xn-x0, 3)).astype('uint8')
-    img_colour_sstacks = np.zeros((yn-y0, xn-x0, 3)).astype('uint8')
-    img_colour_sstacks_flipped = np.zeros((yn-y0, xn-x0, 3)).astype('uint8')
-    img_colour_sstacks_mix = np.zeros((yn-y0, xn-x0, 3)).astype('uint8')
-
-    # draw stacks and sstacks
-    for i in range(1, stack_index):
-        colour_index = i % 10
-        img_colour_stacks[np.where(img_index_stacks == i)] = colour_list[colour_index]
-    for i in range(1, sstack_index):
-        colour_index = i % 10
-        img_colour_sstacks[np.where(img_index_sstacks == i)] = colour_list[colour_index]
-    for i in range(1, sstack_flipped_index):
-        colour_index = i % 10
-        img_colour_sstacks_flipped[np.where(img_index_sstacks_flipped == i)] = colour_list[colour_index]
-    for i in range(1, sstack_mix_index):
-        colour_index = i % 10
-        img_colour_sstacks_mix[np.where(img_index_sstacks_mix == i)] = colour_list[colour_index]
-
-    # draw image to figure and save it to disk
-    plt.figure(1)
-
-    plt.subplot(1,4,1)
-    plt.imshow(img_colour_sstacks)
-    if blob_fflip: plt.title('sstacks, \nY blob')
-    else: plt.title('sstacks, \nX blob')
-
-    plt.subplot(1,4,2)
-    plt.imshow(np.uint8(img_colour_stacks))
-    plt.title('X stacks')
-
-    if any([sstack.stack_ for sstack in sstack_]):  # for sstacks with not empty stack_, show flipped stacks
-
-        plt.subplot(1,4,3)
-        plt.imshow(img_colour_sstacks_flipped)
-        plt.title('Y stacks (flipped)')
-        plt.subplot(1,4,4)
-        plt.imshow(img_colour_sstacks_mix)
-        plt.title('XY stacks')
 
 
-    plt.savefig('./images/slice_blob/sstack_'+str(id(sstack_))+'.png')
-    plt.close()
+"""
+usage: frame_blobs_find_adj.py [-h] [-i IMAGE] [-v VERBOSE] [-n INTRA] [-r RENDER]
+                      [-z ZOOM]
+optional arguments:
+  -h, --help            show this help message and exit
+  -i IMAGE, --image IMAGE
+                        path to image file
+  -v VERBOSE, --verbose VERBOSE
+                        print details, useful for debugging
+  -n INTRA, --intra INTRA
+                        run intra_blobs after frame_blobs
+  -r RENDER, --render RENDER
+                        render the process
+  -z ZOOM, --zoom ZOOM  zooming ratio when rendering
+"""
+
