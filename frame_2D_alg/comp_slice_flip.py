@@ -9,7 +9,7 @@ from collections import deque
 import sys
 import numpy as np
 from class_cluster import ClusterStructure, NoneType
-from slice_utils import *
+from slice_utils import draw_PP_
 
 import warnings  # to detect overflow issue, in case of infinity loop
 warnings.filterwarnings('error')
@@ -20,6 +20,7 @@ flip_ave = .1
 flip_ave_FPP = 5  # flip large FPPs only
 div_ave = 200
 ave_dX = 10  # difference between median x coords of consecutive Ps
+ave_Dx = 10
 
 class CP(ClusterStructure):
     # Dert: summed pixel values and pixel-level derivatives:
@@ -41,12 +42,15 @@ class CP(ClusterStructure):
     dert_ = list   # array of pixel-level derts: (p, dy, dx, g, m), extended in intra_blob
     upconnect_ = list
     downconnect_cnt = int
-    # Dx
+    # Dx - exist in Pd
     Pm = object # reference of Pm for Pd s
-    Pd_ = list  # exist in Pm s only
     dxdert_ = list
     Ddx = int
     Mdx = int
+    # Dx - exist in Pm to store the Pd s related params
+    Pd_ = list  
+    dxP_Ddx = int
+    dxP_Mdx = int
 
 class CderP(ClusterStructure):
     ## derP
@@ -119,7 +123,6 @@ def slice_blob(blob, verbose=False):
     height, width = dert__[0].shape
     if verbose: print("Converting to image...")
     P__ = []
-    Pd__ = []
     derP__ = []
 
     zip_dert__ = zip(*dert__)
@@ -131,16 +134,17 @@ def slice_blob(blob, verbose=False):
 
         P_ = form_P_(list(zip(*dert_)), mask__[y], y)  # horizontal clustering - lower row
         derP_ = scan_P_(P_, _P_)  # test x overlap between Ps, call comp_slice
-
-        Pd_ = form_Pd_(P_); Pd__+= Pd_  # form Pds across Ps
+        
+        # no need to return Pd now, Pd s should be stored in each Pm.Pd_ now
+        form_Pd_(P_)  # form Pds across Ps
         scan_Pd_(P_, _P_)  # add upconnect_ in Pds
+        # form_PP_dx with the derPds?
 
         derP__ += derP_  # frame of derPs
         P__ += P_
         _P_ = P_  # set current lower row P_ as next upper row _P_
 
-    # this should be done in form_Pd_ per Pd, we don't need to form PP_dx_?
-    # form_PP_dx_(Pd__) # cross comp Pd's Dx
+
     form_PP_shell(blob, derP__, P__, fflip)  # form PPs in blob or in FPP
 
     # draw PPs and FPPs
@@ -232,56 +236,69 @@ def form_Pd_(P_):
     '''
     form Pd s across P's derts using Dx sign
     '''
-    Pd__= []
-    for iP in P_:
-        Pd_ = []
 
-        _dert = iP.dert_[0]  # 1st dert
-        dert_ = [_dert]
-        I, Dy, Dx, G, M, Dyy, Dyx, Dxy, Dxx, Ga, Ma = _dert; L = 1; x0 = iP.x0  # initialize P params with first dert
-        _sign = _dert[2] > 0
-        x = 1  # relative x within P
-        '''
-        add this here, change for single P:
-        if (P.downconnect_cnt + [1 for P in P_ if P.upconnect_]):  # P has at least one connect
-        the rest is conditional:
-        '''
-        for dert in iP.dert_[1:]:
-            sign = dert[2] > 0
-            if sign == _sign: # same Dx sign
-                I += dert[0]  # accumulate P params with (p, dy, dx, g, m, dyy, dyx, dxy, dxx, ga, ma) = dert
-                Dy += dert[1]
-                Dx += dert[2]
-                G += dert[3]
-                M += dert[4]
-                Dyy += dert[5]
-                Dyx += dert[6]
-                Dxy += dert[7]
-                Dxx += dert[8]
-                Ga += dert[9]
-                Ma += dert[10]
-                L += 1
-                dert_.append(dert)
+    for iP in P_: # 
+        if (iP.downconnect_cnt>0) or (iP.upconnect_): # Pm should has at least 1 connect
+            
+            dxP_Ddx = 0 # sum of Ddx across Pd s 
+            dxP_Mdx = 0 # sum of Mdx across Pd s
+            Pd_ = [] # this is dxP_ in previous comp_dx function 
+    
+            _dert = iP.dert_[0]  # 1st dert
+            dert_ = [_dert]
+            I, Dy, Dx, G, M, Dyy, Dyx, Dxy, Dxx, Ga, Ma = _dert; L = 1; x0 = iP.x0  # initialize P params with first dert
+            _sign = _dert[2] > 0
+            x = 1  # relative x within P
 
-            else: # sign change, terminate P
-                P = CP(I=I, Dy=Dy, Dx=Dx, G=G, M=M, Dyy=Dyy, Dyx=Dyx, Dxy=Dxy, Dxx=Dxx, Ga=Ga, Ma=Ma, L=L, x0=x0, dert_=dert_, y=iP.y, sign=_sign, Pm=iP)
-                if Dx > ave_Dx:
-                    comp_dx(P)
-                Pd_.append(P)
-                # reinitialize param
-                I, Dy, Dx, G, M, Dyy, Dyx, Dxy, Dxx, Ga, Ma = dert; x0 = iP.x0+x ;L = 1 ; dert_ = [dert]
-
-            _sign = sign
-            x += 1
-        # terminate last P
-        P = CP(I=I, Dy=Dy, Dx=Dx, G=G, M=M, Dyy=Dyy, Dyx=Dyx, Dxy=Dxy, Dxx=Dxx, Ga=Ga, Ma=Ma, L=L, x0=x0, dert_=dert_, y=iP.y, sign=_sign, Pm=iP)
-        Pd_.append(P)
-
-        # update Pd reference in P
-        iP.Pd_ = Pd_
-        Pd__ += Pd_
-
-    return Pd__
+            # but why we even care for upconnect and downconnect if we are not using form_PP_dx now? 
+            # we are not getting upconnect and downconnect for comp_dx, thats mean scan_Pd_ also not needed now? 
+            # or we should form_PP_dx with those derPd s?
+            '''
+            add this here, change for single P:
+            if (P.downconnect_cnt + [1 for P in P_ if P.upconnect_]):  # P has at least one connect
+            the rest is conditional:
+            '''
+            for dert in iP.dert_[1:]:
+                sign = dert[2] > 0
+                if sign == _sign: # same Dx sign
+                    I += dert[0]  # accumulate P params with (p, dy, dx, g, m, dyy, dyx, dxy, dxx, ga, ma) = dert
+                    Dy += dert[1]
+                    Dx += dert[2]
+                    G += dert[3]
+                    M += dert[4]
+                    Dyy += dert[5]
+                    Dyx += dert[6]
+                    Dxy += dert[7]
+                    Dxx += dert[8]
+                    Ga += dert[9]
+                    Ma += dert[10]
+                    L += 1
+                    dert_.append(dert)
+    
+                else: # sign change, terminate P
+                    P = CP(I=I, Dy=Dy, Dx=Dx, G=G, M=M, Dyy=Dyy, Dyx=Dyx, Dxy=Dxy, Dxx=Dxx, Ga=Ga, Ma=Ma, L=L, x0=x0, dert_=dert_, y=iP.y, sign=_sign, Pm=iP)
+                    if Dx > ave_Dx:
+                        comp_dx(P)
+                        dxP_Ddx = P.Ddx
+                        dxP_Mdx = P.Mdx
+                    Pd_.append(P)
+                    # reinitialize param
+                    I, Dy, Dx, G, M, Dyy, Dyx, Dxy, Dxx, Ga, Ma = dert; x0 = iP.x0+x ;L = 1 ; dert_ = [dert]
+    
+                _sign = sign
+                x += 1
+            # terminate last P
+            P = CP(I=I, Dy=Dy, Dx=Dx, G=G, M=M, Dyy=Dyy, Dyx=Dyx, Dxy=Dxy, Dxx=Dxx, Ga=Ga, Ma=Ma, L=L, x0=x0, dert_=dert_, y=iP.y, sign=_sign, Pm=iP)
+            if Dx > ave_Dx:
+                comp_dx(P)
+                dxP_Ddx = P.Ddx
+                dxP_Mdx = P.Mdx
+            Pd_.append(P)
+    
+            # update Pd related params reference in P
+            iP.Pd_ = Pd_
+            iP.dxP_Ddx = dxP_Ddx
+            iP.dxP_Mdx = dxP_Mdx
 
 
 def scan_Pd_(P_, _P_):  # test for x overlap between Pds
@@ -306,10 +323,10 @@ def scan_Pd_(P_, _P_):  # test for x overlap between Pds
 
 def comp_slice(_P, P):  # forms vertical derivatives of derP params, and conditional ders from norm and DIV comp
 
-    s, x0, G, M, Dx, Dy, L= P.sign, P.x0, P.G, P.M, P.Dx, P.Dy, P.L
+    s, x0, G, M, L, Dx, Dy = P.sign, P.x0, P.G, P.M, P.L, P.Dx, P.Dy
     # params per comp branch, add angle params, ext: X, new: L,
     # no input I comp in top dert?
-    _s, _x0, _G, _M, _Dx, _Dy, _L= _P.sign, _P.x0, _P.G, _P.M, _P.Dx, _P.Dy, _P.L
+    _s, _x0, _G, _M, _L, _Dx, _Dy = _P.sign, _P.x0, _P.G, _P.M, _P.L, _P.Dx, _P.Dy
     '''
     redefine Ps by dx in dert_, rescan dert by input P d_ave_x: skip if not in blob?
     '''
@@ -459,7 +476,10 @@ def flip_eval_blob(blob):
             blob.fflip = 1  # rotate 90 degrees for scanning in vertical direction
             blob.dert__ = tuple([np.rot90(dert) for dert in blob.dert__])
             blob.mask__ = np.rot90(blob.mask__)
-
+            # swap blob's Dy and Dx if it is flipped
+            # i think this should be better instead of creating new flag
+            blob.dert__ = list(blob.dert__) # convert to list since param in tuple is immutable
+            blob.dert__[1], blob.dert__[2] = blob.dert__[2], blob.dert__[1]
 
 def accum_Dert(Dert: dict, **params) -> None:
     Dert.update({param: Dert[param] + value for param, value in params.items()})
@@ -523,6 +543,10 @@ def flip_FPP(FPP):
     dert__flip = [np.rot90(dert) for dert in dert__]
     mask__flip = np.rot90(mask__)
 
+    # 11 params in dert (I, Dy, Dx, G, M, Dyy, Dyx, Dxy, Dxx, Ga, Ma)
+    # swap Dy and Dx since derts are always flipped in FPP
+    dert__flip[1],dert__flip[2] = dert__flip[2],dert__flip[1]
+    
     FPP.dert__ = dert__flip
     FPP.mask__ = mask__flip
 
