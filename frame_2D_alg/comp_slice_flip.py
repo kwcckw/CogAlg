@@ -91,6 +91,14 @@ class CPP(ClusterStructure):
     derPf__ = list
     PPf_ = list
     Pf__ = list
+    # PPd params
+    derPd__ = list
+    PPd_ = list
+    Pd__ = list
+    # FPP params
+    derPdf__ = list
+    PPdf_ = list
+    Pdf__ = list
     # comp_dx params
     Ddx = int
     Mdx = int
@@ -124,8 +132,7 @@ def slice_blob(blob, verbose=False):
     mask__ = blob.mask__
     height, width = dert__[0].shape
     if verbose: print("Converting to image...")
-    P__ = []
-    derP__ = []
+    P__ , derP__, Pd__, derPd__ = [], [], [], []
 
     zip_dert__ = zip(*dert__)
     _P_ = form_P_(list(zip(*next(zip_dert__))), mask__[0], 0)  # 1st upper row
@@ -137,33 +144,33 @@ def slice_blob(blob, verbose=False):
         P_ = form_P_(list(zip(*dert_)), mask__[y], y)  # horizontal clustering - lower row
         derP_ = scan_P_(P_, _P_)  # test x overlap between Ps, call comp_slice
 
-        form_Pd_(P_)  # form Pds across Ps
-        scan_Pd_(P_, _P_)  # adds upconnect_ in Pds and calls derPd_2_PP_derPd_, same as derP_2_PP_?
-
-        derP__ += derP_  # frame of derPs
-        P__ += P_
+        Pd_ = form_Pd_(P_)  # form Pds across Ps
+        derPd_ = scan_Pd_(P_, _P_)  # adds upconnect_ in Pds and calls derPd_2_PP_derPd_, same as derP_2_PP_?
+        
+        derP__ += derP_ ; derPd__ += derPd_ # frame of derPs
+        P__ += P_ ; Pd__ += Pd_
         _P_ = P_  # set current lower row P_ as next upper row _P_
 
-    form_PP_shell(blob, derP__, P__, fflip)  # form PPs in blob or in FPP
+    form_PP_shell(blob, derP__, P__, derPd__, Pd__, fflip)  # form PPs in blob or in FPP
     # draw PPs and FPPs
     if not isinstance(blob, CPP):
         draw_PP_(blob)
 
 
-def form_PP_shell(blob, derP__, P__, fflip):
+def form_PP_shell(blob, derP__, P__, derPd__, Pd__, fflip):
     '''
     form PPs in blob or in FPP
     '''
     if not isinstance(blob, CPP):  # input is blob
-        blob.derP__ = derP__
-        blob.P__ = P__
+        blob.derP__ = derP__; blob.P__ = P__
+        blob.derPd__ = derPd__; blob.Pd__ = Pd__
         derP_2_PP_(blob.derP__, blob.PP_,  fflip)  # form vertically contiguous patterns of patterns
-
+        derP_2_PP_(blob.derPd__, blob.PPd_, fflip)
     else: # input is FPP
-        blob.derPf__ = derP__
-        blob.Pf__ = P__
+        blob.derPf__ = derP__; blob.Pf__ = P__
+        blob.derPdf__ = derPd__; blob.Pdf__ = Pd__
         derP_2_PP_(blob.derPf__, blob.PPf_, fflip)  # form vertically contiguous patterns of patterns
-
+        derP_2_PP_(blob.derPdf__, blob.PPdf_, fflip)
 
 def form_P_(idert_, mask_, y):  # segment dert__ into P__, in horizontal ) vertical order
     '''
@@ -233,6 +240,7 @@ def form_Pd_(P_):
     '''
     form Pd s across P's derts using Dx sign
     '''
+    Pd__ = []
     for iP in P_:
         if (iP.downconnect_cnt>0) or (iP.upconnect_):  # Pm should has at least 1 connect
 
@@ -268,7 +276,7 @@ def form_Pd_(P_):
                 else: # sign change, terminate P
                     P = CP(I=I, Dy=Dy, Dx=Dx, G=G, M=M, Dyy=Dyy, Dyx=Dyx, Dxy=Dxy, Dxx=Dxx, Ga=Ga, Ma=Ma, L=L, x0=x0, dert_=dert_, y=iP.y, sign=_sign, Pm=iP)
                     if Dx > ave_Dx:
-                        comp_dx(P); P_Ddx = P.Ddx; P_Mdx = P.Mdx
+                        comp_dx(P); P_Ddx += P.Ddx; P_Mdx += P.Mdx
                     Pd_.append(P)
                     # reinitialize param
                     I, Dy, Dx, G, M, Dyy, Dyx, Dxy, Dxx, Ga, Ma = dert; x0 = iP.x0+x ;L = 1 ; dert_ = [dert]
@@ -278,14 +286,18 @@ def form_Pd_(P_):
             # terminate last P
             P = CP(I=I, Dy=Dy, Dx=Dx, G=G, M=M, Dyy=Dyy, Dyx=Dyx, Dxy=Dxy, Dxx=Dxx, Ga=Ga, Ma=Ma, L=L, x0=x0, dert_=dert_, y=iP.y, sign=_sign, Pm=iP)
             if Dx > ave_Dx:
-                comp_dx(P); P_Ddx = P.Ddx; P_Mdx = P.Mdx
+                comp_dx(P); P_Ddx += P.Ddx; P_Mdx += P.Mdx
             Pd_.append(P)
             # update Pd params in P
             iP.Pd_ = Pd_; iP.Ddx = P_Ddx; iP.Mdx = P_Mdx
+            Pd__ += Pd_
+
+    return Pd__
 
 
 def scan_Pd_(P_, _P_):  # test for x overlap between Pds
 
+    derPd_ = []
     for P in P_:  # lower row
         for _P in _P_:  # upper row
 
@@ -297,11 +309,14 @@ def scan_Pd_(P_, _P_):  # test for x overlap between Pds
                         fcomp = [1 for derPd in Pd.upconnect_ if Pd is derPd.P]  # upconnect could be derP or dirP
                         if not fcomp:
                             derPd = comp_slice(_Pd, Pd) # the operations is the same between Pd and Pm in comp_slice?
+                            derPd_.append(derPd)
                             Pd.upconnect_.append(derPd)
                             _Pd.downconnect_cnt += 1
 
                     elif (Pd.x0 + Pd.L) < _Pd.x0:  # stop scanning the rest of lower P_ if there is no overlap
                         break
+
+    return derPd_
 
 
 def comp_slice(_P, P):  # forms vertical derivatives of derP params, and conditional ders from norm and DIV comp
