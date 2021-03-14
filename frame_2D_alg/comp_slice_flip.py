@@ -110,11 +110,9 @@ class CPP(ClusterStructure):
 # leading 'f' denotes flag
 '''
 workflow, needs an update:
-
 intra_blob -> slice_blob(blob) -> derP_ -> PP,
 if flip_val(PP is FPP): pack FPP in blob.PP_ -> flip FPP.dert__ -> slice_blob(FPP) -> pack PP in FPP.PP_
 else       (PP is PP):  pack PP in blob.PP_
-
 please see scan_P_ diagram: https://github.com/boris-kz/CogAlg/blob/master/frame_2D_alg/Illustrations/comp_slice.drawio
 '''
 
@@ -146,7 +144,7 @@ def slice_blob(blob, verbose=False):
 
         Pd_ = form_Pd_(P_)  # form Pds across Ps
         derPd_ = scan_Pd_(P_, _P_)  # adds upconnect_ in Pds and calls derPd_2_PP_derPd_, same as derP_2_PP_?
-        
+
         derP__ += derP_ ; derPd__ += derPd_ # frame of derPs
         P__ += P_ ; Pd__ += Pd_
         _P_ = P_  # set current lower row P_ as next upper row _P_
@@ -171,6 +169,7 @@ def form_PP_shell(blob, derP__, P__, derPd__, Pd__, fflip):
         blob.derPdf__ = derPd__; blob.Pdf__ = Pd__
         derP_2_PP_(blob.derPf__, blob.PPf_, fflip)  # form vertically contiguous patterns of patterns
         derP_2_PP_(blob.derPdf__, blob.PPdf_, fflip)
+
 
 def form_P_(idert_, mask_, y):  # segment dert__ into P__, in horizontal ) vertical order
     '''
@@ -321,10 +320,10 @@ def scan_Pd_(P_, _P_):  # test for x overlap between Pds
 
 def comp_slice(_P, P):  # forms vertical derivatives of derP params, and conditional ders from norm and DIV comp
 
-    s, x0, G, M, L, Dx, Dy = P.sign, P.x0, P.G, P.M, P.L, P.Dx, P.Dy
+    s, x0, Dx, Dy, G, M, L = P.sign, P.x0, P.Dx, P.Dy, P.G, P.M, P.L
     # params per comp branch, add angle params, ext: X, new: L,
     # no input I comp in top dert?
-    _s, _x0, _G, _M, _L, _Dx, _Dy = _P.sign, _P.x0, _P.G, _P.M, _P.L, _P.Dx, _P.Dy
+    _s, _x0, _Dx, _Dy, _G, _M, _L = _P.sign, _P.x0, _P.Dx, _P.Dy, _P.G, _P.M, _P.L
     '''
     redefine Ps by dx in dert_, rescan dert by input P d_ave_x: skip if not in blob?
     '''
@@ -402,7 +401,6 @@ def derP_2_PP_(derP_, PP_, fflip):
     '''
     for derP in reversed(derP_):  # bottom-up to follow upconnects, derP is stored top-down
         if not derP.P.downconnect_cnt and not isinstance(derP.PP, CPP):  # root derP was not terminated in prior call
-
             PP = CPP(derPP=CderP())  # init
             accum_PP(PP,derP)
 
@@ -418,10 +416,9 @@ def upconnect_2_PP_(iderP, PP_, fflip):
     '''
     compare sign of lower-layer iderP to the sign of its upconnects to form contiguous same-sign PPs
     '''
-
     confirmed_upconnect_ = []
-    for derP in iderP._P.upconnect_:  # potential upconnects from previous call
 
+    for derP in iderP._P.upconnect_:  # potential upconnects from previous call
         if derP not in iderP.PP.derP__:  # derP should not in current iPP derP_ list, but this may occur after the PP merging
 
             if (derP.flip_val>0 and iderP.flip_val>0 and iderP.PP.derPP.flip_val>0):
@@ -465,17 +462,19 @@ def upconnect_2_PP_(iderP, PP_, fflip):
 def flip_eval_blob(blob):
 
     if not blob.fflip:  # blob was not flipped in prior call
-        # L_bias (Lx / Ly) * G_bias (Gy / Gx), blob.box = [y0,yn,x0,xn], ddirection: , preferential comp over low G
+        # L_bias (Lx / Ly) * G_bias (Gy / Gx), blob.box = [y0,yn,x0,xn], ddirection: preferential comp over low G
         horizontal_bias = (blob.box[3] - blob.box[2]) / (blob.box[1] - blob.box[0]) \
                           * (abs(blob.Dy) / abs(blob.Dx))
 
         if horizontal_bias > 1 and (blob.G * blob.Ma * horizontal_bias > flip_ave / 10):
             blob.fflip = 1  # rotate 90 degrees for scanning in vertical direction
-            blob.dert__ = tuple([np.rot90(dert) for dert in blob.dert__])
-            blob.mask__ = np.rot90(blob.mask__)
             # swap blob Dy and Dx:
             Dy=blob.Dy; blob.Dy = blob.Dx; blob.Dx = Dy
+            # rotate dert__:
+            blob.dert__ = tuple([np.rot90(dert) for dert in blob.dert__])
+            blob.mask__ = np.rot90(blob.mask__)
             # swap dert dys and dxs:
+            # blob.dert__[1] swap doesn't affect blob.dert__[2] swap?
             blob.dert__ = list(blob.dert__)  # convert to list since param in tuple is immutable
             blob.dert__[1], blob.dert__[2] = \
             blob.dert__[2], blob.dert__[1]
@@ -540,7 +539,7 @@ def flip_FPP(FPP):
     flipped_dert__[2],flipped_dert__[1]  # swap dy and dx in derts, always flipped in FPP
     FPP.dert__ = flipped_dert__
     FPP.mask__ = flipped_mask__
-    # form PP with the flipped FPP
+    # form PP_ in flipped FPP
     slice_blob(FPP, verbose=True)
 
 def comp_dx(P):  # cross-comp of dx s in P.dert_
@@ -557,7 +556,6 @@ def comp_dx(P):  # cross-comp of dx s in P.dert_
         Ddx += ddx  # P-wide cross-sign, P.L is too short to form sub_Ps
         Mdx += mdx
         _dx = dx
-
     P.dxdert_ = dxdert_
     P.Ddx = Ddx
     P.Mdx = Mdx

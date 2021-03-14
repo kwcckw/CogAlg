@@ -121,7 +121,7 @@ def draw_PP_(blob):
 
 
     for blob_PPd in blob.PPd_: # draw PPd
-        
+
         # draw PPds
         for derPd in blob_PPd.derP__:
             if derPd.flip_val <= 0:
@@ -162,13 +162,13 @@ def draw_PP_(blob):
             # flip back
             img_colour_FPPd_section = np.rot90(img_colour_FPPd_section, k=3)
             img_colour_FPPd_section_Pds = np.rot90(img_colour_FPPd_section_Pds, k=3)
-            
+
             # we need offset because Pds might be empty in certain rows or columns from the given blob_PPd.box
             xs_offset = y0FPPd - 0 # x start offset
             ys_offset = x0FPPd - 0 # y start offset
-            xe_offset = (blob_PPd.box[3]-blob_PPd.box[2]) - ((ynFPPd - y0FPPd)+ xs_offset)# x end negative offset 
+            xe_offset = (blob_PPd.box[3]-blob_PPd.box[2]) - ((ynFPPd - y0FPPd)+ xs_offset)# x end negative offset
             ye_offset = (blob_PPd.box[1]-blob_PPd.box[0]) - ((xnFPPd - x0FPPd)+ ys_offset )# y end negative offset
-            
+
             # fill back the bigger image
             img_colour_FPPd[blob_PPd.box[0]+ys_offset:blob_PPd.box[1]-ye_offset, blob_PPd.box[2]+xs_offset:blob_PPd.box[3]-xe_offset] = img_colour_FPPd_section
             img_colour_FPPd_Pds[blob_PPd.box[0]+ys_offset:blob_PPd.box[1]-ye_offset, blob_PPd.box[2]+xs_offset:blob_PPd.box[3]-xe_offset] = img_colour_FPPd_section_Pds
@@ -536,4 +536,3 @@ optional arguments:
                         render the process
   -z ZOOM, --zoom ZOOM  zooming ratio when rendering
 """
-
