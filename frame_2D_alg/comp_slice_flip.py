@@ -463,8 +463,9 @@ def flip_eval_blob(blob):
 
     if not blob.fflip:  # blob was not flipped in prior call
         # L_bias (Lx / Ly) * G_bias (Gy / Gx), blob.box = [y0,yn,x0,xn], ddirection: preferential comp over low G
-        horizontal_bias = (blob.box[3] - blob.box[2]) / (blob.box[1] - blob.box[0]) \
-                          * (abs(blob.Dy) / abs(blob.Dx))
+        
+        dbias = abs(blob.Dy) / abs(blob.Dx) if abs(blob.Dx)>0 else abs(blob.Dy)*2 # avoid zero division
+        horizontal_bias = (blob.box[3] - blob.box[2]) / (blob.box[1] - blob.box[0]) * dbias
 
         if horizontal_bias > 1 and (blob.G * blob.Ma * horizontal_bias > flip_ave / 10):
             blob.fflip = 1  # rotate 90 degrees for scanning in vertical direction

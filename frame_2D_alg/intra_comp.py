@@ -116,7 +116,7 @@ def comp_r(dert__, ave, root_fia, mask__=None):
     return (i__center, dy__, dx__, g__, m__), majority_mask__
 
 
-def comp_a(dert__, ave, mask__=None):  # cross-comp of angle in 2x2 kernels
+def comp_a(dert__, ave, prior_forks, mask__=None):  # cross-comp of angle in 2x2 kernels
 
     if mask__ is not None:
         majority_mask__ = (mask__[:-1, :-1].astype(int) +
@@ -166,12 +166,23 @@ def comp_a(dert__, ave, mask__=None):  # cross-comp of angle in 2x2 kernels
     ga value is deviation; interruption | wave is sign-agnostic: expected reversion, same for d sign?
     extended-kernel gradient from decomposed diffs: np.hypot(dydy, dxdy) + np.hypot(dydx, dxdx)?
     '''
+    # if root fork is comp_a or from frame_blobs, recompute dy and dx
+    # but right now we don't have prior_fork = comp_a yet 
+    if (prior_forks[-1] == 'g') or (prior_forks[-1] == 'a'):
+        i__topleft  = i__[:-1, :-1]
+        i__topright = i__[:-1, 1:]
+        i__botright = i__[1:, 1:]
+        i__botleft  = i__[1:, :-1]
+        dy__ = (i__botleft + i__botright) - (i__topleft + i__topright)   # decomposition of two diagonal differences
+        dx__ = (i__topright + i__botright) - (i__topleft + i__botleft) # decomposition of two diagonal differences
+    else: 
+        dy__ = dy__[:-1, :-1]  # passed on as idy, not rotated
+        dx__ = dx__[:-1, :-1]  # passed on as idx, not rotated
+       
     i__ = i__[:-1, :-1]  # for summation in Dert
     g__ = g__[:-1, :-1]  # for summation in Dert
     m__ = m__[:-1, :-1]
-    dy__ = dy__[:-1, :-1]  # passed on as idy, not rotated
-    dx__ = dx__[:-1, :-1]  # passed on as idx, not rotated
-
+    
     return (i__, dy__, dx__, g__, m__, day__, dax__, ga__, ma__), majority_mask__
 
 
