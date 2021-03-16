@@ -327,9 +327,9 @@ def comp_slice(_P, P):  # forms vertical derivatives of derP params, and conditi
 
     s, x0, Dx, Dy, G, M, L = P.sign, P.x0, P.Dx, P.Dy, P.G, P.M, P.L
     # params per comp branch, add angle params
-    _s, _x0, _Dx, _Dy, _G, _M, _dX, _L = _P.sign, _P.x0, _P.Dx, _P.Dy, _P.G, _P.M, _P._dX, _P.L
+    _s, _x0, _Dx, _Dy, _G, _M, _dX, _L = _P.sign, _P.x0, _P.Dx, _P.Dy, _P.G, _P.M, _P.dX, _P.L
 
-    dX = (x0 + L-1 / 2) - (_x0 + _L-1 / 2)  # x shift: d_ave_x, or from offsets: abs(x0 - _x0) + abs(xn - _xn)?
+    dX = (x0 + (L-1) / 2) - (_x0 + (_L-1) / 2)  # x shift: d_ave_x, or from offsets: abs(x0 - _x0) + abs(xn - _xn)?
 
     if dX > ave_dX:  # internal comp is higher-power, else two-input comp not compressive?
         xn = x0 + L - 1
@@ -339,6 +339,24 @@ def comp_slice(_P, P):  # forms vertical derivatives of derP params, and conditi
 
     ddX = dX - _dX  # long axis curvature, if > ave: ortho eval per P, else per PP_dX?
     # add mdX = min(dX - _dX)?
+    
+    if dX: # ortho is true once it is not 0? could be >0 or <0
+        hyp = np.hypot(dX, 1) # long axis increment (vertical distance), to adjust params of orthogonal slice:
+        
+        x_ratio = hyp/dX
+        y_ratio= np.sin(np.arccos(1/hyp))
+        
+        L *=  x_ratio # scale L using ratio of hyp to dX?
+        # L /= hyp
+        
+        
+        Dx = (Dx*x_ratio + Dy*y_ratio) / 2  
+        Dy = (Dy*y_ratio - Dx*x_ratio) / 2  
+        # re-orient derivatives by combining them in proportion to their decomposition on new axes:
+        #Dx = (Dx * hyp + Dy / hyp) / 2  # no / hyp: kernel doesn't matter on P level?
+        #Dy = (Dy / hyp - Dx * hyp) / 2  # estimated D over vert_L
+    
+    
     '''
     if ortho:  # estimate params of P locally orthogonal to long axis, maximizing lateral diff and vertical match
         Long axis is a curve of connections between ave_x s: mid-points of consecutive Ps.
@@ -361,16 +379,16 @@ def comp_slice(_P, P):  # forms vertical derivatives of derP params, and conditi
     if Dy > 0 == _Dy > 0: mDy = min(Dy, _Dy)
     else: mDy = -min(abs(Dy), abs(_Dy))
 
-    if P.dxdert and _P._dxdert_:
+    fdx = 0
+    if P.dxdert_ and _P.dxdert_:
         fdx = 1
         dDdx = P.Ddx - _P.Ddx  # from comp_dx
-        if P.Ddx > 0 == _P.Ddx > 0: mDdx = min(P.Ddx, _P.Ddx)
+        if (P.Ddx > 0) == (_P.Ddx > 0): mDdx = min(P.Ddx, _P.Ddx)
         else: mDdx = -min(abs(P.Ddx), abs(_P.Ddx))
         dMdx = min( P.Mdx, _P.Mdx)  # Mdx is signed
-        if P.Mdx > 0 == _P.Mdx > 0: mMdx = min(P.mMdx, _P.Mdx)
+        if (P.Mdx > 0) == (_P.Mdx > 0): mMdx = min(P.mMdx, _P.Mdx)
         else: mMdx = -min(abs(P.Mdx), abs(_P.Mdx))
-    else:
-        fdx = 0
+
 
     dP = ddX + dL + dM + dDx + dDy  # -> directional PPd, equal-weight params, no rdn?
     # correlation: dX -> L, oDy, !oDx, ddX -> dL, odDy ! odDx? dL -> dDx, dDy?
@@ -378,7 +396,7 @@ def comp_slice(_P, P):  # forms vertical derivatives of derP params, and conditi
 
     mP = mL + mM + mDx + mDy # -> complementary PPm, rdn *= Pd | Pm rolp?
     if fdx: mP += mDdx + mMdx
-    mP -= ave_mP * ave_rmP ** (dX / L)  # dX / L is relative x-distance between P and _P,
+    mP -= ave_mP * (ave_rmP ** (dX / L))  # dX / L is relative x-distance between P and _P,
 
     flip_val = (dX * (P.Dy / (P.Dx+.001)) - flip_ave)  # avoid division by zero
 
@@ -389,6 +407,50 @@ def comp_slice(_P, P):  # forms vertical derivatives of derP params, and conditi
     # div_f, nvars
 
     return derP
+
+# draft, not sure yet
+def comp_day(P): # should be same with dax, replacing dy with dx
+  
+    P_day_ = []   # P_days in P
+    _dert = P.dert_[0]  # 1st dert
+    dert_ = [_dert]
+    I, Dy, Dx, G, M, Dyy, Dyx, Dxy, Dxx, Ga, Ma = _dert; L = 1; x0 = P.x0  # initialize P params with first dert
+    _sign = (_dert[1]/_dert[3])> 0 # Day (dy/g)
+    x = 1  # relative x within P
+    
+    for dert in P.dert_[1:]:
+        
+        sign = (dert[1]/dert[3])> 0
+        if sign == _sign: # same Day sign
+            I += dert[0]  # accumulate P params with (p, dy, dx, g, m, dyy, dyx, dxy, dxx, ga, ma) = dert
+            Dy += dert[1]
+            Dx += dert[2]
+            G += dert[3]
+            M += dert[4]
+            Dyy += dert[5]
+            Dyx += dert[6]
+            Dxy += dert[7]
+            Dxx += dert[8]
+            Ga += dert[9]
+            Ma += dert[10]
+            L += 1
+            dert_.append(dert)
+
+        else:  # sign change, terminate P
+            P = CP(I=I, Dy=Dy, Dx=Dx, G=G, M=M, Dyy=Dyy, Dyx=Dyx, Dxy=Dxy, Dxx=Dxx, Ga=Ga, Ma=Ma, L=L, x0=x0, dert_=dert_, y=P.y, sign=_sign)
+            P_day_.append(P)
+            # reinitialize params
+            I, Dy, Dx, G, M, Dyy, Dyx, Dxy, Dxx, Ga, Ma = dert; x0 = P.x0+x; L = 1; dert_ = [dert]
+            
+        _sign = sign
+        x += 1
+        
+    # terminate last P
+    P = CP(I=I, Dy=Dy, Dx=Dx, G=G, M=M, Dyy=Dyy, Dyx=Dyx, Dxy=Dxy, Dxx=Dxx, Ga=Ga, Ma=Ma, L=L, x0=x0, dert_=dert_, y=P.y, sign=_sign)
+    P_day_.append(P)
+    
+    # add additional params in P? Such as day_ and sum of day?
+    
 
 
 def derP_2_PP_(derP_, PP_, fflip):
