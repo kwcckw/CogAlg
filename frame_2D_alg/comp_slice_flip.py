@@ -162,8 +162,8 @@ def form_PP_shell(blob, derP__, P__, derPd__, Pd__):
     if not isinstance(blob, CPP):  # input is blob
         blob.derP__ = derP__; blob.P__ = P__
         blob.derPd__ = derPd__; blob.Pd__ = Pd__
-        derP_2_PP_(blob.derP__, blob.PP_,  1)  # form vertically contiguous patterns of patterns
-        derP_2_PP_(blob.derPd__, blob.PPd_, 1)
+        derP_2_PP_(blob.derP__, blob.PP_,  blob.fflip)  # form vertically contiguous patterns of patterns
+        derP_2_PP_(blob.derPd__, blob.PPd_, blob.fflip)
     else: # input is FPP
         blob.derPf__ = derP__; blob.Pf__ = P__
         blob.derPdf__ = derPd__; blob.Pdf__ = Pd__
@@ -327,7 +327,6 @@ def comp_slice(_P, P):  # forms vertical derivatives of derP params, and conditi
     _dX = (x0 + L-1 / 2) - (_x0 + _L-1 / 2)  # d_ave_x, alternatively:
     dX = abs(x0 - _x0) + abs(xn - _xn)  # diff of ave x, by offset, or max_L - overlap: abs distance?
 
-    mX = 0
     if dX > ave_dX:  # internal comp is higher-power, else two-input comp not compressive?
         mX = min(xn, _xn) - max(x0, _x0)  # overlap = abs proximity: summed binary positional match | miss:
         rX = dX / mX if mX else dX*2  # average dist / prox, | prox / dist, | mX / max_L?
@@ -349,26 +348,15 @@ def comp_slice(_P, P):  # forms vertical derivatives of derP params, and conditi
     dL = L - _L; mL = min(L, _L)  # L: positions / sign, dderived: magnitude-proportional value
     dM = M - _M; mM = min(M, _M)  # no Mx, My: non-core, lesser and redundant bias?
 
-    # my suggestion:
-    # remove negative values in Dy and Dx by scaling from -255-255 -> 0-255
-    _Dx_scaled  = ((_Dx/_L) + 255) /2
-    _Dy_scaled  = ((_Dy/_L) + 255) /2
-    Dx_scaled   = ((Dx/L) + 255) /2
-    Dy_scaled   = ((Dy/L) + 255) /2
-    
-    dDx = Dx_scaled - _Dx_scaled; mDx = min(Dx_scaled, _Dx_scaled)  # same-sign Dx in vxP
-    dDy = Dy_scaled - _Dy_scaled; mDy = min(Dy_scaled, _Dy_scaled)  # Dy per sub_P by intra_comp(dx), vs. less vertically specific dI
+    dDx = abs(Dx) - abs(_Dx); mDx = min(abs(Dx), abs(_Dx))  # same-sign Dx in vxP
+    dDy = Dy - _Dy; mDy = min(Dy, _Dy)  # Dy per sub_P by intra_comp(dx), vs. less vertically specific dI
 
     # no comp G: Dx, dDy are more specific?
     dP = ddX + dL + dM + dDx + dDy  # -> directional PPd, equal-weight params, no rdn?
     # correlation: dX -> L, oDy, !oDx, ddX -> dL, odDy ! odDx? dL -> dDx, dDy?
     mP = mL + mM + mDx + mDy   # -> complementary PPm, rdn *= Pd | Pm rolp?
 
-    # my suggestion:
-    # replace -1 to + 1 because we may get zero division issue if (dX / L) = 1
-    # power of 2 to get non linear relationship
-    mP -= ave_mP / np.power(((dX / L)+1),2)  # just a rough draft
-    
+    mP -= ave_mP / 2^(dX / L)  # just a rough draft
     ''' Positional miss is positive: lower filters, no match: always inverse miss? '''
 
     flip_val = (dX * (P.Dy / (P.Dx+.001)) - flip_ave)  # avoid division by zero
