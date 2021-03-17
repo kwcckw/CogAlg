@@ -19,11 +19,10 @@ aveG = 50  # filter for comp_g, assumed constant direction
 flip_ave = .1
 flip_ave_FPP = 5  # flip large FPPs only
 div_ave = 200
-ave_dX = 10  # difference between median x coords of consecutive Ps
+ave_dX = 1  # difference between median x coords of consecutive Ps
 ave_Dx = 10
 ave_mP = 20  # just a random number right now.
 ave_rmP = .7  # the rate of mP decay per relative dX (x shift) = 1: initial form of distance
-
 
 class CP(ClusterStructure):
     # Dert: summed pixel values and pixel-level derivatives:
@@ -339,27 +338,40 @@ def comp_slice(_P, P):  # forms vertical derivatives of derP params, and conditi
 
     ddX = dX - _dX  # long axis curvature, if > ave: ortho eval per P, else per PP_dX?
     # add mdX = min(dX - _dX)?
-    '''
-    if dX * P.G > ortho:  # estimate params of P locally orthogonal to long axis, maximizing lateral diff and vertical match
     
-        Long axis is a curve of connections between ave_xs: mid-points of consecutive Ps.
-        Ortho virtually rotates P to connection-orthogonal:    
-        hyp = hypot(dX, 1)  # ratio of local segment of long (vertical) axis to dY = 1
-        oL /= hyp  # orthogonal L
+    if dX * P.G > (ave_dX * P.G):  # estimate params of P locally orthogonal to long axis, maximizing lateral diff and vertical match
+    
+        # Long axis is a curve of connections between ave_xs: mid-points of consecutive Ps.
+        # Ortho virtually rotates P to connection-orthogonal:    
+        hyp = np.hypot(dX, 1)  # ratio of local segment of long (vertical) axis to dY = 1
+        oL = L/ hyp  # orthogonal L
         # combine derivatives in proportion to their axes contribution to new axes:
         
-        oDy = (Dy * hyp - Dx / hyp) / 2  # estimated along-axis D
-        oDx = (Dx / hyp + Dy * hyp) / 2  # estimated cross-axis D
-        or:
-        oDy = (Dy * hyp) + (Dx / hyp) / 2 
-        oDx = (Dy / hyp) + (Dx * hyp) / 2.
-        or, most likely:
         
-        oDy = hypot( Dy / hyp, Dx * hyp), 
-        oDx = hypot( Dy * hyp, Dx / hyp)?
-                
-        param correlations: dX-> L, ddX-> dL, neutral to Dx: mixed with anti-correlated oDy?
-    '''
+        oDy1 = (Dy / hyp - Dx * hyp) / 2  # estimated along-axis D
+        oDx1 = (Dx * hyp + Dy / hyp) / 2  # estimated cross-axis D
+        
+        oDy2 = (Dy / hyp) + (Dx * hyp) / 2 
+        oDx2 = (Dy * hyp) + (Dx / hyp) / 2
+       
+        oDy3 = np.hypot( Dy / hyp, Dx * hyp)
+        oDx3 = np.hypot( Dy * hyp, Dx / hyp)
+        
+        # for visualization later
+        f= open("values.txt","a+")
+        f.write(str(Dy)+"\n")
+        f.write(str(Dx)+"\n")
+        f.write(str(hyp)+"\n")
+        f.write(str(oDy1)+"\n")
+        f.write(str(oDx1)+"\n")
+        f.write(str(oDy2)+"\n")
+        f.write(str(oDx2)+"\n")
+        f.write(str(oDy3)+"\n")
+        f.write(str(oDx3)+"\n")
+        f.close()
+        
+        # param correlations: dX-> L, ddX-> dL, neutral to Dx: mixed with anti-correlated oDy?
+    
     # no comp G: Dx, dDy are more specific?
     dL = L - _L; mL = min(L, _L)  # L: positions / sign, dderived: magnitude-proportional value
     dM = M - _M; mM = min(M, _M)  # use abs M?  no Mx, My: non-core, lesser and redundant bias?
@@ -372,7 +384,7 @@ def comp_slice(_P, P):  # forms vertical derivatives of derP params, and conditi
     mDy = min(abs(Dy), abs(_Dy))
     if Dy > 0 != _Dy > 0: mDy = -mDy
 
-    if P.dxdert and _P._dxdert_:  # from comp_dx
+    if P.dxdert_ and _P.dxdert_:  # from comp_dx
         fdx = 1
         dDdx = P.Ddx - _P.Ddx
         mDdx = min(abs(P.Ddx), abs(_P.Ddx))
