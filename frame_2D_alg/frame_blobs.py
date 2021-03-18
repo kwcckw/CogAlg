@@ -306,53 +306,6 @@ def print_deep_blob_forking(deep_layer):
         if len(deep_layer)>0:
             check_deep_blob(deep_layer,i)
 
-
- 
-# to visualize dy & dx and their scaled oDy & oDx
-#oDy1 = (Dy / hyp - Dx * hyp) / 2  # estimated along-axis D
-#oDx1 = (Dx * hyp + Dy / hyp) / 2  # estimated cross-axis D
-#oDy2 = (Dy / hyp) + (Dx * hyp) / 2 
-#oDx2 = (Dy * hyp) + (Dx / hyp) / 2
-#oDy3 = np.hypot( Dy / hyp, Dx * hyp)
-#oDx3 = np.hypot( Dy * hyp, Dx / hyp)    
-def visualize_odydx():
-    from matplotlib import pyplot as plt
-    import matplotlib
-    matplotlib.use('Agg')
-    # Dy, Dx, hyp, oDy1, oDx1, oDy2, oDx2, oDy3, oDx3
-    values_  = [ [],[],[],[],[],[],[],[],[]]
-    
-    f = open("values.txt","r")
-    flines = f.readlines()
-    for n, val in enumerate(flines):    
-        values_[n%9].append(round(float(val[:-1]),1))
-
-    num_data = range(len(values_[0]))
-    
-    for n in num_data:
-        plt.figure()
-        plt.plot([values_[1][n]], [values_[0][n]], marker='o', markersize=5, color="black")
-        plt.text(values_[1][n], values_[0][n],'Dy, Dx')
-
-        plt.plot([values_[1][n],values_[4][n]],[values_[0][n],values_[3][n]],'r')
-        plt.plot([values_[4][n]], [values_[3][n]], marker='o', markersize=5, color="red")
-        plt.text(values_[4][n], values_[3][n],'oDy1, oDx1')
-        
-        plt.plot([values_[1][n],values_[6][n]],[values_[0][n],values_[5][n]],'g')
-        plt.plot([values_[6][n]], [values_[5][n]], marker='o', markersize=5, color="green")
-        plt.text(values_[6][n], values_[5][n],'oDy2, oDx2')
-        
-        plt.plot([values_[1][n],values_[8][n]],[values_[0][n],values_[7][n]],'b')
-        plt.plot([values_[8][n]], [values_[7][n]], marker='o', markersize=5, color="blue")
-        plt.text(values_[8][n], values_[7][n],'oDy3, oDx3')
-        
-        plt.xlabel('Dx')
-        plt.ylabel('Dy')
-        plt.savefig('./images/oDyoDx/points_'+str(n)+'.png')
-        plt.close()
-
-
-
 if __name__ == "__main__":
     # Imports
     import argparse
@@ -433,9 +386,6 @@ if __name__ == "__main__":
         if args.verbose:
             print_deep_blob_forking(deep_layers)
             print("\rFinished intra_blob")
-
-    # visualize dy, dx and their ody, odx
-    visualize_odydx()
     
     end_time = time() - start_time
 

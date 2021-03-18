@@ -337,38 +337,26 @@ def comp_slice(_P, P):  # forms vertical derivatives of derP params, and conditi
         rX = dX / mX if mX else dX*2  # average dist / prox, | prox / dist, | mX / max_L?
 
     ddX = dX - _dX  # long axis curvature, if > ave: ortho eval per P, else per PP_dX?
-    # add mdX = min(dX - _dX)?
+    mdX = min(dX, _dX) # add this to mP computation?
     
     if dX * P.G > (ave_dX * P.G):  # estimate params of P locally orthogonal to long axis, maximizing lateral diff and vertical match
     
         # Long axis is a curve of connections between ave_xs: mid-points of consecutive Ps.
         # Ortho virtually rotates P to connection-orthogonal:    
         hyp = np.hypot(dX, 1)  # ratio of local segment of long (vertical) axis to dY = 1
-        oL = L/ hyp  # orthogonal L
+        L = L/ hyp  # orthogonal L
         # combine derivatives in proportion to their axes contribution to new axes:
-        
-        
-        oDy1 = (Dy / hyp - Dx * hyp) / 2  # estimated along-axis D
-        oDx1 = (Dx * hyp + Dy / hyp) / 2  # estimated cross-axis D
-        
-        oDy2 = (Dy / hyp) + (Dx * hyp) / 2 
-        oDx2 = (Dy * hyp) + (Dx / hyp) / 2
+        Dy = (Dy / hyp + Dx * hyp) / 2 
+        Dx = (Dy * hyp + Dx / hyp) / 2
        
-        oDy3 = np.hypot( Dy / hyp, Dx * hyp)
-        oDx3 = np.hypot( Dy * hyp, Dx / hyp)
+        # visualize_odydx(Dy, Dx, dX)
         
-        # for visualization later
-        f= open("values.txt","a+")
-        f.write(str(Dy)+"\n")
-        f.write(str(Dx)+"\n")
-        f.write(str(hyp)+"\n")
-        f.write(str(oDy1)+"\n")
-        f.write(str(oDx1)+"\n")
-        f.write(str(oDy2)+"\n")
-        f.write(str(oDx2)+"\n")
-        f.write(str(oDy3)+"\n")
-        f.write(str(oDx3)+"\n")
-        f.close()
+        # alternative 1:
+        #Dy = (Dy / hyp - Dx * hyp) / 2  # estimated along-axis D
+        #Dx = (Dy * hyp + Dx / hyp) / 2  # estimated cross-axis D
+        # alternative 2:
+        #Dy = np.hypot( Dy / hyp, Dx * hyp)
+        #Dx = np.hypot( Dy * hyp, Dx / hyp)
         
         # param correlations: dX-> L, ddX-> dL, neutral to Dx: mixed with anti-correlated oDy?
     
@@ -388,11 +376,11 @@ def comp_slice(_P, P):  # forms vertical derivatives of derP params, and conditi
         fdx = 1
         dDdx = P.Ddx - _P.Ddx
         mDdx = min(abs(P.Ddx), abs(_P.Ddx))
-        if P.Ddx > 0 != _P.Ddx > 0: mDdx = -mDdx
+        if (P.Ddx > 0) != (_P.Ddx > 0): mDdx = -mDdx # as we discussed previously, we need the bracket, else the checking sequence of sign will be wrong
         # Mdx is signed:
         dMdx = min( P.Mdx, _P.Mdx)
         mMdx = -min(abs(P.Mdx), abs(_P.Mdx))
-        if P.Mdx > 0 != _P.Mdx > 0: mMdx = -mMdx
+        if (P.Mdx > 0) != (_P.Mdx > 0): mMdx = -mMdx
     else:
         fdx = 0
 

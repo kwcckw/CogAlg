@@ -201,6 +201,43 @@ def draw_PP_(blob):
     cv2.imwrite(img_dir_path + 'img_b' + str(blob.id) + '.bmp', img_combined)
 
 
+
+# to visualize dy & dx and their scaled oDy & oDx
+def visualize_odydx(Dy, Dx, dX):
+    from matplotlib import pyplot as plt
+    import matplotlib
+    matplotlib.use('Agg')
+    
+    hyp = np.hypot(dX, 1)  # ratio of local segment of long (vertical) axis to dY = 1
+    
+    oDy1 = (Dy / hyp - Dx * hyp) / 2  
+    oDx1 = (Dy * hyp + Dx / hyp) / 2  
+    
+    oDy2 = (Dy / hyp + Dx * hyp) / 2 
+    oDx2 = (Dy * hyp + Dx / hyp) / 2
+
+    oDy3 = np.hypot( Dy / hyp, Dx * hyp)
+    oDx3 = np.hypot( Dy * hyp, Dx / hyp)
+        
+    plt.figure()
+    
+    plt.plot([Dx],[Dy], marker='o', markersize=5, color="black")
+    plt.text(Dx,Dy,'Dy, Dx')
+    
+    plt.plot([Dx,oDx1],[Dy,oDy1], marker='o', markersize=5, color="red")
+    plt.text(oDx1,oDy1,'oDy1, oDx1')
+    
+    plt.plot([Dx,oDx2],[Dy,oDy2], marker='o', markersize=5, color="green")
+    plt.text(oDx2,oDy2,'oDy2, oDx2')
+    
+    plt.plot([Dx,oDx3],[Dy,oDy3], marker='o', markersize=5, color="blue")
+    plt.text(oDx3,oDy3,'oDy3, oDx3')
+    
+    plt.xlabel('Dx')
+    plt.ylabel('Dy')
+    plt.savefig('./images/oDyoDx/points_'+str(id(dX))+'.png')
+    plt.close()
+
 def form_PP_dx_(P__):
     '''
     Obsolete
