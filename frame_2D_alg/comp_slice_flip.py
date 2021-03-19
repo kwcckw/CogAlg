@@ -9,7 +9,7 @@ from collections import deque
 import sys
 import numpy as np
 from class_cluster import ClusterStructure, NoneType
-from slice_utils import draw_PP_
+from slice_utils import draw_PP_, generate_params_weight
 
 import warnings  # to detect overflow issue, in case of infinity loop
 warnings.filterwarnings('error')
@@ -367,6 +367,7 @@ def comp_slice(_P, P):  # forms vertical derivatives of derP params, and conditi
     mDy = min(abs(Dy), abs(_Dy))
     if (Dy > 0) != (_Dy > 0): mDy = -mDy
 
+    dDdx, dMdx, mDdx, mMdx = 0, 0, 0, 0
     if P.dxdert_ and _P.dxdert_:  # from comp_dx
         fdx = 1
         dDdx = P.Ddx - _P.Ddx
@@ -383,8 +384,11 @@ def comp_slice(_P, P):  # forms vertical derivatives of derP params, and conditi
     # correlation: dX -> L, oDy, !oDx, ddX -> dL, odDy ! odDx? dL -> dDx, dDy?
     if fdx: dP += dDdx + dMdx
 
-    mP = mL + mM + mDx + mDy # -> complementary PPm, rdn *= Pd | Pm rolp?
+    mP = mdX+ mL + mM + mDx + mDy # -> complementary PPm, rdn *= Pd | Pm rolp?
     if fdx: mP += mDdx + mMdx
+    
+    generate_params_weight(ddX,dL,dM,dDx,dDy,mdX,mL,mM,mDx,mDy,fdx,dDdx,dMdx,mDdx,mMdx)
+    
     mP -= ave_mP * ave_rmP ** (dX / L)  # dX / L is relative x-distance between P and _P,
 
     flip_val = (dX * (P.Dy / (P.Dx+.001)) - flip_ave)  # avoid division by zero
@@ -400,7 +404,6 @@ def comp_slice(_P, P):  # forms vertical derivatives of derP params, and conditi
     div_f, nvars: primary comp L, the rest is normalized?
     '''
     return derP
-
 
 def derP_2_PP_(derP_, PP_, fflip):
     '''

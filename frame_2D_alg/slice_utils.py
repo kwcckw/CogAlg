@@ -14,6 +14,250 @@ ave_Dx = 10
 ave_PP_Dx = 100
 
 
+
+def generate_params_weight(ddX,dL,dM,dDx,dDy,mdX,mL,mM,mDx,mDy,fdx,dDdx,dMdx,mDdx,mMdx):
+    
+    # use try-except to ignore sample with zero division issue
+    try:
+        n = 5
+        # average value computation
+        dP = ddX + dL + dM + dDx + dDy
+        mP = mdX+ mL + mM + mDx + mDy
+        avg_dP = dP/n
+        avg_mP = mP/n
+        # ratio computation
+        d_nratio = (ddX/dL) * (ddX/dM) * (ddX/dDx) * (ddX/dDy)
+        m_nratio = (mdX/mL) * (mdX/mM) * (mdX/mDx) * (mdX/dDy)
+        
+        if fdx:
+            n = 7
+            # average value computation
+            dP += dDdx + dMdx
+            mP += mDdx + mMdx
+            avg_dP = dP/n
+            avg_mP = mP/n
+            # ratio computation
+            d_nratio *= (ddX/dDdx) * (ddX/dMdx) 
+            m_nratio *= (mdX/mDdx) * (mdX/mMdx)
+             
+        # average method results
+        r1_ddX = (ddX/avg_dP) #* ddX # not sure want to multiply back the param or not
+        r1_dL  = (dL/avg_dP ) #* dL
+        r1_dM  = (dM/avg_dP ) #* dM
+        r1_dDx = (dDx/avg_dP) #* dDx
+        r1_dDy = (dDy/avg_dP) #* dDy
+        
+        r1_mdX = (mdX / avg_mP) #* mdX
+        r1_mL  = (mL / avg_mP ) #* mL
+        r1_mM  = (mM / avg_mP ) #* mM
+        r1_mDx = (mDx / avg_mP) #* mDx
+        r1_mDy = (mDy / avg_mP) #* mDy
+        
+        # ratio method results
+        r2_ddX = ddX  * (n*d_nratio)  # ddX is dividend in d_nratio
+        r2_dL  = dL   * (n/d_nratio)  # dL is divisor in d_nratio
+        r2_dM  = dM   * (n/d_nratio)  # dM is divisor in d_nratio
+        r2_dDx = dDx  * (n/d_nratio)  # dDx is divisor in d_nratio
+        r2_dDy = dDy  * (n/d_nratio)  # dDy is divisor in d_nratio
+        
+        r2_mdX = mdX  * (n*m_nratio)  # mdX is dividend in m_nratio
+        r2_mL  = mL   * (n/m_nratio)  # mL is divisor in m_nratio
+        r2_mM  = mM   * (n/m_nratio)  # mM is divisor in m_nratio
+        r2_mDx = mDx  * (n/m_nratio)  # mDx is divisor in m_nratio
+        r2_mDy = mDy  * (n/m_nratio)  # mDy is divisor in m_nratio
+        
+        if fdx:
+            # average method results
+            r1_dDdx = (dDdx / avg_dP) #* dDdx
+            r1_dMdx = (dMdx / avg_dP) #* dMdx
+            r1_mDdx = (mDdx / avg_mP) #* mDdx
+            r1_mMdx = (mMdx / avg_mP) #* mMdx
+            # ratio method results
+            r2_dDdx = dDdx * (n/d_nratio) # dDdx is divisor in d_nratio
+            r2_dMdx = dMdx * (n/d_nratio) # dMdx is divisor in d_nratio
+            r2_mDdx = mDdx * (n/m_nratio) # mDdx is divisor in m_nratio
+            r2_mMdx = mMdx * (n/m_nratio) # mMdx is divisor in m_nratio
+            
+        if fdx:
+            f=open("param_values_fdx.txt", "a+")
+        else:
+            f=open("param_values.txt", "a+")
+            
+            
+        # results 1
+        f.write(str(r1_ddX)+'\n')
+        f.write(str(r1_dL)+'\n')
+        f.write(str(r1_dM)+'\n')
+        f.write(str(r1_dDx)+'\n')
+        f.write(str(r1_dDy)+'\n')
+        f.write(str(r1_mdX)+'\n')
+        f.write(str(r1_mL)+'\n')
+        f.write(str(r1_mM)+'\n')
+        f.write(str(r1_mDx)+'\n')
+        f.write(str(r1_mDy)+'\n')
+        # results 2
+        f.write(str(r2_ddX)+'\n')
+        f.write(str(r2_dL)+'\n')
+        f.write(str(r2_dM)+'\n')
+        f.write(str(r2_dDx)+'\n')
+        f.write(str(r2_dDy)+'\n')
+        f.write(str(r2_mdX)+'\n')
+        f.write(str(r2_mL)+'\n')
+        f.write(str(r2_mM)+'\n')
+        f.write(str(r2_mDx)+'\n')
+        f.write(str(r2_mDy)+'\n')
+
+             
+        if fdx:
+            f.write(str(r1_dDdx)+'\n')
+            f.write(str(r1_dMdx)+'\n')
+            f.write(str(r1_mDdx)+'\n')
+            f.write(str(r1_mMdx)+'\n')
+            f.write(str(r2_dDdx)+'\n')
+            f.write(str(r2_dMdx)+'\n')
+            f.write(str(r2_mDdx)+'\n')
+            f.write(str(r2_mMdx)+'\n')
+
+        f.close()
+            
+    except:
+        pass
+
+# up to r1 only, r2 still need to be discussed
+def visualize_params():
+    
+    marker_size = 3 # to increase marker size when frequency of same observation increases
+    params_ = [[] for _ in range(20)]
+    params_fdx_ = [[] for _ in range(28)]
+
+    # open file and get data without fdx params # -----------------------------    
+    f1=open("param_values.txt", "r")
+    n = 0
+    for param_value in f1.read().split('\n'):
+        if param_value:
+            params_[n%20].append(round(float(param_value),2))
+        n+=1
+    f1.close()
+
+    # open file and get data with fdx params # --------------------------------
+    f2=open("param_values_fdx.txt", "r")
+    n = 0
+    for param_value in f2.read().split('\n'):
+        if param_value:
+            params_fdx_[n%28].append(round(float(param_value),2))
+        n+=1
+    f2.close()
+    
+    # plotting # --------------------------------------------------------------
+    from collections import Counter
+    from matplotlib import pyplot as plt
+    import matplotlib
+    matplotlib.use('Qt5Agg')
+    
+    # without fdx - dP params ## ----------------------------------------------
+    plt.figure()
+    plt.grid(b=True,which='both',axis='both')
+    for i in range(5):
+        x_plot= [i]*len(params_[i])
+        marker_weights = [marker_size*k for k in Counter(params_[i]).values() for j in range(k)]
+        plt.scatter(x_plot, params_[i],s=marker_weights)
+        
+    plt.xlabel('Params')
+    plt.ylabel('Weights')
+    plt.xticks(range(5),['ddX','dL','dM','dDx','dDy'])
+    plt.title('(r1 & without fdx) dP params and weights')
+    
+    # show mean data
+    plt.figure()
+    plt.grid(b=True,which='both',axis='both')
+    plt.bar(range(5),[np.mean(param) for param in params_[:5]])
+    plt.xlabel('Params')
+    plt.ylabel('Weights')
+    plt.xticks(range(5),['ddX','dL','dM','dDx','dDy'])
+    plt.title('(r1 & without fdx) dP params and mean weights')
+    
+    ## without fdx - mP params ## ---------------------------------------------
+    plt.figure()
+    plt.grid(b=True,which='both',axis='both')
+    for i in range(5,10,1):
+        x_plot= [i]*len(params_[i])
+        marker_weights = [marker_size*k for k in Counter(params_[i]).values() for j in range(k)]
+        plt.scatter(x_plot, params_[i],s=marker_weights)
+        
+    plt.xlabel('Params')
+    plt.ylabel('Weights')
+    plt.xticks(range(5,10,1),['mdX','mL','mM','mDx','mDy'])
+    plt.title('(r1 & without fdx) mP params and weights')
+    
+    # show mean data
+    plt.figure()
+    plt.grid(b=True,which='both',axis='both')
+    plt.bar(range(5),[np.mean(param) for param in params_[5:10]])
+    plt.xlabel('Params')
+    plt.ylabel('Weights')
+    plt.xticks(range(5),['mdX','mL','mM','mDx','mDy'])
+    plt.title('(r1 & without fdx) mP params and mean weights')
+    
+    ## with fdx - dP params ## ------------------------------------------------
+    plt.figure()
+    plt.grid(b=True,which='both',axis='both')
+    for i in range(5):
+        x_plot= [i]*len(params_fdx_[i])
+        marker_weights = [marker_size*k for k in Counter(params_fdx_[i]).values() for j in range(k)]
+        plt.scatter(x_plot, params_fdx_[i],s=marker_weights)
+    for i in range(20,22,1):
+        x_plot= [i-15]*len(params_fdx_[i])
+        marker_weights = [marker_size*k for k in Counter(params_fdx_[i]).values() for j in range(k)]
+        plt.scatter(x_plot, params_fdx_[i],s=marker_weights)
+  
+    plt.xlabel('Params')
+    plt.ylabel('Weights')
+    plt.xticks(range(7),['ddX','dL','dM','dDx','dDy','dDdx','dMdx'])
+    plt.title('(r1 & with fdx) dP params and weights')
+    
+    # show mean data
+    plt.figure()
+    plt.grid(b=True,which='both',axis='both')
+    plt.bar(range(5),[np.mean(param) for param in params_fdx_[:5]])
+    plt.bar(range(5,7,1),[np.mean(param) for param in params_fdx_[20:22]])
+    plt.xlabel('Params')
+    plt.ylabel('Weights')
+    plt.xticks(range(7),['ddX','dL','dM','dDx','dDy','dDdx','dMdx'])
+    plt.title('(r1 & with fdx) dP params and mean weights')
+    
+    ## with fdx - mP params ## ------------------------------------------------
+    
+    plt.figure()
+    
+    for i in range(5,10,1):
+        x_plot= [i]*len(params_fdx_[i])
+        marker_weights = [marker_size*k for k in Counter(params_fdx_[i]).values() for j in range(k)]
+        plt.scatter(x_plot, params_fdx_[i],s=marker_weights)
+    for i in range(22,24,1):
+        x_plot= [i-12]*len(params_fdx_[i])
+        marker_weights = [marker_size*k for k in Counter(params_fdx_[i]).values() for j in range(k)]
+        plt.scatter(x_plot, params_fdx_[i],s=marker_weights)
+  
+    plt.xlabel('Params')
+    plt.ylabel('Weights')
+    plt.xticks(range(5,12,1),['mdX','mL','mM','mDx','mDy','mDdx','mMdx'])
+    plt.title('(r1 & with fdx) dP params and weights')
+    plt.grid(b=True,which='both',axis='both')
+    
+    # show mean data
+    plt.figure()
+    plt.grid(b=True,which='both',axis='both')
+    plt.bar(range(5),[np.mean(param) for param in params_fdx_[5:10]])
+    plt.bar(range(5,7,1),[np.mean(param) for param in params_fdx_[22:24]])
+    plt.xlabel('Params')
+    plt.ylabel('Weights')
+    plt.xticks(range(7),['mdX','mL','mM','mDx','mDy','mDdx','mMdx'])
+    plt.title('(r1 & with fdx) dP params and mean weights')
+    plt.grid(b=True,which='both',axis='both')
+    
+    ## with fdx - mP params ## ------------------------------------------------
+    plt.show()
+
 def visualize_ortho():
     '''
     visualize dy & dx and their scaled oDy & oDx
