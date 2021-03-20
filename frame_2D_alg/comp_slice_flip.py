@@ -367,27 +367,25 @@ def comp_slice(_P, P):  # forms vertical derivatives of derP params, and conditi
     mDy = min(abs(Dy), abs(_Dy))
     if (Dy > 0) != (_Dy > 0): mDy = -mDy
 
-    dDdx, dMdx, mDdx, mMdx = 0, 0, 0, 0
     if P.dxdert_ and _P.dxdert_:  # from comp_dx
         fdx = 1
-        dDdx = P.Ddx - _P.Ddx
-        mDdx = min(abs(P.Ddx), abs(_P.Ddx))
+        dDdx = 0.7*(P.Ddx - _P.Ddx) 
+        mDdx = min(abs(0.7*P.Ddx), abs(0.7*_P.Ddx))
         if (P.Ddx > 0) != (_P.Ddx > 0): mDdx = -mDdx
         # Mdx is signed:
-        dMdx = min( P.Mdx, _P.Mdx)
-        mMdx = -min(abs(P.Mdx), abs(_P.Mdx))
+        dMdx = min( 0.7*P.Mdx, 0.7*_P.Mdx)
+        mMdx = -min(abs(0.7*P.Mdx), abs(0.7*_P.Mdx))
         if (P.Mdx > 0) != (_P.Mdx > 0): mMdx = -mMdx
     else:
         fdx = 0
 
-    dP = ddX + dL + dM + dDx + dDy  # -> directional PPd, equal-weight params, no rdn?
+    # 0.7 to semi redundant parameter, 0.5 to fully redundant parameter
+    dP = 0.7*(dM + dDx + dDy) + ddX + dL  # -> directional PPd, equal-weight params, no rdn?
     # correlation: dX -> L, oDy, !oDx, ddX -> dL, odDy ! odDx? dL -> dDx, dDy?
     if fdx: dP += dDdx + dMdx
 
-    mP = mdX+ mL + mM + mDx + mDy # -> complementary PPm, rdn *= Pd | Pm rolp?
+    mP = 0.7*(mM + mDx + mDy) + mdX + mL   # -> complementary PPm, rdn *= Pd | Pm rolp?
     if fdx: mP += mDdx + mMdx
-    
-    generate_params_weight(ddX,dL,dM,dDx,dDy,mdX,mL,mM,mDx,mDy,fdx,dDdx,dMdx,mDdx,mMdx)
     
     mP -= ave_mP * ave_rmP ** (dX / L)  # dX / L is relative x-distance between P and _P,
 

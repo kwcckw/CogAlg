@@ -17,6 +17,14 @@ ave_PP_Dx = 100
 
 def generate_params_weight(ddX,dL,dM,dDx,dDy,mdX,mL,mM,mDx,mDy,fdx,dDdx,dMdx,mDdx,mMdx):
     
+    '''
+    # temporary, to visualize mP and dP params weight
+    # remove file if exists, to avoid endless accumulation of text file values in each run
+    import os
+    if os.path.exists("param_values.txt"): os.remove("param_values.txt")
+    if os.path.exists("param_values_fdx.txt"): os.remove("param_values_fdx.txt")
+    '''
+    
     # use try-except to ignore sample with zero division issue
     try:
         n = 5
@@ -241,7 +249,7 @@ def visualize_params():
     plt.xlabel('Params')
     plt.ylabel('Weights')
     plt.xticks(range(5,12,1),['mdX','mL','mM','mDx','mDy','mDdx','mMdx'])
-    plt.title('(r1 & with fdx) dP params and weights')
+    plt.title('(r1 & with fdx) mP params and weights')
     plt.grid(b=True,which='both',axis='both')
     
     # show mean data
@@ -252,7 +260,7 @@ def visualize_params():
     plt.xlabel('Params')
     plt.ylabel('Weights')
     plt.xticks(range(7),['mdX','mL','mM','mDx','mDy','mDdx','mMdx'])
-    plt.title('(r1 & with fdx) dP params and mean weights')
+    plt.title('(r1 & with fdx) mP params and mean weights')
     plt.grid(b=True,which='both',axis='both')
     
     ## with fdx - mP params ## ------------------------------------------------

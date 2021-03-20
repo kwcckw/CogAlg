@@ -34,7 +34,6 @@ from draw_frame_blobs import visualize_blobs
 from utils import minmax
 from collections import namedtuple
 from class_cluster import ClusterStructure, NoneType
-from slice_utils import visualize_params
 
 ave = 30  # filter or hyper-parameter, set as a guess, latter adjusted by feedback
 UNFILLED = -1
@@ -315,7 +314,7 @@ if __name__ == "__main__":
 
     # Parse arguments
     argument_parser = argparse.ArgumentParser()
-    argument_parser.add_argument('-i', '--image', help='path to image file', default='./images//toucan.jpg')
+    argument_parser.add_argument('-i', '--image', help='path to image file', default='./images//raccoon_eye.jpeg')
     argument_parser.add_argument('-v', '--verbose', help='print details, useful for debugging', type=int, default=1)
     argument_parser.add_argument('-n', '--intra', help='run intra_blobs after frame_blobs', type=int, default=1)
     argument_parser.add_argument('-r', '--render', help='render the process', type=int, default=0)
@@ -346,12 +345,6 @@ if __name__ == "__main__":
             frame.dert__[3],  # g
             frame.dert__[4],  # m
             )
-
-        # temporary, to visualize mP and dP params weight
-        # remove file if exists, to avoid endless accumulation of text file values in each run
-        import os
-        if os.path.exists("param_values.txt"): os.remove("param_values.txt")
-        if os.path.exists("param_values_fdx.txt"): os.remove("param_values_fdx.txt")
 
         for i, blob in enumerate(frame.blob_):  # print('Processing blob number ' + str(bcount))
             '''
@@ -393,9 +386,6 @@ if __name__ == "__main__":
         if args.verbose:
             print_deep_blob_forking(deep_layers)
             print("\rFinished intra_blob")
-
-    # visualize mP and dP params after running through intra_blob
-    visualize_params()
     
     end_time = time() - start_time
 
