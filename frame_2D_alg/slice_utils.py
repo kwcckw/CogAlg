@@ -367,7 +367,7 @@ def draw_PP_(blob):
             img_colour_P[P.y, P.x0 + x] = colour_list[c_ind_P % 10]
         c_ind_P += 1
 
-    for blob_PP in blob.PP_: # draw PP
+    for blob_PP in blob.PPmm_: # draw PP
 
         # draw PPs
         for derP in blob_PP.derP__:
@@ -415,7 +415,7 @@ def draw_PP_(blob):
             img_colour_FPP_Ps[blob_PP.box[0]:blob_PP.box[1], blob_PP.box[2]:blob_PP.box[3]] = img_colour_FPP_section_Ps
 
 
-    for blob_PPd in blob.PPd_: # draw PPd
+    for blob_PPd in blob.PPmd_: # draw PPd
 
         # draw PPds
         for derPd in blob_PPd.derP__:

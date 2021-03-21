@@ -77,6 +77,7 @@ def visualize_blobs(idmap, blob_, window_size=None, winname="Blobs"):
                       "Dy =", blob.Dy,
                       "Dx =", blob.Dx,
                       "S =", blob.A,
+                      "M = ",blob.M,
                       end="\t\t\t")
                 sys.stdout.flush()
 

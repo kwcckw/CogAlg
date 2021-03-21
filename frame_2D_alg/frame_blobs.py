@@ -98,11 +98,12 @@ class CBlob(ClusterStructure):
     a_depth = int  # currently not used
     prior_forks = list
     adj_blobs = list  # for borrowing
-
-    PP_ = list  # comp_slice_ if not empty
+    PPmm_ = list  # comp_slice_ if not empty
+    PPdm_ = list  
     derP__ = list
     P__ = list
-    PPd_ = list  # PP_derPd_
+    PPdd_ = list  # PP_derPd_
+    PPmd_ = list  
     derPd__ = list
     Pd__ = list
 
@@ -314,7 +315,7 @@ if __name__ == "__main__":
 
     # Parse arguments
     argument_parser = argparse.ArgumentParser()
-    argument_parser.add_argument('-i', '--image', help='path to image file', default='./images//raccoon_eye.jpeg')
+    argument_parser.add_argument('-i', '--image', help='path to image file', default='./images//toucan.jpg')
     argument_parser.add_argument('-v', '--verbose', help='print details, useful for debugging', type=int, default=1)
     argument_parser.add_argument('-n', '--intra', help='run intra_blobs after frame_blobs', type=int, default=1)
     argument_parser.add_argument('-r', '--render', help='render the process', type=int, default=0)

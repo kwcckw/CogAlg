@@ -93,20 +93,24 @@ class CPP(ClusterStructure):
     mask__ = bool
     # PP params
     derP__ = list
-    PP_ = list
     P__ = list
+    PPmm_ = list
+    PPdm_ = list
     # FPP params
     derPf__ = list
-    PPf_ = list
     Pf__ = list
+    PPmmf_ = list
+    PPdmf_ = list
     # PPd params
     derPd__ = list
-    PPd_ = list
     Pd__ = list
+    PPmd_ = list
+    PPdd_ = list
     # FPP params
     derPdf__ = list
-    PPdf_ = list
     Pdf__ = list
+    PPmdf_ = list
+    PPddf_ = list
     # comp_dx params
     Ddx = int
     Mdx = int
@@ -160,6 +164,7 @@ def slice_blob(blob, verbose=False):
     form_PP_shell(blob, derP__, P__, derPd__, Pd__)  # form PPs in blob or in FPP
     # draw PPs and FPPs
     if not isinstance(blob, CPP):
+        # yet to be updated 
         draw_PP_(blob)
 
 
@@ -312,16 +317,28 @@ def form_PP_shell(blob, derP__, P__, derPd__, Pd__):
     if not isinstance(blob, CPP):  # input is blob
         blob.derP__ = derP__; blob.P__ = P__
         blob.derPd__ = derPd__; blob.Pd__ = Pd__
-        derP_2_PP_(blob.derP__, blob.PP_,  1)  # form vertically contiguous patterns of patterns by the sign of derP
-        derP_2_PP_(blob.derPd__, blob.PPd_, 1)
+        # derPm - check mP
+        derP_2_PP_(blob.derP__, blob.PPmm_,  1, fPPd=0)  # form vertically contiguous patterns of patterns by the sign of derP
+        # derPm - check dP
+        derP_2_PP_(blob.derP__, blob.PPdm_,  1, fPPd=1)  
+        # derPd - check mP
+        derP_2_PP_(blob.derPd__, blob.PPmd_, 1, fPPd=0)
+        # derPd - check dP
+        derP_2_PP_(blob.derPd__, blob.PPdd_,  1, fPPd=1)
+        
     else: # input is FPP
         blob.derPf__ = derP__; blob.Pf__ = P__
         blob.derPdf__ = derPd__; blob.Pdf__ = Pd__
-        derP_2_PP_(blob.derPf__, blob.PPf_, 0)  # form vertically contiguous patterns of patterns by the sign of derP
-        derP_2_PP_(blob.derPdf__, blob.PPdf_, 0)
+        # derPmf - check mP
+        derP_2_PP_(blob.derPf__, blob.PPmmf_, 0, fPPd=0)  # form vertically contiguous patterns of patterns by the sign of derP
+        # derPmf - check dP
+        derP_2_PP_(blob.derPf__, blob.PPdmf_, 0, fPPd=1)  
+        # derPdf - check mP
+        derP_2_PP_(blob.derPdf__, blob.PPmdf_, 0, fPPd=0)
+        # derPdf - check dP
+        derP_2_PP_(blob.derPdf__, blob.PPddf_, 0, fPPd=1)
 
-
-def derP_2_PP_(derP_, PP_, fflip):
+def derP_2_PP_(derP_, PP_, fflip, fPPd):
     '''
     first row of derP_ has downconnect_cnt == 0, higher rows may also have them
     '''
@@ -331,14 +348,14 @@ def derP_2_PP_(derP_, PP_, fflip):
             accum_PP(PP,derP)
 
             if derP._P.upconnect_:  # derP has upconnects
-                upconnect_2_PP_(derP, PP_, fflip)  # form PPs across _P upconnects
+                upconnect_2_PP_(derP, PP_, fflip, fPPd)  # form PPs across _P upconnects
             else:
                 if (derP.PP.derPP.flip_val > flip_ave_FPP) and fflip:
                     flip_FPP(derP.PP)
                 PP_.append(derP.PP)
 
 
-def upconnect_2_PP_(iderP, PP_, fflip):
+def upconnect_2_PP_(iderP, PP_, fflip, fPPd):
     '''
     compare sign of lower-layer iderP to the sign of its upconnects to form contiguous same-sign PPs
     '''
@@ -346,6 +363,9 @@ def upconnect_2_PP_(iderP, PP_, fflip):
 
     for derP in iderP._P.upconnect_:  # potential upconnects from previous call
         if derP not in iderP.PP.derP__:  # derP should not in current iPP derP_ list, but this may occur after the PP merging
+
+            if fPPd: p_sign = (iderP.dP > 0) == (derP.dP > 0) # check dP sign
+            else: p_sign = (iderP.mP > 0) == (derP.mP > 0)    # check mP sign
 
             if (derP.flip_val>0 and iderP.flip_val>0 and iderP.PP.derPP.flip_val>0):
                 # upconnect derP has different FPP, merge them
@@ -356,7 +376,7 @@ def upconnect_2_PP_(iderP, PP_, fflip):
                     confirmed_upconnect_.append(derP)
 
             # same sign and not FPP
-            elif ((iderP.mP > 0) == (derP.mP > 0)) and not (iderP.flip_val>0) and not (derP.flip_val>0):
+            elif (p_sign) and not (iderP.flip_val>0) and not (derP.flip_val>0):
                 # upconnect derP has different PP, merge them
                 if isinstance(derP.PP, CPP) and (derP.PP is not iderP.PP):
                     merge_PP(iderP.PP, derP.PP, PP_)
@@ -370,7 +390,7 @@ def upconnect_2_PP_(iderP, PP_, fflip):
                 derP.P.downconnect_cnt = 0  # reset downconnect count for root derP
 
             if derP._P.upconnect_:
-                upconnect_2_PP_(derP, PP_, fflip)  # recursive compare sign of next-layer upconnects
+                upconnect_2_PP_(derP, PP_, fflip, fPPd)  # recursive compare sign of next-layer upconnects
 
             elif derP.PP is not iderP.PP and derP.P.downconnect_cnt == 0:
                 if (derP.PP.derPP.flip_val > flip_ave_FPP) and fflip:
