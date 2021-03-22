@@ -77,6 +77,8 @@ class CderP(ClusterStructure):
     mDdx = int
     dMdx = int
     mMdx = int
+    Ddx = int
+    Mdx = int
 
 class CPP(ClusterStructure):
 
@@ -111,9 +113,7 @@ class CPP(ClusterStructure):
     Pdf__ = list
     PPmdf_ = list
     PPddf_ = list
-    # comp_dx params
-    Ddx = int
-    Mdx = int
+    
 
 # Functions:
 '''
@@ -414,7 +414,7 @@ def merge_PP(_PP, PP, PP_):  # merge PP into _PP
             # accumulate if PP' derP not in _PP
             _PP.derPP.accumulate(flip_val=derP.flip_val, mP=derP.mP, dP=derP.dP, mx=derP.mx, dx=derP.dx,
                                  mL=derP.mL, dL=derP.dL, mDx=derP.mDx, dDx=derP.dDx,
-                                 mDy=derP.mDy, dDy=derP.dDy)
+                                 mDy=derP.mDy, dDy=derP.dDy, Ddx=derP.Ddx, Mdx=derP.Mdx)
     if PP in PP_:
         PP_.remove(PP)  # remove merged PP
 
@@ -484,7 +484,7 @@ def accum_Dert(Dert: dict, **params) -> None:
 def accum_PP(PP, derP):  # accumulate derP params in PP
 
     PP.derPP.accumulate(flip_val=derP.flip_val, mP=derP.mP, dP=derP.dP, mx=derP.mx, dx=derP.dx, mL=derP.mL, dL=derP.dL, mDx=derP.mDx, dDx=derP.dDx,
-                        mDy=derP.mDy, dDy=derP.dDy)
+                        mDy=derP.mDy, dDy=derP.dDy, Ddx=derP.Ddx, Mdx=derP.Mdx)
     PP.derP__.append(derP)
     derP.PP = PP  # update reference
 
@@ -511,9 +511,9 @@ def comp_dx(P):  # cross-comp of dx s in P.dert_
 
 def comp_slice(_P, P):  # forms vertical derivatives of derP params, and conditional ders from norm and DIV comp
 
-    s, x0, Dx, Dy, G, M, L = P.sign, P.x0, P.Dx, P.Dy, P.G, P.M, P.L
+    s, x0, Dx, Dy, G, M, L, Ddx, Mdx = P.sign, P.x0, P.Dx, P.Dy, P.G, P.M, P.L, P.Ddx, P.Mdx
     # params per comp branch, add angle params
-    _s, _x0, _Dx, _Dy, _G, _M, _dX, _L = _P.sign, _P.x0, _P.Dx, _P.Dy, _P.G, _P.M, _P.dX, _P.L
+    _s, _x0, _Dx, _Dy, _G, _M, _dX, _L, _Ddx, _Mdx = _P.sign, _P.x0, _P.Dx, _P.Dy, _P.G, _P.M, _P.dX, _P.L, _P.Ddx, _P.Mdx
 
     dX = (x0 + (L-1) / 2) - (_x0 + (_L-1) / 2)  # x shift: d_ave_x, or from offsets: abs(x0 - _x0) + abs(xn - _xn)?
 
@@ -556,13 +556,13 @@ def comp_slice(_P, P):  # forms vertical derivatives of derP params, and conditi
     dDdx, dMdx, mDdx, mMdx = 0, 0, 0, 0
     if P.dxdert_ and _P.dxdert_:  # from comp_dx
         fdx = 1
-        dDdx = P.Ddx - _P.Ddx
-        mDdx = min( abs(P.Ddx), abs(_P.Ddx))
-        if (P.Ddx > 0) != (_P.Ddx > 0): mDdx = -mDdx
+        dDdx = Ddx - _Ddx
+        mDdx = min( abs(Ddx), abs(_Ddx))
+        if (Ddx > 0) != (_Ddx > 0): mDdx = -mDdx
         # Mdx is signed:
-        dMdx = min( P.Mdx, _P.Mdx)
-        mMdx = -min( abs(P.Mdx), abs(_P.Mdx))
-        if (P.Mdx > 0) != (_P.Mdx > 0): mMdx = -mMdx
+        dMdx = min(Mdx, _Mdx)
+        mMdx = -min( abs(Mdx), abs(_Mdx))
+        if (Mdx > 0) != (_Mdx > 0): mMdx = -mMdx
     else:
         fdx = 0
     # coeff = 0.7 for semi redundant parameters, 0.5 for fully redundant parameters:
@@ -577,7 +577,7 @@ def comp_slice(_P, P):  # forms vertical derivatives of derP params, and conditi
 
     flip_val = (dX * (P.Dy / (P.Dx+.001)) - flip_ave)  # avoid division by zero
 
-    derP = CderP(P=P, _P=_P, flip_val=flip_val,
+    derP = CderP(P=P, _P=_P, flip_val=flip_val, Ddx=Ddx, Mdx=Mdx,
                  mP=mP, dP=dP, dX=dX, mL=mL, dL=dL, mDx=mDx, dDx=dDx, mDy=mDy, dDy=dDy)
     if fdx:
         derP.fdx=1; derP.dDdx=dDdx; derP.mDdx=mDdx; derP.dMdx=dMdx; derP.mMdx=mMdx
