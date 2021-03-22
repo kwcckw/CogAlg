@@ -14,7 +14,7 @@ ave_Dx = 10
 ave_PP_Dx = 100
 
 
-
+# may useful in the future when we need to visualize the param weight
 def generate_params_weight(ddX,dL,dM,dDx,dDy,mdX,mL,mM,mDx,mDy,fdx,dDdx,dMdx,mDdx,mMdx):
     
     '''
@@ -131,6 +131,7 @@ def generate_params_weight(ddX,dL,dM,dDx,dDy,mdX,mL,mM,mDx,mDy,fdx,dDdx,dMdx,mDd
     except:
         pass
 
+# may useful in the future when we need to visualize the param weight
 # up to r1 only, r2 still need to be discussed
 def visualize_params():
     
@@ -339,35 +340,50 @@ def draw_PP_(blob):
     # init
     img_colour_P = np.zeros((yn - y0, xn - x0, 3)).astype('uint8')
     img_separator = (np.ones((yn - y0, 1, 3)).astype('uint8')) * 255
-    # PP
-    img_colour_PP = np.zeros((yn - y0, xn - x0, 3)).astype('uint8')
-    img_colour_PP_Ps = np.zeros((yn - y0, xn - x0, 3)).astype('uint8')
-    img_colour_FPP = np.zeros((yn - y0, xn - x0, 3)).astype('uint8')
-    img_colour_FPP_Ps = np.zeros((yn - y0, xn - x0, 3)).astype('uint8')
-    # PPd
-    img_colour_PPd = np.zeros((yn - y0, xn - x0, 3)).astype('uint8')
-    img_colour_PPd_Pds = np.zeros((yn - y0, xn - x0, 3)).astype('uint8')
-    img_colour_FPPd = np.zeros((yn - y0, xn - x0, 3)).astype('uint8')
-    img_colour_FPPd_Pds = np.zeros((yn - y0, xn - x0, 3)).astype('uint8')
-
     # colour index
     c_ind_P = 0  # P
-    c_ind_PP = 0  # PP
-    c_ind_PP_Ps = 0  # PP's Ps
-    c_ind_FPP_section = 0  # FPP
-    c_ind_FPP_section_Ps = 0  # FPP's Ps
-    c_ind_PPd = 0  # PPd
-    c_ind_PPd_Pds = 0  # PPd's Pds
-    c_ind_FPPd_section = 0  # FPPd
-    c_ind_FPPd_section_Pds = 0  # FPPd's Pds
-
     # draw Ps
     for P in blob.P__:
         for x, _ in enumerate(P.dert_):
             img_colour_P[P.y, P.x0 + x] = colour_list[c_ind_P % 10]
         c_ind_P += 1
 
-    for blob_PP in blob.PPmm_: # draw PP
+    # draw each PPs and their FPPs
+    img_PPmm, img_PPmm_Pms, img_FPPmm, img_FPPmm_Pms = draw_PP(blob.PPmm_, y0,yn,x0,xn, colour_list)
+    img_PPdm, img_PPdm_Pms, img_FPPdm, img_FPPdm_Pms = draw_PP(blob.PPdm_, y0,yn,x0,xn, colour_list)
+    img_PPmd, img_PPmd_Pds, img_FPPmd, img_FPPmd_Pds = draw_PP(blob.PPmd_, y0,yn,x0,xn, colour_list)
+    img_PPdd, img_PPdd_Pds, img_FPPdd, img_FPPdd_Pds = draw_PP(blob.PPdd_, y0,yn,x0,xn, colour_list)
+
+    # list of images
+    imgs_to_draw = [img_PPmm, img_PPmm_Pms, img_FPPmm, img_FPPmm_Pms,
+                    img_PPdm, img_PPdm_Pms, img_FPPdm, img_FPPdm_Pms,
+                    img_PPmd, img_PPmd_Pds, img_FPPmd, img_FPPmd_Pds,
+                    img_PPdd, img_PPdd_Pds, img_FPPdd, img_FPPdd_Pds]
+    
+    # concatenate images
+    img_combined = np.concatenate((img_colour_P, img_separator), axis=1)
+    for img_to_draw in imgs_to_draw:
+        img_combined = np.concatenate((img_combined, img_to_draw), axis=1)
+        img_combined = np.concatenate((img_combined, img_separator), axis=1)
+    
+    # save image to disk
+    cv2.imwrite(img_dir_path + 'img_b' + str(blob.id) + '.bmp', img_combined)
+
+
+def draw_PP(iPP_, y0, yn, x0, xn, colour_list):
+
+    # init image
+    img_colour_PP = np.zeros((yn - y0, xn - x0, 3)).astype('uint8')
+    img_colour_PP_Ps = np.zeros((yn - y0, xn - x0, 3)).astype('uint8')
+    img_colour_FPP = np.zeros((yn - y0, xn - x0, 3)).astype('uint8')
+    img_colour_FPP_Ps = np.zeros((yn - y0, xn - x0, 3)).astype('uint8')
+    
+    c_ind_PP = 0  # PP
+    c_ind_PP_Ps = 0  # PP's Ps
+    c_ind_FPP_section = 0  # FPP
+    c_ind_FPP_section_Ps = 0  # FPP's Ps
+
+    for blob_PP in iPP_: # draw PP
 
         # draw PPs
         for derP in blob_PP.derP__:
@@ -414,87 +430,7 @@ def draw_PP_(blob):
             img_colour_FPP[blob_PP.box[0]:blob_PP.box[1], blob_PP.box[2]:blob_PP.box[3]] = img_colour_FPP_section
             img_colour_FPP_Ps[blob_PP.box[0]:blob_PP.box[1], blob_PP.box[2]:blob_PP.box[3]] = img_colour_FPP_section_Ps
 
-
-    for blob_PPd in blob.PPmd_: # draw PPd
-
-        # draw PPds
-        for derPd in blob_PPd.derP__:
-            if derPd.flip_val <= 0:
-                # _P
-                for _x, _dert in enumerate(derPd._P.dert_):
-                    img_colour_PPd[derPd._P.y, derPd._P.x0 + _x, :] = colour_list[c_ind_PPd % 10]
-                    img_colour_PPd_Pds[derPd._P.y, derPd._P.x0 + _x, :] = colour_list[c_ind_PPd_Pds % 10]
-                c_ind_PPd_Pds += 1
-                # P
-                for x, dert in enumerate(derPd.P.dert_):
-                    img_colour_PPd[derPd.P.y, derPd.P.x0 + x, :] = colour_list[c_ind_PPd % 10]
-                    img_colour_PPd_Pds[derPd.P.y, derPd.P.x0 + x, :] = colour_list[c_ind_PPd_Pds % 10]
-                c_ind_PPd_Pds += 1
-
-        c_ind_PPd += 1  # increase P index
-
-        # draw FPPds
-        if blob_PPd.derPP.flip_val > flip_ave_FPP :
-
-            # get box
-            x0FPPd = min([P.x0 for P in blob_PPd.Pdf__])
-            xnFPPd = max([P.x0 + P.L for P in blob_PPd.Pdf__])
-            y0FPPd = min([P.y for P in blob_PPd.Pdf__])
-            ynFPPd = max([P.y for P in blob_PPd.Pdf__]) + 1  # +1 because yn is not inclusive, else we will lost last y value
-
-            # init smaller image contains the flipped section only
-            img_colour_FPPd_section = np.zeros((ynFPPd - y0FPPd, xnFPPd - x0FPPd, 3))
-            img_colour_FPPd_section_Pds = np.zeros((ynFPPd - y0FPPd, xnFPPd - x0FPPd, 3))
-
-            # fill colour
-            for P in blob_PPd.Pdf__:
-                for x, _ in enumerate(P.dert_):
-                    img_colour_FPPd_section[P.y-y0FPPd, P.x0 + x - x0FPPd] = colour_list[c_ind_FPPd_section % 10]
-                    img_colour_FPPd_section_Pds[P.y-y0FPPd, P.x0 + x- x0FPPd] = colour_list[c_ind_FPPd_section_Pds % 10]
-                c_ind_FPPd_section_Pds += 1
-            c_ind_FPPd_section += 1
-
-            # flip back
-            img_colour_FPPd_section = np.rot90(img_colour_FPPd_section, k=3)
-            img_colour_FPPd_section_Pds = np.rot90(img_colour_FPPd_section_Pds, k=3)
-
-            # we need offset because Pds might be empty in certain rows or columns from the given blob_PPd.box
-            xs_offset = y0FPPd - 0 # x start offset
-            ys_offset = x0FPPd - 0 # y start offset
-            xe_offset = (blob_PPd.box[3]-blob_PPd.box[2]) - ((ynFPPd - y0FPPd)+ xs_offset)# x end negative offset
-            ye_offset = (blob_PPd.box[1]-blob_PPd.box[0]) - ((xnFPPd - x0FPPd)+ ys_offset )# y end negative offset
-
-            # fill back the bigger image
-            img_colour_FPPd[blob_PPd.box[0]+ys_offset:blob_PPd.box[1]-ye_offset, blob_PPd.box[2]+xs_offset:blob_PPd.box[3]-xe_offset] = img_colour_FPPd_section
-            img_colour_FPPd_Pds[blob_PPd.box[0]+ys_offset:blob_PPd.box[1]-ye_offset, blob_PPd.box[2]+xs_offset:blob_PPd.box[3]-xe_offset] = img_colour_FPPd_section_Pds
-
-
-    ## combine images with Ps, PPs and FPPs into 1 single image
-    img_combined = np.concatenate((img_colour_P, img_separator), axis=1)
-    # PP and their Ps
-    img_combined = np.concatenate((img_combined, img_colour_PP), axis=1)
-    img_combined = np.concatenate((img_combined, img_separator), axis=1)
-    img_combined = np.concatenate((img_combined, img_colour_PP_Ps), axis=1)
-    img_combined = np.concatenate((img_combined, img_separator), axis=1)
-    # FPP and their Ps
-    img_combined = np.concatenate((img_combined, img_colour_FPP), axis=1)
-    img_combined = np.concatenate((img_combined, img_separator), axis=1)
-    img_combined = np.concatenate((img_combined, img_colour_FPP_Ps), axis=1)
-    img_combined = np.concatenate((img_combined, img_separator), axis=1)
-    # PPd and their Ps
-    img_combined = np.concatenate((img_combined, img_colour_PPd), axis=1)
-    img_combined = np.concatenate((img_combined, img_separator), axis=1)
-    img_combined = np.concatenate((img_combined, img_colour_PPd_Pds), axis=1)
-    img_combined = np.concatenate((img_combined, img_separator), axis=1)
-    # FPPd and their Pds
-    img_combined = np.concatenate((img_combined, img_colour_FPPd), axis=1)
-    img_combined = np.concatenate((img_combined, img_separator), axis=1)
-    img_combined = np.concatenate((img_combined, img_colour_FPPd_Pds), axis=1)
-    img_combined = np.concatenate((img_combined, img_separator), axis=1)
-
-    # save image to disk
-    cv2.imwrite(img_dir_path + 'img_b' + str(blob.id) + '.bmp', img_combined)
-
+    return img_colour_PP, img_colour_PP_Ps, img_colour_FPP, img_colour_FPP_Ps
 
 
 # to visualize dy & dx and their scaled oDy & oDx

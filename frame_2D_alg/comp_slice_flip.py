@@ -77,6 +77,8 @@ class CderP(ClusterStructure):
     flip_val = int
     # from comp_dx
     fdx = NoneType
+    Ddx = int
+    Mdx = int
 
 class CPP(ClusterStructure):
 
@@ -111,8 +113,6 @@ class CPP(ClusterStructure):
     PPdd_ = list
     PPmdf_ = list
     PPddf_ = list    # comp_dx params
-    Ddx = int
-    Mdx = int
 
 # Functions:
 '''
@@ -313,6 +313,9 @@ def form_PP_shell(blob, derP__, P__, derPd__, Pd__):
     '''
     form PPs in blob or in FPP
     '''
+    # there are some bugs here and it should be fixed in the next update.
+    # right now blob's derP__ and their Ps are used twice in derP_2_PP (PPmm -> PPdm, or PPmd -> PPdd)
+    # this will mess up the P's downconnect count when we call the derP_2_PP the 2nd time since we are already reset it after the checking in the 1st derP_2_PP call.
     if not isinstance(blob, CPP):  # input is blob
         blob.derP__ = derP__; blob.P__ = P__
         blob.derPd__ = derPd__; blob.Pd__ = Pd__
@@ -375,13 +378,14 @@ def upconnect_2_PP_(iderP, PP_, fflip, fPPd):
             else:
                 if fPPd: same_sign = (iderP.dP > 0) == (derP.dP > 0)  # comp dP sign
                 else: same_sign = (iderP.mP > 0) == (derP.mP > 0)  # comp mP sign
-                if same_sign:
-                    if not (iderP.flip_val>0) and not (derP.flip_val>0):  # upconnect derP has different PP, merge them
+                #  "(iderP.flip_val>0) and not (derP.flip_val>0)" need to be in same statement with same_sign so that if this is false, it will go to the elif statement below
+                if (same_sign) and not (iderP.flip_val>0) and not (derP.flip_val>0):  # upconnect derP has different PP, merge them
                         if isinstance(derP.PP, CPP) and (derP.PP is not iderP.PP):
                             merge_PP(iderP.PP, derP.PP, PP_)
                         else:  # accumulate derP in current PP
                             accum_PP(iderP.PP, derP)
                             confirmed_upconnect_.append(derP)
+            
                 elif not isinstance(derP.PP, CPP):  # sign changed, derP is root derP unless it already has FPP/PP
                     PP = CPP(derPP=CderP())
                     accum_PP(PP,derP)
@@ -412,7 +416,7 @@ def merge_PP(_PP, PP, PP_):  # merge PP into _PP
             # accumulate if PP' derP not in _PP
             _PP.derPP.accumulate(flip_val=derP.flip_val, mP=derP.mP, dP=derP.dP, mx=derP.mx, dx=derP.dx,
                                  mL=derP.mL, dL=derP.dL, mDx=derP.mDx, dDx=derP.dDx,
-                                 mDy=derP.mDy, dDy=derP.dDy)
+                                 mDy=derP.mDy, dDy=derP.dDy, Ddx=derP.Ddx, Mdx=derP.Mdx)
     if PP in PP_:
         PP_.remove(PP)  # remove merged PP
 
@@ -482,7 +486,7 @@ def accum_Dert(Dert: dict, **params) -> None:
 def accum_PP(PP, derP):  # accumulate derP params in PP
 
     PP.derPP.accumulate(flip_val=derP.flip_val, mP=derP.mP, dP=derP.dP, mx=derP.mx, dx=derP.dx, mL=derP.mL, dL=derP.dL, mDx=derP.mDx, dDx=derP.dDx,
-                        mDy=derP.mDy, dDy=derP.dDy)
+                        mDy=derP.mDy, dDy=derP.dDy, Ddx=derP.Ddx, Mdx=derP.Mdx)
     PP.derP__.append(derP)
     derP.PP = PP  # update reference
 
@@ -509,9 +513,9 @@ def comp_dx(P):  # cross-comp of dx s in P.dert_
 
 def comp_slice(_P, P):  # forms vertical derivatives of derP params, and conditional ders from norm and DIV comp
 
-    s, x0, Dx, Dy, G, M, L = P.sign, P.x0, P.Dx, P.Dy, P.G, P.M, P.L
+    s, x0, Dx, Dy, G, M, L, Ddx, Mdx = P.sign, P.x0, P.Dx, P.Dy, P.G, P.M, P.L, P.Ddx, P.Mdx
     # params per comp branch, add angle params
-    _s, _x0, _Dx, _Dy, _G, _M, _dX, _L = _P.sign, _P.x0, _P.Dx, _P.Dy, _P.G, _P.M, _P.dX, _P.L
+    _s, _x0, _Dx, _Dy, _G, _M, _dX, _L, _Ddx, _Mdx = _P.sign, _P.x0, _P.Dx, _P.Dy, _P.G, _P.M, _P.dX, _P.L, _P.Ddx, _P.Mdx
 
     dX = (x0 + (L-1) / 2) - (_x0 + (_L-1) / 2)  # x shift: d_ave_x, or from offsets: abs(x0 - _x0) + abs(xn - _xn)?
 
@@ -554,13 +558,13 @@ def comp_slice(_P, P):  # forms vertical derivatives of derP params, and conditi
     dDdx, dMdx, mDdx, mMdx = 0, 0, 0, 0
     if P.dxdert_ and _P.dxdert_:  # from comp_dx
         fdx = 1
-        dDdx = P.Ddx - _P.Ddx
-        mDdx = min( abs(P.Ddx), abs(_P.Ddx))
-        if (P.Ddx > 0) != (_P.Ddx > 0): mDdx = -mDdx
+        dDdx = Ddx - _Ddx
+        mDdx = min( abs(Ddx), abs(_Ddx))
+        if (Ddx > 0) != (_Ddx > 0): mDdx = -mDdx
         # Mdx is signed:
-        dMdx = min( P.Mdx, _P.Mdx)
-        mMdx = -min( abs(P.Mdx), abs(_P.Mdx))
-        if (P.Mdx > 0) != (_P.Mdx > 0): mMdx = -mMdx
+        dMdx = min( Mdx, _Mdx)
+        mMdx = -min( abs(Mdx), abs(_Mdx))
+        if (Mdx > 0) != (_Mdx > 0): mMdx = -mMdx
     else:
         fdx = 0
     # coeff = 0.7 for semi redundant parameters, 0.5 for fully redundant parameters:
@@ -575,10 +579,10 @@ def comp_slice(_P, P):  # forms vertical derivatives of derP params, and conditi
 
     flip_val = (dX * (P.Dy / (P.Dx+.001)) - flip_ave)  # avoid division by zero
 
-    derP = CderP(P=P, _P=_P, flip_val=flip_val,
+    derP = CderP(P=P, _P=_P, flip_val=flip_val, 
                  mP=mP, dP=dP, dX=dX, mL=mL, dL=dL, mDx=mDx, dDx=dDx, mDy=mDy, dDy=dDy)
     if fdx:
-        derP.fdx=1; derP.dDdx=dDdx; derP.mDdx=mDdx; derP.dMdx=dMdx; derP.mMdx=mMdx
+        derP.fdx=1; derP.dDdx=dDdx; derP.mDdx=mDdx; derP.dMdx=dMdx; derP.mMdx=mMdx; derP.Ddx=Ddx; derP.Mdx=Mdx
 
     '''
     min comp for rotation: L, Dy, Dx, no redundancy?
