@@ -141,29 +141,33 @@ def slice_blob(blob, verbose=False):
     mask__ = blob.mask__
     height, width = dert__[0].shape
     if verbose: print("Converting to image...")
-    P__ , derP__, Pd__, derPd__ = [], [], [], []
-
-    zip_dert__ = zip(*dert__)
-    _P_ = form_P_(list(zip(*next(zip_dert__))), mask__[0], 0)  # 1st upper row
-    P__ += _P_  # frame of Ps
-
-    for y, dert_ in enumerate(zip_dert__, start=1):  # scan top down
-        if verbose: print(f"\rProcessing line {y + 1}/{height}, ", end=""); sys.stdout.flush()
-
-        P_ = form_P_(list(zip(*dert_)), mask__[y], y)  # horizontal clustering - lower row
-        derP_ = scan_P_(P_, _P_)  # tests for x overlap between Ps, calls comp_slice
-
-        Pd_ = form_Pd_(P_)  # form Pds within Ps
-        derPd_ = scan_Pd_(P_, _P_)  # adds upconnect_ in Pds and calls derPd_2_PP_derPd_, same as derP_2_PP_
-
-        derP__ += derP_; derPd__ += derPd_  # frame of derPs
-        P__ += P_; Pd__ += Pd_
-        _P_ = P_  # set current lower row P_ as next upper row _P_
-
-    form_PP_shell(blob, derP__, P__, derPd__, Pd__)  # form PPs in blob or in FPP
-    # draw PPs and FPPs
+        
+    # we need run this section twice because we need unique Ps and derPs for each run.
+    # if we use the 'copy' approach, we need to copy each derP and their individual P and _P, which will be more troublesome.
+    # please let me know if you have any better suggestion.
+    for fPPd in range(2): # loop twice, 1st loop fPPd=0, 2nd loop fPpd=1
+        P__ , derP__, Pd__, derPd__ = [], [], [], []
+        zip_dert__ = zip(*dert__)
+        _P_ = form_P_(list(zip(*next(zip_dert__))), mask__[0], 0)  # 1st upper row
+        P__ += _P_  # frame of Ps
+    
+        for y, dert_ in enumerate(zip_dert__, start=1):  # scan top down
+            if verbose: print(f"\rProcessing line {y + 1}/{height}, ", end=""); sys.stdout.flush()
+    
+            P_ = form_P_(list(zip(*dert_)), mask__[y], y)  # horizontal clustering - lower row
+            derP_ = scan_P_(P_, _P_)  # tests for x overlap between Ps, calls comp_slice
+    
+            Pd_ = form_Pd_(P_)  # form Pds within Ps
+            derPd_ = scan_Pd_(P_, _P_)  # adds upconnect_ in Pds and calls derPd_2_PP_derPd_, same as derP_2_PP_
+    
+            derP__ += derP_; derPd__ += derPd_  # frame of derPs
+            P__ += P_; Pd__ += Pd_
+            _P_ = P_  # set current lower row P_ as next upper row _P_
+    
+        form_PP_shell(blob, derP__, P__, derPd__, Pd__, fPPd)  # form PPs in blob or in FPP
+        
+        # draw PPs and FPPs
     if not isinstance(blob, CPP):
-        # yet to be updated
         draw_PP_(blob)
 
 
@@ -308,31 +312,32 @@ def scan_Pd_(P_, _P_):  # test for x overlap between Pds
     return derPd_
 
 
-def form_PP_shell(blob, derP__, P__, derPd__, Pd__):
+def form_PP_shell(blob, derP__, P__, derPd__, Pd__, fPPd):
     '''
     form vertically contiguous patterns of patterns by the sign of derP, in blob or in FPP
     '''
-    # there are some bugs here and it should be fixed in the next update.
-    # right now blob's derP__ and their Ps are used twice in derP_2_PP (PPmm -> PPdm, or PPmd -> PPdd)
-    # this will mess up the P's downconnect count when we call the derP_2_PP the 2nd time
-    # since we are already reset it after the checking in the 1st derP_2_PP call.
     if not isinstance(blob, CPP):  # input is blob
 
         blob.derP__ = derP__; blob.P__ = P__
         blob.derPd__ = derPd__; blob.Pd__ = Pd__
-        derP_2_PP_(blob.derP__, blob.PPmm_, 1, fPPd=0)   # cluster by derPm mP sign
-        derP_2_PP_(blob.derP__, blob.PPdm_, 1, fPPd=1)   # cluster by derPm dP sign
-        derP_2_PP_(blob.derPd__, blob.PPmd_, 1, fPPd=0)  # cluster by derPd mP sign
-        derP_2_PP_(blob.derPd__, blob.PPdd_, 1, fPPd=1)  # cluster by derPd dP sign
+        if fPPd:
+            derP_2_PP_(blob.derP__, blob.PPdm_, 1, fPPd=1)   # cluster by derPm dP sign
+            derP_2_PP_(blob.derPd__, blob.PPdd_, 1, fPPd=1)  # cluster by derPd dP sign
+        else:
+            derP_2_PP_(blob.derP__, blob.PPmm_, 1, fPPd=0)   # cluster by derPm mP sign
+            derP_2_PP_(blob.derPd__, blob.PPmd_, 1, fPPd=0)  # cluster by derPd mP sign
+        
 
     else:  # input is FPP
         blob.derPf__ = derP__; blob.Pf__ = P__
         blob.derPdf__ = derPd__; blob.Pdf__ = Pd__
-        derP_2_PP_(blob.derPf__, blob.PPmmf_, 0, fPPd=0)   # cluster by derPmf mP sign
-        derP_2_PP_(blob.derPf__, blob.PPdmf_, 0, fPPd=1)   # cluster by derPmf dP sign
-        derP_2_PP_(blob.derPdf__, blob.PPmdf_, 0, fPPd=0)  # cluster by derPdf mP sign
-        derP_2_PP_(blob.derPdf__, blob.PPddf_, 0, fPPd=1)  # cluster by derPdf dP sign
-
+        if fPPd:
+            derP_2_PP_(blob.derPf__, blob.PPdmf_, 0, fPPd=1)   # cluster by derPmf dP sign
+            derP_2_PP_(blob.derPdf__, blob.PPddf_, 0, fPPd=1)  # cluster by derPdf dP sign
+        else:
+            derP_2_PP_(blob.derPf__, blob.PPmmf_, 0, fPPd=0)   # cluster by derPmf mP sign
+            derP_2_PP_(blob.derPdf__, blob.PPmdf_, 0, fPPd=0)  # cluster by derPdf mP sign
+        
 
 def derP_2_PP_(derP_, PP_, fflip, fPPd):
     '''
