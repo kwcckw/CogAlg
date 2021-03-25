@@ -387,7 +387,7 @@ def draw_PP(iPP_, y0, yn, x0, xn, colour_list):
 
         # draw PPs
         for derP in blob_PP.derP__:
-            if derP.flip_val <= 0:
+            if derP.P.flip_val <= 0:
                 # _P
                 for _x, _dert in enumerate(derP._P.dert_):
                     img_colour_PP[derP._P.y, derP._P.x0 + _x, :] = colour_list[c_ind_PP % 10]
@@ -402,7 +402,7 @@ def draw_PP(iPP_, y0, yn, x0, xn, colour_list):
         c_ind_PP += 1  # increase P index
 
         # draw FPPs
-        if blob_PP.derPP.flip_val > flip_ave_FPP :
+        if blob_PP.Pi.flip_val > flip_ave_FPP :
 
             # get box
             x0FPP = min([P.x0 for P in blob_PP.Pf__])
