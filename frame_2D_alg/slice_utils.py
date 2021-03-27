@@ -349,16 +349,16 @@ def draw_PP_(blob):
         c_ind_P += 1
 
     # draw each PPs and their FPPs
-    img_PPmm, img_PPmm_Pms, img_FPPmm, img_FPPmm_Pms, img_colour_SPPmm = draw_PP(blob.PPmm_, y0,yn,x0,xn, colour_list, fPd=0)
-    img_PPdm, img_PPdm_Pms, img_FPPdm, img_FPPdm_Pms, img_colour_SPPdm = draw_PP(blob.PPdm_, y0,yn,x0,xn, colour_list, fPd=1)
-    img_PPmd, img_PPmd_Pds, img_FPPmd, img_FPPmd_Pds, img_colour_SPPmd = draw_PP(blob.PPmd_, y0,yn,x0,xn, colour_list, fPd=0)
-    img_PPdd, img_PPdd_Pds, img_FPPdd, img_FPPdd_Pds, img_colour_SPPdd = draw_PP(blob.PPdd_, y0,yn,x0,xn, colour_list, fPd=1)
+    img_PPmm, img_PPmm_Pms, img_FPPmm, img_FPPmm_Pms, img_SPPmm = draw_PP(blob.PPmm_, y0,yn,x0,xn, colour_list, fPd=0)
+    img_PPdm, img_PPdm_Pms, img_FPPdm, img_FPPdm_Pms, img_SPPdm = draw_PP(blob.PPdm_, y0,yn,x0,xn, colour_list, fPd=1)
+    img_PPmd, img_PPmd_Pds, img_FPPmd, img_FPPmd_Pds, img_SPPmd = draw_PP(blob.PPmd_, y0,yn,x0,xn, colour_list, fPd=0)
+    img_PPdd, img_PPdd_Pds, img_FPPdd, img_FPPdd_Pds, img_SPPdd = draw_PP(blob.PPdd_, y0,yn,x0,xn, colour_list, fPd=1)
 
     # list of images
-    imgs_to_draw = [img_PPmm, img_PPmm_Pms, img_FPPmm, img_FPPmm_Pms, img_colour_SPPmm,
-                    img_PPdm, img_PPdm_Pms, img_FPPdm, img_FPPdm_Pms, img_colour_SPPdm,
-                    img_PPmd, img_PPmd_Pds, img_FPPmd, img_FPPmd_Pds, img_colour_SPPmd,
-                    img_PPdd, img_PPdd_Pds, img_FPPdd, img_FPPdd_Pds, img_colour_SPPdd]
+    imgs_to_draw = [img_PPmm, img_PPmm_Pms, img_FPPmm, img_FPPmm_Pms, img_SPPmm,
+                    img_PPdm, img_PPdm_Pms, img_FPPdm, img_FPPdm_Pms, img_SPPdm,
+                    img_PPmd, img_PPmd_Pds, img_FPPmd, img_FPPmd_Pds, img_SPPmd,
+                    img_PPdd, img_PPdd_Pds, img_FPPdd, img_FPPdd_Pds, img_SPPdd]
     
     # concatenate images
     img_combined = np.concatenate((img_colour_P, img_separator), axis=1)
@@ -402,7 +402,7 @@ def draw_PP(iPP_, y0, yn, x0, xn, colour_list, fPd):
             
         # draw PPs
         for derP in blob_PP.derP__:
-            if derP.P.flip_val <= 0:
+            if derP.P.Dert.flip_val <= 0:
                 # _P
                 for _x, _dert in enumerate(derP._P.dert_):
                     img_colour_PP[derP._P.y, derP._P.x0 + _x, :] = colour_list[c_ind_PP % 10]

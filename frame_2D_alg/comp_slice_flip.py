@@ -43,20 +43,8 @@ class CDert(ClusterStructure):
 
 
 class CP(ClusterStructure):
-    # Dert: summed pixel values and pixel-level derivatives:
-    I = int
-    Dy = int
-    Dx = int
-    G = int
-    M = int
-    Dyy = int
-    Dyx = int
-    Dxy = int
-    Dxx = int
-    Ga = int
-    Ma = int
-    Mdx = int  # optional
-    Ddx = int  # optional
+   
+    Dert = object # Dert: summed pixel values and pixel-level derivatives:
     L = int
     x0 = int
     dX = int  # shift of average x between P and _P, if any
@@ -65,7 +53,6 @@ class CP(ClusterStructure):
     dert_ = list   # array of pixel-level derts: (p, dy, dx, g, m), extended in intra_blob
     upconnect_ = list
     downconnect_cnt = int
-    flip_val = int
     derP = object # derP object reference
     # only in Pd:
     Pm = object  # reference to root P
@@ -89,8 +76,7 @@ class CderP(ClusterStructure):
     P = object      # lower comparand
     _P = object     # higher comparand
     PP = object     # FPP if flip_val, contains this derP
-    oPP = object    # original PP reference before flipping
-    fsplice = int   # flag to indicate splicing point
+    xfflip = int   # flag to indicate splicing point or flipping point
     # from comp_dx
     fdx = NoneType
     # optional:
@@ -206,7 +192,7 @@ def form_P_(idert_, mask_, y):  # segment dert__ into P__, in horizontal ) verti
 
         if mask:  # masks: if 1,_0: P termination, if 0,_1: P initialization, if 0,_0: P accumulation:
             if ~_mask:  # _dert is not masked, dert is masked, terminate P:
-                P = CP(I=I, Dy=Dy, Dx=Dx, G=G, M=M, Dyy=Dyy, Dyx=Dyx, Dxy=Dxy, Dxx=Dxx, Ga=Ga, Ma=Ma, L=L, x0=x0, dert_=dert_, y=y)
+                P = CP(Dert=CDert(I=I, Dy=Dy, Dx=Dx, G=G, M=M, Dyy=Dyy, Dyx=Dyx, Dxy=Dxy, Dxx=Dxx, Ga=Ga, Ma=Ma), L=L, x0=x0, dert_=dert_, y=y)
                 P_.append(P)
         else:  # dert is not masked
             if _mask:  # _dert is masked, initialize P params:
@@ -228,7 +214,7 @@ def form_P_(idert_, mask_, y):  # segment dert__ into P__, in horizontal ) verti
         _mask = mask
 
     if ~_mask:  # terminate last P in a row
-        P = CP(I=I, Dy=Dy, Dx=Dx, G=G, M=M, Dyy=Dyy, Dyx=Dyx, Dxy=Dxy, Dxx=Dxx, Ga=Ga, Ma=Ma, L=L, x0=x0, dert_=dert_, y=y)
+        P = CP(Dert=CDert(I=I, Dy=Dy, Dx=Dx, G=G, M=M, Dyy=Dyy, Dyx=Dyx, Dxy=Dxy, Dxx=Dxx, Ga=Ga, Ma=Ma), L=L, x0=x0, dert_=dert_, y=y)
         P_.append(P)
 
     return P_
@@ -267,10 +253,10 @@ def form_Pd_(P_):
                     dert_.append(dert)
 
                 else:  # sign change, terminate P
-                    P = CP(I=I, Dy=Dy, Dx=Dx, G=G, M=M, Dyy=Dyy, Dyx=Dyx, Dxy=Dxy, Dxx=Dxx, Ga=Ga, Ma=Ma, L=L, x0=x0, dert_=dert_, y=iP.y, sign=_sign, Pm=iP)
+                    P = CP(Dert=CDert(I=I, Dy=Dy, Dx=Dx, G=G, M=M, Dyy=Dyy, Dyx=Dyx, Dxy=Dxy, Dxx=Dxx, Ga=Ga, Ma=Ma), L=L, x0=x0, dert_=dert_, y=iP.y, sign=_sign, Pm=iP)
                     if Dx > ave_Dx:
                         # cross-comp of dx in P.dert_
-                        comp_dx(P); P_Ddx += P.Ddx; P_Mdx += P.Mdx
+                        comp_dx(P); P_Ddx += P.Dert.Ddx; P_Mdx += P.Dert.Mdx
                     Pd_.append(P)
                     # reinitialize params
                     I, Dy, Dx, G, M, Dyy, Dyx, Dxy, Dxx, Ga, Ma = dert; x0 = iP.x0+x; L = 1; dert_ = [dert]
@@ -278,12 +264,12 @@ def form_Pd_(P_):
                 _sign = sign
                 x += 1
             # terminate last P
-            P = CP(I=I, Dy=Dy, Dx=Dx, G=G, M=M, Dyy=Dyy, Dyx=Dyx, Dxy=Dxy, Dxx=Dxx, Ga=Ga, Ma=Ma, L=L, x0=x0, dert_=dert_, y=iP.y, sign=_sign, Pm=iP)
+            P = CP(Dert=CDert(I=I, Dy=Dy, Dx=Dx, G=G, M=M, Dyy=Dyy, Dyx=Dyx, Dxy=Dxy, Dxx=Dxx, Ga=Ga, Ma=Ma), L=L, x0=x0, dert_=dert_, y=iP.y, sign=_sign, Pm=iP)
             if Dx > ave_Dx:
-                comp_dx(P); P_Ddx += P.Ddx; P_Mdx += P.Mdx
+                comp_dx(P); P_Ddx += P.Dert.Ddx; P_Mdx += P.Dert.Mdx
             Pd_.append(P)
             # update Pd params in P
-            iP.Pd_ = Pd_; iP.Ddx = P_Ddx; iP.Mdx = P_Mdx
+            iP.Pd_ = Pd_; iP.Dert.Ddx = P_Ddx; iP.Dert.Mdx = P_Mdx
             Pd__ += Pd_
 
     return Pd__
@@ -342,39 +328,32 @@ def form_PP_shell(blob, derP__, P__, derPd__, Pd__, fPPd):
         if fPPd:
             derP_2_PP_(blob.derP__, blob.PPdm_, 1, 1)   # cluster by derPm dP sign
             derP_2_PP_(blob.derPd__, blob.PPdd_, 1, 1)  # cluster by derPd dP sign
-            # splice PPs, after all PPs are formed
-            splice_PP_(blob.PPdm_)
-            splice_PP_(blob.PPdd_)
         else:
             derP_2_PP_(blob.derP__, blob.PPmm_, 1, 0)   # cluster by derPm mP sign
             derP_2_PP_(blob.derPd__, blob.PPmd_, 1, 0)  # cluster by derPd mP sign
-            # splice PPs, after all PPs are formed
-            splice_PP_(blob.PPmm_)
-            splice_PP_(blob.PPmd_)
 
     else:  # input(blob) is FPP
-        blob.derPf__ = derP__; blob.Pf__ = P__
-        blob.derPdf__ = derPd__; blob.Pdf__ = Pd__
+        FPP = blob # reassign for clarity
+        splice_PP(FPP) # splice FPP
+        
+        FPP.derPf__ = derP__; FPP.Pf__ = P__
+        FPP.derPdf__ = derPd__; FPP.Pdf__ = Pd__
         if fPPd:
-            derP_2_PP_(blob.derPf__, blob.PPdmf_, 0, 1)   # cluster by derPmf dP sign
-            derP_2_PP_(blob.derPdf__, blob.PPddf_, 0, 1)  # cluster by derPdf dP sign
+            derP_2_PP_(FPP.derPf__, FPP.PPdmf_, 0, 1)   # cluster by derPmf dP sign
+            derP_2_PP_(FPP.derPdf__, FPP.PPddf_, 0, 1)  # cluster by derPdf dP sign
         else:
-            derP_2_PP_(blob.derPf__, blob.PPmmf_, 0, 0)   # cluster by derPmf mP sign
-            derP_2_PP_(blob.derPdf__, blob.PPmdf_, 0, 0)  # cluster by derPdf mP sign
+            derP_2_PP_(FPP.derPf__, FPP.PPmmf_, 0, 0)   # cluster by derPmf mP sign
+            derP_2_PP_(FPP.derPdf__, FPP.PPmdf_, 0, 0)  # cluster by derPdf mP sign
 
-def splice_PP_(PP_):
-    for PP in PP_:
-        for derP in PP.splice_derP_: # check each derP in PP
-            # not every _P is having derP, speficially on those top row Ps, so we need check _P is derP or not
-            if derP.fsplice and isinstance(derP._P.derP, CderP):   # check whether the derP is splicing point
-                _P = derP._P
-                P = derP.P
-                # if (_P.derP.mP >0) and (P.derP.mP>0): # same positive m sign, may include this later
+def splice_PP(PP):
 
-                if _P.derP.PP not in PP.splice_PP_: # add _P's PP to PP
-                    PP.splice_PP_.append(_P.derP.PP)
-                if PP not in _P.derP.PP.splice_PP_: # add PP to _P's PP
-                    _P.derP.PP.splice_PP_.append(PP)
+    for derP in PP.splice_derP_: # check each derP in PP
+        _P = derP._P
+
+        if _P.derP.PP not in PP.splice_PP_: # add _P's PP to PP
+            PP.splice_PP_.append(_P.derP.PP)
+        if PP not in _P.derP.PP.splice_PP_: # add PP to _P's PP
+            _P.derP.PP.splice_PP_.append(PP)
 
 
 def derP_2_PP_(derP_, PP_, fflip, fPPd):
@@ -403,7 +382,7 @@ def upconnect_2_PP_(iderP, PP_, fflip, fPPd):
     for derP in iderP._P.upconnect_:  # potential upconnects from previous call
         if derP not in iderP.PP.derP__:  # derP should not in current iPP derP_ list, but this may occur after the PP merging
 
-            if (derP.P.flip_val>0 and iderP.P.flip_val>0 and iderP.PP.Dert.flip_val>0):
+            if (derP.P.Dert.flip_val>0 and iderP.P.Dert.flip_val>0 and iderP.PP.Dert.flip_val>0):
                 # upconnect derP has different FPP, merge them
                 if isinstance(derP.PP, CPP) and (derP.PP is not iderP.PP):
                     merge_PP(iderP.PP, derP.PP, PP_)
@@ -415,7 +394,7 @@ def upconnect_2_PP_(iderP, PP_, fflip, fPPd):
                 if fPPd: same_sign = (iderP.dP > 0) == (derP.dP > 0)  # comp dP sign
                 else: same_sign = (iderP.mP > 0) == (derP.mP > 0)  # comp mP sign
 
-                if same_sign and not (iderP.P.flip_val>0) and not (derP.P.flip_val>0):  # upconnect derP has different PP, merge them
+                if same_sign and not (iderP.P.Dert.flip_val>0) and not (derP.P.Dert.flip_val>0):  # upconnect derP has different PP, merge them
                         if isinstance(derP.PP, CPP) and (derP.PP is not iderP.PP):
                             merge_PP(iderP.PP, derP.PP, PP_)
                         else:  # accumulate derP in current PP
@@ -449,18 +428,16 @@ def merge_PP(_PP, PP, PP_):  # merge PP into _PP
             _PP.derP__.append(derP)
             derP.PP = _PP  # update reference
 
-            # accumulate P param of derP
-            _PP.Dert.accumulate(I=derP.P.I, Dy=derP.P.Dy, Dx=derP.P.Dx, G=derP.P.G, M=derP.P.M, Dyy=derP.P.Dyy, Dyx=derP.P.Dyx, Dxy=derP.P.Dxy, Dxx=derP.P.Dxx,
-                              Ga=derP.P.Ga, Ma=derP.P.Ma, Mdx=derP.P.Mdx, Ddx=derP.P.Ddx, flip_val=derP.P.flip_val)
+            Dert = derP.P.Dert
+            # accumulate Dert param of derP
+            _PP.Dert.accumulate(I=Dert.I, Dy=Dert.Dy, Dx=Dert.Dx, G=Dert.G, M=Dert.M, Dyy=Dert.Dyy, Dyx=Dert.Dyx, Dxy=Dert.Dxy, Dxx=Dert.Dxx,
+                               Ga=Dert.Ga, Ma=Dert.Ma, Mdx=Dert.Mdx, Ddx=Dert.Ddx, flip_val=Dert.flip_val)
 
             # accumulate if PP' derP not in _PP
             _PP.derPP.accumulate(mP=derP.mP, dP=derP.dP, mx=derP.mx, dx=derP.dx,
                                  mL=derP.mL, dL=derP.dL, mDx=derP.mDx, dDx=derP.dDx,
                                  mDy=derP.mDy, dDy=derP.dDy)
             
-            _PP.P__ += [derP.P, derP._P] # add P reference
-
-
     for splice_derP in PP.splice_derP_:
         if splice_derP not in _PP.splice_derP_:
             _PP.splice_derP_.append(splice_derP)
@@ -530,9 +507,10 @@ def accum_Dert(Dert: dict, **params) -> None:
 
 def accum_PP(PP, derP):  # accumulate derP params in PP
 
-    # accumulate P params
-    PP.Dert.accumulate(I=derP.P.I, Dy=derP.P.Dy, Dx=derP.P.Dx, G=derP.P.G, M=derP.P.M, Dyy=derP.P.Dyy, Dyx=derP.P.Dyx, Dxy=derP.P.Dxy, Dxx=derP.P.Dxx,
-                     Ga=derP.P.Ga, Ma=derP.P.Ma, Mdx=derP.P.Mdx, Ddx=derP.P.Ddx, flip_val=derP.P.flip_val)
+    Dert = derP.P.Dert
+    # accumulate Dert params
+    PP.Dert.accumulate(I=Dert.I, Dy=Dert.Dy, Dx=Dert.Dx, G=Dert.G, M=Dert.M, Dyy=Dert.Dyy, Dyx=Dert.Dyx, Dxy=Dert.Dxy, Dxx=Dert.Dxx,
+                     Ga=Dert.Ga, Ma=Dert.Ma, Mdx=Dert.Mdx, Ddx=Dert.Ddx, flip_val=Dert.flip_val)
 
     # accumulate derP params
     PP.derPP.accumulate(mP=derP.mP, dP=derP.dP, mx=derP.mx, dx=derP.dx, mL=derP.mL, dL=derP.dL, mDx=derP.mDx, dDx=derP.dDx,
@@ -541,7 +519,7 @@ def accum_PP(PP, derP):  # accumulate derP params in PP
 
     derP.PP = PP  # update reference
 
-    if derP.fsplice: # add splice point
+    if derP.xfflip: # add splice point
         PP.splice_derP_.append(derP)
 
 def comp_dx(P):  # cross-comp of dx s in P.dert_
@@ -560,16 +538,16 @@ def comp_dx(P):  # cross-comp of dx s in P.dert_
         Mdx += mdx
         _dx = dx
     P.dxdert_ = dxdert_
-    P.Ddx = Ddx
-    P.Mdx = Mdx
+    P.Dert.Ddx = Ddx
+    P.Dert.Mdx = Mdx
 
 
 def comp_slice(_P, P, _derP_):  # forms vertical derivatives of derP params, and conditional ders from norm and DIV comp
 
     # need to pass _derP_ from prior calls to comp_slice?
 
-    s, x0, Dx, Dy, G, M, L, Ddx, Mdx = P.sign, P.x0, P.Dx, P.Dy, P.G, P.M, P.L, P.Ddx, P.Mdx  # params per comp branch
-    _s, _x0, _Dx, _Dy, _G, _M, _dX, _L, _Ddx, _Mdx = _P.sign, _P.x0, _P.Dx, _P.Dy, _P.G, _P.M, _P.dX, _P.L, _P.Ddx, _P.Mdx
+    s, x0, Dx, Dy, G, M, L, Ddx, Mdx = P.sign, P.x0, P.Dert.Dx, P.Dert.Dy, P.Dert.G, P.Dert.M, P.L, P.Dert.Ddx, P.Dert.Mdx  # params per comp branch
+    _s, _x0, _Dx, _Dy, _G, _M, _dX, _L, _Ddx, _Mdx = _P.sign, _P.x0, _P.Dert.Dx, _P.Dert.Dy, _P.Dert.G, _P.Dert.M, _P.dX, _P.L, _P.Dert.Ddx, _P.Dert.Mdx
 
     dX = (x0 + (L-1) / 2) - (_x0 + (_L-1) / 2)  # x shift: d_ave_x, or from offsets: abs(x0 - _x0) + abs(xn - _xn)?
 
@@ -586,23 +564,28 @@ def comp_slice(_P, P, _derP_):  # forms vertical derivatives of derP params, and
     mP = mdX + mL + mM  # -> complementary PPm, rdn *= Pd | Pm rolp?
     mP -= ave_mP * ave_rmP ** (dX / L)  # dX / L is relative x-distance between P and _P,
 
-    P.flip_val = (dX * (P.Dy / (P.Dx+.001)) - flip_ave)  # avoid division by zero
+    P.Dert.flip_val = (dX * (P.Dert.Dy / (P.Dert.Dx+.001)) - flip_ave)  # avoid division by zero
 
     derP = CderP(P=P, _P=_P, mP=mP, dP=dP, dX=dX, mL=mL, dL=dL)
     P.derP = derP
-    if (P.flip_val>0) and (derP.mP >0) and (P.flip_val>0) != (_P.flip_val) :
-        # derP is not associated to any PP yet
-        # derP.PP.splice_.append((derP, _derP_))
-        derP.fsplice = 1
+    
+    # 4 conditions
+    # flip value >0 = flipping area
+    # positive mP = high predictive value
+    # flip sign changed  - flipping end point
+    # _P.derP is derP - avoid 1st row P that doesn't have any derP
+    if (P.Dert.flip_val>0) and (derP.mP >0) and ((P.Dert.flip_val>0) != (_P.Dert.flip_val>0)) and (isinstance(_P.derP, CderP)):
+        derP.xfflip = 1
+
 
     return derP
 
 
 def comp_slice_full(_P, P):  # forms vertical derivatives of derP params, and conditional ders from norm and DIV comp
 
-    s, x0, Dx, Dy, G, M, L, Ddx, Mdx = P.sign, P.x0, P.Dx, P.Dy, P.G, P.M, P.L, P.Ddx, P.Mdx
+    s, x0, Dx, Dy, G, M, L, Ddx, Mdx = P.sign, P.x0, P.Dert.Dx, P.Dert.Dy, P.Dert.G, P.Dert.M, P.L, P.Dert.Ddx, P.Dert.Mdx
     # params per comp branch, add angle params
-    _s, _x0, _Dx, _Dy, _G, _M, _dX, _L, _Ddx, _Mdx = _P.sign, _P.x0, _P.Dx, _P.Dy, _P.G, _P.M, _P.dX, _P.L, _P.Ddx, _P.Mdx
+    _s, _x0, _Dx, _Dy, _G, _M, _dX, _L, _Ddx, _Mdx = _P.sign, _P.x0, _P.Dert.Dx, _P.Dert.Dy, _P.Dert.G, _P.Dert.M, _P.dX, _P.L, _P.Dert.Ddx, _P.Dert.Mdx
 
     dX = (x0 + (L-1) / 2) - (_x0 + (_L-1) / 2)  # x shift: d_ave_x, or from offsets: abs(x0 - _x0) + abs(xn - _xn)?
 
@@ -615,7 +598,7 @@ def comp_slice_full(_P, P):  # forms vertical derivatives of derP params, and co
     ddX = dX - _dX  # long axis curvature, if > ave: ortho eval per P, else per PP_dX?
     mdX = min(dX, _dX)  # dX is inversely predictive of mP?
 
-    if dX * P.G > ave_ortho:  # estimate params of P locally orthogonal to long axis, maximizing lateral diff and vertical match
+    if dX * P.Dert.G > ave_ortho:  # estimate params of P locally orthogonal to long axis, maximizing lateral diff and vertical match
         # diagram: https://github.com/boris-kz/CogAlg/blob/master/frame_2D_alg/Illustrations/orthogonalization.png
         # Long axis is a curve of connections between ave_xs: mid-points of consecutive Ps.
 
@@ -663,14 +646,18 @@ def comp_slice_full(_P, P):  # forms vertical derivatives of derP params, and co
     if fdx: mP += 0.7*(mDdx + mMdx)
     mP -= ave_mP * ave_rmP ** (dX / L)  # dX / L is relative x-distance between P and _P,
 
-    flip_val = (dX * (P.Dy / (P.Dx+.001)) - flip_ave)  # avoid division by zero
-    P.flip_val = flip_val
+    P.Dert.flip_val = (dX * (P.Dert.Dy / (P.Dert.Dx+.001)) - flip_ave)  # avoid division by zero
 
     derP = CderP(P=P, _P=_P, mP=mP, dP=dP, dX=dX, mL=mL, dL=dL, mDx=mDx, dDx=dDx, mDy=mDy, dDy=dDy)
     P.derP = derP
-    if (P.flip_val>0) and (derP.mP >0) and (P.flip_val>0) != (_P.flip_val):
-        derP.fsplice = 1
-
+    
+    # 4 conditions
+    # flip value >0 = flipping area
+    # positive mP = high predictive value
+    # flip sign changed  - flipping end point
+    # _P.derP is derP - avoid 1st row P that doesn't have any derP
+    if (P.Dert.flip_val>0) and (derP.mP >0) and ((P.Dert.flip_val>0) != (_P.Dert.flip_val>0)) and (isinstance(_P.derP, CderP)):
+        derP.xfflip = 1
 
     if fdx:
         derP.fdx=1; derP.dDdx=dDdx; derP.mDdx=mDdx; derP.dMdx=dMdx; derP.mMdx=mMdx
