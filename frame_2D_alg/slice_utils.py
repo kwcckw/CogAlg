@@ -388,12 +388,12 @@ def draw_PP(iPP_, y0, yn, x0, xn, colour_list, fPd):
     for blob_PP in iPP_: # draw PP
 
         # draw spliced_PPs
-        if blob_PP.splice_PP_: 
+        if blob_PP.xflip_derP_PP_: 
             for derP in blob_PP.derP__:
                 for x, dert in enumerate(derP.P.dert_):
                     img_colour_SPP[derP.P.y, derP.P.x0 + x, :] = colour_list[c_ind_SPP % 10]
             
-            for SPP in blob_PP.splice_PP_:
+            for SPP in blob_PP.xflip_derP_PP_:
                 for derP in SPP.derP__:
                     for x, dert in enumerate(derP.P.dert_):
                         img_colour_SPP[derP.P.y, derP.P.x0 + x, :] = colour_list[c_ind_PP % 10]
