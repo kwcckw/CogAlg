@@ -344,16 +344,14 @@ def form_PP_shell(blob, derP__, P__, derPd__, Pd__, fPPd):
         PPs_ = [blob.PPdm_,blob.PPdd_,blob.PPmm_,blob.PPmd_]
         for PP_ in PPs_:
             for PP in PP_:
-                # no need to check 'if FPP' here, since we just need to get non-empty xflip_derP_
+                # check 'if FPP' to save on below?
                 # splice FPP with connected PPs:
                 for derP in PP.xflip_derP_:  # check derPs where flip_val changed sign
                     _P = derP._P
-                    # why we are not adding _PP to PP?
                     if _P.derP.PP not in PP.xflip_derP_PP_:  # add _PP to P's PP
                         PP.xflip_derP_PP_.append(_P.derP.PP)
 #                    if FPP not in _P.derP.PP.xflip_derP_PP_:  # add PP to _P's PP
 #                        _P.derP.PP.xflip_derP_PP_.append(PP)
-
     else:
         FPP = blob  # reassign for clarity
         FPP.derPf__ = derP__; FPP.Pf__ = P__
@@ -364,6 +362,7 @@ def form_PP_shell(blob, derP__, P__, derPd__, Pd__, fPPd):
         else:
             derP_2_PP_(FPP.derPf__, FPP.PPmmf_, 0, 0)   # cluster by derPmf mP sign
             derP_2_PP_(FPP.derPdf__, FPP.PPmdf_, 0, 0)  # cluster by derPdf mP sign
+
 
 def derP_2_PP_(derP_, PP_, fflip, fPPd):
     '''
@@ -518,6 +517,11 @@ def accum_PP(PP, derP):  # accumulate derP params in PP
 
     Dert = derP.P.Dert
     # accumulate Dert params
+    ''' use:
+    for param, PP_param in zip(Dert, PP.Dert):
+        PP_param+=param
+    ?
+    '''
     PP.Dert.accumulate(I=Dert.I, Dy=Dert.Dy, Dx=Dert.Dx, G=Dert.G, M=Dert.M, Dyy=Dert.Dyy, Dyx=Dert.Dyx, Dxy=Dert.Dxy, Dxx=Dert.Dxx,
                      Ga=Dert.Ga, Ma=Dert.Ma, Mdx=Dert.Mdx, Ddx=Dert.Ddx, flip_val=Dert.flip_val)
     # accumulate derP params
@@ -577,7 +581,6 @@ def comp_slice(_P, P, _derP_):  # forms vertical derivatives of derP params, and
 
     # if flip value>0 AND positive mP (predictive value) AND flip_val sign changed AND _P.derP is derP: exclude 1st row Ps
     if (P.Dert.flip_val>0) and (derP.mP >0) and ((P.Dert.flip_val>0) != (_P.Dert.flip_val>0)) and (isinstance(_P.derP, CderP)):
-        # buffer splicing points:
         derP.fxflip = 1
 
     return derP
@@ -655,7 +658,6 @@ def comp_slice_full(_P, P):  # forms vertical derivatives of derP params, and co
 
     # if flip value>0 AND positive mP (predictive value) AND flip_val sign changed AND _P.derP is derP: exclude 1st row Ps
     if (P.Dert.flip_val>0) and (derP.mP >0) and ((P.Dert.flip_val>0) != (_P.Dert.flip_val>0)) and (isinstance(_P.derP, CderP)):
-        # buffer splicing points:
         derP.fxflip = 1
 
     if fdx:
