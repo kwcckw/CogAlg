@@ -8,7 +8,7 @@ from comp_slice_ import *
 aveG = 50
 # flip ave
 flip_ave = 0.1
-flip_ave_FPP = 5
+flip_ave_FPP = 0
 # dx ave
 ave_Dx = 10
 ave_PP_Dx = 100
@@ -386,33 +386,37 @@ def draw_PP(iPP_, y0, yn, x0, xn, colour_list, fPd):
     c_ind_SPP = 0  # spliced PPs
 
     for blob_PP in iPP_: # draw PP
+        if blob_PP.id == 244:
+            a = 1
 
         # draw spliced_PPs
         if blob_PP.xflip_derP_PP_: 
-            for derP in blob_PP.derP__:
-                for x, dert in enumerate(derP.P.dert_):
+            for derP in blob_PP.derP__:   
+                for x, dert in enumerate(derP.P.dert_): # P
                     img_colour_SPP[derP.P.y, derP.P.x0 + x, :] = colour_list[c_ind_SPP % 10]
+#                    for _x, _dert in enumerate(derP._P.dert_): # _P
+#                        img_colour_SPP[derP._P.y, derP._P.x0 + _x, :] = colour_list[c_ind_SPP % 10]
             
             for SPP in blob_PP.xflip_derP_PP_:
                 for derP in SPP.derP__:
-                    for x, dert in enumerate(derP.P.dert_):
+                    for x, dert in enumerate(derP.P.dert_): # P
                         img_colour_SPP[derP.P.y, derP.P.x0 + x, :] = colour_list[c_ind_PP % 10]
-                    
+#                        for _x, _dert in enumerate(derP._P.dert_): # _P
+#                            img_colour_SPP[derP._P.y, derP._P.x0 + _x, :] = colour_list[c_ind_SPP % 10]
             c_ind_SPP += 1
             
         # draw PPs
         for derP in blob_PP.derP__:
-            if derP.P.Dert.flip_val <= 0:
-                # _P
-                for _x, _dert in enumerate(derP._P.dert_):
-                    img_colour_PP[derP._P.y, derP._P.x0 + _x, :] = colour_list[c_ind_PP % 10]
-                    img_colour_PP_Ps[derP._P.y, derP._P.x0 + _x, :] = colour_list[c_ind_PP_Ps % 10]
-                c_ind_PP_Ps += 1
-                # P
-                for x, dert in enumerate(derP.P.dert_):
-                    img_colour_PP[derP.P.y, derP.P.x0 + x, :] = colour_list[c_ind_PP % 10]
-                    img_colour_PP_Ps[derP.P.y, derP.P.x0 + x, :] = colour_list[c_ind_PP_Ps % 10]
-                c_ind_PP_Ps += 1
+            # _P
+#            for _x, _dert in enumerate(derP._P.dert_):
+#                img_colour_PP[derP._P.y, derP._P.x0 + _x, :] = colour_list[c_ind_PP % 10]
+#                img_colour_PP_Ps[derP._P.y, derP._P.x0 + _x, :] = colour_list[c_ind_PP_Ps % 10]
+#            c_ind_PP_Ps += 1
+            # P
+            for x, dert in enumerate(derP.P.dert_):
+                img_colour_PP[derP.P.y, derP.P.x0 + x, :] = colour_list[c_ind_PP % 10]
+                img_colour_PP_Ps[derP.P.y, derP.P.x0 + x, :] = colour_list[c_ind_PP_Ps % 10]
+            c_ind_PP_Ps += 1
 
         c_ind_PP += 1  # increase P index
 
@@ -430,12 +434,17 @@ def draw_PP(iPP_, y0, yn, x0, xn, colour_list, fPd):
             img_colour_FPP_section_Ps = np.zeros((ynFPP - y0FPP, xnFPP - x0FPP, 3))
 
             # fill colour
-            for P in blob_PP.Pf__:
+            Pf__ =  [derPf.P for derPf in blob_PP.derPf__] # get lower P only
+            for P in Pf__:
                 for x, _ in enumerate(P.dert_):
-                    img_colour_FPP_section[P.y-y0FPP, P.x0 + x - x0FPP] = colour_list[c_ind_FPP_section % 10]
+                    if blob_PP.derPP.mP>0 : # positive FPP
+                        img_colour_FPP_section[P.y-y0FPP, P.x0 + x - x0FPP] = colour_list[2]
+                    else: # negative FPP
+                        img_colour_FPP_section[P.y-y0FPP, P.x0 + x - x0FPP] = colour_list[1]
                     img_colour_FPP_section_Ps[P.y-y0FPP, P.x0 + x - x0FPP] = colour_list[c_ind_FPP_section_Ps % 10]
                 c_ind_FPP_section_Ps += 1
             c_ind_FPP_section += 1
+
 
             # flip back
             img_colour_FPP_section = np.rot90(img_colour_FPP_section, k=3)
