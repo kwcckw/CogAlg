@@ -369,7 +369,7 @@ def draw_PP_(blob):
     # save image to disk
     cv2.imwrite(img_dir_path + 'img_b' + str(blob.id) + '.bmp', img_combined)
 
-
+# for clarity, now visualize Ps only, instead of Ps and _Ps
 def draw_PP(iPP_, y0, yn, x0, xn, colour_list, fPd):
 
     # init image
@@ -386,32 +386,39 @@ def draw_PP(iPP_, y0, yn, x0, xn, colour_list, fPd):
     c_ind_SPP = 0  # spliced PPs
 
     for blob_PP in iPP_: # draw PP
-        if blob_PP.id == 244:
-            a = 1
 
         # draw spliced_PPs
-        if blob_PP.xflip_derP_PP_: 
+        if (blob_PP.derPP.mP>0) and (blob_PP.Dert.flip_val>0): 
             for derP in blob_PP.derP__:   
-                for x, dert in enumerate(derP.P.dert_): # P
+                # P
+                for x, dert in enumerate(derP.P.dert_): 
                     img_colour_SPP[derP.P.y, derP.P.x0 + x, :] = colour_list[c_ind_SPP % 10]
-#                    for _x, _dert in enumerate(derP._P.dert_): # _P
-#                        img_colour_SPP[derP._P.y, derP._P.x0 + _x, :] = colour_list[c_ind_SPP % 10]
-            
-            for SPP in blob_PP.xflip_derP_PP_:
+                    # _P
+                    '''
+                    for _x, _dert in enumerate(derP._P.dert_): 
+                        img_colour_SPP[derP._P.y, derP._P.x0 + _x, :] = colour_list[c_ind_SPP % 10]
+                    '''
+            for SPP in blob_PP.xflip_PP_:
                 for derP in SPP.derP__:
-                    for x, dert in enumerate(derP.P.dert_): # P
-                        img_colour_SPP[derP.P.y, derP.P.x0 + x, :] = colour_list[c_ind_PP % 10]
-#                        for _x, _dert in enumerate(derP._P.dert_): # _P
-#                            img_colour_SPP[derP._P.y, derP._P.x0 + _x, :] = colour_list[c_ind_SPP % 10]
+                    # P
+                    for x, dert in enumerate(derP.P.dert_): 
+                        img_colour_SPP[derP.P.y, derP.P.x0 + x, :] = colour_list[c_ind_SPP % 10]
+                        # _P
+                        '''
+                        for _x, _dert in enumerate(derP._P.dert_): 
+                            img_colour_SPP[derP._P.y, derP._P.x0 + _x, :] = colour_list[c_ind_SPP % 10]
+                        '''
             c_ind_SPP += 1
             
         # draw PPs
         for derP in blob_PP.derP__:
             # _P
-#            for _x, _dert in enumerate(derP._P.dert_):
-#                img_colour_PP[derP._P.y, derP._P.x0 + _x, :] = colour_list[c_ind_PP % 10]
-#                img_colour_PP_Ps[derP._P.y, derP._P.x0 + _x, :] = colour_list[c_ind_PP_Ps % 10]
-#            c_ind_PP_Ps += 1
+            '''
+            for _x, _dert in enumerate(derP._P.dert_):
+                img_colour_PP[derP._P.y, derP._P.x0 + _x, :] = colour_list[c_ind_PP % 10]
+                img_colour_PP_Ps[derP._P.y, derP._P.x0 + _x, :] = colour_list[c_ind_PP_Ps % 10]
+            c_ind_PP_Ps += 1
+            '''
             # P
             for x, dert in enumerate(derP.P.dert_):
                 img_colour_PP[derP.P.y, derP.P.x0 + x, :] = colour_list[c_ind_PP % 10]
@@ -423,11 +430,19 @@ def draw_PP(iPP_, y0, yn, x0, xn, colour_list, fPd):
         # draw FPPs
         if blob_PP.Dert.flip_val > flip_ave_FPP :
 
-            # get box
+            # get box of P only
+            x0FPP = min([derPf.P.x0 for derPf in blob_PP.derPf__])
+            xnFPP = max([derPf.P.x0 + derPf.P.L for derPf in blob_PP.derPf__])
+            y0FPP = min([derPf.P.y for derPf in blob_PP.derPf__])
+            ynFPP = max([derPf.P.y for derPf in blob_PP.derPf__])+1   # +1 because yn is not inclusive, else we will lost last y value
+
+            # _P and P
+            '''
             x0FPP = min([P.x0 for P in blob_PP.Pf__])
             xnFPP = max([P.x0 + P.L for P in blob_PP.Pf__])
             y0FPP = min([P.y for P in blob_PP.Pf__])
             ynFPP = max([P.y for P in blob_PP.Pf__]) + 1  # +1 because yn is not inclusive, else we will lost last y value
+            '''
 
             # init smaller image contains the flipped section only
             img_colour_FPP_section = np.zeros((ynFPP - y0FPP, xnFPP - x0FPP, 3))
@@ -445,28 +460,20 @@ def draw_PP(iPP_, y0, yn, x0, xn, colour_list, fPd):
                 c_ind_FPP_section_Ps += 1
             c_ind_FPP_section += 1
 
-
             # flip back
             img_colour_FPP_section = np.rot90(img_colour_FPP_section, k=3)
             img_colour_FPP_section_Ps = np.rot90(img_colour_FPP_section_Ps, k=3)
 
-            if fPd:
-                # we need offset because Pds might be empty in certain rows or columns from the given blob_PPd.box
-                xs_offset = y0FPP - 0 # x start offset
-                ys_offset = x0FPP - 0 # y start offset
-                xe_offset = (blob_PP.box[3]-blob_PP.box[2]) - ((ynFPP - y0FPP)+ xs_offset)# x end negative offset 
-                ye_offset = (blob_PP.box[1]-blob_PP.box[0]) - ((xnFPP - x0FPP)+ ys_offset )# y end negative offset
-                
-                # fill back the bigger image
-                img_colour_FPP[blob_PP.box[0]+ys_offset:blob_PP.box[1]-ye_offset, blob_PP.box[2]+xs_offset:blob_PP.box[3]-xe_offset] = img_colour_FPP_section
-                img_colour_FPP_Ps[blob_PP.box[0]+ys_offset:blob_PP.box[1]-ye_offset, blob_PP.box[2]+xs_offset:blob_PP.box[3]-xe_offset] = img_colour_FPP_section_Ps
-
-            else:
-                # fill back the bigger image
-                img_colour_FPP[blob_PP.box[0]:blob_PP.box[1], blob_PP.box[2]:blob_PP.box[3]] = img_colour_FPP_section
-                img_colour_FPP_Ps[blob_PP.box[0]:blob_PP.box[1], blob_PP.box[2]:blob_PP.box[3]] = img_colour_FPP_section_Ps
-
+            # we need offset because Ps might be empty in certain rows or columns from the given blob_PP.box
+            xs_offset = y0FPP - 0 # x start offset
+            ys_offset = x0FPP - 0 # y start offset
+            xe_offset = (blob_PP.box[3]-blob_PP.box[2]) - ((ynFPP - y0FPP)+ xs_offset)# x end negative offset 
+            ye_offset = (blob_PP.box[1]-blob_PP.box[0]) - ((xnFPP - x0FPP)+ ys_offset )# y end negative offset
             
+            # fill back the bigger image
+            img_colour_FPP[blob_PP.box[0]+ys_offset:blob_PP.box[1]-ye_offset, blob_PP.box[2]+xs_offset-1:blob_PP.box[3]-xe_offset-1] = img_colour_FPP_section
+            img_colour_FPP_Ps[blob_PP.box[0]+ys_offset:blob_PP.box[1]-ye_offset, blob_PP.box[2]+xs_offset-1:blob_PP.box[3]-xe_offset-1] = img_colour_FPP_section_Ps
+
     return img_colour_PP, img_colour_PP_Ps, img_colour_FPP, img_colour_FPP_Ps, img_colour_SPP
 
 
