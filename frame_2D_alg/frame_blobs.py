@@ -79,6 +79,7 @@ class CBlob(ClusterStructure):
     Dxx = int
     Ga = int
     Ma = int
+    Dir = int # directional value, = abs(g) * (dy/dx)
     # blob params:
     A = int  # blob area
     sign = NoneType
@@ -98,6 +99,8 @@ class CBlob(ClusterStructure):
     a_depth = int  # currently not used
     prior_forks = list
     adj_blobs = list  # for borrowing
+    merge_blob_ = list # list of weak directional blobs
+    fmerge = int         # flag to indicate whether the weak directional blob is merged or not
     PPmm_ = list  # comp_slice_ if not empty
     PPdm_ = list  
     derP__ = list
@@ -278,7 +281,8 @@ def assign_adjacents(adj_pairs, blob_cls=CBlob):  # adjacents are connected oppo
         elif y01 > y02 and x01 > x02 and yn1 < yn2 and xn1 < xn2:
             pose1, pose2 = 1, 0  # 1: external, 0: internal
         else:
-            raise ValueError("something is wrong with pose")
+            pose1, pose2 = 1, 1  # external to each other
+            # raise ValueError("something is wrong with pose")
 
         # bilateral assignments
         blob1.adj_blobs[0].append((blob2, pose2))
