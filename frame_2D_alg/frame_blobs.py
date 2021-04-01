@@ -79,7 +79,6 @@ class CBlob(ClusterStructure):
     Dxx = int
     Ga = int
     Ma = int
-    Dir = int # directional value, = abs(g) * (dy/dx)
     # blob params:
     A = int  # blob area
     sign = NoneType
@@ -99,8 +98,9 @@ class CBlob(ClusterStructure):
     a_depth = int  # currently not used
     prior_forks = list
     adj_blobs = list  # for borrowing
-    merge_blob_ = list # list of weak directional blobs
-    fmerge = int         # flag to indicate whether the weak directional blob is merged or not
+    merged_blob_ = list # list of weak directional blobs
+    fsliced = int
+    fmerged = int         # flag to indicate whether the weak directional blob is merged or not
     PPmm_ = list  # comp_slice_ if not empty
     PPdm_ = list  
     derP__ = list

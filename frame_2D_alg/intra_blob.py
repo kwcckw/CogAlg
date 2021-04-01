@@ -59,7 +59,8 @@ def intra_blob(blob, **kwargs):  # slice_blob or recursive input rng+ | angle cr
                 blob.prior_forks.extend('p')
                 if kwargs.get('verbose'): print('\nslice_blob fork\n')
                 # slice_blob(blob, verbose=True)  # cross-comp of vertically consecutive Ps in selected stacks
-                segment_by_direction(blob,verbose=True)
+                merged_blob_, weak_dir_blob_ = segment_by_direction(blob,verbose=True)
+
     else:
         # root fork is frame_blobs or comp_r
         ext_dert__, ext_mask__ = extend_dert(blob)  # dert__ boundaries += 1, for cross-comp in larger kernels
