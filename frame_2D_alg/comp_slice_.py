@@ -48,7 +48,6 @@ class CDert(ClusterStructure):
     Ma = int
     Mdx = int
     Ddx = int
-    Dir = int
 
 class CP(ClusterStructure):
 
@@ -127,15 +126,11 @@ if flip_val(PP is FPP): pack FPP in blob.PP_ -> flip FPP.dert__ -> slice_blob(FP
 else       (PP is PP):  pack PP in blob.PP_
 '''
 
-
 def slice_blob(blob, verbose=False):
     '''
-    Slice_blob converts selected smooth-edge blobs (high G, low Ga) into sliced blobs,
+    Slice_blob converts selected smooth-edge blobs (high G, low Ga or low M, high Ma) into sliced blobs,
     adding horizontal blob slices: Ps or 1D patterns
     '''
-    
-    flip_eval_blob(blob)
-
     dert__ = blob.dert__
     mask__ = blob.mask__
     height, width = dert__[0].shape
@@ -164,8 +159,8 @@ def slice_blob(blob, verbose=False):
         form_PP_shell(blob, derP__, P__, derPd__, Pd__, fPPd)  # form PPs in blob or in FPP
 
     # draw PPs
-#    if not isinstance(blob, CPP):
-#        draw_PP_(blob)
+    #    if not isinstance(blob, CPP):
+    #        draw_PP_(blob)
 
 
 def form_P_(idert_, mask_, y):  # segment dert__ into P__, in horizontal ) vertical order
@@ -326,7 +321,6 @@ def form_PP_shell(blob, derP__, P__, derPd__, Pd__, fPPd):
         derP_2_PP_(blob.derPd__, blob.PPmd_, 1, 0)  # cluster by derPd mP sign
 
 
-
 def derP_2_PP_(derP_, PP_, fflip, fPPd):
     '''
     first row of derP_ has downconnect_cnt == 0, higher rows may also have them
@@ -383,76 +377,16 @@ def merge_PP(_PP, PP, PP_):  # merge PP into _PP
         if derP not in _PP.derP__:
             _PP.derP__.append(derP)
             derP.PP = _PP  # update reference
-
             Dert = derP.P.Dert
             # accumulate Dert param of derP
             _PP.Dert.accumulate(I=Dert.I, Dy=Dert.Dy, Dx=Dert.Dx, G=Dert.G, M=Dert.M, Dyy=Dert.Dyy, Dyx=Dert.Dyx, Dxy=Dert.Dxy, Dxx=Dert.Dxx,
                                Ga=Dert.Ga, Ma=Dert.Ma, Mdx=Dert.Mdx, Ddx=Dert.Ddx)
-
             # accumulate if PP' derP not in _PP
             _PP.derPP.accumulate(mP=derP.mP, dP=derP.dP, mx=derP.mx, dx=derP.dx,
                                  mL=derP.mL, dL=derP.dL, mDx=derP.mDx, dDx=derP.dDx,
                                  mDy=derP.mDy, dDy=derP.dDy)
-
-
     if PP in PP_:
         PP_.remove(PP)  # remove merged PP
-
-
-def flip_FPP(FPP):
-    '''
-    flip derts of FPP and call again slice_blob to get PPs of FPP
-    '''
-    # get box from P and P
-    x0 = min(min([derP.P.x0 for derP in FPP.derP__]), min([derP._P.x0 for derP in FPP.derP__]))
-    xn = max(max([derP.P.x0+derP.P.L for derP in FPP.derP__]), max([derP._P.x0+derP._P.L for derP in FPP.derP__]))
-    y0 = min(min([derP.P.y for derP in FPP.derP__]), min([derP._P.y for derP in FPP.derP__]))
-    yn = max(max([derP.P.y for derP in FPP.derP__]), max([derP._P.y for derP in FPP.derP__])) +1  # +1 because yn is not inclusive
-    FPP.box = [y0,yn,x0,xn]
-    # init empty derts, 11 params each: p, dy, dx, g, m, dyy, dyx, dxy, dxx, ga, ma
-    dert__ = [np.zeros((yn-y0, xn-x0)) for _ in range(11)]
-    mask__ = np.ones((yn-y0, xn-x0)).astype('bool')
-
-    # fill empty dert with current FPP derts
-    for derP in FPP.derP__:
-        # _P
-        for _x, _dert in enumerate(derP._P.dert_):
-            for i, _param in enumerate(_dert):
-                dert__[i][derP._P.y-y0, derP._P.x0-x0+_x] = _param
-                mask__[derP._P.y-y0, derP._P.x0-x0+_x] = False
-        # P
-        for x, dert in enumerate(derP.P.dert_):
-            for j, param in enumerate(dert):
-                dert__[j][derP.P.y-y0, derP.P.x0-x0+x] = param
-                mask__[derP.P.y-y0, derP.P.x0-x0+x] = False
-    # flip dert__
-    flipped_dert__ = [np.rot90(dert) for dert in dert__]
-    flipped_mask__ = np.rot90(mask__)
-    flipped_dert__[1],flipped_dert__[2] = \
-    flipped_dert__[2],flipped_dert__[1]  # swap dy and dx in derts, always flipped in FPP
-    FPP.dert__ = flipped_dert__
-    FPP.mask__ = flipped_mask__
-    # form PP_ in flipped FPP
-    slice_blob(FPP, verbose=True)
-
-
-def flip_eval_blob(blob):
-
-    # L_bias (Lx / Ly) * G_bias (Gy / Gx), blob.box = [y0,yn,x0,xn], ddirection: preferential comp over low G
-    horizontal_bias = (blob.box[3] - blob.box[2]) / (blob.box[1] - blob.box[0])  \
-                    * (abs(blob.Dy) / abs(blob.Dx))
-
-    if horizontal_bias > 1 and (blob.G * blob.Ma * horizontal_bias > flip_ave / 10):
-        blob.fflip = 1  # rotate 90 degrees for scanning in vertical direction
-        # swap blob Dy and Dx:
-        Dy=blob.Dy; blob.Dy = blob.Dx; blob.Dx = Dy
-        # rotate dert__:
-        blob.dert__ = tuple([np.rot90(dert) for dert in blob.dert__])
-        blob.mask__ = np.rot90(blob.mask__)
-        # swap dert dys and dxs:
-        blob.dert__ = list(blob.dert__)  # convert to list since param in tuple is immutable
-        blob.dert__[1], blob.dert__[2] = \
-        blob.dert__[2], blob.dert__[1]
 
 
 def accum_Dert(Dert: dict, **params) -> None:
@@ -520,7 +454,7 @@ def comp_slice(_P, P, _derP_):  # forms vertical derivatives of derP params, and
 
     derP = CderP(P=P, _P=_P, mP=mP, dP=dP, dX=dX, mL=mL, dL=dL)
     P.derP = derP
-    
+
     return derP
 
 

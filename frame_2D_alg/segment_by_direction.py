@@ -7,77 +7,76 @@ from frame_blobs import CBlob, flood_fill, assign_adjacents
 from comp_slice_ import*
 
 flip_ave = 10
-ave_dir_val_dert = 1
-ave_dir_val_blob = 1
+ave_dir_val = 1
+ave_M = 20
 
-
-def segment_by_direction(blob, verbose=False):
-
-
-    flip_eval_blob(blob) # initial flip eval
+def segment_by_direction(blob, verbose=False):  # draft
 
     dert__ = list(blob.dert__)
     mask__ = blob.mask__
-    
-    g__  = dert__[3]
-    dy__ = dert__[1]
-    dx__ = dert__[2]
-    dx__[dx__==0] = 1  # solve 0 zero division issue
-    dir__ = abs(g__)*(dy__/dx__) # please suggest a better name
-    
-    dert__.append(dir__) # add Dir as additional param to blob
-    
-    # segment by direction
-    sub_blob_, idmap, adj_pairs = flood_fill(dert__, dir__, verbose=False, mask__=mask__, blob_cls=CBlob, accum_func=accum_dir_blob_Dert)
+    merged_blob_ = []
+    weak_dir_blob_ = []
+    dy__ = dert__[1]; dx__ = dert__[2]
+    # segment blob into primarily vertical and horizontal sub blobs according to the direction of kernel-level gradient:
+
+    dir_blob_, idmap, adj_pairs = flood_fill(dert__, dy__>dx__, verbose=False, mask__=mask__, blob_cls=CBlob, accum_func=accum_dir_blob_Dert)
     assign_adjacents(adj_pairs, CBlob)
-    
-    for sub_blob in sub_blob_:
-        if sub_blob.Dir >ave_dir_val_blob: # dir blob
-          
-            flip_eval_blob(sub_blob) # flip eval sub blobs?
-            slice_blob(sub_blob)     # slice dir sub blob
-            
-        else: # weak dir blob 
-            # merge the weak dir blobs. Append them to a list or merge them?
-            #merge_blob_recursive(sub_blob)
-            pass
-            
-# draft, should be a better way to do this
-def merge_blob_recursive(sub_blob):
-    # sub_blob.adj_blobs = [ [[adj_blob1, pose1],[adj_blob2, pose2]], A, G, M, Ga]
-    for adj_blob, pose in sub_blob.adj_blobs[0]:
-        if (adj_blob.Dir <= ave_dir_val_blob) and not (adj_blob.fmerge): # potential merging blob
-            if sub_blob not in adj_blob.merge_blob_ and adj_blob not in sub_blob.merge_blob_:
-                adj_blob.fmerge = 1
-                sub_blob.merge_blob_.append(adj_blob)
-                
-                merge_blob_recursive(adj_blob)
-                
-                for merge_blob in adj_blob.merge_blob_:
-                    if merge_blob not in sub_blob.merge_blob_:
-                        sub_blob.merge_blob_.append(merge_blob)
+
+    for dir_blob in dir_blob_:
+        if abs(dir_blob.G * ( dir_blob.Dy / (dir_blob.Dx+.001))) > ave_dir_val:  # direction strength eval
+            if dir_blob.M > ave_M:
+                dir_blob.fsliced = 1
+                merged_blob_.append( slice_blob(dir_blob) )  # slice across directional sub-blob
+            else:
+                merged_blob_.append( dir_blob)  # returned blob is not sliced
+        else:
+            weak_dir_blob_.append(dir_blob)  # weak-direction sub-blob, buffer and merge if connected by assign_adjacents
+
+    merged_blob_.append([ merge_blobs_recursive( weak_dir_blob_) ])
+
+    return merged_blob_  # merged blobs may or may not be sliced
 
 
+def merge_blobs_recursive(weak_dir_blob_):  # draft
 
-def flip_eval_blob(blob):
+    merged_blob_ = []
+    merged_weak_dir_blob_ = []
 
-    # L_bias (Lx / Ly) * G_bias (Gy / Gx), blob.box = [y0,yn,x0,xn], ddirection: preferential comp over low G
-    horizontal_bias = (blob.box[3] - blob.box[2]) / (blob.box[1] - blob.box[0])  \
-                    * (abs(blob.Dy) / abs(blob.Dx))
+    for blob in weak_dir_blob_:
+        merge_adjacents_recursive(blob, blob.adj_blobs)  # merge dert__ and accumulate params in blob
 
-    if horizontal_bias > 1 and (blob.G * blob.Ma * horizontal_bias > flip_ave / 10):
-        blob.fflip = 1  # rotate 90 degrees for scanning in vertical direction
-        # swap blob Dy and Dx:
-        Dy=blob.Dy; blob.Dy = blob.Dx; blob.Dx = Dy
-        # rotate dert__:
-        blob.dert__ = tuple([np.rot90(dert) for dert in blob.dert__])
-        blob.mask__ = np.rot90(blob.mask__)
-        # swap dert dys and dxs:
-        blob.dert__ = list(blob.dert__)  # convert to list since param in tuple is immutable
-        blob.dert__[1], blob.dert__[2] = \
-        blob.dert__[2], blob.dert__[1]
-        
-        
+        if abs(blob.G * ( blob.Dy / (blob.Dx+.001))) > ave_dir_val:  # direction strength eval
+            if blob.M > ave_M:
+                blob.fsliced = 1
+                merged_blob_.append( slice_blob(blob))  # slice across directional sub-blob
+            else:
+                merged_blob_.append(blob)  # returned blob is not sliced
+        else:
+            merged_weak_dir_blob_.append(blob)  # weak-direction sub-blob, buffer and merge if connected by assign_adjacents
+
+    if merged_weak_dir_blob_:
+        merged_blob_.append([ merge_blobs_recursive( merged_weak_dir_blob_) ])
+
+    return merged_blob_  # merged blobs may or may not be sliced
+
+
+def merge_adjacents_recursive(blob, adj_blobs):
+
+    for adj_blob, pose in blob.adj_blobs[0]:  # sub_blob.adj_blobs = [ [[adj_blob1, pose1],[adj_blob2, pose2]], A, G, M, Ga]
+            if not adj_blob.fmerged:  # potential merging blob
+                if abs(adj_blob.G * ( adj_blob.Dy / (adj_blob.Dx+.001))) <= ave_dir_val:
+
+                    if blob not in adj_blob.merged_blob_:  # and adj_blob not in merged_blob_: it can't be, one pass?
+                        adj_blob.fmerged = 1
+                        blob = merge_blobs(blob, adj_blob)  # merge dert__ and accumulate params
+                        merge_adjacents_recursive(blob, adj_blob.adj_blobs)
+
+
+def merge_blobs(blob, adj_blob):
+    # merge adj_blob into blob
+    return blob
+
+
 def accum_dir_blob_Dert(blob, dert__, y, x):
     blob.I += dert__[0][y, x]
     blob.Dy += dert__[1][y, x]
@@ -94,4 +93,3 @@ def accum_dir_blob_Dert(blob, dert__, y, x):
         blob.Ga += dert__[9][y, x]
         blob.Ma += dert__[10][y, x]
         blob.Dir += dert__[11][y,x]
-
