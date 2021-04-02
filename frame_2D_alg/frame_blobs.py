@@ -98,7 +98,7 @@ class CBlob(ClusterStructure):
     a_depth = int  # currently not used
     prior_forks = list
     adj_blobs = list  # for borrowing
-    merged_blob_ = list # list of weak directional blobs
+    dir_blob_ = list # list of directional blobs
     fsliced = int
     fmerged = int         # flag to indicate whether the weak directional blob is merged or not
     PPmm_ = list  # comp_slice_ if not empty
