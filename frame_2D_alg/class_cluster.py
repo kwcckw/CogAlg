@@ -54,7 +54,7 @@ class MetaCluster(type):
                    and not callable(attr))
 
         numeric_params = tuple(param for param in params
-                               if issubclass(attrs[param], Number))
+                               if (issubclass(attrs[param], Number)) and not (issubclass(attrs[param], bool)) ) # avoid accumulate bool, which is flag
         # Fill in the template
         methods_definitions = _methods_template.format(
             typename=typename,
@@ -87,7 +87,7 @@ class MetaCluster(type):
         for param in params:
             attrs[param + '_type'] = attrs.pop(param)
         # attrs['params'] = params
-        # attrs['numeric_params'] = numeric_params
+        attrs['numeric_params'] = numeric_params
 
         # Add fields/params and other instance attributes
         attrs['__slots__'] = (('_id', 'hid', *params, '__weakref__')

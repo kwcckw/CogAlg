@@ -376,14 +376,13 @@ def merge_PP(_PP, PP, PP_):  # merge PP into _PP
         if derP not in _PP.derP__:
             _PP.derP__.append(derP)
             derP.PP = _PP  # update reference
-            Dert = derP.P.Dert
+            
             # accumulate Dert param of derP
-            _PP.Dert.accumulate(I=Dert.I, Dy=Dert.Dy, Dx=Dert.Dx, G=Dert.G, M=Dert.M, Dyy=Dert.Dyy, Dyx=Dert.Dyx, Dxy=Dert.Dxy, Dxx=Dert.Dxx,
-                               Ga=Dert.Ga, Ma=Dert.Ma, Mdx=Dert.Mdx, Ddx=Dert.Ddx)
+            _PP.Dert.accumulate(**{param:getattr(derP.P.Dert, param) for param in _PP.Dert.numeric_params})
+    
             # accumulate if PP' derP not in _PP
-            _PP.derPP.accumulate(mP=derP.mP, dP=derP.dP, mx=derP.mx, dx=derP.dx,
-                                 mL=derP.mL, dL=derP.dL, mDx=derP.mDx, dDx=derP.dDx,
-                                 mDy=derP.mDy, dDy=derP.dDy)
+            _PP.derPP.accumulate(**{param:getattr(derP, param) for param in _PP.derPP.numeric_params})
+    
     if PP in PP_:
         PP_.remove(PP)  # remove merged PP
 
@@ -393,17 +392,12 @@ def accum_Dert(Dert: dict, **params) -> None:
 
 def accum_PP(PP, derP):  # accumulate derP params in PP
 
-    Dert = derP.P.Dert
     # accumulate Dert params
-    ''' use:
-    for param, PP_param in zip(Dert, PP.Dert):
-        PP_param+=param
-    ? '''
-    PP.Dert.accumulate(I=Dert.I, Dy=Dert.Dy, Dx=Dert.Dx, G=Dert.G, M=Dert.M, Dyy=Dert.Dyy, Dyx=Dert.Dyx, Dxy=Dert.Dxy, Dxx=Dert.Dxx,
-                     Ga=Dert.Ga, Ma=Dert.Ma, Mdx=Dert.Mdx, Ddx=Dert.Ddx)
+    PP.Dert.accumulate(**{param:getattr(derP.P.Dert, param) for param in PP.Dert.numeric_params})
+    
     # accumulate derP params
-    PP.derPP.accumulate(mP=derP.mP, dP=derP.dP, mx=derP.mx, dx=derP.dx, mL=derP.mL, dL=derP.dL, mDx=derP.mDx, dDx=derP.dDx,
-                        mDy=derP.mDy, dDy=derP.dDy)
+    PP.derPP.accumulate(**{param:getattr(derP, param) for param in PP.derPP.numeric_params})
+    
     PP.derP__.append(derP)
 
     derP.PP = PP  # update reference

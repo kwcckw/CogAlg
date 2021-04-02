@@ -33,11 +33,11 @@ def merge_blobs_recursive(blob, merged_blob_):
     rD = blob.Dy / blob.Dx if blob.Dx else 2*blob.Dy
     if abs(blob.G * rD) > ave_dir_val: # direction strength eval
         if (blob.M > ave_M) and (blob.box[1]-blob.box[0]>1): # y size >1, otherwise pointless since we cannot form derP
-            blob.fsliced = 1
+            blob.fsliced = True
             merged_blob_.append(slice_blob(blob))  # slice across directional sub-blob
         else:
             merged_blob_.append(blob)  # returned blob is not sliced     
-    elif blob.fmerged: # dir blob is merged previously but still weak, pack them merged _blob
+    elif blob.fmerged: # dir blob is merged previously but still weak, pack them to merged _blob
         merged_blob_.append(blob)        
     else: # merge weak dir blob
         merge_adjacents_recursive(blob, blob.adj_blobs)  # merge dert__ and accumulate params in blob
@@ -48,23 +48,21 @@ def merge_adjacents_recursive(blob, adj_blobs):
 
     for adj_blob, pose in blob.adj_blobs[0]:  # sub_blob.adj_blobs = [ [[adj_blob1, pose1],[adj_blob2, pose2]], A, G, M, Ga]
         if not adj_blob.fmerged:  # potential merging blob
-            adj_blob.fmerged = 1
+            adj_blob.fmerged = True
             blob = merge_blobs(blob, adj_blob)  # merge dert__ and accumulate params
             merge_adjacents_recursive(blob, adj_blob.adj_blobs)
 
     # remove adj blobs after merging            
     blob.adj_blobs[0] = []
     # set current blob is merged
-    blob.fmerged = 1
+    blob.fmerged = True
 
 def merge_blobs(blob, adj_blob):
     # merge adj_blob into blob
 
     # accumulate params
-    # do we need to merge those params such as rdn, rng Ls and sub_layers?
-    blob.accumulate(I=adj_blob.I, Dy=adj_blob.Dy, Dx=adj_blob.Dx, G=adj_blob.G, M=adj_blob.M,
-                    Dyy=adj_blob.Dyy, Dyx=adj_blob.Dyx, Dxy=adj_blob.Dxy, Dxx=adj_blob.Dxx,
-                    Ga=adj_blob.Ga, Ma=adj_blob.Ma, A=adj_blob.A)
+    # this will acumulate all numeric params, including rdn, rng and Ls
+    blob.accumulate(**{param:getattr(adj_blob, param) for param in adj_blob.numeric_params})
      
     # y0, yn, x0, xn for common box between blob and adj blob
     y0 = min([blob.box[0],adj_blob.box[0]])
