@@ -41,31 +41,8 @@ EXCLUDED_ID = -2
 
 FrameOfBlobs = namedtuple('FrameOfBlobs', 'I, Dy, Dx, G, M, blob_, dert__')
 
-class CFlatBlob(ClusterStructure):  # from frame_blobs only, no sub_blobs
-    # Dert params
-    I = int
-    Dy = int
-    Dx = int
-    G = int
-    M = int
-    Dyy = int
-    Dyx = int
-    Dxy = int
-    Dxx = int
-    Ga = int
-    Ma = int
-    # blob params
-    A = int  # blob area
-    sign = NoneType
-    box = list
-    mask__ = object
-    dert__ = object
-    root_dert__ = object
-    adj_blobs = list
-    prior_forks = list
-    fopen = bool
 
-class CBlob(ClusterStructure):
+class CDert(ClusterStructure):
     # Dert params, comp_pixel:
     I = int
     Dy = int
@@ -79,6 +56,27 @@ class CBlob(ClusterStructure):
     Dxx = int
     Ga = int
     Ma = int
+    # Dert params, comp_dx:
+    Mdx = int
+    Ddx = int
+
+class CFlatBlob(ClusterStructure):  # from frame_blobs only, no sub_blobs
+    # Dert params
+    Dert = object
+    # blob params
+    A = int  # blob area
+    sign = NoneType
+    box = list
+    mask__ = object
+    dert__ = object
+    root_dert__ = object
+    adj_blobs = list
+    prior_forks = list
+    fopen = bool
+
+class CBlob(ClusterStructure):
+    # Dert params, comp_pixel:
+    Dert = object
     # blob params:
     A = int  # blob area
     sign = NoneType
@@ -100,12 +98,24 @@ class CBlob(ClusterStructure):
     prior_forks = list
     adj_blobs = list  # for borrowing and merging
     dir_blobs = list
-    fsliced = int
+    fsliced = bool
+    fmerged = bool
 
+    '''
     PP_ = list  # comp_slice_ if not empty
     derP__ = list
     P__ = list
     PPd_ = list  # PP_derPd_
+    derPd__ = list
+    Pd__ = list
+    '''
+    # if we are not using PPmm, PPdm, PPmd, PPdd, is there a new PP structure?
+    PPmm_ = list  # comp_slice_ if not empty
+    PPdm_ = list  # comp_slice_ if not empty  
+    derP__ = list
+    P__ = list 
+    PPmd_ = list  # PP_derPd_
+    PPdd_ = list  # PP_derPd_
     derPd__ = list
     Pd__ = list
 
@@ -148,11 +158,11 @@ def derts2blobs(dert__, verbose=False, render=False, use_c=False):
         blob_, idmap, adj_pairs = flood_fill(dert__, sign__=dert__[3] > 0,  verbose=verbose)
         I = Dy = Dx = G = M = 0
         for blob in blob_:
-            I += blob.I
-            Dy += blob.Dy
-            Dx += blob.Dx
-            G += blob.G
-            M += blob.M
+            I += blob.Dert.I
+            Dy += blob.Dert.Dy
+            Dx += blob.Dert.Dx
+            G += blob.Dert.G
+            M += blob.Dert.M
         frame = FrameOfBlobs(I=I, Dy=Dy, Dx=Dx, G=G, M=M, blob_=blob_, dert__=dert__)
 
     assign_adjacents(adj_pairs)
@@ -165,11 +175,11 @@ def derts2blobs(dert__, verbose=False, render=False, use_c=False):
 
 def accum_blob_Dert(blob, dert__, y, x):
 
-    blob.I += dert__[0][y, x]
-    blob.Dy += dert__[1][y, x]
-    blob.Dx += dert__[2][y, x]
-    blob.G += dert__[3][y, x]
-    blob.M += dert__[4][y, x]
+    blob.Dert.I += dert__[0][y, x]
+    blob.Dert.Dy += dert__[1][y, x]
+    blob.Dert.Dx += dert__[2][y, x]
+    blob.Dert.G += dert__[3][y, x]
+    blob.Dert.M += dert__[4][y, x]
 
 
 def flood_fill(dert__, sign__, verbose=False, mask__=None, blob_cls=CBlob, accum_func=accum_blob_Dert, prior_forks=[]):
@@ -194,7 +204,7 @@ def flood_fill(dert__, sign__, verbose=False, mask__=None, blob_cls=CBlob, accum
         for x in range(width):
             if idmap[y, x] == UNFILLED:  # ignore filled/clustered derts
                 # initialize new blob
-                blob = blob_cls(sign=sign__[y, x], root_dert__=dert__)
+                blob = blob_cls(Dert=CDert(),sign=sign__[y, x], root_dert__=dert__)
                 if prior_forks: # update prior forks in deep blob
                     blob.prior_forks= prior_forks.copy()
                 blob_.append(blob)
@@ -287,13 +297,13 @@ def assign_adjacents(adj_pairs, blob_cls=CBlob):  # adjacents are connected oppo
         blob2.adj_blobs[0].append((blob1, pose1))
         blob1.adj_blobs[1] += blob2.A
         blob2.adj_blobs[1] += blob1.A
-        blob1.adj_blobs[2] += blob2.G
-        blob2.adj_blobs[2] += blob1.G
-        blob1.adj_blobs[3] += blob2.M
-        blob2.adj_blobs[3] += blob1.M
+        blob1.adj_blobs[2] += blob2.Dert.G
+        blob2.adj_blobs[2] += blob1.Dert.G
+        blob1.adj_blobs[3] += blob2.Dert.M
+        blob2.adj_blobs[3] += blob1.Dert.M
         if hasattr(blob1,'Ma'): # add Ma to deep blob only
-            blob1.adj_blobs[4] += blob2.Ma
-            blob2.adj_blobs[4] += blob1.Ma
+            blob1.adj_blobs[4] += blob2.Dert.Ma
+            blob2.adj_blobs[4] += blob1.Dert.Ma
 
 
 def print_deep_blob_forking(deep_layer):
@@ -355,8 +365,8 @@ if __name__ == "__main__":
             +G "edge" blobs are low-match, valuable only as contrast: to the extent that their negative value cancels 
             positive value of adjacent -G "flat" blobs.
             '''
-            G = blob.G
-            M = blob.M
+            G = blob.Dert.G
+            M = blob.Dert.M
             adj_G = blob.adj_blobs[2]
             borrow_G = min(abs(G), abs(adj_G) / 2)
             '''
