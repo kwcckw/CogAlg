@@ -41,7 +41,7 @@ EXCLUDED_ID = -2
 
 FrameOfBlobs = namedtuple('FrameOfBlobs', 'I, Dy, Dx, G, M, blob_, dert__')
 
-class CFlatBlob(ClusterStructure):
+class CFlatBlob(ClusterStructure):  # from frame_blobs only, no sub_blobs
     # Dert params
     I = int
     Dy = int
@@ -96,17 +96,16 @@ class CBlob(ClusterStructure):
     Ls = int   # for visibility and next-fork rdn
     sub_layers = list
     a_depth = int  # currently not used
+
     prior_forks = list
-    adj_blobs = list  # for borrowing
-    dir_blob_ = list # list of directional blobs
-    fsliced = bool   
-    fmerged = bool   # flag to indicate whether the weak directional blob is merged or not
-    PPmm_ = list  # comp_slice_ if not empty
-    PPdm_ = list  
+    adj_blobs = list  # for borrowing and merging
+    dir_blobs = list
+    fsliced = int
+
+    PP_ = list  # comp_slice_ if not empty
     derP__ = list
     P__ = list
-    PPdd_ = list  # PP_derPd_
-    PPmd_ = list  
+    PPd_ = list  # PP_derPd_
     derPd__ = list
     Pd__ = list
 
@@ -281,8 +280,7 @@ def assign_adjacents(adj_pairs, blob_cls=CBlob):  # adjacents are connected oppo
         elif y01 > y02 and x01 > x02 and yn1 < yn2 and xn1 < xn2:
             pose1, pose2 = 1, 0  # 1: external, 0: internal
         else:
-            pose1, pose2 = 1, 1  # external to each other
-            # raise ValueError("something is wrong with pose")
+            raise ValueError("something is wrong with pose")
 
         # bilateral assignments
         blob1.adj_blobs[0].append((blob2, pose2))
@@ -391,7 +389,7 @@ if __name__ == "__main__":
         if args.verbose:
             print_deep_blob_forking(deep_layers)
             print("\rFinished intra_blob")
-    
+
     end_time = time() - start_time
 
     if args.verbose:

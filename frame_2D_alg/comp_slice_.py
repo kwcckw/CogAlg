@@ -67,8 +67,8 @@ class CP(ClusterStructure):
     # only in Pm:
     Pd_ = list
 
-class CderP(ClusterStructure):
-    ## derDert
+class CderDert(ClusterStructure):
+    
     mP = int
     dP = int
     mx = int
@@ -79,21 +79,40 @@ class CderP(ClusterStructure):
     dDx = int
     mDy = int
     dDy = int
+    ''' 
+    currently not used:
+    mDyy = int
+    mDyx = int
+    mDxy = int
+    mDxx = int
+    mGa = int
+    mMa = int
+    mMdx = int
+    mDdx = int
+    dDyy = int
+    dDyx = int
+    dDxy = int
+    dDxx = int
+    dGa = int
+    dMa = int
+    dMdx = int
+    dDdx = int
+    '''
+
+class CderP(ClusterStructure):
+    
+    derDert = object
     P = object   # lower comparand
     _P = object  # higher comparand
     PP = object  # FPP if flip_val, contains this derP
     # from comp_dx
     fdx = NoneType
-    # optional:
-    dDdx = int
-    mDdx = int
-    dMdx = int
-    mMdx = int
+
 
 class CPP(ClusterStructure):
 
     Dert  = object  # set of P params accumulated in PP
-    derPP = object  # set of derP params accumulated in PP
+    derDert = object  # set of derP params accumulated in PP
     # between PPs:
     upconnect_ = list
     downconnect_cnt = int
@@ -326,7 +345,7 @@ def derP_2_PP_(derP_, PP_, fflip, fPPd):
     '''
     for derP in reversed(derP_):  # bottom-up to follow upconnects, derP is stored top-down
         if not derP.P.downconnect_cnt and not isinstance(derP.PP, CPP):  # root derP was not terminated in prior call
-            PP = CPP(Dert=CDert(), derPP=CderP())  # init
+            PP = CPP(Dert=CDert(), derDert=CderDert())  # init
             accum_PP(PP,derP)
 
             if derP._P.upconnect_:  # derP has upconnects
@@ -354,7 +373,7 @@ def upconnect_2_PP_(iderP, PP_, fflip, fPPd):
                     accum_PP(iderP.PP, derP)
                     confirmed_upconnect_.append(derP)
             elif not isinstance(derP.PP, CPP):  # sign changed, derP is root derP unless it already has FPP/PP
-                PP = CPP(Dert=CDert(), derPP=CderP())
+                PP = CPP(Dert=CDert(), derDert=CderDert())
                 accum_PP(PP,derP)
                 derP.P.downconnect_cnt = 0  # reset downconnect count for root derP
 
@@ -376,12 +395,10 @@ def merge_PP(_PP, PP, PP_):  # merge PP into _PP
         if derP not in _PP.derP__:
             _PP.derP__.append(derP)
             derP.PP = _PP  # update reference
-            
-            # accumulate Dert param of derP
+            # accumulate Dert
             _PP.Dert.accumulate(**{param:getattr(derP.P.Dert, param) for param in _PP.Dert.numeric_params})
-    
-            # accumulate if PP' derP not in _PP
-            _PP.derPP.accumulate(**{param:getattr(derP, param) for param in _PP.derPP.numeric_params})
+            # accumulate derDert
+            _PP.derDert.accumulate(**{param:getattr(derP.derDert, param) for param in _PP.derDert.numeric_params})
     
     if PP in PP_:
         PP_.remove(PP)  # remove merged PP
@@ -390,13 +407,11 @@ def merge_PP(_PP, PP, PP_):  # merge PP into _PP
 def accum_Dert(Dert: dict, **params) -> None:
     Dert.update({param: Dert[param] + value for param, value in params.items()})
 
-def accum_PP(PP, derP):  # accumulate derP params in PP
-
-    # accumulate Dert params
+def accum_PP(PP, derP):  # accumulate params in PP
+    # accumulate Dert
     PP.Dert.accumulate(**{param:getattr(derP.P.Dert, param) for param in PP.Dert.numeric_params})
-    
-    # accumulate derP params
-    PP.derPP.accumulate(**{param:getattr(derP, param) for param in PP.derPP.numeric_params})
+    # accumulate derDert
+    PP.derDert.accumulate(**{param:getattr(derP.derDert, param) for param in PP.derDert.numeric_params})
     
     PP.derP__.append(derP)
 
