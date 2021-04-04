@@ -34,7 +34,7 @@ from segment_by_direction import segment_by_direction
 # filters, All *= rdn:
 ave = 50  # fixed cost per dert, from average m, reflects blob definition cost, may be different for comp_a?
 aveB = 50  # fixed cost per intra_blob comp and clustering
-
+aveG = 50
 
 # --------------------------------------------------------------------------------------------------------------
 # functions:
@@ -114,12 +114,12 @@ def cluster_sub_eval(blob, dert__, sign__, mask__, **kwargs):  # comp_r or comp_
 
     for sub_blob in sub_blobs:  # evaluate sub_blob
         G = blob.Dert.G  # Gr, Grr...
-        adj_M = blob.adj_blobs[3]  # adj_M is incomplete, computed within current dert_only, use root blobs instead:
+        #adj_M = blob.adj_blobs[3]  # adj_M is incomplete, computed within current dert_only, use root blobs instead:
         # adjacent valuable blobs of any sign are tracked from frame_blobs to form borrow_M?
         # track adjacency of sub_blobs: wrong sub-type but right macro-type: flat blobs of greater range?
         # G indicates or dert__ extend per blob G?
 
-        borrow_M = min(G, adj_M / 2)
+        # borrow_M = min(G, adj_M / 2)
         sub_blob.prior_forks = blob.prior_forks.copy()  # increments forking sequence: g->a, g->a->p, etc.
 
         if sub_blob.Dert.G > AveB:  # replace with borrow_M when known
@@ -129,7 +129,7 @@ def cluster_sub_eval(blob, dert__, sign__, mask__, **kwargs):  # comp_r or comp_
             sub_blob.rdn = sub_blob.rdn + 1 + 1 / blob.Ls
             blob.sub_layers += intra_blob(sub_blob, **kwargs)
 
-        elif sub_blob.Dert.M - borrow_M > AveB:
+        elif sub_blob.Dert.M - aveG > AveB:
             # comp_r:
             sub_blob.rng = blob.rng * 2
             sub_blob.rdn = sub_blob.rdn + 1 + 1 / blob.Ls
