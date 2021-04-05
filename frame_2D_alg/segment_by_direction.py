@@ -1,37 +1,46 @@
+'''
+- Segment input blob into dir_blobs by primary direction of kernel gradient: dy>dx
+- Merge weakly directional dir_blobs, with dir_val < cost of comp_slice_
+- Evaluate merged blobs for comp_slice_: if blob.M > ave_M
+'''
+
 import numpy as np
 from frame_blobs import CBlob, flood_fill, assign_adjacents
 from comp_slice_ import slice_blob
 
 flip_ave = 10
 ave_dir_val = 50
-ave_M = -500 # high negative ave M for high G blobs
+ave_M = -500  # high negative ave M for high G blobs
 
-def segment_by_direction(blob, verbose=False):  # draft
+def segment_by_direction(blob, verbose=False):
 
     dert__ = list(blob.dert__)
     mask__ = blob.mask__
     dy__ = dert__[1]; dx__ = dert__[2]
-    # segment blob into primarily vertical and horizontal sub blobs according to the direction of kernel-level gradient:
 
-    dir_blob_, idmap, adj_pairs = flood_fill(dert__, dy__>dx__, verbose=False, mask__=mask__, blob_cls=CBlob, accum_func=accum_dir_blob_Dert)
+    # segment blob into primarily vertical and horizontal sub blobs according to the direction of kernel-level gradient:
+    dir_blob_, idmap, adj_pairs = \
+        flood_fill(dert__, abs(dy__) > abs(dx__), verbose=False, mask__=mask__, blob_cls=CBlob, accum_func=accum_dir_blob_Dert)
     assign_adjacents(adj_pairs, CBlob)
 
     for blob in dir_blob_:
         blob = merge_adjacents_recursive(blob, blob.adj_blobs)
+
         if (blob.Dert.M > ave_M) and (blob.box[1]-blob.box[0]>1):  # y size >1, else we can't form derP
             blob.fsliced = True
             slice_blob(blob,verbose)  # slice and comp_slice_ across directional sub-blob
+
         blob.dir_blobs.append(blob)
 
 
 def merge_adjacents_recursive(blob, adj_blobs):
 
-    _fweak = direction_eval(blob) # direction eval on the input blob
+    _fweak = directionality_eval(blob)  # direction eval on the input blob
 
     for adj_blob in adj_blobs[0]:  # adj_blobs = [ [adj_blob1,adj_blob2], [pose1,pose2] ]
-        if not adj_blob.fmerged:  # potential merging blob
-            
-            fweak = direction_eval(blob) # direction eval on the adjacent blob
+        # if adj_blob was merged, it should be replaced by a ref to merged blob, so we don't need fmerged?:
+        if not adj_blob.fmerged:
+            fweak = directionality_eval(blob)  # direction eval on the adjacent blob
 
             if _fweak: # blob is weak, merge blob to adj blob
                 blob.fmerged = True
@@ -41,14 +50,13 @@ def merge_adjacents_recursive(blob, adj_blobs):
                 adj_blob.fmerged = True
                 blob = merge_blobs(blob, adj_blob)  # merge dert__ and accumulate params
             
-            _fweak = direction_eval(blob) # direction eval again on the merged blob
-            # if merged blob is still weak, continue searching and merging
+            _fweak = directionality_eval(blob)  # if merged blob is still weak, continue searching and merging
             if _fweak: merge_adjacents_recursive(blob, adj_blob.adj_blobs) 
             
     return blob
 
 
-def direction_eval(blob):
+def directionality_eval(blob):
     
     rD = blob.Dert.Dy / blob.Dert.Dx if blob.Dert.Dx else 2 * blob.Dert.Dy
     if abs(blob.Dert.G * rD) < ave_dir_val:  # direction strength eval

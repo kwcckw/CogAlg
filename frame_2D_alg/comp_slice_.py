@@ -54,7 +54,7 @@ class CP(ClusterStructure):
     Pd_ = list
 
 class CderDert(ClusterStructure):
-    
+
     mP = int
     dP = int
     mx = int
@@ -82,10 +82,10 @@ class CderDert(ClusterStructure):
     dMa = int
     dMdx = int
     dDdx = int
-    
+
 
 class CderP(ClusterStructure):
-    
+
     derDert = object
     P = object   # lower comparand
     _P = object  # higher comparand
@@ -384,7 +384,7 @@ def merge_PP(_PP, PP, PP_):  # merge PP into _PP
             _PP.Dert.accumulate(**{param:getattr(derP.P.Dert, param) for param in _PP.Dert.numeric_params})
             # accumulate derDert
             _PP.derDert.accumulate(**{param:getattr(derP.derDert, param) for param in _PP.derDert.numeric_params})
-    
+
     if PP in PP_:
         PP_.remove(PP)  # remove merged PP
 
@@ -397,7 +397,7 @@ def accum_PP(PP, derP):  # accumulate params in PP
     PP.Dert.accumulate(**{param:getattr(derP.P.Dert, param) for param in PP.Dert.numeric_params})
     # accumulate derDert
     PP.derDert.accumulate(**{param:getattr(derP.derDert, param) for param in PP.derDert.numeric_params})
-    
+
     PP.derP__.append(derP)
 
     derP.PP = PP  # update reference
@@ -521,7 +521,7 @@ def comp_slice_full(_P, P):  # forms vertical derivatives of derP params, and co
 
     if fdx:
         derP.fdx=1; derP.derDert.dDdx=dDdx; derP.derDert.mDdx=mDdx; derP.derDert.dMdx=dMdx; derP.derDert.mMdx=mMdx
-    
+
     '''
     min comp for rotation: L, Dy, Dx, no redundancy?
     mParam weighting by relative contribution to mP, /= redundancy?

@@ -1,11 +1,12 @@
 '''
-    intra_blob recursively evaluates each blob for three forks of extended internal cross-comparison and sub-clustering:
-
+    Intra_blob recursively evaluates each blob for three forks of extended internal cross-comparison and sub-clustering:
+    -
     - comp_r: incremental range cross-comp in low-variation flat areas of +v--vg: the trigger is positive deviation of negated -vg,
     - comp_a: angle cross-comp in high-variation edge areas of positive deviation of gradient, forming gradient of angle,
-    - slice_blob forms roughly edge-orthogonal Ps, their stacks evaluated for rotation, comp_d, and comp_slice
-
+    - comp_slice_ forms roughly edge-orthogonal Ps, their stacks evaluated for rotation, comp_d, and comp_slice
+    -
     Please see diagram: https://github.com/boris-kz/CogAlg/blob/master/frame_2D_alg/Illustrations/intra_blob_scheme.png
+    -
     Blob structure, for all layers of blob hierarchy:
     root_dert__,
     Dert = A, Ly, I, Dy, Dx, G, M, Day, Dax, Ga, Ma
@@ -34,7 +35,6 @@ from segment_by_direction import segment_by_direction
 # filters, All *= rdn:
 ave = 50  # fixed cost per dert, from average m, reflects blob definition cost, may be different for comp_a?
 aveB = 50  # fixed cost per intra_blob comp and clustering
-aveG = 50
 
 # --------------------------------------------------------------------------------------------------------------
 # functions:
@@ -181,4 +181,3 @@ def accum_blob_Dert(blob, dert__, y, x):
         blob.Dert.Dxx += dert__[8][y, x]
         blob.Dert.Ga += dert__[9][y, x]
         blob.Dert.Ma += dert__[10][y, x]
-
