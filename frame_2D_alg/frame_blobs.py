@@ -98,7 +98,7 @@ class CBlob(ClusterStructure):
     adj_blobs = list  # for borrowing and merging
     dir_blobs = list
     fsliced = bool
-    fmerged = bool
+    merged_blob = object
 
     PPmm_ = list  # comp_slice_ if not empty
     PPdm_ = list  # comp_slice_ if not empty
@@ -172,7 +172,7 @@ def accum_blob_Dert(blob, dert__, y, x):
     blob.Dert.M += dert__[4][y, x]
 
 
-def flood_fill(dert__, sign__, verbose=False, mask__=None, blob_cls=CBlob, accum_func=accum_blob_Dert, prior_forks=[]):
+def flood_fill(dert__, sign__, verbose=False, mask__=None, blob_cls=CBlob, f8dir=False, accum_func=accum_blob_Dert, prior_forks=[]):
 
     if mask__ is None: # non intra dert
         height, width = dert__[0].shape
@@ -218,7 +218,7 @@ def flood_fill(dert__, sign__, verbose=False, mask__=None, blob_cls=CBlob, accum
                     elif x1 > xn:
                         xn = x1
                     # determine neighbors' coordinates, 4 for -, 8 for +
-                    if blob.sign:   # include diagonals
+                    if blob.sign or f8dir:   # include diagonals
                         adj_dert_coords = [(y1 - 1, x1 - 1), (y1 - 1, x1),
                                            (y1 - 1, x1 + 1), (y1, x1 + 1),
                                            (y1 + 1, x1 + 1), (y1 + 1, x1),
@@ -310,7 +310,7 @@ if __name__ == "__main__":
 
     # Parse arguments
     argument_parser = argparse.ArgumentParser()
-    argument_parser.add_argument('-i', '--image', help='path to image file', default='./images//toucan.jpg')
+    argument_parser.add_argument('-i', '--image', help='path to image file', default='./images//raccoon_head.jpg')
     argument_parser.add_argument('-v', '--verbose', help='print details, useful for debugging', type=int, default=1)
     argument_parser.add_argument('-n', '--intra', help='run intra_blobs after frame_blobs', type=int, default=1)
     argument_parser.add_argument('-r', '--render', help='render the process', type=int, default=0)
