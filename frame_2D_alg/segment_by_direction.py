@@ -21,72 +21,74 @@ def segment_by_direction(iblob, verbose=False):
 
     # segment blob into primarily vertical and horizontal sub blobs according to the direction of kernel-level gradient:
     dir_blob_, idmap, adj_pairs = \
-        flood_fill(dert__, abs(dy__) > abs(dx__), verbose=False, mask__=mask__, blob_cls=CBlob, f8dir=True, accum_func=accum_dir_blob_Dert)
+        flood_fill(dert__, abs(dy__) > abs(dx__), verbose=False, mask__=mask__, blob_cls=CBlob, fseg=True, accum_func=accum_dir_blob_Dert)
     assign_adjacents(adj_pairs, CBlob)
 
-    # temporary, for visualization purpose
-    id_list_ = []
-    for dir_blob in dir_blob_:
-        id_list_.append(dir_blob.id)
-    max_id = max(id_list_)
-    min_id = min(id_list_)
-    divisor = max_id-min_id
-    if max_id-min_id == 0:
-        divisor = 0.01;    
-
     for i, blob in enumerate(dir_blob_):
+        
         blob = merge_adjacents_recursive(blob, blob.adj_blobs)
+        if blob: 
+            if (blob.Dert.M > ave_M) and (blob.box[1]-blob.box[0]>1):  # y size >1, else we can't form derP
+                blob.fsliced = True
+                slice_blob(blob,verbose)  # slice and comp_slice_ across directional sub-blob
+            iblob.dir_blobs.append(blob)
 
-        if (blob.Dert.M > ave_M) and (blob.box[1]-blob.box[0]>1):  # y size >1, else we can't form derP
-            blob.fsliced = True
-            slice_blob(blob,verbose)  # slice and comp_slice_ across directional sub-blob
-
-        iblob.dir_blobs.append(blob)
-
-        # temporary, for visualization purpose
-        cv2.namedWindow('merging process', cv2.WINDOW_NORMAL)
-        img_id = mask__.copy().astype('uint8')*0
+        # To visualizate merging process
+        cv2.namedWindow('gray=weak, white=strong', cv2.WINDOW_NORMAL)
+        img_blobs   = mask__.copy().astype('float')*0
+        # draw weak blobs
         for dir_blob in dir_blob_:
-            if isinstance(dir_blob.merged_blob,CBlob):
-                dir_blob = dir_blob.merged_blob
-            for y in range(dir_blob.mask__.shape[0]): 
-                for x in range(dir_blob.mask__.shape[1]):
-                    if not dir_blob.mask__[y,x]: # replace when mask = false
-                        
-                        ind = np.argwhere(np.array(id_list_)==dir_blob.id)
-                        if len(ind):
-                            img_id[dir_blob.box[0]+y,dir_blob.box[2]+x] = 255-(((dir_blob.id-min_id)/(divisor))*255)
-        cv2.imshow('merging process',img_id)
-        cv2.resizeWindow('merging process', 640, 480)
-        cv2.waitKey(100)            
+            fweak = directionality_eval(dir_blob) # direction eval on the blob
+            y0,yn,x0,xn = dir_blob.box
+            if fweak:
+                img_blobs[y0:yn,x0:xn] += ((~dir_blob.mask__) * 90) .astype('uint8')
+            else:
+                img_blobs[y0:yn,x0:xn] += ((~dir_blob.mask__) * 255) .astype('uint8')
+        # draw strong blobs
+        img_mask = np.ones_like(mask__).astype('bool')
+        for dir_blob in iblob.dir_blobs:
+            fweak = directionality_eval(dir_blob) # direction eval on the blob
+            y0,yn,x0,xn = dir_blob.box
+            if ~fweak:
+                img_mask[y0:yn,x0:xn] = np.logical_and(img_mask[y0:yn,x0:xn], dir_blob.mask__)
+        img_blobs += ((~img_mask).astype('float')*255)
+        img_blobs[img_blobs>255] = 255
+        cv2.imshow('gray=weak, white=strong',img_blobs.astype('uint8'))
+        cv2.resizeWindow('gray=weak, white=strong', 640, 480)
+        cv2.waitKey(50)          
     cv2.destroyAllWindows()
 
 def merge_adjacents_recursive(iblob, adj_blobs):
 
-    # remove current blob reference in adj' adj blobs, since adj blob are assigned bilaterally
-    if iblob in adj_blobs: adj_blobs.remove(iblob)
     blob = iblob
-    _fweak = directionality_eval(blob) # direction eval on the input blob
-    
-    for i,adj_blob in enumerate(adj_blobs[0]):  # adj_blobs = [ [adj_blob1,adj_blob2], [pose1,pose2] ]
-        
-        if not isinstance(adj_blob.merged_blob,CBlob):  # potential merging blob
-            fweak = directionality_eval(adj_blob) # direction eval on the adjacent blob
-            # always merge the weak adj blob to blob first
-            if fweak:  # adj blob is weak, merge adj blob to blob
-                blob = merge_blobs(blob, adj_blob)  # merge dert__ and accumulate params
-            elif _fweak: # blob is weak, merge blob to adj blob
-                blob = merge_blobs(adj_blob, blob)  # merge dert__ and accumulate params
-      
-        else: # adjacent blob is merged to other blob, merge current blob to it
-            blob = merge_blobs(adj_blob.merged_blob,blob)  # merge dert__ and accumulate params
+    # remove current blob reference in adj' adj blobs, since adj blob are assigned bilaterally
+    if blob in adj_blobs[0]: adj_blobs[0].remove(blob)
 
-        _fweak = directionality_eval(blob) # direction eval again on the merged blob
-        # if merged blob is still weak and is not the input blob, continue searching and merging with the merged blob's adj blobs
-        if _fweak and blob is not iblob:
-            merge_adjacents_recursive(blob, blob.adj_blobs) 
-            
-    return blob
+    _fweak = directionality_eval(blob) # direction eval on the input blob
+    adj_blob_list_ = [[],[]]
+    for (adj_blob,pose) in zip(*adj_blobs):  # adj_blobs = [ [adj_blob1,adj_blob2], [pose1,pose2] ]
+        
+        fweak = directionality_eval(adj_blob) # direction eval on the adjacent blob
+        if fweak:  # adj blob is weak, merge adj blob to blob, blob could be weak or strong
+            blob = merge_blobs(blob, adj_blob)  # merge dert__ and accumulate params 
+            if pose != 1: # if adjacent is not internal
+                for i,adj_adj_blob in enumerate(adj_blob.adj_blobs[0]):
+                    if adj_adj_blob not in adj_blob_list_[0]:
+                        adj_blob_list_[0].append(adj_blob.adj_blobs[0][i]) # add adj adj_blobs to search list if they are merged
+                        adj_blob_list_[1].append(adj_blob.adj_blobs[1][i])    
+                
+        elif _fweak: # blob is weak but adj blob is strong, merge blob to adj blob
+            blob = merge_blobs(adj_blob, blob)  # merge dert__ and accumulate params
+
+        _fweak = directionality_eval(blob) # direction eval again on the merged blob 
+
+    # if merged blob is still weak，  continue searching and merging with the merged blob's adj blobs
+    # else they will stop merging adjacent blob
+    if _fweak and adj_blob_list_[0]:
+        blob = merge_adjacents_recursive(blob, adj_blob_list_) 
+
+    if blob is iblob: # return only if current blob is strong blob, else the blob is merged to other blob, no need to return     
+        return blob
 
 
 def directionality_eval(blob):
@@ -102,8 +104,7 @@ def directionality_eval(blob):
 def merge_blobs(blob, adj_blob):  # merge adj_blob into blob
 
     '''
-    temporary changes to speed up the merging process, work in progress
-    right now the pixel by pixel assignment is extremely slow
+    added AND operation for the merging process, still need to be optimized further
     '''
     
     # 0 = overlap between blob and adj_blob
@@ -139,64 +140,47 @@ def merge_blobs(blob, adj_blob):  # merge adj_blob into blob
 
 
     if floc == 1:  # blob is inside adj blob
-        # extended mask is adj blob's mask, update blob mask to adj blob mask
+        # extended mask is adj blob's mask, AND extended mask with blob mask
         extended_mask__ = adj_blob.mask__
-        for y in range(blob.mask__.shape[0]): # blob mask
-            for x in range(blob.mask__.shape[1]):
-                if not blob.mask__[y,x]: # replace when mask = false
-                    extended_mask__[y+y0_offset,x+x0_offset] = blob.mask__[y,x]    
-        # extended derts are adj blob's derts, update blob derts to adj blob derts
+        extended_mask__[y0_offset:y0_offset+(_yn-_y0), x0_offset:x0_offset+(_xn-_x0)] = \
+        np.logical_and(blob.mask__, extended_mask__[y0_offset:y0_offset+(_yn-_y0), x0_offset:x0_offset+(_xn-_x0)])
+        # if blob is inside adj blob, blob derts should be already in adj blob derts
         extended_dert__ = adj_blob.dert__
-        for i in range(len(blob.dert__)):
-            for y in range(blob.dert__[i].shape[0]): # blob derts
-                for x in range(blob.dert__[i].shape[1]):
-                    if not blob.mask__[y,x]: # replace when mask = false
-                        extended_dert__[i][y+y0_offset,x+x0_offset] = blob.dert__[i][y,x]
-        
+    
     elif floc == 2: # adj blob is inside blob
-        # extended mask is blob's mask, update adj blob mask to blob mask
+        # extended mask is blob's mask, AND extended mask with adj blob mask
         extended_mask__ = blob.mask__
-        for y in range(adj_blob.mask__.shape[0]): # adj_blob mask
-            for x in range(adj_blob.mask__.shape[1]):
-                if not adj_blob.mask__[y,x]: # replace when mask = false
-                    extended_mask__[y+adj_y0_offset,x+adj_x0_offset] = adj_blob.mask__[y,x]
-        # extended derts are blob's derts, update adj blob derts to blob derts
+        extended_mask__[adj_y0_offset:adj_y0_offset+(yn-y0), adj_x0_offset:adj_x0_offset+(xn-x0)] = \
+        np.logical_and(adj_blob.mask__, extended_mask__[adj_y0_offset:adj_y0_offset+(yn-y0), adj_x0_offset:adj_x0_offset+(xn-x0)])
+        # if adj blob is inside blob, adj blob derts should be already in blob derts
         extended_dert__ = blob.dert__
-        for i in range(len(adj_blob.dert__)):
-            for y in range(adj_blob.dert__[i].shape[0]): # adj_blob derts
-                for x in range(adj_blob.dert__[i].shape[1]):
-                    if not adj_blob.mask__[y,x]: # replace when mask = false
-                        extended_dert__[i][y+adj_y0_offset,x+adj_x0_offset] = adj_blob.dert__[i][y,x]
+        
     else:
         # create extended mask from combined box
         extended_mask__ = np.ones((cyn-cy0,cxn-cx0)).astype('bool')
-        for y in range(blob.mask__.shape[0]): # blob mask
-            for x in range(blob.mask__.shape[1]):
-                if not blob.mask__[y,x]: # replace when mask = false
-                    extended_mask__[y+y0_offset,x+x0_offset] = blob.mask__[y,x]
-        for y in range(adj_blob.mask__.shape[0]): # adj_blob mask
-            for x in range(adj_blob.mask__.shape[1]):
-                if not adj_blob.mask__[y,x]: # replace when mask = false
-                    extended_mask__[y+adj_y0_offset,x+adj_x0_offset] = adj_blob.mask__[y,x]
-    
+        # AND extended mask with blob mask
+        extended_mask__[y0_offset:y0_offset+(_yn-_y0), x0_offset:x0_offset+(_xn-_x0)] = \
+        np.logical_and(blob.mask__, extended_mask__[y0_offset:y0_offset+(_yn-_y0), x0_offset:x0_offset+(_xn-_x0)])
+        
+        extended_mask__[adj_y0_offset:adj_y0_offset+(yn-y0), adj_x0_offset:adj_x0_offset+(xn-x0)] = \
+        np.logical_and(adj_blob.mask__, extended_mask__[adj_y0_offset:adj_y0_offset+(yn-y0), adj_x0_offset:adj_x0_offset+(xn-x0)])
+        
+        # AND extended mask with adj blob mask
+        extended_mask__[adj_y0_offset:adj_y0_offset+(yn-y0), adj_x0_offset:adj_x0_offset+(xn-x0)] = \
+        np.logical_and(adj_blob.mask__, extended_mask__[adj_y0_offset:adj_y0_offset+(yn-y0), adj_x0_offset:adj_x0_offset+(xn-x0)])
+        
         # create extended derts from combined box
         extended_dert__ = [np.zeros((cyn-cy0,cxn-cx0)) for _ in range(len(blob.dert__))]
         for i in range(len(blob.dert__)):
-            for y in range(blob.dert__[i].shape[0]): # blob derts
-                for x in range(blob.dert__[i].shape[1]):
-                    if not blob.mask__[y,x]: # replace when mask = false
-                        extended_dert__[i][y+y0_offset,x+x0_offset] = blob.dert__[i][y,x]
-            for y in range(adj_blob.dert__[i].shape[0]): # adj_blob derts
-                for x in range(adj_blob.dert__[i].shape[1]):
-                    if not adj_blob.mask__[y,x]: # replace when mask = false
-                        extended_dert__[i][y+adj_y0_offset,x+adj_x0_offset] = adj_blob.dert__[i][y,x]
+            extended_dert__[i][y0_offset:y0_offset+(_yn-_y0), x0_offset:x0_offset+(_xn-_x0)] = blob.dert__[i]
+            extended_dert__[i][adj_y0_offset:adj_y0_offset+(yn-y0), adj_x0_offset:adj_x0_offset+(xn-x0)] = adj_blob.dert__[i]
+            
 
     # update dert, mask and box
     blob.dert__ = extended_dert__
     blob.mask__ = extended_mask__
     blob.box = [cy0,cyn,cx0,cxn]
-    adj_blob.merged_blob = blob # update merged blob reference
-
+                
     return blob
 
 
