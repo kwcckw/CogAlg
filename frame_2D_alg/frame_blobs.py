@@ -217,7 +217,7 @@ def flood_fill(dert__, sign__, verbose=False, mask__=None, blob_cls=CBlob, fseg=
                     elif x1 > xn:
                         xn = x1
                     # determine neighbors' coordinates, 4 for -, 8 for +
-                    if blob.sign:   # include diagonals
+                    if blob.sign or fseg:   # include diagonals
                         adj_dert_coords = [(y1 - 1, x1 - 1), (y1 - 1, x1),
                                            (y1 - 1, x1 + 1), (y1, x1 + 1),
                                            (y1 + 1, x1 + 1), (y1 + 1, x1),
@@ -243,17 +243,17 @@ def flood_fill(dert__, sign__, verbose=False, mask__=None, blob_cls=CBlob, fseg=
                         elif blob.sign != sign__[y2, x2]:
                             adj_pairs.add((idmap[y2, x2], blob.id))     # blob.id always bigger
                        
-                        
-                    if fseg: # if call from segment by direction, add checking for diagonal directions
-                        new_adj_coords = [(y1 - 1, x1 - 1), (y1 - 1, x1 + 1),
-                                          (y1 + 1, x1 + 1), (y1 + 1, x1 - 1)]
-                            
-                        for y2, x2 in new_adj_coords:
-                        # if image boundary is not reached, is filled , and not same-signed: add adjacency
-                            if not (y2 < 0 or y2 >= height or x2 < 0 or x2 >= width or idmap[y2, x2] == EXCLUDED_ID) and not \
-                            (idmap[y2, x2] == UNFILLED) and \
-                            (blob.sign != sign__[y2, x2]):
-                                adj_pairs.add((idmap[y2, x2], blob.id))     # blob.id always bigger
+                     # temporary commented out, still buggy
+#                    if fseg: # if call from segment by direction, add checking for diagonal directions
+#                        new_adj_coords = [(y1 - 1, x1 - 1), (y1 - 1, x1 + 1),
+#                                          (y1 + 1, x1 + 1), (y1 + 1, x1 - 1)]
+#                            
+#                        for y2, x2 in new_adj_coords:
+#                        # if image boundary is not reached, is filled , and not same-signed: add adjacency
+#                            if not (y2 < 0 or y2 >= height or x2 < 0 or x2 >= width or idmap[y2, x2] == EXCLUDED_ID) and not \
+#                            (idmap[y2, x2] == UNFILLED) and \
+#                            (blob.sign != sign__[y2, x2]):
+#                                adj_pairs.add((idmap[y2, x2], blob.id))     # blob.id always bigger
                 
                 # terminate blob
                 yn += 1

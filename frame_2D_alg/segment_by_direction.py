@@ -26,8 +26,13 @@ def segment_by_direction(iblob, verbose=False):
 
     for i, blob in enumerate(dir_blob_):
         
-        blob = merge_adjacents_recursive(blob, blob.adj_blobs)
-        if blob: 
+        # local params
+        merge_pair_ = [[],[]] # merging pair containing merging blob and target blob id
+        merged_ids =[]        # contains ids of merged blob, so that we wouldn't merge it twice
+        strong_ids = []       # contains ids of strong blob, to check if strong blob is already check through their adjacents
+        blob = merge_adjacents_recursive(blob, blob.adj_blobs, merge_pair_, merged_ids, strong_ids)
+ 
+        if blob: # blob is empty if it is weak
             if (blob.Dert.M > ave_M) and (blob.box[1]-blob.box[0]>1):  # y size >1, else we can't form derP
                 blob.fsliced = True
                 slice_blob(blob,verbose)  # slice and comp_slice_ across directional sub-blob
@@ -41,9 +46,9 @@ def segment_by_direction(iblob, verbose=False):
             fweak = directionality_eval(dir_blob) # direction eval on the blob
             y0,yn,x0,xn = dir_blob.box
             if fweak:
-                img_blobs[y0:yn,x0:xn] += ((~dir_blob.mask__) * 90) .astype('uint8')
+                img_blobs[y0:yn,x0:xn] += ((~dir_blob.mask__) * 90) .astype('float')
             else:
-                img_blobs[y0:yn,x0:xn] += ((~dir_blob.mask__) * 255) .astype('uint8')
+                img_blobs[y0:yn,x0:xn] += ((~dir_blob.mask__) * 255) .astype('float')
         # draw strong blobs
         img_mask = np.ones_like(mask__).astype('bool')
         for dir_blob in iblob.dir_blobs:
@@ -52,43 +57,80 @@ def segment_by_direction(iblob, verbose=False):
             if ~fweak:
                 img_mask[y0:yn,x0:xn] = np.logical_and(img_mask[y0:yn,x0:xn], dir_blob.mask__)
         img_blobs += ((~img_mask).astype('float')*255)
-        img_blobs[img_blobs>255] = 255
+        img_blobs[img_blobs>100] = 255
         cv2.imshow('gray=weak, white=strong',img_blobs.astype('uint8'))
         cv2.resizeWindow('gray=weak, white=strong', 640, 480)
         cv2.waitKey(50)          
     cv2.destroyAllWindows()
 
-def merge_adjacents_recursive(iblob, adj_blobs):
+def merge_adjacents_recursive(blob, adj_blobs, merge_pair_, merged_ids, strong_ids):
 
-    blob = iblob
     # remove current blob reference in adj' adj blobs, since adj blob are assigned bilaterally
     if blob in adj_blobs[0]: adj_blobs[0].remove(blob)
-
     _fweak = directionality_eval(blob) # direction eval on the input blob
+    
+    # local params
     adj_blob_list_ = [[],[]]
+    merged_list_ = []
+
     for (adj_blob,pose) in zip(*adj_blobs):  # adj_blobs = [ [adj_blob1,adj_blob2], [pose1,pose2] ]
         
         fweak = directionality_eval(adj_blob) # direction eval on the adjacent blob
-        if fweak:  # adj blob is weak, merge adj blob to blob, blob could be weak or strong
-            blob = merge_blobs(blob, adj_blob)  # merge dert__ and accumulate params 
+        
+        # blob is weak and adjacent blob is strong, update adjacent reference
+        if _fweak and not fweak: 
+            
+            # if strong adjacent blob is already checked through their adjacents, we will merge current blob to the strong adjacent blob after checking through all current adjacents
+            if adj_blob in strong_ids:
+                merged_list_.append(adj_blob)
+            else: 
+                strong_ids.append(adj_blob.id)     # update strong ids
+                merge_pair_[0].append(blob)        # update merging pair merging blob
+                merge_pair_[1].append(adj_blob.id) # update merging pair target id
+                
+            if blob not in adj_blob.adj_blobs[0]:   # if current blob not in adj_blob's adj_blobs list
+                adj_blob.adj_blobs[0].append(blob)  # update weak blob into strong adj_blob's adj_blobs
+                adj_blob.adj_blobs[1].append(pose)  # update pose
+
+        # blob is strong or weak, but adjacent is weak, merge adjacent blob to blob
+        elif fweak and adj_blob.id not in merged_ids:  
+
+            # if blob is strong, update strong ids 
+            if not _fweak: strong_ids.append(blob.id)
+
+            if adj_blob in merge_pair_[0]:              # if adjacent blob is already paired up with strong blob
+                if blob.id in merge_pair_[1]:           # if the target strong blob is current blob, merge them
+                    blob = merge_blobs(blob, adj_blob)  # merge dert__ and accumulate params
+            else:                                       # if adjacent blob is not having strong blob pair yet
+                blob = merge_blobs(blob, adj_blob)      # merge dert__ and accumulate params
+
+            merged_ids.append(adj_blob.id)  # update adjacent blob id into the merged ids
+
             if pose != 1: # if adjacent is not internal
                 for i,adj_adj_blob in enumerate(adj_blob.adj_blobs[0]):
-                    if adj_adj_blob not in adj_blob_list_[0]:
+                    if adj_adj_blob not in adj_blob_list_[0] and adj_adj_blob is not blob and  adj_adj_blob.id not in merged_ids :
                         adj_blob_list_[0].append(adj_blob.adj_blobs[0][i]) # add adj adj_blobs to search list if they are merged
-                        adj_blob_list_[1].append(adj_blob.adj_blobs[1][i])    
+                        adj_blob_list_[1].append(adj_blob.adj_blobs[1][i])  
                 
-        elif _fweak: # blob is weak but adj blob is strong, merge blob to adj blob
-            blob = merge_blobs(adj_blob, blob)  # merge dert__ and accumulate params
-
         _fweak = directionality_eval(blob) # direction eval again on the merged blob 
 
-    # if merged blob is still weak，  continue searching and merging with the merged blob's adj blobs
-    # else they will stop merging adjacent blob
-    if _fweak and adj_blob_list_[0]:
-        blob = merge_adjacents_recursive(blob, adj_blob_list_) 
-
-    if blob is iblob: # return only if current blob is strong blob, else the blob is merged to other blob, no need to return     
-        return blob
+    # if there is merge list, merge them
+    if (merged_list_): merge_blobs(merged_list_[0],blob)
+    
+    # if blob is not in merging pair, continue searching and merging from adjacent's adjacents
+    elif not blob in merge_pair_[0]:
+        # if merged blob is still weak， continue searching and merging with the merged blob's adj blobs
+        # else they will stop merging adjacent blob
+        if _fweak:
+            if adj_blob_list_[0]:
+                blob = merge_adjacents_recursive(blob, adj_blob_list_,merge_pair_,merged_ids,strong_ids) 
+                if blob: 
+                    _fweak = directionality_eval(blob) # direction eval again on the merged blob 
+                    if not _fweak: 
+                        return blob # return only strong blob
+    
+        else: 
+            return blob # return only strong blob
 
 
 def directionality_eval(blob):
@@ -176,11 +218,18 @@ def merge_blobs(blob, adj_blob):  # merge adj_blob into blob
             extended_dert__[i][adj_y0_offset:adj_y0_offset+(yn-y0), adj_x0_offset:adj_x0_offset+(xn-x0)] = adj_blob.dert__[i]
             
 
-    # update dert, mask and box
+    # update dert, mask , box and sign
     blob.dert__ = extended_dert__
     blob.mask__ = extended_mask__
     blob.box = [cy0,cyn,cx0,cxn]
-                
+    blob.sign = abs(blob.Dert.Dy)>abs(blob.Dert.Dx)
+    
+    # update adj blob 'adj blobs' adj_blobs reference from pointing adj blob into the merged blob
+    for i, adj_adj_blob1 in enumerate(adj_blob.adj_blobs[0]):            # loop adj blobs of adj blob
+        for j, adj_adj_blob2 in enumerate(adj_adj_blob1.adj_blobs[0]):   # loop adj blobs from adj blobs of adj blob
+            if adj_adj_blob2 is adj_blob and adj_adj_blob1 is not blob : # if adj blobs from adj blobs of adj blob is adj blob, update reference to the merged blob
+                adj_adj_blob1.adj_blobs[0][j] = blob
+
     return blob
 
 
