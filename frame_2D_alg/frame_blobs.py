@@ -97,6 +97,7 @@ class CBlob(ClusterStructure):
     prior_forks = list
     adj_blobs = list  # for borrowing and merging
     dir_blobs = list
+    dir_val = int
     fsliced = bool
 
     PPmm_ = list  # comp_slice_ if not empty
