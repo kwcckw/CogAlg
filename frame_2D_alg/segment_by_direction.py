@@ -8,6 +8,7 @@ import numpy as np
 from frame_blobs import CBlob, flood_fill, assign_adjacents
 from comp_slice_ import slice_blob
 import cv2
+from copy import deepcopy
 
 flip_ave = 10
 ave_dir_val = 50
@@ -27,6 +28,9 @@ def segment_by_direction(iblob, verbose=False):
     for blob in dir_blob_:
         rD = blob.Dert.Dy / blob.Dert.Dx if blob.Dert.Dx else 2 * blob.Dert.Dy
         blob.dir_val = abs(blob.Dert.G * rD) - ave_dir_val  # direction strength value
+
+    _dir_blob_ = deepcopy(dir_blob_) # get a copy for dir blob before merging, for visualization purpose
+
 #   for debugging:
 #   from draw_frame_blobs import visualize_blobs
 #   visualize_blobs(idmap, dir_blob_)
@@ -46,7 +50,7 @@ def segment_by_direction(iblob, verbose=False):
             if dir_blob.id in merged_ids:
                 iblob.dir_blobs.remove(dir_blob)
 
-        visualize_merging_process(iblob, dir_blob_,mask__, i)
+        visualize_merging_process(iblob, dir_blob_, _dir_blob_,mask__, i)
 
 
 def merge_adjacents_recursive(blob, adj_blobs, merged_ids):
@@ -73,16 +77,16 @@ def merge_adjacents_recursive(blob, adj_blobs, merged_ids):
         if blob.dir_val < 0:  # if merged blob is still weak，merge it into the stronger of vert_adj_blobs and lat_adj_blobs:
 
             dir_adj_blobs = [[0, [], []], [0, [], []]]  # lat_adj_blobs and vert_adj_blobs, each: dir_val, adj_blob_, pose_
-            dir_adj_blobs[blob.sign][0] += blob.dir_val  # sum blob.dir_val into same-direction (vertical or lateral) dir_adj_blobs
+            dir_adj_blobs[blob.sign*1][0] += blob.dir_val  # sum blob.dir_val into same-direction (vertical or lateral) dir_adj_blobs
 
-            for adj_blob in merged_adj_blobs[0]:
+            for adj_blob,pose in zip(*merged_adj_blobs):
                 # add adj_blob into same-direction-sign adj_blobs: 1 if vertical, 0 if lateral:
-                dir_adj_blobs[adj_blob.sign][0] += adj_blob.dir_val  # sum dir_val (abs)
-                dir_adj_blobs[adj_blob.sign][1].append(adj_blob)  # buffer adj_blobs
-                dir_adj_blobs[adj_blob.sign][2].append(adj_blob)  # buffer adj_blob poses, not needed?
+                dir_adj_blobs[adj_blob.sign*1][0] += adj_blob.dir_val  # sum dir_val (abs)
+                dir_adj_blobs[adj_blob.sign*1][1].append(adj_blob)  # buffer adj_blobs
+                dir_adj_blobs[adj_blob.sign*1][2].append(pose)  # buffer adj_blob poses, not needed? i think no, actually we can remove the pose since it is not in used
 
             # merge final_weak_blob with all remaining strong blobs in the stronger of dir_adj_blobs:
-            for adj_blob in dir_adj_blobs[ dir_adj_blobs[0][0] > dir_adj_blobs[1]] [1]:
+            for adj_blob in dir_adj_blobs[ (dir_adj_blobs[1][0] > dir_adj_blobs[0][0]) *1 ] [1]:
 
                 if adj_blob.id not in merged_ids and adj_blob is not blob:
                     blob = merge_blobs(blob, adj_blob)
@@ -194,6 +198,9 @@ def merge_blobs(blob, adj_blob):  # merge adj_blob into blob
     blob.mask__ = extended_mask__
     blob.box = [cy0,cyn,cx0,cxn]
     blob.sign = abs(blob.Dert.Dy)>abs(blob.Dert.Dx)
+    # update dir val after merging
+    rD = blob.Dert.Dy / blob.Dert.Dx if blob.Dert.Dx else 2 * blob.Dert.Dy
+    blob.dir_val = abs(blob.Dert.G * rD) - ave_dir_val
 
     # update adj blob 'adj blobs' adj_blobs reference from pointing adj blob into the merged blob
     for i, adj_adj_blob1 in enumerate(adj_blob.adj_blobs[0]):            # loop adj blobs of adj blob
@@ -221,42 +228,60 @@ def accum_dir_blob_Dert(blob, dert__, y, x):
         blob.Dert.Ma += dert__[10][y, x]
 
 
-def visualize_merging_process(iblob, dir_blob_, mask__, i):
+def visualize_merging_process(iblob, dir_blob_, _dir_blob_, mask__, i):
 
-    cv2.namedWindow('(1)weak blobs, (2)strong blobs, (3)strong+weak blobs, (4)overlapping between weak and strongblob (error)', cv2.WINDOW_NORMAL)
+    cv2.namedWindow('(1-4)Before merging, (5-8)After merging - weak blobs,strong blobs,strong+weak blobs, overlapping-weak&strong (error)', cv2.WINDOW_NORMAL)
 
+    # masks - before merging
     img_mask_strong = np.ones_like(mask__).astype('bool')
     img_mask_weak = np.ones_like(mask__).astype('bool')
-
     # get mask of dir blobs
-#    for dir_blob in dir_blob_:
-#        y0, yn, x0, xn = dir_blob.box
-#        # direction eval on the blob
-#        if dir_eval(dir_blob): # weak blob
-#            img_mask_weak[y0:yn, x0:xn] = np.logical_and(img_mask_weak[y0:yn, x0:xn], dir_blob.mask__)
-#        else:
-#            img_mask_strong[y0:yn, x0:xn] = np.logical_and(img_mask_strong[y0:yn, x0:xn], dir_blob.mask__)
+    for dir_blob in _dir_blob_:
+        y0, yn, x0, xn = dir_blob.box
+        # direction eval on the blob
+        if dir_blob.dir_val < 0: # weak blob
+            img_mask_weak[y0:yn, x0:xn] = np.logical_and(img_mask_weak[y0:yn, x0:xn], dir_blob.mask__)
+        else:
+            img_mask_strong[y0:yn, x0:xn] = np.logical_and(img_mask_strong[y0:yn, x0:xn], dir_blob.mask__)
 
+    # masks - after merging
+    img_mask_strong_merged = np.ones_like(mask__).astype('bool')
+    img_mask_weak_merged = np.ones_like(mask__).astype('bool')
     # get mask of merged blobs
     for dir_blob in iblob.dir_blobs:
         y0, yn, x0, xn = dir_blob.box
         # direction eval on the blob
         if dir_blob.dir_val < 0:   # weak blob
-            img_mask_strong[y0:yn, x0:xn] = np.logical_and(img_mask_strong[y0:yn, x0:xn], dir_blob.mask__)
+            img_mask_strong_merged[y0:yn, x0:xn] = np.logical_and(img_mask_strong_merged[y0:yn, x0:xn], dir_blob.mask__)
         else:  # strong blob
-            img_mask_weak[y0:yn, x0:xn] = np.logical_and(img_mask_weak[y0:yn, x0:xn], dir_blob.mask__)
+            img_mask_weak_merged[y0:yn, x0:xn] = np.logical_and(img_mask_weak_merged[y0:yn, x0:xn], dir_blob.mask__)
 
-    img_separator = np.ones((mask__.shape[0],3)) * 45         # separator
-    img_weak = ((~img_mask_weak)*90).astype('uint8')          # weak blobs
-    img_strong = ((~img_mask_strong)*255).astype('uint8')     # strong blobs
-    img_combined = img_weak + img_strong                      # merge weak and strong blobs
-    img_overlap = np.logical_and(~img_mask_weak, ~img_mask_strong)*255 # overlapping area (between blobs) to check if we merge blob twice
-    img_concat = np.concatenate((img_weak, img_separator, img_strong, img_separator, img_combined, img_separator, img_overlap), axis=1).astype('uint8')
+    # assign value to masks
+    img_separator = np.ones((mask__.shape[0],2)) * 0         # separator
+    # before merging
+    img_weak = ((~img_mask_weak)*90).astype('uint8')                    # weak blobs before merging process
+    img_strong = ((~img_mask_strong)*255).astype('uint8')               # strong blobs before merging process
+    img_combined = img_weak + img_strong                                # merge weak and strong blobs
+    img_overlap = np.logical_and(~img_mask_weak, ~img_mask_strong)*255 
+    # after merging
+    img_weak_merged = ((~img_mask_weak_merged)*90).astype('uint8')          # weak blobs after merging process
+    img_strong_merged = ((~img_mask_strong_merged)*255).astype('uint8')     # strong blobs after merging process
+    img_combined_merged = img_weak_merged + img_strong_merged                      # merge weak and strong blobs
+    img_overlap_merged = np.logical_and(~img_mask_weak_merged, ~img_mask_strong_merged)*255 # overlapping area (between blobs) to check if we merge blob twice
+    
+    img_concat = np.concatenate((img_weak, img_separator, 
+                                 img_strong, img_separator, 
+                                 img_combined, img_separator, 
+                                 img_overlap, img_separator, 
+                                 img_weak_merged, img_separator, 
+                                 img_strong_merged, img_separator, 
+                                 img_combined_merged, img_separator, 
+                                 img_overlap_merged), axis=1).astype('uint8')
 
 
     # plot image
-    cv2.imshow('(1)weak blobs, (2)strong blobs, (3)strong+weak blobs, (4)overlapping between weak and strongblob (error)', img_concat)
-    cv2.resizeWindow('(1)weak blobs, (2)strong blobs, (3)strong+weak blobs, (4)overlapping between weak and strongblob (error)', 1280, 720)
+    cv2.imshow('(1-4)Before merging, (5-8)After merging - weak blobs,strong blobs,strong+weak blobs, overlapping-weak&strong (error)', img_concat)
+    cv2.resizeWindow('(1-4)Before merging, (5-8)After merging - weak blobs,strong blobs,strong+weak blobs, overlapping-weak&strong (error)', 1280, 720)
     cv2.waitKey(50)
     if i == len(dir_blob_) - 1:
         cv2.destroyAllWindows()
