@@ -24,104 +24,100 @@ def segment_by_direction(iblob, verbose=False):
         flood_fill(dert__, abs(dy__) > abs(dx__), verbose=False, mask__=mask__, blob_cls=CBlob, fseg=True, accum_func=accum_dir_blob_Dert)
     assign_adjacents(adj_pairs, CBlob)
 
-    # temporary, for debug purpose
-#    from draw_frame_blobs import visualize_blobs
-#    visualize_blobs(idmap, dir_blob_)
+    for blob in dir_blob_:
+        rD = blob.Dert.Dy / blob.Dert.Dx if blob.Dert.Dx else 2 * blob.Dert.Dy
+        blob.dir_val = abs(blob.Dert.G * rD) - ave_dir_val  # direction strength value
+#   for debugging:
+#   from draw_frame_blobs import visualize_blobs
+#   visualize_blobs(idmap, dir_blob_)
 
     merged_ids = []  # ids of merged adjacent blobs, to skip in the rest of dir_blobs
+
     for i, blob in enumerate(dir_blob_):
         if blob.id not in merged_ids:
             blob = merge_adjacents_recursive(blob, blob.adj_blobs, merged_ids)
-            
+
             if (blob.Dert.M > ave_M) and (blob.box[1]-blob.box[0]>1):  # y size >1, else we can't form derP
                 blob.fsliced = True
                 slice_blob(blob,verbose)  # slice and comp_slice_ across directional sub-blob
             iblob.dir_blobs.append(blob)
-            
+
         for dir_blob in iblob.dir_blobs[:]: # strong blob is merged to another blob, remove it
             if dir_blob.id in merged_ids:
                 iblob.dir_blobs.remove(dir_blob)
 
         visualize_merging_process(iblob, dir_blob_,mask__, i)
 
+
 def merge_adjacents_recursive(blob, adj_blobs, merged_ids):
 
-    if dir_eval(blob):  # returns directionality fweak, no re-evaluation until all adjacent weak blobs are merged
+    if blob.dir_val < 0:  # directionally weak blob, no re-evaluation until all adjacent weak blobs are merged
 
         if blob in adj_blobs[0]: adj_blobs[0].remove(blob)  # remove current blob from adj adj blobs (assigned bilaterally)
-        merged_adj_blobs = [[], []]       # adj_blob_, pose_
+        merged_adj_blobs = [[], []]  # adj_blob_, pose_
 
         for (adj_blob, pose) in zip(*adj_blobs):  # adj_blobs = [ [adj_blob1,adj_blob2], [pose1,pose2] ]
-            if dir_eval(adj_blob) and adj_blob.id not in merged_ids:  # also directionally weak, merge adj blob to blob
+            if (adj_blob.dir_val < 0) and adj_blob.id not in merged_ids:  # also directionally weak, merge adj blob to blob
                 blob = merge_blobs(blob, adj_blob)
                 merged_ids.append(adj_blob.id)
 
                 for i, adj_adj_blob in enumerate(adj_blob.adj_blobs[0]):
-                    # add adj adj_blobs to merged_adj_blobs:
+                    # recursively add adj_adj_blobs to merged_adj_blobs:
                     if adj_adj_blob not in merged_adj_blobs[0] and adj_adj_blob is not blob and adj_adj_blob.id not in merged_ids:
                         merged_adj_blobs[0].append(adj_blob.adj_blobs[0][i])
                         merged_adj_blobs[1].append(adj_blob.adj_blobs[1][i])
-            
-            # ignore strong adjacent blob? or merge them as next step?
-            # strong adjacent blob
-#            elif not dir_eval(adj_blob) and adj_blob.id not in merged_ids:
-#                merged_adj_blobs_strong[0].append(adj_blob)
-#                merged_adj_blobs_strong[1].append(pose)
 
         if merged_adj_blobs[0]:
             blob = merge_adjacents_recursive(blob, merged_adj_blobs, merged_ids)
 
-        if dir_eval(blob):  # if merged blob is still weak，merge it into the stronger of vert_adj_blobs and lat_adj_blobs:
+        if blob.dir_val < 0:  # if merged blob is still weak，merge it into the stronger of vert_adj_blobs and lat_adj_blobs:
 
-            dir_adj_blobs = [[0, [], []], [0, [], []]]  # vert_adj_blobs and lat_adj_blobs, each: dir_val, adj_blob_, pose_
+            dir_adj_blobs = [[0, [], []], [0, [], []]]  # lat_adj_blobs and vert_adj_blobs, each: dir_val, adj_blob_, pose_
+            dir_adj_blobs[blob.sign][0] += blob.dir_val  # sum blob.dir_val into same-direction (vertical or lateral) dir_adj_blobs
+
             for adj_blob in merged_adj_blobs[0]:
+                # add adj_blob into same-direction-sign adj_blobs: 1 if vertical, 0 if lateral:
+                dir_adj_blobs[adj_blob.sign][0] += adj_blob.dir_val  # sum dir_val (abs)
+                dir_adj_blobs[adj_blob.sign][1].append(adj_blob)  # buffer adj_blobs
+                dir_adj_blobs[adj_blob.sign][2].append(adj_blob)  # buffer adj_blob poses, not needed?
 
-                if adj_blob.sign: lateral = 0 # index of vertical adj_blobs
-                else: lateral = 1             # index of lateral adj_blobs
-                  
-                adj_rD = adj_blob.Dert.Dy / adj_blob.Dert.Dx if adj_blob.Dert.Dx else 2 * adj_blob.Dert.Dy
-                dir_adj_blobs[lateral][0] += abs(adj_blob.Dert.G * adj_rD)
+            # merge final_weak_blob with all remaining strong blobs in the stronger of dir_adj_blobs:
+            for adj_blob in dir_adj_blobs[ dir_adj_blobs[0][0] > dir_adj_blobs[1]] [1]:
 
-                for i, adj_adj_blob in enumerate(adj_blob.adj_blobs[0]):
-                    if adj_adj_blob not in dir_adj_blobs[lateral][1]:
-                        dir_adj_blobs[lateral][1].append(adj_blob.adj_blobs[0][i])
-                        dir_adj_blobs[lateral][2].append(adj_blob.adj_blobs[1][i])
+                if adj_blob.id not in merged_ids and adj_blob is not blob:
+                    blob = merge_blobs(blob, adj_blob)
+                    merged_ids.append(adj_blob.id)
 
-                rD = blob.Dert.Dy / blob.Dert.Dx if blob.Dert.Dx else 2 * blob.Dert.D
-                if blob.dir_val > 0:  # vertical
-                    dir_adj_blobs[0][0] += abs(blob.Dert.G * rD)
-                else:  # lateral
-                    dir_adj_blobs[1][0] += abs(blob.Dert.G * rD)
+            '''
+            not needed:
+            final strong-blob merging is not recursive:
+            for i, adj_adj_blob in enumerate(adj_blob.adj_blobs[0]):
+                if adj_adj_blob not in dir_adj_blobs[adj_blob.sign][1]:
+                    dir_adj_blobs[adj_blob.sign][1].append(adj_blob.adj_blobs[0][i])  # buffer adj_blobs
+                    dir_adj_blobs[adj_blob.sign][2].append(adj_blob.adj_blobs[1][i])  # buffer adj_blob poses, not needed?
                     
-                # merge final_weak_blob with all remaining strong blobs in the stronger dir_adj_blobs:
-                if dir_adj_blobs[0][0] > dir_adj_blobs[1][0]:
-                    merge_final_weak_blob(blob, dir_adj_blobs[0][1], merged_ids)  # merge blob with all dir_adj blobs
-                else:
-                    merge_final_weak_blob(blob, dir_adj_blobs[1][1], merged_ids)
+            if dir_adj_blobs[0][0] > dir_adj_blobs[1][0]:
+                merge_final_weak_blob(blob, dir_adj_blobs[0][1], merged_ids)  # merge blob with all dir_adj blobs
+                blob.adj_blobs = dir_adj_blobs[1]  # remaining adj_blobs
+            else:
+                merge_final_weak_blob(blob, dir_adj_blobs[1][1], merged_ids)  # merge blob with all dir_adj blobs
+                blob.adj_blobs = dir_adj_blobs[0]  # remaining adj_blobs
+            
+            def merge_final_weak_blob(blob, adj_blobs, merged_ids):
 
-            # what if blob is still weak?
-            # if blob is still weak, merge with strong blob
-#            if dir_eval(blob):   
-#                merge_final_weak_blob(blob, merged_adj_blobs_strong[0], merged_ids)
-                
+                for adj_blob in adj_blobs:
+                    if adj_blob.id not in merged_ids and adj_blob is not blob:
+                        blob = merge_blobs(blob, adj_blob)
+                        merged_ids.append(adj_blob.id)
+                        
+            def dir_eval(blob):  # not used
+
+                rD = blob.Dert.Dy / blob.Dert.Dx if blob.Dert.Dx else 2 * blob.Dert.Dy
+                if  abs(blob.Dert.G * rD) < ave_dir_val:  # direction strength eval
+                    fweak = 1
+                else: fweak = 0
+            '''
     return blob
-
-
-def merge_final_weak_blob(blob, adj_blobs, merged_ids):
-
-    for adj_blob in adj_blobs:
-        if adj_blob.id not in merged_ids and adj_blob is not blob:
-            blob = merge_blobs(blob, adj_blob)
-            merged_ids.append(adj_blob.id)
-
-def dir_eval(blob):
-
-    rD = blob.Dert.Dy / blob.Dert.Dx if blob.Dert.Dx else 2 * blob.Dert.Dy
-    if  abs(blob.Dert.G * rD)< ave_dir_val:  # direction strength eval
-        fweak = 1
-    else: fweak = 0
-
-    return fweak
 
 
 def merge_blobs(blob, adj_blob):  # merge adj_blob into blob
@@ -226,14 +222,14 @@ def accum_dir_blob_Dert(blob, dert__, y, x):
 
 
 def visualize_merging_process(iblob, dir_blob_, mask__, i):
-    
+
     cv2.namedWindow('(1)weak blobs, (2)strong blobs, (3)strong+weak blobs, (4)overlapping between weak and strongblob (error)', cv2.WINDOW_NORMAL)
-    
+
     img_mask_strong = np.ones_like(mask__).astype('bool')
     img_mask_weak = np.ones_like(mask__).astype('bool')
-    
+
     # get mask of dir blobs
-#    for dir_blob in dir_blob_: 
+#    for dir_blob in dir_blob_:
 #        y0, yn, x0, xn = dir_blob.box
 #        # direction eval on the blob
 #        if dir_eval(dir_blob): # weak blob
@@ -245,25 +241,22 @@ def visualize_merging_process(iblob, dir_blob_, mask__, i):
     for dir_blob in iblob.dir_blobs:
         y0, yn, x0, xn = dir_blob.box
         # direction eval on the blob
-        if dir_eval(dir_blob):   # weak blob
+        if dir_blob.dir_val < 0:   # weak blob
             img_mask_strong[y0:yn, x0:xn] = np.logical_and(img_mask_strong[y0:yn, x0:xn], dir_blob.mask__)
         else:  # strong blob
             img_mask_weak[y0:yn, x0:xn] = np.logical_and(img_mask_weak[y0:yn, x0:xn], dir_blob.mask__)
-
-        
-
 
     img_separator = np.ones((mask__.shape[0],3)) * 45         # separator
     img_weak = ((~img_mask_weak)*90).astype('uint8')          # weak blobs
     img_strong = ((~img_mask_strong)*255).astype('uint8')     # strong blobs
     img_combined = img_weak + img_strong                      # merge weak and strong blobs
     img_overlap = np.logical_and(~img_mask_weak, ~img_mask_strong)*255 # overlapping area (between blobs) to check if we merge blob twice
-    img_concat = np.concatenate((img_weak, img_separator, img_strong, img_separator, img_combined, img_separator, img_overlap), axis=1).astype('uint8')    
+    img_concat = np.concatenate((img_weak, img_separator, img_strong, img_separator, img_combined, img_separator, img_overlap), axis=1).astype('uint8')
 
 
     # plot image
     cv2.imshow('(1)weak blobs, (2)strong blobs, (3)strong+weak blobs, (4)overlapping between weak and strongblob (error)', img_concat)
     cv2.resizeWindow('(1)weak blobs, (2)strong blobs, (3)strong+weak blobs, (4)overlapping between weak and strongblob (error)', 1280, 720)
     cv2.waitKey(50)
-    if i == len(dir_blob_) - 1:       
+    if i == len(dir_blob_) - 1:
         cv2.destroyAllWindows()
