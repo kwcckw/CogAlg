@@ -155,7 +155,7 @@ def derts2blobs(dert__, verbose=False, render=False, use_c=False):
             M += blob.Dert.M
         frame = FrameOfBlobs(I=I, Dy=Dy, Dx=Dx, G=G, M=M, blob_=blob_, dert__=dert__)
 
-    assign_adjacents(adj_pairs)
+    assign_adjacents(adj_pairs)  # f_segment_by_direction=False
 
     if verbose: print(f"{len(frame.blob_)} blobs formed in {time() - start_time} seconds")
     if render: visualize_blobs(idmap, frame.blob_)
@@ -295,6 +295,11 @@ def assign_adjacents(adj_pairs, blob_cls=CBlob):  # adjacents are connected oppo
             raise ValueError("something is wrong with pose")
 
         # bilateral assignments
+        '''
+        if f_segment_by_direction:  # pose is not needed
+            blob1.adj_blobs.append(blob2)
+            blob2.adj_blobs.append(blob1)
+        '''
         blob1.adj_blobs[0].append(blob2)
         blob1.adj_blobs[1].append(pose2)
         blob2.adj_blobs[0].append(blob1)
