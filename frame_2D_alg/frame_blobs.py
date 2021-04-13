@@ -97,7 +97,6 @@ class CBlob(ClusterStructure):
     prior_forks = list
     adj_blobs = list  # for borrowing and merging
     dir_blobs = list  # primarily vertically | laterally oriented edge blobs
-    dir_val = int     # directional value in dir_blobs
     fsliced = bool
 
     PPmm_ = list  # comp_slice_ if not empty
@@ -108,6 +107,44 @@ class CBlob(ClusterStructure):
     PPdd_ = list  # PP_derPd_
     derPd__ = list
     Pd__ = list
+
+# draft
+def comp_pixel_new(image):  # 2x2 pixel cross-correlation within image, a standard edge detection operator
+    # see comp_pixel_versions file for other versions and more explanation
+
+    # input slices into sliding 3x3 kernel, each slice is a shifted 2D frame of grey-scale pixels:
+    topleft__     = image[:-2, :-2]
+    top__         = image[:-2,1:-1]
+    topright__    = image[:-2, 2:]
+    right__       = image[1:-1, 2:]
+    bottomright__ = image[2:, 2:]
+    bottom__      = image[2:,1:-1]
+    bottomleft__  = image[2:, :-2]
+    left__        = image[1:-1,:-2]
+    centre__      = image[1:-1,1:-1]
+
+    # using bottom right quarant of 3x3 kernel -> 2x2
+    rot_Gy__ = bottomright__ - centre__  # rotated to bottom__ - top__
+    rot_Gx__ = right__ - bottom__  # rotated to right__ - left__
+
+    # deviation of central gradient per kernel, between four vertex pixels
+    G__ = (np.hypot(rot_Gy__, rot_Gx__) - ave).astype('int')
+    
+    
+    # inverse deviation of SAD: variation
+    M__ = int(ave * 1.2)  - (abs(centre__ - topleft__)     + \
+                             abs(centre__ - top__)         + \
+                             abs(centre__ - topright__)    + \
+                             abs(centre__ - right__)       + \
+                             abs(centre__ - bottomright__) + \
+                             abs(centre__ - bottom__)      + \
+                             abs(centre__ - bottomleft__)  + \
+                             abs(centre__ - left__))
+    
+
+    return (topleft__, rot_Gy__, rot_Gx__, G__, M__)  # tuple of 2D arrays per param of dert (derivatives' tuple)
+    # renamed dert__ = (p__, dy__, dx__, g__, m__) for readability in functions below
+
 
 
 def comp_pixel(image):  # 2x2 pixel cross-correlation within image, a standard edge detection operator
