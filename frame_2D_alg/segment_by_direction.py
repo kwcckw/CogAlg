@@ -90,8 +90,7 @@ def merge_adjacents_recursive(blob, merged_ids, adj_blobs, strong_adj_blobs):
             blob = merge_adjacents_recursive(blob, merged_ids, merged_adj_blobs, strong_adj_blobs)
         # all weak adj_blobs should now be merged, resulting blob may be weak or strong, vertical or lateral
 
-        # we cannot remove an re-init the adj_blobs, some strong blobs are added to adj_blobs during the merging process, line 191 below
-        # blob.adj_blobs = [[],[]]  # replace with same-dir strong_adj_blobs.adj_blobs + opposite-dir strong_adj_blobs:
+        blob.adj_blobs = [[],[]]  # replace with same-dir strong_adj_blobs.adj_blobs + opposite-dir strong_adj_blobs:
         for adj_blob in strong_adj_blobs:
             # merge with same-direction strong adj_blobs:
             if (adj_blob.sign == blob.sign) and adj_blob.id not in merged_ids and adj_blob is not blob:
@@ -178,31 +177,12 @@ def merge_blobs(blob, adj_blob, merged_ids):  # merge adj_blob into blob
     blob.mask__ = extended_mask__
     blob.box = [cy0,cyn,cx0,cxn]
     blob.sign = abs(blob.Dert.Dy)>abs(blob.Dert.Dx)
-
-    # merged adj_blob's adj blobs are now blob's adj blobs too
-    for adj_adj_blob,pose in zip(*adj_blob.adj_blobs):
-        if adj_adj_blob not in blob.adj_blobs[0] and adj_adj_blob is not blob:
-            # i missed out this section previously ,we should merge weak adjacent of adjacent blobs too
-            rD = adj_adj_blob.Dert.Dy / adj_adj_blob.Dert.Dx if adj_adj_blob.Dert.Dx else 2 * adj_adj_blob.Dert.Dy    
-            if abs(adj_adj_blob.Dert.G * rD)  < ave_dir_val and adj_adj_blob.id not in merged_ids: # weak adjacent, merge them
-                merged_ids.append(adj_adj_blob.id)
-                merge_blobs(blob, adj_adj_blob, merged_ids)
-            else: # strong adjacent, assign as new adjacent blob
-                blob.adj_blobs[0].append(adj_adj_blob)
-                blob.adj_blobs[1].append(pose)
-            
+     
     # update adj blob 'adj blobs' adj_blobs reference from pointing adj blob into the merged blob
     for i, adj_adj_blob1 in enumerate(adj_blob.adj_blobs[0]):            # loop adj blobs of adj blob
         for j, adj_adj_blob2 in enumerate(adj_adj_blob1.adj_blobs[0]):   # loop adj blobs from adj blobs of adj blob
             if adj_adj_blob2 is adj_blob and adj_adj_blob1 is not blob : # if adj blobs from adj blobs of adj blob is adj blob, update reference to the merged blob
                 adj_adj_blob1.adj_blobs[0][j] = blob
-
-    # remove the merged blob from adj list
-    if adj_blob in blob.adj_blobs[0]:
-        ind_remove = blob.adj_blobs[0].index(adj_blob) # index of removal
-        blob.adj_blobs[0].pop(ind_remove)              # remove blob
-        blob.adj_blobs[1].pop(ind_remove)              # remove pose
-        
 
     return blob
 
