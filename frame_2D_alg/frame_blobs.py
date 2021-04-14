@@ -109,9 +109,15 @@ class CBlob(ClusterStructure):
     Pd__ = list
 
 # draft
-def comp_pixel_new(image):  # 2x2 pixel cross-correlation within image, a standard edge detection operator
+def comp_pixel_new(image):  # 3x3 pixel cross-correlation within image, a standard edge detection operator
     # see comp_pixel_versions file for other versions and more explanation
-
+    '''
+    3x3 kernel M and 2x2 kernel-quadrant G. 2x2 M is very close to G, but they are different in 3x3 and higher kernels.
+    In general, M should be defined in odd-sized kernels, and G in their even-sized quadrants, initially 2x2 quadrants in 3x3 kernels.
+    Same as d in line_patterns, translated into 2D.
+    M is omnilateral relative to central dert because it's not directional and defines value of that dert,
+    G is unilateral higher-derivation directional comparand, thus also higher-resolution to preserve direction 2x2
+    '''
     # input slices into sliding 3x3 kernel, each slice is a shifted 2D frame of grey-scale pixels:
     topleft__     = image[:-2, :-2]
     top__         = image[:-2,1:-1]
@@ -121,31 +127,27 @@ def comp_pixel_new(image):  # 2x2 pixel cross-correlation within image, a standa
     bottom__      = image[2:,1:-1]
     bottomleft__  = image[2:, :-2]
     left__        = image[1:-1,:-2]
-    centre__      = image[1:-1,1:-1]
+    center__      = image[1:-1,1:-1]
 
     # using bottom right quarant of 3x3 kernel -> 2x2
-    rot_Gy__ = bottomright__ - centre__  # rotated to bottom__ - top__
+    rot_Gy__ = bottomright__ - center__  # rotated to bottom__ - top__
     rot_Gx__ = right__ - bottom__  # rotated to right__ - left__
 
     # deviation of central gradient per kernel, between four vertex pixels
     G__ = (np.hypot(rot_Gy__, rot_Gx__) - ave).astype('int')
-    
-    
+
     # inverse deviation of SAD: variation
-    M__ = int(ave * 1.2)  - (abs(centre__ - topleft__)     + \
-                             abs(centre__ - top__)         + \
-                             abs(centre__ - topright__)    + \
-                             abs(centre__ - right__)       + \
-                             abs(centre__ - bottomright__) + \
-                             abs(centre__ - bottom__)      + \
-                             abs(centre__ - bottomleft__)  + \
-                             abs(centre__ - left__))
-    
+    M__ = int(ave * 1.2)  - (abs(center__ - topleft__)     +
+                             abs(center__ - top__)         +
+                             abs(center__ - topright__)    +
+                             abs(center__ - right__)       +
+                             abs(center__ - bottomright__) +
+                             abs(center__ - bottom__)      +
+                             abs(center__ - bottomleft__)  +
+                             abs(center__ - left__))
 
-    return (topleft__, rot_Gy__, rot_Gx__, G__, M__)  # tuple of 2D arrays per param of dert (derivatives' tuple)
+    return (center__, rot_Gy__, rot_Gx__, G__, M__)  # tuple of 2D arrays per param of dert (derivatives' tuple)
     # renamed dert__ = (p__, dy__, dx__, g__, m__) for readability in functions below
-
-
 
 def comp_pixel(image):  # 2x2 pixel cross-correlation within image, a standard edge detection operator
     # see comp_pixel_versions file for other versions and more explanation
