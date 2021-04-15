@@ -91,7 +91,7 @@ def merge_adjacents_recursive(blob, merged_ids, adj_blobs, strong_adj_blobs):
             # append opposite-direction strong_adj_blobs:
             elif adj_blob not in blob.adj_blobs[0] and adj_blob.id not in merged_ids:
                 blob.adj_blobs[0].append(adj_blob)
-                blob.adj_blobs[1].append(2) # assuming adjacent are open, just to visualize the adjacent blobs
+                blob.adj_blobs[1].append(2)  # assuming adjacents are open, just to visualize the adjacent blobs
 
     return blob
 
@@ -103,17 +103,15 @@ def dir_eval(Dy, Dx, G):  # blob direction strength eval
         return True
     else: return False
 
-def merge_blobs(blob, adj_blob, strong_adj_blobs):  # merge adj_blob into blob
-    '''
-    merge blob and adj_blob by summing their params and compute new combined derts and mask
-    '''
+def merge_blobs(blob, adj_blob, strong_adj_blobs):  # merge blob and adj_blob by summing their params and combining dert__ and mask__
+
     # accumulate blob Dert
     blob.accumulate(**{param:getattr(adj_blob.Dert, param) for param in adj_blob.Dert.numeric_params})
 
     _y0, _yn, _x0, _xn = blob.box
     y0, yn, x0, xn = adj_blob.box
     cy0 = min(_y0, y0); cyn = max(_yn, yn); cx0 = min(_x0, x0); cxn = max(_xn, xn)
-    
+
     if (y0<=_y0) and (yn>=_yn) and (x0<=_x0) and (xn>=_xn): # blob is inside adj blob
         # y0, yn, x0, xn for blob within adj blob
         ay0 = (_y0 - y0); ayn = (_yn - y0); ax0 = (_x0 - x0); axn = (_xn - x0)
@@ -130,8 +128,8 @@ def merge_blobs(blob, adj_blob, strong_adj_blobs):  # merge adj_blob into blob
 
     else:
         # y0, yn, x0, xn for combined blob and adj blob box
-        cay0 = _y0-cy0; cayn = _yn-cy0; cax0 = _x0-cx0; caxn = _xn-cx0 
-        cby0 =  y0-cy0; cbyn =  yn-cy0; cbx0 = x0-cx0;  cbxn = xn-cx0 
+        cay0 = _y0-cy0; cayn = _yn-cy0; cax0 = _x0-cx0; caxn = _xn-cx0
+        cby0 =  y0-cy0; cbyn =  yn-cy0; cbx0 = x0-cx0;  cbxn = xn-cx0
         # create extended mask from combined box
         extended_mask__ = np.ones((cyn-cy0,cxn-cx0)).astype('bool')
         extended_mask__[cay0:cayn, cax0:caxn] = np.logical_and(blob.mask__, extended_mask__[cay0:cayn, cax0:caxn])
@@ -141,7 +139,7 @@ def merge_blobs(blob, adj_blob, strong_adj_blobs):  # merge adj_blob into blob
         for i in range(len(blob.dert__)):
             extended_dert__[i][cay0:cayn, cax0:caxn] = blob.dert__[i]
             extended_dert__[i][cby0:cbyn, cbx0:cbxn] = adj_blob.dert__[i]
-        
+
     # update dert, mask , box and sign
     blob.dert__ = extended_dert__
     blob.mask__ = extended_mask__
@@ -286,5 +284,4 @@ def merge_final_weak_blob(blob, adj_blobs, merged_ids):
         if adj_blob.id not in merged_ids and adj_blob is not blob:
             blob = merge_blobs(blob, adj_blob)
             merged_ids.append(adj_blob.id)
-
 '''
