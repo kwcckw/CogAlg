@@ -290,8 +290,7 @@ def flood_fill(dert__, sign__, verbose=False, mask__=None, blob_cls=CBlob, fseg=
                         for y2, x2 in new_adj_coords:
                         # if image boundary is not reached, is filled , and not same-signed: add adjacency
                             if not (y2 < 0 or y2 >= height or x2 < 0 or x2 >= width or idmap[y2, x2] == EXCLUDED_ID) and not \
-                            (idmap[y2, x2] == UNFILLED) and \
-                            (blob.sign != sign__[y2, x2]):
+                            (idmap[y2, x2] == UNFILLED): # removed the sign check (and blob.sign != sign__[y2, x2])
                                 adj_pairs.add((idmap[y2, x2], blob.id))     # blob.id always bigger
 
                 # terminate blob
@@ -317,32 +316,33 @@ def assign_adjacents(adj_pairs, blob_cls=CBlob):  # adjacents are connected oppo
     Assign adjacent blobs bilaterally according to adjacent pairs' ids in blob_binder.
     '''
     for blob_id1, blob_id2 in adj_pairs:
-        assert blob_id1 < blob_id2
+        #        assert blob_id1 < blob_id2
         blob1 = blob_cls.get_instance(blob_id1)
         blob2 = blob_cls.get_instance(blob_id2)
 
         y01, yn1, x01, xn1 = blob1.box
         y02, yn2, x02, xn2 = blob2.box
 
-        if blob1.fopen and blob2.fopen:
-            pose1 = pose2 = 2
-        elif y01 < y02 and x01 < x02 and yn1 > yn2 and xn1 > xn2:
-            pose1, pose2 = 0, 1  # 0: internal, 1: external
-        elif y01 > y02 and x01 > x02 and yn1 < yn2 and xn1 < xn2:
-            pose1, pose2 = 1, 0  # 1: external, 0: internal
-        else:
-            raise ValueError("something is wrong with pose")
+        if blob_id1 != blob_id2:
 
-        # bilateral assignments
-        '''
-        if f_segment_by_direction:  # pose is not needed
-            blob1.adj_blobs.append(blob2)
-            blob2.adj_blobs.append(blob1)
-        '''
-        blob1.adj_blobs[0].append(blob2)
-        blob1.adj_blobs[1].append(pose2)
-        blob2.adj_blobs[0].append(blob1)
-        blob2.adj_blobs[1].append(pose1)
+            if y01 < y02 and x01 < x02 and yn1 > yn2 and xn1 > xn2:
+                pose1, pose2 = 0, 1  # 0: internal, 1: external
+            elif y01 > y02 and x01 > x02 and yn1 < yn2 and xn1 < xn2:
+                pose1, pose2 = 1, 0  # 1: external, 0: internal
+            else:
+                pose1 = pose2 =  2  # 2: open
+            # raise ValueError("something is wrong with pose")
+
+            # bilateral assignments
+            '''
+            if f_segment_by_direction:  # pose is not needed
+                blob1.adj_blobs.append(blob2)
+                blob2.adj_blobs.append(blob1)
+            '''
+            blob1.adj_blobs[0].append(blob2)
+            blob1.adj_blobs[1].append(pose2)
+            blob2.adj_blobs[0].append(blob1)
+            blob2.adj_blobs[1].append(pose1)
 
 
 def print_deep_blob_forking(deep_layer):
@@ -417,6 +417,9 @@ if __name__ == "__main__":
                     blob.f_comp_a = 1
                     deep_layers[i] = intra_blob(blob, render=args.render, verbose=args.verbose)
                     # dert__ comp_a in 2x2 kernels
+
+                    if deep_layers[i]:
+                        aa = 1
 
             elif M > aveB and blob_height > 3 and blob_width  > 3:  # min blob dimensions
                 blob.rdn = 1
