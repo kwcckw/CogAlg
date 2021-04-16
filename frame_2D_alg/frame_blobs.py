@@ -35,6 +35,8 @@ from class_cluster import ClusterStructure, NoneType
 
 ave = 30  # filter or hyper-parameter, set as a guess, latter adjusted by feedback
 aveB = 50
+ave_M = 100
+ave_mP = 100
 UNFILLED = -1
 EXCLUDED_ID = -2
 
@@ -257,7 +259,7 @@ def flood_fill(dert__, sign__, verbose=False, mask__=None, blob_cls=CBlob, fseg=
                     elif x1 > xn:
                         xn = x1
                     # determine neighbors' coordinates, 4 for -, 8 for +
-                    if blob.sign:   # include diagonals
+                    if blob.sign or fseg:   # include diagonals
                         adj_dert_coords = [(y1 - 1, x1 - 1), (y1 - 1, x1),
                                            (y1 - 1, x1 + 1), (y1, x1 + 1),
                                            (y1 + 1, x1 + 1), (y1 + 1, x1),
@@ -283,16 +285,6 @@ def flood_fill(dert__, sign__, verbose=False, mask__=None, blob_cls=CBlob, fseg=
                         elif blob.sign != sign__[y2, x2]:
                             adj_pairs.add((idmap[y2, x2], blob.id))     # blob.id always bigger
 
-                    if fseg and not blob.sign: # if call from segment by direction, add checking for diagonal directions
-                        new_adj_coords = [(y1 - 1, x1 - 1), (y1 - 1, x1 + 1),
-                                          (y1 + 1, x1 + 1), (y1 + 1, x1 - 1)]
-
-                        for y2, x2 in new_adj_coords:
-                        # if image boundary is not reached, is filled , and not same-signed: add adjacency
-                            if not (y2 < 0 or y2 >= height or x2 < 0 or x2 >= width or idmap[y2, x2] == EXCLUDED_ID) and not \
-                            (idmap[y2, x2] == UNFILLED): # removed the sign check (and blob.sign != sign__[y2, x2])
-                                adj_pairs.add((idmap[y2, x2], blob.id))     # blob.id always bigger
-
                 # terminate blob
                 yn += 1
                 xn += 1
@@ -316,33 +308,32 @@ def assign_adjacents(adj_pairs, blob_cls=CBlob):  # adjacents are connected oppo
     Assign adjacent blobs bilaterally according to adjacent pairs' ids in blob_binder.
     '''
     for blob_id1, blob_id2 in adj_pairs:
-        #        assert blob_id1 < blob_id2
+        assert blob_id1 < blob_id2
         blob1 = blob_cls.get_instance(blob_id1)
         blob2 = blob_cls.get_instance(blob_id2)
 
         y01, yn1, x01, xn1 = blob1.box
         y02, yn2, x02, xn2 = blob2.box
 
-        if blob_id1 != blob_id2:
+        if blob1.fopen and blob2.fopen:
+            pose1 = pose2 = 2
+        elif y01 < y02 and x01 < x02 and yn1 > yn2 and xn1 > xn2:
+            pose1, pose2 = 0, 1  # 0: internal, 1: external
+        elif y01 > y02 and x01 > x02 and yn1 < yn2 and xn1 < xn2:
+            pose1, pose2 = 1, 0  # 1: external, 0: internal
+        else:
+            raise ValueError("something is wrong with pose")
 
-            if y01 < y02 and x01 < x02 and yn1 > yn2 and xn1 > xn2:
-                pose1, pose2 = 0, 1  # 0: internal, 1: external
-            elif y01 > y02 and x01 > x02 and yn1 < yn2 and xn1 < xn2:
-                pose1, pose2 = 1, 0  # 1: external, 0: internal
-            else:
-                pose1 = pose2 =  2  # 2: open
-            # raise ValueError("something is wrong with pose")
-
-            # bilateral assignments
-            '''
-            if f_segment_by_direction:  # pose is not needed
-                blob1.adj_blobs.append(blob2)
-                blob2.adj_blobs.append(blob1)
-            '''
-            blob1.adj_blobs[0].append(blob2)
-            blob1.adj_blobs[1].append(pose2)
-            blob2.adj_blobs[0].append(blob1)
-            blob2.adj_blobs[1].append(pose1)
+        # bilateral assignments
+        '''
+        if f_segment_by_direction:  # pose is not needed
+            blob1.adj_blobs.append(blob2)
+            blob2.adj_blobs.append(blob1)
+        '''
+        blob1.adj_blobs[0].append(blob2)
+        blob1.adj_blobs[1].append(pose2)
+        blob2.adj_blobs[0].append(blob1)
+        blob2.adj_blobs[1].append(pose1)
 
 
 def print_deep_blob_forking(deep_layer):
@@ -357,6 +348,80 @@ def print_deep_blob_forking(deep_layer):
     for i, deep_layer in enumerate(deep_layers):
         if len(deep_layer)>0:
             check_deep_blob(deep_layer,i)
+
+
+
+def comp_blob_extend_recursive(blob, adj_blob_, checked_ids_, net_M):
+    '''
+    call by comp_blob_recursive, to recursively search and apply comp_blob to blob and the adjacents
+    '''
+    for adj_blob in adj_blob_:    
+        if adj_blob.id not in checked_ids_:
+            
+            comp_blob(blob,adj_blob)          # cross compare blob and adjacent blob
+            net_M += adj_blob.Dert.M          # cost for extending the cross comparison
+            checked_ids_.append(adj_blob.id)   
+        
+            # not sure about this, need further review:
+            # search adjacents of adjacent if crit met
+            if blob.Dert.M - net_M > ave_M:   
+                comp_blob_extend_recursive(blob, adj_blob.adj_blobs[0], checked_ids_, net_M)
+
+    
+            if blob.fsliced and adj_blob.fsliced:
+                # apply comp_PP here to PPmm, Ppdm, PPmd, PPdd
+                pass
+
+
+def comp_blob_recursive_(blob_):
+    '''
+    core function of comp_blob, cross compare current blob and their adjacents, as well as blob and their adjacents in sub_layers
+    '''
+    for blob in blob_:
+        
+        # checked ids is per blob, which mean 1 blob may be checked twice from different root blob
+        checked_ids_ = [blob.id] 
+        net_M = 0;
+        
+        # between blobs
+        comp_blob_extend_recursive(blob, blob.adj_blobs[0], checked_ids_, net_M)
+   
+        # between sub blobs of blob
+        if blob.sub_layers:
+            for sub_layer in blob.sub_layers:
+                comp_blob_recursive_(sub_layer)
+                         
+            
+def comp_blob(_blob, blob):
+    '''
+    cross compare _blob and blob
+    '''
+    
+    (_I, _Dy, _Dx, _G, _M, _Dyy, _Dyx, _Dxy, _Dxx, _Ga, _Ma, _Mdx, _Ddx), _A = _blob.Dert.unpack(), _blob.A
+    (I, Dy, Dx, G, M, Dyy, Dyx, Dxy, Dxx, Ga, Ma, Mdx, Ddx), A = blob.Dert.unpack(), blob.A
+        
+    # not so sure here, need further discussion
+    dI = abs(_I - I)
+    mI = min(_I, I)
+    
+    
+    dA = abs(_A - A)
+    mA = min(_A, A)
+    
+    dG = abs(_G - G)
+    mG = min(_G, G)
+    
+    dM = abs(_M - M)
+    mM = min(_M, M)
+    
+    
+    mP = mI + mA + mG + mM 
+    
+    
+    if mP > ave_mP:
+        # form derblob here?
+        pass
+
 
 if __name__ == "__main__":
     # Imports
@@ -418,9 +483,6 @@ if __name__ == "__main__":
                     deep_layers[i] = intra_blob(blob, render=args.render, verbose=args.verbose)
                     # dert__ comp_a in 2x2 kernels
 
-                    if deep_layers[i]:
-                        aa = 1
-
             elif M > aveB and blob_height > 3 and blob_width  > 3:  # min blob dimensions
                 blob.rdn = 1
                 blob.rng = 1
@@ -435,12 +497,23 @@ if __name__ == "__main__":
             print_deep_blob_forking(deep_layers)
             print("\rFinished intra_blob")
 
+
+        
+        comp_blob_recursive_(frame.blob_)
+
+   
     end_time = time() - start_time
 
     if args.verbose:
         print(f"\nSession ended in {end_time:.2} seconds", end="")
     else:
         print(end_time)
+
+
+
+        
+        
+
 
     '''
     Test fopen:

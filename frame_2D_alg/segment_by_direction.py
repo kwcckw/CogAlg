@@ -14,18 +14,21 @@ flip_ave = 10
 ave_dir_val = 50
 ave_M = -500  # high negative ave M for high G blobs
 
-def segment_by_direction(iblob, verbose=False):
+def segment_by_direction(iblob, **kwargs):
 
+    verbose = kwargs.get('verbose')
+    render = kwargs.get('render')
+    
     dert__ = list(iblob.dert__)
     mask__ = iblob.mask__
     dy__ = dert__[1]; dx__ = dert__[2]
 
     # segment blob into primarily vertical and horizontal sub blobs according to the direction of kernel-level gradient:
     dir_blob_, idmap, adj_pairs = \
-        flood_fill(dert__, abs(dy__) > abs(dx__), verbose=False, mask__=mask__, blob_cls=CBlob, fseg=True, accum_func=accum_dir_blob_Dert)
+        flood_fill(dert__, abs(dy__) > abs(dx__), verbose=verbose, mask__=mask__, blob_cls=CBlob, fseg=True, accum_func=accum_dir_blob_Dert)
     assign_adjacents(adj_pairs, CBlob)  # fseg=True: skip adding the pose
 
-    _dir_blob_ = deepcopy(dir_blob_) # get a copy for dir blob before merging, for visualization purpose
+    if render: _dir_blob_ = deepcopy(dir_blob_) # get a copy for dir blob before merging, for visualization purpose
 
     merged_ids = []  # ids of merged adjacent blobs, to skip in the rest of dir_blobs
 
@@ -42,18 +45,20 @@ def segment_by_direction(iblob, verbose=False):
             if dir_blob.id in merged_ids:  # strong blob was merged to another blob, remove it
                 iblob.dir_blobs.remove(dir_blob)
 
-        visualize_merging_process(iblob, dir_blob_, _dir_blob_,mask__, i)
+        
+        if render: visualize_merging_process(iblob, dir_blob_, _dir_blob_,mask__, i)
 
-    # for debugging: visualize adjacents of merged blob to see that adjacents are assigned correctly after the merging:
-    if len(dir_blob_)>50 and len(dir_blob_)<500:
-        new_idmap = (np.zeros_like(idmap).astype('int'))-2
-        for blob in iblob.dir_blobs:
-            y0,yn,x0,xn = blob.box
-            new_idmap[y0:yn,x0:xn] += (~blob.mask__)*(blob.id + 2)
-
-        visualize_merging_process(iblob, dir_blob_, _dir_blob_, mask__, 0)
-        from draw_frame_blobs import visualize_blobs
-        visualize_blobs(new_idmap, iblob.dir_blobs)
+    if render: 
+        # for debugging: visualize adjacents of merged blob to see that adjacents are assigned correctly after the merging:
+        if len(dir_blob_)>50 and len(dir_blob_)<500:
+            new_idmap = (np.zeros_like(idmap).astype('int'))-2
+            for blob in iblob.dir_blobs:
+                y0,yn,x0,xn = blob.box
+                new_idmap[y0:yn,x0:xn] += (~blob.mask__)*(blob.id + 2)
+    
+            visualize_merging_process(iblob, dir_blob_, _dir_blob_, mask__, 0)
+            from draw_frame_blobs import visualize_blobs
+            visualize_blobs(new_idmap, iblob.dir_blobs)
 
 
 def merge_adjacents_recursive(blob, merged_ids, adj_blobs, strong_adj_blobs):
