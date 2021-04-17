@@ -111,12 +111,10 @@ class CBlob(ClusterStructure):
     Pd__ = list
 
 # draft
-def comp_pixel_new(image):  # 3x3 pixel cross-correlation within image, a standard edge detection operator
-    # see comp_pixel_versions file for other versions and more explanation
+def comp_pixel_hybrid(image):  # 3x3 kernel M and 2x2 quadrant G, see comp_pixel_versions file for other versions and more explanation
     '''
-    3x3 kernel M and 2x2 kernel-quadrant G. 2x2 M is very close to G, but they are different in 3x3 and higher kernels.
     In general, M should be defined in odd-sized kernels, and G in their even-sized quadrants, initially 2x2 quadrants in 3x3 kernels.
-    Same as d in line_patterns, translated into 2D.
+    Same as d in line_patterns, translated into 2D. 2x2 M is very close to G, but they are different in 3x3 and higher kernels.
     M is omnilateral relative to central dert because it's not directional and defines value of that dert,
     G is unilateral higher-derivation directional comparand, thus also higher-resolution to preserve direction 2x2
     '''
@@ -350,84 +348,11 @@ def print_deep_blob_forking(deep_layer):
             check_deep_blob(deep_layer,i)
 
 
-
-def comp_blob_extend_recursive(blob, adj_blob_, checked_ids_, net_M):
-    '''
-    call by comp_blob_recursive, to recursively search and apply comp_blob to blob and the adjacents
-    '''
-    for adj_blob in adj_blob_:    
-        if adj_blob.id not in checked_ids_:
-            
-            comp_blob(blob,adj_blob)          # cross compare blob and adjacent blob
-            net_M += adj_blob.Dert.M          # cost for extending the cross comparison
-            checked_ids_.append(adj_blob.id)   
-        
-            # not sure about this, need further review:
-            # search adjacents of adjacent if crit met
-            if blob.Dert.M - net_M > ave_M:   
-                comp_blob_extend_recursive(blob, adj_blob.adj_blobs[0], checked_ids_, net_M)
-
-    
-            if blob.fsliced and adj_blob.fsliced:
-                # apply comp_PP here to PPmm, Ppdm, PPmd, PPdd
-                pass
-
-
-def comp_blob_recursive_(blob_):
-    '''
-    core function of comp_blob, cross compare current blob and their adjacents, as well as blob and their adjacents in sub_layers
-    '''
-    for blob in blob_:
-        
-        # checked ids is per blob, which mean 1 blob may be checked twice from different root blob
-        checked_ids_ = [blob.id] 
-        net_M = 0;
-        
-        # between blobs
-        comp_blob_extend_recursive(blob, blob.adj_blobs[0], checked_ids_, net_M)
-   
-        # between sub blobs of blob
-        if blob.sub_layers:
-            for sub_layer in blob.sub_layers:
-                comp_blob_recursive_(sub_layer)
-                         
-            
-def comp_blob(_blob, blob):
-    '''
-    cross compare _blob and blob
-    '''
-    
-    (_I, _Dy, _Dx, _G, _M, _Dyy, _Dyx, _Dxy, _Dxx, _Ga, _Ma, _Mdx, _Ddx), _A = _blob.Dert.unpack(), _blob.A
-    (I, Dy, Dx, G, M, Dyy, Dyx, Dxy, Dxx, Ga, Ma, Mdx, Ddx), A = blob.Dert.unpack(), blob.A
-        
-    # not so sure here, need further discussion
-    dI = abs(_I - I)
-    mI = min(_I, I)
-    
-    
-    dA = abs(_A - A)
-    mA = min(_A, A)
-    
-    dG = abs(_G - G)
-    mG = min(_G, G)
-    
-    dM = abs(_M - M)
-    mM = min(_M, M)
-    
-    
-    mP = mI + mA + mG + mM 
-    
-    
-    if mP > ave_mP:
-        # form derblob here?
-        pass
-
-
 if __name__ == "__main__":
-    # Imports
     import argparse
     from time import time
     from utils import imread
+    from comp_blob_draft import cross_comp_blobs
 
     # Parse arguments
     argument_parser = argparse.ArgumentParser()
@@ -497,23 +422,14 @@ if __name__ == "__main__":
             print_deep_blob_forking(deep_layers)
             print("\rFinished intra_blob")
 
+        cross_comp_blobs(frame.blob_)
 
-        
-        comp_blob_recursive_(frame.blob_)
-
-   
     end_time = time() - start_time
 
     if args.verbose:
         print(f"\nSession ended in {end_time:.2} seconds", end="")
     else:
         print(end_time)
-
-
-
-        
-        
-
 
     '''
     Test fopen:
