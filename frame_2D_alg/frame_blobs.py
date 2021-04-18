@@ -109,6 +109,9 @@ class CBlob(ClusterStructure):
     PPdd_ = list  # PP_derPd_
     derPd__ = list
     Pd__ = list
+    
+    # comp blobs
+    derBlob = object
 
 # draft
 def comp_pixel_hybrid(image):  # 3x3 kernel M and 2x2 quadrant G, see comp_pixel_versions file for other versions and more explanation
@@ -422,7 +425,7 @@ if __name__ == "__main__":
             print_deep_blob_forking(deep_layers)
             print("\rFinished intra_blob")
 
-        cross_comp_blobs(frame.blob_)
+        bblob_ = cross_comp_blobs(frame.blob_)
 
     end_time = time() - start_time
 
