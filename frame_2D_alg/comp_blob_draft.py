@@ -6,7 +6,7 @@ from class_cluster import ClusterStructure, NoneType
 
 class CderBlob(ClusterStructure):
 
-    _blob = object
+    _blob = object # not necessary if we are gonna use blob.adj_blobs to get adjacent derBlob
     blob = object
     dI = int
     mI = int
@@ -18,7 +18,7 @@ class CderBlob(ClusterStructure):
     mM = int
     mB = int
     dB = int
-    sub_derBlob = list  # why sub, this should already be packed in sub_blobs?
+    sub_derBlob = list  # why sub, this should already be packed in sub_blobs? Yes, this is meant for form derBlob and bblob recursively with the sub blobs, i guess now is not needed?
 
 class CBblob(ClusterStructure):
 
@@ -45,7 +45,7 @@ def cross_comp_blobs(blob_):
 
     return bblob_
 
-# draft, similar with derP_2_PP
+
 def form_bblob_(derBlob__):
     '''
     form bblob with same sign derBlob
@@ -54,14 +54,15 @@ def form_bblob_(derBlob__):
     checked_ids = []
 
     for derBlob in derBlob__[1:]:
-        if derBlob.id not in checked_ids: # current derBlob is not checked before
-            checked_ids.append(derBlob.id)
+        if derBlob.blob.id not in checked_ids: # current derBlob is not checked before
+            checked_ids.append(derBlob.blob.id)
 
             bblob = CBblob(derBlob=CderBlob()) # init new bblob
             accum_bblob(bblob,derBlob)         # accum derBlob into bblob
 
-            if derBlob._blob.derBlob.id not in checked_ids: # current derBlob is not checked before
-                form_bblob_recursive(bblob, derBlob, derBlob._blob.derBlob, checked_ids) # recursively add blob to bblob via the adjacency
+            for adj_blob in derBlob.blob.adj_blobs[0]:
+                if adj_blob.id not in checked_ids: # adj blob's derBlob is not checked before
+                    form_bblob_recursive(bblob, derBlob, adj_blob.derBlob, checked_ids) # recursively add blob to bblob via the adjacency
 
             bblob_.append(bblob) # pack bblob after checking through all adjacents
 
@@ -72,14 +73,13 @@ def form_bblob_recursive(bblob, _derBlob, derBlob, checked_ids):
     '''
     As distinct from form_PP_, consecutive blobs don't have to be adjacent, that needs to be checked through blob.adj_blobs
     '''
+    if (_derBlob.mB>0) == (derBlob.mB>0):    # same sign check for adjacent derBlob
+        checked_ids.append(derBlob.blob.id)
+        accum_bblob(bblob,derBlob)           # accum same sign derBlob into bblob
 
-    checked_ids.append(derBlob.id)
-
-    if (_derBlob.mB>0) == (derBlob.mB>0):        # same sign check for adjacent derBlob
-        accum_bblob(bblob,derBlob._blob.derBlob) # accum same sign derBlob into bblob
-
-        if derBlob._blob.derBlob.id not in checked_ids: # current derBlob is not checked before
-            form_bblob_recursive(bblob, derBlob, derBlob._blob.derBlob, checked_ids)  # recursively add blob to bblob via the adjacency
+        for adj_blob in derBlob.blob.adj_blobs[0]:
+             if adj_blob.id not in checked_ids: # adj blob's derBlob is not checked before
+                form_bblob_recursive(bblob, derBlob, adj_blob.derBlob, checked_ids)  # recursively add blob to bblob via the adjacency
 
 
 def accum_bblob(bblob, derBlob):
@@ -108,8 +108,6 @@ def comp_blob_recursive(blob, adj_blob_, checked_ids_, net_M):
             if blob.Dert.M - net_M > ave_M:  # if crit: search adjacents of adjacent, depth-first
                 derBlob_ += comp_blob_recursive(blob, adj_blob.adj_blobs[0], checked_ids_, net_M)
 
-            # if blob.fsliced and adj_blob.fsliced: this should be in comp_blob
-
     return derBlob_
 
 
@@ -134,6 +132,9 @@ def comp_blob(_blob, blob):
     # form derBlob regardless
     derBlob  = CderBlob(_blob=_blob, blob=blob, dI=dI, mI=mI, dA=dA, mA=mA, dG=dG, mG=mG, dM=dM, mM=mM, mB=mB, dB=dB)
     blob.derBlob = derBlob
+
+    if _blob.fsliced and blob.fsliced:
+        pass
 
     return derBlob
 
