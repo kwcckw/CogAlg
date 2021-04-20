@@ -111,7 +111,9 @@ class CBlob(ClusterStructure):
     Pd__ = list
     
     # comp blobs
-    derBlob = object
+    derBlob_ = list # list of derBlob in a cluster of blobs
+    pot_blob_ = list # please suggest a better name, list of potential blobs from adjacent cluster
+
 
 # draft
 def comp_pixel_hybrid(image):  # 3x3 kernel M and 2x2 quadrant G, see comp_pixel_versions file for other versions and more explanation
