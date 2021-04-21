@@ -112,7 +112,6 @@ class CBlob(ClusterStructure):
     
     # comp blobs
     derBlob_ = list # list of derBlob in a cluster of blobs
-    pot_blob_ = list # please suggest a better name, list of potential blobs from adjacent cluster
 
 
 # draft
@@ -190,7 +189,7 @@ def derts2blobs(dert__, verbose=False, render=False, use_c=False):
         frame, idmap, adj_pairs = wrapped_flood_fill(dert__)
     else:
         blob_, idmap, adj_pairs = flood_fill(dert__, sign__=dert__[3] > 0,  verbose=verbose)
-        I = Dy = Dx = G = M = 0
+        I, Dy, Dx, G, M = 0, 0, 0, 0, 0
         for blob in blob_:
             I += blob.Dert.I
             Dy += blob.Dert.Dy
@@ -427,7 +426,7 @@ if __name__ == "__main__":
             print_deep_blob_forking(deep_layers)
             print("\rFinished intra_blob")
 
-        bblob_ = cross_comp_blobs(frame.blob_)
+        bblob_ = cross_comp_blobs(frame)
 
     end_time = time() - start_time
 
