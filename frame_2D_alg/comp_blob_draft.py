@@ -9,6 +9,10 @@ import cv2
 class CderBlob(ClusterStructure):
 
     _blob = object # adj blobs of head node
+    mB = int
+    dB = int
+
+    '''
     dI = int
     mI = int
     dA = int
@@ -17,8 +21,7 @@ class CderBlob(ClusterStructure):
     mG = int
     dM = int
     mM = int
-    mB = int
-    dB = int
+    '''
 
 class CBblob(ClusterStructure):
 
@@ -38,9 +41,9 @@ def cross_comp_blobs(frame):
 
     for blob in blob_:
         compared_blob_ = []  # compared to current blob, reinitialized for each new blob
-        if blob.id not in checked_ids_:
-            checked_ids_.append(blob.id); net_M = 0  # checked ids per blob: may be checked from multiple root blobs
-            comp_blob_recursive(blob, blob.adj_blobs[0], checked_ids_, net_M, compared_blob_)  # comp between blob, blob.adj_blobs
+        if blob.id not in checked_ids_ and not blob.derBlob_: # blob is not head node and not checked before
+            checked_ids_.append(blob.id); neg_mB = 0 ; neg_dist = 0;# checked ids per blob: may be checked from multiple root blobs
+            comp_blob_recursive(blob, blob.adj_blobs[0], checked_ids_, neg_mB, neg_dist, compared_blob_, compared_blobs)  # comp between blob, blob.adj_blobs
 
         compared_blobs[0].append(blob)
         compared_blobs[1].append(compared_blob_)  # nested list
@@ -52,7 +55,7 @@ def cross_comp_blobs(frame):
     return bblob_
 
 
-def comp_blob_recursive(blob, adj_blob_, checked_ids_, neg_mB, compared_blob_):
+def comp_blob_recursive(blob, adj_blob_, checked_ids_, neg_mB, neg_dist, compared_blob_, compared_blobs):
     '''
     called by cross_comp_blob to recursively compare blob to adj_blobs in incremental layers of adjacency
     '''
@@ -60,23 +63,37 @@ def comp_blob_recursive(blob, adj_blob_, checked_ids_, neg_mB, compared_blob_):
         if adj_blob.id not in checked_ids_ and not adj_blob.derBlob_: # adj blob not checked and is not the head node
             checked_ids_.append(adj_blob.id)
 
-            distance = np.sqrt(blob.A) / 2 + np.sqrt(adj_blob.A)  # approximated euclidean distance to adj_adj_blobs
+
+            dist = neg_dist + np.sqrt(blob.A) / 2 + np.sqrt(adj_blob.A)    # approximated euclidean distance to adj_adj_blobs
             # this is not correct, distance is computed over negative mB adj_blobs only, not sure yet how to pass it
+            # but we need this dist to compute mB, so probably compute it first and accumulate only the negative mB?
+            
+            derBlob = comp_blob(blob, adj_blob, dist)  # cross compare blob and adjacent blob
 
-            derBlob = comp_blob(blob, adj_blob, distance)  # cross compare blob and adjacent blob
-            neg_mB += derBlob.mB  # mB accumulated over comparison scope
-            blob.derBlob_.append(derBlob)  # blob comparison forms multiple derBlobs, one for each adjacent blob
+            if derBlob.mB>0: # positive mB, stop the searching with prior blob and start with current adj blob
+                neg_dist = 0;
+                neg_mB = 0; 
+                adj_compared_blob_ = []  # compared to current blob, reinitialized for each new blob
+                comp_blob_recursive(adj_blob, adj_blob.adj_blobs[0], checked_ids_, neg_mB, neg_dist, adj_compared_blob_, compared_blobs)
+                compared_blobs[0].append(adj_blob)
+                compared_blobs[1].append(adj_compared_blob_)  # nested list
+                                
+            else: # negative mB, continue searching
+                blob.derBlob_.append(derBlob)
+                neg_dist += dist
+                neg_mB += derBlob.mB  # mB accumulated over comparison scope
+                
+                # is there any backward match here?
+                if blob.Dert.M + neg_mB > ave_mB:  # extend search to adjacents of adjacent, depth-first
+                    comp_blob_recursive(blob, adj_blob.adj_blobs[0], checked_ids_, neg_mB, neg_dist, compared_blob_, compared_blobs)
 
-            if blob.Dert.M + neg_mB > ave_mB:  # extend search to adjacents of adjacent, depth-first
-                comp_blob_recursive(blob, adj_blob.adj_blobs[0], checked_ids_, neg_mB, compared_blob_)
-
-            else:  # compared adj blobs are potential bblob elements
-                for adj_adj_blob in adj_blob.adj_blobs[0]:
-                    if adj_adj_blob not in compared_blob_:
-                        compared_blob_.append(adj_adj_blob)  # potential bblob element
+                else:  # compared adj blobs are potential bblob elements
+                    for adj_adj_blob in adj_blob.adj_blobs[0]:
+                        if adj_adj_blob not in compared_blob_:
+                            compared_blob_.append(adj_adj_blob)  # potential bblob element
 
 
-def comp_blob(_blob, blob, distance):
+def comp_blob(_blob, blob, dist):
     '''
     cross compare _blob and blob
     '''
@@ -93,11 +110,11 @@ def comp_blob(_blob, blob, distance):
     mM = min(_M, M)
 
     mB = mI + mA + mG + mM \
-         - ave_mB * ave_rM ** (1 + distance / np.sqrt(blob.A))  # average blob match projected at current distance
+         - ave_mB * ave_rM ** (1 + dist / np.sqrt(blob.A))  # average blob match projected at current distance
     dB = dI + dA + dG + dM
 
     # form derBlob regardless
-    derBlob  = CderBlob(_blob=blob, dI=dI, mI=mI, dA=dA, mA=mA, dG=dG, mG=mG, dM=dM, mM=mM, mB=mB, dB=dB)
+    derBlob  = CderBlob(_blob=blob, mB=mB, dB=dB)
 
     if _blob.fsliced and blob.fsliced:
         pass
