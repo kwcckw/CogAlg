@@ -27,6 +27,7 @@ class CBblob(ClusterStructure):
 
     derBlob = object
     derBlob_ = list
+    blob_ = list
 
 ave_mB = 200
 ave_rM = .5  # average relative match per input magnitude, at rl=1 or .5?
@@ -38,19 +39,21 @@ def cross_comp_blobs(frame):
     '''
     blob_ = frame.blob_
     checked_ids_ = []
-    derBlobs = []
+    derBlobs = [[], []] # index 0 = list of DerBlob, index 1 = list of derBlobs
 
     for blob in blob_:  # no checking ids, all blobs form unique derBlobs
-        derBlob_ = [CderBlob(), []]  # DerBlob (including omni_mB), derBlob_
+        DerBlob = CderBlob()
+        derBlob_ = []  # DerBlob (including omni_mB), derBlob_
 
         for adj_blob in blob.adj_blobs[0]:
             if adj_blob.id not in checked_ids_ and not blob.derBlob_:
                 # comp between blob, adj_blob
                 derBlob = comp_blob(blob, adj_blob)
-                accum_DerBlob(derBlob_[0], derBlob)
-                derBlob_[1].append(derBlob)
+                accum_DerBlob(DerBlob, derBlob)
+                derBlob_.append(derBlob)
 
-        derBlobs.append(derBlob_)
+        derBlobs[0].append(DerBlob)
+        derBlobs[1].append(derBlob_)
 
     bblob_ = form_bblob_(blob_, derBlobs)  # form blobs of blobs
 
@@ -98,39 +101,40 @@ def form_bblob_(blob_, derBlobs):
     bblob_ = []
     neg_mB = 0
 
-    for blob, (DerBlob,derBlob_) in zip(blob_, derBlobs): 
+    for blob, DerBlob, derBlob_ in zip(blob_, derBlobs[0], derBlobs[1]): 
         if blob.id not in checked_ids:
             checked_ids.append(blob.id)
             
-            bblob = CBblob(derBlob=CderBlob())   # init bblob with current blob
+            bblob = CBblob(derBlob=CderBlob())   # init bblob with previous unconnected blob
             neg_mB += DerBlob.mB                 # accumulate neg_mB
-            for derBlob in derBlob_: accum_bblob(bblob, derBlob) # accumulate blob's derBlobs into bblob
             
             form_bblob_recursive(bblob_, bblob, blob, DerBlob, blob.adj_blobs[0],  blob_, derBlobs, neg_mB, checked_ids)
             bblob_.append(bblob) # append bblob after scan through adjacents recursively
         
     return(bblob_)
 
-
+# need further optimization on the number of parsing variables
 def form_bblob_recursive(bblob_, bblob, blob, DerBlob, adj_blob_,  blob_, derBlobs, neg_mB, checked_ids):
     
     for adj_blob in adj_blob_:
         if adj_blob.id not in checked_ids:
             checked_ids.append(adj_blob.id)
-            adj_DerBlob, adj_derBlob_ = derBlobs[blob_.index(adj_blob)] # get DerBlob and derblobs of adjacent blob
             
-            if (DerBlob.mB>0) and (adj_DerBlob.mB>0): # check same sign omni mB
-                adj_bblob = CBblob(derBlob=CderBlob()) # init new bblob for adjblob
-                neg_mB = 0; neg_mB += adj_DerBlob.mB   # init new omni mB and accumulate adj omni mB
-                for derBlob in adj_derBlob_: accum_bblob(bblob, derBlob) # accumulate adj_blob's derBlobs into bblob
+            # tentative, adj_derBlob_ seems not usable here
+            adj_DerBlob, adj_derBlob_ = derBlobs[0][blob_.index(adj_blob)] ,derBlobs[1][blob_.index(adj_blob)] # get DerBlob and derblobs of adjacent blob
+            
+            if (DerBlob.mB>0) == (adj_DerBlob.mB>0):      # check positive and same mB sign
+                neg_mB += adj_DerBlob.mB                  # increase neg_mB cost
+                derBlob_ = derBlobs[1][blob_.index(blob)] # derBlob_ of current blob
+                bblob.blob_.append(blob)                  # pack blob into bblob
+                for derBlob in derBlob_: accum_bblob(bblob, derBlob) # accumulate blob's derBlobs into bblob
                 
-                form_bblob_recursive(bblob_, adj_bblob, adj_blob, adj_DerBlob, adj_blob.adj_blobs[0], blob_, derBlobs, neg_mB, checked_ids) 
-                bblob_.append(adj_bblob) # append bblob after scan through adjacents recursively
-    
-            elif (DerBlob.mB>0) and (blob.Dert.M + neg_mB > ave_mB): # different sign, check ave_mB to search adjacency
+                form_bblob_recursive(bblob_, bblob, adj_blob, adj_DerBlob, adj_blob.adj_blobs[0], blob_, derBlobs, neg_mB, checked_ids) 
+             
+            elif (blob.Dert.M + neg_mB > ave_mB): # different sign, check ave_mB to search adjacency
                 neg_mB += adj_DerBlob.mB # increase neg_mB cost
                 form_bblob_recursive(bblob_, bblob, blob, DerBlob, adj_blob.adj_blobs[0], blob_, derBlobs, neg_mB, checked_ids)
-    
+            
 
 '''
 def form_bblob_recursive(bblob, _blob, blob, checked_ids, compared_blobs):
