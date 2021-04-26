@@ -30,7 +30,7 @@ class CBblob(ClusterStructure):
     blob_ = list
 
 ave_mB = 200
-ave_rM = .7071  # average relative match per input magnitude, at rl=1 or .5?
+ave_rM = .7  # average relative match per input magnitude, at rl=1 or .5?
 
 
 
@@ -39,51 +39,43 @@ def cross_comp_blobs(frame):
     root function of comp_blob: cross compare blobs with their adjacent blobs in frame.blob_, including sub_layers
     '''
     blob_ = frame.blob_
-    checked_ids_ = []
-    compared_blobs = [[],[]]
 
-    for blob in blob_:
-        compared_blob_ = []  # compared to current blob, reinitialized for each new blob
-        if blob.id not in checked_ids_:
-            checked_ids_.append(blob.id); neg_mB = 0; depth = 0;  # checked ids per blob: may be checked from multiple root blobs
-            comp_blob_recursive(blob, blob.adj_blobs[0], checked_ids_, neg_mB, depth, compared_blob_)  # comp between blob, blob.adj_blobs
-        
-        compared_blobs[0].append(blob) 
-        compared_blobs[1].append(compared_blob_) # square bracket not necessary, each compared_blob_ is already as list
+    for blob in blob_: # each blob forming their own cluster now
+        checked_ids_ = [blob.id];  neg_mB = 0; depth = 0;  # checked ids per blob: may be checked from multiple root blobs
+        comp_blob_recursive(blob, blob.adj_blobs[0], checked_ids_, neg_mB, depth)  # comp between blob, blob.adj_blobs
 
-    bblob_ = form_bblob_(compared_blobs)  # form blobs of blobs
+    bblob_ = form_bblob_(blob_)  # form blobs of blobs
 
-    visualize_cluster_(bblob_, frame)
+    visualize_cluster_(bblob_, blob_, frame)
 
     return bblob_
 
 
-def comp_blob_recursive(blob, adj_blob_, checked_ids_, neg_mB, depth, compared_blob_):
+def comp_blob_recursive(blob, adj_blob_, checked_ids_, neg_mB, depth):
     '''
     called by cross_comp_blob to recursively compare blob to adj_blobs in incremental layers of adjacency
     '''
     for adj_blob in adj_blob_:
-        if adj_blob.id not in checked_ids_ and not adj_blob.derBlob_: # adj blob not checked and is not the head node
-
+        if adj_blob.id not in checked_ids_: # adj blob not checked and is not the head node
+            checked_ids_.append(adj_blob.id)
             depth += 1
             derBlob = comp_blob(blob, adj_blob, depth)  # cross compare blob and adjacent blob
 
             if derBlob.mB>0: # positive mB, pack derBlob (contains adj_blob) to blob 
-                checked_ids_.append(adj_blob.id)
                 neg_mB += derBlob.mB  # mB accumulated over comparison scope
                 blob.derBlob_.append(derBlob) # add derBlob into blob.derBlob_
-                comp_blob_recursive(blob, adj_blob.adj_blobs[0], checked_ids_, depth, neg_mB, compared_blob_)
+                comp_blob_recursive(blob, adj_blob.adj_blobs[0], checked_ids_, depth, neg_mB)
 
-            # negative mB, continue searching
+            # negative mB, continue searching when > ave_mB
             elif blob.Dert.M + neg_mB > ave_mB:  # extend search to adjacents of adjacent, depth-first
                 neg_mB += derBlob.mB  # mB accumulated over comparison scope
-                comp_blob_recursive(blob, adj_blob.adj_blobs[0], checked_ids_, depth, neg_mB, compared_blob_)
+                comp_blob_recursive(blob, adj_blob.adj_blobs[0], checked_ids_, depth, neg_mB)
 
-            # stop searching
+            # stop searching when < ave_mB
             else:  # compared adj blobs are potential bblob elements
                 for adj_adj_blob in adj_blob.adj_blobs[0]:
-                    if adj_adj_blob not in compared_blob_:
-                        compared_blob_.append(adj_adj_blob)  # potential bblob element
+                    if adj_adj_blob not in blob.compared_blob_:
+                        blob.compared_blob_.append(adj_adj_blob)  # potential bblob element
 
 
 def accum_DerBlob(_derBlob, derBlob):
@@ -119,44 +111,47 @@ def comp_blob(_blob, blob, depth):
     return derBlob
 
 
-def form_bblob_(compared_blobs):
+def form_bblob_(blob_):
     '''
     form blob of blobs as a cluster of blobs with positive adjacent derBlob_s, formed by comparing adj_blobs
     '''
     checked_ids = []
     bblob_ = []
-    neg_mB = 0
-
-    for blob, compared_blob_ in zip(*compared_blobs): 
-        if blob.id not in checked_ids and blob.derBlob_: # not checked and is head node
-            checked_ids.append(blob.id)
-            
+    
+    for blob in blob_: 
+        if blob.id not in checked_ids: # not checked and is head node
+            neg_mB = 0; checked_ids.append(blob.id)
             bblob = CBblob(derBlob=CderBlob())   # init bblob with previous unconnected blob
-            form_bblob_recursive(bblob, blob, neg_mB, checked_ids, compared_blobs)
+            accum_bblob(bblob, blob)
+            form_bblob_recursive(bblob, blob, neg_mB, checked_ids)
             bblob_.append(bblob) # pack bblob after search through adjacents
                 
     return(bblob_)
 
 
-def form_bblob_recursive(bblob, blob, neg_mB, checked_ids, compared_blobs):
-
-    blob_index = compared_blobs[0].index(blob)     # index of current blob in compared_blobs
-    compared_blob_ = compared_blobs[1][blob_index] # get compared_blob_ of current blob 
+def form_bblob_recursive(bblob, blob, neg_mB, checked_ids):
+       
     _omni_mB = sum([derBlob.mB for derBlob in blob.derBlob_])
-
-    for compared_blob in compared_blob_:
+    omni_mB = 0
+    
+    for compared_blob in blob.compared_blob_: # get sum of omni_mB from all compared_blobs
         if compared_blob.derBlob_ and compared_blob.id not in checked_ids:
-            checked_ids.append(compared_blob.id)
-            omni_mB = sum([derBlob.mB for derBlob in compared_blob.derBlob_])
-        
-            if (_omni_mB>0) and (omni_mB>0):        # check positive and same mB sign
-                neg_mB += omni_mB                  # increase neg_mB cost
+            omni_mB += sum([derBlob.mB for derBlob in compared_blob.derBlob_]) 
+            
+    if (_omni_mB>0) and (omni_mB>0):        # check mutual +mB sign
+        neg_mB += omni_mB                   # increase neg_mB cost
+        for compared_blob in blob.compared_blob_:
+            if compared_blob.derBlob_ and compared_blob.id not in checked_ids:
+                checked_ids.append(compared_blob.id)
                 accum_bblob(bblob, compared_blob)  # accumulate compared blob's cluster
-                form_bblob_recursive(bblob, compared_blob, neg_mB, checked_ids, compared_blobs)
-     
-            elif (blob.Dert.M + neg_mB > ave_mB):  # different sign, check ave_mB to search adjacency
-                neg_mB += omni_mB                  # increase neg_mB cost
-                form_bblob_recursive(bblob, compared_blob, neg_mB, checked_ids, compared_blobs)
+                form_bblob_recursive(bblob, compared_blob, neg_mB, checked_ids) # continue searching
+ 
+    elif (blob.Dert.M + neg_mB > ave_mB):  # different sign, check ave_mB to search adjacency
+        neg_mB += omni_mB                  # increase neg_mB cost
+        for compared_blob in blob.compared_blob_:
+            if compared_blob.id not in checked_ids:
+                checked_ids.append(compared_blob.id)
+                form_bblob_recursive(bblob, compared_blob, neg_mB, checked_ids) # continue searching
         
 
 def accum_bblob(bblob, blob):
@@ -165,8 +160,9 @@ def accum_bblob(bblob, blob):
         # accumulate derBlob
         bblob.derBlob.accumulate(**{param:getattr(derBlob, param) for param in bblob.derBlob.numeric_params})
         bblob.derBlob_.append(derBlob)
+        bblob.blob_.append(derBlob._blob) # pack adj of blob into bblob.blob_
         
-    bblob.blob_.append(blob)
+    bblob.blob_.append(blob) # pack blob into bblob.blob_
 
 '''
     cross-comp among sub_blobs in nested sub_layers:
@@ -178,8 +174,8 @@ def accum_bblob(bblob, blob):
         merge(_sub_layer, sub_layer)  # only for sub-blobs not combined into new bblobs by cross-comp
 '''
 
-# draft, to visualize bblob
-def visualize_cluster_(bblob_, frame):
+
+def visualize_cluster_(bblob_, blob_, frame):
 
     colour_list = []  # list of colours:
     colour_list.append([200, 130, 1])  # blue
@@ -199,129 +195,49 @@ def visualize_cluster_(bblob_, frame):
     cluster_img = np.zeros((ysize, xsize,3)).astype('uint8')
     img_separator = np.zeros((ysize,3,3)).astype('uint8')
 
+    # create mask
+    blob_mask = np.zeros_like(frame.dert__[0]).astype('uint8')
+    cluster_mask = np.zeros_like(frame.dert__[0]).astype('uint8')
+
     blob_colour_index = 1
     cluster_colour_index = 1
 
     cv2.namedWindow('blobs & clusters', cv2.WINDOW_NORMAL)
 
+    # draw blobs
+    for blob in blob_:
+        cy0, cyn, cx0, cxn = blob.box
+        blob_mask[cy0:cyn,cx0:cxn] += (~blob.mask__ * blob_colour_index).astype('uint8')
+        blob_colour_index += 1
+
+    # draw blob cluster of bblob
     for bblob in bblob_:
-        if bblob and bblob.derBlob_:
-            
-            blob = bblob.derBlob_[0].blob
-            
-            # create mask
-            blob_mask = np.zeros_like(frame.dert__[0]).astype('uint8')
-            cluster_mask = np.zeros_like(frame.dert__[0]).astype('uint8')
-
+        for blob in bblob.blob_:
             cy0, cyn, cx0, cxn = blob.box
-            # insert index of each blob
-            blob_mask[cy0:cyn,cx0:cxn] += (~blob.mask__ * blob_colour_index).astype('uint8')
             blob_colour_index += 1
-            # insert index of blob in cluster
             cluster_mask[cy0:cyn,cx0:cxn] += (~blob.mask__ *cluster_colour_index).astype('uint8')
+            
+        # increase colour index
+        cluster_colour_index += 1
 
-            for derBlob in bblob.derBlob_:
-                cy0, cyn, cx0, cxn = derBlob._blob.box
-                # insert index of each adjacent blob
-                blob_mask[cy0:cyn,cx0:cxn] += (~derBlob._blob.mask__ * blob_colour_index).astype('uint8')
-                blob_colour_index += 1
-                # insert index of each adjacent blob in cluster
-                cluster_mask[cy0:cyn,cx0:cxn] += (~derBlob._blob.mask__ * cluster_colour_index).astype('uint8')
+        # insert colour of blobs
+        for i in range(1,blob_colour_index):
+            blob_img[np.where(blob_mask == i)] = colour_list[i % 10]
 
-            # increase colour index
-            cluster_colour_index += 1
+        # insert colour of clusters
+        for i in range(1,cluster_colour_index):
+            cluster_img[np.where(cluster_mask == i)] = colour_list[i % 10]
 
-            # insert colour of blobs
-            for i in range(1,blob_colour_index):
-                blob_img[np.where(blob_mask == i)] = colour_list[i % 10]
+        # combine images for visualization
+        img_concat = np.concatenate((blob_img, img_separator,
+                                    cluster_img, img_separator), axis=1)
 
-            # insert colour of clusters
-            for i in range(1,cluster_colour_index):
-                cluster_img[np.where(cluster_mask == i)] = colour_list[i % 10]
-
-            # combine images for visualization
-            img_concat = np.concatenate((blob_img, img_separator,
-                                        cluster_img, img_separator), axis=1)
-
-            # plot cluster of blob
-            cv2.imshow('blobs & clusters',img_concat)
-            cv2.resizeWindow('blobs & clusters', 1920, 720)
-            cv2.waitKey(100)
+        # plot cluster of blob
+        cv2.imshow('blobs & clusters',img_concat)
+        cv2.resizeWindow('blobs & clusters', 1920, 720)
+        cv2.waitKey(100)
 
     cv2.waitKey(0)
     cv2.destroyAllWindows()
 
-
-
-'''
-# draft, to visualize the cluster of blobs, next is to visualize the merged clusters
-def visualize_cluster_(blob_, derBlobs, frame):
-
-    colour_list = []  # list of colours:
-    colour_list.append([200, 130, 1])  # blue
-    colour_list.append([75, 25, 230])  # red
-    colour_list.append([25, 255, 255])  # yellow
-    colour_list.append([75, 180, 60])  # green
-    colour_list.append([212, 190, 250])  # pink
-    colour_list.append([240, 250, 70])  # cyan
-    colour_list.append([48, 130, 245])  # orange
-    colour_list.append([180, 30, 145])  # purple
-    colour_list.append([40, 110, 175])  # brown
-    colour_list.append([192, 192, 192])  # silver
-
-    # initialization
-    ysize, xsize = frame.dert__[0].shape
-    blob_img = np.zeros((ysize, xsize,3)).astype('uint8')
-    cluster_img = np.zeros((ysize, xsize,3)).astype('uint8')
-    img_separator = np.zeros((ysize,3,3)).astype('uint8')
-
-    blob_colour_index = 1
-    cluster_colour_index = 1
-
-    cv2.namedWindow('blobs & clusters', cv2.WINDOW_NORMAL)
-
-    for blob, (DerBlob, derBlob_) in zip(blob_, derBlobs):
-        if derBlob_:
-            # create mask
-            blob_mask = np.zeros_like(frame.dert__[0]).astype('uint8')
-            cluster_mask = np.zeros_like(frame.dert__[0]).astype('uint8')
-
-            cy0, cyn, cx0, cxn = blob.box
-            # insert index of each blob
-            blob_mask[cy0:cyn,cx0:cxn] += (~blob.mask__ * blob_colour_index).astype('uint8')
-            blob_colour_index += 1
-            # insert index of blob in cluster
-            cluster_mask[cy0:cyn,cx0:cxn] += (~blob.mask__ *cluster_colour_index).astype('uint8')
-
-            for derBlob in derBlob_:
-                cy0, cyn, cx0, cxn = derBlob._blob.box
-                # insert index of each adjacent blob
-                blob_mask[cy0:cyn,cx0:cxn] += (~derBlob._blob.mask__ * blob_colour_index).astype('uint8')
-                blob_colour_index += 1
-                # insert index of each adjacent blob in cluster
-                cluster_mask[cy0:cyn,cx0:cxn] += (~derBlob._blob.mask__ * cluster_colour_index).astype('uint8')
-
-            # increase colour index
-            cluster_colour_index += 1
-
-            # insert colour of blobs
-            for i in range(1,blob_colour_index):
-                blob_img[np.where(blob_mask == i)] = colour_list[i % 10]
-
-            # insert colour of clusters
-            for i in range(1,cluster_colour_index):
-                cluster_img[np.where(cluster_mask == i)] = colour_list[i % 10]
-
-            # combine images for visualization
-            img_concat = np.concatenate((blob_img, img_separator,
-                                        cluster_img, img_separator), axis=1)
-
-            # plot cluster of blob
-            cv2.imshow('blobs & clusters',img_concat)
-            cv2.resizeWindow('blobs & clusters', 1920, 720)
-            cv2.waitKey(100)
-
-    cv2.waitKey(0)
-    cv2.destroyAllWindows()
-'''
 
