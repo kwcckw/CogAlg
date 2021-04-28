@@ -111,7 +111,7 @@ class CBlob(ClusterStructure):
     Pd__ = list
     
     # comp blobs
-    derBlob = object
+    DerBlob = object
     derBlob_ = list
 
 # draft
