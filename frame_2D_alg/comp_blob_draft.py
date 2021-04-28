@@ -9,7 +9,6 @@ import cv2
 class CderBlob(ClusterStructure):
 
     blob = object  # core node
-    _blob = object # adj blobs
     neg_mB = int
     distance = int
     mB = int
@@ -38,8 +37,8 @@ def cross_comp_blobs(frame):
     '''
     blob_ = frame.blob_
 
-    for blob in blob_:  # each blob forms compared_blob_ from comparisons to blob.adj_blobs:
-        blob.derBlob = CderBlob() # each blob form derBlob to accumulate derBlob from adjacents
+    for blob in blob_:  # each blob forms derBlob per compared adj_blob,
+        blob.derBlob = CderBlob()  # and accumulates adj_blobs' derBlobs
         comp_blob_recursive(blob, blob.adj_blobs[0], checked_id_=[blob.id],  neg_mB=0, distance=0)
 
     bblob_ = form_bblob_(blob_)  # form blobs of blobs, connected by mutual match
@@ -64,29 +63,14 @@ def comp_blob_recursive(blob, adj_blob_, checked_id_, neg_mB, distance):
                 # positive mB, replace blob with adj_blob for continuing adjacency search:
                 comp_blob_recursive(adj_blob, adj_blob.adj_blobs[0], checked_id_, neg_mB, distance)
 
-            # negative mB, continue searching when > ave_mB
-            elif blob.Dert.M + neg_mB > ave_mB:  # extend search to adjacents of adjacent, depth-first
+            elif blob.Dert.M + neg_mB > ave_mB:  # negative mB, extend blob comparison to adjacents of adjacent, depth-first
 
                 neg_mB += adj_blob.derBlob.mB  # mB accumulated over comparison scope
                 distance += np.sqrt(adj_blob.A)
                 comp_blob_recursive(blob, adj_blob.adj_blobs[0], checked_id_, neg_mB, distance)
-            
-            # not needed if we gonna search adj_blobs in form_bblob_
-            '''
-            not needed?
-            # stop searching when < ave_mB
-            else:  # compared adj blobs are potential bblob elements
-                for adj_adj_blob in adj_blob.adj_blobs[0]:
-                    if adj_adj_blob not in blob.compared_blob_:
-                        blob.compared_blob_.append(adj_adj_blob)  # potential bblob element
-            '''
 
-def accum_derBlob(_blob, blob):
-    # accumulate derBlob
-    _blob.derBlob.accumulate(**{param:getattr(blob.derBlob, param) for param in _blob.derBlob.numeric_params})
-    _blob.derBlob_.append(blob.derBlob)
 
-def comp_blob(_blob, blob, distance):
+def comp_blob(blob, _blob, distance):
     '''
     cross compare _blob and blob
     '''
@@ -102,39 +86,50 @@ def comp_blob(_blob, blob, distance):
     dM = _M - M
     mM = min(_M, M)
 
-    mB = mI + mA + mG + mM - ave_mB * (ave_rM ** ((1+distance) / np.sqrt(A)))  # deviation from average blob match projected at current distance
+    mB = mI + mA + mG + mM - ave_mB * (ave_rM ** ((1+distance) / np.sqrt(A)))  # deviation from average blob match at current distance
     dB = dI + dA + dG + dM
 
-    derBlob  = CderBlob(blob=_blob, _blob = blob, mB=mB, dB=dB) # blob is core node, _blob is adjacent blob here
+    derBlob  = CderBlob(blob=blob, _blob=_blob, mB=mB, dB=dB)  # blob is core node, _blob is adjacent blob
 
     if _blob.fsliced and blob.fsliced:
         pass
 
     return derBlob
 
-'''
-Below is not reviewed: 
-'''
 
 def form_bblob_(blob_):
     '''
     form blob of blobs as a cluster of blobs with positive adjacent derBlob_s, formed by comparing adj_blobs
     '''
-    checked_ids = []
+    checked_ids = []  # frame-wide?
     bblob_ = []
 
     for blob in blob_:
-        if blob.id not in checked_ids: # not checked and is head node
+        if blob.id not in checked_ids:  # not checked and is core node
             neg_mB = 0; checked_ids.append(blob.id)
-            bblob = CBblob(derBlob=CderBlob())   # init bblob with previous unconnected blob
-            accum_bblob(bblob, blob)
+            if blob.derBlob.mB > 0:
+                '''
+                not sure how exactly to do this:
+                
+                for bblob in:
+                    # we need to add blob.derBlob_, it's not the same as adj_blobs' derBlobs because it may include adj_adj_blob.derBlobs, etc.
+                    
+                    if (any of mBs in blob.derBlob_) is (any of mBs in bblob_' bblob.derBlob_):
+                         accum_bblob(bblob, blob) 
+                    else:
+                        bblob = CBblob(derBlob=CderBlob())  
+                        # init bblob with previously unconnected blob: no +mB common with any of previous bblobs' +mBs
+                '''
+
             form_bblob_recursive(bblob, blob, neg_mB, checked_ids)
-            
-            if bblob.derBlob.mB>0: # pack positive mB blob
-                bblob_.append(bblob) # pack bblob after search through adjacents
+
+            bblob_.append(bblob)  # pack bblob after search through adjacents, all bblobs are positive
 
     return(bblob_)
 
+'''
+Below is not reviewed: 
+'''
 
 def form_bblob_recursive(bblob, blob, neg_mB, checked_ids):
 
@@ -142,17 +137,22 @@ def form_bblob_recursive(bblob, blob, neg_mB, checked_ids):
     for adj_blob in blob.adj_blobs[0]:
         if adj_blob.id not in checked_ids:
             omni_mB = adj_blob.derBlob.mB
-            
+
             if (_omni_mB>0) and (omni_mB>0):    # check mutual +mB sign
                 checked_ids.append(adj_blob.id) # add checked id only if same +mutual sign
                 neg_mB += omni_mB               # increase neg_mB cost
-                accum_bblob(bblob, adj_blob)    # accumulate mutual +mB sign blob    
+                accum_bblob(bblob, adj_blob)    # accumulate mutual +mB sign blob
                 form_bblob_recursive(bblob, adj_blob, neg_mB, checked_ids) # continue searching with adj_blob
-        
+
             elif (blob.Dert.M + neg_mB > ave_mB):  # different sign, check ave_mB to continue searching adjacency
                 neg_mB += omni_mB                  # increase neg_mB cost
                 form_bblob_recursive(bblob, adj_blob, neg_mB, checked_ids) # continue searching
 
+
+def accum_derBlob(_blob, blob):
+    # accumulate derBlob
+    _blob.derBlob.accumulate(**{param:getattr(blob.derBlob, param) for param in _blob.derBlob.numeric_params})
+    _blob.derBlob_.append(blob.derBlob)
 
 def accum_bblob(bblob, blob):
 
