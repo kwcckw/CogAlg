@@ -9,6 +9,7 @@ import cv2
 class CderBlob(ClusterStructure):
 
     blob = object  # core node
+    _blob = object # blob pair 
     neg_mB = int
     distance = int
     mB = int
@@ -26,8 +27,10 @@ class CBblob(ClusterStructure):
 
     derBlob = object
     blob_ = list
+    _blob_ = list
 
-ave_mB = 200
+ave_mB = 20000
+ave_cluster = -99999
 ave_rM = .7  # average relative match at rL=1: rate of ave_mB decay with relative distance, due to correlation between proximity and similarity
 
 
@@ -56,16 +59,17 @@ def comp_blob_recursive(blob, adj_blob_, checked_id_, neg_mB, distance):
         if adj_blob.id not in checked_id_:
             checked_id_.append(adj_blob.id)
 
-            adj_blob.derBlob = comp_blob(blob, adj_blob, distance)  # compare blob and adjacent blob
-            accum_derBlob(blob, adj_blob)  # add derBlob into blob.derBlob_
+            derBlob = comp_blob(blob, adj_blob, distance)  # compare blob and adjacent blob
+            accum_derBlob(blob, derBlob)  # add derBlob into blob.derBlob_
 
-            if adj_blob.derBlob.mB>0:
+            if derBlob.mB>0:
                 # positive mB, replace blob with adj_blob for continuing adjacency search:
-                comp_blob_recursive(adj_blob, adj_blob.adj_blobs[0], checked_id_, neg_mB, distance)
+                # i think replacement is not needed here, adj_blob will having their own search in main loop within cross_comp_blobs
+                comp_blob_recursive(blob, adj_blob.adj_blobs[0], checked_id_, neg_mB, distance)
 
             elif blob.Dert.M + neg_mB > ave_mB:  # negative mB, extend blob comparison to adjacents of adjacent, depth-first
 
-                neg_mB += adj_blob.derBlob.mB  # mB accumulated over comparison scope
+                neg_mB += derBlob.mB  # mB accumulated over comparison scope
                 distance += np.sqrt(adj_blob.A)
                 comp_blob_recursive(blob, adj_blob.adj_blobs[0], checked_id_, neg_mB, distance)
 
@@ -101,36 +105,42 @@ def form_bblob_(blob_):
     '''
     form blob of blobs as a cluster of blobs with positive adjacent derBlob_s, formed by comparing adj_blobs
     '''
-    checked_ids = []  # frame-wide?
+    checked_ids = []  # frame-wide checked ids, not per blob
     bblob_ = []
 
     for blob in blob_:
-        if blob.id not in checked_ids:  # not checked and is core node
-            neg_mB = 0; checked_ids.append(blob.id)
-            if blob.derBlob.mB > 0:
-                '''
-                not sure how exactly to do this:
-                
-                for bblob in:
-                    # we need to add blob.derBlob_, it's not the same as adj_blobs' derBlobs because it may include adj_adj_blob.derBlobs, etc.
-                    
-                    if (any of mBs in blob.derBlob_) is (any of mBs in bblob_' bblob.derBlob_):
-                         accum_bblob(bblob, blob) 
-                    else:
-                        bblob = CBblob(derBlob=CderBlob())  
-                        # init bblob with previously unconnected blob: no +mB common with any of previous bblobs' +mBs
-                '''
+        if blob.derBlob.mB > ave_cluster and blob.id not in checked_ids: 
+            checked_ids.append(blob.id)
+            bblob = CBblob(derBlob=CderBlob()); accum_bblob(bblob, blob) # init bblob and accumulate current blob into bblob
+            form_bblob_recursive(bblob_, blob_, bblob, checked_ids)
 
-            form_bblob_recursive(bblob, blob, neg_mB, checked_ids)
+    return bblob_
 
-            bblob_.append(bblob)  # pack bblob after search through adjacents, all bblobs are positive
+def form_bblob_recursive(bblob_, blob_, bblob, checked_ids):
+    
+    fclustered = 0
+    for blob in blob_: # scan all other blobs, but this is expensive, should be able to optimize better
+        if (blob.derBlob.mB > ave_cluster) and (blob.id not in checked_ids): # positive mB
+            for derBlob in blob.derBlob_:
+                # if any of derBlob's blob or _blob is in current bblob, pack current blob to bblob
+                if derBlob.blob in bblob.blob_ or derBlob._blob in bblob._blob_:
+                    accum_bblob(bblob, blob)
+                    checked_ids.append(blob.id)
+                    fclustered = 1
+                    break
+    
+    # if there is new blob added to bblob, perform clustering again to search connected blobs of new added blob
+    # this will continue recursively until the bblob is stable (no new added blob)
+    if fclustered: 
+        form_bblob_recursive(bblob_, blob_, bblob, checked_ids)
+            
+    bblob_.append(bblob) # pack bblob after scanning all possible derBlobs      
 
-    return(bblob_)
 
 '''
 Below is not reviewed: 
 '''
-
+'''
 def form_bblob_recursive(bblob, blob, neg_mB, checked_ids):
 
     _omni_mB = blob.derBlob.mB
@@ -147,18 +157,24 @@ def form_bblob_recursive(bblob, blob, neg_mB, checked_ids):
             elif (blob.Dert.M + neg_mB > ave_mB):  # different sign, check ave_mB to continue searching adjacency
                 neg_mB += omni_mB                  # increase neg_mB cost
                 form_bblob_recursive(bblob, adj_blob, neg_mB, checked_ids) # continue searching
+'''
 
-
-def accum_derBlob(_blob, blob):
+def accum_derBlob(blob, derBlob):
     # accumulate derBlob
-    _blob.derBlob.accumulate(**{param:getattr(blob.derBlob, param) for param in _blob.derBlob.numeric_params})
-    _blob.derBlob_.append(blob.derBlob)
+    blob.derBlob.accumulate(**{param:getattr(derBlob, param) for param in blob.derBlob.numeric_params})
+    blob.derBlob_.append(derBlob)
 
 def accum_bblob(bblob, blob):
 
     # accumulate derBlob
     bblob.derBlob.accumulate(**{param:getattr(blob.derBlob, param) for param in bblob.derBlob.numeric_params})
-    bblob.blob_.append(blob) # pack blob into bblob.blob_
+    
+    if blob not in bblob.blob_:
+        bblob.blob_.append(blob) # pack blob into bblob.blob_
+    
+    for derBlob in blob.derBlob_: # pack adjacent blobs of blob into bblob
+        if derBlob._blob not in bblob._blob_:
+            bblob._blob_.append(derBlob._blob)
 
 '''
     cross-comp among sub_blobs in nested sub_layers:
