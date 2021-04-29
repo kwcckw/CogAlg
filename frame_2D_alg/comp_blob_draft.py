@@ -55,15 +55,15 @@ def comp_blob_recursive(blob, adj_blob_, checked_id_):
     '''
     for adj_blob in adj_blob_:
         if adj_blob.id not in checked_id_:
-            checked_id_.append(adj_blob.id)
-            # pack derBlob as adj_blob.DerBlob so that their DerBlob won't be empty
-            adj_blob.DerBlob = comp_blob(blob, adj_blob)  # compare blob and adjacent blob
-            accum_derBlob(blob, adj_blob.DerBlob)  # from all compared blobs, regardless of mB sign
+            derBlob = comp_blob(blob, adj_blob)  # compare blob and adjacent blob
+            accum_derBlob(blob, derBlob)  # from all compared blobs, regardless of mB sign
 
-            if adj_blob.DerBlob.mB > 0:  # replace blob with adj_blob for continuing adjacency search:
+            if derBlob.mB > 0:  # replace blob with adj_blob for continuing adjacency search:
+                checked_id_.append(adj_blob.id)
+                adj_blob.DerBlob = CderBlob()
                 comp_blob_recursive(adj_blob, adj_blob.adj_blobs[0], checked_id_)
             else:
-                blob.DerBlob.neg_mB += adj_blob.DerBlob.mB  # mB accumulated over comparison scope
+                blob.DerBlob.neg_mB += derBlob.mB  # mB accumulated over comparison scope
                 blob.DerBlob.distance += np.sqrt(adj_blob.A)
 
                 if blob.Dert.M + blob.DerBlob.neg_mB > ave_mB: # negative mB, extend blob comparison to adjacents of adjacent, depth-first
