@@ -27,10 +27,8 @@ class CBblob(ClusterStructure):
 
     DerBlob = object
     blob_ = list
-    _blob_ = list
 
-ave_mB = 20000
-ave_DerBlob_mB = 99999  # it can't be negative?
+ave_mB = -20000 # ave_DerBlob_mB  may not needed if ave_mB is negative
 ave_rM = .7  # average relative match at rL=1: rate of ave_mB decay with relative distance, due to correlation between proximity and similarity
 
 
@@ -58,18 +56,17 @@ def comp_blob_recursive(blob, adj_blob_, checked_id_):
     for adj_blob in adj_blob_:
         if adj_blob.id not in checked_id_:
             checked_id_.append(adj_blob.id)
+            # pack derBlob as adj_blob.DerBlob so that their DerBlob won't be empty
+            adj_blob.DerBlob = comp_blob(blob, adj_blob)  # compare blob and adjacent blob
+            accum_derBlob(blob, adj_blob.DerBlob)  # from all compared blobs, regardless of mB sign
 
-            derBlob = comp_blob(blob, adj_blob)  # compare blob and adjacent blob
-            accum_derBlob(blob, derBlob)  # from all compared blobs, regardless of mB sign
-
-            if derBlob.mB > 0:  # replace blob with adj_blob for continuing adjacency search:
-                adj_blob.DerBlob = CderBlob()  # neg_mB = 0, distance = 0
+            if adj_blob.DerBlob.mB > 0:  # replace blob with adj_blob for continuing adjacency search:
                 comp_blob_recursive(adj_blob, adj_blob.adj_blobs[0], checked_id_)
             else:
-                blob.derBlob.neg_mB += derBlob.mB  # mB accumulated over comparison scope
-                blob.derBlob.distance += np.sqrt(adj_blob.A)
+                blob.DerBlob.neg_mB += adj_blob.DerBlob.mB  # mB accumulated over comparison scope
+                blob.DerBlob.distance += np.sqrt(adj_blob.A)
 
-                if blob.Dert.M + blob.derBlob.neg_mB > ave_mB:  # negative mB, extend blob comparison to adjacents of adjacent, depth-first
+                if blob.Dert.M + blob.DerBlob.neg_mB > ave_mB: # negative mB, extend blob comparison to adjacents of adjacent, depth-first
                     comp_blob_recursive(blob, adj_blob.adj_blobs[0], checked_id_)
 
 
@@ -89,7 +86,7 @@ def comp_blob(blob, _blob):
     dM = _M - M
     mM = min(_M, M)
 
-    mB = mI + mA + mG + mM - ave_mB * (ave_rM ** ((1+blob.derBlob.distance) / np.sqrt(A)))
+    mB = mI + mA + mG + mM - ave_mB * (ave_rM ** ((1+blob.DerBlob.distance) / np.sqrt(A)))
     # deviation from average blob match at current distance
     dB = dI + dA + dG + dM
 
@@ -114,55 +111,33 @@ def form_bblob_(blob_):
 
             bblob = CBblob(DerBlob=CderBlob())
             accum_bblob(bblob, blob)
-            form_bblob_recursive(bblob_, blob_, bblob, checked_ids)
+            form_bblob_recursive(bblob_, bblob, checked_ids)
 
     return bblob_
 
-def form_bblob_recursive(bblob_, blob_, bblob, checked_ids):
+def form_bblob_recursive(bblob_, bblob, checked_ids):
 
     fsearch = 0  # there are blobs to check for inclusion in bblob
-
-    for blob in blob_: # scan all other blobs, but this is expensive, should be able to optimize better
+    
+    for blob in bblob.blob_: # search blob' derBlob's blobs to get potential border clustering blob
         if (blob.DerBlob.mB > 0) and (blob.id not in checked_ids): # positive mB
             for derBlob in blob.derBlob_:
-                # if any of derBlob's blob or _blob is in current bblob, pack current blob to bblob
-                if derBlob.blob in bblob.blob_: # check if derBlob.blob is in bblob.blob_
+                # if derBlob.blob is in bblob.blob_, but derBlob._blob is not in bblob_blob_
+                # so if sum of derBlob._blob's mB with blob's mB > 0 , pack the derBlob._blob into bblob.blob_ 
+                if (derBlob.blob in bblob.blob_) and (derBlob._blob.DerBlob.mB + blob.DerBlob.mB >0) and (derBlob._blob not in bblob.blob_):
+                    merge_blob = derBlob._blob
                     fsearch = 1
-                    original_blob = bblob.blob_[bblob.blob_.index(derBlob.blob)]
-                elif derBlob._blob in bblob._blob_: # check if derBlob._blob is in bblob._blob_
+                if (derBlob._blob in bblob.blob_) and (derBlob._blob.DerBlob.mB + blob.DerBlob.mB >0) and (derBlob.blob not in bblob.blob_):
+                    merge_blob = derBlob.blob
                     fsearch = 1
-                    original_blob = bblob._blob_[bblob._blob_.index(derBlob._blob)]
-
-                if fsearch and (original_blob.DerBlob.mB + blob.DerBlob.mB >0): # sum of bblob' blob's mB with current checking blob's mB >0
-                    accum_bblob(bblob, blob)
+                if fsearch:
+                    accum_bblob(bblob, merge_blob)
                     checked_ids.append(blob.id)
-                    break
-                else:
-                    fsearch = 0  # no more blobs to check for inclusion in bblob
     if fsearch:
-        form_bblob_recursive(bblob_, blob_, bblob, checked_ids)
+        form_bblob_recursive(bblob_, bblob, checked_ids)
 
     bblob_.append(bblob) # pack bblob after scanning all possible derBlobs
 
-
-'''
-Below is not reviewed: 
-'''
-'''
-def form_bblob_recursive(bblob, blob, neg_mB, checked_ids):
-    _omni_mB = blob.derBlob.mB
-    for adj_blob in blob.adj_blobs[0]:
-        if adj_blob.id not in checked_ids:
-            omni_mB = adj_blob.derBlob.mB
-            if (_omni_mB>0) and (omni_mB>0):    # check mutual +mB sign
-                checked_ids.append(adj_blob.id) # add checked id only if same +mutual sign
-                neg_mB += omni_mB               # increase neg_mB cost
-                accum_bblob(bblob, adj_blob)    # accumulate mutual +mB sign blob
-                form_bblob_recursive(bblob, adj_blob, neg_mB, checked_ids) # continue searching with adj_blob
-            elif (blob.Dert.M + neg_mB > ave_mB):  # different sign, check ave_mB to continue searching adjacency
-                neg_mB += omni_mB                  # increase neg_mB cost
-                form_bblob_recursive(bblob, adj_blob, neg_mB, checked_ids) # continue searching
-'''
 
 def accum_derBlob(blob, derBlob):
 
@@ -178,8 +153,8 @@ def accum_bblob(bblob, blob):
         bblob.blob_.append(blob) # pack blob into bblob.blob_
 
     for derBlob in blob.derBlob_: # pack adjacent blobs of blob into bblob
-        if derBlob._blob not in bblob._blob_:
-            bblob._blob_.append(derBlob._blob)
+        if derBlob._blob not in bblob.blob_:
+            bblob.blob_.append(derBlob._blob)
 
 '''
     cross-comp among sub_blobs in nested sub_layers:
@@ -205,6 +180,16 @@ def visualize_cluster_(bblob_, blob_, frame):
     colour_list.append([180, 30, 145])  # purple
     colour_list.append([40, 110, 175])  # brown
     colour_list.append([192, 192, 192])  # silver
+    colour_list.append([255, 255, 0])  # blue2
+    colour_list.append([34, 34, 178])  # red2
+    colour_list.append([0, 215, 255])  # yellow2
+    colour_list.append([50, 205, 50])  # green2
+    colour_list.append([114, 128, 250])  # pink2
+    colour_list.append([255, 255, 224])  # cyan2
+    colour_list.append([0, 140, 255])  # orange2
+    colour_list.append([204, 50, 153])  # purple2
+    colour_list.append([63, 133, 205])  # brown2
+    colour_list.append([128, 128, 128])  # silver2
 
     # initialization
     ysize, xsize = frame.dert__[0].shape
