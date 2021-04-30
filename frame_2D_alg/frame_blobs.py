@@ -113,6 +113,8 @@ class CBlob(ClusterStructure):
     # comp blobs
     DerBlob = object
     derBlob_ = list
+    distance = int  # derBlob only
+    neg_mB = int    # derBlob only
 
 # draft
 def comp_pixel_hybrid(image):  # 3x3 kernel M and 2x2 quadrant G, see comp_pixel_versions file for other versions and more explanation

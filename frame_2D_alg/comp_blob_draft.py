@@ -8,7 +8,6 @@ import cv2
 
 class CderBlob(ClusterStructure):
 
-    blob = object  # not needed, common for all derBlobs in derBlob_?
     _blob = object
     mB = int
     dB = int
@@ -20,9 +19,6 @@ class CderBlob(ClusterStructure):
     mG = int
     dM = int
     mM = int
-    # DerBlob only, do not accumulate:
-    neg_mB = int
-    distance = int
 
 class CBblob(ClusterStructure):
 
@@ -41,7 +37,7 @@ def cross_comp_blobs(frame):
 
     for blob in blob_:  # each blob forms derBlob per compared adj_blob and accumulates adj_blobs'derBlobs:
         blob.DerBlob = CderBlob()
-        comp_blob_recursive(blob, blob.adj_blobs[0], comped_id_=[blob.id])
+        comp_blob_recursive(blob, blob.adj_blobs[0], comped_id_=[blob.id]) # comped_id_ is blob wide, per blob
 
     bblob_ = form_bblob_(blob_)  # form blobs of blobs, connected by mutual match
 
@@ -55,23 +51,27 @@ def comp_blob_recursive(blob, adj_blob_, comped_id_):
     called by cross_comp_blob to recursively compare blob to adj_blobs in incremental layers of adjacency
     '''
     for adj_blob in adj_blob_:
-        if adj_blob.id in comped_id_:  # this is ids of blobs compared to immediate adjacents?
-            # pseudo for assign checked id' derBlob as current derBlob:
-            derBlob = @ adj_blob.id
-            accum_derBlob(blob, derBlob)
+        if adj_blob.id in comped_id_:  # this is ids of blobs compared to immediate adjacents? Yes
+            # not sure here, why we need accumulate again?
+            # assign checked id' derBlob as current derBlob if the checked blob is having derBlob (they might not having derBlob if mB<0)
+            if isinstance(adj_blob.DerBlob, CderBlob) and adj_blob is not blob:
+                for derBlob in adj_blob.derBlob_:
+                    if derBlob not in blob.derBlob_:
+                        accum_derBlob(blob, derBlob)
+   
         else:
+            comped_id_.append(adj_blob.id)
             derBlob = comp_blob(blob, adj_blob)  # compare blob and adjacent blob
             accum_derBlob(blob, derBlob)  # from all compared blobs, regardless of mB sign
-            comped_id_.append(adj_blob.id)
 
-        if derBlob.mB > 0:  # replace blob with adj_blob for continuing adjacency search:
-            adj_blob.DerBlob = CderBlob()
-            comp_blob_recursive(adj_blob, adj_blob.adj_blobs[0], comped_id_)
-        else:
-            blob.DerBlob.neg_mB += derBlob.mB  # mB accumulated over comparison scope
-            blob.DerBlob.distance += np.sqrt(adj_blob.A)
-
-            if blob.Dert.M + blob.DerBlob.neg_mB > ave_mB: # negative mB, extend blob comparison to adjacents of adjacent, depth-first
+            if derBlob.mB > 0:  # replace blob with adj_blob for continuing adjacency search:
+                if not isinstance(adj_blob.DerBlob, CderBlob): # the adj blob should not checked before
+                    adj_blob.DerBlob = CderBlob()
+                    adj_comped_id_ = [adj_blob.id]
+                    comp_blob_recursive(adj_blob, adj_blob.adj_blobs[0], adj_comped_id_)
+            elif blob.Dert.M + blob.neg_mB+ derBlob.mB > ave_mB: # negative mB, extend blob comparison to adjacents of adjacent, depth-first
+                blob.neg_mB += derBlob.mB  # mB accumulated over comparison scope
+                blob.distance += np.sqrt(adj_blob.A) # accumulate distance only if the condition met (>mB)
                 comp_blob_recursive(blob, adj_blob.adj_blobs[0], comped_id_)
 
 
@@ -91,11 +91,11 @@ def comp_blob(blob, _blob):
     dM = _M - M
     mM = min(_M, M)
 
-    mB = mI + mA + mG + mM - ave_mB * (ave_rM ** ((1+blob.DerBlob.distance) / np.sqrt(A)))
+    mB = mI + mA + mG + mM - ave_mB * (ave_rM ** ((1+blob.distance) / np.sqrt(A)))
     # deviation from average blob match at current distance
     dB = dI + dA + dG + dM
 
-    derBlob  = CderBlob(blob=blob, _blob=_blob, mB=mB, dB=dB)  # blob is core node, _blob is adjacent blob
+    derBlob  = CderBlob(_blob=_blob, mB=mB, dB=dB)  # blob is core node, _blob is adjacent blob
 
     if _blob.fsliced and blob.fsliced:
         pass
@@ -127,17 +127,13 @@ def form_bblob_recursive(bblob_, bblob, checked_ids):
     for blob in bblob.blob_: # search blob' derBlob's blobs to get potential border clustering blob
         if (blob.DerBlob.mB > 0) and (blob.id not in checked_ids):  # positive mB
             for derBlob in blob.derBlob_:
-                # if derBlob.blob is in bblob.blob_, but derBlob._blob is not in bblob_blob_
+                # if blob is in bblob.blob_, but derBlob._blob is not in bblob_blob_
                 # so if sum of derBlob._blob's mB with blob's mB > 0 , pack the derBlob._blob into bblob.blob_
-                if (derBlob.blob in bblob.blob_) and (derBlob._blob.DerBlob.mB + blob.DerBlob.mB >0) and (derBlob._blob not in bblob.blob_):
-                    merge_blob = derBlob._blob
-                    fsearch = 1
-                if (derBlob._blob in bblob.blob_) and (derBlob._blob.DerBlob.mB + blob.DerBlob.mB >0) and (derBlob.blob not in bblob.blob_):
-                    merge_blob = derBlob.blob
-                    fsearch = 1
-                if fsearch:
-                    accum_bblob(bblob, merge_blob)
+                if (derBlob._blob not in bblob.blob_) and (derBlob._blob.DerBlob.mB + blob.DerBlob.mB >0):
+                    accum_bblob(bblob, derBlob._blob)
                     checked_ids.append(blob.id)
+                    fsearch = 1
+
     if fsearch:
         form_bblob_recursive(bblob_, bblob, checked_ids)
 
