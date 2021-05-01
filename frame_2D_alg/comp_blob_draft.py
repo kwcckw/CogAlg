@@ -25,7 +25,7 @@ class CBblob(ClusterStructure):
     DerBlob = object
     blob_ = list
 
-ave_mB = -20000
+ave_mB = 20000  # ave can't be negative
 ave_rM = .7  # average relative match at rL=1: rate of ave_mB decay with relative distance, due to correlation between proximity and similarity
 
 
@@ -36,8 +36,9 @@ def cross_comp_blobs(frame):
     blob_ = frame.blob_
 
     for blob in blob_:  # each blob forms derBlob per compared adj_blob and accumulates adj_blobs'derBlobs:
+        comp_blob_recursive(blob, blob.adj_blobs[0], derBlob_=[], derBlob_id_=[])
+        # derBlob_ and derBlob_id_ are local and frame-wide
         blob.DerBlob = CderBlob()
-        comp_blob_recursive(blob, blob.adj_blobs[0], comped_id_=[blob.id]) # comped_id_ is blob wide, per blob
 
     bblob_ = form_bblob_(blob_)  # form blobs of blobs, connected by mutual match
 
@@ -46,33 +47,38 @@ def cross_comp_blobs(frame):
     return bblob_
 
 
-def comp_blob_recursive(blob, adj_blob_, comped_id_):
+def comp_blob_recursive(blob, adj_blob_, derBlob_, derBlob_id_):
     '''
     called by cross_comp_blob to recursively compare blob to adj_blobs in incremental layers of adjacency
     '''
     for adj_blob in adj_blob_:
-        if adj_blob.id in comped_id_:  # this is ids of blobs compared to immediate adjacents? Yes
-            # not sure here, why we need accumulate again?
-            # assign checked id' derBlob as current derBlob if the checked blob is having derBlob (they might not having derBlob if mB<0)
-            if isinstance(adj_blob.DerBlob, CderBlob) and adj_blob is not blob:
-                for derBlob in adj_blob.derBlob_:
-                    if derBlob not in blob.derBlob_:
-                        accum_derBlob(blob, derBlob)
-   
-        else:
-            comped_id_.append(adj_blob.id)
-            derBlob = comp_blob(blob, adj_blob)  # compare blob and adjacent blob
-            accum_derBlob(blob, derBlob)  # from all compared blobs, regardless of mB sign
+        derBlob_id = adj_blob.id * blob.id  # unique comparand_pair identifier, frame-wide, same for derBlob_?
+        fnew = 1  # new comparand pair
 
-            if derBlob.mB > 0:  # replace blob with adj_blob for continuing adjacency search:
-                if not isinstance(adj_blob.DerBlob, CderBlob): # the adj blob should not checked before
-                    adj_blob.DerBlob = CderBlob()
-                    adj_comped_id_ = [adj_blob.id]
-                    comp_blob_recursive(adj_blob, adj_blob.adj_blobs[0], adj_comped_id_)
-            elif blob.Dert.M + blob.neg_mB+ derBlob.mB > ave_mB: # negative mB, extend blob comparison to adjacents of adjacent, depth-first
-                blob.neg_mB += derBlob.mB  # mB accumulated over comparison scope
-                blob.distance += np.sqrt(adj_blob.A) # accumulate distance only if the condition met (>mB)
-                comp_blob_recursive(blob, adj_blob.adj_blobs[0], comped_id_)
+        for i, id in enumerate(derBlob_id_):  # is there a shortcut for finding index of a known value, this could be very slow?
+            if id==derBlob_id:
+                derBlob = derBlob_[i]
+                accum_derBlob(blob, derBlob)  # also adj_blob.rdn += 1: redundancy coeff?
+                fnew=0
+                break
+        if fnew:
+            if adj_blob is not blob:
+                derBlob = comp_blob(blob, adj_blob)  # compare blob and adjacent blob
+                accum_derBlob(blob, derBlob)  # from all compared blobs, regardless of mB sign
+                derBlob_id_.append(adj_blob.id * blob.id)  # unique comparand_pair identifier
+                derBlob_.append(derBlob)  # also frame-wide
+
+        if derBlob.mB > 0:
+            # replace blob with adj_blob for continuing adjacency search:
+            if not isinstance(adj_blob.DerBlob, CderBlob):  # do we really need this?
+                adj_blob.DerBlob = CderBlob()
+                comp_blob_recursive(adj_blob, adj_blob.adj_blobs[0], derBlob_, derBlob_id_)
+
+        elif blob.Dert.M + blob.neg_mB+ derBlob.mB > ave_mB:  # neg mB but positive comb M,
+            # extend blob comparison to adjacents of adjacent, depth-first
+            blob.neg_mB += derBlob.mB  # mB and distance are accumulated over comparison scope
+            blob.distance += np.sqrt(adj_blob.A)
+            comp_blob_recursive(blob, adj_blob.adj_blobs[0], derBlob_, derBlob_id_)
 
 
 def comp_blob(blob, _blob):
