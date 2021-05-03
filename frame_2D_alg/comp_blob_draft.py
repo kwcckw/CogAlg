@@ -37,7 +37,7 @@ def cross_comp_blobs(frame):
 
     for blob in blob_:  # each blob forms derBlob per compared adj_blob and accumulates adj_blobs'derBlobs:
         blob.DerBlob = CderBlob()
-        comp_blob_recursive(blob, blob.adj_blobs[0], derBlob_=[], derBlob_id_=[])
+        comp_blob_recursive(blob, blob.adj_blobs[0], blob_id_=[], derBlob_=[], derBlob_id_=[])
         # derBlob_ and derBlob_id_ are local and frame-wide
 
     bblob_ = form_bblob_(blob_)  # form blobs of blobs, connected by mutual match
@@ -47,12 +47,14 @@ def cross_comp_blobs(frame):
     return bblob_
 
 
-def comp_blob_recursive(blob, adj_blob_, derBlob_, derBlob_id_):
+def comp_blob_recursive(blob, adj_blob_, blob_id_, derBlob_, derBlob_id_):
     '''
     called by cross_comp_blob to recursively compare blob to adj_blobs in incremental layers of adjacency
     '''
+    blob_id_.append(blob.id) # prevent the cluster connectivity connect back to the previous blob and forming infinity loop
+    
     for adj_blob in adj_blob_:
-        if blob is not adj_blob: # adj of adj blob could be the blob itself
+        if adj_blob.id not in blob_id_: # adj of adj blob could be the blob itself
             # pairing function generates unique number from each comparand_pair, frame-wide:
             derBlob_id = generate_unique_id(blob.id, adj_blob.id)
 
@@ -74,30 +76,31 @@ def comp_blob_recursive(blob, adj_blob_, derBlob_, derBlob_id_):
             if derBlob.mB > 0:
                 # replace blob with adj_blob for continuing adjacency search:
                 if not isinstance(adj_blob.DerBlob, CderBlob):  # if adj_blob.DerBlob: it's already searched in previous call
-                    # but this search could be to a different depth?
-                    adj_blob.DerBlob = CderBlob()
-                comp_blob_recursive(adj_blob, adj_blob.adj_blobs[0], derBlob_, derBlob_id_)
+                    adj_blob.DerBlob = CderBlob()               # but this search could be to a different depth?
+                comp_blob_recursive(adj_blob, adj_blob.adj_blobs[0], blob_id_, derBlob_, derBlob_id_)
+                break
 
             elif blob.Dert.M + blob.neg_mB+ derBlob.mB > ave_mB:  # neg mB but positive comb M,
                 # extend blob comparison to adjacents of adjacent, depth-first
                 blob.neg_mB += derBlob.mB  # mB and distance are accumulated over comparison scope
                 blob.distance += np.sqrt(adj_blob.A)
-                comp_blob_recursive(blob, adj_blob.adj_blobs[0], derBlob_, derBlob_id_)
+                comp_blob_recursive(blob, adj_blob.adj_blobs[0], blob_id_, derBlob_, derBlob_id_)
 
 
 def generate_unique_id(id1, id2):
     '''
     generate unique id based on id1 and id2, different order of id1 and id2 yields unique id in different sign
     '''
-     # get sign based on order of id1 and id2, output would be +1 or -1
+    # get sign based on order of id1 and id2, output would be +1 or -1
     id_sign = ((0.5*(id1+id2)*(id1+id2+1) + id1) - (0.5*(id2+id1)*(id2+id1+1) + id2)) / abs(id1-id2)
 
     # modified pairing function, so that different order of a and b will generate same value
     unique_id = (0.5*(id1+id2)*(id1+id2+1) + (id1*id2)) * id_sign
+
     '''
     why not:
     derBlob_id = (0.5 x (id1+id2) x (id1+id2+1) + (id1 x id2))
-    if id1 is adj_blob:
+    if id1 is adj_blob:   (in the new scan, we may not know id1 is blob or adj_blob from the previous scan, so the sign assignment would be not correct)
     derBlob_id = -derBlob_id 
     ? 
     '''
