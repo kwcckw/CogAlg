@@ -27,6 +27,7 @@ class CBblob(ClusterStructure):
 
 ave_mB = 0  # ave can't be negative
 ave_rM = .7  # average relative match at rL=1: rate of ave_mB decay with relative distance, due to correlation between proximity and similarity
+ave_scale = 100 # scale down large value to prevent overflow in int
 
 
 def cross_comp_blobs(frame):
@@ -36,7 +37,8 @@ def cross_comp_blobs(frame):
     blob_ = frame.blob_
 
     for blob in blob_:  # each blob forms derBlob per compared adj_blob and accumulates adj_blobs'derBlobs:
-        blob.DerBlob = CderBlob()
+        if not isinstance(blob.DerBlob, CderBlob): # blob may searched before, when current blob is adj_blob and the formed derBlob.mB>0 in prior function call
+            blob.DerBlob = CderBlob()
         comp_blob_recursive(blob, blob.adj_blobs[0], blob_id_=[], derBlob_=[], derBlob_id_=[])
         # derBlob_ and derBlob_id_ are local and frame-wide
 
@@ -55,7 +57,7 @@ def comp_blob_recursive(blob, adj_blob_, blob_id_, derBlob_, derBlob_id_):
         blob_id_.append(blob.id) # prevent the cluster connectivity connect back to the previous blob and forming infinity loop
     
         for adj_blob in adj_blob_:
-            if adj_blob.id not in blob_id_: # adj of adj blob could be the blob itself
+            if adj_blob is not blob: # adj of adj blob could be the blob itself
                 # pairing function generates unique number from each comparand_pair, frame-wide:
                 derBlob_id = generate_unique_id(blob.id, adj_blob.id)
     
@@ -63,11 +65,7 @@ def comp_blob_recursive(blob, adj_blob_, blob_id_, derBlob_, derBlob_id_):
                 if derBlob_id in derBlob_id_: # same sign derBlob is in existing derBlob
                     derBlob = derBlob_[derBlob_id_.index(derBlob_id)]
                     accum_derBlob(blob, derBlob)  # also adj_blob.rdn += 1?
-    
-                elif -derBlob_id in derBlob_id_: # different sign derBlob is in existing derBlob
-                    derBlob = derBlob_[derBlob_id_.index(-derBlob_id)]
-                    accum_derBlob(blob, derBlob)  # also adj_blob.rdn += 1
-    
+
                 else:  # compute new derBlob
                     derBlob = comp_blob(blob, adj_blob)  # compare blob and adjacent blob
                     accum_derBlob(blob, derBlob)  # from all compared blobs, regardless of mB sign
@@ -81,7 +79,7 @@ def comp_blob_recursive(blob, adj_blob_, blob_id_, derBlob_, derBlob_id_):
                     comp_blob_recursive(adj_blob, adj_blob.adj_blobs[0], blob_id_, derBlob_, derBlob_id_)
                     break
     
-                elif blob.Dert.M + blob.neg_mB+ derBlob.mB > ave_mB:  # neg mB but positive comb M,
+                elif blob.Dert.M + (blob.neg_mB*ave_scale)+ (derBlob.mB*ave_scale) > ave_mB:  # neg mB but positive comb M,
                     # extend blob comparison to adjacents of adjacent, depth-first
                     blob.neg_mB += derBlob.mB  # mB and distance are accumulated over comparison scope
                     blob.distance += np.sqrt(adj_blob.A)
@@ -93,18 +91,15 @@ def generate_unique_id(id1, id2):
     generate unique id based on id1 and id2, different order of id1 and id2 yields unique id in different sign
     '''
     # get sign based on order of id1 and id2, output would be +1 or -1
-    id_sign = ((0.5*(id1+id2)*(id1+id2+1) + id1) - (0.5*(id2+id1)*(id2+id1+1) + id2)) / abs(id1-id2)
+    # id_sign = ((0.5*(id1+id2)*(id1+id2+1) + id1) - (0.5*(id2+id1)*(id2+id1+1) + id2)) / abs(id1-id2)
 
     # modified pairing function, so that different order of a and b will generate same value
-    unique_id = (0.5*(id1+id2)*(id1+id2+1) + (id1*id2)) * id_sign
+    # unique_id = (0.5*(id1+id2)*(id1+id2+1) + (id1*id2)) * id_sign
+    
+    # i don't see the usage of sign yet, so probably we can ignore the sign here
+    # if we need the sign, we can use the equations above
+    unique_id = (0.5*(id1+id2)*(id1+id2+1) + (id1*id2))
 
-    '''
-    why not:
-    derBlob_id = (0.5 x (id1+id2) x (id1+id2+1) + (id1 x id2))
-    if id1 is adj_blob:   (in the new scan, we may not know id1 is blob or adj_blob from the previous scan, so the sign assignment would be not correct)
-    derBlob_id = -derBlob_id 
-    ? 
-    '''
     return unique_id
 
 def comp_blob(blob, _blob):
@@ -127,7 +122,7 @@ def comp_blob(blob, _blob):
     # deviation from average blob match at current distance
     dB = dI + dA + dG + dM
 
-    derBlob  = CderBlob(_blob=_blob, mB=mB, dB=dB)  # blob is core node, _blob is adjacent blob
+    derBlob  = CderBlob(_blob=_blob, mB=mB/ave_scale, dB=dB/ave_scale)  # blob is core node, _blob is adjacent blob
 
     if _blob.fsliced and blob.fsliced:
         pass
