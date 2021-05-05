@@ -121,6 +121,8 @@ class CBlob(ClusterStructure):
     derBlob_ = list
     distance = int  # common per derBlob_
     neg_mB = int    # common per derBlob_
+    derBlob_id_ = list       # temporary, for debug purpose
+    derBlob_blob_id_ = list  # temporary, for debug purpose
 
 
 # draft
