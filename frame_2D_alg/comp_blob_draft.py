@@ -1,5 +1,5 @@
 '''
-Cross-compare blobs with incremental adjacency, within a frame
+Cross-compare blobs with incrementally intermediate adjacency, within a frame
 '''
 
 from class_cluster import ClusterStructure, NoneType
@@ -59,12 +59,10 @@ def comp_blob_recursive(blob, adj_blob_, blob_id_, derBlob_, derBlob_id_):
 
         for adj_blob in adj_blob_:
             if adj_blob.id not in _blob_id:  # adj_blob of adj_blob could be the blob itself
-                # pairing function generates unique number from each comparand_pair, frame-wide:
+                # pairing function generates unique number from each pair of comparands, frame-wide:
                 derBlob_id = (0.5 * (blob.id + adj_blob.id) * (blob.id + adj_blob.id + 1) + (blob.id * adj_blob.id))
 
-                # if prior derBlob exists and if we retrieve the prior existing derBlob, derBlob.blob may not always =current blob, it could be the other way around
-                # it could be derBlob.blob=blob, derBlob._blob=adj_blob or derBlob.blob=adj_blob, derBlob._blob=blob 
-                # so in this case, we would need have both blob and _blob in derBlob
+                # if derBlob exists, it may be that derBlob.blob==blob, derBlob._blob==adj_blob, or derBlob.blob=adj_blob, derBlob._blob=blob
                 if derBlob_id in derBlob_id_:  # derBlob exists, just accumulate it in blob.DerBlob
                     derBlob = derBlob_[derBlob_id_.index(derBlob_id)]
                     accum_derBlob(blob, derBlob)  # also adj_blob.rdn += 1?
@@ -77,8 +75,8 @@ def comp_blob_recursive(blob, adj_blob_, blob_id_, derBlob_, derBlob_id_):
 
                 if derBlob.mB > 0:
                     # replace blob with adj_blob for continuing adjacency search:
-                    if not isinstance(adj_blob.DerBlob, CderBlob):  # if adj_blob.DerBlob: it's already searched in previous call
-                        adj_blob.DerBlob = CderBlob()               # but this search could be to a different depth?
+                    if not isinstance(adj_blob.DerBlob, CderBlob):  # if adj_blob.DerBlob: it's already searched in previous call,
+                        adj_blob.DerBlob = CderBlob()  # but this search could be of different depth, so compare again:
                     comp_blob_recursive(adj_blob, adj_blob.adj_blobs[0], blob_id_, derBlob_, derBlob_id_)
                     break
 
@@ -128,8 +126,8 @@ def form_bblob_(blob_):
         if blob.DerBlob.mB > 0 and blob.id not in checked_ids:  # init bblob with current blob
             checked_ids.append(blob.id)
 
-            bblob = CBblob(DerBlob=CderBlob()) # init new bblob per blob
-            accum_bblob(bblob, blob) # accum blob into bblob
+            bblob = CBblob(DerBlob=CderBlob())
+            accum_bblob(bblob, blob)  # accum blob into bblob
             form_bblob_recursive(bblob_, bblob, checked_ids)
 
     # for debug purpose on duplicated blobs in bblob, not needed in actual code
@@ -144,11 +142,11 @@ def form_bblob_recursive(bblob_, bblob, checked_ids):
 
     fsearch = 0  # there are blobs to check for inclusion in bblob
 
-    for blob in bblob.blob_: # search blob' derBlob's blobs to get potential border clustering blob
+    for blob in bblob.blob_:  # search blob' derBlob's blobs to get potential border clustering blob
         if (blob.DerBlob.mB > 0) and (blob.id not in checked_ids):  # positive mB
             for derBlob in blob.derBlob_:
-                # if blob is in bblob.blob_, but derBlob._blob is not in bblob_blob_
-                # so if sum of derBlob._blob's mB with blob's mB > 0 , pack the derBlob._blob into bblob.blob_
+                # if blob is in bblob.blob_, but derBlob._blob is not in bblob_blob_ and (DerBlob.mB > 0 and blob.mB > 0):
+                # pack derBlob._blob in bblob:
                 if (derBlob._blob not in bblob.blob_) and (derBlob._blob.DerBlob.mB + blob.DerBlob.mB >0):
                     accum_bblob(bblob, derBlob._blob)
                     checked_ids.append(blob.id)
@@ -173,8 +171,8 @@ def accum_bblob(bblob, blob):
 
     # accumulate derBlob
     bblob.DerBlob.accumulate(**{param:getattr(blob.DerBlob, param) for param in bblob.DerBlob.numeric_params})
- 
-    bblob.blob_.append(blob) # yes, they should be checked prior this function call
+
+    bblob.blob_.append(blob)
 
     for derBlob in blob.derBlob_: # pack adjacent blobs of blob into bblob
         if derBlob._blob not in bblob.blob_:
@@ -282,4 +280,3 @@ def generate_unique_id(id1, id2):
     unique_id = (0.5 * (id1 + id2) * (id1 + id2 + 1) + (id1 * id2))
 
     return unique_id
-
