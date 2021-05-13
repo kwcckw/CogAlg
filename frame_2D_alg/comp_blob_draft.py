@@ -148,16 +148,14 @@ def form_bblob_(blob_):
     '''
     form blob of blobs as a cluster of blobs with positive adjacent derBlob_s, formed by comparing adj_blobs
     '''
-    checked_ids = []  # checked for clustering, frame-wide vs. per blob
-    bblob_ = []
 
+    bblob_ = []
     for blob in blob_:
-        if blob.DerBlob.mB > 0 and blob.id not in checked_ids:  # init bblob with current blob
-            checked_ids.append(blob.id)
+        if blob.DerBlob.mB > 0:  # init bblob with current blob
 
             bblob = CBblob(DerBlob=CderBlob())
             accum_bblob(bblob, blob)  # accum blob into bblob
-            form_bblob_recursive(bblob_, bblob, checked_ids)
+            form_bblob_recursive(bblob_, bblob, bblob.blob_)
 
     # for debug purpose on duplicated blobs in bblob, not needed in actual code
     for bblob in bblob_:
@@ -167,26 +165,24 @@ def form_bblob_(blob_):
 
     return bblob_
 
-def form_bblob_recursive(bblob_, bblob, checked_ids):
+def form_bblob_recursive(bblob_, bblob, blob_):
 
-    fsearch = 0  # there are blobs to check for inclusion in bblob
+    new_blob_ = [] # there are new blobs to check for inclusion in bblob
 
-    for blob in bblob.blob_:  # search blob' derBlob's blobs to get potential border clustering blob
-        if (blob.DerBlob.mB > 0) and (blob.id not in checked_ids):  # positive mB
+    for blob in blob_:  # search new added blobs to get potential border clustering blob
+        if (blob.DerBlob.mB > 0):  # positive mB
             for derBlob in blob.derBlob_:
                 # if blob is in bblob.blob_, but derBlob._blob is not in bblob_blob_ and (DerBlob.mB > 0 and blob.mB > 0):
                 # pack derBlob._blob in bblob:
-                if (derBlob._blob not in bblob.blob_) and (derBlob._blob.DerBlob.mB + blob.DerBlob.mB >0):
+                if (derBlob._blob not in bblob.blob_) and (derBlob._blob.DerBlob.mB + blob.DerBlob.mB > 0):
                     accum_bblob(bblob, derBlob._blob)
-                    checked_ids.append(blob.id)
-                    fsearch = 1
-                elif (derBlob.blob not in bblob.blob_) and (derBlob.blob.DerBlob.mB + blob.DerBlob.mB >0):
+                    new_blob_.append(derBlob._blob)
+                elif (derBlob.blob not in bblob.blob_) and (derBlob.blob.DerBlob.mB + blob.DerBlob.mB > 0):
                     accum_bblob(bblob, derBlob.blob)
-                    checked_ids.append(blob.id)
-                    fsearch = 1
+                    new_blob_.append(derBlob.blob)
 
-    if fsearch:
-        form_bblob_recursive(bblob_, bblob, checked_ids)
+    if new_blob_:
+        form_bblob_recursive(bblob_, bblob, new_blob_)
 
     bblob_.append(bblob) # pack bblob after scanning all possible derBlobs
 
