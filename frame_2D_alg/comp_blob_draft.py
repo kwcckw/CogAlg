@@ -36,8 +36,9 @@ def cross_comp_blobs(frame):
     blob_ = frame.blob_
 
     for blob in blob_:  # each blob forms derBlob per compared adj_blob and accumulates adj_blobs'derBlobs:
-        if not isinstance(blob.DerBlob, CderBlob):  # blob may have been compared when current blob was adj_blob, forming derBlob
+        if not isinstance(blob.DerBlob, CderBlob):  # blob was not compared as adj_blob, forming derBlob
             blob.DerBlob = CderBlob()
+
         comp_blob_recursive(blob, blob.adj_blobs[0], derBlob_=[])
         # derBlob_ and derBlob_id_ are local and frame-wide
 
@@ -52,63 +53,55 @@ def comp_blob_recursive(blob, adj_blob_, derBlob_):
     '''
     called by cross_comp_blob to recursively compare blob to adj_blobs in incremental layers of adjacency
     '''
-    
-    derBlob_pair_ = [ [derBlob.blob, derBlob._blob]  for derBlob in derBlob_] # pair of blob and adj_blob 
-    
-    for adj_blob in adj_blob_:  
-        # if [blob, adj_blob] is in derBlob pair, that's mean blob is checked prior this function call - break from the for loop
-        if [blob, adj_blob] in derBlob_pair_:
+    derBlob_pair_ = [ [derBlob.blob, derBlob._blob]  for derBlob in derBlob_]  # blob, adj_blob pair
+
+    for adj_blob in adj_blob_:
+        if [blob, adj_blob] in derBlob_pair_:  # blob was compared in prior function call
             break
-        # if derBlob exists, it may be that derBlob.blob=adj_blob, derBlob._blob=blob
-        elif [adj_blob, blob] in derBlob_pair_:
+        elif [adj_blob, blob] in derBlob_pair_:  # derBlob.blob=adj_blob, derBlob._blob=blob
             derBlob = derBlob_[derBlob_pair_.index([adj_blob,blob])]
-            accum_derBlob(blob, derBlob)  # also adj_blob.rdn += 1? 
-        else: # compute new derBlob
+            accum_derBlob(blob, derBlob)  # also adj_blob.rdn += 1?
+        else:  # form new derBlob
             derBlob = comp_blob(blob, adj_blob)  # compare blob and adjacent blob
             accum_derBlob(blob, derBlob)         # from all compared blobs, regardless of mB sign
             derBlob_.append(derBlob)             # also frame-wide
-        
-        if derBlob.mB > 0:
-            # replace blob with adj_blob for continuing adjacency search:
-            if not isinstance(adj_blob.DerBlob, CderBlob):  # if adj_blob.DerBlob: it's already searched in previous call,
-                adj_blob.DerBlob = CderBlob()  # but this search could be of different depth, so compare again:
-            comp_blob_recursive(adj_blob, adj_blob.adj_blobs[0], derBlob_)
+
+        if derBlob.mB > 0:  # replace blob with adj_blob for continued adjacency search:
+
+            if not isinstance(adj_blob.DerBlob, CderBlob):  # else DerBlob was formed in previous call
+                adj_blob.DerBlob = CderBlob()
+            comp_blob_recursive(adj_blob, adj_blob.adj_blobs[0], derBlob_)  # search depth could be different, compare anyway
             break
-        elif blob.Dert.M + blob.neg_mB + derBlob.mB > ave_mB:  # neg mB but positive comb M,  
+        elif blob.Dert.M + blob.neg_mB + derBlob.mB > ave_mB:  # neg mB but positive comb M,
             # extend blob comparison to adjacents of adjacent, depth-first
             blob.neg_mB += derBlob.mB  # mB and distance are accumulated over comparison scope
             blob.distance += np.sqrt(adj_blob.A)
             comp_blob_recursive(blob, adj_blob.adj_blobs[0], derBlob_)
-        
+
     '''
     if blob.id not in blob_id_:
         blob_id_.append(blob.id)  # to prevent redundant (adj_blob, blob) derBlobs, local per blob
         _blob_id = [derBlob._blob.id for derBlob in blob.derBlob_] + \
                    [derBlob.blob.id for derBlob in blob.derBlob_] # list of derBlob.blobs & derBlob._blobs, local to current function
-
         for adj_blob in adj_blob_:
             if adj_blob.id not in _blob_id:  # adj_blob of adj_blob could be the blob itself
                 # pairing function generates unique number from each pair of comparands, frame-wide:
                 derBlob_id = (0.5 * (blob.id + adj_blob.id) * (blob.id + adj_blob.id + 1) + (blob.id * adj_blob.id))
-
                 # if derBlob exists, it may be that derBlob.blob==blob, derBlob._blob==adj_blob, or derBlob.blob=adj_blob, derBlob._blob=blob
                 if derBlob_id in derBlob_id_:  # derBlob exists, just accumulate it in blob.DerBlob
                     derBlob = derBlob_[derBlob_id_.index(derBlob_id)]
                     accum_derBlob(blob, derBlob)  # also adj_blob.rdn += 1?
-
                 else:  # compute new derBlob
                     derBlob = comp_blob(blob, adj_blob)  # compare blob and adjacent blob
                     accum_derBlob(blob, derBlob)         # from all compared blobs, regardless of mB sign
                     derBlob_id_.append(derBlob_id)       # unique comparand_pair identifier
                     derBlob_.append(derBlob)             # also frame-wide
-
                 if derBlob.mB > 0:
                     # replace blob with adj_blob for continuing adjacency search:
                     if not isinstance(adj_blob.DerBlob, CderBlob):  # if adj_blob.DerBlob: it's already searched in previous call,
                         adj_blob.DerBlob = CderBlob()  # but this search could be of different depth, so compare again:
                     comp_blob_recursive(adj_blob, adj_blob.adj_blobs[0], blob_id_, derBlob_, derBlob_id_)
                     break
-
                 elif blob.Dert.M + blob.neg_mB + derBlob.mB > ave_mB:  # neg mB but positive comb M,
                     # extend blob comparison to adjacents of adjacent, depth-first
                     blob.neg_mB += derBlob.mB  # mB and distance are accumulated over comparison scope
@@ -146,9 +139,8 @@ def comp_blob(blob, _blob):
 
 def form_bblob_(blob_):
     '''
-    form blob of blobs as a cluster of blobs with positive adjacent derBlob_s, formed by comparing adj_blobs
+    bblob is a cluster / graph of blobs with positive adjacent derBlob_s, formed by comparing adj_blobs
     '''
-
     bblob_ = []
     for blob in blob_:
         if blob.DerBlob.mB > 0:  # init bblob with current blob
@@ -167,24 +159,23 @@ def form_bblob_(blob_):
 
 def form_bblob_recursive(bblob_, bblob, blob_):
 
-    new_blob_ = [] # there are new blobs to check for inclusion in bblob
+    blobs2check = []  # blobs to check for inclusion in bblob
 
     for blob in blob_:  # search new added blobs to get potential border clustering blob
         if (blob.DerBlob.mB > 0):  # positive mB
             for derBlob in blob.derBlob_:
-                # if blob is in bblob.blob_, but derBlob._blob is not in bblob_blob_ and (DerBlob.mB > 0 and blob.mB > 0):
-                # pack derBlob._blob in bblob:
+                # blob is in bblob.blob_, but derBlob._blob is not in bblob_blob_ and (DerBlob.mB > 0 and blob.mB > 0):
                 if (derBlob._blob not in bblob.blob_) and (derBlob._blob.DerBlob.mB + blob.DerBlob.mB > 0):
-                    accum_bblob(bblob, derBlob._blob)
-                    new_blob_.append(derBlob._blob)
+                    accum_bblob(bblob, derBlob._blob)  # pack derBlob._blob in bblob
+                    blobs2check.append(derBlob._blob)
                 elif (derBlob.blob not in bblob.blob_) and (derBlob.blob.DerBlob.mB + blob.DerBlob.mB > 0):
                     accum_bblob(bblob, derBlob.blob)
-                    new_blob_.append(derBlob.blob)
+                    blobs2check.append(derBlob.blob)
 
-    if new_blob_:
-        form_bblob_recursive(bblob_, bblob, new_blob_)
+    if blobs2check:
+        form_bblob_recursive(bblob_, bblob, blobs2check)
 
-    bblob_.append(bblob) # pack bblob after scanning all possible derBlobs
+    bblob_.append(bblob)  # pack bblob after scanning all accessible derBlobs
 
 
 def accum_derBlob(blob, derBlob):
