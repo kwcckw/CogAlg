@@ -35,6 +35,9 @@ ave_mP = 8  # just a random number right now.
 ave_rmP = .7  # the rate of mP decay per relative dX (x shift) = 1: initial form of distance
 ave_ortho = 20
 
+# comp_PP
+ave_mPP = 100
+
 class CP(ClusterStructure):
 
     Dert = object  # summed kernel parameters
@@ -94,6 +97,15 @@ class CderP(ClusterStructure):
     fdx = NoneType
 
 
+class CderPP(ClusterStructure):
+     
+    PP = object
+    _PP = object
+    mmPP = int
+    dmPP = int
+    mdPP = int
+    ddPP = int
+
 class CPP(ClusterStructure):
 
     Dert  = object  # set of P params accumulated in PP
@@ -116,6 +128,12 @@ class CPP(ClusterStructure):
     Pd__ = list
     PPmd_ = list
     PPdd_ = list  # comp_dx params
+    
+    # comp_PP
+    derPPm = object
+    derPPd = object
+    neg_mmPP = int
+    neg_mdPP = int
 
 # Functions:
 '''
@@ -162,11 +180,120 @@ def slice_blob(blob, verbose=False):
 
         form_PP_root(blob, derP__, P__, derPd__, Pd__, fPPd)  # form PPs in blob or in FPP
 
+        comp_PP_(blob,fPPd)
+
     # yet to be updated
     # draw PPs
     #    if not isinstance(blob, CPP):
     #        draw_PP_(blob)
 
+
+# draft
+def comp_PP_(blob, fPPd):
+     
+    for fPd in [0,1]:    
+        if fPPd: # cluster by d sign
+            if fPd: # using derPd (PPdd)
+                PP_ = blob.PPdd_ 
+            else: # using derPm (PPdm)
+                PP_ = blob.PPdm_ 
+        else: # cluster by m sign
+            if fPd: # using derPd (PPmd)
+                PP_ = blob.PPmd_ 
+            else: # using derPm (PPmm)
+                PP_ = blob.PPmm_ 
+        
+        for PP in PP_:
+            comp_PP_recursive(PP_, PP, fPd=fPd, fPPd=fPPd)
+
+
+def comp_PP(PP, _PP):
+    
+    # do we need all?
+    mP, dP, mx, dx, mL, dL, mDx, dDx, mDy, dDy, \
+    mDyy, mDyx, mDxy, mDxx, mGa, mMa, mMdx, mDdx, \
+    dDyy, dDyx, dDxy, dDxx, dGa, dMa, dMdx, dDdx = PP.derDert.unpack()
+
+    _mP, _dP, _mx, _dx, _mL, _dL, _mDx, _dDx, _mDy, _dDy, \
+    _mDyy, _mDyx, _mDxy, _mDxx, _mGa, _mMa, _mMdx, _mDdx, \
+    _dDyy, _dDyx, _dDxy, _dDxx, _dGa, _dMa, _dMdx, _dDdx = _PP.derDert.unpack()
+
+    # use 10 params for now
+    dmP = _mP - mP
+    mmP = min(_mP, mP)
+    ddP = _dP - dP
+    mdP = min(_dP, dP) 
+    dmx = _mx - mx
+    mmx = min(_mx, mx)
+    ddx = _dx - dx
+    mdx = min(_dx, dx)
+    dmL = _mL - mL
+    mmL = min(_mL, mL)
+    ddL = _dL - dL
+    mdL = min(_dL, dL)
+    dmDx = _mDx - mDx
+    mmDx = min(_mDx, mDx)
+    ddDx = _dDx - dDx
+    mdDx = min(_dDx, dDx)
+    dmDy = _mDy - mDy
+    mmDy = min(_mDy, mDy)
+    ddDy = _dDy - dDy
+    mdDy = min(_dDy, dDy)
+
+    # match of compared PPs' m components
+    mmPP = mmP + mmx + mmL + mmDx + mmDy 
+    # deviation of compared PPs' m components
+    dmPP = dmP + dmx + dmL + dmDx + dmDy
+    
+    # match of compared PPs' d components
+    mdPP = mdP + mdx + mdL + mdDx + mdDy
+    # deviation of compared PPs' d components
+    ddPP = ddP + ddx + ddL + ddDx + ddD
+
+    derPP = CderPP(PP=PP, _PP=_PP, mmPP=mmPP, dmPP = dmPP,  mdPP=mdPP, ddPP=ddPP)
+    
+    return derPP
+
+
+def comp_PP_recursive(PP_, PP, fPd, fPPd):
+    
+    for PP in PP_: # loop PP and compare them recursively   
+        if fPd: derP__ = PP.derPd__  # derPd
+        else: derP__ = PP.derP__     # derPm
+        
+        # need further review, suppose we need find connected PPs, but upconnect should be already merged into the PP ?
+        # search upconnects via PP's derPs
+        for derP in derP__:
+            for upconnect in derP._P.upconnect_:
+                if upconnect not in derP__:
+                    
+                    _PP = upconnect.PP
+                    derPP = comp_PP(PP, _PP) # comp_PP
+            
+                    if fPPd:                   # d component
+                        mPP = derPP.mdPP       # match of d
+                        if not isinstance(PP.derPPd, CderPP): # init new derPP of PP
+                            PP.derPPd = CderPP()
+                        accum_derPP(PP.derPPd, derPP)         # accumulate derPPd
+                    else:                     # m component
+                        mPP = derPP.mmPP      # match of m
+                        if not isinstance(PP.derPPm, CderPP): # init new derPP of PP
+                            PP.derPPm = CderPP()
+                        accum_derPP(PP.derPPm, derPP)         # accumulate derPPm
+                         
+                    if mPP>0: # _PP replace PP to continue the searching
+                        comp_PP_recursive(PP_, _PP,  fPd, fPPd)
+                    elif not fPPd and PP.neg_mmPP > ave_mPP: # evaluation to extend PP comparison
+                        PP.neg_mmPP += derPP.mmPP
+                        comp_PP_recursive(PP_, PP,  fPd, fPPd)
+                    elif fPPd and PP.neg_mdPP > ave_mPP: # evaluation to extend PP comparison
+                        PP.neg_mdPP += derPP.mdPP
+                        comp_PP_recursive(PP_, PP,  fPd, fPPd)
+
+
+def accum_derPP(_derPP, derPP):
+    
+    _derPP.accumulate(**{param:getattr(derPP, param) for param in _derPP.numeric_params})
 
 def form_P_(idert_, mask_, y):  # segment dert__ into P__ in horizontal ) vertical order, sum dert params into P params
 
@@ -313,14 +440,14 @@ def form_PP_root(blob, derP__, P__, derPd__, Pd__, fPPd):
     blob.derP__ = derP__; blob.P__ = P__
     blob.derPd__ = derPd__; blob.Pd__ = Pd__
     if fPPd:
-        derP_2_PP_(blob.derP__, blob.PPdm_, 0, 1)   # cluster by derPm dP sign
-        derP_2_PP_(blob.derPd__, blob.PPdd_, 1, 1)  # cluster by derPd dP sign, not used
+        derP_2_PP_(blob.derP__, blob.PPdm_,  1)   # cluster by derPm dP sign
+        derP_2_PP_(blob.derPd__, blob.PPdd_,  1)  # cluster by derPd dP sign, not used
     else:
-        derP_2_PP_(blob.derP__, blob.PPmm_, 0, 0)   # cluster by derPm mP sign
-        derP_2_PP_(blob.derPd__, blob.PPmd_, 1, 0)  # cluster by derPd mP sign, not used
+        derP_2_PP_(blob.derP__, blob.PPmm_, 0)   # cluster by derPm mP sign
+        derP_2_PP_(blob.derPd__, blob.PPmd_, 0)  # cluster by derPd mP sign, not used
 
 
-def derP_2_PP_(derP_, PP_, fderPd, fPPd):
+def derP_2_PP_(derP_, PP_,  fPPd):
     '''
     first row of derP_ has downconnect_cnt == 0, higher rows may also have them
     '''
@@ -330,12 +457,12 @@ def derP_2_PP_(derP_, PP_, fderPd, fPPd):
             accum_PP(PP,derP)
 
             if derP._P.upconnect_:  # derP has upconnects
-                upconnect_2_PP_(derP, PP_, fderPd, fPPd)  # form PPs across _P upconnects
+                upconnect_2_PP_(derP, PP_, fPPd)  # form PPs across _P upconnects
             else:
                 PP_.append(derP.PP)
 
 
-def upconnect_2_PP_(iderP, PP_, fderPd, fPPd):
+def upconnect_2_PP_(iderP, PP_,  fPPd):
     '''
     compare sign of lower-layer iderP to the sign of its upconnects to form contiguous same-sign PPs
     '''
@@ -359,7 +486,7 @@ def upconnect_2_PP_(iderP, PP_, fderPd, fPPd):
                 derP.P.downconnect_cnt = 0  # reset downconnect count for root derP
 
             if derP._P.upconnect_:
-                upconnect_2_PP_(derP, PP_, fderPd, fPPd)  # recursive compare sign of next-layer upconnects
+                upconnect_2_PP_(derP, PP_, fPPd)  # recursive compare sign of next-layer upconnects
 
             elif derP.PP is not iderP.PP and derP.P.downconnect_cnt == 0:
                 PP_.append(derP.PP)  # terminate PP (not iPP) at the sign change
