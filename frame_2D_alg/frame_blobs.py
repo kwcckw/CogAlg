@@ -114,6 +114,7 @@ class CBlob(ClusterStructure):
     Pd__ = list
     
     # comp blobs
+    bblob = object
     DerBlob = object
     derBlob_ = list
     distance = int  # derBlob only
@@ -408,7 +409,8 @@ if __name__ == "__main__":
             print_deep_blob_forking(deep_layers)
             print("\rFinished intra_blob")
 
-    # should not be in intra_blob section
+    # should not be in intra_blob section, and should start with deepest layer sub_blobs
+    # right now start with root layer blobs first
     bblob_ = cross_comp_blobs(frame)
 
     end_time = time() - start_time
