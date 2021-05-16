@@ -23,7 +23,18 @@ class CderBlob(ClusterStructure):
 
 class CBblob(ClusterStructure):
 
-    DerBlob = object
+    # derBlob params
+    mB = int
+    dB = int
+    dI = int
+    mI = int
+    dA = int
+    mA = int
+    dG = int
+    mG = int
+    dM = int
+    mM = int
+    
     blob_ = list
 
 ave_mB = 0  # ave can't be negative
@@ -71,7 +82,7 @@ def comp_blob_recursive(blob, adj_blob_, derBlob_):
                 adj_blob.DerBlob = CderBlob()
             comp_blob_recursive(adj_blob, adj_blob.adj_blobs[0], derBlob_)  # search depth could be different, compare anyway
             break
-        elif blob.Dert.M + blob.neg_mB + derBlob.mB > ave_mB:  # neg mB but positive comb M,
+        elif blob.M + blob.neg_mB + derBlob.mB > ave_mB:  # neg mB but positive comb M,
             # extend blob comparison to adjacents of adjacent, depth-first
             blob.neg_mB += derBlob.mB  # mB and distance are accumulated over comparison scope
             blob.distance += np.sqrt(adj_blob.A)
@@ -82,8 +93,8 @@ def comp_blob(blob, _blob):
     '''
     cross compare _blob and blob
     '''
-    (_I, _Dy, _Dx, _G, _M, _Dyy, _Dyx, _Dxy, _Dxx, _Ga, _Ma, _Mdx, _Ddx), _A = _blob.Dert.unpack(), _blob.A
-    (I, Dy, Dx, G, M, Dyy, Dyx, Dxy, Dxx, Ga, Ma, Mdx, Ddx), A = blob.Dert.unpack(), blob.A
+    _I, _G, _M, _A = _blob.I, _blob.G, _blob.M, _blob.A
+    I, G, M,  A = blob.I, blob.G, blob.M, blob.A
 
     dI = _I - I  # d is always signed
     mI = min(_I, I)
@@ -113,7 +124,7 @@ def form_bblob_(blob_):
     bblob_ = []
     for blob in blob_:
         if blob.DerBlob.mB > 0 and not isinstance(blob.bblob, CBblob):  # init bblob with current blob 
-            bblob = CBblob(DerBlob=CderBlob())
+            bblob = CBblob()
             merged_ids = [bblob.id]
             accum_bblob(bblob_, bblob, blob, merged_ids)  # accum blob into bblob
             form_bblob_recursive(bblob_, bblob, bblob.blob_, merged_ids)
@@ -177,7 +188,7 @@ def merge_bblob(bblob_, _bblob, bblob, merged_ids):
                     
 def accum_derBlob(blob, derBlob):
 
-    blob.DerBlob.accumulate(**{param:getattr(derBlob, param) for param in blob.DerBlob.numeric_params})
+    blob.accum_from(derBlob)
     blob.derBlob_.append(derBlob)
 
 def accum_bblob(bblob_, bblob, blob, merged_ids):
@@ -194,7 +205,7 @@ def accum_bblob(bblob_, bblob, blob, merged_ids):
                     merge_bblob(bblob_, bblob,derBlob._blob.bblob, merged_ids)   
             else:
                 # accumulate derBlob only if _blob (adjacent) not in bblob
-                bblob.DerBlob.accumulate(**{param:getattr(derBlob, param) for param in bblob.DerBlob.numeric_params})
+                bblob.accum_from(derBlob)
                 bblob.blob_.append(derBlob._blob)
                 derBlob._blob.bblob = bblob
                 

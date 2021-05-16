@@ -19,7 +19,6 @@ _methods_template = '''
 @property
 def id(self):
     return self._id
-    
 def pack(self{pack_args}):
     """Pack all fields/params back into {typename}."""
     {pack_assignments}
@@ -34,7 +33,7 @@ def accum_from(self, other):
     """Accumulate params from another structure."""
     self.accumulate(**{{p:getattr(other, p, 0)
                     for p in self.numeric_params}})
-,def __contains__(self, item):
+def __contains__(self, item):
     return (item in {params})
 def __delattr__(self, item):
     raise AttributeError("cannot delete attribute from "
