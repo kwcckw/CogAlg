@@ -237,38 +237,33 @@ def slice_blob(blob, verbose=False):
 
 def form_P_(idert_, mask_, y):  # segment dert__ into P__ in horizontal ) vertical order, sum dert params into P params
 
-    P_ = []  # rows of derPs
-    dert_ = [list(idert_[0])]  # get first dert from idert_ (generator/iterator)
-    _mask = mask_[0]  # mask bit per dert
+    P_ = []                # rows of derPs
+    _dert = list(idert_[0]) # first dert
+    dert_ = [_dert]         # pack 1st dert
+    _mask = mask_[0]       # mask bit per dert
+    
     if ~_mask:
-        I, Dy, Dx, G, M, Day, Dax, Ga, Ma = dert_[0]; L = 1; x0 = 0  # initialize P params with first dert
-
+        # initialize P with first dert
+        P = CP(I=_dert[0], Dy=_dert[1], Dx=_dert[2], G=_dert[3], M=_dert[4], Day=_dert[5], Dax=_dert[6], Ga=_dert[7], Ma=_dert[8], x0=0, L=1, y=y, dert_=dert_)
+        
     for x, dert in enumerate(idert_[1:], start=1):  # left to right in each row of derts
         mask = mask_[x]  # pixel mask
 
         if mask:  # masks: if 1,_0: P termination, if 0,_1: P initialization, if 0,_0: P accumulation:
             if ~_mask:  # _dert is not masked, dert is masked, terminate P:
-                P = CP(I=I, Dy=Dy, Dx=Dx, G=G, M=M, Day=Day, Dax=Dax, Ga=Ga, Ma=Ma, L=L, x0=x0, dert_=dert_, y=y)
                 P_.append(P)
         else:  # dert is not masked
             if _mask:  # _dert is masked, initialize P params:
-                I, Dy, Dx, G, M, Day, Dax, Ga, Ma = dert; L = 1; x0 = x; dert_ = [dert]
+                # initialize P with first dert
+                P = CP(I=dert[0], Dy=dert[1], Dx=dert[2], G=dert[3], M=dert[4], Day=dert[5], Dax=dert[6], Ga=dert[7], Ma=dert[8], x0=x, L=1, y=y, dert_=dert_)
             else:
-                I += dert[0]  # _dert is not masked, accumulate P params with (p, dy, dx, g, m, dyy, dyx, dxy, dxx, ga, ma) = dert
-                Dy += dert[1]
-                Dx += dert[2]
-                G += dert[3]
-                M += dert[4]
-                Day += dert[5]
-                Dax += dert[6]
-                Ga += dert[7]
-                Ma += dert[8]
-                L += 1
-                dert_.append(dert)
+                # _dert is not masked, accumulate P params with (p, dy, dx, g, m, dyy, dyx, dxy, dxx, ga, ma) = dert
+                P.accumulate(I=dert[0], Dy=dert[1], Dx=dert[2], G=dert[3], M=dert[4], Day=dert[5], Dax=dert[6], Ga=dert[7], Ma=dert[8],L=1)
+                P.dert_.append(dert)
+                
         _mask = mask
 
     if ~_mask:  # terminate last P in a row
-        P = CP(I=I, Dy=Dy, Dx=Dx, G=G, M=M, Day=Day, Dax=Dax, Ga=Ga, Ma=Ma, L=L, x0=x0, dert_=dert_, y=y)
         P_.append(P)
 
     return P_
@@ -281,43 +276,34 @@ def form_Pd_(P_):  # form Pds from Pm derts by dx sign, otherwise same as form_P
             P_Ddx = 0  # sum of Ddx across Pd s
             P_Mdx = 0  # sum of Mdx across Pd s
             Pd_ = []   # Pds in P
+            
             _dert = iP.dert_[0]  # 1st dert
-            dert_ = [_dert]
-            I, Dy, Dx, G, M, Day, Dax, Ga, Ma= _dert; L = 1; x0 = iP.x0  # initialize P params with first dert
+            dert_ = [_dert]   
             _sign = _dert[2] > 0
+            # initialize P with first dert
+            P = CP(I=_dert[0], Dy=_dert[1], Dx=_dert[2], G=_dert[3], M=_dert[4], Day=_dert[5], Dax=_dert[6], Ga=_dert[7], Ma=_dert[8], x0=iP.x0, dert_=dert_, L=1, y=iP.y, sign=_sign, Pm=iP) 
+            
             x = 1  # relative x within P
 
             for dert in iP.dert_[1:]:
                 sign = dert[2] > 0
                 if sign == _sign: # same Dx sign
-                    I += dert[0]  # accumulate P params with (p, dy, dx, g, m, dyy, dyx, dxy, dxx, ga, ma) = dert
-                    Dy += dert[1]
-                    Dx += dert[2]
-                    G += dert[3]
-                    M += dert[4]
-                    Day += dert[5]
-                    Dax += dert[6]
-                    Ga += dert[7]
-                    Ma += dert[8]
-                    L += 1
-                    dert_.append(dert)
+                    # accumulate P params with (p, dy, dx, g, m, dyy, dyx, dxy, dxx, ga, ma) = dert
+                    P.accumulate(I=dert[0], Dy=dert[1], Dx=dert[2], G=dert[3], M=dert[4], Day=dert[5], Dax=dert[6], Ga=dert[7], Ma=dert[8],L=1)
+                    P.dert_.append(dert)
 
                 else:  # sign change, terminate P
-                    P = CP(I=I, Dy=Dy, Dx=Dx, G=G, M=M, Day=Day, Dax=Dax, Ga=Ga, Ma=Ma,
-                           L=L, x0=x0, dert_=dert_, y=iP.y, sign=_sign, Pm=iP)
-                    if Dx > ave_Dx:
+                    if P.Dx > ave_Dx:
                         # cross-comp of dx in P.dert_
                         comp_dx(P); P_Ddx += P.Ddx; P_Mdx += P.Mdx
                     Pd_.append(P)
                     # reinitialize params
-                    I, Dy, Dx, G, M, Day, Dax, Ga, Ma = dert; x0 = iP.x0+x; L = 1; dert_ = [dert]
-
+                    P = CP(I=dert[0], Dy=dert[1], Dx=dert[2], G=dert[3], M=dert[4], Day=dert[5], Dax=dert[6], Ga=dert[7], Ma=dert[8], x0=iP.x0+x, dert_=[dert], L=1, y=iP.y, sign=sign, Pm=iP)
+                    
                 _sign = sign
                 x += 1
             # terminate last P
-            P = CP(I=I, Dy=Dy, Dx=Dx, G=G, M=M, Day=Day, Dax=Dax, Ga=Ga, Ma=Ma,
-                   L=L, x0=x0, dert_=dert_, y=iP.y, sign=_sign, Pm=iP)
-            if Dx > ave_Dx:
+            if P.Dx > ave_Dx:
                 comp_dx(P); P_Ddx += P.Ddx; P_Mdx += P.Mdx
             Pd_.append(P)
             # update Pd params in P
@@ -474,7 +460,7 @@ def comp_dx(P):  # cross-comp of dx s in P.dert_
     P.Mdx = Mdx
 
 
-def comp_slice(_P, P, _derP_):  # forms vertical derivatives of derP params, and conditional ders from norm and DIV comp
+def comp_slice(_P, P):  # forms vertical derivatives of derP params, and conditional ders from norm and DIV comp
 
     s, x0, Dx, Dy, G, M, L, Ddx, Mdx = P.sign, P.x0, P.Dx, P.Dy, P.G, P.M, P.L, P.Ddx, P.Mdx  # params per comp branch
     _s, _x0, _Dx, _Dy, _G, _M, _dX, _L, _Ddx, _Mdx = _P.sign, _P.x0, _P.Dx, _P.Dy, _P.G, _P.M, _P.dX, _P.L, _P.Ddx, _P.Mdx
@@ -504,9 +490,9 @@ def comp_slice(_P, P, _derP_):  # forms vertical derivatives of derP params, and
 
 def comp_slice_full(_P, P):  # forms vertical derivatives of derP params, and conditional ders from norm and DIV comp
 
-    s, x0, Dx, Dy, G, M, L, Ddx, Mdx = P.sign, P.x0, P.Dx, P.Dy, P.G, P.M, P.L, P.Ddx, P.Mdx
+    x0, Dx, Dy, L, = P.x0, P.Dx, P.Dy, P.L
     # params per comp branch, add angle params
-    _s, _x0, _Dx, _Dy, _G, _M, _dX, _L, _Ddx, _Mdx = _P.sign, _P.x0, _P.Dx, _P.Dy, _P.G, _P.M, _P.dX, _P.L, _P.Ddx, _P.Mdx
+    _x0, _Dx, _Dy,_dX, _L = _P.x0, _P.Dx, _P.Dy, _P.dX, _P.L
 
     dX = (x0 + (L-1) / 2) - (_x0 + (_L-1) / 2)  # x shift: d_ave_x, or from offsets: abs(x0 - _x0) + abs(xn - _xn)?
 
@@ -518,6 +504,23 @@ def comp_slice_full(_P, P):  # forms vertical derivatives of derP params, and co
 
     ddX = dX - _dX  # long axis curvature, if > ave: ortho eval per P, else per PP_dX?
     mdX = min(dX, _dX)  # dX is inversely predictive of mP?
+
+    # is this looks better? or it would better if we stick to the old code?
+    difference = P.difference(_P)   # P - _P
+    match = P.min_match(_P)         # min of P and _P
+    abs_match = P.abs_min_match(_P) # min of abs(P) and abs(_P)
+        
+    dL = difference['L'] # L: positions / sign, dderived: magnitude-proportional value
+    mL = match['L']
+    dM = difference['M'] # use abs M?  no Mx, My: non-core, lesser and redundant bias?
+    mM = match['M']
+    
+    # min is value distance for opposite-sign comparands, vs. value overlap for same-sign comparands
+    dDy = difference['Dy']  # Dy per sub_P by intra_comp(dx), vs. less vertically specific dI
+    mDy = abs_match['Dy']
+    # no comp G: Dy, Dx are more specific:
+    dDx = difference['Dx']  # same-sign Dx if Pd
+    mDx = abs_match['Dx']
 
     if dX * P.G > ave_ortho:  # estimate params of P locally orthogonal to long axis, maximizing lateral diff and vertical match
         # diagram: https://github.com/boris-kz/CogAlg/blob/master/frame_2D_alg/Illustrations/orthogonalization.png
@@ -535,27 +538,27 @@ def comp_slice_full(_P, P):  # forms vertical derivatives of derP params, and co
         oDy = (Dy * hyp - Dx / hyp) / 2;  oDx = (Dx / hyp + Dy * hyp) / 2;  or:
         oDy = hypot( Dy / hyp, Dx * hyp);  oDx = hypot( Dy * hyp, Dx / hyp)
         '''
-    dL = L - _L; mL = min(L, _L)  # L: positions / sign, dderived: magnitude-proportional value
-    dM = M - _M; mM = min(M, _M)  # use abs M?  no Mx, My: non-core, lesser and redundant bias?
-    # no comp G: Dy, Dx are more specific:
-    dDx = Dx - _Dx  # same-sign Dx if Pd
-    mDx = min(abs(Dx), abs(_Dx))
-    if Dx > 0 != _Dx > 0: mDx = -mDx
-    # min is value distance for opposite-sign comparands, vs. value overlap for same-sign comparands
-    dDy = Dy - _Dy  # Dy per sub_P by intra_comp(dx), vs. less vertically specific dI
-    mDy = min(abs(Dy), abs(_Dy))
+        # recompute difference and match
+        dL = _L - L
+        mL = min(_L, L)
+        dDy = _Dy - Dy
+        mDy = min(abs(_Dy), abs(Dy))
+        dDx = _Dx - Dx
+        mDx = min(abs(_Dx), abs(Dx))
+        
+    if (Dx > 0) != (_Dx > 0): mDx = -mDx
     if (Dy > 0) != (_Dy > 0): mDy = -mDy
 
     dDdx, dMdx, mDdx, mMdx = 0, 0, 0, 0
     if P.dxdert_ and _P.dxdert_:  # from comp_dx
         fdx = 1
-        dDdx = Ddx - _Ddx
-        mDdx = min( abs(Ddx), abs(_Ddx))
-        if (Ddx > 0) != (_Ddx > 0): mDdx = -mDdx
+        dDdx = difference['Ddx']
+        mDdx = abs_match['Ddx']
+        if (P.Ddx > 0) != (_P.Ddx > 0): mDdx = -mDdx
         # Mdx is signed:
-        dMdx = min( Mdx, _Mdx)
-        mMdx = -min( abs(Mdx), abs(_Mdx))
-        if (Mdx > 0) != (_Mdx > 0): mMdx = -mMdx
+        dMdx = match['Mdx']
+        mMdx = -abs_match['Mdx']
+        if (P.Mdx > 0) != (_P.Mdx > 0): mMdx = -mMdx
     else:
         fdx = 0
     # coeff = 0.7 for semi redundant parameters, 0.5 for fully redundant parameters:
@@ -621,47 +624,20 @@ def comp_PP_(blob, fPPd):
 
 def comp_PP(PP, _PP):
     
-    # do we need all?
-    mP, dP, mx, dx, mL, dL, mDx, dDx, mDy, dDy, \
-    mDyy, mDyx, mDxy, mDxx, mGa, mMa, mMdx, mDdx, \
-    dDyy, dDyx, dDxy, dDxx, dGa, dMa, dMdx, dDdx = PP.DerDert.unpack()
-
-    _mP, _dP, _mx, _dx, _mL, _dL, _mDx, _dDx, _mDy, _dDy, \
-    _mDyy, _mDyx, _mDxy, _mDxx, _mGa, _mMa, _mMdx, _mDdx, \
-    _dDyy, _dDyx, _dDxy, _dDxx, _dGa, _dMa, _dMdx, _dDdx = _PP.DerDert.unpack()
-
-    # use 10 params for now
-    dmP = _mP - mP
-    mmP = min(_mP, mP)
-    ddP = _dP - dP
-    mdP = min(_dP, dP) 
-    dmx = _mx - mx
-    mmx = min(_mx, mx)
-    ddx = _dx - dx
-    mdx = min(_dx, dx)
-    dmL = _mL - mL
-    mmL = min(_mL, mL)
-    ddL = _dL - dL
-    mdL = min(_dL, dL)
-    dmDx = _mDx - mDx
-    mmDx = min(_mDx, mDx)
-    ddDx = _dDx - dDx
-    mdDx = min(_dDx, dDx)
-    dmDy = _mDy - mDy
-    mmDy = min(_mDy, mDy)
-    ddDy = _dDy - dDy
-    mdDy = min(_dDy, dDy)
+    # match and difference of _PP and PP
+    difference = _PP.difference(PP)
+    match = _PP.min_match(PP)
 
     # match of compared PPs' m components
-    mmPP = mmP + mmx + mmL + mmDx + mmDy 
+    mmPP = match['mP'] + match['mx'] + match['mL'] + match['mDx'] + match['mDy'] 
     # deviation of compared PPs' m components
-    dmPP = dmP + dmx + dmL + dmDx + dmDy
+    dmPP = difference['mP'] + difference['mx'] + difference['mL'] + difference['mDx'] + difference['mDy'] 
     
     # match of compared PPs' d components
-    mdPP = mdP + mdx + mdL + mdDx + mdDy
+    mdPP = match['dP'] + match['dx'] + match['dL'] + match['dDx'] + match['dDy'] 
     # deviation of compared PPs' d components
-    ddPP = ddP + ddx + ddL + ddDx + ddD
-
+    ddPP = difference['dP'] + difference['dx'] + difference['dL'] + difference['dDx'] + difference['dDy'] 
+    
     derPP = CderPP(PP=PP, _PP=_PP, mmPP=mmPP, dmPP = dmPP,  mdPP=mdPP, ddPP=ddPP)
     
     return derPP
