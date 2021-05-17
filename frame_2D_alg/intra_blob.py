@@ -7,7 +7,7 @@
     -
     Please see diagram: https://github.com/boris-kz/CogAlg/blob/master/frame_2D_alg/Illustrations/intra_blob_scheme.png
     -
-    Blob structure, for all layers of blob hierarchy:
+    Blob structure, for all layers of blob hierarchy, see class CBlob:
     root_dert__,
     Dert = A, Ly, I, Dy, Dx, G, M, Day, Dax, Ga, Ma
     # A: area, Ly: vertical dimension, I: input; Dy, Dx: renamed Gy, Gx; G: gradient; M: match; Day, Dax, Ga, Ma: angle Dy, Dx, G, M

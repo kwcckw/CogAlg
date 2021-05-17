@@ -16,12 +16,11 @@ ave_M = -500  # high negative ave M for high G blobs
 
 def segment_by_direction(iblob, **kwargs):
 
-    verbose = kwargs.get('verbose')
-    render = kwargs.get('render')
-
     dert__ = list(iblob.dert__)
     mask__ = iblob.mask__
     dy__ = dert__[1]; dx__ = dert__[2]
+    verbose = kwargs.get('verbose')
+    render = kwargs.get('render')
 
     # segment blob into primarily vertical and horizontal sub blobs according to the direction of kernel-level gradient:
     dir_blob_, idmap, adj_pairs = \
@@ -141,7 +140,7 @@ def merge_blobs(blob, adj_blob, strong_adj_blobs):  # merge blob and adj_blob by
         extended_dert__ = [np.zeros((cyn-cy0,cxn-cx0)) for _ in range(len(blob.dert__))]
         extended_dert__[5] = np.zeros((cyn-cy0,cxn-cx0),dtype=np.complex_) # complex day
         extended_dert__[6] = np.zeros((cyn-cy0,cxn-cx0),dtype=np.complex_) # complex dax
-        
+
         for i in range(len(blob.dert__)):
             extended_dert__[i][cay0:cayn, cax0:caxn] = blob.dert__[i]
             extended_dert__[i][cby0:cbyn, cbx0:cbxn] = adj_blob.dert__[i]
@@ -164,7 +163,6 @@ def merge_blobs(blob, adj_blob, strong_adj_blobs):  # merge blob and adj_blob by
                 adj_adj_blob1.adj_blobs[0][j] = blob
 
     return blob
-
 
 
 def visualize_merging_process(iblob, dir_blob_, _dir_blob_, mask__, i):

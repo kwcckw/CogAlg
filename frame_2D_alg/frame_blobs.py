@@ -52,17 +52,17 @@ class CDert(ClusterStructure):
     Dx = int
     G = int
     M = int
-    # Dert params, comp_angle:
+    # comp_angle:
     Day = complex
     Dax = complex
     Ga = int
     Ma = int
-    # Dert params, comp_dx:
+    # comp_dx:
     Mdx = int
     Ddx = int
 
 class CFlatBlob(ClusterStructure):  # from frame_blobs only, no sub_blobs
-    
+
     # Dert params, comp_pixel:
     I = int
     Dy = int
@@ -90,7 +90,7 @@ class CFlatBlob(ClusterStructure):  # from frame_blobs only, no sub_blobs
     fopen = bool
 
 class CBlob(ClusterStructure):
-    
+
     # Dert params, comp_pixel:
     I = int
     Dy = int
@@ -105,14 +105,13 @@ class CBlob(ClusterStructure):
     # Dert params, comp_dx:
     Mdx = int
     Ddx = int
-    
+
     # blob params:
     A = int  # blob area
     sign = NoneType
     box = list
     mask__ = bool
-    dert__ = tuple
-    dert__instance = list
+    dert__ = tuple  # 2D array per param
     root_dert__ = tuple
     fopen = bool     # the blob is bordering masked area
     f_root_a = bool  # input is from comp angle
@@ -144,7 +143,6 @@ class CBlob(ClusterStructure):
     derBlob_ = list
     distance = int  # common per derBlob_
     neg_mB = int    # common per derBlob_
-
 
 
 def comp_pixel(image):  # 2x2 pixel cross-correlation within image, a standard edge detection operator

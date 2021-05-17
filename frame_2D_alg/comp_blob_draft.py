@@ -34,7 +34,7 @@ class CBblob(ClusterStructure):
     mG = int
     dM = int
     mM = int
-    
+
     blob_ = list
 
 ave_mB = 0  # ave can't be negative
@@ -71,7 +71,8 @@ def comp_blob_recursive(blob, adj_blob_, derBlob_):
             break
         elif [adj_blob, blob] in derBlob_pair_:  # derBlob.blob=adj_blob, derBlob._blob=blob
             derBlob = derBlob_[derBlob_pair_.index([adj_blob,blob])]
-            accum_derBlob(blob, derBlob)  # also adj_blob.rdn += 1?
+            accum_derBlob(blob, derBlob)
+            # also adj_blob.rdn += 1?
         else:  # form new derBlob
             derBlob = comp_blob(blob, adj_blob)  # compare blob and adjacent blob
             accum_derBlob(blob, derBlob)         # from all compared blobs, regardless of mB sign
@@ -119,17 +120,18 @@ def comp_blob(blob, _blob):
 
 def form_bblob_(blob_):
     '''
-    bblob is a cluster / graph of blobs with positive adjacent derBlob_s, formed by comparing adj_blobs
+    bblob is a cluster (graph) of blobs with positive mB to any other member blob, formed by comparing adj_blobs
+    two kinds of bblobs: merged_blob and blob_graph
     '''
     bblob_ = []
     for blob in blob_:
-        if blob.DerBlob.mB > 0 and not isinstance(blob.bblob, CBblob):  # init bblob with current blob 
+        if blob.DerBlob.mB > 0 and not isinstance(blob.bblob, CBblob):  # init bblob with current blob
             bblob = CBblob()
             merged_ids = [bblob.id]
             accum_bblob(bblob_, bblob, blob, merged_ids)  # accum blob into bblob
             form_bblob_recursive(bblob_, bblob, bblob.blob_, merged_ids)
 
-    # for debug purpose on duplicated blobs in bblob, not needed in actual code
+    # test code to see duplicated blobs in bblob, not needed in actual code
     for bblob in bblob_:
         bblob_blob_id_ = [ blob.id for blob in bblob.blob_]
         if len(bblob_blob_id_) != len(np.unique(bblob_blob_id_)):
@@ -137,16 +139,18 @@ def form_bblob_(blob_):
 
     return bblob_
 
+
 def form_bblob_recursive(bblob_, bblob, blob_, merged_ids):
 
-    blobs2check = []  # blobs to check for inclusion in bblob
-    
+    blobs2check = []  # list of blobs to check for inclusion in bblob
+
     for blob in blob_:  # search new added blobs to get potential border clustering blob
-        if (blob.DerBlob.mB > 0):  # positive mB
-            if isinstance(blob.bblob, CBblob) and blob.bblob.id not in merged_ids: # merge existing bblobs
-                if blob.bblob in bblob_: 
-                    bblob_.remove(blob.bblob) # remove the merging bblob from bblob_
-                merge_bblob(bblob_, bblob, blob.bblob, merged_ids)        
+        if (blob.DerBlob.mB > 0):  # positive summed mBs
+
+            if isinstance(blob.bblob, CBblob) and blob.bblob.id not in merged_ids:  # merge existing bblobs
+                if blob.bblob in bblob_:
+                    bblob_.remove(blob.bblob)  # remove the merging bblob from bblob_
+                merge_bblob(bblob_, bblob, blob.bblob, merged_ids)
             else:
                 for derBlob in blob.derBlob_:
                     # blob is in bblob.blob_, but derBlob._blob is not in bblob_blob_ and (DerBlob.mB > 0 and blob.mB > 0):
@@ -164,51 +168,51 @@ def form_bblob_recursive(bblob_, bblob, blob_, merged_ids):
 
 
 def merge_bblob(bblob_, _bblob, bblob, merged_ids):
-    
+
     merged_ids.append(bblob.id)
-                      
+
     for blob in bblob.blob_: # check and merge blobs of bblob
         if blob not in _bblob.blob_:
             _bblob.blob_.append(blob) # add blob to bblob
             blob.bblob = _bblob       # update bblob reference of blob
-            
+
             for derBlob in blob.derBlob_: # pack adjacent blobs of blob into _bblob
-                if derBlob._blob not in _bblob.blob_: 
+                if derBlob._blob not in _bblob.blob_:
                     if isinstance(derBlob._blob.bblob, CBblob):  # derBlob._blob is having bblob, merge them
-                        if derBlob._blob.bblob.id not in merged_ids: 
-                            if derBlob._blob.bblob in bblob_: 
+                        if derBlob._blob.bblob.id not in merged_ids:
+                            if derBlob._blob.bblob in bblob_:
                                 bblob_.remove(derBlob._blob.bblob) # remove the merging bblob from bblob_
-                            merge_bblob(bblob_, _bblob, derBlob._blob.bblob, merged_ids)   
-                            
+                            merge_bblob(bblob_, _bblob, derBlob._blob.bblob, merged_ids)
+
                     else:
                         # accumulate derBlob only if _blob (adjacent) not in _bblob
                         _bblob.DerBlob.accumulate(**{param:getattr(derBlob, param) for param in _bblob.DerBlob.numeric_params})
                         _bblob.blob_.append(derBlob._blob)
                         derBlob._blob.bblob = _bblob
-                    
+
 def accum_derBlob(blob, derBlob):
 
     blob.accum_from(derBlob)
     blob.derBlob_.append(derBlob)
 
 def accum_bblob(bblob_, bblob, blob, merged_ids):
-    
+
     bblob.blob_.append(blob) # add blob to bblob
     blob.bblob = bblob       # update bblob reference of blob
 
     for derBlob in blob.derBlob_: # pack adjacent blobs of blob into bblob
         if derBlob._blob not in bblob.blob_:
             if isinstance(derBlob._blob.bblob, CBblob): # derBlob._blob is having bblob, merge them
-                if derBlob._blob.bblob.id not in merged_ids: 
-                    if derBlob._blob.bblob in bblob_: 
+                if derBlob._blob.bblob.id not in merged_ids:
+                    if derBlob._blob.bblob in bblob_:
                         bblob_.remove(derBlob._blob.bblob) # remove the merging bblob from bblob_
-                    merge_bblob(bblob_, bblob,derBlob._blob.bblob, merged_ids)   
+                    merge_bblob(bblob_, bblob,derBlob._blob.bblob, merged_ids)
             else:
                 # accumulate derBlob only if _blob (adjacent) not in bblob
                 bblob.accum_from(derBlob)
                 bblob.blob_.append(derBlob._blob)
                 derBlob._blob.bblob = bblob
-                
+
 '''
     cross-comp among sub_blobs in nested sub_layers:
     _sub_layer = bblob.sub_layer[0]
