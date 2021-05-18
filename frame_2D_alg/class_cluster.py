@@ -73,7 +73,6 @@ class MetaCluster(type):
                              if params else 'pass',
             accumulations='; '.join(f"self.{param} += "
                                     f"kwargs.get('{param}', 0)"
-                                    #f"kwargs['{param}']"
                                     for param in numeric_params)
                           if params else 'pass',
             repr_fmt=', '.join(f'{param}=%r' for param in numeric_params),
@@ -191,17 +190,17 @@ class ClusterStructure(metaclass=MetaCluster):
         self.accumulate(**{p: getattr(other, p, 0)
                            for p in self.numeric_params})
 
-    def difference(self, other):
+    def difference(self, other, excluded=[]):
         return {param:(getattr(self, param) - getattr(other, param))
-                for param in self.numeric_params}
+                for param in self.numeric_params if param not in excluded}
 
-    def min_match(self, other):
+    def min_match(self, other, excluded=[]):
         return {param: min(getattr(self, param), getattr(other, param))
-                for param in self.numeric_params}
+                for param in self.numeric_params if param not in excluded}
 
-    def abs_min_match(self, other):
+    def abs_min_match(self, other, excluded=[]):
         return {param: min(abs(getattr(self, param)), abs(getattr(other, param)))
-                for param in self.numeric_params}
+                for param in self.numeric_params if param not in excluded}
 
 
 if __name__ == "__main__":  # for debugging

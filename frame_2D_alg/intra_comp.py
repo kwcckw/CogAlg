@@ -198,7 +198,7 @@ def angle_diff(az2, az1):  # compare phase angle of az1 to that of az2
     Substitute cos_da, sin_da (from angle_diff below):
 
     daz = (cos_1*cos_2 + sin_1*sin_2) + j*(cos_1*sin_2 - sin_1*cos_2)
-        = (cos_1 + j*sin_1)*(cos_2 - j*sin_2)
+        = (cos_1 - j*sin_1)*(cos_2 + j*sin_2)
 
     Substitute (1) and (2) into the above eq:
     daz = az1 * complex_conjugate_of_(az2)
@@ -208,8 +208,8 @@ def angle_diff(az2, az1):  # compare phase angle of az1 to that of az2
         = (ac + bd) + (ad - bc)j
         (same as old formula, in angle_diff2() below)
      '''
-
-    return az1*az2.conj()  # imags and reals of the result are sines and cosines of difference between angles
+    # corrected version
+    return az2*az1.conj()  # imags and reals of the result are sines and cosines of difference between angles
 
 '''
 old version:
