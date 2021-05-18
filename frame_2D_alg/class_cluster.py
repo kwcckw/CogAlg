@@ -1,5 +1,5 @@
-"""
-Provide a base class for cluster objects in 2D implementation of CogAlg.
+'''
+Provide a base class for cluster objects in CogAlg.
 Features:
 - Unique instance ids per class.
 - Instances are retrievable by ids via class.
@@ -7,7 +7,7 @@ Features:
 - Methods generated via string templates so overheads caused by
 differences in interfaces are mostly eliminated.
 - Can be extended/modified further to support main implementation better.
-"""
+'''
 
 import weakref
 from numbers import Number
@@ -198,7 +198,7 @@ class ClusterStructure(metaclass=MetaCluster):
     def min_match(self, other):
         return {param: min(getattr(self, param), getattr(other, param))
                 for param in self.numeric_params}
-        
+
     def abs_min_match(self, other):
         return {param: min(abs(getattr(self, param)), abs(getattr(other, param)))
                 for param in self.numeric_params}

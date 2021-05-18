@@ -21,7 +21,10 @@
     thus should be cross-compared between blobs on the next level of search.
     - assign_adjacents:
     Each blob is assigned internal and external sets of opposite-sign blobs it is connected to.
-    Please see illustrations: https://github.com/boris-kz/CogAlg/blob/master/frame_2D_alg/Illustrations/frame_blobs.png
+    
+    Please see illustrations:
+    https://github.com/boris-kz/CogAlg/blob/master/frame_2D_alg/Illustrations/blob_params.drawio
+    https://github.com/boris-kz/CogAlg/blob/master/frame_2D_alg/Illustrations/frame_blobs.png
     https://github.com/boris-kz/CogAlg/blob/master/frame_2D_alg/Illustrations/frame_blobs_intra_blob.drawio
 '''
 
@@ -246,7 +249,7 @@ def flood_fill(dert__, sign__, verbose=False, mask__=None, blob_cls=CBlob, fseg=
                                     Dx=dert__[2][y][x],
                                     G =dert__[3][y][x],
                                     M =dert__[4][y][x])
-                    
+
                     if len(dert__)>5: # comp_angle
                         blob.accumulate(Day =dert__[5][y][x],
                                         Dax =dert__[6][y][x],
@@ -255,7 +258,7 @@ def flood_fill(dert__, sign__, verbose=False, mask__=None, blob_cls=CBlob, fseg=
                     if len(dert__)>10: # comp_dx
                         blob.accumulate(Mdx =dert__[9][y][x],
                                         Ddx =dert__[10][y][x])
-   
+
                     blob.A += 1
                     if y1 < y0:
                         y0 = y1

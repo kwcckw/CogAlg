@@ -96,7 +96,7 @@ class CderP(ClusterStructure):
     dMa = int
     dMdx = int
     dDdx = int
-    
+
     P = object   # lower comparand
     _P = object  # higher comparand
     PP = object  # FPP if flip_val, contains this derP
@@ -105,7 +105,7 @@ class CderP(ClusterStructure):
 
 
 class CderPP(ClusterStructure):
-     
+
     PP = object
     _PP = object
     mmPP = int
@@ -129,7 +129,7 @@ class CPP(ClusterStructure):
     # Dert params, comp_dx:
     Mdx = int
     Ddx = int
-    
+
     # derP params
     mP = int
     dP = int
@@ -154,7 +154,7 @@ class CPP(ClusterStructure):
     dMa = int
     dMdx = int
     dDdx = int
-    
+
     # between PPs:
     upconnect_ = list
     downconnect_cnt = int
@@ -173,7 +173,7 @@ class CPP(ClusterStructure):
     Pd__ = list
     PPmd_ = list
     PPdd_ = list  # comp_dx params
-    
+
     # comp_PP
     derPPm = object
     derPPd = object
@@ -225,15 +225,12 @@ def slice_blob(blob, verbose=False):
 
         form_PP_root(blob, derP__, P__, derPd__, Pd__, fPPd)  # form PPs in blob or in FPP
 
-        #comp_PP_(blob,fPPd)
+        # comp_PP_(blob,fPPd)
 
-    # yet to be updated
-    # draw PPs
-    #    if not isinstance(blob, CPP):
-    #        draw_PP_(blob)
-
-
-
+        # yet to be updated
+        # draw PPs
+        #    if not isinstance(blob, CPP):
+        #        draw_PP_(blob)
 
 def form_P_(idert_, mask_, y):  # segment dert__ into P__ in horizontal ) vertical order, sum dert params into P params
 
@@ -241,11 +238,11 @@ def form_P_(idert_, mask_, y):  # segment dert__ into P__ in horizontal ) vertic
     _dert = list(idert_[0]) # first dert
     dert_ = [_dert]         # pack 1st dert
     _mask = mask_[0]       # mask bit per dert
-    
+
     if ~_mask:
         # initialize P with first dert
         P = CP(I=_dert[0], Dy=_dert[1], Dx=_dert[2], G=_dert[3], M=_dert[4], Day=_dert[5], Dax=_dert[6], Ga=_dert[7], Ma=_dert[8], x0=0, L=1, y=y, dert_=dert_)
-        
+
     for x, dert in enumerate(idert_[1:], start=1):  # left to right in each row of derts
         mask = mask_[x]  # pixel mask
 
@@ -260,7 +257,7 @@ def form_P_(idert_, mask_, y):  # segment dert__ into P__ in horizontal ) vertic
                 # _dert is not masked, accumulate P params with (p, dy, dx, g, m, dyy, dyx, dxy, dxx, ga, ma) = dert
                 P.accumulate(I=dert[0], Dy=dert[1], Dx=dert[2], G=dert[3], M=dert[4], Day=dert[5], Dax=dert[6], Ga=dert[7], Ma=dert[8],L=1)
                 P.dert_.append(dert)
-                
+
         _mask = mask
 
     if ~_mask:  # terminate last P in a row
@@ -276,13 +273,13 @@ def form_Pd_(P_):  # form Pds from Pm derts by dx sign, otherwise same as form_P
             P_Ddx = 0  # sum of Ddx across Pd s
             P_Mdx = 0  # sum of Mdx across Pd s
             Pd_ = []   # Pds in P
-            
+
             _dert = iP.dert_[0]  # 1st dert
-            dert_ = [_dert]   
+            dert_ = [_dert]
             _sign = _dert[2] > 0
             # initialize P with first dert
-            P = CP(I=_dert[0], Dy=_dert[1], Dx=_dert[2], G=_dert[3], M=_dert[4], Day=_dert[5], Dax=_dert[6], Ga=_dert[7], Ma=_dert[8], x0=iP.x0, dert_=dert_, L=1, y=iP.y, sign=_sign, Pm=iP) 
-            
+            P = CP(I=_dert[0], Dy=_dert[1], Dx=_dert[2], G=_dert[3], M=_dert[4], Day=_dert[5], Dax=_dert[6], Ga=_dert[7], Ma=_dert[8], x0=iP.x0, dert_=dert_, L=1, y=iP.y, sign=_sign, Pm=iP)
+
             x = 1  # relative x within P
 
             for dert in iP.dert_[1:]:
@@ -299,7 +296,7 @@ def form_Pd_(P_):  # form Pds from Pm derts by dx sign, otherwise same as form_P
                     Pd_.append(P)
                     # reinitialize params
                     P = CP(I=dert[0], Dy=dert[1], Dx=dert[2], G=dert[3], M=dert[4], Day=dert[5], Dax=dert[6], Ga=dert[7], Ma=dert[8], x0=iP.x0+x, dert_=[dert], L=1, y=iP.y, sign=sign, Pm=iP)
-                    
+
                 _sign = sign
                 x += 1
             # terminate last P
@@ -434,7 +431,7 @@ def accum_Dert(Dert: dict, **params) -> None:
     Dert.update({param: Dert[param] + value for param, value in params.items()})
 
 def accum_PP(PP, derP):  # accumulate params in PP
-    
+
     PP.accum_from(derP)    # accumulate params
     PP.derP__.append(derP) # add derP to PP
     derP.PP = PP           # update reference
@@ -509,12 +506,12 @@ def comp_slice_full(_P, P):  # forms vertical derivatives of derP params, and co
     difference = P.difference(_P)   # P - _P
     match = P.min_match(_P)         # min of P and _P
     abs_match = P.abs_min_match(_P) # min of abs(P) and abs(_P)
-        
+
     dL = difference['L'] # L: positions / sign, dderived: magnitude-proportional value
     mL = match['L']
     dM = difference['M'] # use abs M?  no Mx, My: non-core, lesser and redundant bias?
     mM = match['M']
-    
+
     # min is value distance for opposite-sign comparands, vs. value overlap for same-sign comparands
     dDy = difference['Dy']  # Dy per sub_P by intra_comp(dx), vs. less vertically specific dI
     mDy = abs_match['Dy']
@@ -545,7 +542,7 @@ def comp_slice_full(_P, P):  # forms vertical derivatives of derP params, and co
         mDy = min(abs(_Dy), abs(Dy))
         dDx = _Dx - Dx
         mDx = min(abs(_Dx), abs(Dx))
-        
+
     if (Dx > 0) != (_Dx > 0): mDx = -mDx
     if (Dy > 0) != (_Dy > 0): mDy = -mDy
 
@@ -605,59 +602,59 @@ def comp_slice_full(_P, P):  # forms vertical derivatives of derP params, and co
 
 # draft of comp_PP, pending update
 def comp_PP_(blob, fPPd):
-     
-    for fPd in [0,1]:    
+
+    for fPd in [0,1]:
         if fPPd: # cluster by d sign
             if fPd: # using derPd (PPdd)
-                PP_ = blob.PPdd_ 
+                PP_ = blob.PPdd_
             else: # using derPm (PPdm)
-                PP_ = blob.PPdm_ 
+                PP_ = blob.PPdm_
         else: # cluster by m sign
             if fPd: # using derPd (PPmd)
-                PP_ = blob.PPmd_ 
+                PP_ = blob.PPmd_
             else: # using derPm (PPmm)
-                PP_ = blob.PPmm_ 
-        
+                PP_ = blob.PPmm_
+
         for PP in PP_:
             comp_PP_recursive(PP_, PP, fPd=fPd, fPPd=fPPd)
 
 
 def comp_PP(PP, _PP):
-    
+
     # match and difference of _PP and PP
     difference = _PP.difference(PP)
     match = _PP.min_match(PP)
 
     # match of compared PPs' m components
-    mmPP = match['mP'] + match['mx'] + match['mL'] + match['mDx'] + match['mDy'] 
+    mmPP = match['mP'] + match['mx'] + match['mL'] + match['mDx'] + match['mDy']
     # deviation of compared PPs' m components
-    dmPP = difference['mP'] + difference['mx'] + difference['mL'] + difference['mDx'] + difference['mDy'] 
-    
+    dmPP = difference['mP'] + difference['mx'] + difference['mL'] + difference['mDx'] + difference['mDy']
+
     # match of compared PPs' d components
-    mdPP = match['dP'] + match['dx'] + match['dL'] + match['dDx'] + match['dDy'] 
+    mdPP = match['dP'] + match['dx'] + match['dL'] + match['dDx'] + match['dDy']
     # deviation of compared PPs' d components
-    ddPP = difference['dP'] + difference['dx'] + difference['dL'] + difference['dDx'] + difference['dDy'] 
-    
+    ddPP = difference['dP'] + difference['dx'] + difference['dL'] + difference['dDx'] + difference['dDy']
+
     derPP = CderPP(PP=PP, _PP=_PP, mmPP=mmPP, dmPP = dmPP,  mdPP=mdPP, ddPP=ddPP)
-    
+
     return derPP
 
 
 def comp_PP_recursive(PP_, PP, fPd, fPPd):
-    
-    for PP in PP_: # loop PP and compare them recursively   
+
+    for PP in PP_: # loop PP and compare them recursively
         if fPd: derP__ = PP.derPd__  # derPd
         else: derP__ = PP.derP__     # derPm
-        
+
         # need further review, suppose we need find connected PPs, but upconnect should be already merged into the PP ?
         # search upconnects via PP's derPs
         for derP in derP__:
             for upconnect in derP._P.upconnect_:
                 if upconnect not in derP__:
-                    
+
                     _PP = upconnect.PP
                     derPP = comp_PP(PP, _PP) # comp_PP
-            
+
                     if fPPd:                   # d component
                         mPP = derPP.mdPP       # match of d
                         if not isinstance(PP.derPPd, CderPP): # init new derPP of PP
@@ -668,7 +665,7 @@ def comp_PP_recursive(PP_, PP, fPd, fPPd):
                         if not isinstance(PP.derPPm, CderPP): # init new derPP of PP
                             PP.derPPm = CderPP()
                         accum_derPP(PP.derPPm, derPP)         # accumulate derPPm
-                         
+
                     if mPP>0: # _PP replace PP to continue the searching
                         comp_PP_recursive(PP_, _PP,  fPd, fPPd)
                     elif not fPPd and PP.neg_mmPP > ave_mPP: # evaluation to extend PP comparison
@@ -680,5 +677,5 @@ def comp_PP_recursive(PP_, PP, fPd, fPPd):
 
 
 def accum_derPP(_derPP, derPP):
-    
+
     _derPP.accumulate(**{param:getattr(derPP, param) for param in _derPP.numeric_params})

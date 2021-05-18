@@ -47,7 +47,7 @@ def cross_comp_blobs(frame):
     blob_ = frame.blob_
 
     for blob in blob_:  # each blob forms derBlob per compared adj_blob and accumulates adj_blobs'derBlobs:
-        if len(blob.derBlob_) == 0: 
+        if len(blob.derBlob_) == 0:
             comp_blob_recursive(blob, blob.adj_blobs[0], derBlob_=[])
         # derBlob_ is local and but not frame-wide, it is per blob
 
@@ -90,11 +90,11 @@ def comp_blob(blob, _blob):
     '''
     cross compare _blob and blob
     '''
-    
+
     # need further fix, getting error on min of complex here
     difference = _blob.difference(blob)
     match = _blob.min_match(blob)
-    
+
     mB = match['I'] + match['A'] + match['G'] + match['M'] - ave_mB * (ave_rM ** ((1+blob.distance) / np.sqrt(blob.A)))
     # deviation from average blob match at current distance
     dB = difference['I'] + difference['A'] + difference['G'] + difference['M']
@@ -109,7 +109,6 @@ def comp_blob(blob, _blob):
     '''
     _I, _G, _M, _A = _blob.I, _blob.G, _blob.M, _blob.A
     I, G, M,  A = blob.I, blob.G, blob.M, blob.A
-
     dI = _I - I  # d is always signed
     mI = min(_I, I)
     dA = _A - A
@@ -118,16 +117,12 @@ def comp_blob(blob, _blob):
     mG = min(_G, G)
     dM = _M - M
     mM = min(_M, M)
-
     mB = mI + mA + mG + mM - ave_mB * (ave_rM ** ((1+blob.distance) / np.sqrt(A)))
     # deviation from average blob match at current distance
     dB = dI + dA + dG + dM
-
     derBlob  = CderBlob(blob=blob, _blob=_blob, mB=mB, dB=dB)  # blob is core node, _blob is adjacent blob
-
     if _blob.fsliced and blob.fsliced:
         pass
-
     return derBlob
     '''
 
