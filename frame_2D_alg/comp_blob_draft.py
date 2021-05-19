@@ -167,8 +167,8 @@ def merge_bblob(bblob_, _bblob, bblob, merged_ids):
                     merge_blob = derBlob.blob
                 elif derBlob._blob not in _bblob.blob_:  # if _blob not in _bblob.blob_, blob in _bblob.blob_
                     merge_blob = derBlob._blob
-                    
-                if "merge_blob" in locals():   
+
+                if "merge_blob" in locals():
                     if isinstance(merge_blob.bblob, CBblob):  # derBlob._blob is having bblob, merge them
                         if merge_blob.bblob.id not in merged_ids:
                             if merge_blob.bblob in bblob_:
@@ -195,7 +195,7 @@ def accum_bblob(bblob_, bblob, blob, merged_ids):
             merge_blob = derBlob.blob
         elif derBlob._blob not in bblob.blob_:  # if _blob not in bblob.blob_, blob in bblob.blob_
             merge_blob = derBlob._blob
-            
+
         if "merge_blob" in locals():
             if isinstance(merge_blob.bblob, CBblob): # derBlob._blob or derBlob.blob is having bblob, merge them
                 if merge_blob.bblob.id not in merged_ids:
