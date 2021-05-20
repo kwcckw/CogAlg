@@ -191,17 +191,17 @@ class ClusterStructure(metaclass=MetaCluster):
         self.accumulate(**{p: getattr(other, p, 0)
                            for p in self.numeric_params})
 
-    def difference(self, other, excluded=[]):
+    def difference(self, other, excluded=tuple()):
         return {param:(getattr(self, param) - getattr(other, param))
                 for param in self.numeric_params if param not in excluded}
 
 
-    def abs_min_match(self, other, excluded=[]):
+    def abs_min_match(self, other, excluded=tuple()):
         return {param: min(abs(getattr(self, param)), abs(getattr(other, param)))
                 for param in self.numeric_params if param not in excluded}
 
 
-    def min_match(self, other, excluded=[]):
+    def min_match(self, other, excluded=tuple()):
         results = {}
         for param in self.numeric_params:
             if param not in excluded:
