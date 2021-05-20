@@ -74,7 +74,7 @@ def comp_blob_recursive(blob, adj_blob_, derBlob_):
 
         if "derBlob" in locals(): # derBlob exists
             accum_derBlob(blob, derBlob)         # from all compared blobs, regardless of mB sign
-            
+
             if derBlob.mB > 0:  # replace blob with adj_blob for continued adjacency search:
                 comp_blob_recursive(adj_blob, adj_blob.adj_blobs[0], derBlob_)  # search depth could be different, compare anyway
                 break

@@ -616,8 +616,8 @@ def comp_PP_(blob, fPPd):
                 PP_ = blob.PPdm_
             for PP in PP_:
                 if len(PP.derPPd_) == 0: # PP doesn't perform any searching in prior function call
-                    comp_PP_recursive(PP, PP.upconnect_, derPP_=[], fPPd=fPPd)   
-                    
+                    comp_PP_recursive(PP, PP.upconnect_, derPP_=[], fPPd=fPPd)
+
         else: # cluster by m sign
             if fPd: # using derPd (PPmd)
                 PP_ = blob.PPmd_
@@ -625,22 +625,21 @@ def comp_PP_(blob, fPPd):
                 PP_ = blob.PPmm_
             for PP in PP_:
                 if len(PP.derPPm_) == 0: # PP doesn't perform any searching in prior function call
-                    comp_PP_recursive(PP, PP.upconnect_, derPP_=[], fPPd=fPPd)    
-
+                    comp_PP_recursive(PP, PP.upconnect_, derPP_=[], fPPd=fPPd)
 
 
 def comp_PP_recursive(PP, upconnect_, derPP_, fPPd):
 
-    derPP_pair_ = [ [derPP.PP, derPP._PP]  for derPP in derPP_] 
-    
+    derPP_pair_ = [ [derPP.PP, derPP._PP]  for derPP in derPP_]
+
     for _PP in upconnect_:
         if [_PP, PP] in derPP_pair_ : # derPP.PP = _PP, derPP._PP = PP
             derPP = derPP_[derPP_pair_.index([_PP,PP])]
-            
+
         elif [PP, _PP] not in derPP_pair_ : # same pair of PP and _PP doesn't checked prior this function call
             derPP = comp_PP(PP, _PP) # comp_PP
             derPP_.append(derPP)
-  
+
         if "derPP" in locals(): # derPP exists
             accum_derPP(PP, derPP, fPPd)    # accumulate derPP
             if fPPd:                  # PP cluster by d
@@ -650,11 +649,11 @@ def comp_PP_recursive(PP, upconnect_, derPP_, fPPd):
 
             if mPP>0: # _PP replace PP to continue the searching
                 comp_PP_recursive(_PP, _PP.upconnect_, derPP_, fPPd)
-                
+
             elif fPPd and PP.neg_mdPP > ave_mPP: # evaluation to extend PPd comparison
                 PP.neg_mdPP += derPP.mdPP
                 comp_PP_recursive(PP, _PP.upconnect_, derPP_, fPPd)
-                  
+
             elif not fPPd and PP.neg_mmPP > ave_mPP: # evaluation to extend PPm comparison
                 PP.neg_mmPP += derPP.mmPP
                 comp_PP_recursive(PP, _PP.upconnect_, derPP_, fPPd)
