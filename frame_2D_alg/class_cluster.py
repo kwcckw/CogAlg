@@ -191,27 +191,40 @@ class ClusterStructure(metaclass=MetaCluster):
         self.accumulate(**{p: getattr(other, p, 0)
                            for p in self.numeric_params})
 
-    def difference(self, other, excluded=tuple()):
+    def difference(self, other, excluded=()):
         return {param:(getattr(self, param) - getattr(other, param))
                 for param in self.numeric_params if param not in excluded}
 
+    '''
+    It should be generic min_match, no two separate versions:
 
-    def abs_min_match(self, other, excluded=tuple()):
+    if self_param>0 == other_param>0:
+        return {param: min(abs(getattr(self, param)), abs(getattr(other, param)))
+                for param in self.numeric_params if param not in excluded}
+    else:
+        return negative param ( one of comparands is always negative here, it should become min_match )
+
+    How do we put it in code?
+    '''
+    def min_match(self, other, excluded=()):
+
+        return {param: min(getattr(self, param), getattr(other, param))
+                for param in self.numeric_params if param not in excluded}
+
+    def abs_min_match(self, other, excluded=()):
+
         return {param: min(abs(getattr(self, param)), abs(getattr(other, param)))
                 for param in self.numeric_params if param not in excluded}
 
-
-    def min_match(self, other, excluded=tuple()):
+    def min_match_da(self, other):
         results = {}
         for param in self.numeric_params:
-            if param not in excluded:
-                _e = getattr(other, param)
-                e = getattr(self, param)
-                if isinstance(e, complex):
-                    # For angle, not sure if it makes any sense for min-match
-                    results[param] = _e if phase(_e) < phase(e)  else e
-                else:
-                    results[param] = min(_e, e)
+            _e = getattr(other, param)
+            e = getattr(self, param)
+            if isinstance(e, complex):  # match between angle diffs
+                results[param] = _e if phase(_e) < phase(e)  else e
+            else:
+                results[param] = min(_e, e)
         return results
 
 if __name__ == "__main__":  # for debugging
