@@ -31,7 +31,7 @@ ave_rmP = .7  # the rate of mP decay per relative dX (x shift) = 1: initial form
 ave_ortho = 20
 
 # comp_PP
-ave_mPP = 100
+ave_mPP = 0
 ave_rM  = .7
 
 '''
@@ -467,7 +467,7 @@ def accum_Dert(Dert: dict, **params) -> None:
     Dert.update({param: Dert[param] + value for param, value in params.items()})
 
 def accum_PP(PP, derP):  # accumulate params in PP
-
+    
     PP.accum_from(derP)    # accumulate params
     PP.derP__.append(derP) # add derP to PP
     derP.PP = PP           # update reference
@@ -648,6 +648,8 @@ def comp_PP_(blob, fPPd):
             for PP in PP_:
                 if len(PP.derPPd_) == 0: # PP doesn't perform any searching in prior function call
                     comp_PP_recursive(PP, PP.upconnect_, derPP_=[], fPPd=fPPd)
+                    
+            form_PPP_(PP_, fPPd)
 
         else: # cluster by m sign
             if fPd: # using derPd (PPmd)
@@ -658,6 +660,7 @@ def comp_PP_(blob, fPPd):
                 if len(PP.derPPm_) == 0: # PP doesn't perform any searching in prior function call
                     comp_PP_recursive(PP, PP.upconnect_, derPP_=[], fPPd=fPPd)
 
+            form_PPP_(PP_, fPPd)
 
 def comp_PP_recursive(PP, upconnect_, derPP_, fPPd):
 
@@ -697,12 +700,16 @@ def form_PPP_(PP_, fPPd):
     PPP_ = []
     for PP in PP_:
 
-        if fPPd: mPP = PP.mdPP # match of PP's d
-        else:    mPP = PP.mdPP # match of PP's m
+        if fPPd: 
+            mPP = PP.mdPP # match of PP's d
+            PPP = PP.PPPd
+        else:    
+            mPP = PP.mmPP # match of PP's m
+            PPP = PP.PPPm
 
-        if mPP > 0 and not isinstance(PP.PPP, CPPP):
-            PPP = CPPP()                    # init new PPP
-            accum_PPP(PPP_, PPP, PP, fPPd)  # accum PP into PPP
+        if mPP > 0 and not isinstance(PPP, CPPP):
+            PPP = CPPP()              # init new PPP
+            accum_PPP(PPP, PP, fPPd)  # accum PP into PPP
             form_PPP_recursive(PPP_, PPP, PP.upconnect_, checked_ids=[PP.id], fPPd=fPPd)
             PPP_.append(PPP) # pack PPP after scanning all upconnects
 
@@ -711,22 +718,24 @@ def form_PPP_(PP_, fPPd):
 def form_PPP_recursive(PPP_, PPP, upconnect_,  checked_ids, fPPd):
 
     for _PP in upconnect_:
-        if fPPd: _mPP = _PP.mdPP   # match of _PPs' d
-        else:    _mPP = _PP.mmPP   # match of _PPs' m
-
-        if mPP>0 and _PP.id not in checked_ids:
+        if _PP.id not in checked_ids:
             checked_ids.append(_PP.id)
-
-            if fPPd: _PPP = _PP.PPPd
-            else:    _PPP = _PP.PPPm
-
-            if isinstance(_PPP, CPPP):  # _PP's PPP exists, merge with current PPP
-                PPP_.remove(PPP_, _PPP) # remove the merging PPP from PPP_
-                merge_PPP(PPP, _PPP, fPPd)
-            else:
-                accum_PPP(PPP_, PPP, _PP, merged_ids)  # accum PP into PPP
-                if _PP.upconnect_:                     # continue with _PP upconnects
-                    form_PPP_recursive(PPP_, PPP, _PP.upconnect_,  checked_ids, fPPd)
+            
+            if fPPd: _mPP = _PP.mdPP   # match of _PPs' d
+            else:    _mPP = _PP.mmPP   # match of _PPs' m
+    
+            if _mPP>0 :  # _PP.mPP >0
+    
+                if fPPd: _PPP = _PP.PPPd
+                else:    _PPP = _PP.PPPm
+    
+                if isinstance(_PPP, CPPP):     # _PP's PPP exists, merge with current PPP
+                    PPP_.remove(_PPP)    # remove the merging PPP from PPP_
+                    merge_PPP(PPP, _PPP, fPPd)
+                else:
+                    accum_PPP(PPP, _PP, fPPd)  # accum PP into PPP
+                    if _PP.upconnect_:         # continue with _PP upconnects
+                        form_PPP_recursive(PPP_, PPP, _PP.upconnect_,  checked_ids, fPPd)
 
 
 def accum_PPP(PPP, PP, fPPd):
@@ -756,7 +765,7 @@ def comp_PP(PP, _PP):
 
     # match and difference of _PP and PP
     difference = _PP.difference(PP)
-    match = _PP.min_match(PP)
+    match = _PP.min_match_da(PP)
 
     # do we need this?
     # match = match - ave_mPP * (ave_rM ** ((1+PP.distance) / len(PP.P__)))
