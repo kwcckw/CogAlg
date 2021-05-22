@@ -248,6 +248,9 @@ def slice_blob(blob, verbose=False):
             P__ += P_; Pd__ += Pd_
             _P_ = P_  # set current lower row P_ as next upper row _P_
 
+        for P in P__: P.x += P.L/2  # update P.x to average x (middle of L)
+        for P in Pd__: P.x += P.L/2 # update Pd.x to average x (middle of L)
+        
         form_PP_root(blob, derP__, P__, derPd__, Pd__, fPPd)  # form PPs in blob or in FPP
 
         comp_PP_(blob,fPPd)
@@ -277,7 +280,7 @@ def form_P_(idert_, mask_, y):  # segment dert__ into P__ in horizontal ) vertic
         else:  # dert is not masked
             if _mask:  # _dert is masked, initialize P params:
                 # initialize P with first dert
-                P = CP(I=dert[0], Dy=dert[1], Dx=dert[2], G=dert[3], M=dert[4], Day=dert[5], Dax=dert[6], Ga=dert[7], Ma=dert[8], x0=x, L=1, y=y, dert_=dert_)
+                P = CP(I=dert[0], Dy=dert[1], Dx=dert[2], G=dert[3], M=dert[4], Day=dert[5], Dax=dert[6], Ga=dert[7], Ma=dert[8], x=x, L=1, y=y, dert_=dert_)
             else:
                 # _dert is not masked, accumulate P params with (p, dy, dx, g, m, dyy, dyx, dxy, dxx, ga, ma) = dert
                 P.accumulate(I=dert[0], Dy=dert[1], Dx=dert[2], G=dert[3], M=dert[4], Day=dert[5], Dax=dert[6], Ga=dert[7], Ma=dert[8],L=1)
@@ -304,7 +307,7 @@ def form_Pd_(P_):  # form Pds from Pm derts by dx sign, otherwise same as form_P
             _sign = _dert[2] > 0
             # initialize P with first dert
             P = CP(I=_dert[0], Dy=_dert[1], Dx=_dert[2], G=_dert[3], M=_dert[4], Day=_dert[5], Dax=_dert[6], Ga=_dert[7], Ma=_dert[8],
-                   x0=iP.x0, dert_=dert_, L=1, y=iP.y, sign=_sign, Pm=iP)
+                   x=iP.x, dert_=dert_, L=1, y=iP.y, sign=_sign, Pm=iP)
             x = 1  # relative x within P
 
             for dert in iP.dert_[1:]:
@@ -321,7 +324,7 @@ def form_Pd_(P_):  # form Pds from Pm derts by dx sign, otherwise same as form_P
                     Pd_.append(P)
                     # reinitialize params
                     P = CP(I=dert[0], Dy=dert[1], Dx=dert[2], G=dert[3], M=dert[4], Day=dert[5], Dax=dert[6], Ga=dert[7], Ma=dert[8],
-                           x0=iP.x0+x, dert_=[dert], L=1, y=iP.y, sign=sign, Pm=iP)
+                           x=iP.x+x, dert_=[dert], L=1, y=iP.y, sign=sign, Pm=iP)
                 _sign = sign
                 x += 1
             # terminate last P
@@ -488,10 +491,13 @@ def comp_dx(P):  # cross-comp of dx s in P.dert_
 
 def comp_slice(_P, P):  # forms vertical derivatives of derP params, and conditional ders from norm and DIV comp
 
-    s, x0, Dx, Dy, G, M, L, Ddx, Mdx = P.sign, P.x0, P.Dx, P.Dy, P.G, P.M, P.L, P.Ddx, P.Mdx  # params per comp branch
-    _s, _x0, _Dx, _Dy, _G, _M, _dX, _L, _Ddx, _Mdx = _P.sign, _P.x0, _P.Dx, _P.Dy, _P.G, _P.M, _P.dX, _P.L, _P.Ddx, _P.Mdx
+    s, x, Dx, Dy, G, M, L, Ddx, Mdx = P.sign, P.x, P.Dx, P.Dy, P.G, P.M, P.L, P.Ddx, P.Mdx  # params per comp branch
+    _s, _x, _Dx, _Dy, _G, _M, _dX, _L, _Ddx, _Mdx = _P.sign, _P.x, _P.Dx, _P.Dy, _P.G, _P.M, _P.dX, _P.L, _P.Ddx, _P.Mdx
 
-    dX = (x0 + (L-1) / 2) - (_x0 + (_L-1) / 2)  # x shift: d_ave_x, or from offsets: abs(x0 - _x0) + abs(xn - _xn)?
+     x0 = x-(L/2)
+    _x0 = _x-(_L/2)   
+
+    dX = x - _x  # x shift: d_ave_x, or from offsets: abs(x0 - _x0) + abs(xn - _xn)?
 
     ddX = dX - _dX  # long axis curvature, if > ave: ortho eval per P, else per PP_dX?
     mdX = min(dX, _dX)  # dX is inversely predictive of mP?
@@ -516,15 +522,18 @@ def comp_slice(_P, P):  # forms vertical derivatives of derP params, and conditi
 
 def comp_slice_full(_P, P):  # forms vertical derivatives of derP params, and conditional ders from norm and DIV comp
 
-    x0, Dx, Dy, L, = P.x0, P.Dx, P.Dy, P.L
+    x, Dx, Dy, L, = P.x, P.Dx, P.Dy, P.L
     # params per comp branch, add angle params
-    _x0, _Dx, _Dy,_dX, _L = _P.x0, _P.Dx, _P.Dy, _P.dX, _P.L
+    _x, _Dx, _Dy,_dX, _L = _P.x, _P.Dx, _P.Dy, _P.dX, _P.L
 
-    dX = (x0 + (L-1) / 2) - (_x0 + (_L-1) / 2)  # x shift: d_ave_x, or from offsets: abs(x0 - _x0) + abs(xn - _xn)?
+    x0 = x-(L/2)
+    _x0 = _x-(_L/2)
+
+    dX = x - _x  # x shift: d_ave_x, or from offsets: abs(x0 - _x0) + abs(xn - _xn)?
 
     if dX > ave_dX:  # internal comp is higher-power, else two-input comp not compressive?
-        xn = x0 + L - 1
-        _xn = _x0 + _L - 1
+        xn = x0 + L -1
+        _xn = _x + _L - 1
         mX = min(xn, _xn) - max(x0, _x0)  # overlap = abs proximity: summed binary x match
         rX = dX / mX if mX else dX*2  # average dist / prox, | prox / dist, | mX / max_L?
 
