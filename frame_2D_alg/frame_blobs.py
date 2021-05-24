@@ -372,20 +372,19 @@ if __name__ == "__main__":
     argument_parser = argparse.ArgumentParser()
     argument_parser.add_argument('-i', '--image', help='path to image file', default='./images//toucan.jpg')
     argument_parser.add_argument('-v', '--verbose', help='print details, useful for debugging', type=int, default=1)
-    # argument_parser.add_argument('-n', '--intra', help='run intra_blobs after frame_blobs', type=int, default=0)
+    argument_parser.add_argument('-n', '--intra', help='run intra_blobs after frame_blobs', type=int, default=1)
     argument_parser.add_argument('-r', '--render', help='render the process', type=int, default=0)
     argument_parser.add_argument('-c', '--clib', help='use C shared library', type=int, default=0)
     args = argument_parser.parse_args()
     image = imread(args.image)
-    # verbose = args.verbose
-    # intra = args.intra
-    # render = args.render
+    verbose = args.verbose
+    intra = args.intra
+    render = args.render
 
     start_time = time()
     dert__ = comp_pixel(image)
     frame = derts2blobs(dert__, verbose=args.verbose, render=args.render, use_c=args.clib)
 
-    intra = 0
     if intra:  # call to intra_blob, omit for testing frame_blobs only:
 
         if args.verbose: print("\rRunning intra_blob...")
