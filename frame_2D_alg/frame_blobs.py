@@ -82,7 +82,6 @@ class CFlatBlob(ClusterStructure):  # from frame_blobs only, no sub_blobs
     # Dert params, comp_dx:
     Mdx = int
     Ddx = int
-
     # blob params
     A = int  # blob area
     sign = NoneType
@@ -163,16 +162,16 @@ def comp_pixel(image):  # 2x2 pixel cross-correlation within image, a standard e
     rot_Gy__ = bottomright__ - topleft__  # rotated to bottom__ - top__
     rot_Gx__ = topright__ - bottomleft__  # rotated to right__ - left__
 
-    G__ = (np.hypot(rot_Gy__, rot_Gx__) - ave).astype('int')
-    # deviation of central gradient per kernel, between four vertex pixels
-    M__ = int(ave * 1.2) - (abs(rot_Gy__) + abs(rot_Gx__))
-    # inverse deviation of SAD, which is a measure of variation. Ave * coeff = ave_SAD / ave_G, 1.2 is a guess
+    G__ = np.hypot(rot_Gy__, rot_Gx__)  # central gradient per kernel, between four vertex pixels
+    sin__, cos__ = (rot_Gy__, rot_Gx__) / G__
+    vG__ = (G__ - ave).astype('int')  # deviation of gradient
+    M__ = int(ave * 1.2) - (abs(rot_Gy__) + abs(rot_Gx__))  # inverse deviation of SAD (variation), ave * (ave_SAD / ave_G): 1.2?
 
-    return (topleft__, rot_Gy__, rot_Gx__, G__, M__)  # tuple of 2D arrays per param of dert (derivatives' tuple)
+    return (topleft__, sin__, cos__, vG__, M__)  # tuple of 2D arrays per param of dert (derivatives tuple), topleft__ is off by .5 pixels
     # renamed dert__ = (p__, dy__, dx__, g__, m__) for readability in functions below
 '''
     rotate dert__ 45 degrees clockwise, convert diagonals into orthogonals to avoid summation, which degrades accuracy of Gy, Gx
-    Gy, Gx are used in comp_a, which returns them, as well as day, dax back to orthogonal
+    Gy, Gx are used in comp_a, which returns them (as well as day, dax) back to orthogonal orientation
     
     Sobel version:
     Gy__ = -(topleft__ - bottomright__) - (topright__ - bottomleft__)   # decomposition of two diagonal differences into Gy

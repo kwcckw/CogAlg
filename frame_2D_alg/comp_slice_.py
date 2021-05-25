@@ -508,17 +508,17 @@ def comp_slice(_P, P):  # forms vertical derivatives of derP params, and conditi
     dM = M - _M; mM = min(M, _M)  # use abs M?  no Mx, My: non-core, lesser and redundant bias?
 
     Ave = ave * P.L; _Ave = ave *_P.L
-    
+
     # prevent zero division
     if P.G + Ave == 0:
         G = P.G + Ave+1;
     else:
-        G = P.G + Ave;     
-    if _P.G + _Ave == 0:  
+        G = P.G + Ave;
+    if _P.G + _Ave == 0:
         _G = _P.G + _Ave + 1;
     else:
         _G = _P.G + _Ave;
-    
+
     sin = P.Dy / (G); _sin = _P.Dy / (_G)  # sine component   = dy/g
     cos = P.Dx / (G); _cos = _P.Dx / (_G)  # cosine component = dx/g
     sin_da = (cos * _sin) - (sin * _cos)   # using formula : sin(α − β) = sin α cos β − cos α sin β
@@ -609,27 +609,27 @@ def comp_slice_full(_P, P):  # forms vertical derivatives of derP params, and co
         if (P.Mdx > 0) != (_P.Mdx > 0): mMdx = -mMdx
     else:
         fdx = 0
-        
-        
+
+
     Ave = ave * P.L; _Ave = ave *_P.L
-    
+
     # prevent zero division
     if P.G + Ave == 0:
         G = P.G + Ave+1;
     else:
-        G = P.G + Ave;     
-    if _P.G + _Ave == 0:  
+        G = P.G + Ave;
+    if _P.G + _Ave == 0:
         _G = _P.G + _Ave + 1;
     else:
         _G = _P.G + _Ave;
-    
+
     sin = P.Dy / (G); _sin = _P.Dy / (_G)  # sine component   = dy/g
     cos = P.Dx / (G); _cos = _P.Dx / (_G)  # cosine component = dx/g
     sin_da = (cos * _sin) - (sin * _cos)   # using formula : sin(α − β) = sin α cos β − cos α sin β
     cos_da = (cos * _cos) + (sin * _sin)   # using formula : cos(α − β) = cos α cos β + sin α sin β
     da = np.arctan2( sin_da, cos_da )
     ma = ave_da - abs(da)
-        
+
     # coeff = 0.7 for semi redundant parameters, 0.5 for fully redundant parameters:
     dP = da + ddX + dL + 0.7*(dM + dDx + dDy)  # -> directional PPd, equal-weight params, no rdn?
     # correlation: dX -> L, oDy, !oDx, ddX -> dL, odDy ! odDx? dL -> dDx, dDy?
@@ -803,13 +803,10 @@ def comp_PP(PP, _PP):
     difference = _PP.difference(PP)
     match = _PP.min_match(PP)
 
-    # do we need this?
-    # match = match - ave_mPP * (ave_rM ** ((1+PP.distance) / len(PP.P__)))
-
     # match of compared PPs' m components
-    mmPP = match['mP'] + match['mx'] + match['mL'] + match['mDx'] + match['mDy']
+    mmPP = match['mP'] + match['mx'] + match['mL'] + match['mDx'] + match['mDy'] - ave_mPP
     # difference of compared PPs' m components
-    dmPP = difference['mP'] + difference['mx'] + difference['mL'] + difference['mDx'] + difference['mDy']
+    dmPP = difference['mP'] + difference['mx'] + difference['mL'] + difference['mDx'] + difference['mDy'] - ave_mPP
 
     # match of compared PPs' d components
     mdPP = match['dP'] + match['dx'] + match['dL'] + match['dDx'] + match['dDy']
