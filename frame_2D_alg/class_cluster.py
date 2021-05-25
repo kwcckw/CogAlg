@@ -124,6 +124,17 @@ class MetaCluster(type):
             setattr(instance, param,
                     kwargs.get(param,
                                getattr(cls, param + '_type')()))
+        
+            
+            # for testing purpose, on nested parameters
+            ''' 
+            
+            value = kwargs.get(param, getattr(cls, param + '_type')())
+            list_value = [ {'Dy':0, 'Dx':0} , value]
+            setattr(instance, param, list_value )
+            
+            '''
+        
         # Set id
         instance._id = len(cls._instances)
         # Create ref

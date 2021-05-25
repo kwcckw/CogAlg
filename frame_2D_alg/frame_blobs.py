@@ -47,7 +47,7 @@ ave_mP = 100
 UNFILLED = -1
 EXCLUDED_ID = -2
 
-FrameOfBlobs = namedtuple('FrameOfBlobs', 'I, Dy, Dx, G, M, blob_, dert__')
+FrameOfBlobs = namedtuple('FrameOfBlobs', 'I, Sin, Cos, vG, M, blob_, dert__')
 
 
 class CDert(ClusterStructure):
@@ -97,9 +97,9 @@ class CBlob(ClusterStructure):
 
     # Dert params, comp_pixel:
     I = int
-    Dy = int
-    Dx = int
-    G = int
+    Sin = int
+    Cos = int
+    vG = int
     M = int
     # Dert params, comp_angle:
     Day = complex
@@ -191,14 +191,14 @@ def derts2blobs(dert__, verbose=False, render=False, use_c=False):
     else:
         # [flood_fill](https://en.wikipedia.org/wiki/Flood_fill)
         blob_, idmap, adj_pairs = flood_fill(dert__, sign__=dert__[3] > 0,  verbose=verbose)
-        I, Dy, Dx, G, M = 0, 0, 0, 0, 0
+        I, Sin, Cos, vG, M = 0, 0, 0, 0, 0
         for blob in blob_:
             I += blob.I
-            Dy += blob.Dy
-            Dx += blob.Dx
-            G += blob.G
+            Sin += blob.Sin
+            Cos += blob.Cos
+            vG += blob.vG
             M += blob.M
-        frame = FrameOfBlobs(I=I, Dy=Dy, Dx=Dx, G=G, M=M, blob_=blob_, dert__=dert__)
+        frame = FrameOfBlobs(I=I, Sin=Sin, Cos=Cos, vG=vG, M=M, blob_=blob_, dert__=dert__)
 
     assign_adjacents(adj_pairs)  # f_segment_by_direction=False
 
@@ -246,9 +246,9 @@ def flood_fill(dert__, sign__, verbose=False, mask__=None, blob_cls=CBlob, fseg=
                     y1, x1 = unfilled_derts.popleft()
                     # add dert to blob
                     blob.accumulate(I =dert__[0][y][x],
-                                    Dy=dert__[1][y][x],
-                                    Dx=dert__[2][y][x],
-                                    G =dert__[3][y][x],
+                                    Sin=dert__[1][y][x],
+                                    Cos=dert__[2][y][x],
+                                    vG =dert__[3][y][x],
                                     M =dert__[4][y][x])
 
                     if len(dert__)>5: # comp_angle
@@ -395,9 +395,9 @@ if __name__ == "__main__":
         empty = np.zeros_like(frame.dert__[0])
         root_dert__ = (  # update root dert__
             frame.dert__[0],  # i
-            frame.dert__[1],  # dy
-            frame.dert__[2],  # dx
-            frame.dert__[3],  # g
+            frame.dert__[1],  # sin
+            frame.dert__[2],  # cos
+            frame.dert__[3],  # vg
             frame.dert__[4],  # m
             )
 
@@ -407,10 +407,10 @@ if __name__ == "__main__":
             +G "edge" blobs are low-match, valuable only as contrast: to the extent that their negative value cancels 
             positive value of adjacent -G "flat" blobs.
             '''
-            G = blob.G
+            G = blob.vG
             M = blob.M
             blob.root_dert__=root_dert__
-            blob.prior_forks=['g']  # not sure about this
+            blob.prior_forks=['g']  
             blob_height = blob.box[1] - blob.box[0]
             blob_width = blob.box[3] - blob.box[2]
 

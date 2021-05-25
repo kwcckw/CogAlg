@@ -52,7 +52,7 @@ def intra_blob(blob, **kwargs):  # slice_blob or recursive input rng+ | angle cr
         # root fork is comp_a -> slice_blob
         if blob.mask__.shape[0] > 2 and blob.mask__.shape[1] > 2 and False in blob.mask__:  # min size in y and x, at least one dert in dert__
 
-            if (-blob.M * blob.Ma - AveB > 0) and blob.Dx:  # vs. G reduced by Ga: * (1 - Ga / (4.45 * A)), max_ga=4.45
+            if (-blob.M * blob.Ma - AveB > 0) and blob.Cos:  # vs. G reduced by Ga: * (1 - Ga / (4.45 * A)), max_ga=4.45
                 blob.f_comp_a = 0
                 blob.prior_forks.extend('p')
                 if kwargs.get('verbose'): print('\nslice_blob fork\n')
@@ -63,7 +63,7 @@ def intra_blob(blob, **kwargs):  # slice_blob or recursive input rng+ | angle cr
         # root fork is frame_blobs or comp_r
         ext_dert__, ext_mask__ = extend_dert(blob)  # dert__ boundaries += 1, for cross-comp in larger kernels
 
-        if blob.G > AveB:  # comp_a fork, replace G with borrow_M when known
+        if blob.vG > AveB:  # comp_a fork, replace G with borrow_M when known
 
             adert__, mask__ = comp_a(ext_dert__, Ave, blob.prior_forks, ext_mask__)  # compute ma and ga
             blob.f_comp_a = 1
@@ -109,7 +109,7 @@ def cluster_sub_eval(blob, dert__, sign__, mask__, **kwargs):  # comp_r or comp_
     blob.sub_layers = [sub_blobs]  # 1st layer of sub_blobs
 
     for sub_blob in sub_blobs:  # evaluate sub_blob
-        G = blob.G  # Gr, Grr...
+        # G = blob.G  # Gr, Grr...
         # adj_M = blob.adj_blobs[3]  # adj_M is incomplete, computed within current dert_only, use root blobs instead:
         # adjacent valuable blobs of any sign are tracked from frame_blobs to form borrow_M?
         # track adjacency of sub_blobs: wrong sub-type but right macro-type: flat blobs of greater range?
@@ -118,7 +118,7 @@ def cluster_sub_eval(blob, dert__, sign__, mask__, **kwargs):  # comp_r or comp_
         # borrow_M = min(G, adj_M / 2)
         sub_blob.prior_forks = blob.prior_forks.copy()  # increments forking sequence: g->a, g->a->p, etc.
 
-        if sub_blob.G > AveB:  # replace with borrow_M when known
+        if sub_blob.vG > AveB:  # replace with borrow_M when known
             # comp_a:
             sub_blob.f_root_a = 1
             sub_blob.a_depth += blob.a_depth  # accumulate a depth from blob to sub_blob, currently not used

@@ -72,29 +72,35 @@ def comp_r(dert__, ave, root_fia, mask__=None):
     else:
         majority_mask__ = None  # returned at the end of function
 
+    # i think this shouldn't be needed now, if root_fia, it will not be reaching comp_r, root_fia is always 0 here
     if root_fia:  # initialize derivatives:
         dy__ = np.zeros_like(i__center)  # sparse to align with i__center
         dx__ = np.zeros_like(dy__)
         m__ = np.zeros_like(dy__)
 
     else:  # root fork is comp_r, accumulate derivatives:
-        dy__ = dert__[1][1:-1:2, 1:-1:2].copy()  # sparse to align with i__center
-        dx__ = dert__[2][1:-1:2, 1:-1:2].copy()
+        sin__ = dert__[1][1:-1:2, 1:-1:2].copy()  # sparse to align with i__center
+        cos__ = dert__[2][1:-1:2, 1:-1:2].copy()
         m__ = dert__[4][1:-1:2, 1:-1:2].copy()
 
     # compare four diametrically opposed pairs of rim pixels, with Sobel coeffs:
 
-    dy__ += ((i__topleft - i__bottomright) * -1 +
+    dy__ =  ((i__topleft - i__bottomright) * -1 +
              (i__top - i__bottom) * -2 +
              (i__topright - i__bottomleft) * -1 +
              (i__right - i__left) * 0)
 
-    dx__ += ((i__topleft - i__bottomright) * -1 +
+    dx__ =  ((i__topleft - i__bottomright) * -1 +
              (i__top - i__bottom) * 0 +
              (i__topright - i__bottomleft) * 1 +
              (i__right - i__left) * 2)
 
-    g__ = np.hypot(dy__, dx__) - ave  # gradient, recomputed at each comp_r
+    g__ = np.hypot(dy__, dx__) # gradient, recomputed at each comp_r
+
+    sin__ += dy__/g__ # accumulate sin
+    cos__ += dx__/g__ # accumulate cos
+    
+    vg__ = g__ - ave   # deviation of gradient
     '''
     inverse match = SAD, direction-invariant and more precise measure of variation than g
     (all diagonal derivatives can be imported from prior 2x2 comp)
@@ -110,7 +116,7 @@ def comp_r(dert__, ave, root_fia, mask__=None):
                             + abs(i__center - i__left) * 2
                             )
 
-    return (i__center, dy__, dx__, g__, m__), majority_mask__
+    return (i__center, sin__, cos__, vg__, m__), majority_mask__
 
 
 def comp_a(dert__, ave, prior_forks, mask__=None):  # cross-comp of gradient angle in 2x2 kernels
@@ -127,9 +133,10 @@ def comp_a(dert__, ave, prior_forks, mask__=None):  # cross-comp of gradient ang
     else:
         majority_mask__ = None
 
-    i__, dy__, dx__, g__, m__ = dert__[:5]  # day__,dax__,ga__,ma__ are recomputed
+    i__, sin__, cos__, vg__, m__ = dert__[:5]  # day__,dax__,ga__,ma__ are recomputed
 
-    az__ = dx__ + 1j * dy__  # take the complex number (z), phase angle is now atan2(dy, dx)
+    # az__ = dx__ + 1j * dy__  # take the complex number (z), phase angle is now atan2(dy, dx)
+    az__ = cos__ + 1j * sin__ # not so sure yet
 
     with np.errstate(divide='ignore', invalid='ignore'):  # suppress numpy RuntimeWarning
         az__ /= np.absolute(az__)  # normalized, cosine = a__.real, sine = a__.imag
@@ -160,22 +167,31 @@ def comp_a(dert__, ave, prior_forks, mask__=None):  # cross-comp of gradient ang
     '''
     ga deviation from ave = 0.2777 @ 22.5 deg, 0.5554 @ 45 degrees = π/4 radians, sqrt(0.5)*π/4 
     '''
-    if (prior_forks[-1] == 'g') or (prior_forks[-1] == 'a'):  # root fork is frame_blobs, recompute orthogonal dy and dx
+    
+    # sin and cos of a? 
+    sin_a__ = dax__/ga__
+    cos_a__ = day__/ga__
+    
+    if (prior_forks[-1] == 'g') or (prior_forks[-1] == 'a'):  # root fork is frame_blobs, recompute orthogonal sin and cos
         i__topleft = i__[:-1, :-1]
         i__topright = i__[:-1, 1:]
         i__botright = i__[1:, 1:]
         i__botleft = i__[1:, :-1]
         dy__ = (i__botleft + i__botright) - (i__topleft + i__topright)  # decomposition of two diagonal differences
         dx__ = (i__topright + i__botright) - (i__topleft + i__botleft)  # decomposition of two diagonal differences
+        g__ = np.hypot(dy__, dx__)
+        sin__ = dy__/g__  # recomputed sin__
+        cos__ = dx__/g__  # recomputed cos__
+        
     else:
-        dy__ = dy__[:-1, :-1]  # passed on as idy, not rotated
-        dx__ = dx__[:-1, :-1]  # passed on as idx, not rotated
+        sin__ = sin__[:-1, :-1]  # passed on as idy, not rotated
+        cos__ = cos__[:-1, :-1]  # passed on as idx, not rotated
 
-    i__ = i__[:-1, :-1]  # for summation in Dert
-    g__ = g__[:-1, :-1]  # for summation in Dert
-    m__ = m__[:-1, :-1]
+    i__  = i__[:-1, :-1]  # for summation in Dert
+    vg__ = vg__[:-1, :-1]  # for summation in Dert
+    m__  = m__[:-1, :-1]
 
-    return (i__, dy__, dx__, g__, m__, dazy__, dazx__, ga__, ma__), majority_mask__  # dazx__, dazy__ may not be needed
+    return (i__, sin__, cos__, vg__, m__, sin_a__, cos_a__, ga__, ma__), majority_mask__  # dazx__, dazy__ may not be needed
 
 
 def angle_diff(az2, az1):  # unpacked in comp_a
@@ -260,7 +276,7 @@ def comp_a_simple(dert__, ave, prior_forks, mask__=None):  # cross-comp of gradi
         dy__ = (i__botleft + i__botright) - (i__topleft + i__topright)  # decomposition of two diagonal differences
         dx__ = (i__topright + i__botright) - (i__topleft + i__botleft)  # decomposition of two diagonal differences
     else:
-        dy__ = dy__[:-1, :-1]  # passed on as idy, not rotated
+        dy_ = dy__[:-1, :-1]  # passed on as idy, not rotated
         dx__ = dx__[:-1, :-1]  # passed on as idx, not rotated
 
     i__ = i__[:-1, :-1]  # for summation in Dert
@@ -268,7 +284,7 @@ def comp_a_simple(dert__, ave, prior_forks, mask__=None):  # cross-comp of gradi
     m__ = m__[:-1, :-1]
 
 
-    return (i__, dy__, dx__, g__, m__, day__, dax__, ga__, ma__), majority_mask__
+    return (i__, sin__, cos__, g__, m__, day__, dax__, ga__, ma__), majority_mask__
 
 
 def angle_diff_simple(a2, a1):  # compare angle_1 to angle_2
