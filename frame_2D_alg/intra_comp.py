@@ -96,6 +96,7 @@ def comp_r(dert__, ave, root_fia, mask__=None):
              (i__right - i__left) * 2)
 
     g__ = np.hypot(dy__, dx__) # gradient, recomputed at each comp_r
+    g__[g__== 0] = 1           # when g =0 , set g = 1
 
     sin__ += dy__/g__ # accumulate sin
     cos__ += dx__/g__ # accumulate cos
@@ -169,8 +170,8 @@ def comp_a(dert__, ave, prior_forks, mask__=None):  # cross-comp of gradient ang
     '''
     
     # sin and cos of a? 
-    sin_a__ = dax__/ga__
-    cos_a__ = day__/ga__
+    sin_ga__ = dax__/ga__
+    cos_ga__ = day__/ga__
     
     if (prior_forks[-1] == 'g') or (prior_forks[-1] == 'a'):  # root fork is frame_blobs, recompute orthogonal sin and cos
         i__topleft = i__[:-1, :-1]
@@ -180,9 +181,10 @@ def comp_a(dert__, ave, prior_forks, mask__=None):  # cross-comp of gradient ang
         dy__ = (i__botleft + i__botright) - (i__topleft + i__topright)  # decomposition of two diagonal differences
         dx__ = (i__topright + i__botright) - (i__topleft + i__botleft)  # decomposition of two diagonal differences
         g__ = np.hypot(dy__, dx__)
+        g__[g__== 0] = 1  # when g =0 , set g = 1
         sin__ = dy__/g__  # recomputed sin__
         cos__ = dx__/g__  # recomputed cos__
-        
+
     else:
         sin__ = sin__[:-1, :-1]  # passed on as idy, not rotated
         cos__ = cos__[:-1, :-1]  # passed on as idx, not rotated
@@ -191,7 +193,7 @@ def comp_a(dert__, ave, prior_forks, mask__=None):  # cross-comp of gradient ang
     vg__ = vg__[:-1, :-1]  # for summation in Dert
     m__  = m__[:-1, :-1]
 
-    return (i__, sin__, cos__, vg__, m__, sin_a__, cos_a__, ga__, ma__), majority_mask__  # dazx__, dazy__ may not be needed
+    return (i__, sin__, cos__, vg__, m__, sin_ga__, cos_ga__, ga__, ma__), majority_mask__  # dazx__, dazy__ may not be needed
 
 
 def angle_diff(az2, az1):  # unpacked in comp_a

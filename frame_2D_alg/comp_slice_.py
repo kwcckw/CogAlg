@@ -24,7 +24,7 @@ flip_ave = .1
 flip_ave_FPP = 0  # flip large FPPs only (change to 0 for debug purpose)
 div_ave = 200
 ave_dX = 10  # difference between median x coords of consecutive Ps
-ave_Dx = 10
+ave_Cos = 10
 ave_mP = 8  # just a random number right now.
 ave_rmP = .7  # the rate of mP decay per relative dX (x shift) = 1: initial form of distance
 ave_ortho = 20
@@ -49,13 +49,13 @@ class CP(ClusterStructure):
 
     # Dert params, comp_pixel:
     I = int
-    Dy = int
-    Dx = int
+    Sin = int
+    Cos = int
     G = int
     M = int
     # Dert params, comp_angle:
-    Day = complex
-    Dax = complex
+    Sin_ga = int
+    Cos_ga = int
     Ga = int
     Ma = int
     # Dert params, comp_dx:
@@ -130,8 +130,8 @@ class CPP(ClusterStructure):
     G = int
     M = int
     # Dert params, comp_angle:
-    Day = complex
-    Dax = complex
+    Sin_ga = int
+    Cos_ga = int
     Ga = int
     Ma = int
     # Dert params, comp_dx:
@@ -266,7 +266,7 @@ def form_P_(idert_, mask_, y):  # segment dert__ into P__ in horizontal ) vertic
 
     if ~_mask:
         # initialize P with first dert
-        P = CP(I=_dert[0], Dy=_dert[1], Dx=_dert[2], G=_dert[3], M=_dert[4], Day=_dert[5], Dax=_dert[6], Ga=_dert[7], Ma=_dert[8], x0=0, L=1, y=y, dert_=dert_)
+        P = CP(I=_dert[0], Sin=_dert[1], Cos=_dert[2], G=_dert[3], M=_dert[4], Sin_ga=_dert[5], Cos_ga=_dert[6], Ga=_dert[7], Ma=_dert[8], x0=0, L=1, y=y, dert_=dert_)
 
     for x, dert in enumerate(idert_[1:], start=1):  # left to right in each row of derts
         mask = mask_[x]  # pixel mask
@@ -278,11 +278,11 @@ def form_P_(idert_, mask_, y):  # segment dert__ into P__ in horizontal ) vertic
         else:  # dert is not masked
             if _mask:  # _dert is masked, initialize P params:
                 # initialize P with first dert
-                P = CP(I=dert[0], Dy=dert[1], Dx=dert[2], G=dert[3], M=dert[4], Day=dert[5], Dax=dert[6], Ga=dert[7], Ma=dert[8],
+                P = CP(I=dert[0], Sin=dert[1], Cos=dert[2], G=dert[3], M=dert[4], Sin_ga=dert[5], Cos_ga=dert[6], Ga=dert[7], Ma=dert[8],
                        x0=x, L=1, y=y, dert_=dert_)
             else:
                 # _dert is not masked, accumulate P params with (p, dy, dx, g, m, day, dax, ga, ma) = dert
-                P.accumulate(I=dert[0], Dy=dert[1], Dx=dert[2], G=dert[3], M=dert[4], Day=dert[5], Dax=dert[6], Ga=dert[7], Ma=dert[8], L=1)
+                P.accumulate(I=dert[0], Sin=dert[1], Cos=dert[2], G=dert[3], M=dert[4], Sin_ga=dert[5], Cos_ga=dert[6], Ga=dert[7], Ma=dert[8], L=1)
                 P.dert_.append(dert)
 
         _mask = mask
@@ -306,7 +306,7 @@ def form_Pd_(P_):  # form Pds from Pm derts by dx sign, otherwise same as form_P
             dert_ = [_dert]
             _sign = _dert[2] > 0
             # initialize P with first dert
-            P = CP(I=_dert[0], Dy=_dert[1], Dx=_dert[2], G=_dert[3], M=_dert[4], Day=_dert[5], Dax=_dert[6], Ga=_dert[7], Ma=_dert[8],
+            P = CP(I=_dert[0], Sin=_dert[1], Cos=_dert[2], G=_dert[3], M=_dert[4], Sin_ga=_dert[5], Cos_ga=_dert[6], Ga=_dert[7], Ma=_dert[8],
                    x0=iP.x0, dert_=dert_, L=1, y=iP.y, sign=_sign, Pm=iP)
             x = 1  # relative x within P
 
@@ -314,22 +314,22 @@ def form_Pd_(P_):  # form Pds from Pm derts by dx sign, otherwise same as form_P
                 sign = dert[2] > 0
                 if sign == _sign: # same Dx sign
                     # accumulate P params with (p, dy, dx, g, m, dyy, dyx, dxy, dxx, ga, ma) = dert
-                    P.accumulate(I=dert[0], Dy=dert[1], Dx=dert[2], G=dert[3], M=dert[4], Day=dert[5], Dax=dert[6], Ga=dert[7], Ma=dert[8],L=1)
+                    P.accumulate(I=dert[0], Sin=dert[1], Cos=dert[2], G=dert[3], M=dert[4], Sin_ga=dert[5], Cos_ga=dert[6], Ga=dert[7], Ma=dert[8],L=1)
                     P.dert_.append(dert)
 
                 else:  # sign change, terminate P
-                    if P.Dx > ave_Dx:
+                    if P.Cos > ave_Cos:
                         # cross-comp of dx in P.dert_
                         comp_dx(P); P_Ddx += P.Ddx; P_Mdx += P.Mdx
                     P.x = P.x0 + (P.L-1) // 2
                     Pd_.append(P)
                     # reinitialize params
-                    P = CP(I=dert[0], Dy=dert[1], Dx=dert[2], G=dert[3], M=dert[4], Day=dert[5], Dax=dert[6], Ga=dert[7], Ma=dert[8],
+                    P = CP(I=dert[0], Sin=dert[1], Cos=dert[2], G=dert[3], M=dert[4], Sin_ga=dert[5], Cos_ga=dert[6], Ga=dert[7], Ma=dert[8],
                            x0=iP.x0+x, dert_=[dert], L=1, y=iP.y, sign=sign, Pm=iP)
                 _sign = sign
                 x += 1
             # terminate last P
-            if P.Dx > ave_Dx:
+            if P.Cos > ave_Cos:
                 comp_dx(P); P_Ddx += P.Ddx; P_Mdx += P.Mdx
             P.x = P.x0 + (P.L-1) // 2
             Pd_.append(P)
@@ -461,8 +461,6 @@ def merge_PP(_PP, PP, PP_):  # merge PP into _PP
         PP_.remove(PP)  # remove merged PP
 
 
-def accum_Dert(Dert: dict, **params) -> None:
-    Dert.update({param: Dert[param] + value for param, value in params.items()})
 
 def accum_PP(PP, derP):  # accumulate params in PP
 
@@ -507,22 +505,8 @@ def comp_slice(_P, P):  # forms vertical derivatives of derP params, and conditi
     M /= hyp  # orthogonal M is reduced by hyp
     dM = M - _M; mM = min(M, _M)  # use abs M?  no Mx, My: non-core, lesser and redundant bias?
 
-    Ave = ave * P.L; _Ave = ave *_P.L
-
-    # prevent zero division
-    if P.G + Ave == 0:
-        G = P.G + Ave+1;
-    else:
-        G = P.G + Ave;
-    if _P.G + _Ave == 0:
-        _G = _P.G + _Ave + 1;
-    else:
-        _G = _P.G + _Ave;
-
-    sin = P.Dy / (G); _sin = _P.Dy / (_G)  # sine component   = dy/g
-    cos = P.Dx / (G); _cos = _P.Dx / (_G)  # cosine component = dx/g
-    sin_da = (cos * _sin) - (sin * _cos)   # using formula : sin(α − β) = sin α cos β − cos α sin β
-    cos_da = (cos * _cos) + (sin * _sin)   # using formula : cos(α − β) = cos α cos β + sin α sin β
+    sin_da = (P.Cos * _P.Sin) - (P.Sin * _P.Cos)   # using formula : sin(α − β) = sin α cos β − cos α sin β
+    cos_da = (P.Cos * _P.Cos) + (P.Sin * _P.Sin)   # using formula : cos(α − β) = cos α cos β + sin α sin β
     da = np.arctan2( sin_da, cos_da )
     ma = ave_da - abs(da)
 
@@ -563,6 +547,7 @@ def comp_slice_full(_P, P):  # forms vertical derivatives of derP params, and co
     dM = difference['M'] # use abs M?  no Mx, My: non-core, lesser and redundant bias?
     mM = match['M']
 
+    # pending update
     # min is value distance for opposite-sign comparands, vs. value overlap for same-sign comparands
     dDy = difference['Dy']  # Dy per sub_P by intra_comp(dx), vs. less vertically specific dI
     mDy = abs_match['Dy']
@@ -611,23 +596,7 @@ def comp_slice_full(_P, P):  # forms vertical derivatives of derP params, and co
         fdx = 0
 
 
-    Ave = ave * P.L; _Ave = ave *_P.L
-
-    # prevent zero division
-    if P.G + Ave == 0:
-        G = P.G + Ave+1;
-    else:
-        G = P.G + Ave;
-    if _P.G + _Ave == 0:
-        _G = _P.G + _Ave + 1;
-    else:
-        _G = _P.G + _Ave;
-
-    sin = P.Dy / (G); _sin = _P.Dy / (_G)  # sine component   = dy/g
-    cos = P.Dx / (G); _cos = _P.Dx / (_G)  # cosine component = dx/g
-    sin_da = (cos * _sin) - (sin * _cos)   # using formula : sin(α − β) = sin α cos β − cos α sin β
-    cos_da = (cos * _cos) + (sin * _sin)   # using formula : cos(α − β) = cos α cos β + sin α sin β
-    da = np.arctan2( sin_da, cos_da )
+    da = np.arctan2(difference['Sin'], difference['Cos'] )
     ma = ave_da - abs(da)
 
     # coeff = 0.7 for semi redundant parameters, 0.5 for fully redundant parameters:

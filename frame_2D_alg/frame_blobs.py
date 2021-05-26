@@ -100,8 +100,8 @@ class CBlob(ClusterStructure):
     G = int
     M = int
     # Dert params, comp_angle:
-    Day = complex
-    Dax = complex
+    Sin_ga = int
+    Cos_ga = int
     Ga = int
     Ma = int
     # Dert params, comp_dx:
@@ -162,9 +162,11 @@ def comp_pixel(image):  # 2x2 pixel cross-correlation within image, a standard e
     rot_Gx__ = topright__ - bottomleft__  # rotated to right__ - left__
 
     G__ = np.hypot(rot_Gy__, rot_Gx__)  # central gradient per kernel, between four vertex pixels
-    # if G == 0: G = 1?
+    vG__ = (G__ - ave).astype('int')    # deviation of gradient
+    
+    G__[G__ == 0] = 1 # when G =0 , set G = 1
     sin__, cos__ = (rot_Gy__, rot_Gx__) / G__
-    vG__ = (G__ - ave).astype('int')  # deviation of gradient
+    
     M__ = int(ave * 1.2) - (abs(rot_Gy__) + abs(rot_Gx__))  # inverse deviation of SAD (variation), ave * (ave_SAD / ave_G): 1.2?
 
     return (topleft__, sin__, cos__, vG__, M__)  # tuple of 2D arrays per param of dert (derivatives tuple), topleft__ is off by .5 pixels
@@ -406,7 +408,7 @@ if __name__ == "__main__":
             +G "edge" blobs are low-match, valuable only as contrast: to the extent that their negative value cancels 
             positive value of adjacent -G "flat" blobs.
             '''
-            G = blob.vG
+            G = blob.G
             M = blob.M
             blob.root_dert__=root_dert__
             blob.prior_forks=['g']

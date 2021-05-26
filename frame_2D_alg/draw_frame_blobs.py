@@ -78,11 +78,11 @@ def visualize_blobs(idmap, blob_, window_size=None, winname="Blobs"):
                       "sign =", "'+'" if blob.sign else "'-'",
                       "I =", blob.Dert.I,
                       "G =", blob.Dert.G,
-                      "Dy =", blob.Dert.Dy,
-                      "Dx =", blob.Dert.Dx,
+                      "Sin =", blob.Dert.Sin,
+                      "Cos =", blob.Dert.Cos,
                       "S =", blob.A,
                       "M = ",blob.Dert.M,
-                      "dir_val = ", dir_val,
+                      "box =", blob.box,
                       end="\t\t\t")
                 sys.stdout.flush()
 
