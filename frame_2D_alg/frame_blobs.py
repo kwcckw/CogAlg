@@ -21,10 +21,8 @@
     thus should be cross-compared between blobs on the next level of search.
     - assign_adjacents:
     Each blob is assigned internal and external sets of opposite-sign blobs it is connected to.
-
     Frame_blobs is a root function for all deeper processing in 2D alg.
     Please see illustrations:
-
     https://github.com/boris-kz/CogAlg/blob/master/frame_2D_alg/Illustrations/blob_params.drawio
     https://github.com/boris-kz/CogAlg/blob/master/frame_2D_alg/Illustrations/frame_blobs.png
     https://github.com/boris-kz/CogAlg/blob/master/frame_2D_alg/Illustrations/frame_blobs_intra_blob.drawio
@@ -47,7 +45,7 @@ ave_mP = 100
 UNFILLED = -1
 EXCLUDED_ID = -2
 
-FrameOfBlobs = namedtuple('FrameOfBlobs', 'I, Sin, Cos, vG, M, blob_, dert__')
+FrameOfBlobs = namedtuple('FrameOfBlobs', 'I, Sin, Cos, G, M, blob_, dert__')
 
 
 class CDert(ClusterStructure):
@@ -99,7 +97,7 @@ class CBlob(ClusterStructure):
     I = int
     Sin = int
     Cos = int
-    vG = int
+    G = int
     M = int
     # Dert params, comp_angle:
     Day = complex
@@ -150,6 +148,7 @@ class CBlob(ClusterStructure):
     neg_mB = int    # common per derBlob_
     bblob = object
 
+
 def comp_pixel(image):  # 2x2 pixel cross-correlation within image, a standard edge detection operator
     # see comp_pixel_versions file for other versions and more explanation
 
@@ -163,6 +162,7 @@ def comp_pixel(image):  # 2x2 pixel cross-correlation within image, a standard e
     rot_Gx__ = topright__ - bottomleft__  # rotated to right__ - left__
 
     G__ = np.hypot(rot_Gy__, rot_Gx__)  # central gradient per kernel, between four vertex pixels
+    # if G == 0: G = 1?
     sin__, cos__ = (rot_Gy__, rot_Gx__) / G__
     vG__ = (G__ - ave).astype('int')  # deviation of gradient
     M__ = int(ave * 1.2) - (abs(rot_Gy__) + abs(rot_Gx__))  # inverse deviation of SAD (variation), ave * (ave_SAD / ave_G): 1.2?
@@ -191,14 +191,14 @@ def derts2blobs(dert__, verbose=False, render=False, use_c=False):
     else:
         # [flood_fill](https://en.wikipedia.org/wiki/Flood_fill)
         blob_, idmap, adj_pairs = flood_fill(dert__, sign__=dert__[3] > 0,  verbose=verbose)
-        I, Sin, Cos, vG, M = 0, 0, 0, 0, 0
+        I, Sin, Cos, G, M = 0, 0, 0, 0, 0
         for blob in blob_:
             I += blob.I
             Sin += blob.Sin
             Cos += blob.Cos
-            vG += blob.vG
+            G += blob.G
             M += blob.M
-        frame = FrameOfBlobs(I=I, Sin=Sin, Cos=Cos, vG=vG, M=M, blob_=blob_, dert__=dert__)
+        frame = FrameOfBlobs(I=I, Sin=Sin, Cos=Cos, G=G, M=M, blob_=blob_, dert__=dert__)
 
     assign_adjacents(adj_pairs)  # f_segment_by_direction=False
 
@@ -206,7 +206,6 @@ def derts2blobs(dert__, verbose=False, render=False, use_c=False):
     if render: visualize_blobs(idmap, frame.blob_)
 
     return frame
-
 
 
 def flood_fill(dert__, sign__, verbose=False, mask__=None, blob_cls=CBlob, fseg=False, prior_forks=[]):
@@ -248,7 +247,7 @@ def flood_fill(dert__, sign__, verbose=False, mask__=None, blob_cls=CBlob, fseg=
                     blob.accumulate(I =dert__[0][y][x],
                                     Sin=dert__[1][y][x],
                                     Cos=dert__[2][y][x],
-                                    vG =dert__[3][y][x],
+                                    G =dert__[3][y][x],
                                     M =dert__[4][y][x])
 
                     if len(dert__)>5: # comp_angle
@@ -397,7 +396,7 @@ if __name__ == "__main__":
             frame.dert__[0],  # i
             frame.dert__[1],  # sin
             frame.dert__[2],  # cos
-            frame.dert__[3],  # vg
+            frame.dert__[3],  # g
             frame.dert__[4],  # m
             )
 
@@ -410,7 +409,7 @@ if __name__ == "__main__":
             G = blob.vG
             M = blob.M
             blob.root_dert__=root_dert__
-            blob.prior_forks=['g']  
+            blob.prior_forks=['g']
             blob_height = blob.box[1] - blob.box[0]
             blob_width = blob.box[3] - blob.box[2]
 
