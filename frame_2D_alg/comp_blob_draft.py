@@ -95,11 +95,27 @@ def comp_blob(blob, _blob):
     cross compare _blob and blob
     '''
 
+    derBlob = blob.compare(_blob, blob.A, MDparams=('I', 'A', 'G', 'M'))
+
+    '''
     difference = _blob.difference(blob)
     match = _blob.min_match(blob)
+    
+    Ave = ave * blob.A; _Ave = ave *_blob.A  # why ave is defined size? Is it due to relative to size of blob?
 
-    da = np.arctan2(difference['Sin'], difference['Cos'])
+    # prevent zero division
+    if blob.G + Ave == 0: G = blob.G + Ave+1
+    else: G = blob.G + Ave
+    if _blob.G + _Ave == 0: _G = _blob.G + _Ave + 1
+    else: _G = _blob.G + _Ave
+
+    sin = blob.Dy / (G); _sin = _blob.Dy / (_G)   # sine component   = dy/g
+    cos = blob.Dx / (G); _cos = _blob.Dx / (_G)   # cosine component = dx/g
+    sin_da = (cos * _sin) - (sin * _cos)          # using formula : sin(α − β) = sin α cos β − cos α sin β
+    cos_da = (cos * _cos) + (sin * _sin)          # using formula : cos(α − β) = cos α cos β + sin α sin β
+    da = np.arctan2( sin_da, cos_da )
     ma = ave_da - abs(da)
+
 
     mB = match['I'] + match['A'] + match['G'] + match['M'] + ma \
     - ave_mB * (ave_rM ** ((1+blob.distance) / np.sqrt(blob.A)))  # deviation from average blob match at current distance
@@ -110,6 +126,8 @@ def comp_blob(blob, _blob):
 
     if _blob.fsliced and blob.fsliced:
         pass
+        
+    '''
     return derBlob
 
 

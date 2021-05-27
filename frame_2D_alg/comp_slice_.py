@@ -520,8 +520,6 @@ def comp_slice(_P, P):  # forms vertical derivatives of derP params, and conditi
     mP = mL + mM + ma  # -> complementary PPm, rdn *= Pd | Pm rolp?
     mP -= ave_mP * ave_rmP ** (dX / L)  # dX / L is relative x-distance between P and _P,
 
-    P.flip_val = (dX * (P.Dy / (P.Dx+.001)) - flip_ave)  # +.001 to avoid division by zero
-
     derP = CderP(mP=mP, dP=dP, dX=dX, mL=mL, dL=dL, P=P, _P=_P)
     P.derP = derP
 
@@ -771,7 +769,7 @@ def comp_PP(PP, _PP):
 
     # match and difference of _PP and PP
     difference = _PP.difference(PP)
-    match = _PP.min_match_da(PP)
+    match = _PP.min_match(PP)
 
     # match of compared PPs' m components
     mmPP = match['mP'] + match['mx'] + match['mL'] + match['mDx'] + match['mDy'] - ave_mPP

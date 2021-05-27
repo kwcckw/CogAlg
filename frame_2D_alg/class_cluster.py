@@ -1,4 +1,4 @@
-'''
+"""
 Provide a base class for cluster objects in CogAlg.
 Features:
 - Unique instance ids per class.
@@ -7,12 +7,11 @@ Features:
 - Methods generated via string templates so overheads caused by
 differences in interfaces are mostly eliminated.
 - Can be extended/modified further to support main implementation better.
-'''
+"""
 
 import weakref
 from numbers import Number
 from inspect import isclass
-from cmath import phase
 
 NoneType = type(None)
 
@@ -54,11 +53,9 @@ class MetaCluster(type):
         # inherit params
         for base in bases:
             if issubclass(base, ClusterStructure):
-                for key in base.__dict__:
-                    if key[-5:] == "_type":
-                        param = key[:-5]
-                        if param not in attrs:
-                            attrs[param] = list
+                for param in base.numeric_params:
+                    if param not in attrs:
+                        attrs[param] = CParamDer
 
         # only ignore param names start with double underscore
         params = tuple(attr for attr in attrs
@@ -124,17 +121,6 @@ class MetaCluster(type):
             setattr(instance, param,
                     kwargs.get(param,
                                getattr(cls, param + '_type')()))
-        
-            
-            # for testing purpose, on nested parameters
-            ''' 
-            
-            value = kwargs.get(param, getattr(cls, param + '_type')())
-            list_value = [ {'Dy':0, 'Dx':0} , value]
-            setattr(instance, param, list_value )
-            
-            '''
-        
         # Set id
         instance._id = len(cls._instances)
         # Create ref
@@ -208,79 +194,69 @@ class ClusterStructure(metaclass=MetaCluster):
 
     def accum_from(self, other, excluded=()):
         """Accumulate params from another structure."""
-
-        # always exclude sin and cos component
-        excluded = excluded + ('Sin','Cos','Sin_ga','Cos_ga')
-
         self.accumulate(**{param: getattr(other, param, 0)
                            for param in self.numeric_params
-                           if param not in excluded  })
-    
-        if "Sin" in self.numeric_params and "Sin" in other.numeric_params: 
-            # sum of sin and cos component
-            Sin = getattr(self, 'Sin'); _Sin = getattr(other, 'Sin');
-            Cos = getattr(self, 'Cos'); _Cos = getattr(other, 'Cos')
-            Sin_ga = getattr(self, 'Sin_ga'); _Sin_ga = getattr(other, 'Sin_ga')
-            Cos_ga = getattr(self, 'Cos_ga'); _Cos_ga = getattr(other, 'Cos_ga')
-        
-            # set the sum value
-            setattr(self, 'Sin', (Cos * _Sin) + (Sin * _Cos))   # using formula : sin(α + β) = sin α cos β + cos α sin β
-            setattr(self, 'Cos', (Cos * _Cos) - (Sin * _Sin))   # using formula : cos(α + β) = cos α cos β - sin α sin β
-            setattr(self, 'Sin_ga', (Cos_ga * _Sin_ga) + (Sin_ga * _Cos_ga))   # using formula : sin(α + β) = sin α cos β + cos α sin β
-            setattr(self, 'Cos_ga', (Cos_ga * _Cos_ga) - (Sin_ga * _Sin_ga))   # using formula : cos(α + β) = cos α cos β - sin α sin β
-   
+                           if param not in excluded})
 
-    def difference(self, other, excluded=()):
-        """difference of params."""
+    def compare(self, other, ave, MDparams = (), excluded=()):
+        # Get the subclass (inheritted class) and init a new instance
+        der = self.__class__.__subclasses__()[0]()
         
-        # always exclude sin and cos component
-        excluded = excluded + ('Sin','Cos','Sin_ga','Cos_ga')
-        
-        difference_dict = {param:(getattr(self, param) - getattr(other, param))
-                           for param in self.numeric_params if param not in excluded}
-        
-        # difference of sin and cos component
-        if "Sin" in self.numeric_params and "Sin" in other.numeric_params: 
-            # sum of sin and cos component
-            Sin = getattr(self, 'Sin'); _Sin = getattr(other, 'Sin');
-            Cos = getattr(self, 'Cos'); _Cos = getattr(other, 'Cos')
-            Sin_ga = getattr(self, 'Sin_ga'); _Sin_ga = getattr(other, 'Sin_ga')
-            Cos_ga = getattr(self, 'Cos_ga'); _Cos_ga = getattr(other, 'Cos_ga')
-        
-            # set the sum value
-            difference_dict['Sin'] = (Cos * _Sin) - (Sin * _Cos)   # using formula : sin(α - β) = sin α cos β - cos α sin β
-            difference_dict['Cos'] =  (Cos * _Cos) + (Sin * _Sin)   # using formula : cos(α - β) = cos α cos β + sin α sin β
-            difference_dict['Sin_ga'] =  (Cos_ga * _Sin_ga) - (Sin_ga * _Cos_ga)   # using formula : sin(α - β) = sin α cos β - cos α sin β
-            difference_dict['Cos_ga'] =  (Cos_ga * _Cos_ga) + (Sin_ga * _Sin_ga)   # using formula : cos(α - β) = cos α cos β + sin α sin β
-    
-        return difference_dict
-
-    def min_match(self, other, excluded=()):
-        
-        # min match of sin and cos would be?
-        
-        return {param: min(getattr(self, param), getattr(other, param))
-                for param in self.numeric_params if (param not in excluded) and \
-                not (isinstance(getattr(self, param),complex))} # exclude min match for complex
-
-
-if __name__ == "__main__":  # for debugging
-    from sys import getsizeof as size
-    size(ClusterStructure)
-
-'''
-    def min_match_da(self, other):
-        results = {}
+        # init
+        M = 0
+        D = 0
         for param in self.numeric_params:
-            _e = getattr(other, param)
-            e = getattr(self, param)
-            if isinstance(e, complex):  # match between angle diffs
-                results[param] = _e if phase(_e) < phase(e)  else e
-            else:
-                results[param] = min(_e, e)
-        return results
-'''
+            if param not in excluded and param in other.numeric_params:
+                _i = getattr(other, param) 
+                i = getattr(self, param)   
+                d = i - _i        # difference
+                m = abs(d) - ave  # match
+                mm = 0
+                if not isinstance(i, complex):
+                    mm = min(i, _i)   # min match
 
-if __name__ == "__main__":  # for debugging
-    from sys import getsizeof as size
-    size(ClusterStructure)
+                # assign to der
+                setattr(der, param, CParamDer(i, d, m, mm))
+
+                # sum of min match and difference
+                if param in MDparams:
+                    M += mm
+                    D += d
+
+        # find angle difference (da) and match (ma) between 2 complex, and then add to M and D
+        # using this formula?
+        # θ = cos−1 ( A⋅B / |A||B|) 
+        
+        return der
+
+
+# ----------------------------------------------------------------------------
+# CSingleDer class
+class CParamDer(Number):
+    __slots__ = ('I', 'D', 'M', 'MM')
+    def __init__(self, I=0, M=0, D=0, MM=0):
+        self.I = I
+        self.M = M
+        self.D = D
+        self.MM = MM
+
+    def __add__(self, other):
+        return CDer(self.I + other.I, self.D + other.D, self.M + other.M, self.MM + other.MM)
+
+    def __sub__(self, other):
+        return CDer(self.I - other.I, self.D - other.D, self.M - other.M, self.MM - other.MM)
+
+    def __repr__(self):
+        return "(I={}, D={}, M={}, MM={})".format(self.I, self.D, self.M, self.MM)
+
+if __name__ == "__main__":  # for tests
+    class CTest(ClusterStructure):
+        x = int
+        y = int
+
+    class CTestSub(CTest):
+        pass
+
+    b = CTest(x=5, y=7)
+    c = CTest(x=2, y=3)
+    print(b.compare(c, ave=1))  # automatically return the inherited class (it is assumed to contain ders)
