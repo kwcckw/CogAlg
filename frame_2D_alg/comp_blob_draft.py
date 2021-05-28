@@ -95,7 +95,13 @@ def comp_blob(blob, _blob):
     cross compare _blob and blob
     '''
 
-    derBlob = blob.compare(_blob, blob.A, MDparams=('I', 'A', 'G', 'M'))
+    derBlob = blob.compare(_blob, blob.A)
+    
+    derBlob.mB = derBlob.I.m + derBlob.A.m + derBlob.G.m + derBlob.M.m +  derBlob.Vector.M  \
+    - ave_mB * (ave_rM ** ((1+blob.distance) / np.sqrt(blob.A)))  # deviation from average blob match at current distance
+
+    derBlob.dB = derBlob.I.d + derBlob.A.d + derBlob.G.d + derBlob.M.d +  derBlob.Vector.d
+
 
     '''
     difference = _blob.difference(blob)
@@ -104,9 +110,9 @@ def comp_blob(blob, _blob):
     Ave = ave * blob.A; _Ave = ave *_blob.A  # why ave is defined size? Is it due to relative to size of blob?
 
     # prevent zero division
-    if blob.G + Ave == 0: G = blob.G + Ave+1
+    if blob.G + Ave == 0: G = 1
     else: G = blob.G + Ave
-    if _blob.G + _Ave == 0: _G = _blob.G + _Ave + 1
+    if _blob.G + _Ave == 0: _G = 1
     else: _G = _blob.G + _Ave
 
     sin = blob.Dy / (G); _sin = _blob.Dy / (_G)   # sine component   = dy/g
