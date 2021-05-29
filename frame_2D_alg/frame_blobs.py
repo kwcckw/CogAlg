@@ -151,7 +151,10 @@ class CBlob(ClusterStructure):
 
 
 class CderBlob(CBlob):
-    pass
+    Vector = complex
+    aVector = complex
+    comparator = object # blob
+    comparand = object  # _blob
 
 def comp_pixel(image):  # 2x2 pixel cross-correlation within image, a standard edge detection operator
     # see comp_pixel_versions file for other versions and more explanation

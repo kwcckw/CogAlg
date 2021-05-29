@@ -95,12 +95,16 @@ def comp_blob(blob, _blob):
     cross compare _blob and blob
     '''
 
-    derBlob = blob.compare(_blob, blob.A)
+    derBlob = blob.comp_param(_blob, blob.A)
 
-    derBlob.mB = derBlob.I.m + derBlob.A.m + derBlob.G.m + derBlob.M.m +  derBlob.Vector.M  \
+    derBlob.mB = derBlob.I.m + derBlob.A.m + derBlob.G.m + derBlob.M.m +  derBlob.Vector.m  \
     - ave_mB * (ave_rM ** ((1+blob.distance) / np.sqrt(blob.A)))  # deviation from average blob match at current distance
 
     derBlob.dB = derBlob.I.d + derBlob.A.d + derBlob.G.d + derBlob.M.d +  derBlob.Vector.d
+    
+    derBlob.comparator = blob
+    derBlob.comparand = _blob
+    
     '''
     difference = _blob.difference(blob)
     match = _blob.min_match(blob)

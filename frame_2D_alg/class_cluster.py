@@ -55,7 +55,7 @@ class MetaCluster(type):
             if issubclass(base, ClusterStructure):
                 for param in base.numeric_params:
                     if param not in attrs:  # prevents duplication of base params
-                        attrs[param] = CDert
+                        attrs[param] = Cdert
 
         # only ignore param names start with double underscore
         params = tuple(attr for attr in attrs
@@ -208,7 +208,7 @@ class ClusterStructure(metaclass=MetaCluster):
                 p = getattr(self, param)
                 _p = getattr(other, param)
                 d = p - _p  # difference
-                if param is 'I':
+                if param == 'I':
                     m = ave - abs(d)  # indirect match
                 else:
                     m = min(p,_p) - abs(d)/2 - ave  # direct match
@@ -221,7 +221,7 @@ class ClusterStructure(metaclass=MetaCluster):
             a =  dx + 1j * dy; _a = _dx + 1j * _dy # angle in complex form
             da = a * _a.conjugate()                # angle difference
             ma = ave - abs(da)                     # match
-            setattr(dert, 'vector', Cdert(a, da, ma))
+            setattr(dert, 'Vector', Cdert(a, da, ma))
 
         if 'Day' in self.numeric_params and 'Day' in other.numeric_params:
             day = getattr(self, 'Day'); _day = getattr(other, 'Day')
@@ -235,10 +235,7 @@ class ClusterStructure(metaclass=MetaCluster):
             #     = az1 * az2
             dda = dday * ddax   # sum of angle difference
             mda = ave - abs(dda) # match
-            setattr(dert, 'avector', Cdert((day, dax), dda, mda))
-
-        dert.comparand1 = self  # where is it used?
-        dert.comparand2 = other
+            setattr(dert, 'aVector', Cdert((day, dax), dda, mda))
 
         return dert
 
@@ -249,43 +246,54 @@ class Cdert(Number):
     def __init__(self, p=0, d=0, m=0):
         self.p, self.d, self.m = p, d, m
 
-    def __accum__(self, other):
+    def accum(self, other):
 
         return Cdert(self.p + other.p, self.d + other.d, self.m + other.m)
 
-    def __comp_dert__(self, other, ave):  # adds a level of nesting to self dert
-        # can we make it shorter?
+    def comp_dert(self, other, ave):  # adds a level of nesting to self dert
 
-        param = self.p
-        d = self.p - other.p
-        if self is 'I':  # also add versions for vector and avector
-            m = ave - abs(d)
-        else: m = min(self.p, other.p) - abs(d)/2 - ave
-        p = Cdert(param, m, d)
-
-        d = self.m - other.m
-        m = Cdert(self.m, min(self.m, other.m) - abs(d)/2 - ave, d)
-        d = self.d - other.d
-        d = Cdert(self.d, min(self.d, other.d) - abs(d)/2 - ave, d)
-
+        p = self.comp_dert_fcn(self.m, other.m, ave)
+        m = self.comp_dert_fcn(self.m, other.m, ave)
+        d = self.comp_dert_fcn(self.d, other.d, ave)
+        
         return Cdert(p, m, d)
 
+
+    def comp_dert_fcn(self, param, _param, ave):
+        
+        d = param - _param
+        if param == self.p and (self == 'I' or self == 'Vector' or self == 'aVector'):
+            m = ave - abs(d)
+        else:
+            m = min(param, _param) - abs(d)/2 - ave
+            
+        return Cdert(param, d, m)
 
     def __repr__(self):
         return "(p={}, d={}, m={})".format(self.p, self.d, self.m)
 
 if __name__ == "__main__":  # for tests
     class CTest(ClusterStructure):
-        y = int
-        x = int
+        I = int
         Dy = int
         Dx = int
+        G = int
+        M = int
         Day = int
         Dax = int
-
+        
     class CTestSub(CTest):
-        pass
+        vector = complex
+        avector = complex
 
-    b = CTest(y=5, x=7, Dy=5, Dx=6, Day=4+5j, Dax = 8+9j)
-    c = CTest(y=2, x=3, Dy=8, Dx=7, Day=5+6j, Dax = 6+7j)
-    print(b.comp_param(c, ave=1))  # automatically return the inherited class (it is assumed to contain ders)
+    b = CTest(I = 5, Dy=5, Dx=7, G=5, M=6, Day=4+5j, Dax = 8+9j)
+    c = CTest(I = 9, Dy=2, Dx=3, G=8, M=7, Day=5+6j, Dax = 6+7j)
+    d = CTest(I = 3, Dy=5, Dx=4, G=9, M=9, Day=3+7j, Dax = 7+10j)
+    
+    der1 = b.comp_param(c, ave=1)
+    der2 = c.comp_param(d, ave=1)
+    print(der1)  # automatically return the inherited class (it is assumed to contain ders)
+    print(der2)
+    print(der1.I.comp_dert(der2.I,ave=1))
+    print(der1.G.comp_dert(der2.G,ave=1))
+    
