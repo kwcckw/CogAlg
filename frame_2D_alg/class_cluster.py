@@ -54,7 +54,7 @@ class MetaCluster(type):
         for base in bases:
             if issubclass(base, ClusterStructure):
                 for param in base.numeric_params:
-                    if param not in attrs:
+                    if param not in attrs:  # prevents duplication of base params
                         attrs[param] = CDert
 
         # only ignore param names start with double underscore
@@ -112,8 +112,8 @@ class MetaCluster(type):
 
         return cls
 
-    def __call__(cls, *args, **kwargs):  # call right before a new instace is created
-        # register new instace
+    def __call__(cls, *args, **kwargs):  # call right before a new instance is created
+        # register new instance
         instance = super().__call__(*args, **kwargs)
 
         # initialize fields/params
@@ -140,12 +140,11 @@ class MetaCluster(type):
     def instance_cnt(cls):
         return len(cls._instances)
 
-
 # ----------------------------------------------------------------------------
 # ClusterStructure class
 class ClusterStructure(metaclass=MetaCluster):
     """
-    Class for cluster objects in 2D implementation of CogAlg.
+    Class for cluster objects in CogAlg.
     Each time a new instance is created, four things are done:
     - Set initialize field/param.
     - Set id.
@@ -189,9 +188,6 @@ class ClusterStructure(metaclass=MetaCluster):
     CP(L='something', I=10)
     """
 
-    
-
-
     def __init__(self, **kwargs):
         pass
 
@@ -201,64 +197,79 @@ class ClusterStructure(metaclass=MetaCluster):
                            for param in self.numeric_params
                            if param not in excluded})
 
-    def compare(self, other, ave, excluded=()):
-        # Get the subclass (inheritted class) and init a new instance
-        der = self.__class__.__subclasses__()[0]()
+    def comp_param(self, other, ave, excluded=()):
+        # Get the subclass (inherited class) and init a new instance
+        dert = self.__class__.__subclasses__()[0]()
 
         excluded += ('Dy', 'Dx', 'Day', 'Dax') # always exclude dy and dx related components
 
         for param in self.numeric_params:
             if param not in excluded and param in other.numeric_params:
-                i = getattr(self, param) 
-                _i = getattr(other, param)  
-                d = i - _i        # difference
-                m = abs(d) - ave  # match
-
-                # assign to der
-                setattr(der, param, CDert(i, d, m))
+                p = getattr(self, param)
+                _p = getattr(other, param)
+                d = p - _p  # difference
+                if param is 'I':
+                    m = ave - abs(d)  # indirect match
+                else:
+                    m = min(p,_p) - abs(d)/2 - ave  # direct match
+                # assign to dert:
+                setattr(dert, param, Cdert(p, d, m))
 
         if 'Dy' in self.numeric_params and 'Dy' in other.numeric_params:
             dy = getattr(self, 'Dy'); _dy = getattr(other, 'Dy')
             dx = getattr(self, 'Dx'); _dx = getattr(other, 'Dx')
             a =  dx + 1j * dy; _a = _dx + 1j * _dy # angle in complex form
-            da = a * _a.conjugate()                     # angle difference
+            da = a * _a.conjugate()                # angle difference
             ma = ave - abs(da)                     # match
-            setattr(der, 'vector', CDert(a, da, ma))
-            
-        if 'Day' in self.numeric_params and 'Day' in other.numeric_params: 
+            setattr(dert, 'vector', Cdert(a, da, ma))
+
+        if 'Day' in self.numeric_params and 'Day' in other.numeric_params:
             day = getattr(self, 'Day'); _day = getattr(other, 'Day')
             dax = getattr(self, 'Dax'); _dax = getattr(other, 'Dax')
-            
+
             dday = day * _day.conjugate() # angle difference of complex day
             ddax = dax * _dax.conjugate() # angle difference of complex dax
-            
-            # using formula for sum of angle, similar with angle_diff
+            # formula for sum of angles, ~ angle_diff:
             # daz = (cos_1*cos_2 - sin_1*sin_2) + j*(cos_1*sin_2 + sin_1*cos_2)
             #     = (cos_1 + j*sin_1)*(cos_2 + j*sin_2)
-            #     = az1 * az2 
-            dda = dday * ddax   # sum of angle difference 
+            #     = az1 * az2
+            dda = dday * ddax   # sum of angle difference
             mda = ave - abs(dda) # match
-            setattr(der, 'avector', CDert((day, dax), dda, mda))
-            
-        der.comparator = self
-        der.comparand = other
+            setattr(dert, 'avector', Cdert((day, dax), dda, mda))
 
-        return der
+        dert.comparand1 = self  # where is it used?
+        dert.comparand2 = other
 
+        return dert
 
 # ----------------------------------------------------------------------------
-# CSingleDer class
-class CDert(Number):
+
+class Cdert(Number):
     __slots__ = ('p', 'd', 'm')
     def __init__(self, p=0, d=0, m=0):
         self.p, self.d, self.m = p, d, m
 
+    def __accum__(self, other):
 
-    def __add__(self, other):
-        return CDer(self.p + other.p, self.d + other.d, self.m + other.m)
+        return Cdert(self.p + other.p, self.d + other.d, self.m + other.m)
 
-    def __sub__(self, other):
-        return CDer(self.p - other.p, self.d - other.d, self.m - other.m)
+    def __comp_dert__(self, other, ave):  # adds a level of nesting to self dert
+        # can we make it shorter?
+
+        param = self.p
+        d = self.p - other.p
+        if self is 'I':  # also add versions for vector and avector
+            m = ave - abs(d)
+        else: m = min(self.p, other.p) - abs(d)/2 - ave
+        p = Cdert(param, m, d)
+
+        d = self.m - other.m
+        m = Cdert(self.m, min(self.m, other.m) - abs(d)/2 - ave, d)
+        d = self.d - other.d
+        d = Cdert(self.d, min(self.d, other.d) - abs(d)/2 - ave, d)
+
+        return Cdert(p, m, d)
+
 
     def __repr__(self):
         return "(p={}, d={}, m={})".format(self.p, self.d, self.m)
@@ -277,4 +288,4 @@ if __name__ == "__main__":  # for tests
 
     b = CTest(y=5, x=7, Dy=5, Dx=6, Day=4+5j, Dax = 8+9j)
     c = CTest(y=2, x=3, Dy=8, Dx=7, Day=5+6j, Dax = 6+7j)
-    print(b.compare(c, ave=1))  # automatically return the inherited class (it is assumed to contain ders)
+    print(b.comp_param(c, ave=1))  # automatically return the inherited class (it is assumed to contain ders)
