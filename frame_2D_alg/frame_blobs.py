@@ -48,7 +48,7 @@ EXCLUDED_ID = -2
 FrameOfBlobs = namedtuple('FrameOfBlobs', 'I, Dy, Dx, G, M, blob_, dert__')
 
 
-class CDert(ClusterStructure):
+class CDert(ClusterStructure):  # not used
     # Dert params, comp_pixel:
     I = int
     Dy = int
@@ -149,12 +149,10 @@ class CBlob(ClusterStructure):
     neg_mB = int    # common per derBlob_
     bblob = object
 
-
 class CderBlob(CBlob):
     Vector = complex
     aVector = complex
-    comparator = object # blob
-    comparand = object  # _blob
+
 
 def comp_pixel(image):  # 2x2 pixel cross-correlation within image, a standard edge detection operator
     # see comp_pixel_versions file for other versions and more explanation
@@ -377,7 +375,7 @@ if __name__ == "__main__":
     argument_parser = argparse.ArgumentParser()
     argument_parser.add_argument('-i', '--image', help='path to image file', default='./images//toucan.jpg')
     argument_parser.add_argument('-v', '--verbose', help='print details, useful for debugging', type=int, default=1)
-    argument_parser.add_argument('-n', '--intra', help='run intra_blobs after frame_blobs', type=int, default=0)
+    argument_parser.add_argument('-n', '--intra', help='run intra_blobs after frame_blobs', type=int, default=1)
     argument_parser.add_argument('-r', '--render', help='render the process', type=int, default=0)
     argument_parser.add_argument('-c', '--clib', help='use C shared library', type=int, default=0)
     args = argument_parser.parse_args()
