@@ -55,7 +55,7 @@ class MetaCluster(type):
             if issubclass(base, ClusterStructure):
                 for param in base.numeric_params:
                     if param not in attrs:  # prevents duplication of base params
-                        attrs[param] = Cdert
+                        attrs[param] = Cdm
 
         # only ignore param names start with double underscore
         params = tuple(attr for attr in attrs
@@ -197,6 +197,8 @@ class ClusterStructure(metaclass=MetaCluster):
                            for param in self.numeric_params
                            if param not in excluded})
 
+    # old code
+    '''
     def comp_param_dert(self, other, ave, excluded=()):
         # Get the subclass (inherited class) and init a new instance
         dert = self.__class__.__subclasses__()[0]()
@@ -238,7 +240,9 @@ class ClusterStructure(metaclass=MetaCluster):
             setattr(dert, 'aVector', Cdert((day, dax), dda, mda))
 
         return dert
+    '''
 
+    # compare root layer to get 1st layer derivatives
     def comp_param(self, other, ave, excluded=()):
         # Get the subclass (inherited class) and init a new instance
         dm = self.__class__.__subclasses__()[0]()
@@ -269,6 +273,7 @@ class ClusterStructure(metaclass=MetaCluster):
             day = getattr(self, 'Day'); _day = getattr(other, 'Day')
             dax = getattr(self, 'Dax'); _dax = getattr(other, 'Dax')
 
+            # temporary workaround until there is a better way to find angle difference between Day, Dax
             dday = day * _day.conjugate() # angle difference of complex day
             ddax = dax * _dax.conjugate() # angle difference of complex dax
             # formula for sum of angles, ~ angle_diff:
@@ -280,8 +285,27 @@ class ClusterStructure(metaclass=MetaCluster):
             setattr(dm, 'aVector', Cdm(dda, mda))
 
         return dm
-
-
+    
+    
+    # compare 1st layer derivatives to get 2nd layer derivatives 
+    def comp_param_layer(self, other, ave, excluded=()):
+        
+        nested_dm = self.__class__.__subclasses__()[0]()
+        
+        for param in self.numeric_params:
+            if param not in excluded and param in other.numeric_params:
+             
+                dm = getattr(self, param) 
+                _dm = getattr(other, param)        
+                
+                nested_param = dm.comp_dm(_dm, ave)
+        
+                setattr(nested_dm, param, nested_param)
+                
+                # preserve dm in nested param? So that we can access root level param
+                # setattr(nested_dm, param, (dm, nested_param))
+                
+        return nested_dm
 # ----------------------------------------------------------------------------
 
 '''
@@ -294,16 +318,22 @@ class Cdm(Number):
         self.d, self.m = d, m
 
     def accum(self, other):
-        return Cdert(self.d + other.d, self.m + other.m)
+        return Cdm(self.d + other.d, self.m + other.m)
 
     def comp_dm(self, other, ave):  # adds a level of nesting to self dert
-
-        d = self.p - other.p
-        m = min(self.p, other.p) - abs(d)/2 - ave
+        if isinstance(self.d, complex): # vector and avector
+            d = self.d * other.d.conjugate()   # angle difference
+            m = ave - abs(d)                   # match
+        else:
+            d = self.d - other.d
+            m = min(self.m, other.m) - abs(d)/2 - ave
         return Cdm(d,m)
+    
+    def __repr__(self):
+        return "(d={}, m={})".format(self.d, self.m)
 
 # old:
-
+'''
 class Cdert(Number):
     __slots__ = ('p', 'd', 'm')
     def __init__(self, p=0, d=0, m=0):
@@ -334,10 +364,11 @@ class Cdert(Number):
 
     def __repr__(self):
         return "(p={}, d={}, m={})".format(self.p, self.d, self.m)
-
+'''
 
 if __name__ == "__main__":  # for tests
-    class CTest(ClusterStructure):
+    # using blob as example
+    class CBlob(ClusterStructure):
         I = int
         Dy = int
         Dx = int
@@ -346,17 +377,30 @@ if __name__ == "__main__":  # for tests
         Day = int
         Dax = int
 
-    class CTestSub(CTest):
-        vector = complex
-        avector = complex
+    class CDerBlob(CBlob):
+        Vector = complex
+        aVector = complex
+          
+    class CDerBblob(CDerBlob):
+        pass
 
-    b = CTest(I = 5, Dy=5, Dx=7, G=5, M=6, Day=4+5j, Dax = 8+9j)
-    c = CTest(I = 9, Dy=2, Dx=3, G=8, M=7, Day=5+6j, Dax = 6+7j)
-    d = CTest(I = 3, Dy=5, Dx=4, G=9, M=9, Day=3+7j, Dax = 7+10j)
+    # root layer
+    blob1 = CBlob(I = 5, Dy=5, Dx=7, G=5, M=6, Day=4+5j, Dax = 8+9j)
+    blob2 = CBlob(I = 9, Dy=2, Dx=3, G=8, M=7, Day=5+6j, Dax = 6+7j)
+    blob3 = CBlob(I = 3, Dy=5, Dx=4, G=9, M=9, Day=3+7j, Dax = 7+10j)
 
-    der1 = b.comp_param(c, ave=1)
-    der2 = c.comp_param(d, ave=1)
-    print(der1)  # automatically return the inherited class (it is assumed to contain ders)
-    print(der2)
-    print(der1.I.comp_dert(der2.I,ave=1))
-    print(der1.G.comp_dert(der2.G,ave=1))
+    # root layer derivatives
+    derBlob1 = blob1.comp_param(blob2, ave=1)
+    derBlob2 = blob2.comp_param(blob3, ave=1)
+    
+    print(derBlob1)  # automatically return the inherited class (it is assumed to contain ders)
+    print(derBlob2)
+    
+    # 1st layer (assume bblob = derBlob, their parameter should be the same)
+    bblob1 = derBlob1
+    bblob2 = derBlob2
+
+    # 1st layer derivatives
+    derBblob1 = bblob1.comp_param_layer(bblob2, ave=1)
+    
+    
