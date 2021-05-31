@@ -246,6 +246,7 @@ class ClusterStructure(metaclass=MetaCluster):
     def comp_param(self, other, ave, excluded=()):
         # Get the subclass (inherited class) and init a new instance
         dm = self.__class__.__subclasses__()[0]()
+        dm.dm_layer = self.__class__.__subclasses__()[0]()
 
         excluded += ('Dy', 'Dx', 'Day', 'Dax') # always exclude dy and dx related components
 
@@ -253,13 +254,21 @@ class ClusterStructure(metaclass=MetaCluster):
             if param not in excluded and param in other.numeric_params:
                 p = getattr(self, param)
                 _p = getattr(other, param)
-                d = p - _p  # difference
-                if param == 'I':
-                    m = ave - abs(d)  # indirect match
+                
+                if isinstance(p, Cdm) and isinstance(_p, Cdm): # compute dm recursively through binary tree of d|m
+                    dmi = p.comp_dm(_p, ave) # dm instance     
                 else:
-                    m = min(p,_p) - abs(d)/2 - ave  # direct match
+                    d = p - _p  # difference
+                    if param == 'I':
+                        m = ave - abs(d)  # indirect match
+                    else:
+                        m = min(p,_p) - abs(d)/2 - ave  # direct match    
+                    dmi = Cdm(d, m)  # dm instance
+                        
                 # assign:
-                setattr(dm, param, Cdm(d, m))
+                setattr(dm, param,dm)           # if dm is set in dm_layer, what would we set in der's param?
+                setattr(dm.dm_layer, param, dmi) # set dm in dm_layer
+                
 
         if 'Dy' in self.numeric_params and 'Dy' in other.numeric_params:
             dy = getattr(self, 'Dy'); _dy = getattr(other, 'Dy')
@@ -268,6 +277,7 @@ class ClusterStructure(metaclass=MetaCluster):
             da = a * _a.conjugate()                # angle difference
             ma = ave - abs(da)                     # match
             setattr(dm, 'Vector', Cdm(da, ma))
+            setattr(dm.dm_layer, 'Vector', Cdm(da, ma)) # set dm in dm_layer
 
         if 'Day' in self.numeric_params and 'Day' in other.numeric_params:
             day = getattr(self, 'Day'); _day = getattr(other, 'Day')
@@ -283,10 +293,11 @@ class ClusterStructure(metaclass=MetaCluster):
             dda = dday * ddax   # sum of angle difference
             mda = ave - abs(dda) # match
             setattr(dm, 'aVector', Cdm(dda, mda))
+            setattr(dm.dm_layer, 'aVector', Cdm(dda, mda)) # set dm in dm_layer
 
         return dm
     
-    
+    '''
     # compare 1st layer derivatives to get 2nd layer derivatives 
     def comp_param_layer(self, other, ave, excluded=()):
         
@@ -301,11 +312,9 @@ class ClusterStructure(metaclass=MetaCluster):
                 nested_param = dm.comp_dm(_dm, ave)
         
                 setattr(nested_dm, param, nested_param)
-                
-                # preserve dm in nested param? So that we can access root level param
-                # setattr(nested_dm, param, (dm, nested_param))
-                
+                  
         return nested_dm
+    '''
 # ----------------------------------------------------------------------------
 
 '''
@@ -315,22 +324,66 @@ class Clayer(object): no new params, base params are replaced by d,m after comp_
 class Cdm(Number):
     __slots__ = ('d', 'm')
     def __init__(self, d=0, m=0):
-        self.d, self.m = d, m
+       self.d, self.m = d, m
 
     def accum(self, other):
         return Cdm(self.d + other.d, self.m + other.m)
 
     def comp_dm(self, other, ave):  # adds a level of nesting to self dert
-        if isinstance(self.d, complex): # vector and avector
-            d = self.d * other.d.conjugate()   # angle difference
-            m = ave - abs(d)                   # match
-        else:
-            d = self.d - other.d
-            m = min(self.m, other.m) - abs(d)/2 - ave
+        
+        if isinstance(self.d, Cdm) and isinstance(other.d, Cdm) and\
+           isinstance(self.m, Cdm) and isinstance(other.m, Cdm) :
+            
+            d = self.comp_dm_recursive(self, self.d, other.d, ave) # nested d   
+            m = ()
+            # this is not correct yet:
+            # as discussed previously: "m=min as a comparand is redundant to the smaller root param"
+            # to access the root param, we would need p in Cdm: Cdm(p,d,m), so add p in Cdm?
+            if self.m < other.m: 
+                m = self.comp_dm_recursive(self, self.m, other.m, ave) # nested m
+               
+        else: 
+            
+            if isinstance(self.d, complex): # vector and avector
+                d = self.d * other.d.conjugate()   # angle difference
+                m = ave - abs(d)                   # match
+            else: 
+                d = self.d - other.d
+                m = min(self.m, other.m) - abs(d)/2 - ave
+            
         return Cdm(d,m)
     
-    def __repr__(self):
-        return "(d={}, m={})".format(self.d, self.m)
+    def comp_dm_recursive(self, dm, _dm, ave): # comp_dm recursively, return binary tree of d|m
+        
+        if isinstance(dm.d, Cdm) and isinstance(_dm.d, Cdm) and \
+           isinstance(dm.m, Cdm) and isinstance(_dm.m, Cdm):
+           
+            d = self.comp_dm_recursive(self, dm.d, _dm.d, ave) # nested d 
+            m = ()
+            if dm.m < _dm.m: 
+                m = self.comp_dm_recursive(self, dm.m, _dm.m, ave) # nested m
+               
+        else:
+            if isinstance(self.d, complex): # vector and avector  
+                dd = dm.d * _dm.d.conjugate()            # angle difference of d
+                md = ave - abs(dd)                       # match of d
+                dm = dm.m - _dm.m                        # difference of m
+                mm = min(dm.m, _dm.m) - abs(dm)/2 - ave  # match of m
+            else:
+                dd = dm.d - _dm.d                        # difference of d
+                md = min(dm.d, _dm.d) - abs(dd)/2 - ave  # match of d
+                dm = dm.m - _dm.m                        # difference of m
+                mm = min(dm.m, _dm.m) - abs(dm)/2 - ave  # match of m
+                     
+            d = Cdm(dd, md)   # difference and match of d
+            m = Cdm(dm, mm)   # difference and match of m
+                
+        return Cdm(d,m)
+        
+        
+    
+    def __repr__(self): # representation of object
+        return "(p={}, d={}, m={})".format(self.p, self.d, self.m)
 
 # old:
 '''
@@ -378,10 +431,14 @@ if __name__ == "__main__":  # for tests
         Dax = int
 
     class CDerBlob(CBlob):
+        dm_layer = object
         Vector = complex
         aVector = complex
           
-    class CDerBblob(CDerBlob):
+    class CBblob(CDerBlob):
+        pass
+    
+    class CDerBblob(CBblob):
         pass
 
     # root layer
@@ -401,6 +458,6 @@ if __name__ == "__main__":  # for tests
     bblob2 = derBlob2
 
     # 1st layer derivatives
-    derBblob1 = bblob1.comp_param_layer(bblob2, ave=1)
+    derBblob1 = bblob1.comp_param(bblob2,1)
     
     
