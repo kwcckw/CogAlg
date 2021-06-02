@@ -56,6 +56,7 @@ class MetaCluster(type):
             if issubclass(base, ClusterStructure):
                 for param in base.numeric_params:
                     if param not in attrs:  # prevents duplication of base params
+                        # not all inherited params are Cdm
                         if param in replace:
                             new_param, new_type = replace[param]
                             if new_param is not None:
@@ -200,19 +201,29 @@ class ClusterStructure(metaclass=MetaCluster):
 
     def accum_from(self, other, excluded=()):
         """Accumulate params from another structure."""
+        
+        # need to accumulate param in tuple, for eg: aVector = (day, dax)
+
         self.accumulate(**{param: getattr(other, param, 0)
                            for param in self.numeric_params
                            if param not in excluded})
 
 
+        
+        self.dm_layer.accum_from(other.dm_layer) # accumulate dm_layer
+
     def comp_param(self, other, ave, excluded=()):  # compare root layer to get 1st dm_layer
 
         # Get the subclass (inherited class) and init a new instance
         der = self.__class__.__subclasses__()[0]() # derCluster
-        der.dm_layer = self.__class__.__subclasses__()[0]() # dm_layer having same class as derivative, or create a new class
-
-        excluded += ('Dy', 'Dx', 'Day', 'Dax') # always exclude dy and dx related components
-
+        der.dm_layer = der.__class__.__subclasses__()[0]() 
+        
+        # always exclude dy and dx related components
+        if isinstance(excluded, str): # single element 'excluded' will be in string instead of tuple, since tuple need at least 2 elements
+            excluded = (excluded, 'Dy', 'Dx', 'Day', 'Dax') 
+        else:
+            excluded += ('Dy', 'Dx', 'Day', 'Dax')
+        
         for param in self.numeric_params:
             if param not in excluded and param in other.numeric_params:
                 p = getattr(self, param)
@@ -254,14 +265,6 @@ class ClusterStructure(metaclass=MetaCluster):
             setattr(der, 'aVector', (day, dax))  # set root param
             setattr(der.dm_layer, 'aVector', Cdm(dda, mda)) # set dm in dm_layer
 
-
-        '''
-        for param in self.numeric_params:
-            if param  in excluded:
-                delattr(der, param)
-                delattr(der.dm_layer, param)
-        '''
-        
         return der
 
 
@@ -314,6 +317,8 @@ class Cdm(Number):
 
 
 if __name__ == "__main__":  # for tests
+    
+    # ---- root layer  --------------------------------------------------------
     # using blob as example
     class CBlob(ClusterStructure):
         I = int
@@ -324,16 +329,42 @@ if __name__ == "__main__":  # for tests
         Day = int
         Dax = int
 
+    # blob derivative
     class CDerBlob(CBlob):
+        replace = {'Dy': ('Vector', complex), 'Dx': (None, None),
+	               'Day': ('aVector', complex), 'Dax': (None, None)}
         dm_layer = object
-        Vector = complex
-        aVector = complex
+        mB = int
+        dB = int
+        blob = object
+        _blob = object
 
-    class CBblob(CDerBlob):
+    # derBlob mb layer 
+    class CDerBlobMB(CDerBlob):
+        replace = {'mB': (None, None), 'dB': (None, None)} # remove unnecessary param in dm layer
+
+    # ---- 1st layer  ---------------------------------------------------------
+    # bblob
+    class CBblob(CBlob):
+        replace = {'Dy': ('Vector', complex), 'Dx': (None, None),
+	               'Day': ('aVector', complex), 'Dax': (None, None)}
+        dm_layer = object
+        mB = int
+        dB = int
+        derBlob_ = list
         pass
 
+    # bblob derivative
     class CDerBblob(CBblob):
         pass
+    
+    
+    # derbblob mb layer
+    class CDerBblobMB(CDerBblob):
+        pass
+
+
+    # ---- example  -----------------------------------------------------------
 
     # root layer
     blob1 = CBlob(I=5, Dy=5, Dx=7, G=5, M=6, Day=4 + 5j, Dax=8 + 9j)
@@ -347,11 +378,20 @@ if __name__ == "__main__":  # for tests
     print(derBlob1)  # automatically return the inherited class (it is assumed to contain ders)
     print(derBlob2)
 
-    # 1st layer (assume bblob = derBlob, their parameter should be the same)
-    bblob1 = derBlob1
-    bblob2 = derBlob2
+    derBlob1.accum_from(derBlob2)
+
+    # 1st layer
+    bblob1 = CBblob() # the inherited CBblob base params are in Cdm, but we need int instead since CBblob is inherited from CBlob
+    bblob1.accum_from(derBlob1)  
+      
+    bblob2 = CBblob()
+    bblob2.accum_from(derBlob2)
+
 
     # 1st layer derivatives
-    derBblob1 = bblob1.dm_layer.comp_dm(bblob2.dm_layer, 1)
+    # need to think about this:
+    # 1. compare based param of bblob1 and bblob2 (non Cdm) and pack the resulting Cdm in new or existing dm_layer?
+    # 2. compare dm_layer of bblob1 and bblob2 and pack the resulting Cdm in another new or existing dm_layer?
+    derBblob1 = bblob1.comp_param(bblob2, 1) 
 
   
