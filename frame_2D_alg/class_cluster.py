@@ -203,14 +203,19 @@ class ClusterStructure(metaclass=MetaCluster):
         """Accumulate params from another structure."""
         
         # need to accumulate param in tuple, for eg: aVector = (day, dax)
+        for param in self.numeric_params:
+            if param not in excluded :
+                p = getattr(self,param)
+                _p = getattr(other, param) 
+                
+                if isinstance(p,tuple):
+                    setattr(self, param, (p[0]+_p[0], p[1]+_p[1]))
 
-        self.accumulate(**{param: getattr(other, param, 0)
-                           for param in self.numeric_params
-                           if param not in excluded})
+                else:
+                    setattr(self, param, p+_p)
 
-
-        
-        self.dm_layer.accum_from(other.dm_layer) # accumulate dm_layer
+        if hasattr(self, 'dm_layer'):   
+            self.dm_layer.accum_from(other.dm_layer) # accumulate dm_layer
 
     def comp_param(self, other, ave, excluded=()):  # compare root layer to get 1st dm_layer
 
