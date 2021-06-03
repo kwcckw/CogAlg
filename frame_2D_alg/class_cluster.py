@@ -201,34 +201,29 @@ class ClusterStructure(metaclass=MetaCluster):
 
     def accum_from(self, other, excluded=()):
         """Accumulate params from another structure."""
-        
+
         # need to accumulate param in tuple, for eg: aVector = (day, dax)
-        for param in self.numeric_params:
-            if param not in excluded :
-                p = getattr(self,param)
-                _p = getattr(other, param) 
-                
-                if isinstance(p,tuple):
-                    setattr(self, param, (p[0]+_p[0], p[1]+_p[1]))
 
-                else:
-                    setattr(self, param, p+_p)
+        self.accumulate(**{param: getattr(other, param, 0)
+                           for param in self.numeric_params
+                           if param not in excluded})
 
-        if hasattr(self, 'dm_layer'):   
-            self.dm_layer.accum_from(other.dm_layer) # accumulate dm_layer
+
+
+        self.dm_layer.accum_from(other.dm_layer) # accumulate dm_layer
 
     def comp_param(self, other, ave, excluded=()):  # compare root layer to get 1st dm_layer
 
         # Get the subclass (inherited class) and init a new instance
         der = self.__class__.__subclasses__()[0]() # derCluster
-        der.dm_layer = der.__class__.__subclasses__()[0]() 
-        
+        der.dm_layer = der.__class__.__subclasses__()[0]()
+
         # always exclude dy and dx related components
         if isinstance(excluded, str): # single element 'excluded' will be in string instead of tuple, since tuple need at least 2 elements
-            excluded = (excluded, 'Dy', 'Dx', 'Day', 'Dax') 
+            excluded = (excluded, 'Dy', 'Dx', 'Day', 'Dax')
         else:
             excluded += ('Dy', 'Dx', 'Day', 'Dax')
-        
+
         for param in self.numeric_params:
             if param not in excluded and param in other.numeric_params:
                 p = getattr(self, param)
@@ -244,7 +239,7 @@ class ClusterStructure(metaclass=MetaCluster):
                 # assign:
                 setattr(der, param, p)            # set root param
                 setattr(der.dm_layer, param, dm) # set dm in dm_layer
-                
+
         if 'Dy' in self.numeric_params and 'Dy' in other.numeric_params:
             dy = getattr(self, 'Dy'); _dy = getattr(other, 'Dy')
             dx = getattr(self, 'Dx'); _dx = getattr(other, 'Dx')
@@ -274,10 +269,10 @@ class ClusterStructure(metaclass=MetaCluster):
 
 
     def comp_dm(self, other, ave, excluded=()):  # compare dm layer to get subsequent dm layer
-            
+
         der = self.__class__.__subclasses__()[0]() # derCluster
-        der.dm_layer = self.__class__.__subclasses__()[0]() # dm_layer having same class as derivative
-        
+        der.dm_layer = self.__class__.__subclasses__()[0]() # dm_layer has same class as derCluster
+
         for param in self.numeric_params:
             if param not in excluded and param in other.numeric_params:
                 dmi = getattr(self, param)   # dm instance
@@ -293,13 +288,13 @@ class ClusterStructure(metaclass=MetaCluster):
                     md = min(dmi.d, _dmi.d) - abs(dd) / 2 - ave  # match of d
                     dm = dmi.m - _dmi.m  # difference of m
                     mm = min(dmi.m, _dmi.m) - abs(dm) / 2 - ave  # match of m
-                
+
                 d = Cdm(dd, md)  # difference and match of d
                 m = Cdm(dm, mm)  # difference and match of m
 
                 setattr(der, param, dmi)  # set root param
                 setattr(der.dm_layer, param, Cdm(d, m)) # set dm in dm_layer
-                
+
         return der
 
 
@@ -322,7 +317,7 @@ class Cdm(Number):
 
 
 if __name__ == "__main__":  # for tests
-    
+
     # ---- root layer  --------------------------------------------------------
     # using blob as example
     class CBlob(ClusterStructure):
@@ -344,7 +339,7 @@ if __name__ == "__main__":  # for tests
         blob = object
         _blob = object
 
-    # derBlob mb layer 
+    # derBlob mb layer
     class CDerBlobMB(CDerBlob):
         replace = {'mB': (None, None), 'dB': (None, None)} # remove unnecessary param in dm layer
 
@@ -362,8 +357,8 @@ if __name__ == "__main__":  # for tests
     # bblob derivative
     class CDerBblob(CBblob):
         pass
-    
-    
+
+
     # derbblob mb layer
     class CDerBblobMB(CDerBblob):
         pass
@@ -387,8 +382,8 @@ if __name__ == "__main__":  # for tests
 
     # 1st layer
     bblob1 = CBblob() # the inherited CBblob base params are in Cdm, but we need int instead since CBblob is inherited from CBlob
-    bblob1.accum_from(derBlob1)  
-      
+    bblob1.accum_from(derBlob1)
+
     bblob2 = CBblob()
     bblob2.accum_from(derBlob2)
 
@@ -397,6 +392,4 @@ if __name__ == "__main__":  # for tests
     # need to think about this:
     # 1. compare based param of bblob1 and bblob2 (non Cdm) and pack the resulting Cdm in new or existing dm_layer?
     # 2. compare dm_layer of bblob1 and bblob2 and pack the resulting Cdm in another new or existing dm_layer?
-    derBblob1 = bblob1.comp_param(bblob2, 1) 
-
-  
+    derBblob1 = bblob1.comp_param(bblob2, 1)
