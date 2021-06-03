@@ -62,7 +62,7 @@ class MetaCluster(type):
                             if new_param is not None:
                                 attrs[new_param] = new_type
                         else:
-                            attrs[param] = Cdm
+                            attrs[param] = getattr(base,param+'_type') # if the param is not replaced, it will following type of base param
 
         # only ignore param names start with double underscore
         params = tuple(attr for attr in attrs
@@ -202,27 +202,60 @@ class ClusterStructure(metaclass=MetaCluster):
     def accum_from(self, other, excluded=()):
         """Accumulate params from another structure."""
 
-        # need to accumulate param in tuple, for eg: aVector = (day, dax)
+        for param in self.numeric_params:
+            if param not in excluded :
+                p = getattr(self,param)
+                _p = getattr(other, param) 
 
-        self.accumulate(**{param: getattr(other, param, 0)
-                           for param in self.numeric_params
-                           if param not in excluded})
+                if isinstance(p,tuple) and isinstance(_p,tuple) :  # both tuple of complex
+                    setattr(self, param, (p[0]*_p[0], p[1]*_p[1])) # sum of complex = complex1 * complex2
+                    
+                elif isinstance(p,tuple) != isinstance(_p,tuple):  # one is complex, another is tuple, this is due to 1 value is the initialized value.
+                    if isinstance(_p, tuple): # take the complex value (in tuple form)
+                        setattr(self, param, (_p[0], _p[1])) 
+                    else:
+                        setattr(self, param, (p[0], p[1]))  
+                else:
+                    if isinstance(p, complex):
+                        if p==0: # p is the initialized param =0, take the other complex value, else the value will always = 0
+                            setattr(self, param, _p)
+                        else:
+                            setattr(self, param, p*_p) # both are complex, sum of complex = = complex1 * complex2
+                    else:
+                        setattr(self, param, p+_p) # both are not complex, add normaly
 
 
+        if hasattr(self, 'dm_layer1'):   
+            self.dm_layer1.accum_dm_from(other.dm_layer1) # accumulate dm_layer
 
-        self.dm_layer.accum_from(other.dm_layer) # accumulate dm_layer
 
-    def comp_param(self, other, ave, excluded=()):  # compare root layer to get 1st dm_layer
+    def accum_dm_from(self, other, excluded=()): # accumulate dm_layers
+        
+        for param in self.numeric_params:
+            if param not in excluded :
+                p = getattr(self,param)
+                _p = getattr(other, param) 
+                
+                d = p.d; _d = _p.d
+                m = p.m; _m = _p.m
+                
+                if isinstance(d, complex) and isinstance(_d, complex): # both d are complex
+                    if d == 0: # d is the initialized value = 0, take the other value
+                        dm = Cdm(_d, m+_m)
+                    else:
+                        dm = Cdm(d*_d, m+_m) # sum of complex = complex1 * complex2
+                else:
+                    dm = Cdm(d+_d, m+_m)
+
+                setattr(self,param,dm)
+
+    def comp_param(self, other, ave, excluded=()):  # compare base params to get dm_layer
 
         # Get the subclass (inherited class) and init a new instance
         der = self.__class__.__subclasses__()[0]() # derCluster
-        der.dm_layer = der.__class__.__subclasses__()[0]()
-
+        
         # always exclude dy and dx related components
-        if isinstance(excluded, str): # single element 'excluded' will be in string instead of tuple, since tuple need at least 2 elements
-            excluded = (excluded, 'Dy', 'Dx', 'Day', 'Dax')
-        else:
-            excluded += ('Dy', 'Dx', 'Day', 'Dax')
+        excluded += ('Dy', 'Dx', 'Day', 'Dax')
 
         for param in self.numeric_params:
             if param not in excluded and param in other.numeric_params:
@@ -238,7 +271,7 @@ class ClusterStructure(metaclass=MetaCluster):
 
                 # assign:
                 setattr(der, param, p)            # set root param
-                setattr(der.dm_layer, param, dm) # set dm in dm_layer
+                setattr(der.dm_layer1, param, dm) # set dm in dm_layer
 
         if 'Dy' in self.numeric_params and 'Dy' in other.numeric_params:
             dy = getattr(self, 'Dy'); _dy = getattr(other, 'Dy')
@@ -247,7 +280,7 @@ class ClusterStructure(metaclass=MetaCluster):
             da = a * _a.conjugate()                # angle difference
             ma = ave - abs(da)                     # match
             setattr(der, 'Vector', a ) # set root param
-            setattr(der.dm_layer, 'Vector', Cdm(da, ma)) # set dm in dm_layer
+            setattr(der.dm_layer1, 'Vector', Cdm(da, ma)) # set dm in dm_layer
 
         if 'Day' in self.numeric_params and 'Day' in other.numeric_params:
             day = getattr(self, 'Day'); _day = getattr(other, 'Day')
@@ -263,16 +296,15 @@ class ClusterStructure(metaclass=MetaCluster):
             dda = dday * ddax   # sum of angle difference
             mda = ave - abs(dda) # match
             setattr(der, 'aVector', (day, dax))  # set root param
-            setattr(der.dm_layer, 'aVector', Cdm(dda, mda)) # set dm in dm_layer
+            setattr(der.dm_layer1, 'aVector', Cdm(dda, mda)) # set dm in dm_layer
 
         return der
 
-
+    # no needed at this moment
     def comp_dm(self, other, ave, excluded=()):  # compare dm layer to get subsequent dm layer
 
         der = self.__class__.__subclasses__()[0]() # derCluster
-        der.dm_layer = self.__class__.__subclasses__()[0]() # dm_layer has same class as derCluster
-
+        
         for param in self.numeric_params:
             if param not in excluded and param in other.numeric_params:
                 dmi = getattr(self, param)   # dm instance
@@ -318,6 +350,20 @@ class Cdm(Number):
 
 if __name__ == "__main__":  # for tests
 
+    
+    # ---- dm layer instance, all layers are the same  ------------------------
+    class CDm_layer(ClusterStructure):
+        I       = Cdm
+        Vector  = Cdm
+        G       = Cdm
+        M       = Cdm
+        Ga      = Cdm
+        Ma      = Cdm
+        Mdx     = Cdm
+        Ddx     = Cdm
+        aVector = Cdm
+
+    
     # ---- root layer  --------------------------------------------------------
     # using blob as example
     class CBlob(ClusterStructure):
@@ -333,35 +379,30 @@ if __name__ == "__main__":  # for tests
     class CDerBlob(CBlob):
         replace = {'Dy': ('Vector', complex), 'Dx': (None, None),
 	               'Day': ('aVector', complex), 'Dax': (None, None)}
-        dm_layer = object
+        dm_layer1 = CDm_layer # comparing blobs' base params
         mB = int
         dB = int
         blob = object
         _blob = object
 
-    # derBlob mb layer
-    class CDerBlobMB(CDerBlob):
-        replace = {'mB': (None, None), 'dB': (None, None)} # remove unnecessary param in dm layer
 
     # ---- 1st layer  ---------------------------------------------------------
     # bblob
     class CBblob(CBlob):
         replace = {'Dy': ('Vector', complex), 'Dx': (None, None),
 	               'Day': ('aVector', complex), 'Dax': (None, None)}
-        dm_layer = object
+        dm_layer1 = CDm_layer # inherited from derBlb
         mB = int
         dB = int
         derBlob_ = list
-        pass
+
 
     # bblob derivative
     class CDerBblob(CBblob):
-        pass
+        dm_layer01 = CDm_layer # comparing Bblob base params
+        dm_layer11 = CDm_layer # comparing bblob.dm_layer1
 
 
-    # derbblob mb layer
-    class CDerBblobMB(CDerBblob):
-        pass
 
 
     # ---- example  -----------------------------------------------------------
@@ -387,9 +428,3 @@ if __name__ == "__main__":  # for tests
     bblob2 = CBblob()
     bblob2.accum_from(derBlob2)
 
-
-    # 1st layer derivatives
-    # need to think about this:
-    # 1. compare based param of bblob1 and bblob2 (non Cdm) and pack the resulting Cdm in new or existing dm_layer?
-    # 2. compare dm_layer of bblob1 and bblob2 and pack the resulting Cdm in another new or existing dm_layer?
-    derBblob1 = bblob1.comp_param(bblob2, 1)

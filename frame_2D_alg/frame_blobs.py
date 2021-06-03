@@ -36,7 +36,7 @@ from collections import deque
 from draw_frame_blobs import visualize_blobs
 from utils import minmax
 from collections import namedtuple
-from class_cluster import ClusterStructure, NoneType
+from class_cluster import ClusterStructure, NoneType, Cdm
 
 ave = 30  # filter or hyper-parameter, set as a guess, latter adjusted by feedback
 aveB = 50
@@ -46,6 +46,19 @@ UNFILLED = -1
 EXCLUDED_ID = -2
 
 FrameOfBlobs = namedtuple('FrameOfBlobs', 'I, Dy, Dx, G, M, blob_, dert__')
+
+class CDm_layer(ClusterStructure):
+    I       = Cdm
+    Vector  = Cdm
+    G       = Cdm
+    M       = Cdm
+    Ga      = Cdm
+    Ma      = Cdm
+    aVector = Cdm
+    A       = Cdm
+    Mdx     = Cdm
+    Ddx     = Cdm
+    
 
 
 class CDert(ClusterStructure):  # not used
@@ -149,9 +162,30 @@ class CBlob(ClusterStructure):
     neg_mB = int    # common per derBlob_
     bblob = object
 
-class CderBlob(CBlob):
-    Vector = complex
-    aVector = complex
+
+class CDerBlob(CBlob):
+    replace = {'Dy' : ('Vector', complex)   , 'Dx': (None, None),
+	           'Day': ('aVector', complex)  , 'Dax': (None, None),
+               'rdn': (None, None)          ,'rng': (None, None),
+               'Ls' : (None, None)          , 'mB': (None, None),
+               'dB' : (None, None)          , 'distance': (None, None),
+               'neg_mB': (None, None)}
+      
+    dm_layer1 = CDm_layer # comparing blobs' base params
+    mB = int
+    dB = int
+    blob = object
+    _blob = object
+    
+
+class CBblob(CBlob):
+
+    replace = {'Dy': ('Vector', complex), 'Dx': (None, None),
+	           'Day': ('aVector', complex), 'Dax': (None, None)}
+    dm_layer1 = CDm_layer # inherited from derBlb
+    mB = int
+    dB = int
+    derBlob_ = list  
 
 
 def comp_pixel(image):  # 2x2 pixel cross-correlation within image, a standard edge detection operator

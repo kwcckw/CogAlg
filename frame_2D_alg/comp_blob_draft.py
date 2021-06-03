@@ -3,21 +3,9 @@ Cross-compare blobs with incrementally intermediate adjacency, within a frame
 '''
 
 from class_cluster import ClusterStructure, NoneType
-from frame_blobs import ave, CBlob
+from frame_blobs import ave, CBlob, CDerBlob, CBblob
 import numpy as np
 import cv2
-
-class CderBlob(CBlob):
-
-    blob = object
-    _blob = object
-    mB = int
-    dB = int
-
-class CBblob(CderBlob):
-
-    blob_ = list
-
 
 ave_mB = 0  # ave can't be negative
 ave_rM = .7  # average relative match at rL=1: rate of ave_mB decay with relative distance, due to correlation between proximity and similarity
@@ -57,6 +45,7 @@ def comp_blob_recursive(blob, adj_blob_, derBlob_):
             derBlob_.append(derBlob)             # also frame-wide
 
         if "derBlob" in locals(): # derBlob exists
+            # blob accmulate base param of derBlob
             accum_derBlob(blob, derBlob)         # from all compared blobs, regardless of mB sign
 
             if derBlob.mB > 0:  # replace blob with adj_blob for continued adjacency search:
@@ -74,12 +63,15 @@ def comp_blob(blob, _blob):
     cross compare _blob and blob
     '''
 
-    derBlob = blob.comp_param(_blob, blob.A)
+    derBlob = blob.comp_param(_blob, blob.A, excluded=( 'rdn', 'rng','Ls', 'a_depth', 'mB','dB','distance','neg_mB'))
 
-    derBlob.mB = derBlob.I.m + derBlob.A.m + derBlob.G.m + derBlob.M.m +  derBlob.Vector.m  \
+    derBlob.mB = derBlob.dm_layer1.I.m + derBlob.dm_layer1.A.m + derBlob.dm_layer1.G.m + derBlob.dm_layer1.M.m +  derBlob.dm_layer1.Vector.m  \
     - ave_mB * (ave_rM ** ((1+blob.distance) / np.sqrt(blob.A)))  # deviation from average blob match at current distance
 
-    derBlob.dB = derBlob.I.d + derBlob.A.d + derBlob.G.d + derBlob.M.d +  derBlob.Vector.d
+    derBlob.dB = derBlob.dm_layer1.I.d + derBlob.dm_layer1.A.d + derBlob.dm_layer1.G.d + derBlob.dm_layer1.M.d +  derBlob.dm_layer1.Vector.d
+
+    derBlob.blob = blob
+    derBlob._blob = _blob
 
     '''
     difference = _blob.difference(blob)
