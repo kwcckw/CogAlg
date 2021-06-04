@@ -202,52 +202,9 @@ class ClusterStructure(metaclass=MetaCluster):
     def accum_from(self, other, excluded=()):
         """Accumulate params from another structure."""
 
-        for param in self.numeric_params:
-            if param not in excluded :
-                p = getattr(self,param)
-                _p = getattr(other, param) 
-
-                if isinstance(p,tuple) and isinstance(_p,tuple) :  # both tuple of complex
-                    setattr(self, param, (p[0]*_p[0], p[1]*_p[1])) # sum of complex = complex1 * complex2
-                    
-                elif isinstance(p,tuple) != isinstance(_p,tuple):  # one is complex, another is tuple, this is due to 1 value is the initialized value.
-                    if isinstance(_p, tuple): # take the complex value (in tuple form)
-                        setattr(self, param, (_p[0], _p[1])) 
-                    else:
-                        setattr(self, param, (p[0], p[1]))  
-                else:
-                    if isinstance(p, complex):
-                        if p==0: # p is the initialized param =0, take the other complex value, else the value will always = 0
-                            setattr(self, param, _p)
-                        else:
-                            setattr(self, param, p*_p) # both are complex, sum of complex = = complex1 * complex2
-                    else:
-                        setattr(self, param, p+_p) # both are not complex, add normaly
-
-
-        if hasattr(self, 'dm_layer1'):   
-            self.dm_layer1.accum_dm_from(other.dm_layer1) # accumulate dm_layer
-
-
-    def accum_dm_from(self, other, excluded=()): # accumulate dm_layers
-        
-        for param in self.numeric_params:
-            if param not in excluded :
-                p = getattr(self,param)
-                _p = getattr(other, param) 
-                
-                d = p.d; _d = _p.d
-                m = p.m; _m = _p.m
-                
-                if isinstance(d, complex) and isinstance(_d, complex): # both d are complex
-                    if d == 0: # d is the initialized value = 0, take the other value
-                        dm = Cdm(_d, m+_m)
-                    else:
-                        dm = Cdm(d*_d, m+_m) # sum of complex = complex1 * complex2
-                else:
-                    dm = Cdm(d+_d, m+_m)
-
-                setattr(self,param,dm)
+        self.accumulate(**{param: getattr(other, param, 0)
+                           for param in self.numeric_params
+                           if param not in excluded})
 
     def comp_param(self, other, ave, excluded=()):  # compare base params to get dm_layer
 
@@ -330,7 +287,6 @@ class ClusterStructure(metaclass=MetaCluster):
         return der
 
 
-
 class Cdm(Number):
     __slots__ = ('d', 'm')
 
@@ -346,6 +302,41 @@ class Cdm(Number):
             return "Cdm(d=Cdm, m=Cdm)"
         else:
             return "Cdm(d={}, m={})".format(self.d, self.m)
+
+
+
+
+def comp_param(param, _param, param_name, ave):
+    
+    d = param - _param    # difference
+    if param_name == 'I':
+        m = ave - abs(d)  # indirect match
+    else:
+        m = min(param,_param) - abs(d)/2 - ave  # direct match
+        
+    return [d,m]
+    
+def comp_param_complex(dy, dx, _dy, _dx, ave, fda):
+    
+    if not fda: # input is dy and dx
+        
+        a =  dx + 1j * dy; _a = _dx + 1j * _dy # angle in complex form
+        da = a * _a.conjugate()                # angle difference
+        ma = ave - abs(da)    
+    
+    else: # dy and dax is day and dax
+        
+        dday = dy * _dy.conjugate() # angle difference of complex day
+        ddax = dx * _dx.conjugate() # angle difference of complex dax
+        # formula for sum of angles, ~ angle_diff:
+        # daz = (cos_1*cos_2 - sin_1*sin_2) + j*(cos_1*sin_2 + sin_1*cos_2)
+        #     = (cos_1 + j*sin_1)*(cos_2 + j*sin_2)
+        #     = az1 * az2
+        da = dday * ddax   # sum of angle difference
+        ma = ave - abs(da) # match
+     
+    return [da,ma]
+      
 
 
 if __name__ == "__main__":  # for tests

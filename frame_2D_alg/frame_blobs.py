@@ -47,19 +47,6 @@ EXCLUDED_ID = -2
 
 FrameOfBlobs = namedtuple('FrameOfBlobs', 'I, Dy, Dx, G, M, blob_, dert__')
 
-class CDm_layer(ClusterStructure):
-    I       = Cdm
-    Vector  = Cdm
-    G       = Cdm
-    M       = Cdm
-    Ga      = Cdm
-    Ma      = Cdm
-    aVector = Cdm
-    A       = Cdm
-    Mdx     = Cdm
-    Ddx     = Cdm
-    
-
 
 class CDert(ClusterStructure):  # not used
     # Dert params, comp_pixel:
@@ -107,21 +94,9 @@ class CFlatBlob(ClusterStructure):  # from frame_blobs only, no sub_blobs
 
 class CBlob(ClusterStructure):
 
-    # Dert params, comp_pixel:
-    I = int
-    Dy = int
-    Dx = int
-    G = int
-    M = int
-    # Dert params, comp_angle:
-    Day = complex
-    Dax = complex
-    Ga = int
-    Ma = int
-    # Dert params, comp_dx:
-    Mdx = int
-    Ddx = int
-
+    Dert = list      # base params
+    Dert_param = list# name of base params 
+    
     # blob params:
     A = int  # blob area
     sign = NoneType
@@ -163,30 +138,27 @@ class CBlob(ClusterStructure):
     bblob = object
 
 
-class CDerBlob(CBlob):
-    replace = {'Dy' : ('Vector', complex)   , 'Dx': (None, None),
-	           'Day': ('aVector', complex)  , 'Dax': (None, None),
-               'rdn': (None, None)          ,'rng': (None, None),
-               'Ls' : (None, None)          , 'mB': (None, None),
-               'dB' : (None, None)          , 'distance': (None, None),
-               'neg_mB': (None, None)}
-      
-    dm_layer1 = CDm_layer # comparing blobs' base params
+class CDerBlob(ClusterStructure):
+    
+    layer1 = list       # dm layer params
+    layer1_param = list # name of dm layer's params
+    
     mB = int
     dB = int
     blob = object
     _blob = object
     
+class CBblob(ClusterStructure):
 
-class CBblob(CBlob):
+    Dert = list           # base params
+    Dert_param = list     # name of base params
+    layer1 = list         # dm layer params
+    dm_layer_param = list # name of dm layer's params
 
-    replace = {'Dy': ('Vector', complex), 'Dx': (None, None),
-	           'Day': ('aVector', complex), 'Dax': (None, None)}
-    dm_layer1 = CDm_layer # inherited from derBlb
     mB = int
     dB = int
     derBlob_ = list  
-
+    blob_ = list
 
 def comp_pixel(image):  # 2x2 pixel cross-correlation within image, a standard edge detection operator
     # see comp_pixel_versions file for other versions and more explanation
@@ -231,11 +203,11 @@ def derts2blobs(dert__, verbose=False, render=False, use_c=False):
         blob_, idmap, adj_pairs = flood_fill(dert__, sign__=dert__[3] > 0,  verbose=verbose)
         I, Dy, Dx, G, M = 0, 0, 0, 0, 0
         for blob in blob_:
-            I += blob.I
-            Dy += blob.Dy
-            Dx += blob.Dx
-            G += blob.G
-            M += blob.M
+            I += blob.Dert[0]
+            Dy += blob.Dert[1]
+            Dx += blob.Dert[2]
+            G += blob.Dert[3]
+            M += blob.Dert[4]
         frame = FrameOfBlobs(I=I, Dy=Dy, Dx=Dx, G=G, M=M, blob_=blob_, dert__=dert__)
 
     assign_adjacents(adj_pairs)  # f_segment_by_direction=False
@@ -270,7 +242,9 @@ def flood_fill(dert__, sign__, verbose=False, mask__=None, blob_cls=CBlob, fseg=
         for x in range(width):
             if idmap[y, x] == UNFILLED:  # ignore filled/clustered derts
                 # initialize new blob
-                blob = blob_cls(sign=sign__[y, x], root_dert__=dert__)
+                blob = blob_cls(Dert=[0 for _ in range(11)],sign=sign__[y, x], root_dert__=dert__)
+                blob.Dert_param = ['I', 'Dy', 'Dx', 'G', 'M', 'Day', 'Dax', 'Ga', 'Ma', 'Mdx', 'Ddx']
+                
                 if prior_forks: # update prior forks in deep blob
                     blob.prior_forks= prior_forks.copy()
                 blob_.append(blob)
@@ -283,21 +257,8 @@ def flood_fill(dert__, sign__, verbose=False, mask__=None, blob_cls=CBlob, fseg=
                 while unfilled_derts:
                     y1, x1 = unfilled_derts.popleft()
                     # add dert to blob
-                    blob.accumulate(I =dert__[0][y][x],
-                                    Dy=dert__[1][y][x],
-                                    Dx=dert__[2][y][x],
-                                    G =dert__[3][y][x],
-                                    M =dert__[4][y][x])
-
-                    if len(dert__)>5: # comp_angle
-                        blob.accumulate(Day =dert__[5][y][x],
-                                        Dax =dert__[6][y][x],
-                                        Ga  =dert__[7][y][x],
-                                        Ma  =dert__[8][y][x])
-                    if len(dert__)>10: # comp_dx
-                        blob.accumulate(Mdx =dert__[9][y][x],
-                                        Ddx =dert__[10][y][x])
-
+                    for i, param__ in enumerate(dert__): blob.Dert[i]+=param__[y][x]
+                        
                     blob.A += 1
                     if y1 < y0:
                         y0 = y1
@@ -409,7 +370,7 @@ if __name__ == "__main__":
     argument_parser = argparse.ArgumentParser()
     argument_parser.add_argument('-i', '--image', help='path to image file', default='./images//toucan.jpg')
     argument_parser.add_argument('-v', '--verbose', help='print details, useful for debugging', type=int, default=1)
-    argument_parser.add_argument('-n', '--intra', help='run intra_blobs after frame_blobs', type=int, default=1)
+    argument_parser.add_argument('-n', '--intra', help='run intra_blobs after frame_blobs', type=int, default=0)
     argument_parser.add_argument('-r', '--render', help='render the process', type=int, default=0)
     argument_parser.add_argument('-c', '--clib', help='use C shared library', type=int, default=0)
     args = argument_parser.parse_args()
@@ -445,8 +406,8 @@ if __name__ == "__main__":
             +G "edge" blobs are low-match, valuable only as contrast: to the extent that their negative value cancels 
             positive value of adjacent -G "flat" blobs.
             '''
-            G = blob.G
-            M = blob.M
+            G = blob.Dert[blob.Dert_param.index['G']] # or simply blob.Dert[3]
+            M = blob.Dert[blob.Dert_param.index['M']] # or simply blob.Dert[4]
             blob.root_dert__=root_dert__
             blob.prior_forks=['g']  # not sure about this
             blob_height = blob.box[1] - blob.box[0]
