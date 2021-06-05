@@ -95,10 +95,9 @@ class CFlatBlob(ClusterStructure):  # from frame_blobs only, no sub_blobs
 class CBlob(ClusterStructure):
 
     layer0 = list      # base params
-    layer0_param = list  # name of base params
+    layer0_names = list  # name of base params
 
     # blob params:
-    A = int  # blob area
     sign = NoneType
     box = list
     mask__ = bool
@@ -141,7 +140,7 @@ class CBlob(ClusterStructure):
 class CDerBlob(ClusterStructure):
 
     layer1 = list       # dm layer params
-    layer1_param = list # name of dm layer's params
+    layer1_names = list # name of dm layer's params
 
     mB = int
     dB = int
@@ -151,9 +150,9 @@ class CDerBlob(ClusterStructure):
 class CBblob(ClusterStructure):
 
     layer0 = list           # base params
-    layer0_param = list     # name of base params
+    layer0_names = list     # name of base params
     layer1 = list         # dm layer params
-    dm_layer_param = list # name of dm layer's params
+    layer1_names = list # name of dm layer's params
 
     mB = int
     dB = int
@@ -243,8 +242,8 @@ def flood_fill(dert__, sign__, verbose=False, mask__=None, blob_cls=CBlob, fseg=
             if idmap[y, x] == UNFILLED:  # ignore filled/clustered derts
                 # initialize new blob
                 blob = blob_cls(layer0=[0 for _ in range(11)],sign=sign__[y, x], root_dert__=dert__)
-                blob.layer0_param = ['I', 'Dy', 'Dx', 'G', 'M', 'Day', 'Dax', 'Ga', 'Ma', 'Mdx', 'Ddx']
-
+                blob.layer0_names = ['I', 'Dy', 'Dx', 'G', 'M', 'Day', 'Dax', 'Ga', 'Ma', 'A', 'Mdx', 'Ddx']
+                
                 if prior_forks: # update prior forks in deep blob
                     blob.prior_forks= prior_forks.copy()
                 blob_.append(blob)
@@ -258,8 +257,8 @@ def flood_fill(dert__, sign__, verbose=False, mask__=None, blob_cls=CBlob, fseg=
                     y1, x1 = unfilled_derts.popleft()
                     # add dert to blob
                     for i, param__ in enumerate(dert__): blob.layer0[i]+=param__[y][x]
+                    blob.layer0[10] += 1 # increase A
 
-                    blob.A += 1
                     if y1 < y0:
                         y0 = y1
                     elif y1 > yn:
@@ -304,7 +303,7 @@ def flood_fill(dert__, sign__, verbose=False, mask__=None, blob_cls=CBlob, fseg=
                 blob.adj_blobs = [[],[]] # iblob.adj_blobs[0] = adj blobs, blob.adj_blobs[1] = poses
 
                 if verbose:
-                    progress += blob.A * step
+                    progress += blob.layer0[10] * step
                     print(f"\rClustering... {round(progress)} %", end="")
                     sys.stdout.flush()
     if verbose:
