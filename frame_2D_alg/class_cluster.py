@@ -206,11 +206,140 @@ class ClusterStructure(metaclass=MetaCluster):
                            for param in self.numeric_params
                            if param not in excluded})
 
-    def comp_param(self, other, ave, excluded=()):  # compare base params to get dm_layer
+
+class Cdm(Number):
+    __slots__ = ('d', 'm')
+
+    def __init__(self, d=0, m=0):
+        self.d, self.m = d, m
+
+    def __add__(self, other):
+        return Cdm(self.d + other.d, self.m + other.m)
+
+
+    def __repr__(self):  # representation of object
+        if isinstance(self.d, Cdm) or isinstance(self.m, Cdm):
+            return "Cdm(d=Cdm, m=Cdm)"
+        else:
+            return "Cdm(d={}, m={})".format(self.d, self.m)
+
+
+def comp_param(param, _param, param_name, ave):
+
+    d = param - _param    # difference
+    if param_name == 'I':
+        m = ave - abs(d)  # indirect match
+    else:
+        m = min(param,_param) - abs(d)/2 - ave  # direct match
+
+    return [d,m]
+
+def comp_param_complex(dy, dx, _dy, _dx, ave, fda):
+
+    if not fda: # input is dy and dx
+
+        a =  dx + 1j * dy; _a = _dx + 1j * _dy # angle in complex form
+        da = a * _a.conjugate()                # angle difference
+        ma = ave - abs(da)
+
+    else: # dy and dax is day and dax
+
+        dday = dy * _dy.conjugate() # angle difference of complex day
+        ddax = dx * _dx.conjugate() # angle difference of complex dax
+        # formula for sum of angles, ~ angle_diff:
+        # daz = (cos_1*cos_2 - sin_1*sin_2) + j*(cos_1*sin_2 + sin_1*cos_2)
+        #     = (cos_1 + j*sin_1)*(cos_2 + j*sin_2)
+        #     = az1 * az2
+        da = dday * ddax   # sum of angle difference
+        ma = ave - abs(da) # match
+
+    return [da,ma]
+
+
+if __name__ == "__main__":  # for tests
+
+    # ---- all layers are the same  ------------------------
+    class Clayer(ClusterStructure):
+        I       = Cdm
+        Vector  = Cdm
+        G       = Cdm
+        M       = Cdm
+        Ga      = Cdm
+        Ma      = Cdm
+        Mdx     = Cdm
+        Ddx     = Cdm
+        aVector = Cdm
+
+
+    # ---- root layer  --------------------------------------------------------
+    # using blob as example
+    class CBlob(ClusterStructure):
+        I = int
+        Dy = int
+        Dx = int
+        G = int
+        M = int
+        Day = int
+        Dax = int
+
+    # blob derivative
+    class CDerBlob(CBlob):
+        replace = {'Dy': ('Vector', complex), 'Dx': (None, None),
+	               'Day': ('aVector', complex), 'Dax': (None, None)}
+        dm_layer1 = Clayer # comparing blobs' base params
+        mB = int
+        dB = int
+        blob = object
+        _blob = object
+
+
+    # ---- 1st layer  ---------------------------------------------------------
+    # bblob
+    class CBblob(CBlob):
+        replace = {'Dy': ('Vector', complex), 'Dx': (None, None),
+	               'Day': ('aVector', complex), 'Dax': (None, None)}
+        dm_layer1 = Clayer # inherited from derBlb
+        mB = int
+        dB = int
+        derBlob_ = list
+
+
+    # bblob derivative
+    class CDerBblob(CBblob):
+        dm_layer01 = Clayer # comparing Bblob base params
+        dm_layer11 = Clayer # comparing bblob.dm_layer1
+
+
+    # ---- example  -----------------------------------------------------------
+
+    # root layer
+    blob1 = CBlob(I=5, Dy=5, Dx=7, G=5, M=6, Day=4 + 5j, Dax=8 + 9j)
+    blob2 = CBlob(I=9, Dy=2, Dx=3, G=8, M=7, Day=5 + 6j, Dax=6 + 7j)
+    blob3 = CBlob(I=3, Dy=5, Dx=4, G=9, M=9, Day=3 + 7j, Dax=7 + 10j)
+
+    # root layer derivatives
+    derBlob1 = blob1.comp_param(blob2, ave=1)
+    derBlob2 = blob2.comp_param(blob3, ave=1)
+
+    print(derBlob1)  # automatically return the inherited class (it is assumed to contain ders)
+    print(derBlob2)
+
+    derBlob1.accum_from(derBlob2)
+
+    # 1st layer
+    bblob1 = CBblob() # the inherited CBblob base params are in Cdm, but we need int instead since CBblob is inherited from CBlob
+    bblob1.accum_from(derBlob1)
+
+    bblob2 = CBblob()
+    bblob2.accum_from(derBlob2)
+
+# not used:
+
+def comp_params(self, other, ave, excluded=()):  # compare base params to get dm_layer
 
         # Get the subclass (inherited class) and init a new instance
         der = self.__class__.__subclasses__()[0]() # derCluster
-        
+
         # always exclude dy and dx related components
         excluded += ('Dy', 'Dx', 'Day', 'Dax')
 
@@ -257,165 +386,31 @@ class ClusterStructure(metaclass=MetaCluster):
 
         return der
 
-    # no needed at this moment
-    def comp_dm(self, other, ave, excluded=()):  # compare dm layer to get subsequent dm layer
 
-        der = self.__class__.__subclasses__()[0]() # derCluster
-        
-        for param in self.numeric_params:
-            if param not in excluded and param in other.numeric_params:
-                dmi = getattr(self, param)   # dm instance
-                _dmi = getattr(other, param)
+def comp_dm(self, other, ave, excluded=()):  # compare dm layer to get subsequent dm layer
 
-                if isinstance(dmi.d, complex):  # vector and avector
-                    dd = dmi.d * _dmi.d.conjugate()  # angle difference of d
-                    md = ave - abs(dd)  # match of d
-                    dm = dmi.m - _dmi.m  # difference of m
-                    mm = min(dmi.m, _dmi.m) - abs(dm) / 2 - ave  # match of m
-                else:
-                    dd = dmi.d - _dmi.d  # difference of d
-                    md = min(dmi.d, _dmi.d) - abs(dd) / 2 - ave  # match of d
-                    dm = dmi.m - _dmi.m  # difference of m
-                    mm = min(dmi.m, _dmi.m) - abs(dm) / 2 - ave  # match of m
+    der = self.__class__.__subclasses__()[0]() # derCluster
 
-                d = Cdm(dd, md)  # difference and match of d
-                m = Cdm(dm, mm)  # difference and match of m
+    for param in self.numeric_params:
+        if param not in excluded and param in other.numeric_params:
+            dmi = getattr(self, param)   # dm instance
+            _dmi = getattr(other, param)
 
-                setattr(der, param, dmi)  # set root param
-                setattr(der.dm_layer, param, Cdm(d, m)) # set dm in dm_layer
+            if isinstance(dmi.d, complex):  # vector and avector
+                dd = dmi.d * _dmi.d.conjugate()  # angle difference of d
+                md = ave - abs(dd)  # match of d
+                dm = dmi.m - _dmi.m  # difference of m
+                mm = min(dmi.m, _dmi.m) - abs(dm) / 2 - ave  # match of m
+            else:
+                dd = dmi.d - _dmi.d  # difference of d
+                md = min(dmi.d, _dmi.d) - abs(dd) / 2 - ave  # match of d
+                dm = dmi.m - _dmi.m  # difference of m
+                mm = min(dmi.m, _dmi.m) - abs(dm) / 2 - ave  # match of m
 
-        return der
+            d = Cdm(dd, md)  # difference and match of d
+            m = Cdm(dm, mm)  # difference and match of m
 
+            setattr(der, param, dmi)  # set root param
+            setattr(der.dm_layer, param, Cdm(d, m)) # set dm in dm_layer
 
-class Cdm(Number):
-    __slots__ = ('d', 'm')
-
-    def __init__(self, d=0, m=0):
-        self.d, self.m = d, m
-
-    def __add__(self, other):
-        return Cdm(self.d + other.d, self.m + other.m)
-
-
-    def __repr__(self):  # representation of object
-        if isinstance(self.d, Cdm) or isinstance(self.m, Cdm):
-            return "Cdm(d=Cdm, m=Cdm)"
-        else:
-            return "Cdm(d={}, m={})".format(self.d, self.m)
-
-
-
-
-def comp_param(param, _param, param_name, ave):
-    
-    d = param - _param    # difference
-    if param_name == 'I':
-        m = ave - abs(d)  # indirect match
-    else:
-        m = min(param,_param) - abs(d)/2 - ave  # direct match
-        
-    return [d,m]
-    
-def comp_param_complex(dy, dx, _dy, _dx, ave, fda):
-    
-    if not fda: # input is dy and dx
-        
-        a =  dx + 1j * dy; _a = _dx + 1j * _dy # angle in complex form
-        da = a * _a.conjugate()                # angle difference
-        ma = ave - abs(da)    
-    
-    else: # dy and dax is day and dax
-        
-        dday = dy * _dy.conjugate() # angle difference of complex day
-        ddax = dx * _dx.conjugate() # angle difference of complex dax
-        # formula for sum of angles, ~ angle_diff:
-        # daz = (cos_1*cos_2 - sin_1*sin_2) + j*(cos_1*sin_2 + sin_1*cos_2)
-        #     = (cos_1 + j*sin_1)*(cos_2 + j*sin_2)
-        #     = az1 * az2
-        da = dday * ddax   # sum of angle difference
-        ma = ave - abs(da) # match
-     
-    return [da,ma]
-      
-
-
-if __name__ == "__main__":  # for tests
-
-    
-    # ---- dm layer instance, all layers are the same  ------------------------
-    class CDm_layer(ClusterStructure):
-        I       = Cdm
-        Vector  = Cdm
-        G       = Cdm
-        M       = Cdm
-        Ga      = Cdm
-        Ma      = Cdm
-        Mdx     = Cdm
-        Ddx     = Cdm
-        aVector = Cdm
-
-    
-    # ---- root layer  --------------------------------------------------------
-    # using blob as example
-    class CBlob(ClusterStructure):
-        I = int
-        Dy = int
-        Dx = int
-        G = int
-        M = int
-        Day = int
-        Dax = int
-
-    # blob derivative
-    class CDerBlob(CBlob):
-        replace = {'Dy': ('Vector', complex), 'Dx': (None, None),
-	               'Day': ('aVector', complex), 'Dax': (None, None)}
-        dm_layer1 = CDm_layer # comparing blobs' base params
-        mB = int
-        dB = int
-        blob = object
-        _blob = object
-
-
-    # ---- 1st layer  ---------------------------------------------------------
-    # bblob
-    class CBblob(CBlob):
-        replace = {'Dy': ('Vector', complex), 'Dx': (None, None),
-	               'Day': ('aVector', complex), 'Dax': (None, None)}
-        dm_layer1 = CDm_layer # inherited from derBlb
-        mB = int
-        dB = int
-        derBlob_ = list
-
-
-    # bblob derivative
-    class CDerBblob(CBblob):
-        dm_layer01 = CDm_layer # comparing Bblob base params
-        dm_layer11 = CDm_layer # comparing bblob.dm_layer1
-
-
-
-
-    # ---- example  -----------------------------------------------------------
-
-    # root layer
-    blob1 = CBlob(I=5, Dy=5, Dx=7, G=5, M=6, Day=4 + 5j, Dax=8 + 9j)
-    blob2 = CBlob(I=9, Dy=2, Dx=3, G=8, M=7, Day=5 + 6j, Dax=6 + 7j)
-    blob3 = CBlob(I=3, Dy=5, Dx=4, G=9, M=9, Day=3 + 7j, Dax=7 + 10j)
-
-    # root layer derivatives
-    derBlob1 = blob1.comp_param(blob2, ave=1)
-    derBlob2 = blob2.comp_param(blob3, ave=1)
-
-    print(derBlob1)  # automatically return the inherited class (it is assumed to contain ders)
-    print(derBlob2)
-
-    derBlob1.accum_from(derBlob2)
-
-    # 1st layer
-    bblob1 = CBblob() # the inherited CBblob base params are in Cdm, but we need int instead since CBblob is inherited from CBlob
-    bblob1.accum_from(derBlob1)
-
-    bblob2 = CBblob()
-    bblob2.accum_from(derBlob2)
-
+    return der
