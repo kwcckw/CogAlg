@@ -73,19 +73,19 @@ def comp_blob(blob, _blob):
             derBlob.mB += dm.m; derBlob.dB += dm.d
             derBlob.layer1.append(dm)
             derBlob.layer1_names.append(param_name)
-     
+
     # Vector from dy and dx
     derBlob.layer1.append(comp_param_complex(blob.layer0[1], blob.layer0[2], _blob.layer0[1], _blob.layer0[2], blob.layer0[10], 0))
     derBlob.layer1_names.append('Vector')
-    
+
     # aVector from day and dax
     derBlob.layer1.append(comp_param_complex(blob.layer0[5], blob.layer0[6], _blob.layer0[5], _blob.layer0[6], blob.layer0[10], 1))
     derBlob.layer1_names.append('aVector')
 
-    # compute mB from I.m, A.m, G.m, M.m, Vector.m                     
+    # compute mB from I.m, A.m, G.m, M.m, Vector.m
     derBlob.mB +=  derBlob.layer1[8].m - ave_mB * (ave_rM ** ((1+blob.distance) / np.sqrt(blob.layer0[10])))  # deviation from average blob match at current distance
 
-    # add Vector.d 
+    # add Vector.d
     derBlob.dB +=  derBlob.layer1[8].d
 
     derBlob.blob = blob
@@ -94,7 +94,6 @@ def comp_blob(blob, _blob):
     '''
     difference = _blob.difference(blob)
     match = _blob.min_match(blob)
-    
     # G + Ave was wrong because Dy, Dx are summed as signed, resulting G is different from summed abs G 
     G = hypot(blob.Dy, blob.Dx)  
     if G==0: G=1
@@ -125,7 +124,7 @@ def form_bblob_(blob_):
     bblob_ = []
     for blob in blob_:
         MB = sum([derBlob.mB for derBlob in blob.derBlob_]) # blob's mB, sum from blob's derBlobs' mB
-        
+
         if MB > 0 and not isinstance(blob.bblob, CBblob):  # init bblob with current blob
             bblob = CBblob(layer0=[0 for _ in range(11)],
                            layer0_param = ['I', 'Dy', 'Dx', 'G', 'M', 'Day', 'Dax', 'Ga', 'Ma','A', 'Mdx', 'Ddx'],
@@ -150,7 +149,7 @@ def form_bblob_recursive(bblob_, bblob, blob_, merged_ids):
     blobs2check = []  # list of blobs to check for inclusion in bblob
 
     for blob in blob_:  # search new added blobs to get potential border clustering blob
-        
+
         MB = sum([derBlob.mB for derBlob in blob.derBlob_]) # blob's mB, sum from blob's derBlobs' mB
         if (MB > 0):  # positive summed mBs
 
@@ -161,10 +160,10 @@ def form_bblob_recursive(bblob_, bblob, blob_, merged_ids):
             else:
                 for derBlob in blob.derBlob_:
                     # blob is in bblob.blob_, but derBlob._blob is not in bblob_blob_ and (DerBlob.mB > 0 and blob.mB > 0):
-                    
+
                     _bblob_mB = sum([blob_derBlob.mB for blob_derBlob in derBlob._blob.derBlob_]) # blob in bblob, _blob wasn't
                     bblob_mB = sum([blob_derBlob.mB for blob_derBlob in derBlob.blob.derBlob_])   # _blob in bbob, blob wasn't
-                    
+
                     if (derBlob._blob not in bblob.blob_) and (_bblob_mB + MB > 0):
                         accum_bblob(bblob_, bblob, derBlob._blob, merged_ids)  # pack derBlob._blob in bblob
                         blobs2check.append(derBlob._blob)
@@ -186,17 +185,17 @@ def add_param(bblob, derBlob):
 
     bblob.mB += derBlob.mB
     bblob.dB += derBlob.dB
-    
+
     for i, param in enumerate(derBlob.blob.layer0): # accumulate base params of blob
-        bblob.layer0[i]+=param     
-        
+        bblob.layer0[i]+=param
+
     for i, dm in enumerate(derBlob.layer1): # accumulate layer 1 - dm value of derBlob
         if derBlob.layer1_names[i] in ['Vector','aVector']:
-            bblob.layer1[i].d *= dm.d  # summation for complex = complex 1 * complex 2      
+            bblob.layer1[i].d *= dm.d  # summation for complex = complex 1 * complex 2
         else:
-            bblob.layer1[i].d += dm.d 
+            bblob.layer1[i].d += dm.d
         bblob.layer1[i].m += dm.m
-    
+
 
 def merge_bblob(bblob_, _bblob, bblob, merged_ids):
 
@@ -244,7 +243,7 @@ def accum_bblob(bblob_, bblob, blob, merged_ids):
                     merge_bblob(bblob_, bblob, merge_blob.bblob, merged_ids)
             else:
                 # accumulate derBlob only if either one of _blob or blob (adjacent) not in bblob
-                add_param(bblob, derBlob) 
+                add_param(bblob, derBlob)
                 bblob.blob_.append(merge_blob)
                 merge_blob.bblob = bblob
 

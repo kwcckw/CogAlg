@@ -22,6 +22,7 @@
     - assign_adjacents:
     Each blob is assigned internal and external sets of opposite-sign blobs it is connected to.
     Frame_blobs is a root function for all deeper processing in 2D alg.
+    -
     Please see illustrations:
     https://github.com/boris-kz/CogAlg/blob/master/frame_2D_alg/Illustrations/blob_params.drawio
     https://github.com/boris-kz/CogAlg/blob/master/frame_2D_alg/Illustrations/frame_blobs.png
@@ -217,7 +218,6 @@ def derts2blobs(dert__, verbose=False, render=False, use_c=False):
     return frame
 
 
-
 def flood_fill(dert__, sign__, verbose=False, mask__=None, blob_cls=CBlob, fseg=False, prior_forks=[]):
 
     if mask__ is None: # non intra dert
@@ -243,7 +243,7 @@ def flood_fill(dert__, sign__, verbose=False, mask__=None, blob_cls=CBlob, fseg=
                 # initialize new blob
                 blob = blob_cls(layer0=[0 for _ in range(11)],sign=sign__[y, x], root_dert__=dert__)
                 blob.layer0_names = ['I', 'Dy', 'Dx', 'G', 'M', 'Day', 'Dax', 'Ga', 'Ma', 'A', 'Mdx', 'Ddx']
-                
+
                 if prior_forks: # update prior forks in deep blob
                     blob.prior_forks= prior_forks.copy()
                 blob_.append(blob)
