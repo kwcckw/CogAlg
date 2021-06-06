@@ -30,7 +30,7 @@ different from range_comp in that elements can be distant, but also always posit
 
 import numpy as np
 from line_patterns import CP
-from frame_2D_alg.class_cluster import *
+from class_cluster import ClusterStructure, NoneType, comp_param, comp_param_complex, Cdm
 
 class CderP(CP):
     sign = bool
@@ -42,9 +42,18 @@ class CderP(CP):
     layer1 = list
 
 class CPP(CderP):
-    P_ = list
+    
     layer0 = list
+    layer1 = list 
+    layer_names = list
+    
+    mP = int
+    dP = int
+    
+    sign = NoneType
+    P_ = list
     sub_layers = list
+
 
 ave = 100  # ave dI -> mI, * coef / var type
 # no ave_mP: deviation computed via rM  # ave_mP = ave* n_comp_params: comp cost, or n vars per P: rep cost?
@@ -63,6 +72,7 @@ def search(P_):  # cross-compare patterns within horizontal line
         P.layer0 = [P.L, P.I, P.D, P.M]  # add initial params to be compared between Ps
         P.layer_names = ['L', 'I', 'D', 'M']
 
+    PPm_ = []
     for i, P in enumerate(P_):
         neg_M = vmP = sign = _sign = neg_L = 0  # initialization
 
@@ -90,12 +100,8 @@ def search(P_):  # cross-compare patterns within horizontal line
                 # sign is ORed bilaterally, negative for singleton derPs only
                 break  # neg net_M: stop search
 
-            if derP_:
-                for derP in derP_:
-                    if not derP.sign:  # check false sign
-                        print('False sign in line' + str(y))
-
-            PPm_ = form_PPm_(derP_)  # cluster derPs into PPms by the sign of mP
+    if derP_:
+        PPm_ = form_PPm_(derP_)  # cluster derPs into PPms by the sign of mP
 
     return PPm_
 
@@ -106,9 +112,9 @@ def comp_P(P, _P, neg_M, neg_L):  # multi-variate cross-comp, _sign = 0 in line_
 
     for param, _param, param_name in zip(P.layer0, _P.layer0, P.layer_names):
         # compare L,I,D,M:
-        Cdm = comp_param(param, _param, param_name, ave)
-        layer1.append([Cdm.d, Cdm.m])
-        mP += Cdm.m; dP += Cdm.d
+        dm = comp_param(param, _param, param_name, ave)
+        layer1.append([dm.d, dm.m])
+        mP += dm.m; dP += dm.d
 
     mP -= ave_M * ave_rM ** (1 + neg_L / P.L)  # average match projected at current distance: neg_L, add coef / var?
     # match(P,_P), ave_M is addition to ave? or abs for projection in search?
@@ -151,20 +157,20 @@ def comp_P(P, _P, neg_M, neg_L):  # multi-variate cross-comp, _sign = 0 in line_
 def form_PPm_(derP_):  # cluster derPs into PPm s by mP sign, eval for div_comp per PPm
 
     PPm_ = []
-    derP = derP_[0]
-    PP = CPP(P_ = [derP.P], **derP.P, **derP)  # initialize PPm with first derP, exclude P.sign?
+    derP = derP_[0]   # 1st derP    
+    # initialize PP, inherit derP.P params, and inherit derP params
+    PP = CPP(P_ = [derP.P], inherit=[derP.P, derP])  # initialize PPm with first derP, exclude P.sign?
     # positive PPms only, miss over discontinuity is expected, contrast dP -> PPd: if PP.mP * abs(dP) > ave_dP: explicit borrow only?
 
     for i, derP in enumerate(derP_, start=1):
         if derP.sign != PP.sign:  # sign != _sign: same-sign derPs in PP
             # terminate PPm:
             PPm_.append(PP)
-            PP = CPP(P_ = [derP.P], **derP.P, **derP)  # initialize PPm with current derP
+            PP = CPP(P_ = [derP.P], inherit=[derP.P, derP])  # initialize PPm with current derP
         else:
             # accumulate PPm numerical params with same-name current derP params, exclusions and replacements?:
-            accum_from(PP, derP.P)
-            accum_from(PP, derP)
-            accum_from(*PP.layer1, *derP.layer1)
+            PP.accum_from(derP.P)
+            PP.accum_from(derP)
 
     PPm_.append(PP)  # pack last PP
 

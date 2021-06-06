@@ -26,7 +26,7 @@ import argparse
 from time import time
 from utils import *
 from itertools import zip_longest
-from frame_2D_alg.class_cluster import *
+from class_cluster import ClusterStructure, NoneType, comp_param, comp_param_complex, Cdm
 
 class Cdert(ClusterStructure):
     p = int
@@ -34,6 +34,8 @@ class Cdert(ClusterStructure):
     m = int
 
 class CP(ClusterStructure):
+    layer0 = list
+    layer_names = list
     sign = NoneType
     L = int
     I = int
@@ -89,7 +91,7 @@ def cross_comp(frame_of_pixels_):  # converts frame_of_pixels to frame_of_patter
             adj_M_ = form_adjacent_M_(Pm_)  # compute adjacent Ms to evaluate contrastive borrow potential
             intra_Pm_(Pm_, adj_M_, fid=False, rdn=1, rng=3)  # evaluates for sub-recursion per Pm
 
-        frame_of_patterns_.append([Pm_])
+        frame_of_patterns_.append(Pm_) # extra bracket not needed, else it would be nested
         # line of patterns is added to frame of patterns
 
     return frame_of_patterns_  # frame of patterns will be output to level 2
@@ -345,7 +347,7 @@ if __name__ == "__main__":
     # Main
     frame_of_patterns_ = cross_comp(image)  # returns Pm__
 
-    fline_PPs = 0
+    fline_PPs = 1
     if fline_PPs:  # debug line_PPs_draft
         from line_PPs_draft import *
         frame_PPm_ = []
