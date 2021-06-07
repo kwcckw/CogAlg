@@ -21,12 +21,17 @@
   The former should be used in rng_comp and the latter in der_comp, which may alternate with intra_P.
 '''
 
+# add ColAlg folder to system path
+import sys
+from os.path import dirname, join, abspath
+sys.path.insert(0, abspath(join(dirname("CogAlg"), '..')))
+
 import cv2
 import argparse
 from time import time
 from utils import *
 from itertools import zip_longest
-from class_cluster import ClusterStructure, NoneType, comp_param, comp_param_complex, Cdm
+from frame_2D_alg.class_cluster import ClusterStructure, NoneType, comp_param, Cdm
 
 class Cdert(ClusterStructure):
     p = int
@@ -35,7 +40,7 @@ class Cdert(ClusterStructure):
 
 class CP(ClusterStructure):
 
-    sign = NoneType
+    sign = Bool
     L = int
     I = int
     D = int
@@ -347,12 +352,12 @@ if __name__ == "__main__":
     # Main
     frame_of_patterns_ = cross_comp(image)  # returns Pm__
 
-    fline_PPs = 0
+    fline_PPs = 1
     if fline_PPs:  # debug line_PPs_draft
         from line_PPs_draft import *
         frame_PPm_ = []
 
-        for y, P_ in enumerate(frame_of_patterns_):
+        for y, P_ in enumerate(frame_of_patterns_[0]):
             PPm_ = search(P_)
             frame_PPm_.append(PPm_)
 

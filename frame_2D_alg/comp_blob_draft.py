@@ -2,7 +2,7 @@
 Cross-compare blobs with incrementally intermediate adjacency, within a frame
 '''
 
-from class_cluster import ClusterStructure, NoneType, comp_param, comp_param_complex, Cdm
+from class_cluster import ClusterStructure, NoneType, comp_param, Cdm
 from frame_blobs import ave, CBlob, CDerBlob, CBblob
 import numpy as np
 import cv2
@@ -62,31 +62,22 @@ def comp_blob(blob, _blob):
     '''
     cross compare _blob and blob
     '''
-    # derBlob's layer1 param = 'I', 'G', 'M', 'Ga', 'Ma', 'Mdx', 'Ddx', 'A', 'Vector', 'aVector'
+    # derBlob's layer1 param = 'I', 'G', 'M', 'Vector', 'aVector','Ga', 'Ma', 'A', 'Mdx', 'Ddx' 
     derBlob = CDerBlob()
 
     # non complex numeric params
-    for param, _param, param_name in zip(blob.layer0, _blob.layer0, blob.layer0_names):
-        if not isinstance(param, complex) and param_name not in ['Dy', 'Dx', 'Day', 'Dax']:
+    for i, (param, _param, param_name) in enumerate(zip(blob.layer0, _blob.layer0, blob.layer_names)):
 
-            dm = comp_param(param, _param, param_name, blob.layer0[10])
-            derBlob.mB += dm.m; derBlob.dB += dm.d
-            derBlob.layer1.append(dm)
-            derBlob.layer1_names.append(param_name)
+        dm = comp_param(param, _param, param_name, blob.A)
+        derBlob.mB += dm.m; 
+        if not isinstance(param, complex): # do we need to accumulate d of Vector and aVector, which is in complex form?
+            derBlob.dB += dm.d
+        derBlob.layer1.append(dm)
+        derBlob.layer_names.append(param_name)
 
-    # Vector from dy and dx
-    derBlob.layer1.append(comp_param_complex(blob.layer0[1], blob.layer0[2], _blob.layer0[1], _blob.layer0[2], blob.layer0[10], 0))
-    derBlob.layer1_names.append('Vector')
-
-    # aVector from day and dax
-    derBlob.layer1.append(comp_param_complex(blob.layer0[5], blob.layer0[6], _blob.layer0[5], _blob.layer0[6], blob.layer0[10], 1))
-    derBlob.layer1_names.append('aVector')
 
     # compute mB from I.m, A.m, G.m, M.m, Vector.m
-    derBlob.mB +=  derBlob.layer1[8].m - ave_mB * (ave_rM ** ((1+blob.distance) / np.sqrt(blob.layer0[10])))  # deviation from average blob match at current distance
-
-    # add Vector.d
-    derBlob.dB +=  derBlob.layer1[8].d
+    derBlob.mB -=  ave_mB * (ave_rM ** ((1+blob.distance) / np.sqrt(blob.A)))  # deviation from average blob match at current distance
 
     derBlob.blob = blob
     derBlob._blob = _blob

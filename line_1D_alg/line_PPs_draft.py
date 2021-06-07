@@ -30,7 +30,7 @@ different from range_comp in that elements can be distant, but also always posit
 
 import numpy as np
 from line_patterns import CP
-from class_cluster import ClusterStructure, NoneType, comp_param, comp_param_complex, Cdm
+from class_cluster import ClusterStructure, NoneType, comp_param,  Cdm
 
 class CderP(CP):
 
@@ -41,9 +41,15 @@ class CderP(CP):
     P = object
     layer1 = list
 
-class CPP(CderP, CP):
+class CPP(CP): # only able to inherit single class here
+    
+    mP = int
+    dP = int
+    layer1 = list
+    replace = {'dert_': ('P_', list), 
+               'fdert': (None, None),
+               'ileft': (None, None)}
 
-    P_ = list  # maybe sub_PPm_
 
 
 ave = 100  # ave dI -> mI, * coef / var type
