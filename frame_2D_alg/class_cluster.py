@@ -83,9 +83,9 @@ class MetaCluster(type):
             param_vals=', '.join(f'self.{param}'
                                  for param in params),
             numeric_param_vals=', '.join(f'self.{param}'
-                                         for param in numeric_params),                           
+                                         for param in numeric_params),
             list_param_vals=', '.join(f'self.{param}'
-                                         for param in list_params),                             
+                                         for param in list_params),
             pack_args=', '.join(param for param in ('', *params)),
             pack_assignments='; '.join(f'self.{param} = {param}'
                                   for param in params)
@@ -134,18 +134,18 @@ class MetaCluster(type):
             setattr(instance, param,
                     kwargs.get(param,
                                getattr(cls, param + '_type')()))
-        
+
         # set inherited params
         if kwargs.get('inherit') is not None:
             for inherit_instance in kwargs.get('inherit'):
                 for param in cls.numeric_params: # inherit numeric params
                     if hasattr(inherit_instance,param):
-                        setattr(instance, param, getattr(inherit_instance, param))    
-                        
+                        setattr(instance, param, getattr(inherit_instance, param))
+
                 for param in cls.list_params: # inherit list params
                     if hasattr(inherit_instance,param):
-                        setattr(instance, param, getattr(inherit_instance, param))    
-            
+                        setattr(instance, param, getattr(inherit_instance, param))
+
         # Set id
         instance._id = len(cls._instances)
         # Create ref
@@ -160,7 +160,6 @@ class MetaCluster(type):
     def __call__(cls, *args, **kwargs):  # call right before a new instance is created
         # register new instance
         instance = super().__call__(*args, **kwargs)
-
         # initialize fields/params
         for param in cls.__slots__[2:]:  # Exclude _id and __weakref__
             setattr(instance, param,
@@ -172,7 +171,6 @@ class MetaCluster(type):
         cls._instances.append(weakref.ref(instance))
         # no default higher cluster id, set to None
         instance.hid = None  # higher cluster's id
-
         return instance
     '''
 
@@ -245,7 +243,7 @@ class ClusterStructure(metaclass=MetaCluster):
         self.accumulate(**{param: getattr(other, param, 0)
                            for param in self.numeric_params
                            if param not in excluded})
-    
+
         # accumulate layers
         for layer_num in self.list_params:
             if (layer_num in other.list_params) and ('layer' in layer_num) and ('names' not in layer_num):
@@ -253,32 +251,32 @@ class ClusterStructure(metaclass=MetaCluster):
                 layer = getattr(self,layer_num)   # self layer params
                 _layer = getattr(other,layer_num) # other layer params
                 _layer_names = getattr(other,layer_num+'_names') # target params' name
-                
+
                 if not isinstance(layer[0], Cdm): # layer 0
-                    for i, (p, _p) in enumerate(zip(layer, _layer)):  # accumulate _dm to dm in layer 
+                    for i, (p, _p) in enumerate(zip(layer, _layer)):  # accumulate _dm to dm in layer
                         if _layer_names[i] not in ['Dy','Dx','Day','Dax']:
                             layer[i] += _p
-                            
+
                         elif _layer_names[i] == 'Dy':
                             dy = p;  _dy = _p
-                            dx = layer[i+1]; _dx = _layer[i+1]; 
+                            dx = layer[i+1]; _dx = _layer[i+1];
                             if dx ==0: dx = 1
                             sum_dydx = (dx + dy*1j) * (_dx + _dy*1j) # summation for complex = complex 1 * complex 2
                             layer[i] = sum_dydx.imag    # decomposed dy
                             layer[i+1] = sum_dydx.real  # decomposed dx
-                            
-                        elif _layer_names[i] == 'Day':  
+
+                        elif _layer_names[i] == 'Day':
                             day = p;  _day = _p
-                            dax = layer[i+1]; _dax = _layer[i+1]; 
+                            dax = layer[i+1]; _dax = _layer[i+1];
                             if dax ==0: dax = 1
                             sum_day = day * _day
                             sum_dax = dax * _dax
                             sum_daydax = sum_day * sum_dax
                             layer[i] = sum_daydax.imag    # decomposed day
                             layer[i+1] = sum_daydax.real  # decomposed dax
-                                
+
                 else: # layer 1 and above
-                    for i, (dm, _dm) in enumerate(zip(layer, _layer)):  # accumulate _dm to dm in layer 
+                    for i, (dm, _dm) in enumerate(zip(layer, _layer)):  # accumulate _dm to dm in layer
                         if _layer_names[i] in ['Vector','aVector']:
                             if dm.d == 0: dm.d = 1
                             dm.d *= _dm.d  # summation for complex = complex 1 * complex 2

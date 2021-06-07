@@ -92,8 +92,7 @@ def comp_blob(blob, _blob):
     derBlob._blob = _blob
 
     '''
-    difference = _blob.difference(blob)
-    match = _blob.min_match(blob)
+    In comp_param:
     # G + Ave was wrong because Dy, Dx are summed as signed, resulting G is different from summed abs G 
     G = hypot(blob.Dy, blob.Dx)  
     if G==0: G=1

@@ -34,8 +34,7 @@ class Cdert(ClusterStructure):
     m = int
 
 class CP(ClusterStructure):
-    layer0 = list
-    layer_names = list
+
     sign = NoneType
     L = int
     I = int
@@ -44,6 +43,7 @@ class CP(ClusterStructure):
     dert_ = list
     sub_layers = list
     fdert = bool
+    ileft = int  # index of left _P that P was compared to, initialize at max X?
 
 # pattern filters or hyper-parameters: eventually from higher-level feedback, initialized here as constants:
 
@@ -91,7 +91,7 @@ def cross_comp(frame_of_pixels_):  # converts frame_of_pixels to frame_of_patter
             adj_M_ = form_adjacent_M_(Pm_)  # compute adjacent Ms to evaluate contrastive borrow potential
             intra_Pm_(Pm_, adj_M_, fid=False, rdn=1, rng=3)  # evaluates for sub-recursion per Pm
 
-        frame_of_patterns_.append(Pm_) # extra bracket not needed, else it would be nested
+        frame_of_patterns_.append([Pm_])
         # line of patterns is added to frame of patterns
 
     return frame_of_patterns_  # frame of patterns will be output to level 2
@@ -347,7 +347,7 @@ if __name__ == "__main__":
     # Main
     frame_of_patterns_ = cross_comp(image)  # returns Pm__
 
-    fline_PPs = 1
+    fline_PPs = 0
     if fline_PPs:  # debug line_PPs_draft
         from line_PPs_draft import *
         frame_PPm_ = []
