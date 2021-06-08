@@ -40,15 +40,17 @@ class Cdert(ClusterStructure):
 
 class CP(ClusterStructure):
 
-    sign = Bool
+    sign = bool
+    _sign = bool  # temporary, for
     L = int
     I = int
     D = int
     M = int
     dert_ = list
     sub_layers = list
-    fdert = bool
-    ileft = int  # index of left _P that P was compared to, initialize at max X?
+    fdert = bool  # forgot
+    ileft = int=1024  # index of left-most _P that P was compared to in line_PPs, initialize at max X?
+
 
 # pattern filters or hyper-parameters: eventually from higher-level feedback, initialized here as constants:
 
@@ -352,12 +354,12 @@ if __name__ == "__main__":
     # Main
     frame_of_patterns_ = cross_comp(image)  # returns Pm__
 
-    fline_PPs = 1
+    fline_PPs = 0
     if fline_PPs:  # debug line_PPs_draft
         from line_PPs_draft import *
         frame_PPm_ = []
 
-        for y, P_ in enumerate(frame_of_patterns_[0]):
+        for y, P_ in enumerate(frame_of_patterns_):
             PPm_ = search(P_)
             frame_PPm_.append(PPm_)
 

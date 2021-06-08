@@ -137,11 +137,11 @@ class MetaCluster(type):
 
         # set inherited params
         if kwargs.get('inherit') is not None:
-            
+
             excluded = []
             if kwargs.get('excluded') is not None:
                 excluded = kwargs.get('excluded')
-                
+
             for inherit_instance in kwargs.get('inherit'):
                 for param in cls.numeric_params: # inherit numeric params
                     if hasattr(inherit_instance,param) and (param not in excluded):
@@ -247,20 +247,20 @@ class ClusterStructure(metaclass=MetaCluster):
         # accumulate layer 0 or base params
         for param in self.numeric_params:
             if (param not in excluded) and (param in other.numeric_params):
-                p = getattr(self,param)   
-                _p = getattr(other,param) 
-                
+                p = getattr(self,param)
+                _p = getattr(other,param)
+
                 if param not in ['Dy','Dx','Day','Dax']:
-                    setattr(self, param, p+_p) 
+                    setattr(self, param, p+_p)
                     self.layer0[self.layer_names.index(param)] = p+_p # update layer 0 reference
-                    
+
                 elif param == 'Dy':
                     dy = p;  _dy = _p
                     dx = getattr(self,'Dx'); _dx = getattr(other,'Dx')
                     if dx ==0: dx = 1
                     Vector = (dx + dy*1j) * (_dx + _dy*1j) # summation for complex = complex 1 * complex 2
-                    setattr(self, 'Dy', Vector.imag) 
-                    setattr(self, 'Dx', Vector.real) 
+                    setattr(self, 'Dy', Vector.imag)
+                    setattr(self, 'Dx', Vector.real)
                     self.layer0[self.layer_names.index('Vector')] = Vector # update layer 0 Vector
 
                 elif param == 'Day':
@@ -270,8 +270,8 @@ class ClusterStructure(metaclass=MetaCluster):
                     sum_day = day * _day
                     sum_dax = dax * _dax
                     aVector = sum_day * sum_dax
-                    setattr(self, 'Day', aVector.imag) 
-                    setattr(self, 'Dax', aVector.real) 
+                    setattr(self, 'Day', aVector.imag)
+                    setattr(self, 'Dax', aVector.real)
                     self.layer0[self.layer_names.index('aVector')] = aVector # update layer 0 aVector
 
         # accumulate layers 1 and above
@@ -281,7 +281,7 @@ class ClusterStructure(metaclass=MetaCluster):
                 layer = getattr(self,layer_num)   # self layer params
                 _layer = getattr(other,layer_num) # other layer params
                 _layer_names = getattr(other,layer_num+'_names') # target params' name
-                
+
                 for i, (dm, _dm) in enumerate(zip(layer, _layer)):  # accumulate _dm to dm in layer
                     if _layer_names[i] in ['Vector','aVector']:
                         if dm.d == 0: dm.d = 1
@@ -311,7 +311,7 @@ class Cdm(Number):
 def comp_param(param, _param, param_name, ave):
 
     if isinstance(param, complex):
-        d = param * _param.conjugate() # ma 
+        d = param * _param.conjugate() # ma
         m = ave - abs(d)               # da
     else:
         d = param - _param    # difference
@@ -319,7 +319,7 @@ def comp_param(param, _param, param_name, ave):
             m = ave - abs(d)  # indirect match
         else:
             m = min(param,_param) - abs(d)/2 - ave  # direct match
-    
+
     return Cdm(d,m)
 
 

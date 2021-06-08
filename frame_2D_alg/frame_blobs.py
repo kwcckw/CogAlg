@@ -109,7 +109,7 @@ class CBlob(ClusterStructure):
     # comp_dx:
     Mdx = int
     Ddx = int
-     
+
     layer0 = list       # base params
     layer_names = list  # name of base params
 
@@ -274,7 +274,7 @@ def flood_fill(dert__, sign__, verbose=False, mask__=None, blob_cls=CBlob, fseg=
                     blob.accumulate(I =dert__[0][y][x],
                                     G =dert__[3][y][x],
                                     M =dert__[4][y][x])
-                    
+
                     if blob.Dx==0: blob.Dx =1 # prevent 0 value after summation of complex
                     Vector = (blob.Dx + 1j*blob.Dy) * (dert__[2][y][x] + 1j*dert__[1][y][x]) # sum of complex = complex1 * complex2
                     # update blob
@@ -291,7 +291,7 @@ def flood_fill(dert__, sign__, verbose=False, mask__=None, blob_cls=CBlob, fseg=
                                         Dax =dert__[6][y][x],
                                         Ga  =dert__[7][y][x],
                                         Ma  =dert__[8][y][x])
-                        
+
                         if blob.Dax==0: blob.Dax = 1
                         sum_day = (blob.Day * dert__[5][y][x])
                         sum_dax = (blob.Dax * dert__[6][y][x])
@@ -303,15 +303,15 @@ def flood_fill(dert__, sign__, verbose=False, mask__=None, blob_cls=CBlob, fseg=
                         blob.layer0[4] = aVector
                         blob.layer0[5] = blob.Ga
                         blob.layer0[6] = blob.Ma
-     
+
                     if len(dert__)>10: # comp_dx
                         blob.accumulate(Mdx =dert__[9][y][x],
                                         Ddx =dert__[10][y][x])
                         # update layer0
                         blob.layer0[8] = blob.Mdx
                         blob.layer0[9] = blob.Ddx
-                        
-          
+
+
                     blob.A += 1;   # increase A
                     blob.layer0[7] = blob.A
 

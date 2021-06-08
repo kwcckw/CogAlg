@@ -62,14 +62,14 @@ def comp_blob(blob, _blob):
     '''
     cross compare _blob and blob
     '''
-    # derBlob's layer1 param = 'I', 'G', 'M', 'Vector', 'aVector','Ga', 'Ma', 'A', 'Mdx', 'Ddx' 
+    # derBlob's layer1 param = 'I', 'G', 'M', 'Vector', 'aVector','Ga', 'Ma', 'A', 'Mdx', 'Ddx'
     derBlob = CDerBlob()
 
     # non complex numeric params
     for i, (param, _param, param_name) in enumerate(zip(blob.layer0, _blob.layer0, blob.layer_names)):
 
         dm = comp_param(param, _param, param_name, blob.A)
-        derBlob.mB += dm.m; 
+        derBlob.mB += dm.m;
         if not isinstance(param, complex): # do we need to accumulate d of Vector and aVector, which is in complex form?
             derBlob.dB += dm.d
         derBlob.layer1.append(dm)
