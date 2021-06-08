@@ -37,26 +37,28 @@ import numpy as np
 from line_patterns import CP
 from frame_2D_alg.class_cluster import ClusterStructure, NoneType, comp_param, Cdm
 
-class CderP(CP):
+class CderP(CP): 
 
+    layer1 = list
+    layer_names = list
     mP = int
     dP = int
     neg_M = int
     neg_L = int
+    sign = bool
     P = object
-    layer1 = list
     PP = object  # PP that derP belongs to, for merging PPs in back_search_extend
+    replace = {'ileft': (None, None)}
 
-
-class CPP(CderP):
+class CPP(CP, CderP): # inherit both derP and CP numeric params
 
     layer1 = list  # must be added manually
-    # replace P.dert_ with P_, maybe sub_PPm_:
-    replace = {'dert_': ('P_', list),
-               'fdert': (None, None),
-               'ileft': (None, None)}
-
-
+    layer_names = list
+    sign = bool 
+    P_ = list
+    replace = {'ileft': (None, None)}
+    
+    
 ave = 100  # ave dI -> mI, * coef / var type
 # no ave_mP: deviation computed via rM  # ave_mP = ave* n_comp_params: comp cost, or n vars per P: rep cost?
 ave_div = 50
@@ -91,12 +93,12 @@ def search(P_):  # cross-compare patterns within horizontal line
                     neg_L += _L   # accumulate distance to match
                     if j == len(P_):
                         # last P is a singleton derP, derivatives are ignored:
-                        derP_.append(CderP(sign=sign or _sign, mP=vmP, neg_M=neg_M, neg_L=neg_L, P=P ))
+                        derP_.append(CderP(sign=sign or _sign, mP=vmP, neg_M=neg_M, neg_L=neg_L, P=P, layer_names = ['L', 'I', 'D', 'M']))
                     '''                     
                     no contrast value in neg derPs and PPs: initial opposite-sign P miss is expected
                     neg_derP derivatives are not significant; neg_M obviates distance * decay_rate * M '''
             else:
-                derP_.append(CderP(sign=sign or _sign, mP=vmP, neg_M=neg_M, neg_L=neg_L, P=P))
+                derP_.append(CderP(sign=sign or _sign, mP=vmP, neg_M=neg_M, neg_L=neg_L, P=P, layer_names = ['L', 'I', 'D', 'M']))
                 # sign is ORed bilaterally, negative for singleton derPs only
                 break  # neg net_M: stop search
 
@@ -162,22 +164,23 @@ def comp_P(P, _P, neg_M, neg_L):  # multi-variate cross-comp, _sign = 0 in line_
 def form_PPm_(derP_):  # cluster derPs into PPm s by mP sign, eval for div_comp per PPm
 
     PPm_ = []
-    derP = derP_[0]  # 1st derP
-    PP = CPP( P_=[derP.P], inherit=[derP])  # initialize PP with 1st derP params
-    derP.PP = PP  # PP that derP belongs to, for merging PPs in back_search_extend
-    # positive PPms only, miss over discontinuity is expected, contrast dP -> PPd: if PP.mP * abs(dP) > ave_dP: explicit borrow only?
-
-    for i, derP in enumerate(derP_, start=1):
-        if derP.sign != PP.sign:  # sign != _sign: same-sign derPs in PP
-            # terminate PPm:
-            PPm_.append(PP)
-            PP = CPP( P_=[derP.P], inherit=[derP])  # reinitialize PPm with current derP
-            derP.PP = PP  # PP that derP belongs to, for merging PPs in back_search_extend
-        else:
-            PP.accum_from(derP.P)
-            PP.accum_from(derP)  # accumulate PPm numerical params with same-name current derP params, exclusions?
-
-    PPm_.append(PP)  # pack last PP
+    if derP_: # From checking, derP_ could be empty, this is due to in search(P), section start with line 94, if "if j == len(P_):" not fulfill, no derP will be appended into derP_
+        derP = derP_[0]  # 1st derP
+        PP = CPP( P_=[derP.P], inherit=[derP], layer1=[Cdm() for _ in range(4)], layer_names=['L', 'I', 'D', 'M'])  # initialize PP with 1st derP params
+        derP.PP = PP  # PP that derP belongs to, for merging PPs in back_search_extend
+        # positive PPms only, miss over discontinuity is expected, contrast dP -> PPd: if PP.mP * abs(dP) > ave_dP: explicit borrow only?
+    
+        for i, derP in enumerate(derP_, start=1):
+            if derP.sign != PP.sign:  # sign != _sign: same-sign derPs in PP
+                # terminate PPm:
+                PPm_.append(PP)
+                PP = CPP( P_=[derP.P], inherit=[derP], layer1=[Cdm() for _ in range(4)], layer_names=['L', 'I', 'D', 'M'])  # reinitialize PPm with current derP
+                derP.PP = PP  # PP that derP belongs to, for merging PPs in back_search_extend
+            else:
+                PP.accum_from(derP.P)
+                PP.accum_from(derP)  # accumulate PPm numerical params with same-name current derP params, exclusions?
+    
+        PPm_.append(PP)  # pack last PP
 
     return PPm_
 
