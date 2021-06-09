@@ -256,7 +256,7 @@ class ClusterStructure(metaclass=MetaCluster):
 
                 if param not in ['Day','Dax']:
                     setattr(self, param, p+_p)
-                    
+
                 elif param == 'Day':
                     day = p;  _day = _p
                     dax = getattr(self,'Dax'); _dax = getattr(other,'Dax')
@@ -312,7 +312,7 @@ def comp_param(param, _param, param_name, ave):
         dy = param[0] * _param[0].conjugate() # difference in day
         dx = param[1] * _param[1].conjugate() # difference in dax
         d = dy * dx # sum of difference (sum of 2 complex)
-        m = ave - abs(d)               
+        m = ave - abs(d)
     else:
         d = param - _param    # difference
         if param_name == 'I':

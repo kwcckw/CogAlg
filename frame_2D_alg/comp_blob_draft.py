@@ -67,18 +67,18 @@ def comp_blob(blob, _blob):
 
     # non complex numeric params
     for param_name in blob.layer_names:
-        
+
         if param_name == "Vector":
             dy= getattr(blob,'Dy'); _dy = getattr(_blob,'Dy')
             dx= getattr(blob,'Dx'); _dx = getattr(_blob,'Dx')
             param = dx + 1j*dy
-            _param = _dx + 1j*_dy 
-            
+            _param = _dx + 1j*_dy
+
         elif param_name == "aVector":
             day= getattr(blob,'Day'); _day = getattr(_blob,'Day')
             dax= getattr(blob,'Dax'); _dax = getattr(_blob,'Dax')
             param = [day,dax];
-            _param = [_day,_dax]  
+            _param = [_day,_dax]
         else:
             param = getattr(blob, param_name)
             _param = getattr(_blob, param_name)
