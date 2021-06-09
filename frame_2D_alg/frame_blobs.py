@@ -271,24 +271,24 @@ def flood_fill(dert__, sign__, verbose=False, mask__=None, blob_cls=CBlob, fseg=
                 while unfilled_derts:
                     y1, x1 = unfilled_derts.popleft()
                     # add dert to blob
-                    blob.accumulate(I  = dert__[0][y][x],
-                                    Dy = dert__[1][y][x],
-                                    Dx = dert__[2][y][x],
-                                    G  = dert__[3][y][x],
-                                    M  = dert__[4][y][x])
+                    blob.accumulate(I  = dert__[0][y1][x1],
+                                    Dy = dert__[1][y1][x1],
+                                    Dx = dert__[2][y1][x1],
+                                    G  = dert__[3][y1][x1],
+                                    M  = dert__[4][y1][x1])
                     if len(dert__)>5: # comp_angle
-                        blob.accumulate(Ga  =dert__[7][y][x],
-                                        Ma  =dert__[8][y][x])
+                        blob.accumulate(Ga  =dert__[7][y1][x1],
+                                        Ma  =dert__[8][y1][x1])
                         if blob.Dax==0: blob.Dax = 1
-                        sum_day = (blob.Day * dert__[5][y][x])
-                        sum_dax = (blob.Dax * dert__[6][y][x])
+                        sum_day = (blob.Day * dert__[5][y1][x1])
+                        sum_dax = (blob.Dax * dert__[6][y1][x1])
                         aVector = sum_day * sum_dax
                         # update blob
                         blob.Day = aVector.imag
                         blob.Day = aVector.real
                     if len(dert__)>10: # comp_dx
-                        blob.accumulate(Mdx =dert__[9][y][x],
-                                        Ddx =dert__[10][y][x])
+                        blob.accumulate(Mdx =dert__[9][y1][x1],
+                                        Ddx =dert__[10][y1][x1])
                     blob.A += 1;   # increase A
 
                     if y1 < y0:
@@ -401,7 +401,7 @@ if __name__ == "__main__":
     argument_parser = argparse.ArgumentParser()
     argument_parser.add_argument('-i', '--image', help='path to image file', default='./images//toucan.jpg')
     argument_parser.add_argument('-v', '--verbose', help='print details, useful for debugging', type=int, default=1)
-    argument_parser.add_argument('-n', '--intra', help='run intra_blobs after frame_blobs', type=int, default=0)
+    argument_parser.add_argument('-n', '--intra', help='run intra_blobs after frame_blobs', type=int, default=1)
     argument_parser.add_argument('-r', '--render', help='render the process', type=int, default=0)
     argument_parser.add_argument('-c', '--clib', help='use C shared library', type=int, default=0)
     args = argument_parser.parse_args()

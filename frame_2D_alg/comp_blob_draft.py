@@ -7,7 +7,7 @@ from frame_blobs import ave, CBlob, CDerBlob, CBblob
 import numpy as np
 import cv2
 
-ave_mB = 0  # ave can't be negative
+ave_mB =  0  # ave can't be negative
 ave_rM = .7  # average relative match at rL=1: rate of ave_mB decay with relative distance, due to correlation between proximity and similarity
 ave_da = 0.7853  # da at 45 degrees
 
@@ -69,16 +69,12 @@ def comp_blob(blob, _blob):
     for param_name in blob.layer_names:
 
         if param_name == "Vector":
-            dy= getattr(blob,'Dy'); _dy = getattr(_blob,'Dy')
-            dx= getattr(blob,'Dx'); _dx = getattr(_blob,'Dx')
-            param = dx + 1j*dy
-            _param = _dx + 1j*_dy
+            param = blob.Dx + 1j*blob.Dy
+            _param = _blob.Dx + 1j*_blob.Dy
 
         elif param_name == "aVector":
-            day= getattr(blob,'Day'); _day = getattr(_blob,'Day')
-            dax= getattr(blob,'Dax'); _dax = getattr(_blob,'Dax')
-            param = [day,dax];
-            _param = [_day,_dax]
+            param = [blob.day,blob.dax];
+            _param = [_blob.day,_blob.dax]
         else:
             param = getattr(blob, param_name)
             _param = getattr(_blob, param_name)

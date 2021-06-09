@@ -105,7 +105,7 @@ def search(P_):  # cross-compare patterns within horizontal line
 
     PPm_ = form_PPm_(derP_)  # cluster derPs into PPms by the sign of mP
 
-    PPm_ = back_search_extend( PPm_, derP_, P_)  # evaluate for 1st P in each PP, merge with _P.PP if any
+    PPm_ = back_search_extend_Kelvin( PPm_, derP_, P_)  # evaluate for 1st P in each PP, merge with _P.PP if any
 
     return PPm_
 
@@ -114,23 +114,13 @@ def comp_P(P, _P, neg_M, neg_L):  # multi-variate cross-comp, _smP = 0 in line_p
 
     mP = dP = 0
     layer1 = []
-    # names are not needed:
-    dm = comp_param(P.I, _P.I, ave)
-    layer1.append([dm.d, dm.m])
-    mP += dm.m; dP += dm.d
 
-    dm = comp_param(P.L, _P.L, ave)
-    layer1.append([dm.d, dm.m])
-    mP += dm.m; dP += dm.d
-
-    dm = comp_param(P.D, _P.D, ave)
-    layer1.append([dm.d, dm.m])
-    mP += dm.m; dP += dm.d
-
-    dm = comp_param(P.M, _P.M, ave)
-    layer1.append([dm.d, dm.m])
-    mP += dm.m; dP += dm.d
-
+    # compare I, L, D, M    
+    for (param, _param) in zip([P.I, P.L, P.D, P.M], [_P.I, _P.L, _P.D, _P.M]):
+        dm = comp_param(param, _param, [], ave)
+        layer1.append([dm.d, dm.m])
+        mP += dm.m; dP += dm.d
+    
     mP -= ave_M * ave_rM ** (1 + neg_L / P.L)  # average match projected at current distance: neg_L, add coef / var?
     # match(P,_P), ave_M is addition to ave? or abs for projection in search?
     if P.sign == _P.sign: mP *= 2  # sign is MSB, value of sign match = full magnitude match?
@@ -200,7 +190,7 @@ def back_search_extend_Kelvin( PPm_, derP_, P_):  # evaluate for the 1st P in PP
         # neg_M = vmP = sign = _sign = neg_L = 0
         # Those params are already computed and should be accessed from derP_, so we can evaluate immediately:
 
-        illeft = PP.P_[0].ileft -1  # might be wrong
+        illeft = PP.P_[0].ileft -1  # might be wrong # the purpose ileft here is to find the leftmost derP from P?
         derP = derP_[illeft]
 
         while PP.P_[0].M + derP.neg_M > 0:
