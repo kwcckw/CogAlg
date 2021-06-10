@@ -274,7 +274,7 @@ class ClusterStructure(metaclass=MetaCluster):
 
                 layer = getattr(self,layer_num)   # self layer params
                 _layer = getattr(other,layer_num) # other layer params
-                
+
                 if hasattr(other,'layer_names'):
                     _layer_names = getattr(other,'layer_names') # target params' name
 

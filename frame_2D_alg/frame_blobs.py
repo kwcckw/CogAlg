@@ -49,8 +49,9 @@ EXCLUDED_ID = -2
 FrameOfBlobs = namedtuple('FrameOfBlobs', 'I, Dy, Dx, G, M, blob_, dert__')
 
 
-class Clayer0(ClusterStructure):  # not used
-    # layer0 params, comp_pixel:
+class CBlob(ClusterStructure):  # from frame_blobs only, no sub_blobs
+
+    # comp_pixel:
     I = int
     Dy = int
     Dx = int
@@ -64,27 +65,9 @@ class Clayer0(ClusterStructure):  # not used
     # comp_dx:
     Mdx = int
     Ddx = int
-
-class CFlatBlob(ClusterStructure):  # from frame_blobs only, no sub_blobs
-
-    # layer0 params, comp_pixel:
-    I = int
-    Dy = int
-    Dx = int
-    G = int
-    M = int
-    # layer0 params, comp_angle:
-    Day = complex
-    Dax = complex
-    Ga = int
-    Ma = int
-    # layer0 params, comp_dx:
-    Mdx = int
-    Ddx = int
-
-    # blob params
+    # new params:
     A = int  # blob area
-    sign = NoneType
+    sign = bool
     box = list
     mask__ = object
     dert__ = object
@@ -93,34 +76,13 @@ class CFlatBlob(ClusterStructure):  # from frame_blobs only, no sub_blobs
     prior_forks = list
     fopen = bool
 
-class CBlob(ClusterStructure):
+    root_bblob = object
+    subH = object  # represents hierarchy of sub_blobs, if any
 
-    # layer0 params
-    I = int
-    Dy = int
-    Dx = int
-    G = int
-    M = int
-    # comp_angle:
-    Day = complex
-    Dax = complex
-    Ga = int
-    Ma = int
-    # comp_dx:
-    Mdx = int
-    Ddx = int
 
-    layer0 = list       # base params
-    layer_names = list  # name of base params
+class CsubH(ClusterStructure):
 
-    # blob params:
-    A = int  # blob area
-    sign = NoneType
-    box = list
-    mask__ = bool
-    dert__ = tuple  # 2D array per param
-    root_dert__ = tuple
-    fopen = bool     # the blob is bordering masked area
+    # draft:
     f_root_a = bool  # input is from comp angle
     f_comp_a = bool  # current fork is comp angle
     fflip = bool     # x-y swap
@@ -129,10 +91,6 @@ class CBlob(ClusterStructure):
     # deep and external params:
     Ls = int   # for visibility and next-fork rdn
     sub_layers = list
-    a_depth = int  # currently not used
-
-    prior_forks = list
-    adj_blobs = list  # for borrowing and merging
     dir_blobs = list  # primarily vertically | laterally oriented edge blobs
     fsliced = bool
 
@@ -145,35 +103,30 @@ class CBlob(ClusterStructure):
     derPd__ = list
     Pd__ = list
 
-    # comp blobs
+# do we meed these here:?
+
+class CderBlob(CBlob):
+
+    layer1 = list      # dm layer params
+    layer_names = list # name of dm layer's params
     mB = int
     dB = int
-    derBlob_ = list
+    derBlob_ = list # not sure?
     distance = int  # common per derBlob_
     neg_mB = int    # common per derBlob_
-    bblob = object
-
-
-class CDerBlob(ClusterStructure):
-
-    layer1 = list       # dm layer params
-    layer_names = list # name of dm layer's params
-
-    mB = int
-    dB = int
     blob = object
     _blob = object
+    subH = object  # represents hierarchy of sub_blobs, if any
 
-class CBblob(ClusterStructure):
 
-    layer_names = list     # name of base params
-    layer0 = list           # base params
-    layer1 = list         # dm layer params
+class CBblob(CderBlob):
 
-    mB = int
-    dB = int
+    layer_names = list  # name of base params
+    layer0 = list       # base params
+    layer1 = list       # dm layer params
     derBlob_ = list
     blob_ = list
+
 
 def comp_pixel(image):  # 2x2 pixel cross-correlation within image, a standard edge detection operator
     # see comp_pixel_versions file for other versions and more explanation
@@ -218,11 +171,11 @@ def derts2blobs(dert__, verbose=False, render=False, use_c=False):
         blob_, idmap, adj_pairs = flood_fill(dert__, sign__=dert__[3] > 0,  verbose=verbose)
         I, Dy, Dx, G, M = 0, 0, 0, 0, 0
         for blob in blob_:
-            I += blob.layer0[0]
-            Dy += blob.layer0[1]
-            Dx += blob.layer0[2]
-            G += blob.layer0[3]
-            M += blob.layer0[4]
+            I += blob.I
+            Dy += blob.Dy
+            Dx += blob.Dx
+            G += blob.G
+            M += blob.M
         frame = FrameOfBlobs(I=I, Dy=Dy, Dx=Dx, G=G, M=M, blob_=blob_, dert__=dert__)
 
     assign_adjacents(adj_pairs)  # f_segment_by_direction=False
@@ -289,7 +242,7 @@ def flood_fill(dert__, sign__, verbose=False, mask__=None, blob_cls=CBlob, fseg=
                     if len(dert__)>10: # comp_dx
                         blob.accumulate(Mdx =dert__[9][y1][x1],
                                         Ddx =dert__[10][y1][x1])
-                    blob.A += 1;   # increase A
+                    blob.A += 1
 
                     if y1 < y0:
                         y0 = y1

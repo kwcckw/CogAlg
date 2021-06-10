@@ -21,7 +21,7 @@ def cross_comp_blobs(frame):
     for blob in blob_:  # each blob forms derBlob per compared adj_blob and accumulates adj_blobs'derBlobs:
         if len(blob.derBlob_) == 0:
             comp_blob_recursive(blob, blob.adj_blobs[0], derBlob_=[])
-        # derBlob_ is local and but not frame-wide, it is per blob
+        # derBlob_ is local per blob, not frame-wide
 
     bblob_ = form_bblob_(blob_)  # form blobs of blobs, connected by mutual match
 
@@ -73,14 +73,14 @@ def comp_blob(blob, _blob):
             _param = _blob.Dx + 1j*_blob.Dy
 
         elif param_name == "aVector":
-            param = [blob.day,blob.dax];
+            param = [blob.day,blob.dax]
             _param = [_blob.day,_blob.dax]
         else:
             param = getattr(blob, param_name)
             _param = getattr(_blob, param_name)
 
         dm = comp_param(param, _param, param_name, blob.A)
-        derBlob.mB += dm.m;
+        derBlob.mB += dm.m
         if not isinstance(param, complex): # do we need to accumulate d of Vector and aVector, which is in complex form?
             derBlob.dB += dm.d
         derBlob.layer1.append(dm)
