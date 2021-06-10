@@ -266,8 +266,7 @@ class ClusterStructure(metaclass=MetaCluster):
                     aVector = sum_day * sum_dax
                     setattr(self, 'Day', aVector.imag)
                     setattr(self, 'Dax', aVector.real)
-                    self.layer0[self.layer_names.index('aVector')] = aVector # update layer 0 aVector
-
+                    
         # accumulate layers 1 and above
         for layer_num in self.list_params:
             if (layer_num in other.list_params) and ('layer' in layer_num) and ('names' not in layer_num):
@@ -309,14 +308,15 @@ class Cdm(Number):
 
 def comp_param(param, _param, param_name, ave):
 
-    if param_name == "Vector":
-        d = param * _param.conjugate() # da
-        m = ave - abs(d)               # ma
-    elif param_name == "aVector":
+    
+    if param_name == "aVector":
         dy = param[0] * _param[0].conjugate() # difference in day
         dx = param[1] * _param[1].conjugate() # difference in dax
         d = dy * dx # sum of difference (sum of 2 complex)
         m = ave - abs(d)
+    elif (param_name == "Vector") or (isinstance(param,complex)):
+        d = param * _param.conjugate() # da
+        m = ave - abs(d)               # ma
     else:
         d = param - _param    # difference
         if param_name == 'I':

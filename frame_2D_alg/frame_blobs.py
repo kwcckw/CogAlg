@@ -65,6 +65,7 @@ class CBlob(ClusterStructure):  # from frame_blobs only, no sub_blobs
     # comp_dx:
     Mdx = int
     Ddx = int
+    
     # new params:
     A = int  # blob area
     sign = bool
@@ -75,14 +76,9 @@ class CBlob(ClusterStructure):  # from frame_blobs only, no sub_blobs
     adj_blobs = list
     prior_forks = list
     fopen = bool
-
     root_bblob = object
-    subH = object  # represents hierarchy of sub_blobs, if any
-
-
-class CsubH(ClusterStructure):
-
-    # draft:
+    
+    # intra_blob: sub_blobs
     f_root_a = bool  # input is from comp angle
     f_comp_a = bool  # current fork is comp angle
     fflip = bool     # x-y swap
@@ -91,42 +87,29 @@ class CsubH(ClusterStructure):
     # deep and external params:
     Ls = int   # for visibility and next-fork rdn
     sub_layers = list
+   
+    # comp_slice: dir_blobs
     dir_blobs = list  # primarily vertically | laterally oriented edge blobs
     fsliced = bool
-
+    # m
     PPmm_ = list  # comp_slice_ if not empty
     PPdm_ = list  # comp_slice_ if not empty
     derP__ = list
     P__ = list
+    # d
     PPmd_ = list  # PP_derPd_
     PPdd_ = list  # PP_derPd_
     derPd__ = list
     Pd__ = list
 
-# do we meed these here:?
-
-class CderBlob(CBlob):
-
-    layer1 = list      # dm layer params
-    layer_names = list # name of dm layer's params
+    # comp_blob: derBlob, bblob
     mB = int
     dB = int
-    derBlob_ = list # not sure?
+    derBlob_ = list
     distance = int  # common per derBlob_
     neg_mB = int    # common per derBlob_
-    blob = object
-    _blob = object
-    subH = object  # represents hierarchy of sub_blobs, if any
-
-
-class CBblob(CderBlob):
-
-    layer_names = list  # name of base params
-    layer0 = list       # base params
-    layer1 = list       # dm layer params
-    derBlob_ = list
-    blob_ = list
-
+    bblob = object
+    
 
 def comp_pixel(image):  # 2x2 pixel cross-correlation within image, a standard edge detection operator
     # see comp_pixel_versions file for other versions and more explanation
@@ -210,7 +193,6 @@ def flood_fill(dert__, sign__, verbose=False, mask__=None, blob_cls=CBlob, fseg=
             if idmap[y, x] == UNFILLED:  # ignore filled/clustered derts
                 # initialize new blob
                 blob = blob_cls(layer0=[0 for _ in range(11)],sign=sign__[y, x], root_dert__=dert__)
-                blob.layer_names = ['I', 'G', 'M', 'Vector', 'aVector', 'Ga', 'Ma', 'A', 'Mdx', 'Ddx']
 
                 if prior_forks: # update prior forks in deep blob
                     blob.prior_forks= prior_forks.copy()

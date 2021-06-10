@@ -35,7 +35,7 @@ ave_mPP = 0
 ave_rM  = .7
 
 
-layer_names = ['I', 'G', 'M', 'Vector', 'aVector', 'Ga', 'Ma', 'Mdx', 'Ddx', 'x', 'L' ]
+layer_names = ['I', 'G', 'M', 'Vector', 'aVector', 'Ga', 'Ma', 'L', 'Mdx', 'Ddx', 'x']
 
 class CP(ClusterStructure):
 
@@ -73,7 +73,7 @@ class CP(ClusterStructure):
     Pd_ = list
 
 class CderP(CP):
-
+    
     layer1 = list
     layer_names = list
     # derP params
@@ -99,6 +99,7 @@ class CPP(CderP):
     box = list   # for visualization only, original box before flipping
     dert__ = list
     mask__ = bool
+    
     # PP params
     derP__ = list
     P__ = list
@@ -110,11 +111,19 @@ class CPP(CderP):
     # comp_dx params
     PPmd_ = list
     PPdd_ = list
+    
     # comp_PP
     derPPm_ = []
     derPPd_ = []
+    distance = int
+    mmPP = int
+    dmPP = int
+    mdPP = int
+    ddPP = int
     PPPm = object
     PPPd = object
+    neg_mmPP = int
+    neg_mdPP = int
 
 class CderPP(CPP):
     layer0 = list
@@ -133,6 +142,11 @@ class CPPP(CderPP):
 
     PPm_ = list
     PPd_ = list
+    
+    mmPP = int
+    dmPP = int
+    mdPP = int
+    ddPP = int
 
 # Functions:
 '''
@@ -209,7 +223,7 @@ def form_P_(idert_, mask_, y):  # segment dert__ into P__ in horizontal ) vertic
             if _mask:  # _dert is masked, initialize P params:
                 # initialize P with first dert
                 P = CP(I=dert[0], Dy=dert[1], Dx=dert[2], G=dert[3], M=dert[4], Day=dert[5], Dax=dert[6], Ga=dert[7], Ma=dert[8],
-                       x0=x, L=1, y=y, dert_=dert_, layer_names=layer_names)
+                   x0=x, L=1, y=y, dert_=dert_, layer_names=layer_names)
             else:
                 # _dert is not masked, accumulate P params with (p, dy, dx, g, m, day, dax, ga, ma) = dert
                 P.accumulate(I=dert[0], Dy=dert[1], Dx=dert[2], G=dert[3], M=dert[4], Day=dert[5], Dax=dert[6], Ga=dert[7], Ma=dert[8], L=1)
@@ -397,6 +411,7 @@ def accum_Dert(Dert: dict, **params) -> None:
 def accum_PP(PP, derP):  # accumulate params in PP
 
     PP.accum_from(derP)    # accumulate params
+    PP.accum_from(derP.P)  # accum derP's P base param to PP
     PP.derP__.append(derP) # add derP to PP
     derP.PP = PP           # update reference
 
@@ -427,7 +442,7 @@ def comp_slice(_P, P):  # forms vertical derivatives of derP params, and conditi
     dP = 0
     layer1 = []
 
-    for param_name in _P.layer_names:
+    for param_name in layer_names:
 
         if param_name == "Vector":
             dy= P.Dy/max(1, P.G); _dy = _P.Dy/max(1,_P.G)
@@ -742,10 +757,80 @@ def merge_PPP(PPP, _PPP, fPPd):
 
 def comp_PP(PP, _PP):
 
-    # match and difference of _PP and PP
-    difference = _PP.difference(PP)
-    match = _PP.min_match(PP)
+    layer1 = []
+    mP = 0
+    dP = 0
+    
+    # compare PP and _PP base params to get layer 1 of derPP
+    for param_name in layer_names:
 
+        if param_name == "Vector":
+            dy= PP.Dy/max(1, PP.G); _dy = _PP.Dy/max(1,_PP.G)
+            dx= PP.Dx/max(1, PP.G); _dx = _PP.Dx/max(1,_PP.G)
+            param = dx + 1j*dy
+            _param = _dx + 1j*_dy
+
+        elif param_name == "aVector":
+            day= PP.Day/max(1, PP.Ga); _day = _PP.Day/max(1,_PP.Ga)
+            dax= PP.Dax/max(1, PP.Ga); _dax = _PP.Dax/max(1,_PP.Ga)
+            param = [day,dax];
+            _param = [_day,_dax]
+
+        elif param_name == "x":
+            _param = _PP.dX # _dX
+            param = PP.x    # dX
+
+        elif param_name == "L" or param_name == "M":
+            hyp = np.hypot(PP.x, 1)  # ratio of local segment of long (vertical) axis to dY = 1
+            _param = getattr(_PP,param_name)
+            param = getattr(PP,param_name) / hyp # orthogonal L & M are reduced by hyp
+
+        else:
+            param = getattr(PP, param_name)
+            _param = getattr(_PP, param_name)
+
+        dm = comp_param(param, _param, param_name, PP.L)
+        mP += dm.m;
+        if not isinstance(param, complex): # do not accumulate complex d
+            dP += dm.d
+
+        layer1.append(dm)    
+    
+    # compare layer1 to get layer2
+    layer1 = getattr(PP, 'layer1')
+    _layer1 = getattr(_PP, 'layer1')
+    
+    layer2 = []
+    mmPP = 0
+    dmPP = 0
+    mdPP = 0
+    ddPP = 0
+    
+    for dm, _dm in enumerate(zip(layer1, _layer1)):
+        
+        dmd = comp_param(dm.d, _dm.d)  # dm of d   
+        dmm = comp_param(dm.m, _dm.m)  # dm of m 
+        layer2.append([dmd, dmm]) # or 2 layers for each d and m?
+           
+        mdPP += dmd.m # m from dm of d
+        if not isinstance(param, complex): # do not accumulate complex d
+            ddPP += dmd.d # d from dm of d
+            
+        mmPP += dmm.m # m from dm of m
+        if not isinstance(param, complex): # do not accumulate complex d
+            dmPP += dmm.d # d from dm of m
+         
+    dmmP = comp_param(PP.mP, _PP.mP, [], PP.L) # dm of mP
+    dmdP = comp_param(PP.dP, _PP.dP, [], PP.L) # dm of dP
+    
+    mdPP += dmdP.m # match of compared PPs' d components
+    ddPP += dmdP.d  # difference of compared PPs' d components
+    mmPP += dmmP.m - ave_mPP # match of compared PPs' m components
+    dmPP += dmmP.d - ave_mPP # difference of compared PPs' m components
+    
+    derPP = CderPP(PP=PP, _PP=_PP, mmPP=mmPP, dmPP = dmPP, mdPP=mdPP, ddPP=ddPP,layer1=layer1, layer2=layer2)
+    
+    '''
     # match of compared PPs' m components
     mmPP = match['mP'] + match['mx'] + match['mL'] + match['mDx'] + match['mDy'] - ave_mPP
     # difference of compared PPs' m components
@@ -757,6 +842,7 @@ def comp_PP(PP, _PP):
     ddPP = difference['dP'] + difference['dx'] + difference['dL'] + difference['dDx'] + difference['dDy']
 
     derPP = CderPP(PP=PP, _PP=_PP, mmPP=mmPP, dmPP = dmPP,  mdPP=mdPP, ddPP=ddPP)
+    '''
 
     return derPP
 

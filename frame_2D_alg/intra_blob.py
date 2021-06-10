@@ -29,7 +29,6 @@ from intra_comp import comp_r, comp_a
 from draw_frame_blobs import visualize_blobs
 from itertools import zip_longest
 from comp_slice_ import *
-from slice_utils import *
 from segment_by_direction import segment_by_direction
 
 # filters, All *= rdn:
@@ -120,10 +119,10 @@ def cluster_sub_eval(blob, dert__, sign__, mask__, **kwargs):  # comp_r or comp_
         '''
         sub_blob.prior_forks = blob.prior_forks.copy()  # increments forking sequence: g->a, g->a->p, etc.
 
-        if sub_blob.G > AveB:  # replace with borrow_M when known
+        # ensure sub blob's prior fork is rom comp_a by checking dert__ size
+        if sub_blob.G > AveB and len(sub_blob.dert__)>5:  # replace with borrow_M when known
             # comp_a:
             sub_blob.f_root_a = 1
-            sub_blob.a_depth += blob.a_depth  # accumulate a depth from blob to sub_blob, currently not used
             sub_blob.rdn = sub_blob.rdn + 1 + 1 / blob.Ls
             blob.sub_layers += intra_blob(sub_blob, **kwargs)
 

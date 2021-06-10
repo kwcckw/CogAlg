@@ -3,13 +3,32 @@ Cross-compare blobs with incrementally intermediate adjacency, within a frame
 '''
 
 from class_cluster import ClusterStructure, NoneType, comp_param, Cdm
-from frame_blobs import ave, CBlob, CDerBlob, CBblob
+from frame_blobs import ave, CBlob
 import numpy as np
 import cv2
 
 ave_mB =  0  # ave can't be negative
 ave_rM = .7  # average relative match at rL=1: rate of ave_mB decay with relative distance, due to correlation between proximity and similarity
 ave_da = 0.7853  # da at 45 degrees
+
+layer_names = ['I', 'G', 'M', 'Vector', 'aVector', 'Ga', 'Ma', 'A', 'Mdx', 'Ddx']
+
+class CderBlob(ClusterStructure): # actually no need to inherit blob? Since we not really need any param from blob 
+
+    mB = int
+    dB = int
+    layer1 = list      # dm layer params
+    layer_names = list # name of dm layer's params  
+    blob = object
+    _blob = object
+
+class CBblob(CderBlob):
+
+    layer_names = list  # name of base params
+    layer0 = list       # base params
+    layer1 = list       # dm layer params
+    derBlob_ = list
+    blob_ = list
 
 
 def cross_comp_blobs(frame):
@@ -51,10 +70,10 @@ def comp_blob_recursive(blob, adj_blob_, derBlob_):
             if derBlob.mB > 0:  # replace blob with adj_blob for continued adjacency search:
                 comp_blob_recursive(adj_blob, adj_blob.adj_blobs[0], derBlob_)  # search depth could be different, compare anyway
                 break
-            elif blob.layer0[4] + blob.neg_mB + derBlob.mB > ave_mB:  # neg mB but positive comb M,
+            elif blob.M + blob.neg_mB + derBlob.mB > ave_mB:  # neg mB but positive comb M,
                 # extend blob comparison to adjacents of adjacent, depth-first
                 blob.neg_mB += derBlob.mB  # mB and distance are accumulated over comparison scope
-                blob.distance += np.sqrt(adj_blob.layer0[10])
+                blob.distance += np.sqrt(adj_blob.distance)
                 comp_blob_recursive(blob, adj_blob.adj_blobs[0], derBlob_)
 
 
@@ -63,18 +82,18 @@ def comp_blob(blob, _blob):
     cross compare _blob and blob
     '''
     # derBlob's layer1 param = 'I', 'G', 'M', 'Vector', 'aVector','Ga', 'Ma', 'A', 'Mdx', 'Ddx'
-    derBlob = CDerBlob()
+    derBlob = CderBlob()
 
     # non complex numeric params
-    for param_name in blob.layer_names:
+    for param_name in layer_names:
 
         if param_name == "Vector":
             param = blob.Dx + 1j*blob.Dy
             _param = _blob.Dx + 1j*_blob.Dy
 
         elif param_name == "aVector":
-            param = [blob.day,blob.dax]
-            _param = [_blob.day,_blob.dax]
+            param = [blob.Day,blob.Dax]
+            _param = [_blob.Day,_blob.Dax]
         else:
             param = getattr(blob, param_name)
             _param = getattr(_blob, param_name)
@@ -127,8 +146,7 @@ def form_bblob_(blob_):
         MB = sum([derBlob.mB for derBlob in blob.derBlob_]) # blob's mB, sum from blob's derBlobs' mB
 
         if MB > 0 and not isinstance(blob.bblob, CBblob):  # init bblob with current blob
-            bblob = CBblob(layer1=[Cdm() for _ in range(10)],
-                           layer_names = ['I', 'G', 'M', 'Vector', 'aVector', 'Ga', 'Ma', 'A', 'Mdx', 'Ddx'])
+            bblob = CBblob(layer1=[Cdm() for _ in range(10)], layer_names = layer_names)
 
             merged_ids = [bblob.id]
             accum_bblob(bblob_, bblob, blob, merged_ids)  # accum blob into bblob
