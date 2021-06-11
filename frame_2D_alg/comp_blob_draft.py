@@ -10,25 +10,9 @@ import cv2
 ave_mB =  0  # ave can't be negative
 ave_rM = .7  # average relative match at rL=1: rate of ave_mB decay with relative distance, due to correlation between proximity and similarity
 ave_da = 0.7853  # da at 45 degrees
+ave_comp = 0   # ave for comp_param to get next level derivatives
 
 layer_names = ['I', 'G', 'M', 'Vector', 'aVector', 'Ga', 'Ma', 'A', 'Mdx', 'Ddx']
-
-class CderBlob(ClusterStructure): # actually no need to inherit blob? Since we not really need any param from blob 
-
-    mB = int
-    dB = int
-    layer1 = list      # dm layer params
-    layer_names = list # name of dm layer's params  
-    blob = object
-    _blob = object
-
-class CBblob(CderBlob):
-
-    layer_names = list  # name of base params
-    layer0 = list       # base params
-    layer1 = list       # dm layer params
-    derBlob_ = list
-    blob_ = list
 
 
 class CderBlob(ClusterStructure):
@@ -37,7 +21,7 @@ class CderBlob(ClusterStructure):
     layer_names = list # name of dm layer's params
     mB = int
     dB = int
-    derBlob_ = list # not sure?
+    derBlob_ = list # not sure? # not needed, since there is no reason to pack multiple derBlobs per derBlob
     distance = int  # common per derBlob_
     neg_mB = int    # common per derBlob_
     blob = object
@@ -107,24 +91,33 @@ def comp_blob(blob, _blob):
     # derBlob's layer1 param = 'I', 'G', 'M', 'Vector', 'aVector','Ga', 'Ma', 'A', 'Mdx', 'Ddx'
     derBlob = CderBlob()
 
+    f_comp = 0
     # non complex numeric params
     for param_name in layer_names:
 
         if param_name == "Vector":
             param = blob.Dx + 1j*blob.Dy
-            _param = _blob.Dx + 1j*_blob.Dy
-
+            _param = _blob.Dx + 1j*_blob.Dy 
+            if abs(param)>ave_comp and abs(_param)>ave_comp: f_comp=1 
+                      
         elif param_name == "aVector":
             param = [blob.Day,blob.Dax]
             _param = [_blob.Day,_blob.Dax]
+            if abs(blob.Dax+1j*blob.Day)>ave_comp and abs(_blob.Dax+1j*_blob.Day)>ave_comp: f_comp=1 
+            
         else:
             param = getattr(blob, param_name)
             _param = getattr(_blob, param_name)
-
-        dm = comp_param(param, _param, param_name, blob.A)
-        derBlob.mB += dm.m
-        if not isinstance(param, complex): # do we need to accumulate d of Vector and aVector, which is in complex form?
-            derBlob.dB += dm.d
+            if (param>ave_comp) and (_param>ave_comp): f_comp = 1
+            
+        if f_comp:
+            dm = comp_param(param, _param, param_name, blob.A)
+            derBlob.mB += dm.m
+            if not isinstance(param, complex): # do we need to accumulate d of Vector and aVector, which is in complex form?
+                derBlob.dB += dm.d
+        else:
+            dm = Cdm() #empty dm
+            
         derBlob.layer1.append(dm)
         derBlob.layer_names.append(param_name)
 

@@ -95,7 +95,13 @@ class CBlob(ClusterStructure):  # from frame_blobs only, no sub_blobs
     PPdd_ = list  # PP_derPd_
     derPd__ = list
     Pd__ = list
-
+    # comp_blob: # we need this too
+    mB = int
+    dB = int
+    derBlob_ = list
+    distance = int  # common per derBlob_
+    neg_mB = int    # common per derBlob_
+    bblob = object
     root_bblob = object
 
 
@@ -181,7 +187,6 @@ def flood_fill(dert__, sign__, verbose=False, mask__=None, blob_cls=CBlob, fseg=
             if idmap[y, x] == UNFILLED:  # ignore filled/clustered derts
                 # initialize new blob
                 blob = blob_cls(layer0=[0 for _ in range(11)],sign=sign__[y, x], root_dert__=dert__)
-                blob.layer_names = ['I', 'G', 'M', 'Vector', 'aVector', 'Ga', 'Ma', 'A', 'Mdx', 'Ddx']
 
                 if prior_forks: # update prior forks in deep blob
                     blob.prior_forks= prior_forks.copy()
@@ -325,7 +330,7 @@ if __name__ == "__main__":
     argument_parser = argparse.ArgumentParser()
     argument_parser.add_argument('-i', '--image', help='path to image file', default='./images//toucan.jpg')
     argument_parser.add_argument('-v', '--verbose', help='print details, useful for debugging', type=int, default=1)
-    argument_parser.add_argument('-n', '--intra', help='run intra_blobs after frame_blobs', type=int, default=0)
+    argument_parser.add_argument('-n', '--intra', help='run intra_blobs after frame_blobs', type=int, default=1)
     argument_parser.add_argument('-r', '--render', help='render the process', type=int, default=0)
     argument_parser.add_argument('-c', '--clib', help='use C shared library', type=int, default=0)
     args = argument_parser.parse_args()
