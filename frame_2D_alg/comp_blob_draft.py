@@ -31,6 +31,29 @@ class CBblob(CderBlob):
     blob_ = list
 
 
+class CderBlob(ClusterStructure):
+
+    layer1 = list      # dm layer params
+    layer_names = list # name of dm layer's params
+    mB = int
+    dB = int
+    derBlob_ = list # not sure?
+    distance = int  # common per derBlob_
+    neg_mB = int    # common per derBlob_
+    blob = object
+    _blob = object
+    subH = object  # represents hierarchy of sub_blobs, if any
+
+
+class CBblob(CBlob, CderBlob):
+
+    layer_names = list  # name of base params
+    layer0 = list       # base params
+    layer1 = list       # dm layer params
+    derBlob_ = list
+    blob_ = list
+
+
 def cross_comp_blobs(frame):
     '''
     root function of comp_blob: cross compare blobs with their adjacent blobs in frame.blob_, including sub_layers
