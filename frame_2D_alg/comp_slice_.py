@@ -73,8 +73,8 @@ class CP(ClusterStructure):
     # only in Pm:
     Pd_ = list
 
-class CderP(CP):
-    
+class CderP(ClusterStructure):
+
     layer1 = list
     layer_names = list
     # derP params
@@ -87,7 +87,7 @@ class CderP(CP):
     fdx = NoneType
     distance = int  # d_ave_x
 
-class CPP(CderP):
+class CPP(CP, CderP):
 
     layer0 = list
     layer1 = list
@@ -100,7 +100,7 @@ class CPP(CderP):
     box = list   # for visualization only, original box before flipping
     dert__ = list
     mask__ = bool
-    
+
     # PP params
     derP__ = list
     P__ = list
@@ -112,7 +112,7 @@ class CPP(CderP):
     # comp_dx params
     PPmd_ = list
     PPdd_ = list
-    
+
     # comp_PP
     derPPm_ = []
     derPPd_ = []
@@ -126,7 +126,7 @@ class CPP(CderP):
     neg_mmPP = int
     neg_mdPP = int
 
-class CderPP(CPP):
+class CderPP(ClusterStructure):
     layer0 = list
     layer1 = list
     layer2 = list
@@ -139,11 +139,11 @@ class CderPP(CPP):
     mdPP = int
     ddPP = int
 
-class CPPP(CderPP):
+class CPPP(CPP, CderPP):
 
     PPm_ = list
     PPd_ = list
-    
+
     mmPP = int
     dmPP = int
     mdPP = int
@@ -451,14 +451,14 @@ def comp_slice(_P, P):  # forms vertical derivatives of derP params, and conditi
             dx= P.Dx/max(1, P.G); _dx = _P.Dx/max(1,_P.G)
             param = dx + 1j*dy
             _param = _dx + 1j*_dy
-            if abs(param)>ave_comp and abs(_param)>ave_comp: f_comp=1 
+            if abs(param)>ave_comp and abs(_param)>ave_comp: f_comp=1
 
         elif param_name == "aVector":
             day= P.Day/max(1, P.Ga); _day = _P.Day/max(1,_P.Ga)
             dax= P.Dax/max(1, P.Ga); _dax = _P.Dax/max(1,_P.Ga)
             param = [day,dax];
             _param = [_day,_dax]
-            if abs(P.Dax+1j*P.Day)>ave_comp and abs(_P.Dax+1j*_P.Day)>ave_comp: f_comp=1 
+            if abs(P.Dax+1j*P.Day)>ave_comp and abs(_P.Dax+1j*_P.Day)>ave_comp: f_comp=1
 
         elif param_name == "x":
             _param = _P.dX # _dX
@@ -475,15 +475,15 @@ def comp_slice(_P, P):  # forms vertical derivatives of derP params, and conditi
             param = getattr(P, param_name)
             _param = getattr(_P, param_name)
             if (param>ave_comp) and (_param>ave_comp): f_comp = 1
-            
+
         if f_comp:
             dm = comp_param(param, _param, param_name, P.L)
             mP += dm.m
-            if not isinstance(param, complex): 
+            if not isinstance(param, complex):
                 dP += dm.d
         else:
-            dm = Cdm() #empty dm    
-        
+            dm = Cdm() #empty dm
+
         layer1.append(dm)
 
 
@@ -771,7 +771,7 @@ def comp_PP(PP, _PP):
     mP = 0
     dP = 0
     f_comp = 0
-    
+
     # compare PP and _PP base params to get layer 1 of derPP #-----------------
     for param_name in layer_names:
         if param_name == "Vector":
@@ -784,8 +784,7 @@ def comp_PP(PP, _PP):
         elif param_name == "aVector":
             day= PP.Day/max(1, PP.Ga); _day = _PP.Day/max(1,_PP.Ga)
             dax= PP.Dax/max(1, PP.Ga); _dax = _PP.Dax/max(1,_PP.Ga)
-            param = [day,dax];
-            _param = [_day,_dax]
+            param = [day,dax]; _param = [_day,_dax]
             if abs(P.Dax+1j*P.Day)>0 and abs(_P.Dax+1j*_P.Day)>0: f_comp=1
 
         elif param_name == "x":
@@ -807,23 +806,23 @@ def comp_PP(PP, _PP):
         if f_comp:
             dm = comp_param(param, _param, param_name, PP.L)
             mP += dm.m # mP and dP is not needed here? derPP doesn't seem need mP and dP
-            if not isinstance(param, complex): 
+            if not isinstance(param, complex):
                 dP += dm.d
         else:
-            dm = Cdm() #empty dm    
+            dm = Cdm() #empty dm
 
-        layer1.append(dm)    
-    
+        layer1.append(dm)
+
     # compare layer1 to get layer2 #-------------------------------------------
     layer1 = getattr(PP, 'layer1')
     _layer1 = getattr(_PP, 'layer1')
-    
+
     layer2 = []
     mmPP = 0
     dmPP = 0
     mdPP = 0
     ddPP = 0
-    
+
     for dm, _dm in enumerate(zip(layer1, _layer1)):
         f_comp = 0
         if isinstance(dm.d, complex) and (abs(dm.d)>ave_comp) and (dm.m>ave_comp) \
@@ -832,27 +831,27 @@ def comp_PP(PP, _PP):
         elif not isinstance(dm, complex) and (dm.d>ave_comp) and (dm.m>ave_comp) \
              and (_dm.d>ave_comp) and (_dm.m>ave_comp):
             f_comp=1
-            
+
         if f_comp:
-            dmd = comp_param(dm.d, _dm.d)  # dm of d   
-            dmm = comp_param(dm.m, _dm.m)  # dm of m 
+            dmd = comp_param(dm.d, _dm.d)  # dm of d
+            dmm = comp_param(dm.m, _dm.m)  # dm of m
             layer2.append([dmd, dmm])      # layer 2 in list ,storing dm of eacn d and m
-               
+
             mdPP += dmd.m # m from dm of d
             if not isinstance(param, complex): # do not accumulate complex d
                 ddPP += dmd.d # d from dm of d
-                
+
             mmPP += dmm.m # m from dm of m
             if not isinstance(param, complex): # do not accumulate complex d
                 dmPP += dmm.d # d from dm of m
         else:
             dmd = Cdm()
             dmm = Cdm()
-                
+
     if PP.mP >ave_comp and PP.dP>ave_comp and _PP.mP >ave_comp and _PP.dP>ave_comp:
         dmmP = comp_param(PP.mP, _PP.mP, [], PP.L) # dm of mP
         dmdP = comp_param(PP.dP, _PP.dP, [], PP.L) # dm of dP
-        
+
         mdPP += dmdP.m # match of compared PPs' d components
         ddPP += dmdP.d # difference of compared PPs' d components
         mmPP += dmmP.m # match of compared PPs' m components
@@ -861,20 +860,18 @@ def comp_PP(PP, _PP):
 
     mmPP -= ave_mPP # match of compared PPs' m components
     dmPP -= ave_mPP # difference of compared PPs' m components
-    
+
     derPP = CderPP(PP=PP, _PP=_PP, mmPP=mmPP, dmPP = dmPP, mdPP=mdPP, ddPP=ddPP,layer1=layer1, layer2=layer2)
-    
+
     '''
     # match of compared PPs' m components
     mmPP = match['mP'] + match['mx'] + match['mL'] + match['mDx'] + match['mDy'] - ave_mPP
     # difference of compared PPs' m components
     dmPP = difference['mP'] + difference['mx'] + difference['mL'] + difference['mDx'] + difference['mDy'] - ave_mPP
-
     # match of compared PPs' d components
     mdPP = match['dP'] + match['dx'] + match['dL'] + match['dDx'] + match['dDy']
     # difference of compared PPs' d components
     ddPP = difference['dP'] + difference['dx'] + difference['dL'] + difference['dDx'] + difference['dDy']
-
     derPP = CderPP(PP=PP, _PP=_PP, mmPP=mmPP, dmPP = dmPP,  mdPP=mdPP, ddPP=ddPP)
     '''
 

@@ -21,7 +21,6 @@ class CderBlob(ClusterStructure):
     layer_names = list # name of dm layer's params
     mB = int
     dB = int
-    derBlob_ = list # not sure? # not needed, since there is no reason to pack multiple derBlobs per derBlob
     distance = int  # common per derBlob_
     neg_mB = int    # common per derBlob_
     blob = object
@@ -97,33 +96,33 @@ def comp_blob(blob, _blob):
 
         if param_name == "Vector":
             param = blob.Dx + 1j*blob.Dy
-            _param = _blob.Dx + 1j*_blob.Dy 
-            if abs(param)>ave_comp and abs(_param)>ave_comp: f_comp=1 
-                      
+            _param = _blob.Dx + 1j*_blob.Dy
+            if abs(param)>ave_comp and abs(_param)>ave_comp: f_comp=1
+
         elif param_name == "aVector":
             param = [blob.Day,blob.Dax]
             _param = [_blob.Day,_blob.Dax]
-            if abs(blob.Dax+1j*blob.Day)>ave_comp and abs(_blob.Dax+1j*_blob.Day)>ave_comp: f_comp=1 
-            
+            if abs(blob.Dax+1j*blob.Day)>ave_comp and abs(_blob.Dax+1j*_blob.Day)>ave_comp: f_comp=1
+
         else:
             param = getattr(blob, param_name)
             _param = getattr(_blob, param_name)
             if (param>ave_comp) and (_param>ave_comp): f_comp = 1
-            
+
         if f_comp:
             dm = comp_param(param, _param, param_name, blob.A)
             derBlob.mB += dm.m
-            if not isinstance(param, complex): # do we need to accumulate d of Vector and aVector, which is in complex form?
+            if not isinstance(param, complex):  # add complex vars
                 derBlob.dB += dm.d
         else:
-            dm = Cdm() #empty dm
-            
+            dm = Cdm()  # empty dm
+
         derBlob.layer1.append(dm)
         derBlob.layer_names.append(param_name)
 
 
     # compute mB from I.m, A.m, G.m, M.m, Vector.m
-    derBlob.mB -=  ave_mB * (ave_rM ** ((1+blob.distance) / np.sqrt(blob.A)))  # deviation from average blob match at current distance
+    derBlob.mB -=  ave_mB * (ave_rM ** ((1+derBlob.distance) / np.sqrt(blob.A)))  # deviation from average blob match at current distance
 
     derBlob.blob = blob
     derBlob._blob = _blob
@@ -238,6 +237,7 @@ def merge_bblob(bblob_, _bblob, bblob, merged_ids):
                         _bblob.blob_.append(merge_blob)
                         merge_blob.bblob = _bblob
 
+
 def accum_bblob(bblob_, bblob, blob, merged_ids):
 
     bblob.blob_.append(blob) # add blob to bblob
@@ -261,7 +261,6 @@ def accum_bblob(bblob_, bblob, blob, merged_ids):
                 bblob.accum_from(derBlob.blob)
                 bblob.blob_.append(merge_blob)
                 merge_blob.bblob = bblob
-
 
 
 def visualize_cluster_(bblob_, blob_, frame):
