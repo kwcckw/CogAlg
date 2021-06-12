@@ -308,23 +308,14 @@ class Cdm(Number):
 
 def comp_param(param, _param, param_name, ave):
 
-    
-    if param_name == "aVector":
-        dy = param[0] * _param[0].conjugate() # difference in day
-        dx = param[1] * _param[1].conjugate() # difference in dax
-        d = dy * dx # sum of difference (sum of 2 complex)
-        m = ave - abs(d)
-    elif (param_name == "Vector") or (isinstance(param,complex)):
-        d = param * _param.conjugate() # da
-        m = ave - abs(d)               # ma
-    else:
-        d = param - _param    # difference
-        if param_name == 'I':
-            m = ave - abs(d)  # indirect match
-        else:
-            m = min(param,_param) - abs(d)/2 - ave  # direct match
 
-    return Cdm(d,m)
+    d = param - _param    # difference
+    if param_name == 'I':
+        m = ave - abs(d)  # indirect match
+    else:
+        m = min(param,_param) - abs(d)/2 - ave  # direct match
+
+    return Cdm(m,d)
 
 
 if __name__ == "__main__":  # for tests

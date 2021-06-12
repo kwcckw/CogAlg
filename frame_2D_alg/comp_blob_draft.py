@@ -12,7 +12,8 @@ ave_rM = .7  # average relative match at rL=1: rate of ave_mB decay with relativ
 ave_da = 0.7853  # da at 45 degrees
 ave_comp = 0   # ave for comp_param to get next level derivatives
 
-layer_names = ['I', 'G', 'M', 'Vector', 'aVector', 'Ga', 'Ma', 'A', 'Mdx', 'Ddx']
+layer0_names = ['I', 'Dy', 'Dx', 'G', 'M', 'Dyy', 'Dxy', 'Dyx', 'Dxx', 'Ga', 'Ma', 'A', 'Mdx', 'Ddx']
+layer1_names = ['I', 'Vector', 'G', 'M', 'aVector', 'Ga', 'Ma', 'A', 'Mdx', 'Ddx']
 
 
 class CderBlob(ClusterStructure):
@@ -87,39 +88,68 @@ def comp_blob(blob, _blob):
     '''
     cross compare _blob and blob
     '''
-    # derBlob's layer1 param = 'I', 'G', 'M', 'Vector', 'aVector','Ga', 'Ma', 'A', 'Mdx', 'Ddx'
+    # derBlob's layer param =['I', 'Vector', 'G', 'M', 'aVector', 'Ga', 'Ma', 'A', 'Mdx', 'Ddx']
     derBlob = CderBlob()
-
-    f_comp = 0
+    
     # non complex numeric params
-    for param_name in layer_names:
-
-        if param_name == "Vector":
-            param = blob.Dx + 1j*blob.Dy
-            _param = _blob.Dx + 1j*_blob.Dy
-            if abs(param)>ave_comp and abs(_param)>ave_comp: f_comp=1
-
-        elif param_name == "aVector":
-            param = [blob.Day,blob.Dax]
-            _param = [_blob.Day,_blob.Dax]
-            if abs(blob.Dax+1j*blob.Day)>ave_comp and abs(_blob.Dax+1j*_blob.Day)>ave_comp: f_comp=1
-
-        else:
+    for param_name in layer0_names:
+        f_comp = 0
+        if param_name == "dy":
+            # sin and cos components
+            sin1 = blob.dyy; cos1 = blob.dxy
+            _sin1 = _blob.dyy; _cos1 = _blob.dxy
+            
+            if (sin1>ave_comp) and (cos1>ave_comp) and (_sin1>ave_comp) and (_cos1>ave_comp):
+                # difference of dy and dx
+                sin_da = (cos1 * _sin1) - (sin1 * _cos1)  # sin(α - β) = sin α cos β - cos α sin β
+                cos_da= (cos1 * _cos1) + (sin1 * _sin1)   # cos(α - β) = cos α cos β + sin α sin β
+                # da and ma
+                da = np.arctan2(sin_da, cos_da)
+                ma = ave_da - abs(da)
+                dm = Cdm(d=da,m=ma)    
+            else:
+                dm = Cdm() # empty dm
+            
+        elif param_name == "dyy":
+            # dy and dx of y (day)
+            sin1 = blob.dyy; cos1 = blob.dxy
+            _sin1 = _blob.dyy; _cos1 = _blob.dxy
+            # dy and dx of x (dax)
+            sin2 = blob.dyx; cos2 = blob.dxx
+            _sin2 = _blob.dyx; _cos2 = _blob.dxx
+            
+            if (sin1>ave_comp) and (cos1>ave_comp) and (_sin1>ave_comp) and (_cos1>ave_comp) and \
+               (sin2>ave_comp) and (cos2>ave_comp) and (_sin2>ave_comp) and (_cos2>ave_comp):
+                # difference of days
+                sin_da1 = (cos1 * _sin1) - (sin1 * _cos1)  
+                cos_da1 = (cos1 * _cos1) + (sin1 * _sin1)  
+                # difference of daxs
+                sin_da2 = (cos2 * _sin2) - (sin2 * _cos2)
+                cos_da2 = (cos2 * _cos2) + (sin2 * _sin2)   
+                # sum of da
+                sin_da = (cos_da1 * _sin_da2) + (sin_da1 * _cos_da2) # sin(α + β) = sin α cos β + cos α sin β  
+                cos_da = (cos_da1 * cos_da2) - (sin_da1 * sin_da2)   # cos(α + β) = cos α cos β − sin α sin β                
+                # da and ma from their sum
+                da = np.arctan2(sin_da, cos_da)
+                ma = ave_da - abs(da)
+                dm = Cdm(d=da,m=ma)
+            else:
+                dm = Cdm() # empty dm
+            
+        elif param_name not in ['dy','dx', 'dyy', 'dxy', 'dyx', 'dxx']:
             param = getattr(blob, param_name)
             _param = getattr(_blob, param_name)
-            if (param>ave_comp) and (_param>ave_comp): f_comp = 1
-
-        if f_comp:
-            dm = comp_param(param, _param, param_name, blob.A)
-            derBlob.mB += dm.m
-            if not isinstance(param, complex):  # add complex vars
-                derBlob.dB += dm.d
-        else:
-            dm = Cdm()  # empty dm
-
+            if (param>ave_comp) and (_param >ave_comp):
+                dm = comp_param(param, _param, param_name, blob.A)
+            else:
+                dm = Cdm()  # empty dm
+            
+            
+        derBlob.mB += dm.m
+        derBlob.dB += dm.d
         derBlob.layer1.append(dm)
-        derBlob.layer_names.append(param_name)
-
+        
+    derBlob.layer_names = layer1_names
 
     # compute mB from I.m, A.m, G.m, M.m, Vector.m
     derBlob.mB -=  ave_mB * (ave_rM ** ((1+derBlob.distance) / np.sqrt(blob.A)))  # deviation from average blob match at current distance
@@ -161,7 +191,7 @@ def form_bblob_(blob_):
         MB = sum([derBlob.mB for derBlob in blob.derBlob_]) # blob's mB, sum from blob's derBlobs' mB
 
         if MB > 0 and not isinstance(blob.bblob, CBblob):  # init bblob with current blob
-            bblob = CBblob(layer1=[Cdm() for _ in range(10)], layer_names = layer_names)
+            bblob = CBblob(layer1=[Cdm() for _ in range(10)], layer_names = layer1_names)
 
             merged_ids = [bblob.id]
             accum_bblob(bblob_, bblob, blob, merged_ids)  # accum blob into bblob

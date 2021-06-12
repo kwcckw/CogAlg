@@ -58,8 +58,10 @@ class CBlob(ClusterStructure):  # from frame_blobs only, no sub_blobs
     G = int
     M = int
     # comp_angle:
-    Day = complex
-    Dax = complex
+    Dyy = int
+    Dxy = int
+    Dyx = int
+    Dxx = int
     Ga = int
     Ma = int
     # comp_dx:
@@ -96,7 +98,9 @@ class CBlob(ClusterStructure):  # from frame_blobs only, no sub_blobs
     derPd__ = list
     Pd__ = list
     # from comp_blob:
-    derBlob__ = list
+    derBlob_ = list
+    neg_mB = int
+    bblob = object
     # from form_bblob:
     root_bblob = object
 
@@ -183,7 +187,6 @@ def flood_fill(dert__, sign__, verbose=False, mask__=None, blob_cls=CBlob, fseg=
             if idmap[y, x] == UNFILLED:  # ignore filled/clustered derts
                 # initialize new blob
                 blob = blob_cls(layer0=[0 for _ in range(11)],sign=sign__[y, x], root_dert__=dert__)
-                blob.layer_names = ['I', 'G', 'M', 'Vector', 'aVector', 'Ga', 'Ma', 'A', 'Mdx', 'Ddx']
 
                 if prior_forks: # update prior forks in deep blob
                     blob.prior_forks= prior_forks.copy()
@@ -203,18 +206,26 @@ def flood_fill(dert__, sign__, verbose=False, mask__=None, blob_cls=CBlob, fseg=
                                     G  = dert__[3][y1][x1],
                                     M  = dert__[4][y1][x1])
                     if len(dert__)>5: # comp_angle
-                        blob.accumulate(Ga  =dert__[7][y1][x1],
-                                        Ma  =dert__[8][y1][x1])
-                        if blob.Dax==0: blob.Dax = 1
-                        sum_day = (blob.Day * dert__[5][y1][x1])
-                        sum_dax = (blob.Dax * dert__[6][y1][x1])
-                        aVector = sum_day * sum_dax
-                        # update blob
-                        blob.Day = aVector.imag
-                        blob.Day = aVector.real
-                    if len(dert__)>10: # comp_dx
-                        blob.accumulate(Mdx =dert__[9][y1][x1],
-                                        Ddx =dert__[10][y1][x1])
+                        blob.accumulate(Ga  =dert__[9][y1][x1],
+                                        Ma  =dert__[10][y1][x1])
+
+                        # dy and dx of y (day)
+                        sin1 = blob.dyy; cos1 = blob.dxy
+                        _sin1 = dert__[5][y1][x1]; _cos1 = dert__[6][y1][x1]
+                        # sum of days
+                        blob.dyy = (cos1 * _sin1) + (sin1 * _cos1)  # sin(α + β) = sin α cos β + cos α sin β
+                        blob.dxy = (cos1 * _cos1) - (sin1 * _sin1)  # cos(α + β) = cos α cos β − sin α sin β
+                        
+                        # dy and dx of x (dax)
+                        sin2 = blob.dyx; cos2 = blob.dxx
+                        _sin2 = dert__[7][y1][x1]; _cos2 = dert__[8][y1][x1]
+                        # sum of dayx
+                        blob.dyx = (cos2 * _sin2) + (sin2 * _cos2)
+                        blob.dxx = (cos2 * _cos2) - (sin2 * _sin2)
+
+                    if len(dert__)>11: # comp_dx
+                        blob.accumulate(Mdx =dert__[11][y1][x1],
+                                        Ddx =dert__[12][y1][x1])
                     blob.A += 1
 
                     if y1 < y0:
