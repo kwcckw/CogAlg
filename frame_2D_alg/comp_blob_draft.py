@@ -12,8 +12,8 @@ ave_rM = .7  # average relative match at rL=1: rate of ave_mB decay with relativ
 ave_da = 0.7853  # da at 45 degrees
 ave_comp = 0   # ave for comp_param to get next level derivatives
 
-layer0_names = ['I', 'Dy', 'Dx', 'G', 'M', 'Dyy', 'Dxy', 'Dyx', 'Dxx', 'Ga', 'Ma', 'A', 'Mdx', 'Ddx']
-layer1_names = ['I', 'Vector', 'G', 'M', 'aVector', 'Ga', 'Ma', 'A', 'Mdx', 'Ddx']
+layer0_names = ['I', 'Dy', 'Dx', 'G', 'M', 'Dydy', 'Dxdy', 'Dydx', 'Dxdx', 'Ga', 'Ma', 'A', 'Mdx', 'Ddx']
+layer1_names = ['I', 'Da', 'G', 'M', 'Dady','Dadx', 'Ga', 'Ma', 'A', 'Mdx', 'Ddx']
 
 
 class CderBlob(ClusterStructure):
@@ -93,62 +93,54 @@ def comp_blob(blob, _blob):
     
     # non complex numeric params
     for param_name in layer0_names:
-        f_comp = 0
         if param_name == "dy":
             # sin and cos components
             sin1 = blob.dyy; cos1 = blob.dxy
             _sin1 = _blob.dyy; _cos1 = _blob.dxy
-            
-            if (sin1>ave_comp) and (cos1>ave_comp) and (_sin1>ave_comp) and (_cos1>ave_comp):
-                # difference of dy and dx
-                sin_da = (cos1 * _sin1) - (sin1 * _cos1)  # sin(α - β) = sin α cos β - cos α sin β
-                cos_da= (cos1 * _cos1) + (sin1 * _sin1)   # cos(α - β) = cos α cos β + sin α sin β
-                # da and ma
-                da = np.arctan2(sin_da, cos_da)
-                ma = ave_da - abs(da)
-                dm = Cdm(d=da,m=ma)    
-            else:
-                dm = Cdm() # empty dm
-            
-        elif param_name == "dyy":
-            # dy and dx of y (day)
-            sin1 = blob.dyy; cos1 = blob.dxy
-            _sin1 = _blob.dyy; _cos1 = _blob.dxy
-            # dy and dx of x (dax)
-            sin2 = blob.dyx; cos2 = blob.dxx
-            _sin2 = _blob.dyx; _cos2 = _blob.dxx
-            
-            if (sin1>ave_comp) and (cos1>ave_comp) and (_sin1>ave_comp) and (_cos1>ave_comp) and \
-               (sin2>ave_comp) and (cos2>ave_comp) and (_sin2>ave_comp) and (_cos2>ave_comp):
-                # difference of days
-                sin_da1 = (cos1 * _sin1) - (sin1 * _cos1)  
-                cos_da1 = (cos1 * _cos1) + (sin1 * _sin1)  
-                # difference of daxs
-                sin_da2 = (cos2 * _sin2) - (sin2 * _cos2)
-                cos_da2 = (cos2 * _cos2) + (sin2 * _sin2)   
-                # sum of da
-                sin_da = (cos_da1 * _sin_da2) + (sin_da1 * _cos_da2) # sin(α + β) = sin α cos β + cos α sin β  
-                cos_da = (cos_da1 * cos_da2) - (sin_da1 * sin_da2)   # cos(α + β) = cos α cos β − sin α sin β                
-                # da and ma from their sum
-                da = np.arctan2(sin_da, cos_da)
-                ma = ave_da - abs(da)
-                dm = Cdm(d=da,m=ma)
-            else:
-                dm = Cdm() # empty dm
-            
-        elif param_name not in ['dy','dx', 'dyy', 'dxy', 'dyx', 'dxx']:
+            # difference of dy and dx
+            sin_da = (cos1 * _sin1) - (sin1 * _cos1)  # sin(α - β) = sin α cos β - cos α sin β
+            cos_da= (cos1 * _cos1) + (sin1 * _sin1)   # cos(α - β) = cos α cos β + sin α sin β
+            # da and ma
+            da = np.arctan2(sin_da, cos_da)
+            mda = ave_da - abs(da)
+            # compute dm 
+            dm = Cdm(d=da,m=mda)    
+           
+        elif param_name == "dydy":
+            # compute Dady
+            sin1 = blob.dydy; cos1 = blob.dxdy
+            _sin1 = _blob.dydy; _cos1 = _blob.dxdy
+            # difference of days
+            sin_da1 = (cos1 * _sin1) - (sin1 * _cos1)  
+            cos_da1 = (cos1 * _cos1) + (sin1 * _sin1)  
+            # compute da and ma
+            dady = np.arctan2(sin_da1, cos_da1)
+            mdady = ave_da - abs(dady)
+            # dm of dady and mdady
+            dm = Cdm(d=dady,m=mdady) # dmdy
+                
+        elif param_name == "dydx":  
+            # compute Dadx
+            sin2 = blob.dydx; cos2 = blob.dxdx
+            _sin2 = _blob.dydx; _cos2 = _blob.dxdx
+            # difference of daxs
+            sin_da2 = (cos2 * _sin2) - (sin2 * _cos2)
+            cos_da2 = (cos2 * _cos2) + (sin2 * _sin2)   
+            # compute da and ma
+            dadx = np.arctan2(sin_da2, cos_da2)
+            mdadx = ave_da - abs(dadx)
+            # dm of dadx and mdadx
+            dm = Cdm(d=dadx,m=mdadx)# dmdx
+
+        elif param_name not in ['dy','dx', 'dydy', 'dxdy', 'dydx', 'dxdx']:
             param = getattr(blob, param_name)
             _param = getattr(_blob, param_name)
-            if (param>ave_comp) and (_param >ave_comp):
-                dm = comp_param(param, _param, param_name, blob.A)
-            else:
-                dm = Cdm()  # empty dm
-            
-            
+            # compute dm 
+            dm = comp_param(param, _param, param_name, blob.A)
+
         derBlob.mB += dm.m
         derBlob.dB += dm.d
         derBlob.layer1.append(dm)
-        
     derBlob.layer_names = layer1_names
 
     # compute mB from I.m, A.m, G.m, M.m, Vector.m
