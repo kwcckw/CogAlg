@@ -7,7 +7,7 @@ from frame_blobs import ave, CBlob
 import numpy as np
 import cv2
 
-ave_mB =  0  # ave can't be negative
+ave_mB =  1  # ave can't be negative
 ave_rM = .7  # average relative match at rL=1: rate of ave_mB decay with relative distance, due to correlation between proximity and similarity
 ave_da = 0.7853  # da at 45 degrees
 ave_comp = 0   # ave for comp_param to get next level derivatives
@@ -88,58 +88,23 @@ def comp_blob(blob, _blob):
     '''
     cross compare _blob and blob
     '''
-    # derBlob's layer param =['I', 'Vector', 'G', 'M', 'aVector', 'Ga', 'Ma', 'A', 'Mdx', 'Ddx']
+    # derBlob's layer param =['I', 'Da', 'G', 'M', 'Dady','Dadx', 'Ga', 'Ma', 'A', 'Mdx', 'Ddx']
     derBlob = CderBlob()
-    
-    # non complex numeric params
-    for param_name in layer0_names:
-        if param_name == "dy":
-            # sin and cos components
-            sin1 = blob.dyy; cos1 = blob.dxy
-            _sin1 = _blob.dyy; _cos1 = _blob.dxy
-            # difference of dy and dx
-            sin_da = (cos1 * _sin1) - (sin1 * _cos1)  # sin(α - β) = sin α cos β - cos α sin β
-            cos_da= (cos1 * _cos1) + (sin1 * _sin1)   # cos(α - β) = cos α cos β + sin α sin β
-            # da and ma
-            da = np.arctan2(sin_da, cos_da)
-            mda = ave_da - abs(da)
-            # compute dm 
-            dm = Cdm(d=da,m=mda)    
-           
-        elif param_name == "dydy":
-            # compute Dady
-            sin1 = blob.dydy; cos1 = blob.dxdy
-            _sin1 = _blob.dydy; _cos1 = _blob.dxdy
-            # difference of days
-            sin_da1 = (cos1 * _sin1) - (sin1 * _cos1)  
-            cos_da1 = (cos1 * _cos1) + (sin1 * _sin1)  
-            # compute da and ma
-            dady = np.arctan2(sin_da1, cos_da1)
-            mdady = ave_da - abs(dady)
-            # dm of dady and mdady
-            dm = Cdm(d=dady,m=mdady) # dmdy
-                
-        elif param_name == "dydx":  
-            # compute Dadx
-            sin2 = blob.dydx; cos2 = blob.dxdx
-            _sin2 = _blob.dydx; _cos2 = _blob.dxdx
-            # difference of daxs
-            sin_da2 = (cos2 * _sin2) - (sin2 * _cos2)
-            cos_da2 = (cos2 * _cos2) + (sin2 * _sin2)   
-            # compute da and ma
-            dadx = np.arctan2(sin_da2, cos_da2)
-            mdadx = ave_da - abs(dadx)
-            # dm of dadx and mdadx
-            dm = Cdm(d=dadx,m=mdadx)# dmdx
 
-        elif param_name not in ['dy','dx', 'dydy', 'dxdy', 'dydx', 'dxdx']:
+    for i,param_name in enumerate(layer0_names):
+        if param_name in ['Dy', 'Dydy', 'Dydx']:
+            # sin and cos components
+            sin = getattr(blob,layer0_names[i]); cos = getattr(blob,layer0_names[i+1]); 
+            _sin = getattr(_blob,layer0_names[i]); _cos = getattr(_blob,layer0_names[i+1]); 
+            param = [sin, cos]
+            _param = [_sin, _cos]
+
+        elif param_name not in ['Dy','Dx', 'Dydy', 'Dxdy', 'Dydx', 'Dxdx']:
             param = getattr(blob, param_name)
             _param = getattr(_blob, param_name)
-            # compute dm 
-            dm = comp_param(param, _param, param_name, blob.A)
-
-        derBlob.mB += dm.m
-        derBlob.dB += dm.d
+        
+        dm = comp_param(param, _param, param_name, blob.A)
+        derBlob.mB += dm.m; derBlob.dB += dm.d
         derBlob.layer1.append(dm)
     derBlob.layer_names = layer1_names
 

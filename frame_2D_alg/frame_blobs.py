@@ -58,10 +58,10 @@ class CBlob(ClusterStructure):  # from frame_blobs only, no sub_blobs
     G = int
     M = int
     # comp_angle:
-    Dyy = int
-    Dxy = int
-    Dyx = int
-    Dxx = int
+    Dydy = int
+    Dxdy = int
+    Dydx = int
+    Dxdx = int
     Ga = int
     Ma = int
     # comp_dx:
@@ -109,8 +109,6 @@ def comp_pixel(image):  # 2x2 pixel cross-correlation within image, a standard e
     # see comp_pixel_versions file for other versions and more explanation
 
     # input slices into sliding 2x2 kernel, each slice is a shifted 2D frame of grey-scale pixels:
-    image = image.astype('int32')  # it appears that we had overflow in G computation
-
     topleft__ = image[:-1, :-1]
     topright__ = image[:-1, 1:]
     bottomleft__ = image[1:, :-1]
@@ -208,26 +206,15 @@ def flood_fill(dert__, sign__, verbose=False, mask__=None, blob_cls=CBlob, fseg=
                                     G  = dert__[3][y1][x1],
                                     M  = dert__[4][y1][x1])
                     if len(dert__)>5: # comp_angle
-                        blob.accumulate(Ga  =dert__[9][y1][x1],
-                                        Ma  =dert__[10][y1][x1])
-
-                        # dy and dx of y (day)
-                        sin1 = blob.dyy; cos1 = blob.dxy
-                        _sin1 = dert__[5][y1][x1]; _cos1 = dert__[6][y1][x1]
-                        # sum of days
-                        blob.dyy = (cos1 * _sin1) + (sin1 * _cos1)  # sin(α + β) = sin α cos β + cos α sin β
-                        blob.dxy = (cos1 * _cos1) - (sin1 * _sin1)  # cos(α + β) = cos α cos β − sin α sin β
-                        
-                        # dy and dx of x (dax)
-                        sin2 = blob.dyx; cos2 = blob.dxx
-                        _sin2 = dert__[7][y1][x1]; _cos2 = dert__[8][y1][x1]
-                        # sum of dayx
-                        blob.dyx = (cos2 * _sin2) + (sin2 * _cos2)
-                        blob.dxx = (cos2 * _cos2) - (sin2 * _sin2)
-
+                        blob.accumulate(Dydy = dert__[5][y1][x1],
+                                        Dxdy = dert__[6][y1][x1],
+                                        Dydx = dert__[7][y1][x1],
+                                        Dxdx = dert__[8][y1][x1],
+                                        Ga = dert__[9][y1][x1],
+                                        Ma = dert__[10][y1][x1])
                     if len(dert__)>11: # comp_dx
-                        blob.accumulate(Mdx =dert__[11][y1][x1],
-                                        Ddx =dert__[12][y1][x1])
+                        blob.accumulate(Mdx = dert__[11][y1][x1],
+                                        Ddx = dert__[12][y1][x1])
                     blob.A += 1
 
                     if y1 < y0:
@@ -340,7 +327,7 @@ if __name__ == "__main__":
     argument_parser = argparse.ArgumentParser()
     argument_parser.add_argument('-i', '--image', help='path to image file', default='./images//toucan.jpg')
     argument_parser.add_argument('-v', '--verbose', help='print details, useful for debugging', type=int, default=1)
-    argument_parser.add_argument('-n', '--intra', help='run intra_blobs after frame_blobs', type=int, default=0)
+    argument_parser.add_argument('-n', '--intra', help='run intra_blobs after frame_blobs', type=int, default=1)
     argument_parser.add_argument('-r', '--render', help='render the process', type=int, default=0)
     argument_parser.add_argument('-c', '--clib', help='use C shared library', type=int, default=0)
     args = argument_parser.parse_args()

@@ -36,7 +36,8 @@ ave_rM  = .7
 # comp_param
 ave_comp = 0
 
-layer_names = ['I', 'G', 'M', 'Vector', 'aVector', 'Ga', 'Ma', 'L', 'Mdx', 'Ddx', 'x']
+layer0_names = ['I', 'Dy', 'Dx', 'G', 'M', 'Dydy', 'Dxdy', 'Dydx', 'Dxdx', 'Ga', 'Ma', 'L', 'Mdx', 'Ddx', 'x']
+layer1_names = ['I', 'Da', 'G', 'M', 'Dady','Dadx', 'Ga', 'Ma', 'L', 'Mdx', 'Ddx','x']
 
 class CP(ClusterStructure):
 
@@ -49,8 +50,10 @@ class CP(ClusterStructure):
     G = int
     M = int
     # comp_angle:
-    Day = complex
-    Dax = complex
+    Dydy = int
+    Dxdy = int
+    Dydx = int
+    Dxdx = int
     Ga = int
     Ma = int
     # comp_dx:
@@ -194,7 +197,7 @@ def slice_blob(blob, verbose=False):
 
         form_PP_root(blob, derP__, P__, derPd__, Pd__, fPPd)  # form PPs in blob or in FPP
 
-        comp_PP_(blob,fPPd)
+        # comp_PP_(blob,fPPd)
 
         # yet to be updated
         # draw PPs
@@ -210,8 +213,8 @@ def form_P_(idert_, mask_, y):  # segment dert__ into P__ in horizontal ) vertic
 
     if ~_mask:
         # initialize P with first dert
-        P = CP(I=_dert[0], Dy=_dert[1], Dx=_dert[2], G=_dert[3], M=_dert[4], Day=_dert[5], Dax=_dert[6], Ga=_dert[7], Ma=_dert[8],
-               x0=0, L=1, y=y, dert_=dert_, layer_names=layer_names)
+        P = CP(I=_dert[0], Dy=_dert[1], Dx=_dert[2], G=_dert[3], M=_dert[4], Dydy=_dert[5], Dxdy=_dert[6], Dydx=_dert[7], Dxdx=_dert[8], Ga=_dert[9], Ma=_dert[10],
+               x0=0, L=1, y=y, dert_=dert_, layer_names=layer0_names)
 
     for x, dert in enumerate(idert_[1:], start=1):  # left to right in each row of derts
         mask = mask_[x]  # pixel mask
@@ -223,11 +226,11 @@ def form_P_(idert_, mask_, y):  # segment dert__ into P__ in horizontal ) vertic
         else:  # dert is not masked
             if _mask:  # _dert is masked, initialize P params:
                 # initialize P with first dert
-                P = CP(I=dert[0], Dy=dert[1], Dx=dert[2], G=dert[3], M=dert[4], Day=dert[5], Dax=dert[6], Ga=dert[7], Ma=dert[8],
-                   x0=x, L=1, y=y, dert_=dert_, layer_names=layer_names)
+                P = CP(I=dert[0], Dy=dert[1], Dx=dert[2], G=dert[3], M=dert[4], Dydy=_dert[5], Dxdy=_dert[6], Dydx=_dert[7], Dxdx=_dert[8], Ga=_dert[9], Ma=_dert[10],
+                   x0=x, L=1, y=y, dert_=dert_, layer_names=layer0_names)
             else:
                 # _dert is not masked, accumulate P params with (p, dy, dx, g, m, day, dax, ga, ma) = dert
-                P.accumulate(I=dert[0], Dy=dert[1], Dx=dert[2], G=dert[3], M=dert[4], Day=dert[5], Dax=dert[6], Ga=dert[7], Ma=dert[8], L=1)
+                P.accumulate(I=dert[0], Dy=dert[1], Dx=dert[2], G=dert[3], M=dert[4], Dydy=dert[5], Dxdy=dert[6], Dydx=dert[7], Dxdx=dert[8], Ga=dert[9], Ma=dert[10], L=1)
                 P.dert_.append(dert)
 
         _mask = mask
@@ -251,15 +254,15 @@ def form_Pd_(P_):  # form Pds from Pm derts by dx sign, otherwise same as form_P
             dert_ = [_dert]
             _sign = _dert[2] > 0
             # initialize P with first dert
-            P = CP(I=_dert[0], Dy=_dert[1], Dx=_dert[2], G=_dert[3], M=_dert[4], Day=_dert[5], Dax=_dert[6], Ga=_dert[7], Ma=_dert[8],
-                   x0=iP.x0, dert_=dert_, L=1, y=iP.y, sign=_sign, Pm=iP, layer_names=layer_names)
+            P = CP(I=_dert[0], Dy=_dert[1], Dx=_dert[2], G=_dert[3], M=_dert[4],  Dydy=_dert[5], Dxdy=_dert[6], Dydx=_dert[7], Dxdx=_dert[8], Ga=_dert[9], Ma=_dert[10],
+                   x0=iP.x0, dert_=dert_, L=1, y=iP.y, sign=_sign, Pm=iP, layer_names=layer0_names)
             x = 1  # relative x within P
 
             for dert in iP.dert_[1:]:
                 sign = dert[2] > 0
                 if sign == _sign: # same Dx sign
                     # accumulate P params with (p, dy, dx, g, m, dyy, dyx, dxy, dxx, ga, ma) = dert
-                    P.accumulate(I=dert[0], Dy=dert[1], Dx=dert[2], G=dert[3], M=dert[4], Day=dert[5], Dax=dert[6], Ga=dert[7], Ma=dert[8],L=1)
+                    P.accumulate(I=dert[0], Dy=dert[1], Dx=dert[2], G=dert[3], M=dert[4],  Dydy=_dert[5], Dxdy=_dert[6], Dydx=_dert[7], Dxdx=_dert[8], Ga=_dert[9], Ma=_dert[10], L=1)
                     P.dert_.append(dert)
 
                 else:  # sign change, terminate P
@@ -269,8 +272,8 @@ def form_Pd_(P_):  # form Pds from Pm derts by dx sign, otherwise same as form_P
                     P.x = P.x0 + (P.L-1) // 2
                     Pd_.append(P)
                     # reinitialize params
-                    P = CP(I=dert[0], Dy=dert[1], Dx=dert[2], G=dert[3], M=dert[4], Day=dert[5], Dax=dert[6], Ga=dert[7], Ma=dert[8],
-                           x0=iP.x0+x, dert_=[dert], L=1, y=iP.y, sign=sign, Pm=iP, layer_names=layer_names)
+                    P = CP(I=dert[0], Dy=dert[1], Dx=dert[2], G=dert[3], M=dert[4],  Dydy=_dert[5], Dxdy=_dert[6], Dydx=_dert[7], Dxdx=_dert[8], Ga=_dert[9], Ma=_dert[10],
+                           x0=iP.x0+x, dert_=[dert], L=1, y=iP.y, sign=sign, Pm=iP, layer_names=layer0_names)
                 _sign = sign
                 x += 1
             # terminate last P
@@ -443,46 +446,33 @@ def comp_slice(_P, P):  # forms vertical derivatives of derP params, and conditi
     dP = 0
     layer1 = []
 
-    f_comp = 0
-    for param_name in layer_names: # layer1
+    for i, param_name in enumerate(layer0_names): 
 
-        if param_name == "Vector":
-            dy= P.Dy/max(1, P.G); _dy = _P.Dy/max(1,_P.G)
-            dx= P.Dx/max(1, P.G); _dx = _P.Dx/max(1,_P.G)
-            param = dx + 1j*dy
-            _param = _dx + 1j*_dy
-            if abs(param)>ave_comp and abs(_param)>ave_comp: f_comp=1
-
-        elif param_name == "aVector":
-            day= P.Day/max(1, P.Ga); _day = _P.Day/max(1,_P.Ga)
-            dax= P.Dax/max(1, P.Ga); _dax = _P.Dax/max(1,_P.Ga)
-            param = [day,dax];
-            _param = [_day,_dax]
-            if abs(P.Dax+1j*P.Day)>ave_comp and abs(_P.Dax+1j*_P.Day)>ave_comp: f_comp=1
+        if param_name in ['Dy', 'Dydy', 'Dydx']:
+            # sin and cos components
+            sin = getattr(P,layer0_names[i]); cos = getattr(P,layer0_names[i+1]); 
+            _sin = getattr(_P,layer0_names[i]); _cos = getattr(_P,layer0_names[i+1]); 
+            param = [sin, cos]
+            _param = [_sin, _cos]
 
         elif param_name == "x":
             _param = _P.dX # _dX
             param = P.x    # dX
-            if (param>ave_comp) and (_param>ave_comp): f_comp = 1
 
         elif param_name == "L" or param_name == "M":
             hyp = np.hypot(P.x, 1)  # ratio of local segment of long (vertical) axis to dY = 1
             _param = getattr(_P,param_name)
             param = getattr(P,param_name) / hyp # orthogonal L & M are reduced by hyp
-            if (param>ave_comp) and (_param>ave_comp): f_comp = 1
 
         else:
             param = getattr(P, param_name)
             _param = getattr(_P, param_name)
-            if (param>ave_comp) and (_param>ave_comp): f_comp = 1
 
-        if f_comp:
-            dm = comp_param(param, _param, param_name, P.L)
-            mP += dm.m
-            if not isinstance(param, complex):
-                dP += dm.d
-        else:
-            dm = Cdm() #empty dm
+
+        dm = comp_param(param, _param, param_name, P.L)
+
+        mP += dm.m
+        dP += dm.d
 
         layer1.append(dm)
 
@@ -773,7 +763,7 @@ def comp_PP(PP, _PP):
     f_comp = 0
 
     # compare PP and _PP base params to get layer 1 of derPP #-----------------
-    for param_name in layer_names:
+    for param_name in layer0_names:
         if param_name == "Vector":
             dy= PP.Dy/max(1, PP.G); _dy = _PP.Dy/max(1,_PP.G)
             dx= PP.Dx/max(1, PP.G); _dx = _PP.Dx/max(1,_PP.G)

@@ -113,7 +113,7 @@ def comp_r(dert__, ave, root_fia, mask__=None):
     return (i__center, dy__, dx__, g__, m__), majority_mask__
 
 
-def comp_a(dert__, ave, prior_forks, mask__=None):  # cross-comp of gradient angle in 2x2 kernels
+def comp_a_complex(dert__, ave, prior_forks, mask__=None):  # cross-comp of gradient angle in 2x2 kernels
     '''
     More concise but also more opaque version
     https://github.com/khanh93vn/CogAlg/commit/1f3499c4545742486b89e878240d5c291b81f0ac
@@ -201,7 +201,7 @@ def angle_diff(az2, az1):  # unpacked in comp_a
 '''
 old version:
 '''
-def comp_a_simple(dert__, ave, prior_forks, mask__=None):  # cross-comp of gradient angle in 2x2 kernels
+def comp_a(dert__, ave, prior_forks, mask__=None):  # cross-comp of gradient angle in 2x2 kernels
 
     # angles can't be summed: https://rosettacode.org/wiki/Averages/Mean_angle
 
@@ -267,7 +267,7 @@ def comp_a_simple(dert__, ave, prior_forks, mask__=None):  # cross-comp of gradi
     m__ = m__[:-1, :-1]
 
 
-    return (i__, dy__, dx__, g__, m__, day__, dax__, ga__, ma__), majority_mask__
+    return (i__, dy__, dx__, g__, m__, day__[0],day__[1], dax__[0], dax__[1], ga__, ma__), majority_mask__
 
 
 def angle_diff_simple(a2, a1):  # compare angle_1 to angle_2
