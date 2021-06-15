@@ -305,9 +305,20 @@ def draw_g(img_out, g_):
 
     return img_out
 
-def draw_gr(img_out, g_):
+def draw_gr(img_out, g_, rng):
 
-    img_out[:] = cv2.resize((g_[:] * 255) / g_.max(),  # normalize g to uint
+    # get max g of each rng, only applicable to g
+    if rng>0:
+        max_g = 0
+        half_size = int(len(Y_COEFFS)/2)
+        current_coeffs = Y_COEFFS[rng]
+        for coeff in current_coeffs[:half_size]:
+            max_g += coeff * 255
+    else:
+        max_g = g_.max()
+        
+    
+    img_out[:] = cv2.resize((g_[:] * 255) / max_g,  # normalize g to uint
                             (img_out.shape[1], img_out.shape[0]),
                             interpolation=cv2.INTER_NEAREST)
     return img_out
@@ -362,17 +373,20 @@ if __name__ == "__main__":
     # 1st layer
 
     # rng = 1
-    gr_1 = draw_gr(ini_.copy(), gr_dert_1[3])
-    mr_1 = draw_gr(ini_.copy(), gr_dert_1[4])
-    re_1 = draw_gr(ini_.copy(),  gr_dert_1[5])
+    gr_1 = draw_gr(ini_.copy(), gr_dert_1[3], rng=1)
+    mr_1 = draw_gr(ini_.copy(), gr_dert_1[4], rng=-1)
+    re_1 = draw_gr(ini_.copy(),  gr_dert_1[5], rng=-1)
+    sobel1 = cv2.Sobel(image.astype('uint8'),cv2.CV_64F,0,1,ksize=3)
     # rng = 2
-    gr_2 = draw_gr(ini_.copy(), gr_dert_2[3])
-    mr_2 = draw_gr(ini_.copy(), gr_dert_2[4])
-    re_2 = draw_gr(ini_.copy(),  gr_dert_2[5])
+    gr_2 = draw_gr(ini_.copy(), gr_dert_2[3], rng=2)
+    mr_2 = draw_gr(ini_.copy(), gr_dert_2[4], rng=-1)
+    re_2 = draw_gr(ini_.copy(),  gr_dert_2[5], rng=-1)
+    sobel2 = cv2.Sobel(image.astype('uint8'),cv2.CV_64F,0,1,ksize=5)
     # rng = 3
-    gr_3 = draw_gr(ini_.copy(), gr_dert_3[3])
-    mr_3 = draw_gr(ini_.copy(), gr_dert_3[4])
-    re_3 = draw_gr(ini_.copy(),  gr_dert_3[5])
+    gr_3 = draw_gr(ini_.copy(), gr_dert_3[3], rng=3)
+    mr_3 = draw_gr(ini_.copy(), gr_dert_3[4], rng=-1)
+    re_3 = draw_gr(ini_.copy(),  gr_dert_3[5], rng=-1)
+    sobel3 = cv2.Sobel(image.astype('uint8'),cv2.CV_64F,0,1,ksize=7)
     '''
     # rng = 4
     gr_4 = draw_gr(ini_.copy(), gr_dert_4[3])
@@ -405,20 +419,25 @@ if __name__ == "__main__":
     '''
 
     # save to disk
+    
     cv2.imwrite(arguments.output + '2x2_g.jpg',  g_)
     cv2.imwrite(arguments.output + '2x2_SAD.jpg',  m_)
 
     cv2.imwrite(arguments.output + '3x3_g.jpg',  gr_1)
     cv2.imwrite(arguments.output + '3x3_SAD.jpg',  mr_1)
     cv2.imwrite(arguments.output + '3x3_x.jpg',  re_1)
+    cv2.imwrite(arguments.output + '3x3_sobel.jpg',  sobel1)
 
     cv2.imwrite(arguments.output + '5x5_g.jpg',  gr_2)
     cv2.imwrite(arguments.output + '5x5_SAD.jpg',  mr_2)
     cv2.imwrite(arguments.output + '5x5_x.jpg',  re_2)
+    cv2.imwrite(arguments.output + '5x5_sobel.jpg',  sobel2)
+
 
     cv2.imwrite(arguments.output + '7x7_g.jpg',  gr_3)
     cv2.imwrite(arguments.output + '7x7_SAD.jpg',  mr_3)
     cv2.imwrite(arguments.output + '7x7_x.jpg',  re_3)
+    cv2.imwrite(arguments.output + '7x7_sobel.jpg',  sobel3)
 
     '''
     cv2.imwrite(arguments.output + '9x9_g.jpg',  gr_4)
