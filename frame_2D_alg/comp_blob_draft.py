@@ -7,7 +7,7 @@ from frame_blobs import ave, CBlob
 import numpy as np
 import cv2
 
-ave_mB =  1  # ave can't be negative
+ave_mB =  0  # ave can't be negative
 ave_rM = .7  # average relative match at rL=1: rate of ave_mB decay with relative distance, due to correlation between proximity and similarity
 ave_da = 0.7853  # da at 45 degrees
 ave_comp = 0   # ave for comp_param to get next level derivatives
@@ -80,7 +80,7 @@ def comp_blob_recursive(blob, adj_blob_, derBlob_):
             elif blob.M + blob.neg_mB + derBlob.mB > ave_mB:  # neg mB but positive comb M,
                 # extend blob comparison to adjacents of adjacent, depth-first
                 blob.neg_mB += derBlob.mB  # mB and distance are accumulated over comparison scope
-                blob.distance += np.sqrt(adj_blob.distance)
+                blob.distance += derBlob.distance
                 comp_blob_recursive(blob, adj_blob.adj_blobs[0], derBlob_)
 
 
@@ -108,7 +108,7 @@ def comp_blob(blob, _blob):
         derBlob.layer1.append(dm)
     derBlob.layer_names = layer1_names
 
-    # compute mB from I.m, A.m, G.m, M.m, Vector.m
+    derBlob.distance = np.sqrt(blob.A) + np.sqrt(_blob.A) # or suggest anothr computation method
     derBlob.mB -=  ave_mB * (ave_rM ** ((1+derBlob.distance) / np.sqrt(blob.A)))  # deviation from average blob match at current distance
 
     derBlob.blob = blob

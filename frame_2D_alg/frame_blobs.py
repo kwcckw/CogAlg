@@ -100,6 +100,7 @@ class CBlob(ClusterStructure):  # from frame_blobs only, no sub_blobs
     # from comp_blob:
     derBlob_ = list
     neg_mB = int
+    distance = int
     bblob = object
     # from form_bblob:
     root_bblob = object

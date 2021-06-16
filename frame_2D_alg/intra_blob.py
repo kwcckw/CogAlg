@@ -65,7 +65,7 @@ def intra_blob(blob, **kwargs):  # slice_blob or recursive input rng+ | angle cr
 
         if blob.G > AveB:  # comp_a fork, replace G with borrow_M when known
 
-            adert__, mask__ = comp_a(ext_dert__, Ave, blob.prior_forks, ext_mask__)  # compute ma and ga
+            adert__, mask__ = comp_a(ext_dert__, blob.prior_forks, ext_mask__)  # compute ma and ga
             blob.f_comp_a = 1
             if kwargs.get('verbose'): print('\na fork\n')
             blob.prior_forks.extend('a')

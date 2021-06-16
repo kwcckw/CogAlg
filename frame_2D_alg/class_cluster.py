@@ -53,8 +53,10 @@ class MetaCluster(type):
         replace = attrs.get('replace', {})
 
         # inherit params
+        new_bases = []
         for base in bases:
             if issubclass(base, ClusterStructure):
+                new_bases.append(base)
                 for param in base.numeric_params:
                     if param not in attrs:  # prevents duplication of base params
                         # not all inherited params are Cdm
@@ -64,8 +66,13 @@ class MetaCluster(type):
                                 attrs[new_param] = new_type
                         else:
                             attrs[param] = getattr(base,param+'_type') # if the param is not replaced, it will following type of base param
+            else:
+                print(f"Warning: {base} is not a subclass of {ClusterStructure}")
 
-        if len(bases)>1: bases=(bases[0],)
+        bases = tuple(new_bases)   # remove
+
+        if len(bases)>1: 
+            bases=(bases[0],)
 
         # only ignore param names start with double underscore
         params = tuple(attr for attr in attrs
@@ -268,20 +275,23 @@ class ClusterStructure(metaclass=MetaCluster):
 
                 if len(layer) == len(_layer): # both layers are having same params
                     for i, (dm, _dm) in enumerate(zip(layer, _layer)):  # accumulate _dm to dm in layer
+                        
                         if hasattr(other,'layer_names') and (_layer_names[i] in ['Da','Dady','Dadx']):
                             # convert da to vector, sum them and convert them back to angle
                             da = dm.d; _da= _dm.d
                             sin = np.sin(da); _sin = np.sin(_da)
                             cos = np.cos(da); _cos = np.cos(_da)
-                            sin_sum = (cos * _sin1) + (sin * _cos)  # sin(α + β) = sin α cos β + cos α sin β
-                            cos_sum= (cos * _cos1) - (sin * _sin)   # cos(α + β) = cos α cos β - sin α sin β
+                            sin_sum = (cos * _sin) + (sin * _cos)  # sin(α + β) = sin α cos β + cos α sin β
+                            cos_sum= (cos * _cos) - (sin * _sin)   # cos(α + β) = cos α cos β - sin α sin β
                             a_sum = np.arctan2(sin_sum, cos_sum)
                             layer[i].d = a_sum
                         else:
                             dm.d += _dm.d
+ 
                         dm.m += _dm.m
                 elif len(_layer)>0: # _layer is not empty but layer is empty
-                    layer = _layer.copy()
+                    setattr(self,layer_num,_layer.copy())
+
 
 
 class Cdm(Number):
@@ -320,7 +330,7 @@ def comp_param(param, _param, param_name, ave):
             m = ave - abs(d)  # indirect match
         else:
             m = min(param,_param) - abs(d)/2 - ave  # direct match
-        dm = Cdm(m,d)
+        dm = Cdm(d,m) # pack d follow by m, must follow this sequence
 
     return dm
 
@@ -349,17 +359,18 @@ if __name__ == "__main__":  # for tests
 
     # ---- 1st layer  ---------------------------------------------------------
     # bblob
-    class CBblob(ClusterStructure):
-        I = int
-        Dy = int
-        Dx = int
-        G = int
-        M = int
-        Day = int
-        Dax = int
-        mB = int
-        dB = int
-        derBlob_ = list
+    class CBblob(CBlob, CDerBlob):
+        pass
+#        I = int
+#        Dy = int
+#        Dx = int
+#        G = int
+#        M = int
+#        Day = int
+#        Dax = int
+#        mB = int
+#        dB = int
+#        derBlob_ = list
 
     # ---- example  -----------------------------------------------------------
 
