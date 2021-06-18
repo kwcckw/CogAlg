@@ -52,23 +52,23 @@ FrameOfBlobs = namedtuple('FrameOfBlobs', 'I, Dy, Dx, G, M, blob_, dert__')
 class CBlob(ClusterStructure):  # from frame_blobs only, no sub_blobs
 
     # comp_pixel:
-    I = int
-    Dy = int
-    Dx = int
-    G = int
-    M = int
+    I = float
+    Dy = float
+    Dx = float
+    G = float
+    M = float
     # comp_angle:
-    Dydy = int
-    Dxdy = int
-    Dydx = int
-    Dxdx = int
-    Ga = int
-    Ma = int
+    Dydy = float
+    Dxdy = float
+    Dydx = float
+    Dxdx = float
+    Ga = float
+    Ma = float
     # comp_dx:
-    Mdx = int
-    Ddx = int
+    Mdx = float
+    Ddx = float
     # new params:
-    A = int  # blob area
+    A = float  # blob area
     sign = bool
     box = list
     mask__ = object
@@ -326,7 +326,7 @@ if __name__ == "__main__":
     argument_parser = argparse.ArgumentParser()
     argument_parser.add_argument('-i', '--image', help='path to image file', default='./images//toucan.jpg')
     argument_parser.add_argument('-v', '--verbose', help='print details, useful for debugging', type=int, default=1)
-    argument_parser.add_argument('-n', '--intra', help='run intra_blobs after frame_blobs', type=int, default=0)
+    argument_parser.add_argument('-n', '--intra', help='run intra_blobs after frame_blobs', type=int, default=1)
     argument_parser.add_argument('-r', '--render', help='render the process', type=int, default=0)
     argument_parser.add_argument('-c', '--clib', help='use C shared library', type=int, default=0)
     args = argument_parser.parse_args()
