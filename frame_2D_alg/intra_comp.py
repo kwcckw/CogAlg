@@ -116,7 +116,7 @@ def comp_r(dert__, ave, root_fia, mask__=None):
     return (i__center, dy__, dx__, g__, m__), majority_mask__
 
 
-def comp_a(dert__, prior_forks, mask__=None):  # cross-comp of gradient angle in 2x2 kernels
+def comp_a(dert__, ave_ma, ave_ga, prior_forks, mask__=None):  # cross-comp of gradient angle in 2x2 kernels
 
     if mask__ is not None:
         majority_mask__ = (mask__[:-1, :-1].astype(int) +
@@ -144,7 +144,7 @@ def comp_a(dert__, prior_forks, mask__=None):  # cross-comp of gradient angle in
     sin_da1__, cos_da1__ = angle_diff(angle__bottom, angle__top)  # ... same for day
 
     with np.errstate(divide='ignore', invalid='ignore'):  # suppress numpy RuntimeWarning
-        ma__ = (cos_da0__ + 1) + (cos_da1__ + 1) - ave_ma  # +1 to convert to all positives, +.001 to avoid / 0, ave ma = 2
+        ma__ = (cos_da0__ + 1) + (cos_da1__ + 1) - ave_ma  # +1 to convert to all positives, ave ma = 2?
 
     # angle change in y, sines are sign-reversed because da0 and da1 are top-down, no reversal in cosines
     day__ = [-sin_da0__ - sin_da1__, cos_da0__ + cos_da1__]
@@ -156,8 +156,8 @@ def comp_a(dert__, prior_forks, mask__=None):  # cross-comp of gradient angle in
     '''
     ga__ = np.hypot( np.arctan2(*day__), np.arctan2(*dax__) ) - ave_ga
     '''
-    ga value is a deviation; interruption | wave is sign-agnostic: expected reversion, same for d sign?
-    extended-kernel gradient from decomposed diffs: np.hypot(dydy, dxdy) + np.hypot(dydx, dxdx)?
+    ga: deviation of magnitude of gradient of angle
+    in conventional notation: G = (Ix, Iy), A = (Ix, Iy) / hypot(G), DA = (dAdx, dAdy), abs_GA = hypot(DA)
     '''
     # if root fork is frame_blobs, recompute orthogonal dy and dx
     if (prior_forks[-1] == 'g') or (prior_forks[-1] == 'a'):

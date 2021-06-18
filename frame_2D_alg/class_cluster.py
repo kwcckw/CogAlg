@@ -71,7 +71,7 @@ class MetaCluster(type):
 
         bases = tuple(new_bases)   # remove
 
-        if len(bases)>1: 
+        if len(bases)>1:
             bases=(bases[0],)
 
         # only ignore param names start with double underscore
@@ -275,7 +275,7 @@ class ClusterStructure(metaclass=MetaCluster):
 
                 if len(layer) == len(_layer): # both layers are having same params
                     for i, (dm, _dm) in enumerate(zip(layer, _layer)):  # accumulate _dm to dm in layer
-                        
+
                         if hasattr(other,'layer_names') and (_layer_names[i] in ['Da','Dady','Dadx']):
                             # convert da to vector, sum them and convert them back to angle
                             da = dm.d; _da= _dm.d
@@ -287,7 +287,7 @@ class ClusterStructure(metaclass=MetaCluster):
                             layer[i].d = a_sum
                         else:
                             dm.d += _dm.d
- 
+
                         dm.m += _dm.m
                 elif len(_layer)>0: # _layer is not empty but layer is empty
                     setattr(self,layer_num,_layer.copy())
@@ -322,8 +322,8 @@ def comp_param(param, _param, param_name, ave):
         # da and ma
         da = np.arctan2(sin_da, cos_da)
         mda = ave - abs(da)
-        # compute dm 
-        dm = Cdm(d=da,m=mda)   # dm of da  
+        # compute dm
+        dm = Cdm(d=da,m=mda)   # dm of da
     else: # numeric
         d = param - _param    # difference
         if param_name == 'I':
