@@ -89,25 +89,28 @@ def comp_blob(blob, _blob, _derBlob):
     derBlob = CderBlob()
     layer1 = dict({'I':.0,'Da':.0,'G':.0,'M':.0,'Dady':.0,'Dadx':.0,'Ga':.0,'Ma':.0,'A':.0,'Mdx':.0, 'Ddx':.0})
     
+    norm = blob.G + (ave*blob.A); _norm = _blob.G + (ave*_blob.A); 
+    anorm = blob.Ga + (ave*blob.A); _anorm = _blob.Ga + (ave*_blob.A); 
+    
     for param_name in layer1:
         if param_name == 'Da':
             # sin and cos components
-            sin = blob.Dy; cos = _blob.Dy
-            _sin = blob.Dx; _cos = _blob.Dx
+            sin = blob.Dy/norm ; cos = blob.Dx/norm
+            _sin = _blob.Dy/_norm; _cos = _blob.Dx/_norm
             param = [sin, cos]
             _param = [_sin, _cos]
 
         elif param_name == 'Dady':
             # sin and cos components
-            sin = blob.Dydy; cos = _blob.Dydy
-            _sin = blob.Dxdy; _cos = _blob.Dxdy
+            sin = blob.Dydy/anorm; cos = blob.Dxdy/anorm
+            _sin = _blob.Dydy/_anorm; _cos = _blob.Dxdy/_anorm
             param = [sin, cos]
             _param = [_sin, _cos]
 
         elif param_name == 'Dadx':
             # sin and cos components
-            sin = blob.Dydx; cos = _blob.Dydx
-            _sin = blob.Dxdx; _cos = _blob.Dxdx
+            sin = blob.Dydx/anorm; cos = blob.Dxdx/anorm
+            _sin = _blob.Dydx/_anorm; _cos = _blob.Dxdx/_anorm
             param = [sin, cos]
             _param = [_sin, _cos]
 
@@ -115,7 +118,7 @@ def comp_blob(blob, _blob, _derBlob):
             param = getattr(blob, param_name)
             _param = getattr(_blob, param_name)
 
-        dm = comp_param(param, _param, param_name, blob.A)
+        dm = comp_param(param, _param, param_name, ave_mB)
         layer1[param_name] = dm
         derBlob.mB += dm.m; derBlob.dB += dm.d
 

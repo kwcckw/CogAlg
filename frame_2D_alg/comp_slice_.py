@@ -439,45 +439,41 @@ def comp_dx(P):  # cross-comp of dx s in P.dert_
 def comp_slice(_P, P):  # forms vertical derivatives of derP params, and conditional ders from norm and DIV comp
 
     layer1 = dict({'I':.0,'Da':.0,'G':.0,'M':.0,'Dady':.0,'Dadx':.0,'Ga':.0,'Ma':.0,'L':.0,'Mdx':.0, 'Ddx':.0, 'x':.0})
-  
     mP, dP = 0, 0
+    norm = P.G + (ave*P.L); _norm = _P.G + (ave*_P.L)
+    anorm = P.Ga + (ave*P.L); _anorm = _P.Ga + (ave*_P.L)
+    
     for param_name in layer1:
         if param_name == 'Da':
             # sin and cos components
-            sin = P.Dy; cos = _P.Dy
-            _sin = P.Dx; _cos = _P.Dx
+            sin  = P.Dy/norm  ;  cos = P.Dx/norm
+            _sin = _P.Dy/_norm; _cos = _P.Dx/_norm
             param = [sin, cos]
             _param = [_sin, _cos]
-
         elif param_name == 'Dady':
             # sin and cos components
-            sin = P.Dydy; cos = _P.Dydy
-            _sin = P.Dxdy; _cos = _P.Dxdy
+            sin = P.Dydy/anorm; cos = P.Dxdy/anorm
+            _sin = _P.Dydy/_anorm; _cos = _P.Dxdy/_anorm
             param = [sin, cos]
             _param = [_sin, _cos]
-
         elif param_name == 'Dadx':
             # sin and cos components
-            sin = P.Dydx; cos = _P.Dydx
-            _sin = P.Dxdx; _cos = _P.Dxdx
+            sin = P.Dydx/anorm; cos = P.Dxdx/anorm
+            _sin = _P.Dydx/_anorm; _cos = _P.Dxdx/_anorm
             param = [sin, cos]
             _param = [_sin, _cos]
-
         elif param_name == "x":
             _param = _P.dX # _dX
             param = P.x    # dX
-
         elif param_name == "L" or param_name == "M":
             hyp = np.hypot(P.x, 1)  # ratio of local segment of long (vertical) axis to dY = 1
             _param = getattr(_P,param_name)
             param = getattr(P,param_name) / hyp # orthogonal L & M are reduced by hyp
-
-        elif param_name not in ['Dx', 'Dxdy', 'Dxdx']:
+        else:
             param = getattr(P, param_name)
             _param = getattr(_P, param_name)
 
-
-        dm = comp_param(param, _param, param_name, P.L)
+        dm = comp_param(param, _param, param_name, ave_mP)
         layer1[param_name] = dm
         mP += dm.m
         dP += dm.d
@@ -760,23 +756,25 @@ def comp_PP(PP, _PP):
     # compare PP and _PP base params to get layer 1 of derPP #-----------------
     layer1 = dict({'I':.0,'Da':.0,'G':.0,'M':.0,'Dady':.0,'Dadx':.0,'Ga':.0,'Ma':.0,'L':.0,'Mdx':.0, 'Ddx':.0, 'x':.0})
     mP, dP = 0, 0
+    norm = PP.G + (ave*PP.L); _norm = _PP.G + (ave*_PP.L)
+    anorm = PP.Ga + (ave*PP.L); _anorm = _PP.Ga + (ave*_PP.L)
     for param_name in layer1:
         if param_name == 'Da':
             # sin and cos components
-            sin = PP.Dy; cos = _PP.Dy
-            _sin = PP.Dx; _cos = _PP.Dx
+            sin = PP.Dy/norm; cos = PP.Dx/norm
+            _sin = _PP.Dy/_norm; _cos = _PP.Dx/_norm
             param = [sin, cos]
             _param = [_sin, _cos]
         elif param_name == 'Dady':
             # sin and cos components
-            sin = PP.Dydy; cos = _PP.Dydy
-            _sin = PP.Dxdy; _cos = _PP.Dxdy
+            sin = PP.Dydy/anorm; cos = PP.Dxdy/anorm
+            _sin = _PP.Dydy/_anorm; _cos = _PP.Dxdy/_anorm
             param = [sin, cos]
             _param = [_sin, _cos]
         elif param_name == 'Dadx':
             # sin and cos components
-            sin = PP.Dydx; cos = _PP.Dydx
-            _sin = PP.Dxdx; _cos = _PP.Dxdx
+            sin = PP.Dydx/anorm; cos = PP.Dxdx/anorm
+            _sin = _PP.Dydx/_anorm; _cos = _PP.Dxdx/_anorm
             param = [sin, cos]
             _param = [_sin, _cos]
         elif param_name == "x":
@@ -786,11 +784,11 @@ def comp_PP(PP, _PP):
             hyp = np.hypot(PP.x, 1)  # ratio of local segment of long (vertical) axis to dY = 1
             _param = getattr(_PP,param_name)
             param = getattr(PP,param_name) / hyp # orthogonal L & M are reduced by hyp
-        elif param_name not in ['Dx', 'Dxdy', 'Dxdx']:
+        else:
             param = getattr(PP, param_name)
             _param = getattr(_PP, param_name)
 
-        dm = comp_param(param, _param, param_name, PP.L)
+        dm = comp_param(param, _param, param_name, ave_mPP)
         layer1[param_name] = dm
         mP += dm.m
         dP += dm.d
@@ -805,7 +803,7 @@ def comp_PP(PP, _PP):
         if param_name in ['Da', 'Dady', 'Dadx']: # angle, need convert to vector form
             if dm.m > ave_comp and _dm.m >ave_comp: # check da.m of prior layer
                 f_comp = 1
-                sin, cos = np.sin(dm.d), np.cos(dm.d)
+                sin, cos = np.sin(dm.d), np.cos(dm.d)    # da is computed from normalized dy and dx, do we still need to normalize it again here in layer1? 
                 _sin, _cos = np.sin(_dm.d), np.cos(_dm.d)
                 param_d = [sin, cos]; param_m = dm.m
                 _param_d = [_sin, _cos]; _param_m = _dm.m
@@ -816,8 +814,8 @@ def comp_PP(PP, _PP):
                 _param_d = _dm.d; _param_m = _dm.m
 
         if f_comp:
-            dmd = comp_param(param_d, _param_d, param_name, PP.L)  # dm of d
-            dmm = comp_param(param_m, _param_m, param_name, PP.L)  # dm of m
+            dmd = comp_param(param_d, _param_d, param_name, ave_mPP)  # dm of d
+            dmm = comp_param(param_m, _param_m, param_name, ave_mPP)  # dm of m
             layer2[param_name] = [dmd, dmm]      # layer 2 in list ,storing dm of each d and m
             mdPP += dmd.m # m from dm of d
             ddPP += dmd.d # d from dm of d
@@ -828,8 +826,8 @@ def comp_PP(PP, _PP):
             dmm = Cdm()
 
     if PP.mP >ave_comp and PP.dP>ave_comp and _PP.mP >ave_comp and _PP.dP>ave_comp:
-        dmmP = comp_param(PP.mP, _PP.mP, [], PP.L) # dm of mP
-        dmdP = comp_param(PP.dP, _PP.dP, [], PP.L) # dm of dP
+        dmmP = comp_param(PP.mP, _PP.mP, [], ave_mPP) # dm of mP
+        dmdP = comp_param(PP.dP, _PP.dP, [], ave_mPP) # dm of dP
 
         mdPP += dmdP.m # match of compared PPs' d components
         ddPP += dmdP.d # difference of compared PPs' d components

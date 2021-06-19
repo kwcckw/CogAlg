@@ -41,7 +41,6 @@ from class_cluster import ClusterStructure, NoneType, Cdm
 
 ave = 30  # filter or hyper-parameter, set as a guess, latter adjusted by feedback
 aveB = 50
-ave_M = 100
 ave_mP = 100
 UNFILLED = -1
 EXCLUDED_ID = -2
