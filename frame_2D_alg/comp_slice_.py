@@ -436,13 +436,12 @@ def comp_dx(P):  # cross-comp of dx s in P.dert_
     P.Ddx = Ddx
     P.Mdx = Mdx
 
-
 def comp_slice(_P, P):  # forms vertical derivatives of derP params, and conditional ders from norm and DIV comp
 
     layer1 = dict({'I':.0,'Da':.0,'G':.0,'M':.0,'Dady':.0,'Dadx':.0,'Ga':.0,'Ma':.0,'L':.0,'Mdx':.0, 'Ddx':.0, 'x':.0})
     mP, dP = 0, 0
     absG = P.G + (ave*P.L); _absG = _P.G + (ave*_P.L)
-    absGa = P.Ga + (ave*P.L); _absGa = _P.Ga + (ave*_P.L)
+    absGa = P.Ga + (ave_da*P.L); _absGa = _P.Ga + (ave_da*_P.L)
     
     for param_name in layer1:
         if param_name == 'Da':
@@ -755,7 +754,7 @@ def comp_PP(PP, _PP):
     layer1 = dict({'I':.0,'Da':.0,'G':.0,'M':.0,'Dady':.0,'Dadx':.0,'Ga':.0,'Ma':.0,'L':.0,'Mdx':.0, 'Ddx':.0, 'x':.0})
     mP, dP = 0, 0
     absG = PP.G + (ave*PP.L); _absG = _PP.G + (ave*_PP.L)
-    absGa = PP.Ga + (ave*PP.L); _absGa = _PP.Ga + (ave*_PP.L)
+    absGa = PP.Ga + (ave_da*PP.L); _absGa = _PP.Ga + (ave_da*_PP.L)
     for param_name in layer1:
         if param_name == 'Da':
             # sin and cos components

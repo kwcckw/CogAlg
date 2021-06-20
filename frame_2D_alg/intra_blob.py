@@ -34,7 +34,8 @@ from segment_by_direction import segment_by_direction
 # filters, All *= rdn:
 ave = 50  # fixed cost per dert, from average m, reflects blob definition cost, may be different for comp_a?
 aveB = 50  # fixed cost per intra_blob comp and clustering
-
+ave_ga = .78
+ave_ma = 2
 # --------------------------------------------------------------------------------------------------------------
 # functions:
 
@@ -64,7 +65,6 @@ def intra_blob(blob, **kwargs):  # slice_blob or recursive input rng+ | angle cr
         ext_dert__, ext_mask__ = extend_dert(blob)  # dert__ boundaries += 1, for cross-comp in larger kernels
 
         if blob.G > AveB:  # comp_a fork, replace G with borrow_M when known
-            ave_ga = .78; ave_ma = 2
 
             adert__, mask__ = comp_a(ext_dert__, ave_ma, ave_ga, blob.prior_forks, ext_mask__)  # compute ma and ga
             blob.f_comp_a = 1
