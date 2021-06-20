@@ -7,9 +7,11 @@ from frame_blobs import ave, CBlob
 import numpy as np
 import cv2
 
+# change ave to Ave from the root intra_blob?
+ave_min = 5  # change to Ave_min from the root intra_blob?
 ave_mB =  0  # ave can't be negative
 ave_rM = .7  # average relative match at rL=1: rate of ave_mB decay with relative distance, due to correlation between proximity and similarity
-ave_da = 0.7853  # da at 45 degrees
+ave_da = 0.7853  # da at 45 degree, = ga at 22.5 degree
 ave_comp = 0   # ave for comp_param to get next level derivatives
 
 class CderBlob(ClusterStructure):
@@ -74,11 +76,11 @@ def search_blob_recursive(blob, adj_blob_, _derBlob, derBlob_):
             elif blob.M + derBlob.neg_mB + derBlob.mB > ave_mB:  # neg mB but positive comb M,
                 # extend blob comparison to adjacents of adjacent, depth-first
                 derBlob.neg_mB = derBlob.mB   # mB and distance are accumulated over comparison scope
-                derBlob.distance = np.sqrt(adj_blob.A) 
+                derBlob.distance = np.sqrt(adj_blob.A)
                 if _derBlob:
                      derBlob.neg_mB += _derBlob.neg_mB
                      derBlob.distance += _derBlob.distance
-                
+
                 search_blob_recursive(blob, adj_blob.adj_blobs[0], derBlob, derBlob_)
 
 
@@ -88,29 +90,26 @@ def comp_blob(blob, _blob, _derBlob):
     '''
     derBlob = CderBlob()
     layer1 = dict({'I':.0,'Da':.0,'G':.0,'M':.0,'Dady':.0,'Dadx':.0,'Ga':.0,'Ma':.0,'A':.0,'Mdx':.0, 'Ddx':.0})
-    
-    norm = blob.G + (ave*blob.A); _norm = _blob.G + (ave*_blob.A); 
-    anorm = blob.Ga + (ave*blob.A); _anorm = _blob.Ga + (ave*_blob.A); 
-    
+
+    absG = blob.G + (ave*blob.A); _absG = _blob.G + (ave*_blob.A)
+    absGa = blob.Ga + (ave_da*blob.A); _absGa = _blob.Ga + (ave_da*_blob.A)
+
     for param_name in layer1:
         if param_name == 'Da':
-            # sin and cos components
-            sin = blob.Dy/norm ; cos = blob.Dx/norm
-            _sin = _blob.Dy/_norm; _cos = _blob.Dx/_norm
+            sin = blob.Dy/absG ; cos = blob.Dx/absG
+            _sin = _blob.Dy/_absG; _cos = _blob.Dx/_absG
             param = [sin, cos]
             _param = [_sin, _cos]
 
         elif param_name == 'Dady':
-            # sin and cos components
-            sin = blob.Dydy/anorm; cos = blob.Dxdy/anorm
-            _sin = _blob.Dydy/_anorm; _cos = _blob.Dxdy/_anorm
+            sin = blob.Dydy/absGa; cos = blob.Dxdy/absGa
+            _sin = _blob.Dydy/_absGa; _cos = _blob.Dxdy/_absGa
             param = [sin, cos]
             _param = [_sin, _cos]
 
         elif param_name == 'Dadx':
-            # sin and cos components
-            sin = blob.Dydx/anorm; cos = blob.Dxdx/anorm
-            _sin = _blob.Dydx/_anorm; _cos = _blob.Dxdx/_anorm
+            sin = blob.Dydx/absGa; cos = blob.Dxdx/absGa
+            _sin = _blob.Dydx/_absGa; _cos = _blob.Dxdx/_absGa
             param = [sin, cos]
             _param = [_sin, _cos]
 
@@ -118,7 +117,9 @@ def comp_blob(blob, _blob, _derBlob):
             param = getattr(blob, param_name)
             _param = getattr(_blob, param_name)
 
-        dm = comp_param(param, _param, param_name, ave_mB)
+        dist_ave = ave * (ave_rM ** ((1 + derBlob.distance) / np.sqrt(blob.A)))  # deviation from average blob match at current distance
+
+        dm = comp_param(param, _param, param_name, dist_ave_mB)
         layer1[param_name] = dm
         derBlob.mB += dm.m; derBlob.dB += dm.d
 
@@ -127,8 +128,7 @@ def comp_blob(blob, _blob, _derBlob):
     if _derBlob:
         derBlob.distance = _derBlob.distance # accumulate distance
         derBlob.neg_mB = _derBlob.neg_mB # accumulate neg_mB
-
-    derBlob.mB -=  ave_mB * (ave_rM ** ((1+derBlob.distance) / np.sqrt(blob.A)))  # deviation from average blob match at current distance
+    # ave_mB * (ave_rM ** ((1 + derBlob.distance) / np.sqrt(blob.A)))  # deviation from average blob match at current distance
 
     derBlob.blob = blob
     derBlob._blob = _blob

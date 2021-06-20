@@ -89,6 +89,9 @@ class MetaCluster(type):
         dict_params = tuple(param for param in params
                                if (issubclass(attrs[param], dict)))
 
+        dict_params = tuple(param for param in params
+                               if (issubclass(attrs[param], dict)))
+
         # Fill in the template
         methods_definitions = _methods_template.format(
             typename=typename,

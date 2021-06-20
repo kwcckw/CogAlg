@@ -19,7 +19,8 @@ from class_cluster import ClusterStructure, NoneType, comp_param, Cdm
 # import warnings  # to detect overflow issue, in case of infinity loop
 # warnings.filterwarnings('error')
 
-ave = 30  # filter or hyper-parameter, set as a guess, latter adjusted by feedback, not needed here
+ave = 30  # change to Ave from the root intra_blob?
+ave_min = 5  # change to Ave_min from the root intra_blob?
 aveG = 50  # filter for comp_g, assumed constant direction
 flip_ave = .1
 flip_ave_FPP = 0  # flip large FPPs only (change to 0 for debug purpose)
@@ -440,26 +441,23 @@ def comp_slice(_P, P):  # forms vertical derivatives of derP params, and conditi
 
     layer1 = dict({'I':.0,'Da':.0,'G':.0,'M':.0,'Dady':.0,'Dadx':.0,'Ga':.0,'Ma':.0,'L':.0,'Mdx':.0, 'Ddx':.0, 'x':.0})
     mP, dP = 0, 0
-    norm = P.G + (ave*P.L); _norm = _P.G + (ave*_P.L)
-    anorm = P.Ga + (ave*P.L); _anorm = _P.Ga + (ave*_P.L)
+    absG = P.G + (ave*P.L); _absG = _P.G + (ave*_P.L)
+    absGa = P.Ga + (ave*P.L); _absGa = _P.Ga + (ave*_P.L)
     
     for param_name in layer1:
         if param_name == 'Da':
-            # sin and cos components
-            sin  = P.Dy/norm  ;  cos = P.Dx/norm
-            _sin = _P.Dy/_norm; _cos = _P.Dx/_norm
+            sin  = P.Dy/absG  ;  cos = P.Dx/absG
+            _sin = _P.Dy/_absG; _cos = _P.Dx/_absG
             param = [sin, cos]
             _param = [_sin, _cos]
         elif param_name == 'Dady':
-            # sin and cos components
-            sin = P.Dydy/anorm; cos = P.Dxdy/anorm
-            _sin = _P.Dydy/_anorm; _cos = _P.Dxdy/_anorm
+            sin = P.Dydy/absGa; cos = P.Dxdy/absGa
+            _sin = _P.Dydy/_absGa; _cos = _P.Dxdy/_absGa
             param = [sin, cos]
             _param = [_sin, _cos]
         elif param_name == 'Dadx':
-            # sin and cos components
-            sin = P.Dydx/anorm; cos = P.Dxdx/anorm
-            _sin = _P.Dydx/_anorm; _cos = _P.Dxdx/_anorm
+            sin = P.Dydx/absGa; cos = P.Dxdx/absGa
+            _sin = _P.Dydx/_absGa; _cos = _P.Dxdx/_absGa
             param = [sin, cos]
             _param = [_sin, _cos]
         elif param_name == "x":
@@ -473,7 +471,7 @@ def comp_slice(_P, P):  # forms vertical derivatives of derP params, and conditi
             param = getattr(P, param_name)
             _param = getattr(_P, param_name)
 
-        dm = comp_param(param, _param, param_name, ave_mP)
+        dm = comp_param(param, _param, param_name, ave)  # add ave_min, * P.L is not needed?
         layer1[param_name] = dm
         mP += dm.m
         dP += dm.d
@@ -756,25 +754,25 @@ def comp_PP(PP, _PP):
     # compare PP and _PP base params to get layer 1 of derPP #-----------------
     layer1 = dict({'I':.0,'Da':.0,'G':.0,'M':.0,'Dady':.0,'Dadx':.0,'Ga':.0,'Ma':.0,'L':.0,'Mdx':.0, 'Ddx':.0, 'x':.0})
     mP, dP = 0, 0
-    norm = PP.G + (ave*PP.L); _norm = _PP.G + (ave*_PP.L)
-    anorm = PP.Ga + (ave*PP.L); _anorm = _PP.Ga + (ave*_PP.L)
+    absG = PP.G + (ave*PP.L); _absG = _PP.G + (ave*_PP.L)
+    absGa = PP.Ga + (ave*PP.L); _absGa = _PP.Ga + (ave*_PP.L)
     for param_name in layer1:
         if param_name == 'Da':
             # sin and cos components
-            sin = PP.Dy/norm; cos = PP.Dx/norm
-            _sin = _PP.Dy/_norm; _cos = _PP.Dx/_norm
+            sin = PP.Dy/absG; cos = PP.Dx/absG
+            _sin = _PP.Dy/_absG; _cos = _PP.Dx/_absG
             param = [sin, cos]
             _param = [_sin, _cos]
         elif param_name == 'Dady':
             # sin and cos components
-            sin = PP.Dydy/anorm; cos = PP.Dxdy/anorm
-            _sin = _PP.Dydy/_anorm; _cos = _PP.Dxdy/_anorm
+            sin = PP.Dydy/absGa; cos = PP.Dxdy/absGa
+            _sin = _PP.Dydy/_absGa; _cos = _PP.Dxdy/_absGa
             param = [sin, cos]
             _param = [_sin, _cos]
         elif param_name == 'Dadx':
             # sin and cos components
-            sin = PP.Dydx/anorm; cos = PP.Dxdx/anorm
-            _sin = _PP.Dydx/_anorm; _cos = _PP.Dxdx/_anorm
+            sin = PP.Dydx/absGa; cos = PP.Dxdx/absGa
+            _sin = _PP.Dydx/_absGa; _cos = _PP.Dxdx/_absGa
             param = [sin, cos]
             _param = [_sin, _cos]
         elif param_name == "x":
@@ -803,7 +801,7 @@ def comp_PP(PP, _PP):
         if param_name in ['Da', 'Dady', 'Dadx']: # angle, need convert to vector form
             if dm.m > ave_comp and _dm.m >ave_comp: # check da.m of prior layer
                 f_comp = 1
-                sin, cos = np.sin(dm.d), np.cos(dm.d)    # da is computed from normalized dy and dx, do we still need to normalize it again here in layer1? 
+                sin, cos = np.sin(dm.d), np.cos(dm.d)    # da is computed from normalized dy and dx, do we still need to absGalize it again here in layer1?
                 _sin, _cos = np.sin(_dm.d), np.cos(_dm.d)
                 param_d = [sin, cos]; param_m = dm.m
                 _param_d = [_sin, _cos]; _param_m = _dm.m
