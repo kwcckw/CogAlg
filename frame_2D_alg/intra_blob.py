@@ -29,7 +29,6 @@ from intra_comp import comp_r, comp_a
 from draw_frame_blobs import visualize_blobs
 from itertools import zip_longest
 from comp_slice_ import *
-from slice_utils import *
 from segment_by_direction import segment_by_direction
 
 # filters, All *= rdn:
@@ -67,7 +66,6 @@ def intra_blob(blob, **kwargs):  # slice_blob or recursive input rng+ | angle cr
         ext_dert__, ext_mask__ = extend_dert(blob)  # dert__ boundaries += 1, for cross-comp in larger kernels
 
         if blob.G > AveB:  # comp_a fork, replace G with borrow_M when known
-
             adert__, mask__ = comp_a(ext_dert__, ave_ma, ave_ga, blob.prior_forks, ext_mask__)  # compute ma and ga
             blob.f_comp_a = 1
             blob.rng = 0
@@ -127,7 +125,7 @@ def cluster_sub_eval(blob, dert__, sign__, mask__, **kwargs):  # comp_r or comp_
         if sub_blob.G > AveB:  # replace with borrow_M when known
             # comp_a:
             sub_blob.f_root_a = 1
-            sub_blob.a_depth += blob.a_depth  # accumulate a depth from blob to sub_blob, currently not used
+            sub_blob.a_depth += blob.a_depth  # accumulate a depth from blob to sub_blob, currently not used ( do we want to keep this?)
             sub_blob.rdn = sub_blob.rdn + 1 + 1 / blob.Ls
             blob.sub_layers += intra_blob(sub_blob, **kwargs)
 

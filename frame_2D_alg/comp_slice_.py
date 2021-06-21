@@ -31,11 +31,15 @@ ave_mP = 8  # just a random number right now.
 ave_rmP = .7  # the rate of mP decay per relative dX (x shift) = 1: initial form of distance
 ave_ortho = 20
 ave_ga = 0.78  # ga at 22.5 degree
+ave_min = 10
 # comp_PP
 ave_mPP = 0
 ave_rM  = .7
 # comp_param
 ave_comp = 0
+
+# comp_PPP
+ave_mPPP = 5
 
 class CP(ClusterStructure):
 
@@ -110,8 +114,8 @@ class CPP(CP, CderP):
     PPdd_ = list
 
     # comp_PP
-    derPPm_ = []
-    derPPd_ = []
+    derPPm_ = list
+    derPPd_ = list
     distance = int
     mmPP = int
     dmPP = int
@@ -139,6 +143,9 @@ class CPPP(CPP, CderPP):
     layer2 = dict
     PPm_ = list
     PPd_ = list
+
+    derPPm_ = list
+    derPPd_ = list
 
     mmPP = int
     dmPP = int
@@ -441,8 +448,8 @@ def comp_slice(_P, P):  # forms vertical derivatives of derP params, and conditi
 
     layer1 = dict({'I':.0,'Da':.0,'G':.0,'M':.0,'Dady':.0,'Dadx':.0,'Ga':.0,'Ma':.0,'L':.0,'Mdx':.0, 'Ddx':.0, 'x':.0})
     mP, dP = 0, 0
-    absG = P.G + (ave_g*P.L); _absG = _P.G + (ave_g*_P.L)
-    absGa = P.Ga + (ave_ga *P.L); _absGa = _P.Ga + (ave_ga *_P.L)
+    absG = max(1,P.G + (ave_g*P.L)); _absG = max(1,_P.G + (ave_g*_P.L))         # use max to avoid zero division
+    absGa = max(1,P.Ga + (ave_ga *P.L)); _absGa = max(1,_P.Ga + (ave_ga *_P.L))
     
     for param_name in layer1:
         if param_name == 'Da':
@@ -471,7 +478,7 @@ def comp_slice(_P, P):  # forms vertical derivatives of derP params, and conditi
             param = getattr(P, param_name)
             _param = getattr(_P, param_name)
 
-        dm = comp_param(param, _param, param_name, ave)  # add ave_min, * P.L is not needed?
+        dm = comp_param(param, _param, param_name, ave_min)  # add ave_min, * P.L is not needed?
         layer1[param_name] = dm
         mP += dm.m
         dP += dm.d
@@ -689,7 +696,6 @@ def form_PPP_(PP_, fPPd):
 
     PPP_ = []
     for PP in PP_:
-
         if fPPd:
             mPP = PP.mdPP # match of PP's d
             PPP = PP.PPPd
@@ -697,7 +703,8 @@ def form_PPP_(PP_, fPPd):
             mPP = PP.mmPP # match of PP's m
             PPP = PP.PPPm
 
-        if mPP > 0 and not isinstance(PPP, CPPP):
+        if mPP > ave_mPPP and not isinstance(PPP, CPPP):
+
             PPP = CPPP()              # init new PPP
             accum_PPP(PPP, PP, fPPd)  # accum PP into PPP
             form_PPP_recursive(PPP_, PPP, PP.upconnect_, checked_ids=[PP.id], fPPd=fPPd)
@@ -729,13 +736,23 @@ def form_PPP_recursive(PPP_, PPP, upconnect_,  checked_ids, fPPd):
 
 def accum_PPP(PPP, PP, fPPd):
 
+    # accumulate layer 1 of PP into PPP too?
     PPP.accum_from(PP) # accumulate parameter
+  
     if fPPd:
         PPP.PPd_.append(PP) # add PPd to PPP's PPd_
         PP.PPPd = PPP       # update PPP reference of PP
+        for derPPd in PP.derPPd_: # accumulate derPPd params, layer1 and layer2
+            PPP.accum_from(derPPd)
+            PPP.derPPd_.append(derPPd)
+        
     else:
         PPP.PPm_.append(PP) # add PPm to PPP's PPm_
         PP.PPPm = PPP       # update PPP reference of PP
+        for derPPm in PP.derPPm_: # accumulate derPPm params, layer1 and layer2
+            PPP.accum_from(derPPm)
+            PPP.derPPm_.append(derPPm)
+
 
 
 def merge_PPP(PPP, _PPP, fPPd):
@@ -754,8 +771,8 @@ def comp_PP(PP, _PP):
     # compare PP and _PP base params to get layer 1 of derPP #-----------------
     layer1 = dict({'I':.0,'Da':.0,'G':.0,'M':.0,'Dady':.0,'Dadx':.0,'Ga':.0,'Ma':.0,'L':.0,'Mdx':.0, 'Ddx':.0, 'x':.0})
     mP, dP = 0, 0
-    absG = PP.G + (ave_g*PP.L); _absG = _PP.G + (ave_g*_PP.L)
-    absGa = PP.Ga + (ave_ga*PP.L); _absGa = _PP.Ga + (ave_ga*_PP.L)
+    absG = max(1, PP.G + (ave_g*PP.L)); _absG = max(1, _PP.G + (ave_g*_PP.L))      # use max to avoid zero division
+    absGa = max(1,PP.Ga + (ave_ga*PP.L)); _absGa = max(1, _PP.Ga + (ave_ga*_PP.L))
     for param_name in layer1:
         if param_name == 'Da':
             # sin and cos components
@@ -856,7 +873,7 @@ def accum_derPP(PP, derPP, fPPd):
 
     if fPPd: # PP cluster by d
         PP.derPPd_.append(derPP)
-        PP.accumulate(mdPP=derPP.mdPP, ddPP=derPP.ddPP)
     else:    # PP cluster by m
         PP.derPPm_.append(derPP)
-        PP.accumulate(mmPP=derPP.mmPP, dmPP=derPP.dmPP)
+
+    PP.accum_from(derPP)

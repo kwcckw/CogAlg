@@ -27,7 +27,7 @@
     https://github.com/boris-kz/CogAlg/blob/master/frame_2D_alg/Illustrations/blob_params.drawio
     https://github.com/boris-kz/CogAlg/blob/master/frame_2D_alg/Illustrations/frame_blobs.png
     https://github.com/boris-kz/CogAlg/blob/master/frame_2D_alg/Illustrations/frame_blobs_intra_blob.drawio
-'''
+ '''
 
 import sys
 import numpy as np
@@ -82,6 +82,7 @@ class CBlob(ClusterStructure):  # from frame_blobs only, no sub_blobs
     fflip = bool     # x-y swap
     rdn = float      # redundancy to higher blob layers
     rng = int        # comp range, set before intra_comp
+    a_depth = int
     # derivation hierarchy:
     Ls = int   # for visibility and next-fork rdn
     sub_layers = list
