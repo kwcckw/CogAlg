@@ -9,22 +9,20 @@ weight7x7 = 2
 
 # reference: https://stackoverflow.com/questions/9567882/sobel-filter-kernel-of-large-size
 Y_COEFFS = {
-    1:np.array([-0.5, -1, -0.5, 0, 0.5, 1, 0.5, 0])*weight3x3,
+    1:np.array([-0.5, -1, -0.5, 0, 0.5, 1, 0.5, 0]) *weight3x3,
     2:np.array([-0.25, -0.4, -0.5, -0.4, -0.25, -0.2 ,  0.  ,  0.2 ,  0.25,
-        0.4,  0.5,  0.4,  0.25,  0.2 ,  0.  , -0.2 ])*weight5x5,
+        0.4,  0.5,  0.4,  0.25,  0.2 ,  0.  , -0.2 ]) *weight5x5,
     3:np.array([-0.1667, -0.2308, -0.3, -0.3333, -0.3, -0.2308, -0.1667, -0.1538 ,
        -0.1,  0,  0.1,  0.1538,  0.1667,  0.2308,  0.3,  0.3333,
-        0.3,  0.2308,  0.1667,  0.1538,  0.1,  0, -0.1, -0.1538 ])*weight7x7,
+        0.3,  0.2308,  0.1667,  0.1538,  0.1,  0, -0.1, -0.1538 ]) *weight7x7,
 }
-
 X_COEFFS = {
-    1:np.array([-0.5, 0, 0.5, 1, 0.5, 0, -0.5, -1])*weight3x3,
+    1:np.array([-0.5, 0, 0.5, 1, 0.5, 0, -0.5, -1]) *weight3x3,
     2:np.array([-0.25, -0.2,  0,  0.2 ,  0.25,  0.4,  0.5,  0.4,  0.25,
-        0.2 ,  0.  , -0.2 , -0.25, -0.4, -0.5, -0.4])*weight5x5,
+        0.2 ,  0.  , -0.2 , -0.25, -0.4, -0.5, -0.4]) *weight5x5,
     3:np.array([-0.1667, -0.1538 , -0.1  ,  0.   ,  0.1  ,  0.1538 ,  0.1667,  0.2308,
-        0.3,  0.3333,  0.3,  0.2308,  0.1667,  0.1538 ,  0.1  ,  0.   ,
-       -0.1  , -0.1538 , -0.1667, -0.2308, -0.3, -0.3333, -0.3, -0.2308])*weight7x7}
-
+        0.3,  0.3333,  0.3,  0.2308,  0.1667,  0.1538 ,  0.1  ,  0.,
+       -0.1  , -0.1538 , -0.1667, -0.2308, -0.3, -0.3333, -0.3, -0.2308]) *weight7x7}
 
 
 import cv2
@@ -60,7 +58,6 @@ def comp_pixel_m(image):  # current version of 2x2 pixel cross-correlation withi
     idx__ = np.zeros((topleft__.shape[0], topleft__.shape[1]))
 
     return ((topleft__, idy__, idx__, g__, dy__, dx__, m__))
-
 
 
 def shift_img(img,rng):
@@ -219,6 +216,7 @@ def comp_rng(dert__, ave, root_fia, rng, mask__=None):
     m__dif = []
 
     # get directional differences of m
+    # add COEFFS, as for g but not signed?
     for i__directional in i__directional_:
         m__dif.append(abs(i__center - i__directional))
 
@@ -266,9 +264,9 @@ def draw_gr(img_out, g_, rng):
     else:
         max_g = g_.max()
     '''
-    
+
     max_g = g_.max()
-    
+
     img_out[:] = cv2.resize((g_[:] * 255) / max_g,  # normalize g to uint
                             (img_out.shape[1], img_out.shape[0]),
                             interpolation=cv2.INTER_NEAREST)
@@ -370,7 +368,7 @@ if __name__ == "__main__":
     '''
 
     # save to disk
-    
+
     cv2.imwrite(arguments.output + '2x2_g.jpg',  g_)
     cv2.imwrite(arguments.output + '2x2_SAD.jpg',  m_)
 
@@ -394,27 +392,21 @@ if __name__ == "__main__":
     cv2.imwrite(arguments.output + '9x9_g.jpg',  gr_4)
     cv2.imwrite(arguments.output + '9x9_SAD.jpg',  mr_4)
     cv2.imwrite(arguments.output + '9x9_x.jpg',  re_4)
-
     cv2.imwrite(arguments.output + '11x11_g.jpg',  gr_5)
     cv2.imwrite(arguments.output + '11x11_SAD.jpg',  mr_5)
     cv2.imwrite(arguments.output + '11x11_x.jpg',  re_5)
-
     cv2.imwrite(arguments.output + '13x13_g.jpg',  gr_6)
     cv2.imwrite(arguments.output + '13x13_SAD.jpg',  mr_6)
     cv2.imwrite(arguments.output + '13x13_x.jpg',  re_6)
-
     cv2.imwrite(arguments.output + '15x15_g.jpg',  gr_7)
     cv2.imwrite(arguments.output + '15x15_SAD.jpg',  mr_7)
     cv2.imwrite(arguments.output + '15x15_x.jpg',  re_7)
-
     cv2.imwrite(arguments.output + '17x17_g.jpg',  gr_8)
     cv2.imwrite(arguments.output + '17x17_SAD.jpg',  mr_8)
     cv2.imwrite(arguments.output + '17x17_x.jpg',  re_8)
-
     cv2.imwrite(arguments.output + '19x19_g.jpg',  gr_9)
     cv2.imwrite(arguments.output + '19x19_SAD.jpg',  mr_9)
     cv2.imwrite(arguments.output + '19x19_x.jpg',  re_9)
-
     cv2.imwrite(arguments.output + '21x21_g.jpg',  gr_10)
     cv2.imwrite(arguments.output + '21x21_SAD.jpg',  mr_10)
     cv2.imwrite(arguments.output + '21x21_x.jpg',  re_10)
