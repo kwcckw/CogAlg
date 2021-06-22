@@ -58,9 +58,7 @@ def intra_blob(blob, **kwargs):  # slice_blob or recursive input rng+ | angle cr
                 blob.f_comp_a = 0
                 blob.prior_forks.extend('p')
                 if kwargs.get('verbose'): print('\nslice_blob fork\n')
-                segment_by_direction(blob, verbose=True)
-                # derP_ = slice_blob(blob, [])  # cross-comp of vertically consecutive Ps in selected stacks
-                # blob.PP_ = derP_2_PP_(derP_, blob.PP_)  # form vertically contiguous patterns of patterns
+                segment_by_direction(blob, Ave, verbose=True)
     else:
         # root fork is frame_blobs or comp_r
         ext_dert__, ext_mask__ = extend_dert(blob)  # dert__ boundaries += 1, for cross-comp in larger kernels
@@ -122,7 +120,8 @@ def cluster_sub_eval(blob, dert__, sign__, mask__, **kwargs):  # comp_r or comp_
         '''
         sub_blob.prior_forks = blob.prior_forks.copy()  # increments forking sequence: g->a, g->a->p, etc.
 
-        if sub_blob.G > AveB:  # replace with borrow_M when known
+        # add condition to make sure prior fork is comp_a
+        if sub_blob.G > AveB and blob.prior_forks[-1] == 'a':  # replace with borrow_M when known
             # comp_a:
             sub_blob.f_root_a = 1
             sub_blob.a_depth += blob.a_depth  # accumulate a depth from blob to sub_blob, currently not used ( do we want to keep this?)
@@ -131,7 +130,7 @@ def cluster_sub_eval(blob, dert__, sign__, mask__, **kwargs):  # comp_r or comp_
 
         elif sub_blob.M - aveG > AveB:
             # comp_r:
-            sub_blob.rng = blob.rng + 1  # correct?
+            sub_blob.rng = blob.rng  # rng counter will be incremented just before calling comp_r again
             sub_blob.rdn = sub_blob.rdn + 1 + 1 / blob.Ls
             blob.sub_layers += intra_blob(sub_blob, **kwargs)
 

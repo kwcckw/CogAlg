@@ -6,6 +6,7 @@ import numpy as np
 weight3x3 = 2
 weight5x5 = 2
 weight7x7 = 2
+weight9x9 = 2
 
 # reference: https://stackoverflow.com/questions/9567882/sobel-filter-kernel-of-large-size
 Y_COEFFS = {
@@ -15,15 +16,21 @@ Y_COEFFS = {
     3:np.array([-0.1667, -0.2308, -0.3, -0.3333, -0.3, -0.2308, -0.1667, -0.1538 ,
        -0.1,  0,  0.1,  0.1538,  0.1667,  0.2308,  0.3,  0.3333,
         0.3,  0.2308,  0.1667,  0.1538,  0.1,  0, -0.1, -0.1538 ]) *weight7x7,
-}
+    4:np.array([-0.125, -0.16,-0.2, -0.2353, -0.25,	-0.2353, -0.2, -0.16, -0.125, 
+       -0.12, -0.1, -0.0588, 0, 0.0588, 0.1, 0.12, 0.125, 0.16, 0.2, 0.2353, 0.25, 
+        0.2353, 0.2, 0.16, 0.125, 0.12, 0.1, 0.0588, 0, -0.0588, -0.1, -0.12]) * weight9x9}
+
+
 X_COEFFS = {
     1:np.array([-0.5, 0, 0.5, 1, 0.5, 0, -0.5, -1]) *weight3x3,
     2:np.array([-0.25, -0.2,  0,  0.2 ,  0.25,  0.4,  0.5,  0.4,  0.25,
         0.2 ,  0.  , -0.2 , -0.25, -0.4, -0.5, -0.4]) *weight5x5,
     3:np.array([-0.1667, -0.1538 , -0.1  ,  0.   ,  0.1  ,  0.1538 ,  0.1667,  0.2308,
         0.3,  0.3333,  0.3,  0.2308,  0.1667,  0.1538 ,  0.1  ,  0.,
-       -0.1  , -0.1538 , -0.1667, -0.2308, -0.3, -0.3333, -0.3, -0.2308]) *weight7x7}
-
+       -0.1  , -0.1538 , -0.1667, -0.2308, -0.3, -0.3333, -0.3, -0.2308]) *weight7x7,
+    4:np.array([-0.125, -0.12, -0.1, -0.0588, 0, 0.0588, 0.1, 0.12, 0.125, 0.16, 
+        0.2, 0.2353, 0.25, 0.2353, 0.2, 0.16, 0.125, 0.12, 0.1, 0.0588, 0, -0.0588, 
+        -0.1, -0.12, -0.125, -0.16, -0.2, -0.235, -0.25, -0.235, -0.2, -0.16])* weight9x9}
 
 import cv2
 import argparse
@@ -304,8 +311,8 @@ if __name__ == "__main__":
     gr_dert_1, _ = comp_rng(dert_, ave, root_fia = 0, rng= 1)
     gr_dert_2, _ = comp_rng(dert_, ave, root_fia = 0, rng= 2)
     gr_dert_3, _ = comp_rng(dert_, ave, root_fia = 0, rng= 3)
-    '''
     gr_dert_4, _ = comp_rng(dert_, ave, root_fia = 0, rng= 4)
+    '''
     gr_dert_5, _ = comp_rng(dert_, ave, root_fia = 0, rng= 5)
     gr_dert_6, _ = comp_rng(dert_, ave, root_fia = 0, rng= 6)
     gr_dert_7, _ = comp_rng(dert_, ave, root_fia = 0, rng= 7)
@@ -336,11 +343,13 @@ if __name__ == "__main__":
     mr_3 = draw_gr(ini_.copy(), gr_dert_3[4], rng=-1)
     re_3 = draw_gr(ini_.copy(),  gr_dert_3[5], rng=-1)
     sobel3 = cv2.Sobel(image.astype('uint8'),cv2.CV_64F,0,1,ksize=7)
-    '''
     # rng = 4
-    gr_4 = draw_gr(ini_.copy(), gr_dert_4[3])
-    mr_4 = draw_gr(ini_.copy(), gr_dert_4[4])
-    re_4 = draw_gr(ini_.copy(),  gr_dert_4[5])
+    gr_4 = draw_gr(ini_.copy(), gr_dert_4[3], rng=4)
+    mr_4 = draw_gr(ini_.copy(), gr_dert_4[4], rng=-1)
+    re_4 = draw_gr(ini_.copy(),  gr_dert_4[5], rng=-1)
+    sobel4 = cv2.Sobel(image.astype('uint8'),cv2.CV_64F,0,1,ksize=9)
+    
+    '''
     # rng = 5
     gr_5 = draw_gr(ini_.copy(), gr_dert_5[3])
     mr_5 = draw_gr(ini_.copy(), gr_dert_5[4])
@@ -387,11 +396,13 @@ if __name__ == "__main__":
     cv2.imwrite(arguments.output + '7x7_SAD.jpg',  mr_3)
     cv2.imwrite(arguments.output + '7x7_x.jpg',  re_3)
     cv2.imwrite(arguments.output + '7x7_sobel.jpg',  sobel3)
-
-    '''
+    
     cv2.imwrite(arguments.output + '9x9_g.jpg',  gr_4)
     cv2.imwrite(arguments.output + '9x9_SAD.jpg',  mr_4)
     cv2.imwrite(arguments.output + '9x9_x.jpg',  re_4)
+    cv2.imwrite(arguments.output + '9x9_sobel.jpg',  sobel4)
+
+    '''
     cv2.imwrite(arguments.output + '11x11_g.jpg',  gr_5)
     cv2.imwrite(arguments.output + '11x11_SAD.jpg',  mr_5)
     cv2.imwrite(arguments.output + '11x11_x.jpg',  re_5)

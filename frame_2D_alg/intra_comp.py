@@ -88,15 +88,15 @@ def comp_r(dert__, ave, rng, root_fia, mask__=None):
     # compare four diametrically opposed pairs of rim pixels, with Sobel coeffs:
     # if rng == 3: skip ratio = 4, so dy, dx *= 2?
 
-    dy__ += ((i__topleft - i__bottomright) * -1 +
-             (i__top - i__bottom) * -2 +
-             (i__topright - i__bottomleft) * -1 +
+    dy__ += ((i__topleft - i__bottomright) * -1 * rng +
+             (i__top - i__bottom) * -2  * rng +
+             (i__topright - i__bottomleft) * -1 * rng +
              (i__right - i__left) * 0)
 
-    dx__ += ((i__topleft - i__bottomright) * -1 +
+    dx__ += ((i__topleft - i__bottomright) * -1 * rng +
              (i__top - i__bottom) * 0 +
-             (i__topright - i__bottomleft) * 1 +
-             (i__right - i__left) * 2)
+             (i__topright - i__bottomleft) * 1 * rng+
+             (i__right - i__left) * 2 * rng)
 
     g__ = np.hypot(dy__, dx__) - ave  # gradient, recomputed at each comp_r
     '''
@@ -106,13 +106,13 @@ def comp_r(dert__, ave, rng, root_fia, mask__=None):
     '''
     #  if rng == 3: skip ratio = 4, so m__ *= 2?
     m__ += int(ave * 1.2) - ( abs(i__center - i__topleft)
-                            + abs(i__center - i__top) * 2
+                            + abs(i__center - i__top) * 2 * rng
                             + abs(i__center - i__topright)
-                            + abs(i__center - i__right) * 2
+                            + abs(i__center - i__right) * 2 * rng
                             + abs(i__center - i__bottomright)
-                            + abs(i__center - i__bottom) * 2
+                            + abs(i__center - i__bottom) * 2 * rng
                             + abs(i__center - i__bottomleft)
-                            + abs(i__center - i__left) * 2
+                            + abs(i__center - i__left) * 2 * rng
                             )
 
     return (i__center, dy__, dx__, g__, m__), majority_mask__

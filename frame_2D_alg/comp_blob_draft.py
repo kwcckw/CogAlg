@@ -4,12 +4,13 @@ Cross-compare blobs with incrementally intermediate adjacency, within a frame
 
 from class_cluster import ClusterStructure, NoneType, comp_param, Cdm
 from frame_blobs import ave, CBlob
-from intra_blob import ave_ga, ave_ma
+from intra_blob import ave_ga, ave_ma, aveB
+from intra_blob import ave as Ave # ave is having same name with ave from frame_blobs
 import numpy as np
 import cv2
 
-ave_inv = 20 # ave inverse m, change to Ave from the root intra_blob?
-ave_min = 5  # ave direct m, change to Ave_min from the root intra_blob?
+#ave_inv = 20 # ave inverse m, change to Ave from the root intra_blob?
+#ave_min = 5  # ave direct m, change to Ave_min from the root intra_blob?
 ave_mB = 1   # search termination crit
 ave_rM = .7  # average relative match at rL=1: rate of ave_mB decay with relative distance, due to correlation between proximity and similarity
 ave_da = 0.7853  # da at 45 degree, = ga at 22.5 degree
@@ -121,9 +122,9 @@ def comp_blob(blob, _blob, _derBlob):
             param = getattr(blob, param_name)
             _param = getattr(_blob, param_name)
             if param_name == "I":
-                ave_mPar = ave_inv
+                ave_mPar = Ave*blob.rdn   # ave_inv 
             else:
-                ave_mPar = ave_min
+                ave_mPar = aveB*blob.rdn  # ave_min
 
         dist_ave = ave_mPar * (ave_rM ** ((1 + derBlob.distance) / np.sqrt(blob.A)))  # deviation from average blob match at current distance
         dm = comp_param(param, _param, param_name, dist_ave)

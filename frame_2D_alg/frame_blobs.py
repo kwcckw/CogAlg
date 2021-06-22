@@ -377,8 +377,7 @@ if __name__ == "__main__":
                     # dert__ comp_a in 2x2 kernels
 
             elif M > aveB and blob_height > 3 and blob_width  > 3:  # min blob dimensions
-                blob.rdn = 1
-                blob.rng = 1
+                blob.rdn = 1 # now blob.rng will be incremented before calling comp_r in intra_blob 
                 blob.f_root_a = 0
                 deep_layers[i] = intra_blob(blob, render=args.render, verbose=args.verbose)
                 # dert__ comp_r in 3x3 kernels

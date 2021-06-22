@@ -45,6 +45,7 @@ class CP(ClusterStructure):
     I = int
     D = int
     M = int
+    x0 = int
     dert_ = list
     sub_layers = list
     # for line_PPs
@@ -111,17 +112,18 @@ def form_Pm_(P_dert_):  # initialization, accumulation, termination
 
     _sign = dert.m > 0
     D = dert.d or 0  # 0 if no dert.d
-    L, I, M, dert_, sub_H = 1, dert.p, dert.m, [dert], []
+    L, I, M, dert_, sub_H, x = 1, dert.p, dert.m, [dert], [], 0
     # cluster P_derts by m sign
     for dert in P_dert_[1:]:
         sign = dert.m > 0
         if sign != _sign:  # sign change, terminate P
-            P_.append(CP(sign=_sign, L=L, I=I, D=D, M=M, dert_=dert_, sub_layers=sub_H, _smP=False))
+            P_.append(CP(sign=_sign, L=L, I=I, D=D, M=M, x0=x-(L-1), dert_=dert_, sub_layers=sub_H, _smP=False))
             L, I, D, M, dert_, sub_H = 0, 0, 0, 0, [], []  # reset params
 
         L += 1; I += dert.p; D += dert.d; M += dert.m  # accumulate params, bilateral m: for eval per pixel
         dert_ += [dert]
         _sign = sign
+        x += 1
 
     P_.append(CP(sign=_sign, L=L, I=I, D=D, M=M, dert_=dert_, sub_layers=sub_H, _smP=False))  # incomplete P
     return P_
@@ -132,12 +134,12 @@ def form_Pd_(P_dert_):  # cluster by d sign, within -Pms: min neg m spans
     P_ = []  # initialization:
     dert = P_dert_[1]  # skip dert_[0]: d is None
     _sign = dert.d > 0
-    L, I, D, M, dert_, sub_H = 1, dert.p, 0, dert.m, [dert], []
+    L, I, D, M, dert_, sub_H, x = 1, dert.p, 0, dert.m, [dert], [], 0
     # cluster P_derts by d sign
     for dert in P_dert_[2:]:
         sign = dert.d > 0
         if sign != _sign:  # sign change, terminate P
-            P_.append(CP(sign=_sign, L=L, I=I, D=D, M=M, dert_=dert_, sub_layers=sub_H, _smP=False))
+            P_.append(CP(sign=_sign, L=L, I=I, D=D, M=M, x0=x-(L-1), dert_=dert_, sub_layers=sub_H, _smP=False))
             L, I, D, M, dert_, sub_H = 0, 0, 0, 0, [], []  # reset accumulated params
 
         L += 1; I += dert.p; D += dert.d; M += dert.m  # accumulate params, m for eval per pixel is bilateral
@@ -360,7 +362,7 @@ if __name__ == "__main__":
     # Main
     frame_of_patterns_ = cross_comp(image)  # returns Pm__
 
-    fline_PPs = 0
+    fline_PPs = 1
     if fline_PPs:  # debug line_PPs_draft
         from line_PPs_draft import *
         frame_PPm_ = []

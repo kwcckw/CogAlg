@@ -165,7 +165,7 @@ if flip_val(PP is FPP): pack FPP in blob.PP_ -> flip FPP.dert__ -> slice_blob(FP
 else       (PP is PP):  pack PP in blob.PP_
 '''
 
-def slice_blob(blob, verbose=False):
+def slice_blob(blob, Ave, verbose=False): # where should we use this Ave?
     '''
     Slice_blob converts selected smooth-edge blobs (high G, low Ga or low M, high Ma) into sliced blobs,
     adding horizontal blob slices: Ps or 1D patterns

@@ -65,7 +65,6 @@ ave_sub_M = 50  # sub_H comp filter
 ave_Ls = 3
 ave_PPM = 200
 ave_merge = 50  # merge adjacent Ps
-base_comparands=['L', 'I', 'D', 'M']
 
 
 def search(P_):  # cross-compare patterns within horizontal line
@@ -81,7 +80,7 @@ def search(P_):  # cross-compare patterns within horizontal line
                 # P.M decay with distance: * ave_rM ** (1 + neg_L / P.L): only for abs P.M?
 
                 derP, _L, _smP = comp_P(P, _P, neg_M, neg_L)
-                sign, mP, dP, neg_M, neg_L, P = derP.sign, derP.mP, derP.dP, derP.neg_M, derP.neg_L, derP.P
+                sign, mP, dP, neg_M, neg_L, P = derP.sign, derP.mP, derP.dP, derP.neg_M, derP.neg_L, derP.P # why we need reload P as derP.P? They should be the same object right?
 
                 derP_d_.append(derP)  # appended at each comp_P: if induction = lend value, for form_PPd_
 
@@ -128,32 +127,38 @@ def form_adjacent_mP(derP_d_):
 
 def comp_P(P, _P, neg_M, neg_L):  # multi-variate cross-comp, _smP = 0 in line_patterns
     mP = dP = 0
-    layer1 = []
+    layer1 = dict({'L':.0,'I':.0,'D':.0,'M':.0})
     L= P.L; _L=_P.L
     distance_ave = ave_M * ave_rM ** (1 + neg_L / P.L)
     # average match projected at current distance from P: neg_L, separate for min_match, add coef / var?
 
-    for (param, _param) in zip([P.I/L, P.D/L, P.M/L], [_P.I/_L, _P.D/_L, _P.M/_L]):
-        dm = comp_param(param, _param, [], distance_ave)
-        # layer1.append([dm.d, dm.m])
+    for param_name in layer1:
+        if param_name == "I":
+            dm = comp_param(P.dert_[0].p, _P.dert_[-1].p, 'I', ave) # why we are getting I from dert_ instead of summed I?
+        else:       
+            param = getattr(P, param_name); 
+            _param = getattr(_P, param_name)
+            dm = comp_param(param/L, _param/L, [], distance_ave)
         mP += dm.m; dP += dm.d
-
-    rel_distance = (P.x0 - (_P.x0 +_P.L)) / P.L  # tentative
-
-    dm = comp_param(P.dert_[0].p, _P.dert_[-1].p, 'I', ave)
-    mP += dm.m; dP += dm.d  # same value as match of summed params?
+    
+    rel_distance = (P.x0 - (_P.x0 +_P.L)) / P.L  # tentative # rel_distance may = 0 when (P.x0 = _P.x0 + _P.L) an causing zero division issue
 
     if mP / rel_distance > ave_merge:
-        merge(_P, P)  # splice proximate and param/L- similar Ps
+        # merge(_P, P)  # splice proximate and param/L- similar Ps # no merge function yet? 
         # re_search (merged _P, P_)?
 
+        # placeholder
+        derP = CderP(P=P) # after merging, there is no derP?
+        
     else:  # form derP:
         dist_ave = ave_M * ave_rM ** (1 + neg_L / P.L)  # average match projected at current distance: neg_L, add coef / var?
 
-        for (param, _param) in zip([P.I, P.L, P.D, P.M], [_P.I, _P.L, _P.D, _P.M]):
-            dm = comp_param(param, _param, [], dist_ave)
-            layer1.append([dm.d, dm.m])
+        for param_name in layer1:
+            param = getattr(P, param_name)/L
+            _param = getattr(_P, param_name)/_L
+            dm = comp_param(param, _param, [], distance_ave)
             mP += dm.m; dP += dm.d
+            layer1[param_name] = dm
 
         # mP -= ave_M * ave_rM ** (1 + neg_L / P.L)  # average match projected at current distance: neg_L, add coef / var?
         # match(P,_P), ave_M is addition to ave? or abs for projection in search?
