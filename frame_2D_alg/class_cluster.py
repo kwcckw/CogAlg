@@ -85,7 +85,7 @@ class MetaCluster(type):
 
         list_params = tuple(param for param in params
                                if (issubclass(attrs[param], list)))
-        
+
         dict_params = tuple(param for param in params
                                if (issubclass(attrs[param], dict)))
 
@@ -281,9 +281,9 @@ class ClusterStructure(metaclass=MetaCluster):
 
                 if len(layer) == len(_layer): # both layers are having same params
                     for i, ((param_name,dm), (_param_name,_dm)) in enumerate(zip(layer.items(), _layer.items())):  # accumulate _dm to dm in layer
-                              
-                        if not isinstance(dm, Cdm) and isinstance(_dm, Cdm): # dm is not dm, due to base param < ave_comp 
-                            layer[param_name] = _dm          
+
+                        if not isinstance(dm, Cdm) and isinstance(_dm, Cdm): # dm is not dm, due to base param < ave_comp
+                            layer[param_name] = _dm
                         elif isinstance(dm, Cdm) and isinstance(_dm, Cdm): # both params are having dm
                             if param_name in ['Da','Dady','Dadx'] and _param_name in ['Da','Dady','Dadx'] : # check both names, just in case
                                 # convert da to vector, sum them and convert them back to angle

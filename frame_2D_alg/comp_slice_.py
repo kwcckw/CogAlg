@@ -127,7 +127,7 @@ class CPP(CP, CderP):
     neg_mdPP = int
 
 class CderPP(ClusterStructure):
-    
+
     layer1 = dict
     layer2 = dict
     PP = object
@@ -356,7 +356,7 @@ def derP_2_PP_(derP_, PP_,  fPPd):
         if not derP.P.downconnect_cnt and not isinstance(derP.PP, CPP):  # root derP was not terminated in prior call
             PP = CPP()  # init
             accum_PP(PP,derP)
-            
+
             if derP._P.upconnect_:  # derP has upconnects
                 upconnect_2_PP_(derP, PP_, fPPd)  # form PPs across _P upconnects
             else:
@@ -450,7 +450,7 @@ def comp_slice(_P, P):  # forms vertical derivatives of derP params, and conditi
     mP, dP = 0, 0
     absG = max(1,P.G + (ave_g*P.L)); _absG = max(1,_P.G + (ave_g*_P.L))         # use max to avoid zero division
     absGa = max(1,P.Ga + (ave_ga *P.L)); _absGa = max(1,_P.Ga + (ave_ga *_P.L))
-    
+
     for param_name in layer1:
         if param_name == 'Da':
             sin  = P.Dy/absG  ;  cos = P.Dx/absG
@@ -482,7 +482,7 @@ def comp_slice(_P, P):  # forms vertical derivatives of derP params, and conditi
         layer1[param_name] = dm
         mP += dm.m
         dP += dm.d
-        
+
     '''
     s, x0, Dx, Dy, G, M, L, Ddx, Mdx = P.sign, P.x0, P.Dx, P.Dy, P.G, P.M, P.L, P.Ddx, P.Mdx  # params per comp branch
     _s, _x0, _Dx, _Dy, _G, _M, _dX, _L, _Ddx, _Mdx = _P.sign, _P.x0, _P.Dx, _P.Dy, _P.G, _P.M, _P.dX, _P.L, _P.Ddx, _P.Mdx
@@ -738,14 +738,14 @@ def accum_PPP(PPP, PP, fPPd):
 
     # accumulate layer 1 of PP into PPP too?
     PPP.accum_from(PP) # accumulate parameter
-  
+
     if fPPd:
         PPP.PPd_.append(PP) # add PPd to PPP's PPd_
         PP.PPPd = PPP       # update PPP reference of PP
         for derPPd in PP.derPPd_: # accumulate derPPd params, layer1 and layer2
             PPP.accum_from(derPPd)
             PPP.derPPd_.append(derPPd)
-        
+
     else:
         PPP.PPm_.append(PP) # add PPm to PPP's PPm_
         PP.PPPm = PPP       # update PPP reference of PP
@@ -807,7 +807,7 @@ def comp_PP(PP, _PP):
         layer1[param_name] = dm
         mP += dm.m
         dP += dm.d
-        
+
     # compare layer1 to get layer2 #-------------------------------------------
 
     layer2 = dict({'I':.0,'Da':.0,'G':.0,'M':.0,'Dady':.0,'Dadx':.0,'Ga':.0,'Ma':.0,'L':.0,'Mdx':.0, 'Ddx':.0, 'x':.0})
