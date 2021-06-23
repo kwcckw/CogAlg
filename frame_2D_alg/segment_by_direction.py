@@ -14,7 +14,7 @@ flip_ave = 10
 ave_dir_val = 50
 ave_M = -500  # high negative ave M for high G blobs
 
-def segment_by_direction(iblob, Ave, **kwargs):
+def segment_by_direction(iblob, **kwargs):
 
     dert__ = list(iblob.dert__)
     mask__ = iblob.mask__
@@ -37,7 +37,7 @@ def segment_by_direction(iblob, Ave, **kwargs):
 
             if (blob.M > ave_M) and (blob.box[1]-blob.box[0]>1):  # y size >1, else we can't form derP
                 blob.fsliced = True
-                slice_blob(blob,Ave, verbose)  # slice and comp_slice_ across directional sub-blob
+                slice_blob(blob, verbose)  # slice and comp_slice_ across directional sub-blob
             iblob.dir_blobs.append(blob)
 
         for dir_blob in iblob.dir_blobs:

@@ -125,7 +125,7 @@ def comp_P(P_, P, _P, i, j, neg_M, neg_L):  # multi-variate cross-comp, _smP = 0
             dm = comp_param(param/L, _param/L, [], dist_ave)
         mP += dm.m; dP += dm.d
 
-    rel_distance = neg_L / P.L if neg_L else 0  # tentative
+    rel_distance = neg_L / P.L if neg_L else 1  # tentative, set value to 1 if neg_L = 0
 
     if mP / rel_distance > ave_merge:
         merge(P, _P)  # splice proximate and param/L- similar Ps, same as merge_blob
@@ -277,15 +277,16 @@ def form_PPm_(derP_):  # cluster derPs into PPm s by mP sign, eval for div_comp 
 
 def form_adjacent_mP(derP_d_):
 
-    pri_mP = derP_d_[0].mP
-    mP = derP_d_[1].mP
-    derP_d_[0].adj_mP = derP_d_[1].mP
-
-    for i, derP in enumerate(derP_d_[2:]):
-        next_mP = derP.mP
-        derP_d_[i+1].adj_mP = (pri_mP + next_mP)/2
-        pri_mP = mP
-        mP = next_mP
+    if len(derP_d_)>1:
+        pri_mP = derP_d_[0].mP
+        mP = derP_d_[1].mP
+        derP_d_[0].adj_mP = derP_d_[1].mP
+    
+        for i, derP in enumerate(derP_d_[2:]):
+            next_mP = derP.mP
+            derP_d_[i+1].adj_mP = (pri_mP + next_mP)/2
+            pri_mP = mP
+            mP = next_mP
 
     return derP_d_
 
