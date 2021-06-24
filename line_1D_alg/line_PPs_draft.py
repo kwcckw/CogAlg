@@ -128,7 +128,8 @@ def comp_P(P_, _P, P, i, j, neg_M, neg_L):  # multi-variate cross-comp, _smP = 0
             param = getattr(P, param_name)
             _param = getattr(_P, param_name)
             dm = comp_param(_param/L, param/L, [], dist_ave)
-        mP += dm.m; dP += dm.d
+        if dm.d: dP += dm.d # d could be None   
+        mP += dm.m; 
 
         # add comp sub_layers: deep merge
 
@@ -137,8 +138,9 @@ def comp_P(P_, _P, P, i, j, neg_M, neg_L):  # multi-variate cross-comp, _smP = 0
     if mP / max(rel_distance, 1) > ave_merge:
         # merge(_P, P): splice proximate and param/L- similar Ps:
         _P.accum_from(P)
-        _P.dert_.append([P.dert_])
-        # sub_layers are already merged if compared?
+        _P.dert_ += P.dert_ # += is sufficient to merge their dert_
+        _P.sub_layers += P.sub_layers
+        # sub_layers are already merged if compared? sub layers are not merged
         P_.remove(P)
 
         comp_P(P_, P_[i-1], _P, i-1, i, neg_M, neg_L)  # backward re-comp_P
@@ -287,15 +289,16 @@ def form_PPm_(derP_):  # cluster derPs into PPm s by mP sign, eval for div_comp 
 
 def form_adjacent_mP(derP_d_):
 
-    pri_mP = derP_d_[0].mP
-    mP = derP_d_[1].mP
-    derP_d_[0].adj_mP = derP_d_[1].mP
-
-    for i, derP in enumerate(derP_d_[2:]):
-        next_mP = derP.mP
-        derP_d_[i+1].adj_mP = (pri_mP + next_mP)/2
-        pri_mP = mP
-        mP = next_mP
+    if len(derP_d_) > 1: # no reason to form adjacent when size < 1 right?
+        pri_mP = derP_d_[0].mP
+        mP = derP_d_[1].mP
+        derP_d_[0].adj_mP = derP_d_[1].mP
+    
+        for i, derP in enumerate(derP_d_[2:]):
+            next_mP = derP.mP
+            derP_d_[i+1].adj_mP = (pri_mP + next_mP)/2
+            pri_mP = mP
+            mP = next_mP
 
     return derP_d_
 
