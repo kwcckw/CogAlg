@@ -122,7 +122,7 @@ def comp_blob(blob, _blob, _derBlob):
             param = getattr(blob, param_name)
             _param = getattr(_blob, param_name)
             if param_name == "I":
-                ave_mPar = ave_inv   # ave_inv 
+                ave_mPar = ave_inv   # ave_inv
             else:
                 ave_mPar = ave_min  # ave_min
 
