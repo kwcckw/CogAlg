@@ -16,10 +16,11 @@ from collections import deque
 import sys
 import numpy as np
 from class_cluster import ClusterStructure, NoneType, comp_param, Cdm
-from comp_blob import ave_min, ave_inv
 # import warnings  # to detect overflow issue, in case of infinity loop
 # warnings.filterwarnings('error')
 
+ave_inv = 20 # ave inverse m, change to Ave from the root intra_blob?
+ave_min = 5  # ave direct m, change to Ave_min from the root intra_blob?
 ave_g = 30  # change to Ave from the root intra_blob?
 flip_ave = .1
 flip_ave_FPP = 0  # flip large FPPs only (change to 0 for debug purpose)

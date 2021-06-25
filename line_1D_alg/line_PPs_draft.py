@@ -81,13 +81,15 @@ def search(P_):  # cross-compare patterns within horizontal line
             if _P.M + neg_M > 0:  # search while net_M > ave_M * nparams or 1st P, no selection by M sign
                 # P.M decay with distance: * ave_rM ** (1 + neg_L / P.L): only for abs P.M?
 
-                derP, _L, _smP = comp_P(P_, _P, P, i, j, neg_M, neg_L)
+                derP, _L, _smP = comp_P(P_, _P, P, i, j+i+1, neg_M, neg_L) # we need +i+1 to get the correct P from P_
                 sign, mP, dP, neg_M, neg_L = derP.sign, derP.mP, derP.dP, derP.neg_M, derP.neg_L
 
                 derP_d_.append(derP)  # appended at each comp_P: if induction = lend value, for form_PPd_
 
                 if sign:
-                    P_[i + 1 + j]._smP = True  # backward match per P, or set _smP in derP_ with empty CderPs?
+                    # this may not work now, since we are removing P from P_ in comp_P after the merging
+                    # why not just set _P.smP = True?
+                    P_[i + 1+ j]._smP = True  # backward match per P, or set _smP in derP_ with empty CderPs?
                     derP_.append(derP)
                     break  # nearest-neighbour search is terminated by first match
                 else:
@@ -106,12 +108,14 @@ def search(P_):  # cross-compare patterns within horizontal line
 
     PPm_ = form_PPm_(derP_)  # cluster derPs into PPms by the sign of mP
 
-    derP_d_ = form_adjacent_mP(derP_d_)
+    if len(derP_d_)>1: derP_d_ = form_adjacent_mP(derP_d_)
     PPd_ = form_PPd_(derP_d_)  # cluster derP_ds into PPds by the sign of vdP
+    PPd_ = []
 
     return PPm_, PPd_
 
 
+# would it be better if we separate it into 2 functions? comp_P recursive and comp_P?
 def comp_P(P_, _P, P, i, j, neg_M, neg_L):  # multi-variate cross-comp, _smP = 0 in line_patterns
     mP = dP = 0
     layer1 = dict({'L':.0,'I':.0,'D':.0,'M':.0})
@@ -132,26 +136,37 @@ def comp_P(P_, _P, P, i, j, neg_M, neg_L):  # multi-variate cross-comp, _smP = 0
         dm = comp_param(_param/L, param/L, [], ave)
         dP += dm.d or 0  # d could be None
         mP += dm.m
-
-        # add comp sub_layers: deep merge
+    
+    # why we would need comp_sub_layer here where we will comp_sub_layer again in the else loop?
+    comp_sub_layers(_P, P, mP) # add comp sub_layers: deep merge
 
     rel_distance = neg_L / _P.L
 
-    if mP / max(rel_distance, 1) > ave_merge:
+    if mP / max(rel_distance, 1) > ave_merge:  # no point to search if there's only 1 single P?
         # merge(_P, P): splice proximate and param/L- similar Ps:
         _P.accum_from(P)
         _P.dert_+= P.dert_
         # add comp sub_layers
-        P_.remove(P)
+        if P in P_: P_.remove(P)
         # if _P is Pm: P.sign = P.M > 0
         # else: _P.sign = P.D > 0
-
-        comp_P(P_, P_[i-1], _P, i-1, i, neg_M, neg_L)  # backward re-comp_P
-        comp_P(P_, _P, P_[j+1], i, j+1, neg_M, neg_L)  # forward comp_P
-
+        
+        # draft
+        # if leftmost P is reached, start to merge from 1? or the original j? 
+        if (i-1) >=0: # left most P reached
+            derP, _L, _smP = comp_P(P_, P_[i-1], _P, i-1, i, neg_M, neg_L)  # backward re-comp_P
+        elif (j+1) <= len(P_)-1: # there is P in the right
+            derP, _L, _smP = comp_P(P_, _P, P_[j+1], i, j+1, neg_M, neg_L)  # forward comp_P
+        else:
+            derP = CderP(P=_P) # dummy derP, to allow function always return derP
+                              
     else:  # form derP:
 
         for param_name in layer1:
+            if param_name == "I":
+                dist_ave = ave_inv * dist_coef
+            else:
+                dist_ave = ave_min * dist_coef
             param = getattr(P, param_name)/L
             _param = getattr(_P, param_name)/_L
             dm = comp_param(_param, param, [], dist_ave)
@@ -163,37 +178,53 @@ def comp_P(P_, _P, P, i, j, neg_M, neg_L):  # multi-variate cross-comp, _smP = 0
         if P.sign == _P.sign: mP *= 2  # sign is MSB, value of sign match = full magnitude match?
 
         sign = mP > 0
-        if sign:  # positive forward match, compare sub_layers between P.sub_H and _P.sub_H:
+        if sign: # positive forward match, compare sub_layers between P.sub_H and _P.sub_H:
+            comp_sub_layers(_P, P, mP)
 
-            if P.sub_layers and _P.sub_layers:  # not empty sub layers
-                for _sub_layer, sub_layer in zip(_P.sub_layers, P.sub_layers):
-
-                    if _sub_layer and sub_layer:
-                        _Ls, _fdP, _fid, _rdn, _rng, _sub_P_ = _sub_layer[0]
-                        Ls, fdP, fid, rdn, rng, sub_P_ = sub_layer[0]
-                        # fork comparison:
-                        if fdP == _fdP and rng == _rng and min(Ls, _Ls) > ave_Ls:
-                            der_sub_P_ = []
-                            sub_mP = 0
-                            # compare all sub_Ps to each _sub_P, form dert_sub_P per compared pair
-                            for i, _sub_P in enumerate(_sub_P_):  # note name recycling in nested loop
-                                for j, sub_P in enumerate(sub_P_):
-                                    der_sub_P, _, _ = comp_P(_sub_P_, _sub_P, sub_P, i, j, neg_M=0, neg_L=0)
-                                    # this is not correct, we are comparing between sub_P_s, not within one?
-                                    sub_mP += der_sub_P.mP  # sum sub_vmPs in derP_layer
-                                    der_sub_P_.append(der_sub_P)
-
-                            _P.derP.der_sub_H.append((fdP, fid, rdn, rng, der_sub_P_))  # add only layers that have been compared
-                            mP += sub_mP  # of compared H, no specific mP?
-                            if sub_mP < ave_sub_M:
-                                # potentially mH: trans-layer induction?
-                                break  # low vertical induction, deeper sub_layers are not compared
-                        else:
-                            break  # deeper P and _P sub_layers are from different intra_comp forks, not comparable?
-
-        derP = CderP(sign=sign, mP=mP, neg_M=neg_M, neg_L=neg_L, P=_P, layer1=layer1)
-
+        if isinstance(_P.derP, CderP): # derP is created in comp_sub_layers
+            _P.derP.sign = sign
+            _P.derP.layer1 = layer1
+            _P.derP.accumulate(mP=mP, neg_M=neg_M, neg_L=neg_L, P=_P)
+            derP = _P.derP
+        else:
+            derP = CderP(sign=sign, mP=mP, neg_M=neg_M, neg_L=neg_L, P=_P, layer1=layer1)
+            _P.derP = derP
+          
     return derP, _P.L, _P.sign
+
+
+def comp_sub_layers(_P, P, mP):
+    
+    if P.sub_layers and _P.sub_layers:  # not empty sub layers
+        for _sub_layer, sub_layer in zip(_P.sub_layers, P.sub_layers):
+
+            if _sub_layer and sub_layer:
+                _Ls, _fdP, _fid, _rdn, _rng, _sub_P_ = _sub_layer[0]
+                Ls, fdP, fid, rdn, rng, sub_P_ = sub_layer[0]
+                # fork comparison:
+                if fdP == _fdP and rng == _rng and min(Ls, _Ls) > ave_Ls:
+                    der_sub_P_ = []
+                    sub_mP = 0
+                    # compare all sub_Ps to each _sub_P, form dert_sub_P per compared pair
+                    for m, _sub_P in enumerate(_sub_P_):  # note name recycling in nested loop
+                        for n, sub_P in enumerate(sub_P_):
+                            der_sub_P, _, _ = comp_P(_sub_P_, _sub_P, sub_P, m, n, neg_M=0, neg_L=0)
+                            # this is not correct, we are comparing between sub_P_s, not within one?
+                            # should be correct, we are comparing sub_P from P's sub_layer and _P.sub_layer   
+                            sub_mP += der_sub_P.mP  # sum sub_vmPs in derP_layer
+                            der_sub_P_.append(der_sub_P)
+
+                    # if _P is not having derP yet, create 1 here?
+                    if not isinstance(_P.derP, CderP):
+                        _P.derP = CderP(_P=_P)
+                    _P.derP.der_sub_H.append((fdP, fid, rdn, rng, der_sub_P_))  # add only layers that have been compared
+
+                    mP += sub_mP  # of compared H, no specific mP?
+                    if sub_mP < ave_sub_M:
+                        # potentially mH: trans-layer induction?
+                        break  # low vertical induction, deeper sub_layers are not compared
+                else:
+                    break  # deeper P and _P sub_layers are from different intra_comp forks, not comparable?
 
 
 def comp_P_kelvin(P, _P, neg_M, neg_L, P_):  # multi-variate cross-comp, _smP = 0 in line_patterns
