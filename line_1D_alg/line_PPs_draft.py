@@ -66,7 +66,8 @@ ave_sub_M = 50  # sub_H comp filter
 ave_Ls = 3
 ave_PPM = 200
 ave_merge = 50  # merge adjacent Ps
-
+ave_inv = 20 # ave inverse m, change to Ave from the root intra_blob?
+ave_min = 5  # ave direct m, change to Ave_min from the root intra_blob?
 
 def search(P_):  # cross-compare patterns within horizontal line
 
@@ -115,21 +116,22 @@ def comp_P(P_, _P, P, i, j, neg_M, neg_L):  # multi-variate cross-comp, _smP = 0
     mP = dP = 0
     layer1 = dict({'L':.0,'I':.0,'D':.0,'M':.0})
     _L=_P.L; L= P.L
-    dist_ave = ave_M * ave_rM ** (1 + neg_L / _P.L)
+    dist_coef = ave_rM ** (1 + neg_L / _P.L)
     # average match projected at current distance from P: neg_L, separate for min_match, add coef / var?
 
     for param_name in layer1:
         if param_name == "I":
-            if neg_L:
-                dm = comp_param(_P.dert_[-1].p, P.dert_[0].p, 'I', ave)  # add mean d of _P?
-            else:
-                dm = Cdm(d=_P.dert_[0].d, m=_P.dert_[0].m)
+            if neg_L == 0: dm = Cdm(d=_P.dert_[0].d, m=_P.dert_[0].m)
+            # else: comp mean params only?
+            ave = ave_inv * dist_coef
         else:
-            param = getattr(P, param_name)
-            _param = getattr(_P, param_name)
-            dm = comp_param(_param/L, param/L, [], dist_ave)
-        if dm.d: dP += dm.d # d could be None   
-        mP += dm.m; 
+            ave = ave_min * dist_coef
+
+        param = getattr(P, param_name)
+        _param = getattr(_P, param_name)
+        dm = comp_param(_param/L, param/L, [], ave)
+        dP += dm.d or 0  # d could be None
+        mP += dm.m
 
         # add comp sub_layers: deep merge
 
@@ -138,15 +140,17 @@ def comp_P(P_, _P, P, i, j, neg_M, neg_L):  # multi-variate cross-comp, _smP = 0
     if mP / max(rel_distance, 1) > ave_merge:
         # merge(_P, P): splice proximate and param/L- similar Ps:
         _P.accum_from(P)
-        _P.dert_ += P.dert_ # += is sufficient to merge their dert_
-        _P.sub_layers += P.sub_layers
-        # sub_layers are already merged if compared? sub layers are not merged
+        _P.dert_+= P.dert_
+        # add comp sub_layers
         P_.remove(P)
+        # if _P is Pm: P.sign = P.M > 0
+        # else: _P.sign = P.D > 0
 
         comp_P(P_, P_[i-1], _P, i-1, i, neg_M, neg_L)  # backward re-comp_P
         comp_P(P_, _P, P_[j+1], i, j+1, neg_M, neg_L)  # forward comp_P
 
     else:  # form derP:
+
         for param_name in layer1:
             param = getattr(P, param_name)/L
             _param = getattr(_P, param_name)/_L
@@ -164,7 +168,7 @@ def comp_P(P_, _P, P, i, j, neg_M, neg_L):  # multi-variate cross-comp, _smP = 0
             if P.sub_layers and _P.sub_layers:  # not empty sub layers
                 for _sub_layer, sub_layer in zip(_P.sub_layers, P.sub_layers):
 
-                    if P and _P:  # both forks exist? or if _sub_layer and sub_layer?
+                    if _sub_layer and sub_layer:
                         _Ls, _fdP, _fid, _rdn, _rng, _sub_P_ = _sub_layer[0]
                         Ls, fdP, fid, rdn, rng, sub_P_ = sub_layer[0]
                         # fork comparison:
@@ -289,16 +293,15 @@ def form_PPm_(derP_):  # cluster derPs into PPm s by mP sign, eval for div_comp 
 
 def form_adjacent_mP(derP_d_):
 
-    if len(derP_d_) > 1: # no reason to form adjacent when size < 1 right?
-        pri_mP = derP_d_[0].mP
-        mP = derP_d_[1].mP
-        derP_d_[0].adj_mP = derP_d_[1].mP
-    
-        for i, derP in enumerate(derP_d_[2:]):
-            next_mP = derP.mP
-            derP_d_[i+1].adj_mP = (pri_mP + next_mP)/2
-            pri_mP = mP
-            mP = next_mP
+    pri_mP = derP_d_[0].mP
+    mP = derP_d_[1].mP
+    derP_d_[0].adj_mP = derP_d_[1].mP
+
+    for i, derP in enumerate(derP_d_[2:]):
+        next_mP = derP.mP
+        derP_d_[i+1].adj_mP = (pri_mP + next_mP)/2
+        pri_mP = mP
+        mP = next_mP
 
     return derP_d_
 

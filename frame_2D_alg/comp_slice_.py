@@ -21,7 +21,6 @@ from comp_blob import ave_min, ave_inv
 # warnings.filterwarnings('error')
 
 ave_g = 30  # change to Ave from the root intra_blob?
-aveG = 50  # filter for comp_g, assumed constant direction
 flip_ave = .1
 flip_ave_FPP = 0  # flip large FPPs only (change to 0 for debug purpose)
 div_ave = 200
