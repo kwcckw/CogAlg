@@ -65,7 +65,7 @@ ave_M = 100  # search stop
 ave_sub_M = 50  # sub_H comp filter
 ave_Ls = 3
 ave_PPM = 200
-ave_merge = 50  # merge adjacent Ps
+ave_merge = -50  # merge adjacent Ps
 ave_inv = 20 # ave inverse m, change to Ave from the root intra_blob?
 ave_min = 5  # ave direct m, change to Ave_min from the root intra_blob?
 
@@ -73,50 +73,86 @@ def search(P_):  # cross-compare patterns within horizontal line
 
     derP_ = []  # search forms array of derPs (P + P'derivatives): combined output of pair-wise comp_P
     derP_d_ = []
-    for i, _P in enumerate(P_):
-        neg_M = neg_L = mP = sign = dP =_smP = 0  # initialization
-
-
-        for j, P in enumerate(P_[i + 1:]):  # variable-range comp, no last-P displacement, just shifting first _P
-            if _P.M + neg_M > 0:  # search while net_M > ave_M * nparams or 1st P, no selection by M sign
-                # P.M decay with distance: * ave_rM ** (1 + neg_L / P.L): only for abs P.M?
-
-                derP, _L, _smP = comp_P(P_, _P, P, i, j+i+1, neg_M, neg_L) # we need +i+1 to get the correct P from P_
-                sign, mP, dP, neg_M, neg_L = derP.sign, derP.mP, derP.dP, derP.neg_M, derP.neg_L
-
-                derP_d_.append(derP)  # appended at each comp_P: if induction = lend value, for form_PPd_
-
-                if sign:
-                    # this may not work now, since we are removing P from P_ in comp_P after the merging
-                    # why not just set _P.smP = True?
-                    P_[i + 1+ j]._smP = True  # backward match per P, or set _smP in derP_ with empty CderPs?
-                    derP_.append(derP)
-                    break  # nearest-neighbour search is terminated by first match
-                else:
-                    neg_M += mP  # accumulate contiguous P miss, or all derivatives?
-                    neg_L += _L  # accumulate distance to matching P
-                    if j == len(P_):  # needs review
-                        # last P has a singleton derP
+    PPm_ = []
+    remove_index = []
+    
+    for i, _P in enumerate(P_): 
+        if i not in remove_index:
+            neg_M = neg_L = mP = sign = dP =_smP = 0  # initialization
+            # start = 1 to allow j start to enumerate with number of 1 
+            for j, P in enumerate(P_[i + 1:], start=1):  # variable-range comp, no last-P displacement, just shifting first _P 
+                if (j+i) not in remove_index:
+                
+                    if _P.M + neg_M > 0:  # search while net_M > ave_M * nparams or 1st P, no selection by M sign
+                        # P.M decay with distance: * ave_rM ** (1 + neg_L / P.L): only for abs P.M?
+        
+                        derP, _L, _smP = merge_comp_P(P_, _P, P, i, j+i, neg_M, neg_L, remove_index) # we need +i to get the correct P from P_
+                        sign, mP, dP, neg_M, neg_L = derP.sign, derP.mP, derP.dP, derP.neg_M, derP.neg_L
+                        derP_d_.append(derP)  # appended at each comp_P: if induction = lend value, for form_PPd_
+        
+                        if sign:
+                            # this may not work now, since we are removing P from P_ in comp_P after the merging
+                            # should be i+j only if we want to refer back to P
+                            P_[j+i]._smP = True  # backward match per P, or set _smP in derP_ with empty CderPs?
+                            derP_.append(derP)
+                            break  # nearest-neighbour search is terminated by first match
+                        else:
+                            neg_M += mP  # accumulate contiguous P miss, or all derivatives?
+                            neg_L += _L  # accumulate distance to matching P
+                            if (j+i) == len(P_):  # last P is j+i
+                                # last P has a singleton derP
+                                derP_.append( CderP(sign=sign or _smP, mP=mP,dP=dP, neg_M=neg_M, neg_L=neg_L, P=_P))
+                            '''                     
+                            no contrast value in neg derPs and PPs: initial opposite-sign P miss is expected
+                            neg_derP derivatives are not significant; neg_M obviates distance * decay_rate * M '''
+                    else:
                         derP_.append( CderP(sign=sign or _smP, mP=mP,dP=dP, neg_M=neg_M, neg_L=neg_L, P=_P))
-                    '''                     
-                    no contrast value in neg derPs and PPs: initial opposite-sign P miss is expected
-                    neg_derP derivatives are not significant; neg_M obviates distance * decay_rate * M '''
-            else:
-                derP_.append( CderP(sign=sign or _smP, mP=mP,dP=dP, neg_M=neg_M, neg_L=neg_L, P=_P))
-                # sign is ORed bilaterally, negative for singleton derPs only
-                break  # neg net_M: stop search
+                        # sign is ORed bilaterally, negative for singleton derPs only
+                        break  # neg net_M: stop search
 
-    PPm_ = form_PPm_(derP_)  # cluster derPs into PPms by the sign of mP
+    # delete the merged sub_Ps at last
+    for index in sorted(remove_index, reverse=True):
+         del P_[index]  
 
+    if derP_: PPm_ = form_PPm_(derP_)  # cluster derPs into PPms by the sign of mP
     if len(derP_d_)>1: derP_d_ = form_adjacent_mP(derP_d_)
     PPd_ = form_PPd_(derP_d_)  # cluster derP_ds into PPds by the sign of vdP
-    PPd_ = []
 
     return PPm_, PPd_
 
 
-# would it be better if we separate it into 2 functions? comp_P recursive and comp_P?
-def comp_P(P_, _P, P, i, j, neg_M, neg_L):  # multi-variate cross-comp, _smP = 0 in line_patterns
+
+def merge_comp_P(P_, _P, P, i, j, neg_M, neg_L, remove_index):  # multi-variate cross-comp, _smP = 0 in line_patterns
+    
+    # tentative derP
+    iderP, _L, _smP = comp_P(_P, P, neg_L, neg_M)
+
+    rel_distance = neg_L / _P.L
+
+    if iderP.mP / max(rel_distance, 1) > ave_merge:  # no point to search if there's only 1 single P?
+        # merge(_P, P): splice proximate and param/L- similar Ps:
+        _P.accum_from(P)
+        _P.dert_+= P.dert_
+        # add comp sub_layers
+        remove_index.append(j)
+
+        # if _P is Pm: P.sign = P.M > 0
+        # else: _P.sign = P.D > 0
+        if (i-1) >=0 and (i-1) not in remove_index and (i) not in remove_index: # left most P reached
+            derP, _L, _smP = merge_comp_P(P_, P_[i-1], _P, i-1, i, neg_M, neg_L, remove_index)  # backward re-comp_P
+        elif (j+1) <= len(P_)-1 and (j+1) not in remove_index and (i) not in remove_index: # there is P in the right
+            derP, _L, _smP = merge_comp_P(P_, _P, P_[j+1], i, j+1, neg_M, neg_L, remove_index)  # forward comp_P
+        else:
+            derP = CderP(P=_P) # dummy derP, to allow function always return derP
+                              
+    else:  # form derP:
+
+        derP, L, _smP = comp_P(_P, P, neg_L, neg_M)
+          
+    return derP, _P.L, _P.sign
+
+def comp_P(_P, P, neg_L, neg_M):  # multi-variate cross-comp, _smP = 0 in line_patterns
+    
     mP = dP = 0
     layer1 = dict({'L':.0,'I':.0,'D':.0,'M':.0})
     _L=_P.L; L= P.L
@@ -126,52 +162,14 @@ def comp_P(P_, _P, P, i, j, neg_M, neg_L):  # multi-variate cross-comp, _smP = 0
     for param_name in layer1:
         if param_name == "I":
             if neg_L == 0: dm = Cdm(d=_P.dert_[0].d, m=_P.dert_[0].m)
-            # else: comp mean params only?
-            ave = ave_inv * dist_coef
+            dist_ave = ave_inv * dist_coef
         else:
-            ave = ave_min * dist_coef
-
-        param = getattr(P, param_name)
-        _param = getattr(_P, param_name)
-        dm = comp_param(_param/L, param/L, [], ave)
-        dP += dm.d or 0  # d could be None
-        mP += dm.m
-    
-    # why we would need comp_sub_layer here where we will comp_sub_layer again in the else loop?
-    comp_sub_layers(_P, P, mP) # add comp sub_layers: deep merge
-
-    rel_distance = neg_L / _P.L
-
-    if mP / max(rel_distance, 1) > ave_merge:  # no point to search if there's only 1 single P?
-        # merge(_P, P): splice proximate and param/L- similar Ps:
-        _P.accum_from(P)
-        _P.dert_+= P.dert_
-        # add comp sub_layers
-        if P in P_: P_.remove(P)
-        # if _P is Pm: P.sign = P.M > 0
-        # else: _P.sign = P.D > 0
-        
-        # draft
-        # if leftmost P is reached, start to merge from 1? or the original j? 
-        if (i-1) >=0: # left most P reached
-            derP, _L, _smP = comp_P(P_, P_[i-1], _P, i-1, i, neg_M, neg_L)  # backward re-comp_P
-        elif (j+1) <= len(P_)-1: # there is P in the right
-            derP, _L, _smP = comp_P(P_, _P, P_[j+1], i, j+1, neg_M, neg_L)  # forward comp_P
-        else:
-            derP = CderP(P=_P) # dummy derP, to allow function always return derP
-                              
-    else:  # form derP:
-
-        for param_name in layer1:
-            if param_name == "I":
-                dist_ave = ave_inv * dist_coef
-            else:
-                dist_ave = ave_min * dist_coef
-            param = getattr(P, param_name)/L
-            _param = getattr(_P, param_name)/_L
-            dm = comp_param(_param, param, [], dist_ave)
-            mP += dm.m; dP += dm.d
-            layer1[param_name] = dm
+            dist_ave = ave_min * dist_coef
+        param = getattr(P, param_name)/L
+        _param = getattr(_P, param_name)/_L
+        dm = comp_param(_param, param, [], dist_ave)
+        mP += dm.m; dP += dm.d
+        layer1[param_name] = dm
 
         # mP -= ave_M * ave_rM ** (1 + neg_L / P.L)  # average match projected at current distance: neg_L, add coef / var?
         # match(P,_P), ave_M is addition to ave? or abs for projection in search?
@@ -205,18 +203,27 @@ def comp_sub_layers(_P, P, mP):
                 if fdP == _fdP and rng == _rng and min(Ls, _Ls) > ave_Ls:
                     der_sub_P_ = []
                     sub_mP = 0
+                    
+                    # compare and merge within sub_P_
+                    merge_sub_P_(_sub_P_)
+                    merge_sub_P_(sub_P_)
+
                     # compare all sub_Ps to each _sub_P, form dert_sub_P per compared pair
+                    remove_index = []
                     for m, _sub_P in enumerate(_sub_P_):  # note name recycling in nested loop
                         for n, sub_P in enumerate(sub_P_):
-                            der_sub_P, _, _ = comp_P(_sub_P_, _sub_P, sub_P, m, n, neg_M=0, neg_L=0)
-                            # this is not correct, we are comparing between sub_P_s, not within one?
-                            # should be correct, we are comparing sub_P from P's sub_layer and _P.sub_layer   
-                            sub_mP += der_sub_P.mP  # sum sub_vmPs in derP_layer
-                            der_sub_P_.append(der_sub_P)
+                            if n not in remove_index:
+                                # -1 for i, because comparing different sub_P_
+                                der_sub_P, _, _ = merge_comp_P(_sub_P_, _sub_P, sub_P, -1, n, 0, 0, remove_index)
+                                sub_mP += der_sub_P.mP  # sum sub_vmPs in derP_layer
+                                der_sub_P_.append(der_sub_P)
+
+                    # delete the merged sub_Ps at last
+                    for index in sorted(remove_index, reverse=True):
+                        del sub_P_[index]   
 
                     # if _P is not having derP yet, create 1 here?
-                    if not isinstance(_P.derP, CderP):
-                        _P.derP = CderP(_P=_P)
+                    if not isinstance(_P.derP, CderP): _P.derP = CderP(_P=_P)
                     _P.derP.der_sub_H.append((fdP, fid, rdn, rng, der_sub_P_))  # add only layers that have been compared
 
                     mP += sub_mP  # of compared H, no specific mP?
@@ -225,6 +232,28 @@ def comp_sub_layers(_P, P, mP):
                         break  # low vertical induction, deeper sub_layers are not compared
                 else:
                     break  # deeper P and _P sub_layers are from different intra_comp forks, not comparable?
+
+
+def merge_sub_P_(sub_P_):
+    
+    remove_index = []
+    for i, _sub_P in enumerate(sub_P_): # outer loop, leftward of inner loop sub_P
+        if i not in remove_index:
+            
+            for j, sub_P in enumerate(sub_P_[i+1:], start=1): # inner loop, rightward of outer loop sub_P
+                if (j+i) not in remove_index:
+                    
+                    # merging criteria, need further review
+                    if (_sub_P.sign == sub_P.sign) and ((_sub_P.M + sub_P.M) > ave_merge) : 
+                        
+                        _, _, _ = merge_comp_P(sub_P_, _sub_P, sub_P, i, j+i, 0, 0, remove_index)
+                       # not sure but do we need the returned object here? Since sub_Ps are merged, the others still needed?
+
+    # delete the merged sub_Ps at last
+    for index in sorted(remove_index, reverse=True):
+        del sub_P_[index]    
+    
+
 
 
 def comp_P_kelvin(P, _P, neg_M, neg_L, P_):  # multi-variate cross-comp, _smP = 0 in line_patterns
