@@ -49,6 +49,8 @@ class CP(ClusterStructure):
     x0 = int
     dert_ = list
     sublayers = list
+    sub_PPm_ = list
+    sub_PPd_ = list
     # for line_PPs
     derP = object  # forward comp_P derivatives
     _smP = bool  # backward mP sign, for derP.sign determination, not needed thereafter
@@ -369,6 +371,8 @@ if __name__ == "__main__":
 
         for y, P_ in enumerate(frame_of_patterns_):
             PPm_, PPd_ = search(P_)
+            search_in_sublayers(P_) # search sublayers after search Ps
+
             frame_PP_.append([PPm_, PPd_])
 
     end_time = time() - start_time

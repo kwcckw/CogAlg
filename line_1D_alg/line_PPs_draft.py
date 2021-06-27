@@ -66,7 +66,7 @@ ave_D = 100
 ave_sub_M = 50  # sub_H comp filter
 ave_Ls = 3
 ave_PPM = 200
-ave_merge = -50  # merge adjacent Ps
+ave_merge = 50  # merge adjacent Ps 
 ave_inv = 20 # ave inverse m, change to Ave from the root intra_blob?
 ave_min = 5  # ave direct m, change to Ave_min from the root intra_blob?
 
@@ -75,14 +75,20 @@ ave_min = 5  # ave direct m, change to Ave_min from the root intra_blob?
 def search_in_sublayers(P_):
 
     for P in P_:
-        if P.fPd:
-            if abs(P.D) > ave_D:  # better use sublayers.D|M, but we don't have it yet
-                for sub_P_ in P.sublayers:
-                    search(sub_P_)
-        elif P.M > ave_M:
+        
+        # better use sublayers.D|M, but we don't have it yet   
+        # is it using mP and dP from derP?  or get suum of d and m from sub_layer Ps?     
+        
+        if isinstance(P.derP, CderP):
+            sub_M = P.derP.mP
+            sub_D = P.derP.dP
+        else:
+            sub_M = P.M
+            sub_D = P.D
+        
+        if (P.fPd and abs(sub_D) > ave_D) or (sub_M > ave_M):  
             for sub_P_ in P.sublayers:
-                search(sub_P_)
-
+                P.sub_PPm_, P.sub_PPd_ = search(sub_P_[0][5])
 
 def search(P_):  # cross-compare patterns within horizontal line
 
@@ -140,12 +146,27 @@ def search(P_):  # cross-compare patterns within horizontal line
 
 def merge_comp_P(P_, _P, P, i, j, neg_M, neg_L, remove_index):  # multi-variate cross-comp, _smP = 0 in line_patterns
 
-    # tentative derP:
-    iderP, _L, _smP = comp_P(_P, P, neg_L, neg_M)
+    mP = 0
+    layer1 = dict({'L':.0,'I':.0,'D':.0,'M':.0})
+    dist_coef = ave_rM ** (1 + neg_L / _P.L)
+    # average match projected at current distance from P: neg_L, separate for min_match, add coef / var?
+
+    for param_name in layer1:
+        if param_name == "I":
+            if neg_L == 0: dm = Cdm(d=_P.dert_[0].d, m=_P.dert_[0].m)
+            dist_ave = ave_inv * dist_coef
+        else:
+            dist_ave = ave_min * dist_coef
+        param = getattr(P, param_name)/P.L
+        _param = getattr(_P, param_name)/_P.L
+        
+        if param_name != "I": dm = comp_param(_param, param, [], dist_ave) # param name I's dm is computed above
+        mP += dm.m
+
 
     rel_distance = neg_L / _P.L
 
-    if iderP.mP / max(rel_distance, 1) > ave_merge:  # no point to search if there's only 1 single P?
+    if mP / max(rel_distance, 1) > ave_merge:  # no point to search if there's only 1 single P?
         # merge(_P, P): splice proximate and param/L- similar Ps:
         _P.accum_from(P)
         _P.dert_+= P.dert_
@@ -156,7 +177,6 @@ def merge_comp_P(P_, _P, P, i, j, neg_M, neg_L, remove_index):  # multi-variate 
 
         if (i-1) >=0 and (i-1) not in remove_index and (i) not in remove_index:
             derP, _L, _smP = merge_comp_P(P_, P_[i-1], _P, i-1, i, neg_M, neg_L, remove_index)  # backward re-comp_P
-
         elif (j+1) <= len(P_)-1 and (j+1) not in remove_index and (i) not in remove_index:
             derP, _L, _smP = merge_comp_P(P_, _P, P_[j+1], i, j+1, neg_M, neg_L, remove_index)  # forward comp_P
         else:
@@ -172,19 +192,18 @@ def comp_P(_P, P, neg_L, neg_M):  # multi-variate cross-comp, _smP = 0 in line_p
 
     mP = dP = 0
     layer1 = dict({'L':.0,'I':.0,'D':.0,'M':.0})
-    _L=_P.L; L= P.L
     dist_coef = ave_rM ** (1 + neg_L / _P.L)
     # average match projected at current distance from P: neg_L, separate for min_match, add coef / var?
 
     for param_name in layer1:
         if param_name == "I":
-            if neg_L == 0: dm = Cdm(d=_P.dert_[0].d, m=_P.dert_[0].m)
             dist_ave = ave_inv * dist_coef
         else:
             dist_ave = ave_min * dist_coef
-        param = getattr(P, param_name)/L
-        _param = getattr(_P, param_name)/_L
-        dm = comp_param(_param, param, [], dist_ave)
+        param = getattr(P, param_name)
+        _param = getattr(_P, param_name)
+        
+        dm = comp_param(_param, param, [], dist_ave) # param name I's dm is computed above
         mP += dm.m; dP += dm.d
         layer1[param_name] = dm
 
@@ -235,7 +254,7 @@ def comp_sublayers(_P, P, mP):
                         del sub_P_[index]
 
                     # if _P is not having derP yet, create 1 here?
-                    if not isinstance(_P.derP, CderP): _P.derP = CderP(_P=_P)
+                    if not isinstance(_P.derP, CderP): _P.derP = CderP(P=_P)
                     _P.derP.der_sub_H.append((fdP, fid, rdn, rng, der_sub_P_))  # add only layers that have been compared
 
                     mP += sub_mP  # of compared H, no specific mP?
@@ -245,7 +264,7 @@ def comp_sublayers(_P, P, mP):
                 else:
                     break  # deeper P and _P sublayers are from different intra_comp forks, not comparable?
 
-
+# not needed now, sub_P search with same search function
 def merge_sub_P_(sub_P_):
 
     remove_index = []
