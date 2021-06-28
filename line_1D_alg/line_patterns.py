@@ -371,8 +371,6 @@ if __name__ == "__main__":
 
         for y, P_ in enumerate(frame_of_patterns_):
             PPm_, PPd_ = search(P_)
-            search_in_sublayers(P_) # search sublayers after search Ps
-
             frame_PP_.append([PPm_, PPd_])
 
     end_time = time() - start_time
