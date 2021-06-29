@@ -192,7 +192,6 @@ def intra_Pm_(P_, adj_M_, fid, rdn, rng):  # evaluate for sub-recursion in line 
 
     comb_layers = []  # combine into root P sublayers[1:]
     for P, adj_M in zip(P_, adj_M_):  # each sub_layer is nested to depth = sublayers[n]
-
         if P.sign:  # +Pm: low-variation span, eval comp at rng=2^n: 2, 4., kernel: 5, 9., rng=1 cross-comp is kernels 2 and 3
             if P.M - adj_M > ave_M * rdn and P.L > 4:  # reduced by lending to contrast: all comps form params for hLe comp?
                 '''
@@ -208,7 +207,7 @@ def intra_Pm_(P_, adj_M_, fid, rdn, rng):  # evaluate for sub-recursion in line 
                 P.sublayers += [[(Ls, False, fid, rdn, rng, sub_Pm_)]]  # 1st layer, Dert=[], fill if Ls > min?
                 if len(sub_Pm_) > 4:
                     sub_adj_M_ = form_adjacent_M_(sub_Pm_)
-                    P.sublayers += intra_Pm_(sub_Pm_, sub_adj_M_, fid, rdn + 1 + 1 / Ls, rng * 2 + 1)  # feedback
+                    P.sublayers +=  intra_Pm_(sub_Pm_, sub_adj_M_, fid, rdn + 1 + 1 / Ls, rng * 2 + 1)  # feedback
                     # add param summation within sublayer, for comp_sublayers?
                     # splice sublayers across sub_Ps:
                     comb_layers = [comb_layers + sublayers for comb_layers, sublayers in
@@ -216,7 +215,7 @@ def intra_Pm_(P_, adj_M_, fid, rdn, rng):  # evaluate for sub-recursion in line 
 
         else:  # -Pm: high-variation span, min neg M is contrast value, borrowed from adjacent +Pms:
             if min(-P.M, adj_M) > ave_D * rdn and P.L > 3:  # cancelled M+ val, M = min | ~v_SAD
-
+                P.fPd = 1 # fPd = 1 if P contains Pd sublayers?  Else the search will start in a deeper layer
                 rel_adj_M = adj_M / -P.M  # for allocation of -Pm' adj_M to each of its internal Pds
                 sub_Pd_ = form_Pd_(P.dert_)  # cluster by input d sign match: partial d match
                 Ls = len(sub_Pd_)

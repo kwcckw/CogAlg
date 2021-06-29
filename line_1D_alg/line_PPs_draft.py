@@ -62,7 +62,7 @@ ave_div = 50
 ave_rM = .5  # average relative match per input magnitude, at rl=1 or .5?
 ave_M = 100  # search stop
 ave_D = 100
-ave_sub_M = 50  # sub_H comp filter
+ave_sub_M = 500  # sub_H comp filter
 ave_Ls = 3
 ave_PPM = 200
 ave_merge = -50  # merge adjacent Ps
@@ -74,19 +74,23 @@ def search(P_):  # cross-compare patterns within horizontal line
 
     # search in sublayers, top-down:
     for P in P_:  # cross-sub_P search before cross-P search: proceed with incremental distance
-        if P.fPd:
-            if abs(P.D) > ave_D:  # better use sublayers.D|M, but we don't have it yet
-                for sublayer in P.sublayers:
+        if P.fPd: 
+            if abs(P.D) > ave_D and P.sublayers:  # better use sublayers.D|M, but we don't have it yet
+                for sub_ in P.sublayers[0]:
                     # this is correct for sublayer[0] only, search in deeper sublayers should be selective per sublayer[0] of sub_P
-                    if len(sublayer[5]) > 2:
-                        sub_PPm_, sub_PPd_ = search(sublayer[5])  # sub_P_
-                        sublayer[5].clear(); sublayer[5].append([sub_PPm_, sub_PPd_])  # tuple is immutable
+                    if len(sub_[5]) > 2: # sub_[5] is sub_P_
+                        sub_PPm_, sub_PPd_ = search(sub_[5])  # sub_P_
+                        if sub_PPm_ or sub_PPd_: # replace only if there are returned sub_PPs?
+                            sub_[5].clear(); sub_[5].append([sub_PPm_, sub_PPd_])  # tuple is immutable
         elif P.M > ave_M:
-            for sublayer in P.sublayers:
-                if len(sublayer[5]) > 2:
-                    sub_PPm_, sub_PPd_ = search(sublayer[5])  # sub_P_
-                    sublayer[5].clear(); sublayer[5].append([sub_PPm_, sub_PPd_])  # tuple is immutable
+            if P.sublayers:
+                for sub_ in P.sublayers[0]:
+                    if len(sub_[5]) > 2: # sub_[5] is sub_P_
+                        sub_PPm_, sub_PPd_ = search(sub_[5])  # sub_P_
+                        if sub_PPm_ or sub_PPd_: # replace only if there are returned sub_PPs?
+                            sub_[5].clear(); sub_[5].append([sub_PPm_, sub_PPd_])  # tuple is immutable
 
+                        
     # search in P_:
     derP_ = []  # search forms array of derPs (P + P'derivatives): combined output of pair-wise comp_P
     derP_d_ = []; PPm_ = []; PPd_ = []; remove_index = []
@@ -246,8 +250,8 @@ def comp_sublayers(_P, P, mP):  # also add dP?
                     mP += sub_mP  # of compared H, no specific mP?
                     if sub_mP < ave_sub_M:
                         # potentially mH: trans-layer induction?
-                        # could you elaborate more on the process here?
-
+                        # f mP + sub_mP < ave_sub_M:
+                        # so selection considers both local and global values of mP.
                         break  # low vertical induction, deeper sublayers are not compared
                 else:
                     break  # deeper P and _P sublayers are from different intra_comp forks, not comparable?
