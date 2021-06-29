@@ -47,7 +47,6 @@ class CderP(ClusterStructure):
     P = object
     layer1 = dict  # d, m per comparand
     der_sub_H = list  # sub hierarchy of derivatives, from comp sublayers
-
     PP = object  # PP that derP belongs to, currently not used
 
 class CPP(CP, CderP):
@@ -73,23 +72,22 @@ ave_min = 5  # ave direct m, change to Ave_min from the root intra_blob?
 
 def search(P_):  # cross-compare patterns within horizontal line
 
-    # search in sub_layers first, incrementally from lowest level
+    # search in sublayers, top-down:
     for P in P_:  # cross-sub_P search before cross-P search: proceed with incremental distance
         if P.fPd:
             if abs(P.D) > ave_D:  # better use sublayers.D|M, but we don't have it yet
                 for sublayer in P.sublayers:
-                    for sub_P_ in sublayer: 
-                        if isinstance(sub_P_[5][0], CP) and len(sub_P_[5]) > 2: # sublayers' Ps are not replaced with PPs in prior call of search
-                            sub_PPm_, sub_PPd_ = search(sub_P_[5])
-                            sub_P_[5].clear(); sub_P_[5].append([sub_PPm_, sub_PPd_]) # need extra steps due to tuple is immutable          
+                    # this is correct for sublayer[0] only, search in deeper sublayers should be selective per sublayer[0] of sub_P
+                    if len(sublayer[5]) > 2:
+                        sub_PPm_, sub_PPd_ = search(sublayer[5])  # sub_P_
+                        sublayer[5].clear(); sublayer[5].append([sub_PPm_, sub_PPd_])  # tuple is immutable
         elif P.M > ave_M:
             for sublayer in P.sublayers:
-                for sub_P_ in sublayer: 
-                    if isinstance(sub_P_[5][0], CP) and len(sub_P_[5]) > 2: # sublayers' Ps are not replaced with PPs in prior call of search
-                        sub_PPm_, sub_PPd_ = search(sub_P_[5])
-                        sub_P_[5].clear(); sub_P_[5].append([sub_PPm_, sub_PPd_])
+                if len(sublayer[5]) > 2:
+                    sub_PPm_, sub_PPd_ = search(sublayer[5])  # sub_P_
+                    sublayer[5].clear(); sublayer[5].append([sub_PPm_, sub_PPd_])  # tuple is immutable
 
-    # search in P_
+    # search in P_:
     derP_ = []  # search forms array of derPs (P + P'derivatives): combined output of pair-wise comp_P
     derP_d_ = []; PPm_ = []; PPd_ = []; remove_index = []
 
@@ -113,7 +111,7 @@ def search(P_):  # cross-compare patterns within horizontal line
                         else:
                             neg_M += mP  # accumulate contiguous P miss, or all derivatives?
                             neg_L += _L  # accumulate distance to matching P
-                            if (j+i+1) == len(P_): # need +1 here, because index start with 0, while len(P_) doesn't include 0
+                            if (j+i+1) == len(P_):  # index start with 0, while len(P_) doesn't include it
                                 # last P has a singleton derP
                                 derP_.append( CderP(sign=sign or _smP, mP=mP,dP=dP, neg_M=neg_M, neg_L=neg_L, P=_P))
                             '''                     
@@ -173,7 +171,7 @@ def merge_comp_P(P_, _P, P, i, j, neg_M, neg_L, remove_index):  # multi-variate 
             derP = CderP(P=_P)  # return _P with empty derP
 
     else:  # form derP:
-        derP, L, _smP = comp_P(_P, P, neg_L, neg_M)  # unpack here?
+        derP, L, _smP = comp_P(_P, P, neg_L, neg_M)
 
     return derP, _P.L, _P.sign
 
@@ -182,7 +180,7 @@ def comp_P(_P, P, neg_L, neg_M):  # multi-variate cross-comp, _smP = 0 in line_p
 
     mP = dP = 0
     layer1 = dict({'L':.0,'I':.0,'D':.0,'M':.0})
-    dist_coef = ave_rM ** (1 + neg_L / _P.L)  # average match projected at current distance: neg_L, diff. for min_match, add coef / var?
+    dist_coef = ave_rM ** (1 + neg_L / _P.L)  # average match projected at current distance:
 
     for param_name in layer1:
         if param_name == "I":
@@ -242,15 +240,14 @@ def comp_sublayers(_P, P, mP):  # also add dP?
                     for index in sorted(remove_index, reverse=True):
                         del sub_P_[index]
 
-                    # if _P is not having derP yet, create 1 here
-                    if not isinstance(_P.derP, CderP): _P.derP = CderP(P=_P) # sorry there's a typo here
+                    if not isinstance(_P.derP, CderP): _P.derP = CderP(P=_P)  # _P had no derP
                     _P.derP.der_sub_H.append((fdP, fid, rdn, rng, der_sub_P_))  # add only layers that have been compared
 
                     mP += sub_mP  # of compared H, no specific mP?
                     if sub_mP < ave_sub_M:
                         # potentially mH: trans-layer induction?
                         # could you elaborate more on the process here?
-                        
+
                         break  # low vertical induction, deeper sublayers are not compared
                 else:
                     break  # deeper P and _P sublayers are from different intra_comp forks, not comparable?
@@ -269,7 +266,7 @@ def form_PPm_(derP_):  # cluster derPs into PPm s by mP sign, eval for div_comp 
         if derP.sign != PP.sign:  # sign != _sign: same-sign derPs in PP
             # terminate PPm:
             PPm_.append(PP)
-            PP = CPP( derP_=[derP], inherit=([derP.P, derP]) )  # reinitialize PPm with current derP # those inherited instances need to be in a list
+            PP = CPP( derP_=[derP], inherit=([derP.P, derP]) )  # reinitialize PPm with current derP
             PP.derP = derP
             derP.PP = PP  # PP that derP belongs to, for merging PPs in back_search_extend
         else:
@@ -311,7 +308,7 @@ def form_PPd_(derP_d_):
         if vdP <= 0:
             # terminate PPd:
             PPd_.append(PP)
-            PP = CPP( derP_=[derP_d], inherit=([derP_d.P, derP_d]) ) # those inherited instances need to be in a list
+            PP = CPP( derP_=[derP_d], inherit=([derP_d.P, derP_d]) )
             PP.derP = derP_d
             derP_d.PP = PP
         else:
