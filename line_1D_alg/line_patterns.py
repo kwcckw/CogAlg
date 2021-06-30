@@ -220,7 +220,7 @@ def intra_Pm_(P_, adj_M_, fid, rdn, rng):  # evaluate for sub-recursion in line 
                 rel_adj_M = adj_M / -P.M  # for allocation of -Pm' adj_M to each of its internal Pds
                 sub_Pd_ = form_Pd_(P.dert_)  # cluster by input d sign match: partial d match
                 Ls = len(sub_Pd_)
-                P.sublayers += [[(Ls, True, 1, rdn, rng, sub_Pd_)]]  # 1st layer, Dert=[], fill if Ls > min?
+                P.sublayers += [[(Ls, True, 1, rdn, rng, sub_Pd_, [], [])]]  # 1st layer, Dert=[], fill if Ls > min?
 
                 P.sublayers += intra_Pd_(sub_Pd_, rel_adj_M, rdn + 1 + 1 / Ls, rng + 1)  # der_comp eval per nPm
                 # splice sublayers across sub_Ps, for return as root sublayers[1:]:
