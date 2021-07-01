@@ -127,44 +127,29 @@ def search(P_):  # cross-compare patterns within horizontal line
 def sub_search_recursive_draft(P_, fderP):  # search in sublayer[0] per P
     
     for P in P_:
-        # tentative, not so sure yet, to get last mP and dP in sublayer
-        last_mmP = 0; last_mdP = 0
-        last_dmP = 0; last_ddP = 0
-        
         # process top sublayer, subsequent layers will be processed recursively
         # P.sublayers = [[sublayer0],[sublayer1],[sublayer2],...] 
         # Each sublayer (depends on number of sub_Ps)= [ (Ls1, fPd1, fid1, rdn1, rng1, sub_P1_, sub_PPm1_, sub_PPd1_), (Ls2, fPd2, fid2, rdn2, rng2, sub_P2_, sub_PPm2_, sub_PPd2_),... ]
         if P.sublayers: # sublayers might be empty
             for sublayer in P.sublayers[0]:# top layer only
                 
-                
                 sub_P_ = sublayer[5] 
                 if len(sub_P_) > 2:
-                    PM = P.M+last_mmP; PD = P.D+last_dmP  
-                    last_mmP = 0; last_mdP = 0
+                    PM = P.M; PD = P.D  
                     if fderP:
-                        PM += P.derP.mP+last_dmP; PD += P.derP.mP+last_ddP  # include match added by last search? From last sublayer within same P?
-                        last_dmP = 0; last_ddP = 0
+                        PM += P.derP.mP; PD += P.derP.mP  # include match added by last search?
                         
                     if P.fPd:
                         if abs(PD) > ave_D:  # better use sublayers.D|M, but we don't have it yet
                             sub_PPm_, sub_PPd_ = search(sub_P_)
                             sublayer[6].append(sub_PPm_); sublayer[7].append(sub_PPd_)  # extended in line_patterns
                             sub_search_recursive_draft(sub_P_, fderP=1)  # deeper sublayers search is selective per sub_P
-                            # tentative, not so sure yet
-                            last_mdP += sum([sub_PPm.mP for sub_PPm in sub_PPm_])
-                            last_mdP += sum([sub_PPd.mP for sub_PPd in sub_PPd_])
-                            last_ddP = sum([sub_PPm.dP for sub_PPm in sub_PPm_])
-                            last_ddP = sum([sub_PPd.dP for sub_PPd in sub_PPd_])
+
                     elif PM > ave_M:
                         sub_PPm_, sub_PPd_ = search(sub_P_)
                         sublayer[6].append(sub_PPm_); sublayer[7].append(sub_PPd_)  # extended in line_patterns
                         sub_search_recursive_draft(sub_P_, fderP=1)  # deeper sublayers search is selective per sub_P
-                        # tentative, not so sure yet
-                        last_mmP += sum([sub_PPm.mP for sub_PPm in sub_PPm_])
-                        last_mmP += sum([sub_PPd.mP for sub_PPd in sub_PPd_])
-                        last_dmP = sum([sub_PPm.dP for sub_PPm in sub_PPm_])
-                        last_dmP = sum([sub_PPd.dP for sub_PPd in sub_PPd_])
+
 
 def merge_comp_P(P_, _P, P, i, j, neg_M, neg_L, remove_index):  # multi-variate cross-comp, _smP = 0 in line_patterns
 

@@ -21,7 +21,7 @@
 # add ColAlg folder to system path
 import sys
 from os.path import dirname, join, abspath
-sys.path.insert(0, abspath(join(dirname("CogAlg"), '../..')))
+sys.path.insert(0, abspath(join(dirname("CogAlg"), '..')))
 
 import cv2
 import argparse
@@ -59,7 +59,7 @@ ave_M = 50  # min M for initial incremental-range comparison(t_), higher cost th
 ave_D = 5  # min |D| for initial incremental-derivation comparison(d_)
 ave_nP = 5  # average number of sub_Ps in P, to estimate intra-costs? ave_rdn_inc = 1 + 1 / ave_nP # 1.2
 ave_rdm = .5  # average dm / m, to project bi_m = m * 1.5
-init_y = 400  # starting row, the whole frame doesn't need to be processed
+init_y = 0  # starting row, the whole frame doesn't need to be processed
 
 '''
     Conventions:
@@ -86,7 +86,7 @@ def cross_comp(frame_of_pixels_):  # converts frame_of_pixels to frame_of_patter
         Pm_ = form_P_(pixel_, d_, fms=True)  # forms m-sign patterns
         if len(Pm_) > 4:
             adj_M_ = form_adjacent_M_(Pm_)  # compute adjacent Ms to evaluate contrastive borrow potential
-            intra_Pm_(Pm_, adj_M_, fid=False, rdn=1, rng=3)  # evaluates for sub-recursion per Pm
+            intra_Pm_(Pm_, adj_M_, fid=False, rdn=1, rng=4)  # evaluates for sub-recursion per Pm
 
         frame_of_patterns_.append(Pm_)
         # line of patterns is added to frame of patterns
@@ -104,9 +104,9 @@ def form_P_(p_, d_, fms):  # initialization, accumulation, termination
     if fms: _sign = _m > 0
     else: _sign = _d > 0
 
-    P = CP(sign=_sign, L=1, I=_p, D=_d, M=_m, x0=0, p_=[_p], d_=[_d], sublayers=[], _smP=False, fPd=~fms)
+    P = CP(sign=_sign, L=1, I=_p, D=_d, M=_m, x0=0, p_=[_p], d_=[_d], sublayers=[], _smP=False, fPd=fms^1) # ~0=-1, ~1=-2, which is not correct
     # segment by m sign:
-    for p, d in zip( p_[1:], d_[1:] ):
+    for p, d in zip( p_[1:], d_[1:]):
         m = ave - abs(d)
         if fms: sign = m > 0
         else: sign = d > 0
@@ -114,7 +114,7 @@ def form_P_(p_, d_, fms):  # initialization, accumulation, termination
         if sign != _sign:  # sign change, terminate P
             P_.append(P)
             # re-initialization:
-            P = CP(sign=_sign, L=1, I=p, D=d, M=m, x0=P.x-(P.L-1), p_=[p], d_=[d], sublayers=[], _smP=False, fPd=~fms)
+            P = CP(sign=_sign, L=1, I=p, D=d, M=m, x0=x-(P.L-1), p_=[p], d_=[d], sublayers=[], _smP=False, fPd=fms^1)
         else:
             # accumulate params:
             P.L += 1; P.I += p; P.D += d; P.M += m
@@ -169,7 +169,7 @@ def intra_Pm_(P_, adj_M_, fid, rdn, rng):  # evaluate for sub-recursion in line 
     for P, adj_M in zip(P_, adj_M_):  # each sub_layer is nested to depth = sublayers[n]
 
         if P.sign:  # +Pm: low-variation span, eval comp at rng=2^n: kernel size 2, 4, 8...
-            if P.M - adj_M > ave_M * rdn and P.L > 4:  # reduced by lending to contrast: all comps form params for hLe comp?
+            if P.M - adj_M > ave_M * rdn and P.L > rng:  # reduced by lending to contrast: all comps form params for hLe comp?
                 '''
                 if localized filters:
                 P_ave = (P.M - adj_M) / P.L  
@@ -177,14 +177,14 @@ def intra_Pm_(P_, adj_M_, fid, rdn, rng):  # evaluate for sub-recursion in line 
                 loc_ave_min = (ave_min + P_ave) / 2
                 rdert_ = range_comp(P.dert_, loc_ave, loc_ave_min, fid)
                 '''
-                rdert_ = range_comp(P.dert_, fid)  # rng+ comp with localized ave, skip predictable next dert
-                sub_Pm_ = form_P_(P.p_, rdert_, fms=True)  # cluster by m sign
+                rdert_ = range_comp(P, fid, rng)  # rng+ comp with localized ave, skip predictable next dert
+                sub_Pm_ = form_P_(P.p_, [rdert.d for rdert in rdert_], fms=True)  # cluster by m sign
                 Ls = len(sub_Pm_)
                 P.sublayers += [[(Ls, False, fid, rdn, rng, sub_Pm_, [], [])]]  # sub_PPm_, sub_PPd_
                 # 1st layer, Dert=[], fill if Ls > min?
-                if len(sub_Pm_) > 4:
+                if len(sub_Pm_) > rng: # or > rng*2 for next level rng?
                     sub_adj_M_ = form_adjacent_M_(sub_Pm_)
-                    P.sublayers += intra_Pm_(sub_Pm_, sub_adj_M_, fid, rdn + 1 + 1 / Ls, rng * 2 + 1)  # feedback
+                    P.sublayers += intra_Pm_(sub_Pm_, sub_adj_M_, fid, rdn + 1 + 1 / Ls, rng * 2)  # feedback
                     # add param summation within sublayer, for comp_sublayers?
                     # splice sublayers across sub_Ps:
                     comb_layers = [comb_layers + sublayers for comb_layers, sublayers in
@@ -213,8 +213,8 @@ def intra_Pd_(Pd_, rel_adj_M, rdn, rng):  # evaluate for sub-recursion in line P
         if min(abs(P.D), abs(P.D) * rel_adj_M) > ave_D * rdn and P.L > 3:  # abs(D) * rel_adj_M: allocated adj_M
             # if fid: abs(D), else: M + ave*L: complementary m is more precise than inverted diff?
 
-            ddert_ = deriv_comp(P.dert_)  # cross-comp of uni_ds
-            sub_Pm_ = form_P_(P.p_, ddert_, fms=False)  # cluster Pd derts by md, won't happen
+            ddert_ = deriv_comp(P.d_)  # cross-comp of uni_ds
+            sub_Pm_ = form_P_(P.p_, [ddert.d for ddert in ddert_], fms=False)  # cluster Pd derts by md, won't happen
             Ls = len(sub_Pm_)
             P.sublayers += [[(Ls, 1, 1, rdn, rng, sub_Pm_, [], [] )]]  # sub_PPm_, sub_PPd_
             # 1st layer: Ls, fPd, fid, rdn, rng, sub_P_
@@ -232,59 +232,56 @@ def intra_Pd_(Pd_, rel_adj_M, rdn, rng):  # evaluate for sub-recursion in line P
     return comb_layers
 
 
-def range_comp(dert_, fid):  # skip odd derts for sparse rng+ comp: 1 skip / 1 add, to maintain 2x overlap
+def range_comp(P, fid, rng):  # skip odd derts for sparse rng+ comp: 1 skip / 1 add, to maintain 2x overlap
 
     rdert_ = []  # prefix '_' denotes the prior of same-name variables, initialization:
-    __dert = dert_[0]  # prior-prior dert
-    __i = __dert.p
-    _dert = dert_[2]  # initialize _dert with sparse p_, skipping odd ps
-    _i = _dert.p
-    _short_rng_d = _dert.d
-    _short_rng_m = _dert.m
-
+    nskip = (rng-1) # number of skipping (rng=4-skip=3, rng=8-skip=7,...)    
+    d_ = P.d_
+    i_ = P.p_
+    
+    __i = i_[0]
+    _i = i_[nskip]  # initialize _dert with sparse p_ skipping differs with rng
+    
+    _short_rng_d = d_[nskip]
     _d = _i - __i
     if fid:  # flag: input is d, from deriv_comp
         _m = min(__i, _i) - ave_min
     else:
-        _m = ave - abs(_dert.d)  # no ave * rng: m and d value is cumulative
-    _rng_m = (_m + _m / 2) + __dert.m  # back-project missing m as _m / 2: induction decays with distance
+        _m = ave - abs(_d)  # no ave * rng: m and d value is cumulative
+    _rng_m = (_m + _m / 2)   # back-project missing m as _m / 2: induction decays with distance
     rdert_.append(Cdert(p=__i, d=0, m=_rng_m))  # no _rng_d = _d + __short_rng_d
 
-    for n in range(4, len(dert_), 2):  # backward comp
+    for n in range((nskip*2), len(i_), nskip):  # backward comp
 
-        dert = dert_[n]
-        i = dert.p
-        short_rng_d = dert.d
-        short_rng_m = dert.m
+        i = i_[n]
+        short_rng_d = d_[n]
         d = i - _i
         if fid:
             m = min(i, _i) - ave_min  # match = min: magnitude of derived vars correlates with stability
         else:
             m = ave - abs(d)  # inverse match: intensity doesn't correlate with stability
         rng_d = _d + _short_rng_d  # difference accumulated in rng
-        rng_m = _m + m + _short_rng_m  # bilateral match accumulated in rng
+        rng_m = _m + m  # match accumulated in rng
         rdert_.append(Cdert(p=_i, d=rng_d, m=rng_m))
-        _i, _d, _m, _short_rng_d, _short_rng_m = \
-            i, d, m, short_rng_d, short_rng_m
+        _i, _d, _m, _short_rng_d=  i, d, m, short_rng_d, 
 
-    rdert_.append(Cdert(p=_i, d=_d + _short_rng_d, m=(_m + _m / 2) + _short_rng_m))  # forward-project _m to bilateral m
+    rdert_.append(Cdert(p=_i, d=_d + _short_rng_d, m=(_m + _m / 2)))  # forward-project _m to bilateral m
     return rdert_
 
 
-def deriv_comp(dert_):  # cross-comp consecutive uni_ds in same-sign dert_: sign match is partial d match
+def deriv_comp(d_):  # cross-comp consecutive uni_ds in same-sign dert_: sign match is partial d match
     # dd and md may match across d sign, but likely in high-match area, spliced by spec in comp_P?
 
     ddert_ = []  # initialization:
-    __i = dert_[1].d  # each prefix '_' denotes prior
-    _i = dert_[2].d
+    __i = abs(d_[0])  # each prefix '_' denotes prior
+    _i = abs(d_[1])
 
-    __i = abs(__i);  _i = abs(_i)
     _d = _i - __i  # initial comp
     _m = min(__i, _i) - ave_min
     ddert_.append(Cdert(p=_i, d=0, m=(_m + _m / 2)))  # no __d, back-project __m = _m * .5
 
-    for dert in dert_[3:]:
-        i = abs(dert.d)  # unilateral d, same sign in Pd
+    for d in d_[2:]:
+        i = abs(d)  # unilateral d, same sign in Pd
         d = i - _i  # d is dd
         m = min(i, _i) - ave_min  # md = min: magnitude of derived vars corresponds to predictive value
         ddert_.append(Cdert(p=_i, d=_d, m=_m + m))  # unilateral _d and bilateral m per _i
