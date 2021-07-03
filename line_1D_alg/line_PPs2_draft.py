@@ -137,8 +137,9 @@ def sub_search_recursive_draft(P_, fderP):  # search in sublayer[0] per P
                 if len(sub_P_) > 2:
                     PM = P.M; PD = P.D  
                     if fderP:
+
                         PM += P.derP.mP; PD += P.derP.mP  # include match added by last search?
-                        
+
                     if P.fPd:
                         if abs(PD) > ave_D:  # better use sublayers.D|M, but we don't have it yet
                             sub_PPm_, sub_PPd_ = search(sub_P_)
@@ -146,6 +147,7 @@ def sub_search_recursive_draft(P_, fderP):  # search in sublayer[0] per P
                             sub_search_recursive_draft(sub_P_, fderP=1)  # deeper sublayers search is selective per sub_P
 
                     elif PM > ave_M:
+                        
                         sub_PPm_, sub_PPd_ = search(sub_P_)
                         sublayer[6].append(sub_PPm_); sublayer[7].append(sub_PPd_)  # extended in line_patterns
                         sub_search_recursive_draft(sub_P_, fderP=1)  # deeper sublayers search is selective per sub_P
@@ -170,13 +172,15 @@ def merge_comp_P(P_, _P, P, i, j, neg_M, neg_L, remove_index):  # multi-variate 
         layer1[param_name] = dm
 
     if neg_L == 0:
-        mP += _P.dert_[0].m; dP += _P.dert_[0].d
+        mP += _P.m_[0]; dP += _P.d_[0]
 
     rel_distance = neg_L / _P.L
 
     if mP / max(rel_distance, 1) > ave_merge:  # merge(_P, P): splice proximate and param/L- similar Ps:
         _P.accum_from(P)
-        _P.dert_+= P.dert_
+        _P.p_+= P.p_
+        _P.d_+= P.d_
+        _P.m_+= P.m_
         remove_index.append(j)
         if _P.fPd: _P.sign = P.D > 0
         else: P.sign = P.M > 0
@@ -188,7 +192,7 @@ def merge_comp_P(P_, _P, P, i, j, neg_M, neg_L, remove_index):  # multi-variate 
             derP, _L, _smP = merge_comp_P(P_, _P, P_[j+1], i, j+1, neg_M, neg_L, remove_index)  # forward comp_P
         else:
             derP = CderP(P=_P)  # return _P with empty derP
-            _P.derP=derP
+            _P.derP = derP
 
     else:  # form derP:
         derP, L, _smP = comp_P(_P, P, neg_L, neg_M)
