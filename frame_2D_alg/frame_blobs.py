@@ -121,7 +121,9 @@ def comp_pixel(image):  # 2x2 pixel cross-correlation within image, a standard e
     M__ = int(ave * 1.2) - (abs(rot_Gy__) + abs(rot_Gx__))
     # inverse deviation of SAD, which is a measure of variation. Ave * coeff = ave_SAD / ave_G, 1.2 is a guess
 
-    return (topleft__, rot_Gy__, rot_Gx__, G__, M__)  # tuple of 2D arrays per param of dert (derivatives' tuple)
+    p__ = topleft__+topright__+bottomleft__+bottomright__ # sum of 4 rims as p, or better if we get mean?
+
+    return (p__, rot_Gy__, rot_Gx__, G__, M__)  # tuple of 2D arrays per param of dert (derivatives' tuple)
     # renamed dert__ = (p__, dy__, dx__, g__, m__) for readability in functions below
 '''
     rotate dert__ 45 degrees clockwise, convert diagonals into orthogonals to avoid summation, which degrades accuracy of Gy, Gx

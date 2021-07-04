@@ -56,7 +56,7 @@ def intra_blob(blob, **kwargs):  # slice_blob or recursive input rng+ | angle cr
     ext_dert__, ext_mask__ = extend_dert(blob)  # dert__ boundaries += 1, for cross-comp in larger kernels
 
     if blob.G > AveB:  # comp_a fork, replace G with borrow_M if known
-        adert__, mask__ = comp_a(ext_dert__, ave_ma, ave_ga, blob.prior_forks, ext_mask__)  # compute ma and ga
+        adert__, mask__ = comp_a(ext_dert__, ave_ma, ave_ga, blob.rng, blob.prior_forks, ext_mask__)  # compute ma and ga
         blob.f_comp_a = 1
         blob.rng = 0
         if kwargs.get('verbose'): print('\na fork\n')
