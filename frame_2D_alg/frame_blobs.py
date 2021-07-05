@@ -27,7 +27,7 @@
     https://github.com/boris-kz/CogAlg/blob/master/frame_2D_alg/Illustrations/blob_params.drawio
     https://github.com/boris-kz/CogAlg/blob/master/frame_2D_alg/Illustrations/frame_blobs.png
     https://github.com/boris-kz/CogAlg/blob/master/frame_2D_alg/Illustrations/frame_blobs_intra_blob.drawio
- '''
+'''
 
 import sys
 import numpy as np
@@ -41,6 +41,7 @@ from class_cluster import ClusterStructure, NoneType, Cdm
 
 ave = 30  # filter or hyper-parameter, set as a guess, latter adjusted by feedback
 aveB = 50
+ave_M = 100
 ave_mP = 100
 UNFILLED = -1
 EXCLUDED_ID = -2
@@ -51,23 +52,21 @@ FrameOfBlobs = namedtuple('FrameOfBlobs', 'I, Dy, Dx, G, M, blob_, dert__')
 class CBlob(ClusterStructure):  # from frame_blobs only, no sub_blobs
 
     # comp_pixel:
-    I = float
-    Dy = float
-    Dx = float
-    G = float
-    M = float
+    I = int
+    Dy = int
+    Dx = int
+    G = int
+    M = int
     # comp_angle:
-    Dydy = float
-    Dxdy = float
-    Dydx = float
-    Dxdx = float
-    Ga = float
-    Ma = float
+    Day = complex
+    Dax = complex
+    Ga = int
+    Ma = int
     # comp_dx:
-    Mdx = float
-    Ddx = float
+    Mdx = int
+    Ddx = int
     # new params:
-    A = float  # blob area
+    A = int  # blob area
     sign = bool
     box = list
     mask__ = object
@@ -82,7 +81,6 @@ class CBlob(ClusterStructure):  # from frame_blobs only, no sub_blobs
     fflip = bool     # x-y swap
     rdn = float      # redundancy to higher blob layers
     rng = int        # comp range, set before intra_comp
-    a_depth = int
     # derivation hierarchy:
     Ls = int   # for visibility and next-fork rdn
     sub_layers = list
@@ -98,14 +96,12 @@ class CBlob(ClusterStructure):  # from frame_blobs only, no sub_blobs
     derPd__ = list
     Pd__ = list
     # from comp_blob:
-    derBlob_ = list
-    bblob = object
+    derBlob__ = list
     # from form_bblob:
     root_bblob = object
 
 
-def comp_pixel(image):  # 2x2 pixel cross-correlation within image, a standard edge detection operator
-    # see comp_pixel_versions file for other versions and more explanation
+def comp_pixel(image):  # 2x2 pixel cross-correlation within image, see comp_pixel_versions file for other versions and more explanation
 
     # input slices into sliding 2x2 kernel, each slice is a shifted 2D frame of grey-scale pixels:
     topleft__ = image[:-1, :-1]
@@ -113,22 +109,16 @@ def comp_pixel(image):  # 2x2 pixel cross-correlation within image, a standard e
     bottomleft__ = image[1:, :-1]
     bottomright__ = image[1:, 1:]
 
-    rot_Gy__ = bottomright__ - topleft__  # rotated to bottom__ - top__
-    rot_Gx__ = topright__ - bottomleft__  # rotated to right__ - left__
+    d_upleft__ = bottomright__ - topleft__
+    d_upright__= bottomleft__ - topright__
 
-    G__ = (np.hypot(rot_Gy__, rot_Gx__) - ave)
-    # deviation of central gradient per kernel, between four vertex pixels
-    M__ = int(ave * 1.2) - (abs(rot_Gy__) + abs(rot_Gx__))
-    # inverse deviation of SAD, which is a measure of variation. Ave * coeff = ave_SAD / ave_G, 1.2 is a guess
+    G__ = (np.hypot(d_upleft__, d_upright__) - ave)  # deviation of kernel gradient, between four pixels
+    # M__ = ave - (abs(Gy__) + abs(Gx__))  # inverse deviation of SAD, a measure of variation, redundant here
+    p__ = topleft__ + topright__ + bottomleft__ + bottomright__  # sum of 4 rim pixels
 
-    p__ = topleft__+topright__+bottomleft__+bottomright__ # sum of 4 rims as p, or better if we get mean?
-
-    return (p__, rot_Gy__, rot_Gx__, G__, M__)  # tuple of 2D arrays per param of dert (derivatives' tuple)
-    # renamed dert__ = (p__, dy__, dx__, g__, m__) for readability in functions below
+    return (p__, d_upleft__, d_upright__, G__)  # tuple of 2D arrays per param of dert (derivatives' tuple)
+    # renamed dert__ = (p__, dy__, dx__, g__) for readability in functions below
 '''
-    rotate dert__ 45 degrees clockwise, convert diagonals into orthogonals to avoid summation, which degrades accuracy of Gy, Gx
-    Gy, Gx are used in comp_a, which returns them, as well as day, dax back to orthogonal
-    
     Sobel version:
     Gy__ = -(topleft__ - bottomright__) - (topright__ - bottomleft__)   # decomposition of two diagonal differences into Gy
     Gx__ = -(topleft__ - bottomright__) + (topright__ - bottomleft__))  # decomposition of two diagonal differences into Gx
@@ -188,6 +178,7 @@ def flood_fill(dert__, sign__, verbose=False, mask__=None, blob_cls=CBlob, fseg=
             if idmap[y, x] == UNFILLED:  # ignore filled/clustered derts
                 # initialize new blob
                 blob = blob_cls(layer0=[0 for _ in range(11)],sign=sign__[y, x], root_dert__=dert__)
+                blob.layer_names = ['I', 'G', 'M', 'Vector', 'aVector', 'Ga', 'Ma', 'A', 'Mdx', 'Ddx']
 
                 if prior_forks: # update prior forks in deep blob
                     blob.prior_forks= prior_forks.copy()
@@ -207,15 +198,18 @@ def flood_fill(dert__, sign__, verbose=False, mask__=None, blob_cls=CBlob, fseg=
                                     G  = dert__[3][y1][x1],
                                     M  = dert__[4][y1][x1])
                     if len(dert__)>5: # comp_angle
-                        blob.accumulate(Dydy = dert__[5][y1][x1],
-                                        Dxdy = dert__[6][y1][x1],
-                                        Dydx = dert__[7][y1][x1],
-                                        Dxdx = dert__[8][y1][x1],
-                                        Ga = dert__[9][y1][x1],
-                                        Ma = dert__[10][y1][x1])
-                    if len(dert__)>11: # comp_dx
-                        blob.accumulate(Mdx = dert__[11][y1][x1],
-                                        Ddx = dert__[12][y1][x1])
+                        blob.accumulate(Ga  =dert__[7][y1][x1],
+                                        Ma  =dert__[8][y1][x1])
+                        if blob.Dax==0: blob.Dax = 1
+                        sum_day = (blob.Day * dert__[5][y1][x1])
+                        sum_dax = (blob.Dax * dert__[6][y1][x1])
+                        aVector = sum_day * sum_dax
+                        # update blob
+                        blob.Day = aVector.imag
+                        blob.Day = aVector.real
+                    if len(dert__)>10: # comp_dx
+                        blob.accumulate(Mdx =dert__[9][y1][x1],
+                                        Ddx =dert__[10][y1][x1])
                     blob.A += 1
 
                     if y1 < y0:
@@ -328,7 +322,7 @@ if __name__ == "__main__":
     argument_parser = argparse.ArgumentParser()
     argument_parser.add_argument('-i', '--image', help='path to image file', default='./images//toucan.jpg')
     argument_parser.add_argument('-v', '--verbose', help='print details, useful for debugging', type=int, default=1)
-    argument_parser.add_argument('-n', '--intra', help='run intra_blobs after frame_blobs', type=int, default=1)
+    argument_parser.add_argument('-n', '--intra', help='run intra_blobs after frame_blobs', type=int, default=0)
     argument_parser.add_argument('-r', '--render', help='render the process', type=int, default=0)
     argument_parser.add_argument('-c', '--clib', help='use C shared library', type=int, default=0)
     args = argument_parser.parse_args()
@@ -379,7 +373,8 @@ if __name__ == "__main__":
                     # dert__ comp_a in 2x2 kernels
 
             elif M > aveB and blob_height > 3 and blob_width  > 3:  # min blob dimensions
-                blob.rdn = 1 # now blob.rng will be incremented before calling comp_r in intra_blob 
+                blob.rdn = 1
+                blob.rng = 1
                 blob.f_root_a = 0
                 deep_layers[i] = intra_blob(blob, render=args.render, verbose=args.verbose)
                 # dert__ comp_r in 3x3 kernels

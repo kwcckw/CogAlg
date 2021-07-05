@@ -40,26 +40,20 @@ def comp_r(dert__, ave, rng, mask__=None):
     else:
         majority_mask__ = None  # returned at the end of function
 
-    dy__ = dert__[1][:-1:2, :-1:2].copy()  # sparse to align with i__center
-    dx__ = dert__[2][:-1:2, :-1:2].copy()
+    d_upleft__ = dert__[1][:-1:2, :-1:2].copy()  # sparse to align with i__center
+    d_upright__= dert__[2][:-1:2, :-1:2].copy()
     rngSkip = 1
     if rng>2: rngSkip *= (rng-2)*2  # *2 for 8x8, *4 for 16x16
-    # compare four corner rim pixels diagonally,
-    # rotate in the opposite direction from prior rng, if rng is odd: clock-wise, else counter-clock-wise:
+    # compare pixels diagonally:
+    d_upleft__ += (i__bottomright - i__topleft) * rngSkip
+    d_upright__+= (i__bottomleft - i__topright) * rngSkip
 
-    if rng%2: # odd rng
-        rot_dy__ = dy__ + (i__topleft - i__bottomright) * rngSkip
-        rot_dx__ = dx__ + (i__topright - i__bottomleft) * rngSkip
-    else: # even rng
-        rot_dy__ = dy__ + (i__bottomright - i__topleft) * rngSkip
-        rot_dx__ = dx__ + (i__bottomleft - i__topright) * rngSkip
+    g__ = np.hypot(d_upleft__, d_upright__) - ave  # gradient, recomputed at each comp_r
 
-    g__ = np.hypot(rot_dy__, rot_dx__) - ave  # gradient, recomputed at each comp_r
-
-    return (i__topleft, rot_dy__, rot_dx__, g__), majority_mask__
+    return (i__topleft, d_upleft__, d_upright__, g__), majority_mask__
 
 
-def comp_r_old(dert__, ave, rng, root_fia, mask__=None):
+def comp_r(dert__, ave, rng, root_fia, mask__=None):
     '''
     Cross-comparison of input param (dert[0]) over rng passed from intra_blob.
     This fork is selective for blobs with below-average gradient,
@@ -167,7 +161,7 @@ def comp_r_old(dert__, ave, rng, root_fia, mask__=None):
     return (i__center, dy__, dx__, g__, m__), majority_mask__
 
 
-def comp_a(dert__, ave_ma, ave_ga, rng, prior_forks, mask__=None):  # cross-comp of gradient angle in 2x2 kernels
+def comp_a(dert__, ave_ma, ave_ga, prior_forks, mask__=None):  # cross-comp of gradient angle in 2x2 kernels
 
     if mask__ is not None:
         majority_mask__ = (mask__[:-1, :-1].astype(int) +
@@ -189,36 +183,19 @@ def comp_a(dert__, ave_ma, ave_ga, rng, prior_forks, mask__=None):  # cross-comp
     angle__top = angle__[:, :-1, 1:]  # was topright
     angle__right = angle__[:, 1:, 1:]  # was botright
     angle__bottom = angle__[:, 1:, :-1]  # was botleft
-    
-    if rng % 2: # odd rng
-        '''
-        a__ is rotated 45 degrees counter-clockwise:
-        '''
-        sin_da0__, cos_da0__ = angle_diff(angle__right, angle__left)  # dax__ contains 2 component arrays: sin(dax), cos(dax) ...
-        sin_da1__, cos_da1__ = angle_diff(angle__bottom, angle__top)  # ... same for day
-        
-        # angle change in y, sines are sign-reversed because da0 and da1 are top-down, no reversal in cosines
-        day__ = [-sin_da0__ - sin_da1__, cos_da0__ + cos_da1__]
-        # angle change in x, positive sign is right-to-left, so only sin_da0__ is sign-reversed
-        dax__ = [-sin_da0__ + sin_da1__, cos_da0__ + cos_da1__]
-            
+    '''
+    a__ is rotated 45 degrees counter-clockwise:
+    '''
+    sin_da0__, cos_da0__ = angle_diff(angle__right, angle__left)  # dax__ contains 2 component arrays: sin(dax), cos(dax) ...
+    sin_da1__, cos_da1__ = angle_diff(angle__bottom, angle__top)  # ... same for day
 
-    else: # even rng
-        '''
-        a__ is rotated 45 degrees clockwise:
-        '''
-        sin_da0__, cos_da0__ = angle_diff(angle__left, angle__right)  # dax__ contains 2 component arrays: sin(dax), cos(dax) ...
-        sin_da1__, cos_da1__ = angle_diff(angle__top, angle__bottom)  # ... same for day
-        
-        # angle change in y, sines are sign-reversed because da0 and da1 are top-down, no reversal in cosines
-        day__ = [-sin_da0__ - sin_da1__, cos_da0__ + cos_da1__]
-        # angle change in x, positive sign is left-to-right, so only sin_da0__ is sign-reversed
-        dax__ = [-sin_da0__ + sin_da1__, cos_da0__ + cos_da1__]
-        
-    
     with np.errstate(divide='ignore', invalid='ignore'):  # suppress numpy RuntimeWarning
         ma__ = (cos_da0__ + 1) + (cos_da1__ + 1) - ave_ma  # +1 to convert to all positives, ave ma = 2?
 
+    # angle change in y, sines are sign-reversed because da0 and da1 are top-down, no reversal in cosines
+    day__ = [-sin_da0__ - sin_da1__, cos_da0__ + cos_da1__]
+    # angle change in x, positive sign is right-to-left, so only sin_da0__ is sign-reversed
+    dax__ = [-sin_da0__ + sin_da1__, cos_da0__ + cos_da1__]
     '''
     sin(-θ) = -sin(θ), cos(-θ) = cos(θ): 
     sin(da) = -sin(-da), cos(da) = cos(-da) => (sin(-da), cos(-da)) = (-sin(da), cos(da))
