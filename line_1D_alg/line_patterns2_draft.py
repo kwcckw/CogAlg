@@ -179,7 +179,7 @@ def intra_Pm_(P_, irp_, adj_M_, fid, rdn, rng):  # evaluate for sub-recursion in
                     loc_ave_min = (ave_min + P_ave) / 2
                     rdert_ = range_comp(P.dert_, loc_ave, loc_ave_min, fid)
                     '''
-                    rp_, rd_ = range_comp(irp_, P.p_, P.d_)  # rng+ comp with localized ave, skip predictable next dert
+                    rp_, rd_ = range_comp(irp_, P)  # rng+ comp with localized ave, skip predictable next dert
                     sub_Pm_ = form_P_(rp_, rd_, fPd=False)  # cluster by m sign
                     Ls = len(sub_Pm_)
                     P.sublayers += [[(Ls, False, fid, rdn, rng, sub_Pm_, [], [])]]  # sub_PPm_, sub_PPd_
@@ -215,7 +215,7 @@ def intra_Pd_(Pd_, irp_, rel_adj_M, rdn, rng):  # evaluate for sub-recursion in 
 
         if min(abs(P.D), abs(P.D) * rel_adj_M) > ave_D * rdn and P.L > 3:  # abs(D) * rel_adj_M: allocated adj_M
             # cross-comp of ds:
-            dd_, dm_ = deriv_comp(P.d_)
+            dd_ = deriv_comp(P)
             sub_Pm_ = form_P_(P.d_, dd_, fPd=True)  # cluster Pd derts by md, won't happen
             Ls = len(sub_Pm_)
             # 1st layer: Ls, fPd, fid, rdn, rng, sub_P_, sub_PPm_, sub_PPd_:
@@ -223,8 +223,8 @@ def intra_Pd_(Pd_, irp_, rel_adj_M, rdn, rng):  # evaluate for sub-recursion in 
 
             if len(sub_Pm_) > 3:
                 sub_adj_M_ = form_adjacent_M_(sub_Pm_)
-                irp_ = irp_[P.x0:P.x0+P.L]
-                P.sublayers += intra_Pm_(sub_Pm_, irp_, sub_adj_M_, 1, rdn+1 + 1/Ls, rng + 1)
+                rp_ = irp_[P.x0:P.x0+P.L] # we cannot replace irp_, irp_ will be used across multiple Ps
+                P.sublayers += intra_Pm_(sub_Pm_, rp_, sub_adj_M_, 1, rdn+1 + 1/Ls, rng + 1)
                 # splice sublayers across sub_Ps:
                 comb_layers = [comb_layers + sublayers for comb_layers, sublayers in
                                zip_longest(comb_layers, P.sublayers, fillvalue=[])]
@@ -236,9 +236,10 @@ def intra_Pd_(Pd_, irp_, rel_adj_M, rdn, rng):  # evaluate for sub-recursion in 
     return comb_layers
 
 
-def range_comp(p_, rp_, rd_):
+def range_comp(p_, P):
     # no rp_, rd_ = [], []: should be cumulative? unless preserve rim layers
 
+    rp_, rd_ = P.p_, P.d
     p_ = p_[::2]  # sparse p_ and d_, skipping odd ps compared in prior rng: 1 skip / 1 add, to maintain 2x overlap
     rp_ = rp_[::2]
     rd_ = rd_[::2]
@@ -256,25 +257,29 @@ def range_comp(p_, rp_, rd_):
         rng_d = d + pri_rng_d  # difference accumulated in rng
         rng_p_.append(rng_p)
         rng_d_.append(rng_d)
+        P.I += rng_p
+        P.D += rng_d
         _p = p
 
     return rng_p_, rng_d_
 
 
-def deriv_comp(d_):  # cross-comp consecutive ds in same-sign dert_: sign match is partial d match
+def deriv_comp(P):  # cross-comp consecutive ds in same-sign dert_: sign match is partial d match
     # dd and md may match across d sign, but likely in high-match area, spliced by spec in comp_P?
 
-    dd_, md_ = [], []  # initialization:
+    d_ = P.d_
+    dd_ = []  # initialization:
     _d = abs( d_[0] )  # same-sign in Pd
 
     for d in d_[1:]:
         dd = abs(d) - _d
         md = min(d, _d) - abs( dd/2) - ave_min  # md = min: magnitude of derived vars corresponds to predictive value
         dd_.append(dd)
-        md_.append(md)
+        P.D += dd
+        P.M += md
         _d = d
 
-    return md_, dd_  # if fid: P. rp_ = md_
+    return dd_  # if fid: P. rp_ = md_
 
 
 def cross_comp_spliced(frame_of_pixels_):  # converts frame_of_pixels to frame_of_patterns, each pattern maybe nested

@@ -53,7 +53,7 @@ def comp_r(dert__, ave, rng, mask__=None):
     return (i__topleft, d_upleft__, d_upright__, g__), majority_mask__
 
 
-def comp_r(dert__, ave, rng, root_fia, mask__=None):
+def comp_r_old(dert__, ave, rng, root_fia, mask__=None):
     '''
     Cross-comparison of input param (dert[0]) over rng passed from intra_blob.
     This fork is selective for blobs with below-average gradient,
@@ -161,6 +161,7 @@ def comp_r(dert__, ave, rng, root_fia, mask__=None):
     return (i__center, dy__, dx__, g__, m__), majority_mask__
 
 
+
 def comp_a(dert__, ave_ma, ave_ga, prior_forks, mask__=None):  # cross-comp of gradient angle in 2x2 kernels
 
     if mask__ is not None:
@@ -178,16 +179,14 @@ def comp_a(dert__, ave_ma, ave_ga, prior_forks, mask__=None):  # cross-comp of g
         angle__ = [dy__, dx__] / np.hypot(dy__, dx__)  # or g + ave
         for angle_ in angle__: angle_[np.where(np.isnan(angle_))] = 0 # set nan to 0, to avoid error later
 
-    # angle__ shifted in 2x2 kernel, rotate 45 degrees counter-clockwise to cancel clockwise rotation in frame_blobs:
-    angle__left = angle__[:, :-1, :-1]  # was topleft # a is 3 dimensional
-    angle__top = angle__[:, :-1, 1:]  # was topright
-    angle__right = angle__[:, 1:, 1:]  # was botright
-    angle__bottom = angle__[:, 1:, :-1]  # was botleft
-    '''
-    a__ is rotated 45 degrees counter-clockwise:
-    '''
-    sin_da0__, cos_da0__ = angle_diff(angle__right, angle__left)  # dax__ contains 2 component arrays: sin(dax), cos(dax) ...
-    sin_da1__, cos_da1__ = angle_diff(angle__bottom, angle__top)  # ... same for day
+    # angle__ shifted in 2x2 kernel, 
+    angle__topleft = angle__[:, :-1, :-1]
+    angle__topright = angle__[:, :-1, 1:] 
+    angle__bottomright = angle__[:, 1:, 1:]  
+    angle__bottomleft = angle__[:, 1:, :-1]  
+
+    sin_da0__, cos_da0__ = angle_diff(angle__bottomright, angle__topleft)  # dax__ contains 2 component arrays: sin(dax), cos(dax) ...
+    sin_da1__, cos_da1__ = angle_diff(angle__bottomleft, angle__topright)  # ... same for day
 
     with np.errstate(divide='ignore', invalid='ignore'):  # suppress numpy RuntimeWarning
         ma__ = (cos_da0__ + 1) + (cos_da1__ + 1) - ave_ma  # +1 to convert to all positives, ave ma = 2?
@@ -211,8 +210,8 @@ def comp_a(dert__, ave_ma, ave_ga, prior_forks, mask__=None):  # cross-comp of g
         i__topright = i__[:-1, 1:]
         i__botright = i__[1:, 1:]
         i__botleft = i__[1:, :-1]
-        dy__ = (i__botleft + i__botright) - (i__topleft + i__topright)  # decomposition of two diagonal differences
-        dx__ = (i__topright + i__botright) - (i__topleft + i__botleft)  # decomposition of two diagonal differences
+        dy__ = (i__botright) - (i__topleft)  # decomposition of two diagonal differences
+        dx__ = (i__botleft) - (i__topright)  # decomposition of two diagonal differences
     else:
         dy__ = dy__[:-1, :-1]  # passed on as idy, not rotated
         dx__ = dx__[:-1, :-1]  # passed on as idx, not rotated
