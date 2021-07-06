@@ -44,6 +44,7 @@ class CP(ClusterStructure):
     x0 = int
     p_ = list
     d_ = list
+    m_ = list
     sublayers = list
     # for line_PPs
     derP = object  # forward comp_P derivatives
@@ -79,11 +80,11 @@ def cross_comp(frame_of_pixels_):  # converts frame_of_pixels to frame_of_patter
         _p = pixel_[0]
 
         for p in pixel_[1:]:  # pixel p is compared to prior pixel _p in a row
-            rp_.append(p +_p)
+            rp_.append(p +_p) 
             d_.append(p -_p)  # m = ave - abs(d) is defined for accumulation only, otherwise redundant
             _p = p
 
-        Pm_ = form_P_(pixel_, d_, fPd=False)  # forms m-sign patterns
+        Pm_ = form_P_(pixel_, d_, [], fPd=False)  # forms m-sign patterns
         if len(Pm_) > 4:
             adj_M_ = form_adjacent_M_(Pm_)  # compute adjacent Ms to evaluate contrastive borrow potential
             intra_Pm_(Pm_, rp_, adj_M_, fid=False, rdn=1, rng=2)  # rng is unilateral, evaluates for sub-recursion per Pm
@@ -94,20 +95,25 @@ def cross_comp(frame_of_pixels_):  # converts frame_of_pixels to frame_of_patter
     return frame_of_patterns_  # frame of patterns will be output to level 2
 
 
-def form_P_(p_, d_, fPd):  # initialization, accumulation, termination
+def form_P_(p_, d_, m_, fPd):  # initialization, accumulation, termination
 
     P_ = []  # initialization:
     x=0
     _d = d_[0]
     _p = p_[0]
-    _m = ave - abs(_d)
+    _m = ave - abs(_d) 
+    if m_: _m += m_[0]
+    
     if fPd: _sign = _d > 0
-    else: _sign = _m > 0
+    else: _sign = _m > 0    
+    
 
     P = CP(sign=_sign, L=1, I=_p, D=_d, M=_m, x0=0, p_=[_p], d_=[_d], sublayers=[], _smP=False, fPd=fPd)
     # segment by m sign:
-    for p, d in zip( p_[1:], d_[1:] ):
+    for i, (p, d) in enumerate(zip( p_[1:], d_[1:] ), start=1):
         m = ave - abs(d)
+        if m_: m += m_[i]
+        
         if fPd: sign = d > 0
         else: sign = m > 0
 
@@ -179,8 +185,8 @@ def intra_Pm_(P_, irp_, adj_M_, fid, rdn, rng):  # evaluate for sub-recursion in
                     loc_ave_min = (ave_min + P_ave) / 2
                     rdert_ = range_comp(P.dert_, loc_ave, loc_ave_min, fid)
                     '''
-                    rp_, rd_ = range_comp(irp_, P)  # rng+ comp with localized ave, skip predictable next dert
-                    sub_Pm_ = form_P_(rp_, rd_, fPd=False)  # cluster by m sign
+                    rp_, rd_ = range_comp(irp_, P.p_, P.d_)  # rng+ comp with localized ave, skip predictable next dert
+                    sub_Pm_ = form_P_(rp_, rd_, [], fPd=False)  # cluster by m sign
                     Ls = len(sub_Pm_)
                     P.sublayers += [[(Ls, False, fid, rdn, rng, sub_Pm_, [], [])]]  # sub_PPm_, sub_PPd_
                     # 1st layer, Dert=[], fill if Ls > min?
@@ -196,7 +202,7 @@ def intra_Pm_(P_, irp_, adj_M_, fid, rdn, rng):  # evaluate for sub-recursion in
                 if min(-P.M, adj_M) > ave_D * rdn:  # cancelled M+ val, M = min | ~v_SAD
 
                     rel_adj_M = adj_M / -P.M  # for allocation of -Pm' adj_M to each of its internal Pds
-                    sub_Pd_ = form_P_(P.p_, P.d_, fPd=True)  # cluster by input d sign match: partial d match
+                    sub_Pd_ = form_P_(P.p_, P.d_, [], fPd=True)  # cluster by input d sign match: partial d match
                     Ls = len(sub_Pd_)
                     P.sublayers += [[(Ls, True, True, rdn, rng, sub_Pd_)]]  # 1st layer, Dert=[], fill if Ls > min?
 
@@ -216,7 +222,7 @@ def intra_Pd_(Pd_, irp_, rel_adj_M, rdn, rng):  # evaluate for sub-recursion in 
         if min(abs(P.D), abs(P.D) * rel_adj_M) > ave_D * rdn and P.L > 3:  # abs(D) * rel_adj_M: allocated adj_M
             # cross-comp of ds:
             dd_ = deriv_comp(P)
-            sub_Pm_ = form_P_(P.d_, dd_, fPd=True)  # cluster Pd derts by md, won't happen
+            sub_Pm_ = form_P_(P.d_, dd_, P.m_, fPd=True)  # cluster Pd derts by md, won't happen
             Ls = len(sub_Pm_)
             # 1st layer: Ls, fPd, fid, rdn, rng, sub_P_, sub_PPm_, sub_PPd_:
             P.sublayers += [[(Ls, True, True, rdn, rng, sub_Pm_, [], [] )]]
@@ -236,29 +242,22 @@ def intra_Pd_(Pd_, irp_, rel_adj_M, rdn, rng):  # evaluate for sub-recursion in 
     return comb_layers
 
 
-def range_comp(p_, P):
+def range_comp(rp_, p_, d_):
     # no rp_, rd_ = [], []: should be cumulative? unless preserve rim layers
 
-    rp_, rd_ = P.p_, P.d
     p_ = p_[::2]  # sparse p_ and d_, skipping odd ps compared in prior rng: 1 skip / 1 add, to maintain 2x overlap
-    rp_ = rp_[::2]
-    rd_ = rd_[::2]
-
+    rd_ = d_[::2]
+    rng_p_ = rp_[::2] # sparse rng_p_, derived from rp_, which is the accumulated p_
+    
     _p = p_[0]
-    _pri_rng_p = rp_[0]
     _pri_rng_d = rd_[0]
 
-    rng_p_ = [_pri_rng_p]
     rng_d_ = [_pri_rng_d]
 
-    for p, pri_rng_p, pri_rng_d in zip(p_[1:], rp_[1:], rd_[1:]):
-        d = p -_p
-        rng_p =_p + pri_rng_p  # intensity accumulated in rng
+    for p, pri_rng_d in zip(p_[1:], rd_[1:]):
+        d = p -_p # p is used for computing difference only
         rng_d = d + pri_rng_d  # difference accumulated in rng
-        rng_p_.append(rng_p)
         rng_d_.append(rng_d)
-        P.I += rng_p
-        P.D += rng_d
         _p = p
 
     return rng_p_, rng_d_
@@ -268,17 +267,17 @@ def deriv_comp(P):  # cross-comp consecutive ds in same-sign dert_: sign match i
     # dd and md may match across d sign, but likely in high-match area, spliced by spec in comp_P?
 
     d_ = P.d_
-    dd_ = []  # initialization:
+    dd_, md_ = [], []  # initialization:
     _d = abs( d_[0] )  # same-sign in Pd
 
     for d in d_[1:]:
         dd = abs(d) - _d
         md = min(d, _d) - abs( dd/2) - ave_min  # md = min: magnitude of derived vars corresponds to predictive value
         dd_.append(dd)
-        P.D += dd
-        P.M += md
+        md_.append(md)
         _d = d
 
+    P.m_ = md_
     return dd_  # if fid: P. rp_ = md_
 
 

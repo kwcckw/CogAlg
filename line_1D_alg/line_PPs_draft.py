@@ -33,7 +33,7 @@ from os.path import dirname, join, abspath
 sys.path.insert(0, abspath(join(dirname("CogAlg"), '..')))
 
 from line_patterns import CP
-from frame_2D_alg.class_cluster import ClusterStructure, comp_param, Cdm_
+from frame_2D_alg.class_cluster import ClusterStructure, comp_param, Cdm
 
 class CderP(ClusterStructure):
 
@@ -64,7 +64,7 @@ ave_D = 100
 ave_sub_M = 500  # sub_H comp filter
 ave_Ls = 3
 ave_PPM = 200
-ave_merge = -50  # merge adjacent Ps
+ave_merge = 50  # merge adjacent Ps
 ave_inv = 20 # ave inverse m, change to Ave from the root intra_blob?
 ave_min = 5  # ave direct m, change to Ave_min from the root intra_blob?
 
@@ -115,33 +115,40 @@ def search(P_):  # cross-compare patterns within horizontal line
 
     if derP_:
         PPm_ = form_PP_(derP_, fPd=False)  # cluster derPs into PPms by the sign of mP
+        eval_params(PPm_)
 
     if len(derP_d_)>1:
         derP_d_ = form_adjacent_mP(derP_d_)
         PPd_ = form_PP_(derP_d_, fPd=True)  # cluster derP_ds into PPds by the sign of vdP
-
+        eval_params(PPd_)
+        
     return PPm_, PPd_
 
 
 def sub_search_recursive(P_, fderP):  # search in sublayer[0] per P
     
+    # As in my previous push, we need the new changes from the changes below, because:
+    # P.sublayers = [[sublayer0],[sublayer1],[sublayer2],...] 
+    # Each sublayer (depends on number of sub_Ps)= [ (Ls1, fPd1, fid1, rdn1, rng1, sub_P1_, sub_PPm1_, sub_PPd1_), (Ls2, fPd2, fid2, rdn2, rng2, sub_P2_, sub_PPm2_, sub_PPd2_)
     for P in P_:
-        sub_P_ = P.sublayers[0][5]  
-        if len(sub_P_) > 2:
-            PM = P.M; PD = P.D
-            if fderP:
-                PM += P.derP.mP; PD += P.derP.mP  # include match added by last search
-
-            if P.fPd:
-                if abs(PD) > ave_D:  # better use sublayers.D|M, but we don't have it yet
-                    sub_PPm_, sub_PPd_ = search(sub_P_)
-                    P.sublayers[0][6] += sub_PPm_; P.sublayers[0][7] += sub_PPd_  # extended in line_patterns
-                    sub_search_recursive(sub_P_, fderP=1)  # deeper sublayers search is selective per sub_P
-
-            elif PM > ave_M:
-                sub_PPm_, sub_PPd_ = search(sub_P_)
-                P.sublayers[0][6] += sub_PPm_; P.sublayers[0][7] += sub_PPd_  # extended in line_patterns
-                sub_search_recursive(sub_P_, fderP=1)  # deeper sublayers search is selective per sub_P
+        if P.sublayers:
+            for sublayer in P.sublayers[0]:# top layer only
+                sub_P_ = sublayer[5] 
+                if len(sub_P_) > 2:
+                    PM = P.M; PD = P.D
+                    if fderP:
+                        PM += P.derP.mP; PD += P.derP.mP  # include match added by last search
+        
+                    if P.fPd:
+                        if abs(PD) > ave_D:  # better use sublayers.D|M, but we don't have it yet
+                            sub_PPm_, sub_PPd_ = search(sub_P_)
+                            sublayer[6].append(sub_PPm_); sublayer[7].append(sub_PPd_)  # extended in line_patterns
+                            sub_search_recursive(sub_P_, fderP=1)  # deeper sublayers search is selective per sub_P
+        
+                    elif PM > ave_M:
+                        sub_PPm_, sub_PPd_ = search(sub_P_)
+                        sublayer[6].append(sub_PPm_); sublayer[7].append(sub_PPd_)  # extended in line_patterns
+                        sub_search_recursive(sub_P_, fderP=1)  # deeper sublayers search is selective per sub_P
 
 
 def merge_comp_P(P_, _P, P, i, j, neg_M, neg_L, remove_index):  # multi-variate cross-comp, _smP = 0 in line_patterns
@@ -180,7 +187,7 @@ def merge_comp_P(P_, _P, P, i, j, neg_M, neg_L, remove_index):  # multi-variate 
         elif (j+1) <= len(P_)-1 and (j+1) not in remove_index and (i) not in remove_index:
             derP, _L, _smP = merge_comp_P(P_, _P, P_[j+1], i, j+1, neg_M, neg_L, remove_index)  # forward comp_P
         else:
-            derP = CderP(P=_P)  # return _P with empty derP
+            derP = CderP(P=_P)  # return _P with empty derP ( i think we need remove this and restructure the whole section, this derP is meaningless.)
 
     else:  # form derP:
         derP, L, _smP = comp_P(_P, P, neg_L, neg_M)
@@ -228,14 +235,14 @@ def comp_P(_P, P, neg_L, neg_M):  # multi-variate cross-comp, _smP = 0 in line_p
     return derP, _P.L, _P.sign
 
 
-def comp_sublayers(_P, P, mP):  # also add dP?
+def comp_sublayers(_P, P, mP):  # also add dP? Yes, why not.
 
     if P.sublayers and _P.sublayers:  # not empty sub layers
         for _sub_layer, sub_layer in zip(_P.sublayers, P.sublayers):
 
             if _sub_layer and sub_layer:
-                _Ls, _fdP, _fid, _rdn, _rng, _sub_P_ = _sub_layer[0]
-                Ls, fdP, fid, rdn, rng, sub_P_ = sub_layer[0]
+                _Ls, _fdP, _fid, _rdn, _rng, _sub_P_, [], [] = _sub_layer[0]
+                Ls, fdP, fid, rdn, rng, sub_P_, [], [] = sub_layer[0]
                 # fork comparison:
                 if fdP == _fdP and rng == _rng and min(Ls, _Ls) > ave_Ls:
                     der_sub_P_ = []
@@ -294,7 +301,7 @@ def form_PP_(derP_, fPd):  # cluster derPs into PP s by derP sign,
             PP.accum_from(derP)  # accumulate PPm numerical params with same-name current derP params, exclusions?
             PP.derP_.append(derP)
 
-        _sign - sign
+        _sign = sign
 
     PP_.append(PP)  # pack last PP
 
@@ -463,7 +470,7 @@ def form_Pp_draft(PP, param_name, fPd):
     # needs extension:
     Pp = CP(_smP=False, sign=_sign)
 
-    for derP in PP.derP[1:]:
+    for derP in PP.derP_[1:]:
         d = derP.layer1[param_name].d
         m = derP.layer1[param_name].m
         if fPd: sign = d > 0

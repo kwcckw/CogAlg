@@ -143,8 +143,7 @@ def derts2blobs(dert__, verbose=False, render=False, use_c=False):
             Dy += blob.Dy
             Dx += blob.Dx
             G += blob.G
-            M += blob.M
-        frame = FrameOfBlobs(I=I, Dy=Dy, Dx=Dx, G=G, M=M, blob_=blob_, dert__=dert__)
+        frame = FrameOfBlobs(I=I, Dy=Dy, Dx=Dx, G=G, blob_=blob_, dert__=dert__)
 
     assign_adjacents(adj_pairs)  # f_segment_by_direction=False
 
@@ -178,7 +177,6 @@ def flood_fill(dert__, sign__, verbose=False, mask__=None, blob_cls=CBlob, fseg=
             if idmap[y, x] == UNFILLED:  # ignore filled/clustered derts
                 # initialize new blob
                 blob = blob_cls(layer0=[0 for _ in range(11)],sign=sign__[y, x], root_dert__=dert__)
-                blob.layer_names = ['I', 'G', 'M', 'Vector', 'aVector', 'Ga', 'Ma', 'A', 'Mdx', 'Ddx']
 
                 if prior_forks: # update prior forks in deep blob
                     blob.prior_forks= prior_forks.copy()
@@ -195,8 +193,8 @@ def flood_fill(dert__, sign__, verbose=False, mask__=None, blob_cls=CBlob, fseg=
                     blob.accumulate(I  = dert__[0][y1][x1],
                                     Dy = dert__[1][y1][x1],
                                     Dx = dert__[2][y1][x1],
-                                    G  = dert__[3][y1][x1],
-                                    M  = dert__[4][y1][x1])
+                                    G  = dert__[3][y1][x1])
+#                                    M  = dert__[4][y1][x1])
                     if len(dert__)>5: # comp_angle
                         blob.accumulate(Ga  =dert__[7][y1][x1],
                                         Ma  =dert__[8][y1][x1])
@@ -320,9 +318,9 @@ if __name__ == "__main__":
 
     # Parse arguments
     argument_parser = argparse.ArgumentParser()
-    argument_parser.add_argument('-i', '--image', help='path to image file', default='./images//toucan.jpg')
+    argument_parser.add_argument('-i', '--image', help='path to image file', default='./images//toucan_small.jpg')
     argument_parser.add_argument('-v', '--verbose', help='print details, useful for debugging', type=int, default=1)
-    argument_parser.add_argument('-n', '--intra', help='run intra_blobs after frame_blobs', type=int, default=0)
+    argument_parser.add_argument('-n', '--intra', help='run intra_blobs after frame_blobs', type=int, default=1)
     argument_parser.add_argument('-r', '--render', help='render the process', type=int, default=0)
     argument_parser.add_argument('-c', '--clib', help='use C shared library', type=int, default=0)
     args = argument_parser.parse_args()
@@ -359,7 +357,7 @@ if __name__ == "__main__":
             positive value of adjacent -G "flat" blobs.
             '''
             G = blob.G
-            M = blob.M
+            M = ave-blob.G # temporary
             blob.root_dert__=root_dert__
             blob.prior_forks=['g']  # not sure about this
             blob_height = blob.box[1] - blob.box[0]
