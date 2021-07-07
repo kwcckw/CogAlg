@@ -89,11 +89,16 @@ def comp_blob(blob, _blob, _derBlob):
     compare _blob and blob
     '''
     derBlob = CderBlob()
-    layer1 = dict({'I':.0,'Da':.0,'G':.0,'M':.0,'Dady':.0,'Dadx':.0,'Ga':.0,'Ma':.0,'A':.0,'Mdx':.0, 'Ddx':.0})
+    layer1 = dict({'I':.0,'Da':.0, 'M':.0,'Dady':.0,'Dadx':.0,'Ma':.0,'A':.0,'Mdx':.0, 'Ddx':.0})
 
-    absG = max(1, blob.G + (ave * blob.A)); _absG = max(1, _blob.G + (ave * _blob.A))
+    G = np.hypot(blob.Dy, blob.Dx) # need -ave here?
+    _G = np.hypot(_blob.Dy, _blob.Dx)
+    absG = max(1, G + (ave * blob.A)); _absG = max(1, _G + (ave * _blob.A))
+    
+    Ga = np.hypot( np.arctan2(blob.Dydy, blob.Dxdy), np.arctan2(blob.Dydx, blob.Dxdx) )  # need -ave_ga here?
+    _Ga = np.hypot( np.arctan2(_blob.Dydy, _blob.Dxdy), np.arctan2(_blob.Dydx, _blob.Dxdx) ) 
     # use max to avoid zero division, this is possible when -blob.G = (ave*_blob.A)
-    absGa = max(1, blob.Ga + (ave_da * blob.A)); _absGa = max(1, _blob.Ga + (ave_da * _blob.A))
+    absGa = max(1, Ga + (ave_da * blob.A)); _absGa = max(1, _Ga + (ave_da * _blob.A))
 
     for param_name in layer1:
         if param_name == 'Da':

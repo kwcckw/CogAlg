@@ -51,7 +51,9 @@ def comp_r(dert__, ave, rng, mask__=None):
 
     g__ = np.hypot(d_upright__, d_upleft__) - ave  # gradient, recomputed at each comp_r
 
-    return (i__topleft, d_upleft__, d_upright__, g__), majority_mask__
+    m__= -g__ # m = -g?
+      
+    return (i__topleft, d_upleft__, d_upright__, m__), majority_mask__
 
 
 def comp_a(dert__, ave_ma, ave_ga, prior_forks, mask__=None):  # cross-comp of gradient angle in 2x2 kernels
@@ -91,7 +93,7 @@ def comp_a(dert__, ave_ma, ave_ga, prior_forks, mask__=None):  # cross-comp of g
     sin(-θ) = -sin(θ), cos(-θ) = cos(θ): 
     sin(da) = -sin(-da), cos(da) = cos(-da) => (sin(-da), cos(-da)) = (-sin(da), cos(da))
     '''
-    ga__ = np.hypot( np.arctan2(*day__), np.arctan2(*dax__) ) - ave_ga
+    # ga__ = np.hypot( np.arctan2(*day__), np.arctan2(*dax__) ) - ave_ga
     '''
     ga: deviation of magnitude of gradient of angle
     in conventional notation: G = (Ix, Iy), A = (Ix, Iy) / hypot(G), DA = (dAdx, dAdy), abs_GA = hypot(DA)
@@ -99,10 +101,9 @@ def comp_a(dert__, ave_ma, ave_ga, prior_forks, mask__=None):  # cross-comp of g
     dy__ = dy__[:-1, :-1]  # passed on as idy, not rotated
     dx__ = dx__[:-1, :-1]  # passed on as idx, not rotated
     i__ = i__[:-1, :-1]  # for summation in Dert
-    g__ = g__[:-1, :-1]  # for summation in Dert
     m__ = m__[:-1, :-1]
 
-    return (i__, dy__, dx__, g__, m__, day__[0], day__[1], dax__[0], dax__[1], ga__, ma__), majority_mask__
+    return (i__, dy__, dx__, m__, day__[0], day__[1], dax__[0], dax__[1], ma__), majority_mask__
 
 
 def angle_diff(a2, a1):  # compare angle_1 to angle_2 (angle_1 to angle_2)
