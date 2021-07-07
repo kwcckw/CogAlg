@@ -46,7 +46,7 @@ ave_mP = 100
 UNFILLED = -1
 EXCLUDED_ID = -2
 
-FrameOfBlobs = namedtuple('FrameOfBlobs', 'I, Dy, Dx, G, M, blob_, dert__')
+FrameOfBlobs = namedtuple('FrameOfBlobs', 'I, Dy, Dx, M, blob_, dert__')
 
 
 class CBlob(ClusterStructure):  # from frame_blobs only, no sub_blobs
@@ -55,7 +55,6 @@ class CBlob(ClusterStructure):  # from frame_blobs only, no sub_blobs
     I = int
     Dy = int
     Dx = int
-    G = int
     M = int
     # comp_angle:
     Day = complex
@@ -117,7 +116,7 @@ def comp_pixel(image):  # 2x2 pixel cross-correlation within image, see comp_pix
     rp__ = topleft__ + topright__ + bottomleft__ + bottomright__  # sum of 4 rim pixels
 
     return (rp__, d_upleft__, d_upright__, G__)  # tuple of 2D arrays per param of dert (derivatives' tuple)
-    # renamed dert__ = (p__, dy__, dx__, g__) for readability in functions below
+    # renamed dert__ = (rp__, dy__, dx__, g__) for readability in functions below
 '''
     Sobel version:
     Gy__ = -(topleft__ - bottomright__) - (topright__ - bottomleft__)   # decomposition of two diagonal differences into Gy
@@ -137,13 +136,13 @@ def derts2blobs(dert__, verbose=False, render=False, use_c=False):
     else:
         # [flood_fill](https://en.wikipedia.org/wiki/Flood_fill)
         blob_, idmap, adj_pairs = flood_fill(dert__, sign__=dert__[3] > 0,  verbose=verbose)
-        I, Dy, Dx, G, M = 0, 0, 0, 0, 0
+        I, Dy, Dx, M = 0, 0, 0, 0
         for blob in blob_:
             I += blob.I
             Dy += blob.Dy
             Dx += blob.Dx
-            G += blob.G
-        frame = FrameOfBlobs(I=I, Dy=Dy, Dx=Dx, G=G, blob_=blob_, dert__=dert__)
+            M += blob.M
+        frame = FrameOfBlobs(I=I, Dy=Dy, Dx=Dx, M=M, blob_=blob_, dert__=dert__)
 
     assign_adjacents(adj_pairs)  # f_segment_by_direction=False
 
@@ -177,6 +176,8 @@ def flood_fill(dert__, sign__, verbose=False, mask__=None, blob_cls=CBlob, fseg=
             if idmap[y, x] == UNFILLED:  # ignore filled/clustered derts
                 # initialize new blob
                 blob = blob_cls(layer0=[0 for _ in range(11)],sign=sign__[y, x], root_dert__=dert__)
+                # not updated
+                blob.layer_names = ['I', 'G', 'M', 'Vector', 'aVector', 'Ga', 'Ma', 'A', 'Mdx', 'Ddx']
 
                 if prior_forks: # update prior forks in deep blob
                     blob.prior_forks= prior_forks.copy()
@@ -193,11 +194,12 @@ def flood_fill(dert__, sign__, verbose=False, mask__=None, blob_cls=CBlob, fseg=
                     blob.accumulate(I  = dert__[0][y1][x1],
                                     Dy = dert__[1][y1][x1],
                                     Dx = dert__[2][y1][x1],
-                                    G  = dert__[3][y1][x1])
-#                                    M  = dert__[4][y1][x1])
-                    if len(dert__)>5: # comp_angle
-                        blob.accumulate(Ga  =dert__[7][y1][x1],
-                                        Ma  =dert__[8][y1][x1])
+                                    M  = -dert__[3][y1][x1]  # inverted g
+                                    )
+                    # below is not updated
+                    if len(dert__)>4: # comp_angle
+                        blob.accumulate(Ma = dert__[6][y1][x1])
+                                        #Ma  =dert__[8][y1][x1])
                         if blob.Dax==0: blob.Dax = 1
                         sum_day = (blob.Day * dert__[5][y1][x1])
                         sum_dax = (blob.Dax * dert__[6][y1][x1])
@@ -318,9 +320,9 @@ if __name__ == "__main__":
 
     # Parse arguments
     argument_parser = argparse.ArgumentParser()
-    argument_parser.add_argument('-i', '--image', help='path to image file', default='./images//toucan_small.jpg')
+    argument_parser.add_argument('-i', '--image', help='path to image file', default='./images//toucan.jpg')
     argument_parser.add_argument('-v', '--verbose', help='print details, useful for debugging', type=int, default=1)
-    argument_parser.add_argument('-n', '--intra', help='run intra_blobs after frame_blobs', type=int, default=1)
+    argument_parser.add_argument('-n', '--intra', help='run intra_blobs after frame_blobs', type=int, default=0)
     argument_parser.add_argument('-r', '--render', help='render the process', type=int, default=0)
     argument_parser.add_argument('-c', '--clib', help='use C shared library', type=int, default=0)
     args = argument_parser.parse_args()
@@ -356,8 +358,8 @@ if __name__ == "__main__":
             +G "edge" blobs are low-match, valuable only as contrast: to the extent that their negative value cancels 
             positive value of adjacent -G "flat" blobs.
             '''
-            G = blob.G
-            M = ave-blob.G # temporary
+            G = np.hypot(blob.Dy, blob.Dx)
+            M = blob.M
             blob.root_dert__=root_dert__
             blob.prior_forks=['g']  # not sure about this
             blob_height = blob.box[1] - blob.box[0]
