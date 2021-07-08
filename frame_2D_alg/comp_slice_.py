@@ -76,7 +76,6 @@ class CP(ClusterStructure):
 class CderP(ClusterStructure):
 
     layer1 = dict
-    # derP params
     mP = int
     dP = int
     P = object   # lower comparand
@@ -447,7 +446,7 @@ def comp_slice(_P, P):  # forms vertical derivatives of derP params, and conditi
 
     layer1 = dict({'I':.0,'Da':.0,'M':.0,'Dady':.0,'Dadx':.0,'Ma':.0,'L':.0,'Mdx':.0, 'Ddx':.0, 'x':.0})
     mP, dP = 0, 0
-    
+
     G = np.hypot(P.Dy, P.Dx) - ave_g * P.L
     _G = np.hypot(_P.Dy, _P.Dx) - ave_g * _P.L
     absG = max(1,G + (ave_g*P.L)); _absG = max(1,_G + (ave_g*_P.L))         # use max to avoid zero division
@@ -776,15 +775,15 @@ def comp_PP(PP, _PP):
     # compare PP and _PP base params to get layer 01 of derPP #-----------------
     layer01 = dict({'I':.0,'Da':.0,'M':.0,'Dady':.0,'Dadx':.0, 'Ma':.0,'L':.0,'Mdx':.0, 'Ddx':.0, 'x':.0})
     mP, dP = 0, 0
-    
+
     G = np.hypot(PP.Dy, PP.Dx) - ave_g * PP.L
     _G = np.hypot(_PP.Dy, _PP.Dx) - ave_g * _PP.L
     absG = max(1,G + (ave_g*PP.L)); _absG = max(1,_G + (ave_g*_PP.L))         # use max to avoid zero division
     Ga = np.hypot( np.arctan2(PP.Dydy, PP.Dxdy), np.arctan2(PP.Dydx, PP.Dxdx) ) - ave_ga * PP.L
     _Ga = np.hypot( np.arctan2(_PP.Dydy, _PP.Dxdy), np.arctan2(_PP.Dydx, _PP.Dxdx) ) - ave_ga * _PP.L
     absGa = max(1,Ga + (ave_ga *PP.L)); _absGa = max(1,_Ga + (ave_ga *_PP.L))
-    
-    
+
+
     for param_name in layer01:
         if param_name == 'Da':
             # sin and cos components

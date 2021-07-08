@@ -52,7 +52,7 @@ class CderP(ClusterStructure):
 class CPP(CP, CderP):
 
     derP_ = list  # constituents, maybe sub_PPm_
-    layer1 = dict  # d, m per comparand (dict is not inherited automatically)
+    layer1 = dict  # d,m per comparand (dict is not inherited automatically)
 
 ave = 100  # ave dI -> mI, * coef / var type
 # no ave_mP: deviation computed via rM  # ave_mP = ave* n_comp_params: comp cost, or n vars per P: rep cost?
@@ -120,11 +120,11 @@ def search(P_):  # cross-compare patterns within horizontal line
     return PPm_, PPd_
 
 
-def sub_search_recursive(P_, fderP):  # search in sublayer[0] per P
+def sub_search_recursive(P_, fderP):  # search in top sublayer per P / sub_P
 
     for P in P_:
         if P.sublayers:
-            sublayer = P.sublayers[0][0]  # search top layer only
+            sublayer = P.sublayers[0][0]  # top sublayer has one element
             sub_P_ = sublayer[5]
             if len(sub_P_) > 2:
                 PM = P.M; PD = P.D
