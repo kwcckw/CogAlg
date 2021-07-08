@@ -102,7 +102,6 @@ def search(P_):  # cross-compare patterns within horizontal line
                                 no contrast value in neg derPs and PPs: initial opposite-sign P miss is expected
                                 neg_derP derivatives are not significant; neg_M obviates distance * decay_rate * M '''
                     else:
-                        derP_.append( CderP(sign=sign or _smP, mP=mP,dP=dP, neg_M=neg_M, neg_L=neg_L, P=_P, layer1={}))
                         # sign is ORed bilaterally, negative for singleton derPs only
                         break  # neg net_M: stop search
 

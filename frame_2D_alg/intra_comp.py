@@ -50,8 +50,9 @@ def comp_r(dert__, ave, rng, mask__=None):
 
     g__ = np.hypot(d_upright__, d_upleft__) - ave  # gradient, recomputed at each comp_r
     m__= - g__ # match = inverse of variation
+    i__sum = i__topleft + i__topright + i__bottomleft + i__bottomright
 
-    return (i__topleft, d_upleft__, d_upright__, m__), majority_mask__
+    return (i__sum, d_upleft__, d_upright__, m__), majority_mask__
 
 
 def comp_a(dert__, ave_ma, ave_ga, prior_forks, mask__=None):  # cross-comp of gradient angle in 2x2 kernels
@@ -65,7 +66,7 @@ def comp_a(dert__, ave_ma, ave_ga, prior_forks, mask__=None):  # cross-comp of g
     else:
         majority_mask__ = None
 
-    i__, dy__, dx__, g__, m__ = dert__[:5]  # day__,dax__,ga__,ma__ are recomputed
+    i__, dy__, dx__, m__ = dert__[:5]  # day__,dax__,ga__,ma__ are recomputed
 
     with np.errstate(divide='ignore', invalid='ignore'):  # suppress numpy RuntimeWarning
         angle__ = [dy__, dx__] / np.hypot(dy__, dx__)  # or g + ave
