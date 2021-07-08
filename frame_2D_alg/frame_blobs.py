@@ -343,8 +343,7 @@ if __name__ == "__main__":
             frame.dert__[0],  # i
             frame.dert__[1],  # dy
             frame.dert__[2],  # dx
-            frame.dert__[3],  # g
-            frame.dert__[4],  # m
+            frame.dert__[3]   # m
             )
 
         for i, blob in enumerate(frame.blob_):  # print('Processing blob number ' + str(bcount))
@@ -353,10 +352,10 @@ if __name__ == "__main__":
             +G "edge" blobs are low-match, valuable only as contrast: to the extent that their negative value cancels 
             positive value of adjacent -G "flat" blobs.
             '''
-            G = np.hypot(blob.Dy, blob.Dx)
+            G = np.hypot(blob.Dy, blob.Dx) - ave * blob.A
             M = blob.M
             blob.root_dert__=root_dert__
-            blob.prior_forks=['g']  # not sure about this
+            blob.prior_forks=['g']
             blob_height = blob.box[1] - blob.box[0]
             blob_width = blob.box[3] - blob.box[2]
 

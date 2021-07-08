@@ -173,6 +173,10 @@ class MetaCluster(type):
                     if hasattr(inherit_instance,param) and (param not in excluded):
                         setattr(instance, param, getattr(inherit_instance, param))
 
+                for param in cls.dict_params: # inherit dict params
+                    if hasattr(inherit_instance,param) and (param not in excluded):
+                        setattr(instance, param, getattr(inherit_instance, param))
+
         # Set id
         instance._id = len(cls._instances)
         # Create ref
