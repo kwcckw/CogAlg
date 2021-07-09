@@ -46,7 +46,7 @@ ave_mP = 100
 UNFILLED = -1
 EXCLUDED_ID = -2
 
-FrameOfBlobs = namedtuple('FrameOfBlobs', 'I, Dy, Dx, M, blob_, dert__')
+FrameOfBlobs = namedtuple('FrameOfBlobs', 'I, Dy, Dx, M, rP, blob_, dert__')
 
 class CBlob(ClusterStructure):  # from frame_blobs only, no sub_blobs
 
@@ -55,6 +55,7 @@ class CBlob(ClusterStructure):  # from frame_blobs only, no sub_blobs
     Dy = float
     Dx = float
     M = float
+    rP = float
     # comp_angle:
     Dydy = float
     Dxdy = float
@@ -134,14 +135,15 @@ def derts2blobs(dert__, verbose=False, render=False, use_c=False):
         frame, idmap, adj_pairs = wrapped_flood_fill(dert__)
     else:
         # [flood_fill](https://en.wikipedia.org/wiki/Flood_fill)
-        blob_, idmap, adj_pairs = flood_fill(dert__, sign__=dert__[3] > 0,  verbose=verbose)
-        I, Dy, Dx, M = 0, 0, 0, 0
+        blob_, idmap, adj_pairs = flood_fill(dert__, sign__=dert__[3]> 0,  verbose=verbose) # use dert__[3] which is M or use hypot recompute G?
+        I, Dy, Dx, M, rP = 0, 0, 0, 0, 0
         for blob in blob_:
             I += blob.I
             Dy += blob.Dy
             Dx += blob.Dx
             M += blob.M
-        frame = FrameOfBlobs(I=I, Dy=Dy, Dx=Dx, M=M, blob_=blob_, dert__=dert__)
+            rP += blob.rP
+        frame = FrameOfBlobs(I=I, Dy=Dy, Dx=Dx, M=M, rP=rP, blob_=blob_, dert__=dert__)
 
     assign_adjacents(adj_pairs)  # f_segment_by_direction=False
 
@@ -174,7 +176,7 @@ def flood_fill(dert__, sign__, verbose=False, mask__=None, blob_cls=CBlob, fseg=
         for x in range(width):
             if idmap[y, x] == UNFILLED:  # ignore filled/clustered derts
                 # initialize new blob
-                blob = blob_cls(layer0=[0 for _ in range(11)],sign=sign__[y, x], root_dert__=dert__)
+                blob = blob_cls(sign=sign__[y, x], root_dert__=dert__)
                 # it's not in range(11) now?
 
                 if prior_forks: # update prior forks in deep blob
@@ -192,17 +194,17 @@ def flood_fill(dert__, sign__, verbose=False, mask__=None, blob_cls=CBlob, fseg=
                     blob.accumulate(I  = dert__[0][y1][x1],
                                     Dy = dert__[1][y1][x1],
                                     Dx = dert__[2][y1][x1],
-                                    M  = -dert__[3][y1][x1]) # M -= g
+                                    M  = -dert__[3][y1][x1], # M -= g
+                                    rP = dert__[4][y1][x1])
                     if len(dert__) > 5: # comp_angle
-                        # dert__[4] is now rp__, increment below?
-                        blob.accumulate(Dydy = dert__[4][y1][x1],
-                                        Dxdy = dert__[5][y1][x1],
-                                        Dydx = dert__[6][y1][x1],
-                                        Dxdx = dert__[7][y1][x1],
-                                        Ma = dert__[8][y1][x1])
+                        blob.accumulate(Dydy = dert__[5][y1][x1],
+                                        Dxdy = dert__[6][y1][x1],
+                                        Dydx = dert__[7][y1][x1],
+                                        Dxdx = dert__[8][y1][x1],
+                                        Ma = dert__[9][y1][x1])
                     if len(dert__) > 10: # comp_dx
-                        blob.accumulate(Mdx = dert__[9][y1][x1],
-                                        Ddx = dert__[10][y1][x1])
+                        blob.accumulate(Mdx = dert__[10][y1][x1],
+                                        Ddx = dert__[11][y1][x1])
                     blob.A += 1
 
                     if y1 < y0:
@@ -331,7 +333,7 @@ if __name__ == "__main__":
     if intra:  # call to intra_blob, omit for testing frame_blobs only:
 
         if args.verbose: print("\rRunning intra_blob...")
-        from intra_blob import intra_blob, aveB
+        from intra_blob import intra_blob, aveA, aveB, pcoef, rcoef
 
         deep_frame = frame, frame  # 1st frame initializes summed representation of hierarchy, 2nd is individual top layer
         deep_blob_i_ = []  # index of a blob with deep layers
@@ -341,7 +343,8 @@ if __name__ == "__main__":
             frame.dert__[0],  # i
             frame.dert__[1],  # dy
             frame.dert__[2],  # dx
-            frame.dert__[3]   # m
+            frame.dert__[3],  # m
+            frame.dert__[4]   # rp
             )
 
         for i, blob in enumerate(frame.blob_):  # print('Processing blob number ' + str(bcount))
@@ -350,26 +353,27 @@ if __name__ == "__main__":
             +G "edge" blobs are low-match, valuable only as contrast: to the extent that their negative value cancels 
             positive value of adjacent -G "flat" blobs.
             '''
-            G = np.hypot(blob.Dy, blob.Dx) - ave * blob.A
+            G = np.hypot(blob.Dy, blob.Dx) - aveA * blob.A
             M = blob.M
             blob.root_dert__=root_dert__
             blob.prior_forks=['g']
             blob_height = blob.box[1] - blob.box[0]
             blob_width = blob.box[3] - blob.box[2]
 
-            if blob.sign:  # +M on first fork, remove blob.sign?
-                if (M > aveB) and (blob_height > 3 and blob_width > 3):  # min blob dimensions
-                    blob.rdn = 1
-                    blob.rng = 1
-                    blob.f_root_a = 0
-                    deep_layers[i] = intra_blob(blob, render=args.render, verbose=args.verbose)
-                    # dert__ comp_r in 4x4 kernels
-
-            elif G > aveB and blob_height > 3 and blob_width  > 3:  # min blob dimensions
+            # changed the structure to make it consistent with intra_blob, the prevent running wrong comp operation
+            if G > aveB and blob_height > 3 and blob_width  > 3:  # min blob dimensions
                 blob.rdn = 1
                 blob.f_comp_a = 1
                 deep_layers[i] = intra_blob(blob, render=args.render, verbose=args.verbose)
                 # dert__ comp_a in 2x2 kernels
+            
+            # use M is better to make it consistent with intra_blob
+            elif (blob.M > aveB * rcoef) and (blob_height > 3 and blob_width > 3):  # min blob dimensions
+                blob.rdn = 1
+                blob.rng = 1
+                deep_layers[i] = intra_blob(blob, render=args.render, verbose=args.verbose)
+                    # dert__ comp_r in 4x4 kernels
+
 
             if deep_layers[i]:  # if there are deeper layers
                 deep_blob_i_.append(i)  # indices of blobs with deep layers

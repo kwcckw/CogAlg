@@ -17,7 +17,7 @@ from comp_slice_ import *
 from segment_by_direction import segment_by_direction
 
 # filters, All *= rdn:
-ave = 50  # comp_a cost per dert, from average m, reflects blob definition cost
+aveA = 50  # comp_a cost per dert, from average m, reflects blob definition cost (rename to differentiate ave from frame_blobs)
 aveB = 50  # comp_a cost per intra_blob comp and clustering
 # no ave_ga = .78, ave_ma = 2: no indep eval
 pcoef = 2  # ave_comp_P / ave: relative cost of p fork
@@ -28,7 +28,7 @@ rcoef = 1  # ave_comp_r / ave: relative cost of r fork
 
 def intra_blob(blob, **kwargs):  # slice_blob or recursive input rng+ | angle cross-comp within input blob
 
-    Ave = int(ave * blob.rdn)
+    AveA = int(aveA * blob.rdn)
     AveB = int(aveB * blob.rdn)
     verbose = kwargs.get('verbose')
 
@@ -39,7 +39,7 @@ def intra_blob(blob, **kwargs):  # slice_blob or recursive input rng+ | angle cr
     # root fork is frame_blobs or comp_r
     ext_dert__, ext_mask__ = extend_dert(blob)  # dert__ boundaries += 1, for cross-comp in larger kernels
 
-    G = np.hypot(blob.Dy,blob.Dx)
+    G = np.hypot(blob.Dy,blob.Dx) - aveA * blob.A  # consistent with frame_blobs
 
     if G > AveB:  # comp_a fork, replace G with borrow_M if known
         adert__, mask__ = comp_a(ext_dert__, ext_mask__)  # compute abs ma, no indep eval
@@ -49,7 +49,7 @@ def intra_blob(blob, **kwargs):  # slice_blob or recursive input rng+ | angle cr
         blob.prior_forks.extend('a')
 
         if mask__.shape[0] > 2 and mask__.shape[1] > 2 and False in mask__:  # min size in y and x, least one dert in dert__
-            sign__ = ((np.hypot(adert__[1],adert__[2])) * adert__[8]) > ave * pcoef  # variable value of comp_P
+            sign__ = ((np.hypot(adert__[1],adert__[2])) * adert__[8]) > aveA * pcoef  # variable value of comp_P
             # g * (ma / ave: deviation rate, no independent value, not co-measurable with g)
 
             cluster_sub_eval(blob, adert__, sign__, mask__, **kwargs)  # forms sub_blobs of fork p sign in unmasked area
@@ -59,7 +59,7 @@ def intra_blob(blob, **kwargs):  # slice_blob or recursive input rng+ | angle cr
     elif blob.M > AveB * rcoef:  # comp_r fork
         blob.rng += 1  # rng counter for comp_r
 
-        dert__, mask__ = comp_r(ext_dert__, Ave, blob.rng, ext_mask__)
+        dert__, mask__ = comp_r(ext_dert__, AveA, blob.rng, ext_mask__)
         blob.f_comp_a = 0
         if kwargs.get('verbose'): print('\na fork\n')
         blob.prior_forks.extend('r')
@@ -108,11 +108,11 @@ def cluster_sub_eval(blob, dert__, sign__, mask__, **kwargs):  # comp_r or comp_
                 '''
                 if sub_G > AveB:  # replace with borrow_M when known
                     # comp_a:
-                    sub_blob.a_depth += blob.a_depth  # accumulate a depth from blob to sub_blob, currently not used ( do we want to keep this?)
+                    # sub_blob.a_depth += blob.a_depth  # accumulate a depth from blob to sub_blob, currently not used ( do we want to keep this?)
                     sub_blob.rdn = sub_blob.rdn + 1 + 1 / blob.Ls
                     blob.sub_layers += intra_blob(sub_blob, **kwargs)
 
-                elif sub_blob.M > AveB * mB_coef:
+                elif sub_blob.M > AveB * rcoef:
                     # comp_r:
                     sub_blob.rng = blob.rng
                     sub_blob.rdn = sub_blob.rdn + 1 + 1 / blob.Ls

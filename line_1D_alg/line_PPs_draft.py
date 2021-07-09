@@ -102,6 +102,7 @@ def search(P_):  # cross-compare patterns within horizontal line
                                 no contrast value in neg derPs and PPs: initial opposite-sign P miss is expected
                                 neg_derP derivatives are not significant; neg_M obviates distance * decay_rate * M '''
                     else:
+                        derP_.append( CderP(sign=sign or _smP, mP=mP,dP=dP, neg_M=neg_M, neg_L=neg_L, P=_P, layer1={}))
                         # sign is ORed bilaterally, negative for singleton derPs only
                         break  # neg net_M: stop search
 
@@ -161,13 +162,16 @@ def merge_comp_P(P_, _P, P, i, j, neg_M, neg_L, remove_index):  # multi-variate 
         layer1[param_name] = dm
 
     if neg_L == 0:
-        mP += _P.dert_[0].m; dP += _P.dert_[0].d
+        mP += _P.m_[0]; dP += _P.d_[0]
 
     rel_distance = neg_L / _P.L
 
     if mP / max(rel_distance, 1) > ave_merge:  # merge(_P, P): splice proximate and param/L- similar Ps:
         _P.accum_from(P)
-        _P.dert_+= P.dert_
+        _P.p_+= P.p_
+        _P.d_+= P.d_
+        _P.m_+= P.m_
+        
         remove_index.append(j)
         if _P.fPd: _P.sign = P.D > 0
         else: P.sign = P.M > 0
@@ -469,7 +473,7 @@ def form_Pp_(PP, param_name, fPd):
             Pp.L += 1
             Pp.D += d
             Pp.M += m
-            Pp.dert_.append((d,m))
+            # Pp.dert_.append((d,m)) no dert__ in Pp, need to pack d and m?
 
         _sign = sign
 

@@ -204,7 +204,7 @@ def intra_Pm_(P_, pixel_, adj_M_, fid, rdn, rng):  # evaluate for sub-recursion 
                     Ls = len(sub_Pd_)
                     P.sublayers += [[(Ls, True, True, rdn, rng, sub_Pd_)]]  # 1st layer, Dert=[], fill if Ls > min?
 
-                    P.sublayers += intra_Pd_(sub_Pd_, irp_, rel_adj_M, rdn+1 + 1/Ls, rng)  # der_comp eval per nPm
+                    P.sublayers += intra_Pd_(sub_Pd_, pixel_, rel_adj_M, rdn+1 + 1/Ls, rng)  # der_comp eval per nPm
                     # splice sublayers across sub_Ps, for return as root sublayers[1:]:
                     comb_layers = [comb_layers + sublayers for comb_layers, sublayers in
                                    zip_longest(comb_layers, P.sublayers, fillvalue=[])]
@@ -319,7 +319,7 @@ if __name__ == "__main__":
     # Main
     frame_of_patterns_ = cross_comp(image)  # returns Pm__
 
-    fline_PPs = 0
+    fline_PPs = 1
     if fline_PPs:  # debug line_PPs_draft
         from line_PPs_draft import *
         frame_PP_ = []

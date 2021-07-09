@@ -4,7 +4,6 @@ Cross-compare blobs with incrementally intermediate adjacency, within a frame
 
 from class_cluster import ClusterStructure, NoneType, comp_param, Cdm
 from frame_blobs import ave, CBlob
-from intra_blob import ave_ga, ave_ma
 from comp_slice_ import ave_min, ave_inv # facing error when comp-slice_ import from comp_blob, hence shift it here.
 import numpy as np
 import cv2
@@ -13,6 +12,8 @@ import cv2
 ave_mB = 1   # search termination crit
 ave_rM = .7  # average relative match at rL=1: rate of ave_mB decay with relative distance, due to correlation between proximity and similarity
 ave_da = 0.7853  # da at 45 degree, = ga at 22.5 degree
+ave_ga = .78
+ave_ma = 2
 
 class CderBlob(ClusterStructure):
 
@@ -89,7 +90,7 @@ def comp_blob(blob, _blob, _derBlob):
     compare _blob and blob
     '''
     derBlob = CderBlob()
-    layer1 = dict({'I':.0,'Da':.0, 'M':.0,'Dady':.0,'Dadx':.0,'Ma':.0,'A':.0,'Mdx':.0, 'Ddx':.0})
+    layer1 = dict({'I':.0,'Da':.0, 'M':.0, 'rP':.0,'Dady':.0,'Dadx':.0,'Ma':.0,'A':.0,'Mdx':.0, 'Ddx':.0})
 
     G = np.hypot(blob.Dy, blob.Dx) - ave * blob.A
     _G = np.hypot(_blob.Dy, _blob.Dx) - ave * _blob.A

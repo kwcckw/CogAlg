@@ -63,7 +63,7 @@ def comp_a(dert__, mask__=None):  # cross-comp of gradient angle in 2x2 kernels
     else:
         majority_mask__ = None
 
-    i__, dy__, dx__, m__ = dert__[:5]  # day__,dax__,ga__,ma__ are recomputed
+    i__, dy__, dx__, m__, rp__ = dert__[:5]  # day__,dax__,ga__,ma__ are recomputed
 
     with np.errstate(divide='ignore', invalid='ignore'):  # suppress numpy RuntimeWarning
         angle__ = [dy__, dx__] / np.hypot(dy__, dx__)  # or / ave + m
@@ -97,8 +97,9 @@ def comp_a(dert__, mask__=None):  # cross-comp of gradient angle in 2x2 kernels
     dx__ = dx__[:-1, :-1]  # passed on as idx, not rotated
     i__ = i__[:-1, :-1]  # for summation in Dert
     m__ = m__[:-1, :-1]
+    rp__ = rp__[:-1, :-1]
 
-    return (i__, dy__, dx__, m__, day__[0], day__[1], dax__[0], dax__[1], ma__), majority_mask__
+    return (i__, dy__, dx__, m__, rp__, day__[0], day__[1], dax__[0], dax__[1], ma__), majority_mask__
 
 
 def angle_diff(a2, a1):  # compare angle_1 to angle_2 (angle_1 to angle_2)
