@@ -310,7 +310,7 @@ if __name__ == "__main__":
     argument_parser = argparse.ArgumentParser()
     argument_parser.add_argument('-i', '--image', help='path to image file', default='./images//toucan.jpg')
     argument_parser.add_argument('-v', '--verbose', help='print details, useful for debugging', type=int, default=1)
-    argument_parser.add_argument('-n', '--intra', help='run intra_blobs after frame_blobs', type=int, default=0)
+    argument_parser.add_argument('-n', '--intra', help='run intra_blobs after frame_blobs', type=int, default=1)
     argument_parser.add_argument('-r', '--render', help='render the process', type=int, default=0)
     argument_parser.add_argument('-c', '--clib', help='use C shared library', type=int, default=0)
     args = argument_parser.parse_args()
@@ -333,10 +333,11 @@ if __name__ == "__main__":
         deep_layers = [[]] * len(frame.blob_)  # for visibility only
         empty = np.zeros_like(frame.dert__[0])
         root_dert__ = (  # update root dert__
-            frame.dert__[4],  # i
+            frame.dert__[0],  # i
             frame.dert__[1],  # dy
             frame.dert__[2],  # dx
-            frame.dert__[3]   # m
+            frame.dert__[3],  # m
+            frame.dert__[4]   # ri (we need this ri in index of 4 for intra_comp and later flood_fill accumulation)
             )
 
         for i, blob in enumerate(frame.blob_):  # print('Processing blob number ' + str(bcount))
@@ -354,8 +355,7 @@ if __name__ == "__main__":
             if blob.sign:  # +M, remove blob.sign?
                 if (M > aveB) and (blob_height > 3 and blob_width > 3):  # min blob dimensions
                     blob.rdn = 1
-                    blob.rng = 1
-                    blob.f_root_a = 0
+                    blob.rng = 1 # f_root_a no longer in use
                     deep_layers[i] = intra_blob(blob, render=args.render, verbose=args.verbose)
                     # dert__ comp_r in 4x4 kernels
 

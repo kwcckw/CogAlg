@@ -47,7 +47,6 @@ class CP(ClusterStructure):
     Dy = int
     Dx = int
     M = int
-    rP = int
     # comp_angle:
     Dydy = int
     Dxdy = int
@@ -774,7 +773,7 @@ def merge_PPP(PPP, _PPP, fPPd):
 def comp_PP(PP, _PP):
 
     # compare PP and _PP base params to get layer 01 of derPP #-----------------
-    layer01 = dict({'I':.0,'Da':.0,'M':.0,'rP':.0,'Dady':.0,'Dadx':.0, 'Ma':.0,'L':.0,'Mdx':.0, 'Ddx':.0, 'x':.0})
+    layer01 = dict({'I':.0,'Da':.0,'M':.0,'Dady':.0,'Dadx':.0, 'Ma':.0,'L':.0,'Mdx':.0, 'Ddx':.0, 'x':.0})
     mP, dP = 0, 0
 
     G = np.hypot(PP.Dy, PP.Dx) - ave_g * PP.L
@@ -822,7 +821,7 @@ def comp_PP(PP, _PP):
 
     # compare layer1 to get layer11 #-------------------------------------------
 
-    layer11 = dict({'I':.0,'Da':.0,'M':.0,'rP':.0,'Dady':.0,'Dadx':.0,'Ma':.0,'L':.0,'Mdx':.0, 'Ddx':.0, 'x':.0})
+    layer11 = dict({'I':.0,'Da':.0,'M':.0,'Dady':.0,'Dadx':.0,'Ma':.0,'L':.0,'Mdx':.0, 'Ddx':.0, 'x':.0})
     mmPP, dmPP, mdPP, ddPP = 0, 0, 0, 0
     for i, ((param_name, dm), (_param_name, _dm)) in enumerate(zip(PP.layer1.items(), _PP.layer1.items())):
 

@@ -90,7 +90,7 @@ def comp_blob(blob, _blob, _derBlob):
     compare _blob and blob
     '''
     derBlob = CderBlob()
-    layer1 = dict({'I':.0,'Da':.0, 'M':.0, 'rP':.0,'Dady':.0,'Dadx':.0,'Ma':.0,'A':.0,'Mdx':.0, 'Ddx':.0})
+    layer1 = dict({'I':.0,'Da':.0, 'M':.0, 'Dady':.0,'Dadx':.0,'Ma':.0,'A':.0,'Mdx':.0, 'Ddx':.0})
 
     G = np.hypot(blob.Dy, blob.Dx) - ave * blob.A
     _G = np.hypot(_blob.Dy, _blob.Dx) - ave * _blob.A
