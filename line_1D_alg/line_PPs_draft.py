@@ -94,6 +94,7 @@ def search(P_):  # cross-compare patterns within horizontal line
                             if sign:
                                 P_[j+i]._smP = True  # backward match per P, or set _smP in derP_ with empty CderPs?
                                 derP_.append(derP)
+                                derP=[]
                                 break  # nearest-neighbour search is terminated by first match
                             else:
                                 neg_M += mP  # accumulate contiguous P miss, or all derivatives?
@@ -102,8 +103,9 @@ def search(P_):  # cross-compare patterns within horizontal line
                                 no contrast value in neg derPs and PPs: initial opposite-sign P miss is expected
                                 neg_derP derivatives are not significant; neg_M obviates distance * decay_rate * M '''
                     else:
-                        derP_.append( CderP(sign=sign or _smP, mP=mP,dP=dP, neg_M=neg_M, neg_L=neg_L, P=_P, layer1={}))
-                        # sign is ORed bilaterally, negative for singleton derPs only
+                        if derP:  # current _P has been compared before
+                            derP.sign=sign or _smP  # sign is ORed bilaterally, negative for singleton derPs only
+                            derP_.append(derP)  # vs. derP_.append( CderP(sign=sign or _smP, mP=mP,dP=dP, neg_M=neg_M, neg_L=neg_L, P=_P, layer1={}))
                         break  # neg net_M: stop search
 
     for index in sorted(remove_index, reverse=True):
@@ -162,16 +164,13 @@ def merge_comp_P(P_, _P, P, i, j, neg_M, neg_L, remove_index):  # multi-variate 
         layer1[param_name] = dm
 
     if neg_L == 0:
-        mP += _P.m_[0]; dP += _P.d_[0]
+        mP += _P.dert_[0].m; dP += _P.dert_[0].d
 
     rel_distance = neg_L / _P.L
 
     if mP / max(rel_distance, 1) > ave_merge:  # merge(_P, P): splice proximate and param/L- similar Ps:
         _P.accum_from(P)
-        _P.p_+= P.p_
-        _P.d_+= P.d_
-        _P.m_+= P.m_
-        
+        _P.dert_+= P.dert_
         remove_index.append(j)
         if _P.fPd: _P.sign = P.D > 0
         else: P.sign = P.M > 0
@@ -473,7 +472,8 @@ def form_Pp_(PP, param_name, fPd):
             Pp.L += 1
             Pp.D += d
             Pp.M += m
-            # Pp.dert_.append((d,m)) no dert__ in Pp, need to pack d and m?
+            Pp.d_.append(d)
+            Pp.m_.append(m)
 
         _sign = sign
 
