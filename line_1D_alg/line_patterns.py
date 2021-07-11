@@ -83,9 +83,9 @@ def cross_comp(frame_of_pixels_):  # converts frame_of_pixels to frame_of_patter
 
         for p in pixel_[1:]:  # pixel p is compared to prior pixel _p in a row
             d = p -_p
-            p_.append(p +_p)
-            d_.append(d)
-            m_.append(ave - abs(d))  # for consistency with deriv_comp output, otherwise redundant
+            p_.append( p +_p)
+            d_.append( d )
+            m_.append( ave - abs(d))  # for consistency with deriv_comp output, otherwise redundant
             _p = p
 
         Pm_ = form_P_(pixel_, p_, d_, m_, fPd=False)  # forms m-sign patterns

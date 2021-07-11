@@ -62,7 +62,7 @@ def comp_a(dert__, mask__=None):  # cross-comp of gradient angle in 2x2 kernels
                            ) > 1
     else:
         majority_mask__ = None
- 
+
     i__, dy__, dx__, m__, ri__ = dert__[:5]  # day__,dax__,ma__ are recomputed
 
     with np.errstate(divide='ignore', invalid='ignore'):  # suppress numpy RuntimeWarning

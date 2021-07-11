@@ -115,7 +115,7 @@ def comp_pixel(image):  # 2x2 pixel cross-correlation within image, see comp_pix
     rp__ = topleft__ + topright__ + bottomleft__ + bottomright__  # sum of 4 rim pixels -> mean, not summed in blob param
 
     return (topleft__, d_upleft__, d_upright__, M__, rp__)  # tuple of 2D arrays per param of dert (derivatives' tuple)
-    # renamed dert__ = (p__, dy__, dx__, m__, rp__) for readability in functions below
+    # renamed dert__ = (i__, dy__, dx__, m__, ri__) for readability in functions below
 '''
     old version:
     Gy__ = ((bottomleft__ + bottomright__) - (topleft__ + topright__))  # decomposition of two diagonal differences into Gy
@@ -310,7 +310,7 @@ if __name__ == "__main__":
     argument_parser = argparse.ArgumentParser()
     argument_parser.add_argument('-i', '--image', help='path to image file', default='./images//toucan.jpg')
     argument_parser.add_argument('-v', '--verbose', help='print details, useful for debugging', type=int, default=1)
-    argument_parser.add_argument('-n', '--intra', help='run intra_blobs after frame_blobs', type=int, default=1)
+    argument_parser.add_argument('-n', '--intra', help='run intra_blobs after frame_blobs', type=int, default=0)
     argument_parser.add_argument('-r', '--render', help='render the process', type=int, default=0)
     argument_parser.add_argument('-c', '--clib', help='use C shared library', type=int, default=0)
     args = argument_parser.parse_args()
@@ -337,14 +337,14 @@ if __name__ == "__main__":
             frame.dert__[1],  # dy
             frame.dert__[2],  # dx
             frame.dert__[3],  # m
-            frame.dert__[4]   # ri (we need this ri in index of 4 for intra_comp and later flood_fill accumulation)
+            frame.dert__[4]   # ri
             )
 
         for i, blob in enumerate(frame.blob_):  # print('Processing blob number ' + str(bcount))
             '''
-            Blob G: -|+ predictive value, positive value of -G blobs is lent to the value of their adjacent +G blobs. 
-            +G "edge" blobs are low-match, valuable only as contrast: to the extent that their negative value cancels 
-            positive value of adjacent -G "flat" blobs.
+            Blob M: -|+ predictive value, positive value of M blobs is lent to the value of their adjacent -M blobs. 
+            -M "edge" blobs are low-match, valuable only as contrast: to the extent that their negative value cancels 
+            positive value of adjacent M "flat" blobs.
             '''
             M = blob.M
             blob.root_dert__=root_dert__
@@ -355,7 +355,7 @@ if __name__ == "__main__":
             if blob.sign:  # +M, remove blob.sign?
                 if (M > aveB) and (blob_height > 3 and blob_width > 3):  # min blob dimensions
                     blob.rdn = 1
-                    blob.rng = 1 # f_root_a no longer in use
+                    blob.rng = 1
                     deep_layers[i] = intra_blob(blob, render=args.render, verbose=args.verbose)
                     # dert__ comp_r in 4x4 kernels
 
