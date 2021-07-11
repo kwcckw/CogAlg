@@ -33,7 +33,7 @@ from os.path import dirname, join, abspath
 sys.path.insert(0, abspath(join(dirname("CogAlg"), '..')))
 
 from line_patterns import CP
-from frame_2D_alg.class_cluster import ClusterStructure, comp_param, Cdm_
+from frame_2D_alg.class_cluster import ClusterStructure, comp_param, Cdm
 
 class CderP(ClusterStructure):
 
@@ -101,6 +101,7 @@ def search(P_):  # cross-compare patterns within horizontal line
                                 '''                     
                                 no contrast value in neg derPs and PPs: initial opposite-sign P miss is expected
                                 neg_derP derivatives are not significant; neg_M obviates distance * decay_rate * M '''
+                        else: del derP # derP may = None
                     else:
                         if "derP" in locals():  # current _P has been compared before
                             derP.sign=sign or _smP  # sign is ORed bilaterally, negative for singleton derPs only
@@ -436,40 +437,38 @@ def rng_search(P_, ave):
 def form_Pp_(derP_, fPd):  # this is a draft, please check
 
     # rdn = layer0_rdn[param_name]
-    param_names = derP_[0].layer1.key  #?
+    param_names = derP_[0].layer1.keys() # get params name from layer1 dict
 
     for param_name in param_names:
-        if fPd:
-            derP_[0].layer1.Ppd_[0] = CP(sign = derP_[0].layer1[param_name].d > 0)  # not sure this is correct?
-        else:
-            derP_[0].layer1.Ppm_[0] = CP(sign = derP_[0].layer1[param_name].m > 0)
+        if fPd: _sign = derP_[0].layer1[param_name].d > 0 
+        else: _sign = derP_[0].layer1[param_name].m > 0 
+        derP_[0].layer1[param_name].Ppd_.append(CP(sign = _sign))
 
-    for derP in derP_:
-        for param_name in param_names:  # this is not correct, we two loops
-            if fPd:
-                _sign = derP_[0].layer1.param_name.Ppd_[0].sign
-                sign = derP.layer1[param_name].d > 0
-            else:
-                _sign = derP_[0].layer1.param_name.Ppm_[0].sign
-                sign = derP.layer1[param_name].m > 0
+    # this is not correct, we two loops (same with line_PPs?)
+    # below is not correct
+    for param_name in param_names: 
+        for i, derP in enumerate(derP_[1:], start=1):
 
-            for derP in derP_[1:]:
-                d = derP.layer1[param_name].d
-                m = derP.layer1[param_name].m
-                if fPd: sign = d > 0
-                else:   sign = m > 0
-
-            if sign != _sign:
-                if fPd: derP.layer1[param_name].Ppd_.append(Pp)
-                else:   derP.layer1[param_name].Ppm_.append(Pp)
-                Pp = CP(sign=_sign)
-            else:
-                # accumulate Pp params
-                Pp.L += 1
-                Pp.D += d
-                Pp.M += m
-                Pp.d_.append(d)
-                Pp.m_.append(m)
+                if fPd: sign = derP.layer1[param_name].d > 0
+                else: sign = derP.layer1[param_name].m > 0
+    
+                for derP in derP_[1:]:
+                    d = derP.layer1[param_name].d
+                    m = derP.layer1[param_name].m
+                    if fPd: sign = d > 0
+                    else:   sign = m > 0
+    
+                if sign != _sign:
+                    if fPd: derP.layer1[param_name].Ppd_.append(Pp)
+                    else:   derP.layer1[param_name].Ppm_.append(Pp)
+                    Pp = CP(sign=_sign)
+                else:
+                    # accumulate Pp params
+                    Pp.L += 1
+                    Pp.D += d
+                    Pp.M += m
+                    Pp.d_.append(d)
+                    Pp.m_.append(m)
 
     merge_Pp_Kelvin(derP_, fPd)
 

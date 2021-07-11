@@ -306,38 +306,20 @@ class ClusterStructure(metaclass=MetaCluster):
                     setattr(self,layer_num,_layer.copy())
 
 
-
 class Cdm(Number):
-    __slots__ = ('d', 'm')
-
-    def __init__(self, d=0, m=0):
-        self.d, self.m = d, m
-
-    def __add__(self, other):
-        return Cdm(self.d + other.d, self.m + other.m)
-
-
-    def __repr__(self):  # representation of object
-        if isinstance(self.d, Cdm) or isinstance(self.m, Cdm):
-            return "Cdm(d=Cdm, m=Cdm)"
-        else:
-            return "Cdm(d={}, m={})".format(self.d, self.m)
-
-# Kelvin:
-class Cdm_(Number):
     __slots__ = ('d','m', 'Ppd_', 'Ppm_')
 
     def __init__(self, d=0, m=0, Ppd_=[], Ppm_=[]):
         self.d, self.m, self.Ppd_, self.Ppm_ = d, m, Ppd_, Ppm_
 
     def __add__(self, other):
-        return Cdm_(self.d + other.d, self.m + other.m)
+        return Cdm(self.d + other.d, self.m + other.m)
 
     def __repr__(self):  # representation of object
-        if isinstance(self.d, Cdm_) or isinstance(self.m, Cdm_):
-            return "Cdm_(d=Cdm_, m=Cdm_)"
+        if isinstance(self.d, Cdm) or isinstance(self.m, Cdm):
+            return "Cdm(d=Cdm, m=Cdm)"
         else:
-            return "Cdm_(d={}, m={}, Ppd_=[], Ppm_=[])".format(self.d, self.m, self.Ppd_, self.Ppm_)
+            return "Cdm(d={}, m={}, Ppd_=[], Ppm_=[])".format(self.d, self.m, self.Ppd_, self.Ppm_)
 
 
 def comp_param(param, _param, param_name, ave):
@@ -359,7 +341,7 @@ def comp_param(param, _param, param_name, ave):
             m = ave - abs(d)  # indirect match
         else:
             m = min(param,_param) - abs(d)/2 - ave  # direct match
-        dm = Cdm(d,m) # pack d follow by m, must follow this sequence
+        dm = Cdm(d=d,m=m) # pack d follow by m, must follow this sequence
 
         # dm = Cdm_(d, [], m, []) if Pp
 
