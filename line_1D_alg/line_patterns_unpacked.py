@@ -20,7 +20,7 @@
 # add ColAlg folder to system path
 import sys
 from os.path import dirname, join, abspath
-sys.path.insert(0, abspath(join(dirname("CogAlg"), '../../../AppData/Roaming/JetBrains/PyCharmCE2021.1')))
+sys.path.insert(0, abspath(join(dirname("CogAlg"), '..')))
 
 import cv2
 import argparse
@@ -30,10 +30,9 @@ from itertools import zip_longest
 from frame_2D_alg.class_cluster import ClusterStructure, NoneType, comp_param, Cdm
 
 class Cdert(ClusterStructure):
-    i = int  # input for range_comp only
-    p = int  # accumulated in rng
-    d = int  # accumulated in rng
-    m = int  # distinct in deriv_comp only
+    p = int
+    d = int
+    m = int
 
 class CP(ClusterStructure):
 
@@ -43,7 +42,10 @@ class CP(ClusterStructure):
     D = int
     M = int
     x0 = int
-    dert_ = list # contains i, p, d, m
+    i_ = list  # input for comp_r only
+    p_ = list  # accumulated with rng
+    d_ = list  # accumulated with rng
+    m_ = list  # only distinct from d_ in deriv_comp
     sublayers = list
     # for line_PPs
     derP = object  # forward comp_P derivatives
@@ -75,18 +77,18 @@ def cross_comp(frame_of_pixels_):  # converts frame_of_pixels to frame_of_patter
 
     for y in range(init_y + 1, Y):  # y is index of new line pixel_, a brake point here, we only need one row to process
         # initialization:
-        dert_ = []  # line-wide i_, p_, d_, m__
+        p_, d_, m_ = [], [], []  # renamed rp_, rd_, rm_
         pixel_ = frame_of_pixels_[y, :]
-        _i = pixel_[0]
+        _p = pixel_[0]
 
-        for i in pixel_[1:]:  # pixel p is compared to prior pixel _p in a row
-            d = i -_i
-            p = ( i +_i)
-            m = ave - abs(d)  # for consistency with deriv_comp output, otherwise redundant
-            dert_.append(Cdert(i=i,p=p,d=d,m=m))
-            _i = i
+        for p in pixel_[1:]:  # pixel p is compared to prior pixel _p in a row
+            d = p -_p
+            p_.append( p +_p)
+            d_.append( d )
+            m_.append( ave - abs(d))  # for consistency with deriv_comp output, otherwise redundant
+            _p = p
 
-        Pm_ = form_P_(dert_, fPd=False)  # forms m-sign patterns
+        Pm_ = form_P_(pixel_, p_, d_, m_, fPd=False)  # forms m-sign patterns
         if len(Pm_) > 4:
             adj_M_ = form_adjacent_M_(Pm_)  # compute adjacent Ms to evaluate contrastive borrow potential
             intra_Pm_(Pm_, adj_M_, fid=False, rdn=1, rng=1)  # rng is unilateral, evaluates for sub-recursion per Pm
@@ -97,28 +99,31 @@ def cross_comp(frame_of_pixels_):  # converts frame_of_pixels to frame_of_patter
     return frame_of_patterns_  # frame of patterns is an output to level 2
 
 
-def form_P_(dert_, fPd):  # initialization, accumulation, termination
+def form_P_(i_, p_, d_, m_, fPd):  # initialization, accumulation, termination
 
     # initialization:
     P_ = []; x=0
-    _dert = dert_[0]
-    if fPd: _sign = _dert.d > 0
-    else:   _sign = _dert.m > 0
+    _i = i_[0]
+    _p = p_[0]  # renamed rp_, rd_, rm_:
+    _d = d_[0]
+    _m = m_[0]
+    if fPd: _sign = _d > 0
+    else:   _sign = _m > 0
 
-    P = CP(sign=_sign, L=1, I=_dert.p, D=_dert.d, M=_dert.m, x0=0, dert_=[_dert], sublayers=[], _smP=False, fPd=fPd)
+    P = CP(sign=_sign, L=1, I=_p, D=_d, M=_m, x0=0, i_=[_i], p_=[_p], d_=[_d], m_=[_m], sublayers=[], _smP=False, fPd=fPd)
     # segment by sign:
-    for dert in dert_[1:]:
-        if fPd: sign = dert.d > 0
-        else:   sign = dert.m > 0
+    for i, p, d, m in zip( i_[1:], p_[1:], d_[1:], m_[1:] ):
+        if fPd: sign = d > 0
+        else:   sign = m > 0
 
         if sign != _sign:  # sign change, terminate P
             P_.append(P)
             # re-initialization:
-            P = CP(sign=_sign, L=1, I=dert.p, D=dert.d, M=dert.m, x0=x-(P.L-1), dert_=[dert], sublayers=[], _smP=False, fPd=fPd)
+            P = CP(sign=_sign, L=1, I=p, D=d, M=m, x0=x-(P.L-1), i_=[i], p_=[p], d_=[d], m_=[_m], sublayers=[], _smP=False, fPd=fPd)
         else:
             # accumulate params:
-            P.L += 1; P.I += dert.p; P.D += dert.d; P.M += dert.m
-            P.dert_ += [dert]
+            P.L += 1; P.I += p; P.D += d; P.M += m
+            P.i_ += [i]; P.p_ += [p]; P.d_ += [d]; P.m_ += [_m]
 
         _sign = sign
         x += 1
@@ -179,8 +184,8 @@ def intra_Pm_(P_, adj_M_, fid, rdn, rng):  # evaluate for sub-recursion in line 
                     loc_ave_min = (ave_min + P_ave) / 2
                     rdert_ = range_comp(P.dert_, loc_ave, loc_ave_min, fid)
                     '''
-                    rdert_ = range_comp(P.dert_)  # rng+ comp with localized ave, skip predictable next dert
-                    sub_Pm_ = form_P_(rdert_, fPd=False)  # cluster by m sign
+                    i_, p_, d_, m_ = range_comp(P.i_, P.p_, P.d_, P.m_)  # rng+ comp with localized ave, skip predictable next dert
+                    sub_Pm_ = form_P_(i_, p_, d_, m_, fPd=False)  # cluster by m sign
                     Ls = len(sub_Pm_)
                     P.sublayers += [[(Ls, False, fid, rdn, rng, sub_Pm_, [], [])]]  # sub_PPm_, sub_PPd_, add Dert=[] if Ls > min?
                     # 1st sublayer is single-element, packed in double brackets only to allow nesting for deeper sublayers
@@ -196,7 +201,7 @@ def intra_Pm_(P_, adj_M_, fid, rdn, rng):  # evaluate for sub-recursion in line 
                 if min(-P.M, adj_M) > ave_D * rdn:  # cancelled M+ val, M = min | ~v_SAD
 
                     rel_adj_M = adj_M / -P.M  # for allocation of -Pm' adj_M to each of its internal Pds
-                    sub_Pd_ = form_P_(P.dert_, fPd=True)  # cluster by input d sign match: partial d match
+                    sub_Pd_ = form_P_(P.i_, P.p_, P.d_, P.m_, fPd=True)  # cluster by input d sign match: partial d match
                     Ls = len(sub_Pd_)
                     P.sublayers += [[(Ls, True, True, rdn, rng, sub_Pd_)]]  # 1st layer, Dert=[], fill if Ls > min?
 
@@ -215,8 +220,8 @@ def intra_Pd_(Pd_, rel_adj_M, rdn, rng):  # evaluate for sub-recursion in line P
 
         if min(abs(P.D), abs(P.D) * rel_adj_M) > ave_D * rdn and P.L > 3:  # abs(D) * rel_adj_M: allocated adj_M
             # cross-comp of ds:
-            ddert_ = deriv_comp(P.dert_)  # i_ is d
-            sub_Pm_ = form_P_(ddert_, fPd=True)  # cluster Pd derts by md, won't happen
+            i_, d_, dd_, md_ = deriv_comp(P.d_)  # i_ is d
+            sub_Pm_ = form_P_(i_, d_, dd_, md_, fPd=True)  # cluster Pd derts by md, won't happen
             Ls = len(sub_Pm_)
             # 1st layer: Ls, fPd, fid, rdn, rng, sub_P_, sub_PPm_, sub_PPd_:
             P.sublayers += [[(Ls, True, True, rdn, rng, sub_Pm_, [], [] )]]
@@ -235,40 +240,39 @@ def intra_Pd_(Pd_, rel_adj_M, rdn, rng):  # evaluate for sub-recursion in line P
     return comb_layers
 
 
-def range_comp(dert_):  # cross-comp of 2**rng- distant pixels: 4,8,16.., skipping intermediate pixels
+def range_comp(p_, rp_, rd_, rm_):  # cross-comp of 2**rng- distant pixels: 4,8,16.., skipping intermediate pixels
 
-    rdert_ = []
-    _i = dert_[0].i
+    rng_p_, rng_d_, rng_m_ = [], [], []
+    p_ = p_[::2]  # all inputs are sparse, skipping odd ps compared in prior rng: 1 skip / 1 add, to maintain 2x overlap
+    rp_ = rp_[::2]
+    rd_ = rd_[::2]
+    rm_ = rm_[::2]
+    _p = p_[0]
 
-    for dert in dert_[2::2]:  # all inputs are sparse, skip odd pixels compared in prior rng: 1 skip / 1 add, to maintain 2x overlap
-        d = dert.i -_i
-        rng_p = dert.p + _i  # intensity accumulated in rng
-        rng_d = dert.d + d   # difference accumulated in rng
-        rng_m = dert.m + ave - abs(d)  # m accumulated in rng
-        # for consistency with deriv_comp, else m is redundant
+    for p, rp, rd, rm in zip(p_[1:], rp_, rd_, rm_):
+        d = p -_p
+        rng_p_.append(( rp + _p ))  # intensity accumulated in rng
+        rng_d_.append(( rd + d ))  # difference accumulated in rng
+        rng_m_.append(( rm + ave - abs(d) ))  # for consistency with deriv_comp output, otherwise redundant
+        _p = p
 
-        rdert_.append( Cdert( i=dert.i,p=rng_p,d=rng_d,m=rng_m ))
-        _i = dert.i
-
-    return rdert_
+    return p_, rng_p_, rng_d_, rng_m_  # renamed i_, rp_, rd_, rm_
 
 
-def deriv_comp(dert_):  # cross-comp consecutive ds in same-sign dert_: sign match is partial d match
+def deriv_comp(d_):  # cross-comp consecutive ds in same-sign dert_: sign match is partial d match
     # dd and md may match across d sign, but likely in high-match area, spliced by spec in comp_P?
     # initialization:
-    ddert_ = []
-    _d = abs( dert_[0].d)  # same-sign in Pd
+    rd_, dd_, md_ = [], [], []
+    _d = d_[0]  # same-sign in Pd
 
-    for dert in dert_[1:]:
-        # same-sign in Pd
-        d = abs( dert.d )
-        rd = d + _d
-        dd = d - _d
-        md = min(d, _d) - abs( dd/2) - ave_min  # min_match because magnitude of derived vars corresponds to predictive value
-        ddert_.append( Cdert( i=dert.d,p=rd,d=dd,m=md ))
+    for d in d_[1:]:
+        rd = abs(d) + abs(_d); rd_.append(rd)
+        dd = abs(d) - abs(_d); dd_.append(dd)
+        md = min(d, _d) - abs( dd/2) - ave_min; md_.append(md)
+        # md = min: magnitude of derived vars corresponds to predictive value
         _d = d
 
-    return ddert_
+    return d_, rd_, dd_, md_
 
 
 def cross_comp_spliced(frame_of_pixels_):  # converts frame_of_pixels to frame_of_patterns, each pattern maybe nested
@@ -276,24 +280,25 @@ def cross_comp_spliced(frame_of_pixels_):  # converts frame_of_pixels to frame_o
     process all image rows as a single line, vertically consecutive and preserving horizontal direction
     '''
     Y, X = frame_of_pixels_.shape  # Y: frame height, X: frame width
-    dert_ = []  # line-wide i_, p_, d_, m__.
+    # initialization:
+    p_, d_, m_ = [], [], []  # renamed rp_, rd_, rm_
     pixel_ = []
 
     for y in range(init_y + 1, Y):  # y is index of new line
         pixel_.append([ frame_of_pixels_[y, :] ])  # splice all rows into pixel_
     _p = pixel_[0]
 
-    for i in pixel_[1:]:  # pixel p is compared to prior pixel _p in a row
-        d = i -_i
-        p = ( i +_i)
-        m = ave - abs(d)  # for consistency with deriv_comp output, otherwise redundant
-        dert_.append(Cdert(i=i,p=p,d=d,m=m))
-        _i = i
+    for p in pixel_[1:]:  # pixel p is compared to prior pixel _p in a row
+        d = p -_p
+        p_.append(p +_p)
+        d_.append(d)
+        m_.append(ave - abs(d))  # for consistency with deriv_comp output, otherwise redundant
+        _p = p
 
-    Pm_ = form_P_(dert_, fPd=False)  # forms m-sign patterns
+    Pm_ = form_P_(pixel_, p_, d_, m_, fPd=False)  # forms m-sign patterns
     if len(Pm_) > 4:
         adj_M_ = form_adjacent_M_(Pm_)  # compute adjacent Ms to evaluate contrastive borrow potential
-        intra_Pm_(Pm_, adj_M_, fid=False, rdn=1, rng=1)  # rng is unilateral, evaluates for sub-recursion per Pm
+        intra_Pm_(Pm_, adj_M_, fid=False, rdn=1, rng=2)  # rng is unilateral, evaluates for sub-recursion per Pm
 
     return Pm_  # frame of patterns, an output to line_PPs (level 2 processing)
 
