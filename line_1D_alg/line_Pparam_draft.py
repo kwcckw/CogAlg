@@ -16,8 +16,6 @@ from copy import deepcopy
 
 class CderP(ClusterStructure):
 
-    mP = int 
-    dP = int
     sign = bool
     rrdn =int
     neg_M = int
@@ -42,6 +40,84 @@ ave_min = 5  # ave direct m, change to Ave_min from the root intra_blob?
 
 layer0_rdn = {'L': .25, 'I': .5, 'D': .25, 'M': .5}  # M is doubled because it represents both comparands
 
+
+def line_Pparam_(P_):
+    
+    P_ = merge_comp_P_(P_)
+    Ppar_ = unpack_P_(P_)
+    Pp_ = search_param_(Ppar_)
+    merge_Pp_(Pp_)
+
+    return Pp_
+
+def merge_comp_P_(P_):
+    '''
+    compare and merge consecutive Ps
+    
+    relative_separation = abs( M2) / abs( M1+M3),
+    miss = (-match( M1/L1, M2/L2) - match( M3/L3, M2/L2) ) / 2
+    relative_similarity = match( M1/L1, M3/L3) / miss
+    merge_value = relative_similarity / relative_separation - ave_merge_value
+    '''  
+    return (P_)
+
+
+def unpack_P_(P_):
+    
+    Ppar_ = [[],[],[],[]]
+    for P in P_:
+        Ppar_[0].append((P.L, P.L, P.x0)) # L # (2 L entry for code consistency, easier for the processing later)
+        Ppar_[1].append((P.I, P.L, P.x0)) # I 
+        Ppar_[2].append((P.D, P.L, P.x0)) # D
+        Ppar_[3].append((P.M, P.L, P.x0)) # M
+    
+    return Ppar_
+
+def search_param_(Ppar_):
+    
+    # ave for each L, I, D, M param
+    aves = [10, 10, 10,-10]  # define it here, or define it globally like what we did usually?
+    
+    Pp_ = [ [], [], [], [] ] # stores Pp of each L, I, D, M
+    param_names = ['L','I','D','M']
+    
+    for n, par_ in enumerate(Ppar_): # loop each param L, I, D, M 
+        if len(par_)>2: # at least 2 instances for comparison
+        
+            ave = aves[n]               # ave for current param
+            param_name = param_names[n] # get current param name
+            
+            __param, __L, __x0 = par_[0]  # 1st index of (param, L, x0)
+            _param, _L, _x0 = par_[1]     # 2nd index of (param, L, x0)
+            _dm = comp_param(__param, _param, param_name,ave) # compare params
+            _sign = _dm.m>0 # sign based on m?
+            Pp = CP(sign=_sign, x0=min(__x0,_x0), L=__L+_L) # 1st Pp
+            setattr(Pp,param_name,__param+_param)           # accumulate param value , or accumulate dm is better?
+            
+            for i, (param, L, x0) in enumerate(par_[2:],start=2): # consecutive params
+    
+                dm = comp_param(_param, param, param_name,ave) # compare params
+                sign = dm.m>0
+                
+                if _sign != sign: # sign changed, pack Pp and reinitialize Pp
+                    Pp_[n].append(Pp)
+                    Pp = CP(sign=sign, x0=min(_x0,x0), L=_L+L) 
+                         
+                else: # accumulate P params
+                    Pp.accumulate(L=L)
+                    Pp.x0 = min(_x0,x0)
+                    setattr(Pp,param_name, getattr(Pp,param_name)+param)
+           
+                _x0 = x0; _L=L; _param=param # update prior values
+            
+            Pp_[n].append(Pp) # pack last Pp
+                 
+    return Pp_
+
+    
+def merge_Pp_(Pp_):    
+    return Pp_
+    
 
 def search(P_):  # cross-compare patterns within horizontal line
 
@@ -124,7 +200,7 @@ def sub_search_recursive(P_, fderP):  # search in top sublayer per P / sub_P
                     sublayer[6].append(sub_PPm_); sublayer[7].append(sub_PPd_)
                     sub_search_recursive(sub_P_, fderP=1)  # deeper sublayers search is selective per sub_P
 
-
+'''
 def merge_comp_P(P_, _P, P, i, j, neg_M, neg_L, remove_index, iparam_name):  # multi-variate cross-comp, _smP = 0 in line_patterns
 
     mP = dP = 0
@@ -183,11 +259,11 @@ def comp_P(_P, P, neg_L, neg_M, iparam_name):  # multi-variate cross-comp, _smP 
         mP += dm.m * rdn
         dP += dm.d * rdn
         layer1[param_name] = dm
-    '''
-    main comp is between summed params, with an option for div_comp, etc.
-    mP -= ave_M * ave_rM ** (1 + neg_L / P.L)  # average match projected at current distance: neg_L, add coef / var?
-    match(P,_P), ave_M is addition to ave? or abs for projection in search?
-    '''
+    
+    # main comp is between summed params, with an option for div_comp, etc.
+    # mP -= ave_M * ave_rM ** (1 + neg_L / P.L)  # average match projected at current distance: neg_L, add coef / var?
+    # match(P,_P), ave_M is addition to ave? or abs for projection in search?
+    
     if P.sign == _P.sign: mP *= 2  # sign is MSB, value of sign match = full magnitude match?
     sign = layer1[iparam_name].m > 0
     if sign:  # positive forward match, compare sublayers between P.sub_H and _P.sub_H:
@@ -201,7 +277,7 @@ def comp_P(_P, P, neg_L, neg_M, iparam_name):  # multi-variate cross-comp, _smP 
     else:
         derP = CderP(sign=sign, mP=mP, neg_M=neg_M, neg_L=neg_L, P=_P, layer1=layer1)
         _P.derP = derP
-
+'''
 
 def comp_sublayers(_P, P, mP):  # also add dP?
 

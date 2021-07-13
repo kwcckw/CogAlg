@@ -20,7 +20,7 @@
 # add ColAlg folder to system path
 import sys
 from os.path import dirname, join, abspath
-sys.path.insert(0, abspath(join(dirname("CogAlg"), '../../../AppData/Roaming/JetBrains/PyCharmCE2021.1')))
+sys.path.insert(0, abspath(join(dirname("CogAlg"), '..')))
 
 import cv2
 import argparse
@@ -314,14 +314,14 @@ if __name__ == "__main__":
     # Main
     frame_of_patterns_ = cross_comp(image)  # returns Pm__
 
-    fline_PPs = 0
+    fline_PPs = 1
     if fline_PPs:  # debug line_PPs_draft
-        from line_PPs_draft import *
+        from line_Pparam_draft import *
         frame_PP_ = []
 
         for y, P_ in enumerate(frame_of_patterns_):
-            PPm_, PPd_ = search(P_)
-            frame_PP_.append([PPm_, PPd_])
+            Pp_ = line_Pparam_(P_)
+            frame_PP_.append(Pp_)
 
     end_time = time() - start_time
     print(end_time)
