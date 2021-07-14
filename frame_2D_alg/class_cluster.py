@@ -306,20 +306,20 @@ class ClusterStructure(metaclass=MetaCluster):
                     setattr(self,layer_num,_layer.copy())
 
 
-class Cdm(Number):
-    __slots__ = ('d','m', 'Ppd_', 'Ppm_')
+class Cdm(Number): # Ppd and Ppdm might not relevant now, so remove it
+    __slots__ = ('d','m', 'rp')
 
-    def __init__(self, d=0, m=0, Ppd_=[], Ppm_=[]):
-        self.d, self.m, self.Ppd_, self.Ppm_ = d, m, Ppd_, Ppm_
+    def __init__(self, d=0, m=0, rp=0):
+        self.d, self.m, self.rp = d, m, rp 
 
     def __add__(self, other):
-        return Cdm(self.d + other.d, self.m + other.m)
+        return Cdm(self.d + other.d, self.m + other.m, self.rp + other.rp)
 
     def __repr__(self):  # representation of object
-        if isinstance(self.d, Cdm) or isinstance(self.m, Cdm):
-            return "Cdm(d=Cdm, m=Cdm)"
+        if isinstance(self.d, Cdm) or isinstance(self.m, Cdm) or isinstance(self.rp, Cdm):
+            return "Cdm(d=Cdm, m=Cdm, rp=Cdm)"
         else:
-            return "Cdm(d={}, m={}, Ppd_=[], Ppm_=[])".format(self.d, self.m, self.Ppd_, self.Ppm_)
+            return "Cdm(d={}, m={}, rp={})".format(self.d, self.m, self.rp)
 
 
 def comp_param(param, _param, param_name, ave):
@@ -341,9 +341,7 @@ def comp_param(param, _param, param_name, ave):
             m = ave - abs(d)  # indirect match
         else:
             m = min(param,_param) - abs(d)/2 - ave  # direct match
-        dm = Cdm(d=d,m=m) # pack d follow by m, must follow this sequence
-
-        # dm = Cdm_(d, [], m, []) if Pp
+        dm = Cdm(d=d,m=m,rp=param+_param) # pack d follow by m, must follow this sequence
 
     return dm
 

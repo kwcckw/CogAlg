@@ -11,7 +11,7 @@ from os.path import dirname, join, abspath
 sys.path.insert(0, abspath(join(dirname("CogAlg"), '..')))
 
 from line_patterns import CP, Cdert
-from frame_2D_alg.class_cluster import ClusterStructure, comp_param, Cdm_
+from frame_2D_alg.class_cluster import ClusterStructure, comp_param, Cdm
 
 class CderP(ClusterStructure):
 
@@ -50,66 +50,64 @@ def unpack_P_(P_):
 
     return Ppar_
 
-
 def search_draft(P_):  # cross-compare patterns within horizontal line
 
-    sub_search_recursive(P_, fderP=0)  # search with incremental distance: first inside sublayers
-    merge_P_draft(P_)  # merge I- or D- similar and weakly separated Ps
+    # haven't check below yet
+    # sub_search_recursive(P_, fderP=0)  # search with incremental distance: first inside sublayers
+    # merge_P_draft(P_)  # merge I- or D- similar and weakly separated Ps
 
-    if len(P_) > 2:  # at least 2 comparands
-        par_ = unpack_P_(P_)
-        param_names = ['L', 'I', 'D', 'M']
-        Ppar_ = [[], [], [], []]  # Pp_ per param
-        aves = [40, 20, 40, -20]  # ave / rdn per param
+    par__ = unpack_P_(P_)
+    param_names = ['L', 'I', 'D', 'M']
+    Ppm_ = [[], [], [], []]  # Pp_ per param
+    Ppd_ = [[], [], [], []]  # Pp_ per param
+    
+    aves = [10, 10, 10, 10]  # ave / rdn per param
+    for i, rdn in enumerate(layer0_rdn):
+        aves[i] /= layer0_rdn[rdn] 
 
-        for n, par_ in enumerate(par_):  # loop each param L, I, D, M
-            if len(par_) > 2:  # at least 2 instances for comparison
-                ave = aves[n]
-                param_name = param_names[n]  # get current param name
-                # initialization:
-                dert_ = []  # line-wide i_, p_, d_, m__
-                mdert_ = []  # from variable-range search
-                _param, _L, _x0 = par_[0]
+    for n, par_ in enumerate(par__):  # loop each param L, I, D, M
 
-                for i, (param, _L, _x0) in enumerate( par_[1:]):  # param is compared to prior _param in a row
+        ave = aves[n]
+        param_name = param_names[n]  # get current param name
+        # initialization:
+        dert_ = []  # line-wide i_, p_, d_, m__
+        mdert_ = []  # from variable-range search
+        _par = par_[0]
+        
+        for i, par in enumerate(par_[1:]):
+            
+            search_recursive(_par, par_, param_name, 0, _par[1], dert_, mdert_, ave, fd=1)
+            _par = par
+            
+        # haven't check below yet
+        # Ppm_[n] = form_Pp_(mdert_)  # draft
+        # Ppd_[n] = form_Pp_(dert_)
 
-                    p, d, m = comp_param(param, _param, param_name, ave)
-                    # extend comp_param to return p+_p,
-                    # m definition for Ppm: m - neg_M - ave / (1 - negL / (negL+L1+L2))?
-                    dert_.append( Cdert(i=param, p=p, d=d, m=m))
-                    if m > ave:
-                        mdert_.append( msearch(par_[i+1:], param) )  # conditionally extend search beyond _param
-                    else:
-                        mdert_.append(Cdert(i=param, p=p, d=d, m=m, negL=0, negM=0))
-                    _param = param
-                    '''
-                    search:
-                    for j, P in enumerate(P_[i + 1:], start=2):
-                    # j starts at 1, variable-range comp, no last-P displace, just shifting first _P
-                    if _P.M + neg_M > 0:  # search while net_M > ave_M * nparams or 1st P, no selection by M sign
+    return Ppm_, Ppd_
 
-                        d, m = comp_param(_P.layer1.param_name.val, P.layer1.param_name.val, ave)
-                            (P_, _P, P, i, j+i, neg_M, neg_L, remove_index)
-                            if derP:
-                                sign, mP, dP, neg_M, neg_L = derP.sign, derP.mP, derP.dP, derP.neg_M, derP.neg_L
-                                derP_d_.append(derP)  # at each comp_P: induction = lend value for form_PPd_
-                                if sign:
-                                    P_[j+i]._smP = True  # backward match per P, or set _smP in derP_ with empty CderPs?
-                                    derP_.append(derP);  del derP
-                                    break  # nearest-neighbour search is terminated by 1st matching P, which latter searches as _P in line 81
-                                else:
-                                    neg_M += mP  # accumulate contiguous P miss, or all derivatives?
-                                    neg_L += _L  # accumulate distance to matching P
-                        else:
-                            if "derP" in locals():  # current _P has been compared before
-                                derP.sign=sign or _smP  # sign is ORed bilaterally, negative for singleton derPs only
-                                derP_.append(derP)  # vs. derP_.append( CderP(sign=sign or _smP, mP=mP,dP=dP, neg_M=neg_M, neg_L=neg_L, P=_P, layer1={}))
-                            break  # neg net_M: stop search
-                    '''
-                Ppm_ = form_Pp_(mdert_)  # draft
-                Ppd_ = form_Pp_(dert_)
+  
+def search_recursive(_par, par_, param_name, negM, negL, dert_, mdert_, ave, fd):
+    
+    _param, _L, _x0 = _par
+    
+    for i, par in enumerate( par_):  # param is compared to prior _param in a row
+    
+        param, L, x0 = par
+        dm = comp_param(param, _param, param_name, ave)
+        d = dm.d; m = dm.m; rp = dm.rp # rp=_p +p
+        
+        if fd: # fd = flag to pack dert. When value =0, that's mean it's not a extend search
+            dert_.append( Cdert(i=param, p=rp, d=d, m=m))
+            
+        if m - negM - (ave / (1 - (negL / (negL+L+_L))))> ave:  
+            negM += m
+            negL += L
+            # conditionally extend search beyond _param
+            search_recursive(par, par_[i+1:], param_name, negM, negL, dert_, mdert_, ave, fd=0)
+        else:
+            mdert_.append(Cdert(i=param, p=rp, d=d, m=m, negL=negL, negM=negM))
+            break # beak when extend search requirements not met
 
-                return Ppm_, Ppd_
 
 def merge_P_draft(P_):
     neg_M = neg_L = 0
