@@ -28,7 +28,7 @@ import argparse
 from time import time
 from utils import *
 from itertools import zip_longest
-from frame_2D_alg.class_cluster import ClusterStructure, NoneType, comp_param, Cdm
+from frame_2D_alg.class_cluster import ClusterStructure, NoneType, comp_param, Cdert
 
 class Cdert(ClusterStructure):
     i = int  # input for range_comp only
@@ -317,15 +317,18 @@ if __name__ == "__main__":
     '''
     # show image in the same window as a code
     image = cv2.imread('.//raccoon.jpg', 0).astype(int)  # manual load pix-mapped image
-    plt.imshow(image, cmap='gray')  # show the image below in gray
-    plt.show()
     assert image is not None, "No image in the path"
-    image = image.astype(int)
-    # optional:
-    with open("frame_of_patterns_2.csv", "w") as csvFile:
-        write = csv.writer(csvFile, delimiter=",")
-        fieldnames = ("L=", "I=", "D=", "M=", "x0=")
-        write.writerow(fieldnames)
+    render = 0
+    verbose = 0
+    
+    if render:
+        plt.figure();plt.imshow(image, cmap='gray')  # show the image below in gray
+    if verbose:
+        # optional:
+        with open("frame_of_patterns_2.csv", "w") as csvFile:
+            write = csv.writer(csvFile, delimiter=",")
+            fieldnames = ("L=", "I=", "D=", "M=", "x0=")
+            write.writerow(fieldnames)
 
     start_time = time()
     # Main
@@ -333,9 +336,9 @@ if __name__ == "__main__":
     # from pprint import pprint
     # pprint(frame_of_patterns_[0])  # shows 1st layer Pm_ only
 
-    fline_PPs = 0
+    fline_PPs = 1
     if fline_PPs:  # debug line_PPs_draft
-        from line_PPs_draft import *
+        from line_Pparam_draft import *
         frame_PP_ = []
 
         for y, P_ in enumerate(frame_of_patterns_):
