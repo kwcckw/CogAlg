@@ -168,7 +168,7 @@ class MetaCluster(type):
                         list_param = getattr(inherit_instance, param)
                         if len(list_param)>0: # not empty list
                             setattr(instance, param, list_param )
-                            
+
                 for param in cls.dict_params: # inherit dict params
                     if hasattr(inherit_instance,param) and (param not in excluded):
                         setattr(instance, param, getattr(inherit_instance, param))
@@ -285,14 +285,14 @@ class ClusterStructure(metaclass=MetaCluster):
                 _layer = getattr(other,layer_num) # other layer params
 
                 if len(layer) == len(_layer): # both layers are having same params
-                    for i, ((param_name,dm), (_param_name,_dm)) in enumerate(zip(layer.items(), _layer.items())):  # accumulate _dm to dm in layer
+                    for i, ((param_name,dert), (_param_name,_dert)) in enumerate(zip(layer.items(), _layer.items())):  # accumulate _dert to dert in layer
 
-                        if not isinstance(dm, Cdm) and isinstance(_dm, Cdm): # dm is not dm, due to base param < ave_comp
-                            layer[param_name] = _dm
-                        elif isinstance(dm, Cdm) and isinstance(_dm, Cdm): # both params are having dm
+                        if not isinstance(dert, Cdert) and isinstance(_dert, Cdert): # dert is not dert, due to base param < ave_comp
+                            layer[param_name] = _dert
+                        elif isinstance(dert, Cdert) and isinstance(_dert, Cdert): # both params are having dm
                             if param_name in ['Da','Dady','Dadx'] and _param_name in ['Da','Dady','Dadx'] : # check both names, just in case
                                 # convert da to vector, sum them and convert them back to angle
-                                da = dm.d; _da= _dm.d
+                                da = dert.d; _da= _dert.d
                                 sin = np.sin(da); _sin = np.sin(_da)
                                 cos = np.cos(da); _cos = np.cos(_da)
                                 sin_sum = (cos * _sin) + (sin * _cos)  # sin(α + β) = sin α cos β + cos α sin β
@@ -300,26 +300,28 @@ class ClusterStructure(metaclass=MetaCluster):
                                 a_sum = np.arctan2(sin_sum, cos_sum)
                                 layer[param_name].d = a_sum
                             else:
-                                dm.d += _dm.d
-                            dm.m += _dm.m
+                                dert.d += _dert.d
+
+                            dert.p += _dert.p
+                            dert.m += _dert.m
                 elif len(_layer)>0: # _layer is not empty but layer is empty
                     setattr(self,layer_num,_layer.copy())
 
 
-class Cdm(Number): # Ppd and Ppdm might not relevant now, so remove it
-    __slots__ = ('d','m', 'rp')
+class Cdert(Number): # Ppd and Ppdm might not relevant now, so remove it
+    __slots__ = ('i','p','d','m')
 
-    def __init__(self, d=0, m=0, rp=0):
-        self.d, self.m, self.rp = d, m, rp 
+    def __init__(self, i=0, p=0, d=0, m=0):
+        self.i, self.p, self.d, self.m = i, d, m, p
 
     def __add__(self, other):
-        return Cdm(self.d + other.d, self.m + other.m, self.rp + other.rp)
+        return Cdert(self.i, self.p + other.p, self.d + other.d, self.m + other.m)
 
     def __repr__(self):  # representation of object
-        if isinstance(self.d, Cdm) or isinstance(self.m, Cdm) or isinstance(self.rp, Cdm):
-            return "Cdm(d=Cdm, m=Cdm, rp=Cdm)"
+        if isinstance(self.i, Cdert) or isinstance(self.p, Cdert) or isinstance(self.d, Cdert) or isinstance(self.m, Cdert):
+            return "Cdert(i=Cdert, p=Cdert, d=Cdert, m=Cdert)"
         else:
-            return "Cdm(d={}, m={}, rp={})".format(self.d, self.m, self.rp)
+            return "Cdert(i={}, p={}, d={}, m={})".format(self.i, self.p, self.d, self.m, self.p)
 
 
 def comp_param(param, _param, param_name, ave):
@@ -334,16 +336,16 @@ def comp_param(param, _param, param_name, ave):
         da = np.arctan2(sin_da, cos_da)
         mda = ave - abs(da)
         # compute dm
-        dm = Cdm(d=da,m=mda)   # dm of da
+        dert = Cdert(i=param, p=param+_param, d=da, m=mda)   # please check if correct
     else: # numeric
         d = param - _param    # difference
         if param_name == 'I':
             m = ave - abs(d)  # indirect match
         else:
             m = min(param,_param) - abs(d)/2 - ave  # direct match
-        dm = Cdm(d=d,m=m,rp=param+_param) # pack d follow by m, must follow this sequence
+        dert = Cdert(i=param, p=param+_param, d=d,m=m)
 
-    return dm
+    return dert
 
 
 if __name__ == "__main__":  # for tests
@@ -360,34 +362,21 @@ if __name__ == "__main__":  # for tests
         Day = int
         Dax = int
 
-    # blob derivative
-    class CDerBlob(ClusterStructure):
+    # blob derivatives
+    class CderBlob(ClusterStructure):
         mB = int
         dB = int
         blob = object
         _blob = object
 
-
-    # ---- 1st layer  ---------------------------------------------------------
-    # bblob
-    class CBblob(CBlob, CDerBlob):
+    class CBblob(CBlob, CderBlob):
         pass
-#        I = int
-#        Dy = int
-#        Dx = int
-#        G = int
-#        M = int
-#        Day = int
-#        Dax = int
-#        mB = int
-#        dB = int
-#        derBlob_ = list
 
     # ---- example  -----------------------------------------------------------
 
     # root layer
     blob1 = CBlob(I=5, Dy=5, Dx=7, G=5, M=6, Day=4 + 5j, Dax=8 + 9j)
-    derBlob1 = CDerBlob(mB=5, dB=5)
+    derBlob1 = CderBlob(mB=5, dB=5)
 
     # example of value inheritance, bblob now will having parameter values from blob1 and derBlob1
     # In this example, Dy and Dx are excluded from the inheritance

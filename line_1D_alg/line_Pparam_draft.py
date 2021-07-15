@@ -1,6 +1,5 @@
 '''
 Just an initialization at this point
-
 line_Pps is a 2nd-level 1D algorithm, its input is Ps formed by the 1st-level line_patterns.
 It cross-compares Ps (s, L, I, D, M, dert_, layers) and forms Pparam_ for each compared param
 '''
@@ -10,8 +9,8 @@ import sys
 from os.path import dirname, join, abspath
 sys.path.insert(0, abspath(join(dirname("CogAlg"), '..')))
 
-from line_patterns import CP, Cdert
-from frame_2D_alg.class_cluster import ClusterStructure, comp_param, Cdm
+from line_patterns import CP
+from frame_2D_alg.class_cluster import ClusterStructure, comp_param, Cdert
 
 class CderP(ClusterStructure):
 
@@ -23,6 +22,14 @@ class CderP(ClusterStructure):
     P = object
     layer1 = dict  # dert per compared param
     der_sub_H = list  # sub hierarchy of derivatives, from comp sublayers
+
+class Cdert(ClusterStructure):
+    i = int  # input for range_comp only
+    p = int  # accumulated in rng
+    d = int  # accumulated in rng
+    m = int  # distinct in deriv_comp only
+    negL = int  # in mdert only
+    negM = int  # in mdert only
 
 ave = 100  # ave dI -> mI, * coef / var type
 # no ave_mP: deviation computed via rM  # ave_mP = ave* n_comp_params: comp cost, or n vars per P: rep cost?
@@ -36,78 +43,59 @@ ave_PPM = 200
 ave_merge = -50  # merge adjacent Ps
 ave_inv = 20 # ave inverse m, change to Ave from the root intra_blob?
 ave_min = 5  # ave direct m, change to Ave_min from the root intra_blob?
+# layer0_rdn = {'L': .25, 'I': .5, 'D': .25, 'M': .5}
 
-layer0_rdn = {'L': .25, 'I': .5, 'D': .25, 'M': .5}  # M is doubled because it represents both comparands
+
+def search(P_):  # cross-compare patterns within horizontal line
+
+    sub_search_recursive(P_, fderP=0)  # search with incremental distance: first inside sublayers
+    merge_P_draft(P_)  # merge I- or D- similar and weakly separated Ps
+
+    if len(P_) > 2:  # at least 2 comparands, unpack P_:
+        layer0 = {'L_': ([],.25), 'I_': ([],.5), 'D_': ([],.25), 'M_': ([],.5)}  # M is doubled because it represents both comparands
+        for P in P_:
+            layer0['L_'][0].append((P.L, P.L, P.x0))  # L # (2 L entry for code consistent processing later)
+            layer0['I_'][0].append((P.I, P.L, P.x0))  # I
+            layer0['D_'][0].append((P.D, P.L, P.x0))  # D
+            layer0['M_'][0].append((P.M, P.L, P.x0))  # M
+
+        for param in layer0:  # loop L_, I_, D_, M_
+            search_param_(param)
 
 
-def unpack_P_(P_):
-    Ppar_ = [[], [], [], []]
-    for P in P_:
-        Ppar_[0].append((P.L, P.L, P.x0))  # L # (2 L entry for code consistent processing later)
-        Ppar_[1].append((P.I, P.L, P.x0))  # I
-        Ppar_[2].append((P.D, P.L, P.x0))  # D
-        Ppar_[3].append((P.M, P.L, P.x0))  # M
+def search_param_(param):
 
-    return Ppar_
+    ddert_, mdert_ = [], []  # line-wide (i, p, d, m)_, + (negL, negM) in mdert: variable-range search
+    name = param.key
+    rdn = param[1]
+    param_ = param[0]
+    _param, _L, _x0 = param_[0]
 
-def search_draft(P_):  # cross-compare patterns within horizontal line
+    for i, (param, L, x0) in enumerate(param_[1:]):
+        dert = comp_param(_param, param, name, ave/rdn)  # param is compared to prior-P param
 
-    # haven't check below yet
-    # sub_search_recursive(P_, fderP=0)  # search with incremental distance: first inside sublayers
-    # merge_P_draft(P_)  # merge I- or D- similar and weakly separated Ps
+        ddert_.append(dert)
+        negL = negM = 0
+        comb_M = dert.m
+        while comb_M > 0:
+            i+=1
+            ext_param, ext_L, ext_x0 = param_[i]  # extend search beyond next param
+            dert = comp_param(param, ext_param, name, ave)
+            comb_M = dert.m + negM - ave / (1 - (negL / (negL + L + _L)))
+            negM += dert.m
+            negL += ext_L
 
-    par__ = unpack_P_(P_)
-    param_names = ['L', 'I', 'D', 'M']
-    Ppm_ = [[], [], [], []]  # Pp_ per param
-    Ppd_ = [[], [], [], []]  # Pp_ per param
-    
-    aves = [10, 10, 10, 10]  # ave / rdn per param
-    for i, rdn in enumerate(layer0_rdn):
-        aves[i] /= layer0_rdn[rdn] 
+        dert.negL = negL; dert.negM = negM
+        mdert_.append(dert)  # only after extended search is terminated
 
-    for n, par_ in enumerate(par__):  # loop each param L, I, D, M
+        _param = param
 
-        ave = aves[n]
-        param_name = param_names[n]  # get current param name
-        # initialization:
-        dert_ = []  # line-wide i_, p_, d_, m__
-        mdert_ = []  # from variable-range search
-        _par = par_[0]
-        
-        for i, par in enumerate(par_[1:]):
-            
-            search_recursive(_par, par_, param_name, 0, _par[1], dert_, mdert_, ave, fd=1)
-            _par = par
-            
-        # haven't check below yet
-        # Ppm_[n] = form_Pp_(mdert_)  # draft
-        # Ppd_[n] = form_Pp_(dert_)
+    Ppm_ = form_Pp_(mdert_)  # draft
+    Ppd_ = form_Pp_(ddert_)
 
     return Ppm_, Ppd_
 
-  
-def search_recursive(_par, par_, param_name, negM, negL, dert_, mdert_, ave, fd):
-    
-    _param, _L, _x0 = _par
-    
-    for i, par in enumerate( par_):  # param is compared to prior _param in a row
-    
-        param, L, x0 = par
-        dm = comp_param(param, _param, param_name, ave)
-        d = dm.d; m = dm.m; rp = dm.rp # rp=_p +p
-        
-        if fd: # fd = flag to pack dert. When value =0, that's mean it's not a extend search
-            dert_.append( Cdert(i=param, p=rp, d=d, m=m))
-            
-        if m - negM - (ave / (1 - (negL / (negL+L+_L))))> ave:  
-            negM += m
-            negL += L
-            # conditionally extend search beyond _param
-            search_recursive(par, par_[i+1:], param_name, negM, negL, dert_, mdert_, ave, fd=0)
-        else:
-            mdert_.append(Cdert(i=param, p=rp, d=d, m=m, negL=negL, negM=negM))
-            break # beak when extend search requirements not met
-
+# below is not revised:
 
 def merge_P_draft(P_):
     neg_M = neg_L = 0
@@ -139,12 +127,9 @@ def merge_eval_draft(P_, _P, P, i, j, neg_M, neg_L, remove_index):  # comp to me
 
     '''
     For 3 Pms, same-sign P1 and P3, opposite-sign P2, it's something like this:
-
-    rel_proximity = abs( (M1+M3) / M2): ,
-    miss = (-match( M1/L1, M2/L2) - match( M3/L3, M2/L2) ) / 2 # both should be negative
-    rel_similarity = match( M1/L1, M3/L3) / miss: (match( M1/L1, M2/L2) + match( M3/L3, M2/L2) ) / 2
-
-    merge_value = relative_proximity * relative_similarity - ave_merge_value
+    rel_proximity = abs( (M1+M3) / M2):
+    rel_similarity = match( M1/L1, M3/L3) / miss: (match( M1/L1, M2/L2) + match( M3/L3, M2/L2) ) # both should be negative
+    merge_value = rel_proximity * rel_similarity - ave_merge_value
 '''
     mP = 0
     layer1 = dict({'L': .0, 'I': .0, 'D': .0, 'M': .0})
@@ -182,6 +167,7 @@ def merge_eval_draft(P_, _P, P, i, j, neg_M, neg_L, remove_index):  # comp to me
         else:
             derP = None
 
+
 def sub_search_recursive(P_, fderP):  # search in top sublayer per P / sub_P
 
     for P in P_:
@@ -202,12 +188,6 @@ def sub_search_recursive(P_, fderP):  # search in top sublayer per P / sub_P
                     sub_PPm_, sub_PPd_ = search(sub_P_)
                     sublayer[6].append(sub_PPm_); sublayer[7].append(sub_PPd_)
                     sub_search_recursive(sub_P_, fderP=1)  # deeper sublayers search is selective per sub_P
-
-
-    else:  # form derP:
-        derP, L, _smP = comp_P(_P, P, neg_L, neg_M)
-
-    return derP, _P.L, _P.sign
 
 
 def comp_P(_P, P, neg_L, neg_M):  # multi-variate cross-comp, _smP = 0 in line_patterns
