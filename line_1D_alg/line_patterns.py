@@ -342,8 +342,8 @@ if __name__ == "__main__":
         frame_PP_ = []
 
         for y, P_ in enumerate(frame_of_patterns_):
-            PPm_, PPd_ = search(P_)
-            frame_PP_.append([PPm_, PPd_])
+            layer0 = search(P_)
+            frame_PP_.append(layer0)
 
     end_time = time() - start_time
     print(end_time)

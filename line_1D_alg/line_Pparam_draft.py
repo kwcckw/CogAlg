@@ -47,9 +47,8 @@ def search(P_):  # cross-compare patterns within horizontal line
 
     # sub_search_recursive(P_, fderP=0)  # search with incremental distance: first inside sublayers
     merge_P_recursive_draft(P_, fPd=0)  # merge I- or D- similar and weakly separated Ps
-
+    layer0 = {'L_': [[],.25], 'I_': [[],.5], 'D_': [[],.25], 'M_': [[],.5]}  # M is doubled because it represents both comparands
     if len(P_) > 1:  # at least 2 comparands, unpack P_:
-        layer0 = {'L_': ([],.25), 'I_': ([],.5), 'D_': ([],.25), 'M_': ([],.5)}  # M is doubled because it represents both comparands
         for P in P_:
             layer0['L_'][0].append((P.L, P.L, P.x0))  # L: (2 L entry for code consistent processing later)
             layer0['I_'][0].append((P.I, P.L, P.x0))  # I
@@ -60,12 +59,13 @@ def search(P_):  # cross-compare patterns within horizontal line
             # layer0[param_name][0].append((Ppm_, Ppd_))
             search_param_(param_name, layer0[param_name])
 
+    return layer0
 
-def search_param_(param_name, param):
+def search_param_(param_name, iparam):
 
     ddert_, mdert_ = [], []  # line-wide (i, p, d, m)_, + (negL, negM) in mdert: variable-range search
-    rdn = param[1]
-    param_ = param[0]
+    rdn = iparam[1]
+    param_ = iparam[0]
     _param, _L, _x0 = param_[0]
 
     for i, (param, L, x0) in enumerate(param_[1:], start=1):
@@ -87,12 +87,43 @@ def search_param_(param_name, param):
 
         _param = param
 
-    # Ppm_ = form_Pp_(mdert_)
-    # Ppd_ = form_Pp_(ddert_
+    Ppm_ = form_Pp_(mdert_, fPd=0)
+    Ppd_ = form_Pp_(ddert_, fPd=1)
 
-    param[0].append(([],[]))  # replace with ((Ppm_, Ppd_))
+    iparam[0] = (Ppm_, Ppd_)
 
-# below is not revised:
+# exactly same with form_P_ for now
+# Pp need negL and negM from mdert?
+def form_Pp_(dert_, fPd):
+
+    # initialization:
+    Pp_ = []; x=0
+    _dert = dert_[0]
+    if fPd: _sign = _dert.d > 0
+    else:   _sign = _dert.m > 0
+
+    Pp = CP(sign=_sign, L=1, I=_dert.p, D=_dert.d, M=_dert.m, x0=0, dert_=[_dert], sublayers=[], _smP=False, fPd=fPd)
+    # segment by sign:
+    for dert in dert_[1:]:
+        if fPd: sign = dert.d > 0
+        else:   sign = dert.m > 0
+
+        if sign != _sign:  # sign change, terminate Pp
+            Pp_.append(Pp)
+            # re-initialization:
+            Pp = CP(sign=_sign, L=1, I=dert.p, D=dert.d, M=dert.m, x0=x-(Pp.L-1), dert_=[dert], sublayers=[], _smP=False, fPd=fPd)
+        else:
+            # accumulate params:
+            Pp.L += 1; Pp.I += dert.p; Pp.D += dert.d; Pp.M += dert.m
+            Pp.dert_ += [dert]
+
+        _sign = sign
+        x += 1
+
+    Pp_.append(Pp)  # last incomplete Pp
+
+    return Pp_
+    
 
 def merge_P_recursive_draft(P_, fPd):
     '''
@@ -107,62 +138,47 @@ def merge_P_recursive_draft(P_, fPd):
     merge_value = rel_proximity * rel_similarity - ave_merge_value
     '''
     new_P_ = []
-    fnew_cnt = 0
 
-    for ((__P, __fnew), (_P, _fnew), (P, fnew)) in P_[:-2]:
-        # full 3P-kernels only, how do we define their relative indices?
+    while len(P_)>2: # at least 3 Ps
+        
+        __P = P_.pop(0)
+        _P = P_.pop(0)
+        P = P_.pop(0)
+        
         if fPd:
-            proximity = abs((__P.D +P.D) / _P.D)
-            similarity = match(__P.D/__P.L, P.D/P.L) / ((match(__P.D/__P.L, _P.D/_P.L) + match(_P.D/_P.L, P.D/P.L)) # both should be negative
-            merge_value = proximity * similarity - ave
+            ddert13 = comp_param(__P.D/__P.L, P.D/P.L, [], ave_merge)   # P1 & P3
+            ddert12 = comp_param(__P.D/__P.L, _P.D/_P.L, [], ave_merge) # P1 & P2
+            ddert23 = comp_param(_P.D/_P.L, P.D/P.L, [], ave_merge)     # P2 & P3
+            proximity = abs((__P.D +P.D) / _P.D) if _P.M!=0 else 0 # prevent 0 division
+            similarity = ddert13.m/ (ddert12.m + ddert23.m) # both should be negative
+        else: 
+            mdert13 = comp_param(__P.M/__P.L, P.M/P.L, [], ave_merge)   # P1 & P3
+            mdert12 = comp_param(__P.M/__P.L, _P.M/_P.L, [], ave_merge) # P1 & P2
+            mdert23 = comp_param(_P.M/_P.L, P.M/P.L, [], ave_merge)     # P2 & P3
+            proximity = abs((__P.M +P.M) / _P.M) if _P.M!=0 else 0 # prevent 0 division
+            similarity = mdert13.m/ (mdert12.m + mdert23.m) # both should be negative
+        merge_value = proximity * similarity - ave
+
+        if merge_value:
+            # for debug purpose
+            print('P_'+str(_P.id)+' and P_'+str(P.id)+' are merged into P_'+str(__P.id))
+            
+            # merge _P and P into __P
+            for merge_P in [_P, P]:
+                x0 = min(__P.x0, merge_P.x0)
+                __P.accum_from(merge_P)
+                __P.dert_+= merge_P.dert_
+                __P.x0=x0
+            P_.insert(0, __P) # insert merged __P back into P_ for the consecutive merging process
         else:
-            proximity = abs((__P.M +P.M) / _P.M)
-            similarity = match(__P.M/__P.L, P.M/P.L) / ((match(__P.M/__P.L, _P.M/_P.L) + match(_P.M/_P.L, P.M/P.L)) # both should be negative
-            merge_value = proximity * similarity - ave
-
-        if merge_val:
-            new_P = merge(__P, _P, P)   # unpack here
-            new_P_.append((new_P, fnew=True))
-            fnew_cnt += 1
-        else:
-            new_P_ += [(__P, __fnew), (_P, _fnew), (P, fnew)]
-
-    if fnew_cnt > 0:
-        merge_P_recursive_draft(new_P_, fPd):
-    else:
-        return new_P_
-
-# below is not reviewed:
-'''
-    P1 = __P
-    P2 = P_[j+1]
-    P3= P_[j+2]
-
-    m12 = compute_match(P1, P2, negL)
-    m23 = compute_match(P2, P3, negL)
-    m13 = compute_match(P1, P3, negL)
-
-    # not sure on this part, but i think this is the most relevant solution for now
-    # get average match for each P
-    m1 = (m12 + m13) /2;
-    m2 = (m12 + m23) /2;
-    m3 = (m23 + m13) /2;
-
-    rel_proximity = abs( (m1+m3) / m2)
-    miss = min( m1/P1.L, m2/P2.L) + min( m3/P3.L, m2/P2.L)  # use min for match? or using ave is more suitable?
-    rel_similarity = min( m1/P1.L, m3/P3.L) /miss  # both should be negative
-    merge_value = rel_proximity * rel_similarity - ave_merge
-
-    if merge_value:
-        remove_index += [j+1, j+2]
-        for P in [P2, P3]:
-            x0 = min(P1.x0, P.x0)
-            P1.accum_from(P)
-            P1.dert_+= P.dert_
-            P1.x0=x0
-
-    return merge_value
-    '''
+            new_P_.append(__P) # append __P to P_ when there is no further merging process for __P
+            P_.insert(0, P)    # insert P back into P_ for the consecutive merging process
+            P_.insert(0, _P)  # insert _P back into P_ for the consecutive merging process
+    
+    # leftover Ps, pack into new_P_
+    if P_: new_P_ += P_
+    
+    return new_P_
 
 def compute_match(_P, P,negL):
 
@@ -419,7 +435,7 @@ def rng_search(P_, ave):
 
     return sub_PPm_
 
-
+'''
 def form_Pp_(derP_, fPd):  # this is a draft, please check
 
     # rdn = layer0_rdn[param_name]
@@ -459,6 +475,7 @@ def form_Pp_(derP_, fPd):  # this is a draft, please check
                 Pp.m_.append(m)
 
     merge_Pp_Kelvin(derP_, fPd)
+'''
 
 def merge_Pp_Kelvin(derP_, fPd):  # merge low value Pps into negative Pp
     neg_Pp_ = []
