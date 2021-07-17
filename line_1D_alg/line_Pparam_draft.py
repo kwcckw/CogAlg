@@ -30,6 +30,14 @@ class Cpdert(ClusterStructure):
     negM = int  # in mdert only
 
 class CPp(CP):
+    
+    # only numerics are inherited, the others need to be defined again
+    sign = bool
+    dert_ = list # contains i, p, d, m
+    sublayers = list
+    derPp = object  # forward comp_P derivatives
+    _smPp = bool  # backward mP sign, for derPp.sign determination, not needed thereafter
+    fPd = bool  # P is Pd if true, else Pm; also defined per layer
     negL = int  # in mdert only
     negM = int  # in mdert only
 
@@ -42,7 +50,7 @@ ave_D = 100
 ave_sub_M = 500  # sub_H comp filter
 ave_Ls = 3
 ave_PPM = 200
-ave_merge = -50  # merge adjacent Ps
+ave_merge = 50  # merge adjacent Ps
 ave_inv = 20 # ave inverse m, change to Ave from the root intra_blob?
 ave_min = 5  # ave direct m, change to Ave_min from the root intra_blob?
 
@@ -105,7 +113,7 @@ def form_Pp_(dert_, fPd):  # almost tha same as form_P_ for now
     if fPd: _sign = _dert.d > 0
     else:   _sign = _dert.m > 0
 
-    Pp = CP(sign=_sign, L=1, I=_dert.p, D=_dert.d, M=_dert.m, negL=_dert.negL, negM=_dert.negM, x0=0, dert_=[_dert], sublayers=[], _smP=False, fPd=fPd)
+    Pp = CPp(sign=_sign, L=1, I=_dert.p, D=_dert.d, M=_dert.m, negL=_dert.negL, negM=_dert.negM, x0=0, dert_=[_dert], sublayers=[], _smP=False, fPd=fPd)
     # segment by sign:
     for dert in dert_[1:]:
         if fPd: sign = dert.d > 0
@@ -114,7 +122,7 @@ def form_Pp_(dert_, fPd):  # almost tha same as form_P_ for now
         if sign != _sign:  # sign change, terminate Pp
             Pp_.append(Pp)
             # re-initialization:
-            Pp = CP(sign=_sign, L=1, I=dert.p, D=dert.d, M=dert.m, negL=dert.negL, negM=dert.negM, x0=x-(Pp.L-1), dert_=[dert], sublayers=[], _smP=False, fPd=fPd)
+            Pp = CPp(sign=_sign, L=1, I=dert.p, D=dert.d, M=dert.m, negL=dert.negL, negM=dert.negM, x0=x-(Pp.L-1), dert_=[dert], sublayers=[], _smP=False, fPd=fPd)
         else:
             # accumulate params:
             Pp.L += 1; Pp.I += dert.p; Pp.D += dert.d; Pp.M += Pp.dert.m; Pp.negL+=_dert.negL; Pp.negM+=_dert.negM
@@ -124,7 +132,8 @@ def form_Pp_(dert_, fPd):  # almost tha same as form_P_ for now
         x += 1
 
     Pp_.append(Pp)  # last incomplete Pp
-
+    merge_P_draft(Pp_, fPd=fPd) # merge Pp the same way as P
+    
     return Pp_
 
 
@@ -146,28 +155,15 @@ def merge_P_draft(P_, fPd):
         _P = P_.pop(0)
         P = P_.pop(0)
 
-        if fPd:
-            proximity = abs((__P.D + P.D) / _P.D) if _P.D != 0 else 0  # prevents /0
-            __mean=__P.D/__P.L; _mean=_P.D/_P.L; mean=P.D/P.L
-        else:
-            proximity = abs((__P.M + P.M) / _P.M) if _P.M != 0 else 0  # prevents /0
-            __mean=__P.M/__P.L; _mean=_P.M/_P.L; mean=P.D/P.L
-        m13 = min(mean, __mean) - abs(mean-__mean)/2   # P1 & P3
-        m12 = min(_mean, __mean) - abs(_mean-__mean)/2 # P1 & P2
-        m23 = min(_mean, mean) - abs(_mean- mean)/2    # P2 & P3
-
-        similarity = m13 / abs( m12 + m23)  # both should be negative
-        merge_value = proximity * similarity - ave_merge
-
-        if merge_value:
+        if comp_merge_value(__P, _P, P, fPd) > ave_merge: # merge_value is true for negative value too, so it is better to use > ave_merge
             # for debug purpose
             print('P_'+str(_P.id)+' and P_'+str(P.id)+' are merged into P_'+str(__P.id))
             # merge _P and P into __P
             for merge_P in [_P, P]:
-                x0 = min(__P.x0, merge_P.x0)
+                __P.x0 = min(__P.x0, merge_P.x0)
                 __P.accum_from(merge_P)
                 __P.dert_+= merge_P.dert_
-                __P.x0=x0
+
             # backward merging over new_P_:
             __P = merge_P_back(new_P_, __P, fPd)
 
@@ -185,37 +181,41 @@ def merge_P_draft(P_, fPd):
 def merge_P_back(new_P_, P, fPd):  # P is __P in calling merge_P_draft
 
     while len(new_P_) > 2:  # at least 3 Ps
-        __P = new_P_.pop(0)
-        _P = new_P_.pop(0)
-        if fPd:
-            proximity = abs((__P.D + P.D) / _P.D) if _P.D != 0 else 0  # prevents /0
-            __mean=__P.D/__P.L; _mean=_P.D/_P.L; mean=P.D/P.L
-        else:
-            proximity = abs((__P.M + P.M) / _P.M) if _P.M != 0 else 0  # prevents /0
-            __mean=__P.M/__P.L; _mean=_P.M/_P.L; mean=P.D/P.L
-        m13 = min(mean, __mean) - abs(mean-__mean)/2   # P1 & P3
-        m12 = min(_mean, __mean) - abs(_mean-__mean)/2 # P1 & P2
-        m23 = min(_mean, mean) - abs(_mean- mean)/2    # P2 & P3
-
-        similarity = m13 / abs( m12 + m23)  # both should be negative
-        merge_value = proximity * similarity - ave_merge
-
-        if merge_value:
+        _P = new_P_.pop() # pop from last element in backward merge
+        __P = new_P_.pop()
+        
+        if comp_merge_value(__P, _P, P, fPd) > ave_merge:
             # for debug purpose
-            print('P_'+str(_P.id)+' and P_'+str(P.id)+' are merged into P_'+str(__P.id))
+            print('P_'+str(_P.id)+' and P_'+str(P.id)+' are backward merged into P_'+str(__P.id))
             # merge _P and P into __P
             for merge_P in [_P, P]:
-                x0 = min(__P.x0, merge_P.x0)
+                __P.x0 = min(__P.x0, merge_P.x0)
                 __P.accum_from(merge_P)
                 __P.dert_+= merge_P.dert_
-                __P.x0=x0
-            new_P_.append(__P)
+            # new_P_.append(__P) # shouldn't pack the merged __P into new_P_, it might be reused in forward merge later
             P = __P  # also returned P
         else:
             new_P_+= [__P, _P]
             break
 
     return P
+
+def comp_merge_value(__P, _P, P, fPd):
+
+    if fPd:
+        proximity = abs((__P.D + P.D) / _P.D) if _P.D != 0 else 0  # prevents /0
+        __mean=__P.D/__P.L; _mean=_P.D/_P.L; mean=P.D/P.L
+    else:
+        proximity = abs((__P.M + P.M) / _P.M) if _P.M != 0 else 0  # prevents /0
+        __mean=__P.M/__P.L; _mean=_P.M/_P.L; mean=P.D/P.L
+    m13 = min(mean, __mean) - abs(mean-__mean)/2   # P1 & P3
+    m12 = min(_mean, __mean) - abs(_mean-__mean)/2 # P1 & P2
+    m23 = min(_mean, mean) - abs(_mean- mean)/2    # P2 & P3
+
+    similarity = m13 / abs( m12 + m23)  # both should be negative
+    merge_value = proximity * similarity
+    
+    return merge_value
 
 # below is not revised
 
@@ -474,7 +474,7 @@ def rng_search(P_, ave):
 
     return sub_PPm_
 
-
+'''
 def form_Pp_(derP_, fPd):  # this is a draft, please check
 
     # rdn = layer0_rdn[param_name]
@@ -514,6 +514,7 @@ def form_Pp_(derP_, fPd):  # this is a draft, please check
                 Pp.m_.append(m)
 
     merge_Pp_Kelvin(derP_, fPd)
+'''
 
 def merge_Pp_Kelvin(derP_, fPd):  # merge low value Pps into negative Pp
     neg_Pp_ = []

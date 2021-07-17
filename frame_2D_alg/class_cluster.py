@@ -308,20 +308,20 @@ class ClusterStructure(metaclass=MetaCluster):
                     setattr(self,layer_num,_layer.copy())
 
 
-class Cdert(Number): # Ppd and Ppdm might not relevant now, so remove it
-    __slots__ = ('i','p','d','m','negM','negL')
+class Cdert(Number): # negM and negL is not needed in Cdert
+    __slots__ = ('i','p','d','m')
 
-    def __init__(self, i=0, p=0, d=0, m=0,negM=0,negL=0):
-        self.i, self.p, self.d, self.m,self.negM, self.negL = i, d, m, p, negM, negL
+    def __init__(self, i=0, p=0, d=0, m=0):
+        self.i, self.p, self.d, self.m = i, p, d, m
 
     def __add__(self, other):
-        return Cdert(self.i, self.p + other.p, self.d + other.d, self.m + other.m, self.negM + other.negM, self.negL + other.negL)
+        return Cdert(self.i, self.p + other.p, self.d + other.d, self.m + other.m)
 
     def __repr__(self):  # representation of object
         if isinstance(self.i, Cdert) or isinstance(self.p, Cdert) or isinstance(self.d, Cdert) or isinstance(self.m, Cdert):
             return "Cdert(i=Cdert, p=Cdert, d=Cdert, m=Cdert)"
         else:
-            return "Cdert(i={}, p={}, d={}, m={}, negM={}, negL={})".format(self.i, self.p, self.d, self.m, self.p, self.negM, self.negL)
+            return "Cdert(i={}, p={}, d={}, m={})".format(self.i, self.p, self.d, self.m, self.p)
 
 
 def comp_param(param, _param, param_name, ave):
