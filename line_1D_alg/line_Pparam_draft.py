@@ -56,8 +56,8 @@ ave_min = 5  # ave direct m, change to Ave_min from the root intra_blob?
 
 def search(P_):  # cross-compare patterns within horizontal line
 
-    # sub_search_recursive(P_, fderP=0)  # search with incremental distance: first inside sublayers
-    merge_P_draft(P_, fPd=0)  # merge I- or D- similar and weakly separated Ps
+    sub_search_recursive(P_)  # search with incremental distance: first inside sublayers
+    merge_P_draft(P_, merge_eval=merge_eval_P, fPd=0)  # merge I- or D- similar and weakly separated Ps
 
     layer0 = {'L_': [[],.25], 'I_': [[],.5], 'D_': [[],.25], 'M_': [[],.5]}  # M is doubled because it represents both comparands
     if len(P_) > 1:  # at least 2 comparands, unpack P_:
@@ -68,10 +68,27 @@ def search(P_):  # cross-compare patterns within horizontal line
             layer0['M_'][0].append((P.M, P.L, P.x0))  # M
 
         for n, param_name in enumerate(layer0):  # loop L_, I_, D_, M_
-            # layer0[param_name][0].append((Ppm_, Ppd_))
             search_param_(param_name, layer0[param_name])
 
     return layer0
+
+def sub_search_recursive(P_):  # search in top sublayer per P / sub_P
+
+    for P in P_:
+        if P.sublayers:
+            sublayer = P.sublayers[0][0]  # top sublayer has one element
+            sub_P_ = sublayer[5]
+            if len(sub_P_) > 2:
+                PM = P.M; PD = P.D
+                # include match added by last search (not sure with Pp)
+                if P.fPd:
+                    if abs(PD) > ave_D:  # better use sublayers.D|M, but we don't have it yet
+                        sublayer[6].append(search(sub_P_))
+                        sub_search_recursive(sub_P_)  # deeper sublayers search is selective per sub_P
+                elif PM > ave_M:
+                    sublayer[6].append(search(sub_P_))
+                    sub_search_recursive(sub_P_)  # deeper sublayers search is selective per sub_P
+
 
 def search_param_(param_name, iparam):
 
@@ -128,12 +145,12 @@ def form_Pp_(dert_, fPd):  # almost the same as form_P_ for now
         _sign = sign
 
     Pp_.append(Pp)  # last incomplete Pp
-    merge_P_draft(Pp_, fPd=fPd)  # add eval by negL and negM
+    merge_P_draft(Pp_, merge_eval=merge_eval_Pp, fPd=fPd)  # add eval by negL and negM
 
     return Pp_
 
 
-def merge_P_draft(P_, fPd):
+def merge_P_draft(P_, merge_eval, fPd):
     '''
     Initial P separation is determined by pixel-level sign change, but resulting opposite-sign pattern may be relatively weak,
     and same-sign patterns it separates relatively strong.
@@ -156,7 +173,7 @@ def merge_P_draft(P_, fPd):
                 __P.accum_from(merge_P)
                 __P.dert_+= merge_P.dert_
 
-            __P = merge_P_back(new_P_, __P, fPd)  # backward merging
+            __P = merge_P_back(new_P_, __P, merge_eval, fPd)  # backward merging
             P_.insert(0, __P)  # insert merged __P back into P_ to continue merging
         else:
             new_P_.append(__P) # append __P to P_ when there is no further merging process for __P
@@ -168,7 +185,8 @@ def merge_P_draft(P_, fPd):
 
     return new_P_
 
-def merge_P_back(new_P_, P, fPd):  # P is __P in calling merge_P_draft
+
+def merge_P_back(new_P_, P, merge_eval, fPd):  # P is __P in calling merge_P_draft
 
     while len(new_P_) > 2:  # at least 3 Ps
         _P = new_P_.pop()
@@ -190,7 +208,7 @@ def merge_P_back(new_P_, P, fPd):  # P is __P in calling merge_P_draft
 
     return P
 
-def merge_eval(__P, _P, P, fPd):
+def merge_eval_P(__P, _P, P, fPd):
     '''
     For 3 Pms, same-sign P1 and P3, opposite-sign P2:
     relative proximity = abs((M1+M3) / M2)
@@ -201,7 +219,33 @@ def merge_eval(__P, _P, P, fPd):
         __mean=__P.D/__P.L; _mean=_P.D/_P.L; mean=P.D/P.L
     else:
         proximity = abs((__P.M + P.M) / _P.M) if _P.M != 0 else 0  # prevents /0
-        __mean=__P.M/__P.L; _mean=_P.M/_P.L; mean=P.D/P.L
+        __mean=__P.M/__P.L; _mean=_P.M/_P.L; mean=P.M/P.L # typo
+    m13 = min(mean, __mean) - abs(mean-__mean)/2   # P1 & P3
+    m12 = min(_mean, __mean) - abs(_mean-__mean)/2 # P1 & P2
+    m23 = min(_mean, mean) - abs(_mean- mean)/2    # P2 & P3
+
+    similarity = m13 / abs( m12 + m23)  # both should be negative
+    merge_value = proximity * similarity
+
+    return merge_value
+
+
+def merge_eval_Pp(__Pp, _Pp, Pp, fPd):
+    '''
+    For 3 Pps, same-sign Pp1 and Pp3, opposite-sign Pp2:
+    relative proximity = abs((M1+M3) / M2)
+    relative similarity = match (M1/L1, M3/L3) / miss (match (M1/L1, M2/L2) + match (M3/L3, M2/L2)) # both should be negative
+    '''
+    if fPd:
+        proximity = abs((__Pp.D + Pp.D) / _Pp.D) if _Pp.D != 0 else 0  # prevents /0
+        __mean=__Pp.D/__Pp.L
+        _mean=_Pp.D/_Pp.L
+        mean=Pp.D/Pp.L
+    else:
+        proximity = abs((__Pp.M-__Pp.negM + Pp.M-Pp.negM) / (_Pp.M-_Pp.negM) ) if (_Pp.M-_Pp.negM) != 0 else 0  # prevents /0
+        __mean= (__Pp.M-__Pp.negM)/(__Pp.L+__Pp.negL)
+        _mean= (_Pp.M-_Pp.negM)/(_Pp.L+_Pp.negL)
+        mean= (Pp.M-Pp.negM)/(Pp.L, Pp.negL)
     m13 = min(mean, __mean) - abs(mean-__mean)/2   # P1 & P3
     m12 = min(_mean, __mean) - abs(_mean-__mean)/2 # P1 & P2
     m23 = min(_mean, mean) - abs(_mean- mean)/2    # P2 & P3
@@ -212,7 +256,7 @@ def merge_eval(__P, _P, P, fPd):
     return merge_value
 
 # below is not revised
-
+'''
 def sub_search_recursive(P_, fderP):  # search in top sublayer per P / sub_P
 
     for P in P_:
@@ -234,6 +278,7 @@ def sub_search_recursive(P_, fderP):  # search in top sublayer per P / sub_P
                     sublayer[6].append(sub_PPm_); sublayer[7].append(sub_PPd_)
                     sub_search_recursive(sub_P_, fderP=1)  # deeper sublayers search is selective per sub_P
 
+'''
 
 def comp_P(_P, P, neg_L, neg_M):  # multi-variate cross-comp, _smP = 0 in line_patterns
 

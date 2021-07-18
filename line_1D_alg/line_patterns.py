@@ -183,7 +183,7 @@ def intra_Pm_(P_, adj_M_, fid, rdn, rng):  # evaluate for sub-recursion in line 
                     rdert_ = range_comp(P.dert_)  # rng+ comp with localized ave, skip predictable next dert
                     sub_Pm_ = form_P_(rdert_, fPd=False)  # cluster by m sign
                     Ls = len(sub_Pm_)
-                    P.sublayers += [[(Ls, False, fid, rdn, rng, sub_Pm_, [], [])]]  # sub_PPm_, sub_PPd_, add Dert=[] if Ls > min?
+                    P.sublayers += [[(Ls, False, fid, rdn, rng, sub_Pm_, [])]]  # sub_PPm_, sub_PPd_, add Dert=[] if Ls > min?
                     # 1st sublayer is single-element, packed in double brackets only to allow nesting for deeper sublayers
                     if len(sub_Pm_) > 4:
                         sub_adj_M_ = form_adjacent_M_(sub_Pm_)
@@ -199,7 +199,7 @@ def intra_Pm_(P_, adj_M_, fid, rdn, rng):  # evaluate for sub-recursion in line 
                     rel_adj_M = adj_M / -P.M  # for allocation of -Pm' adj_M to each of its internal Pds
                     sub_Pd_ = form_P_(P.dert_, fPd=True)  # cluster by input d sign match: partial d match
                     Ls = len(sub_Pd_)
-                    P.sublayers += [[(Ls, True, True, rdn, rng, sub_Pd_)]]  # 1st layer, Dert=[], fill if Ls > min?
+                    P.sublayers += [[(Ls, True, True, rdn, rng, sub_Pd_,[])]]  # 1st layer, Dert=[], fill if Ls > min?
 
                     P.sublayers += intra_Pd_(sub_Pd_, rel_adj_M, rdn+1 + 1/Ls, rng)  # der_comp eval per nPm
                     # splice sublayers across sub_Ps, for return as root sublayers[1:]:
@@ -329,7 +329,7 @@ if __name__ == "__main__":
     # from pprint import pprint
     # pprint(frame_of_patterns_[0])  # shows 1st layer Pm_ only
 
-    fline_PPs = 0
+    fline_PPs = 1
     if fline_PPs:  # debug line_PPs_draft
         from line_Pparam_draft import *
         frame_PP_ = []
