@@ -58,7 +58,7 @@ ave_M = 50  # min M for initial incremental-range comparison(t_), higher cost th
 ave_D = 5  # min |D| for initial incremental-derivation comparison(d_)
 ave_nP = 5  # average number of sub_Ps in P, to estimate intra-costs? ave_rdn_inc = 1 + 1 / ave_nP # 1.2
 ave_rdm = .5  # obsolete: average dm / m, to project bi_m = m * 1.5
-ave_merge = 50  # to merge a kernel of 3 adjacent Ps
+ave_merge = 500  # to merge a kernel of 3 adjacent Ps
 init_y = 0  # starting row, the whole frame doesn't need to be processed
 
 '''
@@ -94,7 +94,7 @@ def cross_comp(frame_of_pixels_):  # converts frame_of_pixels to frame_of_patter
     return frame_of_patterns_  # frame of patterns is an output to level 2
 
 
-def form_P_(dert_, fPd, rdn, rng):  # accumulation and termination
+def form_P_(dert_, rdn, rng, fPd):  # accumulation and termination
     # initialization:
     P_ = []
     x = 0
@@ -115,10 +115,11 @@ def form_P_(dert_, fPd, rdn, rng):  # accumulation and termination
         _sign = sign
 
     if len(P_) > 4:
-        splice_P_(P_, fPd=0)  # merge mean_I- or mean_D- similar and weakly separated Ps
+        # we need return merged P_ here since new_P_ is a new list
+        P_ = splice_P_(P_, fPd=0)  # merge mean_I- or mean_D- similar and weakly separated Ps
         if len(P_) > 4:
             adj_M_ = form_adjacent_M_(P_)  # compute adjacent Ms to evaluate contrastive borrow potential
-            intra_Pm_(P_, adj_M_, rdn, rng, fid=False)  # rng is unilateral, evaluates for sub-recursion per Pm
+            intra_Pm_(P_, adj_M_, fid=False, rdn=rdn, rng=rng)  # rng is unilateral, evaluates for sub-recursion per Pm
 
     # for visualization only:
     with open("frame_of_patterns_2.csv", "a") as csvFile:
@@ -308,7 +309,6 @@ def splice_P_(P_, fPd):
     # pack remaining Ps:
     if P_: new_P_ += P_
     return new_P_
-
 
 def splice_P_back(new_P_, P, fPd):  # P is __P in calling splice_P_
 

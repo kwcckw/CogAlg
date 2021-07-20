@@ -52,7 +52,7 @@ ave_PPM = 200
 ave_merge = 50  # merge a kernel of 3 adjacent Pps
 ave_inv = 20 # ave inverse m, change to Ave from the root intra_blob?
 ave_min = 5  # ave direct m, change to Ave_min from the root intra_blob?
-
+ave_rolp = 50 # ave to comp_Pp from Pps overlapping ratio
 
 def search(P_):  # cross-compare patterns within horizontal line
     # sub_search_recursive(P_, fderP=0)  # search with incremental distance: first inside sublayers
@@ -69,12 +69,67 @@ def search(P_):  # cross-compare patterns within horizontal line
             # layer0[param_name][0].append((Ppm_, Ppd_))
             search_param_(param_name, layer0[param_name])
 
+    compute_overlap(layer0,0)
+
     return layer0
 
+
+
+def compute_overlap(layer0, fPd):
+    '''
+    Draft
+    right now using 2 steps process, should be able to optimize further after this
+    But 2 steps process is better in ter mof clarity
+    '''
+    # 1st step, check for overlapping Pps between 4 params' Pps
+    overlapping_Pp_ = []
+    for _param_name in layer0: # loop 1st param    
+        
+        if fPd: _Pp_ = layer0[_param_name][0][1] # _Ppd
+        else: _Pp_ = layer0[_param_name][0][0]   # _Ppm
+        
+        # single _Pp in 1st param may overlap with multiple Pps from the other param
+        for _Pp in _Pp_: # loop Pp of current param
+            overlapping_Pps = [(_Pp,_param_name)] # initialization
+            
+            for param_name in layer0:
+                if (_param_name != param_name): # check all the other param's Pps
+                    if fPd: Pp_ = layer0[_param_name][0][1] # Ppd
+                    else: Pp_ = layer0[_param_name][0][0]   # Ppm
+
+                    for Pp in Pp_: # loop Pp of consecutive param and check for overlapping
+                        if  (Pp.x0 - 1 < (_Pp.x0 + _Pp.L) and (Pp.x0 + Pp.L) + 1 > _Pp.x0): # overlapping evaluation
+                            overlapping_Pps.append((Pp,param_name))
+                            
+    
+        if len(overlapping_Pps) > 1: # at least more than 1 Pps for a series of overlapping Pps
+            overlapping_Pp_.append(overlapping_Pps)
+    
+    # 2nd step, compute overlapping ratio
+    derPp_ = []
+    for overlapping_Pps in overlapping_Pp_:
+        _Pp, _param_name = overlapping_Pps[0]
+        
+        for (Pp,param_name) in overlapping_Pps[1:]:
+            # https://stackoverflow.com/questions/16691524/calculating-the-overlap-distance-of-two-1d-line-segments
+            olpL = max(0, min(_Pp.x0+_Pp.L, Pp.x0+Pp.L) - max(_Pp.x0, Pp.x0)) # overlapping L
+        
+            rolpL = ((olpL/_Pp.L) + (olpL/Pp.L))/2 # mean of overlapping L
+            
+            # need further review
+            # how to compare Pps of all overlapping Pps if we are only able to compare 2 Pps at once?
+            if rolpL > ave_rolp:
+                derPp = comp_Pp(_Pp,Pp)
+                derPp_.append(derPp)
+    
+    
+            
+    
 def search_param_(param_name, iparam):
 
     ddert_, mdert_ = [], []  # line-wide (i, p, d, m)_, + (negL, negM) in mdert: variable-range search
     rdn = iparam[1]
+    rng = 1
     param_ = iparam[0]
     _param, _L, _x0 = param_[0]
     negL=negM=0
@@ -107,7 +162,7 @@ def search_param_(param_name, iparam):
 
 
 def form_Pp_(dert_, rdn, rng, fPd):  # almost the same as line_patterns form_P_ for now
-    # Needs to be updated as current form_P_ in line patterns
+    # Needs to be updated as current form_P_ in line patterns # shouldn't be the same now?
     # initialization:
     Pp_ = []
     x = 0
@@ -129,11 +184,11 @@ def form_Pp_(dert_, rdn, rng, fPd):  # almost the same as line_patterns form_P_ 
         x += 1
         _sign = sign
 
-    if len(P_) > 4:
-        splice_P_(Pp_, fPd=0)  # merge mean_I- or mean_D- similar and weakly separated Ps
-        if len(P_) > 4:
+    if len(Pp_) > 4:
+        Pp_ = splice_P_(Pp_, fPd=0)  # merge mean_I- or mean_D- similar and weakly separated Ps
+        if len(Pp_) > 4:
             adj_M_ = form_adjacent_M_(Pp_)  # compute adjacent Ms to evaluate contrastive borrow potential
-            intra_Ppm_(P_, adj_M_, rdn, rng, fid=False)  # rng is unilateral, evaluates for sub-recursion per Pm
+            intra_Ppm_(Pp_, adj_M_, rdn, rng, fid=False)  # rng is unilateral, evaluates for sub-recursion per Pm
 
     return Pp_
 
@@ -321,22 +376,23 @@ def form_adjacent_mP(derP_d_):
     return derP_d_
 
 
-def intra_Ppm_(PPm_, rdn):
+def intra_Ppm_(PPm_, adj_M, rdn, rng, fid):
     '''
-    Each PP is evaluated for intra-processing, non-recursive here:
+    Each Pp is evaluated for intra-processing, non-recursive here:
     - incremental range and derivation, as in line_patterns intra_P but over multiple params,
     - x param div_comp: if internal compression: rm * D * L, * external compression: PP.L * L-proportional coef?
     - form_par_P if param Match | x_param Contrast: diff (D_param, ave_D_alt_params: co-derived co-vary? neg val per P, else delete?
     form_PPd: dP = dL + dM + dD  # -> directional PPd, equal-weight params, no rdn?
     if comp I -> dI ~ combined d_derivatives, then project ave_d?
     '''
+    pass
+#    for PP in PPm_:
+#        if len(PP.P_) > 8 and PP.mP + PP.M > ave_PPM:
+#            # calls rnd_derP:
+#            sub_PPm_ = rng_search(PP.P_, (ave_M + PP.M / len(PP.P_)) / 2 * rdn)  # ave_M is average of local and global match
+#
+#            return sub_PPm_
 
-    for PP in PPm_:
-        if len(PP.P_) > 8 and PP.mP + PP.M > ave_PPM:
-            # calls rnd_derP:
-            sub_PPm_ = rng_search(PP.P_, (ave_M + PP.M / len(PP.P_)) / 2 * rdn)  # ave_M is average of local and global match
-
-            return sub_PPm_
 
 # below is mostly obsolete:
 
