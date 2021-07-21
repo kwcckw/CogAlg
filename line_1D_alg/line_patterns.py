@@ -372,14 +372,14 @@ if __name__ == "__main__":
     # from pprint import pprint
     # pprint(frame_of_patterns_[0])  # shows 1st layer Pm_ only
 
-    fline_PPs = 0
+    fline_PPs = 1
     if fline_PPs:  # debug line_PPs_draft
         from line_PPs_draft import *
         frame_PP_ = []
 
         for y, P_ in enumerate(frame_of_patterns_):
-            layer0 = search(P_)
-            frame_PP_.append(layer0)
+            PP_ = search(P_)
+            frame_PP_.append(PP_)
 
     end_time = time() - start_time
     print(end_time)
