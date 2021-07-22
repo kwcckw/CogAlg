@@ -287,7 +287,7 @@ def splice_P_(P_, fPd):
                 __P.x0 = min(__P.x0, merge_P.x0)
                 __P.accum_from(merge_P)
                 __P.dert_+= merge_P.dert_
-            # back merging
+            # back splicing
             __P = splice_P_back(new_P_, __P, fPd)
             P_.insert(0, __P)  # insert merged __P back into P_ to continue merging
         else:
