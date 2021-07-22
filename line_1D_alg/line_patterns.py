@@ -123,7 +123,8 @@ def form_P_(dert_, rdn, rng, fPd):  # accumulation and termination
         _sign = sign
 
     if len(P_) > 4:
-        splice_P_(P_, fPd=0)  # merge meanI- or meanD- similar and weakly separated Ps
+        # we need return P_ here, new_P_ is a new list
+        P_ = splice_P_(P_, fPd=0)  # merge meanI- or meanD- similar and weakly separated Ps
         if len(P_) > 4:
             intra_Pm_(P_, rdn, rng, not fPd)  # evaluates range_comp | deriv_comp sub-recursion per Pm
 
