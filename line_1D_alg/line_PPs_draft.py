@@ -23,8 +23,9 @@ class Cpdert(ClusterStructure):
     L = int
 
 class CPp(CP):
-    pdert_ = list
-    N = int  # n of Ps in Pp, similar to L in P
+    dert_ = list # use dert is better, so that we can just use the same naming for Pp and P in splice_P
+    iL = int    # length of Pp in pixel scale
+    ix0 = int   # x starting pixel coordinate
     fPd = bool  # P is Pd if true, else Pm; also defined per layer
     negL = int  # in mdert only
     negM = int  # in mdert only
@@ -33,7 +34,6 @@ class CPp(CP):
 class CderPp(ClusterStructure):
     mPp = int
     dPp = int
-    sign = bool
     rrdn = int
     negM = int
     negL = int
@@ -134,11 +134,11 @@ def form_Pp_(dert_, param_name, rdn, fPd):  # almost the same as line_patterns f
                 # m + ddist_ave = ave - ave * (ave_rM * (1 + negL / ((param.L + _param.L) / 2))) / (1 + negM / ave_negM)?
         if sign != _sign:
             # sign change, initialize P and append it to P_
-            Pp = CPp(N=1, L=dert.L, I=dert.p, D=dert.d, M=dert.m, negL=dert.negL, negM=dert.negM, x0=dert.x0, dert_=[dert], sublayers=[], fPd=fPd)
+            Pp = CPp(L=1, iL=dert.L, I=dert.p, D=dert.d, M=dert.m, negL=dert.negL, negM=dert.negM, x0=x, ix0=dert.x0, dert_=[dert], sublayers=[], fPd=fPd)
             Pp_.append(Pp)  # updated with accumulation below
         else:
             # accumulate params:
-            Pp.N += 1; Pp.L += dert.L; Pp.I += dert.p; Pp.D += dert.d; Pp.M += dert.m; Pp.negL+=dert.negL; Pp.negM+=dert.negM
+            Pp.L += 1; Pp.iL += dert.L; Pp.I += dert.p; Pp.D += dert.d; Pp.M += dert.m; Pp.negL+=dert.negL; Pp.negM+=dert.negM
             Pp.dert_ += [dert]
         x += 1
         _sign = sign
@@ -155,20 +155,20 @@ def compute_overlap(layer0, fPd):  # find Pps that overlap across 4 Pp_s, comput
 
     overlapping_Pp_ = []
 
-    for _param_name in layer0: # loop 1st param
+    for i, _param_name in enumerate(layer0): # loop 1st param
         if fPd: _Pp_ = layer0[_param_name][0][1]  # _Ppd
         else:   _Pp_ = layer0[_param_name][0][0]  # _Ppm
 
         for _Pp in _Pp_:  # Pps of current param, _Pp of 1st param may overlap with multiple Pps of the other param
             overlapping_Pps = [(_Pp,_param_name)]  # initialization
 
-            for param_name in layer0:
-                if (_param_name != param_name):  # check Pps of all other params
+            for j, param_name in enumerate(layer0):
+                if i>j:  # check the other non repeating param
                     if fPd: Pp_ = layer0[param_name][0][1]  # Ppd
                     else:   Pp_ = layer0[param_name][0][0]  # Ppm
 
                     for Pp in Pp_:  # check Pps of the other param for x overlap:
-                        if (Pp.x0 - 1 < (_Pp.x0 + _Pp.L) and (Pp.x0 + Pp.L) + 1 > _Pp.x0):
+                        if (Pp.ix0 - 1 < (_Pp.ix0 + _Pp.iL) and (Pp.ix0 + Pp.iL) + 1 > _Pp.ix0):
                             overlapping_Pps.append((Pp,param_name))
 
         if len(overlapping_Pps) > 1: # at least more than 1 Pps for a series of overlapping Pps
@@ -178,13 +178,13 @@ def compute_overlap(layer0, fPd):  # find Pps that overlap across 4 Pp_s, comput
     for overlapping_Pps in overlapping_Pp_:  # compute overlap ratio
         derPp_ = []  # from comp_Pp of overlapping Pps from current-pair Pp_s:
 
-        for (_Pp,_param_name) in overlapping_Pps:
-            for (Pp,param_name) in overlapping_Pps:
-                if _Pp is not Pp:
+        for i, (_Pp,_param_name) in enumerate(overlapping_Pps):
+            for j, (Pp,param_name) in enumerate(overlapping_Pps):
+                if i>j: # check for non repeating Pp pair
                     # https://stackoverflow.com/questions/16691524/calculating-the-overlap-distance-of-two-1d-line-segments
-                    olpL = max(0, min(_Pp.x0+_Pp.L, Pp.x0+Pp.L) - max(_Pp.x0, Pp.x0))  # L of overlap
+                    olpL = max(0, min(_Pp.ix0+_Pp.iL, Pp.ix0+Pp.iL) - max(_Pp.ix0, Pp.ix0))  # L of overlap
                     # replace with computing pixel-level x0,L
-                    rolp = olpL / ((_Pp.L + Pp.L) / 2)  # mean of overlap Ls
+                    rolp = olpL / ((_Pp.iL + Pp.iL) / 2)  # mean of overlap Ls
 
                     if rolp > ave_rolp:
                         derPp = comp_Pp(_Pp,Pp,layer0)

@@ -15,7 +15,7 @@ Most functions should be replaced by casting generic Search, Compare, Cluster fu
 from collections import deque
 import sys
 import numpy as np
-from class_cluster import ClusterStructure, NoneType, comp_param, Cdm
+from class_cluster import ClusterStructure, NoneType, comp_param, Cdert
 # import warnings  # to detect overflow issue, in case of infinity loop
 # warnings.filterwarnings('error')
 
@@ -483,10 +483,10 @@ def comp_slice(_P, P):  # forms vertical derivatives of derP params, and conditi
             _param = getattr(_P, param_name)
 
 
-        dm = comp_param(param, _param, param_name, ave_min)  # add ave_min, * P.L is not needed?
-        layer1[param_name] = dm
-        mP += dm.m
-        dP += dm.d
+        pdert = comp_param(param, _param, param_name, ave_min)  # add ave_min, * P.L is not needed?
+        layer1[param_name] = pdert
+        mP += pdert.m
+        dP += pdert.d
 
     '''
     s, x0, Dx, Dy, G, M, L, Ddx, Mdx = P.sign, P.x0, P.Dx, P.Dy, P.G, P.M, P.L, P.Ddx, P.Mdx  # params per comp branch
@@ -523,7 +523,7 @@ def comp_slice(_P, P):  # forms vertical derivatives of derP params, and conditi
 
     return derP
 
-
+# obsolete
 def comp_slice_full(_P, P):  # forms vertical derivatives of derP params, and conditional ders from norm and DIV comp
 
     x0, Dx, Dy, L, = P.x0, P.Dx, P.Dy, P.L
@@ -814,51 +814,51 @@ def comp_PP(PP, _PP):
             param = getattr(PP, param_name)
             _param = getattr(_PP, param_name)
 
-        dm = comp_param(param, _param, param_name, ave_mPP)
-        layer01[param_name] = dm
-        mP += dm.m
-        dP += dm.d
+        pdert = comp_param(param, _param, param_name, ave_mPP)
+        layer01[param_name] = pdert
+        mP += pdert.m
+        dP += pdert.d
 
     # compare layer1 to get layer11 #-------------------------------------------
 
     layer11 = dict({'I':.0,'Da':.0,'M':.0,'Dady':.0,'Dadx':.0,'Ma':.0,'L':.0,'Mdx':.0, 'Ddx':.0, 'x':.0})
     mmPP, dmPP, mdPP, ddPP = 0, 0, 0, 0
-    for i, ((param_name, dm), (_param_name, _dm)) in enumerate(zip(PP.layer1.items(), _PP.layer1.items())):
+    for i, ((param_name, pdert), (_param_name, _pdert)) in enumerate(zip(PP.layer1.items(), _PP.layer1.items())):
 
         f_comp = 0
         if param_name in ['Da', 'Dady', 'Dadx']: # angle, need convert to vector form
-            if dm.m > ave_comp and _dm.m >ave_comp: # check da.m of prior layer
+            if pdert.m > ave_comp and _pdert.m >ave_comp: # check da.m of prior layer
                 f_comp = 1
-                sin, cos = np.sin(dm.d), np.cos(dm.d)    # da is computed from normalized dy and dx, do we still need to absGalize it again here in layer1?
-                _sin, _cos = np.sin(_dm.d), np.cos(_dm.d)
-                param_d = [sin, cos]; param_m = dm.m
-                _param_d = [_sin, _cos]; _param_m = _dm.m
+                sin, cos = np.sin(pdert.d), np.cos(pdert.d)    # da is computed from normalized dy and dx, do we still need to absGalize it again here in layer1?
+                _sin, _cos = np.sin(_pdert.d), np.cos(_pdert.d)
+                param_d = [sin, cos]; param_m = pdert.m
+                _param_d = [_sin, _cos]; _param_m = _pdert.m
         else:
-            if dm.m > ave_comp and _dm.m >ave_comp: # check m of prior layer
+            if pdert.m > ave_comp and _pdert.m >ave_comp: # check m of prior layer
                 f_comp = 1
-                param_d = dm.d; param_m = dm.m
-                _param_d = _dm.d; _param_m = _dm.m
+                param_d = pdert.d; param_m = pdert.m
+                _param_d = _pdert.d; _param_m = _pdert.m
 
         if f_comp:
-            dmd = comp_param(param_d, _param_d, param_name, ave_mPP)  # dm of d
-            dmm = comp_param(param_m, _param_m, param_name, ave_mPP)  # dm of m
-            layer11[param_name] = [dmd, dmm]      # layer 2 in list ,storing dm of each d and m
-            mdPP += dmd.m # m from dm of d
-            ddPP += dmd.d # d from dm of d
-            mmPP += dmm.m # m from dm of m
-            dmPP += dmm.d # d from dm of m
+            ddert = comp_param(param_d, _param_d, param_name, ave_mPP)  # dert of d
+            mdert = comp_param(param_m, _param_m, param_name, ave_mPP)  # dert of m
+            layer11[param_name] = [ddert, mdert]      # layer 2 in list ,storing dm of each d and m
+            mdPP += ddert.m # m from dert of d
+            ddPP += ddert.d # d from dert of d
+            mmPP += mdert.m # m from dert of m
+            dmPP += mdert.d # d from dert of m
         else:
-            dmd = Cdm()
-            dmm = Cdm()
+            ddert = Cdert()
+            mdert = Cdert()
 
     if PP.mP >ave_comp and PP.dP>ave_comp and _PP.mP >ave_comp and _PP.dP>ave_comp:
-        dmmP = comp_param(PP.mP, _PP.mP, [], ave_mPP) # dm of mP
-        dmdP = comp_param(PP.dP, _PP.dP, [], ave_mPP) # dm of dP
+        mPdert = comp_param(PP.mP, _PP.mP, [], ave_mPP) # dm of mP
+        dPdert = comp_param(PP.dP, _PP.dP, [], ave_mPP) # dm of dP
 
-        mdPP += dmdP.m # match of compared PPs' d components
-        ddPP += dmdP.d # difference of compared PPs' d components
-        mmPP += dmmP.m # match of compared PPs' m components
-        dmPP += dmmP.d # difference of compared PPs' m components
+        mdPP += dPdert.m # match of compared PPs' d components
+        ddPP += dPdert.d # difference of compared PPs' d components
+        mmPP += mPdert.m # match of compared PPs' m components
+        dmPP += mPdert.d # difference of compared PPs' m components
 
 
     mmPP -= ave_mPP # match of compared PPs' m components

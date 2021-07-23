@@ -2,7 +2,7 @@
 Cross-compare blobs with incrementally intermediate adjacency, within a frame
 '''
 
-from class_cluster import ClusterStructure, NoneType, comp_param, Cdm
+from class_cluster import ClusterStructure, NoneType, comp_param, Cdert
 from frame_blobs import ave, CBlob
 from comp_slice_ import ave_min, ave_inv # facing error when comp-slice_ import from comp_blob, hence shift it here.
 import numpy as np
@@ -17,7 +17,7 @@ ave_ma = 2
 
 class CderBlob(ClusterStructure):
 
-    layer1 = dict      # dm layer params
+    layer1 = dict      # Cdert layer params
     mB = float
     dB = float
     distance = float  # common per derBlob_
@@ -30,7 +30,7 @@ class CderBlob(ClusterStructure):
 class CBblob(CBlob, CderBlob):
 
     # base params are retrieved from CBlob and CderBlob
-    layer1 = dict       # dm layer params
+    layer1 = dict       # Cdert layer params
     derBlob_ = list
     blob_ = list
 
@@ -132,9 +132,9 @@ def comp_blob(blob, _blob, _derBlob):
                 ave_mPar = ave_min  # ave_min
 
         dist_ave = ave_mPar * (ave_rM ** ((1 + derBlob.distance) / np.sqrt(blob.A)))  # deviation from average blob match at current distance
-        dm = comp_param(param, _param, param_name, dist_ave)
-        layer1[param_name] = dm
-        derBlob.mB += dm.m; derBlob.dB += dm.d
+        pdert = comp_param(param, _param, param_name, dist_ave)
+        layer1[param_name] = pdert
+        derBlob.mB += pdert.m; derBlob.dB += pdert.d
 
     derBlob.layer1 = layer1
 

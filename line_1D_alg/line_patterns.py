@@ -37,8 +37,6 @@ class Cdert(ClusterStructure):
     m = int  # distinct in deriv_comp only
 
 class CP(ClusterStructure):
-
-    sign = bool  # replace by if P.M > 0
     L = int
     I = int
     D = int
@@ -282,7 +280,7 @@ def splice_P_(P_, fPd):
                 print('P_'+str(_P.id)+' and P_'+str(P.id)+' are merged into P_'+str(__P.id))
             # merge _P and P into __P
             for merge_P in [_P, P]:
-                __P.accum_from(merge_P, excluded=['x0'])
+                __P.accum_from(merge_P, excluded=['x0','ix0'])
                 __P.dert_+= merge_P.dert_
             # back splicing
             __P = splice_P_back(new_P_, __P, fPd)
@@ -302,12 +300,12 @@ def splice_P_back(new_P_, P, fPd):  # P is __P in calling splice_P_
         _P = new_P_.pop()
         __P = new_P_.pop()
 
-        if splice_eval(__P, _P, P, fPd) > ave_merge:  # no * ave_rM * (1 + _P.L / (__P.L+P.L) / 2): rM should be insignificant
+        if splice_eval(__P, _P, P, fPd) > ave_splice:  # no * ave_rM * (1 + _P.L / (__P.L+P.L) / 2): rM should be insignificant
             if verbose:
                 print('P_'+str(_P.id)+' and P_'+str(P.id)+' are backward merged into P_'+str(__P.id))
             # merge _P and P into __P
             for merge_P in [_P, P]:
-                __P.accum_from(merge_P, excluded=['x0'])
+                __P.accum_from(merge_P, excluded=['x0','ix0'])
                 __P.dert_+= merge_P.dert_
             P = __P  # also returned
         else:
@@ -334,7 +332,7 @@ def splice_eval(__P, _P, P, fPd):  # should work for splicing Pps too
     m12 = min(_mean, __mean) - abs(_mean-__mean)/2  # inverse match of P1, P2
     m23 = min(_mean, mean) - abs(_mean- mean)/2     # inverse match of P2, P3
 
-    rel_similarity = (m13 * rel_continuity) / abs(m12 + m23)  # m12 and m23 should be negative
+    rel_similarity = (m13 * rel_continuity) / abs(m12 + m23) if (m12+m23) !=0 else 0 # m12 and m23 should be negative
     # * rel_continuity: relative value of m13 vs m12 and m23
     splice_value = rel_continuity * rel_similarity
 
@@ -370,7 +368,16 @@ if __name__ == "__main__":
     # from pprint import pprint
     # pprint(frame_of_patterns_[0])  # shows 1st layer Pm_ only
 
-    fline_PPs = 0
+    # Khanh's visualization
+    img = np.full((image.shape[0]-1,image.shape[1]-1), 128, np.uint8) # dert size is smaller by the size of 1
+    for y, P_ in enumerate(frame_of_patterns_):
+        for P in P_:
+          wd = img[y,P.x0:P.x0+P.L]  
+          wd[:] = (P.M>0) * 255
+    plt.figure();plt.imshow(img, cmap='gray'); plt.title('merged image')
+    # cv2.imwrite("img_merged.bmp",img)
+
+    fline_PPs = 1
     if fline_PPs:  # debug line_PPs_draft
         from line_PPs_draft import *
         frame_PP_ = []

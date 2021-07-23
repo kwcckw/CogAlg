@@ -290,21 +290,7 @@ class ClusterStructure(metaclass=MetaCluster):
                         if not isinstance(dert, Cdert) and isinstance(_dert, Cdert):  # dert is not dert if base param < ave_comp?
                             layer[param_name] = _dert
                         elif isinstance(dert, Cdert) and isinstance(_dert, Cdert):  # both params have dm
-                            if param_name in ['Da','Dady','Dadx'] and _param_name in ['Da','Dady','Dadx']:  # we shouldn't need both
-                                ''' 
-                                we shouldn't have da, daa, only ma, maa?
-                                da = dert.d; _da= _dert.d
-                                sin = np.sin(da); _sin = np.sin(_da)
-                                cos = np.cos(da); _cos = np.cos(_da)
-                                sin_sum = (cos * _sin) + (sin * _cos)  # sin(α + β) = sin α cos β + cos α sin β
-                                cos_sum= (cos * _cos) - (sin * _sin)   # cos(α + β) = cos α cos β - sin α sin β
-                                a_sum = np.arctan2(sin_sum, cos_sum)
-                                layer[param_name].d = a_sum
-                                '''
-                                pass
-                            else:
-                                dert.d += _dert.d
-
+                            dert.d += _dert.d # yea, since we will recompute da, day, dax each time in the comp function, so accumulate them is pointless here
                             dert.p += _dert.p
                             dert.m += _dert.m
                 elif len(_layer)>0: # _layer is not empty but layer is empty
