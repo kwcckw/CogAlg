@@ -284,24 +284,24 @@ class ClusterStructure(metaclass=MetaCluster):
                 layer = getattr(self,layer_num)   # self layer params
                 _layer = getattr(other,layer_num) # other layer params
 
-                if len(layer) == len(_layer): # both layers are having same params
-                    for i, ((param_name,dert), (_param_name,_dert)) in enumerate(zip(layer.items(), _layer.items())):  # accumulate _dert to dert in layer
-
-                        if not isinstance(dert, Cdert) and isinstance(_dert, Cdert):  # dert is not dert if base param < ave_comp?
+                if len(layer) == len(_layer):  # both layers have the same params
+                    for i, ((param_name,dert), (_param_name,_dert)) in enumerate(zip(layer.items(), _layer.items())):
+                        # accumulate _dert into dert
+                        if not isinstance(dert, Cdert) and isinstance(_dert, Cdert):  # if base param < ave_comp?
                             layer[param_name] = _dert
-                        elif isinstance(dert, Cdert) and isinstance(_dert, Cdert):  # both params have dm
-                            dert.d += _dert.d # yea, since we will recompute da, day, dax each time in the comp function, so accumulate them is pointless here
+                        elif isinstance(dert, Cdert) and isinstance(_dert, Cdert):
                             dert.p += _dert.p
+                            dert.d += _dert.d
                             dert.m += _dert.m
                 elif len(_layer)>0: # _layer is not empty but layer is empty
                     setattr(self,layer_num,_layer.copy())
 
 
-class Cdert(Number): # negM and negL is not needed in Cdert
+class Cdert(Number): # Ppd and Ppdm might not relevant now, so remove it
     __slots__ = ('i','p','d','m')
 
     def __init__(self, i=0, p=0, d=0, m=0):
-        self.i, self.p, self.d, self.m = i, p, d, m
+        self.i, self.p, self.d, self.m = i, d, m, p
 
     def __add__(self, other):
         return Cdert(self.i, self.p + other.p, self.d + other.d, self.m + other.m)
