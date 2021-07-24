@@ -289,11 +289,10 @@ def splice_P_(P_, fPd):
         # merge _P and P into __P
         __P.accum_from(_P, excluded=['x0', 'ix0'])
         __P.accum_from(P, excluded=['x0', 'ix0'])
-        __P.dert_ += _P.dert_ + P.dert_
+        if hasattr(__P,'pdert_'):  __P.pdert_ += _P.pdert_ + P.pdert_
+        else: __P.dert_ += _P.dert_ + P.dert_
 
         spliced_P_.append(__P)
-        # to be removed:
-        assert isinstance(__P.dert_, list)
 
     # add remaining Ps into spliced_P
     spliced_P_ += [P_[i] for i, folp in enumerate(folp_) if not folp]
@@ -368,7 +367,7 @@ if __name__ == "__main__":
         plt.figure(); plt.imshow(img, cmap='gray'); plt.title('merged image')
         # cv2.imwrite("img_merged.bmp",img)
 
-    fline_PPs = 0
+    fline_PPs = 1
     if fline_PPs:  # debug line_PPs_draft
         from line_PPs_draft import *
         frame_PP_ = []

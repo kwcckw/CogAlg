@@ -77,12 +77,11 @@ def search(P_):  # cross-compare patterns within horizontal line
             layer0['D_'][0].append((P.D, P.L, P.x0))  # D
             layer0['M_'][0].append((P.M, P.L, P.x0))  # M
 
-        for n, param_name in enumerate(layer0):  # loop L_, I_, D_, M_
+        for param_name in layer0:  # loop L_, I_, D_, M_
             # we need to arrange this to get unique pairs of names, as discussed?
             search_param_(param_name, layer0[param_name])  # layer0[param_name][0].append((Ppm_, Ppd_))
 
-        derPp__ = comp_overlaps(layer0, fPd=0)
-        form_PP_(PP_, derPp__)  # form PP from current overlapping derPps
+        PP_ = form_PP_from_overlap(layer0, fPd=0)
 
     return PP_
 
@@ -134,12 +133,12 @@ def form_Pp_(dert_, param_name, rdn, fPd):  # almost the same as line_patterns f
                 # m + ddist_ave = ave - ave * (ave_rM * (1 + negL / ((param.L + _param.L) / 2))) / (1 + negM / ave_negM)?
         if sign != _sign:
             # sign change, initialize P and append it to P_
-            Pp = CPp(L=1, iL=dert.L, I=dert.p, D=dert.d, M=dert.m, negL=dert.negL, negM=dert.negM, x0=x, ix0=dert.x0, dert_=[dert], sublayers=[], fPd=fPd)
+            Pp = CPp(L=1, iL=dert.L, I=dert.p, D=dert.d, M=dert.m, negL=dert.negL, negM=dert.negM, x0=x, ix0=dert.x0, pdert_=[dert], sublayers=[], fPd=fPd)
             Pp_.append(Pp)  # updated with accumulation below
         else:
             # accumulate params:
-            Pp.L += 1; Pp.iL += dert.iL; Pp.I += dert.p; Pp.D += dert.d; Pp.M += dert.m; Pp.negL+=dert.negL; Pp.negM+=dert.negM
-            Pp.dert_ += [dert]
+            Pp.L += 1; Pp.iL += dert.L; Pp.I += dert.p; Pp.D += dert.d; Pp.M += dert.m; Pp.negL+=dert.negL; Pp.negM+=dert.negM
+            Pp.pdert_ += [dert]
         x += 1
         _sign = sign
 
@@ -151,40 +150,53 @@ def form_Pp_(dert_, param_name, rdn, fPd):  # almost the same as line_patterns f
     return Pp_
 
 
-def comp_overlaps(layer0, fPd):  # find Pps that overlap across 4 Pp_s, compute overlap ratio
+def form_PP_from_overlap(layer0, fPd):  # find Pps that overlap across 4 Pp_s, compute overlap ratio
 
-    derPp__ = []  # from comp_Pp of all overlapping Pps
-
+    PP_= []
     for i, _param_name in enumerate(layer0): # loop 1st param
         if fPd: _Pp_ = layer0[_param_name][0][1]  # _Ppd
         else:   _Pp_ = layer0[_param_name][0][0]  # _Ppm
 
         for _Pp in _Pp_:  # Pps of current param, _Pp of 1st param may overlap with multiple Pps of the other param
-            derPp__ = []  # from comp_Pp of _Pp to all overlapping Pps
+            derPp_ = []  # from comp_Pp of _Pp to overlapping Pps per param
             for j, param_name in enumerate(layer0):
                 if i>j:  # Pp pair is unique: https://stackoverflow.com/questions/16691524/calculating-the-overlap-distance-of-two-1d-line-segments
                     if fPd: Pp_ = layer0[param_name][0][1]  # Ppd
                     else:   Pp_ = layer0[param_name][0][0]  # Ppm
 
-                    derPp_ = []  # from comp_Pp of _Pp to overlapping Pps per param
                     for Pp in Pp_:  # check Pps of the other param for x overlap:
                         if (Pp.ix0 - 1 < (_Pp.ix0 + _Pp.iL) and (Pp.ix0 + Pp.iL) + 1 > _Pp.ix0):
-
                             olpL = max(0, min(_Pp.ix0+_Pp.iL, Pp.ix0+Pp.iL) - max(_Pp.ix0, Pp.ix0))  # L of overlap
                             rolp = olpL / ((_Pp.iL + Pp.iL) / 2)  # mean of Ls
                             if rolp > ave_rolp:
                                 derPp = comp_Pp(_Pp,Pp,layer0)
                                 derPp_.append(derPp)
+                        else:
+                            break # next Pp in the right should be overlapped if current Pps isn't overlap
 
-                    derPp__.append(derPp_)
+            if derPp_: # derPp_ is a series of overlapping Pps' derPps
+                form_PP(PP_, derPp_)
+    return PP_
 
-    return derPp__  # not sure about this derPp__, maybe it should be per _Pp?
-
-
-def form_PP_(PP_, derPp__):
+def form_PP(PP_, derPp_):
     '''
     Draft: form PP from derPps formed from different overlapping Pps
     '''
+    fPP = 0
+    PP = CPP() # initialize 1st PP
+    for derPp in derPp_:
+        if derPp.mPp > -ave_M*100 and derPp.dPp > -ave_D*100: # ave is just a placeholder
+            fPP = 1
+            PP.accum_from(derPp)
+            PP.derPp_.append(derPp)
+
+    if fPP: PP_.append(PP)
+
+'''
+def form_PP_(PP_, derPp__):
+    
+    # Draft: form PP from derPps formed from different overlapping Pps
+    
     for derPp_ in derPp__:
         fPP = 0
         PP = CPP() # initialize 1st PP
@@ -196,6 +208,7 @@ def form_PP_(PP_, derPp__):
                 PP.derPp_.append(derPp)
 
         if fPP: PP_.append(PP)
+'''
 
 def comp_Pp(_Pp, Pp, layer0):
     '''
@@ -397,7 +410,7 @@ def intra_Ppm_(Pp_, param_name, rdn, fPd):
         if Pp.M > -ave_M and Pp.M / Pp.L > -ave:
             sub_param_ = []
 
-            for pdert in Pp.dert_:
+            for pdert in Pp.pdert_:
                 if fPd:
                     param_name = "D_"  # comp d
                     sub_param_.append((pdert.d, pdert.x0, pdert.L))
