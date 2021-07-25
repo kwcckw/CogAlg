@@ -151,12 +151,14 @@ def form_Pp_(dert_, param_name, rdn, fPd):  # almost the same as line_patterns f
 
 def comp_overlaps(layer0, fPd):  # find Pps that overlap across 4 Pp_s, compute overlap ratio, call comp_Pp_ and form_PP_
 
-    derPp__ = []  # from comp_Pp of all overlapping Pps
+    PP_ = []
+    derPp___ = []  # from comp_Pp of all overlapping Pps # not in use now?
 
     for i, _param_name in enumerate(layer0): # loop 1st param
         if fPd: _Pp_ = layer0[_param_name][0][1]  # _Ppd
         else:   _Pp_ = layer0[_param_name][0][0]  # _Ppm
-
+        start_ind = {'L_': 0, 'I_': 0, 'D_': 0, 'M_': 0}
+    
         for _Pp in _Pp_:  # Pps of current param, _Pp of 1st param may overlap with multiple Pps of the other param
             derPp__ = []  # from comp_Pp of _Pp to all overlapping Pps
             for j, param_name in enumerate(layer0):
@@ -165,38 +167,47 @@ def comp_overlaps(layer0, fPd):  # find Pps that overlap across 4 Pp_s, compute 
                     else:   Pp_ = layer0[param_name][0][0]  # Ppm
 
                     derPp_ = []  # from comp_Pp of _Pp to overlapping Pps per param
-                    for Pp in Pp_:  # check Pps of the other param for x overlap:
+                    for ind, Pp in enumerate(Pp_[start_ind[param_name]:],start=start_ind[param_name]):  # check Pps of the other param for x overlap:
                         if (Pp.ix0 - 1 < (_Pp.ix0 + _Pp.iL) and (Pp.ix0 + Pp.iL) + 1 > _Pp.ix0):
 
                             olpL = max(0, min(_Pp.ix0+_Pp.iL, Pp.ix0+Pp.iL) - max(_Pp.ix0, Pp.ix0))  # L of overlap
                             rolp = olpL / ((_Pp.iL + Pp.iL) / 2)  # mean of Ls
                             if rolp > ave_rolp:
                                 derPp = comp_Pp(_Pp,Pp,layer0)
-                                derPp_.append(derPp)
+                                derPp_.append((derPp, _param_name, param_name))
                         else:
-                            break  # if current Pp doesn't overlap _Pp, the next one won't either, but next _Pp overlaps current Pp?
-                            # then next _Pp should start looping from current Pp, not from the beginning of Pp_?
+                            
+                            start_ind[param_name] = ind # next Pp starting index for current param_name
+                            break  # if current Pp doesn't overlap _Pp, the next one won't either, but next _Pp overlaps current Pp? Should be
+                            # then next _Pp should start looping from current Pp, not from the beginning of Pp_? Yes
 
                     derPp__.append(derPp_)
 
             if derPp__:  # derPp_s per _Pp
                 form_PP_(PP_, derPp__)
+                derPp___.append(derPp__)
 
-    return derPp__  # not sure about this derPp__, maybe it should be per _Pp?
+    return PP_
+
+    # actually we no need to return derPp here, derPp will be used to form PP anyway
+    # return derPp___  # not sure about this derPp__, maybe it should be per _Pp? 
 
 
-def form_PP_(PP_, derPp_):
+def form_PP_(PP_, derPp__): # derPp__ are formed from overlapping Pps for a single _Pp
     '''
     not reviewed
     Draft: form PP from derPps formed from different overlapping Pps
     '''
+    
+    # need further update here, still in discussion
     fPP = 0
     PP = CPP()  # initialize 1st PP
-    for derPp in derPp_:
-        if derPp.mPp > -ave_M * 100 and derPp.dPp > -ave_D * 100:  # ave is just a placeholder
-            fPP = 1
-            PP.accum_from(derPp)
-            PP.derPp_.append(derPp)
+    for derPp_ in derPp__: 
+        for derPp, _param_name, param_name in derPp_:
+            if derPp.mPp > -ave_M * 100 and derPp.dPp > -ave_D * 100:  # ave is just a placeholder
+                fPP = 1
+                PP.accum_from(derPp)
+                PP.derPp_.append(derPp)
 
     if fPP: PP_.append(PP)
 '''
