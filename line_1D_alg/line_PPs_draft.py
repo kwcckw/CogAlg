@@ -143,7 +143,7 @@ def form_Pp_(dert_, param_name, rdn, fPd):  # almost the same as line_patterns f
 
     if len(Pp_) > 2:
         splice_P_(Pp_, fPd=0)  # merge mean_I- or mean_D- similar and weakly separated Ps
-        if len(Pp_) > 4:
+        if Pp_: # actually how the number of 4 is decided here? intra_Ppm should be feasible with at least 1 Pp
             intra_Ppm_(Pp_, param_name, rdn, fPd)  # evaluates for sub-recursion per Pm
 
     return Pp_
@@ -174,7 +174,7 @@ def comp_overlaps(layer0, fPd):  # find Pps that overlap across 4 Pp_s, compute 
                             rolp = olpL / ((_Pp.iL + Pp.iL) / 2)  # mean of Ls
                             if rolp > ave_rolp:
                                 derPp = comp_Pp(_Pp,Pp,layer0)
-                                derPp_.append((derPp, _param_name, param_name))
+                                derPp_.append((derPp, _param_name, param_name)) # pack derPp bottom up
                         else:
                             
                             start_ind[param_name] = ind # next Pp starting index for current param_name
@@ -184,32 +184,36 @@ def comp_overlaps(layer0, fPd):  # find Pps that overlap across 4 Pp_s, compute 
                     derPp__.append(derPp_)
 
             if derPp__:  # derPp_s per _Pp
-                form_PP_(PP_, derPp__)
                 derPp___.append(derPp__)
 
+    form_PP_(PP_, derPp___)
     return PP_
 
-    # actually we no need to return derPp here, derPp will be used to form PP anyway
-    # return derPp___  # not sure about this derPp__, maybe it should be per _Pp? 
 
-
-def form_PP_(PP_, derPp__): # derPp__ are formed from overlapping Pps for a single _Pp
+def form_PP_(PP_, derPp___): # derPp__ are formed from overlapping Pps for a single _Pp
     '''
     not reviewed
     Draft: form PP from derPps formed from different overlapping Pps
     '''
     
-    # need further update here, still in discussion
-    fPP = 0
-    PP = CPP()  # initialize 1st PP
-    for derPp_ in derPp__: 
-        for derPp, _param_name, param_name in derPp_:
-            if derPp.mPp > -ave_M * 100 and derPp.dPp > -ave_D * 100:  # ave is just a placeholder
-                fPP = 1
-                PP.accum_from(derPp)
-                PP.derPp_.append(derPp)
-
-    if fPP: PP_.append(PP)
+    rdn = {'L_': .25, 'I_': .5, 'D_': .25, 'M_': .5}
+    
+    for derPp__ in derPp___:  # unpack derPp___ top down, where each derPp__ in derPp___ should form 1 PP 
+        fPP = 0
+        PP = CPP()  # initialize 1st PP    
+        
+        for derPp_ in derPp__:  # derPp__ = list of overlapping Pp's derPps for different param_names
+            for (derPp, _param_name, param_name) in derPp_: # derPp_ = list of overlapping Pp's derPps per param_name
+                
+                # mean of match  and difference based on both compared params?
+                mPp = (derPp.mPp * rdn[_param_name] + derPp.mPp * rdn[param_name])/2
+                dPp = (derPp.dPp * rdn[_param_name] + derPp.dPp * rdn[param_name])/2
+                
+                if mPp > ave_M and dPp > ave_D :  # ave is just a placeholder
+                    fPP = 1
+                    PP.accum_from(derPp)
+                    PP.derPp_.append(derPp)         
+        if fPP: PP_.append(PP)
 '''
 We should get 4-layer nesting in derPp____: names ( _ Pp ( names ( Pp ) ) ), and form PP_ out of it.
 PP should combine all matching overlapping Pps, including multiple matches in each dimension.
