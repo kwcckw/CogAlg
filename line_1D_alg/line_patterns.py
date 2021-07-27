@@ -373,7 +373,7 @@ if __name__ == "__main__":
         plt.figure(); plt.imshow(img, cmap='gray'); plt.title('merged image')
         # cv2.imwrite("img_merged.bmp",img)
 
-    fline_PPs = 0
+    fline_PPs = 1
     if fline_PPs:  # debug line_PPs_draft
         from line_PPs_draft import *
         frame_PP_ = []
@@ -382,5 +382,9 @@ if __name__ == "__main__":
             PP_ = search(P_)
             frame_PP_.append(PP_)
 
+        # temporary for debug purpose
+        draw_PP(image, frame_PP_, 0)
+        draw_PP(image, frame_PP_, 1)
+        
     end_time = time() - start_time
     print(end_time)
