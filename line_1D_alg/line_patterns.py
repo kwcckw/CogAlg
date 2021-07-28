@@ -330,6 +330,7 @@ def splice_eval(__P, _P, P, fPd):  # should work for splicing Pps too
     m12 = min(_mean, __mean) - abs(_mean-__mean)/2  # inverse match of P1, P2, should be negative
     m23 = min(_mean, mean) - abs(_mean- mean)/2     # inverse match of P2, P3, should be negative
 
+    #  abs(m12 + m23) could be zero here and causing 0 division problem
     rel_similarity = (m13 * rel_continuity) / abs(m12 + m23)  # * rel_continuity: relative value of m13 vs m12 and m23
     # splice_value = rel_continuity * rel_similarity
 
@@ -381,8 +382,7 @@ if __name__ == "__main__":
             frame_PP_.append(PP_)
 
         # temporary for debug purpose
-        draw_PP(image, frame_PP_, 0)
-        draw_PP(image, frame_PP_, 1)
+        draw_PP_(image, frame_PP_)
         
     end_time = time() - start_time
     print(end_time)
