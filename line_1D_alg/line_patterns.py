@@ -28,7 +28,6 @@ from time import time
 from utils import *
 from itertools import zip_longest
 from frame_2D_alg.class_cluster import ClusterStructure, NoneType, comp_param
-from line_PPs_draft import draw_PP_
 
 class Cdert(ClusterStructure):
     i = int  # input for range_comp only
@@ -372,7 +371,7 @@ if __name__ == "__main__":
         plt.figure(); plt.imshow(img, cmap='gray'); plt.title('merged image')
         # cv2.imwrite("img_merged.bmp",img)
 
-    fline_PPs = 0
+    fline_PPs = 1
     if fline_PPs:  # debug line_PPs_draft
         from line_PPs_draft import *
         frame_PP_ = []
