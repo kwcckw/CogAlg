@@ -45,7 +45,7 @@ class CderPp(ClusterStructure):
 
 class CPP(CPp, CderPp):
     layer1 = dict
-    derPp____ = [[[[]]]]  # _names ( _Pp_ ( names ( Pp_ )))
+    derPp____ = list  # _names ( _Pp_ ( names ( Pp_ )))
     param_name_= list # for visualization purpose
 
 
@@ -204,6 +204,12 @@ def form_PP_(params_derPp____, fPd):  # Draft:
     Rolp = 0
     PP_ = []
     _sign = None
+    
+    # init new empty derPp____ with the same list structure as params_derPp____, for [i][j][k] indexing later
+    derPp____ = [[[[]  for param_derPp_   in param_derPp__] \
+                       for param_derPp__  in param_derPp___] \
+                       for param_derPp___ in params_derPp____]
+    param_name_ = derPp____.copy()
 
     for i, _param_derPp___ in enumerate( params_derPp____):  # derPp___ from comp_Pp (across params)
         for j, _Pp_derPp__ in enumerate( _param_derPp___):  # from comp_Pp (param_Pp_, other params)
@@ -214,7 +220,7 @@ def form_PP_(params_derPp____, fPd):  # Draft:
                     if names[k] != name: raise ValueError("Wrong name")
 
                     mean_rdn = (rdn[i] + rdn[k]) / 2  # of compared params
-                    if "pre_PP" not in locals(): pre_PP = CPP()
+                    if "pre_PP" not in locals(): pre_PP = CPP(derPp____=derPp____.copy())
                     if fPd: derPp_val = derPp.dPp; ave = ave_D
                     else:   derPp_val = derPp.mPp; ave = ave_M
 
@@ -224,27 +230,46 @@ def form_PP_(params_derPp____, fPd):  # Draft:
                         pre_PP.derPp____[i][j][k].append(derPp)
                         pre_PP.param_name_.append((names[i], names[k]))
                     else:
-                        pre_PP = CPP()
+                        pre_PP = CPP(derPp____=derPp____.copy())
                 # tentative:
                 # inclusion into higher layer of pre_PP by the sum of concurrent mPps > ave_M * Rolp, over all lower layers:
-                # use pre_PP_val instead of pre_PP.mPp?
-                if pre_PP.derPp____[i][j][k] and pre_PP.mPp > ave_M * Rolp:
-                    pre_PP.derPp____[i][j].append(pre_PP.derPp____[i][j][k])
-                else:
-                    pre_PP = CPP()
-            if pre_PP.derPp____[i][j] and pre_PP.mPp > ave_M * Rolp:
-                pre_PP.derPp____[i].append(pre_PP.derPp____[i][j])
-            else:
-                pre_PP = CPP()
-        if pre_PP.derPp____[i]:
+                # use pre_PP_val instead of pre_PP.mPp? (what would be pre_PP_val?)
+                if "pre_PP" in locals() and pre_PP.derPp____[i][j][k] and not pre_PP.mPp > ave_M * Rolp: # derPp should be already appended into pre_PP.derPp____[i][j][k], so we just need to check the false condition of (ave_M * Rolp) to init it?
+                    pre_PP = CPP(derPp____=derPp____.copy())
+            
+            # pre_PP.derPp____[i][j] is a nested list, we need to check recursively to determine whether there is any appended derPp
+            if "pre_PP" in locals() and not emptylist(pre_PP.derPp____[i][j]) and not pre_PP.mPp > ave_M * Rolp:
+                pre_PP = CPP(derPp____=derPp____.copy())
+                
+        if "pre_PP" in locals() and not emptylist(pre_PP.derPp____[i]):
             if pre_PP.mPp > ave_M * Rolp:
-                pre_PP.derPp____.append(pre_PP.derPp____[i])
+                pre_PP.derPp____.append(pre_PP.derPp____[i]) # this is not needed?(same as line 237 above), since it is appending back itself?
                 _sign = True
             else:
+                # reset _sign if _sign is true here?
                 if _sign==True: PP_.append(pre_PP)  # terminate previous PP
-                pre_PP = CPP()
+                pre_PP = CPP(derPp____=derPp____.copy())
+
+            # it could be just as below?
+            '''
+            if pre_PP.mPp > ave_M * Rolp*:
+                PP_.append(pre_PP)  # terminate previous PP
+                pre_PP = CPP(derPp____=derPp____.copy())
+            '''
+
 
     return PP_
+
+
+# https://stackoverflow.com/questions/1593564/python-how-to-check-if-a-nested-list-is-essentially-empty
+def emptylist(in_list):
+    '''
+    check if nested list is totally empty
+    '''
+    if isinstance(in_list, list): # Is a list
+        return all( map(emptylist, in_list) )
+    return False # Not a list
+
 
 
 def comp_Pp(_Pp, Pp, layer0):
@@ -459,7 +484,7 @@ def intra_Ppm_(Pp_, param_name, rdn, fPd):
             # add: ave_M + (Pp.M / len(Pp.P_)) / 2 * rdn: ave_M is average of local and global match
             # extended search needs to be restricted to ave_M-terminated derts
 
-
+# yet to be updated
 def draw_PP_(image, frame_PP_):
     # init every possible combinations
     img_mparams = {'L_I_': np.zeros_like(image), 'L_D_': np.zeros_like(image),

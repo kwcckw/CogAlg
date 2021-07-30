@@ -379,7 +379,9 @@ if __name__ == "__main__":
         for y, P_ in enumerate(frame_of_patterns_):
             PP_ = search(P_)
             frame_PP_.append(PP_)
-        draw_PP_(image, frame_PP_)  # debugging
+        
+        # yet to be updated
+        # draw_PP_(image, frame_PP_)  # debugging
 
     end_time = time() - start_time
     print(end_time)
