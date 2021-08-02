@@ -66,16 +66,8 @@ ave_rolp = .5  # ave overlap ratio for comp_Pp
 
 def search(P_):  # cross-compare patterns within horizontal line
     # sub_search_recursive(P_, fderP=0)  # search with incremental distance: first inside sublayers
- 
-    # format = param_name: [ [params], [rdn_m, rdn_d] ]
-    # please check if they are correct, might not be correct
-    layer0 = {'L_': [[],[['M_'], ['I_', 'D_']] ], \
-              'I_': [[],[['D_','M_', 'L_'], ['D_','M_', 'L_']]], \
-              'D_': [[],[['M_','I_','L'], []]], \
-              'M_': [[],[[], ['D_','I_', 'L_']]]}
-    
-    
-    # param[1,2]: redundant params, M*=2: represents both comparands?
+
+    layer0 = {'L_':[],'I_':[],'D_':[],'M_':[]}  # param_name: [params]
     if len(P_) > 1:
         # at least 2 comparands, unpack P_:
         for P in P_:
@@ -89,162 +81,56 @@ def search(P_):  # cross-compare patterns within horizontal line
             mdert_, ddert_ = search_param_(param_name, layer0[param_name])  # layer0[param_name][0].append((Ppm_, Ppd_))
             mdert__.append(mdert_)
             ddert__.append(ddert_)
-            
-        # generate rdn based on their rdn pair on each pdert
-        rdn_m_, rdn_d_ = generate_rdn_(layer0, mdert__, ddert__)
-       
-        for i, (param_name, mdert_, ddert_, rdn_mparam_, rdn_dparam_) in enumerate(zip(layer0, mdert__, ddert__, rdn_m_, rdn_d_)):    
-            
+
+        mrdn_ = sum_rdn_(layer0, mdert__, fPd=True)
+        drdn_ = sum_rdn_(layer0, ddert__, fPd=False)
+
+        for i, (param_name, mdert_, ddert_, rdn_mparam_, rdn_dparam_) in enumerate(zip(layer0, mdert__, ddert__, mrdn_, drdn_)):
             Ppm_ = form_Pp_(mdert_, param_name, rdn_mparam_, fPd=0)
             Ppd_ = form_Pp_(ddert_, param_name, rdn_dparam_, fPd=1)
-            
-        
-        # search is variable-range, so we may have to align pdert_s one-by-one, no zipping?
-        #for L_mdert_, I_mdert_, D_mdert_, M_mdert_ in zip(mdert__[0], mdert__[1], mdert__[2], mdert__[3]):
-        '''
-        access same-P_-index pderts of all params, to compute m|d redundancy to ms|ds of other params.
-        if other-param same-P_-index pdert is missing, rdn doesn't change.
-        '''
-        #Ppm_ = form_Pp_(mdert_, param_name, rdn, fPd=0)
-        #Ppd_ = form_Pp_(ddert_, param_name, rdn, fPd=1)
         '''
         PPm_ = search_Pp_(layer0, fPd=0)  # calls comp_Pp_ and form_PP_ per param
         PPd_ = search_Pp(layer0, fPd=1)
         '''
-        
-        # dummy list, to prevent error, not importnat
+        # dummy list
         PPm_ = []
         PPd_ = []
-        
         return (PPm_, PPd_)
 
 
-# generate rdn values for each pdert oair
-def generate_rdn_(layer0, mdert__, ddert__):
-    # mdert
-    rdn_mL_,rdn_mI_,rdn_mD_,rdn_mM_ =[], [], [], [] # init rdn_
-    for L_mdert, I_mdert, D_mdert, M_mdert in zip(mdert__[0], mdert__[1], mdert__[2], mdert__[3]):
-    
-        rdn_L=rdn_I=rdn_D=rdn_M= 0 # init rdn
-   
+def sum_rdn_(layer0, pdert__, fPd):
+    '''
+    access same-P_-index pderts of all params, to compute m|d redundancy to ms|ds of other params.
+    if other-param same-P_-index pdert is missing, rdn doesn't change.
+    '''
+    if fPd: alt='M'
+    else: alt='D'
+    pair_names = (('I','L'), ('I','D'), ('I','M'), ('L',alt), ('D','M'))
+    pair_rdns = [[0, 0], [0, 0], [0, 0], [0, 0], [0, 0]]  # initialized redundancy per name
+
+    pdert_Rdn=[]
+    # search is variable-range, have to x-align pdert_s one-by-one, no zipping?
+    for L_dert, I_dert, D_dert, M_dert in zip(pdert__[0], pdert__[1], pdert__[2], pdert__[3]):
+
+        for rdn_pair, name_pair in zip(pair_rdns, pair_names):
+            # pseudocode: assign rdn in each pair, using names in the pair as layer0 param_names:
+            if 'name_pair[0]'_dert.m > 'name_pair[1]'_dert.m:
+                rdn_pair[1] = 1
+            else: rdn_pair[0] = 1  # weaker pair rdn=1
+
+        # sum rdn per param from all pairs it is in, pseudocode:
+        # flatten pair_names, pair_rdns?
+        Rdn_=[]
+        Rdn=0
         for param_name in layer0:
-            for param_name_rdn in layer0[param_name][1][0]:
-                
-                if param_name_rdn == "L_": # redundant pair is L   
-                    # check I as redundant pair
-                    if I_mdert.m > L_mdert.m:
-                        rdn_L += 1 # weaker pair rdn += 1
-                    else:
-                        rdn_I += 1    
-                    # check D as redundant pair
-                    if D_mdert.m > L_mdert.m:
-                        rdn_L += 1 # weaker pair rdn += 1
-                    else:
-                        rdn_D += 1     
-                 
-                elif param_name_rdn == "I_": # redundant pair is I
-                    # check D as redundant pair
-                    if D_mdert.m > I_mdert.m:
-                        rdn_I += 1 # weaker pair rdn += 1
-                    else:
-                        rdn_D += 1
-                        
-                elif param_name_rdn == "D_": # redundant pair is D
-                    # check I as redundant pair
-                    if I_mdert.m > D_mdert.m:
-                        rdn_D += 1 # weaker pair rdn += 1
-                    else:
-                        rdn_I += 1
-                
-                elif param_name_rdn == "M_": # redundant pair is M
-                    # check L as redundant pair
-                    if L_mdert.m > M_mdert.m:
-                        rdn_M += 1 # weaker pair rdn += 1
-                    else:
-                        rdn_L += 1   
-                    # check I as redundant pair
-                    if I_mdert.m > M_mdert.m:
-                        rdn_M += 1 # weaker pair rdn += 1
-                    else:
-                        rdn_I += 1       
-                    # check D as redundant pair
-                    if D_mdert.m > M_mdert.m:
-                        rdn_M += 1 # weaker pair rdn += 1
-                    else:
-                        rdn_D += 1 
-        
-        rdn_mL_.append(rdn_L)
-        rdn_mI_.append(rdn_I)
-        rdn_mD_.append(rdn_D)
-        rdn_mM_.append(rdn_M)
-        
-    rdn_m_ = [rdn_mL_,rdn_mI_,rdn_mD_,rdn_mM_] 
-        
-    # ddert
-    rdn_dL_,rdn_dI_,rdn_dD_,rdn_dM_ =[], [], [], [] # init rdn_
-    for L_ddert, I_ddert, D_ddert, M_ddert in zip(ddert__[0], ddert__[1], ddert__[2], ddert__[3]):
-    
-        rdn_L=rdn_I=rdn_D=rdn_M= 0 # init rdn
-   
-        for param_name in layer0:
-            for param_name_rdn in layer0[param_name][1][1]:
-                
-                if param_name_rdn == "L_": # redundant pair is L   
-                    # check I as redundant pair
-                    if I_mdert.m > L_mdert.m:
-                        rdn_L += 1 # weaker pair rdn += 1
-                    else:
-                        rdn_I += 1    
-                    # check M as redundant pair
-                    if M_mdert.m > L_mdert.m:
-                        rdn_L += 1 # weaker pair rdn += 1
-                    else:
-                        rdn_M += 1     
-                 
-                elif param_name_rdn == "I_": # redundant pair is I
-                    # check L as redundant pair
-                    if L_mdert.m > I_mdert.m:
-                        rdn_I += 1 # weaker pair rdn += 1
-                    else:
-                        rdn_L += 1
-                    # check M as redundant pair
-                    if M_mdert.m > I_mdert.m:
-                        rdn_I += 1 # weaker pair rdn += 1
-                    else:
-                        rdn_M += 1
-                        
-                elif param_name_rdn == "D_": # redundant pair is D
-                    # check L as redundant pair
-                    if L_mdert.m > D_mdert.m:
-                        rdn_D += 1 # weaker pair rdn += 1
-                    else:
-                        rdn_L += 1
-                    # check I as redundant pair
-                    if I_mdert.m > D_mdert.m:
-                        rdn_D += 1 # weaker pair rdn += 1
-                    else:
-                        rdn_I += 1
-                    # check M as redundant pair
-                    if M_mdert.m > D_mdert.m:
-                        rdn_D += 1 # weaker pair rdn += 1
-                    else:
-                        rdn_M += 1
-                elif param_name_rdn == "M_": # redundant pair is M
-                    # check I as redundant pair
-                    if I_mdert.m > M_mdert.m:
-                        rdn_M += 1 # weaker pair rdn += 1
-                    else:
-                        rdn_I += 1       
+            for name_in_pair, rdn in zip(pair_names, pair_rdns):
+                if param_name==name_in_pair:
+                    Rdn+=rdn  # M*=2: represents both comparands?
+            Rdn_.append(Rdn)  # Rdn per name in pdert
 
-        rdn_dL_.append(rdn_L)
-        rdn_dI_.append(rdn_I)
-        rdn_dD_.append(rdn_D)
-        rdn_dM_.append(rdn_M)
+        pdert_Rdn_.append(Rdn_)  # same length as pdert_
 
-
-    rdn_d_ = [rdn_dL_,rdn_dI_,rdn_dD_,rdn_dM_] 
-      
-    return rdn_m_, rdn_d_
+    return pdert_Rdn_
 
 
 def search_param_(param_name, iparam):
@@ -285,7 +171,7 @@ def form_Pp_(dert_, param_name, rdn_, fPd):  # almost the same as line_patterns 
     Pp_ = []
     x = 0
     _sign = None  # to initialize 1st P, (None != True) and (None != False) are both True
-    
+
     for dert, rdn in zip(dert_, rdn_):  # segment by sign
         if fPd: sign = dert.d > 0
         else:   sign = dert.m > 0  # adjust by ave projected at distance=negL and contrast=negM, if significant:
@@ -308,7 +194,135 @@ def form_Pp_(dert_, param_name, rdn_, fPd):  # almost the same as line_patterns 
     '''
     return Pp_
 
-# obsolete:
+
+def generate_rdn_(layer0, mdert__, ddert__):
+
+    rdn_mL_,rdn_mI_,rdn_mD_,rdn_mM_ =[], [], [], [] # init rdn_
+    # search is variable-range, we may have to align pdert_s one-by-one, no zipping?
+    for L_mdert, I_mdert, D_mdert, M_mdert in zip(mdert__[0], mdert__[1], mdert__[2], mdert__[3]):
+
+        rdn_L=rdn_I=rdn_D=rdn_M= 0 # init rdn
+
+        for param_name in layer0:
+            for param_name_rdn in layer0[param_name][1][0]:
+
+                if param_name_rdn == "L_": # redundant pair is L
+                    # check I as redundant pair
+                    if I_mdert.m > L_mdert.m:
+                        rdn_L += 1 # weaker pair rdn += 1
+                    else:
+                        rdn_I += 1
+                    # check D as redundant pair
+                    if D_mdert.m > L_mdert.m:
+                        rdn_L += 1 # weaker pair rdn += 1
+                    else:
+                        rdn_D += 1
+
+                elif param_name_rdn == "I_": # redundant pair is I
+                    # check D as redundant pair
+                    if D_mdert.m > I_mdert.m:
+                        rdn_I += 1 # weaker pair rdn += 1
+                    else:
+                        rdn_D += 1
+
+                elif param_name_rdn == "D_": # redundant pair is D
+                    # check I as redundant pair
+                    if I_mdert.m > D_mdert.m:
+                        rdn_D += 1 # weaker pair rdn += 1
+                    else:
+                        rdn_I += 1
+
+                elif param_name_rdn == "M_": # redundant pair is M
+                    # check L as redundant pair
+                    if L_mdert.m > M_mdert.m:
+                        rdn_M += 1 # weaker pair rdn += 1
+                    else:
+                        rdn_L += 1
+                    # check I as redundant pair
+                    if I_mdert.m > M_mdert.m:
+                        rdn_M += 1 # weaker pair rdn += 1
+                    else:
+                        rdn_I += 1
+                    # check D as redundant pair
+                    if D_mdert.m > M_mdert.m:
+                        rdn_M += 1 # weaker pair rdn += 1
+                    else:
+                        rdn_D += 1
+
+        rdn_mL_.append(rdn_L)
+        rdn_mI_.append(rdn_I)
+        rdn_mD_.append(rdn_D)
+        rdn_mM_.append(rdn_M)
+
+    rdn_m_ = [rdn_mL_,rdn_mI_,rdn_mD_,rdn_mM_]
+
+    # ddert
+    rdn_dL_,rdn_dI_,rdn_dD_,rdn_dM_ =[], [], [], [] # init rdn_
+    for L_ddert, I_ddert, D_ddert, M_ddert in zip(ddert__[0], ddert__[1], ddert__[2], ddert__[3]):
+
+        rdn_L=rdn_I=rdn_D=rdn_M= 0 # init rdn
+
+        for param_name in layer0:
+            for param_name_rdn in layer0[param_name][1][1]:
+
+                if param_name_rdn == "L_": # redundant pair is L
+                    # check I as redundant pair
+                    if I_mdert.m > L_mdert.m:
+                        rdn_L += 1 # weaker pair rdn += 1
+                    else:
+                        rdn_I += 1
+                    # check M as redundant pair
+                    if M_mdert.m > L_mdert.m:
+                        rdn_L += 1 # weaker pair rdn += 1
+                    else:
+                        rdn_M += 1
+
+                elif param_name_rdn == "I_": # redundant pair is I
+                    # check L as redundant pair
+                    if L_mdert.m > I_mdert.m:
+                        rdn_I += 1 # weaker pair rdn += 1
+                    else:
+                        rdn_L += 1
+                    # check M as redundant pair
+                    if M_mdert.m > I_mdert.m:
+                        rdn_I += 1 # weaker pair rdn += 1
+                    else:
+                        rdn_M += 1
+
+                elif param_name_rdn == "D_": # redundant pair is D
+                    # check L as redundant pair
+                    if L_mdert.m > D_mdert.m:
+                        rdn_D += 1 # weaker pair rdn += 1
+                    else:
+                        rdn_L += 1
+                    # check I as redundant pair
+                    if I_mdert.m > D_mdert.m:
+                        rdn_D += 1 # weaker pair rdn += 1
+                    else:
+                        rdn_I += 1
+                    # check M as redundant pair
+                    if M_mdert.m > D_mdert.m:
+                        rdn_D += 1 # weaker pair rdn += 1
+                    else:
+                        rdn_M += 1
+                elif param_name_rdn == "M_": # redundant pair is M
+                    # check I as redundant pair
+                    if I_mdert.m > M_mdert.m:
+                        rdn_M += 1 # weaker pair rdn += 1
+                    else:
+                        rdn_I += 1
+
+        rdn_dL_.append(rdn_L)
+        rdn_dI_.append(rdn_I)
+        rdn_dD_.append(rdn_D)
+        rdn_dM_.append(rdn_M)
+
+
+    rdn_d_ = [rdn_dL_,rdn_dI_,rdn_dD_,rdn_dM_]
+
+    return rdn_m_, rdn_d_
+
+# below obsolete:
 
 def form_PP_(params_derPp____, fPd):  # Draft:
     '''
@@ -355,7 +369,6 @@ def form_PP_(params_derPp____, fPd):  # Draft:
                 # inclusion into higher layer of pre_PP by the sum of concurrent mPps > ave_M * Rolp, over all lower layers:
                 if "pre_PP" in locals() and pre_PP.derPp____[i][j][k] and not pre_PP.mPp > ave_M * Rolp:
                     pre_PP = CPP(derPp____=derPp____.copy())
-
             # pre_PP.derPp____[i][j] is a nested list, we need to check recursively to determine whether there is any appended derPp
             if "pre_PP" in locals() and not emptylist(pre_PP.derPp____[i][j]) and not pre_PP.mPp > ave_M * Rolp:
                 pre_PP = CPP(derPp____=derPp____.copy())
