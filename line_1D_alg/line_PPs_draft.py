@@ -84,19 +84,15 @@ def search(P_):  # cross-compare patterns within horizontal line
             mdert__.append(mdert_)
             ddert__.append(ddert_)
 
-        # ddert negL is always 0, the purpose of getting ddert index is to get a consistent index for sum_rdn_
-        mdert_index__ = [[ i+mdert.negL for i, mdert in enumerate(mdert_)] for mdert_ in mdert__]
-        ddert_index__ = [[ i+ddert.negL for i, ddert in enumerate(ddert_)] for ddert_ in ddert__]
+        mrdn_ = sum_rdn_(layer0, mdert__, fPd=True)
+        drdn_ = sum_rdn_(layer0, ddert__, fPd=False)
 
-        mrdn_ = sum_rdn_(mdert_index__, mdert__, fPd=True)
-        drdn_ = sum_rdn_(ddert_index__, ddert__, fPd=False)
-
-        for i, (param_name, mdert_, ddert_, rdn_mparam_, rdn_dparam_) in enumerate(zip(layer0, mdert__, ddert__, mrdn_, drdn_)):
-            Ppm_ = form_Pp_(mdert_, param_name, rdn_mparam_, fPd=0)
-            Ppd_ = form_Pp_(ddert_, param_name, rdn_dparam_, fPd=1)
+        for i, (param_name, mdert_, ddert_, mpar_rdn_, dpar_rdn_) in enumerate(zip(layer0, mdert__, ddert__, mrdn_, drdn_)):
+            Ppm_ = form_Pp_(mdert_, param_name, mpar_rdn_, fPd=0)
+            Ppd_ = form_Pp_(ddert_, param_name, dpar_rdn_, fPd=1)
         '''
         PPm_ = search_Pp_(layer0, fPd=0)  # calls comp_Pp_ and form_PP_ per param
-        PPd_ = search_Pp(layer0, fPd=1)
+        PPd_ = search_Pp_(layer0, fPd=1)
         '''
         # dummy list
         PPm_ = []
@@ -104,57 +100,41 @@ def search(P_):  # cross-compare patterns within horizontal line
         return (PPm_, PPd_)
 
 
-def sum_rdn_(dert_index__, pdert__, fPd):
+def sum_rdn_(layer0, pdert__, fPd):
     '''
     access same-P_-index pderts of all params, to compute m|d redundancy to ms|ds of other params.
     if other-param same-P_-index pdert is missing, rdn doesn't change.
     '''
     if fPd: alt='M'
     else: alt='D'
-    pair_names = (('I','L'), ('I','D'), ('I','M'), ('L',alt), ('D','M'))
-     # initialized redundancy per name
-    
-    dert_ = {'L':[],'I':[],'D':[],'M':[]}
+    name_pairs = (('I','L'), ('I','D'), ('I','M'), ('L',alt), ('D','M'))
+    pderts = {'L':[],'I':[],'D':[],'M':[]}
+    pderts_Rdn = [[], [], [], []]  # L_, I_, D_, M_' Rdns
 
-    pdert_Rdn_=[[],[],[],[]] # L_, I_, D_, M_'s rdn
+    # there is pdert for each _P
+    for L_dert, I_dert, D_dert, M_dert in zip(pdert__[0], pdert__[1], pdert__[2], pdert__[3]):
+        rdn_pairs = [[0, 0], [0, 0], [0, 0], [0, 0], [0, 0]]
 
-    for i in range(np.max(dert_index__)+1): # loop each x index, find the pderts from L, I, D, M with the same x index
-        
-        # init for every new pdert
-        pair_rdns = [[0, 0], [0, 0], [0, 0], [0, 0], [0, 0]] 
-        
-        # current x-index corresponding to pdert, x-index might be empty or > 1 instance(more than 1 pdert is having same index, this is possible after x-index+negL) 
-        L_index_ = np.where(np.array(dert_index__[0]) == i)[0]
-        I_index_ = np.where(np.array(dert_index__[1]) == i)[0]
-        D_index_ = np.where(np.array(dert_index__[2]) == i)[0]
-        M_index_ = np.where(np.array(dert_index__[3]) == i)[0]
-        
-        dert_['L'] = [pdert__[0][L_index] for L_index in L_index_]
-        dert_['I'] = [pdert__[1][I_index] for I_index in I_index_]
-        dert_['D'] = [pdert__[2][D_index] for D_index in D_index_]
-        dert_['M'] = [pdert__[3][M_index] for M_index in M_index_]
+        for rdn_pair, name_pair in zip(rdn_pairs, name_pairs):
+            # assign rdn in each pair using partial name replacement: https://www.w3schools.com/python/ref_func_eval.asp
+            if name_pair[0] + "_dert.m > " + name_pair[1] + "_dert.m":
+                rdn_pair[1] = 1
+            else:
+                rdn_pair[0] = 1  # weaker pair rdn=1
+        # sum rdn per param from all pairs it is in, probably not correct:
+        # flatten pair_names, pair_rdns?
+        Rdn_ = []
+        Rdn = 0
+        for param_name in layer0:
+            for name_in_pair, rdn in zip(name_pairs, rdn_pairs):
+                if param_name == name_in_pair:
+                    Rdn += rdn  # M*=2: represents both comparands?
+            Rdn_.append(Rdn)  # Rdn per name in pdert
 
-        # compute rdn based on rdn pairs
-        for rdn_pair, name_pair in zip(pair_rdns, pair_names):
-            for dert0 in dert_[name_pair[0]]:
-                for dert1 in dert_[name_pair[1]]:
-                    if dert0.m > dert1.m:
-                        rdn_pair[1] += 1 # use +1? Since we might get more than 1 dert in single x-index
-                    else:
-                        rdn_pair[0] += 1
-                        
-        # sum rdn per param from all pairs it is in:
-        for j, param_name in enumerate(['L', 'I', 'D', 'M']):
-            Rdn=0
-            for rdn_pair, name_pair in zip(pair_rdns, pair_names):
-                if param_name==name_pair[0]:
-                    Rdn+=rdn_pair[0]  # M*=2: represents both comparands? (why we need M*=2? Since we are having 2 elements rdn, 1 for each comparand?)
-                elif param_name==name_pair[1]:
-                    Rdn+=rdn_pair[1]
+        pderts_Rdn.append(Rdn_)  # same length as pdert_
 
-            pdert_Rdn_[j].append(Rdn)  # same length as pdert_
 
-    return pdert_Rdn_
+    return pderts_Rdn
 
 
 def search_param_(param_name, param_):
@@ -202,7 +182,8 @@ def form_Pp_(dert_, param_name, rdn_, fPd):  # almost the same as line_patterns 
                 # m + ddist_ave = ave - ave * (ave_rM * (1 + negL / ((param.L + _param.L) / 2))) / (1 + negM / ave_negM)?
         if sign != _sign:
             # sign change, initialize P and append it to P_
-            Pp = CPp(L=1, iL=dert.L, I=dert.p, D=dert.d, M=dert.m, Rdn=rdn, negiL=dert.negiL, negL=dert.negL, negM=dert.negM, x0=x, ix0=dert.x0, pdert_=[dert], sublayers=[], fPd=fPd)
+            Pp = CPp(L=1, iL=dert.L, I=dert.p, D=dert.d, M=dert.m, Rdn=rdn, negiL=dert.negiL, negL=dert.negL, negM=dert.negM,
+                     x0=x, ix0=dert.x0, pdert_=[dert], sublayers=[], fPd=fPd)
             Pp_.append(Pp)  # updated with accumulation below
         else:
             # accumulate params:
