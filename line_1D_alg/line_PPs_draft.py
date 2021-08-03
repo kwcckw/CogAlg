@@ -108,8 +108,7 @@ def sum_rdn_(layer0, pdert__, fPd):
     if fPd: alt='M'
     else: alt='D'
     name_pairs = (('I','L'), ('I','D'), ('I','M'), ('L',alt), ('D','M'))
-    pderts = {'L':[],'I':[],'D':[],'M':[]}
-    pderts_Rdn = [[], [], [], []]  # L_, I_, D_, M_' Rdns
+    pderts_Rdn = [[], [], [], []]  # L_, I_, D_, M_' Rdns , same structure with pdert__
 
     # there is pdert for each _P
     for L_dert, I_dert, D_dert, M_dert in zip(pdert__[0], pdert__[1], pdert__[2], pdert__[3]):
@@ -117,23 +116,22 @@ def sum_rdn_(layer0, pdert__, fPd):
 
         for rdn_pair, name_pair in zip(rdn_pairs, name_pairs):
             # assign rdn in each pair using partial name replacement: https://www.w3schools.com/python/ref_func_eval.asp
-            if name_pair[0] + "_dert.m > " + name_pair[1] + "_dert.m":
+            if eval(name_pair[0]+"_dert.m > " + name_pair[1] + "_dert.m"):
                 rdn_pair[1] = 1
             else:
                 rdn_pair[0] = 1  # weaker pair rdn=1
         # sum rdn per param from all pairs it is in, probably not correct:
         # flatten pair_names, pair_rdns?
-        Rdn_ = []
-        Rdn = 0
-        for param_name in layer0:
+        for i, param_name in enumerate(layer0):
+            Rdn = 0
             for name_in_pair, rdn in zip(name_pairs, rdn_pairs):
-                if param_name == name_in_pair:
-                    Rdn += rdn  # M*=2: represents both comparands?
-            Rdn_.append(Rdn)  # Rdn per name in pdert
-
-        pderts_Rdn.append(Rdn_)  # same length as pdert_
-
-
+                if param_name[0] == name_in_pair[0]: # param_name = "L_", param_name[0] = "L"
+                    Rdn += rdn[0]  # M*=2: represents both comparands?
+                elif param_name[0] == name_in_pair[1]:
+                    Rdn += rdn[1]  # M*=2: represents both comparands?
+                    
+            pderts_Rdn[i].append(Rdn)  # same length as pdert_
+            
     return pderts_Rdn
 
 
@@ -192,140 +190,19 @@ def form_Pp_(dert_, param_name, rdn_, fPd):  # almost the same as line_patterns 
         x += 1
         _sign = sign
 
-    '''
+    
     if len(Pp_) > 2:
         splice_P_(Pp_, fPd=0)  # merge mean_I- or mean_D- similar and weakly separated Ps; move to comp_param instead?
-        intra_Ppm_(Pp_, param_name, rdn, fPd)  # evaluates for sub-recursion per Pm
-    '''
+#        intra_Ppm_(Pp_, param_name, rdn, fPd)  # evaluates for sub-recursion per Pm
+    
     return Pp_
 
 
-def generate_rdn_(layer0, mdert__, ddert__):
 
-    rdn_mL_,rdn_mI_,rdn_mD_,rdn_mM_ =[], [], [], [] # init rdn_
-    # search is variable-range, we may have to align pdert_s one-by-one, no zipping?
-    for L_mdert, I_mdert, D_mdert, M_mdert in zip(mdert__[0], mdert__[1], mdert__[2], mdert__[3]):
-
-        rdn_L=rdn_I=rdn_D=rdn_M= 0 # init rdn
-
-        for param_name in layer0:
-            for param_name_rdn in layer0[param_name][1][0]:
-
-                if param_name_rdn == "L_": # redundant pair is L
-                    # check I as redundant pair
-                    if I_mdert.m > L_mdert.m:
-                        rdn_L += 1 # weaker pair rdn += 1
-                    else:
-                        rdn_I += 1
-                    # check D as redundant pair
-                    if D_mdert.m > L_mdert.m:
-                        rdn_L += 1 # weaker pair rdn += 1
-                    else:
-                        rdn_D += 1
-
-                elif param_name_rdn == "I_": # redundant pair is I
-                    # check D as redundant pair
-                    if D_mdert.m > I_mdert.m:
-                        rdn_I += 1 # weaker pair rdn += 1
-                    else:
-                        rdn_D += 1
-
-                elif param_name_rdn == "D_": # redundant pair is D
-                    # check I as redundant pair
-                    if I_mdert.m > D_mdert.m:
-                        rdn_D += 1 # weaker pair rdn += 1
-                    else:
-                        rdn_I += 1
-
-                elif param_name_rdn == "M_": # redundant pair is M
-                    # check L as redundant pair
-                    if L_mdert.m > M_mdert.m:
-                        rdn_M += 1 # weaker pair rdn += 1
-                    else:
-                        rdn_L += 1
-                    # check I as redundant pair
-                    if I_mdert.m > M_mdert.m:
-                        rdn_M += 1 # weaker pair rdn += 1
-                    else:
-                        rdn_I += 1
-                    # check D as redundant pair
-                    if D_mdert.m > M_mdert.m:
-                        rdn_M += 1 # weaker pair rdn += 1
-                    else:
-                        rdn_D += 1
-
-        rdn_mL_.append(rdn_L)
-        rdn_mI_.append(rdn_I)
-        rdn_mD_.append(rdn_D)
-        rdn_mM_.append(rdn_M)
-
-    rdn_m_ = [rdn_mL_,rdn_mI_,rdn_mD_,rdn_mM_]
-
-    # ddert
-    rdn_dL_,rdn_dI_,rdn_dD_,rdn_dM_ =[], [], [], [] # init rdn_
-    for L_ddert, I_ddert, D_ddert, M_ddert in zip(ddert__[0], ddert__[1], ddert__[2], ddert__[3]):
-
-        rdn_L=rdn_I=rdn_D=rdn_M= 0 # init rdn
-
-        for param_name in layer0:
-            for param_name_rdn in layer0[param_name][1][1]:
-
-                if param_name_rdn == "L_": # redundant pair is L
-                    # check I as redundant pair
-                    if I_mdert.m > L_mdert.m:
-                        rdn_L += 1 # weaker pair rdn += 1
-                    else:
-                        rdn_I += 1
-                    # check M as redundant pair
-                    if M_mdert.m > L_mdert.m:
-                        rdn_L += 1 # weaker pair rdn += 1
-                    else:
-                        rdn_M += 1
-
-                elif param_name_rdn == "I_": # redundant pair is I
-                    # check L as redundant pair
-                    if L_mdert.m > I_mdert.m:
-                        rdn_I += 1 # weaker pair rdn += 1
-                    else:
-                        rdn_L += 1
-                    # check M as redundant pair
-                    if M_mdert.m > I_mdert.m:
-                        rdn_I += 1 # weaker pair rdn += 1
-                    else:
-                        rdn_M += 1
-
-                elif param_name_rdn == "D_": # redundant pair is D
-                    # check L as redundant pair
-                    if L_mdert.m > D_mdert.m:
-                        rdn_D += 1 # weaker pair rdn += 1
-                    else:
-                        rdn_L += 1
-                    # check I as redundant pair
-                    if I_mdert.m > D_mdert.m:
-                        rdn_D += 1 # weaker pair rdn += 1
-                    else:
-                        rdn_I += 1
-                    # check M as redundant pair
-                    if M_mdert.m > D_mdert.m:
-                        rdn_D += 1 # weaker pair rdn += 1
-                    else:
-                        rdn_M += 1
-                elif param_name_rdn == "M_": # redundant pair is M
-                    # check I as redundant pair
-                    if I_mdert.m > M_mdert.m:
-                        rdn_M += 1 # weaker pair rdn += 1
-                    else:
-                        rdn_I += 1
-
-        rdn_dL_.append(rdn_L)
-        rdn_dI_.append(rdn_I)
-        rdn_dD_.append(rdn_D)
-        rdn_dM_.append(rdn_M)
+def form_PPp_(Pp_, fPd):  # Draft:
+    pass
 
 
-    rdn_d_ = [rdn_dL_,rdn_dI_,rdn_dD_,rdn_dM_]
-
-    return rdn_m_, rdn_d_
 
 # below obsolete:
 
@@ -420,6 +297,9 @@ def comp_Pp(_Pp, Pp, layer0):
 
     negM = _Pp.negM - Pp.negM
     negL = _Pp.L - Pp.negL
+    negiL = _Pp.iL - Pp.negiL
+    
+    
     '''
     options for div_comp, etc.    
     if P.sign == _P.sign: mP *= 2  # sign is MSB, value of sign match = full magnitude match?
@@ -435,7 +315,7 @@ def comp_Pp(_Pp, Pp, layer0):
         derP = CderP(sign=sign, mP=mP, neg_M=neg_M, neg_L=neg_L, P=_P, layer1=layer1)
         _P.derP = derP
     '''
-    derPp = CderPp( mPp=mPp, dPp=dPp, negM=negM, negL=negL, _Pp=_Pp, Pp=Pp, layer1=layer1)
+    derPp = CderPp( mPp=mPp, dPp=dPp, negM=negM, negL=negL, negiL=negiL, _Pp=_Pp, Pp=Pp, layer1=layer1)
 
     return derPp
 
