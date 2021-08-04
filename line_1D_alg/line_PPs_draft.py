@@ -93,7 +93,9 @@ def search(P_):  # cross-compare patterns within horizontal line
             rdn_Ppm_ = form_rdnPp_(Ppm_, fPd=0)
             Ppd_ = form_Pp_(ddert_, param_name, drdn_, fPd=1)
             rdn_Ppd_ = form_rdnPp_(Ppd_, fPd=1)
-
+            
+        # compare&replace P with rdn_Pp here after we formed rdn_Pp with all params?
+            
         return (rdn_Ppm_, rdn_Ppd_)
 
 '''
@@ -204,8 +206,32 @@ def form_Pp_(dert_, param_name, rdn_, fPd):  # almost the same as line_patterns 
 def form_rdnPp_(Pp_, fPd):
 
     # then call splicing / P-level removal per rdn_Pp_
-    pass
+    rdnPp_ = []
+    
+    x = 0
+    _sign = None  # to initialize 1st rdn Pp, (None != True) and (None != False) are both True
 
+    for Pp in Pp_:  # segment by sign
+        if fPd: 
+            sign = abs(Pp.D) - Pp.Rdn * ave_D * Pp.L > 0
+        else:   
+            sign = abs(Pp.D) - Pp.Rdn * ave_D * Pp.L > 0
+               
+        if sign != _sign:
+            # sign change, initialize P and append it to P_
+            rdnPp = CPp(L=1, iL=Pp.iL, I=Pp.I, D=Pp.D, M=Pp.M, Rdn=Pp.Rdn, negiL=Pp.negiL, negL=Pp.negL, negM=Pp.negM,
+                     x0=x, ix0=Pp.ix0, pdert_=[Pp], sublayers=[], fPd=fPd)
+            rdnPp_.append(rdnPp)  # updated with accumulation below
+        else:
+            # accumulate params:
+            rdnPp.L += 1; rdnPp.iL += Pp.iL; rdnPp.I += Pp.I; rdnPp.D += Pp.D;rdnPp.M += Pp.M; 
+            rdnPp.Rdn+=Pp.Rdn; rdnPp.negiL+=Pp.negiL; rdnPp.negL+=Pp.negL; rdnPp.negM+=Pp.negM
+            rdnPp.pdert_ += [Pp]
+        x += 1
+        _sign = sign
+        
+    
+    return rdnPp_
 
 def intra_Ppm_(Pp_, param_name, rdn, fPd):
     '''
