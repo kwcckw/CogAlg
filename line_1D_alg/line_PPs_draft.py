@@ -120,7 +120,7 @@ def sum_rdn_(layer0, pdert__, fPd):
             # assign rdn in each rdn_pair using partial name replacement: https://www.w3schools.com/python/ref_func_eval.asp
             if fPd:
                 # we need to compare abs ds here, how is it done with strings?
-                if eval(name_pair[0]+"_dert.d > " + name_pair[1] + "_dert.d"):  # (param_name)_dert.d|m
+                if eval("abs("+name_pair[0]+"_dert.d) >  abs("+name_pair[1]+"_dert.d)"): # (param_name)_dert.d|m
                     rdn_pair[1] = 1
                 else: rdn_pair[0] = 1  # weaker pair rdn=1
             else:
@@ -229,6 +229,30 @@ def form_rdn_Pp_(Pp_, fPd):
 
 
 def Pp_x_pdert_rdn_eval(Pp):  # adjust for cross-level rdn, then Pp and Pp.pdert_P_ eval to keep or remove
+    
+    Pp_val = Pp.rval / Pp.L - ave   # (resolution reduction)
+    pdert_val = Pp.rval - ave * Pp.L # (cost = number of representations)?
+    
+    if Pp_val > pdert_val:
+        pdert_val -= ave*Pp.Rdn - Pp_val
+    else:
+        Pp_val -= ave*Pp.Rdn # ave(rdn) is an ave scaled by rdn? Or a new ave?
+
+    if Pp_val <= 0:
+        # Pp remove: Pp = current param' list from _Ps in pdert_?
+        Pp.L = 0
+        Pp.I = 0
+        Pp.D = 0
+        Pp.M = 0
+        Pp.negM = 0
+        Pp.negL = 0
+        Pp.Rdn = 0
+
+    elif pdert_val <= 0:
+        Pp.pdert_ = [] # remove them?
+        # pdert_ remove: Pp = spliced pdert_'_Ps, including spliced dert_s, only for I-> Pm or D-> Pd?
+    
+
     '''
     Pp value = rval / P.L (resolution reduction) - ave
     pdert_ value: rval - Pp value - ave * P.L (cost = number of representations)?
