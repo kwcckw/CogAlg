@@ -81,7 +81,12 @@ def search(P_):  # cross-compare patterns within horizontal line
 
         mdert__ = []; ddert__ = []
         for param_name in layer0:  # loop L_, I_, D_, M_
-            mdert_, ddert_ = search_param_(param_name, layer0[param_name])  # layer0[param_name][0].append((Ppm_, Ppd_))
+             
+            param_ = layer0[param_name]
+            if param_name == "I_": # if param = I, project D
+                param_ = [(sum([I,D/2]),L,x0) for (I,L,x0 ), (D,_,_) in zip(param_, layer0["D_"])]
+            
+            mdert_, ddert_ = search_param_(param_name, param_)  # layer0[param_name][0].append((Ppm_, Ppd_))
             mdert__.append(mdert_)
             ddert__.append(ddert_)
 
@@ -221,9 +226,15 @@ def form_rdn_Pp_(Pp_, fPd):
                     if Pp_val > pdert_val: pdert_val -= ave * Pp.Rdn
                     else:                  Pp_val -= ave * Pp.Rdn  # ave scaled by rdn
                     if Pp_val <= 0:
-                        rPp.pdert_[i] = CPp(Pp.pdert_)  # Pp remove: reset Pp vars to 0
+                        rPp.pdert_[i] = CPp(pdert_=Pp.pdert_)  # Pp remove: reset Pp vars to 0
                     elif pdert_val <= 0:
-                        Pp.pdert_ = []  # pdert_ remove, splice pdert_'_Ps if param is I: P-defining on a dert level?
+                        if ((param_name == "I_") and not fPd) or ((param_name == "D_") and fPd): # splice all Ps (or = splice all pderts into 1 pdert)   
+                            _pdert = Pp.pdert_[0]
+                            for pdert in Pp.pdert_[1:]:
+                                _pdert.accum_from(pdert,excluded=["x0"])
+                            Pp.pdert_ = [_pdert]
+                        else:
+                            Pp.pdert_ = []  # pdert_ remove, splice pdert_'_Ps if param is I: P-defining on a dert level?
 
             rPp_.append(rPp)  # updated with accumulation below
         else:
@@ -245,10 +256,15 @@ def Pp_x_pdert_rdn_eval(Pp):  # adjust for cross-level rdn, then Pp and Pp.pdert
     if Pp_val > pdert_val: pdert_val -= ave * Pp.Rdn
     else:                  Pp_val -= ave * Pp.Rdn  # ave scaled by rdn
     if Pp_val <= 0:
-        Pp = CPp(Pp.pdert_)  # Pp remove: reset Pp vars to 0
+        Pp = CPp(pdert=Pp.pdert_)  # Pp remove: reset Pp vars to 0
     elif pdert_val <= 0:
-        Pp.pdert_ = []  # pdert_ remove: Pp = spliced pdert_'_Ps, including spliced dert_s, only for I-> Pm or D-> Pd?
-
+        if ((param_name == "I_") and not fPd) or ((param_name == "D_") and fPd): # splice all Ps (or = splice all pderts into 1 pdert)   
+            _pdert = Pp.pdert_[0]
+            for pdert in Pp.pdert_[1:]:
+                _pdert.accum_from(pdert,excluded=["x0"])
+            Pp.pdert_ = [_pdert]
+        else:
+            Pp.pdert_ = []  # pdert_ remove, splice pdert_'_Ps if param is I: P-defining on a dert level?
 
 def intra_Ppm_(Pp_, param_name, fPd):
     '''
@@ -269,7 +285,7 @@ def intra_Ppm_(Pp_, param_name, fPd):
                     sub_param_.append((pdert.d, pdert.x0, pdert.L))
                 else:
                     param_name = "I_"  # comp i @ local ave_M
-                    sub_param_.append((pdert.i, pdert.x0, pdert.L))
+                    sub_param_.append((pdert.i + (pdert.d/2), pdert.x0, pdert.L))
 
             Pp.sublayers = search_param_(param_name, sub_param_)  # iparam = sub_param_: (param1, x01, L1),(param2, x02, L2),...
             # add: ave_M + (Pp.M / len(Pp.P_)) / 2 * rdn: ave_M is average of local and global match?
