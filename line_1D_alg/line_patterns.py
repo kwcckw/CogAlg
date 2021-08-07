@@ -208,15 +208,12 @@ def form_adjacent_M_(Pm_):  # compute array of adjacent Ms, for contrastive borr
     On the other hand, we may have a 2D outline or 1D contrast with low gradient / difference, but it terminates some high-match area.
     Contrast is salient to the extent that it can borrow sufficient predictive value from adjacent high-match area.
     '''
-    
-    # it should be start from Pm_[1:], since the 1st Pm's adjacent M should be 0 and Pm_[1]
-    M_ = [0] + [Pm.M for Pm in Pm_[1:]] + [0]  # list of adj M components in the order of Pm_
+    M_ = [0] + [Pm.M for Pm in Pm_] + [0]  # list of adj M components in the order of Pm_, + first and last M=0,
 
     adj_M_ = [ (abs(prev_M) + abs(next_M)) / 2  # mean adjacent Ms
-               for prev_M, next_M in zip(M_[:-1], M_[1:])  # exclude 1st and last Ms, added below:
+               for prev_M, next_M in zip(M_[:-2], M_[2:])  # exclude first and last Ms
              ]
-    # adj_M_ = [ M_[1]] + adj_M_ + [M_[-2] ]  # extend adj_M_ with first and last Ms, ~[ M_[1]], [adj_M_], [M_[-2] ]?
-
+    # adj_M_ = [ M_[1]] + adj_M_ + [M_[-2] ]
     ''' expanded:
     pri_M = Pm_[0].M  # deriv_comp value is borrowed from adjacent opposite-sign Ms
     M = Pm_[1].M
@@ -373,7 +370,7 @@ if __name__ == "__main__":
         plt.figure(); plt.imshow(img, cmap='gray'); plt.title('merged image')
         # cv2.imwrite("img_merged.bmp",img)
 
-    fline_PPs = 1
+    fline_PPs = 0
     if fline_PPs:  # debug line_PPs_draft
         from line_PPs_draft import *
         frame_PP_ = []
