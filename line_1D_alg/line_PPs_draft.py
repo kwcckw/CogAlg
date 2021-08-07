@@ -83,11 +83,13 @@ def search(P_):  # cross-compare patterns within horizontal line
 
         mdert__ = []; ddert__ = []; param_ = []
 
-        for param_name, fPd in zip(layer0, fPd_):  # loop L_, I_, D_, M_
-            if param_name == "I_" and not fPd:  # project by D
-                for (I,L,x0 ), (D,_,_) in zip(param_, layer0["D_"]):
-                    param_.append(((I, D), L, x0))
-
+        for j, param_name in enumerate(layer0):  # loop L_, I_, D_, M_
+            param_ = layer0[param_name]
+            if param_name == "I_":  # project by D 
+                for i, ((I,L,x0 ), (D,_,_), fPd) in enumerate(zip(param_, layer0["D_"], fPd_)):
+                    if not fPd:
+                        param_[i] = ((I, D), L, x0) # replace with I and D
+            
             mdert_, ddert_ = search_param_(param_name, param_, fPd_)  # layer0[param_name][0].append((Ppm_, Ppd_))
             mdert__.append(mdert_)
             ddert__.append(ddert_)
@@ -151,13 +153,13 @@ def search_param_(param_name, param_, fPd_):
     ddert_, mdert_ = [], []  # line-wide (i, p, d, m)_, + (negL, negM) in mdert: variable-range search
     # rdn = iparam[1]  # iparam = (param_, P.L, P.x0), rdn
     _param, _L, _x0 = param_[0]
-    if _param is tuple:
+    if isinstance(_param, tuple):
         _par = _param[0] + _param[1]/2  # I+=D/2: forward proj for template
     else: _par = _param
-    _fPd = fPd_[0]
+    _fPd = fPd_[0] # why we need this?
     i = 0
-    for (param, L, x0), fPd in zip( param_[1:], fPd_[1:], start=1):  # sorry, how is it done?
-        if param is tuple:
+    for (param, L, x0), fPd in zip( param_[1:], fPd_[1:]): # we can use enumerate, but why we need start=1 here?
+        if isinstance(param, tuple):
             par = param[0] - _param[1] / 2  # I-=D/2: backward proj for input
         else:
             par = param
@@ -172,7 +174,11 @@ def search_param_(param_name, param_, fPd_):
         while comb_M > 0 and j+1 < len(param_):
             j += 1
             ext_param, ext_L, ext_x0 = param_[j]  # extend search beyond next param
-            dert = comp_param(param, ext_param, param_name, ave)
+            if isinstance(ext_param, tuple):
+                ext_par = ext_param[0] + ext_param[1]/2  # I+=D/2: forward proj for template
+            else: ext_par = ext_param
+            
+            dert = comp_param(par, ext_par, param_name, ave)
             if dert.m > 0:
                 break  # 1st matching param takes over connectivity search from _param, in the next loop
             else:
@@ -182,9 +188,8 @@ def search_param_(param_name, param_, fPd_):
                 negL += 1
         # after extended search, if any:
         mdert_.append( Cpdert( i=dert.i, p=dert.p, d=dert.d, m=dert.m, x0=x0, L=L, negiL=negiL,negL=negL, negM=negM))
-        if param is tuple:
-            _par = param[0] + param[1] / 2  # I+=D/2: forward proj
-        else: _par = param
+
+        _par = par
         i+=1
 
     return mdert_, ddert_
@@ -272,16 +277,19 @@ def intra_Ppm_(Pp_, param_name, fPd):
     for Pp in Pp_:
         if (Pp.L > 2) and (Pp.M > -ave_M and Pp.M / Pp.L > -ave):
             sub_param_ = []
+            fPd_ = []
 
             for pdert in Pp.pdert_:
                 if fPd:
                     param_name = "D_"  # comp d
                     sub_param_.append((pdert.d, pdert.x0, pdert.L))
+                    fPd_.append(1)
                 else:
                     param_name = "I_"  # comp i @ local ave_M
-                    sub_param_.append((pdert.i + (pdert.d/2), pdert.x0, pdert.L))
+                    sub_param_.append(((pdert.i, pdert.d), pdert.x0, pdert.L))
+                    fPd_.append(0)
 
-            Pp.sublayers = search_param_(param_name, sub_param_)  # iparam = sub_param_: (param1, x01, L1),(param2, x02, L2),...
+            Pp.sublayers = search_param_(param_name, sub_param_, fPd_)  # iparam = sub_param_: (param1, x01, L1),(param2, x02, L2),...
             # add: ave_M + (Pp.M / len(Pp.P_)) / 2 * rdn: ave_M is average of local and global match?
             # extended search needs to be restricted to ave_M-terminated derts
 

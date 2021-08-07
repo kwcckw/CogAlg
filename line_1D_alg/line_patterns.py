@@ -370,7 +370,7 @@ if __name__ == "__main__":
         plt.figure(); plt.imshow(img, cmap='gray'); plt.title('merged image')
         # cv2.imwrite("img_merged.bmp",img)
 
-    fline_PPs = 0
+    fline_PPs = 1
     if fline_PPs:  # debug line_PPs_draft
         from line_PPs_draft import *
         frame_PP_ = []
