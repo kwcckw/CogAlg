@@ -84,12 +84,17 @@ def search(P_, fPd):  # cross-compare patterns within horizontal line
 
         for j, param_name in enumerate(layer0):  # loop L_, I_, D_, M_
             param_ = layer0[param_name]
+            
             _par_= param_[:-1]; par_= param_[1:]  # compared vectors
 
             if param_name == "I_" and not fPd:  # project by D  # I=D in deriv_comp sub_Ps
-                _par_[:][0] -= layer0["D_"][:-1][0] /2  # _I in (I,L,x0) is forward projected by _D in (D,L,x0)
-                par_ [:][0] += layer0["D_"][1:][0] / 2  # I in (I,L,x0) is backward projected by D in (D,L,x0)
-
+                _par_= []
+                for (I, L, x0),(D,_,_) in zip(param_[:-1], layer0["D_"][:-1]):  # _I in (I,L,x0) is forward projected by _D in (D,L,x0)
+                    _par_.append((I-(D/2), L, x0))
+                par_= []
+                for (I, L, x0),(D,_,_) in zip(param_[1:], layer0["D_"][1:]): # I in (I,L,x0) is backward projected by D in (D,L,x0)
+                    par_.append((I+(D/2), L, x0))
+                
             mdert_, ddert_ = search_param_(_par_, par_, param_name)  # layer0[param_name][0].append((Ppm_, Ppd_))
             mdert__.append(mdert_)
             ddert__.append(ddert_)
@@ -115,8 +120,13 @@ def search_param_(_param_, param_, param_name):
 
     ddert_, mdert_ = [], []  # line-wide (i, p, d, m)_, + (negL, negM) in mdert: variable-range search
 
-    for i, (_param, _L, _x0), (param, L, x0) in enumerate( zip( _param_, param_)):
-        dert = comp_param(_param, param, param_name, ave)  # param is compared to prior-P _param
+    for i, ((_param, _L, _x0), (param, L, x0)) in enumerate(zip( _param_, param_)):
+        
+        rL = _L/L
+        if param_name != "L_": # normalized by rL if param is not L
+            _param *= rL
+            param *= rL     
+        dert = comp_param(_param, param, param_name[0], ave)  # param is compared to prior-P _param
 
         # or div_comp(L), norm_comp(I, D, M): simpler than mean, but never sub_comp?
         # if I,!fPd or D, fPd: splice eval in form_rdn_Pp_
@@ -127,7 +137,9 @@ def search_param_(_param_, param_, param_name):
         while comb_M > 0 and j+1 < len(param_):
             j += 1
             ext_param, ext_L, ext_x0 = param_[j]  # extend search beyond next param
-            dert = comp_param(_param, ext_param, param_name, ave)
+            if param_name != "L_": # normalized by rL if param is not L
+                ext_param *= rL
+            dert = comp_param(_param, ext_param, param_name[0], ave)
             if dert.m > 0:
                 break  # 1st matching param takes over connectivity search from _param, in the next loop
             else:
@@ -193,8 +205,10 @@ def form_rdn_Pp_(Pp_, param_name, fPd):  # cluster Pps by cross-param redundant 
                         rPp.pdert_[i] = CPp(pdert_=Pp.pdert_)  # Pp remove: reset Pp vars to 0
                     elif pdert_val <= 0:
                         if ((param_name == "I_") and not fPd) or ((param_name == "D_") and fPd):  # dert-level P-defining params
+                            # why we need this P here while it is not pack everyhwere?
                             P=CP()
                             for pdert in Pp.pdert_:
+                                # pdert is not having _P reference yet
                                 P.accum_from(pdert._P, excluded=["x0"])  # different from Pp params
                                 P.dert_ += [pdert._P.dert_]  # splice dert_s, eval intra_P?
                         else:
@@ -261,19 +275,30 @@ def intra_Ppm_(Pp_, param_name, fPd):
     for Pp in Pp_:
         if (Pp.L > 2) and (Pp.M > -ave_M and Pp.M / Pp.L > -ave):
             sub_param_ = []
-            fPd_ = []
-
             for pdert in Pp.pdert_:
                 if fPd:
                     param_name = "D_"  # comp d
                     sub_param_.append((pdert.d, pdert.x0, pdert.L))
-                    fPd_.append(1)
+
                 else:
                     param_name = "I_"  # comp i @ local ave_M
-                    sub_param_.append(((pdert.i, pdert.d), pdert.x0, pdert.L))
-                    fPd_.append(0)
+                    sub_param_.append((pdert.i, pdert.x0, pdert.L))
 
-            Pp.sublayers = search_param_(param_name, sub_param_, fPd_)  # iparam = sub_param_: (param1, x01, L1),(param2, x02, L2),...
+            _sub_par_ = sub_param_[:-1]
+            sub_par_ = sub_param_[1:]
+            
+            if param_name == "I_" and not fPd:
+                
+                D_ = [pdert.d for pdert in Pp.pdert_]
+                
+                _sub_par_= []
+                for (I, L, x0),D in zip(sub_param_[:-1],D_[:-1]):  # _I in (I,L,x0) is forward projected by _D in (D,L,x0)
+                    _sub_par_.append((I-(D/2), L, x0))
+                sub_par_= []
+                for (I, L, x0),D in zip(sub_param_[1:], D_[1:]): # I in (I,L,x0) is backward projected by D in (D,L,x0)
+                    sub_par_.append((I+(D/2), L, x0))
+                
+            Pp.sublayers = search_param_(_sub_par_, sub_par_, param_name)  # iparam = sub_param_: (param1, x01, L1),(param2, x02, L2),...
             # add: ave_M + (Pp.M / len(Pp.P_)) / 2 * rdn: ave_M is average of local and global match?
             # extended search needs to be restricted to ave_M-terminated derts
 

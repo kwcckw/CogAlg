@@ -325,7 +325,10 @@ def comp_param(_param, param, param_name, ave):
         ma = ave - abs(da)  # indirect match
         dert = Cdert(i=param, p=param+_param, d=da, m=ma)  # d=None? p=param+_param will sum lists?
     else:  # numeric
-        d = param - _param    # difference
+        if param_name == 'L':
+            d = _param/param
+        else:
+            d = param - _param    # difference
         if param_name == 'I':
             m = ave - abs(d)  # indirect match
         else:
