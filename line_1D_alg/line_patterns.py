@@ -345,10 +345,10 @@ if __name__ == "__main__":
     '''
     render = 0
     fpickle = 0
-    fline_PPs = 0
+    fline_PPs = 1
 
     start_time = time()
-    if pickle:
+    if fpickle:
         # Read frame_of_patterns from saved file instead
         with open("frame_of_patterns_.pkl", 'rb') as file:
             frame_of_patterns_ = pickle.load(file)
