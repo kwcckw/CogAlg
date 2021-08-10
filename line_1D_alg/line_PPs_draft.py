@@ -81,7 +81,7 @@ def search(P_, fPd):  # cross-compare patterns within horizontal line
         Ldert_ = []; rL_ = []
         # unpack Ps:
         for P in P_:
-            if _P in locals:  # not 1st P,
+            if "_P" in locals():  # not 1st P,
                 L=P.L; _L=_P.L
                 rL = max(L,_L) / min(L,_L)  # div_comp L: higher-scale, not accumulated: no search
                 if L <_L: rL *= -1  # rL is signed
@@ -90,22 +90,23 @@ def search(P_, fPd):  # cross-compare patterns within horizontal line
                 rL_.append(rL)
             _P = P
             layer0['L_'].append([P.L, P.x0])
-            # not sure this is needed now?
-            layer0['I_'].append([P.I, P.L, P.x0])  # I
-            layer0['D_'].append([P.D, P.L, P.x0])  # D
-            layer0['M_'].append([P.M, P.L, P.x0])  # M
+            # not sure this is needed now? With the edits below, now it is not needed
+            # layer0['I_'].append([P.I, P.L, P.x0])  # I
+            # layer0['D_'].append([P.D, P.L, P.x0])  # D
+            # layer0['M_'].append([P.M, P.L, P.x0])  # M
 
         mdert__ = [Ldert_]; ddert__ = [Ldert_]  # no search for L: same Ldert_ for ddert_ and mdert_
 
         for param_name in ["I_", "D_", "M_"]:
-            param_ = layer0[param_name]
+            param_ = [[getattr(P, param_name[0]),P.L, P.x0] for P in P_]
             _par_ =[ [_par*rL, L, x0] for [_par,L,x0], rL in zip(param_[:-1], rL_) ]  # normalize by rL
             par_ = param_[1:]  # compared vectors
 
             if param_name == "I_" and not fPd:  # project by D  # I=D in deriv_comp sub_Ps
-                _par_ = [ [_par-(D/2), L, x0] for [_par,L,x0], [D,_,_] in zip(_par_,layer0["D_"][:-1]) ]
+                D_ = [getattr(P, "D") for P in P_]
+                _par_ = [ [_par-(D/2), L, x0] for [_par,L,x0], D in zip(_par_,D_[:-1]) ]
                 # _I in (I,L,x0) is forward projected by _D in (D,L,x0)
-                par_  = [ [ par+(D/2), L, x0] for [ par,L,x0], [D,_,_] in zip( par_,layer0["D_"][1:]) ]
+                par_  = [ [ par+(D/2), L, x0] for [ par,L,x0], D in zip( par_,D_[1:]) ]
                 # I in (I,L,x0) is backward projected by D in (D,L,x0)
 
             mdert_, ddert_ = search_param_(_par_, par_, P_[:-1], param_name)  # layer0[param_name][0].append((Ppm_, Ppd_))
