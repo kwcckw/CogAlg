@@ -67,9 +67,10 @@ ave_rolp = .5  # ave overlap ratio for comp_Pp
 
 def search(P_, fPd):  # cross-compare patterns within horizontal line
 
-    # sub_search_recursive(P_, fderP=0)  # search with incremental distance: first inside sublayers
+    sub_search_recursive(P_, fPd)  # search with incremental distance: first inside sublayers
     layer0 = {'L_': [], 'I_': [], 'D_': [], 'M_': []}  # param_name: [params]
-
+    PPm_, PPd_ = [], []
+    
     if len(P_) > 1:  # at least 2 comparands
         Ldert_ = []; rL_ = []
         # unpack Ps:
@@ -114,7 +115,7 @@ def search(P_, fPd):  # cross-compare patterns within horizontal line
             Ppd_ = form_Pp_(ddert_, param_name, drdn_, fPd=1)
             rdn_Ppd_ = form_rdn_Pp_(Ppd_, param_name, fPd=1)
 
-        return (rdn_Ppm_, rdn_Ppd_)
+    return PPm_, PPd_
 '''
 next level line_PPPs:
 PPm_ = search_Pp_(layer0, fPd=0)  # calls comp_Pp_ and form_PP_ per param
@@ -305,6 +306,26 @@ def intra_Ppm_(Pp_, param_name, fPd):
             # add: ave_M + (Pp.M / len(Pp.P_)) / 2 * rdn: ave_M is average of local and global match?
             # extended search needs to be restricted to ave_M-terminated derts
 
+# draft and tentative
+def sub_search_recursive(P_, fPd):  # search in top sublayer per P / sub_P
+
+    for P in P_:
+        if P.sublayers:
+            sublayer = P.sublayers[0][0]  # top sublayer has one element
+            sub_P_ = sublayer[5]
+            if len(sub_P_) > 2:
+                if fPd:
+                    if abs(P.D) > ave_D:  # better use sublayers.D|M, but we don't have it yet
+                        sub_PPm_, sub_PPd_ = search(sub_P_, fPd)
+                        sublayer[6].append(sub_PPm_)
+                        sublayer[7].append(sub_PPd_)
+                        sub_search_recursive(sub_P_, fPd)  # deeper sublayers search is selective per sub_P
+                elif P.M > ave_M:
+                    sub_PPm_, sub_PPd_ = search(sub_P_, fPd)
+                    sublayer[6].append(sub_PPm_)
+                    sublayer[7].append(sub_PPd_)
+                    sub_search_recursive(sub_P_, fPd)  # deeper sublayers search is selective per sub_P
+
 
 # below is obsolete:
 '''     
@@ -437,32 +458,6 @@ def comp_Pp(_Pp, Pp, layer0):
 
 
 # below is not revised
-
-def sub_search_recursive(P_, fderP):  # search in top sublayer per P / sub_P
-
-    for P in P_:
-        if P.sublayers:
-            sublayer = P.sublayers[0][0]  # top sublayer has one element
-            sub_P_ = sublayer[5]
-            if len(sub_P_) > 2:
-                PM = P.M;
-                PD = P.D
-                if fderP:
-                    PM += P.derP.mP;
-                    PD += P.derP.mP
-                    # include match added by last search
-                if P.fPd:
-                    if abs(PD) > ave_D:  # better use sublayers.D|M, but we don't have it yet
-                        sub_PPm_, sub_PPd_ = search(sub_P_)
-                        sublayer[6].append(sub_PPm_);
-                        sublayer[7].append(sub_PPd_)
-                        sub_search_recursive(sub_P_, fderP=1)  # deeper sublayers search is selective per sub_P
-                elif PM > ave_M:
-                    sub_PPm_, sub_PPd_ = search(sub_P_)
-                    sublayer[6].append(sub_PPm_);
-                    sublayer[7].append(sub_PPd_)
-                    sub_search_recursive(sub_P_, fderP=1)  # deeper sublayers search is selective per sub_P
-
 
 def comp_sublayers(_P, P, mP):  # also add dP?
 

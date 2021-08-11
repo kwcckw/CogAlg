@@ -154,7 +154,7 @@ def intra_Pm_(P_, rdn, rng, fPd):  # evaluate for sub-recursion in line Pm_, pac
                     rdn += 1; rng += 1
                     sub_Pm_ = form_P_(rdert_, rdn, rng, fPd=False)  # cluster by m sign, eval intra_Pm_
                     Ls = len(sub_Pm_)
-                    P.sublayers += [[(Ls, False, fPd, rdn, rng, sub_Pm_)]]  # add Dert=[] if Ls > min?
+                    P.sublayers += [[(Ls, False, fPd, rdn, rng, sub_Pm_, [], [])]]  # add Dert=[] if Ls > min?
                     # 1st sublayer is single-element, packed in double brackets only to allow nesting for deeper sublayers
                     if len(sub_Pm_) > 4:
                         P.sublayers += intra_Pm_(sub_Pm_, rdn+1 + 1/Ls, rng+1, fPd)  # feedback
@@ -169,7 +169,7 @@ def intra_Pm_(P_, rdn, rng, fPd):  # evaluate for sub-recursion in line Pm_, pac
                     rel_adj_M = adj_M / -P.M  # for allocation of -Pm' adj_M to each of its internal Pds
                     sub_Pd_ = form_P_(P.dert_, rdn+1, rng, fPd=True)  # cluster by d sign: partial d match, eval intra_Pm_(Pdm_)
                     Ls = len(sub_Pd_)
-                    P.sublayers += [[(Ls, True, True, rdn, rng, sub_Pd_)]]  # 1st layer, Dert=[], fill if Ls > min?
+                    P.sublayers += [[(Ls, True, True, rdn, rng, sub_Pd_, [], [])]]  # 1st layer, Dert=[], fill if Ls > min?
 
                     P.sublayers += intra_Pd_(sub_Pd_, rel_adj_M, rdn+1 + 1/Ls, rng)  # der_comp eval per nPm
                     # splice sublayers across sub_Ps, for return as root sublayers[1:]:
@@ -376,8 +376,8 @@ if __name__ == "__main__":
         frame_PP_ = []
 
         for y, P_ in enumerate(frame_of_patterns_):
-            PP_ = search(P_, fPd=0)
-            frame_PP_.append(PP_)
+            PPm_, PPd_ = search(P_, fPd=0)
+            frame_PP_.append((PPm_, PPd_))
         # draw_PP_(image, frame_PP_)  # debugging
 
     end_time = time() - start_time
