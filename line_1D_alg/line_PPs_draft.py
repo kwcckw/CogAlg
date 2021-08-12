@@ -123,6 +123,13 @@ def search_param_(_param_, param_, P_, param_name):  # variable-range search in 
     ddert_, mdert_ = [], []  # line-wide (i, p, d, m)_, + (negL, negM) in mdert
     for i, ((_param, _L, _x0), (param, L, x0), P) in enumerate( zip(_param_, param_, P_)):
 
+        if param_name == "D_" or param_name == "M_":
+            if i == 0:
+                __param = 0
+            else:
+                __param = _param_[i-1][0] # or we recompute __param_ in search before calling search_param?
+            _dert = comp_param(__param, param, param_name[0], ave)  # same sign comparison
+        
         dert = comp_param(_param, param, param_name[0], ave)  # param is compared to prior-P _param
         ddert_.append(Cpdert(i=dert.i, p=dert.p, d=dert.d, m=dert.m, x0=x0, L=L, _P=P))
         negiL = negL = negM = 0  # comp next only
@@ -247,11 +254,42 @@ def form_rdn_Pp_(Pp_, param_name, fPd):  # cluster Pps by cross-param redundant 
                            13M += __pdert.m; 12M += _pdert.m
                         if 13M / abs(12M) > ave_splice: # similarity / separation: strong Pp, weak Pp.pdert_? 
                         for all summed param types, but step=2 and dert_ splicing if P-defining param only?
-                        '''
-                        P = CP()
-                        for pdert in Pp.pdert_:
-                            P.accum_from(pdert._P, excluded=["x0"])  # different from Pp params
-                            P.dert_ += [pdert._P.dert_]  # splice dert_s, eval intra_P?
+                        ''' 
+                        
+                        P = CP() 
+                        checked_pdert_ = []
+                        if len(Pp.pdert_)>2:
+                            while len(Pp.pdert_)>2:
+                                __pdert = Pp.pdert_.pop(0)
+                                _pdert = Pp.pdert_.pop(0)
+                                pdert = Pp.pdert_.pop(0)
+                                
+                                if fPd: 
+                                    dert13 = comp_param(pdert.d,__pdert.d, param_name[0], ave)
+                                    dert12 = comp_param(pdert.d,_pdert.d, param_name[0], ave)
+                                    match13 = dert13.d
+                                    miss12 = abs(dert12.d)
+                                else: 
+                                    dert13 = comp_param(pdert.m,__pdert.m, param_name[0], ave)
+                                    dert12 = comp_param(pdert.m,_pdert.m, param_name[0], ave)
+                                    match13 = dert13.m
+                                    miss12 = abs(dert12.m)
+                                    
+                                if miss12==0: miss12 = 1 # avoid zero division
+                                if  match13/miss12 > ave_splice: # splice all 3 Pps into P
+                                    for pdert in [__pdert,_pdert,pdert]:
+                                        P.accum_from(pdert._P, excluded=["x0"])  # different from Pp params
+                                        P.dert_ += [pdert._P.dert_]  # splice dert_s, eval intra_P?
+                                else: # no splicing
+                                    checked_pdert_.append(__pdert) # not sure if we need this __pdert, if the __pdert < ave_splice, we just ignore them?
+                                    Pp.pdert_.insert(0, pdert) # pack back to pdert_ to check in the next round
+                                    Pp.pdert_.insert(0, _pdert)
+                                      
+                        else: # pdert_ size less than 2, merge them anyway?
+                            for pdert in Pp.pdert_:
+                                P.accum_from(pdert._P, excluded=["x0"])  # different from Pp params
+                                P.dert_ += [pdert._P.dert_]  # splice dert_s, eval intra_P?
+                            
                         rPp.pdert_[i] = P     # replace Pp with spliced P
 
                     if pdert_val <= 0:
