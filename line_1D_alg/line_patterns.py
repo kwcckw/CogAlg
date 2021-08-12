@@ -22,10 +22,13 @@ import sys
 from os.path import dirname, join, abspath
 sys.path.insert(0, abspath(join(dirname("CogAlg"), '..')))
 import cv2
-import argparse
-import pickle
+# import argparse # not used in current edition
+import pickle # already imported in
 from time import time
-from utils import *
+# from utils import * # only NumPy really used from here, see next line
+# import numpy as np
+from matplotlib import pyplot as plt
+import csv
 from itertools import zip_longest
 from frame_2D_alg.class_cluster import ClusterStructure, NoneType, comp_param
 
@@ -121,13 +124,13 @@ def form_P_(dert_, rdn, rng, fPd):  # accumulation and termination
     '''    
     replace by comp_param(P.M | P.D) in line_PPs:
     if len(P_) > 4: P_ = splice_P_(P_, fPd=0)  # merge aI- | aD- similar weakly separated Ps
-    if render:
-        with open("frame_of_patterns_2.csv", "a") as csvFile:  # current layer visualization
+    '''
+    if logging:
+        with open("frame_of_patterns.csv", "a") as csvFile:  # current layer visualization
             write = csv.writer(csvFile, delimiter=",")
             for item in range(len(P_)):
                 # print(P_[item].L, P_[item].I, P_[item].D, P_[item].M, P_[item].x0)
                 write.writerow([P_[item].L, P_[item].I, P_[item].D, P_[item].M, P_[item].x0])
-    '''
     return P_
 
 ''' 
@@ -154,7 +157,7 @@ def intra_Pm_(P_, rdn, rng, fPd):  # evaluate for sub-recursion in line Pm_, pac
                     rdn += 1; rng += 1
                     sub_Pm_ = form_P_(rdert_, rdn, rng, fPd=False)  # cluster by m sign, eval intra_Pm_
                     Ls = len(sub_Pm_)
-                    P.sublayers += [[(Ls, False, fPd, rdn, rng, sub_Pm_, [], [])]]  # add Dert=[] if Ls > min?
+                    P.sublayers += [[(Ls, False, fPd, rdn, rng, sub_Pm_)]]  # add Dert=[] if Ls > min?
                     # 1st sublayer is single-element, packed in double brackets only to allow nesting for deeper sublayers
                     if len(sub_Pm_) > 4:
                         P.sublayers += intra_Pm_(sub_Pm_, rdn+1 + 1/Ls, rng+1, fPd)  # feedback
@@ -169,7 +172,7 @@ def intra_Pm_(P_, rdn, rng, fPd):  # evaluate for sub-recursion in line Pm_, pac
                     rel_adj_M = adj_M / -P.M  # for allocation of -Pm' adj_M to each of its internal Pds
                     sub_Pd_ = form_P_(P.dert_, rdn+1, rng, fPd=True)  # cluster by d sign: partial d match, eval intra_Pm_(Pdm_)
                     Ls = len(sub_Pd_)
-                    P.sublayers += [[(Ls, True, True, rdn, rng, sub_Pd_, [], [])]]  # 1st layer, Dert=[], fill if Ls > min?
+                    P.sublayers += [[(Ls, True, True, rdn, rng, sub_Pd_)]]  # 1st layer, Dert=[], fill if Ls > min?
 
                     P.sublayers += intra_Pd_(sub_Pd_, rel_adj_M, rdn+1 + 1/Ls, rng)  # der_comp eval per nPm
                     # splice sublayers across sub_Ps, for return as root sublayers[1:]:
@@ -343,41 +346,45 @@ if __name__ == "__main__":
     # Read image
     image = cv2.imread(arguments['image'], 0).astype(int)  # load pix-mapped image
     '''
+    logging = 0  # log dataframes
+    fpickle = 2  # 0: read from the dump; 1: pickle dump; 2: no pickling
     render = 0
-    fpickle = 0
-    fline_PPs = 1
-
+    fline_PPs = 0
     start_time = time()
-    if fpickle:
+
+    if logging:
+        # save layer0 parameters to file
+        with open("frame_of_patterns.csv", "w") as csvFile:
+            write = csv.writer(csvFile, delimiter=",")
+            fieldnames = ("L=", "I=", "D=", "M=", "x0=")
+            write.writerow(fieldnames)
+
+    if fpickle == 0:
         # Read frame_of_patterns from saved file instead
         with open("frame_of_patterns_.pkl", 'rb') as file:
             frame_of_patterns_ = pickle.load(file)
+
     else:
-        # show image in the same window as a code
+        # Run calculations
         image = cv2.imread('.//raccoon.jpg', 0).astype(int)  # manual load pix-mapped image
         assert image is not None, "No image in the path"
-        if render:
-            plt.figure();plt.imshow(image, cmap='gray')  # show the image in gray
-            '''
-            with open("frame_of_patterns_2.csv", "w") as csvFile:
-                write = csv.writer(csvFile, delimiter=",")
-                fieldnames = ("L=", "I=", "D=", "M=", "x0=")
-                write.writerow(fieldnames)
-            '''
-
         # Main
         frame_of_patterns_ = cross_comp(image)  # returns Pm__
-        # save to file
-        with open("frame_of_patterns_.pkl", 'wb') as file:
-            pickle.dump(frame_of_patterns_, file)
+        if fpickle == 1: # save the dump of the whole data to file
+            with open("frame_of_patterns_.pkl", 'wb') as file:
+                pickle.dump(frame_of_patterns_, file)
+
+    if render:
+        image = cv2.imread('.//raccoon.jpg', 0).astype(int)  # manual load pix-mapped image
+        plt.figure(); plt.imshow(image, cmap='gray'); plt.show() # show the image below in gray
 
     if fline_PPs:  # debug line_PPs_draft
         from line_PPs_draft import *
         frame_PP_ = []
 
         for y, P_ in enumerate(frame_of_patterns_):
-            PPm_, PPd_ = search(P_, fPd=0)
-            frame_PP_.append((PPm_, PPd_))
+            PP_ = search(P_, fPd=0)
+            frame_PP_.append(PP_)
         # draw_PP_(image, frame_PP_)  # debugging
 
     end_time = time() - start_time
