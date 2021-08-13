@@ -86,34 +86,35 @@ def search(P_, fPd):  # cross-compare patterns within horizontal line
             layer0['D_'].append([P.D, P.L, P.x0])  # D tuple
             layer0['M_'].append([P.M, P.L, P.x0])  # M tuple
 
-        pdert__ = [Ldert_]; pdert1__ = [Ldert_]; pdert2__= []  # step=2 for P splicing:  # no search for L
+        pdert__ = [Ldert_]; pdert1__ = [Ldert_]; pdert2__= [[]]  # step=2 for P splicing:  # no search for L
 
         for param_name in ["I_", "D_", "M_"]:
             param_ = layer0[param_name]  # param values
             par_ = param_[1:]  # compared vectors:
             _par_ = [[ _par*rL, L, x0] for [_par,L,x0], rL in zip(param_[:-1], rL_) ]  # normalize by rL
+            __par_ = _par_[1:].copy() + [[0,1,0]] # add dummy par at the end for size consistency
 
             if ((param_name == "I_") and not fPd) or ((param_name == "D_") and fPd):  # dert-level P-defining params
-                if not fPd:
-                    # project I by D, or D by Dd in deriv_comp sub_Ps:
-                    _par_ = [[_par - (D / 2), L, x0] for [_par, L, x0], [D, _, _] in zip(_par_, layer0["D_"][:-1])]
-                    # _I in (I,L,x0) is forward projected by _D in (D,L,x0)
-                    par_ = [[ par + (D / 2), L, x0] for [ par, L, x0], [D, _, _] in zip(par_, layer0["D_"][1:])]
-                    # I in (I,L,x0) is backward projected by D in (D,L,x0)
+                
+                # project I by D, or D by Dd in deriv_comp sub_Ps:
+                _par_ = [[_par - (D / 2), L, x0] for [_par, L, x0], [D, _, _] in zip(_par_, layer0["D_"][:-1])]
+                # _I in (I,L,x0) is forward projected by _D in (D,L,x0)
+                __par_ = _par_[1:].copy() +  [[0,1,0]]
+                par_ = [[ par + (D / 2), L, x0] for [ par, L, x0], [D, _, _] in zip(par_, layer0["D_"][1:])]
+                # I in (I,L,x0) is backward projected by D in (D,L,x0)
 
-                pdert__.append([ search_param_(_par_, par_, P_[:-1], param_name) ])  # layer0[param_name][0].append((Ppm_, Ppd_))
-                _rL_=[]
-                for P in P_:
-                    if "_P" in locals():  # not the 1st P
-                        if "__P" in locals():  # not the 2nd P
-                            _rL_.append(P.L/__P.L)
-                        __P = _P
-                    _P = P
-                __par_ = [[__par * _rL, L, x0] for [__par, L, x0], _rL in zip(param_[:-2], _rL_)]
-                # normalize by _rL
-                pdert2__.append([comp_param(__par, par, param_name[0], ave) for __par, par, param_name[0] in zip(__par_, par_)])
+            pdert__ += [search_param_(_par_, par_, P_[:-1], param_name) ]  # layer0[param_name][0].append((Ppm_, Ppd_))
+            _rL_=[] # where would we need _rL?
+            for P in P_:
+                if "_P" in locals():  # not the 1st P
+                    if "__P" in locals():  # not the 2nd P
+                        _rL_.append(P.L/__P.L)
+                    __P = _P
+                _P = P
 
-            pdert1__.append([ comp_param(_par, par, param_name[0], ave) for _par, par, param_name[0] in zip(_par_, par_) ])
+            # normalize by _rL
+            pdert2__.append([comp_param(__par, par, param_name[0], ave) for __par, par in zip(__par_, par_)])  # append them anyway for index consistency 
+            pdert1__.append([comp_param(_par, par, param_name[0], ave) for _par, par in zip(_par_, par_) ])
             # comp step=1 for optional ddert_ and P splicing
 
         rdn__ = sum_rdn_(layer0, pdert__, fPd=1)
@@ -162,23 +163,22 @@ def sum_rdn_(layer0, pdert__, fPd):
     name_pairs = (('I', 'L'), ('I', 'D'), ('I', 'M'), ('L', alt), ('D', 'M'))  # pairs of params redundant to each other
     pderts_Rdn = [[], [], [], []]  # L_, I_, D_, M_' Rdns, as in pdert__
 
-    for Ldert_, Idert_, Ddert_, Mdert_ in zip(pdert__[0], pdert__[1], pdert__[2], pdert__[3]):  # there is one pdert for each _P
-        for Ldert, Idert, Ddert, Mdert in zip(Ldert_, Idert_, Ddert_, Mdert_):
+    for Ldert, Idert, Ddert, Mdert in zip(pdert__[0], pdert__[1], pdert__[2], pdert__[3]):  # there is one pdert for each _P
 
-            rdn_pairs = [[fPd, 0], [fPd, 1-fPd], [fPd, fPd], [0, 1], [1-fPd, fPd]]  # initial rdn values in name_pairs:
-            #           ('I','L'), ('I','D'),    ('I','M'),  ('L',alt), ('D','M'))
-            # redundancy of params in overlapping Pms and Pds: if fPd: I, M rdn+=1, else: D rdn+=1
+        rdn_pairs = [[fPd, 0], [fPd, 1-fPd], [fPd, fPd], [0, 1], [1-fPd, fPd]]  # initial rdn values in name_pairs:
+        #           ('I','L'), ('I','D'),    ('I','M'),  ('L',alt), ('D','M'))
+        # redundancy of params in overlapping Pms and Pds: if fPd: I, M rdn+=1, else: D rdn+=1
 
-            for rdn_pair, name_pair in zip(rdn_pairs, name_pairs):
-                # assign rdn in each rdn_pair using partial name replacement: https://www.w3schools.com/python/ref_func_eval.asp
-                if fPd:
-                    if eval("abs(" + name_pair[0] + "dert.d) > abs(" + name_pair[1] + "dert.d)"):  # (param_name)dert.d|m
-                        rdn_pair[1] += 1
-                    else: rdn_pair[0] += 1  # weaker pair rdn+1
-                else:
-                    if eval(name_pair[0] + "dert.m > " + name_pair[1] + "dert.m"):
-                        rdn_pair[1] += 1
-                    else: rdn_pair[0] += 1  # weaker pair rdn+1
+        for rdn_pair, name_pair in zip(rdn_pairs, name_pairs):
+            # assign rdn in each rdn_pair using partial name replacement: https://www.w3schools.com/python/ref_func_eval.asp
+            if fPd:
+                if eval("abs(" + name_pair[0] + "dert.d) > abs(" + name_pair[1] + "dert.d)"):  # (param_name)dert.d|m
+                    rdn_pair[1] += 1
+                else: rdn_pair[0] += 1  # weaker pair rdn+1
+            else:
+                if eval(name_pair[0] + "dert.m > " + name_pair[1] + "dert.m"):
+                    rdn_pair[1] += 1
+                else: rdn_pair[0] += 1  # weaker pair rdn+1
 
         # below is not revised, looping is probably wrong
         for i, param_name in enumerate(layer0):  # sum param rdn from all pairs it is in, flatten pair_names, pair_rdns?
@@ -253,11 +253,12 @@ def form_rdn_Pp_(Pp_, param_name, pdert1__, pdert2__, fPd):  # cluster Pps by cr
                         # needs a review:
                         M2 = M1 = 0
                         if fPd:
-                            for pdert2, pdert1 in zip(pdert2__["D"], pdert1__["D"]):
-                                M2 += pdert2.m; M1 += pdert1.m
+                            # for pdert1__ and pdert2__, index0=L, index1=I,index2=D,index3=M, or pack only D and I in pdert1 and pdert2?
+                            for pdert2, pdert1 in zip(pdert2__[2], pdert1__[2]): # D
+                                M2 += pdert2.m; M1 += pdert1.m # match of D
                         else:
-                            for pdert2, pdert1 in zip(pdert2__["I"], pdert1__["I"]):
-                                M2 += pdert2.m; M1 += pdert1.m
+                            for pdert2, pdert1 in zip(pdert2__[1], pdert1__[1]): # I
+                                M2 += pdert2.m; M1 += pdert1.m # match of I
                         if M2 / abs(M1) > ave_splice:  # similarity / separation: strong Pp, weak Pp.pdert_?
                             P = CP()
                             for pdert in Pp.pdert_:
