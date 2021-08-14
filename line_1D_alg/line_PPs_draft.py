@@ -67,7 +67,7 @@ ave_rolp = .5  # ave overlap ratio for comp_Pp
 
 def search(P_, fPd):  # cross-compare patterns within horizontal line
 
-    sub_search_recursive(P_, fPd)  # search with incremental distance: first inside sublayers
+    # sub_search_recursive(P_, fPd)  # search with incremental distance: first inside sublayers
     layer0 = {'L_': [], 'I_': [], 'D_': [], 'M_': []}  # param_name: [params]
 
     if len(P_) > 1:  # at least 2 comparands
@@ -100,7 +100,7 @@ def search(P_, fPd):  # cross-compare patterns within horizontal line
                     par_ = [[ par + (D / 2), L, x0] for [ par, L, x0], [D, _, _] in zip(par_, layer0["D_"][1:])]
                     # I in (I,L,x0) is backward projected by D in (D,L,x0)
 
-                pdert__.append([ search_param_(_par_, par_, P_[:-1], param_name) ])
+                pdert__ += [ search_param_(_par_, par_, P_[:-1], param_name) ]
                 _rL_=[]
                 for P in P_:
                     if "_P" in locals():  # not the 1st P
@@ -110,10 +110,13 @@ def search(P_, fPd):  # cross-compare patterns within horizontal line
                     _P = P
                 __par_ = [[__par * _rL, L, x0] for [__par, L, x0], _rL in zip(param_[:-2], _rL_)]  # normalize by _rL
                 # step=2 comp for P splicing
-                pdert2__.append([ comp_param(__par, par, param_name[0], ave) for __par, par, param_name[0] in zip(__par_, par_[1:]) ])
+                pdert2__.append([comp_param(__par, par, param_name[0], ave) for __par, par in zip(__par_, par_[1:]) ])
+                # pdert2__ should be having 1 element only, either (I and not fPd) or (D and fPd)
+            else:
+                pdert__ += [ search_param_(_par_, par_, P_[:-1], param_name) ]
 
             # step=1 comp for optional ddert_ and P splicing
-            pdert1__.append([ comp_param(_par, par, param_name[0], ave) for _par, par, param_name[0] in zip(_par_, par_) ])
+            pdert1__.append([ comp_param(_par, par, param_name[0], ave) for _par, par in zip(_par_, par_) ])
 
         rdn__ = sum_rdn_(layer0, pdert__, fPd=1)
         for param_name, pdert_, rdn_ in zip(layer0, pdert__, rdn__):
@@ -193,6 +196,10 @@ def sum_rdn_(layer0, pdert__, fPd):
 
 
 def form_Pp_(dert_, param_name, rdn_, layer_rdn, fPd):  # need to check use of rdn_, each rdn *= layer_rdn?
+    
+    # update rdn with layer_rdn
+    rdn_ = [rdn * layer_rdn for rdn in rdn_]
+
     # initialization:
     Pp_ = []
     x = 0
@@ -264,13 +271,13 @@ def consolidate(rPp, pdert1__, pdert2__, param_name, fPd):  # re-eval Pps, Pp.pd
         elif ((param_name == "I_") and not fPd) or ((param_name == "D_") and fPd):  # P-defining params, else no separation
             M2 = M1 = 0  # param match over step=2 and step=1
             if fPd:
-                for pdert2 in pdert2__[2]: M2 += pdert2.m  # match(D, __D),
+                for pdert2 in pdert2__[0]: M2 += pdert2.m  # match(D, __D),
                 for pdert1 in pdert1__[2]: M1 += pdert1.m  # match(D, _D)
             else:
-                for pdert2 in pdert2__[1]: M2 += pdert2.m  # match(I, __I),
+                for pdert2 in pdert2__[0]: M2 += pdert2.m  # match(I, __I),
                 for pdert1 in pdert1__[1]: M1 += pdert1.m  # match(I, _I)
 
-            if M2 / abs(M1) > ave_splice:  # similarity / separation: splice Ps in Pp, also implies weak Pp.pdert_?
+            if M2 / abs(M1) > -ave_splice:  # similarity / separation: splice Ps in Pp, also implies weak Pp.pdert_?
                 P = CP()
                 for pdert in Pp.pdert_:
                     P.accum_from(pdert._P, excluded=["x0"])  # different from Pp params
@@ -281,9 +288,50 @@ def consolidate(rPp, pdert1__, pdert2__, param_name, fPd):  # re-eval Pps, Pp.pd
             Pp.pdert_ = []  # pdert_ remove
 
 
-def intra_Ppm_(Pp_, param_name, rdn_, layer_rdn, fPd):  # evaluate for sub-recursion in line Pm_, pack results into sub_Pm_
+# same as range_comp, except we are returning pdert to store L information, or we modify range_comp to use in both cases?
+def rng_search(dert_): # cross-comp of 2**rng- distant pixels: 4,8,16.., skipping intermediate pixels
+    
+    rdert_ = []
+    _dert = dert_[0]
 
-    # need to implement use of rdn_ -> rdn: *= layer_rdn
+    for dert in dert_[2::2]:  # all inputs are sparse, skip odd pixels compared in prior rng: 1 skip / 1 add to maintain 2x overlap
+        d = dert.i -_dert.i
+        rp = dert.p + _dert.i  # intensity accumulated in rng
+        rd = dert.d + d   # difference accumulated in rng
+        rm = dert.m + ave - abs(d)  # m accumulated in rng
+        # for consistency with deriv_comp, else redundant
+        rdert_.append(Cpdert( i=dert.i,p=rp,d=rd,m=rm,x0=_dert.x0, \
+                             L=_dert.L, _P=_dert._P, negiL=_dert.negiL, \
+                             negL=_dert.negL, negM=_dert.negM ))
+
+        _dert = dert
+        
+    return rdert_
+
+# same as range_comp, except we are returning pdert now
+def deriv_comp(dert_):  # cross-comp consecutive ds in same-sign dert_: sign match is partial d match
+    # dd and md may match across d sign, but likely in high-match area, spliced by spec in comp_P?
+    # initialization:
+    ddert_ = []
+    _dert = dert_[0]
+    
+    for dert in dert_[1:]:
+        _d = abs(_dert.d)  # same-sign in Pd
+        # same-sign in Pd
+        d = abs( dert.d )
+        rd = d + _d
+        dd = d - _d
+        md = min(d, _d) - abs( dd/2) - ave_min  # min_match because magnitude of derived vars corresponds to predictive value
+        ddert_.append(Cpdert( i=dert.d,p=rd,d=dd,m=md,x0=_dert.x0, \
+                             L=_dert.L, _P=_dert._P, negiL=_dert.negiL, \
+                             negL=_dert.negL, negM=_dert.negM ))
+        
+        _dert = dert
+        
+    return ddert_
+
+
+def intra_Ppm_(Pp_, param_name, rdn_, layer_rdn, fPd):  # evaluate for sub-recursion in line Pm_, pack results into sub_Pm_
 
     comb_layers = []  # combine into root P sublayers[1:]
 
@@ -295,6 +343,7 @@ def intra_Ppm_(Pp_, param_name, rdn_, layer_rdn, fPd):  # evaluate for sub-recur
                     rpdert_ = rng_search(Pp.pdert_)  # for terminated-search pderts only
                     sub_Ppm_ = form_Pp_(rpdert_, param_name, rdn_, layer_rdn, fPd=False)  # cluster by m sign, eval intra_Pm_
                     Ls = len(sub_Ppm_)
+                    # wtih fPd, do we still need fid here?
                     Pp.sublayers += [[(Ls, False, fPd, layer_rdn, sub_Ppm_)]]  # 1st sublayer is single element, double brackets for common format
                     if len(sub_Ppm_) > 4:
                         Pp.sublayers += intra_Ppm_(sub_Ppm_, param_name, rdn_, layer_rdn+1 + 1/Ls, fPd)  # feedback, add param summation for comp_sublayers?
@@ -322,14 +371,15 @@ def intra_Ppd_(Pd_, param_name, mean_M, rdn_, layer_rdn):  # evaluate for sub-re
 
         if min(abs(P.D), abs(P.D) * mean_M) > ave_D * layer_rdn and P.L > 3:  # abs(D) * rel_adj_M: allocated adj_M
             # cross-comp of ds:
-            ddert_ = deriv_comp(P.dert_)  # i is d
-            sub_Pm_ = form_P_(ddert_, rdn_, layer_rdn+1, fPd=True)  # cluster Pd derts by md sign, eval intra_Pm_(Pdm_), won't happen
+            ddert_ = deriv_comp(P.pdert_)  # i is d
+            # shouldn't be form_Pp here?
+            sub_Pm_ = form_Pp_(ddert_, param_name, rdn_, layer_rdn+1, fPd=True)  # cluster Pd derts by md sign, eval intra_Pm_(Pdm_), won't happen
             Ls = len(sub_Pm_)
-            # 1st layer: Ls, fPd, fid, rdn, rng, sub_P_:
+            # 1st layer: Ls, fid, fPd, rdn, rng, sub_P_:
             P.sublayers += [[(Ls, True, True, layer_rdn, sub_Pm_ )]]
 
             if len(sub_Pm_) > 3:
-                P.sublayers += intra_Pm_(sub_Pm_, rdn_, layer_rdn+1 + 1/Ls, fPd=True)
+                P.sublayers += intra_Ppm_(sub_Pm_, param_name, rdn_, layer_rdn + 1/Ls, fPd=True)
                 # splice sublayers across sub_Ps:
                 comb_layers = [comb_layers + sublayers for comb_layers, sublayers in
                                zip_longest(comb_layers, P.sublayers, fillvalue=[])]
