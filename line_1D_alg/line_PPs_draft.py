@@ -115,7 +115,7 @@ def search(P_, fPd):  # cross-compare patterns within horizontal line
                 pdert__ += [ search_param_(_par_, par_, P_[:-1], param_name) ]
 
             # step=1 comp for optional ddert_ and P splicing
-            pdert1__+= [ comp_param(_par, par, param_name[0], ave) for _par, par in zip(_par_, par_) ]
+            pdert1__+= [ [comp_param(_par, par, param_name[0], ave) for _par, par in zip(_par_, par_)] ]
 
         rdn__ = sum_rdn_(layer0, pdert__, fPd=1)
         for param_name, pdert_, rdn_ in zip(layer0, pdert__, rdn__):
@@ -217,10 +217,42 @@ def form_Pp_(dert_, param_name, rdn_, fPd):  # need to check use of rdn_, each r
         _sign = sign
 
     intra_Ppm_(Pp_, param_name, rdn_, fPd)  # evaluates for sub-recursion and forming Ppd_ per Pm
-    # rng_search and der_search for core param only?
+#     rng_search and der_search for core param only?
 
     return Pp_
 
+# draft and tentative
+def form_matched_connected_Pp_(dert_, param_name, rdn_, fPd):  
+    
+    # initialization:
+    Pp_ = []
+    x = 0
+
+    _dert = dert_[0]
+    Pp = CPp(L=1, iL=_dert.L, I=_dert.p, D=_dert.d, M=_dert.m, Rdn=rdn_[0], negiL=_dert.negiL, negL=_dert.negL, negM=_dert.negM,
+                     x0=0, ix0=_dert.x0, pdert_=[_dert], sublayers=[], fPd=fPd)
+    Pp_.append(Pp)  # updated by accumulation below
+
+    for dert, rdn in zip(dert_, rdn_):  # segment by sign
+        
+        # match connected Pderts
+        if _dert.m - dert.m < ave: # or how to evaluate match-connected pderts?
+            # accumulate params:
+            Pp.L += 1; Pp.iL += dert.L; Pp.I += dert.p; Pp.D += dert.d; Pp.M += dert.m; Pp.Rdn += rdn; Pp.negiL += dert.negiL
+            Pp.negL += dert.negL; Pp.negM += dert.negM
+            Pp.pdert_ += [dert]
+            
+        else:
+            # match value change > ave, initialize P and append it to P_
+            Pp = CPp(L=1, iL=dert.L, I=dert.p, D=dert.d, M=dert.m, Rdn=rdn, negiL=dert.negiL, negL=dert.negL, negM=dert.negM,
+                     x0=x, ix0=dert.x0, pdert_=[dert], sublayers=[], fPd=fPd)
+            Pp_.append(Pp)  # updated by accumulation below
+             
+        x += 1
+
+    intra_Ppm_(Pp_, param_name, rdn_, fPd)  # evaluates for sub-recursion and forming Ppd_ per Pm
+
+    return Pp_
 
 def form_rdn_Pp_(Pp_, param_name, pdert1__, pdert2__, fPd):  # cluster Pps by cross-param redundant value sign, re-evaluate them for cross-level rdn
     rPp_ = []
@@ -324,8 +356,10 @@ def intra_Ppd_(Pd_, param_name, mean_M, rdn_):  # evaluate for sub-recursion in 
             rdn_ = [rdn + 1 for rdn in rdn_]
             ddert_ = []
             for _pdert, pdert in zip( P.pdert_[:-1], P.pdert_[1:]):
-                _param = _pdert.d, param = pdert.d
-                ddert_ += [ comp_param(_param, param, param_name[0], ave) ]  # cross-comp of ds
+                _param = _pdert.d; param = pdert.d
+                dert = comp_param(_param, param, param_name[0], ave)
+                ddert_ += [Cpdert(i=dert.i, p=dert.p, d=dert.d, m=dert.m, x0=P.x0, \
+                                  L=P.L, _P=[], negiL=P.negiL, negL=P.negL, negM=P.negM)  ]  # cross-comp of ds
             # cluster Pd derts by md sign:
             sub_Pm_ = form_Pp_(ddert_, param_name, rdn_, fPd=True)
             Ls = len(sub_Pm_)
@@ -340,10 +374,10 @@ def intra_Ppd_(Pd_, param_name, mean_M, rdn_):  # evaluate for sub-recursion in 
 def rng_search(Pp, Pp_, ave):  # ~ search_param_ with local ave and for miss-terminated pderts only
 
     mdert_ = []  # line-wide (i, p, d, m, negL, negM, x0, L, P)
-    _param_ = [pdert.m for pdert in Pp.pdert_[:-1]]
-    param_ = [pdert.m for pdert in Pp.pdert_[1:]]
+    _param_ = [(pdert.m,pdert.L,pdert.x0) for pdert in Pp.pdert_[:-1]]
+    param_ = [(pdert.m,pdert.L,pdert.x0) for pdert in Pp.pdert_[1:]]
 
-    for i, ((_param, _L, _x0), (param, L, x0), P) in enumerate( zip(_param_, param_, Pp_)):
+    for i,  ((_param, _L, _x0), (param, L, x0), P) in enumerate(zip(_param_, param_, Pp_)):
         # add: select miss-terminated pderts?
         dert = comp_param(_param, param, "I_", ave)  # param is compared to prior-P _param
         negiL = negL = negM = 0  # comp next only
