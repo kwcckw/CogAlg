@@ -102,7 +102,7 @@ def search(P_, fPd):  # cross-compare patterns within horizontal line
                     # _I in (I,L,x0) is forward projected by _D in (D,L,x0)
                     par_ = [[ par + (D / 2), L, x0] for [ par, L, x0], [D, _, _] in zip(par_, layer0["D_"][1:])]
                     # I in (I,L,x0) is backward projected by D in (D,L,x0)
-                    pdert_ = [ search_param_(_par_, par_, P_[:-1]) ]
+                    pdert_ = [ search_param_(_par_, par_, P_[:-1]) ] # not packing this pdert_ to Pdert__? Then why would we need this?
                     # only one param
                 _rL_=[]
                 for P in P_:  # form rLs to normalize cross-comp of same-M-sign Ps in pdert2_
@@ -125,7 +125,7 @@ def search(P_, fPd):  # cross-compare patterns within horizontal line
         rdn__ = sum_rdn_(layer0, Pdert__, fPd=1)
         for param_name, Pdert_, rdn_ in zip(layer0, Pdert__, rdn__):
 
-            if Pdert_[0] is instance Cpdert:
+            if isinstance(Pdert_[0], Cpdert):
                 Ppm_ = form_Pp_rng(Pdert_, rdn_, P_)  # P_ is stored per Pp,
             else:
                 Ppm_ = form_Pp_(Pdert_, param_name, rdn_, P_, fPd=0)  # Ppd_formed in -Ppms only, in intra_Ppm_
@@ -236,6 +236,41 @@ def form_Pp_rng(dert_, rdn_, P_):
     if (_dert.m and dert.m) and (P_[_dert.x0 + _dert.negL] is dert._P)
     else keep scanning multiple _Ps in _P_, Pps may overlap?
     '''
+    
+    Pp_ = []
+    _dert_ = dert_[:]
+    _rdn_ = rdn_[:]
+    for i, dert in enumerate(dert_):
+        
+        # new Pp for each dert
+        Pp = CPp(L=1, iL=dert.L, I=dert.p, D=dert.d, M=dert.m, Rdn=rdn_[i], \
+                negiL=dert.negiL, negL=dert.negL, negM=dert.negM, \
+                x0=i, ix0=dert.x0, pdert_=[dert], P_=[dert], sublayers=[], fPd=0)
+        
+        while _dert_:
+        
+            _dert = _dert_.pop(0) # pop comparing dert
+            _rdn = _rdn_.pop(0)
+            
+            if (dert is not _dert) and (_dert.m and dert.m) and (P_[_dert.x0 + _dert.negL] is dert._P):
+                # accumulate match connected params:
+                Pp.L += 1; Pp.iL += _dert.L; Pp.I += _dert.p; Pp.D += _dert.d; Pp.M += _dert.m; Pp.Rdn += _rdn; Pp.negiL += _dert.negiL
+                Pp.negL += _dert.negL; Pp.negM += _dert.negM
+                Pp.pdert_ += [_dert]
+                Pp.P_  += [_dert]
+                
+                # if _dert is match connected, we shouldn't pack it back to _dert_?
+                
+            else:
+                if len(Pp.pdert)>1: # at least 2 matched connected dert
+                    Pp_.append(Pp)
+  
+                _dert_.insert(_dert,0) # packing _dert back to _dert_
+                _rdn_.insert(_rdn,0) # packing _dert back to _dert_
+    
+                break # break and check the consecutive dert
+                
+
 
 
 def form_rdn_Pp_(Pp_, param_name, pdert1__, pdert2__, fPd):  # cluster Pps by cross-param redundant value sign, re-evaluate them for cross-level rdn
