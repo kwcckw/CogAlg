@@ -97,7 +97,7 @@ def search(P_, fPd):  # cross-compare patterns within horizontal line
                     # _I in (I,L,x0) is forward projected by _D in (D,L,x0)
                     par_ = [[ par + (D / 2), L, x0] for [ par, L, x0], [D, _, _] in zip(par_, layer0["D_"][1:])]
                     # I in (I,L,x0) is backward projected by D in (D,L,x0)
-                    Pdert__ += [[ search_param_(_par_, par_, P_[:-1]) ]]  # pdert_ if "I_"
+                    Pdert__ += [ search_param_(_par_, par_, P_[:-1]) ]  # pdert_ if "I_"
                 _rL_=[]
                 for P in P_:  # form rLs to normalize cross-comp of same-M-sign Ps in pdert2_
                     if "_P" in locals():  # not the 1st P
@@ -116,7 +116,8 @@ def search(P_, fPd):  # cross-compare patterns within horizontal line
         rdn__ = sum_rdn_(layer0, Pdert__, fPd=1)  # assign redundancy to lesser-magnitude m|d in param pair for same-_P Pderts
 
         for param_name, Pdert_, rdn_ in zip(layer0, Pdert__, rdn__):  # segment Pdert__ into Pps
-            if param_name=="I_":  # = isinstance(Pdert_[0], Cpdert)
+            # shouldn't it be (I and not fPd) | (D and fPd)  for core param?
+            if param_name=="I_" and not fPd:  # = isinstance(Pdert_[0], Cpdert)
                 Ppm_ = form_Pp_rng_draft(Pdert_, rdn_, P_)  # P_ is stored per Pp
             else:
                 Ppm_ = form_Pp_(Pdert_, param_name, rdn_, P_, fPd=0)  # Ppd_formed in -Ppms only, in intra_Ppm_
@@ -204,13 +205,16 @@ def form_Pp_(dert_, param_name, rdn_, P_, fPd):
 
         if sign != _sign:
             # sign change, initialize P and append it to P_
-            Pp = CPp(L=1, iL=dert.L, I=dert.p, D=dert.d, M=dert.m, Rdn=rdn, negiL=dert.negiL, negL=dert.negL, negM=dert.negM,
-                     x0=x, ix0=dert.x0, pdert_=[dert], P_=[], sublayers=[], fPd=fPd)
+            Pp = CPp(L=1, iL=P_[x].L, I=dert.p, D=dert.d, M=dert.m, Rdn=rdn, \
+                     x0=x, ix0=P_[x].x0, pdert_=[dert], P_=[P_[x]], sublayers=[], fPd=fPd)
+            if hasattr(dert, "negL"):
+                Pp.accumulate(negiL=dert.negiL, negL=dert.negL, negM=dert.negM)
             Pp_.append(Pp)  # updated by accumulation below
         else:
             # accumulate params:
-            Pp.L += 1; Pp.iL += dert.L; Pp.I += dert.p; Pp.D += dert.d; Pp.M += dert.m; Pp.Rdn += rdn; Pp.negiL += dert.negiL
-            Pp.negL += dert.negL; Pp.negM += dert.negM
+            Pp.L += 1; Pp.iL += P_[x].L; Pp.I += dert.p; Pp.D += dert.d; Pp.M += dert.m; Pp.Rdn += rdn; 
+            if hasattr(dert, "negL"):
+                Pp.accumulate(negiL=dert.negiL, negL=dert.negL, negM=dert.negM)
             Pp.pdert_ += [dert];  Pp.P_ += [P]
         x += 1
         _sign = sign
@@ -222,33 +226,45 @@ def form_Pp_(dert_, param_name, rdn_, P_, fPd):
 
 def form_Pp_rng_draft(dert_, rdn_, P_):  # multiple Pps may overlap within _dert.negL
 
-    Pp_ = []; _dert_ = [], _P_=[]; _rdn_ = []
-    Pp=CPp  # positive Pps only
+    Pp_, _dert_, _P_, _rdn_ = [], [], [], []
+    Pp=CPp()  # positive Pps only
 
-    for i, dert, P, rdn in enumerate( zip( dert_.pop(), P_.pop(), rdn_.pop() )):
+    i = 0 # not using i now, put it here in case we need it later
+    while dert_:
+        
+        dert = dert_.pop(0)
+        P    = P_.pop(0)
+        rdn  = rdn_.pop(0)
 
         if dert.m - ave*rdn:  # initialize Pp for positive derts only, else too much overlap?
-            Pp = CPp(L=1, iL=dert.L, I=dert.p, D=dert.d, M=dert.m, Rdn=rdn, negiL=dert.negiL, negL=dert.negL, negM=dert.negM,
-                     x0=i, ix0=dert.x0, pdert_=[dert], P_=[P], sublayers=[], fPd=0)
+            Pp = CPp(L=1, iL=P.L, I=dert.p, D=dert.d, M=dert.m, Rdn=rdn, negiL=dert.negiL, negL=dert.negL, negM=dert.negM,
+                     x0=i, ix0=P.x0, pdert_=[dert], P_=[P], sublayers=[], fPd=0)
+        j = 0
+        while j<=len(_dert_)-1:
+            _dert = _dert_.pop(j)
+            _P    = _P_.pop(j) # _P index should be from x0 + negL? Since right now _P will never be P
+            _rdn  = _rdn_.pop(j)
 
-        for _dert, _rdn, _P in enumerate( zip( _dert_.pop(), _P_.pop(), _rdn_.pop()) ):
             if _P is P:
-                if (_dert.m - ave*_rdn) and (dert.m - ave*rdn) \
-                    and (dert is not _dert):  # this should be preventable?
+                if (_dert.m - ave*_rdn) and (dert.m - ave*rdn) :
                     # accumulate params:
                     Pp.L += 1; Pp.iL += _dert.L; Pp.I += _dert.p; Pp.D += _dert.d; Pp.M += _dert.m; Pp.Rdn += _rdn; Pp.negiL += _dert.negiL
                     Pp.negL += _dert.negL; Pp.negM += _dert.negM
                     Pp.pdert_ += [_dert];  Pp.P_ += [_P]
                 else:
                     Pp_.append(Pp)  # even if single-dert
-                    break  # not sure about this?
-                    # sorry I re-arranged things, may have missed some of your points?
+                    break  # break when there is no continuous same sign dert
 
-            else:  # keep for next derts
-                _dert_.append(_dert); _P_.append(_P); _rdn_.append(_rdn)
+            else:  # packing back with same index
+                _dert_.insert(j,_dert); _P_.insert(j, _P);_rdn_.insert(j,_rdn)
+                j += 1 # no increment in index if 
 
+        # dert will be either in _dert_ or dert_, they shouldn't exist in dert_ and _dert_ at a same time
+        # after the outer loop, dert from dert_ will be packed into _dert_
         _dert_.append(dert); _P_.append(P); _rdn_.append(rdn)
+        i += 1
 
+    return Pp_
 
 def form_rdn_Pp_(Pp_, param_name, pdert1__, pdert2__, fPd):  # cluster Pps by cross-param redundant value sign, re-evaluate them for cross-level rdn
     rPp_ = []
@@ -262,7 +278,7 @@ def form_rdn_Pp_(Pp_, param_name, pdert1__, pdert2__, fPd):  # cluster Pps by cr
         if sign != _sign:  # sign change, initialize rPp and append it to rPp_
 
             rPp = CPp(L=1, iL=Pp.iL, I=Pp.I, D=Pp.D, M=Pp.M, Rdn=Pp.Rdn, rval=Pp.rval, negiL=Pp.negiL, negL=Pp.negL, negM=Pp.negM,
-                      x0=x, ix0=Pp.ix0, pdert_=[Pp], sublayers=[], fPd=fPd)
+                      x0=x, ix0=Pp.x0, pdert_=[Pp], sublayers=[], fPd=fPd)
             # or rPp is sign, Pp_?
             if _sign:  # -rPps are not processed?
                 compact(rPp, pdert1__, pdert2__, param_name, fPd)  # re-eval Pps, Pp.pdert_s for redundancy, eval splice Ps
