@@ -18,6 +18,7 @@ class Cpdert(ClusterStructure):
     negM = int  # in mdert only
     negL = int  # in mdert only
     negiL = int
+    Pp = object  # for Pp merging in form_Pp_rng, temporary?
 
 class CPp(CP):
     pdert_ = list
@@ -108,7 +109,7 @@ def search(P_, fPd):  # cross-compare patterns within horizontal line
                 __par_ = [[__par * _rL, L, x0] for [__par, L, x0], _rL in zip(param_[:-2], _rL_)]  # normalize by _rL
                 # step=2 comp for P splice, one param: (I and not fPd) or (D and fPd):
                 dert2_ = [ comp_param(__par, par, param_name[0], ave) for __par, par in zip(__par_, par_[1:]) ]
-                # else step=1 only:
+            # else step=1 only:
             dert1_ = [ comp_param(_par, par, param_name[0], ave) for _par, par in zip(_par_, par_) ]  # append pdert1_ per param_
             dert1__ += [dert1_]
             if not param_name=="I_": Pdert__ += [dert1_]  # dert_ = comp_param_
@@ -116,7 +117,6 @@ def search(P_, fPd):  # cross-compare patterns within horizontal line
         rdn__ = sum_rdn_(layer0, Pdert__, fPd=1)  # assign redundancy to lesser-magnitude m|d in param pair for same-_P Pderts
 
         for param_name, Pdert_, rdn_ in zip(layer0, Pdert__, rdn__):  # segment Pdert__ into Pps
-            # shouldn't it be (I and not fPd) | (D and fPd)  for core param?
             if param_name=="I_" and not fPd:  # = isinstance(Pdert_[0], Cpdert)
                 Ppm_ = form_Pp_rng_draft(Pdert_, rdn_, P_)  # P_ is stored per Pp
             else:
@@ -166,7 +166,7 @@ def sum_rdn_(layer0, Pdert__, fPd):
         # pdert per _P
         rdn_pairs = [[fPd, 0], [fPd, 1-fPd], [fPd, fPd], [0, 1], [1-fPd, fPd]]  # rdn in olp Pms, Pds: if fPd: I, M rdn+=1, else: D rdn+=1
         # names:    ('I','L'), ('I','D'),    ('I','M'),  ('L',alt), ('D','M'))
-        # I *= M: comparison value is always combined?
+        # I *= M: comp value is combined?
 
         for rdn_pair, name_pair in zip(rdn_pairs, name_pairs):
             # assign rdn in each rdn_pair using partial name substitution: https://www.w3schools.com/python/ref_func_eval.asp
@@ -202,20 +202,17 @@ def form_Pp_(dert_, param_name, rdn_, P_, fPd):
         if fPd: sign = dert.d > 0
         else:   sign = dert.m > 0  # adjust by ave projected at distance=negL and contrast=negM, if significant:
         # m + ddist_ave = ave - ave * (ave_rM * (1 + negL / ((param.L + _param.L) / 2))) / (1 + negM / ave_negM)?
-
         if sign != _sign:
             # sign change, initialize P and append it to P_
-            Pp = CPp(L=1, iL=P_[x].L, I=dert.p, D=dert.d, M=dert.m, Rdn=rdn, \
-                     x0=x, ix0=P_[x].x0, pdert_=[dert], P_=[P_[x]], sublayers=[], fPd=fPd)
+            Pp = CPp(L=1, iL=P_[x].L, I=dert.p, D=dert.d, M=dert.m, Rdn=rdn, x0=x, ix0=P_[x].x0, pdert_=[dert], P_=[P_[x]], sublayers=[], fPd=fPd)
             if hasattr(dert, "negL"):
                 Pp.accumulate(negiL=dert.negiL, negL=dert.negL, negM=dert.negM)
             Pp_.append(Pp)  # updated by accumulation below
         else:
             # accumulate params:
-            Pp.L += 1; Pp.iL += P_[x].L; Pp.I += dert.p; Pp.D += dert.d; Pp.M += dert.m; Pp.Rdn += rdn; 
+            Pp.L += 1; Pp.iL += P_[x].L; Pp.I += dert.p; Pp.D += dert.d; Pp.M += dert.m; Pp.Rdn += rdn; Pp.pdert_ += [dert]; Pp.P_ += [P]
             if hasattr(dert, "negL"):
                 Pp.accumulate(negiL=dert.negiL, negL=dert.negL, negM=dert.negM)
-            Pp.pdert_ += [dert];  Pp.P_ += [P]
         x += 1
         _sign = sign
 
@@ -224,47 +221,40 @@ def form_Pp_(dert_, param_name, rdn_, P_, fPd):
 
     return Pp_
 
+
 def form_Pp_rng_draft(dert_, rdn_, P_):  # multiple Pps may overlap within _dert.negL
 
-    Pp_, _dert_, _P_, _rdn_ = [], [], [], []
-    Pp=CPp()  # positive Pps only
-
-    i = 0 # not using i now, put it here in case we need it later
-    while dert_:
-        
-        dert = dert_.pop(0)
-        P    = P_.pop(0)
-        rdn  = rdn_.pop(0)
-
-        if dert.m - ave*rdn:  # initialize Pp for positive derts only, else too much overlap?
-            Pp = CPp(L=1, iL=P.L, I=dert.p, D=dert.d, M=dert.m, Rdn=rdn, negiL=dert.negiL, negL=dert.negL, negM=dert.negM,
-                     x0=i, ix0=P.x0, pdert_=[dert], P_=[P], sublayers=[], fPd=0)
-        j = 0
-        while j<=len(_dert_)-1:
-            _dert = _dert_.pop(j)
-            _P    = _P_.pop(j) # _P index should be from x0 + negL? Since right now _P will never be P
-            _rdn  = _rdn_.pop(j)
-
-            if _P is P:
-                if (_dert.m - ave*_rdn) and (dert.m - ave*rdn) :
-                    # accumulate params:
-                    Pp.L += 1; Pp.iL += _dert.L; Pp.I += _dert.p; Pp.D += _dert.d; Pp.M += _dert.m; Pp.Rdn += _rdn; Pp.negiL += _dert.negiL
-                    Pp.negL += _dert.negL; Pp.negM += _dert.negM
-                    Pp.pdert_ += [_dert];  Pp.P_ += [_P]
+    Pp_ = []  # no Pp=CPp(): positive Pps only
+    _dert_ = dert_.copy; _P_= P_.copy; _rdn_ = rdn_.copy
+    i = 0
+    while _dert_:
+        _dert = _dert_.pop(0); _P = _P_.pop(0); _rdn  = _rdn_.pop(0)
+        # initialize Pp for positive derts only, else too much overlap?
+        if _dert.m > ave*_rdn:
+            Pp = CPp(L=1, iL=_P.L, I=_dert.p, D=_dert.d, M=_dert.m, Rdn=_rdn, negiL=_dert.negiL, negL=_dert.negL, negM=_dert.negM,
+                     x0=i, ix0=_P.x0, pdert_=[_dert], P_=[_P], sublayers=[], fPd=0)
+            # not sure this will work?:
+            _dert.Pp = Pp
+            j = i + _dert.negL
+            while j <= len(dert_)-1:
+                dert = dert_[j]; P = P_[j]; rdn = rdn_[j]  # no pop: maybe used by other _derts
+                if dert.m > ave*rdn:
+                    if dert.Pp:  # dert is already integrated in previously formed Pp, represented per dert?
+                        merge(Pp, dert.Pp)  # no need to continue search
+                        break
+                    else:  # accumulate params:
+                        Pp.L += 1; Pp.iL += dert.L; Pp.I += dert.p; Pp.D += dert.d; Pp.M += dert.m; Pp.Rdn += rdn; Pp.negiL += dert.negiL
+                        Pp.negL += dert.negL; Pp.negM += dert.negM; Pp.pdert_ += [dert]; Pp.P_ += [P]
+                        dert.Pp = Pp
+                        # Pp derts already searched through dert_, so they won't be used as _derts:
+                        _dert_.pop(j); _P_.pop(j); _rdn_.pop(j)
+                        j += dert.negL
                 else:
                     Pp_.append(Pp)  # even if single-dert
-                    break  # break when there is no continuous same sign dert
-
-            else:  # packing back with same index
-                _dert_.insert(j,_dert); _P_.insert(j, _P);_rdn_.insert(j,_rdn)
-                j += 1 # no increment in index if 
-
-        # dert will be either in _dert_ or dert_, they shouldn't exist in dert_ and _dert_ at a same time
-        # after the outer loop, dert from dert_ will be packed into _dert_
-        _dert_.append(dert); _P_.append(P); _rdn_.append(rdn)
+                    break  # Pp is terminated
         i += 1
-
     return Pp_
+
 
 def form_rdn_Pp_(Pp_, param_name, pdert1__, pdert2__, fPd):  # cluster Pps by cross-param redundant value sign, re-evaluate them for cross-level rdn
     rPp_ = []
