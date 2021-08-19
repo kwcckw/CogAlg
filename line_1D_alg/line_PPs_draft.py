@@ -225,34 +225,38 @@ def form_Pp_(dert_, param_name, rdn_, P_, fPd):
 def form_Pp_rng_draft(dert_, rdn_, P_):  # multiple Pps may overlap within _dert.negL
 
     Pp_ = []  # no Pp=CPp(): positive Pps only
-    _dert_ = dert_.copy; _P_= P_.copy; _rdn_ = rdn_.copy
-    i = 0
-    while _dert_:
-        _dert = _dert_.pop(0); _P = _P_.pop(0); _rdn  = _rdn_.pop(0)
+    merged_index = [] # index of merged dert's P in P_
+    
+    for i, (_dert, _P, _rdn) in enumerate(zip(dert_, P_, rdn_)):
         # initialize Pp for positive derts only, else too much overlap?
         if _dert.m > ave*_rdn:
-            Pp = CPp(L=1, iL=_P.L, I=_dert.p, D=_dert.d, M=_dert.m, Rdn=_rdn, negiL=_dert.negiL, negL=_dert.negL, negM=_dert.negM,
-                     x0=i, ix0=_P.x0, pdert_=[_dert], P_=[_P], sublayers=[], fPd=0)
-            # not sure this will work?:
-            _dert.Pp = Pp
+            if not isinstance(_dert.Pp, CPp):
+                Pp = CPp(L=1, iL=_P.L, I=_dert.p, D=_dert.d, M=_dert.m, Rdn=_rdn, negiL=_dert.negiL, negL=_dert.negL, negM=_dert.negM,
+                         x0=i, ix0=_P.x0, pdert_=[_dert], P_=[_P], sublayers=[], fPd=0)
+                _dert.Pp = Pp
+            else:
+                Pp = _dert.Pp
             j = i + _dert.negL
-            while j <= len(dert_)-1:
+            while (j <= len(dert_)-1) and (j != i) and (j not in merged_index):
                 dert = dert_[j]; P = P_[j]; rdn = rdn_[j]  # no pop: maybe used by other _derts
                 if dert.m > ave*rdn:
-                    if dert.Pp:  # dert is already integrated in previously formed Pp, represented per dert?
-                        merge(Pp, dert.Pp)  # no need to continue search
-                        break
+                    if isinstance(dert.Pp, CPp):  # dert is already integrated in previously formed Pp, represented per dert?
+                        Pp.accum_from(dert.Pp,excluded=['x0'])
+                        Pp.P_ += dert.Pp.P_
+                        Pp.pdert_ += dert.Pp.pdert_
+                        Pp.sublayers += dert.Pp.sublayers
+                        break # no need to continue search
                     else:  # accumulate params:
-                        Pp.L += 1; Pp.iL += dert.L; Pp.I += dert.p; Pp.D += dert.d; Pp.M += dert.m; Pp.Rdn += rdn; Pp.negiL += dert.negiL
+                        Pp.L += 1; Pp.iL += P.L; Pp.I += dert.p; Pp.D += dert.d; Pp.M += dert.m; Pp.Rdn += rdn; Pp.negiL += dert.negiL
                         Pp.negL += dert.negL; Pp.negM += dert.negM; Pp.pdert_ += [dert]; Pp.P_ += [P]
                         dert.Pp = Pp
                         # Pp derts already searched through dert_, so they won't be used as _derts:
-                        _dert_.pop(j); _P_.pop(j); _rdn_.pop(j)
+                        merged_index.append(j)
                         j += dert.negL
                 else:
                     Pp_.append(Pp)  # even if single-dert
                     break  # Pp is terminated
-        i += 1
+
     return Pp_
 
 
