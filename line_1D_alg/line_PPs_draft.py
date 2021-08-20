@@ -98,7 +98,7 @@ def search(P_, fPd):  # cross-compare patterns within horizontal line
                     # _I in (I,L,x0) is forward projected by _D in (D,L,x0)
                     par_ = [[ par + (D / 2), L, x0] for [ par, L, x0], [D, _, _] in zip(par_, layer0["D_"][1:])]
                     # I in (I,L,x0) is backward projected by D in (D,L,x0)
-                    Pdert__ += [ search_param_(_par_, par_, P_[:-1]) ]  # pdert_ if "I_"
+                    Pdert__ += [ search_param_(_par_, par_, P_[:-1], iave=[])]  # pdert_ if "I_"
                 _rL_=[]
                 for P in P_:  # form rLs to normalize cross-comp of same-M-sign Ps in pdert2_
                     if "_P" in locals():  # not the 1st P
@@ -127,20 +127,22 @@ def search(P_, fPd):  # cross-compare patterns within horizontal line
     return rdn_Ppm_
 
 
-def search_param_(_param_, param_, P_):  # variable-range search in mdert_, only if param is core param?
+def search_param_(_param_, param_, P_, iave):  # variable-range search in mdert_, only if param is core param?
     # add local ave for extended edge-dert: lower ave_M with higher Pp.M: crit for search, not match?
 
+    if not iave: iave = ave
+    
     mdert_ = []  # line-wide (i, p, d, m, negL, negM, x0, L, P)
     for i, ((_param, _L, _x0), (param, L, x0), P) in enumerate( zip(_param_, param_, P_)):
 
-        dert = comp_param(_param, param, "I_", ave)  # param is compared to prior-P _param
+        dert = comp_param(_param, param, "I_", iave)  # param is compared to prior-P _param
         negiL = negL = negM = 0  # comp next only
         comb_M = dert.m
         j = i
         while comb_M > 0 and j + 1 < len(param_):
             j += 1
             ext_param, ext_L, ext_x0 = param_[j]  # extend search beyond next param
-            dert = comp_param(_param, ext_param, "I_", ave)
+            dert = comp_param(_param, ext_param, "I_", iave)
             if dert.m > 0:
                 break  # 1st matching param takes over connectivity search from _param, in the next loop
             else:
@@ -387,6 +389,9 @@ def rng_search(Pp, Pp_, ave):  # search_param_ with higher ave, der_comp( dert1_
 
     # include adjacent Pps, not for der_comp?
     # for _param_ in previous and param_ in next Pp:
+
+    # if we perform rng search with Pp, shouldn't be all _param_ is Pp? while the param_ is adjacent Pps, which could be Pp_.
+    # pdert is not having L and x0, if we get it from their Pp, it would be the same value across a same Pp.pdert_
     _param_ = [(pdert.m,pdert.L,pdert.x0) for pdert in Pp.pdert_[:-1]]
     param_ = [(pdert.m,pdert.L,pdert.x0) for pdert in Pp.pdert_[1:]]
 
