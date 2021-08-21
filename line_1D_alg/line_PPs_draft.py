@@ -98,7 +98,7 @@ def search(P_, fPd):  # cross-compare patterns within horizontal line
                     # _I in (I,L,x0) is forward projected by _D in (D,L,x0)
                     par_ = [[ par + (D / 2), L, x0] for [ par, L, x0], [D, _, _] in zip(par_, layer0["D_"][1:])]
                     # I in (I,L,x0) is backward projected by D in (D,L,x0)
-                    Pdert__ += [ search_param_(_par_, par_, P_[:-1], iave=[])]  # pdert_ if "I_"
+                    Pdert__ += [ search_param_(_par_, par_, P_[:-1]) ]  # pdert_ if "I_"
                 _rL_=[]
                 for P in P_:  # form rLs to normalize cross-comp of same-M-sign Ps in pdert2_
                     if "_P" in locals():  # not the 1st P
@@ -119,7 +119,7 @@ def search(P_, fPd):  # cross-compare patterns within horizontal line
 
         for param_name, Pdert_, rdn_ in zip(layer0, Pdert__, rdn__):  # segment Pdert__ into Pps
             if param_name=="I_" and not fPd:  # = isinstance(Pdert_[0], Cpdert)
-                Ppm_ = form_Pp_rng(Pdert_, rdn_, P_)  # P_ is stored per Pp
+                Ppm_ = form_Pp_rng(Pdert_, rdn_, P_)
             else:
                 Ppm_ = form_Pp_(Pdert_, param_name, rdn_, P_, fPd=0)  # Ppd_formed in -Ppms only, in intra_Ppm_
             rdn_Ppm_ = form_rdn_Pp_(Ppm_, param_name, dert1__, dert2_, fPd=0)
@@ -127,29 +127,28 @@ def search(P_, fPd):  # cross-compare patterns within horizontal line
     return rdn_Ppm_
 
 
-def search_param_(_param_, param_, P_, iave):  # variable-range search in mdert_, only if param is core param?
-    # add local ave for extended edge-dert: lower ave_M with higher Pp.M: crit for search, not match?
+def search_param_(_param_, param_, P_, ave):  # variable-range search in mdert_, only if param is core param?
+    # higher local ave for extended rng: -> lower m and term by match, and higher proj_M?
 
-    if not iave: iave = ave
-    
-    mdert_ = []  # line-wide (i, p, d, m, negL, negM, x0, L, P)
+    mdert_ = []  # line-wide (i, p, d, m, negL, negM, negiL)
     for i, ((_param, _L, _x0), (param, L, x0), P) in enumerate( zip(_param_, param_, P_)):
 
-        dert = comp_param(_param, param, "I_", iave)  # param is compared to prior-P _param
+        dert = comp_param(_param, param, "I_", ave)  # param is compared to prior-P _param
         negiL = negL = negM = 0  # comp next only
-        comb_M = dert.m
-        j = i
-        while comb_M > 0 and j + 1 < len(param_):
-            j += 1
-            ext_param, ext_L, ext_x0 = param_[j]  # extend search beyond next param
-            dert = comp_param(_param, ext_param, "I_", iave)
+        proj_M = dert.m / P.L  # * rave m xP, tentative: (ave + Pp.M / 2) / Pp.M?
+        j = i + 1
+        while proj_M > 0 and j < len(param_):
+            ext_param, ext_L, ext_x0 = param_[j]
+            # extend search beyond next param
+            dert = comp_param(_param, ext_param, "I_", ave)
             if dert.m > 0:
                 break  # 1st matching param takes over connectivity search from _param, in the next loop
             else:
-                comb_M = dert.m + negM - ave_M  # adjust ave_M for relative continuity and similarity?
+                proj_M = dert.m + negM - ave_M  # adjust ave_M for relative continuity and similarity?
                 negM += dert.m
                 negiL += ext_L
                 negL += 1
+                j += 1
         # after extended search, if any:
         mdert_.append( Cpdert(i=dert.i, p=dert.p, d=dert.d, m=dert.m, negiL=negiL, negL=negL, negM=negM))
 
@@ -389,9 +388,6 @@ def rng_search(Pp, Pp_, ave):  # search_param_ with higher ave, der_comp( dert1_
 
     # include adjacent Pps, not for der_comp?
     # for _param_ in previous and param_ in next Pp:
-
-    # if we perform rng search with Pp, shouldn't be all _param_ is Pp? while the param_ is adjacent Pps, which could be Pp_.
-    # pdert is not having L and x0, if we get it from their Pp, it would be the same value across a same Pp.pdert_
     _param_ = [(pdert.m,pdert.L,pdert.x0) for pdert in Pp.pdert_[:-1]]
     param_ = [(pdert.m,pdert.L,pdert.x0) for pdert in Pp.pdert_[1:]]
 
