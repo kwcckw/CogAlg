@@ -62,10 +62,10 @@ ave_inv = 20  # ave inverse m, change to Ave from the root intra_blob?
 ave_min = 5  # ave direct m, change to Ave_min from the root intra_blob?
 ave_rolp = .5  # ave overlap ratio for comp_Pp
 
-
+# is there any chance fPd = true here? I don't see how it could be true here. probably we can remove it?
 def search(P_, fPd):  # cross-compare patterns within horizontal line
 
-    # sub_search_recursive(P_, fPd)  # search with incremental distance: first inside sublayers
+    sub_search_recursive(P_, fPd)  # search with incremental distance: first inside sublayers
     layer0 = {'L_': [], 'I_': [], 'D_': [], 'M_': []}  # param_name: [params]
 
     if len(P_) > 1:  # at least 2 comparands
@@ -316,11 +316,11 @@ def compact(rPp, pdert1__, pdert2_, param_name, fPd):  # re-eval Pps, Pp.pdert_s
                 for pdert1 in pdert1__[1]: M1 += pdert1.m  # match(I, _I)
 
             if M2 / abs(M1) > -ave_splice:  # similarity / separation: splice Ps in Pp, also implies weak Pp.pdert_?
-                P = CP()
-                for pdert in Pp.pdert_:
-                    P.accum_from(pdert._P, excluded=["x0"])  # different from Pp params
-                    P.dert_ += [pdert._P.dert_]  # splice dert_s, eval intra_P?
-                rPp.pdert_[i] = P  # replace Pp with spliced P
+                _P = CP()
+                for P in Pp.P_:
+                    _P.accum_from(P, excluded=["x0"])  # different from Pp params
+                    _P.dert_ += [P.dert_]  # splice dert_s, eval intra_P?
+                rPp.pdert_[i] = _P  # replace Pp with spliced P
 
         if pdert_val <= 0:
             Pp.pdert_ = []  # remove pdert_
@@ -399,18 +399,16 @@ def sub_search_recursive(P_, fPd):  # search in top sublayer per P / sub_P
     for P in P_:
         if P.sublayers:
             sublayer = P.sublayers[0][0]  # top sublayer has one element
-            sub_P_ = sublayer[5]
+            sub_P_ = sublayer[4]
             if len(sub_P_) > 2:
                 if fPd:
                     if abs(P.D) > ave_D:  # better use sublayers.D|M, but we don't have it yet
-                        sub_PPm_, sub_PPd_ = search(sub_P_, fPd)
-                        sublayer[6].append(sub_PPm_)
-                        sublayer[7].append(sub_PPd_)
+                        sub_PP_ = search(sub_P_, fPd)
+                        sublayer[5].append(sub_PP_)
                         sub_search_recursive(sub_P_, fPd)  # deeper sublayers search is selective per sub_P
                 elif P.M > ave_M:
-                    sub_PPm_, sub_PPd_ = search(sub_P_, fPd)
-                    sublayer[6].append(sub_PPm_)
-                    sublayer[7].append(sub_PPd_)
+                    sub_PP_ = search(sub_P_, fPd)
+                    sublayer[5].append(sub_PP_)
                     sub_search_recursive(sub_P_, fPd)  # deeper sublayers search is selective per sub_P
 
 
