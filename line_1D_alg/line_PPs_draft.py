@@ -121,12 +121,13 @@ def search(P_, fPd):  # cross-compare patterns within horizontal line
 
         for param_name, Pdert_, rdn_ in zip(layer0, Pdert__, rdn__):  # segment Pdert__ into Pps
             if param_name=="I_" and not fPd:  # = isinstance(Pdert_[0], Cpdert)
-                Ppm__ += [ form_Pp_rng(Pdert_, rdn_, P_) ]
+                Ppm_ =  form_Pp_rng(Pdert_, rdn_, P_) 
             else:
-                Ppm__ += [ form_Pp_(Pdert_, param_name, rdn_, P_, fPd=0) ]  # Ppd_ is formed in -Ppms only, in intra_Ppm_
-            rdn_Ppm__ += [ form_rdn_Pp_(Ppm__, param_name, dert1__, dert2_, fPd=0) ]
+                Ppm_ =  form_Pp_(Pdert_, param_name, rdn_, P_, fPd=0)  # Ppd_ is formed in -Ppms only, in intra_Ppm_
+            Ppm__ += [ Ppm_ ]
+            rdn_Ppm__ += [ form_rdn_Pp_(Ppm_, param_name, dert1__, dert2_, fPd=0) ]
 
-    return rdn_Ppm__
+    return Ppm__, rdn_Ppm__
 
 
 def search_param_(_param_, param_, P_, ave):  # variable-range search in mdert_, only if param is core param?
@@ -355,7 +356,9 @@ def intra_Ppm_(Pp_, param_name, rdn_, fPd):  # evaluate for sub-recursion in lin
                 if -Pp.M > ave_D * rdn:
                     # or abs D: likely sign match span?
                     rdn_ = [rdn+1 for rdn in rdn_]
-                    mean_M = -Pp.M / Pp.L  # for allocation to each internal Pd?
+                    mean_M = -Pp.M / Pp.L  # for allocation to each internal Pd?                
+                    # There's an endless recursion here because the same pdert_ forming Pp are parsed into form_Pp_ again, and a same Pp will be formed and call intra_Ppm again 
+                    # add rdn as an extra evaluation here?
                     sub_Ppd_ = form_Pp_(Pp.pdert_, param_name, rdn_, Pp.P_, fPd=True)  # cluster by d sign: partial d match, eval intra_Pm_(Pdm_)
                     Pp.sublayers += [[(True, sub_Ppd_)]]  # 1st layer, Dert=[], fill if Ls > min?
                     Pp.sublayers += intra_Ppd_(sub_Ppd_, param_name, mean_M, rdn_)  # der_comp eval, rdn_?
@@ -399,12 +402,12 @@ def sub_search_recursive(P_, fPd):  # search in top sublayer per P / sub_P
             if len(sub_P_) > 2:
                 if fPd:
                     if abs(P.D) > ave_D:  # better use sublayers.D|M, but we don't have it yet
-                        sub_PP_ = search(sub_P_, fPd)
-                        sublayer[5].append(sub_PP_)
+                        sub_Pp__, sub_rdn_Pp__ = search(sub_P_, fPd)
+                        sublayer[5].append((sub_Pp__, sub_rdn_Pp__))
                         sub_search_recursive(sub_P_, fPd)  # deeper sublayers search is selective per sub_P
                 elif P.M > ave_M:
-                    sub_PP_ = search(sub_P_, fPd)
-                    sublayer[5].append(sub_PP_)
+                    sub_Pp__, sub_rdn_Pp__ = search(sub_P_, fPd)
+                    sublayer[5].append((sub_Pp__, sub_rdn_Pp__))
                     sub_search_recursive(sub_P_, fPd)  # deeper sublayers search is selective per sub_P
 
 
