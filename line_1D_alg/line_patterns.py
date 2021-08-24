@@ -184,7 +184,7 @@ def intra_Pm_(P_, rdn, rng, fPd):  # evaluate for sub-recursion in line Pm_, pac
                     rng += 1; rdn += 1  # redundancy to higher levels, or +=1 for the weaker layer? 
                     sub_Pm_ = form_P_(rdert_, rdn, rng, fPd=False)  # cluster by m sign, eval intra_Pm_
                     # 1st sublayer is one element, sub_Ppm__=[], + Dert=[]:
-                    P.sublayers += [(False, fPd, rdn, rng, sub_Pm_, [])]
+                    P.sublayers += [[False, fPd, rdn, rng, sub_Pm_, []]]  
                     if len(sub_Pm_) > 4:
                         P.sublayers += intra_Pm_(sub_Pm_, rdn+1, rng+1, fPd)  # feedback, add sublayer param summing for comp_sublayers?
                         comb_layers = [comb_layers + sublayers for comb_layers, sublayers in
@@ -195,7 +195,7 @@ def intra_Pm_(P_, rdn, rng, fPd):  # evaluate for sub-recursion in line Pm_, pac
 
                     rel_adj_M = adj_M / -P.M  # for allocation of -Pm' adj_M to each of its internal Pds
                     sub_Pd_ = form_P_(P.dert_, rdn+1, rng, fPd=True)  # cluster by d sign: partial d match, eval intra_Pm_(Pdm_)
-                    P.sublayers += [(True, True, rdn, rng, sub_Pd_, [])]  # 1st sublayer, sub_Ppm__=[], + Dert=[]?
+                    P.sublayers += [[True, True, rdn, rng, sub_Pd_, []]]  # 1st sublayer, sub_Ppm__=[], + Dert=[]?
 
                     P.sublayers += intra_Pd_(sub_Pd_, rel_adj_M, rdn+1, rng)  # der_comp eval per nPm
                     # splice sublayers across sub_Ps, for return as root sublayers[1:]:
@@ -213,7 +213,7 @@ def intra_Pd_(Pd_, rel_adj_M, rdn, rng):  # evaluate for sub-recursion in line P
             # cross-comp of ds:
             ddert_ = deriv_comp(P.dert_)  # i is d
             sub_Pm_ = form_P_(ddert_, rdn+1, rng+1, fPd=True)  # cluster Pd derts by md sign, eval intra_Pm_(Pdm_), won't happen
-            P.sublayers += [(True, True, rdn, rng, sub_Pm_, [])]  # 1st sublayer: fPd, fid, rdn, rng, sub_P_, sub_Ppm__=[], + Dert=[]?
+            P.sublayers += [[True, True, rdn, rng, sub_Pm_, []]]  # 1st entry is fid? # 1st sublayer: fid, fPd, rdn, rng, sub_P_, sub_Ppm__=[], + Dert=[]?
             if len(sub_Pm_) > 3:
                 P.sublayers += intra_Pm_(sub_Pm_, rdn+1, rng + 1, fPd=True)
                 # splice sublayers across sub_Ps:
@@ -368,7 +368,7 @@ if __name__ == "__main__":
     logging = 1  # log dataframes
     fpickle = 2  # 0: read from the dump; 1: pickle dump; 2: no pickling
     render = 0
-    fline_PPs = 0
+    fline_PPs = 1
     start_time = time()
 
     if logging:
