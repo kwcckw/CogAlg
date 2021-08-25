@@ -156,9 +156,11 @@ def search_draft(P_, fPd):  # cross-compare patterns within horizontal line
             # if dert-level P-defining param:
             if ((param_name == "I_") and not fPd) or ((param_name == "D_") and fPd):
                 if not fPd:
-                    Pdert__ += [search_param_(param_, layer0["D_"], P_, ave, rave=1)]  # pdert_ if "I_"
+                    # add [:-1] for size consistency, else the size of dert from search_param will be > dert1
+                    Pdert__ += [search_param_(param_[:-1], layer0["D_"][:-1], P_, ave, rave=1)]  # pdert_ if "I_"
                 # step=2 comp for P splice, one param: (I and not fPd) or (D and fPd):
-                dert2_ = [comp_param(__par, par, param_name[0], ave) for __par, par in zip( param_[:-2], param_[2:])]
+                # if step=2, the length of Pdert_ and dert1_ will be different with dert2_, add dummy dert?
+                dert2_ = [comp_param(__par, par, param_name[0], ave) for __par, par in zip( param_[:-2], param_[2:])] + [Cdert()]
             # else step=1 per param only:
             dert1_ = [comp_param(_par, par, param_name[0], ave) for _par, par in zip( param_[:-1], param_[1:])]
             dert1__ += [dert1_]
@@ -183,7 +185,7 @@ def search_param_(I_, D_, P_, ave, rave):  # variable-range search in mdert_, on
 
     mdert_ = []  # line-wide (i, p, d, m, negL, negM, negiL)
 
-    for i, (_I, _D, _P) in enumerate( zip(I_, D_, P_)):
+    for i, (_I, _D, _P) in enumerate( zip(I_, D_, P_[:-1])):
         proj_M = 1
         negiL = negL = negM = 0
         _pI = _I - (_D / 2)  # forward project by _D
@@ -194,7 +196,7 @@ def search_param_(I_, D_, P_, ave, rave):  # variable-range search in mdert_, on
             pI = I - (D / 2)  # backward project by D
             dert = comp_param(_pI, pI, "I_", ave)  # param is compared to prior-P _param
             if dert.m > 0:
-                comp_sublayers(P_[i], P_[i+1], dert.m, dert.d)
+                comp_sublayers(P_[i], P_[j], dert.m, dert.d) # P should be j index
                 break  # 1st matching param takes over connectivity search from _param, in the next loop
             else:
                 proj_M = dert.m * rave + negM - ave_M  # lower ave_M instead of projection?
@@ -391,12 +393,12 @@ def intra_Ppm_(Pp_, param_name, rdn_, fPd):  # evaluate for sub-recursion in lin
             if Pp.M > 0:  # low-variation span, eval rng_comp
                 if Pp.M > ave_M * rdn and param_name=="I_":  # and if variable cost: Pp.M / Pp.L? reduced by lending to contrast?
                     rdn_ = [rdn+1 for rdn in rdn_]
-                    _param_ = [(pdert.m, P.L, P.x0) for pdert, P in zip(Pp.pdert_[:-1], Pp.P_[:-1])]
-                    param_ = [(pdert.m, P.L, P.x0) for pdert, P in zip(Pp.pdert_[1:], Pp.P_[1:])]
+                    I_ = [pdert.i for pdert in (Pp.pdert_[:-1])]
+                    D_ = [pdert.d for pdert in (Pp.pdert_[:-1])]
                     # search range is extended by higher ave: less replacing by match,
                     # and by higher proj_P = dert.m * rave ((Pp.M / Pp.L) / ave): less term by miss:
                     P_ave = Pp.M / Pp.L
-                    rpdert_ = search_param_(_param_, param_, Pp.P_, (ave + P_ave) / 2, rave = P_ave / ave )
+                    rpdert_ = search_param_(I_, D_, Pp.P_, (ave + P_ave) / 2, rave = P_ave / ave )
 
                     sub_Ppm_ = form_Pp_(rpdert_, param_name, rdn_, Pp.P_, fPd=False)  # cluster by m sign, eval intra_Pm_
                     Pp.sublayers += [[[fPd, sub_Ppm_]]]  # 1st sublayer is single element
@@ -452,11 +454,11 @@ def sub_search_recursive(P_, fPd):  # search in top sublayer per P / sub_P
             if len(sub_P_) > 2:
                 if fPd:
                     if abs(P.D) > ave_D:  # better use sublayers.D|M, but we don't have it yet
-                        sub_rdn_Pp__ = search(sub_P_, fPd)
+                        sub_rdn_Pp__ = search_draft(sub_P_, fPd)
                         sublayer[5].append(sub_rdn_Pp__)
                         sub_search_recursive(sub_P_, fPd)  # deeper sublayers search is selective per sub_P
                 elif P.M > ave_M:
-                    sub_rdn_Pp__ = search(sub_P_, fPd)
+                    sub_rdn_Pp__ = search_draft(sub_P_, fPd)
                     sublayer[5].append(sub_rdn_Pp__)
                     sub_search_recursive(sub_P_, fPd)  # deeper sublayers search is selective per sub_P
 
@@ -468,7 +470,7 @@ def comp_sublayers(_P, P, mP, dP):  # not revised; also add dP?
 
             if _sub_layer and sub_layer:
                 _fid, _fPd, _rdn, _rng, _sub_P_, _sub_Pp__, = _sub_layer
-                _fid, fPd, rdn, rng, sub_P_, sub_Pp__ = sub_layer
+                fid, fPd, rdn, rng, sub_P_, sub_Pp__ = sub_layer
                 # fork comparison:
                 if fPd == _fPd and rng == _rng and min(_P.L, P.L) > ave_Ls:
                     sub_mP = sub_dP = 0

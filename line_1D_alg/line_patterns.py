@@ -164,14 +164,15 @@ def form_P_(dert_, rdn, rng, fPd):  # accumulation and termination
 ''' 
 Sub-recursion in intra_P extends pattern with a hierarchy of sub-patterns (sub_), to be adjusted by feedback:
 '''
-def intra_Pm_(P_, rdn, rng, fPd):  # evaluate for sub-recursion in line Pm_, pack results into sub_Pm_
+def intra_Pm_(P_, irdn, irng, fPd):  # evaluate for sub-recursion in line Pm_, pack results into sub_Pm_
 
     adj_M_ = form_adjacent_M_(P_)  # compute adjacent Ms to evaluate contrastive borrow potential
     comb_layers = []  # combine into root P sublayers[1:]
 
     for P, adj_M in zip(P_, adj_M_):  # each sub_layer is nested to depth = sublayers[n]
-        if P.L > 2 * (rng+1):  # vs. **? rng+1 because rng is initialized at 0, as all params
-
+        if P.L > 0: #2 * (rng+1):  # vs. **? rng+1 because rng is initialized at 0, as all params
+            rng, rdn = irng, irdn  # prevent rng&rdn increases as we loop through multiple Ps, each layer should have same rng&rdn
+            
             if P.M > 0:  # low-variation span, eval comp at rng=2^n: 1, 2, 3; kernel size 2, 4, 8...
                 if P.M > ave_M * rdn:  # no -adj_M: reduced by lending to contrast, should be reflected in ave?
                     '''
@@ -184,9 +185,9 @@ def intra_Pm_(P_, rdn, rng, fPd):  # evaluate for sub-recursion in line Pm_, pac
                     rng += 1; rdn += 1  # redundancy to higher levels, or +=1 for the weaker layer? 
                     sub_Pm_ = form_P_(rdert_, rdn, rng, fPd=False)  # cluster by m sign, eval intra_Pm_
                     # 1st sublayer is one element, double brackets are for concatenation, sub_Ppm__=[], + Dert=[]:
-                    P.sublayers += [[[False, fPd, rdn, rng, sub_Pm_, []]]]
+                    P.sublayers += [[False, fPd, rdn, rng, sub_Pm_, []]]
                     if len(sub_Pm_) > 4:
-                        P.sublayers += intra_Pm_(sub_Pm_, rdn+1, rng+1, fPd)  # feedback, add sublayer param summing for comp_sublayers?
+                        P.sublayers += [intra_Pm_(sub_Pm_, rdn+1, rng+1, fPd)]  # feedback, add sublayer param summing for comp_sublayers?
                         comb_layers = [comb_layers + sublayers for comb_layers, sublayers in
                                        zip_longest(comb_layers, P.sublayers, fillvalue=[])]  # splice sublayers across sub_Ps
 
@@ -195,21 +196,22 @@ def intra_Pm_(P_, rdn, rng, fPd):  # evaluate for sub-recursion in line Pm_, pac
 
                     rel_adj_M = adj_M / -P.M  # for allocation of -Pm' adj_M to each of its internal Pds
                     sub_Pd_ = form_P_(P.dert_, rdn+1, rng, fPd=True)  # cluster by d sign: partial d match, eval intra_Pm_(Pdm_)
-                    P.sublayers += [[[True, True, rdn, rng, sub_Pd_, []]]]  # 1st sublayer, sub_Ppm__=[], + Dert=[]?
+                    P.sublayers += [[True, True, rdn, rng, sub_Pd_, []]]  # 1st sublayer, sub_Ppm__=[], + Dert=[]?
 
-                    P.sublayers += intra_Pd_(sub_Pd_, rel_adj_M, rdn+1, rng)  # der_comp eval per nPm
+                    P.sublayers += [intra_Pd_(sub_Pd_, rel_adj_M, rdn+1, rng)]  # der_comp eval per nPm
                     # splice sublayers across sub_Ps, for return as root sublayers[1:]:
                     comb_layers = [comb_layers + sublayers for comb_layers, sublayers in
                                    zip_longest(comb_layers, P.sublayers, fillvalue=[])]
 
     return comb_layers
 
-def intra_Pd_(Pd_, rel_adj_M, rdn, rng):  # evaluate for sub-recursion in line P_, packing results in sub_P_
+def intra_Pd_(Pd_, rel_adj_M, irdn, irng):  # evaluate for sub-recursion in line P_, packing results in sub_P_
 
     comb_layers = []
     for P in Pd_:  # each sub in sub_ is nested to depth = sub_[n]
 
-        if min(abs(P.D), abs(P.D) * rel_adj_M) > ave_D * rdn and P.L > 3:  # abs(D) * rel_adj_M: allocated adj_M
+        if min(abs(P.D), abs(P.D) * rel_adj_M) > ave_D * irdn and P.L > 3:  # abs(D) * rel_adj_M: allocated adj_M  
+            rng, rdn = irng, irdn
             # cross-comp of ds:
             ddert_ = deriv_comp(P.dert_)  # i is d
             sub_Pm_ = form_P_(ddert_, rdn+1, rng+1, fPd=True)  # cluster Pd derts by md sign, eval intra_Pm_(Pdm_), won't happen
@@ -364,10 +366,10 @@ if __name__ == "__main__":
     # Read image
     image = cv2.imread(arguments['image'], 0).astype(int)  # load pix-mapped image
     '''
-    logging = 1  # log dataframes
+    logging = 0  # log dataframes
     fpickle = 2  # 0: read from the dump; 1: pickle dump; 2: no pickling
     render = 0
-    fline_PPs = 0
+    fline_PPs = 1
     start_time = time()
 
     if logging:
@@ -400,7 +402,7 @@ if __name__ == "__main__":
         frame_PP__ = []
 
         for y, P_ in enumerate(frame_of_patterns_):
-            rdn_Pp__ = search(P_, fPd=0)
+            rdn_Pp__ = search_draft(P_, fPd=0)
             frame_PP__.append(rdn_Pp__)
         # draw_PP_(image, frame_PP_)  # debugging
 
