@@ -89,11 +89,9 @@ def search(P_, fPd):  # cross-compare patterns within horizontal line
             # if dert-level P-defining param:
             if ((param_name == "I_") and not fPd) or ((param_name == "D_") and fPd):
                 if not fPd:
-                    # add [:-1] for size consistency, else the size of dert from search_param will be > dert1
-
-                    Pdert__ += [search_param_(param_[:-1], layer0["D_"][:-1], P_, ave, rave=1)]  # pdert_ if "I_"
+                    Pdert__ += [search_param_(param_, layer0["D_"], P_, ave, rave=1)]  # pdert_ if "I_"
                 # step=2 comp for P splice, one param: (I and not fPd) or (D and fPd):
-                dert2_ = [comp_param(__par, par, param_name[0], ave) for __par, par in zip( param_[:-2], param_[2:])] + [Cdert()]
+                dert2_ = [comp_param(__par, par, param_name[0], ave) for __par, par in zip( param_[:-2], param_[2:])] 
             # else step=1 per param only:
             dert1_ = [comp_param(_par, par, param_name[0], ave) for _par, par in zip( param_[:-1], param_[1:])]
             dert1__ += [dert1_]
@@ -118,7 +116,7 @@ def search_param_(I_, D_, P_, ave, rave):  # variable-range search in mdert_, on
     # higher local ave for extended rng: -> lower m and term by match, and higher proj_M?
     mdert_ = []  # line-wide (i, p, d, m, negL, negM, negiL)
 
-    for i, (_I, _D, _P) in enumerate( zip(I_[:-1], D_[:-1], P_[:-1])):
+    for i, (_I, _D, _P) in enumerate( zip(I_[:-1], D_[:-1], P_[:-1])):  # added -1 here to get consistent length with other params, such as L,D and M
         proj_M = 1
         negiL = negL = negM = 0
         _pI = _I - (_D / 2)  # forward project by _D
@@ -382,7 +380,7 @@ def sub_search_recursive(P_, fPd):  # search in top sublayer per P / sub_P
 
     for P in P_:
         if P.sublayers:
-            sublayer = P.sublayers[0]  # top sublayer has one array
+            sublayer = P.sublayers[0][0]  # top sublayer has one array
             sub_P_ = sublayer[4]
             if len(sub_P_) > 2:
                 if fPd:
@@ -399,7 +397,7 @@ def sub_search_recursive(P_, fPd):  # search in top sublayer per P / sub_P
 def comp_sublayers(_P, P, mP, dP):  # not revised; also add dP?
 
     if P.sublayers and _P.sublayers:  # not empty sub layers
-        for _sub_layer, sub_layer in zip(_P.sublayers, P.sublayers):
+        for _sub_layer, sub_layer in zip(_P.sublayers[0], P.sublayers[0]):
 
             if _sub_layer and sub_layer:
                 _fid, _fPd, _rdn, _rng, _sub_P_, _sub_Pp__, = _sub_layer
