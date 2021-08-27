@@ -23,7 +23,7 @@ import sys
 from os.path import dirname, join, abspath
 
 from numpy import int16, int32
-sys.path.insert(0, abspath(join(dirname("CogAlg"), '../../../AppData/Roaming/JetBrains/PyCharmCE2021.2')))
+sys.path.insert(0, abspath(join(dirname("CogAlg"), '..')))
 import cv2
 # import argparse
 import pickle
@@ -153,10 +153,17 @@ def form_P_(rootP, dert_, rdn, rng, fPd):  # accumulation and termination
 
     # draft:
     if rootP:  # if called from intra_P_
-        rootP.sublayers = [[[fPd, rdn, rng, P_, []]]]  # 1st sublayer is one element, double brackets for concatenation, sub_Ppm__=[], + Dert=[]
-        if len(P_) > 4:
-            rootP.sublayers += [intra_P_(P_, rdn, rng, fPd)]  # feedback of comb_layers, add sublayer param summing for comp_sublayers?
+        # triple brackets here
+        # innermost bracket = storing values
+        # center bracket    = each sub_P's sublayers in a same depth layer
+        # outermost bracket = between layers of different depth   
+        rootP.sublayers = [[[ fPd, rdn, rng, P_, [] ]]]  # 1st sublayer is one element, double brackets for concatenation, sub_Ppm__=[], + Dert=[]
+        if len(P_) > 4: # 2 * (rng+1) = 2*2 =4
+            rootP.sublayers += intra_P_(P_, rdn, rng, fPd)  # feedback of comb_layers, add sublayer param summing for comp_sublayers?
 
+    else: # this should replace the intra_P_ call in cross_comp
+        intra_P_(P_, rdn, rng, fPd)
+        
     if logging:  # fill the array with layer0 params
         global logs_2D  # reset for each row
         for i in range(len(P_)):  # for each P
@@ -176,40 +183,41 @@ def intra_P_(P_, rdn, rng, fPd):
         if P.L > 2 * (rng+1):  # vs. **? rng+1 because rng is initialized at 0, as all params
 
             rel_adj_M = adj_M / -P.M  # for allocation of -Pm' adj_M to each of its internal Pds
+            # Pd -> Pd
             if fPd and min(abs(P.D), abs(P.D) * rel_adj_M) > ave_D * rdn and P.L > 0:
-            # Pd
                 ddert_ = deriv_comp(P.dert_)  # i is d
                 form_P_(P, ddert_, rdn+1, rng+1, fPd=True)  # cluster Pd derts by md sign, eval intra_Pm_(Pdm_), won't happen
                 # splice sublayers across sub_Ps
                 comb_layers = [ comb_layer + sublayers for comb_layer, sublayers in
                                 zip_longest(comb_layers, P.sublayers,  fillvalue=[])
                                ]
-            else:  # Pm
-                if P.M > 0:  # low-variation span, eval comp at rng=2^n: 1, 2, 3; kernel size 2, 4, 8...
-                    if P.M > ave_M * rdn:  # no -adj_M: reduced by lending to contrast, should be reflected in ave?
-                        '''
-                        if localized filters:
-                        loc_ave = (ave + (P.M - adj_M) / P.L) / 2  # mean ave + P_ave, possibly negative?
-                        loc_ave_min = (ave_min + (P.M - adj_M) / P.L) / 2  # if P.M is min?
-                        rdert_ = range_comp(P.dert_, loc_ave, loc_ave_min, fid)
-                        '''
-                        rdert_ = range_comp(P.dert_)  # rng+ comp, skip predictable next dert, localized ave?
-                        # redundancy to higher levels, or +=1 for the weaker layer?
-                        form_P_(P, rdert_, rdn+1, rng+1, fPd=False)  # cluster by m sign, eval intra_Pm_
-                        # splice sublayers across sub_Ps:
-                        comb_layers = [ comb_layer + sublayers for comb_layer, sublayers in
-                                        zip_longest(comb_layers, P.sublayers,  fillvalue=[])
-                                       ]
-                else:  # neg Pm: high-variation span, min neg M is contrast value, borrowed from adjacent +Pms:
-                    if -P.M > ave_D * rdn:  # cancelled M+ val, M = min | ~v_SAD
-                        # | if min(-P.M, adj_M):
-                        rel_adj_M = adj_M / -P.M  # for allocation of -Pm' adj_M to each of its internal Pds?
+            # Pm -> Pm
+            # low-variation span, eval comp at rng=2^n: 1, 2, 3; kernel size 2, 4, 8...
+            elif P.M > 0 and P.M > ave_M * rdn:  # no -adj_M: reduced by lending to contrast, should be reflected in ave?
+                '''
+                if localized filters:
+                loc_ave = (ave + (P.M - adj_M) / P.L) / 2  # mean ave + P_ave, possibly negative?
+                loc_ave_min = (ave_min + (P.M - adj_M) / P.L) / 2  # if P.M is min?
+                rdert_ = range_comp(P.dert_, loc_ave, loc_ave_min, fid)
+                '''
+                rdert_ = range_comp(P.dert_)  # rng+ comp, skip predictable next dert, localized ave?
+                # redundancy to higher levels, or +=1 for the weaker layer?
+                form_P_(P, rdert_, rdn+1, rng+1, fPd=False)  # cluster by m sign, eval intra_Pm_
+                # splice sublayers across sub_Ps:
+                comb_layers = [ comb_layer + sublayers for comb_layer, sublayers in
+                                zip_longest(comb_layers, P.sublayers,  fillvalue=[])
+                               ]
+            # Pm -> Pd
+            # neg Pm: high-variation span, min neg M is contrast value, borrowed from adjacent +Pms:
+            elif -P.M > ave_D * rdn:  # cancelled M+ val, M = min | ~v_SAD
+                # | if min(-P.M, adj_M):
+                rel_adj_M = adj_M / -P.M  # for allocation of -Pm' adj_M to each of its internal Pds?
 
-                        form_P_(P, P.dert_, rdn+1, rng+1, fPd=True)  # cluster by d sign: partial d match, eval intra_Pm_(Pdm_)
-                        # splice sublayers across sub_Ps:
-                        comb_layers = [ comb_layer + sublayers for comb_layer, sublayers in
-                                        zip_longest(comb_layers, P.sublayers,  fillvalue=[])
-                                       ]
+                form_P_(P, P.dert_, rdn+1, rng+1, fPd=True)  # cluster by d sign: partial d match, eval intra_Pm_(Pdm_)
+                # splice sublayers across sub_Ps:
+                comb_layers = [ comb_layer + sublayers for comb_layer, sublayers in
+                                zip_longest(comb_layers, P.sublayers,  fillvalue=[])
+                               ]
     ''' 
     adj_M is not affected by primary range_comp per Pm?
     no comb_m = comb_M / comb_S, if fid: comb_m -= comb_|D| / comb_S: alt rep cost
