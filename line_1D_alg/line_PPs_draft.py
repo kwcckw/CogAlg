@@ -91,7 +91,7 @@ def search(P_, fPd):  # cross-compare patterns within horizontal line
                 if not fPd:
                     Pdert__ += [search_param_(param_, layer0["D_"], P_, ave, rave=1)]  # pdert_ if "I_"
                 # step=2 comp for P splice, one param: (I and not fPd) or (D and fPd):
-                dert2_ = [comp_param(__par, par, param_name[0], ave) for __par, par in zip( param_[:-2], param_[2:])] 
+                dert2_ = [comp_param(__par, par, param_name[0], ave) for __par, par in zip( param_[:-2], param_[2:])]
             # else step=1 per param only:
             dert1_ = [comp_param(_par, par, param_name[0], ave) for _par, par in zip( param_[:-1], param_[1:])]
             dert1__ += [dert1_]
@@ -116,7 +116,7 @@ def search_param_(I_, D_, P_, ave, rave):  # variable-range search in mdert_, on
     # higher local ave for extended rng: -> lower m and term by match, and higher proj_M?
     mdert_ = []  # line-wide (i, p, d, m, negL, negM, negiL)
 
-    for i, (_I, _D, _P) in enumerate( zip(I_[:-1], D_[:-1], P_[:-1])):  # added -1 here to get consistent length with other params, such as L,D and M
+    for i, (_I, _D, _P) in enumerate( zip(I_[:-1], D_[:-1], P_[:-1])):
         proj_M = 1
         negiL = negL = negM = 0
         _pI = _I - (_D / 2)  # forward project by _D
@@ -131,7 +131,7 @@ def search_param_(I_, D_, P_, ave, rave):  # variable-range search in mdert_, on
                 break  # 1st matching param takes over connectivity search from _param, in the next loop
             else:
                 proj_M = dert.m * rave + negM - ave_M  # lower ave_M instead of projection?
-                negM += dert.m * rave
+                negM += dert.m * rave  # or abs m only?
                 negiL += P.L
                 negL += 1
                 j += 1
