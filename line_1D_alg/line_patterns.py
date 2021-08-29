@@ -277,7 +277,7 @@ if __name__ == "__main__":
     logging = 0  # log dataframes
     fpickle = 2  # 0: read from the dump; 1: pickle dump; 2: no pickling
     render = 0
-    fline_PPs = 0
+    fline_PPs = 1
     start_time = time()
 
     if logging:
@@ -307,15 +307,17 @@ if __name__ == "__main__":
 
     if fline_PPs:  # debug line_PPs_draft
         from line_PPs import *
-        frame_PP__ = []
+        frame_Pp__ = []
 
         for y, P_ in enumerate(frame_of_patterns_):
             if len(P_) > 1: # at least 2 comparands
-                rdn_Pp__ = search(P_, fPd=0)
+                rdn_Pp__, Pp__ = search(P_, fPd=0)
             else:
-                rdn_Pp__ = None
-            frame_PP__.append(rdn_Pp__)
-        # draw_PP_(image, frame_PP_)  # debugging
+                rdn_Pp__, Pp__ = [], []
+            frame_Pp__.append((rdn_Pp__, Pp__))
+            
+        
+        draw_PP_(image, frame_Pp__)  # debugging
 
     end_time = time() - start_time
     print(end_time)
