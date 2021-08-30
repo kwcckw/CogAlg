@@ -47,13 +47,13 @@ class CderPp(ClusterStructure):  # for line_PPPs only, if PPP comb x Pps?
 class CPP(CPp, CderPp):
     layer1 = dict
 
-ave = 100  # ave dI -> mI, * coef / var type
+ave = 1  # ave dI -> mI, * coef / var type
 # no ave_mP: deviation computed via rM  # ave_mP = ave* n_comp_params: comp cost, or n vars per P: rep cost?
 ave_div = 50
 ave_rM = .5  # average relative match per input magnitude, at rl=1 or .5?
 ave_negM = 10  # or rM?
-ave_M = 100  # search stop
-ave_D = 100  # search stop
+ave_M = 10  # search stop
+ave_D = 10  # search stop
 ave_sub_M = 500  # sub_H comp filter
 ave_Ls = 3
 ave_PPM = 200
@@ -270,7 +270,7 @@ def form_rdn_Pp_(Pp_, param_name, pdert1__, pdert2__, fPd):
 
     for Pp in Pp_:
         if fPd: Pp.rval = abs(Pp.D) - Pp.Rdn * ave_D * Pp.L
-        else:   Pp.rval = Pp.M - Pp.Rdn * ave_D * Pp.L
+        else:   Pp.rval = Pp.M - Pp.Rdn * ave_M * Pp.L
         sign = Pp.rval > 0
         if sign != _sign:  # sign change, initialize rPp and append it to rPp_
 
@@ -415,27 +415,26 @@ def draw_PP_(image, frame_Pp__):
 
     # initialization
     img_rdn_Pp_ = [np.zeros_like(image) for _ in range(4)]
+    
     img_Pp_ = [np.zeros_like(image) for _ in range(4)]
+    img_Pp_pdert_ = [np.zeros_like(image) for _ in range(4)]
+    
     param_names = ['L', 'I', 'D', 'M']
 
-    for y, (rdn_Pp__, Pp__) in enumerate(frame_Pp__):  # loop each line
+    for y, (rdn_Pp__, Pp__) in enumerate(frame_Pp__):  # loop each line 
         for i, (rdn_Pp_, Pp_) in enumerate(zip(rdn_Pp__, Pp__)): # loop each rdn_Pp or Pp
-
-            draw_value_rdn_Pp = 0
-            draw_value_Pp = 0
-
             # rdn_Pp
-            for rdn_Pp in rdn_Pp_:
-                draw_value_rdn_Pp = (draw_value_rdn_Pp + 127) % 255 # increase draw value for each new rdn_Pp
-                for Pp in rdn_Pp.pdert_:
-                    for P in Pp.P_:
-                        img_rdn_Pp_[i][y,P.x0:P.x0+P.L] += draw_value_rdn_Pp
+            for j, rdn_Pp in enumerate(rdn_Pp_):
+                for k, Pp in enumerate(rdn_Pp.pdert_): 
+                    for m, P in enumerate(Pp.P_):
+                        img_rdn_Pp_[i][y,P.x0:P.x0+P.L] = ((j%2)+1) *127
 
             # Pp
-            for Pp in Pp_:
-                draw_value_Pp = (draw_value_Pp + 127) % 255 # increase draw value for each new Pp
-                for P in Pp.P_:
-                    img_Pp_[i][y,P.x0:P.x0+P.L] += draw_value_Pp
+            for j, Pp in enumerate(Pp_): # each Pp
+                for k, P in enumerate(Pp.P_): # each P or pdert
+                    img_Pp_[i][y,P.x0:P.x0+P.L] = ((j%2)+1) *127
+                    img_Pp_pdert_[i][y,P.x0:P.x0+P.L] = ((k%2)+1) *127
+
 
 
     # plot diagram of params
@@ -443,10 +442,16 @@ def draw_PP_(image, frame_Pp__):
     for i, param in enumerate(param_names):
         plt.subplot(2, 2, i + 1)
         plt.imshow(img_rdn_Pp_[i], vmin=0, vmax=255)
-        plt.title("Rdn Pp, Param = " + param)
+        plt.title("Rdn Pps, Param = " + param)
 
     plt.figure()
     for i, param in enumerate(param_names):
         plt.subplot(2, 2, i + 1)
         plt.imshow(img_Pp_[i], vmin=0, vmax=255)
-        plt.title("Pp, Param = " + param)
+        plt.title("Pps, Param = " + param)
+        
+    plt.figure()
+    for i, param in enumerate(param_names):
+        plt.subplot(2, 2, i + 1)
+        plt.imshow(img_Pp_pdert_[i], vmin=0, vmax=255)
+        plt.title("Pderts, Param = " + param)

@@ -58,7 +58,7 @@ ave_D = 5  # min |D| for initial incremental-derivation comparison(d_)
 ave_nP = 5  # average number of sub_Ps in P, to estimate intra-costs? ave_rdn_inc = 1 + 1 / ave_nP # 1.2
 ave_rdm = .5  # obsolete: average dm / m, to project bi_m = m * 1.5
 ave_splice = 50  # to merge a kernel of 3 adjacent Ps
-init_y = 500  # starting row, the whole frame doesn't need to be processed
+init_y = 0  # starting row, the whole frame doesn't need to be processed
 
 '''
     Conventions:
@@ -277,7 +277,7 @@ if __name__ == "__main__":
     logging = 0  # log dataframes
     fpickle = 2  # 0: read from the dump; 1: pickle dump; 2: no pickling
     render = 0
-    fline_PPs = 0
+    fline_PPs = 1
     start_time = time()
 
     if logging:
@@ -314,7 +314,7 @@ if __name__ == "__main__":
             else:           rdn_Pp__, Pp__ = [], []
             frame_Pp__.append(( rdn_Pp__, Pp__))
 
-            draw_PP_(image, frame_Pp__)  # debugging
+        draw_PP_(image, frame_Pp__)  # debugging
 
     end_time = time() - start_time
     print(end_time)
