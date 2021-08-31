@@ -77,7 +77,8 @@ def search(P_, fPd):  # cross-compare patterns within horizontal line
         if "_P" in locals():  # not the 1st P
             _L = _P.L
             rL = L / _L  # div_comp L: higher-scale, not accumulated: no search
-            mL = int(max( rL, 1 / rL)) * min(L, _L)  # div_comp match is additive compression, not directional
+            # add ave_Ls to L param match computation?
+            mL = int(max( rL, 1 / rL)) * min(L, _L) - ave_Ls  # div_comp match is additive compression, not directional
             Ldert_.append( Cdert( i=L, p=L + _L, d=rL, m=mL))
         _P = P
         layer0['I_'].append(P.I / L)  # mean values for comp_param
@@ -85,27 +86,37 @@ def search(P_, fPd):  # cross-compare patterns within horizontal line
         layer0['M_'].append(P.M / L)
     # dert1__ = [Ldert_] not needed, for splice only
     Pdert__ = [Ldert_]  # no search for L, step=1 only, contains derts. Pp elements are pderts if param is core I
-
-    # tentative:
-    param_ = layer0["I_"]
-    if not fPd:  # core param
-        Pdert__ += [search_param_(param_, layer0["D_"], P_, ave_mI, rave=1)]  # pdert_ if "I_"
+    
+    # refactored for clarity, need further review:
+    if fPd:
+        # step=1 per param only:
+        # I
+        dert1_I = [ comp_param(_par, par, "I_", ave_mI) for _par, par in zip(layer0["I_"][:-1], layer0["I_"][1:]) ]
+        # D
+        dert1_D = [ comp_param(_par, par, "D_", ave_mD) for _par, par in zip(layer0["D_"][:-1], layer0["D_"][1:]) ]
+        dert2_D = [ comp_param(_par, par, "D_", ave_mD) for _par, par in zip(layer0["D_"][:-2], layer0["D_"][2:]) ]
+        # M
+        dert1_M = [ comp_param(_par, par, "M_", ave_mM) for _par, par in zip(layer0["M_"][:-1], layer0["M_"][1:]) ]
+        
+        Pdert__ += [dert1_I, dert1_D, dert1_M] # no dert1__ += [dert1_]: for P splice only?
+        dert1_ = dert1_D # if fPd, dert1 is dert1_D? 
+        dert2_ = dert2_D
+    
+    else: 
         # step=2 comp for P splice only:
-        dert2_ = [comp_param(__par, par, "I_", ave_mI) for __par, par in zip(param_[:-2], param_[2:])]
-        # else step=1 per param only:
-    dert1_ = [[ comp_param(_par, par, "I_", ave_mI) for _par, par in zip(param_[:-1], param_[1:]) ]]
-    if fPd:
-        dert2_ = [ comp_param(_par, par, "D_", ave_mD) for _par, par in zip(layer0["D_"][:-2], layer0["D_"][2:]) ]
-        Pdert__ += [dert2_]
-    else:
-        dert1_ = [ comp_param(_par, par, "D_", ave_mD) for _par, par in zip(layer0["D_"][:-1], layer0["D_"][1:]) ]
-        Pdert__ += [dert1_]  # no dert1__ += [dert1_]: for P splice only?
-    if fPd:
-        dert1_ = [ comp_param(_par, par, "M_", ave_mM) for _par, par in zip(layer0["M_"][:-1], layer0["M_"][1:]) ]
-        Pdert__ += [dert1_]  # no dert1__ += [dert1_]: for P splice only?
-    else:
-        dert_ = [ comp_param(_par, par, "M_", ave_mM) for _par, par in zip(layer0["M_"][:-2], layer0["M_"][2:]) ]
-        Pdert__ += [dert_]  # no dert2_: for Pd | Pm splice only?
+        # I : core _param
+        dert_I  = search_param_(layer0["I_"], layer0["D_"], P_, ave_mI, rave=1) # pdert_ if "I_"
+        dert1_I = [comp_param(__par, par, "I_", ave_mI) for __par, par in zip(layer0["I_"][:-1], layer0["I_"][1:])]         
+        dert2_I = [comp_param(__par, par, "I_", ave_mI) for __par, par in zip(layer0["I_"][:-2], layer0["I_"][2:])]  
+        # D
+        dert1_D = [ comp_param(_par, par, "D_", ave_mD) for _par, par in zip(layer0["D_"][:-1], layer0["D_"][1:]) ]
+        # M
+        dert2_M = [ comp_param(_par, par, "M_", ave_mM) for _par, par in zip(layer0["M_"][:-2], layer0["M_"][2:]) ] # why -2 for M?
+        Pdert__ += [dert_I, dert1_D, dert2_M]  # no dert2_: for Pd | Pm splice only?
+    
+        dert1_ = dert1_I # if not fPd, dert1 is dert1_I? 
+        dert2_ = dert2_I
+        
     '''
     for param_name in ["I_", "D_", "M_"]:
         param_ = layer0[param_name]  # param values
@@ -229,6 +240,8 @@ def form_Pp_(rootPp, dert_, param_name, rdn_, P_, fPd):
             Pp.L += 1; Pp.iL += P_[x].L; Pp.I += dert.p; Pp.D += dert.d; Pp.M += dert.m; Pp.Rdn += rdn; Pp.pdert_ += [dert]; Pp.P_ += [P]
         x += 1
         _sign = sign
+    
+    Pp.P_ += [P_[-1]] # pack last P
 
     if rootPp:  # call from intra_Pp_
         # sublayers brackets: 1st: param set, 2nd: sublayer concatenated from n root_Ps, 3rd: layers depth hierarchy
@@ -257,9 +270,8 @@ def form_Pp_rng(rootPp, dert_, rdn_, P_):  # cluster Pps by cross-param redundan
             else:
                 Pp = _dert.Pp
             j = i + _dert.negL + 1
-            while (j <= len(dert_)-1) and (j not in merged_idx_):
+            while (j <= len(rdn_)-1) and (j not in merged_idx_):
                 dert = dert_[j]; P = P_[j]; rdn = rdn_[j]  # no pop: maybe used by other _derts
-
                 if dert.m > ave*rdn:
                     if isinstance(dert.Pp, CPp):
                         # merge Pp with dert.Pp, if any:
@@ -275,8 +287,8 @@ def form_Pp_rng(rootPp, dert_, rdn_, P_):  # cluster Pps by cross-param redundan
                         j += dert.negL
                     break  # term by match?
                 else:
-                    Pp_.append(Pp)  # even if single-dert
-                    # break  # Pp is terminated?
+                    if Pp not in Pp_: Pp_.append(Pp)  # even if single-dert
+                    break  # Pp is terminated? They might terminated in other loop, so need to add if Pp not in Pp_
 
     if rootPp:  # call from intra_Pp_
         # sublayers brackets: 1st: param set, 2nd: sublayer concatenated from n root_Ps, 3rd: layer depth hierarchy
@@ -335,9 +347,9 @@ def compact(rPp, pdert1_, pdert2_, param_name, fPd):  # re-eval Pps, Pp.pdert_s 
             # param match over step=2 and step=1:
             for pdert2 in pdert2_: M2 += pdert2.m  # match(I, __I or D, __D): only one pdert2_
             if fPd:
-                for pdert1 in pdert1_[2]: M1 += pdert1.m  # match(D, _D)
+                for pdert1 in pdert1_: M1 += pdert1.m  # match(D, _D)
             else:
-                for pdert1 in pdert1_[1]: M1 += pdert1.m  # match(I, _I)
+                for pdert1 in pdert1_: M1 += pdert1.m  # match(I, _I)
 
             if M2 / abs(M1) > -ave_splice:  # similarity / separation: splice Ps in Pp, also implies weak Pp.pdert_?
                 _P = CP()
@@ -454,14 +466,24 @@ def draw_PP_(image, frame_Pp__):
             for j, rdn_Pp in enumerate(rdn_Pp_):
                 for k, Pp in enumerate(rdn_Pp.pdert_): 
                     for m, P in enumerate(Pp.P_):
-                        img_rdn_Pp_[i][y,P.x0:P.x0+P.L] = ((j%2)+1) *127
-
+                        
+                        if rdn_Pp.M>0:
+                            img_rdn_Pp_[i][y,P.x0:P.x0+P.L] = 255 # + sign
+                        else:
+                            img_rdn_Pp_[i][y,P.x0:P.x0+P.L] = 128 # - sign
             # Pp
             for j, Pp in enumerate(Pp_): # each Pp
                 for k, P in enumerate(Pp.P_): # each P or pdert
-                    img_Pp_[i][y,P.x0:P.x0+P.L] = ((j%2)+1) *127
-                    img_Pp_pdert_[i][y,P.x0:P.x0+P.L] = ((k%2)+1) *127
-
+                    
+                    if Pp.M>0:
+                        img_Pp_[i][y,P.x0:P.x0+P.L] = 255 # + sign
+                    else:
+                        img_Pp_[i][y,P.x0:P.x0+P.L] = 128 # - sign
+                    
+                    if P.M>0:
+                        img_Pp_pdert_[i][y,P.x0:P.x0+P.L] = 255 # + sign
+                    else:
+                        img_Pp_pdert_[i][y,P.x0:P.x0+P.L] = 128 # - sign
 
 
     # plot diagram of params
