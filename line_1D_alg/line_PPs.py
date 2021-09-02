@@ -235,7 +235,7 @@ def form_Pp_(rootPp, dert_, param_name, rdn_, P_, fPd):
             Pp.L += 1; Pp.iL += P_[x].L; Pp.I += dert.p; Pp.D += dert.d; Pp.M += dert.m; Pp.Rdn += rdn; Pp.pdert_ += [dert]; Pp.P_ += [P]
         x += 1
         _sign = sign
-    
+
     if param_name == "M_" and not fPd:
         Pp.P_ += P_[-2:]  # last 2 Ps for M param (step 2)
     else:
@@ -256,39 +256,35 @@ def form_Pp_rng(rootPp, dert_, rdn_, P_):  # cluster Pps by cross-param redundan
     # multiple Pps may overlap within _dert.negL
     # needs a review
     Pp_ = []
-    
 
     for i, (_dert, _P, _rdn) in enumerate(zip(dert_, P_, rdn_)):
-        if _dert.m > ave*_rdn:  # positive Pps only, else too much overlap?
+        if _dert.m + _P.M > ave*_rdn:  # positive Pps only, else too much overlap? + _P.M: value is combined across P levels?
             # initialize Pp:
             if not isinstance(_dert.Pp, CPp):
                 Pp = CPp(L=1, iL=_P.L, I=_dert.p, D=_dert.d, M=_dert.m, Rdn=_rdn, negiL=_dert.negiL, negL=_dert.negL, negM=_dert.negM,
                          x0=i, ix0=_P.x0, pdert_=[_dert], P_=[_P], sublayers=[], fPd=0)
                 _dert.Pp = Pp
-                Pp_.append(Pp)
+                Pp_.append(Pp)  # params will be accumulated
             else:
-                Pp = _dert.Pp
-                
-            merged_idx_ = []  # indices of merged derts P in P_ (i think this should be per _P?)
+                break  # _dert already searched forward, so no merged_idx_ = []  # indices of merged derts P in P_
             j = i + _dert.negL + 1
-            while (j <= len(dert_)-1) and (j not in merged_idx_):
+
+            while (j <= len(dert_)-1):
                 dert = dert_[j]; P = P_[j]; rdn = rdn_[j]  # no pop: maybe used by other _derts
-                if dert.m > ave*rdn:
-                    # Right now this section will never be reached, since j index is appended into merged_idx, and it is causing false in while loop above (if derP.Pp is Pp, it will be in merged_idx)
-                    if isinstance(dert.Pp, CPp) and (dert.Pp is not Pp):  # unique Pp per dert in row Pdert_?
-                        # merge Pp with dert.Pp, if any:  
-                        for pdert in dert.Pp.pdert_: pdert.Pp = Pp # update Pp reference of merging Pp
+                if dert.m + P.M > ave*rdn:
+                    if isinstance(dert.Pp, CPp):  # unique Pp per dert in row Pdert_
+                        # merge Pp with dert.Pp, if any:
                         Pp.accum_from(dert.Pp,excluded=['x0'])
                         Pp.P_ += dert.Pp.P_
                         Pp.pdert_ += dert.Pp.pdert_
                         Pp.sublayers += dert.Pp.sublayers
-                        Pp_.remove(Pp) # actually, we need to remove it from Pp_? Yes we need to remove it from Pp_      
+                        Pp_.remove(dert.Pp)  # no for pdert in dert.Pp.pdert_: pdert.Pp = Pp: correct, but won't be used?
                         break  # dert already searched forward
                     else:  # accumulate params:
                         Pp.L += 1; Pp.iL += P.L; Pp.I += dert.p; Pp.D += dert.d; Pp.M += dert.m; Pp.Rdn += rdn; Pp.negiL += dert.negiL
-                        Pp.negL += dert.negL; Pp.negM += dert.negM; Pp.pdert_ += [dert]; Pp.P_ += [P]; dert.Pp = Pp
-                        # Pp derts already searched through dert_, so they won't be used as _derts:
-                        merged_idx_.append(j)
+                        Pp.negL += dert.negL; Pp.negM += dert.negM; Pp.pdert_ += [dert]; Pp.P_ += [P]
+                        dert.Pp = Pp  # not sure this is needed, only the first dert in pdert_ needs Pp?
+                        # Pp derts already searched through dert_, so they won't be used as _derts
                         j += dert.negL
                 else:
                     break  # Pp is terminated
