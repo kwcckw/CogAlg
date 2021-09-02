@@ -129,7 +129,7 @@ def search(P_, fPd):  # cross-compare patterns within horizontal line
     '''
 
     rdn__ = sum_rdn_(layer0, Pdert__, fPd=1)  # assign redundancy to lesser-magnitude m|d in param pair for same-_P Pderts
-    rdn_Ppm__ = []
+    rval_Pp__ = []
     Ppm__ = [] # for visualization
 
     for param_name, Pdert_, rdn_ in zip(layer0, Pdert__, rdn__):  # segment Pdert__ into Pps
@@ -138,10 +138,10 @@ def search(P_, fPd):  # cross-compare patterns within horizontal line
         else:
             Ppm_ = form_Pp_(None, Pdert_, param_name, rdn_, P_, fPd=0)  # Ppd_ is formed in -Ppms only, in intra_Ppm_
         # list of param rdn_Ppm_s:
-        rdn_Ppm__ += [form_rdn_Pp_(Ppm_, param_name, dert1_, dert2_, fPd=0)]  # evaluates for compact()
+        rval_Pp__ += [form_rdn_Pp_(Ppm_, param_name, dert1_, dert2_, fPd=0)]  # evaluates for compact()
         Ppm__ += [Ppm_]
 
-    return rdn_Ppm__, Ppm__
+    return rval_Pp__, Ppm__
 
 
 def search_param_(I_, D_, P_, ave, rave):  # variable-range search in mdert_, only if param is core param?
@@ -272,20 +272,22 @@ def form_Pp_rng(rootPp, dert_, rdn_, P_):  # cluster Pps by cross-param redundan
             while (j <= len(dert_)-1):
                 dert = dert_[j]; P = P_[j]; rdn = rdn_[j]  # no pop: maybe used by other _derts
                 if dert.m + P.M > ave*rdn:
-                    if isinstance(dert.Pp, CPp):  # unique Pp per dert in row Pdert_
+                    if isinstance(dert.Pp, CPp) and (Pp is not dert.Pp):  # unique Pp per dert in row Pdert_
                         # merge Pp with dert.Pp, if any:
                         Pp.accum_from(dert.Pp,excluded=['x0'])
                         Pp.P_ += dert.Pp.P_
                         Pp.pdert_ += dert.Pp.pdert_
                         Pp.sublayers += dert.Pp.sublayers
                         Pp_.remove(dert.Pp)  # no for pdert in dert.Pp.pdert_: pdert.Pp = Pp: correct, but won't be used?
+                        for pdert in dert.Pp.pdert_: pdert.Pp = Pp
                         break  # dert already searched forward
                     else:  # accumulate params:
                         Pp.L += 1; Pp.iL += P.L; Pp.I += dert.p; Pp.D += dert.d; Pp.M += dert.m; Pp.Rdn += rdn; Pp.negiL += dert.negiL
                         Pp.negL += dert.negL; Pp.negM += dert.negM; Pp.pdert_ += [dert]; Pp.P_ += [P]
+                        #we need this, else we can't check "isinstance(dert.Pp, CPp)" in the while loop
                         dert.Pp = Pp  # not sure this is needed, only the first dert in pdert_ needs Pp?
                         # Pp derts already searched through dert_, so they won't be used as _derts
-                        j += dert.negL
+                        j += dert.negL+1
                 else:
                     break  # Pp is terminated
 
@@ -302,6 +304,28 @@ def form_Pp_rng(rootPp, dert_, rdn_, P_):  # cluster Pps by cross-param redundan
 
 def form_rdn_Pp_(Pp_, param_name, pdert1__, pdert2__, fPd):
     # cluster Pps by cross-param redundant value sign, re-evaluate them for cross-level rdn
+    
+    rval_Pp__ = []
+    _sign = None  # to initialize 1st rdn Pp, (None != True) and (None != False) are both True
+    
+    for Pp in Pp_:
+        if fPd: rval = abs(Pp.D) - Pp.Rdn * ave_D * Pp.L
+        else:   rval = Pp.M - Pp.Rdn * ave_M * Pp.L
+        sign = rval>0
+
+        if sign != _sign:  # sign change, initialize rPp and append it to rPp_
+            rval_Pp_ = [(rval, Pp)]
+            if _sign:  # -rPps are not processed?
+                compact(rval_Pp_, pdert1__, pdert2__, param_name, fPd)  # re-eval Pps, Pp.pdert_s for redundancy, eval splice Ps
+            rval_Pp__.append(rval_Pp_)  # updated by accumulation below
+        else:
+            # accumulate params:
+            rval_Pp_ += [(rval, Pp)]
+        _sign = sign
+        
+    return rval_Pp__
+    
+    '''
     rPp_ = []
     x = 0
     _sign = None  # to initialize 1st rdn Pp, (None != True) and (None != False) are both True
@@ -324,12 +348,41 @@ def form_rdn_Pp_(Pp_, param_name, pdert1__, pdert2__, fPd):
             rPp.pdert_ += [Pp]
         x += 1
         _sign = sign
+    '''
+        
+    
 
-    return rPp_
 
+def compact(rval_Pp_, pdert1_, pdert2_, param_name, fPd):  # re-eval Pps, Pp.pdert_s for redundancy, eval splice Ps
 
-def compact(rPp, pdert1_, pdert2_, param_name, fPd):  # re-eval Pps, Pp.pdert_s for redundancy, eval splice Ps
+    for i, (rval, Pp) in enumerate(rval_Pp_):
+        # assign cross-level rdn (Pp vs. pdert_), re-evaluate Pp and pdert_:
+        Pp_val = rval / Pp.L - ave  # / Pp.L: resolution reduction, but lower rdn:
+        pdert_val = rval - ave * Pp.L  # * Pp.L: ave cost * number of representations
 
+        if Pp_val > pdert_val: pdert_val -= ave * Pp.Rdn
+        else:                  Pp_val -= ave * Pp.Rdn  # ave scaled by rdn
+        if Pp_val <= 0:
+            rval_Pp_[i] = (rval, CPp(pdert_=Pp.pdert_))  # Pp remove: reset Pp vars to 0, do we need reset their x0 and L too? or we should keep the position information?
+
+        elif ((param_name == "I_") and not fPd) or ((param_name == "D_") and fPd):  # P-defining params, else no separation
+            M2 = M1 = 0
+            # param match over step=2 and step=1:
+            for pdert2 in pdert2_: M2 += pdert2.m  # match(I, __I or D, __D)
+            for pdert1 in pdert1_: M1 += pdert1.m  # match(I, _I or D, _D)
+
+            if M2 / abs(M1) > -ave_splice:  # similarity / separation: splice Ps in Pp, also implies weak Pp.pdert_?
+                _P = CP()
+                for P in Pp.P_:
+                    _P.accum_from(P, excluded=["x0"])  # different from Pp params
+                    _P.dert_ += [P.dert_]  # splice dert_s within Pp
+                # rerun form_P_(P.dert_)?
+                rval_Pp_[i] = (rval, _P)  # replace Pp with spliced P
+
+        if pdert_val <= 0:
+            Pp.pdert_ = []  # remove pdert_
+    
+    '''
     for i, Pp in enumerate(rPp.pdert_):
         # assign cross-level rdn (Pp vs. pdert_), re-evaluate Pp and pdert_:
         Pp_val = Pp.rval / Pp.L - ave  # / Pp.L: resolution reduction, but lower rdn:
@@ -356,7 +409,7 @@ def compact(rPp, pdert1_, pdert2_, param_name, fPd):  # re-eval Pps, Pp.pdert_s 
 
         if pdert_val <= 0:
             Pp.pdert_ = []  # remove pdert_
-
+    '''
 
 def intra_Pp_(Pp_, param_name, rdn_, fPd):  # evaluate for sub-recursion in line Pm_, pack results into sub_Pm_
 
@@ -448,24 +501,24 @@ def draw_PP_(image, frame_Pp__):
     import numpy as np
 
     # initialization
-    img_rdn_Pp_ = [np.zeros_like(image) for _ in range(4)]
+    img_rval_Pp_ = [np.zeros_like(image) for _ in range(4)]
 
     img_Pp_ = [np.zeros_like(image) for _ in range(4)]
     img_Pp_pdert_ = [np.zeros_like(image) for _ in range(4)]
 
     param_names = ['L', 'I', 'D', 'M']
 
-    for y, (rdn_Pp__, Pp__) in enumerate(frame_Pp__):  # loop each line
-        for i, (rdn_Pp_, Pp_) in enumerate(zip(rdn_Pp__, Pp__)): # loop each rdn_Pp or Pp
-            # rdn_Pp
-            for j, rdn_Pp in enumerate(rdn_Pp_):
-                for k, Pp in enumerate(rdn_Pp.pdert_):
+    for y, (rval_Pp__, Pp__) in enumerate(frame_Pp__):  # loop each line
+        for i, (rval_Pp_, Pp_) in enumerate(zip(rval_Pp__, Pp__)): # loop each rdn_Pp or Pp
+            # rval_Pp
+            for j, rval_Pps in enumerate(rval_Pp_):
+                for k, (rval, Pp) in enumerate(rval_Pps):
                     for m, P in enumerate(Pp.P_):
 
-                        if rdn_Pp.M>0:
-                            img_rdn_Pp_[i][y,P.x0:P.x0+P.L] = 255 # + sign
+                        if rval>0:
+                            img_rval_Pp_[i][y,P.x0:P.x0+P.L] = 255 # + sign
                         else:
-                            img_rdn_Pp_[i][y,P.x0:P.x0+P.L] = 128 # - sign
+                            img_rval_Pp_[i][y,P.x0:P.x0+P.L] = 128 # - sign
             # Pp
             for j, Pp in enumerate(Pp_): # each Pp
                 for k, P in enumerate(Pp.P_): # each P or pdert
@@ -485,8 +538,8 @@ def draw_PP_(image, frame_Pp__):
     plt.figure()
     for i, param in enumerate(param_names):
         plt.subplot(2, 2, i + 1)
-        plt.imshow(img_rdn_Pp_[i], vmin=0, vmax=255)
-        plt.title("Rdn Pps, Param = " + param)
+        plt.imshow(img_rval_Pp_[i], vmin=0, vmax=255)
+        plt.title("Rval Pps, Param = " + param)
 
     plt.figure()
     for i, param in enumerate(param_names):
