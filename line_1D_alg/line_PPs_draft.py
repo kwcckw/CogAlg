@@ -62,7 +62,7 @@ ave_splice = 50  # merge Ps within core-param Pp
 ave_inv = 20  # ave inverse m, change to Ave from the root intra_blob?
 ave_min = 5  # ave direct m, change to Ave_min from the root intra_blob?
 ave_rolp = .5  # ave overlap ratio for comp_Pp
-ave_mL = 2  # needs to be tuned
+ave_mL = 5  # needs to be tuned
 ave_mI = 5  # needs to be tuned
 ave_mD = 5  # needs to be tuned
 ave_mM = 5  # needs to be tuned
@@ -72,110 +72,75 @@ def search(P_, fPd):  # cross-compare patterns within horizontal line
 
     sub_search_recursive(P_, fPd)  # search with incremental distance: first inside sublayers?
 
-    Ldert_, Idert_, Ddert_, Mdert_ = [],[],[],[]
+    param_name_ = ["L_", "I_", "D_", "M_"]
+    Ldert_, Idert_, Ddert_, Mdert_, dert1_, dert2_ = [], [], [], [], [], []
     _P = P_[0]
-    _L=_P.L; _I=_P.I; _D=_P.D; _M=_P.M
-
-    for i, P in enumerate( P_[1:]):
-        L = P.L
+    _L, _I, _D, _M = _P.L, _P.I, _P.D, _P.M
+    
+    # unpacked version:
+    for i, (P, P2) in enumerate(zip_longest(P_[1:], P_[2:], fillvalue=CP())):
+        
+        L, I, D, M = P.L, P.I, P.D, P.M
+        I2, D2, M2 = P2.I, P2.D, P2.M
+        # L
         rL = L / _L  # div_comp L: higher-scale, not accumulated: no search, rL is directional
-        int_rL = int( max(rL, 1 / rL))
-        frac_rL = rL - int_rL
+        rL = max(rL, 1/rL) # # Since we suppose to use max value in line below, should we just assign rL = max(rL, 1 / rL) here?
+        int_rL = int(rL)
+        frac_rL = rL - int_rL  
         mL = int_rL * min(L, _L) - (int_rL*frac_rL) / 2 - ave_mL  # div_comp match is additive compression: +=min, not directional
-        Ldert_.append( Cdert( i=L, p=L + _L, d=rL, m=mL))
-        I = P.I
-        # the below to be revised with param access from P_, vs. layer0:
-
-        if fPd:  # comp | search per param type, separate dert1_, dert2_ (step=1, step=2 comp) for P splicing only
-            dert1_I = [comp_param(_par, par, "I_", ave_mI) for _par, par in zip(layer0["I_"][:-1], layer0["I_"][1:])]
-            # D: Pd-defining param
-            dert1_D = [comp_param(_par, par, "D_", ave_mD) for _par, par in zip(layer0["D_"][:-1], layer0["D_"][1:])]
-            dert2_D = [comp_param(_par, par, "D_", ave_mD) for _par, par in zip(layer0["D_"][:-2], layer0["D_"][2:])]
-            # M
-            dert1_M = [comp_param(_par, par, "M_", ave_mM) for _par, par in zip(layer0["M_"][:-1], layer0["M_"][1:])]
-            # generic
-            Pdert__ += [dert1_I, dert1_D, dert1_M]
-            dert1_ = dert1_D  # for Pd splicing
-            dert2_ = dert2_D
-        else:
-            # I: Pm-defining param
-            pdert_I = search_param_(layer0["I_"], P_, ave_mI, rave=1)  # forms variable-negL pderts
-            dert1_I = [comp_param(__par, par, "I_", ave_mI) for __par, par in zip(layer0["I_"][:-1], layer0["I_"][1:])]
-            dert2_I = [comp_param(__par, par, "I_", ave_mI) for __par, par in zip(layer0["I_"][:-2], layer0["I_"][2:])]
+        Ldert_.append(Cdert( i=L, p=L + _L, d=rL, m=mL))   
+        
+        if fPd:
+            # I
+            dert1_I = comp_param(_I, I, "I_", ave_mI)
             # D
-            dert1_D = [comp_param(_par, par, "D_", ave_mD) for _par, par in zip(layer0["D_"][:-1], layer0["D_"][1:])]
+            dert1_D = comp_param(_D, D, "D_", ave_mD)
+            dert2_D = comp_param(_D, D2, "D_", ave_mD)    
             # M
-            dert2_M = [comp_param(_par, par, "M_", ave_mM) for _par, par in zip(layer0["M_"][:-2], layer0["M_"][2:])]
+            dert1_M = comp_param(_M, M, "M_", ave_mM)
             # generic
-            Pdert__ += [pdert_I, dert1_D, dert2_M]
-            dert1_ = dert1_I  # for Pm splicing
-            dert2_ = dert2_I
+            dert1 = dert1_D  # for Pd splicing
+            dert2 = dert2_D
+            # update prior value
+            
+            # pack derts
+            Idert_.append(dert1_I)
+            Ddert_.append(dert1_D)
+            Mdert_.append(dert1_M)
+            dert1_.append(dert1)
+            dert2_.append(dert2)
+            
+        else:
+            # I
+            dert1_I = comp_param(_I, I, "I_", ave_mI)
+            dert2_I = comp_param(_I, I2, "I_", ave_mI)
+            # D
+            dert1_D = comp_param(_D, D, "D_", ave_mD)
+            # M
+            dert2_M = comp_param(_M, M2, "M_", ave_mM)
+            # generic
+            dert1 = dert1_I  # for Pm splicing
+            dert2 = dert2_I
+            # pack derts
+            Ddert_.append(dert1_D)
+            Mdert_.append(dert2_M)
+            dert1_.append(dert1)
+            dert2_.append(dert2)
+        
+        _L, _I, _D, _M = L, I, D, M   
+        
+    if not fPd: # search_param
+        Idert_ = search_param_([P.I/P.L for P in P_], P_, ave_mI, rave=1) 
+        Mdert_ = Mdert_[:-1] # should be lesser 1 value in step 2, due to it is compensated with zip_longest
+    dert2_ = dert2_[:-1]
+        
+    Pdert__ = [Ldert_, Idert_, Ddert_, Mdert_]
 
-    layer0 = {'L_': [], 'I_': [], 'D_': [], 'M_': []}  # param_name: [param values]
-
-    Ldert_ = []
-    for P in P_:  # unpack P params? but we don't need to unpack them, just access from P_?
-        L = P.L
-        if "_P" in locals():  # not the 1st P
-            _L = _P.L
-            rL = L / _L  # div_comp L: higher-scale, not accumulated: no search, rL is directional
-            int_rL = int( max(rL, 1 / rL))
-            frac_rL = rL - int_rL
-            mL = int_rL * min(L, _L) - (int_rL*frac_rL) / 2 - ave_mL  # div_comp match is additive compression: +=min, not directional
-            Ldert_.append( Cdert( i=L, p=L + _L, d=rL, m=mL))
-        _P = P
-        layer0['I_'].append(P.I / L)  # mean values for comp_param
-        layer0['D_'].append(P.D / L)
-        layer0['M_'].append(P.M / L)
-    Pdert__ = [Ldert_]  # no search for L, step=1 only
-
-    if fPd:  # comp | search per param type, separate dert1_, dert2_ (step=1, step=2 comp) for P splicing only
-        # I
-        dert1_I = [ comp_param(_par, par, "I_", ave_mI) for _par, par in zip(layer0["I_"][:-1], layer0["I_"][1:]) ]
-        # D: Pd-defining param
-        dert1_D = [ comp_param(_par, par, "D_", ave_mD) for _par, par in zip(layer0["D_"][:-1], layer0["D_"][1:]) ]
-        dert2_D = [ comp_param(_par, par, "D_", ave_mD) for _par, par in zip(layer0["D_"][:-2], layer0["D_"][2:]) ]
-        # M
-        dert1_M = [ comp_param(_par, par, "M_", ave_mM) for _par, par in zip(layer0["M_"][:-1], layer0["M_"][1:]) ]
-        # generic
-        Pdert__ += [dert1_I, dert1_D, dert1_M]
-        dert1_ = dert1_D  # for Pd splicing
-        dert2_ = dert2_D
-    else:
-        # I: Pm-defining param
-        pdert_I = search_param_(layer0["I_"], P_, ave_mI, rave=1)  # forms variable-negL pderts
-        dert1_I = [comp_param(__par, par, "I_", ave_mI) for __par, par in zip(layer0["I_"][:-1], layer0["I_"][1:])]
-        dert2_I = [comp_param(__par, par, "I_", ave_mI) for __par, par in zip(layer0["I_"][:-2], layer0["I_"][2:])]
-        # D
-        dert1_D = [comp_param(_par, par, "D_", ave_mD) for _par, par in zip(layer0["D_"][:-1], layer0["D_"][1:]) ]
-        # M
-        dert2_M = [comp_param(_par, par, "M_", ave_mM) for _par, par in zip(layer0["M_"][:-2], layer0["M_"][2:]) ]
-        # generic
-        Pdert__ += [pdert_I, dert1_D, dert2_M]
-        dert1_ = dert1_I  # for Pm splicing
-        dert2_ = dert2_I
-    '''
-    old:
-    for param_name in ["I_", "D_", "M_"]:
-        param_ = layer0[param_name]  # param values
-        # if dert-level P-defining param:
-        if ((param_name == "I_") and not fPd) or ((param_name == "D_") and fPd):
-            if not fPd:
-                Pdert__ += [search_param_(param_, layer0["D_"], P_, ave_mI, rave=1)]  # pdert_ if "I_"
-            # step=2 comp for P splice only:
-            dert2_ = [comp_param(__par, par, param_name[0], ave) for __par, par in zip( param_[:-2], param_[2:])]
-        # else step=1 per param only:
-        dert1_ = [comp_param(_par, par, param_name[0], ave) for _par, par in zip( param_[:-1], param_[1:])]
-        dert1__ += [dert1_]
-        if not param_name == "I_":
-            Pdert__ += [dert1_]  # clustered into Pps in form_Pp_
-    '''
-
-    rdn__ = sum_rdn_(layer0, Pdert__, fPd=1)  # assign redundancy to lesser-magnitude m|d in param pair for same-_P Pderts
+    rdn__ = sum_rdn_(param_name_, Pdert__, fPd=1)  # assign redundancy to lesser-magnitude m|d in param pair for same-_P Pderts
     rval_Pp__ = []
     Ppm__ = []  # for visualization
 
-    for param_name, Pdert_, rdn_ in zip(layer0, Pdert__, rdn__):  # segment Pdert__ into Pps
+    for param_name, Pdert_, rdn_ in zip(param_name_, Pdert__, rdn__):  # segment Pdert__ into Pps
         if param_name == "I_" and not fPd:
             Ppm_ = form_Pp_rng(None, Pdert_, rdn_, P_)
         else:
@@ -219,7 +184,7 @@ def search_param_(I_, P_, ave, rave):  # variable-range search in mdert_, only i
     return mdert_
 
 
-def sum_rdn_(layer0, Pdert__, fPd):
+def sum_rdn_(param_name_, Pdert__, fPd):
     '''
     access same-index pderts of all P params, assign redundancy to lesser-magnitude m|d in param pair.
     if other-param same-P_-index pdert is missing, rdn doesn't change.
@@ -245,7 +210,7 @@ def sum_rdn_(layer0, Pdert__, fPd):
                     rdn_pair[1] += 1
                 else: rdn_pair[0] += 1  # weaker pair rdn+1
 
-        for i, param_name in enumerate(layer0):  # sum param rdn from all pairs it is in, flatten pair_names, pair_rdns?
+        for i, param_name in enumerate(param_name_):  # sum param rdn from all pairs it is in, flatten pair_names, pair_rdns?
             Rdn = 0
             for name_in_pair, rdn in zip(name_pairs, rdn_pairs):
                 if param_name[0] == name_in_pair[0]:  # param_name = "L_", param_name[0] = "L"
@@ -278,10 +243,6 @@ def form_Pp_(rootPp, dert_, param_name, rdn_, P_, fPd):
             Pp.L += 1; Pp.iL += P_[x].L; Pp.I += dert.p; Pp.D += dert.d; Pp.M += dert.m; Pp.Rdn += rdn; Pp.rdn_ += [rdn]; Pp.pdert_ += [dert]; Pp.P_ += [P]
         x += 1
         _sign = sign
-
-    if len(P_) > len(dert_): # check for extra Ps and pack them to last Pp
-        extra_index = len(P_) - len(dert_)
-        Pp.P_ .extend(P_[-extra_index:]) # last Ps
 
     if rootPp:
         # call from intra_Pp_; sublayers brackets: 1st: param set, 2nd: sublayer concatenated from n root_Ps, 3rd: layers depth hierarchy
@@ -546,7 +507,7 @@ def draw_PP_(image, frame_Pp__):
     for y, (rval_Pp__, Pp__) in enumerate(frame_Pp__):  # loop each line
         for i, (rval_Pp_, Pp_) in enumerate(zip(rval_Pp__, Pp__)): # loop each rdn_Pp or Pp
             # rval_Pp
-            for j, rval_Pps in enumerate(rval_Pp_):
+            for j, (Rval, rval_Pps) in enumerate(rval_Pp_):
                 for k, (rval, Pp) in enumerate(rval_Pps):
                     for m, P in enumerate(Pp.P_):
 
