@@ -64,7 +64,7 @@ ave_min = 5  # ave direct m, change to Ave_min from the root intra_blob?
 ave_rolp = .5  # ave overlap ratio for comp_Pp
 ave_mL = 5  # needs to be tuned
 ave_mI = 5  # needs to be tuned
-ave_mD = 5  # needs to be tuned
+ave_mD = 1  # needs to be tuned
 ave_mM = 5  # needs to be tuned
 ave_sub = 20  # for comp_sub_layers
 
@@ -98,7 +98,6 @@ def search(P_, fPd):  # cross-compare patterns within horizontal line
             dert1_ += [comp_param(_D, D, "D_", ave_mD)]
             dert2_ += [Ddert.copy]
         else:
-            Idert_ = search_param_(P_, ave_mI, rave=1)  # variable-range comp, because range depends on Ms of Is
             Ddert_ += [comp_param(_D, D, "D_", ave_mD)]
             Mdert_ += [comp_param(_M, M2, "M_", ave_mM)]  # step=2 for same-M-sign comp
             # to splice Pms:
@@ -108,6 +107,7 @@ def search(P_, fPd):  # cross-compare patterns within horizontal line
 
         _L, _I, _D, _M = L, I, D, M
     if not fPd:
+        Idert_ = search_param_(P_, ave_mI, rave=1)  # variable-range comp, because range depends on Ms of Is
         Mdert_ = Mdert_[:-1]  # due to zip_longest in search_param
     dert2_ = dert2_[:-1]  # due to zip_longest in line 82
 
