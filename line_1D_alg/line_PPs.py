@@ -21,6 +21,7 @@ class Cpdert(ClusterStructure):
     negL = int  # in mdert only
     negiL = int
     sub_M = int  # match from comp_sublayers, if any
+    sub_D = int
     Pp = object  # Pp that pdert is in, for merging in form_Pp_rng, temporary?
 
 class CPp(CP):
@@ -56,8 +57,8 @@ ave = 1  # ave dI -> mI, * coef / var type
 ave_div = 50
 ave_rM = .5  # average relative match per input magnitude, at rl=1 or .5?
 ave_negM = 10  # or rM?
-ave_M = 500  # search stop
-ave_D = 500  # search stop
+ave_M = 10  # search stop
+ave_D = 10  # search stop
 ave_sub_M = 500  # sub_H comp filter
 ave_Ls = 3
 ave_PPM = 200
@@ -84,7 +85,7 @@ def search(P_, fPd):  # cross-compare patterns within horizontal line
 
     for i, (P, P2) in enumerate(zip_longest(P_[1:], P_[2:], fillvalue=CP())):  # unpack Ps:
         L, I, D, M = P.L, P.I, P.D, P.M
-        L2, I2, D2, M2 = P2.L, P2.I, P2.D, P2.M
+        D2, M2 = P2.D, P2.M
         # div_comp for L:
         rL = L / _L  # higher order of scale, not accumulated: no search, rL is directional
         int_rL = int( max(rL, 1/rL))
@@ -103,17 +104,15 @@ def search(P_, fPd):  # cross-compare patterns within horizontal line
         else:
             Ddert_ += [comp_param(_D, D, "D_", ave_mD)]
             Mdert_ += [comp_param(_M, M2, "M_", ave_mM)]  # step=2 for same-M-sign comp
-            # to splice Pms:
-            dert1_ += [comp_param(_I, I, "I_", ave_mI)]
-            dert2_ += [comp_param(_I, I2, "I_", ave_mI)]  # or get both from search_param_, if min range=2?
-
+            
         _L, _I, _D, _M = L, I, D, M
 
-    if not fPd:
-        Idert_ = search_param_(P_, ave_mI, rave=1)  # comp x variable range, depending on M of Is
-        Mdert_ = Mdert_[:-1]  # due to zip_longest in search_param
     dert2_ = dert2_[:-1]  # due to zip_longest in line 82
-
+    if not fPd:
+        # dert1_, dert2_ to splice Pms
+        Idert_, dert1_, dert2_ = search_param_(P_, ave_mI, rave=1)  # comp x variable range, depending on M of Is
+        Mdert_ = Mdert_[:-1]  # due to zip_longest in search_param
+    
     Pdert__ = [Ldert_, Idert_, Ddert_, Mdert_]
 
     rdn__ = sum_rdn_(param_names, Pdert__, fPd=1)  # assign redundancy to lesser-magnitude m|d in param pair for same-_P Pderts
@@ -135,17 +134,23 @@ def search(P_, fPd):  # cross-compare patterns within horizontal line
 def search_param_(P_, ave, rave):  # variable-range search in mdert_, only if param is core param?
 
     # higher local ave for extended rng: -> lower m and term by match, and higher proj_M?
-    Idert_ = []  # line-wide (i, p, d, m, negL, negM, negiL)
+    Idert_, dert1_, dert2_ = [], [], []  # line-wide (i, p, d, m, negL, negM, negiL)
 
     for i, _P in enumerate( P_[:-1]):
         negiL = negL = negM = 0
         _pI = _P.I - (_P.D / 2)  # forward project by _D
-        j = i + 1  # or min rng=2, then per combined M, still of positive-M Is only: internal match projects xP I match?
+        j = i + 1  # or min rng=2, then per combined M, still of positive-M Is only: internal match projects xP I match? 
 
+        # not sure if it is better to move them to this section
+        dert1_.append(comp_param(_pI, P_[i+1].I-(P_[i+1].I/ 2), "I_", ave))
+        if (i>1) and (i+2<len(P_)):
+            dert2_.append(comp_param(_pI, P_[i+2].I-(P_[i+2].I/ 2), "I_", ave))
+         
         while _P.M + negM > ave_M and j < len(P_):  # for positive _P.Ms only?
             P = P_[j]
-            pI = P.I + (P.D / 2)  # backward project by D
+            pI = P.I + (P.D / 2)  # backward project by D            
             dert = comp_param(_pI, pI, "I_", ave)  # param is compared to prior-P _param
+            dert = Cpdert(i=dert.i, p=dert.p, d=dert.d, m=dert.m) # convert Cdert to Cpdert
             curr_M = dert.m * rave + (_P.M + P.M) / 2  # P.M is bidirectional
 
             if curr_M > ave_sub:  # comp all sub_P_ params, for core I only?
@@ -157,10 +162,15 @@ def search_param_(P_, ave, rave):  # variable-range search in mdert_, only if pa
                 negiL += P.L
                 negL += 1
                 j += 1
-        # after extended search, if any:
-        Idert_.append( Cpdert(i=dert.i, p=dert.p, d=dert.d, m=dert.m, negiL=negiL, negL=negL, negM=negM))
+                
+        if 'dert' in locals(): # after extended search, if any:
+            dert.accumulate( negiL=negiL, negL=negL, negM=negM)
+            Idert_.append(dert)
+            del dert
+        else: 
+            Idert_.append(Cpdert()) # None or empty dert, for size consistency, but using empty Cpdert should be better , else need add more evaluation to check for None later
 
-    return Idert_
+    return Idert_, dert1_, dert2_
 
 
 def sum_rdn_(param_name_, Pdert__, fPd):
@@ -363,7 +373,7 @@ def intra_Pp_(Pp_, param_name, fPd):  # evaluate for sub-recursion in line Pm_, 
                     rdn_ = [rdn+1 for rdn in Pp.rdn_[:-1]]
                     P_ave = Pp.M / Pp.L  # also I,D,M /= L?
                     # range extended by incr ave: less term by match, and decr proj_P = dert.m * rave ((Pp.M / Pp.L) / ave): less term by miss
-                    rpdert_ = search_param_(Pp.P_, (ave + P_ave) / 2, rave = P_ave / ave )  # rpdert_len-=1 in search_param:
+                    rpdert_, _, _ = search_param_(Pp.P_, (ave + P_ave) / 2, rave = P_ave / ave )  # rpdert_len-=1 in search_param:
                     form_Pp_(Pp, rpdert_, param_name, rdn_[:-1], Pp.P_[:-1], fPd=False)  # cluster by m sign, eval intra_Pm_
                 # -Ppm -> sub_Ppd:
                 elif -Pp.M > ave_D * Pp.Rdn:  # high-variation span, -M is contrast borrowed from adjacent +Ppms: or abs D: likely sign match span?
@@ -410,7 +420,7 @@ def comp_sublayers_draft(_P, P, dert):
                     # compare all sub_Ps to each _sub_P:
                     for _sub_P in _sub_P_:
                         for sub_P in sub_P_:
-                            sub_dert = comp_param(_sub_P.I, sub_P.I, "I_", ave)
+                            sub_dert = comp_param(_sub_P.I, sub_P.I, "I_", ave_mI)
                     dert.sub_M += sub_dert.m  # of compared H, no specific mP?
                     dert.sub_D += sub_dert.d  # not sure this is needed
                     if dert.sub_M + P.M < ave_sub_M:
@@ -462,18 +472,18 @@ def draw_PP_(image, frame_Pp__):
     plt.figure()
     for i, param in enumerate(param_names):
         plt.subplot(2, 2, i + 1)
-        plt.imshow(img_rval_Pp_[i], vmin=0, vmax=255, cmap="gray")
+        plt.imshow(img_rval_Pp_[i], vmin=0, vmax=255)
         plt.title("Rval Pps, Param = " + param)
 
     plt.figure()
     for i, param in enumerate(param_names):
         plt.subplot(2, 2, i + 1)
-        plt.imshow(img_Pp_[i], vmin=0, vmax=255, cmap="gray")
+        plt.imshow(img_Pp_[i], vmin=0, vmax=255)
         plt.title("Pps, Param = " + param)
 
     plt.figure()
     for i, param in enumerate(param_names):
         plt.subplot(2, 2, i + 1)
-        plt.imshow(img_Pp_pdert_[i], vmin=0, vmax=255, cmap="gray")
+        plt.imshow(img_Pp_pdert_[i], vmin=0, vmax=255)
         plt.title("Pderts, Param = " + param)
     pass
