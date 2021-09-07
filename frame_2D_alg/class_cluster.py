@@ -13,6 +13,7 @@ import weakref
 from numbers import Number
 from inspect import isclass
 import numpy as np
+from copy import deepcopy
 
 NoneType = type(None)
 
@@ -305,6 +306,9 @@ class Cdert(Number): # Ppd and Ppdm might not relevant now, so remove it
 
     def __add__(self, other):
         return Cdert(self.i, self.p + other.p, self.d + other.d, self.m + other.m)
+
+    def copy(self):
+        return deepcopy(self)
 
     def __repr__(self):  # representation of object
         if isinstance(self.i, Cdert) or isinstance(self.p, Cdert) or isinstance(self.d, Cdert) or isinstance(self.m, Cdert):
