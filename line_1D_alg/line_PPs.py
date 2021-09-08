@@ -172,6 +172,34 @@ def search_param_(P_, ave, rave):  # variable-range search in mdert_, only if pa
 
     return Idert_, _P_
 
+def sub_search_param_(_P_, P_, ipdert):  # variable-range search
+
+    rave = 1
+    for i, _P in enumerate(_P_):         
+        negM = 0 # per _P
+
+        for j, P in enumerate(P_):            
+            if (_P.M + P.M) / 2 + ipdert.m + negM > ave_M :
+            
+                _pI = _P.I - (_P.D / 2)  # forward project by _D
+                pI = P.I + (P.D / 2)     # backward project by D
+                dert = comp_param(_pI, pI, "I_", ave_mI)  # param is compared to prior-P _param
+                pdert = Cpdert(i=dert.i, p=dert.p, d=dert.d, m=dert.m)  # convert Cdert to Cpdert
+                ipdert.accumulate(sub_M=pdert.m, sub_D=pdert.d)
+                
+                curr_M = pdert.m * rave + (_P.M + P.M) / 2  # P.M is bidirectional (include ipdert.m?)
+
+                if curr_M > ave_sub:  # comp all sub_P_ params, for core I only?
+                    comp_sublayers_draft(_P, P, pdert)  # should set dert.sub_M
+                if curr_M + pdert.sub_M > ave_M:  # match between sublayers; or > ave_cM?
+                    break  # 1st match takes over connectivity search in the next loop
+                else:
+                    pdert.negM += curr_M - ave_M  # known to be negative, accum per dert
+                    pdert.negiL += P.L
+                    pdert.negL += 1
+                    negM = pdert.negM
+
+
 
 def sum_rdn_(param_name_, Pdert__, fPd):
     '''
@@ -416,12 +444,17 @@ def comp_sublayers_draft(_P, P, pdert):
                 # fork comparison:
                 if fPd == _fPd and rng == _rng and min(_P.L, P.L) > ave_Ls:
                     # compare sub_Ps to each _sub_P within max distance, comb_M- proportional:
+                    sub_search_param_(_sub_P_, sub_P_, pdert)
+                    
+                    '''
                     for _sub_P in _sub_P_:
                         for sub_P in sub_P_:
-                            # if (_sub_P.M + sub_P.M) / 2 + pdert.m: ? something like that
-                            sub_dert = comp_param(_sub_P.I, sub_P.I, "I_", ave_mI)
-                            pdert.sub_M += sub_dert.m  # between whole compared sub_Hs
-                            pdert.sub_D += sub_dert.d
+                            if (_sub_P.M + sub_P.M) / 2 + pdert.m: # something like that
+                                sub_dert = comp_param(_sub_P.I, sub_P.I, "I_", ave_mI)
+                                pdert.sub_M += sub_dert.m  # between whole compared sub_Hs
+                                pdert.sub_D += sub_dert.d
+                    '''
+
                     if pdert.sub_M + pdert.m + P.M < ave_sub_M:  # combine match values across all P levels.
                         break  # low vertical induction, deeper sublayers are not compared
                 else:
@@ -438,6 +471,9 @@ def draw_PP_(image, frame_Pp__):
 
     img_Pp_ = [np.zeros_like(image) for _ in range(4)]
     img_Pp_pdert_ = [np.zeros_like(image) for _ in range(4)]
+
+    img_Pp_layer_ = [np.zeros_like(image) for _ in range(4)]
+    draw_layer = 1 # draw certain layer, start from 1, the higher the number, the deeper the layer, 0 = root layer so not applicable here
 
     param_names = ['L', 'I', 'D', 'M']
 
@@ -465,6 +501,18 @@ def draw_PP_(image, frame_Pp__):
                         img_Pp_pdert_[i][y,P.x0:P.x0+P.L] = 255 # + sign
                     else:
                         img_Pp_pdert_[i][y,P.x0:P.x0+P.L] = 128 # - sign
+                        
+                # sub_Pps
+                for k, sub_P_layers in enumerate(Pp.sublayers): # each layer                
+                    if k+1 == draw_layer:
+                        for m, (_, Pp_) in enumerate(sub_P_layers): # each sub_P's Pps 
+                            for n, P in enumerate(Pp.P_): # each P or pdert
+                                if Pp.M>0:
+                                    img_Pp_layer_[i][y,P.x0:P.x0+P.L] = 255 # + sign
+                                else:
+                                    img_Pp_layer_[i][y,P.x0:P.x0+P.L] = 128 # - sign
+                        break # draw only selected layer
+
 
     # plot diagram of params
     plt.figure()
@@ -478,6 +526,12 @@ def draw_PP_(image, frame_Pp__):
         plt.subplot(2, 2, i + 1)
         plt.imshow(img_Pp_[i], vmin=0, vmax=255)
         plt.title("Pps, Param = " + param)
+
+    plt.figure()
+    for i, param in enumerate(param_names):
+        plt.subplot(2, 2, i + 1)
+        plt.imshow(img_Pp_layer_[i], vmin=0, vmax=255)
+        plt.title("Sub Pps, Layer = "+str(draw_layer)+", Param = " + param)
 
     plt.figure()
     for i, param in enumerate(param_names):
