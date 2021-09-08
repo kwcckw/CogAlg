@@ -1,10 +1,9 @@
 '''
 line_PPs is a 2nd-level 1D algorithm, its input is P_ formed by the 1st-level line_patterns.
 It cross-compares P params (initially L, I, D, M) and forms param_Ps: Pp_ for each param type per image row.
-
-Subsequent cross-comp between Pps of different params is exclusive of x overlap: redundant?
-Local consolidation, or 3rd level: Pps are higher level of composition, same-type or cross-type?
-(params are not compared cross-type in overlaps: their relationship is already known)
+-
+Subsequent cross-comp between Pps of different params is exclusive of x overlap: there relationship is already known.
+Thus it should be on 3rd level: no Pp overlap means comp between Pps: higher composition, same-type or cross-type?
 '''
 
 import sys  # add CogAlg folder to system path
@@ -75,7 +74,7 @@ ave_mM = 5  # needs to be tuned
 ave_sub = 20  # for comp_sub_layers
 
 def search(P_, fPd):  # cross-compare patterns within horizontal line
-    IP_=[]
+
     sub_search_recursive(P_, fPd)  # search with incremental distance: first inside sublayers?
 
     param_names = ["L_", "I_", "D_", "M_"]
@@ -100,8 +99,8 @@ def search(P_, fPd):  # cross-compare patterns within horizontal line
             Ddert = comp_param(_D, D2, "D_", ave_mD)  # step=2 for same-D-sign comp
             Ddert_ += [Ddert]
             dert2_ += [Ddert.copy()]
-            Mdert_ += [comp_param(_M, M, "M_", ave_mM)]
             dert1_ += [comp_param(_D, D, "D_", ave_mD)]  # to splice Pds
+            Mdert_ += [comp_param(_M, M, "M_", ave_mM)]
         else:
             Ddert_ += [comp_param(_D, D, "D_", ave_mD)]
             Mdert = comp_param(_M, M2, "M_", ave_mM)  # step=2 for same-M-sign comp
@@ -119,7 +118,6 @@ def search(P_, fPd):  # cross-compare patterns within horizontal line
         DP_, MP_ = P_[:-1], P_[:-2]
     else:
         IP_, DP_, MP_ = P_[:-1], P_[:-2], P_[:-1]
-
 
     Pdert__ = [(Ldert_, LP_), (Idert_, IP_), (Ddert_, DP_), (Mdert_, MP_)]
 
@@ -153,7 +151,7 @@ def search_param_(P_, ave, rave):  # variable-range search in mdert_, only if pa
             P = P_[j]
             pI = P.I + (P.D / 2)  # backward project by D
             dert = comp_param(_pI, pI, "I_", ave)  # param is compared to prior-P _param
-            pdert = Cpdert(i=dert.i, p=dert.p, d=dert.d, m=dert.m) # Convert Cdert to Cpdert
+            pdert = Cpdert(i=dert.i, p=dert.p, d=dert.d, m=dert.m)  # convert Cdert to Cpdert
             curr_M = pdert.m * rave + (_P.M + P.M) / 2  # P.M is bidirectional
 
             if curr_M > ave_sub:  # comp all sub_P_ params, for core I only?
@@ -164,13 +162,13 @@ def search_param_(P_, ave, rave):  # variable-range search in mdert_, only if pa
                 pdert.negM += curr_M - ave_M  # known to be negative, accum per dert
                 pdert.negiL += P.L
                 pdert.negL += 1
-                negM = pdert.negM 
+                negM = pdert.negM
                 j += 1
 
         if "pdert" in locals():  # after extended search, if any:
             Idert_.append(pdert)
             _P_.append(_P)
-            del pdert # prevent reuse of same pdert in multiple loops 
+            del pdert # prevent reuse of same pdert in multiple loops
 
     return Idert_, _P_
 
@@ -407,26 +405,24 @@ def sub_search_recursive(P_, fPd):  # search in top sublayer per P / sub_P
                     sub_search_recursive(sub_P_, fPd)  # deeper sublayers search is selective per sub_P
 
 
-def comp_sublayers_draft(_P, P, dert):
+def comp_sublayers_draft(_P, P, pdert):
 
     if P.sublayers and _P.sublayers:  # not empty sub layers
         for _sub_layer, sub_layer in zip(_P.sublayers[0], P.sublayers[0]):
-            # accumulate dert.sub_M, dert maps to P
-
+            # accumulate dert.sub_M
             if _sub_layer and sub_layer:
                 _fPd, _rdn, _rng, _sub_P_, _sub_Pp__, = _sub_layer
                 fPd, rdn, rng, sub_P_, sub_Pp__ = sub_layer
                 # fork comparison:
                 if fPd == _fPd and rng == _rng and min(_P.L, P.L) > ave_Ls:
-                    # compare all sub_Ps to each _sub_P:
+                    # compare sub_Ps to each _sub_P within max distance, comb_M- proportional:
                     for _sub_P in _sub_P_:
                         for sub_P in sub_P_:
+                            # if (_sub_P.M + sub_P.M) / 2 + pdert.m: ? something like that
                             sub_dert = comp_param(_sub_P.I, sub_P.I, "I_", ave_mI)
-                            # shouldn't this inside the loop to accumulate each sub_dert?
-                            dert.sub_M += sub_dert.m  # between whole compared Hs
-                            dert.sub_D += sub_dert.d  # not sure
-                    if dert.sub_M + P.M < ave_sub_M:
-                        # potentially mH: trans-layer induction: if mP + sub_mP < ave_sub_M: both local and global values of mP.
+                            pdert.sub_M += sub_dert.m  # between whole compared sub_Hs
+                            pdert.sub_D += sub_dert.d
+                    if pdert.sub_M + pdert.m + P.M < ave_sub_M:  # combine match values across all P levels.
                         break  # low vertical induction, deeper sublayers are not compared
                 else:
                     break  # deeper P and _P sublayers are from different intra_comp forks, not comparable?
