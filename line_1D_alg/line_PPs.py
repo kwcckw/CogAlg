@@ -358,7 +358,6 @@ def intra_Pp_(Pp_, param_name, fPd):  # evaluate for sub-recursion in line Pm_, 
 
             if fPd:  # Pp is Ppd
                 if abs(Pp.D) * mean_M > ave_D * Pp.Rdn and Pp.L > 3:  # mean_M from adjacent +ve Ppms
-
                     sub_search_draft(Pp.P_, fPd)  # search in top sublayer, also depends on pdert.m, eval per P?
                     rdn_ = [rdn + 1 for rdn in Pp.rdn_[:-1]]
                     ddert_ = []
@@ -386,6 +385,9 @@ def intra_Pp_(Pp_, param_name, fPd):  # evaluate for sub-recursion in line Pm_, 
                     form_Pp_(Pp, Pp.pdert_, param_name, rdn_, Pp.P_, fPd=True)  # cluster by d sign: partial d match, eval intra_Pm_(Pdm_)
 
             if Pp.sublayers:  # splice sublayers from all sub_Pp calls in Pp:
+                
+                if param_name == "I_": comp_sublayers(Pp) # comp Pp's sublayers after forming sublayers recursively
+
                 comb_layers = [comb_layer + sublayer for comb_layer, sublayer in
                                zip_longest(comb_layers, Pp.sublayers, fillvalue=[])
                                ]
@@ -415,6 +417,24 @@ def sub_search_draft(P_, fPd):  # search in top sublayer per P / sub_P,
                     # sub_search_recursive(sub_P_, fPd)  # deeper sublayers search is selective per sub_P
 
 
+#  Operates on sub_Ps per P of Pp, called from intra_Pp
+def comp_sublayers(Pp):
+
+    for P, pdert in zip(Pp.P_, Pp.pdert_):
+        # next layer only
+        if P.sublayers and len(P.sublayers[0])>1: # at least 2 sub_P's sublayers
+
+            _fPd, _rdn, _rng, _sub_P_, _sub_Pp__ = P.sublayers[0][0] # 1st sub_P's sublayer
+
+            for fPd, rdn, rng, sub_P_, sub_Pp__ in P.sublayers[0][1:]: # consecutive sub_P's sublayer
+                # fork comparison:
+                if fPd == _fPd and rng == _rng and min(len(_sub_P_), len(sub_P_)) > ave_Ls:
+                    # compare sub_Ps to each _sub_P within max distance, comb_M- proportional:
+                    sub_search_param_(_sub_P_, sub_P_, pdert) 
+
+                _fPd, _rdn, _rng, _sub_P_, _sub_Pp__ = fPd, rdn, rng, sub_P_, sub_Pp__
+
+# compare between sublayers of 2 Ps, called from search_param
 def comp_sublayers_draft(_P, P, pdert):
     # conditional on pdert.m, summed params m, also positional m: mx0?
 
