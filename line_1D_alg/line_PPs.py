@@ -402,17 +402,17 @@ def sub_search_draft(P_, fPd):  # search in top sublayer per P / sub_P, after P_
         if P.sublayers:
             sublayer = P.sublayers[0][0]  # top sublayer has one array
             # if pdert.m, eval per P, Idert or Ddert only?
-            sub_P_ = sublayer[3]
+            sub_P_ = sublayer[4]
             if len(sub_P_) > 2:
                 if fPd:
                     if abs(P.D) > ave_D:  # better use sublayers.D|M, but we don't have it yet
                         sub_rdn_Pp__ = search(sub_P_, fPd)
-                        sublayer[4].append(sub_rdn_Pp__)
+                        sublayer[5].append(sub_rdn_Pp__)
                         # no direct recursion: sub_search_recursive(sub_P_, fPd)  # deeper sublayers search is selective per sub_P
 
                 elif P.M > ave_M:  # + pdert.m?
                     sub_rdn_Pp__ = search(sub_P_, fPd)
-                    sublayer[4].append(sub_rdn_Pp__)
+                    sublayer[5].append(sub_rdn_Pp__)
                     # no direct recursion: sub_search_recursive(sub_P_, fPd)  # deeper sublayers search is selective per sub_P
 
 
@@ -423,29 +423,31 @@ def comp_sublayers_draft(_P, P, pdert):
     if P.sublayers and _P.sublayers:  # not empty sub layers
         for _sub_layer, sub_layer in zip(_P.sublayers[0], P.sublayers[0]):
             if _sub_layer and sub_layer:
-                _Dert, (_fPd, _rdn, _rng, _sub_P_, _sub_Pp__) = _sub_layer
-                Dert, (fPd, rdn, rng, sub_P_, sub_Pp__) = sub_layer
+                (_Dert, _fPd, _rdn, _rng, _sub_P_, _sub_Pp__) = _sub_layer
+                (Dert, fPd, rdn, rng, sub_P_, sub_Pp__) = sub_layer
                 # fork comparison:
                 if fPd == _fPd and rng == _rng and min(_P.L, P.L) > ave_Ls:
                     # compare sub_Ps to each _sub_P within max distance, comb_M- proportional:
-                    '''
+                    
                     # compare Derts and accumulate dert.sub_M:
                     if _Dert and Dert:
+                        # compare all params? Or just I here?
                         for _param, param in zip(_Dert, Dert):
-                            dert = comp_param(_param, param, param_name[0], ave)
+                            dert = comp_param(_param, param, "I_", ave_mI)
                             pdert.sub_M += dert.m
-                    if pdert.sub_M:
-                    '''
-                    for _sub_P in _sub_P_:
-                        for sub_P in sub_P_:
-                            if (_sub_P.M + sub_P.M) / 2 + pdert.m > (sub_P.x0 - (_sub_P.x0 + _sub_P.L)) * dist_coef:  # actually max_x0 - min_x0
-                               # something like that, tentative
-                                sub_dert = comp_param(_sub_P.I, sub_P.I, "I_", ave_mI)
-                                pdert.sub_M += sub_dert.m  # between whole compared sub_Hs
-                                pdert.sub_D += sub_dert.d
+                            
+                        if pdert.sub_M: # section below is conditional based on pdert.sub_M
 
-                    if pdert.sub_M + pdert.m + P.M < ave_sub_M:  # combine match values across all P levels.
-                        break  # low vertical induction, deeper sublayers are not compared
+                            for _sub_P in _sub_P_:
+                                for sub_P in sub_P_:
+                                    if (_sub_P.M + sub_P.M) / 2 + pdert.m > (sub_P.x0 - (_sub_P.x0 + _sub_P.L)) * dist_coef:  # actually max_x0 - min_x0
+                                       # something like that, tentative
+                                        sub_dert = comp_param(_sub_P.I, sub_P.I, "I_", ave_mI)
+                                        pdert.sub_M += sub_dert.m  # between whole compared sub_Hs
+                                        pdert.sub_D += sub_dert.d
+    
+                            if pdert.sub_M + pdert.m + P.M < ave_sub_M:  # combine match values across all P levels.
+                                break  # low vertical induction, deeper sublayers are not compared
                 else:
                     break  # deeper P and _P sublayers are from different intra_comp forks, not comparable?
 

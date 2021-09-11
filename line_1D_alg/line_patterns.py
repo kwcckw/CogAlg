@@ -150,9 +150,16 @@ def form_P_(rootP, dert_, rdn, rng, fPd):  # accumulation and termination, rdn a
 
     if rootP:  # call from intra_P_
         # sublayers brackets: 1st: param set, 2nd: sublayer concatenated from n root_Ps, 3th: hierarchy
-        rootP.sublayers = [[( fPd, rdn, rng, P_, [] )]]  # 1st sublayer is one param set, last []: sub_Ppm__
+        Dert_ = [] # each element = sum of params in a new layer
+        rootP.sublayers = [[(Dert_, fPd, rdn, rng, P_, [] )]]  # 1st sublayer is one param set, last []: sub_Ppm__
         if len(P_) > 4:  # 2 * (rng+1) = 2*2 =4
             rootP.sublayers += intra_P_(P_, rdn, rng, fPd)  # deeper comb_layers feedback
+            
+            L, I, D, M = 0,0,0,0
+            P_ =  rootP.sublayers[0][0][4] # top layer only?
+            for P in P_: # Loop each P
+                L+=P.L; I+=P.I; D+=P.D; M+=P.M         
+            Dert_ += [L, I, D, M]  
         '''
         if sum params into layer_Dert:
         # sublayers brackets: 1st: param set, 2nd: Dert, param set, 3rd: sublayer concatenated from n root_Ps, 4th: hierarchy
