@@ -46,6 +46,7 @@ class CP(ClusterStructure):
     x0 = int
     dert_ = list  # contains (i, p, d, m)
     sublayers = list  # multiple layers of sub_P_s from d segmentation or extended comp, nested to depth = sub_[n]
+    subDerts = list
     # for layer-parallel access and comp, ~ frequency domain, composition: 1st: dert_, 2nd: sub_P_[ derts], 3rd: sublayers[ sub_Ps[ derts]]
     fPd = bool  # P is Pd if true, else Pm; also defined per layer
 
@@ -150,16 +151,14 @@ def form_P_(rootP, dert_, rdn, rng, fPd):  # accumulation and termination, rdn a
 
     if rootP:  # call from intra_P_
         # sublayers brackets: 1st: param set, 2nd: sublayer concatenated from n root_Ps, 3th: hierarchy
-        Dert_ = [] # each element = sum of params in a new layer
-        rootP.sublayers = [[(Dert_, fPd, rdn, rng, P_, [] )]]  # 1st sublayer is one param set, last []: sub_Ppm__
-        if len(P_) > 4:  # 2 * (rng+1) = 2*2 =4
-            rootP.sublayers += intra_P_(P_, rdn, rng, fPd)  # deeper comb_layers feedback
-            
+        rootP.sublayers = [[(fPd, rdn, rng, P_, [])]]  # 1st sublayer is one param set, last []: sub_Ppm__
+        if len(P_) > 4:  # 2 * (rng+1) = 2*2 =4       # or move this section inside form_P_ above?     
             L, I, D, M = 0,0,0,0
-            P_ =  rootP.sublayers[0][0][4] # top layer only?
             for P in P_: # Loop each P
-                L+=P.L; I+=P.I; D+=P.D; M+=P.M         
-            Dert_ += [L, I, D, M]  
+                L+=P.L; I+=P.I; D+=P.D; M+=P.M  
+            rootP.subDerts.append([L, I, D, M]) # each element = sum of params in a new layer 
+            rootP.sublayers += intra_P_(P_, rootP.subDerts, rdn, rng, fPd)  # deeper comb_layers feedback    
+
         '''
         if sum params into layer_Dert:
         # sublayers brackets: 1st: param set, 2nd: Dert, param set, 3rd: sublayer concatenated from n root_Ps, 4th: hierarchy
@@ -175,7 +174,7 @@ def form_P_(rootP, dert_, rdn, rng, fPd):  # accumulation and termination, rdn a
          '''
     else:
         # call from cross_comp
-        intra_P_(P_, rdn, rng, fPd)
+        intra_P_(P_, None, rdn, rng, fPd)
         return P_  # else packed in P.sublayers
 
     if logging:  # fill the array with layer0 params
@@ -186,9 +185,10 @@ def form_P_(rootP, dert_, rdn, rng, fPd):  # accumulation and termination, rdn a
     # print(logs_2D.shape)
 
 
-def intra_P_(P_, rdn, rng, fPd):  # recursive cross-comp and form_P_ inside selected sub_Ps in P_
+def intra_P_(P_, isubDerts, rdn, rng, fPd):  # recursive cross-comp and form_P_ inside selected sub_Ps in P_
 
     comb_layers = []
+    subDerts = []
     adj_M_ = form_adjacent_M_(P_)  # compute adjacent Ms to evaluate contrastive borrow potential
 
     for P, adj_M in zip(P_, adj_M_):
@@ -222,9 +222,33 @@ def intra_P_(P_, rdn, rng, fPd):  # recursive cross-comp and form_P_ inside sele
                         comb_param += sub_param  # sum Derts
                     comb_layer[0] += sublayer[0]  # append sub_P param sets
                 '''
+                
+                # To get layer wide Dert params from each layer
+                if isubDerts:
+                    # get current P and their deeper layer's Dert
+                    subDert = []
+                    for sub_P_layers in P.sublayers:
+                        L=I=D=M= 0
+                        for sub_P_layer in sub_P_layers:                   
+                            for P in sub_P_layer[3]:
+                                L+=P.L; I+=P.I; D+=P.D; M+=P.M    
+                        subDert.append([L,I,D,M])
+    
+                    # combine current P's Dert to main subDerts
+                    for i, (Dert, Derts) in enumerate(zip_longest(subDert, subDerts, fillvalue=[])):  
+                        if Dert:
+                            if Derts: # both subDert and subDerts are having same layer Dert, accumulate subDert to subDerts
+                                for j, param_value in enumerate(Derts):
+                                    subDerts[i][j] = param_value + Dert[j] 
+                            else:
+                                if i > len(Derts)-1: # subDert's layer is deeper, append new layer of subDert to subDerts
+                                    subDerts.append(Dert)
+
                 comb_layers = [ comb_layer + sublayer for comb_layer, sublayer in
                                 zip_longest(comb_layers, P.sublayers, fillvalue=[])
                                 ]
+                          
+    if subDerts: isubDerts += subDerts # pack subDerts to isubDerts
     ''' 
     adj_M is not affected by primary range_comp per Pm?
     no comb_m = comb_M / comb_S, if fid: comb_m -= comb_|D| / comb_S: alt rep cost
