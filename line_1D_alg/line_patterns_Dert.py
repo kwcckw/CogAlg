@@ -80,7 +80,7 @@ def cross_comp(frame_of_pixels_):  # converts frame_of_pixels to frame_of_patter
         _i = pixel_[0]
     else:
     '''
-    for y in range(init_y, init_y+2):  # y is index of new line pixel_, a brake point here, we only need one row to process
+    for y in range(init_y, init_y+Y):  # y is index of new line pixel_, a brake point here, we only need one row to process
         if logging:
             global logs_2D, logs_3D  # to share between functions
             logs_2D = np.empty((0, 6), dtype=int32)  # 2D array for layer0 params
@@ -150,13 +150,13 @@ def form_P_(rootP, dert_, rdn, rng, fPd):  # accumulation and termination, rdn a
 
     if rootP:  # call from intra_P_
         # sublayers brackets: 1st: param set, 2nd: Dert, param set, 3rd: sublayer concatenated from n root_Ps, 4th: hierarchy
-        Dert = [0,0,0,0]  # P.L, I, D, M summed within a layer
-        
-        rootP.sublayers = [( Dert, [(fPd, rdn, rng, P_, [])] )]  # 1st sublayer is one param set, last[] is sub_Ppm__
+        Dert = [0,0,0,0]  # P.L, I, D, M summed within a layer  
+        # we need square bracket here, else we cannot add new layer later using comb_layer[1] += sublayer[1] (line 211 below)
+        rootP.sublayers = [[ Dert, [(fPd, rdn, rng, P_, [])] ]]  # 1st sublayer is one param set, last[] is sub_Ppm__
         if len(P_) > 4:  # 2 * (rng+1) = 2*2 =4
             for P in P_:
                 Dert[0] += P.L; Dert[1] += P.I; Dert[2] += P.D; Dert[3] += P.M
-            rootP.sublayers += intra_P_(P_, rdn, rng, fPd)  # deeper comb_layers feedback, sub_P params are summed per sublayer             
+            rootP.sublayers += intra_P_(P_, rdn, rng, fPd)  # deeper comb_layers feedback, sub_P params are summed per sublayer
     else:
         # call from cross_comp
         intra_P_(P_, rdn, rng, fPd)
@@ -172,7 +172,7 @@ def form_P_(rootP, dert_, rdn, rng, fPd):  # accumulation and termination, rdn a
 
 def intra_P_(P_, rdn, rng, fPd):  # recursive cross-comp and form_P_ inside selected sub_Ps in P_
 
-    comb_layers = [([0,0,0,0], [])]  # list of (Dert, sub_P_set_)
+    comb_layers= [] # empty Dert will be initialized per layer below
     adj_M_ = form_adjacent_M_(P_)  # compute adjacent Ms to evaluate contrastive borrow potential
 
     for P, adj_M in zip(P_, adj_M_):
@@ -200,11 +200,17 @@ def intra_P_(P_, rdn, rng, fPd):  # recursive cross-comp and form_P_ inside sele
 
             if P.sublayers:  # splice sublayers from all sub_P calls within P:
                 # sublayer: (Dert, sub_P_set_)
-                for comb_layer, sublayer in zip_longest(comb_layers, P.sublayers, fillvalue=[]):
-                    for comb_param, param in zip(comb_layer[0], sublayer[0]):
-                        comb_param += param  # sum Dert params
-                    comb_layer[1].append(sublayer[1])  # append combined sub_P_set_
-    ''' 
+                for i, (comb_layer, sublayer) in enumerate(zip_longest(comb_layers, P.sublayers, fillvalue=[])):                
+                    if sublayer: # sublayer is not empty
+                        if not comb_layer:# sublayer is having deeper layer, but not for comb_layer
+                            comb_layers.append([[0,0,0,0], []]) # reinitialize new sublayer, prevent referencing to P.sublayer
+                            comb_layer = comb_layers[i]
+   
+                        # accumulate Dert, sublayer[0] and comb_layer[0] is Dert
+                        for j, param_value in enumerate(sublayer[0]): comb_layer[0][j] += param_value
+                        comb_layer[1] += sublayer[1]  # append combined sub_P_set_
+     
+    '''
     adj_M is not affected by primary range_comp per Pm?
     no comb_m = comb_M / comb_S, if fid: comb_m -= comb_|D| / comb_S: alt rep cost
     same-sign comp: parallel edges, cross-sign comp: M - (~M/2 * rL) -> contrast as 1D difference?

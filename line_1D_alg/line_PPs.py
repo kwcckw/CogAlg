@@ -399,21 +399,22 @@ def sub_search_draft(P_, fPd):  # search in top sublayer per P / sub_P, after P_
     # called from intra_Pp_, especially MPp: init select by P.M, then combined Pp match?
 
     for P in P_:
-        if P.sublayers:
-            sublayer = P.sublayers[0][0]  # top sublayer has one array
-            # if pdert.m, eval per P, Idert or Ddert only?
-            sub_P_ = sublayer[3]
-            if len(sub_P_) > 2:
-                if fPd:
-                    if abs(P.D) > ave_D:  # better use sublayers.D|M, but we don't have it yet
+        if P.sublayers: # not empty sublayer
+            if P.sublayers[0][1]: # not empty 1st layer, P.sublayers[0][0] is Dert
+                sublayer = P.sublayers[0][1][0]  # top sublayer has one array
+                # if pdert.m, eval per P, Idert or Ddert only?
+                sub_P_ = sublayer[3]
+                if len(sub_P_) > 2:
+                    if fPd:
+                        if abs(P.D) > ave_D:  # better use sublayers.D|M, but we don't have it yet
+                            sub_rdn_Pp__ = search(sub_P_, fPd)
+                            sublayer[4].append(sub_rdn_Pp__)
+                            # no direct recursion: sub_search_recursive(sub_P_, fPd)  # deeper sublayers search is selective per sub_P
+    
+                    elif P.M > ave_M:  # + pdert.m?
                         sub_rdn_Pp__ = search(sub_P_, fPd)
                         sublayer[4].append(sub_rdn_Pp__)
                         # no direct recursion: sub_search_recursive(sub_P_, fPd)  # deeper sublayers search is selective per sub_P
-
-                elif P.M > ave_M:  # + pdert.m?
-                    sub_rdn_Pp__ = search(sub_P_, fPd)
-                    sublayer[4].append(sub_rdn_Pp__)
-                    # no direct recursion: sub_search_recursive(sub_P_, fPd)  # deeper sublayers search is selective per sub_P
 
 
 def comp_sublayers_draft(_P, P, pdert):
@@ -421,10 +422,12 @@ def comp_sublayers_draft(_P, P, pdert):
     dist_decay = 2  # decay of projected match with relative distance between sub_Ps
 
     if P.sublayers and _P.sublayers:  # not empty sub layers
-        for _sub_layer, sub_layer in zip(_P.sublayers[0], P.sublayers[0]):
-            if _sub_layer and sub_layer:
-                _Dert, (_fPd, _rdn, _rng, _sub_P_, _sub_Pp__) = _sub_layer
-                Dert, (fPd, rdn, rng, sub_P_, sub_Pp__) = sub_layer
+        if _P.sublayers[0][1] and P.sublayers[0][1]:
+            _Dert, _sub_layers = _P.sublayers[0] # 1st layer only
+            Dert, sub_layers = P.sublayers[0]
+            for _sub_layer, sub_layer in zip(_sub_layers, sub_layers): 
+                _fPd, _rdn, _rng, _sub_P_, _sub_Pp__ = _sub_layer
+                fPd, rdn, rng, sub_P_, sub_Pp__ = sub_layer
                 # fork comparison:
                 if fPd == _fPd and rng == _rng and min(_P.L, P.L) > ave_Ls:
                     # compare Derts and accumulate dert.sub_M:
