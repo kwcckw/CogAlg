@@ -418,37 +418,33 @@ def sub_search_draft(P_, fPd):  # search in top sublayer per P / sub_P, after P_
 
 def comp_sublayers_draft(_P, P, pdert):
     # if pdert.m -> if summed params m -> if positional m: mx0?
-    dist_coef = 2  # draft, converts distance between sub_Ps into negative projected match
-
-    param_names = ["L_", "I_", "D_", "M_"]
-    aves = [ave_mL, ave_mI, ave_mD, ave_mM]
+    dist_decay = 2  # decay of projected match with relative distance between sub_Ps
 
     if P.sublayers and _P.sublayers:  # not empty sub layers
         for _sub_layer, sub_layer in zip(_P.sublayers[0], P.sublayers[0]):
             if _sub_layer and sub_layer:
-                _fPd, _rdn, _rng, _sub_P_, _sub_Pp__ = _sub_layer
-                fPd, rdn, rng, sub_P_, sub_Pp__ = sub_layer
+                _Dert, (_fPd, _rdn, _rng, _sub_P_, _sub_Pp__) = _sub_layer
+                Dert, (fPd, rdn, rng, sub_P_, sub_Pp__) = sub_layer
                 # fork comparison:
                 if fPd == _fPd and rng == _rng and min(_P.L, P.L) > ave_Ls:
-                    # compare sub_Ps to each _sub_P within max distance, comb_M- proportional:
-                    
                     # compare Derts and accumulate dert.sub_M:
-                    if _P.subDerts and P.subDerts:
-                        for _param, param, param_name, ave_param in zip(_P.subDerts[0], P.subDerts[0], param_names, aves): # top layer Dert only?
-                            dert = comp_param(_param, param, param_name, ave_param)  # different param name for each param or all should follow root level param - I? 
-                            pdert.sub_M += dert.m
-                    if pdert.sub_M:
-                    
+                    for _param, param in zip(_Dert, Dert):
+                        dert = comp_param(_param, param, "I_", ave_mI)
+                        pdert.sub_M += dert.m
+
+                    if pdert.sub_M:  # compare sub_Ps to each _sub_P within max distance, comb_M- proportional:
                         for _sub_P in _sub_P_:
                             for sub_P in sub_P_:
-                                if (_sub_P.M + sub_P.M) / 2 + pdert.m > (sub_P.x0 - (_sub_P.x0 + _sub_P.L)) * dist_coef:  # actually max_x0 - min_x0
-                                   # something like that, tentative
+                                distance = sub_P.x0 - (_sub_P.x0 + _sub_P.L)  # always sub_P.x0 >_sub_P.x0?
+                                rel_distance = distance / (1 + (_sub_P.L + sub_P.L)) / 2  # distance / (distance + mean length)
+                                if ((_sub_P.M + sub_P.M) / 2 + pdert.m) * rel_distance * dist_decay > ave_M:
+                                    # comp I only, call from search_param?
                                     sub_dert = comp_param(_sub_P.I, sub_P.I, "I_", ave_mI)
                                     pdert.sub_M += sub_dert.m  # between whole compared sub_Hs
                                     pdert.sub_D += sub_dert.d
-    
-                        if pdert.sub_M + pdert.m + P.M < ave_sub_M:  # combine match values across all P levels.
-                            break  # low vertical induction, deeper sublayers are not compared
+
+                    if pdert.sub_M + pdert.m + P.M < ave_sub_M:  # combine match values across all P levels.
+                        break  # low vertical induction, deeper sublayers are not compared
                 else:
                     break  # deeper P and _P sublayers are from different intra_comp forks, not comparable?
 
