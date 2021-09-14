@@ -80,7 +80,7 @@ def cross_comp(frame_of_pixels_):  # converts frame_of_pixels to frame_of_patter
         _i = pixel_[0]
     else:
     '''
-    for y in range(init_y, init_y+2):  # y is index of new line pixel_, init_y+2: we only need one row to process, use Y for full frame
+    for y in range(init_y, init_y+Y):  # y is index of new line pixel_, init_y+2: we only need one row to process, use Y for full frame
         if logging:
             global logs_2D, logs_3D  # to share between functions
             logs_2D = np.empty((0, 6), dtype=int32)  # 2D array for layer0 params
@@ -202,8 +202,9 @@ def intra_P_(P_, rdn, rng, fPd):  # recursive cross-comp and form_P_ inside sele
                     if sublayer[1]:  # sublayer is not empty
                         if not comb_layer[1]: comb_layers.append(comb_layer)  # ([0,0,0,0], [])
                         for j, param_value in enumerate(sublayer[0]): comb_layer[0][j] += param_value  # accumulate Dert
-                        comb_layer[1].append( sublayer[1])  # append sublayer' subset_
-
+                        # i checked and we need to use extend here, else it will be appending the whole list, instead of subset in tuple only
+                        comb_layer[1].extend(sublayer[1])  # extend sublayer' subset_
+                        
     return comb_layers
 
 
