@@ -242,11 +242,14 @@ def form_Pp_(rootPp, dert_, param_name, rdn_, P_, fPd):
             Pp.L += 1; Pp.iL += P_[x].L; Pp.I += dert.p; Pp.D += dert.d; Pp.M += dert.m; Pp.Rdn += rdn; Pp.rdn_ += [rdn]; Pp.pdert_ += [dert]; Pp.P_ += [P]
         x += 1
         _sign = sign
-
+ 
     if rootPp:
+        Dert = [0,0,0,0]  # P.L, I, D, M summed within a layer
         # call from intra_Pp_; sublayers brackets: 1st: param set, 2nd: sublayer concatenated from n root_Ps, 3rd: layers depth hierarchy
-        rootPp.sublayers = [[( fPd, Pp_ )]]  # 1st sublayer is one element, sub_Ppm__=[], + Dert=[]
-        if len(P_) > 4:  # 2 * (rng+1) = 2*2 =4
+        rootPp.sublayers = [(Dert, [( fPd, Pp_ )])]  # 1st sublayer is one element, sub_Ppm__=[], + Dert=[]
+        if len(Pp_) > 4:  # 2 * (rng+1) = 2*2 =4
+            for Pp in Pp_:
+                Dert[0] += Pp.L; Dert[1] += Pp.I; Dert[2] += Pp.D; Dert[3] += Pp.M
             rootPp.sublayers += intra_Pp_(Pp_, param_name, fPd)  # deeper comb_layers, each appended with feedback of sublayers[n-1] from mult sub_Ps
     else:
         # call from search
@@ -292,9 +295,12 @@ def form_Pp_rng(rootPp, dert_, rdn_, P_):  # cluster Pps by cross-param redundan
                     break  # Pp is terminated
 
     if rootPp:
+        Dert = [0,0,0,0]  # P.L, I, D, M summed within a layer
         # call from intra_Pp_; sublayers brackets: 1st: param set, 2nd: sublayer concatenated from n root_Ps, 3rd: layers depth hierarchy
-        rootPp.sublayers = [[( 0, Pp_ )]]  # 1st sublayer is one element, sub_Ppm__=[], + Dert=[]
+        rootPp.sublayers = [(Dert, [( 0, Pp_ )])]  # 1st sublayer is one element, sub_Ppm__=[], + Dert=[]
         if len(P_) > 4:  # 2 * (rng+1) = 2*2 =4
+            for Pp in Pp_:
+                Dert[0] += Pp.L; Dert[1] += Pp.I; Dert[2] += Pp.D; Dert[3] += Pp.M
             rootPp.sublayers += intra_Pp_(Pp_, "I_", fPd=0)  # deeper comb_layers, each appended with feedback of sublayers[n-1] from mult sub_Ps
     else:
         # call from search
@@ -399,9 +405,19 @@ def intra_Pp_(Pp_, param_name, fPd):  # evaluate for sub-recursion in line Pm_, 
                     form_Pp_(Pp, Pp.pdert_, param_name, rdn_, Pp.P_, fPd=True)  # cluster by d sign: partial d match, eval intra_Pm_(Pdm_)
 
             if Pp.sublayers:  # splice sublayers from all sub_Pp calls in Pp:
-                comb_layers = [comb_layer + sublayer for comb_layer, sublayer in
-                               zip_longest(comb_layers, Pp.sublayers, fillvalue=[])
-                               ]
+                
+                for comb_layer, sublayer in zip_longest(comb_layers, Pp.sublayers, fillvalue=([0,0,0,0], []) ):
+                    if sublayer[1]:  # sublayer (Dert, subset_) is not empty
+                        if not comb_layer[1]: comb_layers.append(comb_layer)  # initialized ([0,0,0,0], [])
+                        # accumulate combined Dert:
+                        for i, param_value in enumerate(sublayer[0]): comb_layer[0][i] += param_value
+                        # append combined subset_ (array of sub_Pp_ param sets):
+                        comb_layer[1].extend(sublayer[1])  # append would increase nesting
+
+                
+#                comb_layers = [comb_layer + sublayer for comb_layer, sublayer in
+#                               zip_longest(comb_layers, Pp.sublayers, fillvalue=[])
+#                               ]
     return comb_layers
 
 
@@ -448,7 +464,8 @@ def comp_sublayers_draft(_P, P, pdert):
                     if pdert.sub_M:  # compare sub_Ps to each _sub_P within max distance, comb_M- proportional:
                         for _sub_P in _sub_P_:
                             for sub_P in sub_P_:
-                                distance = sub_P.x0 - (_sub_P.x0 + _sub_P.L)  # always sub_P.x0 >_sub_P.x0?
+                                # distance should be having direction here? else we can abs it. Otherwise we need to deal with zero division problem when -distance = (_sub_P.L + sub_P.L)
+                                distance = abs(sub_P.x0 - (_sub_P.x0 + _sub_P.L))  # always sub_P.x0 >_sub_P.x0? Nope, it could be <, so distance could be negative here
                                 rel_distance = distance / (distance + (_sub_P.L + sub_P.L)) / 2  # distance / (distance + mean length)?
                                 if ((_sub_P.M + sub_P.M) / 2 + pdert.m) * rel_distance * dist_decay > ave_M:
                                     # comp I only, call from search_param?
@@ -506,7 +523,7 @@ def draw_PP_(image, frame_Pp__):
                 # sub_Pps
                 for k, sub_P_layers in enumerate(Pp.sublayers): # each layer
                     if k+1 == draw_layer:
-                        for m, (_, Pp_) in enumerate(sub_P_layers): # each sub_P's Pps
+                        for m, (_, Pp_) in enumerate(sub_P_layers[1]): # each sub_P's Pps
                             for n, P in enumerate(Pp.P_): # each P or pdert
                                 if Pp.M>0:
                                     img_Pp_layer_[i][y,P.x0:P.x0+P.L] = 255 # + sign
