@@ -459,10 +459,20 @@ def comp_sublayers_draft(_P, P, pdert):
                     if pdert.sub_M:  # compare sub_Ps to each _sub_P within max relative distance, comb_M- proportional:
                         # or reuse search, but with 2 P_ arrays instead of one?
                         for i, _sub_P in enumerate(_sub_P_):
-                            sub_pdert = Cpdert  # per _sub_P
+                            sub_pdert = Cpdert()  # per _sub_P
                             for sub_P in sub_P_[i:]:  # for x0 > _x0, but sub_P.x0 may still be < _sub_P.x0 + _sub_P.L:
+                                
+                                # the code below works only when P is top layer P, else it won't work if P is sub_P, and sub_P is sub_sub_P
+                                # so we need add: if rootP: x = rootP.x0   in form_P_
+                                '''
+                                _sub_x0 = _P.x0+_sub_P.x0 
+                                sub_x0 = P.x0+sub_P.x0
+                                '''
+                                
+                                if _sub_P.x0 > sub_P.x0: # for debug purpose, not needed
+                                    raise ValueError('_sub x0 > sub x0')
+                                
                                 distance = sub_P.x0 - (_sub_P.x0 + _sub_P.L)  # negative distance is overlap, not sure how to treat it
-
                                 rel_distance = distance / (distance + (_sub_P.L + sub_P.L)) / 2  # distance / (distance + mean length)
                                 if ((_sub_P.M + sub_P.M) / 2 + pdert.m) * rel_distance * dist_decay > ave_M:
                                     for _param, param, param_name, ave in \

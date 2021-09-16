@@ -80,7 +80,7 @@ def cross_comp(frame_of_pixels_):  # converts frame_of_pixels to frame_of_patter
         _i = pixel_[0]
     else:
     '''
-    for y in range(init_y, init_y+2):  # y is index of new line pixel_, init_y+2: we only need one row to process, use Y for full frame
+    for y in range(init_y, init_y+Y):  # y is index of new line pixel_, init_y+2: we only need one row to process, use Y for full frame
         if logging:
             global logs_2D, logs_3D  # to share between functions
             logs_2D = np.empty((0, 6), dtype=int32)  # 2D array for layer0 params
@@ -132,6 +132,7 @@ def form_P_(rootP, dert_, rdn, rng, fPd):  # accumulation and termination, rdn a
     # initialization:
     P_ = []
     x = 0
+    if rootP: x = rootP.x0     
     _sign = None  # to initialize 1st P, (None != True) and (None != False) are both True
 
     for dert in dert_:  # segment by sign
