@@ -84,7 +84,7 @@ def norm_feedback(P_, fPd):
         fbM = fbL = 0
         fbM += P.M; fbL += P.L
         if fbM > ave_Dave:
-            if fbM / fbL > ave_dave:
+            if fbM / fbL > ave_dave: # and this ave_dave will be adjusted by higher level again?
                 pass  # eventually feedback: line_patterns' cross_comp(frame_of_pixels_, ave + fbM / fbL)
                 # also terminate Fspan: same-filter frame_ with summed params
         P.I /= P.L; P.D /= P.L; P.M /= P.L  # immediate normalization to a mean
@@ -408,15 +408,18 @@ def intra_Pp_(Pp_, param_name, fPd):  # evaluate for sub-recursion in line Pm_, 
                     rdn_ = [rdn+1 for rdn in Pp.rdn_]
                     form_Pp_(Pp, Pp.pdert_, param_name, rdn_, Pp.P_, fPd=True)  # cluster by d sign: partial d match, eval intra_Pm_(Pdm_)
 
-            if Pp.sublayers:  # splice sublayers from all sub_Pp calls in Pp:
 
-                for comb_layer, sublayer in zip_longest(comb_layers, Pp.sublayers, fillvalue=([0,0,0,0], []) ):
-                    if sublayer[1]:  # sublayer (Dert, subset_) is not empty
-                        if not comb_layer[1]: comb_layers.append(comb_layer)  # initialized ([0,0,0,0], [])
-                        # accumulate combined Dert:
-                        for i, param_value in enumerate(sublayer[0]): comb_layer[0][i] += param_value
-                        # append combined subset_ (array of sub_Pp_ param sets):
-                        comb_layer[1].extend(sublayer[1])  # append would preserve nesting
+            if Pp.sublayers: # splice sublayers from all sub_Pp calls in Pp:
+                new_comp_layers = []
+                for (comb_Dert, comb_subset_), (Dert, subset_) in zip_longest(comb_layers, Pp.sublayers, fillvalue=([0, 0, 0, 0], [])):
+                    # Accumulate combined Dert:
+                    new_comb_Dert = [(comb_param + param) for comb_param, param in zip(comb_Dert, Dert)]
+                    # Append combined subset_ (array of sub_P_ param sets)
+                    new_comb_subset_ = comb_subset_ + subset_
+                    # append layer = (Dert, subset_)
+                    new_comp_layers.append((new_comb_Dert, new_comb_subset_))
+    
+                comb_layers = new_comp_layers
 
     return comb_layers
 
@@ -450,9 +453,11 @@ def comp_sublayers_draft(_P, P, pdert):
         if _P.sublayers[0][1] and P.sublayers[0][1]:
             _Dert, _subset_ = _P.sublayers[0]  # 1st layer only
             Dert, subset_ = P.sublayers[0]
+            
             for _subset, subset in zip(_subset_, subset_):
                 _fPd, _rdn, _rng, _sub_P_, _sub_Pp__ = _subset
                 fPd, rdn, rng, sub_P_, sub_Pp__ = subset
+                
                 # fork comparison:
                 if fPd == _fPd and rng == _rng and min(_P.L, P.L) > ave_Ls:
                     # compare Derts and accumulate dert.sub_M:
@@ -463,19 +468,25 @@ def comp_sublayers_draft(_P, P, pdert):
                     if pdert.sub_M:  # compare sub_Ps to each _sub_P within max relative distance, comb_M- proportional:
                         _SL = SL = 0  # summed Ls
                         index = 0  # index of starting sub_P for last _sub_P
+                        
                         for _sub_P in _sub_P_:
                             sub_pdert = Cpdert()  # per _sub_P
+                            _SL += _sub_P.L  # next _ix0  (initialize here so that 1st _sub_P's L is not 0)  +1 not necessary, since last element is not inclusive
+                            
                             for sub_P in sub_P_[index:]:  # for ix0 > _ix0
-                                if SL >= _SL:
+                                SL += sub_P.L   # next ix0
+                                
+                                if SL >= _SL:          
                                     distance = sub_P.x0 - (_sub_P.x0 + _sub_P.L)  # negative distance is overlap, not sure how to treat it
                                     rel_distance = distance / (distance + (_sub_P.L + sub_P.L)) / 2
+                                    
                                     # distance / (distance + mean L)?
                                     if ((_sub_P.M + sub_P.M) / 2 + pdert.m) * rel_distance * dist_decay > ave_M:
                                         # the rest of search() below?
                                         for _param, param, param_name, ave in \
                                             zip( (_sub_P.L,_sub_P.I,_sub_P.D,_sub_P.M), (sub_P.L,sub_P.I,sub_P.D,sub_P.M),
                                                  ("L_", "I_", "D_", "M_"), (ave_mL, ave_mI, ave_mD, ave_mM) ):
-                                            if param_name != "I_" or _sub_P_.fPd:
+                                            if param_name != "I_" or _sub_P.fPd:
                                                 dert = comp_param(_param, param, param_name, ave)
                                                 sub_pdert.sub_M += dert.m  # high-value mL: macro-param?
                                         # if param_name == "I_": sub_pdert = search_param_(param_)
@@ -486,8 +497,6 @@ def comp_sublayers_draft(_P, P, pdert):
                                         break  # only sub_Ps with relatively proximate position in sub_P_|_sub_P_ are compared
 
                                 else: index+=1  # try next sub_P
-                            SL += sub_P.L + 1  # next ix0
-                        _SL += _sub_P.L + 1  # next _ix0
 
                     if pdert.sub_M + pdert.m + P.M < ave_sub_M:  # combine match values across all P levels.
                         break  # low vertical induction, deeper sublayers are not compared
