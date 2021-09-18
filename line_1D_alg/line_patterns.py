@@ -81,7 +81,7 @@ def cross_comp(frame_of_pixels_):  # converts frame_of_pixels to frame_of_patter
         _i = pixel_[0]
     else:
     '''
-    for y in range(init_y, init_y+2):  # y is index of new line pixel_, init_y+2: we only need one row to process, use Y for full frame
+    for y in range(init_y, init_y+Y):  # y is index of new line pixel_, init_y+2: we only need one row to process, use Y for full frame
         if logging:
             global logs_2D, logs_3D  # to share between functions
             logs_2D = np.empty((0, 6), dtype=int32)  # 2D array for layer0 params
@@ -152,13 +152,12 @@ def form_P_(rootP, dert_, rdn, rng, fPd):  # accumulation and termination, rdn a
     if rootP:  # call from intra_P_
         Dert = []
         # sublayers brackets: 1st: param set, 2nd: Dert, param set, 3rd: sublayer concatenated from n root_Ps, 4th: hierarchy
-        rootP.sublayers = [( Dert, [(fPd, rdn, rng, P_, [])] )]  # 1st sublayer has one subset: sub_P_ param set, last[] is sub_Ppm__
-        if len(P_) > 4:  # 2 * (rng+1) = 2*2 =4
-
-            if rootP.M * len(P_) > ave_M * 5:
-                Dert[:] = [0, 0, 0, 0]  # P.L, I, D, M summed within a layer
-                for P in P_:
-                    Dert[0] += P.L; Dert[1] += P.I; Dert[2] += P.D; Dert[3] += P.M
+        rootP.sublayers = [[(fPd, rdn, rng, P_, [])]]  # 1st sublayer has one subset: sub_P_ param set, last[] is sub_Ppm__
+        rootP.subDerts = [Dert]
+        if (len(P_) > 4) and (rootP.M * len(P_) > ave_M): # 2 * (rng+1) = 2*2 =4
+            Dert[:] = [0, 0, 0, 0]  # P.L, I, D, M summed within a layer
+            for P in P_:
+                Dert[0] += P.L; Dert[1] += P.I; Dert[2] += P.D; Dert[3] += P.M
 
             comb_sublayers, comb_subDerts = intra_P_(P_, rdn, rng, fPd)  # deeper comb_layers feedback, subDerts is selective
             rootP.sublayers += comb_sublayers
@@ -166,7 +165,6 @@ def form_P_(rootP, dert_, rdn, rng, fPd):  # accumulation and termination, rdn a
     else:
         # call from cross_comp
         intra_P_(P_, rdn, rng, fPd)
-        return P_  # else packed in P.sublayers
 
     if logging:  # fill the array with layer0 params
         global logs_2D  # reset for each row
@@ -174,12 +172,14 @@ def form_P_(rootP, dert_, rdn, rng, fPd):  # accumulation and termination, rdn a
             logs_1D = np.array(([P_[i].L], [P_[i].I], [P_[i].D], [P_[i].M], [P_[i].x0], [len(P_[i].sublayers)] )).T  # 2D structure
             logs_2D = np.append(logs_2D, logs_1D, axis=0)  # log for every image row
     # print(logs_2D.shape)
+    return P_  # else packed in P.sublayers
 
 
 def intra_P_(P_, rdn, rng, fPd):  # recursive cross-comp and form_P_ inside selected sub_Ps in P_
 
     adj_M_ = form_adjacent_M_(P_)  # compute adjacent Ms to evaluate contrastive borrow potential
-
+    comb_layers=[]
+    comb_subDerts=[]
     for P, adj_M in zip(P_, adj_M_):
         if P.L > 2 * (rng+1):  # vs. **? rng+1 because rng is initialized at 0, as all params
             rel_adj_M = adj_M / -P.M  # for allocation of -Pm' adj_M to each of its internal Pds?
@@ -203,28 +203,24 @@ def intra_P_(P_, rdn, rng, fPd):  # recursive cross-comp and form_P_ inside sele
                     # or if min(-P.M, adj_M),  rel_adj_M = adj_M / -P.M  # allocate -Pm adj_M to each sub_Pd?
                     form_P_(P, P.dert_, rdn+1, rng, fPd=True)  # cluster by d sign: partial d match, eval intra_Pm_(Pdm_)
 
-            comb_layers=[]
+            
             if P.sublayers:
+                # combine sublayers
                 new_sublayers = []
                 for comb_subset_, subset_ in zip_longest(comb_layers, P.sublayers, fillvalue=([])):
                     # append combined subset_ (array of sub_P_ param sets):
-                    new_sublayers += [ comb_subset_.extend(subset_) ]
-                comb_layers = [new_sublayers]
+                    new_sublayers.append(comb_subset_ + subset_)
+                comb_layers = new_sublayers
 
-                comb_subDerts=[]
-                for comb_subset_ in comb_layers:
-                    if P.M * len(comb_subset_) > ave_M * 5:  # 5 is a placeholder, form subDert:
-                        new_subDerts = []
-                        for comb_Dert, subset_ in zip_longest(comb_subDerts, comb_subset_, fillvalue=([])):
-                            if subset_:
-                                if not comb_Dert: comb_Dert=[0,0,0,0]
-                                for subset in subset_:
-                                    for sub_P in subset[3]:  # accumulate combined Dert:
-                                        comb_Dert[0]+=sub_P.L; comb_Dert[1]+=sub_P.I; comb_Dert[2]+=sub_P.D; comb_Dert[3]+=sub_P.M
-                            new_subDerts += comb_Dert
-                        comb_subDerts = new_subDerts
-                    else:
-                        break  # no skip to deeper layers
+                # combine subDerts
+                new_subDerts = []
+                for comb_Dert_, Dert_ in zip_longest(comb_subDerts, P.subDerts, fillvalue=([])):
+                    if Dert_ or comb_Dert_: # at least one is not empty
+                        new_Dert_ = [comb_param + param
+                                    for comb_param, param in
+                                    zip_longest(comb_Dert_, Dert_, fillvalue=0)]
+                        new_subDerts.append(new_Dert_)
+                comb_subDerts = new_subDerts
 
     return comb_layers, comb_subDerts
 
