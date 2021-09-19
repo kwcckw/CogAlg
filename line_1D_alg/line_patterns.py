@@ -81,7 +81,7 @@ def cross_comp(frame_of_pixels_):  # converts frame_of_pixels to frame_of_patter
         _i = pixel_[0]
     else:
     '''
-    for y in range(init_y, init_y+2):  # y is index of new line pixel_, init_y+2: we only need one row to process, use Y for full frame
+    for y in range(init_y, init_y+Y):  # y is index of new line pixel_, init_y+2: we only need one row to process, use Y for full frame
         if logging:
             global logs_2D, logs_3D  # to share between functions
             logs_2D = np.empty((0, 6), dtype=int32)  # 2D array for layer0 params
@@ -168,7 +168,8 @@ def form_P_(rootP, dert_, rdn, rng, fPd):  # accumulation and termination, rdn a
         # call from cross_comp
         intra_P_(P_, rdn, rng, fPd)
 
-    if logging:  # fill the array with layer0 params
+    # logging is not exist when we call form_P_ from compact
+    if "logging" in globals() and logging:  # fill the array with layer0 params
         global logs_2D  # reset for each row
         for i in range(len(P_)):  # for each P
             logs_1D = np.array(([P_[i].L], [P_[i].I], [P_[i].D], [P_[i].M], [P_[i].x0], [len(P_[i].sublayers)] )).T  # 2D structure
@@ -300,7 +301,7 @@ if __name__ == "__main__":
     logging = 0  # log dataframes
     fpickle = 2  # 0: read from the dump; 1: pickle dump; 2: no pickling
     render = 0
-    fline_PPs = 0
+    fline_PPs = 1
     start_time = time()
 
     if logging:
