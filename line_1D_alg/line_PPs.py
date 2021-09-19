@@ -79,7 +79,7 @@ ave_dave = 20   # mean feedback filter
 # def feedback(P_):  # adjust line_patterns filters
 
 
-def norm_feexdback(P_, fPd):
+def norm_feedback(P_, fPd):
 
     for P in P_:
         fbM = fbL = 0
@@ -381,7 +381,7 @@ def compact(rval_Pp_, pdert1_, pdert2_, param_name, fPd):  # re-eval Pps, Pp.pde
 
 def intra_Pp_(Pp_, param_name, fPd):  # evaluate for sub-recursion in line Pm_, pack results into sub_Pm_
 
-    comb_layers = []  # combine into root P sublayers[1:]
+    comb_sublayers = []  # combine into root P sublayers[1:]
     comb_subDerts=[]
     # each Pp is evaluated for incremental range and derivation xcomp, as in line_patterns but with local aves
 
@@ -422,11 +422,10 @@ def intra_Pp_(Pp_, param_name, fPd):  # evaluate for sub-recursion in line Pm_, 
             if Pp.sublayers: # splice sublayers from all sub_Pp calls in Pp:
                 # combine sublayers
                 new_sublayers = []
-                for comb_subset_, subset_ in zip_longest(comb_layers, Pp.sublayers, fillvalue=([])):
+                for comb_subset_, subset_ in zip_longest(comb_sublayers, Pp.sublayers, fillvalue=([])):
                     # append combined subset_ (array of sub_P_ param sets):
                     new_sublayers.append(comb_subset_ + subset_)
-                comb_layers = new_sublayers
-    
+                comb_sublayers = new_sublayers
                 # combine subDerts
                 new_subDerts = []
                 for comb_Dert_, Dert_ in zip_longest(comb_subDerts, Pp.subDerts, fillvalue=([])):
@@ -436,8 +435,8 @@ def intra_Pp_(Pp_, param_name, fPd):  # evaluate for sub-recursion in line Pm_, 
                                     zip_longest(comb_Dert_, Dert_, fillvalue=0)]
                         new_subDerts.append(new_Dert_)
                 comb_subDerts = new_subDerts
-                
-    return comb_layers, comb_subDerts
+
+    return comb_sublayers, comb_subDerts
 
 
 def sub_search_draft(P_, fPd):  # search in top sublayer per P / sub_P, after P_ search: top-down induction,
@@ -466,14 +465,12 @@ def comp_sublayers_draft(_P, P, pdert):
     dist_decay = 2  # decay of projected match with relative distance between sub_Ps
 
     if P.sublayers and _P.sublayers:  # not empty sub layers
-#        if _P.sublayers[0] and P.sublayers[0]:
         _Dert, _subset_ = _P.subDerts[0], _P.sublayers[0]  # 1st layer only
         Dert, subset_ = P.subDerts[0], P.sublayers[0]
-        
+
         for _subset, subset in zip(_subset_, subset_):
             _fPd, _rdn, _rng, _sub_P_, _sub_Pp__ = _subset
             fPd, rdn, rng, sub_P_, sub_Pp__ = subset
-            
             # fork comparison:
             if fPd == _fPd and rng == _rng and min(_P.L, P.L) > ave_Ls:
                 # compare Derts and accumulate dert.sub_M:
@@ -484,18 +481,12 @@ def comp_sublayers_draft(_P, P, pdert):
                 if pdert.sub_M:  # compare sub_Ps to each _sub_P within max relative distance, comb_M- proportional:
                     _SL = SL = 0  # summed Ls
                     index = 0  # index of starting sub_P for last _sub_P
-                    
                     for _sub_P in _sub_P_:
                         sub_pdert = Cpdert()  # per _sub_P
-                        _SL += _sub_P.L  # next _ix0  (initialize here so that 1st _sub_P's L is not 0)  +1 not necessary, since last element is not inclusive
-                        
                         for sub_P in sub_P_[index:]:  # for ix0 > _ix0
-                            SL += sub_P.L   # next ix0
-                            
-                            if SL >= _SL:          
+                            if SL >= _SL:
                                 distance = sub_P.x0 - (_sub_P.x0 + _sub_P.L)  # negative distance is overlap, not sure how to treat it
                                 rel_distance = distance / (distance + (_sub_P.L + sub_P.L)) / 2
-                                
                                 # distance / (distance + mean L)?
                                 if ((_sub_P.M + sub_P.M) / 2 + pdert.m) * rel_distance * dist_decay > ave_M:
                                     # the rest of search() below?
@@ -513,6 +504,8 @@ def comp_sublayers_draft(_P, P, pdert):
                                     break  # only sub_Ps with relatively proximate position in sub_P_|_sub_P_ are compared
 
                             else: index+=1  # try next sub_P
+                        SL += sub_P.L + 1  # next P' ix0
+                    _SL += _sub_P.L + 1  # next _P' ix0
 
                 if pdert.sub_M + pdert.m + P.M < ave_sub_M:  # combine match values across all P levels.
                     break  # low vertical induction, deeper sublayers are not compared

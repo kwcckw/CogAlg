@@ -81,7 +81,7 @@ def cross_comp(frame_of_pixels_):  # converts frame_of_pixels to frame_of_patter
         _i = pixel_[0]
     else:
     '''
-    for y in range(init_y, init_y+Y):  # y is index of new line pixel_, init_y+2: we only need one row to process, use Y for full frame
+    for y in range(init_y, init_y+2):  # y is index of new line pixel_, init_y+2: we only need one row to process, use Y for full frame
         if logging:
             global logs_2D, logs_3D  # to share between functions
             logs_2D = np.empty((0, 6), dtype=int32)  # 2D array for layer0 params
@@ -129,6 +129,7 @@ def cross_comp(frame_of_pixels_):  # converts frame_of_pixels to frame_of_patter
 
     return frame_of_patterns_  # frame of patterns is an input to level 2
 
+
 def form_P_(rootP, dert_, rdn, rng, fPd):  # accumulation and termination, rdn and rng are pass-through intra_P_
     # initialization:
     P_ = []
@@ -154,10 +155,11 @@ def form_P_(rootP, dert_, rdn, rng, fPd):  # accumulation and termination, rdn a
         # sublayers brackets: 1st: param set, 2nd: Dert, param set, 3rd: sublayer concatenated from n root_Ps, 4th: hierarchy
         rootP.sublayers = [[(fPd, rdn, rng, P_, [])]]  # 1st sublayer has one subset: sub_P_ param set, last[] is sub_Ppm__
         rootP.subDerts = [Dert]
-        if (len(P_) > 4) and (rootP.M * len(P_) > ave_M): # 2 * (rng+1) = 2*2 =4
-            Dert[:] = [0, 0, 0, 0]  # P.L, I, D, M summed within a layer
-            for P in P_:
-                Dert[0] += P.L; Dert[1] += P.I; Dert[2] += P.D; Dert[3] += P.M
+        if len(P_) > 4:  # 2 * (rng+1) = 2*2 =4
+
+            if rootP.M * len(P_) > ave_M * 5:  # or in line_PPs?
+                Dert[:] = [0, 0, 0, 0]  # P. L, I, D, M summed within a layer
+                for P in P_:  Dert[0] += P.L; Dert[1] += P.I; Dert[2] += P.D; Dert[3] += P.M
 
             comb_sublayers, comb_subDerts = intra_P_(P_, rdn, rng, fPd)  # deeper comb_layers feedback, subDerts is selective
             rootP.sublayers += comb_sublayers
@@ -172,14 +174,16 @@ def form_P_(rootP, dert_, rdn, rng, fPd):  # accumulation and termination, rdn a
             logs_1D = np.array(([P_[i].L], [P_[i].I], [P_[i].D], [P_[i].M], [P_[i].x0], [len(P_[i].sublayers)] )).T  # 2D structure
             logs_2D = np.append(logs_2D, logs_1D, axis=0)  # log for every image row
     # print(logs_2D.shape)
-    return P_  # else packed in P.sublayers
+
+    return P_  # used only if not rootP, else packed in rootP.sublayers and rootP.subDerts
 
 
 def intra_P_(P_, rdn, rng, fPd):  # recursive cross-comp and form_P_ inside selected sub_Ps in P_
 
     adj_M_ = form_adjacent_M_(P_)  # compute adjacent Ms to evaluate contrastive borrow potential
-    comb_layers=[]
-    comb_subDerts=[]
+    comb_sublayers = []
+    comb_subDerts = []
+
     for P, adj_M in zip(P_, adj_M_):
         if P.L > 2 * (rng+1):  # vs. **? rng+1 because rng is initialized at 0, as all params
             rel_adj_M = adj_M / -P.M  # for allocation of -Pm' adj_M to each of its internal Pds?
@@ -203,26 +207,24 @@ def intra_P_(P_, rdn, rng, fPd):  # recursive cross-comp and form_P_ inside sele
                     # or if min(-P.M, adj_M),  rel_adj_M = adj_M / -P.M  # allocate -Pm adj_M to each sub_Pd?
                     form_P_(P, P.dert_, rdn+1, rng, fPd=True)  # cluster by d sign: partial d match, eval intra_Pm_(Pdm_)
 
-            
             if P.sublayers:
-                # combine sublayers
                 new_sublayers = []
-                for comb_subset_, subset_ in zip_longest(comb_layers, P.sublayers, fillvalue=([])):
+                for comb_subset_, subset_ in zip_longest(comb_sublayers, P.sublayers, fillvalue=([])):
                     # append combined subset_ (array of sub_P_ param sets):
                     new_sublayers.append(comb_subset_ + subset_)
-                comb_layers = new_sublayers
+                comb_sublayers = new_sublayers
 
-                # combine subDerts
                 new_subDerts = []
-                for comb_Dert_, Dert_ in zip_longest(comb_subDerts, P.subDerts, fillvalue=([])):
-                    if Dert_ or comb_Dert_: # at least one is not empty
-                        new_Dert_ = [comb_param + param
-                                    for comb_param, param in
-                                    zip_longest(comb_Dert_, Dert_, fillvalue=0)]
-                        new_subDerts.append(new_Dert_)
+                for comb_Dert, Dert in zip_longest(comb_subDerts, P.subDerts, fillvalue=([])):
+                    new_Dert = []
+                    if Dert or comb_Dert:  # at least one is not empty, from form_P_
+                        new_Dert = [comb_param + param
+                                   for comb_param, param in
+                                   zip_longest(comb_Dert, Dert, fillvalue=0)]
+                    new_subDerts.append(new_Dert)
                 comb_subDerts = new_subDerts
 
-    return comb_layers, comb_subDerts
+    return comb_sublayers, comb_subDerts
 
 
 def form_adjacent_M_(Pm_):  # compute array of adjacent Ms, for contrastive borrow evaluation
@@ -231,7 +233,6 @@ def form_adjacent_M_(Pm_):  # compute array of adjacent Ms, for contrastive borr
     In noise, there is a lot of variation. but no adjacent match to cancel, so that variation has no predictive value.
     On the other hand, 2D outline or 1D contrast may have low gradient / difference, but it terminates some high-match span.
     Such contrast is salient to the extent that it can borrow predictive value from adjacent high-match area.
-
     adj_M is not affected by primary range_comp per Pm?
     no comb_m = comb_M / comb_S, if fid: comb_m -= comb_|D| / comb_S: alt rep cost
     same-sign comp: parallel edges, cross-sign comp: M - (~M/2 * rL) -> contrast as 1D difference?
@@ -299,7 +300,7 @@ if __name__ == "__main__":
     logging = 0  # log dataframes
     fpickle = 2  # 0: read from the dump; 1: pickle dump; 2: no pickling
     render = 0
-    fline_PPs = 1
+    fline_PPs = 0
     start_time = time()
 
     if logging:
