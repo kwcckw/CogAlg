@@ -469,8 +469,8 @@ def comp_sublayers_draft(_P, P, pdert):
         Dert, subset_ = P.subDerts[0], P.sublayers[0]
 
         for _subset, subset in zip(_subset_, subset_):
-            _fPd, _rdn, _rng, _sub_P_, _sub_Pp__ = _subset
-            fPd, rdn, rng, sub_P_, sub_Pp__ = subset
+            _fPd, _rdn, _rng, _sub_P_ , _sub_pdert_, _sub_Pp__ = _subset
+            fPd, rdn, rng, sub_P_, sub_pdert_, sub_Pp__ = subset
             # fork comparison:
             if fPd == _fPd and rng == _rng and min(_P.L, P.L) > ave_Ls:
                 # compare Derts and accumulate dert.sub_M:
@@ -479,13 +479,24 @@ def comp_sublayers_draft(_P, P, pdert):
                     pdert.sub_M += dert.m  # high-value mL: macro-param?
                 if pdert.sub_M:  # compare sub_Ps to each _sub_P within max relative distance, comb_M- proportional:
                     _SL = SL = 0  # summed Ls
-                    index = 0  # index of starting sub_P for last _sub_P
                     for _sub_P in _sub_P_:
+                        f_left = 0 # flag to search left
+                        index_left =  0  # next search left index
+                        index_right = 0 # next search right index
                         sub_pdert = Cpdert()  # per _sub_P
-                        for i, sub_P in enumerate(sub_P_[index:], start=index):  # for ix0 > _ix0
-                            if SL >= _SL:
-                                # rightward only, secondary leftward search?
-                                distance = sub_P.x0 - (_sub_P.x0 + _sub_P.L)  # negative distance is overlap, not sure how to treat it
+                        _sub_pdert_.append(sub_pdert) # append sub_pdert into _sub_P?
+                        
+                        while True:
+                            if index_right > len(sub_P_)-1: break  # break when reach end of line
+                            if f_left: sub_P = sub_P_[index_left] # if search left
+                            else: sub_P = sub_P_[index_right]     # if search right
+                                
+                            if SL >= _SL:                         
+                                if f_left: # if search left, need changes in the distance computation
+                                    distance = sub_P.x0 - (_sub_P.x0 + _sub_P.L)
+                                else:
+                                    distance = sub_P.x0 - (_sub_P.x0 + _sub_P.L)  # negative distance is overlap, not sure how to treat it
+                                    
                                 if distance <0: distance = 0 # temporary to prevent zero division
                                 rel_distance = distance / (distance + (_sub_P.L + sub_P.L)) / 2
                                 # distance / (distance + mean L)?
@@ -501,10 +512,23 @@ def comp_sublayers_draft(_P, P, pdert):
                                     sub_dert = comp_param(_sub_P.I, sub_P.I, "I_", ave_mI)
                                     sub_pdert.sub_M += sub_dert.m  # between whole compared sub_Hs
                                     sub_pdert.sub_D += sub_dert.d
+                                    
+                                    if f_left: f_left = 0 # if current search left successful, the next search will be on right
+                                    else: # if current search right successful, the next search will be on left
+                                        if index_right - 1 >=0: 
+                                            f_left = 1
+                                            index_left = index_right-1
+                                        index_right += 1 # next right index
                                 else:
                                     break  # only sub_Ps with relatively proximate position in sub_P_|_sub_P_ are compared
 
-                            else: index=min(i+1, len(sub_P_)-1)  # next _sub_P loop's sub_P_ starting index
+                            else: 
+                                if f_left: 
+                                    if index_left - 1 >= 0: index_left -= 1 # check if reach end of left side, else continue search left
+                                    else: f_left = 0
+                                else: index_right += 1 # continue search right
+                            
+                            
                             SL += sub_P.L   # next P' ix0
                         _SL += _sub_P.L   # next _P' ix0
 
