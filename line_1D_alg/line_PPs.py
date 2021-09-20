@@ -481,15 +481,13 @@ def comp_sublayers_draft(_P, P, pdert):
                     _SL = SL = 0  # summed Ls
                     for _sub_P in _sub_P_:
                         f_left = 0 # flag to search left
-                        index_left =  0  # next search left index
-                        index_right = 0 # next search right index
+                        index =  0  # next search index
                         sub_pdert = Cpdert()  # per _sub_P
                         _sub_pdert_.append(sub_pdert) # append sub_pdert into _sub_P?
-                        
+                          
                         while True:
-                            if index_right > len(sub_P_)-1: break  # break when reach end of line
-                            if f_left: sub_P = sub_P_[index_left] # if search left
-                            else: sub_P = sub_P_[index_right]     # if search right
+                            if index < 0: break  # break when search left ended
+                            sub_P = sub_P_[index]
                                 
                             if SL >= _SL:                         
                                 if f_left: # if search left, need changes in the distance computation
@@ -513,25 +511,20 @@ def comp_sublayers_draft(_P, P, pdert):
                                     sub_pdert.sub_M += sub_dert.m  # between whole compared sub_Hs
                                     sub_pdert.sub_D += sub_dert.d
                                     
-                                    if f_left: f_left = 0 # if current search left successful, the next search will be on right
-                                    else: # if current search right successful, the next search will be on left
-                                        if index_right - 1 >=0: 
-                                            f_left = 1
-                                            index_left = index_right-1
-                                        index_right += 1 # next right index
                                 else:
-                                    break  # only sub_Ps with relatively proximate position in sub_P_|_sub_P_ are compared
-
+                                    if f_left: break # break when search left stopped
+                                    else: # enable search left and set search left index
+                                        f_left = 1
+                                        index -= 1
                             else: 
-                                if f_left: 
-                                    if index_left - 1 >= 0: index_left -= 1 # check if reach end of left side, else continue search left
-                                    else: f_left = 0
-                                else: index_right += 1 # continue search right
-                            
-                            
+                                if f_left: index -= 1  # continue search left
+                                else: 
+                                    index += 1      # continue search right
+                                    if index>len(sub_P_)-1: # reach end of line, start search left
+                                        f_left = 1
+                                        index -= 2 # -1 back to previous index, -2 back to left side of previous index       
                             SL += sub_P.L   # next P' ix0
                         _SL += _sub_P.L   # next _P' ix0
-
                 if pdert.sub_M + pdert.m + P.M < ave_sub_M:  # combine match values across all P levels.
                     break  # low vertical induction, deeper sublayers are not compared
             else:
