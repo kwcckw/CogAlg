@@ -369,7 +369,7 @@ def compact(rval_Pp_, pdert1_, pdert2_, param_name, fPd):  # re-eval Pps, Pp.pde
                 _P = CP()
                 for P in Pp.P_:
                     _P.accum_from(P, excluded=["x0"])  # different from Pp params
-                    _P.dert_ += P.dert_  # splice dert_s within Pp # bracket is not necessary here
+                    _P.dert_ += P.dert_  # splice dert_s within Pp
 
                 form_P_(_P, _P.dert_, rdn=1, rng=1, fPd=fPd)  # rerun on spliced Ps
                 rval_Pp_[i] = (rval, _P)  # replace Pp with spliced P,
@@ -428,12 +428,12 @@ def intra_Pp_(Pp_, param_name, fPd):  # evaluate for sub-recursion in line Pm_, 
                 comb_sublayers = new_sublayers
                 # combine subDerts
                 new_subDerts = []
-                for comb_Dert_, Dert_ in zip_longest(comb_subDerts, Pp.subDerts, fillvalue=([])):
-                    if Dert_ or comb_Dert_: # at least one is not empty
-                        new_Dert_ = [comb_param + param
-                                    for comb_param, param in
-                                    zip_longest(comb_Dert_, Dert_, fillvalue=0)]
-                        new_subDerts.append(new_Dert_)
+                for comb_Dert, Dert in zip_longest(comb_subDerts, Pp.subDerts, fillvalue=([])):
+                    if Dert or comb_Dert: # at least one is not empty
+                        new_Dert = [comb_param + param
+                                   for comb_param, param in
+                                   zip_longest(comb_Dert, Dert, fillvalue=0)]
+                        new_subDerts.append(new_Dert)
                 comb_subDerts = new_subDerts
 
     return comb_sublayers, comb_subDerts
@@ -484,6 +484,7 @@ def comp_sublayers_draft(_P, P, pdert):
                         sub_pdert = Cpdert()  # per _sub_P
                         for i, sub_P in enumerate(sub_P_[index:], start=index):  # for ix0 > _ix0
                             if SL >= _SL:
+                                # rightward only, secondary leftward search?
                                 distance = sub_P.x0 - (_sub_P.x0 + _sub_P.L)  # negative distance is overlap, not sure how to treat it
                                 if distance <0: distance = 0 # temporary to prevent zero division
                                 rel_distance = distance / (distance + (_sub_P.L + sub_P.L)) / 2
