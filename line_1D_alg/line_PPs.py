@@ -468,68 +468,77 @@ def comp_sublayers_draft(_P, P, pdert):
         _Dert, _subset_ = _P.subDerts[0], _P.sublayers[0]  # 1st layer only
         Dert, subset_ = P.subDerts[0], P.sublayers[0]
 
-        for _subset, subset in zip(_subset_, subset_):
-            _fPd, _rdn, _rng, _sub_P_ , _sub_pdert_, _sub_Pp__ = _subset
-            fPd, rdn, rng, sub_P_, sub_pdert_, sub_Pp__ = subset
-            # fork comparison:
-            if fPd == _fPd and rng == _rng and min(_P.L, P.L) > ave_Ls:
-                # compare Derts and accumulate dert.sub_M:
-                for _param, param, param_name, ave in zip(_Dert, Dert, ("L_","I_","D_","M_"), (ave_mL, ave_mI, ave_mD, ave_mM)):
-                    dert = comp_param(_param, param, param_name, ave)
-                    pdert.sub_M += dert.m  # high-value mL: macro-param?
-                if pdert.sub_M:  # compare sub_Ps to each _sub_P within max relative distance, comb_M- proportional:
-                    _SL = SL = 0  # summed Ls
-                    for _sub_P in _sub_P_:
-                        f_left = 0 # flag to search left
-                        index =  0  # next search index
-                        sub_pdert = Cpdert()  # per _sub_P
-                        _sub_pdert_.append(sub_pdert) # append sub_pdert into _sub_P?
-                          
-                        while True:
-                            if index < 0: break  # break when search left ended
-                            sub_P = sub_P_[index]
+        _fPd, _rdn, _rng, _sub_P_ , _sub_pdert_, _sub_Pp__ = _subset_[0]
+        fPd, rdn, rng, sub_P_, sub_pdert_, sub_Pp__ = subset_[0]
+        # fork comparison:
+        if fPd == _fPd and rng == _rng and min(_P.L, P.L) > ave_Ls:
+            # compare Derts and accumulate dert.sub_M:
+            for _param, param, param_name, ave in zip(_Dert, Dert, ("L_","I_","D_","M_"), (ave_mL, ave_mI, ave_mD, ave_mM)):
+                dert = comp_param(_param, param, param_name, ave)
+                pdert.sub_M += dert.m  # high-value mL: macro-param?
+            if pdert.sub_M:  # compare sub_Ps to each _sub_P within max relative distance, comb_M- proportional:
+                _SL = SL = 0  # summed Ls
+                index_right = 0 # starting search index for _sub_P
+                index_left =  0  # next search left index
+                for _sub_P in _sub_P_:
+                    f_left = 0 # flag to search left, default to 0 for each new _sub_P
+                    sub_pdert = Cpdert()  # per _sub_P
+                    _sub_pdert_.append(sub_pdert) # append sub_pdert into _sub_P?
+                      
+                    while True: 
+                        if index_left < 0 : break  # break when search left ended
+                        if f_left: sub_P = sub_P_[index_left]
+                        else: sub_P = sub_P_[index_right]
+                        
+                        if SL >= _SL and (SL != 0 and _SL != 0): # add non zero ?  
+                            # if search left, need changes in the distance computation?
+                            distance = sub_P.x0 - (_sub_P.x0 + _sub_P.L)  # negative distance is overlap, not sure how to treat it
                                 
-                            if SL >= _SL:                         
-                                if f_left: # if search left, need changes in the distance computation
-                                    distance = sub_P.x0 - (_sub_P.x0 + _sub_P.L)
-                                else:
-                                    distance = sub_P.x0 - (_sub_P.x0 + _sub_P.L)  # negative distance is overlap, not sure how to treat it
-                                    
-                                if distance <0: distance = 0 # temporary to prevent zero division
-                                rel_distance = distance / (distance + (_sub_P.L + sub_P.L)) / 2
-                                # distance / (distance + mean L)?
-                                if ((_sub_P.M + sub_P.M) / 2 + pdert.m) * rel_distance * dist_decay > ave_M:
-                                    # the rest of search() below?
-                                    for _param, param, param_name, ave in \
-                                        zip( (_sub_P.L,_sub_P.I,_sub_P.D,_sub_P.M), (sub_P.L,sub_P.I,sub_P.D,sub_P.M),
-                                             ("L_", "I_", "D_", "M_"), (ave_mL, ave_mI, ave_mD, ave_mM) ):
-                                        if param_name != "I_" or _sub_P.fPd:
-                                            dert = comp_param(_param, param, param_name, ave)
-                                            sub_pdert.sub_M += dert.m  # high-value mL: macro-param?
-                                    # if param_name == "I_": sub_pdert = search_param_(param_)
-                                    sub_dert = comp_param(_sub_P.I, sub_P.I, "I_", ave_mI)
-                                    sub_pdert.sub_M += sub_dert.m  # between whole compared sub_Hs
-                                    sub_pdert.sub_D += sub_dert.d
-                                    
-                                else:
-                                    if f_left: break # break when search left stopped
-                                    else: # enable search left and set search left index
-                                        f_left = 1
-                                        index -= 1
+                            if distance <0: distance = 0 # temporary to prevent zero division
+                            rel_distance = distance / (distance + (_sub_P.L + sub_P.L)) / 2
+                            # distance / (distance + mean L)?
+                            if ((_sub_P.M + sub_P.M) / 2 + pdert.m) * rel_distance * dist_decay > ave_M:
+                                # the rest of search() below?
+                                for _param, param, param_name, ave in \
+                                    zip( (_sub_P.L,_sub_P.I,_sub_P.D,_sub_P.M), (sub_P.L,sub_P.I,sub_P.D,sub_P.M),
+                                         ("L_", "I_", "D_", "M_"), (ave_mL, ave_mI, ave_mD, ave_mM) ):
+                                    if param_name != "I_" or _sub_P.fPd:
+                                        dert = comp_param(_param, param, param_name, ave)
+                                        sub_pdert.sub_M += dert.m  # high-value mL: macro-param?
+                                # if param_name == "I_": sub_pdert = search_param_(param_)
+                                sub_dert = comp_param(_sub_P.I, sub_P.I, "I_", ave_mI)
+                                sub_pdert.sub_M += sub_dert.m  # between whole compared sub_Hs
+                                sub_pdert.sub_D += sub_dert.d
+                                
+                                if not f_left: SL += sub_P.L   # next P' ix0
+                                
+                            else:
+                                if f_left:
+                                    break # break when search left stopped
+                                else: # enable search left and set search left index
+                                    f_left = 1
+                                    index_left = index_right - 1 # next search left index for current _sub_P
+                                    index_right += 1 # search right index for next _sub_P
+                                    SL += sub_P.L   # next P' ix0
+                        else: 
+                            if f_left: 
+                                index_left -= 1  # continue search left
                             else: 
-                                if f_left: index -= 1  # continue search left
-                                else: 
-                                    index += 1      # continue search right
-                                    if index>len(sub_P_)-1: # reach end of line, start search left
-                                        f_left = 1
-                                        index -= 2 # -1 back to previous index, -2 back to left side of previous index       
-                            SL += sub_P.L   # next P' ix0
-                        _SL += _sub_P.L   # next _P' ix0
-                if pdert.sub_M + pdert.m + P.M < ave_sub_M:  # combine match values across all P levels.
-                    break  # low vertical induction, deeper sublayers are not compared
-            else:
-                break  # deeper P and _P sublayers are from different intra_comp forks, not comparable?
-
+                                if index_right+1>len(sub_P_)-1: # reach end of line, start search left
+                                    f_left = 1
+                                    index_left = index_right-1  # -1 back to previous index, -2 back to left side of previous index       
+                                else:
+                                    index_right += 1
+                                SL += sub_P.L   # next P' ix0
+                    _SL += _sub_P.L   # next _P' ix0
+                    
+        # below is not needed since there's only 1 subsets for 1st deeper layer
+        '''
+            if pdert.sub_M + pdert.m + P.M < ave_sub_M:  # combine match values across all P levels.
+                break  # low vertical induction, deeper sublayers are not compared
+        else:
+            break  # deeper P and _P sublayers are from different intra_comp forks, not comparable?
+        '''
 
 def draw_PP_(image, frame_Pp__):
 
