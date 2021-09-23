@@ -448,11 +448,11 @@ def sub_search_draft(P_, fPd):  # search in top sublayer per P / sub_P, after P_
                     if fPd:
                         if abs(P.D) > ave_D:  # or if P.D + pdert.d + sublayer.Dert.D: P.sublayers[0][0][2]?
                             sub_rdn_Pp__ = search(sub_P_, fPd)
-                            subset[4].append(sub_rdn_Pp__)
+                            subset[5].append(sub_rdn_Pp__)
                             # recursion via form_P_
                     elif P.M > ave_M:  # or if P.M + pdert.m + sublayer.Dert.M: P.sublayers[0][0][3]?
                         sub_rdn_Pp__ = search(sub_P_, fPd)
-                        subset[4].append(sub_rdn_Pp__)
+                        subset[5].append(sub_rdn_Pp__)
                         # recursion via form_P_: deeper sublayers search is selective per sub_P
 
 
@@ -461,25 +461,26 @@ def comp_sublayers_draft(_P, P, pdert):  # if pdert.m -> if summed params m -> i
     param_names = ["L_", "I_", "D_", "M_"]
     aves = [ave_mL, ave_mI, ave_mD, ave_mM]
 
-    for _sublayer, _subDert, sublayer, subDert in zip_longest(_P.sublayers, _P.subDerts, _P.sublayers, P.subDerts, fillvalue=([])):
-        if _subDert and subDert:
-            # compare Derts and accumulate dert.sub_M:
-            for _param, param, param_name, ave in zip(_subDert, subDert, param_names, aves):
-                dert = comp_param(_param, param, param_name, ave)
-                pdert.sub_M += dert.m  # higher-value mL?
+    # empty sublayers will not be in the loop and will not be compared
+    for _sublayer, _subDert, sublayer, subDert in zip(_P.sublayers, _P.subDerts, _P.sublayers, P.subDerts):
+        # compare Derts and accumulate dert.sub_M:
+        for _param, param, param_name, ave in zip(_subDert, subDert, param_names, aves):
+            dert = comp_param(_param, param, param_name, ave)
+            pdert.sub_M += dert.m  # higher-value mL?
 
         if pdert.sub_M > ave_M * 4:
-            for _subset, subset in zip_longest(_sublayer, sublayer, fillvalue=([])):
-                if _subset and subset:
-                    _fPd, _rdn, _rng, _sub_P_, _sub_pdert_, _sub_Pp__ = _subset
+            # between _subset_ and subset_
+            for _subset in _sublayer:
+                _fPd, _rdn, _rng, _sub_P_, _sub_pdert_, _sub_Pp__ = _subset
+                _sub_pdert_.extend([ [],[],[],[] ]) # per _subset
+                for subset in sublayer:  
                     fPd, rdn, rng, sub_P_, sub_pdert_, sub_Pp__ = subset
-                    # comp fork:
+                    # comp fork: between _sub_P_ and sub_P_
                     if fPd == _fPd and rng == _rng and min(_P.L, P.L) > ave_Ls:
                         if pdert.sub_M > 0:  # compare sub_Ps to each _sub_P within max relative distance, comb_M- proportional:
                             _SL = SL = 0  # summed Ls
                             start_index = next_index = 0  # index of starting sub_P for current _sub_P
-                            for _sub_P in _sub_P_:
-                                _sub_pdert_.extend([ [],[],[],[] ])
+                            for _sub_P in _sub_P_: 
                                 '''
                                 or extend per sub_P: sub_pdert per compared sub_P pair, separate _sub_pdert_right and _sub_pdert_left?
                                 add as P.pdert_ formed by comp_sub_P_, separate from sublayers formed by comp dert?
@@ -499,11 +500,11 @@ def comp_sublayers_draft(_P, P, pdert):  # if pdert.m -> if summed params m -> i
                                         break  # only sub_Ps with relatively proximate position in sub_P_|_sub_P_ are compared
                                 # for next _sub_P:
                                 start_index = next_index
-                    else:
+                    else: # break from sublayer_ , break from _sublayer_ too?
                         break  # deeper P and _P sublayers are from different intra_comp forks, not comparable?
-
-            if pdert.sub_M + pdert.m + P.M < ave_sub_M:  # combine match values across all P levels.
-                break  # low vertical induction, deeper sublayers are not compared
+                # break from _sublayer_
+                if pdert.sub_M + pdert.m + P.M < ave_sub_M:  # combine match values across all P levels.
+                    break  # low vertical induction, deeper sublayers are not compared
 
 
 def search_dir(_sub_P, sub_P, _sub_pdert_, pdert, param_names, aves):
