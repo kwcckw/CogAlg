@@ -461,66 +461,58 @@ def comp_sublayers_draft(_P, P, pdert):  # if pdert.m -> if summed params m -> i
     param_names = ["L_", "I_", "D_", "M_"]
     aves = [ave_mL, ave_mI, ave_mD, ave_mM]
 
-    # empty sublayers will not be in the loop and will not be compared
-    for _sublayer, _subDert, sublayer, subDert in zip(_P.sublayers, _P.subDerts, _P.sublayers, P.subDerts):
-        # compare Derts and accumulate dert.sub_M:
+    for _subDert, subDert in zip(_P.subDerts, P.subDerts):
+        # comp Derts, accumulate dert.sub_M:
         for _param, param, param_name, ave in zip(_subDert, subDert, param_names, aves):
             dert = comp_param(_param, param, param_name, ave)
             pdert.sub_M += dert.m  # higher-value mL?
+            # add dertDert per _subDert, also a copy for subDert?
 
-        if pdert.sub_M > ave_M * 4:
-            # between _subset_ and subset_
-            for _subset in _sublayer:
-                _fPd, _rdn, _rng, _sub_P_, _sub_pdert_, _sub_Pp__ = _subset
-                _sub_pdert_.extend([ [],[],[],[] ]) # per _subset
-                for subset in sublayer:  
-                    fPd, rdn, rng, sub_P_, sub_pdert_, sub_Pp__ = subset
-                    # comp fork: between _sub_P_ and sub_P_
-                    if fPd == _fPd and rng == _rng and min(_P.L, P.L) > ave_Ls:
-                        if pdert.sub_M > 0:  # compare sub_Ps to each _sub_P within max relative distance, comb_M- proportional:
-                            _SL = SL = 0  # summed Ls
-                            start_index = next_index = 0  # index of starting sub_P for current _sub_P
-                            for _sub_P in _sub_P_: 
-                                '''
-                                or extend per sub_P: sub_pdert per compared sub_P pair, separate _sub_pdert_right and _sub_pdert_left?
-                                add as P.pdert_ formed by comp_sub_P_, separate from sublayers formed by comp dert?
-                                doesn't form Pps: short range and long-distance?
-                                '''
-                                _SL += _sub_P.L  # ix0 of next _sub_P
-                                # search right:
-                                for sub_P in sub_P_[start_index:]:  # index_ix0 > _ix0
-                                    if search_dir(_sub_P, sub_P, _sub_pdert_, pdert, param_names, aves):  # returns fbreak
-                                        break  # only sub_Ps with relatively proximate position in sub_P_|_sub_P_ are compared
-                                    if SL < _SL:
-                                        next_index += 1  # if next ix overlap: ix0 of next _sub_P < ix0 of current sub_P
-                                    SL += sub_P.L  # ix0 of next sub_P
-                                # search left:
-                                for sub_P in reversed( sub_P_[ len(sub_P_) - start_index:]):  # index_ix0 <= _ix0
-                                    if search_dir(_sub_P, sub_P, _sub_pdert_, pdert, param_names, aves):  # returns fbreak
-                                        break  # only sub_Ps with relatively proximate position in sub_P_|_sub_P_ are compared
-                                # for next _sub_P:
-                                start_index = next_index
-                    else: # break from sublayer_ , break from _sublayer_ too?
-                        break  # deeper P and _P sublayers are from different intra_comp forks, not comparable?
-                # break from _sublayer_
-                if pdert.sub_M + pdert.m + P.M < ave_sub_M:  # combine match values across all P levels.
-                    break  # low vertical induction, deeper sublayers are not compared
+    if pdert.sub_M > ave_M * 4:  # or pdert.sub_M + pdert.m + P.M?
+        # comp sub_Ps between sub_P_s in 1st sublayer:
+        _fPd, _rdn, _rng, _sub_P_, _sub_pdert_, _sub_Pp__ = _P.sublayers[0]
+        fPd, rdn, rng, sub_P_, sub_pdert_, sub_Pp__ = P.sublayers[0]
+        # if same intra_comp fork, else sub_Ps are not comparable:
+        if fPd == _fPd and rng == _rng and min(_P.L, P.L) > ave_Ls:
+            if pdert.sub_M > 0:  # compare sub_Ps to each _sub_P within max relative distance, comb_M- proportional:
+                _SL = SL = 0  # summed Ls
+                start_index = next_index = 0  # index of starting sub_P for current _sub_P
+                _sub_pdert_.append([])  # per sub_P_, selective nesting: [_sub_P [ sub_P_ [dir_dert_ [sub_pdert]]]]:
+
+                for _sub_P in _sub_P_:  # doesn't form Pps: short range and long distance? #  _sub_pdert_right and _sub_pdert_left?
+                    _SL += _sub_P.L  # ix0 of next _sub_P
+                    # search right:
+                    for sub_P in sub_P_[start_index:]:  # index_ix0 > _ix0
+                        right_pdert_, fbreak = search_dir(_sub_P, sub_P, pdert, param_names, aves)
+                        _sub_pdert_[-1].append( right_pdert_)  # preserve nesting
+                        if fbreak:
+                            break  # only sub_Ps with relatively proximate position in sub_P_|_sub_P_ are compared
+                        if SL < _SL:
+                            next_index += 1  # if next ix overlap: ix0 of next _sub_P < ix0 of current sub_P
+                        SL += sub_P.L  # ix0 of next sub_P
+                    # search left:
+                    for sub_P in reversed( sub_P_[ len(sub_P_) - start_index:]):  # index_ix0 <= _ix0
+                        left_pdert_, fbreak = search_dir(_sub_P, sub_P, pdert, param_names, aves)
+                        _sub_pdert_[-1].append(left_pdert_)  # preserve nesting
+                        if fbreak:
+                            break  # only sub_Ps with relatively proximate position in sub_P_|_sub_P_ are compared
+                    # for next _sub_P:
+                    start_index = next_index
 
 
-def search_dir(_sub_P, sub_P, _sub_pdert_, pdert, param_names, aves):
+def search_dir(_sub_P, sub_P, pdert, param_names, aves):
 
     fbreak = 0
+    dir_pdert_ = []
     dist_decay = 2  # decay of projected match with relative distance between sub_Ps
 
     distance = (sub_P.x0 + sub_P.L / 2) - (_sub_P.x0 + _sub_P.L / 2)  # distance between mean xs
     rel_distance = distance / (_sub_P.L + sub_P.L) / 2  # mean L; gap and overlap are edge-specific?
     # or comp all, then filter by distance?
     if ((_sub_P.M + sub_P.M) / 2 + pdert.m) * rel_distance * dist_decay > ave_M:
-
-        # 1x1 comp, need to add search_param, sum_rdn, etc, as in search?
-        for i, (param_name, ave) in enumerate(zip(param_names, aves)):
-            sub_pdert = Cpdert()  # per param
-            _sub_pdert_[i].append(sub_pdert)  # or separate _sub_pdert_right and _sub_pdert_left?
+        sub_pdert = Cpdert()
+        # 1x1 comp, add search_param, sum_rdn, etc, as in search?
+        for param_name, ave in zip([param_names], aves):
             _param = getattr(_sub_P, param_name[0])
             param = getattr(sub_P, param_name[0])
 
@@ -532,10 +524,12 @@ def search_dir(_sub_P, sub_P, _sub_pdert_, pdert, param_names, aves):
                 sub_dert = comp_param(_sub_P.I, sub_P.I, "I_", ave_mI)
                 sub_pdert.sub_M += sub_dert.m  # between whole compared sub_Hs
                 sub_pdert.sub_D += sub_dert.d
+
+        dir_pdert_.append(sub_pdert)  # _sub_pdert_right or _sub_pdert_left
     else:
         fbreak = 1  # only sub_Ps with relatively proximate position in sub_P_|_sub_P_ are compared
 
-    return fbreak
+    return dir_pdert_, fbreak
 
 
 def draw_PP_(image, frame_Pp__):
