@@ -122,10 +122,10 @@ def search(P_, fPd):  # cross-compare patterns within horizontal line
         _L, _I, _D, _M = L, I, D, M
 
     LP_ = P_[:-1]
-    dert2_ = dert2_[:-1]  # due to zip_longest in line 98
+    dert2_ = dert2_[:-1]  # due to filled CP() in P2 ( for loop above ) 
     if not fPd:
         Idert_, IP_ = search_param_(P_, ave_mI, rave=1)  # comp x variable range, depending on M of Is
-        Mdert_ = Mdert_[:-1]  # due to zip_longest in search_param
+        Mdert_ = Mdert_[:-1]  # due to filled CP() in P2 ( for loop above ) 
         DP_, MP_ = P_[:-1], P_[:-2]
     else:
         IP_, DP_, MP_ = P_[:-1], P_[:-2], P_[:-1]
@@ -302,7 +302,7 @@ def form_Pp_rng(rootPp, dert_, rdn_, P_):  # cluster Pps by cross-param redundan
     if rootPp:
         Dert = [0,0,0,0]  # P.L, I, D, M summed within a layer
         # call from intra_Pp_; sublayers brackets: 1st: param set, 2nd: sublayer concatenated from n root_Ps, 3rd: layers depth hierarchy
-        rootPp.sublayers = [[( fPd, Pp_ )]]  # 1st sublayer is one element, sub_Ppm__=[], + Dert=[]
+        rootPp.sublayers = [[( 0, Pp_ )]]  # 1st sublayer is one element, sub_Ppm__=[], + Dert=[]
         rootPp.subDerts = [Dert]
         if (len(Pp_) > 4) and (rootPp.M * len(Pp_) > ave_M): # 2 * (rng+1) = 2*2 =4
             Dert[:] = [0, 0, 0, 0]  # P.L, I, D, M summed within a layer
@@ -468,10 +468,10 @@ def comp_sublayers_draft(_P, P, pdert):  # if pdert.m -> if summed params m -> i
             pdert.sub_M += dert.m  # higher-value mL?
             # add dertDert per _subDert, also a copy for subDert?
 
-    if pdert.sub_M > ave_M * 4:  # or pdert.sub_M + pdert.m + P.M?
+    if pdert.sub_M > ave_M * 4 and _P.sublayers and P.sublayers:  # or pdert.sub_M + pdert.m + P.M?
         # comp sub_Ps between sub_P_s in 1st sublayer:
-        _fPd, _rdn, _rng, _sub_P_, _sub_pdert_, _sub_Pp__ = _P.sublayers[0]
-        fPd, rdn, rng, sub_P_, sub_pdert_, sub_Pp__ = P.sublayers[0]
+        _fPd, _rdn, _rng, _sub_P_, _sub_pdert_, _sub_Pp__ = _P.sublayers[0][0] # 1st [0] is 1st deeper layer, 2nd [0] is 1st subset
+        fPd, rdn, rng, sub_P_, sub_pdert_, sub_Pp__ = P.sublayers[0][0]
         # if same intra_comp fork, else sub_Ps are not comparable:
         if fPd == _fPd and rng == _rng and min(_P.L, P.L) > ave_Ls:
             if pdert.sub_M > 0:  # compare sub_Ps to each _sub_P within max relative distance, comb_M- proportional:
@@ -510,9 +510,9 @@ def search_dir(_sub_P, sub_P, pdert, param_names, aves):
     rel_distance = distance / (_sub_P.L + sub_P.L) / 2  # mean L; gap and overlap are edge-specific?
     # or comp all, then filter by distance?
     if ((_sub_P.M + sub_P.M) / 2 + pdert.m) * rel_distance * dist_decay > ave_M:
-        sub_pdert = Cpdert()
         # 1x1 comp, add search_param, sum_rdn, etc, as in search?
-        for param_name, ave in zip([param_names], aves):
+        for param_name, ave in zip(param_names, aves):
+            sub_pdert = Cpdert() # shouldn't be sub_pdert per param?
             _param = getattr(_sub_P, param_name[0])
             param = getattr(sub_P, param_name[0])
 
@@ -525,7 +525,7 @@ def search_dir(_sub_P, sub_P, pdert, param_names, aves):
                 sub_pdert.sub_M += sub_dert.m  # between whole compared sub_Hs
                 sub_pdert.sub_D += sub_dert.d
 
-        dir_pdert_.append(sub_pdert)  # _sub_pdert_right or _sub_pdert_left
+            dir_pdert_.append(sub_pdert)  # _sub_pdert_right or _sub_pdert_left per param
     else:
         fbreak = 1  # only sub_Ps with relatively proximate position in sub_P_|_sub_P_ are compared
 
