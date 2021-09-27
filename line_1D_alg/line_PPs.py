@@ -133,7 +133,15 @@ def search(P_, fPd):  # cross-compare patterns within horizontal line
 
     Pdert__ = [(Ldert_, LP_), (Idert_, IP_), (Ddert_, DP_), (Mdert_, MP_)]
 
-    # why fPd is 1 here?
+    rval_Pp__, Ppm__ = form_Pp_from_pdert(Pdert__, dert1_, dert2_, fPd)
+
+    return rval_Pp__, Ppm__
+
+
+def form_Pp_from_pdert(Pdert__, dert1_, dert2_, fPd):
+    
+    param_names = ["L_", "I_", "D_", "M_"]
+
     rdn__ = sum_rdn_(param_names, Pdert__, fPd=fPd)  # assign redundancy to lesser-magnitude m|d in param pair for same-_P Pderts
     rval_Pp__ = []
     Ppm__ = []  # for visualization
@@ -148,7 +156,6 @@ def search(P_, fPd):  # cross-compare patterns within horizontal line
         Ppm__ += [Ppm_]
 
     return rval_Pp__, Ppm__
-
 
 def search_param_(P_, ave, rave):  # variable-range search in mdert_, only if param is core param?
 
@@ -450,11 +457,11 @@ def sub_search_draft(P_, fPd):  # search in top sublayer per P / sub_P, after P_
                     if fPd:
                         if abs(P.D) > ave_D:  # or if P.D + pdert.d + sublayer.Dert.D: P.sublayers[0][0][2]?
                             sub_rdn_Pp__ = search(sub_P_, fPd)
-                            subset[5].append(sub_rdn_Pp__)
+                            subset[6].append(sub_rdn_Pp__)
                             # recursion via form_P_
                     elif P.M > ave_M:  # or if P.M + pdert.m + sublayer.Dert.M: P.sublayers[0][0][3]?
                         sub_rdn_Pp__ = search(sub_P_, fPd)
-                        subset[5].append(sub_rdn_Pp__)
+                        subset[6].append(sub_rdn_Pp__)
                         # recursion via form_P_: deeper sublayers search is selective per sub_P
 
 
@@ -478,20 +485,22 @@ def comp_sublayers_draft(_P, P, root_m):  # if pdert.m -> if summed params m -> 
 
     if root_m > ave_M * 4 and _P.sublayers and P.sublayers:  # or pdert.sub_M + pdert.m + P.M?
         # comp sub_Ps between sub_P_s in 1st sublayer:
-        _fPd, _rdn, _rng, _sub_P_, _sub_pdert_, _sub_Pp__ = _P.sublayers[0][0]  # 2nd [0] is the 1st and only subset
-        fPd, rdn, rng, sub_P_, sub_pdert_, sub_Pp__ = P.sublayers[0][0]
+        _fPd, _rdn, _rng, _sub_P_, _sub_pdert_, _sub_rval_Pp_, _sub_Pp__ = _P.sublayers[0][0]  # 2nd [0] is the 1st and only subset
+        fPd, rdn, rng, sub_P_, sub_pdert_, sub_rval_Pp_, sub_Pp__ = P.sublayers[0][0]
         # if same intra_comp fork, else not comparable:
         if fPd == _fPd and rng == _rng and min(_P.L, P.L) > ave_Ls and root_m > 0:
             # compare sub_Ps to each _sub_P within max relative distance, comb_M- proportional:
             _SL = SL = 0  # summed Ls
             start_index = next_index = 0  # index of starting sub_P for current _sub_P
-            _sub_pdert_.append([])  # append per sub_P_, each bracket is a level of nesting:
+            dir_sub_pdert_ = []
+            _sub_pdert_.append(dir_sub_pdert_)  # append per sub_P_, each bracket is a level of nesting:
+            sub_pdert_.append(dir_sub_pdert_) # copies for symmetrical representation
             # _sub_pdert_ nesting: _sub_P[ sub_P_[ dir_dertt[ dir_dert_[ sub_pdertt[ sub_pdert]]]]]:
 
             for _sub_P in _sub_P_:  # doesn't form Pps: short range and long distance?
                 P_ = [] # for form Pp purpose
                 _SL += _sub_P.L  # ix0 of next _sub_P
-                # sub_pdert_.append([]): copies for symmetrical representation? or primary unique sub_pdert_, if match?
+
                 # search right:
                 right_pdert_ = []
                 for sub_P in sub_P_[start_index:]:  # index_ix0 > _ix0
@@ -503,7 +512,7 @@ def comp_sublayers_draft(_P, P, root_m):  # if pdert.m -> if summed params m -> 
                     if SL < _SL:
                         next_index += 1  # if next ix overlap: ix0 of next _sub_P < ix0 of current sub_P
                     SL += sub_P.L  # ix0 of next sub_P
-                _sub_pdert_[-1].append(right_pdert_)  # preserve nesting
+                dir_sub_pdert_.append(right_pdert_)  # preserve nesting
                 # search left:
                 left_pdert_ = []
                 for sub_P in reversed( sub_P_[ len(sub_P_) - start_index:]):  # index_ix0 <= _ix0
@@ -512,33 +521,23 @@ def comp_sublayers_draft(_P, P, root_m):  # if pdert.m -> if summed params m -> 
                     left_pdert_.append(sub_pdertt)
                     if fbreak:
                         break  # only sub_Ps with relatively proximate position in sub_P_|_sub_P_ are compared
-                _sub_pdert_[-1].append(left_pdert_)  # preserve nesting
+                dir_sub_pdert_.append(left_pdert_)  # preserve nesting
                 # for next _sub_P:
                 start_index = next_index
 
                 # draft, following workflow in search
-                if _sub_pdert_[-1]:  # _P.sub_P and P.sub_P form sub_pdert
-                    comb_pdert_ = _sub_pdert_[-1][0] + _sub_pdert_[-1][1]  # index 0 is right, index 1 is left
-                    if len(comb_pdert_) > 10:  # ave_L, very unlikely
+                if dir_sub_pdert_:  # _P.sub_P and P.sub_P form sub_pdert
+                    comb_pdert_ = dir_sub_pdert_[0] + dir_sub_pdert_[1]  # index 0 is right, index 1 is left
+                    if len(comb_pdert_) > 0:  # ave_L, very unlikely
                         # form_xsub_Pp:
                         sub_Ldert_ = [sub_pdert[0] for sub_pdert in comb_pdert_]
                         sub_Idert_ = [sub_pdert[1] for sub_pdert in comb_pdert_]
                         sub_Ddert_ = [sub_pdert[2] for sub_pdert in comb_pdert_]
                         sub_Mdert_ = [sub_pdert[3] for sub_pdert in comb_pdert_]
                         sub_Pdertt_= [(sub_Ldert_, P_), (sub_Idert_, P_), (sub_Ddert_, P_), (sub_Mdert_, P_)]
-                        # assign redundancy to lesser-magnitude m|d in param pair for same-_P Pderts:
-                        sub_rdn__ = sum_rdn_(param_names, sub_Pdertt_, fPd=0)
-                        sub_rval_Pp__ = []
-                        sub_Ppm__ = []  # for visualization
 
-                        for param_name, (pdert_, P_), rdn_ in zip(param_names, sub_Pdertt_, sub_rdn__):
-                            if param_name == "I_":
-                                sub_Ppm_ = form_Pp_rng(None, pdert_, rdn_, P_)
-                            else:
-                                sub_Ppm_ = form_Pp_(None, pdert_, param_name, rdn_, P_, fPd=0)
-                                sub_rval_Pp__ += [form_rval_Pp_(sub_Ppm_, param_name, [], [], fPd=0)]
-                                sub_Ppm__ += [sub_Ppm_]
-
+                        sub_rval_Pp__, sub_Ppm__ = form_Pp_from_pdert(sub_Pdertt_, [], [], fPd=0)
+                        _sub_rval_Pp_.append(sub_rval_Pp__)
 
 def comp_sub_P(_sub_P, sub_P, root_m, param_names, aves):
     fbreak = 0

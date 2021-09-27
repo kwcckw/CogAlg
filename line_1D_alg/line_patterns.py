@@ -125,7 +125,7 @@ def form_P_(rootP, dert_, rdn, rng, fPd):  # accumulation and termination, rdn a
     if rootP:  # call from intra_P_
         Dert = []
         # sublayers brackets: 1st: param set, 2nd: Dert, param set, 3rd: sublayer concatenated from n root_Ps, 4th: hierarchy
-        rootP.sublayers = [[(fPd, rdn, rng, P_, [], [])]]  # 1st sublayer has one subset: sub_P_ param set, last[] is sub_Ppm__
+        rootP.sublayers = [[(fPd, rdn, rng, P_, [], [], [])]]  # 1st sublayer has one subset: sub_P_ param set, last[] is sub_Ppm__
         rootP.subDerts = [Dert]
         if len(P_) > 4:  # 2 * (rng+1) = 2*2 =4
 
@@ -264,8 +264,8 @@ if __name__ == "__main__":
     '''
     fpickle = 2  # 0: load; 1: dump; 2: no pickling
     render = 0
-    save = 0
-    fline_PPs = 0
+    save = 1
+    fline_PPs = 1
     start_time = time()
     if fpickle == 0:
         # Read frame_of_patterns from saved file instead
@@ -273,7 +273,7 @@ if __name__ == "__main__":
             frame_of_patterns_ = pickle.load(file)
     else:
         # Run functions
-        image = cv2.imread('.//raccoon.jpg', 0).astype(int)  # manual load pix-mapped image
+        image = cv2.imread('.//toucan_small.jpg', 0).astype(int)  # manual load pix-mapped image
         assert image is not None, "No image in the path"
         # Main
         frame_of_patterns_ = cross_comp(image)  # returns Pm__
@@ -285,10 +285,9 @@ if __name__ == "__main__":
         image = cv2.imread('.//raccoon.jpg', 0).astype(int)  # manual load pix-mapped image
         plt.figure(); plt.imshow(image, cmap='gray'); plt.show()  # show the image below in gray
 
+    frame_Pp__ = []
     if fline_PPs:  # debug line_PPs
         from line_PPs import *
-        frame_Pp__ = []
-
         for y, P_ in enumerate(frame_of_patterns_):
             if len(P_) > 1: rval_Pp__, Pp__ = search(P_, fPd=0)
             else:           rval_Pp__, Pp__ = [], []
@@ -296,9 +295,10 @@ if __name__ == "__main__":
 
         draw_PP_(image, frame_Pp__)  # debugging
 
-    elif save:
-        from imaging import save_Ps, Ps_to_layers, show_layer
+    if save:
+        from imaging import save_Pps, save_Ps, Ps_to_layers, show_layer
         save_Ps("frame_of_patterns.bin", frame_of_patterns_)
+        save_Pps("frame_of_Pp.bin", frame_Pp__)
 
     end_time = time() - start_time
     print(end_time)

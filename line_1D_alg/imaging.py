@@ -110,6 +110,13 @@ def show_layer(layer, shape, resolution=(1024, 512), wname="layer"):
     cv.imshow(wname, cv.resize(img, resolution, interpolation=cv.INTER_NEAREST))
 
 
+# draw_PP_ similar process here
+def save_Pps(filename, frame_Pp__):  
+    pass
+
+def read_Pps(filename):  
+    pass
+
 if __name__ == "__main__":
     layers, shape = read_Ps("frame_of_patterns.bin")
     ilayer = 0          # begin with layer0
