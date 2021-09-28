@@ -75,20 +75,29 @@ ave_mM = 5  # needs to be tuned
 ave_sub = 20  # for comp_sub_layers
 
 ave_Dave = 100  # summed feedback filter
-ave_dave = 20   # mean feedback filter
+ave_dave = 5   # mean feedback filter
 
+def norm_feedback(P_, fbs, fPd):
+      
+    fbM = fbs[0]
+    fbL = fbs[1]
+    
+    for i, P in enumerate(P_):
 
-def norm_feedback(P_, fPd):
-
-    for P in P_:
-        fbM = fbL = 0
         fbM += P.M; fbL += P.L
+        
         if fbM > ave_Dave:
             if fbM / fbL > ave_dave:
-                pass  # eventually feedback: line_patterns' cross_comp(frame_of_pixels_, ave + fbM / fbL)
-                # also terminate Fspan: same-filter frame_ with summed params
+                fbs[0] = (fbs[0]+ fbM) /2  # get mean value? else value will be larger and larger
+                fbs[1] =  (fbs[1]+ fbL) /2
+                # eventually feedback: line_patterns' cross_comp(frame_of_pixels_, ave + fbM / fbL)
+                # also terminate Fspan: same-filter frame_ with summed params   
+            else:
+                pass
+               
         P.I /= P.L; P.D /= P.L; P.M /= P.L  # immediate normalization to a mean
-    search(P_, fPd)
+
+    return search(P_, fPd)
 
 
 def search(P_, fPd):  # cross-compare patterns within horizontal line
@@ -479,7 +488,7 @@ def comp_sublayers_draft(_P, P, root_m):  # if pdert.m -> if summed params m -> 
         _derDert_.append(_derDert) # derDert per sublayer
     _P.derDerts.append(_derDert_)  # derDert_ per _P and P pair
 
-    if root_m > ave_M * 4 and _P.sublayers and P.sublayers:  # or pdert.sub_M + pdert.m + P.M?
+    if root_m + pdert_m > ave_M * 4 and _P.sublayers and P.sublayers:  # or pdert.sub_M + pdert.m + P.M?
         # comp sub_Ps between sub_P_s in 1st sublayer:
         _fPd, _rdn, _rng, _sub_P_, _xsub_pdert_, _xsub_rval_Pp_, _sub_Pp__ = _P.sublayers[0][0]  # 2nd [0] is the 1st and only subset
         fPd, rdn, rng, sub_P_, xsub_pdert_, xsub_rval_Pp_, sub_Pp__ = P.sublayers[0][0]
@@ -525,7 +534,7 @@ def comp_sublayers_draft(_P, P, root_m):  # if pdert.m -> if summed params m -> 
                 # draft, following Pp formation in search:
                 if dir_xsub_pdert_:  # _P.sub_P and P.sub_P form sub_pdert
                     bi_pdert_ = dir_xsub_pdert_[0] + dir_xsub_pdert_[1]  # bilateral: index 0 is right, index 1 is left
-                    if len(bi_pdert_) > 0:
+                    if bi_pdert_[0]: # at least 1 xsub_pdert
                         # real ~ ave_L=8, very unlikely
                         sub_Ldert_ = [sub_pdert[0] for sub_pdert in bi_pdert_]
                         sub_Idert_ = [sub_pdert[1] for sub_pdert in bi_pdert_]

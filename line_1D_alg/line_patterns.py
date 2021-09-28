@@ -21,6 +21,7 @@
 # add ColAlg folder to system path
 import sys
 from os.path import dirname, join, abspath
+from tqdm import tqdm
 
 from numpy import int16, int32
 sys.path.insert(0, abspath(join(dirname("CogAlg"), '..')))
@@ -60,8 +61,11 @@ ave_D = 5  # min |D| for initial incremental-derivation comparison(d_)
 ave_nP = 5  # average number of sub_Ps in P, to estimate intra-costs? ave_rdn_inc = 1 + 1 / ave_nP # 1.2
 ave_rdm = .5  # obsolete: average dm / m, to project bi_m = m * 1.5
 ave_splice = 50  # to merge a kernel of 3 adjacent Ps
+ave_fb = 0.99 # same as decay rate 
 init_y = 0  # starting row, the whole frame doesn't need to be processed
 halt_y = 999999999  # ending row
+fbs = [1, 1] # fbM and fbL
+
 '''
     Conventions:
     postfix '_' denotes array name, vs. same-name elements
@@ -70,8 +74,27 @@ halt_y = 999999999  # ending row
     capitalized variables are normally summed small-case variables
 '''
 
+
+def update_aves_from_feedback():
+    
+    # not sure if there's a better way to update global variables, right now only can think of this now
+    global ave, ave_min, ave_M, ave_D, ave_nP, ave_rdm, ave_splice
+    
+    fbM = fbs[0]
+    fbL = fbs[1]
+    
+    ave *= fbM/fbL
+    ave_min *= fbM/fbL
+    ave_M *= fbM/fbL
+    ave_D *= fbM/fbL
+    ave_nP *= fbM/fbL 
+    ave_rdm *= fbM/fbL 
+    ave_splice *= fbM/fbL
+
 def cross_comp(frame_of_pixels_):  # converts frame_of_pixels to frame_of_patterns, each pattern may be nested
 
+    update_aves_from_feedback()
+    
     Y, X = frame_of_pixels_.shape  # Y: frame height, X: frame width
     frame_of_patterns_ = []
     '''
@@ -262,43 +285,66 @@ if __name__ == "__main__":
     # Read image
     image = cv2.imread(arguments['image'], 0).astype(int)  # load pix-mapped image
     '''
+    
     fpickle = 2  # 0: load; 1: dump; 2: no pickling
     render = 0
-    save = 1
+    save = 0
     fline_PPs = 1
     start_time = time()
-    if fpickle == 0:
-        # Read frame_of_patterns from saved file instead
-        with open("frame_of_patterns_.pkl", 'rb') as file:
-            frame_of_patterns_ = pickle.load(file)
-    else:
-        # Run functions
-        image = cv2.imread('.//toucan_small.jpg', 0).astype(int)  # manual load pix-mapped image
-        assert image is not None, "No image in the path"
-        # Main
-        frame_of_patterns_ = cross_comp(image)  # returns Pm__
-        if fpickle == 1: # save the dump of the whole data_1D to file
-            with open("frame_of_patterns_.pkl", 'wb') as file:
-                pickle.dump(frame_of_patterns_, file)
+    iterations = 5 # max iteration number, emulates sequence of frames
 
-    if render:
-        image = cv2.imread('.//raccoon.jpg', 0).astype(int)  # manual load pix-mapped image
-        plt.figure(); plt.imshow(image, cmap='gray'); plt.show()  # show the image below in gray
+    for i in tqdm(range(iterations)): # uses tqdm to show progress bar
+   
+        if fpickle == 0:
+            # Read frame_of_patterns from saved file instead
+            with open("frame_of_patterns_.pkl", 'rb') as file:
+                frame_of_patterns_ = pickle.load(file)
+        else:
+            # Run functions
+            image = cv2.imread('.//raccoon.jpg', 0).astype(int)  # manual load pix-mapped image
+            assert image is not None, "No image in the path"
+            # Main
+            frame_of_patterns_ = cross_comp(image)  # returns Pm__
+            if fpickle == 1: # save the dump of the whole data_1D to file
+                with open("frame_of_patterns_.pkl", 'wb') as file:
+                    pickle.dump(frame_of_patterns_, file)
+    
+        if render:
+            image = cv2.imread('.//raccoon.jpg', 0).astype(int)  # manual load pix-mapped image
+            plt.figure(); plt.imshow(image, cmap='gray'); plt.show()  # show the image below in gray
+    
+        frame_Pp__ = []
+        if fline_PPs:  # debug line_PPs
+            from line_PPs import *
+            for y, P_ in enumerate(frame_of_patterns_):
+                if len(P_) > 1: 
+                    rval_Pp__, Pp__ = norm_feedback(P_, fbs,fPd=0)  # calls search(P_, fPd=0)
+                else: # ave is too larger after the feedback, and there's <= 1 P now, increase fbL?
+                    fbs[1] /= ave_fb
+                    rval_Pp__, Pp__ = [], []
+                frame_Pp__.append(( rval_Pp__, Pp__))
+    
+            # draw_PP_(image, frame_Pp__)  # debugging
+    
+        if save:
+            from imaging import save_Pps, save_Ps, Ps_to_layers, show_layer
+            save_Ps("frame_of_patterns.bin", frame_of_patterns_)
+            save_Pps("frame_of_Pp.bin", frame_Pp__)
 
-    frame_Pp__ = []
-    if fline_PPs:  # debug line_PPs
-        from line_PPs import *
+        # for quick visualization, can be removed or replaced later
+        import numpy as np
+        image_Ps = np.zeros_like(image)
+
         for y, P_ in enumerate(frame_of_patterns_):
-            if len(P_) > 1: rval_Pp__, Pp__ = norm_feedback(P_, fPd=0)  # calls search(P_, fPd=0)
-            else:           rval_Pp__, Pp__ = [], []
-            frame_Pp__.append(( rval_Pp__, Pp__))
+            for P in P_:
+                if P.M>0:
+                    image_Ps[y,P.x0:P.x0+P.L] = 255 # positive
+                else:
+                    image_Ps[y,P.x0:P.x0+P.L] = 128 # negative
+        plt.figure()
+        plt.imshow(image_Ps.astype('uint8'))
+        plt.title('fbM/fbL= '+str(fbs[0]/fbs[1]))
 
-        draw_PP_(image, frame_Pp__)  # debugging
-
-    if save:
-        from imaging import save_Pps, save_Ps, Ps_to_layers, show_layer
-        save_Ps("frame_of_patterns.bin", frame_of_patterns_)
-        save_Pps("frame_of_Pp.bin", frame_Pp__)
 
     end_time = time() - start_time
     print(end_time)
