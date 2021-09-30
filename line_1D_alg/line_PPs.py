@@ -90,7 +90,7 @@ def norm_feedback(P_, fPd):
                 # also terminate Fspan: same-filter frame_ with summed params, re-init at all 0s
 
         P.I /= P.L; P.D /= P.L; P.M /= P.L  # immediate normalization to a mean
-    
+
     return search(P_, fPd)
 
 
@@ -484,54 +484,50 @@ def comp_sublayers_draft(_P, P, root_m):  # if pdert.m -> if summed params m -> 
 
     if pdert_m + root_m > ave_M * 4 and _P.sublayers and P.sublayers:  # or pdert.sub_M + pdert.m + P.M?
         # comp sub_Ps between sub_P_s in 1st sublayer:
-        _fPd, _rdn, _rng, _sub_P_, _xsub_pdert_, _sub_Pp__ = _P.sublayers[0][0]  # 2nd [0] is the 1st and only subset
-        fPd, rdn, rng, sub_P_, xsub_pdert_, sub_Pp__ = P.sublayers[0][0]
+        _fPd, _rdn, _rng, _sub_P_, _xsub_pdertt_, _sub_Pp__ = _P.sublayers[0][0]  # 2nd [0] is the 1st and only subset
+        fPd, rdn, rng, sub_P_, xsub_pdertt_, sub_Pp__ = P.sublayers[0][0]
         # if same intra_comp fork, else not comparable:
         if fPd == _fPd and rng == _rng and min(_P.L, P.L) > ave_Ls and root_m > 0:
 
             # compare sub_Ps to each _sub_P within max relative distance, comb_M- proportional:
             _SL = SL = 0  # summed Ls
             start_index = next_index = 0  # index of starting sub_P for current _sub_P
-            _xsub_pdert_+=[[]]; xsub_pdert_+=[[]]  # for bilateral append bi_dertt per _sub_P_ and sub_P_, sparse indexing?
-            # xsub_pdert_ is cross-sub_P pderts, each bracket is level of nesting:
-            # _sub_P_xsub_pdert_[ sub_P_xsub_pdert_[ dir_dert_[ sub_pdert]]]
+            _xsub_pdertt_ += [[], [], [], []]  # array of cross-sub_P pdert tuples per sub_P_
+            xsub_pdertt_ += [[], [], [], []]  # append xsub_dertt per _sub_P_ and sub_P_, sparse?
 
-            for _sub_P in _sub_P_:  # doesn't form Pps: short range and long distance?
-                P_ = [] # for form Pp purpose
+            for _sub_P in _sub_P_:  # form xsub_pdertt_[ xsub_dertt [ xsub_pdert_[ sub_pdert]]]: each bracket is level of nesting
                 _SL += _sub_P.L  # ix0 of next _sub_P
-                dir_pdert_ = [[], [], [], []] # each L, I, D, M sub_pdert (combined from left and right, unless we need to identify whether they are left or right)
+                xsub_Ppt = [[], [], [], []]  # tuple of L, I, D, M xsub_Pp_s
+                _xsub_pdertt = [[], [], [], []]  # tuple of L, I, D, M xsub_pderts
                 # search right:
-                for sub_P in sub_P_[start_index:]:  # index_ix0 > _ix0
-                    # only sub_Ps with relatively proximate position in sub_P_|_sub_P_ are compared
-                    if comp_sub_P(_sub_P, sub_P, dir_pdert_, P_, root_m, param_names, aves): break  
+                for sub_P in sub_P_[start_index:]:  # index_ix0 > _ix0, only sub_Ps at proximate relative positions in sub_P_ are compared
+                    if comp_sub_P(_sub_P, sub_P, _xsub_pdertt, xsub_Ppt, root_m, param_names, aves):
+                        break
                     # if next ix overlap: ix0 of next _sub_P < ix0 of current sub_P
-                    if SL < _SL: next_index += 1  
+                    if SL < _SL: next_index += 1
                     SL += sub_P.L  # ix0 of next sub_P
                 # search left:
-                for sub_P in reversed( sub_P_[ len(sub_P_) - start_index:]):  # index_ix0 <= _ix0
-                    # only sub_Ps with relatively proximate position in sub_P_|_sub_P_ are compared
-                    if comp_sub_P(_sub_P, sub_P, dir_pdert_, P_, root_m, param_names, aves): break  
-                
+                for sub_P in reversed( sub_P_[ len(sub_P_) - start_index:]):  # index_ix0 <= _ix0, invert positions of sub_P and _sub_P:
+                    if comp_sub_P(sub_P, _sub_P, _xsub_pdertt, xsub_Ppt, root_m, param_names, aves):
+                        break
                 # not implemented: if param_name == "I_" and not fPd: sub_pdert = search_param_(param_)
                 # for next _sub_P:
                 start_index = next_index
 
-                # mostly following form Pp in search:
-                if dir_pdert_[0]:  # at least 1 sub_pdert
-                    # real ave_L ~ 8, very unlikely
-                    sub_Pdertt_= [(dir_pdert_[0], P_), (dir_pdert_[1], P_), (dir_pdert_[2], P_), (dir_pdert_[3], P_)]
-                    # form_xsub_Pp:
-                    xsub_rval_Pp__, sub_Ppm__ = form_Pp_root(sub_Pdertt_, [], [], fPd=0)
-                    _xsub_pdert_[-1][:] = xsub_rval_Pp__  # vs. _xsub_rval_Pp_.append(xsub_rval_Pp__)
-                    xsub_pdert_[-1][:] = _xsub_pdert_[-1] # bilateral assignment 
-                    
-                else: _xsub_pdert_[-1].append(dir_pdert_)  # preserve nesting
+                if _xsub_pdertt[0]:  # at least 1 sub_pdert, real min length ~ 8, very unlikely
+                    sub_Pdertt_= [(_xsub_pdertt[0], xsub_Ppt[0]), (_xsub_pdertt[1], xsub_Ppt[1]), (_xsub_pdertt[2], xsub_Ppt[2]), (_xsub_pdertt[3], xsub_Ppt[3])]
+                    # form_xsub_Pp_ 4-tuple:
+                    xsub_rval_Pp_t, sub_Ppm__ = form_Pp_root(sub_Pdertt_, [], [], fPd=0)
+                    _xsub_pdertt_[-1][:] = xsub_rval_Pp_t
+                    xsub_pdertt_[-1][:] = _xsub_pdertt_[-1]  # bilateral assignment
+
+                else: _xsub_pdertt_[-1].append(_xsub_pdertt)  # preserve nesting
 '''
-xsub_pderts (cross-sub_P): _sub_P_xsub_pdert_[ sub_P_xsub_pdert_[ bi_pdertt[ dir_pdert_[ sub_pdertt[ sub_pdert]]]]],   
-the above forms Pps across bi_dertt_, then also form Pps across sub_P_xpdert_ and _sub_P_xpdert_? 
+xsub_pderts (cross-sub_P): xsub_pdertt_[ xsub_dertt [ xsub_pdert_[ sub_pdert]]]: each bracket is level of nesting,   
+the above forms Pps across xsub_dertt, then also form Pps across _xsub_pdertt_ and xsub_pdertt_? 
 '''
 
-def comp_sub_P(_sub_P, sub_P, dir_pdert_, P_,  root_m, param_names, aves):
+def comp_sub_P(_sub_P, sub_P, xsub_pdertt, xsub_Ppt, root_m, param_names, aves):
     fbreak = 0
     comb_m = 0  # no pDertt.accum_from(sub_pdert): sub_pdertt params
     dist_decay = 2  # decay of projected match with relative distance between sub_Ps
@@ -541,19 +537,19 @@ def comp_sub_P(_sub_P, sub_P, dir_pdert_, P_,  root_m, param_names, aves):
     # or comp all, then filter by distance?
     if ((_sub_P.M + sub_P.M) / 2 + root_m) * rel_distance * dist_decay > ave_M:
         # 1x1 comp, add search_param, sum_rdn, etc, as in search?
-
         for i, (param_name, ave) in enumerate(zip(param_names, aves)):
+
             _param = getattr(_sub_P, param_name[0])  # is there a simpler way to do that?
             param = getattr(sub_P, param_name[0])
             dert = comp_param(_param, param, param_name, ave)
             sub_pdert = Cpdert(i=dert.i, p=dert.p, d=dert.d, m=dert.m)  # convert Cdert to Cpdert
-            if sub_pdert.m > 0:  # negative ms are not summed because their Pps won't be processed
+            if root_m > 0:  # negative ms are not considered because their Pps won't be processed
                 comb_m += sub_pdert.m
-            dir_pdert_[i].append(sub_pdert)
-            P_.append(sub_P)
-            # bidirectional: also add to sub_pdertt?
+            xsub_pdertt[i].append(sub_pdert)
+            xsub_Ppt[i].append(sub_P)
+
         if comb_m + _sub_P.M > ave_M * 5:
-            comp_sublayers_draft(_sub_P, sub_P, comb_m)
+            comp_sublayers_draft(_sub_P, sub_P, comb_m)  # recursion for deeper layers
     else:
         fbreak = 1  # only sub_Ps with relatively proximate position in sub_P_|_sub_P_ are compared
 
