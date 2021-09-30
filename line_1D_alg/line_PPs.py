@@ -77,6 +77,10 @@ ave_sub = 20  # for comp_sub_layers
 ave_Dave = 100  # summed feedback filter
 ave_dave = 20   # mean feedback filter
 
+# As sugested by Khanh, i think it's better to make it global, since we need it in several places:
+# search, form_Pp_root, comp_sublayers_draft, draw_PP_
+param_names = ["L_", "I_", "D_", "M_"]
+aves = [ave_mL, ave_mI, ave_mD, ave_mM]
 
 def norm_feedback(P_, fPd):
     fbM = fbL = 0
@@ -96,9 +100,42 @@ def norm_feedback(P_, fPd):
 
 def search(P_, fPd):  # cross-compare patterns within horizontal line
 
-    param_names = ["L_", "I_", "D_", "M_"]
-    Ldert_, Idert_, Ddert_, Mdert_, dert1_, dert2_ = [], [], [], [], [], []
+    Ldert_, Idert_, Ddert_, Mdert_, dert1_, dert2_, LP_, IP_, DP_, MP_ = [], [], [], [], [], [], [], [], [], []
+    param_derts_ = [Ldert_, Idert_, Ddert_, Mdert_]
+    param_Ps_ = [LP_, IP_, DP_, MP_]
 
+    for i, (_P, P, P2) in enumerate(zip(P_, P_[1:], P_[2:] + [None])):
+        for param_dert_, param_P_, param_name, ave_param in zip(param_derts_, param_Ps_, param_names, aves):
+            _param  = getattr(_P, param_name[0])
+            param   = getattr(P , param_name[0])
+            
+            if param_name == "L_": # same computation regardless fPd for L param
+                # div_comp for L:
+                _L = _param; L= param 
+                rL = L / _L  # higher order of scale, not accumulated: no search, rL is directional
+                int_rL = int( max(rL, 1/rL))
+                frac_rL = max(rL, 1/rL) - int_rL
+                mL = int_rL * min(L, _L) - (int_rL*frac_rL) / 2 - ave_mL  # div_comp match is additive compression: +=min, not directional
+                Ldert_.append(Cdert( i=L, p=L + _L, d=rL, m=mL))
+                param_P_.append(_P)
+                   
+            elif (fPd and param_name == "D_") or (not fPd and param_name == "M_") : # step = 2
+                if i < len(P_)-2: # P size is -2 and dert size is -1 when step = 2, so last 2 elements are not needed
+                    param2 = getattr(P2, param_name[0])
+                    param_dert_ += [comp_param(_param, param2, param_name, ave_param)]
+                    dert2_ += [param_dert_[-1].copy()]
+                    param_P_.append(_P)
+                dert1_ += [comp_param(_param, param, param_name, ave_param)]
+                    
+            elif not (not fPd and param_name == "I_") : # step = 1
+                param_dert_ += [comp_param(_param, param, param_name, ave_param)]
+                param_P_.append(_P)
+                
+    # comp x variable range, depending on M of Is
+    if not fPd: Idert_, IP_ = search_param_(P_, ave_mI, rave=1)
+
+    # unpacked version:
+    '''
     for _P, P, P2 in zip(P_, P_[1:], P_[2:] + [CP()]):  # for P_ cross-comp over step=1 and step=2
         _L, _I, _D, _M, *_ = _P.unpack()  # *_: skip remaining params
         L, I, D, M, *_ = P.unpack()
@@ -133,6 +170,7 @@ def search(P_, fPd):  # cross-compare patterns within horizontal line
         DP_, MP_ = P_[:-1], P_[:-2]
     else:
         IP_, DP_, MP_ = P_[:-1], P_[:-2], P_[:-1]
+    '''
 
     Pdert__ = [(Ldert_, LP_), (Idert_, IP_), (Ddert_, DP_), (Mdert_, MP_)]
     rval_Pp__, Ppm__ = form_Pp_root(Pdert__, dert1_, dert2_, fPd)
@@ -177,7 +215,6 @@ def search_param_(P_, ave, rave):  # variable-range search in mdert_, only if pa
 
 
 def form_Pp_root(Pdert__, dert1_, dert2_, fPd):
-    param_names = ["L_", "I_", "D_", "M_"]
 
     rdn__ = sum_rdn_(param_names, Pdert__, fPd=fPd)  # assign redundancy to lesser-magnitude m|d in param pair for same-_P Pderts
     rval_Pp__ = []; Ppm__ = []  # for visualization
@@ -465,8 +502,6 @@ def sub_search_draft(P_, fPd):  # search in top sublayer per P / sub_P, after P_
 
 def comp_sublayers_draft(_P, P, root_m):  # if pdert.m -> if summed params m -> if positional m: mx0?
 
-    param_names = ["L_", "I_", "D_", "M_"]
-    aves = [ave_mL, ave_mI, ave_mD, ave_mM]
     _derDert_ = []  # + derDert_ for bilateral assignment?
     pdert_m = 0
 
@@ -488,34 +523,33 @@ def comp_sublayers_draft(_P, P, root_m):  # if pdert.m -> if summed params m -> 
         fPd, rdn, rng, sub_P_, xsub_pdertt_, sub_Pp__ = P.sublayers[0][0]
         # if same intra_comp fork, else not comparable:
         if fPd == _fPd and rng == _rng and min(_P.L, P.L) > ave_Ls and root_m > 0:
-
             # compare sub_Ps to each _sub_P within max relative distance, comb_M- proportional:
             _SL = SL = 0  # summed Ls
             start_index = next_index = 0  # index of starting sub_P for current _sub_P
-            _xsub_pdertt_ += [[], [], [], []]  # array of cross-sub_P pdert tuples per sub_P_
-            xsub_pdertt_ += [[], [], [], []]  # append xsub_dertt per _sub_P_ and sub_P_, sparse?
+            _xsub_pdertt_ += [ [] ]  # array of cross-sub_P pdert tuples per sub_P_
+            xsub_pdertt_ += [ [] ]  # append xsub_dertt per _sub_P_ and sub_P_, sparse?
 
             for _sub_P in _sub_P_:  # form xsub_pdertt_[ xsub_dertt [ xsub_pdert_[ sub_pdert]]]: each bracket is level of nesting
                 _SL += _sub_P.L  # ix0 of next _sub_P
-                xsub_Ppt = [[], [], [], []]  # tuple of L, I, D, M xsub_Pp_s
+                xsub_Ppt = []  # tuple of L, I, D, M xsub_Pp_s
                 _xsub_pdertt = [[], [], [], []]  # tuple of L, I, D, M xsub_pderts
                 # search right:
                 for sub_P in sub_P_[start_index:]:  # index_ix0 > _ix0, only sub_Ps at proximate relative positions in sub_P_ are compared
-                    if comp_sub_P(_sub_P, sub_P, _xsub_pdertt, xsub_Ppt, root_m, param_names, aves):
+                    if comp_sub_P(_sub_P, sub_P, _xsub_pdertt, xsub_Ppt, root_m):
                         break
                     # if next ix overlap: ix0 of next _sub_P < ix0 of current sub_P
                     if SL < _SL: next_index += 1
                     SL += sub_P.L  # ix0 of next sub_P
                 # search left:
                 for sub_P in reversed( sub_P_[ len(sub_P_) - start_index:]):  # index_ix0 <= _ix0, invert positions of sub_P and _sub_P:
-                    if comp_sub_P(sub_P, _sub_P, _xsub_pdertt, xsub_Ppt, root_m, param_names, aves):
+                    if comp_sub_P(sub_P, _sub_P, _xsub_pdertt, xsub_Ppt, root_m):
                         break
                 # not implemented: if param_name == "I_" and not fPd: sub_pdert = search_param_(param_)
                 # for next _sub_P:
                 start_index = next_index
 
                 if _xsub_pdertt[0]:  # at least 1 sub_pdert, real min length ~ 8, very unlikely
-                    sub_Pdertt_= [(_xsub_pdertt[0], xsub_Ppt[0]), (_xsub_pdertt[1], xsub_Ppt[1]), (_xsub_pdertt[2], xsub_Ppt[2]), (_xsub_pdertt[3], xsub_Ppt[3])]
+                    sub_Pdertt_= [(_xsub_pdertt[0], xsub_Ppt), (_xsub_pdertt[1], xsub_Ppt), (_xsub_pdertt[2], xsub_Ppt), (_xsub_pdertt[3], xsub_Ppt)]
                     # form_xsub_Pp_ 4-tuple:
                     xsub_rval_Pp_t, sub_Ppm__ = form_Pp_root(sub_Pdertt_, [], [], fPd=0)
                     _xsub_pdertt_[-1][:] = xsub_rval_Pp_t
@@ -527,7 +561,7 @@ xsub_pderts (cross-sub_P): xsub_pdertt_[ xsub_dertt [ xsub_pdert_[ sub_pdert]]]:
 the above forms Pps across xsub_dertt, then also form Pps across _xsub_pdertt_ and xsub_pdertt_? 
 '''
 
-def comp_sub_P(_sub_P, sub_P, xsub_pdertt, xsub_Ppt, root_m, param_names, aves):
+def comp_sub_P(_sub_P, sub_P, xsub_pdertt, xsub_Ppt, root_m):
     fbreak = 0
     comb_m = 0  # no pDertt.accum_from(sub_pdert): sub_pdertt params
     dist_decay = 2  # decay of projected match with relative distance between sub_Ps
@@ -545,8 +579,8 @@ def comp_sub_P(_sub_P, sub_P, xsub_pdertt, xsub_Ppt, root_m, param_names, aves):
             sub_pdert = Cpdert(i=dert.i, p=dert.p, d=dert.d, m=dert.m)  # convert Cdert to Cpdert
             if root_m > 0:  # negative ms are not considered because their Pps won't be processed
                 comb_m += sub_pdert.m
-            xsub_pdertt[i].append(sub_pdert)
-            xsub_Ppt[i].append(sub_P)
+            xsub_pdertt[i].append(sub_pdert) # each L, I, D, M's xsub_pdertt
+            xsub_Ppt.append(sub_P)           # same sub_P for all params
 
         if comb_m + _sub_P.M > ave_M * 5:
             comp_sublayers_draft(_sub_P, sub_P, comb_m)  # recursion for deeper layers
@@ -569,8 +603,6 @@ def draw_PP_(image, frame_Pp__):
 
     img_Pp_layer_ = [np.zeros_like(image) for _ in range(4)]
     draw_layer = 1 # draw certain layer, start from 1, the higher the number, the deeper the layer, 0 = root layer so not applicable here
-
-    param_names = ['L', 'I', 'D', 'M']
 
     for y, (rval_Pp__, Pp__) in enumerate(frame_Pp__):  # loop each line
         for i, (rval_Pp_, Pp_) in enumerate(zip(rval_Pp__, Pp__)): # loop each rdn_Pp or Pp
