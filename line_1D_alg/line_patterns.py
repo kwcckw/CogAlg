@@ -31,6 +31,7 @@ from time import time
 from matplotlib import pyplot as plt
 from itertools import zip_longest
 from frame_2D_alg.class_cluster import ClusterStructure, NoneType, comp_param
+from line_PPs import *
 
 class Cdert(ClusterStructure):
     i = int  # input for range_comp only
@@ -70,6 +71,140 @@ halt_y = 999999999  # ending row
     capitalized variables are normally summed small-case variables
 '''
 
+
+
+def cross_comp_(frame_all_level_, frame_current_level_, level, fPd, frecursive):
+    
+    Y = len(frame_current_level_) # Y: frame height
+    frame_next_level_ = []
+    frame_all_level_.append(frame_next_level_) 
+    
+    for y in range(init_y, min(halt_y, Y)):  # y is index of new row pixel_, we only need one row, use init_y=0, halt_y=Y for full frame
+
+        X = len(frame_current_level_[y])  # X: frame width
+                
+        if X>1:
+            element_ = frame_current_level_[y]
+            # get feedback when it is non root level
+            if level>0: fbM, fbL = level_feedback(element_, fPd)             
+            dert_ = search_(frame_current_level_[y], level, fPd)
+            pattern_ = form_pattern_(dert_, level, fPd)
+            frame_next_level_.append(pattern_)
+            
+    if frecursive: # next level computation
+        level += 1
+        cross_comp_(frame_all_level_, frame_next_level_, level, fPd, frecursive)
+
+
+def search_(element_, level, fPd):
+    
+    if level == 0 : # line_patterns
+        # initialization:
+        dert_ = []  # line-wide i_, p_, d_, m__
+        pixel_ = element_
+        _i = pixel_[0]
+        # pixel i is compared to prior pixel _i in a row:
+        for i in pixel_[1:]:
+            d = i - _i  # accum in rng
+            p = i + _i  # accum in rng
+            m = ave - abs(d)  # for consistency with deriv_comp output, else redundant
+            dert_.append( Cdert( i=i, p=p, d=d, m=m) )
+            _i = i
+                
+    else: # line_PPs and higher level
+        if level == 1: # level 1
+            # input is P_
+        
+            P_ = element_
+            Ldert_, Idert_, Ddert_, Mdert_, dert1_, dert2_, LP_, IP_, DP_, MP_ = [], [], [], [], [], [], [], [], [], []
+            param_derts_ = [Ldert_, Idert_, Ddert_, Mdert_]
+            param_Ps_ = [LP_, IP_, DP_, MP_]
+        
+            for i, (_P, P, P2) in enumerate(zip(P_, P_[1:], P_[2:] + [None])):
+                for param_dert_, param_P_, param_name, ave_param in zip(param_derts_, param_Ps_, param_names, aves):
+                    _param  = getattr(_P, param_name[0])
+                    param   = getattr(P , param_name[0])
+        
+                    if param_name == "L_":  # div_comp for L because it's a higher order of scale:
+                        _L = _param; L= param
+                        rL = L / _L  # higher order of scale, not accumulated: no search, rL is directional
+                        int_rL = int( max(rL, 1/rL))
+                        frac_rL = max(rL, 1/rL) - int_rL
+                        mL = int_rL * min(L, _L) - (int_rL*frac_rL) / 2 - ave_mL  # div_comp match is additive compression: +=min, not directional
+                        Ldert_.append(Cdert( i=L, p=L + _L, d=rL, m=mL))
+                        param_P_.append(_P)
+        
+                    elif (fPd and param_name == "D_") or (not fPd and param_name == "M_") : # step = 2
+                        if i < len(P_)-2: # P size is -2 and dert size is -1 when step = 2, so last 2 elements are not needed
+                            param2 = getattr(P2, param_name[0])
+                            param_dert_ += [comp_param(_param, param2, param_name, ave_param)]
+                            dert2_ += [param_dert_[-1].copy()]
+                            param_P_.append(_P)
+                        dert1_ += [comp_param(_param, param, param_name, ave_param)]
+        
+                    elif not (not fPd and param_name == "I_") : # step = 1
+                        param_dert_ += [comp_param(_param, param, param_name, ave_param)]
+                        param_P_.append(_P)
+        
+            # comp x variable range, depending on M of Is
+            if not fPd: Idert_, IP_ = search_param_(P_, ave_mI, rave=1)
+    
+            # Pdert__, dert1_, dert2_
+            dert_ = [[(Ldert_, LP_), (Idert_, IP_), (Ddert_, DP_), (Mdert_, MP_)], dert1_, dert2_]
+
+
+        else: # > level 1
+            # input is rval_Pp__
+            pass
+
+    return dert_
+
+
+def form_pattern_(dert_, level, fPd):
+
+    if level==0:  # input is dert  
+         # form m-sign patterns, rootP=None:
+        Pm_ = form_P_(None, dert_, rdn=1, rng=1, fPd=fPd)  # eval intra_Pm_ per Pm in
+        pattern_ = Pm_
+    
+    elif level == 1: # input is pdert
+        Pdert__, dert1_, dert2_,  = dert_ 
+        rval_Pp__, Ppm__ = form_Pp_root(Pdert__, dert1_, dert2_, fPd)
+        pattern_ = rval_Pp__
+
+    else: # input is higher level pdert
+        pass
+
+    return pattern_
+
+
+def level_feedback(element_, fPd):
+    '''
+    just a simple draft , far from complete
+    '''
+    
+    fbM = fbL = 0
+    '''
+    for element in element_:
+        fbM += element.M; fbL += element.L
+        fbM += element.M; fbL += element.L
+        if abs(fbM) > ave_Dave:
+            if abs(fbM / fbL) > ave_dave:
+                fbM = fbL = 0
+                pass  # eventually feedback: line_patterns' cross_comp(frame_of_pixels_, ave + fbM / fbL)
+                # also terminate Fspan: same-filter frame_ with summed params, re-init at all 0s
+
+        element.I /= element.L; element.D /= element.L; element.M /= element.L  # immediate normalization to a mean
+    '''
+    return fbM, fbL
+
+def update_aves(fbM, fbL):
+    '''
+    update aves here
+    '''
+    pass
+
+
 def cross_comp(frame_of_pixels_):  # converts frame_of_pixels to frame_of_patterns, each pattern may be nested
 
     Y, X = frame_of_pixels_.shape  # Y: frame height, X: frame width
@@ -100,7 +235,6 @@ def cross_comp(frame_of_pixels_):  # converts frame_of_pixels to frame_of_patter
         frame_of_patterns_.append(Pm_)  # add line of patterns to frame of patterns, skip if cross_comp_spliced
 
     return frame_of_patterns_  # frame of patterns is an input to level 2
-
 
 def form_P_(rootP, dert_, rdn, rng, fPd):  # accumulation and termination, rdn and rng are pass-through intra_P_
     # initialization:
@@ -264,8 +398,9 @@ if __name__ == "__main__":
     '''
     fpickle = 2  # 0: load; 1: dump; 2: no pickling
     render = 0
-    fline_PPs = 0
+    fline_PPs = 1
     start_time = time()
+    
     if fpickle == 0:
         # Read frame_of_patterns from saved file instead
         with open("frame_of_patterns_.pkl", 'rb') as file:
@@ -286,14 +421,15 @@ if __name__ == "__main__":
 
     if fline_PPs:  # debug line_PPs
         from line_PPs import *
-        frame_Pp__ = []
-
-        for y, P_ in enumerate(frame_of_patterns_):
-            if len(P_) > 1: rval_Pp__, Pp__ = norm_feedback(P_, fPd=0)  # calls search(P_, fPd=0)
-            else:           rval_Pp__, Pp__ = [], []
-            frame_Pp__.append(( rval_Pp__, Pp__))
-
+        
+        frame_Pp__ = cross_comp_P_(frame_of_patterns_)
         draw_PP_(image, frame_Pp__)  # debugging
-
+        
+                
+     # recursive version
+    image = cv2.imread('.//raccoon.jpg', 0).astype(int)  # manual load pix-mapped image
+    frame_all_level_ = []
+    cross_comp_(frame_all_level_, frame_current_level_=image, level=0, fPd=0, frecursive=1)
+    
     end_time = time() - start_time
     print(end_time)

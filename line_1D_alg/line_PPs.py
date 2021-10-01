@@ -86,6 +86,22 @@ param_names = ["L_", "I_", "D_", "M_"]
 aves = [ave_mL, ave_mI, ave_mD, ave_mM]
 
 
+
+def cross_comp_P_(frame_of_patterns_):
+
+    Y = len(frame_of_patterns_)        # Y: frame height,
+    frame_Pp__ = []
+    for y in range(Y):
+        X = len(frame_of_patterns_[y])  # X: frame width
+        if X > 1: 
+            rval_Pp__, Pp__ = norm_feedback(frame_of_patterns_[y], fPd=0)  # calls search(P_, fPd=0)
+        else:           
+            rval_Pp__, Pp__ = [], []
+        frame_Pp__.append(( rval_Pp__, Pp__))
+             
+    return frame_Pp__
+
+
 def norm_feedback(P_, fPd):
     fbM = fbL = 0
 
@@ -136,43 +152,6 @@ def search(P_, fPd):  # cross-compare patterns within horizontal line
 
     # comp x variable range, depending on M of Is
     if not fPd: Idert_, IP_ = search_param_(P_, ave_mI, rave=1)
-
-    # unpacked version:
-    '''
-    for _P, P, P2 in zip(P_, P_[1:], P_[2:] + [CP()]):  # for P_ cross-comp over step=1 and step=2
-        _L, _I, _D, _M, *_ = _P.unpack()  # *_: skip remaining params
-        L, I, D, M, *_ = P.unpack()
-        D2, M2 = P2.D, P2.M
-        # div_comp for L:
-        rL = L / _L  # higher order of scale, not accumulated: no search, rL is directional
-        int_rL = int( max(rL, 1/rL))
-        frac_rL = max(rL, 1/rL) - int_rL
-        mL = int_rL * min(L, _L) - (int_rL*frac_rL) / 2 - ave_mL  # div_comp match is additive compression: +=min, not directional
-        Ldert_.append(Cdert( i=L, p=L + _L, d=rL, m=mL))
-        # summed params comp:
-        if fPd:
-            Idert_ += [comp_param(_I, I, "I_", ave_mI)]
-            Ddert = comp_param(_D, D2, "D_", ave_mD)  # step=2 for same-D-sign comp
-            Ddert_ += [Ddert]
-            dert2_ += [Ddert.copy()]
-            dert1_ += [comp_param(_D, D, "D_", ave_mD)]  # to splice Pds
-            Mdert_ += [comp_param(_M, M, "M_", ave_mM)]
-        else:
-            Ddert_ += [comp_param(_D, D, "D_", ave_mD)]
-            Mdert = comp_param(_M, M2, "M_", ave_mM)  # step=2 for same-M-sign comp
-            Mdert_ += [Mdert]
-            dert2_ += [Mdert.copy()]
-            dert1_ += [comp_param(_M, M, "M_", ave_mM)]  # to splice Pms
-        _L, _I, _D, _M = L, I, D, M
-    LP_ = P_[:-1]
-    dert2_ = dert2_[:-1]  # due to filled CP() in P2 ( for loop above )
-    if not fPd:
-        Idert_, IP_ = search_param_(P_, ave_mI, rave=1)  # comp x variable range, depending on M of Is
-        Mdert_ = Mdert_[:-1]  # due to filled CP() in P2 ( for loop above )
-        DP_, MP_ = P_[:-1], P_[:-2]
-    else:
-        IP_, DP_, MP_ = P_[:-1], P_[:-2], P_[:-1]
-    '''
 
     Pdert__ = [(Ldert_, LP_), (Idert_, IP_), (Ddert_, DP_), (Mdert_, MP_)]
     rval_Pp__, Ppm__ = form_Pp_root(Pdert__, dert1_, dert2_, fPd)
