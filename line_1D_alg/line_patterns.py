@@ -51,6 +51,8 @@ class CP(ClusterStructure):
     subDerts = list  # conditionally summed [L,I,D,M] per sublayer, most are empty
     derDerts = list  # for compared subDerts only
     fPd = bool  # P is Pd if true, else Pm; also defined per layer
+    # for rval Pp
+    rval_ = list
 
 verbose = False
 # pattern filters or hyper-parameters: eventually from higher-level feedback, initialized here as constants:
@@ -73,27 +75,31 @@ halt_y = 999999999  # ending row
 
 
 
-def cross_comp_(frame_all_level_, frame_current_level_, level, fPd, frecursive):
+def cross_comp_(frame_all_level_, level, fPd, frecursive):
+    '''
+    frame_all_level_ contains input for current level and output for next level
+    level 0 = frame_of_pixels   (image input)
+    level 1 = frame_of_patterns (input = level 0 output, output = level 2 input)
+    level 2 = frame_of_rval_Pp  (input = level 1 output, output = level 3 input)
+    an so on..
+    '''
     
+    frame_current_level_ = frame_all_level_[-1] # last frame is current level frame input  
+    frame_all_level_.append([])                 # current level frame output
     Y = len(frame_current_level_) # Y: frame height
-    frame_next_level_ = []
-    frame_all_level_.append(frame_next_level_) 
-    
-    for y in range(init_y, min(halt_y, Y)):  # y is index of new row pixel_, we only need one row, use init_y=0, halt_y=Y for full frame
 
-        X = len(frame_current_level_[y])  # X: frame width
-                
-        if X>1:
+    for y in range(init_y, min(halt_y, Y)):  # y is index of new row pixel_, we only need one row, use init_y=0, halt_y=Y for full frame
+        X = len(frame_current_level_[y])  # X: frame width          
+        if X>1: # non empty row's elements (pixels, Ps or Pps)
             element_ = frame_current_level_[y]
             # get feedback when it is non root level
             if level>0: fbM, fbL = level_feedback(element_, fPd)             
             dert_ = search_(frame_current_level_[y], level, fPd)
             pattern_ = form_pattern_(dert_, level, fPd)
-            frame_next_level_.append(pattern_)
+            frame_all_level_[-1].append(pattern_)
             
     if frecursive: # next level computation
-        level += 1
-        cross_comp_(frame_all_level_, frame_next_level_, level, fPd, frecursive)
+        cross_comp_(frame_all_level_, level+1, fPd, frecursive)
 
 
 def search_(element_, level, fPd):
@@ -112,52 +118,56 @@ def search_(element_, level, fPd):
             _i = i
                 
     else: # line_PPs and higher level
-        if level == 1: # level 1
-            # input is P_
-        
+        if level == 1: # level 1             
             P_ = element_
-            Ldert_, Idert_, Ddert_, Mdert_, dert1_, dert2_, LP_, IP_, DP_, MP_ = [], [], [], [], [], [], [], [], [], []
-            param_derts_ = [Ldert_, Idert_, Ddert_, Mdert_]
-            param_Ps_ = [LP_, IP_, DP_, MP_]
-        
-            for i, (_P, P, P2) in enumerate(zip(P_, P_[1:], P_[2:] + [None])):
-                for param_dert_, param_P_, param_name, ave_param in zip(param_derts_, param_Ps_, param_names, aves):
-                    _param  = getattr(_P, param_name[0])
-                    param   = getattr(P , param_name[0])
-        
-                    if param_name == "L_":  # div_comp for L because it's a higher order of scale:
-                        _L = _param; L= param
-                        rL = L / _L  # higher order of scale, not accumulated: no search, rL is directional
-                        int_rL = int( max(rL, 1/rL))
-                        frac_rL = max(rL, 1/rL) - int_rL
-                        mL = int_rL * min(L, _L) - (int_rL*frac_rL) / 2 - ave_mL  # div_comp match is additive compression: +=min, not directional
-                        Ldert_.append(Cdert( i=L, p=L + _L, d=rL, m=mL))
-                        param_P_.append(_P)
-        
-                    elif (fPd and param_name == "D_") or (not fPd and param_name == "M_") : # step = 2
-                        if i < len(P_)-2: # P size is -2 and dert size is -1 when step = 2, so last 2 elements are not needed
-                            param2 = getattr(P2, param_name[0])
-                            param_dert_ += [comp_param(_param, param2, param_name, ave_param)]
-                            dert2_ += [param_dert_[-1].copy()]
-                            param_P_.append(_P)
-                        dert1_ += [comp_param(_param, param, param_name, ave_param)]
-        
-                    elif not (not fPd and param_name == "I_") : # step = 1
-                        param_dert_ += [comp_param(_param, param, param_name, ave_param)]
-                        param_P_.append(_P)
-        
-            # comp x variable range, depending on M of Is
-            if not fPd: Idert_, IP_ = search_param_(P_, ave_mI, rave=1)
-    
-            # Pdert__, dert1_, dert2_
-            dert_ = [[(Ldert_, LP_), (Idert_, IP_), (Ddert_, DP_), (Mdert_, MP_)], dert1_, dert2_]
-
-
-        else: # > level 1
-            # input is rval_Pp__
-            pass
-
+            dert_ = search_fcn(P_, fPd)
+        else: # > level 1        
+            dert_ = []
+            for P_ in element_:   
+                dert_.append(search_fcn(P_, fPd))
+                             
     return dert_
+
+
+def search_fcn(P_, fPd):
+
+    Ldert_, Idert_, Ddert_, Mdert_, dert1_, dert2_, LP_, IP_, DP_, MP_ = [], [], [], [], [], [], [], [], [], []
+    param_derts_ = [Ldert_, Idert_, Ddert_, Mdert_]
+    param_Ps_ = [LP_, IP_, DP_, MP_]
+
+    for i, (_P, P, P2) in enumerate(zip(P_, P_[1:], P_[2:] + [None])):
+        for param_dert_, param_P_, param_name, ave_param in zip(param_derts_, param_Ps_, param_names, aves):
+            _param  = getattr(_P, param_name[0])
+            param   = getattr(P , param_name[0])
+
+            if param_name == "L_":  # div_comp for L because it's a higher order of scale:
+                _L = _param; L= param
+                rL = L / _L  # higher order of scale, not accumulated: no search, rL is directional
+                int_rL = int( max(rL, 1/rL))
+                frac_rL = max(rL, 1/rL) - int_rL
+                mL = int_rL * min(L, _L) - (int_rL*frac_rL) / 2 - ave_mL  # div_comp match is additive compression: +=min, not directional
+                Ldert_.append(Cdert( i=L, p=L + _L, d=rL, m=mL))
+                param_P_.append(_P)
+
+            elif (fPd and param_name == "D_") or (not fPd and param_name == "M_") : # step = 2
+                if i < len(P_)-2: # P size is -2 and dert size is -1 when step = 2, so last 2 elements are not needed
+                    param2 = getattr(P2, param_name[0])
+                    param_dert_ += [comp_param(_param, param2, param_name, ave_param)]
+                    dert2_ += [param_dert_[-1].copy()]
+                    param_P_.append(_P)
+                dert1_ += [comp_param(_param, param, param_name, ave_param)]
+
+            elif not (not fPd and param_name == "I_") : # step = 1
+                param_dert_ += [comp_param(_param, param, param_name, ave_param)]
+                param_P_.append(_P)
+
+    # comp x variable range, depending on M of Is
+    if not fPd: Idert_, IP_ = search_param_(P_, ave_mI, rave=1)
+
+    # Pdert__, dert1_, dert2_
+    Pdert__ = [(Ldert_, LP_), (Idert_, IP_), (Ddert_, DP_), (Mdert_, MP_)]
+
+    return Pdert__, dert1_, dert2_
 
 
 def form_pattern_(dert_, level, fPd):
@@ -172,9 +182,12 @@ def form_pattern_(dert_, level, fPd):
         rval_Pp__, Ppm__ = form_Pp_root(Pdert__, dert1_, dert2_, fPd)
         pattern_ = rval_Pp__
 
-    else: # input is higher level pdert
-        pass
-
+    else: # input is higher level pdert , > level 1
+        pattern_ = []
+        for  Pdert__, dert1_, dert2_ in dert_:
+            rval_Pp__, Ppm__ = form_Pp_root(Pdert__, dert1_, dert2_, fPd)
+            pattern_.append(rval_Pp__)
+    
     return pattern_
 
 
@@ -428,8 +441,8 @@ if __name__ == "__main__":
                 
      # recursive version
     image = cv2.imread('.//raccoon.jpg', 0).astype(int)  # manual load pix-mapped image
-    frame_all_level_ = []
-    cross_comp_(frame_all_level_, frame_current_level_=image, level=0, fPd=0, frecursive=1)
+    frame_all_level_ = [image] # root frame
+    cross_comp_(frame_all_level_, level=0, fPd=0, frecursive=1)
     
     end_time = time() - start_time
     print(end_time)

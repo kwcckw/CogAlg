@@ -342,6 +342,36 @@ def sum_rdn_(param_name_, Pdert__, fPd):
 
     return pderts_Rdn  # rdn__
 
+
+def form_rval_Pp_(iPp_, param_name, pdert1_, pdert2_, fPd):
+
+    # cluster Pps by the sign of value adjusted for cross-param redundancy,
+    # re-evaluate them for cross-level rdn and consolidation: compact()
+    rval_Pp_ = []
+    _sign = None  # to initialize 1st rdn Pp, (None != True) and (None != False) are both True
+
+    for Pp in iPp_:
+        if fPd: rval = abs(Pp.D) - Pp.Rdn * ave_D * Pp.L
+        else:   rval = Pp.M - Pp.Rdn * ave_M * Pp.L
+        sign = rval>0
+
+        if sign != _sign:  # sign change, initialize rPp and append it to rPp_
+            rval_Pp  = CP(dert_=[Pp], rval_=[rval])
+            rval_Pp.accum_from(Pp)
+            rval_Pp_.append(rval_Pp)
+            if _sign:  # -rPps are not processed?
+                compact(rval_Pp, pdert1_, pdert2_, param_name, fPd)  # re-eval Pps, Pp.pdert_s for redundancy, eval splice Ps
+        else:
+            # accumulate params:
+            rval_Pp.rval_.append(rval)
+            rval_Pp.dert_.append(Pp)
+            rval_Pp.accum_from(Pp)
+        _sign = sign
+
+    return rval_Pp_
+
+
+'''
 def form_rval_Pp_(iPp_, param_name, pdert1_, pdert2_, fPd):
 
     # cluster Pps by the sign of value adjusted for cross-param redundancy,
@@ -368,10 +398,11 @@ def form_rval_Pp_(iPp_, param_name, pdert1_, pdert2_, fPd):
         _sign = sign
 
     return rval_Pp__
+'''
 
-def compact(rval_Pp_, pdert1_, pdert2_, param_name, fPd):  # re-eval Pps, Pp.pdert_s for redundancy, eval splice Ps
+def compact(rval_Pp, pdert1_, pdert2_, param_name, fPd):  # re-eval Pps, Pp.pdert_s for redundancy, eval splice Ps
 
-    for i, (rval, Pp) in enumerate(rval_Pp_):
+    for i, (Pp, rval) in enumerate(zip(rval_Pp.dert_,rval_Pp.rval_)):
         # assign cross-level rdn (Pp vs. pdert_), re-evaluate Pp and pdert_:
         Pp_val = rval / Pp.L - ave  # / Pp.L: resolution reduction, but lower rdn:
         pdert_val = rval - ave * Pp.L  # * Pp.L: ave cost * number of representations
@@ -379,7 +410,7 @@ def compact(rval_Pp_, pdert1_, pdert2_, param_name, fPd):  # re-eval Pps, Pp.pde
         if Pp_val > pdert_val: pdert_val -= ave * Pp.Rdn
         else:                  Pp_val -= ave * Pp.Rdn  # ave scaled by rdn
         if Pp_val <= 0:
-            rval_Pp_[i] = (rval, CPp(pdert_=Pp.pdert_))
+            rval_Pp.dert_[i]  = CPp(pdert_=Pp.pdert_)
 
         elif ((param_name == "I_") and not fPd) or ((param_name == "D_") and fPd):  # P-defining params, else no separation
             M2 = M1 = 0
@@ -394,7 +425,7 @@ def compact(rval_Pp_, pdert1_, pdert2_, param_name, fPd):  # re-eval Pps, Pp.pde
                     _P.dert_ += [P.dert_]  # splice dert_s within Pp
 
                 form_P_(_P, _P.dert_, rdn=1, rng=1, fPd=fPd)  # rerun on spliced Ps
-                rval_Pp_[i] = (rval, _P)  # replace Pp with spliced P,
+                rval_Pp.dert_[i] = _P # replace Pp with spliced P,
                 # or rerun search(spliced_P_) if len(spliced_P_) / len(P_) > ave?
 
         if pdert_val <= 0:
@@ -588,6 +619,8 @@ def draw_PP_(image, frame_Pp__):
     for y, (rval_Pp__, Pp__) in enumerate(frame_Pp__):  # loop each line
         for i, (rval_Pp_, Pp_) in enumerate(zip(rval_Pp__, Pp__)): # loop each rdn_Pp or Pp
             # rval_Pp
+            # pending update
+            '''
             for j, (Rval, rval_Pps) in enumerate(rval_Pp_):
                 for k, (rval, Pp) in enumerate(rval_Pps):
                     for m, P in enumerate(Pp.P_):
@@ -596,6 +629,8 @@ def draw_PP_(image, frame_Pp__):
                             img_rval_Pp_[i][y,P.x0:P.x0+P.L] = 255 # + sign
                         else:
                             img_rval_Pp_[i][y,P.x0:P.x0+P.L] = 128 # - sign
+            '''
+            
             # Pp
             for j, Pp in enumerate(Pp_): # each Pp
                 for k, P in enumerate(Pp.P_): # each P or pdert
