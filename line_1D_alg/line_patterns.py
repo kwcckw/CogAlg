@@ -270,6 +270,8 @@ def cross_comp(frame_of_pixels_):  # converts frame_of_pixels to frame_of_patter
             _i = i
         # form m-sign patterns, rootP=None:
         Pm_ = form_P_(None, dert_, rdn=1, rng=1, fPd=False)  # eval intra_Pm_ per Pm in
+        rval_Pm_ = form_rval_P_(Pm_)
+        
         frame_of_patterns_.append(Pm_)  # add line of patterns to frame of patterns, skip if cross_comp_spliced
 
     return frame_of_patterns_  # frame of patterns is an input to level 2
@@ -425,6 +427,54 @@ def deriv_comp(dert_):  # cross-comp consecutive ds in same-sign dert_: sign mat
     return ddert_
 
 
+def form_rval_P_(iP_):
+
+    # cluster Ps by the sign of value adjusted for cross-param redundancy,
+    # re-evaluate them for cross-level rdn and consolidation: compact()
+    rval_P__ = []
+    Rval=0
+    _sign = None  # to initialize 1st rdn P, (None != True) and (None != False) are both True
+
+    for P in iP_:
+        rval = P.M - 1 * ave_M * P.L
+        sign = rval>0
+        
+        if sign != _sign:  # sign change, initialize rP and append it to rP_
+            rval_P_ = [(rval, P)]
+            Rval = rval
+            if _sign:  # -rPs are not processed?
+                compact_P_(rval_P_)  # re-eval Pps, Pp.pdert_s for redundancy, eval splice Ps
+            rval_P__.append(( Rval, rval_P_))  # updated by accumulation below
+        else:
+            # accumulate params:
+            Rval += rval
+            rval_P_ += [(rval, P)]
+        _sign = sign
+
+    return rval_P__
+
+# need further review:
+def compact_P_(rval_P_):
+    for i, (rval, P) in enumerate(rval_P_):
+        # assign cross-level rdn (P vs. dert_), re-evaluate P and dert_:
+        P_val = rval / P.L - ave  # / P.L: resolution reduction, but lower rdn:
+        dert_val = rval - ave * P.L  # * P.L: ave cost * number of representations
+
+        if P_val > dert_val: dert_val -= ave * 1
+        else:                  P_val -= ave * 1  # ave scaled by rdn (rdn = 1)
+        if P_val <= 0:
+            rval_P_[i]  = (rval, CP(dert_=P.dert_))
+        else:
+            _P = CP() # not sure if need this?
+            _P.dert_ = P.dert_
+            for dert in P.dert_:
+                _P.accum_from(dert)  # different from P params
+                
+            rval_P_.dert_[i] = (rval, _P) # replace P with spliced P,
+            if dert_val <= 0:
+                P.dert_ = []  # remove pdert_
+
+
 if __name__ == "__main__":
     ''' 
     Parse argument (image)
@@ -436,7 +486,7 @@ if __name__ == "__main__":
     '''
     fpickle = 2  # 0: load; 1: dump; 2: no pickling
     render = 0
-    fline_PPs = 1
+    fline_PPs = 0
     start_time = time()
     
     if fpickle == 0:
@@ -445,7 +495,7 @@ if __name__ == "__main__":
             frame_of_patterns_ = pickle.load(file)
     else:
         # Run functions
-        image = cv2.imread('.//raccoon.jpg', 0).astype(int)  # manual load pix-mapped image
+        image = cv2.imread('.//toucan_small.jpg', 0).astype(int)  # manual load pix-mapped image
         assert image is not None, "No image in the path"
         # Main
         frame_of_patterns_ = cross_comp(image)  # returns Pm__
@@ -464,10 +514,10 @@ if __name__ == "__main__":
         draw_PP_(image, frame_Pp__)  # debugging
         
                 
-     # recursive version
-    image = cv2.imread('.//raccoon.jpg', 0).astype(int)  # manual load pix-mapped image
-    feedback_H = []
-    cross_comp_(image, feedback_H, level=0, fPd=0, frecursive=1)
-    
-    end_time = time() - start_time
-    print(end_time)
+#     # recursive version
+#    image = cv2.imread('.//raccoon.jpg', 0).astype(int)  # manual load pix-mapped image
+#    feedback_H = []
+#    cross_comp_(image, feedback_H, level=0, fPd=0, frecursive=1)
+#    
+#    end_time = time() - start_time
+#    print(end_time)
