@@ -75,174 +75,6 @@ halt_y = 999999999  # ending row
 
 
 
-def cross_comp_(input__, feedback_H, level, fPd, frecursive):
-    '''
-    cross comp input recursively
-    '''
-
-    output__ = []    # current level output
-    Y = len(input__) # Y: frame height
-
-    for y in range(init_y, min(halt_y, Y)):  # y is index of new row pixel_, we only need one row, use init_y=0, halt_y=Y for full frame
-        X = len(input__[y])  # X: frame width          
-        if X>1: # non empty row's elements (pixels, Ps or Pps)
-            element_ = input__[y]                              # get current line input
-            compute_feedback(element_, feedback_H, level, fPd) # compute hierarchy feedback       
-            dert_ = search_(element_, level, fPd)              # search & compare input elements, then compute derivatives
-            pattern_ = form_pattern_(dert_, level, fPd)        # form patterns with same sign derivatives
-            output__.append(pattern_)
-            
-    # max level = 5 now, due to haven't add any deeper level computation evaluation
-    if frecursive and level<5: # next level computation
-        cross_comp_(output__, feedback_H, level+1, fPd, frecursive) # current level output is next level input
-
-# main search function
-def search_(element_, level, fPd):
-    
-    if level == 0 : # line_Ps
-        dert_ = search_pixel_(element_)
-                
-    elif level == 1: # line_PPs
-        dert_ = search_pattern_(element_, fPd)  
-    else: # > level 1        
-        dert_ = []
-        search_Pp_(element_, dert_, fPd, level)
-                             
-    return dert_
-
-# level 0 search (or root level) - search pixels to get patterns
-def search_pixel_(pixel_):
-    dert_ = []  # line-wide i_, p_, d_, m__
-    _i = pixel_[0]
-    # pixel i is compared to prior pixel _i in a row:
-    for i in pixel_[1:]:
-        d = i - _i  # accum in rng
-        p = i + _i  # accum in rng
-        m = ave - abs(d)  # for consistency with deriv_comp output, else redundant
-        dert_.append( Cdert( i=i, p=p, d=d, m=m) )
-        _i = i
-        
-    return dert_
-    
-# level 1 search - search patterns to get Pp
-def search_pattern_(P_, fPd):
-
-    Ldert_, Idert_, Ddert_, Mdert_, dert1_, dert2_, LP_, IP_, DP_, MP_ = [], [], [], [], [], [], [], [], [], []
-    param_derts_ = [Ldert_, Idert_, Ddert_, Mdert_]
-    param_Ps_ = [LP_, IP_, DP_, MP_]
-
-    for i, (_P, P, P2) in enumerate(zip(P_, P_[1:], P_[2:] + [None])):
-        for param_dert_, param_P_, param_name, ave_param in zip(param_derts_, param_Ps_, param_names, aves):
-            _param  = getattr(_P, param_name[0])
-            param   = getattr(P , param_name[0])
-
-            if param_name == "L_":  # div_comp for L because it's a higher order of scale:
-                _L = _param; L= param
-                rL = L / _L  # higher order of scale, not accumulated: no search, rL is directional
-                int_rL = int( max(rL, 1/rL))
-                frac_rL = max(rL, 1/rL) - int_rL
-                mL = int_rL * min(L, _L) - (int_rL*frac_rL) / 2 - ave_mL  # div_comp match is additive compression: +=min, not directional
-                Ldert_.append(Cdert( i=L, p=L + _L, d=rL, m=mL))
-                param_P_.append(_P)
-
-            elif (fPd and param_name == "D_") or (not fPd and param_name == "M_") : # step = 2
-                if i < len(P_)-2: # P size is -2 and dert size is -1 when step = 2, so last 2 elements are not needed
-                    param2 = getattr(P2, param_name[0])
-                    param_dert_ += [comp_param(_param, param2, param_name, ave_param)]
-                    dert2_ += [param_dert_[-1].copy()]
-                    param_P_.append(_P)
-                dert1_ += [comp_param(_param, param, param_name, ave_param)]
-
-            elif not (not fPd and param_name == "I_") : # step = 1
-                param_dert_ += [comp_param(_param, param, param_name, ave_param)]
-                param_P_.append(_P)
-
-    # comp x variable range, depending on M of Is
-    if not fPd: Idert_, IP_ = search_param_(P_, ave_mI, rave=1)
-
-    # Pdert__
-    Pdert__ = [(Ldert_, LP_), (Idert_, IP_), (Ddert_, DP_), (Mdert_, MP_)]
-
-    return Pdert__, dert1_, dert2_
-
-# search for level 2 - search rval_Pp to get rval_Pp__ per param
-def search_Pp_(rval_Pp__, iPp_, fPd, level):
-    
-    if level == 1:
-        if len(rval_Pp__)>1: # at least 2 elements to search with step=2     
-            return search_pattern_(rval_Pp__, fPd)
-        else:
-            return [] # preseve index
-    else:  
-        Pp_ = []
-        for rval_Pp_ in rval_Pp__: 
-            Pp_.append(search_Pp_(rval_Pp_, Pp_, fPd, level-1))
-        iPp_.append(Pp_)
-
-# main form pattern function
-def form_pattern_(dert_, level, fPd):
-
-    if level==0:  # input is dert  
-         # form m-sign patterns, rootP=None:
-        Pm_ = form_P_(None, dert_, rdn=1, rng=1, fPd=fPd)  # eval intra_Pm_ per Pm in
-        pattern_ = Pm_
-    
-    elif level == 1: # input is pdert
-        Pdert__, dert1_, dert2_,  = dert_ 
-        rval_Pp__, Ppm__ = form_Pp_root(Pdert__, dert1_, dert2_, fPd)
-        pattern_ = rval_Pp__
-
-    else: # input is higher level pdert , > level 1
-        pattern_ = []
-        form_PPp_root(dert_, pattern_, level, fPd)
-    
-    return pattern_
-
-# form pattern for level 2 and above
-def form_PPp_root(dert_, ipattern_, level, fPd):
-    if level == 1: # input is pdert
-        if dert_:
-            Pdert__, dert1_, dert2_  = dert_
-            rval_Pp__, Ppm__ = form_Pp_root(Pdert__, dert1_, dert2_, fPd)
-            return rval_Pp__
-        else:
-            return [] # preserve index
-
-    # input is higher level pdert , > level 1
-    elif dert_: # non empty dert
-        pattern_ = []
-        for pdert__ in dert_[0]: # dert_[0] due to added bracket during search function
-            pattern_.append(form_PPp_root(pdert__, pattern_, level-1, fPd))
-        ipattern_.append(pattern_)
-
-
-def compute_feedback(element_, feedback_H, level, fPd):
-    '''
-    just a simple draft , far from complete
-    '''
-    
-    fbM = fbL = 0
-    '''
-    for element in element_:
-        fbM += element.M; fbL += element.L
-        fbM += element.M; fbL += element.L
-        if abs(fbM) > ave_Dave:
-            if abs(fbM / fbL) > ave_dave:
-                fbM = fbL = 0
-                pass  # eventually feedback: line_patterns' cross_comp(frame_of_pixels_, ave + fbM / fbL)
-                # also terminate Fspan: same-filter frame_ with summed params, re-init at all 0s
-
-        element.I /= element.L; element.D /= element.L; element.M /= element.L  # immediate normalization to a mean
-    '''
-    return fbM, fbL
-
-def update_aves(fbM, fbL):
-    '''
-    update aves here
-    '''
-    pass
-
-
 def cross_comp(frame_of_pixels_):  # converts frame_of_pixels to frame_of_patterns, each pattern may be nested
 
     Y, X = frame_of_pixels_.shape  # Y: frame height, X: frame width
@@ -486,7 +318,7 @@ if __name__ == "__main__":
     '''
     fpickle = 2  # 0: load; 1: dump; 2: no pickling
     render = 0
-    fline_PPs = 0
+    fline_PPs = 1
     start_time = time()
     
     if fpickle == 0:
@@ -495,7 +327,7 @@ if __name__ == "__main__":
             frame_of_patterns_ = pickle.load(file)
     else:
         # Run functions
-        image = cv2.imread('.//toucan_small.jpg', 0).astype(int)  # manual load pix-mapped image
+        image = cv2.imread('.//raccoon.jpg', 0).astype(int)  # manual load pix-mapped image
         assert image is not None, "No image in the path"
         # Main
         frame_of_patterns_ = cross_comp(image)  # returns Pm__
@@ -514,10 +346,3 @@ if __name__ == "__main__":
         draw_PP_(image, frame_Pp__)  # debugging
         
                 
-#     # recursive version
-#    image = cv2.imread('.//raccoon.jpg', 0).astype(int)  # manual load pix-mapped image
-#    feedback_H = []
-#    cross_comp_(image, feedback_H, level=0, fPd=0, frecursive=1)
-#    
-#    end_time = time() - start_time
-#    print(end_time)
