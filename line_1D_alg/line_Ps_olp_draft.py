@@ -66,13 +66,17 @@ init_y = 0  # starting row, the whole frame doesn't need to be processed
 halt_y = 999999999  # ending row
 '''
     Conventions:
+    postfix 't' denotes tuple
     postfix '_' denotes array name, vs. same-name elements
-    prefix '_' denotes prior of two same-name variables
-    prefix 'f' denotes flag
+    prefix '_'  denotes prior of two same-name variables
+    prefix 'f'  denotes flag
     capitalized variables are normally summed small-case variables
 '''
 
-def cross_comp_pixel_(frame_of_pixels_):  # converts frame_of_pixels to frame_of_patterns, each pattern may be nested
+def cross_comp(frame_of_pixels_):  # converts frame_of_pixels to frame_of_patterns, each pattern may be nested
+
+    Y, X = frame_of_pixels_.shape  # Y: frame height, X: frame width
+    frame_of_patterns_ = []
     '''
     if cross_comp_spliced:  # process all image rows as a single line, vertically consecutive and preserving horizontal direction:
         pixel_=[]; dert_=[]  
@@ -81,18 +85,10 @@ def cross_comp_pixel_(frame_of_pixels_):  # converts frame_of_pixels to frame_of
         _i = pixel_[0]
     else:
     '''
-    dert__ = search_pixel_(frame_of_pixels_)
-    frame_of_patterns_ = form_P_root(dert__)
-    
-    return frame_of_patterns_  # frame of patterns, an input to level 2
-
-
-def search_pixel_(frame_of_pixels_):
-    Y, X = frame_of_pixels_.shape  # Y: frame height, X: frame width
-    dert__ = []
     for y in range(init_y, min(halt_y, Y)):  # y is index of new row pixel_, we only need one row, use init_y=0, halt_y=Y for full frame
+
         # initialization:
-        dert_ = []  # line-wide i_, p_, d_, m__
+        dert_ = []  # line-wide i_, p_, d_, m_, mrdn_
         pixel_ = frame_of_pixels_[y, :]
         _i = pixel_[0]
         # pixel i is compared to prior pixel _i in a row:
@@ -100,28 +96,16 @@ def search_pixel_(frame_of_pixels_):
             d = i - _i  # accum in rng
             p = i + _i  # accum in rng
             m = ave - abs(d)  # for consistency with deriv_comp output, else redundant
-            mrdn = abs(m) < abs(d)  # add mRdn += m_rdn in form_P
+            mrdn = m + ave < abs(d)
             dert_.append( Cdert( i=i, p=p, d=d, m=m, mrdn=mrdn) )
             _i = i
-        dert__.append(dert_)
-        
-    return dert__
-
-
-def form_P_root(dert__):
-    
-    frame_of_patterns_ = []
-    for dert_ in dert__:
-        # form m|d- sign patterns, rootP=None:
-        # need to remove calling form_P_(fPd=true) from intra_P_, it may call both form_Pm_ and form_Pd_
-
-        Pm_ = form_P_(None, dert_, rdn=1, rng=1, fPd=False)  # eval intra_Pm_ per Pm in
-        rval_Pm_ = form_rval_P_(Pm_, fPd=False)
-        Pd_ = form_P_(None, dert_, rdn=1, rng=1, fPd=True)  # eval intra_Pd_ per Pm in
-        rval_Pd_ = form_rval_P_(Pd_, fPd=True)
+        # form patterns:
+        rval_Pm_ = form_P_(None, dert_, rdn=1, rng=1, fPd=False)  # rootP=None, eval intra_P_, call form_rval_P_
+        rval_Pd_ = form_P_(None, dert_, rdn=1, rng=1, fPd=True)
 
         frame_of_patterns_.append((rval_Pm_, rval_Pd_))  # add line of patterns to frame of patterns, skip if cross_comp_spliced
-    return frame_of_patterns_
+
+    return frame_of_patterns_  # frame of patterns, an input to level 2
 
 
 def form_P_(rootP, dert_, rdn, rng, fPd):  # accumulation and termination, rdn and rng are pass-through intra_P_
@@ -146,8 +130,8 @@ def form_P_(rootP, dert_, rdn, rng, fPd):  # accumulation and termination, rdn a
 
     if rootP:  # call from intra_P_
         Dert = []
-        # sublayers brackets: 1st: param set, 2nd: Dert, param set, 3rd: sublayer concatenated from n root_Ps, 4th: hierarchy
-        rootP.sublayers = [[(fPd, rdn, rng, P_, [], [])]]  # 1st sublayer has one subset: sub_P_ param set, last[] is sub_Ppm__
+        # sublayers brackets: 1st: param set, 2nd: sublayer concatenated from several root_Ps, 3rd: hierarchy of sublayers
+        rootP.sublayers = [[(fPd, rdn, rng, P_, [], [])]]  # 1st sublayer has one sub_P_ param set, last[] is sub_Pp__
         rootP.subDerts = [Dert]
         if len(P_) > 4:  # 2 * (rng+1) = 2*2 =4
 
@@ -162,31 +146,26 @@ def form_P_(rootP, dert_, rdn, rng, fPd):  # accumulation and termination, rdn a
         # call from cross_comp
         intra_P_(P_, rdn, rng, fPd)
 
-    return P_  # used only if not rootP, else packed in rootP.sublayers and rootP.subDerts
+    rval_P_ = form_rval_P_(P_, fPd)
+    return rval_P_  # used only if not rootP, else packed in rootP.sublayers and rootP.subDerts
 
 '''
 needs to change for fully overlapping Pm_ and Pd_
 '''
 def intra_P_(P_, rdn, rng, fPd):  # recursive cross-comp and form_P_ inside selected sub_Ps in P_
 
-    adj_value_ = form_adjacent_(P_, fPd)  # compute adjacent Ms to evaluate contrastive borrow potential
+    adj_M_ = form_adjacent_M_(P_)  # compute adjacent Ms to evaluate contrastive borrow potential
     comb_sublayers = []
     comb_subDerts = []  # may not be needed, evaluation is more accurate in comp_sublayers?
 
-    for P, adj_value in zip(P_, adj_value_):
+    for P, adj_M in zip(P_, adj_M_):
         if P.L > 2 * (rng+1):  # vs. **? rng+1 because rng is initialized at 0, as all params
-            if fPd: rel_adj_value = adj_value / -P.D  if P.D !=0 else 1  # P.D could be zero due to non abs accumulation
-            else: rel_adj_value = adj_value / -P.M   # for allocation of -Pm' adj_M to each of its internal Pds?
+            rel_adj_M = adj_M / -P.M  # for allocation of -Pm' adj_M to each of its internal Pds?
 
             if fPd:  # P is Pd, -> sub_Pdm_, in high same-sign D span
-                # +Pd
-                if min( abs(P.D), abs(P.D) * rel_adj_value) > ave_D * rdn:  # level rdn, vs. param rdn in dert
+                if min( abs(P.D), abs(P.D) * rel_adj_M) > ave_D * rdn:  # level rdn, vs. param rdn in dert
                     ddert_ = deriv_comp(P.dert_)  # i is d
                     form_P_(P, ddert_, rdn+1, rng+1, fPd=True)  # cluster Pd derts by md sign, eval intra_Pm_(Pdm_), won't happen
-                # -Pd
-                elif  -P.D > ave_M * rdn:  
-                    form_P_(P, P.dert_, rdn+1, rng+1, fPd=False)
-               
             else:  # P is Pm,
                 # +Pm -> sub_Pm_ in low-variation span, eval comp at rng=2^n: 1, 2, 3; kernel size 2, 4, 8..:
                 if P.M > ave_M * rdn:  # no -adj_M: lend to contrast is not adj only, reflected in ave?
@@ -222,7 +201,7 @@ def intra_P_(P_, rdn, rng, fPd):  # recursive cross-comp and form_P_ inside sele
     return comb_sublayers, comb_subDerts
 
 
-def form_adjacent_(P_, fPd):  # compute array of adjacent M/Ds, for contrastive borrow evaluation
+def form_adjacent_M_(Pm_):  # compute array of adjacent Ms, for contrastive borrow evaluation
     '''
     Value is projected match, while variation has contrast value only: it matters to the extent that it interrupts adjacent match: adj_M.
     In noise, there is a lot of variation. but no adjacent match to cancel, so that variation has no predictive value.
@@ -232,12 +211,10 @@ def form_adjacent_(P_, fPd):  # compute array of adjacent M/Ds, for contrastive 
     no comb_m = comb_M / comb_S, if fid: comb_m -= comb_|D| / comb_S: alt rep cost
     same-sign comp: parallel edges, cross-sign comp: M - (~M/2 * rL) -> contrast as 1D difference?
     '''
-    
-    if fPd: value_ = [0] + [Pd.D for Pd in P_] + [0]  # list of adj M components in the order of Pm_, + first and last M=0,
-    else: value_ = [0] + [Pm.M for Pm in P_] + [0]  # list of adj D components in the order of Pd_, + first and last D=0,
+    M_ = [0] + [Pm.M for Pm in Pm_] + [0]  # list of adj M components in the order of Pm_, + first and last M=0,
 
-    adj_value_ = [ (abs(prev_value) + abs(next_value)) / 2  # mean adjacent M/Ds
-               for prev_value, next_value in zip(value_[:-2], value_[2:])  # exclude first and last M/Ds
+    adj_M_ = [ (abs(prev_M) + abs(next_M)) / 2  # mean adjacent Ms
+               for prev_M, next_M in zip(M_[:-2], M_[2:])  # exclude first and last Ms
              ]
     ''' expanded:
     pri_M = Pm_[0].M  # deriv_comp value is borrowed from adjacent opposite-sign Ms
@@ -250,7 +227,7 @@ def form_adjacent_(P_, fPd):  # compute array of adjacent M/Ds, for contrastive 
         M = next_M
     adj_M_.append(abs(pri_M))  # no / 2: projection for last P
     '''
-    return adj_value_
+    return adj_M_
 
 def range_comp(dert_):  # cross-comp of 2**rng- distant pixels: 4,8,16.., skipping intermediate pixels
     rdert_ = []
@@ -262,14 +239,14 @@ def range_comp(dert_):  # cross-comp of 2**rng- distant pixels: 4,8,16.., skippi
         rd = dert.d + d   # difference accumulated in rng
         rm = dert.m + ave - abs(d)  # m accumulated in rng
         # for consistency with deriv_comp, else redundant
-        rmrdn = abs(rm) < abs(rd)
+        rmrdn = rm + ave < abs(rd)  # use Ave?
         rdert_.append( Cdert( i=dert.i,p=rp,d=rd,m=rm,mrdn=rmrdn ))
         _i = dert.i
 
     return rdert_
 
 def deriv_comp(dert_):  # cross-comp consecutive ds in same-sign dert_: sign match is partial d match
-    # dd and md may match across d sign, but likely in high-match area, spliced by spec in comp_P?
+    # dd and md may match across d sign, spliced in compact?
     # initialization:
     ddert_ = []
     _d = abs( dert_[0].d)  # same-sign in Pd
@@ -280,8 +257,8 @@ def deriv_comp(dert_):  # cross-comp consecutive ds in same-sign dert_: sign mat
         rd = d + _d
         dd = d - _d
         md = min(d, _d) - abs( dd/2) - ave_min  # min_match because magnitude of derived vars corresponds to predictive value
-        dmrdn = abs(md) < abs(dd)
-        ddert_.append( Cdert( i=dert.d,p=rd,d=dd,m=md, dmrdn=dmrdn ))
+        dmrdn = md + ave < abs(dd)  # use Ave?
+        ddert_.append( Cdert( i=dert.d,p=rd,d=dd,m=md,dmrdn=dmrdn ))
         _d = d
 
     return ddert_
@@ -293,10 +270,11 @@ def form_rval_P_(iP_, fPd):  # cluster Ps by the sign of value adjusted for cros
     _sign = None  # to initialize 1st rdn P, (None != True) and (None != False) are both True
 
     for P in iP_:
-        # P.L-P.Rdn: inverted P.Rdn, max P.Rdn = P.L. Inverted because it counts mrdn, which is ~rdn for Pd:
+        # P.L-P.Rdn is inverted P.Rdn: max P.Rdn = P.L. Inverted because it counts mrdn, = (not drdn):
         if fPd: rval = abs(P.D) - (P.L-P.Rdn) * ave_D * P.L
         else:   rval = P.M - P.Rdn * ave_M * P.L
-        # P.M - 1 * ave_M * P.L
+        # ave_D, ave_M are defined per dert: variable cost to adjust for rdn,
+        # * Ave_D, Ave_M coef: fixed costs per P?
         sign = rval>0
 
         if sign != _sign:  # sign change, initialize rP and append it to rP_
@@ -332,7 +310,7 @@ if __name__ == "__main__":
         image = cv2.imread('.//raccoon.jpg', 0).astype(int)  # manual load pix-mapped image
         assert image is not None, "No image in the path"
         # Main
-        frame_of_patterns_ = cross_comp_pixel_(image)  # returns Pm__
+        frame_of_patterns_ = cross_comp(image)  # returns Pm__
         if fpickle == 1: # save the dump of the whole data_1D to file
             with open("frame_of_patterns_.pkl", 'wb') as file:
                 pickle.dump(frame_of_patterns_, file)
@@ -343,8 +321,14 @@ if __name__ == "__main__":
 
     if fline_PPs:  # debug line_PPs
         from line_PPs import *
-        frame_Pp__ = cross_comp_P_(frame_of_patterns_)
-        draw_PP_(image, frame_Pp__)  # debugging
+        frame_Pp_t = []
+
+        for y, P_t in enumerate(frame_of_patterns_):  # each line_of_patterns is (Pm_, Pd_)
+            if len(P_) > 1: rval_Pp_t, Pp_t = line_PPs_root(P_t, 0)
+            else:           rval_Pp_t, Pp_t = [], []
+            frame_Pp_t.append(( rval_Pp_t, Pp_t ))
+
+        draw_PP_(image, frame_Pp_t)  # debugging
 
     end_time = time() - start_time
     print(end_time)

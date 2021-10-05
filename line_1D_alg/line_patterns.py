@@ -31,7 +31,6 @@ from time import time
 from matplotlib import pyplot as plt
 from itertools import zip_longest
 from frame_2D_alg.class_cluster import ClusterStructure, NoneType, comp_param
-from line_PPs import *
 
 class Cdert(ClusterStructure):
     i = int  # input for range_comp only
@@ -51,8 +50,6 @@ class CP(ClusterStructure):
     subDerts = list  # conditionally summed [L,I,D,M] per sublayer, most are empty
     derDerts = list  # for compared subDerts only
     fPd = bool  # P is Pd if true, else Pm; also defined per layer
-    # for rval Pp
-    rval_ = list
 
 verbose = False
 # pattern filters or hyper-parameters: eventually from higher-level feedback, initialized here as constants:
@@ -72,8 +69,6 @@ halt_y = 999999999  # ending row
     prefix 'f' denotes flag
     capitalized variables are normally summed small-case variables
 '''
-
-
 
 def cross_comp(frame_of_pixels_):  # converts frame_of_pixels to frame_of_patterns, each pattern may be nested
 
@@ -102,11 +97,10 @@ def cross_comp(frame_of_pixels_):  # converts frame_of_pixels to frame_of_patter
             _i = i
         # form m-sign patterns, rootP=None:
         Pm_ = form_P_(None, dert_, rdn=1, rng=1, fPd=False)  # eval intra_Pm_ per Pm in
-        rval_Pm_ = form_rval_P_(Pm_)
-        
         frame_of_patterns_.append(Pm_)  # add line of patterns to frame of patterns, skip if cross_comp_spliced
 
     return frame_of_patterns_  # frame of patterns is an input to level 2
+
 
 def form_P_(rootP, dert_, rdn, rng, fPd):  # accumulation and termination, rdn and rng are pass-through intra_P_
     # initialization:
@@ -259,54 +253,6 @@ def deriv_comp(dert_):  # cross-comp consecutive ds in same-sign dert_: sign mat
     return ddert_
 
 
-def form_rval_P_(iP_):
-
-    # cluster Ps by the sign of value adjusted for cross-param redundancy,
-    # re-evaluate them for cross-level rdn and consolidation: compact()
-    rval_P__ = []
-    Rval=0
-    _sign = None  # to initialize 1st rdn P, (None != True) and (None != False) are both True
-
-    for P in iP_:
-        rval = P.M - 1 * ave_M * P.L
-        sign = rval>0
-        
-        if sign != _sign:  # sign change, initialize rP and append it to rP_
-            rval_P_ = [(rval, P)]
-            Rval = rval
-            if _sign:  # -rPs are not processed?
-                compact_P_(rval_P_)  # re-eval Pps, Pp.pdert_s for redundancy, eval splice Ps
-            rval_P__.append(( Rval, rval_P_))  # updated by accumulation below
-        else:
-            # accumulate params:
-            Rval += rval
-            rval_P_ += [(rval, P)]
-        _sign = sign
-
-    return rval_P__
-
-# need further review:
-def compact_P_(rval_P_):
-    for i, (rval, P) in enumerate(rval_P_):
-        # assign cross-level rdn (P vs. dert_), re-evaluate P and dert_:
-        P_val = rval / P.L - ave  # / P.L: resolution reduction, but lower rdn:
-        dert_val = rval - ave * P.L  # * P.L: ave cost * number of representations
-
-        if P_val > dert_val: dert_val -= ave * 1
-        else:                  P_val -= ave * 1  # ave scaled by rdn (rdn = 1)
-        if P_val <= 0:
-            rval_P_[i]  = (rval, CP(dert_=P.dert_))
-        else:
-            _P = CP() # not sure if need this?
-            _P.dert_ = P.dert_
-            for dert in P.dert_:
-                _P.accum_from(dert)  # different from P params
-                
-            rval_P_.dert_[i] = (rval, _P) # replace P with spliced P,
-            if dert_val <= 0:
-                P.dert_ = []  # remove pdert_
-
-
 if __name__ == "__main__":
     ''' 
     Parse argument (image)
@@ -318,9 +264,8 @@ if __name__ == "__main__":
     '''
     fpickle = 2  # 0: load; 1: dump; 2: no pickling
     render = 0
-    fline_PPs = 1
+    fline_PPs = 0
     start_time = time()
-    
     if fpickle == 0:
         # Read frame_of_patterns from saved file instead
         with open("frame_of_patterns_.pkl", 'rb') as file:
@@ -341,8 +286,15 @@ if __name__ == "__main__":
 
     if fline_PPs:  # debug line_PPs
         from line_PPs import *
-        
-        frame_Pp__ = cross_comp_P_(frame_of_patterns_)
+        frame_Pp__ = []
+
+        for y, P_ in enumerate(frame_of_patterns_):
+            if len(P_) > 1: rval_Pp_t, Pp_t = line_PPs_root(P_, 0)
+            else:           rval_Pp_t, Pp_t = [], []
+            frame_Pp__.append(( rval_Pp_t, Pp_t))
+
         draw_PP_(image, frame_Pp__)  # debugging
-        
-                
+
+    end_time = time() - start_time
+    print(end_time)
+
