@@ -92,13 +92,23 @@ def line_PPs_root(root_P_t, feedback, elevation=1):  # elevation and feedback ar
     input is P_t: tuple (Pm_, Pd_), with 2 layers  in line_PPs, then nested to the depth = 2*elevation (level counter)
     output has 2 layers of nesting: 1st i = fPd: Pm_| Pd_, 2nd param_names = L | I | D | M, each P_ is FIFO
     '''
-    for i, P_ in enumerate(root_P_t):  # fPd = i
+    
+    rval_Pp_t__, Pp_t__ = [[],[]], [[],[]] # 2 brackets, for each rval_Pm and rval_Pd
+    for i, rval_P_ in enumerate(root_P_t):  # fPd = i, # rval_Pm_ and rval_Pd_ 
+        for rval_P in (rval_P_): # per rval_P  
+            rval_Pp_t_, Pp_t_ = [], [] 
+            P_ = [P for (rval, P) in rval_P[1]] # rval_P[0] is Rval
+            
+            norm_feedback(P_, i)  # feedback is not implemented
+            Pdert_t, dert1_, dert2_ = search(P_, i)
+            rval_Pp_t, Pp_t = form_Pp_root( Pdert_t, dert1_, dert2_, i)
+            rval_Pp_t_.append(rval_Pp_t) 
+            Pp_t_.append(Pp_t)
+                
+            rval_Pp_t__[i].append(rval_Pp_t_)
+            Pp_t__[i].append(Pp_t_)
 
-        norm_feedback(P_, i)  # feedback is not implemented
-        Pdert_t, dert1_, dert2_ = search(P_, i)
-        rval_Pp_t, Pp_t = form_Pp_root( Pdert_t, dert1_, dert2_, i)
-
-    return rval_Pp_t, Pp_t  # Pp_t is for visualization
+    return rval_Pp_t__, Pp_t__  # Pp_t is for visualization
 
 
 def search(P_, fPd):  # cross-compare patterns within horizontal line
@@ -453,7 +463,7 @@ def intra_Pp_(Pp_, param_name, fPd):  # evaluate for sub-recursion in line Pm_, 
 
     return comb_sublayers, comb_subDerts
 
-
+# need further update after implementing parallel sub_Ps
 def sub_search_draft(P_, fPd):  # search in top sublayer per P / sub_P, after P_ search: top-down induction,
     # called from intra_Pp_, especially MPp: init select by P.M, then combined Pp match?
 
