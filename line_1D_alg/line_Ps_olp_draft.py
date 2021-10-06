@@ -145,6 +145,7 @@ def intra_P_(P_, rdn, rng, fPd):  # recursive cross-comp and form_P_ inside sele
 
     for P, adj_M in zip(P_, adj_M_):
         if P.L > 2 * (rng + 1):  # vs. **? rng+1 because rng is initialized at 0, as all params
+
             rel_adj_M = adj_M / -P.M  # for allocation of -Pm' adj_M to each of its internal Pds?
 
             if fPd:  # P is Pd
@@ -153,8 +154,10 @@ def intra_P_(P_, rdn, rng, fPd):  # recursive cross-comp and form_P_ inside sele
                     rdn+=1; rng+=1  # brackets: 1st: param set, 2nd: sublayer concatenated from several root_Ps, 3rd: hierarchy of sublayers:
                     P.sublayers += [[(fPd, rdn, rng, sub_Pm_, [], sub_Pd_, [])]]
                     ddert_ = deriv_comp(P.dert_)  # i is d
-                    sub_Pm_[:] = form_P_(P, ddert_, rdn, rng, fPd=False)  # cluster by mm sign
-                    sub_Pd_[:] = form_P_(P, ddert_, rdn, rng, fPd=True)  # cluster by md sign
+                    # bracket colon should be not needed, since we are not trying to copy anything
+                    # https://docs.python.org/3/tutorial/introduction.html#lists
+                    sub_Pm_ = form_P_(P, ddert_, rdn, rng, fPd=False)  # cluster by mm sign
+                    sub_Pd_ = form_P_(P, ddert_, rdn, rng, fPd=True)  # cluster by md sign
             else:  # P is Pm
                    # eval comp at rng=2^n: 1, 2, 3; kernel size 2, 4, 8..:
                 if P.M > ave_M * rdn:  # high-M span, no -adj_M: lend to contrast is not adj only, reflected in ave?
@@ -167,20 +170,23 @@ def intra_P_(P_, rdn, rng, fPd):  # recursive cross-comp and form_P_ inside sele
                     rdn+=1; rng+=1  # brackets: 1st: param set, 2nd: sublayer concatenated from several root_Ps, 3rd: hierarchy of sublayers:
                     P.sublayers += [[(fPd, rdn, rng, sub_Pm_, [], sub_Pd_, [])]]
                     rdert_ = range_comp(P.dert_)  # rng+, skip predictable next dert, local ave? rdn to higher (or stronger?) layers
-                    sub_Pm_[:] = form_P_(P, rdert_, rdn, rng, fPd=False)  # cluster by rm sign
-                    sub_Pd_[:] = form_P_(P, rdert_, rdn, rng, fPd=True)  # cluster by rd sign
+                    sub_Pm_ = form_P_(P, rdert_, rdn, rng, fPd=False)  # cluster by rm sign
+                    sub_Pd_ = form_P_(P, rdert_, rdn, rng, fPd=True)  # cluster by rd sign
 
                 else:  # to preserve index of sub_Pms and sub_Pds in P.sublayers
                     P.sublayers += [[]]
 
             # index 0 is sub_Pms, index 1 is sub_Pds, due to we form_P_ with fPd = false first
-            if P.sublayers and P.sublayers[fPd]:
+            if P.sublayers:   
+                comb_sublayers = [comb_subset_ + subset_ for comb_subset_, subset_ in
+                                  zip_longest(comb_sublayers, P.sublayers, fillvalue=[])]
+                '''
                 new_sublayers = []
-                for comb_subset_, subset_ in zip_longest(comb_sublayers, P.sublayers[fPd], fillvalue=([])):
+                for comb_subset_, subset_ in zip_longest(comb_sublayers, P.sublayers, fillvalue=([])):
                     # append combined subset_ (array of sub_P_ param sets):
                     new_sublayers.append(comb_subset_ + subset_)
                 comb_sublayers = new_sublayers
-
+                '''
     return comb_sublayers
 
 
@@ -282,7 +288,7 @@ if __name__ == "__main__":
     '''
     fpickle = 2  # 0: load; 1: dump; 2: no pickling
     render = 0
-    fline_PPs = 0
+    fline_PPs = 1
     start_time = time()
     if fpickle == 0:
         # Read frame_of_patterns from saved file instead
@@ -307,11 +313,11 @@ if __name__ == "__main__":
         frame_Pp_t = []
 
         for y, P_t in enumerate(frame_of_patterns_):  # each line_of_patterns is (Pm_, Pd_)
-            if len(P_) > 1: rval_Pp_t, Pp_t = line_PPs_root(P_t, 0)
+            if len(P_t) > 1: rval_Pp_t, Pp_t = line_PPs_root(P_t, 0)
             else:           rval_Pp_t, Pp_t = [], []
             frame_Pp_t.append(( rval_Pp_t, Pp_t ))
 
-        draw_PP_(image, frame_Pp_t)  # debugging
+#        draw_PP_(image, frame_Pp_t)  # debugging
 
     end_time = time() - start_time
     print(end_time)
