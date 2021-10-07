@@ -171,8 +171,8 @@ def intra_P_(P_, rdn, rng, fPd):  # recursive cross-comp and form_P_ inside sele
                     sub_Pm_[:] = form_P_(P, rdert_, rdn, rng, fPd=False)  # cluster by rm sign
                     sub_Pd_[:] = form_P_(P, rdert_, rdn, rng, fPd=True)  # cluster by rd sign
 
-                else:  # to preserve index of sub_Pms and sub_Pds in P.sublayers
-                    P.sublayers += [[]]  # empty subset
+                # else:  # to preserve index of sub_Pms and sub_Pds in P.sublayers
+                #    P.sublayers += [[]]  # empty subset
 
             if P.sublayers:
                 comb_sublayers = [comb_subset_ + subset_ for comb_subset_, subset_ in
@@ -249,21 +249,25 @@ def form_rval_P_(iP_, fPd):  # cluster Ps by the sign of value adjusted for cros
     rval_P__, rval_P_ = [], []
     _sign = None  # to initialize 1st rdn P, (None != True) and (None != False) are both True
 
-    for P in iP_:
+    for i, P in enumerate(iP_):
         # P.L-P.Rdn is inverted P.Rdn: max P.Rdn = P.L. Inverted because it counts mrdn, = (not drdn):
         if fPd: rval = abs(P.D) - (P.L-P.Rdn) * ave_D * P.L
-        else:   rval = P.M - P.Rdn * ave_M * P.L
+        else:   rval = P.M - P.Rdn * ave_M * P.L 
         # ave_D, ave_M are defined per dert: variable cost to adjust for rdn,
         # * Ave_D, Ave_M coef: fixed costs per P?
         sign = rval>0
 
         if sign != _sign:  # sign change, initialize rP and append it to rP_
+            if not rval_P_: Rval=rval; rval_P_.append((rval, P)) # if rval_P_ is empty, pack rval and P (due to 1st element and instant sign change)
             rval_P__.append([Rval, rval_P_])  # updated by accumulation below
+            rval_P_ = []; Rval=0; # reinit
         else:
             # accumulate params:
             Rval += rval
             rval_P_ += [(rval, P)]
         _sign = sign
+
+    if rval_P_: rval_P__.append([Rval, rval_P_]) # leftover, when there is no sign change at last P
 
     return rval_P__
 
@@ -279,7 +283,7 @@ if __name__ == "__main__":
     '''
     fpickle = 2  # 0: load; 1: dump; 2: no pickling
     render = 0
-    fline_PPs = 0
+    fline_PPs = 1
     start_time = time()
     if fpickle == 0:
         # Read frame_of_patterns from saved file instead

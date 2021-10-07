@@ -13,6 +13,7 @@ line_PPPPs = increment (line_PPPs), etc. That will be the hardest and most impor
 import sys  # add CogAlg folder to system path
 from os.path import dirname, join, abspath
 sys.path.insert(0, abspath(join(dirname("CogAlg"), '..')))
+import numpy as np
 from line_patterns import *
 from frame_2D_alg.class_cluster import ClusterStructure, comp_param
 
@@ -94,7 +95,8 @@ def line_PPs_root(root_P_t, feedback, elevation=1):  # elevation and feedback ar
     sub_rval_Pp_t_t, sub_Pp_t_t = [],[]  # replace root_P_t?
 
     for i, rval_P_ in enumerate(root_P_t):  # fPd = i: rval_Pm_| rval_Pd_
-        splice(rval_P_)  # for discontinuous search
+        if len(rval_P_)>2: 
+            splice(rval_P_)  # for discontinuous search
         sub_rval_Pp_t_, sub_Pp_t_ = [], []  # for search results
 
         for rval_P in rval_P_:
@@ -761,7 +763,9 @@ def splice(rval_P_):  # separation between contiguous positive rval_P_s may be l
     The criterion to re-evaluate separation is similarity of P-defining param: M/L for Pm, D/L for Pd, among the three Ps
     If relative similarity > merge_ave: all three Ps are merged into one.
     '''
-    splice_val_ = [splice_eval(__P, _P, rval_P_)  # compute splice values
+    
+    # typo ?
+    splice_val_ = [splice_eval(__P, _P, P)  # compute splice values
                    for __P, _P, P in zip(rval_P_, rval_P_[1:], rval_P_[2:])]
     sorted_splice_val_ = sorted(enumerate(splice_val_),
                                 key=lambda k: k[1],
@@ -769,33 +773,30 @@ def splice(rval_P_):  # separation between contiguous positive rval_P_s may be l
     if sorted_splice_val_[0][1] <= ave_splice:  # exit recursion
         return rval_P_
 
-    folp_ = np.zeros(len(P_), bool)  # if True: P is included in another spliced triplet
-    spliced_P_ = []
+    folp_ = np.zeros(len(rval_P_), bool)  # if True: P is included in another spliced triplet
+    spliced_rval_P_ = []
     for i, splice_val in sorted_splice_val_:  # loop through splice vals
         if splice_val <= ave_splice:  # stop, following splice_vals will be even smaller
             break
         if folp_[i : i+3].any():  # skip if overlap
             continue
         folp_[i : i+3] = True     # splice_val > ave_splice: overlapping Ps folp=True
-        __P, _P, P = P_[i : i+3]  # triplet to splice
+        __P, _P, P = rval_P_[i : i+3]  # triplet to splice
         # merge _P and P into __P:
-        __P.accum_from(_P, excluded=['x0', 'ix0'])
-        __P.accum_from(P, excluded=['x0', 'ix0'])
-
-        if hasattr(__P, 'pdert_'):  # for splice_Pp_ in line_PPs
-            __P.pdert_ += _P.pdert_ + P.pdert_
-        else:
-            __P.dert_ += _P.dert_ + P.dert_
-        spliced_P_.append(__P)
+        
+        __P[0] += _P[0] + P[0] # accumulate Rval
+        __P[1] += _P[1] + P[1] # accumulate (rval, P)
+        
+        spliced_rval_P_.append(__P)
 
     # add remaining Ps into spliced_P
-    spliced_P_ += [P_[i] for i, folp in enumerate(folp_) if not folp]
-    spliced_P_.sort(key=lambda P: P.x0)  # back to original sequence
+    spliced_rval_P_ += [rval_P_[i] for i, folp in enumerate(folp_) if not folp]
+    spliced_rval_P_.sort(key=lambda P: P[1][0][1].x0)  # back to original sequence
 
-    if len(spliced_P_) > 4:
-        splice(spliced_P_)
+    if len(spliced_rval_P_) > 4:
+        splice(spliced_rval_P_)
 
-    return spliced_P_
+    return spliced_rval_P_
 
 def splice_eval(__P, _P, P):  # should work for splicing Pps too
     '''
@@ -810,6 +811,9 @@ def splice_eval(__P, _P, P):  # should work for splicing Pps too
     __Rval = __P[0]; _Rval = _P[0]; Rval = P[0]
     if _Rval == 0: _Rval =.1  # prevents /0
     rel_continuity = abs(__Rval / _Rval)
+    
+    rel_similarity = 0
+
     __mean= __Rval/len(__P[1]); _mean= _Rval/len(_P[1]); mean= Rval/len(P[1])
 
     m13 = min(mean, __mean) - abs(mean-__mean)/2    # inverse match of P1, P3
