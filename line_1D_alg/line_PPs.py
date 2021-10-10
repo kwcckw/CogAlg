@@ -81,6 +81,9 @@ ave_sub = 20  # for comp_sub_layers
 
 ave_Dave = 100  # summed feedback filter
 ave_dave = 20   # mean feedback filter
+
+ave_d = 10
+
 # used in search, form_Pp_root, comp_sublayers_, draw_PP_:
 param_names = ["L_", "I_", "D_", "M_"]
 aves = [ave_mL, ave_mI, ave_mD, ave_mM]
@@ -102,7 +105,7 @@ def line_PPs_root(root_P_t):
             P_ = [P for (rval, P) in rval_P[1]]  # rval_P[0] is Rval
             norm_feedback(P_, i)  # feedback is not implemented yet
 
-            if len(P_) > 1 and rval_P[0] > ave_M * 4:  # * search_coef: Rval evaluation vs. fixed search cost
+            if len(P_) > 1 and rval_P[0] > ave_M * 4:  # * search_coef: Rval evaluation vs. fixed search cost 
                 Pdert_t, dert1_, dert2_ = search(P_, i)
                 sub_rval_Pp_t, sub_Pp_t = form_Pp_root( Pdert_t, dert1_, dert2_, i)
                 sub_rval_Pp_t_.append(sub_rval_Pp_t)
@@ -355,26 +358,27 @@ def form_rval_Pp_(iPp_, param_name, pdert1_, pdert2_, fPd):
     # cluster Pps by the sign of value adjusted for cross-param redundancy,
     # re-evaluate them for cross-level rdn and consolidation: compact()
     rval_Pp_ = []
-    Pp = iPp_[0]  # initialization:
-    if fPd: rval = abs(Pp.D) - (Pp.L - Pp.Rdn) * ave_D * Pp.L  # P.L-P.Rdn is inverted P.Rdn: max P.Rdn = P.L, mrdn, = (not drdn)
-    else:   rval = Pp.M - Pp.Rdn * ave_M * Pp.L  # ave_D, ave_M are defined per dert: variable cost to adjust for rdn, * Ave_D, Ave_M coef: fixed costs per P?
-    Rval = rval; rval_Pp = [(rval, Pp)]
-    _sign = rval > 0
-
-    for Pp in iPp_:
-        if fPd: rval = abs(Pp.D) - (Pp.L - Pp.Rdn) * ave_D * Pp.L
-        else:   rval = Pp.M - Pp.Rdn * ave_M * Pp.L
-        sign = rval > 0
-        if sign != _sign:  # terminate and reinitialize rval_Pp:
-            if _sign:  # -rPps are not processed?
-                compact(rval_Pp, pdert1_, pdert2_, param_name, fPd)  # re-eval Pps, Pp.pdert_s for redundancy, eval splice Ps
-            rval_Pp_.append([Rval, rval_Pp])
-            Rval = rval; rval_Pp = [(rval, Pp)]
-        else:
-            # accumulate params:
-            Rval += rval; rval_Pp += [(rval, Pp)]
-        _sign = sign
-    rval_Pp_.append([Rval, rval_Pp])  # last rval_P, termination always lags by 1 input
+    if iPp_: # some iPp_ might be empty from previous search
+        Pp = iPp_[0]  # initialization:
+        if fPd: rval = abs(Pp.D) - (Pp.L - Pp.Rdn) * ave_D * Pp.L  # P.L-P.Rdn is inverted P.Rdn: max P.Rdn = P.L, mrdn, = (not drdn)
+        else:   rval = Pp.M - Pp.Rdn * ave_M * Pp.L  # ave_D, ave_M are defined per dert: variable cost to adjust for rdn, * Ave_D, Ave_M coef: fixed costs per P?
+        Rval = rval; rval_Pp = [(rval, Pp)]
+        _sign = rval > 0
+    
+        for Pp in iPp_:
+            if fPd: rval = abs(Pp.D) - (Pp.L - Pp.Rdn) * ave_D * Pp.L
+            else:   rval = Pp.M - Pp.Rdn * ave_M * Pp.L
+            sign = rval > 0
+            if sign != _sign:  # terminate and reinitialize rval_Pp:
+                if _sign:  # -rPps are not processed?
+                    compact(rval_Pp, pdert1_, pdert2_, param_name, fPd)  # re-eval Pps, Pp.pdert_s for redundancy, eval splice Ps
+                rval_Pp_.append([Rval, rval_Pp])
+                Rval = rval; rval_Pp = [(rval, Pp)]
+            else:
+                # accumulate params:
+                Rval += rval; rval_Pp += [(rval, Pp)]
+            _sign = sign
+        rval_Pp_.append([Rval, rval_Pp])  # last rval_P, termination always lags by 1 input
 
     return rval_Pp_
 
@@ -478,17 +482,19 @@ def sub_search_draft(P_, fPd):  # search in top sublayer per P / sub_P, after P_
             if P.sublayers[0]:  # not empty 1st layer subset, P.sublayers[0][0] is Dert
                 subset = P.sublayers[0][0]  # top sublayer subset_ is one array
                 # if pdert.m, eval per P, Idert or Ddert only?
-                sub_P_ = subset[3]
-                if len(sub_P_) > 2:
+                
+                # need further review
+                sub_P_ = [subset[2], subset[3]] 
+                if len(subset[2]) > 2 and len(subset[3]) > 2:
                     if fPd:
                         if abs(P.D) > ave_D:  # or if P.D + pdert.d + sublayer.Dert.D
-                            sub_rdn_Pp__ = search(sub_P_, fPd)
-                            subset[5].append(sub_rdn_Pp__)
+                            sub_rdn_Pp__ = line_PPs_root(sub_P_)
+                            subset[7+i].append(sub_rdn_Pp__)
                             # recursion via form_P_
                     elif P.M > ave_M:  # or if P.M + pdert.m + sublayer.Dert.M
-                        sub_rdn_Pp__ = search(sub_P_, fPd)
-                        subset[5].append(sub_rdn_Pp__)
-                        # recursion via form_P_: deeper sublayers search is selective per sub_P
+                        sub_rdn_Pp__ = line_PPs_root(sub_P_)
+                        subset[6+i].append(sub_rdn_Pp__)
+                    # recursion via form_P_: deeper sublayers search is selective per sub_P
 
 
 def comp_sublayers(_P, P, root_v):  # if pdert.m -> if summed params m -> if positional m: mx0?
@@ -496,13 +502,13 @@ def comp_sublayers(_P, P, root_v):  # if pdert.m -> if summed params m -> if pos
     xDert_vt = form_comp_Derts(_P, P, root_v)  # value tuple: separate vm, vd for comp sub_mP_ or sub_dP_
     # comp sub_Ps between 1st sublayers of _P and P:
     # eval @ call
-    _rdn, _rng, _sub_rval_Pm_, _sub_rval_Pd_, _xsub_pmdertt_, _xsub_pddertt_ = _P.sublayers[0][0]  # 2nd [0] is the 1st and only subset
-    rdn, rng, sub_rval_Pm_, sub_rval_Pd_, xsub_pmdertt_, xsub_pddertt_ = P.sublayers[0][0]
+    _rdn, _rng = _P.sublayers[0][0][:2]  # 2nd [0] is the 1st and only subset
+    rdn, rng  = P.sublayers[0][0][:2]
 
     for i, xDert_v in enumerate(xDert_vt):  # eval m, d:
         if xDert_v + root_v > ave_M * (i * ave_D):  # ave_D should be defined as coef
-            _sub_rval_P_, _xsub_pdertt_ = _P.sublayers[0][0][ 2+i, 4+i]  # see above
-            sub_rval_P_, xsub_pdertt_ = P.sublayers[0][0][ 2+i, 4+i]
+            _sub_rval_P_, _,  _xsub_pdertt_ = _P.sublayers[0][0][2+i:4+i+1]
+            sub_rval_P_, _, xsub_pdertt_ = P.sublayers[0][0][2+i:4+i+1]
             if rng == _rng and min(_P.L, P.L) > ave_Ls:
                 # if same intra_comp fork: compare sub_Ps to each _sub_P within max relative distance, comb_V- proportional:
                 _SL = SL = 0  # summed Ls
@@ -526,7 +532,7 @@ def comp_sublayers(_P, P, root_v):  # if pdert.m -> if summed params m -> if pos
                                         if SL < _SL: next_index += 1
                                         SL += sub_P.L  # ix0 of next sub_P
                                     # search left:
-                                    for rval, sub_P in reversed(sub_rval_P_[1][len(sub_rval_P_[1]) - start_index:]):  # index_ix0 <= _ix0
+                                    for rval, sub_P in reversed(sub_rval_P[1][len(sub_rval_P[1]) - start_index:]):  # index_ix0 <= _ix0
                                         if comp_sub_P(sub_P, _sub_P, _xsub_pdertt, P_, root_v):  # invert sub_P, _sub_P positions
                                             break
                                     # not implemented: if param_name == "I_" and not fPd: sub_pdert = search_param_(param_)
@@ -550,7 +556,7 @@ def form_comp_Derts(_P, P, root_v):
         for i, isublayer in enumerate([_sublayer, sublayer]):  # list of subsets: index 0 = _P.sublayers, index 1 = P.sublayers
             if root_v * len(isublayer) > ave_M * 5:  # won't work, first len(isublayer) = 1, need to think about it
                 subDertt  = [[0, 0, 0, 0], [0, 0, 0, 0]]  # Pm, Pd' L, I, D, M summed within sublayer
-                for rdn, rng, sub_rval_Pm_, xsub_pmdertt_, sub_rval_Pd_, xsub_pddertt_ in isublayer: # current layer subsets
+                for rdn, rng, sub_rval_Pm_, sub_rval_Pd_, xsub_pmdertt_, xsub_pddertt_, _, _ in isublayer: # current layer subsets
                     for j, sub_rval_P__ in enumerate([sub_rval_Pm_, sub_rval_Pd_]):  # j: Pm | Pd
                         for Rval, sub_rval_P_ in sub_rval_P__:
                             for rval, sub_rval_P in sub_rval_P_:
@@ -569,9 +575,13 @@ def form_comp_Derts(_P, P, root_v):
     for (_mDert, _dDert), (mDert, dDert) in zip(subDertt_t[0], subDertt_t[1]):
         for i, (_iDert, iDert) in enumerate( zip((_mDert, _dDert), (mDert, dDert))):
             derDert = []
-            for _param, param, param_name, ave in zip(_iDert, iDert, param_names, aves):
-                dert = comp_param(_param, param, param_name, ave)
+            for _param, param, param_name, ave in zip(_iDert, iDert, param_names, aves): 
                 # need to replace dert.m with v = dert[2+i], if i: v = abs(v) - ave_d
+                if i:
+                    _param = abs(_param) - ave_d
+                    param = abs(param) - ave_d  
+                dert = comp_param(_param, param, param_name, ave)
+                
                 if dert.m > 0:
                     xDert_vt[i] += dert.m  # also higher-value mL? no -m sum: won't be processed
                 derDert.append(dert)  # dert per param, derDert_ per _subDert, copy in subDert?
