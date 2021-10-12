@@ -173,7 +173,7 @@ def intra_P_(rootP, rval_P, rdn, rng, fPm):  # recursive cross-comp and form_P_ 
             # rel_adj_M = adj_M / -P.M  # for allocation of -Pm' adj_M to each of its internal Pds?
 
             if fPm:  # P is Pm, eval comp at rng=2^n: 1, 2, 3; kernel size 2, 4, 8.., min = 2 * (rng+1) = 2*2:
-                if P.M > ave_M * rdn and len(P.dert_) > 4:  # high-M span, no -adj_M: lend to contrast is not adj only, reflected in ave?
+                if P.M > ave_M * rdn and len(P.dert_) > (2*rng+1):  # high-M span, no -adj_M: lend to contrast is not adj only, reflected in ave?
                     ''' if local ave:
                     loc_ave = (ave + (P.M - adj_M) / P.L) / 2  # mean ave + P_ave, possibly negative?
                     loc_ave_min = (ave_min + (P.M - adj_M) / P.L) / 2  # if P.M is min?
@@ -181,7 +181,7 @@ def intra_P_(rootP, rval_P, rdn, rng, fPm):  # recursive cross-comp and form_P_ 
                     '''
                     rdn+=1; rng+=1
                     sub_Pm_, sub_Pd_ = [], []
-                    P.sublayers += [[(rdn, rng, sub_Pm_, sub_Pd_, [], [])]]  # last []s are xsub_pmdertt_, _xsub_pddertt_, add sub_Pp_s?
+                    P.sublayers += [[(rdn, rng, sub_Pm_, sub_Pd_, [], [], [], [])]]  # last few []s are xsub_pmdertt_, _xsub_pddertt_, sub_Ppm_s, sub_Ppd_s 
                     rdert_ = range_comp(P.dert_)  # rng+, skip predictable next dert, local ave? rdn to higher (or stronger?) layers
                     sub_Pm_[:] = form_P_(P, rdert_, rdn, rng, fPm=True)  # cluster by rm sign
                     sub_Pd_[:] = form_P_(P, rdert_, rdn, rng, fPm=False)  # cluster by rd sign
@@ -193,20 +193,21 @@ def intra_P_(rootP, rval_P, rdn, rng, fPm):  # recursive cross-comp and form_P_ 
                     rdn+=1; rng+=1
                     sub_Pm_, sub_Pd_ = [], []  # initialize layers top-down, concatenate by intra_P_ in form_P_
                     # brackets: 1st: param set, 2nd: sublayer concatenated from several root_Ps, 3rd: hierarchy of sublayers:
-                    P.sublayers += [[(rdn, rng, sub_Pm_, sub_Pd_, [], [])]]  # last []: sub_rval_Pp_ from line_PPs
+                    P.sublayers += [[(rdn, rng, sub_Pm_, sub_Pd_, [], [], [], [])]]  # last few []s are xsub_pmdertt_, _xsub_pddertt_, sub_Ppm_s, sub_Ppd_s 
                     ddert_ = deriv_comp(P.dert_)  # i is d
                     sub_Pm_[:] = form_P_(P, ddert_, rdn, rng, fPm=True)  # cluster by mm sign
                     sub_Pd_[:] = form_P_(P, ddert_, rdn, rng, fPm=False)  # cluster by md sign
                 else:
                     P.sublayers += [[]]  # empty subset to preserve index in sublayer
 
-            if rootP:
-                if P.sublayers:
-                    comb_sublayers = [comb_subset_ + subset_ for comb_subset_, subset_ in
-                                      zip_longest(comb_sublayers, P.sublayers, fillvalue=[]) ]
-                    return comb_sublayers
-            else:
-                return rval_P  # each P has new sublayers, comb_sublayers is not needed
+            if rootP and P.sublayers:
+                comb_sublayers = [comb_subset_ + subset_ for comb_subset_, subset_ in
+                                  zip_longest(comb_sublayers, P.sublayers, fillvalue=[]) ]
+
+    if rootP:
+        return comb_sublayers
+    else:
+        return rval_P  # each P has new sublayers, comb_sublayers is not needed
 
 
 def range_comp(dert_):  # cross-comp of 2**rng- distant pixels: 4,8,16.., skipping intermediate pixels
@@ -284,7 +285,7 @@ if __name__ == "__main__":
     '''
     fpickle = 2  # 0: load; 1: dump; 2: no pickling
     render = 0
-    fline_PPs = 0
+    fline_PPs = 1
     start_time = time()
     if fpickle == 0:
         # Read frame_of_patterns from saved file instead
