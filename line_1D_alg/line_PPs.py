@@ -91,7 +91,7 @@ aves = [ave_mL, ave_mI, ave_mD, ave_mM]
 
 def line_PPs_root(root_P_t):  # P_t: Pm_, Pd_; higher-level input is nested to the depth = 2*elevation (level counter), or 2^elevation?
 
-    sub_rval_Pp_t_t = []  # replace root_P_t
+    sub_rval_Pp_t_t = []  # replaces root_P_t
     for i, rval_P_ in enumerate(root_P_t):  # fPd = i: rval_Pm_| rval_Pd_
         if len(rval_P_) > 2:
             splice(rval_P_)  # for discontinuous search
@@ -392,17 +392,16 @@ def compact(rval_Pp_, pdert1_, pdert2_, param_name, fPd):  # re-eval Pps, Pp.pde
         if pdert_val <= 0:
             Pp.pdert_ = []  # remove pdert_
 
-# need further update after implementing parallel sub_Ps
+
 def intra_Pp_(Pp_, param_name, fPd):  # evaluate for sub-recursion in line Pm_, pack results into sub_Pm_
 
     comb_sublayers = []  # combine into root P sublayers[1:]
-    comb_subDerts=[]
-    # each Pp is evaluated for incremental range and derivation xcomp, as in line_patterns but with local aves
+    # each Pp may be compared over incremental range and derivation, as in line_patterns but with local aves
 
     for Pp in Pp_:  # each sub_layer is nested to depth = sublayers[n]
         if Pp.L > 2:  # no rel_adj_M = adj_M / -P.M: discontinuous search?
             mean_M = Pp.M / Pp.L  # for internal Pd eval, +opposite-side mean_M?
-
+            # all params norm?
             if fPd:  # Pp is Ppd
                 if abs(Pp.D) * mean_M > ave_D * Pp.Rdn and Pp.L > 3:  # mean_M from adjacent +ve Ppms
                     # search in top sublayer, eval by pdert.d:
@@ -464,7 +463,7 @@ def sub_search_draft(P_, fPd):  # search in top sublayer per P / sub_P, after P_
                 if len(sub_rval_P_) > 2:
                     splice(sub_rval_P_)  # for discontinuous search
                     # should be no feedback in subsearch?
-        
+
                     for sub_rval_P in sub_rval_P_:
                         sub_P_ = [sub_P for (sub_rval, sub_P) in sub_rval_P[1]]  # rval_P[0] is Rval
                         if fPd:
@@ -478,8 +477,8 @@ def sub_search_draft(P_, fPd):  # search in top sublayer per P / sub_P, after P_
                             sub_rval_Pp_t = form_Pp_root(sub_Pdert_t, sub_dert1_, sub_dert2_, i)
                             subset[6+i].append(sub_rval_Pp_t)
                             # recursion via form_P_: deeper sublayers search is selective per sub_P
-                    
-                    
+
+
 def comp_sublayers(_P, P, root_v):  # if pdert.m -> if summed params m -> if positional m: mx0?
     # replace root_v with root_vt: separate evaluations?
 
@@ -538,7 +537,7 @@ def form_comp_Derts(_P, P, root_v):
     for _sublayer, sublayer in zip(_P.sublayers, P.sublayers):
         for i, isublayer in enumerate([_sublayer, sublayer]):  # list of subsets: index 0 = _P.sublayers, index 1 = P.sublayers
             nsub = 0
-            for subset in isublayer: 
+            for subset in isublayer:
                 nsub += len(subset[2]) + len(subset[3])  # or nsub_t, for separate form mDert | dDert eval?
             if root_v * nsub > ave_M * 5:  # ave_Dert, separate eval for m and d?
                 subDertt = [[0, 0, 0, 0], [0, 0, 0, 0]]  # Pm,Pd' L,I,D,M summed in sublayer
