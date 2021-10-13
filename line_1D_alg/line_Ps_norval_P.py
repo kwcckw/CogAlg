@@ -23,7 +23,7 @@ import sys
 from os.path import dirname, join, abspath
 
 from numpy import int16, int32
-sys.path.insert(0, abspath(join(dirname("CogAlg"), '../../../AppData/Roaming/JetBrains/PyCharmCE2021.2')))
+sys.path.insert(0, abspath(join(dirname("CogAlg"), '..')))
 import cv2
 # import argparse
 import pickle
@@ -61,7 +61,7 @@ ave_D = 5  # min |D| for initial incremental-derivation comparison(d_)
 ave_nP = 5  # average number of sub_Ps in P, to estimate intra-costs? ave_rdn_inc = 1 + 1 / ave_nP # 1.2
 ave_rdm = .5  # obsolete: average dm / m, to project bi_m = m * 1.5
 ave_splice = 50  # to merge a kernel of 3 adjacent Ps
-init_y = 500  # starting row, 0 for the whole frame, mostly not needed
+init_y = 0  # starting row, 0 for the whole frame, mostly not needed
 halt_y = 502  # ending row, 999999999 for arbitrary image
 '''
     Conventions:
@@ -127,6 +127,7 @@ def form_P_(rootP, dert_, rdn, rng, fPm):  # accumulation and termination, rdn a
         x += 1
         _sign = sign
 
+
     intra_P_(rootP, P_, rdn, rng, fPm)
 
     return P_  # used only if not rootP, else packed in rootP.sublayers
@@ -171,10 +172,10 @@ def intra_P_(rootP, P_, rdn, rng, fPm):  # recursive cross-comp and form_P_ insi
         if rootP and P.sublayers:
             comb_sublayers = [comb_subset_ + subset_ for comb_subset_, subset_ in
                               zip_longest(comb_sublayers, P.sublayers, fillvalue=[]) ]
-    if rootP:
-        return comb_sublayers
-    else:
-        return P_  # each P has new sublayers, comb_sublayers is not needed
+    
+    if rootP: rootP.sublayers += comb_sublayers
+
+    return P_  # each P has new sublayers, comb_sublayers is not needed
 
 
 def range_comp(dert_):  # cross-comp of 2**(rng+1) - distant pixels, skipping intermediate pixels:  rng=1,2,3 -> kernel=4,8,16...
@@ -252,7 +253,7 @@ if __name__ == "__main__":
     '''
     fpickle = 2  # 0: load; 1: dump; 2: no pickling
     render = 0
-    fline_PPs = 0
+    fline_PPs = 1
     start_time = time()
     if fpickle == 0:
         # Read frame_of_patterns from saved file instead
@@ -273,12 +274,12 @@ if __name__ == "__main__":
         plt.figure(); plt.imshow(image, cmap='gray'); plt.show()  # show the image below in gray
 
     if fline_PPs:  # debug line_PPs
-        from line_PPs import *
+        from line_PPs_norval_P import *
         frame_Pp_t = []
 
         for y, P_t in enumerate(frame_of_patterns_):  # each line_of_patterns is (Pm_, Pd_)
-            if len(P_t) > 1: Pp_tt = line_PPs_root(P_t)  # output is a nested tuple
-            else:            Pp_tt = [], []
+            if len(P_t) > 1: Pp_t = line_PPs_root(P_t)  # output is a nested tuple
+            else:           Pp_t = [], []
             frame_Pp_t.append(( Pp_t ))
 
         # draw_PP_(image, frame_Pp_t)  # debugging
