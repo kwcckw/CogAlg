@@ -97,9 +97,13 @@ def line_PPs_root(rootPp, root_P_t):  # root_P_t: Pm_, Pd_; higher-level input i
         # M = sum([P.M for P in P_])  # not needed, search is a default now, else convert M | abs(D) to V
         # Rdn = sum([P.Rdn for P in P_])
         if len(P_) > 1:
-            Pdert_t, dert1_, dert2_ = search(P_, i)  # returns LPp_, IPp_, DPp_, MPp_
+            
             # form Pp_ tuple, as in line_patterns cross_comp:
+            # fPd should be same for search and form_Pp_root, else we will facing error where search_param is true only when fPd=0
+            Pdert_t, dert1_, dert2_ = search(P_, fPd=False)  # returns LPp_, IPp_, DPp_, MPp_
             Ppm_t = form_Pp_root(rootPp, Pdert_t, dert1_, dert2_, rdn=1, fPd=False)  # eval intra_Pp_ (calls form_Pp_)
+            
+            Pdert_t, dert1_, dert2_ = search(P_, fPd=True) 
             Ppd_t = form_Pp_root(rootPp, Pdert_t, dert1_, dert2_, rdn=1, fPd=True)
             # each element of Ppm_t and Ppd_t is LPp_, IPp_, DPp_, MPp_
             Pp_ttt.append((Ppm_t, Ppd_t))
@@ -173,7 +177,7 @@ def search_param_(P_, ave, rave):  # variable-range search in mdert_, only if pa
             pdert = Cpdert(i=dert.i, p=dert.p, d=dert.d, m=dert.m)  # convert Cdert to Cpdert
             curr_M = pdert.m * rave + (_P.M + P.M) / 2  # P.M is bilateral, no fPd in search_param
 
-            if curr_M > ave_sub and (_P.sublayers and P.sublayers) and (_P.sublayers[0] and P.sublayers[0]):  # comp sub_P_s, for core I only?
+            if curr_M > ave_sub and not emptylist(_P.sublayers) and not emptylist(P.sublayers):  # comp sub_P_s, for core I only?
                 comp_sublayers(P_[i], P_[j], pdert.m)  # between sublayers[0], forms pdert.sub_M:
             if curr_M + pdert.sub_M > ave_M * 4:  # 4 = ave_cM coef
                 break  # 1st match takes over connectivity search in the next loop
@@ -409,17 +413,16 @@ def sub_search_draft(P_, fPd):  # search in top sublayer per P / sub_P, after P_
                     sub_P_ = splice(sub_P_, fPd)  # for discontinuous search
                     # should be no feedback in subsearch?
 
-                    if fPd:
-                        if abs(P.D) > ave_D:  # or if P.D + pdert.d + sublayer.Dert.D
-                            sub_Pdert_t, sub_dert1_, sub_dert2_ = search(sub_P_, i)
-                            sub_Pp_t = form_Pp_root(sub_Pdert_t, sub_dert1_, sub_dert2_, i)
-                            subset[7+i].append(sub_Pp_t)
-                            # recursion via form_P_
-                    elif P.M > ave_M:  # or if P.M + pdert.m + sublayer.Dert.M
-                        sub_Pdert_t, sub_dert1_, sub_dert2_ = search(sub_P_, i)
-                        sub_Pp_t = form_Pp_root(sub_Pdert_t, sub_dert1_, sub_dert2_, i)
-                        subset[6+i].append(sub_Pp_t)
-                        # recursion via form_P_: deeper sublayers search is selective per sub_P
+                     # or if P.D + pdert.d + sublayer.Dert.D 
+                    if (fPd and abs(P.D) > ave_D) or (P.M > ave_M): # or if P.M + pdert.m + sublayer.Dert.M
+                            sub_Pdert_t, sub_dert1_, sub_dert2_ = search(sub_P_, fPd=False) 
+                            sub_Ppm_t = form_Pp_root(None, sub_Pdert_t, sub_dert1_, sub_dert2_, rdn=1, fPd=False)
+                            subset[6].append(sub_Ppm_t)
+                            
+                            sub_Pdert_t, sub_dert1_, sub_dert2_ = search(sub_P_, fPd=True) 
+                            sub_Ppd_t = form_Pp_root(None, sub_Pdert_t, sub_dert1_, sub_dert2_, rdn=1, fPd=True)
+                            subset[7].append(sub_Ppd_t)
+                            # recursion via form_P_: deeper sublayers search is selective per sub_P
 
 
 def comp_sublayers(_P, P, root_v):  # if pdert.m -> if summed params m -> if positional m: mx0?
@@ -463,7 +466,7 @@ def comp_sublayers(_P, P, root_v):  # if pdert.m -> if summed params m -> if pos
                     if _xsub_pdertt[0]:  # at least 1 sub_pdert, real min length ~ 8, very unlikely
                         sub_Pdertt_ = [(_xsub_pdertt[0], P_), (_xsub_pdertt[1], P_), (_xsub_pdertt[2], P_), (_xsub_pdertt[3], P_)]
                         # form 4-tuple of xsub_Pp_s:
-                        xsub_Pp_t = form_Pp_root(sub_Pdertt_, [], [], i)
+                        xsub_Pp_t = form_Pp_root(None, sub_Pdertt_, [], [], rdn=1, fPd=i)
                         _xsub_pdertt_[-1][:] = xsub_Pp_t
                         xsub_pdertt_[-1][:] = _xsub_pdertt_[-1]  # bilateral assignment
                     else:
@@ -545,15 +548,17 @@ def comp_sub_P(_sub_P, sub_P, xsub_pdertt, P_, root_v, fPd):
             P_.append(sub_P)  # same sub_P for all xsub_Pps
 
         V += xsub_P_vt[0] + xsub_P_vt[1]  # or two separate values for comp_sublayers?
-        if V > ave_M * 4 and _sub_P.sublayers and sub_P.sublayers:  # 4: ave_comp_sublayers coef
+        if V > ave_M * 4 and not emptylist(_sub_P.sublayers) and not emptylist(sub_P.sublayers):  # 4: ave_comp_sublayers coef
             comp_sublayers(_sub_P, sub_P, V)  # recursion for deeper layers
     else:
         fbreak = 1  # only sub_Ps with relatively proximate position in sub_P_|_sub_P_ are compared
 
     return fbreak
 
-
-def norm_feedback(P_, fPd):
+# need to be updated
+def norm_feedback(P_):
+    pass
+    '''
     fbM = fbL = 0
 
     for P in P_:
@@ -565,6 +570,15 @@ def norm_feedback(P_, fPd):
                 # also terminate Fspan: same-filter frame_ with summed params, re-init at all 0s
 
         P.I /= P.L; P.D /= P.L; P.M /= P.L  # immediate normalization to a mean
+    '''
+
+def emptylist(in_list):
+    '''
+    check if nested list is totally empty
+    '''
+    if isinstance(in_list, list): # Is a list
+        return all( map(emptylist, in_list) )
+    return False # Not a list
 
 
 def splice(P_, fPd):  # currently not used, replaced by compact() in line_PPs
