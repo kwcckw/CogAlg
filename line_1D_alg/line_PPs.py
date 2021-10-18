@@ -195,7 +195,7 @@ def form_Pp_root(rootPp, Pdert_t, pdert1_, pdert2_, rng, fPd):  # add rootPp for
         if param_name == "I_" and not fPd:
             Pp_ = form_Pp_rng(rootPp, P_, Pdert_, pdert1_, pdert2_, rdn_, rng)  # eval splice P_ by match induction, no I mag induction
         else:
-            Pp_ = form_Pp_(rootPp, P_, Pdert_, param_name, rdn_, rng, fPd=0)
+            Pp_ = form_Pp_(rootPp, P_, Pdert_, param_name, rdn_, rng, fPd=fPd) # should be follow the input fPd?
         Pp_t.append(Pp_)  # Ppm | Ppd
 
     return Pp_t
@@ -381,19 +381,22 @@ def intra_Pp_(rootPp, Pp_, param_name, rng, fPd):  # evaluate for sub-recursion 
                     rng += 1
                     rdn_ = [rdn+1 for rdn in Pp.rdn_[:-1]]  # replaces lay_rdn += 1
                     sub_Ppm_, sub_Ppd_ = [], []
+                    rpdert_ = []
                     Pp.sublayers = [[( fPd, sub_Ppm_, sub_Ppd_ )]]
                     if param_name == "I_":  # range+ by incr ave: less term by match, and decr proj_P = dert.m * rave ((M/L) / ave): less term by miss
                         # also skip negL, for 1s and last pderts in Pp only?
-                        rpdert_, rP_ = search_param_(Pp.P_, Pp.rdn_, (ave + Pp.M) / 2, rave=Pp.M / ave)
+                        rpdert_, rP_ = search_param_(Pp.P_, (ave + Pp.M) / 2, rdn = Pp.Rdn, rave=Pp.M / ave)
                         sub_Ppm_[:] = form_Pp_rng(Pp, Pp.P_, rpdert_, [], [], rdn_, rng)  # no P splicing by distant xcomp?
-                    else:
-                        rpdert_ = []  # fixed rng comp: accumulate prior-rng derivatives?
-                        for _pdert, pdert in zip(Pp.pdert_[:-1+rng], Pp.pdert_[1+rng:]):
-                            dert = comp_param(_pdert[0], pdert[0], param_name[0], ave)
+                    elif len(Pp.pdert_) > 1+rng:
+                         # fixed rng comp: accumulate prior-rng derivatives?
+                        for _pdert, pdert in zip(Pp.pdert_[:-1-rng], Pp.pdert_[1+rng:]):
+                            _param = _pdert.m; param = pdert.m
+                            if param_name == "L_" and param == 0: param = 1 # prevent zero division for division comparison
+                            dert = comp_param(_param, param, param_name[0], ave)
                             rpdert_ += [Cpdert(i=dert.i, p=dert.p, d=dert.d, m=dert.m)]
-                            sub_Ppm_[:] = form_Pp_(Pp, Pp.P_, rpdert_, param_name, rdn_, rng, fPd=False)  # cluster by m sign, eval intra_Pm_
-
-                    sub_Ppd_[:] = form_Pp_(Pp, Pp.P_, rpdert_, param_name, rdn_, rng, fPd=True)  # cluster rpdert_ by rd
+                        if rpdert_: sub_Ppm_[:] = form_Pp_(Pp, Pp.P_, rpdert_, param_name, rdn_, rng, fPd=False)  # cluster by m sign, eval intra_Pm_
+                    # reuse the rpdert_ from above
+                    if rpdert_: sub_Ppd_[:] = form_Pp_(Pp, Pp.P_, rpdert_, param_name, rdn_, rng, fPd=True)  # cluster rpdert_ by rd
                 else:
                     Pp.sublayers += [[]]  # empty subset to preserve index in sublayer
 
