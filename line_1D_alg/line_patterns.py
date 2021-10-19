@@ -61,7 +61,7 @@ ave_D = 5  # min |D| for initial incremental-derivation comparison(d_)
 ave_nP = 5  # average number of sub_Ps in P, to estimate intra-costs? ave_rdn_inc = 1 + 1 / ave_nP # 1.2
 ave_rdm = .5  # obsolete: average dm / m, to project bi_m = m * 1.5
 ave_splice = 50  # to merge a kernel of 3 adjacent Ps
-init_y = 500  # starting row, set 0 for the whole frame, mostly not needed
+init_y = 0  # starting row, set 0 for the whole frame, mostly not needed
 halt_y = 502  # ending row, set 999999999 for arbitrary image
 '''
     Conventions:
@@ -98,6 +98,8 @@ def cross_comp(frame_of_pixels_):  # converts frame_of_pixels to frame_of_patter
             mrdn = m + ave < abs(d)
             dert_.append( Cdert( i=i, p=p, d=d, m=m, mrdn=mrdn) )
             _i = i
+            
+        # why we need rdnm_ or rdnd_ here?
         # form patterns:
         Pm_, rdnm_ = form_P_(None, dert_, rdn=1, rng=1, fPm=True)  # rootP=None, eval intra_P_ (calls form_P_)
         Pd_, rdnd_ = form_P_(None, dert_, rdn=1, rng=1, fPm=False)
@@ -129,7 +131,7 @@ def form_P_(rootP, dert_, rdn, rng, fPm):  # accumulation and termination, rdn a
 
     intra_P_(rootP, P_, rdn, rng, fPm)
 
-    return P_  # used only if not rootP, else packed in rootP.sublayers
+    return P_ # used only if not rootP, else packed in rootP.sublayers
 
 
 def intra_P_(rootP, P_, rdn, rng, fPm):  # recursive cross-comp and form_P_ inside selected sub_Ps in P_
@@ -253,7 +255,7 @@ if __name__ == "__main__":
     '''
     fpickle = 2  # 0: load; 1: dump; 2: no pickling
     render = 0
-    fline_PPs = 0
+    fline_PPs = 1
     start_time = time()
     if fpickle == 0:
         # Read frame_of_patterns from saved file instead

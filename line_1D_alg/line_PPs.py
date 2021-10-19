@@ -141,7 +141,7 @@ def search(P_, fPd):  # cross-compare patterns within horizontal line
     LP_ = P_[:-1]
     dert2_ = dert2_[:-1]  # due to filled CP() in P2 ( for loop above )
     if not fPd:
-        Idert_, IP_ = search_param_(P_, [], ave_mI, rave=1)  # comp x variable range, depending on M of Is
+        Idert_, IP_ = search_param_(P_, None, 0, ave_mI, rave=1)  # comp x variable range, depending on M of Is
         Mdert_ = Mdert_[:-1]  # due to filled CP() in P2 ( for loop above )
         DP_, MP_ = P_[:-1], P_[:-2]
     else:
@@ -152,58 +152,65 @@ def search(P_, fPd):  # cross-compare patterns within horizontal line
     return Pdert_t, dert1_, dert2_
 
 
-def search_param_(P_, intra_t, ave, rave):  # variable-range search in mdert_, only if param is core param?
+def search_param_(P_, Pp, start_index, ave, rave):  # variable-range search in mdert_, only if param is core param?
 
     # higher local ave for extended rng: -> lower m and term by match, and higher proj_M?
-    Idert_, _P_ = [], []  # line-wide (i, p, d, m, negL, negM, negiL)
+    Idert_, _P_ = [], [] # line-wide (i, p, d, m, negL, negM, negiL)
 
-    if intra_t:  # call from intra_Pp_
-        Pp, first = intra_t
-        for i, _P in enumerate(P_[first], P_[first+Pp.L]):  # Pp_[x-1].pdert_[-1], Pp.pdert_[-1]  # for 1st, last pderts only
-            if i:
-                j = i + 1 + Pp.pdert[-1].negL  # skip last negL
-                search_param_continue_draft(P_, j, ave, rave, freversed=False)
-            else:
-                j = i - 1  # search backwards
-                search_param_continue_draft(P_, j, ave, rave, freversed=True)
+    if Pp: end_index = start_index + Pp.L
+    else:  end_index = -1
 
-    else:  # call from line_patterns, old scheme
-        for i, _P in enumerate(P_[:-1]):
-            negM = 0
-            _pI = _P.I - (_P.D / 2)  # forward project by _D
-            j = i + 1  # init with positive-M Is only: internal match projects xP I match:
-            search_param_continue_draft(P_, j, ave, rave, freversed=False)
+    for i, _P in enumerate(P_[start_index:end_index]):
+        
+        # forward search
+        j = i + 1  # init with positive-M Is only: internal match projects xP I match
+        if Pp: j += Pp.pdert_[-1].negL  # skip last negL
+        pdert_forward = search_param_continue_draft(P_, _P, j, ave, rave, freversed=False)
+        if pdert_forward:  # after extended search, if any:
+            Idert_.append(pdert_forward)
+            _P_.append(_P)
 
-    # below is not updated
-    if "pdert" in locals():  # after extended search, if any:
-        Idert_.append(pdert)
-        _P_.append(_P)
-        del pdert  # prevent reuse of same pdert in multiple loops
+        # search backwards
+        if Pp: 
+            j = i - 1  
+            pdert_backward = search_param_continue_draft(P_, _P, j, ave, rave, freversed=True)
+            if pdert_backward:  # after extended search, if any:
+                Idert_.append(pdert_backward)
+                _P_.append(_P)
 
     return Idert_, _P_
 
 
-def search_param_continue_draft(P_, j, ave, rave, freversed):
+def search_param_continue_draft(P_, _P, j, ave, rave, freversed):
 
-    # below is not updated
-    while _P.M + negM > ave_M and j < len(P_):  # starts with positive _P.Ms, but continues over negM if > ave
+    pdert = None
+    negM = 0
+    _pI = _P.I - (_P.D / 2)  # forward project by _D
+    
+    # condition to continue search forward(left to right) OR backward(right to left)
+    while _P.M + negM > ave_M and ((not freversed and j < len(P_)) or (freversed and j >= 0)) : 
+        # starts with positive _P.Ms, but continues over negM if > ave
+          
         P = P_[j]
-            pI = P.I + (P.D / 2)  # back-project by D
-            dert = comp_param(_pI, pI, "I_", ave)  # param is compared to prior-P _param
-            pdert = Cpdert(i=dert.i, p=dert.p, d=dert.d, m=dert.m)  # convert Cdert to Cpdert
-            curr_M = pdert.m * rave + (_P.M + P.M) / 2  # P.M is bilateral, no fPd in search_param
+        pI = P.I + (P.D / 2)  # back-project by D
+        dert = comp_param(_pI, pI, "I_", ave)  # param is compared to prior-P _param
+        pdert = Cpdert(i=dert.i, p=dert.p, d=dert.d, m=dert.m)  # convert Cdert to Cpdert
+        curr_M = pdert.m * rave + (_P.M + P.M) / 2  # P.M is bilateral, no fPd in search_param
 
-            if curr_M > ave_sub * P.Rdn and _P.sublayers[0] and P.sublayers[0]:  # comp sub_P_s, for core I only?
-                comp_sublayers(P_[i], P_[j], pdert.m)  # forms pdert.sub_M:
-            if curr_M + pdert.sub_M > ave_M * P.Rdn * 4:  # ave_cM
-                break  # 1st match takes over connectivity search in the next loop
-            else:
-                pdert.negM += curr_M - ave_M  # known to be negative, accum per dert
-                pdert.negiL += P.L
-                pdert.negL += 1
-                negM = pdert.negM
-                j += 1
+        if curr_M > ave_sub * P.Rdn and _P.sublayers[0] and P.sublayers[0]:  # comp sub_P_s, for core I only?
+            comp_sublayers(_P, P, pdert.m)  # forms pdert.sub_M:
+        if curr_M + pdert.sub_M > ave_M * P.Rdn * 4:  # ave_cM
+            break  # 1st match takes over connectivity search in the next loop
+        else:
+            pdert.negM += curr_M - ave_M  # known to be negative, accum per dert
+            pdert.negiL += P.L
+            pdert.negL += 1
+            negM = pdert.negM
+            
+            if freversed: j -= 1
+            else: j += 1
 
+    return pdert
 
 def form_Pp_root(rootPp, Pdert_t, pdert1_, pdert2_, fPd):  # add rootPp for form_Pp_, if called from intra_Pp_
     Pp_t = []
@@ -242,7 +249,7 @@ def form_Pp_(rootPp, P_, pdert_, param_name, rdn_, fPd):
         x += 1
         _sign = sign
 
-    intra_Pp_(rootPp, Pp_, param_name, rdn_, fPd)
+    intra_Pp_(rootPp, Pp_, param_name, fPd)
 
     return Pp_
 
@@ -398,16 +405,19 @@ def intra_Pp_(rootPp, Pp_, param_name, fPd):  # evaluate for sub-recursion in li
                 if Pp.M > ave_M * Pp.Rdn and param_name=="I_":  # variable costs, add fixed costs? -lend to contrast?
                     sub_search_draft(Pp, Pp.P_, fPd)  # search in top sublayer, eval by pdert.m
                     # +Ppm -> sub_Ppm_: low-variation span, eval rng_comp, rng is represented by negL, no rng+=1
-                    rdn_ = [rdn+1 for rdn in Pp.rdn_[:-1]]  # replaces layer_rdn += 1
                     sub_Ppm_, sub_Ppd_ = [], []
                     Pp.sublayers = [[( fPd, sub_Ppm_, sub_Ppd_ )]]
                     # range+ by incr ave: less term by match, and decr proj_P = dert.m * rave ((M/L) / ave): less term by miss?
                     # pass Pdert_t[1]: (Idert_, IP_), + 1st, lst dert: single Pp search, reform Pp_?
-                    first = SL
-                    rpdert_, rP_ = search_param_(rootPp.P_, [Pp, first], (ave + Pp.M) / 2, rave=Pp.M / ave)
-                    sub_Ppm_[:] = form_Pp_rng(Pp, Pp.P_, rpdert_, [], [], rdn_)  # no P splicing by distant xcomp?
+                    start_index = SL
+                    if rootPp: # rootPp could be None from the root layer
+                        rpdert_, rP_ = search_param_(rootPp.P_, Pp, start_index, (ave + Pp.M) / 2, rave=Pp.M / ave)
+                    else: # not sure about this
+                        rpdert_, rP_ = search_param_(Pp.P_, None, 0, (ave + Pp.M) / 2, rave=Pp.M / ave)   
+                    rdn_ = [P.Rdn+1 for P in rP_] # recompute rdn_
+                    sub_Ppm_[:] = form_Pp_rng(Pp, rP_, rpdert_, [], [], rdn_)  # no P splicing by distant xcomp?
                     # Ppds with +rval only, indices vs. empty subsets?:
-                    sub_Ppd_[:] = form_Pp_(Pp, Pp.P_, rpdert_, param_name, rdn_, fPd=True)  # cluster rpdert_ by rd
+                    sub_Ppd_[:] = form_Pp_(Pp, rP_, rpdert_, param_name, rdn_, fPd=True)  # cluster rpdert_ by rd
                 else:
                     Pp.sublayers += [[]]  # empty subset to preserve index in sublayer
 
