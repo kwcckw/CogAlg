@@ -157,7 +157,7 @@ def search_param_(P_, Pp, first, ave, rave):  # variable-range search in mdert_,
     # higher local ave for extended rng: -> lower m and term by match, and higher proj_M?
     Idert_, _P_ = [], []  # line-wide (i, p, d, m, negL, negM, negiL)
 
-    if Pp: iP_ = [P_[first], P_[first + Pp.L]]
+    if Pp: iP_ = [P_[first], P_[first + Pp.L-1]]
     else:  iP_ = P_
     for i, _P in enumerate(iP_):
         if Pp:  # call from intra_Pp_
@@ -165,20 +165,23 @@ def search_param_(P_, Pp, first, ave, rave):  # variable-range search in mdert_,
             else: j = i - 1; freversed=True
             add_pdert = search_param_continue(P_, _P, j, ave, rave, freversed)
             if add_pdert:  # after extended search, if any:
-                if freversed:
+                if freversed: # backward search
                     ext_Idert_ = [add_pdert]; ext_P_ = [_P]
-                    ext_Idert_ += Idert_; ext_P_ += _P_
-                else:
-                    ext_Idert_ = Idert_.append(add_pdert)
-                    ext_P_ = _P_.append(_P)
+                    ext_Idert_ += Idert_; ext_P_ += _P_ # accumulate Idert and _P_ from forward search
+                else: # forward search
+                    Idert_.append(add_pdert)
+                    _P_.append(_P)
         else:  # call from search
             j = i + 1
             add_pdert = search_param_continue(P_, _P, j, ave, rave, freversed=False)
             if add_pdert:  # after extended search, if any:
-                ext_Idert_ = Idert_.append(add_pdert)
-                ext_P_ = _P_.append(_P)
-
-    return ext_Idert_, ext_P_
+                Idert_.append(add_pdert)
+                _P_.append(_P)
+                
+    if "ext_Idert_" in locals():
+        return ext_Idert_, ext_P_   
+    else: # call from search
+        return Idert_, _P_    
 
 
 def search_param_continue(P_, _P, j, ave, rave, freversed):
@@ -206,8 +209,7 @@ def search_param_continue(P_, _P, j, ave, rave, freversed):
             pdert.negL += 1
             negM = pdert.negM
 
-            if freversed: j -= 1
-            else: j += 1
+            if not freversed: j += 1 # there would be no consecutive search for backward search
 
     return pdert
 
@@ -262,7 +264,6 @@ def form_Pp_rng(rootPp, P_, pdert_, pdert1_, pdert2_):  # cluster Pps by cross-p
     for i, (_pdert, _P) in enumerate(zip(pdert_, P_)):
         if _pdert.m + _P.M > ave *_pdert.rdn:  # positive Pps only, else too much overlap? +_P.M: value is combined across P levels?
             # initialize Pp:
-            if not isinstance(_pdert, Cpdert): _pdert = Cpdert(i=_pdert.i, p=_pdert.p, d=_pdert.d, m=_pdert.m)  # convert Cdert to Cpdert
             if not isinstance(_pdert.Pp, CPp):  # _pdert is not in any Pp
                 Pp = CPp(L=1, iL=_P.L, I=_pdert.p, D=_pdert.d, M=_pdert.m, Rdn=_pdert.rdn+_P.Rdn, negiL=_pdert.negiL, negL=_pdert.negL, negM=_pdert.negM,
                          x0=i, ix0=_P.x0, pdert_=[_pdert], P_=[_P], sublayers=[])
@@ -274,7 +275,6 @@ def form_Pp_rng(rootPp, P_, pdert_, pdert1_, pdert2_):  # cluster Pps by cross-p
 
             while (j <= len(pdert_)-1):
                 pdert = pdert_[j]; P = P_[j]  # no pop: maybe used by other _derts
-                if not isinstance(pdert, Cpdert): pdert = Cpdert(i=pdert.i, p=pdert.p, d=pdert.d, m=pdert.m, rdn=pdert.rdn)  # convert Cdert to Cpdert
                 if pdert.m + P.M > ave*pdert.rdn:
                     if isinstance(pdert.Pp, CPp):  # unique Pp per dert in row Pdert_
                         # merge Pp with dert.Pp, if any:
@@ -315,7 +315,7 @@ def sum_rdn_(param_names, Pdert_t, fPd):
     name_pairs = (('I', 'L'), ('I', 'D'), ('I', 'M'), ('L', alt), ('D', 'M'))  # pairs of params redundant to each other
     # rdn_t = [[], [], [], []] is replaced with pdert.rdn
 
-    for i, Ldert, Idert, Ddert, Mdert in enumerate( zip_longest(Pdert_t[0][0], Pdert_t[1][0], Pdert_t[2][0], Pdert_t[3][0], fillvalue=Cdert())):
+    for i, (Ldert, Idert, Ddert, Mdert) in enumerate( zip_longest(Pdert_t[0][0], Pdert_t[1][0], Pdert_t[2][0], Pdert_t[3][0], fillvalue=Cpdert())):
         # pdert per _P in P_, 0: Ldert_, 1: Idert_, 2: Ddert_, 3: Mdert_
         # P M|D rdn + dert m|d rdn:
         rdn_pairs = [[fPd, 0], [fPd, 1-fPd], [fPd, fPd], [0, 1], [1-fPd, fPd]]  # rdn in olp Ps: if fPd: I, M rdn+=1, else: D rdn+=1
@@ -339,8 +339,11 @@ def sum_rdn_(param_names, Pdert_t, fPd):
                     Rdn += rdn[0]
                 elif param_name[0] == name_in_pair[1]:
                     Rdn += rdn[1]
-
-            Pdert_t[j][0][i].rdn = Rdn  # [Ldert.rdn_, Idert.rdn_, Ddert.rdn_, Mdert.rdn_]
+                       
+            # convert Cdert to Cpdert 
+            if len(Pdert_t[j][0]) > i and not isinstance(Pdert_t[j][0][i], Cpdert):
+                dert = Pdert_t[j][0][i] # [Ldert.rdn_, Idert.rdn_, Ddert.rdn_, Mdert.rdn_]
+                Pdert_t[j][0][i] = Cpdert(i=dert.i, p=dert.p, d=dert.d, m=dert.m, Rdn=Rdn)
 
     return Pdert_t  # rdn is packed in pderts
 
@@ -384,10 +387,11 @@ def intra_Pp_(rootPp, Pp_, param_name, fPd):  # evaluate for sub-recursion in li
 
     for i, Pp in enumerate(Pp_):  # each sub_layer is nested to depth = sublayers[n]
         if Pp.L > 1:  # min L for both forks
+            # increase pdert rdn for deeper layer?
+            for pdert in Pp.pdert_: pdert.rdn += 1   
             if fPd:  # Pp is Ppd
                 if abs(Pp.D) + Pp.M > ave_D * Pp.Rdn and Pp.L > 2:  # + Pp.M: borrow potential, regardless of Rdn?
                     sub_search_draft(Pp, Pp.P_, fPd)  # search in top sublayer, eval by pdert.d
-                    rdn_ = [rdn + 1 for rdn in Pp.rdn_[:-1]]  # replaces layer_rdn += 1
                     sub_Ppm_, sub_Ppd_ = [], []
                     Pp.sublayers = [[(fPd, sub_Ppm_, sub_Ppd_)]]
                     ddert_ = []
@@ -405,12 +409,14 @@ def intra_Pp_(rootPp, Pp_, param_name, fPd):  # evaluate for sub-recursion in li
                 if Pp.M > ave_M * Pp.Rdn and param_name=="I_":  # variable costs, add fixed costs? -lend to contrast?
                     sub_search_draft(Pp, Pp.P_, fPd)  # search in top sublayer, eval by pdert.m
                     # +Ppm -> sub_Ppm_: low-variation span, eval rng_comp, rng is represented by negL, no rng+=1
-                    rdn_ = [rdn+1 for rdn in Pp.rdn_[:-1]]  # replaces layer_rdn += 1
                     sub_Ppm_, sub_Ppd_ = [], []
                     Pp.sublayers = [[( fPd, sub_Ppm_, sub_Ppd_ )]]
                     # range+ by incr ave: less term by match, and decr proj_P = dert.m * rave ((M/L) / ave): less term by miss?
                     # single Pp 1st=SL, lst derts search, Pp overlap?  reform Pp_?
-                    rpdert_, rP_ = search_param_(rootPp.P_, Pp, SL, (ave + Pp.M) / 2, rave=Pp.M / ave)
+                    if rootPp:
+                        rpdert_, rP_ = search_param_(rootPp.P_, Pp, SL, (ave + Pp.M) / 2, rave=Pp.M / ave)
+                    else:
+                        rpdert_, rP_ = search_param_(Pp.P_, None, 0, (ave + Pp.M) / 2, rave=Pp.M / ave)
                     sub_Ppm_[:] = form_Pp_rng(Pp, Pp.P_, rpdert_, [], [])  # no P splicing by distant xcomp?
                     # if +rval, indices vs. empty subsets?:
                     sub_Ppd_[:] = form_Pp_(Pp, Pp.P_, rpdert_, param_name, fPd=True)  # cluster rpdert_ by rd
