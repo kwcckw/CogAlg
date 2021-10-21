@@ -297,6 +297,8 @@ class ClusterStructure(metaclass=MetaCluster):
                 elif len(_layer)>0: # _layer is not empty but layer is empty
                     setattr(self,layer_num,_layer.copy())
 
+    def copy(self):
+        return deepcopy(self)
 
 class Cdert(Number): # Ppd and Ppdm might not relevant now, so remove it
     __slots__ = ('i','p','d','m')
