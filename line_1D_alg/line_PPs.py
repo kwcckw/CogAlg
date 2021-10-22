@@ -135,7 +135,7 @@ def search(P_, fPd):  # cross-compare patterns within horizontal line
     LP_ = P_[:-1]
     dert2_ = dert2_[:-1]  # due to filled CP() in P2 ( for loop above )
     if not fPd:
-        Idert_, IP_ = search_param_(P_, None, ave_mI, rave=1)  # comp x variable range, depending on M of Is
+        Idert_, IP_ = search_param_(P_, [], 0, ave_mI, rave=1)  # comp x variable range, depending on M of Is
         Mdert_ = Mdert_[:-1]  # due to filled CP() in P2 ( for loop above )
         DP_, MP_ = P_[:-1], P_[:-2]
     else:
@@ -161,48 +161,55 @@ def comp_par(_param, param, param_name, ave):
     return Cpdert(i=param, p=param + _param, d=d, m=m)
 
 
-def search_param_(P_, Pp, ave, rave):  # variable-range search for core I
-    IP_ = []
+def search_param_(P_, Pp_, i, ave, rave):  # variable-range search for core I
+    IP_, Idert_ = [], []
+    
     # higher local ave for extended rng: -> lower m and term by match, and higher proj_M?
 
-    if Pp:  # call from intra_Pp_
-        Pi_ = [P_[Pp.P_[0].x0], P_[Pp.P_[0].x0 + Pp.L-1]]  # starting index in P_
-        Idert_ = [Pp.pdert_[0], Pp.pdert_[-1]]  # search by two iPs only, accumulate their two pderts
+    if Pp_ and len(Pp_)>i+1:  # call from intra_Pp_
+        first = Pp_[i  ].x0
+        last  = Pp_[i+1].x0-1 # next Pp.P_[0].x0 -1 is current Pp last (last P before overlapping)
+        
+        if last > first: # Pp should have at least 2 Ps
+        
+            length = last - first # length between first and last
+            Pi_ = [first, last]  # starting index in P_
+            Idert_ = [Pp_[i].pdert_[0], Pp_[i].pdert_[length]]  # search by two iPs only, accumulate their two pderts
+    
+            for i, (Pi, _Idert) in enumerate(zip(Pi_, Idert_)):  
+                if i: j = Pi + 1 + _Idert.negL; freversed = False  # if last: skip negL
+                else: j = Pi - 1; freversed = True            
 
-        for i, (Pi, _Idert) in enumerate(zip(Pi_, Idert_)):
-            if i: j = Pi + 1 + _Idert.negL; freversed = False  # if last: skip negL
-            else: j = Pi - 1; freversed = True
-            _P = P_[Pi]
-            search_param_continue(P_, _Idert, _P, j, ave, rave, freversed)
-            IP_ += [_P]  # Idert_ doesn't change, each Idert is accumulated in search_param_continue
-            '''
-            if add_pdert:  # after extended search, if any:
-                if freversed:  # backward search
-                    ext_Idert_ = [add_pdert]; ext_P_ = [IP]
-                    ext_Idert_ += Idert_; ext_P_ += IP_  # accumulate Idert and _P_ from forward search
-                else:  # forward search
-                    Idert_.append(add_pdert)
-                    IP_.append(IP)
+                _P = P_[Pi]
+                Idert_ += [search_param_continue(P_, _Idert, _P, j, ave, rave, freversed)]
+                IP_ += [_P]  # Idert_ doesn't change, each Idert is accumulated in search_param_continue
+                '''
+                if add_pdert:  # after extended search, if any:
+                    if freversed:  # backward search
+                        ext_Idert_ = [add_pdert]; ext_P_ = [IP]
+                        ext_Idert_ += Idert_; ext_P_ += IP_  # accumulate Idert and _P_ from forward search
+                    else:  # forward search
+                        Idert_.append(add_pdert)
+                        IP_.append(IP)
             '''
     else:  # call from search
-        Idert_ = []
-        for i, _P in enumerate(P_):
+        for i, _P in enumerate(P_[:-1]): # length always - 1 for search comparison, due to we need 2 comparands
             j = i + 1
-            Idert_ += [ search_param_continue(P_, None, _P, j, ave, rave, freversed=False)]
-            IP_ += _P
+            Idert_ += [search_param_continue(P_, None, _P, j, ave, rave, freversed=False)]
+            IP_    += [_P] # same with append
 
     return Idert_, IP_
 
 
 def search_param_continue(P_, Idert, _P, j, ave, rave, freversed):
 
-    if not Idert: Idert = Cpdert
     negM = 0
     if freversed: _pI = _P.I + (_P.D / 2)  # back-project by _D
     else:         _pI = _P.I - (_P.D / 2)  # forward-project by _D
 
     # continue search forward(left to right) OR backward(right to left), starts with positive _P.Ms:
     while (_P.M + negM > ave_M or not Idert) and ((not freversed and j < len(P_)) or (freversed and j >= 0)):
+        if not Idert: Idert = Cpdert() # 1st Idert
         P = P_[j]
         if freversed: pI = P.I - (_P.D / 2)  # forward-project by _D
         else:         pI = _P.I + (P.D / 2)  # back-project by _D
@@ -409,7 +416,7 @@ def intra_Pp_(root, Pp_, param_name, fPd):  # evaluate for sub-recursion in line
                     Pp.sublayers = [[(fPd, sub_Ppm_, sub_Ppd_)]]
                     ddert_ = []
                     for _pdert, pdert in zip( Pp.pdert_[:-1], Pp.pdert_[1:]):
-                        ddert_ += comp_par(_pdert.d, pdert.d, param_name[0], ave)  # higher derivation cross-comp of ds in dert1_, local aves?
+                        ddert_ += [comp_par(_pdert.d, pdert.d, param_name[0], ave)]  # higher derivation cross-comp of ds in dert1_, local aves?
                     # cluster in ddert_:
                     sub_Ppm_[:] = form_Pp_(Pp, Pp.P_, ddert_, param_name, fPd=False)
                     sub_Ppd_[:] = form_Pp_(Pp, Pp.P_, ddert_, param_name, fPd=True)
@@ -423,13 +430,18 @@ def intra_Pp_(root, Pp_, param_name, fPd):  # evaluate for sub-recursion in line
                     sub_Ppm_, sub_Ppd_ = [], []
                     Pp.sublayers = [[(fPd, sub_Ppm_, sub_Ppd_)]]
                     # range+ by incr ave: less term by match, and decr proj_P = dert.m * rave ((M/L) / ave): less term by miss?
-                    if isinstance(root, CPp): P_ = root.P_  # P_ in root Pp
-                    else: P_ = root  # P_ in line_PPs_root
-                    rpdert_, rP_ = search_param_(P_, Pp, (ave + Pp.M) / 2, rave=Pp.M / ave)  # 1st, lst derts search outside Pp, Pps overlap
+                    if isinstance(root, CPp): 
+                        P_ = root.P_  # P_ in root Pp
+                        iPp_ = Pp_
+                    else: 
+                        P_ = root  # P_ in line_PPs_root
+                        iPp_ = []
+        
+                    rpdert_, rP_ = search_param_(P_, iPp_, i, (ave + Pp.M) / 2, rave=Pp.M / ave)  # 1st, lst derts search outside Pp, Pps overlap 
                     # no use for rP_?
-                    sub_Ppm_[:] = form_Pp_rng(Pp, Pp.P_, rpdert_, [], [])  # no P splicing by distant xcomp?
+                    sub_Ppm_[:] = form_Pp_rng(Pp, rP_, rpdert_, [], [])  # no P splicing by distant xcomp?
                     # if +rval, indices vs. empty subsets?:
-                    sub_Ppd_[:] = form_Pp_(Pp, Pp.P_, rpdert_, param_name, fPd=True)  # cluster rpdert_ by rd
+                    sub_Ppd_[:] = form_Pp_(Pp, rP_, rpdert_, param_name, fPd=True)  # cluster rpdert_ by rd
                 else:
                     Pp.sublayers += [[]]  # empty subset to preserve index in sublayer
 
