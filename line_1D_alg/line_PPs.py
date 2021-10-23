@@ -135,7 +135,7 @@ def search(P_, fPd):  # cross-compare patterns within horizontal line
     dert2_ = dert2_[:-1]  # due to filled CP() in P2 ( for loop above )
     if not fPd:
         Idert_ = search_param_(P_, None, ave_mI, rave=1)  # comp x variable range, depending on M of Is
-        IP_ = P_.pop
+        IP_ = P_[:-1]
         Mdert_ = Mdert_[:-1]  # due to filled CP() in P2 ( for loop above )
         DP_, MP_ = P_[:-1], P_[:-2]
     else:
@@ -166,7 +166,10 @@ def search_param_(P_, Pp, ave, rave):  # variable-range search for core I
     # higher local ave for extended rng: -> lower m and term by match, and higher proj_M?
 
     if Pp:  # call from intra_Pp_
-        Pi_ = [P_[Pp.P_[0].x0], P_[Pp.P_[-1].x0 + Pp.P_[-1].L-1]]  # 1st and last P_ indices are starting search indices in P_
+        
+        first = P_.index(Pp.P_[0]) # we cannot use P.x0, that is index of dert, not P
+        last  = P_.index(Pp.P_[-1])
+        Pi_ = [first, last]  # 1st and last P_ indices are starting search indices in P_
         Idert_ = [Pp.pdert_[0], Pp.pdert_[-1]]
         # search by 1st and last Ps, accumulate their Iderts:
         for i, (Pi, _Idert) in enumerate(zip(Pi_, Idert_)):
@@ -178,7 +181,7 @@ def search_param_(P_, Pp, ave, rave):  # variable-range search for core I
     else:
         # call from search
         Idert_ = []
-        for i, _P in enumerate(P_):
+        for i, _P in enumerate(P_[:-1]):
             j = i + 1
             Idert_ += [ search_param_continue(P_, None, _P, j, ave, rave, freversed=False)]
             # IP_ += [_P]
@@ -251,6 +254,7 @@ def form_Pp_(root, P_, pdert_, param_name, fPd):
                 Pp = Pp_[-1]; Pp.I /= Pp.L; Pp.D /= Pp.L; Pp.M /= Pp.L; Pp.Rdn /= Pp.L  # immediate normalization
                 Pp.Rdn += 1  # redundancy to higher layers
             Pp = CPp( L=1, iL=P_[x].L, I=pdert.p, D=pdert.d, M=pdert.m, Rdn = pdert.rdn+P.Rdn, x0=x, ix0=P_[x].x0, pdert_=[pdert], P_=[P_[x]], sublayers=[])
+            P.Pp = Pp
             Pp_.append(Pp)  # updated by accumulation below
         else:
             # accumulate params:
@@ -273,6 +277,7 @@ def form_Pp_rng(root, P_, pdert_, pdert1_, pdert2_):  # cluster Pps by cross-par
             if not isinstance(_pdert.Pp, CPp):  # _pdert is not in any Pp
                 Pp = CPp(L=1, iL=_P.L, I=_pdert.p, D=_pdert.d, M=_pdert.m, Rdn = _pdert.rdn + _P.Rdn, negiL=_pdert.negiL, negL=_pdert.negL, negM=_pdert.negM,
                          x0=i, ix0=_P.x0, pdert_=[_pdert], P_=[_P], sublayers=[])
+                _P.Pp = Pp
                 _pdert.Pp = Pp
                 Pp_.append(Pp)  # params will be accumulated
             else:
@@ -281,10 +286,16 @@ def form_Pp_rng(root, P_, pdert_, pdert1_, pdert2_):  # cluster Pps by cross-par
 
             while (j <= len(pdert_)-1):
                 pdert = pdert_[j]; P = P_[j]  # no pop: maybe used by other _derts
-                if pdert.m + P.M > ave*pdert.rdn:
+                           
+                if isinstance(P.Pp, CPp): # existing P.Pp, merge it to root
+                   for merge_pdert in P.Pp.pdert_:
+                       merge_pdert.Pp = root
+                   for merge_P in P.Pp.P_:
+                       merge_P.Pp = root
+                elif pdert.m + P.M > ave*pdert.rdn:
                     if isinstance(pdert.Pp, CPp):  # unique Pp per dert in row Pdert_
                         # merge Pp with dert.Pp, if any:
-                        Pp.accum_from(pdert.Pp,excluded=['x0'])
+                        Pp.accum_from(pdert.Pp, excluded=['x0'])
                         Pp.P_ += pdert.Pp.P_
                         Pp.pdert_ += pdert.Pp.pdert_
                         Pp.sublayers += pdert.Pp.sublayers
@@ -418,11 +429,13 @@ def intra_Pp_(root, Pp_, param_name, fPd):  # evaluate for sub-recursion in line
                         P_ = root.P_; frootP_=0  # P_ in root Pp
                     else:
                         P_ = root; frootP_=1  # P_ in line_PPs_root
-                    rpdert_ = search_param_(P_, Pp, (ave + Pp.M) / 2, rave=Pp.M / ave)  # 1st, lst derts search outside Pp, Pps overlap
+                    rpdert_ = search_param_(P_, Pp, (ave + Pp.M) / 2, rave=Pp.M / ave)
+                    # 1st, lst derts search outside Pp, Pps overlap
                     if frootP_:
-                        sub_Ppm_[:] = form_Pp_rng(Pp, Pp.P_.pop, rpdert_, [], [])  # no P splicing by distant xcomp?
-                        sub_Ppd_[:] = form_Pp_(Pp, Pp.P_.pop, rpdert_, param_name, fPd=True)  # if +rval, indices vs empty subsets?
+                        sub_Ppm_[:] = form_Pp_rng(Pp, Pp.P_[:-1], rpdert_, [], [])  # no P splicing by distant xcomp?
+                        sub_Ppd_[:] = form_Pp_(Pp, Pp.P_[:-1], rpdert_, param_name, fPd=True)  # if +rval, indices vs empty subsets?
                     else:
+                        sub_Ppm_[:] = form_Pp_rng(Pp, Pp.P_, rpdert_, [], [])
                         Pp.sublayers += [[]]  # 2 rpderts only, rerun form_Pp_root(root.P_) if min n rpderts / len(root.P_)?
                 else:
                     Pp.sublayers += [[]]  # empty subset to preserve index in sublayer, or increment index of subset?
