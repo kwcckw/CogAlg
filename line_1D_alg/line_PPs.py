@@ -81,6 +81,8 @@ ave_sub = 20  # for comp_sub_layers
 ave_Dave = 100  # summed feedback filter
 ave_dave = 20   # mean feedback filter
 
+ave_nrderts = 1
+
 # used in search, form_Pp_root, comp_sublayers_, draw_PP_:
 param_names = ["L_", "I_", "D_", "M_"]
 aves = [ave_mL, ave_mI, ave_mD, ave_mM]
@@ -205,12 +207,12 @@ def search_param_continue(P_, pdert_, Pp, Idert, _P, j, ave, rave, freversed):
         if curr_M + Idert.sub_M > ave_M * P.Rdn * 4:  # ave_cM
             _Pp = pdert_[P_.index(P)].Pp  # to merge
             if freversed:
-                Pp.P_ = [P].append(Pp.P_)
-                if _Pp: merge(_Pp, Pp)
+                Pp.P_ += [P] + [Pp.P_]
+                if _Pp and _Pp is not Pp: _Pp.merge(Pp, 'Pp', CPp, excluded=['x0'])
                 else:   Pp.pdert_= [Idert].append(pdert_[P_.index(P)])
             else:
                 Pp.P_.append(P)
-                if _Pp: merge(Pp, _Pp)
+                if _Pp and _Pp is not Pp: Pp.merge(_Pp, 'Pp', CPp, excluded=['x0'])
                 else:   Pp.pdert_.append(_Pp)
             break  # 1st match takes over connectivity search in the next loop
         else:
@@ -387,7 +389,7 @@ def compact(Pp_, pdert1_, pdert2_, param_name, fPd):  # re-eval Pps, Pp.pdert_s 
                 for P in Pp.P_:
                     _P.accum_from(P, excluded=["x0"])  # different from Pp params
                     _P.dert_ += [P.dert_]  # splice dert_s within Pp
-                Pp_[-1].P_ = _P  # replace with spliced P
+                Pp_[-1].P_ = [_P]  # replace with spliced P
 
         # if pdert_val <= 0:
         #    Pp.pdert_ = []  # remove pdert_
@@ -421,15 +423,17 @@ def intra_Pp_(root, Pp_, param_name, fPd):  # evaluate for sub-recursion in line
                     sub_Ppm_, sub_Ppd_ = [], []
                     Pp.sublayers = [[(fPd, sub_Ppm_, sub_Ppd_)]]
                     # range+ by incr ave: less term by match, and decr proj_P = dert.m * rave ((M/L) / ave): less term by miss?
+                    # this section is not review yet
                     if isinstance(root, CPp):  # Pps may overlap
-                        P_ = root.P_[0]; pdert_ = root.P_[1]; frootP_=0  # P_ in root Pp, 1st and lst derts search outside Pp
+                        P_ = root.P_; pdert_ = root.pdert_; frootP_=0  # P_ in root Pp, 1st and lst derts search outside Pp
                     else:
-                        P_ = root[0]; pdert_ = root[1]; frootP_=1  # P_ in line_PPs_root
+                        P_ = root; pdert_ = Pp.pdert_; frootP_=1  # P_ in line_PPs_root
                     rpdert_ = search_param_(P_, pdert_, Pp, (ave + Pp.M) / 2, rave=Pp.M / ave)
-                    if frootP_:
+                    if frootP_: 
                         sub_Ppm_[:] = form_Pp_rng(Pp, Pp.P_[:-1], rpdert_, [], [])  # no P splicing by distant xcomp?
                         sub_Ppd_[:] = form_Pp_(Pp, Pp.P_[:-1], rpdert_, param_name, fPd=True)  # if +rval, indices vs empty subsets?
                     else:
+                        nrderts = len(rpdert_)
                         Pp.sublayers += [[]]  # 2 rpderts only: nrderts+=2?
                 else:
                     Pp.sublayers += [[]]  # empty subset to preserve index in sublayer, or increment index of subset?
@@ -437,9 +441,9 @@ def intra_Pp_(root, Pp_, param_name, fPd):  # evaluate for sub-recursion in line
             if isinstance(root, CPp) and Pp.sublayers[0]:
                 comb_sublayers = [comb_subset_ + subset_ for comb_subset_, subset_ in
                                   zip_longest(comb_sublayers, Pp.sublayers, fillvalue=[])
-                                  ]
-    # if nrderts / len(root.P_) > ave_nrderts:  # rerun:
-    #    sub_Ppm_[:] = form_Pp_rng(Pp, rootPp.P_, rootPp.rpdert_, [], [])?
+                           ]
+    if 'nrderts' in locals() and nrderts / len(root.P_) > ave_nrderts:  # rerun:
+        sub_Ppm_[:] = form_Pp_rng(Pp, root.P_, rpdert_, [], [])
 
     if isinstance(root, CPp):
         root.sublayers += comb_sublayers
