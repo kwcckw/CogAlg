@@ -168,6 +168,18 @@ def search_param_(P_, pdert_, Pp, ave, rave):  # variable-range search for core 
     if Pp:  # call from intra_Pp_
         Pi_ = [P_.index(Pp.P_[0]), P_.index(Pp.P_[-1])]  # indices of 1st and last Ps in Pp: starting search indices in P_
         Idert_ = [Pp.pdert_[0], Pp.pdert_[-1]]  # 1st and last Iderts accumulate search results
+        
+        # scheme of using Pp.pdert instead
+        '''
+        Pi_ = pdert_.index(Pp.pdert_[0]), pdert_.index(Pp.pdert_[-1])
+        Idert_ = Pp.pdert_
+        '''
+        
+        # scheme of 1st to last
+        '''
+        Pi_ = range(P_.index(Pp.P_[0]), P_.index(Pp.P_[-1]),1)  # indices of 1st to last Ps in Pp: starting search indices in P_
+        Idert_ = [Pp.pdert_[i] for i in Pi_] # 1st to last Iderts accumulate search results    
+        '''
 
         for i, (Pi, _Idert) in enumerate(zip(Pi_, Idert_)):
             if i: j = Pi + 1 + _Idert.negL; freversed = False  # if last: skip negL
@@ -192,48 +204,51 @@ def search_param_continue(P_, pdert_, Pp, Idert, _P, j, ave, rave, freversed):
         _pI = _P.I - (_P.D / 2)  # forward-project by _D
 
     # continue search forward(left to right) OR backward(right to left), starts with positive _P.Ms:
-    while (_P.M + negM > ave_M or not Idert) and ((not freversed and j < len(P_)) or (freversed and j >= 0)):
-        if not Idert: Idert = Cpdert(Ppt=[[],[]])  # 1st Idert, make it generic Idert |_Idert?
-        pdert = pdert_[j]
-        P = P_[j]
-        if freversed:
-            pI = P.I + (_P.D / 2)  # back-project by _D, accumulate _Idert:
-            _Idert.p = pI + _pI  # summed input
-            _Idert.d = _pI - pI  # difference
-            _Idert.m = ave - abs(Idert.d)  # indirect match
-            curr_M = _Idert.m * rave + (_P.M + P.M) / 2  # P.M is bilateral, no fPd in search_param
-        else:
-            pI = _P.I - (P.D / 2)  # forward-project by _D
-            Idert.p = pI + _pI  # summed input
-            Idert.d = pI - _pI  # difference
-            Idert.m = ave - abs(Idert.d)  # indirect match
-            curr_M = Idert.m * rave + (_P.M + P.M) / 2  # P.M is bilateral, no fPd in search_param
-
-        if curr_M > ave_sub * P.Rdn and _P.sublayers[0] and P.sublayers[0]:  # comp sub_P_s, for core I only?
-            comp_sublayers(_P, P, Idert.m)  # forms pdert.sub_M:
-        if curr_M + Idert.sub_M > ave_M * P.Rdn * 4:  # ave_cM
-            _Pp = pdert_[P_.index(P)].Ppt[0]  # rootPp to merge
+    if (_P.M + negM > ave_M or not Idert) :
+        if not Idert: # when Idert_ is empty, called from search
+            Idert = Cpdert(Ppt=[[],[]])  # 1st Idert, make it generic Idert |_Idert?
+        
+        while ((not freversed and j < len(pdert_)) or (freversed and j >= 0)):
+            pdert = pdert_[j]
+            P = P_[j]
             if freversed:
-                Pp.P_ = [P] + [Pp.P_]
-                if _Pp: merge(_Pp, Pp)  # unique Pp per dert in row Pdert_
-                else:
-                    pdert.accum_from(_Idert)  # pderts represent forward derivatives
-                    Pp.pdert_.insert(pdert, 0)  # appendleft, delete pdert_[P_.index(P)]?
-                    Pp.P_.insert(P_, 0)
+                pI = P.I + (_P.D / 2)  # back-project by _D, accumulate _Idert:
+                _Idert.p = pI + _pI  # summed input
+                _Idert.d = _pI - pI  # difference
+                _Idert.m = ave - abs(Idert.d)  # indirect match
+                curr_M = _Idert.m * rave + (_P.M + P.M) / 2  # P.M is bilateral, no fPd in search_param
             else:
-                Pp.P_.append(P)
-                if _Pp: merge(Pp, _Pp)
-                else: Pp.pdert_.append(pdert); Pp.P_.append(P) # delete pdert_[P_.index(P)]?
-
-            break  # this dert already searched forward
-            # 1st match takes over connectivity search in the next loop
-        else:
-            Idert.negM += curr_M - ave_M  # known to be negative, accum per dert
-            Idert.negiL += P.L
-            Idert.negL += 1
-            negM = Idert.negM
-            if freversed: j -= 1
-            else: j += 1
+                pI = _P.I - (P.D / 2)  # forward-project by _D
+                Idert.p = pI + _pI  # summed input
+                Idert.d = pI - _pI  # difference
+                Idert.m = ave - abs(Idert.d)  # indirect match
+                curr_M = Idert.m * rave + (_P.M + P.M) / 2  # P.M is bilateral, no fPd in search_param
+    
+            if curr_M > ave_sub * P.Rdn and _P.sublayers[0] and P.sublayers[0]:  # comp sub_P_s, for core I only?
+                comp_sublayers(_P, P, Idert.m)  # forms pdert.sub_M:
+            if curr_M + Idert.sub_M > ave_M * P.Rdn * 4:  # ave_cM
+                _Pp = pdert_[P_.index(P)].Ppt[0]  # rootPp to merge
+                if freversed:
+                    Pp.P_ = [P] + [Pp.P_]
+                    if _Pp: merge(_Pp, Pp)  # unique Pp per dert in row Pdert_
+                    else:
+                        pdert.accum_from(_Idert)  # pderts represent forward derivatives
+                        Pp.pdert_.insert(0, pdert)  # appendleft, delete pdert_[P_.index(P)]?
+                        Pp.P_.insert(0, P_)
+                else:
+                    Pp.P_.append(P)
+                    if _Pp: merge(Pp, _Pp)
+                    else: Pp.pdert_.append(pdert); Pp.P_.append(P) # delete pdert_[P_.index(P)]?
+    
+                break  # this dert already searched forward
+                # 1st match takes over connectivity search in the next loop
+            else:
+                Idert.negM += curr_M - ave_M  # known to be negative, accum per dert
+                Idert.negiL += P.L
+                Idert.negL += 1
+                negM = Idert.negM
+                if freversed: j -= 1
+                else: j += 1
 
     return Idert
 
@@ -441,7 +456,7 @@ def intra_Pp_(rootPp, root_P_, root_pdert_, Pp_, param_name, fPd):  # evaluate f
                     Pp.sublayers = [[(fPd, sub_Ppm_, sub_Ppd_)]]
                     # range+ by incr ave: less term by match, and decr proj_P = dert.m * rave ((M/L) / ave): less term by miss?
                     rpdert_ = search_param_(root_P_, root_pdert_, Pp, (ave + Pp.M) / 2, rave=Pp.M / ave)  # eval intra_Pp_(extended_Pp)?
-                    if len(rpdert_) > 2:
+                    if len(rpdert_) > 2: # rpdert_ will always having size of 2 if we use first and last pdert
                         # not from deep search_param_, always 2: 1st and last accumulated rpderts
                         sub_Ppm_[:] = form_Pp_rng(Pp.P_[:-1], rpdert_, [], [])  # no P splicing by distant xcomp?
                         sub_Ppd_[:] = form_Pp_(Pp.P_[:-1], rpdert_, param_name, fPd=True)
