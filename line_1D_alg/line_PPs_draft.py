@@ -167,25 +167,31 @@ def comp_par(_param, param, param_name, ave):
     return Cpdert(i=param, p=param + _param, d=d, m=m, Ppt=[[],[]])
 
 
-def search_Idert_root(P_, Idert_, Pp, ave, rave):  # variable-range search for core I, called from search() only
+def search_Idert_root(P_, iIdert_, Pp, ave, rave):  # variable-range search for core I, called from search() only
     # higher local ave for extended rng -> lower m and term by match, higher proj_M?
 
-    for i, P in enumerate(P_[:-1]):
+    Idert_ = []
+    for i, P in enumerate(P_[2:-1], start=2): # start from 3rd index  to allow index of i-2 below
+        # why return Idert_ from search left but Idert from search right?
         # search left:
-        Idert_ = search_Idert_(P_, Idert_, P, Idert_[i-1], i-2, ave, rave, fleft=True)
+        Idert = search_Idert_(Pp, P_, iIdert_, P, iIdert_[i-1], i-2, ave, rave, fleft=True)
         # search right:
-        Idert_.append([ search_Idert_(P_, Idert_, P, Idert_[i], i+1, ave, rave, fleft=False) ])
+        Idert = search_Idert_(Pp, P_, iIdert_, P, iIdert_[i], i+1, ave, rave, fleft=False)
+        Idert_.append(Idert)
+        
+    form_Pp_rng(P_[2:-1], Idert_, [], []) 
 
     return Idert_
 
 
-def search_Idert_(P_, Idert_, iP, iIdert, j, ave, rave, fleft):
+def search_Idert_(Pp, P_, Idert_, iP, iIdert, j, ave, rave, fleft):
     negM = 0
     # no internal form_Pp call to extend search, asymmetric?
 
     if fleft: _pI = iP.I + (iP.D / 2)  # back-project by _D
     else:     _pI = iP.I - (iP.D / 2)  # forward-project by _D
 
+    Idert = Idert_[j] # 1st assignment, else we will return None
     while(iP.M + negM > ave_M) and ((not fleft and j < len(Idert_)) or (fleft and j >= 0)):
         # continue search forward(left to right) OR backward(right to left):
         Idert = Idert_[j]
@@ -209,15 +215,21 @@ def search_Idert_(P_, Idert_, iP, iIdert, j, ave, rave, fleft):
             _Pp = Idert_[P_.index(P)].Ppt[0]  # rootPp to merge
             if fleft:
                 Pp.P_ = [P] + [Pp.P_]
-                if _Pp: merge(_Pp, Pp)  # unique Pp per dert in row Pdert_
+                # i checked and _Pp could be Pp in some cases
+                # this is possible when the same pdert.Ppt[0] and Pp from form_Pp_rng are parsed to here
+                if _Pp and _Pp is not Pp: # check non empty and not same Pp
+                    merge(_Pp, Pp)  # unique Pp per dert in row Pdert_
                 else:
                     Idert.accum_from(iIdert)  # pderts represent forward derivatives
                     Pp.pdert_.insert(0, Idert)  # appendleft, delete pdert_[P_.index(P)]?
                     Pp.P_.insert(0, P_)
             else:
                 Pp.P_.append(P)
-                if _Pp: merge(Pp, _Pp)
-                else: Pp.pdert_.append(Idert); Pp.P_.append(P) # delete pdert_[P_.index(P)]?
+                if _Pp and _Pp is not Pp:
+                    merge(Pp, _Pp)
+                else:
+                    Pp.pdert_.append(Idert); 
+                    Pp.P_.append(P) # delete pdert_[P_.index(P)]?
 
             break  # this dert already searched forward
             # 1st match takes over connectivity search in the next loop
@@ -238,7 +250,7 @@ def merge(Pp, _Pp):
     for pdert in _Pp.pdert_:
         if pdert not in Pp.pdert_:  # a bug forms overlapping derPs
             Pp.pdert_.append(pdert)
-            pdert.Ppt[0] = Pp  # Ppm
+        pdert.Ppt[0] = Pp  # Ppm
     # merge sublayers
     Pp.sublayers += _Pp.sublayers
     # also need to remove _Pp from rootPp' Pp_: delete object?
@@ -434,13 +446,16 @@ def intra_Pp_(rootPp, root_P_, root_pdert_, Pp_, param_name, fPd):  # evaluate f
                     sub_Ppm_, sub_Ppd_ = [], []
                     Pp.sublayers = [[(fPd, sub_Ppm_, sub_Ppd_)]]
                     # range+ by incr ave: less term by match, and decr proj_P = dert.m * rave ((M/L) / ave): less term by miss?
-                    rpdert_ = search_Idert_root(root_P_, root_pdert_, Pp, (ave + Pp.M) / 2, rave=Pp.M / ave)  # eval intra_Pp_(extended_Pp)?
+                    
+                    if not rootPp: # rootPp is empty when root_pdert_ is computed from comp_par
+                        search_Idert_root(root_P_, root_pdert_, Pp, (ave + Pp.M) / 2, rave=Pp.M / ave)  # eval intra_Pp_(extended_Pp)?
                     # no if len(rpdert_) > 2: called once only 
                     #    sub_Ppm_[:] = form_Pp_rng(Pp.P_[:-1], rpdert_, [], [])  # no P splicing by distant xcomp?
                     #    sub_Ppd_[:] = form_Pp_(Pp.P_[:-1], rpdert_, param_name, fPd=True)
                     #    # no neg rPpms, but full rPpds eval only?  indices vs empty subsets?
-                    else:
-                        Pp.sublayers += [[]]
+                    # the following should be not needed now?
+                    # else:
+                    #    Pp.sublayers += [[]]
                 else: Pp.sublayers += [[]]  # empty subset to preserve index in sublayer, or increment index of subset?
 
             if isinstance(rootPp, CPp) and Pp.sublayers[0]:
