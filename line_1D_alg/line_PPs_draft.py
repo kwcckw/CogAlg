@@ -164,24 +164,20 @@ def form_Pp_root(Pdert_t, pdert1_, pdert2_, fPd):  # add rootPp for form_Pp_, if
     Pp_t = []
     rdn_t = sum_rdn_(param_names, Pdert_t, fPd=fPd)  # assign redundancy to lesser-magnitude m|d in param pair for same-_P Pderts
 
-    for param_name, (Pdert_, P_), rdn_ in zip(param_names, Pdert_t, rdn_t):  # segment Pdert__ into Pps
-        if param_name == "I_" and not fPd:
-            Pp_ = form_Pp_rng(P_, Pdert_, pdert1_, pdert2_)  # eval splice P_ by match induction, no I mag induction
-        else:
-            Pp_ = form_Pp_(P_, Pdert_, param_name, fPd=0)
+    for param_name, Pdert_, rdn_ in zip(param_names, Pdert_t, rdn_t):  # segment Pdert__ into Pps
+        Pp_ = form_Pp_(Pdert_, param_name, fPd=0)
         Pp_t.append(Pp_)  # Ppm | Ppd
-
     return Pp_t
 
 
-def form_Pp_(P_, pdert_, param_name, fPd):  # need to remove P_
+def form_Pp_(pdert_, param_name, fPd):  # need to remove P_
     # initialization:
     Pp_ = []
     x = 0
     _sign = None  # to initialize 1st P, (None != True) and (None != False) are both True
     rootPp = pdert_[0].Ppt[fPd]  # all pderts have the same root_Pp, empty if called from line_PPs_root
 
-    for pdert, P in zip(pdert_, P_):  # segment by sign
+    for pdert in pdert_:  # segment by sign
         if fPd: sign = pdert.d > 0
         else:   sign = pdert.m > 0
         # adjust by ave projected at distance=negL and contrast=negM, if significant:
@@ -191,16 +187,19 @@ def form_Pp_(P_, pdert_, param_name, fPd):  # need to remove P_
             if Pp_:  # empty at 1st sign change
                 Pp = Pp_[-1]; Pp.I /= Pp.L; Pp.D /= Pp.L; Pp.M /= Pp.L; Pp.Rdn /= Pp.L  # immediate normalization
                 Pp.Rdn += 1  # redundancy to higher layers
-            Pp = CPp( L=1, iL=P_[x].L, I=pdert.p, D=pdert.d, M=pdert.m, Rdn = pdert.rdn+P.Rdn, x0=x, ix0=P_[x].x0, pdert_=[pdert], P_=[P_[x]], sublayers=[])
+            Pp = CPp( L=1, iL=pdert.P.L, I=pdert.p, D=pdert.d, M=pdert.m, Rdn = pdert.rdn+pdert.P.Rdn, x0=x, ix0=pdert.P.x0, pdert_=[pdert], P_=[pdert.P], sublayers=[])
             pdert.Ppt[fPd] = Pp  # Ppm|Ppd that pdert is in, replace root_Pp if any
             Pp_.append(Pp)  # updated by accumulation below
         else:
             # accumulate params:
-            Pp.L += 1; Pp.iL += P_[x].L; Pp.I += pdert.p; Pp.D += pdert.d; Pp.M += pdert.m; Pp.Rdn += pdert.rdn+P.Rdn; Pp.pdert_ += [pdert]; Pp.P_ += [P]
+            Pp.L += 1; Pp.iL += pdert.P.L; Pp.I += pdert.p; Pp.D += pdert.d; Pp.M += pdert.m; Pp.Rdn += pdert.rdn+pdert.P.Rdn; Pp.pdert_ += [pdert]; Pp.P_ += [pdert.P]
         x += 1
         _sign = sign
 
-    extra_Pp_(Pp_, pdert_, ave, rave)  # recursive rng+
+    if param_name == "I_" and rootPp:
+        extra_Pp_(Pp_, pdert_, ave, rave=rootPp.M/ave)  # recursive rng+
+        
+    P_ = [pdert.P for pdert in pdert_]
     intra_Pp_(rootPp, P_, pdert_, Pp_, param_name, fPd)  # recursive der+, root = P_,pdert_
 
     return Pp_
@@ -212,17 +211,20 @@ def extra_Pp_(Pp_, Idert_, ave, rave):  # variable-range search for core I, call
     SL = 0; Rdn = 0; Ext_M = 0
 
     for Pp in Pp_:
+        iL = Pp.L # Pp.L might changed after merging in search_Idert_
         ileft = SL  # index of Pp.pdert[0] in Idert_
+        ext_M = 0
         if Pp.M > ave_M * Pp.Rdn * 4:  # rng_coef
 
-            for i, Idert in enumerate(Idert_):
+            for i, Idert in enumerate(Idert_[1:]): # start from 1 to search from ileft-1
                 # search left:
-                ext_M = search_Idert_(Pp, Idert_, Idert, ileft-1, ave, rave, fleft=True)  # accum from left Idert
+                ext_M = search_Idert_(Pp, Idert_, Idert, ileft-1, ave, rave, fleft=True)  # accum from left Idert      
                 # search right:
                 ext_M+= search_Idert_(Pp, Idert_, Idert, ileft+Pp.L+1, ave, rave, fleft=False)
 
-        SL += Pp.L; Rdn += Pp.Rdn; Ext_M += ext_M
+        SL += iL; Rdn += Pp.Rdn; Ext_M += ext_M
 
+    # not quite sure on this section yet, wouldn't this running the same thing again if there's no merging?
     if Ext_M > ave_M * (Rdn / len(Pp_)) * 4:  # extra_Pp_ recursion coef
         extra_Pp_(Pp_, Idert_, ave, rave)
 
@@ -233,6 +235,7 @@ def search_Idert_(Pp, Idert_, iIdert, j, ave, rave, fleft):
     # iIdert searches Idert_ left or right from j
     negM = 0
     iP = iIdert.P  # iIdert but not iP may be replaced below
+    Ext_M = 0
 
     if fleft:
         iIdert = Idert_[j]  # use derivatives only, not P or i
@@ -262,7 +265,7 @@ def search_Idert_(Pp, Idert_, iIdert, j, ave, rave, fleft):
             comp_sublayers(iP, P, Idert.m)  # forms pdert.sub_M:
         if curr_M + Idert.sub_M > ave_M * P.Rdn * 4:  # ave_cM
             # 1st match takes over connectivity search in the next rng+
-            _Pp = P.Ppt[0]  # rootPp to merge
+            _Pp = Idert.Ppt[0]  # rootPp to merge
             if fleft:
                 if _Pp: merge(_Pp, Pp)  # unique Pp per dert in row Pdert_
                 else:
@@ -275,6 +278,7 @@ def search_Idert_(Pp, Idert_, iIdert, j, ave, rave, fleft):
                     Pp.I += Idert.i; Pp.D += Idert.d; Pp.M += Idert.m; Pp.L+=1
                     Pp.pdert_.append(Idert) # delete pdert_[P_.index(P)]?
 
+            Ext_M += Pp.M # increase ext_M when there's match here?
             break  # this dert already searched forward
 
         else:
@@ -285,16 +289,18 @@ def search_Idert_(Pp, Idert_, iIdert, j, ave, rave, fleft):
             if fleft: j -= 1
             else: j += 1
 
+    return Ext_M
     # compute ext_M: added Pp.M increment, to return
 
 
 def merge(Pp, _Pp):
     # merge Pp with dert.Pp, if any:
-    Pp.accum_from(_Pp, excluded=['x0'])
+    Pp.accum_from(_Pp, excluded=['x0', 'L'])
     # merge pderts and update pdert.Pp reference
     for pdert in _Pp.pdert_:
         if pdert not in Pp.pdert_:  # a bug forms overlapping derPs
             Pp.pdert_.append(pdert)
+            Pp.L += 1
             pdert.Ppt[0] = Pp  # Ppm
     # merge sublayers
     Pp.sublayers += _Pp.sublayers
@@ -352,7 +358,7 @@ def sum_rdn_(param_names, Pdert_t, fPd):
     name_pairs = (('I', 'L'), ('I', 'D'), ('I', 'M'), ('L', alt), ('D', 'M'))  # pairs of params redundant to each other
     # rdn_t = [[], [], [], []] is replaced with pdert.rdn
 
-    for i, (Ldert, Idert, Ddert, Mdert) in enumerate( zip_longest(Pdert_t[0][0], Pdert_t[1][0], Pdert_t[2][0], Pdert_t[3][0], fillvalue=Cpdert())):
+    for i, (Ldert, Idert, Ddert, Mdert) in enumerate( zip_longest(Pdert_t[0], Pdert_t[1], Pdert_t[2], Pdert_t[3], fillvalue=Cpdert())):
         # pdert per _P in P_, 0: Ldert_, 1: Idert_, 2: Ddert_, 3: Mdert_
         # P M|D rdn + dert m|d rdn:
         rdn_pairs = [[fPd, 0], [fPd, 1-fPd], [fPd, fPd], [0, 1], [1-fPd, fPd]]  # rdn in olp Ps: if fPd: I, M rdn+=1, else: D rdn+=1
@@ -377,8 +383,8 @@ def sum_rdn_(param_names, Pdert_t, fPd):
                 elif param_name[0] == name_in_pair[1]:
                     Rdn += rdn[1]
 
-            if len(Pdert_t[j][0]) >i:  # if fPd: Ddert_ is step=2, else: Mdert_ is step=2
-                Pdert_t[j][0][i].rdn = Rdn  # [Ldert_, Idert_, Ddert_, Mdert_]
+            if len(Pdert_t[j]) >i:  # if fPd: Ddert_ is step=2, else: Mdert_ is step=2
+                Pdert_t[j][i].rdn = Rdn  # [Ldert_, Idert_, Ddert_, Mdert_]
 
     return Pdert_t
 
@@ -431,10 +437,10 @@ def intra_Pp_(rootPp, root_P_, root_pdert_, Pp_, param_name, fPd):  # evaluate f
                     Pp.sublayers = [[(fPd, sub_Ppm_, sub_Ppd_)]]
                     ddert_ = []
                     for _pdert, pdert in zip( Pp.pdert_[:-1], Pp.pdert_[1:]):
-                        ddert_ += [comp_par(_pdert.d, pdert.d, param_name[0], ave)]  # higher derivation cross-comp of ds in dert1_, local aves?
+                        ddert_ += [comp_par(_pdert.P, _pdert.d, pdert.d, param_name[0], ave)]  # higher derivation cross-comp of ds in dert1_, local aves?
                     # cluster in ddert_:
-                    sub_Ppm_[:] = form_Pp_(Pp.P_, ddert_, param_name, fPd=False)
-                    sub_Ppd_[:] = form_Pp_(Pp.P_, ddert_, param_name, fPd=True)
+                    sub_Ppm_[:] = form_Pp_(ddert_, param_name, fPd=False)
+                    sub_Ppd_[:] = form_Pp_(ddert_, param_name, fPd=True)
                 else:
                     Pp.sublayers += [[]]  # empty subset to preserve index in sublayer, or increment index of subset?
 
@@ -444,15 +450,16 @@ def intra_Pp_(rootPp, root_P_, root_pdert_, Pp_, param_name, fPd):  # evaluate f
                     # +Ppm -> sub_Ppm_: low-variation span, eval rng_comp, rng is represented by negL, no rng+=1
                     sub_Ppm_, sub_Ppd_ = [], []
                     Pp.sublayers = [[(fPd, sub_Ppm_, sub_Ppd_)]]
-                    # range+ by incr ave: less term by match, and decr proj_P = dert.m * rave ((M/L) / ave): less term by miss?
-                    rpdert_ = search_param_(root_P_, root_pdert_, Pp, (ave + Pp.M) / 2, rave=Pp.M / ave)  # eval intra_Pp_(extended_Pp)?
-                    if len(rpdert_) > 2: # rpdert_ will always having size of 2 if we use first and last pdert
-                        # not from deep search_param_, always 2: 1st and last accumulated rpderts
-                        sub_Ppm_[:] = form_Pp_rng(Pp.P_[:-1], rpdert_, [], [])  # no P splicing by distant xcomp?
-                        sub_Ppd_[:] = form_Pp_(Pp.P_[:-1], rpdert_, param_name, fPd=True)
-                        # no neg rPpms, but full rPpds eval only?  indices vs empty subsets?
-                    else:
-                        Pp.sublayers += [[]]
+             
+                    # not quite sure on this section
+                    rpdert_ = []
+                    for _pdert, pdert in zip( Pp.pdert_[:-1], Pp.pdert_[1:]):
+                        rpdert_ += [comp_par(_pdert.P, _pdert.m, pdert.m, "I", ave)]
+                
+                    # cluster in rdert_:
+                    sub_Ppm_[:] = form_Pp_(rpdert_, param_name="I_", fPd=False)
+                    sub_Ppd_[:] = form_Pp_(rpdert_, param_name="I_", fPd=True)
+
                 else: Pp.sublayers += [[]]  # empty subset to preserve index in sublayer, or increment index of subset?
 
             if isinstance(rootPp, CPp) and Pp.sublayers[0]:
