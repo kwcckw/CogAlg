@@ -18,8 +18,8 @@ import sys  # add CogAlg folder to system path
 from os.path import dirname, join, abspath
 sys.path.insert(0, abspath(join(dirname("CogAlg"), '..')))
 import numpy as np
-from chee import *
 from frame_2D_alg.class_cluster import ClusterStructure, comp_param
+from line_patterns import *
 
 class Cpdert(ClusterStructure):
     # P param dert
@@ -100,21 +100,34 @@ def line_PPs_root(P_t):  # P_t= Pm_, Pd_; higher-level input is nested to the de
     for i, P_ in enumerate(P_t):  # fPd = i: Pm_| Pd_
         if len(P_) > 1:
             Pdert_t, dert1_, dert2_ = cross_comp(P_, i)  # forms (LPp_, IPp_, DPp_, MPp_)
+
+            # unpacked version
+            Pp_tt = []
+            for fPd in range(2):
+                Pp_t = [] # stores each Pp_
+                rdn_t = sum_rdn_(param_names, Pdert_t, fPd=fPd)  # assign redundancy to lesser-magnitude m|d in param pair for same-_P Pderts
+                for param_name, Pdert_, rdn_ in zip(param_names, Pdert_t, rdn_t):  # segment Pdert__ into Pps
+                    Pp_ = form_Pp_(Pdert_, param_name, dert1_, dert2_, fPd=0)
+                    Pp_t.append(Pp_)  # Ppm | Ppd
+                    
+                    if not fPd and param_name == "I_" and len(Pdert_) > 3:  # per Pm_'IPpm_: I match induction = dert.m + P.M?
+                        extra_Pp_(Pp_, Pdert_, ave, rave=1)  # recursive rng+, replace Ppm_t[0], no sublayers
+
+                Pp_tt.append(Pp_t)  # stores each Ppm_t | Ppd_t  
+            Pp_ttt.append(Pp_tt)
             
+            # packed version:
+            '''            
             Ppm_t = form_Pp_root(Pdert_t, dert1_, dert2_, fPd=False)
+            
             if not i and len(P_) > 3:  # per Pm_'IPpm_: I match induction = dert.m + P.M?
                 extra_Pp_(Ppm_t[0], Pdert_t[0], ave, rave=1)  # recursive rng+, replace Ppm_t[0], no sublayers
 
             Ppd_t = form_Pp_root(Pdert_t, dert1_, dert2_, fPd=True)  # root is added in form_Pp_s
             # intra_Pp_ should be called from form_Pp_ because it could be for sub_Ps
-            ''' 
-            unpack here? :
-            rdn_t = sum_rdn_(param_names, Pdert_t, fPd=fPd)  
-            # assign redundancy to lesser-magnitude m|d in param pair for same-_P Pderts
-            for param_name, Pdert_, rdn_ in zip(param_names, Pdert_t, rdn_t):  # segment Pdert__ into Pps
-                Pp_t.append( form_Pp_(Pdert_, param_name, pdert1_, pdert2_, fPd=0) )  # returns Ppm | Ppd
-            '''
+
             Pp_ttt.append((Ppm_t, Ppd_t))  # each element of Ppm_t and Ppd_t is LPp_, IPp_, DPp_, MPp_
+            '''
         else:
             Pp_ttt.append(P_)
 
@@ -219,23 +232,25 @@ def extra_Pp_(Pp_, Idert_, ave, rave):  # variable-range search for core I, call
 
     # higher local ave for extended rng -> lower m and term by match, higher proj_M?
     SL = 0; Rdn = 0; Ext_M = 0
-
-    for Pp in Pp_:
-        iL = Pp.L  # Pp.L may change after merging in search_Idert_
+    L_ = [Pp.L for Pp in Pp_] # length of Pp's pdert before merging
+    for Pp, L in zip(Pp_, L_):
         ileft = SL  # index of Pp.pdert[0] in Idert_
         ext_M = 0
         if Pp.M > ave_M * Pp.Rdn * 4:  # rng_coef  # variable costs, add fixed costs? -lend to contrast?
 
-            for i, Idert in enumerate(Idert_[1:]): # start from 1 to search from ileft-1
+            for Idert in Idert_: # no need 1 here, since SL start with 0, else SL need to start with 1
                 # search left:
                 ext_M = search_Idert_(Pp, Idert_, Idert, ileft-1, ave, rave, fleft=True)  # accum from left Idert
                 # search right:
-                ext_M+= search_Idert_(Pp, Idert_, Idert, ileft+Pp.L+1, ave, rave, fleft=False)
+                ext_M+= search_Idert_(Pp, Idert_, Idert, ileft+L+1, ave, rave, fleft=False)
 
-        SL += iL; Rdn += Pp.Rdn; Ext_M += ext_M
+        SL += L; Rdn += Pp.Rdn; Ext_M += ext_M
 
-    if Ext_M > ave_M * (Rdn / len(Pp_)) * 4:  # extra_Pp_ recursion coef
-        extra_Pp_(Pp_, Idert_, ave, rave)
+    # added +rave as temporary measure to prevent endless loop, i think we should increase the cost here for each deeper recursive loop?
+    if Ext_M > rave+ ave_M * (Rdn / len(Pp_)) * 4:  # extra_Pp_ recursion coef
+        new_Idert_ = []
+        for Pp in Pp_: new_Idert_ += Pp.pdert_ # updated Idert_ after Pp merging process in search_Idert_
+        extra_Pp_(Pp_, new_Idert_, ave, rave+10) 
 
     # no return Pp_: changed in place
 
@@ -246,7 +261,7 @@ def search_Idert_(Pp, Idert_, iIdert, j, ave, rave, fleft):
     iP = iIdert.P  # iIdert but not iP may be replaced below
     ext_M = 0
 
-    if fleft:
+    if fleft and j>=0: # if j is negative, it will be getting the wrong Idert
         iIdert = Idert_[j]  # use derivatives only, not P or i
         j -= 1  # Idert_[j] was already compared
         _pI = iP.I + (iP.D / 2)  # back-project by _D
@@ -273,7 +288,7 @@ def search_Idert_(Pp, Idert_, iIdert, j, ave, rave, fleft):
         if curr_M > ave_sub * P.Rdn and iP.sublayers[0] and P.sublayers[0]:  # comp sub_P_s
             comp_sublayers(iP, P, Idert.m)  # forms pdert.sub_M:
 
-        if curr_M + Idert.sub_M > ave_M * P.Rdn * 4:  # ave_cM
+        if curr_M + Idert.sub_M > ave_M * P.Rdn * 4 and Idert.Ppt[0] is not Pp:  # ave_cM
             # 1st match takes over connectivity search in the next extra_Pp_
             _Pp = Idert.Ppt[0]  # rootPp to merge
             if fleft:
