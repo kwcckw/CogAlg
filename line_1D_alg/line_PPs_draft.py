@@ -204,7 +204,7 @@ def form_Pp_(pdert_, param_name, fPd):
                 Pp = Pp_[-1]; Pp.I /= Pp.L; Pp.D /= Pp.L; Pp.M /= Pp.L; Pp.Rdn /= Pp.L  # immediate normalization
                 Pp.Rdn += 1  # redundancy to higher layers
             Pp = CPp( L=1, iL=pdert.P.L, I=pdert.p, D=pdert.d, M=pdert.m, Rdn = pdert.rdn+pdert.P.Rdn, x0=x, ix0=pdert.P.x0,
-                      pdert_=[pdert], sublayers=[])
+                      pdert_=[pdert], sublayers=[[]])
             pdert.Ppt[fPd] = Pp  # Ppm|Ppd that pdert is in, replace root_Pp if any
             Pp_.append(Pp)  # updated by accumulation below
         else:
@@ -224,28 +224,45 @@ def extra_Pp_(Pp_, Idert_, ave, rave):  # incremental-range search for core I
 
     # higher local ave for extended rng -> lower m and term by match, higher proj_M?
     Rdn = 0; Ext_M = 0
+    Pp_index = []
 
     for Pp in Pp_:
         ext_M = 0
-        if Pp.M > ave_M * Pp.Rdn * 4:  # rng_coef  # variable costs, add fixed costs? -lend to contrast?
+        if Pp.M > ave_M * Pp.Rdn * -4:  # rng_coef  # variable costs, add fixed costs? -lend to contrast?
+            pdert_index = []
             for Idert in Idert_:
 
-                if Pp.x0 > 0:  # replace with Pp._negL; search left:
-                    ext_M = search_Idert_(Pp, Idert_, Idert, Pp.x0-1, ave, rave, fleft=True)  # accum from left Idert
-                    # should be Pp.x0 - Pp._negL: left-most compared distance from Pp.x0
+                if Pp.x0 > 0 and Pp.x0-1 < len(Idert_) :  # replace with Pp._negL; search left:
+                    j = Pp.x0-1
+                    if j not in pdert_index and Idert_[j].Ppt[0] is not Pp: # not in appended index and pdert.Ppm is not current Pp      
+                        ext_M = search_Idert_(Pp_, Pp, Idert_, Idert, j, ave, rave, Pp_index, pdert_index, fleft=True)  # accum from left Idert
+                # should be Pp.x0 - Pp._negL: left-most compared distance from Pp.x0
                 if Pp.x0+Pp.L+Pp.pdert_[-1].negL < len(Idert_):  # search right:
-                    ext_M+= search_Idert_(Pp, Idert_, Idert, Pp.x0+Pp.L+1, ave, rave, fleft=False)
+                    j = Pp.x0+Pp.L+1
+                    if j not in pdert_index and j < len(Idert_) and Idert_[j].Ppt[0] is not Pp:
+                        ext_M+= search_Idert_(Pp_, Pp, Idert_, Idert, j, ave, rave, Pp_index, pdert_index, fleft=False)
                 else:
                     break  # not sure about this
+            # remove appended IDert
+            if pdert_index:
+                pdert_index.sort() # sort in ascending
+                for remove_index in reversed(pdert_index): # remove from last element
+                    Idert_.pop(remove_index)
         Rdn += Pp.Rdn; Ext_M += ext_M
-
+        
+    # remove merged Pp
+    if Pp_index:
+        Pp_index.sort() # sort in ascending
+        for remove_index in reversed(Pp_index): # remove from last element
+            Pp_.pop(remove_index)
+ 
     if Ext_M > ave_M * (Rdn / len(Pp_)) * 4:  # extra_Pp_ recursion coef
         extra_Pp_(Pp_, Idert_, ave, rave+10)
 
     # no return Pp_: changed in place
 
-
-def search_Idert_(Pp, Idert_, iIdert, j, ave, rave, fleft):
+# i think later we can tidy up the input arguments a bit
+def search_Idert_(Pp_, Pp, Idert_, iIdert, j, ave, rave, Pp_index, pdert_index, fleft):
     # iIdert searches Idert_ left or right from j
     negM = 0
     ext_M = 0
@@ -258,7 +275,7 @@ def search_Idert_(Pp, Idert_, iIdert, j, ave, rave, fleft):
     else:
         _pI = iP.I - (iP.D / 2)  # forward-project by _D
 
-    while(iP.M + negM > ave_M) and ((not fleft and j < len(Idert_)) or (fleft and j >= 0)):
+    while(iP.M + negM > ave_M) and (j not in pdert_index) and ((not fleft and j < len(Idert_)) or (fleft and j >= 0)):
         # continue search forward(left to right) OR backward(right to left):
         Idert = Idert_[j]
         P = Idert.P
@@ -282,19 +299,22 @@ def search_Idert_(Pp, Idert_, iIdert, j, ave, rave, fleft):
             # 1st match takes over connectivity search in the next extra_Pp_
             _Pp = Idert.Ppt[0]  # rootPp to merge
             if fleft:
-                if _Pp: merge(_Pp, Pp); ext_M += Pp.M  # unique Pp per dert in row Pdert_
+                if _Pp and Pp is not _Pp:
+                    merge(Pp_, _Pp, Pp, Pp_index)
+                    ext_M += Pp.M  # unique Pp per dert in row Pdert_
                 else:
                     iIdert.P = P; iIdert.i = P.I  # pderts represent initial P and i: the last on the left
                     Pp.I += iIdert.i; Pp.D += iIdert.d; Pp.M += iIdert.m; Pp.L+=1; ext_M += iIdert.m
                     Pp.pdert_.insert(0, iIdert)  # appendleft, delete pdert_[P_.index(P)]?
+                    pdert_index.append(Idert_.index(iIdert))
             else:
-                if _Pp: merge(Pp, _Pp); ext_M += _Pp.M
+                if _Pp and _Pp is not Pp:
+                    merge(Pp_, Pp, _Pp, Pp_index); ext_M += _Pp.M
                 else:
                     Pp.I += Idert.i; Pp.D += Idert.d; Pp.M += Idert.m; Pp.L+=1; ext_M += iIdert.m
                     Pp.pdert_.append(Idert)  # delete pdert_[P_.index(P)]?
-
+                    pdert_index.append(Idert_.index(iIdert))
             break  # this dert already searched forward
-
         else:
             Idert.negM += curr_M - ave_M  # known to be negative, accum per dert
             Idert.negiL += P.L
@@ -306,93 +326,8 @@ def search_Idert_(Pp, Idert_, iIdert, j, ave, rave, fleft):
 
     return ext_M
 
-def extra_Pp_(Pp_, Idert_, ave, rave):  # variable-range search for core I, called from form_Pp_
 
-    # higher local ave for extended rng -> lower m and term by match, higher proj_M?
-    SL = 0; Rdn = 0; Ext_M = 0
-
-    for Pp in Pp_:
-        iL = Pp.L  # Pp.L may change after merging in search_Idert_
-        ileft = SL  # index of Pp.pdert[0] in Idert_
-        ext_M = 0
-        if Pp.M > ave_M * Pp.Rdn * 4:  # rng_coef  # variable costs, add fixed costs? -lend to contrast?
-
-            for i, Idert in enumerate(Idert_[1:]): # start from 1 to search from ileft-1
-                # search left:
-                ext_M = search_Idert_(Pp, Idert_, Idert, ileft-1, ave, rave, fleft=True)  # accum from left Idert
-                # search right:
-                ext_M+= search_Idert_(Pp, Idert_, Idert, ileft+Pp.L+1, ave, rave, fleft=False)
-
-        SL += iL; Rdn += Pp.Rdn; Ext_M += ext_M
-
-    if Ext_M > ave_M * (Rdn / len(Pp_)) * 4:  # extra_Pp_ recursion coef
-        extra_Pp_(Pp_, Idert_, ave, rave)
-
-    # no return Pp_: changed in place
-
-
-def search_Idert_(Pp, Idert_, iIdert, j, ave, rave, fleft):
-    # iIdert searches Idert_ left or right from j
-    negM = 0
-    iP = iIdert.P  # iIdert but not iP may be replaced below
-    ext_M = 0
-
-    if fleft:
-        iIdert = Idert_[j]  # use derivatives only, not P or i
-        j -= 1  # Idert_[j] was already compared
-        _pI = iP.I + (iP.D / 2)  # back-project by _D
-    else:
-        _pI = iP.I - (iP.D / 2)  # forward-project by _D
-
-    while(iP.M + negM > ave_M) and ((not fleft and j < len(Idert_)) or (fleft and j >= 0)):
-        # continue search forward(left to right) OR backward(right to left):
-        Idert = Idert_[j]
-        P = Idert.P
-        if fleft:
-            pI = iP.I + (iP.D / 2)  # back-project by _D, accumulate _Idert:
-            iIdert.p = pI + _pI  # summed input
-            iIdert.d = _pI - pI  # difference
-            iIdert.m = ave - abs(Idert.d)  # indirect match
-            curr_M = iIdert.m * rave + (iP.M + P.M) / 2  # P.M is bilateral, no fPd in search_param
-        else:
-            pI = iP.I - (iP.D / 2)  # forward-project by _D
-            Idert.p = pI + _pI  # summed input
-            Idert.d = pI - _pI  # difference
-            Idert.m = ave - abs(Idert.d)  # indirect match
-            curr_M = Idert.m * rave + (iP.M + Idert.P.M) / 2  # P.M is bilateral, no fPd in search_param
-
-        if curr_M > ave_sub * P.Rdn and iP.sublayers[0] and P.sublayers[0]:  # comp sub_P_s
-            comp_sublayers(iP, P, Idert.m)  # forms pdert.sub_M:
-
-        if curr_M + Idert.sub_M > ave_M * P.Rdn * 4:  # ave_cM
-            # 1st match takes over connectivity search in the next extra_Pp_
-            _Pp = Idert.Ppt[0]  # rootPp to merge
-            if fleft:
-                if _Pp: merge(_Pp, Pp); ext_M += Pp.M  # unique Pp per dert in row Pdert_
-                else:
-                    iIdert.P = P; iIdert.i = P.I  # pderts represent initial P and i: the last on the left
-                    Pp.I += iIdert.i; Pp.D += iIdert.d; Pp.M += iIdert.m; Pp.L+=1; ext_M += iIdert.m
-                    Pp.pdert_.insert(0, iIdert)  # appendleft, delete pdert_[P_.index(P)]?
-            else:
-                if _Pp: merge(Pp, _Pp); ext_M += _Pp.M
-                else:
-                    Pp.I += Idert.i; Pp.D += Idert.d; Pp.M += Idert.m; Pp.L+=1; ext_M += iIdert.m
-                    Pp.pdert_.append(Idert)  # delete pdert_[P_.index(P)]?
-
-            break  # this dert already searched forward
-
-        else:
-            Idert.negM += curr_M - ave_M  # known to be negative, accum per dert
-            Idert.negiL += P.L
-            Idert.negL += 1
-            negM = Idert.negM
-            if fleft: j -= 1
-            else: j += 1
-
-    return ext_M
-
-
-def merge(Pp, _Pp):
+def merge(Pp_, Pp, _Pp, Pp_index):
     # merge Pp with dert.Pp, if any:
     Pp.accum_from(_Pp, excluded=['x0', 'L'])
     # merge pderts and update pdert.Pp reference
@@ -401,8 +336,14 @@ def merge(Pp, _Pp):
             Pp.pdert_.append(pdert)
             Pp.L += 1
             pdert.Ppt[0] = Pp  # Ppm
+        elif pdert.Ppt[0] is not Pp: # if pdert inside Pp but their Pp reference is not Pp (very unlikely) but it did happened, need to verify on this again after the other sections are finalized
+            pdert.Ppt[0] = Pp
     # merge sublayers
     Pp.sublayers += _Pp.sublayers
+    
+    # _Pp is the existing Pp_'s Pp and not save into Pp_index before this
+    if _Pp in Pp_ and Pp_.index(_Pp) not in Pp_index:
+        Pp_index.append(Pp_.index(_Pp)) # to be deleted from Pp_
     # also need to remove _Pp from rootPp' Pp_: delete object refs?
 
 
