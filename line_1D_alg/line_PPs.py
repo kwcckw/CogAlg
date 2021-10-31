@@ -20,6 +20,7 @@ sys.path.insert(0, abspath(join(dirname("CogAlg"), '..')))
 import numpy as np
 from frame_2D_alg.class_cluster import ClusterStructure, comp_param
 from line_patterns import *
+import gc
 
 class Cpdert(ClusterStructure):
     # P param dert
@@ -34,7 +35,7 @@ class Cpdert(ClusterStructure):
     sub_M = int  # match from comp_sublayers, if any
     sub_D = int  # diff from comp_sublayers, if any
     P = object  # P of i param
-    Ppt = lambda: [object, object]  # tuple [Ppm,Ppd]: Pps that pdert is in, for merging in form_Pp_rng, temporary?
+    Ppt = lambda: [object, object, object]  # tuple [Ppm,Ppd]: Pps that pdert is in, for merging in form_Pp_rng, temporary?
 
 class CPp(CP):
     pdert_ = list  # Pp elements, "p" for param
@@ -199,6 +200,7 @@ def form_Pp_(pdert_, param_name, fPd):
             # accumulate params:
             Pp.L += 1; Pp.iL += pdert.P.L; Pp.I += pdert.p; Pp.D += pdert.d; Pp.M += pdert.m; Pp.Rdn += pdert.rdn+pdert.P.Rdn
             Pp.pdert_ += [pdert]
+            pdert.Ppt[fPd] = Pp
         x += 1
         _sign = sign
 
@@ -272,17 +274,21 @@ def search_Idert_(Pp_, Pp, Idert_, iIdert, j, ave, rave, fleft):
             _Pp = Idert.Ppt[0]  # rootPp to merge
             if fleft:
                 Pp._negL, Pp._negM = 0, 0
-                if _Pp: merge(_Pp, Pp); ext_M += Pp.M  # unique Pp per dert in row Pdert_
+                if isinstance(_Pp, CPp): # _Pp could be an object empty and can be true if use if Pp
+                    merge(_Pp, Pp); ext_M += Pp.M  # unique Pp per dert in row Pdert_
                 else:
                     iIdert.P = P; iIdert.i = P.I  # pderts represent initial P and i: the last on the left
                     Pp.I += iIdert.i; Pp.D += iIdert.d; Pp.M += iIdert.m; Pp.L+=1; ext_M += iIdert.m
                     Pp.pdert_.insert(0, iIdert)  # appendleft
+                    iIdert.Ppt[0] = Pp
                     # pdert_index.append(Idert_.index(iIdert))
             else:
-                if _Pp: merge(Pp, _Pp); ext_M += _Pp.M
+                if isinstance(_Pp, CPp): 
+                    merge(Pp, _Pp); ext_M += _Pp.M
                 else:
                     Pp.I += Idert.i; Pp.D += Idert.d; Pp.M += Idert.m; Pp.L+=1; ext_M += iIdert.m
                     Pp.pdert_.append(Idert)
+                    Idert.Ppt[0] = Pp
                     # pdert_index.append(Idert_.index(iIdert))
             break  # this dert already searched forward
         else:
@@ -300,27 +306,30 @@ def search_Idert_(Pp_, Pp, Idert_, iIdert, j, ave, rave, fleft):
     return ext_M
 
 
-def merge(Pp_, Pp, _Pp, Pp_index):
+def merge(Pp, _Pp):
     # merge Pp with dert.Pp, if any:
     Pp.accum_from(_Pp, excluded=['x0', 'L'])
     # merge pderts and update pdert.Pp reference
-    for pdert in _Pp.pdert_:
+    for pdert in _Pp.pdert_: 
         if pdert not in Pp.pdert_:  # a bug forms overlapping derPs
             Pp.pdert_.append(pdert)
             Pp.L += 1
-            pdert.Ppt[0] = Pp  # Ppm
-        elif pdert.Ppt[0] is not Pp:
-            # if pdert inside Pp but their Pp reference is not Pp (very unlikely) but it did happened, need to verify on this again after the other sections are finalized
-            pdert.Ppt[0] = Pp
+            # pdert.Ppt[0] = Pp  # Ppm this will be updated in referrer section below
     # merge sublayers
     Pp.sublayers += _Pp.sublayers
 
-    # _Pp is the existing Pp_'s Pp and not save into Pp_index before this
-    if _Pp in Pp_ and Pp_.index(_Pp) not in Pp_index:
-        Pp_index.append(Pp_.index(_Pp)) # to be deleted from Pp_
-    # also need to remove _Pp from rootPp' Pp_: delete object refs?
+    # instead of remove _Pp from Pp_, why not replace _Pp with Pp?
+    _Pp_reference_ = gc.get_referrers(_Pp)
+    for reference_ in _Pp_reference_:
+        if isinstance(reference_, list): # reference is Pp_ or pdert.Ppt
+            _Pp_index = reference_.index(_Pp)
+            if Pp not in reference_: # if Pp not in the list, replace it
+                reference_[_Pp_index] = Pp
+            else: # if Pp is in the list, remove _Pp instead of replace it with Pp
+                if not (len(reference_) == 3 and reference_[2] is object): # remnove only when list is not Ppt
+                    reference_.remove(_Pp)
 
-
+            
 def sum_rdn_(param_names, Pdert_t, fPd):
     '''
     access same-index pderts of all P params, assign redundancy to lesser-magnitude m|d in param pair.
