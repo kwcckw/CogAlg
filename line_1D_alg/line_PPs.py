@@ -112,9 +112,9 @@ def line_PPs_root(P_t):  # P_t= Pm_, Pd_; higher-level input is nested to the de
             IPpm_ = Ppm_t[1]; Idert_ = Pdert_t[1]
             rootM = sum(Pp.M for Pp in IPpm_) + sum(pdert.m for pdert in Idert_)  # input match in two overlapping layers
             compact(IPpm_, dert1_, dert2_, fPd)  # re-eval Pps for xlayer rdn, eval splice Pms|Pds: Ps in +IPpms may merge,
-            # but Pp.pdert_ is still in and may search:
+            # but Pp.pdert_ is still in and may extend:
             if len(P_) > 3 and rootM > ave_M * 4:  # different coef
-                # +IPms search in adj -IPms, merge if comp in next +IPm, no use for -IPms:
+                # +IPpms search in adj -IPpms, merge if comp in next +IPpm, no use for -IPpms:
                 extra_Pp_(IPpm_, Idert_, ave, rave=1)  # rng+ per Pm_'IPpm_: I induction = dert.m + P.M? no sublayers
 
             Ppd_t = []  # LPp_, IPp_, DPp_, MPp_
@@ -200,7 +200,6 @@ def form_Pp_(pdert_, param_name, fPd):
             # accumulate params:
             Pp.L += 1; Pp.iL += pdert.P.L; Pp.I += pdert.p; Pp.D += pdert.d; Pp.M += pdert.m; Pp.Rdn += pdert.rdn+pdert.P.Rdn
             Pp.pdert_ += [pdert]
-            pdert.Ppt[0] = Pp # we do need update pdert.Ppt here right?
 
         pdert.Ppt[fPd] = Pp  # Ppm | Ppd that pdert is in, replace root_Pp if any
         _sign = sign; x += 1
@@ -211,7 +210,7 @@ def form_Pp_(pdert_, param_name, fPd):
     return Pp_
 
 
-def extra_Pp_(Pp_, Idert_, ave, rave):  # incremental-range search for core I for +IPms, in adj -IPms, merge if next +IPm?
+def extra_Pp_(Pp_, Idert_, ave, rave):  # incremental-range search for core I for +IPpms, in adj -IPpms, merge if next +IPpm
 
     # higher local ave for extended rng -> lower m and term by match, higher proj_M?
     Rdn = 0; Ext_M = 0
@@ -224,13 +223,11 @@ def extra_Pp_(Pp_, Idert_, ave, rave):  # incremental-range search for core I fo
                 if j > 0:
                     ext_M = search_Idert_(Pp_, Pp, Idert_, Idert, j, ave, rave, fleft=True)
                     if Pp not in Pp_: # after merging, Pp is removed from Pp_
-                        Pp = Pp.pdert_[0].Ppt[0] # update Pp to the merged Pp, or break?
+                        Pp = Pp.pdert_[0].Ppt[0]  # merging _Pp
                 # search right:
                 j = Pp.x0 + Pp.L + Pp.pdert_[-1].negL
-                if j < len(Idert_): 
+                if j < len(Idert_):
                     ext_M+= search_Idert_(Pp_, Pp, Idert_, Idert, j, ave, rave, fleft=False)
-                    if Pp not in Pp_: # after merging, Pp is removed from Pp_
-                        Pp = Pp.pdert_[0].Ppt[0] # update Pp to the merged Pp
                 else:
                     break  # not sure about this
         Rdn += Pp.Rdn; Ext_M += ext_M
@@ -257,56 +254,47 @@ def search_Idert_(Pp_, Pp, Idert_, iIdert, j, ave, rave, fleft):
     while(iP.M + negM > ave_M) and ((not fleft and j < len(Idert_)) or (fleft and j >= 0)):
         # continue search forward(left to right) OR backward(right to left):
         Idert = Idert_[j]
-        if Idert.Ppt[0] is not Pp: # prevent comparing to itself， this is possible since Pp is formed from Idert
-            P = Idert.P
-            if fleft:
-                pI = iP.I + (iP.D / 2)  # back-project by _D, accumulate _Idert:
-                iIdert.p = pI + _pI; iIdert.d = _pI - pI; iIdert.m = ave - abs(Idert.d)  # indirect match
-                curr_M = iIdert.m * rave + (iP.M + P.M) / 2  # P.M is bilateral, no fPd in search_param
+        P = Idert.P
+        if fleft:
+            pI = iP.I + (iP.D / 2)  # back-project by _D, accumulate _Idert:
+            iIdert.p = pI + _pI; iIdert.d = _pI - pI; iIdert.m = ave - abs(Idert.d)  # indirect match
+            curr_M = iIdert.m * rave + (iP.M + P.M) / 2  # P.M is bilateral, no fPd in search_param
+        else:
+            pI = iP.I - (iP.D / 2)  # forward-project by _D
+            Idert.p = pI + _pI; Idert.d = pI - _pI; Idert.m = ave - abs(Idert.d)  # indirect match
+            curr_M = Idert.m * rave + (iP.M + Idert.P.M) / 2  # P.M is bilateral, no fPd in search_param
+
+        if curr_M > ave_sub * P.Rdn and iP.sublayers[0] and P.sublayers[0]:  # comp sub_P_s
+            comp_sublayers(iP, P, Idert.m)  # forms pdert.sub_M:
+
+        if curr_M + Idert.sub_M > ave_M * P.Rdn * 4:  # ave_cM
+            # 1st match takes over connectivity search in the next extra_Pp_
+            _Pp = Idert.Ppt[0]  # rootPp to merge
+            if _Pp.M > 0:
+                if fleft: merge(Pp_, _Pp, Pp); ext_M += Pp.M  # unique Pp per dert in row Pdert_
+                else:     merge(Pp_, Pp, _Pp); ext_M += Pp.M
             else:
-                pI = iP.I - (iP.D / 2)  # forward-project by _D
-                Idert.p = pI + _pI; Idert.d = pI - _pI; Idert.m = ave - abs(Idert.d)  # indirect match
-                curr_M = Idert.m * rave + (iP.M + Idert.P.M) / 2  # P.M is bilateral, no fPd in search_param
-    
-            if curr_M > ave_sub * P.Rdn and iP.sublayers[0] and P.sublayers[0]:  # comp sub_P_s
-                comp_sublayers(iP, P, Idert.m)  # forms pdert.sub_M:
-    
-            if curr_M + Idert.sub_M > ave_M * P.Rdn * 4:  # ave_cM
-                # 1st match takes over connectivity search in the next extra_Pp_
-                _Pp = Idert.Ppt[0]  # rootPp to merge
                 if fleft:
                     Pp._negL, Pp._negM = 0, 0
-                    if isinstance(_Pp, CPp): # _Pp could be an object empty and can be true if use if Pp
-                        merge(Pp_, _Pp, Pp); ext_M += Pp.M  # unique Pp per dert in row Pdert_
-                    else:
-                        iIdert.P = P; iIdert.i = P.I  # pderts represent initial P and i: the last on the left
-                        Pp.I += iIdert.i; Pp.D += iIdert.d; Pp.M += iIdert.m; Pp.L+=1; ext_M += iIdert.m
-                        Pp.pdert_.insert(0, iIdert)  # appendleft
-                        iIdert.Ppt[0] = Pp
-                        # pdert_index.append(Idert_.index(iIdert))
+                    iIdert.P = P; iIdert.i = P.I  # pderts represent initial P and i: the last on the left
+                    Pp.I += iIdert.i; Pp.D += iIdert.d; Pp.M += iIdert.m; Pp.L+=1; ext_M += iIdert.m
+                    Pp.pdert_.insert(0, iIdert)  # appendleft
+                    iIdert.Ppt[0] = Pp
                 else:
-                    if isinstance(_Pp, CPp):
-                        merge(Pp_, Pp, _Pp); ext_M += _Pp.M
-                    else:
-                        Pp.I += Idert.i; Pp.D += Idert.d; Pp.M += Idert.m; Pp.L+=1; ext_M += iIdert.m
-                        Pp.pdert_.append(Idert)
-                        Idert.Ppt[0] = Pp
-                        # pdert_index.append(Idert_.index(iIdert))
-                break  # this dert already searched forward
+                    Pp.I += Idert.i; Pp.D += Idert.d; Pp.M += Idert.m; Pp.L+=1; ext_M += iIdert.m
+                    Pp.pdert_.append(Idert)
+                    Idert.Ppt[0] = Pp
+                break  # added pdert | Pp already searched
+        else:  # _Idert miss
+            if fleft:
+                Pp._negL = negL; Pp._negM = negM
+                j -= 1
             else:
-                if fleft:
-                    Pp._negL = negL
-                    Pp._negM = negM
-                    j -= 1
-                else:
-                    Idert.negM += curr_M - ave_M  # known to be negative, accum per dert
-                    Idert.negiL += P.L
-                    Idert.negL += 1
-                    negM = Idert.negM
-                    j += 1
-        else: # increase searching index
-            if fleft: j -= 1
-            else: j += 1
+                Idert.negM += curr_M - ave_M  # known to be negative, accum per dert
+                Idert.negiL += P.L
+                Idert.negL += 1
+                negM = Idert.negM
+                j += 1
 
     return ext_M
 
