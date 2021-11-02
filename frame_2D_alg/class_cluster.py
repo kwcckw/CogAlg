@@ -299,6 +299,16 @@ class ClusterStructure(metaclass=MetaCluster):
                 elif len(_layer)>0: # _layer is not empty but layer is empty
                     setattr(self,layer_num,_layer.copy())
 
+
+    def remove_param(self, other, excluded=()):
+        """Remove params from another structure."""
+        # remove base params
+        for param in self.numeric_params:
+            if (param not in excluded) and (param in other.numeric_params):
+                p = getattr(self,param)
+                _p = getattr(other,param)
+                setattr(self, param, p-_p)
+                
     def merge(self, other, self_instance_name, self_instance, excluded = ()):
         # accumulate numeric params
         self.accum_from(other,excluded=excluded)

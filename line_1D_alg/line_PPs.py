@@ -271,19 +271,60 @@ def search_Idert_(Pp_, Pp, Idert_, iIdert, j, ave, rave, fleft):
             # 1st match takes over connectivity search in the next extra_Pp_
             _Pp = Idert.Ppt[0]  # rootPp to merge
             if _Pp.M > 0:
-                if fleft: merge(Pp_, _Pp, Pp); ext_M += Pp.M  # unique Pp per dert in row Pdert_
+                if fleft: 
+                    merge(Pp_, _Pp, Pp)
+                    ext_M += Pp.M  # unique Pp per dert in row Pdert_
+                    # this update may causing consecutive Pdert's Pp is same as the current Pp
+                    Pp = _Pp # update merging Pp reference to the merged _Pp  
+                    
                 else:     merge(Pp_, Pp, _Pp); ext_M += Pp.M
-            else:
+            else: 
                 if fleft:
-                    Pp._negL, Pp._negM = 0, 0
-                    iIdert.P = P; iIdert.i = P.I  # pderts represent initial P and i: the last on the left
-                    Pp.I += iIdert.i; Pp.D += iIdert.d; Pp.M += iIdert.m; Pp.L+=1; ext_M += iIdert.m
-                    Pp.pdert_.insert(0, iIdert)  # appendleft
-                    iIdert.Ppt[0] = Pp
+                    pri_index = Pp_.index(_Pp)-1 # previous +Pp
+                    if pri_index>=0: # index need at least 0
+                        pri_Pp = Pp_[pri_index] # get the left +Pp of current -_Pp
+                        # check match between pri_Pp right most pdert and _Pp leftmost pdert
+                        # if match, continue to transfer the rest of _Pp's pdert?
+                        pri_pdert = pri_Pp.pdert_[-1]
+                        remove_pdert_ = [] # list of pderts to be removed from _Pp
+                        for _pdert in _Pp.pdert_: 
+                            dert = comp_par(pri_pdert.P, pri_pdert.m, _pdert.m, "I_", ave)
+                            if dert.m > ave: # matching pdert, transfer -_Pp.pdert to +pri_Pp 
+                                _pdert.Ppt[0] = pri_Pp    # update reference to pri_Pp
+                                pri_Pp.accum_from(_pdert) # accumulate params of _pdert
+                                _Pp.remove_param(_pdert)   # remove params value from _Pp
+                                remove_pdert_.append(_pdert)
+                            else: # stop the transferring process once there's no matching pdert
+                                break 
+                        for remove_pdert in remove_pdert_:  _Pp.pdert_.remove(remove_pdert) # remove pdert at the end of loop                               
+                    else:  
+                        Pp._negL, Pp._negM = 0, 0
+                        iIdert.P = P; iIdert.i = P.I  # pderts represent initial P and i: the last on the left
+                        Pp.I += iIdert.i; Pp.D += iIdert.d; Pp.M += iIdert.m; Pp.L+=1; ext_M += iIdert.m
+                        Pp.pdert_.insert(0, iIdert)  # appendleft
+                        iIdert.Ppt[0] = Pp
                 else:
-                    Pp.I += Idert.i; Pp.D += Idert.d; Pp.M += Idert.m; Pp.L+=1; ext_M += iIdert.m
-                    Pp.pdert_.append(Idert)
-                    Idert.Ppt[0] = Pp
+                    nxt_index = Pp_.index(_Pp)+1 # next +Pp
+                    if nxt_index <= len(Pp_)-1: # index need at least size of Pp_
+                        nxt_Pp = Pp_[nxt_index] # get the left +Pp of current -_Pp
+                        # check match between nxt_Pp left most pdert and _Pp rightmost pdert
+                        # if match, continue to transfer the rest of _Pp's pdert?
+                        nxt_pdert = nxt_Pp.pdert_[0]
+                        remove_pdert_ = [] # list of pderts to be removed from _Pp
+                        for _pdert in reversed(_Pp.pdert_): # scan from right to left 
+                            dert = comp_par(nxt_pdert.P, nxt_pdert.m, _pdert.m, "I_", ave)
+                            if dert.m > ave: # matching pdert, transfer -_Pp.pdert to +nxt_Pp 
+                                _pdert.Ppt[0] = nxt_Pp    # update reference to pri_Pp
+                                nxt_Pp.accum_from(_pdert) # accumulate params of _pdert
+                                _Pp.remove_param(_pdert)   # remove params value from _Pp
+                                remove_pdert_.append(_pdert)
+                            else: # stop the transferring process once there's no matching pdert
+                                break 
+                        for remove_pdert in remove_pdert_:  _Pp.pdert_.remove(remove_pdert) # remove pdert at the end of loop            
+                    else:
+                        Pp.I += Idert.i; Pp.D += Idert.d; Pp.M += Idert.m; Pp.L+=1; ext_M += iIdert.m
+                        Pp.pdert_.append(Idert)
+                        Idert.Ppt[0] = Pp
                 break  # added pdert | Pp already searched
         else:  # _Idert miss
             if fleft:
@@ -309,17 +350,6 @@ def merge(Pp_, Pp, _Pp):
     # merge sublayers
     Pp.sublayers += _Pp.sublayers
     Pp_.remove(_Pp)
-    '''
-    _Pp_reference_ = gc.get_referrers(_Pp)
-    for reference_ in _Pp_reference_:
-        if isinstance(reference_, list): # reference is Pp_ or pdert.Ppt
-            _Pp_index = reference_.index(_Pp)
-            if Pp not in reference_: # if Pp not in the list, replace it
-                reference_[_Pp_index] = Pp
-            else: # if Pp is in the list, remove _Pp instead of replace it with Pp
-                if not (len(reference_) == 3 and reference_[2] is object): # remnove only when list is not Ppt
-                    reference_.remove(_Pp)
-    '''
 
 def sum_rdn_(param_names, Pdert_t, fPd):
     '''
