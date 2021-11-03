@@ -211,7 +211,6 @@ def form_Pp_(pdert_, param_name, fPd):
 
 
 def extra_Pp_(Pp_, Idert_, ave, rave):  # incremental-range search for core I for +IPpms, in adj -IPpms, merge if next +IPpm
-
     # higher local ave for extended rng -> lower m and term by match, higher proj_M?
     Rdn = 0; Ext_M = 0
     for Pp in Pp_:
@@ -253,56 +252,59 @@ def search_Idert_(Pp_, Pp, Idert_, iIdert, j, ave, rave, fleft):
 
     while(iP.M + negM > ave_M) and ((not fleft and j < len(Idert_)) or (fleft and j >= 0)):
         # continue search forward(left to right) OR backward(right to left):
-
-        cIdert = Idert_[j]  # c for "current"
-        if fleft:
-            pI = iP.I + (iP.D / 2)  # back-project by _D
-            Idert = iIdert; _Idert = cIdert; P = iP; _P = cIdert.P  # rename by direction, not sure about this
-        else:
-            Idert = cIdert; _Idert = iIdert; P = cIdert.P; _P = iP  # rename by direction
-            pI = iP.I - (iP.D / 2)  # forward-project by _D
-
-        _Idert.p = pI + _pI; _Idert.d = _pI - pI; _Idert.m = ave - abs(_Idert.d)  # comp, accum _Idert
-        curr_M = _Idert.m * rave + (_P.M + P.M) / 2  # P.M is bilateral, no fPd in search_param
-
-        if curr_M > ave_sub * P.Rdn and _P.sublayers[0] and P.sublayers[0]:  # comp sub_P_s
-            comp_sublayers(_P, P, Idert.m)  # forms pdert.sub_M:
-
-        if curr_M + Idert.sub_M > ave_M * P.Rdn * 4:  # ave_cM
-            # 1st match takes over connectivity search in next extra_Pp_
-            cPp = cIdert.Ppt[0]  # Pp to merge if positive or shrink if negative:
-
-            if cPp.M > 0:
-                if fleft: ext_M += Pp.M; merge(Pp_, cPp, Pp)  # merge Pp in _Pp
-                else:     ext_M += cPp.M; merge(Pp_, Pp, cPp)  # merge _Pp in Pp
-
-            else:  # transfer cIdert from cPp to Pp
-                if fleft:
-                    Pp._negL, Pp._negM = 0, 0
-                    Idert.P = P; Idert.i = P.I  # pderts represent initial P and i: the last on the left
-                    ext_M += _Idert.m
-                    Pp.pdert_.insert(0, _Idert)  # appendleft
-                else:
-                    ext_M += Idert.m
-                    Pp.pdert_.append(Idert)
-
-                Pp.I += cIdert.i; Pp.D += cIdert.d; Pp.M += cIdert.m; Pp.L+=1
-                cIdert.Ppt[0] = Pp
-                cPp.I -= cIdert.i; cPp.D -= cIdert.d; cPp.M -= cIdert.m; cPp.L-=1
-                cPp.pdert_.remove(cIdert)  # cIdert is transferred from cPp to Pp
-
-            break  # added pdert or merged Pp already searched in corresponding direction
-
-        else:  # _Idert miss
+        if Idert_[j].Ppt[0] is not Pp:
+            cIdert = Idert_[j]  # c for "current"
             if fleft:
-                Pp._negL = negL; Pp._negM = negM
-                j -= 1
+                pI = iP.I + (iP.D / 2)  # back-project by _D
+                Idert = iIdert; _Idert = cIdert; P = iP; _P = cIdert.P  # rename by direction, not sure about this
             else:
-                Idert.negM += curr_M - ave_M  # known to be negative, accum per dert
-                Idert.negiL += P.L
-                Idert.negL += 1
-                negM = Idert.negM
-                j += 1
+                Idert = cIdert; _Idert = iIdert; P = cIdert.P; _P = iP  # rename by direction
+                pI = iP.I - (iP.D / 2)  # forward-project by _D
+    
+            _Idert.p = pI + _pI; _Idert.d = _pI - pI; _Idert.m = ave - abs(_Idert.d)  # comp, accum _Idert
+            curr_M = _Idert.m * rave + (_P.M + P.M) / 2  # P.M is bilateral, no fPd in search_param
+    
+            if curr_M > ave_sub * P.Rdn and _P.sublayers[0] and P.sublayers[0]:  # comp sub_P_s
+                comp_sublayers(_P, P, Idert.m)  # forms pdert.sub_M:
+    
+            if curr_M + Idert.sub_M > ave_M * P.Rdn * 4:  # ave_cM
+                # 1st match takes over connectivity search in next extra_Pp_
+                cPp = cIdert.Ppt[0]  # Pp to merge if positive or shrink if negative:
+                if cPp.M > 0:
+                    if fleft: ext_M += Pp.M; merge(Pp_, cPp, Pp)  # merge Pp in _Pp
+                    else:     ext_M += cPp.M; merge(Pp_, Pp, cPp)  # merge _Pp in Pp
+    
+                else:  # transfer cIdert from cPp to Pp
+                    if fleft:
+                        Pp._negL, Pp._negM = 0, 0
+                        Idert.P = P; Idert.i = P.I  # pderts represent initial P and i: the last on the left
+                        ext_M += _Idert.m
+                        Pp.pdert_.insert(0, _Idert)  # appendleft
+                    else:
+                        ext_M += Idert.m
+                        Pp.pdert_.append(Idert)
+    
+                    Pp.I += cIdert.i; Pp.D += cIdert.d; Pp.M += cIdert.m; Pp.L+=1
+                    cIdert.Ppt[0] = Pp
+                    cPp.I -= cIdert.i; cPp.D -= cIdert.d; cPp.M -= cIdert.m; cPp.L-=1
+                    cPp.pdert_.remove(cIdert)  # cIdert is transferred from cPp to Pp
+                    if not cPp.pdert_: Pp_.remove(cPp) # cPp is having 0 pdert after the transfer, delete it
+                        
+                break  # added pdert or merged Pp already searched in corresponding direction
+    
+            else:  # _Idert miss
+                if fleft:
+                    Pp._negL = negL; Pp._negM = negM
+                    j -= 1
+                else:
+                    Idert.negM += curr_M - ave_M  # known to be negative, accum per dert
+                    Idert.negiL += P.L
+                    Idert.negL += 1
+                    negM = Idert.negM
+                    j += 1
+        else: # current Idert is being merged/transfer previously to current Pp, skip current Idert and continue the next search 
+            if fleft: j -= 1
+            else: j += 1
 
     return ext_M
 
