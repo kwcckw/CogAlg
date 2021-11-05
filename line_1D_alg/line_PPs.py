@@ -276,7 +276,8 @@ def search_Idert_(Pp_, Pp, Idert_, i, j, ave, rave, fleft):
             sub_M, sub_D = comp_sublayers(_P, P, Idert.m)  # comp sub_P_s
             _Idert.sub_M = sub_M; _Idert.sub_D = sub_D
 
-        if curr_M + sub_M > ave_M * P.Rdn * 4:  # net match of _P to P
+        # sub_M may not exist if comp_sublayers is not run in the section above
+        if curr_M + _Idert.sub_M > ave_M * P.Rdn * 4:  # net match of _P to P
             cPp = cIdert.Ppt[0]  # Pp to merge if positive or shrink if negative:
 
             if cPp.M > 0:  # +Pp: match to any Idert in Pp.pdert_ -> all consecutive matches
@@ -475,6 +476,8 @@ def comp_sublayers(_P, P, root_v):  # if pdert.m -> if summed params m -> if pos
             _sub_P_, _, _xsub_pdertt_ = _P.sublayers[0][0][2+i: 4+i+1]
             sub_P_, _, xsub_pdertt_ = P.sublayers[0][0][2+i: 4+i+1]
             if rng == _rng and min(_P.L, P.L) > ave_Ls:
+                if i: sub_D += xDert_v
+                else: sub_M += xDert_v
                 # if same intra_comp fork: compare sub_Ps to each _sub_P within max relative distance, comb_V- proportional:
                 _SL = SL = 0  # summed Ls
                 start_index = next_index = 0  # index of starting sub_P for current _sub_P
@@ -482,13 +485,13 @@ def comp_sublayers(_P, P, root_v):  # if pdert.m -> if summed params m -> if pos
                 xsub_pdertt_ += [[]]  # append xsub_dertt per _sub_P_ and sub_P_, sparse?
 
                 for _sub_P in _sub_P_:
-                    P_ = []  # to form xsub_Pps
+                    P_ = []  # to form xsub_Pps (where would we need this P_? Else we can remove it)
                     _xsub_pdertt = [[], [], [], []]  # tuple of L, I, D, M xsub_pderts
                     _SL += _sub_P.L  # ix0 of next _sub_P
                     # search right:
                     for sub_P in sub_P_[start_index:]:  # index_ix0 > _ix0, comp sub_Ps at proximate relative positions in sub_P_
-                        fbreak, xsub_P_M, xsub_P_D = comp_sub_P(_sub_P, sub_P, P_, root_v, i)
-                        sub_M += xsub_P_M + xDert_vt[0]; sub_D += xsub_P_D + xDert_vt[1]
+                        fbreak, xsub_P_M, xsub_P_D = comp_sub_P(_sub_P, sub_P, _xsub_pdertt, P_, root_v, i)
+                        sub_M += xsub_P_M ; sub_D += xsub_P_D
                         if fbreak:
                             break
                         # if next ix overlap: ix0 of next _sub_P < ix0 of current sub_P
@@ -496,8 +499,8 @@ def comp_sublayers(_P, P, root_v):  # if pdert.m -> if summed params m -> if pos
                         SL += sub_P.L  # ix0 of next sub_P
                     # search left:
                     for sub_P in reversed(sub_P_[len(sub_P_) - start_index:]):  # index_ix0 <= _ix0
-                        fbreak, xsub_P_M, xsub_P_D = comp_sub_P(_sub_P, sub_P, P_, root_v, i)  # invert sub_P, _sub_P positions
-                        sub_M += xsub_P_M + xDert_vt[0]; sub_D += xsub_P_D + xDert_vt[1]
+                        fbreak, xsub_P_M, xsub_P_D = comp_sub_P(_sub_P, sub_P, _xsub_pdertt, P_, root_v, i)  # invert sub_P, _sub_P positions
+                        sub_M += xsub_P_M ; sub_D += xsub_P_D
                         if fbreak:
                             break
                     # not implemented: if param_name == "I_" and not fPd: sub_pdert = search_param_(param_)
@@ -505,7 +508,7 @@ def comp_sublayers(_P, P, root_v):  # if pdert.m -> if summed params m -> if pos
 
                     if _xsub_pdertt[0]:  # at least 1 sub_pdert, real min length ~ 8, very unlikely
                         # form 4-tuple of xsub_Pp_s:
-                        xsub_Pp_t = form_Pp_root(_xsub_pdertt, None, None, fPd=i)
+                        xsub_Pp_t = form_Pp_root(_xsub_pdertt, [], [], fPd=i)
                         _xsub_pdertt_[-1][:] = xsub_Pp_t
                         xsub_pdertt_[-1][:] = _xsub_pdertt_[-1]  # bilateral assignment
                     else:
@@ -562,7 +565,7 @@ xsub_pderts (cross-sub_P): xsub_pdertt_[ xsub_pdertt [ xsub_pdert_[ sub_pdert]]]
 the above forms Pps across xsub_dertt, then also form Pps across _xsub_pdertt_ and xsub_pdertt_? 
 '''
 
-def comp_sub_P(_sub_P, sub_P, P_, root_v, fPd):
+def comp_sub_P(_sub_P, sub_P, xsub_pdertt, P_, root_v, fPd):
     fbreak = 0
     xsub_P_M, xsub_P_D = 0,0  # vm,vd combined across params
     dist_decay = 2  # decay of projected match with relative distance between sub_Ps
@@ -581,11 +584,10 @@ def comp_sub_P(_sub_P, sub_P, P_, root_v, fPd):
         for i, (param_name, ave) in enumerate(zip(param_names, aves)):
             _param = getattr(_sub_P, param_name[0])  # can be simpler?
             param = getattr(sub_P, param_name[0])
-            dert = comp_param(_param, param, param_name, ave)
-            sub_pdert = Cpdert(P=_sub_P, i=dert.i, p=dert.p, d=dert.d, m=dert.m)  # convert Cdert to Cpdert
+            sub_pdert = comp_par(sub_P, _param, param, param_name, ave)
             # no negative-value sum: -Ps won't be processed:
-            if dert.m > 0: xsub_P_M += dert.m
-            vd = abs(dert.d) - ave_d  # convert to coef
+            if sub_pdert.m > 0: xsub_P_M += sub_pdert.m
+            vd = abs(sub_pdert.d) - ave_d  # convert to coef
             if vd > 0: xsub_P_D += vd
             xsub_pdertt[i].append(sub_pdert)  # per L, I, D, M' xsub_pdert
             P_.append(sub_P)  # same sub_P for all xsub_Pps
