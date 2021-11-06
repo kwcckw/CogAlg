@@ -263,58 +263,64 @@ def search_Idert_(Pp_, Pp, Idert_, i, j, ave, rave, fleft):
     while(iM + iIdert.m + negM > ave_M) and ((not fleft and j < len(Idert_)) or (fleft and j >= 0)):
 
         cIdert = Idert_[j]  # c for current comparand, left OR right from iIdert
-        cI = cIdert.i; cD = cIdert.d; cM = cIdert.P.M
-        if fleft:
-            Idert = iIdert; _Idert = cIdert  # rename by direction
-            pI = ipI; _pI = cI - (cD / 2)  # forward-project by cD
-        else:
-            Idert = cIdert; _Idert = iIdert  # rename by direction
-            pI = cI + (cD / 2); _pI = ipI  # back-project by cD
-
-        # comp(_Idert, Idert):
-        _Idert.p = pI + _pI; _Idert.d = _pI - pI; _Idert.m = ave - abs(_Idert.d)
-        curr_M = _Idert.m * rave + (iM + cM) / 2  # P.M is bilateral
-        P = Idert.P
-        _P = _Idert.P
-        if curr_M > ave_sub * P.Rdn and _P.sublayers[0] and P.sublayers[0]:
-            sub_M, sub_D = comp_sublayers(_P, P, Idert.m)  # comp sub_P_s
-            _Idert.sub_M = sub_M; _Idert.sub_D = sub_D
-        # comb.match(_P, P):
-        if curr_M + _Idert.sub_M > ave_M * P.Rdn * 4:
-            cPp = cIdert.Ppt[0]  # Pp to merge if positive or shrink if negative:
-
-            if cPp.M > 0:  # +Pp: match to any Idert in Pp.pdert_ -> all consecutive matches
-                if fleft: addM += Pp.M; merge(Pp_, cPp, Pp)  # merge Pp in cPp
-                else: addM += cPp.M; merge(Pp_, Pp, cPp)  # merge cPp in Pp
-
-            else:  # transfer cIdert from cPp to Pp
-                if fleft:
-                    Pp._negL, Pp._negM = 0, 0
-                    Idert.P = P; Idert.i = P.I  # pderts represent initial P and i: the last on the left
-                    addM += _Idert.m
-                    Pp.pdert_.insert(0, _Idert)  # appendleft
-                else:
-                    addM += Idert.m
-                    Pp.pdert_.append(Idert)
-
-                cIdert.Ppt[0] = Pp
-                Pp.I += cIdert.i; Pp.D += cIdert.d; Pp.M += cIdert.m; Pp.L+=1
-                cPp.I -= cIdert.i; cPp.D -= cIdert.d; cPp.M -= cIdert.m; cPp.L-=1
-                cPp.pdert_.remove(cIdert)  # cIdert was transferred to Pp
-                if not cPp.pdert_: Pp_.remove(cPp)  # delete emptied cPp
-
-            break  # matching pdert or merged Pp takes over connectivity search in the next extra_Pp_
-
-        else:  # Iderts miss
+        if cIdert.Ppt[0] is not Pp: # skip current Idert if Idert.Pp is Pp
+            
+            cI = cIdert.i; cD = cIdert.d; cM = cIdert.P.M
             if fleft:
-                Pp._negL = negL; Pp._negM = negM
-                j -= 1
+                Idert = iIdert; _Idert = cIdert  # rename by direction
+                pI = ipI; _pI = cI - (cD / 2)  # forward-project by cD
             else:
-                Idert.negM += curr_M - ave_M  # known to be negative, accum per dert
-                Idert.negiL += P.L
-                Idert.negL += 1
-                negM = Idert.negM
-                j += 1
+                Idert = cIdert; _Idert = iIdert  # rename by direction
+                pI = cI + (cD / 2); _pI = ipI  # back-project by cD
+    
+            # comp(_Idert, Idert):
+            _Idert.p = pI + _pI; _Idert.d = _pI - pI; _Idert.m = ave - abs(_Idert.d)
+            curr_M = _Idert.m * rave + (iM + cM) / 2  # P.M is bilateral
+            P = Idert.P
+            _P = _Idert.P
+            if curr_M > ave_sub * P.Rdn and _P.sublayers[0] and P.sublayers[0]:
+                sub_M, sub_D = comp_sublayers(_P, P, Idert.m)  # comp sub_P_s
+                _Idert.sub_M = sub_M; _Idert.sub_D = sub_D
+            # comb.match(_P, P):
+            if curr_M + _Idert.sub_M > ave_M * P.Rdn * 4:
+                cPp = cIdert.Ppt[0]  # Pp to merge if positive or shrink if negative:
+    
+                if cPp.M > 0:  # +Pp: match to any Idert in Pp.pdert_ -> all consecutive matches
+                    if fleft: addM += Pp.M; merge(Pp_, cPp, Pp)  # merge Pp in cPp
+                    else: addM += cPp.M; merge(Pp_, Pp, cPp)  # merge cPp in Pp
+    
+                else:  # transfer cIdert from cPp to Pp
+                    if fleft:
+                        Pp._negL, Pp._negM = 0, 0
+                        Idert.P = P; Idert.i = P.I  # pderts represent initial P and i: the last on the left
+                        addM += _Idert.m
+                        Pp.pdert_.insert(0, _Idert)  # appendleft
+                    else:
+                        addM += Idert.m
+                        Pp.pdert_.append(Idert)
+    
+                    cIdert.Ppt[0] = Pp
+                    Pp.I += cIdert.i; Pp.D += cIdert.d; Pp.M += cIdert.m; Pp.L+=1
+                    cPp.I -= cIdert.i; cPp.D -= cIdert.d; cPp.M -= cIdert.m; cPp.L-=1
+                    cPp.pdert_.remove(cIdert)  # cIdert was transferred to Pp
+                    if not cPp.pdert_: Pp_.remove(cPp)  # delete emptied cPp
+    
+                break  # matching pdert or merged Pp takes over connectivity search in the next extra_Pp_
+    
+            else:  # Iderts miss
+                if fleft:
+                    Pp._negL = negL; Pp._negM = negM
+                    j -= 1
+                else:
+                    Idert.negM += curr_M - ave_M  # known to be negative, accum per dert
+                    Idert.negiL += P.L
+                    Idert.negL += 1
+                    negM = Idert.negM
+                    j += 1
+        else:
+            if fleft: j -= 1  
+            else: j += 1
+
     return addM
 
 def merge(Pp_, Pp, _Pp):  # merge Pp with dert.Pp, if any:
@@ -376,11 +382,15 @@ def compact(Pp_, pdert1_, pdert2_, fPd):  # re-eval Pps, Pp.pdert_s for redundan
     Pp = Pp_[-1]
     for i, pdert in enumerate(Pp.pdert_):  # why is eval per P, it should be Pp?
         P = pdert.P
-        if fPd: iP_val = P.D - P.Rdn * pdert.rdn * ave * ave_d  # assign Pp vs pdert_ rdn, re-eval Pp and pdert_ by rdn=1/L?
-        else:   iP_val = P.M - P.Rdn * pdert.rdn * ave  # same-sign primary M|D, no cross-sign cancel and splicing by rdn M|D?
+        if fPd: 
+            iP_val = P.D - P.Rdn * pdert.rdn * ave * ave_d  # assign Pp vs pdert_ rdn, re-eval Pp and pdert_ by rdn=1/L?
+            idert_val = pdert.d - pdert.rdn * ave * ave_d
+        else:   
+            iP_val = P.M - P.Rdn * pdert.rdn * ave  # same-sign primary M|D, no cross-sign cancel and splicing by rdn M|D?
+            idert_val = pdert.m - pdert.rdn * ave
 
         P_val = iP_val / P.L  # resolution reduction but lower rdn:
-        dert_val = iP_val - P.L * ave_M * (ave_D*fPd)  # ave cost * number of representations, different effect from /=L?
+        dert_val = idert_val - P.L * ave_M * (ave_D*fPd)  # ave cost * number of representations, different effect from /=L?
 
         if P_val > dert_val: dert_val -= ave * P.Rdn
         else: P_val -= ave * P.Rdn  # ave scaled by rdn
