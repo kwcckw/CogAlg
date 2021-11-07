@@ -298,10 +298,12 @@ def search_Idert_(Pp_, Pp, Idert_, i, j, ave, rave, fleft):
                 else:
                     addM += Idert.m
                     Pp.pdert_.append(Idert)
-
                 cIdert.Ppt[0] = Pp
                 Pp.I += cIdert.i; Pp.D += cIdert.d; Pp.M += cIdert.m; Pp.L+=1
                 cPp.I -= cIdert.i; cPp.D -= cIdert.d; cPp.M -= cIdert.m; cPp.L-=1
+                if cIdert is cPp.pdert_[0]: 
+                    Pp.x0 = min(cPp.x0, Pp.x0) # update new x0 after the transfer  
+                    cPp.x0 += 1 # if the 1st pdert is transferred, increase x0
                 cPp.pdert_.remove(cIdert)  # cIdert was transferred to Pp
                 if not cPp.pdert_: Pp_.remove(cPp)  # delete emptied cPp
 
