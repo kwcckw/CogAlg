@@ -302,15 +302,22 @@ def search_Idert_(Pp_, iPp, Idert_, i, j, ave, rave, fleft):
                     Idert.P = P; Idert.i = P.I  # pderts represent initial P and i: the last on the left
                     addM += _Idert.m
                     iPp.pdert_.insert(0, _Idert)  # appendleft
-                    iPp.x0 -= 1
+                    if iPp.x0 > Idert_.index(_Idert): # if index of added Idert is < Pp.x0, set Pp.x0 to index of added Idert in Idert_
+                        iPp.x0 = Idert_.index(_Idert)
+                    iPp.L += 1
+                    cPp.L -= 1
                 else:
                     addM += Idert.m
-                    iPp.pdert_.append(Idert)
-
+                    iPp.pdert_.append(Idert)                    
+                    Idert_index = Idert_.index(Idert)
+                    if iPp.x0 + iPp.L <  Idert_index : # add range L 
+                        iPp.L = Idert_index+1-iPp.x0
+                    cPp.x0 -= 1
+                    cPp.L -= 1
                 cIdert.Ppt[0] = iPp
-                iPp.I += cIdert.i; iPp.D += cIdert.d; iPp.M += cIdert.m; iPp.L+=1
-                cPp.I -= cIdert.i; cPp.D -= cIdert.d; cPp.M -= cIdert.m; cPp.L-=1
-                cPp.pdert_.remove(cIdert)  # cIdert was transferred to Pp
+                iPp.I += cIdert.i; iPp.D += cIdert.d; iPp.M += cIdert.m
+                cPp.I -= cIdert.i; cPp.D -= cIdert.d; cPp.M -= cIdert.m
+                cPp.pdert_.remove(cIdert)  # _Idert was transferred to Pp
                 if not cPp.pdert_: Pp_.remove(cPp)  # delete emptied cPp
 
             break  # matching pdert or merged Pp takes over connectivity search in the next extra_Pp_
@@ -328,11 +335,12 @@ def search_Idert_(Pp_, iPp, Idert_, i, j, ave, rave, fleft):
     return addM
 
 def merge(Pp_, _Pp, Pp):  # merge Pp with dert.Pp, if any:
-
-    Pp.accum_from(Pp, excluded=['x0'])
+    
+    # L can't be accumulate here since we are having range L, pending update
+    _Pp.accum_from(Pp, excluded=['x0'])
     # merge pderts
     for pdert in Pp.pdert_:
-        Pp.pdert_.append(pdert)
+        _Pp.pdert_.append(pdert)
         pdert.Ppt[0] = _Pp  # pdert.Ppm
     # merge sublayers
     _Pp.sublayers += Pp.sublayers
