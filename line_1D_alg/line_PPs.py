@@ -47,6 +47,7 @@ class CPp(CP):
     iI = int
     iD = int
     iM = int
+    dert_negL = int
     negM = int  # in mdert only
     negL = int  # in mdert only
     _negM = int  # for search left, within adjacent neg Ppm only?
@@ -252,7 +253,7 @@ def extra_Pp_(Pp_, Idert_, ave, rave):  # incremental-range search for core I fo
                     Pp = Pp.pdert_[0].Ppt[0]  # merging Pp
             # search right:
             i = Pp.x0 + Pp.L - 1  # Idert mapped to last pdert
-            j = i + Pp.pdert_[-1].negL + 1  # 1st-right not-compared Idert
+            j = i + Pp.dert_negL + 1  # 1st-right not-compared Idert
             if j < len(Idert_):
                 ext_M += search_Idert_(Pp_, Pp, Idert_, i, j, ave, rave, fleft=False)
             # else: next Pp can search left but not right
@@ -307,7 +308,7 @@ def search_Idert_(Pp_, iPp, Idert_, i, j, ave, rave, fleft):
                     iPp.x0 -= 1 + iPp._negL
                     iPp.L += 1 + iPp._negL
                     iPp._negL, iPp._negM = 0, 0
-                    cPp.L -= 1 + cPp.pdert_[-1].negL
+                    cPp.L -= 1 + cPp.dert_negL
                     Idert.P = P; Idert.i = P.I  # pderts represent initial P and i: the last on the left
                     addM += _Idert.m
                     iPp.pdert_.insert(0, _Idert)  # appendleft
@@ -315,13 +316,14 @@ def search_Idert_(Pp_, iPp, Idert_, i, j, ave, rave, fleft):
                     cPp.x0 += 1 + Idert.negL
                     cPp.L -= 1 + Idert.negL
                     cPp._negL = Idert.negL; cPp._negM = Idert.negM
-                    iPp.L += 1 + iPp.pdert_[-1].negL
+                    iPp.L += 1 + cPp.dert_negL
                     addM += Idert.m
                     iPp.pdert_.append(Idert)
 
+                cIdert.Ppt[0] = iPp # we need update cIdert's Pp reference regardless of cPp.pdert_ condition
                 cPp.pdert_.remove(cIdert)  # cIdert was transferred to Pp
                 if cPp.pdert_:
-                    cPp.I -= cIdert.i; cPp.D -= cIdert.d; cPp.M -= cIdert.m;  cIdert.Ppt[0] = iPp
+                    cPp.I -= cIdert.i; cPp.D -= cIdert.d; cPp.M -= cIdert.m
                 else:
                     Pp_.remove(cPp)  # delete emptied cPp
                 iPp.I += cIdert.i; iPp.D += cIdert.d; iPp.M += cIdert.m
@@ -333,6 +335,7 @@ def search_Idert_(Pp_, iPp, Idert_, i, j, ave, rave, fleft):
                 j -= 1
             else:
                 Idert.negM += curr_M - ave_M  # known to be negative, accum per dert
+                iPp.dert_negL += 1
                 Idert.negiL += P.L
                 Idert.negL += 1
                 negM = Idert.negM
@@ -342,10 +345,10 @@ def search_Idert_(Pp_, iPp, Idert_, i, j, ave, rave, fleft):
 
 def merge(Pp_, _Pp, Pp):  # merge Pp with dert.Pp, if any:
 
-    Pp.accum_from(Pp, excluded=['x0'])
+    _Pp.accum_from(Pp, excluded=['x0'])
     # merge pderts
     for pdert in Pp.pdert_:
-        Pp.pdert_.append(pdert)
+        _Pp.pdert_.append(pdert)
         pdert.Ppt[0] = _Pp  # pdert.Ppm
     # merge sublayers
     _Pp.sublayers += Pp.sublayers
