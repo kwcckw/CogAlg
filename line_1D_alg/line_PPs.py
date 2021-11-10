@@ -239,7 +239,8 @@ def extra_Pp_(Pp_, Idert_, ave, rave):  # incremental-range search for core I fo
     Rdn, AddM = 0, 0
     for Pp in Pp_:
         addM = 0
-        if Pp.M + Pp.iM > ave_M * Pp.Rdn * 4:  # rng_coef, this is variable costs, add fixed costs? -lend to contrast?
+        iM = sum([pdert.P.M for pdert in Pp.pdert_])
+        if Pp.M + iM > ave_M * Pp.Rdn * -4:  # rng_coef, this is variable costs, add fixed costs? -lend to contrast?
             # search left:
             i = Pp.x0  # Idert mapped to 1st pdert
             j = i - Pp._negL - 1  # 1st-left not-compared Idert
@@ -249,7 +250,7 @@ def extra_Pp_(Pp_, Idert_, ave, rave):  # incremental-range search for core I fo
                     Pp = Pp.pdert_[0].Ppt[0]  # merging Pp
             # search right:
             i = Pp.x0 + Pp.L - 1  # Idert mapped to last pdert
-            j = i + Pp.pdert_[-1].negL + 1  # 1st-right not-compared Idert
+            j = i + sum([pdert.negL for pdert in Pp.pdert_]) + 1  # 1st-right not-compared Idert
             if j < len(Idert_):
                 addM += search_Idert_(Pp_, Pp, Idert_, i, j, ave, rave, fleft=False)
             # else: next Pp can search left but not right
@@ -300,16 +301,18 @@ def search_Idert_(Pp_, iPp, Idert_, i, j, ave, rave, fleft):
                     iPp.x0 -= 1 + iPp._negL
                     iPp.L += 1 + iPp._negL
                     iPp._negL, iPp._negM = 0, 0
-                    cPp.L -= 1 + cPp.pdert_[-1].negL
+                    cPp.L -= 1 # + cPp.pdert_[-1].negL why we need add lsat negL here?
                     Idert.P = P; Idert.i = P.I  # pderts represent initial P and i: the last on the left
                     addM += _Idert.m
                     _Idert.Ppt[0] = iPp
                     iPp.pdert_.insert(0, _Idert)  # appendleft
                 else:
-                    cPp.x0 += 1 + Idert.negL
-                    cPp.L -= 1 + Idert.negL
+                    if Idert == cPp.pdert_[0]: cPp.x0 += 1 # increase x0 if the 1st pdert is transferred 
+                    if Idert != cPp.pdert_[-1]: cPp.pdert_[-1].negL += 1 + Idert.negL # increase negL of last pdert if transferred pdert is not the last pdert     
+                    cPp.L -= 1  
+                    # why we need set cPp's _negL to Idert negL here?
                     cPp._negL = Idert.negL; cPp._negM = Idert.negM
-                    iPp.L += 1 + iPp.pdert_[-1].negL
+                    iPp.L += 1  # why accumulate their own last pdert's negL?
                     addM += Idert.m
                     Idert.Ppt[0] = iPp
                     iPp.pdert_.append(Idert)
@@ -339,7 +342,7 @@ def merge(Pp_, _Pp, Pp):  # merge Pp with dert.Pp, if any:
     _Pp.accum_from(Pp, excluded=['x0'])
     # merge pderts
     for pdert in Pp.pdert_:
-        Pp.pdert_.append(pdert)
+        _Pp.pdert_.append(pdert)
         pdert.Ppt[0] = _Pp  # pdert.Ppm
     # merge sublayers
     _Pp.sublayers += Pp.sublayers
