@@ -130,7 +130,6 @@ def form_Pp_root(Pdert_t, dert1_, dert2_, fPd):
     IPpm_ = Ppm_t[1]; Idert_ = Pdert_t[1]; DPpm_ = Ppm_t[2]
     rootM = sum(Pp.M for Pp in IPpm_) + sum(pdert.m for pdert in Idert_)  # input match in two overlapping layers
     if len(Idert_) > 3 and rootM > ave_M * 4:  # same criteria for batch compact(Pp' Ps in Idert_) and extra_Pp_?
-
         if fPd: splice_Ps(DPpm_, dert1_, dert2_, fPd)  # eval splice Pds in each +DPpm
         else: splice_Ps(IPpm_, dert1_, dert2_, fPd)  # eval splice Pms in each +IPpm
         # but Pp.pdert_ is still in and may extend: +IPpms search in adj -IPpms, merge if match in the next +IPpm:
@@ -184,8 +183,8 @@ def comp_par(P, _param, param, param_name, ave):
         # div_comp match is additive compression: +=min, not directional
     else:
         d = param - _param  # difference
-        if param_name == 'I_': m = ave - abs(d)  # indirect match
-        else: m = min(param, _param) - abs(d) / 2 - ave  # direct match
+        if param_name == 'I_': m = ave - abs(d)  # indirect match （if ave is low, m mostly will be negative)
+        else: m = min(param, _param) - abs(d) / 2 - ave  # direct match 
 
     return Cpdert(P=P, i=param, p=param + _param, d=d, m=m)
 
@@ -242,7 +241,7 @@ def extra_Pp_(Pp_, Idert_, ave, rave):  # incremental-range search for core I fo
     for Pp in Pp_:
         addM = 0
         iM = sum([pdert.P.M for pdert in Pp.pdert_])  # not precomputed because it's very selective
-        if Pp.M + iM > ave_M * Pp.Rdn * -4:  # rng_coef, this is fixed costs, add variable costs? -lend to contrast?
+        if Pp.M + iM > ave_M * Pp.Rdn * 4:  # rng_coef, this is fixed costs, add variable costs? -lend to contrast?
             # search left:
             i = Pp.x0  # Idert mapped to 1st pdert
             j = i - Pp._negL - 1  # 1st-left not-compared Idert
@@ -334,6 +333,15 @@ def merge(Pp_, _Pp, Pp):  # merge Pp with dert.Pp, if any:
     for pdert in Pp.pdert_:
         _Pp.pdert_.append(pdert)
         pdert.Ppt[0] = _Pp  # pdert.Ppm
+    
+    # increase negL if negative Pp between 2 positive Pps
+    # same +1 for both fleft = true and false since _Pp is iPp and cPp in both cases
+    neg_Pp_index = Pp_.index(_Pp)+1 # negative Pp index between _Pp and Pp
+
+    if Pp_[neg_Pp_index] != Pp: # negative Pp is still possible to merge into +ve Pp when their iM > Pp.M
+        # increase negL of _Pp
+        _Pp.pdert_[-1].negL +=  len(Pp_[neg_Pp_index].pdert_)
+        
     # merge sublayers
     _Pp.sublayers += Pp.sublayers
     Pp_.remove(Pp)
