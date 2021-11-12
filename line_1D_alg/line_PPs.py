@@ -225,11 +225,12 @@ def form_Pp_(pdert_, param_name, fPd):
         pdert.Ppt[fPd] = Pp  # Ppm | Ppd that pdert is in, replace root_Pp if any
         _sign = sign; x += 1
 
-    if fPd:
-        if param_name == "D" and abs( rootPp.D) > ave_M * ave_D * 4:  # per Pd_'DPpd_: diff induction, add rootPp.iD?
-            intra_Pp_(rootPp, Pp_, fPd)  # recursive der+
-    elif param_name == "I" and rootPp.M > ave_M * 4:  # per Pm_'IPpm_: intensity induction, add rootPp.iM?
-        intra_Pp_(rootPp, Pp_, fPd)  # recursive rng+
+    if isinstance(rootPp, CPp): # make sure rootPp is CPp instead of default empty object
+        if fPd:
+            if param_name == "D_" and abs( rootPp.D) > ave_M * ave_D * 4:  # per Pd_'DPpd_: diff induction, add rootPp.iD?
+                intra_Pp_(rootPp, Pp_, fPd)  # recursive der+
+        elif param_name == "I" and rootPp.M > ave_M * 4:  # per Pm_'IPpm_: intensity induction, add rootPp.iM?
+            intra_Pp_(rootPp, Pp_, fPd)  # recursive rng+
 
     return Pp_
 
@@ -328,20 +329,23 @@ def search_Idert_(Pp_, iPp, Idert_, i, j, ave, rave, fleft):
     return addM
 
 def merge(Pp_, _Pp, Pp):  # merge Pp with dert.Pp, if any:
-
+    
     _Pp.accum_from(Pp, excluded=['x0'])
+    
+    # get negL of last pdert, and then reset it
+    negL = _Pp.pdert_[-1].negL
+    _Pp.pdert_[-1].negL = 0
+    
     # merge pderts
     for pdert in Pp.pdert_:
         _Pp.pdert_.append(pdert)
         pdert.Ppt[0] = _Pp  # pdert.Ppm
     
-    # increase negL if negative Pp between 2 positive Pps
-    # same +1 for both fleft = true and false since _Pp is iPp and cPp in both cases
-    neg_Pp_index = Pp_.index(_Pp)+1 # negative Pp index between _Pp and Pp
+    # pack negL to the new last pdert of _Pp
+    _Pp.pdert_[-1].negL += negL
 
-    if Pp_[neg_Pp_index] != Pp: # negative Pp is still possible to merge into +ve Pp when their iM > Pp.M
-        # increase negL of _Pp
-        _Pp.pdert_[-1].negL +=  len(Pp_[neg_Pp_index].pdert_)
+    # increase negL with Pp.negL if 2 positive Pps merged  
+    _Pp.pdert_[-1].negL += Pp._negL
         
     # merge sublayers
     _Pp.sublayers += Pp.sublayers
