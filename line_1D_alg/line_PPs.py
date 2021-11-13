@@ -126,7 +126,7 @@ def form_Pp_root(Pdert_t, dert1_, dert2_, fPd):
     rdn_t = sum_rdn_(param_names, Pdert_t, fPd=0)  # assign redundancy to lesser-magnitude m|d in param pair for same-_P Pderts
     for param_name, Pdert_, rdn_ in zip(param_names, Pdert_t, rdn_t):
         Ppm_ = form_Pp_(Pdert_, fPd=0)  # segment Pdert__ into Ppms
-        if param_name=="I": Ppm_ = intra_Pp_(None, Ppm_, Pdert_, fPd)
+        if param_name=="I_": Ppm_ = intra_Pp_(None, Ppm_, Pdert_, fPd)
         Ppm_t.append(Ppm_)
 
     # Ppm_t only:
@@ -144,7 +144,7 @@ def form_Pp_root(Pdert_t, dert1_, dert2_, fPd):
     rdn_t = sum_rdn_(param_names, Pdert_t, fPd=1)
     for param_name, Pdert_, rdn_ in zip(param_names, Pdert_t, rdn_t):
         Ppd_ = form_Pp_(Pdert_, fPd=0)  # segment Pdert__ into Ppds
-        if param_name=="D": Ppd_ = intra_Pp_(None, Ppd_, Pdert_, fPd)
+        if param_name=="D_": Ppd_ = intra_Pp_(None, Ppd_, Pdert_, fPd)
         Ppm_t.append(Ppd_)
 
     return [Ppm_t, Ppd_t]  # Pp_tt
@@ -201,6 +201,7 @@ def form_Pp_(pdert_, fPd):
     Pp_ = []
     x = 0
     _sign = None  # to initialize 1st P, (None != True) and (None != False) are both True
+    # do we still need this rootPp?
     rootPp = pdert_[0].Ppt[fPd]  # all pderts have the same root_Pp, empty if called from line_PPs_root
 
     for pdert in pdert_:  # segment by sign
@@ -427,15 +428,19 @@ def intra_Pp_(rootPp, Pp_, Pdert_, fPd):  # evaluate for sub-recursion in line P
         if Pp.L > 1:
             if fPd:
                 if abs(Pp.D) + Pp.M > ave_M * ave_D * Pp.Rdn:  # + Pp.M: borrow potential, regardless of Rdn?
-                    sub_search(Pp, Pp.P_, True)  # search in top sublayer, eval by pdert.d
+                    P_ = [pdert.P for pdert in Pp.pdert_]
+                    sub_search(Pp, P_, True)  # search in top sublayer, eval by pdert.d
                     sub_Ppm_, sub_Ppd_ = [], []
                     Pp.sublayers = [[(sub_Ppm_, sub_Ppd_)]]
                     ddert_ = []
                     for _pdert, pdert in zip( Pp.pdert_[:-1], Pp.pdert_[1:]):
                         ddert_ += [comp_par(_pdert.P, _pdert.d, pdert.d, "D", ave)]  # higher derivation cross-comp of ds in dert1_, local aves?
                     sub_Ppm_[:] = form_Pp_(ddert_, fPd=True)  # cluster in ddert_
-                    sub_Ppd_[:] = form_Pp_(ddert_, fPd=True)
-                    if abs(rootPp.D) > ave_M * ave_D * 4:
+                    sub_Ppd_[:] = form_Pp_(ddert_, fPd=True)     
+                    # if rootPp is None, get D from Pp?                    
+                    if isinstance(rootPp,CPp): root_D = rootPp.D
+                    else: root_D = Pp.D
+                    if abs(root_D) > ave_M * ave_D * 4:
                         # per Pd_'DPpd_: diff induction, add rootPp.iD?
                         intra_Pp_(Pp, sub_Ppd_, None, fPd=True)  # recursive der+, no rng+: Pms are redundant?
                 else:
@@ -443,12 +448,16 @@ def intra_Pp_(rootPp, Pp_, Pdert_, fPd):  # evaluate for sub-recursion in line P
             else:
                 # rng+ by more selective nearest match @ higher ave, in addition to extension by higher ave_negM in extra_Pp_
                 if Pp.M > ave_M * Pp.Rdn:  # + Pp.iM?
-                    sub_search(Pp, Pp.P_, True)  # search in top sublayer, eval by pdert.d
+                    P_ = [pdert.P for pdert in Pp.pdert_]
+                    sub_search(Pp, P_, True)  # search in top sublayer, eval by pdert.d
                     sub_Ppm_, sub_Ppd_ = [], []
                     Pp.sublayers = [[(sub_Ppm_, sub_Ppd_)]]
                     rdert_ = search_pdert_(Pp, Pdert_, ave_mI, rave=1)  # comp x variable range, depending on I.M
                     sub_Ppm_[:] = form_Pp_rng(rdert_)  # cluster in rdert_
-                    if rootPp.M > ave_M * 4:
+                    # if rootPp is None, get M from Pp?                    
+                    if isinstance(rootPp,CPp): root_M = rootPp.M
+                    else: root_M = Pp.M
+                    if root_M > ave_M * 4:
                         # per Pm_'IPpm_: intensity induction, add rootPp.iM?
                         intra_Pp_(Pp, sub_Ppd_, rdert_, fPd=False)  # recursive rng+, no der+: Pds are redundant?
                 else:
@@ -468,7 +477,7 @@ def search_pdert_(Pp, Idert_, ave_d, rave):  # extended variable-range search fo
     rdert_ = []
     for i, _Idert in enumerate(Pp.pdert_):  # overlapping pderts & +Pps, if pdert.m>0: negL is intra-Pp reference, no -Pps
 
-        rdert = Cpdert(P=_Idert.P, i=_Idert.i, x0=_Idert.x0, negL=_Idert.negL, negM=_Idert.negM)
+        rdert = Cpdert(P=_Idert.P, i=_Idert.i, x0=_Idert.P.x0, negL=_Idert.negL, negM=_Idert.negM)
         comb_M = _Idert.m
         j = i + 1
         # search right, from step=2, may be outside Pp.pdert_, add merge?:
@@ -485,14 +494,36 @@ def search_pdert_(Pp, Idert_, ave_d, rave):  # extended variable-range search fo
                 rdert.negM += rdert.m
                 comb_M = rdert.m - ave_M
 
+        # how to know if _Idert was not matched from the left?
         # search left if _Idert was not matched from the left:
-        if _Idert is Pp.dert[0]:  # this might be wrong...
+        # if _Idert in Pp.dert_:  # this might be wrong...
+        
+        # search left if there's left pdert
+        if i>0:
+            # left rdert
+            lrdert = Cpdert(P=_Idert.P, i=_Idert.i, x0=_Idert.P.x0, negL=_Idert.negL, negM=_Idert.negM)
+            comb_M = _Idert.m
+            
+            while comb_M > 0 and j-1 >= 0:
+                j -= 1
+                Idert = Idert_[j]  # search left Idert
+                lrdert.p = Idert.i + _Idert.i
+                lrdert.d = _Idert.i - Idert.i  # difference
+                lrdert.m = ave_d - abs(lrdert.d)  # indirect match
+                if lrdert.m > 0:
+                    break  # 1st matching param takes over connectivity search from _param, in the next loop
+                else:
+                    # same with rdert here?
+                    lrdert.negL += 1
+                    lrdert.negM += rdert.m
+                    comb_M = lrdert.m - ave_M
+                # pack lrdert?
 
         # after extended search, if any:
         rdert_.append(rdert)  # Cpdert( i=dert.i, p=dert.p, d=dert.d, m=dert.m, x0=x0, L=L, negL=negL, negM=negM))
         _Idert = Idert
 
-    return form_Pp_rng(rdert_)
+    return rdert_
 
 def form_Pp_rng(rdert_):  # Ppms only, still a draft
     Pp_ = []
