@@ -350,7 +350,7 @@ def intra_Pp_(rootPp, Pp_, Pdert_, fPd):  # evaluate for sub-recursion in line P
 def search_Pdert_(Pp, Idert_, ave_d, rave):  # extended variable-range search for core I at local ave: lower m and term by match
 
     rdert_ = []
-    flmiss_ = []  # Pp.pdert_ flags: len = Pp.pdert_, initialize with 1: np.ones?
+    flmiss_ = [1 for _ in Pp.pdert_]  # Pp.pdert_ flags: len = Pp.pdert_, initialize with 1: np.ones?
     for i, _Idert in enumerate(Pp.pdert_):  # overlapping pderts & +Pps, if pdert.m>0: negL is intra-Pp reference, no -Pps
 
         rdert = Cpdert(P=_Idert.P, i=_Idert.i, x0=_Idert.P.x0)  # always negL, negM = 0
@@ -383,10 +383,10 @@ def search_Pdert_(Pp, Idert_, ave_d, rave):  # extended variable-range search fo
             j = i + Pp.x0 - 1
             while comb_M > 0 and j-1 >= 0:
                 j -= 1
-                Idert = Idert_[j]
+                lIdert = Idert_[j] # rename LIdert, prevent wrong assignment of _Idert = Idert at the bottom of the current function
                 ldert = Cpdert(P=_Idert.P, i=_Idert.i, x0=_Idert.P.x0)  # negL=0, negM=0?
-                ldert.p = Idert.i + _Idert.i
-                ldert.d = _Idert.i - Idert.i  # difference
+                ldert.p = lIdert.i + _Idert.i
+                ldert.d = lIdert.i - _Idert.i  # difference (should be same as search right Idert - _Idert)
                 ldert.m = ave_d - abs(ldert.d)  # indirect match
                 if ldert.m > 0:
                     if j < Pp.x0:  # outside Pp
@@ -441,7 +441,7 @@ def extra_Pp_(Pp_, Idert_, ave, rave):  # incremental-range search for core I fo
     for Pp in Pp_:
         addM = 0
         iM = sum([pdert.P.M for pdert in Pp.pdert_])  # not precomputed because it's very selective
-        if Pp.M + iM > ave_M * Pp.Rdn * -4:  # rng_coef, this is fixed costs, add variable costs? -lend to contrast?
+        if Pp.M + iM > ave_M * Pp.Rdn * 4:  # rng_coef, this is fixed costs, add variable costs? -lend to contrast?
             # search left:
             i = Pp.x0  # Idert mapped to 1st pdert
             j = i - Pp._negL - 1  # 1st-left not-compared Idert
@@ -522,7 +522,6 @@ def search_Idert_(Pp_, iPp, Idert_, i, j, ave, rave, fleft):
             else:
                 last_pdert = iPp.pdert_[-1]
                 last_pdert.negM += curr_M - ave_M  # known to be negative, accum per dert
-                last_pdert.negiL += P.L
                 last_pdert.negL += 1
                 negM = last_pdert.negM
                 j += 1
@@ -533,10 +532,8 @@ def merge(Pp_, _Pp, Pp):  # merge Pp with dert.Pp, if any:
 
     _Pp.accum_from(Pp, excluded=['x0'])
     # previously summed from all pderts except the last (negative) one:
-    _Pp.L += _Pp.pdert_[-1].negL
-    _Pp.iL += _Pp.pdert_[-1].negiL
-    _Pp.negL += _Pp.pdert_[-1].negL
-    _Pp.negM += _Pp.pdert_[-1].negM
+    _Pp.L += Pp._negL
+    _Pp._negM += Pp._negM
     # merge pderts
     for pdert in Pp.pdert_:
         _Pp.pdert_.append(pdert)
