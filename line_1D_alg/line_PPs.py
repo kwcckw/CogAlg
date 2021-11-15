@@ -311,7 +311,7 @@ def intra_Pp_(rootPp, Pp_, Pdert_, fPd):  # evaluate for sub-recursion in line P
                     sub_Ppd_[:] = form_Pp_(ddert_, fPd=True)
                     if abs(Pp.D) > ave_M * ave_D * 4:  # diff induction per Pd_'DPpd_, add Pp.iD?
                         intra_Pp_(Pp, sub_Ppd_, None, fPd=True)  # recursive der+, no rng+: Pms are redundant?
-                else:
+                 else:
                     Pp.sublayers += [[]]  # empty subset to preserve index in sublayer, or increment index of subset?
             else:
                 # rng+ by more selective nearest match @ higher ave, in addition to extension by higher ave_negM in extra_Pp_
@@ -352,7 +352,8 @@ def search_Idert_(Pp, Idert_, ave_d, rave):  # extended variable-range search fo
             idert.d = rdert.i - idert.i  # difference
             idert.m = ave_d - abs(idert.d)  # indirect match
             if idert.m > 0:
-                if j > len(Pp.pdert_):  # rdert is outside Pp
+                # we need >= since index starts with 0
+                if j >= len(Pp.pdert_):  # rdert is outside Pp 
                     rng_dert_.append(rdert); flmiss_.append(0)
                 else:
                     flmiss_[j] = 0
@@ -379,7 +380,7 @@ def search_Idert_(Pp, Idert_, ave_d, rave):  # extended variable-range search fo
                     if j < Pp.x0:  # ldert is outside Pp
                         rng_dert_.insert(0, ldert); flmiss_.insert(0, 0)
                     else:
-                        flmiss_[j] = 0
+                        flmiss_[i] = 0 # should be i index here, j index is referring to index in IDert_
                     break  # 1st matching param takes over connectivity search from _param, in the next loop
                 else:
                     ldert.negL += 1
@@ -391,15 +392,17 @@ def search_Idert_(Pp, Idert_, ave_d, rave):  # extended variable-range search fo
 def form_Pp_rng(rdert_):  # rng_derts -> Ppms only, still a draft
     Pp_ = []
     x = 0
-
+    fsearch_ = [0 for _ in rdert_]
     for i, _rdert in enumerate(rdert_):  # form +Pp for each +rdert not included in prior Pp, else skip all:
-        if not _rdert.Ppt[1]:
+        if not fsearch_[i]: # no Pp formed from this rdert yet (from prior loop)
+            fsearch_[i] = 1
             Pp = CPp(L=1, I=_rdert.p, D=_rdert.d, M=_rdert.m, Rdn=_rdert.rdn+_rdert.P.Rdn, x0=x, rdert_=[_rdert], sublayers=[[]])
             cm = 1  # to start the loop
             j = i + 1 + _rdert.negL
-            while cm > 0:
+            while cm > 0 and j<len(rdert_): # current m >0 and  j < length of rdert_
+                fsearch_[j] = 1
                 rdert = rdert_[j]
-                rdert.Ppt[1] = CPp  # this is not a root_Ppd, just indicates that rdert is in some prior Pp, to skip in the next loop
+                # rdert.Ppt[1] = CPp  # this is not a root_Ppd, just indicates that rdert is in some prior Pp, to skip in the next loop
                 # accumulate params:
                 Pp.L += 1; Pp.I += rdert.p; Pp.D += rdert.d; Pp.M += rdert.m; Pp.Rdn += rdert.rdn+rdert.P.Rdn+Pp.L  # rdn to higher root layers, not normalized
                 Pp.pdert_ += [rdert]
@@ -407,8 +410,10 @@ def form_Pp_rng(rdert_):  # rng_derts -> Ppms only, still a draft
                 cm = rdert.m
                 if cm > 0:
                     Pp.negL += _rdert.negL; Pp.negM += _rdert.negM
-                # else negative: the last rdert in Pp, breaks the loop
-
+                j += 1 + rdert.negL
+                # below is not needed since j<len(rdert_) is added in the while loop
+                # elif j == len(rdert_)-1 : # last rdert
+                #    break
             Pp_.append(Pp)
     return Pp_
 
