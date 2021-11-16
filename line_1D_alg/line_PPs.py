@@ -34,7 +34,7 @@ class Cpdert(ClusterStructure):
     sub_M = int  # match from comp_sublayers, if any
     sub_D = int  # diff from comp_sublayers, if any
     P = object  # P of i param
-    Ppt = lambda: [object, object]  # tuple [Ppm,Ppd]: Pps that pdert is in, for merging in form_Pp_rng, temporary?
+    Ppt = list  # tuple [Ppm,Ppd]: Pps that pdert is in, for merging in form_Pp_rng, temporary?
 
 class CPp(CP):
     dert_ = list  # if not empty: Pp is primarily a merged P, other params are optional
@@ -183,7 +183,7 @@ def comp_par(P, _param, param, param_name, ave):
         if param_name == 'I_': m = ave - abs(d)  # indirect match
         else: m = min(param, _param) - abs(d) / 2 - ave  # direct match
 
-    return Cpdert(P=P, i=param, p=param + _param, d=d, m=m)
+    return Cpdert(P=P, i=param, p=param + _param, d=d, m=m, Ppt=[[], []])
 
 
 def form_Pp_(pdert_, fPd):
@@ -216,7 +216,7 @@ def form_Pp_(pdert_, fPd):
             # accumulate params:
             Pp.L += 1; Pp.I += pdert.p; Pp.D += pdert.d; Pp.M += pdert.m; Pp.Rdn += pdert.rdn+pdert.P.Rdn; Pp.pdert_ += [pdert]
 
-        pdert.Ppt[fPd] = Pp  # Ppm | Ppd that pdert is in, replace root_Pp if any
+        pdert.Ppt[fPd].append(Pp)  # Ppm | Ppd that pdert is in, replace root_Pp if any
         _sign = sign; x += 1
 
     return Pp_
@@ -344,7 +344,7 @@ def search_Idert_(Pp, Idert_, ave_d, rave):  # extended variable-range search fo
     for i, idert in enumerate(Pp.pdert_):  # overlapping pderts & +Pps, if pdert.m>0: negL is intra-Pp reference, no -Pps
 
         comb_M = idert.m
-        j = i + Pp.x0 + 1
+        j = i + Pp.x0 # +1 is already within the while loop
         # search right:
         while comb_M > 0 and j+1 < len(Idert_):  # from step=2, may continue outside Pp.pdert_, no merge: Pps overlap?
             j += 1
@@ -353,8 +353,9 @@ def search_Idert_(Pp, Idert_, ave_d, rave):  # extended variable-range search fo
             idert.d = rdert.i - idert.i  # difference
             idert.m = ave_d - abs(idert.d)  # indirect match
             if idert.m > 0:
-                if j >= len(Pp.pdert_):  # rdert is outside Pp
+                if j > Pp.x0 + Pp.L -1:  # rdert is outside Pp
                     rng_dert_.append(rdert); flmiss_.append(0)
+                    Pp.L += 1 # since rng_dert_ is Pp.pdert_, increase Pp.L?
                 else:
                     flmiss_[j - Pp.x0] = 0  # =index of rdert in rng_dert_
                 break  # 1st matching param takes over connectivity search from _param, in the next loop
@@ -362,13 +363,17 @@ def search_Idert_(Pp, Idert_, ave_d, rave):  # extended variable-range search fo
                 idert.negL += 1
                 idert.negM += idert.m
                 comb_M = idert.m - ave_M
-                if j >= len(Pp.pdert_):  # missing searched derts added for form_Pp_rng to represent discontinuity
+                # should be >Pp.x0 + Pp.L -1 instead if j is not within range of Pp.pdert_
+                if j > Pp.x0 + Pp.L -1:  # missing searched derts added for form_Pp_rng to represent discontinuity
                     rng_dert_.append(rdert)
                     flmiss_.append(1)
+                    Pp.L += 1
+                    break # i think should break here too?
+                    
         # search left:
         if flmiss_[i]:  # if idert was not matched as rdert in search right, else it's replaced as idert by left-matching dert
             comb_M = idert.m
-            j = i + Pp.x0 - 1
+            j = i + Pp.x0  # -1 is already within the while loop
             while comb_M > 0 and j-1 >= 0:  # from step=2, may continue outside Pp.pdert_, no merge: Pps overlap?
                 j -= 1
                 ldert = Idert_[j]  # left dert
@@ -378,7 +383,8 @@ def search_Idert_(Pp, Idert_, ave_d, rave):  # extended variable-range search fo
                 if ldert.m > 0:
                     if j < Pp.x0:  # ldert is outside Pp
                         rng_dert_.insert(0, ldert); flmiss_.insert(0, 0)
-                    else:
+                        Pp.x0 -= 1; Pp.L += 1 # since rng_dert_ is Pp.pdert_, decrease Pp.x0 and increase Pp.L?
+                    else: 
                         flmiss_[j - Pp.x0] = 0  # =index of ldert in rng_dert_
                     break  # 1st matching dert takes over connectivity search in the next loop
                 else:
@@ -387,6 +393,8 @@ def search_Idert_(Pp, Idert_, ave_d, rave):  # extended variable-range search fo
                     comb_M = ldert.m - ave_M
                     if j < Pp.x0:  # missing searched derts added for form_Pp_rng to represent discontinuity
                         rng_dert_.insert(0, ldert); flmiss_.insert(0, 1)
+                        Pp.x0 -= 1; Pp.L += 1
+                        break # i think should break here too?
 
     return rng_dert_  # no return for flmiss_?
 
