@@ -298,28 +298,31 @@ def intra_Pp_(rootPp, Pp_, Pdert_, fPd):  # evaluate for sub-recursion in line P
     each Pp may be compared over incremental range or derivation, as in line_patterns but with higher local ave
     '''
     comb_sublayers = []  # combine into root P sublayers[1:], each nested to depth = sublayers[n]
+    # rootPp would be none if we call it from root, but it is always = 1 now
+    if rootPp:  nroot_sublayers = len(rootPp.sublayers)
+    else: nroot_sublayers = 1
 
     for i, Pp in enumerate(Pp_):
         if Pp.L > 1:
             if fPd:
                 # search vs. looping cost:
-                if abs(Pp.D) + Pp.M > ave_M * ave_D * Pp.Rdn * len(rootPp.sublayers) * 4:  # 4:search_cost, +Pp.M: borrow potential, regardless of Rdn?
+                if abs(Pp.D) + Pp.M > ave_M * ave_D * Pp.Rdn * nroot_sublayers  * 4:  # 4:search_cost, +Pp.M: borrow potential, regardless of Rdn?
                     sub_search(Pp, True)  # search in top sublayer, eval by pdert.d
                     sub_Ppm_, sub_Ppd_ = [], []
                     Pp.sublayers = [[(sub_Ppm_, sub_Ppd_)]]
                     ddert_ = []
                     for _pdert, pdert in zip( Pp.pdert_[:-1], Pp.pdert_[1:]):
-                        ddert_ += [comp_par(_pdert.P, _pdert.d, pdert.d, "D", ave)]  # higher derivation cross-comp of ds in dert1_, local aves?
+                        ddert_ += [comp_par(_pdert.P, _pdert.d, pdert.d, "D_", ave)]  # higher derivation cross-comp of ds in dert1_, local aves?
                     sub_Ppm_[:] = form_Pp_(ddert_, fPd=True)  # cluster in ddert_
                     sub_Ppd_[:] = form_Pp_(ddert_, fPd=True)
-                    if abs(Pp.D) + Pp.M > ave_M * ave_D * Pp.Rdn * len(rootPp.sublayers) * 4:  # diff induction per Pd_'DPpd_, add Pp.iD?
+                    if abs(Pp.D) + Pp.M > ave_M * ave_D * Pp.Rdn * nroot_sublayers * 4:  # diff induction per Pd_'DPpd_, add Pp.iD?
                         # same as in 305 but per sub_Ppd_: fixed cost of looping?
                         intra_Pp_(Pp, sub_Ppd_, None, fPd=True)  # recursive der+, no rng+: Pms are redundant?
                 else:
                     Pp.sublayers += [[]]  # empty subset to preserve index in sublayer, or increment index of subset?
             else:
                 # rng+ by more selective nearest match @ higher ave, in addition to extension by higher ave_negM in extra_Pp_
-                if Pp.M > ave_M * Pp.Rdn * len(rootPp.sublayers) + 4:  # + Pp.iM?
+                if Pp.M > ave_M * Pp.Rdn * nroot_sublayers  + 4:  # + Pp.iM?
                     sub_search(Pp, True)  # search in top sublayer, eval by pdert.d
                     sub_Ppm_, sub_Ppd_ = [], []
                     Pp.sublayers = [[(sub_Ppm_, sub_Ppd_)]]
@@ -346,57 +349,52 @@ def search_Idert_(Pp, Idert_, ave_d, rave):  # extended variable-range search fo
     flmiss_ = [1 for _ in Pp.pdert_]  # ones the length of Pp.pdert_
     for i, idert in enumerate(Pp.pdert_):  # overlapping pderts and +Pps, no -Pps
         # search right:
-        comb_M = idert.m
         j = i + Pp.x0 + 1  # start at step=2, step=1 is in cross-comp
-        while comb_M > 0 and j+1 < len(Idert_):  # may continue outside Pp.pdert_, no merge: Pps overlap?
-            j += 1
-            rdert = Idert_[j]  # right_dert, extend search beyond next param
-            idert.p = rdert.i + idert.i
-            idert.d = rdert.i - idert.i  # difference
-            idert.m = ave_d - abs(idert.d)  # indirect match
-            if idert.m > 0:
-                if idert.m > ave_M * 4 and idert.P.sublayers[0] and rdert.P.sublayers[0]:  # 4: init ave_sub coef
-                    comp_sublayers(idert.P, rdert.P, idert.m)
-                if j > Pp.x0 + Pp.L-1:  # rdert is outside Pp
-                    rng_dert_.append(rdert); flmiss_.append(0)
-                else:
-                    flmiss_[j - Pp.x0] = 0  # =index of rdert in rng_dert_
-                break  # 1st matching param takes over connectivity search from _param, in the next loop
-            else:
-                idert.negL += 1
-                idert.negM += idert.m
-                comb_M = idert.m - ave_M
-                if j > Pp.x0 + Pp.L-1:  # missing searched derts added for form_Pp_rng to represent discontinuity
-                    rng_dert_.append(rdert); flmiss_.append(1)
+        search_dir(Pp, idert, rng_dert_, Idert_, j, flmiss_, fleft=0)           
         # search left:
         if flmiss_[i]:  # if idert was not matched as rdert in search right, else it's replaced as idert by left-matching dert
-            comb_M = idert.m
             j = i + Pp.x0 - 1  # start at step=2, step=1 is in cross-comp
-            while comb_M > 0 and j-1 >= 0:  # may continue outside Pp.pdert_, no merge: Pps overlap?
-                j -= 1
-                ldert = Idert_[j]  # left dert
-                ldert.p = idert.p + ldert.i
-                ldert.d = idert.i - ldert.i  # difference
-                ldert.m = ave_d - abs(ldert.d)  # indirect match
-                if ldert.m > 0:
-                    if idert.m > ave_M * 4 and idert.P.sublayers[0] and ldert.P.sublayers[0]:  # 4: init ave_sub coef
-                        comp_sublayers(idert.P, ldert.P, idert.m)
-                    if j < Pp.x0:  # ldert is outside Pp
-                        rng_dert_.insert(0, ldert); flmiss_.insert(0, 0)
-                    else:
-                        flmiss_[j - Pp.x0] = 0  # =index of ldert in rng_dert_
-                    break  # 1st matching dert takes over connectivity search in the next loop
-                else:
-                    ldert.negL += 1
-                    ldert.negM += ldert.m
-                    comb_M = ldert.m - ave_M
-                    if j < Pp.x0:  # missing searched derts added for form_Pp_rng to represent discontinuity
-                        rng_dert_.insert(0, ldert); flmiss_.insert(0, 1)
-
+            search_dir(Pp, idert, rng_dert_, Idert_, j, flmiss_, fleft=1)
     return rng_dert_  # no return for flmiss_?
 
-def search_dir(fleft):  # to replace left and right forks
-    pass
+def search_dir(Pp, idert, rng_dert_, Idert_, j, flmiss_, fleft):  # to replace left and right forks
+        
+    comb_M = idert.m 
+    while comb_M > 0 and j+1 < len(Idert_) and  j-1 >= 0:  # may continue outside Pp.pdert_, no merge: Pps overlap?
+        
+        dert = Idert_[j]  # dert, extend search beyond next param
+        if fleft: # search left
+            j -= 1  
+            ldert = dert  # dert on left side
+            rdert = idert # dert on right side
+        else: # search right
+            j += 1
+            ldert = idert  # dert on left side
+            rdert = dert   # dert on right side
+        
+        pdert = comp_par(rdert.P, rdert.i, ldert.i, "I_", ave_d)
+        ldert.p, ldert.d, ldert.m = pdert.p, pdert.d, pdert.m
+        
+        if pdert.m > 0:
+            if idert.m > ave_M * 4 and idert.P.sublayers[0] and dert.P.sublayers[0]:  # 4: init ave_sub coef
+                comp_sublayers(idert.P, dert.P, idert.m)
+            if fleft and j < Pp.x0:  #  left dert is outside Pp
+                rng_dert_.insert(0, dert); flmiss_.insert(0, 0)
+            elif not fleft and j > Pp.x0 + Pp.L-1:  # right dert is outside Pp
+                rng_dert_.append(dert); flmiss_.append(0)
+            else:
+                flmiss_[j - Pp.x0] = 0  # =index of rdert in rng_dert_
+            break  # 1st matching param takes over connectivity search from _param, in the next loop
+        
+        else:  
+            ldert.negL += 1
+            ldert.negM += ldert.m
+            comb_M = ldert.m - ave_M
+            if fleft and j < Pp.x0:  # missing searched derts added for form_Pp_rng to represent discontinuity
+                rng_dert_.insert(0, ldert); flmiss_.insert(0, 1)
+            elif not fleft and j > Pp.x0 + Pp.L-1:  # missing searched derts added for form_Pp_rng to represent discontinuity
+                rng_dert_.append(rdert); flmiss_.append(1)
+                
 
 
 def form_Pp_rng(rdert_):  # rng_derts -> Ppms only, still a draft
