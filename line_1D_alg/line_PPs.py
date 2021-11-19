@@ -110,7 +110,7 @@ def line_PPs_root(P_t):  # P_t= Pm_, Pd_;  higher-level input is nested to the d
             Pdert_t, dert1_, dert2_ = cross_comp(P_, fPd)  # Pdert_t: Ldert_, Idert_, Ddert_, Mdert_
             Pp_tt = []  # Ppm_t, Ppd_t, each: [LPp_, IPp_, DPp_, MPp_]
 
-            for fPpd in 0, 1:  # -> Ppm_t if 0, Ppd_t if 1
+            for fPpd in [0, 1]:  # -> Ppm_t if 0, Ppd_t if 1
                 Pp_t = []  # [LPp_, IPp_, DPp_, MPp_]
                 rdn_t = sum_rdn_(param_names, Pdert_t, fPd)
                 # segment Pdert_ into Pps:
@@ -312,6 +312,7 @@ def intra_Pp_(rootPp, Pp_, Pdert_, hlayers, fPd):  # evaluate for sub-recursion 
                     Pp.sublayers = [[(sub_Ppm_, sub_Ppd_)]]
                     rdert_ = search_Idert_(Pp, Pdert_, ave_mI, rave=1)  # comp x variable range, depending on I.M
                     sub_Ppm_[:] = form_Pp_rng(rdert_)  # cluster in rdert_
+                    # no hlayers here?
                     if Pp.M > ave_M * 4 and not Pp.dert_:  # 4:looping_cost, Pp was not spliced, induction = Pm_'IPpm_, +Pp.iM?
                         intra_Pp_(Pp, sub_Ppm_, rdert_, hlayers+1, fPd=False)  # recursive rng+, no der+: Pds are redundant?
                 else:
@@ -406,7 +407,7 @@ def form_Pp_rng(rdert_):  # rng_derts -> Ppms only, still a draft
             Pp_.append(Pp)
     return Pp_
 
-
+# almost same with line_PPs_root
 def sub_search(rootPp, fPd):  # search inside top sublayer per P / sub_P, after P_ search: top-down induction,
     # called from intra_Pp_, init select by P.M|D combined in Pp?
 
@@ -419,14 +420,24 @@ def sub_search(rootPp, fPd):  # search inside top sublayer per P / sub_P, after 
                 for sub_P_ in sub_P_t:  # not sure about this
                     if len(sub_P_) > 2: sub_P_ = splice(sub_P_, fPd)  # for discontinuous search?
                 '''
-                if (fPd and abs(P.D) > ave_D * rootPp.Rdn) or (P.M > ave_M * rootPp.Rdn):  # or if P.M + pdert.m + sublayer.Dert.M
-                    if len(sub_P_) > 1: # at least 2 comparands in sub_P_?
-                        sub_Pdert_t, dert1_, dert2_ = cross_comp(sub_P_, fPd=i)
-                        sub_Ppm_t = form_Pp_root(sub_Pdert_t, dert1_, dert2_, fPd=False)
-                        sub_Ppd_t = form_Pp_root(sub_Pdert_t, dert1_, dert2_, fPd=True)
-                        subset[6].append(sub_Ppm_t)
-                        subset[7].append(sub_Ppd_t)
-                        #  deeper sublayers search is selective per sub_P
+                if len(sub_P_) > 1 and ((fPd and abs(P.D) > ave_D * rootPp.Rdn) or (P.M > ave_M * rootPp.Rdn)):  # or if P.M + pdert.m + sublayer.Dert.M
+                    sub_Pdert_t, dert1_, dert2_ = cross_comp(sub_P_, fPd=i)  # Pdert_t: Ldert_, Idert_, Ddert_, Mdert_
+                    sub_Pp_tt = []  # Ppm_t, Ppd_t, each: [LPp_, IPp_, DPp_, MPp_]
+        
+                    for fPpd in 0, 1:  # -> Ppm_t if 0, Ppd_t if 1
+                        sub_Pp_t = []  # [LPp_, IPp_, DPp_, MPp_]
+                        sub_rdn_t = sum_rdn_(param_names, sub_Pdert_t, fPd)
+                        # segment Pdert_ into Pps:
+                        for param_name, sub_Pdert_, rdn_ in zip(param_names, sub_Pdert_t, sub_rdn_t):
+                            sub_Pp_ = form_Pp_(sub_Pdert_, fPpd)
+                            if (fPpd and param_name == "D_") or (not fPpd and param_name == "I_"):
+                                if not fPd:  # splice eval by M in Pms only, of Pms or Pds in each +IPpm of +DPpm:
+                                    splice_Ps(sub_Pp_, dert1_, dert2_, fPpd)
+                                sub_Pp_ = intra_Pp_(None, sub_Pp_, sub_Pdert_, 1, fPpd)  # der+ or rng+
+                            sub_Pp_t.append(sub_Pp_)
+                        sub_Pp_tt.append(sub_Pp_t) 
+                    subset[6+i].append(sub_Pp_tt)# sub_Ppm_tt and sub_Ppd_tt
+                    #  deeper sublayers search is selective per sub_P
 
 
 def form_Pp_root(Pdert_t, dert1_, dert2_, fPd):
