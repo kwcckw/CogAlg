@@ -290,11 +290,12 @@ def intra_Pp_(rootPp, Pp_, Pdert_, hlayers, fPd):  # evaluate for sub-recursion 
     '''
     comb_sublayers = []  # combine into root P sublayers[1:], each nested to depth = sublayers[n]
 
-    for i, Pp in enumerate(Pp_):
+    for i, Pp in enumerate(Pp_):  
         if Pp.L > 1:
-            loc_ave_M = (ave_M + Pp.M) / 2 * Pp.Rdn * hlayers
+            # we need abs(Pp.M)? Else when Pp.M is negative, loc_ave_M will be smaller when hlayers get deeper
+            loc_ave_M = (ave_M + abs(Pp.M)) / 2 * Pp.Rdn * hlayers
             iM = sum( [ pdert.P.M for pdert in Pp.pdert_])
-            loc_ave = (ave + iM) / 2 * Pp.Rdn * hlayers
+            loc_ave = (ave + abs(iM)) / 2 * Pp.Rdn * hlayers
             if fPd:
                 # der+ fork
                 loc_ave_M *= ave_D  # =ave_d?
@@ -472,28 +473,44 @@ def comp_sublayers(_P, P, root_v):  # if pdert.m -> if summed params m -> if pos
                 for _sub_P in _sub_P_:
                     _xsub_pdertt = [[], [], [], []]  # L, I, D, M xsub_pdert_s
                     _SL += _sub_P.L  # ix0 of next _sub_P
+                    
                     # search right:
                     for sub_P in sub_P_[start_index:]:  # index_ix0 > _ix0, comp sub_Ps at proximate relative positions in sub_P_
                         fbreak, xsub_P_M, xsub_P_D = comp_sub_P(_sub_P, sub_P, _xsub_pdertt, root_v, fPd)
                         sub_M += xsub_P_M ; sub_D += xsub_P_D
-                        if fbreak:
+                        if fbreak: 
                             break
-                        # if next ix overlap: ix0 of next _sub_P < ix0 of current sub_P
-                        if SL < _SL: next_index += 1
-                        SL += sub_P.L  # ix0 of next sub_P
-                    # search left:
-                    for sub_P in reversed(sub_P_[len(sub_P_) - start_index:]):  # index_ix0 <= _ix0
-                        fbreak, xsub_P_M, xsub_P_D = comp_sub_P(_sub_P, sub_P, _xsub_pdertt, root_v, fPd)  # invert sub_P, _sub_P positions
-                        sub_M += xsub_P_M ; sub_D += xsub_P_D
-                        if fbreak:
-                            break
+                        else:# search left only if miss
+                            # if next ix overlap: ix0 of next _sub_P < ix0 of current sub_P
+                            if SL < _SL: next_index += 1
+                            SL += sub_P.L  # ix0 of next sub_P
+                                    
+                            # search left:
+                            for sub_P in reversed(sub_P_[:start_index]):  # index_ix0 <= _ix0
+                                fbreak, xsub_P_M, xsub_P_D = comp_sub_P(_sub_P, sub_P, _xsub_pdertt, root_v, fPd)  # invert sub_P, _sub_P positions
+                                sub_M += xsub_P_M ; sub_D += xsub_P_D
+                                if fbreak:
+                                    break 
                     # not implemented: if param_name == "I_" and not fPd: sub_pdert = search_param_(param_)
                     start_index = next_index  # for next _sub_P
 
                     if _xsub_pdertt[0]:  # at least 1 sub_pdert, real min length ~ 8, very unlikely
-                        # form 4-tuple of xsub_Pp_s:
-                        xsub_Pp_t = form_Pp_root(_xsub_pdertt, [], [], fPd)
-                        _xsub_pdertt_[-1][:] = xsub_Pp_t
+                        # 2-tuple (m | d), each form 4-tuple of xsub_Pp_s:
+                        xsub_Pp_tt = []  # Ppm_t, Ppd_t, each: [LPp_, IPp_, DPp_, MPp_]
+                        for fPpd in 0, 1:  # -> Ppm_t if 0, Ppd_t if 1
+                            xsub_Pp_t = []  # [LPp_, IPp_, DPp_, MPp_]
+                            rdn_t = sum_rdn_(param_names, _xsub_pdertt, fPd)
+                            # Pdert_-> Pps:
+                            for param_name, xsub_Pdert_, rdn_ in zip(param_names, _xsub_pdertt, rdn_t):
+                                xsub_Pp_ = form_Pp_(xsub_Pdert_, fPpd)
+                                if (fPpd and param_name == "D_") or (not fPpd and param_name == "I_"):
+                                    if not fPpd:
+                                        splice_Ps(xsub_Pp_, [], [], fPd)  # splice eval by Pp.M in Ppm_, for Pms in +IPpms or Pds in +DPpm
+                                    xsub_Pp_ = intra_Pp_(None, xsub_Pp_, xsub_Pdert_, 1, fPpd)  # der+ or rng+
+                                xsub_Pp_t.append(xsub_Pp_)
+                            xsub_Pp_tt.append(xsub_Pp_t)
+                        
+                        _xsub_pdertt_[-1][:] = xsub_Pp_tt
                         xsub_pdertt_[-1][:] = _xsub_pdertt_[-1]  # bilateral assignment
                     else:
                         _xsub_pdertt_[-1].append(_xsub_pdertt)  # preserve nesting
