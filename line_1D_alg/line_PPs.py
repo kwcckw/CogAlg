@@ -41,6 +41,7 @@ class Cpdert(ClusterStructure):
 class CPp(CP):
     dert_ = list  # if not empty: Pp is primarily a merged P, other params are optional
     pdert_ = list  # Pp elements, "p" for param
+    opdert_ = list # overlapping pderts
     flay_rdn = bool  # Pp is layer-redundant to Pp.pdert_
     negM = int  # in rng_Pps only
     negL = int  # in rng_Pps only, summed in L, no need to be separate?
@@ -174,7 +175,7 @@ def comp_par(_P, _param, param, param_name, ave):
         if param_name == 'I_': m = ave - abs(d)  # indirect match
         else: m = min(param, _param) - abs(d) / 2 - ave  # direct match
 
-    return Cpdert(P=_P, i=_param, p=param + _param, d=d, m=m)
+    return Cpdert(P=_P, i=_param, p=param + _param, d=d, m=m, Ppt=[[],[]])
 
 
 def form_Pp_(pdert_, fPd):
@@ -396,26 +397,29 @@ def form_Pp_rng(rdert_):  # rng_derts -> Ppms only, still a draft
     Pp_ = []
     x = 0
     for i, _rdert in enumerate(rdert_):  # form +Pp from +rderts
-        if not _rdert.Ppt[0]:
-            # _rdert is not in any rng_Pp yet, else skip all:
-            # exclusive assignment of overlapping pderts: point-wise eval by m, may overlap in Pp?
-            Pp = CPp(L=1, I=_rdert.p, D=_rdert.d, M=_rdert.m, Rdn=_rdert.rdn+_rdert.P.Rdn, x0=x, pdert_=[_rdert], sublayers=[[]])
-            cm = 1  # initialize current m to start the loop
-            j = i + 1 + _rdert.negL
-            while cm > 0 and j < len(rdert_):
-                rdert = rdert_[j]
-                # accumulate params:
-                Pp.L += 1; Pp.I += rdert.p; Pp.D += rdert.d; Pp.M += rdert.m; Pp.Rdn += rdert.rdn + rdert.P.Rdn + Pp.L  # rdn to root layers, not normalized
-                Pp.pdert_ += [rdert]
-                # currently wrong, this should be done at Pp termination?:
-                if Pp not in rdert.Ppt[0]:
-                    rdert.Ppt[0].append(Pp); Pp.Rdn += 1  # Pps may overlap, len rdert.Ppt[0] is rdn count, skip as _rdert in the next loop
-                cm = rdert.m
-                if cm > 0:
-                    Pp.negL += _rdert.negL; Pp.negM += _rdert.negM
-                j += 1 + rdert.negL
-
-            Pp_.append(Pp)
+        # exclusive assignment of overlapping pderts: point-wise eval by m, may overlap in Pp?
+        Pp = CPp(L=1, I=_rdert.p, D=_rdert.d, M=_rdert.m, Rdn=_rdert.rdn+_rdert.P.Rdn, x0=x, pdert_=[_rdert], sublayers=[[]])
+        if _rdert.Ppt[0] and _rdert.m > ave_M: # overlapping _rdert
+            _rdert.Ppt[0].append(Pp) # add current Pp into _rdert's Pp list
+            for oPp in _rdert.Ppt[0]: # add current _rdert as overlapping rderts
+                Pp.opdert_.append(_rdert)
+        
+        cm = 1  # initialize current m to start the loop
+        j = i + 1 + _rdert.negL
+        while cm > 0 and j < len(rdert_):
+            rdert = rdert_[j]
+            if rdert.Ppt[0] and rdert.m > ave_M: # rdert is having existing Pp hence it is an overlapping rdert
+                 Pp.opdert_.append(_rdert)
+            # accumulate params:
+            Pp.L += 1; Pp.I += rdert.p; Pp.D += rdert.d; Pp.M += rdert.m; Pp.Rdn += rdert.rdn + rdert.P.Rdn + Pp.L  # rdn to root layers, not normalized
+            Pp.pdert_ += [rdert]
+            rdert.Ppt[0].append(Pp); Pp.Rdn += 1  # Pps may overlap, len rdert.Ppt[0] is rdn count, skip as _rdert in the next loop
+            cm = rdert.m
+            if cm > 0:
+                Pp.negL += _rdert.negL; Pp.negM += _rdert.negM
+            j += 1 + rdert.negL
+ 
+        Pp_.append(Pp)
     return Pp_
 
 
@@ -500,7 +504,7 @@ def comp_sublayers(_P, P, root_v):  # if pdert.m -> if summed params m -> if pos
                             if param_name == "I_":
                                 # splice_Ps(xsub_Pp_, [], [], fPd)  # splice eval by Pp.M in Ppm_, for Pms in +IPpms
                                 xsub_Pp_ = intra_Pp_(None, xsub_Pp_, xsub_Pdert_, 1, fPd=0)  # rng+ only?
-                                xsub_Pp_t.append(xsub_Pp_)
+                            xsub_Pp_t.append(xsub_Pp_) 
 
                         _xsub_pdertt_[-1][:] = xsub_Pp_t
                         xsub_pdertt_[-1][:] = xsub_Pp_t  # bilateral assignment?
