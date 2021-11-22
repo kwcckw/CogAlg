@@ -293,6 +293,7 @@ def intra_Pp_(rootPp, Pp_, Pdert_, hlayers, fPd):  # evaluate for sub-recursion 
     for i, Pp in enumerate(Pp_):
         loc_ave_M = ave_M * Pp.Rdn * hlayers
         if Pp.L > 1 and Pp.M > loc_ave_M:  # min for both forks
+
             loc_ave_M *= (Pp.M / ave_M) / 2
             iM = sum( [pdert.P.M for pdert in Pp.pdert_])
             loc_ave = (ave + iM) / 2 * Pp.Rdn * hlayers  # cost per comp
@@ -397,6 +398,7 @@ def form_Pp_rng(rdert_):  # rng_derts -> Ppms only, still a draft
     for i, _rdert in enumerate(rdert_):  # form +Pp from +rderts
         if not _rdert.Ppt[0]:
             # _rdert is not in any rng_Pp yet, else skip all:
+            # exclusive assignment of overlapping pderts: point-wise eval by m, may overlap in Pp?
             Pp = CPp(L=1, I=_rdert.p, D=_rdert.d, M=_rdert.m, Rdn=_rdert.rdn+_rdert.P.Rdn, x0=x, pdert_=[_rdert], sublayers=[[]])
             cm = 1  # initialize current m to start the loop
             j = i + 1 + _rdert.negL
@@ -465,13 +467,11 @@ def comp_sublayers(_P, P, root_v):  # if pdert.m -> if summed params m -> if pos
             if rng == _rng and min(_P.L, P.L) > ave_Ls:  # if same fork: compare sub_Ps to each _sub_P within max relative distance per comb_V:
                 _SL = SL = 0  # summed Ls
                 start_index = next_index = 0  # index of starting sub_P for current _sub_P
-                
+                _xsub_pdertt_ += [[]]  # array of cross-sub_P pdert tuples, inner brackets for subset_
+                xsub_pdertt_ += [[]]  # append xsub_dertt per _sub_P_ and sub_P_, sparse?
+
                 for _sub_P in _sub_P_:
-                    # i think we need add new list into _xsub_pdertt_ here, so that empty list will be preserved
-                    _xsub_pdertt_ += [[]]  # array of cross-sub_P pdert tuples, inner brackets for subset_
-                    xsub_pdertt_ += [[]]  # append xsub_dertt per _sub_P_ and sub_P_, sparse?
                     _xsub_pdertt = [[], [], [], []]  # L, I, D, M xsub_pdert_s
-                    xsub_pdertt = [[], [], [], []]
                     _SL += _sub_P.L  # ix0 of next _sub_P
                     # search right:
                     for sub_P in sub_P_[start_index:]:  # index_ix0 > _ix0, comp sub_Ps at proximate relative positions in sub_P_
@@ -496,15 +496,14 @@ def comp_sublayers(_P, P, root_v):  # if pdert.m -> if summed params m -> if pos
                         rdn_t = sum_rdn_(param_names, _xsub_pdertt, fPd)
                         for param_name, xsub_Pdert_, rdn_ in zip(param_names, _xsub_pdertt, rdn_t):
                             xsub_Pp_ = form_Pp_(xsub_Pdert_, fPd=0)
+                            # no step=2 for splice: xsub_pdertts are not consecutive, and their Ps are not aligned?
                             if param_name == "I_":
-                                splice_Ps(xsub_Pp_, [], [], fPd)  # splice eval by Pp.M in Ppm_, for Pms in +IPpms
+                                # splice_Ps(xsub_Pp_, [], [], fPd)  # splice eval by Pp.M in Ppm_, for Pms in +IPpms
                                 xsub_Pp_ = intra_Pp_(None, xsub_Pp_, xsub_Pdert_, 1, fPd=0)  # rng+ only?
-                            xsub_Pp_t.append(xsub_Pp_) # append regardless of param name
+                                xsub_Pp_t.append(xsub_Pp_)
+
                         _xsub_pdertt_[-1][:] = xsub_Pp_t
-                        xsub_pdertt_[-1][:] = _xsub_pdertt_[-1]  # bilateral assignment
-                    else:
-                        _xsub_pdertt_[-1].append(_xsub_pdertt)  # preserve nesting
-                        xsub_pdertt_[-1].append(xsub_pdertt)  # preserve nesting
+                        xsub_pdertt_[-1][:] = xsub_Pp_t  # bilateral assignment?
 
     return sub_M, sub_D
 
