@@ -46,6 +46,7 @@ class CPp(CP):
     negL = int  # in rng_Pps only, summed in L, no need to be separate?
     _negM = int  # for search left, within adjacent neg Ppm only?
     _negL = int  # left-most compared distance from Pp.x0
+    ngap = int # gap of negative pderts on the left to prior +ve Pp
     sublayers = list
     subDerts = list
     rootPp = object  # to replace locals for merging
@@ -293,7 +294,6 @@ def intra_Pp_(rootPp, Pp_, Pdert_, hlayers, fPd):  # evaluate for sub-recursion 
     for i, Pp in enumerate(Pp_):
         loc_ave_M = ave_M * Pp.Rdn * hlayers
         if Pp.L > 1 and Pp.M > loc_ave_M:  # min for both forks
-
             loc_ave_M *= (Pp.M / ave_M) / 2
             iM = sum( [pdert.P.M for pdert in Pp.pdert_])
             loc_ave = (ave + iM) / 2 * Pp.Rdn * hlayers  # cost per comp
@@ -393,6 +393,50 @@ def search_direction(Pp, idert, rng_dert_, Idert_, j, flmiss_, loc_ave, fleft): 
 def form_Pp_rng(rdert_):  # rng_derts -> Ppms only, still a draft
 
     for pdert in rdert_: pdert.Ppt[0] = []  # clear Ppms to replace with rng_Ppms, pderts only reference one hlayer of Pps
+    Pp_ = []; Pp = CPp() # 1st Pp
+    x = 0; ngap = 0
+    _rdert = rdert_[0]; _sign = _rdert.m > 0
+    if _sign:  # init +ve Pp params, exclusive assignment of overlapping pderts: point-wise eval by m, negL may overlap in and between Pps
+        Pp.L=1; Pp.I=_rdert.p; Pp.D=_rdert.d; Pp.M=_rdert.m; Pp.Rdn=_rdert.rdn + _rdert.P.Rdn; 
+        Pp.x0=x; Pp.pdert_=[_rdert]; Pp.negL=_rdert.negL; Pp.negM=_rdert.negM
+        _rdert.Ppt[0] = Pp
+    else:
+        ngap += 1
+
+    for i, rdert in enumerate(rdert_[1:]):  # form +Pp from +rderts
+        sign = rdert.m > 0
+        
+        # (both positive pderts) or (prior pdert is negative but current pdert is positive)
+        if (sign and _sign) or (sign and not _sign):  # accumulate params:
+            Pp.L += 1; Pp.I += rdert.p; Pp.D += rdert.d; Pp.M += rdert.m; Pp.Rdn += rdert.rdn + rdert.P.Rdn  # * hlayers -> rdn to root layers, not normalized
+            Pp.negL += rdert.negL; Pp.negM += rdert.negM; Pp.pdert_ += [rdert]
+            rdert.Ppt[0] = Pp
+            
+            if not _sign: 
+                Pp.x0 = x # new x0 if previous pdert is negative
+        
+        # previous pdert is positive but current pdert is negative
+        elif _sign: # termination - update ngap to Pp and reset ngap
+            Pp_.append(Pp); Pp.ngap = ngap; Pp.Rdn += Pp.L # add Pp.L to Rdn only at termination
+            ngap = 0
+            Pp = CPp() # reinit Pp
+                
+        # both pderts are negative
+        else:
+            ngap += 1
+                
+        x += 1
+        _sign = sign
+                       
+    # update last Pp
+    if Pp.L: Pp_.append(Pp); Pp.ngap = ngap; Pp.Rdn += Pp.L 
+        
+    return Pp_
+
+'''
+def form_Pp_rng(rdert_):  # rng_derts -> Ppms only, still a draft
+
+    for pdert in rdert_: pdert.Ppt[0] = []  # clear Ppms to replace with rng_Ppms, pderts only reference one hlayer of Pps
     Pp_ = []
     x = 0; ngap = 0
     _rdert = rdert_[0]; _sign = _rdert.m > 0
@@ -418,7 +462,7 @@ def form_Pp_rng(rdert_):  # rng_derts -> Ppms only, still a draft
         _sign = sign
 
     return Pp_
-
+'''
 
 def sub_search(rootPp, fPd):  # ~line_PPs_root: cross-comp sub_Ps in top sublayer of high-M Pms | high-D Pds, called from intra_Pp_
 
