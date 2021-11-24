@@ -176,7 +176,53 @@ def comp_par(_P, _param, param, param_name, ave):
 
     return Cpdert(P=_P, i=_param, p=param + _param, d=d, m=m)
 
+# following structure in form_Pp_rng
+def form_Pp_(pdert_, fPd):
+    # initialization:
+    Pp_ = []
+    x = 0
+    _pdert = pdert_[0]
+    
+    if fPd: _sign = _pdert.d > 0
+    else:   _sign = _pdert.m > 0
+    
+    # init params
+    L=1; I=_pdert.p; D=_pdert.d; M=_pdert.m; Rdn=_pdert.rdn+_pdert.P.Rdn; x0=x; ix0=_pdert.P.x0; pdert_=[_pdert] # initialization
+        
+    for pdert in pdert_[1:]:  # segment by sign
+        if fPd: sign = pdert.d > 0
+        else:   sign = pdert.m > 0
+        # adjust by ave projected at distance=negL and contrast=negM, if significant:
+        # m + ddist_ave = ave - ave * (ave_rM * (1 + negL / ((param.L + _param.L) / 2))) / (1 + negM / ave_negM)?
+        # or proj = decay?
+        if sign != _sign:
 
+            Pp = CPp(L=L, I=I, D=D, M=M, Rdn=Rdn, x0=x0, ix0=ix0, pdert_=pdert_, sublayers=[[]])
+            Pp_.append(Pp)
+            for pdert in Pp.pdert_: pdert.Ppt[fPd] = Pp  # update Pp reference
+
+            # sign change, compact terminated Pp, initialize Pp and append it to Pp_
+            Pp = Pp_[-1]  # no immediate normalization: Pp.I /= Pp.L; Pp.D /= Pp.L; Pp.M /= Pp.L; Pp.Rdn /= Pp.L
+            Pp.Rdn += Pp.L  # redundancy to higher root Pp layers, not normalized
+            # Pp vs Pdert_ redundancy:
+            if fPd: V = abs(Pp.D)  # derived values
+            else: V = Pp.M
+            PpV = V / (Pp.L *.7)  # .7: ave intra-Pp-match coef, for value reduction with resolution, still non-negative
+            pdert_V = V - Pp.L * ave_M * (ave_D * fPd)  # cost incr per pdert representations
+            if PpV <= pdert_V:
+                Pp.Rdn += Pp.L; Pp.flay_rdn = 1  # Pp or pdert_ are layer-redundant, use in next-level eval
+
+            L=1; I=pdert.p; D=pdert.d; M=pdert.m; Rdn=pdert.rdn+pdert.P.Rdn; x0=x; ix0=pdert.P.x0; pdert_=[pdert] # reinit
+        else:
+            # accumulate params:
+            L += 1; I += pdert.p; D += pdert.d; M += pdert.m; Rdn += pdert.rdn+pdert.P.Rdn; pdert_ += [pdert]
+   
+        _sign = sign; x += 1
+
+    return Pp_
+
+
+'''
 def form_Pp_(pdert_, fPd):
     # initialization:
     Pp_ = []
@@ -212,7 +258,7 @@ def form_Pp_(pdert_, fPd):
         _sign = sign; x += 1
 
     return Pp_
-
+'''
 
 def sum_rdn_(param_names, Pdert_t, fPd):
     '''
@@ -293,7 +339,6 @@ def intra_Pp_(rootPp, Pp_, Pdert_, hlayers, fPd):  # evaluate for sub-recursion 
     for i, Pp in enumerate(Pp_):
         loc_ave_M = ave_M * Pp.Rdn * hlayers
         if Pp.L > 1 and Pp.M > loc_ave_M:  # min for both forks
-
             loc_ave_M *= (Pp.M / ave_M) / 2
             iM = sum( [pdert.P.M for pdert in Pp.pdert_])
             loc_ave = (ave + iM) / 2 * Pp.Rdn * hlayers  # cost per comp
@@ -358,11 +403,11 @@ def search_direction(Pp, idert, rng_dert_, Idert_, j, flmiss_, loc_ave, fleft): 
     comb_M = idert.m
     while comb_M > 0 and j+1 < len(Idert_) and  j-1 >= 0:  # may continue outside Pp.pdert_, no merge: Pps overlap?
 
-        cdert = Idert_[j]  # dert, extend search beyond next param
+        # we need to retrieve cdert after the j increment/decrement, but not before it
         if fleft:  # search left
-            j -= 1; ldert = cdert; rdert = idert  # left and right derts
+            j -= 1; cdert = Idert_[j]; ldert = cdert; rdert = idert  # left and right derts
         else:  # search right
-            j += 1; ldert = idert; rdert = cdert  # left and right derts
+            j += 1; cdert = Idert_[j]; ldert = idert; rdert = cdert  # left and right derts
 
         pdert = comp_par(rdert.P, rdert.i, ldert.i, "I_", loc_ave)
         ldert.p, ldert.d, ldert.m = pdert.p, pdert.d, pdert.m
@@ -405,17 +450,17 @@ def form_Pp_rng(rdert_):  # rng_derts -> positive Ppms only
             L += 1; I += rdert.p; D += rdert.d; M += rdert.m; Rdn += rdert.rdn + rdert.P.Rdn; negL += rdert.negL; negM += rdert.negM; pdert_ += [rdert]
         else:
             if _sign:  # termination:
-                Pp = CPp(L=1, I=rdert.p, D=rdert.d, M=rdert.m, negL = negL, negM = negM, x0=x0, pdert_=[rdert], sublayers=[[]],
-                         Rdn = rdert.rdn + rdert.P.Rdn + Pp.L)  # Pp.L: rdn to root layer per pdert, not normalized
+                Pp = CPp(L=L, I=I, D=D, M=M, negL = negL, negM = negM, x0=x0, pdert_=pdert_, sublayers=[[]],
+                         Rdn = Rdn + L)  # Pp.L: rdn to root layer per pdert, not normalized
                 for rdert in Pp.pdert_: rdert.Ppt[0] = Pp
                 Pp_.append(Pp)
             elif sign:  # reinitialize +ve Pp params:
                 L=1; I=rdert.p; D=rdert.d; M=rdert.m; Rdn=rdert.rdn + rdert.P.Rdn; x0=x; pdert_=[rdert]; negL=rdert.negL; negM=rdert.negM
-            x+=1
+        x+=1 # x+1 for each rdert in the loop
         _sign = sign
 
     if _sign:  # terminate last Pp:
-        Pp = CPp(L=1, I=rdert.p, D=rdert.d, M=rdert.m, negL=negL, negM=negM, x0=x0, pdert_=[rdert], sublayers=[[]], Rdn=rdert.rdn + rdert.P.Rdn + Pp.L)
+        Pp = CPp(L=L, I=I, D=D, M=M, negL = negL, negM = negM, x0=x0, pdert_=pdert_, sublayers=[[]], Rdn=Rdn + L)
         for rdert in Pp.pdert_: rdert.Ppt[0] = Pp
         Pp_.append(Pp)
 
