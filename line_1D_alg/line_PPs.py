@@ -103,6 +103,44 @@ aves = [ave_mL, ave_mI, ave_mD, ave_mM]
     capitalized variables are normally summed small-case variables
 '''
 
+
+# draft
+def form_PPP_recursive(Pp_ttt):  
+    PPP_ttt, f_recursive = form_PPP_root(Pp_ttt)
+    
+    if f_recursive:
+        return form_PPP_recursive(PPP_ttt)  
+    else:
+        return PPP_ttt
+    
+# draft
+def form_PPP_root(Pp_ttt):
+    
+    f_recursive = 0
+    PPP_ttt = []
+    for Pp_tt in Pp_ttt:  # Pds | Pms  (fPd)  
+        PPP_tt = []
+        for Ppt in Pp_tt: # Ppds | Ppms (fPpd)
+            PPP_t = []
+            
+            if isinstance(Ppt, list): # Ppt is not P, when Pps are formed      
+                for Pp_ in Ppt: # L, I, D, M
+                    if len(Pp_)>1:
+                        PPP_ = form_PPP_(Pp_)
+                        f_recursive = 1 # to enable recursion when new PPPs are formed
+                        PPP_t.append(PPP_)
+                
+            PPP_tt.append(PPP_t)      
+        PPP_ttt.append(PPP_tt)
+            
+    return PPP_ttt, f_recursive
+    
+
+# draft
+def fom_PPP_(Pp_):
+    # form PPP_ from Pp_ here
+    pass
+
 def line_PPs_root(P_t):  # P_t= Pm_, Pd_;  higher-level input is nested to the depth = 2*elevation (level counter), or 2^elevation?
     Pp_ttt = []
     norm_feedback(P_t)  # before processing
@@ -127,6 +165,9 @@ def line_PPs_root(P_t):  # P_t= Pm_, Pd_;  higher-level input is nested to the d
             Pp_ttt.append(Pp_tt)
         else:
             Pp_ttt.append(P_)  # Pps are not formed
+
+    # temporary to test on the recursion
+    PPP_recursive = form_PPP_recursive(Pp_ttt)
 
     return Pp_ttt  # 3-level nested tuple per line: Pm_, Pd_( Ppm_, Ppd_( LPp_, IPp_, DPp_, MPp_)))
 
