@@ -22,6 +22,7 @@ import numpy as np
 from copy import deepcopy
 from frame_2D_alg.class_cluster import ClusterStructure, comp_param
 from line_patterns import *
+from increment import *
 
 class Cpdert(ClusterStructure):
     # P param dert
@@ -104,42 +105,6 @@ aves = [ave_mL, ave_mI, ave_mD, ave_mM]
 '''
 
 
-# draft
-def form_PPP_recursive(Pp_ttt):  
-    PPP_ttt, f_recursive = form_PPP_root(Pp_ttt)
-    
-    if f_recursive:
-        return form_PPP_recursive(PPP_ttt)  
-    else:
-        return PPP_ttt
-    
-# draft
-def form_PPP_root(Pp_ttt):
-    
-    f_recursive = 0
-    PPP_ttt = []
-    for Pp_tt in Pp_ttt:  # Pds | Pms  (fPd)  
-        PPP_tt = []
-        for Ppt in Pp_tt: # Ppds | Ppms (fPpd)
-            PPP_t = []
-            
-            if isinstance(Ppt, list): # Ppt is not P, when Pps are formed      
-                for Pp_ in Ppt: # L, I, D, M
-                    if len(Pp_)>1:
-                        PPP_ = form_PPP_(Pp_)
-                        f_recursive = 1 # to enable recursion when new PPPs are formed
-                        PPP_t.append(PPP_)
-                
-            PPP_tt.append(PPP_t)      
-        PPP_ttt.append(PPP_tt)
-            
-    return PPP_ttt, f_recursive
-    
-
-# draft
-def fom_PPP_(Pp_):
-    # form PPP_ from Pp_ here
-    pass
 
 def line_PPs_root(P_t):  # P_t= Pm_, Pd_;  higher-level input is nested to the depth = 2*elevation (level counter), or 2^elevation?
     Pp_ttt = []
@@ -167,7 +132,7 @@ def line_PPs_root(P_t):  # P_t= Pm_, Pd_;  higher-level input is nested to the d
             Pp_ttt.append(P_)  # Pps are not formed
 
     # temporary to test on the recursion
-    PPP_recursive = form_PPP_recursive(Pp_ttt)
+    line_PPP_root(Pp_ttt)
 
     return Pp_ttt  # 3-level nested tuple per line: Pm_, Pd_( Ppm_, Ppd_( LPp_, IPp_, DPp_, MPp_)))
 
@@ -218,24 +183,24 @@ def comp_par(_P, _param, param, param_name, ave):
     return Cpdert(P=_P, i=_param, p=param + _param, d=d, m=m)
 
 
-def form_Pp_(pdert_, fPd):
+def form_Pp_(ipdert_, fPd):
     # initialization:
     Pp_ = []
     x = 0
-    _pdert = pdert_[0]
+    _pdert = ipdert_[0]
     if fPd: _sign = _pdert.d > 0
     else:   _sign = _pdert.m > 0
     # init Pp params:
     L=1; I=_pdert.p; D=_pdert.d; M=_pdert.m; Rdn=_pdert.rdn+_pdert.P.Rdn; x0=x; ix0=_pdert.P.x0; pdert_=[_pdert]
 
-    for pdert in pdert_[1:]:  # segment by sign
+    for pdert in ipdert_[1:]:  # segment by sign
         # proj = decay, or adjust by ave projected at distance=negL and contrast=negM, if significant:
         # m + ddist_ave = ave - ave * (ave_rM * (1 + negL / ((param.L + _param.L) / 2))) / (1 + negM / ave_negM)?
         if fPd: sign = pdert.d > 0
         else:   sign = pdert.m > 0
 
         if sign != _sign:  # sign change, pack terminated Pp, initialize new Pp
-            Pp_ = term_Pp( Pp_, L, I, D, M, Rdn, x0, ix0, pdert_, fPd)
+            term_Pp( Pp_, L, I, D, M, Rdn, x0, ix0, pdert_, fPd)
             # re-init Pp params:
             L=1; I=pdert.p; D=pdert.d; M=pdert.m; Rdn=pdert.rdn+pdert.P.Rdn; x0=x; ix0=pdert.P.x0; pdert_=[pdert]
         else:
@@ -243,7 +208,7 @@ def form_Pp_(pdert_, fPd):
             L += 1; I += pdert.p; D += pdert.d; M += pdert.m; Rdn += pdert.rdn+pdert.P.Rdn; pdert_ += [pdert]
         _sign = sign; x += 1
 
-    Pp_ = term_Pp( Pp_, L, I, D, M, Rdn, x0, ix0, pdert_, fPd)  # pack last Pp
+    term_Pp( Pp_, L, I, D, M, Rdn, x0, ix0, pdert_, fPd)  # pack last Pp
     return Pp_
 
 def term_Pp(Pp_, L, I, D, M, Rdn, x0, ix0, pdert_, fPd):
@@ -258,8 +223,8 @@ def term_Pp(Pp_, L, I, D, M, Rdn, x0, ix0, pdert_, fPd):
     for pdert in Pp.pdert_: pdert.Ppt[fPd] = Pp  # root Pp refs
     Pp_.append(Pp)  # no immediate normalization: Pp.I /= Pp.L; Pp.D /= Pp.L; Pp.M /= Pp.L; Pp.Rdn /= Pp.L
 
-    return Pp_
-
+    # no need to return since we append it
+    
 def sum_rdn_(param_names, Pdert_t, fPd):
     '''
     access same-index pderts of all P params, assign redundancy to lesser-magnitude m|d in param pair.
