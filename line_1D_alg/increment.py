@@ -26,7 +26,6 @@ form_rval_P_(P_):
 .
 2nd increment converts line_PPs into line_PPs: line_PPPs_code = 2nd_increment_code (line_PPs_code).
 We will then try to convert it into fully recursive xlevel_increment
-
 Separate increment for each root function to accommodate greater input nesting and value variation:
 '''
 
@@ -63,37 +62,65 @@ def form_Pp_incr(form_Pp_):
     '''
     pass
 
+def line_PPPs_draft(Pp_ttt):  # higher-level input is nested to the depth = 1 + 2*elevation (level counter)?
+    '''
+    draft, mostly to show nesting at this point. Need to add conditions, sum_rdn, splice, intra_Ppp_
+    '''
+    norm_feedback(Pp_ttt)  # before processing
+    Ppp_ttttt = []  # add  4-tuple of Pp vars ) 2-tuple of Pppm, Pppd per var
+
+    for Pp_tt, fPd in zip(Pp_ttt, [0,1]):  # fPd: Pm_ | Pd_
+        Ppp_tttt = []  # Pppm_, Pppd_
+        for Pp_t, fPpd in zip(Pp_tt, [0,1]):  # fPpd: Ppm_ | Ppd_
+            Ppp_ttt = []
+            for param_name, Pp_ in zip( param_names, Pp_t):  # param_name: LPp_ | IPp_ | DPp_ | MPp_
+                Ppdert_t = cross_comp(Pp_, fPpd)
+                Ppp_tt = []
+                for fPpd in 0, 1:  # 0: Pppm_, 1: Pppd_
+                    Ppp_t = []
+                    for Ppdert_ in Ppdert_t:  # Lpdert_, Ipdert_, Dpdert_, Mpdert_
+                        Ppp_ = form_Ppp_(Ppdert_, fPpd)
+                        Ppp_t.append(Ppp_)  # LPpp_, IPpp_, DPpp_, MPpp_
+                    Ppp_tt.append(Pp_t)   # Pppm_, Pppd_
+                Ppp_ttt.append(Pp_tt)   # LPp_, IPp_, DPp_, MPp_
+            Ppp_tttt.append(Ppp_ttt)  # Ppm_, Ppd_
+        Ppp_ttttt.append(Ppp_tttt)  # Pm_, Pd_
+
+    return Ppp_ttttt  # 5-level nested tuple of arrays per line:
+    # (Pm_, Pd_( Ppm_, Ppd_( LPp_, IPp_, DPp_, MPp_ ( Pppm_, Pppd_ ( LPpp_, IPpp_, DPpp_, MPpp_)))))
 
 # draft
-def line_PPP_root(Pp_ttt):  # higher-level input is nested to the depth = 2*elevation (level counter), or 2^elevation?
+def line_PPPs_root(Pp_ttt):  # higher-level input is nested to the depth = 2+elevation (level counter), or 2*elevation?
 
     norm_feedback(Pp_ttt)  # before processing
-    
-    Ppp_tttt = []  # add Pp vars tuple ) Pppm, Pppd tuple
-    # i guess fPd is useless here since we are using fPpd now?
-    for Pp_tt, fPd in zip(Pp_ttt, [0,1]):  # fPd: root Pm_ or root Pd_
-        Ppp_ttt = [] # each element is L, I, D, M's Ppp_ of different fPpd
-        for Pp_t, fPpd in zip(Pp_tt, [0,1]): # fPpd: root Ppm_ or root Ppd_
+    Ppp_ttttt = []  # add  4-tuple of Pp vars ) 2-tuple of Pppm, Pppd per var
 
-            if isinstance(Pp_t, list): # Ppt is not P, when Pps are formed      
-                Ppp_tt = [] 
-                for Pp_ in Pp_t: # L, I, D, M Pps
-                    Ppp_t = [] 
+    for Pp_tt, fPd in zip(Pp_ttt, [0,1]):  # fPd: root Pm_ or root Pd_
+        Ppp_tttt = []  # each element is L, I, D, M's Ppp_ of different fPpd
+
+        for Pp_t, fPpd in zip(Pp_tt, [0,1]):  # fPpd: Ppm_ or Ppd_
+            if isinstance(Pp_t, list):  # Ppt is not P
+                Ppp_tt = []
+                for Pp_ in Pp_t:  # LPp_, IPp_, DPp_, MPp_
+                    Ppp_t = []
                     if len(Pp_)>1:
-                        Ppdert_t = cross_comp(Pp_, fPpd) # or it should be fPd here?
-                        for Ppdert_ in Ppdert_t: # L, I, D, M, Ppps
+                        Ppdert_t = cross_comp(Pp_, fPpd)  # or it should be fPd here?
+                        for Ppdert_ in Ppdert_t:  # L, I, D, M, Ppps
                             Ppp_ = form_PPP_(Ppdert_, fPpd)
                             Ppp_t.append(Ppp_)
-            
-                        Ppp_tt.append(Ppp_t)      
+
+                        Ppp_tt.append(Ppp_t)
                 Ppp_ttt.append(Ppp_tt)
 
         Ppp_tttt.append(Ppp_ttt)
-    return Ppp_tttt  # 4-level nested tuple per line: (root Pm_, root Pd_( root Ppm_, root Ppd_( root PpL, root_PpI, root_PpD, root_PpM (LiPpp_, IPpp_, DPpp_, MPpp_))))
+
+    return Ppp_ttttt  # 5-level nested tuple of arrays per line:
+    # (Pm_, Pd_( Ppm_, Ppd_( LPp_, IPp_, DPp_, MPp_ (LPpp_, IPpp_, DPpp_, MPpp_))))
+
 
 
 def norm_feedback(Pp_ttt):
-    # probably recursive norm_feedback here depends on the depthness
+    # probably recursive norm_feedback here depends on the depth
     pass
 
 def cross_comp(Pp_, fPpd):  # cross-compare patterns of params within horizontal line
@@ -101,7 +128,7 @@ def cross_comp(Pp_, fPpd):  # cross-compare patterns of params within horizontal
     LPpdert_, IPpdert_, DPpdert_, MPpdert_ = [], [], [], []
 
     for _Pp, Pp, Pp2 in zip(Pp_, Pp_[1:], Pp_[2:] + [CPp()]):  # for P_ cross-comp over step=1 and step=2
-        _L, _I, _D, _M = _Pp.L, _Pp.I, _Pp.D, _Pp.M 
+        _L, _I, _D, _M = _Pp.L, _Pp.I, _Pp.D, _Pp.M
         L, I, D, M, = Pp.L, Pp.I, Pp.D, Pp.M
         D2, M2 = Pp2.D, Pp2.M
 
@@ -139,8 +166,8 @@ def comp_par(_Pp, _param, param, param_name, ave):
 
 
 # draft
-def form_PPP_(Ppdert_, fPpd):
-    
+def form_Ppp_(Ppdert_, fPpd):
+
     Ppp_ = []
     x = 0
     _Ppdert = Ppdert_[0]
@@ -163,15 +190,15 @@ def form_PPP_(Ppdert_, fPpd):
         _sign = sign; x += 1
 
     Ppp_ = term_Ppp( Ppp_, L, I, D, M, Rdn, x0, Ppdert_, fPpd)  # pack last Ppp
-    
+
     return Ppp_
-        
-    
+
+
 def term_Ppp(Ppp_, L, I, D, M, Rdn, x0, Ppdert_, fPpd):
-    
+
     Ppp = CPp(L=L, I=I, D=D, M=M, Rdn=Rdn+L, x0=x0, pdert_=Ppdert_, sublayers=[[]])
     for Ppdert in Ppp.pdert_: Ppdert.Ppt[fPpd] = Ppp  # root Ppp refs
-    Ppp_.append(Ppp)  
+    Ppp_.append(Ppp)
 
 
 # draft
@@ -182,6 +209,4 @@ def form_PPP_recursive(Pp_ttt):
         return form_PPP_recursive(PPP_ttt)
     else:
         return PPP_ttt
-
-
 
