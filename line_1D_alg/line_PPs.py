@@ -22,7 +22,7 @@ import numpy as np
 from copy import deepcopy
 from frame_2D_alg.class_cluster import ClusterStructure, comp_param
 from line_patterns import *
-from increment import *
+from increment import line_PPPs_root
 
 class Cpdert(ClusterStructure):
     # P param dert
@@ -113,16 +113,17 @@ def line_PPs_root(P_t):  # P_t= Pm_, Pd_;  higher-level input is nested to the d
             Pdert_t, dert1_, dert2_ = cross_comp(P_, fPd)  # Pdert_t: Ldert_, Idert_, Ddert_, Mdert_
             Pp_tt = []  # Ppm_t, Ppd_t, each: [LPp_, IPp_, DPp_, MPp_]
 
+            sum_rdn_(param_names, Pdert_t, fPd) # this line should be called before fPpd in the next line? Else it will be called twice withs same fPd
             for fPpd in 0, 1:  # 0-> Ppm_, 1-> Ppd_
                 Pp_t = []  # LPp_, IPp_, DPp_, MPp_
-                rdn_t = sum_rdn_(param_names, Pdert_t, fPd)
+                
                 # Pdert_-> Pps:
-                for param_name, Pdert_, rdn_ in zip(param_names, Pdert_t, rdn_t):
+                for param_name, Pdert_ in zip(param_names, Pdert_t):
                     Pp_ = form_Pp_(Pdert_, fPpd)
                     if (fPpd and param_name == "D_") or (not fPpd and param_name == "I_"):
                         if not fPpd:
                             splice_Ps(Pp_, dert1_, dert2_, fPd)  # splice eval by Pp.M in Ppm_, for Pms in +IPpms or Pds in +DPpm
-                        Pp_ = intra_Pp_(None, Pp_, Pdert_, 1, fPpd)  # der+ or rng+
+                        intra_Pp_(None, Pp_, Pdert_, 1, fPpd)  # der+ or rng+
                     Pp_t.append(Pp_)  # LPp_, IPp_, DPp_, MPp_
                 Pp_tt.append(Pp_t)  # Ppm_, Ppd_
             Pp_ttt.append(Pp_tt)  # Pm_, Pd_
@@ -260,9 +261,8 @@ def sum_rdn_(param_names, Pdert_t, fPd):
 
             if len(Pdert_t[j]) >i:  # if fPd: Ddert_ is step=2, else: Mdert_ is step=2
                 Pdert_t[j][i].rdn = Rdn  # [Ldert_, Idert_, Ddert_, Mdert_]
-
-    return Pdert_t
-
+                
+    # no need to return since rdn is updated in each pdert
 
 def splice_Ps(Ppm_, pdert1_, pdert2_, fPd):  # re-eval Pps, Pp.pdert_s for redundancy, eval splice Ps
     '''
@@ -341,8 +341,8 @@ def intra_Pp_(rootPp, Pp_, Pdert_, hlayers, fPd):  # evaluate for sub-recursion 
                              ]
     if isinstance(rootPp, CPp):
         rootPp.sublayers += comb_sublayers
-    else:
-        return Pp_  # each Pp has new sublayers, comb_sublayers is not needed
+
+    # actually no need to return Pp_ here, Pp_ object remained the same all the time in this fucnction
 
 
 def search_Idert_(Pp, Idert_, loc_ave):  # extended variable-range search for core I at local ave: lower m and term by match
