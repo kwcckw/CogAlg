@@ -71,9 +71,9 @@ def line_PPPs_draft(Pp_ttt):  # higher-level input is nested to the depth = 1 + 
 
     for Pp_tt, fPd in zip(Pp_ttt, [0,1]):  # fPd: Pm_ | Pd_
         Ppp_tttt = []
-        for param_name, Pp_ in zip( param_names, Pp_tt):  # LPp_ | IPp_ | DPp_ | MPp_
+        for param_name, Pp_t in zip( param_names, Pp_tt):  # LPp_ | IPp_ | DPp_ | MPp_
             Ppp_ttt = []
-            for Pp_t, fPpd in zip(Pp_tt, [0, 1]):  # fPpd: Ppm_ | Ppd_
+            for Pp_, fPpd in zip(Pp_t, [0, 1]):  # fPpd: Ppm_ | Ppd_
                 Ppp_tt = []
                 Ppdert_t, Ppdert1_, Ppdert2_ = cross_comp(Pp_, fPpd) # we can't cross_comp Pp_ here, since it's still Pp_t here
                 sum_rdn_Pp(param_names, Ppdert_t, fPpd)  # sum cross-param redundancy per Ppdert
@@ -99,47 +99,42 @@ def line_PPPs_draft(Pp_ttt):  # higher-level input is nested to the depth = 1 + 
 def line_PPPs_root(Pp_ttt):  # higher-level input is nested to the depth = 2+elevation (level counter), or 2*elevation?
 
     norm_feedback(Pp_ttt)  # before processing
-    Ppp_tttttt = []  # add 4-tuple of Pp vars ( 2-tuple of Pppm, Pppd )
+    Ppp_ttttt = []  # add 4-tuple of Pp vars ( 2-tuple of Pppm, Pppd )
 
     for Pp_tt, fPd in zip(Pp_ttt, [0, 1]):  # fPd: Pm_ | Pd_
-        Ppp_ttttt = []  
+        Ppp_tttt = []
 
-        for param_name, Pp_ in zip( param_names, Pp_tt):  # LPp_ | IPp_ | DPp_ | MPp_
-            Ppp_tttt = []
+        for param_name, Pp_t in zip( param_names, Pp_tt):  # LPp_ | IPp_ | DPp_ | MPp_
+            Ppp_ttt = []
 
-            for Pp_t, fPpd in zip(Pp_tt, [0,1]):  # fPpd: Ppm_ | Ppd_
-                Ppp_ttt = []
-                if isinstance(Pp_t, list):  # Ppt is not P
-                    # actually i think the loop in line below is not needed, since we will form 4 params Ppdert_t anyway?
-                    for param_name, Pp_ in zip(param_names, Pp_t):  # param_name: LPpp_ | IPpp_ | DPpp_ | MPpp_
-                        # I think this should be tested in calling function: (but they are nested, we can test only here)
-                        Ppp_tt = []
-                        if len(Pp_)>1:
-                            
-                            Ppdert_t, Ppdert1_, Ppdert2_ = cross_comp_Pp(Pp_, fPpd)
-                            sum_rdn_Pp(param_names, Ppdert_t, fPpd)
-                            for fPppd in 0,1:  # fPppd: 0: Pppm_, 1: Pppd_:
-                                
-                                Ppp_t = []
-                                for Ppdert_ in Ppdert_t:  # L, I, D, M, Ppps
-                                    Ppp_ = []
-                                    if Ppdert_:
-                                        Ppp_ = form_Ppp_(Ppdert_, fPppd)
-                                        if (fPpd and param_name == "D_") or (not fPpd and param_name == "I_"):
-                                            if not fPppd:
-                                                splice_Pps(Ppp_, Ppdert1_, Ppdert2_, fPpd)  # splice eval by Pp.M in Ppm_, for Pms in +IPpms or Pds in +DPpm
-                                            intra_Ppp_(None, Ppp_, Ppdert_, 1, fPppd)  # der+ or rng+
-                                              
-                                    Ppp_t.append(Ppp_) # preserve index, so that always 4 elements    
-                                Ppp_tt.append(Ppp_t)      
-                        Ppp_ttt.append(Ppp_tt)     
-                else: # Pp_t is P, pack it
-                    Ppp_ttt.append(Pp_t)
-                Ppp_tttt.append(Ppp_ttt)
-            Ppp_ttttt.append(Ppp_tttt)
-        Ppp_tttttt.append(Ppp_ttttt)
-
-    return Ppp_tttttt  # 6-level nested tuple of arrays per line:
+            if isinstance(Pp_t, list):  # Ppt is not P
+                for Pp_, fPpd in zip(Pp_t, [0,1]):  # fPpd: Ppm_ | Ppd_
+                    Ppp_tt = []
+                    
+                    if len(Pp_)>1:   # I think this should be tested in calling function: (but they are nested, we can test only here)      
+                        Ppdert_t, Ppdert1_, Ppdert2_ = cross_comp_Pp(Pp_, fPpd)
+                        sum_rdn_Pp(param_names, Ppdert_t, fPpd)
+                    
+                        for param_name, Ppdert_ in zip(param_names, Ppdert_t):  # param_name: LPpp_ | IPpp_ | DPpp_ | MPpp_
+                            Ppp_t = []
+                            for fPppd in 0,1:  # fPppd: 0: Pppm_, 1: Pppd_:                              
+                                Ppp = []
+                                if Ppdert_:
+                                    Ppp_ = form_Ppp_(Ppdert_, fPppd)
+                                    if (fPpd and param_name == "D_") or (not fPpd and param_name == "I_"):
+                                        if not fPppd:
+                                            splice_Pps(Ppp_, Ppdert1_, Ppdert2_, fPpd)  # splice eval by Pp.M in Ppm_, for Pms in +IPpms or Pds in +DPpm
+                                        intra_Ppp_(None, Ppp_, Ppdert_, 1, fPppd)  # der+ or rng+  
+                                Ppp_t.append(Ppp_) # preserve index, so that always 4 elements  
+                        Ppp_tt.append(Ppp_t)   
+                    else:
+                        Ppp_tt.append([])     
+            else: # Pp_t is P, pack it
+                Ppp_ttt.append(Pp_tt)
+  
+            Ppp_tttt.append(Ppp_ttt)
+        Ppp_ttttt.append(Ppp_tttt)
+    return Ppp_ttttt  # 5-level nested tuple of arrays per line:
     # (Pm_, Pd_( LPp_, IPp_, DPp_, MPp_( Ppm_, Ppd_ ( LPpp_, IPpp_, DPpp_, MPpp_( Pppm_, Pppd_ )))))
 
 
