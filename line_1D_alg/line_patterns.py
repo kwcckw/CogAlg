@@ -61,8 +61,8 @@ ave_D = 5  # min |D| for initial incremental-derivation comparison(d_)
 ave_nP = 5  # average number of sub_Ps in P, to estimate intra-costs? ave_rdn_inc = 1 + 1 / ave_nP # 1.2
 ave_rdm = .5  # obsolete: average dm / m, to project bi_m = m * 1.5
 ave_splice = 50  # to merge a kernel of 3 adjacent Ps
-init_y = 500  # starting row, set 0 for the whole frame, mostly not needed
-halt_y = 502  # ending row, set 999999999 for arbitrary image
+init_y = 0  # starting row, set 0 for the whole frame, mostly not needed
+halt_y = 9999  # ending row, set 999999999 for arbitrary image
 '''
     Conventions:
     postfix 't' denotes tuple
@@ -253,7 +253,7 @@ if __name__ == "__main__":
     '''
     fpickle = 2  # 0: load; 1: dump; 2: no pickling
     render = 0
-    fline_PPs = 0
+    fline_PPs = 1
     start_time = time()
     if fpickle == 0:
         # Read frame_of_patterns from saved file instead
@@ -274,12 +274,14 @@ if __name__ == "__main__":
         plt.figure(); plt.imshow(image, cmap='gray'); plt.show()  # show the image below in gray
 
     if fline_PPs:  # debug line_PPs
-        from line_PPs import *
-        frame_Pp_ttt_ = []
+        from line_PPPs import line_root
+        frame_P_ = []
 
         for y, P_t in enumerate(frame_of_patterns_):  # each line_of_patterns is (Pm_, Pd_)
-            Pp_ttt = line_PPs_root(P_t)
-            frame_Pp_ttt_.append(( Pp_ttt ))  # 3-level nested tuple per line: Pm_, Pd_( Ppm_, Ppd_( LPp_, IPp_, DPp_, MPp_)))
+            P_layers = []  # contains layers of patterns
+            layer = 0      # 0 = root layer
+            line_root(P_layers, P_t, layer=layer)
+            frame_P_.append(P_layers)
 
         # draw_PP_(image, frame_Pp_t)  # debugging
 

@@ -22,7 +22,6 @@ import numpy as np
 from copy import deepcopy
 from frame_2D_alg.class_cluster import ClusterStructure, comp_param
 from line_patterns import *
-from line_PPPs import line_PPPs_root
 
 class Cpdert(ClusterStructure):
     # P param dert
@@ -127,8 +126,6 @@ def line_PPs_root(P_t):  # P_t= Pm_, Pd_;  higher-level input is nested to the d
             Pp_ttt.append(Pp_tt)   # Pm_, Pd_
         else:
             Pp_ttt.append(P_)  # Pps are not formed
-        # test a call to 3rd-level draft:
-        line_PPPs_root(Pp_ttt)
 
     return Pp_ttt  # 3-level nested tuple per line: Pm_, Pd_( LPp_, IPp_, DPp_, MPp_( Ppm_, Ppd_)))
 

@@ -61,6 +61,19 @@ def form_Pp_incr(form_Pp_):
     pass
 
 
+# draft for recursion
+def line_root(P_layers, iP_t, layer):  # generic for line_PPs_root, line_PPPs_root, etc, by evaluating iP_t nesting to unpack
+    if layer==0:  # from line_Ps
+        oP_t = line_PPs_root(iP_t)  # input is P_t, output is Pp_ttt
+    else:  # from line_PPs and above
+        oP_t = []
+        line_P_recursive(iP_t, oP_t)  # when layer=1: input is Pp_ttt, output = Ppp_ttttt
+
+    # below is temporary, need to add recursion stopping criteria
+    if layer < 10:
+        line_root(P_layers, oP_t, layer+1)
+
+
 def line_PPPs_simplified(Pp_ttt):  # higher-level input is nested to the depth = 1 + 2*elevation (level counter)?
 
     norm_feedback(Pp_ttt)  # before processing
@@ -92,41 +105,49 @@ def line_PPPs_simplified(Pp_ttt):  # higher-level input is nested to the depth =
     # (Pm_, Pd_( LPp_, IPp_, DPp_, MPp_( Ppm_, Ppd_( LPpp_, IPpp_, DPpp_, MPpp_( Pppm_, Pppd_)))))
 
 
-def line_PPPs_root(Pp_ttt):  # higher-level input is nested to the depth = 2+elevation (level counter), or 2*elevation?
+def line_P_recursive(iP_t, oP_t):  # input P and output P
+    for Pp_t in iP_t:
+        oPp_t = []  # output for current loop
+    
+        if (Pp_t) and isinstance(Pp_t[0], list) and len(Pp_t) == 2:  # Pp_t[0] is Pp_
+            f_Pp = 0  # flag to determine whether Pp_t[0] is Pp_ and Pp_[0] is Pp
+            for Pp_ in Pp_t:
+                for Pp in Pp_:
+                    if isinstance(Pp, CPp):
+                        f_Pp = 1
+            if f_Pp:
+                form_pattern_(Pp_t, oP_t)
 
-    norm_feedback(Pp_ttt)  # before processing
-    Ppp_ttttt = []  # add 4-tuple of Pp vars ( 2-tuple of Pppm, Pppd )
+        else:
+            line_P_recursive(Pp_t, oPp_t)  # Pp_t[0] is not Pp_, still at higher level loop
 
-    for Pp_tt, fPd in zip(Pp_ttt, [0, 1]):  # fPd: Pm_ | Pd_
-        Ppp_tttt = []
-        for Pp_t in Pp_tt:  # LPp_ | IPp_ | DPp_ | MPp_
-            Ppp_ttt = []
-            if isinstance(Pp_t, list):  # Pp_t is not a spliced P: if IPp_ only?
-                Ppp_tt = []
-                for Pp_, fPpd in zip(Pp_t, [0,1]):  # fPpd: Ppm_ | Ppd_
-                    if len(Pp_)>1:
-                        Ppdert_t, Ppdert1_, Ppdert2_ = cross_comp_Pp(Pp_, fPpd)
-                        sum_rdn_Pp(param_names, Ppdert_t, fPpd)
-                        for param_name, Ppdert_ in zip(param_names, Ppdert_t):  # param_name: LPpp_ | IPpp_ | DPpp_ | MPpp_
-                            Ppp_t = []
-                            for fPppd in 0,1:  # fPppd 0: Pppm_, 1: Pppd_
-                                if Ppdert_:
-                                    Ppp_ = form_Ppp_(Ppdert_, fPppd)
-                                    if (fPpd and param_name == "D_") or (not fPpd and param_name == "I_"):
-                                        if not fPppd:
-                                            splice_Pps(Ppp_, Ppdert1_, Ppdert2_, fPpd)  # splice eval by Pp.M in Ppm_, for Pms in +IPpms or Pds in +DPpm
-                                        intra_Ppp_(None, Ppp_, Ppdert_, 1, fPppd)  # der+ or rng+
-                                else: Ppp_ = []     # keep index
-                                Ppp_t.append(Ppp_)  # Pppm_, Pppd_
-                            Ppp_tt.append(Ppp_t)    # LPpp_, IPpp_, DPpp_, MPpp_
-                    else: Ppp_tt = []
-                Ppp_ttt.append(Ppp_tt)              # Ppm_, Ppd_
-            else: Ppp_ttt = Pp_t  # spliced P
-            Ppp_tttt.append(Ppp_ttt)                # LPp_, IPp_, DPp_, MPp_
-        Ppp_ttttt.append(Ppp_tttt)                  # Pm_, Pd_
+        oP_t.append(oPp_t)
 
-    return Ppp_ttttt  # 5-level nested tuple of arrays per line:
-    # (Pm_, Pd_( LPp_, IPp_, DPp_, MPp_( Ppm_, Ppd_ ( LPpp_, IPpp_, DPpp_, MPpp_( Pppm_, Pppd_ )))))
+
+def form_pattern_(Pp_t, Ppp_tt):
+    for Pp_, fPpd in zip(Pp_t, [0,1]):  # fPpd: Ppm_ | Ppd_
+        if len(Pp_)>1:
+            Ppdert_t, Ppdert1_, Ppdert2_ = cross_comp_Pp(Pp_, fPpd)
+            sum_rdn_Pp(param_names, Ppdert_t, fPpd)
+            for param_name, Ppdert_ in zip(param_names, Ppdert_t):  # param_name: LPpp_ | IPpp_ | DPpp_ | MPpp_
+                Ppp_t = []
+
+                for fPppd in 0,1:  # fPppd 0: Pppm_, 1: Pppd_
+                    if Ppdert_:
+                        Ppp_ = form_Ppp_(Ppdert_, fPppd)
+                        if (fPpd and param_name == "D_") or (not fPpd and param_name == "I_"):
+                            if not fPppd:
+                                splice_Pps(Ppp_, Ppdert1_, Ppdert2_, fPpd)  # splice eval by Pp.M in Ppm_, for Pms in +IPpms or Pds in +DPpm
+                            intra_Ppp_(None, Ppp_, Ppdert_, 1, fPppd)  # der+ or rng+
+                    else: 
+                        Ppp_ = []     # keep index
+
+                    Ppp_t.append(Ppp_)  # Pppm_, Pppd_
+                Ppp_tt.append(Ppp_t)    # LPpp_, IPpp_, DPpp_, MPpp_
+        else: 
+            Ppp_tt.append([])
+
+
 
 ''' 
 Next: 
