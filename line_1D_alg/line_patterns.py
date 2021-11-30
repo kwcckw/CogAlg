@@ -278,10 +278,7 @@ if __name__ == "__main__":
         frame_P_ = []
 
         for y, P_t in enumerate(frame_of_patterns_):  # each line_of_patterns is (Pm_, Pd_)
-            P_layers = []  # contains layers of patterns
-            layer = 0      # 0 = root layer
-            line_root(P_layers, P_t, layer=layer)
-            frame_P_.append(P_layers)
+            frame_P_.append(line_root( P_t))
 
         # draw_PP_(image, frame_Pp_t)  # debugging
 
