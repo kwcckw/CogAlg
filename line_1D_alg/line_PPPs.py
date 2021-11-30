@@ -152,7 +152,7 @@ def form_pattern_(Pp_t, Ppp_tt):
 ''' 
 Next: 
 - check if line_PPs functions work with line_PPPs,
-- start combining line_PPs_root and line_PPP_root into generic line_root, evaluating nesting in input P_t for unpacking and repacking,
+- start combining line_PPs_root and line_PPP_root into generic line_root, evaluating nesting in input iP_t for unpacking and repacking,
 - explore possible cross_comp between iP_s of different core params, to the extent that they don't anticorrelate
 '''
 
