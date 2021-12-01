@@ -274,11 +274,11 @@ if __name__ == "__main__":
         plt.figure(); plt.imshow(image, cmap='gray'); plt.show()  # show the image below in gray
 
     if fline_PPs:  # debug line_PPs
-        from line_PPPs import line_root
+        from line_PPPs import line_recursive
         frame_P_ = []
 
         for y, P_t in enumerate(frame_of_patterns_):  # each line_of_patterns is (Pm_, Pd_)
-            frame_P_.append(line_root( P_t))
+            frame_P_.append(line_recursive( P_t))
 
         # draw_PP_(image, frame_Pp_t)  # debugging
 
