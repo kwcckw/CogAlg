@@ -68,52 +68,47 @@ def line_PPPs_recursive(Pp_ttt):  # higher-level input is nested to the depth = 
 
 
 def comp_P_recursive(Pp_tt):
-    
-    norm_feedback(Pp_tt) 
-    P_M = 0
-    f_recursive = 0
+
+    norm_feedback(Pp_tt)
     Ppp_tttt = []
-    for param_name, Pp_t in zip(param_names, Pp_tt):  # LPp_ | IPp_ | DPp_ | MPp_
+    for param_name, Pp_t in zip(param_names, Pp_tt):  # LPp_ | IPp_ | DPp_ | MPp_ 
         Ppp_ttt = []
         if isinstance(Pp_t, list):  # Ppt is not P
             for Pp_, fPpd in zip(Pp_t, [0,1]):  # fPpd: Ppm_ | Ppd_
-                Ppp_tt = []
-                if len(Pp_) > 1:
-
+                Ppp_tt = []; Ppp_M = 0; f_recursive = 0
+                if len(Pp_) > 1:   
                     Pdert_t, pdert1_, pdert2_ = cross_comp(Pp_, fPpd)
                     sum_rdn(param_names, Pdert_t, fPpd)
-                
                     for param_name, Pdert_ in zip(param_names, Pdert_t):  # param_name: LPp_ | IPp_ | DPp_ | MPp_
                         Ppp_t = []  # pack Ppm, Ppd_, and deeper
                         for fPppd in 0, 1:  # fPpd: 0: Ppm_, 1: Ppd_:
                             if Pdert_:
-                                f_recursive = 1  # at least 1 Ppp is formed to enable next level recursion
                                 Ppp_ = form_Pp_(Pdert_, fPppd)  # oP starts with Pp and may get deeper
                                 if (fPpd and param_name == "D_") or (not fPpd and param_name == "I_"):
                                     if not fPppd:
-                                        splice_Ps(oP_, pdert1_, pdert2_, fPpd)  # splice eval by Pp.M in Ppm_, for Pms in +IPpms or Pds in +DPpm
-                                    intra_Pp_(None, oP_, Pdert_, 1, fPppd)  # der+ or rng+
+                                        splice_Ps(Ppp_, pdert1_, pdert2_, fPpd)  # splice eval by Pp.M in Ppm_, for Pms in +IPpms or Pds in +DPpm
+                                    intra_Pp_(None, Ppp_, Pdert_, 1, fPppd)  # der+ or rng+
                                 # evaluate for recursion
-                                P_M += sum([Ppp.M for Ppp in Ppp_])
-                                Ppp_t.append(Ppp_)         
+                                Ppp_M += sum([Ppp.M for Ppp in Ppp_])
+                                Ppp_t.append(Ppp_)       
+                                if len(Ppp_)>1: f_recursive = 1 # no recursion if Ppp_ size is <= 1
                             else:
                                 Ppp_t.append([])  # preserve index
                         Ppp_tt.append(Ppp_t)  
                 else:
                     Ppp_tt.append([])
-                Ppp_ttt.append(Ppp_tt)
+                
+                # next level recursion
+                if Ppp_M > ave_M and f_recursive: 
+                    Ppp_tt = comp_P_recursive (Ppp_tt) # replace Ppp_tt with recursion output
+             
         else:  # Pp_t is P, pack it
-            Ppp_ttt.append(Pp_t)
+            Ppp_ttt.append(Pp_tt)
         Ppp_tttt.append(Ppp_ttt)
 
+    return Ppp_tttt
 
-    # evaluate for recursion
-    if P_M > ave_M and f_recursive:
-         oP_T = comp_P_recursive(Ppp_tttt)
-    else:
-        oP_T = Ppp_tttt
 
-    return oP_T
 
 '''
 def comp_P_recursive(iP_, fPd):  # cross_comp, sum_rdn, splice, intra, comp_P
@@ -279,17 +274,17 @@ def comp_par(_Pp, _param, param, param_name, ave):
     return Cpdert(P=_Pp, i=_param, p=param + _param, d=d, m=m)
 
 # draft
-def form_Pp_(Ppdert_, fPpd):
+def form_Pp_(iPpdert_, fPpd): # we need set this var name as iPpdert_, to prevent overlap of names
 
     Ppp_ = []
     x = 0
-    _Ppdert = Ppdert_[0]
+    _Ppdert = iPpdert_[0]
     if fPpd: _sign = _Ppdert.d > 0
     else:   _sign = _Ppdert.m > 0
     # init Ppp params:
     L=1; I=_Ppdert.p; D=_Ppdert.d; M=_Ppdert.m; Rdn=_Ppdert.rdn; x0=x; Ppdert_=[_Ppdert]
 
-    for Ppdert in Ppdert_[1:]:  # segment by sign
+    for Ppdert in iPpdert_[1:]:  # segment by sign
         if fPpd: sign = Ppdert.d > 0
         else:   sign = Ppdert.m > 0
         # sign change, pack terminated Ppp, initialize new Ppp:
