@@ -68,24 +68,51 @@ def comp_P_recursive(iP_T, iPM_T, iP_, fPd):  # cross_comp_Pp_, sum_rdn, splice,
         oP_tt.append(oP_t);  oPM_tt.append(oPM_t)
     iP_T.append(oP_tt); iPM_T.append(oPM_tt)  # added per comp_P_recursive
 
-    cross_core_comp(iP_T, iPM_T)  # evaluate recursion with results of cross_core_comp:
+    # cross core comp only the current depth oP_tt and oP_M_tt instead of oP_tt from all depth?
+    cross_core_comp(oP_tt, oPM_tt)  # evaluate recursion with results of cross_core_comp:
 
     for param_name, oP_t, oPM_t in zip(param_names, oP_tt, oPM_tt):  # param_name: LPpp_ | IPpp_ | DPpp_ | MPpp_
         for fPpd in 0, 1:  # fPpd: 0: Ppm_, 1: Ppd_:
             if (fPd and param_name == "D_") or (not fPd and param_name == "I_"):
                 if len(oP_t[fPpd]) > 4 and oPM_t[fPpd] > ave_M * 4:  # 1st 4: ave_len_oP_, 2nd 4: recursion coef
                     # iP_T += oP_tt:
-                    oP_T, oPM_T = comp_P_recursive(iP_T, iPM_T, oP_, fPpd)  # oP nesting increases in recursion
-    if oP_T in locals:
+                    oP_T, oPM_T = comp_P_recursive(iP_T, iPM_T, oP_t[fPpd], fPpd)  # oP nesting increases in recursion
+    
+    if "oP_T" in locals():
         return oP_T, oPM_T
     else:
         return iP_T, iPM_T
 
-def cross_core_comp(P_T, PM_T):
+# draft, need further discussion 
+def cross_core_comp(oP_tt, oPM_tt):
 
-    for P_t, PM_t in zip( P_T, PM_T):
-        pass  # eval by PM_s for cross_core_comp between P_s, need to compute one-to-one rdn?
-    pass
+    xPp_ttt = [] # cross compare between 4 params, always = 6 elements
+    for j, (_P_t, _PM_t) in enumerate(zip(oP_tt, oPM_tt)):
+        if j+1 < 4: # 
+            for P_t, PM_t in zip(oP_tt[j+1:], oPM_tt[j+1:]):
+                xPp_tt = [] # xPp between params
+                for fPd in 0, 1:
+                    _P_ = _P_t[fPd]
+                    P_ = P_t[fPd]
+                    xPp_t = []
+                    for i,(param_name, ave) in enumerate(zip(param_names, aves)):
+                        xpdert_ = []
+                        for _P in _P_:
+                            for P in P_:                      
+                                # probably wrong but we need this evaluation, add in PM for evaluation?
+                                if _P.M + P.M > (_P.Rdn + P.Rdn) * ave: 
+                                    _param = getattr(_P,param_name[0])
+                                    param = getattr(P,param_name[0])
+                                    xpdert = comp_par(_P, _param, param, param_name, ave)
+                                    xpdert_.append(xpdert)
+                        if len(xpdert_)>1:
+                            xPp_ = form_Pp_(xpdert_, fPd)
+                        else: xPp_ = []
+                        xPp_t.append(xPp_)     
+                    xPp_tt.append(xPp_tt)
+                xPp_ttt.append(xPp_tt)
+        # eval by PM_s for cross_core_comp between P_s, need to compute one-to-one rdn?
+        
 
 
 def line_PPPs_root(Pp_ttt):  # higher-level input is nested to the depth = 2+elevation (level counter), or 2*elevation?
