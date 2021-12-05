@@ -31,7 +31,7 @@ def line_PPPs_start(Pp_ttt):  # starts level-recursion, higher-level input is ne
                 for Pp_, fPpd in zip(Pp_t, [0,1]):  # fPpd: Ppm_ | Ppd_
                     Ppp_tt = []
                     if len(Pp_) > 1:
-                        comp_P_recursive(Pp_ttt, [], Pp_, [], fPpd)  # no iM_ttt and iM_ input yet
+                        comp_P_recursive(Pp_ttt, Pp_, fPpd)  # no iM_ttt and iM_ input yet
                         # Pp_[:] = Ppp_tt: LPpp(m_,d_), IPpp(m_,d_), DPpp(m_,d_), MPpp(m_,d_), deeper with recursion
                         '''
                         below is not needed, Pp_ttt nesting is extended in place?
@@ -46,15 +46,15 @@ def line_PPPs_start(Pp_ttt):  # starts level-recursion, higher-level input is ne
     # (Pm_, Pd_( LPp_, IPp_, DPp_, MPp_( Ppm_, Ppd_( LPpp_, IPpp_, DPpp_, MPpp_( Pppm_, Pppd_ )))))
 
 
-def comp_P_recursive(iP_T, iM_T, iP_, iM_, fPd):  # cross_comp_Pp_, sum_rdn, splice, intra, comp_P_recursive
+def comp_P_recursive(iP_T, iP_, fPd):  # cross_comp_Pp_, sum_rdn, splice, intra, comp_P_recursive
 
     norm_feedback(iP_)
     Pdert_t, pdert1_, pdert2_ = cross_comp_Pp_(iP_, fPd)
     sum_rdn(param_names, Pdert_t, fPd)
-    oP_tt, oM_tt = [], []  # Pp_tt or deeper if recursion, added per comp_P_recursive
+    oP_tt = []  # Pp_tt or deeper if recursion, added per comp_P_recursive
 
     for param_name, Pdert_ in zip(param_names, Pdert_t):  # param_name: LPp_ | IPp_ | DPp_ | MPp_
-        oP_t, oM_t = [], []  # Ppm, Ppd_
+        oP_t = []  # Ppm, Ppd_
         for fPpd in 0, 1:  # 0: Ppm_, 1: Ppd_
             if Pdert_:
                 oP_ = form_Pp_(Pdert_, fPpd)
@@ -63,43 +63,47 @@ def comp_P_recursive(iP_T, iM_T, iP_, iM_, fPd):  # cross_comp_Pp_, sum_rdn, spl
                         splice_Ps(oP_, pdert1_, pdert2_, fPd)  # splice eval by Pp.M in Ppm_, for Pms in +IPpms or Pds in +DPpm
                     intra_Pp_(None, oP_, Pdert_, 1, fPpd)  # der+ | rng+
                 oP_t.append(oP_)
-                oM_t.append( [sum( [Pp.M for Pp in oP_] )] )  # to evaluate for cross_core_comp and recursion
             else:
-                oP_t.append([]); oM_t.append([])  # preserve index
-        oP_tt.append(oP_t); oM_tt.append(oM_t)
-    iP_[:] = oP_tt; iM_[0] = oM_tt  # nesting added per comp_P_recursive, reflected in iP_T, iM_T; iM_ is single-element list for mutability?
+                oP_t.append([])  # preserve index
+        oP_tt.append(oP_t)
 
-    cross_core_comp(iP_T, iM_T)  # evaluate recursion with results of cross_core_comp
+    iP_[:] = oP_tt
+    
+    cross_core_comp(iP_T)  # evaluate recursion with results of cross_core_comp
 
-    for param_name, oP_t, oM_t in zip(param_names, oP_tt, oM_tt):  # param_name: LPpp_ | IPpp_ | DPpp_ | MPpp_
+    for param_name, oP_t in zip(param_names, oP_tt):  # param_name: LPpp_ | IPpp_ | DPpp_ | MPpp_
         for fPpd in 0, 1:
             oP_ = oP_t[fPpd]  # fPpd 0: Ppm_, 1: Ppd_
-            oM = oM_t[fPpd][0]
+            oM = sum([oP.M for oP in oP_])
             if (fPd and param_name == "D_") or (not fPd and param_name == "I_"):
-                if len(oP_) > 4 and oM > ave_M * 4:  # 1st 4: ave_len_oP_, 2nd 4: recursion coef
-                    comp_P_recursive(iP_T, iM_T, oP_, [oM], fPpd)  # oP nesting increases in recursion
+                if len(oP_) > 1 and oM > ave_M * 4 *-100000:  # 1st 4: ave_len_oP_, 2nd 4: recursion coef
+                    comp_P_recursive(iP_T, oP_, fPpd)  # oP nesting increases in recursion
 
     # return iP_T, iM_T  # for cross_core_comp only?
 
 
 # draft, need further discussion
-def cross_core_comp(oP_tt, oPM_tt):  # P_T, M_T
+def cross_core_comp(oP_tt):  # P_T
 
     xPp_ttt = [] # cross compare between 4 params, always = 6 elements
-    for j, (_P_t, _PM_t) in enumerate(zip(oP_tt, oPM_tt)):
-        if j+1 < 4: #
-            for P_t, PM_t in zip(oP_tt[j+1:], oPM_tt[j+1:]):
+    for j, _P_t in enumerate(oP_tt):
+        if j+1 < 4: # always < 4 due to there are 4 params
+            for P_t in zip(oP_tt[j+1:]):
+                    
+                 
                 xPp_tt = [] # xPp between params
                 for fPd in 0, 1:
                     _P_ = _P_t[fPd]
+                    _M = sum([_P.M for _P in _P_])
                     P_ = P_t[fPd]
+                    M = sum([P.M for P in P_])
                     xPp_t = []
                     for i,(param_name, ave) in enumerate(zip(param_names, aves)):
                         xpdert_ = []
                         for _P in _P_:
                             for P in P_:
                                 # probably wrong but we need this evaluation, add in PM for evaluation?
-                                if _P.M + P.M > (_P.Rdn + P.Rdn) * ave:
+                                if _P.M + P.M + _M + M > (_P.Rdn + P.Rdn) * ave:
                                     _param = getattr(_P,param_name[0])
                                     param = getattr(P,param_name[0])
                                     xpdert = comp_par(_P, _param, param, param_name, ave)
