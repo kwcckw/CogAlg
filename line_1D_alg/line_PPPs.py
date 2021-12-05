@@ -83,40 +83,49 @@ def comp_P_recursive(iP_T, iP_, fPd):  # cross_comp_Pp_, sum_rdn, splice, intra,
 
 
 # draft, need further discussion
-def cross_core_comp(oP_tt):  # P_T
-
-    xPp_ttt = [] # cross compare between 4 params, always = 6 elements
-    for j, _P_t in enumerate(oP_tt):
-        if j+1 < 4: # always < 4 due to there are 4 params
-            for P_t in zip(oP_tt[j+1:]):
-                    
-                 
-                xPp_tt = [] # xPp between params
-                for fPd in 0, 1:
-                    _P_ = _P_t[fPd]
-                    _M = sum([_P.M for _P in _P_])
-                    P_ = P_t[fPd]
-                    M = sum([P.M for P in P_])
-                    xPp_t = []
-                    for i,(param_name, ave) in enumerate(zip(param_names, aves)):
-                        xpdert_ = []
-                        for _P in _P_:
-                            for P in P_:
-                                # probably wrong but we need this evaluation, add in PM for evaluation?
-                                if _P.M + P.M + _M + M > (_P.Rdn + P.Rdn) * ave:
-                                    _param = getattr(_P,param_name[0])
-                                    param = getattr(P,param_name[0])
-                                    xpdert = comp_par(_P, _param, param, param_name, ave)
-                                    xpdert_.append(xpdert)
-                        if len(xpdert_)>1:
-                            xPp_ = form_Pp_(xpdert_, fPd)
-                        else: xPp_ = []
-                        xPp_t.append(xPp_)
-                    xPp_tt.append(xPp_tt)
-                xPp_ttt.append(xPp_tt)
-        # eval by PM_s for cross_core_comp between P_s, need to compute one-to-one rdn?
-
-
+def cross_core_comp(iP_T):  # oP_tt
+    
+    xPp_ttt = [] # cross compare between 4 params, always = 6 elements if call from root function
+    if len(iP_T) == 4: # each element in iP_T is from one of the param
+        for j, _P_t in enumerate(oP_T):
+            if j+1 < 4: # always < 4 due to there are 4 params
+                for P_t in zip(oP_T[j+1:]): 
+                    xPp_tt = [] # xPp between params
+                    for fPd in 0, 1:
+                        _P_ = _P_t[fPd]
+                        P_ = P_t[fPd]
+                        if isinstance(_P_, list) and isinstance(_P_[0], CPp) and \
+                           isinstance(P_, list) and isinstance(P_[0], CPp):
+                        
+                            _M = sum([_P.M for _P in _P_])
+                            M = sum([P.M for P in P_])
+                            xPp_t = []
+                            for i,(param_name, ave) in enumerate(zip(param_names, aves)):
+                                xpdert_ = []
+                                for _P in _P_:
+                                    for P in P_:
+                                        # probably wrong but we need this evaluation, add in PM for evaluation?
+                                        if _P.M + P.M + _M + M > (_P.Rdn + P.Rdn) * ave:
+                                            _param = getattr(_P,param_name[0])
+                                            param = getattr(P,param_name[0])
+                                            xpdert = comp_par(_P, _param, param, param_name, ave)
+                                            xpdert_.append(xpdert)
+                                if len(xpdert_)>1:
+                                    xPp_ = form_Pp_(xpdert_, fPd)
+                                else: xPp_ = []
+                                xPp_t.append(xPp_)
+                            xPp_tt.append(xPp_tt)
+                            
+                        else: # there are deeper depth Pp, call cross_core_comp again?
+                            # not quite sure on here yet
+                            pass     
+                        xPp_ttt.append(xPp_tt)
+    else:
+        for iP_t in iP_T: # 2 elements iP_T, each element with different fPd, call cross_core_comp again, next depth should be 4 elements
+            xPp_ttt.append(cross_core_comp(iP_t))
+        
+            
+    return xPp_ttt
 
 def line_PPPs_root(Pp_ttt):  # higher-level input is nested to the depth = 2+elevation (level counter), or 2*elevation?
 
