@@ -26,19 +26,85 @@ def line_recursive(p_):  # draft for level-recursive processing, starting with l
     return oP_T_
 
 def line_PPPs_start(Pp_ttt):  # starts level-recursion, higher-level input is nested to the depth = 1 + 2*elevation (level counter)
+    
+    depth_Pp = 3  # depth level of Pp = 3 from line_PPs
 
     # just unpack for comp_Pp_recursive:
     for Pp_tt, fPd in zip(Pp_ttt, [0, 1]):  # fPd: Pm_ | Pd_
         for Pp_t, param_name in zip(Pp_tt, param_names):  # LPp_ | IPp_ | DPp_ | MPp_
             for Pp_, fPpd in zip(Pp_t, [0, 1]):  # fPpd: Ppm_ | Ppd_
-                if len(Pp_) > 1 and sum([Pp.M for Pp in Pp_]) > ave_M:
-                    Pp_[:] = comp_Pp_recursive(Pp_ttt, Pp_, depth=3, fPd=fPpd)  # add oP_tt_ as two new nesting levels in P_T
+                if len(Pp_)>1 and sum([Pp.M for Pp in Pp_]) > ave_M: 
+                    comp_Pp_(Pp_, fPd)  # add oP_tt_ as two new nesting levels in P_T
+
+    depth_Pp += 2  # add 2 new depth level after comp_Pp
+    
+    for Pp_tt, fPd in zip(Pp_ttt, [0, 1]):  # fPd: Pm_ | Pd_
+        comp_Pp_recursive(Pp_ttt, Pp_tt, depth_Pp, fPd)  # search and form Pp recursively
+
+def comp_Pp_recursive(Pp_ttt, iPp_tt, depth_Pp, ifPd):  # input is always Pp_ttt to preserve the hierarchy
+
+    depth = 1  # depth level of loop
+    M = 0  # sum of M from current level
+
+    for Pp_t, param_name in zip(iPp_tt, param_names):  # LPp_ | IPp_ | DPp_ | MPp_
+       for Pp_, fPpd in zip(Pp_t, [0, 1]):  # fPpd: Ppm_ | Ppd_ 
+           M += search_deeper_recursive(Pp_, depth+2, depth_Pp, ifPd)
+        
+    if depth_Pp > 3: cross_core_comp(Pp_ttt, depth_Pp)  # eval cross-comp of Pp_s in last sublevel iP_T, implicitly nested by all lower hierarchy
+    
+    if M > ave_M:  # next depth level evaluation
+        depth_Pp += 2  # Pp depth level is increased by 2 level for each recursion
+        for Pp_tt, fPd in zip(Pp_ttt, [0, 1]):  # fPd: Pm_ | Pd_
+            comp_Pp_recursive(Pp_ttt, Pp_tt, depth_Pp, fPd)
+
+        
+
+def search_deeper_recursive(Pp_tt, depth, depth_Pp, fPd):
+    
+    M = 0
+    for Pp_t, param_name in zip(Pp_tt, param_names):  # LPp_ | IPp_ | DPp_ | MPp_
+        if isinstance(Pp_t, list):  # if there's new Pps are formed in prior function call
+            for Pp_, fPpd in zip(Pp_t, [0, 1]):  # fPpd: Ppm_ | Ppd_
+                if depth+2 == depth_Pp:
+                    M += comp_Pp_(Pp_, fPd)          
+                else:
+                    search_deeper_recursive(Pp_, depth+2, depth_Pp, fPd)
+    return M
 
 
+# this can be unpacked later
+def comp_Pp_(iP_, fPd):  # cross_comp_Pp_, sum_rdn, splice, intra, comp_P_recursive
+
+    norm_feedback(iP_)  # before processing
+
+    Pdert_t, pdert1_, pdert2_ = cross_comp_Pp_(iP_, fPd)  # iP_: fully unpacked element in iP_T deepest 2-tuple (always Pm_, Pd_)
+    sum_rdn(param_names, Pdert_t, fPd)
+    oP_tt = []  # two new nesting levels added to iP_T per comp_P_recursive
+    M = 0
+
+    for Pdert_, param_name in zip(Pdert_t, param_names):  # param_name: LPp_ | IPp_ | DPp_ | MPp_
+        oP_t = []  # Ppm, Ppd_
+        for fPpd in 0, 1:  # 0: Ppm_, 1: Ppd_
+            if Pdert_:
+                oP_ = form_Pp_(Pdert_, fPpd)  # forms 8 Pp_s per iP_, nested 8 lines below
+                if (fPd and param_name == "D_") or (not fPd and param_name == "I_"):
+                    if not fPpd:
+                        splice_Ps(oP_, pdert1_, pdert2_, fPd)  # splice eval by Pp.M in Ppm_, for Pms in +IPpms or Pds in +DPpm
+                    intra_Pp_(None, oP_, Pdert_, 1, fPpd)  # der+ | rng+
+                M += sum([oP.M for oP in oP_])
+                oP_t.append(oP_)
+            else:
+                oP_t.append([])  # preserve index
+        oP_tt.append(oP_t)
+    iP_[:] = oP_tt  # map oP_tt to iP_
+
+    return M
+
+'''
 def comp_Pp_recursive(iP_T, iP_, depth, fPd):  # cross_comp_Pp_, sum_rdn, splice, intra, comp_P_recursive
 
     norm_feedback(iP_)  # before processing
-    if depth > 3: cross_core_comp(iP_T)  # eval cross-comp of Pp_s in last sublevel iP_T, implicitly nested by all lower hierarchy
+    if depth > 3: cross_core_comp(iP_T, depth)  # eval cross-comp of Pp_s in last sublevel iP_T, implicitly nested by all lower hierarchy
 
     Pdert_t, pdert1_, pdert2_ = cross_comp_Pp_(iP_, fPd)  # iP_: fully unpacked element in iP_T deepest 2-tuple (always Pm_, Pd_)
     sum_rdn(param_names, Pdert_t, fPd)
@@ -59,13 +125,16 @@ def comp_Pp_recursive(iP_T, iP_, depth, fPd):  # cross_comp_Pp_, sum_rdn, splice
         oP_tt.append(oP_t)
     iP_[:] = oP_tt  # map oP_tt to iP_
 
+
+
+
     for oP_t, param_name in zip(oP_tt, param_names):
         for oP_, fPd in zip(oP_t, [0, 1]):
             if len(oP_) > 1 and sum([oP.M for oP in oP_]) > ave_M:
                 comp_Pp_recursive(iP_T, oP_, depth+2, fPd)  # increased nesting in iP_T
+'''
 
-
-def cross_core_comp(iP_T):  # draft, need further discussion and update
+def cross_core_comp(iP_T, depth_Pp):  # draft, need further discussion and update
     '''
     comp Pp_s across >3 nesting levels in iP_T: common_root_depth - comparands_depth >3, which maps to the distance of >16 Pp_s
     '''
@@ -106,7 +175,7 @@ def cross_core_comp(iP_T):  # draft, need further discussion and update
                         xPp_ttt.append(xPp_tt)
     else:
         for iP_t in iP_T: # 2 elements iP_T, each element with different fPd, call cross_core_comp again, next depth should be 4 elements
-            xPp_ttt.append(cross_core_comp(iP_t))
+            xPp_ttt.append(cross_core_comp(iP_t, depth_Pp))
 
 
     return xPp_ttt
