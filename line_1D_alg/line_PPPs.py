@@ -8,6 +8,7 @@ from collections import deque
 from line_Ps import *
 from line_PPs import *
 from itertools import zip_longest
+import math
 
 '''
     Conventions:
@@ -25,8 +26,8 @@ def line_recursive(p_):
     Pp_T = line_PPs_root(); Ppp_T = line_PPPs_root(); line_PPPs_start(Ppp_T=P_ttt)
     if pipeline: output per P termination, append till min iP_ len, concatenate across frames
     '''
-    P_ttt = line_PPs_root( line_Ps_root(p_))
-    P_T_ = level_recursion( [P_ttt] )
+
+    P_T_ = level_recursion(line_PPs_root( line_Ps_root(p_)))
 
     return P_T_
 
@@ -36,12 +37,23 @@ def level_recursion(P_T_):  # P_T is single list of new P_s, implicitly nested t
     oP_T = []  # preserve input level
     iP_T = P_T_[-1]
 
+    # below should be not needed, or we need to use it in some evaluations?
+    _length_P = len(iP_T)  # length of P_ in prior level
+    _level = math.log(len(iP_T)/2,8)  # pior level, line_P output = level 0, line_PPs output = level 1 and so on
+    print(_level)
     for i, iP_ in enumerate( iP_T ):  # last-level-wide comp_form_P__, use compound flags + names for cross_core_comp?
+        fPd = i % 2
+        # where do we need the param name of each P_?
+        param_index = int((i%8)/2)  # int to round down
+        param_name = param_names[param_index]
+        
         if len(iP_) > 1 and sum([P.M for P in iP_]) > ave_M:
             nextended += 1
-            oP_T.append( comp_form_P_( iP_T, iP_, fPd = i%2) )  # add oP_tt_ as 8 P_s: two new nesting levels
+            oP_T += comp_form_P_(iP_T, iP_, fPd = fPd)  # add oP_tt_ as 8 P_s: two new nesting levels
         else:
-            oP_T += [[],[],[],[],[],[],[],[]]  # better to add count of missing prior P_s to each P_?
+            # each P_ should form additional 8 P_ in the next level ( * 4 * 2)
+            oP_T += [[] for _ in range(8)]  # better to add count of missing prior P_s to each P_?
+            
             '''
             P_T_: 2P_, 8P_, 16P_, 64P_.,
             each P_ has unique nested type: fPd + (fPd, param_name) pairs, where n_pairs = math.log( len(P_T)/2, 8)
@@ -56,18 +68,17 @@ def level_recursion(P_T_):  # P_T is single list of new P_s, implicitly nested t
         level_recursion(P_T_)  # increased nesting in P_T
 
 
-def comp_form_P_(P_T, P_, fPd):  # cross_comp_Pp_, sum_rdn, splice, intra, comp_P_recursive
+def comp_form_P_(iP_T, P_, fPd):  # cross_comp_Pp_, sum_rdn, splice, intra, comp_P_recursive
 
     norm_feedback(P_)  # before processing
-    if len(P_T) > 16:  # depth > 3
-        cross_core_comp(P_T)  # eval cross-comp of Pp_s in last sublevel iP_T, implicitly nested by all lower hierarchy
+    if len(iP_T) > 16:  # depth > 3
+        cross_core_comp(iP_T)  # eval cross-comp of Pp_s in last sublevel iP_T, implicitly nested by all lower hierarchy
 
     Pdert_t, pdert1_, pdert2_ = cross_comp_Pp_(P_, fPd)  # iP_: fully unpacked element in iP_T deepest 2-tuple (always Pm_, Pd_)
     sum_rdn(param_names, Pdert_t, fPd)
-    oP_tt = []  # two new nesting levels added to iP_T per comp_P_recursive
+    oP_t = []  # two new nesting levels added to iP_T per comp_P_recursive
 
     for Pdert_, param_name in zip(Pdert_t, param_names):  # param_name: LPp_ | IPp_ | DPp_ | MPp_
-        oP_t = []  # Ppm, Ppd_
         for fPpd in 0, 1:  # 0: Ppm_, 1: Ppd_
             if Pdert_:
                 oP_ = form_Pp_(Pdert_, fPpd)  # forms 8 Pp_s per iP_, but P sublevels is still missing one level?
@@ -78,9 +89,8 @@ def comp_form_P_(P_T, P_, fPd):  # cross_comp_Pp_, sum_rdn, splice, intra, comp_
                 oP_t.append(oP_)
             else:
                 oP_t.append([])  # preserve index
-        oP_tt.append(oP_t)
 
-    return oP_tt  # then map oP_tt to iP_
+    return oP_t  
 
 
 def cross_core_comp(iP_T):  # draft, need further discussion and update
