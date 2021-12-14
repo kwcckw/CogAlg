@@ -113,16 +113,17 @@ aves = [ave_mL, ave_mI, ave_mD, ave_mM]
     prefix 'f'  denotes flag
     capitalized variables are normally summed small-case variables
 '''
-# flat oP_T version
+
 def line_PPs_root(iP_T):  # P_T is P_t = [Pm_, Pd_];  higher-level input is implicitly nested to the depth = 1 + 2*elevation (level counter)
 
     norm_feedback(iP_T)  # before processing
-    
+
     oP_T = []  # output: 16-tuple of Pp_s per line
     for fPd, P_ in enumerate(iP_T):  # fPd: Pm_ or Pd_
         if len(P_) > 1:
             Pdert_t, dert1_, dert2_ = cross_comp(P_, fPd)  # Pdert_t: Ldert_, Idert_, Ddert_, Mdert_ (tuples of derivatives per P param)
             sum_rdn_(param_names, Pdert_t, fPd)  # sum cross-param redundancy per pdert, to evaluate for deeper processing
+
             for param_name, Pdert_ in zip(param_names, Pdert_t):  # Pdert_ -> Pps:
                 for fPpd in 0, 1:  # 0-> Ppm_, 1-> Ppd_: more anti-correlated than Pp_s of different params
                     Pp_ = form_Pp_(Pdert_, fPpd)
@@ -131,14 +132,14 @@ def line_PPs_root(iP_T):  # P_T is P_t = [Pm_, Pd_];  higher-level input is impl
                             splice_Ps(Pp_, dert1_, dert2_, fPd)  # splice eval by Pp.M in Ppm_, for Pms in +IPpms or Pds in +DPpm
                         intra_Pp_(None, Pp_, Pdert_, 1, fPpd)  # der+ or rng+ per Pp
                     oP_T.append(Pp_)
-        else:   
+        else:
             # each P_ should form additional 8 P_ in the next level ( * 4 * 2)
             oP_T.append( [[] for _ in range(8)])  # Pps are not formed, pack empty list to preserve index
 
     return [iP_T, oP_T]  # P_T_ contains 1st level and 2nd level output
 
-'''
-def line_PPs_root(P_t):  # P_t = Pm_, Pd_;  higher-level input is implicitly nested to the depth = 1 + 2*elevation (level counter)
+
+def line_PPs_nested(P_t):  # P_t = Pm_, Pd_;  higher-level input is implicitly nested to the depth = 1 + 2*elevation (level counter)
 
     norm_feedback(P_t)  # before processing
     Pp_ttt = []  # output: 16-tuple of Pp_s per line, nested in 3 levels: Pm_, Pd_( LPp_, IPp_, DPp_, MPp_( Ppm_, Ppd_)))
@@ -163,7 +164,7 @@ def line_PPs_root(P_t):  # P_t = Pm_, Pd_;  higher-level input is implicitly nes
             Pp_ttt.append(P_)  # Pps are not formed
 
     return Pp_ttt  # flat 16-tuple vs. 3-level nested tuple per line: Pm_, Pd_( LPp_, IPp_, DPp_, MPp_( Ppm_, Ppd_)))?
-'''
+
 
 def cross_comp(P_, fPd):  # cross-compare patterns within horizontal line
 
