@@ -22,8 +22,7 @@ import math
 
 def line_recursive(p_):
     '''
-    draft level-recursive processing, from line_patterns(),
-    Pp_T = line_PPs_root(); Ppp_T = line_PPPs_root(); line_PPPs_start(Ppp_T=P_ttt)
+    Specific outputs: P_t = line_Ps_root(), Pp_ttt = line_PPs_root(), Ppp_ttttt = line_PPPs_root()
     if pipeline: output per P termination, append till min iP_ len, concatenate across frames
     '''
     return level_recursion( line_PPs_root( line_Ps_root(p_)))  # returns P_T_
@@ -35,58 +34,48 @@ def level_recursion(P_T_):  # P_T_: 2P_, 16P_, 128P_., each level is implicitly 
     oP_T = []  # new level: flat list of P_s, to preserve input level
     iP_T = P_T_[-1]
     ntypes = 1 + 2 * math.log( len(iP_T)/2, 8)  # number of types per P_ in iP_T, with (fPd, param_name) n_pairs = math.log(len(iP_T)/2, 8)
-    types_ = []
+    types_ = []  # parallel to P_T, for zipping
 
     for i, iP_ in enumerate( iP_T ):  # last-level-wide comp_form_P__
 
         types = []  # list of fPds and names of len = ntypes
-        step = len(iP_T) / 2  # i'm using the name "step" here, please suggest a better name
-        step_counter = 1
+        step = len(iP_T) / 2  # implicit nesting, top-down
+        nsteps = 1
 
         while( len(types) < ntypes):  # decode unique set of alternating types per P_: [fPd,name,fPd,name..], from index in iP_T:
-            if len(types) % 2:  # add name index: 0|1|2|3
-                types.append( int( i%step / (step/4)))    
-            else:   # add fPd: 0|1. This is the 1st increment because len(types) starts from 0
-                types.append( int((i/step)) % 2)
-                
-            step_counter += 1
-            if step_counter%2:
+            if len(types) % 2:
+                types[0].insert( int( i%step / (step/4) ))  # add name index: 0|1|2|3
+            else:
+                types[0].insert( int( (i/step)) % 2)  # add fPd: 0|1. This is the 1st increment because len(types) starts from 0
+            nsteps += 1
+            if nsteps % 2:
                 step /= 8
-
-        # The equations in the section above are derived from the values below
-        '''
-            # level 1 
-            # elevation = 1
+            ''' Le 1 
             types.append( int((i/8))  % 2 )     # fPd
-            # elevation = 2
             types.append( int( i%8 / 2 ))       # param
-            # elevation = 3
             types.append( int((i/1))  % 2 )     # fPd
-            
-            
-            # level 2
-            # elevation = 1
+                Le 2
             types.append( int((i/64)) % 2 )     # fPd
-            # elevation = 2
-            types.append( int( i%64/16 ))       # param  
-            # elevation = 3
+            types.append( int( i%64/16 ))       # param 
             types.append( int((i/8))  % 2 )     # fPd    
-            # elevation = 4
             types.append( int( i%8/2 ))         # param
-            # elevation = 5
             types.append( int((i/1))  % 2 )     # fPd
-        ''' 
             
-        types_.append(types)
-         
-         
-        '''
-        types.append( i%2 )  # fPd1
-        types.append( int(i%8 / 2))  # name1 in param name index, 2i / (8i+1)?
-        types.append( i%16)  # fPd2, 8i / (16i+1)?
-        types.append( int(i%64 / 2))  # name2: 16i / (64i+1), then fPd = 64i / (128i+1))...
-        '''
-        if len(iP_) > 1: #and sum([P.M for P in iP_]) > ave_M:
+            bottom-up scheme:
+            _step = 1  # n of indices per current level of type
+            for i, iP_ in enumerate( iP_T ):  # last-level-wide comp_form_P__
+
+                while( len(types) < ntypes):  # decode unique set of alternating types per P_: [fPd,name,fPd,name..], from index in iP_T:
+                    if len(types) % 2:
+                        step = _step*4  # add name index: 0|1|2|3
+                else:
+                    step = _step*2  # add fPd: 0|1. This is the 1st increment because len(types) starts from 0
+                types.append( int( (i % step) / _step))  # int to round down: type should not change within step
+                _step = step
+            '''
+        types_.append(types)  # parallel to P_T, for zipping
+
+        if len(iP_) > 1 and sum([P.M for P in iP_]) > ave_M:
             nextended += 1
             oP_T += comp_form_P_(iP_T, iP_, types)  # add oP_tt_ as 8 P_s: two new nesting levels
         else:
@@ -100,8 +89,8 @@ def level_recursion(P_T_):  # P_T_: 2P_, 16P_, 128P_., each level is implicitly 
 def comp_form_P_(iP_T, P_, types):  # cross_comp_Pp_, sum_rdn, splice, intra, comp_P_recursive
 
     norm_feedback(P_)  # before processing
-#    if len(iP_T) > 16:  # depth > 3
-#        cross_core_comp(iP_T)  # eval cross-comp of Pp_s in last sublevel iP_T, implicitly nested by all lower hierarchy
+    if len(iP_T) > 16:  # depth > 3
+        cross_core_comp(iP_T)  # eval cross-comp of Pp_s in last sublevel iP_T, implicitly nested by all lower hierarchy
     fPd = types[0]
 
     Pdert_t, pdert1_, pdert2_ = cross_comp_Pp_(P_, fPd)  # iP_: fully unpacked element in iP_T deepest 2-tuple (always Pm_, Pd_)
