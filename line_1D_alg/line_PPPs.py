@@ -41,7 +41,6 @@ def level_recursion(P_T_):  # P_T_: 2P_, 16P_, 128P_., each level is implicitly 
         types = []  # list of fPds and names of len = ntypes
         step = len(iP_T) / 2  # implicit nesting, top-down
         nsteps = 1
-
         while( len(types) < ntypes):  # decode unique set of alternating types per P_: [fPd,name,fPd,name..], from index in iP_T:
             if len(types) % 2:
                 types.insert(0, int( i%step / (step/4) ))  # add name index: 0|1|2|3
@@ -64,7 +63,6 @@ def level_recursion(P_T_):  # P_T_: 2P_, 16P_, 128P_., each level is implicitly 
             bottom-up scheme:
             _step = 1  # n of indices per current level of type
             for i, iP_ in enumerate( iP_T ):  # last-level-wide comp_form_P__
-
                 while( len(types) < ntypes):  # decode unique set of alternating types per P_: [fPd,name,fPd,name..], from index in iP_T:
                     if len(types) % 2:
                         step = _step*4  # add name index: 0|1|2|3
@@ -73,19 +71,18 @@ def level_recursion(P_T_):  # P_T_: 2P_, 16P_, 128P_., each level is implicitly 
                 types.append( int( (i % step) / _step))  # int to round down: type should not change within step
                 _step = step
             '''
-        
         types_.append(types)  # parallel to P_T, for zipping
 
-        if len(iP_) > 1 : #and sum([P.M for P in iP_]) > ave_M:
+        if len(iP_T) > 16:  # depth > 3
+            xM = cross_core_comp(iP_T, types_, ntypes)  # eval cross-comp of Pp_s in last sublevel iP_T, implicitly nested by all lower hierarchy
+        else: xM = 0
+
+        if len(iP_) > 1 and xM + sum([P.M for P in iP_]) > ave_M:
             nextended += 1
             oP_T += comp_form_P_(iP_T, iP_, types)  # add oP_tt_ as 8 P_s: two new nesting levels
         else:
             oP_T += [[] for _ in range(8)]  # add 8 empty P_s, better to add count of missing prior P_s to each P_?
     P_T_.append(oP_T)  # add to the hierarchy of levels
-
-    # i think it should move here, after all comp_form_P_ of current level is done
-    if len(iP_T) > 16:  # depth > 3
-        cross_core_comp(iP_T, types_, ntypes)  # eval cross-comp of Pp_s in last sublevel iP_T, implicitly nested by all lower hierarchy
 
     if len(iP_T) / max(nextended,1) < 4:  # ave_extend_ratio
         level_recursion(P_T_)  # increased implicit nesting in oP_T
@@ -119,14 +116,13 @@ def cross_core_comp(iP_T, types_, ntypes):  # draft, need further discussion and
     '''
     comp Pp_s across >3 nesting levels in iP_T: common_root_depth - comparands_depth >3, which maps to the distance of >16 Pp_s
     '''
-    
+
     xPp_t = []
     for elevation in range(int(ntypes)):
         if elevation % 2:  # params
-            
+
             LP_t, IP_t, DP_t, MP_t = [], [], [], []
-            
-            # get P_ of each param for current elevation (compare at each elevation?)      
+            # get P_ of each param for current elevation (compare at each elevation?)
             for i, types in enumerate(types_):
                 if types[elevation] == 0:
                     LP_t.append(iP_T[i])
@@ -136,22 +132,17 @@ def cross_core_comp(iP_T, types_, ntypes):  # draft, need further discussion and
                     DP_t.append(iP_T[i])
                 elif types[elevation] == 3:
                     MP_t.append(iP_T[i])
-            
-            
                 P_tt = [LP_t, IP_t, DP_t, MP_t]
-    
+
                 xPp_ = [] # cross compare between 4 params, always = 6 elements if call from root function
                 for j, _P_t in enumerate(P_tt):
-                    if j+1 < 4: # always < 4 due to there are 4 params 
+                    if j+1 < 4: # always < 4 due to there are 4 params
                         for P_t in P_tt[j+1:]:
-
                             for _P_ in _P_t:
                                 for P_ in P_t:
-                                    
                                     if _P_ and P_:  # not empty _P_ and P_
                                         _M = sum([_P.M for _P in _P_])
                                         M = sum([P.M for P in P_])
-                                        
                                         for i,(param_name, ave) in enumerate(zip(param_names, aves)):
                                             xpdert_ = []
                                             for _P in _P_:
@@ -165,11 +156,10 @@ def cross_core_comp(iP_T, types_, ntypes):  # draft, need further discussion and
                                             if len(xpdert_)>1:
                                                 fPd = 1
                                                 xPp_.append(form_Pp_(xpdert_, fPd))  # add a loop to form xPp_ with fPd = 0 and fPd = 1?
-                                            else: 
+                                            else:
                                                 xPp_.append([])
-
-            
             xPp_t.append(xPp_)
+
 # not needed:
 
 def line_PPPs_start(P_ttt):  # starts level-recursion, higher-level input is nested to the depth = 1 + 2*elevation (level counter)
