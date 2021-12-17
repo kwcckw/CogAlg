@@ -77,7 +77,7 @@ def level_recursion(P_T_):  # P_T_: 2P_, 16P_, 128P_., each level is implicitly 
             xM = cross_core_comp(iP_T, types_, ntypes)  # eval cross-comp of Pp_s in last sublevel iP_T, implicitly nested by all lower hierarchy
         else: xM = 0
 
-        if len(iP_) > 1 and xM + sum([P.M for P in iP_]) > ave_M:
+        if sum([len(iP_) for iP_ in iP_T]) > 1 and xM + sum([P.M for P in iP_]) > ave_M:
             nextended += 1
             oP_T += comp_form_P_(iP_T, iP_, types)  # add oP_tt_ as 8 P_s: two new nesting levels
         else:
@@ -117,7 +117,7 @@ def cross_core_comp(iP_T, types_, ntypes):  # draft, need further discussion and
     comp Pp_s across >3 nesting levels in iP_T: common_root_depth - comparands_depth >3, which maps to the distance of >16 Pp_s
     '''
 
-    xPp_t = []
+    xPp_ttttt = []  # each tuple is 6 xPp_ of single elevation
     for elevation in range(int(ntypes)):
         if elevation % 2:  # params
 
@@ -134,31 +134,41 @@ def cross_core_comp(iP_T, types_, ntypes):  # draft, need further discussion and
                     MP_t.append(iP_T[i])
                 P_tt = [LP_t, IP_t, DP_t, MP_t]
 
-                xPp_ = [] # cross compare between 4 params, always = 6 elements if call from root function
-                for j, _P_t in enumerate(P_tt):
-                    if j+1 < 4: # always < 4 due to there are 4 params
-                        for P_t in P_tt[j+1:]:
-                            for _P_ in _P_t:
-                                for P_ in P_t:
-                                    if _P_ and P_:  # not empty _P_ and P_
-                                        _M = sum([_P.M for _P in _P_])
-                                        M = sum([P.M for P in P_])
-                                        for i,(param_name, ave) in enumerate(zip(param_names, aves)):
-                                            xpdert_ = []
-                                            for _P in _P_:
-                                                for P in P_:
-                                                    # probably wrong but we need this evaluation, add in PM for evaluation?
-                                                    if _P.M + P.M + _M + M > (_P.Rdn + P.Rdn) * ave:
-                                                        _param = getattr(_P,param_name[0])
-                                                        param = getattr(P,param_name[0])
-                                                        xpdert = comp_par(_P, _param, param, param_name, ave)
-                                                        xpdert_.append(xpdert)
+            xPp_tttt = [] # cross compare between 4 params, always = 6 elements if call from root function, empty if both 
+            for j, _P_t in enumerate(P_tt):  # loop 1st param of 4 params
+                if j+1 < 4: # always < 4 due to there are 4 params
+                    for P_t in P_tt[j+1:]:   # loop 2nd param of 4 params
+                        xPp_ttt  = []
+                        for _P_ in _P_t:  # loop P_s of 1st param
+                            for P_ in P_t:  # loop P_s of 2nd param
+                                if _P_ and P_:  # not empty _P_ and P_
+                                    _M = sum([_P.M for _P in _P_])
+                                    M = sum([P.M for P in P_])
+                                    xPp_tt = []
+                                    for i,(param_name, ave) in enumerate(zip(param_names, aves)):
+                                        xpdert_ = []
+                                        for _P in _P_:
+                                            for P in P_:
+                                                # probably wrong but we need this evaluation, add in PM for evaluation?
+                                                if _P.M + P.M + _M + M > (_P.Rdn + P.Rdn) * ave:
+                                                    _param = getattr(_P,param_name[0])
+                                                    param = getattr(P,param_name[0])
+                                                    xpdert = comp_par(_P, _param, param, param_name, ave)
+                                                    xpdert_.append(xpdert)
+                                        xPp_t = []
+                                        for fPd in 0,1:
                                             if len(xpdert_)>1:
-                                                fPd = 1
-                                                xPp_.append(form_Pp_(xpdert_, fPd))  # add a loop to form xPp_ with fPd = 0 and fPd = 1?
+                                                xPp_t.append(form_Pp_(xpdert_, fPd))  # add a loop to form xPp_ with fPd = 0 and fPd = 1?
                                             else:
-                                                xPp_.append([])
-            xPp_t.append(xPp_)
+                                                xPp_t.append([])
+                                        xPp_tt.append(xPp_t)
+                                    xPp_ttt.append(xPp_tt)
+                                else:
+                                    xPp_ttt.append( [[[],[]],[[],[]],[[],[]],[[],[]]])  # 1 of 6 elements, but empty list to preserve index
+                        xPp_tttt.append(xPp_ttt)                                  
+            xPp_ttttt.append(xPp_tttt)
+            
+    return xPp_ttttt
 
 # not needed:
 
