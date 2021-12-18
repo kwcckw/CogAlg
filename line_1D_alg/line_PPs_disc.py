@@ -59,6 +59,7 @@ class CPp(CP):
     subDerts = list
     sublevels = list  # levels of composition per generic Pp: P ) Pp ) Ppp...
     rootPp = object  # to replace locals for merging
+    cluster_ = list
     # layer1: iL, iI, iD, iM, iRdn: summed P params
 
 class CderPp(ClusterStructure):  # for line_PPPs only, if PPP comb x Pps?
@@ -303,8 +304,8 @@ def intra_Pp_(rootPp, Pp_, Pdert_, hlayers, fPd):  # evaluate for sub-recursion 
 
     for i, Pp in enumerate(Pp_):
         loc_ave_M = ave_M * Pp.Rdn * hlayers
-        if Pp.L > 1 and Pp.M > loc_ave_M:  # min for both forks
-
+        if Pp.L > 1 : #and Pp.M > loc_ave_M:  # min for both forks
+            
             loc_ave_M *= (Pp.M / ave_M) / 2
             iM = sum( [pdert.P.M for pdert in Pp.pdert_])
             loc_ave = (ave + iM) / 2 * Pp.Rdn * hlayers  # cost per comp
@@ -395,10 +396,53 @@ def search_direction(Pp, idert, rng_dert_, Idert_, j, loc_ave, fleft):  # left o
                 if j > Pp.x0 + Pp.L-1: rng_dert_.append(rdert)
                 j += 1
 
-def join_rng_Pps():  # vs. merge, also removes redundancy, no need to adjust?
+# draft, edits from form_Pp_rng
+def join_rng_Pps(rdert_):  # vs. merge, also removes redundancy, no need to adjust?
 
+    cluster_ = []
+    cluster = []
+    x = 0
+    _rdert = rdert_[0]
+    _sign = _rdert.m > 0
+    if _sign:  # init +ve Pp params, exclusive assignment of overlapping pderts: point-wise eval by m, negL may overlap in and between Pps
+        L=1; I=_rdert.p; D=_rdert.d; M=_rdert.m; Rdn=_rdert.rdn + _rdert.P.Rdn; x0=x; pdert_=[_rdert]; negL=_rdert.negL; negM=_rdert.negM
+
+    for rdert in rdert_[1:]:  # form +Pp from +rderts
+        sign = rdert.m > 0
+        if sign and _sign:  # same +sign: accumulate params:
+            L+=1; I+=rdert.p; D+=rdert.d; M+=rdert.m; Rdn+=rdert.rdn+rdert.P.Rdn; negL+=rdert.negL; negM+=rdert.negM; pdert_+=[rdert]
+        else:
+            if _sign:  # pack Pp to cluster:
+                Pp = CPp(L=L, I=I, D=D, M=M, negL=negL, negM=negM, x0=x0, pdert_=pdert_, sublayers=[[]], Rdn=Rdn+L)  # L: rdn to root layer per pdert
+                for rdert in Pp.pdert_: rdert.Ppt[0] = Pp
+                cluster.append(Pp)
+                
+                # accum negL and negM
+                negL += 1
+                negM += rdert.negM
+                            
+                # pack cluster into cluster_ if negM > ave
+                if negM > ave_M:  # tentative
+                    cluster_.append(cluster)
+                    cluster = []
+                    negL = 0; negM = 0  # reset negM and negL when we terminate cluster
+                
+            elif sign:  # reinitialize +ve Pp params:
+                L=1; I=rdert.p; D=rdert.d; M=rdert.m; Rdn=rdert.rdn + rdert.P.Rdn; x0=x; pdert_=[rdert]; negL+=rdert.negL; negM+=rdert.negM
+
+        
+        x += 1
+        _sign = sign
+
+    if _sign:  # terminate last Pp:
+        Pp = CPp(L=L, I=I, D=D, M=M, negL = negL, negM = negM, x0=x0, pdert_=pdert_, sublayers=[[]], Rdn=Rdn + L)
+        for rdert in Pp.pdert_: rdert.Ppt[0] = Pp
+        cluster.append(Pp)
+        cluster_.append(cluster)
+
+    return cluster_  # right now it is multiple list of Pps , each list is a cluster, or use Pp object instead of list?            
     # joined clusters should be appended to Pp.cluster_, not nested?
-    pass
+
 
 def sub_search(rootPp, fPd):  # ~line_PPs_root: cross-comp sub_Ps in top sublayer of high-M Pms | high-D Pds, called from intra_Pp_
 
