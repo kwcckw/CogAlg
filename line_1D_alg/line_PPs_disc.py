@@ -277,13 +277,15 @@ def splice_Ps(Ppm_, pdert1_, pdert2_, fPd):  # re-eval Pps, Pp.pdert_s for redun
 
                 for pdert in Pp.pdert_:
                     Pp.dert_ += pdert.P.dert_  # if Pp.dert_: spliced P, summed P params are primary, other Pp params are low-value
-                # intra_P( Pp): re-eval intra_P per spliced P
+                intra_P(Pp, rdn=1, rng=1, fPd=fPd)  # re-eval intra_P per spliced P
         '''
         no splice(): fine-grained eval per P triplet is too expensive?
         '''
 # draft:
-def intra_P(P):
-    if P.fPm:
+def intra_P(P, rdn, rng, fPd):
+    comb_sublayers = []
+    
+    if not fPd:
         if P.M - P.Rdn * ave_M * P.L > ave_M * rdn and P.L > 2:  # M value adjusted for xP and higher-layers redundancy
             rdn+=1; rng+=1
             sub_Pm_, sub_Pd_ = [], []
@@ -305,14 +307,12 @@ def intra_P(P):
         else:
             P.sublayers += [[]]  # empty subset to preserve index in sublayer
 
-    if rootP and P.sublayers:
+    if P.sublayers:
         comb_sublayers = [comb_subset_ + subset_ for comb_subset_, subset_ in
                           zip_longest(comb_sublayers, P.sublayers, fillvalue=[])
                           ]
-    if rootP:
-        rootP.sublayers += comb_sublayers  # no return
-    else:
-        return P_  # each P has new sublayers, comb_sublayers is not needed
+
+    P.sublayers += comb_sublayers  # no return
 
 
 def intra_Pp_(rootPp, Pp_, Pdert_, hlayers, fPd):  # evaluate for sub-recursion in line Pm_, pack results into sub_Pm_
@@ -420,9 +420,9 @@ def search_direction(Pp, idert, rng_dert_, Idert_, j, loc_ave, fleft):  # left o
 def join_rng_Pps(Pp_):  # vs. merge, also removes redundancy, no need to adjust?
 
     for Pp in Pp_:
-        Pp.rdert_ = [Pp.rdert_]  # convert into nested list
-        for rdert in Pp.rdert_:
-            Pp.rdert_ += rdert._Pp.rdert_  # not yet nested, make it recursive:
+        Pp.pdert_ = [Pp.pdert_]  # convert into nested list
+        for pdert in Pp.pdert_:
+            Pp.pdert_ += pdert._Pp.pdert_  # not yet nested, make it recursive:
             # while Pp is list (or is not CPp):
             #    for rdert in Pp.rdert_:...
             Pp_.remove(rdert._Pp)  # redundant to clustered representation, remove with all nesting
