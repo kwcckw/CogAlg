@@ -400,8 +400,31 @@ def search_Idert_(Pp, Idert_, loc_ave):  # extended fixed-rng search-right for c
     return rng_dert_
 
 # draft
-def join_rng_pdert_s(Pp_):  # vs. merge, also removes redundancy, no need to adjust?
+def join_rng_pdert_s(rdert_):  # vs. merge, also removes redundancy, no need to adjust?
 
+    
+    Pp_ = []
+    rdert_Pp_ = [[] for _ in len(rdert_)]  # reference of Pp for each rdert, may more than 1 Pp
+    
+    # 2 steps process:
+    # 1st step to form cluster from each rdert
+    for i, rdert in enumerate(rdert_):
+        Pp = CPp(pdert_=[rdert])
+        Pp.accum_from(rdert,excluded=['x0'])
+        
+        rdert_Pp_[i] += [Pp]
+        Pp_ += [Pp]
+        
+        for j, rdert in enumerate(rdert_):            
+            if i != j:  # not same rdert
+                
+                if Pp.M + rdert.m > ave_M:  # join pdert if sum of match > ave
+                    Pp.accum_from(rdert,excluded=['x0'])
+                    Pp.pdert_ += [rdert]
+                    rdert_Pp_[j] += [Pp]
+                    
+    # 2nd step to join all clusters  
+    # pending update later
     for Pp in Pp_:
         Pp.pdert_ = [Pp.pdert_]  # convert into nested list
         for pdert in Pp.pdert_:
