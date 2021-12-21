@@ -322,7 +322,6 @@ def intra_Pp_(rootPp, Pp_, Pdert_, hlayers, fPd):  # evaluate for sub-recursion 
     for i, Pp in enumerate(Pp_):
         loc_ave_M = ave_M * Pp.Rdn * hlayers
         if Pp.L > 1 and Pp.M > loc_ave_M:  # min for both forks
-
             loc_ave_M *= (Pp.M / ave_M) / 2
             iM = sum( [pdert.P.M for pdert in Pp.pdert_])
             loc_ave = (ave + iM) / 2 * Pp.Rdn * hlayers  # cost per comp
@@ -369,14 +368,16 @@ def intra_Pp_(rootPp, Pp_, Pdert_, hlayers, fPd):  # evaluate for sub-recursion 
 def search_Idert_(root_Pp, Idert_, loc_ave):  # extended fixed-rng search-right for core I at local ave: lower m
     # fixed because it's parallelizable and individual extensions are not worth it
 
+    # rng here may == 0, use min(min_rng, value)?
     rng = int( root_Pp.M / root_Pp.L / 4)  # ave_rng
     Pp_ = []
-    idert_ = root_Pp.pdert_.copy
-    for idert in idert_: idert .Ppt = []  # clear higher-level ref for current level
+    idert_ = root_Pp.pdert_.copy()
+    for idert in idert_: idert.Ppt[0] = []  # clear higher-level ref for current level
 
-    for i, idert in enumerate(root_Pp.pdert_):  # overlapping pderts and +Pps, no -Pps
+    # loop the copied idert_ instead?
+    for i, idert in enumerate(idert_):  # overlapping pderts and +Pps, no -Pps
         j = i + root_Pp.x0 + 1  # start at step=2, step=1 was in cross-comp
-        Pp = CPp
+        Pp = CPp()
         while j-i < rng and j < len(Idert_) - 1:
             # cross-comp:
             cdert = Idert_[j]  # current dert with compared P
@@ -409,6 +410,34 @@ def search_Idert_(root_Pp, Idert_, loc_ave):  # extended fixed-rng search-right 
         j = i + Pp.x0 - 1  # start at step=2, step=1 was in cross-comp
         search_direction(Pp, idert, rng_dert_, Idert_, j, loc_ave, fleft=1)
 '''
+
+# draft, to compare average of Pp to P
+def comp_par_Pp(Pp, P):
+
+    ppdert_ = []  # dert between average Pp value and P
+    for param_name in param_names:
+        
+        _param = getattr(Pp, param_name[0])
+        param = getattr(P, param_name[0])
+    
+        if param_name == 'L_':  # special div_comp for L:
+            _param /= len(Pp.pdert_)  # average value of L = L/len(pderts)?
+            d = param / _param  # higher order of scale, not accumulated: no search, rL is directional
+            int_rL = int(max(d, 1 / d))
+            frac_rL = max(d, 1 / d) - int_rL
+            m = int_rL * min(param, _param) - (int_rL * frac_rL) / 2 - ave
+            # div_comp match is additive compression: +=min, not directional
+        else:
+            _L = getattr(Pp, "L")  
+            _param /= _L  # average value   
+            d = param - _param  # difference
+            if param_name == 'I_': m = ave - abs(d)  # indirect match
+            else: m = min(param, _param) - abs(d) / 2 - ave  # direct match
+
+        ppdert = Cpdert(P=Pp, i=_param, p=param + _param, d=d, m=m)
+        ppdert_.append(ppdert)
+
+    return ppdert_
 
 # draft
 def join_rng_pdert_s(Pp_):  # vs. merge, also removes redundancy, no need to adjust?
