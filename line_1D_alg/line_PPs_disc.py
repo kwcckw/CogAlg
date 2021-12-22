@@ -322,13 +322,14 @@ def intra_Pp_(rootPp, Pp_, Pdert_, hlayers, fPd):  # evaluate for sub-recursion 
     for i, Pp in enumerate(Pp_):
         loc_ave_M = ave_M * Pp.Rdn * hlayers
         if Pp.L > 1 and Pp.M > loc_ave_M:  # min for both forks
+
             loc_ave_M *= (Pp.M / ave_M) / 2
             iM = sum( [pdert.P.M for pdert in Pp.pdert_])
             loc_ave = (ave + iM) / 2 * Pp.Rdn * hlayers  # cost per comp
             if fPd:
                 loc_ave *= ave_d; loc_ave_M *= ave_D  # =ave_d?
                 # der+ fork
-                if abs(Pp.D) > loc_ave_M * 4:  # 4: search cost, + Pp.M: local borrow potential?
+                if abs(Pp.D) / Pp.L > loc_ave_M * 4:  # 4: search cost, + Pp.M: local borrow potential?
                     sub_search(Pp, fPd=True)  # search in top sublayer, eval by pdert.d
                     sub_Ppm_, sub_Ppd_ = [], []
                     Pp.sublayers = [[(sub_Ppm_, sub_Ppd_)]]
@@ -343,7 +344,7 @@ def intra_Pp_(rootPp, Pp_, Pdert_, hlayers, fPd):  # evaluate for sub-recursion 
                     Pp.sublayers += [[]]  # empty subset to preserve index in sublayer, or increment index of subset?
             else:
                 # rng+ fork
-                if Pp.M > loc_ave_M + 4:  # 4: search cost, + Pp.iM?
+                if Pp.M / Pp.L > loc_ave_M + 4:  # 4: search cost, + Pp.iM?
                     sub_search(Pp, True)  # search in top sublayer, eval by pdert.d
                     sub_Ppm_, sub_Ppd_ = [], []
                     Pp.sublayers = [[(sub_Ppm_, sub_Ppd_)]]
@@ -368,13 +369,11 @@ def intra_Pp_(rootPp, Pp_, Pdert_, hlayers, fPd):  # evaluate for sub-recursion 
 def search_Idert_(root_Pp, Idert_, loc_ave):  # extended fixed-rng search-right for core I at local ave: lower m
     # fixed because it's parallelizable and individual extensions are not worth it
 
-    # rng here may == 0, use min(min_rng, value)?
     rng = int( root_Pp.M / root_Pp.L / 4)  # ave_rng
     Pp_ = []
     idert_ = root_Pp.pdert_.copy()
-    for idert in idert_: idert.Ppt[0] = []  # clear higher-level ref for current level
+    for idert in idert_: idert.Ppt = [[],[]]  # clear higher-level ref for current level
 
-    # loop the copied idert_ instead?
     for i, idert in enumerate(idert_):  # overlapping pderts and +Pps, no -Pps
         j = i + root_Pp.x0 + 1  # start at step=2, step=1 was in cross-comp
         Pp = CPp()
@@ -389,7 +388,7 @@ def search_Idert_(root_Pp, Idert_, loc_ave):  # extended fixed-rng search-right 
                     comp_sublayers(idert.P, cdert.P, idert.m)
                 Pp.accum_from(idert, excluded=['x0'])  # Pp params += pdert params
                 Pp.pdert_ += [idert]; idert.Ppt[0] += [Pp]
-
+                idert = Cpdert()
             else:  # idert miss, represent discontinuity:
                 idert.negL += 1
                 idert.negM += idert.m
@@ -411,46 +410,32 @@ def search_Idert_(root_Pp, Idert_, loc_ave):  # extended fixed-rng search-right 
         search_direction(Pp, idert, rng_dert_, Idert_, j, loc_ave, fleft=1)
 '''
 
-# draft, to compare average of Pp to P
-def comp_par_Pp(Pp, P):
-
-    ppdert_ = []  # dert between average Pp value and P
-    for param_name in param_names:
-        
-        _param = getattr(Pp, param_name[0])
-        param = getattr(P, param_name[0])
-    
-        if param_name == 'L_':  # special div_comp for L:
-            _param /= len(Pp.pdert_)  # average value of L = L/len(pderts)?
-            d = param / _param  # higher order of scale, not accumulated: no search, rL is directional
-            int_rL = int(max(d, 1 / d))
-            frac_rL = max(d, 1 / d) - int_rL
-            m = int_rL * min(param, _param) - (int_rL * frac_rL) / 2 - ave
-            # div_comp match is additive compression: +=min, not directional
-        else:
-            _L = getattr(Pp, "L")  
-            _param /= _L  # average value   
-            d = param - _param  # difference
-            if param_name == 'I_': m = ave - abs(d)  # indirect match
-            else: m = min(param, _param) - abs(d) / 2 - ave  # direct match
-
-        ppdert = Cpdert(P=Pp, i=_param, p=param + _param, d=d, m=m)
-        ppdert_.append(ppdert)
-
-    return ppdert_
-
 # draft
 def join_rng_pdert_s(Pp_):  # vs. merge, also removes redundancy, no need to adjust?
-    # if beyond rng, other-Pp' Ps may still match?
+    _Pp = Pp_[0]
+    for Pp in Pp_[1:]:
 
-    for Pp in Pp_:
         Pp.pdert_ = [Pp.pdert_]  # convert into nested list
         for pdert in Pp.pdert_:
-            Pp.pdert_ += pdert._Pp.pdert_  # not yet nested, make it recursive:
-            # while Pp is list (or is not CPp):
-            #    for rdert in Pp.rdert_:...
-            Pp_.remove(pdert._Pp)  # redundant to clustered representation, remove with all nesting
-
+            if pdert.Ppt[0][0] is Pp:  # common Pp, single-element Ppt[0] at this point?
+                # compare initial Pp params:
+                xPp_m = 0  # total match between Pps
+                ppdert_ = []  # xparam derts
+                for param_name in param_names:
+                    _param = getattr(_Pp, param_name[1:])  # skip L: = rng, I, D, M only
+                    param = getattr(Pp, param_name[1:])
+                    d = param - _param  # difference
+                    if param_name == 'I_': m = ave - abs(d)  # indirect match
+                    else: m = min(param, _param) - abs(d) / 2 - ave  # direct match
+                    xPp_m += m
+                    ppdert_.append(Cpdert(P=Pp, i=_param, p=param + _param, d=d, m=m))
+                if xPp_m > ave_M * 4:
+                    Pp.accum_from(_Pp)
+                    Pp.pdert_ += pdert._Pp.pdert_  # should be nested, make it recursive:
+                    # while Pp is list (or is not CPp):
+                    #   for rdert in Pp.rdert_:...
+                    Pp_.remove(_Pp)  # redundant to clustered representation, remove with all nesting
+        _Pp = Pp
 
 def sub_search(rootPp, fPd):  # ~line_PPs_root: cross-comp sub_Ps in top sublayer of high-M Pms | high-D Pds, called from intra_Pp_
 
