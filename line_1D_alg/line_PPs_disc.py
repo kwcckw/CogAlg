@@ -322,7 +322,6 @@ def intra_Pp_(rootPp, Pp_, Pdert_, hlayers, fPd):  # evaluate for sub-recursion 
     for i, Pp in enumerate(Pp_):
         loc_ave_M = ave_M * Pp.Rdn * hlayers
         if Pp.L > 1 and Pp.M > loc_ave_M:  # min for both forks
-
             loc_ave_M *= (Pp.M / ave_M) / 2
             iM = sum( [pdert.P.M for pdert in Pp.pdert_])
             loc_ave = (ave + iM) / 2 * Pp.Rdn * hlayers  # cost per comp
@@ -349,10 +348,12 @@ def intra_Pp_(rootPp, Pp_, Pdert_, hlayers, fPd):  # evaluate for sub-recursion 
                     sub_Ppm_, sub_Ppd_ = [], []
                     Pp.sublayers = [[(sub_Ppm_, sub_Ppd_)]]
                     # higher ave -> distant match, higher ave_negM -> extend Pp
-                    rdert_ = search_Idert_(Pp, Pdert_, loc_ave * ave_mI)  # comp x variable range, while curr_M
-                    sub_Ppm_[:] = join_rng_pdert_s(rdert_.copy())  # rdert_ contains P+pdert_s that form rng_Pps
+                    rPp_ = search_Idert_(Pp, Pdert_, loc_ave * ave_mI)  # comp x variable range, while curr_M
+                    sub_Ppm_[:] = join_rng_pdert_s(rPp_.copy())  # rdert_ contains P+pdert_s that form rng_Pps
 
                     if Pp.M > loc_ave_M * 4 and not Pp.dert_:  # 4: looping cost, not spliced Pp, if Pm_'IPpm_.M, +Pp.iM?
+                        rdert_ = []
+                        for rPp in rPp_: rdert_ += rPp.pdert_   # get rdert_ from rPp.pdert_ 
                         intra_Pp_(Pp, sub_Ppm_, rdert_, hlayers+1, fPd)  # recursive rng+ per joined cluster, no der+ in redundant Pds?
                 else:
                     Pp.sublayers += [[]]  # empty subset to preserve index in sublayer, or increment index of subset?
@@ -376,7 +377,7 @@ def search_Idert_(root_Pp, Idert_, loc_ave):  # extended fixed-rng search-right 
 
     for i, idert in enumerate(idert_):  # overlapping pderts and +Pps, no -Pps
         j = i + root_Pp.x0 + 1  # start at step=2, step=1 was in cross-comp
-        Pp = CPp()
+        Pp = CPp(sublayers=[[]])
         while j-i < rng and j < len(Idert_) - 1:
             # cross-comp:
             cdert = Idert_[j]  # current dert with compared P
@@ -388,7 +389,7 @@ def search_Idert_(root_Pp, Idert_, loc_ave):  # extended fixed-rng search-right 
                     comp_sublayers(idert.P, cdert.P, idert.m)
                 Pp.accum_from(idert, excluded=['x0'])  # Pp params += pdert params
                 Pp.pdert_ += [idert]; idert.Ppt[0] += [Pp]
-                idert = Cpdert()
+                idert = Cpdert(Ppt=[[],[]], P=idert.P)  # not quite sure, or it should be cdert.P?
             else:  # idert miss, represent discontinuity:
                 idert.negL += 1
                 idert.negM += idert.m
@@ -415,27 +416,34 @@ def join_rng_pdert_s(Pp_):  # vs. merge, also removes redundancy, no need to adj
     _Pp = Pp_[0]
     for Pp in Pp_[1:]:
 
+        # why we need nested pdert_ here? Each nested pdert_ is a cluster?
         Pp.pdert_ = [Pp.pdert_]  # convert into nested list
-        for pdert in Pp.pdert_:
-            if pdert.Ppt[0][0] is Pp:  # common Pp, single-element Ppt[0] at this point?
-                # compare initial Pp params:
-                xPp_m = 0  # total match between Pps
-                ppdert_ = []  # xparam derts
-                for param_name in param_names:
-                    _param = getattr(_Pp, param_name[1:])  # skip L: = rng, I, D, M only
-                    param = getattr(Pp, param_name[1:])
-                    d = param - _param  # difference
-                    if param_name == 'I_': m = ave - abs(d)  # indirect match
-                    else: m = min(param, _param) - abs(d) / 2 - ave  # direct match
-                    xPp_m += m
-                    ppdert_.append(Cpdert(P=Pp, i=_param, p=param + _param, d=d, m=m))
-                if xPp_m > ave_M * 4:
-                    Pp.accum_from(_Pp)
-                    Pp.pdert_ += pdert._Pp.pdert_  # should be nested, make it recursive:
-                    # while Pp is list (or is not CPp):
-                    #   for rdert in Pp.rdert_:...
-                    Pp_.remove(_Pp)  # redundant to clustered representation, remove with all nesting
-        _Pp = Pp
+           
+        for pdert_ in Pp.pdert_:     
+            for pdert in pdert_:
+            
+                # pdert is from Pp, so we should check is the same _Pp instead?
+                if pdert.Ppt[0][0] is _Pp:  # common Pp, single-element Ppt[0] at this point?
+                    # compare initial Pp params:
+                    xPp_m = 0  # total match between Pps
+                    ppdert_ = []  # xparam derts
+                    for param_name in param_names[1:]: # skip L: = rng, I, D, M only
+                        _param = getattr(_Pp, param_name[0])  
+                        param = getattr(Pp, param_name[0])
+                        d = param - _param  # difference
+                        if param_name == 'I_': m = ave - abs(d)  # indirect match
+                        else: m = min(param, _param) - abs(d) / 2 - ave  # direct match
+                        xPp_m += m
+                        ppdert_.append(Cpdert(P=Pp, i=_param, p=param + _param, d=d, m=m))
+                    if xPp_m > ave_M * 4:
+                        Pp.accum_from(_Pp)
+                        Pp.pdert_ += pdert._Pp.pdert_  # should be nested, make it recursive:
+                        # while Pp is list (or is not CPp):
+                        #   for rdert in Pp.rdert_:...
+                        Pp_.remove(_Pp)  # redundant to clustered representation, remove with all nesting
+            _Pp = Pp
+
+    return Pp_
 
 def sub_search(rootPp, fPd):  # ~line_PPs_root: cross-comp sub_Ps in top sublayer of high-M Pms | high-D Pds, called from intra_Pp_
 
