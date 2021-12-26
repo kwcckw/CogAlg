@@ -270,15 +270,49 @@ class ClusterStructure(metaclass=MetaCluster):
     def __init__(self, **kwargs):
         pass
 
-    def accum_from(self, other, excluded=()):
+    def accum_from(self, other, excluded=(), ignore_capital=False):
         """Accumulate params from another structure."""
 
         # accumulate base params
         for param in self.numeric_params:
-            if (param not in excluded) and (param in other.numeric_params):
-                p = getattr(self,param)
-                _p = getattr(other,param)
-                setattr(self, param, p+_p)
+            
+            if ignore_capital:  # check in additional lower and upper case
+                # check for excluded params
+                check_exclude = 1
+                for exclude in excluded:
+                     if exclude in [param, param.lower(), param.upper()]:
+                         check_exclude = 0
+                         break
+                # check for existance of param in other object
+                check_exist = 0
+                for numeric_param in other.numeric_params:
+                     if numeric_param in [param, param.lower(), param.upper()]:
+                         check_exist = 1
+                         break
+                if check_exclude and check_exist:
+                    # get param from other
+                    if hasattr(other, param):
+                        _p = getattr(other,param)
+                    elif hasattr(other, param.lower()):
+                        _p = getattr(other,param.lower())
+                    elif hasattr(other, param.upper()):
+                        _p = getattr(other,param.upper())  
+                         
+                    # get param from self and set to new accumulated value
+                    if hasattr(self, param):
+                        p = getattr(self,param)
+                        setattr(self, param, p+_p)
+                    elif hasattr(self, param.lower()):
+                        p = getattr(self,param.lower())
+                        setattr(self, param.lower(), p+_p)
+                    elif hasattr(self, param.upper()):
+                        p = getattr(self,param.upper())
+                        setattr(self, param.upper(), p+_p)
+            else:
+                if (param not in excluded) and (param in other.numeric_params):
+                    p = getattr(self,param)
+                    _p = getattr(other,param)
+                    setattr(self, param, p+_p)
 
         # accumulate layers 1 and above
         for layer_num in self.dict_params:

@@ -354,7 +354,8 @@ def intra_Pp_(rootPp, Pp_, Pdert_, hlayers, fPd):  # evaluate for sub-recursion 
                     sub_Ppm_[:] = join_rng_pdert_s(rPp_.copy(), rng)  # rdert_ contains P+pdert_s that form rng_Pps
 
                     if Pp.M > loc_ave_M * 4 and not Pp.dert_:  # 4: looping cost, not spliced Pp, if Pm_'IPpm_.M, +Pp.iM?
-                        rdert_ = [];  for rPp in rPp_: rdert_ += rPp.pdert_
+                        rdert_ = [] 
+                        for rPp in rPp_: rdert_ += rPp.pdert_
                         intra_Pp_(Pp, sub_Ppm_, rdert_, hlayers + 1, fPd)  # recursive rng+ per joined cluster, no der+ in redundant Pds?
                 else:
                     Pp.sublayers += [[]]  # empty subset to preserve index in sublayer, or increment index of subset?
@@ -398,7 +399,7 @@ def search_Idert_(root_Pp, Idert_, loc_ave, rng):  # extended fixed-rng search-r
                 idert.negM += idert.m
             j += 1
         if idert.m <= 0:  # add last idert if negative:
-            Pp.accum_from(idert, excluded=['x0'])  # Pp params += pdert params
+            Pp.accum_from(idert, excluded=['x0'], ignore_capital=True)  # Pp params += pdert params
             Pp.pdert_ += [idert]; idert.Ppt[0] += [Pp]
 
         Pp_ += [Pp]
@@ -408,18 +409,27 @@ def search_Idert_(root_Pp, Idert_, loc_ave, rng):  # extended fixed-rng search-r
 # draft, almost certainly buggy:
 
 def join_rng_pdert_s(Pp_, rng):  # vs. merge, also removes redundancy, no need to adjust?
-    Pp_ = deque(Pp_)
-    outPp_ = []
+    # Pp_ = deque(Pp_)  # this should be not needed, we can pop list too
+    out_Pp_ = []
 
     while Pp_:
-        _Pp = Pp_.popleft
+        _Pp = Pp_.pop(0)  # popleft
         i = 1  # Pp distance from Pp
-        while Pp_ and i < rng-1:  # _Pp and Pp overlap
+        
+        test_Pp_ = []  # the tested Pps for current _Pp and rng
+        while Pp_ and i < abs(rng)-1:  # _Pp and Pp overlap
             i += 1
             joined = 0
-            Pp = Pp_.popleft
-            Pp.pdert_ = [Pp.pdert_]  # nested list of joined Pp pdert_s
-            for pdert in Pp.pdert_:  # check all
+            Pp = Pp_.pop(0) # popleft
+            
+            # i checked and we need this check, since Pp may be tested multiple times for different _Pp (when rng is high) 
+            if isinstance(Pp.pdert_[0],list):
+                pdert_ = Pp.pdert_[0]
+            else:
+                pdert_ = Pp.pdert_
+                Pp.pdert_ = [Pp.pdert_]  # nested list of joined Pp pdert_s
+
+            for pdert in pdert_ :  # check all
                 if pdert.Ppt[0][0] is Pp:  # common Pp, single-element Ppt[0] at this point?
                     # comp Pp.I -> mI, *_Pp.M?
                     _I = getattr(_Pp, param_names[1][0])  # I only, as in comp pdert, other params anti-correlate
@@ -434,11 +444,13 @@ def join_rng_pdert_s(Pp_, rng):  # vs. merge, also removes redundancy, no need t
                     joined = 0
                     break  # may be joined at multiple points?
             if not joined:
-                Pp_.insert(i-1, Pp)
-
-        outPp_.append(_Pp)
-    Pp_[:] = outPp_[:]  # keep id
-
+                test_Pp_.append(Pp)  # append the tested but not joined Pp
+        test_Pp_.extend(Pp_)
+        Pp_ = test_Pp_
+        out_Pp_.append(_Pp)
+    Pp_[:] = out_Pp_[:]  # keep id
+    
+    return Pp_
 
 def join_rng_pdert_Chee(Pp_):  # vs. merge, also removes redundancy, no need to adjust?
     _Pp = Pp_[0]
