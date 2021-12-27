@@ -338,7 +338,7 @@ def intra_Pp_(rootPp, Pp_, Pdert_, hlayers, fPd):  # evaluate for sub-recursion 
                     Pp.sublayers = [[(sub_Ppm_, sub_Ppd_)]]
                     # extend search if high loc_ave, fixed-range: parallelizable, individual selection is not worth the costs:
                     rng = int(Pp.M / Pp.L / 4)  # ave_rng = 4
-                    rPp_ = search_Idert_(Pp, Pdert_, loc_ave * ave_mI, rng)  # comp x variable range, while curr_M
+                    rPp_ = search_Idert_(Pp, Pdert_, loc_ave * ave_mI, rng=5)  # comp x variable range, while curr_M
                     sub_Ppm_[:] = join_pdert_s(rPp_.copy(), rng)  # rdert_ contains P+pdert_s that form rng_Pps
 
                     if Pp.M > loc_ave_M * 4 and not Pp.dert_:  # 4: looping cost, not spliced Pp, if Pm_'IPpm_.M, +Pp.iM?
@@ -408,13 +408,9 @@ def join_pdert_s(Pp_, rng):  # connect Pp similarity clusters through their comm
             fjoined = 0
             Pp = Pp_.pop(0)
             for pdert in Pp.pdert_:
-                if _Pp in pdert.Ppt[0]:  # check for common Pp
-                    '''
-                    for pdert.Ppt[0][0] in [pdert.Ppt[0] for pdert in Pp.pdert_]  # check overlap of 2 Pp_s:
-                        pdert_Pps = []
-                        for pdert in Pp.pdert_: pdert_Pps.extend(pdert.Ppt[0])
-                        check = any(Pp in pdert.Ppt[0] for Pp in pdert_Pps)
-                    '''
+                pdert_Pps = [Pp for Pp in pdert.Ppt[0]]
+
+                if _Pp not in pdert_Pps:  # check for common Pp
                     # comp Pp.I -> mI, *_Pp.M?
                     _I = getattr(_Pp, param_names[1][0])  # I only, as in comp pdert, other params anti-correlate
                     I = getattr(Pp, param_names[1][0])
@@ -427,12 +423,13 @@ def join_pdert_s(Pp_, rng):  # connect Pp similarity clusters through their comm
                         _Pp.pdert_ += Pp.pdert_  # or _Pp.pdert_[i] += Pp.pdert_ for deeper nesting?
                         for pdert in Pp.pdert_: pdert.Ppt[0].append(_Pp)
 
-                    fjoined = 0  # may be joined at multiple points?
-                    break
+                        # should be 1 here? And the indentation should be one level deeper?
+                        fjoined = 1  # may be joined at multiple points?
+                        break
             if not fjoined:
                 rng_Pp_.append(Pp)  # append the tested but not joined Pp
 
-        Pp_ = rng_Pp_.extend([Pp_])
+        Pp_ = rng_Pp_ + Pp_[:]  # is the same with rng_Pp.extendleft(Pp_)
         out_Pp_.append(_Pp)
     Pp_[:] = out_Pp_[:]  # keep id
 
