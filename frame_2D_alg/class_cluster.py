@@ -275,7 +275,7 @@ class ClusterStructure(metaclass=MetaCluster):
 
         # accumulate base params
         for param in self.numeric_params:
-            
+
             if ignore_capital:  # check in additional lower and upper case
                 # check for excluded params
                 check_exclude = 1
@@ -296,8 +296,8 @@ class ClusterStructure(metaclass=MetaCluster):
                     elif hasattr(other, param.lower()):
                         _p = getattr(other,param.lower())
                     elif hasattr(other, param.upper()):
-                        _p = getattr(other,param.upper())  
-                         
+                        _p = getattr(other,param.upper())
+
                     # get param from self and set to new accumulated value
                     if hasattr(self, param):
                         p = getattr(self,param)
@@ -342,20 +342,20 @@ class ClusterStructure(metaclass=MetaCluster):
                 p = getattr(self,param)
                 _p = getattr(other,param)
                 setattr(self, param, p-_p)
-                
+
     def merge(self, other, self_instance_name, self_instance, excluded = ()):
         # accumulate numeric params
         self.accum_from(other,excluded=excluded)
-        
-        for list_param in self.list_params: # list params, such as pdert_, P_, sublayers, subDerts 
+
+        for list_param in self.list_params: # list params, such as pdert_, P_, sublayers, subDerts
             if hasattr(other, list_param):
-             
+
                 self_list = getattr(self,list_param)   # get self list param, such as P_, pdert_ and etc
                 other_list = getattr(other,list_param) # get other list param, such as P_, pdert_ and et
-                
+
                 for other_param in other_list: # append each list param to self, for example other.P_ to self.P_
                     self_list.append(other_param)
-                    
+
                     # update reference, may add in more class later
                     # for example update other P.Pp to self Pp
                     if hasattr(other_param, self_instance_name) and isinstance(self, self_instance):
