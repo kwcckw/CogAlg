@@ -39,6 +39,7 @@ class Cpdert(ClusterStructure):
 class CPp(CP):
     dert_ = list  # if not empty: Pp is primarily a merged P, other params are optional
     pdert_ = list  # Pp elements, "p" for param
+    idert_ = list
     flay_rdn = bool  # Pp is layer-redundant to Pp.pdert_
     negM = int  # in rng_Pps only
     negL = int  # in rng_Pps only, summed in L, no need to be separate?
@@ -308,7 +309,6 @@ def intra_Pp_(rootPp, Pp_, Pdert_, hlayers, fPd):  # evaluate for sub-recursion 
     for i, Pp in enumerate(Pp_):
         loc_ave_M = ave_M * Pp.Rdn * hlayers
         if Pp.L > 1 and Pp.M > loc_ave_M:  # min for both forks
-
             loc_ave_M *= (Pp.M / ave_M) / 2
             iM = sum( [pdert.P.M for pdert in Pp.pdert_])
             loc_ave = (ave + iM) / 2 * Pp.Rdn * hlayers  # cost per comp
@@ -331,7 +331,6 @@ def intra_Pp_(rootPp, Pp_, Pdert_, hlayers, fPd):  # evaluate for sub-recursion 
             else:
                 # rng+ fork
                 if Pp.M / Pp.L > loc_ave_M + 4:  # 4: search cost, + Pp.iM?
-
                     sub_search(Pp, True)  # search in top sublayer, eval by pdert.d
                     sub_Ppm_, sub_Ppd_ = [], []
                     Pp.sublayers = [[(sub_Ppm_, sub_Ppd_)]]
@@ -366,7 +365,7 @@ def search_Idert_(root_Pp, Idert_, loc_ave, rng):  # extended fixed-rng search-r
 
         j = i + root_Pp.x0 + 1  # get compared index in root Idert_, start at step=2 or 1 + prior rng, step=1 was in cross-comp
         idert.m = idert.d = 0  # reset from rng=1 comp, if no rng comp
-        Pp = CPp()
+        Pp = CPp(idert_ = [idert])
         while j - (i + root_Pp.x0 + 1) < rng and j < len(Idert_) - 1:
             # cross-comp within rng:
             cdert = Idert_[j]  # current dert with compared P
@@ -376,10 +375,16 @@ def search_Idert_(root_Pp, Idert_, loc_ave, rng):  # extended fixed-rng search-r
             if idert.m > 0:
                 if idert.m > ave_M * 4 and idert.P.sublayers[0] and cdert.P.sublayers[0]:  # 4: init ave_sub coef
                     comp_sublayers(idert.P, cdert.P, idert.m)
+                
+                Pp.idert_.append(cdert)
                 Pp.accum_from(idert, excluded=['x0'])  # Pp params += pdert params
-                Pp.pdert_ += [idert]; idert.Ppt[0] += [Pp]
-                idert = idert.copy()  # new instance for Pp.pdert_
-                idert.negL = 0; idert.negM = 0  # p,d,m are replaced by comp, i,P are constant
+                Pp.pdert_ += [idert]; idert.Ppt[0] += [Pp]  # always 1 Pp for Ppt[0]
+                
+                # init new idert
+                _idert = idert
+                idert = Cpdert(Ppt=[[],[]])
+                idert.accum_from(_idert, excluded=['p','d','m','negL','negM'])  # p,d,m are replaced by comp, i,P are constant
+                idert.P = _idert.P
             else:
                 # idert miss, need to represent discontinuity:
                 idert.negL += 1  # dert scope = negL + 1 + prior rng
@@ -406,8 +411,10 @@ def join_pdert_s(Pp_, rng):  # connect Pp similarity clusters through their comm
             i += 1
             fjoined = 0
             Pp = Pp_.pop(0)
-            for pdert in Pp.pdert_:  # single-level in Pp
-                if _Pp is pdert.Ppt[0][0]:  # Pp is _Pp, same for all levels of nesting in _Pp.pdert_
+              
+            for idert in Pp.idert_:  # single-level in Pp   
+                if idert in _Pp.idert_:
+                    
                     # comp Pp.I -> mI, *_Pp.M?
                     _I = getattr(_Pp, param_names[1][0])  # I only, as in comp pdert, other params anti-correlate
                     I = getattr(Pp, param_names[1][0])
@@ -420,12 +427,12 @@ def join_pdert_s(Pp_, rng):  # connect Pp similarity clusters through their comm
                         _Pp.pdert_ += Pp.pdert_  # or _Pp.pdert_[i] += Pp.pdert_ for deeper nesting?
                         for pdert in Pp.pdert_: pdert.Ppt[0].append(_Pp)
 
-                    fjoined = 0  # may be joined at multiple points?
-                    break
+                        fjoined = 1  # may be joined at multiple points?
+                        break
             if not fjoined:
                 rng_Pp_.append(Pp)  # append the tested but not joined Pp
 
-        Pp_ = rng_Pp_.extend([Pp_])
+        Pp_ = rng_Pp_ + Pp_[:]  # is the same with rng_Pp.extendleft(Pp_)
         out_Pp_.append(_Pp)
     Pp_[:] = out_Pp_[:]  # keep id
 
