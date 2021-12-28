@@ -90,7 +90,6 @@ aves = [ave_mL, ave_mI, ave_mD, ave_mM]
 '''
 
 def line_PPs_root(P_t):  # P_T is P_t = [Pm_, Pd_];  higher-level input is implicitly nested to the depth = 1 + 2*elevation (level counter)
-
     norm_feedback(P_t)  # before processing
 
     P_ttt = []  # output is 16-tuple of Pp_s per line, implicitly nested into 3 levels
@@ -338,7 +337,7 @@ def intra_Pp_(rootPp, Pp_, Pdert_, hlayers, fPd):  # evaluate for sub-recursion 
                     Pp.sublayers = [[(sub_Ppm_, sub_Ppd_)]]
                     # extend search if high loc_ave, fixed-range: parallelizable, individual selection is not worth the costs:
                     rng = int(Pp.M / Pp.L / 4)  # ave_rng = 4
-                    rPp_ = search_Idert_(Pp, Pdert_, loc_ave * ave_mI, rng=5)  # comp x variable range, while curr_M
+                    rPp_ = search_Idert_(Pp, Pdert_, loc_ave * ave_mI, rng)  # comp x variable range, while curr_M
                     sub_Ppm_[:] = join_pdert_s(rPp_.copy(), rng)  # rdert_ contains P+pdert_s that form rng_Pps
 
                     if Pp.M > loc_ave_M * 4 and not Pp.dert_:  # 4: looping cost, not spliced Pp, if Pm_'IPpm_.M, +Pp.iM?
@@ -366,7 +365,7 @@ def search_Idert_(root_Pp, Idert_, loc_ave, rng):  # extended fixed-rng search-r
     for i, idert in enumerate(idert_):  # form fixed-rng Pps per idert.P, consecutive Pps overlap within rng-1
 
         j = i + root_Pp.x0 + 1  # get compared index in root Idert_, start at step=2 or 1 + prior rng, step=1 was in cross-comp
-        idert.m = idert.d = 0  # reset from rng=1 comp, if no rng comp:
+        idert.m = idert.d = 0  # reset from rng=1 comp, if no rng comp
         Pp = CPp()
         while j - (i + root_Pp.x0 + 1) < rng and j < len(Idert_) - 1:
             # cross-comp within rng:
@@ -388,7 +387,7 @@ def search_Idert_(root_Pp, Idert_, loc_ave, rng):  # extended fixed-rng search-r
             j += 1
         if idert.m <= 0:  # add last idert if negative:
             Pp.accum_from(idert, excluded=['x0'], ignore_capital=True)  # Pp params += pdert params
-            Pp.pdert_ += [idert]; idert.Ppt[0] += [Pp]
+            Pp.pdert_ += [idert]; idert.Ppt[0] = [Pp]  # single root Pp
 
         Pp_ += [Pp]
 
@@ -396,7 +395,7 @@ def search_Idert_(root_Pp, Idert_, loc_ave, rng):  # extended fixed-rng search-r
 
 
 def join_pdert_s(Pp_, rng):  # connect Pp similarity clusters through their common elements,
-    # joined pdert_s include dissimilar elements
+    # joined pdert_s include connected but dissimilar elements
     out_Pp_ = []
 
     while Pp_:
@@ -407,10 +406,8 @@ def join_pdert_s(Pp_, rng):  # connect Pp similarity clusters through their comm
             i += 1
             fjoined = 0
             Pp = Pp_.pop(0)
-            for pdert in Pp.pdert_:
-                pdert_Pps = [Pp for Pp in pdert.Ppt[0]]
-
-                if _Pp not in pdert_Pps:  # check for common Pp
+            for pdert in Pp.pdert_:  # single-level in Pp
+                if _Pp is pdert.Ppt[0][0]:  # Pp is _Pp, same for all levels of nesting in _Pp.pdert_
                     # comp Pp.I -> mI, *_Pp.M?
                     _I = getattr(_Pp, param_names[1][0])  # I only, as in comp pdert, other params anti-correlate
                     I = getattr(Pp, param_names[1][0])
@@ -423,13 +420,12 @@ def join_pdert_s(Pp_, rng):  # connect Pp similarity clusters through their comm
                         _Pp.pdert_ += Pp.pdert_  # or _Pp.pdert_[i] += Pp.pdert_ for deeper nesting?
                         for pdert in Pp.pdert_: pdert.Ppt[0].append(_Pp)
 
-                        # should be 1 here? And the indentation should be one level deeper?
-                        fjoined = 1  # may be joined at multiple points?
-                        break
+                    fjoined = 0  # may be joined at multiple points?
+                    break
             if not fjoined:
                 rng_Pp_.append(Pp)  # append the tested but not joined Pp
 
-        Pp_ = rng_Pp_ + Pp_[:]  # is the same with rng_Pp.extendleft(Pp_)
+        Pp_ = rng_Pp_.extend([Pp_])
         out_Pp_.append(_Pp)
     Pp_[:] = out_Pp_[:]  # keep id
 
