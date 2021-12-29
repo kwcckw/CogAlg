@@ -338,7 +338,7 @@ def intra_Pp_(rootPp, Pp_, Pdert_, hlayers, fPd):  # evaluate for sub-recursion 
                     # extend search if high loc_ave, fixed-range: parallelizable, individual selection is not worth the costs:
                     rng = int(Pp.M / Pp.L / 4)  # ave_rng = 4
                     rPp_ = search_Idert_(Pp, Pdert_, loc_ave * ave_mI, rng)  # comp x variable range, while curr_M
-                    sub_Ppm_[:] = join_pdert_s(rPp_.copy(), rng)  # rdert_ contains P+pdert_s that form rng_Pps
+                    sub_Ppm_[:] == form_rPp_(rPp_, rng)
 
                     if Pp.M > loc_ave_M * 4 and not Pp.dert_:  # 4: looping cost, not spliced Pp, if Pm_'IPpm_.M, +Pp.iM?
                         rdert_ = []
@@ -378,8 +378,11 @@ def search_Idert_(root_Pp, Idert_, loc_ave, rng):  # extended fixed-rng search-r
                     comp_sublayers(idert.P, cdert.P, idert.m)
                 Pp.accum_from(idert, excluded=['x0'])  # Pp params += pdert params
                 idert.Ppt[0] = Pp; Pp.pdert_ += [idert]
-                idert = idert.copy()  # new instance for Pp.pdert_
-                idert.negL = 0; idert.negM = 0  # p,d,m are replaced by comp, i,P are constant
+
+                _idert = idert
+                idert.accum_from(_idert)
+                idert.Ppt = _idert.Ppt
+                idert.P = _idert.P
             else:
                 # idert miss, need to represent discontinuity:
                 idert.negL += 1  # dert scope = negL + 1 + prior rng
@@ -396,39 +399,53 @@ def search_Idert_(root_Pp, Idert_, loc_ave, rng):  # extended fixed-rng search-r
 
 def form_rPp_(rPp_, rng):  # cluster rng-overlapping directional rPps by M sign within the overlap
     out_rPp_ = []  # output clusters
-    x = 0
-    fterm = 1
-    _rPp_ = deque(maxlen=rng)
-    _rPp_.append(rPp_[0])  # wrong, it should be out_rPp initialized with rPp_[0]
+    
+    while rPp_:   
+        _rPp_ = deque(maxlen=rng)
+        _rPp = rPp_.pop(0)
+        current_rng = 0  # rng counter for _rPp, reset for every new _rPp
+        
+        if _rPp.M > 0: 
+            _rPp_.append(_rPp)
+            
+            while rPp_:  # negative rPp will be ignored?
+                current_rng += 1
+                rPp = rPp_.pop(0)
+            
+                if rPp.M > 0:  # segment by sign
+                    _rPp_.append(rPp)  # maxlen=rng  
+                       
+                # fterm is not needed, since we will continue to search regardless if current_rng!=rng
+                if current_rng==rng:
+                    out_rPp_.append(term_rPp(_rPp_)) 
+                    _rPp_ = deque(maxlen=rng)  # reinit _rPp_
+                    break
+                
+            if len(_rPp_) >0:  # remaining packed _rPp_
+                out_rPp_.append(term_rPp(_rPp_))
 
-    for rPp in rPp_[1:]:  # segment by sign
-        for _rPp in _rPp_:
-            if _rPp.M > 0 and rPp.M > 0:
-        # unfinished below:
-                _rPp.accum_from(rPp)  # accumulate params: L += 1; I += rPp.I; D += rPp.I; M += rPp.I; Rdn += rPp.Rdn+rPp.P.Rdn; pdert_ += [rPp]
-                fterm=0
-                break
-            if fterm and len(_rPp_)==rng:
-                term_rPp(_rPp_.popleft)  # , L, I, D, M, Rdn, x0, ix0, pdert_)
-                L=1; I=rPp.I; D=rPp.D; M=rPp.M; Rdn=rPp.Rdn+rPp.P.Rdn; x0=x; ix0=rPp.P.x0; pdert_=[rPp]  # initialize new out_rPp
-
-        _rPp_.append(rPp)  # maxlen=rng
-    for _rPp in _rPp_.popleft:
-        term_rPp( rPp_, L, I, D, M, Rdn, x0, ix0, pdert_)  # pack last Pp
     return out_rPp_
 
 
-def term_rPp(Pp_, L, I, D, M, Rdn, x0, ix0, rPp_):
+def term_rPp(rPp_):
 
-    Pp_M = M / (L *.7)  # .7: ave intra-Pp-match coef, for value reduction with resolution, still non-negative
-    rPp_M  = M - L * ave_M  # cost incr per pdert representations
+    # pack deque of rPp_ into single Pp cluster
+    Pp = CPp()
+    while rPp_:
+        rPp = rPp_.pop()
+        Pp.accum_from(rPp, excluded=['x0', 'ix0'])
+        Pp.pdert_ += [rPp]
+        rPp.rootPp = Pp
+    
+    Pp_M = Pp.M / max(1,(Pp.L *.7))  # .7: ave intra-Pp-match coef, for value reduction with resolution, still non-negative
+    rPp_M  = Pp.M - (Pp.L * ave_M)  # cost incr per pdert representations
     flay_rdn = Pp_M < rPp_M  # Pp vs rPp_ rdn
-    Pp = CPp(L=L, I=I, D=D, M=M, Rdn=Rdn+L+L*flay_rdn, x0=x0, ix0=ix0, flay_rdn=flay_rdn, pdert_=rPp_, sublayers=[[]])
-    for rPp in Pp.rPp_: rPp.Ppt[0] = Pp  # root Pp refs
-    Pp_.append(Pp)
+    Pp.Rdn += Pp.L+ (Pp.L*flay_rdn)
+    Pp.flay_rdn=flay_rdn
     # no immediate normalization: Pp.I /= Pp.L; Pp.D /= Pp.L; Pp.M /= Pp.L; Pp.Rdn /= Pp.L
 
-
+    return Pp
+    
 def sub_search(rootPp, fPd):  # ~line_PPs_root: cross-comp sub_Ps in top sublayer of high-M Pms | high-D Pds, called from intra_Pp_
 
     for pdert in rootPp.pdert_:
