@@ -308,9 +308,12 @@ def intra_Pp_(rootPp, Pp_, Pdert_, hlayers, fPd):  # evaluate for sub-recursion 
     for i, Pp in enumerate(Pp_):
         loc_ave_M = ave_M * Pp.Rdn * hlayers
         if Pp.L > 1 and Pp.M > loc_ave_M:  # min for both forks
-
             loc_ave_M *= (Pp.M / ave_M) / 2
-            iM = sum( [pdert.P.M for pdert in Pp.pdert_])
+            if isinstance(Pp.pdert_[0], Cpdert):
+                iM = sum( [pdert.P.M for pdert in Pp.pdert_])
+            else:
+                iM = sum( [rPp.M for rPp in Pp.pdert_])
+            
             loc_ave = (ave + iM) / 2 * Pp.Rdn * hlayers  # cost per comp
             if fPd:
                 loc_ave *= ave_d; loc_ave_M *= ave_D  # =ave_d?
@@ -376,7 +379,8 @@ def search_Idert_(root_Pp, Idert_, loc_ave, rng):  # extended fixed-rng search-r
             if idert.m > 0:
                 if idert.m > ave_M * 4 and idert.P.sublayers[0] and cdert.P.sublayers[0]:  # 4: init ave_sub coef
                     comp_sublayers(idert.P, cdert.P, idert.m)
-                Pp.accum_from(idert, excluded=['x0'])  # Pp params += pdert params
+                Pp.accum_from(idert, excluded=['x0'], ignore_capital=True)  # Pp params += pdert params
+                Pp.L += 1  # add length of Pp
                 idert.Ppt[0] = [Pp]; Pp.pdert_ += [idert]
                 idert = Cpdert(P=idert.P, Ppt=[[Pp],[]])  # new idert
             else:
@@ -386,6 +390,7 @@ def search_Idert_(root_Pp, Idert_, loc_ave, rng):  # extended fixed-rng search-r
             j += 1
         if idert.m <= 0:  # add last idert if negative:
             Pp.accum_from(idert, excluded=['x0'], ignore_capital=True)  # Pp params += pdert params
+            Pp.L += 1
             idert.Ppt[0] = [Pp]; Pp.pdert_ += [idert]  # single root Pp
 
         Pp_ += [Pp]
@@ -400,17 +405,23 @@ def form_rPp_(pre_rPp_, rng):  # cluster rng-overlapping directional rPps by M s
 
     for pre_rPp in pre_rPp_:
         if pre_rPp.M > 0:
-            if rPp in locals:
+            if "rPp" in locals():
                 # add additions and exclusions:
                 rPp.accum_from(pre_rPp)  # both pre_rPp and rPp.pre_rPp_[-1 |-rng:-1] are positive
+                rPp.pdert_ += [pre_rPp]
             else:
                 rPp = CPp(pdert_=[pre_rPp])  # add params initialization: rPp.accum_from(pre_rPp)?
+                rPp.accum_from(pre_rPp)
                 distance = 1
         else:
             distance += 1  # from next pre_rPp
-            if rPp in locals and distance==rng:
+            if "rPp" in locals() and distance==rng:
                 term_rPp(rPp, rPp_)  # define CrPp to include pre_rPp_?
                 del rPp  # exceeded comp rng, remove from locals
+             
+    if "rPp" in locals():  # terminate leftover rPp
+        term_rPp(rPp, rPp_)
+        
     return rPp_
 
 
@@ -421,7 +432,8 @@ def term_rPp(rPp, rPp_):  # Pp_, L, I, D, M, Rdn, x0, ix0, rPp_):
     rPp_M  = rPp.M - rPp.L * ave_M  # cost incr per pdert representations
     rPp.flay_rdn = Pp_M < rPp_M  # Pp vs rPp_ rdn
     # Pp = CPp(L=L, I=I, D=D, M=M, Rdn=Rdn+L+L*flay_rdn, x0=x0, ix0=ix0, flay_rdn=flay_rdn, pdert_=rPp_, sublayers=[[]])
-    for pre_rPp in rPp.pre_rPp_: pre_rPp.Ppt[0] = rPp  # root Pp refs
+    for pre_rPp in rPp.pdert_:  # rPp.pdert_ is pre_rPp_
+        pre_rPp.rootPp = rPp  # root Pp refs  (Pp object doesn't have Ppt, so we use rootPp?)
     rPp_.append(rPp)
     # no immediate normalization: Pp.I /= Pp.L; Pp.D /= Pp.L; Pp.M /= Pp.L; Pp.Rdn /= Pp.L
 
@@ -429,7 +441,12 @@ def term_rPp(rPp, rPp_):  # Pp_, L, I, D, M, Rdn, x0, ix0, rPp_):
 def sub_search(rootPp, fPd):  # ~line_PPs_root: cross-comp sub_Ps in top sublayer of high-M Pms | high-D Pds, called from intra_Pp_
 
     for pdert in rootPp.pdert_:
-        P = pdert.P
+        
+        if isinstance(pdert, Cpdert):
+            P = pdert.P
+        else:
+            P = pdert.rootPp
+
         if P.sublayers[0]:  # not empty sublayer
             subset = P.sublayers[0][0]  # single top sublayer subset
             for fsubPd, sub_P_ in enumerate([subset[2], subset[3]]):  # sub_Pm_, sub_Pd_
