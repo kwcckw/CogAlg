@@ -359,13 +359,33 @@ def intra_Pp_(rootPp, Pp_, Pdert_, hlayers, fPd):  # evaluate for sub-recursion 
 def search_Idert_(root_Pp, Idert_, loc_ave, rng):  # extended fixed-rng search-right for core I at local ave: lower m
 
     Rdert_ = []
-    idert_ = root_Pp.pdert_.copy()
-    for idert in idert_: idert.Ppt = [[],[]]  # clear higher-level ref for current level
+
+    if isinstance(root_Pp.pdert_[0], Cpdert):
+        idert_ = root_Pp.pdert_.copy()
+        for idert in idert_: 
+            idert.Ppt = [[],[]]  # clear higher-level ref for current level
+            idert.m = idert.d = 0  # reset from rng=1 comp, if no rng comp
+    else:  
+        # each idert is Rdert from previous level, convert it to pdert instance
+        Rdert_ = root_Pp.pdert_.copy()
+        idert_ = []
+        for Rdert in Rdert_: 
+            idert = Cpdert()
+            idert.accum_from(Rdert, ignore_capital=True)
+            idert.m = idert.d = 0  # reset from rng=1 comp, if no rng comp
+            idert_.append(idert)
+
+        RIdert_ = Idert_.copy()
+        Idert_ = []
+        for Rdert in RIdert_: 
+            idert = Cpdert()
+            idert.accum_from(Rdert, ignore_capital=True)
+            Idert_.append(idert)
 
     for i, idert in enumerate(idert_):  # form fixed-rng Pps per idert.P, consecutive Pps overlap within rng-1
 
         j = i + root_Pp.x0 + 1  # get compared index in root Idert_, start at step=2 or 1 + prior rng, step=1 was in cross-comp
-        idert.m = idert.d = 0  # reset from rng=1 comp, if no rng comp
+        
         Rdert = CPp()
         while j - (i + root_Pp.x0 + 1) < rng and j < len(Idert_) - 1:
             # cross-comp within rng:
@@ -411,7 +431,7 @@ def form_rPp_(Rdert_, rng):  # cluster rng-overlapping directional rPps by M sig
             distance = 1
         else:
             distance += 1  # from next pre_rPp
-            if "rPp" in locals() and distance==rng:
+            if "rPp" in locals() and distance>=rng:  # we need >= here, if rng = 1 after the init and distance += 1 in the next loop, distance will be > rng
                 term_rPp(rPp, rPp_)  # rPp.pdert_ is Rdert_
                 del rPp  # exceeded comp rng, remove from locals
 
