@@ -337,12 +337,20 @@ def intra_Pp_(rootPp, Pp_, Pdert_, hlayers, fPd):  # evaluate for sub-recursion 
                     Pp.sublayers = [[(sub_Ppm_, sub_Ppd_)]]
                     # extend search if high loc_ave, fixed-range: parallelizable, individual selection is not worth the costs:
                     rng = int(Pp.M / Pp.L / 4)  # ave_rng = 4
-                    Rdert_ = search_Idert_(Pp, Pdert_, loc_ave * ave_mI, rng)  # rng comp, rPp_ is really pre_rPp_ before form_rPp_
+
+                    if isinstance(Pp_[0].pdert_[0], CPp):  # pdert_ is Rdert_
+                        idert_ = [Rdert.pdert_[0].copy() for Rdert in Pp.pdert_]
+                    else: idert_ = Pp.pdert_.copy()
+
+                    Rdert_ = search_Idert_(Pp, idert_, Pdert_, loc_ave * ave_mI, rng)  # rng comp, rPp_ is really pre_rPp_ before form_rPp_
                     rPp_ = form_rPp_(Rdert_, rng)
                     sub_Ppm_[:] = rPp_
                     if Pp.M > loc_ave_M * 4 and not Pp.dert_:  # 4: looping cost, not spliced Pp, if Pm_'IPpm_.M, +Pp.iM?
                         Rdert_ = []
-                        for rPp in rPp_: Rdert_ += rPp.pdert_
+                        for rPp in rPp_:
+                            for Rdert in rPp.pdert_:  # rPp.pdert_ is Rdert_
+                                Rdert_ += [Rdert.pdert_[0]]
+                                # only Rdert_[0] is needed to restore rootPp.pdert_, the rest of Rdert_s overlaps between rPps
                         intra_Pp_(Pp, sub_Ppm_, Rdert_, hlayers + 1, fPd)  # recursive rng+ per joined cluster, no der+ in redundant Pds?
                 else:
                     Pp.sublayers += [[]]  # empty subset to preserve index in sublayer, or increment index of subset?
@@ -356,31 +364,12 @@ def intra_Pp_(rootPp, Pp_, Pdert_, hlayers, fPd):  # evaluate for sub-recursion 
 
     # no return, Pp_ is changed in-place
 
-def search_Idert_(root_Pp, Idert_, loc_ave, rng):  # extended fixed-rng search-right for core I at local ave: lower m
+def search_Idert_(root_Pp, idert_, Idert_, loc_ave, rng):  # extended fixed-rng search-right for core I at local ave: lower m
 
     Rdert_ = []
-
-    if isinstance(root_Pp.pdert_[0], Cpdert):
-        idert_ = root_Pp.pdert_.copy()
-        for idert in idert_: 
-            idert.Ppt = [[],[]]  # clear higher-level ref for current level
-            idert.m = idert.d = 0  # reset from rng=1 comp, if no rng comp
-    else:  
-        # each idert is Rdert from previous level, convert it to pdert instance
-        Rdert_ = root_Pp.pdert_.copy()
-        idert_ = []
-        for Rdert in Rdert_: 
-            idert = Cpdert()
-            idert.accum_from(Rdert, ignore_capital=True)
-            idert.m = idert.d = 0  # reset from rng=1 comp, if no rng comp
-            idert_.append(idert)
-
-        RIdert_ = Idert_.copy()
-        Idert_ = []
-        for Rdert in RIdert_: 
-            idert = Cpdert()
-            idert.accum_from(Rdert, ignore_capital=True)
-            Idert_.append(idert)
+    for idert in idert_: 
+        idert.Ppt = [[],[]]  # clear higher-level ref for current level
+        idert.m = idert.d = 0  # reset from rng=1 comp, if no rng comp
 
     for i, idert in enumerate(idert_):  # form fixed-rng Pps per idert.P, consecutive Pps overlap within rng-1
 
