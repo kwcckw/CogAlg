@@ -104,7 +104,8 @@ def line_PPs_root(P_t):  # P_T is P_t = [Pm_, Pd_];  higher-level input is impli
                     if (fPpd and param_name == "D_") or (not fPpd and param_name == "I_"):
                         if not fPpd:
                             splice_Ps(Pp_, dert1_, dert2_, fPd, fPpd)  # splice eval by Pp.M in Ppm_, for Pms in +IPpms or Pds in +DPpm
-                        intra_Pp_(None, Pp_, Pdert_, 1, fPpd)  # eval der+ or rng+ per Pp
+                        rootPp = CPp(sublayers=[Pp_])  # 1st call only
+                        intra_Pp_(rootPp, Pdert_, 1, fPpd)  # eval der+ or rng+ per Pp
                     P_ttt.append(Pp_)  # implicit nesting
         else:
             P_ttt.append( [[] for _ in range(8)])  # pack 8 empty P_s to preserve index
@@ -299,11 +300,12 @@ def intra_P(P, rdn, rng, fPd):  # this is a rerun of line_Ps
     P.sublayers += comb_sublayers  # no return
 
 
-def intra_Pp_(rootPp, Pp_, Pdert_, hlayers, fPd):  # evaluate for sub-recursion in line Pm_, pack results into sub_Pm_
+def intra_Pp_(rootPp, Pdert_, hlayers, fPd):  # evaluate for sub-recursion in line Pm_, pack results into sub_Pm_
     '''
     each Pp may be compared over incremental range or derivation, as in line_patterns but with higher local ave
     '''
     comb_sublayers = []  # combine into root P sublayers[1:], each nested to depth = sublayers[n]
+    Pp_ = rootPp.sublayers[0][fPd]
 
     for i, Pp in enumerate(Pp_):
         loc_ave_M = ave_M * Pp.Rdn * hlayers
@@ -325,33 +327,24 @@ def intra_Pp_(rootPp, Pp_, Pdert_, hlayers, fPd):  # evaluate for sub-recursion 
                     sub_Ppm_[:] = form_Pp_(ddert_, fPd=False)
                     sub_Ppd_[:] = form_Pp_(ddert_, fPd=True)
                     if abs(Pp.D) + Pp.M > loc_ave_M * 4:  # 4: looping search cost, diff induction per Pd_'DPpd_, +Pp.iD?
-                        intra_Pp_(Pp, sub_Ppd_, None, hlayers+1, fPd)  # recursive der+, no rng+: Pms are redundant?
+                        intra_Pp_(Pp, None, hlayers+1, fPd)  # recursive der+, no need for Pdert_, no rng+: Pms are redundant?
                 else:
                     Pp.sublayers += [[]]  # empty subset to preserve index in sublayer, or increment index of subset?
             else:
                 # rng+ fork
                 if Pp.M / Pp.L > loc_ave_M + 4:  # 4: search cost, + Pp.iM?
-
                     sub_search(Pp, True)  # search in top sublayer, eval by pdert.d
                     sub_Ppm_, sub_Ppd_ = [], []
                     Pp.sublayers = [[(sub_Ppm_, sub_Ppd_)]]
                     # extend search if high loc_ave, fixed-range: parallelizable, individual selection is not worth the costs:
                     rng = int(Pp.M / Pp.L / 4)  # ave_rng = 4
-
-                    if isinstance(Pp_[0].pdert_[0], CPp):  # pdert_ is Rdert_
-                        idert_ = [Rdert.pdert_[0].copy() for Rdert in Pp.pdert_]
-                    else: idert_ = Pp.pdert_.copy()
-
-                    Rdert_ = search_Idert_(Pp, idert_, Pdert_, loc_ave * ave_mI, rng)  # rng comp, rPp_ is really pre_rPp_ before form_rPp_
+                    idert_ = rootPp.pdert_[Pp.x0: Pp.x0+Pp.L].copy()  # mapped Pp.pdert_
+                    Rdert_ = search_Idert_(Pp, idert_, Pdert_, loc_ave * ave_mI, rng)  # each Rdert contains fixed-rng pdert_
                     rPp_ = form_rPp_(Rdert_, rng)
                     sub_Ppm_[:] = rPp_
                     if Pp.M > loc_ave_M * 4 and not Pp.dert_:  # 4: looping cost, not spliced Pp, if Pm_'IPpm_.M, +Pp.iM?
-                        Rdert_ = []
-                        for rPp in rPp_:
-                            for Rdert in rPp.pdert_:  # rPp.pdert_ is Rdert_
-                                Rdert_ += [Rdert.pdert_[0]]
-                                # only Rdert_[0] is needed to restore rootPp.pdert_, the rest of Rdert_s overlaps between rPps
-                        intra_Pp_(Pp, sub_Ppm_, Rdert_, hlayers + 1, fPd)  # recursive rng+ per joined cluster, no der+ in redundant Pds?
+                        rdert_ = Pdert_[rootPp.x0: Pp.x0 + Pp.L].copy()  # mapped subset
+                        intra_Pp_(Pp, rdert_, hlayers + 1, fPd)  # recursive rng+, no der+ in redundant Pds?
                 else:
                     Pp.sublayers += [[]]  # empty subset to preserve index in sublayer, or increment index of subset?
 
@@ -367,14 +360,12 @@ def intra_Pp_(rootPp, Pp_, Pdert_, hlayers, fPd):  # evaluate for sub-recursion 
 def search_Idert_(root_Pp, idert_, Idert_, loc_ave, rng):  # extended fixed-rng search-right for core I at local ave: lower m
 
     Rdert_ = []
-    for idert in idert_: 
-        idert.Ppt = [[],[]]  # clear higher-level ref for current level
-        idert.m = idert.d = 0  # reset from rng=1 comp, if no rng comp
+    for idert in idert_: idert.Ppt = [[],[]]  # clear higher-level ref for current level
 
     for i, idert in enumerate(idert_):  # form fixed-rng Pps per idert.P, consecutive Pps overlap within rng-1
 
         j = i + root_Pp.x0 + 1  # get compared index in root Idert_, start at step=2 or 1 + prior rng, step=1 was in cross-comp
-        
+        idert.m = idert.d = 0  # reset from rng=1 comp, if no rng comp
         Rdert = CPp()
         while j - (i + root_Pp.x0 + 1) < rng and j < len(Idert_) - 1:
             # cross-comp within rng:
@@ -407,7 +398,11 @@ def search_Idert_(root_Pp, idert_, Idert_, loc_ave, rng):  # extended fixed-rng 
 def form_rPp_(Rdert_, rng):  # cluster rng-overlapping directional rPps by M sign
     rPp_ = []  # output clusters
     distance = 1
-
+    '''
+    before clustering, need to adjust Rdert.Ms for overlaps between Rderts, 
+    by rdn+=1 for same pderts in lower-M Rdert: 
+    scan overlapping pderts of all Rderts in rng of _Rdert, if positive, they should be same as in _RIdert?
+    '''
     for Rdert in Rdert_:
         if Rdert.M > 0:
             if "rPp" in locals():
@@ -420,7 +415,7 @@ def form_rPp_(Rdert_, rng):  # cluster rng-overlapping directional rPps by M sig
             distance = 1
         else:
             distance += 1  # from next pre_rPp
-            if "rPp" in locals() and distance>=rng:  # we need >= here, if rng = 1 after the init and distance += 1 in the next loop, distance will be > rng
+            if "rPp" in locals() and distance==rng:
                 term_rPp(rPp, rPp_)  # rPp.pdert_ is Rdert_
                 del rPp  # exceeded comp rng, remove from locals
 
@@ -436,7 +431,7 @@ def term_rPp(rPp, rPp_):  # Pp_, L, I, D, M, Rdn, x0, ix0, rPp_):
     Pp_M = rPp.M / (rPp.L *.7)  # .7: ave intra-Pp-match coef, for value reduction with resolution, still non-negative
     rPp_M  = rPp.M - rPp.L * ave_M  # cost incr per pdert representations
     rPp.flay_rdn = Pp_M < rPp_M  # Pp vs rPp_ rdn
-    # Pp = CPp(L=L, I=I, D=D, M=M, Rdn=Rdn+L+L*flay_rdn, x0=x0, ix0=ix0, flay_rdn=flay_rdn, pdert_=rPp_, sublayers=[[]])
+    # rPp = CPp(L=L, I=I, D=D, M=M, Rdn=Rdn+L+L*flay_rdn, x0=x0, ix0=ix0, flay_rdn=flay_rdn, pdert_=rPp_, sublayers=[[]])
     for Rdert in rPp.pdert_:  # rPp.pdert_ is Rdert_
         Rdert.rootPp = rPp  # rootPp is Ppt
     rPp_.append(rPp)
