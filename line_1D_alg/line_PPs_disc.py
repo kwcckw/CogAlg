@@ -100,13 +100,21 @@ def line_PPs_root(P_t):  # P_T is P_t = [Pm_, Pd_];  higher-level input is impli
             # P_tt=[] if nested
             for param_name, Pdert_ in zip(param_names, Pdert_t):  # Pdert_ -> Pps:
                 for fPpd in 0, 1:  # 0-> Ppm_, 1-> Ppd_: more anti-correlated than Pp_s of different params
-                    Pp_ = form_Pp_(Pdert_, fPpd)
+                    if fPpd:
+                        Ppm_ = []
+                        Ppd_ = form_Pp_(Pdert_, fPpd)
+                        P_ttt.append(Ppd_)  # implicit nesting
+                    else:
+                        Ppm_ = form_Pp_(Pdert_, fPpd)
+                        Ppd_ = [] 
+                        P_ttt.append(Ppm_)  # implicit nesting
+                        if param_name == "I_": splice_Ps(Ppm_, dert1_, dert2_, fPd, fPpd)  # splice eval by Pp.M in Ppm_, for Pms in +IPpms or Pds in +DPpm
+        
                     if (fPpd and param_name == "D_") or (not fPpd and param_name == "I_"):
-                        if not fPpd:
-                            splice_Ps(Pp_, dert1_, dert2_, fPd, fPpd)  # splice eval by Pp.M in Ppm_, for Pms in +IPpms or Pds in +DPpm
-                        rootPp = CPp(sublayers=[Pp_])  # 1st call only
+                        rootPp = CPp(pdert_=Pdert_, sublayers=[[(Ppm_, Ppd_)]])  # 1st call only
+                        
                         intra_Pp_(rootPp, Pdert_, 1, fPpd)  # eval der+ or rng+ per Pp
-                    P_ttt.append(Pp_)  # implicit nesting
+                    
         else:
             P_ttt.append( [[] for _ in range(8)])  # pack 8 empty P_s to preserve index
 
@@ -305,7 +313,7 @@ def intra_Pp_(rootPp, Pdert_, hlayers, fPd):  # evaluate for sub-recursion in li
     each Pp may be compared over incremental range or derivation, as in line_patterns but with higher local ave
     '''
     comb_sublayers = []  # combine into root P sublayers[1:], each nested to depth = sublayers[n]
-    Pp_ = rootPp.sublayers[0][fPd]
+    Pp_ = rootPp.sublayers[0][0][fPd]
 
     for i, Pp in enumerate(Pp_):
         loc_ave_M = ave_M * Pp.Rdn * hlayers
@@ -338,7 +346,10 @@ def intra_Pp_(rootPp, Pdert_, hlayers, fPd):  # evaluate for sub-recursion in li
                     Pp.sublayers = [[(sub_Ppm_, sub_Ppd_)]]
                     # extend search if high loc_ave, fixed-range: parallelizable, individual selection is not worth the costs:
                     rng = int(Pp.M / Pp.L / 4)  # ave_rng = 4
-                    idert_ = rootPp.pdert_[Pp.x0: Pp.x0+Pp.L].copy()  # mapped Pp.pdert_
+                    if isinstance(rootPp.pdert_[0], CPp):  # when rootPp is rPp and contains Rdert, extract their pderts
+                        idert_ = [Rdert.pdert_[0].copy() for Rdert in rootPp.pdert_]
+                    else:
+                        idert_ = rootPp.pdert_[Pp.x0: Pp.x0+Pp.L].copy()  # mapped Pp.pdert_
                     Rdert_ = search_Idert_(Pp, idert_, Pdert_, loc_ave * ave_mI, rng)  # each Rdert contains fixed-rng pdert_
                     rPp_ = form_rPp_(Rdert_, rng)
                     sub_Ppm_[:] = rPp_
@@ -403,6 +414,14 @@ def form_rPp_(Rdert_, rng):  # cluster rng-overlapping directional rPps by M sig
     by rdn+=1 for same pderts in lower-M Rdert: 
     scan overlapping pderts of all Rderts in rng of _Rdert, if positive, they should be same as in _RIdert?
     '''
+    # draft
+    for i, _Rdert in enumerate(Rdert_):
+        for Rdert in Rdert_[i:i+rng]:  # rng overlapped Rderts of _Rdert
+            if _Rdert.M > Rdert.M:  # Rdert M is lower
+                for pdert in Rdert.pdert_: pdert.rdn += 1  # increase rdn of lower M pderts
+            else:  # _Rdert's M is lower
+                for _pdert in _Rdert.pdert_: _pdert.rdn += 1  # increase rdn of lower M pderts
+    
     for Rdert in Rdert_:
         if Rdert.M > 0:
             if "rPp" in locals():
