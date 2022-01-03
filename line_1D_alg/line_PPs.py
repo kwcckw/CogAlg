@@ -351,9 +351,32 @@ def intra_Pp_(rootPp, Pdert_, hlayers, fPd):  # evaluate for sub-recursion in li
                 else:
                     Pp.sublayers += []  # empty subset to preserve index in sublayer, or increment index of subset?
 
-        comb_sublayers = [comb_subset_ + subset_ for comb_subset_, subset_ in
-                          zip_longest(comb_sublayers, Pp.sublayers, fillvalue=[])
-                         ]  # splice only the top layer of nesting per sublayer, incrementally nested in deeper sublayers
+        # draft to pack new structure of Pp.sublayers (unpacked version)
+        new_comb_sublayers = []
+        for comb_subset_, subset_ in zip_longest(comb_sublayers, Pp.sublayers, fillvalue=[]):
+            # init current depth
+            sub_Ppm_ = []
+            sub_Ppd_ = []
+            
+            # current layer subset is not empty, pack their sub_Ppm and sub_Ppd to layer wide sub_Ppm_ and sub_Ppd_
+            if subset_:  
+                sub_Ppm_.append(subset_[0])  
+                sub_Ppd_.append(subset_[1])
+            # preserve index, pack empty list 
+            else:  
+                sub_Ppm_.append([])
+                sub_Ppd_.append([])
+
+            # if combined subset of current layer is not empty, pack current layer sub_Ppm_ and sub_Ppd_ as new element
+            if comb_subset_:
+                comb_subset_[0] += sub_Ppm_
+                comb_subset_[1] += sub_Ppd_
+            # if combined subset of current layer is empty, set them as current layer sub_Ppm_ and sub_Ppd_ as new element
+            else:
+                comb_subset_ = [sub_Ppm_, sub_Ppd_]
+            
+            new_comb_sublayers.append(comb_subset_)  # each element is each depth top layer Ppm_ and Ppd_
+        comb_sublayers = new_comb_sublayers
 
     rootPp.sublayers += comb_sublayers  # add new sublayer
     # no return, Pp_ is changed in-place
@@ -408,18 +431,22 @@ def form_rPp_(Rdert_, rng):  # cluster rng-overlapping directional rPps by M sig
     '''
     # draft
     for i, _Rdert in enumerate(Rdert_):
-        for Rdert in Rdert_[i:i+rng]:  # rng overlapped Rderts of _Rdert
-            if _Rdert.M > Rdert.M:  # Rdert M is lower
-                '''
-                This should only be done on overlapping pderts, and the overlap between Rdert and _ Rdert is always partial.
-                So, we need to check the index of those pderts:
-                '''
-                for pdert in Rdert.pdert_: pdert.rdn += 1  # increase rdn of lower M pderts
-            else:  # _Rdert's M is lower
-                for _pdert in _Rdert.pdert_: _pdert.rdn += 1  # increase rdn of lower M pderts
+        for j, Rdert in enumerate(Rdert_[i:], start=i):     
+            overlap = rng - (j-i)
+            if overlap:
+                if _Rdert.M > Rdert.M:  # Rdert M is lower
+                    '''
+                    This should only be done on overlapping pderts, and the overlap between Rdert and _ Rdert is always partial.
+                    So, we need to check the index of those pderts:
+                    '''
+                    for pdert in Rdert.pdert_: pdert.rdn += 1  # increase rdn of lower M pderts
+                else:  # _Rdert's M is lower
+                    for _pdert in _Rdert.pdert_: _pdert.rdn += 1  # increase rdn of lower M pderts
+            else:
+                break  # break from inner for loop
 
     for Rdert in Rdert_:
-        if Rdert.M > 0:
+        if Rdert.M > -100000:
             if "rPp" in locals():
                 # additions and exclusions, exclude overlap? or individual vars accum and init is clearer?
                 rPp.accum_from(Rdert)  # both Rdert and any of Rdert_[-rng:-1] are positive
