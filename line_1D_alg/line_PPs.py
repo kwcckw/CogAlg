@@ -44,7 +44,7 @@ class CPp(CP):
     negL = int  # in rng_Pps only, summed in L, no need to be separate?
     _negM = int  # for search left, within adjacent neg Ppm only?
     _negL = int  # left-most compared distance from Pp.x0
-    sublayers = lambda: [[]]  # nested list
+    sublayers = lambda: [([],[])]  # nested list
     subDerts = list
     sublevels = list  # levels of composition per generic Pp: P ) Pp ) Ppp...
     rootPp = object  # to replace locals for merging
@@ -196,7 +196,7 @@ def term_Pp(Pp_, L, I, D, M, Rdn, x0, ix0, pdert_, fPd):
     pdert_V  = value - L * ave_M * (ave_D * fPd)  # cost incr per pdert representations
     flay_rdn = Pp_value < pdert_V
     # Pp vs Pdert_ rdn
-    Pp = CPp(L=L, I=I, D=D, M=M, Rdn=Rdn+L+L*flay_rdn, x0=x0, ix0=ix0, flay_rdn=flay_rdn, pdert_=pdert_, sublayers=[[]])
+    Pp = CPp(L=L, I=I, D=D, M=M, Rdn=Rdn+L+L*flay_rdn, x0=x0, ix0=ix0, flay_rdn=flay_rdn, pdert_=pdert_, sublayers=[([],[])])
     for pdert in Pp.pdert_: pdert.Ppt[fPd] = Pp  # root Pp refs
     Pp_.append(Pp)
     # no immediate normalization: Pp.I /= Pp.L; Pp.D /= Pp.L; Pp.M /= Pp.L; Pp.Rdn /= Pp.L
@@ -306,9 +306,8 @@ def intra_Pp_(rootPp, Pdert_, hlayers, fPd):  # evaluate for sub-recursion in li
     '''
     each Pp may be compared over incremental range or derivation, as in line_patterns but with higher local ave
     '''
-    comb_sublayers = []  # combine into root P sublayers[1:], each nested to depth = sublayers[n]
+    comb_sublayers = [([],[])]  # combine into root P sublayers[1:], each nested to depth = sublayers[n]
     Pp_ = rootPp.sublayers[0][fPd]
-
     for i, Pp in enumerate(Pp_):
         loc_ave_M = ave_M * Pp.Rdn * hlayers
         if Pp.L > 1 and Pp.M > loc_ave_M:  # min for both forks
@@ -332,7 +331,7 @@ def intra_Pp_(rootPp, Pdert_, hlayers, fPd):  # evaluate for sub-recursion in li
                         intra_Pp_(Pp, None, hlayers+1, fPd)  # recursive der+, no need for Pdert_, no rng+: Pms are redundant?
 
                 else:  # this would add a sublayer, not needed?:
-                    Pp.sublayers += []  # empty subset to preserve index in sublayer, or increment index of subset?
+                    Pp.sublayers += [([],[])]  # empty subset to preserve index in sublayer, or increment index of subset?
             else:
                 # rng+ fork
                 if Pp.M / Pp.L > loc_ave_M + 4:  # 4: search cost, + Pp.iM?
@@ -349,33 +348,14 @@ def intra_Pp_(rootPp, Pdert_, hlayers, fPd):  # evaluate for sub-recursion in li
                         rdert_ = Pdert_[rootPp.x0: Pp.x0 + Pp.L].copy()  # mapped subset
                         intra_Pp_(Pp, rdert_, hlayers + 1, fPd)  # recursive rng+, no der+ in redundant Pds?
                 else:
-                    Pp.sublayers += []  # empty subset to preserve index in sublayer, or increment index of subset?
+                    Pp.sublayers += [([],[])]  # empty subset to preserve index in sublayer, or increment index of subset?
 
-        # draft to pack new structure of Pp.sublayers (unpacked version)
+        # draft to pack new structure of Pp.sublayers
         new_comb_sublayers = []
-        for comb_subset_, subset_ in zip_longest(comb_sublayers, Pp.sublayers, fillvalue=[]):
-            # init current depth
-            sub_Ppm_ = []
-            sub_Ppd_ = []
-
-            # current layer subset is not empty, pack their sub_Ppm and sub_Ppd to layer wide sub_Ppm_ and sub_Ppd_
-            if subset_:
-                sub_Ppm_.append(subset_[0])
-                sub_Ppd_.append(subset_[1])
-            # preserve index, pack empty list
-            else:
-                sub_Ppm_.append([])
-                sub_Ppd_.append([])
-
-            # if combined subset of current layer is not empty, pack current layer sub_Ppm_ and sub_Ppd_ as new element
-            if comb_subset_:
-                comb_subset_[0] += sub_Ppm_
-                comb_subset_[1] += sub_Ppd_
-            # if combined subset of current layer is empty, set them as current layer sub_Ppm_ and sub_Ppd_ as new element
-            else:
-                comb_subset_ = [sub_Ppm_, sub_Ppd_]
-
-            new_comb_sublayers.append(comb_subset_)  # each element is each depth top layer Ppm_ and Ppd_
+        for (comb_sub_Ppm_, comb_sub_Ppd_), (sub_Ppm_, sub_Ppd_) in zip_longest(comb_sublayers, Pp.sublayers, fillvalue=([],[])):
+            comb_sub_Ppm_ += [sub_Ppm_]
+            comb_sub_Ppd_ += [sub_Ppd_]            
+            new_comb_sublayers.append((comb_sub_Ppm_, comb_sub_Ppd_))  # each element is each depth top layer Ppm_ and Ppd_
         comb_sublayers = new_comb_sublayers
 
     rootPp.sublayers += comb_sublayers  # add new sublayer
