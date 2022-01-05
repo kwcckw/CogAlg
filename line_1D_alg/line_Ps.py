@@ -61,8 +61,8 @@ ave_D = 5  # min |D| for initial incremental-derivation comparison(d_)
 ave_nP = 5  # average number of sub_Ps in P, to estimate intra-costs? ave_rdn_inc = 1 + 1 / ave_nP # 1.2
 ave_rdm = .5  # obsolete: average dm / m, to project bi_m = m * 1.5
 ave_splice = 50  # to merge a kernel of 3 adjacent Ps
-init_y = 500  # starting row, set 0 for the whole frame, mostly not needed
-halt_y = 502  # ending row, set 999999999 for arbitrary image
+init_y = 0  # starting row, set 0 for the whole frame, mostly not needed
+halt_y = 601  # ending row, set 999999999 for arbitrary image
 '''
     Conventions:
     postfix 't' denotes tuple, multiple ts is a nested tuple
@@ -89,7 +89,7 @@ def line_Ps_root(pixel_):  # Ps: patterns, converts frame_of_pixels to frame_of_
     Pm_ = form_P_(None, dert_, rdn=1, rng=1, fPm=True)  # rootP=None, eval intra_P_ (calls form_P_)
     Pd_ = form_P_(None, dert_, rdn=1, rng=1, fPm=False)
 
-    return [Pm_, Pd_]  # P_t: input to level 2
+    return dert_, [Pm_, Pd_]  # P_t: input to level 2
 
 
 def form_P_(rootP, dert_, rdn, rng, fPm):  # accumulation and termination, rdn and rng are pass-through intra_P_

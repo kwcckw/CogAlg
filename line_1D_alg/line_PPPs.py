@@ -37,7 +37,10 @@ def line_recursive(p_):
     Specific outputs: P_t = line_Ps_root(), Pp_ttt = line_PPs_root(), Ppp_ttttt = line_PPPs_root()
     if pipeline: output per P termination, append till min iP_ len, concatenate across frames
     '''
-    return level_recursion( line_PPs_root( line_Ps_root(p_)))  # returns P_T_
+
+    Pdert_, P_t = line_Ps_root(p_)
+    rootPp =  line_PPs_root(Pdert_, P_t)
+    # return level_recursion(rootPp)  # returns P_T_
 
 def level_recursion(P_T_):  # P_T_: 2P_, 16P_, 128P_., each level is implicitly nested to the depth = 1 + 2*elevation
 
