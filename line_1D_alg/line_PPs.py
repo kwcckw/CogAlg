@@ -46,8 +46,8 @@ class CPp(CP):
     _negL = int  # left-most compared distance from Pp.x0
     sublayers = list  # lambda: [([],[])]  # nested Ppm_ and Ppd_
     subDerts = list
-    sublevels = list  # levels of composition per generic Pp: P ) Pp ) Ppp...
-    rootPp = object  # to replace locals for merging
+    # sublevels = list  # levels of composition per generic Pp: P ) Pp ) Ppp...
+    root = object  # higher Pp, to replace locals for merging
     # layer1: iL, iI, iD, iM, iRdn: summed P params
 
 
@@ -82,7 +82,7 @@ aves = [ave_mL, ave_mI, ave_mD, ave_mM]
 '''
     Conventions:
     postfix 't' denotes tuple, multiple ts is a nested tuple
-    (usually the nesting is implicit, actual structure is flat list)
+    (or flat list if selective access from sublayers[0]?)
     postfix '_' denotes array name, vs. same-name elements
     prefix '_'  denotes prior of two same-name variables
     prefix 'f'  denotes flag
@@ -90,33 +90,31 @@ aves = [ave_mL, ave_mI, ave_mD, ave_mM]
 '''
 
 def line_PPs_root(Pdert_, P_t):  # P_T is P_t = [Pm_, Pd_];  higher-level input is implicitly nested to the depth = 1 + 2*elevation (level counter)
+
     norm_feedback(P_t)  # before processing
-    rootPp = CPp(pdert_=Pdert_, sublayers=[P_t, []])  # each new element is a layer's subsets?
-    current_subset = rootPp.sublayers[-1]  # we need to get current_subset as separated variable here, since number of element in rootPp.sublayers will be increased in the intra_Pp process
-    
+    root = CPp(pdert_=Pdert_, sublayers=[P_t])  # input sublayers are sublevels
+
     for fPd, P_ in enumerate(P_t):  # fPd: Pm_ or Pd_, wrong order?
         if len(P_) > 1:
             Pdert_t, dert1_, dert2_ = cross_comp(P_, fPd)  # Pdert_t: Ldert_, Idert_, Ddert_, Mdert_ (tuples of derivatives per P param)
             sum_rdn_(param_names, Pdert_t, fPd)  # sum cross-param redundancy per pdert, to evaluate for deeper processing
-            # P_tt=[] if nested
+            i = len(root.sublayers)
+            sublayer = []
             for param_name, Pdert_ in zip(param_names, Pdert_t):  # Pdert_ -> Pps:
                 subset = []
-                current_subset += [subset]  # add subset first? since they will be added regardless of fPpd
-
                 for fPpd in 0, 1:  # 0-> Ppm_, 1-> Ppd_: more anti-correlated than Pp_s of different params
                     Pp_ = form_Pp_(Pdert_, fPpd)
                     subset.append(Pp_)
                     if (fPpd and param_name == "D_") or (not fPpd and param_name == "I_"):
                         if not fPpd:
                             splice_Ps(Pp_, dert1_, dert2_, fPd, fPpd)  # splice eval by Pp.M in Ppm_, for Pms in +IPpms or Pds in +DPpm
-                        intra_Pp_(rootPp, subset, Pdert_, 1, fPpd)  # eval der+ or rng+ per Pp
-                    # P_ttt.append(Pp_)  # implicit nesting in rootPp, redundant to initialization above?
-                    # yea, actually P_ttt is not needed now, we can just get them from sublayers
+                        intra_Pp_(root, subset, Pdert_, 1, fPpd)  # eval der+ or rng+ per Pp
 
-    # not sure need this anymore, same with sublayers
-    # rootPp.sublevels = [P_t, P_ttt]  # those are sublevels of rootPp, but P_t is also ?
+                sublayer += subset
+            if any(sublayer):
+                root.sublayers.insert(i, sublayer)  # root.sublayers may get deeper than i in intra_Pp
 
-    return rootPp  # not P_T_, contains 1st level and 2nd level outputs
+    return root  # contains 1st level and 2nd level outputs
 
 
 def cross_comp(P_, fPd):  # cross-compare patterns within horizontal line
@@ -311,10 +309,11 @@ def intra_Pp_(rootPp, subset, Pdert_, hlayers, fPd):  # evaluate for sub-recursi
     each Pp may be compared over incremental range or derivation, as in line_patterns but with higher local ave
     '''
     comb_sublayers = []  # combine into root P sublayers[1:], each nested to depth = sublayers[n]
-    Pp_ = subset[fPd]  # we need to parse subset here, since it is 4 tuples from line_PPs_root, while 2 tuples from the recursive calls
+    Pp_ = subset[fPd]  # subset because sublayer is 8-tuple from line_PPs_root, but 2-tuple from intra_Pp_
+
     for i, Pp in enumerate(Pp_):
         loc_ave_M = ave_M * Pp.Rdn * hlayers
-        if Pp.L > 1 and Pp.M > loc_ave_M:  # min for both forks 
+        if Pp.L > 1 and Pp.M > loc_ave_M:  # min for both forks
             loc_ave_M *= (Pp.M / ave_M) / 2
             if isinstance(Pp.pdert_[0], Cpdert): iM = sum( [pdert.P.M for pdert in Pp.pdert_])
             else:                                iM = sum( [rPp.M for rPp in Pp.pdert_])
@@ -333,9 +332,6 @@ def intra_Pp_(rootPp, subset, Pdert_, hlayers, fPd):  # evaluate for sub-recursi
                     sub_Ppd_[:] = form_Pp_(ddert_, fPd=True)
                     if abs(Pp.D) + Pp.M > loc_ave_M * 4:  # 4: looping search cost, diff induction per Pd_'DPpd_, +Pp.iD?
                         intra_Pp_(Pp, Pp.sublayers[0], None, hlayers+1, fPd)  # recursive der+, no need for Pdert_, no rng+: Pms are redundant?
-
-                else:  # this would add a sublayer, not needed?:
-                    Pp.sublayers = [[]]  # empty subset to preserve index in sublayer, or increment index of subset?
             else:
                 # rng+ fork
                 if Pp.M / Pp.L > loc_ave_M + 4:  # 4: search cost, + Pp.iM?
@@ -352,8 +348,6 @@ def intra_Pp_(rootPp, subset, Pdert_, hlayers, fPd):  # evaluate for sub-recursi
                     if Pp.M > loc_ave_M * 4 and not Pp.dert_:  # 4: looping cost, not spliced Pp, if Pm_'IPpm_.M, +Pp.iM?
                         rdert_ = Pdert_[rootPp.x0: Pp.x0 + Pp.L].copy()  # mapped subset
                         intra_Pp_(Pp, Pp.sublayers[0], rdert_, hlayers + 1, fPd)  # recursive rng+, no der+ in redundant Pds?
-                else:
-                    Pp.sublayers = [[]]  # empty subset to preserve index in sublayer, or increment index of subset?
 
         # this section is not updated yet, need to confirm on the sublayer structure first
         '''
@@ -363,7 +357,6 @@ def intra_Pp_(rootPp, subset, Pdert_, hlayers, fPd):  # evaluate for sub-recursi
             new_comb_sublayers.append((comb_sub_Ppm_, comb_sub_Ppd_))  # each element is a sublayer
         comb_sublayers = new_comb_sublayers
         '''
-        
     rootPp.sublayers += comb_sublayers  # new sublayers
     # no return, Pp_ is changed in-place
 
