@@ -99,7 +99,7 @@ def line_PPs_root(Pdert_, P_t):  # P_T is P_t = [Pm_, Pd_];  higher-level input 
             Pdert_t, dert1_, dert2_ = cross_comp(P_, fPd)  # Pdert_t: Ldert_, Idert_, Ddert_, Mdert_ (tuples of derivatives per P param)
             sum_rdn_(param_names, Pdert_t, fPd)  # sum cross-param redundancy per pdert, to evaluate for deeper processing
             i = len(root.sublayers)
-            sublayer = []
+            sublayer = [[],[]]  # 2 lists, for Pm_ and Pd_
             for param_name, Pdert_ in zip(param_names, Pdert_t):  # Pdert_ -> Pps:
                 subset = []
                 for fPpd in 0, 1:  # 0-> Ppm_, 1-> Ppd_: more anti-correlated than Pp_s of different params
@@ -110,7 +110,7 @@ def line_PPs_root(Pdert_, P_t):  # P_T is P_t = [Pm_, Pd_];  higher-level input 
                             splice_Ps(Pp_, dert1_, dert2_, fPd, fPpd)  # splice eval by Pp.M in Ppm_, for Pms in +IPpms or Pds in +DPpm
                         intra_Pp_(root, subset, Pdert_, 1, fPpd)  # eval der+ or rng+ per Pp
 
-                sublayer += subset
+                sublayer[fPd] += [subset]  # looks like we need bracket here, else it will become 8 subsets
             if any(sublayer):
                 root.sublayers.insert(i, sublayer)  # root.sublayers may get deeper than i in intra_Pp
 
@@ -330,8 +330,11 @@ def intra_Pp_(rootPp, subset, Pdert_, hlayers, fPd):  # evaluate for sub-recursi
                         ddert_ += [comp_par(_pdert.P, _pdert.d, pdert.d, "D_", loc_ave * ave_mD)]  # cross-comp of ds
                     sub_Ppm_[:] = form_Pp_(ddert_, fPd=False)
                     sub_Ppd_[:] = form_Pp_(ddert_, fPd=True)
-                    if abs(Pp.D) + Pp.M > loc_ave_M * 4:  # 4: looping search cost, diff induction per Pd_'DPpd_, +Pp.iD?
+                    # check if sub_Ppm_ and sub_Ppd_ is empty or not
+                    if any(Pp.sublayers[0]) and abs(Pp.D) + Pp.M > loc_ave_M * 4:  # 4: looping search cost, diff induction per Pd_'DPpd_, +Pp.iD?
                         intra_Pp_(Pp, Pp.sublayers[0], None, hlayers+1, fPd)  # recursive der+, no need for Pdert_, no rng+: Pms are redundant?
+                    else:
+                        Pp.sublayers = []  # reset it to empty list instead of [([],[])]
             else:
                 # rng+ fork
                 if Pp.M / Pp.L > loc_ave_M + 4:  # 4: search cost, + Pp.iM?
@@ -340,23 +343,25 @@ def intra_Pp_(rootPp, subset, Pdert_, hlayers, fPd):  # evaluate for sub-recursi
                     Pp.sublayers = [(sub_Ppm_, sub_Ppd_)]
                     # extend search if high loc_ave, fixed-range: parallelizable, individual selection is not worth the costs:
                     rng = int(Pp.M / Pp.L / 4)  # ave_rng = 4
-                    rng = abs(rng)
                     Pdert_ = Pdert_[Pp.x0: Pp.x0+Pp.L].copy()  # mapped Pp.pdert_
                     Rdert_ = search_Idert_(Pp, Pdert_, loc_ave * ave_mI, rng)  # each Rdert contains fixed-rng pdert_
                     rPp_ = form_rPp_(Rdert_, rng)
                     sub_Ppm_[:] = rPp_
-                    if Pp.M > loc_ave_M * 4 and not Pp.dert_:  # 4: looping cost, not spliced Pp, if Pm_'IPpm_.M, +Pp.iM?
+                    # check if sub_Ppm_(rPp_) and sub_Ppd_ is empty or not
+                    if any(Pp.sublayers[0]) and Pp.M > loc_ave_M * 4 and not Pp.dert_:  # 4: looping cost, not spliced Pp, if Pm_'IPpm_.M, +Pp.iM?
                         rdert_ = Pdert_[rootPp.x0: Pp.x0 + Pp.L].copy()  # mapped subset
                         intra_Pp_(Pp, Pp.sublayers[0], rdert_, hlayers + 1, fPd)  # recursive rng+, no der+ in redundant Pds?
+                    else:
+                        Pp.sublayers = []  # reset it to empty list instead of [([],[])]
 
-        # this section is not updated yet, need to confirm on the sublayer structure first
-        '''
-        new_comb_sublayers = []  # pack added sublayers:
-        for (comb_sub_Ppm_, comb_sub_Ppd_), (sub_Ppm_, sub_Ppd_) in zip_longest(comb_sublayers, Pp.sublayers, fillvalue=([],[])):
-            comb_sub_Ppm_ += [sub_Ppm_]; comb_sub_Ppd_ += [sub_Ppd_]
-            new_comb_sublayers.append((comb_sub_Ppm_, comb_sub_Ppd_))  # each element is a sublayer
-        comb_sublayers = new_comb_sublayers
-        '''
+        # if Pp sublayers is not empty
+        if Pp.sublayers:
+            new_comb_sublayers = []  # pack added sublayers:
+            for (comb_sub_Ppm_, comb_sub_Ppd_), (sub_Ppm_, sub_Ppd_) in zip_longest(comb_sublayers, Pp.sublayers, fillvalue=([],[])):
+                comb_sub_Ppm_ += sub_Ppm_; comb_sub_Ppd_ += sub_Ppd_  # remove bracket to not preserve index, else we can use bracket to preserve index of each sub_Pp's root
+                new_comb_sublayers.append((comb_sub_Ppm_, comb_sub_Ppd_))  # each element is a sublayer
+            comb_sublayers = new_comb_sublayers
+
     rootPp.sublayers += comb_sublayers  # new sublayers
     # no return, Pp_ is changed in-place
 
@@ -455,7 +460,7 @@ def term_rPp(rPp, rPp_):  # Pp_, L, I, D, M, Rdn, x0, ix0, rPp_):
     rPp.flay_rdn = Pp_M < rPp_M  # Pp vs rPp_ rdn
     # rPp = CPp(L=L, I=I, D=D, M=M, Rdn=Rdn+L+L*flay_rdn, x0=x0, ix0=ix0, flay_rdn=flay_rdn, pdert_=rPp_, sublayers=[[]])
     for Rdert in rPp.pdert_:  # rPp.pdert_ is Rdert_
-        Rdert.rootPp = rPp  # rootPp is Ppt
+        Rdert.root = rPp  # root is Ppt
     rPp_.append(rPp)
     # no immediate normalization: Pp.I /= Pp.L; Pp.D /= Pp.L; Pp.M /= Pp.L; Pp.Rdn /= Pp.L
 
