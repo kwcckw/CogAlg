@@ -136,7 +136,7 @@ def intra_P_(rootP, P_, rdn, rng, fPm):  # recursive cross-comp and form_P_ insi
                 rdn+=1; rng+=1
                 sub_Pm_, sub_Pd_ = [], []
                 P.subset = rdn, rng, [],[],[],[]  # []s: future 1st sublayer' xsub_pmdertt_, _xsub_pddertt_, sub_Ppm_, sub_Ppd_
-                P.sublayers += [sub_Pm_, sub_Pd_]
+                P.sublayers += [(sub_Pm_, sub_Pd_)]  # we need 2 brackets here, else all layers will be mixed up, 1st bracket contains all layers, 2nd bracket separate each layer
                 rdert_ = range_comp(P.dert_)  # rng+, skip predictable next dert, local ave? rdn to higher (or stronger?) layers
                 sub_Pm_[:] = form_P_(P, rdert_, rdn, rng, fPm=True)  # cluster by rm sign
                 sub_Pd_[:] = form_P_(P, rdert_, rdn, rng, fPm=False)  # cluster by rd sign
@@ -147,16 +147,29 @@ def intra_P_(rootP, P_, rdn, rng, fPm):  # recursive cross-comp and form_P_ insi
                 rdn+=1; rng+=1
                 sub_Pm_, sub_Pd_ = [], []  # initialize layers top-down, concatenate by intra_P_ in form_P_
                 P.subset = rdn, rng, [],[],[],[]  # []s: future 1st sublayer' xsub_pmdertt_, _xsub_pddertt_, sub_Ppm_, sub_Ppd_
-                P.sublayers += [sub_Pm_, sub_Pd_]
+                P.sublayers += [(sub_Pm_, sub_Pd_)]
                 ddert_ = deriv_comp(P.dert_)  # i is d
                 sub_Pm_[:] = form_P_(P, ddert_, rdn, rng, fPm=True)  # cluster by mm sign
                 sub_Pd_[:] = form_P_(P, ddert_, rdn, rng, fPm=False)  # cluster by md sign
             # else: P.sublayers += []  # empty subset to preserve index in sublayer
 
         if rootP and P.sublayers:  # needs a revision:
+            # same as intra_Pp
+            new_comb_sublayers = []
+            
+            for (comb_sub_Pm_, comb_sub_Pd_), (sub_Pm_, sub_Pd_) in zip_longest(comb_sublayers, P.sublayers, fillvalue=([],[])):
+                comb_sub_Pm_ += sub_Pm_  # remove brackets, they preserve index in sub_Pp root_
+                comb_sub_Pd_ += sub_Pd_
+                new_comb_sublayers.append((comb_sub_Pm_, comb_sub_Pd_))  # add sublayer
+
+            comb_sublayers = new_comb_sublayers
+            
+            
+            ''' Previous version
             comb_sublayers = [comb_subset_ + subset_ for comb_subset_, subset_ in
                               zip_longest(comb_sublayers, P.sublayers, fillvalue=[])
                               ]
+            '''
     if rootP:
         rootP.sublayers += comb_sublayers  # no return
     else:
