@@ -116,7 +116,8 @@ def line_PPs_root(P_t):  # P_T is P_t = [Pm_, Pd_];  higher-level input is neste
             sublayer0 += [paramset]  # -> [Pm_, Pd_]
         else: sublayer0 += []
 
-    return P_t, root  # contains 1st level and 2nd level outputs
+    # actually we no need to return P_t? It is already in the input
+    return root  # contains 1st level and 2nd level outputs
 
 
 def cross_comp(P_, fPd):  # cross-compare patterns within horizontal line
@@ -526,10 +527,12 @@ def comp_sublayers(_P, P, root_v):  # if pdert.m -> if summed params m -> if pos
             if rng == _rng and min(_P.L, P.L) > ave_Ls:  # if same fork: compare sub_Ps to each _sub_P within max relative distance per comb_V:
                 _SL = SL = 0  # summed Ls
                 start_index = next_index = 0  # index of starting sub_P for current _sub_P
-                _xsub_pdertt_ += [[]]  # array of cross-sub_P pdert tuples, inner brackets for subset_
-                xsub_pdertt_ += [[]]  # append xsub_dertt per _sub_P_ and sub_P_, sparse?
-
+                
                 for _sub_P in _sub_P_:
+                    # i think this should be moved here, for each _sub_P?
+                    _xsub_pdertt_ += [[]]  # array of cross-sub_P pdert tuples, inner brackets for subset_
+                    xsub_pdertt_ += [[]]  # append xsub_dertt per _sub_P_ and sub_P_, sparse?
+
                     _xsub_pdertt = [[], [], [], []]  # L, I, D, M xsub_pdert_s
                     _SL += _sub_P.L  # ix0 of next _sub_P
                     # search right:
@@ -550,9 +553,9 @@ def comp_sublayers(_P, P, root_v):  # if pdert.m -> if summed params m -> if pos
                     # not implemented: if param_name == "I_" and not fPd: sub_pdert = search_param_(param_)
                     start_index = next_index  # for next _sub_P
 
-                    if _xsub_pdertt[0]:  # at least 1 sub_pdert, real min length ~ 8, very unlikely
+                    if any(_xsub_pdertt):  # at least 1 sub_pdert, real min length ~ 8, very unlikely
                         xsub_Pp_t = []  # LPpm_, IPpm_, DPpm_, MPpm_
-                        rdn_t = sum_rdn_(param_names, _xsub_pdertt, fPd)
+                        sum_rdn_(param_names, _xsub_pdertt, fPd)  # no return from sum_rdn now
                         for param_name, xsub_Pdert_ in zip(param_names, _xsub_pdertt):
                             xsub_Pp_ = form_Pp_(xsub_Pdert_, fPd=0)
                             # no step=2 for splice: xsub_pdertts are not consecutive, and their Ps are not aligned?
@@ -642,7 +645,6 @@ def comp_sub_P(_sub_P, sub_P, xsub_pdertt, root_v, fPd):
         V += xsub_P_M + xsub_P_D  # separate eval for form_Pm_ and form_Pd_?
 
         if V > ave_M * 4 and _sub_P.sublayers and sub_P.sublayers:  # 4: ave_comp_sublayers coef
-            # if sub_P.sublayers is not empty, then sub_P.sublayers[0] can't be empty
             # update sub_M in Ipdert(xsub_pdertt[1]) only?
             sub_M, sub_D = comp_sublayers(_sub_P, sub_P, V)  # recursion for deeper layers
             xsub_P_M += sub_M; xsub_P_D += sub_M
