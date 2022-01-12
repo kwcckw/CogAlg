@@ -114,9 +114,9 @@ def line_PPs_root(P_t):  # P_T is P_t = [Pm_, Pd_];  higher-level input is neste
                         intra_Pp_(root, param_md, Pdert_, 1, fPpd)  # eval der+ or rng+ per Pp
                 paramset += [param_md]  # -> [Lmd, Imd, Dmd, Mmd]
             sublayer0 += [paramset]  # -> [Pm_, Pd_]
-        else: sublayer0 += []
+        else: 
+            sublayer0 += [[]]  # we need add another bracket to preserve index, else it will add nothing
 
-    # actually we no need to return P_t? It is already in the input
     return root  # contains 1st level and 2nd level outputs
 
 
