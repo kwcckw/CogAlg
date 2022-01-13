@@ -37,42 +37,45 @@ def line_recursive(p_):
     Specific outputs: P_t = line_Ps_root(), Pp_ttt = line_PPs_root(), Ppp_ttttt = line_PPPs_root()
     if pipeline: output per P termination, append till min iP_ len, concatenate across frames
     '''
-    
     P_t = line_Ps_root(p_)
-    root = line_PPs_root(P_t)    
+    root = line_PPs_root(P_t)
     return line_level_root(root)
-    # returns iLevels and root_P, with P_T_ as root_P.sublayers[0]
 
-# very initial draft, need further discussion
-def line_level_root(iroot):
 
-    root = CPp()  # create a root per level too? But not quite sure how to use it yet
-    level_output = []  # output of current level, each element is output from each root.sublayer
-    # line_PPPs_root for now, search within each sublayers
-    for i, sublayer in enumerate(iroot.sublayers):
-        oPpp_T = []  # output for current layer
-        if i == 0:  # top layer of current level (2 tuples fPd-> 4 tuples param->2 tuples fPpd)   
-            Ppp_ttttt = []
-            for fPd, Pp_tt in enumerate(sublayer):
-                Ppp_tttt = []
-                for param_name, Pp_t in zip(param_names,Pp_tt):
-                    Ppp_ttt = line_PPPs_root(Pp_t)
-                    Ppp_tttt.append(Ppp_ttt)
-                Ppp_ttttt.append(Ppp_tttt)
-            oPpp_T.append(Ppp_ttttt)
-            
-        else:  # layer1 and above (2 tuples fPpd)
-            Ppp_ttt = line_PPPs_root(sublayer)
-            oPpp_T.append(Ppp_ttt)
-    
-        level_output.append(oPpp_T)
-        
-    # comp_sublayers(root.sublayers)  # compare between each sublayer here? 
-        
+def line_level_root(root):
+
+    sublayer0 = []  # 1st sublayer: (Pm_, Pd_( Lmd, Imd, Dmd, Mmd ( Ppm_, Ppd_))), deep sublayers: Ppm_(Ppmm_), Ppd_(Ppdm_,Ppdd_)
+    root.sublayers=[sublayer0]  # reset from last-level sublayers
+    P_ttt = root.levels[-1][0]  # input is 1st sublayer of the last level, always P_ttt?
+
+    for fiPd, pramset in enumerate(P_ttt):  # fiPd: Pm_ or Pd_
+        for param_name, param_md in zip(param_names, pramset):
+            for fiPpd, P_ in enumerate(param_md):  # fiPpd: Ppm_ or Ppd_
+                # below is not fully revised:
+                if len(P_) > 1:
+                    Pdert_t, dert1_, dert2_ = cross_comp(P_, fiPpd)  # Pdert_t: Ldert_, Idert_, Ddert_, Mdert_ (tuples of derivatives per P param)
+                    sum_rdn_(param_names, Pdert_t, fiPpd)  # sum cross-param redundancy per pdert, to evaluate for deeper processing
+                    paramset = []
+                    for param_name, Pdert_ in zip(param_names, Pdert_t):  # Pdert_ -> Pps:
+                        param_md = []
+                        for fPpd in 0, 1:  # 0-> Ppm_, 1-> Ppd_: more anti-correlated than Pp_s of different params
+                            Pp_ = form_Pp_(Pdert_, fPpd)
+                            param_md += [Pp_]  # -> [Ppm_, Ppd_]
+                            if (fPpd and param_name == "D_") or (not fPpd and param_name == "I_"):
+                                if not fPpd:
+                                    splice_Ps(Pp_, dert1_, dert2_, fiPpd, fPpd)  # splice eval by Pp.M in Ppm_, for Pms in +IPpms or Pds in +DPpm
+                                intra_Pp_(root, param_md, Pdert_, 1, fPpd)  # eval der+ or rng+ per Pp
+                        paramset += [param_md]  # -> [Lmd, Imd, Dmd, Mmd]
+                    sublayer0 += [paramset]  # -> [Pm_, Pd_]
+                else: sublayer0 += [[]]  # empty paramset to preserve index in [Pm_, Pd_]
+    # add nesting here
+
+    root.levels.append(root.sublayers)  # to contain 1st and 2nd levels
     return root
 
+
 def line_PPPs_root(Pp_t):
-    
+
     Ppp_ttt = []
     for fPpd, Pp_ in enumerate(Pp_t):
         Ppp_tt = []
@@ -88,12 +91,12 @@ def line_PPPs_root(Pp_t):
                             if not fPppd:
                                 splice_Ps(Ppp_, Ppdert1_, Ppdert2_, fPpd)  # splice eval by Pp.M in Ppm_, for Pms in +IPpms or Pds in +DPpm
                             intra_Pp_(None, Ppp_, Ppdert_, 1, fPppd)  # der+ or rng+
-                    else: 
+                    else:
                         Ppp_ = []     # keep index
                     Ppp_t.append(Ppp_)  # Pppm_, Pppd_
-                Ppp_tt.append(Ppp_t)    # LPpp_, IPpp_, DPpp_, MPpp_ 
+                Ppp_tt.append(Ppp_t)    # LPpp_, IPpp_, DPpp_, MPpp_
         Ppp_ttt.append(Ppp_tt)
-        
+
     return Ppp_ttt
 
 
@@ -157,14 +160,11 @@ def level_recursion(P_T_):  # P_T_: 2P_, 16P_, 128P_., each level is implicitly 
 
 '''
 def line_level_root(iP_T, P_, types):  # cross_comp_Pp_, sum_rdn, splice, intra, comp_P_recursive
-
     norm_feedback(P_)  # before processing
     fPd = types[0]
-
     Pdert_t, pdert1_, pdert2_ = cross_comp_Pp_(P_, fPd)  # iP_: fully unpacked element in iP_T deepest 2-tuple (always Pm_, Pd_)
     sum_rdn(param_names, Pdert_t, fPd)
     oP_tt = []  # two new nesting levels added to iP_T per comp_P_recursive
-
     for Pdert_, param_name in zip(Pdert_t, param_names):  # param_name: LPp_ | IPp_ | DPp_ | MPp_
         for fPpd in 0, 1:  # 0: Ppm_, 1: Ppd_
             if Pdert_:
@@ -176,7 +176,6 @@ def line_level_root(iP_T, P_, types):  # cross_comp_Pp_, sum_rdn, splice, intra,
                 oP_tt.append(oP_)  # nesting is implicit
             else:
                 oP_tt.append([])  # preserve index
-
     return oP_tt
 '''
 
