@@ -54,8 +54,9 @@ def line_level_root(root):
 
     types_, ntypes = P_type_assign(iP_T)  # to assign types to element P_s:
 
-    for P_ in iP_T:
+    for P_, types in zip(iP_T, types_):
         if len(P_) > 2:  # aveN, actually will be higher
+            fiPpd = types[0]    
             Pdert_t, dert1_, dert2_ = cross_comp_Pp_(P_, fiPpd)  # Pdert_t: Ldert_, Idert_, Ddert_, Mdert_
             sum_rdn_(param_names, Pdert_t, fiPpd)  # sum cross-param redundancy per pdert
             for param_name, Pdert_ in zip(param_names, Pdert_t):  # Pdert_ -> Pps:
@@ -67,27 +68,26 @@ def line_level_root(root):
                             splice_Ps(Pp_, dert1_, dert2_, fiPpd, fPpd)  # splice eval by Pp.M in Ppm_, for Pms in +IPpms or Pds in +DPpm
                         intra_Pp_(root, Pp_, Pdert_, 1, fPpd)  # eval der+ or rng+ per Pp
                     level_M += sum([Pp.M for Pp in Pp_])
-        else:  # not reviewed below:
-            # additional brackets to preserve the whole index, else the next level output will not be correct since some of them are empty
-            sublayer0 += [[[[], []] for _ in range(4)]]  # empty paramset to preserve index in [Pm_, Pd_]
+        else:
+            sublayer0 += [[] for _ in range(8)]  # 8 empty list for 4 params * 2 fPd tuples
 
-    if len(P_) > 1 and sum([P.M for P in P_]) > ave_M:
+
+    oP_T += [sublayer0]  # add 1st elevation output?
+    # any Pp_ length > 1 and sum of Ps' M > aveM
+    if max([len(P_) for P_ in sublayer0]) > 1 and sum([P.M for P_ in sublayer0 for P in P_]) > ave_M:
         nextended += 1
-        oP_T += line_level_root(root)  # comp Ps and form higher Ps, adds two nesting levels: oP_tt_, 8 P_s:
+        # line_level_root returns root, or oP_T should += root.sublayers?
+        oP_T += [line_level_root(root).sublayers[0]]  # comp Ps and form higher Ps, adds two nesting levels: oP_tt_, 8 P_s:
     else:
-        oP_T += [[] for _ in range(8)]  # add 8 empty P_s, better to add count of missing prior P_s to each P_?
+        # next elevation output size would be len(sublayer0)*8
+        oP_T += [[[] for _ in range(len(sublayer0)*8)]]  # add 8 empty P_s, better to add count of missing prior P_s to each P_?
 
     cross_core_comp(oP_T, types_, ntypes)  # eval cross-comp of Pp_s in last sublevel iP_T, implicitly nested by all lower hierarchy
     # oP_T starts at 4th level: len(iP_T)>16, form xM per iP_, append to xM_ per oP_T?
-    root.levels_.append(oP_T)  # hierarchy of levels
+    root.levels.append(oP_T)  # hierarchy of levels
 
     if len(iP_T) / max(nextended,1) < 4:  # ave_extend_ratio
         line_level_root(root)  # increased implicit nesting in oP_T
-
-    root.levels.append(root.sublayers)
-
-    if any(sublayer0) and level_M > ave_M:  # evaluate for next level recursively
-        line_level_root(root)
 
     return root
 
