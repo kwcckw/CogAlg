@@ -92,8 +92,7 @@ aves = [ave_mL, ave_mI, ave_mD, ave_mM]
 
 def line_PPs_root(P_t):  # P_T is P_t = [Pm_, Pd_];  higher-level input is nested to the depth = 1 + 2*elevation (level counter)
 
-    norm_feedback(P_t)  # before processing
-
+    norm_feedback(P_t)
     sublayer0 = []  # 1st sublayer is a 3-layer nested tuple P_ttt: (Pm_, Pd_, each:( Lmd, Imd, Dmd, Mmd, each: ( Ppm_, Ppd_)))
     root = CPp(levels=[P_t], sublayers=[sublayer0])  # deep sublayers are 2-layer nested tuples: Ppm_(Ppmm_), Ppd_(Ppdm_,Ppdd_)
 
@@ -108,10 +107,37 @@ def line_PPs_root(P_t):  # P_T is P_t = [Pm_, Pd_];  higher-level input is neste
                     if (fPpd and param_name == "D_") or (not fPpd and param_name == "I_"):
                         if not fPpd:
                             splice_Ps(Pp_, dert1_, dert2_, fPd, fPpd)  # splice eval by Pp.M in Ppm_, for Pms in +IPpms or Pds in +DPpm
-                        # can't use root.pdert_: empty and 8 Pdert_s, but 1 Pdert_ in deeper intra_Pp calls:
                         intra_Pp_(root, Pp_, Pdert_, 1, fPpd)  # eval der+ or rng+ per Pp
-        else: 
-            sublayer0 += [[] for _ in range(8)]  # 8 empty [] to preserve index, 8 for each fPd 
+        else:
+            sublayer0 += [[] for _ in range(8)]  # 8 empty [] to preserve index, 8 for each fPd
+
+    root.levels.append(root.sublayers)  # to contain 1st and 2nd levels
+    return root
+
+
+def line_PPs_nested(P_t):  # P_T is P_t = [Pm_, Pd_];  higher-level input is nested to the depth = 1 + 2*elevation (level counter)
+
+    norm_feedback(P_t)
+    sublayer0 = []  # 1st sublayer is a 3-layer nested tuple P_ttt: (Pm_, Pd_, each:( Lmd, Imd, Dmd, Mmd, each: ( Ppm_, Ppd_)))
+    root = CPp(levels=[P_t], sublayers=[sublayer0])  # deep sublayers are 2-layer nested tuples: Ppm_(Ppmm_), Ppd_(Ppdm_,Ppdd_)
+
+    for fPd, P_ in enumerate(P_t):  # fPd: Pm_ or Pd_
+        if len(P_) > 1:
+            Pdert_t, dert1_, dert2_ = cross_comp(P_, fPd)  # Pdert_t: Ldert_, Idert_, Ddert_, Mdert_ (tuples of derivatives per P param)
+            sum_rdn_(param_names, Pdert_t, fPd)  # sum cross-param redundancy per pdert, to evaluate for deeper processing
+            paramset = []
+            for param_name, Pdert_ in zip(param_names, Pdert_t):  # Pdert_ -> Pps:
+                param_md = []
+                for fPpd in 0, 1:  # 0-> Ppm_, 1-> Ppd_: more anti-correlated than Pp_s of different params
+                    Pp_ = form_Pp_(Pdert_, fPpd)
+                    param_md += [Pp_]  # -> [Ppm_, Ppd_]
+                    if (fPpd and param_name == "D_") or (not fPpd and param_name == "I_"):
+                        if not fPpd:
+                            splice_Ps(Pp_, dert1_, dert2_, fPd, fPpd)  # splice eval by Pp.M in Ppm_, for Pms in +IPpms or Pds in +DPpm
+                        intra_Pp_(root, param_md, Pdert_, 1, fPpd)  # eval der+ or rng+ per Pp
+                paramset += [param_md]  # -> [Lmd, Imd, Dmd, Mmd]
+            sublayer0 += [paramset]  # -> [Pm_, Pd_]
+        else: sublayer0 += [[]]  # empty paramset to preserve index in [Pm_, Pd_]
 
     root.levels.append(root.sublayers)  # to contain 1st and 2nd levels
     return root
@@ -345,7 +371,7 @@ def intra_Pp_(rootPp, Pp_, Pdert_, hlayers, fPd):  # evaluate for sub-recursion 
                     Rdert_ = search_Idert_(Pp, Pdert_, loc_ave * ave_mI, rng)  # each Rdert contains fixed-rng pdert_
                     rPp_ = form_rPp_(Rdert_, rootPp, rng)
                     sub_Ppm_[:] = rPp_
-                    if rPp_ and Pp.M > loc_ave_M * 4 and not Pp.dert_:  # 4: looping cost, not spliced Pp, if Pm_'IPpm_.M, +Pp.iM?   
+                    if rPp_ and Pp.M > loc_ave_M * 4 and not Pp.dert_:  # 4: looping cost, not spliced Pp, if Pm_'IPpm_.M, +Pp.iM?
                         intra_Pp_(Pp, rPp_, Pp.pdert_, hlayers + 1, fPd)  # recursive rng+, no der+ in redundant Pds?
                     else:
                         Pp.sublayers = []  # reset after the above converts it to [([],[])]
@@ -647,7 +673,6 @@ def form_comp_Derts(_P, P, root_v):
 xsub_pderts (cross-sub_P): xsub_pdertt_[ xsub_pdertt [ xsub_pdert_[ sub_pdert]]]: each bracket is a level of nesting
 the above forms Pps across xsub_dertt, then also form Pps across _xsub_pdertt_ and xsub_pdertt_? 
 '''
-
 
 def norm_feedback(P_t):
 
