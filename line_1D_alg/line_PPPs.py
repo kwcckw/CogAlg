@@ -39,9 +39,19 @@ def line_recursive(p_):
     '''
     P_t = line_Ps_root(p_)
     root = line_PPs_root(P_t)
-    return line_level_root(root)
 
-def line_level_root(root):  # recursively adds higher levels of pattern composition and derivation
+    ntypes = 1 + 2  * math.log( len(root.sublayers[0])/2, 8)
+    types_ = []    
+    for i in range(len(root.sublayers[0])):
+        types = []
+        types.insert(0, int(i/8) % 2)    # 2- fPds
+        types.insert(0, int( i%8 / 2 ))  # 4 - params
+        types.insert(0, i%2)             # 2 - fPpds
+        types_.append(types)
+      
+    return line_level_root(root, types_, ntypes)
+
+def line_level_root(root, types_, ntypes):  # recursively adds higher levels of pattern composition and derivation
 
     # i/o are tuples of P_s, implicitly nested to the depth = 1 + 2*elevation: 2 P_s, 16 P_s, 128 P_s..:
     sublayer0 = root.levels[-1][0]  # input is 1st sublayer of the last level
@@ -49,11 +59,6 @@ def line_level_root(root):  # recursively adds higher levels of pattern composit
     root.sublayers = [new_sublayer0]  # will be new level, reset from last-level sublayers
     nextended = 0  # number of extended-depth P_s
     new_M = 0
-
-    types_, ntypes = P_type_assign(sublayer0)  # assign types to element P_s
-
-    if ntypes>3:  # i think it's better to call cross_core_comp before new_sublayer0 computation if the new M is not needed?
-        cross_core_comp(sublayer0, types_, ntypes)  # eval cross-comp of current-level Pp_s, implicitly nested by all lower levels
 
     for P_, types in zip(sublayer0, types_):
         if len(P_) > 2 and sum([P.M for P_ in sublayer0 for P in P_]) > ave_M:  # 2: min aveN, will be higher
@@ -75,11 +80,25 @@ def line_level_root(root):  # recursively adds higher levels of pattern composit
             new_sublayer0 += [[] for _ in range(8)]  # 8 empty list for 4 params * 2 fPd tuples
             # better to add count of missing prior P_s to each P_, or use nested tuples?
 
+    new_ntypes = 1 + 2  * math.log( len(new_sublayer0)/2, 8)  # number of types per P_ in iP_T, with (fPd, param_name) n_pairs = math.log(len(iP_T)/2, 8) 
+    
+    new_types_ = []
+    for types in types_:     
+        for i in range(8):  # each level add 4 params *2 fPd elements, so we add 8 extra elements here from input types
+            new_types = types.copy()
+            new_types.insert(0, int( i%8 / 2 )) # 4 params
+            new_types.insert(0, i%2)            # fPpd
+            new_types_.append(new_types)
+
+    if ntypes>3 and new_M > ave_M:
+        cross_core_comp(new_sublayer0, new_types_, new_ntypes)  # eval cross-comp of current-level Pp_s, implicitly nested by all lower levels
+
+
     if len(sublayer0) / max(nextended,1) < 4 and new_M > ave_M * 4:  # ave_extend_ratio and added M, will be default if pipelined
         root.levels.append(root.sublayers)  # levels represent all lower hierarchy
 
         if len(sublayer0) / max(nextended,1) < 8 and new_M > ave_M * 8:  # higher thresholds for recursion:
-            line_level_root(root)  # try to add new level
+            line_level_root(root, new_types_, new_ntypes)  # try to add new level
 
 
 def P_type_assign(iP_T):  # P_T_: 2P_, 16P_, 128P_., each level is nested to the depth = 1 + 2*elevation
