@@ -414,7 +414,8 @@ def search_rng(rootPp, Idert_, loc_ave, rng):  # extended fixed-rng search-right
                     comp_sublayers(idert.P, cdert.P, idert.m)  # deeper cross-comp between high-m Ps
                 # left assign:
                 Rdert.accum_from(idert, ignore_capital=True)  # Pp params += pdert params
-                idert.Ppt[0] = [Rdert]; Rdert.sub_dert_ += [idert]
+                idert.Ppt[0] = [Rdert]  # why not append? idert may have multiple Rdert reference (when overlapping occurs?)
+                Rdert.sub_dert_ += [idert]
                 # right assign:
                 right_Rdert.accum_from(idert, ignore_capital=True)  # Pp params += pdert params
                 rdert = idert.copy(); rdert.Ppt[0] = [right_Rdert]
@@ -427,16 +428,20 @@ def search_rng(rootPp, Idert_, loc_ave, rng):  # extended fixed-rng search-right
                 right_Rdert.sub_dert_[0].negL += 1
                 right_Rdert.sub_dert_[0].negM += idert.m
             j += 1
-        if idert.m <= 0:  # add last idert if negative:
-            # left assign:
-            Rdert.accum_from(idert, ignore_capital=True)  # Pp params += pdert params
-            idert.Ppt[0] = Rdert  # single root, if needed
-            Rdert.sub_dert_ += [idert]
-            # right assign:
-            right_Rdert = Rdert_[j]  # not quite sure about j
-            right_Rdert.accum_from(idert, ignore_capital=True)  # Pp params += pdert params
-            rdert = idert.copy(); rdert.Ppt[0] = [right_Rdert]
-            right_Rdert.sub_dert_.insert(0, rdert)  # extend left, Rdert is now bilateral
+
+        # not quite sure on this, if this is the last idert and last Rdert, there's no right_Rdert, then we can skip it?
+        if idert.m <= 0 :  # add last idert if negative:
+            j = i + rootPp.x0 + 1
+            if j - (i + rootPp.x0 + 1) < rng and j < len(Idert_) - 1:
+                # left assign:
+                Rdert.accum_from(idert, ignore_capital=True)  # Pp params += pdert params
+                idert.Ppt[0] = Rdert  # single root, if needed
+                Rdert.sub_dert_ += [idert]
+                # right assign:
+                right_Rdert = Rdert_[j]
+                right_Rdert.accum_from(idert, ignore_capital=True)  # Pp params += pdert params
+                rdert = idert.copy(); rdert.Ppt[0] = [right_Rdert]
+                right_Rdert.sub_dert_.insert(0, rdert)  # extend left, Rdert is now bilateral
 
     return Rdert_  # accumulated rng_dert_
 
