@@ -35,11 +35,12 @@ class Cpdert(ClusterStructure):
     sub_D = int  # diff from comp_sublayers, if any
     sub_dert_ = list  # in Rderts only, len = rng
     P = object  # P of i param
-    Ppt = lambda: [object, object]  # tuple [Ppm,Ppd]: Pps that pdert is in, to join rdert_s
+    Ppt = lambda: [[], []]  # tuple [Ppm,Ppd]: Pps that pdert is in, to join rdert_s
 
 class CPp(CP):
     dert_ = list  # if not empty: Pp is primarily a merged P, other params are optional
     pdert_ = list  # Pp elements, "p" for param
+    neg_pdert_ = list  # negative pderts
     flay_rdn = bool  # Pp is layer-redundant to Pp.pdert_
     negM = int  # in rng_Pps only
     negL = int  # in rng_Pps only, summed in L, no need to be separate?
@@ -369,7 +370,7 @@ def intra_Pp_(rootPp, Pp_, Pdert_, hlayers, fPd):  # evaluate for sub-recursion 
                     Pp.sublayers = [(sub_Ppm_, sub_Ppd_)]
                     # extend search if high loc_ave, fixed-range: parallelizable, individual selection is not worth the costs:
                     rng = int(Pp.M / Pp.L / 4)  # ave_rng = 4
-                    rPp_ = search_rng(Pp, rootPp.pdert_, loc_ave * ave_mI, rng)  # each rPp contains fixed-rng pdert_
+                    rPp_ = search_rng(Pp, Pdert_, loc_ave * ave_mI, rng)  # each rPp contains fixed-rng pdert_
                     # rPp_ = form_rPp_(Rdert_, rootPp, rng)  replace with recursive merge_rPp_?
                     sub_Ppm_[:] = rPp_
                     if rPp_ and Pp.M > loc_ave_M * 4 and not Pp.dert_:  # 4: looping cost, not spliced Pp, if Pm_'IPpm_.M, +Pp.iM?
@@ -394,9 +395,9 @@ def search_rng(rootPp, Idert_, loc_ave, rng):  # extended fixed-rng search-right
 
     rPp_ = []
     idert_ = rootPp.pdert_
-    for idert in idert_:
-        idert.Ppt = [[],[]]  # clear higher-level ref for current level, rdn assign to non-max
-        rPp_.append(CPp(P=idert.P))  # initialize rPp for each idert
+    for idert in idert_: idert.Ppt = [[],[]]  # clear higher-level ref for current level, rdn assign to non-max
+    for Idert in Idert_:  # rPp_ should be per Idert_?
+        rPp_.append(CPp(P=Idert.P))  # initialize rPp for each idert
 
     for i, (idert, _rPp) in enumerate(zip( idert_,rPp_)):  # form consecutive fixed-rng rPps, overlapping within rng-1
 
@@ -408,33 +409,84 @@ def search_rng(rootPp, Idert_, loc_ave, rng):  # extended fixed-rng search-right
             idert.p = cdert.i + idert.i  # -> ave i
             idert.d = cdert.i - idert.i  # difference
             idert.m = loc_ave - abs(idert.d)  # indirect match
-            rPp = rPp_[j]  # not quite sure about j
+            rPp = rPp_[j]  # not quite sure about j (should be correct provided rPp_ is per Idert_)
             if idert.m > 0:
                 if idert.m > ave_M * 4 and idert.P.sublayers and cdert.P.sublayers:  # 4: init ave_sub coef
                     comp_sublayers(idert.P, cdert.P, idert.m)  # deeper cross-comp between high-m Ps
+                rdert = idert.copy()  # get rdert before any accumulation during left assign
+                
                 # left assign:
                 _rPp.accum_from(idert, ignore_capital=True)  # Pp params += pdert params
                 idert.Ppt[0] += [_rPp]  # root _rPps = olp
-                _rPp.pdert_ += [idert]
+                _rPp.pdert_ += [idert]  # add positive idert                
+                
                 # right assign:
-                rPp.accum_from(idert, ignore_capital=True)  # Pp params += pdert params
-                rdert = idert.copy(); rdert.Ppt[0] = [rPp]
+                rPp.accum_from(rdert, ignore_capital=True)  # Pp params += pdert params
                 rPp.pdert_.insert(0, rdert)  # extend left, Rdert is now bilateral
-                idert = Cpdert(P=idert.P, Ppt=[[_rPp],[]])  # new idert, not sure about Ppt
+                rdert.Ppt[0] += [rPp]  # why not use append here?
+                
+                # reinit
+                idert = Cpdert(P=idert.P)  # new idert, not sure about Ppt (Ppt should be empty until matched, same as the initialization in the section above?)
             else:
                 # idert miss, need to represent discontinuity:
                 idert.negL += 1  # dert scope = negL + 1 + prior rng
                 idert.negM += idert.m
-                rPp.pdert_[0].negL += 1
-                rPp.pdert_[0].negM += idert.m
+                rPp.neg_pdert_ += [idert.copy()]  # add negative dert
+                # why not add to the last pdert_ instead?
+                if rPp.pdert_:
+                    rPp.pdert_[0].negL += 1
+                    rPp.pdert_[0].negM += idert.m
+                
+            # add rdn
+            # or this should be at the end of function? So all M of rPp are being summed first?
+            if _rPp.M < rPp.M:  # or use mutual M?
+                _rPp.pdert_[-1].rdn += 1  # increase rdn of lower M left _rPp's last pdert
+            elif rPp.M < _rPp.M:
+                rPp.pdert_[0].rdn += 1  # increase rdn of lower M right rPp's first pdert
+                
             j += 1
+            
         if idert.m <= 0:  # add last idert if negative:
             # left assign only:
             _rPp.accum_from(idert, ignore_capital=True)  # Pp params += pdert params
             idert.Ppt[0] += [_rPp]
-            _rPp.sub_dert_ += [idert]
+            _rPp.neg_pdert_ += [idert]
 
-    return rPp_  # accumulated rng_dert_
+    rPp_ = merge_rPp_(rPp_)
+
+    return rPp_  
+
+def merge_rPp_(rPp_):
+    
+    orPp_ = []
+    while rPp_:  
+        _rPp = rPp_.pop(0)  # get left rPp
+          
+        checked_rPp_ = []
+        while rPp_:    
+            rPp = rPp_.pop(0)  # get right rPp
+            f_merged = 0  # flag to know whether current rPp is merged
+        
+            for i, _idert in enumerate(_rPp.pdert_, start=1): 
+                # not quite sure on this
+                if _rPp.x0 + i + _idert.negL >= rPp.x0 and _rPp.M + rPp.M > ave_M:  # check for overlap and mutual M > ave 
+                    f_merged = 1
+                    
+                    # merge rPp to _rPp
+                    for idert in rPp.pdert_:
+                        if idert not in _rPp.pdert_:  # to avoid mutual idert
+                            _rPp.accum_from(idert, ignore_capital=True)
+                            _rPp.pdert_.append(idert)
+                            idert.Ppt[0] += [_rPp]
+                        else:  # mutual idert, remove reference of merged rPp from idert.Ppt
+                            idert.Ppt[0].remove(rPp)
+                    break
+                
+            if not f_merged: checked_rPp_.append(rPp)  # packing back the non-merged rPp
+        rPp_ = checked_rPp_
+        orPp_.append(_rPp)        
+
+    return orPp_
 
 # replace with merge_rPp_:
 def form_rPp_(Rdert_, root, rng):  # cluster rng-overlapping directional rPps by M sign
