@@ -41,7 +41,6 @@ def line_recursive(p_):
     root = line_PPs_root(P_t)
     types_ = []
     for i in range(16):  # len(root.sublayers[0]
-        # we need list here, tuple doesn't have copy
         types = [i%2, int(i%8 / 2), int(i/8) % 2]  # fPpd, param, fPd
         types_.append(types)
 
@@ -58,7 +57,7 @@ def line_level_root(root, types_):  # recursively adds higher levels of pattern 
 
     new_types_ = []
     for P_, types in zip(sublayer0, types_):
-        
+
         if len(P_) > 2 and sum([P.M for P_ in sublayer0 for P in P_]) > ave_M:  # 2: min aveN, will be higher
             nextended += 1  # the depth of this P_ will be extended
             fiPd = types[0]  # probably OR all fPds in types, not just the last one
@@ -82,24 +81,10 @@ def line_level_root(root, types_):  # recursively adds higher levels of pattern 
         else:
             new_sublayer0 += [[] for _ in range(8)]  # 8 empty list for 4 params * 2 fPd tuples
             # better to add count of missing prior P_s to each P_, or use nested tuples?
-            
-            # actually we can skip the new types here? Since they are not gonna be used too
-            for i in range(8): new_types_.append([])
-
-    '''
-    new_types_ = []  # this may be included in "if" section above, then "else"
-    for types in types_:
-        for i in range(8):  # each level adds 8 types: 4 params * 2 fPds
-            new_types = types.copy()
-            new_types.insert(0, int( i%8 / 2 )) # param
-            new_types.insert(0, i%2)            # fPpd
-            new_types_.append(new_types)
-    '''
-
-    if new_M > ave_M:
-        cross_core_comp(new_sublayer0, new_types_)  # eval cross-comp of current-level Pp_s, implicitly nested by all lower levels
 
     if len(sublayer0) / max(nextended,1) < 4 and new_M > ave_M * 4:  # ave_extend_ratio and added M, will be default if pipelined
+        # may move to line 91, for higher threshold:
+        cross_core_comp(new_sublayer0, new_types_)  # eval cross-comp of current-level Pp_s, implicitly nested by all lower levels
         root.levels.append(root.sublayers)  # levels represent all lower hierarchy
 
         if len(sublayer0) / max(nextended,1) < 8 and new_M > ave_M * 8:  # higher thresholds for recursion:
