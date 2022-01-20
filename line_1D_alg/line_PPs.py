@@ -46,7 +46,7 @@ class CPp(CP):  # may use separate CrPp, it's more complex?
     negL = int  # in rng_Pps only, summed in L, no need to be separate?
     _negM = int  # for search left, within adjacent neg Ppm only?
     _negL = int  # left-most compared distance from Pp.x0
-    olp_Pp_ = lambda: dict, dict  # overlapping rPps and their M to current rPp
+    olp_rPp_ = dict  # overlapping rPps and their M to current rPp
     sublayers = list  # lambda: [([],[])]  # nested Ppm_ and Ppd_
     subDerts = list  # for comp sublayers
     levels = list  # levels of composition: Ps ) Pps ) Ppps..
@@ -423,18 +423,18 @@ def search_rng(rootPp, loc_ave, rng):  # extended fixed-rng search-right for cor
                 if idert.m > ave_M * 4 and idert.P.sublayers and cdert.P.sublayers:  # 4: init ave_sub coef
                     comp_sublayers(idert.P, cdert.P, idert.m)  # deeper cross-comp between high-m Ps
                 # left assign:
-                if rPp not in _rPp.olp_rPp_:
-                    _rPp.olp_Pp_.append({"key":rPp.id})
-                _rPp.olp_rPp_["value"]+=idert.m  # this seems wrong
+                if rPp.id not in _rPp.olp_rPp_.keys():
+                    _rPp.olp_rPp_[rPp.id] = 0  # create rPp id as key, m as value (init with 0)
+                _rPp.olp_rPp_[rPp.id] += idert.m  # add m value to current rPp key
                 _rPp.accum_from(idert, ignore_capital=True)  # Pp params += pdert params
                 idert.Ppt[0] += [_rPp]  # root _rPps = olp
                 idert.aPp = _rPp  # anchor rPp, check and replace in merging?
                 _rPp.pdert_ += [idert]
 
                 # right assign:
-                if _rPp not in _rPp.olp_rPp_:
-                    rPp.olp_Pp_.append({"key":_rPp.id})
-                rPp.olp_rPp_["value"]+=idert.m  # this seems wrong
+                if _rPp.id not in rPp.olp_rPp_.keys():
+                    rPp.olp_rPp_[_rPp.id] = 0  # create _rPp id as key, m as value (init with 0)   
+                rPp.olp_rPp_[_rPp.id] += idert.m  # add m value to current rPp key
                 rPp.accum_from(idert, ignore_capital=True)  # Pp params += pdert params
                 rPp.pdert_.insert(0, idert)  # extend rPp left
                 idert.Ppt[0] += [rPp]
@@ -457,17 +457,21 @@ def search_rng(rootPp, loc_ave, rng):  # extended fixed-rng search-right for cor
     return rPp_
 
 # draft:
+# not fully updated yet, especially on the merging part
 def merge_rPp_(rPp_):
     merged_rPp_ = []
     while rPp_:
         rPp = rPp_.pop(0)
-        for olp_rPp in rPp.olp_rPp_:
-            if olp_rPp.val > ave_M:  # high mutual M
+        rPp_ids = [Pp.id for Pp in rPp_]
+        
+        for rPp_id, val in zip(rPp.olp_rPp_.keys(), rPp.olp_rPp_.values()):
+            if val > ave_M:  # high mutual M
+                olp_rPp = rPp_[rPp_ids.index(rPp_id)]  # get olp_rPp from their id
                 if olp_rPp.M > rPp.M:  # can we use reference as a key, to retrieve olp_rPp?
                     merge(olp_rPp, rPp)
                     merged_rPp_.append(olp_rPp)
                 else:
-                    merge(rPp, olp_rPp); rPp_.remove(olp_Pp)
+                    merge(rPp, olp_rPp); rPp_.remove(olp_rPp)
                     merged_rPp_.append(rPp)
             else:
                 merged_rPp_.append(rPp)
@@ -491,6 +495,9 @@ def merge_rPp_(rPp_):
             '''
     return merged_rPp_
 
+
+def merge(_rPp, rPp):
+    pass
 
 # replace with merge_rPp_:
 def form_rPp_(Rdert_, root, rng):  # cluster rng-overlapping directional rPps by M sign
