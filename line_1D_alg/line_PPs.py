@@ -422,15 +422,15 @@ def search_rng(rootPp, loc_ave, rng):  # extended fixed-rng search-right for cor
                 if idert.m > ave_M * 4 and idert.P.sublayers and cdert.P.sublayers:  # 4: init ave_sub coef
                     comp_sublayers(idert.P, cdert.P, idert.m)  # deeper cross-comp between high-m Ps
                 # left rPp assign:
-                if rPp.id not in _rPp.olp_rPp_.keys(): _rPp.olp_rPp_[rPp] = 0  # create rPp as key, m=0 as value
-                _rPp.olp_rPp_[rPp.id] += idert.m  # add m value to current rPp key, also counter?
+                if rPp not in _rPp.olp_rPp_.keys(): _rPp.olp_rPp_[rPp] = 0  # create rPp as key, m=0 as value
+                _rPp.olp_rPp_[rPp] += idert.m  # add m value to current rPp key, also counter?
                 _rPp.accum_from(idert, ignore_capital=True)  # Pp params += pdert params
                 idert.Ppt[0] += [_rPp]  # root _rPps = olp
                 idert.aPp = _rPp  # anchor rPp per idert, if unique assign?
                 _rPp.pdert_ += [idert]
                 # right rPp assign:
-                if _rPp.id not in rPp.olp_rPp_.keys(): _rPp.olp_rPp_[rPp] = 0
-                rPp.olp_rPp_[_rPp.id] += idert.m
+                if _rPp not in rPp.olp_rPp_.keys(): rPp.olp_rPp_[_rPp] = 0
+                rPp.olp_rPp_[_rPp] += idert.m
                 rPp.accum_from(idert, ignore_capital=True)  # Pp params += pdert params
                 rPp.pdert_.insert(0, idert)  # extend rPp left
                 idert.Ppt[0] += [rPp]
@@ -451,22 +451,26 @@ def search_rng(rootPp, loc_ave, rng):  # extended fixed-rng search-right for cor
 
     return rPp_
 
-# not fully updated yet, especially on the merging part
 def merge_rPp_(rPp_):
     merged_rPp_ = []
 
     while rPp_:
         rPp = rPp_.pop(0)
-        olp_rPp_ = rPp.olp_rPp_  # old: rPp_ids = [Pp.id for Pp in rPp_]
-        for olp_rPp in olp_rPp_:  # old: in rPp_id, val in zip(rPp.olp_rPp_.keys(), rPp.olp_rPp_.values()):
+        olp_rPp_ = rPp.olp_rPp_
+        for olp_rPp in list(olp_rPp_):  # loop each key, which is olp_rPp instance
+            if olp_rPp_[olp_rPp] > ave_M:  # high mutual M
 
-            if olp_rPp > ave_M:  # high mutual M
-                ref_olp_rPp = rPp.olp_rPp_[olp_rPp]  # get referred olp_rPp, need to store olp_rPp instance as a key
-                if ref_olp_rPp.M > rPp.M:
+                if olp_rPp.M > rPp.M:  # merge rPp to olp_rPp
                     merge(olp_rPp, rPp)
-                    merged_rPp_.append(ref_olp_rPp)
-                else:
-                    merge(rPp, ref_olp_rPp); rPp_.remove(ref_olp_rPp)
+                    merged_rPp_.append(olp_rPp)
+                else:  # merge olp_rPp to rPp
+                    merge(rPp, olp_rPp)
+                    # the merging olp_rPp could be in rPp_ or merged_rPp_
+                    if olp_rPp in rPp_:
+                        rPp_.remove(olp_rPp)
+                    elif olp_rPp in merged_rPp_:
+                        merged_rPp_.remove(olp_rPp)
+
                     merged_rPp_.append(rPp)
             else:
                 merged_rPp_.append(rPp)
@@ -474,24 +478,22 @@ def merge_rPp_(rPp_):
     return merged_rPp_
 
 def merge(_rPp, rPp):
-    '''
+
     # merge olp_rPp to _rPp
-    for idert in olp_rPp.pdert_:
+    for idert in rPp.pdert_:
         if idert not in _rPp.pdert_:  # to avoid mutual idert
             _rPp.accum_from(idert, ignore_capital=True)
             _rPp.pdert_.append(idert)
-            idert.Ppt[0] += [_rPp]
-        else:  # mutual idert, remove reference of merged rPp from idert.Ppt
-            idert.Ppt[0].remove(olp_rPp)
+            idert.Ppt[0] += [_rPp]  # add the _merged rPp reference
+
+        # remove the merging rPp reference (either way we need to remove it)
+        if rPp in idert.Ppt[0]: idert.Ppt[0].remove(rPp)
+            
     # check and pack overlap of overlap rPps to _rPp
-    olp_olp_Pp_ = olp_rPp.olp_Pp_["rPp"]
-    olp_mut_M_ = olp_rPp.olp_Pp_["mut_M"]
-    for olp_olp_rPp, olp_mut_M in zip(olp_olp_Pp_, olp_mut_M_):
-        if olp_olp_rPp not in olp_Pp_ and olp_olp_rPp is not _rPp:
-            olp_Pp_.append(olp_olp_rPp)
-            mut_M_.append(olp_mut_M)
-    '''
-    pass
+    for olp_rPp in rPp.olp_rPp_:
+        if olp_rPp not in _rPp.olp_rPp_.keys():  # if olp_rPp of rPp not in _rPp
+            _rPp.olp_rPp_[olp_rPp] = rPp.olp_rPp_[olp_rPp]  # add key and value of olp_rPp to _rPp
+
 
 # replaced by merge_rPp_:
 def form_rPp_(Rdert_, root, rng):  # cluster rng-overlapping directional rPps by M sign
