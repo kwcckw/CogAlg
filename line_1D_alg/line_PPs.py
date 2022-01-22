@@ -415,10 +415,10 @@ def search_rng(rootPp, loc_ave, rng):  # extended fixed-rng search-right for cor
             idert.m = loc_ave - abs(idert.d)  # indirect match
             rPp = rPp_[j]
             if idert.m > 0:
-                if i:  # not 1st idert
-                    if _idert.m <= 0:  # terminate and append neg_pdert:
-                        _rPp.accum_from(_idert, ignore_capital=True)  # or accum negL, negM only?
-                        _rPp.pdert_ += [_idert]
+                 # not 1st idert
+                if i and _idert.m <= 0:  # terminate and append neg_pdert:
+                    _rPp.accum_from(_idert, ignore_capital=True)  # or accum negL, negM only?
+                    _rPp.pdert_ += [_idert]
                 if idert.m > ave_M * 4 and idert.P.sublayers and cdert.P.sublayers:  # 4: init ave_sub coef
                     comp_sublayers(idert.P, cdert.P, idert.m)  # deeper cross-comp between high-m Ps
                 # left rPp assign:
@@ -457,23 +457,28 @@ def merge_rPp_(rPp_):  # merge sufficiently overlapping rPps into the higher-M o
     while rPp_:
         rPp = rPp_.pop(0)
         olp_rPp_ = rPp.olp_rPp_
-        for olp_rPp in list(olp_rPp_):  # loop keys, each is olp_rPp instance
-            if olp_rPp_[olp_rPp] > ave_M:  # high mutual M, or mutual M / total M?
+        list_olp_rPp_ = list(olp_rPp_.keys())
+        list_olp_values = list(olp_rPp_.values())
+        
+        for i, olp_rPp in enumerate(list_olp_rPp_):  # loop keys, each is olp_rPp instance
+            if list_olp_values[i] > ave_M:  # high mutual M, or mutual M / total M?
 
                 if olp_rPp.M > rPp.M:  # merge rPp in olp_rPp
-                    merge(olp_rPp, rPp)
+                    merge(olp_rPp, rPp, list_olp_rPp_, list_olp_values)
                     merged_rPp_.append(olp_rPp)
                 else:  # merge olp_rPp in rPp
-                    merge(rPp, olp_rPp)
+                    merge(rPp, olp_rPp, list_olp_rPp_, list_olp_values)
                     if olp_rPp in rPp_:          rPp_.remove(olp_rPp)
                     elif olp_rPp in merged_rPp_: merged_rPp_.remove(olp_rPp)
                     merged_rPp_.append(rPp)
             else:
                 merged_rPp_.append(rPp)
+        # pack back as dict
+        rPp.olp_rPp_ = dict(zip(list_olp_rPp_,list_olp_values))
 
     return merged_rPp_
 
-def merge(_rPp, rPp):  # merge overlapping rPp in _rPp
+def merge(_rPp, rPp, rPp_, values):  # merge overlapping rPp in _rPp
 
     for idert in rPp.pdert_:
         if idert not in _rPp.pdert_:  # non-redundant idert, positive only?
@@ -483,8 +488,9 @@ def merge(_rPp, rPp):  # merge overlapping rPp in _rPp
         if rPp in idert.Ppt[0]: idert.Ppt[0].remove(rPp)  # remove merging rPp reference
     # merge olp_rPp_s:
     for olp_rPp in rPp.olp_rPp_:
-        if olp_rPp not in _rPp.olp_rPp_.keys():
-            _rPp.olp_rPp_[olp_rPp] = rPp.olp_rPp_[olp_rPp]  # add non-redundant olp_rPp
+        if olp_rPp not in rPp_:
+            rPp_.append(olp_rPp)  # pack olp_rPp
+            values.append(rPp.olp_rPp_[olp_rPp])  # pack value
 
 '''   
     assign rdn to overlapping pderts in lower-M rPps, if eval by element.cluster, which is wrong, same cluster for all elements?:  
