@@ -46,7 +46,7 @@ class CPp(CP):  # may use separate CrPp, it's more complex?
     negL = int  # in rng_Pps only, summed in L, no need to be separate?
     _negM = int  # for search left, within adjacent neg Ppm only?
     _negL = int  # left-most compared distance from Pp.x0
-    olp_rPp_ = dict  # overlapping rPps and their M to current rPp
+    olp_Rdert_ = dict  # overlapping rPps and their M to current rPp
     sublayers = list  # lambda: [([],[])]  # nested Ppm_ and Ppd_
     subDerts = list  # for comp sublayers
     levels = list  # levels of composition: Ps ) Pps ) Ppps..
@@ -373,8 +373,9 @@ def intra_Pp_(rootPp, Pp_, hlayers, fPd):  # evaluate for sub-recursion in line 
                     Pp.sublayers = [(sub_Ppm_, sub_Ppd_)]
                     # extend search if high loc_ave, fixed-range: parallelizable, individual selection is not worth the costs:
                     rng = int(Pp.M / Pp.L / 4)  # ave_rng = 4
-                    rPp_ = search_rng(Pp, loc_ave * ave_mI, rng)  # each rPp contains fixed-rng pdert_
-                    rPp_ = merge_rPp_(rPp_)  # merge the weaker of sufficiently overlapping rPps
+                    Rdert_ = search_rng(Pp, loc_ave * ave_mI, rng)  # each rPp contains fixed-rng pdert_
+                    rPp_ = form_rPp_(Rdert_)  # merge the weaker of sufficiently overlapping rPps
+                    rPp_ = reform_rPp_(rPp_, Pp, rng)
                     sub_Ppm_[:] = rPp_
                     if rPp_ and Pp.M > loc_ave_M * 4 and not Pp.dert_:  # 4: looping cost, not spliced Pp, if Pm_'IPpm_.M, +Pp.iM?
                         intra_Pp_(Pp, rPp_, hlayers + 1, fPd)  # recursive rng+, no der+ in redundant Pds?
@@ -404,7 +405,7 @@ def search_rng(rootPp, loc_ave, rng):  # extended fixed-rng search-right for cor
 
     for i, (idert, _Rdert) in enumerate(zip( idert_, Rdert_)):  # form consecutive fixed-rng Rderts, overlapping within rng-1
         _m = 0
-        adert = Cpdert  # _Rdert anchor dert, should be separate from  idert now?
+        adert = Cpdert(P=idert.P)  # _Rdert anchor dert, should be separate from  idert now?
         j = i + rootPp.x0 + 1  # comparand index in idert_, step=1 was in cross-comp, start at step=2 or 1 + prior rng
 
         while j - (i + rootPp.x0 + 1) < rng and j < len(idert_) - 1:
@@ -415,21 +416,21 @@ def search_rng(rootPp, loc_ave, rng):  # extended fixed-rng search-right for cor
             adert.m = loc_ave - abs(idert.d)  # indirect match
             Rdert = Rdert_[j]  # Rdert where cdert is an anchor
             if adert.m > 0:
-                if i:  # not 1st idert
-                    if _adert.m <= 0:  # terminate and append neg_pdert:
-                        _Rdert.accum_from(_adert, ignore_capital=True)  # or accum negL, negM only?
-                        _Rdert.pdert_ += [_adert]
+                # not 1st idert
+                if i and _adert.m <= 0:  # terminate and append neg_pdert:
+                    _Rdert.accum_from(_adert, ignore_capital=True)  # or accum negL, negM only?
+                    _Rdert.pdert_ += [_adert]
                 if adert.m > ave_M * 4 and adert.P.sublayers and cdert.P.sublayers:  # 4: init ave_sub coef
                     comp_sublayers(adert.P, cdert.P, adert.m)  # deeper cross-comp between high-m Ps
                 # left rPp assign:
                 if Rdert not in _Rdert.olp_Rdert_.keys(): _Rdert.olp_Rdert_[Rdert] = 0  # create key = Rdert object, value m = 0
-                _Rdert.olp_rPp_[Rdert] += adert.m  # add m value to current Rdert key
+                _Rdert.olp_Rdert_[Rdert] += adert.m  # add m value to current Rdert key
                 _Rdert.accum_from(adert, ignore_capital=True)  # Pp params += pdert params
                 adert.Ppt[0] += [_Rdert]  # root _Rderts = olp
                 adert.aPp = _Rdert  # anchor Rdert per idert, if unique assign?
                 _Rdert.pdert_ += [adert]
                 # right Rdert assign:
-                if _Rdert not in Rdert.olp_Rdert_.keys(): Rdert.olp_rPp_[_Rdert] = 0
+                if _Rdert not in Rdert.olp_Rdert_.keys(): Rdert.olp_Rdert_[_Rdert] = 0
                 Rdert.olp_Rdert_[_Rdert] += adert.m
                 Rdert.accum_from(adert, ignore_capital=True)  # Pp params += pdert params
                 Rdert.pdert_.insert(0, adert)  # extend rPp left
@@ -454,26 +455,33 @@ def search_rng(rootPp, loc_ave, rng):  # extended fixed-rng search-right for cor
 def form_rPp_(Rdert_):  # cluster sufficiently overlapping Rderts into rPps: higher-order pattern is a graph
     # form and eval olp_dertRs: tuples of combined derivatives between 2 Rderts?
     rPp_ = []
+    packed_Rdert_ = []
 
-    while Rdert_:
-        # old:
-        rPp = rPp_.pop(0)
-        olp_rPp_ = rPp.olp_rPp_
-        for olp_rPp in list(olp_rPp_):  # loop keys, each is olp_rPp instance
-            if olp_rPp_[olp_rPp] > ave_M:  # high mutual M, or mutual M / total M?
-
-                if olp_rPp.M > rPp.M:  # merge rPp in olp_rPp
-                    merge(olp_rPp, rPp)
-                    merged_rPp_.append(olp_rPp)
-                else:  # merge olp_rPp in rPp
-                    merge(rPp, olp_rPp)
-                    if olp_rPp in rPp_:          rPp_.remove(olp_rPp)
-                    elif olp_rPp in merged_rPp_: merged_rPp_.remove(olp_rPp)
-                    merged_rPp_.append(rPp)
-            else:
-                merged_rPp_.append(rPp)
-
-    return merged_rPp_
+    for Rdert in Rdert_:
+        if Rdert not in packed_Rdert_:
+            
+            rPp = CPp(pdert=[Rdert])
+            rPp.accum_from(Rdert, excluded=["x0"])  # i think it's better to use accum_from instead of unpacking all param and accum them separately?
+            packed_Rdert_.append(Rdert)
+            rPp_.append(rPp)
+            
+            # check each overlapping Rdert and cluster Rdert with sufficient M to current rPp
+            Rdert_ = list(Rdert.olp_Rdert_.keys())  # olp_rPp_.keys() is overlapping Rderts 
+            Rdert_val_ = list(Rdert.olp_Rdert_.values())  
+            
+            for i, olp_Rdert in enumerate(Rdert_):   
+                if Rdert_val_[i] > ave_M and olp_Rdert not in packed_Rdert_:
+                    rPp.pdert_ += [olp_Rdert]
+                    rPp.accum_from(olp_Rdert, excluded=["x0"])
+                    packed_Rdert_.append(olp_Rdert)
+                    
+                    # pack overlap of overlap into the checking loop
+                    for olp_olp_Rdert in olp_Rdert.olp_Rdert_:
+                        if olp_olp_Rdert not in packed_Rdert_:
+                            Rdert_.append(olp_olp_Rdert)
+                            Rdert_val_.append(olp_Rdert.olp_Rdert_[olp_olp_Rdert])
+                    
+    return rPp_
 
 def merge(_rPp, rPp):  # merge overlapping rPp in _rPp
 
@@ -548,7 +556,7 @@ def term_re_rPp(rPp, rPp_):  # Pp_, L, I, D, M, Rdn, x0, ix0, rPp_):
     rPp.flay_rdn = Pp_M < rPp_M  # Pp vs rPp_ rdn
     # rPp = CPp(L=L, I=I, D=D, M=M, Rdn=Rdn+L+L*flay_rdn, x0=x0, ix0=ix0, flay_rdn=flay_rdn, pdert_=Rdert_)
     for Rdert in rPp.pdert_:  # rPp.pdert_ is Rdert_
-        Rdert.Ppt[0] = rPp
+        Rdert.root = rPp  # Rdert is CPp, so we use root
     rPp_.append(rPp)
     # no immediate normalization: Pp.I /= Pp.L; Pp.D /= Pp.L; Pp.M /= Pp.L; Pp.Rdn /= Pp.L
 
