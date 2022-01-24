@@ -448,80 +448,55 @@ def search_rng(rootPp, loc_ave, rng):  # extended fixed-rng search-right for cor
 
 def form_rPp_draft(Rdert_):  # cluster sufficiently overlapping Rderts into rPps: higher-order pattern is a graph
                              # form and eval olp_dertRs: tuples of combined derivatives between 2 Rderts?
-    new_Rdert_= []
+#    new_Rdert_= []
+    rPp_ = []
     while Rdert_:
-        Rdert = Rdert_.pop
-        miss = 1
-        for olp_Rdert, olp_Rdert_m in zip(Rdert.olp_Rdert_.keys(), Rdert.olp_Rdert_.values()):
-
-            if olp_Rdert_m > ave_M * 4:  # match between anchor pdert.Ps
-                olp_M = 0
-                rel_m = olp_Rdert_m / (Rdert.I)
-                for olp_olp_Rdert in olp_Rdert.olp_Rdert_:
-                    olp_M += olp_olp_Rdert.M * rel_m  # estimated match between olp pdert.Ps, probably buggy
-                # olp_olp_Rdert = olp_M  # replaces value in key=olp_olp_Rdert?
-
-                if olp_Rdert_m + olp_M > ave_M * 6:  # evaluate direct + overlap match between Rderts
-                    rPp = olp_Rdert.Ppt[0]  # if single root?
-                    rPp.accum_from(Rdert, excluded=["x0"])
-                    rPp.pdert_.append(Rdert)  # both key and value
-                    miss=0  # if many roots: overlapping graphs, adjust for rdn?
-        if miss:
-            Rdert.Ppt[0] = CPp(pdert=[Rdert])  # if not included in rPp = olp_Rdert.Ppt[0]
-            new_Rdert_.append(Rdert)
-
-    rPp_ = []
-    for Rdert in new_Rdert_:
-        if Rdert.Ppt[0]:
-            rPp_.append(Rdert.Ppt[0])
-
-    # then Rdert_ = new_Rdert_, but no need to return?
-    return rPp_
-
-
-def form_rPp_Chee(Rdert_):  # cluster sufficiently overlapping Rderts into rPps: higher-order pattern is a graph
-    # form and eval olp_dertRs: tuples of combined derivatives between 2 Rderts?
-    rPp_ = []
-    packed_Rdert_ = []
-
-    for Rdert in Rdert_:
-        if Rdert not in packed_Rdert_:
-
+        Rdert = Rdert_.pop(0)
+        if not isinstance(Rdert.root, CPp):  # Rdert is not packed into any of rPp yet
             rPp = CPp(pdert=[Rdert])
-            rPp.accum_from(Rdert, excluded=["x0"])  # i think it's better to use accum_from instead of unpacking all param and accum them separately?
-            packed_Rdert_.append(Rdert)
             rPp_.append(rPp)
+            Rdert.root = rPp
+            form_rPp_recursive(Rdert, rPp)
 
-            # check each overlapping Rdert and cluster Rdert with sufficient M to current rPp
-            Rdert_ = list(Rdert.olp_Rdert_.keys())  # olp_rPp_.keys() is overlapping Rderts
-            Rdert_val_ = list(Rdert.olp_Rdert_.values())
-
-            for i, olp_Rdert in enumerate(Rdert_):
-                if Rdert_val_[i] > ave_M and olp_Rdert not in packed_Rdert_:
-                    rPp.pdert_ += [olp_Rdert]
-                    rPp.accum_from(olp_Rdert, excluded=["x0"])
-                    packed_Rdert_.append(olp_Rdert)
-
-                    # pack overlap of overlap into the checking loop
-                    for olp_olp_Rdert in olp_Rdert.olp_Rdert_:
-                        if olp_olp_Rdert not in packed_Rdert_:
-                            Rdert_.append(olp_olp_Rdert)
-                            Rdert_val_.append(olp_Rdert.olp_Rdert_[olp_olp_Rdert])
-
+    # then Rdert_ = new_Rdert_, but no need to return? 
+    # Either way we need to return since it is a new object now, but it shouldn't matter in this scheme now
     return rPp_
 
-def merge(_rPp, rPp):  # merge overlapping rPp in _rPp
 
-    for idert in rPp.pdert_:
-        if idert not in _rPp.pdert_:  # non-redundant idert, positive only?
-            _rPp.accum_from(idert, ignore_capital=True)
-            _rPp.pdert_.append(idert)
-            idert.Ppt[0] += [_rPp]  # add merged rPp reference
-        if rPp in idert.Ppt[0]: idert.Ppt[0].remove(rPp)  # remove merging rPp reference
-    # merge olp_rPp_s:
-    for olp_rPp in rPp.olp_rPp_:
-        if olp_rPp not in _rPp.olp_rPp_.keys():
-            _rPp.olp_rPp_[olp_rPp] = rPp.olp_rPp_[olp_rPp]  # add non-redundant olp_rPp
+def form_rPp_recursive(Rdert, rPp):
+    
+    for olp_Rdert, olp_Rdert_m in zip(Rdert.olp_Rdert_.keys(), Rdert.olp_Rdert_.values()):
+
+        if olp_Rdert_m > ave_M * 4:  # match between anchor pdert.Ps
+            olp_M = 0
+            rel_m = olp_Rdert_m / (Rdert.I)
+            
+            for idert in olp_Rdert.pdert_:
+                if idert in Rdert.pdert_:  # get only mutual overlapping derts
+                    olp_M +=idert.m * rel_m  # estimated match between olp pdert.Ps      
+            # olp_olp_Rdert = olp_M  # replaces value in key=olp_olp_Rdert?
+
+            if olp_Rdert_m + olp_M > ave_M * 6:  # evaluate direct + overlap match between Rderts
+                # there's existing rPp for olp_rPp, merge them
+                if olp_Rdert.root is not rPp:
+                    if isinstance(olp_Rdert.root, CPp):
+                        merge_rPp(rPp, olp_Rdert.root)
+                    else:
+                        olp_Rdert.root = Rdert.root
+                        rPp.accum_from(Rdert, excluded=["x0"])
+                        rPp.pdert_.append(Rdert)  # both key and value
+                    
+                    # check overlap of overlap (Rderts with connections after the inclusion of olp_Rdert)
+                    form_rPp_recursive(olp_Rdert, rPp)
+                    
+
+def merge_rPp(_rPp, rPp):  # merge overlapping rPp in _rPp
+
+    for Rdert in rPp.pdert_:
+        if Rdert not in _rPp.pdert_: 
+            _rPp.accum_from(Rdert, excluded=['x0'])
+            _rPp.pdert_.append(Rdert)
+            Rdert.root = _rPp  # update root (rPp) reference
 
 '''   
     We know that "other" pderts in rPps are the same within overlap, but "anchor" pderts are different, because overlap is between different rPps. 
