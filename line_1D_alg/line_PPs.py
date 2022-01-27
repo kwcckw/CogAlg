@@ -233,7 +233,9 @@ def term_Pp(Pp_, L, I, D, M, Rdn, x0, ix0, pdert_, fPd):
     flay_rdn = Pp_value < pdert_V
     # Pp vs Pdert_ rdn
     Pp = CPp(L=L, I=I, D=D, M=M, Rdn=Rdn+L+L*flay_rdn, x0=x0, ix0=ix0, flay_rdn=flay_rdn, pdert_=pdert_)
-    for pdert in Pp.pdert_: pdert.Ppt[fPd] = Pp  # root Pp refs
+
+    # for pdert in Pp.pdert_: pdert.Ppt[fPd] = Pp  # root Pp refs
+
     Pp_.append(Pp)
     # no immediate normalization: Pp.I /= Pp.L; Pp.D /= Pp.L; Pp.M /= Pp.L; Pp.Rdn /= Pp.L
 
@@ -413,7 +415,7 @@ def search_rng(rootPp, loc_ave, rng):  # extended fixed-rng search-right for cor
         while j - (i + rootPp.x0 + 1) < rng and j < len(idert_) - 1:
             # cross-comp within rng:
             Rdert = Rdert_[j]  # Rdert in which cdert is an anchor
-            rdert = Cpdert(P=idert.P, Ppt = _Rdert)  # rng dert, higher-order than iderts
+            rdert = Cpdert(P=idert.P, Ppt = Rdert)  # rng dert, higher-order than iderts
             cdert = idert_[j]  # compared-P dert
             rdert.p = cdert.i + idert.i  # -> ave i
             rdert.d = cdert.i - idert.i  # difference
@@ -439,21 +441,18 @@ def form_rPp_(idert_, rng):  # cluster sufficiently overlapping Rderts into rPps
             rPp = CrPp(Rdert_=[Rdert])
             rPp_.append(rPp)
             Rdert.root = rPp
-            form_rPp_recursive(idert, None, i, rng, depth=1)
+            form_rPp_recursive(rPp, idert.Ppt.pdert_, [rPp], i, rng, depth=1)
 
     return rPp_  # no Rdert_
 
 # draft
-def form_rPp_recursive(adert, olp_dert_, i, rng, depth):  # evaluate direct and mediated match between adert.P and olp_dert.Ps
+def form_rPp_recursive(_rPp, olp_dert_, merged_rPp_, i, rng, depth):  # evaluate direct and mediated match between adert.P and olp_dert.Ps
     '''
     Each recursion adds a layer of pdert_ mediation to hierarchical graph:
     includes nodes with peri-negative more direct direct match into higher layers of rPp.pdert_(Rdert_ here),
     and adds them to positive pderts for more detail, so both Rdert_ and its pdert_ are nested?
     '''
     olp_M = 0
-    _Rdert = adert.Ppt
-    if not olp_dert_:  # 0th recursion
-        olp_dert_ = _Rdert.pdert_
     start_index = max(i - (rng-i), 0)
     end_index = min(i + (rng-i), len(olp_dert_))
 
@@ -465,31 +464,30 @@ def form_rPp_recursive(adert, olp_dert_, i, rng, depth):  # evaluate direct and 
     if olp_M > ave_M * 4:  # total M of adert to olp_dert_
         for j, olp_dert in enumerate( olp_dert_[start_index:end_index]):
             if olp_dert.m > ave_dir_m:
-
                 Rdert = olp_dert.Ppt
-                _rPp = _Rdert.root; rPp=Rdert.root
-                if rPp is not _rPp:
+                rPp=Rdert.root
+                if rPp not in merged_rPp_:
                     if isinstance(rPp, CrPp):  # there is different rPp instance reference for olp_Rdert
                         merge_rPp(_rPp, rPp)
+                        merged_rPp_.append(rPp)
                     else:  # no rPp ref in olp_Rdert yet
                         _rPp.accum_from(Rdert, excluded=["x0"])
-                        _rPp.pdert_.append(olp_dert)
-                        depth += 1
-                        Rdert.root.depth = depth
-                # draft:
-                form_rPp_recursive(adert, Rdert.pdert_, j, rng, depth)  # evaluate direct and pdert_-mediated match between Rdert and olp Rderts
+                        _rPp.pdert_.append(olp_dert) 
+                        Rdert.root = _rPp
+                        _rPp.depth = max(depth+1, _rPp.depth)  # get the max depth only?
+                        
+                    # draft:
+                    form_rPp_recursive(_rPp, Rdert.pdert_, merged_rPp_, j, rng, depth+1)  # evaluate direct and pdert_-mediated match between Rdert and olp Rderts
 
-# yet to be updated
+
 def merge_rPp(_rPp, rPp):  # merge overlapping rPp in _rPp
 
-    pass
-    '''
-    for Rdert in rPp.pdert_:
-        if Rdert not in _rPp.pdert_:
-            _rPp.accum_from(Rdert, excluded=['x0'])
-            _rPp.pdert_.append(Rdert)
-            Rdert.root = _rPp  # update root (rPp) reference
-    '''
+    for adert in rPp.pdert_:
+        if adert not in _rPp.pdert_:
+            _rPp.accum_from(adert.Ppt, excluded=['x0'])
+            _rPp.pdert_.append(adert)
+            adert.Ppt.root = _rPp  # update root (rPp) reference
+    
 '''   
     We know that "other" pderts in rPps are the same within overlap, but "anchor" pderts are different, because overlap is between different rPps. 
     So, the difference between same-other-P pdert.m s within overlap should be proportional to relative m between anchor (other) pdert Ps
