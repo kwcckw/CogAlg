@@ -38,6 +38,7 @@ class Cpdert(ClusterStructure):
 class CPp(CP):
 
     dert_ = list  # already in CP? if not empty: Pp is primarily a merged P, other params are optional
+    adert = list  # anchor dert
     pdert_ = list  # Pp elements, "p" for param
     flay_rdn = bool  # Pp is layer-redundant to Pp.pdert_
     sublayers = list  # lambda: [([],[])]  # nested Ppm_ and Ppd_
@@ -108,9 +109,9 @@ def line_PPs_root(P_t):  # P_T is P_t = [Pm_, Pd_];  higher-level input is neste
         if len(P_) > 2:
             Pdert_t, dert1_, dert2_ = cross_comp(P_, fPd)  # Pdert_t: Ldert_, Idert_, Ddert_, Mdert_ (tuples of derivatives per P param)
             sum_rdn_(param_names, Pdert_t, fPd)  # sum cross-param redundancy per pdert, to evaluate for deeper processing
-            for param_name, Pdert_ in zip(param_names, Pdert_t):  # Pdert_ -> Pps:
+            for param_name, Pdert_ in zip(param_names, Pdert_t):  # Pdert_ -> Pps:  
                 for fPpd in 0, 1:  # 0-> Ppm_, 1-> Ppd_: more anti-correlated than Pp_s of different params
-                    Pp_ = form_Pp_(Pdert_, fPpd)
+                    Pp_ = form_Pp_(deepcopy(Pdert_), fPpd)
                     sublayer0 += [Pp_]
                     if (fPpd and param_name == "D_") or (not fPpd and param_name == "I_"):
                         if not fPpd:
@@ -234,7 +235,7 @@ def term_Pp(Pp_, L, I, D, M, Rdn, x0, ix0, pdert_, fPd):
     # Pp vs Pdert_ rdn
     Pp = CPp(L=L, I=I, D=D, M=M, Rdn=Rdn+L+L*flay_rdn, x0=x0, ix0=ix0, flay_rdn=flay_rdn, pdert_=pdert_)
 
-    # for pdert in Pp.pdert_: pdert.Ppt[fPd] = Pp  # root Pp refs
+    for pdert in Pp.pdert_: pdert.Ppt[fPd] = Pp  # root Pp refs
 
     Pp_.append(Pp)
     # no immediate normalization: Pp.I /= Pp.L; Pp.D /= Pp.L; Pp.M /= Pp.L; Pp.Rdn /= Pp.L
@@ -443,12 +444,12 @@ def form_rPp_(idert_, rng):  # cluster sufficiently overlapping Rderts into rPps
             rPp = CrPp(Rdert_=[Rdert])
             rPp_.append(rPp)
             Rdert.root = rPp
-            form_rPp_recursive(rPp, idert.Ppt.pdert_, [rPp], i, rng, depth=1)
+            form_rPp_recursive(rPp, idert.rdert_, [rPp], i, rng, idepth=1)
 
     return rPp_  # no Rdert_
 
 # draft
-def form_rPp_recursive(_rPp, olp_dert_, merged_rPp_, i, rng, depth):  # evaluate direct and mediated match between adert.P and olp_dert.Ps
+def form_rPp_recursive(_rPp, olp_dert_, merged_rPp_, i, rng, idepth):  # evaluate direct and mediated match between adert.P and olp_dert.Ps
     '''
     Each recursion adds a layer of pdert_ mediation to form hierarchical graph:
     higher graphs include nodes with peri-negative more direct direct match into higher layers of rPp.pdert_(Rdert_ here),
@@ -478,8 +479,8 @@ def form_rPp_recursive(_rPp, olp_dert_, merged_rPp_, i, rng, depth):  # evaluate
                         _rPp.pdert_.append(olp_dert)
                         Rdert.root = _rPp
 
-                    _rPp.depth = depth + 1  # or always local?
-                    form_rPp_recursive(_rPp, Rdert.pdert_, merged_rPp_, j, rng, depth+1)  # evaluate increasingly pdert_-mediated matches
+                    # _rPp.depth = depth + 1  # or always local?
+                    form_rPp_recursive(_rPp, Rdert.adert.rdert_, merged_rPp_, j, rng, idepth+1)  # evaluate increasingly pdert_-mediated matches
 
 
 def merge_rPp(_rPp, rPp):  # merge overlapping rPp in _rPp
