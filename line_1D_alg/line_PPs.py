@@ -425,10 +425,12 @@ def search_rng(rootPp, loc_ave, rng):  # extended fixed-rng search-right for cor
             # left Rdert assign:
             _Rdert.accum_from(rdert, ignore_capital=True)  # Pp params += pdert params
             _Rdert.pdert_ += [rdert]  # extend _Rdert to the right
+            _Rdert.L += 1
             # right Rdert assign:
             Rdert.accum_from(rdert, ignore_capital=True)  # Pp params += pdert params
             Rdert.pdert_.insert(0, rdert.copy())  # extend Rdert to the left
             Rdert.pdert_[0].Ppt = _Rdert
+            Rdert.L += 1
 
     rPp_ = []  # cluster sufficiently overlapping Rderts into rPps: higher-order pattern rPp is a graph:
     for i, idert in enumerate(idert_):  # now contain idert.Ppt = Rdert_[i]
@@ -438,11 +440,11 @@ def search_rng(rootPp, loc_ave, rng):  # extended fixed-rng search-right for cor
             rPp = CPp(pdert_=[Rdert], L=1)
             rPp_.append(rPp)
             Rdert.root = rPp
-            form_rPp_recursive(rPp, [rPp], i, rng, depth=1)
+            form_rPp_recursive(rPp, [], [rPp], i, rng, depth=1)
 
     return rPp_  # no Rdert_
 
-def form_rPp_recursive(_rPp, merged_rPp_, i, rng, depth):  # evaluate direct and mediated match between adert.P and olp_dert.Ps
+def form_rPp_recursive(_rPp, checked_pdert_, merged_rPp_, i, rng, depth):  # evaluate direct and mediated match between adert.P and olp_dert.Ps
     '''
     Each recursion adds a layer of pdert_ mediation to form extended graphs of Rderts,
     including Rdert_ pdert.Rderts with peri-negative direct match but positive mediated match into rPp.
@@ -451,38 +453,40 @@ def form_rPp_recursive(_rPp, merged_rPp_, i, rng, depth):  # evaluate direct and
     olp_M = 0
     start_index = max(i - (rng-i), 0)
     end_index = min(i + (rng-i), rng*2+1)  # rng-i is overlap per direction
+    ilen_Rdert = len(_rPp.pdert_)  # initial length of Rdert, to check whether there is newly added Rdert for next recursion
 
-    for Rdert in _rPp.pdert_:  # one Rdert in the 1st call
-        for olp_dert in Rdert.pdert_[start_index:end_index]:  # breadth-first:
-            rel_m = olp_dert.m / max(1, olp_dert.i)  # ratio of direct adert m to olp_dert mag
-            olp_M += olp_dert.m + olp_dert.m * rel_m  # match to olp pdert.Ps is estimated from direct m ratio
+    for _Rdert in _rPp.pdert_:  # one Rdert in the 1st call
+        for olp_dert in _Rdert.pdert_[start_index:end_index]:  # breadth-first:
+            if olp_dert not in checked_pdert_:
+                rel_m = olp_dert.m / max(1, olp_dert.i)  # ratio of direct adert m to olp_dert mag
+                olp_M += olp_dert.m + olp_dert.m * rel_m  # match to olp pdert.Ps is estimated from direct m ratio
 
-        if olp_M > ave_M * 4:  # total M of adert to olp_dert_ is precondition for rPp extension and recursion
-            for j, olp_dert in enumerate( Rdert.pdert_[start_index:end_index]):
-                if olp_dert.m > ave_dir_m:  # < ave, negative here, final eval by match between anchor pdert.Ps
-
+        if olp_M > ave_M * -4:  # total M of adert to olp_dert_ is precondition for rPp extension and recursion
+            for olp_dert in _Rdert.pdert_[start_index:end_index]:
+                if olp_dert.m > ave_dir_m and olp_dert not in checked_pdert_:  # < ave, negative here, final eval by match between anchor pdert.Ps
                     Rdert = olp_dert.Ppt
                     rPp = Rdert.root
+                    checked_pdert_.append(olp_dert)  # checked_pdert_ to know whether olp_dert is added in the previous search
                     if rPp not in merged_rPp_:
                         if isinstance(rPp, CPp):  # Rdert is already in rPp
                             merge_rPp(_rPp, rPp)
                             merged_rPp_.append(rPp)
                         else:  # no rPp
-                            _rPp.accum_from(Rdert, excluded=["x0"])
-                            _rPp.pdert_.append(olp_dert)
+                            _rPp.accum_from(Rdert, excluded=["x0", "L"])
+                            _rPp.pdert_.append(Rdert)  # should be Rdert here?
                             Rdert.root = _rPp
 
-                        if _rPp.M > depth * ave_M:  # local: no _rPp.depth = depth + 1
-                            form_rPp_recursive(_rPp, merged_rPp_, j, rng, depth+1)  # evaluate increasingly pdert_-mediated matches
+    if _rPp.M > depth * ave_M and len(_rPp.pdert_) > ilen_Rdert :  # local: no _rPp.depth = depth + 1
+        form_rPp_recursive(_rPp, checked_pdert_, merged_rPp_, i, rng, depth+1)  # evaluate increasingly pdert_-mediated matches
 
 
 def merge_rPp(_rPp, rPp):  # merge overlapping rPp in _rPp
 
     for rdert in rPp.pdert_:
         if rdert not in _rPp.pdert_:
-            _rPp.accum_from(rdert.Ppt, excluded=['x0'])
-            _rPp.pdert_.append(rdert)
-            rdert.Ppt = _rPp  # update reference of rdert' Rdert
+            _rPp.accum_from(rdert.Ppt, excluded=["x0", "L"])
+            _rPp.pdert_.append(rdert.Ppt)  # rPp.pdert is Rdert
+            rdert.Ppt.root = _rPp  # update reference of rdert' Rdert' rPp
 
 '''   
     We know that "other" pderts in rPps are the same within overlap, but "anchor" pderts are different, because overlap is between different rPps. 
