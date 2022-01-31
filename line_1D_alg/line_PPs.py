@@ -324,7 +324,7 @@ def rng_incr(rootPp, Pp_, hlayers, rng):  # evaluate each Pp for incremental ran
                 sub_Ppm_, sub_Ppd_ = [], []
                 Pp.sublayers = [(sub_Ppm_, sub_Ppd_)]
                 Rdert_ = search_rng(Pp, loc_ave * ave_mI, rng)  # forms Rderts, each with fixed-rng pdert_
-                sub_Ppm_[:] = form_rPp_(Rdert_, [], rng, depth=1)  # draft
+                sub_Ppm_[:] = form_rPp_(Rdert_)  # draft
                 if sub_Ppm_ and Pp.M > loc_ave_M * 4 and not Pp.dert_:  # 4: looping cost, if Pm_'IPpm_.M, +Pp.iM?
                     rng_incr(Pp, sub_Ppm_, hlayers+1, rng+1)  # recursive rng+, no der+ in redundant Pds?
                 else:
@@ -339,7 +339,7 @@ def rng_incr(rootPp, Pp_, hlayers, rng):  # evaluate each Pp for incremental ran
 
             comb_sublayers = new_comb_sublayers
 
-    if rootPp: rootPp.sublayers += comb_sublayers  # new sublayers
+    if rootPp and comb_sublayers: rootPp.sublayers += comb_sublayers  # new sublayers
     # no return, Pp_ is changed in-place
 
 def der_incr(rootPp, Pp_, hlayers):  # evaluate each Pp for incremental derivation, as in line_patterns der_comp but with higher local ave,
@@ -375,7 +375,7 @@ def der_incr(rootPp, Pp_, hlayers):  # evaluate each Pp for incremental derivati
 
             comb_sublayers = new_comb_sublayers
 
-    if rootPp: rootPp.sublayers += comb_sublayers  # new sublayers
+    if rootPp and comb_sublayers: rootPp.sublayers += comb_sublayers  # new sublayers
     # no return, Pp_ is changed in-place
 
 
@@ -386,6 +386,7 @@ def search_rng(rootPp, loc_ave, rng):  # extended fixed-rng search-right for cor
 
     for i, (Rdert, idert) in enumerate( zip(Rdert_, idert_)):
         Rdert.adert=idert  # initialize Rdert for each idert, which is Rdert' anchor dert
+        Rdert.Ppt = []  # reset Ppt
 
     for i, (idert, _Rdert) in enumerate(zip( idert_, Rdert_)):  # form consecutive fixed-rng Rderts, overlapping within rng-1
         j = i + rootPp.x0 + 1  # comparand index in idert_, step=1 was in cross-comp, start at step=2 or 1 + prior rng
@@ -412,47 +413,46 @@ def search_rng(rootPp, loc_ave, rng):  # extended fixed-rng search-right for cor
     return Rdert_
 
 
-def form_rPp_(Rdert_, merged_rPp_, rng, depth):  # evaluate direct and mediated match between adert.P and olp_dert.Ps
+def form_rPp_(Rdert_):  # evaluate direct and mediated match between adert.P and olp_dert.Ps
     '''
     Each rng+ adds a layer of pdert_ mediation to form extended graphs of Rderts,
     including Rdert_ pdert.Rderts with peri-negative direct match but positive mediated match into rPp.
     It also adds mediated match to positive pderts for accuracy. But there will be fewer overlapping pderts with mediation?
     '''
-    olp_M = 0
-    # start_index = max(i - (rng-i), 0)
-    # end_index = min(i + (rng-i), rng*2)  # rng-i is overlap per direction
-    for Rdert in Rdert_:
-        # below is not revised:
-        for olp_dert in Rdert.pdert_[start_index:end_index]:  # breadth-first:
-            rel_m = olp_dert.m / max(1, olp_dert.i)  # ratio of direct adert m to olp_dert mag
-            olp_M += olp_dert.m + olp_dert.m * rel_m  # match to olp pdert.Ps is estimated from direct m ratio
+    
+    rPp_ = []
+    for _Rdert in Rdert_:
+        if not isinstance(_Rdert.Ppt, CPp):  # if no rPp is formed yet, it may formed from prior merging   
+            _rPp = CPp(pdert_=[_Rdert])
+            _Rdert.Ppt = _rPp
+            rPp_.append(_rPp)
+            
+            olp_M = 0
+            for olp_dert in _Rdert.rdert_:  # breadth-first:
+                rel_m = olp_dert.m / max(1, olp_dert.i)  # ratio of direct adert m to olp_dert mag
+                olp_M += olp_dert.m + olp_dert.m * rel_m  # match to olp pdert.Ps is estimated from direct m ratio
 
-        if olp_M > ave_M * 4:  # total M of adert to olp_dert_ is precondition for rPp extension and recursion
-            for j, olp_dert in enumerate( Rdert.pdert_[start_index:end_index]):
-                if olp_dert.m > ave_dir_m:  # < ave, negative here, final eval by match between anchor pdert.Ps
-
-                    Rdert = olp_dert.Ppt
-                    rPp = Rdert.root
-                    if rPp not in merged_rPp_:
-                        if isinstance(rPp, CPp):  # Rdert is already in rPp
+            if olp_M > ave_M * 4:  # total M of adert to olp_dert_ is precondition for rPp extension and recursion  
+                for olp_dert in _Rdert.rdert_:
+                    if olp_dert.m > ave_dir_m:  # < ave, negative here, final eval by match between anchor pdert.Ps
+                        Rdert = olp_dert.Ppt
+                        rPp = Rdert.Ppt
+                        if isinstance(rPp, CPp):  # Rdert is having rPp, merge them
                             merge_rPp(_rPp, rPp)
-                            merged_rPp_.append(rPp)
                         else:  # no rPp
                             _rPp.accum_from(Rdert, excluded=["x0"])
-                            _rPp.pdert_.append(olp_dert)
-                            Rdert.root = _rPp
-
-                        if _rPp.M > depth * ave_M:  # local: no _rPp.depth = depth + 1
-                            form_rPp_recursive(_rPp, merged_rPp_, j, rng, depth+1)  # evaluate increasingly pdert_-mediated matches
-
+                            _rPp.pdert_.append(Rdert)  # pdert_ is Rderts
+                            Rdert.Ppt = _rPp
+     
+    return rPp_
 
 def merge_rPp(_rPp, rPp):  # merge overlapping rPp in _rPp
 
-    for rdert in rPp.pdert_:
-        if rdert not in _rPp.pdert_:
-            _rPp.accum_from(rdert.Ppt, excluded=['x0'])
-            _rPp.pdert_.append(rdert)
-            rdert.Ppt = _rPp  # update reference of rdert' Rdert
+    for Rdert in rPp.pdert_:
+        if Rdert not in _rPp.pdert_:
+            _rPp.accum_from(Rdert.Ppt, excluded=['x0'])
+            _rPp.pdert_.append(Rdert)
+            Rdert.Ppt = _rPp  # update reference of rdert' Rdert
 
 '''   
     We know that "other" pderts in rPps are the same within overlap, but "anchor" pderts are different, because overlap is between different rPps. 
