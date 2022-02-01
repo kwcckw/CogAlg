@@ -436,26 +436,30 @@ def form_rPp_(Rdert_, rng, depth):  # evaluate direct and mediated match between
 
                     if olp_dert.m + olp_dert.olp_M > ave_dir_m:  # ave_dir_m < ave, negative here,
                         # eval by match of anchor + mediated Rdert overlap
-                        new_oolp_Rdert = Rdert.rdert_[0].roots
-                        # test to include oolp_Rdert in rPp, also higher-order overlaps?
-
-                        rPp = Rdert.roots
-                        if isinstance(rPp, CPp):  # Rdert has rPp, merge it
-                            merge_rPp(_rPp, rPp)
-                        else:  # no rPp
-                            _rPp.accum_from(Rdert)
-                            _rPp.pdert_.append(Rdert)  # pdert_ is Rderts
-                            Rdert.roots = _rPp
-
+                        check_and_merge_rPp(_rPp, Rdert)
+                        
+                        # test to include oolp_Rdert in rPp, also higher-order overlaps
+                        oolp_Rdert = Rdert.rdert_[0].roots
+                        # this _rPp is actually rPp after the merging above
+                        if oolp_Rdert not in _rPp.pdert_ and oolp_Rdert.m + olp_dert.olp_M > ave_dir_m:  
+                            check_and_merge_rPp(_rPp, oolp_Rdert)
     return rPp_
 
-def merge_rPp(_rPp, rPp):  # merge overlapping rPp in _rPp
+# please suggest a better name
+def check_and_merge_rPp(_rPp, Rdert):  # merge overlapping rPp in _rPp
 
-    for Rdert in rPp.pdert_:
-        if Rdert not in _rPp.pdert_:
-            _rPp.accum_from(Rdert.roots, excluded=['x0'])
-            _rPp.pdert_.append(Rdert)
-            Rdert.roots = _rPp  # update reference of rdert' Rdert
+    rPp = Rdert.roots
+    if isinstance(rPp, CPp):  # Rdert has rPp, merge it
+        for Rdert in rPp.pdert_:
+            if Rdert not in _rPp.pdert_:
+                _rPp.accum_from(Rdert.roots, excluded=['x0'])
+                _rPp.pdert_.append(Rdert)
+                Rdert.roots = _rPp  # update reference of rdert' Rdert
+    else:  # no rPp
+        _rPp.accum_from(Rdert)
+        _rPp.pdert_.append(Rdert)  # pdert_ is Rderts
+        Rdert.roots = _rPp
+
 
 '''   
     We know that "other" pderts in rPps are the same within overlap, but "anchor" pderts are different, because overlap is between different rPps. 
