@@ -359,11 +359,11 @@ def rng_incr(rootPp, Pp_, hlayers, rng):  # evaluate each Pp for incremental ran
                 sub_search(Pp, fPd=False)
                 sub_Ppm_, sub_Ppd_ = [], []
                 Pp.sublayers = [(sub_Ppm_, sub_Ppd_)]
-                rng += 1  # init=1 in form_Pp_
-                Rdert_ = comp_rng(Pp, loc_ave * ave_mI, rng)  # accumulates Rderts from fixed-rng rdert_
-                sub_Ppm_[:] = form_rPp_(Rdert_, rng, depth=1)
+                # rng += 1  # init=1 in form_Pp_(we cannot use rng += 1 here, it will be incremented wrongly since we are having for loop for Pp_ above)
+                Rdert_ = comp_rng(Pp, loc_ave * ave_mI, rng+1)  # accumulates Rderts from fixed-rng rdert_
+                sub_Ppm_[:] = form_rPp_(Rdert_, rng+1, depth=1)
                 if sub_Ppm_ and Pp.M > loc_ave_M * 4 and not Pp.dert_:  # 4: looping cost, if Pm_'IPpm_.M, +Pp.iM?
-                    rng_incr(Pp, sub_Ppm_, hlayers+1, rng)  # recursive rng+, no der+ in redundant Pds?
+                    rng_incr(Pp, sub_Ppm_, hlayers+1, rng+1)  # recursive rng+, no der+ in redundant Pds?
                 else:
                     Pp.sublayers = []  # reset after the above converts it to [([],[])]
 
@@ -379,18 +379,27 @@ def rng_incr(rootPp, Pp_, hlayers, rng):  # evaluate each Pp for incremental ran
     # no return, Pp_ is changed in-place
 
 def comp_rng(rootPp, loc_ave, rng):  # extended fixed-rng search-right for core I at local ave: lower m
-
-    if rng==1:  # 1st call, initialize Rdert_ with aderts:
+    # first call rng = 2
+    if rng==2:  # 1st call, initialize Rdert_ with aderts:
         Rdert_ = [Cpdert(adert=pdert) for pdert in rootPp.pdert_]
     else:  # rderts are left and right from adert, evaluate per rng+1:
         Rdert_ = rootPp.pdert_.copy()  # copy to avoid overwriting pdert.roots
     for Rdert in Rdert_: Rdert.roots = []  # reset
 
-    for i, _Rdert in enumerate(Rdert_[:-(rng-1)]):  # cross-comp at rng to extend Rderts, exclude last rng Rderts, they have no comparands
-        adert = _Rdert.anchor
+    # divide by rng and use int to get index without decimal
+    # then -1 to get 2nd last element, last element will be as comparand only
+    # finally * rng to get back the actual index
+    end_index = ((int(len(Rdert_)/rng)-1) * rng)
+    
+    # if we need negative index from the right, we can use this
+    # but i think this is redundant, Rdert_[:end_index] should be fine too
+    negative_end_index = len(Rdert_) - end_index 
+    
+    for i, _Rdert in enumerate(Rdert_[:-negative_end_index]):  # cross-comp at rng to extend Rderts, exclude last rng Rderts, they have no comparands
+        adert = _Rdert.adert
         Rdert = Rdert_[i + rng]  # Rdert in which cdert is an anchor
         rdert = Cpdert(P=adert.P, roots=Rdert)  # rng dert
-        cdert = Rdert.anchor  # compared-P dert
+        cdert = Rdert.adert  # compared-P dert
         rdert.p = cdert.i + adert.i  # -> ave i
         rdert.d = cdert.i - adert.i  # difference
         rdert.m = loc_ave - abs(adert.d)  # indirect match
@@ -427,10 +436,11 @@ def form_rPp_(Rdert_, rng, depth):  # evaluate direct and mediated match between
             if olp_M > ave_M * 4:  # total M of adert to olp_dert_ is a precondition for rPp extension
                 for olp_dert in _Rdert.rdert_:
                     Rdert = olp_dert.roots
-                    olp_dert.olp_M += Rdert.rdert_[0].m  # _Rdert olp added per rng+, always 2 rderts per Rdert
-                    Rdert.rdert_[0].olp_M += olp_dert.m  # reciprocal left olp extension
-                    # test to add olp_Rdert in rPp, then same for higher-order overlaps:
-                    eval_olp_recursive(Rdert, olp_dert, _rPp)
+                    if Rdert not in _rPp.pdert_:
+                        olp_dert.olp_M += Rdert.rdert_[0].m  # _Rdert olp added per rng+, always 2 rderts per Rdert
+                        Rdert.rdert_[0].olp_M += olp_dert.m  # reciprocal left olp extension
+                        # test to add olp_Rdert in rPp, then same for higher-order overlaps:
+                        eval_olp_recursive(Rdert, olp_dert, _rPp)
     return rPp_
 
 def eval_olp_recursive(Rdert, olp_dert, _rPp):
@@ -450,7 +460,7 @@ def eval_olp_recursive(Rdert, olp_dert, _rPp):
             Rdert.roots = _rPp
 
         oolp_Rdert = Rdert.rdert_[0].roots
-        if oolp_Rdert not in _rPp.pdert_:
+        if oolp_Rdert not in _rPp.pdert_:  # this is always not true, oolp_Rdert is always in rPp.pdert_
             eval_olp_recursive(oolp_Rdert, Rdert.rdert_[0], _rPp)  # check olp of olp
 
 '''   
