@@ -397,12 +397,13 @@ def comp_rng(rootPp, loc_ave, rng):  # extended fixed-rng search-right for core 
             comp_sublayers(rdert.P, adert.P, rdert.m)  # deeper cross-comp between high-m sub_Ps, separate from ndert.m
 
         # left Rdert assign:
-        for ndert in _Rdert.rdert_[rng:]: ndert.olp_M += rdert.m  # accumulate to eval for ndert.roots inclusion in _rPp
-        _Rdert.accum_from(rdert, ignore_capital=True)  # Pp params += pdert params
+        # i think just _Rdert.rdert_ will be fine, since those rdert_ are appended within rng, using _Rdert.rdert_[rng:] will be redundant
+        for ndert in _Rdert.rdert_: ndert.olp_M += rdert.m  # accumulate to eval for ndert.roots inclusion in _rPp
+        _Rdert.accum_from(rdert)  # Pp params += pdert params
         _Rdert.rdert_ += [rdert]  # extend _Rdert to the right
         # right Rdert assign:
-        for ndert in Rdert.rdert_[:rng]: ndert.olp_M += rdert.m  # accumulate to eval for ndert.roots inclusion in rPp
-        Rdert.accum_from(rdert, ignore_capital=True)  # Pp params += pdert params
+        for ndert in Rdert.rdert_: ndert.olp_M += rdert.m  # accumulate to eval for ndert.roots inclusion in rPp
+        Rdert.accum_from(rdert)  # Pp params += pdert params
         Rdert.rdert_.insert(0, rdert.copy())  # extend Rdert to the left
         Rdert.rdert_[0].roots = _Rdert
 
@@ -422,24 +423,34 @@ def form_rPp_(Rdert_, rng, depth):  # evaluate direct and mediated match between
     for _Rdert in Rdert_:
         if not isinstance(_Rdert.roots, CPp):  # if no rPp is formed from prior merging
             _rPp = CPp(pdert_=[_Rdert])
+            _rPp.accum_from(_Rdert,ignore_capital=True)
             _Rdert.roots = _rPp
             rPp_.append(_rPp)
+        else:  # rPp is formed furing prior merging, i think we still need to check for their olp_dert
+            _rPp = _Rdert.roots
+            
+        # no need breath first since olp_M is incremented in comp_rng
+        # check all overlapping Rderts
+        # should be 1 olp_dert for Rderts[:rng] and Rdert[-rng:], 2 olp_derts for Rderts in between
+        for olp_dert in _Rdert.rdert_:  
+            # olp_M > ave and olp Rdert's m > 0
+            if olp_dert.olp_M > ave_M *4 and olp_dert.roots.m > 0: 
+                Rdert = olp_dert.roots
 
-            olp_M = 0
-            for olp_dert in _Rdert.rdert_:  # breadth-first evaluation:
-                rel_m = olp_dert.m / max(1, olp_dert.i)  # ratio of adert m to olp_dert mag
-                olp_M += olp_dert.m + olp_dert.roots.m * rel_m
-                '''  
-                estimated m to olp pdert: should be proportional to m between aderts because 
-                within overlap between Rderts, rderts are same but compared aderts are different.               
-                '''
-            if olp_M > ave_M * 4:  # total M of adert to olp_dert_, else skip clustering, reuse Rdert_ for multiple rmg+s?
-                for olp_dert in _Rdert.rdert_:
-                    Rdert = olp_dert.roots
-                    if olp_dert.m > 0:
-                        olp_dert.olp_M += Rdert.rdert_[0].m  # _Rdert olp added per rng+, always 2 rderts per Rdert
-                        Rdert.rdert_[0].olp_M += olp_dert.m  # reciprocal left olp extension
+                rPp = Rdert.roots
+                if isinstance(rPp, CPp):
+                    # merge rPp
+                    for Rdert in rPp.pdert_:
+                        if Rdert not in _rPp.pdert_:
+                            _rPp.accum_from(Rdert,ignore_capital=True)
+                            Rdert.roots = _rPp
+                else:
+                    # pack Rdert to _rPp
+                    _rPp.pdert_.append(Rdert)
+                    _rPp.accum_from(Rdert,ignore_capital=True)
+                    Rdert.roots = _rPp
     return rPp_
+
 
 '''   
     local proximity sub-clustering, before and after merge, 
