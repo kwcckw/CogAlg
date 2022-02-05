@@ -350,8 +350,13 @@ def rng_incr(rootPp, Pp_, hlayers, rng):  # evaluate each Pp for incremental ran
 
     for i, Pp in enumerate(Pp_):
         if Pp.L > 1:
-            loc_ave_M = ((Pp.M + ave_M) / 2) * Pp.Rdn * hlayers  # cost per loop = (ave of global and local aves) * redundancy
-            iM = sum( [pdert.P.M for pdert in Pp.pdert_])
+            loc_ave_M = ((Pp.M + ave_M) / 2) * Pp.Rdn * hlayers  # cost per loop = (ave of global and local aves) * redundancy    
+            # this is still needed, since Pp.pdert is Rdert at higher rng, and Rdert doesn't have P reference
+            if rng>2:
+                iM = sum( [rdert.P.M for Rdert in Pp.pdert_ for rdert in Rdert.rdert_])
+                a = 1
+            else:
+                iM = sum( [pdert.P.M for pdert in Pp.pdert_])
             loc_ave = (ave + iM) / 2 * Pp.Rdn * hlayers  # cost per cross-comp
 
             if Pp.M / Pp.L > loc_ave_M + 4:  # 4: search cost, + Pp.iM?
@@ -420,27 +425,33 @@ def form_rPp_(Rdert_, rng, depth):  # evaluate direct and mediated match between
             _Rdert.roots = _rPp
             rPp_.append(_rPp)
         else:  # rPp was formed in prior merging
-            rPp_=_Rdert.roots
+            _rPp =_Rdert.roots
 
         if _rPp.M > ave_M * 4:  # min clustering value, else reuse Rdert_ for multiple rmg+s?
             rdert_= _Rdert.rdert_
-            for i, rdert in enumerate(rdert_):
-                olp_ = _Rdert.rdert_[min(0, i-rng): i]  # _Rdert overlap with rdert_[i].Rdert
+            for i, rdert in enumerate(rdert_): 
+                olp_ = _Rdert.rdert_[min(0, abs(i-rng)): i]  # _Rdert overlap with rdert_[i].Rdert
                 olp_M = sum(rdert.m for rdert in olp_)
-
-                if olp_M / len(olp_) > ave_M * 4:  # mean M of overlap
+                    
+                if olp_M / max(len(olp_),1) > ave_M * 4:  # mean M of overlap
                     # add to _rPp:
                     Rdert = rdert.roots; rPp = Rdert.roots
                     if isinstance(rPp, CPp):  # merge rPp
                         for cRdert in rPp.pdert_:
                             if cRdert not in _rPp.pdert_:
-                                cRdert = rdert.roots
-                                _rPp.accum_from(cRdert, ignore_capital=True)
+                                cRdert.roots = _rPp
+                                _rPp.accum_from(cRdert, ignore_capital=True) 
+                                _rPp.pdert_.append(cRdert)
                                 _rPp.L += 1
-                    if rdert.m > 0:
-                        rdert.olp_M += Rdert.rdert_[0].m  # _Rdert olp added per rng+, always 2 rderts per Rdert
-                        Rdert.rdert_[0].olp_M += rdert.m  # reciprocal left olp extension
-                        rPp.L += 1
+                    elif rdert.m > 0 and Rdert not in _rPp.pdert_:      
+                        _rPp.accum_from(Rdert, ignore_capital=True) 
+                        _rPp.pdert_.append(Rdert)
+                        _rPp.L += 1 
+                        # Rdert.rdert_ may have single element only on the 1st few elements (Rdert_[:rng]) and last few elements (Rdert_[-rng:])
+                        if rdert is not Rdert.rdert_[0]: 
+                            rdert.olp_M += Rdert.rdert_[0].m  # _Rdert olp added per rng+, always 2 rderts per Rdert
+                            Rdert.rdert_[0].olp_M += rdert.m  # reciprocal left olp extension
+                        
 
         rPp_.append(_rPp)
 
