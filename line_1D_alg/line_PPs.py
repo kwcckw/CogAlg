@@ -379,7 +379,7 @@ def rng_incr(rootPp, Pp_, hlayers, rng):  # evaluate each Pp for incremental ran
 def comp_rng(rootPp, loc_ave, rng):  # extended fixed-rng search-right for core I at local ave (lower m)
 
     if rng==2:  # 1st call, initialize Rdert_ with aderts:
-        Rdert_ = [Cpdert(adert=pdert) for pdert in rootPp.pdert_]
+        Rdert_ = [Cpdert(adert=pdert, P=CP()) for pdert in rootPp.pdert_]
     else:  # rderts are left and right from adert, evaluate per rng+1:
         Rdert_ = rootPp.pdert_.copy()  # copy to avoid overwriting pdert.roots
     for Rdert in Rdert_: Rdert.roots = []  # reset for future rPps
@@ -397,15 +397,16 @@ def comp_rng(rootPp, loc_ave, rng):  # extended fixed-rng search-right for core 
             comp_sublayers(rdert.P, adert.P, rdert.m)
         # left Rdert assign:
         _Rdert.accum_from(rdert)  # Pp params += pdert params
+        _Rdert.P.accum_from(rdert.P, excluded=["x0"])
         _Rdert.rdert_ += [rdert]  # extend _Rdert to the right
         # right Rdert assign:
         Rdert.accum_from(rdert)  # Pp params += pdert params
+        Rdert.P.accum_from(rdert.P, excluded=["x0"])
         Rdert.rdert_.insert(0, rdert.copy())  # extend Rdert to the left
         Rdert.rdert_[0].roots = _Rdert
 
     return Rdert_
 
-# needs to be revised to re-evaluate all overlapping Rderts, accumulated in comp_rng:
 
 def form_rPp_(Rdert_, rng, depth):  # evaluate inclusion of accumulated Rderts in _rPp
 
@@ -417,7 +418,7 @@ def form_rPp_(Rdert_, rng, depth):  # evaluate inclusion of accumulated Rderts i
             _Rdert.roots = _rPp
             rPp_.append(_rPp)
         else:  # rPp was formed by prior merging
-            _rPp_ = _Rdert.roots
+            _rPp = _Rdert.roots
 
         if _rPp.M > ave_M * 4:  # clustering costs per rPp, else reuse Rdert_ for multiple rmg+s?
             rdert_= _Rdert.rdert_
@@ -461,13 +462,13 @@ def sub_search(rootPp, fPd):  # ~line_PPs_root: cross-comp sub_Ps in top sublaye
                     for param_name, sub_Pdert_ in zip(param_names, sub_Pdert_t):
                         param_md = []
                         for fPpd in 0, 1:
-                            sub_Pp_ = form_Pp_(sub_Pdert_, fPpd)
+                            sub_Pp_ = form_Pp_(deepcopy(sub_Pdert_), fPpd)
                             param_md.append(sub_Pp_)
                             if (fPpd and param_name == "D_") or (not fPpd and param_name == "I_"):
                                 if not fPpd:
                                     splice_Ps(sub_Pp_, dert1_, dert2_, fPd, fPpd)  # splice eval by Pp.M in Ppm_, for Pms in +IPpms or Pds in +DPpm
-                                rootPp = CPp(pdert_=rootPp.pdert_, sublayers=[param_md])
-                                intra_Pp_(rootPp, param_md[fPpd], sub_Pdert_, 1, fPpd)  # der+ or rng+
+                                rng_incr([], sub_Pp_, hlayers=1, rng=2)  # eval rng+ comp,form per Pp
+                                der_incr([], sub_Pp_, hlayers=1)  # eval der+ comp,form per Pp        
                         paramset.append(param_md)
                     P.subset[4 + fsubPd].append(paramset)  # sub_Ppm_tt and sub_Ppd_tt
                     # deeper comp_sublayers is selective per sub_P
@@ -513,18 +514,19 @@ def comp_sublayers(_P, P, root_v):  # if pdert.m -> if summed params m -> if pos
                         sub_M += xsub_P_M ; sub_D += xsub_P_D
                         if fbreak:
                             break
-                    # not implemented: if param_name == "I_" and not fPd: sub_pdert = search_param_(param_)
+
                     start_index = next_index  # for next _sub_P
 
                     if any(_xsub_pdertt):  # at least 1 sub_pdert, real min length ~ 8, very unlikely
                         xsub_Pp_t = []  # LPpm_, IPpm_, DPpm_, MPpm_
                         sum_rdn_(param_names, _xsub_pdertt, fPd)  # no return from sum_rdn now
                         for param_name, xsub_Pdert_ in zip(param_names, _xsub_pdertt):
-                            xsub_Pp_ = form_Pp_(xsub_Pdert_, fPd=0)
+                            xsub_Pp_ = form_Pp_(deepcopy(xsub_Pdert_), fPd=0)
                             # no step=2 for splice: xsub_pdertts are not consecutive, and their Ps are not aligned?
                             if param_name == "I_":
-                                # no root: Pd_ is always empty as comp_sublayers can be called from I param only:
-                                intra_Pp_(None, xsub_Pp_, xsub_Pdert_, 1, fPd=0)  # rng+ only?
+                                splice_Ps(xsub_Pp_, [], [], fPd, fPpd=0)  # splice eval by Pp.M in Ppm_, for Pms in +IPpms or Pds in +DPpm
+                                rng_incr([], xsub_Pp_, hlayers=1, rng=2)  # eval rng+ comp,form per Pp
+                                der_incr([], xsub_Pp_, hlayers=1)  # eval der+ comp,form per Pp
                             xsub_Pp_t.append(xsub_Pp_)
 
                         _xsub_pdertt_[-1][:] = xsub_Pp_t
