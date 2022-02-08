@@ -75,12 +75,13 @@ def line_level_root(root, types_):  # recursively adds higher levels of pattern 
                     new_sublayer0 += [Pp_]  # Ppm_| Ppd_
                     if (fPd and param == 2) or (not fPd and param == 1):  # 2: "D_", 1: "I_"
                         if not fPd:
-                            splice_Pps(Pp_, dert1_, dert2_, fiPd, fPd)  # splice eval by Pp.M in Ppm_, for Pms in +IPpms or Pds in +DPpm
+                            splice_Ps(Pp_, dert1_, dert2_, fiPd, fPd)  # splice eval by Pp.M in Ppm_, for Pms in +IPpms or Pds in +DPpm
                         rng_incr(root, Pp_, hlayers=1, rng=2)  # eval rng+ comp,form per Pp
                         der_incr(root, Pp_, hlayers=1)  # eval der+ comp,form per Pp
                     new_M += sum([Pp.M for Pp in Pp_])
         else:
             new_sublayer0 += [[] for _ in range(8)]  # 8 empty list for 4 params * 2 fPd tuples
+            new_types_ += [[] for _ in range(8)]  # to get compatible index with sublayer
             # better to add count of missing prior P_s to each P_, or use nested tuples?
 
     if len(sublayer0) / max(nextended,1) < 4 and new_M > ave_M * 4:  # ave_extend_ratio and added M, will be default if pipelined
@@ -189,14 +190,15 @@ def cross_core_comp(iP_T, types_):  # draft, need further discussion and update
             LP_t, IP_t, DP_t, MP_t = [], [], [], []
             # get P_ of each param for current elevation (compare at each elevation?)
             for i, types in enumerate(types_):
-                if types[elevation] == 0:
-                    LP_t += [iP_T[i]]
-                elif types[elevation] == 1:
-                    IP_t += [iP_T[i]]
-                elif types[elevation] == 2:
-                    DP_t += [iP_T[i]]
-                elif types[elevation] == 3:
-                    MP_t += [iP_T[i]]
+                if types:  # non empty types, empty types = no extension
+                    if types[elevation] == 0:
+                        LP_t += [iP_T[i]]
+                    elif types[elevation] == 1:
+                        IP_t += [iP_T[i]]
+                    elif types[elevation] == 2:
+                        DP_t += [iP_T[i]]
+                    elif types[elevation] == 3:
+                        MP_t += [iP_T[i]]
             P_tt = [LP_t, IP_t, DP_t, MP_t]
 
             xPp_t = [] # cross compare between 4 params, always = 6 elements if call from root function
@@ -225,7 +227,7 @@ def cross_core_comp(iP_T, types_):  # draft, need further discussion and update
                                                     xPp_ += form_Pp_(xpdert_, fPpd)  # add a loop to form xPp_ with fPd = 0 and fPd = 1?
                                                     if (fPpd and param_name == "D_") or (not fPpd and param_name == "I_"):
                                                         if not fPpd:
-                                                            splice_Ps(Pp_, [], [], fiPd, fPpd)  # splice eval by Pp.M in Ppm_, for Pms in +IPpms or Pds in +DPpm
+                                                            splice_Ps(xPp_, [], [], 0, fPpd)  # splice eval by Pp.M in Ppm_, for Pms in +IPpms or Pds in +DPpm
                                                     rng_incr([], xPp_, hlayers=1, rng=2)  # eval rng+ comp,form per Pp
                                                     der_incr([], xPp_, hlayers=1)  # eval der+ comp,form per Pp
                                                 # intra_Pp too?

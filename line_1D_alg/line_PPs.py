@@ -264,7 +264,7 @@ def splice_Ps(Ppm_, pdert1_, pdert2_, fPd, fPpd):  # re-eval Pps, Pp.pdert_s for
 
             if M2 / max( abs(M1), 1) > ave_splice:  # similarity / separation(!/0): splice Ps in Pp, also implies weak Pp.pdert_?
                 # replace Pp params with summed P params, Pp is now primarily a spliced P:
-                P = CP
+                P = CP()
                 P.L = sum([pdert.P.L for pdert in Pp.pdert_])
                 P.I = sum([pdert.P.I for pdert in Pp.pdert_])
                 P.D = sum([pdert.P.D for pdert in Pp.pdert_])
@@ -273,6 +273,8 @@ def splice_Ps(Ppm_, pdert1_, pdert2_, fPd, fPpd):  # re-eval Pps, Pp.pdert_s for
 
                 for pdert in Pp.pdert_:
                     P.dert_ += pdert.P.dert_  # if Pp.dert_: spliced P, summed P params are primary, other Pp params are low-value
+                P.x0 = min([pdert.P.x0 for pdert in Pp.pdert_])
+                P.L = len(P.dert_)
                 intra_P(P, rdn=1, rng=1, fPd=fPd)  # fPd, not fPpd, re-eval line_Ps' intra_P per spliced P
                 Pp.P = P
         '''
@@ -366,7 +368,7 @@ def rng_incr(rootPp, Pp_, hlayers, rng):  # evaluate each Pp for incremental ran
                     sub_Ppm_, sub_Ppd_ = [], []
                     Pp.sublayers = [(sub_Ppm_, sub_Ppd_)]
                     sub_Ppm_[:] = form_rPp_(Rdert_, rng)
-                    if sub_Ppm_ and Pp.M > loc_ave_M * 4 and not Pp.dert_:  # 4: looping cost, if Pm_'IPpm_.M, +Pp.iM?
+                    if sub_Ppm_ and Pp.M > loc_ave_M * 4 and not isinstance(Pp.P, CP):  # 4: looping cost, if Pm_'IPpm_.M, +Pp.iM?
                         rng_incr(Pp, sub_Ppm_, hlayers+1, rng+1)  # recursive rng+, no der+ in redundant Pds?
                     else:
                         Pp.sublayers = []  # reset after the above converts it to [([],[])]
@@ -435,12 +437,14 @@ def form_rPp_(Rdert_, rng):  # evaluate inclusion in _rPp of accumulated Rderts,
             for i, rdert in enumerate(rdert_):
                 olp_ = _Rdert.rdert_[max(0, i-rng): i+1]  # _Rdert overlap with rdert_[i].Rdert
 
+                '''
                 olp_M = sum(rdert.roots.rdert_[i].m for i, rdert_ in enumerate(olp_))
                 # not correct, we are looking for Rdert in which rdert is in the middle, so it maps to adert
                 # or:
                 Olp_M = sum(rdert.roots.rdert_[i].olp_M for i, rdert in enumerate(olp_))
                 # accumulate overlap of each element, because match is anchor-specific?
-
+                '''
+                
                 olp_M = sum(olp_rdert.m for olp_rdert in olp_)  # M(_adert, adert) in overlap
 
                 if olp_M / len(olp_) > ave_M * 4:  # clustering by variable cost of process in +rPp, vs mean M of overlap
