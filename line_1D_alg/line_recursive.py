@@ -80,8 +80,7 @@ def line_level_root(root, types_):  # recursively adds higher levels of pattern 
                         der_incr(root, Pp_, hlayers=1)  # eval der+ comp,form per Pp
                     new_M += sum([Pp.M for Pp in Pp_])
         else:
-            new_sublayer0 += [[] for _ in range(8)]  # 8 empty list for 4 params * 2 fPd tuples
-            new_types_ += [[] for _ in range(8)]  # to get compatible index with sublayer
+            new_types_ += [[] for _ in range(8)]  # align indexing with sublayer
             # better to add count of missing prior P_s to each P_, or use nested tuples?
 
     if len(sublayer0) / max(nextended,1) < 4 and new_M > ave_M * 4:  # ave_extend_ratio and added M, will be default if pipelined
@@ -137,7 +136,7 @@ def P_type_assign(iP_T):  # P_T_: 2P_, 16P_, 128P_., each level is nested to the
     return types_, ntypes
 
 
-def line_PPPs_root(root):  # test code
+def line_PPPs_root(root):  # test code, some obsolete
 
     sublayer0 = []  # 1st sublayer: (Pm_, Pd_( Lmd, Imd, Dmd, Mmd ( Ppm_, Ppd_))), deep sublayers: Ppm_(Ppmm_), Ppd_(Ppdm_,Ppdd_)
     root.sublayers=[sublayer0]  # reset from last-level sublayers
@@ -190,15 +189,14 @@ def cross_core_comp(iP_T, types_):  # draft, need further discussion and update
             LP_t, IP_t, DP_t, MP_t = [], [], [], []
             # get P_ of each param for current elevation (compare at each elevation?)
             for i, types in enumerate(types_):
-                if types:  # non empty types, empty types = no extension
-                    if types[elevation] == 0:
-                        LP_t += [iP_T[i]]
-                    elif types[elevation] == 1:
-                        IP_t += [iP_T[i]]
-                    elif types[elevation] == 2:
-                        DP_t += [iP_T[i]]
-                    elif types[elevation] == 3:
-                        MP_t += [iP_T[i]]
+                if types[elevation] == 0:
+                    LP_t += [iP_T[i]]
+                elif types[elevation] == 1:
+                    IP_t += [iP_T[i]]
+                elif types[elevation] == 2:
+                    DP_t += [iP_T[i]]
+                elif types[elevation] == 3:
+                    MP_t += [iP_T[i]]
             P_tt = [LP_t, IP_t, DP_t, MP_t]
 
             xPp_t = [] # cross compare between 4 params, always = 6 elements if call from root function
@@ -209,11 +207,12 @@ def cross_core_comp(iP_T, types_):  # draft, need further discussion and update
                         xPp_ = []
                         for _P_ in _P_t:
                             for P_ in P_t:
-                                if len(P_)>2 and len(_P_)>2:  # minimum number of comparands
+                                if _P_ and P_:  # not empty _P_ and P_
+                                    if len(P_)>2 and len(_P_)>2:
                                         _M = sum([_P.M for _P in _P_])
                                         M = sum([P.M for P in P_])
                                         for i,(param_name, ave) in enumerate(zip(param_names, aves)):
-                                            for fPpd in 0,1:
+                                            for fPd in 0,1:
                                                 xpdert_ = []  # contains result from each _P_ and P_ pair
                                                 for _P in _P_:
                                                     for P in P_:
@@ -223,13 +222,7 @@ def cross_core_comp(iP_T, types_):  # draft, need further discussion and update
                                                             param = getattr(P,param_name[0])
                                                             xpdert = comp_par(_P, _param, param, param_name, ave)
                                                             xpdert_.append(xpdert)
-                                                if xpdert_:
-                                                    xPp_ += form_Pp_(xpdert_, fPpd)  # add a loop to form xPp_ with fPd = 0 and fPd = 1?
-                                                    if (fPpd and param_name == "D_") or (not fPpd and param_name == "I_"):
-                                                        if not fPpd:
-                                                            splice_Ps(xPp_, [], [], 0, fPpd)  # splice eval by Pp.M in Ppm_, for Pms in +IPpms or Pds in +DPpm
-                                                    rng_incr([], xPp_, hlayers=1, rng=2)  # eval rng+ comp,form per Pp
-                                                    der_incr([], xPp_, hlayers=1)  # eval der+ comp,form per Pp
+                                                xPp_ += form_Pp_(xpdert_, fPd)  # add a loop to form xPp_ with fPd = 0 and fPd = 1?
                                                 # intra_Pp too?
                         xPp_t.append(xPp_)
             xPp_t_.append(xPp_t)
@@ -330,3 +323,33 @@ def term_Pp(Ppp_, L, I, D, M, Rdn, x0, Ppdert_, fPpd):
     Ppp = CPp(L=L, I=I, D=D, M=M, Rdn=Rdn+L, x0=x0, pdert_=Ppdert_, sublayers=[[]])
     for Ppdert in Ppp.pdert_: Ppdert.Ppt[fPpd] = Ppp  # root Ppp refs
     Ppp_.append(Ppp)
+
+
+def splice_Ps(Pppm_, Ppdert1_, Ppdert2_, fPd, fPpd):  # re-eval Ppps, pPp.pdert_s for redundancy, eval splice Pps
+    '''
+    Initial P termination is by pixel-level sign change, but resulting separation may not be significant on a pattern level.
+    That is, separating opposite-sign patterns are weak relative to separated same-sign patterns, especially if similar.
+     '''
+    for i, Ppp in enumerate(Pppm_):
+        if fPpd: value = abs(Ppp.D)  # DPpm_ if fPd, else IPpm_
+        else: value = Ppp.M  # add summed P.M|D?
+
+        if value > ave_M * (ave_D*fPd) * Ppp.Rdn * 4 and Ppp.L > 4:  # min internal xP.I|D match in +Ppm
+            M2 = M1 = 0
+            for Ppdert2 in Ppdert2_: M2 += Ppdert2.m  # match(I, __I or D, __D): step=2
+            for Ppdert1 in Ppdert1_: M1 += Ppdert1.m  # match(I, _I or D, _D): step=1
+
+            if M2 / max( abs(M1), 1) > ave_splice:  # similarity / separation(!/0): splice Ps in Pp, also implies weak Pp.pdert_?
+                # replace Pp params with summed P params, Pp is now primarily a spliced P:
+                Ppp.L = sum([Ppdert.P.L for Ppdert in Ppp.pdert_]) # In this case, Ppdert.P is Pp
+                Ppp.I = sum([Ppdert.P.I for Ppdert in Ppp.pdert_])
+                Ppp.D = sum([Ppdert.P.D for Ppdert in Ppp.pdert_])
+                Ppp.M = sum([Ppdert.P.M for Ppdert in Ppp.pdert_])
+                Ppp.Rdn = sum([Ppdert.P.Rdn for Ppdert in Ppp.pdert_])
+
+                for Ppdert in Ppp.pdert_:
+                    Ppp.dert_ += Ppdert.P.pdert_
+                intra_Pp_(None, [[],[]], 1, fPd )  # tentative, need further update
+        '''
+        no splice(): fine-grain eval per P triplet is too expensive?
+        '''
