@@ -159,7 +159,7 @@ def line_PPPs_root(root):  # test code, some obsolete
                             param_md += [Pp_]  # -> [Ppm_, Ppd_]
                             if (fPpd and param_name == "D_") or (not fPpd and param_name == "I_"):
                                 if not fPpd:
-                                    splice_Ps(Pp_, dert1_, dert2_, fiPpd, fPpd)  # splice eval by Pp.M in Ppm_, for Pms in +IPpms or Pds in +DPpm
+                                    splice_Pps(Pp_, dert1_, dert2_, fiPpd, fPpd)  # splice eval by Pp.M in Ppm_, for Pms in +IPpms or Pds in +DPpm
                                 intra_Pp_(root, param_md[fPpd], 1, fPpd)  # eval der+ or rng+ per Pp
                             level_M += sum([Pp.M for Pp in Pp_])
                         paramset += [param_md]  # -> [Lmd, Imd, Dmd, Mmd]
@@ -189,7 +189,7 @@ def cross_core_comp(iP_T, types_):  # draft, need further discussion and update
             LP_t, IP_t, DP_t, MP_t = [], [], [], []
             # get P_ of each param for current elevation (compare at each elevation?)
             for i, types in enumerate(types_):
-                if types:
+                if types:  # else empty set
                     if types[elevation] == 0:
                         LP_t += [iP_T[i]]
                     elif types[elevation] == 1:
@@ -358,4 +358,3 @@ def splice_Pps(Pppm_, Ppdert1_, Ppdert2_, fPd, fPpd):  # re-eval Ppps, pPp.pdert
         '''
         no splice(): fine-grain eval per P triplet is too expensive?
         '''
-        
