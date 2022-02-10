@@ -272,6 +272,9 @@ def splice_Ps(Ppm_, pdert1_, pdert2_, fPd, fPpd):  # re-eval Pps, Pp.pdert_s for
                 for pdert in Pp.pdert_: P.dert_ += pdert.P.dert_
                 P.L = len(P.dert_)
                 intra_P(P, rdn=1, rng=1, fPd=fPd)  # re-run line_Ps intra_P per spliced P
+                # create another rng_incr and der_incr here?
+                # rng_incr_P_([], [P], rdn=1, rng=1)
+                # der_incr_P_([], [P], rdn=1, rng=1)
                 Pp.P = P
         '''
         no splice(): fine-grained eval per P triplet is too expensive?
@@ -419,21 +422,42 @@ def form_rPp_(Rdert_, rng):  # evaluate inclusion in _rPp of accumulated Rderts,
 
     rPp_ = []
     for _Rdert in Rdert_:  # no rPp yet, initialize to merge all included rPps
-        _rPp = CPp(pdert_=[_Rdert], L=1)
-        _rPp.accum_from(_Rdert, ignore_capital=True)
-        _Rdert.roots = _rPp
+        if isinstance(_Rdert.roots, CPp):
+            _rPp = _Rdert.roots          
+        else:
+            _rPp = CPp(pdert_=[_Rdert], L=1)
+            _rPp.accum_from(_Rdert, ignore_capital=True)
+            _Rdert.roots = _rPp
+            rPp_.append(_rPp)
+        
         olp_M = 0
         i_=[]
         for i, rdert in enumerate(_Rdert.rdert_):  # sum in olp_M to evaluate rdert.Rdert inclusion in _rPp
             if rdert.m > 0:
                 olp_M += rdert.m
                 i_.append(i)
-        if olp_M / len(i_) > ave_M * 4:  # clustering by variable cost of process in +rPp, vs mean M of overlap
+        if olp_M / max(1, len(i_)) > ave_M * 4:  # clustering by variable cost of process in +rPp, vs mean M of overlap
             for i in i_:
                 rdert = _Rdert.rdert_[i]
-                merge(_rPp, rdert.roots.roots)  # rdert.Rdert.rPp
-                # include del.rPp in merge
-            rPp_.append(_rPp)
+                Rdert = rdert.roots
+                rPp = Rdert.roots
+                
+                if isinstance(rPp, CPp):  # merge rPp
+                    for olp_Rdert in rPp.pdert_:
+                        if olp_Rdert not in _rPp.pdert_:
+                            olp_Rdert.roots = _rPp
+                            _rPp.accum_from(olp_Rdert, ignore_capital=True) 
+                            _rPp.pdert_.append(olp_Rdert)
+                            _rPp.L += 1
+                    rPp_.remove(rPp)  # removed merged rPp
+                else:
+                    
+                    rdert.roots.roots = _rPp
+                    _rPp.accum_from(Rdert, ignore_capital=True) 
+                    _rPp.pdert_.append(Rdert)
+                    _rPp.L += 1
+                    
+
         # else _rPp is not in rPp_
     return rPp_  # no term_rPp
 '''

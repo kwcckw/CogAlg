@@ -62,7 +62,7 @@ ave_D = 5  # min |D| for initial incremental-derivation comparison(d_)
 ave_nP = 5  # average number of sub_Ps in P, to estimate intra-costs? ave_rdn_inc = 1 + 1 / ave_nP # 1.2
 ave_rdm = .5  # obsolete: average dm / m, to project bi_m = m * 1.5
 ave_splice = 50  # to merge a kernel of 3 adjacent Ps
-init_y = 500  # starting row, set 0 for the whole frame, mostly not needed
+init_y = 0  # starting row, set 0 for the whole frame, mostly not needed
 halt_y = 502  # ending row, set 999999999 for arbitrary image
 '''
     Conventions:
@@ -90,7 +90,7 @@ def line_Ps_root(pixel_):  # Ps: patterns, converts frame_of_pixels to frame_of_
     Pm_ = form_P_(None, dert_, rdn=1, rng=1, fPd=False)  # rootP=None, eval intra_P_ (calls form_P_)
     Pd_ = form_P_(None, dert_, rdn=1, rng=1, fPd=True)
 
-    return dert_, [Pm_, Pd_]  # input to level 2
+    return [Pm_, Pd_]  # input to level 2
 
 
 def form_P_(rootP, dert_, rdn, rng, fPd):  # accumulation and termination, rdn and rng are pass-through intra_P_
@@ -113,28 +113,17 @@ def form_P_(rootP, dert_, rdn, rng, fPd):  # accumulation and termination, rdn a
         x += 1
         _sign = sign
 
-    intra_P_(rootP, P_, rdn, rng, fPd)
+    rng_incr_P_(rootP, P_, rdn, rng)
+    der_incr_P_(rootP, P_, rdn, rng)
 
     return P_  # used only if not rootP, else packed in rootP.sublayers
 
 
-def intra_P_(rootP, P_, rdn, rng, fPd):  # recursive cross-comp and form_P_ inside selected sub_Ps in P_
+def rng_incr_P_(rootP, P_, rdn, rng):
 
     comb_sublayers = []
-    # adj_M_ = form_adjacent_M_(P_)  # compute adjacent Ms to evaluate contrastive borrow potential; but lend is not to adj only, reflected in ave?:
-    # for P, adj_M in zip(P_, adj_M_); rel_adj_M = adj_M / -P.M  # allocate -Pm' adj_M in internal Pds; vs.:
     for P in P_:
-        if fPd:  # P is Pd
-            if abs(P.D) - (P.L - P.Rdn) * ave_D * P.L > ave_D * rdn and P.L > 1:  # high-D span, ave_adj_M is represented in ave_D
-                rdn += 1; rng += 1
-                P.subset = rdn, rng, [],[],[],[]  # 1st sublayer params, []s: xsub_pmdertt_, _xsub_pddertt_, sub_Ppm_, sub_Ppd_
-                sub_Pm_, sub_Pd_ = [], []
-                P.sublayers = [(sub_Pm_, sub_Pd_)]
-                ddert_ = deriv_comp(P.dert_)  # i is d
-                sub_Pm_[:] = form_P_(P, ddert_, rdn, rng, fPd=False)  # cluster by mm sign
-                sub_Pd_[:] = form_P_(P, ddert_, rdn, rng, fPd=True)  # cluster by md sign
-
-        elif P.M - P.Rdn * ave_M * P.L > ave_M * rdn and P.L > 2:  # M value adjusted for xP and higher-layers redundancy
+        if P.M - P.Rdn * ave_M * P.L > ave_M * rdn and P.L > 2:  # M value adjusted for xP and higher-layers redundancy
             ''' P is Pm   
             min skipping P.L=3, actual comp rng = 2^(n+1): 1, 2, 3 -> kernel size 4, 8, 16...
             if local ave:
@@ -157,12 +146,39 @@ def intra_P_(rootP, P_, rdn, rng, fPd):  # recursive cross-comp and form_P_ insi
                 comb_sub_Pd_ += sub_Pd_
                 new_comb_sublayers.append((comb_sub_Pm_, comb_sub_Pd_))  # add sublayer
             comb_sublayers = new_comb_sublayers
+    
     if rootP:
-        rootP.sublayers += comb_sublayers  # no return
-    else:
-        return P_  # each P has new sublayers, comb_sublayers is not needed
+        rootP.sublayers += comb_sublayers  # no return  
 
 
+    
+def der_incr_P_(rootP, P_, rdn, rng):
+    
+    comb_sublayers = []
+    # adj_M_ = form_adjacent_M_(P_)  # compute adjacent Ms to evaluate contrastive borrow potential; but lend is not to adj only, reflected in ave?:
+    # for P, adj_M in zip(P_, adj_M_); rel_adj_M = adj_M / -P.M  # allocate -Pm' adj_M in internal Pds; vs.:
+    for P in P_:
+        if abs(P.D) - (P.L - P.Rdn) * ave_D * P.L > ave_D * rdn and P.L > 1:  # high-D span, ave_adj_M is represented in ave_D
+            rdn += 1; rng += 1
+            P.subset = rdn, rng, [],[],[],[]  # 1st sublayer params, []s: xsub_pmdertt_, _xsub_pddertt_, sub_Ppm_, sub_Ppd_
+            sub_Pm_, sub_Pd_ = [], []
+            P.sublayers = [(sub_Pm_, sub_Pd_)]
+            ddert_ = deriv_comp(P.dert_)  # i is d
+            sub_Pm_[:] = form_P_(P, ddert_, rdn, rng, fPd=False)  # cluster by mm sign
+            sub_Pd_[:] = form_P_(P, ddert_, rdn, rng, fPd=True)  # cluster by md sign
+
+    if rootP and P.sublayers:
+        new_comb_sublayers = []
+        for (comb_sub_Pm_, comb_sub_Pd_), (sub_Pm_, sub_Pd_) in zip_longest(comb_sublayers, P.sublayers, fillvalue=([],[])):
+            comb_sub_Pm_ += sub_Pm_  # remove brackets, they preserve index in sub_Pp root_
+            comb_sub_Pd_ += sub_Pd_
+            new_comb_sublayers.append((comb_sub_Pm_, comb_sub_Pd_))  # add sublayer
+        comb_sublayers = new_comb_sublayers
+
+    if rootP:
+        rootP.sublayers += comb_sublayers  # no return  
+        
+# unpack to range_incr?
 def range_comp(dert_):  # cross-comp of 2**(rng+1) - distant pixels, skipping intermediate pixels:  rng=1,2,3 -> kernel=4,8,16...
     rdert_ = []
     _i = dert_[0].i
@@ -179,6 +195,7 @@ def range_comp(dert_):  # cross-comp of 2**(rng+1) - distant pixels, skipping in
 
     return rdert_
 
+# unpack to der_incr?
 def deriv_comp(dert_):  # cross-comp consecutive ds in same-sign dert_: sign match is partial d match, dd and md may match across d sign?
     # initialization:
     ddert_ = []
@@ -238,7 +255,7 @@ if __name__ == "__main__":
     render = 0
     fline_PPs = 1
     start_time = time()
-    from line_PPPs import line_recursive
+    from line_recursive import line_recursive
 
     # Run functions
     image = cv2.imread('.//raccoon.jpg', 0).astype(int)  # manual load pix-mapped image
