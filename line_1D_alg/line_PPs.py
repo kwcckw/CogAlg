@@ -271,8 +271,10 @@ def splice_Ps(Ppm_, pdert1_, pdert2_, fPd, fPpd):  # re-eval Pps, Pp.pdert_s for
                 P.Rdn = sum([pdert.P.Rdn for pdert in Pp.pdert_])
                 for pdert in Pp.pdert_: P.dert_ += pdert.P.dert_
                 P.L = len(P.dert_)
-                intra_P(P, rdn=1, rng=1, fPd=fPd)  # re-run line_Ps intra_P per spliced P
-                # replace with rng_incr_P_([], [P], rdn=1, rng=1), der_incr_P_([], [P], rdn=1, rng=1)
+                 
+                # re-run line_Ps intra_P per spliced P
+                rng_incr_P_([], [P], rdn=1, rng=1)
+                der_incr_P_([], [P], rdn=1, rng=1)
                 Pp.P = P
         '''
         no splice(): fine-grained eval per P triplet is too expensive?
