@@ -62,7 +62,7 @@ ave_D = 5  # min |D| for initial incremental-derivation comparison(d_)
 ave_nP = 5  # average number of sub_Ps in P, to estimate intra-costs? ave_rdn_inc = 1 + 1 / ave_nP # 1.2
 ave_rdm = .5  # obsolete: average dm / m, to project bi_m = m * 1.5
 ave_splice = 50  # to merge a kernel of 3 adjacent Ps
-init_y = 0  # starting row, set 0 for the whole frame, mostly not needed
+init_y = 500  # starting row, set 0 for the whole frame, mostly not needed
 halt_y = 502  # ending row, set 999999999 for arbitrary image
 '''
     Conventions:
@@ -182,7 +182,6 @@ def der_incr_P_(rootP, P_, rdn, rng):
             sub_Pm_[:] = form_P_(P, ddert_, rdn, rng, fPd=False)  # cluster by mm sign
             sub_Pd_[:] = form_P_(P, ddert_, rdn, rng, fPd=True)  # cluster by md sign
 
-        # this merging is per P
         if rootP and P.sublayers:
             new_comb_sublayers = []
             for (comb_sub_Pm_, comb_sub_Pd_), (sub_Pm_, sub_Pd_) in zip_longest(comb_sublayers, P.sublayers, fillvalue=([],[])):
