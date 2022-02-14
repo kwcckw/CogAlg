@@ -3,7 +3,7 @@ Cross-compare blobs with incrementally intermediate adjacency, within a frame
 '''
 
 from class_cluster import ClusterStructure, NoneType, comp_param, Cdert
-from frame_blobs import ave, CBlob
+from frame_blobs import *
 from comp_slice_ import ave_min, ave_inv # facing error when comp-slice_ import from comp_blob, hence shift it here.
 import numpy as np
 import cv2
@@ -14,6 +14,7 @@ ave_rM = .7  # average relative match at rL=1: rate of ave_mB decay with relativ
 ave_da = 0.7853  # da at 45 degree, = ga at 22.5 degree
 ave_ga = .78
 ave_ma = 2
+
 
 class CderBlob(ClusterStructure):
 
@@ -35,11 +36,11 @@ class CBblob(CBlob, CderBlob):
     blob_ = list
 
 
-def cross_comp_blobs(frame):
+def frame_bblobs(frame, intra, render, verbose):
     '''
     root function of comp_blob: cross compare blobs with their adjacent blobs in frame.blob_, including sub_layers
     '''
-    blob_ = frame.blob_
+    blob_ = frame.blob_.copy()
 
     for blob in blob_:  # each blob forms derBlob per compared adj_blob and accumulates adj_blobs'derBlobs:
         if len(blob.derBlob_) == 0:
@@ -48,10 +49,13 @@ def cross_comp_blobs(frame):
 
     bblob_ = form_bblob_(blob_)  # form blobs of blobs, connected by mutual match
 
-    visualize_cluster_(bblob_, blob_, frame)
+    
+    frame_bblob = FrameOfBlobs(I=0, Dy=0, Dx=0, M=0, blob_=bblob_, dert__=0)
+    
+    # visualize_cluster_(bblob_, blob_, frame)
 
-    return bblob_
-
+    return [frame, frame_bblob]
+    
 
 def search_blob_recursive(blob, adj_blob_, _derBlob, derBlob_):
     '''

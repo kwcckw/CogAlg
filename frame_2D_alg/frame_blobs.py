@@ -37,6 +37,7 @@ from draw_frame_blobs import visualize_blobs
 from utils import minmax
 from collections import namedtuple
 from class_cluster import ClusterStructure
+from time import time
 
 ave = 30  # filter or hyper-parameter, set as a guess, latter adjusted by feedback
 aveB = 50
@@ -286,6 +287,18 @@ def assign_adjacents(adj_pairs, blob_cls=CBlob):  # adjacents are connected oppo
 
 
 
+def frame_blobs(image, intra, render, verbose):
+
+
+    dert__ = comp_pixel(image)
+    frame = derts2blobs(dert__, verbose, render)
+
+    if intra:  # call to intra_blob, omit for testing frame_blobs only:
+        if verbose: print("\rRunning frame's intra_blob...")
+        intra_blob_(frame, render, verbose)
+    
+    return frame
+
 
 if __name__ == "__main__":
     import argparse
@@ -293,12 +306,13 @@ if __name__ == "__main__":
     from utils import imread
     from comp_blob_draft import cross_comp_blobs
     from intra_blob_ import intra_blob_
+    from frame_recursive import frame_recursive
 
     # Parse arguments
     argument_parser = argparse.ArgumentParser()
     argument_parser.add_argument('-i', '--image', help='path to image file', default='./images//toucan.jpg')
     argument_parser.add_argument('-v', '--verbose', help='print details, useful for debugging', type=int, default=1)
-    argument_parser.add_argument('-n', '--intra', help='run intra_blobs after frame_blobs', type=int, default=1)
+    argument_parser.add_argument('-n', '--intra', help='run intra_blobs after frame_blobs', type=int, default=0)
     argument_parser.add_argument('-r', '--render', help='render the process', type=int, default=0)
     argument_parser.add_argument('-c', '--clib', help='use C shared library', type=int, default=0)
     args = argument_parser.parse_args()
@@ -308,15 +322,9 @@ if __name__ == "__main__":
     render = args.render
 
     start_time = time()
-    dert__ = comp_pixel(image)
-    frame = derts2blobs(dert__, verbose=args.verbose, render=args.render, use_c=args.clib)
-
-    if intra:  # call to intra_blob, omit for testing frame_blobs only:
-
-        if args.verbose: print("\rRunning intra_blob...")
-        intra_blob_(frame, args.render, args.verbose)
-
-    bblob_ = cross_comp_blobs(frame)
+    
+    frame = frame_recursive(image, intra, render, verbose)
+    
 
     end_time = time() - start_time
 
