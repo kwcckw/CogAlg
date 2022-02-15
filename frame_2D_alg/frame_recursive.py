@@ -4,8 +4,9 @@ from frame_bblobs import *
 
 
 def frame_recursive(image, intra, render, verbose):
-    frame = frame_blobs(image, intra, render, verbose)
-    frame = frame_bblobs(frame, intra, render, verbose)
+    
+    frame = derts2blobs(image, intra, render, verbose, use_c=False)
+    frame_bblobs(frame, intra, render, verbose)
 
     return frame_level_root(frame)
 

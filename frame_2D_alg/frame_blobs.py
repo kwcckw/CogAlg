@@ -99,6 +99,8 @@ class CBlob(ClusterStructure):  # from frame_blobs only, no sub_blobs
     # from form_bblob:
     root_bblob = object
 
+    # contains each level's frame output
+    levels = list
 
 def comp_pixel(image):  # 2x2 pixel cross-correlation within image, see comp_pixel_versions file for other versions and more explanation
 
@@ -122,10 +124,13 @@ def comp_pixel(image):  # 2x2 pixel cross-correlation within image, see comp_pix
     Gx__ = ((topright__ + bottomright__) - (topleft__ + bottomleft__))  # decomposition of two diagonal differences into Gx
 '''
 
-def derts2blobs(dert__, verbose=False, render=False, use_c=False):
+# rename to img2blobs?
+def derts2blobs(image, intra=False, render=False, verbose=False, use_c=False):
 
     if verbose: start_time = time()
 
+    dert__ = comp_pixel(image)
+        
     if use_c:
         dert__ = dert__[0], np.empty(0), np.empty(0), *dert__[1:], np.empty(0)
         frame, idmap, adj_pairs = wrapped_flood_fill(dert__)
@@ -138,12 +143,17 @@ def derts2blobs(dert__, verbose=False, render=False, use_c=False):
             Dy += blob.Dy
             Dx += blob.Dx
             M += blob.M
-        frame = FrameOfBlobs(I=I, Dy=Dy, Dx=Dx, M=M, blob_=blob_, dert__=dert__)
+
+        frame = CBlob(I=I, Dy=Dy, Dx=Dx, M=M, levels=[blob_], dert__=[dert__])
 
     assign_adjacents(adj_pairs)  # f_segment_by_direction=False
 
-    if verbose: print(f"{len(frame.blob_)} blobs formed in {time() - start_time} seconds")
-    if render: visualize_blobs(idmap, frame.blob_)
+    if verbose: print(f"{len(frame.levels[-1])} blobs formed in {time() - start_time} seconds")
+    if render: visualize_blobs(idmap, frame.levels[-1])
+
+    if intra:  # call to intra_blob, omit for testing frame_blobs only:
+        if verbose: print("\rRunning frame's intra_blob...")
+        intra_blob_(frame, render, verbose)
 
     return frame
 
@@ -287,24 +297,11 @@ def assign_adjacents(adj_pairs, blob_cls=CBlob):  # adjacents are connected oppo
 
 
 
-def frame_blobs(image, intra, render, verbose):
-
-
-    dert__ = comp_pixel(image)
-    frame = derts2blobs(dert__, verbose, render)
-
-    if intra:  # call to intra_blob, omit for testing frame_blobs only:
-        if verbose: print("\rRunning frame's intra_blob...")
-        intra_blob_(frame, render, verbose)
-    
-    return frame
-
 
 if __name__ == "__main__":
     import argparse
     from time import time
     from utils import imread
-    from comp_blob_draft import cross_comp_blobs
     from intra_blob_ import intra_blob_
     from frame_recursive import frame_recursive
 

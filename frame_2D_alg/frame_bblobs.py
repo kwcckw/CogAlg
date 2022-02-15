@@ -14,6 +14,13 @@ ave_da = 0.7853  # da at 45 degree, = ga at 22.5 degree
 ave_ga = .78
 ave_ma = 2
 
+ave_I = 10
+ave_A = 10
+ave_G = 10
+ave_M = 10
+
+param_names = ["I", "A", "G", "M"]
+
 class CderBlob(ClusterStructure):
 
     layer1 = dict      # Cdert layer params
@@ -28,30 +35,86 @@ class CderBlob(ClusterStructure):
 class CpBlob(CBlob, CderBlob):
 
     # base params are retrieved from CBlob and CderBlob
-    layer1 = dict       # Cdert layer params
-    derBlob_ = list
-    blob_ = list
-
+    # layer1 = dict       # Cdert layer params
+    # derBlob_ = list
+    # blob_ = list
+    root = object
 
 def frame_bblobs(frame, intra, render, verbose):
     '''
     root function of comp_blob: cross compare blobs with their adjacent blobs in frame.blob_, including sub_layers
     '''
-    blob_ = frame.blob_.copy()
+    
+    blob_ = frame.levels[-1]
 
-    for blob in blob_:  # each blob forms derBlob per compared adj_blob and accumulates adj_blobs'derBlobs:
-        if len(blob.derBlob_) == 0:
-            search_blob_recursive(blob, blob.adj_blobs[0], derBlob_=[], _derBlob=[])
-        # derBlob_ is local per blob, not frame-wide
+    bpdert_t = cross_comp(blob_)
+    bblob_t = []
+    
+    for param_name, bpdert_ in zip(param_names, bpdert_t):
+        bblob_t += [form_bblob_(bpdert_)]  # form blobs of blobs, connected by mutual match
 
-    bblob_ = form_bblob_(blob_)  # form blobs of blobs, connected by mutual match
+    frame.dert__ += [bpdert_t]
+    frame.levels += [bblob_t]
 
 
-    frame_bblob = FrameOfBlobs(I=0, Dy=0, Dx=0, M=0, blob_=bblob_, dert__=0)
+def cross_comp(blob_):
+    
+    Idert_, Adert_, Gdert_, Mdert_ = [], [], [], []
+    
+    blob_pair = []
+    for _blob in blob_:
+        _I, _A, _Dy, _Dx, _M = _blob.I, _blob.A, _blob.Dy, _blob.Dx, _blob.M
+        
+        for blob in _blob.adj_blobs[0]:
+            
+            if [_blob, blob] not in blob_pair and [blob, _blob] not in blob_pair:  # same pair of blob didn't compare befor
+            
+                blob_pair.append([_blob, blob])
+            
+                I, A, Dy, Dx, M = blob.I, blob.A, blob.Dy, blob.Dx, blob.M
+                
+                # pack bpdert
+                Idert_ += [comp_par(_blob, _I, I, "I", ave_I )] 
+                Adert_ += [comp_par(_blob, _A, A, "A", ave_A )] 
+                Gdert_ += [comp_par(_blob, [_Dy, _Dx], [Dy, Dx], "G", ave_G)] 
+                Mdert_ += [comp_par(_blob, _M, M, "M", ave_M )] 
+                
+    
+    return Idert_, Adert_, Gdert_, Mdert_   
+            
+        
+            
+def comp_par(_blob, _param, param, param_name, ave):
+  
+    if param_name == "G":  # vector
+        _sin, _cos = _param[0], _param[1]
+        sin, cos = param[0], param[1]
+        
+        # sum of dy and dx
+        sin_sa = (cos * _sin) + (sin * _cos) 
+        cos_sa = (cos * _cos) - (sin * _sin)
+        
+        # difference of dy and dx
+        sin_da = (cos * _sin) - (sin * _cos)  # sin(α - β) = sin α cos β - cos α sin β
+        cos_da= (cos * _cos) + (sin * _sin)   # cos(α - β) = cos α cos β + sin α sin β
+        
+        p = np.arctan2(sin_sa, cos_sa)  # sa, sum of angle
+        d = np.arctan2(sin_da, cos_da)  # da, difference of angle
+        m = ave - abs(d)  # indirect match, ma
+    
+    else:
+        p = param+_param
+        d = param - _param    # difference
+        if param_name == 'I':
+            m = ave - abs(d)  # indirect match
+        else:
+            m = min(param,_param) - abs(d)/2 - ave  # direct match
+        
+    # blob' params' dert (bpdert)?
+    bpdert = CpBlob(root=_blob, I=param, p=p, d=d, m=m)
 
-    # visualize_cluster_(bblob_, blob_, frame)
+    return bpdert
 
-    return [frame, frame_bblob]
 
 
 def search_blob_recursive(blob, adj_blob_, _derBlob, derBlob_):
@@ -171,10 +234,11 @@ def comp_blob(blob, _blob, _derBlob):
 
 
 def form_bblob_(blob_):
+    pass
     '''
     bblob is a cluster (graph) of blobs with positive mB to any other member blob, formed by comparing adj_blobs
     two kinds of bblobs: merged_blob and blob_graph
-    '''
+    
     bblob_ = []
     for blob in blob_:
         MB = sum([derBlob.mB for derBlob in blob.derBlob_]) # blob's mB, sum from blob's derBlobs' mB
@@ -192,7 +256,7 @@ def form_bblob_(blob_):
             raise ValueError("Duplicated blobs")
 
     return bblob_
-
+    '''
 
 def form_bblob_recursive(bblob_, bblob, blob_, merged_ids):
 
