@@ -3,7 +3,7 @@ Cross-compare blobs with incrementally intermediate adjacency, within a frame
 '''
 
 from class_cluster import ClusterStructure, NoneType, comp_param, Cdert
-from frame_blobs import *
+from frame_blobs import CBlob
 from comp_slice_ import ave_min, ave_inv # facing error when comp-slice_ import from comp_blob, hence shift it here.
 import numpy as np
 import cv2
@@ -23,7 +23,10 @@ param_names = ["I", "A", "G", "M"]
 
 class CderBlob(ClusterStructure):
 
-    layer1 = dict      # Cdert layer params
+    I = int
+    A = int
+    G = int
+    M = int
     mB = float
     dB = float
     distance = float  # common per derBlob_
@@ -44,17 +47,25 @@ def frame_bblobs_root(frame, intra, render, verbose):
     '''
     root function of comp_blob: cross compare blobs with their adjacent blobs in frame.blob_, including sub_layers
     '''
-    blob_ = frame.levels[-1]
+    blob_ = frame.sub_layers[-1]
 
     derBlob_t = cross_comp(blob_)
-    bblob_t = []
+    pblob_t = []
     
+    I = A = Dy = Dx = M = 0
     for param_name, derBlob_ in zip(param_names, derBlob_t):
-        bblob_t += [form_bblob_(derBlob_)]  # form blobs of blobs, connected by mutual match
+        pblob_ = form_bblob_(derBlob_)
+        I  += sum([pblob.I  for pblob in pblob_])
+        A  += sum([pblob.A  for pblob in pblob_])
+        Dy += sum([pblob.Dy for pblob in pblob_])
+        Dx += sum([pblob.Dx for pblob in pblob_])
+        M  += sum([pblob.M  for pblob in pblob_])
+        pblob_t += [pblob_]  # form blobs of blobs, connected by mutual match
 
-    frame.dert__ += [derBlob_t]
-    frame.levels += [bblob_t]
 
+    new_frame = CpBlob(I=I, A=A, Dy=Dy, Dx=Dx, M=M, sub_layers=[blob_, pblob_t], dert__=[frame.dert__, derBlob_t])
+    
+    return new_frame
 
 def cross_comp(blob_):
     
@@ -64,9 +75,9 @@ def cross_comp(blob_):
     for _blob in blob_:
         _I, _A, _Dy, _Dx, _M = _blob.I, _blob.A, _blob.Dy, _blob.Dx, _blob.M
         
-        for blob in _blob.adj_blobs[0]:
+        for blob in _blob.adj_blobs[0]:  # blob.adj_blobs[0] is blob_, blob.adj_blobs[1] is pose
             
-            if [_blob, blob] not in blob_pair and [blob, _blob] not in blob_pair:  # same pair of blob didn't compare befor
+            if [_blob, blob] not in blob_pair and [blob, _blob] not in blob_pair:  # same pair of blob didn't compare before
             
                 blob_pair.append([_blob, blob])
                 I, A, Dy, Dx, M = blob.I, blob.A, blob.Dy, blob.Dx, blob.M
@@ -87,8 +98,8 @@ def comp_par(_blob, _param, param, param_name, ave):
         sin, cos = param[0], param[1]
         
         # sum (dy,dx)
-        sin_sa = (cos * _sin) + (sin * _cos) 
-        cos_sa = (cos * _cos) - (sin * _sin)
+        sin_sa = (cos * _sin) + (sin * _cos)  # sin(α + β) = sin α cos β + cos α sin β
+        cos_sa = (cos * _cos) - (sin * _sin)  # cos(α + β) = cos α cos β - sin α sin β
         # diff (dy,dx)
         sin_da = (cos * _sin) - (sin * _cos)  # sin(α - β) = sin α cos β - cos α sin β
         cos_da= (cos * _cos) + (sin * _sin)   # cos(α - β) = cos α cos β + sin α sin β
@@ -108,6 +119,47 @@ def comp_par(_blob, _param, param, param_name, ave):
     derBlob = CderBlob(root=_blob, I=param, p=p, d=d, m=m)
 
     return derBlob
+
+# very initial draft
+def form_bblob_(derBlob_):
+    
+    pBlob_ = []
+   
+    # how about x and x0? 
+    for derBlob in derBlob_:
+    
+        if derBlob.M>0:  # positve derBlob only?
+        
+            if "pBlob" in locals():
+                pBlob.accum_from(derBlob)
+                pBlob.L += 1
+                     
+            else:  
+                pBlob = CpBlob(dert__ = [derBlob], L=1)
+                pBlob_.append(pBlob)
+                pBlob.accum_from(derBlob)
+                
+
+    return pBlob_
+    '''
+    bblob is a cluster (graph) of blobs with positive mB to any other member blob, formed by comparing adj_blobs
+    two kinds of bblobs: merged_blob and blob_graph
+    
+    bblob_ = []
+    for blob in blob_:
+        MB = sum([derBlob.mB for derBlob in blob.derBlob_]) # blob's mB, sum from blob's derBlobs' mB
+        if MB > 0 and not isinstance(blob.bblob, CpBlob):  # init bblob with current blob
+            bblob = CpBlob()
+            merged_ids = [bblob.id]
+            accum_bblob(bblob_, bblob, blob, merged_ids)  # accum blob into bblob
+            form_bblob_recursive(bblob_, bblob, bblob.blob_, merged_ids)
+    # test code to see duplicated blobs in bblob, not needed in actual code
+    for bblob in bblob_:
+        bblob_blob_id_ = [ blob.id for blob in bblob.blob_]
+        if len(bblob_blob_id_) != len(np.unique(bblob_blob_id_)):
+            raise ValueError("Duplicated blobs")
+    return bblob_
+    '''
 
 
 def search_blob_recursive(blob, adj_blob_, _derBlob, derBlob_):
@@ -226,27 +278,7 @@ def comp_blob(blob, _blob, _derBlob):
     return derBlob
 
 
-def form_bblob_(blob_):
-    pass
-    '''
-    bblob is a cluster (graph) of blobs with positive mB to any other member blob, formed by comparing adj_blobs
-    two kinds of bblobs: merged_blob and blob_graph
-    
-    bblob_ = []
-    for blob in blob_:
-        MB = sum([derBlob.mB for derBlob in blob.derBlob_]) # blob's mB, sum from blob's derBlobs' mB
-        if MB > 0 and not isinstance(blob.bblob, CpBlob):  # init bblob with current blob
-            bblob = CpBlob()
-            merged_ids = [bblob.id]
-            accum_bblob(bblob_, bblob, blob, merged_ids)  # accum blob into bblob
-            form_bblob_recursive(bblob_, bblob, bblob.blob_, merged_ids)
-    # test code to see duplicated blobs in bblob, not needed in actual code
-    for bblob in bblob_:
-        bblob_blob_id_ = [ blob.id for blob in bblob.blob_]
-        if len(bblob_blob_id_) != len(np.unique(bblob_blob_id_)):
-            raise ValueError("Duplicated blobs")
-    return bblob_
-    '''
+
 
 def form_bblob_recursive(bblob_, bblob, blob_, merged_ids):
 

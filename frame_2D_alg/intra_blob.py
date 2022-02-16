@@ -21,6 +21,36 @@ ave = 50   # cost / dert: of cross_comp + blob formation, same as in frame blobs
 aveB = 50  # cost / blob: fixed syntactic overhead
 pcoef = 2  # ave_comp_slice / ave: relative cost of p fork;  no ave_ga = .78, ave_ma = 2: no indep eval
 
+
+class CBlob_sub(CBlob):
+    
+    mask__ = object
+    root_dert__ = object
+    box = list
+    sign = bool
+    prior_forks=list
+    
+    # intra_blob params:
+    f_comp_a = bool  # current fork is comp angle, else comp_r
+    fflip = bool     # x-y swap
+    rdn = float      # redundancy to higher blob layers
+    rng = int        # comp range, set before intra_comp
+    # derivation hierarchy:
+    Ls = int   # for visibility and next-fork rdn
+    sub_layers = list  # list of layers across sub_blob derivation tree, nested deeper layers, multiple forks
+
+    # comp_slice:
+    dir_blobs = list  # primarily vertically | laterally oriented edge blobs
+    fsliced = bool
+    PPmm_ = list  # comp_slice_ if not empty
+    PPdm_ = list  # comp_slice_ if not empty
+    derP__ = list
+    P__ = list
+    PPmd_ = list  # PP_derPd_
+    PPdd_ = list  # PP_derPd_
+    derPd__ = list
+    Pd__ = list
+
 # --------------------------------------------------------------------------------------------------------------
 # functions:
 
@@ -28,7 +58,7 @@ def intra_blob_(frame, render, verbose):  # slice_blob or recursive input rng+ |
 
     deep_frame = frame, frame  # 1st frame initializes summed representation of hierarchy, 2nd is individual top layer
     deep_blob_i_ = []  # index of a blob with deep layers
-    deep_layers = [[]] * len(frame.blob_)  # for visibility only
+    deep_layers = [[]] * len(frame.sub_layers[-1])  # for visibility only
     root_dert__ = (  # update root dert__
         frame.dert__[0],  # i
         frame.dert__[1],  # dy
@@ -36,7 +66,8 @@ def intra_blob_(frame, render, verbose):  # slice_blob or recursive input rng+ |
         frame.dert__[3],  # m
         frame.dert__[4]   # ri
         )
-    for i, blob in enumerate(frame.blob_):  # print('Processing blob number ' + str(bcount))
+    for i, blob in enumerate(frame.sub_layers[-1]):  # print('Processing blob number ' + str(bcount))
+        
         '''
         Blob M: -|+ predictive value, positive in +M blobs and lent to contrast value of adjacent -M blobs. 
         -M "edge" blobs are valuable as contrast: their negative value cancels positive value of adjacent "flat" +M blobs.
@@ -46,6 +77,8 @@ def intra_blob_(frame, render, verbose):  # slice_blob or recursive input rng+ |
         blob.prior_forks=['g']
         blob_height = blob.box[1] - blob.box[0]
         blob_width = blob.box[3] - blob.box[2]
+
+        blob = CBlob_sub(inherit=[blob], box=blob.box, root_dert__=blob.root_dert__, mask__ = blob.mask__, prior_forks=blob.prior_forks)
 
         if blob.sign:  # +M, remove blob.sign?
             if (M > aveB) and (blob_height > 3 and blob_width > 3):  # min blob dimensions
@@ -125,7 +158,7 @@ def comp_range(blob, render, verbose):   # cross-comp in larger kernels, root fo
 def cluster_sub_eval(blob, dert__, sign__, mask__, render, verbose):  # comp_r or comp_a eval per sub_blob:
 
     AveB = aveB * blob.rdn
-    sub_blobs, idmap, adj_pairs = flood_fill(dert__, sign__, verbose=False, mask__=mask__, blob_cls=CBlob)
+    sub_blobs, idmap, adj_pairs = flood_fill(dert__, sign__, verbose=False, mask__=mask__, blob_cls=CBlob_sub)
     assign_adjacents(adj_pairs, CBlob)
 
     if render:

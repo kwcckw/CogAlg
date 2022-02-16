@@ -74,6 +74,10 @@ class CBlob(ClusterStructure):  # from frame_blobs only, no sub_blobs
     adj_blobs = list
     prior_forks = list
     fopen = bool
+    
+    sub_layers = list  # list of layers across sub_blob derivation tree, nested deeper layers, multiple fork
+    
+    '''
     # intra_blob params:
     f_comp_a = bool  # current fork is comp angle, else comp_r
     fflip = bool     # x-y swap
@@ -93,6 +97,8 @@ class CBlob(ClusterStructure):  # from frame_blobs only, no sub_blobs
     PPdd_ = list  # PP_derPd_
     derPd__ = list
     Pd__ = list
+    '''
+    
     # frame_bblob:
     root_bblob = object
     levels = list  # input levels
@@ -116,14 +122,15 @@ def frame_blobs_root(image, intra=False, render=False, verbose=False, use_c=Fals
             Dy += blob.Dy
             Dx += blob.Dx
             M += blob.M
-        frame = CBlob(I=I, Dy=Dy, Dx=Dx, M=M, sub_layers=[blob_], dert__=[dert__])
+        frame = CBlob(I=I, Dy=Dy, Dx=Dx, M=M, sub_layers=[blob_], dert__=dert__)
 
     assign_adjacents(adj_pairs)  # f_segment_by_direction=False
 
-    if verbose: print(f"{len(frame.levels[-1])} blobs formed in {time() - start_time} seconds")
+    if verbose: print(f"{len(frame.sub_layers[-1])} blobs formed in {time() - start_time} seconds")
     if render: visualize_blobs(idmap, frame.sub_layers[-1])
 
     if intra:  # call to intra_blob, omit for testing frame_blobs only:
+        from intra_blob import intra_blob_
         if verbose: print("\rRunning frame's intra_blob...")
         intra_blob_(frame, render, verbose)
 
@@ -298,7 +305,7 @@ if __name__ == "__main__":
     argument_parser = argparse.ArgumentParser()
     argument_parser.add_argument('-i', '--image', help='path to image file', default='./images//toucan.jpg')
     argument_parser.add_argument('-v', '--verbose', help='print details, useful for debugging', type=int, default=1)
-    argument_parser.add_argument('-n', '--intra', help='run intra_blobs after frame_blobs', type=int, default=0)
+    argument_parser.add_argument('-n', '--intra', help='run intra_blobs after frame_blobs', type=int, default=1)
     argument_parser.add_argument('-r', '--render', help='render the process', type=int, default=0)
     argument_parser.add_argument('-c', '--clib', help='use C shared library', type=int, default=0)
     args = argument_parser.parse_args()
