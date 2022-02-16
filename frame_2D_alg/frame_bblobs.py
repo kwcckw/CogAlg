@@ -40,20 +40,19 @@ class CpBlob(CBlob, CderBlob):
     # blob_ = list
     root = object
 
-def frame_bblobs(frame, intra, render, verbose):
+def frame_bblobs_root(frame, intra, render, verbose):
     '''
     root function of comp_blob: cross compare blobs with their adjacent blobs in frame.blob_, including sub_layers
     '''
-    
     blob_ = frame.levels[-1]
 
-    bpdert_t = cross_comp(blob_)
+    derBlob_t = cross_comp(blob_)
     bblob_t = []
     
-    for param_name, bpdert_ in zip(param_names, bpdert_t):
-        bblob_t += [form_bblob_(bpdert_)]  # form blobs of blobs, connected by mutual match
+    for param_name, derBlob_ in zip(param_names, derBlob_t):
+        bblob_t += [form_bblob_(derBlob_)]  # form blobs of blobs, connected by mutual match
 
-    frame.dert__ += [bpdert_t]
+    frame.dert__ += [derBlob_t]
     frame.levels += [bblob_t]
 
 
@@ -70,19 +69,16 @@ def cross_comp(blob_):
             if [_blob, blob] not in blob_pair and [blob, _blob] not in blob_pair:  # same pair of blob didn't compare befor
             
                 blob_pair.append([_blob, blob])
-            
                 I, A, Dy, Dx, M = blob.I, blob.A, blob.Dy, blob.Dx, blob.M
                 
-                # pack bpdert
+                # pack derBlob
                 Idert_ += [comp_par(_blob, _I, I, "I", ave_I )] 
                 Adert_ += [comp_par(_blob, _A, A, "A", ave_A )] 
                 Gdert_ += [comp_par(_blob, [_Dy, _Dx], [Dy, Dx], "G", ave_G)] 
                 Mdert_ += [comp_par(_blob, _M, M, "M", ave_M )] 
-                
-    
+
     return Idert_, Adert_, Gdert_, Mdert_   
-            
-        
+
             
 def comp_par(_blob, _param, param, param_name, ave):
   
@@ -90,17 +86,16 @@ def comp_par(_blob, _param, param, param_name, ave):
         _sin, _cos = _param[0], _param[1]
         sin, cos = param[0], param[1]
         
-        # sum of dy and dx
+        # sum (dy,dx)
         sin_sa = (cos * _sin) + (sin * _cos) 
         cos_sa = (cos * _cos) - (sin * _sin)
-        
-        # difference of dy and dx
+        # diff (dy,dx)
         sin_da = (cos * _sin) - (sin * _cos)  # sin(α - β) = sin α cos β - cos α sin β
         cos_da= (cos * _cos) + (sin * _sin)   # cos(α - β) = cos α cos β + sin α sin β
         
-        p = np.arctan2(sin_sa, cos_sa)  # sa, sum of angle
-        d = np.arctan2(sin_da, cos_da)  # da, difference of angle
-        m = ave - abs(d)  # indirect match, ma
+        p = np.arctan2(sin_sa, cos_sa)  # sa: sum of angle
+        d = np.arctan2(sin_da, cos_da)  # da: difference of angle
+        m = ave - abs(d)  # ma: indirect match of angle
     
     else:
         p = param+_param
@@ -109,12 +104,10 @@ def comp_par(_blob, _param, param, param_name, ave):
             m = ave - abs(d)  # indirect match
         else:
             m = min(param,_param) - abs(d)/2 - ave  # direct match
-        
-    # blob' params' dert (bpdert)?
-    bpdert = CpBlob(root=_blob, I=param, p=p, d=d, m=m)
+    # blob param dert:
+    derBlob = CderBlob(root=_blob, I=param, p=p, d=d, m=m)
 
-    return bpdert
-
+    return derBlob
 
 
 def search_blob_recursive(blob, adj_blob_, _derBlob, derBlob_):
@@ -242,19 +235,16 @@ def form_bblob_(blob_):
     bblob_ = []
     for blob in blob_:
         MB = sum([derBlob.mB for derBlob in blob.derBlob_]) # blob's mB, sum from blob's derBlobs' mB
-
         if MB > 0 and not isinstance(blob.bblob, CpBlob):  # init bblob with current blob
             bblob = CpBlob()
             merged_ids = [bblob.id]
             accum_bblob(bblob_, bblob, blob, merged_ids)  # accum blob into bblob
             form_bblob_recursive(bblob_, bblob, bblob.blob_, merged_ids)
-
     # test code to see duplicated blobs in bblob, not needed in actual code
     for bblob in bblob_:
         bblob_blob_id_ = [ blob.id for blob in bblob.blob_]
         if len(bblob_blob_id_) != len(np.unique(bblob_blob_id_)):
             raise ValueError("Duplicated blobs")
-
     return bblob_
     '''
 
