@@ -20,45 +20,14 @@ from segment_by_direction import segment_by_direction
 ave = 50   # cost / dert: of cross_comp + blob formation, same as in frame blobs, use rcoef and acoef if different
 aveB = 50  # cost / blob: fixed syntactic overhead
 pcoef = 2  # ave_comp_slice / ave: relative cost of p fork;  no ave_ga = .78, ave_ma = 2: no indep eval
-
-
-class CBlob_sub(CBlob):
-    
-    mask__ = object
-    root_dert__ = object
-    box = list
-    sign = bool
-    prior_forks=list
-    
-    # intra_blob params:
-    f_comp_a = bool  # current fork is comp angle, else comp_r
-    fflip = bool     # x-y swap
-    rdn = float      # redundancy to higher blob layers
-    rng = int        # comp range, set before intra_comp
-    # derivation hierarchy:
-    Ls = int   # for visibility and next-fork rdn
-    sub_layers = list  # list of layers across sub_blob derivation tree, nested deeper layers, multiple forks
-
-    # comp_slice:
-    dir_blobs = list  # primarily vertically | laterally oriented edge blobs
-    fsliced = bool
-    PPmm_ = list  # comp_slice_ if not empty
-    PPdm_ = list  # comp_slice_ if not empty
-    derP__ = list
-    P__ = list
-    PPmd_ = list  # PP_derPd_
-    PPdd_ = list  # PP_derPd_
-    derPd__ = list
-    Pd__ = list
-
 # --------------------------------------------------------------------------------------------------------------
 # functions:
 
-def intra_blob_(frame, render, verbose):  # slice_blob or recursive input rng+ | angle cross-comp within input blob
+def intra_blob_root(frame, render, verbose):  # slice_blob or recursive input rng+ | angle cross-comp within input blob
 
     deep_frame = frame, frame  # 1st frame initializes summed representation of hierarchy, 2nd is individual top layer
     deep_blob_i_ = []  # index of a blob with deep layers
-    deep_layers = [[]] * len(frame.sub_layers[-1])  # for visibility only
+    deep_layers = [[]] * len(frame.blob_)  # for visibility only
     root_dert__ = (  # update root dert__
         frame.dert__[0],  # i
         frame.dert__[1],  # dy
@@ -66,8 +35,7 @@ def intra_blob_(frame, render, verbose):  # slice_blob or recursive input rng+ |
         frame.dert__[3],  # m
         frame.dert__[4]   # ri
         )
-    for i, blob in enumerate(frame.sub_layers[-1]):  # print('Processing blob number ' + str(bcount))
-        
+    for i, blob in enumerate(frame.blob_):  # print('Processing blob number ' + str(bcount))
         '''
         Blob M: -|+ predictive value, positive in +M blobs and lent to contrast value of adjacent -M blobs. 
         -M "edge" blobs are valuable as contrast: their negative value cancels positive value of adjacent "flat" +M blobs.
@@ -78,9 +46,7 @@ def intra_blob_(frame, render, verbose):  # slice_blob or recursive input rng+ |
         blob_height = blob.box[1] - blob.box[0]
         blob_width = blob.box[3] - blob.box[2]
 
-        blob = CBlob_sub(inherit=[blob], box=blob.box, root_dert__=blob.root_dert__, mask__ = blob.mask__, prior_forks=blob.prior_forks)
-
-        if blob.sign:  # +M, remove blob.sign?
+        if M>0:
             if (M > aveB) and (blob_height > 3 and blob_width > 3):  # min blob dimensions
                 blob.rdn = 1
                 blob.rng = 1
@@ -107,7 +73,7 @@ def comp_angle(blob, render, verbose):
     AveB = int(aveB * blob.rdn)
     if render:  # don't render small blobs
         if blob.A < 100: render = False
-    spliced_layers = []  # to extend root_blob sub_layers
+    spliced_layers = []  # to extend root_blob sublayers
 
     # root fork is frame_blobs or comp_r
     ext_dert__, ext_mask__ = extend_dert(blob)  # dert__ boundaries += 1, for cross-comp in larger kernels
@@ -123,8 +89,8 @@ def comp_angle(blob, render, verbose):
             sign__ = (-adert__[3] * adert__[9]) > ave * pcoef  # -m * ma: variable value of comp_slice_, no ave_ma in comp_a
 
             cluster_sub_eval(blob, adert__, sign__, mask__, render, verbose)  # forms sub_blobs of fork p sign in unmasked area
-            spliced_layers = [spliced_layers + sub_layers for spliced_layers, sub_layers in
-                              zip_longest(spliced_layers, blob.sub_layers, fillvalue=[])]
+            spliced_layers = [spliced_layers + sublayers for spliced_layers, sublayers in
+                              zip_longest(spliced_layers, blob.sublayers, fillvalue=[])]
 
     return spliced_layers
 
@@ -135,7 +101,7 @@ def comp_range(blob, render, verbose):   # cross-comp in larger kernels, root fo
     AveB = int(aveB * blob.rdn)
     if render:  # don't render small blobs
         if blob.A < 100: render = False
-    spliced_layers = []  # to extend root_blob sub_layers
+    spliced_layers = []  # to extend root_blob sublayers
     ext_dert__, ext_mask__ = extend_dert(blob)  # dert__ boundaries += 1, for cross-comp in larger kernels
 
     if blob.M > AveB:  # comp_r fork
@@ -149,8 +115,8 @@ def comp_range(blob, render, verbose):   # cross-comp in larger kernels, root fo
             sign__ = dert__[3] > 0  # m__: inverse deviation of g
 
             cluster_sub_eval(blob, dert__, sign__, mask__, render, verbose)  # forms sub_blobs of sign in unmasked area
-            spliced_layers = [spliced_layers + sub_layers for spliced_layers, sub_layers in
-                              zip_longest(spliced_layers, blob.sub_layers, fillvalue=[])]
+            spliced_layers = [spliced_layers + sublayers for spliced_layers, sublayers in
+                              zip_longest(spliced_layers, blob.sublayers, fillvalue=[])]
 
     return spliced_layers
 
@@ -158,14 +124,14 @@ def comp_range(blob, render, verbose):   # cross-comp in larger kernels, root fo
 def cluster_sub_eval(blob, dert__, sign__, mask__, render, verbose):  # comp_r or comp_a eval per sub_blob:
 
     AveB = aveB * blob.rdn
-    sub_blobs, idmap, adj_pairs = flood_fill(dert__, sign__, verbose=False, mask__=mask__, blob_cls=CBlob_sub)
+    sub_blobs, idmap, adj_pairs = flood_fill(dert__, sign__, verbose=False, mask__=mask__, blob_cls=CBlob)
     assign_adjacents(adj_pairs, CBlob)
 
     if render:
         visualize_blobs(idmap, sub_blobs, winname=f"Deep blobs (f_comp_a = {blob.f_comp_a}, f_root_a = {blob.prior_forks[-1] == 'a'})")
 
     blob.Ls = len(sub_blobs)  # for visibility and next-fork rdn
-    blob.sub_layers = [sub_blobs]  # 1st layer of sub_blobs
+    blob.sublayers = [sub_blobs]  # 1st layer of sub_blobs
 
     for sub_blob in sub_blobs:  # evaluate sub_blob
         sub_blob.prior_forks = blob.prior_forks.copy()  # increments forking sequence: m->r, g->a, a->p
@@ -189,13 +155,13 @@ def cluster_sub_eval(blob, dert__, sign__, mask__, render, verbose):  # comp_r o
                 if -sub_blob.M > AveB:  # replace with borrow_M when known
                     # comp_a:
                     sub_blob.rdn = sub_blob.rdn + 1 + 1 / blob.Ls
-                    blob.sub_layers += comp_angle(sub_blob, render, verbose)
+                    blob.sublayers += comp_angle(sub_blob, render, verbose)
 
                 elif sub_blob.M > AveB:
                     # comp_r:
                     sub_blob.rng = blob.rng
                     sub_blob.rdn = sub_blob.rdn + 1 + 1 / blob.Ls
-                    blob.sub_layers += comp_range(sub_blob, render, verbose)
+                    blob.sublayers += comp_range(sub_blob, render, verbose)
 
 def extend_dert(blob):  # extend dert borders (+1 dert to boundaries)
 
