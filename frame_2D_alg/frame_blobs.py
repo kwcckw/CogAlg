@@ -34,8 +34,8 @@ import numpy as np
 from collections import deque, namedtuple
 # from frame_blobs_wrapper import wrapped_flood_fill, from utils import minmax, from time import time
 from draw_frame_blobs import visualize_blobs
-from intra_blob import *
 from class_cluster import ClusterStructure
+from time import time
 
 ave = 30  # filter or hyper-parameter, set as a guess, latter adjusted by feedback
 aveB = 50
@@ -46,27 +46,9 @@ EXCLUDED_ID = -2
 
 FrameOfBlobs = namedtuple('FrameOfBlobs', 'I, Dy, Dx, M, blob_, dert__')
 
-class CBlob(ClusterStructure):
-    # comp_pixel:
-    I = float
-    Dy = float
-    Dx = float
-    M = float
-    A = float  # blob area
-    # composite params:
-    box = list  # x0, xn, y0, yn
-    mask__ = object
-    dert__ = object
-    root_dert__ = object
-    adj_blobs = list
-    fopen = bool
-    # frame_bblob:
-    root_bblob = object
-    sublevels = list  # input levels
-    # intra_blob params:
-    intra = lambda: Cintra
 
-class Cintra:  # intra_blob params:
+
+class Cintra(ClusterStructure):  # intra_blob params:
     # comp_angle:
     Dydy = float
     Dxdy = float
@@ -96,6 +78,27 @@ class Cintra:  # intra_blob params:
     derPd__ = list
     Pd__ = list
 
+class CBlob(ClusterStructure):
+    # comp_pixel:
+    I = float
+    Dy = float
+    Dx = float
+    M = float
+    A = float  # blob area
+    # composite params:
+    box = list  # x0, xn, y0, yn
+    mask__ = object
+    dert__ = object
+    root_dert__ = object
+    adj_blobs = list
+    fopen = bool
+    sign = bool
+    # frame_bblob:
+    root_bblob = object
+    sublevels = list  # input levels
+    # intra_blob params:
+    intra = lambda: Cintra
+
 def frame_blobs_root(image, intra=False, render=False, verbose=False, use_c=False):
 
     if verbose: start_time = time()
@@ -113,14 +116,15 @@ def frame_blobs_root(image, intra=False, render=False, verbose=False, use_c=Fals
             Dy += blob.Dy
             Dx += blob.Dx
             M += blob.M
-        frame = CBlob(I=I, Dy=Dy, Dx=Dx, M=M, sublayers=[blob_], dert__=[dert__])
+        frame = CBlob(I=I, Dy=Dy, Dx=Dx, M=M, sublevels=[blob_], dert__=[dert__])
 
     assign_adjacents(adj_pairs)  # f_segment_by_direction=False
 
-    if verbose: print(f"{len(frame.levels[-1])} blobs formed in {time() - start_time} seconds")
+    if verbose: print(f"{len(frame.sublevels[-1])} blobs formed in {time() - start_time} seconds")
     if render: visualize_blobs(idmap, frame.sublayers[-1])
 
     if intra:  # call to intra_blob, omit for testing frame_blobs only:
+        from intra_blob import intra_blob_root
         if verbose: print("\rRunning frame's intra_blob...")
         intra_blob_root(frame, render, verbose)
 
@@ -169,7 +173,7 @@ def flood_fill(dert__, sign__, verbose=False, mask__=None, blob_cls=CBlob, fseg=
         for x in range(width):
             if idmap[y, x] == UNFILLED:  # ignore filled/clustered derts
 
-                blob = blob_cls(sign=sign__[y, x], root_dert__=dert__)
+                blob = blob_cls(sign=sign__[y, x], root_dert__=dert__, intra=Cintra())
                 if prior_forks: # update prior forks in deep blob
                     blob.prior_forks= prior_forks.copy()
                 blob_.append(blob)
@@ -205,7 +209,7 @@ def flood_fill(dert__, sign__, verbose=False, mask__=None, blob_cls=CBlob, fseg=
                     elif x1 > xn:
                         xn = x1
                     # determine neighbors' coordinates, 4 for -, 8 for +
-                    if blob.sign or fseg:   # include diagonals
+                    if blob.M>0 or fseg:   # include diagonals
                         adj_dert_coords = [(y1 - 1, x1 - 1), (y1 - 1, x1),
                                            (y1 - 1, x1 + 1), (y1, x1 + 1),
                                            (y1 + 1, x1 + 1), (y1 + 1, x1),
@@ -263,12 +267,13 @@ def assign_adjacents(adj_pairs, blob_cls=CBlob):  # adjacents are connected oppo
 
         if blob1.fopen and blob2.fopen:
             pose1 = pose2 = 2
-        elif y01 < y02 and x01 < x02 and yn1 > yn2 and xn1 > xn2:
+        elif y01 < y02 and x01 < x02 and yn1 >= yn2 and xn1 > xn2:
             pose1, pose2 = 0, 1  # 0: internal, 1: external
         elif y01 > y02 and x01 > x02 and yn1 < yn2 and xn1 < xn2:
             pose1, pose2 = 1, 0  # 1: external, 0: internal
         else:
-            raise ValueError("something is wrong with pose")
+            pose1, pose2 = 1, 1  # for overlapping only
+            # raise ValueError("something is wrong with pose")
 
         # bilateral assignments
         '''
@@ -295,7 +300,7 @@ if __name__ == "__main__":
     argument_parser = argparse.ArgumentParser()
     argument_parser.add_argument('-i', '--image', help='path to image file', default='./images//toucan.jpg')
     argument_parser.add_argument('-v', '--verbose', help='print details, useful for debugging', type=int, default=1)
-    argument_parser.add_argument('-n', '--intra', help='run intra_blobs after frame_blobs', type=int, default=0)
+    argument_parser.add_argument('-n', '--intra', help='run intra_blobs after frame_blobs', type=int, default=1)
     argument_parser.add_argument('-r', '--render', help='render the process', type=int, default=0)
     argument_parser.add_argument('-c', '--clib', help='use C shared library', type=int, default=0)
     args = argument_parser.parse_args()

@@ -24,7 +24,8 @@ param_names = ["I", "G", "M", "A"]
 class Cderp(ClusterStructure):  # set of derivatives per blob param
 
     p = int  # compared blob param
-    rp = int  # mean p in rng    dy = int
+    rp = int  # mean p in rng    
+    dy = int
     dx = int
     m = int
     distance = int  # common per derp_
@@ -44,7 +45,7 @@ def frame_bblobs_root(frame, intra, render, verbose):
     '''
     root function of comp_blob: cross compare blobs with their adjacent blobs in frame.blob_, including sublayers
     '''
-    blob_ = frame.sublayers[-1]
+    blob_ = frame.sublevels[-1]
 
     derp_t = cross_comp(blob_)
     pBlob_t = []
@@ -100,7 +101,8 @@ def comp_par(_blob, _param, param, param_name, ave):
         p = np.arctan2(sin_sa, cos_sa)  # sa: sum of angle
         d = np.arctan2(sin_da, cos_da)  # da: difference of angle
         m = ave - abs(d)  # ma: indirect match of angle
-
+        
+        # need to think how to compute dydx
     else:
         p = param+_param
         d = param - _param    # difference
@@ -108,6 +110,8 @@ def comp_par(_blob, _param, param, param_name, ave):
             m = ave - abs(d)  # indirect match
         else:
             m = min(param,_param) - abs(d)/2 - ave  # direct match
+        # need to think how to compute dydx
+        
     # blob param dert:
     derp = Cderp(root=_blob, I=param, p=p, d=d, m=m)
 
@@ -118,14 +122,14 @@ def form_bblob_(derp_):
 
     pBlob_ = []
     for derp in derp_:
-        if derp.M>0:  # positve derp only?
+        if derp.m>0:  # positve derp only?
             if "pBlob" in locals():
                 pBlob.accum_from(derp)
-                pBlob.L += 1
             else:
                 pBlob = CpBlob(dert__ = [derp], L=1)
                 pBlob_.append(pBlob)
-                pBlob.accum_from(derp)
+            pBlob.accum_from(derp)
+            pBlob.A += (derp.distance **2)  # approximate Area using distance ^ 2?
 
     return pBlob_
 '''
