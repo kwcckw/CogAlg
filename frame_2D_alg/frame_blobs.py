@@ -35,7 +35,6 @@ from collections import deque, namedtuple
 # from frame_blobs_wrapper import wrapped_flood_fill, from utils import minmax, from time import time
 from draw_frame_blobs import visualize_blobs
 from class_cluster import ClusterStructure
-from time import time
 
 ave = 30  # filter or hyper-parameter, set as a guess, latter adjusted by feedback
 aveB = 50
@@ -46,9 +45,24 @@ EXCLUDED_ID = -2
 
 FrameOfBlobs = namedtuple('FrameOfBlobs', 'I, Dy, Dx, M, blob_, dert__')
 
-
-
-class Cintra(ClusterStructure):  # intra_blob params:
+class CBlob(ClusterStructure):
+    # comp_pixel:
+    I = float
+    Dy = float
+    Dx = float
+    M = float
+    A = float  # blob area
+    # composite params:
+    box = list  # x0, xn, y0, yn
+    mask__ = object
+    dert__ = object
+    root_dert__ = object
+    adj_blobs = list
+    fopen = bool
+    # frame_bblob:
+    root_bblob = object
+    sublevels = list  # input levels
+    # intra_blob params:  # or pack in intra = lambda: Cintra
     # comp_angle:
     Dydy = float
     Dxdy = float
@@ -78,26 +92,6 @@ class Cintra(ClusterStructure):  # intra_blob params:
     derPd__ = list
     Pd__ = list
 
-class CBlob(ClusterStructure):
-    # comp_pixel:
-    I = float
-    Dy = float
-    Dx = float
-    M = float
-    A = float  # blob area
-    # composite params:
-    box = list  # x0, xn, y0, yn
-    mask__ = object
-    dert__ = object
-    root_dert__ = object
-    adj_blobs = list
-    fopen = bool
-    sign = bool
-    # frame_bblob:
-    root_bblob = object
-    sublevels = list  # input levels
-    # intra_blob params:
-    intra = lambda: Cintra
 
 def frame_blobs_root(image, intra=False, render=False, verbose=False, use_c=False):
 
@@ -109,24 +103,23 @@ def frame_blobs_root(image, intra=False, render=False, verbose=False, use_c=Fals
         frame, idmap, adj_pairs = wrapped_flood_fill(dert__)
 
     else:  # [flood_fill](https://en.wikipedia.org/wiki/Flood_fill)
-        blob_, idmap, adj_pairs = flood_fill(dert__, sign__=dert__[3] > 0,  verbose=verbose)
+        blob_, idmap, adj_pairs = flood_fill(dert__, sign__=dert__[3] > 0,  verbose=verbose)  # dert__[3]: m
         I, Dy, Dx, M = 0, 0, 0, 0
         for blob in blob_:
             I += blob.I
             Dy += blob.Dy
             Dx += blob.Dx
             M += blob.M
-        frame = CBlob(I=I, Dy=Dy, Dx=Dx, M=M, sublevels=[blob_], dert__=[dert__])
+        frame = CBlob(I=I, Dy=Dy, Dx=Dx, M=M, sublayers=[blob_], dert__=[dert__])
 
     assign_adjacents(adj_pairs)  # f_segment_by_direction=False
 
-    if verbose: print(f"{len(frame.sublevels[-1])} blobs formed in {time() - start_time} seconds")
+    if verbose: print(f"{len(frame.levels[-1])} blobs formed in {time() - start_time} seconds")
     if render: visualize_blobs(idmap, frame.sublayers[-1])
 
     if intra:  # call to intra_blob, omit for testing frame_blobs only:
-        from intra_blob import intra_blob_root
         if verbose: print("\rRunning frame's intra_blob...")
-        intra_blob_root(frame, render, verbose)
+        intra_blob_root(frame.sublayers[-1], render, verbose)
 
     return frame
 
@@ -173,7 +166,7 @@ def flood_fill(dert__, sign__, verbose=False, mask__=None, blob_cls=CBlob, fseg=
         for x in range(width):
             if idmap[y, x] == UNFILLED:  # ignore filled/clustered derts
 
-                blob = blob_cls(sign=sign__[y, x], root_dert__=dert__, intra=Cintra())
+                blob = blob_cls(sign=sign__[y, x], root_dert__=dert__)
                 if prior_forks: # update prior forks in deep blob
                     blob.prior_forks= prior_forks.copy()
                 blob_.append(blob)
@@ -228,11 +221,11 @@ def flood_fill(dert__, sign__, verbose=False, mask__=None, blob_cls=CBlob, fseg=
                         # check if filled
                         elif idmap[y2, x2] == UNFILLED:
                             # check if same-signed
-                            if blob.sign == sign__[y2, x2]:
+                            if blob.M>0 == sign__[y2, x2]:
                                 idmap[y2, x2] = blob.id  # add blob ID to each dert
                                 unfilled_derts.append((y2, x2))
                         # else check if same-signed
-                        elif blob.sign != sign__[y2, x2]:
+                        elif blob.M>0 != sign__[y2, x2]:
                             adj_pairs.add((idmap[y2, x2], blob.id))     # blob.id always bigger
 
                 # terminate blob
@@ -267,14 +260,10 @@ def assign_adjacents(adj_pairs, blob_cls=CBlob):  # adjacents are connected oppo
 
         if blob1.fopen and blob2.fopen:
             pose1 = pose2 = 2
-        elif y01 < y02 and x01 < x02 and yn1 >= yn2 and xn1 > xn2:
+        elif y01 < y02 and x01 < x02 and yn1 > yn2 and xn1 > xn2:
             pose1, pose2 = 0, 1  # 0: internal, 1: external
         elif y01 > y02 and x01 > x02 and yn1 < yn2 and xn1 < xn2:
             pose1, pose2 = 1, 0  # 1: external, 0: internal
-        else:
-            pose1, pose2 = 1, 1  # for overlapping only
-            # raise ValueError("something is wrong with pose")
-
         # bilateral assignments
         '''
         if f_segment_by_direction:  # pose is not needed
@@ -285,8 +274,6 @@ def assign_adjacents(adj_pairs, blob_cls=CBlob):  # adjacents are connected oppo
         blob1.adj_blobs[1].append(pose2)
         blob2.adj_blobs[0].append(blob1)
         blob2.adj_blobs[1].append(pose1)
-
-
 
 
 if __name__ == "__main__":
@@ -300,9 +287,10 @@ if __name__ == "__main__":
     argument_parser = argparse.ArgumentParser()
     argument_parser.add_argument('-i', '--image', help='path to image file', default='./images//toucan.jpg')
     argument_parser.add_argument('-v', '--verbose', help='print details, useful for debugging', type=int, default=1)
-    argument_parser.add_argument('-n', '--intra', help='run intra_blobs after frame_blobs', type=int, default=1)
     argument_parser.add_argument('-r', '--render', help='render the process', type=int, default=0)
     argument_parser.add_argument('-c', '--clib', help='use C shared library', type=int, default=0)
+    argument_parser.add_argument('-n', '--intra', help='run intra_blobs after frame_blobs', type=int, default=0)
+    argument_parser.add_argument('-e', '--extra', help='run frame_recursive after frame_blobs', type=int, default=0)
     args = argument_parser.parse_args()
     image = imread(args.image)
     verbose = args.verbose
@@ -310,10 +298,10 @@ if __name__ == "__main__":
     render = args.render
 
     start_time = time()
-
-    frame = frame_recursive(image, intra, render, verbose)
-
-
+    if args.extra:
+        frame = frame_recursive(image, intra, render, verbose)
+    else:
+        frame = frame_blobs_root(image, intra, render, verbose)
     end_time = time() - start_time
 
     if args.verbose:
