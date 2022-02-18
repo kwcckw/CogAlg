@@ -226,11 +226,11 @@ def sum_rdn_(param_names, derp_t, fPd):
         for rdn_pair, name_pair in zip(rdn_pairs, name_pairs):
             # assign rdn in each rdn_pair using partial name substitution: https://www.w3schools.com/python/ref_func_eval.asp
             if fPd:
-                if eval("abs(" + name_pair[0] + "dert.d) > abs(" + name_pair[1] + "dert.d)"):  # (param_name)dert.d|m
+                if eval("abs(" + name_pair[0] + "derp.d) > abs(" + name_pair[1] + "derp.d)"):  # (param_name)dert.d|m
                     rdn_pair[1] += 1
                 else: rdn_pair[0] += 1  # weaker pair rdn+1
             else:
-                if eval(name_pair[0] + "dert.m > " + name_pair[1] + "dert.m"):
+                if eval(name_pair[0] + "derp.m > " + name_pair[1] + "derp.m"):
                     rdn_pair[1] += 1
                 else: rdn_pair[0] += 1  # weaker pair rdn+1
 

@@ -27,6 +27,8 @@
     https://github.com/boris-kz/CogAlg/blob/master/frame_2D_alg/Illustrations/blob_params.drawio
     https://github.com/boris-kz/CogAlg/blob/master/frame_2D_alg/Illustrations/frame_blobs.png
     https://github.com/boris-kz/CogAlg/blob/master/frame_2D_alg/Illustrations/frame_blobs_intra_blob.drawio
+
+
 '''
 
 import sys
@@ -35,6 +37,7 @@ from collections import deque, namedtuple
 # from frame_blobs_wrapper import wrapped_flood_fill, from utils import minmax, from time import time
 from draw_frame_blobs import visualize_blobs
 from class_cluster import ClusterStructure
+from time import time
 
 ave = 30  # filter or hyper-parameter, set as a guess, latter adjusted by feedback
 aveB = 50
@@ -100,7 +103,7 @@ def frame_blobs_root(image, intra=False, render=False, verbose=False, use_c=Fals
 
     if use_c:  # old version, no longer updated:
         dert__ = dert__[0], np.empty(0), np.empty(0), *dert__[1:], np.empty(0)
-        frame, idmap, adj_pairs = wrapped_flood_fill(dert__)
+        root, idmap, adj_pairs = wrapped_flood_fill(dert__)
 
     else:  # [flood_fill](https://en.wikipedia.org/wiki/Flood_fill)
         blob_, idmap, adj_pairs = flood_fill(dert__, sign__=dert__[3] > 0,  verbose=verbose)  # dert__[3]: m
@@ -110,18 +113,19 @@ def frame_blobs_root(image, intra=False, render=False, verbose=False, use_c=Fals
             Dy += blob.Dy
             Dx += blob.Dx
             M += blob.M
-        frame = CBlob(I=I, Dy=Dy, Dx=Dx, M=M, sublayers=[blob_], dert__=[dert__])
+        root = CBlob(I=I, Dy=Dy, Dx=Dx, M=M, sublayers=[blob_], dert__=[dert__])
 
     assign_adjacents(adj_pairs)  # f_segment_by_direction=False
 
-    if verbose: print(f"{len(frame.levels[-1])} blobs formed in {time() - start_time} seconds")
-    if render: visualize_blobs(idmap, frame.sublayers[-1])
+    if verbose: print(f"{len(root.sublayers[-1])} blobs formed in {time() - start_time} seconds")
+    if render: visualize_blobs(idmap, root.sublayers[-1])
 
     if intra:  # call to intra_blob, omit for testing frame_blobs only:
+        from intra_blob import intra_blob_root  # i think we should import only if intra is true?
         if verbose: print("\rRunning frame's intra_blob...")
-        intra_blob_root(frame.sublayers[-1], render, verbose)
+        intra_blob_root(root, render, verbose)
 
-    return frame
+    return root
 
 def comp_pixel(image):  # 2x2 pixel cross-correlation within image, see comp_pixel_versions file for other versions and more explanation
 
@@ -251,7 +255,7 @@ def assign_adjacents(adj_pairs, blob_cls=CBlob):  # adjacents are connected oppo
     Assign adjacent blobs bilaterally according to adjacent pairs' ids in blob_binder.
     '''
     for blob_id1, blob_id2 in adj_pairs:
-        assert blob_id1 < blob_id2
+        # assert blob_id1 < blob_id2
         blob1 = blob_cls.get_instance(blob_id1)
         blob2 = blob_cls.get_instance(blob_id2)
 
@@ -264,6 +268,11 @@ def assign_adjacents(adj_pairs, blob_cls=CBlob):  # adjacents are connected oppo
             pose1, pose2 = 0, 1  # 0: internal, 1: external
         elif y01 > y02 and x01 > x02 and yn1 < yn2 and xn1 < xn2:
             pose1, pose2 = 1, 0  # 1: external, 0: internal
+        else:
+            if blob2.A > blob1.A:
+                pose1, pose2 = 0, 1  # 0: internal, 1: external
+            else:
+                pose1, pose2 = 1, 0  # 1: external, 0: internal
         # bilateral assignments
         '''
         if f_segment_by_direction:  # pose is not needed
@@ -289,8 +298,8 @@ if __name__ == "__main__":
     argument_parser.add_argument('-v', '--verbose', help='print details, useful for debugging', type=int, default=1)
     argument_parser.add_argument('-r', '--render', help='render the process', type=int, default=0)
     argument_parser.add_argument('-c', '--clib', help='use C shared library', type=int, default=0)
-    argument_parser.add_argument('-n', '--intra', help='run intra_blobs after frame_blobs', type=int, default=0)
-    argument_parser.add_argument('-e', '--extra', help='run frame_recursive after frame_blobs', type=int, default=0)
+    argument_parser.add_argument('-n', '--intra', help='run intra_blobs after frame_blobs', type=int, default=1)
+    argument_parser.add_argument('-e', '--extra', help='run frame_recursive after frame_blobs', type=int, default=1)
     args = argument_parser.parse_args()
     image = imread(args.image)
     verbose = args.verbose

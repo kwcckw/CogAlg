@@ -47,11 +47,11 @@ class CpBlob(CBlob, Cderp):  # probably not be needed
     # blob_ = list
     root = object
 
-def frame_bblobs_root(frame, intra, render, verbose):
+def frame_bblobs_root(root, intra, render, verbose):
     '''
     root function of comp_blob: cross compare blobs with their adjacent blobs in frame.blob_, including sublayers
     '''
-    blob_ = frame.intra.sublayers[-1]
+    blob_ = root.sublayers[-1]
 
     derp_t = cross_comp(blob_)
     pBlob_t = []
@@ -63,12 +63,12 @@ def frame_bblobs_root(frame, intra, render, verbose):
         Dy += sum([pBlob.Dy for pBlob in pBlob_])
         Dx += sum([pBlob.Dx for pBlob in pBlob_])
         M  += sum([pBlob.M  for pBlob in pBlob_])
-        A  += sum([pBlob.A for pBlob in pBlob_])
+        A  += sum([pBlob.A  for pBlob in pBlob_])
         pBlob_t += [pBlob_]  # to form blobs of blobs, connected by mutual match
 
-    new_frame = CpBlob(I=I, Dy=Dy, Dx=Dx, M=M, A=A, sublayers=[blob_, pBlob_t], dert__=[frame.dert__, derp_t])
+    new_root = CpBlob(I=I, Dy=Dy, Dx=Dx, M=M, A=A, sublayers=[blob_, pBlob_t], dert__=[root.dert__, derp_t])
 
-    return new_frame
+    return new_root
 
 def cross_comp(blob_):
 
@@ -126,13 +126,13 @@ def form_bblob_(derp_):
     pBlob_ = []
     for derp in derp_:
         if derp.m>0:  # positve derp only?
-            if "pBlob" in locals():
-                pBlob.accum_from(derp)
-                pBlob.L += 1
-            else:
+            if "pBlob" not in locals():
                 pBlob = CpBlob(dert__ = [derp], L=1)
                 pBlob_.append(pBlob)
-                pBlob.accum_from(derp)
+            pBlob.accum_from(derp)
+        else:
+            if "pBlob" in locals():
+                del pBlob
 
     return pBlob_
 '''

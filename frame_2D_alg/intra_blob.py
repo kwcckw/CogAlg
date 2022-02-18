@@ -25,16 +25,18 @@ pcoef = 2  # ave_comp_slice / ave: relative cost of p fork;  no ave_ga = .78, av
 
 def intra_blob_root(root_blob, render, verbose):  # slice_blob or recursive input rng+ | angle cross-comp within input blob
 
+    blob_root_dert__ = root_blob.dert__[-1]
+    
     deep_frame = root_blob, root_blob  # 1st frame initializes summed representation of hierarchy, 2nd is individual top layer
     deep_blob_i_ = []  # index of a blob with deep layers
-    blob_ = root_blob.sublevels[-1]
-    deep_layers = [[]] * len(blob_)  # ?
+    blob_ = root_blob.sublayers[-1]
+    deep_layers = [[]] * len(blob_)  # ? initiaize each deep layer, to preserve index
     root_dert__ = (  # update root dert__
-        root_blob.dert__[0],  # i
-        root_blob.dert__[1],  # dy
-        root_blob.dert__[2],  # dx
-        root_blob.dert__[3],  # m
-        root_blob.dert__[4]   # ri
+        blob_root_dert__[0],  # i
+        blob_root_dert__[1],  # dy
+        blob_root_dert__[2],  # dx
+        blob_root_dert__[3],  # m
+        blob_root_dert__[4]   # ri
         )
     for i, blob in enumerate(blob_):  # print('Processing blob number ' + str(bcount))
         '''
@@ -46,6 +48,7 @@ def intra_blob_root(root_blob, render, verbose):  # slice_blob or recursive inpu
         blob.prior_forks=['g']
         blob_height = blob.box[1] - blob.box[0]
         blob_width = blob.box[3] - blob.box[2]
+        M = 100000
 
         if M>0:
             if (M > aveB) and (blob_height > 3 and blob_width > 3):  # min blob dimensions
