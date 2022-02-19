@@ -45,7 +45,9 @@ class CpBlob(CBlob, Cderp):  # probably not be needed
     # layer1 = dict       # Cdert layer params
     # derp_ = list
     # blob_ = list
+    dert__ = object
     root = object
+    sublayers = list
 
 def frame_bblobs_root(root, intra, render, verbose):
     '''
@@ -54,9 +56,10 @@ def frame_bblobs_root(root, intra, render, verbose):
     blob_ = root.sublayers[-1]
 
     derp_t = cross_comp(blob_)
-    pBlob_t = []
+    sublayer0 = []  # pBlob_  (flat version)
     I = A = Dy = Dx = M = 0
-
+    
+    # how about rdn, d and m param?
     for param_name, derp_ in zip(param_names, derp_t):
         pBlob_ = form_bblob_(derp_)
         I  += sum([pBlob.I  for pBlob in pBlob_])
@@ -64,9 +67,11 @@ def frame_bblobs_root(root, intra, render, verbose):
         Dx += sum([pBlob.Dx for pBlob in pBlob_])
         M  += sum([pBlob.M  for pBlob in pBlob_])
         A  += sum([pBlob.A  for pBlob in pBlob_])
-        pBlob_t += [pBlob_]  # to form blobs of blobs, connected by mutual match
+        sublayer0 += [pBlob_]  # to form blobs of blobs, connected by mutual match
 
-    new_root = CpBlob(I=I, Dy=Dy, Dx=Dx, M=M, A=A, sublayers=[blob_, pBlob_t], dert__=[root.dert__, derp_t])
+        # intra section here?
+
+    new_root = CpBlob(I=I, Dy=Dy, Dx=Dx, M=M, A=A, sublayers=[blob_, sublayer0], dert__=derp_t)
 
     return new_root
 
@@ -121,6 +126,7 @@ def comp_par(_blob, _param, param, param_name, ave):
     return derp
 
 # very initial draft
+# need to add adj_bblob here, not sure how yet
 def form_bblob_(derp_):
 
     pBlob_ = []

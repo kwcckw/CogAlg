@@ -28,7 +28,7 @@ def intra_blob_root(root_blob, render, verbose):  # slice_blob or recursive inpu
     deep_frame = root_blob, root_blob  # 1st frame initializes summed representation of hierarchy, 2nd is individual top layer
     deep_blob_i_ = []  # indices of blobs with added sublayers, redundant to deep_blobs?
     blob_ = root_blob.sublayers[0]
-    deep_blobs = [] * len(blob_)  # each may remain empty, replace with append?
+    deep_blobs = [[]] * len(blob_)  # each may remain empty, replace with append?
 
     root_dert__ = (  # update root dert__, not reviewed
         root_blob.dert__[0],  # i
