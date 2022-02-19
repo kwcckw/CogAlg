@@ -25,18 +25,17 @@ pcoef = 2  # ave_comp_slice / ave: relative cost of p fork;  no ave_ga = .78, av
 
 def intra_blob_root(root_blob, render, verbose):  # slice_blob or recursive input rng+ | angle cross-comp within input blob
 
-    blob_root_dert__ = root_blob.dert__[-1]
-    
     deep_frame = root_blob, root_blob  # 1st frame initializes summed representation of hierarchy, 2nd is individual top layer
-    deep_blob_i_ = []  # index of a blob with deep layers
-    blob_ = root_blob.sublayers[-1]
-    deep_layers = [[]] * len(blob_)  # ? initiaize each deep layer, to preserve index
-    root_dert__ = (  # update root dert__
-        blob_root_dert__[0],  # i
-        blob_root_dert__[1],  # dy
-        blob_root_dert__[2],  # dx
-        blob_root_dert__[3],  # m
-        blob_root_dert__[4]   # ri
+    deep_blob_i_ = []  # indices of blobs with added sublayers, redundant to deep_blobs?
+    blob_ = root_blob.sublayers[0]
+    deep_blobs = [] * len(blob_)  # each may remain empty, replace with append?
+
+    root_dert__ = (  # update root dert__, not reviewed
+        root_blob.dert__[0],  # i
+        root_blob.dert__[1],  # dy
+        root_blob.dert__[2],  # dx
+        root_blob.dert__[3],  # m
+        root_blob.dert__[4]   # ri
         )
     for i, blob in enumerate(blob_):  # print('Processing blob number ' + str(bcount))
         '''
@@ -48,25 +47,24 @@ def intra_blob_root(root_blob, render, verbose):  # slice_blob or recursive inpu
         blob.prior_forks=['g']
         blob_height = blob.box[1] - blob.box[0]
         blob_width = blob.box[3] - blob.box[2]
-        M = 100000
 
         if M>0:
             if (M > aveB) and (blob_height > 3 and blob_width > 3):  # min blob dimensions
                 blob.rdn = 1
                 blob.rng = 1
-                deep_layers[i] = comp_range(blob, render, verbose)
+                deep_blobs[i] = comp_range(blob, render, verbose)
                 # dert__ comp_r in 4x4 kernels
 
         elif -M > aveB and blob_height > 3 and blob_width  > 3:  # min blob dimensions
             blob.rdn = 1
             blob.f_comp_a = 1
-            deep_layers[i] = comp_angle(blob, render, verbose)  # dert__ comp_a in 2x2 kernels
+            deep_blobs[i] = comp_angle(blob, render, verbose)  # dert__ comp_a in 2x2 kernels
 
-        if deep_layers[i]:  # if there are deeper layers
+        if deep_blobs[i]:  # if there are deeper layers
             deep_blob_i_.append(i)  # indices of blobs with deep layers
 
     if verbose:
-        print_deep_blob_forking(deep_layers)
+        print_deep_blob_forking(deep_blobs)
         print("\rFinished intra_blob")
 
     return deep_frame  # need to revise the return variable

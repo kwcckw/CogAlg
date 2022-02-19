@@ -27,8 +27,6 @@
     https://github.com/boris-kz/CogAlg/blob/master/frame_2D_alg/Illustrations/blob_params.drawio
     https://github.com/boris-kz/CogAlg/blob/master/frame_2D_alg/Illustrations/frame_blobs.png
     https://github.com/boris-kz/CogAlg/blob/master/frame_2D_alg/Illustrations/frame_blobs_intra_blob.drawio
-
-
 '''
 
 import sys
@@ -37,7 +35,6 @@ from collections import deque, namedtuple
 # from frame_blobs_wrapper import wrapped_flood_fill, from utils import minmax, from time import time
 from draw_frame_blobs import visualize_blobs
 from class_cluster import ClusterStructure
-from time import time
 
 ave = 30  # filter or hyper-parameter, set as a guess, latter adjusted by feedback
 aveB = 50
@@ -45,8 +42,7 @@ ave_M = 100
 ave_mP = 100
 UNFILLED = -1
 EXCLUDED_ID = -2
-
-FrameOfBlobs = namedtuple('FrameOfBlobs', 'I, Dy, Dx, M, blob_, dert__')
+# FrameOfBlobs = namedtuple('FrameOfBlobs', 'I, Dy, Dx, M, blob_, dert__')
 
 class CBlob(ClusterStructure):
     # comp_pixel:
@@ -65,7 +61,7 @@ class CBlob(ClusterStructure):
     # frame_bblob:
     root_bblob = object
     sublevels = list  # input levels
-    # intra_blob params:  # or pack in intra = lambda: Cintra
+    # intra_blob params: # or pack in intra = lambda: Cintra
     # comp_angle:
     Dydy = float
     Dxdy = float
@@ -103,7 +99,7 @@ def frame_blobs_root(image, intra=False, render=False, verbose=False, use_c=Fals
 
     if use_c:  # old version, no longer updated:
         dert__ = dert__[0], np.empty(0), np.empty(0), *dert__[1:], np.empty(0)
-        root, idmap, adj_pairs = wrapped_flood_fill(dert__)
+        frame, idmap, adj_pairs = wrapped_flood_fill(dert__)
 
     else:  # [flood_fill](https://en.wikipedia.org/wiki/Flood_fill)
         blob_, idmap, adj_pairs = flood_fill(dert__, sign__=dert__[3] > 0,  verbose=verbose)  # dert__[3]: m
@@ -113,19 +109,19 @@ def frame_blobs_root(image, intra=False, render=False, verbose=False, use_c=Fals
             Dy += blob.Dy
             Dx += blob.Dx
             M += blob.M
-        root = CBlob(I=I, Dy=Dy, Dx=Dx, M=M, sublayers=[blob_], dert__=[dert__])
+        frame = CBlob(I=I, Dy=Dy, Dx=Dx, M=M, sublayers=[blob_], dert__=dert__)
 
     assign_adjacents(adj_pairs)  # f_segment_by_direction=False
 
-    if verbose: print(f"{len(root.sublayers[-1])} blobs formed in {time() - start_time} seconds")
-    if render: visualize_blobs(idmap, root.sublayers[-1])
+    if verbose: print(f"{len(frame.sublayers[0])} blobs formed in {time() - start_time} seconds")
+    if render: visualize_blobs(idmap, frame.sublayers[0])
 
-    if intra:  # call to intra_blob, omit for testing frame_blobs only:
-        from intra_blob import intra_blob_root  # i think we should import only if intra is true?
+    if intra:  # omit for testing frame_blobs alone:
         if verbose: print("\rRunning frame's intra_blob...")
-        intra_blob_root(root, render, verbose)
+        from intra_blob import intra_blob_root
+        intra_blob_root(frame, render, verbose)
 
-    return root
+    return frame
 
 def comp_pixel(image):  # 2x2 pixel cross-correlation within image, see comp_pixel_versions file for other versions and more explanation
 
@@ -160,7 +156,7 @@ def flood_fill(dert__, sign__, verbose=False, mask__=None, blob_cls=CBlob, fseg=
     if mask__ is not None:
         idmap[mask__] = EXCLUDED_ID
     if verbose:
-        step = 100 / height / width     # progress % percent per pixel
+        step = 100 / height / width  # progress % percent per pixel
         progress = 0.0
         print(f"\rClustering... {round(progress)} %", end="");  sys.stdout.flush()
 
@@ -185,7 +181,7 @@ def flood_fill(dert__, sign__, verbose=False, mask__=None, blob_cls=CBlob, fseg=
                     blob.accumulate(I  = dert__[4][y1][x1],  # rp__,
                                     Dy = dert__[1][y1][x1],
                                     Dx = dert__[2][y1][x1],
-                                    M  = dert__[3][y1][x1]) # M -= g
+                                    M  = dert__[3][y1][x1])  # M -= g
                     if len(dert__) > 5: # comp_angle
                         blob.accumulate(Dydy = dert__[5][y1][x1],
                                         Dxdy = dert__[6][y1][x1],
@@ -197,15 +193,11 @@ def flood_fill(dert__, sign__, verbose=False, mask__=None, blob_cls=CBlob, fseg=
                                         Ddx = dert__[11][y1][x1])
                     blob.A += 1
 
-                    if y1 < y0:
-                        y0 = y1
-                    elif y1 > yn:
-                        yn = y1
-                    if x1 < x0:
-                        x0 = x1
-                    elif x1 > xn:
-                        xn = x1
-                    # determine neighbors' coordinates, 4 for -, 8 for +
+                    if y1 < y0:   y0 = y1
+                    elif y1 > yn: yn = y1
+                    if x1 < x0:   x0 = x1
+                    elif x1 > xn: xn = x1
+                    # neighbors coordinates, 4 for -, 8 for +
                     if blob.M>0 or fseg:   # include diagonals
                         adj_dert_coords = [(y1 - 1, x1 - 1), (y1 - 1, x1),
                                            (y1 - 1, x1 + 1), (y1, x1 + 1),
@@ -214,8 +206,7 @@ def flood_fill(dert__, sign__, verbose=False, mask__=None, blob_cls=CBlob, fseg=
                     else:
                         adj_dert_coords = [(y1 - 1, x1), (y1, x1 + 1),
                                            (y1 + 1, x1), (y1, x1 - 1)]
-
-                    # search through neighboring derts
+                    # search neighboring derts
                     for y2, x2 in adj_dert_coords:
                         # check if image boundary is reached
                         if (y2 < 0 or y2 >= height or
@@ -231,7 +222,6 @@ def flood_fill(dert__, sign__, verbose=False, mask__=None, blob_cls=CBlob, fseg=
                         # else check if same-signed
                         elif blob.M>0 != sign__[y2, x2]:
                             adj_pairs.add((idmap[y2, x2], blob.id))     # blob.id always bigger
-
                 # terminate blob
                 yn += 1
                 xn += 1
@@ -255,7 +245,6 @@ def assign_adjacents(adj_pairs, blob_cls=CBlob):  # adjacents are connected oppo
     Assign adjacent blobs bilaterally according to adjacent pairs' ids in blob_binder.
     '''
     for blob_id1, blob_id2 in adj_pairs:
-        # assert blob_id1 < blob_id2
         blob1 = blob_cls.get_instance(blob_id1)
         blob2 = blob_cls.get_instance(blob_id2)
 
@@ -289,8 +278,6 @@ if __name__ == "__main__":
     import argparse
     from time import time
     from utils import imread
-    from intra_blob import intra_blob_root
-    from frame_recursive import frame_recursive
 
     # Parse arguments
     argument_parser = argparse.ArgumentParser()
@@ -298,8 +285,8 @@ if __name__ == "__main__":
     argument_parser.add_argument('-v', '--verbose', help='print details, useful for debugging', type=int, default=1)
     argument_parser.add_argument('-r', '--render', help='render the process', type=int, default=0)
     argument_parser.add_argument('-c', '--clib', help='use C shared library', type=int, default=0)
-    argument_parser.add_argument('-n', '--intra', help='run intra_blobs after frame_blobs', type=int, default=1)
-    argument_parser.add_argument('-e', '--extra', help='run frame_recursive after frame_blobs', type=int, default=1)
+    argument_parser.add_argument('-n', '--intra', help='run intra_blobs after frame_blobs', type=int, default=0)
+    argument_parser.add_argument('-e', '--extra', help='run frame_recursive after frame_blobs', type=int, default=0)
     args = argument_parser.parse_args()
     image = imread(args.image)
     verbose = args.verbose
@@ -307,12 +294,14 @@ if __name__ == "__main__":
     render = args.render
 
     start_time = time()
+
     if args.extra:
+        from frame_recursive import frame_recursive
         frame = frame_recursive(image, intra, render, verbose)
     else:
         frame = frame_blobs_root(image, intra, render, verbose)
-    end_time = time() - start_time
 
+    end_time = time() - start_time
     if args.verbose:
         print(f"\nSession ended in {end_time:.2} seconds", end="")
     else:
