@@ -52,6 +52,7 @@ class CBlob(ClusterStructure):
     M = float
     A = float  # blob area
     # composite params:
+    sign = bool
     box = list  # x0, xn, y0, yn
     mask__ = object
     dert__ = object
@@ -118,7 +119,7 @@ def frame_blobs_root(image, intra=False, render=False, verbose=False, use_c=Fals
 
     if intra:  # omit for testing frame_blobs alone:
         if verbose: print("\rRunning frame's intra_blob...")
-        from intra_blob import intra_blob_root
+        from intra_blob_draft import intra_blob_root
         intra_blob_root(frame, render, verbose)
 
     return frame
@@ -216,7 +217,7 @@ def flood_fill(dert__, sign__, verbose=False, mask__=None, blob_cls=CBlob, fseg=
                         # check if filled
                         elif idmap[y2, x2] == UNFILLED:
                             # check if same-signed
-                            if blob.M>0 == sign__[y2, x2]:
+                            if blob.sign == sign__[y2, x2]:
                                 idmap[y2, x2] = blob.id  # add blob ID to each dert
                                 unfilled_derts.append((y2, x2))
                         # else check if same-signed
@@ -285,7 +286,7 @@ if __name__ == "__main__":
     argument_parser.add_argument('-v', '--verbose', help='print details, useful for debugging', type=int, default=1)
     argument_parser.add_argument('-r', '--render', help='render the process', type=int, default=0)
     argument_parser.add_argument('-c', '--clib', help='use C shared library', type=int, default=0)
-    argument_parser.add_argument('-n', '--intra', help='run intra_blobs after frame_blobs', type=int, default=0)
+    argument_parser.add_argument('-n', '--intra', help='run intra_blobs after frame_blobs', type=int, default=1)
     argument_parser.add_argument('-e', '--extra', help='run frame_recursive after frame_blobs', type=int, default=0)
     args = argument_parser.parse_args()
     image = imread(args.image)
