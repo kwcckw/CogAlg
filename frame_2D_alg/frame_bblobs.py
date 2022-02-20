@@ -58,7 +58,7 @@ def frame_bblobs_root(root, intra, render, verbose):
     derp_t = cross_comp(blob_)
     sublayer0 = []  # pBlob_  (flat version)
     I = A = Dy = Dx = M = 0
-    
+
     # how about rdn, d and m param?
     for param_name, derp_ in zip(param_names, derp_t):
         pBlob_ = form_bblob_(derp_)
