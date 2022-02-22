@@ -53,7 +53,7 @@ def frame_bblobs_root(root, intra, render, verbose):
     '''
     root function of comp_blob: cross compare blobs with their adjacent blobs in frame.blob_, including sublayers
     '''
-    blob_ = root.sublayers[-1]
+    blob_ = root.sublayers[0]
 
     derp_t = cross_comp(blob_)
     sublayer0 = []  # pBlob_  (flat version)
@@ -71,7 +71,7 @@ def frame_bblobs_root(root, intra, render, verbose):
 
         # intra section here?
 
-    new_root = CpBlob(I=I, Dy=Dy, Dx=Dx, M=M, A=A, sublayers=[blob_, sublayer0], dert__=derp_t)
+    new_root = CpBlob(I=I, Dy=Dy, Dx=Dx, M=M, A=A, sublayers=sublayer0)
 
     return new_root
 
