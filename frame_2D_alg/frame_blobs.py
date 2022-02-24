@@ -52,6 +52,7 @@ class CBlob(ClusterStructure):
     Dx = float
     G = float
     A = float  # blob area
+    sign = bool
     # composite params:
     sign = bool
     box = list  # x0, xn, y0, yn
