@@ -121,10 +121,14 @@ def line_PPs_root(P_t):  # P_T is P_t = [Pm_, Pd_];  higher-level input is neste
 def cross_comp(P_, fPd):  # cross-compare patterns within horizontal line
 
     Lderp_, Iderp_, Dderp_, Mderp_, derp1_, derp2_ = [], [], [], [], [], []
+    if hasattr(P_[0], "P"): # we can't use isinstance(P_[0], CP) here, because CPp inherited from CP， it is true when check for P instance too
+        new_P = CPp()
+    else:
+        new_P = CP()
 
-    for _P, P, P2 in zip(P_, P_[1:], P_[2:] + [CP()]):  # for P_ cross-comp over step=1 and step=2
-        _L, _I, _D, _M, *_ = _P.unpack()  # *_: skip remaining params
-        L, I, D, M, *_ = P.unpack()
+    for _P, P, P2 in zip(P_, P_[1:], P_[2:] + [new_P]):  # for P_ cross-comp over step=1 and step=2
+        _L, _I, _D, _M = _P.L, _P.I, _P.D, _P.M
+        L, I, D, M, *_ = P.L, P.I, P.D, P.M
         D2, M2 = P2.D, P2.M
 
         Lderp_ += [comp_par(_P, _L, L, "L_", ave_mL)]  # div_comp L, sub_comp summed params:
@@ -266,20 +270,33 @@ def splice_Ps(Ppm_, derp1_, derp2_, fPd, fPpd):  # re-eval Pps, Pp.derp_s for re
 
             if M2 / max( abs(M1), 1) > ave_splice:  # similarity / separation(!/0): splice Ps in Pp, also implies weak Pp.derp_:
                 # Pp is now primarily a spliced P, or higher Pp a spliced lower Pp:
-                if isinstance(derp1.P, CP):
-                    P = CP()
-                else:
-                    P = CPp()  # if called from line_recursive
+                # derp1_ may empty, can't use it
+                if hasattr(Pp.derp_[0].P, "P"):  # if called from line_recursive
+                    P = CPp()   
+                    for Pderp in Pp.derp_: P.derp_ += Pderp.P.derp_
+                    P.L = len(P.derp_)
+                    range_incr_function = range_incr
+                    deriv_incr_function = deriv_incr
+                    range_input_arguments = [], [P], 1, 2   # hlayers=1, rng=2 from line_recursive
+                    deriv_input_arguments = [], [P], 1      # hlayers=1 from line_recursive
+                else:  # if called from line_PPs
+                    P = CP()  
+                    for derp in Pp.derp_: P.dert_ += derp.P.dert_
+                    P.L = len(P.dert_)
+                    range_incr_function = range_incr_P_
+                    deriv_incr_function = deriv_incr_P_
+                    range_input_arguments = [], [P], 1, 1  #  rdn=1, rng=1 from line_Ps
+                    deriv_input_arguments = [], [P], 1, 1  #  rdn=1, rng=1 from line_Ps
+                    
                 P.x0 = Pp.derp_[0].P.x0
                 P.I = sum([derp.P.I for derp in Pp.derp_])
                 P.D = sum([derp.P.D for derp in Pp.derp_])
                 P.M = sum([derp.P.M for derp in Pp.derp_])
                 P.Rdn = sum([derp.P.Rdn for derp in Pp.derp_])
-                for derp in Pp.derp_: P.dert_ += derp.P.dert_
-                P.L = len(P.dert_)
+
                 # re-run line_P sub-recursion per spliced P, or lower spliced Pp in line_recursive:
-                range_incr_P_([], [P], rdn=1, rng=1)
-                deriv_incr_P_([], [P], rdn=1, rng=1)
+                range_incr_function(*range_input_arguments) 
+                deriv_incr_function(*deriv_input_arguments)
                 Pp.P = P
         '''
         no splice(): fine-grained eval per P triplet is too expensive?

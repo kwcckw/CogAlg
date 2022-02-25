@@ -79,7 +79,7 @@ def line_level_root(root, types_):  # recursively adds higher levels of pattern 
                     new_sublayer0 += [Pp_]  # Ppm_| Ppd_
                     if (fPd and param == 2) or (not fPd and param == 1):  # 2: "D_", 1: "I_"
                         if not fPd:
-                            splice_Pps(Pp_, dert1_, dert2_, fiPd, fPd)  # splice eval by Pp.M in Ppm_, for Pms in +IPpms or Pds in +DPpm
+                            splice_Ps(Pp_, dert1_, dert2_, fiPd, fPd)  # splice eval by Pp.M in Ppm_, for Pms in +IPpms or Pds in +DPpm
                         range_incr(root, Pp_, hlayers=1, rng=2)  # evaluate greater-range cross-comp and clustering per Pp
                         deriv_incr(root, Pp_, hlayers=1)  # evaluate higher-derivation cross-comp and clustering per Pp
                     new_M += sum([Pp.M for Pp in Pp_])  # Pp.M includes rng+ and der+ Ms
@@ -95,52 +95,12 @@ def line_level_root(root, types_):  # recursively adds higher levels of pattern 
 
     norm_feedback(root.levels)  # +dfilters: adjust all independent filters on lower levels, for pipelined version only
 
-'''
-should be same as in line_PP?
-def term_Pp(Ppp_, L, I, D, M, Rdn, x0, derp_, fPpd):
 
-    Ppp = CPp(L=L, I=I, D=D, M=M, Rdn=Rdn+L, x0=x0, derp_=derp_, sublayers=[[]])
-    # or Rdn += Rdn+L: sum across all levels / param types?
-    for derp in Ppp.derp_: derp.Ppt[fPpd] = Ppp  # root Ppp refs
-    Ppp_.append(Ppp)
-'''
-
-# needs to be combined with splice_Ps
-def splice_Pps(Pppm_, Pderp1_, Pderp2_, fPd, fPpd):  # re-eval Ppps, pPp.derp_s for redundancy, eval splice Pps
-    '''
-    Initial P termination is by pixel-level sign change, but resulting separation may not be significant on a pattern level.
-    That is, separating opposite-sign patterns are weak relative to separated same-sign patterns, especially if similar.
-     '''
-    for i, Ppp in enumerate(Pppm_):
-        if fPpd: value = abs(Ppp.D)  # DPpm_ if fPd, else IPpm_
-        else: value = Ppp.M  # add summed P.M|D?
-
-        if value > ave_M * (ave_D*fPd) * Ppp.Rdn * 4 and Ppp.L > 4:  # min internal xP.I|D match in +Ppm
-            M2 = M1 = 0
-            for Pderp2 in Pderp2_: M2 += Pderp2.m  # match(I, __I or D, __D): step=2
-            for Pderp1 in Pderp1_: M1 += Pderp1.m  # match(I, _I or D, _D): step=1
-
-            if M2 / max( abs(M1), 1) > ave_splice:  # similarity / separation(!/0): splice Ps in Pp, also implies weak Pp.derp_?
-                Pp = CPp()
-                Pp.x0 = Ppp.derp_[0].P.x0
-                # replace Pp params with summed P params, Pp is now primarily a spliced P:
-                Pp.L = sum([Pderp.P.L for Pderp in Ppp.derp_]) # In this case, Pderp.P is Pp
-                Pp.I = sum([Pderp.P.I for Pderp in Ppp.derp_])
-                Pp.D = sum([Pderp.P.D for Pderp in Ppp.derp_])
-                Pp.M = sum([Pderp.P.M for Pderp in Ppp.derp_])
-                Pp.Rdn = sum([Pderp.P.Rdn for Pderp in Ppp.derp_])
-
-                for Pderp in Ppp.derp_: Pp.derp_ += Pderp.P.derp_
-                Pp.L = len(Pp.derp_)
-                range_incr(rootPp=[], Pp_=[Pp], hlayers=1, rng=2)  # eval rng+ comp,form per Pp
-                deriv_incr(rootPp=[], Pp_=[Pp], hlayers=1)  # eval der+ comp,form per Pp
-                Ppp.P = Pp
-        '''
-        no splice(): fine-grain eval per P triplet is too expensive?
-        '''
+def norm_feedback(levels):
+    # adjust all independent filters on lower levels by corresponding mean deviations (Ms), for pipelined version only
+    pass
 
 # not used:
-
 def cross_core_comp(iP_T, types_):  # currently not used because:
     # correlation is predetermined by derivation: rdn coefs, multiplied across derivation hierarchy, no need to compare?
     '''
@@ -193,11 +153,7 @@ def cross_core_comp(iP_T, types_):  # currently not used because:
                         xPp_t.append(xPp_)
             xPp_t_.append(xPp_t)
 
-
-def norm_feedback(levels):
-    # adjust all independent filters on lower levels by corresponding mean deviations (Ms), for pipelined version only
-    pass
-
+# not used:
 def P_type_assign(iP_T):  # P_T_: 2P_, 16P_, 128P_., each level is nested to the depth = 1 + 2*elevation
 
     ntypes = 1 + 2 * math.log(len(iP_T) / 2, 8)  # number of types per P_ in iP_T, with (fPd, param_name) n_pairs = math.log(len(iP_T)/2, 8)
@@ -241,42 +197,3 @@ def P_type_assign(iP_T):  # P_T_: 2P_, 16P_, 128P_., each level is nested to the
         types_.append(types)  # parallel to P_T, for zipping
     return types_, ntypes
 
-
-def line_PPPs_root(root):  # test code only, some obsolete
-
-    sublayer0 = []  # 1st sublayer: (Pm_, Pd_( Lmd, Imd, Dmd, Mmd ( Ppm_, Ppd_))), deep sublayers: Ppm_(Ppmm_), Ppd_(Ppdm_,Ppdd_)
-    root.sublayers = [sublayer0]  # reset from last-level sublayers
-    P_ttt = root.levels[-1][0]  # input is 1st sublayer of the last level, always P_ttt? Not really, it depends on the level
-    elevation = len(root.levels)
-    level_M = 0
-
-    for fiPd, paramset in enumerate(P_ttt):
-        for param_name, param_md in zip(param_names, paramset):
-            for fiPpd, P_ in enumerate(param_md):  # fiPpd: Ppm_ or Ppd_
-
-                if len(P_) > 2:  # aveN, actually will be higher
-                    derp_t, dert1_, dert2_ = cross_comp_Pp_(P_, fiPpd)  # derp_t: Ldert_, Idert_, Ddert_, Mdert_
-                    sum_rdn_(param_names, derp_t, fiPpd)  # sum cross-param redundancy per derp
-                    paramset = []
-                    for param_name, derp_ in zip(param_names, derp_t):  # derp_ -> Pps:
-                        param_md = []
-                        for fPpd in 0, 1:  # 0-> Ppm_, 1-> Ppd_:
-                            Pp_ = form_Pp_(derp_, fPpd)
-                            param_md += [Pp_]  # -> [Ppm_, Ppd_]
-                            if (fPpd and param_name == "D_") or (not fPpd and param_name == "I_"):
-                                if not fPpd:
-                                    splice_Pps(Pp_, dert1_, dert2_, fiPpd, fPpd)  # splice eval by Pp.M in Ppm_, for Pms in +IPpms or Pds in +DPpm
-                                intra_Pp_(root, param_md[fPpd], 1, fPpd)  # eval der+ or rng+ per Pp
-                            level_M += sum([Pp.M for Pp in Pp_])
-                        paramset += [param_md]  # -> [Lmd, Imd, Dmd, Mmd]
-                    sublayer0 += [paramset]  # -> [Pm_, Pd_]
-                else:
-                    # additional brackets to preserve the whole index, else the next level output will not be correct since some of them are empty
-                    sublayer0 += [[[[], []] for _ in range(4)]]  # empty paramset to preserve index in [Pm_, Pd_]
-    # add nesting here
-    root.levels.append(root.sublayers)
-
-    if any(sublayer0) and level_M > ave_M:  # evaluate for next level recursively
-        line_level_root(root)
-
-    return root
