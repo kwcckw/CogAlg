@@ -24,12 +24,12 @@ pcoef = 2  # ave_comp_slice / ave: relative cost of p fork;  no ave_ga = .78, av
 # --------------------------------------------------------------------------------------------------------------
 # functions:
 
-def intra_blob_root(root_blob, render, verbose):  # recursive evaluation of cross-comp slice| range| angle per blob
+def intra_blob_root(root_blob, blob_, render, verbose):  # recursive evaluation of cross-comp slice| range| angle per blob
 
     deep_blobs = []  # for visualization
     spliced_layers = []  # to extend root_blob sublayers
 
-    for blob in root_blob.sublayers[0]:  # print('Processing blob number ' + str(bcount))
+    for blob in blob_:  # print('Processing blob number ' + str(bcount))
 
         blob.prior_forks = root_blob.prior_forks.copy()  # increment forking sequence: g -> r|a, a -> p
         blob.root_dert__= root_blob.dert__
@@ -45,15 +45,66 @@ def intra_blob_root(root_blob, render, verbose):  # recursive evaluation of cros
                     blob.prior_forks.extend('p')
                     if verbose: print('\nslice_blob fork\n')
                     if render and blob.A < 100: deep_blobs.append(blob)
-            else:
+            else:   
+                ave_G_r = ave_G + max(1, blob.rng)  # ave_G_r scaled by rng
+                ave_G_a = ave_G + blob.rdn          # ave_G_a scaled by rdn? (not sure)
+                
+                if ave_G_r > ave_G_a:
+                    blob.prior_forks.extend('ra')
+                    blob.sublayers = [[]]
+                    
+                    if blob.sign and blob.G > ave_G_r * ave:    
+                        blob.fBa = 0; blob.rng = root_blob.rng + 1; blob.rdn = root_blob.rdn + 1
+                        ext_dert__, ext_mask__ = extend_dert(blob)  # dert__+= 1: cross-comp in larger kernels
+                        # comp_r 4x4:
+                        new_dert__, new_mask__ = comp_r(ext_dert__, blob.rng, ext_mask__)
+                        sign__ = ave * (blob.rdn + 1) - new_dert__[3] > 0  # m__ = ave - g__
+                        
+                        if new_mask__.shape[0] > 2 and new_mask__.shape[1] > 2 and False in new_mask__:       
+                            if verbose: print('\nr fork\n')
+                            sub_blobs, idmap, adj_pairs = flood_fill(new_dert__, sign__, verbose=False, mask__=new_mask__.fill(False), blob_cls=CBlob)
+    
+                            adj_rdn = 1 - (1 / len(sub_blobs))  # adjust pre-assigned max rdn to actual rdn after flood_fill:
+                            blob.rdn -= adj_rdn
+                            for sub_blob in sub_blobs: sub_blob.rdn -= adj_rdn
+                            assign_adjacents(adj_pairs, CBlob)
+                            
+                            blob.sublayers[0].append(sub_blobs)
+                            blob.sublayers += intra_blob_root(blob, sub_blobs, render, verbose)  # recursive evaluation of cross-comp slice| range| angle per blob    
+                        
+                    if blob.G > ave_G_r * ave:  
+                        blob.fBa = 1; blob.rdn = root_blob.rdn+1
+                        ext_dert__, ext_mask__ = extend_dert(blob)  # dert__+= 1: cross-comp in larger kernels
+                        # comp_a 2x2:
+                        new_dert__, new_mask__ = comp_a(ext_dert__, ext_mask__)  # no vgr * vga: deviations can't be combined in a product
+                        sign__ = ave * (blob.rdn+2) * pcoef - new_dert__[3] * new_dert__[9] > 0  # val_comp_slice_, rdn+2: -2 gs: gr * ga
+                        
+                        if new_mask__.shape[0] > 2 and new_mask__.shape[1] > 2 and False in new_mask__:  
+                            if verbose: print('\na fork\n')
+                            sub_blobs, idmap, adj_pairs = flood_fill(new_dert__, sign__, verbose=False, mask__=new_mask__.fill(False), blob_cls=CBlob)
+    
+                            adj_rdn = 1 - (1 / len(sub_blobs))  # adjust pre-assigned max rdn to actual rdn after flood_fill:
+                            blob.rdn -= adj_rdn 
+                            for sub_blob in sub_blobs: sub_blob.rdn -= adj_rdn
+                            assign_adjacents(adj_pairs, CBlob)
+                            
+                            blob.sublayers[0].append(sub_blobs) 
+                            blob.sublayers += intra_blob_root(blob, sub_blobs, render, verbose)  # recursive evaluation of cross-comp slice| range| angle per blob
+
+                    if blob.sublayers[0]:
+                        spliced_layers = [spliced_layers + sublayers for spliced_layers, sublayers in
+                                      zip_longest(spliced_layers, blob.sublayers, fillvalue=[])]
+                      
+                        
+                '''      
                 vG = blob.G - ave_G  # deviation of gradient, from ave per blob, combined max rdn = blob.rdn+1:
                 vvG = abs(vG) - ave_vG * blob.rdn  # 2nd deviation of gradient, from fixed costs of if "new_dert__" loop below
-                ''' 
-                vvG = 0 maps to max G for comp_r if vG < 0, and to min G for comp_a if vG > 0
-                or no vvG, separate ave_G for comp_r and comp_a, to process the blob by both or neither of the forks:
-                if ave_G_r > ave_G_a: overlap in blob.G spectrum is processed by both forks
-                if ave_G_r < ave_G_a: gap in G is not processed
-                '''
+                
+                # vvG = 0 maps to max G for comp_r if vG < 0, and to min G for comp_a if vG > 0
+                # or no vvG, separate ave_G for comp_r and comp_a, to process the blob by both or neither of the forks:
+                # if ave_G_r > ave_G_a: overlap in blob.G spectrum is processed by both forks
+                # if ave_G_r < ave_G_a: gap in G is not processed
+                
                 if blob.sign:  # sign of pixel-level g, which corresponds to sign of blob vG, so we don't need the later
                     if vvG > 0:  # below-average G, eval for comp_r
                         # root values for sub_blobs:
@@ -93,6 +144,8 @@ def intra_blob_root(root_blob, render, verbose):  # recursive evaluation of cros
 
                     spliced_layers = [spliced_layers + sublayers for spliced_layers, sublayers in
                                       zip_longest(spliced_layers, blob.sublayers, fillvalue=[])]
+    '''
+                    
     if verbose:
         print_deep_blob_forking(deep_blobs); print("\rFinished intra_blob")
 

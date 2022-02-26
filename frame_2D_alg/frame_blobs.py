@@ -122,7 +122,7 @@ def frame_blobs_root(image, intra=False, render=False, verbose=False, use_c=Fals
         if verbose: print("\rRunning frame's intra_blob...")
         from intra_blob import intra_blob_root
 
-        spliced_layers = intra_blob_root(frame, render, verbose)  # recursive evaluation of cross-comp range| angle| slice per blob
+        spliced_layers = intra_blob_root(frame, blob_, render, verbose)  # recursive evaluation of cross-comp range| angle| slice per blob
 
         frame.sublayers = [spliced_layers + sublayers for spliced_layers, sublayers in
                            zip_longest(spliced_layers, frame.sublayers, fillvalue=[])]
