@@ -110,7 +110,7 @@ def frame_blobs_root(image, intra=False, render=False, verbose=False, use_c=Fals
 
     I, Dy, Dx, G = 0, 0, 0, 0  # same for both forks:
     for blob in rblob_: I += blob.I; Dy += blob.Dy; Dx += blob.Dx; G += blob.G
-    frame = CBlob(I = I, Dy = Dy, Dx = Dx, G = G, dert__=dert__, rsublayers = [rblob_], asublayers = [ablob_])
+    frame = CBlob(I = I, Dy = Dy, Dx = Dx, G = G, dert__=dert__, prior_forks=["g"], rsublayers = [rblob_], asublayers = [ablob_])
     '''
     if verbose: print(f"{len(frame.sublayers[0])} blobs formed in {time() - start_time} seconds")
     if render: visualize_blobs(idmap, frame.sublayers[0])
@@ -119,12 +119,16 @@ def frame_blobs_root(image, intra=False, render=False, verbose=False, use_c=Fals
         if verbose: print("\rRunning frame's intra_blob...")
         from intra_blob import intra_blob_root
 
-        rspliced_layers = intra_blob_root(frame, render, verbose, ffork=0)  # recursive eval cross-comp range| angle| slice per blob
+        rspliced_layers, aspliced_layers = intra_blob_root(frame, render, verbose, ffork=0)  # recursive eval cross-comp range| angle| slice per blob
         frame.rsublayers = [spliced_layers + sublayers for spliced_layers, sublayers in
                             zip_longest(rspliced_layers, frame.rsublayers, fillvalue=[])]
+        frame.asublayers = [spliced_layers + sublayers for spliced_layers, sublayers in
+                           zip_longest(aspliced_layers, frame.asublayers, fillvalue=[])]
 
-        aspliced_layers = intra_blob_root(frame, render, verbose, ffork=1)  # recursive evaluation of cross-comp range| angle| slice per blob
-        frame.asublayers = [aspliced_layers + sublayers for spliced_layers, sublayers in
+        rspliced_layers, aspliced_layers = intra_blob_root(frame, render, verbose, ffork=1)  # recursive evaluation of cross-comp range| angle| slice per blob
+        frame.rsublayers = [spliced_layers + sublayers for spliced_layers, sublayers in
+                            zip_longest(rspliced_layers, frame.rsublayers, fillvalue=[])]
+        frame.asublayers = [spliced_layers + sublayers for spliced_layers, sublayers in
                            zip_longest(aspliced_layers, frame.asublayers, fillvalue=[])]
     '''
     if use_c:  # old version, no longer updated:
