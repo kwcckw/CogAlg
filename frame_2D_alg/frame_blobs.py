@@ -119,15 +119,12 @@ def frame_blobs_root(image, intra=False, render=False, verbose=False, use_c=Fals
         if verbose: print("\rRunning frame's intra_blob...")
         from intra_blob import intra_blob_root
 
-        rspliced_layers = intra_blob_root(frame, render, verbose, fBa=0)  # recursive eval cross-comp range| angle| slice per blob
+        # sublayers[0] is fork specific, while the deeper sublayers[1++] is mixing of deeper layer forks' sub-blobs
         # extend rsublayers with both of lower sub-forks:
-        frame.rsublayers = [spliced_layers + sublayers for spliced_layers, sublayers in
-                            zip_longest(rspliced_layers, frame.rsublayers, fillvalue=[])]
-
-        aspliced_layers = intra_blob_root(frame, render, verbose, fBa=1)  # recursive eval cross-comp range| angle| slice per blob
+        frame.rsublayers += intra_blob_root(frame, render, verbose, fBa=0)  # recursive eval cross-comp range| angle| slice per blob
         # extend asublayers with both of lower sub-forks:
-        frame.asublayers = [spliced_layers + sublayers for spliced_layers, sublayers in
-                            zip_longest(aspliced_layers, frame.asublayers, fillvalue=[])]
+        frame.asublayers += intra_blob_root(frame, render, verbose, fBa=1)  # recursive eval cross-comp range| angle| slice per blob
+
     '''
     if use_c:  # old version, no longer updated:
         dert__ = dert__[0], np.empty(0), np.empty(0), *dert__[1:], np.empty(0)
