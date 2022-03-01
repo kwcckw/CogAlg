@@ -47,11 +47,11 @@ def line_recursive(p_):  # redundant to main in line_Ps
     return line_level_root(root, types_)
 
 
-def line_level_root(root, types_):  # recursively adds higher levels of pattern composition and derivation
+def line_level_root(levels, sublayer0, types_):  # recursively adds higher levels of pattern composition and derivation
 
-    sublayer0 = root.levels[-1][0]  # input is 1st sublayer of the last level
+    # sublayer0 = root.levels[-1][0]  # input is 1st sublayer of the last level
     new_sublayer0 = []  # 1st sublayer: (Pm_, Pd_( Lmd, Imd, Dmd, Mmd ( Ppm_, Ppd_))), deep sublayers: Ppm_(Ppmm_), Ppd_(Ppdm_,Ppdd_)
-    root.sublayers = [new_sublayer0]  # will become new level, reset from last-level sublayers
+    # root.sublayers = [new_sublayer0]  # will become new level, reset from last-level sublayers
 
     nextended = 0  # number of extended-depth P_s
     new_types_ = []
@@ -80,21 +80,23 @@ def line_level_root(root, types_):  # recursively adds higher levels of pattern 
                     if (fPd and param == 2) or (not fPd and param == 1):  # 2: "D_", 1: "I_"
                         if not fPd:
                             splice_Ps(Pp_, dert1_, dert2_, fiPd, fPd)  # splice eval by Pp.M in Ppm_, for Pms in +IPpms or Pds in +DPpm
-                        range_incr(root, Pp_, hlayers=1, rng=2)  # evaluate greater-range cross-comp and clustering per Pp
-                        deriv_incr(root, Pp_, hlayers=1)  # evaluate higher-derivation cross-comp and clustering per Pp
+                        range_incr([], Pp_, hlayers=1, rng=2)  # evaluate greater-range cross-comp and clustering per Pp
+                        deriv_incr([], Pp_, hlayers=1)  # evaluate higher-derivation cross-comp and clustering per Pp
                     new_M += sum([Pp.M for Pp in Pp_])  # Pp.M includes rng+ and der+ Ms
         else:
             new_types_ += [[] for _ in range(8)]  # align indexing with sublayer, replace with count of missing prior P_s, or use nested tuples?
 
+    levels += [new_sublayer0]
     if len(sublayer0) / max(nextended,1) < 4 and new_M > ave_M * 4:  # ave_extend_ratio and added M, will be default if pipelined
         # cross_core_comp(new_sublayer0, new_types_)
-        root.levels.append(root.sublayers)  # levels represent all lower hierarchy
+        # root.levels.append(root.sublayers)  # levels represent all lower hierarchy
 
         if len(sublayer0) / max(nextended,1) < 8 and new_M > ave_M * 8:  # higher thresholds for recursion than for cross_core_comp?
-            line_level_root(root, new_types_)  # try to add new level
+            line_level_root(levels, new_sublayer0, new_types_)  # try to add new level
 
-    norm_feedback(root.levels)  # +dfilters: adjust all independent filters on lower levels, for pipelined version only
+    norm_feedback(levels)  # +dfilters: adjust all independent filters on lower levels, for pipelined version only
 
+    return levels
 # functions below are not used:
 
 def cross_core_comp(iP_T, types_):  # currently not used because:

@@ -37,9 +37,6 @@ ave_rM  = .7
 # comp_param
 ave_comp = 0
 
-# comp_PPP
-ave_mPPP = 5
-
 ave_I = 10
 ave_G = 10
 ave_M = 10
@@ -199,7 +196,7 @@ def slice_blob(blob, verbose=False):
             for y, dert_ in enumerate(zip_dert__, start=1):  # scan top down
                 if verbose: print(f"\rProcessing line {y + 1}/{height}, ", end=""); sys.stdout.flush()
     
-                P_ = form_P_(list(zip(*dert_)), mask__[y], y, fPpd)  # horizontal clustering - lower row
+                P_ = form_P_(list(zip(*dert_)), mask__[y], param_name, y, fPpd)  # horizontal clustering - lower row
                 derP_ = scan_P_(P_, _P_)  # tests for x overlap between Ps, calls comp_slice
     
                 derP__ += [derP_] # frame of derPs
@@ -531,6 +528,7 @@ def comp_dx(P):  # cross-comp of dx s in P.dert_
 # pending update
 def comp_slice(_P, P):  # forms vertical derivatives of derP params, and conditional ders from norm and DIV comp
 
+    # need to replace M with G and Ma with Ga?
     layer1 = dict({'I':.0,'Da':.0,'M':.0,'Dady':.0,'Dadx':.0,'Ma':.0,'L':.0,'Mdx':.0, 'Ddx':.0, 'x':.0})
     mP, dP = 0, 0
 

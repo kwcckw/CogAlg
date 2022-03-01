@@ -93,7 +93,7 @@ def line_PPs_root(P_t):  # P_T is P_t = [Pm_, Pd_];  higher-level input is neste
 
     norm_feedback(P_t)
     sublayer0 = []
-    root = CPp(levels=[P_t], sublayers=[sublayer0])
+    # root = CPp(levels=[P_t], sublayers=[sublayer0])
     '''
     1st sublayer: implicit 3-layer nested P_tuple, P_ttt: (Pm_, Pd_, each:( Lmd, Imd, Dmd, Mmd, each: ( Ppm_, Ppd_)))
     deep sublayers: implicit 2-layer nested tuples: Ppm_(Ppmm_), Ppd_(Ppdm_,Ppdd_)
@@ -109,21 +109,21 @@ def line_PPs_root(P_t):  # P_T is P_t = [Pm_, Pd_];  higher-level input is neste
                     if (fPpd and param_name == "D_") or (not fPpd and param_name == "I_"):
                         if not fPpd:
                             splice_Ps(Pp_, derp1_, derp2_, fPd, fPpd)  # splice eval by Pp.M in Ppm_, for Pms in +IPpms or Pds in +DPpm
-                        range_incr(root, Pp_, hlayers=1, rng=2)  # eval rng+ comp,form per Pp, parallel to:
-                        deriv_incr(root, Pp_, hlayers=1)  # eval der+ comp,form per Pp
+                        range_incr([], Pp_, hlayers=1, rng=2)  # eval rng+ comp,form per Pp, parallel to:
+                        deriv_incr([], Pp_, hlayers=1)  # eval der+ comp,form per Pp
         else:
             sublayer0 += [[] for _ in range(8)]  # 8 empty [] to preserve index, 8 for each fPd
 
-    root.levels.append(root.sublayers)  # to contain 1st and 2nd levels
-
-    return root  # Pp tuple?    P_ttt: (Pm_, Pd_, each:( Lmd, Imd, Dmd, Mmd, each: ( Ppm_, Ppd_)))
+    return sublayer0  # 16 tuples
+    # root.levels.append(root.sublayers)  # to contain 1st and 2nd levels
+    # return root  # Pp tuple?    P_ttt: (Pm_, Pd_, each:( Lmd, Imd, Dmd, Mmd, each: ( Ppm_, Ppd_)))
 
 
 def cross_comp(P_, fPd):  # cross-compare patterns within horizontal line
 
     Lderp_, Iderp_, Dderp_, Mderp_, derp1_, derp2_ = [], [], [], [], [], []
 
-    if isinstance(P_[0].P, CPp): newP = CPp()  # call from line_recursive
+    if isinstance(P_[0], CPp): newP = CPp()  # call from line_recursive
     else:                        newP = CP()  # call from line_PPs
 
     for _P, P, P2 in zip(P_, P_[1:], P_[2:] + [newP]):  # for P_ cross-comp over step=1 and step=2
@@ -633,18 +633,18 @@ the above forms Pps across xsub_dertt, then also form Pps across _xsub_derpt_ an
 '''
 
 def norm_feedback(P_t):
-
-    fbM = fbL = 0
-    for P in P_t[0]:  # Pm_
-        fbM += P.M; fbL += P.L
-        if abs(fbM) > ave_Dave:
-            if abs(fbM / fbL) > ave_dave:
-                fbM = fbL = 0
-                pass  # eventually feedback: line_patterns' cross_comp(frame_of_pixels_, ave + fbM / fbL)
-                # also terminate Fspan: same-filter frame_ with summed params, re-init at all 0s
-        P.I /= P.L; P.D /= P.L; P.M /= P.L  # immediate normalization to a mean
-    for P in P_t[1]:  # Pd_
-        P.I /= P.L; P.D /= P.L; P.M /= P.L
+    pass
+#    fbM = fbL = 0
+#    for P in P_t[0]:  # Pm_
+#        fbM += P.M; fbL += P.L
+#        if abs(fbM) > ave_Dave:
+#            if abs(fbM / fbL) > ave_dave:
+#                fbM = fbL = 0
+#                pass  # eventually feedback: line_patterns' cross_comp(frame_of_pixels_, ave + fbM / fbL)
+#                # also terminate Fspan: same-filter frame_ with summed params, re-init at all 0s
+#        P.I /= P.L; P.D /= P.L; P.M /= P.L  # immediate normalization to a mean
+#    for P in P_t[1]:  # Pd_
+#        P.I /= P.L; P.D /= P.L; P.M /= P.L
 
 # to avoid intermediate clustering costs and selection, but better to just skip clustering phase with comp_rng:
 # if multiple rng extension cycle:
