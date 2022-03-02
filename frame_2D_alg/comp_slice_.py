@@ -38,11 +38,14 @@ ave_rM  = .7
 ave_comp = 0
 
 ave_I = 10
+ave_Dy = 10
+ave_Dx = 10
 ave_G = 10
 ave_M = 10
-ave_D = 10
+ave_L = 10
 
 param_names = ["I", "Dy", "Dx", "G", "M", "L"]
+aves = [ave_I, ave_Dy, ave_Dx, ave_g, ave_M, ave_L]
 
 class CP(ClusterStructure):
 
@@ -78,7 +81,7 @@ class CP(ClusterStructure):
     # only in Pm:
     Pd_ = list
 
-class Cderp(ClusterStructure):  # dert per CP param
+class CderP(ClusterStructure):  # dert per CP param
 
     i = int
     p = int
@@ -92,7 +95,7 @@ class Cderp(ClusterStructure):  # dert per CP param
     fdx = NoneType
     distance = int  # d_ave_x
 
-class CPp(CP, Cderp):
+class CPp(CP, CderP):
 
     layer1 = dict
     # between PPs:
@@ -188,15 +191,20 @@ def form_P_(idert_, mask_, param_name, y, fPpd):  # segment dert__ into P__ in h
     dert_ = [_dert]         # pack 1st dert
     _mask = mask_[0]       # mask bit per dert
 
+    # dert = i, dy, dx, g, ri, day[0], day[1], dax[0], dax[1], ga
     if ~_mask:
         if param_name == "I":
             _sign = _dert[0] > 0  # I > 0
+        elif param_name == "Dy":
+            _sign = _dert[1] > 0  # Dy > 0
+        elif param_name == "Dx":
+            _sign = _dert[2] > 0  # Dx > 0
         elif param_name == "G":
             _sign = _dert[3] > 0  # G > 0
         elif param_name == "M":
             _sign = ave_inv - _dert[3] > 0  # ave - G > 0
-        elif param_name == "D":
-            _sign = _dert[2] > 0  # dx > 0
+        elif param_name == "L":
+            _sign = _dert[2] - ave_L > 0  # dx - ave > 0 ? (not sure)
 
         # initialize P with first dert
         P = CP(I=_dert[0], Dy=_dert[1], Dx=_dert[2], G=_dert[3],
@@ -213,29 +221,33 @@ def form_P_(idert_, mask_, param_name, y, fPpd):  # segment dert__ into P__ in h
         else:  # dert is not masked
             if param_name == "I":
                 sign = dert[0] > 0  # I > 0
+            elif param_name == "Dy":
+                sign = dert[1] > 0  # Dy > 0
+            elif param_name == "Dx":
+                sign = dert[2] > 0  # Dx > 0
             elif param_name == "G":
                 sign = dert[3] > 0  # G > 0
             elif param_name == "M":
-                sign = ave_inv - dert[3] > 0  # ave - G > 0
-            elif param_name == "D":
-                sign = dert[2] > 0  # dx > 0
+                sign = ave_inv - abs(dert[3]) > 0  # ave - abs(G) > 0
+            elif param_name == "L":
+                sign = dert[2] - ave_L > 0  # dx - ave > 0 ? (not sure)
 
             if _mask:  # _dert is masked, initialize P params when dert is not masked:
                 # initialize P with current dert
                 P = CP(I=dert[0], Dy=dert[1], Dx=dert[2], G=dert[3],
-                       Dydy=dert[4], Dxdy=dert[5], Dydx=dert[6], Dxdx=dert[7], Ga=dert[8],
+                       Dydy=dert[5], Dxdy=dert[6], Dydx=dert[7], Dxdx=dert[8], Ga=dert[9],
                        x0=x, L=1, y=y, dert_=dert_, sign=sign)
             else:
                 if _sign == sign:
                     # _dert is not masked, accumulate P params with (p, dy, dx, g, m, day, dax, ga, ma) = dert
                     P.accumulate(I=dert[0], Dy=dert[1], Dx=dert[2], G=dert[3],
-                                 Dydy=dert[4], Dxdy=dert[5], Dydx=dert[6], Dxdx=dert[7], Ga=dert[8], L=1)
+                                 Dydy=dert[5], Dxdy=dert[6], Dydx=dert[7], Dxdx=dert[8], Ga=dert[9], L=1)
                     P.dert_.append(dert)
 
                 else:  # sign change, terminate and reinit P
                     P_.append(P)
                     P = CP(I=dert[0], Dy=dert[1], Dx=dert[2], G=dert[3],
-                       Dydy=dert[4], Dxdy=dert[5], Dydx=dert[6], Dxdx=dert[7], Ga=dert[8],
+                       Dydy=dert[5], Dxdy=dert[6], Dydx=dert[7], Dxdx=dert[8], Ga=dert[9],
                        x0=x, L=1, y=y, dert_=dert_, sign=sign)
             _sign = sign
         _mask = mask
@@ -472,88 +484,60 @@ def comp_dx(P):  # cross-comp of dx s in P.dert_
     P.Ddx = Ddx
     P.Mdx = Mdx
 
-# pending update
+
 def comp_slice(_P, P):  # forms vertical derivatives of derP params, and conditional ders from norm and DIV comp
 
-    # need to replace M with G and Ma with Ga?
-    layer1 = dict({'I':.0,'Da':.0,'M':.0,'Dady':.0,'Dadx':.0,'Ma':.0,'L':.0,'Mdx':.0, 'Ddx':.0, 'x':.0})
-    mP, dP = 0, 0
-
-    G = np.hypot(P.Dy, P.Dx) - ave_g * P.L
-    _G = np.hypot(_P.Dy, _P.Dx) - ave_g * _P.L
-    absG = max(1,G + (ave_g*P.L)); _absG = max(1,_G + (ave_g*_P.L))         # use max to avoid zero division
-    Ga = np.hypot( np.arctan2(P.Dydy, P.Dxdy), np.arctan2(P.Dydx, P.Dxdx) ) - ave_ga * P.L
-    _Ga = np.hypot( np.arctan2(_P.Dydy, _P.Dxdy), np.arctan2(_P.Dydx, _P.Dxdx) ) - ave_ga * _P.L
-    absGa = max(1,Ga + (ave_ga *P.L)); _absGa = max(1,_Ga + (ave_ga *_P.L))
-
-    # compare base param to get layer1
-    for param_name in layer1:
-        if param_name == 'Da':
+    derP_t = []  # 6 tuples of derP for I, Dy, Dx, G, M, L 
+    for param_name, ave in zip(param_names, aves):
+        # retrieve param from param_name
+        if param_name == "L" or param_name == "M":
+            hyp = np.hypot(P.x, 1)  # ratio of local segment of long (vertical) axis to dY = 1
+            _param = getattr(_P,param_name)
+            param = getattr(P,param_name) / hyp # orthogonal L & M are reduced by hyp  
+        elif param_name == "Dy" or param_name == "Dx":
+            _G = np.hypot(_P.Dy, _P.Dx) - (ave_G * _P.L)
+            G = np.hypot(P.Dy, P.Dx) - (ave_G * P.L)
+            _absG = max(1,_G + (ave_G*_P.L))
+            absG = max(1,G + (ave_G*P.L)) 
             sin  = P.Dy/absG  ;  cos = P.Dx/absG
             _sin = _P.Dy/_absG; _cos = _P.Dx/_absG
             param = [sin, cos]
-            _param = [_sin, _cos]
-        elif param_name == 'Dady':
-            sin = P.Dydy/absGa; cos = P.Dxdy/absGa
-            _sin = _P.Dydy/_absGa; _cos = _P.Dxdy/_absGa
-            param = [sin, cos]
-            _param = [_sin, _cos]
-        elif param_name == 'Dadx':
-            sin = P.Dydx/absGa; cos = P.Dxdx/absGa
-            _sin = _P.Dydx/_absGa; _cos = _P.Dxdx/_absGa
-            param = [sin, cos]
-            _param = [_sin, _cos]
-        elif param_name == "x":
-            _param = _P.dX # _dX
-            param = P.x    # dX
-        elif param_name == "L" or param_name == "M":
-            hyp = np.hypot(P.x, 1)  # ratio of local segment of long (vertical) axis to dY = 1
-            _param = getattr(_P,param_name)
-            param = getattr(P,param_name) / hyp # orthogonal L & M are reduced by hyp
+            _param = [_sin, _cos]   
         else:
             param = getattr(P, param_name)
             _param = getattr(_P, param_name)
-
-
-        pdert = comp_param(param, _param, param_name, ave_min)  # add ave_min, * P.L is not needed?
-        layer1[param_name] = pdert
-        mP += pdert.m
-        dP += pdert.d
-
-    '''
-    s, x0, Dx, Dy, G, M, L, Ddx, Mdx = P.sign, P.x0, P.Dx, P.Dy, P.G, P.M, P.L, P.Ddx, P.Mdx  # params per comp branch
-    _s, _x0, _Dx, _Dy, _G, _M, _dX, _L, _Ddx, _Mdx = _P.sign, _P.x0, _P.Dx, _P.Dy, _P.G, _P.M, _P.dX, _P.L, _P.Ddx, _P.Mdx
-    dX = (x0 + (L-1) / 2) - (_x0 + (_L-1) / 2)  # x shift: d_ave_x, or from offsets: abs(x0 - _x0) + abs(xn - _xn)?
-    ddX = dX - _dX  # long axis curvature, if > ave: ortho eval per P, else per PP_dX?
-    mdX = min(dX, _dX)  # dX is inversely predictive of mP?
-    hyp = np.hypot(dX, 1)  # ratio of local segment of long (vertical) axis to dY = 1
-    L /= hyp  # orthogonal L is reduced by hyp
-    dL = L - _L; mL = min(L, _L)  # L: positions / sign, dderived: magnitude-proportional value
-    M /= hyp  # orthogonal M is reduced by hyp
-    dM = M - _M; mM = min(M, _M)  # use abs M?  no Mx, My: non-core, lesser and redundant bias?
-    # G + Ave was wrong because Dy, Dx are summed as signed, resulting G is different from summed abs G
-    G = np.hypot(P.Dy, P.Dx)
-    if G == 0: G = 1
-    _G = np.hypot(_P.Dy, _P.Dx)
-    if _G == 0: _G = 1
-    sin = P.Dy / G; _sin = _P.Dy / _G
-    cos = P.Dx / G; _cos = _P.Dx / _G
-    sin_da = (cos * _sin) - (sin * _cos)
-    cos_da = (cos * _cos) + (sin * _sin)
-    da = np.arctan2( sin_da, cos_da )
-    ma = ave_ga - abs(da)
+         
+        # compute d and m
+        if param_name == "I" or param_name == "L":
+            d = param - _param   # difference
+            m = ave - abs(d)     # indirect match 
+            i = param
+            p = param+_param       
+        elif param_name == "Dy" or param_name == "Dx":
+            sin, cos = param[0], param[1]
+            _sin, _cos = _param[0], _param[1]
+            # difference of dy and dx
+            sin_da = (cos * _sin) - (sin * _cos)  # sin(α - β) = sin α cos β - cos α sin β
+            cos_da= (cos * _cos) + (sin * _sin)   # cos(α - β) = cos α cos β + sin α sin β
+            d = np.arctan2(sin_da, cos_da)        # da 
+            m = ave - abs(d)                      # indirect match, ma 
+            if param_name == "Dy":
+                i = sin_da  # Ddy
+                p = (cos * _sin) + (sin * _cos)  # sin(α - β) = sin α cos β + cos α sin β                
+            elif param_name == "Dx":   
+                i = cos_da  # Ddx
+                p = (cos * _cos) - (sin * _sin)  # cos(α + β) = cos α cos β - sin α sin β         
+        elif param_name == "G" or param_name == "M":
+            d = param - _param                      # difference
+            m = min(param,_param) - abs(d)/2 - ave  # direct match
+            i = param
+            p = param+_param
+                
+        derP = CderP(i=i, p=p, d=d, m=m, _P=_P, P=P)
+        derP_t.append(derP)
         
-    dP = dL + dM + da  # -> directional PPd, equal-weight params, no rdn?
-    mP = mL + mM + ma  # -> complementary PPm, rdn *= Pd | Pm rolp?    
-    mP -= ave_mP * ave_rmP ** (dX / L)  # dX / L is relative x-distance between P and _P,
-    '''
+    return derP_t
 
-    mP -= ave_mP * ave_rmP ** (P.dX / P.L)
-
-    derP = CderP(mP=mP, dP=dP, P=P, _P=_P, layer1=layer1)
-    P.derP = derP
-
-    return derP
 
 # obsolete
 def comp_slice_full(_P, P):  # forms vertical derivatives of derP params, and conditional ders from norm and DIV comp
