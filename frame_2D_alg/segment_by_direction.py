@@ -23,19 +23,17 @@ def segment_by_direction(iblob, **kwargs):
     render = kwargs.get('render')
 
     # segment blob into primarily vertical and horizontal sub blobs according to the direction of kernel-level gradient:
-    dir_blob_, idmap, adj_pairs = \
-        flood_fill(dert__, abs(dy__) > abs(dx__), verbose=verbose, mask__=mask__, fseg=True)
+    dir_blob_, idmap, adj_pairs = flood_fill(dert__, abs(dy__) > abs(dx__), verbose=verbose, mask__=mask__, fseg=True)
     assign_adjacents(adj_pairs)  # fseg=True: skip adding the pose
 
     if render: _dir_blob_ = deepcopy(dir_blob_) # get a copy for dir blob before merging, for visualization purpose
-
     merged_ids = []  # ids of merged adjacent blobs, to skip in the rest of dir_blobs
 
     for i, blob in enumerate(dir_blob_):
         if blob.id not in merged_ids:
             blob = merge_adjacents_recursive(blob, merged_ids, blob.adj_blobs[0], strong_adj_blobs=[])  # no pose
 
-            if blob.sign and (blob.box[1]-blob.box[0]>1):  # y size >1, else we can't form derP
+            if (blob.M > ave_M) and (blob.box[1]-blob.box[0]>1):  # y size >1, else we can't form derP
                 blob.fsliced = True
                 slice_blob(blob, verbose)  # slice and comp_slice_ across directional sub-blob
             iblob.dir_blobs.append(blob)
@@ -87,7 +85,7 @@ def merge_adjacents_recursive(blob, merged_ids, adj_blobs, strong_adj_blobs):
 
         for adj_blob in strong_adj_blobs:
             # merge with same-direction strong adj_blobs:
-            if (blob.sign == adj_blob.sign) and adj_blob.id not in merged_ids and adj_blob is not blob:
+            if (adj_blob.sign == blob.sign) and adj_blob.id not in merged_ids and adj_blob is not blob:
                 merged_ids.append(adj_blob.id)
                 blob = merge_blobs(blob, adj_blob, strong_adj_blobs)
             # append opposite-direction strong_adj_blobs:

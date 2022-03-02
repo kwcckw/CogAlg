@@ -62,7 +62,7 @@ ave_D = 5  # min |D| for initial incremental-derivation comparison(d_)
 ave_nP = 5  # average number of sub_Ps in P, to estimate intra-costs? ave_rdn_inc = 1 + 1 / ave_nP # 1.2
 ave_rdm = .5  # obsolete: average dm / m, to project bi_m = m * 1.5
 ave_splice = 50  # to merge a kernel of 3 adjacent Ps
-init_y = 0  # starting row, set 0 for the whole frame, mostly not needed
+init_y = 500  # starting row, set 0 for the whole frame, mostly not needed
 halt_y = 502  # ending row, set 999999999 for arbitrary image
 '''
     Conventions:
@@ -238,8 +238,8 @@ if __name__ == "__main__":
     image = cv2.imread(arguments['image'], 0).astype(int)  # load pix-mapped image
     '''
     render = 0
-    fline_PPs = 1
-    frecursive = 1
+    fline_PPs = 0
+    frecursive = 0
 
     start_time = time()
     image = cv2.imread('.//raccoon.jpg', 0).astype(int)  # manual load pix-mapped image
@@ -247,23 +247,22 @@ if __name__ == "__main__":
 
     # Main
     Y, X = image.shape  # Y: frame height, X: frame width
-    frame_P_T_ = []  # array of line P_Ts, each a tuple of P_s with indefinite nesting
-
+    frame = []
     for y in range(init_y, min(halt_y, Y)):  # y is index of new row pixel_, we only need one row, use init_y=0, halt_y=Y for full frame
 
-        P_T = line_Ps_root( image[y,:])  # P_T = [Pm_, Pd_]
+        line = line_Ps_root( image[y,:])  # line = [Pm_, Pd_]
         if fline_PPs:
             from line_PPs import line_PPs_root
-            # output P_T is flat here and having 16 elements, each Pm_ * 4( Lmd, Imd, Dmd, Mmd) * 2( Ppm_, Ppd_) and Pd_ * 4( Lmd, Imd, Dmd, Mmd) * 2( Ppm_, Ppd_)
-            P_T = line_PPs_root(P_T)  # P_T = 3-layer Pp tuple P_ttt: (Pm_, Pd_, each:( Lmd, Imd, Dmd, Mmd, each: ( Ppm_, Ppd_)))
+            line = line_PPs_root([line])  # line = CPp, where sublayers[0] is a flat 16-tuple of P_s,
+            # but it is decoded by indices as 3-layer nested tuple P_ttt: (Pm_, Pd_, each:( Lmd, Imd, Dmd, Mmd, each:( Ppm_, Ppd_)))
             if frecursive:
                 from line_recursive import line_level_root
                 types_ = []
-                for i in range(16):  # len(root.sublayers[0]
+                for i in range(16):  # len(line.sublayers[0]
                     types_.append([i % 2, int(i % 8 / 2), int(i / 8) % 2])  # 2nd level output types: fPpd, param, fPd
-                P_T = line_level_root([], P_T, types_)  # P_T = tuple of P_s with indefinite nesting
+                line = line_level_root(line, types_)  # line = CPp, sublayers[0] is a tuple of P_s, with nesting decoded by types_
 
-        frame_P_T_.append(P_T)  # if fline_PPs: P_T is whole-line CPp
+        frame.append(line)  # if fline_PPs: line is root CPp, else [Pm_, Pd_]
 
     end_time = time() - start_time
     print(end_time)
