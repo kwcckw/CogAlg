@@ -6,13 +6,13 @@
 
 import numpy as np
 from frame_blobs import CBlob, flood_fill, assign_adjacents
-from comp_slice_ import slice_blob
+#from comp_slice_ import slice_blob
 import cv2
 from copy import deepcopy
 
 flip_ave = 10
 ave_dir_val = 50
-ave_M = -500  # high negative ave M for high G blobs
+ave_G = 100
 
 def segment_by_direction(iblob, **kwargs):
 
@@ -33,9 +33,10 @@ def segment_by_direction(iblob, **kwargs):
         if blob.id not in merged_ids:
             blob = merge_adjacents_recursive(blob, merged_ids, blob.adj_blobs[0], strong_adj_blobs=[])  # no pose
 
-            if (blob.M > ave_M) and (blob.box[1]-blob.box[0]>1):  # y size >1, else we can't form derP
+            if (ave_G - abs(blob.G) >0) and (blob.box[1]-blob.box[0]>1):  # y size >1, else we can't form derP
                 blob.fsliced = True
-                slice_blob(blob, verbose)  # slice and comp_slice_ across directional sub-blob
+                # slice blob and form Pp again here?
+                # slice_blob(blob, verbose)  # slice and comp_slice_ across directional sub-blob
             iblob.dir_blobs.append(blob)
 
         for dir_blob in iblob.dir_blobs:
