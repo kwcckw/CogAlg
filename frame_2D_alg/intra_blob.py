@@ -43,7 +43,7 @@ def intra_blob_root(root_blob, render, verbose, fBa):  # recursive evaluation of
                 AveB = aveB * (blob.rdn+1)  # comp_slice is doubling the costs, likely higher, adjust per nsub_blobs?
                 if (AveB - blob.G) + (blob.G - AveB * pcoef) > 0:  # val_comp_slice_blob = dev_G + inv_dev_Ga
                     blob.fBa = 0; blob.rdn = root_blob.rdn+1
-                    # comp_slice root(blob, verbose=True) (pending update)
+                    comp_slice_root(blob, verbose=True)
                     blob.prior_forks.extend('p')
                     if verbose: print('\nslice_blob fork\n')  # if render and blob.A < 100: deep_blobs.append(blob)
             else:
