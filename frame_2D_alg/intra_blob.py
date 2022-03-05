@@ -17,9 +17,9 @@ from segment_by_direction import segment_by_direction
 
 # filters, All *= rdn:
 ave = 50   # cost / dert: of cross_comp + blob formation, same as in frame blobs, use rcoef and acoef if different
-aveB = 50    # cost / blob loop: fixed syntactic overhead
-aveBa = 1.5  # average (rblob value / ablob value)
+aveB = 50  # cost / blob loop: fixed syntactic overhead
 pcoef = 2  # ave_comp_slice / ave: relative cost of p fork;  no ave_ga = .78, ave_ma = 2: no eval for comp_aa..
+aveBa = 1.5  # ave (rblob value / ablob value), replaced by pcoef?
 ave_nsub = 4  # ave n sub_blobs per blob: 4x higher costs? or eval costs only, separate clustering ave = aveB?
 # --------------------------------------------------------------------------------------------------------------
 # functions:

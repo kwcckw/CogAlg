@@ -87,15 +87,9 @@ class CderP(ClusterStructure):  # dert per CP param
     fdx = NoneType
     distance = int  # d_ave_x
 
-class CPp(CP, CderP):
+class CPp(CP, CderP):  # derP params are inherited from P
 
-    # derP params:
-    I = int
-    P = int
-    D = int
-    M = int
-    Rdn = int
-    # between Pps:
+    A = int  # summed from P.L s
     upconnect_ = list
     downconnect_cnt = int
     fPPm = NoneType  # PPm if 1, else PPd; not needed if packed in PP_
@@ -148,34 +142,36 @@ if flip_val(PP is FPP): pack FPP in blob.PP_ -> flip FPP.dert__ -> slice_blob(FP
 else       (PP is PP):  pack PP in blob.PP_
 '''
 
-def comp_slice_root(blob, verbose=False):  # always angle blob, core params are g and ga, forming Pg and Pga?
+def comp_slice_root(blob, verbose=False):  # always angle blob, composite dert core param is v_g + iv_ga
 
     segment_by_direction(blob, verbose=False)
-    P__ = slice_blob(blob, verbose=False)  # convert to batch processing, whole blob per function
-    derP__t = comp_slice_blob(P__, verbose=False)  # calls scan_P_ and comp_slice
-    form_Pp_(blob, derP__t, P__)
-    
+    P__ = slice_blob(blob, verbose=False)  # 2D array of blob slices
+    derP__t = comp_slice_blob(P__)  # scan_P_ and comp_slice
+    form_Pp_t(blob, derP__t, P__)  # Pp: P.param P
+
     # add higher comp orders
 
 def slice_blob(blob, verbose=False):  # forms horizontal blob slices: Ps, ~1D Ps, in select smooth-edge (high G, low Ga) blobs
 
     mask__ = blob.mask__  # same as positive sign here
-    dert__ = zip(*blob.dert__)  # convert tuple of arrays to array of tuples
+    dert__ = zip(*blob.dert__)  # convert 10-tuple of 2D arrays into 1D array of 10-tuple blob rows
+    dert__ = [zip(*dert_) for dert_ in dert__]  # convert 1D array of 10-tuple rows into 2D array of 10-tuples per blob
+
     height, width = mask__.shape
     if verbose: print("Converting to image...")
-    P__ = []  # blob Ps
+    P__ = []  # blob of Ps
 
     for y, (dert_, mask_) in enumerate( zip(dert__, mask__)):  # unpack lines
-        P_ = []  # line Ps
+        P_ = []  # line of Ps
         _mask = True
-        for x, (dert, mask) in  enumerate( zip(zip(*dert_,), mask_)):  # use zip on dert_ again to unpack dert as 10 elements tuple
+        for x, (dert, mask) in enumerate( zip(dert_, mask_)):  # unpack derts: tuples of 10 params
             if verbose:
                 print(f"\rProcessing line {y + 1}/{height}, ", end=""); sys.stdout.flush()
             # masks: if 0,_1: P initialization, if 0,_0: P accumulation, if 1,_0: P termination:
             if not mask:
                 if _mask:  # initialize P with first unmasked dert:
                     P = CP(I=dert[0], Dy=dert[1], Dx=dert[2], G=dert[3], Dydy=dert[5], Dxdy=dert[6], Dydx=dert[7], Dxdx=dert[8], Ga=dert[9],
-                           x0=x, L=1, y=y, dert_=[dert])  # sign is always positive, else masked?
+                           x0=x, L=1, y=y, dert_=[dert])  # sign is always positive, else masked
                 else:
                     # dert and _dert are not masked, accumulate P params:
                     P.accumulate(I=dert[0], Dy=dert[1], Dx=dert[2], G=dert[3],Dydy=dert[5], Dxdy=dert[6], Dydx=dert[7], Dxdx=dert[8], Ga=dert[9], L=1)
@@ -183,64 +179,113 @@ def slice_blob(blob, verbose=False):  # forms horizontal blob slices: Ps, ~1D Ps
             elif not _mask:
                 # _dert is not masked, dert is masked, terminate P:
                 P.x = P.x0 + (P.L - 1) /2
-                P_.append(P)          
-            _mask = mask            
-        if not _mask: P_.append(P)  # pack last P          
+                P_.append(P)
+            _mask = mask
+
+        if not _mask: P_.append(P)  # pack last P
         P__ += [P_]
     return P__
 
 
-def comp_slice_blob(P__, verbose=False):
-    '''
-    derP_ = scan_P_(P_, _P_)  # tests for x overlap between Ps, calls comp_slice
-    derP__ += [derP_] # frame of derPs
-    '''
-    derP__t = [[] for _ in range(6)]  # 6 params tuple array (per blob)
-    _P_ = P__[0]
+def comp_slice_blob(P__):  # vertically compares y-adjacent and x-overlapping blob slices, forming derP__t
+
+    derP__t = [[] for _ in range(6)]  # 2D array of 6-params tuples per blob: (x, I, angle, G, M, L)
+    _P_ = P__[0]  # upper row
+
     for P_ in P__[1:]:
-        derP_t = scan_P_(P_, _P_)  # 6 params tuple array (per P pair)
-        for i, derP_ in enumerate(derP_t): derP__t[i] += derP_  # pack each param array to derP__t's param array
+        derP_t = [[] for _ in range(6)]  # 1D array of 6-param tuples per blob line
+        for P in P_:  # lower row
+            for _P in _P_: # upper row
+                # test for x overlap between P and _P in 8 directions, all Ps here are positive
+                if (P.x0 - 1 < (_P.x0 + _P.L) and (P.x0 + P.L) + 1 > _P.x0):
+                    # upconnect is derP or dirP:
+                    if not [1 for derPt in P.upconnect_ if P is derPt[0].P]:
+                        # P was not compared before
+                        derPt = comp_slice(_P, P)  # form vertical and directional derivatives
+                        for i, derP in enumerate(derPt):
+                            derP_t[i].append(derP)
+                            # each of 6 elements is same-param array of derPs
+                        P.upconnect_.append(derPt)
+                        _P.downconnect_cnt += 1
+
+                elif (P.x0 + P.L) < _P.x0:  # no P xn overlap, stop scanning lower P_
+                    break
+        for i, derP_ in enumerate(derP_t):
+            derP__t[i] += derP_  # pack each 1D param array in 2D param array
+
     return derP__t
-    
-
-def scan_P_(P_, _P_):  # test for x overlap between Ps, call comp_slice
-    
-    derP_t = [[] for _ in range(6)]  # 6 params"x", "I", "angle", "G", "M", "L"
-    for P in P_:  # lower row
-        for _P in _P_:  # upper row
-            # test for x overlap between P and _P in 8 directions
-            if (P.x0 - 1 < (_P.x0 + _P.L) and (P.x0 + P.L) + 1 > _P.x0):  # all Ps here are positive
-
-                fcomp = [1 for derPt in P.upconnect_ if P is derPt[0].P]  # upconnect could be derP or dirP
-                if not fcomp:
-                    derPt = comp_slice(_P, P)  # form vertical and directional derivatives
-                    for i, derP in enumerate(derPt): derP_t[i].append(derP)  # each element in derP_t contains derP array for each param
-                    P.upconnect_.append(derPt)
-                    _P.downconnect_cnt += 1
-
-            elif (P.x0 + P.L) < _P.x0:  # stop scanning the rest of lower P_ if there is no overlap
-                break 
-    return derP_t
 
 
-def form_Pp_(blob, derP__t, P__):
-    '''
-    form vertically contiguous patterns of patterns by the sign of derP, in blob or in FPP
-    first row of derP_ has downconnect_cnt == 0, higher rows may also have them
-    '''
-    
+def comp_slice(_P, P):  # forms vertical derivatives of derP params, and conditional ders from norm and DIV comp
+
+    derPt = []  # 6-tuple of derPs, for "x", "I", "angle", "G", "M", "L"
+    for param_name, ave in zip(param_names, aves):
+        # retrieve param from param_name
+        if param_name == "L" or param_name == "M":
+            hyp = np.hypot(P.x, 1)  # ratio of local segment of long (vertical) axis to dY = 1
+            _param = getattr(_P,param_name)
+            param = getattr(P,param_name) / hyp
+            # orthogonal L & M are reduced by hyp
+        elif param_name == "angle":
+            _G = np.hypot(_P.Dy, _P.Dx) - (ave_dG * _P.L)
+            G = np.hypot(P.Dy, P.Dx) - (ave_dG * P.L)
+            _absG = max(1,_G + (ave_dG*_P.L))
+            absG = max(1,G + (ave_dG*P.L))
+            sin  = P.Dy/absG  ;  cos = P.Dx/absG
+            _sin = _P.Dy/_absG; _cos = _P.Dx/_absG
+            param = [sin, cos]
+            _param = [_sin, _cos]
+        else:  # x, I and G
+            param = getattr(P, param_name)
+            _param = getattr(_P, param_name)
+
+        # compute d and m
+        if param_name == "I" or param_name == "L":
+            d = param - _param   # difference
+            m = ave - abs(d)     # indirect match
+            i = param
+            p = param+_param
+        elif param_name == "angle":
+            sin, cos = param[0], param[1]
+            _sin, _cos = _param[0], _param[1]
+            # difference of dy and dx
+            sin_da = (cos * _sin) - (sin * _cos)  # sin(α - β) = sin α cos β - cos α sin β
+            cos_da= (cos * _cos) + (sin * _sin)   # cos(α - β) = cos α cos β + sin α sin β
+            d = np.arctan2(sin_da, cos_da)        # da
+            m = ave - abs(d)                      # indirect match, ma
+            if param_name == "Dy":
+                i = sin_da  # Ddy
+                p = (cos * _sin) + (sin * _cos)  # sin(α + β) = sin α cos β + cos α sin β
+            elif param_name == "Dx":
+                i = cos_da  # Ddx
+                p = (cos * _cos) - (sin * _sin)  # cos(α + β) = cos α cos β - sin α sin β
+        else:  # G, M and x
+            d = param - _param                      # difference
+            m = min(param,_param) - abs(d)/2 - ave  # direct match
+            i = param
+            p = param+_param
+
+        derP = CderP(i=i, p=p, d=d, m=m, _P=_P, P=P)
+        derPt.append(derP)
+
+    return derPt
+
+
+def form_Pp_t(blob, derP__t, P__):  # form vertically contiguous patterns of patterns by derP sign, in blob or FPP
+
     blob.derP__t = derP__t
     blob.P__ = P__
 
-    for param_name, derP_ in zip(param_names, derP__t):    
-        Pp_t = []  # Pp_t per param
+    for param_name, derP_ in zip(param_names, derP__t):
+        Pp_t = []  # per param
         for fPpd in 0,1:
             Pp_ = []  # Pp_ per fPpd
-            for derP in reversed(deepcopy(derP_)):  # bottom-up to follow upconnects, derP is stored top-down
+            for derP in reversed(deepcopy(derP_)):  # bottom-up to follow upconnects, derP_ is formed top-down
+                # last-row derPs downconnect_cnt == 0
                 if not derP.P.downconnect_cnt and not isinstance(derP.Pp, CPp):  # root derP was not terminated in prior call
-                    Pp = CPp()  # init
+                    Pp = CPp()  
                     accum_Pp(Pp,derP)
-                    if derP._P.upconnect_:  # derP has upconnects
+                    if derP._P.upconnect_:
                         upconnect_2_Pp_(derP, Pp_)  # form PPs across _P upconnects
                     else:
                         Pp_.append(derP.Pp)  # terminate Pp
@@ -295,7 +340,7 @@ def merge_Pp(_Pp, Pp, Pp_):  # merge PP into _Pp
             _Pp.accum_from(derP, ignore_capital=True)    # accumulate params
     if Pp in Pp_:
         Pp_.remove(Pp)  # remove merged Pp
-        
+
 
 def accum_Pp(Pp, derP):  # accumulate params in PP
 
@@ -303,7 +348,7 @@ def accum_Pp(Pp, derP):  # accumulate params in PP
     Pp.derP__.append(derP) # add derP to Pp
     derP.Pp = Pp           # update reference
 
-# this should be called in slice_blob?
+
 def comp_dx(P):  # cross-comp of dx s in P.dert_
 
     Ddx = 0
@@ -322,60 +367,6 @@ def comp_dx(P):  # cross-comp of dx s in P.dert_
     P.dxdert_ = dxdert_
     P.Ddx = Ddx
     P.Mdx = Mdx
-
-
-def comp_slice(_P, P):  # forms vertical derivatives of derP params, and conditional ders from norm and DIV comp
-
-    derPt = []  # 6 tuples of derP for "x", "I", "angle", "G", "M", "L"
-    for param_name, ave in zip(param_names, aves):
-        # retrieve param from param_name
-        if param_name == "L" or param_name == "M":
-            hyp = np.hypot(P.x, 1)  # ratio of local segment of long (vertical) axis to dY = 1
-            _param = getattr(_P,param_name)
-            param = getattr(P,param_name) / hyp # orthogonal L & M are reduced by hyp
-        elif param_name == "angle":
-            _G = np.hypot(_P.Dy, _P.Dx) - (ave_dG * _P.L)
-            G = np.hypot(P.Dy, P.Dx) - (ave_dG * P.L)
-            _absG = max(1,_G + (ave_dG*_P.L))
-            absG = max(1,G + (ave_dG*P.L))
-            sin  = P.Dy/absG  ;  cos = P.Dx/absG
-            _sin = _P.Dy/_absG; _cos = _P.Dx/_absG
-            param = [sin, cos]
-            _param = [_sin, _cos]
-        else:  # x, I and G
-            param = getattr(P, param_name)
-            _param = getattr(_P, param_name)
-
-        # compute d and m
-        if param_name == "I" or param_name == "L":
-            d = param - _param   # difference
-            m = ave - abs(d)     # indirect match
-            i = param
-            p = param+_param
-        elif param_name == "angle":
-            sin, cos = param[0], param[1]
-            _sin, _cos = _param[0], _param[1]
-            # difference of dy and dx
-            sin_da = (cos * _sin) - (sin * _cos)  # sin(α - β) = sin α cos β - cos α sin β
-            cos_da= (cos * _cos) + (sin * _sin)   # cos(α - β) = cos α cos β + sin α sin β
-            d = np.arctan2(sin_da, cos_da)        # da
-            m = ave - abs(d)                      # indirect match, ma
-            if param_name == "Dy":
-                i = sin_da  # Ddy
-                p = (cos * _sin) + (sin * _cos)  # sin(α + β) = sin α cos β + cos α sin β
-            elif param_name == "Dx":
-                i = cos_da  # Ddx
-                p = (cos * _cos) - (sin * _sin)  # cos(α + β) = cos α cos β - sin α sin β
-        else:  # G, M and x
-            d = param - _param                      # difference
-            m = min(param,_param) - abs(d)/2 - ave  # direct match
-            i = param
-            p = param+_param
-
-        derP = CderP(i=i, p=p, d=d, m=m, _P=_P, P=P)
-        derPt.append(derP)
-
-    return derPt
 
 # obsolete
 def comp_slice_full(_P, P):  # forms vertical derivatives of derP params, and conditional ders from norm and DIV comp
