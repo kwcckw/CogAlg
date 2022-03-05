@@ -86,9 +86,9 @@ class CBlob(ClusterStructure):
     dir_blobs = list  # primarily vertically | laterally oriented edge blobs
     fsliced = bool
     fflip = bool  # x-y swap in comp_slice
-    derP__t = list
+    derP_t = list
     P__ = list
-    Pp_tt = list
+    slice_levels = list
 
 
 def frame_blobs_root(image, intra=False, render=False, verbose=False, use_c=False):
