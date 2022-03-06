@@ -87,8 +87,15 @@ class CBlob(ClusterStructure):
     fsliced = bool
     fflip = bool  # x-y swap in comp_slice
     derP_t = list
-    P__ = list
     slice_levels = list
+    PPmm_ = list  # comp_slice_ if not empty
+    PPdm_ = list  # comp_slice_ if not empty
+    derP__ = list
+    P__ = list
+    PPmd_ = list  # PP_derPd_
+    PPdd_ = list  # PP_derPd_
+    derPd__ = list
+    Pd__ = list
 
 
 def frame_blobs_root(image, intra=False, render=False, verbose=False, use_c=False):
