@@ -53,6 +53,7 @@ class CBlob(ClusterStructure):
     Dy = float
     Dx = float
     G = float
+    Ri = float
     A = float  # blob area
     sign = bool
     # composite params:
@@ -67,10 +68,10 @@ class CBlob(ClusterStructure):
     sublevels = list  # input levels
     # intra_blob params: # or pack in intra = lambda: Cintra
     # comp_angle:
-    Dydy = float
-    Dxdy = float
-    Dydx = float
-    Dxdx = float
+    Sin_da0 = float
+    Cos_da0 = float
+    Sin_da1 = float
+    Cos_da1 = float
     Ga = float
     # comp_dx:
     Mdx = float
@@ -86,16 +87,11 @@ class CBlob(ClusterStructure):
     dir_blobs = list  # primarily vertically | laterally oriented edge blobs
     fsliced = bool
     fflip = bool  # x-y swap in comp_slice
-    derP_t = list
-    slice_levels = list
-    PPmm_ = list  # comp_slice_ if not empty
-    PPdm_ = list  # comp_slice_ if not empty
-    derP__ = list
     P__ = list
-    PPmd_ = list  # PP_derPd_
-    PPdd_ = list  # PP_derPd_
-    derPd__ = list
-    Pd__ = list
+    derP_ = list
+    PP_t = list
+    slice_levels = list
+
 
 
 def frame_blobs_root(image, intra=False, render=False, verbose=False, use_c=False):
@@ -176,20 +172,22 @@ def flood_fill(dert__, sign__, verbose=False, mask__=None, fseg=False, prior_for
                 unfilled_derts = deque([(y, x)])
                 while unfilled_derts:
                     y1, x1 = unfilled_derts.popleft()
+
                     # add dert to blob
                     blob.accumulate(I  = dert__[4][y1][x1],  # rp__,
                                     Dy = dert__[1][y1][x1],
                                     Dx = dert__[2][y1][x1],
                                     G  = dert__[3][y1][x1])  # M -= G, None unless direct match, not in frame_blobs?
-                    if len(dert__) > 5: # comp_angle
-                        blob.accumulate(Dydy = dert__[5][y1][x1],
-                                        Dxdy = dert__[6][y1][x1],
-                                        Dydx = dert__[7][y1][x1],
-                                        Dxdx = dert__[8][y1][x1],
-                                        Ga   = dert__[9][y1][x1])
-                    if len(dert__) > 10: # comp_dx
-                        blob.accumulate(Mdx = dert__[10][y1][x1],
-                                        Ddx = dert__[11][y1][x1])
+
+                    if len(dert__) > 9: # comp_angle
+                        blob.accumulate(Ri   = dert__[4][y1][x1],
+                                        ga   = dert__[5][y1][x1],
+                                        day0 = dert__[6][y1][x1],
+                                        dax0 = dert__[7][y1][x1],
+                                        day1 = dert__[8][y1][x1],
+                                        dax1 = dert__[9][y1][x1])
+                    elif len(dert__) > 4: # comp_range
+                        blob.accumulate(ri = dert__[4][y1][x1])
                     blob.A += 1
                     if y1 < y0:   y0 = y1
                     elif y1 > yn: yn = y1

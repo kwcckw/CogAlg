@@ -34,14 +34,17 @@ ave_ga = 0.78  # ga at 22.5 degree
 # comp_param:
 ave_dI = 10  # same as ave_inv
 ave_dM = 10  # same as ave_min, replace the rest with coefs:
+ave_dMa = 10
 ave_dG = 10
+ave_dGa = 10
 ave_dangle = 10  # related to dx?
+ave_ddangle = 10
 ave_dL = 10
 ave_dx = 10  # difference between median x coords of consecutive Ps
 ave_mlayer = 10
 
-param_names = ["x", "I", "angle", "G", "M", "L"]  # angle = (Dy, Dx)
-aves = [ave_dx, ave_dI, ave_dangle, ave_dG, ave_dM, ave_dL]
+param_names = ["x", "I", "G", "Ga", "M", "Ma", "L", "angle", "dangle"]  # angle = (Dy, Dx), dangle = (sin_da0, cos_da0, sin_da1, cos_da1)
+aves = [ave_dx, ave_dI, ave_dG, ave_dGa, ave_dM, ave_dMa, ave_dL, ave_dangle, ave_ddangle]
 
 class CP(ClusterStructure):
 
@@ -149,22 +152,20 @@ def slice_blob(blob, verbose=False):  # forms horizontal blob slices: Ps, ~1D Ps
             if not mask:
                 if _mask:  # initialize P with first unmasked dert:
                     # please revise:
-                    P = CP(I=dert[0], Dy=dert[1], Dx=dert[2], G=dert[3], Dydy=dert[5], Dxdy=dert[6], Dydx=dert[7], Dxdx=dert[8], Ga=dert[9],
+                    P = CP(I=dert[0], Dy=dert[1], Dx=dert[2], G=dert[3], M=ave_dM-abs(dert[3]), Sin_da0=dert[6], Cos_da0=dert[7], Sin_da1=dert[8], Cos_da1=dert[9], Ga=dert[5], Ma = ave_dMa-abs(dert[5]),
                            x0=x, L=1, y=y, dert_=[dert])  # sign is always positive, else masked
                 else:
                     # dert and _dert are not masked, accumulate P params:
                     # please revise:
-                    P.accumulate(I=dert[0], Dy=dert[1], Dx=dert[2], G=dert[3],Dydy=dert[5], Dxdy=dert[6], Dydx=dert[7], Dxdx=dert[8], Ga=dert[9], L=1)
+                    P.accumulate(I=dert[0], Dy=dert[1], Dx=dert[2], G=dert[3], M=ave_dM-abs(dert[3]), Sin_da0=dert[6], Cos_da0=dert[7], Sin_da1=dert[8], Cos_da1=dert[9], Ga=dert[5], Ma = ave_dMa-abs(dert[5]), L=1)
                     P.dert_.append(dert)
             elif not _mask:
                 # _dert is not masked, dert is masked, terminate P:
                 P.x = P.x0 + (P.L - 1) /2
-                # P.param_layers = [[P.x, P.I, P.G, P.M, P.L, (P.Dy, P.Dx)]]  # 1st param layer
                 P_.append(P)
             _mask = mask
 
         if not _mask:
-            # P.param_layers = [[P.x, P.I, P.G, P.M, P.L, (P.Dy, P.Dx)]]
             P_.append(P)  # pack last P
 
         P__ += [P_]
@@ -195,34 +196,57 @@ def comp_slice_blob(P__):  # vertically compares y-adjacent and x-overlapping bl
 # draft:
 def comp_slice(_P, P):  # forms vertical derivatives of P params, conditional ders from norm and DIV comp
 
-    # compared params in layer0, unpacked for clarity:
-    x, L, I, G, M, Ga, Ma, (Dx, Dy), (Sda0, Cda0, Sda1, Cda1) = P.layer0
-    _x, _L, _I, _G, _M, _Ga, _Ma, (_Dx, _Dy), (_Sda0, _Cda0, _Sda1, _Cda1) = _P.layer0
+    if isinstance(_P, CP):  # 1st layer only
+        # compared params in layer0, unpacked for clarity:
+        x, I, G, M, L, Ga, Ma, Dx, Dy, sin_da0, cos_da0, sin_da1, cos_da1 = P.x, P.L, P.I, P.G, P.M, P.Ga, P.Ma, P.Dx, P.Dy, P.Sin_da0, P.Cos_da0, P.Sin_da1, P.Cos_da1
+        _x, _I, _G, _M, _L, _Ga, _Ma, _Dx, _Dy, _sin_da0, _cos_da0, _sin_da1, _Cos_da1 = _P.x, _P.L, _P.I, _P.G, _P.M, _P.Ga, _P.Ma, _P.Dx, _P.Dy, _P.Sin_da0, _P.Cos_da0, _P.Sin_da1, _P.Cos_da1
+    
+        dx = _x - x;  mx = ave_dx - abs(dx)  # mean x shift, if dx: rx = dx / ((L+_L)/2)? no overlap, offset = abs(x0 -_x0) + abs(xn -_xn)?
+        dI = _I - I;  mI = ave_dI - abs(dI)
+        dG = _G - G;  mG = min(_G, G)  # dG, dM are directional, re-direct by dx?
+        dGa = _Ga - Ga;  mGa = min(_Ga, Ga)
+        dM = _M - M;  mM = min(_M, M)
+        dMa = _Ma - Ma;  mMa = min(_Ma, Ma)
+        dL = _L - L*np.hypot(dx, dy=1); mL = min(_L, L)  # if abs(dx) > ave: L is local long axis, no change in G,M
+   
+        # comp angle:
+        # Ds
+        _norm_G = np.hypot(_Dy, _Dx) - (ave_dG * _L)
+        norm_G  = np.hypot(Dy, Dx) - (ave_dG * L)
+        _absG = max(1, _norm_G + (ave_dG * _L))
+        absG  = max(1, norm_G + (ave_dG * L))
+        _sin = _Dy / _absG; _cos = _Dx / _absG
+        sin  = Dy / absG; cos = Dx / absG
+        sin_da = (cos * _sin) - (sin * _cos)  # sin(α - β) = sin α cos β - cos α sin β
+        cos_da = (cos * _cos) + (sin * _sin)  # cos(α - β) = cos α cos β + sin α sin β
+        dangle = (sin_da, cos_da)  # da
+        mangle = ave_dangle - abs(np.arctan2(sin_da, cos_da))  # ma is indirect match
+    
+        # following intra_comp
+        # Das
+        sin_dda0 = (cos_da0 * _sin_da0) - (sin_da0 * _cos_da0)
+        cos_dda0 = (cos_da0 * _cos_da0) + (sin_da0 * _sin_da0)
+        sin_dda1 = (cos_da1 * _sin_da1) - (sin_da1 * _cos_da1)
+        cos_dda1 = (cos_da1 * _cos_da1) + (sin_da1 * _sin_da1) 
+        day = [-sin_dda0 - sin_dda1, cos_dda0 + cos_dda1]  # angle change in y
+        dax = [-sin_dda0 + sin_dda1, cos_dda0 + cos_dda1]  # angle change in x
+        mday = ave_dangle - abs(np.arctan2(day[0], day[1]))
+        mdax = ave_dangle - abs(np.arctan2(dax[0], dax[1]))
+    
+        dlayer = dx + dI + dG + dGa + dM + dMa + dL + dangle + np.arctan2(np.arctan2(day[0], day[1]), np.arctan2(dax[0], dax[1]))   # placeholder for now
+        mlayer = mx + mI + mG + mGa + mM + mMa + mL + mangle + mday + mdax
+        
+        param_layers = []
+        param_layers += [[x, I, G, Ga, M, Ma, L, (Dx, Dy), (sin_da0, cos_da0, sin_da1, cos_da1)]]  # layer0
+        param_layer += [[dx, mx, dI, mI, dG, mG, dGa, mGa, dM, mM, dMa, mMa, dL, mL, dangle, mangle, (sin_dda0, cos_dda0, sin_dda1, cos_dda1), mday+mdax]]  # layer1
+        
+        derP = CderP(d=dlayerP, m=mlayer, param_layers=param_layers , P=P, _P=_P)
 
-    dx = _x - x;  mx = ave_dx - abs(dx)  # mean x shift, if dx: rx = dx / ((L+_L)/2)? no overlap, offset = abs(x0 -_x0) + abs(xn -_xn)?
-    dI = _I - I;  mI = ave_dI - abs(dI)
-    dG = _G - G;  mG = min(_G, G)  # dG, dM are directional, re-direct by dx?
-    dM = _M - M;  mM = min(_M, M)
-    dL = _L - L*np.hypot(dx, dy=1); mL = min(_L, L)  # if abs(dx) > ave: L is local long axis, no change in G,M
-    # comp angle:
-    _norm_G = np.hypot(_Dy, _Dx) - (ave_dG * _L)
-    norm_G  = np.hypot(Dy, Dx) - (ave_dG * L)
-    _absG = max(1, _norm_G + (ave_dG * _L))
-    absG  = max(1, norm_G + (ave_dG * L))
-    _sin = _Dy / _absG; _cos = _Dx / _absG
-    sin  = Dy / absG; cos = Dx / absG
-    sin_da = (cos * _sin) - (sin * _cos)  # sin(α - β) = sin α cos β - cos α sin β
-    cos_da = (cos * _cos) + (sin * _sin)  # cos(α - β) = cos α cos β + sin α sin β
-    dangle = (sin_da, cos_da)  # da
-    mangle = ave_dangle - abs(np.arctan2(sin_da, cos_da))  # ma is indirect match
-
-    # add comp diff_angle (from intra_comp) here
-
-    mlayer = mx + mI + mG + mM + mL + mangle
-    dlayer = dx + dI + dG + dM + dL + dangle  # placeholder for now
+    else:  # higher levels
+        pass
 
     while mlayer > ave_mlayer:
-        for i, (_layer, layer) in enumerate( zip(_P.derP.param_layers[], P.derP.param_layers)):
+        for i, (_layer, layer) in enumerate( zip(_P.derP.param_layers, P.derP.param_layers)):
             # proceed to compare higher layers:
             mlayer = comp_layer(_layer, layer, i)
             # derP.param_layers start with layer1, layer0 remains in derP.P?
@@ -230,6 +254,7 @@ def comp_slice(_P, P):  # forms vertical derivatives of P params, conditional de
 # draft:
 def comp_layer(_layer, layer, nlayer):
     # not revised, remove ifs, etc:
+    # will be updated once layer0 and layer1 are finalized
 
         dm_num = int(i/ (2 ** (layer_num-1)))  # dm number per layer for each param: 1, 2, 4, 8, 16...
 
