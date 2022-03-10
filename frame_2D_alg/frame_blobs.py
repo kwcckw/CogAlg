@@ -53,7 +53,6 @@ class CBlob(ClusterStructure):
     Dy = float
     Dx = float
     G = float
-    Ri = float
     A = float  # blob area
     sign = bool
     # composite params:
@@ -174,20 +173,18 @@ def flood_fill(dert__, sign__, verbose=False, mask__=None, fseg=False, prior_for
                     y1, x1 = unfilled_derts.popleft()
 
                     # add dert to blob
-                    blob.accumulate(I  = dert__[4][y1][x1],  # rp__,
-                                    Dy = dert__[1][y1][x1],
-                                    Dx = dert__[2][y1][x1],
-                                    G  = dert__[3][y1][x1])  # M -= G, None unless direct match, not in frame_blobs?
-
-                    if len(dert__) > 9: # comp_angle
-                        blob.accumulate(Ri   = dert__[4][y1][x1],
-                                        ga   = dert__[5][y1][x1],
-                                        day0 = dert__[6][y1][x1],
-                                        dax0 = dert__[7][y1][x1],
-                                        day1 = dert__[8][y1][x1],
-                                        dax1 = dert__[9][y1][x1])
-                    elif len(dert__) > 4: # comp_range
-                        blob.accumulate(ri = dert__[4][y1][x1])
+                    if len(dert__) > 5: # comp_angle
+                        blob.accumulate(I  = dert__[3][y1][x1],  # rp__,
+                                        Dy = dert__[4][y1][x1],
+                                        Dx = dert__[5][y1][x1],
+                                        Sin_da0 = dert__[6][y1][x1],
+                                        Cos_da0 = dert__[7][y1][x1],
+                                        Sin_da1 = dert__[8][y1][x1],
+                                        Cos_da1 = dert__[9][y1][x1])
+                    else:  # comp_pixel or comp_range
+                        blob.accumulate(I  = dert__[4][y1][x1],  # rp__,
+                                        Dy = dert__[1][y1][x1],
+                                        Dx = dert__[2][y1][x1])
                     blob.A += 1
                     if y1 < y0:   y0 = y1
                     elif y1 > yn: yn = y1
@@ -224,6 +221,9 @@ def flood_fill(dert__, sign__, verbose=False, mask__=None, fseg=False, prior_for
                 blob.dert__ = tuple([param_dert__[y0:yn, x0:xn] for param_dert__ in blob.root_dert__])  # add None__ for m__?
                 blob.mask__ = (idmap[y0:yn, x0:xn] != blob.id)
                 blob.adj_blobs = [[],[]] # iblob.adj_blobs[0] = adj blobs, blob.adj_blobs[1] = poses
+                blob.G = np.hypot(blob.Dy, blob.Dx)  # recompute G
+                if len(dert__) > 5:  # recompute Ga
+                    blob.Ga = (blob.Cos_da0 + 1) + (blob.Cos_da1 + 1)  # +1 for all positives
                 if verbose:
                     progress += blob.A * step; print(f"\rClustering... {round(progress)} %", end=""); sys.stdout.flush()
     if verbose: print("")

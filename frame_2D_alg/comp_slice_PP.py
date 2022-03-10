@@ -65,6 +65,7 @@ class CP(ClusterStructure):
     Ma = float  # summed ave_ga - abs(ga), not restorable from Ga
     L = int
     '''
+    L = int
     # if comp_dx:
     Mdx = int
     Ddx = int
@@ -151,23 +152,31 @@ def slice_blob(blob, verbose=False):  # forms horizontal blob slices: Ps, ~1D Ps
             if not mask:  # masks: if 0,_1: P initialization, if 0,_0: P accumulation, if 1,_0: P termination
                 if _mask:  # initialize P params with first unmasked dert:
                     Pdert_ = []
-                    layer0 = I, M, Ma, Dx, Dy, sin_da0, cos_da0, sin_da1, cos_da1 = dert[3:]
+                    # dert[3:] = I, Dy, Dx, sin_da0, cos_da0, sin_da1, cos_da1
+                    layer0 = [ave_dG-abs(dert[1]), ave_dGa-abs(dert[2]), *dert[3:]] # M, Ma, I,  Dy, Dx, sin_da0, cos_da0, sin_da1, cos_da1
                 else:
                     # dert and _dert are not masked, accumulate P params from dert params:
-                    for Param, param in zip(layer0, dert[3:]): Param += param
+                    for i, (Param, param) in enumerate(zip(layer0[2:], dert[3:]),start=2): 
+                        layer0[i] = Param + param
+                    layer0[1] += ave_dG-abs(dert[1]) # M
+                    layer0[2] += ave_dG-abs(dert[2]) # Ma
                     Pdert_.append(dert)
             elif not _mask:
                 # _dert is not masked, dert is masked, terminate P:
                 L = len(Pdert_)
-                P = CP(layer0= [L, x-(L-1)/2] + list(layer0), x0=x-L-1, L=L, y=y, dert_=[dert])
+                P = CP(layer0= [x-(L-1)/2, L] + list(layer0), x0=x-L-1, L=L, y=y, dert_=Pdert_)
                 P_.append(P)
 
             _mask = mask
 
         if not _mask:  # pack last P:
-            P_.append( CP( layer0 = [L, x-(L-1)/2] + list(layer0), x0=x-L-1, L=1, y=y, dert_=[dert]))
+            L = len(Pdert_)
+            P = CP(layer0 = [x-(L-1)/2, L] + list(layer0), x0=x-L-1, L=1, y=y, dert_=Pdert_)
+            P_.append(P)
+        
         P__ += [P_]
-
+        
+    return P__
 
 def slice_blob_old(blob, verbose=False):  # forms horizontal blob slices: Ps, ~1D Ps, in select smooth-edge (high G, low Ga) blobs
 
@@ -232,14 +241,14 @@ def comp_slice_blob(P__):  # vertically compares y-adjacent and x-overlapping bl
 def comp_slice(_P, P):  # forms vertical derivatives of P params, conditional ders from norm and DIV comp
 
     # compared P params:
-    x, L, I, M, Ma, Dx, Dy, sin_da0, cos_da0, sin_da1, cos_da1 = P.layer0
-    _x, _L, _I, _M, _Ma, _Dx, _Dy, _sin_da0, _cos_da0, _sin_da1, _cos_da1 = _P.layer0
+    x, L, M, Ma, I, Dx, Dy, sin_da0, cos_da0, sin_da1, cos_da1 = P.layer0
+    _x, _L, _M, _Ma, _I, _Dx, _Dy, _sin_da0, _cos_da0, _sin_da1, _cos_da1 = _P.layer0
 
     dx = _x - x;  mx = ave_dx - abs(dx)  # mean x shift, if dx: rx = dx / ((L+_L)/2)? no overlap, offset = abs(x0 -_x0) + abs(xn -_xn)?
     dI = _I - I;  mI = ave_dI - abs(dI)
     dM = _M - M;  mM = min(_M, M)
     dMa = _Ma - Ma;  mMa = min(_Ma, Ma)  # dG, dM are directional, re-direct by dx?
-    dL = _L - L * np.hypot(dx, dy=1); mL = min(_L, L)  # if abs(dx) > ave: adjust L as local long axis, no change in G,M
+    dL = _L - L * np.hypot(dx, 1); mL = min(_L, L)  # if abs(dx) > ave: adjust L as local long axis, no change in G,M
     # G, Ga:
     G = np.hypot(Dy, Dx); _G = np.hypot(_Dy, _Dx)
     dG = _G - G; mG = min(_G, G)
@@ -265,91 +274,94 @@ def comp_slice(_P, P):  # forms vertical derivatives of P params, conditional de
     gax = np.arctan2( (-sin_dda0 + sin_dda1), (cos_dda0 + cos_dda1))  # angle change in x?
     maangle = ave_dangle - abs(np.arctan2(gay, gax))  # match between aangles, probably wrong
 
-    dlayer = dx + dI + dG + dGa + dM + dMa + dL + dangle + daangle  # placeholder for now
+    dlayer = dx + dI + dG + dGa + dM + dMa + dL # + dangle + daangle  # placeholder for now (dangle and ddangle are tuple, cant be added)
     mlayer = mx + mI + mG + mGa + mM + mMa + mL + mangle + maangle
 
-    param_layers = [x, L, I, G, Ga, M, Ma, (Dx, Dy), (sin_da0, cos_da0, sin_da1, cos_da1),  # layer0, replace (Dx, Dy) with (sin_da, cos_da)?
-                    dx, mx, dL, mL, dI, mI, dG, mG, dGa, mGa, dM, mM, dMa, mMa, dangle, mangle, daangle, maangle]  # layer1
+    param_layers = [[x, L, I, G, Ga, M, Ma, (sin_da, cos_da), (sin_da0, cos_da0, sin_da1, cos_da1)],  # layer0, replace (Dx, Dy) with (sin_da, cos_da)?
+                    [dx, mx, dL, mL, dI, mI, dG, mG, dGa, mGa, dM, mM, dMa, mMa, dangle, mangle, daangle, maangle]]  # layer1
 
+    derP = CderP(mP=mlayer, param_layers=param_layers, P=P, _P=_P)
+    P.derP = derP  # what if there's multiple derPs per P?
+    
     mP = mlayer
-    while mlayer > ave_mlayer:
+    # this should be `if` instead of `while`? Else it will be comparing same layers again and again
+    if mlayer > ave_mlayer and isinstance(P.derP, CderP) and isinstance(_P.derP, CderP):
         # compare next layer:
         for i, (_layer, layer) in enumerate( zip(_P.derP.param_layers, P.derP.param_layers)):
             mlayer, param_layers = comp_layer(_layer, layer, i)
             mP += mlayer
 
-    derP = CderP(mP=mP, param_layers=param_layers, P=P, _P=_P)
 
 # draft:
 def comp_layer(_layer, layer, nlayer):
     # not revised, remove ifs, etc:
     # will be updated once layer0 and layer1 are finalized
 
-        dm_num = int(i/ (2 ** (layer_num-1)))  # dm number per layer for each param: 1, 2, 4, 8, 16...
+    dm_num = int(i/ (2 ** (layer_num-1)))  # dm number per layer for each param: 1, 2, 4, 8, 16...
 
-        if dm_num == 0:  # x
-            _x = param; x = param
-            dx = _x - x; mx = ave_dx - abs(dx)
-            param_layer.append(dx); param_layer.append(mx)
-            hyps.append(np.hypot(dx, 1))
-            dP += dx; mP += mx
+    if dm_num == 0:  # x
+        _x = param; x = param
+        dx = _x - x; mx = ave_dx - abs(dx)
+        param_layer.append(dx); param_layer.append(mx)
+        hyps.append(np.hypot(dx, 1))
+        dP += dx; mP += mx
 
-        elif dm_num == 1:  # I
-            _I = _param; I = param
-            dI = _I - I; mI = ave_dI - abs(dI)
-            param_layer.append(dI); param_layer.append(mI)
-            dP += dI; mP += mI
+    elif dm_num == 1:  # I
+        _I = _param; I = param
+        dI = _I - I; mI = ave_dI - abs(dI)
+        param_layer.append(dI); param_layer.append(mI)
+        dP += dI; mP += mI
 
-        elif dm_num == 2:  # G
-            hyp = hyps[i%dm_num]
-            _G = _param; G = param
-            dG = _G - G/hyp;  mG = min(_G, G)  # if comp_norm: reduce by hypot
-            param_layer.append(dG); param_layer.append(mG)
-            dP += dG; mP += mG
+    elif dm_num == 2:  # G
+        hyp = hyps[i%dm_num]
+        _G = _param; G = param
+        dG = _G - G/hyp;  mG = min(_G, G)  # if comp_norm: reduce by hypot
+        param_layer.append(dG); param_layer.append(mG)
+        dP += dG; mP += mG
 
-        elif dm_num == 3:  # M
-            hyp = hyps[i%dm_num]
-            _M = _param; M = param
-            dM = _M - M/hyp;  mM = min(_M, M)
-            param_layer.append(dM); param_layer.append(mM)
-            dP += dM; mP += mM
+    elif dm_num == 3:  # M
+        hyp = hyps[i%dm_num]
+        _M = _param; M = param
+        dM = _M - M/hyp;  mM = min(_M, M)
+        param_layer.append(dM); param_layer.append(mM)
+        dP += dM; mP += mM
 
-        elif dm_num == 4:  # L
-            hyp = hyps[i%dm_num]
-            _L = _param; L = param
-            dL = _L - L/hyp;  mL = min(_L, L)
-            param_layer.append(dL); param_layer.append(mL)
-            dP += dL; mP += mL
+    elif dm_num == 4:  # L
+        hyp = hyps[i%dm_num]
+        _L = _param; L = param
+        dL = _L - L/hyp;  mL = min(_L, L)
+        param_layer.append(dL); param_layer.append(mL)
+        dP += dL; mP += mL
 
-        elif dm_num == 5:  # Dy, Dx
-            if param_layer == 1:
-                _Dy, _Dx = _param; Dy, Dx = param
-                _norm_G = np.hypot(_Dy, _Dx) - (ave_dG * _L)
-                norm_G  = np.hypot(Dy, Dx) - (ave_dG * L)
-                _absG = max(1, _norm_G + (ave_dG * _L))
-                absG  = max(1, norm_G + (ave_dG * L))
-                _sin = _Dy / _absG; _cos = _Dx / _absG
-                sin  = Dy / absG; cos = Dx / absG
-                sin_da = (cos * _sin) - (sin * _cos)  # sin(α - β) = sin α cos β - cos α sin β
-                cos_da = (cos * _cos) + (sin * _sin)  # cos(α - β) = cos α cos β + sin α sin β
-                dangle = (sin_da, cos_da)  # da
-                mangle = ave_dangle - abs(np.arctan2(sin_da, cos_da))  # ma is indirect match
-                param_layer.append(dangle); param_layer.append(mangle)
-                dP += np.arctan2(sin_da, cos_da); mP += mangle
-            else:
-                if isinstance(_param, tuple):  # d (sin_da, cos_da)
-                     _sin_da, _cos_da = _param; sin_da, cos_da = param
-                     sin_dda = (cos_da * _sin_da) - (sin_da * _cos_da)  # sin(α - β) = sin α cos β - cos α sin β
-                     cos_dda = (cos_da * _cos_da) + (sin_da * _sin_da)  # cos(α - β) = cos α cos β + sin α sin β
-                     ddangle = (sin_da, cos_da)  # da
-                     mdangle = ave_dangle - abs(np.arctan2(sin_dda, cos_dda))  # ma is indirect match
-                     param_layer.append(ddangle); param_layer.append(mdangle)
-                     dP += np.arctan2(sin_dda, cos_dda); mP += mdangle
-                else: # m or scalar
-                    _mangle = _param; mangle = param
-                    dmangle = _mangle - mangle;  mmangle = min(_mangle, mangle)
-                    param_layer.append(dmangle); param_layer.append(mmangle)
-                    dP += dmangle; mP += mmangle
+    elif dm_num == 5:  # Dy, Dx
+        if param_layer == 1:
+            _Dy, _Dx = _param; Dy, Dx = param
+            _norm_G = np.hypot(_Dy, _Dx) - (ave_dG * _L)
+            norm_G  = np.hypot(Dy, Dx) - (ave_dG * L)
+            _absG = max(1, _norm_G + (ave_dG * _L))
+            absG  = max(1, norm_G + (ave_dG * L))
+            _sin = _Dy / _absG; _cos = _Dx / _absG
+            sin  = Dy / absG; cos = Dx / absG
+            sin_da = (cos * _sin) - (sin * _cos)  # sin(α - β) = sin α cos β - cos α sin β
+            cos_da = (cos * _cos) + (sin * _sin)  # cos(α - β) = cos α cos β + sin α sin β
+            dangle = (sin_da, cos_da)  # da
+            mangle = ave_dangle - abs(np.arctan2(sin_da, cos_da))  # ma is indirect match
+            param_layer.append(dangle); param_layer.append(mangle)
+            dP += np.arctan2(sin_da, cos_da); mP += mangle
+        else:
+            if isinstance(_param, tuple):  # d (sin_da, cos_da)
+                 _sin_da, _cos_da = _param; sin_da, cos_da = param
+                 sin_dda = (cos_da * _sin_da) - (sin_da * _cos_da)  # sin(α - β) = sin α cos β - cos α sin β
+                 cos_dda = (cos_da * _cos_da) + (sin_da * _sin_da)  # cos(α - β) = cos α cos β + sin α sin β
+                 ddangle = (sin_da, cos_da)  # da
+                 mdangle = ave_dangle - abs(np.arctan2(sin_dda, cos_dda))  # ma is indirect match
+                 param_layer.append(ddangle); param_layer.append(mdangle)
+                 dP += np.arctan2(sin_dda, cos_dda); mP += mdangle
+            else: # m or scalar
+                _mangle = _param; mangle = param
+                dmangle = _mangle - mangle;  mmangle = min(_mangle, mangle)
+                param_layer.append(dmangle); param_layer.append(mmangle)
+                dP += dmangle; mP += mmangle
 
     new_param_layers = P.param_layers.copy() + [param_layer]
 
