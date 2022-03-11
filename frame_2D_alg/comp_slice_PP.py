@@ -41,41 +41,25 @@ ave_dangle = 10  # related to dx?
 ave_ddangle = 10
 ave_dL = 10
 ave_dx = 10  # difference between median x coords of consecutive Ps
-ave_mlayer = 10
+ave_mP = 10
 
 param_names = ["x", "I", "G", "Ga", "M", "Ma", "L", "angle", "dangle"]  # angle = (Dy, Dx), dangle = (sin_da0, cos_da0, sin_da1, cos_da1)
 aves = [ave_dx, ave_dI, ave_dG, ave_dGa, ave_dM, ave_dMa, ave_dL, ave_dangle, ave_ddangle]
 
 class CP(ClusterStructure):
 
-    layer0 = list
-    '''
-    9 summed params: 7 in dert[3:], + m, ma: computed from g, ga in intra_blob_root
-    9 compared params: x, L, I, M, Ma, G, Ga, Ds, Das  # G, Ga are recomputed from Ds, Das:
-    I = int
-    Dy = int  # angle components
-    Dx = int
-    G = float  # recomputed from Dy, Dx at P termination
-    M = float  # summed ave - abs(g), not restorable from G
-    Sin_da0 = float  # Da components
-    Cos_da0 = float
-    Sin_da1 = float
-    Cos_da1 = float
-    Ga = float  # recomputed from 4 Das at P termination
-    Ma = float  # summed ave_ga - abs(ga), not restorable from Ga
-    L = int
-    '''
-    L = int
+    layer0 = list  # 9 compared params: x, L, I, M, Ma, G, Ga, Ds( Dy, Dx, Sin_da0), Das( Cos_da0, Sin_da1, Cos_da1)
+    # I, Dy, Dx, Sin_da0, Cos_da0, Sin_da1, Cos_da1 are summed from dert[3:], M, Ma from ave- g, ga
+    # G, Ga are recomputed from Ds, Das; M, Ma are not restorable from G, Ga
     # if comp_dx:
     Mdx = int
     Ddx = int
     # new:
-    # layer0 = list  # to pack the above params, param_layers in CderP and CPP only?
     x0 = int
     x = float  # median x
     y = int  # for visualization only
     sign = NoneType  # g-ave + ave-ga sign
-    dert_ = list   # array of pixel-level derts
+    dert_ = list   # array of pixel-level derts, redundant to upconnect_?
     upconnect_ = list
     downconnect_cnt = int
     derP = object # derP object reference
@@ -152,64 +136,23 @@ def slice_blob(blob, verbose=False):  # forms horizontal blob slices: Ps, ~1D Ps
             if not mask:  # masks: if 0,_1: P initialization, if 0,_0: P accumulation, if 1,_0: P termination
                 if _mask:  # initialize P params with first unmasked dert:
                     Pdert_ = []
-                    # dert[3:] = I, Dy, Dx, sin_da0, cos_da0, sin_da1, cos_da1
-                    layer0 = [ave_dG-abs(dert[1]), ave_dGa-abs(dert[2]), *dert[3:]] # M, Ma, I,  Dy, Dx, sin_da0, cos_da0, sin_da1, cos_da1
+                    layer0 = [ave_g-abs(dert[1]), ave_ga-abs(dert[2]), *dert[3:]]  # m, ma, dert[3:]: i, dy, dx, sin_da0, cos_da0, sin_da1, cos_da1
                 else:
                     # dert and _dert are not masked, accumulate P params from dert params:
-                    for i, (Param, param) in enumerate(zip(layer0[2:], dert[3:]),start=2): 
+                    layer0[1] += ave_g-abs(dert[1])  # M
+                    layer0[2] += ave_ga-abs(dert[2])  # Ma
+                    for i, (Param, param) in enumerate(zip(layer0[2:], dert[3:]), start=2):  # I, Dy, Dx, Sin_da0, Cos_da0, Sin_da1, Cos_da1
                         layer0[i] = Param + param
-                    layer0[1] += ave_dG-abs(dert[1]) # M
-                    layer0[2] += ave_dG-abs(dert[2]) # Ma
                     Pdert_.append(dert)
             elif not _mask:
                 # _dert is not masked, dert is masked, terminate P:
                 L = len(Pdert_)
-                P = CP(layer0= [x-(L-1)/2, L] + list(layer0), x0=x-L-1, L=L, y=y, dert_=Pdert_)
-                P_.append(P)
+                P_.append( CP(layer0= [x-(L-1)/2, L] + list(layer0), x0=x-L-1, L=L, y=y, dert_=Pdert_))
 
             _mask = mask
-
         if not _mask:  # pack last P:
             L = len(Pdert_)
-            P = CP(layer0 = [x-(L-1)/2, L] + list(layer0), x0=x-L-1, L=1, y=y, dert_=Pdert_)
-            P_.append(P)
-        
-        P__ += [P_]
-        
-    return P__
-
-def slice_blob_old(blob, verbose=False):  # forms horizontal blob slices: Ps, ~1D Ps, in select smooth-edge (high G, low Ga) blobs
-
-    mask__ = blob.mask__  # same as positive sign here
-    dert__ = zip(*blob.dert__)  # convert 10-tuple of 2D arrays into 1D array of 10-tuple blob rows
-    dert__ = [zip(*dert_) for dert_ in dert__]  # convert 1D array of 10-tuple rows into 2D array of 10-tuples per blob
-
-    height, width = mask__.shape
-    if verbose: print("Converting to image...")
-    P__ = []  # blob of Ps
-
-    for y, (dert_, mask_) in enumerate( zip(dert__, mask__)):  # unpack lines
-        P_ = []  # line of Ps
-        _mask = True
-        for x, (dert, mask) in enumerate( zip(dert_, mask_)):  # unpack derts: tuples of 10 params
-            if verbose: print(f"\rProcessing line {y + 1}/{height}, ", end=""); sys.stdout.flush()
-            # masks: if 0,_1: P initialization, if 0,_0: P accumulation, if 1,_0: P termination:
-            if not mask:
-                if _mask:  # initialize P with first unmasked dert:
-                    P = CP(I=dert[0], Dy=dert[1], Dx=dert[2], M=ave_inv-dert[3], Sin_da0=dert[6], Cos_da0=dert[7], Sin_da1=dert[8], Cos_da1=dert[9],
-                           Ma = ave_dMa-abs(dert[5]), x0=x, L=1, y=y, dert_=[dert])  # G, Ga will be recomputed, sign is positive, else masked
-                else:
-                    # dert and _dert are not masked, accumulate P params:
-                    P.accumulate(I=dert[0], Dy=dert[1], Dx=dert[2], M=ave_inv-dert[3], Sin_da0=dert[6], Cos_da0=dert[7], Sin_da1=dert[8], Cos_da1=dert[9],
-                                 Ga=dert[5], Ma = ave_dMa-abs(dert[5]), L=1)
-                    P.dert_.append(dert)
-            elif not _mask:
-                # _dert is not masked, dert is masked, terminate P:
-                P.x = P.x0 + (P.L - 1) /2
-                P_.append(P)
-            _mask = mask
-
-        if not _mask: P_.append(P)  # pack last P
+            P_.append( CP(layer0 = [x-(L-1)/2, L] + list(layer0), x0=x-L-1, L=L, y=y, dert_=Pdert_))
         P__ += [P_]
 
     return P__
@@ -229,7 +172,7 @@ def comp_slice_blob(P__):  # vertically compares y-adjacent and x-overlapping bl
                     if not [1 for derP in P.upconnect_ if P is derP.P]:
                         # P was not compared before
                         derP = comp_slice(_P, P)  # form vertical derivatives per param
-                        derP_.append(derP)
+                        derP_.append(derP)  # redundant to upconnect_?
                         P.upconnect_.append(derP)
                         _P.downconnect_cnt += 1
                 elif (P.x0 + P.L) < _P.x0:  # no P xn overlap, stop scanning lower P_
@@ -237,7 +180,7 @@ def comp_slice_blob(P__):  # vertically compares y-adjacent and x-overlapping bl
         _P_ = P_  # update prior _P_ to current P_
     return derP_
 
-# draft:
+
 def comp_slice(_P, P):  # forms vertical derivatives of P params, conditional ders from norm and DIV comp
 
     # compared P params:
@@ -251,49 +194,57 @@ def comp_slice(_P, P):  # forms vertical derivatives of P params, conditional de
     dL = _L - L * np.hypot(dx, 1); mL = min(_L, L)  # if abs(dx) > ave: adjust L as local long axis, no change in G,M
     # G, Ga:
     G = np.hypot(Dy, Dx); _G = np.hypot(_Dy, _Dx)
-    dG = _G - G; mG = min(_G, G)
-    Ga = (cos_da0 + 1) + (cos_da1 + 1); _Ga = (_cos_da0 + 1) + (_cos_da1 + 1)
-    # not sure about: +1 for all positives?
-    dGa = _Ga - Ga; mGa = min(_Ga, Ga)
+    dG = _G - G;  mG = min(_G, G)
+    Ga = (cos_da0 + 1) + (cos_da1 + 1); _Ga = (_cos_da0 + 1) + (_cos_da1 + 1)  # gradient of angle, not sure about: +1 for all positives?
+    dGa = _Ga - Ga;  mGa = min(_Ga, Ga)
     # comp angle:
     _sin = _Dy / _G; _cos = _Dx / _G
     sin  = Dy / G; cos = Dx / G
     sin_da = (cos * _sin) - (sin * _cos)  # sin(α - β) = sin α cos β - cos α sin β
     cos_da = (cos * _cos) + (sin * _sin)  # cos(α - β) = cos α cos β + sin α sin β
-    dangle = (sin_da, cos_da)  # da
-    mangle = ave_dangle - abs(np.arctan2(sin_da, cos_da))  # ma is indirect match
+    dangle = (sin_da, cos_da)  # difference of angles
+    mangle = ave_dangle - abs(np.arctan2(sin_da, cos_da))  # indirect match of angles
     # comp angle of angle:
     sin_dda0 = (cos_da0 * _sin_da0) - (sin_da0 * _cos_da0)
     cos_dda0 = (cos_da0 * _cos_da0) + (sin_da0 * _sin_da0)
     sin_dda1 = (cos_da1 * _sin_da1) - (sin_da1 * _cos_da1)
     cos_dda1 = (cos_da1 * _cos_da1) + (sin_da1 * _sin_da1)
-    daangle = (sin_dda0, cos_dda0, sin_dda1, cos_dda1)  # daa
-    # day = [-sin_dda0 - sin_dda1, cos_dda0 + cos_dda1]; dax = [-sin_dda0 + sin_dda1, cos_dda0 + cos_dda1]
-
-    gay = np.arctan2( (-sin_dda0 - sin_dda1), (cos_dda0 + cos_dda1))  # angle change in y?
-    gax = np.arctan2( (-sin_dda0 + sin_dda1), (cos_dda0 + cos_dda1))  # angle change in x?
+    daangle = (sin_dda0, cos_dda0, sin_dda1, cos_dda1)
+    # day = [-sin_dda0 - sin_dda1, cos_dda0 + cos_dda1]
+    # dax = [-sin_dda0 + sin_dda1, cos_dda0 + cos_dda1]
+    gay = np.arctan2( (-sin_dda0 - sin_dda1), (cos_dda0 + cos_dda1))  # gradient of angle in y?
+    gax = np.arctan2( (-sin_dda0 + sin_dda1), (cos_dda0 + cos_dda1))  # gradient of angle in x?
     maangle = ave_dangle - abs(np.arctan2(gay, gax))  # match between aangles, probably wrong
 
-    dlayer = dx + dI + dG + dGa + dM + dMa + dL # + dangle + daangle  # placeholder for now (dangle and ddangle are tuple, cant be added)
+    dlayer = dx + dI + dG + dGa + dM + dMa + dL  # placeholder for now, dangle and daangle are tuples, cant be added
     mlayer = mx + mI + mG + mGa + mM + mMa + mL + mangle + maangle
 
-    param_layers = [[x, L, I, G, Ga, M, Ma, (sin_da, cos_da), (sin_da0, cos_da0, sin_da1, cos_da1)],  # layer0, replace (Dx, Dy) with (sin_da, cos_da)?
+    param_layers = [[x, L, I, G, Ga, M, Ma, (sin_da, cos_da), (sin_da0, cos_da0, sin_da1, cos_da1)], # copy of layer0, the original remains in P
                     [dx, mx, dL, mL, dI, mI, dG, mG, dGa, mGa, dM, mM, dMa, mMa, dangle, mangle, daangle, maangle]]  # layer1
-
-    derP = CderP(mP=mlayer, param_layers=param_layers, P=P, _P=_P)
-    P.derP = derP  # what if there's multiple derPs per P?
+    '''
+    The above is for each P in _P.upconnect
     
+    The below is higher derivation, forming param_layers[1:].
+    It should be in separate comp_slice_recursive, for strong non-forking blob segments. 
+    So, we need to cluster consecutive vertically matching Ps in non-forking blob segments, after comp_slice,
+    then evaluate them for comp_slice_recursive: if segment G-Ma and while len segment > recursion count (we need 3 Ps compute layer2, etc.)
+    '''
     mP = mlayer
-    # this should be `if` instead of `while`? Else it will be comparing same layers again and again
-    if mlayer > ave_mlayer and isinstance(P.derP, CderP) and isinstance(_P.derP, CderP):
-        # compare next layer:
-        for i, (_layer, layer) in enumerate( zip(_P.derP.param_layers, P.derP.param_layers)):
-            mlayer, param_layers = comp_layer(_layer, layer, i)
+    if mP < ave_mP:
+        new_layer = []
+        for _layer, layer in zip(_P.derP.param_layers, P.derP.param_layers):
+            # compare next layer:
+            mlayer, new_layer = comp_layer(_layer, layer, new_layer)  # append new_layer
             mP += mlayer
+            if mP < ave_mP:
+                break
+        if new_layer:
+            _P.derP.param_layers += [new_layer]; P.derP.param_layers += [new_layer]  # layer0 remains in P
 
+    derP = CderP(mP=mP, param_layers=param_layers[1:], P=P, _P=_P)
 
 # draft:
-def comp_layer(_layer, layer, nlayer):
+def comp_layer(_layer, layer, new_layer):
     # not revised, remove ifs, etc:
     # will be updated once layer0 and layer1 are finalized
 

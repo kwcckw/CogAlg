@@ -62,9 +62,6 @@ class CBlob(ClusterStructure):
     root_dert__ = object
     adj_blobs = list
     fopen = bool
-    # frame_bblob:
-    root_bblob = object
-    sublevels = list  # input levels
     # intra_blob params: # or pack in intra = lambda: Cintra
     # comp_angle:
     Sin_da0 = float
@@ -90,7 +87,9 @@ class CBlob(ClusterStructure):
     derP_ = list
     PP_t = list
     slice_levels = list
-
+    # frame_bblob:
+    root_bblob = object
+    sublevels = list  # input levels
 
 
 def frame_blobs_root(image, intra=False, render=False, verbose=False, use_c=False):
@@ -100,9 +99,9 @@ def frame_blobs_root(image, intra=False, render=False, verbose=False, use_c=Fals
 
     blob_, idmap, adj_pairs = flood_fill(dert__, sign__= ave-dert__[3] > 0, verbose=verbose)  # dert__[3] is g, https://en.wikipedia.org/wiki/Flood_fill
     assign_adjacents(adj_pairs)  # forms adj_blobs per blob in adj_pairs
-    I, Dy, Dx, G = 0, 0, 0, 0
-    for blob in blob_: I += blob.I; Dy += blob.Dy; Dx += blob.Dx; G += blob.G
-    frame = CBlob(I = I, Dy = Dy, Dx = Dx, G = G, dert__=dert__, prior_forks=["g"], rsublayers = [blob_])  # asublayers = []: no comp_a yet
+    I, Dy, Dx = 0, 0, 0
+    for blob in blob_: I += blob.I; Dy += blob.Dy; Dx += blob.Dx
+    frame = CBlob(I = I, Dy = Dy, Dx = Dx, dert__=dert__, prior_forks=["g"], rsublayers = [blob_])  # asublayers = []: no comp_a yet
 
     if verbose: print(f"{len(frame.rsublayers[0])} blobs formed in {time() - start_time} seconds")
     if render: visualize_blobs(idmap, frame.rsublayers[0])
