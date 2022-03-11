@@ -51,6 +51,7 @@ class CP(ClusterStructure):
     layer0 = list  # 9 compared params: x, L, I, M, Ma, G, Ga, Ds( Dy, Dx, Sin_da0), Das( Cos_da0, Sin_da1, Cos_da1)
     # I, Dy, Dx, Sin_da0, Cos_da0, Sin_da1, Cos_da1 are summed from dert[3:], M, Ma from ave- g, ga
     # G, Ga are recomputed from Ds, Das; M, Ma are not restorable from G, Ga
+    L = int
     # if comp_dx:
     Mdx = int
     Ddx = int
@@ -158,6 +159,33 @@ def slice_blob(blob, verbose=False):  # forms horizontal blob slices: Ps, ~1D Ps
     return P__
 
 
+def comp_slice_blob_recursive(P__):  # vertically compares y-adjacent and x-overlapping blob slices, forming derP__t
+
+    # scan bottom up
+    _P__ = P__[:-1]   # center row
+    __P__ = P__[:-2]  # upper row
+    
+    for __P_, _P_, P_ in zip(reversed(__P__), reversed(_P__), reversed(P__)):  # reversed to loop from last index , so that it is bottom-up  
+        for P in P_:
+            for _P in _P_: 
+                if [1 for derP in P.upconnect_ if _P is derP.P]:  # overlapping between P and _P
+                    for __P in __P_: 
+                        if [1 for _derP in _P.upconnect_ if __P is _derP.P]:  # overlapping netween _P and __P
+                            
+                            # comp higher derivative layers between 2 derPs, 3 Ps 
+                            for derP in P.upconnect_:
+                                if derP.P is P and derP._P is _P:  # to get derP connecting P and _P
+                                    for _derP in _P.upconnect:
+                                        if _derP.P is _P and _derP._P is __P:  # to get derP connecting _P and __P
+                                            mP = derP.m
+                                            _mP = _derP.m
+                                            while mP > ave_mP and _mP > ave_mP:     
+                                                mlayer, new_layer = comp_layer(_derP.param_layers[-1], derP.param_layers[-1]) 
+                                                derP.param_layers += [new_layer]; _derP.param_layers += [new_layer] 
+                                                mP += mlayer
+                                                _mP += mlayer
+
+
 def comp_slice_blob(P__):  # vertically compares y-adjacent and x-overlapping blob slices, forming derP__t
 
     derP_ = []  # derPs per blob
@@ -169,7 +197,7 @@ def comp_slice_blob(P__):  # vertically compares y-adjacent and x-overlapping bl
                 # test for x overlap between P and _P in 8 directions, all Ps here are positive
                 if (P.x0 - 1 < (_P.x0 + _P.L) and (P.x0 + P.L) + 1 > _P.x0):
                     # upconnect is derP or dirP:
-                    if not [1 for derP in P.upconnect_ if P is derP.P]:
+                    if not [1 for derP in P.upconnect_ if _P is derP.P]:
                         # P was not compared before
                         derP = comp_slice(_P, P)  # form vertical derivatives per param
                         derP_.append(derP)  # redundant to upconnect_?
@@ -178,6 +206,8 @@ def comp_slice_blob(P__):  # vertically compares y-adjacent and x-overlapping bl
                 elif (P.x0 + P.L) < _P.x0:  # no P xn overlap, stop scanning lower P_
                     break
         _P_ = P_  # update prior _P_ to current P_
+
+    comp_slice_blob_recursive(P__)
     return derP_
 
 
@@ -229,19 +259,9 @@ def comp_slice(_P, P):  # forms vertical derivatives of P params, conditional de
     So, we need to cluster consecutive vertically matching Ps in non-forking blob segments, after comp_slice,
     then evaluate them for comp_slice_recursive: if segment G-Ma and while len segment > recursion count (we need 3 Ps compute layer2, etc.)
     '''
-    mP = mlayer
-    if mP < ave_mP:
-        new_layer = []
-        for _layer, layer in zip(_P.derP.param_layers, P.derP.param_layers):
-            # compare next layer:
-            mlayer, new_layer = comp_layer(_layer, layer, new_layer)  # append new_layer
-            mP += mlayer
-            if mP < ave_mP:
-                break
-        if new_layer:
-            _P.derP.param_layers += [new_layer]; P.derP.param_layers += [new_layer]  # layer0 remains in P
-
-    derP = CderP(mP=mP, param_layers=param_layers[1:], P=P, _P=_P)
+    
+    derP = CderP(mP=mlayer, param_layers=param_layers[1:], P=P, _P=_P)
+    return derP
 
 # draft:
 def comp_layer(_layer, layer, new_layer):
