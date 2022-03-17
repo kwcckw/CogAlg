@@ -41,7 +41,7 @@ ave_G = 10
 ave_Ga = 2  # related to dx?
 ave_L = 10
 ave_dx = 5  # difference between median x coords of consecutive Ps
-ave_dangle = 2
+ave_dangle = 2  # vertical difference between angles
 ave_daangle = 2
 ave_mP = 10
 ave_dP = 10
@@ -120,10 +120,10 @@ def comp_slice_root(blob, verbose=False):  # always angle blob, composite dert c
         P__ = slice_blob(dir_blob, verbose=False)  # cluster dir_blob.dert__ into 2D array of blob slices
         # comp_dx_blob(P__), comp_dx?
 
-        derP_ = comp_P_blob(P__)  # scan_P_, comp_slice
+        derP_ = comp_P_blob(P__, rng=1)  # scan_P_, comp_slice
         (PPm_, PPd_) = form_PP_(derP_)  # each PP is a stack of (P, derP)s from comp_P
 
-        sub_recursion([PPm_, PPd_])  # rng+ comp_P in PPms, der+ comp_P in PPds, -> param_layer, form sub_PPs
+        sub_recursion(PPm_, PPd_)  # rng+ comp_P in PPms, der+ comp_P in PPds, -> param_layer, form sub_PPs
         dir_blob.levels = [[PPm_, PPd_]]  # 1st composition level, each PP_ may be multi-layer from sub_recursion
 
         agglo_recursion(dir_blob)  # higher composition comp_PP in blob -> derPPs, form PPP., appends dir_blob.levels
@@ -169,42 +169,18 @@ def slice_blob(blob, verbose=False):  # forms horizontal blob slices: Ps, ~1D Ps
     return P__
 
 
-def comp_P_blob(P__):  # vertically compares y-adjacent and x-overlapping blob slices, forming derP__t
+def comp_P_blob(P__, rng):  # vertically compares y-adjacent and x-overlapping blob slices, forming derP__t
 
     derP_ = []
-    _P_ = P__[0]  # upper row, local, no need for blob.P__?
-
-    for P_ in P__[1:]:
-        for P in P_:  # lower row
-            for _P in _P_: # upper row
-                # test for x overlap between P and _P in 8 directions, all Ps here are positive
-                if (P.x0 - 1 < (_P.x0 + _P.L) and (P.x0 + P.L) + 1 > _P.x0):
-                    # if P was not compared yet:
-                    if not [1 for derP in P.upconnect_ if _P is derP._P]:
-                        # form a tuple of vertical derivatives per P param tuple:
-                        derP = comp_P(_P, P)
-                        derP_.append(derP)  # per blob, for comp_slice_recursive only?
-                        P.upconnect_.append(derP)  # per P, eval in form_PP
-                        _P.downconnect_cnt += 1
-                elif (P.x0 + P.L) < _P.x0:  # no P xn overlap, stop scanning lower P_
-                    break
-        _P_ = P_  # update prior _P_ to current P_
-
-    return derP_
-
-# actually this can replace comp_P_blob by using rng=1
-def comp_P_blob_rng(P__, rng):  # vertically compares y-adjacent and x-overlapping blob slices, forming derP__t
-
-    derP_ = []    
     for lower_y, P_ in enumerate(reversed(P__), start=0):  # scan bottom-up
-        for upper_y, _P_ in enumerate(reversed(P__[:-(lower_y+1)]), start=lower_y+1): 
+        for upper_y, _P_ in enumerate(reversed(P__[:-(lower_y+1)]), start=lower_y+1):
             for P in P_:  # lower row
                 for _P in _P_: # upper row
                     # test for x overlap between P and _P in 8 directions, all Ps here are positive
                     if (P.x0 - 1 < (_P.x0 + _P.L) and (P.x0 + P.L) + 1 > _P.x0):
                         # if P was not compared yet:
                         if not [1 for derP in P.upconnect_ if _P is derP._P]:
-                            # form a tuple of vertical derivatives per P param tuple:
+                            # form a tuple of vertical derivatives per P.layer0:
                             derP = comp_P(_P, P)
                             derP_.insert(0,derP)  # use insert so that result is in the same sequence with comp_P_blob
                             P.upconnect_.append(derP)  # per P, eval in form_PP
@@ -230,7 +206,7 @@ def comp_P(_P, P):  # forms vertical derivatives of params per P in _P.upconnect
     # G, Ga:
     G = np.hypot(Dy, Dx); _G = np.hypot(_Dy, _Dx)  # compared as scalars
     dG = _G - G;  mG = min(_G, G)
-    Ga = (cos_da0 + 1) + (cos_da1 + 1); _Ga = (_cos_da0 + 1) + (_cos_da1 + 1)  # gradient of angle, not sure about: +1 for all positives?
+    Ga = (cos_da0 + 1) + (cos_da1 + 1); _Ga = (_cos_da0 + 1) + (_cos_da1 + 1)  # gradient of angle, +1 for all positives?
     # or Ga = np.hypot( np.arctan2(*Day), np.arctan2(*Dax)?
     dGa = _Ga - Ga;  mGa = min(_Ga, Ga)
 
@@ -239,7 +215,7 @@ def comp_P(_P, P):  # forms vertical derivatives of params per P in _P.upconnect
     sin  = Dy / G; cos = Dx / G
     sin_da = (cos * _sin) - (sin * _cos)  # sin(α - β) = sin α cos β - cos α sin β
     cos_da = (cos * _cos) + (sin * _sin)  # cos(α - β) = cos α cos β + sin α sin β
-    dangle = np.arctan2(sin_da, cos_da)  # difference of angles
+    dangle = np.arctan2(sin_da, cos_da)  # vertical difference between angles
     mangle = ave_dangle - abs(dangle)  # indirect match of angles, not redundant as summed
 
     # comp angle of angle: forms daa, not gaa?
@@ -254,7 +230,7 @@ def comp_P(_P, P):  # forms vertical derivatives of params per P in _P.upconnect
     gay = np.arctan2( (-sin_dda0 - sin_dda1), (cos_dda0 + cos_dda1))  # gradient of angle in y?
     gax = np.arctan2( (-sin_dda0 + sin_dda1), (cos_dda0 + cos_dda1))  # gradient of angle in x?
     daangle = np.arctan2( gay, gax)  # probably wrong
-    maangle = ave_daangle - abs(daangle)  # match between aangles
+    maangle = ave_daangle - abs(daangle)  # match between aangles, not redundant as summed
 
     dlayer = abs(dx)-ave_dx + abs(dI)-ave_I + abs(G)-ave_G + abs(Ga)-ave_Ga + abs(dM)-ave_M + abs(dMa)-ave_Ma + abs(dL)-ave_L
     mlayer = mx + mI + mG + mGa + mM + mMa + mL + mangle + maangle
@@ -300,8 +276,8 @@ def upconnect_2_PP_(iderP, PP_, fPd):
             if fPd: sign = derP.d > ave_dP * rdn
             else: sign = derP.m > ave_mP * rdn
 
-            if iderP.PP.sign == sign:  # upconnect is having same sign
-                if isinstance(derP.PP, CPP) and (derP.PP is not iderP.PP):  # upconnect is having existing PP, merge them
+            if iderP.PP.sign == sign:  # upconnect is same-sign
+                if isinstance(derP.PP, CPP) and (derP.PP is not iderP.PP):  # upconnect has PP, merge it
                     merge_PP(iderP.PP, derP.PP, PP_)
                 else:  # accumulate derP in current PP
                     accum_PP(iderP.PP, derP)
@@ -345,14 +321,12 @@ def accum_PP(PP, derP):  # accumulate params in PP
 
 
 # draft
-def sub_recursion(PP_t):  # compares param_layers of consecutive derPs inside generic PP, forming higher param_layer
+def sub_recursion(PPm_, PPd_):  # compares param_layers of consecutive derPs inside generic PP, forming higher param_layer
 
-    PPm_, PPd_ = PP_t
     comb_sublayers = []
-    
     # der+:
     for PP in PPd_:  # PP is generic higher-composition pattern, P is generic lower-composition pattern
-        der_incr(PP)
+        comp_der_root(PP)
         if PP.sublayers:  # pack added sublayers, same as in range_incr:
             new_comb_sublayers = []
             for (comb_sub_PPm_, comb_sub_PPd_), (sub_PPm_, sub_PPd_) in zip_longest(comb_sublayers, PP.sublayers, fillvalue=([], [])):
@@ -360,9 +334,8 @@ def sub_recursion(PP_t):  # compares param_layers of consecutive derPs inside ge
                 comb_sub_PPd_ += sub_PPd_
                 new_comb_sublayers.append((comb_sub_PPm_, comb_sub_PPd_))  # add sublayer
             comb_sublayers = new_comb_sublayers
-        
-        # param layers der+:
-        if PP.D > aveB*PP.Rdn and PP.L > len(PP.param_layers):  # (need 3 Ps compute layer2, etc.)
+        # comp param_layers
+        if PP.D > ave_dPP*PP.Rdn and PP.L > len(PP.param_layers):  # (need 3 Ps compute layer2, etc.)
             for derP in PP.derP_:
                 if derP.P.downconnect_cnt == 0:  # lowest derP in PP, else it was scanned in lower derP.P.upconnect_
                     for _derP in derP._P.upconnect_:
@@ -379,7 +352,7 @@ def sub_recursion(PP_t):  # compares param_layers of consecutive derPs inside ge
                         derP = _derP
     # rng+:
     for PP in PPm_:  # PP is generic higher-composition pattern, P is generic lower-composition pattern
-        rng_incr(PP)
+        comp_rng_root(PP)
         if PP.sublayers:  # pack added sublayers, same as in range_incr:
             new_comb_sublayers = []
             for (comb_sub_PPm_, comb_sub_PPd_), (sub_PPm_, sub_PPd_) in zip_longest(comb_sublayers, PP.sublayers, fillvalue=([], [])):
@@ -387,33 +360,27 @@ def sub_recursion(PP_t):  # compares param_layers of consecutive derPs inside ge
                 comb_sub_PPd_ += sub_PPd_
                 new_comb_sublayers.append((comb_sub_PPm_, comb_sub_PPd_))  # add sublayer
             comb_sublayers = new_comb_sublayers
-        
-        
+        # comp param_layers[:-1]:
         # rng is number of Ps compared per _P, top param_layer is accumulated per comp, vs. compared in der+
         if PP.M > ave_mPP*PP.Rdn and PP.L > PP.rng*2:
             for derP in PP.derP_:
-                if derP.P.downconnect_cnt == 0:  # lowest derP in PP, else it was scanned in lower derP.P.upconnect_  
-                    accumulated_new_layers = []  # per lower derP
+                if derP.P.downconnect_cnt == 0:  # lowest derP in PP, else it was scanned in lower derP.P.upconnect_
+                    # draft:
+                    top_layer_increments = []  # per lower derP
                     for _derP in derP._P.upconnect_:
-                        new_layers = []  # per upper _derP
-                        for _layer, layer in zip(_derP.param_layers, derP.param_layers):
-                            # compare next layer:
-                            mlayer = comp_layer(_layer, layer, new_layers)  # append new_layer with lower-layer derivatives
-                        if not accumulated_new_layers:
-                            accumulated_new_layers = new_layers.copy()
-                        else:
-                            accum_param_layers(accumulated_new_layers, new_layers)
-                        _derP.param_layers += new_layers  # pack a copy of accumulated layer
-                    derP.param_layers += accumulated_new_layers    # pack accumulated layer over different upconnects
-                    
+                        for _layer, layer in zip(_derP.param_layers[:-1], derP.param_layers[:-1]):
+                            mlayer = comp_layer(_layer, layer, top_layer_increments)  # append new_layer with lower-layer derivatives
+                        accum_top_layer(derP.param_layers[-1], top_layer_increments)
+
     return comb_sublayers
 
+# not revised, this should accumulate derP.param_layers[-1]?:
 
-def accum_param_layers(_param_layers, param_layers):
-    
+def accum_top_layer(_param_layers, param_layers):
+
     for _param_layer, param_layer in zip(_param_layers, param_layers):
         for i, (_param, param) in enumerate(zip(_param_layer, param_layer)):
-    
+
             if isinstance(_param, tuple):
                 if len(_param) == 2:  # (sin_da, cos_da)
                     _sin_da, _cos_da = _param
@@ -432,12 +399,12 @@ def accum_param_layers(_param_layers, param_layers):
             else:  # scalar
                 _param_layer[i] += param
 
-
  # draft
-def rng_incr(PP):
+def comp_rng_root(PP):
 
     PP.rng += 1
     # to pack derP.Ps into P__, i think it should be simpler if we pack Ps per PP?
+    # Yes, please do. They are redundant, but it seems to be worth it.
     ys = np.unique([derP.P.y for derP in PP.derP_])
     min_y = min(ys)
     P__ = [[] for _ in range(len(ys))]
@@ -447,13 +414,12 @@ def rng_incr(PP):
         if derP.P not in P__[y]:  # prevent same P, it is possible with multiple upconnects
             P__[y].append(derP.P)
 
-    sub_derP_ = comp_P_blob_rng(P__, PP.rng)  # scan_P_, comp_slice;  splice PPs across dir_blobs?
-    sub_PP_t = form_PP_(sub_derP_)  # each PP is a stack of (P, derP)s from comp_P
-    PP.sublayers = [sub_PP_t]
-    PP.sublayers += sub_recursion(sub_PP_t)  # rng+ comp_P in PPms, der+ comp_P in PPds, -> param_layer, form sub_PPs
+    sub_derP_ = comp_P_blob(P__, PP.rng)  # scan_P_, comp_slice;  splice PPs across dir_blobs?
+    (sub_PPm_,sub_PPm_) = form_PP_(sub_derP_)  # each PP is a stack of (P, derP)s from comp_P
+    PP.sublayers = [sub_PPm_,sub_PPm_]
+    PP.sublayers += sub_recursion(sub_PPm_,sub_PPm_)  # rng+ comp_P in PPms, der+ comp_P in PPds, -> param_layer, form sub_PPs
 
-
-def der_incr(PP):
+def comp_der_root(PP):
 
     # to pack derP.Ps into P__, i think it should be simpler if we pack Ps per PP?
     ys = np.unique([derP.P.y for derP in PP.derP_])
@@ -465,10 +431,10 @@ def der_incr(PP):
         if derP.P not in P__[y]:  # prevent same P, it is possible with multiple upconnects
             P__[y].append(derP.P)
 
-    sub_derP_ = comp_P_blob(P__)  # scan_P_, comp_slice;  splice PPs across dir_blobs?
-    sub_PP_t = form_PP_(sub_derP_)  # each PP is a stack of (P, derP)s from comp_P
-    PP.sublayers = [sub_PP_t]
-    PP.sublayers += sub_recursion(sub_PP_t)  # rng+ comp_P in PPms, der+ comp_P in PPds, -> param_layer, form sub_PPs
+    sub_derP_ = comp_P_blob(P__, rng=1)  # scan_P_, comp_slice;  splice PPs across dir_blobs?
+    (sub_PPm_,sub_PPm_) = form_PP_(sub_derP_)  # each PP is a stack of (P, derP)s from comp_P
+    PP.sublayers = [[sub_PPm_,sub_PPm_]]
+    PP.sublayers += sub_recursion(sub_PPm_,sub_PPm_)  # rng+ comp_P in PPms, der+ comp_P in PPds, -> param_layer, form sub_PPs
 
 
 def agglo_recursion(blob):  # compositional recursion, per blob.Plevel
@@ -540,101 +506,6 @@ def comp_dx(P):  # cross-comp of dx s in P.dert_
     P.Ddx = Ddx
     P.Mdx = Mdx
 
-# old:
-def comp_slice(_P, P):  # forms vertical derivatives of derP params, and conditional ders from norm and DIV comp
-
-    x0, Dx, Dy, L, = P.x0, P.Dx, P.Dy, P.L
-    # params per comp branch, add angle params
-    _x0, _Dx, _Dy,_dX, _L = _P.x0, _P.Dx, _P.Dy, _P.dX, _P.L
-
-    dX = (x0 + (L-1) / 2) - (_x0 + (_L-1) / 2)  # x shift: d_ave_x, or from offsets: abs(x0 - _x0) + abs(xn - _xn)?
-
-    if dX > ave_dX:  # internal comp is higher-power, else two-input comp not compressive?
-        xn = x0 + L - 1
-        _xn = _x0 + _L - 1
-        mX = min(xn, _xn) - max(x0, _x0)  # overlap = abs proximity: summed binary x match
-        rX = dX / mX if mX else dX*2  # average dist / prox, | prox / dist, | mX / max_L?
-
-    ddX = dX - _dX  # long axis curvature, if > ave: ortho eval per P, else per PP_dX?
-    mdX = min(dX, _dX)  # dX is inversely predictive of mP?
-
-    # is this looks better? or it would better if we stick to the old code?
-    difference = P.difference(_P)   # P - _P
-    match = P.min_match(_P)         # min of P and _P
-    abs_match = P.abs_min_match(_P) # min of abs(P) and abs(_P)
-
-    dL = difference['L'] # L: positions / sign, dderived: magnitude-proportional value
-    mL = match['L']
-    dM = difference['M'] # use abs M?  no Mx, My: non-core, lesser and redundant bias?
-    mM = match['M']
-
-    # min is value distance for opposite-sign comparands, vs. value overlap for same-sign comparands
-    dDy = difference['Dy']  # Dy per sub_P by intra_comp(dx), vs. less vertically specific dI
-    mDy = abs_match['Dy']
-    # no comp G: Dy, Dx are more specific:
-    dDx = difference['Dx']  # same-sign Dx if Pd
-    mDx = abs_match['Dx']
-
-    if dX * P.G > ave_ortho:  # estimate params of P locally orthogonal to long axis, maximizing lateral diff and vertical match
-        # diagram: https://github.com/boris-kz/CogAlg/blob/master/frame_2D_alg/Illustrations/orthogonalization.png
-        # Long axis is a curve of connections between ave_xs: mid-points of consecutive Ps.
-
-        # Ortho virtually rotates P to connection-orthogonal direction:
-        hyp = np.hypot(dX, 1)  # ratio of local segment of long (vertical) axis to dY = 1
-        L = L / hyp  # orthogonal L
-        # combine derivatives in proportion to the contribution of their axes to orthogonal axes:
-        # contribution of Dx should increase with hyp(dX,dY=1), this is original direction of Dx:
-        Dy = (Dy / hyp + Dx * hyp) / 2  # estimated along-axis D
-        Dx = (Dy * hyp + Dx / hyp) / 2  # estimated cross-axis D
-        '''
-        alternatives:
-        oDy = (Dy * hyp - Dx / hyp) / 2;  oDx = (Dx / hyp + Dy * hyp) / 2;  or:
-        oDy = hypot( Dy / hyp, Dx * hyp);  oDx = hypot( Dy * hyp, Dx / hyp)
-        '''
-        # recompute difference and match
-        dL = _L - L
-        mL = min(_L, L)
-        dDy = _Dy - Dy
-        mDy = min(abs(_Dy), abs(Dy))
-        dDx = _Dx - Dx
-        mDx = min(abs(_Dx), abs(Dx))
-
-    if (Dx > 0) != (_Dx > 0): mDx = -mDx
-    if (Dy > 0) != (_Dy > 0): mDy = -mDy
-
-    dDdx, dMdx, mDdx, mMdx = 0, 0, 0, 0
-    if P.dxdert_ and _P.dxdert_:  # from comp_dx
-        fdx = 1
-        dDdx = difference['Ddx']
-        mDdx = abs_match['Ddx']
-        if (P.Ddx > 0) != (_P.Ddx > 0): mDdx = -mDdx
-        # Mdx is signed:
-        dMdx = match['Mdx']
-        mMdx = -abs_match['Mdx']
-        if (P.Mdx > 0) != (_P.Mdx > 0): mMdx = -mMdx
-    else:
-        fdx = 0
-    # coeff = 0.7 for semi redundant parameters, 0.5 for fully redundant parameters:
-    dP = ddX + dL + 0.7*(dM + dDx + dDy)  # -> directional PPd, equal-weight params, no rdn?
-    # correlation: dX -> L, oDy, !oDx, ddX -> dL, odDy ! odDx? dL -> dDx, dDy?
-    if fdx: dP += 0.7*(dDdx + dMdx)
-
-    mP = mdX + mL + 0.7*(mM + mDx + mDy)  # -> complementary PPm, rdn *= Pd | Pm rolp?
-    if fdx: mP += 0.7*(mDdx + mMdx)
-    mP -= ave_mP * ave_rmP ** (dX / L)  # dX / L is relative x-distance between P and _P,
-
-    derP = CderP(P=P, _P=_P, mP=mP, dP=dP, dX=dX, mL=mL, dL=dL, mDx=mDx, dDx=dDx, mDy=mDy, dDy=dDy)
-    P.derP = derP
-
-    if fdx:
-        derP.fdx=1; derP.dDdx=dDdx; derP.mDdx=mDdx; derP.dMdx=dMdx; derP.mMdx=mMdx
-
-    '''
-    min comp for rotation: L, Dy, Dx, no redundancy?
-    mParam weighting by relative contribution to mP, /= redundancy?
-    div_f, nvars: if abs dP per PPd, primary comp L, the rest is normalized?
-    '''
-    return derP
 
 # not revised, remove ifs, etc:
 def comp_layer(_layer, layer, new_layer):
