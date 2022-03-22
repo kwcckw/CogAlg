@@ -181,7 +181,7 @@ def comp_P_root(P__, top_derP__, rng, fsub):  # vertically compares y-adjacent a
     derP__ = []  # derivative tuples of P__, which is lower derivation derP__ in recursion
     _P_ = P__[0]  # upper row
 
-    for P_ in P__[1:]:
+    for y, P_ in enumerate(P__[1:], start=1):
         derP_ = []  # per lower row
         for P in P_:  # lower row
             for _P in _P_:  # upper row, scan only one
@@ -190,7 +190,11 @@ def comp_P_root(P__, top_derP__, rng, fsub):  # vertically compares y-adjacent a
 
                     if fsub: derP = comp_layer(_P, P)  # form higher-layer derivatives
                     else:    derP = comp_P(_P, P)  # form vertical derivatives of layer0 params
-
+                    if rng > 1:
+                        for top_derP in top_derP__[y]:
+                            if derP.P is top_derP:  # derP.P is derP in higher derivatives
+                                accum_layer(derP.params, top_derP.params, start=0)
+                                break
                     if not P.downconnect_cnt:  # initial row per root PP, then follow upconnect_
                         derP_.append(derP)
                     P.upconnect_.append(derP)  # per P for form_PP
@@ -200,17 +204,6 @@ def comp_P_root(P__, top_derP__, rng, fsub):  # vertically compares y-adjacent a
                     break
         if derP_: derP__ += [derP_]  # rows in blob or PP
         _P_ = P_
-
-    if rng > 1:
-        for derP_ in derP__:
-            for top_derP_ in top_derP__:
-                if derP_[0].P.P.y == top_derP_[0].P.y:  # check for same row
-                    for derP in derP_:
-                        for top_derP in top_derP_:
-                            if derP.P is top_derP:  # check for same derP
-                                accum_layer(derP.params, top_derP.params, start=0)  # accumulate derP from top_derP
-                                break
-                    break
 
     return derP__
 
@@ -260,7 +253,11 @@ def comp_P(_P, P):  # forms vertical derivatives of params per P in _P.upconnect
 
     params = [dx, mx, dL, mL, dI, mI, dG, mG, dGa, mGa, dM, mM, dMa, mMa, dangle, mangle, daangle, maangle]
     # or summable params only, all Gs are computed at termination?
-    derP = CderP(x0=_P.x0, L=_P.L, y=_P.y,  m=mP, d=dP, params=params, P=P, _P=_P)
+    
+    x0 = min(_P.x0, P.x0)
+    xn = max(_P.x0+_P.L, P.x0+P.L)
+    L = xn-x0
+    derP = CderP(x0=x0, L=L, y=_P.y,  m=mP, d=dP, params=params, P=P, _P=_P)
 
     return derP
 
@@ -275,8 +272,8 @@ def form_PP_(derP__):  # form vertically contiguous patterns of patterns by derP
                 if not derP.P.downconnect_cnt and not isinstance(derP.PP, CPP):
                     rdn = derP.P.Rdn + len(derP.P.upconnect_)
                     # multiple upconnects form partially overlapping PPs, rdn needs to be proportional to overlap?
-                    if fPd: sign = derP.d > ave_dP * rdn
-                    else:   sign = derP.m > ave_mP * rdn
+                    if fPd: sign = derP.dP > ave_dP * rdn
+                    else:   sign = derP.mP > ave_mP * rdn
                     PP = CPP(sign=sign)
                     ys = [derP.P.y]  # local derP.y
                     accum_PP(PP, derP, ys)  # accumulate derP into PP
@@ -297,8 +294,8 @@ def upconnect_2_PP_(iderP, PP_, iys, fPd):
         derP__ = [derP for derP_ in iderP.PP.derP__ for derP in derP_]
         if derP not in derP__:  # this may occur after Pp merging
             rdn = derP.P.Rdn + len(derP.P.upconnect_)
-            if fPd: sign = derP.d > ave_dP * rdn
-            else: sign = derP.m > ave_mP * rdn
+            if fPd: sign = derP.dP > ave_dP * rdn
+            else: sign = derP.mP > ave_mP * rdn
             ys = iys
             if iderP.PP.sign == sign:  # upconnect is same-sign
                 # or if match only, no neg PPs?
@@ -577,4 +574,7 @@ def comp_layer(_derP, derP):
                 der_level.append(dmaangle); der_level.append(mmaangle)
                 dP += dmaangle; mP += mmaangle
 
-    return CderP( x0=_derP.x0, L=_derP.L, y=_derP.y, m=mP, d=dP, params=der_level, P=derP, _P=_derP)
+    x0 = min(_P.x0, P.x0)
+    xn = max(_P.x0+_P.L, P.x0+P.L)
+    L = xn-x0
+    return CderP(x0=x0, L=L, y=_derP.y, m=mP, d=dP, params=der_level, P=derP, _P=_derP)
