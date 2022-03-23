@@ -110,7 +110,6 @@ class CPP(CP, CderP):  # derP params are inherited from P
     box = list  # for visualization only, original box before flipping
     mask__ = bool
     derP__ = list  # replaces dert__
-    P__ = list     # for rng+ only
     Plevels = list  # replaces levels
     params = list  # layer, +=derP params
     sublayers = list
@@ -179,17 +178,27 @@ def comp_P_root(P__, derP__, rng, fsub):  # vertically compares y-adjacent and x
     # if der+: P__ is last-call derP__, derP__=[], form new derP__
     # if rng+: P__ is last-call P__, accumulate derP__ with new_derP__
     new_derP__ = []  # derivative tuples of P__, lower derP__ in recursion
+    if not P__: P__ = derP__
     _P_ = P__[0]  # upper row
-
+    
     for y, P_ in enumerate(P__[1:], start=1):
         new_derP_ = []
         for P in P_:  # lower row
+            if rng>1 and isinstance(P, CderP): 
+                P = P.P  # P is derP, need to get P from derP.P
+                while hasattr(P, "P"):
+                    P = P.P
             for _P in _P_:  # upper row
                 # test for x overlap between P and _P in 8 directions, all Ps here are positive
+                if isinstance(_P, CderP) and rng>1: _P =  _P.P  # _P is _derP, need to get _P from _derP.P
+                if rng>1 and isinstance(_P, CderP): 
+                    _P = _P.P  # P is derP, need to get P from derP.P
+                    while hasattr(_P, "P"):
+                        _P = _P.P
                 if (P.x0 - 1 < (_P.x0 + _P.L) and (P.x0 + P.L) + 1 > _P.x0):
 
-                    if fsub: new_derP = comp_layer(_P, P)  # form higher-layer derivatives
-                    else:    new_derP = comp_P(_P, P)  # form vertical derivatives of layer0 params
+                    if fsub and not rng >1:  new_derP = comp_layer(_P, P)  # form higher-layer derivatives
+                    else: new_derP = comp_P(_P, P)  # form vertical derivatives of layer0 params
                     if rng > 1:
                         for derP in derP__[y]:
                             if new_derP.P is derP.P:  # same input
@@ -267,8 +276,20 @@ def form_PP_(derP__):  # form vertically contiguous patterns of patterns by derP
     PP_t = []
     for fPd in 0, 1:
         PP_ = []
-        for derP_ in deepcopy(derP__):  # scan bottom-up
-            for derP in derP_:
+        for derP_ in derP__:  # scan bottom-up
+            for iderP in derP_:
+                
+                if isinstance(iderP.P, CP):
+                    P = CP(layer0=iderP.P.layer0.copy(), dert_ = iderP.P.dert_, upconnect_ = iderP.P.upconnect_)
+                    _P = CP(layer0=iderP.P.layer0.copy(), dert_ = iderP._P.dert_, upconnect_ = iderP._P.upconnect_)
+                else:
+                    P = CP(params=iderP.P.params.copy(), upconnect_ = iderP.P.upconnect_)
+                    _P = CP(params=iderP.P.params.copy(), upconnect_ = iderP._P.upconnect_)
+                P.accum_from(iderP.P)
+                _P.accum_from(iderP._P)
+                 
+                derP = CderP(params=iderP.params.copy(), P=P, _P=_P)
+                derP.accum_from(iderP)
                 if not derP.P.downconnect_cnt and not isinstance(derP.PP, CPP):
                     rdn = derP.P.Rdn + len(derP.P.upconnect_)
                     # multiple upconnects form partially overlapping PPs, rdn needs to be proportional to overlap?
@@ -287,7 +308,6 @@ def form_PP_(derP__):  # form vertically contiguous patterns of patterns by derP
 def upconnect_2_PP_(iderP, PP_, iys, fPd):  # compare lower-layer iderP sign to upconnects sign, form same-contiguous-sign PPs
 
     matching_upconnect_ = []
-
     for derP in iderP._P.upconnect_:  # potential upconnects from previous call
         derP__ = [derP for derP_ in iderP.PP.derP__ for derP in derP_]
 
@@ -298,8 +318,9 @@ def upconnect_2_PP_(iderP, PP_, iys, fPd):  # compare lower-layer iderP sign to 
             ys = iys
             if iderP.PP.sign == sign:  # upconnect is same-sign
                 # or if match only, no neg PPs?
-                if isinstance(derP.PP, CPP) and (derP.PP is not iderP.PP):  # upconnect has PP, merge it
-                    merge_PP(iderP.PP, derP.PP, PP_, iys)
+                if isinstance(derP.PP, CPP): 
+                    if (derP.PP is not iderP.PP):  # upconnect has PP, merge it
+                        merge_PP(iderP.PP, derP.PP, PP_, iys)
                 else:  # accumulate derP in current PP
                     accum_PP(iderP.PP, derP, iys)
                     matching_upconnect_.append(derP)
@@ -322,9 +343,9 @@ def upconnect_2_PP_(iderP, PP_, iys, fPd):  # compare lower-layer iderP sign to 
 
 def merge_PP(_PP, PP, PP_, ys):  # merge PP into _PP
 
-    _derP__ = [derP for derP_ in _PP.derP__ for derP in derP_]
     for derP_ in PP.derP__:
         for derP in derP_:
+            _derP__ = [derP for derP_ in _PP.derP__ for derP in derP_]  # need to check here because accum_PP may append new derP
             if derP not in _derP__:
                 accum_PP(_PP, derP, ys)  # accumulate params
     _PP.Rdn += PP.Rdn
@@ -352,11 +373,10 @@ def accum_PP(PP, derP, ys):  # accumulate params in PP
         elif derP.P.y < existing_ys[0]:  # derP.y < smallest y in ys
             PP.derP__.insert(0, [derP])
             ys.insert(0, derP.P.y)
-        elif derP.P.y > existing_ys[0] and derP.P.y < existing_ys[1] :  # derP.y in between largest and smallest value
+        elif derP.P.y > existing_ys[0] and derP.P.y < existing_ys[-1] :  # derP.y in between largest and smallest value
             PP.derP__.insert(derP.P.y-existing_ys[0], [derP])
             ys.insert(derP.P.y-existing_ys[0],derP.P.y)
 
-    PP.P__.append([derP.P])  # for rng+ only
     derP.PP = PP           # update reference
 
 def accum_layer(top_layer, der_layer, start):
@@ -390,8 +410,8 @@ def sub_recursion(root_sublayers, PP_, rng):  # compares param_layers of derPs i
         else:       PP_V = PP.D - ave_dPP * PP.Rdn; min_L = 3  # need 3 Ps to compute layer2, etc.
 
         if PP_V > 0 and PP.L > min_L:
-            if rng > 1: P__ = PP.P__; derP__ = PP.derP__  # rng+
-            else:       P__ = PP.derP__; derP__ = []      # der+
+            if rng > 1: P__ = []; derP__ = PP.derP__  # rng+
+            else: P__ = PP.derP__; derP__ = []      # der+
 
             sub_derP_ = comp_P_root(P__, derP__, rng, fsub=1)  # scan_P_, comp_P layer0;  splice PPs across dir_blobs?
             (sub_PPm_, sub_PPd_) = form_PP_(sub_derP_)  # each PP is a stack of (P, derP)s from comp_P
