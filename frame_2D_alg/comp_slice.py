@@ -2,10 +2,10 @@
 Comp_slice is a terminal fork of intra_blob.
 -
 It traces blob axis by cross-comparing vertically adjacent Ps: horizontal slices across an edge blob.
-These low-M high-Ma blobs are vectorized into outlines of adjacent flat or high-M blobs.
-(high match: M / Ma, roughly corresponds to low gradient: G / Ga)
+These low-M high-Ma blobs are vectorized into outlines of adjacent flat (high internal match) blobs.
+(high match or match of angle: M | Ma, roughly corresponds to low gradient: G | Ga)
 -
-Vectorization is clustering of Ps + their derivatives (derPs) into PPs: patterns of Ps that describe an edge.
+Vectorization is clustering of Ps + their derivatives (derPs) into PPs: patterns of Ps that describe an edge blob.
 This process is a reduced-dimensionality (2D->1D) version of cross-comp and clustering cycle, common across this project.
 As we add higher dimensions (2D alg, 3D alg), this dimensionality reduction is done in salient high-aspect blobs
 (likely edges / contours in 2D or surfaces in 3D) to form more compressed "skeletal" representations of full-D patterns.
@@ -74,7 +74,6 @@ class CP(ClusterStructure):  # horizontal blob slice P, with vertical derivative
     # only in Pm:
     Pd_ = list
 
-
 class CderP(ClusterStructure):  # tuple of derivatives in P upconnect_ or downconnect_
 
     dP = int
@@ -102,7 +101,9 @@ class CPP(CP, CderP):  # derP params are inherited from P
 
     D = int  # summed derP.dP
     M = int  # summed derP.mP
-    A = int  # summed from P.L s
+    params = list  # derivation layer += derP params
+    A = int  # summed from P.Ls, also x, y?
+    # separate P params, lower-der params, or that's in lower PPs?
     sign = bool
     rng = lambda: 1  # rng starts with 1
     upconnect_ = list
@@ -115,7 +116,6 @@ class CPP(CP, CderP):  # derP params are inherited from P
     mask__ = bool
     derP__ = list  # replaces dert__
     Plevels = list  # replaces levels
-    params = list  # layer, +=derP params
     sublayers = list
 
 # Functions:
@@ -128,10 +128,8 @@ def comp_slice_root(blob, verbose=False):  # always angle blob, composite dert c
         P__ = slice_blob(dir_blob, verbose=False)  # cluster dir_blob.dert__ into 2D array of blob slices
         # comp_dx_blob(P__), comp_dx?
 
-        derPm__ = comp_P_root(deepcopy(P__), rng=1, fsub=0)  # scan_P_, comp_P, or comp_layers if called from sub_recursion
-        derPd__ = comp_P_root(deepcopy(P__), rng=1, fsub=0)  # scan_P_, comp_P, or comp_layers if called from sub_recursion
-        
-        (PPm_, PPd_) = form_PP_([derPm__, derPd__])  # each PP is a stack of (P, derP)s from comp_P
+        derP__ = comp_P_root(P__, rng=1)  # scan_P_, comp_P, or comp_layers if called from sub_recursion
+        (PPm_, PPd_) = form_PP_(derP__)  # each PP is a stack of (P, derP)s from comp_P
 
         sub_recursion([], PPm_, rng=2)  # rng+ comp_P in PPms, -> param_layer, form sub_PPs
         sub_recursion([], PPd_, rng=1)  # der+ comp_P in PPds, -> param_layer, form sub_PPs
@@ -179,7 +177,7 @@ def slice_blob(blob, verbose=False):  # forms horizontal blob slices: Ps, ~1D Ps
 
     return P__
 
-def comp_P_root(P__, rng, fsub):  # vertically compares y-adjacent and x-overlapping Ps: blob slices, forming derP__
+def comp_P_root(P__, rng):  # vertically compares y-adjacent and x-overlapping Ps: blob slices, forming derP__
 
     # if der+: P__ is last-call derP__, derP__=[], form new derP__
     # if rng+: P__ is last-call P__, accumulate derP__ with new_derP__
@@ -189,8 +187,8 @@ def comp_P_root(P__, rng, fsub):  # vertically compares y-adjacent and x-overlap
     for y, P_ in enumerate(P__[1:], start=1):
         derP_ = []
         for P in P_:  # lower row
-            if rng>1: cP = P.P  # compared P is lower-derivation order
-            else:     cP = P
+            if rng>1: cP = P.P  # compared P is lower-derivation
+            else:     cP = P    # compared P is top derivation
             for _P in _P_:  # upper row
                 if rng>1: _cP = _P.P
                 else:     _cP = _P
@@ -199,8 +197,9 @@ def comp_P_root(P__, rng, fsub):  # vertically compares y-adjacent and x-overlap
 
                     if isinstance(cP, CderP): derP = comp_layer(_cP, cP)  # form higher derivatives of vertical derivatives
                     else:                     derP = comp_P(_cP, cP)  # form vertical derivatives of horizontal P params
-                    if rng>1: accum_layer(derP.params, P.params, start=0)
 
+                    if rng>1:  # accumulate derP through rng+ recursion:
+                        accum_layer(derP.params, P.params)
                     if not P.downconnect_cnt:  # initial row per root PP, then follow upconnect_
                         derP_.append(derP)
                     P.upconnect_.append(derP)  # per P for form_PP
@@ -263,7 +262,7 @@ def comp_P(_P, P):  # forms vertical derivatives of params per P in _P.upconnect
     x0 = min(_P.x0, P.x0)
     xn = max(_P.x0+_P.L, P.x0+P.L)
     L = xn-x0
-    derP = CderP(x0=x0, L=L, y=_P.y,  m=mP, d=dP, params=params, P=P, _P=_P)
+    derP = CderP(x0=x0, L=L, y=_P.y,  m=mP, d=dP, params=params, upconnect_=[], downconnect_cnt=0, P=P, _P=_P)
 
     return derP
 
@@ -272,10 +271,11 @@ def form_PP_(derP__):  # form vertically contiguous patterns of patterns by derP
 
     PP_t = []
     for fPd in 0, 1:
+        if not fPd: derP__ = deepcopy(derP__)
         PP_ = []
-        for derP_ in derP__[fPd]:  # scan bottom-up
+        for derP_ in derP__:  # scan bottom-up
             for derP in derP_:
-                if not derP.P.downconnect_cnt and not isinstance(derP.PP, CPP):
+                if not derP.P.downconnect_cnt and not isinstance(derP.PP, CPP):  # no derP.PP yet
                     rdn = derP.P.Rdn + len(derP.P.upconnect_)
                     # multiple upconnects form partially overlapping PPs, rdn needs to be proportional to overlap?
                     if fPd: sign = derP.dP > ave_dP * rdn
@@ -340,7 +340,7 @@ def accum_PP(PP, derP, ys):  # accumulate params in PP
     if not PP.params:  # if param layer is empty, copy over the derP's param layers
         PP.params = derP.params.copy()
     else:
-        accum_layer(PP.params, derP.params, start=0)
+        accum_layer(PP.params, derP.params)
 
     PP.Rdn += derP.P.Rdn  # add rdn, add derP._P.Rdn too?
     PP.L += 1
@@ -362,9 +362,9 @@ def accum_PP(PP, derP, ys):  # accumulate params in PP
 
     derP.PP = PP           # update reference
 
-def accum_layer(top_layer, der_layer, start):  # start should be not needed now?
+def accum_layer(top_layer, der_layer):
 
-    for i, (_param, param) in enumerate(zip(top_layer[start:], der_layer)):
+    for i, (_param, param) in enumerate(zip(top_layer, der_layer)):
         if isinstance(_param, tuple):
             if len(_param) == 2:  # (sin_da, cos_da)
                 _sin_da, _cos_da = _param
@@ -411,10 +411,10 @@ def sub_recursion(root_sublayers, PP_, rng):  # compares param_layers of derPs i
                         iderP_.append(iderP)
                     iderP__.append(iderP_)
                 iderP__t.append(iderP__)
-                
-            sub_derPm__ = comp_P_root(iderP__t[0], rng, fsub=1)  # scan_P_, comp_P layer0;  splice PPs across dir_blobs?
-            sub_derPd__ = comp_P_root(iderP__t[1], rng, fsub=1)
-            (sub_PPm_, sub_PPd_) = form_PP_([sub_derPm__, sub_derPd__])  # each PP is a stack of (P, derP)s from comp_P
+
+            sub_derP__ = comp_P_root(iderP__t[0], rng, fsub=1)  # scan_P_, comp_P layer0;  splice PPs across dir_blobs?
+            (sub_PPm_, sub_PPd_) = form_PP_(sub_derP__)  # each PP is a stack of (P, derP)s from comp_P
+
             PP.sublayers = [(sub_PPm_, sub_PPm_)]
 
             if len(sub_PPm_)>1: sub_recursion(PP.sublayers, sub_PPm_, rng+1)  # rng+ comp_P in PPms, form param_layer, sub_PPs
