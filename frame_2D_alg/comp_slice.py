@@ -185,9 +185,9 @@ def comp_P_root(P__, rng):  # vertically compares y-adjacent and x-overlapping P
     for P_ in P__:  # reset connects and PP reference for all new layer inputs
         for P in P_:
             P.upconnect_ = []; P.downconnect_cnt = 0
-            while isinstance(P, CderP):
+            if isinstance(P, CderP):
                 P.PP = None; P.P.upconnect_ = []; P._P.upconnect_ = []; P.P.downconnect_cnt = 0; P._P.downconnect_cnt = 0
-                P = P.P
+
     for P_ in P__[1:]:
         derP_ = []
         for P in P_:  # lower row
@@ -268,7 +268,6 @@ def comp_P(_P, P):  # forms vertical derivatives of params per P in _P.upconnect
     xn = max(_P.x0+_P.L, P.x0+P.L)
     L = xn-x0
     derP = CderP(x0=x0, L=L, y=_P.y,  m=mP, d=dP, params=params, P=P, _P=_P)
-
     return derP
 
 
@@ -582,4 +581,4 @@ def comp_layer(_derP, derP):
     xn = max(_derP.x0+_derP.L, derP.x0+derP.L)
     L = xn-x0
 
-    return CderP(x0=x0, L=L, y=_derP.y, m=mP, d=dP, params=der_level, P=derP, _P=_derP)
+    return CderP(x0=x0, L=L, m=mP, d=dP, params=der_level, P=derP, _P=_derP)
