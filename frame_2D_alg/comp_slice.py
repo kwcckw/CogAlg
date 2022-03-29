@@ -87,6 +87,7 @@ class CderP(ClusterStructure):  # tuple of derivatives in P upconnect_ or downco
     P = object  # lower comparand
     _P = object  # higher comparand
     PP = object  # FPP if flip_val, contains this derP
+    mrdn = int
     # higher derivatives
     rdn = int  # +=1 per recursion
     upconnect_ = list  # tuples of higher-order derivatives per derP
@@ -282,53 +283,41 @@ def form_PP_(derP__, rdn):  # form vertically contiguous patterns of patterns by
                     multiple upconnects form partially overlapping PPs, rdn needs to be proportional to overlap
                     we need to compute upL = len(derP.upconnect_) first, then:
                     Rdn = derP.rdn + upL   
-                    if fPd: sign = derP.dP > ave_dP * Rdn
-                    else:   sign = derP.mP > ave_mP * Rdn
+                    
                     '''
-                    PP = CPP(sign=sign, rdn=rdn+upL)
+                    if fPd:
+                        # Rdn = mrdn + rdns for upconnect with mP > derP.mP
+                        Rdn = (not derP.mrdn) + sum([1 for upderP in derP._P.upconnect_ if upderP.mP >= derP.mP])
+                        sign = derP.dP > ave_dP * Rdn
+                    else:
+                        Rdn = derP.mrdn + sum([1 for upderP in derP._P.upconnect_ if upderP.mP >= derP.mP])
+                        sign = derP.mP > ave_mP * Rdn
+                    
+                    PP = CPP(sign=sign, rdn=Rdn + rdn)  # initialize rdn with rdn from upconnects, derP's mrdn and rdn from recursion
                     # PP accumulation:
-                    if fPd: PP.rdn += ~derP.mrdm
-                    else:   PP.rdn += derP.mrdm
                     accum_PP(PP, derP)  # derP.P.downconnect_cnt = 0
                     PP_.append(PP)
                     if derP._P.upconnect_:
                         upconnect_2_PP_(derP, PP_, Rdn, fPd)  # form PPs over _P upconnects
-        # add rdn for partial overlap  between +PPs
-        if len(PP_)>1:  # at least 2 PPs
-            for i, _PP in enumerate(PP_):
-                if _PP.mP > 0:  # positive _PP
-                    for PP in PP_[i+1:] :
-                        if PP.mP > 0:  # positive PP
-                            for _derP_ in _PP.derP__:
-                                for derP_ in PP.derP__:
-                                     if _derP_[0].y == derP_[0].y:  # same y
-                                         for _derP in _derP_:
-                                             for derP in derP_:
-                                                 # check for x overlap between derPs
-                                                 if (derP.x0 - 1 < (_derP.x0 + _derP.L) and (derP.x0 + derP.L) + 1 > _derP.x0):
-                                                     derP.rdn += 1
-                                                     _derP.rdn += 1
-            # update PP's rdn
-            for PP in PP_:
-                for derP_ in PP.derP__:
-                    for derP in derP_:
-                        PP.rdn += derP.rdn
-
         PP_t.append(PP_)
 
     return PP_t  # PPm_, PPd_
 
 
-def upconnect_2_PP_(iderP, PP_, Rdn, fPd):  # compare lower-layer iderP sign to upconnects sign, form same-contiguous-sign PPs
-    # the below is not reviewed:
+def upconnect_2_PP_(iderP, PP_, rdn, fPd):  # compare lower-layer iderP sign to upconnects sign, form same-contiguous-sign PPs
+    
     matching_upconnect_ = []
     for derP in iderP._P.upconnect_:  # get lower-der upconnects?
         derP__ = [pri_derP for derP_ in iderP.PP.derP__ for pri_derP in derP_]
 
         if derP not in derP__:  # this may occur after Pp merging
-            Rdn = derP.rdn + len(derP.P.upconnect_)
-            if fPd: sign = derP.dP > ave_dP * Rdn
-            else: sign = derP.mP > ave_mP * Rdn
+
+            if fPd:
+                Rdn = (not derP.mrdn) + sum([1 for upderP in derP._P.upconnect_ if upderP.mP >= derP.mP])
+                sign = derP.dP > ave_dP * Rdn
+            else:
+                Rdn = derP.mrdn + sum([1 for upderP in derP._P.upconnect_ if upderP.mP >= derP.mP])
+                sign = derP.mP > ave_mP * Rdn      
             if iderP.PP.sign == sign:  # upconnect is same-sign
                 # or if match only, no neg PPs?
                 if isinstance(derP.PP, CPP):
@@ -336,10 +325,12 @@ def upconnect_2_PP_(iderP, PP_, Rdn, fPd):  # compare lower-layer iderP sign to 
                         merge_PP(iderP.PP, derP.PP, PP_)
                 else:  # accumulate derP in current PP
                     accum_PP(iderP.PP, derP)
-                    matching_upconnect_.append(derP)
+                    iderP.PP.rdn += Rdn  # add Rdn for current derP?
+                # this should be regardless of whether derP.PP is CPP
+                matching_upconnect_.append(derP)
             else:  # sign changed
                 if not isinstance(derP.PP, CPP):  # derP is root derP unless it already has FPP/PP
-                    PP = CPP(sign=sign, rdn=Rdn)  # param layer will be accumulated in accum_PP anyway
+                    PP = CPP(sign=sign, rdn=Rdn+rdn)  # param layer will be accumulated in accum_PP anyway
                     PP_.append(PP)
                     accum_PP(PP, derP)
                     derP.P.downconnect_cnt = 0
@@ -352,6 +343,7 @@ def upconnect_2_PP_(iderP, PP_, Rdn, fPd):  # compare lower-layer iderP sign to 
 
 def merge_PP(_PP, PP, PP_):  # merge PP into _PP
 
+    _PP.rdn += PP.rdn
     for derP_ in PP.derP__:
         for derP in derP_:
             _derP__ = [_pri_derP for _pri_derP_ in _PP.derP__ for _pri_derP in _pri_derP_]  # accum_PP may append new derP
