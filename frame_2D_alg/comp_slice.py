@@ -263,9 +263,8 @@ def comp_P(_P, P):  # forms vertical derivatives of params per P in _P.upconnect
     x0 = min(_P.x0, P.x0)
     xn = max(_P.x0+_P.L, P.x0+P.L)
     L = xn-x0
-    mrdn = dP > mP  # Pm is weaker and redundant to Pd in this derP
 
-    derP = CderP(x0=x0, L=L, y=_P.y, rdn=mrdn, mP=mP, dP=dP, params=params, P=P, _P=_P)
+    derP = CderP(x0=x0, L=L, y=_P.y, mP=mP, dP=dP, params=params, P=P, _P=_P)
 
     return derP
 
@@ -282,10 +281,10 @@ def form_PP_(derP__, rdn):  # form vertically contiguous patterns of patterns by
                     '''
                     derP Rdn = mrdn + rdn to stronger upconnects, which form overlapping PPs, PP.rdn += mean of both '''
                     if fPd:
-                        Rdn = (not derP.mrdn) + sum([1 for upderP in derP.P.upconnect_ if upderP.dP >= derP.dP])
+                        Rdn = (derP.dP> derP.mP) + sum([1 for upderP in derP.P.upconnect_ if upderP.dP >= derP.dP])
                         sign = derP.dP > ave_dP * Rdn
                     else:
-                        Rdn = derP.mrdn + sum([1 for upderP in derP.P.upconnect_ if upderP.mP >= derP.mP])
+                        Rdn = (derP.mP> derP.dP) + sum([1 for upderP in derP.P.upconnect_ if upderP.mP >= derP.mP])
                         sign = derP.mP > ave_mP * Rdn
 
                     PP = CPP(sign=sign)
@@ -293,9 +292,14 @@ def form_PP_(derP__, rdn):  # form vertically contiguous patterns of patterns by
                     PP_.append(PP)
                     if derP.P.upconnect_:
                         upconnect_2_PP_(derP, PP_, fPd)  # form PPs over P upconnects
-        # at PP termination:
-        # PP.rdn += 1 + PP.Rdn / PP.params.L(=nderP)  # rdn is a multiplier
-
+        # after all PPs terminated:
+        for PP in PP_: 
+            for derP_ in PP.derP__:
+                for derP in derP_:
+                    if fPd: derP.rdn = (derP.dP> derP.mP) + sum([1 for upderP in derP.P.upconnect_ if upderP.dP >= derP.dP])
+                    else: derP.rdn = (derP.mP> derP.dP) + sum([1 for upderP in derP.P.upconnect_ if upderP.mP >= derP.mP])
+                    PP.Rdn += derP.rdn
+            PP.rdn += 1 + (PP.Rdn / PP.L) + rdn  # PP rdn is recursion rdn + derP's average rdn from overlap and upconnects
         PP_t.append(PP_)
 
     return PP_t  # PPm_, PPd_
@@ -309,10 +313,10 @@ def upconnect_2_PP_(iderP, PP_, fPd):  # compare lower-layer iderP sign to upcon
 
         if derP not in derP__:  # may be added in Pp merging
             if fPd:
-                Rdn = (not derP.mrdn) + sum([1 for upderP in derP.P.upconnect_ if upderP.dP >= derP.dP])
+                Rdn = (derP.dP> derP.mP) + sum([1 for upderP in derP.P.upconnect_ if upderP.dP >= derP.dP])
                 sign = derP.dP > ave_dP * Rdn
             else:
-                Rdn = derP.mrdn + sum([1 for upderP in derP.P.upconnect_ if upderP.mP >= derP.mP])
+                Rdn = (derP.mP> derP.dP)  + sum([1 for upderP in derP.P.upconnect_ if upderP.mP >= derP.mP])
                 sign = derP.mP > ave_mP * Rdn
             if iderP.PP.sign == sign:  # upconnect is same-sign
                 # or if match only, no neg PPs?
@@ -397,8 +401,6 @@ def sub_recursion(root_sublayers, PP_, rng):  # compares param_layers of derPs i
     comb_sublayers = []
     for PP in PP_:  # PP is generic higher-composition pattern, P is generic lower-composition pattern
                     # both P and PP may be recursively formed higher-derivation derP and derPP, etc.
-
-        PP.rdn += PP.Rdn / PP.L  # it should be L from PP.params, that counts all derPs
 
         if rng > 1: PP_V = PP.mP - ave_mPP * PP.rdn; min_L = rng * 2  # V: value of sub_recursion per PP
         else:       PP_V = PP.dP - ave_dPP * PP.rdn; min_L = 3  # need 3 Ps to compute layer2, etc.
@@ -593,6 +595,5 @@ def comp_layer(_derP, derP):
     x0 = min(_derP.x0, derP.x0)
     xn = max(_derP.x0+_derP.L, derP.x0+derP.L)
     L = xn-x0
-    mrdn = dP > mP
 
-    return CderP(x0=x0, L=L, y=_derP.y, rdn=mrdn, mP=mP, dP=dP, params=derivatives, P=derP, _P=_derP)
+    return CderP(x0=x0, L=L, y=_derP.y, mP=mP, dP=dP, params=derivatives, P=derP, _P=_derP)
