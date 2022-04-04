@@ -35,6 +35,7 @@ from collections import deque, namedtuple
 from itertools import zip_longest
 from draw_frame_blobs import visualize_blobs
 from class_cluster import ClusterStructure
+from time import time
 # from frame_blobs_wrapper import wrapped_flood_fill, from utils import minmax, from time import time
 
 # hyper-parameters, set as a guess, latter adjusted by feedback:
@@ -73,8 +74,9 @@ class CBlob(ClusterStructure):
     Mdx = float
     Ddx = float
     # derivation hierarchy:
-    rsublayers = list  # list of layers across sub_blob derivation tree, deeper layers are nested with both forks
-    asublayers = list  # separate for range and angle forks per blob
+    # rsublayers = list  # list of layers across sub_blob derivation tree, deeper layers are nested with both forks
+    # asublayers = list  # separate for range and angle forks per blob
+    sublayers = lambda: [[], []]  # rsublayers and asublayers
     prior_forks = list
     fBa = bool  # in root_blob: next fork is comp angle, else comp_r
     rdn = lambda: 1.0  # redundancy to higher blob layers, or combined?
@@ -112,16 +114,16 @@ def frame_blobs_root(image, intra=False, render=False, verbose=False, use_c=Fals
     assign_adjacents(adj_pairs)  # forms adj_blobs per blob in adj_pairs
     I, Dy, Dx = 0, 0, 0
     for blob in blob_: I += blob.I; Dy += blob.Dy; Dx += blob.Dx
-    frame = CBlob(I = I, Dy = Dy, Dx = Dx, dert__=dert__, prior_forks=["g"], rsublayers = [blob_])  # asublayers = []: no comp_a yet
+    frame = CBlob(I = I, Dy = Dy, Dx = Dx, dert__=dert__, prior_forks=["g"], sublayers = [[blob_], [[]]])  # asublayers = []: no comp_a yet
 
-    if verbose: print(f"{len(frame.rsublayers[0])} blobs formed in {time() - start_time} seconds")
+    if verbose: print(f"{len(frame.sublayers[0])} blobs formed in {time() - start_time} seconds")
     if render: visualize_blobs(idmap, frame.rsublayers[0])
 
     if intra:  # omit for testing frame_blobs without intra_blob
         if verbose: print("\rRunning frame's intra_blob...")
         from intra_blob import intra_blob_root
 
-        frame.rsublayers += intra_blob_root(frame, render, verbose, fBa=0)  # recursive eval cross-comp range| angle| slice per blob
+        frame.sublayers[0] += intra_blob_root(frame, render, verbose, fBa=0)  # recursive eval cross-comp range| angle| slice per blob
         # sublayers[0] is fork-specific, deeper sublayers combine sub-blobs of both forks
     '''
     if use_c:  # old version, no longer updated:
@@ -277,7 +279,6 @@ def assign_adjacents(adj_pairs):  # adjacents are connected opposite-sign blobs
 
 if __name__ == "__main__":
     import argparse
-    from time import time
     from utils import imread
     # Parse arguments
     argument_parser = argparse.ArgumentParser()
@@ -285,8 +286,8 @@ if __name__ == "__main__":
     argument_parser.add_argument('-v', '--verbose', help='print details, useful for debugging', type=int, default=1)
     argument_parser.add_argument('-r', '--render', help='render the process', type=int, default=0)
     argument_parser.add_argument('-c', '--clib', help='use C shared library', type=int, default=0)
-    argument_parser.add_argument('-n', '--intra', help='run intra_blobs after frame_blobs', type=int, default=0)
-    argument_parser.add_argument('-e', '--extra', help='run frame_recursive after frame_blobs', type=int, default=0)
+    argument_parser.add_argument('-n', '--intra', help='run intra_blobs after frame_blobs', type=int, default=1)
+    argument_parser.add_argument('-e', '--extra', help='run frame_recursive after frame_blobs', type=int, default=1)
     args = argument_parser.parse_args()
     image = imread(args.image)
     verbose = args.verbose

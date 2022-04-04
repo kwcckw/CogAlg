@@ -4,7 +4,8 @@ Cross-compare blobs with incrementally mediated adjacency, forming blobs of blob
 
 from class_cluster import ClusterStructure, NoneType, comp_param, Cdert
 from frame_blobs import CBlob
-from comp_slice_ import ave_min, ave_inv # facing error when comp-slice_ import from comp_blob, hence shift it here.
+from comp_slice import ave, ave_daangle, ave_dx, ave_Ma, ave_inv # facing error when comp-slice_ import from comp_blob, hence shift it here.
+from intra_blob import intra_blob_root
 import numpy as np
 import cv2
 
@@ -53,25 +54,33 @@ def frame_bblobs_root(root, intra, render, verbose):
     '''
     root function of comp_blob: cross compare blobs with their adjacent blobs in frame.blob_, including sublayers
     '''
-    blob_ = root.sublayers[0]
+    for ifBa in 0, 1:
+        blob_ = root.sublayers[ifBa][0]
 
-    derp_t = cross_comp(blob_)
-    sublayer0 = []  # pBlob_  (flat version)
-    I = A = Dy = Dx = M = 0
+        for fBa in 0, 1:
+            derp_t = cross_comp(blob_)
+            sublayer0 = []  # pBlob_  (flat version)
+            I = A = Dy = Dx = M = 0
+        
+            # how about rdn, d and m param?
+            for param_name, derp_ in zip(param_names, derp_t):
+                pBlob_ = form_bblob_(derp_)
+                I  += sum([pBlob.I  for pBlob in pBlob_])
+                Dy += sum([pBlob.Dy for pBlob in pBlob_])
+                Dx += sum([pBlob.Dx for pBlob in pBlob_])
+                M  += sum([pBlob.M  for pBlob in pBlob_])
+                A  += sum([pBlob.A  for pBlob in pBlob_])
+                sublayer0 += [pBlob_]  # to form blobs of blobs, connected by mutual match
 
-    # how about rdn, d and m param?
-    for param_name, derp_ in zip(param_names, derp_t):
-        pBlob_ = form_bblob_(derp_)
-        I  += sum([pBlob.I  for pBlob in pBlob_])
-        Dy += sum([pBlob.Dy for pBlob in pBlob_])
-        Dx += sum([pBlob.Dx for pBlob in pBlob_])
-        M  += sum([pBlob.M  for pBlob in pBlob_])
-        A  += sum([pBlob.A  for pBlob in pBlob_])
-        sublayer0 += [pBlob_]  # to form blobs of blobs, connected by mutual match
-
-        # intra section here?
-
-    new_root = CpBlob(I=I, Dy=Dy, Dx=Dx, M=M, A=A, sublayers=sublayer0)
+            if fBa: 
+                new_root.sublayers += [[sublayer0]]
+            else: 
+                new_root = CpBlob(I=I, Dy=Dy, Dx=Dx, M=M, A=A, sublayers=[[sublayer0]])
+            
+            if intra:
+                # not working for 4 params yet
+                # new_root.sublayers[fBa] += intra_blob_root(new_root, render, verbose, fBa=0)
+                pass
 
     return new_root
 
@@ -199,6 +208,7 @@ def comp_blob(blob, _blob, _derp):
     '''
     derp = Cderp()
     layer1 = dict({'I':.0,'Da':.0, 'M':.0, 'Dady':.0,'Dadx':.0,'Ma':.0,'A':.0,'Mdx':.0, 'Ddx':.0})
+    aves = [ave_inv, ave_da, ave_M, ave_daangle, ave_daangle, ave_Ma, ave_A, ave_dx]
 
     G = np.hypot(blob.Dy, blob.Dx) - ave * blob.A
     _G = np.hypot(_blob.Dy, _blob.Dx) - ave * _blob.A
@@ -209,37 +219,30 @@ def comp_blob(blob, _blob, _derp):
     absGa = max(1, Ga + (ave_da * blob.A))
     _absGa = max(1, _Ga + (ave_da * _blob.A))
 
-    for param_name in layer1:
+    for param_name, param_ave in zip(layer1, aves):
         if param_name == 'Da':
             sin = blob.Dy/absG ; cos = blob.Dx/absG
             _sin = _blob.Dy/_absG; _cos = _blob.Dx/_absG
             param = [sin, cos]
             _param = [_sin, _cos]
-            ave_mPar = ave_ma  # average for comp_param
 
         elif param_name == 'Dady':
             sin = blob.Dydy/absGa; cos = blob.Dxdy/absGa
             _sin = _blob.Dydy/_absGa; _cos = _blob.Dxdy/_absGa
             param = [sin, cos]
             _param = [_sin, _cos]
-            ave_mPar = ave_ma
 
         elif param_name == 'Dadx':
             sin = blob.Dydx/absGa; cos = blob.Dxdx/absGa
             _sin = _blob.Dydx/_absGa; _cos = _blob.Dxdx/_absGa
             param = [sin, cos]
             _param = [_sin, _cos]
-            ave_mPar = ave_ma
 
         elif param_name not in ['Da', 'Dady', 'Dadx']:
             param = getattr(blob, param_name)
             _param = getattr(_blob, param_name)
-            if param_name == "I":
-                ave_mPar = ave_inv   # ave_inv
-            else:
-                ave_mPar = ave_min  # ave_min
 
-        dist_ave = ave_mPar * (ave_rM ** ((1 + derp.distance) / np.sqrt(blob.A)))  # deviation from average blob match at current distance
+        dist_ave = param_ave * (ave_rM ** ((1 + derp.distance) / np.sqrt(blob.A)))  # deviation from average blob match at current distance
         pdert = comp_param(param, _param, param_name, dist_ave)
         layer1[param_name] = pdert
         derp.mB += pdert.m; derp.dB += pdert.d
