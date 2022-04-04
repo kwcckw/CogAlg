@@ -68,7 +68,6 @@ class CP(ClusterStructure):  # horizontal blob slice P, with vertical derivative
     dert_ = list  # array of pixel-level derts, redundant to upconnect_, only per blob?
     upconnect_ = list
     downconnect_ = list
-    downconnect_cnt = int
     # only in Pd:
     Pm = object  # reference to root P
     dxdert_ = list
@@ -92,7 +91,6 @@ class CderP(ClusterStructure):  # tuple of derivatives in P upconnect_ or downco
     rdn = int  # mrdn + uprdn, no need for separate mrdn?
     upconnect_ = list  # tuples of higher-row higher-order derivatives per derP
     downconnect_ = list
-    downconnect_cnt = int
    # from comp_dx
     fdx = NoneType
 
@@ -106,7 +104,6 @@ class CPP(CP, CderP):  # derP params are inherited from P
     Rdn = int  # for accumulation only
     upconnect_ = list
     downconnect_ = list
-    downconnect_cnt = int
     fPPm = NoneType  # PPm if 1, else PPd; not needed if packed in PP_
     fdiv = NoneType
     box = list  # for visualization only, original box before flipping
@@ -182,14 +179,14 @@ def comp_P_root(P__, rng):  # vertically compares y-adjacent and x-overlapping P
     derP__ = []  # tuples of derivatives from P__, lower derP__ in recursion
     for P_ in P__:
         for P in P_:
-            P.upconnect_ = []; P.downconnect_=[]; P.downconnect_cnt = 0  # reset connects and PP refs in the last layer only
+            P.upconnect_, P.downconnect_ = [],[]  # reset connects and PP refs in the last layer only
             if isinstance(P, CderP):
                 P.PP = None
 
     for i, _P_ in enumerate(P__):  # higher compared row
         derP_ = []
-        if i+rng < len(P__):
-            P_ = P__[i+rng]  # this should be just 1 line?
+        if i+rng < len(P__):  # rng=1 unless rng+ fork
+            P_ = P__[i+rng]   # lower compared row
             for P in P_:
                 if rng > 1: cP = P.P  # rng+, compared P is lower derivation
                 else:       cP = P  # der+, compared P is top derivation
@@ -198,23 +195,22 @@ def comp_P_root(P__, rng):  # vertically compares y-adjacent and x-overlapping P
                     else:       _cP = _P
                     # test for x overlap between P and _P in 8 directions, all Ps are from +derts, form sub_Pds for comp_dx?
                     if (cP.x0 - 1 < (_cP.x0 + _cP.L) and (cP.x0 + cP.L) + 1 > _cP.x0):
-                        # comp_P for P, comp_layer for derP and PP
-                        if isinstance(cP, CPP) or isinstance(cP, CderP): 
-                            derP = comp_layer(_cP, cP)  # form higher derivatives of vertical derivatives
-                        else:                  
-                            derP = comp_P(_cP, cP)  # form vertical derivatives of horizontal P params
-                        derP.y=P.y  # if rng+=n?
+
+                        if isinstance(cP, CP): derP = comp_P(_cP, cP)  # form vertical derivatives of horizontal P params
+                        else:                  derP = comp_layer(_cP, cP)  # form higher vertical derivatives of derP or PP params
+                        derP.y=P.y  # /rng+=n?
                         if rng > 1:  # accumulate derP through rng+ recursion:
                             accum_layer(derP.params, P.params)
-                        if not P.downconnect_cnt:  # initial row per root PP, then follow upconnect_
+                        if not P.downconnect_:  # initial row per root PP, then follow upconnect_
                             derP_.append(derP)
                         P.upconnect_.append(derP)  # per P for form_PP
-                        _P.downconnect_cnt += 1
-        
+                        _P.downconnect_.append(derP)
+
                     elif (cP.x0 + cP.L) < _cP.x0:  # no P xn overlap, stop scanning lower P_
                         break
-        # add derP_ regardless to preseve row index
-        derP__ += [derP_]  # rows in blob or PP
+        if derP_:
+            derP__ += [derP_]  # rows in blob or PP
+        _P_ = P_
 
     return derP__
 
@@ -275,15 +271,14 @@ def comp_P(_P, P):  # forms vertical derivatives of params per P in _P.upconnect
 
 
 def form_PP_(iderP__, root_rdn):  # form vertically contiguous patterns of patterns by derP sign, in dir_blob
-
-    # rdn may be sub_PP.rdn, recursion is per sub_PP, rng+|der+ overlap is derP.rdn?
+                                  # rdn may be sub_PP.rdn, recursion is per sub_PP, rng+|der+ overlap is derP.rdn?
     PP_t = []
     for fPd in 0, 1:
         PP_ = []
         derP__ = deepcopy(iderP__)
         for derP_ in derP__:  # scan bottom-up
             for derP in derP_:
-                if not derP.P.downconnect_cnt and not isinstance(derP.PP, CPP):  # no derP.PP yet
+                if not derP.P.downconnect_ and not isinstance(derP.PP, CPP):  # no derP.PP yet
                     # derP.rdn = fork rdn + rdn to stronger upconnects, forming overlapping PPs:
                     if fPd:
                         derP.rdn = (derP.mP > derP.dP) + sum([1 for upderP in derP.P.upconnect_ if upderP.dP >= derP.dP])
@@ -332,11 +327,10 @@ def upconnect_2_PP_(iderP, PP_, derP__, fPd):  # compare lower-layer iderP sign 
                     PP = CPP(sign=sign)
                     PP_.append(PP)
                     accum_PP(PP, derP)
-                    derP.P.downconnect_cnt = 0
+                    derP.P.downconnect_ = []
 
                 iderP.PP.upconnect_ += [derP.PP]  # for comp_PP_root, or comp_Pn_root in agglo_recursion
                 derP.PP.downconnect_ += [iderP.PP]
-                derP.PP.downconnect_cnt += 1
 
             if derP._P.upconnect_:
                 upconnect_2_PP_(derP, PP_, derP__, fPd)  # recursive compare sign of next-layer upconnects
@@ -355,20 +349,14 @@ def merge_PP(_PP, PP, PP_, derP__):  # merge PP into _PP
         if up_PP not in _PP.upconnect_:  # PP may have multiple downconnects
             _PP.upconnect_.append(up_PP)
 
-    # update derP's P or _P from PP to _PP
-    for derP_ in derP__:
+    for derP_ in derP__:  # update derP P,_P
         for derP in derP_:
-            if derP.P is PP:
-                derP.P = _PP
-            if derP._P is PP:
-                derP._P = _PP
+            if derP.P is PP:  derP.P = _PP
+            if derP._P is PP: derP._P = _PP
 
-    # we need add downconnect reference, else we couldn't update downconnect's PP's upconnect from PP to _PP
-    # update lower PP's upconnect from PP to _PP
-    # add lower PP to _PP's downconnect_
     for i, down_PP in enumerate(PP.downconnect_):
         if PP in down_PP.upconnect_:
-            down_PP.upconnect_[down_PP.upconnect_.index(PP)] = _PP
+            down_PP.upconnect_[down_PP.upconnect_.index(PP)] = _PP  # update lower PP's upconnect from PP to _PP
             if down_PP not in _PP.downconnect_:
                 _PP.downconnect_ += [down_PP]
 
@@ -432,6 +420,7 @@ def sub_recursion(root_sublayers, PP_, rng):  # compares param_layers of derPs i
         if rng > 1: PP_V = PP.mP - ave_mPP * PP.rdn; min_L = rng * 2  # V: value of sub_recursion per PP
         else:       PP_V = PP.dP - ave_dPP * PP.rdn; min_L = 3  # need 3 Ps to compute layer2, etc.
         if PP_V > 0 and PP.nderP > min_L:
+
             PP.rdn += 1  # rdn to prior derivation layers
             sub_derP__ = comp_P_root(PP.derP__, rng)  # scan_P_, comp_P layer0;  splice PPs across dir_blobs?
             sub_PPm_, sub_PPd_ = form_PP_(sub_derP__, PP.rdn)  # each PP is a stack of (P, derP)s from comp_P
@@ -487,7 +476,7 @@ def agglo_recursion(blob):  # compositional recursion per blob.Plevel. P, PP, PP
 
 def comp_aggloP_root(PP_, rng):
 
-    for PP in PP_: PP.downconnect_cnt = 0  # new downconnect will be recomputed for derPP
+    for PP in PP_: PP.downconnect_ = []  # new downconnect will be recomputed for derPP
     derPP__ = []
 
     for PP in PP_:
@@ -495,13 +484,12 @@ def comp_aggloP_root(PP_, rng):
             if isinstance(_PP, CPP):  # _PP could be the added derPP
                 derPP = comp_layer(_PP, PP)
                 PP.upconnect_[i] = derPP  # replace PP with derPP
-                _PP.downconnect_cnt += 1
+                _PP.downconnect_ += [derPP]
 
-                # pack derPP to each row based on their y
-                # they are automatically packed by their PP.y? I checked and they may not in order due to the upconnect_ merging process
                 if not derPP__:
                     derPP__.append([derPP])
                 else:
+                    # pack derPP in row = derPP.y:
                     current_ys = [derP_[0].P.y for derP_ in derPP__]  # list of current-layer derP rows
                     if derPP.P.y in current_ys:
                         derPP__[current_ys.index(derPP.P.y)].append(derPP)  # append derPP row
