@@ -28,7 +28,8 @@ def intra_blob_root(root_blob, render, verbose, fBa):  # recursive evaluation of
 
     # deep_blobs = []  # for visualization
     spliced_layers = []
-    blob_ = root_blob.sublayers[fBa][0]
+    if fBa:  blob_ = root_blob.asublayers[0]
+    else:    blob_ = root_blob.rsublayers[0]
 
     for blob in blob_:  # fork-specific blobs, print('Processing blob number ' + str(bcount))
 
@@ -108,7 +109,9 @@ def cluster_fork_recursive(blob, spliced_layers, new_dert__, sign__, new_mask__,
     assign_adjacents(adj_pairs)
     if render: visualize_blobs(idmap, sub_blobs, winname=f"Deep blobs (froot_Ba = {blob.fBa}, froot_Ba = {blob.prior_forks[-1] == 'a'})")
 
-    sublayers = blob.sublayers[fBa]
+    if fBa: sublayers = blob.asublayers
+    else:   sublayers = blob.rsublayers
+
     sublayers += [sub_blobs]  # r|a fork- specific sub_blobs, then add deeper layers of mixed-fork sub_blobs:
     sublayers += intra_blob_root(blob, render, verbose, fBa)  # recursive eval cross-comp range| angle| slice per blob
 
