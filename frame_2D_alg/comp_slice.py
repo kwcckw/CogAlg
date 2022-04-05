@@ -45,6 +45,7 @@ ave_mP = 10
 ave_dP = 10
 ave_mPP = 10
 ave_dPP = 10
+ave_splice = 10
 
 param_names = ["x", "I", "M", "Ma", "L", "angle", "aangle"]  # angle = Dy, Dx; aangle = sin_da0, cos_da0, sin_da1, cos_da1; recompute Gs for comparison?
 aves = [ave_dx, ave_I, ave_M, ave_Ma, ave_L, ave_G, ave_Ga, ave_mP, ave_dP]
@@ -130,6 +131,46 @@ def comp_slice_root(blob, verbose=False):  # always angle blob, composite dert c
 
         dir_blob.levels = [[PPm_, PPd_]]  # 1st composition level, each PP_ may be multi-layer from sub_recursion
         agglo_recursion(dir_blob)  # higher-composition comp_PP in blob -> derPPs, form PPP., appends dir_blob.levels
+
+    splice_dir_blob_(blob.dir_blobs)
+
+    
+# draft
+def splice_dir_blob_(dir_blobs):
+    
+    for i, _dir_blob in enumerate(dir_blobs):    
+        for fPd in 0, 1:
+            PP_ = _dir_blob.levels[0][fPd]
+        
+            if fPd: PP_val = sum([PP.mP for PP in PP_])
+            else:   PP_val = sum([PP.dP for PP in PP_])
+                
+            if PP_val - ave_splice > 0:  # high mPP pr dPP
+                
+                _top_P_ = _dir_blob.P__[0]
+                _bottom_P_ = _dir_blob.P__[-1]
+        
+                for j, dir_blob in enumerate(dir_blobs):
+                    if _dir_blob is not dir_blob:
+                        
+                        top_P_ = dir_blob.P__[0]
+                        bottom_P_ = dir_blob.P__[-1]                        
+    
+                        # test y adjacency
+                        if (_top_P_[0].y-1 == bottom_P_[0].y) or (top_P_[0].y-1 == _bottom_P_[0].y):
+                            # tet x overlap
+                             _x0 = min([_P.x0 for _P_ in _dir_blob.P__ for _P in _P_])
+                             _xn = min([_P.x0+_P.L for _P_ in _dir_blob.P__ for _P in _P_])
+                             x0 = min([P.x0 for P_ in dir_blob.P__ for P in P_])
+                             xn = min([P.x0+_P.L for P_ in dir_blob.P__ for P in P_])
+                             if (x0 - 1 < _xn and xn + 1 > _x0) or  (_x0 - 1 < xn and _xn + 1 > x0) :
+                                 splice_blob(_dir_blob, dir_blob)  # splice dir_blob into _dir_blob
+                                 dir_blobs[j] = _dir_blob
+              
+                
+def splice_blob(_blob, blob):
+    # merge blob into _blob here
+    pass
 
 
 def slice_blob(blob, verbose=False):  # forms horizontal blob slices: Ps, ~1D Ps, in select smooth edge (high G, low Ga) blobs

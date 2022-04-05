@@ -22,7 +22,7 @@ ave_A = 10
 
 param_names = ["I", "G", "M", "A"]
 
-class Cderp(ClusterStructure):  # set of derivatives per blob param
+class CderBlob(ClusterStructure):  # set of derivatives per blob param
 
     p = int  # last compared blob param
     s = int  # p summed in rng
@@ -33,6 +33,8 @@ class Cderp(ClusterStructure):  # set of derivatives per blob param
     subM = int  # match from comp_sublayers, if any
     subD = int  # diff from comp_sublayers, if any
     roots = lambda: [[], []]  # [Ppm,Ppd]: Pps that derp is in, to join rderp_s, or Rderp for rderp
+    blob = object
+    _blob = object
     ''' old:
     blob = object
     _blob = object
@@ -41,115 +43,111 @@ class Cderp(ClusterStructure):  # set of derivatives per blob param
     rderp_ = list  # fixed rng of comparands
     aderp = object  # anchor derp
 
-class CpBlob(CBlob, Cderp):  # probably not be needed
-    # base params are retrieved from CBlob and Cderp
-    # layer1 = dict       # Cdert layer params
-    # derp_ = list
-    # blob_ = list
-    dert__ = object
-    root = object
-    sublayers = list
 
 def frame_bblobs_root(root, intra, render, verbose):
     '''
     root function of comp_blob: cross compare blobs with their adjacent blobs in frame.blob_, including sublayers
     '''
     for ifBa in 0, 1:
-        blob_ = root.sublayers[ifBa][0]
+        if ifBa: blob_ = root.asublayers[0]
+        else:    blob_ = root.rsublayers[0]
 
+        new_root = CBblob(params=[0,0,0,0])
         for fBa in 0, 1:
-            derp_t = cross_comp(blob_)
-            sublayer0 = []  # pBlob_  (flat version)
-            I = A = Dy = Dx = M = 0
-        
-            # how about rdn, d and m param?
-            for param_name, derp_ in zip(param_names, derp_t):
-                pBlob_ = form_bblob_(derp_)
-                I  += sum([pBlob.I  for pBlob in pBlob_])
-                Dy += sum([pBlob.Dy for pBlob in pBlob_])
-                Dx += sum([pBlob.Dx for pBlob in pBlob_])
-                M  += sum([pBlob.M  for pBlob in pBlob_])
-                A  += sum([pBlob.A  for pBlob in pBlob_])
-                sublayer0 += [pBlob_]  # to form blobs of blobs, connected by mutual match
-
-            if fBa: 
-                new_root.sublayers += [[sublayer0]]
-            else: 
-                new_root = CpBlob(I=I, Dy=Dy, Dx=Dx, M=M, A=A, sublayers=[[sublayer0]])
+            derBlob_ = cross_comp(blob_, fBa)
+            bblob_ = form_bblob_(derBlob_, fBa)
+            # accumulate params
+            for bblob in bblob_:
+                for i, param in enumerate(bblob.params):
+                    new_root.params[i] += param
+            
+            if fBa: new_root.asublayers += [bblob_]
+            else:   new_root.rsublayers += [bblob_]
             
             if intra:
-                # not working for 4 params yet
-                # new_root.sublayers[fBa] += intra_blob_root(new_root, render, verbose, fBa=0)
-                pass
+                if fBa: new_root.asublayers += intra_blob_root(new_root, render, verbose, fBa=1)
+                else:   new_root.rsublayers += intra_blob_root(new_root, render, verbose, fBa=0) 
 
     return new_root
 
-def cross_comp(blob_):
 
-    Idert_, Gdert_, Mdert_, Adert_ = [], [], [], []
+# need to update further evaluation by fBa
+def cross_comp(blob_, fBa):
+
+    derBlob_ = []
     blob_pair = []
 
     for _blob in blob_:
-        _I, _Dy, _Dx, _M, _A = _blob.I, _blob.Dy, _blob.Dx, _blob.M, _blob.A
-
         for blob in _blob.adj_blobs[0]:  # blob_, blob.adj_blobs[1] is pose
             if [_blob, blob] not in blob_pair and [blob, _blob] not in blob_pair:  # this pair of blobs wasn't compared before
-
                 blob_pair.append([_blob, blob])
-                I, A, Dy, Dx, M = blob.I, blob.A, blob.Dy, blob.Dx, blob.M
-                # pack derp
-                Idert_ += [comp_par(_blob, _I, I, "I", ave_I )]
-                Gdert_ += [comp_par(_blob, [_Dy, _Dx], [Dy, Dx], "G", ave_G)]
-                Mdert_ += [comp_par(_blob, _M, M, "M", ave_M )]
-                Adert_ += [comp_par(_blob, _A, A, "A", ave_A)]
+                
+                # I
+                pI = blob.I+_blob.I
+                dI = blob.I - _blob.I    # difference
+                mI = ave_I - abs(dI)  # indirect match
+                
+                # G vector
+                _sin, _cos = _blob.dy, _blob.dx
+                sin, cos = blob.dy, blob.dx
+                # sum (dy,dx)
+                sin_sa = (cos * _sin) + (sin * _cos)  # sin(α + β) = sin α cos β + cos α sin β
+                cos_sa = (cos * _cos) - (sin * _sin)  # cos(α + β) = cos α cos β - sin α sin β
+                # diff (dy,dx)
+                sin_da = (cos * _sin) - (sin * _cos)  # sin(α - β) = sin α cos β - cos α sin β
+                cos_da= (cos * _cos) + (sin * _sin)   # cos(α - β) = cos α cos β + sin α sin β
+                pG = np.arctan2(sin_sa, cos_sa)  # sa: sum of angle
+                dG = np.arctan2(sin_da, cos_da)  # da: difference of angle
+                mG = ave - abs(dG)  # ma: indirect match of angle
+            
+                # M
+                pM = blob.M+_blob.M
+                dM = blob.M - _blob.M    # difference
+                mM = min(blob.M,_blob.M) - abs(dM)/2 - ave_M  # direct match
+            
+                # A
+                pA = blob.A+_blob.A
+                dA = blob.A - _blob.A    # difference
+                mA = min(blob.A,_blob.A) - abs(dA)/2 - ave_A  # direct match
+                    
+                pB = pI + pG + pM + pA
+                dB = dI + dG + dM + dA
+                mB = mI + mG + mM + mA
+            
+                derBlob = CderBlob(p=pB, d=dB, m=mB, blob=blob, _blob=_blob)           
+                derBlob_.append(derBlob)
 
-    return Idert_, Gdert_, Mdert_, Adert_
+    return derBlob_
 
-
-def comp_par(_blob, _param, param, param_name, ave):
-
-    if param_name == "G":  # vector
-        _sin, _cos = _param[0], _param[1]
-        sin, cos = param[0], param[1]
-        # sum (dy,dx)
-        sin_sa = (cos * _sin) + (sin * _cos)  # sin(α + β) = sin α cos β + cos α sin β
-        cos_sa = (cos * _cos) - (sin * _sin)  # cos(α + β) = cos α cos β - sin α sin β
-        # diff (dy,dx)
-        sin_da = (cos * _sin) - (sin * _cos)  # sin(α - β) = sin α cos β - cos α sin β
-        cos_da= (cos * _cos) + (sin * _sin)   # cos(α - β) = cos α cos β + sin α sin β
-
-        p = np.arctan2(sin_sa, cos_sa)  # sa: sum of angle
-        d = np.arctan2(sin_da, cos_da)  # da: difference of angle
-        m = ave - abs(d)  # ma: indirect match of angle
-
-    else:
-        p = param+_param
-        d = param - _param    # difference
-        if param_name == 'I':
-            m = ave - abs(d)  # indirect match
-        else:
-            m = min(param,_param) - abs(d)/2 - ave  # direct match
-    # blob param dert:
-    derp = Cderp(root=_blob, I=param, p=p, d=d, m=m)
-
-    return derp
 
 # very initial draft
 # need to add adj_bblob here, not sure how yet
-def form_bblob_(derp_):
+def form_bblob_(derBlob_):
 
-    pBlob_ = []
-    for derp in derp_:
-        if derp.m>0:  # positve derp only?
-            if "pBlob" not in locals():
-                pBlob = CpBlob(dert__ = [derp], L=1)
-                pBlob_.append(pBlob)
-            pBlob.accum_from(derp)
+    bblob_ = []
+    for derBlob in derBlob_:
+        if derBlob.mB>0:  # positve derp only?
+            if "bblob" not in locals():
+                bblob = CBlob(dert__ = [])
+                bblob_.append(bblob)
+            accum_bblob(bblob, derBlob)
         else:
             if "pBlob" in locals():
                 del pBlob
 
-    return pBlob_
+    return bblob_
+
+
+def accum_bblob(bblob, derBlob):
+    
+    bblob.dert__.append(derBlob)
+    bblob.L += 1
+    bblob.I += derBlob.I
+    bblob.G += derBlob.G
+    bblob.M += derBlob.M 
+    bblob.A += derBlob.A
+    
+
 '''
     bblob is a cluster (graph) of blobs with positive mB to any other member blob, formed by comparing adj_blobs
     two kinds of bblobs: merged_blob and blob_graph
