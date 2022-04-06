@@ -60,13 +60,13 @@ def frame_bblobs_root(root, intra, render, verbose):
             for bblob in bblob_:
                 for i, param in enumerate(bblob.params):
                     new_root.params[i] += param
-            
+
             if fBa: new_root.asublayers += [bblob_]
             else:   new_root.rsublayers += [bblob_]
-            
+
             if intra:
                 if fBa: new_root.asublayers += intra_blob_root(new_root, render, verbose, fBa=1)
-                else:   new_root.rsublayers += intra_blob_root(new_root, render, verbose, fBa=0) 
+                else:   new_root.rsublayers += intra_blob_root(new_root, render, verbose, fBa=0)
 
     return new_root
 
@@ -81,12 +81,12 @@ def cross_comp(blob_, fBa):
         for blob in _blob.adj_blobs[0]:  # blob_, blob.adj_blobs[1] is pose
             if [_blob, blob] not in blob_pair and [blob, _blob] not in blob_pair:  # this pair of blobs wasn't compared before
                 blob_pair.append([_blob, blob])
-                
+
                 # I
                 pI = blob.I+_blob.I
                 dI = blob.I - _blob.I    # difference
                 mI = ave_I - abs(dI)  # indirect match
-                
+
                 # G vector
                 _sin, _cos = _blob.dy, _blob.dx
                 sin, cos = blob.dy, blob.dx
@@ -99,22 +99,22 @@ def cross_comp(blob_, fBa):
                 pG = np.arctan2(sin_sa, cos_sa)  # sa: sum of angle
                 dG = np.arctan2(sin_da, cos_da)  # da: difference of angle
                 mG = ave - abs(dG)  # ma: indirect match of angle
-            
+
                 # M
                 pM = blob.M+_blob.M
                 dM = blob.M - _blob.M    # difference
                 mM = min(blob.M,_blob.M) - abs(dM)/2 - ave_M  # direct match
-            
+
                 # A
                 pA = blob.A+_blob.A
                 dA = blob.A - _blob.A    # difference
                 mA = min(blob.A,_blob.A) - abs(dA)/2 - ave_A  # direct match
-                    
+
                 pB = pI + pG + pM + pA
                 dB = dI + dG + dM + dA
                 mB = mI + mG + mM + mA
-            
-                derBlob = CderBlob(p=pB, d=dB, m=mB, blob=blob, _blob=_blob)           
+
+                derBlob = CderBlob(p=pB, d=dB, m=mB, blob=blob, _blob=_blob)
                 derBlob_.append(derBlob)
 
     return derBlob_
@@ -139,14 +139,14 @@ def form_bblob_(derBlob_):
 
 
 def accum_bblob(bblob, derBlob):
-    
+
     bblob.dert__.append(derBlob)
     bblob.L += 1
     bblob.I += derBlob.I
     bblob.G += derBlob.G
-    bblob.M += derBlob.M 
+    bblob.M += derBlob.M
     bblob.A += derBlob.A
-    
+
 
 '''
     bblob is a cluster (graph) of blobs with positive mB to any other member blob, formed by comparing adj_blobs
