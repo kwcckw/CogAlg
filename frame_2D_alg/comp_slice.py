@@ -109,6 +109,7 @@ class CPP(CP, CderP):  # derP params are inherited from P
     fdiv = NoneType
     box = list  # for visualization only, original box before flipping
     mask__ = bool
+    P__ = list
     derP__ = list  # replaces dert__
     Plevels = list  # replaces levels
     sublayers = list
@@ -134,7 +135,8 @@ def comp_slice_root(blob, verbose=False):  # always angle blob, composite dert c
 
     splice_dir_blob_(blob.dir_blobs)
 
-# draft
+
+# draft, need to be updated
 def splice_dir_blob_(dir_blobs):
 
     for i, _dir_blob in enumerate(dir_blobs):
@@ -234,9 +236,9 @@ def comp_P_root(P__, rng):  # vertically compares y-adjacent and x-overlapping P
                     else:       _cP = _P
                     # test for x overlap between P and _P in 8 directions, all Ps are from +derts, form sub_Pds for comp_dx?
                     if (cP.x0 - 1 < (_cP.x0 + _cP.L) and (cP.x0 + cP.L) + 1 > _cP.x0):
-
-                        if isinstance(cP, CP): derP = comp_P(_cP, cP)  # form vertical derivatives of horizontal P params
-                        else:                  derP = comp_layer(_cP, cP)  # form higher vertical derivatives of derP or PP params
+                        # CPP inherited from CP, so we can't check with CP here
+                        if isinstance(cP, CPP) or isinstance(cP, CderP): derP = comp_layer(_cP, cP)  # form vertical derivatives of horizontal P params
+                        else:                  derP = comp_P(_cP, cP)  # form higher vertical derivatives of derP or PP params
                         derP.y=P.y  # /rng+=n?
                         if rng > 1:  # accumulate derP through rng+ recursion:
                             accum_layer(derP.params, P.params)
@@ -326,7 +328,7 @@ def form_PP_(iderP__, root_rdn):  # form vertically contiguous patterns of patte
                         derP.rdn = (derP.dP >= derP.mP) + sum([1 for upderP in derP.P.upconnect_ if upderP.mP > derP.mP])
                         sign = derP.mP > ave_mP * derP.rdn
 
-                    PP = CPP(sign=sign)
+                    PP = CPP(sign=sign, x0=derP.x0)
                     accum_PP(PP, derP)  # accum PP with derP, including rdn, derP.P.downconnect_cnt = 0
                     PP_.append(PP)
                     if derP._P.upconnect_:
@@ -363,7 +365,7 @@ def upconnect_2_PP_(iderP, PP_, derP__, fPd):  # compare lower-layer iderP sign 
             else:
                 # sign changed
                 if not isinstance(derP.PP, CPP):
-                    PP = CPP(sign=sign)
+                    PP = CPP(sign=sign, x0=derP.x0)
                     PP_.append(PP)
                     accum_PP(PP, derP)
                     derP.P.downconnect_ = []
@@ -407,6 +409,7 @@ def accum_PP(PP, derP):  # accumulate params in PP
 
     if not PP.params: PP.params = derP.params.copy()
     else:             accum_layer(PP.params, derP.params)
+    PP.x0 = min(PP.x0, derP.x0)
     PP.nderP += 1
     PP.mP += derP.mP
     PP.dP += derP.dP
@@ -499,8 +502,8 @@ def agglo_recursion(blob):  # compositional recursion per blob.Plevel. P, PP, PP
             derPP_ = comp_aggloP_root(PP_, rng=1)  # PP is generic for lower-level composition
             PPPm_, PPPd_ = form_PP_(derPP_, root_rdn=2)  # PPP is generic next-level composition
 
-            splice_PPs(PPPm_)
-            splice_PPs(PPPd_)
+            splice_PPs(PPPm_, frng=1)
+            splice_PPs(PPPd_, frng=0)
 
             PPP_t += [PPPm_, PPPd_]  # flat version
             if PPPm_:
@@ -544,10 +547,52 @@ def comp_aggloP_root(PP_, rng):
 
     return derPP__
 
+# draft
+#  merge select P pairs or triples in vertical direction
+def splice_PPs(PPP_, frng):
+    
+    for PPP in PPP_:
+        if len(PPP.P__)>2:  # at least 3 rows
+            raise ValueError('a')
+            for __PP_, _PP_, PP_ in zip(PPP.P__, PPP.P__[1:], PPP.P__[2:]):
+                
+                __PP_checked = []
+                _PP_checked = []
+                PP_checked = []
+                
+                while __PP_:
+                    __PP = __PP_.pop(0)
+                    
+                    while _PP_:
+                        if _PP_checked: _PP_ = _PP_checked  # get the checked _PP_ from prior loop to check with new __PP
+                        _PP = _PP_.pop(0)
+                        if (_PP.x0 - 1 < (__PP.x0 + __PP.nderP) and (_PP.x0 + _PP.nderP) + 1 > __PP.x0):  # x overlap between __P and _P                     
+                            
+                            while PP_:                            
+                                if PP_checked: PP_ = PP_checked  # get the checked _PP_ from prior loop to check with new _PP
+                                PP = PP_.pop(0)
+                                if (PP.x0 - 1 < (_PP.x0 + _PP.nderP) and (PP.x0 + PP.nderP) + 1 > _PP.x0):  # x overlap between _P and P
+    
+                                    if frng: __PPL, _PPL, PPL = __PP.rng, _PP.nderP, PP.rng
+                                    else:    __PPL, _PPL, PPL = __PP.nderP, _PP.nderP, PP.nderP 
+    
+                                    # splice eval
+                                    if __PPL > _PPL or PPL > _PPL:  # very initial evaluation
+                                        # splice _PP and PP into  __PP
+                                        for _derP_ in _PP.derP__:  # accumulate _P into __P
+                                            for _derP in _derP_: accum_PP(__PP, _derP)
+                                        for derP_ in P.derP__:  # accumulate P into __P
+                                            for derP in derP_: accum_PP(__PP, derP)                     
+                                    else:
+                                        # repacking back to PP_ if their PPs are not merged
+                                        _PP_checked.insert(0, _PP)   
+                                        PP_checked.insert(0, PP)
+                                    __PP_checked.append(__PP)
+    
+                if __PP_: __PP_[:] = __PP_checked[:]
+                if _PP_: _PP_[:] = _PP_checked[:]
+                if PP_: PP_[:] = PP_checked[:]
 
-def splice_PPs(PPP):
-    # merge select P pairs or triples
-    pass
 
 def comp_dx(P):  # cross-comp of dx s in P.dert_
 

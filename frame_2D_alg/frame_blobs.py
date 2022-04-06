@@ -115,7 +115,7 @@ def frame_blobs_root(image, intra=False, render=False, verbose=False, use_c=Fals
     for blob in blob_: I += blob.I; Dy += blob.Dy; Dx += blob.Dx
     frame = CBlob(I = I, Dy = Dy, Dx = Dx, dert__=dert__, prior_forks=["g"], rsublayers = [blob_])  # asublayers = []: no comp_a yet
 
-    if verbose: print(f"{len(frame.sublayers[0])} blobs formed in {time() - start_time} seconds")
+    if verbose: print(f"{len(frame.rsublayers[0])} blobs formed in {time() - start_time} seconds")
     if render: visualize_blobs(idmap, frame.rsublayers[0])
 
     if intra:  # omit for testing frame_blobs without intra_blob
@@ -286,7 +286,7 @@ if __name__ == "__main__":
     argument_parser.add_argument('-r', '--render', help='render the process', type=int, default=0)
     argument_parser.add_argument('-c', '--clib', help='use C shared library', type=int, default=0)
     argument_parser.add_argument('-n', '--intra', help='run intra_blobs after frame_blobs', type=int, default=1)
-    argument_parser.add_argument('-e', '--extra', help='run frame_recursive after frame_blobs', type=int, default=1)
+    argument_parser.add_argument('-e', '--extra', help='run frame_recursive after frame_blobs', type=int, default=0)
     args = argument_parser.parse_args()
     image = imread(args.image)
     verbose = args.verbose
