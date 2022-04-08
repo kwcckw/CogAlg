@@ -287,8 +287,9 @@ def form_PP_(iderP__, root_rdn):  # form vertically contiguous patterns of patte
                     # derP.rdn = fork rdn + rdn to stronger upconnects, forming overlapping PPs:
                     if fPd:
                         derP.rdn = (derP.mP > derP.dP) + sum([1 for upderP in derP.P.upconnect_ if upderP.dP >= derP.dP])
-                        sign = derP.dP >= ave_dP * derP.rdn
-                        # sign match within each param, between params: count, if match: dP+=dparam?
+                        sign = derP.dP >= ave_dP * derP.rdn  # or that's per PPd,
+                        # Pd is defined by Msign: sum of weighted sign matches per param,
+                        # then sum dparams in Pd across dparam sign?
                     else:
                         derP.rdn = (derP.dP >= derP.mP) + sum([1 for upderP in derP.P.upconnect_ if upderP.mP > derP.mP])
                         sign = derP.mP > ave_mP * derP.rdn
@@ -381,7 +382,7 @@ def accum_PP(PP, derP):  # accumulate params in PP
     PP.Rdn += derP.rdn
     PP.y = max(derP.y, PP.y)  # or pass local y arg instead of derP.y?
 
-    if not PP.derP__: 
+    if not PP.derP__:
         PP.derP__.append([derP])
         PP.P__.append([derP.P])
     else:
@@ -396,7 +397,7 @@ def accum_PP(PP, derP):  # accumulate params in PP
         elif derP.P.y > current_ys[0] and derP.P.y < current_ys[-1] :  # derP.y in between largest and smallest value
             PP.derP__.insert(derP.P.y-current_ys[0], [derP])
             PP.P__.insert(derP.P.y-current_ys[0], [derP.P])
-            
+
     PP.L = len(PP.derP__)  # PP.L is Ly
     derP.PP = PP
 
@@ -519,11 +520,10 @@ def comp_aggloP_root(PP_, rng):
 def splice_PPs(PPP_, frng):  # merge select PP pairs or triples
 
     for PPP in PPP_:
-        if len(PPP.P__)>2:  # at least 3 rows
-
+        if frng and len(PPP.P__)>2:
+            # at least 3 rows for comp cross gap _PP
             for __PP_, _PP_, PP_ in zip(PPP.P__, PPP.P__[1:], PPP.P__[2:]):
                 __PP_tested, _PP_tested, PP_tested = [],[],[]
-
                 while __PP_:
                     __PP = __PP_.pop(0)
                     while _PP_:
@@ -532,44 +532,29 @@ def splice_PPs(PPP_, frng):  # merge select PP pairs or triples
                         while PP_:
                             if PP_tested: PP_ = PP_tested
                             PP = PP_.pop(0)
-                            if frng:
-                            # else: comp_layer(__PP.P_[-1], _PP.P_[1])
-                                  # if match: splice __PP, _PP
-                                max_rng = max(__PP.rng, PP.rng)  # both PPs should be positive
-                                f_splice = max_rng > _PP.L
-                                
-                            else:  # for not frng?
-                                max_rng = 1
-                                f_splice = (__PP.L > _PP.L) or (PP.L > _PP.L) 
-                            if not f_splice:
-                                # PP.L is Ly, splice PP triplet:
-                                
-                                _P_ = __PP.P__[-max_rng]      
-                                # get all P_s across rows
-                                # use [:] to prevent the list referencing PP.P__, since PP.P__ will be packed with new Ps in accum_PP
-                                P_s = [__P_[:] for __P_ in __PP.P__[-max_rng-1:]] + \
-                                     [ _P_[:] for _P_ in _PP.P__] + \
-                                     [  P_[:] for P_ in PP.P__[:max_rng]]
-
-                                # compute and accumulate add_derP
-                                for P_ in P_s:
-                                    # multiple overlaps per _P
-                                    for _P in _P_[:]:
-                                        for P in P_[:]:
+                            max_rng = max(__PP.rng, PP.rng)  # both PPs should be positive
+                            if max_rng > _PP.L:
+                                _P_ = __PP.P__[-max_rng] + _PP.P__ + PP.P__[:max_rng-PP.rng]  # all connected P_s in higher row
+                                # P__ = __PP.P__[-max_rng - 1:] + _PP.P__ + PP.P__[:max_rng]
+                                # use [:] to prevent the list referencing PP.P__, which is packed with new Ps in accum_PP
+                                P__ = [__P_[:] for __P_ in __PP.P__[-max_rng - 1:]] + \
+                                      [_P_[:] for _P_ in _PP.P__] + \
+                                      [P_[:] for P_ in PP.P__[:max_rng]]
+                                # add derPs:
+                                for P_ in P__:  # lower row
+                                    for _P in _P_[:]:  # higher row
+                                        for P in P_[:]:  # several lower Ps per _P
                                             if isinstance(P, CPP): add_derP = comp_layer(_P, P)
-                                            else: add_derP = comp_P(_P, P)
-                                            accum_PP(__PP, add_derP)  # add_derP is added to __PP during the accumulation process
-                                    _P = P_
-                                    
-                                # tentative, only for strictly vertical derP_s:
-                                # accumulate derP into _PP, _derP is replaced by add_derP?
-                                for derP_ in PP.derP__:  # accumulate P into __P
+                                            else:                  add_derP = comp_P(_P, P)
+                                            accum_PP(__PP, add_derP)
+                                    _P_ = P_
+                                for derP_ in PP.derP__[max_rng:]:  # accumulate old derPs
                                     for derP in derP_: accum_PP(__PP, derP)
                             else:
                                 # repacking back to PP_ if their PPs are not merged
                                 _PP_tested.insert(0, _PP)
                                 PP_tested.insert(0, PP)
-                            __PP_tested.append(__PP)
+                        __PP_tested.append(__PP)
 
                 # should be adding tested PP back to the array
                 if __PP_tested: __PP_[:] = __PP_tested[:]
