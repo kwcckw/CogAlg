@@ -520,7 +520,49 @@ def comp_aggloP_root(PP_, rng):
 def splice_PPs(PPP_, frng):  # merge select PP pairs or triples
 
     for PPP in PPP_:
-        if frng and len(PPP.P__)>2:
+        if len(PPP.P__)>2:  # at least 3 rows for comp cross gap _PP
+            if frng:  # rng fork
+                for __PP_, _PP_, PP_ in zip(PPP.P__, PPP.P__[1:], PPP.P__[2:]):                 
+                    splice_vals = [ max(__PP.rng, PP.rng)>_PP.L for __PP, _PP, PP in zip(__PP_, _PP_, PP_)]
+                    splice_triplets = [ (__PP, _PP, PP) for __PP, _PP, PP in zip(__PP_, _PP_, PP_)]
+                    _splice_val = False
+                    __PP_spliced, _PP_spliced, PP_spliced  = [], [], []
+                    for i, (splice_val, (__PP, _PP, PP)) in enumerate(zip(reversed(splice_vals), reversed(splice_triplets))):
+                        if splice_val and not _splice_val:  # need to check if prior triplets is merged or not , if they are merged, there should be having only 2 PPs in current loop and we need skip into next loop
+                            max_rng = max(__PP.rng, PP.rng)
+                            
+                            _P_ = __PP.P__[-max_rng] + _PP.P__ + PP.P__[:max_rng-PP.rng]  # all connected P_s in higher row
+                            # P__ = __PP.P__[-max_rng - 1:] + _PP.P__ + PP.P__[:max_rng]
+                            # use [:] to prevent the list referencing PP.P__, which is packed with new Ps in accum_PP
+                            P__ = [__P_[:] for __P_ in __PP.P__[-max_rng - 1:]] + \
+                                  [_P_[:] for _P_ in _PP.P__] + \
+                                  [P_[:] for P_ in PP.P__[:max_rng]]
+                            # add derPs:
+                            for P_ in P__:  # lower row
+                                for _P in _P_[:]:  # higher row
+                                    for P in P_[:]:  # several lower Ps per _P
+                                        if isinstance(P, CPP): add_derP = comp_layer(_P, P)
+                                        else:                  add_derP = comp_P(_P, P)
+                                        accum_PP(__PP, add_derP)
+                                _P_ = P_
+                            for derP_ in PP.derP__[max_rng:]:  # accumulate old derPs
+                                for derP in derP_: accum_PP(__PP, derP)
+                            if i == len(splice_vals)-1:  # last triplets, remove the merged _PP and PP
+                                __PP_spliced += [__PP]
+                        else:
+                            if i == len(splice_vals)-1:  # last triplets, add all not merging __PP, _PP and PP
+                                __PP_spliced += [__PP]
+                                _PP_spliced += [_PP]
+                            PP_spliced += [PP]  # __PP and _PP may be checked again for splicing in the next loop
+                    # update PPP.P__ with spliced PPs
+                    __PP_[:] = __PP_spliced[:]
+                    _PP_[:] = _PP_spliced[:]
+                    PP_[:] = PP_spliced[:]
+                      
+            else:  # non rng fork
+                pass      
+                
+            '''
             # at least 3 rows for comp cross gap _PP
             for __PP_, _PP_, PP_ in zip(PPP.P__, PPP.P__[1:], PPP.P__[2:]):
                 __PP_tested, _PP_tested, PP_tested = [],[],[]
@@ -560,7 +602,7 @@ def splice_PPs(PPP_, frng):  # merge select PP pairs or triples
                 if __PP_tested: __PP_[:] = __PP_tested[:]
                 if _PP_tested: _PP_[:] = _PP_tested[:]
                 if PP_tested: PP_[:] = PP_tested[:]
-
+                '''
 
 def comp_dx(P):  # cross-comp of dx s in P.dert_
 
