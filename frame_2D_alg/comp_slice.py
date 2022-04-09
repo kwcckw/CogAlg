@@ -124,11 +124,11 @@ def comp_slice_root(blob, verbose=False):  # always angle blob, composite dert c
         P__ = slice_blob(dir_blob, verbose=False)  # cluster dir_blob.dert__ into 2D array of blob slices
         # comp_dx_blob(P__), comp_dx?
 
-        derP__ = comp_P_root(P__, rng=1)  # scan_P_, comp_P, or comp_layers if called from sub_recursion
+        derP__ = comp_P_root(P__, rng=1, frng=0)  # scan_P_, comp_P, or comp_layers if called from sub_recursion
         (PPm_, PPd_) = form_PP_(derP__, root_rdn=2)  # each PP is a stack of (P, derP)s from comp_P, redundant to root blob
 
-        sub_recursion([], PPm_, rng=2)  # rng+ comp_P in PPms, -> param_layer, form sub_PPs
-        sub_recursion([], PPd_, rng=1)  # der+ comp_P in PPds, -> param_layer, form sub_PPs
+        sub_recursion([], PPm_, irng=2, frng=1)  # rng+ comp_P in PPms, -> param_layer, form sub_PPs
+        sub_recursion([], PPd_, irng=1, frng=0)  # der+ comp_P in PPds, -> param_layer, form sub_PPs
 
         dir_blob.levels = [[PPm_, PPd_]]  # 1st composition level, each PP_ may be multi-layer from sub_recursion
         agglo_recursion(dir_blob)  # higher-composition comp_PP in blob -> derPPs, form PPP., appends dir_blob.levels
@@ -176,7 +176,7 @@ def slice_blob(blob, verbose=False):  # forms horizontal blob slices: Ps, ~1D Ps
     blob.P__ = P__
     return P__
 
-def comp_P_root(P__, rng):  # vertically compares y-adjacent and x-overlapping Ps: blob slices, forming 2D derP__
+def comp_P_root(P__, rng, frng):  # vertically compares y-adjacent and x-overlapping Ps: blob slices, forming 2D derP__
 
     # if der+: P__ is last-call derP__, derP__=[], form new derP__
     # if rng+: P__ is last-call P__, accumulate derP__ with new_derP__
@@ -191,11 +191,11 @@ def comp_P_root(P__, rng):  # vertically compares y-adjacent and x-overlapping P
         if i+rng < len(P__):  # rng=1 unless rng+ fork
             P_ = P__[i+rng]   # lower compared row
             for P in P_:
-                if rng > 1: cP = P.P  # rng+, compared P is lower derivation
-                else:       cP = P  # der+, compared P is top derivation
+                if frng: cP = P.P  # rng+, compared P is lower derivation
+                else:    cP = P  # der+, compared P is top derivation
                 for _P in _P_:  # upper compared row
-                    if rng > 1: _cP = _P.P
-                    else:       _cP = _P
+                    if frng: _cP = _P.P
+                    else:    _cP = _P
                     # test for x overlap between P and _P in 8 directions, all Ps are from +derts, form sub_Pds for comp_dx?
                     if (cP.x0 - 1 < (_cP.x0 + _cP.L) and (cP.x0 + cP.L) + 1 > _cP.x0):
 
@@ -204,7 +204,7 @@ def comp_P_root(P__, rng):  # vertically compares y-adjacent and x-overlapping P
                         else:
                             derP = comp_P(_cP, cP)  # form higher vertical derivatives of derP or PP params
                         derP.y=P.y
-                        if rng > 1:  # accumulate derP through rng+ recursion:
+                        if frng:  # accumulate derP through rng+ recursion:
                             accum_layer(derP.params, P.params)
                         if not P.downconnect_:  # initial row per root PP, then follow upconnect_
                             derP_.append(derP)
@@ -422,25 +422,26 @@ def accum_layer(top_layer, der_layer):
             top_layer[i] += param
 
 
-def sub_recursion(root_sublayers, PP_, rng):  # compares param_layers of derPs in generic PP, form or accum top derivatives
+def sub_recursion(root_sublayers, PP_, irng, frng):  # compares param_layers of derPs in generic PP, form or accum top derivatives
 
     comb_sublayers = []
     for PP in PP_:  # PP is generic higher-composition pattern, P is generic lower-composition pattern
                     # both P and PP may be recursively formed higher-derivation derP and derPP, etc.
 
-        if rng > 1: PP_V = PP.mP - ave_mPP * PP.rdn; min_L = rng * 2  # V: value of sub_recursion per PP
-        else:       PP_V = PP.dP - ave_dPP * PP.rdn; min_L = 3  # need 3 Ps to compute layer2, etc.
+        if frng: PP_V = PP.mP - ave_mPP * PP.rdn; min_L = irng * 2  # V: value of sub_recursion per PP
+        else:    PP_V = PP.dP - ave_dPP * PP.rdn; min_L = 3  # need 3 Ps to compute layer2, etc.
         if PP_V > 0 and PP.nderP > min_L:
-
+            
             PP.rdn += 1  # rdn to prior derivation layers
-            sub_derP__ = comp_P_root(PP.derP__, rng)  # scan_P_, comp_P layer0;  splice PPs across dir_blobs?
+            rng = irng+1
+            sub_derP__ = comp_P_root(PP.derP__, rng, frng)  # scan_P_, comp_P layer0;  splice PPs across dir_blobs?
             sub_PPm_, sub_PPd_ = form_PP_(sub_derP__, PP.rdn)  # each PP is a stack of (P, derP)s from comp_P
 
             PP.sublayers = [(sub_PPm_, sub_PPd_)]
             if sub_PPm_:   # or rng+n to reduce clustering costs?
-                sub_recursion(PP.sublayers, sub_PPm_, rng+1)  # rng+ comp_P in PPms, form param_layer, sub_PPs
+                sub_recursion(PP.sublayers, sub_PPm_, rng, frng=1)  # rng+ comp_P in PPms, form param_layer, sub_PPs
             if sub_PPd_:
-                sub_recursion(PP.sublayers, sub_PPd_, rng=1)  # der+ comp_P in PPds, form param_layer, sub_PPs
+                sub_recursion(PP.sublayers, sub_PPd_, rng, frng=0)  # der+ comp_P in PPds, form param_layer, sub_PPs
 
             if PP.sublayers:  # pack added sublayers:
                 new_comb_sublayers = []
@@ -458,7 +459,7 @@ def agglo_recursion(blob):  # compositional recursion per blob.Plevel. P, PP, PP
     PP_t = blob.levels[-1]  # input-level composition Ps, initially PPs
     PPP_t = []  # next-level composition Ps, initially PPPs  # for fiPd, PP_ in enumerate(PP_t): fiPd = fiPd % 2  # dir_blob.M += PP.M += derP.m
 
-    next = 0
+    next_comp = 0
     for i, PP_ in enumerate(PP_t):   # fiPd = fiPd % 2
         fiPd = i % 2
         if fiPd: ave_PP = ave_dPP
@@ -466,7 +467,8 @@ def agglo_recursion(blob):  # compositional recursion per blob.Plevel. P, PP, PP
 
         M = ave-abs(blob.G)
         if M > ave_PP * blob.rdn and len(PP_)>1:  # >=2 comparands
-            next += 1
+            # next is built-in function
+            next_comp += 1
             derPP_ = comp_aggloP_root(PP_, rng=1)  # PP is generic for lower-level composition
             PPPm_, PPPd_ = form_PP_(derPP_, root_rdn=2)  # PPP is generic next-level composition
 
@@ -474,14 +476,14 @@ def agglo_recursion(blob):  # compositional recursion per blob.Plevel. P, PP, PP
             splice_PPs(PPPd_, frng=0)
             PPP_t += [PPPm_, PPPd_]  # flat version
 
-            if PPPm_: sub_recursion([], PPPm_, rng=2)  # rng+
-            if PPPd_: sub_recursion([], PPPd_, rng=1)  # der+
+            if PPPm_: sub_recursion([], PPPm_, irng=2, frng=1)  # rng+
+            if PPPd_: sub_recursion([], PPPd_, irng=1, frng=0)  # der+
         else:
             PPP_t += [[], []]
 
     blob.levels.append(PPP_t)  # levels of dir_blob are Plevels
 
-    if next/len(PP_t)>0.5:  # temporary, next: n of extended PPs, should be len PP_
+    if next_comp/len(PP_t)>0.5:  # temporary, next: n of extended PPs, should be len PP_
         agglo_recursion(blob)
 
 
@@ -519,96 +521,77 @@ def splice_PPs(PPP_, frng):  # merge select PP pairs or triples
 
     for PPP in PPP_:
         if frng:  # rng fork
-            if len(PPP.P__) > 2:  # at least 3 rows for comp across gap _PP, or any
-                # if PPP is PP:
-                for __PP_, _PP_, PP_ in zip(PPP.P__, PPP.P__[1:], PPP.P__[2:]):
+            for __PP_ in PPP.P__:  # 0 index in P__ should be top row, so we sesarch their downconnects instead
+                for i, __PP in enumerate(__PP_):
+                    merged_downconnect_ = []
+                    for j, _PP in enumerate(__PP.downconnect_):
+                        fbreak = 0
+                        for k, PP in enumerate(_PP.downconnect_):
+                            
+                            if __PP is not _PP and __PP is not PP and _PP is not PP:
+                            
+                                max_rng = max(__PP.rng, PP.rng)
+                                if max_rng > _PP.L:
+                                    merged_downconnect_ += [_PP]
+                                    
+                                    _P_ = __PP.P__[-max_rng] + _PP.P__ + PP.P__[:max_rng-PP.rng]  # all connected P_s in higher row
+                                    # P__ = __PP.P__[-max_rng - 1:] + _PP.P__ + PP.P__[:max_rng]
+                                    # use [:] to prevent the list referencing PP.P__, which is packed with new Ps in accum_PP
+                                    P__ = [__P_[:] for __P_ in __PP.P__[-max_rng - 1:]] + \
+                                          [_P_[:] for _P_ in _PP.P__] + \
+                                          [P_[:] for P_ in PP.P__[:max_rng]]
+                                    # add derPs:
+                                    for P_ in P__:  # lower row
+                                        for _P in _P_[:]:  # higher row
+                                            for P in P_[:]:  # several lower Ps per _P
+                                                if isinstance(P, CPP): add_derP = comp_layer(_P, P)
+                                                else:                  add_derP = comp_P(_P, P)
+                                                accum_PP(__PP, add_derP)
+                                        _P_ = P_
+                                    for derP_ in PP.derP__[max_rng:]:  # accumulate old derPs
+                                        for derP in derP_: accum_PP(__PP, derP)
+         
+                                    
+                                    # pack below as function and call twice?
+                                    # update upconnect and downconnect reference for _PP
+                                    for up_PP in _PP.upconnect_:
+                                        if up_PP not in __PP.upconnect_:  # PP may have multiple downconnects
+                                            __PP.upconnect_.append(up_PP)
+                                    for i, down_PP in enumerate(_PP.downconnect_):
+                                        if _PP in down_PP.upconnect_:
+                                            down_PP.upconnect_[down_PP.upconnect_.index(_PP)] = __PP  # update lower PP's upconnect from PP to _PP
+                                            if down_PP not in _PP.downconnect_:
+                                                __PP.downconnect_ += [down_PP]
+                                    
+                                    # update upconnect and downconnect reference for PP
+                                    for up_PP in PP.upconnect_:
+                                        if up_PP not in __PP.upconnect_:  # PP may have multiple downconnects
+                                            __PP.upconnect_.append(up_PP)
+                                    for i, down_PP in enumerate(PP.downconnect_):
+                                        if PP in down_PP.upconnect_:
+                                            down_PP.upconnect_[down_PP.upconnect_.index(PP)] = __PP  # update lower PP's upconnect from PP to _PP
+                                            if down_PP not in _PP.downconnect_:
+                                                __PP.downconnect_ += [down_PP]
+                                    
+                                    fbreak = 1
+                                    break  # break from PP_ loop     
+                        if fbreak: break   # break from _PP loop
+                    # remove the merged downconnect
+                    for merged_downconnect in merged_downconnect_:
+                        __PP.downconnect_.remove(merged_downconnect)
+                    
+                
+        else:  # der+ fork
+            pass
 
-                    rng_gaps = [max(__PP.rng, PP.rng) > _PP.L for __PP, _PP, PP in zip(__PP_, _PP_, PP_)]
-                    triplets = [(__PP, _PP, PP) for __PP, _PP, PP in zip(__PP_, _PP_, PP_)]
-                    _splice_val = False
-                    __PP_spliced, _PP_spliced, PP_spliced  = [], [], []
-                    for i, (splice_val, (__PP, _PP, PP)) in enumerate(zip(reversed(rng_gaps), reversed(triplets))):
-                        if splice_val and not _splice_val:
-                            # if prior triplet is merged, there should be having only 2 PPs in current loop and we need skip into next loop
-                            max_rng = max(__PP.rng, PP.rng)
-
-                            _P_ = __PP.P__[-max_rng] + _PP.P__ + PP.P__[:max_rng-PP.rng]  # all connected P_s in higher row
-                            # P__ = __PP.P__[-max_rng - 1:] + _PP.P__ + PP.P__[:max_rng]
-                            # use [:] to prevent the list referencing PP.P__, which is packed with new Ps in accum_PP
-                            P__ = [__P_[:] for __P_ in __PP.P__[-max_rng - 1:]] + \
-                                  [_P_[:] for _P_ in _PP.P__] + \
-                                  [P_[:] for P_ in PP.P__[:max_rng]]
-                            # add derPs:
-                            for P_ in P__:  # lower row
-                                for _P in _P_[:]:  # higher row
-                                    for P in P_[:]:  # several lower Ps per _P
-                                        if isinstance(P, CPP): add_derP = comp_layer(_P, P)
-                                        else:                  add_derP = comp_P(_P, P)
-                                        accum_PP(__PP, add_derP)
-                                _P_ = P_
-                            for derP_ in PP.derP__[max_rng:]:  # accumulate old derPs
-                                for derP in derP_: accum_PP(__PP, derP)
-                            if i == len(rng_gaps)-1:  # last triplets, remove the merged _PP and PP
-                                __PP_spliced += [__PP]
-                        else:
-                            if i == len(rng_gaps)-1:  # last triplets, add all not merging __PP, _PP and PP
-                                __PP_spliced += [__PP]
-                                _PP_spliced += [_PP]
-                            PP_spliced += [PP]  # __PP and _PP may be checked again for splicing in the next loop
-                    # update PPP.P__ with spliced PPs
-                    __PP_[:] = __PP_spliced[:]
-                    _PP_[:] = _PP_spliced[:]
-                    PP_[:] = PP_spliced[:]
-
-            else:  # der+ fork
-                pass
-
+            '''
             if isinstance(PPP.P__[0], CPP):  # draft:
                 for P_ in PPP.P__:  # lower row
                     for P in P_:
                         for _P in P.upconnect_:  # higher row
                             pass
             '''
-            # at least 3 rows for comp cross gap _PP
-            for __PP_, _PP_, PP_ in zip(PPP.P__, PPP.P__[1:], PPP.P__[2:]):
-                __PP_tested, _PP_tested, PP_tested = [],[],[]
-                while __PP_:
-                    __PP = __PP_.pop(0)
-                    while _PP_:
-                        if _PP_tested: _PP_ = _PP_tested  # tested in prior loop, test with new __PP
-                        _PP = _PP_.pop(0)
-                        while PP_:
-                            if PP_tested: PP_ = PP_tested
-                            PP = PP_.pop(0)
-                            max_rng = max(__PP.rng, PP.rng)  # both PPs should be positive
-                            if max_rng > _PP.L:
-                                _P_ = __PP.P__[-max_rng] + _PP.P__ + PP.P__[:max_rng-PP.rng]  # all connected P_s in higher row
-                                # P__ = __PP.P__[-max_rng - 1:] + _PP.P__ + PP.P__[:max_rng]
-                                # use [:] to prevent the list referencing PP.P__, which is packed with new Ps in accum_PP
-                                P__ = [__P_[:] for __P_ in __PP.P__[-max_rng - 1:]] + \
-                                      [_P_[:] for _P_ in _PP.P__] + \
-                                      [P_[:] for P_ in PP.P__[:max_rng]]
-                                # add derPs:
-                                for P_ in P__:  # lower row
-                                    for _P in _P_[:]:  # higher row
-                                        for P in P_[:]:  # several lower Ps per _P
-                                            if isinstance(P, CPP): add_derP = comp_layer(_P, P)
-                                            else:                  add_derP = comp_P(_P, P)
-                                            accum_PP(__PP, add_derP)
-                                    _P_ = P_
-                                for derP_ in PP.derP__[max_rng:]:  # accumulate old derPs
-                                    for derP in derP_: accum_PP(__PP, derP)
-                            else:
-                                # repacking back to PP_ if their PPs are not merged
-                                _PP_tested.insert(0, _PP)
-                                PP_tested.insert(0, PP)
-                        __PP_tested.append(__PP)
-                # should be adding tested PP back to the array
-                if __PP_tested: __PP_[:] = __PP_tested[:]
-                if _PP_tested: _PP_[:] = _PP_tested[:]
-                if PP_tested: PP_[:] = PP_tested[:]
-                '''
-
+ 
 def comp_dx(P):  # cross-comp of dx s in P.dert_
 
     Ddx = 0
