@@ -300,6 +300,8 @@ def form_PP_(iderP__, root_rdn):  # form vertically contiguous patterns of patte
 
         for PP in PP_:  # all PPs are terminated
             PP.rdn += root_rdn + PP.Rdn / PP.nderP  # PP rdn is recursion rdn + average fork rdn + upconnects rdn
+            if fPd: PP.rdn += PP.mP > PP.dP
+            else:   PP.rdn += PP.dP > PP.mP
         PP_t.append(PP_)
 
     return PP_t  # PPm_, PPd_
@@ -523,14 +525,18 @@ def splice_PPs(PPP_, frng):  # splice select PP pairs if der+ or triplets if rng
             for __PP_ in PPP.P__:  # top-down
                 for i, __PP in enumerate(__PP_):
                     spliced_downconnect_ = []
-                    for j, _PP in enumerate(__PP.downconnect_):
+                    for j, _downconnect in enumerate(__PP.downconnect_):
+                        if isinstance(_downconnect, CderP): _PP = _downconnect.PP  # get PP reference if downconnect is derP
+                        else:                               _PP = _downconnect
                         fbreak = 0
-                        for k, PP in enumerate(__PP.downconnect_):
+                        for k, downconnect in enumerate(_PP.downconnect_):
+                            if isinstance(downconnect, CderP): PP = downconnect.PP
+                            else:                              PP = downconnect 
                             if __PP is not _PP and __PP is not PP and _PP is not PP:
                                 max_rng = max(__PP.rng, PP.rng)
                                 if max_rng > _PP.L:
-                                    spliced_downconnect_ += [_PP]
-                                    _P_ = __PP.P__[-max_rng:] + PP.P__[:max_rng]  # all higher row P_s that form add_derPs
+                                    spliced_downconnect_ += [_downconnect]
+                                    _P_ = [P for P_ in (__PP.P__[-max_rng:] + PP.P__[:max_rng]) for P in P_]  # all higher row Ps that form add_derPs
                                     # [:] to not reference PP.P__, it's packed in accum_PP
                                     P__ = [__P_[:] for __P_ in __PP.P__[-max_rng-1:]] + [P_[:] for P_ in PP.P__[:max_rng]]
                                     # comp Ps x gap _PP:
@@ -542,34 +548,44 @@ def splice_PPs(PPP_, frng):  # splice select PP pairs if der+ or triplets if rng
                                                 accum_PP(__PP, add_derP)
                                                 # use form_PP_: we may be adding multiple PPs here, one per x-overlap?
                                         _P_ = P_
-                                    accum_PP(__PP, PP)  # splice PPs, PP.P__ is not changed
-
+                                        
+                                    # merge PP into __PP  
+                                    for derP_ in PP.derP__:
+                                        for derP in derP_:
+                                            _derP__ = [_pri_derP for _pri_derP_ in __PP.derP__ for _pri_derP in _pri_derP_]  # accum_PP may append new derP
+                                            if derP not in _derP__:
+                                                accum_PP(__PP, derP)  # accumulate params
+                                                
                                     # update upconnect and downconnect reference for _PP, pack into function?
                                     for up_PP in _PP.upconnect_:
                                         if up_PP not in __PP.upconnect_:  # PP may have multiple downconnects
                                             __PP.upconnect_.append(up_PP)
+                                            __PP.rdn += up_PP.dP > __PP.mP
                                     for i, down_PP in enumerate(_PP.downconnect_):
                                         if _PP in down_PP.upconnect_:
                                             down_PP.upconnect_[down_PP.upconnect_.index(_PP)] = __PP  # update lower PP's upconnect from PP to _PP
                                             if down_PP not in _PP.downconnect_:
                                                 __PP.downconnect_ += [down_PP]
+                                                __PP.rdn += down_PP.dP > __PP.mP
 
                                     # update upconnect and downconnect reference for PP
                                     for up_PP in PP.upconnect_:
                                         if up_PP not in __PP.upconnect_:  # PP may have multiple downconnects
                                             __PP.upconnect_.append(up_PP)
+                                            __PP.rdn += up_PP.dP > __PP.mP
                                     for i, down_PP in enumerate(PP.downconnect_):
                                         if PP in down_PP.upconnect_:
                                             down_PP.upconnect_[down_PP.upconnect_.index(PP)] = __PP  # update lower PP's upconnect from PP to _PP
                                             if down_PP not in _PP.downconnect_:
                                                 __PP.downconnect_ += [down_PP]
+                                                __PP.rdn += down_PP.dP > __PP.mP
 
                                     fbreak = 1
                                     break  # break PP_ loop
                         if fbreak: break   # break  _PP loop
 
-                    for derP in spliced_downconnect_:
-                        __PP.downconnect_.remove(derP)
+                    for downconnect in spliced_downconnect_:  # PP__.downconnect could be PP or derP
+                        __PP.downconnect_.remove(downconnect)
 
         else:  # der+ fork
             pass
