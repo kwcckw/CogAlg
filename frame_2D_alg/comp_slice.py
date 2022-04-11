@@ -301,15 +301,29 @@ def form_PP_(iderP__, root_rdn):  # form vertically contiguous patterns of patte
 
         for PP in PP_:  # all PPs are terminated
             # add compare connected segments -> segPs, or call agglo_recursion?
+            comp_seg(PP)
             PP.rdn += root_rdn + PP.Rdn / PP.nderP  # PP rdn is recursion rdn + average (forks + upconnects) rdn
         PP_t.append(PP_)
 
     return PP_t  # PPm_, PPd_
 
 
+# tentative
+def comp_seg(PP):
+    # cross comparing all segments
+    derseg_ = []
+    segments = [PP] + PP.segments
+    for i, _segment in enumerate(segments):
+        for segment in segments[i+1:]:
+            derseg = comp_layer(_segment, segment) 
+            derseg_.append(derseg)
+
+    # form_segP_(derseg_)
+
+
 def upconnect_2_PP_(iderP, PP_, derP__, fPd):  # compare lower-layer iderP sign to upconnects sign, form same-contiguous-sign PPs
 
-    matching_upconnect_ = []
+    matching_upconnect_ = []  # always 1 element now
     for derP in iderP._P.upconnect_:  # get lower-der upconnects?
         iderP__ = [pri_derP for derP_ in iderP.PP.derP__ for pri_derP in derP_]
 
@@ -321,7 +335,7 @@ def upconnect_2_PP_(iderP, PP_, derP__, fPd):  # compare lower-layer iderP sign 
                 derP.rdn = (derP.dP >= derP.mP) #+ sum([1 for upderP in derP.P.upconnect_ if upderP.mP > derP.mP])
                 sign = derP.mP > ave_mP * derP.rdn
 
-            if iderP.PP.sign == sign:  # upconnect is same-sign, or if match only, no neg PPs?
+            if iderP.PP.sign == sign and not matching_upconnect_:  # upconnect is same-sign, or if match only, no neg PPs?
                 if isinstance(derP.PP, CPP):
                     if (derP.PP is not iderP.PP):  # upconnect has PP, merge it
                         merge_PP(iderP.PP, derP.PP, PP_, derP__)
@@ -329,13 +343,15 @@ def upconnect_2_PP_(iderP, PP_, derP__, fPd):  # compare lower-layer iderP sign 
                     accum_PP(iderP.PP, derP)  # accumulate derP in current PP
                 matching_upconnect_.append(derP)
             else:
-                # sign changed
+                # sign changed or more than 1 upconnect
                 if not isinstance(derP.PP, CPP):
                     PP = CPP(sign=sign, x0=derP.x0)
                     PP_.append(PP)
                     accum_PP(PP, derP)
                     derP.P.downconnect_ = []
-
+                
+                iderP.PP.segments += [derP.PP]  # add PP as segment
+                derP.PP.segments += [iderP.PP]  # add bilaterally
                 iderP.PP.upconnect_ += [derP.PP]  # for comp_PP_root, or comp_Pn_root in agglo_recursion
                 derP.PP.downconnect_ += [iderP.PP]
 
