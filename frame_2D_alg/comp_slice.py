@@ -125,19 +125,21 @@ def comp_slice_root(blob, verbose=False):  # always angle blob, composite dert c
 
         P__ = slice_blob(dir_blob, verbose=False)  # cluster dir_blob.dert__ into 2D array of blob slices
         # comp_dx_blob(P__), comp_dx?
-
         derP__ = comp_P_root(P__, rng=1, frng=0)  # scan_P_, comp_P, or comp_layers if called from sub_recursion
-        PP_t = form_PP_root(derP__, root_rdn=2, fseg=1)  # forms segs and then PP, segment is a stack of (P,derP)s
 
-        splice_PPs(PP_t[0], frng=1)  # splicing segs, seg__ is 2D: cross-sign (same-sign), converted to PP_ and PP respectively
-        splice_PPs(PP_t[1], frng=0)
-        sub_recursion([], PP_t[0], frng=1)  # rng+ comp_P in PPms, -> param_layer, form sub_PPs
-        sub_recursion([], PP_t[1], frng=0)  # der+ comp_P in PPds, -> param_layer, form sub_PPs
+        segm__,segd__ = form_seg_root(derP__, root_rdn=2)  # 2D seg__s, each segment is a stack of (P,derP)s
+        PPm_ = form_PP_root(segm__, root_rdn=2, fPd=0)  # forms PPs: connected segments
+        PPd_ = form_PP_root(segd__, root_rdn=2, fPd=1)
 
-        for PP_ in PP_t:  # 1st agglomerative recursion is per PP, appending PP.seg_levels, not blob.levels:
+        splice_PPs(PPm_, frng=1)  # splicing segs, seg__ is 2D: cross-sign (same-sign), converted to PP_ and PP respectively
+        splice_PPs(PPd_, frng=0)
+        sub_recursion([], PPm_, frng=1)  # rng+ comp_P in PPms, -> param_layer, form sub_PPs
+        sub_recursion([], PPd_, frng=0)  # der+ comp_P in PPds, -> param_layer, form sub_PPs
+
+        for PP_ in (PPm_, PPd_):  # 1st agglomerative recursion is per PP, appending PP.seg_levels, not blob.levels:
             for PP in PP_:
-                agg_recursion(PP, fseg=1)  # inside PP: higher-composition comp_seg -> segPs... per seg__[n], forming PP.seg_levels
-        dir_blob.levels = [PP_t]
+                agg_recursion(PP, fseg=1)  # higher-composition comp_seg -> segPs.. per seg__[n], in PP.seg_levels
+        dir_blob.levels = [(PPm_, PPd_)]
         agg_recursion(dir_blob, fseg=0)  # 2nd call per dir_blob.PP_s formed in 1st call, forms PPP..s and dir_blob.levels
 
     splice_dir_blob_(blob.dir_blobs)
@@ -282,35 +284,41 @@ def comp_P(_P, P):  # forms vertical derivatives of params per P in _P.upconnect
     derP = CderP(x0=x0, L=L, y=_P.y, mP=mP, dP=dP, params=params, P=P, _P=_P)
     return derP
 
-# draft
+# drafts below:
+
+def form_seg_root(derP__, root_rdn):
+    pass
+
+# old combined version, change to fseg=0 only:
+
 def form_PP_root(input__, root_rdn, fseg):  # input__: if fseg: form segs from derP__, else: form PPs from segs
 
     PP_t = []
     for fPd in 0, 1:
         cluster_ = []  # PP_segs_ if fseg, else PP_
         inp__ = deepcopy(input__)  # derP__ if fseg, else segs_
+        # bottom-up:
+        for inp_ in inp__:  # row of derPs or PP_segs
+            for inp in inp_:  # derP if fseg, else seg
+                if fseg:  # top derP._P.upconnect_:
+                    if len(inp._P.upconnect_)>1: upconnect_ = inp._P.upconnect_.copy()
+                    # or len doesn't matter?
+                else:  # first row of PP upconnect_:
+                    upconnect_ = [upconnect for upconnect in inp._P.upconnect_.copy() if upconnect not in upconnect_]
 
-        for inp_ in inp__:  # scan bottom-up
-            # seg_derPs | PP_segs
-            for inp in inp_:  # derP if fseg, else seg,
-                if not isinstance(inp.root, CPP):  # no derP.segment or PP.PPP yet
-                    # i think we need reset it here? Else they will be reused by multiple inps
-                    cluster, upconnect_ = [],[]
+                if upconnect_:  # test and cluster recursively higher upconnects:
+                    form_PP_(cluster_, [inp], upconnect_, inp__, fPd, fseg)  # form seg over P upconnects or PP over seg upconnects
+                else:
+                    cluster_ += [sum2PP(cluster_, [inp], inp__, fseg, fmergePP=1)]  # immediate termination
+                '''
+                this should be in form_PP_ only?
+                if isinstance(inp.root, CPP):  # derP.segment or PP.PPP assigned
+                    merge_PP(inp.root, cluster)
                     # rng+|der+ rdn:
                     if fPd: inp.rdn += (inp.mP > inp.dP)  # PPd / vD sign, distinct from directly defined match:
                     else:   inp.rdn += (inp.dP >= inp.mP)
                     # if branch rdn: inp.rdn += sum([1 for upderP in derP.P.upconnect_ if upderP.dP >= derP.dP])
-
-                    cluster += [inp]  # sum2PP(PP_segs) at PP_segs termination
-                    if fseg:
-                        if len(inp._P.upconnect_)>1: upconnect_ = inp._P.upconnect_.copy()
-                    else:
-                        upconnect_ += cluster[-1]._P.upconnect_.copy()  # seg.upconnect, exclude redundants?
-                    if upconnect_:
-                        form_PP_(cluster_, cluster, upconnect_, inp__, fPd, fseg)  # form seg over P upconnects or PP over seg upconnects
-                    else:
-                        cluster_ += [sum2PP(cluster_, cluster, inp__, fseg, fmergePP=1)]  # immediate termination: still form_PP, should not be special case?
-
+                '''
         PP_t.append(cluster_)
 
     return PP_t  # PPm_, PPd_
@@ -325,23 +333,23 @@ def form_PP_(cluster_, cluster, upconnect_, input__, fPd, fseg):  # form same-si
         else:   inp.rdn = (inp.dP >= inp.mP); sign = inp.mP > ave_mP * inp.rdn
         if sign == cluster[0].sign:
             matching_upconnect_ += [inp]
-    
-        if fseg: fterm = len(matching_upconnect_) != 1  # terminate segments
-        else:    fterm = len(matching_upconnect_) == 0  # terminate PPs
-        if fterm:
-            cluster_ += [sum2PP(cluster_, cluster, input__, fseg, fmergePP=1)]  # form PP with segs or seg with derPs
-            if fseg:
-                cluster[-1].upconnect_ = matching_upconnect_  # last derP
-            else:
-                inp.upconnect_ = matching_upconnect_
-            # reset:
-            matching_upconnect_ = []; cluster = [inp]
+
+    if fseg: fterm = len(matching_upconnect_) != 1  # terminate segments
+    else:    fterm = len(matching_upconnect_) == 0  # terminate PPs
+    if fterm:
+        cluster_ += [sum2PP(cluster_, cluster, input__, fseg, fmergePP=1)]  # form PP with segs or seg with derPs
+        if fseg:
+            cluster[-1].upconnect_ = matching_upconnect_  # last derP
         else:
-            cluster += [inp]
-            matching_upconnect_ += [upinput for upinput in inp._P.upconnect_ if upinput.mP > 0]
-            _upconnect_ = inp._P.upconnect_.copy()
-            if _upconnect_:
-                form_PP_(cluster_, cluster, _upconnect_, input_, fPd, fseg)  # recursive compare sign of next-layer upconnects
+            inp.upconnect_ = matching_upconnect_
+        # reset:
+        matching_upconnect_ = []; cluster = [inp]
+    else:
+        cluster += [inp]
+        matching_upconnect_ += [upinput for upinput in inp._P.upconnect_ if upinput.mP > 0]
+        _upconnect_ = inp._P.upconnect_.copy()
+        if _upconnect_:
+            form_PP_(cluster_, cluster, _upconnect_, input__, fPd, fseg)  # recursive compare sign of next-layer upconnects
 
 
 def sum2PP(cluster_, cluster, input__, fseg, fmergePP):  # sum params: derPs into segment or segs into PP
@@ -415,11 +423,10 @@ def merge_PP(_PP, PP, PP_, derP__, fseg):  # merge PP into _PP
             down_PP.upconnect_[down_PP.upconnect_.index(PP)] = _PP  # update lower PP's upconnect from PP to _PP
             if down_PP not in _PP.downconnect_:
                 _PP.downconnect_ += [down_PP]
-
     for segment in PP.segments:  # add segments from PP
         _PP.segments += [segment]
     '''
-    
+
     if PP in PP_:
         PP_.remove(PP)  # merged PP
 
@@ -481,9 +488,7 @@ def sub_recursion(root_sublayers, PP_, frng):  # compares param_layers of derPs 
 
 def agg_recursion(blob, fseg):  # compositional recursion per blob.Plevel. P, PP, PPP are relative terms, each may be of any composition order
 
-    if fseg:
-        if blob.PPP_levels: PP_t = blob.PPP_levels[-1]
-        else: PP_t = blob.seg_levels[-1]  # blob is PP, recursion forms segP_t, seg_PP_t, etc.
+    if fseg: PP_t = blob.seg_levels[-1]  # blob is actually PP, recursion forms segP_t, seg_PP_t, etc.
     else:    PP_t = blob.levels[-1]  # input-level composition Ps, initially PPs
     PPP_t = []  # next-level composition Ps, initially PPPs  # for fiPd, PP_ in enumerate(PP_t): fiPd = fiPd % 2  # dir_blob.M += PP.M += derP.m
     # below is not updated
@@ -511,7 +516,7 @@ def agg_recursion(blob, fseg):  # compositional recursion per blob.Plevel. P, PP
             PPP_t += [[], []]  # replace with neg PPPs?
 
     if fseg:
-        blob.PPP_levels += [PPP_t]  # append new level of segments
+        blob.seg_levels += [PPP_t]  # new level of segPs
     else:
         blob.levels.append(PPP_t)  # levels of dir_blob are Plevels
 
