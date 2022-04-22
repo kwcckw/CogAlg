@@ -127,9 +127,9 @@ def comp_slice_root(blob, verbose=False):  # always angle blob, composite dert c
         # comp_dx_blob(P__), comp_dx?
         derP__ = comp_P_root(P__, rng=1, frng=0)  # scan_P_, comp_P, or comp_layers if called from sub_recursion
 
-        segm__,segd__ = form_seg_root(derP__, root_rdn=2)  # 2D seg__s, each segment is a stack of (P,derP)s
-        PPm_ = form_PP_root(segm__, root_rdn=2, fPd=0)  # forms PPs: connected segments
-        PPd_ = form_PP_root(segd__, root_rdn=2, fPd=1)
+        segm_, segd_ = form_seg_root(derP__, root_rdn=2)  # 2D seg__s, each segment is a stack of (P,derP)s
+        PPm_ = form_PP_root(segm_, root_rdn=2, fPd=0)  # forms PPs: connected segments
+        PPd_ = form_PP_root(segd_, root_rdn=2, fPd=1)
 
         splice_PPs(PPm_, frng=1)  # splicing segs, seg__ is 2D: cross-sign (same-sign), converted to PP_ and PP respectively
         splice_PPs(PPd_, frng=0)
@@ -300,12 +300,12 @@ def form_seg_root(iderP__, root_rdn):  # form segs from derPs
                 elif derP._P.upconnect_:  # form seg of _P upconnects:
                     form_segs_(PP_segs_, [derP], derP._P.upconnect_.copy(), derP__, fPd)
                 else:
-                    PP_segs_ += CPP(params = derP.params, derP__=[derP])  # no upconnect_, immediate termination
+                    PP_segs_ += [CPP(params = derP.params, derP__=[derP], x0=derP.x0, y=derP.y, L=1)]  # no upconnect_, immediate termination
         if fPd:
-            segd__ = PP_segs_
+            segd_ = PP_segs_  # PP_segs_ should be 1D here, there is no per row
         else:
-            segm__ = PP_segs_
-    return segm__, segd__
+            segm_ = PP_segs_
+    return segm_, segd_
 
 
 def form_segs_(PP_segs_, PP_segs, upconnect_, derP__, fPd):  # form same-sign vertically contiguous segments
@@ -330,24 +330,24 @@ def form_segs_(PP_segs_, PP_segs, upconnect_, derP__, fPd):  # form same-sign ve
             form_segs_(PP_segs_, PP_segs, _upconnect_, derP__, fPd)  # recursive compare sign of next-layer upconnects
 
 
-def form_PP_root(isegs_, root_rdn, fPd):  # form PPs from segs
+def form_PP_root(iseg_, root_rdn, fPd):  # form PPs from segs
 
     PP_ = []
-    segs_ = deepcopy(isegs_)  # PP_segs_
+    seg_ = deepcopy(iseg_)  # PP_segs_
     # bottom-up:
-    for segs in segs_:  # row of segs
-        # draft:
-        for seg in segs:
-            if isinstance(segs.root, CPP):  # seg.PP was assigned by another seg
-                for root_param, param in zip(seg.root.params, seg.params): root_param += param
-                seg.root.levels[0] += [seg]  # this is currently PP.levels[0], need to revisit
+    for seg in seg_:  # row of seg
 
-            elif seg.upconnect_:  # form seg of _P upconnects:
-                form_PP_(segs_, [seg], matching_upconnect_.copy(), segs_, fPd)
+        if isinstance(seg.root, CPP):  # seg.PP was assigned by another seg
+            for root_param, param in zip(seg.root.params, seg.params): root_param += param
+            seg.root.levels[0] += [seg]  # this is currently PP.levels[0], need to revisit
 
-            elif not matching_upconnect_:
+        else:
+            if seg.upconnect_:  # form seg of _P upconnects:
+                form_PP_(PP_, [seg], seg.upconnect_.copy(), [], fPd)
+
+            else:
                 # we need to append / remove matching_upconnect_ of all PP_segs to test for PP termination
-                PP_segs_ += CPP(params=seg.params, levels=[[seg]])  # no upconnect_, immediate termination
+                PP_ += [CPP(params=seg.params, levels=[[seg]], x0=seg.x0, y=seg.y, L=1)]  # no upconnect_, immediate termination
         '''
             # first row of PP upconnect_:
             upconnect_ = []
@@ -386,7 +386,7 @@ def form_PP_(PP_, PP, upconnect_, segs_, fPd):  # form same-sign vertically cont
 
     if len(matching_upconnect_) == 0:
         PP_ += [sum2PP(PP_, PP, segs_, fseg=0, fmergePP=1)]  # form PP
-        PP_[-1].upconnect_ = [_upseg for upseg in upconnect_ for _upseg in upseg._P.upconnect_ if _upseg not in upconnect_]
+        PP_[-1].upconnect_ = missing_upconnect_ + [_upseg for upseg in upconnect_ for _upseg in upseg._P.upconnect_ if _upseg not in upconnect_ + missing_upconnect_]
         # reset:
         matching_upconnect_ = []; PP = [segs]
     else:
