@@ -111,6 +111,7 @@ class CPP(CP, CderP):  # derP params are inherited from P
     mask__ = bool
     P__ = list
     derP__ = list  # input
+    seg_ = list
     seg_levels = list  # from 1st agg_recursion, seg_t = levels[0], segP_t = levels[n], seg: stack of Ps
     PPP_levels = list  # from 2nd agg_recursion, PP_t = levels[0], from form_PP, before recursion
     layers = list  # from sub_recursion, each is derP_t
@@ -127,7 +128,8 @@ def comp_slice_root(blob, verbose=False):  # always angle blob, composite dert c
         # comp_dx_blob(P__), comp_dx?
 
         derP__ = comp_P_root(P__, rng=1, frng=0)  # scan_P_, comp_P, or comp_layers if called from sub_recursion
-        PPm_, PPd_ = form_PP_root(derP__, root_rdn=2)  # forms segments: stacks of (P,derP)s, combines them into PPs
+        seg_t = form_seg_root(derP__, root_rdn=2)
+        PPm_, PPd_ = form_PP_root(seg_t, root_rdn=2)  # forms segments: stacks of (P,derP)s, combines them into PPs
 
         splice_PPs(PPm_, frng=1)  # splicing segs, seg__ is 2D: cross-sign (same-sign), converted to PP_ and PP respectively
         splice_PPs(PPd_, frng=0)
@@ -228,6 +230,87 @@ def comp_P_root(P__, rng, frng):  # vertically compares y-adjacent and x-overlap
     return derP__
 
 
+def form_seg_root(iderP__, root_rdn):  # form segs from derPs
+
+    seg_t = []
+    for fPd in 0, 1:
+        seg_ = []
+        derP__ = deepcopy(iderP__)
+        # bottom-up:
+        for derP_ in derP__:  # row of derPs
+            for derP in derP_:
+                if not isinstance(derP.root, CPP):  # derP not assigned with segment yet
+                    if derP._P.upconnect_:  # form seg of _P upconnects:
+                        form_seg_(seg_, [derP], fPd)
+                    else:
+                        sum2seg(seg_, [derP])  # no upconnect_, immediate termination  (calling sum2seg looks more convenient)
+        seg_t.append(seg_)
+
+    return seg_t  # segm_, segd_
+
+
+def form_seg_(seg_, seg, fPd):  # form same-sign vertically contiguous segments
+
+    matching_upconnect_ = []
+    for derP in seg[-1]._P.upconnect_:  # get top seg's upconnect, seg is [derP], not converted to CPP yet
+
+        if fPd: derP.rdn = (derP.mP > derP.dP); sign = derP.dP >= ave_dP * derP.rdn
+        else:   derP.rdn = (derP.dP >= derP.mP); sign = derP.mP > ave_mP * derP.rdn
+        if sign == seg[0].sign and not isinstance(derP.root, CPP):  # same sign and not assigned with other seg yet
+            matching_upconnect_ += [derP]  # PP_segs if local test for >1?
+
+    if len(matching_upconnect_) > 1:
+        sum2seg(seg_, seg)  # form seg with derPs
+        seg_[-1].upconnect_ = matching_upconnect_
+        # reset:
+        matching_upconnect_ = []; seg = [derP]
+    else:
+        if matching_upconnect_:  # 1 matching upconnect
+            seg += [derP]  
+            
+            if seg[-1]._P.upconnect_:
+                form_seg_(seg_, seg, fPd)  # recursive compare sign of next-layer upconnects
+        else:
+            sum2seg(seg_, seg)  # termination when 0 matching upconnect
+                 
+'''
+        generic:
+        # rng+|der+ rdn:
+        if fPd: inp.rdn += (inp.mP > inp.dP)  # PPd / vD sign, distinct from directly defined match:
+        else:   inp.rdn += (inp.dP >= inp.mP)
+        # if branch rdn: inp.rdn += sum([1 for upderP in derP.P.upconnect_ if upderP.dP >= derP.dP])
+'''
+
+def sum2seg(seg_, iseg):  # sum params: merge vertically connected derPs into segment
+
+    seg = CPP(x0=iseg[0].x0, sign=iseg[0].sign)
+
+    for derP in iseg:
+
+        if not seg.params:
+            seg.params = derP.params.copy()
+        else:
+            accum_layer(seg.params, derP.params)
+        seg.x0 = min(seg.x0, derP.x0)
+        seg.nderP += 1
+        seg.mP += derP.mP
+        seg.dP += derP.dP
+        seg.Rdn += derP.rdn
+        seg.y = max(seg.y, derP.y)  # or pass local y arg instead of derP.y?
+        '''
+        PP.rdn += root_rdn + PP.Rdn / PP.nderP  # PP rdn is recursion rdn + average (forks + upconnects) rdn
+        '''
+        # 1 derP or 1 P per line
+        seg.derP__.insert(0, [derP])  
+        seg.P__.insert(0, [derP.P])
+        seg.L = len(seg.derP__)  # seg.L is Ly
+        derP.root = seg
+    
+    seg_.append(seg)
+
+
+
+
 def comp_P(_P, P):  # forms vertical derivatives of params per P in _P.upconnect, conditional ders from norm and DIV comp
 
     # compared P params:
@@ -284,138 +367,76 @@ def comp_P(_P, P):  # forms vertical derivatives of params per P in _P.upconnect
 
 # drafts below:
 
-def form_PP_root(iderP__, root_rdn):  # form segs from derPs, then PPs from segs
+def form_PP_root(seg_t, root_rdn):  # form segs from derPs, then PPs from segs
 
+    PP_t = []
     for fPd in 0, 1:
         PP_ = []
-        derP__ = deepcopy(iderP__)
+        seg_ = seg_t[fPd]
         # bottom-up:
-        for derP_ in derP__:  # row of derPs
-            for derP in derP_:
-                # init seg, not in batches for clarity:
-                seg = CPP(params=derP.params, derP__=[derP], x0=derP.x0, y=derP.y, L=1)
-                derP.root = seg  # do we even need derP.root now?
-                # or back to batches: replace seg with seg_derPs and PP with PP_segs?
+        for seg in seg_:  # row of derPs
+            if seg.upconnect_:  # seg's upconnect is derP, need to get their root instead
+                upconnect_ = [derP.root for derP in seg.upconnect if isinstance(derP.root, CPP)]  # get seg reference
+                form_PP_(PP_, [seg], upconnect_, fPd)  
+            else:  # single seg's PP
+                sum2PP(PP_, [seg])
 
-                if len(derP._P.upconnect_)>1:  # one-derP seg, form PP with seg upconnects:
-                    PP = CPP(params=seg.params, levels=[[seg]], x0=derP.x0, y=derP.y, L=1)
-                    seg.root = PP
-                    form_PP(PP_, PP, seg, fPd)
-                elif derP._P.upconnect_:  # len(derP._P.upconnect_)==1
-                    form_seg(PP_, seg, fPd)  # recursive seg append
-                else:
-                    PP = CPP(params = seg.params, levels=[[seg]], x0=derP.x0, y=derP.y, L=1)  # no upconnect_, one-seg PP
-                    seg.root = PP
-                    PP_ += [PP]
-
-        if fPd: PPd_ = PP_
-        else:   PPm_ = PP_
-    return PPm_, PPd_
+        PP_t.append(PP_)
+        
+    return PP_t  # PPm_, PPd_
 
 
-def form_seg(PP_, seg, fPd):  # form same-sign vertically contiguous segments
-
-    matching_upconnect_ = []
-    for derP in seg.derP_[-1]._P.upconnect_:  # this could be seg unless we do it in batch mode?
-
-        if fPd: derP.rdn = (derP.mP > derP.dP); sign = derP.dP >= ave_dP * derP.rdn
-        else:   derP.rdn = (derP.dP >= derP.mP); sign = derP.mP > ave_mP * derP.rdn
-        if sign == PP_[0].sign:
-            matching_upconnect_ += [derP]  # PP_segs if local test for >1?
-
-    if len(matching_upconnect_) > 1:  # call form_PP_, no separate root?
-        PP_ += [sum2PP(PP_, derP__, fseg=1, fmergePP=1)]  # form seg with derPs
-        PP_[-1].levels[-1].upconnect_ = matching_upconnect_
-        # reset:
-        matching_upconnect_ = []; PP_segs = [derP]
-    else:
-        seg.params += matching_upconnect_[0].params  # pseudo
-        _upconnect_ = [up for up in matching_upconnect_[-1]._P.upconnect_ if up not in matching_upconnect_]
-        if _upconnect_:
-            form_seg(PP_, seg, fPd)  # recursive compare sign of next-layer upconnects
-'''
-        generic:
-        # rng+|der+ rdn:
-        if fPd: inp.rdn += (inp.mP > inp.dP)  # PPd / vD sign, distinct from directly defined match:
-        else:   inp.rdn += (inp.dP >= inp.mP)
-        # if branch rdn: inp.rdn += sum([1 for upderP in derP.P.upconnect_ if upderP.dP >= derP.dP])
-'''
-
-# draft, not revised:
-def form_PP(PP_, PP, seg, fPd):  # form PP of same-sign connected segments
+# draft
+def form_PP_(PP_, PP, upconnect_, fPd):  # form PP of same-sign connected segments
 
     matching_upconnect_ = []
     missing_upconnect_ = []
-    for segs in upconnect_:  # segs
-
-        if fPd: segs.rdn = (segs.mP > segs.dP); sign = segs.dP >= ave_dP * segs.rdn
-        else:   segs.rdn = (segs.dP >= segs.mP); sign = segs.mP > ave_mP * segs.rdn
+    for seg in upconnect_:  # seg's upconnects are derPs
+        if fPd: seg.rdn = (seg.mP > seg.dP); sign = seg.dP >= ave_dP * seg.rdn
+        else:   seg.rdn = (seg.dP >= seg.mP); sign = seg.mP > ave_mP * seg.rdn
         if sign == PP[0].sign:
-            matching_upconnect_ += [segs]
+            matching_upconnect_ += [seg]
         else:
-            missing_upconnect_ += [segs]
+            missing_upconnect_ += [seg]
 
     if len(matching_upconnect_) == 0:
-        PP_ += [sum2PP(PP_, PP, segs_, fseg=0, fmergePP=1)]  # form PP
-        PP_[-1].upconnect_ = missing_upconnect_ + [_upseg for upseg in upconnect_ for _upseg in upseg._P.upconnect_ if _upseg not in upconnect_ + missing_upconnect_]
-        # reset:
-        matching_upconnect_ = []; PP = [segs]
+        PP_ += [sum2PP(PP_, PP)]  # form PP
+        # matching upconnect should be merged into PP already, so it is always missing upconnect here, so PP.upconnect_ should be in different sign
+        PP_[-1].upconnect_ = [upseg for upseg in missing_upconnect_ if upseg not in missing_upconnect_]
+        # no need to reset, the function ends here
     else:
-        PP += matching_upconnect_
-        # get upconnects of matching upconnects:
-        _upconnect_ = [_up for up in matching_upconnect_ for _up in up.upconnect_ if _up not in matching_upconnect_]
+        PP += matching_upconnect_  # add upconnects into part of PP
+        # get upconnects of matching upconnects: 
+        _upconnect_ = [derP.root for upseg in matching_upconnect_ for derP in upseg.upconnect_ if isinstance(derP.root, CPP) and derP.root not in matching_upconnect_]
         if _upconnect_:
-            form_PP_(PP_, PP, _upconnect_, segs_, fPd)  # recursive compare sign of next-layer upconnects
+            form_PP_(PP_, PP, _upconnect_, fPd)  # recursive compare sign of next-layer upconnects
 
-# pending update
-def sum2PP(cluster_, cluster, input__, fseg, fmergePP):  # sum params: derPs into segment or segs into PP
 
-    if not fseg:
-        PP_ = [inp.root for inp in cluster[-1].upconnect_ if isinstance(inp.root, CPP)]
-    else:
-        PP_ = [inp.root for inp in cluster[-1]._P.upconnect_ if isinstance(inp.root, CPP)]
-    if PP_: PP = PP_[0]
-    else: PP = CPP(x0=cluster[0].x0, sign=cluster[0].sign)
+def sum2PP(PP_, iPP):  # sum params: derPs into segment or segs into PP
 
-    for inp in cluster:
-        PP_inp_ = [PP_inp for inp_ in PP.derP__ for PP_inp in inp_]
-        if isinstance(inp.root, CPP) and inp.root is not PP and fmergePP:  # inp.root may == PP if PP is we get PP from upconnect
-            merge_PP(PP, inp.root, cluster_, input__, fseg)
-        elif inp not in PP_inp_:
+    PP = CPP(x0=iPP[0].x0, sign=iPP[0].sign)
+
+    for seg in iPP:  
+        if isinstance(seg.root, CPP) and seg.root is not PP :  # inp.root may == PP if PP is we get PP from upconnect
+            merge_PP(PP, seg.root, PP_)
+        elif seg not in PP.seg_:
             if not PP.params:
-                PP.params = inp.params.copy()
+                PP.params = seg.params.copy()
             else:
-                accum_layer(PP.params, inp.params)
-            PP.x0 = min(PP.x0, inp.x0)
+                accum_layer(PP.params, seg.params)
+            PP.x0 = min(PP.x0, seg.x0)
             PP.nderP += 1
-            PP.mP += inp.mP
-            PP.dP += inp.dP
-            PP.Rdn += inp.rdn
-            PP.y = max(inp.y, PP.y)  # or pass local y arg instead of derP.y?
+            PP.mP += seg.mP
+            PP.dP += seg.dP
+            PP.Rdn += seg.rdn
+            PP.y = max(seg.y, PP.y)  # or pass local y arg instead of derP.y?
             '''
             PP.rdn += root_rdn + PP.Rdn / PP.nderP  # PP rdn is recursion rdn + average (forks + upconnects) rdn
             '''
-            if not PP.derP__:
-                PP.derP__.append([inp])
-                PP.P__.append([inp.P])
-            else:
-                current_ys = [inp_[0].P.y for inp_ in PP.derP__]  # list of current-layer seg rows
-                if inp.P.y in current_ys:
-                    PP.derP__[current_ys.index(inp.P.y)].append(inp)  # append inp row
-                    PP.P__[current_ys.index(inp.P.y)].append(inp.P)  # append P row
-                elif inp.P.y > current_ys[-1]:  # inp.y > largest y in ys
-                    PP.derP__.append([inp]);
-                    PP.P__.append([inp.P])
-                elif inp.P.y < current_ys[0]:  # inp.y < smallest y in ys
-                    PP.derP__.insert(0, [inp]);
-                    PP.P__.insert(0, [inp.P])
-                elif inp.P.y > current_ys[0] and inp.P.y < current_ys[-1]:  # inp.y in between largest and smallest value
-                    PP.derP__.insert(inp.P.y - current_ys[0], [inp])
-                    PP.P__.insert(inp.P.y - current_ys[0], [inp.P])
-
-            PP.L = len(PP.derP__)  # PP.L is Ly
-            inp.root = PP
-    return PP
+            PP.seg_ += [seg]  # pack seg instead of derP?
+            PP.L = len(PP.seg_)  # PP.L is Ly
+            seg.root = PP
+    PP_ += [PP]
 
 # different segs may initiate PPs that are connected through their upconnect_s.
 # Seg upconnect_ = seg.derP_[-1].upconnect_
