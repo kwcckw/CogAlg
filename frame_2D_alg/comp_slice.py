@@ -127,21 +127,21 @@ def comp_slice_root(blob, verbose=False):  # always angle blob, composite dert c
         # comp_dx_blob(P__), comp_dx?
         derP__ = comp_P_root(P__, rng=1, frng=0)  # scan_P_, comp_P, or comp_layers if called from sub_recursion
 
-        seg_t = form_seg_root( deepcopy(derP__), root_rdn=2)
+        seg_t = form_seg_root(derP__, root_rdn=2)
         PPm_, PPd_ = form_PP_root(seg_t, root_rdn=2)  # forms segments: stacks of (P,derP)s, combines them into PPs
 
-        splice_PPs(PPm_, frng=1)  # splicing segs, seg__ is 2D: cross-sign (same-sign), converted to PP_ and PP respectively
-        splice_PPs(PPd_, frng=0)
-        sub_recursion([], PPm_, frng=1)  # rng+ comp_P in PPms, -> param_layer, form sub_PPs
-        sub_recursion([], PPd_, frng=0)  # der+ comp_P in PPds, -> param_layer, form sub_PPs
-
-        for PP_ in (PPm_, PPd_):  # 1st agglomerative recursion is per PP, appending PP.seg_levels, not blob.levels:
-            for PP in PP_:
-                agg_recursion(PP, fseg=1)  # higher-composition comp_seg -> segPs.. per seg__[n], in PP.seg_levels
-        dir_blob.levels = [(PPm_, PPd_)]
-        agg_recursion(dir_blob, fseg=0)  # 2nd call per dir_blob.PP_s formed in 1st call, forms PPP..s and dir_blob.levels
-
-    splice_dir_blob_(blob.dir_blobs)
+#        splice_PPs(PPm_, frng=1)  # splicing segs, seg__ is 2D: cross-sign (same-sign), converted to PP_ and PP respectively
+#        splice_PPs(PPd_, frng=0)
+#        sub_recursion([], PPm_, frng=1)  # rng+ comp_P in PPms, -> param_layer, form sub_PPs
+#        sub_recursion([], PPd_, frng=0)  # der+ comp_P in PPds, -> param_layer, form sub_PPs
+#
+#        for PP_ in (PPm_, PPd_):  # 1st agglomerative recursion is per PP, appending PP.seg_levels, not blob.levels:
+#            for PP in PP_:
+#                agg_recursion(PP, fseg=1)  # higher-composition comp_seg -> segPs.. per seg__[n], in PP.seg_levels
+#        dir_blob.levels = [(PPm_, PPd_)]
+#        agg_recursion(dir_blob, fseg=0)  # 2nd call per dir_blob.PP_s formed in 1st call, forms PPP..s and dir_blob.levels
+#
+#    splice_dir_blob_(blob.dir_blobs)
 
 
 def slice_blob(blob, verbose=False):  # forms horizontal blob slices: Ps, ~1D Ps, in select smooth edge (high G, low Ga) blobs
@@ -234,7 +234,8 @@ def form_seg_root(derP__, root_rdn):  # form segs from derPs
     seg_t = []
     for fPd in 0, 1:
         seg_ = []
-        for derP_ in derP__:  # get a row of derPs, bottom-up
+        # we need deepcopy here, since we have fPd loop above 
+        for derP_ in deepcopy(derP__):  # get a row of derPs, bottom-up
             for derP in derP_:
                 if fPd: derP.rdn = (derP.mP > derP.dP); derP.sign = derP.dP >= ave_dP * derP.rdn
                 else:   derP.rdn = (derP.dP >= derP.mP); derP.sign = derP.mP > ave_mP * derP.rdn
@@ -244,6 +245,8 @@ def form_seg_root(derP__, root_rdn):  # form segs from derPs
                     # also accumulate PP_missing_upconnect_ and PP_missing_downconnect_ per derP?
                 else:
                     seg_.append( sum2seg([derP]) )  # no upconnect_, immediate termination
+                    derP.P, derP._P = seg_[-1], object  # update P to seg, _P to empty object due to no upconnect
+                    
         seg_t.append(seg_)
 
     return seg_t  # segm_, segd_
@@ -263,8 +266,9 @@ def form_seg_(seg_, seg_derPs, fPd):  # form same-sign vertically contiguous seg
     if len(matching_upconnect_) > 1:
         seg = sum2seg(seg_derPs)  # convert seg_derPs to seg
         for derP in matching_upconnect_:
-            derP.P = seg  # downconnected seg in upconnect derP
-            derP._P.downconnect_ += [derP]  # add to downconnect_ per upconnect
+            # derP._P.downconnect_ += [derP]  # add to downconnect_ per upconnect (this should be already added in comp_P_root, but not for form_PP_) 
+            derP.P = seg  # downconnected seg in upconnect derP 
+            seg.upconnect_ += [derP]
         seg.upconnect_ = matching_upconnect_
         for derP in seg.downconnect_: derP._P = seg  # upconnected seg
         seg_.append(seg)
@@ -304,35 +308,35 @@ def form_PP_root(seg_t, root_rdn):  # form segs from derPs, then PPs from segs
     return PP_t  # PPm_, PPd_
 
 
-def form_PP_(PP_, PP_segs, upconnect_, fPd):  # form PP of same-sign connected segments
+def form_PP_(PP_segs_, PP_segs, upconnect_, fPd):  # form PP of same-sign connected segments
 
     matching_upconnect_ = []
     missing_upconnect_ = []
     for derP in upconnect_:  # seg upconnects are derPs
 
         seg = derP._P
-        if fPd: seg.rdn = (seg.mP > seg.dP); sign = seg.dP >= ave_dP * seg.rdn
-        else:   seg.rdn = (seg.dP >= seg.mP); sign = seg.mP > ave_mP * seg.rdn
-        if sign == PP_segs[0].sign:
-            if seg not in matching_upconnect_: matching_upconnect_ += [seg]
-        else:
-            if seg not in missing_upconnect_: missing_upconnect_ += [seg]
+        if isinstance(seg, CPP):  # could be object from line 248 above
+            if fPd: seg.rdn = (seg.mP > seg.dP); sign = seg.dP >= ave_dP * seg.rdn
+            else:   seg.rdn = (seg.dP >= seg.mP); sign = seg.mP > ave_mP * seg.rdn
+            if sign == PP_segs[0].sign:
+                if seg not in matching_upconnect_: matching_upconnect_ += [seg]
+            else:
+                if seg not in missing_upconnect_: missing_upconnect_ += [seg]
 
     if not matching_upconnect_:
-        sum2PP(PP_, PP_segs)  # form PP
-        PP = PP_[-1]
-        for derP in missing_upconnect_:
-            derP.P = PP  # downconnected PP in upconnect derP, P should be converted to PP
-            derP._P.downconnect_ += [derP]  # add to downconnect_ per upconnect
-        PP.upconnect_ = missing_upconnect_
-        for derP in PP.downconnect_: derP._P = PP  # upconnected PP
+        sum2PP(PP_segs_, PP_segs)  # form PP
+        PP = PP_segs_[-1]
+        PP.upconnect_ = matching_upconnect_
+        for seg in missing_upconnect_:
+            seg.root.downconnect_ += [PP_segs[0]]  # upconnect's PP's downconnect should be current PP top row of seg
+        for seg in PP.downconnect_: seg.upconnect_ += [PP]  # upconnected PP
     else:
         # not reviewed:
         PP_segs += matching_upconnect_
         # get upconnects of matching upconnects:
-        _upconnect_ = [derP.root for upseg in matching_upconnect_ for derP in upseg.upconnect_ if isinstance(derP.root, CPP)]
+        _upconnect_ = [derP for upseg in matching_upconnect_ for derP in upseg.upconnect_ if isinstance(derP._P, CPP)]
         if _upconnect_:
-            form_PP_(PP_, PP_segs, _upconnect_, fPd)  # recursive compare sign of next-layer upconnects
+            form_PP_(PP_segs_, PP_segs, _upconnect_, fPd)  # recursive compare sign of next-layer upconnects
 
 
 def sum2seg(seg_derPs):  # sum params: merge vertically connected derPs into segment
@@ -358,7 +362,11 @@ def sum2seg(seg_derPs):  # sum params: merge vertically connected derPs into seg
         seg.P__.insert(0, [derP.P])
         seg.L = len(seg.derP__)  # seg.L is Ly
         derP.root = seg
-
+        
+        for down_derP in derP.downconnect_:
+            # check if downconnect not in existing downconnect_ or downconnect not in seg_derPs
+            if down_derP not in seg.downconnect_ and down_derP not in seg_derPs:
+                seg.downconnect_ += [down_derP]
     return seg
 
 
@@ -441,6 +449,11 @@ def sum2PP(PP_, PP_segs):  # sum params: derPs into segment or segs into PP
             PP.seg_levels[0] += [seg]  # should be PP.seg_levels[0][fPd]?
             PP.L = len(PP.seg_levels[0])  # PP.L is Ly
             seg.root = PP
+
+        for down_derP in seg.downconnect_:
+            down_seg = down_derP.P
+            if down_seg not in PP.downconnect_ and down_seg not in PP_segs:
+                PP.downconnect += [down_seg]
 
     PP_ += [PP]
 
