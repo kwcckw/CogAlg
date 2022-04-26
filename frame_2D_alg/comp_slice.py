@@ -127,21 +127,21 @@ def comp_slice_root(blob, verbose=False):  # always angle blob, composite dert c
         # comp_dx_blob(P__), comp_dx?
         derP__ = comp_P_root(P__, rng=1, frng=0)  # scan_P_, comp_P, or comp_layers if called from sub_recursion
 
-        seg_t = form_seg_root(derP__, root_rdn=2)
-        PPm_, PPd_ = form_PP_root(seg_t, root_rdn=2)  # forms segments: stacks of (P,derP)s, combines them into PPs
+        seg_t = form_seg_root(derP__, root_rdn=2)  # forms segments: parameterized stacks of (P,derP)s
+        PPm_, PPd_ = form_PP_root(seg_t, root_rdn=2)  # forms PPs: parameterized graphs of connected segs
 
-#        splice_PPs(PPm_, frng=1)  # splicing segs, seg__ is 2D: cross-sign (same-sign), converted to PP_ and PP respectively
-#        splice_PPs(PPd_, frng=0)
-#        sub_recursion([], PPm_, frng=1)  # rng+ comp_P in PPms, -> param_layer, form sub_PPs
-#        sub_recursion([], PPd_, frng=0)  # der+ comp_P in PPds, -> param_layer, form sub_PPs
-#
-#        for PP_ in (PPm_, PPd_):  # 1st agglomerative recursion is per PP, appending PP.seg_levels, not blob.levels:
-#            for PP in PP_:
-#                agg_recursion(PP, fseg=1)  # higher-composition comp_seg -> segPs.. per seg__[n], in PP.seg_levels
-#        dir_blob.levels = [(PPm_, PPd_)]
-#        agg_recursion(dir_blob, fseg=0)  # 2nd call per dir_blob.PP_s formed in 1st call, forms PPP..s and dir_blob.levels
-#
-#    splice_dir_blob_(blob.dir_blobs)
+        splice_PPs(PPm_, frng=1)  # splicing segs, seg__ is 2D: cross-sign (same-sign), converted to PP_ and PP respectively
+        splice_PPs(PPd_, frng=0)
+        sub_recursion([], PPm_, frng=1)  # rng+ comp_P in PPms, -> param_layer, form sub_PPs
+        sub_recursion([], PPd_, frng=0)  # der+ comp_P in PPds, -> param_layer, form sub_PPs
+
+        for PP_ in (PPm_, PPd_):  # 1st agglomerative recursion is per PP, appending PP.seg_levels, not blob.levels:
+            for PP in PP_:
+                agg_recursion(PP, fseg=1)  # higher-composition comp_seg -> segPs.. per seg__[n], in PP.seg_levels
+        dir_blob.levels = [(PPm_, PPd_)]
+        agg_recursion(dir_blob, fseg=0)  # 2nd call per dir_blob.PP_s formed in 1st call, forms PPP..s and dir_blob.levels
+
+    splice_dir_blob_(blob.dir_blobs)
 
 
 def slice_blob(blob, verbose=False):  # forms horizontal blob slices: Ps, ~1D Ps, in select smooth edge (high G, low Ga) blobs
@@ -234,19 +234,16 @@ def form_seg_root(derP__, root_rdn):  # form segs from derPs
     seg_t = []
     for fPd in 0, 1:
         seg_ = []
-        # we need deepcopy here, since we have fPd loop above 
-        for derP_ in deepcopy(derP__):  # get a row of derPs, bottom-up
+        for derP_ in derP__:  # get a row of derPs, bottom-up
             for derP in derP_:
                 if fPd: derP.rdn = (derP.mP > derP.dP); derP.sign = derP.dP >= ave_dP * derP.rdn
                 else:   derP.rdn = (derP.dP >= derP.mP); derP.sign = derP.mP > ave_mP * derP.rdn
 
                 if derP._P.upconnect_:  # in form_seg_: if len matching_upconnect_==1 and len matching_upconnect_[0].matching_downconnect_==1
                     form_seg_(seg_, [derP], fPd)  # accum seg with 1/1 matching connects
-                    # also accumulate PP_missing_upconnect_ and PP_missing_downconnect_ per derP?
+                    # add to PP_missing_connect_s per derP?
                 else:
-                    seg_.append( sum2seg([derP]) )  # no upconnect_, immediate termination
-                    derP.P, derP._P = seg_[-1], object  # update P to seg, _P to empty object due to no upconnect
-                    
+                    seg_.append( sum2seg([derP], []) )  # no upconnect_, immediate termination
         seg_t.append(seg_)
 
     return seg_t  # segm_, segd_
@@ -264,14 +261,7 @@ def form_seg_(seg_, seg_derPs, fPd):  # form same-sign vertically contiguous seg
         # else: missing_upconnect_ += [derP]  # add to PP_missing_upconnect_ at seg termination, same for missing_downconnect_?
 
     if len(matching_upconnect_) > 1:
-        seg = sum2seg(seg_derPs)  # convert seg_derPs to seg
-        for derP in matching_upconnect_:
-            # derP._P.downconnect_ += [derP]  # add to downconnect_ per upconnect (this should be already added in comp_P_root, but not for form_PP_) 
-            derP.P = seg  # downconnected seg in upconnect derP 
-            seg.upconnect_ += [derP]
-        seg.upconnect_ = matching_upconnect_
-        for derP in seg.downconnect_: derP._P = seg  # upconnected seg
-        seg_.append(seg)
+        seg_.append( sum2seg(seg_derPs, matching_upconnect_) ) # convert seg_derPs to terminated seg
     else:
         if matching_upconnect_ and len(matching_upconnect_[0].downconnect_)==1:  # 1/1 matching connects per derP
             seg_derPs += [derP]
@@ -301,9 +291,8 @@ def form_PP_root(seg_t, root_rdn):  # form segs from derPs, then PPs from segs
 
         PP_t.append(PP_segs_)  # PP_segs are replaced with PPs in sum2PP and form_PP_
         '''
-        PP is a graph with segs as edges and multiple connects (branching points) per seg as vertex / node.
-        Vertex is seg.upconnect_| downconnect_: 0-n derPs, derP.rdn *= len(P.upconnect_| _P.downconnect_)
-        Vertices are always up or down, 1-to-many. Many-to-many connection consists of multiple vertices.
+        PP is a graph with segs as 1D "vertices", each with two sets of edges or branching points: seg.upconnect_ and seg.downconnect_.
+        Each edge is CderP, derP.rdn *= len(P.upconnect_| _P.downconnect_), and derP.P/_P are now CPP: connected segs.
         '''
     return PP_t  # PPm_, PPd_
 
@@ -315,33 +304,42 @@ def form_PP_(PP_segs_, PP_segs, upconnect_, fPd):  # form PP of same-sign connec
     for derP in upconnect_:  # seg upconnects are derPs
 
         seg = derP._P
-        if isinstance(seg, CPP):  # could be object from line 248 above
-            if fPd: seg.rdn = (seg.mP > seg.dP); sign = seg.dP >= ave_dP * seg.rdn
-            else:   seg.rdn = (seg.dP >= seg.mP); sign = seg.mP > ave_mP * seg.rdn
-            if sign == PP_segs[0].sign:
-                if seg not in matching_upconnect_: matching_upconnect_ += [seg]
-            else:
-                if seg not in missing_upconnect_: missing_upconnect_ += [seg]
+        if fPd: seg.rdn = (seg.mP > seg.dP); sign = seg.dP >= ave_dP * seg.rdn
+        else:   seg.rdn = (seg.dP >= seg.mP); sign = seg.mP > ave_mP * seg.rdn
+        if sign == PP_segs[0].sign:
+            if seg not in matching_upconnect_: matching_upconnect_ += [seg]
+        else:
+            if seg not in missing_upconnect_: missing_upconnect_ += [seg]
 
-    if not matching_upconnect_:
-        sum2PP(PP_segs_, PP_segs)  # form PP
-        PP = PP_segs_[-1]
-        PP.upconnect_ = matching_upconnect_
-        for seg in missing_upconnect_:
-            seg.root.downconnect_ += [PP_segs[0]]  # upconnect's PP's downconnect should be current PP top row of seg
-        for seg in PP.downconnect_: seg.upconnect_ += [PP]  # upconnected PP
-    else:
-        # not reviewed:
+    # not reviewed:
+    if matching_upconnect_:
         PP_segs += matching_upconnect_
         # get upconnects of matching upconnects:
         _upconnect_ = [derP for upseg in matching_upconnect_ for derP in upseg.upconnect_ if isinstance(derP._P, CPP)]
         if _upconnect_:
             form_PP_(PP_segs_, PP_segs, _upconnect_, fPd)  # recursive compare sign of next-layer upconnects
+    else:
+        sum2PP(PP_segs_, PP_segs)  # form PP
+        PP = PP_segs_[-1]
+        for seg in missing_upconnect_:
+            seg.root.downconnect_ += [PP_segs[0]]  # upconnect's PP's downconnect should be current PP top row of seg
+        PP.upconnect_ = missing_upconnect_
+        for seg in PP.downconnect_: seg.upconnect_ += [PP]  # upconnected PP
 
 
-def sum2seg(seg_derPs):  # sum params: merge vertically connected derPs into segment
+def sum2seg(seg_derPs, matching_upconnect_):  # sum params: merge vertically connected derPs into segment
 
     seg = CPP(x0=seg_derPs[0].x0, sign=seg_derPs[0].sign)
+
+    for derP in matching_upconnect_:
+        derP.P = seg  # downconnected seg in upconnect derP
+        derP._P.downconnect_ += [derP]  # add derP to upconnected P's downconnect_, that P is still CP
+    seg.upconnect_ = matching_upconnect_
+
+    for derP in seg_derPs[0].downconnect_:
+        if derP.sign == seg.sign:
+            derP._P = seg  # upconnected seg in upconnect derP
+            seg.downconnect_ += [derP]
 
     for derP in seg_derPs:
         if not seg.params:
@@ -362,12 +360,88 @@ def sum2seg(seg_derPs):  # sum params: merge vertically connected derPs into seg
         seg.P__.insert(0, [derP.P])
         seg.L = len(seg.derP__)  # seg.L is Ly
         derP.root = seg
-        
-        for down_derP in derP.downconnect_:
-            # check if downconnect not in existing downconnect_ or downconnect not in seg_derPs
-            if down_derP not in seg.downconnect_ and down_derP not in seg_derPs:
-                seg.downconnect_ += [down_derP]
+
     return seg
+
+# not reviewed:
+def sum2PP(PP_, PP_segs):  # sum params: derPs into segment or segs into PP
+
+    PP = CPP(x0=PP_segs[0].x0, sign=PP_segs[0].sign, seg_levels = [[]])
+
+    for seg in PP_segs:
+        if isinstance(seg.root, CPP) and seg.root is not PP :  # inp.root may == PP if PP is we get PP from upconnect
+            merge_PP(PP, seg.root, PP_)
+        elif seg not in PP.seg_levels[0]:
+            if not PP.params:
+                PP.params = seg.params.copy()
+            else:
+                accum_layer(PP.params, seg.params)
+            PP.x0 = min(PP.x0, seg.x0)
+            PP.nderP += 1
+            PP.mP += seg.mP
+            PP.dP += seg.dP
+            PP.Rdn += seg.rdn
+            PP.y = max(seg.y, PP.y)  # or pass local y arg instead of derP.y?
+            '''
+            PP.rdn += root_rdn + PP.Rdn / PP.nderP  # PP rdn is recursion rdn + average (forks + upconnects) rdn
+            '''
+            PP.seg_levels[0] += [seg]  # should be PP.seg_levels[0][fPd]?
+            PP.L = len(PP.seg_levels[0])  # PP.L is Ly
+            seg.root = PP
+
+    PP_ += [PP]
+
+# merge PPs initiated by different segs that are connected through their upconnect_s:
+
+def merge_PP(_PP, PP,PP_):  # merge PP into _PP
+
+    PP_segs = []
+    for derP_ in PP.derP__:
+        for derP in derP_:
+            current_derP_ = [derP for derP_ in _PP.derP__ for derP in derP_]
+            if derP not in current_derP_:
+                derP.root = object  # reset to prevent merging
+                PP_segs += [derP]
+    if PP_segs: sum2PP(PP_, PP_segs)  # no merge derP.root
+
+    for up_PP in PP.upconnect_:
+        if up_PP not in _PP.upconnect_:  # PP may have multiple downconnects
+            _PP.upconnect_.append(up_PP)
+
+    ''' no downconnect in current scheme, only in comp_P_root:
+    for i, down_PP in enumerate(PP.downconnect_):
+        if PP in down_PP.upconnect_:
+            down_PP.upconnect_[down_PP.upconnect_.index(PP)] = _PP  # update lower PP's upconnect from PP to _PP
+            if down_PP not in _PP.downconnect_:
+                _PP.downconnect_ += [down_PP]
+    for segment in PP.segments:  # add segments from PP
+        _PP.segments += [segment]
+    '''
+
+    if PP in PP_:
+        PP_.remove(PP)  # merged PP
+
+
+def accum_layer(top_layer, der_layer):
+
+    for i, (_param, param) in enumerate(zip(top_layer, der_layer)):
+        if isinstance(_param, tuple):
+            if len(_param) == 2:  # (sin_da, cos_da)
+                _sin_da, _cos_da = _param
+                sin_da, cos_da = param
+                sum_sin_da = (cos_da * _sin_da) + (sin_da * _cos_da)  # sin(α + β) = sin α cos β + cos α sin β
+                sum_cos_da = (cos_da * _cos_da) - (sin_da * _sin_da)  # cos(α + β) = cos α cos β - sin α sin β
+                top_layer[i] = (sum_sin_da, sum_cos_da)
+            else:  # (sin_da0, cos_da0, sin_da1, cos_da1)
+                _sin_da0, _cos_da0, _sin_da1, _cos_da1 = _param
+                sin_da0, cos_da0, sin_da1, cos_da1 = param
+                sum_sin_da0 = (cos_da0 * _sin_da0) + (sin_da0 * _cos_da0)  # sin(α + β) = sin α cos β + cos α sin β
+                sum_cos_da0 = (cos_da0 * _cos_da0) - (sin_da0 * _sin_da0)  # cos(α + β) = cos α cos β - sin α sin β
+                sum_sin_da1 = (cos_da1 * _sin_da1) + (sin_da1 * _cos_da1)
+                sum_cos_da1 = (cos_da1 * _cos_da1) - (sin_da1 * _sin_da1)
+                top_layer[i] = (sum_sin_da0, sum_cos_da0, sum_sin_da1, sum_cos_da1)
+        else:  # scalar
+            top_layer[i] += param
 
 
 def comp_P(_P, P):  # forms vertical derivatives of params per P in _P.upconnect, conditional ders from norm and DIV comp
@@ -423,94 +497,6 @@ def comp_P(_P, P):  # forms vertical derivatives of params per P in _P.upconnect
 
     derP = CderP(x0=x0, L=L, y=_P.y, mP=mP, dP=dP, params=params, P=P, _P=_P)
     return derP
-
-
-def sum2PP(PP_, PP_segs):  # sum params: derPs into segment or segs into PP
-
-    PP = CPP(x0=PP_segs[0].x0, sign=PP_segs[0].sign, seg_levels = [[]])
-
-    for seg in PP_segs:
-        if isinstance(seg.root, CPP) and seg.root is not PP :  # inp.root may == PP if PP is we get PP from upconnect
-            merge_PP(PP, seg.root, PP_)
-        elif seg not in PP.seg_levels[0]:
-            if not PP.params:
-                PP.params = seg.params.copy()
-            else:
-                accum_layer(PP.params, seg.params)
-            PP.x0 = min(PP.x0, seg.x0)
-            PP.nderP += 1
-            PP.mP += seg.mP
-            PP.dP += seg.dP
-            PP.Rdn += seg.rdn
-            PP.y = max(seg.y, PP.y)  # or pass local y arg instead of derP.y?
-            '''
-            PP.rdn += root_rdn + PP.Rdn / PP.nderP  # PP rdn is recursion rdn + average (forks + upconnects) rdn
-            '''
-            PP.seg_levels[0] += [seg]  # should be PP.seg_levels[0][fPd]?
-            PP.L = len(PP.seg_levels[0])  # PP.L is Ly
-            seg.root = PP
-
-        for down_derP in seg.downconnect_:
-            down_seg = down_derP.P
-            if down_seg not in PP.downconnect_ and down_seg not in PP_segs:
-                PP.downconnect += [down_seg]
-
-    PP_ += [PP]
-
-# different segs may initiate PPs that are connected through their upconnect_s.
-
-def merge_PP(_PP, PP,PP_):  # merge PP into _PP
-
-    PP_segs = []
-    for derP_ in PP.derP__:
-        for derP in derP_:
-            current_derP_ = [derP for derP_ in _PP.derP__ for derP in derP_]
-            if derP not in current_derP_:
-                derP.root = object  # reset to prevent merging
-                PP_segs += [derP]
-    if PP_segs: sum2PP(PP_, PP_segs)  # no merge derP.root
-
-    for up_PP in PP.upconnect_:
-        if up_PP not in _PP.upconnect_:  # PP may have multiple downconnects
-            _PP.upconnect_.append(up_PP)
-
-
-    # no downconnect in current scheme, downconnect in comp_P_root only
-    '''
-    for i, down_PP in enumerate(PP.downconnect_):
-        if PP in down_PP.upconnect_:
-            down_PP.upconnect_[down_PP.upconnect_.index(PP)] = _PP  # update lower PP's upconnect from PP to _PP
-            if down_PP not in _PP.downconnect_:
-                _PP.downconnect_ += [down_PP]
-    for segment in PP.segments:  # add segments from PP
-        _PP.segments += [segment]
-    '''
-
-    if PP in PP_:
-        PP_.remove(PP)  # merged PP
-
-
-def accum_layer(top_layer, der_layer):
-
-    for i, (_param, param) in enumerate(zip(top_layer, der_layer)):
-        if isinstance(_param, tuple):
-            if len(_param) == 2:  # (sin_da, cos_da)
-                _sin_da, _cos_da = _param
-                sin_da, cos_da = param
-                sum_sin_da = (cos_da * _sin_da) + (sin_da * _cos_da)  # sin(α + β) = sin α cos β + cos α sin β
-                sum_cos_da = (cos_da * _cos_da) - (sin_da * _sin_da)  # cos(α + β) = cos α cos β - sin α sin β
-                top_layer[i] = (sum_sin_da, sum_cos_da)
-            else:  # (sin_da0, cos_da0, sin_da1, cos_da1)
-                _sin_da0, _cos_da0, _sin_da1, _cos_da1 = _param
-                sin_da0, cos_da0, sin_da1, cos_da1 = param
-                sum_sin_da0 = (cos_da0 * _sin_da0) + (sin_da0 * _cos_da0)  # sin(α + β) = sin α cos β + cos α sin β
-                sum_cos_da0 = (cos_da0 * _cos_da0) - (sin_da0 * _sin_da0)  # cos(α + β) = cos α cos β - sin α sin β
-                sum_sin_da1 = (cos_da1 * _sin_da1) + (sin_da1 * _cos_da1)
-                sum_cos_da1 = (cos_da1 * _cos_da1) - (sin_da1 * _sin_da1)
-                top_layer[i] = (sum_sin_da0, sum_cos_da0, sum_sin_da1, sum_cos_da1)
-        else:  # scalar
-            top_layer[i] += param
-
 
 # pending update for segments
 def sub_recursion(root_sublayers, PP_, frng):  # compares param_layers of derPs in generic PP, form or accum top derivatives
