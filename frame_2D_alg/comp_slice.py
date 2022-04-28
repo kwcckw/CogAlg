@@ -74,6 +74,8 @@ class CP(ClusterStructure):  # horizontal blob slice P, with vertical derivative
     dxdert_ = list
     # only in Pm:
     Pd_ = list
+    # root reference : segment
+    root = object
 
 class CderP(ClusterStructure):  # tuple of derivatives in P upconnect_ or downconnect_
 
@@ -102,7 +104,7 @@ class CPP(CP, CderP):  # derP params are inherited from P
     rng = lambda: 1  # rng starts with 1
     rdn = int  # for PP evaluation, recursion count + Rdn / nderPs
     Rdn = int  # for accumulation only
-    nderP = int  # len 2D derP__ in levels[0][fPd]?  ly = len(derP__), also x, y?
+    nP = int  # len 2D derP__ in levels[0][fPd]?  ly = len(derP__), also x, y?
     upconnect_ = list
     downconnect_ = list
     fPPm = NoneType  # PPm if 1, else PPd; not needed if packed in PP_
@@ -229,20 +231,21 @@ def comp_P_root(P__, rng, frng):  # vertically compares y-adjacent and x-overlap
     return derP__
 
 
-def form_seg_root(derP__, root_rdn):  # form segs from derPs
+def form_seg_root(P__, root_rdn):  # form segs from Ps
 
     seg_t = []
     for fPd in 0, 1:
         seg_ = []
-        for derP_ in reversed(derP__):  # get a row of derPs, bottom-up
-            for derP in derP_:
-                if fPd: derP.rdn = (derP.mP > derP.dP); derP.sign = derP.dP >= ave_dP * derP.rdn
-                else:   derP.rdn = (derP.dP >= derP.mP); derP.sign = derP.mP > ave_mP * derP.rdn
-
-                if derP._P.upconnect_:  # accum seg_derPs with derP if it has <=1 matching upconnect AND <= matching downconnect:
-                    form_seg_(seg_, [derP], fPd)
-                else:
-                    seg_.append( sum2seg([derP], []) )  # no upconnect_, immediate termination
+        for P_ in reversed(P__):  # get a row of Ps, bottom-up
+            for P in P_:
+                for derP in P.upconnect_:
+                    if fPd: derP.rdn = (derP.mP > derP.dP); derP.sign = derP.dP >= ave_dP * derP.rdn
+                    else:   derP.rdn = (derP.dP >= derP.mP); derP.sign = derP.mP > ave_mP * derP.rdn
+    
+                    if derP._P.upconnect_:  # accum seg_derPs with derP if it has <=1 matching upconnect AND <= matching downconnect:
+                        form_seg_(seg_, [derP], fPd)
+                    else:
+                        seg_.append( sum2seg([derP], []) )  # no upconnect_, immediate termination
         seg_t.append(seg_)
 
     return seg_t  # segm_, segd_
@@ -327,8 +330,11 @@ def sum2seg(seg_derPs, upconnect_):  # sum params: merge vertically connected de
     seg = CPP(x0=seg_derPs[0].x0, derP__=seg_derPs, L = len(seg_derPs), sign=seg_derPs[0].sign)
     # here derP__ is 1D and seg.L is Ly
 
+    # if we are gonna accumulate derP.P, we can't update it here, so we can just use derP.P.root to get seg?
+    '''
     for derP in upconnect_ :  # replace downconnected Ps with seg:
         derP.P = seg
+    '''
     seg.upconnect_ = upconnect_
 
     for derP in seg_derPs[0].P.downconnect_:  # seg_derPs[0]: bottom derP of currently terminated seg
@@ -337,20 +343,23 @@ def sum2seg(seg_derPs, upconnect_):  # sum params: merge vertically connected de
             seg.downconnect_ += [derP]
 
     for derP in seg_derPs:
+        P = derP.P
         if not seg.params:
             seg.params = derP.params.copy()
         else:
             accum_layer(seg.params, derP.params)
-        seg.x0 = min(seg.x0, derP.x0)
-        seg.nderP += 1
+        accum_layer(seg.params, P.params)  # accumulate P
+        seg.x0 = min(seg.x0, P.x0)
+        seg.nP += 1
         seg.mP += derP.mP
         seg.dP += derP.dP
         seg.Rdn += derP.rdn
-        seg.y = max(seg.y, derP.y)  # or pass local y arg instead of derP.y?
+        seg.y = max(seg.y, P.y)  # or pass local y arg instead of derP.y?
+        seg.P__ += [P]
         '''
         PP.rdn += root_rdn + PP.Rdn / PP.nderP  # PP rdn is recursion rdn + average (forks + upconnects) rdn
         '''
-        derP.root = seg
+        P.root = seg
 
     return seg
 
