@@ -126,9 +126,9 @@ def comp_slice_root(blob, verbose=False):  # always angle blob, composite dert c
 
         P__ = slice_blob(dir_blob, verbose=False)  # cluster dir_blob.dert__ into 2D array of blob slices
         # comp_dx_blob(P__), comp_dx?
-        comp_P_root(P__, rng=1, frng=0)  # scan_P_, comp_P | comp_layers, adds upconnect_ and downconnect per P
+        P0__ = comp_P_root(P__, rng=1, frng=0)  # scan_P_, comp_P | comp_layers, adds upconnect_ and downconnect per P
 
-        seg_t = form_seg_root(P__, root_rdn=2)  # forms segments: parameterized stacks of (P,derP)s
+        seg_t = form_seg_root(P0__, root_rdn=2)  # forms segments: parameterized stacks of (P,derP)s
         PPm_, PPd_ = form_PP_root(seg_t, root_rdn=2)  # forms PPs: parameterized graphs of connected segs
 
         splice_PPs(PPm_, frng=1)  # splicing segs, seg__ is 2D: cross-sign (same-sign), converted to PP_ and PP respectively
@@ -190,13 +190,17 @@ def comp_P_root(P__, rng, frng):  # vertically compares y-adjacent and x-overlap
     # if der+: P__ is last-call derP__, derP__=[], form new derP__
     # if rng+: P__ is last-call P__, accumulate derP__ with new_derP__
     # 2D array of derivative tuples from P__[n], P__[n-rng], sub-recursive:
+    
+     
     for P_ in P__:
         for P in P_:
             P.upconnect_, P.downconnect_ = [],[]  # reset connects and PP refs in the last layer only
             if isinstance(P, CderP): P.root = None
 
+    P0__ = []
     for i, _P_ in enumerate(P__):  # higher compared row
         if i+rng < len(P__):  # rng=1 unless rng+ fork
+            P0_ = []
             P_ = P__[i+rng]   # lower compared row
             for P in P_:
                 if frng: cP = P.P  # rng+, compared P is lower derivation
@@ -216,11 +220,13 @@ def comp_P_root(P__, rng, frng):  # vertically compares y-adjacent and x-overlap
                             accum_layer(derP.params, P.params)
                         P.upconnect_.append(derP)  # per P for form_PP
                         _P.downconnect_.append(derP)
-
                     elif (cP.x0 + cP.L) < _cP.x0:  # no P xn overlap, stop scanning lower P_
                         break
+                    P0_.append(P)  # add P0 regardless upconnect and downconnect
+            P0__ += [P0_]
         _P_ = P_
 
+    return P0__
 
 def form_seg_root(P__, root_rdn):  # form segs from Ps
 
@@ -228,13 +234,17 @@ def form_seg_root(P__, root_rdn):  # form segs from Ps
     for fPd in 0, 1:
         seg_ = []
         for P_ in reversed(P__):  # get a row of Ps, bottom-up
-            for P in P_:
-                if not P.upconnect_ or isinstance(P.root, CPP):  # _P.root is seg formed by some prior P
-                    # multiple or no upconnect_, terminate seg_Ps = [P]:
-                    seg_.append(sum2seg([P], [],[]))
-                else:
-                    # <=1 matching upconnect AND <= matching downconnect, test P.upconnect_:
-                    form_seg_(seg_, [P], fPd)
+            for P in P_: 
+                if not isinstance(P.root, CPP): 
+                    # when upconnect> 1, downconnect need >0 because seg_Ps will be termianted
+                    # when upconnect == 1, downconnect need = 0 (bottom most line)
+                    if (len(P.upconnect_)>1 and len(P.downconnect_)>0) or \
+                       (len(P.upconnect_)==1 and len(P.downconnect_)==0):
+                        # >=1 matching upconnect AND <= matching downconnect, test P.upconnect_:
+                        form_seg_(seg_, [P], fPd)
+                    elif len(P.upconnect_) == 0 and len(P.downconnect_) > 0:  # when upconnect = 0, must having at least 1 downconnect
+                        seg_.append(sum2seg([P], [], []))
+                    
         seg_t.append(seg_)
 
     return seg_t  # segm_, segd_
@@ -262,7 +272,7 @@ def form_seg_(seg_, seg_Ps, fPd):  # form same-sign vertically contiguous segmen
             if seg_Ps[-1].upconnect_:
                 form_seg_(seg_, seg_Ps, fPd)  # recursive compare sign of next-layer upconnects
         else:
-            seg_.append( sum2seg(seg_Ps, [],[]))  # terminate at 0 matching upconnect
+            seg_.append(sum2seg(seg_Ps, [],[]))  # terminate at 0 matching upconnect
 '''
         generic rng+|der+ rdn:
         if fPd: inp.rdn += (inp.mP > inp.dP)  # PPd / vD sign, distinct from directly defined match:
@@ -316,23 +326,34 @@ def form_PP_(PP_segs_, PP_segs, upconnect_, fPd):  # form PP of same-sign connec
 
 def sum2seg(seg_Ps, matching_upconnect_, missing_upconnect_):  # sum params: merge vertically connected Ps into segment
 
-    seg = CPP(x0=seg_Ps[0].x0, derP__=seg_Ps, L = len(seg_Ps), sign=seg_Ps[0].upconnect_[0].sign)  # seg.L is Ly
+    # get sign from derP
+    if not seg_Ps[0].upconnect_:
+        sign = seg_Ps[0].downconnect_[0].sign
+    else:                        
+        sign = seg_Ps[0].upconnect_[0].sign
+    
+    # init seg
+    seg = CPP(x0=seg_Ps[0].x0, derP__=seg_Ps, L = len(seg_Ps), sign=sign, upconnect_ = matching_upconnect_ + missing_upconnect_)  # seg.L is Ly
 
-    seg.upconnect_ = matching_upconnect_
-
-    for derP in seg_Ps[0].P.downconnect_:  # seg_Ps[0]: bottom P of currently terminated seg
+    for derP in seg_Ps[0].downconnect_:  # seg_Ps[0]: bottom P of currently terminated seg
         if derP.sign == seg.sign:
             derP._P.root = seg  # upconnected seg in upconnect derP
             seg.downconnect_ += [derP]
 
     for i, P in enumerate(seg_Ps):
 
-        if i==len(seg_Ps): derP = CderP  # exclude last upconnect, use blank CderP instead
-        else: derP = P.upconnect_[0]
-        PderP_params = P.params.copy()+derP.params.copy()
-
-        if not seg.params: seg.params = PderP_params
-        else:  accum_layer(seg.params, PderP_params)  # accumulate P
+        if not P.upconnect_:  # P is not having upconnect_ 
+            derP = P.downconnect_[0]
+        else:
+            if i != len(seg_Ps)-1: derP = P.upconnect_[0]
+            else:                  derP = CderP()  # exclude last upconnect, use blank CderP instead
+                  
+        # we need to use accum_layer. since we can't add some if them (angle) directly
+        if not seg.params: 
+            seg.params = derP.params
+        else:  
+            accum_layer(seg.params, derP.params)  # accumulate P
+        accum_layer(seg.params, P.params)
 
         seg.x0 = min(seg.x0, P.x0)
         seg.nP += 1
