@@ -317,9 +317,8 @@ def form_PP_root(seg_t, root_rdn):  # form segs from derPs, then PPs from segs
         seg_ = seg_t[fPd]
         for seg in seg_:  # bottom-up
             # seg.upconnect is CderP with P.root=seg and _P.root=_seg:
-            if seg.upconnect_t[1] and not isinstance(seg.root, CPP):
-                # 1st call should be mixed here? Since matching will be empty
-                form_PP_(PP_segs_, [seg], seg.upconnect_t[0], seg.upconnect_t[1], [], fPd)
+            if seg.upconnect_t[0]:
+                form_PP_(PP_segs_, [seg], seg.upconnect_t[0], seg.upconnect_t[1], fPd)
             else:
                 sum2PP(PP_segs_, [seg], [])  # single-seg PP
 
@@ -332,10 +331,12 @@ def form_PP_root(seg_t, root_rdn):  # form segs from derPs, then PPs from segs
     return PP_t  # PPm_, PPd_
 
 
-def form_PP_(PP_segs_, PP_segs, matching_upconnect_, mixed_upconnect_, missing_upconnect_, fPd):  # form PP of same-sign connected segments
+def form_PP_(PP_segs_, PP_segs, matching_upconnect_, missing_upconnect_, fPd):  # form PP of same-sign connected segments
 
     continued_seg_ = []
-    for derP in mixed_upconnect_:  # combined across all continued segs
+    new_matching_upconnect_ = []
+
+    for derP in matching_upconnect_:  # combined across all continued segs
         seg = derP._P.root
 
         if fPd: seg.rdn = (seg.mP > seg.dP); sign = seg.dP >= ave_dP * seg.rdn
@@ -346,20 +347,24 @@ def form_PP_(PP_segs_, PP_segs, matching_upconnect_, mixed_upconnect_, missing_u
         else:
             if derP not in missing_upconnect_: missing_upconnect_ += [derP]
         continued_seg_.append(seg)
+    matching_upconnect_ += new_matching_upconnect_
 
     if matching_upconnect_:
         PP_segs += [derP._P.root for derP in matching_upconnect_]  # for sum2PP
-        next_mixed_upconnect_ = []  # reset matching upconnect
-        for derP in matching_upconnect_:  # pack next-row matching upconnects
-            for upderP in derP._P.upconnect_t[1]:  # i think should be mixed here, because matched one is not assigned yet, and their root will be tested again for sign
-                if upderP._P.root not in continued_seg_ + PP_segs:
-                    next_mixed_upconnect_ += [upderP]
-        matching_upconnect_ = []  # reset after getting upconnect of matching upconnect
-        
-        if next_mixed_upconnect_:
-            form_PP_(PP_segs_, PP_segs, matching_upconnect_, next_mixed_upconnect_, missing_upconnect_, fPd)  # recursive compare sign of next-layer upconnects
+        matching_upupconnect_ = []
+        for derP in matching_upconnect_:
+
+            for upderP in derP._P.upconnect_t[0]: # pack next-row matching upconnects
+                if upderP._P.root not in continued_seg_:
+                    matching_upupconnect_ += [upderP]
+            for upderP in derP._P.upconnect_t[1]:  # add next-row missing upconnects
+                if upderP not in missing_upconnect_:
+                    missing_upconnect_ += [upderP]
+
+        if matching_upupconnect_:  # recursive compare sign of next-layer upconnects
+            form_PP_(PP_segs_, PP_segs, matching_upupconnect_, missing_upconnect_, fPd)
         else:
-            sum2PP(PP_segs_, PP_segs, missing_upconnect_)   # terminate when there's no next run's mixed upconnect
+            sum2PP(PP_segs_, PP_segs, missing_upconnect_)
     else:
         sum2PP(PP_segs_, PP_segs, missing_upconnect_)  # form PP
 
@@ -401,11 +406,8 @@ def accum_PP(PP, seg):
     PP.nderP += 1
     PP.mP += seg.mP
     PP.dP += seg.dP
-    PP.Rdn += seg.rdn
+    PP.Rdn += seg.rdn  # root_rdn + PP.Rdn / PP.nderP  # PP rdn is recursion rdn + average (forks + connects) rdn
     PP.y = max(seg.y, PP.y)  # or pass local y arg instead of derP.y?
-    '''
-    PP.rdn += root_rdn + PP.Rdn / PP.nderP  # PP rdn is recursion rdn + average (forks + upconnects) rdn
-    '''
     seg.root = PP
 
 
