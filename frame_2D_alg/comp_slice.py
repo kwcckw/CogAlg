@@ -104,6 +104,7 @@ class CPP(CP, CderP):  # derP params are inherited from P
     rdn = int  # for PP evaluation, recursion count + Rdn / nderPs
     Rdn = int  # for accumulation only
     nP = int  # len 2D derP__ in levels[0][fPd]?  ly = len(derP__), also x, y?
+    nderP = int
     upconnect_ = list
     downconnect_ = list
     fPPm = NoneType  # PPm if 1, else PPd; not needed if packed in PP_
@@ -130,6 +131,7 @@ def comp_slice_root(blob, verbose=False):  # always angle blob, composite dert c
         seg_t = form_seg_root(P__, root_rdn=2)  # forms segments: parameterized stacks of (P,derP)s
         draw_seg_(dir_blob, seg_t[0])  # temporary
         PPm_, PPd_ = form_PP_root(seg_t, root_rdn=2)  # forms PPs: parameterized graphs of connected segs
+        draw_PP_(dir_blob, PPm_)
 
         splice_PPs(PPm_, frng=1)  # splicing segs, seg__ is 2D: cross-sign (same-sign), converted to PP_ and PP respectively
         splice_PPs(PPd_, frng=0)
@@ -278,7 +280,7 @@ def sum2seg(seg_Ps, matching_upconnect_, missing_upconnect_):  # sum params: mer
     if seg_Ps[0].upconnect_t[1]: sign=seg_Ps[0].upconnect_t[1][0].sign  # sign in derP of the 1st mixed_upconnect
     else: sign=0
 
-    seg = CPP(x0=seg_Ps[0].x0, P__=seg_Ps, L = len(seg_Ps), sign=sign)  # seg.L is Ly
+    seg = CPP(x0=seg_Ps[0].x0, P__=seg_Ps, L = len(seg_Ps), y0 = seg_Ps[0].y, sign=sign)  # seg.L is Ly
     seg.upconnect_t = [matching_upconnect_, missing_upconnect_]
 
     for i, P in enumerate(seg_Ps):
@@ -370,38 +372,31 @@ def form_PP_(PP_segs_, PP_segs, matching_upconnect_, missing_upconnect_, fPd):  
 # not fully reviewed:
 def sum2PP(PP_, PP_segs, missing_upconnect_):  # sum params: derPs into segment or segs into PP
 
-    PP = CPP(x0=PP_segs[0].x0, sign=PP_segs[0].sign, seg_levels=[PP_segs], L= len(PP_segs), upconnect_ = missing_upconnect_)
+    PP = CPP(x0=PP_segs[0].x0, sign=PP_segs[0].sign,  L= len(PP_segs), upconnect_ = missing_upconnect_, seg_levels=[[]])  # we need init 1st empty seg levels too
 
     for seg in PP_segs:
         if isinstance(seg.root, CPP) and seg.root is not PP:
             _PP = seg.root  # PP initiated by different segs but connected to current PP through upconnects,
-            # merge PP in _PP:
+            # merge PP into _PP:
             for seg in PP.seg_levels[0]:
                 if seg not in _PP.seg_levels[0]: accum_PP(_PP, seg)
-            '''
-            add the below to accum_PP?
-            this should be missing_downconnect_s of all segs with seg.y0 = PP.y0, we may have multiple?
-            PP.downconnect_ should be empty, use PP_segs:
-            '''
-            for derP0 in PP.downconnect_:  # add downconnect
-                if derP0 not in _PP.downconnect_ :
-                    _PP.downconnect_ += [derP0]
-            # this should be missing_upconnect_s of all segs with seg.yn = PP.yn, we may have multiple?
-            for derPn in PP.upconnect_:  # add upconnect
-                if derPn not in _PP.upconnect_:
-                    _PP.upconnect_ += [derPn]
 
-            if _PP in PP_: PP_.remove(_PP)  # remove the merged PP from PP_
+            '''
+            # add downconnect and upconnect per PP
+            for derP0 in PP.downconnect_:  # add downconnect
+                if derP0 not in _PP.downconnect_ and derP0.P.root not in _PP.seg_levels[0]:  # derP is not existing downconnect and derP's seg is not part of PP
+                    _PP.downconnect_ += [derP0]
+            for derPn in PP.upconnect_:  # add upconnect
+                if derPn not in _PP.upconnect_ and derPn.P.root not in _PP.seg_levels[0]:   # derP is not existing upconnect and derP's seg is not part of PP
+                    _PP.upconnect_ += [derPn]
+            '''
+
+            if PP in PP_: PP_.remove(PP)  # remove the merged PP from PP_
             PP=_PP  # for consistent notation
 
         elif seg not in PP.seg_levels[0]:
             accum_PP(PP, seg)
-
-    for seg in PP_segs:
-        if seg.y0 == PP.y0:  # could be multiple bottom segs
-            for derP in seg.downconnect_t[1]:
-                if derP not in PP.downconnect_:
-                    PP.downconnect_ += [derP]
+               
     PP_ += [PP]
 
 
@@ -412,13 +407,32 @@ def accum_PP(PP, seg):
     else:
         accum_layer(PP.params, seg.params)
     PP.x0 = min(PP.x0, seg.x0)
-    PP.nderP += seg.upconnect_t[0]  # redundant derivatives of the same P
+    PP.nderP += len(seg.upconnect_t[0])  # redundant derivatives of the same P
     PP.mP += seg.mP
     PP.dP += seg.dP
     PP.Rdn += seg.rdn  # root_rdn + PP.Rdn / PP.nderP  # PP rdn is recursion rdn + average (forks + connects) rdn
     PP.y = max(seg.y, PP.y)  # or pass local y arg instead of derP.y?
     PP.seg_levels[0] += [seg]
     seg.root = PP
+    
+    # add downconnects and upconnects per seg
+    for derP in seg.P__[0].downconnect_t[1]:
+        if derP not in PP.downconnect_ and derP.P.root not in PP.seg_levels[0]:  # downconnect not in current PP's downconnect and not part of the seg in current PP
+            PP.downconnect_ += [derP]
+    for derP in seg.P__[-1].upconnect_t[1]:
+        if derP not in PP.downconnect_ and derP.P.root not in PP.seg_levels[0]:  # downconnect not in current PP's downconnect and not part of the seg in current PP
+            PP.upconnect_ += [derP]
+
+    # if the added seg is part of the downconnect or upconnect, remove it from downconnects or upconnects
+    for derP in PP.downconnect_:
+        if derP.root is seg:
+            PP.downconnect_.remove(derP)
+            break
+    for derP in PP.upconnect_:
+        if derP.root is seg:
+            PP.upconnect_.remove(derP)
+            break
+
 
 
 def accum_layer(top_layer, der_layer):
@@ -860,3 +874,29 @@ def draw_seg_(dir_blob, seg_):
 
     cv2.imwrite(os.getcwd() + "/images/comp_slice/img_" + str(dir_blob.id) + ".png", img)
 
+# draw PPs, temporary for debug purpose
+# will add upconnect and downconnect in the drawing next
+def draw_PP_(dir_blob, PP_):
+    
+    import random
+    import cv2
+    import os
+
+    x0 = min([P.x0 for PP in PP_ for seg in PP.seg_levels[0] for P in seg.P__])
+    xn = max([P.x0 + P.L for PP in PP_ for seg in PP.seg_levels[0] for P in seg.P__])
+    y0 = min([P.y for PP in PP_ for seg in PP.seg_levels[0] for P in seg.P__])
+    yn = max([P.y for PP in PP_ for seg in PP.seg_levels[0] for P in seg.P__])
+
+    for PP in PP_:
+        img = np.zeros((yn - y0 + 1, xn - x0 + 1, 3), dtype="uint8")
+        for seg in PP.seg_levels[0]:
+            current_colour = (random.randint(0, 255), random.randint(0, 255), random.randint(0, 255))
+    
+            for P in seg.P__:
+                img[P.y - y0, P.x0 - x0:P.x0 - x0 + P.L] = current_colour
+    
+        cv2.imwrite(os.getcwd() + "/images/comp_slice/img_" + str(dir_blob.id) + "PP_"+str(PP.id)+".png", img)
+
+    
+    
+    
