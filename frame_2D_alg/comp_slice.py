@@ -343,26 +343,23 @@ def form_PP_(PP_segs_, _PP, PP_segs, match_uplink_, miss_uplink_, match_downlink
     match_uuplink_ = []  # all local link_s are concatenated across PP
     match_ddownlink_ = []
 
-    for derP in match_uplink_:
-        for upderP in derP._P.uplink_t[0]:  # add next row of segs in matching uplinks:
-            PP_segs += [upderP._P.root]
-            for uupderP in upderP._P.uplink_t[0]:
-                if uupderP not in match_uuplink_ and uupderP._P.root not in PP_segs:
-                    match_uuplink_ += [uupderP]
+    for upderP in match_uplink_:
+        PP_segs += [upderP._P.root]  # add next row of segs in matching uplinks:
+        for uupderP in upderP._P.uplink_t[0]:
+            if uupderP not in match_uuplink_ and uupderP._P.root not in PP_segs:
+                match_uuplink_ += [uupderP]
+        for uupderP in upderP._P.uplink_t[1]:  # add next-row missing uplinks
+            if uupderP not in miss_uplink_:
+                miss_uplink_ += [uupderP]
 
-        for upderP in derP._P.uplink_t[1]:  # add next-row missing uplinks
-            if upderP not in miss_uplink_:
-                miss_uplink_ += [upderP]
-
-    for derP in match_downlink_:
-        for downderP in derP.P.downlink_t[0]:  # add next row of segs in matching downlinks:
-            PP_segs += [downderP.P.root]
-            for ddownderP in downderP.P.downlink_t[0]:
-                if ddownderP not in match_ddownlink_ and ddownderP.P.root not in PP_segs:
-                    match_ddownlink_ += [ddownderP]
-        for downderP in derP.P.downlink_t[1]:  # add next-row missing downlinks
-            if downderP not in miss_downlink_:
-                miss_downlink_ += [downderP]
+    for downderP in match_downlink_:
+        PP_segs += [downderP.P.root]  # add next row of segs in matching downlinks:
+        for ddownderP in downderP.P.downlink_t[0]:
+            if ddownderP not in match_ddownlink_ and ddownderP.P.root not in PP_segs:
+                match_ddownlink_ += [ddownderP]
+        for ddownderP in downderP.P.downlink_t[1]:  # add next-row missing downlinks
+            if ddownderP not in miss_downlink_:
+                miss_downlink_ += [ddownderP]
 
     if match_uuplink_ or match_ddownlink_:  # recursive compare sign of next-layer uplinks
         form_PP_(PP_segs_, _PP, PP_segs, match_uuplink_, miss_uplink_, match_ddownlink_, miss_downlink_, fPd)
@@ -373,7 +370,7 @@ def form_PP_(PP_segs_, _PP, PP_segs, match_uplink_, miss_uplink_, match_downlink
 def sum2PP(PP_, PP_segs, miss_uplink_, miss_downlink_):  # sum params: derPs into segment or segs into PP
 
     PP = CPP(x0=PP_segs[0].x0, sign=PP_segs[0].sign, seg_levels=[PP_segs], L= len(PP_segs),
-             uplink_ = miss_uplink_, downlink_ = miss_downlink_)
+             uplink_t = miss_uplink_, downlink_t = miss_downlink_)
     for seg in PP_segs:
         accum_PP(PP, seg)
     PP_ += [PP]
@@ -399,20 +396,20 @@ def accum_PP(PP, seg):
     seg.root = PP
     # add seg links:
     for derP in seg.P__[0].downlink_t[1]:  # if downlink not in current PP's downlink and not part of the seg in current PP:
-        if derP not in PP.downlink_ and derP.P.root not in PP.seg_levels[0]:
-            PP.downlink_ += [derP]
+        if derP not in PP.downlink_t and derP.P.root not in PP.seg_levels[0]:
+            PP.downlink_t += [derP]
     for derP in seg.P__[-1].uplink_t[1]:  # if downlink not in current PP's downlink and not part of the seg in current PP:
-        if derP not in PP.downlink_ and derP.P.root not in PP.seg_levels[0]:
-            PP.uplink_ += [derP]
+        if derP not in PP.downlink_t and derP.P.root not in PP.seg_levels[0]:
+            PP.uplink_t += [derP]
 
     # if added seg is in link_s, remove it
-    for derP in PP.downlink_:
+    for derP in PP.downlink_t:
         if derP.root is seg:
-            PP.downlink_.remove(derP)
+            PP.downlink_t.remove(derP)
             break
-    for derP in PP.uplink_:
+    for derP in PP.uplink_t:
         if derP.root is seg:
-            PP.uplink_.remove(derP)
+            PP.uplink_t.remove(derP)
             break
 
 
