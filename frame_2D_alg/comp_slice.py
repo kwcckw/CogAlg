@@ -243,7 +243,7 @@ def form_seg_root(P__, root_rdn):  # form segs from Ps
 
 def form_seg_(seg_, seg_Ps, fPd):  # form same-sign vertically contiguous segments
 
-    matching_uplink_, missing_uplink_ = [], []
+    match_uplink_, miss_uplink_ = [], []
 
     for derP in seg_Ps[-1].uplink_t[1]:  # mixed_uplink_ of top P in seg_Ps, not converted to CPP seg yet
 
@@ -251,23 +251,23 @@ def form_seg_(seg_, seg_Ps, fPd):  # form same-sign vertically contiguous segmen
         else:   derP.rdn = (derP.dP >= derP.mP); derP.sign = derP.mP > ave_mP * derP.rdn
 
         if derP.sign == seg_Ps[0].uplink_t[1][0].sign:  # seg.sign = sign from 1st uplink of 1st P
-            matching_uplink_ += [derP]
+            match_uplink_ += [derP]
         else:
-            missing_uplink_ += [derP]  # add to PP_missing_uplink_ at seg termination, same for missing_downlink_?
+            miss_uplink_ += [derP]  # add to PP_missing_uplink_ at seg termination, same for missing_downlink_?
 
-    if len(matching_uplink_) > 1:
-        seg_.append( sum2seg(seg_Ps, matching_uplink_, missing_uplink_) ) # convert seg_Ps to terminated seg
+    if len(match_uplink_) > 1:
+        seg_.append( sum2seg(seg_Ps, match_uplink_, miss_uplink_) ) # convert seg_Ps to terminated seg
     else:
         # if one P.uplink AND one _P.downlink: add _P to seg, matching_uplink_[0] is a sole uplinked derP:
-        if matching_uplink_ and len(matching_uplink_[0]._P.downlink_t[1])==1:
+        if match_uplink_ and len(match_uplink_[0]._P.downlink_t[1])==1:
 
-            seg_Ps += [matching_uplink_[0]._P]
+            seg_Ps += [match_uplink_[0]._P]
             if seg_Ps[-1].uplink_t[1]:
                 form_seg_(seg_, seg_Ps, fPd)  # recursive compare sign of next-layer uplinks
             else:
-                seg_.append( sum2seg(seg_Ps, [], missing_uplink_))
+                seg_.append( sum2seg(seg_Ps, [], miss_uplink_))
         else:
-            seg_.append( sum2seg(seg_Ps, [], missing_uplink_))  # terminate at 0 matching uplink
+            seg_.append( sum2seg(seg_Ps, [], miss_uplink_))  # terminate at 0 matching uplink
 '''
         seg|PP. rng+|der+ rdn:
         if fPd: inp.rdn += (inp.mP > inp.dP)  # PPd / vD sign, distinct from directly defined match:
@@ -275,13 +275,13 @@ def form_seg_(seg_, seg_Ps, fPd):  # form same-sign vertically contiguous segmen
         # if branch rdn: inp.rdn += sum([1 for upderP in derP.P.uplink_ if upderP.dP >= derP.dP])
 '''
 
-def sum2seg(seg_Ps, matching_uplink_, missing_uplink_):  # sum params: merge vertically linked Ps into segment
+def sum2seg(seg_Ps, match_uplink_, miss_uplink_):  # sum params: merge vertically linked Ps into segment
 
     if seg_Ps[0].uplink_t[1]: sign=seg_Ps[0].uplink_t[1][0].sign  # sign in derP of the 1st mixed_uplink
     else: sign=0  # blank derP sign
 
     seg = CPP(x0=seg_Ps[0].x0, P__=seg_Ps, L = len(seg_Ps), y0 = seg_Ps[0].y, sign=sign)  # seg.L is Ly
-    seg.uplink_t = [matching_uplink_, missing_uplink_]
+    seg.uplink_t = [match_uplink_, miss_uplink_]
 
     for i, P in enumerate(seg_Ps):
         if i==len(seg_Ps)-1:
@@ -318,33 +318,33 @@ def form_PP_root(seg_t, root_rdn):  # form PPs from linked segs
     PP_t = []
     for fPd in 0, 1:
         PP_segs_ = []
+        PP_ = []
         seg_ = seg_t[fPd]
+
         for seg in seg_:  # bottom-up
             if not isinstance(seg.root, CPP):  # seg is not already in PP initiated by some prior seg
 
                 if seg.uplink_t[0] or seg.downlink_t[0]: # seg.uplinks are CderP with P.root=seg and _P.root=_seg
-                    form_PP_( PP_segs_, None, [seg],
+                    form_PP_( PP_, PP_segs_, None, [seg],
                         seg.uplink_t[0].copy(), seg.uplink_t[1].copy(), seg.downlink_t[0].copy(), seg.downlink_t[1].copy(), fPd)
                 else:
-                    sum2PP(PP_segs_, [seg], seg.uplink_t[1],seg.downlink_t[1])  # single-seg PP
+                    PP_ = [sum2PP([seg], seg.uplink_t[1],seg.downlink_t[1])]  # single-seg PP
 
-        PP_t.append(PP_segs_)  # PP_segs are replaced with PPs in sum2PP and form_PP_
-        '''
-        PP is a graph with segs as 1D "vertices", each with two sets of edges or branching points: seg.uplink_ and seg.downlink_.
-        Each edge is CderP, derP.rdn *= len(P.uplink_|_P.downlink_)
-        '''
+        PP_t.append(PP_)  # PP_segs are converted to PPs in sum2PP and form_PP_
+
     return PP_t  # PPm_, PPd_
 
 
-def form_PP_(PP_segs_, _PP, PP_segs, match_uplink_, miss_uplink_, match_downlink_, miss_downlink_, fPd):
+def form_PP_(PP_, PP_segs_, _PP, PP_segs, match_uplink_, miss_uplink_, match_downlink_, miss_downlink_, fPd):
     '''
-    add to PP_segs: same-sign linked segments, via flood fill through vertical-only connections
+    this function is flood-filling PP_segs with vertically linked same-sign segments
     '''
-    match_uuplink_ = []  # all local link_s are concatenated across PP
+    match_uuplink_ = []  # all local link_s are concatenated from exposed PP_segs
     match_ddownlink_ = []
 
     for upderP in match_uplink_:
-        PP_segs += [upderP._P.root]  # add next row of segs in matching uplinks:
+        seg = upderP._P.root
+        PP_segs += [seg]  # add next row of segs in matching uplinks:
         for uupderP in upderP._P.uplink_t[0]:
             if uupderP not in match_uuplink_ and uupderP._P.root not in PP_segs:
                 match_uuplink_ += [uupderP]
@@ -362,24 +362,24 @@ def form_PP_(PP_segs_, _PP, PP_segs, match_uplink_, miss_uplink_, match_downlink
                 miss_downlink_ += [ddownderP]
 
     if match_uuplink_ or match_ddownlink_:  # recursive compare sign of next-layer uplinks
-        form_PP_(PP_segs_, _PP, PP_segs, match_uuplink_, miss_uplink_, match_ddownlink_, miss_downlink_, fPd)
+        form_PP_(PP_, PP_segs_, _PP, PP_segs, match_uuplink_, miss_uplink_, match_ddownlink_, miss_downlink_, fPd)
     else:
-        sum2PP(PP_segs_, PP_segs, miss_uplink_, miss_downlink_)
+        PP_ += [sum2PP(PP_segs, miss_uplink_, miss_downlink_)]  # PP_segs is converted to PP
+        '''
+        PP is a graph with segs as 1D "vertices", each with two sets of edges or branching points: seg.uplink_ and seg.downlink_.
+        Each edge is CderP, with derP.rdn *= len(P.uplink_|_P.downlink_)
+        '''
+    return PP_
 
+def sum2PP(PP_segs, miss_uplink_, miss_downlink_):  # sum params: derPs into segment or segs into PP
 
-def sum2PP(PP_, PP_segs, miss_uplink_, miss_downlink_):  # sum params: derPs into segment or segs into PP
+    PP = CPP(x0=PP_segs[0].x0, sign=PP_segs[0].sign, seg_levels=[PP_segs],  # PP_segs is seg_levels[0]
+             L= len(PP_segs), uplink_t = miss_uplink_, downlink_t = miss_downlink_)
 
-    PP = CPP(x0=PP_segs[0].x0, sign=PP_segs[0].sign, seg_levels=[PP_segs], L= len(PP_segs),
-             uplink_t = miss_uplink_, downlink_t = miss_downlink_)
     for seg in PP_segs:
         accum_PP(PP, seg)
-    PP_ += [PP]
 
-def merge_PP(_PP, PP):
-    for seg in PP.seg_levels[0]:  # merge PP_segs into _PP:
-        if seg not in _PP.seg_levels[0]:
-            accum_PP(_PP, seg)
-            _PP.seg_levels[0] += [seg]
+    return PP
 
 def accum_PP(PP, seg):
 
@@ -394,6 +394,7 @@ def accum_PP(PP, seg):
     PP.Rdn += seg.rdn  # root_rdn + PP.Rdn / PP.nderP  # PP rdn is recursion rdn + average (forks + links) rdn
     PP.y = max(seg.y, PP.y)  # or pass local y arg instead of derP.y?
     seg.root = PP
+
     # add seg links:
     for derP in seg.P__[0].downlink_t[1]:  # if downlink not in current PP's downlink and not part of the seg in current PP:
         if derP not in PP.downlink_t and derP.P.root not in PP.seg_levels[0]:
@@ -401,8 +402,7 @@ def accum_PP(PP, seg):
     for derP in seg.P__[-1].uplink_t[1]:  # if downlink not in current PP's downlink and not part of the seg in current PP:
         if derP not in PP.downlink_t and derP.P.root not in PP.seg_levels[0]:
             PP.uplink_t += [derP]
-
-    # if added seg is in link_s, remove it
+    '''
     for derP in PP.downlink_t:
         if derP.root is seg:
             PP.downlink_t.remove(derP)
@@ -411,6 +411,14 @@ def accum_PP(PP, seg):
         if derP.root is seg:
             PP.uplink_t.remove(derP)
             break
+    '''
+
+def merge_PP(_PP, PP):  # only for PP splicing
+
+    for seg in PP.seg_levels[0]:  # merge PP_segs into _PP:
+        if seg not in _PP.seg_levels[0]:
+            accum_PP(_PP, seg)
+            _PP.seg_levels[0] += [seg]
 
 
 def accum_layer(top_layer, der_layer):
