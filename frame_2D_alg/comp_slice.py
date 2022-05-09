@@ -1,4 +1,4 @@
-'''
+''''
 Comp_slice is a terminal fork of intra_blob.
 -
 It traces blob axis by cross-comparing vertically adjacent Ps: horizontal slices across an edge blob.
@@ -130,18 +130,15 @@ def comp_slice_root(blob, verbose=False):  # always angle blob, composite dert c
 
         seg_t = form_seg_root(P__, root_rdn=2)  # forms segments: parameterized stacks of (P,derP)s
         PPm_, PPd_ = form_PP_root(seg_t, root_rdn=2)  # forms PPs: parameterized graphs of linked segs
-        
+
         # temporary
-        draw_seg_(dir_blob, seg_t[0])  
+        draw_seg_(dir_blob, seg_t[0])
         draw_PP_segs(dir_blob, PPm_)
         draw_PPs(dir_blob, PPm_, fspliced=0)
+        # PPm_ = splice_PPs(PPm_, frng=1)  # splicing segs, seg__ is 2D: cross-sign (same-sign), converted to PP_ and PP respectively
+        # PPd_ = splice_PPs(PPd_, frng=0)
+        # draw_PPs(dir_blob, PPm_, fspliced=1)
 
-        PPm_ = splice_PPs(PPm_, frng=1)  # splicing segs, seg__ is 2D: cross-sign (same-sign), converted to PP_ and PP respectively
-        PPd_ = splice_PPs(PPd_, frng=0)
-        
-        # temporary
-        draw_PPs(dir_blob, PPm_, fspliced=1)
-        
         sub_recursion([], PPm_, frng=1)  # rng+ comp_P in PPms, -> param_layer, form sub_PPs
         sub_recursion([], PPd_, frng=0)  # der+ comp_P in PPds, -> param_layer, form sub_PPs
 
@@ -282,30 +279,30 @@ def form_seg_(seg_, seg_Ps, fPd):  # form same-sign vertically contiguous segmen
         # if branch rdn: inp.rdn += sum([1 for upderP in derP.P.uplink_ if upderP.dP >= derP.dP])
 '''
 
-def sum2P(Ps, uplink_, downlink_):
-    
-    if isinstance(Ps[0], CPP):
-        PP = CPP(x0=Ps[0].x0, sign=Ps[0].sign, seg_levels=[Ps],  # PP_segs is seg_levels[0]
-             L= len(Ps), uplink_t = uplink_, downlink_t = downlink_)
-        for seg in Ps:
-            accum_PP(PP, seg)
-    else:        
-        if Ps[0].uplink_t[1]: sign=Ps[0].uplink_t[1][0].sign  # sign in derP of the 1st mixed_uplink
-        else: sign=0  # blank derP sign
-    
-        PP = CPP(x0=Ps[0].x0, P__=Ps, L = len(Ps), y0 = Ps[0].y, sign=sign, uplink_t=[uplink_, downlink_])
+def sum2CPP(inps, uplink_, downlink_):  # inp is seg or PP, not fully reviewed
 
-        for i, P in enumerate(Ps):
-            if i==len(Ps)-1:
+    if isinstance(inps[0], CPP):
+        PP = CPP(x0=inps[0].x0, sign=inps[0].sign, seg_levels=[inps],  # PP_segs is seg_levels[0]
+             L= len(inps), uplink_t = uplink_, downlink_t = downlink_)
+        for seg in inps:
+            accum_PP(PP, seg)
+    else:
+        if inps[0].uplink_t[1]: sign=inps[0].uplink_t[1][0].sign  # sign in derP of the 1st mixed_uplink
+        else: sign=0  # blank derP sign
+
+        PP = CPP(x0=inps[0].x0, P__=inps, L = len(inps), y0 = inps[0].y, sign=sign, uplink_t=[uplink_, downlink_])
+
+        for i, P in enumerate(inps):
+            if i==len(inps)-1:
                 derP = CderP()  # blank CderP instead of last uplink, which is external to seg, same for single-P seg
             else:
                 derP = P.uplink_t[1][0]  # 1st matching_uplink, still in mixed_uplink
-            if not seg.params:
+            if not P.params:
                 PP.params = derP.params
             else:
                 accum_layer(PP.params, derP.params)
             accum_layer(PP.params, P.params)
-    
+
             PP.x0 = min(PP.x0, P.x0)
             PP.nderP += 1  # or not redundant, seg.nderP = seg.uplink_t[1]?
             PP.mP += derP.mP
@@ -314,9 +311,9 @@ def sum2P(Ps, uplink_, downlink_):
             PP.Rdn += derP.rdn  # root_rdn + PP.Rdn / PP.nderP: average uplinks rdn
             PP.y = max(PP.y, P.y)  # or pass local y arg instead of derP.y?
             P.root = PP
-    
-        for derP in Ps[0].downlink_t[1]:  # Ps[0]: bottom P of the seg
-            if derP.sign == seg.sign:
+
+        for derP in inps[0].downlink_t[1]:  # Ps[0]: bottom P of the seg
+            if derP.sign == CPP.sign:
                 derP._P.root = PP  # uplinked seg
                 PP.P__[0].downlink_t[0] += [derP]  # add to matching_downlink_, which is empty from comp_P_root
                 PP.downlink_t[0] += [derP]
@@ -454,16 +451,7 @@ def accum_PP(PP, seg):
     for derP in seg.P__[-1].uplink_t[1]:  # if downlink not in current PP's downlink and not part of the seg in current PP:
         if derP not in PP.downlink_t and derP.P.root not in PP.seg_levels[0]:
             PP.uplink_t += [derP]
-    '''
-    for derP in PP.downlink_t:
-        if derP.root is seg:
-            PP.downlink_t.remove(derP)
-            break
-    for derP in PP.uplink_t:
-        if derP.root is seg:
-            PP.uplink_t.remove(derP)
-            break
-    '''
+
 
 def merge_PP(_PP, PP):  # only for PP splicing
 
@@ -471,14 +459,14 @@ def merge_PP(_PP, PP):  # only for PP splicing
         accum_PP(_PP, seg)
         _PP.seg_levels[0] += [seg]
 
-    # merge their uplinks and downlinks
+    # merge uplinks and downlinks
     for uplink in PP.uplink_t:
         if uplink not in _PP.uplink_t:
             _PP.uplink_t += [uplink]
     for downlink in PP.downlink_t:
         if downlink not in _PP.downlink_t:
-            _PP.downlink_t += [downlink]    
-        
+            _PP.downlink_t += [downlink]
+
 
 def accum_layer(top_layer, der_layer):
 
@@ -663,21 +651,21 @@ def splice_PPs(PP_, frng):  # splice select PP pairs if der+ or triplets if rng+
         _PP = PP_.pop(0)  # pop PP, so that we can differentiate between tested and untested PPs
         tested_segs = []  # we need this because we may add new seg during splicing process, and those new seg need to check their link for splicing too
         _segs = _PP.seg_levels[0]
-        
+
         while _segs:
-            _seg = _segs.pop(0)                   
+            _seg = _segs.pop(0)
             _avg_y = sum([P.y for P in _seg.P__])/len(_seg.P__)  # y centroid for _seg
-            
-            for link in _seg.uplink_t[1] + _seg.downlink_t[1]:  
+
+            for link in _seg.uplink_t[1] + _seg.downlink_t[1]:
                 seg = link.P.root  # missing link of current seg
-                
+
                 if seg.root is not _PP:  # this may occur after the merging where multiple links are having same PP
                     avg_y = sum([P.y for P in seg.P__])/len(seg.P__)  # y centroid for seg
-                
+
                     # test for y distance (temporary)
                     if (_avg_y - avg_y) < ave_splice:
                         if seg.root in PP_: PP_.remove(seg.root)  # remove merged PP
-                        elif seg.root in spliced_PP_: spliced_PP_.remove(seg.root) 
+                        elif seg.root in spliced_PP_: spliced_PP_.remove(seg.root)
                         # splice _seg's PP with seg's PP
                         merge_PP(_PP, seg.root)
 
@@ -887,14 +875,14 @@ def draw_PP_segs(dir_blob, PP_):
                 img[P.y - y0, P.x0 - x0:P.x0 - x0 + P.L] = current_colour
 
         cv2.imwrite(os.getcwd() + "/images/comp_slice/img_" + str(dir_blob.id) + "_PP_"+str(PP.id)+".png", img)
-            
+
 
 # draw PPs within single dir_blob
 def draw_PPs(dir_blob, PP_, fspliced):
     import random
     import cv2
     import os
-    
+
     x0 = min([P.x0 for PP in PP_ for seg in PP.seg_levels[0] for P in seg.P__])
     xn = max([P.x0 + P.L for PP in PP_ for seg in PP.seg_levels[0] for P in seg.P__])
     y0 = min([P.y for PP in PP_ for seg in PP.seg_levels[0] for P in seg.P__])
@@ -909,6 +897,5 @@ def draw_PPs(dir_blob, PP_, fspliced):
 
     if fspliced:
         cv2.imwrite(os.getcwd() + "/images/comp_slice/img_" + str(dir_blob.id) + "_PP.png", img)
-    else:    
+    else:
         cv2.imwrite(os.getcwd() + "/images/comp_slice/img_" + str(dir_blob.id) + "_PP_spliced.png", img)
-    
