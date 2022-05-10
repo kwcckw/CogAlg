@@ -205,21 +205,25 @@ def comp_P_root(P__, rng, frng):  # vertically compares y-adjacent and x-overlap
         if i+rng < len(P__):  # rng=1 unless rng+ fork
             P_ = P__[i+rng]   # lower compared row
             for P in P_:
+                if frng: cP = P  # rng+, compare lower-derivation P
+                else:    cP = P.uplink_t[0][0]  # der+, compare top-derivation derP, multiple?
                 for _P in _P_:  # upper compared row
+                    if frng: _cP = _P
+                    else:    _cP = _P.uplink_t[0][0]
                     # form sub_Pds for comp_dx?
                     # test for x overlap between P and _P in 8 directions, all Ps are from +ve derts:
-                    if (P.x0 - 1 < (_P.x0 + _P.L) and (P.x0 + P.L) + 1 > _P.x0):
-                        if isinstance(P, CPP) or isinstance(P, CderP):
-                            derP = comp_layer(_P, P)  # form vertical derivatives of horizontal P params
+                    if (cP.x0 - 1 < (_cP.x0 + _cP.L) and (cP.x0 + cP.L) + 1 > _cP.x0):
+                        if isinstance(cP, CPP) or isinstance(cP, CderP):
+                            derP = comp_layer(_cP, cP)  # form vertical derivatives of horizontal P params
                         else:
-                            derP = comp_P(_P, P)  # form higher vertical derivatives of derP or PP params
-                        derP.y=P.y
+                            derP = comp_P(_cP, cP)  # form higher vertical derivatives of derP or PP params
+                        derP.y = P.y
                         if frng:  # accumulate derP through rng+ recursion:
                             accum_layer(derP.params, P.params)
                         P.uplink_t[1].append(derP)  # per P for form_PP
                         _P.downlink_t[1].append(derP)
 
-                    elif (P.x0 + P.L) < _P.x0:  # no P xn overlap, stop scanning lower P_
+                    elif (cP.x0 + cP.L) < _cP.x0:  # no P xn overlap, stop scanning lower P_
                         break
         _P_ = P_
 
@@ -374,16 +378,13 @@ def form_PP_root(seg_t, root_rdn):  # form PPs from linked segs
         PP_segs_ = []
         PP_ = []
         seg_ = seg_t[fPd]
-        
-        # need another fPd here to form seg_levels_t?
         for seg in seg_:  # bottom-up
             if not isinstance(seg.root, CPP):  # seg is not already in PP initiated by some prior seg
 
-                if seg.uplink_t[0] or seg.downlink_t[0]: # seg.uplinks are CderP with P.root=seg and _P.root=_seg
-                    form_PP_( PP_, PP_segs_, None, [seg],
-                        seg.uplink_t[0].copy(), seg.uplink_t[1].copy(), seg.downlink_t[0].copy(), seg.downlink_t[1].copy(), fPd)
+                if seg.P_[-1].uplink_ or seg.P_[0].downlink_: # seg.uplinks are CderP with P.root=seg and _P.root=_seg
+                    form_PP_( PP_, PP_segs_, None, [seg], seg.P_[-1].uplink_.copy(), seg.P_[0].downlink_.copy(), fPd)
                 else:
-                    PP_ = [sum2PP([seg], seg.uplink_t[1],seg.downlink_t[1])]  # single-seg PP
+                    PP_ = [sum2PP([seg], seg.P_[-1].uplink_, seg.P_[0].downlink_)]  # single-seg PP
 
         PP_t.append(PP_)  # PP_segs are converted to PPs in sum2PP and form_PP_
 
@@ -442,7 +443,7 @@ def accum_PP(PP, seg):
     seg.root = PP
 
     # add Ps into PP following their y location
-    for P in seg.P__:  
+    for P in seg.P__:
         if not PP.P__:
             PP.P__.append([P])
         else:
