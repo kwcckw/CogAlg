@@ -1,4 +1,4 @@
-''''
+'''
 Comp_slice is a terminal fork of intra_blob.
 -
 It traces blob axis by cross-comparing vertically adjacent Ps: horizontal slices across an edge blob.
@@ -105,8 +105,8 @@ class CPP(CP, CderP):  # derP params are inherited from P
     Rdn = int  # for accumulation only
     nP = int  # len 2D derP__ in levels[0][fPd]?  ly = len(derP__), also x, y?
     nderP = int
-    uplink_t = lambda: [[],[]]
-    downlink_t = lambda: [[],[]]
+    uplink_ = list  # miss links only
+    downlink_ = list
     fPPm = NoneType  # PPm if 1, else PPd; not needed if packed in PP_
     fdiv = NoneType
     box = list  # for visualization only, original box before flipping
@@ -126,16 +126,14 @@ def comp_slice_root(blob, verbose=False):  # always angle blob, composite dert c
 
         P__ = slice_blob(dir_blob, verbose=False)  # cluster dir_blob.dert__ into 2D array of blob slices
         # comp_dx_blob(P__), comp_dx?
-        comp_P_root(P__, rng=1, frng=0)  # scan_P_, comp_P | comp_layers, adds uplink_ and downlink per P
+        comp_P_root(P__, rng=1, frng=1)  # scan_P_, comp_P | comp_layers, adds mixed uplink_, downlink_ per P
 
         seg_t = form_seg_root(P__, root_rdn=2)  # forms segments: parameterized stacks of (P,derP)s
         PPm_, PPd_ = form_PP_root(seg_t, root_rdn=2)  # forms PPs: parameterized graphs of linked segs
-
         # temporary
         draw_seg_(dir_blob, seg_t[0])
         draw_PP_segs(dir_blob, PPm_)
         draw_PPs(dir_blob, PPm_, fspliced=0)
-        # draw_PPs(dir_blob, PPm_, fspliced=1)
 
         sub_recursion([], PPm_, frng=1)  # rng+ comp_P in PPms, -> param_layer, form sub_PPs
         sub_recursion([], PPd_, frng=0)  # der+ comp_P in PPds, -> param_layer, form sub_PPs
@@ -203,34 +201,47 @@ def comp_P_root(P__, rng, frng):  # vertically compares y-adjacent and x-overlap
         if i+rng < len(P__):  # rng=1 unless rng+ fork
             P_ = P__[i+rng]   # lower compared row
             for P in P_:
-                if frng: 
-                    if not P.uplink_t[0]: break
-                    else: cP = P.uplink_t[0][0]  # der+, compare top-derivation derP, multiple?  
+                if frng:
+                    scan_P_(P, _P_, frng)  # rng+, compare at input derivation, which is single P
                 else:
-                    cP = P  # rng+, compare lower-derivation P    
-                for _P in _P_:  # upper compared row
-                    if frng: 
-                        if not _P.uplink_t[0]: break
-                        else: _cP = _P.uplink_t[0][0]
-                    else: _cP = _P
-                        
-                    # form sub_Pds for comp_dx?
-                    # test for x overlap between P and _P in 8 directions, all Ps are from +ve derts:
-                    if (cP.x0 - 1 < (_cP.x0 + _cP.L) and (cP.x0 + cP.L) + 1 > _cP.x0):
-                        if isinstance(cP, CPP) or isinstance(cP, CderP):
-                            derP = comp_layer(_cP, cP)  # form vertical derivatives of horizontal P params
-                        else:
-                            derP = comp_P(_cP, cP)  # form higher vertical derivatives of derP or PP params
-                        derP.y = P.y
-                        if frng:  # accumulate derP through rng+ recursion:
-                            accum_layer(derP.params, P.params)
-                        P.uplink_t[1].append(derP)  # per P for form_PP
-                        _P.downlink_t[1].append(derP)
+                    for derP in P.uplink_t[0]:  # der+, compare at new derivation, which is derP_
+                        scan_P_(derP, _P_, frng)
+            _P_ = P_
 
-                    elif (cP.x0 + cP.L) < _cP.x0:  # no P xn overlap, stop scanning lower P_
-                        break
-        _P_ = P_
+def scan_P_(P, _P_, frng):
 
+    for _P in _P_:  # upper compared row
+        if frng:
+            fbreak = comp_olp(P, _P, frng)
+        else:
+            for _derP in _P.uplink_t[0]:  # compare _derPs
+                fbreak = comp_olp(P, _derP, frng)
+        if fbreak:
+            break
+
+def comp_olp(P, _P, frng):  # P, _P can be derP, _derP;  also form sub_Pds for comp_dx?
+
+    # test for x overlap between P and _P in 8 directions, all Ps are from +ve derts:
+    if P.x0 - 1 < (_P.x0 + _P.L) and (P.x0 + P.L) + 1 > _P.x0:
+
+        if isinstance(P, CPP) or isinstance(P, CderP):
+            derP = comp_layer(_P, P)  # form vertical derivatives of horizontal P params
+        else:
+            derP = comp_P(_P, P)  # form higher vertical derivatives of derP or PP params
+            derP.y = P.y
+            if frng:  # accumulate derP through rng+ recursion:
+                accum_layer(derP.params, P.params)
+                P.uplink_t[1].append(derP)  # per P for form_PP
+                _P.downlink_t[1].append(derP)
+        fbreak = 0
+
+    elif (P.x0 + P.L) < _P.x0:  # no P xn overlap, stop scanning lower P_
+        fbreak = 1
+
+    return fbreak
+'''
+below is not reviewed
+'''
 
 def form_seg_root(P__, root_rdn):  # form segs from Ps
 
@@ -283,7 +294,6 @@ def form_seg_(seg_, seg_Ps, fPd):  # form same-sign vertically contiguous segmen
         # if branch rdn: inp.rdn += sum([1 for upderP in derP.P.uplink_ if upderP.dP >= derP.dP])
 '''
 
-# not sure if this is better
 def sum2CPP(inps, uplink_, downlink_):  # inp is seg or PP, not fully reviewed
 
     if isinstance(inps[0], CPP):
@@ -329,7 +339,7 @@ def sum2CPP(inps, uplink_, downlink_):  # inp is seg or PP, not fully reviewed
 
 def sum2PP(PP_segs, miss_uplink_, miss_downlink_, fPd):  # sum params: derPs into segment or segs into PP
 
-    PP = CPP(x0=PP_segs[0].x0, sign=PP_segs[0].sign, 
+    PP = CPP(x0=PP_segs[0].x0, sign=PP_segs[0].sign,
              L= len(PP_segs), uplink_t = miss_uplink_, downlink_t = miss_downlink_)
     PP.seg_levels[0][fPd] = [PP_segs]  # PP_segs is seg_levels[0]
 
@@ -606,14 +616,14 @@ def agg_recursion(blob, fseg):  # compositional recursion per blob.Plevel. P, PP
 
     n_extended = 0
     for i, PP_ in enumerate(PP_t):   # fiPd = fiPd % 2
-        
+
         # splicing segs when fseg = true, seg__ is 2D: cross-sign (same-sign), converted to PP_ and PP respectively
         # or splicing PPs when fseg = false
         if fseg:
             splice_segs(PP_)
         else:
             splice_PPs(PP_, frng=1-i)
-    
+
         fiPd = i % 2
         if fiPd: ave_PP = ave_dPP
         else:    ave_PP = ave_mPP
