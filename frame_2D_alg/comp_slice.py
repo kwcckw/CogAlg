@@ -215,27 +215,27 @@ def comp_P_rng(PP, rng, fPd):  # compare Ps over incremented range: P__[n], P__[
 
     for seg in seg_:
         for i, P in enumerate(seg.P__):  # each element is a row P in seg
-            crng = 0  # current range
-            new_mix_uplink_ = []  # init new uplink list with new rng
-            check_uplink_recursive(P, new_mix_uplink_, crng, rng)  # check and find uplink recursively within rng 
-            P.uplink_t = [[], new_mix_uplink_]  # update and reset new uplinks
-            P__ += [[P]]
+            uplink_ = P.uplink_t[1]  # should be mixed here, so that we can compare Ps across segs
+            new_mixed_uplink_ = []
+            if uplink_: P__ += [[P]]
+            # replace recursive function
+            while uplink_:
+                new_uplink_ = []
+                for uplink in uplink_:                
+                    _P = uplink._P
+                    dy = abs(P.y - _P.y)
+                    if dy == rng:  # same rng - comp_P
+                        derP = comp_P(_P, P)  # forms vertical derivatives of P params
+                        new_mixed_uplink_ += [derP]  # new uplink per P
+                        _P.downlink_t[1] += [derP]  # add downlink per _P 
+                    elif dy + 1 <= rng and _P.uplink_t[0]:  # search uplink again when dy is < rng
+                        new_uplink_ += _P.uplink_t[0]
+                    else:  # current dy exceeded rng, break
+                        break
+                uplink_ = new_uplink_
+            P.uplink_t = [[], new_mixed_uplink_]
+
     return P__
-
-
-def check_uplink_recursive(P, new_mix_uplink_, crng, rng):
-    
-    for uplink in P.uplink_t[0]:                
-        _P = uplink._P
-        if crng + 1 == rng:  # same rng - comp_P
-            derP = comp_P(_P, P)  # forms vertical derivatives of P params
-            new_mix_uplink_ += [derP]  # for form_PP
-            _P.downlink_t[1] += [derP]       
-        elif crng + 1 <= rng and _P.uplink_t[0]:  # search uplink again when current rng is < target rng
-            check_uplink_recursive(_P, new_mix_uplink_, crng+1, rng)
-        else:  # current rng exceeded rng, break
-            break
-
 
 # very initial draft
 def comp_P_der(PP, fPd):
@@ -252,7 +252,7 @@ def comp_P_der(PP, fPd):
             for uplink in P.uplink_t[0]: 
                 _P = uplink._P
                 if _P.uplink_t[0]:
-                    derP = comp_P(_P.uplink_t[0][0], P.uplink_t[0][0])  # forms vertical derivatives of P params
+                    derP = comp_layer(_P.uplink_t[0][0], P.uplink_t[0][0])  # forms vertical derivatives of P params
                     # add derP to downlink and uplink of derP again (_P.uplink_t[0][0], P.uplink_t[0][0]) ?
                     P__ += [[P.uplink_t[0][0]]]
     return P__
@@ -572,8 +572,8 @@ def sub_recursion(root_layers, PP_, frng):  # compares param_layers of derPs in 
 
             PP.rdn += 1  # rdn to prior derivation layers
             PP.rng = rng
-            if frng: P__ = comp_P_rng(PP, rng, fPd)
-            else:    P__ = comp_P_der(PP, fPd) 
+            if frng: P__ = comp_P_rng(deepcopy(PP), rng, fPd)
+            else:    P__ = comp_P_der(deepcopy(PP), fPd) 
             sub_seg_t = form_seg_root(P__, root_rdn=PP.rdn)
             sub_PPm_, sub_PPd_ = form_PP_root(sub_seg_t, root_rdn=PP.rdn)  # forms PPs: parameterized graphs of linked segs
 
