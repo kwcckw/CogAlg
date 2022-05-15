@@ -204,6 +204,39 @@ def comp_P_root(P__):  # vertically compares y-adjacent and x-overlapping Ps: bl
                     break  # no P xn overlap, stop scanning lower P_
         _P_ = P_
 
+
+def comp_P_sub(PP, rng, fPd):
+       
+    for P_ in PP.P__:  # P__ is packed bottom up
+        for P in P_:
+            if rng > 1:
+                P.downlink_t = [[],[]]  # reset only downlinks, uplinks will be updated below
+                P.root = object  # reset links and PP refs in the last sub_P layer
+            else:
+                for derP in P.uplink_t[1] + P.downlink_t[1]:  # reset all derP:
+                    derP.uplink_t = [[], []]
+                    derP.downlink_t = [[], []]
+                    derP.root = object
+    
+    for i, P_ in enumerate(PP.P__):  # scan bottom up
+        if (i+rng) <= len(PP.P__)-1:
+            _P_ = PP.P__[i+rng]  # upper row's P
+            for P in P_:
+                if rng==1:
+                    if P.uplink_t[0]: P = P.uplink_t[0][0]  # P's 1st uplink's derP
+                    else:             break  # break when there's no uplink
+                else:
+                    new_mixed_uplink_ = []  # initialize new mixed uplink for P instance
+                for _P in _P_:
+                    if rng==1:  
+                        if _P.uplink_t[0]: _P = _P.uplink_t[0][0]  # _P's 1st uplink's derP
+                        else:              break  # break when there's no uplink 
+                    derP = comp_layer(_P, P)  # forms vertical derivatives of P params
+                    _P.downlink_t[1] += [derP]
+                    if rng == 1: P.uplink_t[1] += [derP]  # add uplink for derP
+                    else:        new_mixed_uplink_ += [derP]
+                if rng == 1:  P.uplink_t = [[], new_mixed_uplink_]  # update with new uplinks
+
 # draft:
 def comp_P_rng(PP, rng, fPd):  # compare Ps over incremented range: P__[n], P__[n-rng], sub-recursive
 
@@ -354,12 +387,12 @@ def accum_CPP(PP, inp, fPd):  # inp is derP or seg
                 current_ys = [P_[0].y for P_ in PP.P__]  # list of current-layer seg rows
                 if P.y in current_ys:
                     PP.P__[current_ys.index(P.y)].append(P)  # append P row
-                elif P.y > current_ys[-1]:  # P.y > largest y in ys
+                elif P.y > current_ys[0]:  # P.y > largest y in ys
+                    PP.P__.insert(0, [P])     
+                elif P.y < current_ys[-1]:  # P.y < smallest y in ys
                     PP.P__.append([P])
-                elif P.y < current_ys[0]:  # P.y < smallest y in ys
-                    PP.P__.insert(0, [P])
-                elif P.y > current_ys[0] and P.y < current_ys[-1]:  # P.y in between largest and smallest value
-                    PP.P__.insert(P.y - current_ys[0], [P])
+                elif P.y < current_ys[0] and P.y > current_ys[-1]:  # P.y in between largest and smallest value
+                    PP.P__.insert(P.y - current_ys[-1], [P])
 
         # add seg links:
         for derP in inp.P__[0].downlink_t[1]:  # if downlink not in current PP's downlink and not part of the seg in current PP:
