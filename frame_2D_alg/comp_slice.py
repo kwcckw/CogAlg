@@ -64,8 +64,8 @@ class CP(ClusterStructure):  # horizontal blob slice P, with vertical derivative
     y = int  # for vertical gap in PP.P__
     # composite params:
     dert_ = list  # array of pixel-level derts, redundant to uplink_, only per blob?
-    uplink_layers = lambda: [[[],[]]]  # init 1st layer tuple: (matching_uplink_, mixed_uplink_)
-    downlink_layers = lambda: [[[],[]]]
+    uplink_layers = lambda: [[]]  # init 1st layer to append
+    downlink_layers = lambda: [[]]
     root = object  # segment that contains this P
     # only in Pd:
     Pm = object  # reference to root P
@@ -91,8 +91,8 @@ class CderP(ClusterStructure):  # tuple of derivatives in P uplink_ or downlink_
     root = object  # segment if internal or PP if external derP?
     # higher derivatives
     rdn = int  # mrdn, + uprdn if branch overlap?
-    uplink_layers = list  # tuples of higher-row higher-order derivatives per derP
-    downlink_layers = list
+    uplink_layers = lambda: [[]]  # init 1st layer to append higher-order derivatives
+    downlink_layers = lambda: [[]]
    # from comp_dx
     fdx = NoneType
 
@@ -198,8 +198,8 @@ def comp_P_root(P__):  # vertically compares y-adjacent and x-overlapping Ps: bl
                 # test for x overlap(_P,P) in 8 directions, all Ps' derts are positive:
                 if (P.x0 - 1 < _P.x0 + _P.L) and (P.x0 + P.L + 1 > _P.x0):
                     derP = comp_P(_P, P)
-                    P.uplink_layers[0][1].append(derP)  # for form_PP
-                    _P.downlink_layers[0][1].append(derP)
+                    P.uplink_layers[0].append(derP)  # input to form_PP
+                    _P.downlink_layers[0].append(derP)
                 elif (P.x0 + P.L) < _P.x0:
                     break  # no P xn overlap, stop scanning lower P_
         _P_ = P_
@@ -208,16 +208,11 @@ def comp_P_root(P__):  # vertically compares y-adjacent and x-overlapping Ps: bl
 def comp_P_sub(PP, rng, fPd):  # if rng>1: rng+ fork, else der+ fork
 
     #  add link_layer:
-    # we can't add it in the section below because single P may be accessed multiple times
-    for P_ in PP.P__:
-        for P in P_:
-            if rng == 1:  # comp der
-                if P.uplink_layers[-1][0]:
-                    P.uplink_layers[-1][0][0].uplink_layers += [[[], []]]  # add new layer
-                    P.uplink_layers[-1][0][0].downlink_layers += [[[], []]]  # add new layer
-            else:
-                P.uplink_layers += [[[], []]]  # add new layer
-                P.downlink_layers += [[[], []]]  # add new layer
+    if rng>1:
+        for P_ in PP.P__:
+            for P in P_:
+                P.uplink_layers += []  # add new rng layer
+    # else derP: link_layers are initialized in definition
 
     for i, P_ in enumerate(PP.P__):  # scan bottom up
         if (i+rng) <= len(PP.P__)-1:
@@ -229,30 +224,30 @@ def comp_P_sub(PP, rng, fPd):  # if rng>1: rng+ fork, else der+ fork
                 for _P in _P_:
                     if rng==1:
                         if _P.uplink_layers[-1][0]: _P = _P.uplink_layers[-1][0][0]  # _P's 1st uplink's derP
-                        else: break  # no uplinks  
+                        else: break  # no uplinks
                     derP = comp_layer(_P, P)  # forms vertical derivatives of P params
                     _P.downlink_layers[-1][1] += [derP]
                     P.uplink_layers[-1][1] += [derP]  # uplink for derP
-        else:  # break when rng > PP.P__ y size
-            break  
+        else:
+            break  # rng > PP.P__: y dimension
 
-# draft, add sign to derP based on _P, P pair's uplink layers
-def compute_sign(_P, P, derP, fPd):
-    
+# draft,
+def compute_sign(_P, P, derP, fPd):  # add sign to derP based on _P, P pair's uplink layers
+
     total_common_derP = 0
     total_layers = 0
     for _uplink_layer, uplink_layer in zip(_P.uplink_layers, P.uplink_layers):
-        common_derP_ = list(set(_uplink_layer[1]).intersection(uplink_layer[1]))  # get common derP in mixed uplinks
+        common_derP_ = list(set(_uplink_layer[1]).mutual(uplink_layer[1]))  # get common derP in mixed uplinks
         total_common_derP += len(common_derP_)
         total_layers += 1
-    
+
     if fPd:
         derP.rdn = (derP.mP > derP.dP)
         derP.sign = derP.dP >= ave_dP * derP.rdn * max(1, (total_common_derP/total_layers))  # use max to get at least 1 common derP for current _P, P pair
     else:
         derP.rdn = (derP.dP >= derP.mP)
         derP.sign = derP.mP >= ave_mP * derP.rdn * max(1, (total_common_derP/total_layers))
-        
+
 
 def form_seg_root(P__, root_rdn, fPd):  # form segs from Ps
 
