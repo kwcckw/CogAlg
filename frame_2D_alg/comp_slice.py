@@ -15,7 +15,7 @@ from collections import deque
 import sys
 import numpy as np
 from itertools import zip_longest
-from copy import deepcopy
+from copy import deepcopy, copy
 from class_cluster import ClusterStructure, NoneType, comp_param, Cdert
 from segment_by_direction import segment_by_direction
 # import warnings  # to detect overflow issue, in case of infinity loop
@@ -126,18 +126,21 @@ def comp_slice_root(blob, verbose=False):  # always angle blob, composite dert c
 
         P__ = slice_blob(dir_blob, verbose=False)  # cluster dir_blob.dert__ into 2D array of blob slices
         # comp_dx_blob(P__), comp_dx?
-        comp_P_root(P__)  # scan_P_, comp_P | comp_layers, adds mixed uplink_, downlink_ per P
 
-        segm_ = form_seg_root(P__, root_rdn=2, fPd=0)  # forms segments: parameterized stacks of (P,derP)s
-        segd_ = form_seg_root(P__, root_rdn=2, fPd=1)  # forms segments: parameterized stacks of (P,derP)s
+        # we need deepcopy here, before we assigning uplinks to Ps
+        Pm__ = comp_P_root(deepcopy(P__))  # scan_P_, comp_P | comp_layers, adds mixed uplink_, downlink_ per P
+        Pd__ = comp_P_root(deepcopy(P__))  # scan_P_, comp_P | comp_layers, adds mixed uplink_, downlink_ per P
+
+        segm_ = form_seg_root(Pm__, root_rdn=2, fPd=0)  # forms segments: parameterized stacks of (P,derP)s
+        segd_ = form_seg_root(Pd__, root_rdn=2, fPd=1)  # forms segments: parameterized stacks of (P,derP)s
         PPm_, PPd_ = form_PP_root((segm_, segd_), root_rdn=2)  # forms PPs: parameterized graphs of linked segs
         # temporary
         draw_seg_(dir_blob, [segm_, segd_])
         draw_PP_segs(dir_blob, PPm_)
         draw_PPs(dir_blob, PPm_, fspliced=0)
 
-        sub_recursion([], PPm_, frng=1)  # rng+ comp_P in PPms, -> param_layer, form sub_PPs
         sub_recursion([], PPd_, frng=0)  # der+ comp_P in PPds, -> param_layer, form sub_PPs
+        sub_recursion([], PPm_, frng=1)  # rng+ comp_P in PPms, -> param_layer, form sub_PPs
 
         for PP_ in (PPm_, PPd_):  # 1st agglomerative recursion is per PP, appending PP.seg_levels, not blob.levels:
             for PP in PP_:
@@ -203,28 +206,41 @@ def comp_P_root(P__):  # vertically compares y-adjacent and x-overlapping Ps: bl
                 elif (P.x0 + P.L) < _P.x0:
                     break  # no P xn overlap, stop scanning lower P_
         _P_ = P_
+    return P__
 
 # draft:
-def comp_P_sub(P__, rng, frng):  # if frng: rng+ fork, else der+ fork
+def comp_P_sub(iP__, rng, frng):  # if frng: rng+ fork, else der+ fork
 
     if frng:  # add new rng uplink_layer
-        for P_ in P__:
+        for P_ in iP__:
             for P in P_:
                 P.uplink_layers.append([])
+    P__ = []  # derP__ if not frng
     # else derP: 1st uplink_layer is initialized in definition
 
-    for i, _P_ in enumerate(P__):  # higher compared row
-        if (i+rng) <= len(P__)-1:  # rng=1 unless rng+ fork
-            P_ = P__[i+rng]   # lower compared row
-            for P in P_:
+    for i, iP_ in enumerate(iP__):  # lower compared row
+        if (i+rng) <= len(iP__)-1:  # rng=1 unless rng+ fork
+            _P_ = iP__[i+rng]   # upper compared row
+            P_ = []  # derP_ if not frng
+            for P in iP_:
                 if frng:
                     scan_branches(P, _P_, frng)  # rng+, compare at input derivation, which is single P
+                    P_ += [copy(P)]
+                    P_[-1].uplink_layers = [uplink_layer for uplink_layer in P.uplink_layers]
+                    P_[-1].downlink_layers = [downlink_layer for downlink_layer in P.downlink_layers]
                 else:
-                    for derP in P.uplink_t[0]:  # der+, compare at new derivation, which is derP_
-                        scan_branches(derP, _P_, frng)
-            _P_ = P_
+                    for derP in P.uplink_layers[-1]:  # der+, compare at new derivation, which is derP_
+                        scan_branches(derP, _P_, frng)   
+                        P_ += [derP]
+                        
+            _P_ = iP_
+            P__ += [P_]
         else:
+            # if P is not having comparand, we skip it?
             break  # rng > PP.P__: y dimension
+
+    return P__
+  
 
 def scan_branches(P, _P_, frng):
 
@@ -232,7 +248,7 @@ def scan_branches(P, _P_, frng):
         if frng:
             comp_branch(P, _P, frng)
         else:  # P is derP
-            for _derP in _P.uplink_t[0]:
+            for _derP in _P.uplink_layers[-1]:
                 comp_branch(P, _derP, frng)  # comp derPs
 
 def comp_branch(P, _P, frng): # P, _P can be derP, _derP; also form sub_Pds for comp_dx?
@@ -243,40 +259,14 @@ def comp_branch(P, _P, frng): # P, _P can be derP, _derP; also form sub_Pds for 
         derP = comp_P(_P, P)  # form higher vertical derivatives of derP or PP params
         derP.y = P.y
         if frng:  # accumulate derP through rng+ recursion:
-            P.uplink_[-1].append(derP)  # I guess we need index instead of -1?
-            _P.downlink_[-1].append(derP)
-
-def comp_P_sub_Chee(PP, rng, fPd):  # if rng>1: rng+ fork, else der+ fork
-
-    #  add link_layer:
-    if rng>1:
-        for P_ in PP.P__:
-            for P in P_:
-                P.uplink_layers += [[]]  # add new rng layer
-    # else derP: link_layers are initialized in definition
-
-    for i, P_ in enumerate(PP.P__):  # scan bottom up
-        if (i+rng) <= len(PP.P__)-1:
-            _P_ = PP.P__[i+rng]  # upper row's P
-            for P in P_:
-                if rng==1:  # comp der
-                    if P.uplink_layers[-1]: P = P.uplink_layers[-1][0]  # get 1st match uplink derP from last layer
-                    else: break  # no uplinks
-                for _P in _P_:
-                    if rng==1:
-                        if _P.uplink_layers[-1]: _P = _P.uplink_layers[-1][0]  # get _P's 1st uplink's derP
-                        else: break  # no uplinks
-                    derP = comp_layer(_P, P)  # forms vertical derivatives of P params
-                    _P.downlink_layers[-1] += [derP]
-                    P.uplink_layers[-1] += [derP]  # uplink for derP
-        else:
-            break  # rng > P__: y dimension
+            P.uplink_layers[-1].append(derP)  # I guess we need index instead of -1?
+            _P.downlink_layers[-1].append(derP)
 
 
 def form_seg_root(P__, root_rdn, fPd):  # form segs from Ps
 
     seg_ = []
-    for P_ in reversed(deepcopy(P__)):  # get a row of Ps, bottom-up, different copies per fPd
+    for P_ in reversed(P__):  # get a row of Ps, bottom-up, different copies per fPd
         for P in P_:
             if not isinstance(P.root, CPP):  # P is already in seg formed by some prior P
                 if P.uplink_layers[-1]:  # last link layer is not empty
@@ -563,7 +553,7 @@ def comp_P(_P, P):  # forms vertical derivatives of params per P in _P.uplink, c
 
 
 def sub_recursion(root_layers, PP_, frng):  # compares param_layers of derPs in generic PP, form or accum top derivatives
-    fPd=1-frng  # fPd is inverse of frng
+
     comb_layers = []
     for PP in PP_:  # PP is generic higher-composition pattern, P is generic lower-composition pattern
                     # both P and PP may be recursively formed higher-derivation derP and derPP, etc.
@@ -573,12 +563,10 @@ def sub_recursion(root_layers, PP_, frng):  # compares param_layers of derPs in 
         if PP_V > 0 and PP.nderP > min_L:
             PP.rdn += 1  # rdn to prior derivation layers
             PP.rng = rng
-            PPm = deepcopy(PP)
-            PPd = deepcopy(PP)
-            if frng: comp_P_sub(PPd, rng=rng, fPd=fPd)
-            else:    comp_P_sub(PPm, rng=1, fPd=fPd)
-            sub_segm_ = form_seg_root(PPm.P__, root_rdn=PP.rdn, fPd=0)
-            sub_segd_ = form_seg_root(PPd.P__, root_rdn=PP.rdn, fPd=1)
+            Pm__ = comp_P_sub(PP.P__, rng=rng, frng=frng)
+            Pd__ = comp_P_sub(PP.P__, rng=rng, frng=frng)
+            sub_segm_ = form_seg_root(Pm__, root_rdn=PP.rdn, fPd=0)
+            sub_segd_ = form_seg_root(Pd__, root_rdn=PP.rdn, fPd=1)
             sub_PPm_, sub_PPd_ = form_PP_root((sub_segm_, sub_segd_), root_rdn=PP.rdn)  # forms PPs: parameterized graphs of linked segs
 
             PP.layers = [(sub_PPm_, sub_PPd_)]
