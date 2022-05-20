@@ -229,19 +229,26 @@ def comp_P_sub(iP__, rng, frng):  # sub_recursion in PP, if frng: rng+ fork, els
                 for derP in P.uplink_layers[-1]:
                     P_ += [derP]  # this is adding another dimension to unpack?
 
-            if (i+rng) <= len(iP__)-1:  # rng=1 for der+ fork
-                if frng:
-                    for _derP in P.uplink_[-2]:  # rng+, compare at input derivation, which is Ps
+            if frng:
+                uplink_ = P.uplink_layers[-2].copy()
+                while uplink_:  
+                    _derP = uplink_.pop(0)                     
+                    _P = _derP._P
+                    if (P.y - _P.y) == rng:  # lower row - upper row == rng
+                        if isinstance(_P, CPP) or isinstance(_P, CderP):  # rng+ fork for derPs, very unlikely
+                            comp_derP(_P, P)  # form higher vertical derivatives of derP or PP params
+                        else:
+                            comp_P(_P, P)  # form vertical derivatives of horizontal P params
+                    elif (P.y - _P.y) < rng:  # lower row - upper row <= rng
+                        for _derP in _P.uplink_layers[-2]:  # add derP into uplink_ so that we can check it in the next loop
+                            uplink_.append(_derP)
+            else:
+                for derP in P.uplink_layers[-1]:  # der+, compare at current derivation, which is derPs
+                    for _derP in derP._P.uplink_layers[-1]:
                         if isinstance(_derP._P, CPP) or isinstance(_derP._P, CderP):  # rng+ fork for derPs, very unlikely
                             comp_derP(_derP._P, P)  # form higher vertical derivatives of derP or PP params
                         else:
                             comp_P(_derP._P, P)  # form vertical derivatives of horizontal P params
-                else:
-                    for derP in P.uplink_layers[-1]:  # der+, compare at current derivation, which is derPs
-                        for _derP in derP._P.uplink_[-1]:
-                            comp_derP(_derP, P)  # P is actually derP, form higher vertical derivatives of derP or PP params
-            else:
-                break  # rng > P__: y dimension
         P__ += [P_]
 
     return P__
@@ -256,7 +263,7 @@ def form_seg_root(P__, root_rdn, fPd):  # form segs from Ps
                 if P.uplink_layers[-1]:  # last link_layer is not empty
                     form_seg_(seg_, [P], fPd)  # test P.matching_uplink_, not known in form_seg_root
                 else:
-                    seg_.append(sum2seg([P], [], [], fPd))  # no uplink_, terminate seg_Ps = [P]
+                    seg_.append(sum2seg([P], fPd))  # no uplink_, terminate seg_Ps = [P]
     return seg_
 
 
