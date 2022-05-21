@@ -250,16 +250,16 @@ def form_seg_root(P__, root_rdn, fPd):  # form segs from Ps
 
     seg_ = []
     for P_ in reversed(P__):  # get a row of Ps, bottom-up, different copies per fPd
-        for P in P_:
-            if not isinstance(P.root, CPP):  # P is already in seg formed by some prior P
-                if P.uplink_layers[-1]:  # last link_layer is not empty
-                    form_seg_(seg_, [P], fPd)  # test P.matching_uplink_, not known in form_seg_root
-                else:
-                    seg_.append(sum2seg([P], fPd))  # no uplink_, terminate seg_Ps = [P]
+        while P_:
+            P = P_.pop(0)        
+            if P.uplink_layers[-1]:  # last link_layer is not empty
+                form_seg_(seg_, P__, [P], fPd)  # test P.matching_uplink_, not known in form_seg_root
+            else:
+                seg_.append(sum2seg([P], fPd))  # no uplink_, terminate seg_Ps = [P]
     return seg_
 
 
-def form_seg_(seg_, seg_Ps, fPd):  # form same-sign vertically contiguous segments
+def form_seg_(seg_, P__, seg_Ps, fPd):  # form same-sign vertically contiguous segments
 
     match_uplink_, miss_uplink_ = [], []
 
@@ -272,6 +272,7 @@ def form_seg_(seg_, seg_Ps, fPd):  # form same-sign vertically contiguous segmen
             miss_uplink_ += [derP]  # add to PP_missing_uplink_ at seg termination, same for missing_downlink_?
 
     if len(match_uplink_) > 1:
+        [P_.remove(seg_P) for seg_P in seg_Ps for P_ in P__ if seg_P in P_]  # remove seg_P from P__ when they are forming seg
         seg_.append( sum2seg( seg_Ps, fPd) ) # convert seg_Ps to terminated seg
     else:
         # if one P.uplink AND one _P.downlink: add _P to seg, match_uplink_[0] is a sole uplinked derP:
@@ -279,7 +280,7 @@ def form_seg_(seg_, seg_Ps, fPd):  # form same-sign vertically contiguous segmen
 
             seg_Ps += [match_uplink_[0]._P]
             if seg_Ps[-1].uplink_layers[-1]:
-                form_seg_(seg_, seg_Ps, fPd)  # recursive compare sign of next-layer uplinks
+                form_seg_(seg_, P__, seg_Ps, fPd)  # recursive compare sign of next-layer uplinks
             else:
                 seg_.append( sum2seg(seg_Ps, fPd))
         else:
@@ -326,10 +327,10 @@ def sum2seg(seg_Ps, fPd):  # sum params of vertically connected Ps into segment
     for i, P in enumerate(seg_Ps):
         if i==len(seg_Ps)-1:  # last uplink
             derP = CderP()  # blank CderP, last uplink is external to seg, same for single-P seg
+            # no need accum_CPP is derP is dummy derP?
         else:
             derP = P.uplink_layers[-1][0]  # 1st match_uplink, still in mixed_uplink
-
-        accum_CPP(seg, derP, fPd)  # sum P.params and derP.params into seg.param.layers [0],[1]?
+            accum_CPP(seg, derP, fPd)  # sum P.params and derP.params into seg.param.layers [0],[1]?
         # multi-layer or two-layer params in CPP, or sub_PPs represent single param layer?
 
     return seg
@@ -346,13 +347,17 @@ def sum2PP(PP_segs, miss_uplink_, miss_downlink_, fPd):  # sum params: derPs int
 
 def accum_CPP(PP, inp, fPd):  # inp is derP or seg
 
-    if not PP.params:
-        PP.params = inp.params.copy()
-    else:
-        if isinstance(inp, CPP):  # inp is seg
-            iparam_layers = inp.param_layers
+    if isinstance(inp, CPP):  # inp is seg
+        if not PP.param_layers:
+            PP.param_layers = inp.param_layers.copy()
         else:
-            iparam_layers = [inp.P.params, inp.params]  # inp is derP
+            for i, layer in enumerate(inp.param_layers):
+                accum_layer(PP.param_layers[i], layer)
+    else:  # inp is derP
+        if not PP.param_layers:
+            PP.param_layers = [inp.P.params, inp.params]  
+        else:
+            iparam_layers = [inp.P.params, inp.params] 
             for i, layer in enumerate(iparam_layers):
                 accum_layer(PP.param_layers[i], layer)
 
