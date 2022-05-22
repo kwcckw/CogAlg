@@ -200,7 +200,9 @@ def comp_P_root(P__):  # vertically compares y-adjacent and x-overlapping Ps: bl
         for P in P_:
             for _P in _P_:  # test for x overlap(_P,P) in 8 directions, all Ps' derts are positive:
                 if (P.x0 - 1 < _P.x0 + _P.L) and (P.x0 + P.L + 1 > _P.x0):
-                    comp_P(_P, P)
+                    derP = comp_P(_P, P)
+                    P.uplink_layers[-1] += [derP]
+                    _P.downlink_layers[-1] += [derP]
                 elif (P.x0 + P.L) < _P.x0:
                     break  # no P xn overlap, stop scanning lower P_
         _P_ = P_
@@ -228,30 +230,44 @@ def comp_P_sub(P__, rng, frng):  # sub_recursion in PP, if frng: rng+ fork, else
     P__ = []  # iP__ if frng, else derP__
     '''
     if frng:
-        link_t__ = []  # local [[uplink_, downlink_]] to append to multiple rng link_layers
+        # actually we just need link? downlink or uplink will be assigned from different Ps
+        # link_t__ = []  # local [[uplink_, downlink_]] to append to multiple rng link_layers
+        link__ = []
 
     for P_ in P__:  # lower compared row
-        if frng:
-            link_t_ = []
+        if frng: link_ = []
         for P in P_:
             if frng:
-                for derP in P.uplink_layers[-1]:  # access next layer of linked Ps, which is at dy = rng
-                    _P = derP._P
-                    if isinstance(_P, CPP) or isinstance(_P, CderP):  # rng+ fork for derPs, very unlikely
-                        link_t_.append( comp_derP(_P, P))  # form higher vertical derivatives of derP or PP params
-                    else:
-                        link_t_.append( comp_P(_P, P))  # form vertical derivatives of horizontal P params
+                if P.uplink_layers[-1]:
+                    for derP in P.uplink_layers[-1]:  # access next layer of linked Ps, which is at dy = rng
+                        _P = derP._P
+                        if isinstance(_P, CPP) or isinstance(_P, CderP):  # rng+ fork for derPs, very unlikely
+                            link_.append( comp_derP(_P, P))  # form higher vertical derivatives of derP or PP params
+                        else:
+                            link_.append( comp_P(_P, P))  # form vertical derivatives of horizontal P params
             else:
                 for derP in P.uplink_layers[-1]:  # der+, compare at current derivation, which is derPs
                     for _derP in derP._P.uplink_layers[-1]:
-                        comp_derP(_derP, derP)  # form higher vertical derivatives of derP or PP params
+                        dderP = comp_derP(_derP, derP)  # form higher vertical derivatives of derP or PP params
+                        derP.uplink_layers[-1] += [dderP]  # always 1 new layer for derP
+                        _derP.downlink_layers[-1] += [dderP]
 
-        link_t__.append(link_t_)
+        if frng: link__.append(link_)
+        
     if frng:
-        for P_, link_t_ in zip (P__, link_t_):
-            for P, link_t in zip (P_, link_t_):
-                P.uplink_layers += [link_t[0]]; P.downlink_layers += [P.downlink_t[0]]
+        # add new layer
+        for P_ in P__:
+            for P in P_:
+                P.uplink_layers.append([])
+                P.downlink_layers.append([])
+        # add links
+        for P_, link_ in zip (P__, link__):
+            for P, link in zip (P_, link_):
+                P.uplink_layers[-1] += [link]  # add uplink per P
+                for derP in P.uplink_layers[-2]:  # add downlinks per _P of P 
+                    _P.downlink_layers[-1] += [link]
 
+    return P__
 
 def form_seg_root(P__, root_rdn, fPd):  # form segs from Ps
 
@@ -314,6 +330,11 @@ def olp_sign(derP, fPd):  # sign of combined mutual derPs: overlap between P upl
             rdn += derP.mP > derP.dP
             common_VP += derP.dP
         else:
+            try:
+                derP.dP >= derP.mP
+            except:
+                aa = 1
+            
             rdn += derP.dP >= derP.mP
             common_VP += derP.mP
 
@@ -821,11 +842,8 @@ def comp_derP(_derP, derP):
     L = xn-x0
 
     dderP = CderP(x0=x0, L=L, y=_derP.y, mP=mP, dP=dP, params=derivatives, P=derP, _P=_derP)
-
-    _derP.P.uplink_layers[-1].append(dderP)
-    derP._P.downlink_layers[-1].append(dderP)
-
-    return
+    
+    return dderP
 
 
 # old draft
