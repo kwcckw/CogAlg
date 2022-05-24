@@ -105,7 +105,7 @@ class CPP(CP, CderP):  # P and derP params are combined into param_layers?
     Rdn = int  # for accumulation only
     nP = int  # len 2D derP__ in levels[0][fPd]?  ly = len(derP__), also x, y?
     nderP = int
-    uplink_ = list  # miss links only
+    uplink_ = list  # miss links only, convert to link_layers?
     downlink_ = list
     fPPm = NoneType  # PPm if 1, else PPd; not needed if packed in PP_
     fdiv = NoneType
@@ -209,47 +209,42 @@ def comp_P_root(P__):  # vertically compares y-adjacent and x-overlapping Ps: bl
     return P__
 
 
-def comp_P_sub(P__, rng, frng):  # sub_recursion in PP, if frng: rng+ fork, else der+ fork
+def comp_P_sub(P__, frng):  # sub_recursion in PP, if frng: rng+ fork, else der+ fork
 
     if frng:
-        # init empty links per P
-        uplinks__ = [[[]for P in P_] for P_ in P__ ]
-        downlinks__ = [[[]for P in P_] for P_ in P__ ]
+        uplinks__ = [[ [] for P in P_] for P_ in P__ ]  # init links per P
+        downlinks__ = uplinks__.deepcopy  # same format, all empty
 
     for y, P_ in enumerate(P__):  # lower compared row
         for x, P in enumerate(P_):
             if frng:
-                if P.uplink_layers[-1]:
-                    for derP in P.uplink_layers[-1]:  # access next layer of linked Ps, which is at dy = rng
-                        _P = derP._P
+                if P.uplink_layers[-1]:  # access next layer of linked Ps, which is at dy = rng
+                    for derP in P.uplink_layers[-1]:
+
+                        _P = derP._P  # higher comparand
                         if isinstance(_P, CPP) or isinstance(_P, CderP):  # rng+ fork for derPs, very unlikely
-                            link = comp_derP(_P, P)  # form higher vertical derivatives of derP or PP params
+                            derP = comp_derP(_P, P)  # form higher vertical derivatives of derP or PP params
                         else:
-                            link = comp_P(_P, P)  # form vertical derivatives of horizontal P params
-            
-                        uplinks__[y][x] += [link]  # add uplinks
-                        if y+1 <= len(P__)-1 and _P in P__[y+1]:  # _P may not in upper row, this may occur when branching occur and sign not matched
-                            down_index = P__[y+1].index(_P)  # y+1 because P__ is packed bottom up
-                            downlinks__[y+1][down_index] += [link]
-    
+                            derP = comp_P(_P, P)  # form vertical derivatives of horizontal P params
+
+                        uplinks__[y][x] += [derP]  # add uplinks
+                        if y+1 <= len(P__)-1 and _P in P__[y+1]:  # _P may not be in upper row if branch sign is not matched
+                            down_x = P__[y+1].index(_P)  # index of _P in _P_ at y+1: P__ is packed bottom up
+                            downlinks__[y+1][down_x] += [derP]
             else:
                 for derP in P.uplink_layers[-1]:  # der+, compare at current derivation, which is derPs
                     for _derP in derP._P.uplink_layers[-1]:
                         dderP = comp_derP(_derP, derP)  # form higher vertical derivatives of derP or PP params
-                        derP.uplink_layers[-1] += [dderP]  # always 1 new layer for derP
+                        derP.uplink_layers[-1] += [dderP]  # always 1 new layer per derP
                         _derP.downlink_layers[-1] += [dderP]
-
-        
     if frng:
-        # add links to each P
-        for P_, uplinks_,downlinks_ in zip (P__, uplinks__, downlinks__):
-            # separate uplinks and downlinks by not zipping them, else if 1 of them is empty, it will not be looped 
-            for P, uplinks in zip (P_, uplinks_):
-                P.uplink_layers += [uplinks]  # add new layer of P's uplinks
-            for P, downlinks in zip(P_, downlinks_):
-                P.downlink_layers += [downlinks]  # add new layer of P's downlinks
+        for P_, uplinks_,downlinks_ in zip(P__, uplinks__, downlinks__):
+            for P, uplinks, downlinks in zip_longest(P_, uplinks_, downlinks_, fill_value=[]):
+                P.uplink_layers += [uplinks]  # add link_layers to each P
+                P.downlink_layers += [downlinks]
 
-    return P__
+    return P__  # only needed for frng=0, when the return is derP__, to be added
+
 
 def form_seg_root(P__, root_rdn, fPd):  # form segs from Ps
 
@@ -362,7 +357,7 @@ def accum_CPP(PP, inp, fPd):  # inp is derP or seg
         if not PP.param_layers:
             PP.param_layers = [inp.P.params, inp.params]
         else:
-            iparam_layers = [inp.P.params, inp.params]
+            iparam_layers = [inp.P.param_layers + [inp.params]]
             for i, layer in enumerate(iparam_layers):
                 accum_layer(PP.param_layers[i], layer)
 
@@ -819,7 +814,7 @@ def comp_derP(_derP, derP):
     L = xn-x0
 
     dderP = CderP(x0=x0, L=L, y=_derP.y, mP=mP, dP=dP, params=derivatives, P=derP, _P=_derP)
-    
+
     return dderP
 
 
