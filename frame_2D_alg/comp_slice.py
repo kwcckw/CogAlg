@@ -78,12 +78,11 @@ class CP(ClusterStructure):  # horizontal blob slice P, with vertical derivative
 
 class CderP(ClusterStructure):  # tuple of derivatives in P uplink_ or downlink_
 
-    dP = int  # include in params for accumulation?
-    mP = int
+    # dP, mP are packed in params[0,1]
     params = list  # P derivation layer, n_params = 9 * 2**der_cnt, flat, decoded by mapping each m,d to lower-layer param
     x0 = int  # redundant to params:
     x = float  # median x
-    L = int
+    L = int  # pack in params?
     sign = NoneType  # g-ave + ave-ga sign
     y = int  # for vertical gaps in PP.P__, replace with derP.P.y?
     P = object  # lower comparand
@@ -229,6 +228,7 @@ def comp_P_sub(P__, frng):  # sub_recursion in PP, if frng: rng+ fork, else der+
                     #+= links:
                     uplinks__[y][x] += [derP]
                     if y+1 <= len(P__)-1 and _P in P__[y+1]:  # _P may not be in upper row if branch sign doesn't match
+                    # Sorry, that looks like a mess to me. Need to review it, and 241
                         down_x = P__[y+1].index(_P)  # index of _P in _P_ at y+1: P__ is packed bottom up
                         downlinks__[y+1][down_x] += [derP]
             else:
@@ -238,7 +238,7 @@ def comp_P_sub(P__, frng):  # sub_recursion in PP, if frng: rng+ fork, else der+
                         dderP = comp_derP(_derP, derP)  # form higher vertical derivatives of derP or PP params
                         derP.uplink_layers[0] += [dderP]  # pre-init layer per derP
                         _derP.downlink_layers[0] += [dderP]
-                        if y <= len(derP__)-1: derP__[y].append(derP)  
+                        if y <= len(derP__)-1: derP__[y].append(derP)
                         # top row P may still having upconnects and get terminated
                         # this may occur when this evaluation false: if match_uplink_ and len(match_uplink_[0]._P.downlink_layers[-1])==1:
     if frng:
@@ -267,7 +267,7 @@ def form_seg_root(P__, root_rdn, fPd):  # form segs from Ps
 def form_seg_(seg_, P__, seg_Ps, fPd):  # form same-sign vertically contiguous segments
 
     match_uplink_, miss_uplink_ = [], []
-    
+
     for derP in seg_Ps[-1].uplink_layers[-1]:  # mixed_uplink_ of top P in seg_Ps, not converted to CPP seg yet
 
         olp_sign(derP, fPd)  # compute derP.sign
@@ -330,13 +330,13 @@ def sum2seg(seg_Ps, fPd):  # sum params of vertically connected Ps into segment
     if isinstance(seg_Ps[0], CPP): accum_P = accum_CPP
     else: accum_P = accum_CP
 
-    for P in seg_Ps:
+    for P in seg_Ps[:-1]:
         accum_P(seg, P, fPd)  # sum P params into seg.params[:-1], layered in CPP
-        if P.uplink_layers[-1]:  # exclude accum top P because they shouldn't having derP
-            accum_layer(seg.params[-1], P.uplink_layers[-1][0].params)  # sum single-derP params into top seg param layer
-            seg.nderP += 1
+        accum_layer(seg.params[-1], P.uplink_layers[-1][0].params)  # sum single-derP params into top seg param layer
+    accum_P(seg, seg_Ps[-1], fPd)  # accum top P, not top derP
 
     return seg
+
 
 def sum2PP(PP_segs, miss_uplink_, miss_downlink_, fPd):  # sum params: derPs into segment or segs into PP
 
@@ -355,10 +355,7 @@ def accum_CP(seg, P, fPd):
         seg.params = [P.params]  # single param layer
     else:
         accum_layer(seg.params[-1], P.params)  # P.params is top layer
-
-    # Update the other params
     seg.x0 = min(seg.x0, P.x0)
-    seg.y = max(P.y, seg.y)  
 
 
 def accum_CPP(PP, inp, fPd):  # inp is seg or PP in recursion
@@ -370,8 +367,6 @@ def accum_CPP(PP, inp, fPd):  # inp is seg or PP in recursion
             accum_layer(PP.params[i], layer)
 
     PP.x0 = min(PP.x0, inp.x0)
-    PP.mP += inp.mP
-    PP.dP += inp.dP
     PP.Rdn += inp.rdn  # root_rdn + PP.Rdn / PP.nderP  # PP rdn is recursion rdn + average (forks + links) rdn
     PP.y = max(inp.y, PP.y)  # or pass local y arg instead of derP.y?
     inp.root = PP
@@ -530,7 +525,7 @@ def sub_recursion(root_layers, PP_, frng):  # compares param_layers of derPs in 
 def agg_recursion(blob, fseg):  # compositional recursion per blob.Plevel. P, PP, PPP are relative terms, each may be of any composition order
 
 
-    if fseg: PP_t = [blob.seg_levels[0][-1], blob.seg_levels[1][-1]]   # blob is actually PP, recursion forms segP_t, seg_PP_t, etc.        
+    if fseg: PP_t = [blob.seg_levels[0][-1], blob.seg_levels[1][-1]]   # blob is actually PP, recursion forms segP_t, seg_PP_t, etc.
     else: PP_t = blob.levels[-1]  # input-level composition Ps, initially PPs
     PPP_t = []  # next-level composition Ps, initially PPPs  # for fiPd, PP_ in enumerate(PP_t): fiPd = fiPd % 2  # dir_blob.M += PP.M += derP.m
 
@@ -548,7 +543,7 @@ def agg_recursion(blob, fseg):  # compositional recursion per blob.Plevel. P, PP
         if fiPd: ave_PP = ave_dPP
         else:    ave_PP = ave_mPP
 
-        if fseg: M = ave- np.hypot(blob.params[0][5], blob.params[0][6])  # hypot(dy, dx) 
+        if fseg: M = ave- np.hypot(blob.params[0][5], blob.params[0][6])  # hypot(dy, dx)
         else: M = ave-abs(blob.G)
         if M > ave_PP * blob.rdn and len(PP_)>1:  # >=2 comparands
             n_extended += 1
@@ -599,7 +594,7 @@ def comp_aggP_root(PP_, rng):
                     derPP__.insert(0, [derPP])
                 elif derPP.P.y > current_ys[0] and derPP.P.y < current_ys[-1] :  # derPP.y in between largest and smallest value
                     derPP__.insert(derPP.P.y-current_ys[0], [derPP])
-    
+
     # update links
     for PP, uplink_layer, downlink_layer in zip_longest(PP_, uplink_layers, downlink_layers, fillvalue=[]):
         PP.uplink_layers += [uplink_layer]
@@ -707,15 +702,14 @@ def comp_P(_P, P):  # forms vertical derivatives of params per P in _P.uplink, c
     # sum to evaluate for der+, abs diffs are distinct from directly defined matches:
     mP = mx + mI + mG + mGa + mM + mMa + mL + mangle + maangle
 
-    params = [dx, mx, dL, mL, dI, mI, dG, mG, dGa, mGa, dM, mM, dMa, mMa, dangle, mangle, daangle, maangle]
+    params = [mP, dP, dx, mx, dL, mL, dI, mI, dG, mG, dGa, mGa, dM, mM, dMa, mMa, dangle, mangle, daangle, maangle]
     # or summable params only, all Gs are computed at termination?
 
     x0 = min(_P.x0, P.x0)
     xn = max(_P.x0+_P.L, P.x0+P.L)
     L = xn-x0
 
-    return CderP(x0=x0, L=L, y=_P.y, mP=mP, dP=dP, params=params, P=P, _P=_P)
-    # or pack all summable vars in params?
+    return CderP(x0=x0, L=L, y=_P.y, params=params, P=P, _P=_P)
 
 
 def comp_derP(_derP, derP):
@@ -819,7 +813,7 @@ def comp_derP(_derP, derP):
     xn = max(_derP.x0+_derP.L, derP.x0+derP.L)
     L = xn-x0
 
-    dderP = CderP(x0=x0, L=L, y=_derP.y, mP=mP, dP=dP, params=derivatives, P=derP, _P=_derP)
+    dderP = CderP(x0=x0, L=L, y=_derP.y, params=derivatives, P=derP, _P=_derP)
 
     return dderP
 
