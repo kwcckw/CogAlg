@@ -214,27 +214,28 @@ def comp_P_rng(iP__):  # rng+ sub_recursion in PP.P__
     uplinks__ = [[ [] for P in P_] for P_ in P__ ]  # init links per P
     downlinks__ = deepcopy(uplinks__)  # same format, all empty
 
-    for y, _P_ in enumerate( P__):  # higher compared row
+    for _y, _P_ in enumerate(P__):  # higher compared row
         for x, _P in enumerate(_P_):
             for derP in _P.downlink_layers[-1]:  # lower comparands are linked Ps at dy = rng
                 P = derP.P
+                y = _y + 1
                 if isinstance(P, CPP) or isinstance(P, CderP):  # rng+ fork for derPs, very unlikely
                     derP = comp_derP(P, _P)  # form higher vertical derivatives of derP or PP params
                 else:
                     derP = comp_P(P, _P)  # form vertical derivatives of horizontal P params
                 # += links:
-                downlinks__[y][x] += [derP]
-                up_x = P__[y-1].index(P)  # index of P in P_ at y-1
-                uplinks__[y-1][up_x] += [derP]
+                downlinks__[_y][x] += [derP]
+                up_x = P__[y].index(P)
+                uplinks__[y][up_x] += [derP]
 
     for P_, uplinks_,downlinks_ in zip( P__, uplinks__, downlinks__):  # always top-down
         for P, uplinks, downlinks in zip_longest(P_, uplinks_, downlinks_, fillvalue=[]):
             P.uplink_layers += [uplinks]  # add link_layers to each P
             P.downlink_layers += [downlinks]
 
-    return P__
+    return iP__  # return the bottom up P__
 
-
+# not review yet
 def comp_P_der(iP__):  # der+ sub_recursion in PP.P__
 
     P__ = [P_ for P_ in reversed(iP__)]  # revert to top-down
@@ -276,11 +277,16 @@ def form_seg_root(P__, root_rdn, fPd):  # form segs from Ps
 def form_seg_(seg_, P__, seg_Ps, fPd):  # form same-sign vertically contiguous segments
 
     match_uplink_, miss_uplink_ = [], []
+    for n, derP in enumerate(seg_Ps[-1].uplink_layers[-1]):  # mixed_uplink_ of top P in seg_Ps, not converted to CPP seg yet
 
-    for derP in seg_Ps[-1].uplink_layers[-1]:  # mixed_uplink_ of top P in seg_Ps, not converted to CPP seg yet
+        common_VP, ncommon_derP = comp_VP(derP, fPd)
+        if fPd: vave = ave_dP 
+        else: vave = ave_mP
+        rdn = 1
+        if len(match_uplink_)> 1 and (n < len(match_uplink_)):
+            vave *= n
+        derP.sign = common_VP > vave * rdn * ncommon_derP  # sign of mean mutual derPs
 
-        npass = len(match_uplink_) / len(seg_Ps[-1].uplink_layers[-1])  # not sure, please correct it
-        olp_sign(derP, npass, fPd)  # compute derP.sign, for rng+ only?
         if derP.sign == seg_Ps[0].uplink_layers[-1][0].sign:  # seg sign = sign of any member derP in the last link_layer
             match_uplink_ += [derP]
         else:
@@ -308,7 +314,7 @@ def form_seg_(seg_, P__, seg_Ps, fPd):  # form same-sign vertically contiguous s
         # if branch rdn: inp.rdn += sum([1 for upderP in derP.P.uplink_ if upderP.dP >= derP.dP])
 '''
 
-def olp_sign(derP, npass, fPd):  # sign of combined mutual derPs: overlap between P uplinks and _P downlinks
+def comp_VP(derP, fPd):  # sign of combined mutual derPs: overlap between P uplinks and _P downlinks
 
     _P, P = derP._P, derP.P
     common_derP_ = []
@@ -321,11 +327,10 @@ def olp_sign(derP, npass, fPd):  # sign of combined mutual derPs: overlap betwee
     for derP in common_derP_:
         rdn += derP.params[fPd] > derP.params[1-fPd]  # dP > mP if fPd, else mP > dP
         common_VP += derP.params[fPd]
+    ncommon_derP = len(common_derP_)
 
-    if fPd: vave = ave_dP
-    else: vave = ave_mP
-    derP.sign = common_VP > vave * rdn * len(common_derP_)  # sign of mean mutual derPs
-
+    return common_VP, ncommon_derP
+    
 
 def sum2seg(seg_Ps, fPd):  # sum params of vertically connected Ps into segment
 
@@ -347,7 +352,7 @@ def sum2seg(seg_Ps, fPd):  # sum params of vertically connected Ps into segment
 
 def sum2PP(PP_segs, miss_uplink_, miss_downlink_, fPd):  # sum params: derPs into segment or segs into PP
 
-    PP = CPP(x0=PP_segs[0].x0, sign=PP_segs[0].sign,L= len(PP_segs), uplink_ = miss_uplink_.copy(), downlink_ = miss_downlink_.copy())
+    PP = CPP(x0=PP_segs[0].x0, sign=PP_segs[0].sign,L= len(PP_segs), uplink_layers = [miss_uplink_.copy()], downlink_layers = [miss_downlink_.copy()])
     PP.seg_levels[fPd][0] = PP_segs  # PP_segs is seg_levels[0]
 
     if len(PP_segs)>1:
@@ -357,6 +362,26 @@ def sum2PP(PP_segs, miss_uplink_, miss_downlink_, fPd):  # sum params: derPs int
 
     for seg in PP_segs:
         accum_CPP(PP, seg, fPd)
+
+    # remove non matching links of Ps
+    P__ = [P for P_ in PP.P__ for P in P_]
+    for P_ in PP.P__:
+        for P in P_:
+            # remove non matching uplinks of P
+            non_match_link_ = []
+            for uplink in P.uplink_layers[-1]:
+                if uplink._P not in P__:
+                    non_match_link_.append(uplink)
+            for non_match_link in non_match_link_:
+                P.uplink_layers[-1].remove(non_match_link)
+            # remove non matching downlinks of P
+            non_match_link_ = []
+            for downlink in P.downlink_layers[-1]:
+                if downlink.P not in P__:
+                    non_match_link_.append(downlink)
+            for non_match_link in non_match_link_:
+                P.downlink_layers[-1].remove(non_match_link)
+
 
     return PP
 
@@ -517,8 +542,8 @@ def sub_recursion(root_layers, PP_, frng):  # compares param_layers of derPs in 
 
             PP.rdn += 1  # rdn to prior derivation layers
             PP.rng = rng
-            Pm__ = comp_P_sub(PP.P__, frng=frng)
-            Pd__ = comp_P_sub(PP.P__, frng=frng)
+            Pm__ = comp_P_rng(PP.P__)
+            Pd__ = comp_P_der(PP.P__)
             sub_segm_ = form_seg_root(Pm__, root_rdn=PP.rdn, fPd=0)
             sub_segd_ = form_seg_root(Pd__, root_rdn=PP.rdn, fPd=1)
             sub_PPm_, sub_PPd_ = form_PP_root((sub_segm_, sub_segd_), root_rdn=PP.rdn)  # forms PPs: parameterized graphs of linked segs
