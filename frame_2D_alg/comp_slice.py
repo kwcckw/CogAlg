@@ -208,45 +208,57 @@ def comp_P_root(P__):  # vertically compares y-adjacent and x-overlapping Ps: bl
     return P__
 
 
-def comp_P_sub(iP__, frng):  # sub_recursion in PP, if frng: rng+ fork, else der+ fork
+def comp_P_rng(iP__):  # rng+ sub_recursion in PP.P__
 
-    P__ = [P_ for P_ in reversed(iP__)]  # reverse pack so that it is packed top down
-    if frng:
-        uplinks__ = [[ [] for P in P_] for P_ in P__ ]  # init links per P
-        downlinks__ = deepcopy(uplinks__)  # same format, all empty
-    else:
-        derP__ = [[] for P_ in P__[:-1]]  # init derP rows, exclude bottom P row
+    P__ = [P_ for P_ in reversed(iP__)]  # revert to top-down
+    uplinks__ = [[ [] for P in P_] for P_ in P__ ]  # init links per P
+    downlinks__ = deepcopy(uplinks__)  # same format, all empty
 
-    for y, _P_ in enumerate( P__):  # always top-down, higher compared row
+    for y, _P_ in enumerate( P__):  # higher compared row
         for x, _P in enumerate(_P_):
-            if frng:
-                for derP in _P.downlink_layers[-1]:  # lower comparands are linked Ps at dy = rng
-                    if derP.P in P__[y-1]:  # derP.P may not in P__, which mean it is a branch and it is in another PP
-                        P = derP.P
-                        if isinstance(P, CPP) or isinstance(P, CderP):  # rng+ fork for derPs, very unlikely
-                            derP = comp_derP(P, _P)  # form higher vertical derivatives of derP or PP params
-                        else:
-                            derP = comp_P(P, _P)  # form vertical derivatives of horizontal P params
-                        # += links:
-                        downlinks__[y][x] += [derP]
-                        up_x = P__[y-1].index(P)  # index of P in P_ at y-1
-                        uplinks__[y-1][up_x] += [derP]
-            elif y < len(P__)-1:  # exclude last bottom P's derP
-                for _derP in _P.downlink_layers[-1]:  # der+, compare at current derivation, which is derPs
-                    for derP in _derP.P.downlink_layers[-1]:
-                        dderP = comp_derP(_derP, derP)  # form higher vertical derivatives of derP or PP params
-                        derP.uplink_layers[0] += [dderP]  # pre-init layer per derP
-                        _derP.downlink_layers[0] += [dderP]
-                        derP__[y].append(derP)
-    if frng:
-        for P_, uplinks_,downlinks_ in zip( P__, uplinks__, downlinks__):  # always top-down
-            for P, uplinks, downlinks in zip_longest(P_, uplinks_, downlinks_, fillvalue=[]):
-                P.uplink_layers += [uplinks]  # add link_layers to each P
-                P.downlink_layers += [downlinks]
-        return iP__  
-    else:
-        return derP__
+            for derP in _P.downlink_layers[-1]:  # lower comparands are linked Ps at dy = rng
+                P = derP.P
+                if isinstance(P, CPP) or isinstance(P, CderP):  # rng+ fork for derPs, very unlikely
+                    derP = comp_derP(P, _P)  # form higher vertical derivatives of derP or PP params
+                else:
+                    derP = comp_P(P, _P)  # form vertical derivatives of horizontal P params
+                # += links:
+                downlinks__[y][x] += [derP]
+                up_x = P__[y-1].index(P)  # index of P in P_ at y-1
+                uplinks__[y-1][up_x] += [derP]
 
+    for P_, uplinks_,downlinks_ in zip( P__, uplinks__, downlinks__):  # always top-down
+        for P, uplinks, downlinks in zip_longest(P_, uplinks_, downlinks_, fillvalue=[]):
+            P.uplink_layers += [uplinks]  # add link_layers to each P
+            P.downlink_layers += [downlinks]
+
+    return P__
+
+
+def comp_P_der(iP__):  # der+ sub_recursion in PP.P__
+
+    P__ = [P_ for P_ in reversed(iP__)]  # revert to top-down
+    dderPs__ = []  # derP__ = [[] for P_ in P__[:-1]]  # init derP rows, exclude bottom P row
+
+    for P_ in P__[1:-1]:  # higher compared row, exclude 1st: no +ve uplinks, and last: no +ve downlinks
+        dderPs_ = []
+        for P in P_:
+            dderPs = []  # multiple per P
+            for _derP in P.uplink_layers[-1]:
+                for derP in P.downlink_layers[-1]:
+                    # there maybe no x overlap between recomputed Ls of _derP and derP, compare anyway,
+                    # mderP * (ave_olp_L / olp_L)? or olp(_derP._P.L, derP.P.L)?
+                    # gap: neg_olp, ave = olp-neg_olp?
+                    dderP = comp_derP(_derP, derP)  # form higher vertical derivatives of derP or PP params
+                    derP.uplink_layers[0] += [dderP]  # pre-init layer per derP
+                    _derP.downlink_layers[0] += [dderP]
+                    dderPs += [dderP]
+            dderPs_ += [dderPs]
+        dderPs__ += [dderPs_]
+
+    return dderPs__
+
+# below is not revised:
 
 def form_seg_root(P__, root_rdn, fPd):  # form segs from Ps
 
@@ -391,7 +403,7 @@ def accum_CPP(PP, inp, fPd):  # inp is seg or PP in recursion
                     PP.P__.append([P])
                 elif P.y < current_ys[0] and P.y > current_ys[-1]:  # P.y in between largest and smallest value
                     PP.P__.insert(P.y - current_ys[-1], [P])
-    
+
             # add seg links: we may need links of all terminated segs, for rng+
             for derP in inp.P__[0].downlink_layers[-1]:  # if downlink not in current PP's downlink and not part of the seg in current PP:
                 if derP not in PP.downlink_layers[-1] and derP.P.root not in PP.seg_levels[fPd][-1]:
@@ -555,7 +567,7 @@ def agg_recursion(blob, fseg):  # compositional recursion per blob.Plevel. P, PP
             n_extended += 1
 
             PPm__ = [comp_aggP_root(deepcopy(PP_))]  # PP is generic for lower-level composition
-            PPd__ = [comp_aggP_root(deepcopy(PP_))] 
+            PPd__ = [comp_aggP_root(deepcopy(PP_))]
             # sections below need further update
             segm_ = form_seg_root(PPm__, root_rdn=2, fPd=0)  # forms segments: parameterized stacks of (P,derP)s
             segd_ = form_seg_root(PPd__, root_rdn=2, fPd=1)  # seg is a stack of (P,derP)s
