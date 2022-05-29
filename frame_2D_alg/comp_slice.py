@@ -49,6 +49,7 @@ ave_splice = 10
 
 param_names = ["x", "I", "M", "Ma", "L", "angle", "aangle"]  # angle = Dy, Dx; aangle = sin_da0, cos_da0, sin_da1, cos_da1; recompute Gs for comparison?
 aves = [ave_dx, ave_I, ave_M, ave_Ma, ave_L, ave_G, ave_Ga, ave_mP, ave_dP]
+vaves = [ave_mP, ave_dP]
 
 class CP(ClusterStructure):  # horizontal blob slice P, with vertical derivatives per param if derP
 
@@ -214,7 +215,7 @@ def comp_P_rng(iP__, rng):  # rng+ sub_recursion in PP.P__
     uplinks__ = [[ [] for P in P_] for P_ in P__ ]  # init links per P
     downlinks__ = deepcopy(uplinks__)  # same format, all empty
 
-    for y, _P_ in enumerate(P__):  # higher compared row
+    for _y, _P_ in enumerate(P__):  # higher compared row
         for x, _P in enumerate(_P_):
             for derP in _P.downlink_layers[-1]:  # lower comparands are linked Ps at dy = rng
                 P = derP.P
@@ -223,9 +224,9 @@ def comp_P_rng(iP__, rng):  # rng+ sub_recursion in PP.P__
                 else:
                     derP = comp_P(P, _P)  # form vertical derivatives of horizontal P params
                 # += links:
-                downlinks__[y][x] += [derP]
-                up_x = P__[y+rng].index(P)  # index of P in P_ at y+rng
-                uplinks__[y+rng][up_x] += [derP]
+                downlinks__[_y][x] += [derP]
+                up_x = P__[_y+rng].index(P)  # index of P in P_ at _y+rng, where _y is upper row
+                uplinks__[_y+rng][up_x] += [derP]
 
     for P_, uplinks_,downlinks_ in zip( P__, uplinks__, downlinks__):  # always top-down
         for P, uplinks, downlinks in zip_longest(P_, uplinks_, downlinks_, fillvalue=[]):
@@ -274,9 +275,10 @@ def form_seg_root(P__, root_rdn, fPd):  # form segs from Ps
 
 def form_seg_(seg_, P__, seg_Ps, fPd):  # form same-sign vertically contiguous segments
 
-    miss_uplink_ = []
     match_uplink_ = seg_Ps[-1].uplink_layers[-1]
-
+    match_downlink_ = seg_Ps[0].downlink_layers[-1]
+    
+    '''
     for derP in seg_Ps[-1].uplink_layers[-1]:  # bottom-up, mixed_uplink_ of top P in seg_Ps, not CPP seg yet
         if fPd:
             rdn = derP.params[fPd] > derP.params[1 - fPd]  # dP > mP if fPd, else mP > dP
@@ -289,21 +291,26 @@ def form_seg_(seg_, P__, seg_Ps, fPd):  # form same-sign vertically contiguous s
             match_uplink_ += [derP]
         else:
             miss_uplink_ += [derP]  # add to PP_missing_uplink_ at seg termination, same for missing_downlink_?
-
-        # draft, this should probably replace the above:
-
-        if fPd: vave = ave_dP
-        else:   vave = ave_mP
-        npass = 0
-        branches = match_uplink_.comp  # initial branches
-
-        while (len(match_uplink_) > 1) and (npass < len(branches)):
-            for derP in match_uplink_:
-                npass += 1  # re-evaluate for branch redundancy, increased by the append 289:
-                if derP[fPd] < vave * len(match_uplink_):
-                    match_uplink_.remove(derP)
-
-
+    '''
+    
+    # draft, this should probably replace the above:
+    npass = 0
+    len_branches = len(match_uplink_)  # initial branches 
+    while (len(match_uplink_) > 1) and (npass < len_branches):
+        for derP in reversed(match_uplink_):  # reversed so that we remove derP from last element
+            npass += 1  # re-evaluate for branch redundancy, increased by the append 289:
+            if derP.params[fPd] < vaves[fPd] * len(match_uplink_):
+                match_uplink_.remove(derP)    
+                
+    # we need the same for downlinks too?               
+    npass = 0
+    len_branches = len(match_downlink_)  # initial branches
+    while (len(match_downlink_) > 1) and (npass < len_branches):
+        for derP in reversed(match_downlink_):  
+            npass += 1  # re-evaluate for branch redundancy, increased by the append 289:
+            if derP.params[fPd] < vaves[fPd] * len(match_downlink_):
+                match_downlink_.remove(derP)
+                
     if len(match_uplink_) > 1:
         # terminate seg
         [P_.remove(seg_P) for seg_P in seg_Ps for P_ in P__ if seg_P in P_]  # remove seg_P from P__
