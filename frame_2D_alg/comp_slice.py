@@ -220,13 +220,13 @@ def comp_P_rng(iP__, rng):  # rng+ sub_recursion in PP.P__
             for derP in _P.downlink_layers[-1]:  # lower comparands are linked Ps at dy = rng
                 P = derP.P
                 if isinstance(P, CPP) or isinstance(P, CderP):  # rng+ fork for derPs, very unlikely
-                    derP = comp_derP(P, _P)  # form higher vertical derivatives of derP or PP params
+                    derP = comp_derP(_P, P)  # form higher vertical derivatives of derP or PP params
                 else:
-                    derP = comp_P(P, _P)  # form vertical derivatives of horizontal P params
+                    derP = comp_P(_P, P)  # form vertical derivatives of horizontal P params
                 # += links:
                 downlinks__[y][x] += [derP]
-                up_x = P__[y+rng].index(P)  # index of P in P_ at y+rng
-                uplinks__[y+rng][up_x] += [derP]
+                up_x = P__[y+max(1, rng-1)].index(P)  # index of P in P_ at y+rng
+                uplinks__[y+max(1, rng-1)][up_x] += [derP]
 
     for P_, uplinks_,downlinks_ in zip( P__, uplinks__, downlinks__):  # always top-down
         for P, uplinks, downlinks in zip_longest(P_, uplinks_, downlinks_, fillvalue=[]):
@@ -276,9 +276,9 @@ def form_seg_root(P__, root_rdn, fPd):  # form segs from Ps
 
 def form_seg_(seg_, P__, seg_Ps, fPd):  # form same-sign vertically contiguous segments
 
-    miss_uplink_ = prune_branches( seg_Ps[-1].uplink_layers, fPd)
+    miss_uplink_ = prune_branches( seg_Ps[-1].uplink_layers, fPd, fup=1)
     match_uplink_ = seg_Ps[-1].uplink_layers[-1]
-    miss_downlink_ = prune_branches( seg_Ps[0].downlink_layers, fPd)
+    miss_downlink_ = prune_branches( seg_Ps[0].downlink_layers, fPd, fup=0)
 
     if len(match_uplink_) > 1:  # terminate seg
         seg_.append( sum2seg(seg_Ps, miss_uplink_, miss_downlink_, fPd) ) # convert seg_Ps to CPP seg
@@ -297,7 +297,7 @@ def form_seg_(seg_, P__, seg_Ps, fPd):  # form same-sign vertically contiguous s
             seg_.append( sum2seg(seg_Ps, miss_uplink_, miss_downlink_, fPd))  # terminate seg at 0 matching uplink
 
 
-def prune_branches(link_layers, fPd):  # links from prior comp_P, initially in x0 sequence
+def prune_branches(link_layers, fPd, fup):  # links from prior comp_P, initially in x0 sequence
 
     match_link_, miss_link_ = [],[]
     link_layer = sorted(link_layers[-1], key=lambda derP:derP.params[fPd], reverse=False)
@@ -305,12 +305,15 @@ def prune_branches(link_layers, fPd):  # links from prior comp_P, initially in x
     for i, derP in enumerate(link_layer):  # derPs are links between compared Ps
 
         if fPd: derP.rdn += derP.params[0] > derP.params[1]  # mP > dP
-        else:   rng_eval(derP, fPd)  # resets derP val, rdn
+        else: rng_eval(derP, fPd)  # resets derP val, rdn
 
         if derP.params[fPd] > vaves[fPd] * (derP.rdn + len(match_link_)):  # val > ave * branch redundancy
-            match_link_.append(derP)
+            if not fup and derP._P not in derP.P.uplink_layers[-1]:  # check mutual connection - derP._P must be in derP.P.uplinks from prior scans
+                miss_link_ += [derP]
+            else:
+                match_link_.append(derP)
         else:
-            miss_link_ = link_layer[i:]
+            miss_link_ += link_layer[i:]
             link_layers.append( match_link_)
             break  # the rest of links is even weaker
 
@@ -352,9 +355,9 @@ def sum2seg(seg_Ps, miss_uplink_, miss_downlink_, fPd):  # sum params of vertica
 
     return seg
 
-def sum2PP(PP_segs, fPd):  # sum params: derPs into segment or segs into PP
+def sum2PP(PP_segs, miss_uplink_, miss_downlink_, fPd):  # sum params: derPs into segment or segs into PP
 
-    PP = CPP(x0=PP_segs[0].x0, sign=PP_segs[0].sign,L= len(PP_segs))
+    PP = CPP(x0=PP_segs[0].x0, sign=PP_segs[0].sign,L= len(PP_segs), uplink_layers = [miss_uplink_.copy()], downlink_layers = [miss_downlink_.copy()])
     PP.seg_levels[fPd][0] = PP_segs  # PP_segs is seg_levels[0]
     '''
     if len(PP_segs)>1:
