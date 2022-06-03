@@ -134,11 +134,13 @@ def comp_slice_root(blob, verbose=False):  # always angle blob, composite dert c
         segd_ = form_seg_root(Pd__, root_rdn=2, fPd=1)  # seg is a stack of (P,derP)s
 
         PPm_, PPd_ = form_PP_root((segm_, segd_), root_rdn=2)  # forms PPs: parameterized graphs of linked segs
-        # temporary
+        # temporary, pending update
+        '''
         draw_seg_(dir_blob, [segm_, segd_])
         draw_PP_segs(dir_blob, PPm_)
         draw_PPs(dir_blob, PPm_, fspliced=0)
-
+        '''
+        
         sub_recursion([], PPd_, frng=0)  # der+ comp_P in PPds, -> param_layer, form sub_PPs
         sub_recursion([], PPm_, frng=1)  # rng+ comp_P in PPms, -> param_layer, form sub_PPs
 
@@ -285,7 +287,6 @@ def form_seg_(seg_, P__, seg_Ps, fPd):  # form contiguous segments of vertically
 
         if fPd: derP.rdn += derP.params[0] > derP.params[1]  # mP > dP
         else:   rng_eval(derP, fPd)  # reset derP.val, derP.rdn
-
         if derP.params[fPd] > vaves[fPd] * (derP.rdn + len(derP.P.uplink_layers[-1])):  # val > ave * branch rdn,
             # the weaker links are redundant to the stronger, added to derP.P.uplink_layers[-1]) in prior loops
             derP.P.uplink_layers[-1].append(derP)
@@ -395,7 +396,6 @@ def accum_CPP(PP, inp, fPd):  # inp is seg or PP in recursion
             PP.P__.append(P)
     else:
         for P in inp.P__:  # add Ps in P__[y]:
-            P.root = object  # reset root, to be assigned next sub_recursion
             if not PP.P__: PP.P__.append([P])
             else:
                 current_ys = [P_[0].y for P_ in PP.P__]  # list of current-layer seg rows
@@ -448,7 +448,7 @@ def form_PP_root(seg_t, root_rdn):  # form PPs from linked segs
             if not isinstance(seg.root, CPP):  # seg is not already in PP initiated by some prior seg
                 # link CderPs: P.root=seg, _P.root=_seg
                 if seg.P__[-1].uplink_layers[-1] or seg.P__[0].downlink_layers[-1]:
-                    form_PP_(PP_, [seg], seg.P__[-1].uplink_layers[-1].copy(), seg.P__[0].downlink_layers[-1].copy(), [], [], fPd)
+                    form_PP_(PP_, [seg], seg.P__[-1].uplink_layers[-1].copy(), seg.P__[0].downlink_layers[-1].copy(), fPd)
                 else:
                     PP_ += [sum2PP([seg], fPd)]  # single-seg PP
 
@@ -458,7 +458,7 @@ def form_PP_root(seg_t, root_rdn):  # form PPs from linked segs
 
 # under review, miss_uuplink_, miss_ddownlink_ from top/bottom segs only, use in sum2PP?
 
-def form_PP_(PP_, PP_segs, uplink_, downlink_, miss_uuplink_, miss_ddownlink_, fPd):
+def form_PP_(PP_, PP_segs, uplink_, downlink_, fPd):
 
     # flood-fill PP_segs with vertically linked same-sign segments:
     match_uuplink_, match_ddownlink_  = [],[]
@@ -467,31 +467,36 @@ def form_PP_(PP_, PP_segs, uplink_, downlink_, miss_uuplink_, miss_ddownlink_, f
     miss_uplink_, miss_downlink_ are now in seg.links
     '''
     # scan_link_(): separate upward and downward recursion?
+    
+    # 2 steps process, pack all PP_segs first, then search for the next level links
+    upderP_ = []
     for upderP in uplink_:
-        if isinstance(upderP._P.root, CPP):  # highest row doesn't have _P's root, so we need this check here
-            PP_segs += [upderP._P.root]  # add next row of segs in matching uplinks:
-            for uupderP in upderP._P.uplink_layers[-1]:
-                # check match_uuplink_+miss_uplink_?
-                if uupderP not in match_uuplink_ and uupderP._P.root not in PP_segs:
-                    if uupderP.sign == PP_segs[0].sign:
-                        match_uuplink_ += [uupderP]
-                    else:
-                        miss_uuplink_ += [uupderP]
-
+        if isinstance(upderP._P.root, CPP):
+            PP_segs += [upderP._P.root] 
+            upderP_.append(upderP)
+                     
+    downderP_ = []
     for downderP in downlink_:
         if isinstance(downderP.P.root, CPP):  # lowest row doesn't have P's root
-            PP_segs += [downderP.P.root]  # add next row of segs in matching downlinks:
-            for ddownderP in downderP.P.downlink_layers[0]:
-                if ddownderP not in match_ddownlink_+miss_ddownlink_ and ddownderP.P.root not in PP_segs:
-                    if ddownderP.sign == PP_segs[0].sign:
-                        match_ddownlink_ += [ddownderP]
-                    else:
-                        miss_ddownlink_ += [ddownderP]
+            PP_segs += [downderP.P.root]  # add next row of segs in matching downlinks:      
+            downderP_.append(downderP)
+    
+    for upderP in upderP_:
+        for uupderP in upderP._P.uplink_layers[-1]:
+            # check match_uuplink_+miss_uplink_?
+            if uupderP not in match_uuplink_ and uupderP._P.root not in PP_segs:
+                match_uuplink_ += [uupderP]
+
+    for downderP in downderP_:
+        for ddownderP in downderP.P.downlink_layers[0]:
+            if ddownderP not in match_ddownlink_ and ddownderP.P.root not in PP_segs:
+                match_ddownlink_ += [ddownderP]
+
 
     if match_uuplink_ or match_ddownlink_:  # recursive compare sign of next-layer uplinks
-        form_PP_(PP_, PP_segs, match_uuplink_, match_ddownlink_, miss_uuplink_, miss_ddownlink_, fPd)
+        form_PP_(PP_, PP_segs, match_uuplink_, match_ddownlink_, fPd)
     else:
-        PP_ += [sum2PP(PP_segs, miss_uuplink_, miss_ddownlink_, fPd)]  # PP_segs is converted to PP
+        PP_ += [sum2PP(PP_segs, fPd)]  # PP_segs is converted to PP
         '''
         PP is a graph with segs as 1D "vertices", each with two sets of edges or branching points: seg.uplink_ and seg.downlink_.
         Each edge is CderP, with derP.rdn *= len(P.uplink_|_P.downlink_)
