@@ -67,7 +67,7 @@ class CP(ClusterStructure):  # horizontal blob slice P, with vertical derivative
     dert_ = list  # array of pixel-level derts, redundant to uplink_, only per blob?
     uplink_layers = lambda: [[],[]]  # init 1st 2 layers: derPs and match_derPs
     downlink_layers = lambda: [[],[]]
-    root = None  # segment that contains this P
+    root = lambda:None  # segment that contains this P
     # only in Pd:
     Pm = object  # reference to root P
     dxdert_ = list
@@ -88,7 +88,7 @@ class CderP(ClusterStructure):  # tuple of derivatives in P uplink_ or downlink_
     y = int  # for vertical gaps in PP.P__, replace with derP.P.y?
     P = object  # lower comparand
     _P = object  # higher comparand
-    root = None  # segment if internal or PP if external derP?
+    root = lambda:None  # segment if internal or PP if external derP?
     # higher derivatives
     rdn = int  # mrdn, + uprdn if branch overlap?
     uplink_layers = lambda: [[],[]]  # init 1st 2 layers: dderPs and match_dderPs
@@ -115,7 +115,7 @@ class CPP(CP, CderP):  # P and derP params are combined into param_layers?
     seg_levels = lambda: [[[]],[[]]]  # from 1st agg_recursion, seg_levels[0] is seg_t, higher seg_levels are segP_t s
     PPP_levels = list  # from 2nd agg_recursion, PP_t = levels[0], from form_PP, before recursion
     layers = list  # from sub_recursion, each is derP_t
-    root = object  # higher-order segP or PPP
+    root = lambda:None  # higher-order segP or PPP
 
 # Functions:
 
@@ -464,24 +464,28 @@ def form_PP_(PP_, PP_segs, uplink_, downlink_, fPd):  # flood-fill PP_segs with 
     # miss_uplink_, miss_downlink_ are in seg.links, scan_link_(): separate up and down recursion?
 
     # pack PP_segs width-first, then search for next-level links:
-    uupderP__ = []
+    uupderP__, ddownderP__ = [], []
     for upderP in uplink_:
         if upderP._P.root:  # top-row Ps are not in segs
             PP_segs += [upderP._P.root]
             uupderP__.append(upderP._P.uplink_layers[-1])  # add next row of segs in matching links
-    ddownderP__ = []
+            ddownderP__.append(upderP._P.downlink_layers[-1])
+    
     for downderP in downlink_:
         if downderP.P.root:  # bottom-row Ps are not in segs
             PP_segs += [downderP.P.root]
             ddownderP__.append(downderP.P.downlink_layers[-1])  # add next row of segs in matching links
+            uupderP__.append(downderP.P.uplink_layers[-1])
 
     for uupderP_ in uupderP__:
-        for uupderP in uupderP_:  # also check miss_link_?
-            if uupderP not in match_uuplink_ and uupderP._P.root not in PP_segs:
+        for uupderP in uupderP_:  # also check miss_link_?         
+            match_P_ = [match_uuplink._P for match_uuplink in match_uuplink_]
+            if uupderP not in match_P_ and uupderP._P.root not in PP_segs:
                 match_uuplink_ += [uupderP]
     for ddownderP_ in ddownderP__:
         for ddownderP in ddownderP_:  # also check miss_link_?
-            if ddownderP not in match_ddownlink_ and ddownderP.P.root not in PP_segs:
+            match_P_ = [match_ddownlink.P for match_ddownlink in match_ddownlink_]
+            if ddownderP.P not in match_P_ and ddownderP.P.root not in PP_segs:
                 match_ddownlink_ += [ddownderP]
 
     if match_uuplink_ or match_ddownlink_:  # recursive compare sign of next-layer uplinks
