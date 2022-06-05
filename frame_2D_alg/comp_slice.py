@@ -437,7 +437,25 @@ def accum_layer(top_layer, der_layer):
             top_layer[i] += param
 
 
-def form_PP_root(seg_t, root_rdn):  # form PPs from linked segs
+def form_PP_(PP_segs, link_, fPd): # flood-fill PP_segs with vertically linked segments:
+
+    for derP in link_:  # uplink_ or downlink_
+        seg = derP._P.root
+        if seg and seg not in PP_segs:  # top and bottom row Ps are not in segs
+            PP_segs += [seg] 
+            uplink_ = seg.P__[-1].uplink_layers[-1]  # top P uplink_
+            if uplink_:
+                form_PP_(PP_segs, uplink_, fPd)
+            downlink_ = seg.P__[0].downlink_layers[-1]  # bottom P downlink_
+            if downlink_:
+                form_PP_(PP_segs, downlink_, fPd)
+        '''
+        PP is a graph with segs as 1D "vertices", each with two sets of edges or branching points: seg.uplink_ and seg.downlink_.
+        Each edge is CderP, with derP.rdn *= len(P.uplink_|_P.downlink_)
+        '''
+
+
+def form_PP_root(seg_t, root_rdn): # form PPs from linked segs
 
     PP_t = []
     for fPd in 0, 1:
@@ -445,40 +463,16 @@ def form_PP_root(seg_t, root_rdn):  # form PPs from linked segs
         seg_ = seg_t[fPd]
         for seg in seg_:  # bottom-up
             if not isinstance(seg.root, CPP):  # seg is not already in PP initiated by some prior seg
-                cont = 0
+                PP_segs = [seg]
                 if seg.P__[-1].uplink_layers[-1]:
-                    form_PP_(PP_, [seg], seg.P__[-1].uplink_layers[-1].copy(), fPd)
-                    cont += 1
+                    form_PP_(PP_segs, seg.P__[-1].uplink_layers[-1].copy(), fPd)
                 if seg.P__[0].downlink_layers[-1]:
-                    form_PP_(PP_, [seg], seg.P__[0].downlink_layers[-1].copy(), fPd)
-                    cont += 1
-                if not cont:
-                    PP_ += [sum2PP ([seg], fPd)]  # terminate single-seg PP
-
+                    form_PP_(PP_segs, seg.P__[0].downlink_layers[-1].copy(), fPd)
+                PP_ += [sum2PP(PP_segs, fPd)]
         PP_t.append(PP_)  # PP_segs are converted to PPs in sum2PP and form_PP_
 
     return PP_t  # PPm_, PPd_
 
-
-def form_PP_(PP_, PP_segs, link_, fPd):  # flood-fill PP_segs with vertically linked segments:
-    '''
-    PP is graph with segs as 1D "vertices", each has two sets of edges / branching points: seg.uplink_ and seg.downlink_.
-    '''
-    for derP in link_:  # uplink_ or downlink_
-        seg = derP._P.root
-        if seg and seg not in PP_segs:  # top and bottom row Ps are not in segs
-
-            PP_segs += [seg]
-            uplink_ = seg.P__[-1].uplink_layers[-1]  # top P uplink_
-            if uplink_:
-                form_PP_(PP_, PP_segs, uplink_, fPd)
-            downlink_ = seg.P__[0].downlink_layers[-1  ]  # bottom P downlink_
-            if downlink_:
-                form_PP_(PP_, PP_segs, downlink_, fPd)
-
-        PP_ += [sum2PP(PP_segs, fPd)]  # PP_segs is converted to PP
-
-    return PP_
 
 def sub_recursion(root_layers, PP_, frng):  # compares param_layers of derPs in generic PP, form or accum top derivatives
 
