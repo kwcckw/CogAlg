@@ -338,6 +338,7 @@ def form_PP_root(seg_t, root_rdn):  # form PPs from match-connected segs
         for seg in seg_:  # bottom-up
             if not isinstance(seg.root, CPP):  # seg is not already in PP initiated by some prior seg
                 PP_segs = [seg]
+                
                 if seg.P__[-1].uplink_layers[-1]:
                     form_PP_(PP_segs, seg.P__[-1].uplink_layers[-1].copy(), fPd)
                 if seg.P__[0].downlink_layers[-1]:
@@ -391,6 +392,24 @@ def sum2PP(PP_segs, root_rdn, fPd):  # sum params: derPs into segment or segs in
     PP = CPP(x0=PP_segs[0].x0, rdn=root_rdn, sign=PP_segs[0].sign, L= len(PP_segs))
     PP.seg_levels[fPd][0] = PP_segs  # PP_segs is seg_levels[0]
 
+    # remove Ps that not in PP
+    P__ = [P for seg in PP_segs for P in seg.P__]
+    for seg in PP_segs:
+        for P in seg.P__:
+            remove_link_ = []
+            for downlink in P.downlink_layers[-1]:
+                if downlink.P not in P__:
+                    remove_link_.append(downlink)
+            for link in remove_link_:
+                P.downlink_layers[-1].remove(link)
+            
+            remove_link_ = []
+            for uplink in P.uplink_layers[-1]:
+                if uplink._P not in P__:
+                    remove_link_.append(downlink)
+            for link in remove_link_:
+                P.downlink_layers[-1].remove(link)
+               
     for seg in PP_segs:
         accum_CPP(PP, seg, fPd)
 
