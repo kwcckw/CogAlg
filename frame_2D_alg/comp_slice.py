@@ -216,18 +216,28 @@ def comp_P_rng(iP__, rng):  # rng+ sub_recursion in PP.P__, adding two link_laye
 
     for y, _P_ in enumerate(P__[:-rng]):  # higher compared row, skip last rng: no lower comparand rows
         for x, _P in enumerate(_P_):
-            for pri_derP in _P.downlink_layers[-1]:  # get linked Ps at dy = rng-1
-                pri_P = pri_derP.P
-                for derP in pri_P.downlink_layers[0]:  # lower comparands are linked Ps at dy = rng
-                    P = derP.P
-                    if isinstance(P, CPP) or isinstance(P, CderP):  # rng+ fork for derPs, very unlikely
-                        derP = comp_derP(_P, P)  # form higher vertical derivatives of derP or PP params
-                    else:
-                        derP = comp_P(_P, P)  # form vertical derivatives of horizontal P params
-                    # += links:
-                    downlinks__[y][x] += [derP]
-                    up_x = P__[y+rng].index(P)  # index of P in P_ at y+rng
-                    uplinks__[y][up_x] += [derP]  # uplinks__[y] = P__[y+rng]: uplinks__= P__[rng:]
+            if rng>1:
+                derP_ = []
+                for pri_derP in _P.downlink_layers[-1]:  # get linked Ps at dy = rng-1
+                    pri_P = pri_derP.P
+                    for derP in pri_P.downlink_layers[0]:
+                        existing_P__ = [P for P_ in P__ for P in P_]
+                        if derP.P in existing_P__ and derP._P in existing_P__:  # P from 1st layer may not present in current higher level P__ 
+                            derP_.append(derP)
+            else:
+                derP_ = _P.downlink_layers[-1]
+                
+            for derP in derP_:  # lower comparands are linked Ps at dy = rng
+
+                P = derP.P
+                if isinstance(P, CPP) or isinstance(P, CderP):  # rng+ fork for derPs, very unlikely
+                    derP = comp_derP(_P, P)  # form higher vertical derivatives of derP or PP params
+                else:
+                    derP = comp_P(_P, P)  # form vertical derivatives of horizontal P params
+                # += links:
+                downlinks__[y][x] += [derP]
+                up_x = P__[y+rng].index(P)  # index of P in P_ at y+rng
+                uplinks__[y][up_x] += [derP]  # uplinks__[y] = P__[y+rng]: uplinks__= P__[rng:]
 
     for P_, uplinks_ in zip( P__[rng:], uplinks__):  # skip 1st rmg rows, no uplinks
         for P, uplinks in zip(P_, uplinks_):
@@ -311,9 +321,12 @@ def link_eval(link_, fPd):
         ave = vaves[fPd] * derP.rdn
         # the weaker links are redundant to the stronger, added to derP.P.link_layers[-1]) in prior loops:
 
-        if derP.params[fPd] > ave * len(derP.P.uplink_layers[-1]):  # ave * up branch rdn
+        # a same derP may be checked twice, from P.uplinks and _P.downlinks, so we just need to add it once
+        if derP not in derP.P.uplink_layers[-1] and \
+            derP.params[fPd] > ave * len(derP.P.uplink_layers[-1]):  # ave * up branch rdn
             derP.P.uplink_layers[-1].append(derP)
-        if derP.params[fPd] > ave * len(derP.P.downlink_layers[-1]):  # ave * down branch rdn
+        if derP not in derP._P.downlink_layers[-1] and \
+            derP.params[fPd] > ave * len(derP._P.downlink_layers[-1]):  # ave * down branch rdn
             derP._P.downlink_layers[-1].append(derP)
         # miss_link_ = link_layers[-2] not in link_layers[-1]
 
@@ -346,29 +359,30 @@ def form_PP_root(seg_t, root_rdn):  # form PPs from match-connected segs
                 PP_segs = [seg]
                 # add links in PP_segs:
                 if seg.P__[-1].uplink_layers[-1]:
-                    form_PP_(PP_segs, seg.P__[-1].uplink_layers[-1].copy(), fPd)
+                    form_PP_(PP_segs, seg.P__[-1].uplink_layers[-1].copy(), fPd, fuplink=1)
                 if seg.P__[0].downlink_layers[-1]:
-                    form_PP_(PP_segs, seg.P__[0].downlink_layers[-1].copy(), fPd)
+                    form_PP_(PP_segs, seg.P__[0].downlink_layers[-1].copy(), fPd, fuplink=0)
                 # convert PP_segs to PP:
                 PP_ += [sum2PP(PP_segs, root_rdn, fPd)]
 
         PP_t.append(PP_)  # PPm_, PPd_
     return PP_t
 
-def form_PP_(PP_segs, link_, fPd): # flood-fill PP_segs with vertically linked segments:
+def form_PP_(PP_segs, link_, fPd, fuplink): # flood-fill PP_segs with vertically linked segments:
     '''
     PP is graph with segs as 1D "vertices", each has two sets of edges / branching points: seg.uplink_ and seg.downlink_.
     '''
     for derP in link_:  # uplink_ or downlink_
-        seg = derP._P.root
+        if fuplink: seg = derP._P.root
+        else:       seg = derP.P.root
         if seg and seg not in PP_segs:  # top and bottom row Ps are not in segs
             PP_segs += [seg]
             uplink_ = seg.P__[-1].uplink_layers[-1]  # top-P uplink_
             if uplink_:
-                form_PP_(PP_segs, uplink_, fPd)
+                form_PP_(PP_segs, uplink_, fPd, fuplink=1)
             downlink_ = seg.P__[0].downlink_layers[-1]  # bottom-P downlink_
             if downlink_:
-                form_PP_(PP_segs, downlink_, fPd)
+                form_PP_(PP_segs, downlink_, fPd, fuplink=0)
 
 
 def sum2seg(seg_Ps, fPd):  # sum params of vertically connected Ps into segment
@@ -448,7 +462,8 @@ def accum_CPP(PP, inp, fPd):  # inp is seg or PP in recursion
                 elif P.y < current_ys[-1]:  # P.y < smallest y in ys
                     PP.P__.append([P])
                 elif P.y < current_ys[0] and P.y > current_ys[-1]:  # P.y in between largest and smallest value
-                    PP.P__.insert(P.y - current_ys[-1], [P])
+                    for index, y in enumerate(current_ys):  # loop each y value and insert value once value is larger than next value
+                        if P.y > y: PP.P__.insert(index, [P])
 
             # add seg links: we may need links of all terminated segs, for rng+
             for derP in inp.P__[0].downlink_layers[-1]:  # if downlink not in current PP's downlink and not part of the seg in current PP:
