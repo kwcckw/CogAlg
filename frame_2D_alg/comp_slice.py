@@ -134,8 +134,8 @@ def comp_slice_root(blob, verbose=False):  # always angle blob, composite dert c
         segd_ = form_seg_root(Pd__, root_rdn=2, fPd=1)  # seg is a stack of (P,derP)s
         PPm_, PPd_ = form_PP_root((segm_, segd_), root_rdn=2)  # forms PPs: parameterized graphs of linked segs
 
-        sub_recursion_eval([], PPd_)  # rng+, der+ eval per PP, forms param_layer and sub_PPs
-        sub_recursion_eval([], PPm_)
+        sub_recursion_eval(PPm_)
+        sub_recursion_eval(PPd_)  # rng+, der+ eval per PP, forms param_layer and sub_PPs
 
         for PP_ in (PPm_, PPd_):  # 1st agglomerative recursion is per PP, appending PP.seg_levels, not blob.levels:
             for PP in PP_:
@@ -372,7 +372,6 @@ def form_PP_(PP_segs, link_, fPd, fup): # flood-fill PP_segs with vertically lin
     for derP in link_:  # uplink_ or downlink_
         if fup: seg = derP._P.root
         else:   seg = derP.P.root
-
         if seg and seg not in PP_segs:  # top and bottom row Ps are not in segs
             PP_segs += [seg]
             uplink_ = seg.P__[-1].uplink_layers[-1]  # top-P uplink_
@@ -493,48 +492,78 @@ def accum_layer(top_layer, der_layer):
             top_layer[i] += param
 
 
-def sub_recursion_eval(root_layers, PP_):  # evaluate each PP for rng+ and der+
+def sub_recursion_eval(PP_):  # evaluate each PP for rng+ and der+
 
-    comb_layers = []  # no separate rng_comb_layers and der_comb_layers?
+    comb_layers = [[], []]  # no separate rng_comb_layers and der_comb_layers?
     # P and PP may be recursively formed higher-derivation derP and derPP, etc.
 
     for PP in PP_:  # PP is generic higher-composition pattern, P is generic lower-composition pattern
-
-        mPP, dPP = PP.params[-1][0,1]  # from last param layer only?
+        # get sum from all layers：
+        mPP = dPP = 0
+        for PP_params in PP.params:
+            mPP += PP_params[0]
+            dPP += PP_params[1]
+        # get sum from last layer:
+        # mPP, dPP = PP.params[-1][0:2]  # from last param layer only
+        
         mrdn = dPP > mPP  # fork rdn, only applies if both forks are taken
-
+        
+        
         if mPP > ave_mPP * (PP.rdn + mrdn) and len(PP.P__) > (PP.rng+1) * 2:  # value of rng+ sub_recursion per PP
-            comb_layers = sub_recursion(comb_layers, PP, root_rdn=PP.rdn+mrdn, fPd=0)
-
+            m_comb_layers = sub_recursion(PP, root_rdn=PP.rdn+mrdn, fPd=0)
+        else:
+            m_comb_layers = [[], []]
+            
         if dPP > ave_dPP * (PP.rdn +(not mrdn)) and len(PP.P__) > 3:  # value of der+, need 3 Ps to compute layer2, etc.
-            comb_layers = sub_recursion(comb_layers, PP, root_rdn=PP.rdn+(not mrdn), fPd=1)
+            d_comb_layers = sub_recursion(PP, root_rdn=PP.rdn+(not mrdn), fPd=1)
+        else:
+            d_comb_layers = [[], []]
 
-    if comb_layers: root_layers += comb_layers
+        PP.layers = [[], []]
+        for  i, (m_comb_layer, mm_comb_layer, dm_comb_layer) in enumerate(zip_longest(comb_layers[0], m_comb_layers[0], d_comb_layers[0], fillvalue=[])):
+            PP.layers[0] += [mm_comb_layer +  dm_comb_layer]
+            m_comb_layers += [mm_comb_layer +  dm_comb_layer] 
+            if i > len(comb_layers[0][i])-1:  # new depth for comb_layers, pack new m_comb_layer
+                comb_layers[0][i].append(m_comb_layers)
+
+        for i, (d_comb_layer, dm_comb_layer, dd_comb_layer) in enumerate(zip_longest(comb_layers[1], m_comb_layers[1], d_comb_layers[1], fillvalue=[])):
+            PP.layers[1] += [dm_comb_layer +  dd_comb_layer] 
+            d_comb_layers += [dm_comb_layer + dd_comb_layer]
+            if i > len(comb_layers[1][i])-1:  # new depth for comb_layers, pack new m_comb_layer
+                comb_layers[1][i].append(d_comb_layers)
+            
+    return comb_layers
 
 
-def sub_recursion(comb_layers, PP, root_rdn, fPd):  # compares param_layers of derPs in generic PP, form or accum top derivatives
+def sub_recursion(PP, root_rdn, fPd):  # compares param_layers of derPs in generic PP, form or accum top derivatives
 
     if fPd: P__ = comp_P_rng(PP.P__, PP.rng+1)
     else:   P__ = comp_P_der(PP.P__)
-    rev_P__ = [P_ for P_ in reversed(P__)]  # reversed P__: form_seg_root will reverse back
+    
+    # temporary to use deepcopy, probably it's gonna facing problem of endless recursion
+    rev_Pm__ = [deepcopy(P_) for P_ in reversed(P__)]  # reversed P__: form_seg_root will reverse back
+    rev_Pd__ = [deepcopy(P_) for P_ in reversed(P__)]  # reversed P__: form_seg_root will reverse back
 
-    sub_segm_ = form_seg_root(rev_P__, root_rdn, fPd=0)
-    sub_segd_ = form_seg_root(rev_P__, root_rdn, fPd=1)
+    sub_segm_ = form_seg_root(rev_Pm__, root_rdn, fPd=0)
+    sub_segd_ = form_seg_root(rev_Pd__, root_rdn, fPd=1)
 
     sub_PPm_, sub_PPd_ = form_PP_root((sub_segm_, sub_segd_), root_rdn)  # forms PPs: parameterized graphs of linked segs
-    PP.layers = [(sub_PPm_, sub_PPd_)]
 
-    if sub_PPm_: sub_recursion_eval(PP.layers, sub_PPm_)  # rng+ comp_P in PPms -> param_layer, sub_PPs, rng+=n to skip clustering?
-    if sub_PPd_: sub_recursion_eval(PP.layers, sub_PPd_)  # der+ comp_P in PPds -> param_layer, sub_PPs
+    if sub_PPm_: 
+        PPm_comb_layers = sub_recursion_eval(sub_PPm_)  # rng+ comp_P in PPms -> param_layer, sub_PPs, rng+=n to skip clustering?
+    if sub_PPd_: 
+        PPd_comb_layers = sub_recursion_eval(sub_PPd_)  # der+ comp_P in PPds -> param_layer, sub_PPs
 
-    if PP.layers:  # pack added sublayers:
-        new_comb_layers = []
-        for (comb_sub_PPm_, comb_sub_PPd_), (sub_PPm_, sub_PPd_) in zip_longest(comb_layers, PP.layers, fillvalue=([], [])):
-            comb_sub_PPm_ += sub_PPm_
-            comb_sub_PPd_ += sub_PPd_
-            new_comb_layers.append((comb_sub_PPm_, comb_sub_PPd_))  # add sublayer
-        comb_layers = new_comb_layers
-    '''
+    # combine each sub_PPms and sub_PPds from each layer
+    comb_layers = [[], []]
+    for m_sub_PPm_, d_sub_PPm_ in zip_longest(PPm_comb_layers[0], PPd_comb_layers[0], fillvalue=[]):
+        comb_layers[0] += [m_sub_PPm_ + d_sub_PPm_]
+    for m_sub_PPd_, d_sub_PPd_ in zip_longest(PPm_comb_layers[1], PPd_comb_layers[1], fillvalue=[]):
+        comb_layers[1] += [m_sub_PPd_ + d_sub_PPd_]
+    
+    return comb_layers 
+    
+'''
     not sure:
     if not fPd:
         if PP.y0 < _PP.y0_ + len(PP.P__) + rng: # vertical gap < rng, comp(1st rng Ps, last rng Ps)?
@@ -543,7 +572,6 @@ def sub_recursion(comb_layers, PP, root_rdn, fPd):  # compares param_layers of d
             else:
                 splice_PPs(PP_, frng=1-i)
     '''
-    return comb_layers
 
 def comp_P(_P, P):  # forms vertical derivatives of params per P in _P.uplink, conditional ders from norm and DIV comp
 
