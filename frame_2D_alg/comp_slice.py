@@ -137,13 +137,13 @@ def comp_slice_root(blob, verbose=False):  # always angle blob, composite dert c
         sub_recursion_eval(PPm_)
         sub_recursion_eval(PPd_)  # rng+, der+ eval per PP, forms param_layer and sub_PPs
 
-        for PP_ in (PPm_, PPd_):  # 1st agglomerative recursion is per PP, appending PP.seg_levels, not blob.levels:
-            for PP in PP_:
-                agg_recursion(PP, fseg=1)  # higher-composition comp_seg -> segPs.. per seg__[n], in PP.seg_levels
-        dir_blob.levels = [[PPm_], [PPd_]]
-        agg_recursion(dir_blob, fseg=0)  # 2nd call per dir_blob.PP_s formed in 1st call, forms PPP..s and dir_blob.levels
+#        for PP_ in (PPm_, PPd_):  # 1st agglomerative recursion is per PP, appending PP.seg_levels, not blob.levels:
+#            for PP in PP_:
+#                agg_recursion(PP, fseg=1)  # higher-composition comp_seg -> segPs.. per seg__[n], in PP.seg_levels
+#        dir_blob.levels = [[PPm_], [PPd_]]
+#        agg_recursion(dir_blob, fseg=0)  # 2nd call per dir_blob.PP_s formed in 1st call, forms PPP..s and dir_blob.levels
 
-    splice_dir_blob_(blob.dir_blobs)
+#    splice_dir_blob_(blob.dir_blobs)
 
 
 def slice_blob(blob, verbose=False):  # forms horizontal blob slices: Ps, ~1D Ps, in select smooth edge (high G, low Ga) blobs
@@ -216,10 +216,10 @@ def comp_P_rng(iP__, rng):  # rng+ sub_recursion in PP.P__, adding two link_laye
                 pri_P = pri_rng_derP.P
                 for ini_derP in pri_P.downlink_layers[0]:  # lower comparands are linked Ps at dy = rng
                     # draft:
+                    P = ini_derP.P
                     if ini_derP.P.root:  # should be reset in sub_recursion, new root is same-rng
                         derP = ini_derP.P.root  # links to splice seg ) PP, or local?
                     else:
-                        P = ini_derP.P
                         if isinstance(P, CPP) or isinstance(P, CderP):  # rng+ fork for derPs, very unlikely
                             derP = comp_derP(_P, P)  # form higher vertical derivatives of derP or PP params
                         else:
@@ -267,10 +267,13 @@ def comp_P_der(iP__):  # der+ sub_recursion in PP.P__, compare P.uplinks to P.do
 
 def form_seg_root(P__, root_rdn, fPd):  # form segs from Ps
 
+    splice_seg_ = []
     for P_ in P__[:-1]:  # scan bottom-up, append link_layers[-1] with rdn-adjusted matches in link_layers[-2]:
-        for P in P_: link_eval(P.downlink_layers, fPd)
+        for P in P_: 
+            splice_seg_ += link_eval(P.downlink_layers, fPd)
     for P_ in P__[1:]:
-        for P in P_: link_eval(P.uplink_layers, fPd)
+        for P in P_: 
+            splice_seg_ += link_eval(P.uplink_layers, fPd)
 
     seg_ = []
     for P_ in reversed(P__):  # get a row of Ps bottom-up, different copies per fPd
@@ -280,6 +283,9 @@ def form_seg_root(P__, root_rdn, fPd):  # form segs from Ps
                 form_seg_(seg_, P__, [P], fPd)  # test P.matching_uplink_, not known in form_seg_root
             else:
                 seg_.append( sum2seg([P], fPd))  # no link_s, terminate seg_Ps = [P]
+    
+    # splice seg_ and splice_seg_ before return seg_ here?
+    
     return seg_
 
 def form_seg_(seg_, P__, seg_Ps, fPd):  # form contiguous segments of vertically matching derPs
@@ -303,8 +309,16 @@ def form_seg_(seg_, P__, seg_Ps, fPd):  # form contiguous segments of vertically
 
 
 def link_eval(link_layers, fPd):
+    
+    # isolate splicing seg and link
+    seg_, link_ = [], []
+    for link in link_layers[-2]:
+        if isinstance(link, CPP): seg_.append(link)  # pack seg
+        else: link_.append(link)
+    link_layers[-2] = link_  # update to links only
+    
     # sort by value param:
-    for derP in sorted(link_layers[-2], key=lambda derP: derP.params[fPd], reverse=False):
+    for derP in sorted(link_, key=lambda derP: derP.params[fPd], reverse=False):
 
         if fPd: derP.rdn += derP.params[0] > derP.params[1]  # mP > dP
         else:   rng_eval(derP, fPd)  # reset derP.val, derP.rdn
@@ -315,6 +329,7 @@ def link_eval(link_layers, fPd):
         if derP.params[fPd] > ave * len(link_layers[-1]):  # ave * up branch rdn
             link_layers[-1].append(derP)  # miss_link_ = link_layers[-2] not in link_layers[-1]
 
+    return seg_
 
 def rng_eval(derP, fPd):  # compute value of combined mutual derPs: overlap between P uplinks and _P downlinks
 
@@ -525,7 +540,7 @@ def sub_recursion(PP, root_rdn, fPd):  # compares param_layers of derPs in gener
     if fPd: P__ = comp_P_rng(PP.P__, PP.rng+1)
     else:   P__ = comp_P_der(PP.P__)
 
-    # temporary to use deepcopy, probably it's gonna facing problem of endless recursion
+    # temporary to use deepcopy, probably it's gonna facing problem of endless recursion (need a better workaround)
     rev_Pm__ = [deepcopy(P_) for P_ in reversed(P__)]  # reversed P__: form_seg_root will reverse back
     rev_Pd__ = [deepcopy(P_) for P_ in reversed(P__)]  # reversed P__: form_seg_root will reverse back
 
