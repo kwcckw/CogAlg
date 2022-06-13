@@ -225,7 +225,7 @@ def comp_P_rng(P__, rng):  # rng+ sub_recursion in PP.P__, switch to rng+n to sk
                     P.uplink_layers[-2] += [derP]
                     _P.downlink_layers[-2] += [derP]
 
-    return reversed(P__)  # return bottom-up P__ for form_seg_
+    return [P_ for P_ in reversed(P__)]  # return bottom-up P__ for form_seg_
 
 
 def comp_P_der(P__):  # der+ sub_recursion in PP.P__, compare P.uplinks to P.downlinks
@@ -249,7 +249,7 @@ def comp_P_der(P__):  # der+ sub_recursion in PP.P__, compare P.uplinks to P.dow
             dderPs_ += dderPs  # row of dderPs
         dderPs__ += [dderPs_]
 
-    return dderPs__
+    return [ dderP_ for dderP_ in reversed(dderPs__)]  # return bottom up
 
 
 def form_seg_root(P__, root_rdn, fPd):  # form segs from Ps
@@ -516,24 +516,34 @@ def sub_recursion_eval(PP_):  # evaluate each PP for rng+ and der+
 
 def sub_recursion(PP, base_rdn, fPd):  # compares param_layers of derPs in generic PP, form or accum top derivatives
 
-    P__ = []  # revert to top-down, add 2 link_layers per P:
+    Pm__, Pd__ = [], []  # revert to top-down, add 2 link_layers per P:
     for iP_ in reversed(PP.P__):
-        P_=[]
+        Pm_, Pd_ = [], []
         for P in iP_:
-            P.uplink_layers += [[],[]]; P.downlink_layers += [[],[]]
-            P.root = object
-            P = deepcopy(P)
-            P_ += [P]
-        P__ += [P_]
+            uplink_layers, downlink_layers = P.uplink_layers, P.downlink_layers  # create a temporary copy of link layers
+            P.uplink_layers, P.downlink_layers = [], []  # temporary reset link layers
+            P.root = object  # reset root
+            new_Pm, new_Pd = deepcopy(P), deepcopy(P)  # copy new P, with empty root and link layers
+            new_Pm.uplink_layers += uplink_layers + [[], []]  # reassign back link layers after copy process, older layers are still referring to same object, but newer layers will e new list object
+            new_Pm.downlink_layers +=  downlink_layers + [[], []]
+            new_Pd.uplink_layers += uplink_layers + [[], []]  # reassign back link layers after copy process, older layers are still referring to same object, but newer layers will e new list object
+            new_Pd.downlink_layers +=  downlink_layers + [[], []]
+            P.uplink_layers, P.downlink_layers = uplink_layers, downlink_layers  # reassign back link layers into 
+            Pm_ += [new_Pm]
+            Pd_ += [new_Pd]
+        Pm__ += [Pm_]
+        Pd__ += [Pd_]
 
-    if fPd: P__ = comp_P_rng(P__, PP.rng+1)
-    else:   P__ = comp_P_der(P__)
+    if fPd: 
+        Pm__ = comp_P_rng(Pm__, PP.rng+1)
+        Pd__ = comp_P_rng(Pd__, PP.rng+1)
+    else:   
+        Pm__ = comp_P_der(Pm__)
+        Pd__ = comp_P_der(Pd__)
 
-    rev_Pm__ = [P_ for P_ in reversed(P__)]  # reversed P__: form_seg_root will reverse back
-    rev_Pd__ = [P_ for P_ in reversed(P__)]  # reversed P__: form_seg_root will reverse back
 
-    sub_segm_ = form_seg_root(rev_Pm__, base_rdn, fPd=0)
-    sub_segd_ = form_seg_root(rev_Pd__, base_rdn, fPd=1)
+    sub_segm_ = form_seg_root(Pm__, base_rdn, fPd=0)
+    sub_segd_ = form_seg_root(Pd__, base_rdn, fPd=1)
 
     sub_PPm_, sub_PPd_ = form_PP_root((sub_segm_, sub_segd_), base_rdn)  # forms PPs: parameterized graphs of linked segs
     PPm_comb_layers, PPd_comb_layers = [[],[]], [[],[]]
