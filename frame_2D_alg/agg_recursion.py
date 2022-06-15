@@ -1,4 +1,4 @@
-from comp_slice import *  # exclude agg_recursion?
+from comp_slice import *  
 '''
 Blob edges may be represented by higher-composition PPPs, etc., if top param-layer match,
 in combination with spliced lower-composition PPs, etc, if only lower param-layers match.
@@ -62,18 +62,23 @@ def agg_recursion(blob, fseg):  # compositional recursion per blob.Plevel. P, PP
 
         if fseg: M = ave- np.hypot(blob.params[0][5], blob.params[0][6])  # hypot(dy, dx)
         else: M = ave-abs(blob.G)
-        if M > ave_PP * blob.rdn and len(PP_)>1:  # >=2 comparands
-            n_extended += 1
+#        if M > ave_PP * blob.rdn and len(PP_)>1:  # >=2 comparands
+        if len(PP_)>1:
+            n_extended += 1 
+            
+            PPm_, PPd_ = [comp_PP_root(PP_)]  # PP is generic for lower-level composition
 
-            PPm__ = [comp_PP_root(deepcopy(PP_))]  # PP is generic for lower-level composition
-            PPd__ = [comp_PP_root(deepcopy(PP_))]
             # to be updated:
-            segm_ = form_seg_root(PPm__, root_rdn=2, fPd=0)  # forms segments: parameterized stacks of (P,derP)s
-            segd_ = form_seg_root(PPd__, root_rdn=2, fPd=1)  # seg is a stack of (P,derP)s
+            '''
+            segm_ = form_segPPP_root(PPm_, root_rdn=2, fPd=0)  # forms segments: parameterized stacks of (P,derP)s
+            segd_ = form_segPPP_root(PPd_, root_rdn=2, fPd=1)  # seg is a stack of (P,derP)s
+            '''
 
-            PPPm_, PPPd_ = form_PPP_root([segm_, segd_], base_rdn=2)  # PPP is generic next-level composition
+            PPPm_, PPPd_ = form_PPP_root([PPm_, PPd_], base_rdn=2)  # PPP is generic next-level composition
+            
             splice_PPs(PPPm_, frng=1)
             splice_PPs(PPPd_, frng=0)
+            
             PPP_t += [PPPm_, PPPd_]  # flat version
 
             if PPPm_: sub_recursion([], PPPm_, frng=1)  # rng+
@@ -90,44 +95,63 @@ def agg_recursion(blob, fseg):  # compositional recursion per blob.Plevel. P, PP
         agg_recursion(blob, fseg)
 
 # draft:
-def comp_PP_root(PP__):  # PP__ is 2D, PP can also be PPP, etc.
+def comp_PP_root(PP_):  # PP can also be PPP, etc.
 
-    for PP_ in PP__:
-        for PP in PP_:
-            for _PP in PP.uplink_layers[-1]:
-                comp_PP(_PP, PP)  # variable rng, comp cross-sign if PPd?
-    '''
-    # not sure these are needed:
-    uplink_layers = [[] for PP_ in PP__]
-    downlink_layers = deepcopy(uplink_layers)
+    for _PP in PP_:
+        for PP in _PP.downlink_layers[-1]:
+            comp_PP(_PP, PP)  # variable rng, comp cross-sign if PPd?
+       
+    PPm_ = [copy_P(PP, ftype=2) for PP in PP_]
+    PPd_ = [copy_P(PP, ftype=2) for PP in PP_] 
+
+    return PPm_, PPd_
     
-        uplink_layers[i] += [derPP]  # add derPP
-        if _PP in PP_: downlink_layers[PP_.index(_PP)] += [derPP]
 
-    for PP, uplink_layer, downlink_layer in zip_longest(PP_, uplink_layers, downlink_layers, fillvalue=[]):
-        PP.uplink_layers += [uplink_layer]
-        PP.downlink_layers += [downlink_layer]
-    '''
 
 def comp_PP(_PP, PP):  # draft
-
-    derPP = CderPP
-
-    for _param_layer, param_layer in zip(_PP.params, PP.params):
-        derPP += [comp_derP(_param_layer, param_layer)]
-
+    
+    # compare all layers here? or just last layer?
+    '''
+    for _param_layer, param_layer in zip(_PP.params, PP.params): 
+        derPP_ += [comp_derP(_param_layer, param_layer)]
+    '''
+    
+    derPP = comp_derP(_PP.params[-1], PP.params[-1])
+    
     PP.uplink_layers[-1] += [derPP]  # each layer has Mlayer, Dlayer
     _PP.downlink_layers[-1] += [derPP]
 
-def form_segPPP_root():  # not sure about form_seg_root
+
+# draft
+def form_segPPP_root(PP_, root_rdn, fPd):  # not sure about form_seg_root
+    
+    for PP in PP_:
+        link_eval(P.uplink_layers, fPd)
+        link_eval(P.downlink_layers, fPd)
+    
+    for PP in PP_:
+        form_segPPP_(PP)
+        
+        
+def form_segPPP_(PP):
     pass
 
-def form_PPP_root(seg_t, base_rdn=2):
+    
+def form_PPP_root(PP_t, base_rdn, fPd):  # form PPs from match-connected segs
     '''
     if match params[-1]: form PPP
     elif match params[:-1]: splice PPs and their segs?
     '''
-    pass
+    for fPd, PP_ in enumerate(PP_t):
+        for PP in PP_:
+            if PP.params[-1][fPd]:
+                pass
+                # form PPP
+            
+            else:
+                pass
+                # splice_PP
+    
 
 # pending update
 def splice_segs(seg_):  # in 1st run of agg_recursion
