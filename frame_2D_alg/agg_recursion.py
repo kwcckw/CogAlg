@@ -1,4 +1,8 @@
-from comp_slice import *  
+import sys
+import numpy as np
+from itertools import zip_longest
+from copy import deepcopy, copy
+from class_cluster import ClusterStructure, NoneType, comp_param, Cder
 '''
 Blob edges may be represented by higher-composition PPPs, etc., if top param-layer match,
 in combination with spliced lower-composition PPs, etc, if only lower param-layers match.
@@ -66,15 +70,14 @@ def agg_recursion(blob, fseg):  # compositional recursion per blob.Plevel. P, PP
         if len(PP_)>1:
             n_extended += 1 
             
-            PPm_, PPd_ = [comp_PP_root(PP_)]  # PP is generic for lower-level composition
-
-            # to be updated:
-            '''
+            PPm_, PPd_ = [comp_PP_(PP_t)]  # compare all PPs to the average (centroid) of all other PPs
+            # PP is generic for lower-level composition
+            ''' to be updated:
             segm_ = form_segPPP_root(PPm_, root_rdn=2, fPd=0)  # forms segments: parameterized stacks of (P,derP)s
             segd_ = form_segPPP_root(PPd_, root_rdn=2, fPd=1)  # seg is a stack of (P,derP)s
             '''
 
-            PPPm_, PPPd_ = form_PPP_root([PPm_, PPd_], base_rdn=2)  # PPP is generic next-level composition
+            PPPm_, PPPd_ = form_PPP_([PPm_, PPd_], base_rdn=2)  # PPP is generic next-level composition
             
             splice_PPs(PPPm_, frng=1)
             splice_PPs(PPPd_, frng=0)
@@ -94,35 +97,68 @@ def agg_recursion(blob, fseg):  # compositional recursion per blob.Plevel. P, PP
     if n_extended/len(PP_t) > 0.5:  # mean ratio of extended PPs
         agg_recursion(blob, fseg)
 
-# draft:
-def comp_PP_root(PP_):  # PP can also be PPP, etc.
+# draft,
+'''
+old comment:
+1st compare each node to the average (centroid) of all surrounding nodes within a maximal cartesian distance. 
+This determines if the node is part of proximity cluster, else it starts its own cluster. 
+2nd, that proximity cluster is mapped out through all connected nodes, still via some form of connectivity clustering or flood-fill.
 
-    for _PP in PP_:
-        for PP in _PP.downlink_layers[-1]:
-            comp_PP(_PP, PP)  # variable rng, comp cross-sign if PPd?
-       
+But then that proximity cluster forms its own centroid: mean constituent node params, and may be refined through centroid-based sub-clustering, 
+a global-range version of current sub_recursion().
+That's different from conventional centroid clustering in that initial cluster is defined through connectivity, 
+there is no randomization of any sort.
+'''
+def comp_PP_(PP_):  # PP can also be PPP, etc.
+
+    for PP in PP_:
+        ave_params = []
+        other_PPs = PP_.remove(PP)
+        n = len(other_PPs)
+        avePP = CPP
+        for PP in other_PPs:
+            sum_param = 0
+            for param in PP.params:
+                sum_param += param
+        ave_params += [sum_param / n]
+        derPP = CderPP
+        # comp to centroid:
+        for _param_layer, param_layer in zip(PP.params, ave_params):
+            derPP.params += [comp_derP(_param_layer, param_layer)]
+
     PPm_ = [copy_P(PP, ftype=2) for PP in PP_]
     PPd_ = [copy_P(PP, ftype=2) for PP in PP_] 
 
     return PPm_, PPd_
     
 
-
-def comp_PP(_PP, PP):  # draft
-    
-    # compare all layers here? or just last layer?
+def comp_PP(PP, avePP):  # draft
     '''
-    for _param_layer, param_layer in zip(_PP.params, PP.params): 
-        derPP_ += [comp_derP(_param_layer, param_layer)]
-    '''
-    
-    derPP = comp_derP(_PP.params[-1], PP.params[-1])
-    
+    probably not relevant:
     PP.uplink_layers[-1] += [derPP]  # each layer has Mlayer, Dlayer
     _PP.downlink_layers[-1] += [derPP]
-
+    '''
 
 # draft
+def form_PPP_t(derPP_t, base_rdn):  # form PPs from match-connected segs
+    for fPd, derPP_ in enumerate(derPP_t):
+        # sort derPP_ by value param:
+        for i, derPP in enumerate( sorted(derPP_, key=lambda derPP: derPP.params[fPd], reverse=True)):
+
+            derPP.rdn += derPP.params[fPd] > derPP.params[fPd+1]  # ?
+            ave = vaves[fPd] * derPP.rdn
+            # the weaker links are redundant to the stronger, added to derP.P.link_layers[-1]) in prior loops:
+
+            if derPP.params[fPd] > ave * len(derPP_[i:]):  # ave * cross-PPP rdn, derPPs are proto-PPPs
+                PPP_ = derPP_[i:]  # PPP here is syntactically identical to derPP?
+                break
+    '''
+    if derPP.match params[-1]: form PPP
+    elif derPP.match params[:-1]: splice PPs and their segs?
+    '''
+
+# old:
+
 def form_segPPP_root(PP_, root_rdn, fPd):  # not sure about form_seg_root
     
     for PP in PP_:
@@ -135,23 +171,6 @@ def form_segPPP_root(PP_, root_rdn, fPd):  # not sure about form_seg_root
         
 def form_segPPP_(PP):
     pass
-
-    
-def form_PPP_root(PP_t, base_rdn, fPd):  # form PPs from match-connected segs
-    '''
-    if match params[-1]: form PPP
-    elif match params[:-1]: splice PPs and their segs?
-    '''
-    for fPd, PP_ in enumerate(PP_t):
-        for PP in PP_:
-            if PP.params[-1][fPd]:
-                pass
-                # form PPP
-            
-            else:
-                pass
-                # splice_PP
-    
 
 # pending update
 def splice_segs(seg_):  # in 1st run of agg_recursion
