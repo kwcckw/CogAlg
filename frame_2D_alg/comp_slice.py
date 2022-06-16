@@ -269,6 +269,7 @@ def copy_P(P, ftype):
     # ftype = 0 : P is CP
     # ftype = 1 : P is CderP
     # ftype = 2 : P is CPP
+    # ftype = 3 : P is CderPP
     
     uplink_layers, downlink_layers = P.uplink_layers, P.downlink_layers  # local copy of link layers
     P.uplink_layers, P.downlink_layers = [], []  # reset link layers
@@ -280,6 +281,9 @@ def copy_P(P, ftype):
     elif ftype == 2:
         seg_levels = P.seg_levels 
         PPP_levels = P.PPP_levels
+    elif ftype == 3:
+        PP_derP, _PP_derP = P.PP, P._PP  # local copy of derP.P and derP._P
+        P.PP, P._PP = None, None  # reset
 
     new_P = P.copy()  # copy P with empty root and link layers, reassign link layers:
     new_P.uplink_layers += uplink_layers + [[], []]
@@ -294,6 +298,10 @@ def copy_P(P, ftype):
     elif ftype == 2:
         P.seg_levels = seg_levels
         P.PPP_levels = PPP_levels
+    elif ftype == 3:
+        new_P.PP, new_P._PP = PP_derP, _PP_derP
+        P.PP, P._PP = PP_derP, _PP_derP
+
 
     return new_P
 
