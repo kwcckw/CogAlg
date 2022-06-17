@@ -66,74 +66,57 @@ def agg_recursion(blob, fseg):  # compositional recursion per blob.Plevel. P, PP
         else:    ave_PP = ave_mPP
 
         if fseg: M = ave- np.hypot(blob.params[0][5], blob.params[0][6])  # hypot(dy, dx)
-        else: M = ave-abs(blob.G)
-#        if M > ave_PP * blob.rdn and len(PP_)>1:  # >=2 comparands
+        else: M = ave-abs(blob.G)  # if M > ave_PP * blob.rdn and len(PP_)>1:  # >=2 comparands
+
         if len(PP_)>1:
-            n_extended += 1 
-            
-            derPP_t = comp_PP_(PP_)  # compare all PPs to the average (centroid) of all other PPs
-            # PP is generic for lower-level composition
+            n_extended += 1
 
-            form_PPP_t(derPP_t, base_rdn=2)
+            derPP_t = comp_PP_(PP_)  # compare all PPs to the average (centroid) of all other PPs, is generic for lower level
+            PPP_t = form_PPP_t(derPP_t, base_rdn=2)
 
-            splice_PPs(PPPm_, frng=1)
-            splice_PPs(PPPd_, frng=0)
-            
-            PPP_t += [PPPm_, PPPd_]  # flat version
-
-            if PPPm_: sub_recursion([], PPPm_, frng=1)  # rng+
-            if PPPd_: sub_recursion([], PPPd_, frng=0)  # der+
+            splice_PPs(PPP_t)  # for initial PPs only?
+            sub_recursion_eval(PPP_t)  # rng+ or der+
         else:
             PPP_t += [[], []]  # replace with neg PPPs?
 
-    if fseg:
-        blob.seg_levels += [PPP_t]  # new level of segPs
-    else:
-        blob.levels.append(PPP_t)  # levels of dir_blob are Plevels
+    if fseg: blob.seg_levels += [PPP_t]  # new level of segPs
+    else:    blob.levels += [PPP_t]  # levels of dir_blob are Plevels
 
     if n_extended/len(PP_t) > 0.5:  # mean ratio of extended PPs
         agg_recursion(blob, fseg)
 
-# draft,
 '''
-old comment:
-1st compare each node to the average (centroid) of all surrounding nodes within a maximal cartesian distance. 
-This determines if the node is part of proximity cluster, else it starts its own cluster. 
-2nd, that proximity cluster is mapped out through all connected nodes, still via some form of connectivity clustering or flood-fill.
-
-But then that proximity cluster forms its own centroid: mean constituent node params, and may be refined through centroid-based sub-clustering, 
-a global-range version of current sub_recursion().
-That's different from conventional centroid clustering in that initial cluster is defined through connectivity, 
-there is no randomization of any sort.
+- Compare each PP to the average (centroid) of all other PPs in PP_, or maximal cartesian distance, forming derPPs.  
+- Select above-average derPPs as PPPs, which overlap representing summed derivatives over comp range.
 '''
 def comp_PP_(PP_):  # PP can also be PPP, etc.
 
-    derPPm_, derPPd_ = [], []
-    for _PP in PP_:
+    derPPm_, derPPd_ = [],[]
+
+    for PP in PP_:
         ave_params = []
-        
         other_PP_ = copy(PP_)  # shadllow copy
-        other_PP_.remove(_PP)
-        
-        sum_params = [copy(params) for params in _PP.params]
-
-        # get average of PPs' params
-        ave_params = [copy(params) for params in other_PP_[0].params]
-        for PP in other_PP_[1:]:
-            for _param_layer, param_layer in zip(ave_params, PP.params):
-                for i, param in enumerate(param_layer):
-                    _param_layer[i] = (param+_param_layer[i]) /2  # get average
-
-        derPP = CderPP()
+        other_PP_.remove(PP)
+        n = len(other_PP_)
+        # get an average per param of other_PP_:
+        sum_params = [0 for param in PP.params]
+        for PP in other_PP_:
+            for param, sum_param in zip(PP.params, sum_params):
+                sum_param += param
+        ave_params += [param / n for param in sum_params]
+        derPP = CderPP
         # comp to centroid:
         for _param_layer, param_layer in zip(PP.params, ave_params):
-            derPP.params += [comp_params(_param_layer, param_layer)]
-    
-        derPPm_.append(copy_P(derPP, ftype=3))
-        derPPd_.append(copy_P(derPP, ftype=3))
-        
+            ave_param_layer = []
+            for _param, param in zip(_param_layer, param_layer):
+                ave_param_layer += [comp_params(_param, param)]
+            derPP.params += [ave_param_layer]
+
+        derPPm_.append(copy_P(derPP, Ptype=3))
+        derPPd_.append(copy_P(derPP, Ptype=3))
+
     return derPPm_, derPPd_
-    
+
 
 def comp_params(_params, params):
 
@@ -222,26 +205,19 @@ def comp_params(_params, params):
     return derivatives
 
 
-def comp_PP(PP, avePP):  # draft
-    '''
-    probably not relevant:
-    PP.uplink_layers[-1] += [derPP]  # each layer has Mlayer, Dlayer
-    _PP.downlink_layers[-1] += [derPP]
-    '''
-
-# draft
 def form_PPP_t(derPP_t, base_rdn):  # form PPs from match-connected segs
     PPP_t = []
+
     for fPd, derPP_ in enumerate(derPP_t):
         # sort derPP_ by value param:
         derPP_ = sorted(derPP_, key=lambda derPP: derPP.params[fPd], reverse=True)
         PPP_ = []
         for i, derPP in enumerate(derPP_):
             param_value = 0
-            for params in derPP.params:  # get from all layers?    
-                derPP.rdn += params[fPd] > params[1-fPd]
-                param_value += params[fPd]
-                
+            for param_layer in derPP.params:
+                derPP.rdn += param_layer[fPd] > param_layer[1-fPd]
+                param_value += param_layer[fPd]
+
             ave = vaves[fPd] * derPP.rdn
             # the weaker links are redundant to the stronger, added to derP.P.link_layers[-1]) in prior loops:
 
@@ -249,20 +225,19 @@ def form_PPP_t(derPP_t, base_rdn):  # form PPs from match-connected segs
                 PPP_ = derPP_[i:]  # PPP here is syntactically identical to derPP?
                 break
         PPP_t.append(PPP_)
-    return PPP_t
-            
     '''
     if derPP.match params[-1]: form PPP
     elif derPP.match params[:-1]: splice PPs and their segs?
     '''
+    return PPP_t
 
 # old:
 
 def form_segPPP_root(PP_, root_rdn, fPd):  # not sure about form_seg_root
     
     for PP in PP_:
-        link_eval(P.uplink_layers, fPd)
-        link_eval(P.downlink_layers, fPd)
+        link_eval(PP.uplink_layers, fPd)
+        link_eval(PP.downlink_layers, fPd)
     
     for PP in PP_:
         form_segPPP_(PP)

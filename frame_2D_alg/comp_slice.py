@@ -121,9 +121,9 @@ class CPP(CP, CderP):  # P and derP params are combined into param_layers?
 # Functions:
 
 def comp_slice_root(blob, verbose=False):  # always angle blob, composite dert core param is v_g + iv_ga
-    
+
     from agg_recursion import agg_recursion
-    
+
     segment_by_direction(blob, verbose=False)  # forms blob.dir_blobs
     for dir_blob in blob.dir_blobs:  # dir_blob should be CBlob
 
@@ -232,8 +232,8 @@ def comp_P_rng(P__, rng):  # rng+ sub_recursion in PP.P__, switch to rng+n to sk
                     P.uplink_layers[-2] += [derP]
                     _P.downlink_layers[-2] += [derP]
 
-    Pm__= [[copy_P(P, ftype=0) for P in P_] for P_ in P__ ]
-    Pd__= [[copy_P(P, ftype=0) for P in P_] for P_ in P__ ]
+    Pm__= [[copy_P(P, Ptype=0) for P in P_] for P_ in P__ ]
+    Pd__= [[copy_P(P, Ptype=0) for P in P_] for P_ in P__ ]
 
     return Pm__, Pd__  # new_mP__, new_dP__
 
@@ -259,51 +259,10 @@ def comp_P_der(P__):  # der+ sub_recursion in PP.P__, compare P.uplinks to P.dow
             dderPs_ += dderPs  # row of dderPs
         dderPs__ += [dderPs_]
 
-    dderPm__ = [[copy_P(dderP, ftype=1) for dderP in dderP_] for dderP_ in dderPs__ ]
-    dderPd__ = [[copy_P(dderP, ftype=1) for dderP in dderP_] for dderP_ in dderPs__ ]
+    dderPm__ = [[copy_P(dderP, Ptype=1) for dderP in dderP_] for dderP_ in dderPs__ ]
+    dderPd__ = [[copy_P(dderP, Ptype=1) for dderP in dderP_] for dderP_ in dderPs__ ]
 
     return dderPm__, dderPd__
-
-
-def copy_P(P, ftype):  
-    # ftype = 0 : P is CP
-    # ftype = 1 : P is CderP
-    # ftype = 2 : P is CPP
-    # ftype = 3 : P is CderPP
-    
-    uplink_layers, downlink_layers = P.uplink_layers, P.downlink_layers  # local copy of link layers
-    P.uplink_layers, P.downlink_layers = [], []  # reset link layers
-    seg = P.root  # local copy
-    P.root = None
-    if ftype == 1:
-        P_derP, _P_derP = P.P, P._P  # local copy of derP.P and derP._P
-        P.P, P._P = None, None  # reset
-    elif ftype == 2:
-        seg_levels = P.seg_levels 
-        PPP_levels = P.PPP_levels
-    elif ftype == 3:
-        PP_derP, _PP_derP = P.PP, P._PP  # local copy of derP.P and derP._P
-        P.PP, P._PP = None, None  # reset
-
-    new_P = P.copy()  # copy P with empty root and link layers, reassign link layers:
-    new_P.uplink_layers += uplink_layers + [[], []]
-    new_P.downlink_layers +=  downlink_layers + [[], []]
-
-    P.uplink_layers, P.downlink_layers = uplink_layers, downlink_layers  # reassign link layers
-    P.root = seg  # reassign root
-    # reassign other list params
-    if ftype == 1:
-        new_P.P, new_P._P = P_derP, _P_derP
-        P.P, P._P = P_derP, _P_derP
-    elif ftype == 2:
-        P.seg_levels = seg_levels
-        P.PPP_levels = PPP_levels
-    elif ftype == 3:
-        new_P.PP, new_P._PP = PP_derP, _PP_derP
-        P.PP, P._PP = PP_derP, _PP_derP
-
-
-    return new_P
 
 
 def form_seg_root(P__, root_rdn, fPd):  # form segs from Ps
@@ -351,10 +310,9 @@ def link_eval(link_layers, fPd):
 
         if fPd: derP.rdn += derP.params[0] > derP.params[1]  # mP > dP
         else: rng_eval(derP, fPd)  # reset derP.val, derP.rdn
-
         ave = vaves[fPd] * derP.rdn
-        # the weaker links are redundant to the stronger, added to derP.P.link_layers[-1]) in prior loops:
 
+        # the weaker links are redundant to the stronger, added to derP.P.link_layers[-1]) in prior loops:
         if derP.params[fPd] > ave * len(link_layers[-1]):  # ave * up branch rdn
             link_layers[-1].append(derP)  # misses = link_layers[-2] not in link_layers[-1]
 
@@ -518,7 +476,7 @@ def accum_layer(top_layer, der_layer):
 
 def append_P(P__, P):
     # pack P into P__ in top down sequence
-    
+
     current_ys = [P_[0].y for P_ in P__]  # list of current-layer seg rows
     if P.y in current_ys:
         P__[current_ys.index(P.y)].append(P)  # append P row
@@ -753,6 +711,42 @@ def comp_derP(_derP, derP):
     dderP = CderP(x0=x0, L=L, y=_derP.y, params=derivatives, P=derP, _P=_derP)
 
     return dderP
+
+
+def copy_P(P, Ptype):   # Ptype =0: P is CP | =1: P is CderP | =2: P is CPP | =3: P is CderPP
+
+    uplink_layers, downlink_layers = P.uplink_layers, P.downlink_layers  # local copy of link layers
+    P.uplink_layers, P.downlink_layers = [], []  # reset link layers
+    seg = P.root  # local copy
+    P.root = None
+    if Ptype == 1:
+        P_derP, _P_derP = P.P, P._P  # local copy of derP.P and derP._P
+        P.P, P._P = None, None  # reset
+    elif Ptype == 2:
+        seg_levels = P.seg_levels
+        PPP_levels = P.PPP_levels
+    elif Ptype == 3:
+        PP_derP, _PP_derP = P.PP, P._PP  # local copy of derP.P and derP._P
+        P.PP, P._PP = None, None  # reset
+
+    new_P = P.copy()  # copy P with empty root and link layers, reassign link layers:
+    new_P.uplink_layers += uplink_layers + [[], []]
+    new_P.downlink_layers += downlink_layers + [[], []]
+
+    P.uplink_layers, P.downlink_layers = uplink_layers, downlink_layers  # reassign link layers
+    P.root = seg  # reassign root
+    # reassign other list params
+    if Ptype == 1:
+        new_P.P, new_P._P = P_derP, _P_derP
+        P.P, P._P = P_derP, _P_derP
+    elif Ptype == 2:
+        P.seg_levels = seg_levels
+        P.PPP_levels = PPP_levels
+    elif Ptype == 3:
+        new_P.PP, new_P._PP = PP_derP, _PP_derP
+        P.PP, P._PP = PP_derP, _PP_derP
+
+    return new_P
 
 
 # old draft
