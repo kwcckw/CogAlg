@@ -74,6 +74,7 @@ def agg_recursion(blob, fseg):  # compositional recursion per blob.Plevel. P, PP
             derPP_t = comp_PP_(PP_)  # compare all PPs to the average (centroid) of all other PPs, is generic for lower level
             PPP_t = form_PPP_t(derPP_t, base_rdn=2)
 
+            # do we need splice here?
             splice_PPs(PPP_t)  # for initial PPs only?
             sub_recursion_eval(PPP_t)  # rng+ or der+
         else:
@@ -93,24 +94,22 @@ def comp_PP_(PP_):  # PP can also be PPP, etc.
 
     derPPm_, derPPd_ = [],[]
 
-    for PP in PP_:
-        ave_params = []
+    for _PP in PP_:
         other_PP_ = copy(PP_)  # shadllow copy
-        other_PP_.remove(PP)
+        other_PP_.remove(_PP)
         n = len(other_PP_)
         # get an average per param of other_PP_:
-        sum_params = [0 for param in PP.params]
+        sum_params_layers = [[0 for param in params_layer] for params_layer in _PP.params]
         for PP in other_PP_:
-            for param, sum_param in zip(PP.params, sum_params):
-                sum_param += param
-        ave_params += [param / n for param in sum_params]
-        derPP = CderPP
+            for i, params_layer in enumerate(PP.params):
+                for j, param in enumerate(params_layer): 
+                    sum_params_layers[i][j] += param
+        ave_params = [[param/n for param in sum_params]  for sum_params in sum_params_layers]
+
+        derPP = CderPP()
         # comp to centroid:
-        for _param_layer, param_layer in zip(PP.params, ave_params):
-            ave_param_layer = []
-            for _param, param in zip(_param_layer, param_layer):
-                ave_param_layer += [comp_params(_param, param)]
-            derPP.params += [ave_param_layer]
+        for _param_layer, param_layer in zip(_PP.params, ave_params):
+            derPP.params += [comp_params(_param_layer, param_layer)]
 
         derPPm_.append(copy_P(derPP, Ptype=3))
         derPPd_.append(copy_P(derPP, Ptype=3))
@@ -210,7 +209,7 @@ def form_PPP_t(derPP_t, base_rdn):  # form PPs from match-connected segs
 
     for fPd, derPP_ in enumerate(derPP_t):
         # sort derPP_ by value param:
-        derPP_ = sorted(derPP_, key=lambda derPP: derPP.params[fPd], reverse=True)
+        derPP_ = sorted(derPP_, key=lambda derPP: derPP.params[-1][fPd], reverse=True)  # sort by last layer, or average from all layers?
         PPP_ = []
         for i, derPP in enumerate(derPP_):
             param_value = 0
