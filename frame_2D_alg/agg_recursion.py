@@ -110,8 +110,8 @@ def comp_PP_(PP_):  # PP can also be PPP, etc.
         for _param_layer, param_layer in zip(PP.params, ave_params):
             derPP.params[-1] += [comp_params(_param_layer, param_layer)]  # last layer: derivatives of all lower layers
 
-        derPPm_.append(copy_P(derPP, Ptype=3))
-        derPPd_.append(copy_P(derPP, Ptype=3))
+        derPPm_.append(copy_P(derPP, Ptype=2))
+        derPPd_.append(copy_P(derPP, Ptype=2))
 
     return derPPm_, derPPd_
 
@@ -121,7 +121,7 @@ def form_PPP_t(derPP_t):  # form PPs from match-connected segs
 
     for fPd, derPP_ in enumerate(derPP_t):
         # sort by value of last layer: derivatives of all lower layers:
-        derPP_ = sorted(derPP_, key=lambda derPP: derPP.params[-1][fPd], reverse=True)
+        derPP_ = sorted(derPP_, key=lambda derPP: derPP.params[-1][fPd], reverse=False)  # ascending order, start with lowest mPP or dPP
         PPP_ = []
         for i, derPP in enumerate(derPP_):
             param_value = 0
@@ -133,21 +133,41 @@ def form_PPP_t(derPP_t):  # form PPs from match-connected segs
             if param_value > ave:
                 PPP_ += [derPP]  # PPP here is syntactically identical to derPP?
                 if param_value > ave*10:
-                    ind_comp_PP_(derPP)  # derPP is converted from CPP to CPPP
+                    ind_comp_PP_(derPP, fPd)  # derPP is converted from CPP to CPPP
 
         PPP_t.append(PPP_)
     return PPP_t
 
 # draft
-def ind_comp_PP_(_PP):  # 1-to-1 comp, _PP is converted from CPP to higher-composition CPPP
+def ind_comp_PP_(_PP, fPd):  # 1-to-1 comp, _PP is converted from CPP to higher-composition CPPP
 
+    derPP_ = []
     for PP in _PP.layers[0]:
         # compare _PP to PP forming derPP
-        pass
-    '''
+        derPP_ += [comp_derP(_PP, PP)]  # 1-to-1 comparison between _PP and all other PPs
+        # create new comp_derP to output CderPP instead of CderP?
+        
+    for i, _derPP in enumerate(derPP_):
+        if _derPP.params[fPd]:  # form PPP
+        
+            PPP = CPP(params=deepcopy(PP.params), layers=[_derPP.P])
+            PPP.accum_from(_derPP)
+            _derPP.root = PPP
+            
+            for derPP in derPP_[i+1:]:
+                # no root and same sign
+                if not derPP.PP.root and ((_derPP.params[-1][fPd]>0) == (derPP.params[-1][fPd]>0)):    
+                    PPP.layers.append(derPP)
+                    PPP.accum_from(_derPP)
+                    derPP.root = PPP
+        else:  # splice PP and their segs
+            pass
+
+        
+        '''
     cluster results into new PP, replacing _PP,
     if derPP.match params[-1]: form PPP
-    elif derPP.match params[:-1]: splice PPs and their segs?
+    elif derPP.match params[:-1]: splice PPs and their segs? why params[:-1]?
     '''
 
 def comp_params(_params, params):
