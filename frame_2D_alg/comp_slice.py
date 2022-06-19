@@ -607,19 +607,46 @@ def comp_P(_P, P):  # forms vertical derivatives of params per P in _P.uplink, c
     return CderP(x0=x0, L=L, y=_P.y, params=params, P=P, _P=_P)
 
 
-def comp_derP(_derP, derP):
+def comp_derP(_derP, derP, instance=CderP, finP=1, foutderP=1):
 
-    nparams = len(_derP.params)
     derivatives = []
-    hyps = []
     mP = 0  # for rng+ eval
     dP = 0  # for der+ eval
 
-    if isinstance(_derP.params[0], list):
-        _params, params = _derP.params[-1], derP.params[-1]
-    else:
-        _params, params = _derP.params, derP.params
+    if finP:
+        if isinstance(_derP.params[0], list):  # params is layered
+            derivatives = []
+            for _params_layer, params_layer in zip(_derP.params, derP.params):
+                nparams = len(params_layer)
+                layer_derivatives, layer_dP, layer_mP = comp_params(_params_layer, params_layer, nparams)
+                derivatives += [derivatives]
+                mP += layer_mP
+                dP += layer_dP
+        else:  # params is single list
+            nparams = len(_derP.params)
+            _params, params = _derP.params, derP.params
+            derivatives, dP, mP = comp_params(_params, params, nparams)
 
+    else:  # _derP and derP is params layer
+        nparams = len(_derP)
+        derivatives, dP, mP = comp_params(_derP, derP, nparams)
+
+    if foutderP:  # return derP instance
+        x0 = min(_derP.x0, derP.x0)
+        xn = max(_derP.x0+_derP.L, derP.x0+derP.L)
+        L = xn-x0
+    
+        dderP = instance(x0=x0, L=L, y=_derP.y, params=derivatives, P=derP, _P=_derP)
+        return dderP
+    else:  # return only the derivatives
+        return derivatives
+
+
+def comp_params(_params, params, nparams):
+    
+    derivatives, hyps = [], []
+    
+    mP, dP = 0, 0
     for i, (_param, param) in enumerate(zip(_params, params)):
         param_type = int(i/ (2 ** (nparams-1)))  # for 9 compared params, but there are more in higher layers?
 
@@ -708,14 +735,7 @@ def comp_derP(_derP, derP):
                 derivatives.append(dmaangle); derivatives.append(mmaangle)
                 dP += dmaangle; mP += mmaangle
 
-    x0 = min(_derP.x0, derP.x0)
-    xn = max(_derP.x0+_derP.L, derP.x0+derP.L)
-    L = xn-x0
-
-    dderP = CderP(x0=x0, L=L, y=_derP.y, params=derivatives, P=derP, _P=_derP)
-
-    return dderP
-
+    return derivatives, mP, dP
 
 def copy_P(P, Ptype):   # Ptype =0: P is CP | =1: P is CderP | =2: P is CPP | =3: P is CderPP
 
