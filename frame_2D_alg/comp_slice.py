@@ -616,12 +616,11 @@ def comp_derP(_derP, derP):
     dP = 0  # for der+ eval
 
     if isinstance(_derP.params[0], list):
-        _params, params = _derP.params[-1], derP.params[-1] 
+        _params, params = _derP.params[-1], derP.params[-1]
     else:
-        _params, params = _derP.params, derP.params 
+        _params, params = _derP.params, derP.params
 
     for i, (_param, param) in enumerate(zip(_params, params)):
-        # get param type:
         param_type = int(i/ (2 ** (nparams-1)))  # for 9 compared params, but there are more in higher layers?
 
         if param_type == 0:  # x
