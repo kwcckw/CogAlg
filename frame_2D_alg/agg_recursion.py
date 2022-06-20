@@ -133,36 +133,57 @@ def form_PPP_t(derPP_t):  # form PPs from match-connected segs
             if param_value > ave:
                 PPP_ += [derPP]  # base derPP and PPP is CPP
                 if param_value > ave*10:
-                    ind_comp_PP_(derPP, i, fPd)  # derPP is converted from CPP to CPPP
+                    ind_comp_PP_(derPP, i, fPd)  # derPP is converted from CPP to CPPP  # why we need i here?
             else:
                 break
         PPP_t.append(PPP_)
     return PPP_t
 
+
+# tentative draft
+def comp_layer_params_recursive(_param_layer, param_layer, nested):
+
+    while nested:  # very tentative draft
+        nested -= 1
+        sub_ders = []
+        for j, (_sub_layer, sub_layer) in enumerate( zip(_param_layer, param_layer)):
+            sub_ders += [comp_layer_params_recursive(_param_layer, param_layer, nested=j)]   
+        
+        return sub_ders
+
+    else:
+        params, _, _ = comp_params(_param_layer, param_layer, nparams=len(_param_layer))
+        mparams = params[0::2]  # get even index m params
+        dparams = params[1::2]  # get odd index d params
+        
+        return [mparams, dparams]
+
 # draft
-def ind_comp_PP_(_PP, fPd):  # 1-to-1 comp, _PP is converted from CPP to higher-composition CPPP
+def ind_comp_PP_(_PP, i, fPd):  # 1-to-1 comp, _PP is converted from CPP to higher-composition CPPP
 
     derPP_ = []
-    rng = _PP.params[fPd] / 3  # 3: ave per rel_rng+=1, actual rng is Euclidean distance(y,x):
+    rng = _PP.params[-1][fPd] / 3  # 3: ave per rel_rng+=1, actual rng is Euclidean distance(y,x):
 
     for PP in _PP.layers[0]:  # 1-to-1 comparison between _PP and other PPs within rng
-        derPP = CderPP  # add some _PP variables?
-        # if Euclidean distance(y,x) < rng:
-        for i, _param_layer, param_layer in enumerate( zip(_PP.params, PP.params)):  # or top-down, continue if match?
-            nested = i  # each layer is nested as [lower_layer_ders], each with its own value.
-            ''' draft: 
-            # unpack each layer as 2nd: [[11] [11]], 3rd: [[[11] [11]], [[11], [11]], [[11], [11]]]..:
-            while nested:
-                nested-=1
-                sub_ders = []
-                for j, _sub_layer, sub_layer in enumerate( zip(_param_layer, param_layer)):
-            '''
-            # we shouldn't need comp_derP here?
-            derPP.params[-1] += [ comp_params(_param_layer, param_layer)]
+        derPP = CderPP()  # add some _PP variables? Do we need x0, xn and L in derPP too?
+        # derPP.x0 = min(_PP.x0, PP.x0)
+        # derPP.xn = max(_PP.x0+_PP.L, PP.x0+PP.L)
+        # derPP.L = xn-x0
+        
+        # if Euclidean distance(y,x) < rng:  # distance between 2 PPs ?
+        derPP.params = comp_layer_params_recursive(_PP.params, PP.params, nested=len(_PP.params))
+            
+        ''' draft: 
+        # unpack each layer as 2nd: [[11] [11]], 3rd: [[[11] [11]], [[11], [11]], [[11], [11]]]..:
+        while nested:
+            nested-=1
+            sub_ders = []
+            for j, _sub_layer, sub_layer in enumerate( zip(_param_layer, param_layer)):
+        '''
         derPP_ += [derPP]
 
     # cluster derPPs into PPPs by connectivity:
-    for i, _derPP in enumerate(derPP_):
+    for i, _derPP in enumerate(derPP_):  # input i will be overwritten by this i
 
         if _derPP.params[-1][fPd]:
             PPP = CPPP(params=deepcopy(_derPP.params), layers=[_derPP.PP])
