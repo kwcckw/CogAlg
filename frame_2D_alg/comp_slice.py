@@ -170,7 +170,7 @@ def slice_blob(blob, verbose=False):  # forms horizontal blob slices: Ps, ~1D Ps
                     Pdert_ = [dert]
                     params = [ave_g-dert[1], ave_ga-dert[2], *dert[3:]]  # m, ma, dert[3:]: i, dy, dx, sin_da0, cos_da0, sin_da1, cos_da1
                 else:
-                    # dert and _dert are not masked, accumulate P params from dert params:
+                    # dert and _dert are not masked, accumulate P params from dert params (comp G vs. Dx, Dy->der+?):
                     params[1] += ave_g-dert[1]; params[2] += ave_ga-dert[2]  # M, Ma
                     for i, (Param, param) in enumerate(zip(params[2:], dert[3:]), start=2):  # I, Dy, Dx, Sin_da0, Cos_da0, Sin_da1, Cos_da1
                         params[i] = Param + param
@@ -305,15 +305,14 @@ def form_seg_(seg_, P__, seg_Ps, fPd):  # form contiguous segments of vertically
 
 
 def link_eval(link_layers, fPd):
-    # sort by value param:
-    for derP in sorted(link_layers[-2], key=lambda derP: derP.params[fPd], reverse=False):
+
+    # sort derPs in link_layers[-2] by their value param:
+    for i, derP in enumerate( sorted( link_layers[-2], key=lambda derP: derP.params[fPd], reverse=True)):
 
         if fPd: derP.rdn += derP.params[0] > derP.params[1]  # mP > dP
         else: rng_eval(derP, fPd)  # reset derP.val, derP.rdn
-        ave = vaves[fPd] * derP.rdn
 
-        # the weaker links are redundant to the stronger, added to derP.P.link_layers[-1]) in prior loops:
-        if derP.params[fPd] > ave * len(link_layers[-1]):  # ave * up branch rdn
+        if derP.params[fPd] > vaves[fPd] * derP.rdn * (i+1):  # ave * rdn to stronger derPs in link_layers[-2]
             link_layers[-1].append(derP)  # misses = link_layers[-2] not in link_layers[-1]
 
 
@@ -474,8 +473,7 @@ def accum_layer(top_layer, der_layer):
             top_layer[i] += param
 
 
-def append_P(P__, P):
-    # pack P into P__ in top down sequence
+def append_P(P__, P):  # pack P into P__ in top down sequence
 
     current_ys = [P_[0].y for P_ in P__]  # list of current-layer seg rows
     if P.y in current_ys:
@@ -543,8 +541,8 @@ def sub_recursion(PP, base_rdn, fPd):  # compares param_layers of derPs in gener
     if sub_PPd_:
         PPd_comb_layers = sub_recursion_eval(sub_PPd_)  # der+ comp_P in PPds -> param_layer, sub_PPs
 
-    comb_layers = [[], []]  # combine sub_PPm_s and sub_PPd_s from each layer:
-
+    comb_layers = [[], []]
+    # combine sub_PPm_s and sub_PPd_s from each layer:
     for m_sub_PPm_, d_sub_PPm_ in zip_longest(PPm_comb_layers[0], PPd_comb_layers[0], fillvalue=[]):
         comb_layers[0] += [m_sub_PPm_ + d_sub_PPm_]
     for m_sub_PPd_, d_sub_PPd_ in zip_longest(PPm_comb_layers[1], PPd_comb_layers[1], fillvalue=[]):
@@ -635,7 +633,7 @@ def comp_derP(_derP, derP, instance=CderP, finP=1, foutderP=1):
         x0 = min(_derP.x0, derP.x0)
         xn = max(_derP.x0+_derP.L, derP.x0+derP.L)
         L = xn-x0
-    
+
         dderP = instance(x0=x0, L=L, y=_derP.y, params=derivatives, P=derP, _P=_derP)
         return dderP
     else:  # return only the derivatives
@@ -643,9 +641,9 @@ def comp_derP(_derP, derP, instance=CderP, finP=1, foutderP=1):
 
 
 def comp_params(_params, params, nparams):
-    
+
     derivatives, hyps = [], []
-    
+
     mP, dP = 0, 0
     for i, (_param, param) in enumerate(zip(_params, params)):
         param_type = int(i/ (2 ** (nparams-1)))  # for 9 compared params, but there are more in higher layers?

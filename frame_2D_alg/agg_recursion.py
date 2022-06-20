@@ -102,7 +102,7 @@ def comp_PP_(PP_):  # PP can also be PPP, etc.
             for i, params_layer in enumerate(compared_PP.params):
                 for j, param in enumerate(params_layer):
                     sum_params_layers[i][j] += param
-        # ave params of other_PP_:
+        # ave compared PP params:
         ave_params = [[param/n for param in sum_params] for sum_params in sum_params_layers]
 
         derPP = CPP(params=deepcopy(PP.params), layers=[PP_])  # derPP inherits PP.params
@@ -129,11 +129,11 @@ def form_PPP_t(derPP_t):  # form PPs from match-connected segs
                 derPP.rdn += param_layer[fPd] > param_layer[1-fPd]
                 param_value += param_layer[fPd]
 
-            ave = vaves[fPd] * derPP.rdn * len(derPP_[i+1:])  # derPP is redundant to higher-value previous derPPs in derPP_
+            ave = vaves[fPd] * derPP.rdn * (i+1)  # derPP is redundant to higher-value previous derPPs in derPP_
             if param_value > ave:
                 PPP_ += [derPP]  # base derPP and PPP is CPP
                 if param_value > ave*10:
-                    ind_comp_PP_(derPP, fPd)  # derPP is converted from CPP to CPPP
+                    ind_comp_PP_(derPP, i, fPd)  # derPP is converted from CPP to CPPP
             else:
                 break
         PPP_t.append(PPP_)
@@ -143,9 +143,22 @@ def form_PPP_t(derPP_t):  # form PPs from match-connected segs
 def ind_comp_PP_(_PP, fPd):  # 1-to-1 comp, _PP is converted from CPP to higher-composition CPPP
 
     derPP_ = []
-    for PP in _PP.layers[0]:  # 1-to-1 comparison between _PP and all other PPs
-        for _param_layer, param_layer in zip(_PP.params, PP.params):  # or top-down, continue if match?
-            derPP = comp_derP(_param_layer, param_layer, instance=CderPP)
+    rng = _PP.params[fPd] / 3  # 3: ave per rel_rng+=1, actual rng is Euclidean distance(y,x):
+
+    for PP in _PP.layers[0]:  # 1-to-1 comparison between _PP and other PPs within rng
+        derPP = CderPP  # add some _PP variables?
+        # if Euclidean distance(y,x) < rng:
+        for i, _param_layer, param_layer in enumerate( zip(_PP.params, PP.params)):  # or top-down, continue if match?
+            nested = i  # each layer is nested as [lower_layer_ders], each with its own value.
+            ''' draft: 
+            # unpack each layer as 2nd: [[11] [11]], 3rd: [[[11] [11]], [[11], [11]], [[11], [11]]]..:
+            while nested:
+                nested-=1
+                sub_ders = []
+                for j, _sub_layer, sub_layer in enumerate( zip(_param_layer, param_layer)):
+            '''
+            # we shouldn't need comp_derP here?
+            derPP.params[-1] += [ comp_params(_param_layer, param_layer)]
         derPP_ += [derPP]
 
     # cluster derPPs into PPPs by connectivity:
@@ -162,10 +175,11 @@ def ind_comp_PP_(_PP, fPd):  # 1-to-1 comp, _PP is converted from CPP to higher-
                         PPP.accum_from(_derPP)
                         derPP.root = PPP
 
-                    elif all([params_layer[fPd]>0 for params_layer in derPP.params]):  # if all params_layer[fPd] >0
-                            # splice PP and their segs
-                            pass
-        '''
+                    elif sum([derPP.params][fPd]) > ave*len(derPP.params):
+                         # all([params_layer[fPd]>0 for params_layer in derPP.params]):  # if all params_layer[fPd] >0
+                         # splice PP and their segs
+                         pass
+    '''
     if derPP.match params[-1]: form PPP
     elif derPP.match params[:-1]: splice PPs and their segs? why params[:-1]?
     '''
