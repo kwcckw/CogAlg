@@ -99,6 +99,8 @@ class CderP(ClusterStructure):  # tuple of derivatives in P uplink_ or downlink_
 
 class CPP(CP, CderP):  # P and derP params are combined into param_layers?
 
+    xn = int
+    yn = int
     params = list  # derivation layers += derP params per der+, param L is actually Area
     sign = bool
     rng = lambda: 1  # rng starts with 1

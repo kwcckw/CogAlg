@@ -90,6 +90,29 @@ def agg_recursion(blob, fseg):  # compositional recursion per blob.Plevel. P, PP
 - Select above-average derPPs as PPPs, representing summed derivatives over comp range, overlapping between PPPs.
 '''
 
+# sum params layer into sum layer according to their layer depth
+def sum_nested_layer(sum_layer, params_layer):
+    
+    if isinstance(sum_layer[0], list):  # if nested, continue to loop and search for deeper list
+        for j, (sub_sum_layer, sub_params_layer) in enumerate(zip(sum_layer, params_layer)):    
+            sum_nested_layer(sub_sum_layer, sub_params_layer)
+    else:  # if layer is not nested, sum params
+        for j, param in enumerate(params_layer):
+            sum_layer[j] += param
+
+# get average value for each param according to n value
+def get_layers_average(sum_params, n):
+    
+    average_params = deepcopy(sum_params)  # get a copy as output       
+    if isinstance(average_params[0], list):  # if nested, continue to loop and search for deeper list
+        for j, sub_sum_layer in enumerate(average_params): 
+            get_layers_average(sub_sum_layer, n)
+    else:  # if layer is not nested, get average of each value
+        for j, param in enumerate(average_params):
+            average_params[j] = param/n  
+            
+    return average_params
+
 def comp_PP_(PP_):  # PP can also be PPP, etc.
 
     derPPm_, derPPd_ = [],[]
@@ -99,21 +122,18 @@ def comp_PP_(PP_):  # PP can also be PPP, etc.
         compared_PP_.remove(PP)
         n = len(compared_PP_)
         # sum same-type params across other_PP_:
-        sum_params_layers = [[0 for param in params_layer] for params_layer in PP.params]
-        for compared_PP in compared_PP_:
-            for i, params_layer in enumerate(compared_PP.params):
-                for j, param in enumerate(params_layer):
-                    sum_params_layers[i][j] += param
+        sum_params = deepcopy(compared_PP_[0].params)  # init 1st sum params with 1st element
+        for compared_PP in compared_PP_[1:]:  # sum starts with 2nd element
+            sum_nested_layer(sum_params, compared_PP.params)
 
         # ave compared PP params:
-        ave_params = [[param/n for param in sum_params] for sum_params in sum_params_layers]
+        ave_params = get_layers_average(sum_params, n)
         derPP = CPP(params=deepcopy(PP.params), layers=[PP_])  # derPP inherits PP.params
 
         # comp to the average (centroid) of other PPs in PP_:
-        for i, _param_layer, param_layer in enumerate( zip(PP.params, ave_params)):
-            derPP.params += [unpack_layer(_param_layer, param_layer, nested=i)]
-            # last layer: derivatives of all lower layers,
-            # initial 3 layer nesting diagram: https://github.com/assets/52521979/ea6d436a-6c5e-429f-a152-ec89e715ebd6
+        derPP.params += [unpack_layer(PP.params, ave_params)]
+        # last layer: derivatives of all lower layers,
+        # initial 3 layer nesting diagram: https://github.com/assets/52521979/ea6d436a-6c5e-429f-a152-ec89e715ebd6
 
         derPPm_.append(copy_P(derPP, Ptype=2))
         derPPd_.append(copy_P(derPP, Ptype=2))
@@ -144,17 +164,15 @@ def form_PPP_t(derPP_t):  # form PPs from match-connected segs
         PPP_t.append(PPP_)
     return PPP_t
 
+# maybe use comp_nested_layer instead? Since we unpack and comp_params together
+def unpack_layer(_param_layer, param_layer):
 
-def unpack_layer(_param_layer, param_layer, nested):
-
-    while nested:  # very tentative draft
-        nested -= 1
+    if isinstance(_param_layer[0], list):   # if nested, continue to loop and search for deeper list
         sub_ders = []
         for j, (_sub_layer, sub_layer) in enumerate( zip(_param_layer, param_layer)):
-            sub_ders += [unpack_layer(_param_layer, param_layer, nested=j)]
+            sub_ders += [unpack_layer(_sub_layer, sub_layer)]
         return sub_ders
-
-    else:
+    else:  # comp params if layer is not nested
         params, _, _ = comp_params(_param_layer, param_layer, nparams=len(_param_layer))
         mparams = params[0::2]  # get even index m params
         dparams = params[1::2]  # get odd index d params
