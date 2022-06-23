@@ -63,9 +63,9 @@ def agg_recursion(blob, fseg):  # compositional recursion per blob.Plevel. P, PP
 
     for i, PP_ in enumerate(PP_t):   # fiPd = fiPd % 2
         fiPd = i % 2
-        if fiPd: ave_PP = ave_dPP
+        if fiPd: ave_PP = ave_dPP  # no longer need ave_PP?
         else:    ave_PP = ave_mPP
-        if fseg: M = ave- np.hypot(blob.params[0][5], blob.params[0][6])  # hypot(dy, dx)
+        if fseg: M = ave- blob.params[0][fiPd][4]  # blob.params[0][fiPd][4] is mG | dG
         else: M = ave-abs(blob.G)  # if M > ave_PP * blob.rdn and len(PP_)>1:  # >=2 comparands
 
         if len(PP_)>1:
@@ -102,13 +102,14 @@ def comp_PP_(PP_):  # PP can also be PPP, etc.
             sum_nested_layer(summed_params, compared_PP.params)  # use generic unpack function?
         # ave params of compared PP:
         ave_params = get_layers_average(summed_params, n)  # use generic unpack function?
+        
         derPP = CPP(params=deepcopy(PP.params), layers=[PP_])  # derPP inherits PP.params
         '''
         comp to ave params of compared PPs, form new layer: derivatives of all lower layers, 
         initial 3 layer nesting diagram: https://github.com/assets/52521979/ea6d436a-6c5e-429f-a152-ec89e715ebd6
         '''
-        derPP.params += [comp_params(PP.params[0], ave_params[0])]  # reform to compare 2tuples
-        for i, _layer, layer in enumerate( zip(PP.params[1:], ave_params[1:])):
+        # pending update
+        for i, (_layer, layer) in enumerate( zip(PP.params, ave_params)):
             derPP.params += [comp_layer(_layer, layer, [], i)]  # recursive layer unpack to the depth=i
 
         derPPm_.append(copy_P(derPP, Ptype=2))
@@ -208,6 +209,7 @@ def comp_layer(_layer, layer, sub_ders, i):  # nlists = max_nesting = i-1
         '''
     return sub_ders
 
+# pending update
 # unpack and and accum same-type params
 # use the same unpack sequence as in comp_layer?
 def sum_nested_layer(sum_layer, params_layer):
@@ -219,6 +221,7 @@ def sum_nested_layer(sum_layer, params_layer):
         for j, param in enumerate(params_layer):
             sum_layer[j] += param
 
+# pending update
 # get average value for each param according to n value
 def get_layers_average(sum_params, n):
 

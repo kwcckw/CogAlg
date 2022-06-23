@@ -316,7 +316,7 @@ def link_eval(link_layers, fPd):
         if fPd: derP.rdn += derP.params[0] > derP.params[1]  # mP > dP
         else: rng_eval(derP, fPd)  # reset derP.val, derP.rdn
 
-        if derP.params[fPd] > vaves[fPd] * derP.rdn * (i+1):  # ave * rdn to stronger derPs in link_layers[-2]
+        if derP.params[fPd][0] > vaves[fPd] * derP.rdn * (i+1):  # ave * rdn to stronger derPs in link_layers[-2]
             link_layers[-1].append(derP)  # misses = link_layers[-2] not in link_layers[-1]
 
 
@@ -331,10 +331,10 @@ def rng_eval(derP, fPd):  # compute value of combined mutual derPs: overlap betw
     olp_val = 0
     for derP in common_derP_:
         rdn += derP.params[fPd] > derP.params[1-fPd]  # dP > mP if fPd, else mP > dP
-        olp_val += derP.params[fPd]
+        olp_val += derP.params[fPd][0]
 
     nolp = len(common_derP_)
-    derP.params[fPd] = olp_val / nolp
+    derP.params[fPd][0] = olp_val / nolp
     derP.rdn += (rdn / nolp) > .5  # no fractional rdn?
 
 
@@ -391,17 +391,20 @@ def sum2seg(seg_Ps, fPd):  # sum params of vertically connected Ps into segment
               L = len(seg_Ps), y0 = seg_Ps[0].y)  # seg.L is Ly
     if isinstance(seg_Ps[0], CPP): accum_P = accum_CPP
     else: accum_P = accum_CP
-
-    for P in seg_Ps[:-1]:
-        accum_P(seg, P, fPd)  # sum P params into seg.params[:-1], layered in CPP
-        accum_layer(seg.params[-1], P.uplink_layers[-1][0].params)  # sum single-derP params into top seg param layer
-    accum_P(seg, seg_Ps[-1], fPd)  # accum top P, not top derP
+        
+    seg.params = [[0 for _ in range(10)] for _ in range(2)]  # init 2 tuples, each with 10 params
+    for P in seg_Ps[1:-1]:
+        # accum_P(seg, P, fPd)  # sum P params into seg.params[:-1], layered in CPP
+        for seg_params, P_params in zip(seg.params, P.uplink_layers[-1][0].params):  # loop each 2 tuples
+            accum_layer(seg_params, P_params)  # sum single-derP params into top seg param layer
+    # accum_P(seg, seg_Ps[-1], fPd)  # accum top P, not top derP
 
     return seg
 
 def accum_CP(seg, P, fPd):
     if seg.params:
-        accum_layer(seg.params[-1], P.params)  # P.params is top layer
+        for seg_params, P_params in zip(seg.params, P.params):  # loop each 2 tuples
+            accum_layer(seg_params, P_params)  # P.params is top layer
     else:
         seg.params = [P.params]  # single param layer
     P.root = seg
@@ -422,9 +425,9 @@ def accum_CPP(PP, inp, fPd):  # inp is seg or PP in recursion
 
     if PP.params:
         for i, layer in enumerate(inp.params):  # params are param layers
-            accum_layer(PP.params[i], layer)
+            accum_layer(PP.params[0][i], layer)
     else:
-        PP.params = inp.params.copy()
+        PP.params = [inp.params.copy()]  # add bracket so that PP.params is nested : [  [[1,2,3], [1,2,3]]  ]
     inp.root = PP
     PP.x += inp.x*inp.L  # or in inp.params?
     PP.y += inp.y*inp.L
@@ -500,8 +503,8 @@ def sub_recursion_eval(PP_):  # evaluate each PP for rng+ and der+
     for PP in PP_:  # PP is generic higher-composition pattern, P is generic lower-composition pattern
         mPP = dPP = 0
         for PP_params in PP.params:  # sum from all layers：
-            mPP += PP_params[0]
-            dPP += PP_params[1]
+            mPP += PP_params[0][0]
+            dPP += PP_params[1][0]
         mrdn = dPP > mPP  # fork rdn, only applies if both forks are taken
 
         if mPP > ave_mPP * (PP.rdn + mrdn) and len(PP.P__) > (PP.rng+1) * 2:  # value of rng+ sub_recursion per PP
@@ -610,7 +613,7 @@ def comp_P(_P, P):  # forms vertical derivatives of params per P in _P.uplink, c
 
     return CderP(x0=x0, L=L, y=_P.y, params=params, P=P, _P=_P)
 
-
+# pending update
 def comp_derP(_derP, derP, instance=CderP, finP=1, foutderP=1):
     # instance, finP, foutderP are not needed anymore?
 
@@ -624,17 +627,18 @@ def comp_derP(_derP, derP, instance=CderP, finP=1, foutderP=1):
             for _params_layer, params_layer in zip(_derP.params, derP.params):
                 nparams = len(params_layer)
                 layer_derivatives, layer_dP, layer_mP = comp_params(_params_layer, params_layer, nparams)
-                derivatives += [derivatives]
+                derivatives += [[layer_derivatives[0::2],layer_derivatives[1::2]]]
                 mP += layer_mP
                 dP += layer_dP
         else:  # params is single list
             nparams = len(_derP.params)
             _params, params = _derP.params, derP.params
             derivatives, dP, mP = comp_params(_params, params, nparams)
-
+            derivatives = [[derivatives[0::2], derivatives[1::2]]]
     else:  # _derP and derP is params layer
         nparams = len(_derP)
         derivatives, dP, mP = comp_params(_derP, derP, nparams)
+        derivatives = [[derivatives[0::2], derivatives[1::2]]]
 
     if foutderP:  # return derP instance
         x0 = min(_derP.x0, derP.x0)
@@ -649,76 +653,80 @@ def comp_derP(_derP, derP, instance=CderP, finP=1, foutderP=1):
 
 def comp_params(_params, params, nparams):
 
-    # redefine for 10-param tuples of mders and dders, same as in comp_P?
-
-    derivatives, hyps = [], []
+    derivatives, hyps = [[],[]], []
 
     mP, dP = 0, 0
     for i, (_param, param) in enumerate(zip(_params, params)):
-        param_type = int(i/ (2 ** (nparams-1)))  # for 9 compared params, but there are more in higher layers?
+        param_type = i
 
-        if param_type == 0:  # x
+        if param_type == 0:  # mP | dP
+            _mdP = param; mdP = param
+            dmdP = _mdP - mdP; mmdP = ave_mP - abs(dmdP)  # need to think on how to get ave_mP or ave_dP, or create another 1?
+            derivatives[0].append(mmdP); derivatives[1].append(dmdP)
+            dP += dmdP; mP += mmdP
+
+        elif param_type == 1:  # x
             _x = param; x = param
             dx = _x - x; mx = ave_dx - abs(dx)
-            derivatives.append(dx); derivatives.append(mx)
+            derivatives[0].append(dx); derivatives[1].append(mx)
             hyps.append(np.hypot(dx, 1))
             dP += dx; mP += mx
 
-        elif param_type == 1:  # I
-            _I = _param; I = param
-            dI = _I - I; mI = ave_I - abs(dI)
-            derivatives.append(dI); derivatives.append(mI)
-            dP += dI; mP += mI
-
-        elif param_type == 2:  # G
-            hyp = hyps[i%param_type]
-            _G = _param; G = param
-            dG = _G - G/hyp;  mG = min(_G, G)  # if comp_norm: reduce by hypot
-            derivatives.append(dG); derivatives.append(mG)
-            dP += dG; mP += mG
-
-        elif param_type == 3:  # Ga
-            _Ga = _param; Ga = param
-            dGa = _Ga - Ga;  mGa = min(_Ga, Ga)
-            derivatives.append(dGa); derivatives.append(mGa)
-            dP += dGa; mP += mGa
-
-        elif param_type == 4:  # M
-            hyp = hyps[i%param_type]
-            _M = _param; M = param
-            dM = _M - M/hyp;  mM = min(_M, M)
-            derivatives.append(dM); derivatives.append(mM)
-            dP += dM; mP += mM
-
-        elif param_type == 5:  # Ma
-            _Ma = _param; Ma = param
-            dMa = _Ma - Ma;  mMa = min(_Ma, Ma)
-            derivatives.append(dMa); derivatives.append(mMa)
-            dP += dMa; mP += mMa
-
-        elif param_type == 6:  # L
+        elif param_type == 2:  # L
             hyp = hyps[i%param_type]
             _L = _param; L = param
             dL = _L - L/hyp;  mL = min(_L, L)
-            derivatives.append(dL); derivatives.append(mL)
+            derivatives[0].append(dL); derivatives[1].append(mL)
             dP += dL; mP += mL
 
-        elif param_type == 7:  # angle, (sin_da, cos_da)
+        elif param_type == 3:  # I
+            _I = _param; I = param
+            dI = _I - I; mI = ave_I - abs(dI)
+            derivatives[0].append(dI); derivatives[1].append(mI)
+            dP += dI; mP += mI
+
+        elif param_type == 4:  # G
+            hyp = hyps[i%param_type]
+            _G = _param; G = param
+            dG = _G - G/hyp;  mG = min(_G, G)  # if comp_norm: reduce by hypot
+            derivatives[0].append(dG); derivatives[1].append(mG)
+            dP += dG; mP += mG
+
+        elif param_type == 5:  # Ga
+            _Ga = _param; Ga = param
+            dGa = _Ga - Ga;  mGa = min(_Ga, Ga)
+            derivatives[0].append(dGa); derivatives[1].append(mGa)
+            dP += dGa; mP += mGa
+
+        elif param_type == 6:  # M
+            hyp = hyps[i%param_type]
+            _M = _param; M = param
+            dM = _M - M/hyp;  mM = min(_M, M)
+            derivatives[0].append(dM); derivatives[1].append(mM)
+            dP += dM; mP += mM
+
+        elif param_type == 7:  # Ma
+            _Ma = _param; Ma = param
+            dMa = _Ma - Ma;  mMa = min(_Ma, Ma)
+            derivatives[0].append(dMa); derivatives[1].append(mMa)
+            dP += dMa; mP += mMa
+
+        elif param_type == 8:  # angle, (sin_da, cos_da)
             if isinstance(_param, tuple):  # (sin_da, cos_da)
                  _sin_da, _cos_da = _param; sin_da, cos_da = param
                  sin_dda = (cos_da * _sin_da) - (sin_da * _cos_da)  # sin(α - β) = sin α cos β - cos α sin β
                  cos_dda = (cos_da * _cos_da) + (sin_da * _sin_da)  # cos(α - β) = cos α cos β + sin α sin β
                  dangle = (sin_dda, cos_dda)  # da
                  mangle = ave_dangle - abs(np.arctan2(sin_dda, cos_dda))  # ma is indirect match
-                 derivatives.append(dangle); derivatives.append(mangle)
+                 derivatives[0].append(dangle); derivatives[1].append(mangle)
                  dP += np.arctan2(sin_dda, cos_dda); mP += mangle
             else: # m or scalar
                 _mangle = _param; mangle = param
                 dmangle = _mangle - mangle;  mmangle = min(_mangle, mangle)
-                derivatives.append(dmangle); derivatives.append(mmangle)
+                derivatives[0].append(dmangle); derivatives[1].append(mmangle)
                 dP += dmangle; mP += mmangle
 
-        elif param_type == 8:  # dangle   (sin_da0, cos_da0, sin_da1, cos_da1)
+        elif param_type == 9:  # dangle   (sin_da0, cos_da0, sin_da1, cos_da1)
             if isinstance(_param, tuple):  # (sin_da, cos_da)
                 _sin_da0, _cos_da0, _sin_da1, _cos_da1 = _param
                 sin_da0, cos_da0, sin_da1, cos_da1 = param
@@ -733,13 +741,13 @@ def comp_params(_params, params, nparams):
                 gay = np.arctan2( (-sin_dda0 - sin_dda1), (cos_dda0 + cos_dda1))  # gradient of angle in y?
                 gax = np.arctan2( (-sin_dda0 + sin_dda1), (cos_dda0 + cos_dda1))  # gradient of angle in x?
                 maangle = ave_dangle - abs(np.arctan2(gay, gax))  # match between aangles, probably wrong
-                derivatives.append(daangle); derivatives.append(maangle)
+                derivatives[0].append(daangle); derivatives[1].append(maangle)
                 dP += daangle; mP += maangle
 
             else:  # m or scalar
                 _maangle = _param; maangle = param
                 dmaangle = _maangle - maangle;  mmaangle = min(_maangle, maangle)
-                derivatives.append(dmaangle); derivatives.append(mmaangle)
+                derivatives[0].append(dmaangle); derivatives[1].append(mmaangle)
                 dP += dmaangle; mP += mmaangle
 
     return derivatives, mP, dP
