@@ -99,8 +99,6 @@ class CderP(ClusterStructure):  # tuple of derivatives in P uplink_ or downlink_
 
 class CPP(CP, CderP):  # P and derP params are combined into param_layers?
 
-    xn = int
-    yn = int
     params = list  # derivation layers += derP params per der+, param L is actually Area
     sign = bool
     xn = int
@@ -391,22 +389,24 @@ def sum2seg(seg_Ps, fPd):  # sum params of vertically connected Ps into segment
               L = len(seg_Ps), y0 = seg_Ps[0].y)  # seg.L is Ly
     if isinstance(seg_Ps[0], CPP): accum_P = accum_CPP
     else: accum_P = accum_CP
-        
-    seg.params = [[0 for _ in range(10)] for _ in range(2)]  # init 2 tuples, each with 10 params
+
+    seg.params = [[],[]]
+    seg.params[0] = [0 for _ in range(11)]  # init 1st param layer: a 11-tuple
+    seg.params[1] = [[0 for _ in range(10)] for _ in range(2)]  # init 2nd param layer: two 10-tuples
+
     for P in seg_Ps[1:-1]:
-        # accum_P(seg, P, fPd)  # sum P params into seg.params[:-1], layered in CPP
-        for seg_params, P_params in zip(seg.params, P.uplink_layers[-1][0].params):  # loop each 2 tuples
-            accum_layer(seg_params, P_params)  # sum single-derP params into top seg param layer
-    # accum_P(seg, seg_Ps[-1], fPd)  # accum top P, not top derP
+        # draft, we need to accumulate two layer, not one as below:
+        for seg_ptuple, P_ptuple in zip(seg.params, P.uplink_layers[-1][0].params):  # 2nd layer is two 10-tuples
+            accum_ptuple(seg_ptuple, P_ptuple)  # sum derP params into top seg_param_layer
 
     return seg
 
 def accum_CP(seg, P, fPd):
     if seg.params:
-        for seg_params, P_params in zip(seg.params, P.params):  # loop each 2 tuples
-            accum_layer(seg_params, P_params)  # P.params is top layer
+        for seg_params, P_params in zip(seg.params, P.params):  # 2 layers, each a param tuple
+            accum_ptuple(seg_params, P_params)
     else:
-        seg.params = [P.params]  # single param layer
+        seg.params = [P.params]
     P.root = seg
     seg.x0 = min(seg.x0, P.x0)
 
@@ -424,8 +424,8 @@ def sum2PP(PP_segs, base_rdn, fPd):  # sum params: derPs into segment or segs in
 def accum_CPP(PP, inp, fPd):  # inp is seg or PP in recursion
 
     if PP.params:
-        for i, layer in enumerate(inp.params):  # params are param layers
-            accum_layer(PP.params[0][i], layer)
+        for i, ptuple in enumerate(inp.params):  # params are param layers
+            accum_ptuple(PP.params[0][i], ptuple)
     else:
         PP.params = [inp.params.copy()]  # add bracket so that PP.params is nested : [  [[1,2,3], [1,2,3]]  ]
     inp.root = PP
@@ -460,7 +460,7 @@ def accum_CPP(PP, inp, fPd):  # inp is seg or PP in recursion
                     PP.uplink_layers[-1] += [derP]
 
 
-def accum_layer(top_layer, der_layer):
+def accum_ptuple(top_layer, der_layer):
 
     for i, (_param, param) in enumerate(zip(top_layer, der_layer)):  # include all summable derP variables into params?
         if isinstance(_param, tuple):
@@ -562,9 +562,9 @@ def sub_recursion(PP, base_rdn, fPd):  # compares param_layers of derPs in gener
 
 def comp_P(_P, P):  # forms vertical derivatives of params per P in _P.uplink, conditional ders from norm and DIV comp
 
-    # compared P params:
-    x, L, M, Ma, I, Dx, Dy, sin_da0, cos_da0, sin_da1, cos_da1 = P.params
+    # compared P params
     _x, _L, _M, _Ma, _I, _Dx, _Dy, _sin_da0, _cos_da0, _sin_da1, _cos_da1 = _P.params
+    x, L, M, Ma, I, Dx, Dy, sin_da0, cos_da0, sin_da1, cos_da1 = P.params
 
     dx = _x - x;  mx = ave_dx - abs(dx)  # mean x shift, if dx: rx = dx / ((L+_L)/2)? no overlap, offset = abs(x0 -_x0) + abs(xn -_xn)?
     dI = _I - I;  mI = ave_I - abs(dI)
@@ -613,7 +613,56 @@ def comp_P(_P, P):  # forms vertical derivatives of params per P in _P.uplink, c
 
     return CderP(x0=x0, L=L, y=_P.y, params=params, P=P, _P=_P)
 
-# pending update
+# this should replace comp_params:
+def comp_ptuple(_params, params):  # compare 10 params, as in comp_P, similar operations for m and d versions?
+
+    _P, _x, _L, _I, _G, _Ga, _M, _Ma, _angle, _aangle = _params  # each can be m or d
+    P, x, L, I, G, Ga, M, Ma, angle, aangle = params
+    '''
+    dx = _x - x;  mx = ave_dx - abs(dx)  # mean x shift, if dx: rx = dx / ((L+_L)/2)? no overlap, offset = abs(x0 -_x0) + abs(xn -_xn)?
+    dI = _I - I;  mI = ave_I - abs(dI)
+    dM = _M - M;  mM = min(_M, M)
+    dMa = _Ma - Ma;  mMa = min(_Ma, Ma)  # dG, dM are directional, re-direct by dx?
+    dL = _L - L * np.hypot(dx, 1); mL = min(_L, L)  # if abs(dx) > ave: adjust L as local long axis, no change in G,M
+    # G, Ga:
+    G = np.hypot(Dy, Dx); _G = np.hypot(_Dy, _Dx)  # compared as scalars
+    dG = _G - G;  mG = min(_G, G)
+    Ga = (cos_da0 + 1) + (cos_da1 + 1); _Ga = (_cos_da0 + 1) + (_cos_da1 + 1)  # gradient of angle, +1 for all positives?
+    # or Ga = np.hypot( np.arctan2(*Day), np.arctan2(*Dax)?
+    dGa = _Ga - Ga;  mGa = min(_Ga, Ga)
+
+    # comp angle:
+    _sin = _Dy / (1 if _G==0 else _G); _cos = _Dx / (1 if _G==0 else _G)
+    sin  = Dy / (1 if G==0 else G); cos = Dx / (1 if G==0 else G)
+    sin_da = (cos * _sin) - (sin * _cos)  # sin(α - β) = sin α cos β - cos α sin β
+    cos_da = (cos * _cos) + (sin * _sin)  # cos(α - β) = cos α cos β + sin α sin β
+    dangle = np.arctan2(sin_da, cos_da)  # vertical difference between angles
+    mangle = ave_dangle - abs(dangle)  # indirect match of angles, not redundant as summed
+
+    # comp angle of angle: forms daa, not gaa?
+    sin_dda0 = (cos_da0 * _sin_da0) - (sin_da0 * _cos_da0)
+    cos_dda0 = (cos_da0 * _cos_da0) + (sin_da0 * _sin_da0)
+    sin_dda1 = (cos_da1 * _sin_da1) - (sin_da1 * _cos_da1)
+    cos_dda1 = (cos_da1 * _cos_da1) + (sin_da1 * _sin_da1)
+
+    daangle = (sin_dda0, cos_dda0, sin_dda1, cos_dda1)
+    # day = [-sin_dda0 - sin_dda1, cos_dda0 + cos_dda1]
+    # dax = [-sin_dda0 + sin_dda1, cos_dda0 + cos_dda1]
+    gay = np.arctan2( (-sin_dda0 - sin_dda1), (cos_dda0 + cos_dda1))  # gradient of angle in y?
+    gax = np.arctan2( (-sin_dda0 + sin_dda1), (cos_dda0 + cos_dda1))  # gradient of angle in x?
+    daangle = np.arctan2( gay, gax)  # probably wrong
+    maangle = ave_daangle - abs(daangle)  # match between aangles, not redundant as summed
+
+    dP = abs(dx)-ave_dx + abs(dI)-ave_I + abs(G)-ave_G + abs(Ga)-ave_Ga + abs(dM)-ave_M + abs(dMa)-ave_Ma + abs(dL)-ave_L
+    # sum to evaluate for der+, abs diffs are distinct from directly defined matches:
+    mP = mx + mI + mG + mGa + mM + mMa + mL + mangle + maangle
+
+    params = [[mP, mx, mL, mI, mG, mGa, mM, mMa, mangle, maangle],
+              [dP, dx, dL, dI, dG, dGa, dM, dMa, dangle, daangle]]
+    # or summable params only, compute Gs at termination?
+    '''
+
+# replace with inline derP initialization?
 def comp_derP(_derP, derP, instance=CderP, finP=1, foutderP=1):
     # instance, finP, foutderP are not needed anymore?
 
@@ -626,18 +675,18 @@ def comp_derP(_derP, derP, instance=CderP, finP=1, foutderP=1):
             derivatives = []
             for _params_layer, params_layer in zip(_derP.params, derP.params):
                 nparams = len(params_layer)
-                layer_derivatives, layer_dP, layer_mP = comp_params(_params_layer, params_layer, nparams)
+                layer_derivatives, layer_dP, layer_mP = comp_ptuple(_params_layer, params_layer, nparams)
                 derivatives += [[layer_derivatives[0::2],layer_derivatives[1::2]]]
                 mP += layer_mP
                 dP += layer_dP
         else:  # params is single list
             nparams = len(_derP.params)
             _params, params = _derP.params, derP.params
-            derivatives, dP, mP = comp_params(_params, params, nparams)
+            derivatives, dP, mP = comp_ptuple(_params, params, nparams)
             derivatives = [[derivatives[0::2], derivatives[1::2]]]
     else:  # _derP and derP is params layer
         nparams = len(_derP)
-        derivatives, dP, mP = comp_params(_derP, derP, nparams)
+        derivatives, dP, mP = comp_ptuple(_derP, derP, nparams)
         derivatives = [[derivatives[0::2], derivatives[1::2]]]
 
     if foutderP:  # return derP instance
