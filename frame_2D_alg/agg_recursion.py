@@ -99,8 +99,9 @@ def comp_PP_(PP_):  # PP can also be PPP, etc.
         summed_params = deepcopy(compared_PP_[0].params)  # sum same-type params across compared PPs, init with 1st element
         for compared_PP in compared_PP_[1:]:
             # generic unpack and process, summed_params accum over compared_PP_:
-            summed_params += [func_layers(summed_params, compared_PP.params, out_layers=summed_params, func=accum_ptuple)]
-        ave_params = [ave_layers(summed_params, n, [])]
+            func_layers(summed_params, compared_PP.params, out_layers=summed_params, func=accum_ptuple)
+        ave_params = deepcopy(summed_params)
+        ave_layers(ave_params, n,)
 
         derPP = CPP(params=deepcopy(PP.params), layers=[PP_])  # derPP inherits PP.params
         der_layers = []
@@ -184,30 +185,36 @@ def ind_comp_PP_(_PP, fPd):  # 1-to-1 comp, _PP is converted from CPP to higher-
 
 def func_layers(_layers, layers, out_layers, func):  # max_nesting = len layers, ntuples = sum(ntuples in lower layers) * 2: 1, 2, 6, 18...
 
-    if isinstance(_layers[0], list):  # 1st layer is two vertuples, decoded in func; may need recursive unpack if from der+
-        out_layers += [[func(_layers[0][0], layers[0][0])] [func(_layers[0][1], layers[0][1])]]
-    else:
-        out_layers += [ func(_layers[0], layers[0])]  # 1st layer is latuple, decoded in func
-    # unpack deeper layers:
-    for _layer, layer in zip(_layers[1:], layers[1:]):
-        # func: comp_ptuple | accum_ptuple | sum_ptuple | ave_ptuple..:
-        out_layers += [func_layers(_layer, layer, out_layers, func)]  # layer = deeper sub_layers
+    if _layers and layers:
+        # i think just like this will be sufficient?
+        if isinstance(_layers[0], list):  # 1st layer is two vertuples, decoded in func; may need recursive unpack if from der+
+            sub_out_layers = []
+            for _sub_layers, sub_layers in zip(_layers, layers):
+                func_layers(_sub_layers, sub_layers, sub_out_layers, func)
+            out_layers += [sub_out_layers]
+        else:
+            func(_layers, layers)  # 1st layer is latuple, decoded in func
 
-    return out_layers
+        '''
+        # unpack deeper layers:
+        for _layer, layer in zip(_layers[1:], layers[1:]):
+            # func: comp_ptuple | accum_ptuple | sum_ptuple | ave_ptuple..:
+            out_layers += [func_layers(_layer, layer, out_layers, func)]  # layer = deeper sub_layers
+        '''
 
 
-def ave_layers(summed_params, n, ave_params):
+def ave_layers(ave_params, n):
 
-    if isinstance(summed_params[0], list):  # 1st layer is two vertuples, decoded in func
-        ave_params += [[ave_ptuple(summed_params[0], n)]]
-    else:
-        ave_params += [ ave_ptuple(summed_params[0], n)]  # 1st layer is latuple, decoded in func
-    # unpack deeper layers:
-    for summed_layer in summed_params[1:]:
-        ave_params += [ave_layers(summed_layer, n, ave_params)]  # each layer is deeper sub_layers
+    if ave_params:
+        if isinstance(ave_params[0], list):  # 1st layer is two vertuples, decoded in func
+            for sub_ave_params in ave_params:
+                ave_layers(sub_ave_params, n)
+        else:
+            for i, param in enumerate(ave_params):
+                ave_params[i] = param/n  # 1st layer is latuple, decoded in func
 
-    return ave_params
 
+# actually this is not needed?
 def ave_ptuple(ptuple, n):  # revise to process each param
 
     ave_tuple = []

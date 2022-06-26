@@ -509,9 +509,12 @@ def sub_recursion_eval(PP_):  # evaluate each PP for rng+ and der+
 
     for PP in PP_:  # PP is generic higher-composition pattern, P is generic lower-composition pattern
         mPP = dPP = 0
+        # need unpack here too
+        '''
         for PP_params in PP.params[1:]:  # sum from all layers except the 1st layer：
             mPP += PP_params[0][0]
             dPP += PP_params[1][0]
+        ''' 
         mrdn = dPP > mPP  # fork rdn, only applies if both forks are taken
 
         if mPP > ave_mPP * (PP.rdn + mrdn) and len(PP.P__) > (PP.rng+1) * 2:  # value of rng+ sub_recursion per PP
