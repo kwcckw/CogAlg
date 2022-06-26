@@ -389,7 +389,7 @@ def sum2seg(seg_Ps, fPd):  # sum params of vertically connected Ps into segment
     iP = seg_Ps[0]
     if isinstance(iP, CPP): accum_P = accum_CPP
     elif isinstance(iP, CderP): accum_P = accum_CderP
-    elif isinstance(iP, CP): accum_P = accum_CP
+    else: accum_P = accum_CP
 
     for P in seg_Ps[:-1]:
         accum_P(seg, P, fPd)
@@ -420,7 +420,7 @@ def accum_CP(seg, P, fPd):
 # i think we need accum_CderP too, some params in PP doesn't exist in der
 def accum_CderP(PP, inp, fPd):  # inp is seg or PP in recursion
 
-    accum_nested(PP.params[1], inp.params)      
+    accum_nested(PP.params[1], inp.params)
     inp.root = PP
     # may add more assignments here
 
@@ -428,7 +428,7 @@ def accum_CPP(PP, inp, fPd):  # inp is seg or PP in recursion
 
     accum_nested(PP.params[0], inp.params[0])
     accum_nested(PP.params[1], inp.params[1])
-        
+
     inp.root = PP
     PP.x += inp.x*inp.L  # or in inp.params?
     PP.y += inp.y*inp.L
@@ -632,13 +632,13 @@ def comp_P(_P, P, instance=CderP, finP=1, foutderP=1):  # forms vertical derivat
 
 # accumulated nested params, initialize nested list in the process too
 def accum_nested(_params, params):
-    
+
     if len(params)>0 and isinstance(params[0], list):
         for i, (_sub_params, sub_params) in enumerate(zip_longest(_params, params, fillvalue=[])):
             accum_nested(_sub_params, sub_params)
             if i>len(_params)-1:  # add new layer of params
                 _params.append(_sub_params)
-    else: 
+    else:
         if not _params: _params[:] = [ 0 for param in params ]  # initialize _params if it is empty
         if len(params) == 11:  # P params : x, L, m, ma, I, Dy, Dx, Sin_da0, Cos_da0, Sin_da1, Cos_da1
             accum_p(_params, params)
@@ -657,7 +657,7 @@ def comp_derP(_derP, derP, instance=CderP, finP=1, foutderP=1):
     if finP:
         if isinstance(_derP, CderP):  # params is in tuple of 2, each with 10 elements
             derivatives_t = comp_ptuple(_derP.params, derP.params)
-            
+
         else:  # params is layered
             derivatives_t = [comp_P(_derP.params[0], derP.params[0], finP=0, foutderP=0)]
             mP += derivatives_t[0][0][0]  # 1st index = 1st layer, 2nd index select m | d, 3rd index selecting mP | dP
