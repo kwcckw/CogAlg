@@ -508,12 +508,11 @@ def sub_recursion_eval(PP_):  # evaluate each PP for rng+ and der+
 
     for PP in PP_:  # PP is generic higher-composition pattern, P is generic lower-composition pattern
         mPP = dPP = 0
-        # need unpack here too
-        '''
+        ''' unpack tuple pairs first?
         for PP_params in PP.params[1:]:  # sum from all layers except the 1st layer：
             mPP += PP_params[0][0]
             dPP += PP_params[1][0]
-        ''' 
+        '''
         mrdn = dPP > mPP  # fork rdn, only applies if both forks are taken
 
         if mPP > ave_mPP * (PP.rdn + mrdn) and len(PP.P__) > (PP.rng+1) * 2:  # value of rng+ sub_recursion per PP
@@ -632,7 +631,6 @@ def comp_P(_P, P, instance=CderP, finP=1, foutderP=1):  # forms vertical derivat
         return params
 
 
-# accumulated nested params, initialize nested list in the process too
 def accum_nested(_params, params):
 
     if len(params)>0 and isinstance(params[0], list):
@@ -644,13 +642,14 @@ def accum_nested(_params, params):
         if not _params: _params[:] = [ 0 for param in params ]  # initialize _params if it is empty
         if len(params) == 11:  # P params : x, L, m, ma, I, Dy, Dx, Sin_da0, Cos_da0, Sin_da1, Cos_da1
             accum_p(_params, params)
-        elif len(params) == 10:  # tuple of 2 params:  [mx, mL, mM, mMa, mI, mG, mGa, , mangle, mP, maangle], [dx, dL, dM, dMa, dI, dG, dGa, , dangle, dP, daangle]
+        elif len(params) == 10:  # [mx, mL, mM, mMa, mI, mG, mGa, mangle, mP, maangle], [dx, dL, dM, dMa, dI, dG, dGa, dangle, dP, daangle]
             accum_ptuple(_params, params)
 
 # below is temporary
 # replace with inline derP initialization?
 def comp_derP(_derP, derP, instance=CderP, finP=1, foutderP=1):
-    # instance, finP, foutderP are not needed anymore?
+
+    # instance, finP, foutderP should not be needed, comp_params part should be done by comp_ptuple
 
     derivatives_t = []
     mP = 0  # for rng+ eval
@@ -681,7 +680,7 @@ def comp_derP(_derP, derP, instance=CderP, finP=1, foutderP=1):
 
     if foutderP:  # return derP instance
         x0 = min(_derP.x0, derP.x0)
-        xn = max(_derP.x0+_derP.L, derP.x0+derP.L)
+        xn = max(_derP.x0 + _derP.L, derP.x0+derP.L)
         L = xn-x0
 
         dderP = instance(x0=x0, L=L, y=_derP.y, params=derivatives_t, P=derP, _P=_derP)
@@ -692,6 +691,7 @@ def comp_derP(_derP, derP, instance=CderP, finP=1, foutderP=1):
 
 def comp_ptuple(_params, params):  # compare 2 10-tuples of params, as in comp_P, similar operations for m and d params
 
+    # modify to unpack and separately compare common and differential subsets of lataple and vertuple
     derivatives = [[], []]
 
     _P, _x, _L, _I, _G, _Ga, _M, _Ma, _angle, _aangle = _params
@@ -731,7 +731,7 @@ def comp_ptuple(_params, params):  # compare 2 10-tuples of params, as in comp_P
          mangle = ave_dangle - abs(np.arctan2(sin_dda, cos_dda))  # ma is indirect match
          derivatives[0].append(dangle); derivatives[1].append(mangle)
     else:
-        # m scalar
+        # scalar mangle
         _mangle = _angle; mangle = angle
         dmangle = _mangle - mangle;  mmangle = min(_mangle, mangle)
         derivatives[0].append(dmangle); derivatives[1].append(mmangle)
@@ -752,7 +752,7 @@ def comp_ptuple(_params, params):  # compare 2 10-tuples of params, as in comp_P
         maangle = ave_dangle - abs(np.arctan2(gay, gax))  # match between aangles, probably wrong
         derivatives[0].append(daangle); derivatives[1].append(maangle)
 
-    else:  # scalar
+    else:  # scalar maangle
         _maangle = _aangle; maangle = aangle
         dmaangle = _maangle - maangle;  mmaangle = min(_maangle, maangle)
         derivatives[0].append(dmaangle); derivatives[1].append(mmaangle)

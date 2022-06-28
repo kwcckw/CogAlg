@@ -97,16 +97,13 @@ def comp_PP_(PP_):  # PP can also be PPP, etc.
         n = len(compared_PP_)
 
         summed_params = deepcopy(compared_PP_[0].params)  # sum same-type params across compared PPs, init with 1st element
-        for compared_PP in compared_PP_[1:]:
-            # generic unpack and process, summed_params accum over compared_PP_:
-            func_layers(summed_params, compared_PP.params, out_layers=summed_params, func=accum_ptuple, fpack=0) # there's no need to pack output into summed_prams, they will be summed within the loop
-
-        ave_params = deepcopy(summed_params)
-        ave_layers(ave_params, n)
+        for compared_PP in compared_PP_[1:]:  # accum summed_params over compared_PP_:
+            sum_layers(summed_params, compared_PP.params)
+        sum_params = deepcopy(summed_params)
+        ave_layers(sum_params, n)
 
         derPP = CPP(params=deepcopy(PP.params), layers=[PP_])  # derPP inherits PP.params
-        der_layers = []
-        derPP.params += [func_layers(PP.params, ave_params, out_layers=der_layers, func=comp_ptuple, fpack=1)]  # generic unpack,function
+        derPP.params = comp_layers(PP.params, sum_params, der_layers=[])  # sum_params is now ave_params
         '''
         comp to ave params of compared PPs, form new layer: derivatives of all lower layers, 
         initial 3 layer nesting diagram: https://github.com/assets/52521979/ea6d436a-6c5e-429f-a152-ec89e715ebd6
@@ -115,6 +112,65 @@ def comp_PP_(PP_):  # PP can also be PPP, etc.
         derPPd_.append(copy_P(derPP, Ptype=2))
 
     return derPPm_, derPPd_
+
+'''
+1st and 2nd layers are single sublayers, the 2nd adds tuple pair nesting. Both are unpacked by func_pairs, not func_layers.  
+Multiple sublayers start on the 3rd layer, because it's derived from comparison between two (not one) lower layers. 
+4th layer is derived from comparison between 3 lower layers, where the 3rd layer is already nested, etc:
+'''
+
+def comp_layers(_layers, layers, der_layers):  # each layer is sub_layers
+
+    # recursive unpack of nested ptuple pairs, if any from der+, in the bottom layer or sublayer:
+    der_layers += [comp_pairs(_layers[0], layers[0], der_pairs=[])]
+
+    # recursive unpack of deeper layers, if any from agg+ in 3rd and higher layers, down to nested tuple pairs
+    for _layer, layer in zip(_layers[1:], layers[1:]):  # layer = deeper sub_layers
+        der_layers += [comp_layers(_layer, layer, der_layers)]
+
+    return der_layers # possibly nested param layers
+
+def comp_pairs(_pairs, pairs, der_pairs):  # recursively unpack m,d tuple pairs, if any from der+
+
+    if isinstance(_pairs[0], list):  # pairs is a pair, possibly nested
+        der_pairs += [comp_pairs(_pairs[0], pairs[0], der_pairs)]
+    else:
+        der_pairs += [comp_ptuple(_pairs[0], pairs[0])]  # pairs is a ptuple, 1st element is a param
+
+    return der_pairs  # possibly nested m,d ptuple pairs
+
+
+def sum_layers(Params, params):  # Capitalized names for sums, as comp_layers but no separate der_layers to return
+
+    sum_pairs(Params[0], params[0])  # recursive unpack of nested ptuple pairs, if any from der+
+
+    for Layer, layer in zip(Params[1:], params[1:]):  # recursive unpack of deeper layers, if any from agg+
+        sum_layers(Layer, layer)  # layer = deeper sub_layers
+
+def sum_pairs(Pairs, pairs):  # recursively unpack m,d tuple pairs from der+
+
+    if isinstance(Pairs[0], list):  # pairs is a pair, possibly nested
+        sum_pairs(Pairs[0], pairs)
+    else:
+        accum_ptuple(Pairs[0], pairs[0])  # pairs is a ptuple, 1st element is a param
+
+
+def ave_layers(summed_params, n):  # as sum_layers but single arg
+
+    ave_pairs(summed_params[0], n)  # recursive unpack of nested ptuple pairs, if any from der+
+
+    for summed_layer in summed_params[1:]:  # recursive unpack of deeper layers, if any from agg+:
+        ave_layers(summed_layer, n)  # each layer is deeper sub_layers
+
+def ave_pairs(sum_pairs, n):  # recursively unpack m,d tuple pairs from der+
+
+    if isinstance(sum_pairs[0], list):  # pairs is a pair, possibly nested
+        ave_pairs(sum_pairs[0], n)
+    else:
+        for i, param in enumerate(sum_pairs):  # pairs is a ptuple, 1st element is a param
+            sum_pairs[i] = param / n  # 1st layer is latuple, decoded in func
+
+    return sum_pairs  # sum_pairs is now ave_pairs, possibly nested m,d ptuple pairs
 
 
 def form_PPP_t(derPP_t):  # form PPs from match-connected segs
@@ -140,7 +196,7 @@ def form_PPP_t(derPP_t):  # form PPs from match-connected segs
         PPP_t.append(PPP_)
     return PPP_t
 
-# draft
+
 def ind_comp_PP_(_PP, fPd):  # 1-to-1 comp, _PP is converted from CPP to higher-composition CPPP
 
     derPP_ = []
@@ -158,7 +214,7 @@ def ind_comp_PP_(_PP, fPd):  # 1-to-1 comp, _PP is converted from CPP to higher-
 
         if distance / ((_val+val)/2) < rng:  # distance relative to value, vs. area?
 
-            der_layers = [func_layers(_PP.params, PP.params, out_layers=[], func=comp_ptuple)]  # each layer is sub_layers
+            der_layers = [comp_layers(_PP.params, PP.params, der_layers=[])]  # each layer is sub_layers
             _PP.downlink_layers += [der_layers]
             PP.uplink_layers += [der_layers]
             derPP_ += [derPP]
@@ -183,65 +239,6 @@ def ind_comp_PP_(_PP, fPd):  # 1-to-1 comp, _PP is converted from CPP to higher-
     if derPP.match params[-1]: form PPP
     elif derPP.match params[:-1]: splice PPs and their segs? 
     '''
-
-def func_layers(_layers, layers, out_layers, func, fpack):
-
-    # recursive unpack of nested ptuple pairs, if any from der+, in the bottom layer or sublayer:
-    sub_out_layers = []
-    func_pairs(_layers[0], layers[0], sub_out_layers, func_ptuple=func, fpack=fpack)
-    
-    # recursive unpack of deeper layers, from agg+ in 3rd and higher layers, down to nested tuple pairs
-    for _layer, layer in zip(_layers[1:], layers[1:]):
-        if _layer and layer:
-            func_layers(_layer, layer, out_layers, sub_out_layers, func, fpack=fpack)  # layer = deeper sub_layers
-    if fpack: out_layers += [sub_out_layers]
-    '''
-    1st and 2nd layers are single sublayers, the 2nd adds tuple pair nesting. Both are unpacked by func_pairs, not func_layers.  
-    Multiple sublayers start on the 3rd layer, because it's derived from comparison between two (not one) lower layers. 
-    4th layer is derived from comparison between 3 lower layers, where the 3rd layer is already nested, etc.
-    '''
-    return out_layers # possibly nested param layers
-
-
-def func_pairs(_pairs, pairs,  out_pairs, func_ptuple, fpack):  # recursively unpack m,d tuple pairs from der+
-    
-    sub_out_pairs = []
-    if isinstance(_pairs[0], list):  # pairs is a pair, possibly nested
-        
-        if _pairs[0] and pairs[0]:
-            out = func_pairs(_pairs[0], pairs[0], sub_out_pairs, func_ptuple, fpack)
-            if fpack: sub_out_pairs.append(out)
-    else:
-        
-        if func_ptuple == comp_ptuple and len(pairs) == 11:
-            out = comp_P(_pairs, pairs,  finP=0, foutderP=0)  # temporary solution, need to think a better solution to select different comp method based on number of parameters
-        else:
-            out = func_ptuple(_pairs, pairs)  # pairs is actually a ptuple, 1st element is a param
-        if fpack: sub_out_pairs.append(out)     
-    
-    if fpack: out_pairs.append(sub_out_pairs)
-    return out_pairs  # possibly nested m,d ptuple pairs
-
-
-def ave_layers(summed_params, n):
-
-    ave_params = []
-    # recursive unpack of nested ptuple pairs, if any from der+:
-    ave_pairs(summed_params[0], n)
-    for summed_layer in summed_params[1:]:  # recursive unpack of deeper layers, if any from agg+:
-        if summed_layer:  # not empty layer
-            ave_params += [ave_layers(summed_layer, n)]  # each layer is deeper sub_layers
-    return ave_params
-
-def ave_pairs(pairs, n):  # recursively unpack m,d tuple pairs from der+
-
-    if isinstance(pairs[0], list):  # pairs is a pair, possibly nested
-        if ave_pairs[0]:  # non empty layer
-            ave_pairs(pairs[0], n)
-    else:
-        for i, param in enumerate(pairs):  # pairs is actually a ptuple, 1st element is a param
-            pairs[i] = param / n  # 1st layer is latuple, decoded in func
-
 
 '''
 to be updated:
