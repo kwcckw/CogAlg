@@ -419,16 +419,16 @@ def sum2PP(PP_segs, base_rdn, fPd):  # sum params: derPs into segment or segs in
 
 def accum_CP(seg, P, fPd):
 
-    accum_ptuple([seg.params[0]], [P.params])
+    accum_ptuple(seg.params[0], P.params)
     P.root = seg
     seg.x0 = min(seg.x0, P.x0)
 
 
 # i think we need accum_CderP too, some params in PP doesn't exist in der
-# this should be a fork in accum_PP?
+# this should be a fork in accum_PP? I think it will make accum_PP more complicated because we may need additional flag on that
 def accum_CderP(PP, inp, fPd):  # inp is seg or PP in recursion
 
-    sum_pairs([PP.params[1]], [inp.params])
+    sum_pairs(PP.params[1], inp.params)
     inp.root = PP
     # may add more assignments here
 
@@ -612,7 +612,7 @@ def comp_P(_P, P):  # forms vertical derivatives of params per P in _P.uplink, c
     if isinstance(_P.params[0], list):
         derivatives = comp_pair_layers(_P.params, P.params, [])  # comp vertuple pairs (derP)
     else:
-        derivatives = comp_ptuple([_P.params], [P.params])  # comp lataple (P)
+        derivatives = comp_ptuple(_P.params, P.params)  # comp lataple (P)
 
     x0 = min(_P.x0, P.x0)
     xn = max(_P.x0+_P.L, P.x0+P.L)
@@ -656,6 +656,7 @@ def comp_ptuple(_params, params):  # compare 2 lataple or vertuples, similar ope
         Ga = (cos_da0 + 1) + (cos_da1 + 1); _Ga = (_cos_da0 + 1) + (_cos_da1 + 1)  # gradient of angle, +1 for all positives?
         # or Ga = np.hypot( np.arctan2(*Day), np.arctan2(*Dax)?
         dGa = _Ga - Ga;  mGa = min(_Ga, Ga)
+        derivatives[0].append(dG); derivatives[1].append(mG)
         derivatives[0].append(dGa); derivatives[1].append(mGa)
 
         # comp angle:
@@ -687,7 +688,7 @@ def comp_ptuple(_params, params):  # compare 2 lataple or vertuples, similar ope
         mP = mx + mI + mG + mGa + mM + mMa + mL + mangle + maangle
         derivatives[0].append(dP); derivatives[1].append(mP)
 
-    else:  # 10-param mtuple or dtuple
+    else:  # 10-param mtuple or dtuple  (x, L, M, Ma, I, G, Ga, angle, aangle, vP)
         _G, _Ga, _M, _Ma, _angle, _aangle, _vP = _params[5:]
         G, Ga, M, Ma, angle, aangle, vP = params[5:]
 
@@ -735,7 +736,7 @@ def comp_ptuple(_params, params):  # compare 2 lataple or vertuples, similar ope
             dmaangle = _maangle - maangle;  mmaangle = min(_maangle, maangle)
             derivatives[0].append(dmaangle); derivatives[1].append(mmaangle)
 
-        # P
+        # vP
         dP = _vP - vP; mP = ave_mP - abs(dP)
         derivatives[0].append(dP); derivatives[1].append(mP)
 
