@@ -228,7 +228,7 @@ def comp_P_rng(P__, rng):  # rng+ sub_recursion in PP.P__, switch to rng+n to sk
                         P.uplink_layers += [[],[]]; P.downlink_layers += [[],[]]; P.root = object
 
                     if isinstance(P, CPP) or isinstance(P, CderP):  # rng+ fork for derPs, very unlikely
-                        derP = comp_derP(_P, P)  # form higher vertical derivatives of derP or PP params
+                        derP = comp_P(_P, P)  # form higher vertical derivatives of derP or PP params
                     else:
                         derP = comp_P(_P, P)  # form vertical derivatives of horizontal P params
                     P.uplink_layers[-2] += [derP]
@@ -253,7 +253,7 @@ def comp_P_der(P__):  # der+ sub_recursion in PP.P__, compare P.uplinks to P.dow
                     # there maybe no x overlap between recomputed Ls of _derP and derP, compare anyway,
                     # mderP * (ave_olp_L / olp_L)? or olp(_derP._P.L, derP.P.L)?
                     # gap: neg_olp, ave = olp-neg_olp?
-                    dderP = comp_derP(_derP, derP)  # form higher vertical derivatives of derP or PP params
+                    dderP = comp_P(_derP, derP)  # form higher vertical derivatives of derP or PP params
                     derP.uplink_layers[0] += [dderP]  # pre-init layer per derP
                     _derP.downlink_layers[0] += [dderP]
                     dderPs += [dderP]
@@ -395,14 +395,14 @@ def sum2seg(seg_Ps, fPd):  # sum params of vertically connected Ps into segment
     seg.params[0] = deepcopy(seg_Ps[0].params)
     seg_Ps[0].root = seg
     seg.x0 = min(seg.x0, seg_Ps[0].x0)
-    if len(seg_Ps)>1: 
+    if len(seg_Ps)>1:
         seg.params += [deepcopy(seg_Ps[0].uplink_layers[-1][0].params)]   # add new layer in params if there;s more than 1 P
         accum_P(seg, seg_Ps[-1], fPd)  # accumulate last P
     # accumulate P and their derP's params for non 1st and last P
     for P in seg_Ps[1:-1]:
         accum_P(seg, P, fPd)
         accum_CderP(seg, P.uplink_layers[-1][0], fPd)
-    
+
     return seg
 
 
@@ -419,7 +419,7 @@ def sum2PP(PP_segs, base_rdn, fPd):  # sum params: derPs into segment or segs in
 
 def accum_CP(seg, P, fPd):
 
-    sum_layers([seg.params[0]], [P.params])
+    accum_ptuple([seg.params[0]], [P.params])
     P.root = seg
     seg.x0 = min(seg.x0, P.x0)
 
@@ -428,7 +428,7 @@ def accum_CP(seg, P, fPd):
 # this should be a fork in accum_PP?
 def accum_CderP(PP, inp, fPd):  # inp is seg or PP in recursion
 
-    sum_layers([PP.params[1]], [inp.params])
+    sum_pairs([PP.params[1]], [inp.params])
     inp.root = PP
     # may add more assignments here
 
@@ -469,30 +469,6 @@ def accum_CPP(PP, inp, fPd):  # inp is seg or PP in recursion
                 if derP not in PP.downlink_layers[-1] and derP.P.root not in PP.seg_levels[fPd][-1]:
                     PP.uplink_layers[-1] += [derP]
 
-# change to ops per param, as in comp_ptuple
-# P params : x, L, m, ma, I, Dy, Dx, Sin_da0, Cos_da0, Sin_da1, Cos_da1
-# tuple of 2 params:  [mx, mL, mM, mMa, mI, mG, mGa, , mangle, mP, maangle], [dx, dL, dM, dMa, dI, dG, dGa, , dangle, dP, daangle]
-def accum_ptuple(Ptuple, ptuple):
-
-    for i, (_param, param) in enumerate(zip(Ptuple, ptuple)):  # include all summable derP variables into params?
-        if isinstance(_param, tuple):
-            if len(_param) == 2:  # (sin_da, cos_da)
-                _sin_da, _cos_da = _param
-                sin_da, cos_da = param
-                sum_sin_da = (cos_da * _sin_da) + (sin_da * _cos_da)  # sin(α + β) = sin α cos β + cos α sin β
-                sum_cos_da = (cos_da * _cos_da) - (sin_da * _sin_da)  # cos(α + β) = cos α cos β - sin α sin β
-                Ptuple[i] = (sum_sin_da, sum_cos_da)
-            else:  # (sin_da0, cos_da0, sin_da1, cos_da1)
-                _sin_da0, _cos_da0, _sin_da1, _cos_da1 = _param
-                sin_da0, cos_da0, sin_da1, cos_da1 = param
-                sum_sin_da0 = (cos_da0 * _sin_da0) + (sin_da0 * _cos_da0)  # sin(α + β) = sin α cos β + cos α sin β
-                sum_cos_da0 = (cos_da0 * _cos_da0) - (sin_da0 * _sin_da0)  # cos(α + β) = cos α cos β - sin α sin β
-                sum_sin_da1 = (cos_da1 * _sin_da1) + (sin_da1 * _cos_da1)
-                sum_cos_da1 = (cos_da1 * _cos_da1) - (sin_da1 * _sin_da1)
-                Ptuple[i] = (sum_sin_da0, sum_cos_da0, sum_sin_da1, sum_cos_da1)
-        else:  # scalar
-            Ptuple[i] += param
-
 
 def append_P(P__, P):  # pack P into P__ in top down sequence
 
@@ -514,11 +490,6 @@ def sub_recursion_eval(PP_):  # evaluate each PP for rng+ and der+
 
     for PP in PP_:  # PP is generic higher-composition pattern, P is generic lower-composition pattern
         mPP = dPP = 0
-        ''' unpack tuple pairs first?
-        for PP_params in PP.params[1:]:  # sum from all layers except the 1st layer：
-            mPP += PP_params[0][0]
-            dPP += PP_params[1][0]
-        '''
         mrdn = dPP > mPP  # fork rdn, only applies if both forks are taken
 
         if mPP > ave_mPP * (PP.rdn + mrdn) and len(PP.P__) > (PP.rng+1) * 2:  # value of rng+ sub_recursion per PP
@@ -573,13 +544,13 @@ def sub_recursion(PP, base_rdn, fPd):  # compares param_layers of derPs in gener
 
     return comb_layers
 
-# move here because we need it in comp_slice , agg_recursion will import it
-def comp_layers(_layers, layers, der_layers):  # each layer is sub_layers
+
+def comp_layers(_layers, layers, der_layers):  # only for agg_recursion, each param layer may consist of sub_layers
 
     # recursive unpack of nested ptuple pairs, if any from der+, in the bottom layer or sublayer:
     der_layers += [comp_pair_layers(_layers[0], layers[0], der_pair_layers=[])]
 
-    # recursive unpack of deeper layers, if any from agg+ in 3rd and higher layers, down to nested tuple pairs
+    # recursive unpack of deeper layers, nested in 3rd and higher layers, if any from agg+, down to nested tuple pairs
     for _layer, layer in zip(_layers[1:], layers[1:]):  # layer = deeper sub_layers, stop if none
         der_layers += [comp_layers(_layer, layer, der_layers)]
 
@@ -603,32 +574,54 @@ def sum_layers(Params, params):  # Capitalized names for sums, as comp_layers bu
     for Layer, layer in zip(Params[1:], params[1:]):  # recursive unpack of deeper layers, if any from agg+
         sum_layers(Layer, layer)  # layer = deeper sub_layers
 
-def sum_pairs(Pairs, pairs):  # recursively unpack pair_layers: m,d tuple pairs from der+
+def sum_pairs(Pairs, pairs):  # recursively unpack pairs (short for pair_layers): m,d tuple pairs from der+
 
     if isinstance(Pairs[0], list):  # pairs is a pair, possibly nested in layers
-        for Pair, pair in zip(Pairs, pairs):  # pairs is short for pair_layers
+        for Pair, pair in zip(Pairs, pairs):
             sum_pairs(Pair, pair)
     else:
         accum_ptuple(Pairs, pairs)  # pairs is a ptuple, 1st element is a param
 
+# change to ops per param, as in comp_ptuple?
+# P params : x, L, m, ma, I, Dy, Dx, Sin_da0, Cos_da0, Sin_da1, Cos_da1
+# tuple of 2 params:  [mx, mL, mM, mMa, mI, mG, mGa, , mangle, mP, maangle], [dx, dL, dM, dMa, dI, dG, dGa, , dangle, dP, daangle]
+def accum_ptuple(Ptuple, ptuple):
 
-def comp_P(_P, P, instance=CderP):  # forms vertical derivatives of params per P in _P.uplink, conditional ders from norm and DIV comp
+    for i, (_param, param) in enumerate(zip(Ptuple, ptuple)):  # include all summable derP variables into params?
+        if isinstance(_param, tuple):
+            if len(_param) == 2:  # (sin_da, cos_da)
+                _sin_da, _cos_da = _param
+                sin_da, cos_da = param
+                sum_sin_da = (cos_da * _sin_da) + (sin_da * _cos_da)  # sin(α + β) = sin α cos β + cos α sin β
+                sum_cos_da = (cos_da * _cos_da) - (sin_da * _sin_da)  # cos(α + β) = cos α cos β - sin α sin β
+                Ptuple[i] = (sum_sin_da, sum_cos_da)
+            else:  # (sin_da0, cos_da0, sin_da1, cos_da1)
+                _sin_da0, _cos_da0, _sin_da1, _cos_da1 = _param
+                sin_da0, cos_da0, sin_da1, cos_da1 = param
+                sum_sin_da0 = (cos_da0 * _sin_da0) + (sin_da0 * _cos_da0)  # sin(α + β) = sin α cos β + cos α sin β
+                sum_cos_da0 = (cos_da0 * _cos_da0) - (sin_da0 * _sin_da0)  # cos(α + β) = cos α cos β - sin α sin β
+                sum_sin_da1 = (cos_da1 * _sin_da1) + (sin_da1 * _cos_da1)
+                sum_cos_da1 = (cos_da1 * _cos_da1) - (sin_da1 * _sin_da1)
+                Ptuple[i] = (sum_sin_da0, sum_cos_da0, sum_sin_da1, sum_cos_da1)
+        else:  # scalar
+            Ptuple[i] += param
+            
 
-    if isinstance(_P.params[0], list):  # temporary solution because params is not nested for P instance
-        derivatives = comp_layers(_P.params, P.params, [])
+def comp_P(_P, P):  # forms vertical derivatives of params per P in _P.uplink, conditional ders from norm and DIV comp
+
+    if isinstance(_P.params[0], list):
+        derivatives = comp_pair_layers(_P.params, P.params, [])  # comp vertuple pairs (derP)
     else:
-        derivatives = comp_layers([_P.params], [P.params], [])[0]
-        
-    # or summable params only, compute Gs at termination?
+        derivatives = comp_ptuple([_P.params], [P.params])  # comp lataple (P)
+
     x0 = min(_P.x0, P.x0)
     xn = max(_P.x0+_P.L, P.x0+P.L)
     L = xn-x0
-    
-    return instance(x0=x0, L=L, y=_P.y, params=derivatives, P=P, _P=_P)
+
+    return CderP(x0=x0, L=L, y=_P.y, params=derivatives, P=P, _P=_P)
 
 
-# very initial draft
-def comp_ptuple(_params, params):  # compare 2 10-tuples of params, as in comp_P, similar operations for m and d params
+def comp_ptuple(_params, params):  # compare 2 lataple or vertuples, similar operations for m and d params
 
     derivatives = [[], []]
 
@@ -651,10 +644,11 @@ def comp_ptuple(_params, params):  # compare 2 10-tuples of params, as in comp_P
     dMa = _Ma - Ma;  mMa = min(_Ma, Ma)
     derivatives[0].append(dMa); derivatives[1].append(mMa)
 
-    if len(_params) == 11:  # 11 params: _x, _L, _M, _Ma, _I, _Dx, _Dy, _sin_da0, _cos_da0, _sin_da1, _cos_da1
+    if len(_params) == 11:  # params: _x, _L, _M, _Ma, _I, _Dx, _Dy, _sin_da0, _cos_da0, _sin_da1, _cos_da1
+
         _Dx, _Dy, _sin_da0, _cos_da0, _sin_da1, _cos_da1 = _params[5:]
         Dx, Dy, sin_da0, cos_da0, sin_da1, cos_da1 = params[5:]
-        # if 10 additional params: G, Ga, M, Ma, angle, aangle, vP
+        # if 10, additional params: G, Ga, M, Ma, angle, aangle, vP; or summable params only, compute Gs?
 
         # G, Ga:
         G = np.hypot(Dy, Dx); _G = np.hypot(_Dy, _Dx)  # compared as scalars
@@ -693,7 +687,7 @@ def comp_ptuple(_params, params):  # compare 2 10-tuples of params, as in comp_P
         mP = mx + mI + mG + mGa + mM + mMa + mL + mangle + maangle
         derivatives[0].append(dP); derivatives[1].append(mP)
 
-    else:  # 10 params:   mx, mL, mM, mMa, mI, mG, mGa, mangle, maangle, mP
+    else:  # 10-param mtuple or dtuple
         _G, _Ga, _M, _Ma, _angle, _aangle, _vP = _params[5:]
         G, Ga, M, Ma, angle, aangle, vP = params[5:]
 
@@ -742,7 +736,7 @@ def comp_ptuple(_params, params):  # compare 2 10-tuples of params, as in comp_P
             derivatives[0].append(dmaangle); derivatives[1].append(mmaangle)
 
         # P
-        dP = _P - P; mP = ave_mP - abs(dP)
+        dP = _vP - vP; mP = ave_mP - abs(dP)
         derivatives[0].append(dP); derivatives[1].append(mP)
 
     return derivatives
@@ -782,3 +776,39 @@ def copy_P(P, Ptype):   # Ptype =0: P is CP | =1: P is CderP | =2: P is CPP | =3
         P.PP, P._PP = PP_derP, _PP_derP
 
     return new_P
+
+
+# old draft
+def splice_dir_blob_(dir_blobs):
+
+    for i, _dir_blob in enumerate(dir_blobs):
+        for fPd in 0, 1:
+            PP_ = _dir_blob.levels[0][fPd]
+
+            if fPd: PP_val = sum([PP.mP for PP in PP_])
+            else:   PP_val = sum([PP.dP for PP in PP_])
+
+            if PP_val - ave_splice > 0:  # high mPP pr dPP
+
+                _top_P_ = _dir_blob.P__[0]
+                _bottom_P_ = _dir_blob.P__[-1]
+
+                for j, dir_blob in enumerate(dir_blobs):
+                    if _dir_blob is not dir_blob:
+
+                        top_P_ = dir_blob.P__[0]
+                        bottom_P_ = dir_blob.P__[-1]
+                        # test y adjacency
+                        if (_top_P_[0].y-1 == bottom_P_[0].y) or (top_P_[0].y-1 == _bottom_P_[0].y):
+                            # tet x overlap
+                             _x0 = min([_P.x0 for _P_ in _dir_blob.P__ for _P in _P_])
+                             _xn = min([_P.x0+_P.L for _P_ in _dir_blob.P__ for _P in _P_])
+                             x0 = min([P.x0 for P_ in dir_blob.P__ for P in P_])
+                             xn = min([P.x0+_P.L for P_ in dir_blob.P__ for P in P_])
+                             if (x0 - 1 < _xn and xn + 1 > _x0) or  (_x0 - 1 < xn and _xn + 1 > x0) :
+                                 splice_2dir_blobs(_dir_blob, dir_blob)  # splice dir_blob into _dir_blob
+                                 dir_blobs[j] = _dir_blob
+
+def splice_2dir_blobs(_blob, blob):
+    # merge blob into _blob here
+    pass

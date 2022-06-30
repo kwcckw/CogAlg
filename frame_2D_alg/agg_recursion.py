@@ -65,7 +65,7 @@ def agg_recursion(blob, fseg):  # compositional recursion per blob.Plevel. P, PP
         fiPd = i % 2
         if fiPd: ave_PP = ave_dPP
         else:    ave_PP = ave_mPP
-        if fseg: M = ave- blob.params[-1][fiPd][4]  # we need to search through nested layer to get their M
+        if fseg: M = ave- blob.params[-1][fiPd][4]  # something like M = sum_layers(blob.params[-1][fiPd][4])?
         else: M = ave-abs(blob.G)  # if M > ave_PP * blob.rdn and len(PP_)>1:  # >=2 comparands
 
         if len(PP_)>1:
@@ -118,7 +118,6 @@ def comp_PP_(PP_):  # PP can also be PPP, etc.
 Multiple sublayers start on the 3rd layer, because it's derived from comparison between two (not one) lower layers. 
 4th layer is derived from comparison between 3 lower layers, where the 3rd layer is already nested, etc:
 '''
-
 
 def ave_layers(summed_params, n):  # as sum_layers but single arg
 
