@@ -65,11 +65,12 @@ def agg_recursion(blob, fseg):  # compositional recursion per blob.Plevel. P, PP
         fiPd = i % 2
         if fiPd: ave_PP = ave_dPP
         else:    ave_PP = ave_mPP
-        if fseg: 
+        if fseg:
             seg_M = blob.params[0][2]
-            if len(blob.params)>1: seg_M += blob.params[1][fiPd][2]
-            M = ave- seg_M  
-        else: M = ave-abs(blob.G)  # if M > ave_PP * blob.rdn and len(PP_)>1:  # >=2 comparands
+            if len(blob.params) > 1: seg_M += blob.params[1][fiPd][2]
+            M = ave - seg_M
+        else:
+            M = ave-abs(blob.G)  # if M > ave_PP * blob.rdn and len(PP_)>1:  # >=2 comparands
 
         if len(PP_)>1:
             n_extended += 1
