@@ -607,7 +607,9 @@ def accum_ptuple(Ptuple, ptuple):
 def comp_P(_P, P):  # forms vertical derivatives of params per P in _P.uplink, conditional ders from norm and DIV comp
 
     if isinstance(_P.params[0], list):
-        derivatives = comp_pair_layers(_P.params, P.params, [])  # comp vertuple pairs (derP)
+        derivatives = []
+        for _params, params in zip(_P.params, P.params):
+            derivatives += [comp_pair_layers(_params, params, [])]  # comp vertuple pairs (derP)
     else:
         derivatives = comp_ptuple(_P.params, P.params)  # comp lataple (P)
 
@@ -686,8 +688,8 @@ def comp_ptuple(_params, params):  # compare 2 lataples or vertuples, similar op
         derivatives[0].append(dP); derivatives[1].append(mP)
 
     else:  # 10-param mtuple or dtuple: m|d( x, L, M, Ma, I, G, Ga, angle, aangle, vP)
-        _G, _Ga, _M, _Ma, _angle, _aangle, _vP = _params[5:]
-        G, Ga, M, Ma, angle, aangle, vP = params[5:]
+        _G, _Ga, _angle, _aangle, _vP = _params[5:]
+        G, Ga, angle, aangle, vP = params[5:]
 
         # G
         dG = _G - G/hyp;  mG = min(_G, G)  # if comp_norm: reduce by hypot

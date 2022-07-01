@@ -152,8 +152,8 @@ def form_PPP_t(derPP_t):  # form PPs from match-connected segs
         for i, derPP in enumerate(derPP_):
             derPP_val = 0
             for param_layer in derPP.params:  # may need recursive unpack here
-                derPP.rdn += param_layer[fPd] > param_layer[1-fPd]
-                derPP_val += param_layer[fPd]  # make it a param?
+                derPP.rdn += param_layer[fPd][-1] > param_layer[1-fPd][-1]  # last element is vP
+                derPP_val += param_layer[fPd][-1]  # make it a param?
 
             ave = vaves[fPd] * derPP.rdn * (i+1)  # derPP is redundant to higher-value previous derPPs in derPP_
             if derPP_val > ave:
@@ -169,20 +169,23 @@ def form_PPP_t(derPP_t):  # form PPs from match-connected segs
 def ind_comp_PP_(_PP, fPd):  # 1-to-1 comp, _PP is converted from CPP to higher-composition CPPP
 
     derPP_ = []
-    rng = _PP.params[-1][fPd] / 3  # 3: ave per rel_rng+=1, actual rng is Euclidean distance:
+    rng = _PP.params[-1][fPd][-1] / 3  # 3: ave per rel_rng+=1, actual rng is Euclidean distance:
 
     for PP in _PP.layers[0]:  # 1-to-1 comparison between _PP and other PPs within rng
         derPP = CderPP()
-        _area = _PP.params.L  # pseudo, we need L index in params
-        area = PP.params.L
+        _area = _PP.params[0][1]  # get L from 11 elements param. L is in 2nd index.
+        area = PP.params[0][1]
         dx = _PP.x/_area - PP.x/area
         dy = _PP.y/_area - PP.y/area
         distance = np.hypot(dy, dx)  # Euclidean distance between PP centroids
-        _val = _PP.params[-1][fPd]
-        val = PP.params[-1][fPd]
+        _val, val = 0, 0
+        # PP may not having val when it is having only single layer
+        if len(_PP.params)>1: _val = _PP.params[-1][fPd][-1]
+        if len(PP.params)>1:   val = PP.params[-1][fPd][-1]
+
 
         if distance / ((_val+val)/2) < rng:  # distance relative to value, vs. area?
-
+            # _PP is CderPP while PP is CPP, not sure how to compare here because their layers might be different
             der_layers = [comp_layers(_PP.params, PP.params, der_layers=[])]  # each layer is sub_layers
             _PP.downlink_layers += [der_layers]
             PP.uplink_layers += [der_layers]
