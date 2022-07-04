@@ -101,9 +101,17 @@ def comp_PP_(PP_):  # PP can also be PPP, etc.
         compared_PP_.remove(PP)
         n = len(compared_PP_)
 
-        summed_params = deepcopy(compared_PP_[0].params)  # sum same-type params across compared PPs, init with 1st element
-        for compared_PP in compared_PP_[1:]:  # accum summed_params over compared_PP_:
+        # init summed_params with max number of params layer, some PP (single seg single P's PP) might have lesser params layer
+        max_params_length = max([len(compared_PP.params) for compared_PP in compared_PP_])
+        for compared_PP in compared_PP_:
+            if len(compared_PP.params) == max_params_length:
+                summed_params = deepcopy(compared_PP.params)  # sum same-type params across compared PPs, init 1st element
+                compared_PP_.remove(compared_PP)  # remove PP after params initialization
+                break
+            
+        for compared_PP in compared_PP_:  # accum summed_params over compared_PP_:
             sum_layers(summed_params, compared_PP.params)
+
         sum_params = deepcopy(summed_params)
         ave_layers(sum_params, n)
 
@@ -129,7 +137,10 @@ def ave_layers(summed_params, n):  # as sum_layers but single arg
     ave_pairs(summed_params[0], n)  # recursive unpack of nested ptuple pairs, if any from der+
 
     for summed_layer in summed_params[1:]:  # recursive unpack of deeper layers, if any from agg+:
-        ave_layers(summed_layer, n)  # each layer is deeper sub_layers
+        if isinstance(summed_layer, Cptuple):
+            ave_pairs(summed_layer, n)
+        else:
+            ave_layers(summed_layer, n)  # each layer is deeper sub_layers
 
 def ave_pairs(sum_pairs, n):  # recursively unpack m,d tuple pairs from der+
 
