@@ -170,14 +170,22 @@ def ave_pairs(sum_pairs, n):  # recursively unpack m,d tuple pairs from der+
 
 def ave_ptuple(ptuple, n):
 
-    for i, param in enumerate(ptuple):  # make ptuple an iterable?
-        ptuple[i] = param / n
-
-        if isinstance(param, tuple):
-            for j, sub_param in enumerate(param):
-                param[j] = sub_param / n  # angle or aangle
-        else:
-            ptuple[i] = param / n
+    # numeric params
+    for param_name in (ptuple.numeric_params):
+        setattr(ptuple, param_name, getattr(ptuple, param_name)/n)
+    # angle and aangle
+    if isinstance(ptuple.angle, tuple):
+        angle, aangle = [], []
+        for angle_value in ptuple.angle:
+            angle.append(angle_value / n)  # angle
+        for aangle_value in ptuple.aangle:
+            aangle.append(aangle_value / n)  # aangle
+        ptuple.angle = tuple(angle)  # convert back to tuple
+        ptuple.aangle = tuple(aangle) 
+    else:
+        ptuple.angle /= n
+        ptuple.aangle /= n
+        
 '''
 sum_pairs.x /= n; sum_pairs.L /= n; sum_pairs.M /= n; sum_pairs.Ma /= n; sum_pairs.G /= n; sum_pairs.Ga /= n; sum_pairs.val /= n
 if isinstance(sum_pairs.angle, tuple):
@@ -190,20 +198,30 @@ else:
     sum_pairs.aangle /= n
 '''
 
+# or use get_param_nested
+def get_sum_nested(params_layer, param_name, fPd):
+    
+    sum_value = 0
+    if isinstance(params_layer, Cptuple):  # params layer is not 2 tuple
+        sum_value += getattr(params_layer, param_name)
+    elif isinstance(params_layer[0], Cptuple):  # params layer is 2 tuple
+        sum_value += getattr(params_layer[fPd], param_name)
+    else:  # keep unpacking:
+        for param_layer in params_layer:
+            sum_value += get_sum_nested(param_layer, param_name, fPd)
+    return sum_value
 
 def form_PPP_t(pre_PPP_t):  # form PPs from match-connected segs
     PPP_t = []
 
     for fPd, pre_PPP_ in enumerate(pre_PPP_t):
         # sort by value of last layer: derivatives of all lower layers:
-        pre_PPP_ = sorted(pre_PPP_, key=lambda pre_PPP: pre_PPP.params[-1][fPd], reverse=True)  # descending order
+        pre_PPP_ = sorted(pre_PPP_, key=lambda pre_PPP: get_sum_nested(pre_PPP.params[-1], 'val', fPd), reverse=True)  # descending order
         PPP_ = []
         for i, pre_PPP in enumerate(pre_PPP_):
-            pre_PPP_val = 0
+            pre_PPP_val = get_sum_nested(pre_PPP.params, 'val', fPd=fPd)
             for param_layer in pre_PPP.params:  # may need recursive unpack here
-                pre_PPP.rdn += param_layer[fPd][-1] > param_layer[1-fPd][-1]  # last element is val
-                pre_PPP_val += param_layer[fPd][-1]  # make it a param?
-
+                pre_PPP.rdn += get_sum_nested(param_layer, 'val', fPd=fPd)> get_sum_nested(param_layer, 'val', fPd=1-fPd)
             ave = vaves[fPd] * pre_PPP.rdn * (i+1)  # derPP is redundant to higher-value previous derPPs in derPP_
             if pre_PPP_val > ave:
                 PPP_ += [pre_PPP]  # base derPP and PPP is CPP
@@ -218,17 +236,17 @@ def form_PPP_t(pre_PPP_t):  # form PPs from match-connected segs
 def ind_comp_PP_(pre_PPP, fPd):  # 1-to-1 comp, _PP is converted from CPP to higher-composition CPPP
 
     derPP_ = []
-    rng = pre_PPP.params[-1][fPd][-1] / 3  # 3: ave per rel_rng+=1, actual rng is Euclidean distance:
+    rng = get_sum_nested(pre_PPP.params[-1], 'val', fPd)/ 3  # 3: ave per rel_rng+=1, actual rng is Euclidean distance:
 
     for PP in pre_PPP.layers[-1]:  # 1-to-1 comparison between _PP and other PPs within rng
         derPP = CderPP()
-        _area = pre_PPP.params[0][1]  # get L from 11 elements param. L is in 2nd index.
-        area = PP.params[0][1]
+        _area = get_sum_nested(pre_PPP.params[0], 'L', fPd)  # get L from 11 elements param. L is in 2nd index.
+        area = get_sum_nested(PP.params[0], 'L', fPd)
         dx = pre_PPP.x/_area - PP.x/area
         dy = pre_PPP.y/_area - PP.y/area
         distance = np.hypot(dy, dx)  # Euclidean distance between PP centroids
-        _val = pre_PPP.params[-1][fPd][-1]
-        val = PP.params[-1][fPd][-1]
+        _val = get_sum_nested(pre_PPP.params[-1], 'val', fPd)
+        val = get_sum_nested(PP.params[-1], 'val', fPd)
         '''
         _val, val = 0, 0  # initialize 2nd layer as 2 Cptuples?
         if len(_PP.params)>1: _val = _PP.params[-1][fPd][-1]
@@ -239,22 +257,21 @@ def ind_comp_PP_(pre_PPP, fPd):  # 1-to-1 comp, _PP is converted from CPP to hig
             der_layers = [comp_layers(pre_PPP.params, PP.params, der_layers=[])]  # each layer is sub_layers
             pre_PPP.downlink_layers += [der_layers]
             PP.uplink_layers += [der_layers]
-            derPP_ += [derPP]
+            derPP_ += [derPP]  # but derPP's params is empty here, we can't get their val for evaluation in the next section
 
     for i, _derPP in enumerate(derPP_):  # cluster derPPs into PPPs by connectivity, overwrite derPP[i]
-
-        if _derPP.params[-1][fPd]:
+        if get_sum_nested(_derPP.params[-1], 'val', fPd):
             PPP = CPPP(params=deepcopy(_derPP.params), layers=[_derPP.PP])
             PPP.accum_from(_derPP)  # initialization
             _derPP.root = PPP
             for derPP in derPP_[i+1:]:
                 if not derPP.PP.root:
-                    if derPP.params[-1][fPd]:  # positive and not in PPP yet
+                    if get_sum_nested(derPP.params[-1], 'val', fPd):  # positive and not in PPP yet
                         PPP.layers.append(derPP)  # multiple composition orders
                         PPP.accum_from(_derPP)
                         derPP.root = PPP
                     # pseudo:
-                    elif sum([derPP.params[:-1]][fPd]) > ave*len(derPP.params)-1:
+                    elif sum([get_sum_nested(params, 'val', fPd) for params in derPP.params[:-1]]) > ave*len(derPP.params)-1:
                          # splice PP and their segs
                          pass
     '''
