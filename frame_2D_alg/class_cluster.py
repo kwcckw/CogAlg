@@ -84,14 +84,11 @@ class MetaCluster(type):
 
         numeric_params = tuple(param for param in params
                                if (isinstance(attrs[param](), Number)) and
-                               not (isinstance(attrs[param](), bool))) # avoid accumulate bool, which is flag
-
+                               not (isinstance(attrs[param](), bool)))  # don't accumulate flags
         list_params = tuple(param for param in params
                             if (isinstance(attrs[param](), list)))
-        
         tuple_params = tuple(param for param in params
                             if (isinstance(attrs[param](), tuple)))
-
         dict_params = tuple(param for param in params
                             if (isinstance(attrs[param](), dict)))
 
