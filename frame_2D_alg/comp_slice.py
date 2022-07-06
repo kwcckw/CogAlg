@@ -219,7 +219,7 @@ def comp_P_root(P__):  # vertically compares y-adjacent and x-overlapping Ps: bl
         for P in P_:
             for _P in _P_:  # test for x overlap(_P,P) in 8 directions, derts are positive in all Ps:
                 if (P.x0 - 1 < _P.x0 + _P.L) and (P.x0 + P.L + 1 > _P.x0):
-                    derP = comp_P(_P, P)
+                    derP = comp_P(_P, P, fPd=0)
                     P.uplink_layers[-2] += [derP]  # append derPs, uplink_layers[-1] is match_derPs
                     _P.downlink_layers[-2] += [derP]
                 elif (P.x0 + P.L) < _P.x0:
@@ -248,9 +248,9 @@ def comp_P_rng(P__, rng):  # rng+ sub_recursion in PP.P__, switch to rng+n to sk
                         P.uplink_layers += [[],[]]; P.downlink_layers += [[],[]]; P.root = object
 
                     if isinstance(P, CPP) or isinstance(P, CderP):  # rng+ fork for derPs, very unlikely
-                        derP = comp_P(_P, P)  # form higher vertical derivatives of derP or PP params
+                        derP = comp_P(_P, P, fPd=0)  # form higher vertical derivatives of derP or PP params
                     else:
-                        derP = comp_P(_P, P)  # form vertical derivatives of horizontal P params
+                        derP = comp_P(_P, P, fPd=0)  # form vertical derivatives of horizontal P params
                     P.uplink_layers[-2] += [derP]
                     _P.downlink_layers[-2] += [derP]
 
@@ -273,7 +273,7 @@ def comp_P_der(P__):  # der+ sub_recursion in PP.P__, compare P.uplinks to P.dow
                     # there maybe no x overlap between recomputed Ls of _derP and derP, compare anyway,
                     # mderP * (ave_olp_L / olp_L)? or olp(_derP._P.L, derP.P.L)?
                     # gap: neg_olp, ave = olp-neg_olp?
-                    dderP = comp_P(_derP, derP)  # form higher vertical derivatives of derP or PP params
+                    dderP = comp_P(_derP, derP, fPd=1)  # form higher vertical derivatives of derP or PP params
                     derP.uplink_layers[0] += [dderP]  # pre-init layer per derP
                     _derP.downlink_layers[0] += [dderP]
                     dderPs += [dderP]
@@ -416,7 +416,8 @@ def sum2seg(seg_Ps, fPd):  # sum params of vertically connected Ps into segment
     seg_Ps[0].root = seg
     seg.x0 = min(seg.x0, seg_Ps[0].x0)
     if len(seg_Ps)>1:
-        seg.params += [deepcopy(seg_Ps[0].uplink_layers[-1][0].params)]   # add new layer in params if there;s more than 1 P
+        # double bracket to add nested 2nd element: [ ptuple_layer1, [(dptuple_layer2, mptuple_layer2)]]
+        seg.params += [[deepcopy(seg_Ps[0].uplink_layers[-1][0].params)]]   # add new layer in params if there;s more than 1 P
         accum(seg, seg_Ps[-1], fPd)  # accumulate last P
     # accumulate P and their derP's params for non 1st and last P
     for P in seg_Ps[1:-1]:
@@ -445,7 +446,7 @@ def accum_P(seg, P, fPd):
 
 def accum_derP(PP, inp, fPd):  # inp is seg or PP in recursion
 
-    sum_pairs(PP.params[1], inp.params)
+    sum_pairs(PP.params[1][0], inp.params)
     inp.root = PP
     # may add more assignments here
 
@@ -637,13 +638,17 @@ def accum_ptuple(Ptuple, ptuple):  # lataple or vertuple
         Ptuple.aangle += ptuple.aangle  # [sum(aangle_tuple) for aangle_tuple in zip(Ptuple.aangle, ptuple.aangle)]
 
 
-def comp_P(_P, P):  # forms vertical derivatives of params per P in _P.uplink, conditional ders from norm and DIV comp
+def comp_P(_P, P, fPd):  # forms vertical derivatives of params per P in _P.uplink, conditional ders from norm and DIV comp
 
     if isinstance(_P.params, Cptuple):  # just to save the call, or this testing can be done in comp_pair_layers
         derivatives = comp_ptuple(_P.params, P.params)  # comp lataple (P)
+        if fPd: derivatives = [derivatives[0]]  # preserve only d part of the derivatives. Use list because single element can't be tuple
     else:
         derivatives = comp_pair_layers(_P.params, P.params, [])  # comp vertuple pairs (derP)
-
+        if fPd: 
+            for i, ptuple_pair in enumerate(derivatives):  
+                derivatives[i] = [ptuple_pair[0]]  # preserve only d part of the derivatives
+                 
     x0 = min(_P.x0, P.x0)
     xn = max(_P.x0+_P.L, P.x0+P.L)
     L = xn-x0
@@ -706,7 +711,7 @@ def comp_ptuple(_params, params):  # compare latuples or vertuples, similar oper
 
     tuple_ds.val = mtuple; tuple_ms.val = dtuple
 
-    return tuple_ds, tuple_ms
+    return tuple_ds, tuple_ms  # i think we usually use md sequence, instead of dm?
 
 def comp(param_name, _param, param, dtuple, mtuple, tuple_ds, tuple_ms, ave, finv):
 
@@ -730,6 +735,7 @@ def copy_P(P, Ptype):   # Ptype =0: P is CP | =1: P is CderP | =2: P is CPP | =3
     elif Ptype == 2:
         seg_levels = P.seg_levels
         PPP_levels = P.PPP_levels
+        layers = P.layers
     elif Ptype == 3:
         PP_derP, _PP_derP = P.PP, P._PP  # local copy of derP.P and derP._P
         P.PP, P._PP = None, None  # reset
@@ -747,6 +753,7 @@ def copy_P(P, Ptype):   # Ptype =0: P is CP | =1: P is CderP | =2: P is CPP | =3
     elif Ptype == 2:
         P.seg_levels = seg_levels
         P.PPP_levels = PPP_levels
+        P.layers = layers
     elif Ptype == 3:
         new_P.PP, new_P._PP = PP_derP, _PP_derP
         P.PP, P._PP = PP_derP, _PP_derP

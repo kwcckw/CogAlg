@@ -67,7 +67,11 @@ def agg_recursion(blob, fseg):  # compositional recursion per blob.Plevel. P, PP
         else:    ave_PP = ave_mPP
         if fseg:
             seg_M = blob.params[0].val
-            if len(blob.params) > 1: seg_M += blob.params[1][fiPd].M
+            if len(blob.params) > 1: 
+                if len(blob.params[1][0])>1:  # both m|d part are available
+                    seg_M += blob.params[1][0][fiPd].M
+                elif fiPd == 0:
+                    seg_M += blob.params[1][0][0].M
             M = ave - seg_M
         else:
             M = ave-abs(blob.G)  # if M > ave_PP * blob.rdn and len(PP_)>1:  # >=2 comparands
@@ -78,7 +82,9 @@ def agg_recursion(blob, fseg):  # compositional recursion per blob.Plevel. P, PP
             PPP_t = form_PPP_t(derPP_t)
             # call individual comp_PP if mPPP > ave_mPPP, converting derPP to CPPP
             splice_PPs(PPP_t)  # for initial PPs only: if PP is CPP?
-            sub_recursion_eval(PPP_t)  # rng+ or der+, if PP is CPPP?
+            sub_recursion_eval(PPP_t[0])  # rng+
+            sub_recursion_eval(PPP_t[1])  # der+
+        
         else:
             PPP_t += [[], []]  # replace with neg PPPs?
 
@@ -172,16 +178,16 @@ def ave_ptuple(ptuple, n):
 
 
 def sum_named_param(p_layer, param_name, fPd):
-    sum = 0
+    sum_value = 0  # sum is internal function
 
     if isinstance(p_layer, Cptuple):  # params layer is ptuple, skip angle and aangle elements anyway?
-        sum += getattr(p_layer, param_name)
+        sum_value += getattr(p_layer, param_name)
     elif isinstance(p_layer[0], Cptuple):  # params layer is 2 vertuples
-        sum += getattr(p_layer[fPd], param_name)
+        sum_value += getattr(p_layer[fPd], param_name)
     else:  # keep unpacking:
         for sub_p_layer in p_layer:
-            sum += sum_named_param(p_layer, param_name, fPd)
-    return sum
+            sum_value += sum_named_param(sub_p_layer, param_name, fPd)
+    return sum_value
 
 
 def form_PPP_t(pre_PPP_t):  # form PPs from match-connected segs
@@ -227,9 +233,9 @@ def ind_comp_PP_(pre_PPP, fPd):  # 1-to-1 comp, _PP is converted from CPP to hig
         '''
         if distance / ((_val+val)/2) < rng:  # distance relative to value, vs. area?
 
-            der_layers = [comp_layers(pre_PPP.params, PP.params, der_layers=[])]  # each layer is sub_layers
-            pre_PPP.downlink_layers += [der_layers]
-            PP.uplink_layers += [der_layers]
+            derPP.params = comp_layers(pre_PPP.params, PP.params, der_layers=[]) # each layer is sub_layerss
+            pre_PPP.downlink_layers += [derPP.params]
+            PP.uplink_layers += [derPP.params]
             derPP_ += [derPP]  # but derPP's params is empty here, we can't get their val for evaluation in the next section
 
     for i, _derPP in enumerate(derPP_):  # cluster derPPs into PPPs by connectivity, overwrite derPP[i]
