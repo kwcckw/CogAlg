@@ -61,8 +61,7 @@ def agg_recursion(blob, fseg):  # compositional recursion per blob.Plevel. P, PP
     PPP_t = []  # next-level composition Ps, initially PPPs  # for fiPd, PP_ in enumerate(PP_t): fiPd = fiPd % 2  # dir_blob.M += PP.M += derP.m
     n_extended = 0
 
-    for i, PP_ in enumerate(PP_t):   # fiPd = fiPd % 2
-        fiPd = i % 2
+    for fiPd, PP_ in enumerate(PP_t):   # fiPd = fiPd % 2
         if fiPd: ave_PP = ave_dPP
         else:    ave_PP = ave_mPP
         if fseg:
@@ -79,7 +78,7 @@ def agg_recursion(blob, fseg):  # compositional recursion per blob.Plevel. P, PP
 
         if len(PP_)>1:
             n_extended += 1
-            derPP_t = comp_PP_(PP_)  # compare all PPs to the average (centroid) of all other PPs, is generic for lower level
+            derPP_t = comp_PP_(PP_, fder=fiPd)  # compare all PPs to the average (centroid) of all other PPs, is generic for lower level
             PPP_t = form_PPP_t(derPP_t)
             # call individual comp_PP if mPPP > ave_mPPP, converting derPP to CPPP
             splice_PPs(PPP_t)  # for initial PPs only: if PP is CPP?
@@ -99,7 +98,7 @@ def agg_recursion(blob, fseg):  # compositional recursion per blob.Plevel. P, PP
 - Select above-average derPPs as PPPs, representing summed derivatives over comp range, overlapping between PPPs.
 '''
 
-def comp_PP_(PP_):  # PP can also be PPP, etc.
+def comp_PP_(PP_, fder=0):  # PP can also be PPP, etc.
 
     pre_PPPm_, pre_PPPd_ = [],[]
 
@@ -121,7 +120,7 @@ def comp_PP_(PP_):  # PP can also be PPP, etc.
         ave_layers(sum_params, n)
 
         pre_PPP = CPP(params=deepcopy(PP.params), layers= PP.layers+[PP_])  # comp_ave- defined pre_PPP inherits PP.params
-        pre_PPP.params = comp_layers(PP.params, sum_params, der_layers=[])  # sum_params is now ave_params
+        pre_PPP.params = comp_layers(PP.params, sum_params, der_layers=[],fder=fder)  # sum_params is now ave_params
         '''
         comp to ave params of compared PPs, form new layer: derivatives of all lower layers, 
         initial 3 layer nesting diagram: https://github.com/assets/52521979/ea6d436a-6c5e-429f-a152-ec89e715ebd6
