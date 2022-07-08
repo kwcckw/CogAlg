@@ -601,10 +601,15 @@ def accum_ptuple(Ptuple, ptuple):  # lataple or vertuple
 
     Ptuple.accum_from(ptuple, excluded=["angle", "aangle"])
 
-    if isinstance(Ptuple.angle, tuple):
+    if not Ptuple.angle: Ptuple.angle = deepcopy(ptuple.angle)  # copy over angle if Ptuple.angle is empty list (right after initialization)
+    if not Ptuple.aangle: Ptuple.aangle = deepcopy(ptuple.aangle)  
+
+    if isinstance(Ptuple.angle, tuple) :
+        # we can't zip and sum them because tuple is immutable, so we need reassign them
         # latuple:
-        for Param, param in zip(Ptuple.angle, ptuple.angle): Param += param  # always in vector representation
-        for Param, param in zip(Ptuple.aangle, ptuple.aangle): Param += param
+        Ptuple.angle = (Ptuple.angle[0]+ptuple.angle[0],Ptuple.angle[1]+ptuple.angle[1])
+        Ptuple.aangle = (Ptuple.aangle[0]+ptuple.aangle[0],Ptuple.aangle[1]+ptuple.aangle[1],\
+                         Ptuple.aangle[2]+ptuple.aangle[2],Ptuple.aangle[3]+ptuple.aangle[3])
     else:
         Ptuple.angle += ptuple.angle
         Ptuple.aangle += ptuple.aangle
