@@ -65,14 +65,7 @@ def agg_recursion(blob, fseg):  # compositional recursion per blob.Plevel. P, PP
         if fiPd: ave_PP = ave_dPP
         else:    ave_PP = ave_mPP
         if fseg:
-            seg_M = blob.params[0].val
-            # not needed:
-            if len(blob.params) > 1:
-                if len(blob.params[1][0])>1:  # both m|d part are available
-                    seg_M += blob.params[1][0][fiPd].M
-                elif fiPd == 0:
-                    seg_M += blob.params[1][0][0].M
-            M = ave - seg_M
+            M = sum_named_param(blob.params, "val", fPd=0) - ave
         else:
             M = ave-abs(blob.G)  # if M > ave_PP * blob.rdn and len(PP_)>1:  # >=2 comparands
 
@@ -98,10 +91,6 @@ def agg_recursion(blob, fseg):  # compositional recursion per blob.Plevel. P, PP
 - Select above-average derPPs as PPPs, representing summed derivatives over comp range, overlapping between PPPs.
 '''
 
-# create empty Cptuple following nesting structure of input params
-def init_params(params):
-    return [init_params(param) if isinstance(param, list) else Cptuple() for param in params]
-
 def comp_PP_(PP_, fsubder=0):  # PP can also be PPP, etc.
 
     pre_PPPm_, pre_PPPd_ = [],[]
@@ -111,15 +100,13 @@ def comp_PP_(PP_, fsubder=0):  # PP can also be PPP, etc.
         compared_PP_.remove(PP)
         n = len(compared_PP_)
 
-        # init summed_params with the structure of PP.params        
-        summed_params = init_params(PP.params)        
+        summed_params = init_params(PP.params)  # empty Cptuples with nesting structure of PP params
         for compared_PP in compared_PP_:  # accum summed_params over compared_PP_:
             sum_layers(summed_params, compared_PP.params)
         sum_params = deepcopy(summed_params)
         ave_layers(sum_params, n)
 
         pre_PPP = CPP(params=deepcopy(PP.params), layers= PP.layers+[PP_])  # comp_ave- defined pre_PPP inherits PP.params
-        # we need add new layer here instead?
         pre_PPP.params += [comp_layers(PP.params, sum_params, der_layers=[],fsubder=fsubder)]  # sum_params is now ave_params
         '''
         comp to ave params of compared PPs, form new layer: derivatives of all lower layers, 
@@ -129,12 +116,14 @@ def comp_PP_(PP_, fsubder=0):  # PP can also be PPP, etc.
         pre_PPPd_.append(copy_P(pre_PPP, Ptype=2))
 
     return pre_PPPm_, pre_PPPd_
-
 '''
 1st and 2nd layers are single sublayers, the 2nd adds tuple pair nesting. Both are unpacked by func_pairs, not func_layers.  
 Multiple sublayers start on the 3rd layer, because it's derived from comparison between two (not one) lower layers. 
 4th layer is derived from comparison between 3 lower layers, where the 3rd layer is already nested, etc:
 '''
+def init_params(params):  # empty Cptuples with nesting structure of PP params
+    return [init_params(param) if isinstance(param, list) else Cptuple() for param in params]
+
 
 def comp_layers(_layers, layers, der_layers, fsubder=0):  # only for agg_recursion, each param layer may consist of sub_layers
 
@@ -173,12 +162,9 @@ def ave_ptuple(ptuple, n):
     for param_name in (ptuple.numeric_params):
         setattr(ptuple, param_name, getattr(ptuple, param_name)/n)
 
-    if isinstance(ptuple.angle, tuple):
-        angle, aangle = [], []
-        for dir in ptuple.angle: angle.append(dir / n)  # angle
-        for dir in ptuple.aangle: aangle.append(dir / n)  # aangle
-        ptuple.angle = tuple(angle)  # convert back to tuple
-        ptuple.aangle = tuple(aangle)
+    if isinstance(ptuple.angle, list):
+        for dir in ptuple.angle: dir /= n
+        for dir in ptuple.aangle: dir /= n
     else: # scalar
         ptuple.angle += ptuple.angle # [sum(angle_tuple) for angle_tuple in zip(Ptuple.angle, ptuple.angle)]
         ptuple.aangle += ptuple.aangle  # [sum(aangle_tuple) for aangle_tuple in zip(Ptuple.aangle, ptuple.aangle)]
@@ -225,7 +211,7 @@ def ind_comp_PP_(pre_PPP, fPd):  # 1-to-1 comp, _PP is converted from CPP to hig
     rng = sum_named_param(pre_PPP.params[-1], 'val', fPd)/ 3  # 3: ave per rel_rng+=1, actual rng is Euclidean distance:
 
     for PP in pre_PPP.layers[-1]:  # 1/1 comparison between _PP and other PPs within rng
-        derPP = CderPP()
+        derPP = CderPP(PP=PP)
         _area = sum_named_param(pre_PPP.params[0], 'L', fPd)
         area = sum_named_param(PP.params[0], 'L', fPd)
         dx = pre_PPP.x/_area - PP.x/area
@@ -247,7 +233,7 @@ def ind_comp_PP_(pre_PPP, fPd):  # 1-to-1 comp, _PP is converted from CPP to hig
             PPP.accum_from(_derPP)  # initialization
             _derPP.root = PPP
             for derPP in derPP_[i+1:]:
-                if not derPP.PP.root:  # no root here? Because it is initialized in line 240 above
+                if not derPP.PP.root:  # not sure this is needed
                     Val = sum_named_param(derPP.params[-1], 'val', fPd)
                     if Val:  # positive and not in PPP yet
                         PPP.layers.append(derPP)  # multiple composition orders
