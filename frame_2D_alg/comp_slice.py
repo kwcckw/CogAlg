@@ -60,13 +60,15 @@ class Cptuple(ClusterStructure):  # bottom-layer tuple of lateral or vertical pa
     I = int
     M = int
     Ma = float
-    angle = list  # in lataple, float in vertuple
-    aangle = list
+    angle = lambda: [0,0]   # in lataple, float in vertuple
+    aangle = lambda: [0,0,0,0] 
     # only in lataple, for comparison but not summation:
     G = float
     Ga = float
     # only in vertuple, combined tuple m|d value:
     val = float
+    # number of accumulation
+    n = int  
 
 class CP(ClusterStructure):  # horizontal blob slice P, with vertical derivatives per param if derP
 
@@ -415,7 +417,7 @@ def sum2seg(seg_Ps, fPd):  # sum params of vertically connected Ps into segment
     for P in seg_Ps[1:-1]:  # skip 1st and last P
         accum(seg, P, fPd)
         derP = P.uplink_layers[-1][0]
-        accum_ptuple(seg.params[1][0], derP.params)  # accumulate
+        sum_pair_layers(seg.params[1][0], derP.params)  # accumulate  (sum_pair_layers because derP is a pair of ptuple)
         derP.root = seg
 
     return seg
@@ -588,7 +590,7 @@ def sum_pair_layers(Pairs, pairs):  # recursively unpack pairs (short for pair_l
     if isinstance(Pairs, Cptuple):
         accum_ptuple(Pairs, pairs)  # pairs is a latuple, in 1st layer only
 
-    elif isinstance(Pairs[0], Cptuple):  # pairs is two vertuples
+    elif isinstance(Pairs[0], Cptuple) and len(Pairs)>1 and isinstance(Pairs[1], Cptuple):  # pairs is two vertuples
         accum_ptuple(Pairs[0], pairs[0]); accum_ptuple(Pairs[1], pairs[1])
 
     else:  # pair is pair_layers, keep unpacking:
@@ -598,6 +600,7 @@ def sum_pair_layers(Pairs, pairs):  # recursively unpack pairs (short for pair_l
 def accum_ptuple(Ptuple, ptuple):  # lataple or vertuple
 
     Ptuple.accum_from(ptuple, excluded=["angle", "aangle"])
+    Ptuple.n += 1  # increase accumulation count
 
     if isinstance(Ptuple.angle, list):  # latuple:
         for i, param in enumerate(ptuple.angle): Ptuple.angle[i] += param  # always in vector representation
@@ -626,7 +629,7 @@ def comp_ptuple(_params, params):  # compare lateral or vertical tuples, similar
     dtuple, mtuple = Cptuple(), Cptuple()
     dval, mval = 0, 0
 
-    flatuple = isinstance(_params.angle, tuple)  # else vertuple
+    flatuple = isinstance(_params.angle, list)  # else vertuple
     # same set:
     comp("I", _params.I, params.I, dval, mval, dtuple, mtuple, ave_dI, finv=flatuple)  # inverse match if latuple
     comp("x", _params.x, params.x, dval, mval, dtuple, mtuple, ave_dx, finv=flatuple)
@@ -701,6 +704,7 @@ def copy_P(P, Ptype):   # Ptype =0: P is CP | =1: P is CderP | =2: P is CPP | =3
         seg_levels = P.seg_levels
         PPP_levels = P.PPP_levels
         layers = P.layers
+        P.seg_levels, P.PPP_levels, P.layers = [], [], []  # reset
     elif Ptype == 3:
         PP_derP, _PP_derP = P.PP, P._PP  # local copy of derP.P and derP._P
         P.PP, P._PP = None, None  # reset
