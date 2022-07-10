@@ -67,7 +67,6 @@ class Cptuple(ClusterStructure):  # bottom-layer tuple of lateral or vertical pa
     Ga = float
     # only in vertuple, combined tuple m|d value:
     val = float
-    # n = int  # number PPs in accumulation, should be local n_
 
 class CP(ClusterStructure):  # horizontal blob slice P, with vertical derivatives per param if derP
 
@@ -578,27 +577,33 @@ def comp_pair_layers(_pair_layers, pair_layers, der_pair_layers, fsubder):  # re
 
 # only in agg_recursion, which may use sum2seg with CPP:
 
-def sum_layers(Params, params):  # Capitalized names for sums, as comp_layers but no separate der_layers to return
+def sum_layers(Params, params, n_=[]):  # Capitalized names for sums, as comp_layers but no separate der_layers to return
+    
+    if not n_: n_ = [[] for _ in Params]  # init empty n_
+    sum_pair_layers(Params[0], params[0], n_[0])  # recursive unpack of nested ptuple pair_layers, if any from der+
+    for Layer, layer, n in zip(Params[1:], params[1:], n_[1:]):
+        sum_layers(Layer, layer, n)  #  recursive unpack of higher layers, if any from agg+ and nested with sub_layers
 
-    sum_pair_layers(Params[0], params[0])  # recursive unpack of nested ptuple pair_layers, if any from der+
-    for Layer, layer in zip(Params[1:], params[1:]):
-        sum_layers(Layer, layer)  #  recursive unpack of higher layers, if any from agg+ and nested with sub_layers
-
-def sum_pair_layers(Pairs, pairs):  # recursively unpack pairs (short for pair_layers): m,d tuple pairs from der+
+def sum_pair_layers(Pairs, pairs, n_=[]):  # recursively unpack pairs (short for pair_layers): m,d tuple pairs from der+
 
     if isinstance(Pairs, Cptuple):
-        accum_ptuple(Pairs, pairs)  # pairs is a latuple, in 1st layer only
+        if not n_: n_ = 0  # init empty n_
+        accum_ptuple(Pairs, pairs, n_)  # pairs is a latuple, in 1st layer only
 
     elif isinstance(Pairs[0], Cptuple):  # pairs is two vertuples, 1st layer in der+
-        accum_ptuple(Pairs[0], pairs[0]); accum_ptuple(Pairs[1], pairs[1])
+        if not n_: n_ = [0 for _ in Pairs]  # init empty n_
+        accum_ptuple(Pairs[0], pairs[0], n_[0])
+        accum_ptuple(Pairs[1], pairs[1], n_[1])
 
     else:  # pair is pair_layers, keep unpacking:
-        for Pair, pair in zip(Pairs, pairs):
-            sum_pair_layers(Pair, pair)
+        if not n_: n_ = [[] for _ in Pairs]  # init empty n_
+        for Pair, pair, n in zip(Pairs, pairs, n_):
+            sum_pair_layers(Pair, pair, n)
 
-def accum_ptuple(Ptuple, ptuple):  # lataple or vertuple
+def accum_ptuple(Ptuple, ptuple, n=0):  # lataple or vertuple
 
     Ptuple.accum_from(ptuple, excluded=["angle", "aangle"])
+    n += 1  # increase ptuple.n
 
     if isinstance(Ptuple.angle, list):  # latuple:
         for i, param in enumerate(ptuple.angle): Ptuple.angle[i] += param  # always in vector representation
@@ -721,6 +726,7 @@ def copy_P(P, Ptype):   # Ptype =0: P is CP | =1: P is CderP | =2: P is CPP | =3
         P.seg_levels = seg_levels
         P.PPP_levels = PPP_levels
         P.layers = layers
+        new_P.layers = layers
     elif Ptype == 3:
         new_P.PP, new_P._PP = PP_derP, _PP_derP
         P.PP, P._PP = PP_derP, _PP_derP

@@ -96,11 +96,12 @@ def comp_PP_(PP_, fsubder=0):  # PP can also be PPP, etc.
         compared_PP_ = copy(PP_)  # shallow copy
         compared_PP_.remove(PP)
 
-        summed_params = init_params(PP.params)  # empty Cptuples with nesting structure of PP params
+        summed_params = init_params(PP.params, fptuple=1)  # empty Cptuples with nesting structure of PP params
+        n_ = init_params(PP.params, fptuple=0)
         for compared_PP in compared_PP_:  # accum summed_params over compared_PP_:
-            sum_layers(summed_params, compared_PP.params)
+            sum_layers(summed_params, compared_PP.params, n_)
         sum_params = deepcopy(summed_params)
-        ave_layers(sum_params)
+        ave_layers(sum_params, n_)
 
         pre_PPP = CPP(params=deepcopy(PP.params), layers= PP.layers+[PP_])  # comp_ave- defined pre_PPP inherits PP.params
         pre_PPP.params += [comp_layers(PP.params, sum_params, der_layers=[],fsubder=fsubder)]  # sum_params is now ave_params
@@ -117,8 +118,20 @@ def comp_PP_(PP_, fsubder=0):  # PP can also be PPP, etc.
 Multiple sublayers start on the 3rd layer, because it's derived from comparison between two (not one) lower layers. 
 4th layer is derived from comparison between 3 lower layers, where the 3rd layer is already nested, etc:
 '''
-def init_params(params):  # empty Cptuples with nesting structure of PP params
-    return [init_params(param) if isinstance(param, list) else Cptuple() for param in params]
+def init_params(params, fptuple):  # empty Cptuples|0 with nesting structure of PP params
+
+    out_params = []
+    for param in params:
+        if isinstance(param, list) or isinstance(param, tuple): 
+            out_params += [init_params(param, fptuple)]
+        else:
+            if fptuple: 
+                out_params += [Cptuple()]
+                if not isinstance(param.angle, list):  # if param's ptuple's angle and anngle is not list, change it in the newly initialized ptuple as well
+                    out_params[-1].angle = 0; out_params[-1].aangle = 0
+            else:       
+                out_params += [0]
+    return out_params
 
 
 def comp_layers(_layers, layers, der_layers, fsubder=0):  # only for agg_recursion, each param layer may consist of sub_layers
@@ -132,25 +145,25 @@ def comp_layers(_layers, layers, der_layers, fsubder=0):  # only for agg_recursi
 
     return der_layers # possibly nested param layers
 
-# n_ is a draft
+
 def ave_layers(summed_params, n_):  # as sum_layers but single arg
 
-    ave_pairs(summed_params[0])  # recursive unpack of nested ptuple pairs, if any from der+
-    for summed_layer in summed_params[1:]:
-        ave_layers(summed_layer)  # recursive unpack of higher layers, if any from agg+ and nested with sub_layers
+    ave_pairs(summed_params[0], n_[0])  # recursive unpack of nested ptuple pairs, if any from der+
+    for summed_layer, n in zip(summed_params[1:], n_[1:]):
+        ave_layers(summed_layer, n)  # recursive unpack of higher layers, if any from agg+ and nested with sub_layers
 
 def ave_pairs(sum_pairs, n_):  # recursively unpack m,d tuple pairs from der+
 
     if isinstance(sum_pairs, Cptuple):  # sum_pairs is latuple
-        if sum_pairs: ave_ptuple(sum_pairs)  # if not empty
+        if n_: ave_ptuple(sum_pairs, n_)  # if not empty or summed before
 
     elif isinstance(sum_pairs[0], Cptuple):  # sum_pairs is two vertuples, 1st layer in der+
-        if n_[0]: ave_ptuple(sum_pairs[0]);
-        if n_[1]: ave_ptuple(sum_pairs[1])
+        if n_[0]: ave_ptuple(sum_pairs[0], n_[0]);
+        if n_[1]: ave_ptuple(sum_pairs[1], n_[1])
 
     else:  # sum_pairs is pair_layers:
-        for sum_pair in sum_pairs:
-            ave_pairs(sum_pair)
+        for sum_pair, n in zip(sum_pairs, n_):
+            ave_pairs(sum_pair, n)
 
     return sum_pairs  # sum_pairs is now ave_pairs, possibly nested m,d ptuple pairs
 
@@ -174,11 +187,12 @@ def sum_named_param(p_layer, param_name, fPd):
 
     if isinstance(p_layer, Cptuple):  # 1st layer is ptuple, not for angle and aangle elements, if any
         psum += getattr(p_layer, param_name)
-    elif isinstance(p_layer[0], Cptuple):  # 1st layer is 2 vertuples, from der+
-        psum += getattr(p_layer[fPd], param_name)
-    else:  # keep unpacking:
-        for sub_p_layer in p_layer:
-            psum += sum_named_param(sub_p_layer, param_name, fPd)
+    elif len(p_layer)>1:  # for multiple layer params
+        if isinstance(p_layer[0], Cptuple) and isinstance(p_layer[1], Cptuple) :  # 1st layer is 2 vertuples, from der+
+            psum += getattr(p_layer[fPd], param_name)
+        else:  # keep unpacking:
+            for sub_p_layer in p_layer:
+                psum += sum_named_param(sub_p_layer, param_name, fPd)
     return psum
 
 
