@@ -60,15 +60,14 @@ class Cptuple(ClusterStructure):  # bottom-layer tuple of lateral or vertical pa
     I = int
     M = int
     Ma = float
-    angle = lambda: [0,0]   # in lataple, float in vertuple
-    aangle = lambda: [0,0,0,0] 
+    angle = lambda: [0, 0]  # in lataple only, replaced by float in vertuple
+    aangle = lambda: [0, 0, 0, 0]
     # only in lataple, for comparison but not summation:
     G = float
     Ga = float
     # only in vertuple, combined tuple m|d value:
     val = float
-    # number of accumulation
-    n = int  
+    # n = int  # number PPs in accumulation, should be local n_
 
 class CP(ClusterStructure):  # horizontal blob slice P, with vertical derivatives per param if derP
 
@@ -417,7 +416,7 @@ def sum2seg(seg_Ps, fPd):  # sum params of vertically connected Ps into segment
     for P in seg_Ps[1:-1]:  # skip 1st and last P
         accum(seg, P, fPd)
         derP = P.uplink_layers[-1][0]
-        sum_pair_layers(seg.params[1][0], derP.params)  # accumulate  (sum_pair_layers because derP is a pair of ptuple)
+        sum_pair_layers(seg.params[1][0], derP.params)  # derP.params maybe nested
         derP.root = seg
 
     return seg
@@ -563,7 +562,7 @@ def comp_pair_layers(_pair_layers, pair_layers, der_pair_layers, fsubder):  # re
     if isinstance(_pair_layers, Cptuple):
         der_pair_layers += comp_ptuple(_pair_layers, pair_layers)  # 1st-layer pair_layers is latuple
 
-    elif isinstance(_pair_layers[0], Cptuple):  # pairs is two vertuples, in 1st or higher layers
+    elif isinstance(_pair_layers[0], Cptuple):  # pairs is two vertuples, 1st layer in der+
         dtuple = comp_ptuple(_pair_layers[1], _pair_layers[1])
         if fsubder:  # sub_recursion mtuples are not compared
             der_pair_layers += [dtuple]
@@ -590,7 +589,7 @@ def sum_pair_layers(Pairs, pairs):  # recursively unpack pairs (short for pair_l
     if isinstance(Pairs, Cptuple):
         accum_ptuple(Pairs, pairs)  # pairs is a latuple, in 1st layer only
 
-    elif isinstance(Pairs[0], Cptuple) and len(Pairs)>1 and isinstance(Pairs[1], Cptuple):  # pairs is two vertuples
+    elif isinstance(Pairs[0], Cptuple):  # pairs is two vertuples, 1st layer in der+
         accum_ptuple(Pairs[0], pairs[0]); accum_ptuple(Pairs[1], pairs[1])
 
     else:  # pair is pair_layers, keep unpacking:
@@ -600,7 +599,6 @@ def sum_pair_layers(Pairs, pairs):  # recursively unpack pairs (short for pair_l
 def accum_ptuple(Ptuple, ptuple):  # lataple or vertuple
 
     Ptuple.accum_from(ptuple, excluded=["angle", "aangle"])
-    Ptuple.n += 1  # increase accumulation count
 
     if isinstance(Ptuple.angle, list):  # latuple:
         for i, param in enumerate(ptuple.angle): Ptuple.angle[i] += param  # always in vector representation

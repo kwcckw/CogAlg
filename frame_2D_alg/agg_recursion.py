@@ -64,10 +64,8 @@ def agg_recursion(blob, fseg):  # compositional recursion per blob.Plevel. P, PP
     for fiPd, PP_ in enumerate(PP_t):   # fiPd = fiPd % 2
         if fiPd: ave_PP = ave_dPP
         else:    ave_PP = ave_mPP
-        if fseg:
-            M = sum_named_param(blob.params, "val", fPd=0) - ave
-        else:
-            M = ave-abs(blob.G)  # if M > ave_PP * blob.rdn and len(PP_)>1:  # >=2 comparands
+        if fseg: M = sum_named_param(blob.params, "val", fPd=0) - ave
+        else:    M = ave-abs(blob.G)  # if M > ave_PP * blob.rdn and len(PP_)>1:  # >=2 comparands
 
         if len(PP_)>1:
             n_extended += 1
@@ -77,7 +75,6 @@ def agg_recursion(blob, fseg):  # compositional recursion per blob.Plevel. P, PP
             splice_PPs(PPP_t)  # for initial PPs only: if PP is CPP?
             sub_recursion_eval(PPP_t[0])  # fPd=0, rng+
             sub_recursion_eval(PPP_t[1])  # fPd=1, der+
-
         else:
             PPP_t += [[], []]  # replace with neg PPPs?
 
@@ -98,7 +95,6 @@ def comp_PP_(PP_, fsubder=0):  # PP can also be PPP, etc.
     for PP in PP_:
         compared_PP_ = copy(PP_)  # shallow copy
         compared_PP_.remove(PP)
-        n = len(compared_PP_)
 
         summed_params = init_params(PP.params)  # empty Cptuples with nesting structure of PP params
         for compared_PP in compared_PP_:  # accum summed_params over compared_PP_:
@@ -136,20 +132,21 @@ def comp_layers(_layers, layers, der_layers, fsubder=0):  # only for agg_recursi
 
     return der_layers # possibly nested param layers
 
-
-def ave_layers(summed_params):  # as sum_layers but single arg
+# n_ is a draft
+def ave_layers(summed_params, n_):  # as sum_layers but single arg
 
     ave_pairs(summed_params[0])  # recursive unpack of nested ptuple pairs, if any from der+
     for summed_layer in summed_params[1:]:
         ave_layers(summed_layer)  # recursive unpack of higher layers, if any from agg+ and nested with sub_layers
 
-def ave_pairs(sum_pairs):  # recursively unpack m,d tuple pairs from der+
+def ave_pairs(sum_pairs, n_):  # recursively unpack m,d tuple pairs from der+
 
     if isinstance(sum_pairs, Cptuple):  # sum_pairs is latuple
-        ave_ptuple(sum_pairs)
+        if sum_pairs: ave_ptuple(sum_pairs)  # if not empty
 
-    elif isinstance(sum_pairs[0], Cptuple):  # sum_pairs is two vertuples
-        ave_ptuple(sum_pairs[0]); ave_ptuple(sum_pairs[1])
+    elif isinstance(sum_pairs[0], Cptuple):  # sum_pairs is two vertuples, 1st layer in der+
+        if n_[0]: ave_ptuple(sum_pairs[0]);
+        if n_[1]: ave_ptuple(sum_pairs[1])
 
     else:  # sum_pairs is pair_layers:
         for sum_pair in sum_pairs:
@@ -157,16 +154,15 @@ def ave_pairs(sum_pairs):  # recursively unpack m,d tuple pairs from der+
 
     return sum_pairs  # sum_pairs is now ave_pairs, possibly nested m,d ptuple pairs
 
-def ave_ptuple(ptuple):
+def ave_ptuple(ptuple, n):
 
-    n = max(1, ptuple.n)  # prevent zero division
     for param_name in (ptuple.numeric_params):
         setattr(ptuple, param_name, getattr(ptuple, param_name)/n)
 
     if isinstance(ptuple.angle, list):
-        for i, dir_val in enumerate(ptuple.angle): 
+        for i, dir_val in enumerate(ptuple.angle):
             ptuple.angle[i] = dir_val / n
-        for i, dir_val in enumerate(ptuple.aangle): 
+        for i, dir_val in enumerate(ptuple.aangle):
             ptuple.aangle[i] = dir_val / n
     else: # scalar
         ptuple.angle /= n
@@ -176,9 +172,9 @@ def ave_ptuple(ptuple):
 def sum_named_param(p_layer, param_name, fPd):
     psum = 0  # sum of named param across param layers
 
-    if isinstance(p_layer, Cptuple):  # params layer is ptuple, not for angle and aangle elements, if any
+    if isinstance(p_layer, Cptuple):  # 1st layer is ptuple, not for angle and aangle elements, if any
         psum += getattr(p_layer, param_name)
-    elif isinstance(p_layer[0], Cptuple) and len(p_layer)>1 and isinstance(p_layer[1], Cptuple):  # params layer is 2 vertuples
+    elif isinstance(p_layer[0], Cptuple):  # 1st layer is 2 vertuples, from der+
         psum += getattr(p_layer[fPd], param_name)
     else:  # keep unpacking:
         for sub_p_layer in p_layer:
@@ -213,23 +209,23 @@ def ind_comp_PP_(pre_PPP, fPd):  # 1-to-1 comp, _PP is converted from CPP to hig
     derPP_ = []
     rng = sum_named_param(pre_PPP.params[-1], 'val', fPd)/ 3  # 3: ave per rel_rng+=1, actual rng is Euclidean distance:
 
-    if pre_PPP.layers:
-        for PP in pre_PPP.layers[-1]:  # 1/1 comparison between _PP and other PPs within rng
-            derPP = CderPP(PP=PP)
-            _area = sum_named_param(pre_PPP.params[0], 'L', fPd)
-            area = sum_named_param(PP.params[0], 'L', fPd)
-            dx = pre_PPP.x/_area - PP.x/area
-            dy = pre_PPP.y/_area - PP.y/area
-            distance = np.hypot(dy, dx)  # Euclidean distance between PP centroids
-            _val = sum_named_param(pre_PPP.params[-1], 'val', fPd)
-            val = sum_named_param(PP.params[-1], 'val', fPd)
-    
-            if distance / ((_val+val)/2) < rng:  # distance relative to value, vs. area?
-                params = comp_layers(pre_PPP.params, PP.params, der_layers=[])
-                pre_PPP.downlink_layers += [params]
-                PP.uplink_layers += [params]
-                derPP.params = params
-                derPP_ += [derPP]
+
+    for PP in pre_PPP.layers[-1]:  # 1/1 comparison between _PP and other PPs within rng
+        derPP = CderPP(PP=PP)
+        _area = sum_named_param(pre_PPP.params[0], 'L', fPd)
+        area = sum_named_param(PP.params[0], 'L', fPd)
+        dx = pre_PPP.x/_area - PP.x/area
+        dy = pre_PPP.y/_area - PP.y/area
+        distance = np.hypot(dy, dx)  # Euclidean distance between PP centroids
+        _val = sum_named_param(pre_PPP.params[-1], 'val', fPd)
+        val = sum_named_param(PP.params[-1], 'val', fPd)
+
+        if distance / ((_val+val)/2) < rng:  # distance relative to value, vs. area?
+            params = comp_layers(pre_PPP.params, PP.params, der_layers=[])
+            pre_PPP.downlink_layers += [params]
+            PP.uplink_layers += [params]
+            derPP.params = params
+            derPP_ += [derPP]
 
     for i, _derPP in enumerate(derPP_):  # cluster derPPs into PPPs by connectivity, overwrite derPP[i]
         if sum_named_param(_derPP.params[-1], 'val', fPd):
