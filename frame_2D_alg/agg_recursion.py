@@ -64,7 +64,7 @@ def agg_recursion(blob, fseg):  # compositional recursion per blob.Plevel. P, PP
     for fiPd, PP_ in enumerate(PP_t):   # fiPd = fiPd % 2
         if fiPd: ave_PP = ave_dPP
         else:    ave_PP = ave_mPP
-        if fseg: M = sum_named_param(blob.params, "val", fPd=0) - ave
+        if fseg: M = sum_named_param(blob.params, "val", fPd=0) - ave  # actually ave * nptuples in params
         else:    M = ave-abs(blob.G)  # if M > ave_PP * blob.rdn and len(PP_)>1:  # >=2 comparands
 
         if len(PP_)>1:
@@ -95,13 +95,12 @@ def comp_PP_(PP_, fsubder=0):  # PP can also be PPP, etc.
     for PP in PP_:
         compared_PP_ = copy(PP_)  # shallow copy
         compared_PP_.remove(PP)
+        summed_params = init_params(PP.params, [])  # form empty (Cptuples, n=0)s, nested as PP params
 
-        summed_params = init_params(PP.params, fptuple=1)  # empty Cptuples with nesting structure of PP params
-        n_ = init_params(PP.params, fptuple=0)
         for compared_PP in compared_PP_:  # accum summed_params over compared_PP_:
-            sum_layers(summed_params, compared_PP.params, n_)
+            sum_layers(summed_params, compared_PP.params)
         sum_params = deepcopy(summed_params)
-        ave_layers(sum_params, n_)
+        ave_layers(sum_params)
 
         pre_PPP = CPP(params=deepcopy(PP.params), layers= PP.layers+[PP_])  # comp_ave- defined pre_PPP inherits PP.params
         pre_PPP.params += [comp_layers(PP.params, sum_params, der_layers=[],fsubder=fsubder)]  # sum_params is now ave_params
@@ -118,20 +117,17 @@ def comp_PP_(PP_, fsubder=0):  # PP can also be PPP, etc.
 Multiple sublayers start on the 3rd layer, because it's derived from comparison between two (not one) lower layers. 
 4th layer is derived from comparison between 3 lower layers, where the 3rd layer is already nested, etc:
 '''
-def init_params(params, fptuple):  # empty Cptuples|0 with nesting structure of PP params
+def init_params(params, ptupless):  # form (blank Cptuple, 0)s with nesting structure of PP params
 
-    out_params = []
-    for param in params:
-        if isinstance(param, list) or isinstance(param, tuple): 
-            out_params += [init_params(param, fptuple)]
+    for layer in params:
+        if isinstance(layer, list):
+            ptuples = init_params(layer, [])  # unpack down to ptuples
         else:
-            if fptuple: 
-                out_params += [Cptuple()]
-                if not isinstance(param.angle, list):  # if param's ptuple's angle and anngle is not list, change it in the newly initialized ptuple as well
-                    out_params[-1].angle = 0; out_params[-1].aangle = 0
-            else:       
-                out_params += [0]
-    return out_params
+            ptuples = [Cptuple(), 0]  # "layer" is ptuple
+            if not isinstance(layer.angle, list):  # angle and aangle are lists in init Cptuple
+                ptuples.angle = 0; ptuples.aangle = 0
+
+    return ptupless + [ptuples]
 
 
 def comp_layers(_layers, layers, der_layers, fsubder=0):  # only for agg_recursion, each param layer may consist of sub_layers
@@ -146,28 +142,40 @@ def comp_layers(_layers, layers, der_layers, fsubder=0):  # only for agg_recursi
     return der_layers # possibly nested param layers
 
 
-def ave_layers(summed_params, n_):  # as sum_layers but single arg
+def sum_layers(Params, params):  # Capitalized names for sums, as comp_layers but no separate der_layers to return
 
-    ave_pairs(summed_params[0], n_[0])  # recursive unpack of nested ptuple pairs, if any from der+
-    for summed_layer, n in zip(summed_params[1:], n_[1:]):
-        ave_layers(summed_layer, n)  # recursive unpack of higher layers, if any from agg+ and nested with sub_layers
+    sum_pair_layers(Params[0], params[0])  # recursive unpack of nested ptuple pair_layers, if any from der+
+    # different from comp_slice version, increments ptuple.n in ind_comp_PP and (ptuple, n) in comp_PP_?
 
-def ave_pairs(sum_pairs, n_):  # recursively unpack m,d tuple pairs from der+
+    for Layer, layer, n in zip(Params[1:], params[1:]):
+        sum_layers(Layer, layer)  # recursive unpack of higher layers, if any from agg+ and nested with sub_layers
 
-    if isinstance(sum_pairs, Cptuple):  # sum_pairs is latuple
-        if n_: ave_ptuple(sum_pairs, n_)  # if not empty or summed before
 
-    elif isinstance(sum_pairs[0], Cptuple):  # sum_pairs is two vertuples, 1st layer in der+
-        if n_[0]: ave_ptuple(sum_pairs[0], n_[0]);
-        if n_[1]: ave_ptuple(sum_pairs[1], n_[1])
+def ave_layers(summed_params):  # as sum_layers but single arg
+
+    ave_pairs(summed_params[0])  # recursive unpack of nested ptuple pairs, if any from der+
+    for summed_layer in summed_params[1:]:
+        ave_layers(summed_layer)  # recursive unpack of higher layers, if any from agg+ and nested with sub_layers
+
+def ave_pairs(sum_pairs):  # recursively unpack m,d tuple pairs from der+
+
+    if isinstance(sum_pairs[0], Cptuple):  # sum_pairs is latuple
+        if sum_pairs[1]:  # n>0, not empty ptuple
+            ave_ptuple(sum_pairs)
+
+    elif isinstance(sum_pairs[0][0], Cptuple):  # sum_pairs is two vertuples, 1st layer in der+
+        if sum_pairs[0][1]: ave_ptuple(sum_pairs[0])  # if n>0
+        if sum_pairs[1][1]: ave_ptuple(sum_pairs[1])  # if is probably redundant
 
     else:  # sum_pairs is pair_layers:
-        for sum_pair, n in zip(sum_pairs, n_):
-            ave_pairs(sum_pair, n)
+        for sum_pair in sum_pairs:
+            ave_pairs(sum_pair)
 
     return sum_pairs  # sum_pairs is now ave_pairs, possibly nested m,d ptuple pairs
 
-def ave_ptuple(ptuple, n):
+def ave_ptuple(ptuple_n):
+
+    ptuple, n = ptuple_n[:]
 
     for param_name in (ptuple.numeric_params):
         setattr(ptuple, param_name, getattr(ptuple, param_name)/n)
