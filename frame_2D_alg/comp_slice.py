@@ -425,10 +425,30 @@ def sum2seg(seg_Ps, fPd):  # sum params of vertically connected Ps into segment
     return seg
 
 
+def init_ptuples(params):  # empty Cptuples with nesting structure of PP params
+    
+    out_ptuples = []
+    for param in params:
+        if isinstance(param, list):
+            out_ptuples += [init_ptuples(param)]
+        else:
+            ptuple =  Cptuple()   
+            if not isinstance(param.angle, list):  # follow angle and aangle structure of input params 
+                ptuple.angle = 0; ptuple.aangle = 0
+            out_ptuples += [ptuple]
+    return out_ptuples
+
+
 def sum2PP(PP_segs, base_rdn, fPd):  # sum params: derPs into segment or segs into PP
 
     PP = CPP(x0=PP_segs[0].x0, rdn=base_rdn, sign=PP_segs[0].sign, L= len(PP_segs))
     PP.seg_levels[fPd][0] = PP_segs  # PP_segs is seg_levels[0]
+
+    # init PP's params with highest length of params
+    max_len = max([len(seg.params) for seg in PP_segs])
+    for seg in PP_segs:
+        if len(seg.params) == max_len:
+            PP.params = init_ptuples(seg.params)
 
     for seg in PP_segs:
         accum_PP(PP, seg, fPd)
@@ -437,7 +457,7 @@ def sum2PP(PP_segs, base_rdn, fPd):  # sum params: derPs into segment or segs in
 
 def accum_P(seg, P, fPd):
 
-    accum_ptuple(seg.params[0], P.params, n=0)
+    accum_ptuple(seg.params[0], P.params)
     P.root = seg
     seg.x0 = min(seg.x0, P.x0)
 
@@ -449,16 +469,11 @@ def accum_derP(PP, inp, fPd):  # inp is seg or PP in recursion
 
 def accum_PP(PP, inp, fPd):  # comp_slice inp is seg, PP in agg+ only
 
-    accum_ptuple(PP.params[0], inp.params[0], n=0)  # PP has two param layers
+    accum_ptuple(PP.params[0], inp.params[0])  # PP has two param layers
     # conditional, 2nd layer is empty if single seg|P?:
-    PP.params[1] = sum_pair_layers(PP.params[1], inp.params[1], n=0)
-    '''
-    for PPP:
-    for i, (PP_params, inp_params) in enumerate(zip_longest(PP.params, inp.params, fillvalue=[])):
-        if not PP_params: PP_params = deepcopy(inp_params)    # if PP's current layer params is empty, copy from input
-        else: sum_layers([PP_params], [inp_params])           # accumulate params
-        if i > len(PP.params)-1: PP.params.append(PP_params)  # pack new layer
-    '''
+    if len(inp.params)>1: 
+        sum_pair_layers(PP.params[1], inp.params[1])
+    
     inp.root = PP
     PP.x += inp.x*inp.L  # or in inp.params?
     PP.y += inp.y*inp.L
@@ -585,24 +600,31 @@ def comp_pair_layers(_pair_layers, pair_layers, der_pair_layers, fsubder):  # re
     return der_pair_layers  # possibly nested m,d ptuple pairs
 
 
-def sum_pair_layers(Pairs, pairs, n):  # recursively unpack pairs (short for pair_layers): m,d tuple pairs from der+
+def sum_pair_layers(Pairs, pairs):  # recursively unpack pairs (short for pair_layers): m,d tuple pairs from der+
 
     if isinstance(Pairs, Cptuple):
-        Pairs = accum_ptuple(Pairs, pairs, n)  # pairs is a latuple, in 1st layer only
+        accum_ptuple(Pairs, pairs)  # pairs is a latuple, in 1st layer only
 
     elif isinstance(Pairs[0], Cptuple):  # pairs is two vertuples, 1st layer in der+
-
-        Pairs[0] = accum_ptuple(Pairs[0], pairs[0], n)
-        Pairs[1] = accum_ptuple(Pairs[1], pairs[1], n)
-
+        if isinstance(Pairs[1], Cptuple):
+            accum_ptuple(Pairs[0], pairs[0])
+            accum_ptuple(Pairs[1], pairs[1])
+        else:  # pairs is [ptuple, n]
+            accum_ptuple(Pairs, pairs)
     else:  # pair is pair_layers, keep unpacking:
-        for Pair, pair, n in zip(Pairs, pairs):
-            sum_pair_layers(Pair, pair, n)
+        for Pair, pair in zip(Pairs, pairs):
+            sum_pair_layers(Pair, pair)
 
-    return Pairs
 
-def accum_ptuple(Ptuple, ptuple, n):  # lataple or vertuple
+# n = 0 is default value, when ptuple is Cptuple
+def accum_ptuple(Ptuple, ptuple):  # lataple or vertuple
 
+    if isinstance(Ptuple, list):  # Ptuple is [ptuple, n]
+        Ptuple[1] += 1  # increase n
+        Ptuple, _ = Ptuple
+    else:
+        Ptuple.n += 1
+        
     Ptuple.accum_from(ptuple, excluded=["angle", "aangle"])
 
     if isinstance(Ptuple.angle, list):  # latuple:
@@ -612,11 +634,7 @@ def accum_ptuple(Ptuple, ptuple, n):  # lataple or vertuple
         Ptuple.angle += ptuple.angle
         Ptuple.aangle += ptuple.aangle
 
-    if n: Ptuple = [Ptuple, n + 1]  # for ave_layers
-    else: Ptuple.n += 1
-
-    return Ptuple
-
+    # no need to return for accumulation
 
 def comp_P(_P, P, fsubder=0):  # forms vertical derivatives of params per P in _P.uplink, conditional ders from norm and DIV comp
 
