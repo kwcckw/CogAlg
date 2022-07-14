@@ -125,14 +125,18 @@ def init_params(params):  # form (blank Cptuple, 0)s with nesting structure of P
 
     for layer in params:
         if isinstance(layer, list):
-            ptuples_ += init_params(layer)  # unpack param layer down to ptuples
+            ptuples_ += [init_params(layer)]  # unpack param layer down to ptuples
         else:
-            ptuples_ += [[Cptuple(), 0]]  # "layer" is ptuple
+            ptuple = Cptuple()
+            if not isinstance(layer.angle, list):  # layer is ptuple instance here
+                ptuple.angle = 0; ptuple.aangle = 0
+                
+            ptuples_ += [[ptuple, 0]]  # "layer" is ptuple
             if not isinstance(layer.angle, list):  # angle and aangle are lists in init Cptuple
                 ptuples_[-1][0].angle = 0
                 ptuples_[-1][0].aangle = 0
 
-    return [ptuples_]
+    return ptuples_
 
 
 def comp_layers(_layers, layers, der_layers, fsubder=0):  # only for agg_recursion, each param layer may consist of sub_layers
@@ -149,16 +153,16 @@ def comp_layers(_layers, layers, der_layers, fsubder=0):  # only for agg_recursi
 
 def sum_layers(Params, params, fn):  # Capitalized names for sums, as comp_layers but no separate der_layers to return
 
-    sum_pair_layers(Params[0], params[0], fn)  # recursive unpack of nested ptuple pair_layers, if any from der+
+    Params[0] = sum_pair_layers(Params[0], params[0], fn)  # recursive unpack of nested ptuple pair_layers, if any from der+
     # different from comp_slice version: increments ptuple.n in ind_comp_PP and (ptuple, n) in comp_PP_?
 
-    for Layer, layer in zip(Params[1:], params[1:]):
-        sum_layers(Layer, layer, fn)  # recursive unpack of higher layers, if any from agg+ and nested with sub_layers
+    for i, (Layer, layer) in enumerate(zip(Params[1:], params[1:]), start=1):
+        Params[i] = sum_layers(Layer, layer, fn)  # recursive unpack of higher layers, if any from agg+ and nested with sub_layers
 
 
 def ave_layers(summed_params):  # as sum_layers but single arg
 
-    ave_pairs(summed_params[0])  # recursive unpack of nested ptuple pairs, if any from der+
+    summed_params[0] = ave_pairs(summed_params[0])  # recursive unpack of nested ptuple pairs, if any from der+
     for summed_layer in summed_params[1:]:
         ave_layers(summed_layer)  # recursive unpack of higher layers, if any from agg+ and nested with sub_layers
 
@@ -173,8 +177,9 @@ def ave_pairs(sum_pairs):  # recursively unpack m,d tuple pairs from der+
         if sum_pairs[1][1]: sum_pairs[1] = ave_ptuple(sum_pairs[1])  # if is probably redundant
 
     else:  # sum_pairs is pair_layers:
+        loc_sum_pairs = []
         for sum_pair in sum_pairs:
-            ave_pairs(sum_pair)
+            loc_sum_pairs += [ave_pairs(sum_pair)]
 
     return sum_pairs  # sum_pairs is now ave_pairs, possibly nested m,d ptuple pairs
 

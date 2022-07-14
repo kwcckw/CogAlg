@@ -430,8 +430,9 @@ def sum2PP(PP_segs, base_rdn, fPd):  # sum params: derPs into segment or segs in
     PP = CPP(x0=PP_segs[0].x0, rdn=base_rdn, sign=PP_segs[0].sign, L= len(PP_segs))
     PP.seg_levels[fPd][0] = PP_segs  # PP_segs is seg_levels[0]
 
-    PP.params = PP_segs[0].params
-    for seg in PP_segs[1:]:
+    # init PP's params with highest length of params
+    PP.params = init_ptuples(PP_segs[np.argmax([len(seg.params) for seg in PP_segs])].params)        
+    for seg in PP_segs:
         accum_PP(PP, seg, fPd)
 
     return PP
@@ -453,13 +454,7 @@ def accum_PP(PP, inp, fPd):  # comp_slice inp is seg, PP in agg+ only
     accum_ptuple(PP.params[0], inp.params[0], fn=0)  # PP has two param layers
     if len(inp.params) > 1:
         sum_pair_layers(PP.params[1], inp.params[1], fn=0)  # 2nd layer is empty if single seg|P
-    '''
-    for PPP:
-    for i, (PP_params, inp_params) in enumerate(zip_longest(PP.params, inp.params, fillvalue=[])):
-        if not PP_params: PP_params = deepcopy(inp_params)    # if PP's current layer params is empty, copy from input
-        else: sum_layers([PP_params], [inp_params], n=0)      # accumulate ptuples
-        if i > len(PP.params) - 1: PP.params.append(PP_params)  # pack new layer
-    '''
+
     inp.root = PP
     PP.x += inp.x*inp.L  # or in inp.params?
     PP.y += inp.y*inp.L
@@ -504,7 +499,6 @@ def append_P(P__, P):  # pack P into P__ in top down sequence
         for i, y in enumerate(current_ys):  # insert y if > next y
             if P.y > y: P__.insert(i, [P])  # PP.P__.insert(P.y - current_ys[-1], [P])
 
-# currently not used:
 def init_ptuples(params):  # empty Cptuples with nesting structure of PP params
 
     out_ptuples = []
@@ -541,7 +535,7 @@ def comp_pair_layers(_pair_layers, pair_layers, der_pair_layers, fsubder):  # re
 
 def sum_pair_layers(Pairs, pairs, fn):  # recursively unpack pairs (short for pair_layers): m,d tuple pairs from der+
 
-    if isinstance(Pairs, Cptuple):
+    if isinstance(Pairs, Cptuple) or (fn and isinstance(Pairs[0], Cptuple)):  # Pairs is [ptuple, n]
         Pairs = accum_ptuple(Pairs, pairs, fn)  # pairs is a latuple, in 1st layer only
 
     elif isinstance(Pairs[0], Cptuple):  # pairs is two vertuples, 1st layer in der+
@@ -550,8 +544,10 @@ def sum_pair_layers(Pairs, pairs, fn):  # recursively unpack pairs (short for pa
         Pairs[1] = accum_ptuple(Pairs[1], pairs[1], fn)
 
     else:  # pair is pair_layers, keep unpacking:
-        for Pair, pair, n in zip_longest(Pairs, pairs, fillvalue=[]):
-            sum_pair_layers(Pair, pair, fn)
+        loc_Pairs = []
+        for Pair, pair in zip(Pairs, pairs):
+            loc_Pairs += [sum_pair_layers(Pair, pair, fn)]
+        Pairs = loc_Pairs
 
     return Pairs
 
