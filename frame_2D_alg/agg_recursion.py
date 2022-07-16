@@ -133,8 +133,11 @@ def sum_layers(Params, params):  # Capitalized names for sums, as comp_layers bu
 
     sum_pair_layers(Params[0], params[0])  # recursive unpack of nested ptuple pair_layers, if any from der+
 
-    for Layer, layer in zip(Params[1:], params[1:]):
-        sum_layers(Layer, layer)  # recursive unpack of higher layers, if any from agg+ and nested with sub_layers
+    for Layer, layer in zip_longest(Params[1:], params[1:], fillvalue=[]):
+        if not Layer:  # init new layer
+            Layer = init_ptuples(layer)
+            Params.append(Layer)
+        if layer: sum_layers(Layer, layer)  # recursive unpack of higher layers, if any from agg+ and nested with sub_layers
 
 
 def sum_named_param(p_layer, param_name, fPd):
