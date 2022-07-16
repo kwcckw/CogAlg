@@ -441,8 +441,6 @@ def sum2PP(PP_segs, base_rdn, fPd):  # sum params: derPs into segment or segs in
     PP = CPP(x0=PP_segs[0].x0, rdn=base_rdn, sign=PP_segs[0].sign, L= len(PP_segs))
     PP.seg_levels[fPd][0] = PP_segs  # PP_segs is seg_levels[0]
 
-    # init PP.params with the highest length of seg.params
-#    PP.params = init_ptuples(PP_segs[np.argmax([len(seg.params) for seg in PP_segs])].params)
     for seg in PP_segs:
         accum_PP(PP, seg, fPd)
 
@@ -540,9 +538,10 @@ def sum_pair_layers(Pairs, pairs):  # recursively unpack pairs (short for pair_l
     else:  # pair is pair_layers or two vertuples, keep unpacking:
         for Pair, pair in zip_longest(Pairs, pairs, fillvalue=[]):
             if not Pair:  # init Pair
-                Pair = init_ptuples(pair)
+                Pair = deepcopy(pair)
                 Pairs.append(Pair)
-            sum_pair_layers(Pair, pair)
+            elif pair:
+                sum_pair_layers(Pair, pair)
 
 
 def accum_ptuple(Ptuple, ptuple):  # lataple or vertuple
