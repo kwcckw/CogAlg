@@ -62,7 +62,7 @@ class Cptuple(ClusterStructure):  # bottom-layer tuple of lateral or vertical pa
     Ma = float
     angle = lambda: [0, 0]  # in lataple only, replaced by float in vertuple
     aangle = lambda: [0, 0, 0, 0]
-    n = int  # accumulation count
+    n = lambda: 1  # accumulation count
     # only in lataple, for comparison but not summation:
     G = float
     Ga = float
@@ -425,22 +425,27 @@ def sum2seg(seg_Ps, fPd):  # sum params of vertically connected Ps into segment
     return seg
 
 
-# check _ptuple.params with ptuple.params and init params if _ptuple.params is lesser than ptuple.params
-def check_params(_ptuple, ptuple):
-    
-    for i, (_param, param) in enumerate(zip_longest(_ptuple.params, ptuple.params, fillvalue=[]),start=1):
-        if not _param and param and i > len(_ptuple.params):
-            if isinstance(param, Cptuple):
-                _ptuple.params.append(Cptuple())
-            else:
-                _ptuple.params.append(init_ptuples(param))
-        
+def init_ptuples(params):  # empty Cptuples with nesting structure of PP params
+
+    out_ptuples = []
+    for param in params:
+        if isinstance(param, list):
+            out_ptuples += [init_ptuples(param)]
+        else:
+            ptuple =  Cptuple()
+            if not isinstance(param.angle, list):  # follow angle and aangle structure of input params
+                ptuple.angle = 0; ptuple.aangle = 0
+            out_ptuples += [ptuple]
+    return out_ptuples
+
 
 def sum2PP(PP_segs, base_rdn, fPd):  # sum params: derPs into segment or segs into PP
 
     PP = CPP(x0=PP_segs[0].x0, rdn=base_rdn, sign=PP_segs[0].sign, L= len(PP_segs))
     PP.seg_levels[fPd][0] = PP_segs  # PP_segs is seg_levels[0]
 
+    # init PP.params with the highest length of seg.params
+    PP.params = init_ptuples(PP_segs[np.argmax([len(seg.params) for seg in PP_segs])].params)
     for seg in PP_segs:
         accum_PP(PP, seg, fPd)
 
@@ -454,14 +459,12 @@ def accum_P(seg, P, fPd):
 
 def accum_derP(PP, inp, fPd):  # inp is seg or PP in recursion
 
-    check_params(PP, inp)  
     sum_pair_layers(PP.params, inp.params)
     inp.root = PP
     # may add more assignments here
 
 def accum_PP(PP, inp, fPd):  # comp_slice inp is seg, PP in agg+ only
 
-    check_params(PP, inp)  
     accum_ptuple(PP.params[0], inp.params[0])  # PP has two param layers
     if len(inp.params) > 1:
         sum_pair_layers(PP.params[1], inp.params[1])  # 2nd layer is empty if single seg|P
@@ -496,18 +499,6 @@ def accum_PP(PP, inp, fPd):  # comp_slice inp is seg, PP in agg+ only
                 if derP not in PP.downlink_layers[-1] and derP.P.root not in PP.seg_levels[fPd][-1]:
                     PP.uplink_layers[-1] += [derP]
 
-def init_ptuples(params):  # empty Cptuples with nesting structure of PP params
-
-    out_ptuples = []
-    for param in params:
-        if isinstance(param, list):
-            out_ptuples += [init_ptuples(param)]
-        else:
-            ptuple =  Cptuple()
-            if not isinstance(param.angle, list):  # follow angle and aangle structure of input params
-                ptuple.angle = 0; ptuple.aangle = 0
-            out_ptuples += [ptuple]
-    return out_ptuples
 
 
 def append_P(P__, P):  # pack P into P__ in top down sequence
@@ -591,7 +582,8 @@ def comp_ptuple(_params, params):  # compare lateral or vertical tuples, similar
     dval, mval = 0, 0
 
     flatuple = isinstance(_params.angle, list)  # else vertuple
-    rn = max(1, _params.n)/ max(1, params.n) 
+    rn = _params.n / params.n  # normalize param as param*rn, for n-invariant ratio between compared params:
+    # _param / param*rn = (_param/_n) / (param/n)?
     # same set:
     comp("I", _params.I, params.I*rn, dval, mval, dtuple, mtuple, ave_dI, finv=flatuple)  # inverse match if latuple
     comp("x", _params.x, params.x*rn, dval, mval, dtuple, mtuple, ave_dx, finv=flatuple)
