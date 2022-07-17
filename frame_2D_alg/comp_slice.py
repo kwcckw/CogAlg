@@ -409,12 +409,11 @@ def sum2seg(seg_Ps, fPd):  # sum params of vertically connected Ps into segment
 
     for P in seg_Ps:
         accum(seg, P, fPd)
-        derP = P.uplink_layers[-1][0]
-        if len(seg.params)>1:
-            sum_pair_layers(seg.params[1], derP.params)  # derP.params maybe nested
-        else:
-            seg.params.append( deepcopy(derP.params))  # init 2nd layer
-        derP.root = seg
+        if P.uplink_layers[-1]:  # top row P doesn't have uplink layers
+            derP = P.uplink_layers[-1][0]
+            if len(seg.params)>1: sum_pair_layers(seg.params[1][0], derP.params)  # derP.params maybe nested
+            else: seg.params.append([deepcopy(derP.params)])  # init 2nd layer
+            derP.root = seg
 
     return seg
 
@@ -431,10 +430,8 @@ def sum2PP(PP_segs, base_rdn, fPd):  # sum params: derPs into segment or segs in
 
 def accum_P(seg, P, fPd):
 
-    if seg.params:
-        accum_ptuple(seg.params[0], P.params)
-    else:
-        seg.params.append( deepcopy(P.params))
+    if seg.params: accum_ptuple(seg.params[0], P.params)  # accumulation
+    else: seg.params.append(deepcopy(P.params))  # init seg.params 1st layer with P.params 
     P.root = seg
     seg.x0 = min(seg.x0, P.x0)
 
@@ -446,15 +443,7 @@ def accum_derP(PP, inp, fPd):  # inp is seg or PP in recursion
 
 def accum_PP(PP, inp, fPd):  # comp_slice inp is seg, PP in agg+ only
 
-    # 1st p_layer, PP may have two. This can be done by sum_layers:
-    if isinstance(PP.params[0], Cptuple):  # one latuple
-        accum_ptuple(PP.params[0], inp.params[0])
-    else:  # list of 2 vertuples
-        accum_ptuple(PP.params[0][0], inp.params[0][0])
-        accum_ptuple(PP.params[0][1], inp.params[0][1])
-    # 2nd p_layer, empty if 1-seg PP:
-    if len(inp.params) > 1:
-        sum_pair_layers(PP.params[1], inp.params[1])
+    sum_layers(PP.params, inp.params)
 
     inp.root = PP
     PP.x += inp.x*inp.L  # or in inp.params?
@@ -521,6 +510,19 @@ def comp_pair_layers(_pair_layers, pair_layers, der_pair_layers, fsubder):  # re
 
     return der_pair_layers  # possibly nested m,d ptuple pairs
 
+
+def sum_layers(Params, params):  # Capitalized names for sums, as comp_layers but no separate der_layers to return
+
+    if not Params:
+        Params.append(deepcopy(params[0]))  # no need to sum  
+    else:
+        sum_pair_layers(Params[0], params[0])  # recursive unpack of nested ptuple pair_layers, if any from der+
+        
+    for Layer, layer in zip_longest(Params[1:], params[1:], fillvalue=[]):
+        if Layer and layer:
+            sum_layers(Layer, layer)  # recursive unpack of higher layers, if any from agg+ and nested with sub_layers
+        elif layer:
+            Params.append( deepcopy(layer))
 
 def sum_pair_layers(Pairs, pairs):  # recursively unpack pairs (short for pair_layers): m,d tuple pairs from der+
 

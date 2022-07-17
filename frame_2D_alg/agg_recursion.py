@@ -95,7 +95,7 @@ def comp_PP_(PP_, fsubder=0):  # PP can also be PPP, etc.
     for PP in PP_:
         compared_PP_ = copy(PP_)  # shallow copy
         compared_PP_.remove(PP)
-        summed_params = [[]]  # initialize params[0]
+        summed_params = []  # initialize params
         for compared_PP in compared_PP_:
             sum_layers(summed_params, compared_PP.params)  # accum summed_params over compared_PP_
 
@@ -125,20 +125,6 @@ def comp_layers(_layers, layers, der_layers, fsubder=0):  # only for agg_recursi
         der_layers += [comp_layers(_layer, layer, der_layers=[], fsubder=fsubder)]
 
     return der_layers # possibly nested param layers
-
-
-def sum_layers(Params, params):  # Capitalized names for sums, as comp_layers but no separate der_layers to return
-
-    if Params[0] and params[0]:
-        sum_pair_layers(Params[0], params[0])  # recursive unpack of nested ptuple pair_layers, if any from der+
-    elif params[0]:
-        Params[0] = deepcopy(params[0])  # no need to sum
-
-    for Layer, layer in zip_longest(Params[1:], params[1:], fillvalue=[]):
-        if Layer and layer:
-            sum_layers(Layer, layer)  # recursive unpack of higher layers, if any from agg+ and nested with sub_layers
-        elif layer:
-            Params.append( deepcopy(layer))
 
 
 def sum_named_param(p_layer, param_name, fPd):
