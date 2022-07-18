@@ -198,14 +198,14 @@ def slice_blob(blob, verbose=False):  # forms horizontal blob slices: Ps, ~1D Ps
                 params.L = len(Pdert_)  # G, Ga are recomputed; M, Ma are not restorable from G, Ga:
                 params.G = np.hypot(*params.angle)  # Dy, Dx
                 params.Ga = (params.aangle[1] + 1) + (params.aangle[3] + 1)  # Cos_da0, Cos_da1
-                P_.append( CP(params=params, x0=x-(params.L-1), y=y, dert_=Pdert_))
+                P_.append( CP(params=params, x0=x-(params.L-1), y=y, L=params.L, dert_=Pdert_))
             _mask = mask
 
         if not _mask:  # pack last P, same as above:
             params.L = len(Pdert_)
             params.G = np.hypot(*params.angle)
             params.Ga = (params.aangle[1] + 1) + (params.aangle[3] + 1)
-            P_.append(CP(params=params, x0=x - (params.L - 1), y=y, dert_=Pdert_))
+            P_.append(CP(params=params, x0=x - (params.L - 1), y=y, L=params.L, dert_=Pdert_))
         P__ += [P_]
 
     blob.P__ = P__
@@ -415,6 +415,10 @@ def sum2seg(seg_Ps, fPd):  # sum params of vertically connected Ps into segment
         derP.root = seg
     accum( seg, seg_Ps[-1], fPd)  # top P uplink_layers are not part of seg
 
+    # seg's x and y is mean or min max of P's x&y?
+    seg.x = sum([P.x0+P.L for P in seg_Ps])/ len(seg_Ps)
+    seg.y = sum([P.y for P in seg_Ps])/ len(seg_Ps)
+
     return seg
 
 
@@ -437,7 +441,7 @@ def accum_P(seg, P, fPd):
 
 def accum_derP(seg, derP, fPd):
 
-    sum_layers(seg.params[1], derP.params)
+    sum_layers(seg.params, derP.params)
     derP.root = seg
     # may add more
 
@@ -448,7 +452,7 @@ def accum_PP(PP, inp, fPd):  # comp_slice inp is seg, or segPP in agg+
     inp.root = PP
     PP.x += inp.x*inp.L  # or in inp.params?
     PP.y += inp.y*inp.L
-    PP.xn = max(PP.x0, inp.x0)
+    PP.xn = max(PP.x0+PP.L, inp.x0+PP.L)
     PP.yn = max(inp.y, PP.y)  # or arg y instead of derP.y?
     PP.Rdn += inp.rdn  # base_rdn + PP.Rdn / PP: recursion + forks + links: nderP / len(P__)?
     PP.nderP += len(inp.P__[-1].uplink_layers[-1])  # redundant derivatives of the same P
@@ -530,7 +534,7 @@ def sum_layers(Layers, layers):  # recursively unpack layers: m,d tuple pairs fr
         accum_ptuple(Layers, layers)  # layers is a latuple, in 1st layer only
     else:
         # layer is layers or two vertuples, keep unpacking
-        for Layer, layer in zip_longest(layers, layers, fillvalue=[]):
+        for Layer, layer in zip_longest(Layers, layers, fillvalue=[]):
             if Layer and layer:
                 sum_layers(Layer, layer)
             elif layer:

@@ -53,7 +53,7 @@ class CPPP(CPP, CderPP):
     root = lambda:None  # higher-order segP or PPP
 
 
-def agg_recursion(blob, fseg):  # compositional recursion per blob.Plevel. P, PP, PPP are relative terms, each may be of any composition order
+def agg_recursion(blob, fseg, level=0):  # compositional recursion per blob.Plevel. P, PP, PPP are relative terms, each may be of any composition order
 
     if fseg: PP_t = [blob.seg_levels[0][-1], blob.seg_levels[1][-1]]   # blob is actually PP, recursion forms segP_t, seg_PP_t, etc.
     else:    PP_t = [blob.levels[0][-1], blob.levels[1][-1]]  # input-level composition Ps, initially PPs
@@ -73,7 +73,7 @@ def agg_recursion(blob, fseg):  # compositional recursion per blob.Plevel. P, PP
             PPP_t = form_PPP_t(derPP_t)
             # call individual comp_PP if mPPP > ave_mPPP, converting derPP to CPPP
             splice_PPs(PPP_t)  # for initial PPs only: if PP is CPP?
-            sub_recursion_eval(PPP_t[0])  # fPd=0, rng+
+            sub_recursion_eval(PPP_t[0])  # fPd=0, rng+  # what would be the P__ of PPP? All other PPs?
             sub_recursion_eval(PPP_t[1])  # fPd=1, der+
         else:
             PPP_t += [[], []]  # replace with neg PPPs?
@@ -81,8 +81,9 @@ def agg_recursion(blob, fseg):  # compositional recursion per blob.Plevel. P, PP
     if fseg: blob.seg_levels += [PPP_t]  # new level of segPs
     else:    blob.levels += [PPP_t]  # levels of dir_blob are Plevels
 
-    if n_extended/len(PP_t) > 0.5:  # mean ratio of extended PPs
-        agg_recursion(blob, fseg)
+    # i think need some changes here, atl least at level to scale ave?
+    if n_extended/max(1, (len(PP_t[0]) + len(PP_t[0]))) > 0.5 * level:  # mean ratio of extended PPs
+        agg_recursion(blob, fseg, level=level+1)
 '''
 - Compare each PP to the average (centroid) of all other PPs in PP_, or maximal cartesian distance, forming derPPs.  
 - Select above-average derPPs as PPPs, representing summed derivatives over comp range, overlapping between PPPs.
@@ -103,7 +104,7 @@ def comp_PP_(PP_, fsubder=0):  # PP can also be PPP, etc.
         for compared_PP in compared_PP_:
             sum_levels(summed_params, compared_PP.params)  # accum summed_params over compared_PP_
 
-        pre_PPP = CPP(params=deepcopy(PP.params), layers= PP.layers+[PP_])  # comp_ave- defined pre_PPP inherits PP.params
+        pre_PPP = CPP(params=deepcopy(PP.params), layers= PP.layers+[PP_], x=PP.x, y=PP.y)  # comp_ave- defined pre_PPP inherits PP.params
         pre_PPP.params += [comp_levels(PP.params, summed_params, der_levels=[], fsubder=fsubder)]  # sum_params is now ave_params
         '''
         comp to ave params of compared PPs, form new layer: derivatives of all lower layers, 
@@ -142,6 +143,9 @@ def sum_named_param(plevel, param_name, fPd):
         else:  # keep unpacking:
             for sub_plevel in plevel:
                 psum += sum_named_param(sub_plevel, param_name, fPd)
+    else:
+        for sub_plevel in plevel:
+            psum += sum_named_param(sub_plevel, param_name, fPd)
     return psum
 
 
