@@ -214,11 +214,11 @@ def comp_P_root(P__):  # vertically compares y-adjacent and x-overlapping Ps: bl
     for P_ in P__[1:]:  # lower row
         for P in P_:
             for _P in _P_:  # test for x overlap(_P,P) in 8 directions, derts are positive in all Ps:
-                if (P.x0 - 1 < _P.x0 + _P.L) and (P.x0 + P.L + 1 > _P.x0):
+                if (P.x0 - 1 < _P.x0 + _P.params.L) and (P.x0 + P.params.L + 1 > _P.x0):
                     derP = comp_P(_P, P)
                     P.uplink_layers[-2] += [derP]  # append derPs, uplink_layers[-1] is match_derPs
                     _P.downlink_layers[-2] += [derP]
-                elif (P.x0 + P.L) < _P.x0:
+                elif (P.x0 + P.params.L) < _P.x0:
                     break  # no P xn overlap, stop scanning lower P_
         _P_ = P_
 
@@ -265,6 +265,7 @@ def comp_P_der(P__):  # der+ sub_recursion in PP.P__, compare P.uplinks to P.dow
                     # there maybe no x overlap between recomputed Ls of _derP and derP, compare anyway,
                     # mderP * (ave_olp_L / olp_L)? or olp(_derP._P.L, derP.P.L)?
                     # gap: neg_olp, ave = olp-neg_olp?
+                    # fPd must be 0 here right?
                     dderP = comp_P(_derP, derP, fsubder=1)  # form higher vertical derivatives of derP or PP params
                     derP.uplink_layers[0] += [dderP]  # pre-init layer per derP
                     _derP.downlink_layers[0] += [dderP]
@@ -403,15 +404,12 @@ def sum2seg(seg_Ps, fPd):  # sum params of vertically connected Ps into segment
     else: accum = accum_P   # iP is CP or CderP in der+
 
     for P in seg_Ps[:-1]:
-        accum(seg, P)
+        accum(seg, P, fPd)
         derP = P.uplink_layers[-1][0]
         if len(seg.params)>1: sum_layers(seg.params[1][0], derP.params)  # derP.params maybe nested
         else: seg.params.append([deepcopy(derP.params)])  # init 2nd layer
         derP.root = seg
     accum( seg, seg_Ps[-1], fPd)  # top P uplink_layers are not part of seg
-    # may not be needed:
-    seg.x = sum([P.params.x for P in seg_Ps])
-    seg.y = seg_Ps[-1].y - len(seg_Ps)/2
 
     return seg
 
@@ -426,11 +424,27 @@ def sum2PP(PP_segs, base_rdn, fPd):  # sum PP_segs into PP
 
     return PP
 
-def accum_P(seg, P):  # P is derP if from der+
+def accum_P(seg, P, fPd):  # P is derP if from der+
 
     if seg.params: accum_ptuple(seg.params[0], P.params)
     else: seg.params.append(deepcopy(P.params))  # init 1st level of seg.params with P.params
     P.root = seg
+
+    # actually i think this is more messy, if we pack their L to instance, it will be neater although the L is redundant
+    if isinstance(P, CderP): 
+        if isinstance(P.params[0], list):  # params is nested 2 tuples
+            L = P.params[0][fPd].L    
+        else:  # params is 2 tuples
+            L = P.params[fPd].L  
+    elif isinstance(P, CP):
+        L = P.params.L
+
+    seg.x0 = min(seg.x0, P.x0  # need a better resolution here, if seg.x0 is initialized as 0, it will always be 0 here
+    seg.y0 = min(seg.y0, P.y)
+    seg.xn = max(seg.xn, P.x0 + L)
+    seg.yn = max(seg.yn, P.y)
+    
+    
     # seg.x0 = min(seg.x0, P.x0)  # if we need it at all, it should be a box: x0,xn,y0,yn.
 
 
@@ -542,18 +556,28 @@ def accum_ptuple(Ptuple, ptuple):  # lataple or vertuple
         Ptuple.aangle += ptuple.aangle
 
 
-def comp_P(_P, P, fsubder=0):  # forms vertical derivatives of params per P in _P.uplink, conditional ders from norm and DIV comp
+def comp_P(_P, P, fsubder=0, fPd=0):  # forms vertical derivatives of params per P in _P.uplink, conditional ders from norm and DIV comp
 
     if isinstance(_P.params, Cptuple):  # just to save the call, or this testing can be done in comp_layers
         derivatives = comp_ptuple(_P.params, P.params)  # comp lataple (P)
     else:
         derivatives = comp_layers(_P.params, P.params, [], fsubder=fsubder)  # comp vertuple pairs (derP)
 
-    x0 = min(_P.x0, P.x0)
-    xn = max(_P.x0+_P.L, P.x0+P.L)
-    L = xn-x0
+    if isinstance(_P, CderP): 
+        if isinstance(_P.params[0], list):  # params is nested 2 tuples
+            _L = _P.params[0][fPd].L
+            L = P.params[0][fPd].L
+        else:  # params is 2 tuples
+            _L = _P.params[fPd].L
+            L = P.params[fPd].L
+    elif isinstance(_P, CP):  # params is not nested single ptuple
+        _L = _P.params.L
+        L = P.params.L
 
-    return CderP(x0=x0, L=L, y=_P.y, params=derivatives, P=P, _P=_P)
+    x0 = min(_P.x0, P.x0)
+    xn = max(_P.x0+_L, P.x0+L)
+
+    return CderP(x0=x0, L=xn-x0, y=_P.y, params=derivatives, P=P, _P=_P)
 
 
 def comp_ptuple(_params, params):  # compare lateral or vertical tuples, similar operations for m and d params
