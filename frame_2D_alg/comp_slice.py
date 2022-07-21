@@ -69,10 +69,10 @@ class Cptuple(ClusterStructure):  # bottom-layer tuple of lateral or vertical pa
     # only in vertuple, combined tuple m|d value:
     val = float
 
-
 class CP(ClusterStructure):  # horizontal blob slice P, with vertical derivatives per param if derP
 
     params = object  # x, L, I, M, Ma, G, Ga, angle( Dy, Dx), aangle( Sin_da0, Cos_da0, Sin_da1, Cos_da1)
+    ptuples = list
     x0 = int
     y = int  # for vertical gap in PP.P__
     sign = NoneType  # g-ave + ave-ga sign, redundant to params?
@@ -94,6 +94,7 @@ class CP(ClusterStructure):  # horizontal blob slice P, with vertical derivative
 class CderP(ClusterStructure):  # tuple of derivatives in P uplink_ or downlink_
 
     params = list  # P derivation layers, n ptuples = 2**der_cnt
+    ptuples = list
     x0 = int
     sign = NoneType  # g-ave + ave-ga sign
     y = int  # for vertical gaps in PP.P__, replace with derP.P.y?
@@ -110,6 +111,7 @@ class CderP(ClusterStructure):  # tuple of derivatives in P uplink_ or downlink_
 class CPP(CP, CderP):  # P and derP params are combined into param_layers?
 
     params = list  # P.params (ptuple), += derP params if >1 P|seg, L is Area
+    ptuples = list
     sign = bool
     x0 = int  # replace box, update by max, min
     xn = int
@@ -127,7 +129,7 @@ class CPP(CP, CderP):  # P and derP params are combined into param_layers?
     mask__ = bool
     P__ = list  # input  # derP__ = list  # redundant to P__
     seg_levels = lambda: [[[]],[[]]]  # from 1st agg_recursion, seg_levels[0] is seg_t, higher seg_levels are segP_t s
-    PPP_levels = list  # from 2nd agg_recursion, PP_t = levels[0], from form_PP, before recursion
+    PPP_levels = list  # from 2nd agg_recursion, PP_t = levels[0], from form_PP, before recursion (this is not needed now?)
     layers = list  # elements for sub_recursion, each is derP_t
     root = lambda:None  # higher-order PP, segP, or PPP
 
@@ -155,18 +157,30 @@ def comp_slice_root(blob, verbose=False):  # always angle blob, composite dert c
 
         for PP_ in (PPm_, PPd_):  # 1st-call agglomerative recursion is per PP, appending PP.seg_levels, not blob.levels:
             for PP in PP_:
-                if len(PP.seg_levels[0][-1])>1:  # comp_seg -> segPs.. per seg__[n], in PP.seg_levels
-                    agg_recursion(PP.seg_levels, level=1, fseg=1, fiPd=0)
-                if len(PP.seg_levels[1][-1])>1:
-                    agg_recursion(PP.seg_levels, level=1, fseg=1, fiPd=1)
+                
+                # this section should be same with PP.levels, pack it into a function?
+                segm_ = PP.seg_levels[0][-1]; segd_ = PP.seg_levels[1][-1]
+                # comp_seg -> segPs.. per seg__[n], in PP.seg_levels
+                m_comb_levels, d_comb_levels = [[],[]], [[],[]]   
+                if len(segm_)>1: m_comb_levels = agg_recursion(segm_, fiPd=0)
+                if len(segd_)>1: d_comb_levels = agg_recursion(segd_, fiPd=1)
+                # combine seg levels:
+                for m_sub_segPPPm_, d_sub_segPPPm_ in zip_longest(m_comb_levels[0], d_comb_levels[0], fillvalue=[]):
+                    if m_sub_segPPPm_ or d_sub_segPPPm_: PP.seg_levels[0] += [m_sub_segPPPm_ + d_sub_segPPPm_]
+                for m_sub_segPPPd_, d_sub_segPPPd_ in zip_longest(m_comb_levels[1], d_comb_levels[1], fillvalue=[]):
+                    if m_sub_segPPPd_ or d_sub_segPPPd_: PP.seg_levels[1] += [m_sub_segPPPd_ + d_sub_segPPPd_]
 
         dir_blob.levels = [[PPm_], [PPd_]]  # 2nd call, dir_blob.PP_s formed in 1st call, forms PPPs and dir_blob.levels:
-        if len(PPm_)>1:
-            agg_recursion(dir_blob.levels, level=1, fseg=0, fiPd=0)  # no n_extended, unconditional?
-        if len(PPd_)>1:
-            agg_recursion(dir_blob.levels, level=1, fseg=0, fiPd=1)
+        m_comb_levels, d_comb_levels = [[],[]], [[],[]]   
+        if len(PPm_)>1: m_comb_levels = agg_recursion(PPm_, fiPd=0)  # no n_extended, unconditional?
+        if len(PPd_)>1: d_comb_levels = agg_recursion(PPd_, fiPd=1)
+        # combine PPP levels:
+        for m_sub_PPPm_, d_sub_PPPm_ in zip_longest(m_comb_levels[0], d_comb_levels[0], fillvalue=[]):
+            if m_sub_PPPm_ or d_sub_PPPm_: dir_blob.levels[0] += [m_sub_PPPm_ + d_sub_PPPm_]
+        for m_sub_PPPd_, d_sub_PPPd_ in zip_longest(m_comb_levels[1], d_comb_levels[1], fillvalue=[]):
+            if m_sub_PPPd_ or d_sub_PPPd_: dir_blob.levels[1] += [m_sub_PPPd_ + d_sub_PPPd_]
 
-#    splice_dir_blob_(blob.dir_blobs)  # draft
+    splice_dir_blob_(blob.dir_blobs)  # draft
 
 
 def slice_blob(blob, verbose=False):  # forms horizontal blob slices: Ps, ~1D Ps, in select smooth edge (high G, low Ga) blobs
@@ -416,6 +430,8 @@ def sum2seg(seg_Ps, fPd):  # sum params of vertically connected Ps into segment
         derP.root = seg
     accum( seg, seg_Ps[-1], fPd)  # top P uplink_layers are not part of seg
 
+    # add seg.ptuples here
+    
     return seg
 
 
@@ -427,6 +443,8 @@ def sum2PP(PP_segs, base_rdn, fPd):  # sum PP_segs into PP
     for seg in PP_segs:
         accum_PP(PP, seg, fPd)
 
+    # add PP.ptuples here
+    
     return PP
 
 def accum_P(seg, P, _):  # P is derP if from der+
@@ -766,7 +784,7 @@ def sub_recursion(PP, base_rdn, fPd):  # compares param_layers of derPs in gener
     if sub_PPd_:
         PPd_comb_layers = sub_recursion_eval(sub_PPd_)  # der+ comp_P in PPds -> param_layer, sub_PPs
 
-    comb_layers = [[], []]
+    comb_layers = [[sub_PPm_], [sub_PPd_]]
     # combine sub_PPm_s and sub_PPd_s from each layer:
     for m_sub_PPm_, d_sub_PPm_ in zip_longest(PPm_comb_layers[0], PPd_comb_layers[0], fillvalue=[]):
         comb_layers[0] += [m_sub_PPm_ + d_sub_PPm_]

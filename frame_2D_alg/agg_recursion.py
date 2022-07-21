@@ -53,15 +53,13 @@ class CPPP(CPP, CderPP):
     root = lambda:None  # higher-order segP or PPP
 
 # draft
-def agg_recursion(levels, level, fseg, fiPd):  # compositional recursion per blob.Plevel.
+def agg_recursion(PP_, fiPd):  # compositional recursion per blob.Plevel.
     # P, PP, PPP are relative terms, each may be of any composition order
 
-    if len(levels[0])<level+1: levels[0].append([])
-    if len(levels[1])<level+1: levels[1].append([])
+    comb_levels = [[], []]
 
     if fiPd: ave_PP = ave_dPP
     else: ave_PP = ave_mPP
-    PP_ = levels[fiPd][-2]
 
     V = sum([sum_named_param(PP.params, "val", fPd=fiPd) for PP in PP_])  # combined across plevels, as is comp_PP_ below
     if V > ave_PP:  # params are not combined across levels?
@@ -72,13 +70,20 @@ def agg_recursion(levels, level, fseg, fiPd):  # compositional recursion per blo
         sub_recursion_eval(PPPm_)  # fPd=0, rng+  # for derPP_ in PPPs formed by indiv_comp_PP_
         sub_recursion_eval(PPPd_)  # fPd=1, der+
 
-        levels[0] += [PPPm_]
-        levels[1] += [PPPd_]
-
+        comb_levels[0].append(PPPm_); comb_levels[1].append(PPPd_)  # pack current level PPP
+        m_comb_levels, d_comb_levels = [[],[]], [[],[]] 
         if len(PPPm_)>1:
-            agg_recursion(levels, level+1, fseg, fiPd=0)
+            m_comb_levels = agg_recursion(PPPm_, fiPd=0)
         if len(PPPd_)>1:
-            agg_recursion(levels, level+1, fseg, fiPd=1)
+            d_comb_levels = agg_recursion(PPPd_, fiPd=1)
+            
+        # combine sub_PPm_s and sub_PPd_s from each layer:
+        for m_sub_PPPm_, d_sub_PPPm_ in zip_longest(m_comb_levels[0], d_comb_levels[0], fillvalue=[]):
+            comb_levels[0] += [m_sub_PPPm_ + d_sub_PPPm_]
+        for m_sub_PPPd_, d_sub_PPPd_ in zip_longest(m_comb_levels[1], d_comb_levels[1], fillvalue=[]):
+            comb_levels[1] += [m_sub_PPPd_ + d_sub_PPPd_]
+
+    return comb_levels
 
 '''
 - Compare each PP to the average (centroid) of all other PPs in PP_, or maximal cartesian distance, forming derPPs.  
