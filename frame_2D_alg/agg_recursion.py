@@ -62,7 +62,7 @@ def agg_recursion(PP_, fiPd):  # compositional recursion per blob.Plevel.
     else: ave_PP = ave_mPP
 
     V = sum([sum_named_param(PP.params, "val", fPd=fiPd) for PP in PP_])  # combined across plevels, as is comp_PP_ below
-    if V > ave_PP:  # params are not combined across levels?
+    if V > ave_PP: 
 
         derPP_t = comp_PP_(PP_)  # compare all PPs to the average (centroid) of all other PPs, is generic for lower level
         PPPm_, PPPd_ = form_PPP_t(derPP_t)  # calls individual comp_PP if mPPP > ave_mPPP, converting derPP to CPPP,
@@ -71,12 +71,12 @@ def agg_recursion(PP_, fiPd):  # compositional recursion per blob.Plevel.
         sub_recursion_eval(PPPd_)  # fPd=1, der+
 
         comb_levels[0].append(PPPm_); comb_levels[1].append(PPPd_)  # pack current level PPP
-        m_comb_levels, d_comb_levels = [[],[]], [[],[]] 
+        m_comb_levels, d_comb_levels = [[],[]], [[],[]]
         if len(PPPm_)>1:
             m_comb_levels = agg_recursion(PPPm_, fiPd=0)
         if len(PPPd_)>1:
             d_comb_levels = agg_recursion(PPPd_, fiPd=1)
-            
+
         # combine sub_PPm_s and sub_PPd_s from each layer:
         for m_sub_PPPm_, d_sub_PPPm_ in zip_longest(m_comb_levels[0], d_comb_levels[0], fillvalue=[]):
             comb_levels[0] += [m_sub_PPPm_ + d_sub_PPPm_]
