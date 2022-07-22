@@ -74,6 +74,7 @@ class CBlob(ClusterStructure):
     Mdx = float
     Ddx = float
     # derivation hierarchy:
+    layers = list
     rsublayers = list  # list of layers across sub_blob derivation tree, deeper layers are nested with both forks
     asublayers = list  # separate for range and angle forks per blob
     prior_forks = list
