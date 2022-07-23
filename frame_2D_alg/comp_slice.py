@@ -169,7 +169,7 @@ def comp_slice_root(blob, verbose=False):  # always angle blob, composite dert c
         dir_blob.levels = [[PPm_], [PPd_]]
         agg_recursion_eval(dir_blob, fseg=0)  # 2nd call, dir_blob.PP_s formed in 1st call, forms PPPs and dir_blob.levels
 
-#    splice_dir_blob_(blob.dir_blobs)  # draft
+    splice_dir_blob_(blob.dir_blobs)  # draft
 
 
 def agg_recursion_eval(blob, fseg):
@@ -433,11 +433,12 @@ def sum2seg(seg_Ps, fPd):  # sum params of vertically connected Ps into segment
     for P in seg_Ps[:-1]:
         accum(seg, P, fPd)
         derP = P.uplink_layers[-1][0]
-        if len(seg.params)>1: sum_layers(seg.params[1][0], derP.params)  # derP.params maybe nested
-        else: seg.params.append([deepcopy(derP.params)])  # init 2nd layer
+        if len(seg.params)>1: sum_layers(seg.params[1][0], derP.params, seg.ptuple)  # derP.params maybe nested
+        else: 
+            seg.params.append([deepcopy(derP.params)])  # init 2nd layer
+            sum_layers([], derP.params, seg.ptuple)
         derP.root = seg
     accum(seg, seg_Ps[-1], fPd)   # top P uplink_layers are not part of seg
-    sum_layers([], seg.params, seg.ptuple)
     
     return seg
 
@@ -449,7 +450,6 @@ def sum2PP(PP_segs, base_rdn, fPd):  # sum PP_segs into PP
 
     for seg in PP_segs:
         accum_PP(PP, seg, fPd)
-    sum_layers([], PP.params, PP.ptuple)
 
     return PP
 
@@ -475,7 +475,7 @@ def accum_P(seg, P, _):  # P is derP if from der+
 
 def accum_PP(PP, inp, fPd):  # comp_slice inp is seg, or segPP in agg+
 
-    sum_levels(PP.params, inp.params)  # PP has only 2 param levels, PP.params.x += inp.params.x*inp.L
+    sum_levels(PP.params, inp.params, PP.ptuple)  # PP has only 2 param levels, PP.params.x += inp.params.x*inp.L
 
     inp.root = PP
     PP.x0 = min(PP.x0, inp.x0)
@@ -543,29 +543,29 @@ def comp_layers(_layers, layers, der_layers, fsubder):  # recursively unpack lay
     return der_layers  # m,d ptuple pair in each layer, possibly nested
 
 
-def sum_levels(Params, params):  # Capitalized names for sums, as comp_levels but no separate der_layers to return
+def sum_levels(Params, params, Ptuple):  # Capitalized names for sums, as comp_levels but no separate der_layers to return
 
     if Params:
-        sum_layers(Params[0], params[0])  # recursive unpack of nested ptuple layers, if any from der+
+        sum_layers(Params[0], params[0], Ptuple)  # recursive unpack of nested ptuple layers, if any from der+
     else:
         Params.append(deepcopy(params[0]))  # no need to sum
+        sum_layers([], params[0], Ptuple)
 
     for Level, level in zip_longest(Params[1:], params[1:], fillvalue=[]):
         if Level and level:
-            sum_levels(Level, level)  # recursive unpack of higher levels, if any from agg+ and nested with sub_levels
+            sum_levels(Level, level, Ptuple)  # recursive unpack of higher levels, if any from agg+ and nested with sub_levels
         elif level:
-            Params.append( deepcopy(level))  # no need to sum
-
+            Params.append(deepcopy(level))  # no need to sum
+            sum_levels([], level, Ptuple)
 
 # Ptuple empty by default
-def sum_layers(Layers, layers, Ptuple=None):  # recursively unpack layers: m,d tuple pairs from der+
+def sum_layers(Layers, layers, Ptuple):  # recursively unpack layers: m,d tuple pairs from der+
 
     if isinstance(layers, Cptuple):
-        if Ptuple:
-            if not isinstance(layers.angle, list):  # change to scalar
-                Ptuple.angle = 0; Ptuple.aangle = 0
-            accum_ptuple(Ptuple, layers)  # sum Layers or Ptuple, they shouldn't need to be summed together
-        else:      accum_ptuple(Layers, layers)  # layers is a latuple, in 1st layer only
+        if not isinstance(layers.angle, list):  # change to scalar
+            Ptuple.angle = 0; Ptuple.aangle = 0
+        accum_ptuple(Ptuple, layers)  # sum Layers or Ptuple, they shouldn't need to be summed together
+        if Layers: accum_ptuple(Layers, layers)  # layers is a latuple, in 1st layer only
         
     else:
         # layer is layers or two vertuples, keep unpacking
@@ -573,8 +573,8 @@ def sum_layers(Layers, layers, Ptuple=None):  # recursively unpack layers: m,d t
             if Layer and layer:
                 sum_layers(Layer, layer, Ptuple)
             elif layer:
-                if Ptuple: sum_layers([], layer, Ptuple)  
-                else:      Layers.append(deepcopy(layer))
+                Layers.append(deepcopy(layer))
+                sum_layers([], layer, Ptuple) 
 
     return Ptuple
 
