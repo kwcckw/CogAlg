@@ -172,12 +172,13 @@ def comp_slice_root(blob, verbose=False):  # always angle blob, composite dert c
 #    splice_dir_blob_(blob.dir_blobs)  # draft
 
 
-def agg_recursion_eval(blob):
+def agg_recursion_eval(blob, fseg):
 
     from agg_recursion import agg_recursion
     m_comb_levels, d_comb_levels = [[], []], [[], []]
-    PPm_,PPd_ = blob.levels[0][-1], blob.levels[1][-1]   # top level
-
+    
+    if fseg: PPm_, PPd_ = blob.seg_levels[0][-1], blob.seg_levels[1][-1]   # top level
+    else: PPm_, PPd_ = blob.agg_levels[0][-1], blob.agg_levels[1][-1]   # top level
 
     if len(PPm_) > 1: m_comb_levels = agg_recursion(PPm_, fiPd=0)  # no n_extended, unconditional?
     if len(PPd_) > 1: d_comb_levels = agg_recursion(PPd_, fiPd=1)
@@ -430,13 +431,14 @@ def sum2seg(seg_Ps, fPd):  # sum params of vertically connected Ps into segment
     else: accum = accum_P   # iP is CP or CderP in der+
 
     for P in seg_Ps[:-1]:
-        accum_ptuple(seg.ptuple, accum(seg, P, fPd))
+        accum(seg, P, fPd)
         derP = P.uplink_layers[-1][0]
         if len(seg.params)>1: sum_layers(seg.params[1][0], derP.params)  # derP.params maybe nested
         else: seg.params.append([deepcopy(derP.params)])  # init 2nd layer
         derP.root = seg
-    accum_ptuple(seg.ptuple, accum( seg, seg_Ps[-1], fPd))  # top P uplink_layers are not part of seg
-
+    accum(seg, seg_Ps[-1], fPd)   # top P uplink_layers are not part of seg
+    sum_layers([], seg.params, seg.ptuple)
+    
     return seg
 
 
@@ -446,7 +448,8 @@ def sum2PP(PP_segs, base_rdn, fPd):  # sum PP_segs into PP
     PP.seg_levels[fPd][0] = PP_segs  # PP_segs is levels[0]
 
     for seg in PP_segs:
-        accum_ptuple(PP.ptuple, accum_PP(PP, seg, fPd))
+        accum_PP(PP, seg, fPd)
+    sum_layers([], PP.params, PP.ptuple)
 
     return PP
 
@@ -454,9 +457,9 @@ def accum_P(seg, P, _):  # P is derP if from der+
 
     if seg.params:
         if isinstance(P, CderP):
-            accum_ptuple(seg.ptuple, sum_layers(seg.params[0], P.ptuple))  # possibly multiple layers in derP.params
+            sum_layers(seg.params[0], P.ptuple)  # possibly multiple layers in derP.params
         else:
-            accum_ptuple(seg.ptuple, accum_ptuple(seg.params[0], P.ptuple))
+            accum_ptuple(seg.params[0], P.ptuple)
     else:
         seg.params.append(deepcopy(P.ptuple))  # init 1st level of seg.params with P.ptuple
         seg.x0 = P.x0  # also need to copy other params?
@@ -498,10 +501,10 @@ def accum_PP(PP, inp, fPd):  # comp_slice inp is seg, or segPP in agg+
 
             # add terminated seg links for rng+:
             for derP in inp.P__[0].downlink_layers[-1]:  # if downlink not in current PP's downlink and not part of the seg in current PP:
-                if derP not in PP.downlink_layers[-1] and derP.P.root not in PP.levels[fPd][-1]:
+                if derP not in PP.downlink_layers[-1] and derP.P.root not in PP.seg_levels[fPd][-1]:
                     PP.downlink_layers[-1] += [derP]
             for derP in inp.P__[-1].uplink_layers[-1]:  # if downlink not in current PP's downlink and not part of the seg in current PP:
-                if derP not in PP.downlink_layers[-1] and derP.P.root not in PP.levels[fPd][-1]:
+                if derP not in PP.downlink_layers[-1] and derP.P.root not in PP.seg_levels[fPd][-1]:
                     PP.uplink_layers[-1] += [derP]
 
 
@@ -542,35 +545,36 @@ def comp_layers(_layers, layers, der_layers, fsubder):  # recursively unpack lay
 
 def sum_levels(Params, params):  # Capitalized names for sums, as comp_levels but no separate der_layers to return
 
-    Ptuple = Cptuple()
-
     if Params:
-        ptuple = sum_layers(Params[0], params[0], Cptuple)  # recursive unpack of nested ptuple layers, if any from der+
-        accum_ptuple(Ptuple, ptuple)  # draft
+        sum_layers(Params[0], params[0])  # recursive unpack of nested ptuple layers, if any from der+
     else:
         Params.append(deepcopy(params[0]))  # no need to sum
 
     for Level, level in zip_longest(Params[1:], params[1:], fillvalue=[]):
         if Level and level:
-            ptuple = sum_levels(Level, level)  # recursive unpack of higher levels, if any from agg+ and nested with sub_levels
-            accum_ptuple(Ptuple, ptuple)  # draft
+            sum_levels(Level, level)  # recursive unpack of higher levels, if any from agg+ and nested with sub_levels
         elif level:
             Params.append( deepcopy(level))  # no need to sum
 
-    return Ptuple
 
-def sum_layers(Layers, layers, Ptuple):  # recursively unpack layers: m,d tuple pairs from der+
+# Ptuple empty by default
+def sum_layers(Layers, layers, Ptuple=None):  # recursively unpack layers: m,d tuple pairs from der+
 
     if isinstance(layers, Cptuple):
-        accum_ptuple(Layers, layers)  # layers is a latuple, in 1st layer only
-        accum_ptuple(Ptuple, Layers)
+        if Ptuple:
+            if not isinstance(layers.angle, list):  # change to scalar
+                Ptuple.angle = 0; Ptuple.aangle = 0
+            accum_ptuple(Ptuple, layers)  # sum Layers or Ptuple, they shouldn't need to be summed together
+        else:      accum_ptuple(Layers, layers)  # layers is a latuple, in 1st layer only
+        
     else:
         # layer is layers or two vertuples, keep unpacking
         for Layer, layer in zip_longest(Layers, layers, fillvalue=[]):
             if Layer and layer:
                 sum_layers(Layer, layer, Ptuple)
             elif layer:
-                Layers.append(deepcopy(layer))
+                if Ptuple: sum_layers([], layer, Ptuple)  
+                else:      Layers.append(deepcopy(layer))
 
     return Ptuple
 
@@ -598,10 +602,10 @@ def comp_P(_P, P, fsubder=0):  # forms vertical derivatives of params per P in _
     else:
         _L = _P.ptuple.L; L = P.ptuple.L
     x0 = min(_P.x0, P.x0)
-    xn = max(_P.x0+_L, P.x0+L)
+    xn = max(_P.x0+_L, P.x0+L)  # i guess this is not needed? 
 
     ptuple = Cptuple()
-    accum_ptuple_recursive(ptuple, derivatives)
+    sum_layers([], derivatives, ptuple)
 
     return CderP(x0=x0, L=L, y=_P.y, params=derivatives, ptuple=ptuple, P=P, _P=_P)
 
@@ -685,9 +689,9 @@ def copy_P(P, Ptype):   # Ptype =0: P is CP | =1: P is CderP | =2: P is CPP | =3
         P_derP, _P_derP = P.P, P._P  # local copy of derP.P and derP._P
         P.P, P._P = None, None  # reset
     elif Ptype == 2:
-        levels = P.levels
+        seg_levels = P.seg_levels
         layers = P.layers
-        P.levels, P.layers = [], []  # reset
+        P.seg_levels, P.layers = [], []  # reset
     elif Ptype == 3:
         PP_derP, _PP_derP = P.PP, P._PP  # local copy of derP.P and derP._P
         P.PP, P._PP = None, None  # reset
@@ -703,7 +707,7 @@ def copy_P(P, Ptype):   # Ptype =0: P is CP | =1: P is CderP | =2: P is CPP | =3
         new_P.P, new_P._P = P_derP, _P_derP
         P.P, P._P = P_derP, _P_derP
     elif Ptype == 2:
-        P.levels = levels
+        P.seg_levels = seg_levels
         P.layers = layers
         new_P.layers = layers
     elif Ptype == 3:
