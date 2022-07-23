@@ -47,7 +47,8 @@ class CPPP(CPP, CderPP):
     box = list  # for visualization only, original box before flipping
     mask__ = bool
     P__ = list  # input  # derP__ = list  # redundant to P__
-    levels = lambda: [[[]],[[]]]  # from 1st agg_recursion, levels[0] is seg_t, higher levels are segP_t s
+    seg_levels = lambda: [[[]],[[]]]  # from 1st agg_recursion, seg_levels[0] is seg_t, higher seg_levels are segP_t s
+    agg_levels = list  # from 2nd agg_recursion, PP_t = levels[0], from form_PP, before recursion
     layers = list  # from sub_recursion, each is derP_t
     root = lambda:None  # higher-order segP or PPP
 
@@ -61,7 +62,7 @@ def agg_recursion(PP_, fiPd):  # compositional recursion per blob.Plevel.
     else: ave_PP = ave_mPP
 
     V = sum([sum_named_param(PP.params, "val", fPd=fiPd) for PP in PP_])  # combined across plevels, as is comp_PP_ below
-    if V > ave_PP: 
+    if V > ave_PP:
 
         derPP_t = comp_PP_(PP_)  # compare all PPs to the average (centroid) of all other PPs, is generic for lower level
         PPPm_, PPPd_ = form_PPP_t(derPP_t)  # calls individual comp_PP if mPPP > ave_mPPP, converting derPP to CPPP,
@@ -110,9 +111,6 @@ def comp_PP_(PP_, fsubder=0):  # PP can also be PPP, etc.
         comp to ave params of compared PPs, form new layer: derivatives of all lower layers, 
         initial 3 layer nesting diagram: https://github.com/assets/52521979/ea6d436a-6c5e-429f-a152-ec89e715ebd6
         '''
-        pre_PPP.ptuple = Cptuple()
-        accum_ptuple_recursive(pre_PPP.ptuple, pre_PPP.params)
-        
         pre_PPPm_.append(copy_P(pre_PPP, Ptype=2))  # Ptype 2 is now PPP, we don't need Ptype 3?
         pre_PPPd_.append(copy_P(pre_PPP, Ptype=2))
 
@@ -242,7 +240,7 @@ def splice_PPs(PP_, frng):  # splice select PP pairs if der+ or triplets if rng+
     while PP_:
         _PP = PP_.pop(0)  # pop PP, so that we can differentiate between tested and untested PPs
         tested_segs = []  # new segs may be added during splicing, their links also need to be checked for splicing
-        _segs = _PP.levels[0]
+        _segs = _PP.seg_levels[0]
 
         while _segs:
             _seg = _segs.pop(0)
@@ -262,7 +260,7 @@ def splice_PPs(PP_, frng):  # splice select PP pairs if der+ or triplets if rng+
                         merge_PP(_PP, seg.root)
 
             tested_segs += [_seg]  # pack tested _seg
-        _PP.levels[0] = tested_segs
+        _PP.seg_levels[0] = tested_segs
         spliced_PP_ += [_PP]
 
     return spliced_PP_
@@ -270,9 +268,9 @@ def splice_PPs(PP_, frng):  # splice select PP pairs if der+ or triplets if rng+
 
 def merge_PP(_PP, PP, fPd):  # only for PP splicing
 
-    for seg in PP.levels[fPd][-1]:  # merge PP_segs into _PP:
+    for seg in PP.seg_levels[fPd][-1]:  # merge PP_segs into _PP:
         accum_PP(_PP, seg, fPd)
-        _PP.levels[fPd][-1] += [seg]
+        _PP.seg_levels[fPd][-1] += [seg]
 
     # merge uplinks and downlinks
     for uplink in PP.uplink_layers:
