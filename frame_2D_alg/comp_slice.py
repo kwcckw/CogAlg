@@ -134,6 +134,8 @@ class CPP(CP, CderP):  # P and derP params are combined into param_layers?
     Rdn = int  # for accumulation only
     nP = int  # len 2D derP__ in levels[0][fPd]?  ly = len(derP__), also x, y?
     nderP = int
+    rlayers = list  # actually is mlayers, use a same naming with CBlob 
+    alayers = list  # actually is dlayers, use a same naming with CBlob
     uplink_layers = lambda: [[],[]]
     downlink_layers = lambda: [[],[]]
     fPPm = NoneType  # PPm if 1, else PPd; not needed if packed in PP_
@@ -163,17 +165,18 @@ def comp_slice_root(blob, verbose=False):  # always angle blob, composite dert c
         PPm_, PPd_ = form_PP_root((segm_, segd_), base_rdn=2)  # forms PPs: parameterized graphs of linked segs
         # rng+, der+ fork eval per PP, forms param_layer and sub_PPs:
 
-        dir_blob.layers = [[PPm_], [PPd_]]
+        dir_blob.rlayers = [PPm_]
+        dir_blob.alayers = [PPd_]
         sub_recursion_eval(dir_blob)
 
         for PP_ in (PPm_, PPd_):  # 1st-call agglomerative recursion is per PP, appending PP.levels, not blob.levels:
             for PP in PP_:
                 agg_recursion_eval(PP, fseg=1)  # 1st call, comp_seg -> segPs.. per seg__[n], in PP.levels
                 # if fseg: use seg_levels, else agg_levels
-        dir_blob.levels = [[PPm_], [PPd_]]
+        dir_blob.agg_levels = [[PPm_], [PPd_]]
         agg_recursion_eval(dir_blob, fseg=0)  # 2nd call, dir_blob.PP_s formed in 1st call, forms PPPs and dir_blob.levels
 
-#    splice_dir_blob_(blob.dir_blobs)  # draft
+    splice_dir_blob_(blob.dir_blobs)  # draft
 
 
 def agg_recursion_eval(blob, fseg):
@@ -441,7 +444,7 @@ def sum2seg(seg_Ps, fPd):  # sum params of vertically connected Ps into segment
         if len(seg.params)>1: sum_layers(seg.params[1][0], derP.params, seg.ptuple)  # derP.params maybe nested
         else:
             seg.params.append([deepcopy(derP.params)])  # init 2nd layer
-            sum_layers([], derP.params, seg.ptuple)
+            accum_ptuple(seg.ptuple, derP.ptuple)
         derP.root = seg
     accum(seg, seg_Ps[-1], fPd)   # top P uplink_layers are not part of seg
 
@@ -468,6 +471,12 @@ def accum_P(seg, P, _):  # P is derP if from der+
     else:
         seg.params.append(deepcopy(P.ptuple))  # init 1st level of seg.params with P.ptuple
         seg.x0 = P.x0  # also need to copy other params?
+
+    # accumulate seg.ptuple
+    if not isinstance(P.ptuple.angle, list):  # angle and aangle is scalar
+        seg.ptuple.angle = 0; seg.ptuple.aangle = 0 
+    accum_ptuple(seg.ptuple, P.ptuple)
+
     P.root = seg
 
     if isinstance(P, CderP): L = P.P.ptuple.L
@@ -561,7 +570,7 @@ def sum_levels(Params, params, Ptuple):  # Capitalized names for sums, as comp_l
             sum_levels(Level, level, Ptuple)  # recursive unpack of higher levels, if any from agg+ and nested with sub_levels
         elif level:
             Params.append(deepcopy(level))  # no need to sum
-            sum_levels([], level, Ptuple)
+            sum_layers([], level, Ptuple)
 
 # Ptuple empty by default
 def sum_layers(Layers, layers, Ptuple):  # recursively unpack layers: m,d tuple pairs from der+
@@ -569,7 +578,7 @@ def sum_layers(Layers, layers, Ptuple):  # recursively unpack layers: m,d tuple 
     if isinstance(layers, Cptuple):
         if not isinstance(layers.angle, list):  # change to scalar
             Ptuple.angle = 0; Ptuple.aangle = 0
-        accum_ptuple(Ptuple, layers)  # sum Layers or Ptuple, they shouldn't need to be summed together
+        accum_ptuple(Ptuple, layers)  # accumulate Ptuple
         if Layers: accum_ptuple(Layers, layers)  # layers is a latuple, in 1st layer only
 
     else:
@@ -641,6 +650,7 @@ def comp_ptuple(_params, params):  # compare lateral or vertical tuples, similar
         _sin = _Dy / (.1 if _G == 0 else _G); _cos = _Dx / (.1 if _G == 0 else _G)
         sin_da = (cos * _sin) - (sin * _cos)  # sin(α - β) = sin α cos β - cos α sin β
         cos_da = (cos * _cos) + (sin * _sin)  # cos(α - β) = cos α cos β + sin α sin β
+        # dangle is scalar now?
         dangle = np.arctan2(sin_da, cos_da)  # vertical difference between angles
         mangle = ave_dangle - abs(dangle)  # inverse match, not redundant as summed
         dtuple.angle = dangle; mtuple.angle= mangle
@@ -659,6 +669,7 @@ def comp_ptuple(_params, params):  # compare lateral or vertical tuples, similar
         # dax = [-sin_dda0 + sin_dda1, cos_dda0 + cos_dda1]
         gay = np.arctan2( (-sin_dda0 - sin_dda1), (cos_dda0 + cos_dda1))  # gradient of angle in y?
         gax = np.arctan2( (-sin_dda0 + sin_dda1), (cos_dda0 + cos_dda1))  # gradient of angle in x?
+        # daangle is scalar now?
         daangle = np.arctan2(gay, gax)  # diff between aangles, probably wrong
         maangle = ave_daangle - abs(daangle)  # inverse match, not redundant as summed
         dtuple.aangle = daangle; mtuple.aangle = maangle
@@ -756,22 +767,17 @@ def splice_2dir_blobs(_blob, blob):
 
 def sub_recursion_eval(PP):  # evaluate each PP for rng+ and der+
 
-    sub_PPm_, sub_PPd_ = PP.layers[0][-1], PP.layers[1][-1]
-    m_comb_layers, d_comb_layers = [[], []], [[], []]
+    sub_PPm_, sub_PPd_ = PP.rlayers[-1], PP.alayers[-1]
 
-    if sub_PPm_: m_comb_layers = sub_recursion(sub_PPm_, fPd=0)  # rng+ comp_P in PPms -> param_layer, sub_PPs, rng+=n to skip clustering?
-    if sub_PPd_: d_comb_layers = sub_recursion(sub_PPd_, fPd=1)  # der+ comp_P in PPds -> param_layer, sub_PPs
-
-    for mm_comb_layer, dm_comb_layer in zip_longest(m_comb_layers[0], d_comb_layers[0], fillvalue=[]):
-        if mm_comb_layer or dm_comb_layer: PP.layers[0] += [mm_comb_layer +  dm_comb_layer]
-
-    for dm_comb_layer, dd_comb_layer in zip_longest(m_comb_layers[1], d_comb_layers[1], fillvalue=[]):
-        if dm_comb_layer or dd_comb_layer: PP.layers[1] += [dm_comb_layer +  dd_comb_layer]
+    if sub_PPm_: 
+        PP.rlayers += sub_recursion(sub_PPm_, fPd=0)  # rng+ comp_P in PPms -> param_layer, sub_PPs, rng+=n to skip clustering?
+    if sub_PPd_: 
+        PP.alayers += sub_recursion(sub_PPd_, fPd=1)  # der+ comp_P in PPds -> param_layer, sub_PPs
 
 
 def sub_recursion(PP_, fPd):  # evaluate each PP for rng+ and der+
 
-    comb_layers = [[], []]  # no separate rng_comb_layers and der_comb_layers?
+    comb_layers = []  # no separate rng_comb_layers and der_comb_layers?
 
     for PP in PP_:  # PP is generic higher-composition pattern, P is generic lower-composition pattern
 
@@ -786,20 +792,18 @@ def sub_recursion(PP_, fPd):  # evaluate each PP for rng+ and der+
 
         sub_PPm_, sub_PPd_ = form_PP_root((sub_segm_, sub_segd_), PP.rdn+1)  # forms PPs: parameterized graphs of linked segs
 
-        PP.layers = [[sub_PPm_], [sub_PPd_]]
-        sub_recursion_eval(PP)
-
-        for i, (m_comb_layer, m_layer) in enumerate(zip_longest(comb_layers[0], PP.layers[0], fillvalue=[])):
-            if i > len(comb_layers[0])-1:  # new depth for comb_layers, pack new m_comb_layer
-                comb_layers[0].append([m_layer])
+        PP.rlayers = [sub_PPm_]
+        PP.alayers = [sub_PPd_]
+        
+        # need further discussion
+        if PP.ptuple.val > ave:
+            sub_recursion_eval(PP)
+        
+        for i, (comb_layer, m_layer, d_layer) in enumerate(zip_longest(comb_layers, PP.rlayers, PP.alayers, fillvalue=[])):
+            if i > len(comb_layers)-1:  # new depth for comb_layers, pack new m_comb_layer
+                comb_layers.append(m_layer+d_layer)
             else:
-                m_comb_layer += m_layer
-
-        for i, (d_comb_layer, d_layer) in enumerate(zip_longest(comb_layers[1], PP.layers[1], fillvalue=[])):
-            if i > len(comb_layers[1])-1:  # new depth for comb_layers, pack new m_comb_layer
-                comb_layers[1].append([d_layer])
-            else:
-                d_comb_layer += d_layer
+                comb_layers[i] += m_layer+d_layer  # every 2 elements is m|d pair
 
     return comb_layers
 
