@@ -1,23 +1,27 @@
 '''
 Comp_slice is a terminal fork of intra_blob.
 -
-It traces blob axis by cross-comparing vertically adjacent Ps: horizontal slices across an edge blob.
+In natural images, objects look very fuzzy and frequently interrupted, only vaguely suggested by initial blobs and contours.
+Potential object is proximate low-gradient (flat) blobs, with rough / thick boundary of adjacent high-gradient (edge) blobs.
+These edge blobs can be dimensionality-reduced to their long axis / median line: an effective outline of adjacent flat blob.
+-
+Median line can be connected points that are most equidistant from other blob points, but we don't need to define it separately.
+An edge is meaningful if blob slices orthogonal to median line form some sort of a pattern: match between slices along the line.
+In simplified edge tracing we cross-compare among blob slices in x along y, where y is the longer dimension of a blob / segment.
+Resulting patterns effectively vectorize representation: they represent match and change between slice parameters along the blob.
+-
+This process is very complex, so it must be selective. Selection should be by combined value of gradient deviation of edge blobs
+and inverse gradient deviation of flat blobs. But the latter is implicit here: high-gradient areas are usually quite sparse.
+A stable combination of a core flat blob with adjacent edge blobs is a potential object.
+-
+So, comp_slice traces blob axis by cross-comparing vertically adjacent Ps: horizontal slices across an edge blob.
 These low-M high-Ma blobs are vectorized into outlines of adjacent flat (high internal match) blobs.
 (high match or match of angle: M | Ma, roughly corresponds to low gradient: G | Ga)
 -
 Vectorization is clustering of parameterized Ps + their derivatives (derPs) into PPs: patterns of Ps that describe edge blob.
 This process is a reduced-dimensionality (2D->1D) version of cross-comp and clustering cycle, common across this project.
-As we add higher dimensions (2D alg, 3D alg), this dimensionality reduction is done in salient high-aspect blobs
-(likely edges / contours in 2D or surfaces in 3D) to form more compressed "skeletal" representations of full-dimensional patterns.
-
-In natural images, objects and their edges look very fuzzy and frequently interrupted.
-The object is initially represented as low-gradient (flat) blob, and edge as adjacent high-gradient blobs, not a simple line.
-But these edge blobs can be dimensionality-reduced to long axis or skeleton, which is also a boundary line of adjacent flat blob.
-
-It can be found by connecting points that are most equidistant from other points, or something like that.
-But that edge blob still has dimensions, vectorization process must consider them.
-Selection is by combined value of G deviation of edge blobs and inverse G deviation of flat blob.
-A stable combination of a core flat blob with adjacent edge blobs is a potential object.
+As we add higher dimensions (3D and time), this dimensionality reduction is done in salient high-aspect blobs
+(likely edges in 2D or surfaces in 3D) to form more compressed "skeletal" representations of full-dimensional patterns.
 '''
 
 from collections import deque
@@ -165,20 +169,21 @@ def comp_slice_root(blob, verbose=False):  # always angle blob, composite dert c
         for PP_ in (PPm_, PPd_):  # 1st-call agglomerative recursion is per PP, appending PP.levels, not blob.levels:
             for PP in PP_:
                 agg_recursion_eval(PP, fseg=1)  # 1st call, comp_seg -> segPs.. per seg__[n], in PP.levels
-                # draft: if fseg: use seg_levels, else agg_levels
+                # if fseg: use seg_levels, else agg_levels
         dir_blob.levels = [[PPm_], [PPd_]]
         agg_recursion_eval(dir_blob, fseg=0)  # 2nd call, dir_blob.PP_s formed in 1st call, forms PPPs and dir_blob.levels
 
-    splice_dir_blob_(blob.dir_blobs)  # draft
+#    splice_dir_blob_(blob.dir_blobs)  # draft
 
 
 def agg_recursion_eval(blob, fseg):
 
     from agg_recursion import agg_recursion
     m_comb_levels, d_comb_levels = [[], []], [[], []]
-    
-    if fseg: PPm_, PPd_ = blob.seg_levels[0][-1], blob.seg_levels[1][-1]   # top level
-    else: PPm_, PPd_ = blob.agg_levels[0][-1], blob.agg_levels[1][-1]   # top level
+    if fseg:
+        PPm_, PPd_ = blob.seg_levels[0][-1], blob.seg_levels[1][-1]  # top level
+    else:
+        PPm_, PPd_ = blob.agg_levels[0][-1], blob.agg_levels[1][-1]  # top level
 
     if len(PPm_) > 1: m_comb_levels = agg_recursion(PPm_, fiPd=0)  # no n_extended, unconditional?
     if len(PPd_) > 1: d_comb_levels = agg_recursion(PPd_, fiPd=1)
@@ -434,12 +439,12 @@ def sum2seg(seg_Ps, fPd):  # sum params of vertically connected Ps into segment
         accum(seg, P, fPd)
         derP = P.uplink_layers[-1][0]
         if len(seg.params)>1: sum_layers(seg.params[1][0], derP.params, seg.ptuple)  # derP.params maybe nested
-        else: 
+        else:
             seg.params.append([deepcopy(derP.params)])  # init 2nd layer
             sum_layers([], derP.params, seg.ptuple)
         derP.root = seg
     accum(seg, seg_Ps[-1], fPd)   # top P uplink_layers are not part of seg
-    
+
     return seg
 
 
@@ -566,7 +571,7 @@ def sum_layers(Layers, layers, Ptuple):  # recursively unpack layers: m,d tuple 
             Ptuple.angle = 0; Ptuple.aangle = 0
         accum_ptuple(Ptuple, layers)  # sum Layers or Ptuple, they shouldn't need to be summed together
         if Layers: accum_ptuple(Layers, layers)  # layers is a latuple, in 1st layer only
-        
+
     else:
         # layer is layers or two vertuples, keep unpacking
         for Layer, layer in zip_longest(Layers, layers, fillvalue=[]):
@@ -574,7 +579,7 @@ def sum_layers(Layers, layers, Ptuple):  # recursively unpack layers: m,d tuple 
                 sum_layers(Layer, layer, Ptuple)
             elif layer:
                 Layers.append(deepcopy(layer))
-                sum_layers([], layer, Ptuple) 
+                sum_layers([], layer, Ptuple)
 
     return Ptuple
 
@@ -602,7 +607,7 @@ def comp_P(_P, P, fsubder=0):  # forms vertical derivatives of params per P in _
     else:
         _L = _P.ptuple.L; L = P.ptuple.L
     x0 = min(_P.x0, P.x0)
-    xn = max(_P.x0+_L, P.x0+L)  # i guess this is not needed? 
+    xn = max(_P.x0+_L, P.x0+L)  # i guess this is not needed?
 
     ptuple = Cptuple()
     sum_layers([], derivatives, ptuple)
@@ -797,3 +802,5 @@ def sub_recursion(PP_, fPd):  # evaluate each PP for rng+ and der+
                 d_comb_layer += d_layer
 
     return comb_layers
+
+
