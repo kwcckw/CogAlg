@@ -163,8 +163,8 @@ def comp_slice_root(blob, verbose=False):  # always angle blob, composite dert c
         P__ = slice_blob(dir_blob, verbose=False)  # cluster dir_blob.dert__ into 2D array of blob slices
         # comp_dx_blob(P__), comp_dx?
         # form PPm_ is not revised yet, probably should be from generic P_
-        Pm__ = comp_P_root(deepcopy(P__))  # scan_P_, comp_P | link_layer, adds mixed uplink_, downlink_ per P,
-        Pd__ = comp_P_root(deepcopy(P__))  # deepcopy before assigning link derPs to Ps
+        Pm__ = comp_P_root(deepcopy(P__), fPd=0)  # scan_P_, comp_P | link_layer, adds mixed uplink_, downlink_ per P,
+        Pd__ = comp_P_root(deepcopy(P__), fPd=1)  # deepcopy before assigning link derPs to Ps
 
         segm_ = form_seg_root(Pm__, root_rdn=2, fPd=0)  # forms segments: parameterized stacks of (P,derP)s
         segd_ = form_seg_root(Pd__, root_rdn=2, fPd=1)  # seg is a stack of (P,derP)s
@@ -253,14 +253,14 @@ def slice_blob(blob, verbose=False):  # forms horizontal blob slices: Ps, ~1D Ps
     return P__
 
 
-def comp_P_root(P__):  # vertically compares y-adjacent and x-overlapping Ps: blob slices, forming 2D derP__
+def comp_P_root(P__, fPd):  # vertically compares y-adjacent and x-overlapping Ps: blob slices, forming 2D derP__
 
     _P_ = P__[0]  # upper row, top-down
     for P_ in P__[1:]:  # lower row
         for P in P_:
             for _P in _P_:  # test for x overlap(_P,P) in 8 directions, derts are positive in all Ps:
                 if (P.x0 - 1 < _P.x0 + _P.ptuple.L) and (P.x0 + P.ptuple.L + 1 > _P.x0):
-                    derP = comp_P(_P, P)
+                    derP = comp_P(_P, P, fPd)
                     P.uplink_layers[-2] += [derP]  # append derPs, uplink_layers[-1] is match_derPs
                     _P.downlink_layers[-2] += [derP]
                 elif (P.x0 + P.ptuple.L) < _P.x0:
@@ -287,7 +287,7 @@ def comp_P_rng(P__, rng):  # rng+ sub_recursion in PP.P__, switch to rng+n to sk
                     if P not in [P for P_ in P__ for P in P_]:
                         append_P(P__, P)
                         P.uplink_layers += [[],[]]; P.downlink_layers += [[],[]]; P.root = object
-                    derP = comp_P(_P, P)
+                    derP = comp_P(_P, P, fPd=0)
                     P.uplink_layers[-2] += [derP]
                     _P.downlink_layers[-2] += [derP]
 
@@ -310,7 +310,7 @@ def comp_P_der(P__):  # der+ sub_recursion in PP.P__, compare P.uplinks to P.dow
                     # there maybe no x overlap between recomputed Ls of _derP and derP, compare anyway,
                     # mderP * (ave_olp_L / olp_L)? or olp(_derP._P.L, derP.P.L)?
                     # gap: neg_olp, ave = olp-neg_olp?
-                    dderP = comp_P(_derP, derP, fsubder=1)  # form higher vertical derivatives of derP or PP params
+                    dderP = comp_P(_derP, derP, fPd=1)  # form higher vertical derivatives of derP or PP params
                     derP.uplink_layers[0] += [dderP]  # pre-init layer per derP
                     _derP.downlink_layers[0] += [dderP]
                     dderPs += [dderP]
@@ -366,12 +366,21 @@ def form_seg_(seg_, P__, seg_Ps, fPd):  # form contiguous segments of vertically
 def link_eval(link_layers, fPd):
 
     # sort derPs in link_layers[-2] by their value param:
-    for i, derP in enumerate( sorted( link_layers[-2], key=lambda derP: derP.params[fPd].val, reverse=True)):
+    if fPd:
+        derP_ = sorted( link_layers[-2], key=lambda derP: derP.dtuples[-1].val, reverse=True)
+    else:
+        derP_ = sorted( link_layers[-2], key=lambda derP: derP.mtuples[-1].val, reverse=True)
+        
+    for i, derP in enumerate(derP_):
 
-        if fPd: derP.rdn += derP.params[fPd].val > derP.params[1-fPd].val  # mP > dP
-        else: rng_eval(derP, fPd)  # reset derP.val, derP.rdn
+        if fPd: 
+            derP.rdn += derP.mtuples[-1].val > derP.dtuples[-1].val  # mP > dP
+            val = derP.dtuples[-1].val
+        else:   
+            rng_eval(derP, fPd)  # reset derP.val, derP.rdn
+            val = derP.mtuples[-1].val
 
-        if derP.params[fPd].val > vaves[fPd] * derP.rdn * (i+1):  # ave * rdn to stronger derPs in link_layers[-2]
+        if val > vaves[fPd] * derP.rdn * (i+1):  # ave * rdn to stronger derPs in link_layers[-2]
             link_layers[-1].append(derP)  # misses = link_layers[-2] not in link_layers[-1]
 
 
@@ -385,11 +394,19 @@ def rng_eval(derP, fPd):  # compute value of combined mutual derPs: overlap betw
     rdn = 1
     olp_val = 0
     for derP in common_derP_:
-        rdn += derP.params[fPd].val > derP.params[1-fPd].val  # dP > mP if fPd, else mP > dP
-        olp_val += derP.params[fPd].val
+        nolp = len(common_derP_)
+        mtuple = derP.mtuples[-1]
+        dtuple = derP.dtuples[-1]
+        
+        if fPd: 
+            rdn += dtuple.val > mtuple.val  # dP > mP if fPd
+            olp_val += dtuple.val
+            dtuple.val = olp_val / nolp
+        else:   
+            rdn += mtuple.val > dtuple.val  #  mP > dP if not fPd
+            olp_val += mtuple.val
+            mtuple.val = olp_val / nolp
 
-    nolp = len(common_derP_)
-    derP.params[fPd].val = olp_val / nolp
     derP.rdn += (rdn / nolp) > .5  # no fractional rdn?
 
 
@@ -579,23 +596,14 @@ def append_P(P__, P):  # pack P into P__ in top down sequence
             if P.y > y: P__.insert(i, [P])  # PP.P__.insert(P.y - current_ys[-1], [P])
 
 
-def comp_layers(_layers, layers, der_layers, fsubder):  # recursively unpack layers: m,d ptuple pairs, if any from der+
+def comp_layers(_layers, layers, der_layers, fPd):  # recursively unpack layers: m,d ptuple pairs, if any from der+
 
     if isinstance(_layers, Cptuple):  # 1st-level layers is latuple
-        der_layers += comp_ptuple(_layers, layers)
-
-    elif isinstance(_layers[0], Cptuple):  # layers is two vertuples, 1st level in der+
-        dtuple = comp_ptuple(_layers[1], _layers[1])
-
-        if fsubder:  # sub_recursion mtuples are not compared
-            der_layers += [dtuple]
-        else:
-            mtuple = comp_ptuple(_layers[0], _layers[0])
-            der_layers += [mtuple, dtuple]
+        der_layers += comp_ptuple(_layers, layers)[fPd]
 
     else:  # keep unpacking layers:
         for _layer, layer in zip(_layers, layers):
-            der_layers += [comp_layers(_layer, layer, der_layers, fsubder=fsubder)]
+            der_layers += [comp_layers(_layer, layer, [], fPd=fPd)]
 
     return der_layers  # m,d ptuple pair in each layer, possibly nested
 
@@ -623,25 +631,24 @@ def sum_layers(Layers, layers):
             Layers.append(deepcopy(ptuple))
 
 
-def comp_P(_P, P, fsubder=0):  # forms vertical derivatives of params per P in _P.uplink, conditional ders from norm and DIV comp
+def comp_P(_P, P, fPd):  # forms vertical derivatives of params per P in _P.uplink, conditional ders from norm and DIV comp
 
     if isinstance(_P, CP):  # just to save the call, or this testing can be done in comp_layers
         derivatives = comp_ptuple(_P.ptuple, P.ptuple)  # comp lataple (P)
+        players = [_P.ptuple, derivatives[fPd]]
     else:
-        derivatives = comp_layers(_P.params, P.params, [], fsubder=fsubder)  # comp vertuple pairs (derP)
+        derivatives = comp_layers(_P.players, P.players, [], fPd=fPd)  # comp vertuple pairs (derP)
+        players = [_P.players, derivatives[fPd]]
 
-    if isinstance(_P, CderP):
-        _L = _P.P.ptuple.L; L = P.P.ptuple.L
-    else:
-        _L = _P.ptuple.L; L = P.ptuple.L
-    #?
-    x0 = min(_P.x0, P.x0)
-    xn = max(_P.x0+_L, P.x0+L)  # i guess this is not needed?
+    if isinstance(_P, CderP): L = P.P.ptuple.L
+    else: L = P.ptuple.L
 
-    mtuple, dtuple = Cptuple(), Cptuple() 
-    sum_layers([], derivatives, mtuple, dtuple)
+    mtuples, dtuples = [], []
+    # accumulate mtuples and dtuples with players here
+    # not quite sure how to sum here
+    
+    return CderP(x0=min(_P.x0, P.x0), L=L, y=_P.y, players=players, mtuples=mtuples, dtuples=dtuples, P=P, _P=_P)
 
-    return CderP(x0=x0, L=L, y=_P.y, params=derivatives, mtuple=mtuple, dtuple=dtuple, P=P, _P=_P)
 
 
 def comp_ptuple(_params, params):  # compare lateral or vertical tuples, similar operations for m and d params
