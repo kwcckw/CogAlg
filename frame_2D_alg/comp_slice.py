@@ -180,16 +180,33 @@ def comp_slice_root(blob, verbose=False):  # always angle blob, composite dert c
         if dir_blob.G > ave_dPP * dir_blob.rdn+1+(not mrdn) and len(PPd_) > ave_nsub:
             dir_blob.dlayers += sub_recursion(PPd_, ave_dPP, fPd=1)  # der+ comp_P in PPds -> param_layer, sub_PPs
 
-        for PP_ in (PPm_, PPd_):  # 1st-call agglomerative recursion is per PP, appending PP.levels, not blob.levels:
-            for PP in PP_:
-                agg_recursion_eval(PP, fseg=1)  # 1st call, comp_seg -> segPs.. per seg__[n], in PP.levels
-                # if fseg: add seg_levels, else agg_levels
-        dir_blob.agg_levels = [[PPm_], [PPd_]]
-        agg_recursion_eval(dir_blob, fseg=0)  # 2nd call, dir_blob.PP_s formed in 1st call, forms PPPs and dir_blob.levels
+        # unpacked version:
+        from agg_recursion import agg_recursion
+        # agg_recursion for PP.seg_levels
+        for PP in PPm_:
+            segm_ = PP.seg_levels[-1]
+            mval = sum([seg.mval for seg in segm_])
+            if mval > ave_mPP and len(segm_) > 1: 
+                PP.seg_levels += agg_recursion(segm_, fiPd=0) 
+        for PP in PPd_:
+            segd_ = PP.seg_levels[-1]
+            dval = sum([seg.dval for seg in segd_])
+            if dval > ave_dPP and len(segd_) > 1: 
+                PP.seg_levels += agg_recursion(segd_, fiPd=0) 
 
+        # agg_recursion for dir_blob.agg_levels
+        mval = sum([PP.mval for PP in PPm_])
+        dval = sum([PP.dval for PP in PPd_])
+        dir_blob.agg_levels = [[PPm_], [PPd_]]
+        if mval > ave_mPP and len(PPm_) > 1: 
+            dir_blob.agg_levels[0] += agg_recursion(PPm_, fiPd=0)  
+        if dval > ave_dPP and len(PPd_) > 1: 
+            dir_blob.agg_levels[1] += agg_recursion(PPd_, fiPd=1)
+        
     splice_dir_blob_(blob.dir_blobs)  # draft
 
 
+'''
 def agg_recursion_eval(blob, fseg):  # unpack?
 
     from agg_recursion import agg_recursion
@@ -207,6 +224,7 @@ def agg_recursion_eval(blob, fseg):  # unpack?
 
     for m_sub_PPPd_, d_sub_PPPd_ in zip_longest(m_comb_levels[1], d_comb_levels[1], fillvalue=[]):
         if m_sub_PPPd_ or d_sub_PPPd_: blob.levels[-1][1] += [m_sub_PPPd_ + d_sub_PPPd_]
+'''
 
 
 def slice_blob(blob, verbose=False):  # forms horizontal blob slices: Ps, ~1D Ps, in select smooth edge (high G, low Ga) blobs
@@ -276,16 +294,17 @@ def comp_P(_P, P, fPd):  # forms vertical derivatives of params per P in _P.upli
         mtuple, dtuple = comp_ptuple(_P.ptuple, P.ptuple)
         mval = mtuple.val; dval = dtuple.val
         mplayer = [mtuple]; dplayer = [dtuple]
-        players = [_P.ptuple] + [dtuple] if fPd else [mtuple]
+        players = [[dtuple] if fPd else [mtuple]]  # single layer, and each layer is nested
+
 
     else:  # P is derP from sub_recursion
         der_tuples = comp_layers(_P.players, P.players)
         mval = sum([mtuple.val for mtuple in der_tuples[0]])
         dval = sum([dtuple.val for dtuple in der_tuples[0]])
         mplayer = der_tuples[0]; dplayer = der_tuples[1]  # no extra bracket because elements are already packed in list
-        players = [*_P.players, *der_tuples[fPd]]  # use * to unpack der_tuples[fPd] so that players is flat
+        players = [*_P.players, der_tuples[fPd]]  
 
-    return CderP(x0=min(_P.x0, P.x0), L=players[0].L, y=_P.y, players=players, mplayer=mplayer, dplayer=dplayer, mval=mval, dval=dval, P=P, _P=_P)
+    return CderP(x0=min(_P.x0, P.x0), L=players[0][0].L, y=_P.y, players=players, mplayer=mplayer, dplayer=dplayer, mval=mval, dval=dval, P=P, _P=_P)
 
 # not reviewed:
 def comp_P_rng(P__, rng):  # rng+ sub_recursion in PP.P__, switch to rng+n to skip clustering?
@@ -485,17 +504,17 @@ def sum2seg(seg_Ps, fPd):  # sum params of vertically connected Ps into segment
         accum_derP(seg, derP)  # draft, no separate accum_P, not for agg_recursion
         derP.root = seg
 
-    accum_derP(seg, seg_Ps[-1].P)  # accum last P only, top P uplink_layers are not part of seg
-    seg.y0 = seg_Ps[0].P.y
+    accum_derP(seg, seg_Ps[-1])  # accum last P only, top P uplink_layers are not part of seg
+    seg.y0 = seg_Ps[0].y
     seg.yn = seg.y0 + seg.L
 
     return seg
 
 
-def accum_derP(seg, derP):  # derP might be CP, unlikely
+def accum_derP(seg, derP):  # derP might be CP
 
     if isinstance(derP, CP):
-        sum_layers(seg.players, [derP.ptuple])
+        sum_layers(seg.players, [[derP.ptuple]])
         seg.x0 = min(seg.x0, derP.x0)
         seg.xn = max(seg.xn, derP.x0 + derP.ptuple.L)
     else:
@@ -503,7 +522,7 @@ def accum_derP(seg, derP):  # derP might be CP, unlikely
         accum_player(seg.mplayer, derP.mplayer, seg.mval, derP.mval)  # accum mplayer
         accum_player(seg.dplayer, derP.dplayer, seg.dval, derP.dval)  # accum mplayer
         seg.x0 = min(seg.x0, derP.x0)
-        seg.xn = max(seg.xn, derP.x0 + derP.players[0].L)
+        seg.xn = max(seg.xn, derP.x0 + derP.players[0][0].L)
 
     derP.root = seg
 
@@ -556,10 +575,10 @@ def accum_PP(PP, inp, fPd):  # comp_slice inp is seg, or segPP in agg+
 
             # add terminated seg links for rng+:
             for derP in inp.P__[0].downlink_layers[-1]:  # if downlink not in current PP's downlink and not part of the seg in current PP:
-                if derP not in PP.downlink_layers[-1] and derP.P.root not in PP.seg_levels[fPd][-1]:
+                if derP not in PP.downlink_layers[-1] and derP.P.root not in PP.seg_levels[-1]:
                     PP.downlink_layers[-1] += [derP]
             for derP in inp.P__[-1].uplink_layers[-1]:  # if downlink not in current PP's downlink and not part of the seg in current PP:
-                if derP not in PP.downlink_layers[-1] and derP.P.root not in PP.seg_levels[fPd][-1]:
+                if derP not in PP.downlink_layers[-1] and derP.P.root not in PP.seg_levels[-1]:
                     PP.uplink_layers[-1] += [derP]
 
 
@@ -567,11 +586,11 @@ def sum_layers(Layers, layers):
 
     for Layer, layer in zip_longest(Layers, layers, fillvalue=[]):
         if Layer and layer:
-            for Ptuple, ptuple in zip_longest(Layers, layers, fillvalue=[]):
+            for Ptuple, ptuple in zip_longest(Layer, layer, fillvalue=[]):
                 if Ptuple and ptuple:
                     accum_ptuple(Ptuple, ptuple)  # always same type now
                 elif ptuple:
-                    Layers.append(deepcopy(ptuple))
+                    Layer.append(deepcopy(ptuple))
         elif layer:
             Layers.append(deepcopy(layer))
 
