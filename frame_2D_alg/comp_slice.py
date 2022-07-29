@@ -272,15 +272,19 @@ def comp_P(_P, P, fPd):  # forms vertical derivatives of params per P in _P.upli
         mtuple, dtuple = comp_ptuple(_P.ptuple, P.ptuple)
         mval = mtuple.val; dval = dtuple.val
         mplayer = [mtuple]; dplayer = [dtuple]
-        players = [_P.ptuple]  # dtuple if fPd else mtuple added in form_PP
-
+        L = _P.ptuple.L
+        fPds = [fPd]
     else:  # P is derP from sub_recursion
-        mplayer, dplayer = comp_players(_P.players, P.players)
+        if fPd: _player = _P.dplayer; player = P.dplayer
+        else:   _player = _P.mplayer; player = P.mplayer
+        mplayer, dplayer = comp_players([_player], [player], _P.player_fPds, P.player_fPds)
         mval = sum([mtuple.val for mtuple in mplayer])
         dval = sum([dtuple.val for dtuple in dplayer])
-        players = _P.players  # [dplayer] if fPd else [mplayer]] added in form_PP
+        L = _player[0].L
+        fPds = deepcopy(_P.player_fPds)
+        fPds.append(fPd)
 
-    return CderP(x0=min(_P.x0, P.x0), L=players[0][0].L, y=_P.y, players=players, mplayer=mplayer, dplayer=dplayer, mval=mval, dval=dval, P=P, _P=_P)
+    return CderP(x0=min(_P.x0, P.x0), L=L, y=_P.y, fPds=fPds, mplayer=mplayer, dplayer=dplayer, mval=mval, dval=dval, P=P, _P=_P)
 
 # not reviewed:
 def comp_P_rng(P__, rng):  # rng+ sub_recursion in PP.P__, switch to rng+n to skip clustering?
@@ -477,32 +481,36 @@ def sum2seg(seg_Ps, fPd):  # sum params of vertically connected Ps into segment
 
     for P in seg_Ps[:-1]:
         derP = P.uplink_layers[-1][0]
-        accum_derP(seg, derP)  # draft, no separate accum_P, not for agg_recursion
+        # no accumulation of seg_Ps here?
+        accum_derP(seg, derP, fPd)  # draft, no separate accum_P, not for agg_recursion
         derP.root = seg
 
-    accum_derP(seg, seg_Ps[-1])  # accum last P only, top P uplink_layers are not part of seg
+    accum_derP(seg, seg_Ps[-1], fPd)  # accum last P only, top P uplink_layers are not part of seg
     seg.y0 = seg_Ps[0].y
     seg.yn = seg.y0 + seg.L
 
     return seg
 
-# not revised to append players per fPd
-def accum_derP(seg, derP):  # derP might be CP, though unlikely
+
+def accum_derP(seg, derP, fPd):  # derP might be CP, though unlikely
 
     derP.root = seg
 
     seg.x0 = min(seg.x0, derP.x0)
 
     if isinstance(derP, CP):
-        sum_players(seg.players, [[derP.ptuple]])
+        if not seg.players: seg.players.append([deepcopy(derP.ptuple)])
+        else:               sum_players(seg.players, [[derP.ptuple]])
         seg.xn = max(seg.xn, derP.x0 + derP.ptuple.L)
     else:
-        sum_players(seg.players, derP.players)
+        if fPd: player = derP.dplayer
+        else:   player = derP.mplayer
+        sum_players(seg.players, [player])
         accum_player(seg.mplayer, derP.mplayer)
         accum_player(seg.dplayer, derP.dplayer)
         seg.mval+=derP.mval
         seg.dval+=derP.dval  # higher players only
-        seg.xn = max(seg.xn, derP.x0 + derP.players[0][0].L)
+        seg.xn = max(seg.xn, derP.x0 + player[0].L)
 
 
 def accum_player(Player, player):  # accum mplayer or dplayer
@@ -526,6 +534,10 @@ def sum2PP(PP_segs, base_rdn, fPd):  # sum PP_segs into PP
 def accum_PP(PP, inp, fPd):  # comp_slice inp is seg, or segPP in agg+
 
     sum_players(PP.players, inp.players)
+    accum_player(PP.mplayer, inp.mplayer)
+    accum_player(PP.dplayer, inp.dplayer)
+    PP.mval += inp.mval
+    PP.dval += inp.dval
     inp.root = PP
     # 2nd player is external params:
     PP.L += inp.L  # area
@@ -570,6 +582,7 @@ def sum_players(Layers, layers):  # similar to accum_player? no accum across fPd
                     Layer.append(deepcopy(ptuple))
         elif layer:
             Layers.append(deepcopy(layer))
+
 
 def accum_ptuple(Ptuple, ptuple):  # lataple or vertuple
 
