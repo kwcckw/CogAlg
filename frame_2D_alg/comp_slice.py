@@ -163,8 +163,8 @@ def comp_slice_root(blob, verbose=False):  # always angle blob, composite dert c
         P__ = slice_blob(dir_blob, verbose=False)  # cluster dir_blob.dert__ into 2D array of blob slices
         comp_P_root(P__)  # scan_P_, comp_P | link_layer, adds mixed uplink_, downlink_ per P; comp_dx_blob(P__), comp_dx?
 
-        segm_ = form_seg_root(deepcopy(P__), fPd=0)  # forms segments: parameterized stacks of (P,derP)s
-        segd_ = form_seg_root(deepcopy(P__), fPd=1)
+        segm_ = form_seg_root([[copy_P(P) for P in P_] for P_ in P__], fPd=0)  # forms segments: parameterized stacks of (P,derP)s
+        segd_ = form_seg_root([[copy_P(P) for P in P_] for P_ in P__], fPd=1)
         PPm_, PPd_ = form_PP_root((segm_, segd_), base_rdn=2, fPds=[0])  # forms PPs: parameterized graphs of linked segs
 
         dir_blob.rlayers = [PPm_]; dir_blob.dlayers = [PPd_]
@@ -182,11 +182,11 @@ def comp_slice_root(blob, verbose=False):  # always angle blob, composite dert c
         for PP in PPm_:
             segm_ = PP.seg_levels[-1]
             if PP.mval > avem and len(segm_) > ave_nsub:
-                PP.seg_levels += agg_recursion(segm_, fiPd=0)  # if fPd?
+                PP.seg_levels += agg_recursion(segm_, fPd=0)  # if fPd?
         for PP in PPd_:
             segd_ = PP.seg_levels[-1]
             if PP.dval > aved and len(segd_) > ave_nsub:
-                PP.seg_levels += agg_recursion(segd_, fiPd=1)
+                PP.seg_levels += agg_recursion(segd_, fPd=1)
         # agg_levels +:
         dir_blob.agg_levels = [[PPm_], [PPd_]]
         if sum([PP.mval for PP in PPm_]) > avem and len(PPm_) > ave_nsub:  # need to incr avem, aved?
@@ -502,6 +502,12 @@ def sum2PP(PP_segs, base_rdn, fPd, fPds):  # sum PP_segs into PP
 
     for seg in PP_segs:
         accum_PP(PP, seg)
+    
+    # add new layer into PP, number of elements in PP.player should be same with PP.fPds
+    if fPd and PP.dplayer: PP.players += [PP.dplayer]
+    elif not fPd and PP.mplayer: PP.players += [PP.mplayer]
+    else: PP.players += [Cptuple()]
+    # for single seg with single P without any derP to accumulate , add empty Cptuple() instead? 
 
     return PP
 
@@ -671,7 +677,7 @@ def append_P(P__, P):  # pack P into P__ in top down sequence
             if P.y > y: P__.insert(i, [P])  # PP.P__.insert(P.y - current_ys[-1], [P])
 
 
-def copy_P(P, Ptype):   # Ptype =0: P is CP | =1: P is CderP | =2: P is CPP | =3: P is CderPP
+def copy_P(P, Ptype=0):   # Ptype =0: P is CP | =1: P is CderP | =2: P is CPP | =3: P is CderPP
 
     uplink_layers, downlink_layers = P.uplink_layers, P.downlink_layers  # local copy of link layers
     P.uplink_layers, P.downlink_layers = [], []  # reset link layers
@@ -690,10 +696,11 @@ def copy_P(P, Ptype):   # Ptype =0: P is CP | =1: P is CderP | =2: P is CPP | =3
         P.PP, P._PP = None, None  # reset
 
     new_P = P.copy()  # copy P with empty root and link layers, reassign link layers:
-    new_P.uplink_layers += uplink_layers + [[], []]
-    new_P.downlink_layers += downlink_layers + [[], []]
+    new_P.uplink_layers += copy(uplink_layers)
+    new_P.downlink_layers += copy(downlink_layers)
 
-    P.uplink_layers, P.downlink_layers = uplink_layers, downlink_layers  # reassign link layers
+    # shallow copy to create new list 
+    P.uplink_layers, P.downlink_layers = copy(uplink_layers), copy(downlink_layers)  # reassign link layers
     P.root = seg  # reassign root
     # reassign other list params
     if Ptype == 1:
@@ -703,8 +710,8 @@ def copy_P(P, Ptype):   # Ptype =0: P is CP | =1: P is CderP | =2: P is CPP | =3
         P.seg_levels = seg_levels
         P.rlayers = rlayers
         P.dlayers = dlayers
-        new_P.rlayers = rlayers
-        new_P.dlayers = dlayers
+        new_P.rlayers = copy(rlayers)
+        new_P.dlayers = copy(dlayers)
     elif Ptype == 3:
         new_P.PP, new_P._PP = PP_derP, _PP_derP
         P.PP, P._PP = PP_derP, _PP_derP

@@ -34,7 +34,9 @@ class CderPP(ClusterStructure):  # tuple of derivatives in PP uplink_ or downlin
 class CPPP(CPP, CderPP):
 
     # draft
-    params = list  # derivation layers += derP params per der+, param L is actually Area
+    players = list  # max n ptuples in layer = n ptuples in all lower layers: 1, 1, 2, 4, 8...
+    mplayer = list  # list of ptuples in current derivation layer per fork
+    dplayer = list
     sign = bool
     rng = lambda: 1  # rng starts with 1
     rdn = int  # for PP evaluation, recursion count + Rdn / nderPs
@@ -54,24 +56,25 @@ class CPPP(CPP, CderPP):
     root = lambda:None  # higher-order segP or PPP
 
 # draft
-def agg_recursion(PP_, fiPd):  # compositional recursion per blob.Plevel.
+def agg_recursion(PP_, fPd):  # compositional recursion per blob.Plevel.
     # P, PP, PPP are relative terms, each may be of any composition order
 
     comb_levels = [[], []]
 
-    if fiPd: ave_PP = ave_dPP
+    if fPd: ave_PP = ave_dPP
     else: ave_PP = ave_mPP
 
-    V = sum([sum_named_param(PP.params, "val", fPd=fiPd) for PP in PP_])  # combined across plevels, as is comp_PP_ below
+    if fPd: V = sum([PP.dval for PP in PP_])
+    else:    V = sum([PP.mval for PP in PP_])
+    
     if V > ave_PP:
 
-        derPP_t = comp_PP_(PP_, fPd=fiPd)  # compare all PPs to the average (centroid) of all other PPs, is generic for lower level
+        derPP_t = comp_PP_(PP_, fPd=fPd)  # compare all PPs to the average (centroid) of all other PPs, is generic for lower level
         PPPm_, PPPd_ = form_PPP_t(derPP_t)  # calls individual comp_PP if mPPP > ave_mPPP, converting derPP to CPPP,
 
-        # sections below need further update, sub_recursion_eval is applicable on single PPP only
         # may splice PPs instead of forming PPPs
-        sub_recursion_eval(PPPm_)  # fPd=0, rng+  # for derPP_ in PPPs formed by indiv_comp_PP_
-        sub_recursion_eval(PPPd_)  # fPd=1, der+
+        sub_recursion(PPPm_, fPd=0)  # fPd=0, rng+  # for derPP_ in PPPs formed by indiv_comp_PP_
+        sub_recursion(PPPd_, fPd=1)  # fPd=1, der+
 
         comb_levels[0].append(PPPm_); comb_levels[1].append(PPPd_)  # pack current level PPP
         m_comb_levels, d_comb_levels = [[],[]], [[],[]]
@@ -104,15 +107,13 @@ def comp_PP_(PP_, fsubder=0, fPd=0):  # PP can also be PPP, etc.
         compared_PP_ = copy(PP_)  # shallow copy
         compared_PP_.remove(PP)
 
-        if fPd: layers = PP.dlayers
-        else:   layers = PP.rlayers
-
-        pre_PPP = CPP(params=deepcopy(PP.params), layers= layers+[PP_], x0=PP.x0, xn=PP.xn, y0=PP.y0, yn=PP.yn )
-        summed_params = []  # initialize params
+        pre_PPP = CPP(players=deepcopy(PP.players), mplayer=deepcopy(PP.mplayer), dplayer=deepcopy(PP.dplayer), x0=PP.x0, xn=PP.xn, y0=PP.y0, yn=PP.yn )
+        summed_players = []  # initialize params
         for compared_PP in compared_PP_:
-            sum_levels(summed_params, compared_PP.params, pre_PPP.mptuple, pre_PPP.dptuple)  # accum summed_params over compared_PP_
+            sum_players(summed_players, compared_PP.players)  # accum summed_params over compared_PP_
         # comp_ave- defined pre_PPP inherits PP.params
-        pre_PPP.params += [comp_levels(PP.params, summed_params, der_levels=[], fsubder=fsubder)]  # sum_params is now ave_params
+        # need update comp_levels here
+        pre_PPP.players += [comp_levels(PP.players, summed_players, der_levels=[], fsubder=fsubder)]  # sum_params is now ave_params
         '''
         comp to ave params of compared PPs, form new layer: derivatives of all lower layers, 
         initial 3 layer nesting diagram: https://github.com/assets/52521979/ea6d436a-6c5e-429f-a152-ec89e715ebd6
