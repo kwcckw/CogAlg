@@ -104,11 +104,19 @@ def comp_PP_(PP_, fsubder=0, fPd=0):  # PP can also be PPP, etc.
         Players, Mplayer, Dplayer = [],[],[]  # initialize params
 
         for compared_PP in compared_PP_:  # accum summed_params over compared_PP_:
-            sum_players(Players, compared_PP.players)
-            sum_ptuples(Mplayer, compared_PP.mplayer)
-            sum_ptuples(Dplayer, compared_PP.dplayer)
+            sum_player(Players, compared_PP.players)
+            sum_player(Mplayer, compared_PP.mplayer)
+            sum_player(Dplayer, compared_PP.dplayer)
 
-        pre_PPP.players += [comp_levels(PP.players, Players, der_levels=[], fsubder=fsubder)]  # sum_params is now ave_params
+        mplayer, dplayer = comp_players(PP.players, Players)
+        if fPd: pre_PPP.players += dplayer
+        else:   pre_PPP.players += mplayer
+        
+        # not sure about this, add Mplayer or Dplayer as new element? Or replace it?
+        pre_PPP.mplayer += Mplayer
+        pre_PPP.dplayer += dplayer
+        
+
         '''
         comp to ave params of compared PPs, pre_PPP inherits PP.params, forms new player: derivatives of all lower layers, 
         initial 3 layer nesting diagram: https://github.com/assets/52521979/ea6d436a-6c5e-429f-a152-ec89e715ebd6
@@ -172,12 +180,26 @@ def form_PPP_t(pre_PPP_t):  # form PPs from match-connected segs
 
     for fPd, pre_PPP_ in enumerate(pre_PPP_t):
         # sort by value of last layer: derivatives of all lower layers:
-        pre_PPP_ = sorted(pre_PPP_, key=lambda pre_PPP: sum_named_param(pre_PPP.params[-1], 'val', fPd), reverse=True)  # descending order
+        if fPd: pre_PPP_ = sorted(pre_PPP_, key=lambda pre_PPP: pre_PPP.dval, reverse=True)  # descending order
+        else:   pre_PPP_ = sorted(pre_PPP_, key=lambda pre_PPP: pre_PPP.mval, reverse=True)  # descending order
+        
         PPP_ = []
         for i, pre_PPP in enumerate(pre_PPP_):
-            pre_PPP_val = sum_named_param(pre_PPP.params, 'val', fPd=fPd)
+            if fPd: 
+                pre_PPP_val = pre_PPP.dval
+            else:   
+                pre_PPP_val = pre_PPP.mval
+
+            for mplayer, dplayer in zip(pre_PPP.mplayer, pre_PPP.dplayer):
+                if fPd:  
+                    pre_PPP.rdn += pre_PPP.dplayer[-1].val >pre_PPP.mplayer[-1].val
+                else:
+                    pre_PPP.rdn += pre_PPP.mplayer[-1].val >pre_PPP.dplayer[-1].val
+            '''
             for param_layer in pre_PPP.params:  # may need recursive unpack here
                 pre_PPP.rdn += sum_named_param(param_layer, 'val', fPd=fPd)> sum_named_param(param_layer, 'val', fPd=1-fPd)
+            '''
+            
             ave = vaves[fPd] * pre_PPP.rdn * (i+1)  # derPP is redundant to higher-value previous derPPs in derPP_
             if pre_PPP_val > ave:
                 PPP_ += [pre_PPP]  # base derPP and PPP is CPP
