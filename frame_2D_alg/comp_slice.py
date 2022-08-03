@@ -109,8 +109,8 @@ class CderP(ClusterStructure):  # tuple of derivatives in P uplink_ or downlink_
     players, mplayer, dplayer, fPds are temporary, replaced by PP
     '''
     players = list  # max n ptuples in layer = n ptuples in all lower layers: 1, 1, 2, 4, 8...
-    mplayer = list  # list of ptuples in current derivation layer per fork
-    dplayer = list  # not needed: player mvals, dvals, map to implicit sub_layers in m|dplayer
+    mplayer = lambda: [Cptuple()]  # list of ptuples in current derivation layer per fork
+    dplayer = lambda: [Cptuple()]  # not needed: player mvals, dvals, map to implicit sub_layers in m|dplayer
     mval = float  # summed player vals, both are signed
     dval = float
     x0 = int
@@ -129,8 +129,8 @@ class CPP(CderP):  # derP params include P.ptuple
 
     players = list  # 1st plevel, same as in derP but L is area
     fPds = list  # fPd per player, 1st=0, comp in agg_recursion; no vals
-    mplayer = list
-    dplayer = list
+    mplayer = lambda: [Cptuple()]  # default is empty ptuple
+    dplayer = lambda: [Cptuple()]
     x0 = int  # box, update by max, min; this is a 2nd plevel?
     xn = int
     y0 = int
@@ -319,8 +319,8 @@ def comp_P_rng(P__, rng):  # rng+ sub_recursion in PP.P__, switch to rng+n to sk
                     P.uplink_layers[-2] += [derP]
                     _P.downlink_layers[-2] += [derP]
 
-    Pm__= [[copy_P(P, Ptype=0) for P in P_] for P_ in P__ ]
-    Pd__= [[copy_P(P, Ptype=0) for P in P_] for P_ in P__ ]
+    Pm__= [[copy_P(P) for P in P_] for P_ in P__ ]
+    Pd__= [[copy_P(P) for P in P_] for P_ in P__ ]
 
     return Pm__, Pd__  # new_mP__, new_dP__
 
@@ -346,8 +346,8 @@ def comp_P_der(P__):  # der+ sub_recursion in PP.P__, compare P.uplinks to P.dow
             dderPs_ += dderPs  # row of dderPs
         dderPs__ += [dderPs_]
 
-    dderPm__ = [[copy_P(dderP, Ptype=1) for dderP in dderP_] for dderP_ in dderPs__ ]
-    dderPd__ = [[copy_P(dderP, Ptype=1) for dderP in dderP_] for dderP_ in dderPs__ ]
+    dderPm__ = [[copy_P(dderP) for dderP in dderP_] for dderP_ in dderPs__ ]
+    dderPd__ = [[copy_P(dderP) for dderP in dderP_] for dderP_ in dderPs__ ]
 
     return dderPm__, dderPd__
 
@@ -493,7 +493,7 @@ def sum2seg(seg_Ps, fPd, fPds):  # sum params of vertically connected Ps into se
     seg.y0 = seg_Ps[0].y
     seg.yn = seg.y0 + len(seg_Ps)
 
-    seg.players += seg.dplayer if fPd else seg.mplayer
+    seg.players += [seg.dplayer if fPd else seg.mplayer]  # added extra bracket for nesting
     seg.fPds = fPds + [fPd]  # fPds is of root PP
 
     return seg
@@ -524,7 +524,7 @@ def sum2PP(PP_segs, base_rdn):  # sum PP_segs into PP
 
     for seg in PP_segs:
         accum_PP(PP, seg)
-    PP.fPds = seg.fPds  # use last for convinience
+    PP.fPds = deepcopy(seg.fPds)  # use last for convinience
 
     return PP
 
@@ -615,7 +615,12 @@ def comp_ptuple(_params, params):  # compare lateral or vertical tuples, similar
     dtuple, mtuple = Cptuple(), Cptuple()
     dval, mval = 0, 0
 
-    flatuple = isinstance(_params.angle, list)  # else vertuple
+    fvertuple = 0 ; flatuple = 0
+    if isinstance(_params.angle, list) and isinstance(params.angle, list):  # both latuple
+        flatuple = 1
+    elif not isinstance(_params.angle, list) and not isinstance(params.angle, list):  # both vertuple
+        fvertuple = 1
+
     rn = _params.n / params.n  # normalize param as param*rn, for n-invariant ratio of compared params:
     # _param / param*rn = (_param/_n) / (param/n)?
     # same set:
@@ -660,7 +665,7 @@ def comp_ptuple(_params, params):  # compare lateral or vertical tuples, similar
         dtuple.aangle = daangle; mtuple.aangle = maangle
         dval += abs(daangle); mval += maangle
 
-    else:  # vertuple, all ders are scalars:
+    elif fvertuple:  # vertuple, all ders are scalars:
         comp("val", _params.val, params.val*rn / hyp, dval, mval, dtuple, mtuple, ave_mval, finv=0)
         comp("angle", _params.angle, params.angle*rn / hyp, dval, mval, dtuple, mtuple, ave_dangle, finv=0)
         comp("aangle", _params.aangle, params.aangle*rn / hyp, dval, mval, dtuple, mtuple, ave_daangle, finv=0)
@@ -694,8 +699,18 @@ def append_P(P__, P):  # pack P into P__ in top down sequence
             if P.y > y: P__.insert(i, [P])  # PP.P__.insert(P.y - current_ys[-1], [P])
 
 
-def copy_P(P, Ptype=0):   # Ptype =0: P is CP | =1: P is CderP | =2: P is CPP | =3: P is CderPP
+def copy_P(P, iPtype=None):   # Ptype =0: P is CP | =1: P is CderP | =2: P is CPP | =3: P is CderPP
 
+    if not iPtype:  # assign Ptype based on instance type if no input type is provided
+        if isinstance(P, CPP):
+            Ptype = 2
+        elif isinstance(P, CderP):
+            Ptype = 1
+        elif isinstance(P, CP):
+            Ptype = 0
+    else:
+        Ptype = iPtype
+    
     uplink_layers, downlink_layers = P.uplink_layers, P.downlink_layers  # local copy of link layers
     P.uplink_layers, P.downlink_layers = [], []  # reset link layers
     seg = P.root  # local copy
