@@ -99,28 +99,16 @@ def comp_PP_(PP_, fsubder=0, fPd=0):  # PP can also be PPP, etc.
         compared_PP_ = copy(PP_)  # shallow copy
         compared_PP_.remove(PP)
 
-        pre_PPP = CPP(
-            players=deepcopy(PP.players), mplayer=deepcopy(PP.mplayer), dplayer=deepcopy(PP.dplayer), x0=PP.x0, xn=PP.xn, y0=PP.y0, yn=PP.yn )
-        Players, Mplayer, Dplayer = [],[],[]  # initialize params
+        pre_PPP = CPP( players=deepcopy(PP.players), x0=PP.x0, xn=PP.xn, y0=PP.y0, yn=PP.yn )
+        Players = []  # initialize params
 
         for compared_PP in compared_PP_:  # accum summed_params over compared_PP_:
-            sum_player(Players, compared_PP.players)
-            sum_player(Mplayer, compared_PP.mplayer)
-            sum_player(Dplayer, compared_PP.dplayer)
+            sum_players(Players, compared_PP.players)
 
-        mplayer, dplayer = comp_players(PP.players, Players)
-        if fPd: pre_PPP.players += dplayer
-        else:   pre_PPP.players += mplayer
+        pre_PPP.players += [comp_levels(PP.players, Players, der_levels=[], fsubder=fsubder)]  # sum_params is now ave_params
+        # comp to ave params of compared PPs, pre_PPP inherits PP.params, forms new player: derivatives of all lower layers,
+        # initial 3 layer nesting diagram: https://github.com/assets/52521979/ea6d436a-6c5e-429f-a152-ec89e715ebd6
         
-        # not sure about this, add Mplayer or Dplayer as new element? Or replace it?
-        pre_PPP.mplayer += Mplayer
-        pre_PPP.dplayer += dplayer
-        
-
-        '''
-        comp to ave params of compared PPs, pre_PPP inherits PP.params, forms new player: derivatives of all lower layers, 
-        initial 3 layer nesting diagram: https://github.com/assets/52521979/ea6d436a-6c5e-429f-a152-ec89e715ebd6
-        '''
         pre_PPPm_.append(copy_P(pre_PPP, Ptype=2))  # Ptype 2 is now PPP, we don't need Ptype 3?
         pre_PPPd_.append(copy_P(pre_PPP, Ptype=2))
 
@@ -134,7 +122,7 @@ Multiple sublayers start on the 3rd layer, because it's derived from comparison 
 def comp_levels(_levels, levels, der_levels, fsubder=0):  # only for agg_recursion, each param layer may consist of sub_layers
 
     # recursive unpack of nested param layers, each layer is ptuple pair_layers if from der+
-    der_levels += [comp_players(_levels[0], levels[0], der_layers=[], fsubder=fsubder)]
+    der_levels += [comp_players(_levels[0], levels[0])]
 
     # recursive unpack of deeper layers, nested in 3rd and higher layers, if any from agg+, down to nested tuple pairs
     for _level, level in zip(_levels[1:], levels[1:]):  # level = deeper sub_levels, stop if none
@@ -180,26 +168,12 @@ def form_PPP_t(pre_PPP_t):  # form PPs from match-connected segs
 
     for fPd, pre_PPP_ in enumerate(pre_PPP_t):
         # sort by value of last layer: derivatives of all lower layers:
-        if fPd: pre_PPP_ = sorted(pre_PPP_, key=lambda pre_PPP: pre_PPP.dval, reverse=True)  # descending order
-        else:   pre_PPP_ = sorted(pre_PPP_, key=lambda pre_PPP: pre_PPP.mval, reverse=True)  # descending order
-        
+        pre_PPP_ = sorted(pre_PPP_, key=lambda pre_PPP: sum_named_param(pre_PPP.params[-1], 'val', fPd), reverse=True)  # descending order
         PPP_ = []
         for i, pre_PPP in enumerate(pre_PPP_):
-            if fPd: 
-                pre_PPP_val = pre_PPP.dval
-            else:   
-                pre_PPP_val = pre_PPP.mval
-
-            for mplayer, dplayer in zip(pre_PPP.mplayer, pre_PPP.dplayer):
-                if fPd:  
-                    pre_PPP.rdn += pre_PPP.dplayer[-1].val >pre_PPP.mplayer[-1].val
-                else:
-                    pre_PPP.rdn += pre_PPP.mplayer[-1].val >pre_PPP.dplayer[-1].val
-            '''
+            pre_PPP_val = sum_named_param(pre_PPP.params, 'val', fPd=fPd)
             for param_layer in pre_PPP.params:  # may need recursive unpack here
                 pre_PPP.rdn += sum_named_param(param_layer, 'val', fPd=fPd)> sum_named_param(param_layer, 'val', fPd=1-fPd)
-            '''
-            
             ave = vaves[fPd] * pre_PPP.rdn * (i+1)  # derPP is redundant to higher-value previous derPPs in derPP_
             if pre_PPP_val > ave:
                 PPP_ += [pre_PPP]  # base derPP and PPP is CPP
