@@ -719,7 +719,8 @@ def copy_P(P, iPtype=None):   # Ptype =0: P is CP | =1: P is CderP | =2: P is CP
         seg_levels = P.seg_levels
         rlayers = P.rlayers
         dlayers = P.dlayers
-        P.seg_levels, P.rlayers, P.dlayers = [], [], []  # reset
+        P__ = P.P__
+        P.seg_levels, P.rlayers, P.dlayers, P.P__ = [], [], [], []  # reset
     elif Ptype == 3:
         PP_derP, _PP_derP = P.PP, P._PP  # local copy of derP.P and derP._P
         P.PP, P._PP = None, None  # reset
@@ -741,6 +742,7 @@ def copy_P(P, iPtype=None):   # Ptype =0: P is CP | =1: P is CderP | =2: P is CP
         P.dlayers = dlayers
         new_P.rlayers = copy(rlayers)
         new_P.dlayers = copy(dlayers)
+        new_P.P__ = copy(P__)
     elif Ptype == 3:
         new_P.PP, new_P._PP = PP_derP, _PP_derP
         P.PP, P._PP = PP_derP, _PP_derP

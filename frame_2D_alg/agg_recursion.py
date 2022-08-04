@@ -16,8 +16,8 @@ class CderPP(ClusterStructure):  # tuple of derivatives in PP uplink_ or downlin
 
     # draft
     players = list  # PP derivation level, flat, decoded by mapping each m,d to lower-level param
-    mplayer = list  # list of ptuples in current derivation layer per fork
-    dplayer = list
+    mplayer = lambda: [None]  # list of ptuples in current derivation layer per fork
+    dplayer = lambda: [None]
     mval = float  # summed player vals, both are signed, PP sign by fPds[-1]
     dval = float
     box = list
@@ -34,8 +34,8 @@ class CderPP(ClusterStructure):  # tuple of derivatives in PP uplink_ or downlin
 class CPPP(CPP, CderPP):
 
     players = list  # max n ptuples in layer = n ptuples in all lower layers: 1, 1, 2, 4, 8...
-    mplayer = list  # list of ptuples in current derivation layer per fork
-    dplayer = list
+    mplayer = lambda: [None]  # list of ptuples in current derivation layer per fork
+    dplayer = lambda: [None]
     rng = lambda: 1  # rng starts with 1
     rdn = int  # for PP evaluation, recursion count + Rdn / nderPs
     Rdn = int  # for accumulation only
@@ -67,6 +67,12 @@ def agg_recursion(PP_, fPd):  # compositional recursion per blob.Plevel.
         # may splice PPs instead of forming PPPs
         # use sub_recursion_eval, agg_recursion_eval instead:
 
+        # i think we need sub_recursion instead of sub_recursion_eval here, because inputs are array of PPPm _ and PPPd_, same with agg_recursion
+        if PPPm_:
+            sub_recursion(PPPm_, fPd=0)
+        if PPPd_:
+            sub_recursion(PPPd_, fPd=1)
+        
         comb_levels[0].append(PPPm_); comb_levels[1].append(PPPd_)  # pack current level PPP
         m_comb_levels, d_comb_levels = [[],[]], [[],[]]
 
@@ -108,8 +114,9 @@ def comp_PP_(PP_, fsubder=0, fPd=0):  # PP can also be PPP, etc.
         # comp to ave params of compared PPs, pre_PPP inherits PP.params, forms new player: derivatives of all lower layers,
         # initial 3 layer nesting diagram: https://github.com/assets/52521979/ea6d436a-6c5e-429f-a152-ec89e715ebd6
 
-        pre_PPP = CPP(players=deepcopy(PP.players) + [dplayer] if fPd else [mplayer],
-                      fPds=deepcopy(PP.fPds)+[fPd], x0=PP.x0, xn=PP.xn, y0=PP.y0, yn=PP.yn )
+        pre_PPP = CPP(players=deepcopy(PP.players) + [dplayer if fPd else mplayer],
+                      fPds=deepcopy(PP.fPds)+[fPd], x0=PP.x0, xn=PP.xn, y0=PP.y0, yn=PP.yn,
+                      P__ = compared_PP_)  # temporary, will be replaced with derPP later
 
         pre_PPPm_.append(copy_P(pre_PPP))
         pre_PPPd_.append(copy_P(pre_PPP))
@@ -162,8 +169,9 @@ def form_PPP_t(pre_PPP_t):  # form PPs from match-connected segs
             else:   pre_PPP_val = pre_PPP.mval
 
             for mptuple, dptuple in zip(pre_PPP.mplayer, pre_PPP.dplayer):
-                if fPd: pre_PPP.rdn += dptuple.val > mptuple.val
-                else:   pre_PPP.rdn += mptuple.val > dptuple.val
+                if mptuple and dptuple:  # could be None
+                    if fPd: pre_PPP.rdn += dptuple.val > mptuple.val
+                    else:   pre_PPP.rdn += mptuple.val > dptuple.val
             '''
             for param_layer in pre_PPP.params:  # may need recursive unpack here
                 pre_PPP.rdn += sum_named_param(param_layer, 'val', fPd=fPd)> sum_named_param(param_layer, 'val', fPd=1-fPd)
@@ -182,10 +190,13 @@ def form_PPP_t(pre_PPP_t):  # form PPs from match-connected segs
 def indiv_comp_PP_(pre_PPP, fPd):  # 1-to-1 comp, _PP is converted from CPP to higher-composition CPPP
 
     derPP_ = []
-    if fPd: rng = pre_PPP.dplayer[-1].val/ 3  # 3: ave per rel_rng+=1, actual rng is Euclidean distance:
-    else:   rng = pre_PPP.mplayer[-1].val/ 3
+    rng = 1  # default value of rng, pre_PPP.dplayer[-1] could be None
+    if fPd:  # use int to get minimum value of 1
+        if pre_PPP.dplayer[-1]: rng = int(pre_PPP.dplayer[-1].val/ 3)  # 3: ave per rel_rng+=1, actual rng is Euclidean distance:
+    else:
+        if pre_PPP.mplayer[-1]: rng = int(pre_PPP.mplayer[-1].val/ 3)
 
-    for PP in pre_PPP.layers[-1]:  # 1/1 comparison between _PP and other PPs within rng
+    for PP in pre_PPP.P__:  # 1/1 comparison between _PP and other PPs within rng
         derPP = CderPP(PP=PP)
         _area = pre_PPP.players[0][0].L
         area = PP.players[0][0].L
@@ -193,8 +204,13 @@ def indiv_comp_PP_(pre_PPP, fPd):  # 1-to-1 comp, _PP is converted from CPP to h
         dy = pre_PPP.y/_area - PP.y/area
         distance = np.hypot(dy, dx)  # Euclidean distance between PP centroids
 
-        if fPd: _val = pre_PPP.dplayer[-1].val; val = PP.dplayer[-1].val
-        else:   _val = pre_PPP.mplayer[-1].val; val = PP.mplayer[-1].val
+        _val = 1; val = 1
+        if fPd: 
+            if pre_PPP.dplayer[-1]: _val = pre_PPP.dplayer[-1].val  # dplayer[-1] is not None
+            if PP.dplayer[-1]: val = PP.dplayer[-1].val
+        else: 
+            if pre_PPP.mplayer[-1]: _val = pre_PPP.mplayer[-1].val  # mplayer[-1] is not None
+            if PP.mplayer[-1]: val = PP.mplayer[-1].val
         if distance / ((_val+val)/2) < rng:  # distance relative to value, vs. area?
             mplayer, dplayer = comp_players(pre_PPP.players, PP.players)
             if fPd: player = dplayer
@@ -208,16 +224,22 @@ def indiv_comp_PP_(pre_PPP, fPd):  # 1-to-1 comp, _PP is converted from CPP to h
 
     pre_PPP.P__ = derPP_
     for i, _derPP in enumerate(derPP_):  # cluster derPPs into PPPs by connectivity, overwrite derPP[i]
-        if fPd: val = _derPP.dplayer[-1].val
-        else:   val = _derPP.mplayer[-1].val
+        val = 0
+        if fPd: 
+            if _derPP.dplayer[-1]: val = _derPP.dplayer[-1].val
+        else:   
+            if _derPP.mplayer[-1]: val = _derPP.mplayer[-1].val
         if val:
-            PPP = CPPP(params=deepcopy(_derPP.params), layers=[_derPP.PP])
+            PPP = CPPP(players=deepcopy(_derPP.players))  # not sure if we need still need layers?
             PPP.accum_from(_derPP)  # initialization
             _derPP.root = PPP
             for derPP in derPP_[i+1:]:
                 if not derPP.PP.root:  # not sure this is needed
-                    if fPd: Val = derPP.dplayer[-1].val
-                    else:   Val = derPP.mplayer[-1].val
+                    Val = 0
+                    if fPd: 
+                        if derPP.dplayer[-1]: Val = derPP.dplayer[-1].val
+                    else:   
+                        if derPP.mplayer[-1]: Val = derPP.mplayer[-1].val
                     if Val:  # positive and not in PPP yet
                         PPP.layers.append(derPP)  # multiple composition orders
                         PPP.accum_from(_derPP)
