@@ -180,11 +180,11 @@ def sub_recursion_eval(PPm_, PPd_, avem, aved):  # PP or dir_blob
 
     for PPm in PPm_:
         if PPm.mval > avem and PPm.rlayers and len(PPm.rlayers[-1]) > ave_nsub:
-            PPm.rlayers += sub_recursion(PPm.rlayers[-1], fPd=0)  # rng+ comp_P in PPms -> param_layer, sub_PPs
+            PPm.rlayers += sub_recursion(PPm, PPm.rlayers[-1], fPd=0)  # rng+ comp_P in PPms -> param_layer, sub_PPs
             # avem * 1+PPm_rdn_incr?
     for PPd in PPd_:  # root dlayers is always empty
-        if PPd.dval > aved and PPm.dlayers and len(PPd.dlayers[-1]) > ave_nsub:   
-            PPd.dlayers += sub_recursion(PPd.dlayers[-1], fPd=1)  # der+ comp_P in PPds -> param_layer, sub_PPs
+        if PPd.dval > aved and PPd.dlayers and len(PPd.dlayers[-1]) > ave_nsub:      
+            PPd.dlayers += sub_recursion(PPd, PPd.dlayers[-1], fPd=1)  # der+ comp_P in PPds -> param_layer, sub_PPs
             # aved * 1+PPd_rdn_incr?
 
 def agg_recursion_eval(PPm_, PPd_, avem, aved, dir_blob):  # agg_PP or dir_blob
@@ -781,33 +781,25 @@ def splice_2dir_blobs(_blob, blob):
     pass
 
 
-def sub_recursion(PP_, fPd):  # evaluate each PP for rng+ and der+
+def sub_recursion(PP, P__, fPd):  # evaluate each PP for rng+ and der+
 
     comb_layers = []  # combined rng_comb_layers, der_comb_layers
+  
+    P__ =  [P_ for P_ in reversed(P__)]  # revert to top down
+    if fPd: Pm__, Pd__ = comp_P_der(P__)  # returns top-down
+    else:   Pm__, Pd__ = comp_P_rng(P__, PP.rng+1)
 
-    for PP in PP_:  # PP is generic higher-composition pattern, P is generic lower-composition pattern
+    PP.rdn += 2  # 2 sub-clustering forks, priority is not known?
+    sub_segm_ = form_seg_root(Pm__, fPd=0, fPds=PP.fPds)
+    sub_segd_ = form_seg_root(Pd__, fPd=1, fPds=PP.fPds)  # returns bottom-up
+    sub_PPm_, sub_PPd_ = form_PP_root((sub_segm_, sub_segd_), PP.rdn+1)  # PP is parameterized graph of linked segs
 
-        if fPd: P__ = PP.dlayers[-1]  # PP.dlayers could be emt
-        else:   P__ = PP.rlayers[-1]
-        
-        P__ =  [P_ for P_ in reversed(P__)]  # revert to top down
-        if fPd: Pm__, Pd__ = comp_P_der(P__)  # returns top-down
-        else:   Pm__, Pd__ = comp_P_rng(P__, PP.rng+1)
+    mrdn = PP.dval > PP.mval
+    avem = ave_mPP * (PP.rdn + 1 + mrdn); aved = ave_dPP * (PP.rdn + 1 + (not mrdn))
+    sub_recursion_eval(sub_PPm_, sub_PPd_, avem, aved)  # add rlayers and dlayers to select sub_PPs
 
-        PP.rdn += 2  # 2 sub-clustering forks, priority is not known?
-        sub_segm_ = form_seg_root(Pm__, fPd=0, fPds=PP.fPds)
-        sub_segd_ = form_seg_root(Pd__, fPd=1, fPds=PP.fPds)  # returns bottom-up
-        sub_PPm_, sub_PPd_ = form_PP_root((sub_segm_, sub_segd_), PP.rdn+1)  # PP is parameterized graph of linked segs
-
-        mrdn = PP.dval > PP.mval
-        avem = ave_mPP * (PP.rdn + 1 + mrdn); aved = ave_dPP * (PP.rdn + 1 + (not mrdn))
-        sub_recursion_eval(sub_PPm_, sub_PPd_, avem, aved)  # add rlayers and dlayers to select sub_PPs
-
-        # this should be added to sub_recursion_eval:
-        for i, (comb_layer, rlayer, dlayer) in enumerate(zip_longest(comb_layers, PP.rlayers, PP.dlayers, fillvalue=[])):
-            if i > len(comb_layers)-1:  # pack new comb_layer, if any
-                comb_layers.append(rlayer+dlayer)
-            else:
-                comb_layers[i] += rlayer+dlayer  # layers element is m|d pair
+    # this should be added to sub_recursion_eval:
+    for i, (comb_layer, rlayer, dlayer) in enumerate(zip_longest(comb_layers, PP.rlayers, PP.dlayers, fillvalue=[])):
+        comb_layers.append(rlayer+dlayer)  # layers element is m|d pair
 
     return comb_layers
