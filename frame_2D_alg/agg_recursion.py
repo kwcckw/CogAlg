@@ -46,15 +46,17 @@ class CPPP(CPP, CderPP):
     fdiv = NoneType
     box = list  # for visualization only, original box before flipping
     mask__ = bool
-    P__ = list  # input  # derP__ = list  # redundant to P__
-    seg_levels = lambda: [[[]],[[]]]  # from 1st agg_recursion, seg_levels[0] is seg_t, higher seg_levels are segP_t s
-    agg_levels = list  # from 2nd agg_recursion, PP_t = levels[0], from form_PP, before recursion
+    P__ = list  # input  # input, includes derPs, same as agg_levels[-1]?
     rlayers = list  # | mlayers
     dlayers = list  # | alayers
+    seg_levels = lambda: [[]]  # 1st agg_recursion: segs ) segPs(r,d)) segPPs(r,d)..
+    agg_levels = lambda: [[]]  # 2nd agg_recursion: PPs ) PPPs PPPPs..
+
+
     root = lambda:None  # higher-order segP or PPP
 
 # draft
-def agg_recursion(PP_, fPd):  # compositional recursion per blob.Plevel.
+def agg_recursion(dir_blob, PP_, fPd):  # compositional recursion per blob.Plevel.
     # P, PP, PPP are relative terms, each may be of any composition order
 
     comb_levels = [[], []]
@@ -65,14 +67,13 @@ def agg_recursion(PP_, fPd):  # compositional recursion per blob.Plevel.
         derPP_t = comp_PP_(PP_, fPd=fPd)  # compare all PPs to the average (centroid) of all other PPs, is generic for lower level
         PPPm_, PPPd_ = form_PPP_t(derPP_t)  # calls individual comp_PP if mPPP > ave_mPPP, converting derPP to CPPP,
         # may splice PPs instead of forming PPPs
+        dir_blob.rlayers = [PPPm_]; dir_blob.dlayers = [PPPd_]
         # use sub_recursion_eval, agg_recursion_eval instead:
-
-        # i think we need sub_recursion instead of sub_recursion_eval here, because inputs are array of PPPm _ and PPPd_, same with agg_recursion
         if PPPm_:
             sub_recursion(PPPm_, fPd=0)
         if PPPd_:
             sub_recursion(PPPd_, fPd=1)
-        
+
         comb_levels[0].append(PPPm_); comb_levels[1].append(PPPd_)  # pack current level PPP
         m_comb_levels, d_comb_levels = [[],[]], [[],[]]
 
@@ -205,10 +206,10 @@ def indiv_comp_PP_(pre_PPP, fPd):  # 1-to-1 comp, _PP is converted from CPP to h
         distance = np.hypot(dy, dx)  # Euclidean distance between PP centroids
 
         _val = 1; val = 1
-        if fPd: 
+        if fPd:
             if pre_PPP.dplayer[-1]: _val = pre_PPP.dplayer[-1].val  # dplayer[-1] is not None
             if PP.dplayer[-1]: val = PP.dplayer[-1].val
-        else: 
+        else:
             if pre_PPP.mplayer[-1]: _val = pre_PPP.mplayer[-1].val  # mplayer[-1] is not None
             if PP.mplayer[-1]: val = PP.mplayer[-1].val
         if distance / ((_val+val)/2) < rng:  # distance relative to value, vs. area?
@@ -225,9 +226,9 @@ def indiv_comp_PP_(pre_PPP, fPd):  # 1-to-1 comp, _PP is converted from CPP to h
     pre_PPP.P__ = derPP_
     for i, _derPP in enumerate(derPP_):  # cluster derPPs into PPPs by connectivity, overwrite derPP[i]
         val = 0
-        if fPd: 
+        if fPd:
             if _derPP.dplayer[-1]: val = _derPP.dplayer[-1].val
-        else:   
+        else:
             if _derPP.mplayer[-1]: val = _derPP.mplayer[-1].val
         if val:
             PPP = CPPP(players=deepcopy(_derPP.players))  # not sure if we need still need layers?
@@ -236,9 +237,9 @@ def indiv_comp_PP_(pre_PPP, fPd):  # 1-to-1 comp, _PP is converted from CPP to h
             for derPP in derPP_[i+1:]:
                 if not derPP.PP.root:  # not sure this is needed
                     Val = 0
-                    if fPd: 
+                    if fPd:
                         if derPP.dplayer[-1]: Val = derPP.dplayer[-1].val
-                    else:   
+                    else:
                         if derPP.mplayer[-1]: Val = derPP.mplayer[-1].val
                     if Val:  # positive and not in PPP yet
                         PPP.layers.append(derPP)  # multiple composition orders
