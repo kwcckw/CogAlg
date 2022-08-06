@@ -179,8 +179,8 @@ def sub_recursion_eval(PPm_, PPd_):  # for PP or dir_blob
     for PPm in PPm_:
         avem = ave_mPP * (PPm.rdn + 1 + PPm.dval > PPm.mval)  # fork rdn per PP
 
-        if PPm.mval > avem and PPm.P__ > ave_nsub:
-            PPm.rlayers = sub_recursion(PPm, fPd=0)  # rng+ comp_P in PPms -> param_layer, sub_PPs
+        if PPm.mval > avem and len(PPm.P__) > ave_nsub:
+            PPm.rlayers += sub_recursion(PPm, fPd=0)  # rng+ comp_P in PPms -> param_layer, sub_PPs
             # avem * 1+PPm_rdn_incr, also different for agg_recursion?
         if PPm.mval > avem and len(PPm.seg_levels[-1]) > ave_nsub:
             PPm.seg_levels += agg_recursion(PPm.seg_levels[-1], fPd=0)
@@ -189,7 +189,7 @@ def sub_recursion_eval(PPm_, PPd_):  # for PP or dir_blob
     for PPd in PPd_:
         aved = ave_dPP * (PPd.rdn + 1 + PPd.mval >= PPd.dval)
 
-        if PPd.dval > aved and PPd.P__ > ave_nsub:
+        if PPd.dval > aved and len(PPd.P__) > ave_nsub:
             PPd.dlayers += sub_recursion(PPd, fPd=1)  # der+ comp_P in PPds -> param_layer, sub_PPs
         if PPd.dval > aved and len(PPd.seg_levels[-1]) > ave_nsub:
             PPd.seg_levels += agg_recursion(PPd.seg_levels[-1], fPd=1)
@@ -405,8 +405,8 @@ def rng_eval(derP, fPd):  # compute value of combined mutual derPs: overlap betw
         common_derP_ += list( set(_downlink_layer).intersection(uplink_layer))  # get common derP in mixed uplinks
     rdn = 1
     olp_val = 0
+    nolp = max(1, len(common_derP_))
     for derP in common_derP_:
-        nolp = len(common_derP_)
         if fPd:
             rdn += derP.dval > derP.mval  # dP > mP if fPd;  derP.m|dval is not formed yet?
             olp_val += derP.dval
@@ -476,6 +476,7 @@ def sum2seg(seg_Ps, fPd, fPds):  # sum params of vertically connected Ps into se
 
     for P in seg_Ps[:-1]:
         accum_derP(seg, P.uplink_layers[-1][0], fPd)  # derP = P.uplink_layers[-1][0]
+        P.root = seg  # we still need to add root here?
 
     accum_derP(seg, seg_Ps[-1], 0)  # accum last P only, top P uplink_layers are not part of seg
     seg.y0 = seg_Ps[0].y
@@ -785,7 +786,18 @@ def sub_recursion(PP, fPd):  # evaluate each PP for rng+ and der+
 
     sub_recursion_eval(sub_PPm_, sub_PPd_)  # add rlayers, dlayers, seg_levels to select sub_PPs
 
-    for i, (comb_layer, rlayer, dlayer) in enumerate(zip_longest(comb_layers, PP.rlayers, PP.dlayers, fillvalue=[])):
-        comb_layers.append(rlayer + dlayer)  # layers element is m|d pair
+    # add deeper layers from each sub_PPs, not sure if need separate sub_PPm_ and sub_PPd_
+    for sub_PP in sub_PPm_ + sub_PPd_:        
+        for i, (comb_layer, rlayer, dlayer) in enumerate(zip_longest(comb_layers, sub_PP.rlayers, sub_PP.dlayers, fillvalue=[])):            
+            if i > len(comb_layers)-1:  # add new layer
+                comb_layers.append([[rlayer , dlayer]])  # layers element is m|d pair
+            else:
+                comb_layers[i].append([rlayer , dlayer])  # pack in a same depth layer
+                # layers element is m|d pair
 
+    # 1st bracket is root list bracket
+    # 2nd bracket is between each layer
+    # 3rd bracket is between each m|d pair
+    comb_layers = [[[sub_PPm_ , sub_PPd_]]] + comb_layers  # add 1st layer
+    
     return comb_layers
