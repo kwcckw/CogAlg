@@ -56,7 +56,7 @@ class CPPP(CPP, CderPP):
     root = lambda:None  # higher-order segP or PPP
 
 # draft
-def agg_recursion(dir_blob, PP_, fPd):  # compositional recursion per blob.Plevel.
+def agg_recursion(dir_blob, PP_, fPd, fseg=0):  # compositional recursion per blob.Plevel.
     # P, PP, PPP are relative terms, each may be of any composition order
 
     comb_levels = [[], []]
@@ -67,20 +67,16 @@ def agg_recursion(dir_blob, PP_, fPd):  # compositional recursion per blob.Pleve
         derPP_t = comp_PP_(PP_, fPd=fPd)  # compare all PPs to the average (centroid) of all other PPs, is generic for lower level
         PPPm_, PPPd_ = form_PPP_t(derPP_t)  # calls individual comp_PP if mPPP > ave_mPPP, converting derPP to CPPP,
         # may splice PPs instead of forming PPPs
-        dir_blob.rlayers = [PPPm_]; dir_blob.dlayers = [PPPd_]
-        # use sub_recursion_eval, agg_recursion_eval instead:
-        if PPPm_:
-            sub_recursion(PPPm_, fPd=0)
-        if PPPd_:
-            sub_recursion(PPPd_, fPd=1)
+        if not fseg:  # if PP_ is seg, dir_blob will be PP, shouldn't add to layers and perform sub_recursion?
+            dir_blob.rlayers = [PPPm_]; dir_blob.dlayers = [PPPd_]
+            sub_recursion_eval(PPPm_, fPd=0)
+            sub_recursion_eval(PPPd_, fPd=1)
 
         comb_levels[0].append(PPPm_); comb_levels[1].append(PPPd_)  # pack current level PPP
         m_comb_levels, d_comb_levels = [[],[]], [[],[]]
 
-        if len(PPPm_)>1:  # add eval
-            m_comb_levels = agg_recursion(PPPm_, fPd=0)
-        if len(PPPd_)>1:
-            d_comb_levels = agg_recursion(PPPd_, fPd=1)
+        agg_recursion_eval(PPPm_, dir_blob, fPd=0, fseg=fseg)
+        agg_recursion_eval(PPPd_, dir_blob, fPd=1, fseg=fseg)
 
         # combine sub_PPm_s and sub_PPd_s from each layer:
         for m_sub_PPPm_, d_sub_PPPm_ in zip_longest(m_comb_levels[0], d_comb_levels[0], fillvalue=[]):
@@ -130,22 +126,25 @@ Multiple sublayers start on the 3rd layer, because it's derived from comparison 
 '''
 
 # draft, add agg_levels to agg_PP or dir_blob:
-def agg_recursion_eval(PP_, root, fPd):  # called from agg_recursion per fork, multiple forks per agg_level
+def agg_recursion_eval(PP_, root, fPd, fseg=0):  # called from agg_recursion per fork, multiple forks per agg_level
 
-    if fPd: ave_PP = ave_dPP; val = root.dval, alt_val = root.mval  # or M|G?
-    else:   ave_PP = ave_mPP; val = root.mval, alt_val = root.dval
+    if fPd: ave_PP = ave_dPP; val = root.dval; alt_val = root.mval  # or M|G?
+    else:   ave_PP = ave_mPP; val = root.mval; alt_val = root.dval
     ave =   ave_PP * (root.rdn + 1 + (alt_val > val))  # fork rdn per PP
 
     new_level = []  # list of forks that map to lower-level forks
-    for fork in root.agg_levels[-1]:  # fork is a list of corresponding-composition agg_Ps
+    if fseg: levels = root.seg_levels
+    else: levels = root.agg_levels
+    
+    for fork in levels[-1]:  # fork is a list of corresponding-composition agg_Ps
 
         if val > ave * 3 and len(PP_) > ave_nsub:  # 3: agg_coef
             from agg_recursion import agg_recursion
-            new_level += agg_recursion(fork, fPd)
+            new_level += agg_recursion(fork, fPd, fseg)
         else:
             new_level += [[], []]  # m,d pair
 
-    root.agg_levels += new_level
+    levels += new_level
 
 # for deeper agg_recursion:
 def comp_levels(_levels, levels, der_levels, fsubder=0):  # only for agg_recursion, each param layer may consist of sub_layers
