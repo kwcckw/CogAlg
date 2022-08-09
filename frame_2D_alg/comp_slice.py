@@ -180,10 +180,10 @@ def comp_slice_root(blob, verbose=False):  # always angle blob, composite dert c
         for i, (comb_level, mlevel, dlevel) in enumerate(zip_longest(comb_levels, mlevels, dlevels, fillvalue=[])):
             if mlevel or dlevel:
                 if i > len(comb_levels)-1:
-                    comb_levels.append([[mlevel, dlevel]])  # add new level
+                    comb_levels += [[mlevel, dlevel]]  # add new level
                 else:
                     comb_levels[i] += [mlevel, dlevel]  # append existing level
-        dir_blob.agg_levels = [PPm_ + PPd_] + comb_levels  # add 1st + deeper levels
+        dir_blob.agg_levels = [[PPm_ , PPd_]] + comb_levels  # add 1st + deeper levels
 
     splice_dir_blob_(blob.dir_blobs)  # draft
 
