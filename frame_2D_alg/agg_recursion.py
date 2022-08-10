@@ -53,6 +53,9 @@ class CPPP(CPP, CderPP):
     agg_levels = lambda: [[]]  # 2nd agg_recursion: PPs ) PPPs PPPPs..
     root = lambda:None  # higher-order segP or PPP
 
+# aves
+ave_rng = 3
+
 # draft
 def agg_recursion(dir_blob, PP_, fPd, fseg=0):  # compositional recursion per blob.Plevel; P, PP, PPP are relative to each other
 
@@ -62,8 +65,8 @@ def agg_recursion(dir_blob, PP_, fPd, fseg=0):  # compositional recursion per bl
     if V > ave_PP:
 
         # cross-comp -> bilateral match assign list per PP, re-clustering by rdn match to centroids: ave PPP params
-        PPP_ = comp_PP_(PP_)  # cross-comp all PPs within rng,
-        comp_PPP_centroid(PPP_)  # make recursive, may splice PPs instead of forming PPPs
+        PPPm_, PPPd_ = comp_PP_(PP_)  # cross-comp all PPs within rng,
+        comp_PPP_centroid([PPPm_, PPPd_])  # make recursive, may splice PPs instead of forming PPPs
 
         sub_recursion_eval(PPPm_, fPd=0)  # test within PP_ for each PPP (PP_ is PPP.P__)
         sub_recursion_eval(PPPd_, fPd=1)
@@ -101,39 +104,40 @@ def comp_PP_(PP_):  # rng cross-comp, draft
     PPP_t = []
     for fPd in 0,1:
         PPP_ = []  # each with bilateral derPP assigns to re-eval
-        for i, PP in enumerate(PP_):  # convert all to CPPPs
-            PP_[i] = CPPP(players=PP.players, fPds=PP.fPds + [fPd], x0=PP.x0, xn=PP.xn, y0=PP.y0, yn=PP.yn)
+        for i, PP in enumerate(PP_):  # convert all to CPPPs (why not rename to PPP?)
+            PPP_.append(CPPP(players=deepcopy(PP.players), fPds=deepcopy(PP.fPds) + [fPd], x0=PP.x0, xn=PP.xn, y0=PP.y0, yn=PP.yn))
 
-        while PP_:  # compare _PP to all other PPs within rng
-            _PP = PP_.pop  # no same-pair re-comp
-            for PP in PP_:  # all possible comparands in dy<rng, with incremental y
+        # compare _PP to all other PPs within rng
+        # loop like this is better? If we pop it, the PPs in later loop will be reduced
+        for i, _PPP in enumerate(PPP_):  # no same-pair re-comp
+            for PPP in PPP_[:i] + PPP_[i+1:]:  # skip _PP, all possible comparands in dy<rng, with incremental y
 
-                _area = _PP.players[0][0].L
-                area = PP.players[0][0].L
-                dx = ((_PP.xn-_PP.x0)/2)/_area -((PP.xn-PP.x0)/2)/area
-                dy = _PP.y/_area - PP.y/area
+                _area = _PPP.players[0][0].L
+                area = PPP.players[0][0].L
+                dx = ((_PPP.xn-_PPP.x0)/2)/_area -((PPP.xn-PPP.x0)/2)/area
+                dy = _PPP.y/_area - PPP.y/area
                 distance = np.hypot(dy, dx)  # Euclidean distance between PP centroids
+                _val, val = 0, 0
                 if fPd:
-                    if _PP.dplayer[-1]: _val = _PP.dplayer[-1].val  # dplayer[-1] is not None
-                    if PP.dplayer[-1]:   val =  PP.dplayer[-1].val
+                    if _PPP.dplayer[-1]: _val = _PPP.dplayer[-1].val  # dplayer[-1] is not None
+                    if PPP.dplayer[-1]:   val =  PPP.dplayer[-1].val
                 else:
-                    if _PP.mplayer[-1]: _val = _PP.mplayer[-1].val  # mplayer[-1] is not None
-                    if PP.mplayer[-1]:   val =  PP.mplayer[-1].val
+                    if _PPP.mplayer[-1]: _val = _PPP.mplayer[-1].val  # mplayer[-1] is not None
+                    if PPP.mplayer[-1]:   val =  PPP.mplayer[-1].val
 
-                if distance * ((_val+val)/2 / ave_PP) <= 3: # ave_rng
+                if distance * ((_val+val)/2 / ave_PPs[fPd]) <= ave_rng: 
                     # comp PPs:
-                    mplayer, dplayer = comp_players(_PP.players, PP.players)
+                    mplayer, dplayer = comp_players(_PPP.players, PPP.players)
                     if fPd: player = dplayer
                     else:   player = mplayer
-                    derPP = CderPP(players = deepcopy(_PP.players) + [player], mplayer=mplayer, dplayer=dplayer, _PP=_PP, PP=PP)
-                    _PP.derPP_ += [derPP]
-                    PP.derPP_ += [derPP]
-                    if derPP.mval > ave_PP:
+                    derPP = CderPP(players = deepcopy(_PPP.players) + [player], mplayer=mplayer, dplayer=dplayer, _PP=_PPP, PP=PPP)
+                    _PPP.derPP_ += [derPP]
+                    PPP.derPP_ += [derPP]
+                    if derPP.mval > ave_PPs[fPd]:
                         # only matches are included in the cluster
-                        sum_players([_PP.players[-1]], [derPP.players[-1]])  # sum only dplayer or mplayer
-                        sum_players([PP.players[-1]], [derPP.players[-1]])
-
-                PPP_.append(_PP)  # for comp_PP_centroid
+                        sum_players([_PPP.players[-1]], [derPP.players[-1]])  # sum only dplayer or mplayer
+                        sum_players([PPP.players[-1]], [derPP.players[-1]])
+        PPP_t.append(PPP_)
     return PPP_t
 
 '''
@@ -160,20 +164,43 @@ Selection and variable rdn per derPP requires iterative centroid clustering per 
 This will probably be done in blob-level agg_recursion, it seems too complex for edge tracing, mostly contiguous?
 '''
 #   draft:
-def comp_PPP_centroid(PPP_):  # fsubder=0, fPd=0):  # PP can also be PPP, etc.
+def comp_PPP_centroid(PPP_t):  # fsubder=0, fPd=0):  # PP can also be PPP, etc.
 
-    for PPP in PPP_:
-        for derPP in PPP.derPP_:
-            mplayer, dplayer = comp_players(PPP.players, derPP.PP.players)  # comp to centroid, normalize params in comp_ptuple
-            _mplayer, _dplayer = comp_players(derPP.PPP.players, derPP.PP.players)  # comp to alt_centroid
+    for fPd, PPP_ in enumerate(PPP_t):
+        for PPP in PPP_:
+            for derPP in PPP.derPP_:
+                mplayer, dplayer = comp_players(PPP.players, derPP.PP.players)  # comp to centroid, normalize params in comp_ptuple
+                _mplayer, _dplayer = comp_players(derPP.PP.root.players, derPP.PP.players)  # comp to alt_centroid
+    
+                fPPP = mplayer.val > _mplayer.val
+                if fPPP:
+                    # subtract_players(derPP.PPP.players, derPP.PP.players)  # exclude derPP from _PPP
+                    pass
+                if mplayer.val < ave_PP:
+                    # subtract_players(PPP.players, derPP.PP.players)  # exclude derPP from PPP
+                    pass
 
-            fPPP = mplayer.val > _mplayer.val
-            if fPPP:
-                # subtract_players(derPP.PPP.players, derPP.PP.players)  # exclude derPP from _PPP
-                pass
-            if mplayer.val < ave_PP:
-                # subtract_players(PPP.players, derPP.PP.players)  # exclude derPP from PPP
-                pass
+
+def subtract_players(Players, player):
+    
+    # we sum only last layer, so subtract only last layer
+    for Layer, layer in zip_longest([Layers[-1]], [layers[-1]], fillvalue=[]):
+        if Layer:
+            subtract_player(Layer, layer)
+
+            
+def subtract_player(Player, player):
+    
+    for Ptuple, ptuple in zip_longest(Player, player, fillvalue=[]):
+        if Ptuple:
+            # numeric params
+            for param_name in Ptuple.numeric_params:
+                new_value = getattr(Ptuple, param_name) - getattr(ptuple, param_name) 
+                setattr(Ptuple, param_name, new_value)
+            
+            # angle and aangle
+            Ptuple.angle -= ptuple.angle
+            Ptuple.aangle -= ptuple.aangle
 
 '''
 1st and 2nd layers are single sublayers, the 2nd adds tuple pair nesting. Both are unpacked by func_pairs, not func_layers.  

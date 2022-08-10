@@ -64,7 +64,7 @@ ave_nsub = 1
 param_names = ["x", "I", "M", "Ma", "L", "angle", "aangle"]
 aves = [ave_dx, ave_dI, ave_M, ave_Ma, ave_L, ave_G, ave_Ga, ave_mval, ave_dval]
 vaves = [ave_mval, ave_dval]
-
+ave_PPs = [ave_mPP, ave_dPP]
 
 class Cptuple(ClusterStructure):  # bottom-layer tuple of lateral or vertical params: lataple in P or vertuple in derP
 
