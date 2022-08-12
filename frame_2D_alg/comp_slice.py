@@ -551,35 +551,37 @@ def sum_player(Player, player, fneg=0):  # accum mplayer or dplayer, same as abo
 
     for Ptuple, ptuple in zip_longest(Player, player, fillvalue=[]):
         if ptuple:
-            if fneg:  # subtraction
-                if Ptuple: subtract_ptuple(Ptuple, ptuple)
-            else:  # summation
-                if Ptuple: accum_ptuple(Ptuple, ptuple)
-                else:      Player.append(deepcopy(ptuple))
+            if Ptuple: accum_ptuple(Ptuple, ptuple, fneg)
+            elif not fneg:      Player.append(deepcopy(ptuple))
 
 
-def subtract_ptuple(Ptuple, ptuple):
+def accum_ptuple(Ptuple, ptuple, fneg=0):  # lataple or vertuple
 
-    for param_name in Ptuple.numeric_params:
-        new_value = getattr(Ptuple, param_name) - getattr(ptuple, param_name)
-        setattr(Ptuple, param_name, new_value)
-
-    Ptuple.angle -= ptuple.angle
-    Ptuple.aangle -= ptuple.aangle
-
-def accum_ptuple(Ptuple, ptuple):  # lataple or vertuple
-
-    Ptuple.accum_from(ptuple, excluded=["angle", "aangle"])
+    if fneg:  # subtraction
+        for param_name in Ptuple.numeric_params:
+            new_value = getattr(Ptuple, param_name) - getattr(ptuple, param_name)
+            setattr(Ptuple, param_name, new_value)   
+    else:  # accumulation
+        Ptuple.accum_from(ptuple, excluded=["angle", "aangle"])
+    
     fAngle = isinstance(Ptuple.angle, list)
     fangle = isinstance(ptuple.angle, list)
 
     if fAngle and fangle:  # both are latuples:  # not be needed if ptuples are always same-type
-        for i, param in enumerate(ptuple.angle): Ptuple.angle[i] += param  # always in vector representation
-        for i, param in enumerate(ptuple.aangle): Ptuple.aangle[i] += param
+        for i, param in enumerate(ptuple.angle): 
+            if fneg: Ptuple.angle[i] -= param  # always in vector representation
+            else:    Ptuple.angle[i] += param
+        for i, param in enumerate(ptuple.aangle): 
+            if fneg: Ptuple.aangle[i] -= param
+            else:    Ptuple.aangle[i] += param
 
     elif not fAngle and not fangle:  # both are vertuples:
-        Ptuple.angle += ptuple.angle
-        Ptuple.aangle += ptuple.aangle
+        if fneg:
+            Ptuple.angle -= ptuple.angle
+            Ptuple.aangle -= ptuple.aangle
+        else:
+            Ptuple.angle += ptuple.angle
+            Ptuple.aangle += ptuple.aangle
 
 
 def comp_players(_layers, layers):  # unpack and compare der layers, if any from der+

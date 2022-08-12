@@ -121,10 +121,10 @@ def comp_PP_(PP_):  # rng cross-comp, draft
                     derPP = CderPP(players = deepcopy(_PP.players), mplayer=mplayer, dplayer=dplayer, _PP=_PP, PP=PP, mval=mval)
                     if mval > ave_mPP:
                         derPP.sign = 1  # only matches are summed in PPP, PPP.players is summed derPP.players(=PP.players)
-                        sum_players(_PPP.players, derPP.players)
-                        sum_players(PPP.players, derPP.players)
-                    PPP.derPP_ += derPP
-                    _PPP.derPP_ += derPP  # bilateral derPP assign regardless of sign, to re-eval in centroid clustering
+                        sum_players(_PPP.players, derPP.players + [derPP.mplayer])
+                        sum_players(PPP.players, derPP.players + [derPP.mplayer])
+                    PPP.derPP_ += [derPP]
+                    _PPP.derPP_ += [derPP]  # bilateral derPP assign regardless of sign, to re-eval in centroid clustering
                     '''
                     if derPP.match params[-1]: form PPP
                     elif derPP.match params[:-1]: splice PPs and their segs? 
@@ -140,23 +140,31 @@ Selection and variable rdn per derPP requires iterative centroid clustering per 
 def comp_PPP_centroid(PPP_t):  # need add rdn
 
     for fPd, PPP_ in enumerate(PPP_t):
+        excluded_derPP_ = []
         for _PPP in PPP_:
             for derPP in _PPP.derPP_:  # add comp_plevels?
-                mplayer, dplayer = comp_players(_PPP.players, derPP.players)  # comp to centroid, normalize params in comp_ptuple
-                _mplayer, _dplayer = comp_players(derPP.PP.root.players, derPP.players)  # comp to alt_centroid PPP
-
-                crdn = mplayer.val > _mplayer.val
-                fneg = _mplayer.val < ave_mPP * (1+crdn)
-                # exclude previously included or include previously excluded derPP,
-                # not yet correct, sign should be finluded, specific to PPP:
-                if fneg and derPP.sign or not fneg and not derPP.sign:
-                    derPP.sign = not derPP.sign
-                    sum_players(_PPP.players, derPP.players, fneg)
-
-                fneg = mplayer.val < ave_mPP * (1+(not crdn))
-                if fneg and derPP.sign or not fneg and not derPP.sign:
-                    derPP.sign = not derPP.sign
-                    sum_players(derPP.PP.root.players, derPP.players, fneg)  # exclude derPP from _PPP
+                if derPP not in excluded_derPP_:
+                    # their players will be different due to added players in PPP
+                    mplayer, dplayer = comp_players(_PPP.players, derPP.players)  # comp to centroid, normalize params in comp_ptuple
+                    _mplayer, _dplayer = comp_players(derPP.PP.root.players, derPP.players)  # comp to alt_centroid PPP
+                    
+                    mval = sum([mtuple.val for mtuple in mplayer])
+                    _mval = sum([mtuple.val for mtuple in _mplayer])
+    
+                    crdn = mval > _mval
+                    fneg = mval < ave_mPP * (1+crdn)
+                    # exclude previously included or include previously excluded derPP,
+                    # not yet correct, sign should be finluded, specific to PPP:
+                    if fneg and derPP.sign or not fneg and not derPP.sign:
+                        derPP.sign = not derPP.sign
+                        sum_players(_PPP.players, derPP.players, fneg)
+                        excluded_derPP_ += [derPP]
+    
+                    fneg = mval < ave_mPP * (1+(not crdn))
+                    if fneg and derPP.sign or not fneg and not derPP.sign:
+                        derPP.sign = not derPP.sign
+                        sum_players(derPP.PP.root.players, derPP.players, fneg)  # exclude derPP from _PPP
+                        excluded_derPP_ += [derPP]
 '''
 1st and 2nd layers are single sublayers, the 2nd adds tuple pair nesting. Both are unpacked by func_pairs, not func_layers.  
 Multiple sublayers start on the 3rd layer, because it's derived from comparison between two (not one) lower layers. 
