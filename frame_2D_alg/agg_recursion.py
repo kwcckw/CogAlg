@@ -64,10 +64,10 @@ def agg_recursion(dir_blob, PP_, fPd, fseg=0):  # compositional recursion per bl
     ave_PP = ave_dPP if fPd else ave_mPP
     V = sum([PP.dval for PP in PP_]) if fPd else sum([PP.mval for PP in PP_])
     if V > ave_PP:
-
         # cross-comp -> bilateral match assign list per PP, re-clustering by rdn match to centroids: ave PPP params
         PPPm_, PPPd_ = comp_PP_(PP_)  # cross-comp all PPs within rng,
-        comp_centroid(PPPd_)  # may splice PPs instead of forming PPPs
+        # typo?
+        comp_centroid(PPPm_)  # may splice PPs instead of forming PPPs
         comp_centroid(PPPd_)
 
         sub_recursion_eval(PPPm_, fPd=0)  # test within PP_ for each PPP (PP_ is PPP.P__)
@@ -101,16 +101,18 @@ def agg_recursion_eval(PP_, root, fPd, fseg=0):  # from agg_recursion per fork, 
         levels += [agg_recursion( root, levels[-1], fPd, fseg)]
 
 
-def comp_PP_(PP_):  # rng cross-comp, draft
+def comp_PP_(iPP_):  # rng cross-comp, draft
 
     PPP_t = []
     for fPd in 0,1:
+        PP_ = [copy_P(PP) for PP in iPP_]  # we need 2 different set of PP_ for each fPd
         PPP_ = []
         iPPP_ = [CPPP( PP=PP, players=deepcopy(PP.players), fPds=deepcopy(PP.fPds)+[fPd], x0=PP.x0, xn=PP.xn, y0=PP.y0, yn=PP.yn) for PP in PP_]
 
         while PP_:  # compare _PP to all other PPs within rng
             _PP, _PPP = PP_.pop(), iPPP_.pop()
-            _PP.root = _PPP
+            _PP.root = _PPP  # actual root which is having same index with PP?
+            _PP.roots.append(_PPP)  # not sure
             for PPP, PP in zip(iPPP_, PP_):
                 # all possible comparands in dy<rng, with incremental y, accum derPPs in PPPs
                 area = PP.players[0][0].L; _area = _PP.players[0][0].L  # not sure
@@ -124,6 +126,7 @@ def comp_PP_(PP_):  # rng cross-comp, draft
                     mval = sum([ptuple.val for ptuple in mplayer])
                     derPP = CderPP(players = deepcopy(_PP.players), mplayer=mplayer, dplayer=dplayer, _PP=_PP, PP=PP, mval=mval)
                     if mval > ave_mPP:
+                        _PP.roots.append(PPP)  # not sure
                         derPP.fin = derPP._fin = 1  # PPs match, sum derPP in both PPP and _PPP, m fork only:
                         sum_players(_PPP.players, derPP.players + [derPP.mplayer])
                         sum_players(PPP.players, derPP.players + [derPP.mplayer])
@@ -151,25 +154,28 @@ def comp_centroid(PPP_):
             mplayer, dplayer = comp_players(_PPP.players, derPP.players + [derPP.mplayer])
             _mplayer, _dplayer = comp_players(derPP.PP.root.players, derPP.players + [derPP.mplayer])
 
-            crdn = mplayer.val > _mplayer.val
+            mval = sum([mtuple.val for mtuple in mplayer])  # mplayer and dplayer should contain multiple elements
+            _mval = sum([mtuple.val for mtuple in _mplayer])
+
+            crdn = mval> _mval
             # PP may be summed in multiple PPPs via derPPs: represent as PP.roots: rdn?
             # re-clustering: exclude included or include excluded derPP:
-            fneg = _mplayer.val < ave_mPP * (1+crdn)
-            if fneg and derPP._fin or not fneg and not derPP._fin:
+            fneg = _mval < ave_mPP * (1+crdn)
+            if (fneg and derPP._fin) or (not fneg and not derPP._fin):
                 derPP._fin = not derPP._fin
                 derPP.PP.roots.remove(_PPP)  # draft
                 Val += derPP.val
                 sum_players(_PPP.players, derPP.players, fneg)
 
-            fneg = mplayer.val < ave_mPP * (1+(not crdn))
-            if fneg and derPP.fin or not fneg and not derPP.fin:
+            fneg = mval < ave_mPP * (1+(not crdn))
+            if (fneg and derPP.fin) or (not fneg and not derPP.fin):
                 derPP.fin = not derPP.fin
                 derPP.PP.roots.remove(derPP.PP.root)  # draft
                 Val += derPP.val
                 sum_players(derPP.PP.root.players, derPP.players, fneg)  # exclude derPP from _PPP
 
         if Val > ave_mPP:
-            comp_centroid(PPP_)  # recursion while min update value?
+            comp_centroid(PPP_)  # recursion while min update value? Could you explain further? In the next loop, we increase ave val?
 '''
 1st and 2nd layers are single sublayers, the 2nd adds tuple pair nesting. Both are unpacked by func_pairs, not func_layers.  
 Multiple sublayers start on the 3rd layer, because it's derived from comparison between two (not one) lower layers. 

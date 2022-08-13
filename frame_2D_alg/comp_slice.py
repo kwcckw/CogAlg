@@ -150,7 +150,8 @@ class CPP(CderP):  # derP params include P.ptuple
     dlayers = list  # or alayers
     seg_levels = list  # from 1st agg_recursion[fPd], seg_levels[0] is seg_, higher seg_levels are segP_..s
     root = lambda:None  # higher-order PP | segP | PPP
-
+    roots = list
+    
 # Functions:
 
 def comp_slice_root(blob, verbose=False):  # always angle blob, composite dert core param is v_g + iv_ga
@@ -553,19 +554,34 @@ def sum_player(Player, player, fneg=0):  # accum mplayer or dplayer, same as abo
             if Ptuple: accum_ptuple(Ptuple, ptuple, fneg)
             elif not fneg: Player.append(deepcopy(ptuple))
 
+# another version
 def accum_ptuple(Ptuple, ptuple, fneg=0):  # lataple or vertuple
 
-    for i, (Param, param) in enumerate( zip(Ptuple[:-2], ptuple[:-2])):
-        # (x, L, I, M, Ma, angle, aangle, n, val, G, Ga)
-        # n, val from all levels?
-        if isinstance(Param, list):  # angle or aangle, same-type ptuples
-            for j, (Par, par) in enumerate( zip(Param, param)):
-                if fneg: Param[j] = Par - par
-                else:    Param[j] = Par + par
-        else:
-            if fneg: Ptuple[i] = Param - param
-            else:    Ptuple[i] = Param + param
+    # all numeric except G and Ga
+    for param_name in Ptuple.numeric_params:
+        if param_name != "G" and param_name != "Ga":  
+            Param = getattr(Ptuple, param_name)
+            param = getattr(ptuple, param_name)
+            if fneg: setattr(Ptuple, param_name, Param-param)
+            else:    setattr(Ptuple, param_name, Param+param)
 
+    # angle and aangle
+    if isinstance(Ptuple.angle, list):  
+        for i, angle in enumerate(ptuple.angle):
+            if fneg: Ptuple.angle[i] -= angle
+            else:    Ptuple.angle[i] += angle       
+        for i, aangle in enumerate(ptuple.aangle):
+            if fneg: Ptuple.aangle[i] -= aangle
+            else:    Ptuple.aangle[i] += aangle
+    else:
+        if fneg: 
+            Ptuple.angle -= ptuple.angle
+            Ptuple.aangle -= ptuple.aangle
+        else:    
+            Ptuple.angle += ptuple.angle
+            Ptuple.aangle += ptuple.aangle
+        
+        
 def comp_players(_layers, layers):  # unpack and compare der layers, if any from der+
 
     mplayer, dplayer = [], []
