@@ -69,7 +69,7 @@ PP_aves = [ave_mPP, ave_dPP]
 
 class Cptuple(ClusterStructure):  # bottom-layer tuple of lateral or vertical params: lataple in P or vertuple in derP
 
-    # add prefix v in vertuples: 9 vs 10 params:
+    # add prefix v in vertuples: 9 vs. 10 params:
     x = int
     L = int  # area in PP
     I = int
@@ -86,7 +86,7 @@ class Cptuple(ClusterStructure):  # bottom-layer tuple of lateral or vertical pa
 
 class CP(ClusterStructure):  # horizontal blob slice P, with vertical derivatives per param if derP, always positive
 
-    ptuple = object  # x, L, I, M, Ma, G, Ga, angle( Dy, Dx), aangle( Sin_da0, Cos_da0, Sin_da1, Cos_da1)
+    ptuple = object  # x, L, I, M, Ma, G, Ga, angle( Dy, Dx), aangle( Sin_da0, Cos_da0, Sin_da1, Cos_da1), n, val
     x0 = int
     y = int  # for vertical gap in PP.P__
     rdn = int  # blob-level redundancy, ignore for now
@@ -503,8 +503,7 @@ def accum_PP(PP, inp):  # comp_slice inp is seg, or segPP in agg+
     PP.mval += inp.mval
     PP.dval += inp.dval
     inp.root = PP
-    # 2nd player is external params:
-    PP.x0 = min(PP.x0, inp.x0)
+    PP.x0 = min(PP.x0, inp.x0)  # external params: 2nd player?
     PP.xn = max(PP.xn, inp.xn)
     PP.y0 = min(inp.y0, PP.y0)
     PP.yn = max(inp.yn, PP.yn)
@@ -545,44 +544,27 @@ def sum_players(Layers, layers, fneg=0):  # no accum across fPd, that's checked 
     for Layer, layer in zip_longest(Layers, layers, fillvalue=[]):
         if layer:
             if Layer: sum_player(Layer, layer, fneg=fneg)
-            else:     Layers.append(deepcopy(layer))
+            elif not fneg: Layers.append(deepcopy(layer))
 
 def sum_player(Player, player, fneg=0):  # accum mplayer or dplayer, same as above but simpler if unpacked?
 
     for Ptuple, ptuple in zip_longest(Player, player, fillvalue=[]):
         if ptuple:
             if Ptuple: accum_ptuple(Ptuple, ptuple, fneg)
-            elif not fneg:      Player.append(deepcopy(ptuple))
-
+            elif not fneg: Player.append(deepcopy(ptuple))
 
 def accum_ptuple(Ptuple, ptuple, fneg=0):  # lataple or vertuple
 
-    if fneg:  # subtraction
-        for param_name in Ptuple.numeric_params:
-            new_value = getattr(Ptuple, param_name) - getattr(ptuple, param_name)
-            setattr(Ptuple, param_name, new_value)   
-    else:  # accumulation
-        Ptuple.accum_from(ptuple, excluded=["angle", "aangle"])
-    
-    fAngle = isinstance(Ptuple.angle, list)
-    fangle = isinstance(ptuple.angle, list)
-
-    if fAngle and fangle:  # both are latuples:  # not be needed if ptuples are always same-type
-        for i, param in enumerate(ptuple.angle): 
-            if fneg: Ptuple.angle[i] -= param  # always in vector representation
-            else:    Ptuple.angle[i] += param
-        for i, param in enumerate(ptuple.aangle): 
-            if fneg: Ptuple.aangle[i] -= param
-            else:    Ptuple.aangle[i] += param
-
-    elif not fAngle and not fangle:  # both are vertuples:
-        if fneg:
-            Ptuple.angle -= ptuple.angle
-            Ptuple.aangle -= ptuple.aangle
+    for i, (Param, param) in enumerate( zip(Ptuple[:-2], ptuple[:-2])):
+        # (x, L, I, M, Ma, angle, aangle, n, val, G, Ga)
+        # n, val from all levels?
+        if isinstance(Param, list):  # angle or aangle, same-type ptuples
+            for j, (Par, par) in enumerate( zip(Param, param)):
+                if fneg: Param[j] = Par - par
+                else:    Param[j] = Par + par
         else:
-            Ptuple.angle += ptuple.angle
-            Ptuple.aangle += ptuple.aangle
-
+            if fneg: Ptuple[i] = Param - param
+            else:    Ptuple[i] = Param + param
 
 def comp_players(_layers, layers):  # unpack and compare der layers, if any from der+
 
