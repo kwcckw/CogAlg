@@ -53,6 +53,7 @@ class CPPP(CPP, CderPP):
     box = list  # for visualization only, original box before flipping
     mask__ = bool
     PP_ = list  # (input,derPP)s, common root of layers and levels:
+    cPP_ = list
     rlayers = list  # | mlayers
     dlayers = list  # | alayers
     seg_levels = lambda: [[]]  # 1st agg_recursion: segs ) segPs(r,d)) segPPs(r,d)..
@@ -68,15 +69,13 @@ def agg_recursion(dir_blob, PP_, fPd, fseg=0):  # compositional recursion per bl
     if V > ave_PP:
 
         # cross-comp -> bilateral match assign list per PP, re-clustering by rdn match to centroids: ave PPP params
-        PPPm_, PPPd_ = comp_PP_(PP_)  # cross-comp all PPs within rng,
+        PPPm_ = comp_PP_(PP_)  # cross-comp all PPs within rng,
         comp_centroid(PPPm_)  # may splice PPs instead of forming PPPs
-        comp_centroid(PPPd_)
 
         sub_recursion_eval(PPPm_, fPd=0)  # test within PP_ for each PPP (PP_ is PPP.P__)
-        sub_recursion_eval(PPPd_, fPd=1)
         agg_recursion_eval(PPPm_, dir_blob, fPd=0, fseg=fseg)  # test within PPP_
-        agg_recursion_eval(PPPd_, dir_blob, fPd=1, fseg=fseg)
-
+        
+        PPPd_ = []  # temporary, d fork is not available yet
         for PPP_ in PPPm_, PPPd_:
             for PPP in PPP_:
                 for i, (comb_level, level) in enumerate(zip_longest(comb_levels, PPP.agg_levels, fillvalue=[])):
@@ -128,9 +127,10 @@ def comp_PP_(PP_):  # rng cross-comp, draft
                     sum_players(_PPP.players, PP.players + [derPP.mplayer])
                     sum_players(PPP.players, PP.players + [derPP.mplayer])
                 else: fin = 0
-                _PPP.PP_ += [PP, derPP, fin]
-                PP.cPP_ += [PP]  # ref to redundant reps, access by PP.root
-                PPP.PP_ += [PP, derPP, None]  # reverse derPP, fin is not set here
+                _PPP.PP_ += [(PP, derPP, fin)]
+                _PP.cPP_ += [PP]  # ref to redundant reps, access by PP.root
+                PPP.PP_ += [(PP, derPP, None)]  # reverse derPP, fin is not set here
+                PP.cPP_ += [_PP]  # since it is bilateral we need add _PP the same?
                 # _PP.cPP_ += [_PPt]  # bilateral derPP assign, to re-eval in centroid clustering?
                 '''
                 if derPP.match params[-1]: form PPP
@@ -164,7 +164,12 @@ def comp_centroid(PPP_):
                 Val += mval
                 sum_players(_PPP.players, derPP.players, fneg)
 
-        if PPP_val < ave_mPP: PPP_.remove(_PPP)  # draft
+        if PPP_val < ave_mPP:
+            PPP_.remove(_PPP)  # draft
+            for (PP, derPP, fin) in _PPP.PP_:
+                for cPP in PP.cPP_:
+                    PPP = cPP.root  # other PPP
+                    PPP.PP_.remove(PP)  # remove cPP of PP in other PPP
 
     if Val > ave_mPP: comp_centroid(PPP_)  # recursion while min update value
 '''
