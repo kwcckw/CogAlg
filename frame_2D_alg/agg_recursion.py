@@ -120,11 +120,11 @@ def comp_PP_(PP_):  # rng cross-comp, draft
                     sum_players(_PPP.players, PP.players + [derPP.mplayer])
                     sum_players(PPP.players, PP.players + [derPP.mplayer])
                 else: fin = 0
-                _PPP.PP_ += [PP, derPP, fin]
+                _PPP.PP_ += [(PP, derPP, fin)]
                 # draft:
-                _PP.cPP_ += [PP, derPP, None]  # ref to redundant reps, access by PP.root
-                PPP.PP_ += [PP, derPP, None]  # reverse derPP, fin is not set here
-                PP.cPP_ += [_PP, derPP, fin]  # bilateral assign to eval in centroid clustering
+                _PP.cPP_ += [(PP, derPP, None)]  # ref to redundant reps, access by PP.root
+                PPP.PP_ += [(PP, derPP, None)]  # reverse derPP, fin is not set here
+                PP.cPP_ += [(_PP, derPP, fin)]  # bilateral assign to eval in centroid clustering
                 '''
                 if derPP.match params[-1]: form PPP
                 elif derPP.match params[:-1]: splice PPs and their segs? 
@@ -147,13 +147,13 @@ def comp_centroid(PPP_):
         for i, (PP, derPP, fin) in enumerate(_PPP.PP_):  # comp PP to PPP centroid, use comp_plevels?
 
             mplayer, dplayer = comp_players(_PPP.players, PP.players + [derPP.mplayer])  # norm params in comp_ptuple
-            mval = sum([tuple.val for tuple in mplayer])
+            mval = sum([mtuple.val for mtuple in mplayer])
             derPP.mplayer = mplayer; derPP.dplayer = dplayer; derPP.mval = mval
             # draft:
             cPP_ = PP.cPP_
             cPP_ = sorted(cPP_, key=lambda cPP: cPP[1].mval, reverse=True)  # stays ordered during recursion call
             rdn = 1
-            for alt_PP, alt_derPP, alt_fin in cPP_:  # cPP_ should also contain [PP, derPP, fin]:
+            for (alt_PP, alt_derPP, alt_fin) in cPP_:  # cPP_ should also contain [PP, derPP, fin]:
                 if alt_derPP.mval > derPP.mval:  # cPP is instance of PP, eval derPP.mval only
                     if alt_fin: PPP_rdn += 1  # n of cPPs redundant to PP, if included and >val
                 else:
@@ -172,10 +172,17 @@ def comp_centroid(PPP_):
             PPP_.remove(_PPP)  # PPPs are hugely redundant, need to be pruned
 
             for (PP, derPP, fin) in _PPP.PP_:  # remove refs to local copy of PP in other PPPs
-                for cPP in PP.cPP_:
-                    alt_PPP = cPP.root  # other PPP
-                    for (alt_PP,_,_) in alt_PPP.PP_:
-                        alt_PP.cPP_.remove(PP)  # remove refs to deleted copies
+                for (cPP, cderPP, cfin) in PP.cPP_:
+                    alt_PPP = cPP.root  # other PPP                    
+                    if alt_PPP is not _PPP:  # cPP.root could be _PPP, due to PP's CPPs' root will be pointing back to _PPP
+                        remove_index = -1
+                        for i, (alt_PP, alt_derPP, alt_fin) in enumerate(alt_PPP.PP_):
+                            if alt_PP is PP:                                
+                                remove_index = i  # add rmeove reference
+                                break
+                        if remove_index >= 0:
+                            alt_PPP.PP_.pop(remove_index)  # remove the whole tuple 
+
 
     if update_val > ave_mPP:
         comp_centroid(PPP_)  # recursion while min update value
