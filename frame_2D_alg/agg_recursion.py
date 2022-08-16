@@ -110,10 +110,12 @@ def comp_PP_(PP_):  # rng cross-comp, draft
 
             if distance * ((_PP.mval+PP.mval)/2 / ave_mPP) <= 3:  # ave_rng
                 # comp PPs:
-                mplayer, dplayer = comp_players(_PP.players, PP.players)
+                mplayer, dplayer = comp_players(_PP.players, PP.players, _PP.fPds, PP.fPds)
                 mval = sum([mtuple.val for mtuple in mplayer])
                 derPP = CderPP(mplayer=mplayer, dplayer=dplayer, mval=mval)
-                PP_players = PP.players + [derPP.mplayer, derPP.dplayer]  # both for each clustering fork
+                
+                last_player = [[mplayer, dplayer] for mplayer, dplayer in zip(derPP.mplayer, derPP.dplayer)]
+                PP_players = PP.players + last_player  # both for each clustering fork
                 # summed in PPP only, PP stays at lower composition
                 if mval > ave_mPP:
                     fin = 1  # PPs match, sum derPP in both PPP and _PPP, m fork:
@@ -142,7 +144,7 @@ def comp_centroid(PPP_):  # comp PP to average PP in PPP, sum >ave PPs into new 
 
         for i, (PP, derPP, fin) in enumerate(PPP.PP_):  # comp PP to PPP centroid, use comp_plevels?
 
-            mplayer, dplayer = comp_players(PPP.players, PP.players + derPP.player)  # norm params in comp_ptuple
+            mplayer, dplayer = comp_players(PPP.players, PP.players, PPP.fPds, PP.fPds)  # norm params in comp_ptuple
             mval = sum([mtuple.val for mtuple in mplayer])
             derPP.mplayer = mplayer; derPP.dplayer = dplayer; derPP.mval = mval
             # draft:
@@ -161,7 +163,7 @@ def comp_centroid(PPP_):  # comp PP to average PP in PPP, sum >ave PPs into new 
             if (fneg and fin) or (not fneg and not fin):  # re-clustering: exclude included or include excluded PP
                 PPP.PP_[i][2] = not fin
                 update_val += abs(mval)  # or sum abs mparams?
-                sum_players(PPP.players, derPP.players, fneg)
+                sum_players(PPP.players, derPP.players, fneg)  # i think derPP should get players too> Now it is removed
 
         if PPP_val < ave_mPP * PPP_rdn:  # ave rdn-adjusted value per cost of PPP
 

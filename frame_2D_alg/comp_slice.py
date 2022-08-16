@@ -462,7 +462,8 @@ def sum2seg(seg_Ps, fPd, fPds):  # sum params of vertically connected Ps into se
     seg.y0 = seg_Ps[0].y
     seg.yn = seg.y0 + len(seg_Ps)
 
-    seg.players += [seg.dplayer if fPd else seg.mplayer]
+    player = [[mplayer, dplayer] for mplayer, dplayer in zip(seg.mplayer, seg.dplayer)]
+    seg.players += player
     seg.fPds = fPds + [fPd]  # fPds of root PP
 
     return seg
@@ -549,9 +550,10 @@ def sum_players(Layers, layers, fneg=0):  # no accum across fPd, that's checked 
 
 def sum_player(Player, player, fneg=0):  # accum mplayer or dplayer, same as above but simpler if unpacked?
 
-    for Ptuple, ptuple in zip_longest(Player, player, fillvalue=[]):
+    for i, (Ptuple, ptuple) in enumerate(zip_longest(Player, player, fillvalue=[])):
         if ptuple:
             if Ptuple: accum_ptuple(Ptuple, ptuple, fneg)
+            elif Ptuple == None: Player[i] = ptuple   
             elif not fneg: Player.append(deepcopy(ptuple))
 
 def accum_ptuple(Ptuple, ptuple, fneg=0):  # lataple or vertuple
@@ -576,16 +578,17 @@ def accum_ptuple(Ptuple, ptuple, fneg=0):  # lataple or vertuple
         if fneg: Ptuple.angle -= ptuple.angle; Ptuple.aangle -= ptuple.aangle
         else:    Ptuple.angle += ptuple.angle; Ptuple.aangle += ptuple.aangle
 
-def comp_players(_layers, layers):  # unpack and compare der layers, if any from der+
+def comp_players(_layers, layers, _fPds=[0], fPds=[0]):  # unpack and compare der layers, if any from der+
 
     mplayer, dplayer = [], []
 
-    for _layer, layer in zip(_layers, layers):  # same fPds
-        for _ptuple, ptuple in zip(_layer, layer):
-            if _ptuple and ptuple:
-                mtuple, dtuple = comp_ptuple(_ptuple, ptuple)
-                mplayer.append(mtuple)
-                dplayer.append(dtuple)
+    for i, (_layer, layer) in enumerate(zip(_layers, layers)):
+        _ptuple = _layer[_fPds[i]]
+        ptuple = layer[fPds[i]]
+        if _ptuple and ptuple:  # both not None
+            mtuple, dtuple = comp_ptuple(_ptuple, ptuple)
+            mplayer.append(mtuple)
+            dplayer.append(dtuple)
 
     return mplayer, dplayer
 
