@@ -14,6 +14,7 @@ This may form closed edge patterns around flat blobs, which defines stable objec
 class CderPP(ClusterStructure):  # tuple of derivatives in PP uplink_ or downlink_, PP can also be PPP, etc.
 
     # draft
+    players = list
     mplayer = lambda: [None]  # list of ptuples in current derivation layer per fork,
     dplayer = lambda: [None]  # both for each clustering fork
     mval = float  # summed player vals, both are signed, PP sign by fPds[-1]
@@ -112,9 +113,9 @@ def comp_PP_(PP_):  # rng cross-comp, draft
                 # comp PPs:
                 mplayer, dplayer = comp_players(_PP.players, PP.players, _PP.fPds, PP.fPds)
                 mval = sum([mtuple.val for mtuple in mplayer])
-                derPP = CderPP(mplayer=mplayer, dplayer=dplayer, mval=mval)
-
-                PP_players = PP.players + [derPP.mplayer, derPP.dplayer]  # both from each clustering fork
+                derPP = CderPP(players= deepcopy(PP.players), mplayer=mplayer, dplayer=dplayer, mval=mval)
+                # we need regroup mplayer and dplayer so that each element is m|d pair
+                PP_players = PP.players + [[mplayer, dplayer] for mplayer, dplayer in zip(mplayer,dplayer)]  # both from each clustering fork
                 # PP stays as is, single-layer derPP for now
                 if mval > ave_mPP:
                     fin = 1  # PPs match, sum derPP in both PPP and _PPP, m fork:
@@ -143,7 +144,8 @@ def comp_centroid(PPP_):  # comp PP to average PP in PPP, sum >ave PPs into new 
         PPP_players = []
         for i, (PP, derPP, fin) in enumerate(PPP.PP_):  # comp PP to PPP centroid, use comp_plevels?
 
-            mplayer, dplayer = comp_players(PPP.players, PP.players + derPP.player, PPP.fPds, PP.fPds)  # norm params in comp_ptuple
+            PP_player = [[mplayer, dplayer] for mplayer, dplayer in zip(derPP.mplayer,derPP.dplayer)]
+            mplayer, dplayer = comp_players(PPP.players, PP.players+PP_player, PPP.fPds, PP.fPds)  # norm params in comp_ptuple
             mval = sum([mtuple.val for mtuple in mplayer])
             derPP.mplayer = mplayer; derPP.dplayer = dplayer; derPP.mval = mval
             # compute rdn:
@@ -162,8 +164,9 @@ def comp_centroid(PPP_):  # comp PP to average PP in PPP, sum >ave PPs into new 
             if not fneg:  # include PP in PPP:
                 PPP_val += mval
                 PPP_rdn += rdn
-                if PPP_players: sum_players(PPP_players, PP.players + derPP.player, fneg)  # no fneg now?
-                else:           PPP_players = PP.players + derPP.player  # initialization
+                sum_players(PPP_players, PP.players + PP_player, fneg)  # no fneg now?
+
+        if PPP_players: PPP.players = PPP_players  # update new players?
 
         if PPP_val < ave_mPP * PPP_rdn:  # ave rdn-adjusted value per cost of PPP
 

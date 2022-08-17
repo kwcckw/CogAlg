@@ -491,8 +491,6 @@ def sum2PP(PP_segs, base_rdn):  # sum PP_segs into PP
 def accum_PP(PP, inp):  # comp_slice inp is seg, or segPP in agg+
 
     sum_players(PP.players, inp.players)
-    sum_player(PP.mplayer, inp.mplayer)
-    sum_player(PP.dplayer, inp.dplayer)
     PP.mval += inp.mval
     PP.dval += inp.dval
     inp.root = PP
@@ -533,14 +531,15 @@ def accum_PP(PP, inp):  # comp_slice inp is seg, or segPP in agg+
 
 
 def sum_players(Layers, layers, fneg=0):  # no accum across fPd, that's checked in comp_players?
-
-    accum_ptuple(Layers[0], layers[0], fneg=0)  # latuples
+    
+    if not Layers:
+        if not fneg: Layers.append(deepcopy(layers[0]))  # empty list
+    else: 
+        accum_ptuple(Layers[0][0], layers[0][0], fneg)  # latuples , 1st element is nested ptuple
 
     for Layer, layer in zip_longest(Layers[1:], layers[1:], fillvalue=[]):
         if layer:
-            if Layer:
-                for fork_Layer, fork_layer in zip(Layer, layer):  # two fork_layers per layer
-                    sum_player(fork_Layer, fork_layer, fneg=fneg)
+            if Layer: sum_player(Layer, layer, fneg=fneg)  # sum_player will be unpacking again, there's no need to unpack here
             elif not fneg: Layers.append(deepcopy(layer))
 
 def sum_player(Player, player, fneg=0):  # accum mplayer or dplayer
@@ -575,7 +574,7 @@ def accum_ptuple(Ptuple, ptuple, fneg=0):  # lataple or vertuple
 
 def comp_players(_layers, layers, _fPds=[0], fPds=[0]):  # unpack and compare der layers, if any from der+
 
-    mtuple, dtuple = comp_ptuple(_layers[0], layers[0])  # initial latuples, always present
+    mtuple, dtuple = comp_ptuple(_layers[0][0], layers[0][0])  # initial latuples, always present and nested
     mplayer=[mtuple]; dplayer=[dtuple]
 
     for i, (_layer, layer) in enumerate(zip(_layers[1:], layers[1:])):
