@@ -57,10 +57,9 @@ def agg_recursion(dir_blob, PP_, fPd, fseg=0):  # compositional recursion per bl
     ave_PP = ave_dPP if fPd else ave_mPP
     V = sum([PP.dval for PP in PP_]) if fPd else sum([PP.mval for PP in PP_])
     if V > ave_PP:  # cross-comp, bilateral match assign list per PP, re-clustering by match to PPP centroids
-
         PPPm_ = comp_PP_(PP_)  # cross-comp all PPs within rng,
         comp_centroid(PPPm_)  # may splice PPs instead of forming PPPs
-        sub_recursion_eval(PPPm_, fPd=0)  # test within PP_ for each PPP (PP_ is PPP.P__)
+        sub_recursion_agg_(PPPm_, fPd=0)  # test within PP_ for each PPP (PP_ is PPP.P__)
         agg_recursion_eval(PPPm_, dir_blob, fPd=0, fseg=fseg)  # test within PPP_
 
         for PPP in PPPm_:
@@ -73,6 +72,29 @@ def agg_recursion(dir_blob, PP_, fPd, fseg=0):  # compositional recursion per bl
 
     return comb_levels
 
+
+# very initial draft, structure will be different compare with sub_recursion?
+def sub_recursion_agg_(PPP_, fPd):
+    
+    comb_layers = []
+    for PPP in PPP_:
+        if fPd: val = PPP.dval
+        else:    val = PPP.mval
+        
+        if val > ave and len(PPP.PP_) > ave_nsub:
+            PP_ = [PPt[0] for PPt in PPP.PP_]
+            sub_PPP_ = comp_PP_(PP_)  # cross-comp all PPs within rng,
+            comp_centroid(sub_PPP_)  # may splice PPs instead of forming PPPs
+            
+            sublayers = PPP.dlayers if fPd else PPP.rlayers
+            sublayers += sub_recursion_agg_(sub_PPP_, fPd=fPd)
+            
+            for i, (comb_layer, PPP_layer) in enumerate(zip_longest(comb_layers, sublayers, fillvalue=[])):
+                if PPP_layer:
+                    if i > len(comb_layers) - 1: comb_layers += [PPP_layer]  # add new r|d layer
+                    else: comb_layers[i] += PPP_layer  # splice r|d PP layer into existing layer
+            
+    return comb_layers
 
 def agg_recursion_eval(PP_, root, fPd, fseg=0):  # from agg_recursion per fork, adds agg_level to agg_PP or dir_blob
 
@@ -109,6 +131,7 @@ def comp_PP_(PP_):  # rng cross-comp, draft
                 mplayer, dplayer = comp_players(_PP.players, PP.players, _PP.fPds, PP.fPds)
                 mval = sum([mtuple.val for mtuple in mplayer])
                 dval = sum([dtuple.val for dtuple in dplayer])
+                PPP.mval += mval; PPP.dval += dval  # add mval and dval here?
                 derPP = CderPP(player=[mplayer, dplayer], mval=mval, dval=dval)  # derPP is single-layer, PP stays as is
                 if mval > ave_mPP:
                     fin = 1  # PPs match, sum derPP in both PPP and _PPP, m fork:
@@ -161,7 +184,21 @@ def comp_centroid(PPP_):  # comp PP to average PP in PPP, sum >ave PPs into new 
                 if PPP_players: sum_players(PPP_players, PP.players, fneg)  # no fneg now?
                 else:           PPP_players = PP.players  # initialization is simpler
                 PPP.PP_[i][1] = derPP  # replace not sum
-                # also replace in cPPs to compute rdn?
+                
+                for i, cPPt in enumerate(PP.cPP_):
+                    # update other PPP's PPs?
+                    if isinstance(cPPt[0], CPP):  # might be updated to derPP
+                        alt_PPP  = cPPt[0].root
+                        for j, alt_cPPt in enumerate(alt_PPP.cPP_):  # get PPP and replace their cPP with derPP
+                            if alt_cPPt[0] is PP:
+                                alt_PPP.cPP_[j][0] = derPP
+                        for j, alt_PPt in enumerate(alt_PPP.PP_):  # get PPP and replace their PP with derPP too?
+                            if alt_PPt[0] is PP:
+                                alt_PPP.PP_[j][0] = derPP
+                                    
+                    # update current PPP's cPP         
+                    if cPPt[0] is PP:
+                        PPP.cPPt_[i][0] = derPP
 
         if PPP_players: PPP.players = PPP_players
         if PPP_val < ave_mPP * PPP_rdn:  # ave rdn-adjusted value per cost of PPP
