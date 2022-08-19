@@ -58,8 +58,8 @@ def agg_recursion(dir_blob, PP_, fPd, fseg=0):  # compositional recursion per bl
     if V > ave_PP:
         rng = V/ave_PP  # cross-comp, bilateral match assign list per PP, re-clustering by match to PPP centroids
 
-        PPP_ = comp_PP_(PP_, rng)  # cross-comp all PPs within rng, same PPP_ for both forks
-        PPPm_, PPPd_ = comp_centroid(PPP_)  # if top level miss, lower levels match: splice PPs vs form PPPs
+        PPP_ = comp_PP_(PP_, rng, fPd)  # cross-comp all PPs within rng, same PPP_ for both forks
+        PPPm_, PPPd_ = comp_centroid(PPP_, fPd)  # if top level miss, lower levels match: splice PPs vs form PPPs
         # add separate centroid clustering forks
         sub_recursion_agg(PPPm_, fPd=0)  # reform PP_ per PPP for rng+
         sub_recursion_agg(PPPd_, fPd=1)  # reform PP_ per PPP for der+
@@ -90,8 +90,11 @@ def sub_recursion_agg(PPP_, fPd):  # rng+: extend PP_ per PPP, der+: replace PP 
         if val > ave and len(PPP.PP_) > ave_nsub:
             PP_ = [PPt[0] for PPt in PPP.PP_]
 
-            sub_PPP_ = comp_PP_(PP_, rng=val/ave)  # cross-comp all PPs within rng
-            comp_centroid(sub_PPP_)  # may splice PPs instead of forming PPPs
+            sub_PPP_ = comp_PP_(PP_, rng=int(val/ave), fPd=fPd)  # cross-comp all PPs within rng
+            comp_centroid(sub_PPP_, fPd)  # may splice PPs instead of forming PPPs
+            
+            sublayers = PPP.dlayers if fPd else PPP.rlayers
+            sublayers += sub_recursion_agg_(sub_PPP_, fPd=fPd)
 
             for i, (comb_layer, PPP_layer) in enumerate(zip_longest(comb_layers, PPP.dlayers if fPd else PPP.rlayers, fillvalue=[])):
                 if PPP_layer:
@@ -114,7 +117,7 @@ def agg_recursion_eval(PP_, root, fPd, fseg=0):  # from agg_recursion per fork, 
         root.levels += [agg_recursion(root, root.levels[-1], fPd, fseg)]
 
 
-def comp_PP_(PP_, rng):  # rng cross-comp, draft
+def comp_PP_(PP_, rng, fPd):  # rng cross-comp, draft
 
     PPP_ = []
     iPPP_ = [CPPP(PP=PP, players=deepcopy(PP.players), fPds=deepcopy(PP.fPds), x0=PP.x0, xn=PP.xn, y0=PP.y0, yn=PP.yn) for PP in PP_]
@@ -130,13 +133,15 @@ def comp_PP_(PP_, rng):  # rng cross-comp, draft
             dy = _PP.y / _area - PP.y / area
             distance = np.hypot(dy, dx)  # Euclidean distance between PP centroids
 
-            if distance * ((_PP.mval + PP.mval) / 2 / ave_mPP) <= 3:  # ave_rng
-                # comp PPs:
+            if fPd: val = ((_PP.dval + PP.dval) / 2 / ave_dPP)
+            else:   val = ((_PP.mval + PP.mval) / 2 / ave_mPP)
+            if distance * val  <= 3:  # ave_rng
+                # comp PPs: 
                 mplayer, dplayer = comp_players(_PP.players, PP.players, _PP.fPds, PP.fPds)
                 mval = sum([mtuple.val for mtuple in mplayer])
                 dval = sum([dtuple.val for dtuple in dplayer])
                 derPP = CderPP(player=[mplayer, dplayer], mval=mval, dval=dval)  # derPP is single-layer, PP stays as is
-                if mval > ave_mPP:
+                if (not fPd and mval > ave_mPP) or (fPd and dval > ave_dPP):
                     fin = 1  # PPs match, sum derPP in both PPP and _PPP, m fork:
                     sum_players(_PPP.players, PP.players)
                     sum_players(PPP.players, PP.players)  # same fin for both in comp_PP_
@@ -154,7 +159,7 @@ def comp_PP_(PP_, rng):  # rng cross-comp, draft
     return PPP_
 
 
-def comp_centroid(PPP_):  # comp PP to average PP in PPP, sum >ave PPs into new centroid, recursion while update>ave
+def comp_centroid(PPP_, fPd):  # comp PP to average PP in PPP, sum >ave PPs into new centroid, recursion while update>ave
 
     update_val = 0  # update val, terminate recursion if low
 
@@ -170,15 +175,15 @@ def comp_centroid(PPP_):  # comp PP to average PP in PPP, sum >ave PPs into new 
             derPP = CderPP(player=[mplayer, dplayer], mval=mval, dval=dval)  # derPP is recomputed at each call
             # compute rdn:
             cPP_ = PP.cPP_
-            cPP_ = sorted(cPP_, key=lambda cPP: cPP[1].mval, reverse=True)  # sort by derPP.val per recursion call
+            if fPd: cPP_ = sorted(cPP_, key=lambda cPP: cPP[1].dval, reverse=True)  # sort by derPP.val per recursion call
+            else:   cPP_ = sorted(cPP_, key=lambda cPP: cPP[1].mval, reverse=True)
             rdn = 1
             for (cPP, cderPP, cfin) in cPP_:
                 if cderPP.mval > derPP.mval:  # cPP is instance of PP, eval derPP.mval only
                     if cfin: PPP_rdn += 1  # n of cPPs redundant to PP, if included and >val
                 else:
                     break
-            fneg = mval < ave_mPP * rdn  # rdn per PP
-
+            fneg = dval < ave_dPP * rdn if fPd else mval < ave_mPP * rdn  # rdn per PP
             if (fneg and fin) or (not fneg and not fin):  # re-clustering: exclude included or include excluded PP
                 PPP.PP_[i][2] = not fin
                 update_val += abs(mval)  # or sum abs mparams?
@@ -192,15 +197,16 @@ def comp_centroid(PPP_):  # comp PP to average PP in PPP, sum >ave PPs into new 
                 PPP.PP_[i][1] = derPP  # replace not sum
 
                 for i, cPPt in enumerate(PP.cPP_):
-                    if isinstance(cPPt[0], CPP):  # why is this needed?
-                        cPPP = cPPt[0].root
-                        for j, PPt in enumerate(cPPP.PP_):  # get PPP and replace their cPP with derPP
-                            if PPt[0] is PP:
-                                cPPP.PP_[j][0] = derPP
-                        PPP.cPPt_[i][0] = derPP
+                    cPPP = cPPt[0].root
+                    for j, PPt in enumerate(cPPP.cPP_):  # get PPP and replace their derPP
+                        if PPt[0] is PP:
+                            cPPP.cPP_[j][1] = derPP
+                    if cPPt[0] is PP: # replace cPP's derPP
+                        PPP.cPP_[i][1] = derPP
+            PPP.mval = PPP_val  # m fork for now
 
         if PPP_players: PPP.players = PPP_players
-        if PPP_val < ave_mPP * PPP_rdn:  # ave rdn-adjusted value per cost of PPP
+        if PPP_val < PP_aves[fPd] * PPP_rdn:  # ave rdn-adjusted value per cost of PPP
 
             update_val += abs(PPP_val)  # or sum abs mparams?
             PPP_.remove(PPP)  # PPPs are hugely redundant, need to be pruned
@@ -212,7 +218,7 @@ def comp_centroid(PPP_):  # comp PP to average PP in PPP, sum >ave PPs into new 
                             cPP.cPP_.pop(i)  # remove ccPP tuple
                             break
 
-    if update_val > ave_mPP:
+    if update_val > PP_aves[fPd]:
         comp_centroid(PPP_)  # recursion while min update value
 
 
