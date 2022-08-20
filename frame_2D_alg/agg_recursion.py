@@ -52,31 +52,68 @@ class CPPP(CPP, CderPP):
     root = lambda: None  # higher-order segP or PPP
 
 
-def agg_recursion(dir_blob, PP_, fPd, fseg=0):  # compositional recursion per blob.Plevel; P, PP, PPP are relative to each other
+def agg_recursion(dir_blob, iPP_, fPd, fseg=0):  # compositional recursion per blob.Plevel; P, PP, PPP are relative to each other
 
     comb_levels = []
-    ave_PP = ave_dPP if fPd else ave_mPP
-    V = sum([PP.dval for PP in PP_]) if fPd else sum([PP.mval for PP in PP_])
-    if V > ave_PP:
-        rng = V/ave_PP  # cross-comp, bilateral match assign list per PP, re-clustering by match to PPP centroids
-
-        PPP_ = comp_PP_(PP_, rng, fPd)  # cross-comp all PPs within rng, same PPP_ for both forks
-        PPP_ = comp_centroid(PPP_)  # if top level miss, lower levels match: splice PPs vs form PPPs
-        # compare PPPs across forks, splice PPPms and PPPds into PPP_ in comp_centroid, in y0,x0 order?
-        sub_recursion_agg(PPP_)  # reform PP_ per PPP for rng+ or der+, depending on PPP.fPd
-        agg_recursion_eval(PPP_, dir_blob)
-
-        for PPP in PPP_:
-            for i, (comb_level, level) in enumerate(zip_longest(comb_levels, PPP.agg_levels, fillvalue=[])):
-                if level:
-                    if i > len(comb_levels) - 1:
-                        comb_levels += [[level]]  # add new level
-                    else:
-                        comb_levels[i] += [level]  # append existing layer
-        comb_levels += [PPP_] + comb_levels
+    
+    # 1st pass to compute PPP_
+    PPP_t = []
+    for fPd in 0, 1:    
+        PP_ = [copy_P(PP) for PP in iPP_]
+        V = sum([PP.dval for PP in PP_]) if fPd else sum([PP.mval for PP in PP_])
+        PPP_ = []
+        if V > PP_aves[fPd]:
+            rng = V/PP_aves[fPd]  # cross-comp, bilateral match assign list per PP, re-clustering by match to PPP centroids
+            PPP_ = comp_PP_(PP_, rng, fPd)  # cross-comp all PPs within rng, same PPP_ for both forks
+        PPP_t.append(PPP_)
+            
+    # 2nd pass: compare PPPs across forks, splice PPPms and PPPds into PPP_ in comp_centroid, in y0,x0 order?
+    PPP_ = cross_comp_PPP_(PPP_t)           
+    sub_recursion_agg(PPP_)  # reform PP_ per PPP for rng+ or der+, depending on PPP.fPd
+    agg_recursion_eval(PPP_, dir_blob)
+    for PPP in PPP_:
+        for i, (comb_level, level) in enumerate(zip_longest(comb_levels, PPP.agg_levels, fillvalue=[])):
+            if level:
+                if i > len(comb_levels) - 1:
+                    comb_levels += [[level]]  # add new level
+                else:
+                    comb_levels[i] += [level]  # append existing layer
+    comb_levels += [PPP_] + comb_levels
 
     return comb_levels
 
+# very initial draft
+def cross_comp_PPP_(PPP_t):
+    
+    derPPP_ = []
+    for _PPP_ in PPP_t[0]:  # PPPm_
+        for PPP_ in PPP_t[1]:  # PPPd_
+            mplayer, dplayer = comp_players(_PPP.players, PPP.players, _PPP.fPds, PPP.fPds)
+            mval = sum([mtuple.val for mtuple in mplayer])
+            dval = sum([dtuple.val for dtuple in dplayer])
+            derPPP = CderPP(player=[mplayer, dplayer], mval=mval, dval=dval, _PP=_PPP, PP=PPP)
+            derPPP_.append(derPPP)
+                
+    # form strong PPP from derPPP (2nd order contrast) again?
+    PPP_ = []
+    for i, _derPPP in enumerate(derPPP_):
+        if _derPPP.mval + _derPPP.dval > PPP_aves[0] + PPP_aves[1]: # temporary 
+            _PP = _derPPP._PP
+            # form PPP cluster for each derPPP
+            PPP = CPPP(PP=_PP, players=deepcopy(_PP.players), fPds=deepcopy(_PP.fPds), x0=_PP.x0, xn=_PP.xn, y0=_PP.y0, yn=_PP.yn)
+            sum_players(PPP.players, _derPPP.players)
+            PPP.PP_.append(_PP, _derPPP, None)  # not sure on fin here
+
+            for derPPP in derPPP[:i] + derPPP[i+1:]:  # cluster other derPPP
+                if derPPP.mval + derPPP.dval > PPP_aves[0] + PPP_aves[1]: # temporary     
+                    PP = _derPPP._PP
+                    sum_players(PPP.players, _derPPP.players)
+                    PPP.PP_.append(PP, derPPP, None)
+            PPP_.append(PPP)
+
+    PPP_ = comp_centroid(PPP_)  # if top level miss, lower levels match: splice PPs vs form PPPs
+            
+    return PPP_
 
 def sub_recursion_agg(PPP_):  # rng+: extend PP_ per PPP, der+: replace PP with derPP in PPt
 
@@ -89,7 +126,7 @@ def sub_recursion_agg(PPP_):  # rng+: extend PP_ per PPP, der+: replace PP with 
         if val > ave and len(PPP.PP_) > ave_nsub:
 
             sub_PPP_ = comp_PP_(PP_, rng=int(val/ave), fPd=fPd)  # cross-comp all PPs within rng
-            comp_centroid(sub_PPP_)  # may splice PPs instead of forming PPPs
+            comp_centroid(sub_PPP_, fPd)  # may splice PPs instead of forming PPPs
 
             layers = PPP.dlayers if fPd else PPP.rlayers
             layers += sub_recursion_agg(sub_PPP_)
@@ -105,7 +142,7 @@ def sub_recursion_agg(PPP_):  # rng+: extend PP_ per PPP, der+: replace PP with 
 
 def agg_recursion_eval(PP_, root, fseg=0):  # from agg_recursion per fork, adds agg_level to agg_PP or dir_blob
 
-    fPd = root.fPd
+    fPd = root.fPd  # if root is dir_blob, add fPd to CBlob?
     if isinstance(root, CPP): dval = root.dval; mval = root.mval
     else:                     dval = root.G; mval = root.M
     if fPd: ave_PP = ave_dPP; val = dval; alt_val = mval
@@ -185,8 +222,11 @@ def comp_centroid(PPP_):  # comp PP to average PP in PPP, sum >ave PPs into new 
                 else:
                     break
             fnegm = mval < ave_mPP * rdn; fnegd = dval < ave_dPP * rdn  # rdn per PP
-            # not revised:
-            if (fneg and fin) or (not fneg and not fin):  # re-clustering: exclude included or include excluded PP
+
+            if PPP.fPd: fin_eval = (fnegd and fin) or (not fnegd and not fin)
+            else:       fin_eval = (fnegm and fin) or (not fnegm and not fin)
+
+            if fin_eval:  # re-clustering: exclude included or include excluded PP
                 PPP.PP_[i][2] = not fin
                 update_val += abs(mval)  # or sum abs mparams?
             fin = 0
