@@ -536,9 +536,9 @@ def sum_players(Layers, layers, fneg=0):  # no accum across fPd, that's checked 
 
     for Layer, layer in zip_longest(Layers[1:], layers[1:], fillvalue=[]):
         if layer:
-            if Layer: 
-                for Fork_layer, fork_layer in zip(Layer, layer):
-                    sum_player(Fork_layer, fork_layer, fneg=fneg)
+            if Layer:
+                for fork_Layer, fork_layer in zip(Layer, layer):
+                    sum_player(fork_Layer, fork_layer, fneg=fneg)
             elif not fneg: Layers.append(deepcopy(layer))
 
 def sum_player(Player, player, fneg=0):  # accum players in Players
@@ -577,9 +577,8 @@ def comp_players(_layers, layers, _fPds=[0], fPds=[0]):  # unpack and compare de
     mplayer=[mtuple]; dplayer=[dtuple]
 
     for i, (_layer, layer) in enumerate(zip(_layers[1:], layers[1:])):
-        _ptuples = _layer[_fPds[i]]  # compare fPd tuples on all layers, ~fPd tuples in alt fork
-        ptuples = layer[fPds[i]]
-        for _ptuple, ptuple in zip(_ptuples, ptuples):
+        # compare fPd ptuples on all layers:
+        for _ptuple, ptuple in zip(_layer[_fPds[i]], layer[_fPds[i]]):
             mtuple, dtuple = comp_ptuple(_ptuple, ptuple)
             mplayer+=[mtuple]; dplayer+=[dtuple]
 
