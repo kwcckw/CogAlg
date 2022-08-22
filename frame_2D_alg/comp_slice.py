@@ -110,8 +110,7 @@ class CderP(ClusterStructure):  # tuple of derivatives in P uplink_ or downlink_
     Players in derP are zipped with fds: taken forks. Players, mplayer, dplayer are replaced by those in PP
     '''
     players = list  # max n ptuples in layer = n ptuples in all lower layers: 1, 1, 2, 4, 8...
-    mval = float  # summed last player vals, both are signed
-    dval = float
+    valt = lambda: [0,0]  # tuple of mval, dval, summed from last player, both are signed
     x0 = int
     y = int  # or while isinstance(P, CderP): P = CderP._P; else y = _P.y
     _P = object  # higher comparand
@@ -127,6 +126,7 @@ class CderP(ClusterStructure):  # tuple of derivatives in P uplink_ or downlink_
 class CPP(CderP):  # derP params include P.ptuple
 
     players = list  # 1st plevel, same as in derP but L is area
+    valt = lambda: [0,0]  # mval, dval summed across players
     fds = list  # fPd per player except 1st, to comp in agg_recursion
     x0 = int  # box, update by max, min; this is a 2nd plevel?
     xn = int
@@ -168,9 +168,8 @@ def comp_slice_root(blob, verbose=False):  # always angle blob, composite dert c
         dir_blob.rlayers, dir_blob.dlayers = sub_recursion_eval(PP_)  # add rlayers, dlayers, seg_levels to select PPs
 
         comb_levels, levels = [],[]  # dir_blob agg_levels
-        M = dir_blob.M; G = dir_blob.G  # weak fork rdn?
-        # combined eval for intra-PP processing:
-
+        M = dir_blob.M; G = dir_blob.G  # weak-fork rdn, or combined value?
+        # intra-PP:
         if ((M - ave_mPP * (1+(G>M)) + (G - ave_dPP * (1+M>=G)) - ave_agg * (dir_blob.rdn+1) > 0) and len(PP_) > ave_nsub):
             from agg_recursion import agg_recursion  # agglomeration by centroid cross-comp:
             levels = agg_recursion(dir_blob, PP_, rng=2, fseg=0)  # default rng = 2?
@@ -249,16 +248,15 @@ def comp_P(_P, P):  # forms vertical derivatives of params per P in _P.uplink, c
 
     if isinstance(_P, CP):
         mtuple, dtuple = comp_ptuple(_P.ptuple, P.ptuple)
-        mval = mtuple.val; dval = dtuple.val
+        valt = [mtuple.val, dtuple.val]
         mplayer = [mtuple]; dplayer = [dtuple]
         players = [[_P.ptuple]]
     else:  # P is derP
         mplayer, dplayer = comp_players(_P.players, P.players)  # passed from seg.fds
-        mval = sum([mtuple.val for mtuple in mplayer])
-        dval = sum([dtuple.val for dtuple in dplayer])
+        valt = [sum([mtuple.val for mtuple in mplayer]), sum([dtuple.val for dtuple in dplayer])]
         players = deepcopy(_P.players)
 
-    return CderP(x0=min(_P.x0, P.x0), y=_P.y, players=deepcopy(players)+[[mplayer,dplayer]], mval=mval, dval=dval, P=P, _P=_P)
+    return CderP(x0=min(_P.x0, P.x0), y=_P.y, players=deepcopy(players)+[[mplayer,dplayer]], valt=valt, P=P, _P=_P)
 
 # pending link copy update, copying in the end won't help
 def comp_P_rng(P__, rng):  # rng+ sub_recursion in PP.P__, switch to rng+n to skip clustering?
@@ -361,12 +359,10 @@ def link_eval(link_layers, fPd):
     derP_ = sorted( link_layers[-2], key=lambda derP: derP.dval if fPd else derP.mval, reverse=True)
 
     for i, derP in enumerate(derP_):
-        mrdn = derP.dval > derP.mval
-        if fPd:
-            val = derP.dval; derP.rdn += mrdn
-        else:
-            rng_eval(derP, fPd)  # reset derP.val, derP.rdn
-            val = derP.mval; derP.rdn += not mrdn
+        if not fPd:
+            rng_eval(derP, fPd)  # reset derP.valt, derP.rdn
+        mrdn = derP.valt[1] > derP.valt[0]
+        val = derP.valt[fPd]; derP.rdn += not mrdn if fPd else mrdn
 
         if val > vaves[fPd] * derP.rdn * (i+1):  # ave * rdn to stronger derPs in link_layers[-2]
             link_layers[-1].append(derP)  # misses = link_layers[-2] not in link_layers[-1]
@@ -399,10 +395,10 @@ def rng_eval(derP, fPd):  # compute value of combined mutual derPs: overlap betw
     '''
     derP.rdn += (rdn / nolp) > .5  # no fractional rdn?
 
-# revise to form mixed-fork PP_:
+
 def form_PP_root(seg_t, base_rdn):  # form PPs from match-connected segs
 
-    PP_ = []  # mixing of PPs, fPd will be retrieved from PP.fds[-1]
+    PP_ = []  # PP fork = PP.fds[-1]
     for fPd in 0, 1:
         seg_ = seg_t[fPd]
         for seg in seg_:  # bottom-up
@@ -468,8 +464,7 @@ def accum_derP(seg, derP, fPd):  # derP might be CP, though unlikely
         seg.xn = max(seg.xn, derP.x0 + derP.ptuple.L)
     else:
         sum_players(seg.players, derP.players)  # last derP player is current mplayer, dplayer
-        seg.mval+=derP.mval
-        seg.dval+=derP.dval  # higher players only
+        for i in derP.valt: seg.valt[i]+=derP.valt[i]
         seg.xn = max(seg.xn, derP.x0 + derP.players[0][0].L)
 
 
@@ -487,8 +482,7 @@ def sum2PP(PP_segs, base_rdn):  # sum PP_segs into PP
 def accum_PP(PP, inp):  # comp_slice inp is seg, or segPP in agg+
 
     sum_players(PP.players, inp.players)
-    PP.mval += inp.mval
-    PP.dval += inp.dval
+    for i in inp.valt: PP.valt[i] += inp.valt[i]
     inp.root = PP
     PP.x0 = min(PP.x0, inp.x0)  # external params: 2nd player?
     PP.xn = max(PP.xn, inp.xn)
@@ -574,7 +568,7 @@ def comp_players(_layers, layers, _fds=[0], fds=[0]):  # unpack and compare der 
 
     for i, (_layer, layer) in enumerate(zip(_layers[1:], layers[1:])):
         # compare fPd ptuples on all layers:
-        for _ptuple, ptuple in zip(_layer[_fds[i]], layer[_fds[i]]):
+        for _ptuple, ptuple in zip(_layer[_fds[i]], layer[fds[i]]):
             mtuple, dtuple = comp_ptuple(_ptuple, ptuple)
             mplayer+=[mtuple]; dplayer+=[dtuple]
 
@@ -753,13 +747,12 @@ def sub_recursion_eval(PP_):  # for PP or dir_blob
     from agg_recursion import agg_recursion
     mcomb_layers, dcomb_layers, PPm_, PPd_ = [], [], [], []
     for PP in PP_:
-        if PP.fds[-1]: 
-            ave_PP = ave_dPP; val = PP.dval; alt_val = PP.mval
-            comb_layers = dcomb_layers; PP_layers = PP.dlayers; PPd_ += [PP]
-        else:           
-            ave_PP = ave_mPP; val = PP.mval; alt_val = PP.dval
-            comb_layers = mcomb_layers; PP_layers = PP.rlayers; PPm_ += [PP]
-        ave =   ave_PP * (PP.rdn + 1 + (alt_val > val)) # fork rdn
+
+        fPd = PP.fds[-1]
+        if fPd: comb_layers = dcomb_layers; PP_layers = PP.dlayers; PPd_ += [PP]
+        else:   comb_layers = mcomb_layers; PP_layers = PP.rlayers; PPm_ += [PP]
+        val = PP.valt[fPd]; alt_val = PP.valt[not fPd]  # for fork rdn:
+        ave = PP_aves[fPd] * (PP.rdn + 1 + (alt_val > val))
         if val > ave and len(PP.P__) > ave_nsub:
 
             sub_recursion(PP)  # comp_P_der | comp_P_rng in PPs -> param_layer, sub_PPs
@@ -774,7 +767,7 @@ def sub_recursion_eval(PP_):  # for PP or dir_blob
         if val > ave*3 and len(PP.seg_levels[-1]) > ave_nsub:   # 3: agg_coef
             PP.seg_levels += agg_recursion(PP, PP.seg_levels[-1], rng=2, fseg=1)
 
-    return [[PPm_] + mcomb_layers], [[PPd_] + dcomb_layers]   # also returns empty comb_layers? (if comb_layers is empty, it will be just [[PP_]] instead)
+    return [[PPm_] + mcomb_layers], [[PPd_] + dcomb_layers]  # including empty comb_layers
 
 
 def sub_recursion(PP):  # evaluate each PP for rng+ and der+
@@ -788,4 +781,4 @@ def sub_recursion(PP):  # evaluate each PP for rng+ and der+
     sub_PP_ = form_PP_root((sub_segm_, sub_segd_), PP.rdn + 1)  # PP is parameterized graph of linked segs
 
     sub_rlayers, sub_dlayers = sub_recursion_eval(sub_PP_)  # add rlayers, dlayers, seg_levels to select sub_PPs
-    PP.rlayers += [sub_rlayers]; PP.dlayers += [sub_dlayers]; 
+    PP.rlayers += [sub_rlayers]; PP.dlayers += [sub_dlayers]
