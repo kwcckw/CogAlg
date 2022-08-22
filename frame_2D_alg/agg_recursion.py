@@ -110,28 +110,30 @@ def comp_PP_(PP_, rng):  # 1st cross-comp, draft
     while PP_:  # compare _PP to all other PPs within rng
         _PP, _PPP = PP_.pop(), iPPP_.pop()
         _PP.root = _PPP
+        _fd = _PP.fds[-1]
         for PPP, PP in zip(iPPP_, PP_):  # add selection by dy<rng if incremental y? accum derPPs in PPPs
 
-            area = PP.players[0][0].L; _area = _PP.players[0][0].L  # not sure
+            fd = PP.fds[-1]
+            area = PP.players_t[fd][0][0].L; _area = _PP.players_t[_fd][0][0].L
             dx = ((_PP.xn - _PP.x0) / 2) / _area - ((PP.xn - PP.x0) / 2) / area
             dy = _PP.y / _area - PP.y / area
             distance = np.hypot(dy, dx)  # Euclidean distance between PP centroids
 
-            val = _PP.valt[0+1] / (ave_mPP+ave_dPP)  # draft
+            val = sum(_PP.valt) / (ave_mPP+ave_dPP)  # draft
             if distance * val <= rng:
                 # comp PPs:
-                mplayer, dplayer = comp_players(_PP.players, PP.players, _PP.fds, PP.fds)
+                mplayer, dplayer = comp_players(_PP.players_t[_fd], PP.players_t[fd], _PP.fds, PP.fds)
                 valt = [sum([mtuple.val for mtuple in mplayer]), sum([dtuple.val for dtuple in dplayer])]
                 derPP = CderPP(player=[mplayer, dplayer], valt=valt)  # derPP is single-layer
                 fint = []
                 for fd in 0,1:  # sum players per fork
                     if valt[fd] > PP_aves[fd]:
                         fin = 1  # PPs match, sum derPP in both PPP and _PPP:
-                        sum_players(_PPP.players_t[fd], PP.players)
-                        sum_players(PPP.players_t[fd], PP.players)  # all PP.players in each PPP.players
+                        sum_players(_PPP.players_t[fd], PP.players_t[fd])
+                        sum_players(PPP.players_t[fd], PP.players_t[fd])  # all PP.players in each PPP.players
                     else:
                         fin = 0
-                    fint += fin
+                    fint += [fin]
                 _PPP.PP_ += [[PP, derPP, fint]]
                 _PP.cPP_ += [[PP, derPP, [1,1]]]  # rdn refs, initial fins=1, derPP is reversed
                 PPP.PP_ += [[_PP, derPP, fint]]
@@ -152,9 +154,9 @@ def comp_centroid(PPP_):  # comp PP to average PP in PPP, sum >ave PPs into new 
         PPP_val = 0  # new total, may delete PPP
         PPP_rdn = 0  # rdn of PPs to cPPs in other PPPs
         PPP_players = []
-        for i, (PP, _, fin) in enumerate(PPP.PP_):  # comp PP to PPP centroid, derPP is replaced, use comp_plevels?
-
-            mplayer, dplayer = comp_players(PPP.players, PP.players, PPP.fds, PP.fds)  # norm params in comp_ptuple
+        for i, (PP, _, fint) in enumerate(PPP.PP_):  # comp PP to PPP centroid, derPP is replaced, use comp_plevels?
+            fd = 0  # only the m part for core
+            mplayer, dplayer = comp_players(PPP.players_t[fd], PP.players_t[fd], PPP.fds, PP.fds)  # norm params in comp_ptuple
             mval = sum([mtuple.val for mtuple in mplayer])
             dval = sum([dtuple.val for dtuple in dplayer])
             derPP = CderPP(player=[mplayer, dplayer], valt=[mval,dval])  # derPP is recomputed at each call
@@ -163,7 +165,7 @@ def comp_centroid(PPP_):  # comp PP to average PP in PPP, sum >ave PPs into new 
             cPP_ = sorted(cPP_, key=lambda cPP: cPP[1].valt[0+1], reverse=True)
             rdn = 1
             # not revised:
-            for (cPP, cderPP, cfin) in cPP_:
+            for (cPP, cderPP, cfint) in cPP_:
                 if cderPP.mval > derPP.mval:  # cPP is instance of PP, eval derPP.mval only
                     if cfin: PPP_rdn += 1  # n of cPPs redundant to PP, if included and >val
                 else:
