@@ -455,8 +455,8 @@ def accum_derP(seg, derP, fPd):  # derP might be CP, though unlikely
 
     if isinstance(derP, CP):
         derP.root = seg  # no need for derP.root
-        if seg.players_t[fPd]: sum_players(seg.players_t[fPd], [[derP.ptuple]]) 
-        else:                  seg.players_t[fPd].append([deepcopy(derP.ptuple)])                          
+        if seg.players_t[fPd]: sum_players(seg.players_t[fPd], [[derP.ptuple]])
+        else:                  seg.players_t[fPd].append([deepcopy(derP.ptuple)])
         seg.xn = max(seg.xn, derP.x0 + derP.ptuple.L)
     else:
         sum_players(seg.players_t[fPd], derP.players)  # last derP player is current mplayer, dplayer
@@ -477,7 +477,7 @@ def sum2PP(PP_segs, base_rdn):  # sum PP_segs into PP
 
 def accum_PP(PP, inp):  # comp_slice inp is seg, or segPP in agg+
 
-    for i in range(2): 
+    for i in range(2):
         if inp.players_t[i]: sum_players(PP.players_t[i], inp.players_t[i])  # not empty inp's players
         PP.valt[i] += inp.valt[i]
     inp.root = PP
