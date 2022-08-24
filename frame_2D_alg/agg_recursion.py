@@ -14,7 +14,7 @@ This may form closed edge patterns around flat blobs, which defines stable objec
 
 class CderPP(ClusterStructure):  # tuple of derivatives in PP uplink_ or downlink_, PP can also be PPP, etc.
 
-    player = lambda: [[], []]  # lists of ptuples in current derivation layer per fork
+    player_t = lambda: [[], []]  # lists of ptuples in current derivation layer per fork
     valt = lambda: [0,0]  # tuple of mval, dval
     # 5 below are not needed?
     box = list  # 2nd level, stay in PP?
@@ -101,20 +101,10 @@ def sub_recursion_agg(PPP_):  # rng+: extend PP_ per PPP, der+: replace PP with 
     return comb_layers
 
 
-def comp_PP_(PP_, rng):  # 1st cross-comp, no
+def comp_PP_(PP_, rng):  # 1st cross-comp
 
-    
-    PPP_, iPPP_ = [], []
-    for i, PP in enumerate(PP_):  
-        if isinstance(PP, CPP):  # PP is CPP (1st call)
-            players_t = [[], []]; fd = PP.fds[-1]
-            if PP.oPP: players_t[1-fd] = PP.oPP.players
-            players_t[fd]   = PP.players
-            PP_[i] = CaggPP(PP=PP, players_t=players_t, fds=deepcopy(PP.fds), x0=PP.x0, xn=PP.xn, y0=PP.y0, yn=PP.yn)  # convert PP into CaggPP
-        else:  # PP is CaggPP
-            players_t = deepcopy(PP.players_t)  
-        iPPP_ += [CaggPP(PP=PP, players_t=players_t, fds=deepcopy(PP.fds), x0=PP.x0, xn=PP.xn, y0=PP.y0, yn=PP.yn)]
-                 # this conversion is only in 1st call (1st call of function or agg_recursion?)
+    PPP_ = []
+    iPPP_ = deepcopy(PP_)
 
     while PP_:  # compare _PP to all other PPs within rng
         _PP, _PPP = PP_.pop(), iPPP_.pop()
@@ -163,30 +153,23 @@ def comp_centroid(PPP_):  # comp PP to average PP in PPP, sum >ave PPs into new 
         PPP_val = 0  # new total, may delete PPP
         PPP_rdn = 0  # rdn of PPs to cPPs in other PPPs
         PPP_players = []
-        DerPP = CderPP(player=[[], []]) 
-        
+        DerPP = CderPP(player=[[], []])
+
         for i, (PP, _, fint) in enumerate(PPP.PP_):  # comp PP to PPP centroid, derPP is replaced, use comp_plevels?
-            Mplayer, Dplayer, Valt = [],[],[0,0]
+            Mplayer, Dplayer = [],[]
             # both PP core and edge are compared to PPP core, results are summed or concatenated:
             for fd in 0, 1:
-                if PPP.players_t[0]: PPP_players = PPP.players_t[0]  # PPP.players_t[0] could be empty, when PP is PPd with single seg and single P without any oPP
-                else:                PPP_players = PPP.players_t[1]
-                if PP.players_t[fd]:  PP_players = PP.players_t[fd]  # same as above, PP.players_t[0] could be empty too
-                else:                PP_players = PP.players_t[1-fd]
-                mplayer, dplayer = comp_players(PPP_players, PP_players, PPP.fds, PP.fds)  # params norm in comp_ptuple
-                Mplayer += mplayer; Dplayer += dplayer
+                mplayer, dplayer = comp_players(PPP.players_t[0], PP.players_t[fd], PPP.fds, PP.fds)  # params norm in comp_ptuple
+                player_t = [Mplayer + mplayer, Dplayer + dplayer]
                 valt = [sum([mtuple.val for mtuple in mplayer]), sum([dtuple.val for dtuple in dplayer])]
-                for j in range(2): Valt[j] += valt[j]
-            derPP = CderPP(player=[Mplayer, Dplayer], valt=Valt)  # summed from all PP_
-            # accumulate DerPP:
-            for fd in 0, 1: 
-                for j, (Ptuple, ptuple) in enumerate(zip_longest(DerPP.player[fd], derPP.player[fd], fillvalue=[])):
-                    if not Ptuple:
-                        DerPP.player[fd].append(ptuple)  # pack new layer
-                    else:
-                        sum_players([[Ptuple]], [[ptuple]]) 
-                DerPP.valt[fd] += derPP.valt[fd]  # accumulate val
-            
+            if DerPP in locals():  # summed across PP_:
+                for fd in 0, 1:
+                    for Ptuple, ptuple in zip_longest(DerPP.player_t[fd], player_t[fd], fillvalue=[]):
+                        if not Ptuple: DerPP.player[fd].append(ptuple)  # pack new layer
+                        else:          sum_players([[Ptuple]], [[ptuple]])
+                    DerPP.valt[fd] += valt[fd]
+            else:
+                DerPP = CderPP(player=[Mplayer, Dplayer], valt=valt)  # recomputed per call
             # compute rdn:
             cPP_ = PP.cPP_  # sort by derPP value:
             cPP_ = sorted(cPP_, key=lambda cPP: sum(cPP[1].valt), reverse=True)
@@ -199,13 +182,13 @@ def comp_centroid(PPP_):  # comp PP to average PP in PPP, sum >ave PPs into new 
                         sum_players(PPP.players_t[fd], PP.players_t[fd])  # all PP.players in each PPP.players
                     else:
                         fin = 0
-                    if cderPP.valt[fd] > derPP.valt[fd]:  # cPP is instance of PP
+                    if cderPP.valt[fd] > valt[fd]:  # cPP is instance of PP
                         if cfint[fd]: PPP_rdn += 1  # n of cPPs redundant to PP, if included and >val
                     else:
                         break  # cPP_ is sorted by value
-            fnegm = Valt[0] < PP_aves[0] * rdn
-            fnegd = Valt[1] < PP_aves[1] * rdn  # rdn per PP
-            
+            fnegm = valt[0] < PP_aves[0] * rdn
+            fnegd = valt[1] < PP_aves[1] * rdn  # rdn per PP
+
             # not revised:
             if (fneg and fin) or (not fneg and not fin):  # re-clustering: exclude included or include excluded PP
                 PPP.PP_[i][2] = not fin

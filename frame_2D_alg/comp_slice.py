@@ -125,7 +125,7 @@ class CderP(ClusterStructure):  # tuple of derivatives in P uplink_ or downlink_
 
 class CPP(CderP):  # derP params include P.ptuple
 
-    oPP = object  # adjacent opposite-sign PP.
+    oPP = object  # adjacent opposite-sign PP, combined from oPPs above, below, and lateral?
     players = list  # 1st plevel, same as in derP but L is area
     valt = lambda: [0,0]  # mval, dval summed across players
     fds = list  # fPd per player except 1st, to comp in agg_recursion
@@ -172,7 +172,15 @@ def comp_slice_root(blob, verbose=False):  # always angle blob, composite dert c
         M = dir_blob.M; G = dir_blob.G  # weak-fork rdn, or combined value?
         # intra-PP:
         if ((M - ave_mPP * (1+(G>M)) + (G - ave_dPP * (1+M>=G)) - ave_agg * (dir_blob.rdn+1) > 0) and len(PP_) > ave_nsub):
-            from agg_recursion import agg_recursion  # agglomeration by centroid cross-comp:
+            from agg_recursion import agg_recursion, CaggPP  # agglomeration by centroid cross-comp:
+
+            for i, PP in enumerate(PP_):
+                players_t = [[], []]
+                fd = PP.fds[-1]
+                players_t[fd] = PP.players
+                if PP.oPP: players_t[1-fd] = PP.oPP.players
+                PP_[i] = CaggPP(PP=PP, players_t=players_t, fds=deepcopy(PP.fds), x0=PP.x0, xn=PP.xn, y0=PP.y0, yn=PP.yn)
+
             levels = agg_recursion(dir_blob, PP_, rng=2, fseg=0)  # default rng = 2?
 
         for i, (comb_level, level) in enumerate(zip_longest(comb_levels, levels, fillvalue=[])):
@@ -413,8 +421,8 @@ def form_PP_root(seg_t, base_rdn):  # form PPs from match-connected segs
                 # add oPP, 1st PP or single PP will not having any oPP
                 PP.oPP = _PP
                 _PP = PP
-                
-        
+
+
     return PP_
 
 
