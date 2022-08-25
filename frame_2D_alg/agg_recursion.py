@@ -54,7 +54,8 @@ class CaggPP(CPP, CderPP):
 def agg_recursion(root, PP_, rng, fseg=0):  # compositional recursion per blob.Plevel; P, PP, PPP are relative to each other
 
     PPP_ = comp_PP_(PP_, rng)  # cross-comp all PPs within rng, same PPP_ for both forks, add fseg?
-    PPP_ = comp_centroid(PPP_)  # if top level miss, lower levels match: splice PPs vs form PPPs
+    PPP_ = form_graph(PPP_)
+    # PPP_ = comp_centroid(PPP_)  # if top level miss, lower levels match: splice PPs vs form PPPs
 
     sub_recursion_agg(valt, PPP_)  # re-form PPP.PP_ by der+ if PPP.fPd else rng+, accum root.valt
     val = sum(root.valt)
@@ -146,28 +147,54 @@ def comp_PP_(PP_, rng):  # 1st cross-comp
 # draft:
 def form_graph(PPP_):  # cluster PPPs by mutual connections: match summed across shared cPPs
 
+    graph_ = []
     for PPP in PPP_:  # each PPP is a node and a potential nucleus of a graph, which is also CaggPP?
-        PP_ = PPP.PP_
-        graph = CaggPP()  # init per PPP, graph.PP_ is connected PPPs
-        for PPt in PP_:
-            shared_M = PPt[1].valt[0]  # initialization by derPP.mval
-            for cPP in PPt[0].cPP_:
-                if cPP in PP_:  # mutual connection
-                    shared_M += cPP_instance_in_PP_.valt[0]  # pseudo, we need to find that instance
-                    
-        if shared_M > ave_agg:  # need to add rdn: graphs overlap? 
-            inPPP = PPt[0].root
-            # draft:
-            if graph.valt[0] > inPPP.valt[0]:
-                graph.PP_ += [inPPP]  # connected PPP
-                inPPP.root = graph
-                accum_PPP(graph, inPPP)
-            else:
-                alt_graph = inPPP.root
-                alt_graph.PP_ += [inPPP]  # connected PPP
-                PPP.root = alt_graph
-                accum_PPP(alt_graph, PPP)
-    pass
+        graph = CaggPP(valt = copy(PPP.valt), players_t = copy(PPP.players_t))  # init per PPP, graph.PP_ is connected PPPs
+        
+        # 1st step: compute shared M and Rdn
+        clustered_PP_ = []
+        for (PP, derPP, fint) in PPP.PP_:  # PPt = (PP, derPP, fint)
+            shared_M = derPP.valt[0]  # initialization by derPP.mval 
+            shared_Rdn = derPP.rdn
+            for (cPP, cderPP, cfint) in PP.cPP_:  # cPPt = (cPP, cderPP, cfint)
+                if cPP is PP:  # mutual connection
+                    shared_M += cPP.valt[0]  # add derPP.valt instead of PP?
+                    shared_Rdn += cPP.rdn
+                    clustered_PP_ += [PP]
+                    break                    
+        
+        # 2nd step: cluster PPP into graph
+        if shared_M > ave_agg * shared_Rdn:  # need to add rdn: graphs overlap? I think yes, probably scaled by rdn?
+            for PP in clustered_PP_:
+                inPPP = PP.root  
+                # draft:
+                if not isinstance(inPPP.root, CaggPP):  # don't have existing graph
+                    if graph.valt[0] > inPPP.valt[0]:
+                        graph.PP_ += [inPPP]  # connected PPP
+                        inPPP.root = graph
+                        accum_PPP(graph, inPPP)
+                    else:
+                        # reinitialize inPPP's graph
+                        alt_graph = CaggPP(valt = copy(inPPP.valt), players_t = copy(inPPP.players_t))
+                        alt_graph.PP_ += [inPPP]  # connected PPP
+                        inPPP.root = alt_graph
+                else:  # inPPP has existing graph
+                    # merge graphs here？
+                    accum_PPP(graph, inPPP.root)
+                    for PP in inPPP.root.PP_:
+                        if PP not in graph.PP_:
+                            graph.PP += [PP]
+
+        graph_.append(graph)
+    return graph_
+
+def accum_PPP(_PPP, PPP):
+    
+    for fd in range(0,1):
+        sum_players(_PPP.players_t[fd], PPP.players_t[fd])
+        _PPP.valt[fd] += PPP.valt[fd]
+        
+
 
 # not fully revised, this is an alternative to form_graph, but may not be accurate enough to cluster:
 def comp_centroid(PPP_):  # comp PP to average PP in PPP, sum >ave PPs into new centroid, recursion while update>ave
