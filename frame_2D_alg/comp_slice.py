@@ -125,7 +125,7 @@ class CderP(ClusterStructure):  # tuple of derivatives in P uplink_ or downlink_
 
 class CPP(CderP):  # derP params include P.ptuple
 
-    oPP = object  # adjacent opposite-sign PP, combined from oPPs above, below, and lateral?
+    oPP_ = list  # adjacent opposite-sign PPs from above, below, left and right
     players = list  # 1st plevel, same as in derP but L is area
     valt = lambda: [0,0]  # mval, dval summed across players
     fds = list  # fPd per player except 1st, to comp in agg_recursion
@@ -172,15 +172,16 @@ def comp_slice_root(blob, verbose=False):  # always angle blob, composite dert c
         M = dir_blob.M; G = dir_blob.G  # weak-fork rdn, or combined value?
         # intra-PP:
         if ((M - ave_mPP * (1+(G>M)) + (G - ave_dPP * (1+M>=G)) - ave_agg * (dir_blob.rdn+1) > 0) and len(PP_) > ave_nsub):
-            from agg_recursion import agg_recursion, CaggPP  # agglomeration by centroid cross-comp:
-
+            dir_blob.valt = [M,G]
+            from agg_recursion import agg_recursion, CaggPP
+            # convert PPs to CaggPPs:
             for i, PP in enumerate(PP_):
                 players_t = [[], []]
                 fd = PP.fds[-1]
                 players_t[fd] = PP.players
                 if PP.oPP: players_t[1-fd] = PP.oPP.players
                 PP_[i] = CaggPP(PP=PP, players_t=players_t, fds=deepcopy(PP.fds), x0=PP.x0, xn=PP.xn, y0=PP.y0, yn=PP.yn)
-
+            # agglomeration in PP graphs:
             levels = agg_recursion(dir_blob, PP_, rng=2, fseg=0)  # default rng = 2?
 
         for i, (comb_level, level) in enumerate(zip_longest(comb_levels, levels, fillvalue=[])):
@@ -337,7 +338,7 @@ def form_seg_root(P__, fPd, fds):  # form segs from Ps
             P = P_.pop(0)
             if P.uplink_layers[-1]:  # last matching derPs layer is not empty
                 form_seg_(seg_, P__, [P], fPd, fds)  # test P.matching_uplink_, not known in form_seg_root
-            elif not fPd:  # # for fPd, pack Ps to seg only if there's at least one derP
+            else:
                 seg_.append( sum2seg([P], fPd, fds))  # no link_s, terminate seg_Ps = [P]
 
     return seg_
@@ -358,7 +359,7 @@ def form_seg_(seg_, P__, seg_Ps, fPd, fds):  # form contiguous segments of verti
                 form_seg_(seg_, P__, seg_Ps, fPd, fds)  # recursive compare sign of next-layer uplinks
             else:
                 seg_.append( sum2seg(seg_Ps, fPd, fds))
-        elif not fPd:  # for fPd, pack Ps to seg only if there's at least one derP
+        else:
             seg_.append( sum2seg(seg_Ps, fPd, fds))  # terminate seg at 0 matching uplink
 
 # not sure:
@@ -391,7 +392,6 @@ def rng_eval(derP, fPd):  # compute value of combined mutual derPs: overlap betw
         rdn += derP.valt[fPd] > derP.valt[1-fPd]
         olp_val += derP.valt[fPd]  # olp_val not reset for every derP?
         derP.valt[fPd] = olp_val / nolp
-
     '''
     for i, derP in enumerate( sorted( link_layers[-2], key=lambda derP: derP.params[fPd].val, reverse=True)):
     if fPd: derP.rdn += derP.params[fPd].val > derP.params[1-fPd].val  # mP > dP
@@ -418,8 +418,8 @@ def form_PP_root(seg_t, base_rdn):  # form PPs from match-connected segs
                 # convert PP_segs to PP:
                 PP = sum2PP(PP_segs, base_rdn)
                 PP_ += [PP]
-                # add oPP, 1st PP or single PP will not having any oPP (1st PPd will not having oPP, and hence the formed PPP will not have m(core) part, set oPP as bilateral for 1st PP?)
-                PP.oPP = _PP
+                if _PP not in PP.oPP_:  # adjacent opposite-sign PPs from above, below, left, right
+                    PP.oPP_+=[_PP]; _PP.oPP_+=[PP]
                 _PP = PP
 
     return PP_
@@ -732,7 +732,7 @@ def copy_P(P, iPtype=None):   # Ptype =0: P is CP | =1: P is CderP | =2: P is CP
         P.dlayers = dlayers
         P.levels = levels
         P.root = root
-        new_P.PP_ = copy(PP_)  
+        new_P.PP_ = copy(PP_)
         new_P.cPP_ = copy(cPP_)
         new_P.rlayers = copy(rlayers)
         new_P.dlayers = copy(dlayers)
