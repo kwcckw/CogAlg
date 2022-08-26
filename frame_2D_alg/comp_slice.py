@@ -180,10 +180,10 @@ def comp_slice_root(blob, verbose=False):  # always angle blob, composite dert c
                 fd = PP.fds[-1]
                 players_t[fd] = PP.players
                 players_t[1-fd] = PP.oPP_[0].players
-                for oPP in PP.oPP_[1:]: sum_players(players_t[1-fd], oPP.players)  # sum all oPPs' players
+                for oPP in PP.oPP_[1:]: sum_players(players_t[1-fd], oPP.players)  # sum all oPPs
                 PP_[i] = CaggPP(PP=PP, players_t=players_t, fds=deepcopy(PP.fds), x0=PP.x0, xn=PP.xn, y0=PP.y0, yn=PP.yn)
-            # agglomeration in PP graphs:
-            levels = agg_recursion(dir_blob, PP_, rng=2, fseg=0)  # default rng = 2?
+            # cluster PPs into graphs:
+            levels = agg_recursion(dir_blob, PP_, rng=2, fseg=0)
 
         for i, (comb_level, level) in enumerate(zip_longest(comb_levels, levels, fillvalue=[])):
             if level:
@@ -419,7 +419,7 @@ def form_PP_root(seg_t, base_rdn):  # form PPs from match-connected segs
                 # convert PP_segs to PP:
                 PP = sum2PP(PP_segs, base_rdn)
                 PP_ += [PP]
-                if _PP and _PP not in PP.oPP_:  # adjacent opposite-sign PPs from above, below, left, right
+                if _PP and _PP not in PP.oPP_:  # vertically adjacent opposite-sign PPs, may be multiple above and below?
                     PP.oPP_+=[_PP]; _PP.oPP_+=[PP]
                 _PP = PP
 
