@@ -148,49 +148,54 @@ def form_graph(PPP_):  # cluster PPPs by mutual connections: match summed across
 
     graph_ = []
     for PPP in PPP_:  # each PPP is a node and a potential nucleus of a graph, which is also CaggPP?
-
-        eval_ref_layer(PPP.PP_, graph_, graph=CaggPP(), shared_M=0)  # init graph per PPP, graph.PP_ is connected PPPs
+        if not isinstance(PPP.root, CaggPP):  # PPP.root (graph) might be formed from prior search
+            graph = CaggPP()
+        else:
+            graph = PPP.root
+        
+        # pack 1st PPP into graph
+        accum_PPP(graph, PPP)  # accumulate players_t and valt
+        graph.PP_ += [PPP]  # add PPP into PP_
+        PPP.root = graph  # update root reference
+        
+        eval_ref_layer(PPP, graph=graph, shared_M=0)  # init graph per PPP, graph.PP_ is connected PPPs
+        graph_.append(graph)  # pack graph only after the searching is done
 
     return graph_
 
 # initial draft, total mess:
-def eval_ref_layer(PP_, graph_, graph, shared_M):
-
-    for (PP, derPP, fint) in PP_:
+def eval_ref_layer(PPP, graph, shared_M):
+    
+    for (PP, derPP, fint) in PPP.PP_:
         shared_M += derPP.valt[0]  # initialization
-
         for (_PP, _derPP, _fint) in PP.root.PP_:
-            if _PP is PP:  # mutual connection
+            
+            # below should be always false?
+            # PP.root.PP_ shouldn't contain PP, as in comp_PP_, _PPP didn't pack _PP in their PP_
+            if _PP is PP:  # mutual connection 
                 shared_M += _derPP.valt[0]
-                break  # or comp PPs?
-
-            if shared_M > ave_agg:  # need to add rdn if graphs overlap
-                eval_ref_layer(_PP.root.PP_, graph_, graph, shared_M)
-
-    # not updated:
-            for PP in graph_:
-                inPPP = PP.root
-            # draft:
-            if not isinstance(inPPP.root, CaggPP):  # don't have existing graph
-                if graph.valt[0] > inPPP.valt[0]:
-                    graph.PP_ += [inPPP]  # connected PPP
-                    inPPP.root = graph
-                    accum_PPP(graph, inPPP)
-                else:
-                    # reinitialize inPPP's graph
-                    alt_graph = CaggPP(valt=copy(inPPP.valt), players_t=copy(inPPP.players_t))
-                    alt_graph.PP_ += [inPPP]  # connected PPP
-                    inPPP.root = alt_graph
-            else:  # inPPP has existing graph
-                # merge graphs here？
-                accum_PPP(graph, inPPP.root)
-                for PP in inPPP.root.PP_:
-                    if PP not in graph.PP_:
-                        graph.PP += [PP]
+                # add _PP.root (alt PPP) into graph
+                if shared_M > ave_agg:  # need to add rdn if graphs overlap    
+                    _PPP = _PP.root
+                    alt_graph = _PPP.root
+                    if isinstance(alt_graph, CaggPP):  # _PPP is in another graph, merge them
+                        if alt_graph is not graph:
+                            # merge graphs
+                            accum_PPP(graph, alt_graph)  # accumulate players_t and valt
+                            graph.PP_ += alt_graph.PP_  # merge PPPs into graph.PP_
+                            for alt_PPP in _PPP.root.PP_:  # update graph reference
+                                alt_PPP.root = graph
+                    
+                    else:  # pack _PPP into graph
+                        accum_PPP(graph, _PPP)  # accumulate players_t and valt
+                        graph.PP_ += [_PPP]  # add PPP into PP_
+                        _PPP.root = graph  # update root reference
+                        
+                        # if _PPP has graph, it should be searched in prior loop, so eval_ref_layer need to be in else section
+                        eval_ref_layer(_PPP, graph, shared_M)  # search recursively from cPP of PP
 
 
 def accum_PPP(_PPP, PPP):
-
     for fd in 0,1:
         sum_players(_PPP.players_t[fd], PPP.players_t[fd])
         _PPP.valt[fd] += PPP.valt[fd]
