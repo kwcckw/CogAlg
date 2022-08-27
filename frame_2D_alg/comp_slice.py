@@ -88,6 +88,7 @@ class Cptuple(ClusterStructure):  # bottom-layer tuple of lateral or vertical pa
 class CP(ClusterStructure):  # horizontal blob slice P, with vertical derivatives per param if derP, always positive
 
     ptuple = object  # x, L, I, M, Ma, G, Ga, angle( Dy, Dx), aangle( Sin_da0, Cos_da0, Sin_da1, Cos_da1), n, val
+    oP_ = list  # Ps at the edges of different seg
     x0 = int
     y = int  # for vertical gap in PP.P__
     rdn = int  # blob-level redundancy, ignore for now
@@ -160,9 +161,11 @@ def comp_slice_root(blob, verbose=False):  # always angle blob, composite dert c
         P__ = slice_blob(dir_blob, verbose=False)  # cluster dir_blob.dert__ into 2D array of blob slices
         comp_P_root(P__)  # scan_P_, comp_P | link_layer, adds mixed uplink_, downlink_ per P; comp_dx_blob(P__), comp_dx?
 
+        Pm__ = copy_P_(P__)
+        Pd__ = copy_P_(P__)
         # form segments: parameterized stacks of (P,derP)s:
-        segm_ = form_seg_root([[copy_P(P) for P in P_] for P_ in P__], fPd=0, fds=[0])
-        segd_ = form_seg_root([[copy_P(P) for P in P_] for P_ in P__], fPd=1, fds=[0])
+        segm_ = form_seg_root(Pm__, fPd=0, fds=[0])
+        segd_ = form_seg_root(Pd__, fPd=1, fds=[0])
 
         # form PPs: parameterized graphs of connected segs:
         PP_ = form_PP_root((segm_, segd_), base_rdn=2)  # update to mixed-fork PP_, select by PP.fPd:
@@ -347,10 +350,10 @@ def form_seg_root(P__, fPd, fds):  # form segs from Ps
 def form_seg_(seg_, P__, seg_Ps, fPd, fds):  # form contiguous segments of vertically matching Ps
 
     if len(seg_Ps[-1].uplink_layers[-1]) > 1:  # terminate seg
-        # we can't do this here, PP is not formed yet?
-        if _PP and _PP not in PP.oPP_:  # vertically adjacent opposite-sign PPs, may be multiple above and below?
-            PP.oPP_ += [_PP]; _PP.oPP_ += [PP]
-
+        P = seg_Ps[-1]
+        for uplink in seg_Ps[-1].uplink_layers[-1]:  # add uplinks' P as oP
+            _P = uplink._P
+            P.oP_ += [_P]; _P.oP_ += [P]  # bilateral assignment
         seg_.append( sum2seg( seg_Ps, fPd, fds))  # convert seg_Ps to CPP seg
 
     else:
@@ -493,6 +496,16 @@ def sum2PP(PP_segs, base_rdn):  # sum PP_segs into PP
     for seg in PP_segs:
         accum_PP(PP, seg)
     PP.fds = copy(seg.fds)
+    
+    # search top row and bottom row of oP and get oPP
+    if len(PP.P__)>1: P__ = PP.P__[0] + PP.P__[-1]
+    else:             P__ = PP.P__[0]
+    
+    for P in P__:  # PP.P__ is packed top down, search top row for oP' oPP
+        for oP in P.oP_:
+            if oP.root.root not in PP.oPP_:
+                PP.oPP_ += oP.root.root   # pack oP's oPP
+        
 
     return PP
 
@@ -676,6 +689,22 @@ def append_P(P__, P):  # pack P into P__ in top down sequence
             if P.y > y: P__.insert(i, [P])  # PP.P__.insert(P.y - current_ys[-1], [P])
 
 
+def copy_P_(P__, iPtype=None):   # Ptype =0: P is CP | =1: P is CderP | =2: P is CPP | =3: P is CderPP | =4: P is CaggPP
+
+    new_P__ = [[copy_P(P, iPtype) for P in P_] for P_ in P__]
+    
+    # update oP_ to new copied P
+    for new_P_ in new_P__:
+        for new_P in new_P_:
+            for i, oP in enumerate(new_P.oP_):  # oP is still referencing to old P__, update it to new P__
+                for alt_new_P_ in new_P__:
+                    for alt_new_P in alt_new_P_:
+                        if alt_new_P.id == oP.id:  # same id to determine same P
+                            new_P.oP_[i] = alt_new_P
+    
+    return new_P__
+                        
+
 def copy_P(P, iPtype=None):   # Ptype =0: P is CP | =1: P is CderP | =2: P is CPP | =3: P is CderPP | =4: P is CaggPP
 
     if not iPtype:  # assign Ptype based on instance type if no input type is provided
@@ -702,10 +731,10 @@ def copy_P(P, iPtype=None):   # Ptype =0: P is CP | =1: P is CderP | =2: P is CP
         PP_derP, _PP_derP = P.PP, P._PP  # local copy of derP.P and derP._P
         P.PP, P._PP = None, None  # reset
     elif Ptype == 4:
-        PP_, cPP_ = P.PP_, P.cPP_
+        gPP_, cPP_ = P.gPP_, P.cPP_
         rlayers, dlayers = P.rlayers, P.dlayers
         levels, root = P.levels, P.root
-        P.PP_, P.cPP_, P.rlayers, P.dlayers, P.levels, P.root = [], [], [], [], [], None  # reset
+        P.gPP_, P.cPP_, P.rlayers, P.dlayers, P.levels, P.root = [], [], [], [], [], None  # reset
 
     new_P = P.copy()  # copy P with empty root and link layers, reassign link layers:
     new_P.uplink_layers += copy(uplink_layers)
@@ -732,13 +761,13 @@ def copy_P(P, iPtype=None):   # Ptype =0: P is CP | =1: P is CderP | =2: P is CP
         new_P.PP, new_P._PP = PP_derP, _PP_derP
         P.PP, P._PP = PP_derP, _PP_derP
     elif Ptype == 4:
-        P.PP_ = PP_
+        P.gPP_ = gPP_
         P.cPP_ = cPP_
         P.rlayers = rlayers
         P.dlayers = dlayers
         P.levels = levels
         P.root = root
-        new_P.PP_ = copy(PP_)
+        new_P.gPP_ = copy(gPP_)
         new_P.cPP_ = copy(cPP_)
         new_P.rlayers = copy(rlayers)
         new_P.dlayers = copy(dlayers)

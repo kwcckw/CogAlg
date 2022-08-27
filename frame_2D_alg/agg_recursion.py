@@ -48,7 +48,7 @@ class CgPP(CPP, CderPP):  # generic PP, of any composition
     rlayers = list  # | mlayers
     dlayers = list  # | alayers
     levels = lambda: [[]]  # agg_PPs ) agg_PPPs ) agg_PPPPs..
-    root = lambda: CgPP()  # higher-order segP or PPP
+    root = object # lambda: CgPP()  # higher-order segP or PPP
 
 
 def agg_recursion(root, PP_, rng, fseg=0):  # compositional recursion per blob.Plevel; P, PP, PPP are relative to each other
@@ -126,34 +126,35 @@ def form_graph(PPP_):  # cluster PPPs by mutual connections: match summed across
         PPP.root=graph
         graph_+=[graph]
     for graph in graph_:
-        eval_ref_layer(graph_=graph_, graph=graph, shared_M=0)  # graphs may grow|shrink or be removed from graph_ at each ref_layer
+        eval_ref_layer(graph_=graph_, graph=graph, gPPP_=graph.gPP_, shared_M=0)  # graphs may grow|shrink or be removed from graph_ at each ref_layer
 
     return graph_
 
 # draft
-def eval_ref_layer(graph_, graph, shared_M):  # recursive eval of increasingly mediated nodes (graph_, graph, shared_M)?
+def eval_ref_layer(graph_, graph, gPPP_, shared_M):  # recursive eval of increasingly mediated nodes (graph_, graph, shared_M)?
 
-    gPP_=graph.gPP_
+    for gPPP in gPPP_:
+        for (gPP, derPP, fint) in gPPP.gPP_:
+            shared_M += derPP.valt[0]  # accum shared_M across mediating node layers
+            for (_gPP, _derPP, _fint) in gPP.root.gPP_:  # _PP.PPP / PP.PPP reciprocal refs:
+    
+                if _gPP is gPP:  # mutual connection
+                    shared_M += _derPP.valt[0] - ave_agg  # * rdn from graphs overlap, per ref_layer
+                    if shared_M > 0:
+                        _graph = _gPP.root.root  # we need root.root to get graph from PP's PPP's graph?
+                        
+                        if _graph is not graph:  # merge graphs:
+                            for fd in 0, 1:
+                                sum_players(graph.players_t[fd], _graph.players_t[fd])
+                                graph.valt[fd] += _graph.valt[fd]
+                            graph.gPP_ += _graph.gPP_
+                            graph_.remove(_graph)
 
-    for (gPP, derPP, fint) in gPP_:
-        shared_M += derPP.valt[0]  # accum shared_M across mediating node layers
-        for (_gPP, _derPP, _fint) in gPP.root.gPP_:  # _PP.PPP / PP.PPP reciprocal refs:
-
-            if _gPP is gPP:  # mutual connection
-                shared_M += _derPP.valt[0] - ave_agg  # * rdn from graphs overlap, per ref_layer
-                if shared_M > 0:
-                    _graph = _gPP.root
-                    if _graph is not graph:  # merge graphs:
-                        for fd in 0, 1:
-                            sum_players(graph.players_t[fd], _graph.players_t[fd])
-                            graph.valt[fd] += _graph.valt[fd]
-                        graph.gPP_ += _graph.gPP_
-                        graph_.remove(_graph)
-
-                    # very tentative, definitely wrong:
-                    for ref_gPP in _gPP.gPP_:
-                        for ref_root_gPP in ref_gPP.root.gPP_:
-                            eval_ref_layer(graph_, ref_root_gPP, shared_M)  # search recursively mediated refs
+                            # search and check from _gPP again
+                            for ref_gPP in _gPP.gPP_:
+                                for ref_root_gPP in ref_gPP.root.gPP_:
+                                    ref_root_graph = ref_root_gPP.root.root  
+                                    eval_ref_layer(graph_, ref_root_graph, ref_root_graph.gPP_, shared_M)  # search recursively mediated refs
 
 
 # not revised:
