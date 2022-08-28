@@ -178,8 +178,8 @@ def comp_slice_root(blob, verbose=False):  # always angle blob, composite dert c
                 players_t = [[], []]
                 fd = PP.fds[-1]
                 players_t[fd] = PP.players
-                players_t[1-fd] = PP.oPP_[0].players
-                for oPP in PP.oPP_[1:]: sum_players(players_t[1-fd], oPP.players)  # sum all oPPs
+                #  players_t[1-fd] = PP.oPP_[0].players
+                # for oPP in PP.oPP_[1:]: sum_players(players_t[1-fd], oPP.players)  # sum all oPPs
                 PP_[i] = CgPP(PP=PP, players_t=players_t, fds=deepcopy(PP.fds), x0=PP.x0, xn=PP.xn, y0=PP.y0, yn=PP.yn)
             # cluster PPs into graphs:
             levels = agg_recursion(dir_blob, PP_, rng=2, fseg=0)
@@ -681,6 +681,7 @@ def copy_P_(P__, iPtype=None):  # Ptype =0: P is CP | =1: P is CderP | =2: P is 
 
     new_P__ = [[copy_P(P, iPtype) for P in P_] for P_ in P__]
 
+    '''
     # update oP_ to new copied P
     for new_P_ in new_P__:
         for new_P in new_P_:
@@ -689,6 +690,8 @@ def copy_P_(P__, iPtype=None):  # Ptype =0: P is CP | =1: P is CderP | =2: P is 
                     for alt_new_P in alt_new_P_:
                         if alt_new_P.id == oP.id:  # same id to determine same P
                             new_P.oP_[i] = alt_new_P
+    '''
+    
     return new_P__
 
 def copy_P(P, iPtype=None):  # Ptype =0: P is CP | =1: P is CderP | =2: P is CPP | =3: P is CderPP | =4: P is CaggPP
@@ -715,8 +718,7 @@ def copy_P(P, iPtype=None):  # Ptype =0: P is CP | =1: P is CderP | =2: P is CPP
         rlayers = P.rlayers
         dlayers = P.dlayers
         P__ = P.P__
-        oPP_ = P.oPP_
-        P.seg_levels, P.rlayers, P.dlayers, P.P__, P.oPP_ = [], [], [], [], []  # reset
+        P.seg_levels, P.rlayers, P.dlayers, P.P__ = [], [], [], []  # reset
     elif Ptype == 3:
         PP_derP, _PP_derP = P.PP, P._PP  # local copy of derP.P and derP._P
         P.PP, P._PP = None, None  # reset
@@ -741,12 +743,10 @@ def copy_P(P, iPtype=None):  # Ptype =0: P is CP | =1: P is CderP | =2: P is CPP
         P.seg_levels = seg_levels
         P.rlayers = rlayers
         P.dlayers = dlayers
-        P.oPP_ = oPP_
         new_P.rlayers = copy(rlayers)
         new_P.dlayers = copy(dlayers)
         new_P.P__ = copy(P__)
         new_P.seg_levels = copy(seg_levels)
-        new_P.oPP_ = copy(oPP_)
     elif Ptype == 3:
         new_P.PP, new_P._PP = PP_derP, _PP_derP
         P.PP, P._PP = PP_derP, _PP_derP
