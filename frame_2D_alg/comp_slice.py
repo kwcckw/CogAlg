@@ -126,7 +126,8 @@ class CPP(CderP):  # derP params include P.ptuple
 
     players = list  # 1st plevel, same as in derP but L is area
     valt = lambda: [0,0]  # mval, dval summed across players
-    nvalt = lambda: [0,0]  # neg derPs, val.cnt per fd
+    nvalt = lambda: [0,0]  # from neg derPs:
+    nderP_t = lambda: [[],[]]  # miss links, add with nvalt for combined PP?
     fds = list  # fPd per player except 1st, to comp in agg_recursion
     x0 = int  # box, update by max, min; this is a 2nd plevel?
     xn = int
@@ -135,8 +136,8 @@ class CPP(CderP):  # derP params include P.ptuple
     rng = lambda: 1  # rng starts with 1
     rdn = int  # for PP evaluation, recursion count + Rdn / nderPs
     Rdn = int  # for accumulation only
-    nP = int  # len 2D derP__ in levels[0][fPd]?  ly = len(derP__), also x, y?
-    nderP = int
+    P_cnt = int  # len 2D derP__ in levels[0][fPd]?  ly = len(derP__), also x, y?
+    derP_cnt = int  # redundant per P
     uplink_layers = lambda: [[]]  # the links here will be derPPs from discontinuous comp, not in layers?
     downlink_layers = lambda: [[]]
     fPPm = NoneType  # PPm if 1, else PPd; not needed if packed in PP_
@@ -419,19 +420,15 @@ def form_PP_root(seg_t, base_rdn):  # form PPs from match-connected segs
                     form_PP_(PP_segs, seg.P__[0].downlink_layers[-1][fd].copy(), fup=0, fd=fd)
                 # convert PP_segs to PP:
                 PP_ += [sum2PP(PP_segs, base_rdn, fd)]
-
-        # update P's roott to PP after termination of all PPs
-        # we still need their seg root in form_PP_ hence their roott is updated here
-        for PP in PP_: 
+        # P.roott = seg.root after term of all PPs, for form_PP_
+        for PP in PP_:
             for P_ in PP.P__:
                 for P in P_:
                     P.roott[fd] = PP  # update root from seg to PP
-                    if fd: 
+                    if fd:
                         PPm = P.roott[0]
                         if PPm not in PP.altPP_: PP.altPP_ += [PPm]  # bilateral assignment of altPPs
-                        if PP not in PPm.altPP_: PPm.altPP_ += [PP]
-        
-                            
+                        if PP not in PPm.altPP_: PPm.altPP_ += [PP]  # PPd here
         PP_t += [PP_]
     return PP_t
 
@@ -470,8 +467,9 @@ def sum2seg(seg_Ps, fd, fds):  # sum params of vertically connected Ps into segm
         P.roott[fd] = seg
         for derP in P.uplink_layers[-2]:
             if derP not in P.uplink_layers[-1][fd]:
-                seg.nvalt[fd] += derP.valt[fd]  # -ve links in full links, not in +ve links
-
+                # actually nval and nderP_ in segs, they are not sign-complemented:
+                seg.nvalt += derP.valt[fd]  # -ve links in full links, not in +ve links
+                seg.nderP_t += [derP]
     accum_derP(seg, seg_Ps[-1], fd)  # accum last P only, top P uplink_layers are not part of seg
     seg.y0 = seg_Ps[0].y
     seg.yn = seg.y0 + len(seg_Ps)
@@ -490,7 +488,7 @@ def accum_derP(seg, derP, fd):  # derP might be CP, though unlikely
         seg.xn = max(seg.xn, derP.x0 + derP.ptuple.L)
     else:
         sum_players(seg.players, derP.players)  # last derP player is current mplayer, dplayer
-        for i, val in enumerate(derP.valt): seg.valt[i]+=val
+        seg.valt += derP.valt[fd]
         seg.xn = max(seg.xn, derP.x0 + derP.players[0][0].L)
 
 
@@ -501,48 +499,38 @@ def sum2PP(PP_segs, base_rdn, fd):  # sum PP_segs into PP
 
     for seg in PP_segs:
         sum_players(PP.players, seg.players)  # not empty inp's players
-        for i in 0, 1: PP.valt[i] += seg.valt[i]
+        PP.fds = copy(seg.fds)
         PP.x0 = min(PP.x0, seg.x0)  # external params: 2nd player?
         PP.xn = max(PP.xn, seg.xn)
         PP.y0 = min(seg.y0, PP.y0)
         PP.yn = max(seg.yn, PP.yn)
         PP.Rdn += seg.rdn  # base_rdn + PP.Rdn / PP: recursion + forks + links: nderP / len(P__)?
-        PP.nderP += len(seg.P__[-1].uplink_layers[-1][fd])  # redundant derivatives of the same P
-        PP.fds = copy(seg.fds)
-        
-        # += seg.link_s, they are all misses now
-        for i, (PP_layer, seg_layer) in enumerate(zip_longest(PP.uplink_layers, seg.uplink_layers, fillvalue=[])):   
+        PP.derP_cnt += len(seg.P__[-1].uplink_layers[-1][fd])  # redundant derivatives of the same P
+        # actually nval and nderP_ in segs, only PPs are sign-complemented:
+        PP.valt[fd] += seg.valt
+        PP.nvalt[fd] += seg.nvalt
+        PP.nderP_t[fd] += seg.nderP_t
+        # += miss seg.link_s:
+        for i, (PP_layer, seg_layer) in enumerate(zip_longest(PP.uplink_layers, seg.uplink_layers, fillvalue=[])):
             if seg_layer:
                if i > len(PP.uplink_layers)-1: PP.uplink_layers.append(copy(seg_layer))
-               else:                           PP_layer += seg_layer
-        for i, (PP_layer, seg_layer) in enumerate(zip_longest(PP.downlink_layers, seg.downlink_layers, fillvalue=[])):   
+               else: PP_layer += seg_layer
+        for i, (PP_layer, seg_layer) in enumerate(zip_longest(PP.downlink_layers, seg.downlink_layers, fillvalue=[])):
             if seg_layer:
                if i > len(PP.downlink_layers)-1: PP.downlink_layers.append(copy(seg_layer))
-               else:                             PP_layer += seg_layer
-               
+               else: PP_layer += seg_layer
         for P in seg.P__:
             if not PP.P__: PP.P__.append([P])  # pack 1st P
-            else:          append_P(PP.P__, P)  # pack P into PP.P__
+            else: append_P(PP.P__, P)  # pack P into PP.P__
 
-        # add root to derP
-        for P_ in PP.P__[1:-1]:  # skip 1st and last row
-            for derP in P.uplink_layers[-1][fd]:
-                derP.roott[fd] = PP
-
-        # add neg vals
+        # add derPs from seg branches:
         for derP in seg.P__[-1].uplink_layers[-2]:
-            if derP not in seg.P__[-1].uplink_layers[-1][fd]:  # neg links
-                PP.nvalt[fd] += derP.valt[fd]
-        '''
-        # not reviewed:   
-        # add terminated seg links for rng+:
-        for derP in inp.P__[0].downlink_layers[-1][fd]:  # if downlink not in current PP's downlink and not part of the seg in current PP:
-            if derP not in PP.downlink_layers[-2] and derP.P.roott[fd] not in PP.seg_levels[-1]:
-                PP.downlink_layers[-2] += [derP]
-        for derP in inp.P__[-1].uplink_layers[-1][fd]:  # if downlink not in current PP's downlink and not part of the seg in current PP:
-            if derP not in PP.downlink_layers[-2] and derP.P.roott[fd] not in PP.seg_levels[-1]:
-                PP.uplink_layers[-2] += [derP]
-        '''
+            for i, val in enumerate(derP.valt):
+                if derP in seg.P__[-1].uplink_layers[-1][fd]:  # +ve links
+                    PP.valt[i] += val
+                else:  # -ve links
+                    PP.nvalt[i] += val
+                    PP.nderP_t[i] += [derP]
     return PP
 
 
@@ -796,11 +784,17 @@ def sub_recursion_eval(PP_):  # for PP or dir_blob
     mcomb_layers, dcomb_layers, PPm_, PPd_ = [], [], [], []
     for PP in PP_:
 
-        fPd = PP.fds[-1]
-        if fPd: comb_layers = dcomb_layers; PP_layers = PP.dlayers; PPd_ += [PP]
-        else:   comb_layers = mcomb_layers; PP_layers = PP.rlayers; PPm_ += [PP]
-        val = PP.valt[fPd]; alt_val = PP.valt[not fPd]  # for fork rdn:
-        ave = PP_aves[fPd] * (PP.rdn + 1 + (alt_val > val))
+        fd = PP.fds[-1]
+        if fd:  # add root to derP for der+:
+            for P_ in PP.P__[1:-1]:  # skip 1st and last row
+                for P in P_:
+                    for derP in P.uplink_layers[-1][fd]:
+                        derP.roott[fd] = PP
+            comb_layers = dcomb_layers; PP_layers = PP.dlayers; PPd_ += [PP]
+        else:
+            comb_layers = mcomb_layers; PP_layers = PP.rlayers; PPm_ += [PP]
+        val = PP.valt[fd]; alt_val = PP.valt[not fd]  # for fork rdn:
+        ave = PP_aves[fd] * (PP.rdn + 1 + (alt_val > val))
         if val > ave and len(PP.P__) > ave_nsub:
 
             sub_recursion(PP)  # comp_P_der | comp_P_rng in PPs -> param_layer, sub_PPs
