@@ -127,7 +127,7 @@ class CPP(CderP):  # derP params include P.ptuple
     players = list  # 1st plevel, same as in derP but L is area
     valt = lambda: [0,0]  # mval, dval summed across players
     nvalt = lambda: [0,0]  # from neg derPs:
-    nderP_t = lambda: [[],[]]  # miss links, add with nvalt for combined PP?
+    nderP_t = lambda: [[],[]]  # miss links, add with nvalt for compemented PP
     fds = list  # fPd per player except 1st, to comp in agg_recursion
     x0 = int  # box, update by max, min; this is a 2nd plevel?
     xn = int
@@ -161,18 +161,18 @@ def comp_slice_root(blob, verbose=False):  # always angle blob, composite dert c
         P__ = slice_blob(dir_blob, verbose=False)  # cluster dir_blob.dert__ into 2D array of blob slices
         comp_P_root(P__)  # scan_P_, comp_P | link_layer, adds mixed uplink_, downlink_ per P; comp_dx_blob(P__), comp_dx?
 
-        # form segments: stacks of (P,derP)s:
+        # segments are stacks of (P,derP)s:
         segm_ = form_seg_root([copy(P_) for P_ in P__], fd=0, fds=[0])  # shallow copy: same Ps in different lists
         segd_ = form_seg_root([copy(P_) for P_ in P__], fd=1, fds=[0])
-        # form PPs: graphs of segs:
+        # PPs are graphs of segs:
         PPm_, PPd_ = form_PP_root((segm_, segd_), base_rdn=2)  # not mixed-fork PP_, select by PP.fPd?
-
+        # intra PP:
         dir_blob.rlayers, dir_blob.dlayers = sub_recursion_eval(PPm_ + PPd_)  # add rlayers, dlayers, seg_levels to select PPs
 
         comb_levels, levels = [],[]  # dir_blob agg_levels
         M = dir_blob.M; G = dir_blob.G  # weak-fork rdn, or combined value?
-        # intra-PP:
         if ((M - ave_mPP * (1+(G>M)) + (G - ave_dPP * (1+M>=G)) - ave_agg * (dir_blob.rdn+1) > 0) and len(PPm_) > ave_nsub):
+        # cross PP:
             dir_blob.valt = [M,G]
             from agg_recursion import agg_recursion, CgPP
             # convert PPs to CgPPs:
@@ -186,10 +186,10 @@ def comp_slice_root(blob, verbose=False):  # always angle blob, composite dert c
             # cluster PPs into graphs:
             levels = agg_recursion(dir_blob, PPm_, rng=2, fseg=0)
 
-        for i, (comb_level, level) in enumerate(zip_longest(comb_levels, levels, fillvalue=[])):
-            if level:
-                if i > len(comb_levels)-1: comb_levels += [level]  # add new level
-                else: comb_levels[i] += [level]  # append existing level
+            for i, (comb_level, level) in enumerate(zip_longest(comb_levels, levels, fillvalue=[])):
+                if level:
+                    if i > len(comb_levels)-1: comb_levels += [level]  # add new level
+                    else: comb_levels[i] += [level]  # append existing level
         dir_blob.agg_levels = [[PP_]] + comb_levels  # 1st + higher agg_levels
 
     # splice_dir_blob_(blob.dir_blobs)  # draft
@@ -302,7 +302,7 @@ def comp_P_der(P__):  # der+ sub_recursion in PP.P__, compare P.uplinks to P.dow
         dderPs_ = []  # row of dderPs
         for P in P_:
             dderPs = []  # dderP for each _derP, derP pair in P links
-            for _derP in P.uplink_layers[-1][1]:  # fd always = 1 here
+            for _derP in P.uplink_layers[-1][1]:  # fd=1
                 for derP in P.downlink_layers[-1][1]:
                     # there maybe no x overlap between recomputed Ls of _derP and derP, compare anyway,
                     # mderP * (ave_olp_L / olp_L)? or olp(_derP._P.L, derP.P.L)?
@@ -334,7 +334,7 @@ def form_seg_root(P__, fd, fds):  # form segs from Ps
 
     return seg_
 
-# not sure:
+
 def link_eval(link_layers, fd):
 
     # sort derPs in link_layers[-2] by their value param:
@@ -498,7 +498,7 @@ def sum2PP(PP_segs, base_rdn, fd):  # sum PP_segs into PP
         PP.yn = max(seg.yn, PP.yn)
         PP.Rdn += seg.rdn  # base_rdn + PP.Rdn / PP: recursion + forks + links: nderP / len(P__)?
         PP.derP_cnt += len(seg.P__[-1].uplink_layers[-1][fd])  # redundant derivatives of the same P
-        # actually nval and nderP_ in segs, only PPs are sign-complemented:
+        # only PPs are sign-complemented, seg..[not fd]s are empty:
         PP.valt[fd] += seg.valt[fd]
         PP.nvalt[fd] += seg.nvalt[fd]
         PP.nderP_t[fd] += seg.nderP_t[fd]
