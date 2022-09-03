@@ -55,31 +55,23 @@ class CgPP(CPP, CderPP):  # generic PP, of any composition
 
 def agg_recursion(root, PP_, rng, fseg=0):  # compositional recursion per blob.Plevel; P, PP, PPP are relative to each other
 
-    PPP_ = comp_PP_(PP_, rng)  # cross-comp all PPs within rng, same PPP_ for both forks, add fseg?
+    # copy to prevent empty PP_ after pop
+    PPP_ = comp_PP_(copy(PP_), rng)  # cross-comp all PPs within rng, same PPP_ for both forks, add fseg?
     graph_ = form_graph(PPP_, rng)  # if top level miss, lower levels match: splice PPs vs form PPPs
 
     # intra graph:
     if sum(root.valt) > ave_agg * root.rdn:
-        valt = sub_recursion_agg(graph_)  # re-form PPP.PP_ by der+ if PPP.fPd else rng+, accum root.valt
-        for rval, val in zip(root.valt, valt):
-            rval+=val
+        sub_recursion_agg(graph_, root.valt)  # re-form PPP.PP_ by der+ if PPP.fPd else rng+, accum root.valt
+
     # cross graph:
     val = sum(root.valt)
-    comb_levels = []
-    if (val > ave_agg * root.rdn) and len(graph_) > ave_nsub:
-        root.rdn += 1  # i think we need increase rdn for each new recursion, so probably use local rdn here?
-        if fseg: levels = root.seg_levels
-        else:    levels = root.levels
+    mlevels, dlevels = [graph_], []  # not sure on d part
+    if (val > ave_agg * root.rdn/ len(graph_)) and len(graph_) > ave_nsub:
+        root.rdn += 1  
+        sub_mlevels, sub_dlevels = agg_recursion(root, graph_, rng = val/ave_agg, fseg=fseg)  # cross-comp graphs
+        mlevels += sub_mlevels; dlevels += sub_dlevels
 
-        levels += [agg_recursion(root, graph_, rng = val/ave_agg, fseg=fseg)]  # cross-comp graphs
-        for graph in graph_:
-            for i, (comb_level, level) in enumerate(zip_longest(comb_levels, graph.levels, fillvalue=[])):
-                if level:
-                    if i > len(comb_levels) - 1: comb_levels += [[level]]  # add new level
-                    else: comb_levels[i] += [level]  # append existing layer
-        comb_levels += [graph_] + comb_levels
-
-    return comb_levels
+    return mlevels, dlevels
 
 
 def comp_PP_(PP_, rng):  # 1st cross-comp
@@ -174,7 +166,7 @@ def eval_ref_layer(graph_, graph, PPP_, shared_M):  # recursive eval of increasi
 
 
 # draft:
-def sub_recursion_agg(graph_):  # rng+: extend PP_ per PPP, der+: replace PP with derPP in PPt
+def sub_recursion_agg(graph_, root_valt):  # rng+: extend PP_ per PPP, der+: replace PP with derPP in PPt
 
     comb_layers = []
 
@@ -189,6 +181,7 @@ def sub_recursion_agg(graph_):  # rng+: extend PP_ per PPP, der+: replace PP wit
             else:  graph_layers = graph.rlayers
 
             graph_layers += sub_recursion_agg(sub_graph_, graph.valt)  # re-form PPP.PP_ by der+ if PPP.fPd else rng+, accum root.valt
+            root_valt[0] += graph.valt[0]; root_valt[1] += graph.valt[1]  # i think we can add it here?
 
             for i, (comb_layer, graph_layer) in enumerate(zip_longest(comb_layers, graph_layers, fillvalue=[])):
                 if graph_layer:
