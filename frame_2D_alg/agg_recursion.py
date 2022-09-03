@@ -48,32 +48,36 @@ class CgPP(CPP, CderPP):  # generic PP, of any composition
     cPP_ = list  # co-refs in other PPPs
     rlayers = list  # | mlayers
     dlayers = list  # | alayers
-    levels = lambda: [[]]  # agg_PPs ) agg_PPPs ) agg_PPPPs..
+    mlevels = lambda: [[]]  # agg_PPs ) agg_PPPs ) agg_PPPPs..
+    dlevels = lambda: [[]]
     roott = lambda: [None, None]  # lambda: CgPP()  # higher-order segP or PPP
 
 
-def agg_recursion(root, PP_, rng, rdn, fseg=0):  # compositional recursion per blob.Plevel; P, PP, PPP are relative to each other
+def agg_recursion(root, PP_, rng, fseg=0):  # compositional recursion per blob.Plevel; P, PP, PPP are relative to each other
 
     PPP_ = comp_PP_(PP_, rng)  # cross-comp all PPs within rng, same PPP_ for both forks, add fseg?
     graph_ = form_graph(PPP_, rng)  # if top level miss, lower levels match: splice PPs vs form PPPs
 
-    sub_recursion_agg(graph_, root.valt)  # re-form PPP.PP_ by der+ if PPP.fPd else rng+, accum root.valt
+    # intra graph:
+    if sum(root.valt) > ave_agg * root.rdn:
+        valt = sub_recursion_agg(graph_)  # re-form PPP.PP_ by der+ if PPP.fPd else rng+, accum root.valt
+        for rval, val in zip(root.valt, valt):
+            rval+=val
+    # cross graph:
     val = sum(root.valt)
-    if (val > ave_agg * (root.rdn+rdn)) and len(PPP_) > ave_nsub:
-        rdn += 1  # i think we need increase rdn for each new recursion, so probably use local rdn here?
+    comb_levels = []
+    if (val > ave_agg * root.rdn) and len(graph_) > ave_nsub:
+        root.rdn += 1  # i think we need increase rdn for each new recursion, so probably use local rdn here?
         if fseg: levels = root.seg_levels
         else:    levels = root.levels
-        levels += [agg_recursion(root, PPP_, rng = val/ave_agg, rdn=rdn, fseg=fseg)]  # cross-comp PPP centroids
 
-    comb_levels = []
-    for PPP in PPP_:
-        for i, (comb_level, level) in enumerate(zip_longest(comb_levels, PPP.levels, fillvalue=[])):
-            if level:
-                if i > len(comb_levels) - 1:
-                    comb_levels += [[level]]  # add new level
-                else:
-                    comb_levels[i] += [level]  # append existing layer
-    comb_levels += [PPP_] + comb_levels
+        levels += [agg_recursion(root, graph_, rng = val/ave_agg, fseg=fseg)]  # cross-comp graphs
+        for graph in graph_:
+            for i, (comb_level, level) in enumerate(zip_longest(comb_levels, graph.levels, fillvalue=[])):
+                if level:
+                    if i > len(comb_levels) - 1: comb_levels += [[level]]  # add new level
+                    else: comb_levels[i] += [level]  # append existing layer
+        comb_levels += [graph_] + comb_levels
 
     return comb_levels
 
@@ -82,7 +86,7 @@ def comp_PP_(PP_, rng):  # 1st cross-comp
 
     PPP_ = []
     iPPP_ = [copy_P(PP, iPtype=4) for PP in PP_]
-    
+
     while PP_:  # compare _PP to all other PPs within rng
         _PP, _PPP = PP_.pop(), iPPP_.pop()
         _fid = _PP.fds[-1]
@@ -95,7 +99,7 @@ def comp_PP_(PP_, rng):  # 1st cross-comp
             dy = _PP.y / _area - PP.y / area
             distance = np.hypot(dy, dx)  # Euclidean distance between PP centroids
 
-            val = sum(_PP.valt) / (ave_mPP+ave_dPP)  # draft
+            val = sum(_PP.valt) / (ave_mPP+ave_dPP)  # combined PP eval
             if distance * val <= rng:
                 # comp PPs:
                 mplayer, dplayer = comp_players(_PP.players_t[_fid], PP.players_t[fid], _PP.fds, PP.fds)
@@ -144,13 +148,14 @@ def eval_ref_layer(graph_, graph, PPP_, shared_M):  # recursive eval of increasi
     for PPP in PPP_:
         for (PP, derPP, fint) in PPP.gPP_:
             shared_M += derPP.valt[0]  # accum shared_M across mediating node layers
+
             for (_PP, _derPP, _fint) in PP.roott[0].gPP_:  # _PP.PPP / PP.PPP reciprocal refs:
                 if _PP is PP:  # mutual connection
                     shared_M += _derPP.valt[0] - ave_agg  # eval graph inclusion by match to mediating gPP
                     # * rdn: sum PP_ rdns / len PP_ + cross-PPP overlap rate + cross-graph overlap rate?
                     if shared_M > 0:
-                        _graph = _PP.roott[0].roott[0]  # PP.PPP.graph: two nesting layers above PP
-                        if _graph is not graph:  # this should checked before evaluation?
+                        _graph = _PP.roott[0].roott[0]  # PP.PPP.graph[m]: two nesting layers above PP
+                        if _graph is not graph:
                             # merge graphs:
                             for fd in 0, 1:
                                 if _graph.players_t[fd]:
@@ -164,27 +169,27 @@ def eval_ref_layer(graph_, graph, PPP_, shared_M):  # recursive eval of increasi
                             for __PP in _PP.gPP_:
                                 for (_root_PP,_,_) in __PP.root.gPP_:
                                     _root_PPP = _root_PP.roott[0]
-                                    if _root_PPP.roott[0] is not graph:  # the next searching PPPs' graph is not current graph
+                                    if _root_PPP.roott[0] is not graph:
                                         eval_ref_layer(graph_, graph, _root_PPP.roott[0].gPP_, shared_M)
 
 
 # draft:
-def sub_recursion_agg(graph_, root_valt):  # rng+: extend PP_ per PPP, der+: replace PP with derPP in PPt
+def sub_recursion_agg(graph_):  # rng+: extend PP_ per PPP, der+: replace PP with derPP in PPt
 
     comb_layers = []
+
     for graph in graph_:
         fd = graph.fds[-1]
-        
         if graph.valt[fd] > PP_aves[fd] and len(graph.gPP_) > ave_nsub:
 
             sub_PPP_ = comp_PP_(graph.gPP_)  # cross-comp all PPs within rng, same PPP_ for both forks, add fseg?
             sub_graph_ = form_graph(sub_PPP_, graph.rng)  # if top level miss, lower levels match: splice PPs vs form PPPs
-        
+
             if fd: graph_layers = graph.dlayers
             else:  graph_layers = graph.rlayers
-        
+
             graph_layers += sub_recursion_agg(sub_graph_, graph.valt)  # re-form PPP.PP_ by der+ if PPP.fPd else rng+, accum root.valt
-            
+
             for i, (comb_layer, graph_layer) in enumerate(zip_longest(comb_layers, graph_layers, fillvalue=[])):
                 if graph_layer:
                     if i > len(comb_layers) - 1:
