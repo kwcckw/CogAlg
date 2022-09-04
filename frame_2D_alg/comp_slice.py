@@ -171,10 +171,11 @@ def comp_slice_root(blob, verbose=False):  # always angle blob, composite dert c
         dir_blob.rlayers = sub_recursion_eval(PPm_, fd=0)
         dir_blob.dlayers = sub_recursion_eval(PPd_, fd=1)  # add rlayers, dlayers, seg_levels to select PPs
 
-        dir_blob.mlevels, dir_blob.dlevels = [PPm_], [PPd_]  # dir_blob agg levels
+        dir_blob.mlevels, dir_blob.dlevels = [PPm_], [PPd_]  # agg levels
         M = dir_blob.M; G = dir_blob.G  # weak-fork rdn, or combined value?
+        # cross PP, currently PPm_ only:
         if ((M - ave_mPP * (1+(G>M)) + (G - ave_dPP * (1+M>=G)) - ave_agg * (dir_blob.rdn+1) > 0) and len(PPm_) > ave_nsub):
-        # cross PP:
+
             dir_blob.valt = [M,G]
             from agg_recursion import agg_recursion, CgPP
             # convert PPs to CgPPs:
@@ -186,8 +187,7 @@ def comp_slice_root(blob, verbose=False):  # always angle blob, composite dert c
                     if altPP.players: sum_players(players[1-fd], altPP.players)  # alt-fork PPs per PP
                 PPm_[i] = CgPP(PP=PP, players_t=players, fds=deepcopy(PP.fds), x0=PP.x0, xn=PP.xn, y0=PP.y0, yn=PP.yn)
             # cluster PPs into graphs:
-            sub_mlevels, sub_dlevels = agg_recursion(dir_blob, PPm_, rng=2, fseg=0)  # only PPms for now
-            dir_blob.mlevels += sub_mlevels; dir_blob.dlevels += sub_dlevels   # add new deeper levels
+            agg_recursion(dir_blob, PPm_, rng=2, fseg=0)  # only PPms for now
 
     # splice_dir_blob_(blob.dir_blobs)  # draft
 
@@ -785,7 +785,7 @@ def sub_recursion_eval(PP_, fd):  # for PP or dir_blob
                     if i > len(comb_layers) - 1: comb_layers += [PP_layer]  # add new r|d layer
                     else: comb_layers[i] += PP_layer  # splice r|d PP layer into existing layer
 
-        # segs rng_comp agg_recursion:
+        # segs agg_recursion:
         if val > ave*3 and len(PP.seg_levels[-1]) > ave_nsub and not fd:  # no independent agg_recursion for PPds
             if fd: seg_levels = PP.mseg_levels
             else:  seg_levels = PP.dseg_levels
@@ -809,7 +809,5 @@ def sub_recursion(PP):  # evaluate each PP for rng+ and der+
     sub_segd_ = form_seg_root([copy(P_) for P_ in P__], fd=1, fds=PP.fds)  # returns bottom-up
     sub_PPm_, sub_PPd_ = form_PP_root((sub_segm_, sub_segd_), PP.rdn + 1)  # PP is parameterized graph of linked segs
 
-    # not sure here
     PP.rlayers = sub_recursion_eval(sub_PPm_, fd=0)  # add rlayers, dlayers, seg_levels to select sub_PPs
     PP.dlayers = sub_recursion_eval(sub_PPd_, fd=1)
-    
