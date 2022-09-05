@@ -53,28 +53,28 @@ class CgPP(CPP, CderPP):  # generic PP, of any composition
     roott = lambda: [None, None]  # lambda: CgPP()  # higher-order segP or PPP
 
 
-def agg_recursion(root, PP_t, rng, fseg=0):  # compositional recursion per blob.Plevel; P, PP, PPP are relative to each other
+def agg_recursion(root, PP_, rng, fseg=0):  # compositional recursion per blob.Plevel; P, PP, PPP are relative to each other
 
-    PPPm_ = comp_PP_(copy(PP_t[0]), rng, fseg)  # cross-comp all PPs (which may be segs) within rng, same PPP_ for both forks
-    PPPd_ = comp_PP_(copy(PP_t[1]), rng, fseg)  # temporary, filler for d part comp process
-    
-    graphm_ = form_graph(PPPm_, rng, fd=0)  # if top level miss, lower levels match: splice PPs vs form PPPs
-    graphd_ = form_graph(PPPd_, rng, fd=1)
-
+    PPP_ = comp_PP_(copy(PP_), rng, fseg)  # cross-comp all PPs (which may be segs) within rng, same PPP_ for both forks
+    mgraph_ = form_graph(PPP_, rng, fd=0)  # if top level miss, lower levels match: splice PPs vs form PPPs
+    dgraph_ = form_graph(PPP_, rng, fd=1)
     # intra-graph:
     if sum(root.valt) > ave_agg * root.rdn:
         # draft:
-        sub_rlayers, rvalt = sub_recursion_agg(graphm_, root.valt, fd=0)  # re-form PPP.PP_ by der+ if PPP.fPd else rng+, accum root.valt
+        sub_rlayers, rvalt = sub_recursion_agg(mgraph_, root.valt, fd=0)  # re-form PPP.PP_ by der+ if PPP.fPd else rng+, accum root.valt
         root.valt[0] += sum(rvalt); root.rlayers = sub_rlayers
-        sub_dlayers, dvalt = sub_recursion_agg(graphd_, root.valt, fd=1)
+        sub_dlayers, dvalt = sub_recursion_agg(dgraph_, root.valt, fd=1)
         root.valt[1] += sum(dvalt); root.dlayers = sub_dlayers
     # cross-graph:
-    val = sum(root.valt)
-    if (val > ave_agg * (root.rdn/len(graph_))) and len(graphm_) > ave_nsub and len(graphd_) > ave_nsub:  # not sure about rdn norm
-        root.rdn += 1  # estimate, replace by actual after agg_recursion?
-        root.mlevels += graphm_  # bottom-up
-        root.dlevels += graphd_
-        agg_recursion(root, [graphm_, graphd_], rng = val/ave_agg, fseg=0)  # cross-comp graphs
+    for i, graph_ in enumerate([mgraph_, dgraph_]):
+        # val = sum(root.valt)  # this eval will be per graph
+        fork_rdnt = [1 + (root.valt[1] > root.valt[0]), 1 + (root.valt[0] >= root.valt[1])]
+
+        if (root.valt[i] > PP_aves[i] * ave_agg * (root.rdn + 1) * fork_rdnt[i]) and len(graph_) > ave_nsub:
+            root.rdn += 1  # estimate, replace by actual after agg_recursion?
+            root.mlevels += mgraph_  # bottom-up
+            root.dlevels += dgraph_
+            agg_recursion(root, graph_, rng=val / ave_agg, fseg=0)  # cross-comp graphs
 
 
 def comp_PP_(PP_, rng, fseg):  # 1st cross-comp, PPs may be segs inside a PP
@@ -120,6 +120,7 @@ def comp_PP_(PP_, rng, fseg):  # 1st cross-comp, PPs may be segs inside a PP
         PPP_.append(_PPP)
     return PPP_
 
+# below is not reviewed:
 
 def form_graph(PPP_, rng, fd):  # cluster PPPs by match of mutual connections, which is summed across shared nodes and their roots
 
@@ -178,16 +179,16 @@ def sub_recursion_agg(graph_, fseg, fd):  # rng+: extend PP_ per PPP, der+: repl
         if graph.valt[fd] > PP_aves[fd] and len(graph.gPP_) > ave_nsub:
 
             sub_PPP_ = comp_PP_(graph.gPP_, fseg)  # cross-comp all PPs within rng, same PPP_ for both forks, add fseg?
+            # should be 2 sub_graphs:
             sub_graph_ = form_graph(sub_PPP_, graph.rng)  # if top level miss, lower levels match: splice PPs vs form PPPs
 
             sub_rlayers, valt = sub_recursion_agg(sub_graph_, graph.valt, fd=0)  # re-form PPP.PP_ by der+ if PPP.fPd else rng+, accum root.valt
-            rvalt = sum(valt); graph.valt[0] += rvalt; sub_valt[0] += rvalt  # not sure 
+            rvalt = sum(valt); graph.valt[0] += rvalt; sub_valt[0] += rvalt  # not sure
             sub_dlayers, valt = sub_recursion_agg(sub_graph_, graph.valt, fd=1)
             dvalt = sum(valt); graph.valt[1] += dvalt; sub_valt[1] += dvalt
             graph.rlayers = sub_rlayers; graph.dlayers = sub_dlayers
-            
-            # i think we need to pack both rlayers and dlayers?
-            for comb_layers, graph_layers in zip(comb_layerst, [graph.rlayers, graph.dlayers]): 
+
+            for comb_layers, graph_layers in zip(comb_layerst, [graph.rlayers, graph.dlayers]):
                 for i, (comb_layer, graph_layer) in enumerate(zip_longest(comb_layers, graph_layers, fillvalue=[])):
                     if graph_layer:
                         if i > len(comb_layers) - 1:
