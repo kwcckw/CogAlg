@@ -37,6 +37,7 @@ class CgPP(CPP, CderPP):  # generic PP, of any composition
     rng = lambda: 1  # rng starts with 1
     rdn = int  # for PP evaluation, recursion count + Rdn / nderPs
     Rdn = int  # for accumulation only
+    oRdn = int  # overlapping redundancy
     nP = int  # len 2D derP__ in levels[0][fPd]?  ly = len(derP__), also x, y?
     uplink_layers = lambda: [[], []]  # likely not needed
     downlink_layers = lambda: [[], []]
@@ -145,6 +146,7 @@ def eval_ref_layer(graph_, graph, PPP_, shared_Val, fid):  # recursive eval of i
         for (PP, derPP, fint) in PPP.gPP_:
             shared_Val += derPP.valt[fid]  # accum shared_M across mediating node layers
 
+            # one of the PP.roott is empty now, we need to add d comp in comp_PP?
             for (_PP, _derPP, _fint) in PP.roott[fid].gPP_:  # _PP.PPP / PP.PPP reciprocal refs:
                 if _PP is PP:  # mutual connection
                     shared_Val += _derPP.valt[fid] - ave_agg  # eval graph inclusion by match to mediating gPP
