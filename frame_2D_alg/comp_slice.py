@@ -564,7 +564,7 @@ def sum_player(Player, player, fneg=0):  # accum players in Players
     for i, (Ptuple, ptuple) in enumerate(zip_longest(Player, player, fillvalue=[])):
         if ptuple:
             if Ptuple: accum_ptuple(Ptuple, ptuple, fneg)
-            elif Ptuple == None: Player[i] = ptuple  # not sure
+            elif Ptuple == None: Player[i] = deepcopy(ptuple)  # not sure
             elif not fneg: Player.append(deepcopy(ptuple))
 
 def accum_ptuple(Ptuple, ptuple, fneg=0):  # lataple or vertuple
