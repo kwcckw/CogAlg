@@ -137,7 +137,7 @@ class CPP(CderP):  # derP params include P.ptuple
     rng = lambda: 1  # rng starts with 1
     rdn = int  # for PP evaluation, recursion count + Rdn / nderPs
     Rdn = int  # for accumulation only
-    oRdn = int  # overlapping redundancy between core and edge
+    alt_rdn = int  # overlapping redundancy between core and edge
     P_cnt = int  # len 2D derP__ in levels[0][fPd]?  ly = len(derP__), also x, y?
     derP_cnt = int  # redundant per P
     uplink_layers = lambda: [[]]  # the links here will be derPPs from discontinuous comp, not in layers?
@@ -172,36 +172,36 @@ def comp_slice_root(blob, verbose=False):  # always angle blob, composite dert c
         # intra PP:
         dir_blob.rlayers = sub_recursion_eval(PPm_, fd=0)
         dir_blob.dlayers = sub_recursion_eval(PPd_, fd=1)  # add rlayers, dlayers, seg_levels to select PPs
-        
+
         # agg recursion
         dir_blob.mlevels = [PPm_]; dir_blob.dlevels = [PPd_]  # agg levels
-        pre_agg(dir_blob, [PPm_, PPd_], fseg=0)
-
+        agg_recursion_eval(dir_blob, [PPm_, PPd_], fseg=0)
         # splice_dir_blob_(blob.dir_blobs)  # draft
 
-# please suggest a better name
-def pre_agg(dir_blob, PP_t, fseg):
+
+def agg_recursion_eval(dir_blob, PP_t, fseg):
     from agg_recursion import agg_recursion, CgPP
 
     if fseg: M = dir_blob.players[0][0].M; G = dir_blob.players[0][0].G  # dir_blob is CPP
     else:    M = dir_blob.M; G = dir_blob.G; dir_blob.valt = [M, G]      # update valt only if dir_blob is Cblob
     fork_rdnt = [1+(G>M), 1+(M>=G)]
-    
+
     # cross PP:
     for fd, PP_ in enumerate(PP_t):
-        # add PP's overlapping rdn
-        oRdn = 0  # sum of oRdn across PP_
+        alt_Rdn = 0  # sum of alt_rdn across PP_
+
         for PP in PP_:
             if fseg: PP = PP.roott[PP.fds[-1]]  # use seg's root if fseg
             PP_P_ = [P for P_ in PP.P__ for P in P_]  # PP's Ps
             for altPP in PP.altPP_:  # check overlapping Ps from each alt PP
                 altPP_P_ = [P for P_ in altPP.P__ for P in P_]  # altPP's Ps
-                ordn = len(set(PP_P_).intersection(altPP_P_))
-                # not accumulation of oRdn for fseg = true
-                if not fseg: PP.oRdn += ordn  # add number of overlapping Ps (we don't assign bilaterally here because each PP will compute their oRdn in their own loop)
-                oRdn += ordn
-                
-        if (dir_blob.valt[fd] > PP_aves[fd] * ave_agg * (dir_blob.rdn+1) * fork_rdnt[fd]) and len(PP_) > ave_nsub and oRdn < ave_overlap:
+                alt_rdn = len(set(PP_P_).intersection(altPP_P_))
+                # not accumulation of alt_rdn for fseg = true
+                if not fseg: PP.alt_rdn += alt_rdn  # add number of overlapping Ps
+                # (we don't assign bilaterally here because each PP will compute their alt_rdn in their own loop)
+                alt_Rdn += alt_rdn
+
+        if (dir_blob.valt[fd] > PP_aves[fd] * ave_agg * (dir_blob.rdn+1) * fork_rdnt[fd]) and len(PP_) > ave_nsub and alt_Rdn < ave_overlap:
             for j, PP in enumerate(PP_):  # convert to CgPP
                 alt_players = []
                 if not fseg:  # seg doesn't have altPP
@@ -807,8 +807,8 @@ def sub_recursion_eval(PP_, fd):  # for PP or dir_blob
                     else: comb_layers[i] += PP_layer  # splice r|d PP layer into existing layer
 
         # segs agg_recursion:
-        pre_agg(PP, [PP.mseg_levels[-1], PP.dseg_levels[-1]], fseg=1)
-            
+        agg_recursion_eval(PP, [PP.mseg_levels[-1], PP.dseg_levels[-1]], fseg=1)
+
     return [[PPm_] + mcomb_layers], [[PPd_] + dcomb_layers]  # including empty comb_layers
 
 
