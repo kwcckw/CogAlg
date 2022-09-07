@@ -174,8 +174,8 @@ def comp_slice_root(blob, verbose=False):  # always angle blob, composite dert c
         dir_blob.dlayers = sub_recursion_eval(PPd_, fd=1)  # add rlayers, dlayers, seg_levels to select PPs
         # cross PP:
         dir_blob.mlevels = [PPm_]; dir_blob.dlevels = [PPd_]  # agg levels
-        dir_blob.mlevels += agg_recursion_eval(PPm_, fseg=0, fd=0)
-        dir_blob.dlevels += agg_recursion_eval(PPd_, fseg=0, fd=1)
+        agg_recursion_eval(dir_blob, [PPm_, PPd_], fseg=0)
+        
         # splice_dir_blob_(blob.dir_blobs)  # draft
 
 
