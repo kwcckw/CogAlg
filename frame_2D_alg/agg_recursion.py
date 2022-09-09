@@ -96,10 +96,15 @@ def comp_PP_(PP_, rng, fseg):  # cross-comp, same val,rng for both forks? PPs ma
         graph_ = []
         for i, _PP in enumerate(PP_):
             if not _PP.players_T[fd]: continue  # skip current _PP
-            for PP in PP_[i:]:
+            for PP in PP_[i+1:]:
                 if not PP.players_T[fd]: continue  # skip current PP, comp _PP to all other PPs in rng
 
-                area = PP.players_T[PP.fds][0].L; _area = _PP.players_T[PP.fds][0].L  # draft
+                # unpack in reverse order
+                ptuple = PP.players_T[fd]; _ptuple = _PP.players_T[fd]
+                for _afd, afd in zip(reversed(_PP.fds), reversed(PP.fds)):
+                    ptuple = ptuple[afd]; _ptuple = _ptuple[_afd]
+                area = ptuple.L; _area = _ptuple.L
+
                 dx = ((_PP.xn - _PP.x0) / 2) / _area - ((PP.xn - PP.x0) / 2) / area
                 dy = _PP.y / _area - PP.y / area
                 distance = np.hypot(dy, dx)  # Euclidean distance between PP centroids
@@ -113,26 +118,34 @@ def comp_PP_(PP_, rng, fseg):  # cross-comp, same val,rng for both forks? PPs ma
                     derPP = CderPP(player_t=[mplayer, dplayer], valt=valt)  # single-layer
                     # draft:
                     fint = []
-                    graph = CgPP(node_=[PP], fds=copy(PP.fds), valt=PP.valt, x0=PP.x0, xn=PP.xn, y0=PP.y0, yn=PP.yn,
+                    # node will be added in valt evaluation below?
+                    graph = CgPP(fds=copy(PP.fds), valt=PP.valt, x0=PP.x0, xn=PP.xn, y0=PP.y0, yn=PP.yn,
                                  players_T=[deepcopy(PP.players_T), deepcopy(PP.alt_players_T)])  # nested lower-composition core,edge tuples
                     PP.roott[fd] = graph  # set root of core part as graph
-                    graph_t[fd] += [graph]
+                    graph_ += [graph]
                     for fdd in 0,1:  # sum players per fork
                         if valt[fdd] > PP_aves[fdd]:  # no cross-fork support?
                             fin = 1
                             for gPP in _PP, PP:  # bilateral inclusion
                                 graph = gPP.roott[fd]
-                                sum_players(graph.players_T[fdd], PP.players_T[fdd])
-                                graph.node_ += [PP]
-                                sum_player(gPP.link_player_t[fdd], derPP.player_t[fdd])
+                                if graph:  # what if graph is not initialized yet?
+                                    graph.node_ += [PP]
+                                    sum_player(gPP.link_player_t[fdd], derPP.player_t[fdd])
+                                    
+                                    # unpack in reverse order
+                                    Players_T = graph.players_T[fd]
+                                    players_T = PP.players_T
+                                    for _gfd, gfd in zip(reversed(graph.fds), reversed(PP.fds)):
+                                        Players_T = Players_T[_gfd]
+                                        players_T = players_T[gfd]
+                                    sum_players([Players_T], [players_T])
                         else:
                             fin = 0
                         fint += [fin]
                     _PP.link_ += [[PP, derPP, fint]]
                     PP.link_ += [[_PP, derPP, fint]]
 
-            if _PP.roott[fd].node_:
-                graph_ += [_PP.roott[fd]]
+            if _PP.roott[fd] and _PP.roott[fd].node_: graph_ += [_PP.roott[fd]]
         graph_t += [graph_]
 
     return graph_t
