@@ -180,7 +180,7 @@ def comp_slice_root(blob, verbose=False):  # always angle blob, composite dert c
 
 
 def agg_recursion_eval(dir_blob, PP_t, fseg):
-    from agg_recursion import agg_recursion, CgPP
+    from agg_recursion import agg_recursion, Cgraph
 
     if fseg: M = dir_blob.players[0][0].M; G = dir_blob.players[0][0].G  # dir_blob is CPP
     else:    M = dir_blob.M; G = dir_blob.G; dir_blob.valt = [M, G]      # update valt only if dir_blob is Cblob
@@ -204,9 +204,16 @@ def agg_recursion_eval(dir_blob, PP_t, fseg):
         if (dir_blob.valt[fd] > PP_aves[fd] * ave_agg * (dir_blob.rdn+1) * fork_rdnt[fd]) and len(PP_) > ave_nsub and alt_Rdn < ave_overlap:
             for j, PP in enumerate(PP_):  # convert to CgPP
                 alt_players = []
+                alt_valt = [0, 0]
+                alt_fds = []
                 if not fseg:  # seg doesn't have altPP
-                    for altPP in PP.altPP_: sum_players(alt_players, altPP.players)
-                PP_[j] = CgPP(PP=PP, node_=[PP], players_T=[PP.players,alt_players], fds=deepcopy(PP.fds), x0=PP.x0, xn=PP.xn, y0=PP.y0, yn=PP.yn)
+                    for altPP in PP.altPP_: 
+                        sum_players(alt_players, altPP.players)
+                        alt_valt[0] += altPP.valt[0]; alt_valt[1] += altPP.valt[1]; 
+                        fds = altPP.fds  # not sure, it gets the last altPP's fds now
+                alt_plevels = [[alt_players, alt_fds, alt_valt]]
+                plevels = [[PP.players,PP.fds, PP.valt]]   
+                PP_[j] = Cgraph(PP=PP, node_=[PP], plevels=plevels, alt_plevels=alt_plevels, fds=deepcopy(PP.fds), x0=PP.x0, xn=PP.xn, y0=PP.y0, yn=PP.yn)
             # cluster PPs into graphs:
             dir_blob.rdn += 1  # estimate, replace by actual after agg_recursion?
             agg_recursion(dir_blob, PP_, rng=2, fseg=fseg)
@@ -784,7 +791,7 @@ def splice_2dir_blobs(_blob, blob):
 
 def sub_recursion_eval(PP_, fd):  # for PP or dir_blob
 
-    from agg_recursion import agg_recursion, CgPP
+    from agg_recursion import agg_recursion, Cgraph
     mcomb_layers, dcomb_layers, PPm_, PPd_ = [], [], [], []
     for PP in PP_:
         if fd:  # add root to derP for der+:

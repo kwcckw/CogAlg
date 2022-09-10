@@ -46,7 +46,7 @@ class Cgraph(CPP, CderPP):  # graph or generic PP of any composition
     alt_rdn = int  # valt representation in alt_PP_ valts
     rng = lambda: 1  # rng starts with 1, not for alt_PPs
     box = list
-    link_player_t = lambda: [[], []]  # one player, accum per fork
+    link_player_t = lambda: [[], []]  # one player, accum per fork  (this need to be in levels too?)
     link_ = list  # lateral gPP connections: (PP, derPP, fint)_, + deeper layers?
     node_ = list  # gPP elements, root of layers and levels:
     rlayers = list  # | mlayers, top-down
@@ -83,8 +83,10 @@ def form_graph_(PP_, rng, fseg):
 
     for PP in PP_:  # initialize mgraph, dgraph for each PP
         for fd in 0,1:
-            graph = Cgraph( plevels= [[deepcopy(PP.players), copy(PP.fds), PP.valt]],
+            graph = Cgraph( plevels=deepcopy(PP.plevels), alt_plevels=deepcopy(PP.alt_plevels),
                             node_=[PP], fds=[fd], x0=PP.x0, xn=PP.xn, y0=PP.y0, yn=PP.yn)  # probably some other params too
+            # init new plevel
+            graph.plevels += [[[], [], [0,0]]]
             PP.roott[fd] = graph
 
     mgraph_, dgraph_ = comp_PP_(PP_, rng, fseg)  # cross-comp all PPs in rng (PPs may be segs), compose graphs from +ve PP links
@@ -105,11 +107,12 @@ def comp_PP_(PP_, rng, fseg):  # cross-comp, same val,rng for both forks? PPs ma
     for fd in 0,1:
         graph_ = []
         for i, _PP in enumerate(PP_):  # comp _PP to all other PPs in rng, no alt_PPs yet:
-            if not _PP.players: continue  # skip current _PP
             for PP in PP_[i+1:]:
-                if not PP.players: continue  # skip current PP
-
-                area = PP.players[-1].L; _area = _PP.players[-1].L
+                # 1st [0] is 1st level
+                # 2nd [0] is 1st element (players)
+                # 3rd [0] is selecting the 1st player
+                # 4th [0] is selecting the 1st player's 1st ptuple
+                area = PP.plevels[0][0][0][0].L; _area = _PP.plevels[0][0][0][0].L  # first level L
                 dx = ((_PP.xn - _PP.x0) / 2) / _area - ((PP.xn - PP.x0) / 2) / area
                 dy = _PP.y / _area - PP.y / area
                 distance = np.hypot(dy, dx)  # Euclidean distance between PP centroids
@@ -118,7 +121,10 @@ def comp_PP_(PP_, rng, fseg):  # cross-comp, same val,rng for both forks? PPs ma
                 val = _PP.valt[fd] / PP_aves[fd]  # complimented val: cross-fork support, if spread spectrum?
                 if distance * val <= rng:
                     # comp PPs:
-                    mplayer, dplayer = comp_players(_PP.players, PP.players, _PP.fds, PP.fds)
+                    _players = PP.plevels[-1][0]; players = PP.plevels[-1][0]
+                    _fds = PP.plevels[-1][1]; fds = PP.plevels[-1][1]
+                    
+                    mplayer, dplayer = comp_players(_players, players, _fds, fds)
                     valt = [sum([mtuple.val for mtuple in mplayer]), sum([dtuple.val for dtuple in dplayer])]
                     derPP = CderPP(player_t=[mplayer, dplayer], valt=valt)  # single-layer
                     # no comp alt_PPs yet
@@ -129,8 +135,16 @@ def comp_PP_(PP_, rng, fseg):  # cross-comp, same val,rng for both forks? PPs ma
                             # draft:
                             for node, graph in zip([_PP, PP], [PP.roott[fd], _PP.roott[fd]]):  # bilateral inclusion
                                 graph.node_ += [node]
+                                
+                                # accumulate links
                                 sum_player(node.link_player_t[fdd], derPP.player_t[fdd])
-                                sum_players(graph.plevels[0][0], node.players)  # graph.plevels[i] = (players, fds, valt)
+                                # accumulate nodes
+                                sum_players(graph.plevels[-2][0], node.plevels[-1][0])  # graph.plevels[i] = (players, fds, valt)
+                                
+                                 # accumulate new players?
+                                sum_players(graph.plevels[-1][0], [derPP.player_t[fd]])  # sum current level new player
+                                graph.plevels[-1][1] = [fd]  # assign new fd? Not sure about the fd here.
+                                graph.plevels[-1][2][0] += derPP.valt[0]; graph.plevels[-1][2][0] += derPP.valt[1]  # sum valt   
                         else:
                             fin = 0
                         fint += [fin]
@@ -151,28 +165,17 @@ elif derPP.match params[:-1]: splice PPs and their segs?
 '''
 
 # below is not revised:
-
-def sum2graph(graph, PP, fd):  # sum PP into graph
-
-    for Players_t, players_t in zip_longest(graph.players_T[fd], PP.players_T, fillvalue=[]):
-        if players_t:
-            if not Players_t:  # empty PLayers_t, append it with players_t
-                graph.players_T[fd].append(deepcopy(players_t))
-            else:
-                # tentative and unfinished, need to unpack recursively in higher level of agg_recursion
-                sum_players(Players_t, players_t)
-
 def merge_graph(_graph, graph, fd):  # merge graph into _graph
 
     for node in graph.node_:
         if node not in graph.node_:
+            sum_players(_graph.plevels[-1][0], node.plevels[-1][0])
             sum2graph(_graph, node, fd)  # accumulate players_T with node's players_T
             node.roott[fd] = graph  # update node's roott reference
             graph.node_ += [node]    # add node into graph.node_
 
 
 # not reviewed:
-
 def cluster_node_layer(graph_, graph, node_, shared_Val, fid):  # recursive eval of mutual links in increasingly mediated nodes
 
     for node in node_:
