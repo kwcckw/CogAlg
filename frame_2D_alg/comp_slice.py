@@ -151,7 +151,7 @@ class CPP(CderP):  # derP params include P.ptuple
     mseg_levels = list  # from 1st agg_recursion[fPd], seg_levels[0] is seg_, higher seg_levels are segP_..s
     dseg_levels = list
     roott = lambda: [None,None]  # PPPm, PPPd that contain this PP
-    altPP_ = list  # alt-fork PPs per PP, from P.roott[1] in sum2PP
+    altPP_ = list  # adjacent alt-fork PPs per PP, from P.roott[1] in sum2PP
     cPP_ = list  # rdn reps in other PPPs, to eval and remove
 
 # Functions:
@@ -175,7 +175,7 @@ def comp_slice_root(blob, verbose=False):  # always angle blob, composite dert c
         # cross PP:
         dir_blob.mlevels = [PPm_]; dir_blob.dlevels = [PPd_]  # agg levels
         agg_recursion_eval(dir_blob, [PPm_, PPd_], fseg=0)
-        
+
         # splice_dir_blob_(blob.dir_blobs)  # draft
 
 
@@ -188,31 +188,31 @@ def agg_recursion_eval(dir_blob, PP_t, fseg):
 
     # cross PP:
     for fd, PP_ in enumerate(PP_t):
-        alt_Rdn = 0  # sum of alt_rdn across PP_
-
+        alt_Rdn = 0
         for PP in PP_:
-            if fseg: PP = PP.roott[PP.fds[-1]]  # use seg's root if fseg
-            PP_P_ = [P for P_ in PP.P__ for P in P_]  # PP's Ps
-            for altPP in PP.altPP_:  # check overlapping Ps from each alt PP
+            if fseg:
+                PP = PP.roott[PP.fds[-1]]  # seg root
+            PP_P_ = [P for P_ in PP.P__ for P in P_]  # PPs' Ps
+            for altPP in PP.altPP_:  # overlapping Ps from each alt PP
                 altPP_P_ = [P for P_ in altPP.P__ for P in P_]  # altPP's Ps
                 alt_rdn = len(set(PP_P_).intersection(altPP_P_))
-                # not accumulation of alt_rdn for fseg = true
-                if not fseg: PP.alt_rdn += alt_rdn  # add number of overlapping Ps
-                # (we don't assign bilaterally here because each PP will compute their alt_rdn in their own loop)
-                alt_Rdn += alt_rdn
+                if not fseg:
+                    PP.alt_rdn += alt_rdn  # count overlapping PPs, not bilateral, each PP computes its own alt_rdn
+                alt_Rdn += alt_rdn  # sum across PP_
 
         if (dir_blob.valt[fd] > PP_aves[fd] * ave_agg * (dir_blob.rdn+1) * fork_rdnt[fd]) and len(PP_) > ave_nsub and alt_Rdn < ave_overlap:
-            for j, PP in enumerate(PP_):  # convert to CgPP
+            # CPP -> Cgraph:
+            for j, PP in enumerate(PP_):
                 alt_players = []
                 alt_valt = [0, 0]
                 alt_fds = []
                 if not fseg:  # seg doesn't have altPP
-                    for altPP in PP.altPP_: 
+                    for altPP in PP.altPP_:
                         sum_players(alt_players, altPP.players)
-                        alt_valt[0] += altPP.valt[0]; alt_valt[1] += altPP.valt[1]; 
-                        fds = altPP.fds  # not sure, it gets the last altPP's fds now
+                        alt_valt[0] += altPP.valt[0]; alt_valt[1] += altPP.valt[1]
+                        # sum only lowest players with same fds sequence?
                 alt_plevels = [[alt_players, alt_fds, alt_valt]]
-                plevels = [[PP.players,PP.fds, PP.valt]]   
+                plevels = [[PP.players,PP.fds, PP.valt]]
                 PP_[j] = Cgraph(PP=PP, node_=[PP], plevels=plevels, alt_plevels=alt_plevels, fds=deepcopy(PP.fds), x0=PP.x0, xn=PP.xn, y0=PP.y0, yn=PP.yn)
             # cluster PPs into graphs:
             dir_blob.rdn += 1  # estimate, replace by actual after agg_recursion?
