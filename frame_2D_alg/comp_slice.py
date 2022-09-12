@@ -206,9 +206,23 @@ def agg_recursion_eval(dir_blob, PP_t, fseg):
                 alt_players = []
                 alt_valt = [0, 0]
                 alt_fds = []
-                if not fseg:  # seg doesn't have altPP
+                # seg doesn't have altPP
+                if not fseg and PP.altPP_:  # at least 1 alt PP  
+                    # get common fds
+                    common_fds = PP.altPP_[0].fds
+                    for altPP in PP.altPP_[1:]:
+                        fds = altPP.fds
+                        for i, (_fd, fd) in enumerate(zip(common_fds, fds)):
+                            if _fd != fd:
+                                common_fds = common_fds[:i]
+                                break
+                    # sum common players
                     for altPP in PP.altPP_:
-                        sum_players(alt_players, altPP.players)
+                        n_common = 0
+                        for alt_fd, fd in zip(altPP.fds, common_fds):
+                            if alt_fd == fd:
+                                n_common += 1
+                        sum_players(alt_players, altPP.players[:n_common])  # sum up to n common player?
                         alt_valt[0] += altPP.valt[0]; alt_valt[1] += altPP.valt[1]
                         # sum only lowest players with same fds sequence?
                 alt_plevels = [[alt_players, alt_fds, alt_valt]]
