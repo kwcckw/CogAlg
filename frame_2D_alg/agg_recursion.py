@@ -81,31 +81,29 @@ def form_graph_(PP_, rng, fseg):
 
     for PP in PP_:  # initialize mgraph, dgraph for each PP
         for fd in 0,1:
-            graph = Cgraph(plevels=deepcopy(PP.plevels), alt_plevels=deepcopy(PP.alt_plevels),
-                           fds=[fd], x0=PP.x0, xn=PP.xn, y0=PP.y0, yn=PP.yn)  # probably some other params too
-            PP.roott[fd] = graph
+            graph = [[PP],[0,0]]; PP.roott[fd] = graph  # [node_, valt] only
 
-    (mgraph_, dgraph_), (mvalt_, dvalt_) = comp_PP_(PP_, rng, fseg)  # cross-comp all PPs in rng (PPs may be segs), compose graphs from +ve PP links
+    mgraph_, dgraph_ = comp_PP_(PP_, rng, fseg)
+    # cross-comp all PPs within rng (PPs may be segs), compose graphs from +ve PP links
 
-    for fd, (igraph_, valt_) in enumerate(zip([mgraph_, dgraph_], [mvalt_, dvalt_])):
+    for fd, igraph_ in enumerate(mgraph_, dgraph_):
         graph_ = copy(igraph_)  # copy for popping
         while graph_:
             graph= graph_.pop(0)  # eval intermediate nodes to extend / prune / merge graphs:
-            valt = valt_.pop(0)
-            cluster_node_layer(graph_= igraph_, graph=graph, node_=graph.node_, valt=valt, shared_Val=0, fid=fd)
+            cluster_node_layer(graph_= igraph_, graph=graph, shared_Val=0, fid=fd)  # node_=graph[0], valt=graph[1]
 
-        sum2graph_(igraph_, fd)  # sum nodes' params into graph
+        sum2graph_(igraph_, fd)  # sum node_ params into graph
 
     return mgraph_, dgraph_
 
 
 def comp_PP_(PP_, rng, fseg):  # cross-comp, same val,rng for both forks? PPs may be segs inside a PP
 
-    graph_t, valt_t = [], []
+    graph_t = []
     for fd in 0,1:
-        graph_, valt_ = [], []
+        graph_ = []
         for i, _PP in enumerate(PP_):  # comp _PP to all other PPs in rng, bilateral assign:
-            link_valt = [0,0]  # we need list here, otherwise it initialized s tuple by default, and tuple is immutable
+            link_valt = [0,0]
             for PP in PP_[i+1:]:
 
                 area = PP.plevels[0][0][0][0].L; _area = _PP.plevels[0][0][0][0].L  # 1st plevel' players' 1st player' 1st ptuple' L
@@ -116,27 +114,25 @@ def comp_PP_(PP_, rng, fseg):  # cross-comp, same val,rng for both forks? PPs ma
 
                 val = _PP.valt[fd] / PP_aves[fd]  # no complimented val: cross-fork support if spread spectrum?
                 if distance * val <= rng:
-                    _players = PP.plevels[-1][0]; players = PP.plevels[-1][0]
-                    _fds = PP.plevels[-1][1]; fds = PP.plevels[-1][1]
+                    _players = _PP.plevels[-1][0]; players = PP.plevels[-1][0]
+                    _fds = _PP.plevels[-1][1]; fds = PP.plevels[-1][1]
                     # comp PPs:
                     mplevel, dplevel = comp_players(_players, players, _fds, fds)
-                    # need to revise:
-                    valt = [sum([mtuple.val for mtuple in mplevel]), sum([dtuple.val for dtuple in dplevel])]
-                    derPP = CderG(plevel_t=[mplevel, dplevel], valt=valt)  # single-layer
-                    # comp altPPs?
+                    valt = [sum([mtuple.val for plevel in mplevel[0] for player in plevel[0] for mtuple in player]),
+                            sum([dtuple.val for plevel in dplevel[0] for player in plevel[0] for dtuple in player])]
+                    derPP = CderG(plevel_t=[mplevel, dplevel], valt=valt)  # single-level
+                    # add comp altPPs, same-fds only
                     fint = []
                     for fdd in 0,1:  # sum players per fork
                         if valt[fdd] > PP_aves[fdd]:  # no cross-fork support?
                             fin = 1
-                            # draft:
                             for node, graph in zip([_PP, PP], [PP.roott[fd], _PP.roott[fd]]):  # bilateral inclusion
                                 graph.node_ += [node]
                                 link_valt[0] += derPP.valt[0]; link_valt[1] += derPP.valt[1]  # local for graph eval
-                                sum_player(node.link_plevel_t[fdd], derPP.plevel_t[fdd])  # accum links
                                 '''
-                                new graph.plevel accum from its node.link_plevel_ts after the graph is complete
-                                or all plevels accum when complete, easier in batches, no sum/subtract at exclusion or merge 
+                                all plevels accum when graph is complete, easier in batches, no sum/subtract at exclusion or merge 
                                 we only need to reform node_ and accumulate link_valt to evaluate cluster_node_layer and reforming
+                                # sum_player(node.link_plevel_t[fdd], derPP.plevel_t[fdd])  # accum links
                                 '''
                         else:
                             fin = 0
@@ -144,14 +140,11 @@ def comp_PP_(PP_, rng, fseg):  # cross-comp, same val,rng for both forks? PPs ma
                     _PP.link_ += [[PP, derPP, fint]]
                     PP.link_ += [[_PP, derPP, fint]]
 
-            if len(_PP.roott[fd].node_)>1:
-                # only positively linked PPs are stored as actual graphs:
-                graph_ += [_PP.roott[fd]]  # local link_valt for cluster_node_layer eval, add link_nvalt?
-                valt_ += [link_valt]
-        graph_t += [graph_]
-        valt_t += [valt_]
+            if len(_PP.roott[fd].node_)>1:  # only positively linked PPs are stored in graphs
+                graph_ += [_PP.roott[fd], link_valt]  # link_valt for cluster_node_layer eval, add link_nvalt?
 
-    return graph_t, valt_t
+        graph_t += [graph_]
+    return graph_t
 '''
 _PP.cPP_ += [[PP, derPP, [1,1]]]  # rdn refs, initial fins=1, derPP is reversed
 PP.cPP_ += [[_PP, derPP, [1,1]]]  # bilateral assign to eval in centroid clustering, derPP is reversed
@@ -159,19 +152,7 @@ if derPP.match params[-1]: form PPP
 elif derPP.match params[:-1]: splice PPs and their segs? 
 '''
 
-def sum2graph_(graph_, fd):  # sum nodes' params into graph
-    for graph in graph_:
-        for node in graph.node_[1:]:  # 1st node is used to initialize graph
-
-            graph.x0=min(graph.x0, node.x0)
-            graph.xn=max(graph.xn, node.xn)
-            graph.y0=min(graph.y0, node.y0)
-            graph.yn=max(graph.yn, node.yn)
-            
-            sum_players(graph.plevels[-1][0], node.plevels[-1][0])  # accum nodes
-            
-
-# not reviewed: (link_valt is not in used yet)
+# link_valt is not used yet
 def cluster_node_layer(graph_, graph, node_, valt, shared_Val, fid):  # recursive eval of mutual links in increasingly mediated nodes
 
     for node in node_:
@@ -198,13 +179,13 @@ def cluster_node_layer(graph_, graph, node_, valt, shared_Val, fid):  # recursiv
 # not reviewed:
 def sub_recursion_agg(graph_, fseg, fd):  # rng+: extend PP_ per PPP, der+: replace PP with derPP in PPt
 
-    comb_layerst = [[],[]]
+    comb_layers_t = [[],[]]
     sub_valt = [0,0]
 
     for graph in graph_:
         if graph.valt[fd] > PP_aves[fd] and len(graph.gPP_) > ave_nsub:
-            sub_graph_t = form_graph_(graph.node_, graph.rng, fseg)
 
+            sub_graph_t = form_graph_(graph.node_, graph.rng, fseg)
             if sum(graph.valt) > ave_agg * graph.rdn:
 
                 sub_rlayers, valt = sub_recursion_agg(sub_graph_t[0], graph.valt, fd=0)
@@ -213,7 +194,7 @@ def sub_recursion_agg(graph_, fseg, fd):  # rng+: extend PP_ per PPP, der+: repl
                 dvalt = sum(valt); graph.valt[1] += dvalt; sub_valt[1] += dvalt
                 graph.rlayers = sub_rlayers; graph.dlayers = sub_dlayers
 
-                for comb_layers, graph_layers in zip(comb_layerst, [graph.rlayers, graph.dlayers]):
+                for comb_layers, graph_layers in zip(comb_layers_t, [graph.rlayers, graph.dlayers]):
                     for i, (comb_layer, graph_layer) in enumerate(zip_longest(comb_layers, graph_layers, fillvalue=[])):
                         if graph_layer:
                             if i > len(comb_layers) - 1:
@@ -221,7 +202,21 @@ def sub_recursion_agg(graph_, fseg, fd):  # rng+: extend PP_ per PPP, der+: repl
                             else:
                                 comb_layers[i] += graph_layer  # splice r|d PP layer into existing layer
 
-    return comb_layerst, sub_valt
+    return comb_layers_t, sub_valt
+
+
+def sum2graph_(igraph_, fd):  # sum nodes' params into graph
+    for igraph in igraph_:
+        node_ = igraph[0]
+        # draft:
+        graph = Cgraph(PP=PP, node_=[PP], plevels=plevels, alt_plevels=alt_plevels, fds=deepcopy(PP.fds), x0=PP.x0, xn=PP.xn, y0=PP.y0, yn=PP.yn)
+        for node in graph[0]:
+            graph.x0=min(graph.x0, node.x0)
+            graph.xn=max(graph.xn, node.xn)
+            graph.y0=min(graph.y0, node.y0)
+            graph.yn=max(graph.yn, node.yn)
+
+            sum_players(graph.plevels[-1][0], node.plevels[-1][0])  # accum nodes
 
 
 # not fully revised, this is an alternative to form_graph, but may not be accurate enough to cluster:
