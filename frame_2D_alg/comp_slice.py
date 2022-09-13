@@ -512,7 +512,7 @@ def accum_derP(seg, derP, fd):  # derP might be CP, though unlikely
         seg.xn = max(seg.xn, derP.x0 + derP.ptuple.L)
     else:
         sum_players(seg.players, derP.players)  # last derP player is current mplayer, dplayer
-        seg.valt += derP.valt[fd]
+        seg.valt[0] += derP.valt[0]; seg.valt[1] += derP.valt[1] 
         seg.xn = max(seg.xn, derP.x0 + derP.players[0][0].L)
 
 
