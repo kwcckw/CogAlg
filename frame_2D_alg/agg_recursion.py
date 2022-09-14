@@ -84,7 +84,7 @@ def form_graph_(PP_, rng, fseg):
         for fd in 0,1:
             graph = [[PP],[0,0]]; PP.roott[fd] = graph  # [node_, valt]
 
-    mgraph_, dgraph_ = comp_PP_(PP_, rng, fseg)
+    mgraph_, dgraph_ = comp_graph_(PP_, rng, fseg)
     # cross-comp all PPs within rng (PPs may be segs), compose graphs from +ve PP links
 
     graph_t = []
@@ -93,29 +93,14 @@ def form_graph_(PP_, rng, fseg):
         while igraph_:
             graph = igraph_.pop(0)  # eval intermediate nodes to extend / prune / merge graphs:
             cluster_node_layer(graph_= igraph_, graph=graph, node_ = graph[0], shared_Val=graph[1][fd], fid=fd)
-            graph_ += [graph]  # pack proto-graph after cluster all nodes
+            graph_ += [graph]  # after merges and clustering of all nodes
 
         graph_t.append(sum2graph_(graph_, fd))  # sum node_ params into graph
 
     return graph_t
 
 
-def comp_plevels(_plevels, plevels, _fds, fds):
-
-    mlevels, dlevels = [], []  # output should be multiple levels
-    for (_plevel, _lfds, _valt), (plevel, lfds, valt) in zip(_plevels, plevels):
-        mplayer, dplayer = comp_players(_plevel, plevel, _lfds, fds)
-        new_fds = copy(_lfds) + _fds  # same fds for both mlevel and dlevel
-        mvalt = [sum([mtuple.val for mtuple in mplayer]), 0]  # not sure, 1 element stays empty now?
-        dvalt = [0, sum([dtuple.val for dtuple in dplayer])] 
-        mlevel = [[mplayer], new_fds, mvalt]
-        dlevel = [[dplayer], new_fds, dvalt]
-        mlevels.append(mlevel)
-        dlevels.append(dlevel)
-    return mlevels, dlevels
-
-# change to comp_graph_? Same as derPP to derG?
-def comp_PP_(PP_, rng, fseg):  # cross-comp, same val,rng for both forks? PPs may be segs inside a PP
+def comp_graph_(PP_, rng, fseg):  # cross-comp, same val,rng for both forks? PPs may be segs inside a PP
 
     graph_t = []
     for fd in 0,1:
@@ -132,10 +117,11 @@ def comp_PP_(PP_, rng, fseg):  # cross-comp, same val,rng for both forks? PPs ma
                 val = _PP.valt[fd] / PP_aves[fd]  # no complimented val: cross-fork support if spread spectrum?
                 if distance * val <= rng:
                     # comp PPs:
-                    mplevels, dplevels = comp_plevels(_PP.plevels, PP.plevels, _PP.fds, PP.fds)
+                    mplevel, dplevel = comp_plevels(_PP.plevels, PP.plevels, _PP.fds, PP.fds)
                     # players = plevel[0], draft:
-                    valt = [sum([mplevel[1][0] for mplevel in mplevels]), sum([dplevel[1][1] for dplevel in dplevels])]
-                    derPP = CderG(plevel_t=[mplevels, dplevels], valt=valt)
+                    valt = [sum([sub_mplevel[1][0] for sub_mplevel in mplevel]),
+                            sum([sub_dplevel[1][1] for sub_dplevel in dplevel])]
+                    derPP = CderG(plevel_t=[mplevel, dplevel], valt=valt)
                     # add comp same-fds altPPs here
                     fint = []
                     for fdd in 0,1:  # sum players per fork
@@ -157,32 +143,83 @@ def comp_PP_(PP_, rng, fseg):  # cross-comp, same val,rng for both forks? PPs ma
     return graph_t
 
 
-def cluster_node_layer(graph_, graph, node_, shared_Val, fid):  # recursive eval of mutual links in increasingly mediated nodes
+def cluster_node_layer(graph_, graph, node_, fd):  # recursive eval of mutual links in increasingly mediated nodes
 
     for PP in node_:  # graph node_
         for (_PP, _derPP, _fint) in PP.link_:
             for (__PP, __derPP, __fint) in _PP.link_:
-                if __PP is PP:  # __PP is connected to PP and _PP
-                    shared_Val += __derPP.valt[fid] - ave_agg  # graph is reinforced by mediated matches
-                    if shared_Val > 0:
-                        __graph = __PP.roott[fid]
-                        __node_, __valt = __graph
-                        if __graph is not graph:
-                            for __node in __node_:  # merge node
-                                if __node not in node_:
-                                    node_ += [__node]
-        
-                            graph_list = [graph for graph in graph_]  # get list of graph only, graph_ contain multiple [graph, valt] now
-                            if __graph in graph_list:
-                                graph_.pop(graph_list.index(__graph)) # remove graph from graph_
-                                graph_list.remove(__graph)
-        
-                            # graph may be removed in prior merging, since graph may have multiple nodes
-                            # recursively intermediated search for mutual connections
-                            for ___PP,_,_ in __PP.link_:
-                                ___graph = ___PP.roott[fid]
-                                if ___graph is not graph and __graph in graph_list:  # graph is not graph and not merged in prior scan
-                                    cluster_node_layer(graph_, graph, ___graph[0], shared_Val, fid)
+                if __PP is not PP:
+                    for (___PP, ___derPP, ___fint) in __PP.link_:
+                        if ___PP is PP:  # __PP is intermediate between _PP and PP
+                            adj_val = ___derPP.valt[fd] - ave_agg  # or specific ave per mediation layer?
+                            # adjust vals per node and graph:
+                            PP.valt[fd] += adj_val; _PP.valt[fd] += adj_val; graph.valt += adj_val
+                            # no shared_Val += adj_val for next cluster_node_layer
+    # draft:
+    for i, PP in enumerate(node_):  # re-eval after full graph is adjusted with mediating node layer:
+        if PP.valt[fd] > 0:
+            if graph[1][fd] > 0:  # valt
+                for (_PP, _derPP, _fint) in PP.link_:
+                    _graph = _PP.roott[fd]
+                    _node_, _valt = _graph
+                    if _graph is not graph:
+                        if _valt[fd] > 0:
+                            for _node in _node_:  # merge nodes
+                                if _node not in node_:
+                                    node_ += [_node]; graph[1]
+        # need to add a bunch of things
+        else:
+            del node_[i]
+
+                # not revised:
+
+                graph_list = [graph for graph in graph_]  # get list of graph only, graph_ contain multiple [graph, valt] now
+                if _graph in graph_list:
+                    graph_.pop(graph_list.index(_graph))  # remove graph from graph_
+                    graph_list.remove(_graph)
+
+                # graph may be removed in prior merging, since graph may have multiple nodes
+                # recursively intermediated search for mutual connections
+                for ___PP, _, _ in __PP.link_:
+                    ___graph = ___PP.roott[fd]
+                    if ___graph is not graph and __graph in graph_list:  # graph is not graph and not merged in prior scan
+                        cluster_node_layer(graph_, graph, ___graph[0], shared_Val, fd)
+
+# draft:
+def comp_plevels(_plevels, plevels, _fds, fds):
+
+    mlevel, dlevel = [], []  # flat lists of ptuples, nesting decoded by mapping to lower levels
+    mVal, dVal = 0,0
+
+    for (_plevel, _lfds, _valt), (plevel, lfds, valt), _fd, fd in zip(_plevels, plevels, _fds, fds):
+
+        if _fd==fd:
+            mplayer, dplayer, mval, dval = comp_players(_plevel, plevel, _lfds, lfds)
+            mlevel += mplayer; mVal += mval
+            dlevel += dplayer; dVal += dval
+        else:
+            break
+
+    return mlevel, dlevel, mVal, dVal
+
+# similar to comp_plevels:
+def comp_players(_layers, layers, _fds, fds):  # unpack and compare der layers, if any from der+
+
+    mtuple, dtuple = comp_ptuple(_layers[0][0], layers[0][0])  # initial latuples, always present, no val
+    mPlayer = [mtuple]; mVal = mtuple.val
+    dPlayer = [dtuple]; dVal = dtuple.val
+
+    for _player, player, _fd, fd in zip(_layers[1:], layers[1:], _fds, fds):
+        if _fd == fd:
+            for _ptuple, ptuple in zip(_player, player):
+                mtuple, dtuple = comp_ptuple(_ptuple, ptuple)
+                mPlayer += [mtuple]; mVal = mtuple.val
+                dPlayer += [dtuple]; dVal = dtuple.val
+        else:
+            break
+
+    return mPlayer, dPlayer, mVal, dVal
+
 
 # not reviewed:
 def sub_recursion_agg(graph_, fseg, fd):  # rng+: extend PP_ per PPP, der+: replace PP with derPP in PPt
@@ -235,19 +272,19 @@ def sum2graph_(igraph_, fd):  # sum nodes' params into graph
                     if plevel and plevel[0]:
                         if gplevel:
                             if gplevel[0]:
-                                sum_players(gplevel[0], plevel[0])  # accum nodes' players 
+                                sum_players(gplevel[0], plevel[0])  # accum nodes' players
                             else:
                                 gplevel[0] = deepcopy(plevel[0])
                             gplevel[1] = deepcopy(plevel[1])    # assign fds
                             gplevel[2][0] += plevel[2][0];gplevel[2][1] += plevel[2][1]  # accumulate valt
                         else:
-                            gplevels.append(deepcopy(plevel))  # pack new plevel             
-            
+                            gplevels.append(deepcopy(plevel))  # pack new plevel
+
             # accumulate derG
             for PP, derG,_ in node.link_:
                 if PP in node_:  # PP is in node, accumulate derG?
                     graph.plevels += derG.plevel_t[fd]  # add new level?
-                    graph.alt_plevels += derG.plevel_t[1-fd]          
+                    graph.alt_plevels += derG.plevel_t[1-fd]
         graph_ += [graph]
     return graph_
 
@@ -341,7 +378,7 @@ def comp_centroid(PPP_):  # comp PP to average PP in PPP, sum >ave PPs into new 
 
     return PPP_
 
-
+# this is obsolete?
 # for deeper agg_recursion:
 def comp_levels(_levels, levels, der_levels, fsubder=0):  # only for agg_recursion, each param layer may consist of sub_layers
 
