@@ -88,14 +88,14 @@ def form_graph_(PP_, rng, fseg):
     # cross-comp all PPs within rng (PPs may be segs), init graphs with +ve PP links:
     mgraph_, dgraph_ = comp_graph_(PP_, rng, fseg)
 
-
     graph_t = []
     for fd, igraph_ in enumerate([mgraph_, dgraph_]):
         graph_ = []
         while igraph_:
             graph = igraph_.pop(0)  # eval intermediate nodes to extend / prune / merge graphs:
-            cluster_node_layer(graph_= igraph_, graph=graph, node_ = graph[0], fd=fd)
-            graph_ += [graph]  # after merges and mediating node clustering
+            cluster_node_layer(graph_= igraph_, graph=graph, fd=fd)
+            if graph[1][fd] >0 and len(graph[0])>0:  # checking of len(node_) probably is just redundant, but just in case 
+                graph_ += [graph]  # after merges and mediating node clustering
 
         graph_t.append(sum2graph_(graph_, fd))  # sum node_ params into graph
 
@@ -145,10 +145,10 @@ def comp_graph_(PP_, rng, fseg):  # cross-comp, same val,rng for both forks? PPs
     return graph_t
 
 
-def cluster_node_layer(graph_, graph, node_, fd):  # recursive eval of mutual links in increasingly mediated nodes
-
+def cluster_node_layer(graph_, graph, fd):  # recursive eval of mutual links in increasingly mediated nodes
+    
+    node_, valt = graph
     med_PPs_ = []  # __PPs mediating between PPs and _PPs
-
     for PP in node_:  # graph node_
         med_PPs = []
         for (_PP, _derPP, _fint) in PP.link_:
@@ -158,34 +158,35 @@ def cluster_node_layer(graph_, graph, node_, fd):  # recursive eval of mutual li
                         if ___PP is PP:  # __PP mediates between _PP and PP
                             adj_val = ___derPP.valt[fd] - ave_agg  # ave per mediation layer?
                             # adjust vals per node and graph:
-                            PP.valt[fd] += adj_val; _PP.valt[fd] += adj_val; graph[1][fd] += adj_val
-                            if __PP not in med_PPs_: med_PPs_ += [__PP]
+                            PP.valt[fd] += adj_val; _PP.valt[fd] += adj_val; valt[fd] += adj_val
+                            if __PP not in med_PPs: med_PPs += [__PP]
         med_PPs_ += [med_PPs]
 
-    if graph[1][fd] <= 0: graph_.remove(graph)  # neg val
-    else:
+    if valt[fd] > 0:
+        # remove node with valt < 0 first
+        positive_node_ = []
+        while node_:
+            PP = node_.pop(0)
+            if PP.valt[fd] > 0: positive_node_ += [PP]
+        graph[0] = positive_node_          
+        
         add_node_ = []
-        for i, PP in enumerate(node_):  # re-eval after full graph is adjusted with mediating node layer:
-            if PP.valt[fd] <= 0: node_.remove([i])
-            else:
-                _PP_ = med_PPs_[i]
-                for _PP in _PP_:
-                    if _PP.valt[fd] <= 0: node_.remove(_PP)
-                    else:
-                        _graph = _PP.roott[fd]
-                        _node_, _valt = _graph
-                        if _valt[fd] <= 0: graph_.remove(_graph)
-                        elif _graph is not graph and _graph in graph_:  # _graph is not merged yet
-                            # merge graphs
-                            for _node in _node_:
-                                if _node not in node_+add_node_: add_node_ += [_node]
-                            graph[1][fd] += _valt[fd]
-                            graph_.remove(_graph)
-        node_ += add_node_  
+        for i, PP in enumerate(positive_node_):  # re-eval after full graph is adjusted with mediating node layer:
+            _PP_ = med_PPs_[i]
+            for _PP in _PP_:
+                _graph = _PP.roott[fd]
+                _node_, _valt = _graph
+                if _valt[fd] > 0 and _graph is not graph and _graph in graph_:  # _graph is not merged yet
+                    # merge graphs
+                    for _node in _node_:
+                        if _node not in positive_node_+add_node_: add_node_ += [_node]
+                    valt[fd] += _valt[fd]
+                    graph_.remove(_graph)
+        positive_node_ += add_node_  
 
-        if graph[1][fd] > ave_agg:  # or ave_agg * nmed_layers?
+        if valt[fd] > ave_agg:  # or ave_agg * nmed_layers?
             # eval re-formed graph for next layer of med nodes:
-            cluster_node_layer(graph_, graph, node_, fd)
+            cluster_node_layer(graph_, graph, fd)
 
 
 def comp_plevels(_plevels, plevels, _fds, fds):
@@ -518,3 +519,4 @@ def merge_PP(_PP, PP, fPd):  # only for PP splicing
             _PP.uplink_layers += [uplink]
     for downlink in PP.downlink_layers:
         if downlink not in _PP.downlink_layers:
+            _PP.down_layers += [downlink]
