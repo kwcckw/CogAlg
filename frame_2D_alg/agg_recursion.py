@@ -94,7 +94,8 @@ def form_graph_(PP_, rng, fseg):
         while igraph_:
             graph = igraph_.pop(0)  # eval intermediate nodes to extend / prune / merge graphs:
             cluster_node_layer(graph_= igraph_, graph=graph, imed_node_=graph[0], fd=fd)
-            graph_ += [graph]  # after merges and mediating node clustering
+            if graph[1][fd] >= ave_agg :   # neg adjusted val
+                graph_ += [graph]  # after merges and mediating node clustering
 
         graph_t.append( sum2graph_(graph_, fd))  # sum node_ params into graph
 
@@ -129,14 +130,16 @@ def comp_graph_(PP_, rng, fseg):  # cross-comp, same val,rng for both forks? PPs
                         if valt[fdd] > PP_aves[fdd]:  # no cross-fork support?
                             fin = 1
                             for node, (graph, gvalt) in zip([_PP, PP], [PP.roott[fd], _PP.roott[fd]]):  # bilateral inclusion
-                                graph += [node]
-                                gvalt[0] += node.valt[0]; gvalt[1] += node.valt[1]
+                                if node not in graph: 
+                                    graph += [node]
+                                    gvalt[0] += node.valt[0]; gvalt[1] += node.valt[1]
                         else:
                             fin = 0
                         fint += [fin]
                     _PP.link_ += [[PP, derPP, fint]]
                     PP.link_ += [[_PP, derPP, fint]]
 
+            # why not node_>0? Why it is 1 here?
             if len(_PP.roott[fd][0])>1:  # only positively linked PPs are stored in graphs
                 graph_ += [_PP.roott[fd]]  # root = [node_, valt] for cluster_node_layer eval, add link_nvalt?
 
@@ -163,33 +166,29 @@ def cluster_node_layer(graph_, graph, imed_node_, fd):  # recursive eval of mutu
         med_PPs_ += [med_PPs]
 
     if valt[fd] > 0:  # else delete graph
-        save_node_ = []
-        while node_:
-            PP = node_.pop(0)
-            if PP.valt[fd] > 0: save_node_ += [PP]
-        add_node_, med_node_ = [],[]
-
+        save_node_, save_med_PPs_ = [], []
+        while imed_node_:
+            PP, med_PPs = imed_node_.pop(0), med_PPs_.pop(0)
+            if PP.valt[fd] > 0: 
+                save_node_ += [PP]; save_med_PPs_ += [med_PPs]
+        add_node_ = []
         for i, PP in enumerate(save_node_):  # re-eval after full graph is adjusted with mediating node layer:
-            _PP_ = med_PPs_[i]
+            _PP_ = save_med_PPs_[i]
             for _PP in _PP_:
                 _graph = _PP.roott[fd]
                 _node_, _valt = _graph
                 if _valt[fd] > 0:
-                    med_node_ += [_PP]
                     if _graph is not graph and _graph in graph_:  # _graph is not merged yet, merge graphs:
                         for _node in _node_:
-                            if _node not in save_node_+add_node_: add_node_ += [_node]
+                            if _node not in save_node_+add_node_+node_: add_node_ += [_node]
                         valt[fd] += _valt[fd]
                         graph_.remove(_graph)
-                else:
-                    graph_.remove(_graph)
-        graph[0] = save_node_ + add_node_
+                elif _graph in graph_: graph_.remove(_graph)  # _graph might be removed in prior _PP 
+        node_ += save_node_ + add_node_  # add +save node and mediated node
 
-        if valt[fd] > ave_agg:  # or ave_agg * nmed_layers?  eval re-formed graph for next layer of med nodes:
-            cluster_node_layer(graph_, graph, med_node_, fd)
-
-    elif valt[fd] < ave_agg:  # neg adjusted val
-        graph_.remove(graph)
+        if valt[fd] > ave_agg and add_node_:  # or ave_agg * nmed_layers?  eval re-formed graph for next layer of med nodes:
+            # actually here should be add_node? Since med_node should be checked in prior recursion and we just want to check those additional nodes?
+            cluster_node_layer(graph_, graph, add_node_, fd)  
 
 
 def comp_plevels(_plevels, plevels, _fds, fds):
@@ -231,24 +230,25 @@ def sub_recursion_agg(graph_, fseg, fd):  # rng+: extend PP_ per PPP, der+: repl
     sub_valt = [0,0]
 
     for graph in graph_:
-        if graph.valt[fd] > PP_aves[fd] and len(graph.gPP_) > ave_nsub:
+        if graph.valt[fd] > PP_aves[fd] and len(graph.node_) > ave_nsub:
 
-            sub_graph_t = form_graph_(graph.node_, graph.rng, fseg)
-            if sum(graph.valt) > ave_agg * graph.rdn:
+            sub_mgraph_, sub_dgraph_ = form_graph_(graph.node_, graph.rng, fseg)
+            # sub rng +:
+            sub_rlayers, valt = sub_recursion_agg(sub_mgraph_, graph.valt, fd=0)
+            rvalt = sum(valt); graph.valt[0] += rvalt; sub_valt[0] += rvalt  # not sure
+            graph.rlayers = sub_rlayers
+            # sub der+:
+            sub_dlayers, valt = sub_recursion_agg(sub_dgraph_, graph.valt, fd=1)
+            dvalt = sum(valt); graph.valt[1] += dvalt; sub_valt[1] += dvalt
+            graph.dlayers = sub_dlayers
 
-                sub_rlayers, valt = sub_recursion_agg(sub_graph_t[0], graph.valt, fd=0)
-                rvalt = sum(valt); graph.valt[0] += rvalt; sub_valt[0] += rvalt  # not sure
-                sub_dlayers, valt = sub_recursion_agg(sub_graph_t[1], graph.valt, fd=1)
-                dvalt = sum(valt); graph.valt[1] += dvalt; sub_valt[1] += dvalt
-                graph.rlayers = sub_rlayers; graph.dlayers = sub_dlayers
-
-                for comb_layers, graph_layers in zip(comb_layers_t, [graph.rlayers, graph.dlayers]):
-                    for i, (comb_layer, graph_layer) in enumerate(zip_longest(comb_layers, graph_layers, fillvalue=[])):
-                        if graph_layer:
-                            if i > len(comb_layers) - 1:
-                                comb_layers += [graph_layer]  # add new r|d layer
-                            else:
-                                comb_layers[i] += graph_layer  # splice r|d PP layer into existing layer
+            for comb_layers, graph_layers in zip(comb_layers_t, [graph.rlayers, graph.dlayers]):
+                for i, (comb_layer, graph_layer) in enumerate(zip_longest(comb_layers, graph_layers, fillvalue=[])):
+                    if graph_layer:
+                        if i > len(comb_layers) - 1:
+                            comb_layers += [graph_layer]  # add new r|d layer
+                        else:
+                            comb_layers[i] += graph_layer  # splice r|d PP layer into existing layer
 
     return comb_layers_t, sub_valt
 
@@ -259,8 +259,8 @@ def sum2graph_(igraph_, fd):  # sum nodes' params into graph
     for igraph in igraph_:
         node_, valt = igraph
         # draft:
-        graph = Cgraph( node_=node_, plevels=[[[],[],[0,0]]], alt_plevels =[[[],[],[0,0]]], valt=valt, fds=deepcopy(node_[0].fds),
-                        x0=node_[0].x0, xn=node_[0].xn, y0=node_[0].y0, yn=node_[0].yn)
+        graph = Cgraph( node_=node_, plevels=[[[],[],[0,0]]], alt_plevels =[[[],[],[0,0]]], link_valt=valt, fds=deepcopy(node_[0].fds),
+                        rng=node_[0].rng+1, x0=node_[0].x0, xn=node_[0].xn, y0=node_[0].y0, yn=node_[0].yn)
         new_plevel, new_alt_plevel = [], []
         new_valt, new_alt_valt = [0, 0], [0, 0]
         for node in node_:
