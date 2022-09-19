@@ -101,12 +101,33 @@ def form_graph_(root, PP_, rng, fseg, fd=1):
 
         if regraph_:
             graph_[:] = sum2graph_(regraph_, fd)  # sum node_ params into graph
-            # draft:
-            new_players = [players for players in plevel[0] for plevels[-1] in graph.plevels for graph in graph_]
-            new_fds = [fds for fds in plevel[0] for plevel in graph.plevels[-1] for graph in graph_]
-            new_valt = sum([valt for valt in plevel[0] for plevel in graph.plevels[-1] for graph in graph_])
-            # add new_plevel:
-            root.plevels += [new_players, new_fds, new_valt]
+            if fseg:  # if fseg and root is CPP, or root is CBlob, need to add the same? 
+                pass
+            elif isinstance(root, Cgraph) and cc == 0:
+                # draft:
+                # pack last level's players from each graph
+                new_players = []
+                for graph in graph_:
+                    for i, players in enumerate(graph.plevels[-1][0]):
+                        if i > len(new_players)-1:
+                            new_players.append(players)  # add new players
+                        else:
+                            new_players[i] += players  # pack same layer's player
+                # get common fds from last level's fds
+                new_fds = []
+                for graph in graph_:
+                    fds = graph.plevels[-1][0]  # graph's last plevel's fds
+                    if not new_fds:
+                        new_fds = deepcopy(fds)
+                    else:
+                         for i, (_fd, fd) in enumerate(zip(new_fds, fds)):
+                            if _fd != fd:
+                                new_fds = new_fds[:i]
+                                break     
+                # sum valt of last plevel
+                new_valt = [sum([graph.plevels[-1][2][0]for graph in graph_]), sum([graph.plevels[-1][2][0]for graph in graph_])]
+                # add new_plevel:
+                root.plevels += [[new_players, new_fds, new_valt]]
 
     return mgraph_, dgraph_
 
@@ -157,10 +178,10 @@ def comp_graph_(PP_, rng, fseg, fd):  # cross-comp, same val,rng for both forks?
 def cluster_node_layer(graph_, graph, med_node__, fd):  # recursive eval of mutual links in increasingly mediated nodes
 
     node_, valt = graph
-    save_PP_, med_PP__ = [],[]  # __PPs mediating between PPs and _PPs, flat?
+    save_node_, save_med__ = [],[]  # __PPs mediating between PPs and _PPs, flat?
 
     for PP, med_node_ in zip(node_, med_node__):
-        med_PP_ = []
+        save_med_ = []
         for _PP in med_node_:
             for (__PP, _, _) in _PP.link_:
                 if __PP is not PP:
@@ -170,21 +191,15 @@ def cluster_node_layer(graph_, graph, med_node__, fd):  # recursive eval of mutu
                             # adjust vals per node and graph:
                             PP.valt[fd] += adj_val; _PP.valt[fd] += adj_val; valt[fd] += adj_val
                             # if not saved via prior _PP:
-                            if __PP not in med_PP_: med_PP_ += [__PP]
-                            if PP not in save_PP_: save_PP_ += [PP]
-
-            med_PP__ += med_PP_  # nested, med_PP_ should map to PP, mapping is not correct now
+                            if __PP not in save_med_: save_med_ += [__PP]
+            
+        if save_med_ and PP.valt[fd]>0:
+            save_node_ += [PP]
+            save_med__ += [save_med_]  # nested, med_PP_ should map to PP, mapping is not correct now
 
     # re-eval full graph after adjusting it with mediating node layer:
     if valt[fd] > 0:
-        save_node_, save_med__ = [], []
-        while save_PP_:
-            PP, med_PP_ = save_PP_.pop(0), med_PP__.pop(0)  # currently not aligned
-            if PP.valt[fd] > 0:
-                save_node_ += [PP]; save_med__ += [med_PP_]
-        add_node_, add_med__ = [],[]
-
-        # not updated
+        add_node_, add_med__ = [], []
         for PP, _PP_ in zip(save_node_, save_med__):
             for _PP in _PP_:
                 _graph = _PP.roott[fd]
@@ -197,13 +212,15 @@ def cluster_node_layer(graph_, graph, med_node__, fd):  # recursive eval of mutu
                         valt[fd] += _valt[fd]
                         graph_.remove(_graph)
                     else: graph_.remove(_graph)  # neg val
+                    
+        # it should be the same for both node_ and med_
+        node_[:] = save_node_ + add_node_  # reassign as save_node_ (>0 after mediation) + add_node_ (mediated positive nodes)
+        med_node__[:] = save_med__ + add_med__
 
-            if add_med__: save_med__ += add_med__
-        node_ += save_node_ + add_node_  # add mediated nodes
-
-        if valt[fd] > ave_agg:  # extra ops, no rdn+?
+        # add and node_ to prevent empty node_
+        if valt[fd] > ave_agg and node_:  # extra ops, no rdn+?
             # eval reformed graph with next mediation layer:
-            cluster_node_layer(graph_, graph, save_med__, fd)
+            cluster_node_layer(graph_, graph, med_node__, fd)
 
 
 def sub_recursion_agg(graph_, fseg, fd):  # rng+: extend PP_ per PPP, der+: replace PP with derPP in PPt
@@ -214,7 +231,7 @@ def sub_recursion_agg(graph_, fseg, fd):  # rng+: extend PP_ per PPP, der+: repl
     for graph in graph_:
         if graph.valt[fd] > PP_aves[fd] and len(graph.node_) > ave_nsub:
 
-            sub_mgraph_, sub_dgraph_ = form_graph_(graph.node_, graph.rng, fseg, fd)  # cross-comp and clustering cycle
+            sub_mgraph_, sub_dgraph_ = form_graph_(graph, graph.node_, graph.rng, fseg, fd)  # cross-comp and clustering cycle
 
             if graph.valt[0] > ave_sub * graph.rdn:  # rng +:
                 sub_rlayers, valt = sub_recursion_agg(sub_mgraph_, graph.valt, fd=0)
