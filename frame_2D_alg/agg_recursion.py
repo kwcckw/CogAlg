@@ -94,40 +94,15 @@ def form_graph_(root, PP_, rng, fseg, fd=1):
         regraph_ = []
         while graph_:
             graph = graph_.pop(0)
-            med_node__ = [[link[0] for link in PP.link_] for PP in graph[0]]  # nested list
-
-            cluster_node_layer(graph_= graph_, graph=graph, med_node__=med_node__, fd=fd)
+            cluster_node_layer(graph_= graph_, graph=graph, med_node__=[[link[0] for link in PP.link_] for PP in graph[0]], fd=fd)
             if graph[1][fd] > ave_agg: regraph_ += [graph]  # graph reformed by merges and deletions in cluster_node_layer
 
         if regraph_:
-            graph_[:] = sum2graph_(regraph_, fd)  # sum node_ params into graph
-            if fseg:  # if fseg and root is CPP, or root is CBlob, need to add the same? 
-                pass
-            elif isinstance(root, Cgraph) and cc == 0:
-                # draft:
-                # pack last level's players from each graph
-                new_players = []
-                for graph in graph_:
-                    for i, players in enumerate(graph.plevels[-1][0]):
-                        if i > len(new_players)-1:
-                            new_players.append(players)  # add new players
-                        else:
-                            new_players[i] += players  # pack same layer's player
-                # get common fds from last level's fds
-                new_fds = []
-                for graph in graph_:
-                    fds = graph.plevels[-1][0]  # graph's last plevel's fds
-                    if not new_fds:
-                        new_fds = deepcopy(fds)
-                    else:
-                         for i, (_fd, fd) in enumerate(zip(new_fds, fds)):
-                            if _fd != fd:
-                                new_fds = new_fds[:i]
-                                break     
-                # sum valt of last plevel
-                new_valt = [sum([graph.plevels[-1][2][0]for graph in graph_]), sum([graph.plevels[-1][2][0]for graph in graph_])]
-                # add new_plevel:
-                root.plevels += [[new_players, new_fds, new_valt]]
+            graph_[:] = sum2graph_(regraph_, fd)  # sum node_ params in graph, accum root.plevels:
+            root.plevels = graph_[0].plevels  # initialize [players, fds, valt]
+            for graph in graph_[1:]:
+                sum_players(root.plevels[-1][0],graph.plevels[-1][0], root.plevels[-1][1],graph.plevels[-1][1], fneg=0)  # add players, fds
+                root.plevels[-1][2][0] += graph.plevels[-1][2][0]; root.plevels[-1][2][1] += graph.plevels[-1][2][1]     # add valt
 
     return mgraph_, dgraph_
 
@@ -156,8 +131,8 @@ def comp_graph_(PP_, rng, fseg, fd):  # cross-comp, same val,rng for both forks?
                         comp_plevels(_PP.plevels[:-1], PP.plevels[:-1], _PP.fds[:-1], PP.fds[:-1])
                     alt_mplevel, alt_dplevel, alt_mVal, alt_dVal = \
                         comp_plevels(_PP.alt_plevels[:-1], PP.alt_plevels[:-1], _PP.alt_fds[:-1], PP.alt_fds[:-1])
-
-                # combined core,edge PP: both define pattern?
+                # so, I think we need to add this:
+                # combine core,edge in PP: both define pattern?
                 valt = [mval, dval]
                 derPP = CderG(plevel_t=[mplevel, dplevel], valt=valt)
                 fint = []
@@ -190,12 +165,10 @@ def cluster_node_layer(graph_, graph, med_node__, fd):  # recursive eval of mutu
                             adj_val = ___derPP.valt[fd] - ave_agg  # or ave per mediation depth?
                             # adjust vals per node and graph:
                             PP.valt[fd] += adj_val; _PP.valt[fd] += adj_val; valt[fd] += adj_val
-                            # if not saved via prior _PP:
                             if __PP not in save_med_: save_med_ += [__PP]
-            
+                            # if not saved via prior _PP
         if save_med_ and PP.valt[fd]>0:
-            save_node_ += [PP]
-            save_med__ += [save_med_]  # nested, med_PP_ should map to PP, mapping is not correct now
+            save_node_ += [PP]; save_med__ += [save_med_]  # save_med__ is nested
 
     # re-eval full graph after adjusting it with mediating node layer:
     if valt[fd] > 0:
@@ -212,14 +185,12 @@ def cluster_node_layer(graph_, graph, med_node__, fd):  # recursive eval of mutu
                         valt[fd] += _valt[fd]
                         graph_.remove(_graph)
                     else: graph_.remove(_graph)  # neg val
-                    
-        # it should be the same for both node_ and med_
+
         node_[:] = save_node_ + add_node_  # reassign as save_node_ (>0 after mediation) + add_node_ (mediated positive nodes)
         med_node__[:] = save_med__ + add_med__
 
-        # add and node_ to prevent empty node_
-        if valt[fd] > ave_agg and node_:  # extra ops, no rdn+?
-            # eval reformed graph with next mediation layer:
+        if valt[fd] > ave_agg:  # extra ops, no rdn+?
+            # eval next mediation layer in reformed graph:
             cluster_node_layer(graph_, graph, med_node__, fd)
 
 
@@ -332,6 +303,26 @@ def comp_players(_layers, layers, _fds, fds):  # unpack and compare der layers, 
 
     return mplayer, dplayer, mval, dval
 
+
+def sum_players(Layers, layers, Fds, fds, fneg=0):  # accum layers of same fds
+
+    for i, (Layer, layer, Fd, fd) in enumerate(zip_longest(Layers, layers, Fds, fds, fillvalue=[])):
+        if layer:
+            if Layer:
+                if Fd==fd: sum_player(Layer, layer, fneg=fneg)
+                else:      break
+            elif not fneg:
+                Layers.append(deepcopy(layer))
+
+    Fds[:]=Fds[:i]  # maybe cut short by the break
+'''
+    for Layer, layer, Fd, fd in zip_longest(Layers, layers, Fds, fds, fillvalue=[]):
+        if layer:
+            if Layer and Fd==fd:
+                sum_player(Layer, layer, fneg=fneg)
+            elif not fneg:
+                Layers.append(deepcopy(layer))
+'''
 
 # not revised, this is an alternative to form_graph, but may not be accurate enough to cluster:
 def comp_centroid(PPP_):  # comp PP to average PP in PPP, sum >ave PPs into new centroid, recursion while update>ave
