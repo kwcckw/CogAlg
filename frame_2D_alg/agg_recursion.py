@@ -68,8 +68,8 @@ def agg_recursion(root, PP_, rng, fseg=0):  # compositional recursion per blob.P
         root.valt[1] += sum(dvalt); root.dlayers = sub_dlayers
 
     # cross graph:
-    # if fseg: root.mseg_levels += mgraph_; root.dseg_levels += dgraph_  # add bottom-up
-    root.mlevels += mgraph_; root.dlevels += dgraph_
+    if fseg: root.mseg_levels += mgraph_; root.dseg_levels += dgraph_  # add bottom-up
+    else:    root.mlevels += mgraph_; root.dlevels += dgraph_
     for fd, graph_ in enumerate([mgraph_, dgraph_]):
         val = root.valt[fd]
         if (val > PP_aves[fd] * ave_agg * (root.rdn + 1)) and len(graph_) > ave_nsub:
@@ -303,27 +303,15 @@ def comp_players(_layers, layers, _fds, fds):  # unpack and compare der layers, 
 
     return mplayer, dplayer, mval, dval
 
-
 def sum_players(Layers, layers, Fds, fds, fneg=0):  # accum layers of same fds
 
-    for i, (Layer, layer, Fd, fd) in enumerate(zip_longest(Layers, layers, Fds, fds, fillvalue=[])):
-        if layer:
-            if Layer:
-                if Fd==fd: sum_player(Layer, layer, fneg=fneg)
-                else:      break
-            elif not fneg:
-                Layers.append(deepcopy(layer))
-
-    # if we put it here instead of break section, it will take the largest i even some layers is empty because we use zip_longest
+    for i, (Layer, layer, Fd, fd) in enumerate(zip(Layers, layers, Fds, fds)):
+        if Fd==fd:
+            sum_player(Layer, layer, fneg=fneg)
+        else:
+            break
     Fds[:]=Fds[:i]  # maybe cut short by the break
-'''
-    for Layer, layer, Fd, fd in zip_longest(Layers, layers, Fds, fds, fillvalue=[]):
-        if layer:
-            if Layer and Fd==fd:
-                sum_player(Layer, layer, fneg=fneg)
-            elif not fneg:
-                Layers.append(deepcopy(layer))
-'''
+
 
 # not revised, this is an alternative to form_graph, but may not be accurate enough to cluster:
 def comp_centroid(PPP_):  # comp PP to average PP in PPP, sum >ave PPs into new centroid, recursion while update>ave
