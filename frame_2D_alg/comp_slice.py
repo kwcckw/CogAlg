@@ -209,21 +209,26 @@ def agg_recursion_eval(dir_blob, PP_t, fseg):
             for j, PP in enumerate(PP_): converted_PP_ += [CPP2Cgraph(PP, fseg, Cgraph)]
             dir_blob.rdn += 1  # estimate
             if   isinstance(dir_blob, CPP):   dir_blob = CPP2Cgraph(dir_blob, fseg, Cgraph)
-            elif isinstance(dir_blob, CBlob): dir_blob = CBlob2Cgraph(dir_blob, fseg, Cgraph)
+            elif isinstance(dir_blob, CBlob): CBlob2Cgraph(dir_blob, fseg, Cgraph)
 
-            agg_recursion(dir_blob, converted_PP_, rng=2, fseg=fseg)
+            agg_recursion(dir_blob, converted_PP_, rng=2)
 
 
+# right now only convert blob's mplevels and dplevels, blob is remained as CBlob
 def CBlob2Cgraph(dir_blob, fseg, Cgraph):
 
-    from agg_recursion import sum2graph_
+    from agg_recursion import sum2graph_, sum_plevels
 
-    for fd, iPP_ in enumerate( dir_blob.mlevels[-1], dir_blob.dlevels[-1]):
+    for fd, iPP_ in enumerate([dir_blob.mlevels[-1], dir_blob.dlevels[-1]]):
         PP_ = []  # sum PPs into graph.plevels:
-
         for PP in iPP_: PP_ += [CPP2Cgraph(PP, fseg, Cgraph)]
         valt = [dir_blob.M, dir_blob.G]
         graph = sum2graph_([[PP_, valt]], fd)[0]  # pack PP into graph
+        if fd:
+            sum_plevels(dir_blob.dplevels, graph.plevels)
+        else:
+            sum_plevels(dir_blob.mplevels, graph.plevels)
+        
 
 
 def CPP2Cgraph(PP, fseg, Cgraph):
@@ -232,21 +237,24 @@ def CPP2Cgraph(PP, fseg, Cgraph):
     alt_valt = [0,0]
 
     if not fseg and PP.altPP_:  # seg doesn't have altPP_
-        same_fds = PP.altPP_[0].fds
+        alt_fds = PP.altPP_[0].fds
         for altPP in PP.altPP_[1:]:  # get fd sequence common for all altPPs:
-            for i, (_fd, fd) in enumerate(zip(same_fds, altPP.fds)):
+            for i, (_fd, fd) in enumerate(zip(alt_fds, altPP.fds)):
                 if _fd != fd:
-                    same_fds = same_fds[:i]
+                    alt_fds = alt_fds[:i]
                     break
         for altPP in PP.altPP_:
-            sum_players(alt_players, altPP.players[:len(same_fds)])  # sum same-fd players only
+            sum_players(alt_players, altPP.players[:len(alt_fds)])  # sum same-fd players only
             alt_valt[0] += altPP.valt[0]; alt_valt[1] += altPP.valt[1]
 
     alt_plevels = [[alt_players, alt_fds, alt_valt]]
-    plevels = [[PP.players,PP.fds, PP.valt]]
-    PP[:] = Cgraph(
+    plevels = [[deepcopy(PP.players), deepcopy(PP.fds), deepcopy(PP.valt)]]
+    
+    # we can't change the object to another object
+    graph = Cgraph(
         PP=PP, node_=[PP], plevels=plevels, alt_plevels=alt_plevels, fds=deepcopy(PP.fds), x0=PP.x0, xn=PP.xn, y0=PP.y0, yn=PP.yn)
 
+    return graph
 
 def slice_blob(blob, verbose=False):  # forms horizontal blob slices: Ps, ~1D Ps, in select smooth edge (high G, low Ga) blobs
 

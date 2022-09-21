@@ -55,9 +55,9 @@ class Cgraph(CPP, CderG):  # graph or generic PP of any composition
     # cPP_ = list  # co-refs in other PPPs
 
 
-def agg_recursion(root, PP_, rng, fseg=0):  # compositional recursion per blob.Plevel; P, PP, PPP are relative to each other
+def agg_recursion(root, PP_, rng):  # compositional recursion per blob.Plevel; P, PP, PPP are relative to each other
 
-    mgraph_, dgraph_ = form_graph_(root, PP_, rng, fseg, fd=1)  # PP cross-comp and clustering
+    mgraph_, dgraph_ = form_graph_(root, PP_, rng, fd=1)  # PP cross-comp and clustering
 
     # intra graph:
     if root.valt[0] > ave_sub * root.rdn:
@@ -68,23 +68,23 @@ def agg_recursion(root, PP_, rng, fseg=0):  # compositional recursion per blob.P
         root.valt[1] += sum(dvalt); root.dlayers = sub_dlayers
 
     # cross graph:
-    if fseg: root.mseg_levels += mgraph_; root.dseg_levels += dgraph_  # add bottom-up
-    else:    root.mlevels += mgraph_; root.dlevels += dgraph_
+    # if fseg: root.mseg_levels += mgraph_; root.dseg_levels += dgraph_  # add bottom-up  （this no longer relevant if we converted PP to Cgraph, same with fseg)
+    root.mlevels += mgraph_; root.dlevels += dgraph_
     for fd, graph_ in enumerate([mgraph_, dgraph_]):
         val = root.valt[fd]
         if (val > PP_aves[fd] * ave_agg * (root.rdn + 1)) and len(graph_) > ave_nsub:
             root.rdn += 1  # estimate
-            agg_recursion(root, graph_, rng=val / ave_agg, fseg=fseg)  # cross-comp graphs
+            agg_recursion(root, graph_, rng=val / ave_agg)  # cross-comp graphs
 
 
-def form_graph_(root, PP_, rng, fseg, fd=1):
+def form_graph_(root, PP_, rng, fd=1):
 
     for PP in PP_:  # initialize mgraph, dgraph as roott per PP, for comp_PP_
         for i in 0,1:
             graph = [[PP],[0,0]]  # [node_, valt]
             PP.roott[i] = graph
 
-    comp_graph_(PP_, rng, fseg, fd)  # cross-comp all PPs within rng, PPs may be segs
+    comp_graph_(PP_, rng, fd)  # cross-comp all PPs within rng, PPs may be segs
     mgraph_, dgraph_ = [],[]  # initialize graphs with >0 positive links in PP roots:
     for PP in PP_:
         if len(PP.roott[0][0])>1: mgraph_ += [PP.roott[0]]  # root = [node_, valt] for cluster_node_layer eval, + link_nvalt?
@@ -99,15 +99,23 @@ def form_graph_(root, PP_, rng, fseg, fd=1):
 
         if regraph_:
             graph_[:] = sum2graph_(regraph_, fd)  # sum node_ params in graph, accum root.plevels:
-            root.plevels = deepcopy(graph_[0].plevels)  # initialize [players, fds, valt]
+            if isinstance(root, Cgraph):
+                root_plevels = root.plevels
+            else:  # root is CBlob
+                if fd: 
+                    root_plevels = root.dplevels
+                else:  
+                    root_plevels = root.mplevels
+                root_plevels[:] = deepcopy(graph_[0].plevels)  # initialize [players, fds, valt]
+                  
             for graph in graph_[1:]:
-                sum_players(root.plevels[-1][0],graph.plevels[-1][0], root.plevels[-1][1],graph.plevels[-1][1], fneg=0)  # add players, fds
-                root.plevels[-1][2][0] += graph.plevels[-1][2][0]; root.plevels[-1][2][1] += graph.plevels[-1][2][1]     # add valt
+                sum_players(root_plevels[-1][0],graph.plevels[-1][0], root_plevels[-1][1],graph.plevels[-1][1], fneg=0)  # add players, fds
+                root_plevels[-1][2][0] += graph.plevels[-1][2][0]; root_plevels[-1][2][1] += graph.plevels[-1][2][1]     # add valt
 
     return mgraph_, dgraph_
 
 
-def comp_graph_(PP_, rng, fseg, fd):  # cross-comp, same val,rng for both forks? PPs may be segs inside a PP
+def comp_graph_(PP_, rng, fd):  # cross-comp, same val,rng for both forks? PPs may be segs inside a PP
 
     for i, _PP in enumerate(PP_):  # compare patterns of patterns: _PP to other PPs in rng, bilateral link assign:
         for PP in PP_[i+1:]:
@@ -231,7 +239,7 @@ def sum2graph_(igraph_, fd):  # sum nodes' params into graph
     for igraph in igraph_:
         node_, valt = igraph
         # draft:
-        graph = Cgraph( node_=node_, plevels=[[[],[],[0,0]]], alt_plevels =[[[],[],[0,0]]], link_valt=valt, fds=deepcopy(node_[0].fds),
+        graph = Cgraph( node_=node_, plevels=[], alt_plevels =[], link_valt=valt, fds=deepcopy(node_[0].fds),
                         rng=node_[0].rng+1, x0=node_[0].x0, xn=node_[0].xn, y0=node_[0].y0, yn=node_[0].yn)
         new_plevel, new_alt_plevel = [], []
         new_valt, new_alt_valt = [0, 0], [0, 0]
@@ -243,16 +251,12 @@ def sum2graph_(igraph_, fd):  # sum nodes' params into graph
             graph.y0=min(graph.y0, node.y0)
             graph.yn=max(graph.yn, node.yn)
             # accum params:
-            for pLevels, plevels in zip([graph.plevels, graph.alt_plevels], [node.plevels, node.alt_plevels]):
-                for pLevel, plevel in zip_longest(pLevels, plevels, fillvalue=[]):
-                    if plevel and plevel[0]:
-                        if pLevel:
-                            if pLevel[0]: sum_players(pLevel[0], plevel[0], pLevel[1], plevel[1])  # accum nodes' players
-                            else:         pLevel[0] = deepcopy(plevel[0])  # append node's players
-                            pLevel[1] = deepcopy(plevel[1])  # assign fds
-                            pLevel[2][0] += plevel[2][0]; pLevel[2][1] += plevel[2][1]  # accumulate valt
-                        else:
-                            pLevels.append(deepcopy(plevel))  # pack new plevel
+            if not graph.plevels:  # empty plevels
+                graph.plevels = deepcopy(node.plevels)
+                graph.alt_plevels = deepcopy(node.alt_plevels)
+            else:
+                sum_plevels(graph.plevels, node.plevels)
+                sum_plevels(graph.alt_plevels, node.alt_plevels)
 
             for PP, derG,_ in node.link_:  # accum derG in new level
                 if PP in node_:
@@ -270,6 +274,19 @@ def sum2graph_(igraph_, fd):  # sum nodes' params into graph
 
         graph_ += [graph]
     return graph_
+
+
+def sum_plevels(pLevels, plevels):
+    
+    for pLevel, plevel in zip_longest(pLevels, plevels, fillvalue=[]):
+        if plevel and plevel[0]:
+            if pLevel:
+                if pLevel[0]: sum_players(pLevel[0], plevel[0], pLevel[1], plevel[1])  # accum nodes' players
+                else:         pLevel[0] = deepcopy(plevel[0])  # append node's players
+                pLevel[1] = deepcopy(plevel[1])  # assign fds
+                pLevel[2][0] += plevel[2][0]; pLevel[2][1] += plevel[2][1]  # accumulate valt
+            else:
+                pLevels.append(deepcopy(plevel))  # pack new plevel
 
 
 def comp_plevels(_plevels, plevels, _fds, fds):
@@ -305,13 +322,18 @@ def comp_players(_layers, layers, _fds, fds):  # unpack and compare der layers, 
 
 def sum_players(Layers, layers, Fds, fds, fneg=0):  # accum layers of same fds
 
+    fbreak = 0
     for i, (Layer, layer, Fd, fd) in enumerate(zip(Layers, layers, Fds, fds)):
         if Fd==fd:
             sum_player(Layer, layer, fneg=fneg)
         else:
+            if len(Layers)>i: Layers[:] = Layer[:i]  # pack only Layers with Fd=fd
+            fbreak = 1
             break
-    Fds[:]=Fds[:i]  # maybe cut short by the break
-
+        
+    # we need fbreak, else if i = 0 and it didn't break, Fds[:0] will be empty
+    if fbreak: Fds[:]=Fds[:i]  # maybe cut short by the break
+    else:      Fds[:]=Fds[:i+1]
 
 # not revised, this is an alternative to form_graph, but may not be accurate enough to cluster:
 def comp_centroid(PPP_):  # comp PP to average PP in PPP, sum >ave PPs into new centroid, recursion while update>ave
