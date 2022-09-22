@@ -55,7 +55,7 @@ class Cgraph(CPP, CderG):  # graph or generic PP of any composition
     # cPP_ = list  # co-refs in other PPPs
 
 
-def agg_recursion(root, PP_, rng):  # compositional recursion in root.PP_, pretty sure we still need fseg, process should be different
+def agg_recursion(root, PP_, rng, fseg):  # compositional recursion in root.PP_, pretty sure we still need fseg, process should be different
 
     mgraph_, dgraph_ = form_graph_(root, PP_, rng, fd=1)  # PP cross-comp and clustering
 
@@ -73,7 +73,7 @@ def agg_recursion(root, PP_, rng):  # compositional recursion in root.PP_, prett
         val = root.valt[fd]
         if (val > PP_aves[fd] * ave_agg * (root.rdn + 1)) and len(graph_) > ave_nsub:
             root.rdn += 1  # estimate
-            agg_recursion(root, graph_, rng=val / ave_agg)  # cross-comp graphs
+            agg_recursion(root, graph_, rng=val / ave_agg, fseg=fseg)  # cross-comp graphs
 
 
 def form_graph_(root, PP_, rng, fd=1):
