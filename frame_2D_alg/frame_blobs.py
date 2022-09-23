@@ -82,8 +82,8 @@ class CBlob(ClusterStructure):
     P__ = list  # input + derPs, common root for downward layers and upward PP_s:
     rlayers = list  # list of layers across sub_blob derivation tree, deeper layers are nested with both forks
     dlayers = list  # separate for range and angle forks per blob
-    PPm_ = []
-    PPd_ = []
+    PPm_ = list
+    PPd_ = list
     # comp_slice:
     dir_blobs = list  # primarily vertically | laterally oriented edge blob segments, formed in segment_by_direction
     fsliced = bool
@@ -284,7 +284,7 @@ if __name__ == "__main__":
     argument_parser.add_argument('-v', '--verbose', help='print details, useful for debugging', type=int, default=1)
     argument_parser.add_argument('-r', '--render', help='render the process', type=int, default=0)
     argument_parser.add_argument('-c', '--clib', help='use C shared library', type=int, default=0)
-    argument_parser.add_argument('-n', '--intra', help='run intra_blobs after frame_blobs', type=int, default=0)
+    argument_parser.add_argument('-n', '--intra', help='run intra_blobs after frame_blobs', type=int, default=1)
     argument_parser.add_argument('-e', '--extra', help='run frame_recursive after frame_blobs', type=int, default=0)
     args = argument_parser.parse_args()
     image = imread(args.image)

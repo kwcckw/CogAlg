@@ -24,7 +24,7 @@ class CderG(ClusterStructure):  # tuple of graph derivatives in graph link_
     # below are not needed?
     box = list  # 2nd level, stay in PP?
     rdn = int  # mrdn, + uprdn if branch overlap?
-    PPt = []  # PP,_PP comparands, the order is not fixed
+    PPt = list  # PP,_PP comparands, the order is not fixed
     root = lambda: None  # PP, not segment in sub_recursion
     uplink_layers = lambda: [[], []]  # init a layer of dderPs and a layer of match_dderPs
     downlink_layers = lambda: [[], []]
@@ -96,7 +96,21 @@ def form_graph_(root, PP_, rng, fd=1):
         regraph_ = []
         while graph_:
             graph = graph_.pop(0)
-            cluster_node_layer(graph_= graph_, graph=graph, med_node__=[[link[0] for link in PP.link_] for PP in graph[0]], fd=fd)
+            
+            '''
+            med_node__ = []
+            for PP in graph[0]:
+                med_node_ = []
+                for derPP in PP.link_:
+                    if derPP.PPt[0] is PP:
+                       med_node_ += [derPP.PPt[1]]
+                    else:
+                       med_node_ += [derPP.PPt[0]]
+                med_node__ += [med_node_]
+            '''
+            # same as above
+            med_node__ = [[derPP.PPt[1] if derPP.PPt[0] is PP else derPP.PPt[0] for derPP in PP.link_]for PP in graph[0]]
+            cluster_node_layer(graph_= graph_, graph=graph, med_node__= med_node__, fd=fd)
             if graph[1][fd] > ave_agg: regraph_ += [graph]  # graph reformed by merges and deletions in cluster_node_layer
 
         if regraph_:
@@ -162,9 +176,9 @@ def cluster_node_layer(graph_, graph, med_node__, fd):  # recursive eval of mutu
             for derPP in _PP.link_:
                 if derPP not in PP.link_:  # link_ includes evaluated mediated links, unique
                     # med_PP.link_:
-                    med_link_ = derPP.PP.link_ if derPP.PP is not _PP else derPP._PP.link_
+                    med_link_ = derPP.PPt[0].link_ if derPP.PPt[0] is not _PP else derPP.PPt[1].link_
                     for _derPP in med_link_:
-                        if PP in [_derPP.PP, _derPP._PP] and _derPP  not in PP.link_:  # __PP mediates between _PP and PP
+                        if PP in _derPP.PPt and _derPP not in PP.link_:  # __PP mediates between _PP and PP
                             PP.link_ += [_derPP]
                             adj_val = _derPP.valt[fd] - ave_agg  # or ave per mediation depth
                             # adjust vals per node and graph:
@@ -187,7 +201,7 @@ def cluster_node_layer(graph_, graph, med_node__, fd):  # recursive eval of mutu
                     if _valt[fd] > 0:  # merge graphs:
                         for _node in _node_:
                             add_node_ += [_node]
-                            add_med__.append([link[0] for link in _node.link_])  # initial mediation only
+                            add_med__.append([derPP.PPt[1] if derPP.PPt[0] is _node else derPP.PPt[0] for derPP in _node.link_])  # initial mediation only
                         valt[fd] += _valt[fd]
                         graph_.remove(_graph)
                     else: graph_.remove(_graph)  # neg val

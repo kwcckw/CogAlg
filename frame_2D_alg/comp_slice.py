@@ -175,14 +175,27 @@ def comp_slice_root(blob, verbose=False):  # always angle blob, composite dert c
         # intra PP:
         sub_recursion_eval(dir_blob)  # add rlayers, dlayers, seg_levels to select PPs, sum M,G
         # cross PP:
-        agg_recursion_eval(dir_blob, [dir_blob.node_, dir_blob.alt_node_], fseg=0)
+        # use shallow copy, so that the converted graph doesn't replace blob.PP_
+        agg_recursion_eval(dir_blob, [copy(dir_blob.PPm_), copy(dir_blob.PPd_)], fseg=0)
         # splice_dir_blob_(blob.dir_blobs)  # draft
 
 
 def agg_recursion_eval(dir_blob, gPP_t, fseg):
     from agg_recursion import agg_recursion, Cgraph
 
-    dir_blob = CBlob2graph(dir_blob, fseg=0)
+    # when dir_blob is PP and PPs is seg, convert both PP and segs into graph
+    if isinstance(dir_blob, CPP):  
+        dir_blob = CPP2graph(dir_blob, fseg=1, Cgraph=Cgraph)  # convert PP to graph
+        for PP_ in gPP_t:
+            for i, PP in enumerate(PP_):
+                PP_[i] = CPP2graph(PP, fseg=1, Cgraph=Cgraph)  # convert seg to graph
+    # when dir_blob is blob need to convert both blob and PPs into graph
+    elif not isinstance(dir_blob, Cgraph):  
+        dir_blob = CBlob2graph(dir_blob, fseg=0, Cgraph=Cgraph)  # convert blob to grraph
+        for PP_ in gPP_t:
+            for i, PP in enumerate(PP_):
+                PP_[i] = CPP2graph(PP, fseg=0, Cgraph=Cgraph)  # convert PP to graph
+        
     M, G = dir_blob.valt
     fork_rdnt = [1+(G>M), 1+(M>=G)]
 
@@ -194,8 +207,7 @@ def agg_recursion_eval(dir_blob, gPP_t, fseg):
 
 
 # not revised:
-def CBlob2graph(dir_blob, fseg):
-    from agg_recursion import Cgraph
+def CBlob2graph(dir_blob, fseg, Cgraph):
 
     PPm_ = dir_blob.PPm_; PPd_ = dir_blob.PPd_
 
@@ -557,7 +569,7 @@ def accum_derP(seg, derP, fd):  # derP might be CP, though unlikely
 
 def sum2PP(PP_segs, base_rdn, fd):  # sum PP_segs into PP
 
-    PP = CPP(x0=PP_segs[0].x0, rdn=base_rdn)
+    PP = CPP(x0=PP_segs[0].x0, rdn=base_rdn, rlayers=[[]], dlayers=[[]])
     if fd: PP.dseg_levels, PP.mseg_levels = [PP_segs], [[]]  # empty alt_seg_levels
     else:  PP.mseg_levels, PP.dseg_levels = [PP_segs], [[]]
 
@@ -840,7 +852,10 @@ def sub_recursion_eval(root):  # for PP or dir_blob
 
     from agg_recursion import agg_recursion, Cgraph
 
-    for fd, PP_ in enumerate([root.PPm_, root.PPd_]):
+    if isinstance(root, CPP): root_PPm_, root_PPd_ = root.rlayers[0], root.dlayers[0]
+    else:                     root_PPm_, root_PPd_ = root.PPm_, root.PPd_
+        
+    for fd, PP_ in enumerate([root_PPm_, root_PPd_]):
         mcomb_layers, dcomb_layers, PPm_, PPd_ = [], [], [], []
 
         for PP in PP_:
@@ -864,19 +879,19 @@ def sub_recursion_eval(root):  # for PP or dir_blob
                         if i > len(comb_layers) - 1: comb_layers += [PP_layer]  # add new r|d layer
                         else: comb_layers[i] += PP_layer  # splice r|d PP layer into existing layer
 
-            # convert to Cgraph
-            # maybe CBlob?
-            root = CPP2graph(PP, fseg=1, Cgraph=Cgraph)
-            gPPm_ = [CPP2graph(seg, fseg=1, Cgraph=Cgraph) for seg in PP.mseg_levels[-1]]
-            gPPd_ = [CPP2graph(seg, fseg=1, Cgraph=Cgraph) for seg in PP.dseg_levels[-1]]
-
             # segs agg_recursion:
-            agg_recursion_eval(root, [gPPm_, gPPd_], fseg=1)
+            agg_recursion_eval(PP, [copy(PP.mseg_levels[-1]), copy(PP.dseg_levels[-1])], fseg=1)
 
-            (root_layers, root_val) = (root.dlayers, root.valt[1]) if fd else (root.rlayers, root.valt[0])
             # include empty comb_layers:
-            root_layers[:] = [[PPm_] + mcomb_layers], [[PPd_] + dcomb_layers]
-            root_val += val  # or higher der val?
+            if fd: root.dlayers = [[[PPm_] + mcomb_layers], [[PPd_] + dcomb_layers]]
+            else:  root.rlayers = [[[PPm_] + mcomb_layers], [[PPd_] + dcomb_layers]]
+            
+            # or higher der val?
+            if isinstance(root, CPP):  # root is CPP
+                root.valt[fd] += PP.valt[fd]
+            else:  # root is CBlob
+                if fd: root.G += PP.valt[1]
+                else:  root.M += PP.valt[0]
 
 
 def sub_recursion(PP):  # evaluate each PP for rng+ and der+
