@@ -175,35 +175,30 @@ def comp_slice_root(blob, verbose=False):  # always angle blob, composite dert c
         # intra PP:
         sub_recursion_eval(dir_blob)  # add rlayers, dlayers, seg_levels to select PPs, sum M,G
         # cross PP:
-        # use shallow copy, so that the converted graph doesn't replace blob.PP_
-        agg_recursion_eval(dir_blob, [copy(dir_blob.PPm_), copy(dir_blob.PPd_)], fseg=0)
+        agg_recursion_eval(dir_blob, [copy(dir_blob.PPm_), copy(dir_blob.PPd_)])  # Cgraph conversion doesn't replace PPs?
         # splice_dir_blob_(blob.dir_blobs)  # draft
 
 
-def agg_recursion_eval(dir_blob, gPP_t, fseg):
+def agg_recursion_eval(dir_blob, PP_t):
     from agg_recursion import agg_recursion, Cgraph
 
-    # when dir_blob is PP and PPs is seg, convert both PP and segs into graph
-    if isinstance(dir_blob, CPP):  
-        dir_blob = CPP2graph(dir_blob, fseg=1, Cgraph=Cgraph)  # convert PP to graph
-        for PP_ in gPP_t:
+    if not isinstance(dir_blob, Cgraph):
+        fseg = isinstance(dir_blob, CPP)
+        convert = CPP2graph if fseg else CBlob2graph
+
+        dir_blob = convert(dir_blob, fseg=fseg, Cgraph=Cgraph)  # convert root to graph
+        for PP_ in PP_t:
             for i, PP in enumerate(PP_):
-                PP_[i] = CPP2graph(PP, fseg=1, Cgraph=Cgraph)  # convert seg to graph
-    # when dir_blob is blob need to convert both blob and PPs into graph
-    elif not isinstance(dir_blob, Cgraph):  
-        dir_blob = CBlob2graph(dir_blob, fseg=0, Cgraph=Cgraph)  # convert blob to grraph
-        for PP_ in gPP_t:
-            for i, PP in enumerate(PP_):
-                PP_[i] = CPP2graph(PP, fseg=0, Cgraph=Cgraph)  # convert PP to graph
-        
+                PP_[i] = CPP2graph(PP, fseg=fseg, Cgraph=Cgraph)  # convert PP to graph
+
     M, G = dir_blob.valt
     fork_rdnt = [1+(G>M), 1+(M>=G)]
 
-    for fd, gPP_ in enumerate(gPP_t):
+    for fd, PP_ in enumerate(PP_t):
         if (dir_blob.valt[fd] > PP_aves[fd] * ave_agg * (dir_blob.rdn+1) * fork_rdnt[fd]) \
-            and len(gPP_) > ave_nsub and dir_blob.alt_rdn < ave_overlap:
+            and len(PP_) > ave_nsub and dir_blob.alt_rdn < ave_overlap:
             dir_blob.rdn += 1  # estimate
-            agg_recursion(dir_blob, gPP_, rng=2, fseg=fseg)
+            agg_recursion(dir_blob, PP_, rng=2, fseg=fseg)
 
 
 # not revised:
@@ -854,7 +849,7 @@ def sub_recursion_eval(root):  # for PP or dir_blob
 
     if isinstance(root, CPP): root_PPm_, root_PPd_ = root.rlayers[0], root.dlayers[0]
     else:                     root_PPm_, root_PPd_ = root.PPm_, root.PPd_
-        
+
     for fd, PP_ in enumerate([root_PPm_, root_PPd_]):
         mcomb_layers, dcomb_layers, PPm_, PPd_ = [], [], [], []
 
@@ -881,11 +876,10 @@ def sub_recursion_eval(root):  # for PP or dir_blob
 
             # segs agg_recursion:
             agg_recursion_eval(PP, [copy(PP.mseg_levels[-1]), copy(PP.dseg_levels[-1])], fseg=1)
-
             # include empty comb_layers:
             if fd: root.dlayers = [[[PPm_] + mcomb_layers], [[PPd_] + dcomb_layers]]
             else:  root.rlayers = [[[PPm_] + mcomb_layers], [[PPd_] + dcomb_layers]]
-            
+
             # or higher der val?
             if isinstance(root, CPP):  # root is CPP
                 root.valt[fd] += PP.valt[fd]
@@ -898,11 +892,10 @@ def sub_recursion(PP):  # evaluate each PP for rng+ and der+
 
     P__  = [P_ for P_ in reversed(PP.P__)]  # revert to top down
     P__ = comp_P_der(P__) if PP.fds[-1] else comp_P_rng(P__, PP.rng + 1)   # returns top-down
-
     PP.rdn += 2  # two-fork rdn, priority is not known?
+
     sub_segm_ = form_seg_root([copy(P_) for P_ in P__], fd=0, fds=PP.fds)
     sub_segd_ = form_seg_root([copy(P_) for P_ in P__], fd=1, fds=PP.fds)  # returns bottom-up
     # sub_PPm_, sub_PPd_:
-    PP.rlayers[0], PP.dlayers[0] = form_PP_root((sub_segm_, sub_segd_), PP.rdn + 1)  # PP is parameterized graph of linked segs
-
+    PP.rlayers[0], PP.dlayers[0] = form_PP_root((sub_segm_, sub_segd_), PP.rdn + 1)
     sub_recursion_eval(PP)  # add rlayers, dlayers, seg_levels to select sub_PPs
