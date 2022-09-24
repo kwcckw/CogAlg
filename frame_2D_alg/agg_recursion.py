@@ -114,7 +114,8 @@ def form_graph_(root, PP_, rng, fd=1):
         if regraph_:
             graph_[:] = sum2graph_(regraph_, fd)  # sum node_ params in graph
             # accum root plevels:
-            plevels = (root.plevels, root.alt_root.plevels) [root.fds[-1]]
+            if root.fds[-1]:  plevels = root.alt_plevels
+            else:             plevels = root.plevels
             plevels[:] = deepcopy(graph_[0].plevels)  # initialize [players, fds, valt]
             for graph in graph_[1:]:
                 sum_players(plevels[-1][0],graph.plevels[-1][0], plevels[-1][1],graph.plevels[-1][1], fneg=0)  # add players, fds
@@ -135,7 +136,7 @@ def comp_graph_(PP_, rng, fd):  # cross-comp, same val,rng for both forks? PPs m
             # fork_rdnt = [1 + (root.valt[1] > root.valt[0]), 1 + (root.valt[0] >= root.valt[1])]  # not per graph_?
 
             val = _PP.valt[fd] / PP_aves[fd]  # rng+|der+ fork eval, init der+: single level
-            if distance * val <= rng:
+            if distance * val <= rng and len(_PP.plevels) == len(PP.plevels):
                 # comp PPs:
                 if fd:
                     mplevel, dplevel, mval, dval = \
@@ -180,9 +181,9 @@ def cluster_node_layer(graph_, graph, med_node__, fd):  # recursive eval of mutu
                             adj_val = _derPP.valt[fd] - ave_agg  # or increase ave per mediation depth
                             # adjust vals per node and graph:
                             PP.valt[fd] += adj_val; _PP.valt[fd] += adj_val
-                            valt[fd] += adj_val; _PP.roott[fd].valt[fd] += adj_val
+                            valt[fd] += adj_val; _PP.roott[fd][1][fd] += adj_val
                             # or batch recompute?
-                            __PP = _derPP.PP if _derPP.PP is not _PP else _derPP._PP
+                            __PP = _derPP.PPt[0] if _derPP.PPt[0] is not _PP else _derPP.PPt[1]
                             if __PP not in save_med_:  # if not saved via prior _PP
                                 save_med_ += [__PP]
                                 adj_Val += adj_val  # save_med__ val?
@@ -267,8 +268,8 @@ def sum2graph_(igraph_, fd):  # sum node params into graph
                 sum_plevels(graph.plevels, node.plevels)
                 sum_plevels(graph.alt_plevels, node.alt_plevels)
 
-            for PP, derG,_ in node.link_:  # accum derG in new level
-                if PP in node_:
+            for derG in node.link_:  # accum derG in new level
+                if derG.PPt[0] in node_ or derG.PPt[1] in node_:
                     sum_player(new_plevel, derG.plevel_t[fd])  # it is actually sum_plevel, but the process same with sum_player
                     sum_player(new_alt_plevel, derG.alt_plevel_t[fd])
                     new_valt[0] += derG.valt[0]; new_valt[1] += derG.valt[1]
