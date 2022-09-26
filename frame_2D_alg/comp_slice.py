@@ -262,15 +262,17 @@ def CPP2graph(PP, fseg, Cgraph):
         for altPP in PP.altPP_:
             sum_players(alt_players, altPP.players[:len(alt_fds)])  # sum same-fd players only
             alt_valt[0] += altPP.valt[0];  alt_valt[1] += altPP.valt[1]
-
     fd = PP.fds[-1]
     plevel_t = [[],[]]  # init empty list
     alt_plevel_t = [[],[]]
     plevel_t[fd] = [deepcopy(PP.players), deepcopy(PP.fds), deepcopy(PP.valt)]
     alt_plevel_t[1-fd] = [alt_players, alt_fds, alt_valt]  # should be 1-fd here for alt_plevel? Or same fd?
-    
-    return Cgraph(PP=PP, node_=[PP], plevels=[plevel_t], alt_plevels=[alt_plevel_t], fds=deepcopy(PP.fds), x0=PP.x0, xn=PP.xn, y0=PP.y0, yn=PP.yn)
 
+    return Cgraph(PP=PP, node_=[PP], plevels=[plevel_t], alt_plevels=[alt_plevel_t], fds=deepcopy(PP.fds), x0=PP.x0, xn=PP.xn, y0=PP.y0, yn=PP.yn)
+'''
+    alt_plevels = [[alt_players, alt_fds, alt_valt]]
+    plevels = [[deepcopy(PP.players), deepcopy(PP.fds), deepcopy(PP.valt)]]
+'''
 
 def slice_blob(blob, verbose=False):  # forms horizontal blob slices: Ps, ~1D Ps, in select smooth edge (high G, low Ga) blobs
 
