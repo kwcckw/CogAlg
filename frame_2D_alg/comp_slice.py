@@ -128,7 +128,7 @@ class CderP(ClusterStructure):  # tuple of derivatives in P uplink_ or downlink_
 
 class CPP(CderP):  # derP params include P.ptuple
 
-    players = list  # 1st plevel, same as in derP but L is area
+    players_t = lambda: [[],[]]  # 1st plevel, same as in derP but L is area
     valt = lambda: [0,0]  # mval, dval summed across players
     nvalt = lambda: [0,0]  # from neg derPs:
     nderP_t = lambda: [[],[]]  # miss links, add with nvalt for complemented PP
@@ -209,27 +209,26 @@ def CBlob2graph(dir_blob, fseg, Cgraph):
     # init graph params
     players, fds, valt = [], [], [0,0]  # players, fds and valt
     alt_players, alt_fds, alt_valt = [], [], [0,0]
-    plevels = [[players, fds, valt]]
-    alt_plevels = [[alt_players, alt_fds, alt_valt]]
+    plevels = [[[players, fds, valt],[alt_players, alt_fds, alt_valt]]]
     gPPm_, gPPd_ = [], []  # converted gPPs, node_ and alt_node_
     root_fds = PPm_[0].fds[:-1]  # root fds is the shorter fork?
 
-    root = Cgraph(node_= gPPm_, alt_node_=gPPd_, plevels=plevels, alt_plevels=alt_plevels, rng = PPm_[0].rng,
+    root = Cgraph(node_= gPPm_, alt_node_=gPPd_, plevels=plevels, rng = PPm_[0].rng,
                   fds = root_fds, rdn=dir_blob.rdn, x0=PPm_[0].x0, xn=PPm_[0].xn, y0=PPm_[0].y0, yn=PPm_[0].yn)
 
     for fd, (PP_, gPP_) in enumerate(zip([PPm_, PPd_], [gPPm_, gPPd_])):
         for PP in PP_:
-
-            if fd:  # sum from players
-                sum_players(players, PP.players)
-                valt[0] += PP.valt[0]; valt[1] += PP.valt[1]
-                fds[:] = deepcopy(PP.fds)
-            else:  # sum from altPP's players
+            # should be summing alts when fd= 1?
+            if fd:  # sum from altPP's players
                 for altPP in PP.altPP_:
-                    sum_players(alt_players, altPP.players)
+                    sum_players(alt_players, altPP.players_t[1])
                     alt_valt[0] += altPP.valt[0]; alt_valt[1] += altPP.valt[1]
                     alt_fds[:] = deepcopy(altPP.fds)
-
+            else:  # sum from players
+                sum_players(players, PP.players_t[0])
+                valt[0] += PP.valt[0]; valt[1] += PP.valt[1]
+                fds[:] = deepcopy(PP.fds)
+                 
             # compute rdn
             if fseg: PP = PP.roott[PP.fds[-1]]  # seg root
             PP_P_ = [P for P_ in PP.P__ for P in P_]  # PPs' Ps
@@ -249,26 +248,26 @@ def CBlob2graph(dir_blob, fseg, Cgraph):
     return root
 
 def CPP2graph(PP, fseg, Cgraph):
+    ifd = PP.fds[-1]
+    
     alt_players, alt_fds = [], []
     alt_valt = [0, 0]
 
     if not fseg and PP.altPP_:  # seg doesn't have altPP_
         alt_fds = PP.altPP_[0].fds
         for altPP in PP.altPP_[1:]:  # get fd sequence common for all altPPs:
-            for i, (_fd, fd) in enumerate(zip(alt_fds, altPP.fds)):
+            for i, (_fd, fd) in enumerate(zip(alt_fds, altPP.fds)):    
                 if _fd != fd:
                     alt_fds = alt_fds[:i]
                     break
         for altPP in PP.altPP_:
-            sum_players(alt_players, altPP.players[:len(alt_fds)])  # sum same-fd players only
+            sum_players(alt_players, altPP.players_t[ifd][:len(alt_fds)])  # sum same-fd players only
             alt_valt[0] += altPP.valt[0];  alt_valt[1] += altPP.valt[1]
-    fd = PP.fds[-1]
-    plevel_t = [[],[]]  # init empty list
-    alt_plevel_t = [[],[]]
-    plevel_t[fd] = [deepcopy(PP.players), deepcopy(PP.fds), deepcopy(PP.valt)]
-    alt_plevel_t[1-fd] = [alt_players, alt_fds, alt_valt]  # should be 1-fd here for alt_plevel? Or same fd?
+    
+    # no more alt_plevel_t, pack 1st plevel
+    plevel_t = [[[deepcopy(PP.players_t[PP.fds[-1]]), deepcopy(PP.fds), deepcopy(PP.valt)],[alt_players, alt_fds, alt_valt]]]
 
-    return Cgraph(PP=PP, node_=[PP], plevels=[plevel_t], alt_plevels=[alt_plevel_t], fds=deepcopy(PP.fds), x0=PP.x0, xn=PP.xn, y0=PP.y0, yn=PP.yn)
+    return Cgraph(PP=PP, node_=[PP], plevels=plevel_t, fds=deepcopy(PP.fds), x0=PP.x0, xn=PP.xn, y0=PP.y0, yn=PP.yn)
 '''
     alt_plevels = [[alt_players, alt_fds, alt_valt]]
     plevels = [[deepcopy(PP.players), deepcopy(PP.fds), deepcopy(PP.valt)]]
@@ -499,9 +498,14 @@ def form_PP_root(seg_t, base_rdn):  # form PPs from match-connected segs
                 for P in P_:
                     P.roott[fd] = PP  # update root from seg to PP
                     if fd:
-                        PPm = P.roott[0]
-                        if PPm not in PP.altPP_: PP.altPP_ += [PPm]  # bilateral assignment of altPPs
-                        if PP not in PPm.altPP_: PPm.altPP_ += [PP]  # PPd here
+                        PPm = P.roott[0]               
+                        # i think we need fds_t and val_t too? Then the process to convert PP to graph will be simpler too
+                        if PPm not in PP.altPP_: 
+                            PP.altPP_ += [PPm]  # bilateral assignment of altPPs
+                            sum_players(PP.players_t[0], PPm.players_t[0])  # sum PP's players_t[0] (mplayer)
+                        if PP not in PPm.altPP_: 
+                            PPm.altPP_ += [PP]  # PPd here
+                            sum_players(PPm.players_t[1], PP.players_t[1])  # sum PPm's players_t[1] (dplayer) 
         PP_t += [PP_]
     return PP_t
 
@@ -546,7 +550,7 @@ def sum2seg(seg_Ps, fd, fds):  # sum params of vertically connected Ps into segm
                 seg.nderP_t += [derP]
 
     accum_derP(seg, seg_Ps[-1], fd)  # accum last P only, top P uplink_layers are not part of seg
-    if new_player: seg.players += [new_player]  # add new player
+    if new_player: seg.players_t[fd] += [new_player]  # add new player
     seg.y0 = seg_Ps[0].y
     seg.yn = seg.y0 + len(seg_Ps)
     seg.fds = fds + [fd]  # fds of root PP
@@ -559,11 +563,11 @@ def accum_derP(seg, derP, fd):  # derP might be CP, though unlikely
 
     if isinstance(derP, CP):
         derP.roott[fd] = seg
-        if seg.players: sum_players(seg.players, [[derP.ptuple]])
-        else:           seg.players.append([deepcopy(derP.ptuple)])
+        if seg.players_t[fd]: sum_players(seg.players_t[fd], [[derP.ptuple]])
+        else:           seg.players_t[fd].append([deepcopy(derP.ptuple)])
         seg.xn = max(seg.xn, derP.x0 + derP.ptuple.L)
     else:
-        sum_players(seg.players, derP.players)  # last derP player is current mplayer, dplayer
+        sum_players(seg.players_t[fd], derP.players)  # last derP player is current mplayer, dplayer
         seg.valt[0] += derP.valt[0]; seg.valt[1] += derP.valt[1]
         seg.xn = max(seg.xn, derP.x0 + derP.players[0][0].L)
 
@@ -576,7 +580,7 @@ def sum2PP(PP_segs, base_rdn, fd):  # sum PP_segs into PP
 
     for seg in PP_segs:
         seg.roott[fd] = PP
-        sum_players(PP.players, seg.players)  # not empty inp's players
+        sum_players(PP.players_t[fd], seg.players_t[fd])  # not empty inp's players
         PP.fds = copy(seg.fds)
         PP.x0 = min(PP.x0, seg.x0)  # external params: 2nd player?
         PP.xn = max(PP.xn, seg.xn)
