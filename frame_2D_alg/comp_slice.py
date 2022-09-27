@@ -193,8 +193,8 @@ def agg_recursion_eval(dir_blob, PP_t):
 
     M, G = dir_blob.valt
     fork_rdnt = [1+(G>M), 1+(M>=G)]
+    for fd, PP_ in enumerate(PP_t):  # PPm_, PPd_
 
-    for fd, PP_ in enumerate(PP_t):
         if (dir_blob.valt[fd] > PP_aves[fd] * ave_agg * (dir_blob.rdn+1) * fork_rdnt[fd]) \
             and len(PP_) > ave_nsub and dir_blob.alt_rdn < ave_overlap:
             dir_blob.rdn += 1  # estimate
@@ -228,7 +228,7 @@ def CBlob2graph(dir_blob, fseg, Cgraph):
                 sum_players(players, PP.players_t[0])
                 valt[0] += PP.valt[0]; valt[1] += PP.valt[1]
                 fds[:] = deepcopy(PP.fds)
-                 
+
             # compute rdn
             if fseg: PP = PP.roott[PP.fds[-1]]  # seg root
             PP_P_ = [P for P_ in PP.P__ for P in P_]  # PPs' Ps
@@ -249,21 +249,21 @@ def CBlob2graph(dir_blob, fseg, Cgraph):
 
 def CPP2graph(PP, fseg, Cgraph):
     ifd = PP.fds[-1]
-    
+
     alt_players, alt_fds = [], []
     alt_valt = [0, 0]
 
     if not fseg and PP.altPP_:  # seg doesn't have altPP_
         alt_fds = PP.altPP_[0].fds
         for altPP in PP.altPP_[1:]:  # get fd sequence common for all altPPs:
-            for i, (_fd, fd) in enumerate(zip(alt_fds, altPP.fds)):    
+            for i, (_fd, fd) in enumerate(zip(alt_fds, altPP.fds)):
                 if _fd != fd:
                     alt_fds = alt_fds[:i]
                     break
         for altPP in PP.altPP_:
             sum_players(alt_players, altPP.players_t[ifd][:len(alt_fds)])  # sum same-fd players only
             alt_valt[0] += altPP.valt[0];  alt_valt[1] += altPP.valt[1]
-    
+
     # no more alt_plevel_t, pack 1st plevel
     plevel_t = [[[deepcopy(PP.players_t[PP.fds[-1]]), deepcopy(PP.fds), deepcopy(PP.valt)],[alt_players, alt_fds, alt_valt]]]
 
@@ -498,14 +498,14 @@ def form_PP_root(seg_t, base_rdn):  # form PPs from match-connected segs
                 for P in P_:
                     P.roott[fd] = PP  # update root from seg to PP
                     if fd:
-                        PPm = P.roott[0]               
+                        PPm = P.roott[0]
                         # i think we need fds_t and val_t too? Then the process to convert PP to graph will be simpler too
-                        if PPm not in PP.altPP_: 
+                        if PPm not in PP.altPP_:
                             PP.altPP_ += [PPm]  # bilateral assignment of altPPs
                             sum_players(PP.players_t[0], PPm.players_t[0])  # sum PP's players_t[0] (mplayer)
-                        if PP not in PPm.altPP_: 
+                        if PP not in PPm.altPP_:
                             PPm.altPP_ += [PP]  # PPd here
-                            sum_players(PPm.players_t[1], PP.players_t[1])  # sum PPm's players_t[1] (dplayer) 
+                            sum_players(PPm.players_t[1], PP.players_t[1])  # sum PPm's players_t[1] (dplayer)
         PP_t += [PP_]
     return PP_t
 
@@ -854,8 +854,6 @@ def splice_2dir_blobs(_blob, blob):
 
 
 def sub_recursion_eval(root):  # for PP or dir_blob
-
-    from agg_recursion import agg_recursion, Cgraph
 
     if isinstance(root, CPP): root_PPm_, root_PPd_ = root.rlayers[0], root.dlayers[0]
     else:                     root_PPm_, root_PPd_ = root.PPm_, root.PPd_
