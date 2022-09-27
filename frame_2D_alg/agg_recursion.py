@@ -31,6 +31,7 @@ class CderG(ClusterStructure):  # tuple of graph derivatives in graph link_
     uplink_layers = lambda: [[], []]  # init a layer of dderPs and a layer of match_dderPs
     downlink_layers = lambda: [[], []]
     fdx = NoneType
+    link_ = list
 
 class Cgraph(CPP, CderG):  # graph or generic PP of any composition
 
@@ -84,7 +85,7 @@ def form_graph_(root, PP_, rng):
             graph = [[PP],[0,0]]  # [node_, valt]
             PP.roott[i] = graph
 
-    comp_graph_(PP_, rng)  # cross-comp all PPs within rng, PPs may be segs
+    comp_graph_(PP_)  # cross-comp all PPs within rng, PPs may be segs
     mgraph_, dgraph_ = [],[]  # initialize graphs with >0 positive links in PP roots:
     for PP in PP_:
         if len(PP.roott[0][0])>1: mgraph_ += [PP.roott[0]]  # root = [node_, valt] for cluster_node_layer eval, + link_nvalt?
@@ -124,22 +125,50 @@ def comp_graph_(PP_):  # cross-comp PPs: Gs, derGs if fd?, or segs inside PP. sa
 
     for i, _PP in enumerate(PP_):  # compare patterns of patterns: _PP to other PPs in rng, bilateral link assign:
         for PP in PP_[i+1:]:
+            flink = isinstance(PP, CderG)
+            if flink:
+                fd1, fd2 = PP.PPt[0].fds[-1], PP.PPt[1].fds[-1]  # their fd should be same here
+                _fd1, _fd2 = _PP.PPt[0].fds[-1], _PP.PPt[1].fds[-1]
+                
+                area  = (PP.PPt[0].plevels[0][fd1][0][0][0].L + PP.PPt[1].plevels[0][fd2][0][0][0].L) /2
+                _area  = (_PP.PPt[0].plevels[0][_fd1][0][0][0].L + _PP.PPt[1].plevels[0][_fd2][0][0][0].L) /2
+                dx = (max(_PP.PPt[0].xn, _PP.PPt[1].xn) - min(_PP.PPt[0].x0, _PP.PPt[1].x0)/ _area) - \
+                     (max(PP.PPt[0].xn, PP.PPt[1].xn) - min(PP.PPt[0].x0, PP.PPt[1].x0)/ area)
+                dy = (max(_PP.PPt[0].y, _PP.PPt[1].y)/_area) - \
+                     (max(PP.PPt[0].y, PP.PPt[1].y)/_area)
+            else:
+                area = PP.plevels[0][PP.fds[-1]][0][0][0].L; _area = _PP.plevels[0][_PP.fds[-1]][0][0][0].L
+                # not revised: 1st plevel_t' fork' players' 1st player' 1st ptuple' L
+                dx = ((_PP.xn - _PP.x0) / 2) / _area - ((PP.xn - PP.x0) / 2) / area
+                dy = _PP.y / _area - PP.y / area
 
-            area = PP.plevels[0][PP.fds[-1]][0][0][0].L; _area = _PP.plevels[0][_PP.fds[-1]][0][0][0].L
-            # not revised: 1st plevel_t' fork' players' 1st player' 1st ptuple' L
-            dx = ((_PP.xn - _PP.x0) / 2) / _area - ((PP.xn - PP.x0) / 2) / area
-            dy = _PP.y / _area - PP.y / area
             distance = np.hypot(dy, dx)  # Euclidean distance between PP centroids
             # not per graph_: fork_rdnt = [1 + (root.valt[1] > root.valt[0]), 1 + (root.valt[0] >= root.valt[1])]?
 
             if distance <= ave_rng * (sum(_PP.valt) / sum(PP_aves)):  # max distance depends on combined val
-                if isinstance(PP, Cgraph):
+                if flink:  # draft for CderG, der+
+                    
+                    _PP_plevel_ = [plevel_t[_fd1]for plevel_t in _PP.plevel_t]  # get each level's players
+                    PP_plevel_ = [plevel_t[fd1]for plevel_t in PP.plevel_t]
+                    mplevel_t, dplevel_t, mval, dval = [], [], 0, 0
+                    for _players, players in _PP_plevel_, PP_plevel_:
+                        # create same fds
+                        _fds = [0 for i in range(len(_players))]
+                        fds = [0 for i in range(len(players))]
+                        mplevel, dplevel, mmval, ddval= comp_players(_players, players, _fds, fds)
+                        
+                        mplevel_t += [[mplevel], [[]]]  # d part empty
+                        dplevel_t += [[[]], [dplevel]]  # m part empty
+                        mval += mmval
+                        dval += ddval
+                    PPt = [_PP.PPt[0], PP.PPt[0]]  # temporary, not sure how to select 2 PPs out of 4 possible PPts
+                else:
                     mplevel_t, dplevel_t, mval, dval = comp_plevel_ts(_PP.plevels, PP.plevels)
-                else:  # draft for CderG, der+
-                    mplevel_t, dplevel_t, mval, dval = comp_players(_PP.plevel_t, PP.plevel_t)
+                    PPt = [_PP, PP]
+
 
                 valt = [mval - ave_Gm, dval - ave_Gd]  # adjust for link rdn?
-                derPP = CderG(plevel_t=[mplevel_t, dplevel_t], valt=valt, PPt=[PP,_PP])
+                derPP = CderG(plevel_t=[mplevel_t, dplevel_t], valt=valt, PPt=PPt)
                 # any val:
                 _PP.link_ += [derPP]
                 PP.link_ += [derPP]
@@ -207,9 +236,18 @@ def sub_recursion_g(graph_, fseg, fd):  # rng+: extend PP_ per PPP, der+: replac
     sub_valt = [0,0]
 
     for graph in graph_:
-        if graph.valt[fd] > PP_aves[fd] and len(graph.node_) > ave_nsub:
+        if fd:  # get positive links per graph
+            node_ = []
+            for node in graph.node_:
+                for link in node.link_:
+                    if link.valt[0]>0 and link not in node_:
+                        node_ += [link]
+        else:
+            node_ = graph.node_
 
-            sub_mgraph_, sub_dgraph_ = form_graph_(graph, graph.node_, graph.rng, fd)  # cross-comp and clustering cycle
+        if graph.valt[fd] > PP_aves[fd] and len(node_) > ave_nsub:
+
+            sub_mgraph_, sub_dgraph_ = form_graph_(graph, node_, graph.rng, fd)  # cross-comp and clustering cycle
 
             if graph.valt[0] > ave_sub * graph.rdn:  # rng +:
                 sub_rlayers, valt = sub_recursion_g(sub_mgraph_, graph.valt, fd=0)
@@ -237,8 +275,14 @@ def sum2graph_(igraph_, fd):  # sum node params into graph
     graph_ = []
     for igraph in igraph_:
         node_, valt = igraph
-        # draft:
-        graph = Cgraph( node_=node_, plevels=[], alt_plevels =[], link_valt=valt, fds=deepcopy(node_[0].fds),
+        # below is not updated
+        if isinstance(node_[0], CderG):
+            # in der+, graph's node should be node(which is derG) or node's PPt (Cgraph)?
+            pass
+        else:
+            pass
+              
+        graph = Cgraph(node_=node_, plevels=[], alt_plevels =[], link_valt=valt, fds=deepcopy(node_[0].fds),
                         rng=node_[0].rng+1, x0=node_[0].x0, xn=node_[0].xn, y0=node_[0].y0, yn=node_[0].yn)
 
         new_players_t = [[],[]]
@@ -328,18 +372,21 @@ def comp_players(_layers, layers, _fds, fds):  # unpack and compare der layers, 
 def sum_plevel_ts(pLevels, plevels):
 
     for pLevel_t, plevel_t in zip_longest(pLevels, plevels, fillvalue=[]):
-        for pLevel, plevel in zip_longest(pLevel_t, plevel_t, fillvalue=[]):
-            # cis | alt forks
-            if plevel and plevel[0]:
-                if pLevel:
-                    if pLevel[0]: sum_players(pLevel[0], plevel[0], pLevel[1], plevel[1])  # accum nodes' players
-                    else:         pLevel[0] = deepcopy(plevel[0])  # append node's players
-                    pLevel[1] = deepcopy(plevel[1])  # assign fds
-                    pLevel[2][0] += plevel[2][0]
-                    pLevel[2][1] += plevel[2][1]  # accumulate valt
-                else:
-                    pLevel.append(deepcopy(plevel))  # pack new plevel
-
+        if plevel_t:  # plevel_t must not be empty list from zip_longest
+            if pLevel_t:
+                for pLevel, plevel in zip_longest(pLevel_t, plevel_t, fillvalue=[]):
+                    # cis | alt forks
+                    if plevel and plevel[0]:
+                        if pLevel:
+                            if pLevel[0]: sum_players(pLevel[0], plevel[0], pLevel[1], plevel[1])  # accum nodes' players
+                            else:         pLevel[0] = deepcopy(plevel[0])  # append node's players
+                            pLevel[1] = deepcopy(plevel[1])  # assign fds
+                            pLevel[2][0] += plevel[2][0]
+                            pLevel[2][1] += plevel[2][1]  # accumulate valt
+                        else:
+                            pLevel.append(deepcopy(plevel))  # pack new plevel
+            else:  # pack new plevel_t
+                pLevels.append(deepcopy(plevel_t))
 
 def sum_player_t(pLayer_t, player_t, fd):
 
