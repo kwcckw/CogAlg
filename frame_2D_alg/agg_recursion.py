@@ -105,11 +105,12 @@ def comp_G_(G_):  # cross-comp Gs (patterns of patterns): Gs, derGs, or segs ins
             dy = _G.y / _area - G.y / area
             distance = np.hypot(dy, dx)  # Euclidean distance between PP centroids
             if distance <= ave_rng * ((sum(_G.valt)+sum(G.valt)) / (2*sum(G_aves))):  # max distance depends on combined val
-
                 mplevel_t, dplevel_t, mvalt, dvalt = comp_plevel_ts(_G.plevels, G.plevels)
                 valt = [sum(mvalt) - ave_Gm, sum(dvalt) - ave_Gd]  # *= link rdn?
-                plevel_t = [[mplevel_t,[],mvalt], [dplevel_t,[],dvalt]]
-                derG = Cgraph(plevels=[plevel_t], fds=[0], val_t=valt, node_=[_G, G])
+                fds = deepcopy(_G.plevels[-1][G.fds[-1]][1])  # get fds from _G last plevel
+                afds = deepcopy(fds[:-1] + [1-fds[-1]])  # same fds but last element in different sign
+                plevel_t = [[mplevel_t,fds,mvalt], [dplevel_t,afds,dvalt]]
+                derG = Cgraph(plevels=[plevel_t], fds=[0], valt=valt, node_=[_G, G])  # i think we can have valt per derG here, val_t can be retrieved from their plevel_t
 
                 # any val:
                 _G.link_ += [derG]; G.link_ += [derG]
@@ -214,8 +215,9 @@ def sum2graph_(G_, fd):  # sum node and link params into graph
     for G in G_:
         node_, valt = G
         link_ = []  # to avoid rdn
-        graph = Cgraph(node_=node_, plevels=[[]], fds=deepcopy(node_[0].fds), x0=node_[0].x0, xn=node_[0].xn, y0=node_[0].y0, yn=node_[0].yn)
-        plevel_t, fds, valt = [], [], [0,0]
+        graph = Cgraph(node_=node_, plevels=[], fds=deepcopy(node_[0].fds), x0=node_[0].x0, xn=node_[0].xn, y0=node_[0].y0, yn=node_[0].yn)
+        players_t, fds_t, val_t = [[],[]], [deepcopy(node_[0].fds)+[fd], deepcopy(node_[0].fds)+[1-fd]], [[0,0],[0,0]]
+        plevel_t = [[players_t[0], fds_t[0], val_t[0]], [players_t[1], fds_t[1], val_t[1]]]
         for node in node_:
             graph.valt[0] += node.valt[0]; graph.valt[1] += node.valt[1]
             graph.x0=min(graph.x0, node.x0)
@@ -226,17 +228,19 @@ def sum2graph_(G_, fd):  # sum node and link params into graph
             if not graph.plevels:  # initialization
                 graph.plevels = deepcopy(node.plevels)
             else:
-                sum_plevel_ts(graph.plevels[:-1], node.plevels)
+                sum_plevel_ts(graph.plevels, node.plevels)
             # draft:
             for derG in node.link_:  # accum derG in new level
                 if derG in link_:
                     continue
-                sum_plevel_t(graph.plevels[-1], derG.plevels[0][fd])
-                valt[0] += derG.valt[0][fd]; valt[1] += derG.valt[1][fd]
+                # reconstruct derG.plevel_t
+                derG_plevel_t = [[derG.plevels[0][0][0][fd],derG.plevels[0][0][1],derG.plevels[0][0][2]],\
+                                 [derG.plevels[0][1][0][fd],derG.plevels[0][1][1],derG.plevels[0][1][2]]]
+                sum_plevel_ts([plevel_t], [derG_plevel_t] )
+                valt[0] += derG.plevels[0][0][2][fd]; valt[1] += derG.plevels[0][1][2][fd]  # 1st[]=1st level, 2nd[]=m|d fork, 3rd[]=valt index, 4th[]=val from valt
                 derG.roott[fd] = graph
                 link_ = [derG]  # to avoid rdn
-        # update fds
-        fds[:] = deepcopy(graph.plevels[-1][1] + [fd])
+        graph.plevels += [plevel_t]  # add new level
         graph_ += [graph]
 
     return graph_
@@ -309,17 +313,6 @@ def sum_plevel_ts(pLevels, plevels):
                             pLevel.append(deepcopy(plevel))  # pack new plevel
             else:  # pack new plevel_t
                 pLevels.append(deepcopy(plevel_t))
-
-# sum single plevel_t, fds is not summing criteria
-def sum_plevel_t(pLevel_t, plevel_t):
-
-    for fd, (pLevel, plevel) in enumerate(zip(pLevel_t, plevel_t)):  # each m|d fork
-        for pLayer, player in zip_longest(pLevel[0], plevel[0], fillvalue=[]):  # each player in players
-            if player:
-                if pLayer:
-                    sum_player(pLayer,player)
-                else:
-                    pLevel[0] += [player]  # pack new player
 
 # old
 def sum_plevels(pLevels, plevels):
