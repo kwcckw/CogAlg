@@ -105,12 +105,13 @@ def comp_G_(G_):  # cross-comp Gs (patterns of patterns): Gs, derGs, or segs ins
             dy = _G.y / _area - G.y / area
             distance = np.hypot(dy, dx)  # Euclidean distance between PP centroids
             if distance <= ave_rng * ((sum(_G.valt)+sum(G.valt)) / (2*sum(G_aves))):  # max distance depends on combined val
+
                 mplevel_t, dplevel_t, mvalt, dvalt = comp_plevel_ts(_G.plevels, G.plevels)
                 valt = [sum(mvalt) - ave_Gm, sum(dvalt) - ave_Gd]  # *= link rdn?
-                fds = deepcopy(_G.plevels[-1][G.fds[-1]][1])  # get fds from _G last plevel
-                afds = deepcopy(fds[:-1] + [1-fds[-1]])  # same fds but last element in different sign
-                plevel_t = [[mplevel_t,fds,mvalt], [dplevel_t,afds,dvalt]]
-                derG = Cgraph(plevels=[plevel_t], fds=[0], valt=valt, node_=[_G, G])  # i think we can have valt per derG here, val_t can be retrieved from their plevel_t
+                fds = deepcopy(_G.plevels[-1][G.fds[-1]][1])  # last plevel fds
+                afds = deepcopy(fds[:-1] + [1-fds[-1]])  # alt last fd
+                plevel_t = [[mplevel_t,fds,mvalt], [dplevel_t,afds,dvalt]]  # same fds in both sub-ts?
+                derG = Cgraph(plevels=[plevel_t], fds=[0], valt=valt, node_=[_G, G])  # players valt is in plevel_t
 
                 # any val:
                 _G.link_ += [derG]; G.link_ += [derG]
@@ -128,7 +129,7 @@ def cluster_node_layer(graph_, graph, med_node__, fd):  # recursive eval of mutu
     save_node_, save_med__ = [],[]  # __Gs that mediate between Gs and _Gs
     adj_Val = 0
 
-    for G, med_node_ in zip(node_, med_node__):
+    for G, med_node_ in zip(node_, med_node__):  # G: node or sub-graph
         save_med_ = []
         for _G in med_node_:
             for derG in _G.link_:
@@ -192,7 +193,7 @@ def sub_recursion_g(graph_, fseg, fd):  # rng+: extend G_ per graph, der+: repla
                 sub_rlayers, valt = sub_recursion_g(sub_mgraph_, graph.valt, fd=0)
                 rvalt = sum(valt); graph.valt[0] += rvalt; sub_valt[0] += rvalt  # not sure
                 graph.rlayers = [sub_mgraph_] + [sub_rlayers]
-            # if > cost of calling sub_recursion and looping:
+            # if >cost of calling sub_recursion and looping:
             if graph.valt[1] > ave_sub * graph.rdn:  # der+:
                 sub_dlayers, valt = sub_recursion_g(sub_dgraph_, graph.valt, fd=1)
                 dvalt = sum(valt); graph.valt[1] += dvalt; sub_valt[1] += dvalt
@@ -214,10 +215,10 @@ def sum2graph_(G_, fd):  # sum node and link params into graph
     graph_ = []  # new graph_
     for G in G_:
         node_, valt = G
-        link_ = []  # to avoid rdn
-        graph = Cgraph(node_=node_, plevels=[], fds=deepcopy(node_[0].fds), x0=node_[0].x0, xn=node_[0].xn, y0=node_[0].y0, yn=node_[0].yn)
-        players_t, fds_t, val_t = [[],[]], [deepcopy(node_[0].fds)+[fd], deepcopy(node_[0].fds)+[1-fd]], [[0,0],[0,0]]
-        plevel_t = [[players_t[0], fds_t[0], val_t[0]], [players_t[1], fds_t[1], val_t[1]]]
+        link = node_[0].link_[0]
+        link_ = [link]  # to avoid rdn
+        graph = Cgraph(node_=node_, plevels=[deepcopy(node_[0].plevels) + [deepcopy(link.plevels[0][fd])]], # init plevels = 1st node,link
+                       fds=deepcopy(node_[0].fds+[fd]), x0=node_[0].x0, xn=node_[0].xn, y0=node_[0].y0, yn=node_[0].yn)
         for node in node_:
             graph.valt[0] += node.valt[0]; graph.valt[1] += node.valt[1]
             graph.x0=min(graph.x0, node.x0)
@@ -225,24 +226,18 @@ def sum2graph_(G_, fd):  # sum node and link params into graph
             graph.y0=min(graph.y0, node.y0)
             graph.yn=max(graph.yn, node.yn)
             # accum params:
-            if not graph.plevels:  # initialization
-                graph.plevels = deepcopy(node.plevels)
-            else:
-                sum_plevel_ts(graph.plevels, node.plevels)
-            # draft:
+            if node is node_[0]:
+                continue
+            sum_plevel_ts(graph.plevels[:-1], node.plevels)
             for derG in node.link_:  # accum derG in new level
                 if derG in link_:
                     continue
-                # reconstruct derG.plevel_t
-                derG_plevel_t = [[derG.plevels[0][0][0][fd],derG.plevels[0][0][1],derG.plevels[0][0][2]],\
-                                 [derG.plevels[0][1][0][fd],derG.plevels[0][1][1],derG.plevels[0][1][2]]]
-                sum_plevel_ts([plevel_t], [derG_plevel_t] )
-                valt[0] += derG.plevels[0][0][2][fd]; valt[1] += derG.plevels[0][1][2][fd]  # 1st[]=1st level, 2nd[]=m|d fork, 3rd[]=valt index, 4th[]=val from valt
+                sum_plevel_ts(graph.plevels[-1], derG.plevels[0][fd])  # replace with sum_player_ts
+                valt[0] += derG.valt[0][fd]; valt[1] += derG.valt[1][fd]
                 derG.roott[fd] = graph
-                link_ = [derG]  # to avoid rdn
-        graph.plevels += [plevel_t]  # add new level
-        graph_ += [graph]
+                link_ = [derG]
 
+        graph_ += [graph]
     return graph_
 
 
