@@ -341,7 +341,7 @@ def comp_P(_P, P):  # forms vertical derivatives of params per P in _P.uplink, c
         valt = [mtuple.val, dtuple.val]
         mplayer = [mtuple]; dplayer = [dtuple]
         players = [[_P.ptuple]]
-    
+
     else:  # P is derP
         mplayer, dplayer, mval, dval = comp_players(_P.players, P.players)  # passed from seg.fds
         valt = [mval, dval]
@@ -427,8 +427,7 @@ def link_eval(link_layers, fd):
         mrdn = derP.valt[1] > derP.valt[0]
         derP.rdn += not mrdn if fd else mrdn
 
-#        if derP.valt[fd] > vaves[fd] * derP.rdn * (i+1):  # ave * rdn to stronger derPs in link_layers[-2]
-        if random.uniform(0,1)>0.5:    
+        if derP.valt[fd] > vaves[fd] * derP.rdn * (i+1):  # ave * rdn to stronger derPs in link_layers[-2]
             link_layers[-1][fd].append(derP)
             derP._P.downlink_layers[-1][fd] += [derP]
             # misses = link_layers[-2] not in link_layers[-1], sum as PP.nvalt[fd] in sum2seg and sum2PP
