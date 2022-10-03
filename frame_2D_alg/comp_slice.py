@@ -175,11 +175,11 @@ def comp_slice_root(blob, verbose=False):  # always angle blob, composite dert c
         # intra PP:
         sub_recursion_eval(dir_blob)  # add rlayers, dlayers, seg_levels to select PPs, sum M,G
         # cross PP:
-        agg_recursion_eval(dir_blob, [copy(dir_blob.PPm_), copy(dir_blob.PPd_)])  # Cgraph conversion doesn't replace PPs?
+        agg_recursion_eval(dir_blob, [copy(dir_blob.PPm_), copy(dir_blob.PPd_)], fsub=0)  # Cgraph conversion doesn't replace PPs?
         # splice_dir_blob_(blob.dir_blobs)  # draft
 
 
-def agg_recursion_eval(dir_blob, PP_t):
+def agg_recursion_eval(dir_blob, PP_t, fsub):
     from agg_recursion import agg_recursion, Cgraph
 
     if not isinstance(dir_blob, Cgraph):
@@ -198,7 +198,7 @@ def agg_recursion_eval(dir_blob, PP_t):
         if (dir_blob.valt[fd] > PP_aves[fd] * ave_agg * (dir_blob.rdn+1) * fork_rdnt[fd]) \
             and len(PP_) > ave_nsub and dir_blob.alt_rdn < ave_overlap:
             dir_blob.rdn += 1  # estimate
-            agg_recursion(dir_blob, PP_, fseg=fseg)
+            agg_recursion(dir_blob, PP_, fseg=fseg, fsub=fsub)
 
 
 # not revised:
@@ -426,7 +426,6 @@ def link_eval(link_layers, fd):
             rng_eval(derP, fd)  # reset derP.valt, derP.rdn
         mrdn = derP.valt[1] > derP.valt[0]
         derP.rdn += not mrdn if fd else mrdn
-
         if derP.valt[fd] > vaves[fd] * derP.rdn * (i+1):  # ave * rdn to stronger derPs in link_layers[-2]
             link_layers[-1][fd].append(derP)
             derP._P.downlink_layers[-1][fd] += [derP]
@@ -884,7 +883,7 @@ def sub_recursion_eval(root):  # for PP or dir_blob
                         else: comb_layers[i] += PP_layer  # splice r|d PP layer into existing layer
 
             # segs agg_recursion:
-            agg_recursion_eval(PP, [copy(PP.mseg_levels[-1]), copy(PP.dseg_levels[-1])])
+            agg_recursion_eval(PP, [copy(PP.mseg_levels[-1]), copy(PP.dseg_levels[-1])], fsub=1)
             # include empty comb_layers:
             if fd: root.dlayers = [[[PPm_] + mcomb_layers], [[PPd_] + dcomb_layers]]
             else:  root.rlayers = [[[PPm_] + mcomb_layers], [[PPd_] + dcomb_layers]]
