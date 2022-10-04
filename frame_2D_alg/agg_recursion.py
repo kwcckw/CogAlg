@@ -92,23 +92,23 @@ def form_graph_(root, G_, fsub):  # G is potential node graph, in higher-order G
     return mgraph_, dgraph_
 
 
-def comp_G_(G_, fsub):  # cross-comp Gs (patterns of patterns): Gs, derGs, or segs inside PP
+def comp_G_(G_, fini):  # cross-comp Gs (patterns of patterns): Gs, derGs, or segs inside PP
 
     for i, _G in enumerate(G_):  # compare _G to other Gs in rng, bilateral link assign:
         for G in G_[i+1:]:
             if G in [node for link in _G.link_ for node in link.node_]:  # add frng to skip?
                 continue  # in rng+, G may have been compared to _G in prior sub_recursion
 
-            area = G.plevels[0][0][0][0][0].L; _area = _G.plevels[0][0][0][0][0].L
-            # area: 1st plevel_t' last fork' players' 1st player' 1st ptuple L
+            area = G.plevels[0][0][0][0][0].L; _area = _G.plevels[0][0][0][0][0].L  # 1st plevel_t' last fork' players' 1st player' 1st ptuple L
             dx = ((_G.xn - _G.x0) / 2) / _area - ((G.xn - G.x0) / 2) / area
             dy = ((_G.yn - _G.y0) / 2) / _area - ((G.yn - G.y0) / 2) / area
             distance = np.hypot(dy, dx)  # Euclidean distance between PP centroids
-            if distance <= ave_rng * ((sum(_G.valt)+sum(G.valt)) / (2*sum(G_aves))):  # max distance depends on combined val
-                if fsub:
-                    mplayers, dplayers, mvalt, dvalt  = comp_plevel_ts_fsub(_G.plevels, G.plevels)
+            # max distance depends on combined value:
+            if distance <= ave_rng * ((sum(_G.valt)+sum(G.valt)) / (2*sum(G_aves))):
+                if fini:
+                    mplayers, dplayers, mvalt, dvalt = comp_plevel_t(_G.plevels, G.plevels)
                 else:
-                    mplayers, dplayers, mvalt, dvalt  = comp_plevel_ts(_G.plevels, G.plevels)
+                    mplayers, dplayers, mvalt, dvalt = comp_plevel_ts(_G.plevels, G.plevels)
                 valt = [sum(mvalt) - ave_Gm, sum(dvalt) - ave_Gd]  # *= link rdn?
                 fds = deepcopy(_G.plevels[-1][0][1])  # last plevel fds
                 derG = Cgraph(
@@ -252,57 +252,81 @@ def sum2graph_(G_, fd):  # sum node and link params into graph
                 for G in derG.node_:
                     if G not in graph.node_:  # alt graphs are roots of not-in-graph G in derG.node_
                         alt_graph = G.roott[fd]
-                        if alt_graph not in graph.alt_graph_ and isinstance(alt_graph, Cgraph):  # maybe proto-graph
+                        if alt_graph not in graph.alt_graph_ and isinstance(alt_graph, Cgraph):  # not proto-graph
                             sum_player_ts(graph.plevels[-1][1], alt_graph.plevels[-1][0])
                             graph.alt_graph_ += [alt_graph]
     return graph_
 
 
-def comp_plevel_ts_fsub(_plevels, plevels):
-
-    mplayer_ts, dplayer_ts = [],[]
-    mValt, dValt = [0,0], [0,0]
-
-    for _plevel_t, plevel_t in zip(_plevels, plevels):
-        for alt, (_plevel, plevel) in enumerate(zip(_plevel_t, plevel_t)):
-            # cis | alt fork:
-            if _plevel and plevel:
-                _players, _fds, _valt = _plevel
-                players, fds, valt = plevel    
-                if _players and isinstance(_players[0][0], list):  # each players contains player_t
-                    mplayer_t, dplayer_t, mval, dval = comp_player_ts(_players, players, _fds, fds)
-                    mplayer_ts += [mplayer_t]; dplayer_ts+= [dplayer_t]
-                else:
-                    mplayer, dplayer, mval, dval = comp_players(_players, players, _fds, fds)
-                    if alt: dplayer_ts += [[mplayer, dplayer]]  # each player in players is player_t
-                    else:   mplayer_ts += [[mplayer, dplayer]] 
-                mValt[alt] += mval; dValt[alt] += dval
-    
-    return mplayer_ts, dplayer_ts, mValt, dValt
-
-
-
 def comp_plevel_ts(_plevels, plevels):
 
-    mplayers_, dplayers_ = [],[]
+    mplevel_t, dplevel_t = [],[]  # output
     mValt, dValt = [0,0], [0,0]
 
     for _plevel_t, plevel_t in zip(_plevels, plevels):
-        mplayers, dplayers = [], []
+        mplevel, dplevel = [], []  # each is cis,alt tuple
+
         for alt, (_plevel, plevel) in enumerate(zip(_plevel_t, plevel_t)):
             # cis | alt fork:
             if _plevel and plevel:
-                _players, _fds, _valt = _plevel
-                players, fds, valt = plevel
-                mplayer, dplayer, mval, dval = comp_players(_players, players, _fds, fds)
-                mplayers += mplayer; dplayers += dplayer
+                _players, _fds, _valt = _plevel; players, fds, valt = plevel
+                if len(players) == 2:
+                    mplayers, dplayers, mval, dval = comp_player_ts(_players, players, _fds, fds)
+                else: mplayers, dplayers, mval, dval = comp_players(_players, players, _fds, fds)
+
+                mplevel += [mplayers, fds, mval]; dplevel += [dplayers, fds, dval]  # each is cis,alt tuple
                 mValt[alt] += mval; dValt[alt] += dval
+            else:
+                mplevel += []; dplevel += []   # not sure
 
-    mplayers_ += [mplayers]; dplayers_ +=  [dplayers]
-    return mplayers_, dplayers_, mValt, dValt
+        mplevel_t += [mplevel]; dplevel_t += [dplevel]
+
+    return mplevel_t, dplevel_t, mValt, dValt
+
+# if fini:
+def comp_plevel_t(_plevel_t, plevel_t):
+    # plevel is fd tuple in derG if der+ or alt tuple in 1-plevel PP'G if initial rng+
+
+    mplayers_t, dplayers_t = [],[]
+    mvalt, dvalt = [], []
+
+    for (_players, _fds, _valt), (players, fds, valt) in zip(_plevel_t, plevel_t):
+        if len(players)==2:
+            mplayers, dplayers, mval, dval = comp_player_ts(_players, players, _fds, fds)
+        else: mplayers, dplayers, mval, dval = comp_players(_players, players, _fds, fds)
+
+        mplayers_t += [mplayers]; dplayers_t += [dplayers]  # or combined into flat lists?
+        mvalt += [mval]; dvalt += [dval]
+
+    return mplayers_t, dplayers_t, mvalt, dvalt
 
 
-# i think it's better to separate both comp_players and comp_player_ts?
+def comp_player_ts(_players, players, _fds, fds):  # unpack and compare der layers, if any from der+
+
+    mplayer_ts, dplayer_ts = [[],[]], [[],[]]  # flat lists of ptuples, nesting decoded by mapping to lower levels
+    mval, dval = 0, 0
+
+    for _player_t, player_t, _fd, fd in zip(_players, players, _fds, fds):
+        if _fd==fd:
+            mplayer_t, dplayer_t = [],[]
+            for _player, player in zip(_player_t, player_t):
+                # cis|alt
+                if _player and player:  # alt_players may be empty
+                    mplayer, dplayer = [],[]
+                    for _ptuple, ptuple in zip(_player, player):
+
+                        mtuple, dtuple = comp_ptuple(_ptuple, ptuple)
+                        mplayer += [mtuple]; dplayer += [dtuple]
+                        mval += mtuple.val; dval += dtuple.val
+
+                    mplayer_t += [mplayer]; dplayer_t += [dplayer]
+            mplayer_ts += [mplayer_t]; dplayer_ts += [dplayer_t]
+        else:
+            break  # only same-fd players are compared
+
+    return mplayer_ts, dplayer_ts, mval, dval
+
+# if len(players)!=2:
 def comp_players(_layers, layers, _fds, fds):  # unpack and compare der layers, if any from der+
 
     mplayer, dplayer = [], []  # flat lists of ptuples, nesting decoded by mapping to lower levels
@@ -319,26 +343,6 @@ def comp_players(_layers, layers, _fds, fds):  # unpack and compare der layers, 
 
     return mplayer, dplayer, mval, dval
 
-
-def comp_player_ts(_layers, layers, _fds, fds):  # unpack and compare der layers, if any from der+
-
-    mplayer_t, dplayer_t = [[],[]], [[],[]]  # flat lists of ptuples, nesting decoded by mapping to lower levels
-    mval, dval = 0, 0
-
-    for _player_t, player_t, _fd, fd in zip(_layers, layers, _fds, fds):
-        if _fd==fd:
-            for pfd, (_player, player) in enumerate(zip(_player_t, player_t)):
-                for _ptuple, ptuple in zip(_player, player):
-                    mtuple, dtuple = comp_ptuple(_ptuple, ptuple)
-                    if pfd:
-                        dplayer_t[0] += [mtuple]; dplayer_t[1] += [dtuple] 
-                    else:
-                        mplayer_t[0] += [mtuple]; mplayer_t[1] += [dtuple] 
-                    mval = mtuple.val; dval = dtuple.val
-        else:
-            break  # only same-fd players are compared
-
-    return mplayer_t, dplayer_t, mval, dval
 
 # summing part pending update
 def sum_plevel_ts(pLevels, plevels):
