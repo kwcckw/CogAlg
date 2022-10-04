@@ -39,10 +39,11 @@ class Cgraph(CPP):  # graph or generic PP of any composition
     alt_graph_ = list
 
 
-def agg_recursion(root, G_, fseg, fsub):  # compositional recursion in root.PP_, pretty sure we still need fseg, process should be different
+def agg_recursion(root, G_, fseg, fini):  # compositional recursion in root.PP_, pretty sure we still need fseg, process should be different
 
     ivalt = root.valt
-    mgraph_, dgraph_ = form_graph_(root, G_, fsub)  # PP cross-comp and clustering
+    mgraph_, dgraph_ = form_graph_(root, G_, fini)  # PP cross-comp and clustering
+    fini = 0
 
     # intra graph:
     if root.valt[0] > ave_sub * root.rdn:
@@ -59,17 +60,17 @@ def agg_recursion(root, G_, fseg, fsub):  # compositional recursion in root.PP_,
         # recursion if adjusted val:
         if (adj_val > G_aves[fd] * ave_agg * (root.rdn + 1)) and len(graph_) > ave_nsub:
             root.rdn += 1  # estimate
-            agg_recursion(root, graph_, fseg=fseg, fsub=fsub)  # cross-comp graphs
+            agg_recursion(root, graph_, fseg=fseg, fini=fini)  # cross-comp graphs
 
 
-def form_graph_(root, G_, fsub):  # G is potential node graph, in higher-order GG graph
+def form_graph_(root, G_, fini):  # G is potential node graph, in higher-order GG graph
 
     for G in G_:  # initialize mgraph, dgraph as roott per G, for comp_G_
         for i in 0,1:
             graph = [[G], [], [0,0]]  # proto-GG: [node_, meds_, valt]
             G.roott[i] = graph
 
-    comp_G_(G_, fsub)  # cross-comp all graphs within rng, graphs may be segs
+    comp_G_(G_, fini)  # cross-comp all graphs within rng, graphs may be segs
     mgraph_, dgraph_ = [],[]  # initialize graphs with >0 positive links in graph roots:
     for G in G_:
         if len(G.roott[0][0])>1: mgraph_ += [G.roott[0]]  # root = [node_, valt] for cluster_node_layer eval, + link_nvalt?
@@ -83,6 +84,7 @@ def form_graph_(root, G_, fsub):  # G is potential node graph, in higher-order G
             if graph[2][fd] > ave_agg: regraph_ += [graph]  # graph reformed by merges and removes in cluster_node_layer
 
         if regraph_:
+            # fini is always 0 here because sum2graph uses links and link's players is player_ts
             graph_[:] = sum2graph_(regraph_, fd)  # sum proto-graph node_ params in graph
             plevels = deepcopy(graph_[0].plevels)
             for graph in graph_[1:]:
@@ -189,7 +191,7 @@ def sub_recursion_g(graph_, fseg, fd):  # rng+: extend G_ per graph, der+: repla
         # or if adj_val: top-level only?
         if graph.valt[fd] > G_aves[fd] and len(node_) > ave_nsub:
 
-            sub_mgraph_, sub_dgraph_ = form_graph_(graph, node_, fsub=1)  # cross-comp and clustering cycle
+            sub_mgraph_, sub_dgraph_ = form_graph_(graph, node_, fini=0)  # cross-comp and clustering cycle
             # rng+:
             if graph.valt[0] > ave_sub * graph.rdn:  # >cost of calling sub_recursion and looping:
                 sub_rlayers, valt = sub_recursion_g(sub_mgraph_, graph.valt, fd=0)
@@ -236,11 +238,8 @@ def sum2graph_(G_, fd):  # sum node and link params into graph
             for derG in node.link_:  # accum derG in new level
                 if derG in link_:
                     continue
-                # i think this need depend on fsub? plevels's players could be players or players_t
-                # so it will be sum_plevel here, and sum_players or sum_player_ts will be depend on fsub inside the sum_plevel
                 sum_player_ts(graph.plevels[-1][0], derG.plevels[0][fd])  # sum last plevel_t[0] only
                 valt[0] += derG.valt[0]; valt[1] += derG.valt[1]
-                derG.fds = [fd]
                 derG.roott[fd] = graph
                 link_ = [derG]
 
@@ -284,19 +283,22 @@ def comp_plevel_ts(_plevels, plevels):
     return mplevel_t, dplevel_t, mValt, dValt
 
 # if fini:
-def comp_plevel_t(_plevel_t, plevel_t):
+def comp_plevel_t(_plevels, plevels):
     # plevel is fd tuple in derG if der+ or alt tuple in 1-plevel PP'G if initial rng+
 
-    mplayers_t, dplayers_t = [],[]
+    # i think we need ad additional bracket here, else it will be the same with players with 2 layers
+    mplayers_t, dplayers_t = [[[],[]]],[[[],[]]]
     mvalt, dvalt = [], []
 
-    for (_players, _fds, _valt), (players, fds, valt) in zip(_plevel_t, plevel_t):
-        if len(players)==2:
-            mplayers, dplayers, mval, dval = comp_player_ts(_players, players, _fds, fds)
-        else: mplayers, dplayers, mval, dval = comp_players(_players, players, _fds, fds)
-
-        mplayers_t += [mplayers]; dplayers_t += [dplayers]  # or combined into flat lists?
-        mvalt += [mval]; dvalt += [dval]
+    for _plevel_t, plevel_t  in zip(_plevels, plevels):
+        for alt, ((_players, _fds, _valt), (players, fds, valt)) in enumerate(zip(_plevel_t, plevel_t)):  # each plevel in plevel_t 
+            if len(players)==2:
+                mplayers, dplayers, mval, dval = comp_player_ts(_players, players, _fds, fds)
+            else: 
+                mplayers, dplayers, mval, dval = comp_players(_players, players, _fds, fds)
+    
+            mplayers_t[alt] += [mplayers]; dplayers_t[alt] += [dplayers]  # combine into flat list from different plevels?
+            mvalt += [mval]; dvalt += [dval]
 
     return mplayers_t, dplayers_t, mvalt, dvalt
 
@@ -344,9 +346,10 @@ def comp_players(_layers, layers, _fds, fds):  # unpack and compare der layers, 
     return mplayer, dplayer, mval, dval
 
 
-# summing part pending update
+
 def sum_plevel_ts(pLevels, plevels):
 
+    fini =1  # for 1st plevel only, the consecutive plevels should be 0 for player_ts
     for pLevel_t, plevel_t in zip_longest(pLevels, plevels, fillvalue=[]):
         if plevel_t:  # plevel_t must not be empty list from zip_longest
             if pLevel_t:
@@ -354,8 +357,15 @@ def sum_plevel_ts(pLevels, plevels):
                     # cis | alt forks
                     if plevel and plevel[0]:
                         if pLevel:
-                            if pLevel[0]: sum_players(pLevel[0], plevel[0], pLevel[1], plevel[1])  # accum nodes' players
-                            else:         pLevel[0] = deepcopy(plevel[0])  # append node's players
+                            if pLevel[0]: 
+                                if fini:
+                                    sum_players(pLevel[0], plevel[0], pLevel[1], plevel[1])  # accum nodes' players
+                                    fini = 0 
+                                else:
+                                    sum_player_ts(pLevel, plevel)
+                                    
+                            else:         
+                                pLevel[0] = deepcopy(plevel[0])  # append node's players
                             pLevel[1] = deepcopy(plevel[1])  # assign fds
                             pLevel[2][0] += plevel[2][0]
                             pLevel[2][1] += plevel[2][1]  # accumulate valt
@@ -365,13 +375,15 @@ def sum_plevel_ts(pLevels, plevels):
                 pLevels.append(deepcopy(plevel_t))
 
 
-def sum_player_ts(pLevel, plevel, fsub):
+def sum_player_ts(pLevel, plevel):
 
     if plevel and plevel[0]:
        if pLevel:
            _players, _fds, _valt = pLevel
            players, fds, valt = plevel
-           sum_players(_players, players, _fds, fds)
+           # sum player_t
+           sum_players(_players[0], players[0], _fds, fds)
+           sum_players(_players[1], players[1], _fds, fds)
            _valt[0] += valt[0]; _valt[1] += valt[1]
        else:
            pLevel[:] = deepcopy(plevel)
