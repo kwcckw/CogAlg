@@ -175,11 +175,11 @@ def comp_slice_root(blob, verbose=False):  # always angle blob, composite dert c
         # intra PP:
         sub_recursion_eval(dir_blob)  # add rlayers, dlayers, seg_levels to select PPs, sum M,G
         # cross PP:
-        agg_recursion_eval(dir_blob, [copy(dir_blob.PPm_), copy(dir_blob.PPd_)], fsub=0)  # Cgraph conversion doesn't replace PPs?
+        agg_recursion_eval(dir_blob, [copy(dir_blob.PPm_), copy(dir_blob.PPd_)])  # Cgraph conversion doesn't replace PPs?
         # splice_dir_blob_(blob.dir_blobs)  # draft
 
 
-def agg_recursion_eval(dir_blob, PP_t, fsub):
+def agg_recursion_eval(dir_blob, PP_t):
     from agg_recursion import agg_recursion, Cgraph
 
     if not isinstance(dir_blob, Cgraph):
@@ -198,7 +198,7 @@ def agg_recursion_eval(dir_blob, PP_t, fsub):
         if (dir_blob.valt[fd] > PP_aves[fd] * ave_agg * (dir_blob.rdn+1) * fork_rdnt[fd]) \
             and len(PP_) > ave_nsub and dir_blob.alt_rdn < ave_overlap:
             dir_blob.rdn += 1  # estimate
-            agg_recursion(dir_blob, PP_, fseg=fseg, fsub=fsub)
+            agg_recursion(dir_blob, PP_, fseg=fseg)
 
 
 def slice_blob(blob, verbose=False):  # forms horizontal blob slices: Ps, ~1D Ps, in select smooth edge (high G, low Ga) blobs
@@ -431,10 +431,10 @@ def form_PP_root(seg_t, base_rdn):  # form PPs from match-connected segs
                         # i think we need fds_t and val_t too? Then the process to convert PP to graph will be simpler too
                         if PPm not in PP.altPP_:
                             PP.altPP_ += [PPm]  # bilateral assignment of altPPs
-                            sum_players(PP.players_t[0], PPm.players_t[0])  # sum PP's players_t[0] (mplayer)
+                            sum_players(PP.players_t[1], PPm.players_t[0])  # sum PP's players_t[0] (mplayer)
                         if PP not in PPm.altPP_:
                             PPm.altPP_ += [PP]  # PPd here
-                            sum_players(PPm.players_t[1], PP.players_t[1])  # sum PPm's players_t[1] (dplayer)
+                            sum_players(PPm.players_t[1], PP.players_t[0])  # sum PPm's players_t[1] (dplayer)
         PP_t += [PP_]
     return PP_t
 
@@ -479,7 +479,8 @@ def sum2seg(seg_Ps, fd, fds):  # sum params of vertically connected Ps into segm
                 seg.nderP_t += [derP]
 
     accum_derP(seg, seg_Ps[-1], fd)  # accum last P only, top P uplink_layers are not part of seg
-    if lplayer: seg.players += [lplayer[fd]]  # add new player
+    # so we need to use players_t here, because CPP doesn't have players
+    if lplayer: seg.players_t[0] += [lplayer]  # add new player
     seg.y0 = seg_Ps[0].y
     seg.yn = seg.y0 + len(seg_Ps)
     seg.fds = fds + [fd]  # fds of root PP
@@ -492,12 +493,12 @@ def accum_derP(seg, derP, fd):  # derP might be CP, though unlikely
 
     if isinstance(derP, CP):
         derP.roott[fd] = seg
-        if seg.players_t[fd]: sum_players(seg.players_t[fd], [[derP.ptuple]])
+        if seg.players_t[0]: sum_players(seg.players_t[0], [[derP.ptuple]])
         # players_t:
-        else:           seg.players_t[fd].append([deepcopy(derP.ptuple)])
+        else:           seg.players_t[0].append([deepcopy(derP.ptuple)])
         seg.xn = max(seg.xn, derP.x0 + derP.ptuple.L)
     else:
-        sum_players(seg.players_t[fd], derP.players)  # last derP player is current mplayer, dplayer
+        sum_players(seg.players_t[0], derP.players)  # last derP player is current mplayer, dplayer
         seg.valt[0] += derP.valt[0]; seg.valt[1] += derP.valt[1]
         seg.xn = max(seg.xn, derP.x0 + derP.players[0][0].L)
 
@@ -510,8 +511,8 @@ def sum2PP(PP_segs, base_rdn, fd):  # sum PP_segs into PP
 
     for seg in PP_segs:
         seg.roott[fd] = PP
-        # selection should be alt, not fd, only in convert?
-        sum_players(PP.players_t[fd], seg.players_t[fd])  # not empty inp's players
+        # selection should be alt, not fd, only in convert? Yea, so we assign player_t[0] here, alt will be in form_PP_
+        sum_players(PP.players_t[0], seg.players_t[0])  # not empty inp's players
         PP.fds = copy(seg.fds)
         PP.x0 = min(PP.x0, seg.x0)  # external params: 2nd player?
         PP.xn = max(PP.xn, seg.xn)
@@ -830,7 +831,6 @@ def CBlob2graph(dir_blob, fseg, Cgraph):
     return root
 
 def CPP2graph(PP, fseg, Cgraph):
-    ifd = PP.fds[-1]
 
     alt_players, alt_fds = [], []
     alt_valt = [0, 0]
@@ -885,7 +885,7 @@ def sub_recursion_eval(root):  # for PP or dir_blob
                         else: comb_layers[i] += PP_layer  # splice r|d PP layer into existing layer
 
             # segs agg_recursion:
-            agg_recursion_eval(PP, [copy(PP.mseg_levels[-1]), copy(PP.dseg_levels[-1])], fsub=1)
+            agg_recursion_eval(PP, [copy(PP.mseg_levels[-1]), copy(PP.dseg_levels[-1])])
             # include empty comb_layers:
             if fd: root.dlayers = [[[PPm_] + mcomb_layers], [[PPd_] + dcomb_layers]]
             else:  root.rlayers = [[[PPm_] + mcomb_layers], [[PPd_] + dcomb_layers]]
