@@ -112,7 +112,7 @@ class CderP(ClusterStructure):  # tuple of derivatives in P uplink_ or downlink_
     Players in derP are zipped with fds: taken forks. Players, mplayer, dplayer are replaced by those in PP
     '''
     players = list  # max ntuples in layer = ntuples in lower layers: 1, 1, 2, 4, 8..: one selected fork per compared ptuple
-    # nesting = len players ( player ( sub_player.., explicit to align comparands
+    # nesting = len players ( player ( sub_player.., explicit to align comparands?
     lplayer = lambda: [[], []]  # last mplayer, dplayer; der+ comp: players+dplayer or dplayer: link only?
     valt = lambda: [0,0]  # tuple of mval, dval, summed from last player, both are signed
     x0 = int
@@ -478,7 +478,7 @@ def sum2seg(seg_Ps, fd, fds):  # sum params of vertically connected Ps into segm
                 seg.nderP_ += [derP]
 
     accum_derP(seg, seg_Ps[-1], fd)  # accum last P only, top P uplink_layers are not part of seg
-    if lplayer: seg.players += [lplayer]  # add new player (no need fd here, each lplayer is from single fork only)
+    if lplayer: seg.players += [lplayer]  # add new player
     seg.y0 = seg_Ps[0].y
     seg.yn = seg.y0 + len(seg_Ps)
     seg.fds = fds + [fd]  # fds of root PP
