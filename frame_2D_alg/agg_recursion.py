@@ -212,9 +212,11 @@ def sum2graph_(G_, fd):  # sum node and link params into graph
         node_, meds_, valt = G
         link = node_[0].link_[0]
         link_ = [link]  # to avoid rdn
-        graph = Cgraph(plevels=[deepcopy(node_[0].plevels + link.plevels[fd])], # init plevels: 1st node, link, empty alt
+        graph = Cgraph(plevels=deepcopy(node_[0].plevels + [[link.plevels[fd], []]]), # init plevels: 1st node, link, empty alt
                        x0=node_[0].x0, xn=node_[0].xn, y0=node_[0].y0, yn=node_[0].yn,
                        fds=deepcopy(node_[0].fds+[fd]), node_ = node_, meds_ = meds_)
+        nbrackets = len(graph.plevels)
+        
         for node in node_:
             graph.valt[0] += node.valt[0]; graph.valt[1] += node.valt[1]
             graph.x0=min(graph.x0, node.x0)
@@ -224,19 +226,18 @@ def sum2graph_(G_, fd):  # sum node and link params into graph
             # accum params:
             if node is node_[0]:
                 continue
-            sum_plevels(graph.plevels[1:], node.plevels)
+            sum_plevels(graph.plevels[:-1], node.plevels)  # accumulate all plevels except the new plevel
             for derG in node.link_:  # accum derG in new level
                 if derG in link_:
                     continue
-                sum_plevels(graph.plevels, derG.plevels[fd])  # derG plevels don't include derG.node_[0].plevels
+                # i think there's no need to use fa here because we can just select it from graph.plevels[-1][0]
+                sum_plevel(graph.plevels[-1][0], derG.plevels[fd], nbrackets-2)  # derG plevels don't include derG.node_[0].plevels
                 valt[0] += derG.valt[0]; valt[1] += derG.valt[1]
                 derG.roott[fd] = graph
                 link_ = [derG]
 
         graph_ += [graph]
 
-    nlevel = len(graph.plevels)
-    alt_plevels = []
     for graph in graph_:  # 2nd pass to accum alt_graph params
         for node in graph.node_:
             for derG in node.link_:
@@ -244,37 +245,42 @@ def sum2graph_(G_, fd):  # sum node and link params into graph
                     if G not in graph.node_:  # alt graphs are roots of not-in-graph G in derG.node_
                         alt_graph = G.roott[fd]
                         if alt_graph not in graph.alt_graph_ and isinstance(alt_graph, Cgraph):  # not proto-graph
-                            sum_plevels(alt_plevels, alt_graph.plevels, fa=1)  # fa is to add plevel_t[0]s, former alt_graph.plevels[0] but per plevel
+                            sum_plevel(graph.plevels[-1][1], alt_graph.plevels[-1][0], nbrackets=nbrackets-2)  # fa is to add plevel_t[0]s, former alt_graph.plevels[0] but per plevel
                             graph.alt_graph_ += [alt_graph]
-    # not revised:
-    # add alt plevel
-    # for 1st recursion, original plevels[0] = [plevel, plevel], after adding alt_plevel, it becomes [plevel,plevel,plevel,plevel]
-    if alt_plevel:
-        graph.plevels[0] += alt_plevel
-    else:
-        graph.plevels[0] += [[] for _ in range(2**(nlevel-1))]  # add empty list to preserve element number
 
     return graph_
 
 # not revised:
 # below is draft
 # Cplevel(players, fds, valt), nesting for prelim comp
-
 def comp_plevels(_plevels, plevels):
 
-    plevels_ = [[],[]]
+    plevels_ = [[], []]
     mValt, dValt = [0,0], [0,0]
-    for _iplevel, iplevel in zip(_plevels, plevels):
-        # comp_plevel:
-        for i, ((_players, _fds, _valt), (players, fds, valt)) in enumerate(zip(_iplevel, iplevel)):
+    for nbrackets, (_plevel, plevel) in enumerate(zip(_plevels, plevels)):
+        mplevel_, dplevel_ = comp_plevel(_plevel, plevel, mValt, dValt, nbrackets)
+        plevels_[0] += [mplevel_]; plevels_[1] += [dplevel_]
+
+    return plevels_, mValt, dValt  # always single level
+
+
+# unpacked from comp_plevels, to be called individually
+def comp_plevel(_plevel, plevel, mValt, dValt, nbrackets):
+    
+    plevels_ = [[],[]]
+    if nbrackets>0:
+        for _pplevel, pplevel in zip(_plevel, plevel):
+            mplevel_, dplevel_ = comp_plevel(_pplevel, pplevel, mValt, dValt, nbrackets-1)
+            plevels_[0] += [mplevel_]; plevels_[1] += [dplevel_] 
+    else:
+        for i, ((_players, _fds, _valt), (players, fds, valt)) in enumerate(zip(_plevel, plevel)):
             mplayers, dplayers, mval, dval = comp_players(_players, players, _fds, fds)
             plevels_[0] += [[[mplayers], _fds, [mval, dval]]]  # m fork output, will be selected in sum2graph based on fd
             plevels_[1] += [[[dplayers], _fds, [mval, dval]]]  # d fork output, will be selected in sum2graph based on fd
             if i % 2: dValt[0] += mval; dValt[1] += dval  # odd index is d fork
             else:     mValt[0] += mval; mValt[1] += dval
 
-    return plevels_, mValt, dValt
-
+    return plevels_
 
 def comp_players(_layers, layers, _fds, fds):  # unpack and compare der layers, if any from der+
 
@@ -295,19 +301,24 @@ def comp_players(_layers, layers, _fds, fds):  # unpack and compare der layers, 
 
 def sum_plevels(pLevels, plevels):
 
-    for pLevel, plevel in zip_longest(pLevels, plevels, fillvalue=[]):
+    # level of nesting increases with increasing depth
+    for nbrackets, (pLevel, plevel) in enumerate(zip_longest(pLevels, plevels, fillvalue=[])):
         if plevel:
             if pLevel:
-                sum_plevel(pLevel, plevel)
+                sum_plevel(pLevel, plevel, nbrackets)
             else:  # pLevel is empty, pack new plevel
                 pLevels.append(deepcopy(plevel))
 
 # unpacked from sum_plevels, to be called separately
-def sum_plevel(pLevel, plevel):
-    for (pLayers,_fds,_),(players,fds,_) in zip(pLevel, plevel):
-        if pLayers and players:
-            sum_players(pLayers, players, _fds, fds)
-
+def sum_plevel(pLevel, plevel, nbrackets):
+        
+    if nbrackets >0:
+        for ppLevel,pplevel in zip(pLevel, plevel):
+            sum_plevel(ppLevel, pplevel, nbrackets-1)
+    else:
+        for (pLayers,_fds,_),(players,fds,_) in zip(pLevel, plevel):             
+            if pLayers and players:  # not sure here, if pLayers is empty, copy players? Or skip summing?
+                sum_players(pLayers, players, _fds, fds)
 
 # pending update for new players structure
 def sum_players(Layers, layers, Fds, fds, fneg=0):  # accum layers while same fds
