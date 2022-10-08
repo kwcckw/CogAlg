@@ -250,23 +250,38 @@ def sum2graph_(G_, fd):  # sum node and link params into graph
 
     return graph_
 
-
+# draft:
 def comp_plevels(_plevels, plevels):  # each packed plevel is nested as alT: variable-depth cis/alt tuple
 
     new_plevel = [[], []]
     mValt, dValt = [0,0], [0,0]
 
-    for naltT,(_plevel, plevel) in enumerate(zip( reversed(_plevels),reversed(plevels))):  # top-down depth increase
+    for naltT,(_iplevel, iplevel) in enumerate(zip( reversed(_plevels),reversed(plevels))):  # top-down depth increase
 
+        _next_plevel, next_plevel = _iplevel, iplevel
+        next_new_plevel = [ [[],[]] for _ in range(naltT+1)]
+        if naltT == 0: new_plevel[:] = next_new_plevel[0]  # assign top new plevel
+        
         while naltT:  # recursively unpack nested c/a tuple
-            for _pplevel, pplevel in zip(_plevel, plevel):
-                naltT -= 1
-                for fd in 0,1:
-                    new_plevel[fd] += []  # we get [],[],[].., then use it as indices?
-                    # also add mValt, dValt?
-
-        mplevel, dplevel = comp_plevel(_pplevel, pplevel, mValt, dValt)
-        new_plevel[0] += [mplevel]; new_plevel[1] += [dplevel]  # nested derivatives of all compared plevels
+            
+            _plevel, plevel = copy(_next_plevel), copy(next_plevel)  # get prior next plevel as current plevel
+            _next_plevel, next_plevel = [], []   # reset
+            
+            new_plevel = copy(next_new_plevel)  # get prior next new plevel as current new plevel
+            next_new_plevel = []  # reset
+            
+            for alt, (_pplevel, pplevel, new_pplevel) in enumerate(zip(_plevel, plevel, new_plevel)):  # each plevel is plevel_t here for c|a fork? 
+                mplevel = []; dplevel = []
+                new_pplevel[0] += [mplevel]; new_pplevel[1] += [dplevel]
+                
+                next_new_plevel += [[mplevel,dplevel]]  # mplevel and dplevel will be new_pplevel[0] and new_pplevel[1] of next level
+                _next_plevel += [_pplevel]; next_plevel += [pplevel]  # pack to be checked in the next loop
+            naltT -= 1
+            
+        else:
+            for _pplevel, pplevel, new_pplevel in zip(_next_plevel, next_plevel, next_new_plevel):
+                mplevel, dplevel = comp_plevel(_pplevel, _pplevel, mValt, dValt)
+                new_pplevel[0] += [mplevel]; new_pplevel[1] += [dplevel]  # nested derivatives of all compared plevels
 
     return new_plevel, mValt, dValt  # always single new plevel
 
