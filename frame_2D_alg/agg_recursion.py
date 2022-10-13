@@ -101,8 +101,8 @@ def comp_G_(G_):  # cross-comp Gs (patterns of patterns): Gs, derGs, or segs ins
             distance = np.hypot(dy, dx)  # Euclidean distance between centroids, max depends on combined value:
             if distance <= ave_rng * ((sum(_G.valt)+sum(G.valt)) / (2*sum(G_aves))):
 
-                plevel, valt = comp_plevels(_G.plevels, G.plevels, _G.fds, G.fds)
-                valt = [valt[0] - ave_Gm, valt[1] - ave_Gd]  # or already normalized, *= link rdn?
+                plevel = comp_plevels(_G.plevels, G.plevels, _G.fds, G.fds)
+                valt = [plevel[0][1] - ave_Gm, plevel[1][1] - ave_Gd]  # or already normalized, *= link rdn?
                 derG = Cgraph(
                     plevels=plevel, x0=min(_G.x0,G.x0), xn=max(_G.xn,G.xn), y0=min(_G.y0,G.y0), yn=max(_G.yn,G.yn), valt=valt, node_=[_G,G])
                 _G.link_ += [derG]; G.link_ += [derG]  # any val
@@ -216,7 +216,8 @@ def sum2graph_(G_, fd):  # sum node and link params into graph
         derG = node.link_[0]
         new_plevel = derG.plevels[fd]; derG.roott[fd] = graph; valt[0] += derG.valt[0]; valt[1] += derG.valt[1]
         for derG in node.link_[1:]:
-            sum_derG([new_plevel[0]], [derG.plevels[fd]])  # accum derG in new plevel
+            # there's no need to use index[0] here, and also the additional bracket, since they will be summed the same
+            sum_derG(new_plevel, derG.plevels[fd])  # accum derG in new plevel
             valt[0] += derG.valt[0]; valt[1] += derG.valt[1]
             derG.roott[fd] = graph
         for node in node_[1:]:
@@ -225,12 +226,12 @@ def sum2graph_(G_, fd):  # sum node and link params into graph
             # accum params:
             sum_plevels(graph.plevels, node.plevels)
             for derG in node.link_:
-                sum_derG([new_plevel], [derG.plevels[fd]])  # accum derG
+                sum_derG(new_plevel, derG.plevels[fd])  # accum derG
                 valt[0] += derG.valt[0]; valt[1] += derG.valt[1]
                 derG.roott[fd] = graph
                 # link_ = [derG]?
         graph_ += [graph]
-        graph.plevels += new_plevel
+        graph.plevels += [new_plevel]  # add bracket to add it as new element
 
     for graph in graph_:  # 2nd pass: accum alt_graph_ params
         Alt_plevels = []
@@ -238,7 +239,7 @@ def sum2graph_(G_, fd):  # sum node and link params into graph
             for derG in node.link_:
                 for G in derG.node_:
                     if G not in graph.node_:  # alt graphs are roots of not-in-graph G in derG.node_
-                        alt_graph = G.roott[fd]
+                        alt_graph = graph
                         if alt_graph not in graph.alt_graph_ and isinstance(alt_graph, Cgraph):  # not proto-graph
                             if Alt_plevels: sum_plevels(Alt_plevels, alt_graph.plevels)
                             else:           Alt_plevels = deepcopy(alt_graph.plevels)
@@ -252,14 +253,13 @@ def sum2graph_(G_, fd):  # sum node and link params into graph
         else: Alt_plevels = [[] for _ in graph.plevels]
 
         for cTree, aTree in zip(graph.plevels, Alt_plevels):
-            for cQp, aQp in zip(cTree, aTree):
-                for cQ, aQ in zip(cQp, aQp):
-                    # draft, need to add Qp, Q s in players?
-                    for cplayerst, aplayerst in zip(cQ, aQ):
-                        for cplayert, aplayert in zip(cplayerst[0], aplayerst[0]):
-                            cplayert[0][:] = [cplayert[0], aplayert[0]]  # need to add playert, add alt fork to each player
-                            for fd, (cval, aval) in enumerate( zip( cplayert[1], aplayert[1])):
-                                cval[fd] += aval[fd]  # combined valt per player
+            for cQ, aQ in zip(cTree, aTree):
+                # draft, need to add Qp, Q s in players?
+                for cplayerst, aplayerst in zip(cQ, aQ):
+                    for cplayert, aplayert in zip(cplayerst[0], aplayerst[0]):  # index [0] is players
+                        cplayert[0] = [cplayert[0], aplayert[0]]  # need to add playert, add alt fork to each player
+                        for fd, (cval, aval) in enumerate( zip( cplayerst[1], aplayerst[1])):  # should be playerst?
+                            cplayerst[1][fd] += aplayerst[1][fd]  # combined valt per player
             cTree[:] = [cTree, aTree]  # add alt fork to each plevel
             # add valt to caTree?
     return graph_
@@ -274,32 +274,33 @@ def sum2graph_(G_, fd):  # sum node and link params into graph
 '''
 def comp_plevels(_plevels, plevels, _fds, fds):  # each plevel is caTree|caT: binary cis,alt tree with fdQue pair as terminal leaf
 
-    plevel_pair = [[],[]]  # fd plevels, each cis+alt, same as new_caT
+    mplevel, dplevel = [],[]  # fd plevels, each cis+alt, same as new_caT
     Valt = [0,0]  # each cis+alt
     iVal = ave_G  # to start loop:
 
     for _caTree, caTree in zip(reversed(_plevels), reversed(plevels)):  # loop top-down for selective comp depth, same agg+?
-        fdQp_pair = [[],[]]; pvalt = [0,0]
         if iVal < ave_G:  # loop only if higher plevels match, variable comp depth
             break
-        for _fdQuep, fdQuep in zip(_caTree, caTree):  # fdQuep is cis,alt: leaf in implicit binary tree, nleaves = 2**depth
-            fdQ_pair = [[],[]]; qvalt = [0,0]
-            for _fdQue, fdQue in zip(_fdQuep, fdQuep):  # cis fdQue | alt fdQue, alts may be empty
-                if _fdQue and fdQue:
-                    for _playerst, playerst, _fd, fd in zip(_fdQue, fdQue, _fds, fds):
-                            # bottom-up der+, fds per G or fdQue?
-                            if _fd==fd:
-                                mplayert, dplayert = comp_playerst(_playerst, playerst)
-                                fdQ_pair[0] += [mplayert]; qvalt[0] += mplayert[2]
-                                fdQ_pair[1] += [dplayert]; qvalt[1] += dplayert[2]
-                            else:
-                                break  # comp same fds
-            for i in 0,1: fdQp_pair[i] += [fdQ_pair[i]]; pvalt[i] += qvalt[i]  # fdQp_pair is [m_ca_pair, d_ca_pair]
-        for i in 0,1:   plevel_pair[i] += [fdQp_pair[i]]; Valt[i] += pvalt[i]  # new plevel is m,d pair of candidate plevels
-
+        fdQ, alt_fdQ = [], []; qvalt = [0,0]
+        # last element is ivalt
+        for _fdQue, fdQue in zip(_caTree[:-1], caTree[:-1]):  # cis fdQue | alt fdQue, alts may be empty
+            if _fdQue and fdQue:
+                for _playerst, playerst, _fd, fd in zip(_fdQue, fdQue, _fds, fds):
+                        # bottom-up der+, fds per G or fdQue?
+                        if _fd==fd:
+                            mplayert, dplayert = comp_playerst(_playerst, playerst)
+                            fdQ += [mplayert]; qvalt[0] += mplayert[1]
+                            alt_fdQ += [dplayert]; qvalt[1] += dplayert[1]
+                        else:
+                            break  # comp same fds
+        mplevel += [fdQ]; dplevel += [alt_fdQ]; 
+        for i in 0,1: Valt[i] += qvalt[i]  # new plevel is m,d pair of candidate plevels
         iVal = sum(Valt)  # after 1st loop
-
-    return [plevel_pair[0], Valt[0]], [plevel_pair[1], Valt[1]]  # always single new plevel
+        
+    mplevel += [Valt[0]]
+    dplevel += [Valt[1]]
+         
+    return [mplevel, dplevel]  # always single new plevel
 
 
 def comp_playerst(_playerst, playerst):  # unpack and compare der layers, if any from der+
@@ -318,7 +319,8 @@ def comp_playerst(_playerst, playerst):  # unpack and compare der layers, if any
         else:
             break  # comp same fds
 
-    return [mplayer,mval], [dplayer,dval]  # as in comp_plevels, single new lplayer, no fds till sum2graph
+    # add additional bracket because players in nested, player is not
+    return [[mplayer],mval], [[dplayer],dval]  # as in comp_plevels, single new lplayer, no fds till sum2graph
 
 # reverted
 def sum_plevels(pLevels, plevels):
@@ -326,11 +328,14 @@ def sum_plevels(pLevels, plevels):
     for CaTree, caTree in zip_longest(pLevels, plevels, fillvalue=[]):  # loop top-down for selective comp depth, same agg+?
         if caTree:  # plevel is not empty
             if CaTree:
-                for FdQuep, fdQuep in zip(CaTree, caTree):  # c,a fdQue pair: leaf in implicit binary tree
-                    for FdQue, fdQue in zip(FdQuep, fdQuep):  # cis fdQue | alt fdQue, alts may be empty
-                        if FdQue and fdQue:
-                            for Playerst, playerst in zip_longest(FdQue, fdQue, fillvalue=[]):
-                                if Playerst[0]:
+                # last element is ivalt
+                for FdQue, fdQue in zip(CaTree[:-1], caTree[:-1]):  # cis fdQue | alt fdQue, alts may be empty
+                    if FdQue and fdQue:
+                        for Playerst, playerst in zip_longest(FdQue, fdQue, fillvalue=[]):
+                            if Playerst[0]:
+                                if len(Playerst) == 3:
+                                    sum_playerst_fd(Playerst, playerst)
+                                else:
                                     sum_playerst(Playerst, playerst)
             else:  # add new plevel
                 pLevels.append(deepcopy(caTree))
@@ -338,19 +343,27 @@ def sum_plevels(pLevels, plevels):
 # draft
 def sum_derG(pLevelt, plevelt):
 
-    CaTree, Valt = pLevelt
-    caTree, valt = plevelt
-
-    for FdQp, fdQp in zip(CaTree, caTree):  # c,a fdQue pair: leaf in implicit binary tree
-        for FdQ, fdQ in zip_longest(FdQp, fdQp, fillvalue=[]):  # alts may be empty
-            if FdQ and fdQ:
-                for Playerst, playerst in zip(FdQ, fdQ):
-                    sum_playerst( Playerst, playerst)
+    for FdQ, fdQ in zip_longest(pLevelt[:-1], plevelt[:-1], fillvalue=[]):  # alts may be empty
+        if fdQ:
+            if FdQ:
+                for Playerst, playerst in zip(FdQ, fdQ):                  
+                    sum_playerst(Playerst, playerst)              
             else:
-                FdQ[:] = FdQ if FdQ else fdQ
+                FdQ[:] = deepcopy(fdQ)
+
+
+def sum_playerst(Playerst, playerst):  # accum layers while same fds
+
+    Players, Valt = Playerst
+    players, valt = playerst
+    for i, (pLayer, player) in enumerate( zip_longest(Players, players, fillvalue=[])):
+        if player:
+            if pLayer: sum_player(pLayer, player, fneg=0)
+            else:      Players += [player]     
+
 
 # not updated:
-def sum_playerst(pLayerst, playerst):  # accum layers while same fds
+def sum_playerst_fd(pLayerst, playerst):  # accum layers while same fds
 
     pLayers, Fds, Valt = pLayerst
     players, fds, valt = playerst
