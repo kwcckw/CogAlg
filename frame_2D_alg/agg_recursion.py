@@ -301,17 +301,17 @@ def comp_plevels(_plevels, plevels, _fds, fds):  # each plevel is caTree|caT: bi
     Valt = [0,0]  # each cis+alt
     iVal = ave_G  # to start loop:
 
-    for _caTree, caTree in zip(reversed(_plevels), reversed(plevels)):  # loop top-down for selective comp depth, same agg+?
+    for (_caTree, cvalt), (caTree, cvalt) in zip(reversed(_plevels), reversed(plevels)):  # loop top-down for selective comp depth, same agg+?
         if iVal < ave_G:  # loop only if higher plevels match, variable comp depth
             break
         fdQ, alt_fdQ = [], []; qvalt = [0,0]
         # last element is ivalt
-        for _fdQue, fdQue in zip(_caTree[:-1], caTree[:-1]):  # cis fdQue | alt fdQue, alts may be empty
+        for (_fdQue, fdvalt), (fdQue, fdvalt) in zip(_caTree, caTree):  # cis fdQue | alt fdQue, alts may be empty
             if _fdQue and fdQue:
-                for _playerst, playerst, _fd, fd in zip(_fdQue, fdQue, _fds, fds):
+                for (_playerst, _fds, pvalt), (playerst, fds, pvalt), _fd, fd in zip(_fdQue, fdQue, _fds, fds):
                         # bottom-up der+, fds per G or fdQue?
                         if _fd==fd:
-                            mplayert, dplayert = comp_playerst(_playerst, playerst)
+                            mplayert, dplayert = comp_playerst(_playerst, playerst, _fds, fds)
                             fdQ += [mplayert]; qvalt[0] += mplayert[1]
                             alt_fdQ += [dplayert]; qvalt[1] += dplayert[1]
                         else:
@@ -320,17 +320,17 @@ def comp_plevels(_plevels, plevels, _fds, fds):  # each plevel is caTree|caT: bi
         for i in 0,1: Valt[i] += qvalt[i]  # new plevel is m,d pair of candidate plevels
         iVal = sum(Valt)  # after 1st loop
 
-    return [mplevel, dplevel], Valt  # always single new plevel
+    return [[mplevel, dplevel], Valt]  # always single new plevel
 
-
-def comp_playerst(_playerst, playerst):  # unpack and compare der layers, if any from der+
+# not fully updated
+def comp_playerst(_playerst, playerst, _fds, fds):  # unpack and compare der layers, if any from der+
 
     mplayer, dplayer = [], []  # flat lists of ptuples, nesting decoded by mapping to lower levels
     mval, dval = 0, 0  # new, the old ones in valt for sum2graph
-    _players, _fds, _valt = _playerst
-    players, fds, valt = playerst
+    _players, _valt = _playerst
+    players, valt = playerst
 
-    for _player, player, _fd, fd in zip_longest(_players, players, _fds, fds, fillvalue=[]):
+    for _playert, playert, _fd, fd in zip_longest(_players, players, _fds, fds, fillvalue=[]):
         if _fd==fd:
             for _ptuple, ptuple in zip(_player, player):
                 mtuple, dtuple = comp_ptuple(_ptuple, ptuple)
