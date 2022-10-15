@@ -844,44 +844,26 @@ def CPP2graph(PP, fseg, Cgraph):
             sum_players(alt_players, altPP.players[:len(alt_fds)])  # sum same-fd players only
             alt_valt[0] += altPP.valt[0];  alt_valt[1] += altPP.valt[1]
 
-
-    # ptuple-t
-    players, alt_players = deepcopy(PP.players), deepcopy(alt_players)      
-    for i, (player, alt_player) in enumerate(zip_longest(players, alt_players, fillvalue=[])):  
-        cpvalt = [0, 0]
-        playert, alt_playert = [[], cpvalt], [[], cpvalt]
+    players, alt_players = deepcopy(PP.players), deepcopy(alt_players)
+    #-> Cgraph.plevels: plevels ( caTree ( players ( caTree ( ptuples:
+    players = []
+    valt = [0,0]
+    for i, (player, alt_player), fd in enumerate(zip_longest(players, alt_players, PP.fds, fillvalue=[])):
+        cval, aval = 0,0
         for ptuple, alt_ptuple in zip_longest(player, alt_player, fillvalue=None):
-            playert[0].append([ptuple, alt_ptuple])
-            alt_playert[0].append([alt_ptuple, ptuple])
-            if ptuple:     cpvalt[0] += ptuple.val
-            if alt_ptuple: cpvalt[1] += alt_ptuple.val
+            if ptuple:
+                cval += ptuple.val
+                if alt_ptuple: aval += alt_ptuple.val
+        caTree = [[player, alt_player], [cval, aval]]
+        valt[0] += cval; valt[1] += aval
+        players += [caTree]
 
-        if len(players)-1 < i: players.append(playert)
-        else:                  player[:] = playert[:]          
-        if len(alt_players)-1 < i: alt_players.append(alt_player)
-        else:                      alt_player[:] = alt_playert[:]  
+    # need to revise:
+    players[:] = [players, PP.fds, valt]
+    plevel = [[caTree, valt]]  # alt_plevel will be appended to [players] in form_graph_
+    fds = [1]  # 1st plevel fd is always der+?
 
-    # playerst
-    pvalt = [PP.valt[0]+alt_valt[0],  PP.valt[1]+alt_valt[1]]  # sum from every players
-    playerst, alt_playerst = [[], PP.fds, pvalt], [[], alt_fds, pvalt]
-    for playert, alt_playert in zip_longest(players, alt_players, fillvalue=[]):
-        
-        # playert
-        tvalt = [playert[1][0], playert[1][1]]
-        if alt_playert: tvalt[0] += alt_playert[1][0]; tvalt[1] += alt_playert[1][1]
-        playerst[0].append([[playert, alt_playert], tvalt])
-        alt_playerst[0].append([[alt_playert, playert], tvalt])
-        
-    # fdQ
-    qvalt = [pvalt[0] + pvalt[0], pvalt[1] + pvalt[1]]  # sum from every playerst
-    fdQ = [[playerst, alt_playerst], qvalt]
-    alt_fdQ = [[alt_playerst, playerst], qvalt]
-
-    # plevel
-    cvalt = [qvalt[0] + qvalt[0], qvalt[1] + qvalt[1]]  # sum from every fdQ
-    plevel = [[fdQ, alt_fdQ], cvalt]
-    
-    return Cgraph(node_=[], plevels=[plevel], fds=deepcopy(PP.fds), x0=PP.x0, xn=PP.xn, y0=PP.y0, yn=PP.yn)
+    return Cgraph(node_=[], plevels=[[plevel],valt], fds=fds, x0=PP.x0, xn=PP.xn, y0=PP.y0, yn=PP.yn)
 
 
 def sub_recursion_eval(root):  # for PP or dir_blob
