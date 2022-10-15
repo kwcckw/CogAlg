@@ -299,22 +299,21 @@ def comp_plevels(_plevels, plevels, _fds, fds):  # each plevel is caTree|caT: bi
     for (_caTree, cvalt), (caTree, cvalt), _fd, fd in zip(reversed(_plevels), reversed(plevels), _fds, fds):
         if iVal < ave_G:  # top-down, comp if higher plevels match, same agg+
             break
-        fdQ, alt_fdQ = [], []; qvalt = [0,0]
-        for _players, _players, _fd, fd in zip(_caTree, cvalt, _fds, fds):  # bottom-up der+
+        oplayers, alt_oplayers = [], []; pvalt = [0,0]
+        for _players, players, _fd, fd in zip(_caTree, caTree, _fds, fds):  # bottom-up der+
             if _fd == fd:
                 if _players and _players:  # skip alts if empty
-        # below is not revised:
-
                     mplayert, dplayert = comp_players(_players, players)
-                    fdQ += [mplayert]; qvalt[0] += mplayert[1]
-                    alt_fdQ += [dplayert]; qvalt[1] += dplayert[1]
+                    oplayers     += [mplayert]; pvalt[0] += mplayert[1]
+                    alt_oplayers += [dplayert]; pvalt[1] += dplayert[1]
             else:
                 break  # comp same fds
-        mplevel += [fdQ]; dplevel += [alt_fdQ]
-        for i in 0,1: Valt[i] += qvalt[i]  # new plevel is m,d pair of candidate plevels
+        mplevel += [oplayers]; dplevel += [alt_oplayers]
+        for i in 0,1: Valt[i] += pvalt[i]  # new plevel is m,d pair of candidate plevels
         iVal = sum(Valt)  # after 1st loop
 
-    return [mplevel, dplevel], Valt  # always single new plevel
+    # if there's no bracket, it wil be returned as tuple - ([mplevel, dplevel], Valt)
+    return [[mplevel, dplevel], Valt]  # always single new plevel
 
 
 def comp_players(_playerst, playerst):  # unpack and compare der layers, if any from der+
@@ -324,35 +323,37 @@ def comp_players(_playerst, playerst):  # unpack and compare der layers, if any 
     _players, _fds, _valt = _playerst
     players, fds, valt = playerst
 
-    for _player, player, _fd, fd in zip_longest(_players, players, _fds, fds, fillvalue=[]):
+    for (_player_caTree, valt), (player_caTree, valt), _fd, fd in zip_longest(_players, players, _fds, fds, fillvalue=[]):
+        mplayert, dplayert = [[],[]], [[],[]]
         if _fd==fd:
-            for _ptuple, ptuple in zip(_player, player):
-                mtuple, dtuple = comp_ptuple(_ptuple, ptuple)
-                mplayer += [mtuple]; mval += mtuple.val
-                dplayer += [dtuple]; dval += dtuple.val
+            for i, (_player, player) in enumerate(zip(_player_caTree, player_caTree)):  # always 2 elements here right? for playert
+                for _ptuple, ptuple in zip(_player, player):
+                    mtuple, dtuple = comp_ptuple(_ptuple, ptuple)
+                    mplayert[i] += [mtuple]; mval += mtuple.val
+                    dplayert[i] += [dtuple]; dval += dtuple.val
         else:
             break  # comp same fds
+        mplayer.append(mplayert)
+        dplayer.append(dplayert)
 
     # add additional bracket because players in nested, player is not
     return [[mplayer],mval], [[dplayer],dval]  # as in comp_plevels, single new lplayer, no fds till sum2graph
 
-# not revised
+
 def sum_plevels(pLevels, plevels):
 
-    for CaTree, caTree in zip_longest(pLevels, plevels, fillvalue=[]):  # loop top-down for selective comp depth, same agg+?
-        if caTree:  # plevel is not empty
-            if CaTree:
-                # last element is ivalt
-                for FdQue, fdQue in zip(CaTree[:-1], caTree[:-1]):  # cis fdQue | alt fdQue, alts may be empty
-                    if FdQue and fdQue:
-                        for Playerst, playerst in zip_longest(FdQue, fdQue, fillvalue=[]):
-                            if Playerst[0]:
-                                if len(Playerst) == 3:
-                                    sum_playerst_fd(Playerst, playerst)
-                                else:
-                                    sum_playerst(Playerst, playerst)
+    for CaTreet, caTreet in zip_longest(pLevels, plevels, fillvalue=[]):  # loop top-down for selective comp depth, same agg+?
+        if caTreet:  # plevel is not empty
+            if CaTreet:
+                CaTree, valt = CaTreet; caTree, valt = caTreet
+                for Playerst, playerst in zip(CaTree, caTree):  
+                    for Playerst, playerst in zip_longest(Playerst, playerst, fillvalue=[]):
+                        if len(Playerst) == 3:
+                            sum_playerst_fd(Playerst, playerst)
+                        else:
+                            sum_playerst(Playerst, playerst)
             else:  # add new plevel
-                pLevels.append(deepcopy(caTree))
+                pLevels.append(deepcopy(caTreet))
 
 # draft
 def sum_derG(pLevelt, plevelt):
@@ -365,7 +366,7 @@ def sum_derG(pLevelt, plevelt):
             else:
                 FdQ[:] = deepcopy(fdQ)
 
-
+# not updated
 def sum_playerst(Playerst, playerst):  # accum layers while same fds
 
     Players, Valt = Playerst
