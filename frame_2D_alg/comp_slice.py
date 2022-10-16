@@ -478,7 +478,12 @@ def sum2seg(seg_Ps, fd, fds):  # sum params of vertically connected Ps into segm
                 seg.nderP_ += [derP]
 
     accum_derP(seg, seg_Ps[-1], fd)  # accum last P only, top P uplink_layers are not part of seg
-    if lplayer: seg.players += [lplayer]  # add new player
+    
+    if fd:  # der+
+        if lplayer: seg.players += [lplayer]  # add new player
+    else:  # rng+
+        seg.players = [lplayer]  # replace players with new players? But if lpayer is empty, their players become empty
+        
     seg.y0 = seg_Ps[0].y
     seg.yn = seg.y0 + len(seg_Ps)
     seg.fds = fds + [fd]  # fds of root PP
@@ -548,11 +553,7 @@ def sum2PP(PP_segs, base_rdn, fd):  # sum PP_segs into PP
 
 def sum_players(Layers, layers, fneg=0):  # no accum across fPd, that's checked in comp_players?
 
-    if not Layers:
-        if not fneg: Layers.append(deepcopy(layers[0]))
-    else: accum_ptuple(Layers[0][0], layers[0][0], fneg)  # latuples, in purely formal nesting
-
-    for Layer, layer in zip_longest(Layers[1:], layers[1:], fillvalue=[]):
+    for Layer, layer in zip_longest(Layers, layers, fillvalue=[]):
         if layer:
             if Layer: sum_player(Layer, layer, fneg=fneg)
             elif not fneg: Layers.append(deepcopy(layer))
