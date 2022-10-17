@@ -480,7 +480,7 @@ def sum2seg(seg_Ps, fd, fds):  # sum params of vertically connected Ps into segm
     accum_derP(seg, seg_Ps[-1], fd)  # accum last P only, top P uplink_layers are not part of seg
     if lplayer:
         if fd: seg.players += [lplayer]  # der+
-        else:  seg.players = [lplayer]  # rng+
+        else:  seg.players = [lplayer]  # rng+  (lplayer or seg first player's  angle becomes scalar, this will causing error to accumulate with other seg which is still have angle as list)
         seg.players += [lplayer]  # add new player
     seg.y0 = seg_Ps[0].y
     seg.yn = seg.y0 + len(seg_Ps)
@@ -560,27 +560,29 @@ def sum_ptuples(Player, player, fneg=0):  # accum players in Players
 
     for i, (Ptuple, ptuple) in enumerate(zip_longest(Player, player, fillvalue=[])):
         if ptuple:
-            if Ptuple:  # accum ptuple
-                for param_name in Ptuple.numeric_params:
-                    if param_name != "G" and param_name != "Ga":
-                        Param = getattr(Ptuple, param_name)
-                        param = getattr(ptuple, param_name)
-                        if fneg: out = Param - param
-                        else:    out = Param + param
-                        setattr(Ptuple, param_name, out)  # update value
-                if isinstance(Ptuple.angle, list):
-                    for i, angle in enumerate(ptuple.angle):
-                        if fneg: Ptuple.angle[i] -= angle
-                        else:    Ptuple.angle[i] += angle
-                    for i, aangle in enumerate(ptuple.aangle):
-                        if fneg: Ptuple.aangle[i] -= aangle
-                        else:    Ptuple.aangle[i] += aangle
-                else:
-                    if fneg: Ptuple.angle -= ptuple.angle; Ptuple.aangle -= ptuple.aangle
-                    else:    Ptuple.angle += ptuple.angle; Ptuple.aangle += ptuple.aangle
-
+            if Ptuple: sum_ptuple(Ptuple, ptuple, fneg)  # accum ptuple
             elif Ptuple == None: Player[i] = deepcopy(ptuple)
             elif not fneg: Player.append(deepcopy(ptuple))
+
+def sum_ptuple(Ptuple, ptuple, fneg=0):
+    
+    for param_name in Ptuple.numeric_params:
+        if param_name != "G" and param_name != "Ga":
+            Param = getattr(Ptuple, param_name)
+            param = getattr(ptuple, param_name)
+            if fneg: out = Param - param
+            else:    out = Param + param
+            setattr(Ptuple, param_name, out)  # update value
+    if isinstance(Ptuple.angle, list):
+        for i, angle in enumerate(ptuple.angle):
+            if fneg: Ptuple.angle[i] -= angle
+            else:    Ptuple.angle[i] += angle
+        for i, aangle in enumerate(ptuple.aangle):
+            if fneg: Ptuple.aangle[i] -= aangle
+            else:    Ptuple.aangle[i] += aangle
+    else:
+        if fneg: Ptuple.angle -= ptuple.angle; Ptuple.aangle -= ptuple.aangle
+        else:    Ptuple.angle += ptuple.angle; Ptuple.aangle += ptuple.aangle
 
 def comp_players(_layers, layers):  # unpack and compare der layers, if any from der+
 
@@ -844,7 +846,7 @@ def CPP2graph(PP, fseg, Cgraph):
             if ptuple:
                 cval += ptuple.val
                 if alt_ptuple: aval += alt_ptuple.val
-        caTree = [[player, alt_player], [cval, aval]]
+        caTree = [[player, alt_player], [], [cval, aval]]
         valt[0] += cval; valt[1] += aval
         players += [caTree]
 

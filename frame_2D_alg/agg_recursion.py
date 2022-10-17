@@ -284,8 +284,8 @@ def comp_plevels(_plevels, plevels, _fds, fds):  #  plevels ( caTree ( players (
             if _fd == fd:
                 if _players and _players:  # skip alts if empty
                     mplayert, dplayert = comp_players(_players, players)
-                    mTree += [mplayert]; pvalt[0] += mplayert[1]
-                    dTree += [dplayert]; pvalt[1] += dplayert[1]
+                    mTree += [mplayert]; pvalt[0] += mplayert[2]
+                    dTree += [dplayert]; pvalt[1] += dplayert[2]
             else:
                 break  # comp same fds
         # merge Trees in candidate plevels:
@@ -303,22 +303,38 @@ def comp_players(_playerst, playerst):  # unpack and compare der layers, if any 
     _players, _fds, _valt = _playerst
     players, fds, valt = playerst
 
-    for (_caTree, valt), (caTree, valt), _fd, fd in zip_longest(_players, players, _fds, fds, fillvalue=[]):
-        mTree, dTree = [],[]
-        mval, dval = 0,0
-        if _fd==fd:
-            for i, (_player, player) in enumerate(zip(_caTree, caTree)):
-                for _ptuple, ptuple in zip(_player, player):
-                    mtuple, dtuple = comp_ptuple(_ptuple, ptuple)
-                    mTree += mtuple; mval += mtuple.val
-                    dTree += dtuple; dval += dtuple.val
+    for _caTreet, caTreet, _fd, fd in zip_longest(_players, players, _fds, fds, fillvalue=[]):
+        if _caTreet and caTreet:  # one of them could be empty if size of _players and players is different
+            _caTree, _fds,  valt = _caTreet
+            caTree, fds, valt = caTreet
+            
+            mTree, dTree = [],[]
+            mval, dval = 0,0
+            if _fd==fd:
+                
+                for i, (_player, player) in enumerate(zip(_caTree, caTree)):
+                    for _ptuple, ptuple in zip(_player, player):
+                        mtuple, dtuple = comp_ptuple(_ptuple, ptuple)
+                        mTree += [mtuple]; mval += mtuple.val
+                        dTree += [dtuple]; dval += dtuple.val
+            
+            # not sure but below is not needed now?
+            '''
+            _cis_caTree = _caTree[:len(_caTree)/2]; _alt_caTree = _caTree[len(_caTree)/2:];
+            cis_caTree = caTree[:len(caTree)/2]; alt_caTree = caTree[len(caTree)/2:]; 
+            for alt, (_caTree, caTree) in enumerate(zip([_cis_caTree, _alt_caTree], [cis_caTree, alt_caTree])): 
+                for player, player in zip(_caTree, caTree):
+                    for _ptuple, ptuple in zip(_player, player):
+            '''
+            
         else:
             break  # comp same fds
-        mplayer += [[mTree, mval]]
-        dplayer += [[dTree, dval]]
+        mplayer += [[mTree, [], mval]]  # this empty list is Fds, we will need this fds if we need to unpack fds in sum_player, line 364 below
+        dplayer += [[dTree, [], dval]]
         mVal += mval; dVal += dval
 
-    return [mplayer,mVal], [dplayer,dVal]  # single new lplayer, no fds till sum2graph
+    # the added empty bracket is fds, we will need this fds if we need to unpack fds in sum_Plevel, line 354 below
+    return [mplayer, [], mVal], [dplayer,[], dVal]  # single new lplayer, no fds till sum2graph
 
 
 def sum_plevels(pLevels, plevels):
@@ -337,10 +353,10 @@ def sum_plevel(CaTreet, caTreet):
         if Playerst and playerst:
             Players, Fds, Valt = Playerst
             players, fds, valt = playerst
-            for pLayer, player in zip(enumerate(zip_longest(Players, players, fillvalue=[]))):
-                if player:
-                    if pLayer: sum_player(pLayer, player, fneg=0)
-                    else:      pLayer += [deepcopy(player)]
+            for pLayert, playert in zip_longest(Players, players, fillvalue=[]):
+                if playert and playert[0]:  # each playert is [player, val], playert[0] could be empty, in comp_players, when mTree or dtree is empty due to different in Fd so mplayer or dplayer packing empty list
+                    if pLayert: sum_player(pLayert, playert, fneg=0)
+                    else:       Players += [deepcopy(playert)]
 
 # draft
 def sum_player(pLayert, playert, fneg=0):  # accum layers while same fds
@@ -350,17 +366,14 @@ def sum_player(pLayert, playert, fneg=0):  # accum layers while same fds
     fbreak = 0
 
     for i, (Ptuple, ptuple, Fd, fd) in enumerate( zip_longest(Ptuples, ptuples, Fds, fds, fillvalue=[])):
-        if Fd==fd:
-            # not updated:
-            for pLayer, player in zip(pLayert, playert):
-                if player:
-                    if pLayer: sum_ptuples(pLayer, player, fneg=0)
-                    else:      pLayert += [deepcopy(player)]
-        else:
-            fbreak = 1
-            break
+        if ptuple:  # Ptuple or ptuple could be empty list is their size is different
+            if Fd==fd:
+                if Ptuple: sum_ptuple(Ptuple, ptuple, fneg=0)
+                else:      Ptuples += [deepcopy(ptuple)]
+            else:
+                fbreak = 1
+                break
     Fds[:] = Fds[:i + 1 - fbreak]
-
 
 # not revised, this is an alternative to form_graph, but may not be accurate enough to cluster:
 def comp_centroid(PPP_):  # comp PP to average PP in PPP, sum >ave PPs into new centroid, recursion while update>ave
