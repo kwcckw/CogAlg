@@ -272,7 +272,7 @@ def comp_P(_P, P):  # forms vertical derivatives of params per P in _P.uplink, c
         players = [[_P.ptuple]]
 
     else:  # P is derP
-        mplayer, dplayer, mval, dval = comp_players(_P.players, P.players)  # passed from seg.fds
+        mplayer, dplayer, mval, dval = comp_ptuples(_P.players, P.players)  # passed from seg.fds
         valt = [mval, dval]
         players = deepcopy(_P.players)
 
@@ -480,7 +480,7 @@ def sum2seg(seg_Ps, fd, fds):  # sum params of vertically connected Ps into segm
     accum_derP(seg, seg_Ps[-1], fd)  # accum last P only, top P uplink_layers are not part of seg
     if lplayer:
         if fd: seg.players += [lplayer]  # der+
-        else:  seg.players = [lplayer]  # rng+  (lplayer or seg first player's  angle becomes scalar, this will causing error to accumulate with other seg which is still have angle as list)
+        else:  seg.players = [lplayer]  # rng+
         seg.players += [lplayer]  # add new player
     seg.y0 = seg_Ps[0].y
     seg.yn = seg.y0 + len(seg_Ps)
@@ -565,7 +565,7 @@ def sum_ptuples(Player, player, fneg=0):  # accum players in Players
             elif not fneg: Player.append(deepcopy(ptuple))
 
 def sum_ptuple(Ptuple, ptuple, fneg=0):
-    
+
     for param_name in Ptuple.numeric_params:
         if param_name != "G" and param_name != "Ga":
             Param = getattr(Ptuple, param_name)
@@ -584,18 +584,19 @@ def sum_ptuple(Ptuple, ptuple, fneg=0):
         if fneg: Ptuple.angle -= ptuple.angle; Ptuple.aangle -= ptuple.aangle
         else:    Ptuple.angle += ptuple.angle; Ptuple.aangle += ptuple.aangle
 
-def comp_players(_layers, layers):  # unpack and compare der layers, if any from der+
 
-    mplayer, dplayer = [],[]
+def comp_ptuples(_layers, layers):  # unpack and compare der layers, if any from der+
+
+    mptuples, dptuples = [],[]
     mval, dval = 0,0
 
     for _layer, layer in zip(_layers, layers):
         for _ptuple, ptuple in zip(_layer, layer):
             mtuple, dtuple = comp_ptuple(_ptuple, ptuple)
-            mplayer +=[mtuple]; mval+=mtuple.val
-            dplayer +=[dtuple]; dval+=dtuple.val
+            mptuples +=[mtuple]; mval+=mtuple.val
+            dptuples +=[dtuple]; dval+=dtuple.val
 
-    return mplayer, dplayer, mval, dval
+    return mptuples, dptuples, mval, dval
 
 
 def comp_ptuple(_params, params):  # compare lateral or vertical tuples, similar operations for m and d params
@@ -846,7 +847,7 @@ def CPP2graph(PP, fseg, Cgraph):
             if ptuple:
                 cval += ptuple.val
                 if alt_ptuple: aval += alt_ptuple.val
-        caTree = [[player, alt_player], [], [cval, aval]]
+        caTree = [[player, alt_player], [cval, aval]]
         valt[0] += cval; valt[1] += aval
         players += [caTree]
 
