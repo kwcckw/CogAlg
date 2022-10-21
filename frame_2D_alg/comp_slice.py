@@ -847,11 +847,11 @@ def CPP2graph(PP, fseg, Cgraph):
             if ptuple:
                 cval += ptuple.val
                 if alt_ptuple: aval += alt_ptuple.val
-        caTree = [[ptuples, alt_ptuples], [cval, aval]]
+        caTree = [[[ptuples,cval], [alt_ptuples,aval]], [cval, aval]]
         valt[0] += cval; valt[1] += aval
         players += [caTree]
 
-    caTree = [[players, deepcopy(PP.fds), [valt]]]  # pack single playerst
+    caTree = [[players, deepcopy(PP.fds), valt]]  # pack single playerst
     plevel = [caTree, valt]
 
     return Cgraph(node_=[], plevels=[plevel], valt=valt, valts = [valt], fds=[1], x0=PP.x0, xn=PP.xn, y0=PP.y0, yn=PP.yn)  # 1st plevel fd is always der+?
