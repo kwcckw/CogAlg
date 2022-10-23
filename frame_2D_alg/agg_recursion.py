@@ -247,7 +247,7 @@ def sum2graph_(G_, fd, fder):  # sum node and link params into graph, plevel in 
             for Val, val in zip(graph.valt, node.valt): Val+=val
         graph_ += [graph]
         graph.plevels += [new_plevel]
-    # haven't review below yet
+
     for graph in graph_:  # 2nd pass: accum alt_graph_ params
         Alt_plevels = []  # Alt_players if fsub
         for node in graph.node_:
@@ -274,17 +274,37 @@ def sum2graph_(G_, fd, fder):  # sum node and link params into graph, plevel in 
         else: Alt_plevels = []
     # add sum valts:
     if fder:
-        for playerst, aplayerst in zip(graph.plevels[-1], Alt_plevels):  # each plevel is caTree
-            if playerst and aplayerst:  # else empty
-                for (cptuples, sfds, cvalt), (aptuples, afds, avalt) in zip(playerst[0], aplayerst[0]):
-                    cvalt[0] += avalt[0]; avalt[1] += avalt[1]
-                    cptuples += aptuples  # player Tree leaves
+        add_alts(graph.plevels[-1], Alt_plevels)
     else:
-        for (cplayers, cvalt), (aplayers, avalt) in zip(graph.plevels, Alt_plevels):
+        # all plevels except last plevel        
+        for (cForks, cvalt), (aforks, avalt) in zip(graph.plevels[:-1], Alt_plevels[:-1]):
             cvalt[0] += avalt[0]; avalt[1] += avalt[1]
-            cplayers += aplayers  # plevel Tree leaves
+            cForks += aforks  # plevel Tree leaves (how about the deeper aforks in player? Or we just need to add aForks in higher layer)  
 
+        # last plevel, add afork and aval
+        add_alts(graph.plevels[-1], Alt_plevels[-1])
+    
     return graph_
+
+
+def add_alts(cplevel, aplevel):
+    
+    cForks, cVal = cplevel 
+    aForks, aVal = aplevel
+    cplevel[:] = [cForks + aForks, [cVal, aVal]]  # reassign with alts, bilateral assign
+    aplevel[:] = [aForks + cForks, [aVal, cVal]]
+    
+    for cFork, aFork in zip(cplevel[0], aplevel[0]):  # not sure this is correct because this will not work if number of cFork and aFork is different
+        cplayers, cfds, cval = cFork
+        aplayers, afds, aval = aFork
+        cFork[2] = [cval, aval]  # no bilateral assignment of players here
+        aFork[2] = [aval, cval]
+        
+        for cplayer, aplayer in zip(cplayers, aplayers):  
+            cforks, cval = cplayer
+            aforks, aval = aplayer
+            cplayer[:] = [cforks+aforks, [cval,aval]]  # reassign with alts, bilateral assign
+            aplayer[:] = [aforks+cforks, [aval,cval]]
 
 def comp_plevels(_plevels, plevels, _fds, fds):
     '''
