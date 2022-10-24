@@ -274,32 +274,36 @@ def sum2graph_(G_, fd, fder):  # sum node and link params into graph, plevel in 
         if graph.alt_graph_:
             Alt_plevels = graph.alt_graph_.pop()
         else: Alt_plevels = []
+   
+    # if graph doesn't get Alt_plevels, their val stays as val instead of valt?
     if fder:
         add_alts(graph.plevels, Alt_plevels)  # derG, plevels are actually caForks, so we skip looping plevels
     else:
         for cplevel, aplevel in zip(graph.plevels, Alt_plevels):  # G
-            cForks, cvalt = cplevel
-            aForks, avalt = aplevel
-            cvalt[0] += avalt[0]; avalt[1] += avalt[1]
-            cForks += aForks
-        add_alts(cplevel, aplevel)  # plevel caTree leaves
+            add_alts(cplevel, aplevel)  # plevel caTree leaves
 
     return graph_
 
-# not fully reviewed
+
 def add_alts(cplevel, aplevel):
 
     cForks, cVal = cplevel; aForks, aVal = aplevel
-    csize = len(cForks); asize = len(aForks)
-    cplevel[:] = [cForks + aForks, [cVal, aVal]]  # reassign with alts
+    csize = len(cForks)
+    caForks = cForks + aForks
+    if isinstance(cVal, list): Valt = [cVal[0]+aVal[0], cVal[1]+aVal[1]]
+    else:                      Valt = [cVal, aVal]
+    cplevel[:] = [caForks, Valt]  # reassign with alts
 
-    for cFork, aFork in zip(cplevel[:csize], aplevel[asize:]):
+    for cFork, aFork in zip(cplevel[0][:csize], cplevel[0][csize:]):  # both should be cplevel and csize here, but alt part's index should start with csize
         cplayers, cval, cfds = cFork; aplayers, aval, afds = aFork
         cFork[1] = [cval, aval]
 
         for cplayer, aplayer in zip(cplayers, aplayers):
             cforks, cval = cplayer; aforks, aval = aplayer
-            cplayer[:] = [cforks + aforks, [cval, aval]]  # reassign with alts
+            caforks = cforks+aforks
+            if isinstance(cVal, list): valt = [cval[0]+aval[0], cval[1]+aval[1]]
+            else:                      valt = [cval, aval]  
+            cplayer[:] = [caforks, valt]  # reassign with alts
 
 
 def comp_plevels(_plevels, plevels, _fds, fds):
@@ -355,13 +359,14 @@ def comp_players(_caFork, caFork):  # unpack and compare layers from der+;  plev
         _caforks,_ = _player; caforks,_ = player
 
         for _cafork, cafork in zip(_caforks, caforks):  # bottom-up alt+, pass-through fds
-            _ptuples,_ = _cafork; ptuples,_ = cafork
-            if _ptuples and ptuples:
-                mtuples, dtuples, mval, dval = comp_ptuples(ptuples, ptuples, _fds, fds)
-                mTree += [[mtuples, mval]]; dTree += [[dtuples, dval]]
-                mtval += mval; mtval += dval
-            else:
-                mTree += [[]]; dTree += [[]]
+            if _cafork and cafork:  # we need check here because mTree and dTree pack empty list below
+                _ptuples,_ = _cafork; ptuples,_ = cafork
+                if _ptuples and ptuples:
+                    mtuples, dtuples, mval, dval = comp_ptuples(ptuples, ptuples, _fds, fds)
+                    mTree += [[mtuples, mval]]; dTree += [[dtuples, dval]]
+                    mtval += mval; dtval += dval
+                else:
+                    mTree += [[]]; dTree += [[]]
         # merge Trees:
         mplayer += mTree; dplayer += dTree
         mVal += mtval; dVal += dtval
@@ -408,6 +413,8 @@ def sum_plevel(Plevel, plevel):
                 Valt[0] += valt[0]; Valt[1] += valt[1]
                 lValt[0] += valt[0]; lValt[1] += valt[1]
             else:  # derG
+                # if lValt is valt, valt is val, how should we sum them?
+                # this may happen if there's no graph's alts in the prior recursion
                 Valt += valt; lValt += valt
 
             for Player, player in zip_longest(Players, players, fillvalue=[]):
