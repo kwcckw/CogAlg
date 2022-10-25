@@ -92,18 +92,19 @@ def comp_G_(G_, fder):  # cross-comp Gs (patterns of patterns): Gs, derGs, or se
     for i, _G in enumerate(G_):
 
         for G in G_[i+1:]:  # compare each G to other Gs in rng, bilateral link assign
-            # if fder: comp_derG(_G.plevels[-1], G.plevels[-1])  # G is derG
-            #    continue
             if G in [node for link in _G.link_ for node in link.node_]:  # G,_G was compared in prior rng+, add frng to skip?
                 continue
             dx = (_G.xn-_G.x0)/2 - (G.xn-G.x0)/2; dy = (_G.yn-_G.y0)/2 - (G.yn-G.y0)/2
             distance = np.hypot(dy, dx)  # Euclidean distance between centroids, max depends on combined value:
             if distance <= ave_rng * ((sum(_G.valt)+sum(G.valt)) / (2*sum(G_aves))):
 
-                mplevel, dplevel = comp_plevels(_G.plevels, G.plevels, _G.fds, G.fds)
-                valt = [mplevel[1] - ave_Gm, dplevel[1] - ave_Gd]  # valt is already normalized, *= link rdn?
+                if fder: 
+                    mplevel, dplevel = comp_derG(_G, G)  # G is derG
+                else:
+                    mplevel, dplevel = comp_plevels(_G.plevels, G.plevels, _G.fds, G.fds)
+                valt = [mplevel[1][0] - ave_Gm, dplevel[1][1] - ave_Gd]  # valt is already normalized, *= link rdn?
                 derG = Cgraph(
-                    plevels=[mplevel, dplevel], x0=min(_G.x0,G.x0), xn=max(_G.xn,G.xn), y0=min(_G.y0,G.y0), yn=max(_G.yn,G.yn), valt=valt, node_=[_G,G])
+                    plevels=[mplevel, dplevel], fds = deepcopy(_G.fds), x0=min(_G.x0,G.x0), xn=max(_G.xn,G.xn), y0=min(_G.y0,G.y0), yn=max(_G.yn,G.yn), valt=valt, node_=[_G,G])
                 _G.link_ += [derG]; G.link_ += [derG]  # any val
                 for fd in 0,1:
                     if valt[fd] > 0:  # alt fork is redundant, no support?
@@ -113,6 +114,18 @@ def comp_G_(G_, fder):  # cross-comp Gs (patterns of patterns): Gs, derGs, or se
                                 meds_ += [[derG.node_[0] if derG.node_[1] is node else derG.node_[1] for derG in node.link_]]  # immediate links
                                 gvalt[0] += node.valt[0]; gvalt[1] += node.valt[1]
 
+
+# very initial draft
+def comp_derG(_derG, derG):
+    
+    # each derG's plevels is [mplevels, dplevels]
+    oplevels = []
+    for fd, (_plevels, plevels) in enumerate(zip(_derG.plevels, derG.plevels)):
+            
+        mplevel, dplevel = comp_plevels([_plevels], [plevels], _derG.fds, derG.fds)
+        oplevels += [dplevel]  # select only dplevel?
+        
+    return oplevels  # [dmplevels, ddplevels]
 
 def eval_med_layer(graph_, graph, fd):   # recursive eval of reciprocal links from increasingly mediated nodes
 
@@ -177,11 +190,11 @@ def sub_recursion_g(graph_, fseg, fd):  # rng+: extend G_ per graph, der+: repla
         else: node_ = graph.node_
         '''
         plevel = caForks, valt
-        caFork = players, val, fds
+        caFork = players, fds, valt
         player = caforks, valt
         cafork = ptuples, val
         '''
-        val_sub = sum([ptuple.val for caFork in graph.plevels[-1][0] for cafork in caFork[0][-1] for ptuple in cafork[0][-1]])
+        val_sub = sum([ptuple.val for caFork in graph.plevels[-1][0] for player in caFork[0] for cafork in player[0] for ptuple in cafork[0]])  # player is missed out here
         '''
         val_sub = 0
         for caFork in graph.plevels[-1][0]:  # last plevel forks
@@ -230,6 +243,7 @@ def sum2graph_(G_, fd, fder):  # sum node and link params into graph, plevel in 
                         x0=node.x0, xn=node.xn, y0=node.y0, yn=node.yn, node_ = node_, meds_ = meds_)
 
         derG = node.link_[0]  # init new_plevel with 1st derG:
+        derG.fds += [fd]
         graph.valt[0] += derG.valt[fd] # add new level of valt, cis only
         new_plevel = derG.plevels[fd]; derG.roott[fd] = graph
         for derG in node.link_[1:]:
@@ -244,6 +258,7 @@ def sum2graph_(G_, fd, fder):  # sum node and link params into graph, plevel in 
                 sum_plevel(new_plevel, derG.plevels[fd])  # accum derG, add to graph when complete
                 valt[0] += derG.valt[fd]
                 derG.roott[fd] = graph
+                derG.fds += [fd]
                 # link_ = [derG]?
             for Val, val in zip(graph.valt, node.valt): Val+=val
         graph_ += [graph]
@@ -329,18 +344,18 @@ def comp_plevels(_plevels, plevels, _fds, fds):
             if _caFork and caFork:
                 mplayer, dplayer = comp_players(_caFork, caFork)  # caTree2 is a player
                 mplayers += [mplayer]; dplayers += [dplayer]
-                mlval += mplayer[1]; dlval += dplayer[1]
+                mlval += mplayer[1][0]; dlval += dplayer[1][1]
             else:
                 mplayers += [[]]; dplayers += [[]]  # to align same-length trees for comp and sum
             # pack fds:
-            mTree += [[mplayers, caFork[1], mlval]]; dTree += [[dplayers, caFork[1], dlval]]
+            mTree += [[mplayers, caFork[1], [mlval, 0]]]; dTree += [[dplayers, caFork[1], [0,dlval]]]
             mtval += mlval; dtval += dlval
         # merge trees:
         mplevel += mTree; dplevel += mTree  # merge Trees in candidate plevels
         mval += mtval; dval += dtval
         iVal = mval+dval  # after 1st loop
 
-    return [mplevel,mval], [dplevel,dval]  # always single new plevel
+    return [mplevel,[mval, 0]], [dplevel,[0,dval]]  # always single new plevel
 
 
 def comp_players(_caFork, caFork):  # unpack and compare layers from der+;  plevels ( caTree1 ( players ( caTree2 ( ptuples
@@ -366,12 +381,12 @@ def comp_players(_caFork, caFork):  # unpack and compare layers from der+;  plev
                     mTree += [[mtuples, mval]]; dTree += [[dtuples, dval]]
                     mtval += mval; dtval += dval
                 else:
-                    mTree += [[]]; dTree += [[]]
+                    mTree += [[[],0]]; dTree += [[[],0]]
         # merge Trees:
         mplayer += mTree; dplayer += dTree
         mVal += mtval; dVal += dtval
 
-    return [mplayer,mVal], [dplayer,dVal]  # single new lplayer
+    return [mplayer,[mVal, 0]], [dplayer,[0,dVal]]  # single new lplayer
 
 
 def comp_ptuples(_ptuples, ptuples, _fds, fds):  # unpack and compare der layers, if any from der+
@@ -409,13 +424,8 @@ def sum_plevel(Plevel, plevel):
         if CaFork and caFork:
             Players, Fds, Valt = CaFork; players, fds, valt = caFork
 
-            if isinstance(valt, list):  # G
-                Valt[0] += valt[0]; Valt[1] += valt[1]
-                lValt[0] += valt[0]; lValt[1] += valt[1]
-            else:  # derG
-                # if lValt is valt, valt is val, how should we sum them?
-                # this may happen if there's no graph's alts in the prior recursion
-                Valt += valt; lValt += valt
+            Valt[0] += valt[0]; Valt[1] += valt[1]
+            lValt[0] += valt[0]; lValt[1] += valt[1]
 
             for Player, player in zip_longest(Players, players, fillvalue=[]):
                 if player:
@@ -426,8 +436,8 @@ def sum_plevel(Plevel, plevel):
 def sum_player(Player, player, Fds, fds, fneg=0):  # accum layers while same fds
 
     Caforks, Valt = Player; caforks, valt = player
-    if isinstance(valt, list): Valt[0] += valt[0]; Valt[1] += valt[1]  # G
-    else: Valt += valt  # lplayer val in derG
+    Valt[0] += valt[0]; Valt[1] += valt[1]
+
 
     for Cafork, cafork in zip(Caforks, caforks):
         if Cafork and cafork:
