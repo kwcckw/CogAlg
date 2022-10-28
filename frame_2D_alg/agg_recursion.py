@@ -18,6 +18,7 @@ ave_Gd = 4
 G_aves = [ave_Gm, ave_Gd]
 ave_med = 3  # call cluster_node_layer
 ave_rng = 3  # rng per combined val
+ave_len = 5  # ave for etuple.L
 
 class Cgraph(CPP):  # graph or generic PP of any composition
 
@@ -227,13 +228,10 @@ def sum2graph_(G_, fd, fder):  # sum node and link params into graph, plevel in 
     graph_ = []
     for G in G_:
         node_, meds_, valt = G
-        node = node_[0]  # init graph with 1st node:
-        graph = Cgraph( plevels=deepcopy(node.plevels), fds=deepcopy(node.fds), valt=deepcopy(node.valt),
-                        x0=node.x0, xn=node.xn, y0=node.y0, yn=node.yn, node_ = node_, meds_ = meds_)
+        graph = Cgraph( plevels=[], fds=deepcopy(node_[0].fds), valt=[0,0],
+                        x0=node_[0].x0, xn=node_[0].xn, y0=node_[0].y0, yn=node_[0].yn, node_ = node_, meds_ = meds_)
         new_plevel = [[], [0, 0]]
-        sum_derG_(graph, node, new_plevel, valt, fd)
-
-        for node in node_[1:]:  # if fder: node.plevels[:] = [node.plevels]  in sub_recursion?
+        for node in node_:  # if fder: node.plevels[:] = [node.plevels]  in sub_recursion?
             graph.x0=min(graph.x0, node.x0); graph.xn=max(graph.xn, node.xn); graph.y0=min(graph.y0, node.y0); graph.yn=max(graph.yn, node.yn)
             # accum params:
             sum_plevels(graph.plevels, node.plevels, graph.fds, node.fds)  # same for fsub
@@ -282,7 +280,7 @@ def sum_derG_(graph, node, new_plevel, valt, fd):
         valt[0] += derG.valt[fd]
         # link_ = [derG]?
     node.valt[0] += valt[0]  # derG valts summed in eval_med_layer
-    for Val, val in zip(graph.valt, node.valt): Val += val
+    graph.valt[0] += node.valt[0]; graph.valt[1] += node.valt[1] 
 
 
 def val2valt(plevels):
@@ -377,29 +375,53 @@ def comp_ptuples(_ptuples, ptuples, _fds, fds, extra):  # unpack and compare der
     mptuples, dptuples = [],[]
     mval, dval = 0,0
 
+    iemtuple = Cptuple(angle=[extra[0][0],extra[0][1]], L = extra[0][2])  
+    iedtuple = Cptuple(angle=[extra[1][0],extra[1][1]], L = extra[1][2])
+    
     for _Ptuple, Ptuple, _fd, fd in zip(ptuples, ptuples, _fds, fds):  # bottom-up der+, pass-through fds
         if _fd == fd:
             mtuple, dtuple = comp_ptuple(_Ptuple[0], Ptuple[0])
-            mext_, dext_ = [],[]
-            for _ext, ext in zip(_Ptuple[1]+extra[0], Ptuple[1]+extra[1]):
-                met_, det_ = [],[]
-                for _etuple, etuple in zip(_ext, ext):
-                    # lower etuples include ders from prior comps, so we need to loop them
-                    metuple, detuple = comp_etuple(_etuple, etuple)
-                    met_+= [metuple]  # add vals
-                    det_+= [detuple]
-                mext_+= [met_]
-                dext_+= [det_]
-            mptuples += [[mtuple, mext_]]; mval += mtuple.val + mext_.val
-            dptuples += [[mtuple, mext_]]; dval += dtuple.val + dext_.val
+            mext_, dext_ = deepcopy(_Ptuple[1]),deepcopy(Ptuple[1])  # we need the prior etuples too right?
+            mets_, dets_ = [],[]
+            for _ext, ext in zip(_Ptuple[1] + [[[iemtuple]]], Ptuple[1] + [[[iedtuple]]]):  # each element is from one recursion 
+                mets, dets = [],[]
+                for _etuples, etuples in zip(_ext, ext):  # each element is nested list of ptuple
+                    for _etuple, etuple in zip(_etuples, etuples):  # each element is ptuple
+                        # lower etuples include ders from prior comps, so we need to loop them
+                        metuple, detuple = comp_etuple(_etuple, etuple)
+                        mets += [metuple];dets += [detuple]
+                        mval += metuple.val; dval += metuple.val  # add vals
+                mets_ += [mets]; dets += [dets]
+            mext_+= [mets_]; dext_+= [dets_]  # add new level for current recursion
+            mptuples += [[mtuple, mext_]]; mval += mtuple.val
+            dptuples += [[mtuple, mext_]]; dval += dtuple.val
         else:
             break  # comp same fds
 
     return mptuples, dptuples, mval, dval
 
 def comp_etuple(_etuple, etuple):
-    pass
+    
+    metuple, detuple = Cptuple(), Cptuple()
+    
+    comp("L", _etuple.L, etuple.L, detuple.val, metuple.val, detuple, metuple, ave_len, finv=0)
 
+    if isinstance(_etuple. angle, list):
+        _Dy,_Dx = _etuple.angle[:]; Dy,Dx = etuple.angle[:]
+        _G = np.hypot(_Dy,_Dx); G = np.hypot(Dy,Dx)
+        sin = Dy / (.1 if G == 0 else G); cos = Dx / (.1 if G == 0 else G)
+        _sin = _Dy / (.1 if _G == 0 else _G); _cos = _Dx / (.1 if _G == 0 else _G)
+        sin_da = (cos * _sin) - (sin * _cos)  # sin(α - β) = sin α cos β - cos α sin β
+        cos_da = (cos * _cos) + (sin * _sin)  # cos(α - β) = cos α cos β + sin α sin β
+        # dangle is scalar now?
+        dangle = np.arctan2(sin_da, cos_da)  # vertical difference between angles
+        mangle = ave_dangle - abs(dangle)  # inverse match, not redundant as summed
+        detuple.angle = dangle; metuple.angle= mangle
+        detuple.val += dangle; metuple.val += mangle
+    else:
+        comp("angle", _etuple.angle, etuple.angle, detuple.val, metuple.val, detuple, metuple, ave_dangle, finv=0)
+        
+    return metuple, detuple
 
 def sum_plevels(pLevels, plevels, Fds, fds):
 
