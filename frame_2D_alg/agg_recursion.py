@@ -350,7 +350,7 @@ def comp_players(_caFork, caFork, extra):  # unpack and compare layers from der+
             if _cafork and cafork:
                 _ptuples,_ = _cafork; ptuples,_ = cafork
                 if _ptuples and ptuples:
-                    mtuples, dtuples, mval, dval = comp_ptuples(ptuples, ptuples, _fds, fds, extra)
+                    mtuples, dtuples, mval, dval = comp_ptuples(_ptuples, ptuples, _fds, fds, extra)
                     mTree += [[mtuples, mval]]; dTree += [[dtuples, dval]]
                     mtval += mval; dtval += dval
                 else:
@@ -368,14 +368,17 @@ def comp_ptuples(_ptuples, ptuples, _fds, fds, extra):  # unpack and compare der
 
     mptuples, dptuples = [],[]; MVal, DVal = 0,0
 
-    for _Ptuple, Ptuple, _fd, fd in zip(ptuples, ptuples, _fds, fds):  # bottom-up der+, pass-through fds
+    for _Ptuple, Ptuple, _fd, fd in zip(_ptuples, ptuples, _fds, fds):  # bottom-up der+, pass-through fds
         if _fd == fd:
             mtuple, dtuple = comp_ptuple(_Ptuple[0], Ptuple[0])
             mext__, dext__ = [],[]; mVal, dVal = 0,0
             
+            # i think we need to change the loops below
+            # for each metuple or detuple computed from each element of Ptuple[1], how should we merge them?
+            #  each of them will be a new element in next Ptuple[1]?
+            # if there's 2 elements in Ptuple[1], so mext__ will be [ [[metuple1], [metuple2]]  ,   [[mptuple from extra]]    ]?
             for _ext__, ext__ in zip(_Ptuple[1], Ptuple[1]):
                 mext_, dext_ = [],[]; mval, dval = 0,0
-
                 for _ext_, ext_ in zip(_ext__, ext__):
                     for _etuple, etuple in zip(_ext_, ext_):  # loop ders from prior comps in each lower ext_
                         metuple, detuple = comp_etuple(_etuple, etuple)
@@ -384,12 +387,16 @@ def comp_ptuples(_ptuples, ptuples, _fds, fds, extra):  # unpack and compare der
 
                 mext__ += [mext_]; mext__ += [dext_]
                 mVal += mval; dVal += dval
-            mptuples += [mext__ + [Cptuple(angle=extra[0][0], L = extra[0][1])]]; MVal += mVal
-            dptuples += [dext__ + [Cptuple(angle=extra[1][0], L = extra[1][1])]]; DVal += dVal
+                
+            mext__ += [[[Cptuple(angle=extra[0][0], L = extra[0][1])]]]  # add new layer of etuple 
+            dext__ += [[[Cptuple(angle=extra[1][0], L = extra[1][1])]]]  # add new layer of etuple 
+            # i think the structure should be like this? Ptuple = [ptuple, [etuples]]?
+            mptuples += [[mtuple, mext__]]; dptuples += [[dtuple, dext__]]  # add new Ptuple
+            MVal += mVal; DVal += dVal
         else:
             break  # comp same fds
 
-    return [mtuple, mptuples], [dtuple, dptuples], MVal, DVal  # mPtuple, dPtuple
+    return mptuples,dptuples, MVal, DVal  # mPtuple, dPtuple
 
 # not revised:
 def comp_etuple(_etuple, etuple):
