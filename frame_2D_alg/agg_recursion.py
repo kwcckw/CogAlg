@@ -28,7 +28,8 @@ class Cgraph(CPP):  # graph or generic PP of any composition
     nvalt = lambda: [0, 0]  # from neg open links
     rdn = int  # for PP evaluation, recursion count + Rdn / nderPs; no alt_rdn: valt representation in alt_PP_ valts?
     rng = lambda: 1  # not for alt_graphs
-    link_ = list  # all evaluated external graph links, nested in link_layers? open links replace alt_node_
+    link_ = list  # all evaluated external graph links, nested in link_layers? open links replace alt_node
+    meds_ = list  # last checked mediating nodes
     node_ = list  # graph elements, root of layers and levels:
     rlayers = list  # | mlayers, top-down
     dlayers = list  # | alayers
@@ -98,12 +99,11 @@ def comp_G_(G_, fder):  # cross-comp Gs (patterns of patterns): Gs, derGs, or se
             _x = (_G.xn +_G.x0)/2; _y = (_G.yn +_G.y0)/2; x = (G.xn + G.x0)/2; y = (G.yn + G.y0)/2
             dx = _x - x; dy = _y - y  # distances
             distance = np.hypot(dy, dx)
-            # Euclidean distance between centroids, max depends on combined G value:
+            # Euclidean distance between centroids, max depends on combined G value, if fder: eval distance /= dangle?
             if distance <= ave_rng * ((sum(_G.valt)+sum(G.valt)) / (2*sum(G_aves))):
 
-                extra = [[_x,_y, len(_G.node_)],[x,y, len(G.node_)]]  # len if not fder, else meaningless?
+                extra = [[[_x,_y], len(_G.node_)],[[x,y], len(G.node_)]]  # if fder: comp angle, else comp len?
                 mplevel, dplevel = comp_plevels(_G.plevels, G.plevels, _G.fds, G.fds, extra)
-                # if fder: comp link angle: dx,dy, eval distance /= dangle?
                 valt = [mplevel[1] - ave_Gm, dplevel[1] - ave_Gd]
                 # valt is normalized, *= link rdn?
                 derG = Cgraph(  # or mean x0=_x+dx/2, y0=_y+dy/2:
@@ -169,7 +169,7 @@ def eval_med_layer(graph_, graph, fd):   # recursive eval of reciprocal links fr
 '''
 plevel = caForks, valt
 caFork = players, valt, fds
-player = caforks, valt  # each der Ptuples of all lower players, per new agg span? 
+player = caforks, valt  # each is der Ptuples of all lower players, per new agg span
 cafork = ptuples, valt:
 valSub = sum([ptuple.val for caFork in graph.plevels[-1][0] for player in caFork[0] for cafork in player[0] for ptuple in cafork[0]])  
 '''
@@ -183,7 +183,7 @@ def sub_recursion_g(graph_, fseg, fd):  # rng+: extend G_ per graph, der+: repla
             for node in graph.node_:
                 for link in node.link_:
                     if link.valt[1]>0 and link not in node_:
-                        if not link.fds:  # might be converted via another graph
+                        if not link.fds:  # might be converted in other graph
                             link.fds = [fd]
                             link.valt = link.plevels[fd][1]
                             link.plevels = [link.plevels[fd]]  # single-plevel plevels
@@ -228,14 +228,19 @@ def sum2graph_(G_, fd, fder):  # sum node and link params into graph, plevel in 
     graph_ = []
     for G in G_:
         node_, meds_, valt = G
-        graph = Cgraph( plevels=[], fds=deepcopy(node_[0].fds), valt=[0,0],
-                        x0=node_[0].x0, xn=node_[0].xn, y0=node_[0].y0, yn=node_[0].yn, node_ = node_, meds_ = meds_)
+        graph = Cgraph(fds=deepcopy(node_[0].fds), x0=node_[0].x0, xn=node_[0].xn, y0=node_[0].y0, yn=node_[0].yn, node_=node_, meds_=meds_)
         new_plevel = [[], [0, 0]]
-        for node in node_:  # if fder: node.plevels[:] = [node.plevels]  in sub_recursion?
+        for node in node_:
             graph.x0=min(graph.x0, node.x0); graph.xn=max(graph.xn, node.xn); graph.y0=min(graph.y0, node.y0); graph.yn=max(graph.yn, node.yn)
             # accum params:
             sum_plevels(graph.plevels, node.plevels, graph.fds, node.fds)  # same for fsub
-            sum_derG_(graph, node, new_plevel, valt, fd)
+            for derG in node.link_:
+                sum_plevel(new_plevel, derG.plevels[fd])  # accum derG, add to graph when complete
+                derG.roott[fd] = graph  # link_ = [derG]?
+                valt[fd] += derG.valt[fd]
+            node.valt[0] += valt[fd]  # derG valts summed in eval_med_layer added to lower-plevels valt
+            graph.valt[0]+= node.valt[0]
+            graph.valt[1]+= node.valt[1]
         graph_ += [graph]
         graph.plevels += [new_plevel]
 
@@ -271,17 +276,6 @@ def sum2graph_(G_, fd, fder):  # sum node and link params into graph, plevel in 
                     add_alts(cplevel, aplevel)  # plevel is caForks: caTree leaves
 
     return graph_
-
-def sum_derG_(graph, node, new_plevel, valt, fd):
-
-    for derG in node.link_:
-        sum_plevel(new_plevel, derG.plevels[fd])  # accum derG, add to graph when complete
-        derG.roott[fd] = graph
-        valt[0] += derG.valt[fd]
-        # link_ = [derG]?
-    node.valt[0] += valt[0]  # derG valts summed in eval_med_layer
-    graph.valt[0] += node.valt[0]; graph.valt[1] += node.valt[1] 
-
 
 def val2valt(plevels):
     for plevel in plevels:
@@ -372,38 +366,36 @@ def comp_players(_caFork, caFork, extra):  # unpack and compare layers from der+
 # draft
 def comp_ptuples(_ptuples, ptuples, _fds, fds, extra):  # unpack and compare der layers, if any from der+
 
-    mptuples, dptuples = [],[]
-    mval, dval = 0,0
+    mptuples, dptuples = [],[]; MVal, DVal = 0,0
 
-    iemtuple = Cptuple(angle=[extra[0][0],extra[0][1]], L = extra[0][2])  
-    iedtuple = Cptuple(angle=[extra[1][0],extra[1][1]], L = extra[1][2])
-    
     for _Ptuple, Ptuple, _fd, fd in zip(ptuples, ptuples, _fds, fds):  # bottom-up der+, pass-through fds
         if _fd == fd:
             mtuple, dtuple = comp_ptuple(_Ptuple[0], Ptuple[0])
-            mext_, dext_ = deepcopy(_Ptuple[1]),deepcopy(Ptuple[1])  # we need the prior etuples too right?
-            mets_, dets_ = [],[]
-            for _ext, ext in zip(_Ptuple[1] + [[[iemtuple]]], Ptuple[1] + [[[iedtuple]]]):  # each element is from one recursion 
-                mets, dets = [],[]
-                for _etuples, etuples in zip(_ext, ext):  # each element is nested list of ptuple
-                    for _etuple, etuple in zip(_etuples, etuples):  # each element is ptuple
-                        # lower etuples include ders from prior comps, so we need to loop them
+            mext__, dext__ = [],[]; mVal, dVal = 0,0
+            
+            for _ext__, ext__ in zip(_Ptuple[1], Ptuple[1]):
+                mext_, dext_ = [],[]; mval, dval = 0,0
+
+                for _ext_, ext_ in zip(_ext__, ext__):
+                    for _etuple, etuple in zip(_ext_, ext_):  # loop ders from prior comps in each lower ext_
                         metuple, detuple = comp_etuple(_etuple, etuple)
-                        mets += [metuple];dets += [detuple]
-                        mval += metuple.val; dval += metuple.val  # add vals
-                mets_ += [mets]; dets += [dets]
-            mext_+= [mets_]; dext_+= [dets_]  # add new level for current recursion
-            mptuples += [[mtuple, mext_]]; mval += mtuple.val
-            dptuples += [[mtuple, mext_]]; dval += dtuple.val
+                        mext_ += [metuple]; mext_ += [detuple]
+                        mval += metuple.val; dval += metuple.val
+
+                mext__ += [mext_]; mext__ += [dext_]
+                mVal += mval; dVal += dval
+            mptuples += [mext__ + [Cptuple(angle=extra[0][0], L = extra[0][1])]]; MVal += mVal
+            dptuples += [dext__ + [Cptuple(angle=extra[1][0], L = extra[1][1])]]; DVal += dVal
         else:
             break  # comp same fds
 
-    return mptuples, dptuples, mval, dval
+    return [mtuple, mptuples], [dtuple, dptuples], MVal, DVal  # mPtuple, dPtuple
 
+# not revised:
 def comp_etuple(_etuple, etuple):
-    
+
     metuple, detuple = Cptuple(), Cptuple()
-    
+
     comp("L", _etuple.L, etuple.L, detuple.val, metuple.val, detuple, metuple, ave_len, finv=0)
 
     if isinstance(_etuple. angle, list):
@@ -420,7 +412,7 @@ def comp_etuple(_etuple, etuple):
         detuple.val += dangle; metuple.val += mangle
     else:
         comp("angle", _etuple.angle, etuple.angle, detuple.val, metuple.val, detuple, metuple, ave_dangle, finv=0)
-        
+
     return metuple, detuple
 
 def sum_plevels(pLevels, plevels, Fds, fds):
