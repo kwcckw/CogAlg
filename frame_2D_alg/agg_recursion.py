@@ -369,22 +369,22 @@ def comp_ptuples(_Ptuples, Ptuples, _fds, fds, extset):  # unpack and compare de
     for _Ptuple, Ptuple, _fd, fd in zip(_Ptuples, Ptuples, _fds, fds):  # bottom-up der+, pass-through fds
         if _fd == fd:
             mtuple, dtuple = comp_ptuple(_Ptuple[0], Ptuple[0])
-            mext__, dext__ = [],[]; mVal, dVal = 0,0
+            mext__s, dext__s = [],[]; mVal, dVal = 0,0
             _new_extuple = Cptuple(angle=extset[0][0], L=extset[0][1])
             new_extuple = Cptuple(angle=extset[1][0], L=extset[1][1])
 
             for _ext__, ext__ in zip(_Ptuple[1]+[[[_new_extuple]]], Ptuple[1]+[[[new_extuple]]]):  # ext__: extuple level
-                mext_, dext_ = [],[]; mval, dval = 0,0
+                mext__, dext__ = [],[]; mval, dval = 0,0
                 for _ext_, ext_ in zip(_ext__, ext__):  # ext_: extuple layer
-
+                    mext_, dext_ = [], []  # we need one more loop here?
                     for _extuple, extuple in zip(_ext_, ext_):  # loop ders from prior comps in each lower ext_
                         mextuple, dextuple = comp_extuple(_extuple, extuple)
-                        mext_ += [mextuple]; mext_ += [dextuple]
+                        mext_ += [mextuple]; dext_ += [dextuple]
                         mval += mextuple.val; dval += dextuple.val
-
-                mext__ += [mext_]; mext__ += [dext_]
+                    mext__+=[mext_]; dext__+=[dext_] 
+                mext__s += [mext__]; dext__s += [dext__]
                 mVal += mval; dVal += dval
-            mPtuples += [[mtuple, mext__]]; dPtuples += [[dtuple, dext__]]  # add derPtuple per iPtuple
+            mPtuples += [[mtuple, mext__s]]; dPtuples += [[dtuple, dext__s]]  # add derPtuple per iPtuple
             MVal += mVal; DVal += dVal
         else:
             break  # comp same fds
@@ -458,8 +458,27 @@ def sum_player(Player, player, Fds, fds, fneg=0):  # accum layers while same fds
             for Ptuple, ptuple, Fd, fd in zip_longest(Ptuples, ptuples, Fds, fds, fillvalue=[]):
                 if Fd==fd:
                     if ptuple:
-                        if Ptuple: sum_ptuple(Ptuple[0], ptuple[0], fneg=0)
+                        if Ptuple: 
+                            sum_ptuple(Ptuple[0], ptuple[0], fneg=0)
+                            if ptuple[1]: sum_etuples(Ptuple[1], ptuple[1])
                         else:      Ptuples += [deepcopy(ptuple)]
                         Val += val
                 else:
                     break
+                
+# draft
+def sum_etuples(Etuple__s, etuple__s):
+    for Etuple__, etuple__ in zip_longest(Etuple__s, etuple__s, fillvalue=[]):
+        if etuple__:
+            for Etuple_, etuple_ in zip_longest(Etuple__, etuple__, fillvalue=[]):
+                if etuple_:
+                    for Etuple, etuple in zip_longest(Etuple_, etuple_, fillvalue=[]):
+                        if etuple: 
+                            sum_ptuple(Etuple, etuple)
+                        else:      
+                            Etuple_ += [etuple]
+                else:
+                    Etuple__ += [etuple_]
+        else:
+            Etuple__s += [etuple__]
+
