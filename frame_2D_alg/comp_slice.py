@@ -847,17 +847,16 @@ def CPP2graph(PP, fseg, Cgraph):
             if ptuple:
                 if isinstance(ptuple, list): cval += ptuple[0].val  # already converted
                 else: cval += ptuple.val; ptuples[i] = [ptuple, []]  # convert to Ptuple
-            # we need reduce indentation here, else alt_ptuple might not convert to Ptuple if ptuple is empty
             if alt_ptuple:
-                if isinstance(ptuple, list): aval += alt_ptuple[0].val
+                if isinstance(ptuple, list):
+                    aval += alt_ptuple[0].val
                 else: aval += alt_ptuple.val; alt_ptuples[i] = [alt_ptuple, []]
 
-        caTree = [[], [cval, aval]]
-        # pack only cafork with non empty ptuples
-        if ptuples: caTree[0] += [[ptuples, cval]]
-        if alt_ptuples: caTree[0] += [[alt_ptuples, cval]]
-        valt[0] += cval; valt[1] += aval
-        players += [caTree]
+            cfork = [ptuples, cval]  # can't be empty
+            afork = [alt_ptuples, aval] if alt_ptuples else []
+            caTree = [[cfork, afork], [cval, aval]]
+            valt[0] += cval; valt[1] += aval
+            players += [caTree]
 
     caTree = [[players, valt, deepcopy(PP.fds)]]  # pack single playerst
     plevel = [caTree, valt]
