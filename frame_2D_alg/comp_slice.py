@@ -87,6 +87,10 @@ class Cptuple(ClusterStructure):  # bottom-layer tuple of lateral or vertical pa
     Ga = float
     # only in vertuple, combined tuple m|d value:
     val = float
+    # etuple
+    sparsity = float
+    distance = float
+    
 
 class CP(ClusterStructure):  # horizontal blob slice P, with vertical derivatives per param if derP, always positive
 
@@ -861,7 +865,7 @@ def CPP2graph(PP, fseg, Cgraph):
     caTree = [[players, valt, deepcopy(PP.fds)]]  # pack single playerst
     plevel = [caTree, valt]
 
-    return Cgraph(node_=[], plevels=[plevel], valt=valt, fds=[1], x0=PP.x0, xn=PP.xn, y0=PP.y0, yn=PP.yn)  # 1st plevel fd is always der+?
+    return Cgraph(node_=[], plevels=[plevel], valt=valt, fds=[1], sparsity=1.0, x0=PP.x0, xn=PP.xn, y0=PP.y0, yn=PP.yn)  # 1st plevel fd is always der+?
 
 
 def sub_recursion_eval(root):  # for PP or dir_blob
