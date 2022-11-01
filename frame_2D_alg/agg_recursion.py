@@ -115,8 +115,12 @@ def comp_G_(G_, fder):  # cross-comp Gs (patterns of patterns): Gs, derGs, or se
             else:
                 _L = len(_G.node_); L = len(G.node_)
                 dlen = _L - L; mlen = min(_L, L)
-                sparsity = sum(node.sparsity for node in G.node_) / L
-                _sparsity = sum(node.sparsity for node in _G.node_) / _L
+                if _G.fds == [1] and G.fds == [1]:  # when G is converted from PP and their node_ is P__
+                    _sparsity, sparsity = 1, 1 
+                else: 
+                    _sparsity = sum(node.sparsity for node in _G.node_) / _L
+                    sparsity = sum(node.sparsity for node in G.node_) / L
+                    
             # orders of len and sparsity?
             dspar = _sparsity-sparsity; mspar = min(_sparsity,sparsity)
             # draft:
@@ -395,16 +399,18 @@ def comp_ptuples(_Ptuples, Ptuples, _fds, fds, derext):  # unpack and compare de
         if _fd == fd:  # Ptuple: ptuple, [[[[],00],00],00]
 
             mtuple, dtuple = comp_ptuple(_Ptuple[0], Ptuple[0])
-            mext___, dext___ = [[],0], [[],0]
-            for _ext__, ext__ in zip(_Ptuple[1], Ptuple[1]):  # ext__: extuple level
+            mext___, dext___ = [[],0], [[],0]  # we only have single value of val here, the other one will be added from alts later?
+
+            for _ext__, ext__ in zip(_Ptuple[1][0], Ptuple[1][0]):  # ext__: extuple level
                 mext__, dext__ = [[],0], [[],0]
-                for _ext_, ext_ in zip(_ext__, ext__):  # ext_: extuple layer
+                for _ext_, ext_ in zip(_ext__[0], ext__[0]):  # ext_: extuple layer
                     mext_, dext_= [[],0], [[],0]
-                    for _extuple, extuple in zip(_ext_, ext_):  # loop ders from prior comps in each lower ext_
+                    for _extuple, extuple in zip(_ext_[0], ext_[0]):  # loop ders from prior comps in each lower ext_
                         # + der extlayer:
-                        mextuple, dextuple = comp_extuple(_extuple, extuple)
-                        mext_[0] += [mextuple]; mext_[1] += mextuple.val
-                        dext_[0] += [dextuple]; dext_[1] += dextuple.val
+                        if _extuple and extuple:  # not None from 1st layer
+                            mextuple, dextuple, meval, deval = comp_extuple(_extuple, extuple)
+                            mext_[0] += [mextuple]; mext_[1] += meval
+                            dext_[0] += [dextuple]; dext_[1] += deval
                     # + der extlevel:
                     mext__[0] += [mext_]; mext__[1] += mext_[1]
                     dext__[0] += [dext_]; mext__[1] += dext_[1]
@@ -426,17 +432,26 @@ def comp_ptuples(_Ptuples, Ptuples, _fds, fds, derext):  # unpack and compare de
 # not revised, unpack comps as in comp_G_, add comp dS:
 def comp_extuple(_extuple, extuple):
 
-    mextuple, dextuple = Cptuple(), Cptuple()
+    _distance, _ang, _len, _spar = _extuple   
+    distance, ang, len, spar = extuple
 
-    comp("distance", _extuple.distance, extuple.distance, dextuple.val, mextuple.val, dextuple, mextuple, ave_distance, finv=0)
+    ddistance =  _distance - distance
+    mdistance =  min(_distance,distance) - ave_distance
+    dang =  _ang - ang
+    mang =  min(_ang,ang) - ave_dangle
+    dlen =  _len - len
+    mlen =  min(_len,len) - ave_L
+    dspar =  _spar - spar
+    mspar =  min(_spar,spar) - ave_sparsity
+    
+    dextuple, mextuple = [ddistance, dang, dlen, dspar], [mdistance, mang, mlen, mspar]
 
-    comp("sparsity", _extuple.sparsity, extuple.sparsity, dextuple.val, mextuple.val, dextuple, mextuple, ave_sparsity, finv=0)
+    # not sure here
+    mval = mdistance+mang+mlen+mspar
+    dval = ddistance+dang+dlen+dspar
+    
+    return mextuple, dextuple, mval, dval
 
-    comp("L", _extuple.L, extuple.L, dextuple.val, mextuple.val, dextuple, mextuple, ave_L, finv=0)
-    # angle is always scalar here?
-    comp("angle", _extuple.angle, extuple.angle, dextuple.val, mextuple.val, dextuple, mextuple, ave_dangle, finv=0)
-
-    return mextuple, dextuple
 
 def comp_angle(_angle, angle):
     _Dy, _Dx=_angle; Dy, Dx=angle

@@ -847,12 +847,12 @@ def CPP2graph(PP, fseg, Cgraph):
             if alt_ptuple:
                 if isinstance(ptuple, list):
                     aval += alt_ptuple[0].val
-                else: aval += alt_ptuple.val; alt_ptuples[i] = [alt_ptuple, []]
+                else: aval += alt_ptuple.val; alt_ptuples[i] = [alt_ptuple, [[[[[[None],[0,0]]],[0,0]]],[0,0]] ]  # with the additional of val structure - [[list1, list2], val] in each layer, we need more brackets here
             if ptuple:
                 if isinstance(ptuple, list): cval += ptuple[0].val  # already converted
                 else:  # convert to Ptuple
                     cval += ptuple.val
-                    ptuples[i] = [ptuple, [[[None,[0,0]],[0,0]],[0,0]]]
+                    ptuples[i] = [ptuple, [[[[[[None],[0,0]]],[0,0]]],[0,0]] ]
 
             cfork = [ptuples, cval]  # can't be empty
             afork = [alt_ptuples, aval] if alt_ptuples else []
@@ -863,7 +863,7 @@ def CPP2graph(PP, fseg, Cgraph):
     caTree = [[players, valt, deepcopy(PP.fds)]]  # pack single playerst
     plevel = [caTree, valt]
 
-    return Cgraph(node_=[], plevels=[plevel], sparsity=1.0, valt=valt, fds=[1], x0=PP.x0, xn=PP.xn, y0=PP.y0, yn=PP.yn)
+    return Cgraph(node_=[PP.P__], plevels=[plevel], sparsity=1.0, valt=valt, fds=[1], x0=PP.x0, xn=PP.xn, y0=PP.y0, yn=PP.yn)
     # 1st plevel fd is always der+?
 
 
