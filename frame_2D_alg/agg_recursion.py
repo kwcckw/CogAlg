@@ -21,6 +21,7 @@ ave_rng = 3  # rng per combined val
 ave_ext = 5  # to eval comp_plevel
 ave_distance = 5
 ave_sparsity = 2
+ave_len = 5
 
 
 class Cgraph(CPP):  # graph or generic PP of any composition
@@ -140,7 +141,11 @@ def comp_G_(G_, fder):  # cross-comp Gs (patterns of patterns): Gs, derGs, or se
                         for node, (graph, meds_, gvalt) in zip([_G, G], [G.roott[fd], _G.roott[fd]]):  # bilateral inclusion
                             if node not in graph:
                                 graph += [node]
-                                meds_ += [[derG.node_[0] if derG.node_[1] is node else derG.node_[1] for derG in node.link_]]  # immediate links
+                                for derG in node.link_:  # immediate links
+                                    if derG.node_[1] is node: potential_med = derG.node_[0]
+                                    else:                     potential_med = derG.node_[1]     
+                                    if potential_med not in [med for meds in meds_ for med in meds ]:  # potential med may be already in meds_
+                                        meds_ += [[potential_med]]
                                 gvalt[0] += node.valt[0]; gvalt[1] += node.valt[1]
 
 
@@ -158,7 +163,10 @@ def eval_med_layer(graph_, graph, fd):   # recursive eval of reciprocal links fr
                     # med_PP.link_:
                     med_link_ = derG.node_[0].link_ if derG.node_[0] is not _G else derG.node_[1].link_
                     for _derG in med_link_:
-                        if G in _derG.node_ and _derG not in G.link_:  # __G mediates between _G and G
+                        if _derG in G.link:
+                             # if _derG in G.link, remove _G from meds? Because _derG is the shorter path
+                            pass
+                        elif G in _derG.node_:  # __G mediates between _G and G
                             G.link_ += [_derG]
                             adj_val = _derG.valt[fd] - ave_agg  # or increase ave per mediation depth
                             # adjust nodes:
@@ -405,9 +413,9 @@ def comp_ptuples(_Ptuples, Ptuples, _fds, fds, derext):  # unpack and compare de
                 mext__, dext__ = [[],0], [[],0]
                 for _ext_, ext_ in zip(_ext__[0], ext__[0]):  # ext_: extuple layer
                     mext_, dext_= [[],0], [[],0]
-                    for _extuple, extuple in zip(_ext_[0], ext_[0]):  # loop ders from prior comps in each lower ext_
-                        # + der extlayer:
-                        if _extuple and extuple:  # not None from 1st layer
+                    if _ext_[0] and ext_[0]:    
+                        for _extuple, extuple in zip(_ext_[0], ext_[0]):  # loop ders from prior comps in each lower ext_
+                            # + der extlayer:
                             mextuple, dextuple, meval, deval = comp_extuple(_extuple, extuple)
                             mext_[0] += [mextuple]; mext_[1] += meval
                             dext_[0] += [dextuple]; dext_[1] += deval
@@ -432,23 +440,13 @@ def comp_ptuples(_Ptuples, Ptuples, _fds, fds, derext):  # unpack and compare de
 # not revised, unpack comps as in comp_G_, add comp dS:
 def comp_extuple(_extuple, extuple):
 
-    _distance, _ang, _len, _spar = _extuple   
-    distance, ang, len, spar = extuple
+    mval, dval = 0,0
+    dextuple, mextuple = [],[]
 
-    ddistance =  _distance - distance
-    mdistance =  min(_distance,distance) - ave_distance
-    dang =  _ang - ang
-    mang =  min(_ang,ang) - ave_dangle
-    dlen =  _len - len
-    mlen =  min(_len,len) - ave_L
-    dspar =  _spar - spar
-    mspar =  min(_spar,spar) - ave_sparsity
-    
-    dextuple, mextuple = [ddistance, dang, dlen, dspar], [mdistance, mang, mlen, mspar]
-
-    # not sure here
-    mval = mdistance+mang+mlen+mspar
-    dval = ddistance+dang+dlen+dspar
+    # 4 params:  distance, angle, len, sparsity
+    for _param, param, ave in zip(_extuple, extuple, (ave_distance, ave_dangle, ave_len, ave_sparsity)):    
+        d = _param-param;            dextuple += [d]; dval += d - ave   # all are derived scalars
+        m = min(_param, param)-ave;  mextuple += [m]; mval += m
     
     return mextuple, dextuple, mval, dval
 
@@ -522,16 +520,17 @@ def sum_player(Player, player, Fds, fds, fneg=0):  # accum layers while same fds
 
 # draft
 def sum_extuples(exTuple___, extuple___):
-    for exTuple__, extuple__ in zip_longest(exTuple___, extuple___, fillvalue=[]):
+    for exTuple__, extuple__ in zip_longest(exTuple___[0], extuple___[0], fillvalue=[]):
         if extuple__:
-            for exTuple_, extuple_ in zip_longest(exTuple__, extuple__, fillvalue=[]):
+            for exTuple_, extuple_ in zip_longest(exTuple__[0], extuple__[0], fillvalue=[]):
                 if extuple_:
-                    for exTuple, extuple in zip_longest(exTuple_, extuple_, fillvalue=[]):
+                    for exTuple, extuple in zip_longest(exTuple_[0], extuple_[0], fillvalue=[]):
                         if extuple:
-                            sum_ptuple(exTuple, extuple)
+                            for i in range(len(exTuple)):  # 4 params:  distance, angle, len, sparsity
+                                exTuple[i] += extuple[i]        
                         else:
-                            exTuple_ += [extuple]
+                            exTuple_ += [deepcopy(extuple)]
                 else:
-                    exTuple__ += [extuple_]
+                    exTuple__ += [deepcopy(extuple_)]
         else:
-            exTuple___ += [extuple__]
+            exTuple___ += [deepcopy(extuple__)]

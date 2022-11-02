@@ -847,12 +847,12 @@ def CPP2graph(PP, fseg, Cgraph):
             if alt_ptuple:
                 if isinstance(ptuple, list):
                     aval += alt_ptuple[0].val
-                else: aval += alt_ptuple.val; alt_ptuples[i] = [alt_ptuple, [[[[[[None],[0,0]]],[0,0]]],[0,0]] ]  # with the additional of val structure - [[list1, list2], val] in each layer, we need more brackets here
+                else: aval += alt_ptuple.val; alt_ptuples[i] = [alt_ptuple, [[[[[[]]]]]] ]  # with the additional of val structure - [[list1, list2], val] in each layer, we need more brackets here
             if ptuple:
                 if isinstance(ptuple, list): cval += ptuple[0].val  # already converted
                 else:  # convert to Ptuple
                     cval += ptuple.val
-                    ptuples[i] = [ptuple, [[[[[[None],[0,0]]],[0,0]]],[0,0]] ]
+                    ptuples[i] = [ptuple, [[[[[[]]]]]] ]
 
             cfork = [ptuples, cval]  # can't be empty
             afork = [alt_ptuples, aval] if alt_ptuples else []
