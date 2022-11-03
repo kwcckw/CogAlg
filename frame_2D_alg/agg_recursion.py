@@ -21,7 +21,6 @@ ave_rng = 3  # rng per combined val
 ave_ext = 5  # to eval comp_plevel
 ave_distance = 5
 ave_sparsity = 2
-ave_len = 5
 
 
 class Cgraph(CPP):  # graph or generic PP of any composition
@@ -107,26 +106,24 @@ def comp_G_(G_, fder):  # cross-comp Gs (patterns of patterns): Gs, derGs, or se
             # comp external params:
             _x = (_G.xn +_G.x0)/2; _y = (_G.yn +_G.y0)/2; x = (G.xn + G.x0)/2; y = (G.yn + G.y0)/2
             dx = _x - x; dy = _y - y
+            distance = np.hypot(dy, dx)  # Euclidean distance between centroids, sum in G.sparsity
+            proximity = ave_rng-distance  # coord match
 
-            distance = np.hypot(dy, dx)  # Euclidean distance between centroids, sum in G.sparsity, - fill: accum elements sparsity?
-            proximit = ave_rng-distance  # coord. match
             mang, dang = comp_angle(_G.angle, G.angle)  # dy,dx for derG or high-aspect Gs, both *= aspect?
+            # n orders of len and sparsity, -= fill: sparsity inside nodes?
             if fder:
                 mlen,dlen = 0,0; _sparsity = _G.sparsity; sparsity = G.sparsity  # single-link derGs
             else:
                 _L = len(_G.node_); L = len(G.node_)
                 dlen = _L - L; mlen = min(_L, L)
-                if _G.fds == [1] and G.fds == [1]:  # when G is converted from PP and their node_ is P__
-                    _sparsity, sparsity = 1, 1 
-                else: 
+                if isinstance(G.node_[0][0], CP): _sparsity, sparsity = 1, 1
+                else:
                     _sparsity = sum(node.sparsity for node in _G.node_) / _L
                     sparsity = sum(node.sparsity for node in G.node_) / L
-                    
-            # orders of len and sparsity?
             dspar = _sparsity-sparsity; mspar = min(_sparsity,sparsity)
             # draft:
-            dext = [distance, dang, dlen, dspar]; dVal = distance + dang + dlen + dspar
-            mext = [proximit, mang, mlen, mspar]; mVal = proximit + mang + mlen + mspar
+            mext = [proximity, mang, mlen, mspar]; mVal = proximity + mang + mlen + mspar
+            dext = [distance, dang, dlen, dspar];  dVal = distance + dang + dlen + dspar
             derext = [mext,dext,mVal,dVal]
 
             if mVal > ave_ext * ((sum(_G.valt)+sum(G.valt)) / (2*sum(G_aves))):  # max depends on combined G value
@@ -134,18 +131,14 @@ def comp_G_(G_, fder):  # cross-comp Gs (patterns of patterns): Gs, derGs, or se
                 valt = [mplevel[1] - ave_Gm, dplevel[1] - ave_Gd]  # norm valt: *= link rdn?
                 derG = Cgraph(  # or mean x0=_x+dx/2, y0=_y+dy/2:
                     plevels=[mplevel,dplevel], y0=min(G.y0,_G.y0), yn=max(G.yn,_G.yn), x0=min(G.x0,_G.x0), xn=max(G.xn,_G.xn),
-                    sparsity = distance, angle = [dy,dx], valt=valt, node_=[_G,G])
+                    sparsity=distance, angle=[dy,dx], valt=valt, node_=[_G,G])
                 _G.link_ += [derG]; G.link_ += [derG]  # any val
                 for fd in 0,1:
                     if valt[fd] > 0:  # alt fork is redundant, no support?
                         for node, (graph, meds_, gvalt) in zip([_G, G], [G.roott[fd], _G.roott[fd]]):  # bilateral inclusion
                             if node not in graph:
                                 graph += [node]
-                                for derG in node.link_:  # immediate links
-                                    if derG.node_[1] is node: potential_med = derG.node_[0]
-                                    else:                     potential_med = derG.node_[1]     
-                                    if potential_med not in [med for meds in meds_ for med in meds ]:  # potential med may be already in meds_
-                                        meds_ += [[potential_med]]
+                                meds_ += [[derG.node_[0] if derG.node_[1] is node else derG.node_[1] for derG in node.link_]]  # immediate links
                                 gvalt[0] += node.valt[0]; gvalt[1] += node.valt[1]
 
 
@@ -155,24 +148,31 @@ def eval_med_layer(graph_, graph, fd):   # recursive eval of reciprocal links fr
     save_node_, save_meds_ = [], []
     adj_Val = 0  # adjust connect val in graph
 
-    for G, med_node_ in zip(node_, meds_):  # G: node or sub-graph
+    for G, med_node_ in zip(node_, meds_):  # G: node or sub-graph, also pass med_derGs with node_ = G, med_node?
         mmed_node_ = []  # __Gs that mediate between Gs and _Gs
         for _G in med_node_:
-            for derG in _G.link_:
-                if derG not in G.link_:  # link_ includes all unique evaluated mediated links, flat or in layers?
-                    # med_PP.link_:
-                    med_link_ = derG.node_[0].link_ if derG.node_[0] is not _G else derG.node_[1].link_
-                    for _derG in med_link_:
-                        if _derG in G.link:
-                             # if _derG in G.link, remove _G from meds? Because _derG is the shorter path
-                            pass
-                        elif G in _derG.node_:  # __G mediates between _G and G
-                            G.link_ += [_derG]
-                            adj_val = _derG.valt[fd] - ave_agg  # or increase ave per mediation depth
+            for med_derG in _G.link_:
+                mmed_node = med_derG.node_[1] if med_derG.node_[0] is _G else med_derG.node_[0]
+                for mmed_derG in mmed_node.link_:
+
+                    if med_derG in G.link_:  # med_derG is reciprocal, eval alt links:
+                        mmmed_node = mmed_derG.node_[1] if mmed_derG.node_[0] is _G else mmed_derG.node_[0]
+                        if mmmed_node is G:  # select the shortest of:
+                            # dir derG.node_ = G, mmed_node: direct in G.link_, pass it?
+                            # med_derG.node_ = G, med_node: mediating mmed_node?
+                            _y = (_G.yn+_G.y0)/2; _x = (_G.xn+_G.x0)/2; y = (G.yn+G.y0)/2; x = (G.xn+G.x0)/2
+                            dir_distance = hypot((_y-y),(_x-x))  # form or pass direct derG: node_ = [G, med_node]?
+                            if med_derG.distance < dir_distance:
+                                # replace direct derG with med derG
+                                pass
+                    else:  # med_derG is not reciprocal, link_ is all unique evaluated mediated links, flat or in layers?
+                        if G in mmed_derG.node_ and mmed_derG not in G.link_:  # __G mediates between _G and G
+                            G.link_ += [mmed_derG]
+                            adj_val = mmed_derG.valt[fd] - ave_agg  # or increase ave per mediation depth
                             # adjust nodes:
                             G.valt[fd] += adj_val; _G.valt[fd] += adj_val  # valts not updated
                             valt[fd] += adj_val; _G.roott[fd][2][fd] += adj_val  # root is not graph yet
-                            __G = _derG.node_[0] if _derG.node_[0] is not _G else _derG.node_[1]
+                            __G = mmed_derG.node_[0] if mmed_derG.node_[0] is not _G else mmed_derG.node_[1]
                             if __G not in mmed_node_:  # not saved via prior _G
                                 mmed_node_ += [__G]
                                 adj_Val += adj_val
@@ -270,7 +270,7 @@ def sum2graph_(G_, fd, fder):  # sum node and link params into graph, plevel in 
                 sum_plevel(new_plevel, derG.plevels[fd])  # accum derG
                 derG.roott[fd] = graph  # + link_ = [derG]?
                 valt[fd] += derG.valt[fd]
-                sparsity += derG.sparsity
+                sparsity += derG.sparsity  # probably wrong, eval per node:
                 nlinks += 1
             node.valt[0] += valt[fd]  # derG valts summed in eval_med_layer added to lower-plevels valt
             graph.valt[0]+= node.valt[0]; graph.valt[1]+= node.valt[1]
@@ -371,6 +371,7 @@ def comp_plevels(_plevels, plevels, _fds, fds, derext):
 
     return [mplevel,mval], [dplevel,dval]  # always single new plevel
 
+
 def comp_players(_caFork, caFork, derext):  # unpack and compare layers from der+
 
     mplayer, dplayer = [], []  # flat lists of ptuples, nesting decoded by mapping to lower levels
@@ -404,21 +405,19 @@ def comp_ptuples(_Ptuples, Ptuples, _fds, fds, derext):  # unpack and compare de
     mPtuples, dPtuples = [[],0], [[],0]  # [list, val] each
 
     for _Ptuple, Ptuple, _fd, fd in zip(_Ptuples, Ptuples, _fds, fds):  # bottom-up der+, Ptuples per player, pass-through fds
-        if _fd == fd:  # Ptuple: ptuple, [[[[],00],00],00]
+        if _fd == fd:
 
-            mtuple, dtuple = comp_ptuple(_Ptuple[0], Ptuple[0])
-            mext___, dext___ = [[],0], [[],0]  # we only have single value of val here, the other one will be added from alts later?
-
+            mtuple, dtuple = comp_ptuple(_Ptuple[0], Ptuple[0])  # init Ptuple = ptuple, [[[[[[]]]]]]
+            mext___, dext___ = [[],0], [[],0]
             for _ext__, ext__ in zip(_Ptuple[1][0], Ptuple[1][0]):  # ext__: extuple level
                 mext__, dext__ = [[],0], [[],0]
                 for _ext_, ext_ in zip(_ext__[0], ext__[0]):  # ext_: extuple layer
-                    mext_, dext_= [[],0], [[],0]
-                    if _ext_[0] and ext_[0]:    
-                        for _extuple, extuple in zip(_ext_[0], ext_[0]):  # loop ders from prior comps in each lower ext_
-                            # + der extlayer:
-                            mextuple, dextuple, meval, deval = comp_extuple(_extuple, extuple)
-                            mext_[0] += [mextuple]; mext_[1] += meval
-                            dext_[0] += [dextuple]; dext_[1] += deval
+                    mext_, dext_ = [[],0], [[],0]
+                    for _extuple, extuple in zip(_ext_[0], ext_[0]):  # loop ders from prior comps in each lower ext_
+                        # + der extlayer:
+                        mextuple, dextuple, meval, deval = comp_extuple(_extuple, extuple)
+                        mext_[0] += [mextuple]; mext_[1] += meval
+                        dext_[0] += [dextuple]; dext_[1] += deval
                     # + der extlevel:
                     mext__[0] += [mext_]; mext__[1] += mext_[1]
                     dext__[0] += [dext_]; mext__[1] += dext_[1]
@@ -437,19 +436,18 @@ def comp_ptuples(_Ptuples, Ptuples, _fds, fds, derext):  # unpack and compare de
 
     return mPtuples, dPtuples
 
-# not revised, unpack comps as in comp_G_, add comp dS:
+
 def comp_extuple(_extuple, extuple):
 
     mval, dval = 0,0
     dextuple, mextuple = [],[]
 
-    # 4 params:  distance, angle, len, sparsity
-    for _param, param, ave in zip(_extuple, extuple, (ave_distance, ave_dangle, ave_len, ave_sparsity)):    
-        d = _param-param;            dextuple += [d]; dval += d - ave   # all are derived scalars
-        m = min(_param, param)-ave;  mextuple += [m]; mval += m
-    
-    return mextuple, dextuple, mval, dval
+    for _param, param, ave in zip(_extuple, extuple, (ave_distance, ave_dangle, ave_len, ave_sparsity)):
+        # params: ddistance, dangle, dlen, dsparsity: all derived scalars
+        d = _param-param;          dextuple += [d]; dval += d - ave
+        m = min(_param,param)-ave; mextuple += [m]; mval += m
 
+    return mextuple, dextuple, mval, dval
 
 def comp_angle(_angle, angle):
     _Dy, _Dx=_angle; Dy, Dx=angle
@@ -526,11 +524,10 @@ def sum_extuples(exTuple___, extuple___):
                 if extuple_:
                     for exTuple, extuple in zip_longest(exTuple_[0], extuple_[0], fillvalue=[]):
                         if extuple:
-                            for i in range(len(exTuple)):  # 4 params:  distance, angle, len, sparsity
-                                exTuple[i] += extuple[i]        
+                            sum_ptuple(exTuple, extuple)
                         else:
-                            exTuple_ += [deepcopy(extuple)]
+                            exTuple_ += [extuple]
                 else:
-                    exTuple__ += [deepcopy(extuple_)]
+                    exTuple__ += [extuple_]
         else:
-            exTuple___ += [deepcopy(extuple__)]
+            exTuple___ += [extuple__]
