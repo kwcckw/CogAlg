@@ -153,7 +153,7 @@ def eval_med_layer(graph_, graph, fd):   # recursive eval of reciprocal links fr
     save_node_, save_medG_ = [], []
     adj_Val = 0  # adjust connect val in graph
 
-    for G, mG, dir_mderG in medG_:  # assign G and shortest direct derG to each med node?
+    for i, (G, mG, dir_mderG) in enumerate(medG_):  # assign G and shortest direct derG to each med node?
         mmG_ = []  # __Gs that mediate between Gs and _Gs
         fdir = 0
         for mderG in mG.link_:  # all unique evaluated mediated links, flat or in layers?
@@ -165,11 +165,14 @@ def eval_med_layer(graph_, graph, fd):   # recursive eval of reciprocal links fr
                 if mmG is dirG:  # directly linked
                     if derG.sparsity > dir_mderG.sparsity:
                         dir_mderG = derG  # for next med eval
+                        medG_[i][2] = derG  # replace in medG_?
                         fdir = 1  # dir link is shorter, no med eval:
                     break
             if not fdir:  # mderG is not reciprocal
                 for mmderG in mmG.link_:
-                    if G in mmderG.node_ and mmderG not in G.link_:  # __G mediates between _G and G
+                    # these 2 evaluations are contrasting with each other?
+                    # if G in mmderG.node_, G.link_ should have mmderG too
+                    if mmderG not in G.link_:  # __G mediates between _G and G
                         G.link_ += [mmderG]
                         adj_val = mmderG.valt[fd] - ave_agg  # or increase ave per mediation depth
                         # adjust nodes:
@@ -186,9 +189,8 @@ def eval_med_layer(graph_, graph, fd):   # recursive eval of reciprocal links fr
                     save_medG_ += [[G, mmG, dir_mderG]]
 
     # not fully revised:
-    add_medG_, add_node_ = [],[]  # need node_?
-    for G, mmG, dir_mderG in save_medG_:  # eval graph merge after adjusting graph by mediating node layer
-        add_mmed_= []
+    add_medG_, add_node_ = [],[]  # need node_? Yes, those nodes will be evaluated in the next recursion
+    for (G, mmG, dir_mderG) in save_medG_:  # eval graph merge after adjusting graph by mediating node layer
         _graph = mmG.roott[fd]
         if _graph in graph_ and _graph is not graph:  # was not removed or merged via prior _G
             _node_, _medG_, _valt = _graph
@@ -197,16 +199,19 @@ def eval_med_layer(graph_, graph, fd):   # recursive eval of reciprocal links fr
                     if _node not in add_node_ + save_node_: add_node_ += [_node]
                 for _medG in _medG_:
                     if _medG not in add_medG_ + save_medG_: add_medG_ += [_medG]
+                for _derG in _node.link_:
+                    adj_Val += _derG.valt[fd] - ave_agg
+                # i think below will not be needed, they will be checked in the next recursion anyway
+                '''
                 # not sure if that's needed:
-                for derG in _node.link_:
+                for _derG in _node.link_:
                     __G = derG.node_[0] if derG.node_[0] is not _G else derG.node_[1]
                     if __G not in add_mmed_ + mmed_:  # not saved via prior _G
                         add_mmed_ += [__G]
                         adj_Val += derG.valt[fd] - ave_agg
-
+                '''
             valt[fd] += _valt[fd]
             graph_.remove(_graph)
-        mmed_ += add_mmed_
 
     graph[:] = [save_node_+ add_node_, save_medG_+ add_medG_, valt]
     if adj_Val > ave_med:  # positive adj_Val from eval mmed_
@@ -454,7 +459,7 @@ def comp_extuple(_extuple, extuple):
     mval, dval = 0,0
     dextuple, mextuple = [],[]
 
-    for _param, param, ave in zip(_extuple, extuple, (ave_distance, ave_dangle, ave_len, ave_sparsity)):
+    for _param, param, ave in zip(_extuple, extuple, (ave_distance, ave_dangle, ave_L, ave_sparsity)):
         # params: ddistance, dangle, dlen, dsparsity: all derived scalars
         d = _param-param;          dextuple += [d]; dval += d - ave
         m = min(_param,param)-ave; mextuple += [m]; mval += m
