@@ -25,10 +25,11 @@ As we add higher dimensions (3D and time), this dimensionality reduction is done
 '''
 
 import sys
+import numpy as np
 from itertools import zip_longest
 from copy import deepcopy, copy
 from class_cluster import ClusterStructure, NoneType, comp_param, Cdert
-from sub_recursion import *
+
 # import warnings  # to detect overflow issue, in case of infinity loop
 # warnings.filterwarnings('error')
 
@@ -158,9 +159,10 @@ class CPP(CderP):  # derP params include P.ptuple
 
 def comp_slice_root(blob, verbose=False):  # always angle blob, composite dert core param is v_g + iv_ga
 
-    from sub_recursion import sub_recursion_eval,splice_dir_blob_
+    from sub_recursion import sub_recursion_eval,splice_dir_blob_, segment_by_direction
 
-    segment_by_direction(blob, verbose=False)  # forms blob.dir_blobs
+    rotate_blob(blob)
+    # segment_by_direction(blob, verbose=False)  # forms blob.dir_blobs
     for dir_blob in blob.dir_blobs:
 
         P__ = slice_blob(dir_blob, verbose=False)  # cluster dir_blob.dert__ into 2D array of blob slices
@@ -178,8 +180,49 @@ def comp_slice_root(blob, verbose=False):  # always angle blob, composite dert c
     splice_dir_blob_(blob.dir_blobs)
 
 
+# rotate blob by 45 degree virtually
+def rotate_blob(blob):
+
+    from intra_comp import comp_a
+    
+    dert__ = list(blob.dert__)
+    dert = dert__[0]
+    
+    ysize, xsize = dert__[0].shape
+    eysize, exsize = ysize+1, xsize+1
+    edert = np.zeros((eysize, exsize), dtype="uint8")
+    # copy dert with single extended row and column
+    edert[:-1, :-1] = copy(dert)
+    edert[:-1, -1:] = copy(dert[:, -1:])  # extended column 
+    edert[-1:, :-1] = copy(dert[-1:, :])  # extended row
+    
+    # get rotated 45 degree's p__
+    top__ = edert[:-1,:]
+    right__ = edert[:, 1:]
+    p__ = np.zeros((eysize, exsize), dtype="uint8")
+    p__[:-1, :] += (top__/ np.cos(np.deg2rad(45))).astype("uint8")
+    p__[:, 1:] += (right__/np.cos(np.deg2rad(45))).astype("uint8")
+    
+    # from rotated p__, recompute dert 
+    topleft__ = p__[:-1, :-1]
+    topright__ = p__[:-1, 1:]
+    bottomleft__ = p__[1:, :-1]
+    bottomright__ = p__[1:, 1:]
+
+    d_upright__ = bottomleft__ - topright__
+    d_upleft__ = bottomright__ - topleft__
+
+    G__ = np.hypot(d_upright__, d_upleft__)  # 2x2 kernel gradient (variation), match = inverse deviation, for sign_ only
+    rp__ = topleft__ + topright__ + bottomleft__ + bottomright__  # sum of 4 rim pixels -> mean, not summed in blob param
+
+    rotated_dert__ = [topleft__, d_upleft__, d_upright__, G__, rp__]
+
+    dert__, mask__ = comp_a(rotated_dert__, mask__=blob.mask__)  
+    
+
 def agg_recursion_eval(dir_blob, PP_t):
     from agg_recursion import agg_recursion, Cgraph
+    from sub_recursion import CPP2graph, CBlob2graph
 
     if not isinstance(dir_blob, Cgraph):
         fseg = isinstance(dir_blob, CPP)
@@ -453,6 +496,8 @@ def accum_derP(seg, derP, fd):  # derP might be CP, though unlikely
 
 def sum2PP(PP_segs, base_rdn, fd):  # sum PP_segs into PP
 
+    from sub_recursion import append_P
+    
     PP = CPP(x0=PP_segs[0].x0, rdn=base_rdn, rlayers=[[]], dlayers=[[]])
     if fd: PP.dseg_levels, PP.mseg_levels = [PP_segs], [[]]  # empty alt_seg_levels
     else:  PP.mseg_levels, PP.dseg_levels = [PP_segs], [[]]
