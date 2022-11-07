@@ -24,15 +24,11 @@ As we add higher dimensions (3D and time), this dimensionality reduction is done
 (likely edges in 2D or surfaces in 3D) to form more compressed "skeletal" representations of full-dimensional patterns.
 '''
 
-from collections import deque
 import sys
-import numpy as np
 from itertools import zip_longest
 from copy import deepcopy, copy
 from class_cluster import ClusterStructure, NoneType, comp_param, Cdert
-from segment_by_direction import segment_by_direction
-from frame_blobs import CBlob
-
+from sub_recursion import *
 # import warnings  # to detect overflow issue, in case of infinity loop
 # warnings.filterwarnings('error')
 
@@ -179,7 +175,6 @@ def comp_slice_root(blob, verbose=False):  # always angle blob, composite dert c
         sub_recursion_eval(dir_blob)  # add rlayers, dlayers, seg_levels to select PPs, sum M,G
         # cross PP:
         agg_recursion_eval(dir_blob, [copy(dir_blob.PPm_), copy(dir_blob.PPd_)])  # Cgraph conversion doesn't replace PPs?
-    # splice dir blobs
     splice_dir_blob_(blob.dir_blobs)
 
 
@@ -280,8 +275,6 @@ def comp_P(_P, P):  # forms vertical derivatives of params per P in _P.uplink, c
         players = deepcopy(_P.players)
 
     return CderP(x0=min(_P.x0, P.x0), y=_P.y, players=players, lplayer=[mplayer,dplayer], valt=valt, P=P, _P=_P)
-
-
 
 
 def form_seg_root(P__, fd, fds):  # form segs from Ps
@@ -622,109 +615,4 @@ def comp(param_name, _param, param, dval, mval, dtuple, mtuple, ave, finv):
     setattr(dtuple, param_name, d)  # dtuple.param_name = d
     setattr(mtuple, param_name, m)  # mtuple.param_name = m
 
-
-def append_P(P__, P):  # pack P into P__ in top down sequence
-
-    current_ys = [P_[0].y for P_ in P__]  # list of current-layer seg rows
-    if P.y in current_ys:
-        P__[current_ys.index(P.y)].append(P)  # append P row
-    elif P.y > current_ys[0]:  # P.y > largest y in ys
-        P__.insert(0, [P])
-    elif P.y < current_ys[-1]:  # P.y < smallest y in ys
-        P__.append([P])
-    elif P.y < current_ys[0] and P.y > current_ys[-1]:  # P.y in between largest and smallest value
-        for i, y in enumerate(current_ys):  # insert y if > next y
-            if P.y > y: P__.insert(i, [P])  # PP.P__.insert(P.y - current_ys[-1], [P])
-
-
-def CBlob2graph(dir_blob, fseg, Cgraph):
-
-    PPm_ = dir_blob.PPm_; PPd_ = dir_blob.PPd_
-
-    # init graph params
-    players, fds, valt = [], [], [0,0]  # players, fds and valt
-    alt_players, alt_fds, alt_valt = [], [], [0,0]
-    plevels = [[[players, fds, valt],[alt_players, alt_fds, alt_valt]]]
-    gPPm_, gPPd_ = [], []  # converted gPPs, node_ and alt_node_
-    root_fds = PPm_[0].fds[:-1]  # root fds is the shorter fork?
-
-    root = Cgraph(node_= gPPm_, alt_node_=gPPd_, plevels=plevels, rng = PPm_[0].rng,
-                  fds = root_fds, rdn=dir_blob.rdn, x0=PPm_[0].x0, xn=PPm_[0].xn, y0=PPm_[0].y0, yn=PPm_[0].yn)
-
-    for fd, (PP_, gPP_) in enumerate(zip([PPm_, PPd_], [gPPm_, gPPd_])):
-        for PP in PP_:
-            # should be summing alts when fd= 1?
-            if fd:  # sum from altPP's players
-                for altPP in PP.altPP_:
-                    sum_players(alt_players, altPP.players)
-                    alt_valt[0] += altPP.valt[0]; alt_valt[1] += altPP.valt[1]
-                    alt_fds[:] = deepcopy(altPP.fds)
-            else:  # sum from players
-                sum_players(players, PP.players)
-                valt[0] += PP.valt[0]; valt[1] += PP.valt[1]
-                fds[:] = deepcopy(PP.fds)
-
-            # compute rdn
-            if fseg: PP = PP.roott[PP.fds[-1]]  # seg root
-            PP_P_ = [P for P_ in PP.P__ for P in P_]  # PPs' Ps
-            for altPP in PP.altPP_:  # overlapping Ps from each alt PP
-                altPP_P_ = [P for P_ in altPP.P__ for P in P_]  # altPP's Ps
-                alt_rdn = len(set(PP_P_).intersection(altPP_P_))
-                PP.alt_rdn += alt_rdn  # count overlapping PPs, not bilateral, each PP computes its own alt_rdn
-                root.alt_rdn += alt_rdn  # sum across PP_
-
-            # convert and pack gPP
-            gPP_ += [CPP2graph(PP, fseg, Cgraph)]
-            root.x0=min(root.x0, PP.x0)
-            root.xn=max(root.xn, PP.xn)
-            root.y0=min(root.y0, PP.y0)
-            root.yn=max(root.yn, PP.yn)
-    return root
-
-def CPP2graph(PP, fseg, Cgraph):
-
-    alt_players, alt_fds = [], []
-    alt_valt = [0, 0]
-
-    if not fseg and PP.altPP_:  # seg doesn't have altPP_
-        alt_fds = PP.altPP_[0].fds
-        for altPP in PP.altPP_[1:]:  # get fd sequence common for all altPPs:
-            for i, (_fd, fd) in enumerate(zip(alt_fds, altPP.fds)):
-                if _fd != fd:
-                    alt_fds = alt_fds[:i]
-                    break
-        for altPP in PP.altPP_:
-            sum_players(alt_players, altPP.players[:len(alt_fds)])  # sum same-fd players only
-            alt_valt[0] += altPP.valt[0];  alt_valt[1] += altPP.valt[1]
-    # Cgraph: plevels ( caTree ( players ( caTree ( ptuples:
-    players = []
-    valt = [0,0]
-    for i, (ptuples, alt_ptuples, fd) in enumerate(zip_longest(deepcopy(PP.players), deepcopy(alt_players), PP.fds, fillvalue=[])):
-        cval, aval = 0,0
-        for i, (ptuple, alt_ptuple) in enumerate(zip_longest(ptuples, alt_ptuples, fillvalue=None)):
-            if alt_ptuple:
-                if isinstance(ptuple, list):
-                    aval += alt_ptuple[0].val
-                else:
-                    aval += alt_ptuple.val
-                    alt_ptuples[i] = [alt_ptuple, [[[[[[]]]]]]]  # convert to Ptuple
-            if ptuple:
-                if isinstance(ptuple, list):  # already converted
-                    cval += ptuple[0].val
-                else:  # convert to Ptuple
-                    cval += ptuple.val
-                    ptuples[i] = [ptuple, [[[[[[]]]]]]]
-
-            cfork = [ptuples, cval]  # can't be empty
-            afork = [alt_ptuples, aval] if alt_ptuples else []
-            caTree = [[cfork, afork], [cval, aval]]
-            valt[0] += cval; valt[1] += aval
-            players += [caTree]
-
-    caTree = [[players, valt, deepcopy(PP.fds)]]  # pack single playerst
-    plevel = [caTree, valt]
-    x0 = PP.x0; xn = PP.xn; y0 = PP.y0; yn = PP.yn
-
-    return Cgraph(node_=PP.P__, plevels=[plevel], angle=(yn-y0,xn-x0), sparsity=1.0, valt=valt, fds=[1], x0=x0, xn=xn, y0=y0, yn=yn)
-    # 1st plevel fd is always der+?
 
