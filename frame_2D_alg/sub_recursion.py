@@ -126,36 +126,83 @@ def rotate_blob(blob):
     dert__ = list(blob.dert__)
     dert = dert__[0]
 
-    ysize, xsize = dert__[0].shape
-    eysize, exsize = ysize + 1, xsize + 1
-    edert = np.zeros((eysize, exsize), dtype="uint8")
-    # copy dert with single extended row and column
-    edert[:-1, :-1] = copy(dert)
-    edert[:-1, -1:] = copy(dert[:, -1:])  # extended column
-    edert[-1:, :-1] = copy(dert[-1:, :])  # extended row
+    rotated_dert__ = []
+    for dert in dert__:
+        rotated_dert__ += [rotate_dert1(dert, angle=45)]
 
-    # get rotated 45 degree's p__
-    top__ = edert[:-1, :]
-    right__ = edert[:, 1:]
-    p__ = np.zeros((eysize, exsize), dtype="uint8")
-    p__[:-1, :] += (top__ / np.cos(np.deg2rad(45))).astype("uint8")
-    p__[:, 1:] += (right__ / np.cos(np.deg2rad(45))).astype("uint8")
+    return rotated_dert__
 
-    # from rotated p__, recompute dert
-    topleft__ = p__[:-1, :-1]
-    topright__ = p__[:-1, 1:]
-    bottomleft__ = p__[1:, :-1]
-    bottomright__ = p__[1:, 1:]
 
-    d_upright__ = bottomleft__ - topright__
-    d_upleft__ = bottomright__ - topleft__
+def rotate_dert1(dert, angle):
 
-    G__ = np.hypot(d_upright__, d_upleft__)  # 2x2 kernel gradient (variation), match = inverse deviation, for sign_ only
-    rp__ = topleft__ + topright__ + bottomleft__ + bottomright__  # sum of 4 rim pixels -> mean, not summed in blob param
+    # method from here:
+    # https://homepages.inf.ed.ac.uk/rbf/HIPR2/rotate.htm
+    ysize, xsize = dert.shape[:2]
+    ycenter = int(ysize/2)  # assume centroid is center of x and y, and this is center of rotation
+    xcenter = int(xsize/2)
+    
+    y_ = []; new_y_ = []
+    x_ = []; new_x_ = []
+    # rotate 45 degree
+    angle = np.deg2rad(angle)
+    for y in range(ysize):
+        for x in range(xsize):
+            y_ += [y]; x_ += [x]
+            new_x_ += [int(np.around((np.cos(angle) * (x-xcenter)) - (np.sin(angle) * (y-ycenter)) + xcenter))]
+            new_y_ += [int(np.around((np.sin(angle) * (x-xcenter)) + (np.cos(angle) * (y-ycenter)) + ycenter))]
+            
+                
+    # remove negative coordinates by scaling it to positive
+    min_x = min(new_x_)        
+    min_y = min(new_y_)
+    new_x_ = [ new_x - min_x for new_x in new_x_]
+    new_y_ = [ new_y - min_y for new_y in new_y_]
 
-    rotated_dert__ = [topleft__, d_upleft__, d_upright__, G__, rp__]
+    # initialize rotate image
+    new_xsize = max(new_x_) + 1
+    new_ysize = max(new_y_) + 1
+    rotated_dert = np.zeros((new_ysize, new_xsize), dtype="uint8")
 
-    dert__, mask__ = comp_a(rotated_dert__, mask__=blob.mask__)
+    # fill value    
+    for x,y,new_x, new_y in zip(x_,y_,new_x_, new_y_):
+        rotated_dert[new_y, new_x] = dert[y,x]
+    
+    # fill holes by using average of 4 sides
+    for x in range(new_xsize-1):
+        for y in range(new_ysize-1):
+            if rotated_dert[y, x] == 0:
+                top    = rotated_dert[y-1, x]
+                bottom = rotated_dert[y+1, x]
+                left   = rotated_dert[y, x-1]
+                right  = rotated_dert[y, x+1]
+            
+                if top and bottom and left and right:
+                    rotated_dert[y, x] = np.uint8((float(top) + float(bottom) + float(left) + float(right)) / 4) 
+            
+    return rotated_dert
+
+def rotate_dert2(dert, angle):
+
+    # using opencv method
+    # https://stackoverflow.com/questions/9041681/opencv-python-rotate-image-by-x-degrees-around-specific-point
+    ysize, xsize = dert.shape[:2]  
+    center = (xsize/2, ysize/ 2)
+
+    rotation_matrix = cv2.getRotationMatrix2D(center, -angle, 1.0)
+
+    # get new xsize and new ysize
+    abs_cos = abs(rotation_matrix[0, 0])
+    abs_sin = abs(rotation_matrix[0, 1])
+    new_xsize = int(ysize * abs_sin + xsize * abs_cos)
+    new_ysize = int(ysize * abs_cos + xsize * abs_sin)
+
+    rotation_matrix[0, 2] += new_xsize / 2 - center[0]
+    rotation_matrix[1, 2] += new_ysize / 2 - center[1]
+
+    # rotate image with the new xysize and translated rotation matrix
+    rotated_dert = cv2.warpAffine(dert, rotation_matrix, (new_xsize, new_ysize))
+
+    return rotated_dert.astype("uint8")
 
 
 def dir_eval(Dy, Dx):  # blob direction strength eval
