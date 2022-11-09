@@ -189,8 +189,8 @@ def slice_blob(blob, verbose=False):  # form blob slices nearest to slice Ga: Ps
 
     for y, (dert_, mask_) in enumerate(zip(dert__, mask__)):  # unpack lines
 
-        if sum([dert.dy for dert in dert_]) / len(dert_) > ave_dy:
-            rotate_dert_(dert_, mask_)  # reconstruct dert_, mask_ across the dert__ in axis = Dy,Dx
+        if sum([dert[4] for dert in deepcopy(dert_)]) / len(list(deepcopy(dert_))) > ave_dy:
+            rotated_dert_, rotated_mask = rotate_dert_(deepcopy(dert_), mask_)  # reconstruct dert_, mask_ across the dert__ in axis = Dy,Dx
         P_ = []  # line of Ps
         _mask = True
         for x, (dert, mask) in enumerate(zip(dert_, mask_)):  # dert = i, g, ga, ri, dy, dx, sin_da0, cos_da0, sin_da1, cos_da1
