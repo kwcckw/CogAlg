@@ -118,6 +118,7 @@ def comp_P_der(P__):  # der+ sub_recursion in PP.P__, compare P.uplinks to P.dow
 
     return dderPs__
 
+# not revised, should be rotate():
 
 def rotate_dert_(idert_, mask_):
 
@@ -130,12 +131,11 @@ def rotate_dert_(idert_, mask_):
     xsize = len(idert_)
 
     dert_ = [[] for _ in range(nparams)]
-    for dert in list(idert_):  
+    for dert in list(idert_):
         for i in range(nparams):
             dert_[i].append(dert[i])
 
     ave_ga = sum(dert_[2]) / xsize  # average of ga in rad
-
     ave_x = int(xsize/2)  # local ave_x to dert_ only
 
     x_ = []; new_x_ = []
@@ -145,7 +145,6 @@ def rotate_dert_(idert_, mask_):
         x_ += [x]; y_ += [0]
         new_x_ += [int(np.round((np.cos(ave_ga) * (x-ave_x)) + ave_x))]
         new_y_ += [int(np.round((np.sin(ave_ga) * (x-ave_x)) + 0))]
-
 
     # remove negative coordinates by scaling it to positive
     min_x = min(new_x_)
@@ -166,6 +165,7 @@ def rotate_dert_(idert_, mask_):
             rotated_mask[new_y, new_x] = mask_[x]
 
     return rotated_dert_, rotated_mask
+
 
 def rotate_dert2(dert, angle):
 
