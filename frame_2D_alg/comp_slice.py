@@ -164,10 +164,11 @@ def comp_slice_root(blob, verbose=False):  # always angle blob, composite dert c
     from sub_recursion import sub_recursion_eval, rotate
 
     P__ = slice_blob(blob, verbose=False)  # cluster dir_blob.dert__ into 2D array of blob slices
-    for P_ in P__:  # recursive reform Ps along new axes within blob.dert__
+    for y, P_ in enumerate(P__):  # recursive reform Ps along new axes within blob.dert__
         for P in P_:
             while P.ptuple.G * P.ptuple.angle[0] > ave_rotate:  # angle[0]=Dy: deviation from horizontal
-                rotate(P, blob.dert__, blob.mask__)
+                P = rotate(P, y, blob.dert__, blob.mask__)
+
     comp_P_root(P__)
     # scan_P_, comp_P | link_layer, adds mixed uplink_, downlink_ per P; comp_dx_blob(P__), comp_dx
     # segments are stacks of (P,derP)s:
@@ -190,7 +191,6 @@ def slice_blob(blob, verbose=False):  # form blob slices nearest to slice Ga: Ps
     height, width = mask__.shape
     if verbose: print("Converting to image...")
     P__ = []  # blob of Ps
-    from sub_recursion import rotate_dert_
 
     for y, (dert_, mask_) in enumerate(zip(dert__, mask__)):  # unpack lines, each may have multiple
 

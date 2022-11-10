@@ -120,75 +120,74 @@ def comp_P_der(P__):  # der+ sub_recursion in PP.P__, compare P.uplinks to P.dow
 
 # not revised, should be rotate():
 
-def rotate_dert_(idert_, mask_):
 
-    # method from here:
-    # https://homepages.inf.ed.ac.uk/rbf/HIPR2/rotate.htm
-
-    idert_ = list(idert_)  # idert_ is zipped, need to convert it
-    nparams = len(idert_[0])
-    ysize = 1
-    xsize = len(idert_)
-
-    dert_ = [[] for _ in range(nparams)]
-    for dert in list(idert_):
-        for i in range(nparams):
-            dert_[i].append(dert[i])
-
-    ave_ga = sum(dert_[2]) / xsize  # average of ga in rad
-    ave_x = int(xsize/2)  # local ave_x to dert_ only
-
-    x_ = []; new_x_ = []
+def rotate(P, ycenter, dert__t, mask__):
+    
+    angle = np.arctan2(P.ptuple.angle[0], P.ptuple.angle[1])  # angle of rotation, in rad
+    nparams = len(dert__t)  # number of params in dert, it should be 10 here
+    nderts = len(dert__t[0][0])
+    xcenter = int(P.x0 + P.ptuple.L / 2)  # center of P
+    
+    # initialization
+    dert__ = dert__t[0]
+    ysize, xsize = dert__.shape[:2] 
     y_ = []; new_y_ = []
-    # rotate by ga
-    for x in range(xsize):
-        x_ += [x]; y_ += [0]
-        new_x_ += [int(np.round((np.cos(ave_ga) * (x-ave_x)) + ave_x))]
-        new_y_ += [int(np.round((np.sin(ave_ga) * (x-ave_x)) + 0))]
+    x_ = []; new_x_ = []
 
+    for y in range(ysize):
+        for x in range(xsize):
+            y_ += [y]; x_ += [x]
+            new_x_ += [int(np.around((np.cos(angle) * (x-xcenter)) - (np.sin(angle) * (y-ycenter)) + xcenter))]  # pack rotated new x coordinate
+            new_y_ += [int(np.around((np.sin(angle) * (x-xcenter)) + (np.cos(angle) * (y-ycenter)) + ycenter))]  # pack rotated new y coordinate
+    
     # remove negative coordinates by scaling it to positive
-    min_x = min(new_x_)
+    min_x = min(new_x_)        
     min_y = min(new_y_)
     new_x_ = [ new_x - min_x for new_x in new_x_]
     new_y_ = [ new_y - min_y for new_y in new_y_]
 
-    # initialize rotate dert and mask
+    # initialize rotated dert__t and mask__
     new_xsize = max(new_x_) + 1
     new_ysize = max(new_y_) + 1
-    rotated_dert_ = [np.zeros((new_ysize, new_xsize), dtype="uint8") for _ in range(nparams)]
-    rotated_mask = np.full((new_ysize, new_xsize), fill_value=True, dtype="bool")
-
-    # fill value
+    rotated_dert__t = [np.zeros((new_ysize, new_xsize), dtype="uint8") for _ in range(nparams)]
+    rotated_mask__ = np.full((new_ysize, new_xsize), fill_value=True, dtype="bool")
+    
+    # fill rotated value and mask value
     for x,y,new_x, new_y in zip(x_,y_,new_x_, new_y_):
         for i in range(nparams):
-            rotated_dert_[i][new_y, new_x] = dert_[i][x]
-            rotated_mask[new_y, new_x] = mask_[x]
-
-    return rotated_dert_, rotated_mask
-
-
-def rotate_dert2(dert, angle):
-
-    # using opencv method
-    # https://stackoverflow.com/questions/9041681/opencv-python-rotate-image-by-x-degrees-around-specific-point
-    ysize, xsize = dert.shape[:2]
-    center = (xsize/2, ysize/ 2)
-
-    rotation_matrix = cv2.getRotationMatrix2D(center, -angle, 1.0)
-
-    # get new xsize and new ysize
-    abs_cos = abs(rotation_matrix[0, 0])
-    abs_sin = abs(rotation_matrix[0, 1])
-    new_xsize = int(ysize * abs_sin + xsize * abs_cos)
-    new_ysize = int(ysize * abs_cos + xsize * abs_sin)
-
-    rotation_matrix[0, 2] += new_xsize / 2 - center[0]
-    rotation_matrix[1, 2] += new_ysize / 2 - center[1]
-
-    # rotate image with the new xysize and translated rotation matrix
-    rotated_dert = cv2.warpAffine(dert, rotation_matrix, (new_xsize, new_ysize))
-
-    return rotated_dert.astype("uint8")
+            rotated_dert__t[i][new_y, new_x] = dert__t[i][y,x]
+        rotated_mask__[new_y, new_x] = mask__[y,x]
+    
+    # get single row of rotated dert in ycenter
+    rotated_dert_t = [rotated_dert__[ycenter,:] for rotated_dert__ in rotated_dert__t]
+    rotated_mask_ = rotated_mask__[ycenter,:]
+    
+    # initialize new dert_ and mask_
+    new_dert_ = [[rotated_dert_[xcenter] for rotated_dert_ in rotated_dert_t] ]  # each dert is a tuple of 10 params     
+    new_mask_ = [rotated_mask_[xcenter]]
+    
+    # search towards left side
+    search_x = xcenter
+    while search_x-1>0:
+        search_x -= 1
+        if rotated_mask_[search_x] == False:
+            new_dert_.insert(0, [rotated_dert_[search_x] for rotated_dert_ in rotated_dert_t] )  # pack to the left
+            new_mask_.insert(0, rotated_mask_[search_x])
+        else:
+            break
+            
+    # search towards right side
+    search_x = xcenter
+    while search_x+1<nderts:
+        search_x += 1
+        if rotated_mask_[search_x] == False:
+            new_dert_.append([rotated_dert_[search_x] for rotated_dert_ in rotated_dert_t])  # pack to the right
+            new_mask_.append(rotated_mask_[search_x])
+        else:
+            break
+    
+    # form P with new_dert_ and new_mask_ here, reuse from comp_slice?
+    
 
 '''
 P.axis: 0|1|2|3, which maps to angle. P x0,xn,y0,yn, they can be computed from x,y + (axis_angle * len_dert_/2)
