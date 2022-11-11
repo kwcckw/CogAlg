@@ -121,80 +121,65 @@ def comp_P_der(P__):  # der+ sub_recursion in PP.P__, compare P.uplinks to P.dow
 # not revised, should be rotate():
 
 
-def rotate(P, ycenter, dert__t, mask__):
-    
+def rotate(P, dert__t, mask__):
+
     angle = np.arctan2(P.ptuple.angle[0], P.ptuple.angle[1])  # angle of rotation, in rad
     nparams = len(dert__t)  # number of params in dert, it should be 10 here
-    nderts = len(dert__t[0][0])
     xcenter = int(P.x0 + P.ptuple.L / 2)  # center of P
-    
-    # initialization
+    ycenter = P.y
     dert__ = dert__t[0]
-    ysize, xsize = dert__.shape[:2] 
-    y_ = []; new_y_ = []
-    x_ = []; new_x_ = []
-
-    for y in range(ysize):
-        for x in range(xsize):
+    yn, xn = dert__.shape[:2]
+    y_, ry_, x_, rx_ = [],[],[],[]
+    # r = rotated
+    # replace:
+    # Start from center [(x,y)], sequentially add (rx,ry), mapped (x,y)s, and fill-in values, in both directions, while not mask.
+    for y in range(yn):
+        for x in range(xn):
             y_ += [y]; x_ += [x]
-            new_x_ += [int(np.around((np.cos(angle) * (x-xcenter)) - (np.sin(angle) * (y-ycenter)) + xcenter))]  # pack rotated new x coordinate
-            new_y_ += [int(np.around((np.sin(angle) * (x-xcenter)) + (np.cos(angle) * (y-ycenter)) + ycenter))]  # pack rotated new y coordinate
-    
-    # remove negative coordinates by scaling it to positive
-    min_x = min(new_x_)        
-    min_y = min(new_y_)
-    new_x_ = [ new_x - min_x for new_x in new_x_]
-    new_y_ = [ new_y - min_y for new_y in new_y_]
+            rx_ += [(np.cos(angle) * (x-xcenter)) - (np.sin(angle) * (y-ycenter)) + xcenter]  # pack rotated x
+            ry_ += [(np.sin(angle) * (x-xcenter)) + (np.cos(angle) * (y-ycenter)) + ycenter]  # pack rotated y
+            # only compute for rdert_?
+    # scale coordinates to all positives:
+    rx_ = [rx - rx_[0] for rx in rx_]
+    ry_ = [ry - ry_[0] for ry in ry_]
+    rxn = len(rx_); ryn = len(ry_)
+    rdert__t = [np.zeros((ryn, rxn), dtype="uint8") for _ in range(nparams)]
+    rmask__ = np.full((ryn, rxn), fill_value=True, dtype="bool")
 
-    # initialize rotated dert__t and mask__
-    new_xsize = max(new_x_) + 1
-    new_ysize = max(new_y_) + 1
-    rotated_dert__t = [np.zeros((new_ysize, new_xsize), dtype="uint8") for _ in range(nparams)]
-    rotated_mask__ = np.full((new_ysize, new_xsize), fill_value=True, dtype="bool")
-    
-    # fill rotated value and mask value
-    for x,y,new_x, new_y in zip(x_,y_,new_x_, new_y_):
-        for i in range(nparams):
-            rotated_dert__t[i][new_y, new_x] = dert__t[i][y,x]
-        rotated_mask__[new_y, new_x] = mask__[y,x]
-    
-    # get single row of rotated dert in ycenter
-    rotated_dert_t = [rotated_dert__[ycenter,:] for rotated_dert__ in rotated_dert__t]
-    rotated_mask_ = rotated_mask__[ycenter,:]
-    
-    # initialize new dert_ and mask_
-    new_dert_ = [[rotated_dert_[xcenter] for rotated_dert_ in rotated_dert_t] ]  # each dert is a tuple of 10 params     
-    new_mask_ = [rotated_mask_[xcenter]]
-    
-    # search towards left side
-    search_x = xcenter
-    while search_x-1>0:
-        search_x -= 1
-        if rotated_mask_[search_x] == False:
-            new_dert_.insert(0, [rotated_dert_[search_x] for rotated_dert_ in rotated_dert_t] )  # pack to the left
-            new_mask_.insert(0, rotated_mask_[search_x])
-        else:
-            break
-            
-    # search towards right side
-    search_x = xcenter
-    while search_x+1<nderts:
-        search_x += 1
-        if rotated_mask_[search_x] == False:
-            new_dert_.append([rotated_dert_[search_x] for rotated_dert_ in rotated_dert_t])  # pack to the right
-            new_mask_.append(rotated_mask_[search_x])
-        else:
-            break
-    
+    for x,y, rx,ry in zip(x_,y_, rx_,ry_):
+        # fill rotated param and mask:
+        for i, dert__ in enumerate(dert__t):
+            # each x,y contains all derts within fractional distance from ry,rx, same for all params
+            param = sum( [param*(1-dist) for param,dist in dert__[y, x]])
+            rdert__t[i][ry, rx] = param
+        mask = sum( [mask*(1-dist) for mask,dist in mask__[y,x]])
+        rmask__[ry, rx] = int(mask)  # mask is fractional, round to 1|0
+
+    # get rotated dert_ around ycenter:
+    rdert_t = [rdert__[ycenter,:] for rdert__ in rdert__t]
+    rmask_ = rmask__[ycenter,:]
+    rdert_ = [[rdert_[xcenter] for rdert_ in rdert_t] ]  # each dert is a tuple of 10 params
+    rmask_ = [rmask_[xcenter]]
+
+    # this should be main sequence, most of the stuff above seems irrelevant:
+    dy, dx = P.ptuple.angle[:]
+    cx = xcenter; cy = ycenter
+
+    while cx-1>0 and cy-1>0 and not rmask_[cx]:  # scan left
+        cx -= dx; cy -= dy
+        # compute next rx,ry, then mapped xs,ys, then fill params and mask
+        rdert_.insert(0, [rdert_[cx] for rdert_ in rdert_t] )  # pack left
+        rmask_.insert(0, rmask_[cx])
+
+    # not updated:
+    cx = xcenter
+    while cx+1<xn and not rmask_[cx]:  # scan right
+        cx += 1
+        rdert_.append([rdert_[cx] for rdert_ in rdert_t])  # pack right
+        rmask_.append(rmask_[cx])
+
     # form P with new_dert_ and new_mask_ here, reuse from comp_slice?
-    
 
-'''
-P.axis: 0|1|2|3, which maps to angle. P x0,xn,y0,yn, they can be computed from x,y + (axis_angle * len_dert_/2)
-P.x = (P.x0+ len P.dert_/2) and med_dert is P.dert_[len P.dert_/2]  Same for P.y. 
-New: dert_= [med_dert], dert_.appendleft(left_derts), dert_.append(right_derts).
-New P.x = ave_x + (len(right_derts) - len(left_derts))/2 * axis_angle. Something like that, similar for P.y.
-'''
 def dir_eval(Dy, Dx):  # blob direction strength eval
 
     G = np.hypot(Dy,Dx)
