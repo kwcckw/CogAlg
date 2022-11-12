@@ -6,7 +6,7 @@ from itertools import zip_longest
 from copy import copy, deepcopy
 import numpy as np
 from frame_blobs import CBlob, flood_fill, assign_adjacents
-from comp_slice import CPP,CP, CderP, Cptuple, form_seg_root,form_PP_root, comp_P, sum_players, slice_blob, ave_nsub, ave_splice, PP_aves
+from comp_slice import *
 from agg_recursion import agg_recursion_eval
 
 flip_ave = 10
@@ -118,28 +118,30 @@ def comp_P_der(P__):  # der+ sub_recursion in PP.P__, compare P.uplinks to P.dow
 
     return dderPs__
 
-def rotate(P, dert__t, mask__):
+def rotate_P(P, dert__t, mask__):
 
     xcenter = int(P.x0 + P.ptuple.L / 2)  # center of P
     ycenter = P.y
     dy, dx = P.ptuple.angle[:]  # hypot(dy,dx) = 1: each increment adds one rotated dert/pixel to rdert_
+    dy = dy % (np.pi*2); dx = dx % (np.pi*2)  # scale value within 0-360
+
     # r = rotated:
     rx = xcenter; ry = ycenter
     rdert_ = [form_rdert(rx, ry, dert__t, mask__)]  # default init with central dert
     # scan left:
     x1,x2,y1,y2 = 1,1,1,1  # to start loop
-    while x1>0 and x2>0 and y1>0 and y2>0:
+    while x1>0 and x2>0 and y1>0 and y2>0 and rx-dx>=0 and ry-dy>=0:
         # next rotated coords:
         rx-=dx; ry-=dy
         rdert = form_rdert(rx, ry, dert__t, mask__)
         if rdert:
             x1,x2,y1,y2 = rdert[2]  # mapped coords
-            rdert_[0].insert(rdert)
+            rdert_.insert(0, rdert)
         else:  # mask==1
             break
     # scan right:
     rx = xcenter; ry = ycenter; x1,x2,y1,y2 = 1,1,1,1; yn, xn = dert__t[0].shape[:2]  # to start loop
-    while x1<xn and x2<xn and y1<yn and y2<yn:
+    while x1<xn and x2<xn and y1<yn and y2<yn and rx+dx<xn and ry+dy<yn:
         # next rotated coords:
         rx+=dx; ry+=dy
         rdert = form_rdert(rx,ry, dert__t, mask__)
@@ -149,38 +151,46 @@ def rotate(P, dert__t, mask__):
         else:  # mask==1
             break
     # form new P:
-    for rdert in rdert_:
-        for param in rdert[0]:  # i, g, ga, ri, dy, dx, sin_da0, cos_da0, sin_da1, cos_da1
-            pass
-        '''
-        M+=ave_g-g; Ma+=ave_ga-ga; I+=ri; angle[0]+=angle[0]; angle[1]+=angle[1]
-        aangle = [sum(aangle_tuple) for aangle_tuple in zip(params.aangle, aangle)]
-        dert_.append(dert)
-        '''
-    P[:] = CP()
+    rP = CP(ptuple=Cptuple())
+    for rdert in rdert_:  
+        i, g, ga, ri, dy, dx, sin_da0, cos_da0, sin_da1, cos_da1 = rdert[0]          
+        rP.ptuple.M+=ave_g-g; rP.ptuple.Ma+=ave_ga-ga; rP.ptuple.I+=ri
+        rP.ptuple.angle[0]+=dy; rP.ptuple.angle[1]+=dx
+        for i, aangle in enumerate([sin_da0, cos_da0, sin_da1, cos_da1]): rP.ptuple.aangle[i] += aangle
+        rP.dert_ += [rdert]
+        
+    rP.ptuple.G = np.hypot(*rP.ptuple.angle)  # Dy, Dx
+    rP.ptuple.Ga = (rP.ptuple.aangle[1] + 1) + (rP.ptuple.aangle[3] + 1)  # Cos_da0, Cos_da1
+    rP.ptuple.L = len(rP.dert_)
+    rP.y = P.y
+    # rP.x0 = x  # not sure how to get x0 here
+    return rP
+
 
 def form_rdert(rx,ry, dert__t, mask__):
 
     # coord, distance of four int-coord derts, overlaid by float-coord rdert in dert__, int for indexing:
-    x1 = int(np.floor(rx)); dx1 = abs(rx - x1)
-    x2 = int(np.ceil(rx));  dx2 = abs(rx - x2)
-    y1 = int(np.floor(ry)); dy1 = abs(ry - y1)
-    y2 = int(np.ceil(ry));  dy2 = abs(ry - y1)
+    x1 = max(0, int(np.floor(rx))); dx1 = abs(rx - x1)
+    x2 = min(mask__.shape[1]-1, int(np.ceil(rx)));  dx2 = abs(rx - x2)
+    y1 = max(0, int(np.floor(ry))); dy1 = abs(ry - y1)
+    y2 = min(mask__.shape[0]-1, int(np.ceil(ry)));  dy2 = abs(ry - y1)
 
     # scale all dert params in proportion to inverted distance from rdert, sum(distances) = 1?
     # this is an approximation, square of rpixel is rotated, won't fully match derts
-    mask = mask__[x1][y1] * (1 - np.hypot(dx1, dy1)) \
-         + mask__[x1][y2] * (1 - np.hypot(dx1, dy2)) \
-         + mask__[x2][y1] * (1 - np.hypot(dx2, dy1)) \
-         + mask__[x2][y2] * (1 - np.hypot(dx2, dy2))
+    # numpy array indexing start with y and then x
+    mask = mask__[y1, x1] * (1 - np.hypot(dx1, dy1)) \
+         + mask__[y2, x1] * (1 - np.hypot(dx1, dy2)) \
+         + mask__[y1, x2] * (1 - np.hypot(dx2, dy1)) \
+         + mask__[y2, x2] * (1 - np.hypot(dx2, dy2))
     mask = int(mask)  # summed mask is fractional, round to 1|0
-    if mask:
+    if not mask:  # mask should be false here?
         ptuple = []
+        # i, g, ga, ri, dy, dx, day0, dax0, day1, dax1
         for dert__ in dert__t:  # 10 params in dert
-            param = dert__[x1][y1] * (1 - np.hypot(dx1, dy1)) \
-                  + dert__[x1][y2] * (1 - np.hypot(dx1, dy2)) \
-                  + dert__[x2][y1] * (1 - np.hypot(dx2, dy1)) \
-                  + dert__[x2][y2] * (1 - np.hypot(dx2, dy2))
+            param = dert__[y1, x1] * (1 - np.hypot(dx1, dy1)) \
+                  + dert__[y2, x1] * (1 - np.hypot(dx1, dy2)) \
+                  + dert__[y1, x2] * (1 - np.hypot(dx2, dy1)) \
+                  + dert__[y2, x2] * (1 - np.hypot(dx2, dy2))
             ptuple += [param]
 
         return [ptuple, [rx,ry], [x1,x2,y1,y2], [dx1,dx2,dy1,dy2]]  # ptuple, rcoords, overlaid coords, distances

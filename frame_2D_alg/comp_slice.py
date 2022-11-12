@@ -160,13 +160,13 @@ class CPP(CderP):  # derP params include P.ptuple
 # Functions:
 
 def comp_slice_root(blob, verbose=False):  # always angle blob, composite dert core param is v_g + iv_ga
-    from sub_recursion import sub_recursion_eval, rotate
+    from sub_recursion import sub_recursion_eval, rotate_P
 
     P__ = slice_blob(blob, verbose=False)  # cluster dir_blob.dert__ into 2D array of blob slices
     for P_ in P__:
-        for P in P_:
+        for i, P in enumerate(P_):  # i will be 0 here anyway, because each row has 1 P
             while P.ptuple.G * P.ptuple.angle[0] > ave_rotate:  # Dy is deviation from current horizontal axis
-                rotate(P, blob.dert__, blob.mask__)  # recursive reform Ps along new axes within blob.dert__
+                P_[i] = rotate_P(P, blob.dert__, blob.mask__)  # recursive reform Ps along new axes within blob.dert__
 
     comp_P_root(P__)  # rotated Ps are sparse or overlapping, so derPs are partly redundant, but not biased?
     # segments are stacks of (P,derP)s:
