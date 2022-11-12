@@ -6,7 +6,7 @@ from itertools import zip_longest
 from copy import copy, deepcopy
 import numpy as np
 from frame_blobs import CBlob, flood_fill, assign_adjacents
-from comp_slice import CPP,CP, CderP, form_seg_root,form_PP_root, comp_P, sum_players, slice_blob, ave_nsub, ave_splice, PP_aves
+from comp_slice import CPP,CP, CderP, Cptuple, form_seg_root,form_PP_root, comp_P, sum_players, slice_blob, ave_nsub, ave_splice, PP_aves
 from agg_recursion import agg_recursion_eval
 
 flip_ave = 10
@@ -118,128 +118,75 @@ def comp_P_der(P__):  # der+ sub_recursion in PP.P__, compare P.uplinks to P.dow
 
     return dderPs__
 
-# not revised, should be rotate():
-
-
 def rotate(P, dert__t, mask__):
 
-    angle = np.arctan2(P.ptuple.angle[0], P.ptuple.angle[1])  # angle of rotation, in rad
-    nparams = len(dert__t)  # number of params in dert, it should be 10 here
-    yn, xn = dert__t[0].shape[:2]
-    xcenter, ycenter = int(P.x0 + P.ptuple.L / 2), P.y  # center of P
-    mask_ = mask__[ycenter,:]
+    xcenter = int(P.x0 + P.ptuple.L / 2)  # center of P
+    ycenter = P.y
+    dy, dx = P.ptuple.angle[:]  # hypot(dy,dx) = 1: each increment adds one rotated dert/pixel to rdert_
+    # r = rotated:
+    rx = xcenter; ry = ycenter
+    rdert_ = [form_rdert(rx, ry, dert__t, mask__)]  # default init with central dert
+    # scan left:
+    x1,x2,y1,y2 = 1,1,1,1  # to start loop
+    while x1>0 and x2>0 and y1>0 and y2>0:
+        # next rotated coords:
+        rx-=dx; ry-=dy
+        rdert = form_rdert(rx, ry, dert__t, mask__)
+        if rdert:
+            x1,x2,y1,y2 = rdert[2]  # mapped coords
+            rdert_[0].insert(rdert)
+        else:  # mask==1
+            break
+    # scan right:
+    rx = xcenter; ry = ycenter; x1,x2,y1,y2 = 1,1,1,1; yn, xn = dert__t[0].shape[:2]  # to start loop
+    while x1<xn and x2<xn and y1<yn and y2<yn:
+        # next rotated coords:
+        rx+=dx; ry+=dy
+        rdert = form_rdert(rx,ry, dert__t, mask__)
+        if rdert:
+            x1,x2,y1,y2 = rdert[2]  # mapped coords
+            rdert_ += [rdert]
+        else:  # mask==1
+            break
+    # form new P:
+    for rdert in rdert_:
+        for param in rdert[0]:  # i, g, ga, ri, dy, dx, sin_da0, cos_da0, sin_da1, cos_da1
+            pass
+        '''
+        M+=ave_g-g; Ma+=ave_ga-ga; I+=ri; angle[0]+=angle[0]; angle[1]+=angle[1]
+        aangle = [sum(aangle_tuple) for aangle_tuple in zip(params.aangle, aangle)]
+        dert_.append(dert)
+        '''
+    P[:] = CP()
 
-    # r = rotated
-    # replace:
-    # Start from center [(x,y)], sequentially add (rx,ry), mapped (x,y)s, and fill-in values, in both directions, while not mask.
-    
-    # initialization
-    x_, rxs_, rys_ = [xcenter], [[xcenter]], [[ycenter]]
-    min_rx, min_ry, max_rx, max_ry = 0, 0, 0, 0
-    xdistances_, ydistances_ = [[0]], [[0]]
-    
-    cx = xcenter
-    while cx-1>0 and not mask_[cx-1] :  # scan left
-        cx -= 1;
-        rx = (np.cos(angle) * (cx-xcenter)) + xcenter  # y part of equation is removed bcause y and ycenter is same line
-        ry = (np.sin(angle) * (cx-xcenter)) + ycenter  
-        if rx % 1 !=  0:  # rotated x coordinate has decimal, get overlapping rxs
-            rxs = [int(np.floor(rx)),int(np.ceil(rx))]  # we need int for indexing, float can't be used for indexing
-            xdistances = [abs(rxs[0]-rx),abs(rxs[1]-rx)]
-        else:
-            rxs = [int(rx)]
-            xdistances = [0]
-        if ry % 1 !=  0:  # rotated y coordinate has decimal, get overlapping rys
-            rys = [int(np.floor(ry)),int(np.ceil(ry))]
-            ydistances = [abs(rys[0]-ry),abs(rys[1]-ry)]
-        else:
-            rys = [int(ry)]
-            ydistances = [0]
-        # pack rotated xs and distances
-        x_.insert(0, cx); rxs_.insert(0, rxs); rys_.insert(0, rys)
-        xdistances_.insert(0, xdistances); ydistances_.insert(0, ydistances) 
-        min_rx = min(rxs+[min_rx]); min_ry = min(rys+[min_ry])  # get min to scale negative to positive
-        max_rx = max(rxs+[max_rx]); max_ry = max(rys+[max_ry])  # get max to init rdert_
-        
-        
-    cx = xcenter
-    while cx+1<xn and not mask_[cx-1] :  # scan right
-        cx += 1;
-        rx = (np.cos(angle) * (cx-xcenter)) + xcenter  # y part of equation is removed bcause y and ycenter is same line
-        ry = (np.sin(angle) * (cx-xcenter)) + ycenter  
-        if rx % 1 !=  0:  # rotated x coordinate has decimal, get overlapping rxs
-            rxs = [int(np.floor(rx)),int(np.ceil(rx))]
-            xdistances = [abs(rxs[0]-rx),abs(rxs[1]-rx)]
-        else:
-            rxs = [int(rx)]
-            xdistances = [0]
-        if ry % 1 !=  0:  # rotated y coordinate has decimal, get overlapping rys
-            rys = [int(np.floor(ry)),int(np.ceil(ry))]
-            ydistances = [abs(rys[0]-ry),abs(rys[1]-ry)]
-        else:
-            rys = [int(ry)]
-            ydistances = [0]
-        # pack rotated xs and distances
-        x_.append(cx); rxs_.append(rxs); rys_.append(rys)
-        xdistances_.append(xdistances); ydistances_.append(ydistances) 
-        min_rx = min(rxs+[min_rx]); min_ry = min(rys+[min_ry])  # get min to scale negative to positive
-        max_rx = max(rxs+[max_rx]); max_ry = max(rys+[max_ry])  # get max to init rdert_
-    
-    # we need 2 steps here because we need get all rxs and rys first before we can get the min and scale coordinate from negative to positive
-    # scale coordinate from negative to positive
-    for i, rxs in enumerate(rxs_):
-        rxs_[i] = [rx-min_rx for rx in rxs]
-    for i, rys in enumerate(rys_):
-        rys_[i] = [ry-min_ry for ry in rys]   
+def form_rdert(rx,ry, dert__t, mask__):
 
-    max_rx -= min_rx; max_ry -= min_ry  # scale size of rdert__ and rmask__ too
-    rxcenter = xcenter - min_rx; rycenter = ycenter - min_ry  # scale center coordinate
-    ryn, rxn = max_ry+1, max_rx+1
-    
-    # init rotated rdert__ and rmask__
-    rmask__ = np.full((ryn, rxn), fill_value=True, dtype="bool")
-    rdert__t = [ np.zeros((ryn, rxn), dtype="uint8") for _ in range(nparams)]
+    # coord, distance of four int-coord derts, overlaid by float-coord rdert in dert__, int for indexing:
+    x1 = int(np.floor(rx)); dx1 = abs(rx - x1)
+    x2 = int(np.ceil(rx));  dx2 = abs(rx - x2)
+    y1 = int(np.floor(ry)); dy1 = abs(ry - y1)
+    y2 = int(np.ceil(ry));  dy2 = abs(ry - y1)
 
-    for x, rxs, rys, xdistances, ydistances in zip(x_, rxs_, rys_, xdistances_, ydistances_):
-        # all mapped area's mask is False
-        for ry, ydistance in zip(rys, ydistances):
-            for rx, xdistance in zip(rxs, xdistances):
-                # get rotated mask__
-                rmask__[ry,rx] = False
-        
-                # distance ratio, using average of x and y distance
-                # the higher distance, the lower ratio
-                dratio = 1- ((xdistance + ydistance) / 2)
-        
-                # get rotated dert__
-                for i in range(nparams):
-                    rdert__t[i][ry, rx] += dert__t[i][ycenter, x] * dratio  # each value = dert value * dratio
+    # scale all dert params in proportion to inverted distance from rdert, sum(distances) = 1?
+    # this is an approximation, square of rpixel is rotated, won't fully match derts
+    mask = mask__[x1][y1] * (1 - np.hypot(dx1, dy1)) \
+         + mask__[x1][y2] * (1 - np.hypot(dx1, dy2)) \
+         + mask__[x2][y1] * (1 - np.hypot(dx2, dy1)) \
+         + mask__[x2][y2] * (1 - np.hypot(dx2, dy2))
+    mask = int(mask)  # summed mask is fractional, round to 1|0
+    if mask:
+        ptuple = []
+        for dert__ in dert__t:  # 10 params in dert
+            param = dert__[x1][y1] * (1 - np.hypot(dx1, dy1)) \
+                  + dert__[x1][y2] * (1 - np.hypot(dx1, dy2)) \
+                  + dert__[x2][y1] * (1 - np.hypot(dx2, dy1)) \
+                  + dert__[x2][y2] * (1 - np.hypot(dx2, dy2))
+            ptuple += [param]
 
-    # below not fully updated
-    rmask_ = rmask__[rycenter,:]
-    rdert_ = []
-    dy, dx = P.ptuple.angle[:]
-    cx = rxcenter; cy = rycenter
-    while cx-dx>0 and not rmask_[cx-dx]:  # scan left
-        cx -= dx
-        # compute next rx,ry, then mapped xs,ys, then fill params and mask
-        rdert_.insert(0, [rdert__[cy,cx] for rdert__ in rdert__t] )  # pack left
+        return [ptuple, [rx,ry], [x1,x2,y1,y2], [dx1,dx2,dy1,dy2]]  # ptuple, rcoords, overlaid coords, distances
+    else:
+        return []  # rdert is masked: not in blob
 
-    cx = rxcenter
-    while cx+dx<rxn and not rmask_[cx+dx]:  # scan right
-        cx += dx
-        # compute next rx,ry, then mapped xs,ys, then fill params and mask
-        rdert_.append([rdert__[cy,cx] for rdert__ in rdert__t])  # pack right
-
-    # form P with new_dert_ and new_mask_ here, reuse from comp_slice?
-
-def dir_eval(Dy, Dx):  # blob direction strength eval
-
-    G = np.hypot(Dy,Dx)
-    rD = Dy / Dx if Dx else 2 * Dy
-    if abs(G * rD) < ave_dir_val:
-        return True
-    else: return False
 
 def merge_blobs(blob, adj_blob, strong_adj_blobs):  # merge blob and adj_blob by summing their params and combining dert__ and mask__
 
