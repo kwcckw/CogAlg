@@ -135,6 +135,7 @@ class CPP(CderP):  # derP params include P.ptuple
     xn = int
     y0 = int
     yn = int
+    daxis = int  # sum of final dangle in rotate_P
     rng = lambda: 1  # rng starts with 1
     rdn = int  # for PP evaluation, recursion count + Rdn / nderPs
     Rdn = int  # for accumulation only
@@ -167,7 +168,7 @@ def comp_slice_root(blob, verbose=False):  # always angle blob, composite dert c
             while P.ptuple.G * dangle > ave_rotate:
                 _angle = P.ptuple.angle
                 rotate_P(P, blob.dert__, blob.mask__)  # recursive reform P along new axis in blob.dert__
-                mangle, dangle = comp_angle(_angle, P.ptuple.angle, rn=1)
+                mangle, dangle = comp_angle(_angle, P.ptuple.angle)
             P.daxis = dangle  # final dangle, combine with dangle in comp_ptuple to orient params
 
     comp_P_root(P__)  # rotated Ps are sparse or overlapping, so derPs are partly redundant, but results are not biased?
@@ -396,13 +397,15 @@ def sum2seg(seg_Ps, fd, fds):  # sum params of vertically connected Ps into segm
     miss_downlink_ = [ddownlink for ddownlink in ddownlink_t[fd] if ddownlink not in downlink_]
     # seg rdn: up cost to init, up+down cost for comp_seg eval, in 1st agg_recursion?
     # P rdn is up+down M/n, but P is already formed and compared?
-    seg = CPP(x0=seg_Ps[0].x0, P__= seg_Ps, uplink_layers=[miss_uplink_], downlink_layers = [miss_downlink_], y0 = seg_Ps[0].y)
+    seg = CPP(x0=seg_Ps[0].x0, P__= seg_Ps, uplink_layers=[miss_uplink_], downlink_layers = [miss_downlink_], y0 = seg_Ps[0].y0)
     lplayer = []
     for P in seg_Ps[:-1]:
         derP = P.uplink_layers[-1][fd][0]
         sum_ptuples(lplayer, derP.lplayer[fd])  # not comp derP.players, fd only
         accum_derP(seg, derP, fd)  # derP = P.uplink_layers[-1][0]
         P.roott[fd] = seg
+        seg.daxis += P.daxis
+        # i just realized we didn't accumulate any P to seg here, except the last P?
         for derP in P.uplink_layers[-2]:
             if derP not in P.uplink_layers[-1][fd]:
                 seg.nvalt[fd] += derP.valt[fd]  # -ve links in full links, not in +ve links
@@ -453,6 +456,7 @@ def sum2PP(PP_segs, base_rdn, fd):  # sum PP_segs into PP
         PP.y0 = min(seg.y0, PP.y0)
         PP.yn = max(seg.yn, PP.yn)
         PP.Rdn += seg.rdn  # base_rdn + PP.Rdn / PP: recursion + forks + links: nderP / len(P__)?
+        PP.daxis += seg.daxis
         PP.derP_cnt += len(seg.P__[-1].uplink_layers[-1][fd])  # redundant derivatives of the same P
         # only PPs are sign-complemented, seg..[not fd]s are empty:
         PP.valt[fd] += seg.valt[fd]
@@ -556,10 +560,13 @@ def comp_ptuple(_params, params, daxis):  # compare lateral or vertical tuples, 
         comp("aangle", _params.aangle, params.aangle*rn / daxis, dval, mval, dtuple, mtuple, ave_daangle, finv=0)
     # both:
     comp("I", _params.I, params.I*rn, dval, mval, dtuple, mtuple, ave_dI, finv=flatuple)  # inverse match if latuple
-    comp("x", _params.x, params.x*rn, dval, mval, dtuple, mtuple, ave_dx, finv=flatuple)
-    comp("L", _params.L, params.L*rn / daxis, dval, mval, dtuple, mtuple, ave_L, finv=0)
     comp("M", _params.M, params.M*rn / daxis, dval, mval, dtuple, mtuple, ave_M, finv=0)
     comp("Ma",_params.Ma, params.Ma*rn / daxis, dval, mval, dtuple, mtuple, ave_Ma, finv=0)
+
+    '''
+    comp("x", _params.x, params.x*rn, dval, mval, dtuple, mtuple, ave_dx, finv=flatuple)
+    comp("L", _params.L, params.L*rn / daxis, dval, mval, dtuple, mtuple, ave_L, finv=0)
+    '''
 
     mtuple.val = mval; dtuple.val = dval
 
@@ -575,7 +582,7 @@ def comp(param_name, _param, param, dval, mval, dtuple, mtuple, ave, finv):
     setattr(dtuple, param_name, d)  # dtuple.param_name = d
     setattr(mtuple, param_name, m)  # mtuple.param_name = m
 
-def comp_angle(_angle, angle, rn):
+def comp_angle(_angle, angle, rn=1):
 
     _Dy, _Dx = _angle
     Dy, Dx = angle

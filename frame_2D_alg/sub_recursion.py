@@ -125,21 +125,25 @@ def rotate_P(P, dert__t, mask__):
     rx = xcenter; ry = ycenter  # r = rotated
     L = P.ptuple.L; Dy, Dx = P.ptuple.angle
     dy = Dy/L; dx = Dx/L  # hypot(dy,dx)=1: each dx,dy adds one rotated dert|pixel to rdert_
+    yn, xn = dert__t[0].shape[:2]  # to start scan right
 
     rdert_ = [P.dert_[int( len(P.dert_)/2)]]  # init with central dert
     rx-=dx; ry-=dy; x1,x2,y1,y2 = 1,1,1,1  # to start scan left
+    Px = xcenter; Py = ycenter  # init 1st Px and Py, in case while loop below is false at 1st iteration
+    
     # scan left:
-    while x1>0 and x2>0 and y1>0 and y2>0 and rx>=0 and ry>=0:
+    while x1>0 and x2>0 and y1>0 and y2>0 and rx>=0 and ry>=0 and np.ceil(rx)<xn and np.ceil(ry)<yn:  # Is it possible to get negative dx and dy here? If yes we need the extra evaluations here.
         rdert = form_rdert(rx, ry, dert__t, mask__)
         if rdert:
             rx-=dx; ry-=dy; x1,x2,y1,y2 = rdert[1]  # mapped coords
             rdert_.insert(0, rdert[0])  # ptuple
         else:  # mask==1
+            Px = xcenter; Py = ycenter
             break
-    Px = rx; Py = ry  # left-most
-    rx=xcenter+dx; ry=ycenter+dy; x1,x2,y1,y2 = 1,1,1,1; yn, xn = dert__t[0].shape[:2]  # to start scan right
+    
+    rx=xcenter+dx; ry=ycenter+dy; x1,x2,y1,y2 = 1,1,1,1
     # scan right:
-    while x1<xn and x2<xn and y1<yn and y2<yn and rx<xn and ry<yn:
+    while x1<xn and x2<xn and y1<yn and y2<yn and np.ceil(rx)<xn and np.ceil(ry)<yn and rx>=0 and ry>=0:  # rx and ry has decimal, so ceil of decimal might get value == xn or yn. For example. rx=9.9, xn = 10, so rx < xn is true, but ceil(rx) < xn is false
         rdert = form_rdert(rx,ry, dert__t, mask__)
         if rdert:
             rx+=dx; ry+=dy; x1,x2,y1,y2 = rdert[1]  # mapped coords
@@ -149,12 +153,12 @@ def rotate_P(P, dert__t, mask__):
     # rP:
     # initialization:
     rdert = rdert_[0]  # get rdert's params
-    _, G, Ga, I, Dy, Dx, Sin_da0, Cos_da0, Sin_da1, Cos_da1 = rdert; M=ave_g-G; Ma=ave_ga-Ga; ndert_=[rdert[0]]
+    _, G, Ga, I, Dy, Dx, Sin_da0, Cos_da0, Sin_da1, Cos_da1 = rdert; M=ave_g-G; Ma=ave_ga-Ga; ndert_=[rdert]
     # accumulation:
     for rdert in rdert_[1:]:
-        _, g, ga, i, dy, dx, sin_da0, cos_da0, sin_da1, cos_da1 = rdert[0]
+        _, g, ga, i, dy, dx, sin_da0, cos_da0, sin_da1, cos_da1 = rdert
         I+=i; M+=ave_g-g; Ma+=ave_ga-ga; Dy+=dy; Dx+=dx; Sin_da0+=sin_da0; Cos_da0+=cos_da0; Sin_da1+=sin_da1; Cos_da1+=cos_da1
-        ndert_ += [rdert[0]]
+        ndert_ += [rdert]
     G = np.hypot(Dy,Dx)
     Ga = (Cos_da0 + 1) + (Cos_da1 + 1)
     ptuple = Cptuple(I=I, M=M, G=G, Ma=Ma, Ga=Ga, angle=(Dy,Dx), aangle=(Sin_da0, Cos_da0, Sin_da1, Cos_da1))  # no n,val,L
@@ -368,16 +372,16 @@ def splice_2dir_blobs(_blob, blob):
 
 def append_P(P__, P):  # pack P into P__ in top down sequence
 
-    current_ys = [P_[0].y for P_ in P__]  # list of current-layer seg rows
-    if P.y in current_ys:
-        P__[current_ys.index(P.y)].append(P)  # append P row
-    elif P.y > current_ys[0]:  # P.y > largest y in ys
+    current_ys = [P_[0].y0 for P_ in P__]  # list of current-layer seg rows
+    if P.y0 in current_ys:
+        P__[current_ys.index(P.y0)].append(P)  # append P row
+    elif P.y0 > current_ys[0]:  # P.y > largest y in ys
         P__.insert(0, [P])
-    elif P.y < current_ys[-1]:  # P.y < smallest y in ys
+    elif P.y0 < current_ys[-1]:  # P.y < smallest y in ys
         P__.append([P])
-    elif P.y < current_ys[0] and P.y > current_ys[-1]:  # P.y in between largest and smallest value
-        for i, y in enumerate(current_ys):  # insert y if > next y
-            if P.y > y: P__.insert(i, [P])  # PP.P__.insert(P.y - current_ys[-1], [P])
+    elif P.y0 < current_ys[0] and P.y0 > current_ys[-1]:  # P.y in between largest and smallest value
+        for i, y0 in enumerate(current_ys):  # insert y if > next y
+            if P.y0 > y: P__.insert(i, [P])  # PP.P__.insert(P.y - current_ys[-1], [P])
 
 
 def copy_P(P, iPtype=None):  # Ptype =0: P is CP | =1: P is CderP | =2: P is CPP | =3: P is CderPP | =4: P is CaggPP
@@ -532,5 +536,5 @@ def CPP2graph(PP, fseg, Cgraph):
     plevel = [caTree, valt]
     x0 = PP.x0; xn = PP.xn; y0 = PP.y0; yn = PP.yn
 
-    return Cgraph(node_=PP.P__, plevels=[plevel], angle=(yn-y0,xn-x0), sparsity=1.0, valt=valt, fds=[1], x0=x0, xn=xn, y0=y0, yn=yn)
+    return Cgraph(node_=PP.P__, plevels=[plevel], daxis=PP.daxis, angle=(yn-y0,xn-x0), sparsity=1.0, valt=valt, fds=[1], x0=x0, xn=xn, y0=y0, yn=yn)
     # 1st plevel fd is always der+?
