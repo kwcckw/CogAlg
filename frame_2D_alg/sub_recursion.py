@@ -120,54 +120,46 @@ def comp_P_der(P__):  # der+ sub_recursion in PP.P__, compare P.uplinks to P.dow
 
 def rotate_P(P, dert__t, mask__):
 
-    xcenter = int(P.x0 + P.ptuple.L / 2)  # center of P
-    ycenter = P.y0
+    xcenter = int(P.x0 + len(P.dert_) / 2)  # center of P
+    ycenter = int(P.y0 + len(P.dert_) / 2) if P.daxis else P.y0  # horizontal P
     rx = xcenter; ry = ycenter  # r = rotated
-    L = P.ptuple.L; Dy, Dx = P.ptuple.angle[:]
+    L = P.ptuple.L; Dy, Dx = P.ptuple.angle
     dy = Dy/L; dx = Dx/L  # hypot(dy,dx)=1: each dx,dy adds one rotated dert|pixel to rdert_
-    
-    # init with central dert:
-    rdert_ = [[P.dert_[int(L/2)],[],[]]]  # empty overlaid coords and distances?
-    x1,x2,y1,y2 = 1,1,1,1  # n:next, to start scan left
-    
-    if rx-dx >= 0 and ry-dy >=0:
-        # scan left:
-        while x1>0 and x2>0 and y1>0 and y2>0 and rx-dx>=0 and ry-dy>=0:
-            rdert = form_rdert(rx-dx, ry-dy, dert__t, mask__)
-            if rdert:
-                rx -= dx; ry -= dy  # update next rx, ry( i think this is better instead of packing nrx and nry in rdert?)
-                x1,x2,y1,y2 = rdert[1]  # mapped coords
-                rdert_.insert(0, rdert)  # exclude nrx,nry
-            else:  # mask==1
-                break
-    else:
-        Px = rx; Py = ry  # left-most
 
-    rx = xcenter; ry = ycenter; x1,x2,y1,y2 = 1,1,1,1; yn, xn = dert__t[0].shape[:2]  # to start scan right
-    # scan right:
-    while x1<xn and x2<xn and y1<yn and y2<yn and rx<xn and rx<yn:
+    rdert_ = [P.dert_[int( len(P.dert_)/2)]]  # init with central dert
+    rx-=dx; ry-=dy; x1,x2,y1,y2 = 1,1,1,1  # to start scan left
+    # scan left:
+    while x1>0 and x2>0 and y1>0 and y2>0 and rx>=0 and ry>=0:
         rdert = form_rdert(rx, ry, dert__t, mask__)
         if rdert:
-            rx += dx; ry += dy
-            x1,x2,y1,y2 = rdert[1]  # mapped coords
-            rdert_ += [rdert]  # exclude nrx,nry
+            rx-=dx; ry-=dy; x1,x2,y1,y2 = rdert[1]  # mapped coords
+            rdert_.insert(0, rdert[0])  # ptuple
+        else:  # mask==1
+            break
+    Px = rx; Py = ry  # left-most
+    rx=xcenter+dx; ry=ycenter+dy; x1,x2,y1,y2 = 1,1,1,1; yn, xn = dert__t[0].shape[:2]  # to start scan right
+    # scan right:
+    while x1<xn and x2<xn and y1<yn and y2<yn and rx<xn and ry<yn:
+        rdert = form_rdert(rx,ry, dert__t, mask__)
+        if rdert:
+            rx+=dx; ry+=dy; x1,x2,y1,y2 = rdert[1]  # mapped coords
+            rdert_ += [rdert[0]]  # ptuple
         else:  # mask==1
             break
     # rP:
     # initialization:
-    rdert = rdert_[0][0]  # get rdert's params
-    _, G, Ga, I, Dy, Dx, Sin_da0, Cos_da0, Sin_da1, Cos_da1 = rdert
-    M=ave_g-G; Ma=ave_ga-Ga; nrdert_=[rdert]
+    rdert = rdert_[0]  # get rdert's params
+    _, G, Ga, I, Dy, Dx, Sin_da0, Cos_da0, Sin_da1, Cos_da1 = rdert; M=ave_g-G; Ma=ave_ga-Ga; ndert_=[rdert[0]]
     # accumulation:
     for rdert in rdert_[1:]:
         _, g, ga, i, dy, dx, sin_da0, cos_da0, sin_da1, cos_da1 = rdert[0]
         I+=i; M+=ave_g-g; Ma+=ave_ga-ga; Dy+=dy; Dx+=dx; Sin_da0+=sin_da0; Cos_da0+=cos_da0; Sin_da1+=sin_da1; Cos_da1+=cos_da1
-        nrdert_ += [rdert[0]]  # has overlaid coords and distances
+        ndert_ += [rdert[0]]
     G = np.hypot(Dy,Dx)
     Ga = (Cos_da0 + 1) + (Cos_da1 + 1)
-    ptuple = Cptuple(I=I, M=M, G=G, Ma=Ma, Ga=Ga, angle=(Dy,Dx), aangle=(Sin_da0, Cos_da0, Sin_da1, Cos_da1), L=len(nrdert_))  # no n,val
+    ptuple = Cptuple(I=I, M=M, G=G, Ma=Ma, Ga=Ga, angle=(Dy,Dx), aangle=(Sin_da0, Cos_da0, Sin_da1, Cos_da1))  # no n,val,L
     # replace P:
-    P.ptuple=ptuple; P.dert_=nrdert_; P.axis=ptuple.angle[0] / ptuple.L; P.y0=Py; P.x0=Px
+    P.ptuple=ptuple; P.dert_=ndert_; P.y0=Py; P.x0=Px
 
 
 def form_rdert(rx,ry, dert__t, mask__):
@@ -193,7 +185,7 @@ def form_rdert(rx,ry, dert__t, mask__):
                   + dert__[y1, x2] * (1 - np.hypot(dx2, dy1)) \
                   + dert__[y2, x2] * (1 - np.hypot(dx2, dy2))
             ptuple += [param]
-        return [ptuple, [x1,x2,y1,y2], [dx1,dx2,dy1,dy2]]  # rcoords, ptuple, overlaid coords, distances (we didn't use this distance now?)
+        return [ptuple, [x1,x2,y1,y2]]  # overlaid coords, no rcoords,distances
     else:
         return []  # rdert is masked: not in blob
 
