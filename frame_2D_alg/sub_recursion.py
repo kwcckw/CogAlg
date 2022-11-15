@@ -7,7 +7,6 @@ from copy import copy, deepcopy
 import numpy as np
 from frame_blobs import CBlob, flood_fill, assign_adjacents
 from comp_slice import *
-from agg_recursion import agg_recursion_eval
 
 flip_ave = 10
 ave_dir_val = 50
@@ -134,22 +133,24 @@ def rotate_P_(P__, dert__, mask__):  # rotate each P to align it with direction 
 def rotate_P(P, dert__t, mask__):
 
     L = len(P.dert_)
-    if P.daxis: # rotated P, use old angle
-        ycenter = int(P.y0 + P.angle[0]/2)
-        xcenter = int(P.x0 + P.angle[1]/2)
+    if P.daxis != None: # rotated P, use old angle
+        ycenter = int(P.y0 + P.ptuple.angle[0]/2)
+        xcenter = int(P.x0 + P.ptuple.angle[1]/2)
     else:  # horizontal P, P.daxis==0
         ycenter = P.y0
         xcenter = int(P.x0 + L/2)
     Dy, Dx = P.ptuple.angle
     dy = Dy/L; dx = Dx/L  # hypot(dy,dx)=1: each dx,dy adds one rotated dert|pixel to rdert_
-    yn, xn = dert__t[0].shape[:2]
-    if dy<0: ymin =-yn; ymax = 0
-    else:    ymin = 0; ymax = yn
+    yn, xn = dert__t[0].shape[:2] 
+    # i think we can't use this , when dy <0,  we evaluate ry >= -yn, we will still getting negative value
+    # if dy<0: ymin =-yn; ymax = 0
+    # else:    ymin = 0; ymax = yn
+
     # r = rotated:
     rdert_ = [P.dert_[int(L/2)]]  # init with central dert
     rx=xcenter-dx; ry=ycenter-dy; x1,x2,y1,y2 = 1,1,1,1  # to start scan left
     # scan left:
-    while x1>0 and x2>0 and y1>0 and y2>0 and rx>=0 and ry>=ymin:
+    while x1>0 and x2>0 and y1>0 and y2>0 and rx>=0 and ry>=0 and np.ceil(rx)<xn and np.ceil(ry)<yn:
         rdert = form_rdert(rx, ry, dert__t, mask__)
         if rdert:
             rx-=dx; ry-=dy; x1,x2,y1,y2 = rdert[1]  # next rx, next ry, mapped coords
@@ -159,7 +160,7 @@ def rotate_P(P, dert__t, mask__):
     P.x0 = rx+dx; P.y0 = ry+dy  # left-most, revert from next rx, next ry
     rx=xcenter+dx; ry=ycenter+dy; x1,x2,y1,y2 = 1,1,1,1  # to start scan right
     # scan right:
-    while x1<xn and x2<xn and y1<yn and y2<yn and np.ceil(rx)<xn and np.ceil(ry)<ymax:
+    while x1<xn and x2<xn and y1<yn and y2<yn and rx>=0 and ry>=0 and np.ceil(rx)<xn and np.ceil(ry)<yn:
         rdert = form_rdert(rx,ry, dert__t, mask__)
         if rdert:
             rx+=dx; ry+=dy; x1,x2,y1,y2 = rdert[1]  # mapped coords
@@ -171,7 +172,7 @@ def rotate_P(P, dert__t, mask__):
     rdert = rdert_[0]; _, G, Ga, I, Dy, Dx, Sin_da0, Cos_da0, Sin_da1, Cos_da1 = rdert; M=ave_g-G; Ma=ave_ga-Ga; ndert_=[rdert]
     # accumulation:
     for rdert in rdert_[1:]:
-        _, g, ga, i, dy, dx, sin_da0, cos_da0, sin_da1, cos_da1 = rdert[0]
+        _, g, ga, i, dy, dx, sin_da0, cos_da0, sin_da1, cos_da1 = rdert
         I+=i; M+=ave_g-g; Ma+=ave_ga-ga; Dy+=dy; Dx+=dx; Sin_da0+=sin_da0; Cos_da0+=cos_da0; Sin_da1+=sin_da1; Cos_da1+=cos_da1
         ndert_ += [rdert]
     # re-form gradients:

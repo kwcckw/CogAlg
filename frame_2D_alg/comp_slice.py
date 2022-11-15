@@ -89,7 +89,7 @@ class Cptuple(ClusterStructure):  # bottom-layer tuple of lateral or vertical pa
 class CP(ClusterStructure):  # horizontal blob slice P, with vertical derivatives per param if derP, always positive
 
     ptuple = object  # I, M, Ma, G, Ga, angle(Dy, Dx), aangle( Sin_da0, Cos_da0, Sin_da1, Cos_da1), n, val
-    daxis = float  # final dangle in rotate_P
+    daxis = lambda: None  # final dangle in rotate_P
     x0 = int
     y0 = int  # for vertical gap in PP.P__
     rdn = int  # blob-level redundancy, ignore for now

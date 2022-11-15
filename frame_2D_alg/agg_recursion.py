@@ -131,8 +131,7 @@ def comp_G_(G_, fder):  # cross-comp Gs (patterns of patterns): Gs, derGs, or se
 
             if mVal > ave_ext * ((sum(_G.valt)+sum(G.valt)) / (2*sum(G_aves))):  # max depends on combined G value
                 
-                # should we use the dang from comp_angle as daxis? Or we need parse it all the way from P-> PP -> graph? 
-                mplevel, dplevel = comp_plevels(_G.plevels, G.plevels, _G.fds, G.fds, derext, dang)
+                mplevel, dplevel = comp_plevels(_G.plevels, G.plevels, _G.fds, G.fds, derext)
                 valt = [mplevel[1] - ave_Gm, dplevel[1] - ave_Gd]  # norm valt: *= link rdn?
                 derG = Cgraph(  # or mean x0=_x+dx/2, y0=_y+dy/2:
                     plevels=[mplevel,dplevel], y0=min(G.y0,_G.y0), yn=max(G.yn,_G.yn), x0=min(G.x0,_G.x0), xn=max(G.xn,_G.xn),
@@ -347,7 +346,7 @@ def add_alts(cplevel, aplevel):
     player = caforks, valt
     cafork = ptuples, valt      
 '''
-def comp_plevels(_plevels, plevels, _fds, fds, derext, daxis):
+def comp_plevels(_plevels, plevels, _fds, fds, derext):
 
     mplevel, dplevel = [],[]  # fd plevels, each cis+alt, same as new_caT
     mval, dval = 0,0  # m,d in new plevel, else c,a
@@ -362,7 +361,7 @@ def comp_plevels(_plevels, plevels, _fds, fds, derext, daxis):
         for _caFork, caFork in zip(_caForks, caForks):  # bottom-up alt+, pass-through fds
             mplayers, dplayers = [],[]; mlval, dlval = 0,0
             if _caFork and caFork:
-                mplayer, dplayer = comp_players(_caFork, caFork, derext, daxis)
+                mplayer, dplayer = comp_players(_caFork, caFork, derext)
                 mplayers += [mplayer]; dplayers += [dplayer]
                 mlval += mplayer[1]; dlval += dplayer[1]
             else:
@@ -378,7 +377,7 @@ def comp_plevels(_plevels, plevels, _fds, fds, derext, daxis):
     return [mplevel,mval], [dplevel,dval]  # always single new plevel
 
 
-def comp_players(_caFork, caFork, derext, daxis):  # unpack and compare layers from der+
+def comp_players(_caFork, caFork, derext):  # unpack and compare layers from der+
 
     mplayer, dplayer = [], []  # flat lists of ptuples, nesting decoded by mapping to lower levels
     mVal, dVal = 0,0  # m,d in new player, else c,a
@@ -392,7 +391,7 @@ def comp_players(_caFork, caFork, derext, daxis):  # unpack and compare layers f
             if _cafork and cafork:
                 _ptuples,_ = _cafork; ptuples,_ = cafork  # no comp valt?
                 if _ptuples and ptuples:
-                    mtuples, dtuples = comp_ptuples(_ptuples, ptuples, _fds, fds, derext, daxis)
+                    mtuples, dtuples = comp_ptuples(_ptuples, ptuples, _fds, fds, derext)
                     mTree += [mtuples]; dTree += [dtuples]
                     mtval += mtuples[1]; dtval += dtuples[1]
                 else:
@@ -406,14 +405,14 @@ def comp_players(_caFork, caFork, derext, daxis):  # unpack and compare layers f
     return [mplayer,mVal], [dplayer,dVal]  # single new lplayer
 
 
-def comp_ptuples(_Ptuples, Ptuples, _fds, fds, derext, daxis):  # unpack and compare der layers, if any from der+
+def comp_ptuples(_Ptuples, Ptuples, _fds, fds, derext):  # unpack and compare der layers, if any from der+
 
     mPtuples, dPtuples = [[],0], [[],0]  # [list, val] each
 
     for _Ptuple, Ptuple, _fd, fd in zip(_Ptuples, Ptuples, _fds, fds):  # bottom-up der+, Ptuples per player, pass-through fds
         if _fd == fd:
 
-            mtuple, dtuple = comp_ptuple(_Ptuple[0], Ptuple[0], daxis)  # init Ptuple = ptuple, [[[[[[]]]]]]
+            mtuple, dtuple = comp_ptuple(_Ptuple[0], Ptuple[0], daxis=derext[1][1])  # init Ptuple = ptuple, [[[[[[]]]]]]
             mext___, dext___ = [[],0], [[],0]
             for _ext__, ext__ in zip(_Ptuple[1][0], Ptuple[1][0]):  # ext__: extuple level
                 mext__, dext__ = [[],0], [[],0]
