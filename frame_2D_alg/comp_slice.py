@@ -135,7 +135,6 @@ class CPP(CderP):  # derP params include P.ptuple
     xn = int
     y0 = int
     yn = int
-    daxis = int  # sum of final dangle in rotate_P
     rng = lambda: 1  # rng starts with 1
     rdn = int  # for PP evaluation, recursion count + Rdn / nderPs
     Rdn = int  # for accumulation only
@@ -159,28 +158,20 @@ class CPP(CderP):  # derP params include P.ptuple
 # Functions:
 
 def comp_slice_root(blob, verbose=False):  # always angle blob, composite dert core param is v_g + iv_ga
-    from sub_recursion import sub_recursion_eval, rotate_P
 
-    P__ = slice_blob(blob, verbose=False)  # cluster blob.dert__ into 2D array of blob slices
-    for P_ in P__:
-        for P in P_:
-            dangle = P.ptuple.angle[0] / len(P.dert_)  # dy: deviation from horizontal axis
-            while P.ptuple.G * dangle > ave_rotate:
-                _angle = P.ptuple.angle
-                rotate_P(P, blob.dert__, blob.mask__)  # recursive reform P along new axis in blob.dert__
-                mangle, dangle = comp_angle(_angle, P.ptuple.angle)
-            P.daxis = dangle  # final dangle, combine with dangle in comp_ptuple to orient params
+    from sub_recursion import sub_recursion_eval, rotate_P_
+    P__ = slice_blob(blob, verbose=False)  # cluster blob.dert__ in 2D array of blob slices
+    rotate_P_(P__, blob.dert__, blob.mask__)  # rotate each P to align it with direction of P gradient
 
-    comp_P_root(P__)  # rotated Ps are sparse or overlapping, so derPs are partly redundant, but results are not biased?
-    # segments are stacks of (P,derP)s:
+    comp_P_root(P__)  # rotated Ps are sparse or overlapping: derPs are partly redundant, but results are not biased?
+    # segment is stack of (P,derP)s:
     segm_ = form_seg_root([copy(P_) for P_ in P__], fd=0, fds=[0])  # shallow copy: same Ps in different lists
     segd_ = form_seg_root([copy(P_) for P_ in P__], fd=1, fds=[0])  # initial latuple fd=0
-    # PPs are graphs of segs:
+    # PP is graph of segs:
     blob.PPm_, blob.PPd_ = form_PP_root((segm_, segd_), base_rdn=2)
-    # intra PP:
-    sub_recursion_eval(blob)  # add rlayers, dlayers, seg_levels to select PPs, sum M,G
-    # cross PP:
-    agg_recursion_eval(blob, [copy(blob.PPm_), copy(blob.PPd_)])  # Cgraph conversion doesn't replace PPs?
+    # micro and macro recursion:
+    sub_recursion_eval(blob)  # intra PP, add rlayers, dlayers, seg_levels to select PPs, sum M,G
+    agg_recursion_eval(blob, [copy(blob.PPm_), copy(blob.PPd_)])  # cross PP, Cgraph conversion doesn't replace PPs?
 
 
 def slice_blob(blob, verbose=False):  # form blob slices nearest to slice Ga: Ps, ~1D Ps, in select smooth edge (high G, low Ga) blobs
@@ -246,8 +237,13 @@ def comp_P_root(P__):  # vertically compares y-adjacent and x-overlapping Ps: bl
 def comp_P(_P, P):  # forms vertical derivatives of params per P in _P.uplink, conditional ders from norm and DIV comp
 
     Daxis = _P.daxis - P.daxis
-    Daxis *= np.hypot(_P.x0-len(_P.dert_)-(P.x0-len(P.dert_)), 1)  # project param orthogonal to blob axis, by dx
-
+    dx = _P.x0-len(_P.dert_)/2 - P.x0-len(P.dert_)/2
+    Daxis *= np.hypot(dx, 1)  # project param orthogonal to blob axis, dy=1
+    '''
+    internalize externals? need to think about it:
+    comp("x", _params.x, params.x*rn, dval, mval, dtuple, mtuple, ave_dx, finv=flatuple)
+    comp("L", _params.L, params.L*rn / daxis, dval, mval, dtuple, mtuple, ave_L, finv=0)
+    '''
     if isinstance(_P, CP):
         mtuple, dtuple = comp_ptuple(_P.ptuple, P.ptuple, Daxis)
         valt = [mtuple.val, dtuple.val]
@@ -404,8 +400,6 @@ def sum2seg(seg_Ps, fd, fds):  # sum params of vertically connected Ps into segm
         sum_ptuples(lplayer, derP.lplayer[fd])  # not comp derP.players, fd only
         accum_derP(seg, derP, fd)  # derP = P.uplink_layers[-1][0]
         P.roott[fd] = seg
-        seg.daxis += P.daxis
-        # i just realized we didn't accumulate any P to seg here, except the last P?
         for derP in P.uplink_layers[-2]:
             if derP not in P.uplink_layers[-1][fd]:
                 seg.nvalt[fd] += derP.valt[fd]  # -ve links in full links, not in +ve links
@@ -456,7 +450,6 @@ def sum2PP(PP_segs, base_rdn, fd):  # sum PP_segs into PP
         PP.y0 = min(seg.y0, PP.y0)
         PP.yn = max(seg.yn, PP.yn)
         PP.Rdn += seg.rdn  # base_rdn + PP.Rdn / PP: recursion + forks + links: nderP / len(P__)?
-        PP.daxis += seg.daxis
         PP.derP_cnt += len(seg.P__[-1].uplink_layers[-1][fd])  # redundant derivatives of the same P
         # only PPs are sign-complemented, seg..[not fd]s are empty:
         PP.valt[fd] += seg.valt[fd]
@@ -562,11 +555,6 @@ def comp_ptuple(_params, params, daxis):  # compare lateral or vertical tuples, 
     comp("I", _params.I, params.I*rn, dval, mval, dtuple, mtuple, ave_dI, finv=flatuple)  # inverse match if latuple
     comp("M", _params.M, params.M*rn / daxis, dval, mval, dtuple, mtuple, ave_M, finv=0)
     comp("Ma",_params.Ma, params.Ma*rn / daxis, dval, mval, dtuple, mtuple, ave_Ma, finv=0)
-
-    '''
-    comp("x", _params.x, params.x*rn, dval, mval, dtuple, mtuple, ave_dx, finv=flatuple)
-    comp("L", _params.L, params.L*rn / daxis, dval, mval, dtuple, mtuple, ave_L, finv=0)
-    '''
 
     mtuple.val = mval; dtuple.val = dval
 
