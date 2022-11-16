@@ -127,8 +127,8 @@ def rotate_P_(P__, dert__, mask__):  # rotate each P to align it with direction 
                 _angle = P.ptuple.angle
                 rotate_P(P, dert__, mask__)  # recursive reform P along new axis in blob.dert__
                 mangle, dangle = comp_angle(_angle, P.ptuple.angle)
-
-            P.daxis = dangle  # final dangle, combine with dangle in comp_ptuple to orient params
+                # we need to assign it here, else we couldn't know whether it is None later
+                P.daxis = dangle  # final dangle, combine with dangle in comp_ptuple to orient params
 
 def rotate_P(P, dert__t, mask__):
 
@@ -145,26 +145,29 @@ def rotate_P(P, dert__t, mask__):
     dy = Dy/L; dx = abs(Dx/L)  # hypot(dy,dx)=1: each dx,dy adds one rotated dert|pixel to rdert_
     yn, xn = dert__t[0].shape[:2]
     # scan left:
-    rx=xcenter-dx; ry=ycenter-dy  # next rx,ry
+    # as in our prior discussion, scanning left is always negative. while right is positive?
+    rx=xcenter-abs(dx); ry=ycenter-dy  # next rx,ry
     while True:
-        rdert, (x1,x2,y1,y2) = form_rdert(rx, ry, dert__t, mask__)
-        # is rdert in blob?
-        if rdert and x1>=0 and x2>=0 and y1>=0 and y2>=0 and rx>=0 and ry>=0 and np.ceil(ry)<yn:
+        rderts = form_rdert(rx,ry, dert__t, mask__, xn, yn, fleft=1)
+        if rderts:
+            rdert, (x1,x2,y1,y2) = rderts
             rx-=dx; ry-=dy  # next rx,ry
             rdert_.insert(0, rdert)
         else:
             break
     P.x0 = rx+dx; P.y0 = ry+dy  # left-most, revert from next rx,ry
     # scan right:
-    rx=xcenter+dx; ry=ycenter+dy  # next rx,ry
+    rx=xcenter+abs(dx); ry=ycenter+dy  # next rx,ry
     while True:
-        rdert, (x1,x2,y1,y2) = form_rdert(rx,ry, dert__t, mask__)
+        rderts = form_rdert(rx,ry, dert__t, mask__, xn, yn, fleft=0)
         # is rdert in blob?
-        if rdert and x1<=xn and x2<=xn and y1<=yn and y2<=yn and ry>=0 and np.ceil(rx)<xn and np.ceil(ry)<yn:
+        if rderts:
+            rdert, (x1,x2,y1,y2) = rderts
             rx+=dx; ry+=dy  # next rx,ry
             rdert_ += [rdert]
         else:
             break
+
     # form rP:
     # initialization:
     rdert = rdert_[0]; _, G, Ga, I, Dy, Dx, Sin_da0, Cos_da0, Sin_da1, Cos_da1 = rdert; M=ave_g-G; Ma=ave_ga-Ga; ndert_=[rdert]
@@ -180,32 +183,37 @@ def rotate_P(P, dert__t, mask__):
     P.ptuple=ptuple; P.dert_=ndert_
 
 
-def form_rdert(rx,ry, dert__t, mask__):
+def form_rdert(rx,ry, dert__t, mask__, xn, yn, fleft):
 
     # coord, distance of four int-coord derts, overlaid by float-coord rdert in dert__, int for indexing:
     x1 = int(np.floor(rx)); dx1 = abs(rx - x1)
     x2 = int(np.ceil(rx));  dx2 = abs(rx - x2)
     y1 = int(np.floor(ry)); dy1 = abs(ry - y1)
     y2 = int(np.ceil(ry));  dy2 = abs(ry - y2)
+    
+    # we need to check it here because we might get coordinates exceeded mask boundary
+    if fleft: within_boundary = rx>=0 and ry>=0 and np.ceil(rx)<xn and np.ceil(ry)<yn  # actually we just need to check rx and ry
+    else:     within_boundary = rx>=0 and ry>=0 and np.ceil(rx)<xn and np.ceil(ry)<yn
 
-    # scale all dert params in proportion to inverted distance from rdert, sum(distances) = 1?
-    # approximation, square of rpixel is rotated, won't fully match not-rotated derts
-    mask = mask__[y1, x1] * (1 - np.hypot(dx1, dy1)) \
-         + mask__[y2, x1] * (1 - np.hypot(dx1, dy2)) \
-         + mask__[y1, x2] * (1 - np.hypot(dx2, dy1)) \
-         + mask__[y2, x2] * (1 - np.hypot(dx2, dy2))
-    mask = int(mask)  # summed mask is fractional, round to 1|0
-
-    ptuple = []  # 10 params in dert: i, g, ga, ri, dy, dx, day0, dax0, day1, dax1
-    if not mask:
-        for dert__ in dert__t:
-            param = dert__[y1, x1] * (1 - np.hypot(dx1, dy1)) \
-                  + dert__[y2, x1] * (1 - np.hypot(dx1, dy2)) \
-                  + dert__[y1, x2] * (1 - np.hypot(dx2, dy1)) \
-                  + dert__[y2, x2] * (1 - np.hypot(dx2, dy2))
-            ptuple += [param]
-
-    return ptuple, [x1,x2,y1,y2]  # rdert is empty if masked (not in blob), + overlaid coords
+    if within_boundary:
+        # scale all dert params in proportion to inverted distance from rdert, sum(distances) = 1?
+        # approximation, square of rpixel is rotated, won't fully match not-rotated derts
+        mask = mask__[y1, x1] * (1 - np.hypot(dx1, dy1)) \
+             + mask__[y2, x1] * (1 - np.hypot(dx1, dy2)) \
+             + mask__[y1, x2] * (1 - np.hypot(dx2, dy1)) \
+             + mask__[y2, x2] * (1 - np.hypot(dx2, dy2))
+        mask = int(mask)  # summed mask is fractional, round to 1|0
+    
+        ptuple = []  # 10 params in dert: i, g, ga, ri, dy, dx, day0, dax0, day1, dax1
+        if not mask:
+            for dert__ in dert__t:
+                param = dert__[y1, x1] * (1 - np.hypot(dx1, dy1)) \
+                      + dert__[y2, x1] * (1 - np.hypot(dx1, dy2)) \
+                      + dert__[y1, x2] * (1 - np.hypot(dx2, dy1)) \
+                      + dert__[y2, x2] * (1 - np.hypot(dx2, dy2))
+                ptuple += [param]
+    
+        return ptuple, [x1,x2,y1,y2]  # rdert is empty if masked (not in blob), + overlaid coords
 
 
 def merge_blobs(blob, adj_blob, strong_adj_blobs):  # merge blob and adj_blob by summing their params and combining dert__ and mask__
