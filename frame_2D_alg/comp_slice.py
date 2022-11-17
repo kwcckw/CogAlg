@@ -63,6 +63,10 @@ ave_sub = 2  # cost of calling sub_recursion and looping
 ave_agg = 3  # cost of agg_recursion
 ave_overlap = 10
 ave_rotate = 10
+# extuple
+ave_len = 3
+ave_distance = 5
+ave_sparsity = 2
 
 param_names = ["x", "I", "M", "Ma", "L", "angle", "aangle"]
 aves = [ave_dx, ave_dI, ave_M, ave_Ma, ave_L, ave_G, ave_Ga, ave_mval, ave_dval]
@@ -88,6 +92,13 @@ class Cptuple(ClusterStructure):  # bottom-layer tuple of lateral or vertical pa
     x = int  # median vs. x0?
     daxis = lambda: None  # final dangle in rotate_P
     L = int
+
+    # ex params
+    distance = int
+    exangle = int
+    length = int
+    sparsity = int
+    
 
 class CP(ClusterStructure):  # horizontal blob slice P, with vertical derivatives per param if derP, always positive
 
@@ -164,7 +175,7 @@ def comp_slice_root(blob, verbose=False):  # always angle blob, composite dert c
 
     from sub_recursion import sub_recursion_eval, rotate_P_
     P__ = slice_blob(blob, verbose=False)  # form 2D array of blob slices in blob.dert__
-    rotate_P_(P__, blob.dert__, blob.mask__)  # rotate each P to align it with direction of P gradient
+#    rotate_P_(P__, blob.dert__, blob.mask__)  # rotate each P to align it with direction of P gradient
 
     comp_P_root(P__)  # rotated Ps are sparse or overlapping: derPs are partly redundant, but results are not biased?
     # segment is stack of (P,derP)s:
@@ -239,9 +250,8 @@ def comp_P_root(P__):  # vertically compares y-adjacent and x-overlapping Ps: bl
 
 def comp_P(_P, P):  # forms vertical derivatives of params per P in _P.uplink, conditional ders from norm and DIV comp
 
-    Daxis = _P.daxis - P.daxis
     dx = _P.x0-len(_P.dert_)/2 - P.x0-len(P.dert_)/2
-    Daxis *= np.hypot(dx, 1)  # project param orthogonal to blob axis, dy=1
+    dratio = np.hypot(dx, 1)  # project param orthogonal to blob axis, dy=1
     '''
     form and compare extuple: m|d x, axis, L, -> explayers || players, vs macro as in graph?
     or ptuple extension += [med_x. axis, L]?
@@ -250,7 +260,7 @@ def comp_P(_P, P):  # forms vertical derivatives of params per P in _P.uplink, c
     comp("L", _params.L, params.L*rn / daxis, dval, mval, dtuple, mtuple, ave_L, finv=0)
     '''
     if isinstance(_P, CP):
-        mtuple, dtuple = comp_ptuple(_P.ptuple, P.ptuple, Daxis)
+        mtuple, dtuple = comp_ptuple(_P.ptuple, P.ptuple, dratio)
         valt = [mtuple.val, dtuple.val]
         mplayer = [mtuple]; dplayer = [dtuple]
         players = [[_P.ptuple]]
@@ -534,11 +544,14 @@ def comp_players(_layers, layers):  # unpack and compare der layers, if any from
     return mptuples, dptuples, mval, dval
 
 
-def comp_ptuple(_params, params, daxis):  # compare lateral or vertical tuples, similar operations for m and d params
+def comp_ptuple(_params, params, fext=0, dratio=1):  # compare lateral or vertical tuples, similar operations for m and d params
 
     dtuple, mtuple = Cptuple(), Cptuple()
     dval, mval = 0, 0
     rn = _params.n / params.n  # normalize param as param*rn for n-invariant ratio: _param / param*rn = (_param/_n) / (param/n)
+    # daxis is None by default
+    if _params.daxis and param.daxis: daxis = max(1, (_params.daxis - params.daxis ) * dratio)  # use max prevent 0 
+    else: daxis = 1
 
     flatuple = isinstance(_params.angle, list)  # else vertuple
     if flatuple:
@@ -560,6 +573,12 @@ def comp_ptuple(_params, params, daxis):  # compare lateral or vertical tuples, 
     comp("I", _params.I, params.I*rn, dval, mval, dtuple, mtuple, ave_dI, finv=flatuple)  # inverse match if latuple
     comp("M", _params.M, params.M*rn / daxis, dval, mval, dtuple, mtuple, ave_M, finv=0)
     comp("Ma",_params.Ma, params.Ma*rn / daxis, dval, mval, dtuple, mtuple, ave_Ma, finv=0)
+    
+    if fext:
+        comp("distance", _params.distance, params.distance*rn / daxis, dval, mval, dtuple, mtuple, ave_distance, finv=0)
+        comp("exangle", _params.exangle, params.exangle*rn / daxis, dval, mval, dtuple, mtuple, ave_M, finv=0)
+        comp("length",_params.Ma, params.Ma*rn / daxis, dval, mval, dtuple, mtuple, ave_Ma, finv=0)
+        comp("distance",_params.Ma, params.Ma*rn / daxis, dval, mval, dtuple, mtuple, ave_Ma, finv=0)
 
     mtuple.val = mval; dtuple.val = dval
 

@@ -136,7 +136,8 @@ def rotate_P(P, dert__t, mask__, yn, xn):
     rdert_ = [P.dert_[int(L/2)]]  # init rotated dert_ with old central dert
 
     if P.daxis != None: # rotated P, old angle defined P axis
-        ycenter = int(P.y0 + P.ptuple.angle[0]/2)  # can be negative
+        # this ptuple.angle is accumulated frm prior rotate_P, shouldn't we use P.ptuple.angle[0]/(L*2)?
+        ycenter = int(P.y0 + P.ptuple.angle[0]/2)  # can be negative 
         xcenter = int(P.x0 + abs(P.ptuple.angle[1]/2))  # always positive
     else:  # horizontal P, daxis=None
         ycenter = P.y0
@@ -519,19 +520,8 @@ def CPP2graph(PP, fseg, Cgraph):
     for i, (ptuples, alt_ptuples, fd) in enumerate(zip_longest(deepcopy(PP.players), deepcopy(alt_players), PP.fds, fillvalue=[])):
         cval, aval = 0,0
         for i, (ptuple, alt_ptuple) in enumerate(zip_longest(ptuples, alt_ptuples, fillvalue=None)):
-            if alt_ptuple:
-                if isinstance(ptuple, list):
-                    aval += alt_ptuple[0].val
-                else:
-                    aval += alt_ptuple.val
-                    alt_ptuples[i] = [alt_ptuple, [[[[[[]]]]]]]  # convert to Ptuple
-            if ptuple:
-                if isinstance(ptuple, list):  # already converted
-                    cval += ptuple[0].val
-                else:  # convert to Ptuple
-                    cval += ptuple.val
-                    ptuples[i] = [ptuple, [[[[[[]]]]]]]
-
+            if alt_ptuple: aval += alt_ptuple.val
+            if ptuple:     cval += ptuple.val
             cfork = [ptuples, cval]  # can't be empty
             afork = [alt_ptuples, aval] if alt_ptuples else []
             caTree = [[cfork, afork], [cval, aval]]

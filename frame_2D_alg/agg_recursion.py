@@ -19,9 +19,6 @@ G_aves = [ave_Gm, ave_Gd]
 ave_med = 3  # call cluster_node_layer
 ave_rng = 3  # rng per combined val
 ave_ext = 5  # to eval comp_plevel
-ave_len = 3
-ave_distance = 5
-ave_sparsity = 2
 
 
 class Cgraph(CPP):  # graph or generic PP of any composition
@@ -65,7 +62,6 @@ def agg_recursion(root, G_, fseg):  # compositional recursion in root.PP_, prett
         if (sum(root.plevels[-1][1]) > G_aves[fd] * ave_agg * (root.rdn + 1)) and len(graph_) > ave_nsub:
             root.rdn += 1  # estimate
             agg_recursion(root, graph_, fseg=fseg)  # cross-comp graphs
-
 
 def form_graph_(root, G_, fder):  # forms plevel in agg+ or player in sub+, G is potential node graph, in higher-order GG graph
 
@@ -345,13 +341,17 @@ def add_alts(cplevel, aplevel):
     player = caforks, valt
     cafork = ptuples, valt      
 '''
-def comp_plevels(_plevels, plevels, _fds, fds, derext):
+def comp_plevels(_plevels, plevels, _fds, fds, iderext):
 
     mplevel, dplevel = [],[]  # fd plevels, each cis+alt, same as new_caT
     mval, dval = 0,0  # m,d in new plevel, else c,a
     iVal = ave_G  # to start loop:
 
-    for _plevel, plevel, _fd, fd in zip(reversed(_plevels), reversed(plevels), _fds, fds):  # caForks (caTree)
+    for i, (_plevel, plevel, _fd, fd) in enumerate(zip(reversed(_plevels), reversed(plevels), _fds, fds)):  # caForks (caTree)
+        # derext should be pack in the last plevel only， earlier plevels should have their derext assigned previusly
+        if i == len(_plevels)-1: derext = iderext
+        else:                    derext = []
+            
         if iVal < ave_G or _fd != fd:  # top-down, comp if higher plevels and fds match, same agg+
             break
         mTree, dTree = [],[]; mtval, dtval = 0,0  # Fork trees
@@ -404,54 +404,27 @@ def comp_players(_caFork, caFork, derext):  # unpack and compare layers from der
     return [mplayer,mVal], [dplayer,dVal]  # single new lplayer
 
 
-def comp_ptuples(_Ptuples, Ptuples, _fds, fds, derext):  # unpack and compare der layers, if any from der+
+def comp_ptuples(_ptuples, ptuples, _fds, fds, derext):  # unpack and compare der layers, if any from der+
 
-    mPtuples, dPtuples = [[],0], [[],0]  # [list, val] each
+    mptuples, dptuples = [[],0], [[],0]  # [list, val] each
 
-    for _Ptuple, Ptuple, _fd, fd in zip(_Ptuples, Ptuples, _fds, fds):  # bottom-up der+, Ptuples per player, pass-through fds
+    for _ptuple, ptuple, _fd, fd in zip(_ptuples, ptuples, _fds, fds):  # bottom-up der+, Ptuples per player, pass-through fds
         if _fd == fd:
-
-            mtuple, dtuple = comp_ptuple(_Ptuple[0], Ptuple[0], daxis=derext[1][1])  # init Ptuple = ptuple, [[[[[[]]]]]]
-            mext___, dext___ = [[],0], [[],0]
-            for _ext__, ext__ in zip(_Ptuple[1][0], Ptuple[1][0]):  # ext__: extuple level
-                mext__, dext__ = [[],0], [[],0]
-                for _ext_, ext_ in zip(_ext__[0], ext__[0]):  # ext_: extuple layer
-                    mext_, dext_ = [[],0], [[],0]
-                    for _extuple, extuple in zip(_ext_[0], ext_[0]):  # loop ders from prior comps in each lower ext_
-                        # + der extlayer:
-                        mextuple, dextuple, meval, deval = comp_extuple(_extuple, extuple)
-                        mext_[0] += [mextuple]; mext_[1] += meval
-                        dext_[0] += [dextuple]; dext_[1] += deval
-                    # + der extlevel:
-                    mext__[0] += [mext_]; mext__[1] += mext_[1]
-                    dext__[0] += [dext_]; mext__[1] += dext_[1]
-                # + der inplayer:
-                mext___[0] += [mext__]; mext___[1] += mext__[1]
-                dext___[0] += [dext__]; dext___[1] += dext__[1]
+            # pack derext to ptuple in last plevel
+            if derext:
+                _ptuple.distance, _ptuple.exangle, _ptuple.length, _ptuple.sparsity = derext[fd]
+                mtuple, dtuple = comp_ptuple(_ptuple, ptuple, fext=0)  # no comparison of ext params
+                mtuple.val += derext[2]; dtuple.val += derext[3]
+            else:
+            
+                mtuple, dtuple = comp_ptuple(_ptuple, ptuple, fext=1)  # init Ptuple = ptuple, [[[[[[]]]]]]
             # + der Ptuple:
-            mPtuples[0] += [[mtuple, mext___]]; mPtuples[1] += mtuple.val+mext___[1]
-            dPtuples[0] += [[dtuple, dext___]]; dPtuples[1] += dtuple.val+dext___[1]
+            mptuples[0] += [mtuple]; mptuples[1] += mtuple.val
+            dptuples[0] += [dtuple]; dptuples[1] += dtuple.val
         else:
             break  # comp same fds
 
-    mV = derext[2]; dV = derext[3]  # add der extset to all last elements:
-    mext_[0] += [derext[0]]; mext_[1] += mV; mext__[1] += mV; mext___[1] += mV; mPtuples[1] += mV
-    dext_[0] += [derext[1]]; dext_[1] += dV; dext__[1] += dV; dext___[1] += dV; dPtuples[1] += dV
-
-    return mPtuples, dPtuples
-
-
-def comp_extuple(_extuple, extuple):
-
-    mval, dval = 0,0
-    dextuple, mextuple = [],[]
-
-    for _param, param, ave in zip(_extuple, extuple, (ave_distance, ave_dangle, ave_len, ave_sparsity)):
-        # params: ddistance, dangle, dlen, dsparsity: all derived scalars
-        d = _param-param;          dextuple += [d]; dval += d - ave
-        m = min(_param,param)-ave; mextuple += [m]; mval += m
-
-    return mextuple, dextuple, mval, dval
+    return mptuples, dptuples
 
 
 def sum_plevels(pLevels, plevels, Fds, fds):
@@ -498,27 +471,9 @@ def sum_player(Player, player, Fds, fds, fneg=0):  # accum layers while same fds
                 if Fd==fd:
                     if ptuple:
                         if pTuple:
-                            sum_ptuple(pTuple[0], ptuple[0], fneg=0)
-                            if ptuple[1]: sum_extuples(pTuple[1], ptuple[1])
+                            sum_ptuple(pTuple, ptuple, fneg=0)
                         else:
                             pTuples += [deepcopy(ptuple)]
                         Val += val
                 else:
                     break
-
-# draft
-def sum_extuples(exTuple___, extuple___):
-    for exTuple__, extuple__ in zip_longest(exTuple___[0], extuple___[0], fillvalue=[]):
-        if extuple__:
-            for exTuple_, extuple_ in zip_longest(exTuple__[0], extuple__[0], fillvalue=[]):
-                if extuple_:
-                    for exTuple, extuple in zip_longest(exTuple_[0], extuple_[0], fillvalue=[]):
-                        if extuple:
-                            for i in range(len(exTuple)):  # params: ddistance, dangle, dlen, dsparsity:
-                                exTuple[i] += extuple[i]
-                        else:
-                            exTuple_ += [extuple]
-                else:
-                    exTuple__ += [extuple_]
-        else:
-            exTuple___ += [extuple__]
