@@ -63,10 +63,6 @@ ave_sub = 2  # cost of calling sub_recursion and looping
 ave_agg = 3  # cost of agg_recursion
 ave_overlap = 10
 ave_rotate = 10
-# extuple
-ave_len = 3
-ave_distance = 5
-ave_sparsity = 2
 
 param_names = ["x", "I", "M", "Ma", "L", "angle", "aangle"]
 aves = [ave_dx, ave_dI, ave_M, ave_Ma, ave_L, ave_G, ave_Ga, ave_mval, ave_dval]
@@ -87,18 +83,21 @@ class Cptuple(ClusterStructure):  # bottom-layer tuple of lateral or vertical pa
     Ga = float
     # only in vertuple, combined tuple m|d value:
     val = float
-    # in P, m|d if vertuple, layered?:
-    n = lambda: 1  # accum count
-    x = int  # median vs. x0?
-    daxis = lambda: None  # final dangle in rotate_P
-    L = int
+    n = lambda: 1  # accum count, combine from CpH?
 
-    # ex params
-    distance = int
-    exangle = int
-    length = int
-    sparsity = int
-    
+class CpH(ClusterStructure):  # hierarchy of params: plevels, players, or ptuples
+
+    pH = list
+    fds = list  # m|d per plevel
+    valt = lambda: [0],[0]
+    nvalt = lambda: [0, 0]  # from neg open links?
+    # extuple = list  # one per composition order, list individually, each can be m|d:
+    L = int  # distance in Cgraph
+    ax = float  # median x: x0+L/2
+    ay = float  # only in graph
+    axis = float
+    sparsity = float  # only in graph
+
 
 class CP(ClusterStructure):  # horizontal blob slice P, with vertical derivatives per param if derP, always positive
 
@@ -168,14 +167,19 @@ class CPP(CderP):  # derP params include P.ptuple
     roott = lambda: [None,None]  # PPPm, PPPd that contain this PP
     altPP_ = list  # adjacent alt-fork PPs per PP, from P.roott[1] in sum2PP
     cPP_ = list  # rdn reps in other PPPs, to eval and remove
-
+    '''
+    G: plevels ( plevel:
+                 [players ( player:
+                            [ptuple+P_ext], der_G_ext
+                 ], G_ext)
+    '''
 # Functions:
 
 def comp_slice_root(blob, verbose=False):  # always angle blob, composite dert core param is v_g + iv_ga
 
     from sub_recursion import sub_recursion_eval, rotate_P_
     P__ = slice_blob(blob, verbose=False)  # form 2D array of blob slices in blob.dert__
-#    rotate_P_(P__, blob.dert__, blob.mask__)  # rotate each P to align it with direction of P gradient
+    rotate_P_(P__, blob.dert__, blob.mask__)  # rotate each P to align it with direction of P gradient
 
     comp_P_root(P__)  # rotated Ps are sparse or overlapping: derPs are partly redundant, but results are not biased?
     # segment is stack of (P,derP)s:
@@ -183,7 +187,7 @@ def comp_slice_root(blob, verbose=False):  # always angle blob, composite dert c
     segd_ = form_seg_root([copy(P_) for P_ in P__], fd=1, fds=[0])  # initial latuple fd=0
     # PP is graph of segs:
     blob.PPm_, blob.PPd_ = form_PP_root((segm_, segd_), base_rdn=2)
-    # micro and macro re-clustering:
+    # micro and macro re-comp,clustering:
     sub_recursion_eval(blob)  # intra PP, add rlayers, dlayers, seg_levels to select PPs, sum M,G
     agg_recursion_eval(blob, [copy(blob.PPm_), copy(blob.PPd_)])  # cross PP, Cgraph conversion doesn't replace PPs?
 
@@ -250,27 +254,23 @@ def comp_P_root(P__):  # vertically compares y-adjacent and x-overlapping Ps: bl
 
 def comp_P(_P, P):  # forms vertical derivatives of params per P in _P.uplink, conditional ders from norm and DIV comp
 
+    Daxis = _P.daxis - P.daxis
     dx = _P.x0-len(_P.dert_)/2 - P.x0-len(P.dert_)/2
-    dratio = np.hypot(dx, 1)  # project param orthogonal to blob axis, dy=1
+    Daxis *= np.hypot(dx, 1)  # project param orthogonal to blob axis, dy=1
     '''
-    form and compare extuple: m|d x, axis, L, -> explayers || players, vs macro as in graph?
-    or ptuple extension += [med_x. axis, L]?
-        
-    comp("x", _params.x, params.x*rn, dval, mval, dtuple, mtuple, ave_dx, finv=flatuple)
-    comp("L", _params.L, params.L*rn / daxis, dval, mval, dtuple, mtuple, ave_L, finv=0)
+    add med_x. axis, L?
     '''
     if isinstance(_P, CP):
-        mtuple, dtuple = comp_ptuple(_P.ptuple, P.ptuple, dratio)
-        valt = [mtuple.val, dtuple.val]
+        mtuple, dtuple = comp_ptuple(_P.ptuple, P.ptuple, Daxis)
         mplayer = [mtuple]; dplayer = [dtuple]
-        players = [[_P.ptuple]]
+        players = CpH(plevels=[[_P.ptuple]], valt=[mtuple.val, dtuple.val])
 
     else:  # P is derP
         mplayer, dplayer, mval, dval = comp_players(_P.players, P.players)  # passed from seg.fds
-        valt = [mval, dval]
         players = deepcopy(_P.players)
+        players.valt = [mval, dval]
 
-    return CderP(x0=min(_P.x0, P.x0), y0=_P.y0, players=players, lplayer=[mplayer,dplayer], valt=valt, P=P, _P=_P)
+    return CderP(x0=min(_P.x0, P.x0), y0=_P.y0, players=players, lplayer=[mplayer,dplayer], P=P, _P=_P)
 
 
 def form_seg_root(P__, fd, fds):  # form segs from Ps
@@ -544,14 +544,11 @@ def comp_players(_layers, layers):  # unpack and compare der layers, if any from
     return mptuples, dptuples, mval, dval
 
 
-def comp_ptuple(_params, params, fext=0, dratio=1):  # compare lateral or vertical tuples, similar operations for m and d params
+def comp_ptuple(_params, params, daxis):  # compare lateral or vertical tuples, similar operations for m and d params
 
     dtuple, mtuple = Cptuple(), Cptuple()
     dval, mval = 0, 0
     rn = _params.n / params.n  # normalize param as param*rn for n-invariant ratio: _param / param*rn = (_param/_n) / (param/n)
-    # daxis is None by default
-    if _params.daxis and param.daxis: daxis = max(1, (_params.daxis - params.daxis ) * dratio)  # use max prevent 0 
-    else: daxis = 1
 
     flatuple = isinstance(_params.angle, list)  # else vertuple
     if flatuple:
@@ -573,12 +570,6 @@ def comp_ptuple(_params, params, fext=0, dratio=1):  # compare lateral or vertic
     comp("I", _params.I, params.I*rn, dval, mval, dtuple, mtuple, ave_dI, finv=flatuple)  # inverse match if latuple
     comp("M", _params.M, params.M*rn / daxis, dval, mval, dtuple, mtuple, ave_M, finv=0)
     comp("Ma",_params.Ma, params.Ma*rn / daxis, dval, mval, dtuple, mtuple, ave_Ma, finv=0)
-    
-    if fext:
-        comp("distance", _params.distance, params.distance*rn / daxis, dval, mval, dtuple, mtuple, ave_distance, finv=0)
-        comp("exangle", _params.exangle, params.exangle*rn / daxis, dval, mval, dtuple, mtuple, ave_M, finv=0)
-        comp("length",_params.Ma, params.Ma*rn / daxis, dval, mval, dtuple, mtuple, ave_Ma, finv=0)
-        comp("distance",_params.Ma, params.Ma*rn / daxis, dval, mval, dtuple, mtuple, ave_Ma, finv=0)
 
     mtuple.val = mval; dtuple.val = dval
 
