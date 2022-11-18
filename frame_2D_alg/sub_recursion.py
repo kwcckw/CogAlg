@@ -31,7 +31,7 @@ def sub_recursion_eval(root):  # for PP or dir_blob
             else:
                 comb_layers = mcomb_layers; PP_layers = PP.rlayers; PPm_ += [PP]
 
-            val = PP.valt[fd]; alt_val = PP.valt[1-fd]  # for fork rdn:
+            val = PP.players.valt[fd]; alt_val = PP.players.valt[1-fd]  # for fork rdn:
             ave = PP_aves[fd] * (PP.rdn + 1 + (alt_val > val))
             if val > ave and len(PP.P__) > ave_nsub:
                 sub_recursion(PP)  # comp_P_der | comp_P_rng in PPs -> param_layer, sub_PPs
@@ -50,10 +50,10 @@ def sub_recursion_eval(root):  # for PP or dir_blob
 
             # or higher der val?
             if isinstance(root, CPP):  # root is CPP
-                root.valt[fd] += PP.valt[fd]
+                root.players.valt[fd] += PP.players.valt[fd]
             else:  # root is CBlob
-                if fd: root.G += PP.valt[1]
-                else:  root.M += PP.valt[0]
+                if fd: root.G += PP.players.valt[1]
+                else:  root.M += PP.players.valt[0]
 
 def sub_recursion(PP):  # evaluate each PP for rng+ and der+
 
@@ -381,7 +381,7 @@ def append_P(P__, P):  # pack P into P__ in top down sequence
 
     current_ys = [P_[0].y0 for P_ in P__]  # list of current-layer seg rows
     if P.y0 in current_ys:
-        P__[current_ys.index(P.y)].append(P)  # append P row
+        P__[current_ys.index(P.y0)].append(P)  # append P row
     elif P.y0 > current_ys[0]:  # P.y0 > largest y in ys
         P__.insert(0, [P])
     elif P.y0 < current_ys[-1]:  # P.y0 < smallest y in ys
