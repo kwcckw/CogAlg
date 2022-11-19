@@ -59,7 +59,7 @@ def sub_recursion(PP):  # evaluate each PP for rng+ and der+
 
     P__  = [P_ for P_ in reversed(PP.P__)]  # revert to top down
     P__ = comp_P_der(P__) if PP.fds[-1] else comp_P_rng(P__, PP.rng + 1)   # returns top-down
-    PP.rdn += 2  # two-fork rdn, priority is not known?
+    PP.rdn += 2  # two-fork rdn, priority is not known?  rotate?
 
     sub_segm_ = form_seg_root([copy(P_) for P_ in P__], fd=0, fds=PP.fds)
     sub_segd_ = form_seg_root([copy(P_) for P_ in P__], fd=1, fds=PP.fds)  # returns bottom-up
@@ -123,25 +123,19 @@ def rotate_P_(P__, dert__, mask__):  # rotate each P to align it with direction 
     yn, xn = dert__[0].shape[:2]
     for P_ in P__:
         for P in P_:
-            dangle = P.ptuple.angle[0] / len(P.dert_)  # dy: deviation from horizontal axis
+            dangle = P.ptuple.angle[0] / P.ptuple.L  # dy: deviation from horizontal axis
             while P.ptuple.G * abs(dangle) > ave_rotate:
-                _angle = P.ptuple.angle
+                P.axis = P.ptuple.angle
                 rotate_P(P, dert__, mask__, yn, xn)  # recursive reform P along new axis in blob.dert__
-                mangle, dangle = comp_angle(_angle, P.ptuple.angle)
-                P.daxis = dangle  # final dangle, combine with dangle in comp_ptuple to orient params
+                _, dangle = comp_angle(P.axis, P.ptuple.angle)
 
 def rotate_P(P, dert__t, mask__, yn, xn):
 
     L = len(P.dert_)
     rdert_ = [P.dert_[int(L/2)]]  # init rotated dert_ with old central dert
 
-    if P.daxis != None: # rotated P, old angle defined P axis
-        # this ptuple.angle is accumulated frm prior rotate_P, shouldn't we use P.ptuple.angle[0]/(L*2)?
-        ycenter = int(P.y0 + P.ptuple.angle[0]/2)  # can be negative 
-        xcenter = int(P.x0 + abs(P.ptuple.angle[1]/2))  # always positive
-    else:  # horizontal P, daxis=None
-        ycenter = P.y0
-        xcenter = int(P.x0 + L/2)
+    ycenter = int(P.y0 + P.ptuple.axis[0]/2)  # can be negative
+    xcenter = int(P.x0 + abs(P.ptuple.axis[1]/2))  # always positive
     Dy, Dx = P.ptuple.angle
     dy = Dy/L; dx = abs(Dx/L)  # hypot(dy,dx)=1: each dx,dy adds one rotated dert|pixel to rdert_
     # scan left:
