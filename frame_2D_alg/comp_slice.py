@@ -280,12 +280,12 @@ def form_seg_root(P__, fd, fds):  # form segs from Ps
 def link_eval(link_layers, fd):
 
     # sort derPs in link_layers[-2] by their value param:
-    derP_ = sorted( link_layers[-2], key=lambda derP: derP.valt[fd], reverse=True)
+    derP_ = sorted( link_layers[-2], key=lambda derP: derP.players.valt[fd], reverse=True)
 
     for i, derP in enumerate(derP_):
         if not fd:
             rng_eval(derP, fd)  # reset derP.valt, derP.rdn
-        mrdn = derP.valt[1] > derP.valt[0]
+        mrdn = derP.players.valt[1] > derP.players.valt[0]
         derP.rdn += not mrdn if fd else mrdn
 
         if derP.valt[fd] > vaves[fd] * derP.rdn * (i+1):  # ave * rdn to stronger derPs in link_layers[-2]
@@ -402,7 +402,7 @@ def sum2seg(seg_Ps, fd, fds):  # sum params of vertically connected Ps into segm
         derP = P.uplink_layers[-1][fd][0]
         sum_pH_recursive(lplayer, derP.lplayer[fd])  # not comp derP.players, fd only
         accum_derP(seg, derP, fd)  # derP = P.uplink_layers[-1][0]
-        seg.xn = max(seg.xn, derP.x0 + len(P.dert_))
+        seg.xn = max(seg.xn, derP._P.x0 + len(P.dert_))
         P.roott[fd] = seg
         for derP in P.uplink_layers[-2]:
             if derP not in P.uplink_layers[-1][fd]:
@@ -412,17 +412,18 @@ def sum2seg(seg_Ps, fd, fds):  # sum params of vertically connected Ps into segm
     accum_derP(seg, seg_Ps[-1], fd)  # accum last P only, top P uplink_layers are not part of seg
     if lplayer:
         if fd: seg.players.H += [lplayer]  # der+
-        else:  seg.players.H = [lplayer]  # rng+
+        else:  seg.players.H = lplayer  # rng+
 
     seg.y0 = seg_Ps[0].y0
     seg.yn = seg.y0 + len(seg_Ps)
-    seg.fds = fds + [fd]  # fds of root PP
+    seg.players.fds = fds + [fd]  # fds of root PP
 
     return seg
 
 def accum_derP(seg, derP, fd):  # derP might be CP, though unlikely
-
-    seg.x0 = min(seg.x0, derP.x0)
+    
+    if isinstance(derP, CderP): seg.x0 = min(seg.x0, derP._P.x0)
+    else:                       seg.x0 = min(seg.x0, derP.x0)
 
     if isinstance(derP, CP):
         derP.roott[fd] = seg
@@ -445,7 +446,7 @@ def sum2PP(PP_segs, base_rdn, fd):  # sum PP_segs into PP
         seg.roott[fd] = PP
         # selection should be alt, not fd, only in convert?
         sum_pH_recursive(PP.players.H, seg.players.H)  # not empty inp's players
-        PP.fds = copy(seg.fds)
+        PP.players.fds = copy(seg.players.fds)
         PP.x0 = min(PP.x0, seg.x0)  # external params: 2nd player?
         PP.xn = max(PP.xn, seg.xn)
         PP.y0 = min(seg.y0, PP.y0)
@@ -471,18 +472,18 @@ def sum2PP(PP_segs, base_rdn, fd):  # sum PP_segs into PP
 
         # add derPs from seg branches:
         for derP in seg.P__[-1].uplink_layers[-2]:
-            for i, val in enumerate(derP.valt):
+            for i, val in enumerate(derP.players.valt):
                 if derP in seg.P__[-1].uplink_layers[-1][fd]:  # +ve links
-                    PP.valt[i] += val
+                    PP.players.valt[i] += val
                 else:  # -ve links
                     PP.players.nvalt[i] += val
                     PP.nderP_ += [derP]
     return PP
 
-
+# it's better to exclude players (cPH) in the function because we might need to sum with [[derP.ptuple]], instead of players
 def sum_pH_recursive(PH, pH, fneg=0):  # no accum across fPd, that's checked in comp_players?
 
-    for Layer, layer in zip_longest(PH, pH, fillvalue=[]):
+    for Layer, layer in zip_longest(PH, pH, fillvalue=None):
         if layer:
             if Layer:
                 if isinstance(Layer, Cptuple):
@@ -545,7 +546,7 @@ def comp_ptuple(_params, params):  # compare lateral or vertical tuples, similar
     maxis, daxis = comp_angle(_params.axis, params.axis)
     mval+=maxis; dval+=daxis; mtuple.axis=maxis; dtuple.axis=daxis
 
-    comp("x", _params.x, params.x, 1, dval, mval, dtuple, mtuple, ave_x, finv=1)
+    comp("x", _params.x, params.x, dval, mval, dtuple, mtuple, ave_x, finv=1)
     comp("L", _params.L, params.L*rn / daxis, dval, mval, dtuple, mtuple, ave_L, finv=0)
 
     flatuple = isinstance(_params.angle, list)  # else vertuple
@@ -632,7 +633,7 @@ def agg_recursion_eval(dir_blob, PP_t):
             for i, PP in enumerate(PP_):
                 PP_[i] = CPP2graph(PP, fseg=fseg, Cgraph=Cgraph)  # convert PP to graph
 
-    M, G = dir_blob.valt
+    M, G = dir_blob.plevels.valt
     fork_rdnt = [1+(G>M), 1+(M>=G)]
     for fd, PP_ in enumerate(PP_t):  # PPm_, PPd_
 

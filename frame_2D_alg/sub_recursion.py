@@ -58,11 +58,11 @@ def sub_recursion_eval(root):  # for PP or dir_blob
 def sub_recursion(PP):  # evaluate each PP for rng+ and der+
 
     P__  = [P_ for P_ in reversed(PP.P__)]  # revert to top down
-    P__ = comp_P_der(P__) if PP.fds[-1] else comp_P_rng(P__, PP.rng + 1)   # returns top-down
+    P__ = comp_P_der(P__) if PP.players.fds[-1] else comp_P_rng(P__, PP.rng + 1)   # returns top-down
     PP.rdn += 2  # two-fork rdn, priority is not known?  rotate?
 
-    sub_segm_ = form_seg_root([copy(P_) for P_ in P__], fd=0, fds=PP.fds)
-    sub_segd_ = form_seg_root([copy(P_) for P_ in P__], fd=1, fds=PP.fds)  # returns bottom-up
+    sub_segm_ = form_seg_root([copy(P_) for P_ in P__], fd=0, fds=PP.players.fds)
+    sub_segd_ = form_seg_root([copy(P_) for P_ in P__], fd=1, fds=PP.players.fds)  # returns bottom-up
     # sub_PPm_, sub_PPd_:
     PP.rlayers[0], PP.dlayers[0] = form_PP_root((sub_segm_, sub_segd_), PP.rdn + 1)
     sub_recursion_eval(PP)  # add rlayers, dlayers, seg_levels to select sub_PPs
@@ -125,9 +125,9 @@ def rotate_P_(P__, dert__, mask__):  # rotate each P to align it with direction 
         for P in P_:
             dangle = P.ptuple.angle[0] / P.ptuple.L  # dy: deviation from horizontal axis
             while P.ptuple.G * abs(dangle) > ave_rotate:
-                P.axis = P.ptuple.angle
+                P.ptuple.axis = P.ptuple.angle
                 rotate_P(P, dert__, mask__, yn, xn)  # recursive reform P along new axis in blob.dert__
-                _, dangle = comp_angle(P.axis, P.ptuple.angle)
+                _, dangle = comp_angle(P.ptuple.axis, P.ptuple.angle)
 
 def rotate_P(P, dert__t, mask__, yn, xn):
 
@@ -456,6 +456,7 @@ def CBlob2graph(dir_blob, fseg, Cgraph):
     # init graph params
     players, fds, valt = [], [], [0,0]  # players, fds and valt
     alt_players, alt_fds, alt_valt = [], [], [0,0]
+    # how should we manage CpH with alt players? each players and alt players is an element in H? 
     plevels = [[[players, fds, valt],[alt_players, alt_fds, alt_valt]]]
     gPPm_, gPPd_ = [], []  # converted gPPs, node_ and alt_node_
     root_fds = PPm_[0].fds[:-1]  # root fds is the shorter fork?
@@ -501,17 +502,17 @@ def CPP2graph(PP, fseg, Cgraph):
     if not fseg and PP.altPP_:  # seg doesn't have altPP_
         alt_fds = PP.altPP_[0].fds
         for altPP in PP.altPP_[1:]:  # get fd sequence common for all altPPs:
-            for i, (_fd, fd) in enumerate(zip(alt_fds, altPP.fds)):
+            for i, (_fd, fd) in enumerate(zip(alt_fds, altPP.players.fds)):
                 if _fd != fd:
                     alt_fds = alt_fds[:i]
                     break
         for altPP in PP.altPP_:
-            sum_players(alt_players, altPP.players[:len(alt_fds)])  # sum same-fd players only
-            alt_valt[0] += altPP.valt[0];  alt_valt[1] += altPP.valt[1]
+            sum_pH_recursive(alt_players, altPP.players.H[:len(alt_fds)])  # sum same-fd players only
+            alt_valt[0] += altPP.players.valt[0];  alt_valt[1] += altPP.players.valt[1]
     # Cgraph: plevels ( caTree ( players ( caTree ( ptuples:
     players = []
     valt = [0,0]
-    for i, (ptuples, alt_ptuples, fd) in enumerate(zip_longest(deepcopy(PP.players), deepcopy(alt_players), PP.fds, fillvalue=[])):
+    for i, (ptuples, alt_ptuples, fd) in enumerate(zip_longest(deepcopy(PP.players.H), deepcopy(alt_players), PP.players.fds, fillvalue=[])):
         cval, aval = 0,0
         for i, (ptuple, alt_ptuple) in enumerate(zip_longest(ptuples, alt_ptuples, fillvalue=None)):
             if alt_ptuple: aval += alt_ptuple.val
@@ -522,9 +523,9 @@ def CPP2graph(PP, fseg, Cgraph):
             valt[0] += cval; valt[1] += aval
             players += [caTree]
 
-    caTree = [[players, valt, deepcopy(PP.fds)]]  # pack single playerst
-    plevel = [caTree, valt]
+    caTree = [[players, valt, deepcopy(PP.players.fds)]]  # pack single playerst
+    plevel = CpH(H = caTree,  valt=valt)
     x0 = PP.x0; xn = PP.xn; y0 = PP.y0; yn = PP.yn
 
-    return Cgraph(node_=PP.P__, plevels=[plevel], angle=(yn-y0,xn-x0), sparsity=1.0, valt=valt, fds=[1], x0=x0, xn=xn, y0=y0, yn=yn)
+    return Cgraph(node_=PP.P__, plevels=[plevel], angle=(yn-y0,xn-x0), sparsity=1.0, valt=valt, x0=x0, xn=xn, y0=y0, yn=yn)
     # 1st plevel fd is always der+?
