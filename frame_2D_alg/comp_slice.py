@@ -138,7 +138,7 @@ class CderP(ClusterStructure):  # tuple of derivatives in P uplink_ or downlink_
 class CPP(CderP):  # derP params include P.ptuple
 
     players = lambda: CpH()  # 1st plevel, zipped with alt_players in comp_players
-    alt_players = lambda: CpH  # summed from altPP_, sub comp support, agg comp suppression?
+    alt_players = lambda: CpH()  # summed from altPP_, sub comp support, agg comp suppression?
     x0 = int  # box, update by max, min
     xn = int
     y0 = int
@@ -171,7 +171,7 @@ def comp_slice_root(blob, verbose=False):  # always angle blob, composite dert c
 
     from sub_recursion import sub_recursion_eval, rotate_P_
     P__ = slice_blob(blob, verbose=False)  # form 2D array of blob slices in blob.dert__
-    rotate_P_(P__, blob.dert__, blob.mask__)  # rotate each P to align it with direction of P gradient
+#    rotate_P_(P__, blob.dert__, blob.mask__)  # rotate each P to align it with direction of P gradient
 
     comp_P_root(P__)  # rotated Ps are sparse or overlapping: derPs are partly redundant, but results are not biased?
     # segment is stack of (P,derP)s:
@@ -409,7 +409,7 @@ def sum2seg(seg_Ps, fd, fds):  # sum params of vertically connected Ps into segm
 
     accum_derP(seg, seg_Ps[-1], fd)  # accum last P only, top P uplink_layers are not part of seg
     if lplayer:
-        if fd: seg.players.H += [lplayer]  # der+
+        if fd: seg.players.H += lplayer  # der+
         else:  seg.players.H = lplayer  # rng+
 
     seg.y0 = seg_Ps[0].y0
@@ -452,8 +452,6 @@ def sum2PP(PP_segs, base_rdn, fd):  # sum PP_segs into PP
         PP.Rdn += seg.rdn  # base_rdn + PP.Rdn / PP: recursion + forks + links: nderP / len(P__)?
         PP.derP_cnt += len(seg.P__[-1].uplink_layers[-1][fd])  # redundant derivatives of the same P
         # only PPs are sign-complemented, seg..[not fd]s are empty:
-        PP.players.valt[fd] += seg.players.valt[fd]
-        PP.players.nvalt[fd] += seg.players.nvalt[fd]
         PP.nderP_ += seg.nderP_
         # += miss seg.link_s:
         for i, (PP_layer, seg_layer) in enumerate(zip_longest(PP.uplink_layers, seg.uplink_layers, fillvalue=[])):
@@ -479,9 +477,10 @@ def sum2PP(PP_segs, base_rdn, fd):  # sum PP_segs into PP
     return PP
 
 # add sum valt
-def sum_pH_recursive(PH, pH, fneg=0):  # no accum across fd: matched in comp_players
+# we still need to parse H and h if we need to parse PH and pH, so this may not be a good idea
+def sum_pH_recursive(H, h, fneg=0):  # no accum across fd: matched in comp_players
 
-    for Layer, layer in zip_longest(PH.H, pH.H, fillvalue=None):
+    for Layer, layer in zip_longest(H, h, fillvalue=None):
         if layer:
             if Layer:
                 if isinstance(Layer, Cptuple):
@@ -489,7 +488,7 @@ def sum_pH_recursive(PH, pH, fneg=0):  # no accum across fd: matched in comp_pla
                 else:
                     sum_pH_recursive(Layer, layer, fneg=0)  # unpack hierarchy recursively
             elif not fneg:
-                PH.append(deepcopy(layer))
+                H.append(deepcopy(layer))
 
 # remove:
 def sum_ptuples(Player, player, fneg=0):  # accum players in Players
@@ -632,11 +631,18 @@ def agg_recursion_eval(dir_blob, PP_t):
             for i, PP in enumerate(PP_):
                 PP_[i] = CPP2graph(PP, fseg=fseg, Cgraph=Cgraph)  # convert PP to graph
 
-    M, G = dir_blob.plevels.valt
+    
+    if isinstance(dir_blob, Cgraph):                           
+        M, G = dir_blob.plevels.valt
+    elif isinstance(dir_blob, CPP): 
+        M, G = dir_blob.players.valt
+    else:
+        M, G = dir_blob.M, dir_blob.G
+    valt = [M, G]
     fork_rdnt = [1+(G>M), 1+(M>=G)]
     for fd, PP_ in enumerate(PP_t):  # PPm_, PPd_
 
-        if (dir_blob.valt[fd] > PP_aves[fd] * ave_agg * (dir_blob.rdn+1) * fork_rdnt[fd]) \
+        if (valt[fd] > PP_aves[fd] * ave_agg * (dir_blob.rdn+1) * fork_rdnt[fd]) \
             and len(PP_) > ave_nsub and dir_blob.alt_rdn < ave_overlap:
             dir_blob.rdn += 1  # estimate
             agg_recursion(dir_blob, PP_, fseg=fseg)

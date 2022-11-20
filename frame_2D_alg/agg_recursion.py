@@ -26,8 +26,8 @@ ave_sparsity = 2
 
 class Cgraph(CPP):  # graph or generic PP of any composition
 
-    plevels = lambda: CpH  # zipped with alt_plevels in comp_plevels
-    alt_plevels = lambda: CpH  # summed from alt_graph_, sub comp support, agg comp suppression?
+    plevels = lambda: CpH()  # zipped with alt_plevels in comp_plevels
+    alt_plevels = lambda: CpH()  # summed from alt_graph_, sub comp support, agg comp suppression?
     rdn = int  # for PP evaluation, recursion count + Rdn / nderPs; no alt_rdn: valt representation in alt_PP_ valts?
     rng = lambda: 1  # not for alt_graphs
     medG_ = list  # last checked mediating [mG, dir_link, G]s, from all nodes?
