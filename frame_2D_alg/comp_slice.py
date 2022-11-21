@@ -93,8 +93,8 @@ class CpH(ClusterStructure):  # hierarchy of params: plevels, players, or ptuple
 
     H = list  # plevels, players, or ptuples
     fds = list  # m|d per element
-    val = lambda: 0
-    nval = lambda: 0  # of neg open links?
+    valt = lambda: [0, 0]
+    nvalt = lambda: [0, 0]  # of neg open links?
     # extuple per composition order, each param can be original or m|d:
     L = int  # len node_
     S = float  # sparsity: summed distances
@@ -123,7 +123,7 @@ class CP(ClusterStructure):  # horizontal blob slice P, with vertical derivative
 
 class CderP(ClusterStructure):  # tuple of derivatives in P uplink_ or downlink_: binary tree with latuple root and vertuple forks
 
-    players = None  # max ntuples in layer = ntuples in lower layers: 1, 1, 2, 4, 8..: one selected fork per compared ptuple
+    players = lambda: None  # max ntuples in layer = ntuples in lower layers: 1, 1, 2, 4, 8..: one selected fork per compared ptuple
     lplayer = lambda: [CpH(),CpH()]  # last mplayer, dplayer; der+ comp: players+dplayer or dplayer: link only?
     _P = object  # higher comparand
     P = object  # lower comparand
@@ -171,7 +171,7 @@ def comp_slice_root(blob, verbose=False):  # always angle blob, composite dert c
 
     from sub_recursion import sub_recursion_eval, rotate_P_
     P__ = slice_blob(blob, verbose=False)  # form 2D array of blob slices in blob.dert__
-#    rotate_P_(P__, blob.dert__, blob.mask__)  # rotate each P to align it with direction of P gradient
+    rotate_P_(P__, blob.dert__, blob.mask__)  # rotate each P to align it with direction of P gradient
 
     comp_P_root(P__)  # rotated Ps are sparse or overlapping: derPs are partly redundant, but results are not biased?
     # segment is stack of (P,derP)s:
@@ -249,10 +249,11 @@ def comp_P(_P, P):  # forms vertical derivatives of params per P in _P.uplink, c
 
     if isinstance(_P, CP):
         mtuple, dtuple = comp_ptuple(_P.ptuple, P.ptuple)
-        mplayer = [[mtuple]]; dplayer = [[dtuple]]  # convert to CpH?
-        players = CpH(H=[[_P.ptuple]], valt=[mtuple.val, dtuple.val])
+        mplayer = CpH(H=[mtuple]); dplayer = CpH(H= [dtuple])  # convert to CpH
+        players = CpH(H=[_P.ptuple], valt=[mtuple.val, dtuple.val])
     else:  # P = derP
-        mplayer, dplayer = comp_players(_P.players, P.players)
+        mtuples, dtuples = comp_players(_P.players, P.players)
+        mplayer = CpH(H=mtuples); dplayer = CpH(H=dtuples )
         players = deepcopy(_P.players)
 
     return CderP(x0=min(_P.x0, P.x0), y0=_P.y0, players=players, lplayer=[mplayer, dplayer], P=P, _P=_P)
@@ -394,7 +395,7 @@ def sum2seg(seg_Ps, fd, fds):  # sum params of vertically connected Ps into segm
     # seg rdn: up cost to init, up+down cost for comp_seg eval, in 1st agg_recursion?
     # P rdn is up+down M/n, but P is already formed and compared?
     seg = CPP(x0=seg_Ps[0].x0, P__= seg_Ps, uplink_layers=[miss_uplink_], downlink_layers = [miss_downlink_], y0 = seg_Ps[0].y0)
-    lplayer = CpH
+    lplayer = CpH()
     for P in seg_Ps[:-1]:
         derP = P.uplink_layers[-1][fd][0]
         sum_pH(lplayer, derP.lplayer[fd])  # not comp derP.players, fd only
@@ -408,12 +409,12 @@ def sum2seg(seg_Ps, fd, fds):  # sum params of vertically connected Ps into segm
 
     accum_derP(seg, seg_Ps[-1], fd)  # accum last P only, top P uplink_layers are not part of seg
     if lplayer:
-        if fd: seg.players.H += lplayer  # der+
-        else:  seg.players.H = lplayer  # rng+
+        if fd: seg.players.H += lplayer.H  # der+
+        else:  seg.players.H = lplayer.H  # rng+
 
     seg.y0 = seg_Ps[0].y0
     seg.yn = seg.y0 + len(seg_Ps)
-    seg.players.fds = fds + [fd]  # fds of root PP
+    seg.players.fds = deepcopy(fds) + [fd]  # fds of root PP
 
     return seg
 
@@ -423,12 +424,17 @@ def accum_derP(seg, derP, fd):  # derP might be CP, though unlikely
     else:                       seg.x0 = min(seg.x0, derP.x0)
     if isinstance(derP, CP):
         derP.roott[fd] = seg
+        if fd: valt = [0, derP.ptuple.val]
+        else:  valt = [derP.ptuple.val, 0]
+        
         if isinstance(seg.players, CpH):
-            sum_pH(seg.players, CpH(H=[deepcopy(derP.ptuple)], val=derP.ptuple.val, fds=[fd]))
+            sum_pH(seg.players, CpH(H=[deepcopy(derP.ptuple)], valt=valt, fds=[fd]))
+            seg.players.valt[0] += valt[0]; seg.players.valt[1] += valt[1]
         else:
-            seg.players = CpH(H=[deepcopy(derP.ptuple)], val=derP.ptuple.val, fds=[fd])
+            seg.players = CpH(H=[deepcopy(derP.ptuple)], valt=valt, fds=[fd])
     else:
-        der_players = CpH(H=derP.players.H+derP.lplayer[fd].H, val=derP.players.val+derP.lplayer[fd].val, fds=derP.players.fds+[fd])
+        valt=[derP.players.valt[0]+derP.lplayer[fd].valt[0], derP.players.valt[1]+derP.lplayer[fd].valt[1]] 
+        der_players = CpH(H=derP.players.H+derP.lplayer[fd].H,valt=valt , fds=derP.players.fds+[fd])
         sum_pH(seg.players, der_players)  # last derP player is current mplayer, dplayer
 
 
@@ -437,6 +443,7 @@ def sum2PP(PP_segs, base_rdn, fd):  # sum PP_segs into PP
     from sub_recursion import append_P
 
     PP = CPP(x0=PP_segs[0].x0, rdn=base_rdn, rlayers=[[]], dlayers=[[]])
+    PP.players.fds=deepcopy(PP_segs[0].players.fds)+[fd]
     if fd: PP.dseg_levels, PP.mseg_levels = [PP_segs], [[]]  # empty alt_seg_levels
     else:  PP.mseg_levels, PP.dseg_levels = [PP_segs], [[]]
 
@@ -475,7 +482,7 @@ def sum2PP(PP_segs, base_rdn, fd):  # sum PP_segs into PP
                     PP.nderP_ += [derP]
     return PP
 
-# add sum valt:
+# if we need sum valt between PH and pH here, we need another flag to make sure they only summed once in recursive operation
 def sum_pH(PH, pH, fneg=0):  # recursive, no accum across fd: matched in comp_players
 
     for Sub_pH, sub_pH in zip_longest(PH.H, pH.H, fillvalue=None):
@@ -486,7 +493,7 @@ def sum_pH(PH, pH, fneg=0):  # recursive, no accum across fd: matched in comp_pl
                 else:
                     sum_pH(Sub_pH, sub_pH, fneg=0)  # unpack hierarchy recursively
             elif not fneg:
-                PH.append(deepcopy(sub_pH))
+                PH.H.append(deepcopy(sub_pH))
 
 # remove:
 def sum_ptuples(Player, player, fneg=0):  # accum players in Players
