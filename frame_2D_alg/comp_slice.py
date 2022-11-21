@@ -93,8 +93,8 @@ class CpH(ClusterStructure):  # hierarchy of params: plevels, players, or ptuple
 
     H = list  # plevels, players, or ptuples
     fds = list  # m|d per element
-    valt = lambda: [0, 0]
-    nvalt = lambda: [0, 0]  # of neg open links?
+    val = lambda: 0
+    nval = lambda: 0  # of neg open links?
     # extuple per composition order, each param can be original or m|d:
     L = int  # len node_
     S = float  # sparsity: summed distances
@@ -123,8 +123,8 @@ class CP(ClusterStructure):  # horizontal blob slice P, with vertical derivative
 
 class CderP(ClusterStructure):  # tuple of derivatives in P uplink_ or downlink_: binary tree with latuple root and vertuple forks
 
-    players = lambda: CpH()  # max ntuples in layer = ntuples in lower layers: 1, 1, 2, 4, 8..: one selected fork per compared ptuple
-    lplayer = lambda: [[], []]  # last mplayer, dplayer; der+ comp: players+dplayer or dplayer: link only?
+    players = None  # max ntuples in layer = ntuples in lower layers: 1, 1, 2, 4, 8..: one selected fork per compared ptuple
+    lplayer = lambda: [CpH(),CpH()]  # last mplayer, dplayer; der+ comp: players+dplayer or dplayer: link only?
     _P = object  # higher comparand
     P = object  # lower comparand
     roott = lambda: [None,None]  # for der++
@@ -252,9 +252,8 @@ def comp_P(_P, P):  # forms vertical derivatives of params per P in _P.uplink, c
         mplayer = [[mtuple]]; dplayer = [[dtuple]]  # convert to CpH?
         players = CpH(H=[[_P.ptuple]], valt=[mtuple.val, dtuple.val])
     else:  # P = derP
-        mplayer, dplayer, mval, dval = comp_players(_P.players, P.players)
+        mplayer, dplayer = comp_players(_P.players, P.players)
         players = deepcopy(_P.players)
-        players.valt = [mval, dval]
 
     return CderP(x0=min(_P.x0, P.x0), y0=_P.y0, players=players, lplayer=[mplayer, dplayer], P=P, _P=_P)
 
@@ -395,16 +394,16 @@ def sum2seg(seg_Ps, fd, fds):  # sum params of vertically connected Ps into segm
     # seg rdn: up cost to init, up+down cost for comp_seg eval, in 1st agg_recursion?
     # P rdn is up+down M/n, but P is already formed and compared?
     seg = CPP(x0=seg_Ps[0].x0, P__= seg_Ps, uplink_layers=[miss_uplink_], downlink_layers = [miss_downlink_], y0 = seg_Ps[0].y0)
-    lplayer = []
+    lplayer = CpH
     for P in seg_Ps[:-1]:
         derP = P.uplink_layers[-1][fd][0]
-        sum_pH_recursive(lplayer, derP.lplayer[fd])  # not comp derP.players, fd only
+        sum_pH(lplayer, derP.lplayer[fd])  # not comp derP.players, fd only
         accum_derP(seg, derP, fd)  # derP = P.uplink_layers[-1][0]
         seg.xn = max(seg.xn, derP._P.x0 + len(P.dert_))
         P.roott[fd] = seg
         for derP in P.uplink_layers[-2]:
             if derP not in P.uplink_layers[-1][fd]:
-                seg.players.nvalt[fd] += derP.players.valt[fd]  # -ve links in full links, not in +ve links
+                seg.players.nval += derP.players[fd].val  # -ve links in full links, not in +ve links
                 seg.nderP_ += [derP]
 
     accum_derP(seg, seg_Ps[-1], fd)  # accum last P only, top P uplink_layers are not part of seg
@@ -422,14 +421,15 @@ def accum_derP(seg, derP, fd):  # derP might be CP, though unlikely
 
     if isinstance(derP, CderP): seg.x0 = min(seg.x0, derP._P.x0)
     else:                       seg.x0 = min(seg.x0, derP.x0)
-
     if isinstance(derP, CP):
         derP.roott[fd] = seg
-        if seg.players.H: sum_pH_recursive(seg.players.H, [[derP.ptuple]])
-        else:             seg.players.H.append([deepcopy(derP.ptuple)])
+        if isinstance(seg.players, CpH):
+            sum_pH(seg.players, CpH(H=[deepcopy(derP.ptuple)], val=derP.ptuple.val, fds=[fd]))
+        else:
+            seg.players = CpH(H=[deepcopy(derP.ptuple)], val=derP.ptuple.val, fds=[fd])
     else:
-        sum_pH_recursive(seg.players.H, derP.players.H)  # last derP player is current mplayer, dplayer
-        seg.players.valt[0] += derP.players.valt[0]; seg.players.valt[1] += derP.players.valt[1]
+        der_players = CpH(H=derP.players.H+derP.lplayer[fd].H, val=derP.players.val+derP.lplayer[fd].val, fds=derP.players.fds+[fd])
+        sum_pH(seg.players, der_players)  # last derP player is current mplayer, dplayer
 
 
 def sum2PP(PP_segs, base_rdn, fd):  # sum PP_segs into PP
@@ -443,8 +443,7 @@ def sum2PP(PP_segs, base_rdn, fd):  # sum PP_segs into PP
     for seg in PP_segs:
         seg.roott[fd] = PP
         # selection should be alt, not fd, only in convert?
-        sum_pH_recursive(PP.players.H, seg.players.H)  # not empty inp's players
-        PP.players.fds = copy(seg.players.fds)
+        sum_pH(PP.players, seg.players)  # not empty inp's players
         PP.x0 = min(PP.x0, seg.x0)  # external params: 2nd player?
         PP.xn = max(PP.xn, seg.xn)
         PP.y0 = min(seg.y0, PP.y0)
@@ -476,19 +475,18 @@ def sum2PP(PP_segs, base_rdn, fd):  # sum PP_segs into PP
                     PP.nderP_ += [derP]
     return PP
 
-# add sum valt
-# we still need to parse H and h if we need to parse PH and pH, so this may not be a good idea
-def sum_pH_recursive(H, h, fneg=0):  # no accum across fd: matched in comp_players
+# add sum valt:
+def sum_pH(PH, pH, fneg=0):  # recursive, no accum across fd: matched in comp_players
 
-    for Layer, layer in zip_longest(H, h, fillvalue=None):
-        if layer:
-            if Layer:
-                if isinstance(Layer, Cptuple):
-                    sum_ptuple(Layer, layer, fneg=fneg)
+    for Sub_pH, sub_pH in zip_longest(PH.H, pH.H, fillvalue=None):
+        if sub_pH:
+            if Sub_pH:
+                if isinstance(Sub_pH, Cptuple):
+                    sum_ptuple(Sub_pH, sub_pH, fneg=fneg)
                 else:
-                    sum_pH_recursive(Layer, layer, fneg=0)  # unpack hierarchy recursively
+                    sum_pH(Sub_pH, sub_pH, fneg=0)  # unpack hierarchy recursively
             elif not fneg:
-                H.append(deepcopy(layer))
+                PH.append(deepcopy(sub_pH))
 
 # remove:
 def sum_ptuples(Player, player, fneg=0):  # accum players in Players
@@ -539,38 +537,32 @@ def comp_ptuple(_params, params):  # compare lateral or vertical tuples, similar
     dtuple, mtuple = Cptuple(), Cptuple()
     dval, mval = 0,0
     rn = _params.n / params.n  # normalize param as param*rn for n-invariant ratio: _param / param*rn = (_param/_n) / (param/n)
+
     flatuple = isinstance(_params.angle, list)  # else vertuple
     if flatuple:
-        maxis, daxis = comp_angle(_params.axis, params.axis)
-        mval+=maxis; dval+=daxis; mtuple.axis=maxis; dtuple.axis=daxis
+        comp("G", _params.G, params.G*rn, dval, mval, dtuple, mtuple, ave_G, finv=0)
+        comp("Ga", _params.Ga, params.Ga*rn, dval, mval, dtuple, mtuple, ave_Ga, finv=0)
+        comp_angle("axis", _params.axis, params.axis, dval, mval, dtuple, mtuple)  # rotated, thus no adjustment by daxis?
+        comp_angle("angle", _params.angle, params.angle, dval, mval, dtuple, mtuple)
+        comp_aangle(_params.aangle, params.aangle, dval, mval, dtuple, mtuple)
     else:
+        # vertuple, all params are scalars:
+        comp("val", _params.val, params.val*rn, dval, mval, dtuple, mtuple, ave_mval, finv=0)
         comp("axis", _params.axis, params.axis*rn, dval, mval, dtuple, mtuple, ave_dangle, finv=0)
-        daxis = dtuple.axis  # adjust by ddaxis? or P.daxis only, unadjusted?
-
-    comp("x", _params.x, params.x, dval, mval, dtuple, mtuple, ave_x, finv=flatuple)  # inverse match if latuple
-    # daxis += dtuple.x: Dim compensation / same area, alt axis definition?
-    if flatuple:
-        comp("G", _params.G, params.G*rn/daxis, dval, mval, dtuple, mtuple, ave_G, finv=0)
-        comp("Ga", _params.Ga, params.Ga*rn/daxis, dval, mval, dtuple, mtuple, ave_Ga, finv=0)
-        # angle:
-        mangle, dangle = comp_angle(_params.angle, params.angle, rn)
-        dtuple.angle = dangle; dval += abs(dangle); mtuple.angle = mangle; mval += mangle
-        # angle of angle:
-        maangle, daangle = comp_aangle(_params.aangle, params.aangle, rn)
-        dtuple.aangle = daangle; dval += abs(daangle); mtuple.aangle = maangle; mval += maangle
-    else:  # vertuple, all scalars:
-        comp("val", _params.val, params.val*rn/daxis, dval, mval, dtuple, mtuple, ave_mval, finv=0)
-        comp("angle", _params.angle, params.angle*rn/daxis, dval, mval, dtuple, mtuple, ave_dangle, finv=0)
-        comp("aangle", _params.aangle, params.aangle*rn/daxis, dval, mval, dtuple, mtuple, ave_daangle, finv=0)
-    # both:
-    comp("I", _params.I, params.I*rn, dval, mval, dtuple, mtuple, ave_dI, finv=flatuple)
-    comp("M", _params.M, params.M*rn/daxis, dval, mval, dtuple, mtuple, ave_M, finv=0)
-    comp("Ma",_params.Ma, params.Ma*rn/daxis, dval, mval, dtuple, mtuple, ave_Ma, finv=0)
-    comp("L", _params.L, params.L*rn/daxis, dval, mval, dtuple, mtuple, ave_L, finv=0)
+        comp("angle", _params.angle, params.angle*rn, dval, mval, dtuple, mtuple, ave_dangle, finv=0)
+        comp("aangle", _params.aangle, params.aangle*rn, dval, mval, dtuple, mtuple, ave_daangle, finv=0)
+    # either:
+    comp("I", _params.I, params.I*rn, dval, mval, dtuple, mtuple, ave_dI, finv=flatuple)  # inverse match if latuple
+    comp("M", _params.M, params.M*rn, dval, mval, dtuple, mtuple, ave_M, finv=0)
+    comp("Ma",_params.Ma, params.Ma*rn, dval, mval, dtuple, mtuple, ave_Ma, finv=0)
+    comp("L", _params.L, params.L*rn, dval, mval, dtuple, mtuple, ave_L, finv=0)
+    comp("x", _params.x, params.x, dval, mval, dtuple, mtuple, ave_x, finv=flatuple)
+    # adjust / daxis+dx: Dim compensation in same area, alt axis definition?
 
     mtuple.val = mval; dtuple.val = dval
 
     return mtuple, dtuple
+
 
 def comp(param_name, _param, param, dval, mval, dtuple, mtuple, ave, finv):
 
@@ -582,67 +574,64 @@ def comp(param_name, _param, param, dval, mval, dtuple, mtuple, ave, finv):
     setattr(dtuple, param_name, d)  # dtuple.param_name = d
     setattr(mtuple, param_name, m)  # mtuple.param_name = m
 
-def comp_angle(_angle, angle, rn=1):
+def comp_angle(param_name, _angle, angle, dval=0, mval=0, dtuple=[], mtuple=[]):  # rn doesn't matter for angles
 
     _Dy, _Dx = _angle
     Dy, Dx = angle
-    _G = np.hypot(_Dy,_Dx); G = np.hypot(Dy*rn,Dx*rn)
-    sin = Dy*rn / (.1 if G == 0 else G); cos = Dx*rn / (.1 if G == 0 else G)
+    _G = np.hypot(_Dy,_Dx); G = np.hypot(Dy,Dx)
+    sin = Dy / (.1 if G == 0 else G);     cos = Dx / (.1 if G == 0 else G)
     _sin = _Dy / (.1 if _G == 0 else _G); _cos = _Dx / (.1 if _G == 0 else _G)
     sin_da = (cos * _sin) - (sin * _cos)  # sin(α - β) = sin α cos β - cos α sin β
     cos_da = (cos * _cos) + (sin * _sin)  # cos(α - β) = cos α cos β + sin α sin β
 
     dangle = np.arctan2(sin_da, cos_da)  # scalar, vertical difference between angles
     mangle = ave_dangle - abs(dangle)  # inverse match, not redundant as summed across sign
+    setattr(dtuple, param_name, dangle)
+    setattr(mtuple, param_name, mangle)
 
     return mangle, dangle
 
-def comp_aangle(_aangle, aangle, rn):
+def comp_aangle(_aangle, aangle, dval, mval, dtuple, mtuple):
 
-    _sin_da0, _cos_da0, _sin_da1, _cos_da1 = aangle
+    _sin_da0, _cos_da0, _sin_da1, _cos_da1 = _aangle
     sin_da0, cos_da0, sin_da1, cos_da1 = aangle
 
-    sin_dda0 = (cos_da0 * rn * _sin_da0) - (sin_da0 * rn * _cos_da0)
-    cos_dda0 = (cos_da0 * rn * _cos_da0) + (sin_da0 * rn * _sin_da0)
-    sin_dda1 = (cos_da1 * rn * _sin_da1) - (sin_da1 * rn * _cos_da1)
-    cos_dda1 = (cos_da1 * rn * _cos_da1) + (sin_da1 * rn * _sin_da1)
+    sin_dda0 = (cos_da0 * _sin_da0) - (sin_da0 * _cos_da0)
+    cos_dda0 = (cos_da0 * _cos_da0) + (sin_da0 * _sin_da0)
+    sin_dda1 = (cos_da1 * _sin_da1) - (sin_da1 * _cos_da1)
+    cos_dda1 = (cos_da1 * _cos_da1) + (sin_da1 * _sin_da1)
     # for 2D, not reduction to 1D:
     # aaangle = (sin_dda0, cos_dda0, sin_dda1, cos_dda1)
     # day = [-sin_dda0 - sin_dda1, cos_dda0 + cos_dda1]
     # dax = [-sin_dda0 + sin_dda1, cos_dda0 + cos_dda1]
     gay = np.arctan2((-sin_dda0 - sin_dda1), (cos_dda0 + cos_dda1))  # gradient of angle in y?
     gax = np.arctan2((-sin_dda0 + sin_dda1), (cos_dda0 + cos_dda1))  # gradient of angle in x?
+
     daangle = np.arctan2(gay, gax)  # diff between aangles, probably wrong
     maangle = ave_daangle - abs(daangle)  # inverse match, not redundant as summed
+    dtuple.aangle = daangle; dval += abs(daangle)
+    mtuple.aangle = maangle; mval += maangle
 
-    return maangle, daangle
 
-
-def agg_recursion_eval(dir_blob, PP_t):
+def agg_recursion_eval(blob, PP_t):
     from agg_recursion import agg_recursion, Cgraph
     from sub_recursion import CPP2graph, CBlob2graph
 
-    if not isinstance(dir_blob, Cgraph):
-        fseg = isinstance(dir_blob, CPP)
+    if not isinstance(blob, Cgraph):
+        fseg = isinstance(blob, CPP)
         convert = CPP2graph if fseg else CBlob2graph
-
-        dir_blob = convert(dir_blob, fseg=fseg, Cgraph=Cgraph)  # convert root to graph
+        blob = convert(blob, fseg=fseg, Cgraph=Cgraph)  # convert root to graph
         for PP_ in PP_t:
             for i, PP in enumerate(PP_):
                 PP_[i] = CPP2graph(PP, fseg=fseg, Cgraph=Cgraph)  # convert PP to graph
 
-    
-    if isinstance(dir_blob, Cgraph):                           
-        M, G = dir_blob.plevels.valt
-    elif isinstance(dir_blob, CPP): 
-        M, G = dir_blob.players.valt
-    else:
-        M, G = dir_blob.M, dir_blob.G
+    if isinstance(blob, Cgraph):  M, G = blob.plevels.valt
+    elif isinstance(blob, CPP):   M, G = blob.players.valt
+    else:                         M, G = blob.M, blob.G
     valt = [M, G]
     fork_rdnt = [1+(G>M), 1+(M>=G)]
     for fd, PP_ in enumerate(PP_t):  # PPm_, PPd_
-
-        if (valt[fd] > PP_aves[fd] * ave_agg * (dir_blob.rdn+1) * fork_rdnt[fd]) \
-            and len(PP_) > ave_nsub and dir_blob.alt_rdn < ave_overlap:
-            dir_blob.rdn += 1  # estimate
-            agg_recursion(dir_blob, PP_, fseg=fseg)
+        if (valt[fd] > PP_aves[fd] * ave_agg * (blob.rdn+1) * fork_rdnt[fd]) \
+            and len(PP_) > ave_nsub and blob.alt_rdn < ave_overlap:
+            blob.rdn += 1  # estimate
+            agg_recursion(blob, PP_, fseg=fseg)
