@@ -124,9 +124,10 @@ class CderP(ClusterStructure):  # tuple of derivatives in P uplink_ or downlink_
 
 class CPP(CderP):  # derP params include P.ptuple
 
-    players = list  # 1st plevel, zipped with alt_players in comp_players
-    alt_players = list  # summed from altPP_, sub comp support, agg comp suppression?
+    players = lambda: [[], 0]  # 1st plevel, zipped with alt_players in comp_players
+    alt_players = lambda: [[], 0]  # summed from altPP_, sub comp support, agg comp suppression?
     altPP_ = list  # adjacent alt-fork PPs per PP, from P.roott[1] in sum2PP
+    fds = list
     x0 = int  # box, update by max, min
     xn = int
     y0 = int
@@ -236,14 +237,14 @@ def comp_P(_P, P):  # forms vertical derivatives of params per P in _P.uplink, c
 
     if isinstance(_P, CP):
         mtuple, dtuple = comp_ptuple(_P.ptuple, P.ptuple)
-        players = [[_P.ptuple]]
-        lplayer = [[[mtuple], mtuple.val], [[dtuple], mtuple.val]]
+        players = [[_P.ptuple], _P.ptuple.val]
+        lplayer = [[[mtuple], mtuple.val], [[dtuple], dtuple.val]]
     else:  # P is derP
         mplayer, dplayer, mval, dval = comp_players(_P.players, P.players)
         players = deepcopy(_P.players)
         lplayer = [[mplayer, mval], [dplayer, dval]]
 
-    return CderP(players=players, lplayer=lplayer, val=_P.val, P=P, _P=_P)
+    return CderP(players=players, lplayer=lplayer, val=players[1], P=P, _P=_P)
 
 
 def form_seg_root(P__, fd, fds):  # form segs from Ps
@@ -265,15 +266,15 @@ def form_seg_root(P__, fd, fds):  # form segs from Ps
 def link_eval(link_layers, fd):
 
     # sort derPs in link_layers[-2] by their value param:
-    derP_ = sorted( link_layers[-2], key=lambda derP: derP.players.valt[fd], reverse=True)
+    derP_ = sorted( link_layers[-2], key=lambda derP: derP.lplayer[fd][1], reverse=True)
 
     for i, derP in enumerate(derP_):
         if not fd:
             rng_eval(derP, fd)  # reset derP.valt, derP.rdn
-        mrdn = derP.players.valt[1] > derP.players.valt[0]
+        mrdn = derP.lplayer[1][1] > derP.lplayer[0][1]
         derP.rdn += not mrdn if fd else mrdn
 
-        if derP.valt[fd] > vaves[fd] * derP.rdn * (i+1):  # ave * rdn to stronger derPs in link_layers[-2]
+        if derP.lplayer[fd][1] > vaves[fd] * derP.rdn * (i+1):  # ave * rdn to stronger derPs in link_layers[-2]
             link_layers[-1][fd].append(derP)
             derP._P.downlink_layers[-1][fd] += [derP]
             # misses = link_layers[-2] not in link_layers[-1], sum as PP.nvalt[fd] in sum2seg and sum2PP
@@ -401,7 +402,7 @@ def sum2seg(seg_Ps, fd, fds):  # sum params of vertically connected Ps into segm
 
     seg.y0 = seg_Ps[0].y0
     seg.yn = seg.y0 + len(seg_Ps)
-    seg.players.fds = copy(fds) + [fd]  # fds of root PP
+    seg.fds = copy(fds) + [fd]  # fds of root PP
 
     return seg
 
@@ -426,8 +427,7 @@ def sum2PP(PP_segs, base_rdn, fd):  # sum PP_segs into PP
 
     from sub_recursion import append_P
 
-    PP = CPP(x0=PP_segs[0].x0, rdn=base_rdn, rlayers=[[]], dlayers=[[]])
-    PP.players.fds=copy(PP_segs[0].players.fds)+[fd]
+    PP = CPP(x0=PP_segs[0].x0, rdn=base_rdn, fds=copy(PP_segs[0].fds)+[fd], rlayers=[[]], dlayers=[[]])
     if fd: PP.dseg_levels, PP.mseg_levels = [PP_segs], [[]]  # empty alt_seg_levels
     else:  PP.mseg_levels, PP.dseg_levels = [PP_segs], [[]]
 
@@ -459,9 +459,9 @@ def sum2PP(PP_segs, base_rdn, fd):  # sum PP_segs into PP
         for derP in seg.P__[-1].uplink_layers[-2]:  # loop terminal branches
             if derP in seg.P__[-1].uplink_layers[-1][fd]:
                 # +ve links
-                PP.players.val += derP.val
+                PP.val += derP.val
             else:  # -ve links
-                PP.players.nval += derP.val
+                PP.alt_players[1] += derP.players[1]  # alt_players[1] is nval? Because players[1] is val
                 PP.nderP_ += [derP]
     return PP
 
@@ -571,8 +571,9 @@ def comp_angle(param_name, _angle, angle, dval=0, mval=0, dtuple=[], mtuple=[]):
 
     dangle = np.arctan2(sin_da, cos_da)  # scalar, vertical difference between angles
     mangle = ave_dangle - abs(dangle)  # inverse match, not redundant as summed across sign
-    setattr(dtuple, param_name, dangle); dval += abs(dangle)
-    setattr(mtuple, param_name, mangle); mval += mangle
+    if dtuple and mtuple:  # dtuple and mtuple is not parsed when we call it in rotate_P
+        setattr(dtuple, param_name, dangle); dval += abs(dangle)
+        setattr(mtuple, param_name, mangle); mval += mangle
 
     return mangle, dangle
 
@@ -610,9 +611,8 @@ def agg_recursion_eval(blob, PP_t):
             for i, PP in enumerate(PP_):
                 PP_[i] = CPP2graph(PP, fseg=fseg, Cgraph=Cgraph)  # convert PP to graph
 
-    if isinstance(blob, Cgraph):  M, G = blob.plevels.valt
-    elif isinstance(blob, CPP):   M, G = blob.players.valt
-    else:                         M, G = blob.M, blob.G
+    if isinstance(blob, Cgraph):  M, G = blob.plevels.val, blob.alt_plevels.val
+    elif isinstance(blob, CPP):   M, G = blob.players.val, blob.alt_players.val
     valt = [M, G]
     fork_rdnt = [1+(G>M), 1+(M>=G)]
     for fd, PP_ in enumerate(PP_t):  # PPm_, PPd_

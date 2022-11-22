@@ -28,8 +28,8 @@ class CpH(ClusterStructure):  # hierarchy of params: plevels, players, or ptuple
 
     H = list  # plevels, players, or ptuples
     fds = list  # m|d per element
-    val = 0
-    nval = 0  # of neg open links?
+    val = int
+    nval = int  # of neg open links?
     # extuple per composition order, each param can be original or m|d:
     L = int  # len node_
     S = float  # sparsity: summed distances
