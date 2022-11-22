@@ -126,7 +126,7 @@ def rotate_P_(P__, dert__, mask__):  # rotate each P to align it with direction 
                 P.ptuple.axis = P.ptuple.angle
                 rotate_P(P, dert__, mask__, yn, xn)  # recursive reform P along new axis in blob.dert__
                 _, daxis = comp_angle("axis", P.ptuple.axis, P.ptuple.angle)
-            # store as P.daxis to adjust params?
+            # store P.daxis to adjust params?
 
 def rotate_P(P, dert__t, mask__, yn, xn):
 
@@ -209,17 +209,12 @@ def append_P(P__, P):  # pack P into P__ in top down sequence
             if P.y0 > y: P__.insert(i, [P])  # PP.P__.insert(P.y0 - current_ys[-1], [P])
 
 
-def copy_P(P, iPtype=None):  # Ptype =0: P is CP | =1: P is CderP | =2: P is CPP | =3: P is CderPP | =4: P is CaggPP
+def copy_P(P, Ptype=None):  # Ptype =0: P is CP | =1: P is CderP | =2: P is CPP | =3: P is CderPP | =4: P is CaggPP
 
-    if not iPtype:  # assign Ptype based on instance type if no input type is provided
-        if isinstance(P, CPP):
-            Ptype = 2
-        elif isinstance(P, CderP):
-            Ptype = 1
-        elif isinstance(P, CP):
-            Ptype = 0
-    else:
-        Ptype = iPtype
+    if not Ptype:  # assign Ptype based on instance type if no input type is provided
+        if isinstance(P, CPP):     Ptype = 2
+        elif isinstance(P, CderP): Ptype = 1
+        else:                      Ptype = 0  # CP
 
     uplink_layers, downlink_layers = P.uplink_layers, P.downlink_layers  # local copy of link layers
     P.uplink_layers, P.downlink_layers = [], []  # reset link layers
@@ -272,8 +267,9 @@ def copy_P(P, iPtype=None):  # Ptype =0: P is CP | =1: P is CderP | =2: P is CPP
 
     return new_P
 
+# not revised:
 
-def CBlob2graph(blob, fseg, Cgraph):
+def CBlob2graph(blob, fseg, Cgraph):  # this secondary, don't worry for now
 
     PPm_ = blob.PPm_; PPd_ = blob.PPd_
     root_fds = PPm_[0].players.fds[:-1]  # root fds is the shorter fork?
