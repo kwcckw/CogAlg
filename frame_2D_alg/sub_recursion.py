@@ -9,8 +9,7 @@ from frame_blobs import CBlob, flood_fill, assign_adjacents
 from comp_slice import *
 from agg_recursion import *
 
-ave_M = -500  # high negative ave M for high G blobs
-
+ave_rotate = 10
 
 def sub_recursion_eval(root):  # for PP or dir_blob
 
@@ -280,8 +279,8 @@ def CBlob2graph(blob, fseg, Cgraph):  # this secondary, don't worry for now
 
     for fd, PP_ in enumerate([PPm_, PPd_]):
         for PP in PP_:
-            # mostly wrong below: (actually i think we need sum both plevels and alt_plevels now? So we need to remove the if loop)
-            if fd:  # sum from altPP's players
+            if fd:
+                # we don't need altPP_ here, it's a blob
                 for altPP in PP.altPP_:
                     sum_pH(root.alt_plevels, CpH(H=altPP.players[0]))
                     root.alt_plevels.val += altPP.players[1]
