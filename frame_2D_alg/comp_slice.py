@@ -122,8 +122,8 @@ class CderP(ClusterStructure):  # tuple of derivatives in P uplink_ or downlink_
 
 class CPP(CderP):  # derP params include P.ptuple
 
-    players = lambda: [[], 0]  # 1st plevel, zipped with alt_players in comp_players
-    alt_players = lambda: [[], 0]  # summed from altPP_, sub comp support, agg comp suppression?
+    players = lambda: [[[], 0], 0]  # 1st plevel, zipped with alt_players in comp_players
+    alt_players = lambda: [[[], 0], 0]  # summed from altPP_, sub comp support, agg comp suppression?
     altPP_ = list  # adjacent alt-fork PPs per PP, from P.roott[1] in sum2PP
     fds = list
     nval= int
@@ -236,7 +236,7 @@ def comp_P(_P, P):  # forms vertical derivatives of params per P in _P.uplink, c
 
     if isinstance(_P, CP):
         mtuple, dtuple = comp_ptuple(_P.ptuple, P.ptuple)
-        players = [[[_P.ptuple], _P.ptuple.val]]  # ["ptuples"]
+        players = [[[_P.ptuple], _P.ptuple.val], _P.ptuple.val]  # ["ptuples"]
         lplayer = [[[mtuple], mtuple.val], [[dtuple], dtuple.val]]
     else:  # P is derP
         mplayer, dplayer = comp_players(_P.players, P.players)
@@ -396,7 +396,7 @@ def sum2seg(seg_Ps, fd, fds):  # sum params of vertically connected Ps into segm
 
     accum_derP(seg, seg_Ps[-1], fd)  # accum last P only, top P uplink_layers are not part of seg
     if lplayer[0]:
-        if fd: seg.players[0] += lplayer  # der+
+        if fd: seg.players.insert(1,lplayer)  # der+ (use insert because last element is val)
         else:  seg.players[0] = lplayer  # rng+
 
     seg.y0 = seg_Ps[0].y0
@@ -412,14 +412,13 @@ def accum_derP(seg, derP, fd):  # derP might be CP, though unlikely
     else:                       seg.x0 = min(seg.x0, derP.x0)
     if isinstance(derP, CP):
         derP.roott[fd] = seg
-        if seg.players: sum_players(seg.players, [[derP.ptuple]])  # add val?
+        if seg.players: sum_players(seg.players, [[[derP.ptuple], derP.ptuple.val], derP.ptuple.val])  # add val?
         # players:
         else:           seg.players.append([deepcopy(derP.ptuple)])
         seg.xn = max(seg.xn, derP.x0 + derP.ptuple.L)
     else:
         sum_players(seg.players, derP.players)  # last derP player is current mplayer, dplayer
-        seg.val += derP.val
-        seg.xn = max(seg.xn, derP._P.x0 + derP.players[0][0].L)
+        seg.xn = max(seg.xn, derP._P.x0 + derP.players[0][0][0].L)  # or use derP._P.ptuple.L?
 
 
 def sum2PP(PP_segs, base_rdn, fd):  # sum PP_segs into PP
@@ -467,16 +466,22 @@ def sum2PP(PP_segs, base_rdn, fd):  # sum PP_segs into PP
 
 def sum_players(Layers, layers, fneg=0, fplayer=1):  # no accum across fd, that's checked in comp_players?
 
-    for Layer, layer in zip_longest(Layers[0], layers[0], fillvalue=[]):
-        if layer[0]:
-            if Layer[0]:
+    Layers[-1] += layers[-1]  # this will sum all same level val
+    for i, (Layer, layer) in enumerate(zip_longest(Layers[:-1], layers[:-1], fillvalue=[])):  # last element is val
+        if layer:  # layer will be either [] or having non empty layer[0]
+            if Layer:
                 if fplayer: sum_players(Layer, layer, fneg=fneg, fplayer=0)  # recursion with ptuples vs. players
-                else:       sum_ptuple(Layer, layer, fneg)  # Layer is Ptuple, accum ptuple
+                else:
+                    for Ptuple, ptuple in zip(Layer, layer):
+                        sum_ptuple(Ptuple, ptuple, fneg)  # Layer is Ptuple, accum ptuple
             elif not fneg:
-                Layers[0].append(deepcopy(layer))
-            Layers[1] += layer[1]  # sum val while present
+                if i > len(Layers[:-1]) - 1:
+                    Layers.insert(i, deepcopy(layer))
+                else:
+                    Layers[i] += deepcopy(layer)  # merge layer con
 
 
+# below pending update
 def comp_players(_layers, layers):  # unpack and compare der layers, if any from der+, no fds, same within PP
 
     mlayers, dlayers = [[],0], [[],0]
