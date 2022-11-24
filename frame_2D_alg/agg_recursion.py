@@ -23,15 +23,6 @@ ave_len = 3
 ave_distance = 5
 ave_sparsity = 2
 
-
-class CpH(ClusterStructure):  # hierarchy of params: plevels, players, or ptuples, + their vars
-
-    H = list  # plevels, players, or ptuples
-    fds = list  # m|d per element
-    val = int
-    nval = int  # of neg open links?
-    ext = lambda: Cext
-
 class Cext(ClusterStructure):    # extuple per composition order, each param can be original or m|d:
 
     L = int  # len node_
@@ -39,6 +30,14 @@ class Cext(ClusterStructure):    # extuple per composition order, each param can
     x = float  # median: x0+L/2
     y = float
     axis = float  # optional, if derG or high-aspect graph?
+    
+class CpH(ClusterStructure):  # hierarchy of params: plevels, players, or ptuples, + their vars
+
+    H = list  # plevels, players, or ptuples
+    fds = list  # m|d per element
+    val = int
+    nval = int  # of neg open links?
+    ext = lambda: Cext()
 
 class Cgraph(CPP):  # graph or generic PP of any composition
 

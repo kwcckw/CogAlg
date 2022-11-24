@@ -29,7 +29,7 @@ def sub_recursion_eval(root):  # for PP or dir_blob
             else:
                 comb_layers = mcomb_layers; PP_layers = PP.rlayers; PPm_ += [PP]
 
-            val = PP.players[1]; alt_val = PP.alt_players[1]  # for fork rdn:
+            val = PP.players[1]; alt_val = PP.alt_players[1] if PP.alt_players else 0   # for fork rdn:
             ave = PP_aves[fd] * (PP.rdn + 1 + (alt_val > val))
             if val > ave and len(PP.P__) > ave_nsub:
                 sub_recursion(PP)  # comp_P_der | comp_P_rng in PPs -> param_layer, sub_PPs
@@ -49,7 +49,7 @@ def sub_recursion_eval(root):  # for PP or dir_blob
             if isinstance(root, CPP):  # root is CPP
                 root.players[1] += PP.players[1]  # vals
             else:  # root is CBlob
-                if fd: root.G += PP.alt_players[1]
+                if fd: root.G += PP.alt_players[1] if  PP.alt_players else 0
                 else:  root.M += PP.players[1]
 
 def sub_recursion(PP):  # evaluate each PP for rng+ and der+
