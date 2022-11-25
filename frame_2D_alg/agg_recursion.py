@@ -23,15 +23,7 @@ ave_len = 3
 ave_distance = 5
 ave_sparsity = 2
 
-
-class CpH(ClusterStructure):  # hierarchy of params: plevels, players, or ptuples, + their vars
-
-    H = list  # plevels, players, or ptuples
-    fds = list  # m|d per element
-    val = int
-    nval = int  # of neg open links?
-    ext = lambda: Cext
-
+# Cext need to be defined before CpH to enable Cext in CpH
 class Cext(ClusterStructure):  # extuple per composition order, each param can be original or m|d:
 
     L = int  # len node_
@@ -40,6 +32,16 @@ class Cext(ClusterStructure):  # extuple per composition order, each param can b
     y = float
     axis = float  # optional, if derG or high-aspect graph?
     explayers = list  # add (L,S,axis) explayer per deeper plevel
+
+class CpH(ClusterStructure):  # hierarchy of params: plevels, players, or ptuples, + their vars
+
+    H = list  # plevels, players, or ptuples
+    fds = list  # m|d per element
+    val = int
+    nval = int  # of neg open links?
+    ext = lambda: Cext()
+
+
 
 class Cgraph(CPP):  # graph or generic PP of any composition
 
@@ -348,6 +350,7 @@ def sum2graph_(G_, fd, fder):  # sum node and link params into graph, plevel in 
 def sum_pH(PH, pH, fneg=0):  # hierarchically recursive unpack: plevels ( players ( ptuples ( ptuple
     # no accum across fd: matched in comp_pH
 
+    PH.val += pH.val
     for SpH, spH in zip_longest(PH.H, pH.H, fillvalue=None):
         if spH:
             if SpH:
@@ -357,7 +360,8 @@ def sum_pH(PH, pH, fneg=0):  # hierarchically recursive unpack: plevels ( player
                     sum_pH(SpH, spH, fneg=0)  # unpack sub-hierarchy, recursively
             elif not fneg:
                 PH.H.append(deepcopy(spH))  # new Sub_pH
-            PH.val += spH.val  # accum ptuple.val in player.val or player.val in plevel.val
+            # i think the line below will not be needed, we just need line 353 above to sum every val at every depth
+            # PH.val += spH.val  # accum ptuple.val in player.val or player.val in plevel.val
 
 # old:
 
