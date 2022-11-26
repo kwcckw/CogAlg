@@ -315,19 +315,33 @@ def CPP2graph(PP, fseg, Cgraph):
         for altPP in PP.altPP_:
             # convert altPP's players into CpH
             alt_H, alt_val = [], altPP.players[1]
-            for ptuples, val in altPP.players[0]: alt_H.append(CpH(H=deepcopy(ptuples), val=val))
+            for ptuples, val in altPP.players[0]:
+                len_node = len(ptuples)  
+                sparsity = 1  # how to get sparsity here? Do we need to compute Dy and Dx again?
+                axis = [1, 0]  # init as [1,0]?
+                extH = [[len_node, sparsity, axis]]
+                alt_H.append(CpH(H=deepcopy(ptuples), extH=extH,  val=val))
             if alt_players.H:
-                sum_pH(alt_players, CpH(H=alt_H[:len(alt_players.fds)], val=alt_val))  # sum same-fd players only
+                sum_pH(alt_players, CpH(H=alt_H[:len(alt_players.fds)], extH=extH, val=alt_val))  # sum same-fd players only
             else:
-                alt_players.H, alt_players.val = alt_H, alt_val
+                alt_players.H, alt_players.val, alt_players.extH = alt_H, alt_val, deepcopy(extH)
     # graph: plevels ( players ( ptuples:
-    players = CpH(H=[], val = PP.players[1], fds=deepcopy(PP.fds) )
+    players = CpH(H=[], extH=[[0,0,[0,0]]], val = PP.players[1], fds=deepcopy(PP.fds) )
     # convert multiple ptuples into [CpH]
     for ptuples, val in PP.players[0]:
-        players.H.append(CpH(H=deepcopy(ptuples), val=val))
+        len_node = len(ptuples)  
+        sparsity = 1
+        axis = [1, 0]  # init as [1,0]?
+        extH = [[len_node, sparsity, axis]]
+        players.H.append(CpH(H=deepcopy(ptuples), extH=extH, val=val))
+        
+        # increment players' extH
+        players.extH[0][0] += len_node
+        players.extH[0][1] += sparsity
+        players.extH[0][2][0] += axis[0]; players.extH[0][2][1] += axis[1] 
 
-    plevels = CpH(H = [players],  val=players.val, fds = deepcopy(players.fds))
-    alt_plevels = CpH(H = [alt_players],  val = alt_players.val, fds=deepcopy(alt_players.fds))
+    plevels = CpH(H = [players],  extH=deepcopy(players.extH), val=players.val, fds = deepcopy(players.fds))
+    alt_plevels = CpH(H = [alt_players],  extH=deepcopy(alt_players.extH), val = alt_players.val, fds=deepcopy(alt_players.fds))
     x0 = PP.x0; xn = PP.xn; y0 = PP.y0; yn = PP.yn
 
     return Cgraph(
