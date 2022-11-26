@@ -277,25 +277,14 @@ def CBlob2graph(blob, fseg, Cgraph):  # this secondary, don't worry for now
 
     for fd, PP_ in enumerate([PPm_, PPd_]):
         for PP in PP_:
-            if fd:
-                # we don't need altPP_ here, it's a blob ( but we need alt_plevels? )
-                for altPP in PP.altPP_:
-                    alt_H, alt_val = [], altPP.players[1]
-                    for ptuples, val in altPP.players[0]: alt_H.append(CpH(H=deepcopy(ptuples), val=val))
-                    if root.alt_plevels.H:
-                        sum_pH(root.alt_plevels, CpH(H=alt_H, val=alt_val))   
-                    else:
-                        root.alt_plevels.H, root.alt_plevels.val = alt_H, alt_val
-                    root.alt_plevels.fds = deepcopy(altPP.fds)
-            else:  # sum from players
-                H, val = [], PP.players[1]
-                for ptuples, val in PP.players[0]: H.append(CpH(H=deepcopy(ptuples), val=val))
-                if root.plevels:
-                    sum_pH(root.plevels, CpH(H=H, val=val))
-                else:
-                    root.plevels.H, root.plevels.val = H, val
-                root.plevels.fds = deepcopy(PP.fds)
+            plevels = root.alt_plevels if fd else root.plevels
+            H, val = [], PP.players[1]
+            for ptuples, val in PP.players[0]: H.append(CpH(H=deepcopy(ptuples), val=val))
 
+            if plevels: sum_pH(plevels, CpH(H=H, val=val))
+            else:       plevels.H, plevels.val = H, val
+            plevels.fds = copy(PP.fds)
+            # not updated:
             # compute rdn
             if fseg: PP = PP.roott[PP.fds[-1]]  # seg root
             PP_P_ = [P for P_ in PP.P__ for P in P_]  # PPs' Ps
@@ -331,8 +320,7 @@ def CPP2graph(PP, fseg, Cgraph):
                 sum_pH(alt_players, CpH(H=alt_H[:len(alt_players.fds)], val=alt_val))  # sum same-fd players only
             else:
                 alt_players.H, alt_players.val = alt_H, alt_val
-
-    # graph: plevels ( players ( ptuples: 
+    # graph: plevels ( players ( ptuples:
     players = CpH(H=[], val = PP.players[1], fds=deepcopy(PP.fds) )
     # convert multiple ptuples into [CpH]
     for ptuples, val in PP.players[0]:
