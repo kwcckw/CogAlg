@@ -278,7 +278,7 @@ def CBlob2graph(blob, fseg, Cgraph):  # this secondary, don't worry for now
     for fd, PP_ in enumerate([PPm_, PPd_]):
         for PP in PP_:
             plevels = root.alt_plevels if fd else root.plevels
-            H=[],val= PP.players[1]
+            H=[]; val= PP.players[1]
             for ptuples, val in PP.players[0]: H.append(CpH(H=deepcopy(ptuples), val=val))
 
             if plevels: sum_pH(plevels, CpH(H=H, val=val))
