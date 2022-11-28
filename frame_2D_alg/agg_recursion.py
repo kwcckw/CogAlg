@@ -32,7 +32,7 @@ class CpH(ClusterStructure):  # hierarchy of params + associated vars
     # extuple in players only, replace with ext: skip if empty?
     L = float  # len_node_
     S = float  # sparsity: sum_len_links
-    A = list  # axis: in derG or high-aspect G only?
+    A = lambda: [0, 0]  # axis: in derG or high-aspect G only?
 
 class Cgraph(CPP):  # graph or generic PP of any composition
 
@@ -110,13 +110,13 @@ def comp_G_(G_, fder):  # cross-comp Gs (patterns of patterns): Gs, derGs, or se
             # compare each G to other Gs in rng, bilateral link assign:
             if G in [node for link in _G.link_ for node in link.node_]:  # G,_G was compared in prior rng+, add frng to skip?
                 continue
-            dx = _G.plevels.x - G.plevels.x; dy = _G.plevels.y - G.plevels.y
+            dx = _G.x - G.x; dy = _G.y - G.y
             distance = np.hypot(dy, dx)  # Euclidean distance between centroids, sum in sparsity
             # proximity = ave_rng - distance?
             if distance < ave_distance * ((_G.plevels.val+G.plevels.val) / (2*sum(G_aves))):
                 # comb G eval
-                mplevel, dplevel = comp_G(_G.plevels, G.plevels)
-                alt_mplevel, alt_dplevel = comp_G(_G.alt_plevels, G.alt_plevels)
+                mplevel, dplevel = comp_pH(_G.plevels, G.plevels, fext=1)
+                alt_mplevel, alt_dplevel = comp_pH(_G.alt_plevels, G.alt_plevels, fext=1)
                 # draft:
                 mplevel.H=[CpH(L=1, S=distance, A=[dy,dx])]  # 1st player: L,S,A of derG, in G: summed derG S, redefined L,A?
                 dplevel.H=[CpH(L=1, S=distance, A=[dy,dx])]  # external params or their derivatives in graph of any fd?
@@ -158,19 +158,33 @@ def comp_G(_plevels, plevels):  # unpack plevels ( ptuples ( ptuple
     return mplevel, dplevel
 
 # init redraft:
-def comp_pH(_pH, pH):  # unpack plevels ( players ( PPlayers ( ptuples ( ptuple:
+def comp_pH(_pH, pH, fd=None, fext=0):  # unpack plevels ( players ( PPlayers ( ptuples ( ptuple:
 
-    mpH, dpH = CpH(), CpH()
-    for _spH, spH, _fd, fd in zip(_pH.H, pH.H, _pH.fds, pH.fds):
-        if _fd == fd:
+    mplevel, dplevel = CpH(), CpH()
+    if fd != None and fd:
+        mplevel.A = 0; dplevel.A = 0
+    for i, (_spH, spH) in enumerate(zip(_pH.H, pH.H)):
+        if (fd != None) or (_pH.fds[i] == pH.fds[i]):
             if isinstance(spH, Cptuple):
                 mtuple, dtuple = comp_ptuple(_spH, spH)
                 mplevel.H += [mtuple]; mplevel.val += mtuple.val
                 dplevel.H += [dtuple]; dplevel.val += dtuple.val
             else:
-                if pH.extH:
+                sub_mplevel, sub_dplevel = comp_pH(_spH, spH, fd=_pH)
+                if fext:
+                    if fd == None: fd = _pH.fds[i]
                     mext, dext, mval, dval = comp_ext(_spH, spH, fd)  # only in lower plevels
-                sub_mplevel, sub_dplevel = comp_pH(_spH, spH, fd)
+                    # pack ext values into sub level
+                    for sub_plevel, exts in zip([sub_mplevel.H, sub_dplevel.H], [mext, dext]):
+                        for sub_H, ext_params in zip(sub_plevel, exts):
+                            sub_H.L += ext_params[0]
+                            sub_H.S += ext_params[1]
+                            if isinstance(ext_params[2], list):
+                                sub_H.A[0] += ext_params[2][0]
+                                sub_H.A[1] += ext_params[2][1]
+                            else:
+                                sub_H.A += ext_params[2]
+
                 # unpack to comp_ptuples? no nesting per plevel?
                 mplevel.H += [sub_mplevel]; mplevel.val += sub_mplevel.val
                 dplevel.H += [sub_dplevel]; dplevel.val += sub_dplevel.val
@@ -181,27 +195,28 @@ def comp_pH(_pH, pH):  # unpack plevels ( players ( PPlayers ( ptuples ( ptuple:
 def comp_ext(_pH, pH, fd):  # only for comp_plevels, fd: all scalars?
 
     mext_, dext_ = [],[]; mval, dval = 0,0
+    _L, _S, _A = _pH.L, _pH.S, _pH.A
+    L, S, A = pH.L, pH.S, pH.A
 
-    for (_L,_S,_A), (L,S,A) in zip(_pH.extH, pH.extH):
-        m_, d_ = [], []  # matches, diffs
-        if fd:  # all scalars
-            for _param, param in zip((_L,_S,_A), (L,S,A)):
-                d_+= [_param - param]
-                m_+= [min(_param, param)]
+    m_, d_ = [], []  # matches, diffs
+    if fd:  # all scalars
+        for _param, param in zip((_L,_S,_A), (L,S,A)):
+            d_+= [_param - param]
+            m_+= [min(_param, param)]
+    else:
+        _sparsity = _S / (_L-1); sparsity = S / (L-1)  # average distance between connected nodes
+        d_+= [_sparsity - sparsity]
+        m_+= [min(_sparsity, sparsity)]  # same for derGs?
+        d_+= [_L - L]  # len node_, same for 2-node derGs?
+        m_+= [min(_L, L)]
+        if _A and A:  # axis: dy,dx only for derG or high-aspect Gs, both val *= aspect?
+            mA, dA = comp_angle(None, _A, A)
         else:
-            _sparsity = _S / (_L-1); sparsity = S / (L-1)  # average distance between connected nodes
-            d_+= [_sparsity - sparsity]
-            m_+= [min(_sparsity, sparsity)]  # same for derGs?
-            d_+= [_L - L]  # len node_, same for 2-node derGs?
-            m_+= [min(_L, L)]
-            if _A and A:  # axis: dy,dx only for derG or high-aspect Gs, both val *= aspect?
-                mA, dA = comp_angle(None, _A, A)
-            else:
-                mA=1; dA=0  # no difference, matching low-aspect, only if both?
-            m_+= [mA]; d_+= [dA]
+            mA=1; dA=0  # no difference, matching low-aspect, only if both?
+        m_+= [mA]; d_+= [dA]
 
-        mext_+=[m_]; mval += sum(m_)
-        dext_+=[d_]; dval += sum(d_)
+    mext_+=[m_]; mval += sum(m_)
+    dext_+=[d_]; dval += sum(d_)
 
     return mext_, dext_, mval, dval
 
@@ -221,7 +236,7 @@ def eval_med_layer(graph_, graph, fd):   # recursive eval of reciprocal links fr
             for derG in G.link_:
                 try_mG = derG.node_[0] if derG.node_[1] is G else derG.node_[1]
                 if mmG is try_mG:  # mmG is directly linked to G
-                    if derG.sparsity > dir_mderG.sparsity:
+                    if derG.plevels.H[fd].S > dir_mderG.plevels.H[fd].S:
                         dir_mderG = derG  # for next med eval if dir link is shorter
                         fmed = 0
                     break
@@ -320,16 +335,15 @@ def sum2graph_(G_, fd, fder):  # sum node and link params into graph, plevel in 
                 sum_pH(new_plevel, derG.plevels.H[fd])  # accum derG
                 derG.roott[fd] = graph  # + link_ = [derG]?
                 valt[fd] += derG.plevels.H[fd].val
-                sparsity += derG.sparsity  # probably wrong, eval per node:
                 nlinks += 1
             node.plevels.val += valt[fd]  # derG valts summed in eval_med_layer added to lower-plevels valt
             graph.plevels.val += node.plevels.val
 
         graph.plevels.fds = copy(node.plevels.fds) + [fd]
-        graph.sparsity = sparsity/nlinks  # angle: of line between max distant nodes, hard to compute and value depends on aspect ratio
         graph_ += [graph]
         graph.plevels.H += [new_plevel]
 
+    # below not updated yet
     for graph in graph_:  # 2nd pass: accum alt_graph_ params
         Alt_plevels = []  # Alt_players if fsub
         for node in graph.node_:
@@ -365,9 +379,7 @@ def sum2graph_(G_, fd, fder):  # sum node and link params into graph, plevel in 
 
 def sum_pH(PH, pH, fneg=0):  # recursive unpack plevels ( ptuples ( ptuple, no accum across fd: matched in comp_pH
 
-    for (_L,_S,_A), (L,S,A) in zip(PH.extH, pH.extH):  # n explayers = n higher plevels
-        _L+=L; _S+=S; _A[0]+=A[0]; _A[1]+=A[1]
-
+    PH.L += pH.L; PH.S += pH.S; PH.A += pH.A
     for SpH, spH in zip_longest(PH.H, pH.H, fillvalue=None):
         if spH:
             if SpH:
