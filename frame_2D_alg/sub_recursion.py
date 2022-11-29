@@ -305,27 +305,32 @@ def CBlob2graph(blob, fseg, Cgraph):  # this secondary, don't worry for now
 def CPP2graph(PP, fseg, Cgraph):
 
     alt_players = CpH()
+    alt_fds = []
     if not fseg and PP.altPP_:  # seg doesn't have altPP_
-        alt_players.fds = PP.altPP_[0].fds
+        alt_fds = PP.altPP_[0].fds
         for altPP in PP.altPP_[1:]:  # get fd sequence common for all altPPs:
-            for i, (_fd, fd) in enumerate(zip(alt_players.fds, altPP.fds)):
+            for i, (_fd, fd) in enumerate(zip(alt_fds, altPP.fds)):
                 if _fd != fd:
-                    alt_players.fds = alt_players.fds[:i]
+                    alt_fds = alt_players.fds[:i]
                     break
         for altPP in PP.altPP_:  # convert altPP.players to CpH
             altH=[]; alt_val= altPP.players[1]
             for ptuples, val in altPP.players[0]: altH.append(CpH(H=deepcopy(ptuples), val=val))
             if alt_players.H:
-                sum_pH(alt_players, CpH(H=altH[:len(alt_players.fds)], val=alt_val))  # sum same-fd players only
+                sum_pH(alt_players, CpH(H=altH[:len(alt_fds)], val=alt_val))  # sum same-fd players only
             else:
                 alt_players.H, alt_players.val = altH, alt_val
     # Cgraph:
-    players = CpH(val=PP.players[1], fds=copy(PP.fds))
+    players = CpH(val=PP.players[1])
     for ptuples, val in PP.players[0]:
         players.H.append(CpH(H=deepcopy(ptuples), val=val))  # fd = root player.fd?
 
-    plevels = CpH(H=[players], val=players.val)
-    alt_plevels = CpH(H=[alt_players], val=alt_players.val)
+    pplayers = CpH(H=[players], val=players.val)
+    alt_pplayers = CpH(H=[alt_players], val=alt_players.val)
+    
+    plevels = CpH(H=[pplayers], val=pplayers.val, fds=[copy(PP.fds[-1])])
+    alt_plevels = CpH(H=[alt_pplayers], val=pplayers.val, fds=[alt_fds[-1] if alt_fds else 0])  # if altPP is not available, assign fds as [0]?
+    
     x0 = PP.x0; xn = PP.xn; y0 = PP.y0; yn = PP.yn
 
     return Cgraph( node_=PP.P__, plevels=plevels, alt_plevels=alt_plevels, x0=x0, xn=xn, y0=y0, yn=yn)

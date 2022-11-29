@@ -521,7 +521,7 @@ def comp_players(_layers, layers):  # unpack and compare der layers, if any from
 
     return [mtuples,mval], [dtuples,dval]
 
-def comp_ptuple(_params, params, fd):  # compare lateral or vertical tuples, similar operations for m and d params
+def comp_ptuple(_params, params, fd=0):  # compare lateral or vertical tuples, similar operations for m and d params
 
     dtuple, mtuple = Cptuple(), Cptuple()
     dval, mval = 0,0
