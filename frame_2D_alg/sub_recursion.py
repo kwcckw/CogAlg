@@ -330,10 +330,11 @@ def CPP2graph(PP, fseg, Cgraph):
     pplayer = CpH(H=[players], val=players.val)
     plevels = CpH(H=[pplayer], val=pplayer.val, fds=[0])
     if PP.altPP_:
-        alt_pplayer = CpH(H=[altPP.players], val=altPP.players.val)
+        # we might not get altPP here, so better to use alt_players
+        alt_pplayer = CpH(H=[alt_players], val=alt_players.val)
         alt_plevels = CpH(H=[alt_pplayer], val=alt_pplayer.val, fds=[0])
     else:
-        alt_plevels = []
+        alt_plevels = CpH()  # so we better put an empty CpH here instead of empty list because we will need more evaluation to check for list later
     x0 = PP.x0; xn = PP.xn; y0 = PP.y0; yn = PP.yn
 
     return Cgraph( node_=PP.P__, plevels=plevels, alt_plevels=alt_plevels, x0=x0, xn=xn, y0=y0, yn=yn)

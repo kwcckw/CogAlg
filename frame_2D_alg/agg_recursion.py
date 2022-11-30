@@ -72,13 +72,12 @@ def agg_recursion(root, G_, fseg):  # compositional recursion in root.PP_, prett
             root.rdn += 1  # estimate
             agg_recursion(root, graph_, fseg=fseg)  # cross-comp graphs
 
-
 def form_graph_(root, G_, fderG):  # forms plevel in agg+ or player in sub+, G is potential node graph, in higher-order GG graph
 
     # der+: comp_link if fderG, from sub_recursion_g?
     for G in G_:  # initialize mgraph, dgraph as roott per G, for comp_G_
         for i in 0,1:
-            graph = [[G], [], [0,0]]  # proto-GG: [node_, medG_, valt]
+            graph = [[G], [], 0]  # proto-GG: [node_, medG_, val]
             G.roott[i] = graph
 
     comp_G_(G_)  # cross-comp all graphs within rng, graphs may be segs, fderG?
@@ -187,7 +186,7 @@ def comp_ext(_spH, spH, mpH, dpH, fd):
 # draft: revise valt, compute rdn per node: nroots?
 def eval_med_layer(graph_, graph, fd):   # recursive eval of reciprocal links from increasingly mediated nodes
 
-    node_, medG_, valt = graph  # node_ is not used here
+    node_, medG_, val = graph  # node_ is not used here
     save_node_, save_medG_ = [], []
     adj_Val = 0  # adjust connect val in graph
 
@@ -210,7 +209,7 @@ def eval_med_layer(graph_, graph, fd):   # recursive eval of reciprocal links fr
                         adj_val = mmderG.plevels.H[fd].val - ave_agg  # or increase ave per mediation depth
                         # adjust nodes:
                         G.plevels.val += adj_val; mG.plevels.val += adj_val  # valts are not updated
-                        valt[fd] += adj_val; mG.roott[fd][2][fd] += adj_val  # root is not graph yet
+                        val += adj_val; mG.roott[fd][2] += adj_val  # root is not graph yet
                         mmG = mmderG.node_[0] if mmderG.node_[0] is not mG else mmderG.node_[1]
                         if mmG not in mmG_:  # not saved via prior mG
                             mmG_ += [mmG]
@@ -225,7 +224,7 @@ def eval_med_layer(graph_, graph, fd):   # recursive eval of reciprocal links fr
     for mmG, dir_mderG, G in save_medG_:  # eval graph merge after adjusting graph by mediating node layer
         _graph = mmG.roott[fd]
         if _graph in graph_ and _graph is not graph:  # was not removed or merged via prior _G
-            _node_, _medG_, _valt = _graph
+            _node_, _medG_, _val = _graph
             for _node, _medG in zip(_node_, _medG_):  # merge graphs, add direct links:
                 for _node in _node_:
                     if _node not in add_node_ + save_node_: add_node_ += [_node]
@@ -234,10 +233,10 @@ def eval_med_layer(graph_, graph, fd):   # recursive eval of reciprocal links fr
                 for _derG in _node.link_:
                     adj_Val += _derG.valt[fd] - ave_agg
 
-            valt[fd] += _valt[fd]
+            val += _val
             graph_.remove(_graph)
 
-    graph[:] = [save_node_+ add_node_, save_medG_+ add_medG_, valt]
+    graph[:] = [save_node_+ add_node_, save_medG_+ add_medG_, val]
     if adj_Val > ave_med:  # positive adj_Val from eval mmG_
         eval_med_layer(graph_, graph, fd)  # eval next med layer in reformed graph
 
@@ -251,15 +250,14 @@ def sub_recursion_g(graph_, fseg, fd, fderG):  # rng+: extend G_ per graph, der+
             node_ = []  # positive links within graph
             for node in graph.node_:
                 for link in node.link_:
-                    if link.valt[1]>0 and link not in node_:
-                        if not link.fds:  # might be converted in other graph
-                            link.fds = [fd]; link.valt = link.plevels[fd][1]; link.plevels = [link.plevels[fd]]  # single-plevel
+                    if link.plevels.H[1].val>0 and link not in node_:
+                        if not link.plevels.fds:  # might be converted in other graph
+                            link.plevels.fds = [fd]; link.plevels.H = [link.plevels.H[fd]]  # select from m|d fork
                         node_ += [link]
         else: node_ = graph.node_
 
         valSub = graph.plevels.val  # last plevel valt: ca = dm if fd else md: edge or core, or single player?
         if valSub > G_aves[fd] and len(node_) > ave_nsub:  # graph.valt eval for agg+ only
-
             sub_mgraph_, sub_dgraph_ = form_graph_(graph, node_, fderG)  # cross-comp and clustering cycle
             # rng+:
             if graph.plevels.val > ave_sub * graph.rdn:  # >cost of calling sub_recursion and looping:
@@ -287,7 +285,7 @@ def sum2graph_(G_, fd, fderG):  # sum node and link params into graph, plevel in
 
     graph_ = []
     for G in G_:
-        node_, medG_, valt = G
+        node_, medG_, val = G
         graph = Cgraph(x0=node_[0].x0, xn=node_[0].xn, y0=node_[0].y0, yn=node_[0].yn, node_=node_, medG_=medG_)
         new_pplayer = CpH()
         sparsity, nlinks = 0, 0
@@ -298,9 +296,9 @@ def sum2graph_(G_, fd, fderG):  # sum node and link params into graph, plevel in
             for derG in node.link_:
                 sum_pH(new_pplayer, derG.plevels.H[fd])  # accum derG
                 derG.roott[fd] = graph  # + link_ = [derG]?
-                valt[fd] += derG.plevels.H[fd].val
+                val += derG.plevels.H[fd].val
                 nlinks += 1
-            node.plevels.val += valt[fd]  # derG valts summed in eval_med_layer added to lower-plevels valt
+            node.plevels.val += val  # derG valts summed in eval_med_layer added to lower-plevels valt
             graph.plevels.val += node.plevels.val
 
         graph.plevels.fds = copy(node.plevels.fds) + [fd]
