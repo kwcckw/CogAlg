@@ -271,7 +271,7 @@ def CBlob2graph(blob, fseg, Cgraph):  # this secondary, don't worry for now
 
     PPm_ = blob.PPm_; PPd_ = blob.PPd_
     root_fds = PPm_[0].fds[:-1]  # root fds is the shorter fork?
-    root = Cgraph(plevels=CpH(), alt_plevels=CpH(),
+    root = Cgraph(plevels=CpH(),
            rng = PPm_[0].rng, fds = root_fds, rdn=blob.rdn, x0=PPm_[0].x0, xn=PPm_[0].xn, y0=PPm_[0].y0, yn=PPm_[0].yn)
     gPP_t = [root.node_, root.alt_graph_]
 
@@ -293,6 +293,7 @@ def CBlob2graph(blob, fseg, Cgraph):  # this secondary, don't worry for now
                 alt_rdn = len(set(PP_P_).intersection(altPP_P_))
                 PP.alt_rdn += alt_rdn  # count overlapping PPs, not bilateral, each PP computes its own alt_rdn
                 root.alt_rdn += alt_rdn  # sum across PP_
+                plevels.altV += altPP.players[1]
 
             # convert and pack gPP
             gPP_t[fd] += [CPP2graph(PP, fseg, Cgraph)]
@@ -304,37 +305,27 @@ def CBlob2graph(blob, fseg, Cgraph):  # this secondary, don't worry for now
 
 def CPP2graph(PP, fseg, Cgraph):
 
-    alt_players = CpH()
     alt_fds = []
+    alt_val = 0
     if not fseg and PP.altPP_:  # seg doesn't have altPP_
-        alt_fds = PP.altPP_[0].fds
+        alt_fds = copy(PP.altPP_[0].fds)  # copy to not affect fds in altPP
         for altPP in PP.altPP_[1:]:  # get fd sequence common for all altPPs:
             for i, (_fd, fd) in enumerate(zip(alt_fds, altPP.fds)):
                 if _fd != fd:
-                    alt_fds = alt_players.fds[:i]
+                    alt_fds = alt_fds[:i]
                     break
         for altPP in PP.altPP_:  # convert altPP.players to CpH
-            altH=[]; alt_val= altPP.players[1]
-            for ptuples, val in altPP.players[0]: altH.append(CpH(H=deepcopy(ptuples), val=val))
-            if alt_players.H:
-                sum_pH(alt_players, CpH(H=altH[:len(alt_fds)], val=alt_val))  # sum same-fd players only
-            else:
-                alt_players.H, alt_players.val = altH, alt_val
+            alt_val += altPP.players[1]
 
     # Cgraph: plevels ( pplayer ( players ( ptuples ( ptuple:
-
     players = CpH(val=PP.players[1], fds=copy(PP.fds))
     for ptuples, val in PP.players[0]:
         players.H.append(CpH(H=deepcopy(ptuples), val=val))
 
     pplayer = CpH(H=[players], val=players.val)
-    plevels = CpH(H=[pplayer], val=pplayer.val, fds=[0])
-    if PP.altPP_:
-        alt_pplayer = CpH(H=[alt_players], val=alt_players.val)
-        alt_plevels = CpH(H=[alt_pplayer], val=alt_pplayer.val, fds=[0])
-    else:
-        alt_plevels = []
+    plevels = CpH(H=[pplayer], val=pplayer.val, fds=[0], altF=[alt_fds[-1] if alt_fds else 0], altV=alt_val)
+
     x0 = PP.x0; xn = PP.xn; y0 = PP.y0; yn = PP.yn
 
-    return Cgraph( node_=PP.P__, plevels=plevels, alt_plevels=alt_plevels, x0=x0, xn=xn, y0=y0, yn=yn)
+    return Cgraph( node_=PP.P__, plevels=plevels, x0=x0, xn=xn, y0=y0, yn=yn)
         # 1st plevel fd is always der+?

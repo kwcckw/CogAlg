@@ -67,7 +67,7 @@ def agg_recursion(root, G_, fseg):  # compositional recursion in root.PP_, prett
         root.plevels.val += rval; root.rlayers = sub_rlayers
     if root.alt_plevels.val > ave_sub * root.rdn:
         sub_dlayers, dval = sub_recursion_g(dgraph_, fseg=0, fd=1)
-        root.alt_plevels.val += dval; root.dlayers = sub_dlayers
+        root.plevels.altV += dval; root.dlayers = sub_dlayers
 
     # cross graph:
     root.mlevels += mgraph_; root.dlevels += dgraph_
@@ -115,28 +115,24 @@ def comp_G_(G_):  # cross-comp Gs (patterns of patterns): Gs, derGs, or segs ins
             # compare each G to other Gs in rng, bilateral link assign:
             if G in [node for link in _G.link_ for node in link.node_]:  # G,_G was compared in prior rng+, add frng to skip?
                 continue
-            dx = _G.x - G.x; dy = _G.y - G.y  # form ave in derG only for der+?
+            dx = ((_G.xn+_G.x0)/ 2) - ((G.xn+G.x0)/2); dy = ((_G.yn+_G.y0)/ 2) - ((G.yn+G.y0)/ 2)  # form ave in derG only for der+?
             distance = np.hypot(dy, dx)  # Euclidean distance between centroids, sum in sparsity
             # proximity = ave_rng - distance?
             if distance < ave_distance * ((_G.plevels.val+G.plevels.val) / (2*sum(G_aves))):
                 # comb G eval
                 mplevel, dplevel = comp_pH(_G.plevels, G.plevels)
-                if _G.alt_plevels and G.alt_plevels:
-                    alt_mplevel, alt_dplevel = comp_pH(_G.alt_plevels, G.alt_plevels)
-                    altVm=alt_mplevel.val; altVd=alt_dplevel.val; altFm=alt_mplevel.fds; altFd=alt_dplevel.fds
-                else:
-                    altVm,altVd = 0,0; altFm,altFd = [],[]  # for sum_pH, comp_pH, no altH: reduced resolution?
+    
                 # new derG:
-                mplevel.L=1; mplevel.S=distance; mplevel.A=[dy,dx]; mplevel.altV=altVm; mplevel.altF=altFm
-                dplevel.L=1; dplevel.S=distance; dplevel.A=[dy,dx]; dplevel.altV=altVd; dplevel.altF=altFd
+                mplevel.L=1; mplevel.S=distance; mplevel.A=[dy,dx]
+                dplevel.L=1; dplevel.S=distance; dplevel.A=[dy,dx]
                 # L,S,A: same extuple in graph of either fd, summed S and redefined L,A in higher G
                 plevels = CpH(H=[mplevel,dplevel])
                 # in _G,G ) hl graph:
-                derG = Cgraph( node_=[_G,G], plevels=plevels, val=mplevel.val + altVm,  # comb val?
+                derG = Cgraph( node_=[_G,G], plevels=plevels, val=mplevel.val + dplevel.val,  # comb val?
                                y0=min(G.y0,_G.y0), yn=max(G.yn,_G.yn), x0=min(G.x0,_G.x0), xn=max(G.xn,_G.xn))
                                # or mean x0=_x+dx/2, y0=_y+dy/2?
                 _G.link_ += [derG]; G.link_ += [derG]  # any val
-                for fd, val in enumerate([mplevel.val, altVm]):  # alt fork is redundant, no support?
+                for fd, val in enumerate([mplevel.val, dplevel.val]):  # alt fork is redundant, no support?
                     if val > 0:
                         for node, (graph, medG_, gvalt) in zip([_G, G], [G.roott[fd], _G.roott[fd]]):  # bilateral inclusion
                             if node not in graph:
@@ -242,7 +238,7 @@ def eval_med_layer(graph_, graph, fd):   # recursive eval of reciprocal links fr
                 for _medG in _medG_:
                     if _medG not in add_medG_ + save_medG_: add_medG_ += [_medG]
                 for _derG in _node.link_:
-                    adj_Val += _derG.valt[fd] - ave_agg
+                    adj_Val += _derG.plevels.H[fd].val - ave_agg
 
             val += _val
             graph_.remove(_graph)
@@ -264,6 +260,9 @@ def sub_recursion_g(graph_, fseg, fd):  # rng+: extend G_ per graph, der+: repla
                     if link.plevels.H[1].val>0 and link not in node_:
                         if not link.plevels.fds:  # might be converted in other graph
                             link.plevels.fds = [fd]; link.plevels.H = [link.plevels.H[fd]]  # select from m|d fork
+                            for H in link.plevels.H:
+                                if isinstance(H.A, list):  # convert to scalar when fd = 1   
+                                    H.A = np.hypot(H.A[0], H.A[1])
                         node_ += [link]
         else: node_ = graph.node_
 
@@ -276,9 +275,9 @@ def sub_recursion_g(graph_, fseg, fd):  # rng+: extend G_ per graph, der+: repla
                 graph.plevels.val += rval; sub_val += rval
                 graph.rlayers = [sub_mgraph_] + [sub_rlayers]
             # der+:
-            if graph.alt_plevels.val > ave_sub * graph.rdn:
+            if graph.plevels.altV > ave_sub * graph.rdn:
                 sub_dlayers, dval = sub_recursion_g(sub_dgraph_, fseg=fseg, fd=1)
-                graph.alt_plevels.val += dval; sub_val += dval
+                graph.plevels.altV += dval; sub_val += dval
                 graph.dlayers = [sub_dgraph_] + [sub_dlayers]
 
             for comb_layers, graph_layers in zip(comb_layers_t, [graph.rlayers, graph.dlayers]):
@@ -315,8 +314,10 @@ def sum2graph_(G_, fd):  # sum node and link params into graph, plevel in agg+ o
         graph.plevels.fds = copy(node.plevels.fds) + [fd]
         graph_ += [graph]
         graph.plevels.H += [new_pplayer]
+        if fd and isinstance(new_pplayer.A, list):  # convert to scalar when fd = 1
+            new_pplayer.A = np.hypot(new_pplayer.A[0], new_pplayer.A[1])
 
-    # below not updated yet
+    # below not updated yet (probably not needed if there's no altH now)
     for graph in graph_:  # 2nd pass: accum alt_graph_ params
         Alt_plevels = []  # Alt_players if fsub
         for node in graph.node_:
@@ -361,14 +362,16 @@ def add_alts(cplevel, aplevel):
 
 
 def sum_pH(PH, pH, fneg=0):  # recursive unpack plevels ( pplayer ( players ( ptuples ( ptuple, no accum across fd: matched in comp_pH
-
-    if PH.L:  # valid extuple
+    # should be pH here? Because we accumulate PH with pH, so initially PH.L will be zero
+    if pH.L:  # valid extuple
         PH.L += pH.L; PH.S += pH.S
-        if PH.A and pH.A:
+        if PH.A:
             if isinstance(PH.A, list):
                 PH.A[0] += pH.A[0]; PH.A[1] += pH.A[1]
             else:
                 PH.A += pH.A
+        else:
+            PH.A = copy(pH.A)
     for SpH, spH in zip_longest(PH.H, pH.H, fillvalue=None):
         if spH:
             if SpH:
