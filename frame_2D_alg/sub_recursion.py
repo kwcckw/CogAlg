@@ -271,8 +271,7 @@ def CBlob2graph(blob, fseg, Cgraph):  # this secondary, don't worry for now
 
     PPm_ = blob.PPm_; PPd_ = blob.PPd_
     root_fds = PPm_[0].fds[:-1]  # root fds is the shorter fork?
-    root = Cgraph(plevels=CpH(),
-           rng = PPm_[0].rng, fds = root_fds, rdn=blob.rdn, x0=PPm_[0].x0, xn=PPm_[0].xn, y0=PPm_[0].y0, yn=PPm_[0].yn)
+    root = Cgraph(plevels=CpH(), rng = PPm_[0].rng, fds = root_fds, rdn=blob.rdn, x0=PPm_[0].x0, xn=PPm_[0].xn, y0=PPm_[0].y0, yn=PPm_[0].yn)
     gPP_t = [root.node_, root.alt_graph_]
 
     for fd, PP_ in enumerate([PPm_, PPd_]):
@@ -293,7 +292,7 @@ def CBlob2graph(blob, fseg, Cgraph):  # this secondary, don't worry for now
                 alt_rdn = len(set(PP_P_).intersection(altPP_P_))
                 PP.alt_rdn += alt_rdn  # count overlapping PPs, not bilateral, each PP computes its own alt_rdn
                 root.alt_rdn += alt_rdn  # sum across PP_
-                plevels.altV += altPP.players[1]
+                plevels.altTop.val += altPP.players[1]
 
             # convert and pack gPP
             gPP_t[fd] += [CPP2graph(PP, fseg, Cgraph)]
@@ -305,17 +304,18 @@ def CBlob2graph(blob, fseg, Cgraph):  # this secondary, don't worry for now
 
 def CPP2graph(PP, fseg, Cgraph):
 
-    alt_fds = []
-    alt_val = 0
+    AltTop = CpH
     if not fseg and PP.altPP_:  # seg doesn't have altPP_
-        alt_fds = copy(PP.altPP_[0].fds)  # copy to not affect fds in altPP
+        alt_fds = copy(PP.altPP_[0].fds)
         for altPP in PP.altPP_[1:]:  # get fd sequence common for all altPPs:
             for i, (_fd, fd) in enumerate(zip(alt_fds, altPP.fds)):
                 if _fd != fd:
                     alt_fds = alt_fds[:i]
                     break
         for altPP in PP.altPP_:  # convert altPP.players to CpH
-            alt_val += altPP.players[1]
+            # draft, fds is probably wrong:
+            altTop = CpH(H=altPP[0][0],val=altPP[0][1], fds=copy(alt_fds))
+            sum_pH(AltTop, altTop)
 
     # Cgraph: plevels ( pplayer ( players ( ptuples ( ptuple:
     players = CpH(val=PP.players[1], fds=copy(PP.fds))
@@ -323,7 +323,7 @@ def CPP2graph(PP, fseg, Cgraph):
         players.H.append(CpH(H=deepcopy(ptuples), val=val))
 
     pplayer = CpH(H=[players], val=players.val)
-    plevels = CpH(H=[pplayer], val=pplayer.val, fds=[0], altF=[alt_fds[-1] if alt_fds else 0], altV=alt_val)
+    plevels = CpH(H=[pplayer], val=pplayer.val, fds=[0], altTop=AltTop)  # altF=[alt_fds[-1] if alt_fds else 0], altV=alt_val)
 
     x0 = PP.x0; xn = PP.xn; y0 = PP.y0; yn = PP.yn
 
