@@ -123,8 +123,8 @@ def comp_G_(G_):  # cross-comp Gs (patterns of patterns): Gs, derGs, or segs ins
             if distance < ave_distance * ((_G.plevels.val+G.plevels.val) / (2*sum(G_aves))):
                 # comb G eval
                 mplevel, dplevel = comp_pH(_G.plevels, G.plevels)
-                if _G.alt_plevels and G.alt_plevels:
-                    altTopm, altTopd = comp_pH(_G.plevels.altTop, G.alt_plevels.altTop)
+                if _G.plevels.altTop and G.plevels.altTop:
+                    altTopm, altTopd = comp_pH(_G.plevels.altTop, G.plevels.altTop)
                     mplevel.altTop = altTopm; dplevel.altTop=altTopd  # for sum,comp in agg+, reduced weighting of altVs?
                 # new derG:
                 mplevel.L=2; mplevel.S=distance; mplevel.A=[dy,dx]  # L,S,A in both fd, L=1 if fd? summed L,S, redefined A in higher G
@@ -151,11 +151,10 @@ def comp_pH(_pH, pH):  # recursive unpack plevels ( pplayer ( players ( ptuples 
     pri_fd = 0
     for i, (_spH, spH) in enumerate(zip(_pH.H, pH.H)):
 
-        fd = pH.fds[i] if pH.fds else 0  # in plevels or players
-        _fd = _pH.fds[i] if _pH.fds else 0
+        fd = pH.fds[i] if len(pH.fds)>i else 0  # in plevels or players
+        _fd = _pH.fds[i] if len(_pH.fds)>i else 0
         if _fd == fd:
-            if fd: # all scalars
-                pri_fd = 1
+            pri_fd = min(sum(_pH.fds[1:i]), 1)  # check from 2nd index and if any of prior fd == 1, pri_fd = 1
             if isinstance(spH, Cptuple):
                 mtuple, dtuple = comp_ptuple(_spH, spH, pri_fd)
                 mpH.H += [mtuple]; mpH.val += mtuple.val
@@ -295,14 +294,18 @@ def sum2graph_(G_, fd):  # sum node and link params into graph, plevel in agg+ o
     for G in G_:
         node_, medG_, val = G
         graph = Cgraph(x0=node_[0].x0, xn=node_[0].xn, y0=node_[0].y0, yn=node_[0].yn, node_=node_, medG_=medG_)
-        new_pplayer = CpH()
+        new_pplayer = None
         sparsity, nlinks = 0, 0
         for node in node_:
+            # x0 and y0 should be converted to centroid in PP2graph
             graph.x0=min(graph.x0, node.x0); graph.xn=max(graph.xn, node.xn); graph.y0=min(graph.y0, node.y0); graph.yn=max(graph.yn, node.yn)
             # accum params:
             sum_pH(graph.plevels, node.plevels)  # same for fder
             for derG in node.link_:
-                sum_pH(new_pplayer, derG.plevels.H[fd])  # accum derG
+                if new_pplayer is None:
+                    new_pplayer = deepcopy(derG.plevels.H[fd])
+                else:
+                    sum_pH(new_pplayer, derG.plevels.H[fd])  # accum derG
                 derG.roott[fd] = graph  # + link_ = [derG]?
                 val += derG.plevels.H[fd].val
                 nlinks += 1
@@ -311,9 +314,10 @@ def sum2graph_(G_, fd):  # sum node and link params into graph, plevel in agg+ o
 
         graph.plevels.fds = copy(node.plevels.fds) + [fd]
         graph_ += [graph]
-        graph.plevels.H += [new_pplayer]
-        if fd and isinstance(new_pplayer.A, list):  # convert to scalar when fd = 1
-            new_pplayer.A = np.hypot(new_pplayer.A[0], new_pplayer.A[1])
+        if new_pplayer is not None:
+            graph.plevels.H += [new_pplayer]
+            if fd and isinstance(new_pplayer.A, list):  # convert to scalar when fd = 1
+                new_pplayer.A = np.hypot(new_pplayer.A[0], new_pplayer.A[1])
 
     # below not updated yet
     for graph in graph_:  # 2nd pass: accum alt_graph_ params
