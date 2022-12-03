@@ -267,7 +267,7 @@ def copy_P(P, Ptype=None):  # Ptype =0: P is CP | =1: P is CderP | =2: P is CPP 
 
 # not revised:
 
-def CBlob2graph(blob, fseg, Cgraph):  # this secondary, don't worry for now
+def CBlob2graph(blob, fseg, Cgraph):  # this is secondary, don't worry for now
 
     PPm_ = blob.PPm_; PPd_ = blob.PPd_
     root_fds = PPm_[0].fds[:-1]  # root fds is the shorter fork?
@@ -302,9 +302,8 @@ def CBlob2graph(blob, fseg, Cgraph):  # this secondary, don't worry for now
     return root
 
 def CPP2graph(PP, fseg, Cgraph):
-    
-    # this AltTop is from players, so it should be altTop of pplayer?
-    AltTop = CpH()
+
+    AltTop = CpH()  # should be altTop of players and pplayer
     if not fseg and PP.altPP_:  # seg doesn't have altPP_
         alt_fds = copy(PP.altPP_[0].fds)
         for altPP in PP.altPP_[1:]:  # get fd sequence common for all altPPs:
@@ -312,16 +311,13 @@ def CPP2graph(PP, fseg, Cgraph):
                 if _fd != fd:
                     alt_fds = alt_fds[:i]
                     break
-        AltTop.fds = [alt_fds[-1]]
+        AltTop.fds = [alt_fds[-1]]  #?
         for altPP in PP.altPP_:  # convert altPP.players to CpH
-            # draft, fds is probably wrong:
-            H = []
-            val = 0
+            H = [];  val = 0
             for ptuples in altPP.players[0]:
                 for ptuple in ptuples[0][:2]:  # latuple and vertuple only
-                    H += [ptuple]
-                    val += ptuple.val
-            altTop = CpH(H=H,val=val, fds=[alt_fds[-1]]) 
+                    H += [ptuple]; val += ptuple.val
+            altTop = CpH(H=H,val=val, fds=[alt_fds[-1]])
             sum_pH(AltTop, altTop)
 
     # Cgraph: plevels ( pplayer ( players ( ptuples ( ptuple:
@@ -330,12 +326,10 @@ def CPP2graph(PP, fseg, Cgraph):
         players.H.append(CpH(H=deepcopy(ptuples), val=val))
 
     pplayer = CpH(H=[players], val=players.val)
-    plevels = CpH(H=[pplayer], val=pplayer.val, fds=[0], altTop=AltTop)  # altF=[alt_fds[-1] if alt_fds else 0], altV=alt_val)
+    plevels = CpH(H=[pplayer], val=pplayer.val, fds=[0], altTop=AltTop)
 
-    x0 = int((PP.x0 + PP.xn) /2)  # update to center x
-    y0 = int((PP.y0 + PP.yn) /2)  # update to center y
-    xn = PP.xn
-    yn = PP.yn
+    x0=PP.x0; xn=PP.xn; y0=PP.y0; yn=PP.yn
+    # update to center (x0,y0) and max_distance (xn,yn) in graph:
 
-    return Cgraph( node_=PP.P__, plevels=plevels, x0=x0, xn=xn, y0=y0, yn=yn)
-        # 1st plevel fd is always der+?
+    return Cgraph(node_=PP.P__, plevels=plevels, x0=(x0+xn)/2, xn=(xn-x0)/2, y0=y0(y0+yn)/2, yn=(yn-y0)/2)
+    # 1st plevel fd is always der+?

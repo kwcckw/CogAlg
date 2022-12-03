@@ -26,7 +26,7 @@ ave_sparsity = 2
 class CpH(ClusterStructure):  # hierarchy of params + associated vars
 
     H = list  # plevels | pplayer | players | ptuples
-    fds = list  # m|ds in plevels or players
+    fds = list  # (m|d)s, only in plevels and players
     val = int
     nval = int  # of neg open links?
     # extuple in pplayer=plevel, skip if L==0:
@@ -52,7 +52,7 @@ class Cgraph(CPP):  # graph or generic PP of any composition
     node_ = list  # graph elements, root of layers, levels:
     rlayers = list  # | mlayers, top-down
     dlayers = list  # | alayers
-    rval = float  # for sub_recursion only, plevels.val is agg_recursion, more broad?
+    rval = float  # for sub_recursion, plevels.val is for agg_recursion, more broad?
     dval = float
     mlevels = list  # agg_PPs ) agg_PPPs ) agg_PPPPs.., bottom-up
     dlevels = list
@@ -117,7 +117,7 @@ def comp_G_(G_):  # cross-comp Gs (patterns of patterns): Gs, derGs, or segs ins
             # compare each G to other Gs in rng, bilateral link assign:
             if G in [node for link in _G.link_ for node in link.node_]:  # G,_G was compared in prior rng+, add frng to skip?
                 continue
-            dx = _G.x0 - G.x0; dy = _G.y0 - G.yn  # x0,y0: center, xn,yn: max distance from center; new ave in derG for der+?
+            dx = _G.x0 - G.x0; dy = _G.y0 - G.y0  # x0,y0: center, xn,yn: max distance from center; new ave in derG for der+?
             distance = np.hypot(dy, dx)  # Euclidean distance between centroids, sum in sparsity
             # proximity = ave_rng - distance?
             if distance < ave_distance * ((_G.plevels.val+G.plevels.val) / (2*sum(G_aves))):
@@ -130,9 +130,11 @@ def comp_G_(G_):  # cross-comp Gs (patterns of patterns): Gs, derGs, or segs ins
                 mplevel.L=2; mplevel.S=distance; mplevel.A=[dy,dx]  # L,S,A in both fd, L=1 if fd? summed L,S, redefined A in higher G
                 dplevel.L=2; dplevel.S=distance; dplevel.A=[dy,dx]
                 plevels = CpH(H=[mplevel,dplevel])
-                derG = Cgraph( node_=[_G,G], plevels=plevels, val=mplevel.val + dplevel.val,  # comb val?
-                               y0=min(G.y0,_G.y0), yn=max(G.yn,_G.yn), x0=min(G.x0,_G.x0), xn=max(G.xn,_G.xn))
-                               # or mean x0=_x+dx/2, y0=_y+dy/2?
+                y0 = (G.y0+_G.y0) / 2; x0 = (G.x0+_G.x0) / 2
+                # new center
+                derG = Cgraph( y0=y0, x0=x0, node_=[_G,G], plevels=plevels, val=mplevel.val + dplevel.val,  # comb val?
+                               xn=max((_G.x0+_G.xn)/2 -x0, (G.x0+G.xn)/2 -x0), yn=max((_G.y0+_G.yn)/2 -y0, (G.y0+G.yn)/2 -y0))
+                               # max distance from the center
                 _G.link_ += [derG]; G.link_ += [derG]  # any val
                 for fd, val in enumerate([mplevel.val, dplevel.val]):  # alt fork is redundant, no support?
                     if val > 0:
@@ -151,10 +153,10 @@ def comp_pH(_pH, pH):  # recursive unpack plevels ( pplayer ( players ( ptuples 
     pri_fd = 0
     for i, (_spH, spH) in enumerate(zip(_pH.H, pH.H)):
 
-        fd = pH.fds[i] if len(pH.fds)>i else 0  # in plevels or players
-        _fd = _pH.fds[i] if len(_pH.fds)>i else 0
+        fd = pH.fds[i] if len(pH.fds) else 0  # in plevels or players
+        _fd = _pH.fds[i] if len(_pH.fds) else 0
         if _fd == fd:
-            pri_fd = min(sum(_pH.fds[1:i]), 1)  # check from 2nd index and if any of prior fd == 1, pri_fd = 1
+            if fd: pri_fd = 1  # all scalars
             if isinstance(spH, Cptuple):
                 mtuple, dtuple = comp_ptuple(_spH, spH, pri_fd)
                 mpH.H += [mtuple]; mpH.val += mtuple.val
@@ -293,31 +295,30 @@ def sum2graph_(G_, fd):  # sum node and link params into graph, plevel in agg+ o
     graph_ = []
     for G in G_:
         node_, medG_, val = G
-        graph = Cgraph(x0=node_[0].x0, xn=node_[0].xn, y0=node_[0].y0, yn=node_[0].yn, node_=node_, medG_=medG_)
-        new_pplayer = None
-        sparsity, nlinks = 0, 0
-        for node in node_:
-            # x0 and y0 should be converted to centroid in PP2graph
-            graph.x0=min(graph.x0, node.x0); graph.xn=max(graph.xn, node.xn); graph.y0=min(graph.y0, node.y0); graph.yn=max(graph.yn, node.yn)
+        L=len(node_)
+        graph = Cgraph(L=L, node_=node_, medG_=medG_)
+        sparsity,nlinks, X0,Y0,Xn,Yn = 0,0,0,0,0,0
+        for node in node_: X0+=node.x0; Y0+=node.y0  # first pass defines center
+        X0/=L; Y0/=L
+        for node in node_:  # 2nd pass defines max distance and other params:
+            # x0+xn = box xn:
+            Xn = max(Xn, (node.x0+node.xn)-X0)
+            Yn = max(Yn, (node.y0+node.yn)-Y0)
             # accum params:
             sum_pH(graph.plevels, node.plevels)  # same for fder
+            new_plevel = CpH()
             for derG in node.link_:
-                if new_pplayer is None:
-                    new_pplayer = deepcopy(derG.plevels.H[fd])
-                else:
-                    sum_pH(new_pplayer, derG.plevels.H[fd])  # accum derG
+                sum_pH(new_plevel, derG.plevels.H[fd])  # accum derG
                 derG.roott[fd] = graph  # + link_ = [derG]?
                 val += derG.plevels.H[fd].val
                 nlinks += 1
             node.plevels.val += val  # derG valts summed in eval_med_layer added to lower-plevels valt
+            graph.plevels.H += [new_plevel]
             graph.plevels.val += node.plevels.val
 
+        graph.x0=X0; graph.xn=Xn; graph.y0=Y0; graph.yn=Yn
         graph.plevels.fds = copy(node.plevels.fds) + [fd]
         graph_ += [graph]
-        if new_pplayer is not None:
-            graph.plevels.H += [new_pplayer]
-            if fd and isinstance(new_pplayer.A, list):  # convert to scalar when fd = 1
-                new_pplayer.A = np.hypot(new_pplayer.A[0], new_pplayer.A[1])
 
     # below not updated yet
     for graph in graph_:  # 2nd pass: accum alt_graph_ params
