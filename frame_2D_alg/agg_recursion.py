@@ -127,6 +127,8 @@ def comp_G_(G_):  # cross-comp Gs (patterns of patterns): Gs, derGs, or segs ins
                     altTopm, altTopd = comp_pH(_G.plevels.altTop, G.plevels.altTop)
                     mplevel.altTop = altTopm; dplevel.altTop=altTopd  # for sum,comp in agg+, reduced weighting of altVs?
                 # new derG:
+                # mplevel and dplevel here will be the 2nd element in plevels.H
+                # so plevels.H[0].A is [],  plevels.H[1].A is [dy,dx],  plevels.H[2] and higher index's A is scalar?
                 mplevel.L=2; mplevel.S=distance; mplevel.A=[dy,dx]  # L,S,A in both fd, L=1 if fd? summed L,S, redefined A in higher G
                 dplevel.L=2; dplevel.S=distance; dplevel.A=[dy,dx]
                 plevels = CpH(H=[mplevel,dplevel])
@@ -274,7 +276,7 @@ def sub_recursion_g(graph_, fseg, fd):  # rng+: extend G_ per graph, der+: repla
                 graph.plevels.val += rval; sub_val += rval
                 graph.rlayers = [sub_mgraph_] + [sub_rlayers]
             # der+:
-            if graph.plevels.altTop.val > ave_sub * graph.rdn:
+            if graph.plevels.altTop and graph.plevels.altTop.val > ave_sub * graph.rdn:  # check non empty altTop
                 sub_dlayers, dval = sub_recursion_g(sub_dgraph_, fseg=fseg, fd=1)
                 graph.plevels.altTop.val += dval; sub_val += dval
                 graph.dlayers = [sub_dgraph_] + [sub_dlayers]
@@ -300,27 +302,31 @@ def sum2graph_(G_, fd):  # sum node and link params into graph, plevel in agg+ o
         sparsity,nlinks, X0,Y0,Xn,Yn = 0,0,0,0,0,0
         for node in node_: X0+=node.x0; Y0+=node.y0  # first pass defines center
         X0/=L; Y0/=L
-        for node in node_:  # 2nd pass defines max distance and other params:
+
+        # init plevel with 1st link
+        new_plevel = deepcopy(node.link_[0].plevels.H[fd])
+        for i, node in enumerate(node_):  # 2nd pass defines max distance and other params:
             # x0+xn = box xn:
             Xn = max(Xn, (node.x0+node.xn)-X0)
             Yn = max(Yn, (node.y0+node.yn)-Y0)
             # accum params:
             sum_pH(graph.plevels, node.plevels)  # same for fder
-            new_plevel = CpH()
-            for derG in node.link_:
-                sum_pH(new_plevel, derG.plevels.H[fd])  # accum derG
+            
+            for j, derG in enumerate(node.link_):
+                if i!=0 and j!= 0:  # skip the 1st derG where we use it in the initialization
+                    sum_pH(new_plevel, derG.plevels.H[fd])  # accum derG
                 derG.roott[fd] = graph  # + link_ = [derG]?
                 val += derG.plevels.H[fd].val
                 nlinks += 1
             node.plevels.val += val  # derG valts summed in eval_med_layer added to lower-plevels valt
-            graph.plevels.H += [new_plevel]
             graph.plevels.val += node.plevels.val
 
+        graph.plevels.H += [new_plevel]  # add new plevel's CpH
         graph.x0=X0; graph.xn=Xn; graph.y0=Y0; graph.yn=Yn
         graph.plevels.fds = copy(node.plevels.fds) + [fd]
         graph_ += [graph]
 
-    # below not updated yet
+    # below not updated yet (so we need retrieve altTop from alt_graph?)
     for graph in graph_:  # 2nd pass: accum alt_graph_ params
         Alt_plevels = []  # Alt_players if fsub
         for node in graph.node_:
