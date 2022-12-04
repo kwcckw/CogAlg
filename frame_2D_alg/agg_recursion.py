@@ -140,7 +140,7 @@ def comp_G_(G_):  # cross-comp Gs (patterns of patterns): Gs, derGs, or segs ins
                                 graph += [node]
                                 for derG in node.link_:
                                     mG = derG.node_[0] if derG.node_[1] is node else derG.node_[1]
-                                    if mG not in medG_:
+                                    if mG not in [medG[0] for medG in medG_] :
                                         medG_ += [[mG, derG, _G]]  # derG is init dir_mderG
 
 def comp_pH(_pH, pH):  # recursive unpack plevels ( pplayer ( players ( ptuples -> ptuple:
@@ -172,18 +172,18 @@ def comp_pH(_pH, pH):  # recursive unpack plevels ( pplayer ( players ( ptuples 
 def comp_ext(_spH, spH, mpH, dpH, fd):
     L, S, A = spH.L, spH.S, spH.A
     _L, _S, _A = _spH.L, _spH.S, _spH.A
-
-    _sparsity = _S /(_L-1); sparsity = S /(L-1)  # average distance between connected nodes, single distance if derG
+    # use max prevent zero division
+    _sparsity = _S /max(1, (_L-1)); sparsity = S /max(1, (L-1))  # average distance between connected nodes, single distance if derG
     dpH.S = _sparsity - sparsity; dpH.val += dpH.S
     mpH.S = min(_sparsity, sparsity); mpH.val += mpH.S
     dpH.L = _L - L; dpH.val += dpH.L
     mpH.L = min(_L, L); mpH.val += mpH.L
     if _A and A: # axis: dy,dx only for derG or high-aspect Gs, both val *= aspect?
-        if fd:   # scalar mA or dA
-            dpH.A = _A - A; mpH.A = min(_A, A)
-        else:
+        if isinstance(_A, list):
             m, d = comp_angle(None, _A, A)
             mpH.A = m; dpH.A = d
+        else:  # scalar mA or dA
+            dpH.A = _A - A; mpH.A = min(_A, A)
     else:
         mpH.A = 1; dpH.A = 0  # no difference, matching low-aspect, only if both?
     mpH.val += mpH.A; dpH.val += dpH.A
@@ -320,9 +320,8 @@ def sum2graph_(G_, fd):  # sum node and link params into graph, plevel in agg+ o
         graph.x0=X0; graph.xn=Xn; graph.y0=Y0; graph.yn=Yn
         graph_ += [graph]
 
-    # below not updated yet (so we need retrieve altTop from alt_graph?)
     for graph in graph_:  # 2nd pass: accum alt_graph_ params
-        Alt_plevels = []  # Alt_players if fsub
+        AltTop = CpH()  # Alt_players if fsub
         for node in graph.node_:
             for derG in node.link_:
                 for G in derG.node_:
@@ -331,20 +330,36 @@ def sum2graph_(G_, fd):  # sum node and link params into graph, plevel in agg+ o
                         if alt_graph not in graph.alt_graph_ and isinstance(alt_graph, Cgraph):  # not proto-graph
                             # der+: plevels[-1] += player, rng+: players[-1] = player
                             # der+ if fder else agg+:
-                            if Alt_plevels: sum_pH(Alt_plevels, alt_graph.plevels[-1] if fd else alt_graph.plevels)  # not sure about fd
-                            else:           Alt_plevels = deepcopy(alt_graph.plevels[-1] if fd else alt_graph.plevels)
+                            if AltTop.H:
+                                sum_pH(AltTop.H[0], alt_graph.plevels.H[0])
+                            else:
+                                AltTop.H = [alt_graph.plevels.H[0]]; AltTop.val = alt_graph.plevels.H[0].val; AltTop.fds = alt_graph.plevels.H[0].fds
                             graph.alt_graph_ += [alt_graph]
                             alt_graph.alt_graph_ += [graph]  # bilateral assign
         if graph.alt_graph_:
-            graph.alt_graph_ += [Alt_plevels]  # temporary storage
+            graph.alt_graph_ += [AltTop]  # temporary storage
 
     for graph in graph_:  # 3rd pass: add alt fork to each graph plevel, separate to fix nesting in 2nd pass
         if graph.alt_graph_:
-            Alt_plevels = graph.alt_graph_.pop()
-            graph.valt[:] = [sum(graph.valt), 0]  # all existing graph forks are relatively cis(internal) vs new alt
-            add_alts(graph.plevels, Alt_plevels)
+            AltTop = graph.alt_graph_.pop()
+            add_alt_top(graph.plevels, AltTop)
 
     return graph_
+
+
+# very initial draft
+def add_alt_top(plevels, AltTop):
+    # plevels, not sure on fds yet
+    plevels.altTop = AltTop; plevels.val = AltTop.val
+    # pplayer
+    for pplayer, AltTop_pplayer in zip(plevels.H, AltTop.H[:1]):  # get only 1st index
+        pplayer.altTop = AltTop_pplayer; pplayer.val = AltTop_pplayer.val
+        # players, not sure on fds yet
+        for players, AltTop_players in zip(pplayer.H, AltTop_pplayer.H[:1]):
+            players.altTop = AltTop_players; players.val = AltTop_players.val
+            # ptuples
+            for ptuples, AltTop_ptuples in zip(players.H, AltTop_players.H[:1]):
+                ptuples.altTop = AltTop_ptuples; ptuples.val = AltTop_ptuples.val
 
 # please revise:
 def add_alts(cplevel, aplevel):
