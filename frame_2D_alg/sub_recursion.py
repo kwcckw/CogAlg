@@ -324,7 +324,7 @@ def CPP2graph(PP, fseg, Cgraph):
     for ptuples, val in PP.players[0]:
         players.H.append(CpH(H=deepcopy(ptuples), val=val))
 
-    pplayer = CpH(H=[players], val=players.val, altTop = CpH(H=[deepcopy(AltTop)], val=AltTop.val))
+    pplayer = CpH(H=[players], val=players.val, altTop=CpH(H=[deepcopy(AltTop)], val=AltTop.val))
     plevels = CpH(H=[pplayer], val=pplayer.val, fds=[0], altTop=CpH(H=[deepcopy(pplayer.altTop)], val=pplayer.altTop.val))
 
     x0=PP.x0; xn=PP.xn; y0=PP.y0; yn=PP.yn
