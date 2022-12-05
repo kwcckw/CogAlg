@@ -84,6 +84,7 @@ def agg_recursion(root, G_, fseg):  # compositional recursion in root.PP_, prett
 def form_graph_(root, G_, fderG):  # forms plevel in agg+ or player in sub+, G is potential node graph, in higher-order GG graph
                                    # der+: comp_link if fderG, from sub_recursion_g?
     for G in G_:  # roott: mgraph, dgraph
+        G.link_ = []  # reset link from prior recursion?
         for i in 0,1:
             graph = [[G], [], 0]  # proto-GG: [node_, medG_, val]
             G.roott[i] = graph  # initial overlap between graphs is eliminated in eval_med_layer
@@ -144,7 +145,7 @@ def comp_G_(G_):  # cross-comp Gs (patterns of patterns): Gs, derGs, or segs ins
                                     if mG not in [medG[0] for medG in medG_] :
                                         medG_ += [[mG, derG, _G]]  # derG is init dir_mderG
 
-def comp_pH(_pH, pH):  # recursive unpack plevels ( pplayer ( players ( ptuples -> ptuple:
+def comp_pH(_pH, pH, depth=0):  # recursive unpack plevels ( pplayer ( players ( ptuples -> ptuple:
     # if derG: compare mplevel or dplevel
 
     mpH, dpH = CpH(), CpH()
@@ -162,9 +163,14 @@ def comp_pH(_pH, pH):  # recursive unpack plevels ( pplayer ( players ( ptuples 
             else:
                 if spH.L:  # extuple is valid, in pplayer only
                     comp_ext(_spH, spH, mpH, dpH, pri_fd)
-                sub_mpH, sub_dpH = comp_pH(_spH, spH)
-                mpH.H += [sub_mpH]; mpH.val += sub_mpH.val
-                dpH.H += [sub_dpH]; dpH.val += sub_dpH.val
+                sub_mpH, sub_dpH = comp_pH(_spH, spH, depth=depth+1)
+                if depth == 0:  # we need this section to reduce the nesting, else derG.plevels[fd] is plevels instead of pplayer
+                    mpH.H += sub_mpH.H
+                    dpH.H += sub_dpH.H
+                else:
+                    mpH.H += [sub_mpH];
+                    dpH.H += [sub_dpH];
+                mpH.val += sub_mpH.val; dpH.val += sub_dpH.val
         else:
             break
 
@@ -207,14 +213,14 @@ def eval_med_layer(graph_, graph, fd):   # recursive eval of reciprocal links fr
             for derG in G.link_:
                 try_mG = derG.node_[0] if derG.node_[1] is G else derG.node_[1]
                 if mmG is try_mG:  # mmG is directly linked to G
-                    if derG.plevels.H[fd].S > dir_mderG.plevels.H[fd].S:
+                    if derG.plevels[fd].S > dir_mderG.plevels[fd].S:
                         dir_mderG = derG  # for next med eval if dir link is shorter
                         fmed = 0
                     break
             if fmed:  # mderG is not reciprocal, else explore try_mG links in the rest of medG_
                 for mmderG in mmG.link_:
                     if G in mmderG.node_:  # mmG mediates between mG and G
-                        adj_val = mmderG.plevels.H[fd].val - ave_agg  # or increase ave per mediation depth
+                        adj_val = mmderG.plevels[fd].val - ave_agg  # or increase ave per mediation depth
                         # adjust nodes:
                         G.plevels.val += adj_val; mG.plevels.val += adj_val  # valts are not updated
                         val += adj_val; mG.roott[fd][2] += adj_val  # root is not graph yet
@@ -222,13 +228,17 @@ def eval_med_layer(graph_, graph, fd):   # recursive eval of reciprocal links fr
                         if mmG not in mmG_:  # not saved via prior mG
                             mmG_ += [mmG]
                             adj_Val += adj_val
+                            
+    # i think the section below should be in 2nd pass, where G is scanned through all their link?
+    for mG, dir_mderG, G in medG_:
         if G.plevels.val>0:
             save_node_+= [G]  # G remains in graph
             for mmG in mmG_:  # may be empty
                 if mmG not in save_medG_:
                     save_medG_ += [[mmG, dir_mderG, G]]
-        else:
-            for node in G.node_: node.roott[fd] = []  # delete roots
+        # The G here is actually the node, and if their val >0, we add it to proto-G. G.node_ are from the prior recursion and it shouldn't matter here?
+        # else:
+        #    for node in G.node_: node.roott[fd] = []  # delete roots
 
     add_medG_, add_node_ = [],[]
     for mmG, dir_mderG, G in save_medG_:  # eval graph merge after adjusting graph by mediating node layer
@@ -241,7 +251,7 @@ def eval_med_layer(graph_, graph, fd):   # recursive eval of reciprocal links fr
                 for _medG in _medG_:
                     if _medG not in add_medG_ + save_medG_: add_medG_ += [_medG]
                 for _derG in _node.link_:
-                    adj_Val += _derG.plevels.H[fd].val - ave_agg
+                    adj_Val += _derG.plevels[fd].val - ave_agg
 
             val += _val
             graph_.remove(_graph)
@@ -260,10 +270,11 @@ def sub_recursion_g(graph_, fseg, fd):  # rng+: extend G_ per graph, der+: repla
             node_ = []  # positive links within graph
             for node in graph.node_:
                 for link in node.link_:
-                    if link.plevels.H[1].val>0 and link not in node_:
-                        if not link.plevels.fds:  # might be converted in other graph
-                            link.plevels.fds = [fd]; link.plevels.H = [link.plevels.H[fd]]  # select from m|d fork
-                        node_ += [link]
+                    if link not in node_:
+                        if isinstance(link.plevels, list):  # might be converted in other graph
+                            link.plevels = link.plevels[fd]; link.plevels.fds = [fd]  # select from m|d fork
+                        if link.plevels.val>0:
+                            node_ += [link]
         else: node_ = graph.node_
 
         valSub = graph.plevels.val  # last plevel valt: ca = dm if fd else md: edge or core, or single player?
@@ -310,9 +321,9 @@ def sum2graph_(G_, fd):  # sum node and link params into graph, plevel in agg+ o
             # accum params:
             sum_pH(graph.plevels, node.plevels)  # same for fder
             for derG in node.link_:
-                sum_pH(new_plevel, derG.plevels.H[fd])  # accum derG, += L=1, S=link.S, preA: [Xn,Yn]
+                sum_pH(new_plevel, derG.plevels[fd])  # accum derG, += L=1, S=link.S, preA: [Xn,Yn]
                 derG.roott[fd] = graph  # + link_ = [derG]?
-                val += derG.plevels.H[fd].val
+                val += derG.plevels[fd].val
                 link_ += [derG]  # for new_plevel norm, der+?
 
             node.plevels.val += val  # derG valts summed in eval_med_layer added to lower-plevels valt
@@ -349,7 +360,6 @@ def sum2graph_(G_, fd):  # sum node and link params into graph, plevel in agg+ o
     return graph_
 
 # not revised:
-
 def add_alt_top(plevels, AltTop):
     # plevels, not sure on fds yet
     plevels.altTop = AltTop; plevels.val = AltTop.val
