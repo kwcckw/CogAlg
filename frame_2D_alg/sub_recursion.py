@@ -275,13 +275,9 @@ def CBlob2graph(blob, fseg, Cgraph):  # this is secondary, don't worry for now
     # gPP_t = [root.node_, root.alt_graph_]  # i think root.alt_graph_ should be empty here?
 
     for PP in PPm_:
-        plevels = root.plevels
-        H=[]; val=PP.players[1]
-        for ptuples, val in PP.players[0]: H.append(CpH(H=deepcopy(ptuples), val=val))
-
-        if plevels: sum_pH(plevels, CpH(H=H, val=val))
-        else:       plevels.H, plevels.val = H, val
-        plevels.fds = copy(PP.fds)
+        converted_PP = CPP2graph(PP, fseg, Cgraph)
+        sum_pH(root.plevels, converted_PP.plevels)
+        root.plevels.fds = copy(PP.fds)
         # not updated:
         # compute rdn
         if fseg: PP = PP.roott[PP.fds[-1]]  # seg root
@@ -293,8 +289,8 @@ def CBlob2graph(blob, fseg, Cgraph):  # this is secondary, don't worry for now
             root.alt_rdn += alt_rdn  # sum across PP_
             # no altTop for blob?
 
-        # convert and pack gPP
-        root.node_ += [CPP2graph(PP, fseg, Cgraph)]
+        # pack gPP
+        root.node_ += [converted_PP]
         root.x0=min(root.x0, PP.x0)
         root.xn=max(root.xn, PP.xn)
         root.y0=min(root.y0, PP.y0)
