@@ -271,12 +271,12 @@ def CBlob2graph(blob, fseg, Cgraph):  # this is secondary, don't worry for now
 
     PPm_ = blob.PPm_; PPd_ = blob.PPd_
     root_fds = PPm_[0].fds[:-1]  # root fds is the shorter fork?
-    root = Cgraph(mplevels=CpH, dplevels=CpH, rng = PPm_[0].rng, rdn=blob.rdn, x0=PPm_[0].x0, xn=PPm_[0].xn, y0=PPm_[0].y0, yn=PPm_[0].yn)
+    root = Cgraph(mplevels=CpH(), dplevels=CpH(), node_ = blob.dert__, rng=PPm_[0].rng, rdn=blob.rdn, x0=PPm_[0].x0, xn=PPm_[0].xn, y0=PPm_[0].y0, yn=PPm_[0].yn)
     # alt_graph_ = []: no blob contour, no node_?
-    for fd, PP_ in enumerate(PPm_, PPd_):
+    for fd, PP_ in enumerate([PPm_, PPd_]):
         for PP in PP_:
-            graph = CPP2graph(PP, fseg, Cgraph)
-            sum_pH(root.dplevels if fd else root.mplevels, graph.plevels)
+            graph = CPP2graph(PP, fseg, Cgraph, fd)
+            sum_pH(root.dplevels if fd else root.mplevels, graph.dplevels if fd else graph.mplevels)
             # not updated:
             # compute rdn
             if fseg: PP = PP.roott[PP.fds[-1]]  # seg root
@@ -286,15 +286,17 @@ def CBlob2graph(blob, fseg, Cgraph):  # this is secondary, don't worry for now
                 alt_rdn = len(set(PP_P_).intersection(altPP_P_))
                 PP.alt_rdn += alt_rdn  # count overlapping PPs, not bilateral, each PP computes its own alt_rdn
                 root.alt_rdn += alt_rdn  # sum across PP_
-
-            root.dlayer[0] if fd else root.rlayers[0] += [graph]
+          
+            if fd: root.dlayers += [graph]
+            else:  root.rlayers += [graph]
+            # box will be shared across m|d fork too?
             root.x0=min(root.x0, PP.x0)
             root.xn=max(root.xn, PP.xn)
             root.y0=min(root.y0, PP.y0)
             root.yn=max(root.yn, PP.yn)
     return root
 
-def CPP2graph(PP, fseg, Cgraph):
+def CPP2graph(PP, fseg, Cgraph, ifd=0):
 
     AltTop = CpH()  # should be altTop of players and pplayer
     if not fseg and PP.altPP_:  # seg doesn't have altPP_
@@ -322,5 +324,9 @@ def CPP2graph(PP, fseg, Cgraph):
 
     x0=PP.x0; xn=PP.xn; y0=PP.y0; yn=PP.yn
     # update to center (x0,y0) and max_distance (xn,yn) in graph:
-    return Cgraph(node_=PP.P__, plevels=plevels, x0=(x0+xn)/2, xn=(xn-x0)/2, y0=(y0+yn)/2, yn=(yn-y0)/2)
+    graph = Cgraph(node_=PP.P__, x0=(x0+xn)/2, xn=(xn-x0)/2, y0=(y0+yn)/2, yn=(yn-y0)/2)
+    if ifd: graph.dplevels = plevels
+    else:   graph.mplevels = plevels
+    
+    return graph
     # 1st plevel fd is always der+?
