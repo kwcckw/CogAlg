@@ -47,8 +47,8 @@ class Cgraph(CPP):  # graph or generic PP of any composition
     rlayers = list  # | mlayers: top node_ subdivision, parallel to levels but micro
     dlayers = list  # | alayers; val=0 for sub_recursion
     # sum params in all nesting orders:
-    mplevels = lambda: CpH()  # zipped with alt_plevels in comp_plevels
-    dplevels = lambda: CpH()  # both include players from rlayers and dlayers?
+    mplevels = lambda: CpH(L=0, S=0, A=[0,0])  # zipped with alt_plevels in comp_plevels
+    dplevels = lambda: CpH(L=0, S=0, A=[0,0])  # both include players from rlayers and dlayers?
     x0 = float
     y0 = float  # center: box x0|y0 + L/2
     xn = float  # max distance from center
@@ -75,9 +75,8 @@ def agg_recursion(root, G_, fseg, ifd):  # compositional recursion in root.PP_, 
     # cross graph:
     root.mlevels += mgraph_; root.dlevels += dgraph_
     for fd, graph_ in enumerate([mgraph_, dgraph_]):
-        root_val = root.dplevels.val if fd else root.mplevels.val
         # include lower-level der vals?
-        if (root_val > G_aves[fd] * ave_agg * (root.rdn + 1)) and len(graph_) > ave_nsub:
+        if ([root.mplevels, root.dplevels][fd].val > G_aves[fd] * ave_agg * (root.rdn + 1)) and len(graph_) > ave_nsub:
             root.rdn += 1  # estimate
             agg_recursion(root, graph_, fseg=fseg, ifd=fd)  # cross-comp graphs
 
@@ -105,7 +104,8 @@ def form_graph_(root, G_, fderG, ifd):  # forms plevel in agg+ or player in sub+
         if regraph_:
             graph_[:] = sum2graph_(regraph_, fd)  # sum proto-graph node_ params in graph
             for graph in graph_:
-                sum_pH(root.dplevels if fd else root.mplevels, graph.dplevels if fd else graph.mplevels)
+                # i checked and in some cases, root's pplayer is [a,a] while graph.pplayer is scalar, skip them? 
+                sum_pH([root.mplevels, root.dplevels][fd], [graph.mplevels, graph.dplevels][fd])
 
     return mgraph_, dgraph_
 
@@ -113,25 +113,26 @@ def form_graph_(root, G_, fderG, ifd):  # forms plevel in agg+ or player in sub+
 def comp_G_(G_, ifd):  # cross-comp Gs (patterns of patterns): Gs, derGs, or segs inside PP, same process, no fderG?
 
     for i, _G in enumerate(G_):
-        for G in G_[i+1:]:
+        for G in G_[i+1]:
             # compare each G to other Gs in rng, bilateral link assign:
             if G in [node for link in _G.link_ for node in link.node_]:  # G,_G was compared in prior rng+, add frng to skip?
                 continue
-            if ifd: _plevels = _G.dplevels; plevels = G.dplevels
-            else:   _plevels = _G.mplevels; plevels = G.mplevels
+            _plevels = [_G.mplevels, _G.dplevels][ifd]; plevels = [G.mplevels, G.dplevels][ifd]
             dx = _G.x0 - G.x0; dy = _G.y0 - G.y0  # center x0,y0
             distance = np.hypot(dy, dx)  # Euclidean distance between centroids, sum in sparsity
             # proximity = ave_rng - distance?
             if distance < ave_distance * ((_plevels.val+plevels.val) / (2*sum(G_aves))):
                 # comb G eval
                 mplevel, dplevel = comp_pH(_plevels, plevels)
-                mplevel.L,dplevel.L = 1,1; mplevel.S,dplevel.S = distance,distance; mplevel.A,dplevel.A = [dy,dx],[dy,dx]
+                mplevels = CpH(H=[mplevel], fd=[0], val=mplevel.val, L=1, S=distance, A=[dy,dx])  # convert from pplayer to plevels, we need this because derG is G in der+
+                dplevels = CpH(H=[dplevel], fd=[1], val=dplevel.val, L=1, S=distance, A=[dy,dx])
                 if _plevels.altTop and plevels.altTop:
                     altTopm, altTopd = comp_pH(_plevels.altTop, plevels.altTop)
-                    mplevel.altTop = altTopm; dplevel.altTop=altTopd  # for sum,comp in agg+, reduced weighting of altVs?
+                    # how about L,S,A assignment of alt?
+                    mplevels.altTop = CpH(H=[altTopm],fd=[0],val=altTopm.val); dplevels.altTop=CpH(H=[altTopd],fd=[1],val=altTopd.val)  # for sum,comp in agg+, reduced weighting of altVs?
                 # new derG:
                 y0 = (G.y0+_G.y0)/2; x0 = (G.x0+_G.x0)/2  # new center coords
-                derG = Cgraph( node_=[_G,G], mplevels=mplevel, dplevels=dplevel, y0=y0, x0=x0, # compute max distance from center:
+                derG = Cgraph( node_=[_G,G], mplevels=mplevels, dplevels=dplevels, y0=y0, x0=x0, # compute max distance from center:
                                xn=max((_G.x0+_G.xn)/2 -x0, (G.x0+G.xn)/2 -x0), yn=max((_G.y0+_G.yn)/2 -y0, (G.y0+G.yn)/2 -y0))
                 _G.link_ += [derG]; G.link_ += [derG]  # any val
                 for fd, val in enumerate([mplevel.val, dplevel.val]):  # alt fork is redundant, no support?
@@ -205,7 +206,7 @@ def eval_med_layer(graph_, graph, fd):  # recursive eval of reciprocal links fro
     for mG, dir_mderG, G in medG_:  # assign G and shortest direct derG to each med node?
         if not mG.roott[fd]:  # root graph was deleted
             continue
-        G_plevels = G.dplevels if fd else G.mplevels
+        G_plevels = [G.mplevels, G.dplevels][fd]  # i think using this will be clearer?
         fmed = 1; mmG_ = []  # __Gs that mediate between Gs and _Gs
         mmG__ += [mmG_]
         for mderG in mG.link_:  # all evaluated links
@@ -221,10 +222,13 @@ def eval_med_layer(graph_, graph, fd):  # recursive eval of reciprocal links fro
             if fmed:  # mderG is not reciprocal, else explore try_mG links in the rest of medG_
                 for mmderG in mmG.link_:
                     if G in mmderG.node_:  # mmG mediates between mG and G
-                        adj_val = mmderG.dplevels.val if fd else mmderG.mplevels.val - ave_agg
+                        adj_val = [mmderG.mplevels, mmderG.mplevels][fd].val - ave_agg
                         # adjust nodes:
-                        G_plevels.val += adj_val; mG.dplevels.val if fd else mG.mplevels.val += adj_val
-                        val += adj_val; mG.roott[fd][2] += adj_val  # root is not graph yet
+                        G_plevels.val += adj_val
+                        [mG.mplevels, mG.dplevels][fd].val += adj_val
+                        val += adj_val
+                        if isinstance(mG.roott[fd], Cgraph): [mG.roott[fd].mplevels, mG.roott[fd].dplevels][fd].val += adj_val  # I'm getting roott[fd] as Cgraph here, probably is due to der+ node's roott is Cgraph formed in prior recursion
+                        else:                                mG.roott[fd][2] += adj_val  # root is not graph yet
                         mmG = mmderG.node_[0] if mmderG.node_[0] is not mG else mmderG.node_[1]
                         if mmG not in mmG_:  # not saved via prior mG
                             mmG_ += [mmG]
@@ -318,13 +322,12 @@ def sum2graph_(G_, fd):  # sum node and link params into graph, plevel in agg+ o
         for node in node_:  # 2nd pass defines max distance and other params:
             Xn = max(Xn,(node.x0+node.xn)-X0)  # box xn = x0+xn
             Yn = max(Yn,(node.y0+node.yn)-Y0)
-            if fd: graph_plevels = graph.dplevels; node_plevels = node.dplevels
-            else:  graph_plevels = graph.mplevels; node_plevels = node.mplevels
+            graph_plevels = [graph.mplevels,graph.dplevels][fd]; node_plevels = [node.mplevels, node.dplevels][fd]
             # accum params:
             sum_pH(graph_plevels, node_plevels)  # same for fder , # another fork's plevels will be empty
             for derG in node.link_:
-                derG_plevels = derG.dplevels if fd else derG.mplevels
-                sum_pH(new_plevel, derG_plevels)  # accum derG, += L=1, S=link.S, preA: [Xn,Yn]
+                derG_plevels = [derG.mplevels, derG.dplevels][fd]
+                sum_pH(new_plevel, derG_plevels.H[0])  # accum derG, += L=1, S=link.S, preA: [Xn,Yn] (derG.plevels.H[0] is pplayer)
                 derG.roott[fd] = graph  # + link_ = [derG]?
                 val += derG_plevels.val
 
@@ -345,7 +348,7 @@ def sum2graph_(G_, fd):  # sum node and link params into graph, plevel in agg+ o
                     if G not in graph.node_:  # alt graphs are roots of not-in-graph G in derG.node_
                         alt_graph = G.roott[1-fd]
                         if alt_graph not in graph.alt_graph_ and isinstance(alt_graph, Cgraph):  # not proto-graph or removed
-                            alt_plevels = alt_graph.dplevels if fd else alt_graph.mplevels
+                            alt_plevels = [alt_graph.mplevels, alt_graph.dplevels][1-fd]
                             if AltTop.H:  # der+: plevels[-1] += player, rng+: players[-1] = player?
                                 sum_pH(AltTop.H[0], alt_plevels.H[0])
                             else:
