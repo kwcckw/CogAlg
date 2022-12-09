@@ -68,7 +68,7 @@ def agg_recursion(root, G_, fseg, ifd):  # compositional recursion in root.PP_, 
         root.rdn += 1  # +select per mgraph
         sub_rlayers, rval = sub_recursion_g(mgraph_, fseg=0, fd=0)  # subdivide graph.node_ by der+|rng+, accum root.valt
         root.rlayers = [sub_rlayers, rval]  # combined match of all der orders?
-    if root.dlayers.val > ave_sub * root.rdn:
+    if root.dplevels.val > ave_sub * root.rdn:
         root.rdn += 1  # +select per dgraph
         sub_dlayers, dval = sub_recursion_g(dgraph_, fseg=0, fd=1)
         root.dlayers = [sub_dlayers, dval]
@@ -104,7 +104,16 @@ def form_graph_(root, G_, fderG, ifd):  # forms plevel in agg+ or player in sub+
         if regraph_:
             graph_[:] = sum2graph_(regraph_, fd)  # sum proto-graph node_ params in graph
             for graph in graph_:
-                sum_pH([root.mplevels, root.dplevels][fd], [graph.mplevels, graph.dplevels][fd])
+                # der+ , sum from nodes
+                if ifd:
+                    pass
+                    # unpack node until we get G instead of derG?
+                    '''
+                    for node in graph.node_:
+                        sum_pH([root.mplevels, root.dplevels][fd], [node.mplevels, node.dplevels][fd])
+                    '''
+                else:
+                    sum_pH([root.mplevels, root.dplevels][fd], [graph.mplevels, graph.dplevels][fd])
 
     return mgraph_, dgraph_
 
@@ -112,7 +121,7 @@ def form_graph_(root, G_, fderG, ifd):  # forms plevel in agg+ or player in sub+
 def comp_G_(G_, ifd):  # cross-comp Gs (patterns of patterns): Gs, derGs, or segs inside PP, same process, no fderG?
 
     for i, _G in enumerate(G_):
-        for G in G_[i+1]:
+        for G in G_[i+1:]:
             # compare each G to other Gs in rng, bilateral link assign:
             if G in [node for link in _G.link_ for node in link.node_]:  # G,_G was compared in prior rng+, add frng to skip?
                 continue
@@ -127,7 +136,9 @@ def comp_G_(G_, ifd):  # cross-comp Gs (patterns of patterns): Gs, derGs, or seg
                 dplevels = CpH(H=[dplevel], fd=[1], val=dplevel.val, L=1, S=distance, A=[dy,dx])
                 if _plevels.altTop and plevels.altTop:
                     # elif _plevels.altTop: dplevels.altTop = _plevels.altTop
-                    # elif plevels.altTop: dplevels.altTop = plevels.altTop?
+                    # elif plevels.altTop: dplevels.altTop = plevels.altTop?  
+                    # the returned altTopm and altTopd here actually are players due to _plevels.altTop is pplayer
+                    # so here we need convert the returned altTopm and altTopd to pplayer here (with additional nesting)
                     altTopm,altTopd = comp_pH(_plevels.altTop, plevels.altTop)
                     mplevels.altTop = CpH(H=[altTopm],fd=[0],val=altTopm.val)  # for sum,comp in agg+, reduced weighting of altVs?
                     dplevels.altTop = CpH(H=[altTopd],fd=[1],val=altTopd.val)
@@ -281,13 +292,16 @@ def sub_recursion_g(graph_, fseg, fd):  # rng+: extend G_ per graph, der+: repla
         valSub = graph_plevels.val
         if valSub > G_aves[fd] and len(node_) > ave_nsub:  # graph.valt eval for agg+ only
             sub_mgraph_, sub_dgraph_ = form_graph_(graph, node_, fd, ifd=fd)  # cross-comp and clustering cycle
+            sub_rval = sum([sub_mgraph.mplevels.val+sub_mgraph.dplevels.val for sub_mgraph in sub_mgraph_])
+            sub_dval = sum([sub_dgraph.mplevels.val+sub_dgraph.dplevels.val for sub_dgraph in sub_dgraph_])
+            # so we need to compute sub_rval and sub_dval hee because graph'rlayers or dlayers' val will be empty before the sub_recursion_g
             # rng+:
-            if graph.rval > ave_sub * graph.rdn:  # >cost of calling sub_recursion and looping:
+            if sub_rval > ave_sub * graph.rdn:  # >cost of calling sub_recursion and looping:
                 sub_rlayers, rval = sub_recursion_g(sub_mgraph_, fseg=fseg, fd=0)
                 sub_val += rval
                 graph.rlayers = [[sub_mgraph_] + [sub_rlayers], rval]  # draft
             # der+:
-            if graph.dval > ave_sub * graph.rdn:
+            if sub_dval > ave_sub * graph.rdn:
                 sub_dlayers, dval = sub_recursion_g(sub_dgraph_, fseg=fseg, fd=1)
                 sub_val += dval
                 graph.dlayers = [[sub_dgraph_] + [sub_dlayers], dval]  # draft
@@ -329,6 +343,7 @@ def sum2graph_(G_, fd):  # sum node and link params into graph, plevel in agg+ o
             graph_plevels.val += node_plevels.val
 
         new_plevel.A = [Xn*2,Yn*2]
+        new_plevel.L = max(2, new_plevel.L)  # value must be at least 2, otherwise 1-1 = 0 and it will get zero division later
         graph_plevels.H += [new_plevel]
         graph_plevels.fds = copy(node_plevels.fds) + [fd]
         graph.x0=X0; graph.xn=Xn; graph.y0=Y0; graph.yn=Yn
