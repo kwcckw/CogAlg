@@ -109,8 +109,10 @@ def form_graph_(root, G_, ifd):  # forms plevel in agg+ or player in sub+, G is 
             graph_[:] = sum2graph_(regraph_, fd)  # sum proto-graph node_ params in graph
             for graph in graph_:
                 if ifd:
-                    while graph.mplevel.L==1:  # derG, sum params from node_[0]
-                        pass  # add node params to derG params
+                    for node in graph.node_:  # derG, sum params from node_[0]
+                        while [node.dplevels if node.dplevels.H else node.mplevels][0].H[0].L == 1:
+                            node = node.node_[0]
+                        sum_pH([root.mplevels, root.dplevels][fd], [node.mplevels, node.dplevels][fd])  # add node params to derG params 
                 for node in graph.node_:
                     sum_pH([root.mplevels, root.dplevels][fd], [node.mplevels, node.dplevels][fd])
 
@@ -289,15 +291,15 @@ def sub_recursion_g(graph_, Sval, fseg, fd):  # rng+: extend G_ per graph, der+:
             # rng+:
             Rval = sum([sub_mgraph.mplevels.val for sub_mgraph in sub_mgraph_])
             if Rval > ave_sub * graph.rdn:  # >cost of call:
-                sub_rlayers, rval = sub_recursion_g(sub_mgraph_, Rval, fseg=fseg, fd=0)
-                Rval+=rval; graph.rlayers = [[sub_mgraph_]+[sub_rlayers], Rval]
+                sub_rlayerst, rval = sub_recursion_g(sub_mgraph_, Rval, fseg=fseg, fd=0)
+                Rval+=rval; graph.rlayers = [[sub_mgraph_]+[sub_rlayerst], Rval]  # structure of rlayers
             # der+:
             Dval = sum([sub_dgraph.dplevels.val for sub_dgraph in sub_dgraph_])
             if Dval > ave_sub * graph.rdn:
-                sub_dlayers, dval = sub_recursion_g(sub_dgraph_, Dval, fseg=fseg, fd=1)
-                Dval+=dval; graph.dlayers = [[sub_dgraph_]+[sub_dlayers], Dval]
+                sub_dlayerst, dval = sub_recursion_g(sub_dgraph_, Dval, fseg=fseg, fd=1)
+                Dval+=dval; graph.dlayers = [[sub_dgraph_]+[sub_dlayerst], Dval]
 
-            for comb_layers, graph_layers in zip(comb_layers_t, [graph.rlayers, graph.dlayers]):
+            for comb_layers, graph_layers in zip(comb_layers_t, [graph.rlayers[0], graph.dlayers[0]]):
                 for i, (comb_layer, graph_layer) in enumerate(zip_longest(comb_layers, graph_layers, fillvalue=[])):
                     if graph_layer:
                         if i > len(comb_layers) - 1:
@@ -305,7 +307,9 @@ def sub_recursion_g(graph_, Sval, fseg, fd):  # rng+: extend G_ per graph, der+:
                         else:
                             comb_layers[i] += graph_layer  # splice r|d PP layer into existing layer
 
-    return comb_layers_t, Sval+Rval+Dval
+            Sval += Rval + Dval
+
+    return comb_layers_t, Sval  # we can't return Rval and Dval here because they will be not exist if evaluation above is false
 
 
 def sum2graph_(G_, fd):  # sum node and link params into graph, plevel in agg+ or player in sub+: if fderG?
