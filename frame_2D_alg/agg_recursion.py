@@ -109,10 +109,13 @@ def form_graph_(root, G_, ifd):  # forms plevel in agg+ or player in sub+, G is 
             for graph in graph_:
                 if ifd:  # derG, sum params of its node hierarchy before its own:
                     # draft:
-                    node = graph; plevels = [node.mplevels, node.dplevels][fd]
-                    n = 2 ** len(plevels.H)
-                    while plevels[0].H[0].L==1:  # node is derG
-                        plevels = [node.mplevels, node.dplevels][fd]; root_plevels = [root.mplevels, root.dplevels][fd]
+                    node = graph
+                    plevels = [node.mplevels, node.dplevels][fd]; root_plevels = [root.mplevels, root.dplevels][fd]  
+                    # i think we can init _n as negative n here, because [-n:-_n] will be the same as [-n:] later
+                    n=2 ** len(plevels.H); _n=-n
+                    # added fd == ifd because for root, one of mplevels or dplevels should be empty
+                    while plevels.H[0].L > 0 and fd == ifd:  # node is derG (i think L should be >0 here? because we may accumulate their plevels.L)
+
                         # plevels( pplayers( players( ptuples:
                         # implicit nesting in pplayers: pplayer = 1| 1| 2| 4... players: n_higher_plevels ^ 2:
                         '''
@@ -120,13 +123,21 @@ def form_graph_(root, G_, ifd):  # forms plevel in agg+ or player in sub+, G is 
                         else: pplayer = plevels.H[-1].H[-n:]
                         replace: 
                         '''
-                        for players, root_players in zip(plevels.H[-1].H[-n:_n], root_plevels.H[-1].H[-n:_n]):
+                        for players, root_players in zip(plevels.H[-1].H[-n:-_n], root_plevels.H[-1].H[-n:-_n]):
                             # sum last pplayers' lower ders, 1st node'derG is the highest
                             sum_pH(root_players, players)
-                            _n = n; n=np.sqrt(n); node = node.node_[0]
-                # node is G or derG:
-                for node in graph.node_:
-                    sum_pH([root.mplevels, root.dplevels][fd], [node.mplevels, node.dplevels][fd])
+                            _n = n; n=int(np.sqrt(n)); node = node.node_[0]
+                            
+                        # assign higher plevels for next recursion
+                        if isinstance(node.node_[0], Cgraph):
+                            node = node.node_[0]
+                            plevels = node.mplevels if node.mplevels.H else node.dplevels  # we don't know node.node_[0] but we can check from their plevels.H because plevels.H is empty when it is not the selected fork 
+                        else:
+                            break  # break when node_ is not graph, it will be [P] for the graph converted from PP
+                else:
+                # node is G:
+                    for node in graph.node_:
+                        sum_pH([root.mplevels, root.dplevels][fd], [node.mplevels, node.dplevels][fd])
 
     return mgraph_, dgraph_
 
