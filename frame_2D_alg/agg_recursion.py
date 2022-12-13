@@ -286,7 +286,7 @@ def sub_recursion_g(graph_, Sval, fseg, fd):  # rng+: extend G_ per graph, der+:
             Rval = sum([sub_mgraph.mplevels.val for sub_mgraph in sub_mgraph_])
             if Rval > ave_sub * graph.rdn:  # >cost of call:
                 sub_rlayers, rval = sub_recursion_g(sub_mgraph_, Rval, fseg=fseg, fd=0)
-                Rval+=rval; graph.rlayers = [[sub_mgraph_]+[sub_rlayers], Rval]
+                Rval+=rval; graph.rlayers = [[sub_mgraph_]+[sub_rlayers], Rval]  # now do we need to add val in PP.r|dlayers too ?
             # der+:
             Dval = sum([sub_dgraph.dplevels.val for sub_dgraph in sub_dgraph_])
             if Dval > ave_sub * graph.rdn:
@@ -321,15 +321,19 @@ def sum2graph_(G_, fd):  # sum node and link params into graph, plevel in agg+ o
             Xn = max(Xn,(node.x0+node.xn)-X0)  # box xn = x0+xn
             Yn = max(Yn,(node.y0+node.yn)-Y0)
             graph_plevels = [graph.mplevels,graph.dplevels][fd]; plevels = [node.mplevels, node.dplevels][fd]
+            # sum graph's plevels first because their H will be empty from the initialization above without any accumulation, and if node is derG, we need their H to retrieve the players
+            sum_pH(graph_plevels, plevels)  # G or derG  
             # sum node plevels(pplayers(players(ptuples:
-            while plevels.H[0].L==1:  # node is derG
+            # plevels.H is empty if prior fork is different with fd
+            while plevels.H and plevels.H[0].L==1:  # node is derG
                 node = node.node_[0]
-                plevels = [node.mplevels, node.dplevels][fd]
-                i = 2 ** len(plevels.H); _i = -i  # n_players in implicit pplayer = n_higher_plevels ^2: 1|1|2|4...
+                plevels = node.mplevels if node.mplevels.H else node.dplevels  # we can't select based on fd here because fd in prior fork will be different, the only way is to check if their plevels.H is empty   
+                i = 2 ** len(plevels.H); _i = -i  # n_players in implicit pplayer = n_higher_plevels ^2: 1|1|2|4...  
+                # do we need to have this on altTop too?
                 for graph_players, players in zip(graph_plevels.H[-1].H[-i:-_i], plevels.H[-1].H[-i:-_i]):
                     sum_pH(graph_players, players)  # sum pplayer' players
                     _i = i; i += int(np.sqrt(i))
-            sum_pH(graph_plevels, plevels)  # G or derG
+
             for derG in node.link_:
                 derG_plevels = [derG.mplevels, derG.dplevels][fd]
                 sum_pH(new_plevel, derG_plevels.H[0])  # the only plevel, accum derG, += L=1, S=link.S, preA: [Xn,Yn]
