@@ -75,7 +75,7 @@ def agg_recursion(root, G_, fseg, ifd):  # compositional recursion in root.PP_, 
         else:
             sub_layers = []
         [root.rlayers, root.dlayers][fd] = [sub_layers, val]  # combined val of all new der orders
-        [root.mplevels,root.dplevels][fd] = CpH  # replace with summed params of higher-composition graphs:
+        [root.mplevels,root.dplevels][fd] = CpH()  # replace with summed params of higher-composition graphs:
         for graph in graph_:
             sum_pH([root.mplevels,root.dplevels][fd], [graph.mplevels,graph.dplevels][fd])  # not mplevels+dplevels?
         # cross-graph agg+:
@@ -315,7 +315,9 @@ def sum2graph_(G_, fd):  # sum node and link params into graph, plevel in agg+ o
         for node in node_: X0+=node.x0; Y0+=node.y0  # first pass defines center
         X0/=L; Y0/=L
         graph = Cgraph(L=L, node_=node_, medG_=medG_)
-        graph_plevels = CpH
+        graph_plevels = [graph.mplevels, graph.dplevels][fd]  
+        # actually they will not be assigned in the code below because [graph.mplevels, graph.dplevels][fd] is the object, updating it that way will not update m|dplevels in graph
+        # [graph.mplevels, graph.dplevels][fd] = graph_plevels
         new_plevel = CpH(L=1)  # 1st link adds 2 nodes, other links add 1, one node is already in the graph
 
         for node in node_:  # define max distance,A, sum plevels:
@@ -324,15 +326,19 @@ def sum2graph_(G_, fd):  # sum node and link params into graph, plevel in agg+ o
 
             plevels = [node.mplevels, node.dplevels][fd]
             sum_pH(graph_plevels, plevels)  # node is G or derG, sum plevels ( pplayers ( players ( ptuples
-            rev = 0
-            while plevels and plevels.H[0].L==1:  # node is derG
-                rev=1   # or len(node.mplevels.H)==len(node.dplevels.H): last G.plevel is one fork?
+            # i checked and should be no issue to check their H size
+            while len(node.mplevels.H)==len(node.dplevels.H): #plevels.H and plevels.H[0].L==1:  # node is derG
                 node = node.node_[0]  # lower pplayers in node.node_[0]:
                 node_plevels = node.mplevels if node.mplevels.H else node.dplevels  # prior sub+ fork
+
+                # graph_plevels here is summed from derG.m|dplevels, they are single element H
+                # node.node_[0] is G and they have 2 element H, sum them with sum_pH will get error because they have different angle
                 sum_pH(graph_plevels, node_plevels)  # sum pplayer' players in reverse order
+
+                if len(node.mplevels.H)!=len(node.dplevels.H):
+                    graph_plevels.H[-1].H.reverse()  # pplayers were added top-down, should be bottom-up
                 # include 1st node==G before while breaks
-            if rev==1:
-                reversed(graph_plevels.H[-1].H)  # pplayers were added top-down, should be bottom-up
+
             for derG in node.link_:
                 derG_plevels = [derG.mplevels, derG.dplevels][fd]
                 sum_pH(new_plevel, derG_plevels.H[0])  # the only plevel, accum derG, += L=1, S=link.S, preA: [Xn,Yn]
@@ -344,7 +350,6 @@ def sum2graph_(G_, fd):  # sum node and link params into graph, plevel in agg+ o
         graph.x0=X0; graph.xn=Xn; graph.y0=Y0; graph.yn=Yn
         graph_plevels.H += [new_plevel]
         graph_plevels.fds = copy(plevels.fds) + [fd]
-        [graph.mplevels, graph.dplevels][fd] = graph_plevels
         graph_ += [graph]
 
     for graph in graph_:  # 2nd pass: accum alt_graph_ params
@@ -405,8 +410,8 @@ def add_alts(cplevel, aplevel):
 
 
 def sum_pH(PH, pH, fneg=0):  # recursive unpack plevels ( pplayer ( players ( ptuples ( ptuple, no accum across fd: matched in comp_pH
-
-    if PH.L:  # valid extuple
+    # added as temporary solution to problem in line 334 above
+    if PH.L and pH.L:  # valid extuple
         PH.L += pH.L; PH.S += pH.S
         if PH.A:
             if isinstance(PH.A, list):
