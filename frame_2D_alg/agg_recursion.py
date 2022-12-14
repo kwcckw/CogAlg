@@ -286,7 +286,7 @@ def sub_recursion_g(graph_, Sval, fseg, fd):  # rng+: extend G_ per graph, der+:
             Rval = sum([sub_mgraph.mplevels.val for sub_mgraph in sub_mgraph_])
             if Rval > ave_sub * graph.rdn:  # >cost of call:
                 sub_rlayers, rval = sub_recursion_g(sub_mgraph_, Rval, fseg=fseg, fd=0)
-                Rval+=rval; graph.rlayers = [[sub_mgraph_]+[sub_rlayers], Rval]  # now do we need to add val in PP.r|dlayers too ?
+                Rval+=rval; graph.rlayers = [[sub_mgraph_]+[sub_rlayers], Rval]
             # der+:
             Dval = sum([sub_dgraph.dplevels.val for sub_dgraph in sub_dgraph_])
             if Dval > ave_sub * graph.rdn:
@@ -315,25 +315,24 @@ def sum2graph_(G_, fd):  # sum node and link params into graph, plevel in agg+ o
         for node in node_: X0+=node.x0; Y0+=node.y0  # first pass defines center
         X0/=L; Y0/=L
         graph = Cgraph(L=L, node_=node_, medG_=medG_)
+        graph_plevels = CpH
         new_plevel = CpH(L=1)  # 1st link adds 2 nodes, other links add 1, one node is already in the graph
 
-        for node in node_:  # 2nd pass defines max distance and other params:
+        for node in node_:  # define max distance,A, sum plevels:
             Xn = max(Xn,(node.x0+node.xn)-X0)  # box xn = x0+xn
             Yn = max(Yn,(node.y0+node.yn)-Y0)
-            graph_plevels = [graph.mplevels,graph.dplevels][fd]; plevels = [node.mplevels, node.dplevels][fd]
-            # sum graph's plevels first because their H will be empty from the initialization above without any accumulation, and if node is derG, we need their H to retrieve the players
-            sum_pH(graph_plevels, plevels)  # G or derG  
-            # sum node plevels(pplayers(players(ptuples:
-            # plevels.H is empty if prior fork is different with fd
-            while plevels.H and plevels.H[0].L==1:  # node is derG
-                node = node.node_[0]
-                plevels = node.mplevels if node.mplevels.H else node.dplevels  # we can't select based on fd here because fd in prior fork will be different, the only way is to check if their plevels.H is empty   
-                i = 2 ** len(plevels.H); _i = -i  # n_players in implicit pplayer = n_higher_plevels ^2: 1|1|2|4...  
-                # do we need to have this on altTop too?
-                for graph_players, players in zip(graph_plevels.H[-1].H[-i:-_i], plevels.H[-1].H[-i:-_i]):
-                    sum_pH(graph_players, players)  # sum pplayer' players
-                    _i = i; i += int(np.sqrt(i))
 
+            plevels = [node.mplevels, node.dplevels][fd]
+            sum_pH(graph_plevels, plevels)  # node is G or derG, sum plevels ( pplayers ( players ( ptuples
+            rev = 0
+            while plevels and plevels.H[0].L==1:  # node is derG
+                rev=1   # or len(node.mplevels.H)==len(node.dplevels.H): last G.plevel is one fork?
+                node = node.node_[0]  # lower pplayers in node.node_[0]:
+                node_plevels = node.mplevels if node.mplevels.H else node.dplevels  # prior sub+ fork
+                sum_pH(graph_plevels, node_plevels)  # sum pplayer' players in reverse order
+                # include 1st node==G before while breaks
+            if rev==1:
+                reversed(graph_plevels.H[-1].H)  # pplayers were added top-down, should be bottom-up
             for derG in node.link_:
                 derG_plevels = [derG.mplevels, derG.dplevels][fd]
                 sum_pH(new_plevel, derG_plevels.H[0])  # the only plevel, accum derG, += L=1, S=link.S, preA: [Xn,Yn]
@@ -342,9 +341,10 @@ def sum2graph_(G_, fd):  # sum node and link params into graph, plevel in agg+ o
             graph_plevels.val += plevels.val
 
         new_plevel.A = [Xn*2,Yn*2]
+        graph.x0=X0; graph.xn=Xn; graph.y0=Y0; graph.yn=Yn
         graph_plevels.H += [new_plevel]
         graph_plevels.fds = copy(plevels.fds) + [fd]
-        graph.x0=X0; graph.xn=Xn; graph.y0=Y0; graph.yn=Yn
+        [graph.mplevels, graph.dplevels][fd] = graph_plevels
         graph_ += [graph]
 
     for graph in graph_:  # 2nd pass: accum alt_graph_ params
