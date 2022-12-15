@@ -324,22 +324,23 @@ def sum2graph_(G_, fd):  # sum node and link params into graph, plevel in agg+ o
             # draft:
             plevels = [node.mplevels, node.dplevels][fd]
             sum_pH(graph_plevels, plevels)  # node is G or derG, sum plevels ( pplayers ( players ( ptuples
-            rev=0
+            rev=0; Low_plevels = CpH()
             while len(node.mplevels.H)==1 and len(node.dplevels.H)==1: # or plevels.H and plevels.H[0].L==1: node is derG:
                 rev=1
                 node = node.node_[0]  # get lower pplayers from node.node_[0]:
                 node_plevels = node.mplevels if node.mplevels.H else node.dplevels  # prior sub+ fork
-                sum_pH(graph_plevels, node_plevels)  # sum last pplayers in reverse order
+                if len(node.mplevels.H)==1 and len(node.dplevels.H)==1:  # node is still derG, this may occur in higher der++
+                   sum_pH(graph_plevels, node_plevels)  
+                else:
+                    sum_pH(Low_plevels, node_plevels)  # sum last pplayers in reverse order                             
             if rev:
                 i = 2**len(plevels.H); _i = -i  # n_players in implicit pplayer = n_higher_plevels ^2: 1|1|2|4..
                 rev_pplayers = []
                 for pplayer in graph_plevels.H[0].H[-i:-_i]:  # pplayers were added top-down, should be bottom-up
-                    rev_pplayers += [pplayer]; _i = i; i += int(np.sqrt(i))
-                Low_plevels = CpH
-                node = node.node_[0]  # get lower plevels from last node.node_[0]:
-                low_plevels = node.mplevels if node.mplevels.H else node.dplevels  # prior sub+ fork
-                sum_pH(Low_plevels, low_plevels)
-                graph_plevels.H = Low_plevels + [rev_pplayers]  # all layers of node==derG + node==G plevels in last loop
+                    # we need to init CpH with each pplayer here because we are retrieving players here 
+                    # else the nesting level will be wrong when we add it into graph's plevels
+                    rev_pplayers += [CpH(H=[pplayer], L=2, S=0, A=[0,0], val=pplayer.val)]; _i = i; i += int(np.sqrt(i))
+                graph_plevels.H = Low_plevels.H + rev_pplayers  # all layers of node==derG + node==G plevels in last loop
             # sum new_plevel across nodes:
             for derG in node.link_:
                 derG_plevels = [derG.mplevels, derG.dplevels][fd]
