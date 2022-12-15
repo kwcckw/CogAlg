@@ -41,12 +41,12 @@ def sub_recursion_eval(root):  # for PP or dir_blob
             # segs:
             agg_recursion_eval(PP, [copy(PP.mseg_levels[-1]), copy(PP.dseg_levels[-1])])
             # include empty comb_layers:
-            if fd: 
-                PPmm_ = [PPm_] + mcomb_layers; mVal = sum([PP.players[1] for PP_ in PPmm_ for PP in PP_]) 
+            if fd:
+                PPmm_ = [PPm_] + mcomb_layers; mVal = sum([PP.players[1] for PP_ in PPmm_ for PP in PP_])
                 PPmd_ = [PPm_] + dcomb_layers; dVal = sum([PP.players[1] for PP_ in PPmd_ for PP in PP_])
                 root.dlayers = [[PPmd_, mVal], [PPmm_, dVal]]
-            else:  
-                PPdm_ = [PPm_] + mcomb_layers; mVal = sum([PP.players[1] for PP_ in PPdm_ for PP in PP_]) 
+            else:
+                PPdm_ = [PPm_] + mcomb_layers; mVal = sum([PP.players[1] for PP_ in PPdm_ for PP in PP_])
                 PPdd_ = [PPd_] + dcomb_layers; dVal = sum([PP.players[1] for PP_ in PPdd_ for PP in PP_])
                 root.rlayers = [[PPdm_, mVal], [PPdd_, dVal]]
 
@@ -67,9 +67,9 @@ def sub_recursion(PP):  # evaluate each PP for rng+ and der+
     sub_segd_ = form_seg_root([copy(P_) for P_ in P__], fd=1, fds=PP.fds)  # returns bottom-up
     # sub_PPm_, sub_PPd_:
     sub_PPt = form_PP_root((sub_segm_, sub_segd_), PP.rdn + 1)
-    PP.rlayers[0] = [sub_PPt[0], sum([sub_PP.players[1] for sub_PP in sub_PPt[0]])] 
-    PP.dlayers[0] = [sub_PPt[1], sum([sub_PP.players[1] for sub_PP in sub_PPt[1]])] 
-    
+    PP.rlayers[0] = [sub_PPt[0], sum([sub_PP.players[1] for sub_PP in sub_PPt[0]])]
+    PP.dlayers[0] = [sub_PPt[1], sum([sub_PP.players[1] for sub_PP in sub_PPt[1]])]
+
     sub_recursion_eval(PP)  # add rlayers, dlayers, seg_levels to select sub_PPs
 
 
