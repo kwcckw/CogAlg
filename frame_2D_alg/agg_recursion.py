@@ -332,10 +332,11 @@ def sum2graph_(G_, fd):  # sum node and link params into graph, plevel in agg+ o
                    sum_pH(graph_plevels, node_plevels)  # sum lower pplevels of the top plevel in reverse order
             if rev:
                 i = 2**len(plevels.H); _i = -i  # n_players in implicit pplayer = n_higher_plevels ^2: 1|1|2|4...
-                rev_pplayers = []
+                rev_pplayers = CpH(A=[0,0])  # if pplayer is sequence of players, then rev_pplayers should be CpH to pack them?  
                 for players in graph_plevels.H[0].H[-i:-_i]:  # pplayers were added top-down, should be bottom-up
-                    rev_pplayers += [players]; _i=i; i+=int(np.sqrt(i))  # keep players sequence in pplayer
-                graph_plevels = CpH(H=node_plevels.H+[rev_pplayers], val=node_plevels.val+graph_plevels.val, fds=node_plevels.fds+[fd])
+                    rev_pplayers.H += [players]; _i=i; i+=int(np.sqrt(i))  # keep players sequence in pplayer
+
+                graph_plevels = CpH(H=node_plevels.H+[rev_pplayers], val=node_plevels.val+graph_plevels.val)  # fds will be assigned later
                 # low plevels: last node_[0] in while derG + top plevel: pplayers of node==derG
             for derG in node.link_:
                 derG_plevels = [derG.mplevels, derG.dplevels][fd]
