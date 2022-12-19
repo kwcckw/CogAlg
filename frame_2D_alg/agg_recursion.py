@@ -100,9 +100,9 @@ def form_graph_(root, G_, ifd):  # forms plevel in agg+ or player in sub+, G is 
     comp_G_(G_, ifd)  # cross-comp all graphs within rng, graphs may be segs | fderGs, G.roott += link, link.node
     mgraph_, dgraph_ = [],[]  # initialize graphs with >0 positive links in graph roots:
     for G in G_:
-        if sum(G.roott[0].valt) > ave_Gm and G.roott[0] not in mgraph_:
+        if G.roott[0].valt[0] > ave_Gm and G.roott[0] not in mgraph_:
             mgraph_ += [G.roott[0]]  # root = CQ node_
-        if sum(G.roott[1].valt) > ave_Gd and G.roott[1] not in dgraph_:
+        if G.roott[1].valt[1] > ave_Gd and G.roott[1] not in dgraph_:
             dgraph_ += [G.roott[1]]
 
     for fd, graph_ in enumerate([mgraph_, dgraph_]):  # evaluate nodes to merge or delete their graphs:
@@ -209,8 +209,8 @@ draft:
 def graph_reval(graph_, fd):  # recursive eval of nodes and their links for regraph
 
     regraph_ = []
-    reval = 0
-    for graph in graph_:
+    while graph_:  # to remove graph while looping it, it's better to use pop here
+        graph = graph_.pop()
         regraph = CQ()
         for node in graph.Q:  # node_
             val = node.link_.valt[fd]  # in-graph links only
@@ -221,19 +221,27 @@ def graph_reval(graph_, fd):  # recursive eval of nodes and their links for regr
                     _node = link.node_.Q[1] if link.node_.Q[0] is node else link.node_.Q[0]
                     _val = _node.link_.valt[fd]
                     _graph = _node.roott[fd]  # may be different root: need to test link?
-                    if _graph is graph:
+                    if _graph is graph and _graph in graph_:  # _graph is not remove prior this call
                         if _val > G_aves[fd]:  # link and both nodes must be positive for inclusion in regraph
-                                               # in regraph only if root was merged, then also remove nodes?
-                            regraph.Q += [_node]; regraph.valt[fd] += _val
-                            merge(graph, _graph)  # or reval _graph nodes: not accessed yet, else removed:
+                        # in regraph only if root was merged, then also remove nodes?
+                            # node and val will be summed in merge
+                            merge(regraph, _graph, fd)  # or reval _graph nodes: not accessed yet, else removed:
                             graph_.remove(_graph)
+                 
+        if regraph.valt[fd] and abs(graph.valt[fd]-regraph.valt[fd])>ave_G:  # adjustment in connect val in graph
             regraph_ += [regraph]
-            reval += regraph.valt[fd]
-    for regraph in regraph_:
-        if regraph.valt[fd] and (abs(graph.valt[fd]-regraph.valt[fd]) > ave_G):  # adjustment in connect val in graph
-            regraph = graph_reval(regraph, fd)  # re-clustering while graph value is unstable
 
-    return regraph
+    if regraph_: regraph_ = graph_reval(regraph_, fd)  # re-clustering while graph value is unstable
+
+    return regraph_
+
+
+def merge(_graph, graph, fd):
+    
+    for node in graph.Q:
+        if node not in _graph.Q:
+            _graph.Q += [node]
+            _graph.valt[fd] += node.link_.valt[fd]
 
 
 def sub_recursion_g(graph_, Sval, fseg, fd):  # rng+: extend G_ per graph, der+: replace G_ with derG_
