@@ -25,9 +25,10 @@ ave_distance = 5
 ave_sparsity = 2
 
 class CQ(ClusterStructure):  # nodes or links
-    Q = list
+
+    Q = list  # in-graph node links only?
     valt = lambda: [0,0]  # valt in link_, single-fork node_?
-    tQ = list  # total tested links? or no separate pos links  (why we need this?)
+    tQ = list  # total tested links
     nval = float  # val of neg links in tQ?
 
 class CpH(ClusterStructure):  # hierarchy of params + associated vars
@@ -47,7 +48,8 @@ class Cgraph(CPP):  # graph or generic PP of any composition
 
     link_ = lambda: CQ() # evaluated graph_as_node external links, replace alt_node if open, direct only?
     node_ = lambda: CQ() # fd-selected elements, common root of layers, levels:
-    # agg,sub forks: [[],0] if called only
+    # node_link_ = list  # all node links in graph?
+    # agg,sub forks: [[],0] if called
     mlevels = list  # PPs) Gs) GGs.: node_ agg, each a flat list
     dlevels = list
     rlayers = list  # | mlayers: init from node_ for subdivision, micro relative to levels
@@ -103,13 +105,8 @@ def form_graph_(root, G_, ifd):  # forms plevel in agg+ or player in sub+, G is 
         if sum(G.roott[1].valt) > ave_Gd and G.roott[1] not in dgraph_:
             dgraph_ += [G.roott[1]]
 
-    for fd, graph_ in enumerate([mgraph_, dgraph_]):  # evaluate intermediate nodes to delete or merge their graphs:
-        regraph_ = []
-        while graph_:
-            graph = graph_.pop(0)
-            regraph = CQ()
-            graph_reval(regraph, graph.Q, graph.valt[fd], fd)
-            if len(regraph.Q) > 1: regraph_ += [regraph]  # graph reformed by merges and removes above
+    for fd, graph_ in enumerate([mgraph_, dgraph_]):  # evaluate nodes to merge or delete their graphs:
+        regraph_ = graph_reval(graph_, fd)  # graphs recursively reformed by node re-evaluation
         if regraph_:
             graph_[:] = sum2graph_(regraph_, fd)  # sum proto-graph node_ params in graph
             for graph in graph_:
@@ -118,7 +115,6 @@ def form_graph_(root, G_, ifd):  # forms plevel in agg+ or player in sub+, G is 
                     sum_pH(root_plevels, plevels)
 
     return mgraph_, dgraph_
-
 
 def comp_G_(G_, ifd):  # cross-comp Gs (patterns of patterns): Gs, derGs, or segs inside PP, same process, no fderG?
 
@@ -150,12 +146,10 @@ def comp_G_(G_, ifd):  # cross-comp Gs (patterns of patterns): Gs, derGs, or seg
                 G.link_.Q += [derG]; G.link_.valt[0] += derG.mplevels.val; G.link_.valt[1] += derG.dplevels.val
                 for fd, val in enumerate([mplevel.val, dplevel.val]):  # alt fork is redundant, no support?
                     if val > 0:
-                        for node, GQ in zip([_G, G], [G.roott[fd], _G.roott[fd]]):  # bilateral inclusion
-                            if node not in GQ.Q:
-                                GQ.Q += [node]
-                                GQ.valt[0] += node.link_.valt[0]; GQ.valt[1] += node.link_.valt[1]
-                                    
- 
+                        for node, root in zip([_G, G], [G.roott[fd], _G.roott[fd]]):  # bilateral inclusion
+                            if node not in root.Q:
+                                root.Q += [node]; root.valt[fd] += node.link_.valt[fd]
+
 
 def comp_pH(_pH, pH):  # recursive unpack plevels ( pplayer ( players ( ptuples -> ptuple:
                        # if derG: compare mplevel or dplevel
@@ -205,28 +199,42 @@ def comp_ext(_spH, spH, mpH, dpH):
         mpH.A = 1; dpH.A = 0  # no difference, matching low-aspect, only if both?
     mpH.val += mpH.A; dpH.val += dpH.A
 
+'''
+Inclusion by val of node links in graph: if node_link in G.node_link_: pruned / added in reval? 
+strong nodes may be connected over weak links or weak nodes over strong links,
 
-def graph_reval(regraph, node_, init_val, fd):  # recursive eval of nodes and their links for regraph
+initial clustering by individual links, link_.val is not known till recursion?
+draft:
+'''
+def graph_reval(graph_, fd):  # recursive eval of nodes and their links for regraph
 
-    new_node_ = []
-    for node in node_:  # node_
-        if node.link_.valt[fd] > G_aves[fd]:  # else skip
-            regraph.Q += [node]
-            for link in node.link_.Q:
-                if [link.mplevels, link.dplevels][fd].val > G_aves[fd]:   # link_val
+    regraph_ = []
+    reval = 0
+    for graph in graph_:
+        regraph = CQ()
+        for node in graph.Q:  # node_
+            val = node.link_.valt[fd]  # in-graph links only
+            if val > G_aves[fd]:  # else skip
+                regraph.Q += [node]; node.roott[fd]=regraph; regraph.valt[fd] += val
+                for link in node.link_.Q:
+                    # if [link.mplevels, link.dplevels][fd].val > G_aves[fd]:  # link_val?
                     _node = link.node_.Q[1] if link.node_.Q[0] is node else link.node_.Q[0]
-                    val = _node.link_.valt[fd]
-                    if val > G_aves[fd] and _node not in regraph.Q:  # link and both nodes must be positive for inclusion in regraph
-                        regraph.Q += [_node]; regraph.valt[fd] += val
-                        new_node_ += [_node]  # to scan this new_node in the next recursion, or we rescan all nodes?
-                        # _graph = _node.roott[fd]  # why we need this?
-                        # may not be in graph, merge or eval _graph nodes?
-
-    # their val will be reduced after the search? Or it should be regraph val - initial val?
-    if abs(init_val-regraph.valt[fd]) > ave_G:  # adjustment in connect val in graph
-        regraph = graph_reval(regraph, new_node_, regraph.valt[fd], fd)
+                    _val = _node.link_.valt[fd]
+                    _graph = _node.roott[fd]  # may be different root: need to test link?
+                    if _graph is graph:
+                        if _val > G_aves[fd]:  # link and both nodes must be positive for inclusion in regraph
+                                               # in regraph only if root was merged, then also remove nodes?
+                            regraph.Q += [_node]; regraph.valt[fd] += _val
+                            merge(graph, _graph)  # or reval _graph nodes: not accessed yet, else removed:
+                            graph_.remove(_graph)
+            regraph_ += [regraph]
+            reval += regraph.valt[fd]
+    for regraph in regraph_:
+        if regraph.valt[fd] and (abs(graph.valt[fd]-regraph.valt[fd]) > ave_G):  # adjustment in connect val in graph
+            regraph = graph_reval(regraph, fd)  # re-clustering while graph value is unstable
 
     return regraph
+
 
 def sub_recursion_g(graph_, Sval, fseg, fd):  # rng+: extend G_ per graph, der+: replace G_ with derG_
 

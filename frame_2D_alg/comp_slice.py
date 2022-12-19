@@ -547,7 +547,7 @@ def comp_ptuple(_params, params, fd=0):  # compare lateral or vertical tuples, s
 
     return mtuple, dtuple
 
-# we can't parse mval and dval because their value will not be referenced by mtuple and tuple, hence we need to use mtuple.val and dtuple.val
+
 def comp(param_name, _param, param, dtuple, mtuple, ave, finv):
 
     d = _param-param
@@ -558,7 +558,7 @@ def comp(param_name, _param, param, dtuple, mtuple, ave, finv):
     setattr(dtuple, param_name, d)  # dtuple.param_name = d
     setattr(mtuple, param_name, m)  # mtuple.param_name = m
 
-def comp_angle(param_name, _angle, angle, dval=0, mval=0, dtuple=[], mtuple=[]):  # rn doesn't matter for angles
+def comp_angle(param_name, _angle, angle, dtuple, mtuple):  # rn doesn't matter for angles
 
     _Dy, _Dx = _angle
     Dy, Dx = angle
@@ -571,12 +571,12 @@ def comp_angle(param_name, _angle, angle, dval=0, mval=0, dtuple=[], mtuple=[]):
     dangle = np.arctan2(sin_da, cos_da)  # scalar, vertical difference between angles
     mangle = ave_dangle - abs(dangle)  # inverse match, not redundant as summed across sign
     if dtuple:  # not parsed in rotate_P
-        setattr(dtuple, param_name, dangle); dval += abs(dangle)
-        setattr(mtuple, param_name, mangle); mval += mangle
+        setattr(dtuple, param_name, dangle); dtuple.val += abs(dangle)
+        setattr(mtuple, param_name, mangle); mtuple.val += mangle
 
     return mangle, dangle
 
-def comp_aangle(_aangle, aangle, dval, mval, dtuple, mtuple):
+def comp_aangle(_aangle, aangle, dtuple, mtuple):
 
     _sin_da0, _cos_da0, _sin_da1, _cos_da1 = _aangle
     sin_da0, cos_da0, sin_da1, cos_da1 = aangle
@@ -594,8 +594,9 @@ def comp_aangle(_aangle, aangle, dval, mval, dtuple, mtuple):
 
     daangle = np.arctan2(gay, gax)  # diff between aangles, probably wrong
     maangle = ave_daangle - abs(daangle)  # inverse match, not redundant as summed
-    dtuple.aangle = daangle; dval += abs(daangle)
-    mtuple.aangle = maangle; mval += maangle
+
+    dtuple.aangle = daangle; dtuple.val += abs(daangle)
+    mtuple.aangle = maangle; mtuple.val += maangle
 
 
 def agg_recursion_eval(blob, PP_t):
