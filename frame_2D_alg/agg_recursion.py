@@ -105,9 +105,12 @@ def form_graph_(root, G_, ifd): # form plevel in agg+ or player in sub+, G is no
         graph_ = []
         while G_:
             G = G_.pop(0)  # all Gs not removed in add_node_layer
-            gnode_ = [G]; val = 0
-            add_node_layer(gnode_, val, G_, G, fd)  # recursive depth-first gnode_+=[_G]
-            graph_ += CQ(Q=gnode_, val=val)
+            gnode_ = [G]
+            val = add_node_layer(gnode_, G_, G, fd)  # recursive depth-first gnode_+=[_G]
+            if val > G_aves[fd]:
+                if fd: graph = CQ(Qd=gnode_, dval=val)
+                else:  graph = CQ(Qm=gnode_, mval=val)
+                graph_ += [graph]
 
         regraph_ = graph_reval(graph_, fd)  # graphs recursively reformed by node re-evaluation
         if regraph_:
@@ -120,16 +123,18 @@ def form_graph_(root, G_, ifd): # form plevel in agg+ or player in sub+, G is no
 
     return graph_t
 
-def add_node_layer(gnode_, val, G_, G, fd):  # recursive depth-first gnode_+=[_G]
+def add_node_layer(gnode_, G_, G, fd):  # recursive depth-first gnode_+=[_G]
 
+    val = 0
     link_ = G.link_.Qd if fd else G.link_.Qm  # all positive
     for link in link_:
         _G = link.node_.Q[1] if link.node_.Q[0] is G else link.node_.Q[0]
         if _G in G_:  # _G is not removed in prior loop
-            gnode_ += [_G]
+            gnode_ += [_G]; val+= _G.link_.valt[fd]
             G_.remove(_G)
-            add_node_layer(gnode_, val, G_, _G, fd)
+            val += add_node_layer(gnode_, G_, _G, fd)
 
+    return val
 
 def comp_G_(G_, ifd):  # cross-comp Gs (patterns of patterns): Gs, derGs, or segs inside PP, same process, no fderG?
 
@@ -166,12 +171,16 @@ def comp_G_(G_, ifd):  # cross-comp Gs (patterns of patterns): Gs, derGs, or seg
                 if dval > ave_Gd:
                     _G.link_.Qd += [derG]; _G.link_.dval += dval  # no mval for Qd
                     G.link_.Qd += [derG]; G.link_.dval += dval
+                
+                # below should be not needed now
+                '''
                 # no alt fork support:
                 for fd, val in enumerate([mplevel.val, dplevel.val]):
                     if val > 0:
                         for node, root in zip([_G, G], [G.roott[fd], _G.roott[fd]]):  # bilateral inclusion
                             if node not in root.Q:
                                 root.Q += [node]; root.valt[fd] += node.link_.valt[fd]
+                '''
 
 
 def comp_pH(_pH, pH):  # recursive unpack plevels ( pplayer ( players ( ptuples -> ptuple:
@@ -223,34 +232,45 @@ def comp_ext(_spH, spH, mpH, dpH):
     mpH.val += mpH.A; dpH.val += dpH.A
 
 
-def graph_reval(graph_, adjV_, fd):  # recursive eval of nodes for regraph, increasingly selective with node exclusion?
+def graph_reval(graph_, fd):  # recursive eval of nodes for regraph, increasingly selective with node exclusion?
 
     regraph_ = []
     # draft:
     while graph_:
-        graph = graph_.pop(); adjV = adjV_.pop()
-        if adjV < ave_G: continue  # skip stable graphs
+        graph = graph_.pop()
         regraph = CQ()
-        for node in graph.Q:  # node_
-            val = node.link_.valt[fd]  # in-graph links only
+        node_ = [regraph.Qm, regraph.Qd][fd]
+        for node in [graph.Qm, graph.Qd][fd]:  # node_
+            val = [node.link_.mval,node.link_.dval][fd]  # in-graph links only
             if val > G_aves[fd]:  # else skip
-                regraph.Q += [node]; node.roott[fd]=regraph; regraph.valt[fd] += val
-                for link in node.link_.Q:
+                node_ += [node] 
+                node.roott[fd]=regraph
+                regraph.valt[fd] += val
+                # draft:
+                for link in [node.link_.Qm, node.link_.Qd][fd]:
                     _node = link.node_.Q[1] if link.node_.Q[0] is node else link.node_.Q[0]
                     _val = _node.link_.valt[fd]
-                    _graph = _node.roott[fd]
+                    
+                    if _val > G_aves[fd] :
+                        node_ += [_node] 
+                        _node.roott[fd]=regraph
+                        regraph.valt[fd] += _val
+                        
+                    
+                    '''
                     if _graph is graph and _graph in graph_:  # _graph is not removed prior this call
                         if _val > G_aves[fd]:  # link and both nodes must be positive for inclusion in regraph
                         # in regraph only if root was merged, then also remove nodes?
                         # no longer needed?:
                             merge(regraph, _graph, fd)  # or reval _graph nodes: not accessed yet, else removed:
                             graph_.remove(_graph)
+                    '''
         # draft:
-        adjV = abs(graph.valt[fd]-regraph.valt[fd])  # adjustment in connect val in graph
-        if adjV > ave_G:
-            regraph_ += [regraph]; adjV_ += [adjV]
+        # adjustment in connect val in graph
+        if abs(graph.valt[fd]-regraph.valt[fd]) > ave_G:  # i think there's no need to parse adjV, we just need it here? There's no need to check in the next recursion because wea re already checking it here
+            regraph_ += [regraph]
 
-    if regraph_: regraph_ = graph_reval(regraph_, adjV_, fd)
+    if regraph_: regraph_ = graph_reval(regraph_, fd)
 
     return regraph_
 
