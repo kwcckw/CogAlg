@@ -133,7 +133,7 @@ def graph_reval(graph_, reval_, fd):  # recursive eval nodes for regraph, increa
             regraph_ += [graph]; rreval_ += [0]
             continue
         while graph.Q:  # some links will be removed, graph may split into multiple regraphs, init each with graph.Q node:
-            regraph = CQ
+            regraph = CQ(val=0)  # init val as int instead of list
             node = graph.Q.pop()  # node_, not removed below
             val = [node.link_.mval, node.link_.dval][fd]  # in-graph links only
             if val > G_aves[fd]:  # else skip
@@ -150,7 +150,8 @@ def graph_reval(graph_, reval_, fd):  # recursive eval nodes for regraph, increa
 
 def readd_node_layer(regraph, graph_Q, node, fd):  # recursive depth-first regraph.Q+=[_node]
 
-    for link in node.link_.Q:  # all positive
+    # link_ doesn't use Q, they use lQm and lQd
+    for link in [node.link_.lQm, node.link_.lQd][fd]:  # all positive
         _node = link.node_.Q[1] if link.node_.Q[0] is node else link.node_.Q[0]
         _val = [_node.link_.mval, _node.link_.dval][fd]
         if _val > G_aves[fd] and _node in graph_Q:
@@ -265,7 +266,7 @@ def sub_recursion_g(graph_, Sval, fseg, fd):  # rng+: extend G_ per graph, der+:
             graph_plevels = graph.dplevels
             node_ = []  # fill with positive links in graph:
             for node in graph.node_:
-                for link in node.link_:
+                for link in node.link_.lQd:
                     if link.dplevels.val>0 and link not in node_:
                         node_ += [link]
         else:
@@ -312,6 +313,8 @@ def sum2graph_(G_, fd):  # sum node and link params into graph, plevel in agg+ o
         X0/=L; Y0/=L
         graph = Cgraph(L=L, node_=node_)
         graph_plevels = [graph.mplevels, graph.dplevels][fd]  # init with node_[0]?
+        # so i checked and the previous problem where length of fds is not equal to H is due to we didn't init fds here
+        graph_plevels.fds = copy([node_[0].mplevels, node_[0].dplevels][fd].fds)
         new_plevel = CpH(L=1)  # 1st link adds 2 nodes, other links add 1, one node is already in the graph
 
         for node in node_:  # define max distance,A, sum plevels:
@@ -322,7 +325,7 @@ def sum2graph_(G_, fd):  # sum node and link params into graph, plevel in agg+ o
             rev=0
             while len(node.mplevels.H)==1 and len(node.dplevels.H)==1: # or plevels.H and plevels.H[0].L==1: node is derG:
                 rev=1
-                node = node.node_[0]  # get lower pplayers from node.node_[0]:
+                node = node.node_.Q[0]  # get lower pplayers from node.node_[0]:
                 node_plevels = node.mplevels if node.mplevels.H else node.dplevels  # prior sub+ fork
                 if len(node.mplevels.H)==1 and len(node.dplevels.H)==1:  # node is derG in der++
                    sum_pH(graph_plevels, node_plevels)  # sum lower pplayers of the top plevel in reversed order
