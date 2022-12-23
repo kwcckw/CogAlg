@@ -84,8 +84,15 @@ def agg_recursion(root, G_, fseg, ifd):  # compositional recursion in root.PP_, 
             sub_layers, val = sub_recursion_g(graph_, val, fseg, fd=fd)  # subdivide graph_ by der+|rng+, accum val
         else:
             sub_layers = []
-        [root.rlayers, root.dlayers][fd] = [sub_layers, val]  # combined val of all new der orders
-        [root.mplevels,root.dplevels][fd] = CpH()  # replace with summed params of higher-composition graphs:
+
+        # generally [m, d][fd] cannot be assigned at the left side of the equation
+        if fd:
+            root.dlayers = [sub_layers, val]  # combined val of all new der orders
+            root.dplevels = CpH()  # replace with summed params of higher-composition graphs:
+        else:
+            root.rlayers = [sub_layers, val]
+            root.mplevels = CpH()
+            
         for graph in graph_:
             sum_pH([root.mplevels,root.dplevels][fd], [graph.mplevels,graph.dplevels][fd])  # not mplevels+dplevels?
         # cross-graph agg+:
@@ -99,8 +106,8 @@ def form_graph_(root, G_, ifd): # form plevel in agg+ or player in sub+, G is no
     comp_G_(G_, ifd)  # cross-comp all graphs within rng, graphs may be segs | fderGs, G.roott += link, link.node
     mnode_, dnode_ = [], []  # Gs with >0 +ve fork links:
     for G in G_:
-        if G.link_.lQm: mnode_ += [G]  # all nodes with +ve links, not clustered in graphs yet
-        if G.link_.lQd: dnode_ += [G]
+        if G.link_.Qm: mnode_ += [G]  # all nodes with +ve links, not clustered in graphs yet
+        if G.link_.Qd: dnode_ += [G]
     graph_t = []
     Gm_, Gd_ = copy(G_), copy(G_)
     # form proto-graphs of positively linked nodes:
@@ -114,6 +121,9 @@ def form_graph_(root, G_, ifd): # form plevel in agg+ or player in sub+, G is no
         # reform graphs by node val:
         regraph_ = graph_reval(graph_, [ave_G for graph in graph_], fd)  # init reval_ to start
         if regraph_:
+            # when ifd = 0, fd = 1 here, G's dplevels will be empty
+            # Due to this, graph's dplevels.H has single pplayers now instead of 2 because it adds only new_plevel, there's no existing pplayers
+            # In this case, do we need to create an empty CpH as 1st pplayers? Because new_plevel can't be on the 1st index due to their L is >0
             graph_[:] = sum2graph_(regraph_, fd)  # sum proto-graph node_ params in graph
             for graph in graph_:
                 root_plevels = [root.mplevels, root.dplevels][fd]; plevels = [graph.mplevels, graph.dplevels][fd]
@@ -189,10 +199,10 @@ def comp_G_(G_, ifd):  # cross-comp Gs (patterns of patterns): Gs, derGs, or seg
                 mplevel.L, dplevel.L = 1,1; mplevel.S, dplevel.S = distance,distance; mplevel.A, dplevel.A = [dy,dx],[dy,dx]
                 mplevels = CpH(H=[mplevel], fds=[0], val=mplevel.val); dplevels = CpH(H=[dplevel], fds=[1], val=dplevel.val)
                 # comp alts
-                if _plevels.altTop and plevels.altTop:
-                    altTopm,altTopd = comp_pH(_plevels.altTop, plevels.altTop)
-                    mplevels.altTop = CpH(H=[altTopm],fds=[0],val=altTopm.val)  # for sum,comp in agg+, reduced weighting of altVs?
-                    dplevels.altTop = CpH(H=[altTopd],fds=[1],val=altTopd.val)
+                if _plevels.alt and plevels.alt:
+                    altm,altd = comp_pH(_plevels.alt, plevels.alt)
+                    mplevels.alt = CpH(H=[altm],fds=[0],val=altm.val)  # for sum,comp in agg+, reduced weighting of altVs?
+                    dplevels.alt = CpH(H=[altd],fds=[1],val=altd.val)
                 # new derG:
                 y0 = (G.y0+_G.y0)/2; x0 = (G.x0+_G.x0)/2  # new center coords
                 derG = Cgraph( node_=CQ(Q=[_G,G]), mplevels=mplevels, dplevels=dplevels, y0=y0, x0=x0, # compute max distance from center:
@@ -266,7 +276,7 @@ def sub_recursion_g(graph_, Sval, fseg, fd):  # rng+: extend G_ per graph, der+:
             graph_plevels = graph.dplevels
             node_ = []  # fill with positive links in graph:
             for node in graph.node_:
-                for link in node.link_.lQd:
+                for link in node.link_.Qd:
                     if link.dplevels.val>0 and link not in node_:
                         node_ += [link]
         else:
@@ -347,8 +357,18 @@ def sum2graph_(G_, fd):  # sum node and link params into graph, plevel in agg+ o
         new_plevel.A = [Xn*2,Yn*2]
         graph.x0=X0; graph.xn=Xn; graph.y0=Y0; graph.yn=Yn
         graph_plevels.H += [new_plevel]  # val is summed per node
+        
+        # or like this?
+        '''
+        graph_plevels.fds=[copy(node.mplevels.fds),copy(node.dplevels.fds)][fd] + [fd]
+        if fd: graph.dplevels = graph_plevels
+        else:  graph.mplevels = graph_plevels
+        '''
         graph_Plevels = [graph.mplevels, graph.dplevels][fd]  # currently empty
-        graph_Plevels(H=graph_plevels.H, val=graph_plevels.val, fds=[copy(node.mplevels.fds),copy(node.dplevels.fds)][fd] + [fd])
+        graph_Plevels.H=graph_plevels.H
+        graph_Plevels.val=graph_plevels.val
+        graph_Plevels.fds=[copy(node.mplevels.fds),copy(node.dplevels.fds)][fd] + [fd]
+
         graph_ += [graph]
 
     for graph in graph_:  # 2nd pass: accum alt_graph_ params
@@ -359,7 +379,7 @@ def sum2graph_(G_, fd):  # sum node and link params into graph, plevel in agg+ o
                     if G not in graph.node_:  # alt graphs are roots of not-in-graph G in derG.node_
                         alt_graph = G.roott[1-fd]
                         if alt_graph not in graph.alt_graph_ and isinstance(alt_graph, Cgraph):  # not proto-graph or removed
-                            alt_plevels = [alt_graph.mplevels, alt_graph.dplevels][1-fd]
+                            alt_plevels = [alt_graph.mplevels, alt_graph.dplevels][fd]  # alt graph should have same fd 
                             if AltTop.H:  # der+: plevels[-1] += player, rng+: players[-1] = player?
                                 sum_pH(AltTop.H[0], alt_plevels.H[0])
                             else:
@@ -380,6 +400,7 @@ def sum2graph_(G_, fd):  # sum node and link params into graph, plevel in agg+ o
 def add_alt_top(plevels, AltTop):
 
     plevels.alt = AltTop  # no combined val, fd = 1-fds[0]
+    # right now AltTop is summed from alt_graph's pplayers, so we need to sum alt_graph top pplayers only too?
     for players, alt_players in zip(plevels.H[0].H, AltTop.H):  # top pplayers only, pplayer is implicit
         players.alt = alt_players
         for ptuples, alt_ptuples in zip(players.H, alt_players.H):

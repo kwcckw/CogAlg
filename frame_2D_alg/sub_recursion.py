@@ -304,7 +304,7 @@ def CBlob2graph(blob, fseg, Cgraph):  # this is secondary, don't worry for now
 
 def CPP2graph(PP, fseg, Cgraph, ifd=0):
 
-    AltTop = CpH()  # should be altTop of players and pplayer
+    Alt = CpH()  # should be altTop of players and pplayer
     if not fseg and PP.altPP_:  # seg doesn't have altPP_
         alt_fds = copy(PP.altPP_[0].fds)
         for altPP in PP.altPP_[1:]:  # get fd sequence common for all altPPs:
@@ -317,17 +317,17 @@ def CPP2graph(PP, fseg, Cgraph, ifd=0):
             for ptuples, alt_fd in zip(altPP.players[0], alt_fds):
                 for ptuple in ptuples[0][:2]:  # latuple and vertuple only
                     H += [ptuple]; val += ptuple.val
-            altTop = CpH(H=H,val=val)  # player/ptuples doesn't have fds
-            sum_pH(AltTop, altTop)
+            alt = CpH(H=H,val=val)  # player/ptuples doesn't have fds
+            sum_pH(Alt, alt)
 
     # Cgraph: plevels ( pplayer ( players ( ptuples ( ptuple:
-    players = CpH(val=PP.players[1], fds=copy(PP.fds), altTop = deepcopy(AltTop))
+    players = CpH(val=PP.players[1], fds=copy(PP.fds), altTop = deepcopy(Alt))
     for ptuples, val in PP.players[0]:
         players.H.append(CpH(H=deepcopy(ptuples), val=val))
 
     # so i checked and we shouldn't initialize anything here
-    pplayer = CpH(H=[players], val=players.val, altTop=CpH(H=[deepcopy(AltTop)], val=AltTop.val))
-    plevels = CpH(H=[pplayer], val=pplayer.val, fds=[0], altTop=CpH(H=[deepcopy(pplayer.altTop)], val=pplayer.altTop.val))
+    pplayer = CpH(H=[players], val=players.val, alt=CpH(H=[deepcopy(Alt)], val=Alt.val))
+    plevels = CpH(H=[pplayer], val=pplayer.val, fds=[0], alt=CpH(H=[deepcopy(pplayer.alt)], val=pplayer.alt.val))
 
     x0=PP.x0; xn=PP.xn; y0=PP.y0; yn=PP.yn
     # update to center (x0,y0) and max_distance (xn,yn) in graph:
