@@ -274,21 +274,34 @@ def copy_P(P, Ptype=None):  # Ptype =0: P is CP | =1: P is CderP | =2: P is CPP 
 
     return new_P
 
-# not fully revised:
+def frame2graph(frame, fseg, Cgraph):  # not sure
 
-def CBlob2graph(blob, fseg, Cgraph):  # this is secondary, don't worry for now
+    mblob_ = frame.PPm_; dblob_ = frame.PPd_  # PPs are blobs here
+    x0, xn, y0, yn = frame.box
+    gframe = Cgraph(alt_plevels=CpH, rng=mblob_[0].rng, rdn=frame.rdn, x0=(x0+xn)/2, xn=(xn-x0)/2, y0=(y0+yn)/2, yn=(yn-y0)/2)
+    for fd, blob_, plevels in enumerate(zip([mblob_,dblob_], [gframe.plevels, gframe.alt_plevels])):
+        graph_ = []
+        for blob in blob_:
+            graph = CPP2graph(blob, fseg, Cgraph)
+            sum_pH(plevels, graph.plevels)
+            graph_ += [graph]
+        [gframe.node_.Q, gframe.alt_graph_][fd][:] = graph_  # mblob_|dblob_, [:] to enable to left hand assignment, not valid for object
+
+    return gframe
+
+def CBlob2graph(blob, fseg, Cgraph):  # was meant for frame, not sure
 
     PPm_ = blob.PPm_; PPd_ = blob.PPd_
     x0, xn, y0, yn = blob.box
-    gblob = Cgraph(alt_plevels=CpH(), rng=PPm_[0].rng, rdn=blob.rdn, x0=(x0+xn)/2, xn=(xn-x0)/2, y0=(y0+yn)/2, yn=(yn-y0)/2)
-    # alt_graph_ = []: no blob contour, no node_?
-    for fd, PP_ in enumerate([PPm_, PPd_]):
-        graph_=[]
+    gblob = Cgraph(alt_plevels=CpH, rng=PPm_[0].rng, rdn=blob.rdn, x0=(x0+xn)/2, xn=(xn-x0)/2, y0=(y0+yn)/2, yn=(yn-y0)/2)
+
+    for fd, PP_, plevels in enumerate(zip([PPm_,PPd_], [gblob.plevels, gblob.alt_plevels])):
+        graph_ = []
         for PP in PP_:
             graph = CPP2graph(PP, fseg, Cgraph)
-            sum_pH(gblob.plevels, graph.plevels)  # right now gblob sum from both PPm_ and PPd_, or PPm_ sum to plevels, PPd_ sum to alt_plevels?
-            # not updated:
-            # compute rdn
+            sum_pH(plevels, graph.plevels)
+            graph_ += [graph]
+            # not reviewed:
             if fseg: PP = PP.roott[PP.fds[-1]]  # seg root
             PP_P_ = [P for P_ in PP.P__ for P in P_]  # PPs' Ps
             for altPP in PP.altPP_:  # overlapping Ps from each alt PP
@@ -297,14 +310,13 @@ def CBlob2graph(blob, fseg, Cgraph):  # this is secondary, don't worry for now
                 PP.alt_rdn += alt_rdn  # count overlapping PPs, not bilateral, each PP computes its own alt_rdn
                 gblob.alt_rdn += alt_rdn  # sum across PP_
 
-            graph_ += [graph]
-        [PPm_,PPd_][fd][:] = graph_  # use[:] to enable to left hand assignment, only valid for list, but not object
-
+        [gblob.node_.Q, gblob.alt_graph_][fd][:] = graph_  # PPm_|PPd_, [:] to enable to left hand assignment, not valid for object
     return gblob
+
 
 def CPP2graph(PP, fseg, Cgraph):
 
-    alt_players = CpH()  
+    alt_players = CpH()
     if not fseg and PP.altPP_:  # seg doesn't have altPP_
         alt_fds = copy(PP.altPP_[0].fds)
         for altPP in PP.altPP_[1:]:  # get fd sequence common for all altPPs:
@@ -323,12 +335,10 @@ def CPP2graph(PP, fseg, Cgraph):
     # Cgraph: plevels ( pplayer ( players ( ptuples ( ptuple:
     players = CpH(val=PP.players[1], fds=copy(PP.fds))
     for ptuples, val in PP.players[0]:
-        players.H.append(CpH(H=deepcopy(ptuples), val=val))
+        players.H += [CpH(H=deepcopy(ptuples), val=val)]
 
-    # so i checked and we shouldn't initialize anything here
     pplayer = CpH(H=[players], val=players.val)
     plevels = CpH(H=[pplayer], val=pplayer.val, fds=[0])
-
     alt_pplayer = CpH(H=[alt_players], val=alt_players.val)
     alt_plevels = CpH(H=[alt_pplayer], val=alt_pplayer.val, fds=[1])
 
@@ -336,5 +346,4 @@ def CPP2graph(PP, fseg, Cgraph):
     # update to center (x0,y0) and max_distance (xn,yn) in graph:
     graph = Cgraph(plevels=plevels, alt_plevels=alt_plevels, node_=PP.P__, x0=(x0+xn)/2, xn=(xn-x0)/2, y0=(y0+yn)/2, yn=(yn-y0)/2)
 
-    return graph
-    # 1st plevel fd is always der+?
+    return graph  # 1st plevel fd is always der+?

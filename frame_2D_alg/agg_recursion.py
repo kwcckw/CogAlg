@@ -50,14 +50,14 @@ class CpH(ClusterStructure):  # hierarchy of params + associated vars
 class Cgraph(CPP):  # graph or generic PP of any composition
 
     link_ = lambda: Clink_()  # evaluated graph_as_node external links, replace alt_node if open, direct only?
-    node_ = lambda: CQ() # fd-selected elements, common root of layers, levels:
+    node_ = lambda: CQ()  # fd-selected elements, common root of layers,levels:
     # agg,sub forks: [[],0] if called
     mlevels = list  # PPs) Gs) GGs.: node_ agg, each a flat list
     dlevels = list
     rlayers = list  # | mlayers: init from node_ for subdivision, micro relative to levels
     dlayers = list  # | alayers; init val = sum node_val, for sub_recursion
     # summed params in levels ( layers:
-    plevels = lambda: CpH()  # node_ params (layer0) and r+d layers'players
+    plevels = lambda: CpH()  # node_ params: layer0, + r|d layers'players
     alt_graph_ = list  # contour + overlapping contrast graphs
     alt_plevels = list  # optional summed contour params, also compared by comp_pH
     x0 = float
@@ -83,8 +83,7 @@ def agg_recursion(root, G_, fseg):  # compositional recursion in root.PP_, prett
             sub_layers, val = sub_recursion_g(graph_, val, fseg, fd=fd)  # subdivide graph_ by der+|rng+, accum val
         else:
             sub_layers = []
-        if fd: root.dlayers = [sub_layers, val]  # replace with summed params of higher-composition graphs
-        else:  root.rlayers = [sub_layers, val]
+        root.dlayers if fd else root.rlayers = [sub_layers, val]  # replace with summed params of higher-composition graphs
         for graph in graph_:
             sum_pH(root.plevels, graph.plevels)
         # cross-graph agg+:
@@ -102,12 +101,11 @@ def form_graph_(root, G_): # form plevel in agg+ or player in sub+, G is node in
         if G.link_.Qd: dnode_ += [G]
     graph_t = []
     Gm_, Gd_ = copy(G_), copy(G_)
-    # form proto-graphs of positively linked nodes:
     for fd, (node_, G_) in enumerate(zip([mnode_, dnode_], [Gm_, Gd_])):
-        graph_ = []
+        graph_ = []  # form graphs by link val:
         while G_:  # all Gs not removed in add_node_layer
             G = G_.pop()
-            gnode_=[G]
+            gnode_ = [G]
             val = add_node_layer(gnode_, G_, G, fd, val=0)  # recursive depth-first gnode_+=[_G]
             graph_ += [CQ(Q=gnode_, val=val)]
         # reform graphs by node val:
@@ -181,20 +179,20 @@ def comp_G_(G_):  # cross-comp Gs (patterns of patterns): Gs, derGs, or segs ins
             distance = np.hypot(dy, dx)  # Euclidean distance between centers, sum in sparsity
             # proximity = ave_rng - distance?
             if distance < ave_distance * ((_G.plevels.val+_G.alt_plevels.val + G.plevels.val+G.alt_plevels.val) / (2*sum(G_aves))):
-                # comb G eval
+                # combined G eval
                 mplevel, dplevel = comp_pH(_G.plevels, G.plevels)
                 mplevel.L, dplevel.L = 1,1; mplevel.S, dplevel.S = distance,distance; mplevel.A, dplevel.A = [dy,dx],[dy,dx]
-                plevels = CpH(H=[mplevel, dplevel], val = mplevel.val + dplevel.val)
-                # comp alts
+                # comp contour
                 if _G.alt_plevels and G.alt_plevels:
                     alt_mplevel, alt_dplevel = comp_pH(_G.alt_plevels, G.alt_plevels)
-                    alt_plevels = CpH(H=[alt_mplevel, alt_dplevel], val=alt_mplevel.val+alt_dplevel.val)  # no separate extuple?
+                    alt_plevels = [alt_mplevel, alt_dplevel]  # no separate extuple?
                 else: alt_plevels = []
                 # new derG:
                 y0 = (G.y0+_G.y0)/2; x0 = (G.x0+_G.x0)/2  # new center coords
-                derG = Cgraph( node_=CQ(Q=[_G,G]), plevels=plevels, alt_plevels=alt_plevels, y0=y0, x0=x0, # compute max distance from center:
+                derG = Cgraph( node_=CQ(Q=[_G,G]), plevels=[mplevel,dplevel], alt_plevels=alt_plevels, y0=y0, x0=x0, # max distance from center:
                                xn=max((_G.x0+_G.xn)/2 -x0, (G.x0+G.xn)/2 -x0), yn=max((_G.y0+_G.yn)/2 -y0, (G.y0+G.yn)/2 -y0))
-                mval, dval = derG.plevels.H[0].val, derG.plevels.H[1].val
+                mval = derG.mplevels.val
+                dval = derG.dplevels.val
                 tval = mval + dval
                 _G.link_.Q += [derG]; _G.link_.val += tval  # val of combined-fork' +- links?
                 G.link_.Q += [derG]; G.link_.val += tval
@@ -261,13 +259,10 @@ def sub_recursion_g(graph_, Sval, fseg, fd):  # rng+: extend G_ per graph, der+:
         if fd:
             node_ = []  # fill with positive links in graph:
             for node in graph.node_:
-                for link in node.link_.Qd:
+                for link in node.link_.Qd:  # always positive
                     if link not in node_:
-                        if len(link.plevels.H)>1:  # convert from [mplevel, dplevel] to [dplevel]
-                            link.plevels.H = [link.plevels.H[1]]  
-                            link.plevels.val = link.plevels.H[0].val
-                        if link.plevels.val>0:
-                            node_ += [link]
+                        link.plevels = CpH(H=[link.plevels[1]], val=link.plevels[1].val, fds=[1])
+                        node_ += [link]
         else: node_ = graph.node_
 
         if graph.plevels.val > G_aves[fd] and len(node_) > ave_nsub:
@@ -314,8 +309,8 @@ def sum2graph_(G_, fd):  # sum node and link params into graph, plevel in agg+ o
         for node in node_:  # define max distance,A, sum plevels:
             Xn = max(Xn,(node.x0+node.xn)-X0)  # box xn = x0+xn
             Yn = max(Yn,(node.y0+node.yn)-Y0)
-
-            sum_pH(graph_plevels, node.plevels)  # node: G|derG, sum plevels ( pplayers ( players ( ptuples
+            # node: G|derG, sum plevels ( pplayers ( players ( ptuples:
+            sum_pH(graph_plevels, node.plevels)
             rev=0
             while isinstance(node.plevels, list): # node is derG:
                 rev=1
@@ -330,14 +325,9 @@ def sum2graph_(G_, fd):  # sum node and link params into graph, plevel in agg+ o
                     rev_pplayers.H += [players]; rev_pplayers.fds += [fd]
                     _i = i; i += int(np.sqrt(i))
                 graph_plevels = CpH(H=Node.plevels.H+[rev_pplayers], val=Node.plevels.val+graph_plevels.val, fds=Node.plevels.fds+[fd])
-                # low plevels: last node_[0] in while derG, + top plevel: pplayers of node==derG
-                plevels = graph_plevels  # for accum below?
+                # low plevels in last node_[0] while derG, + top plevel: rev pplayers of node==derG
             for derG in node.link_.Q:
-                sum_pH(new_plevel, derG.plevels.H[fd])  # sum new_plevel across nodes, accum derG, += L=1, S=link.S, preA: [Xn,Yn]
-                val += derG.plevels.H[fd].val
-            # not revised:
-            # node_plevels.val += val  # new val in node (not sure if we ned this, because this val is accumulated across all nodes)
-            # graph_plevels.val += node.plevels.val (this should be not needed, node.val is summed in sum_pH)
+                sum_pH(new_plevel, derG.plevels[fd])  # sum new_plevel across nodes, accum derG, += L=1, S=link.S, preA: [Xn,Yn]
 
         new_plevel.A = [Xn*2,Yn*2]
         graph.x0=X0; graph.xn=Xn; graph.y0=Y0; graph.yn=Yn
