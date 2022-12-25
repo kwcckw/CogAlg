@@ -83,7 +83,7 @@ def agg_recursion(root, G_, fseg):  # compositional recursion in root.PP_, prett
             sub_layers, val = sub_recursion_g(graph_, val, fseg, fd=fd)  # subdivide graph_ by der+|rng+, accum val
         else:
             sub_layers = []
-        root.dlayers if fd else root.rlayers = [sub_layers, val]  # replace with summed params of higher-composition graphs
+        [root.rlayers, root.dlayers][:] = [sub_layers, val]  # replace with summed params of higher-composition graphs
         for graph in graph_:
             sum_pH(root.plevels, graph.plevels)
         # cross-graph agg+:

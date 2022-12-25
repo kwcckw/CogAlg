@@ -86,6 +86,7 @@ class CBlob(ClusterStructure):
     valt = list  # PPm_ val, PPd_ val, += M,G?
     fsliced = bool  # from comp_slice
     root = object  # frame or from frame_bblob
+    graph = lambda: None  # reference to converted blob
 
 '''
     Conventions:
@@ -280,7 +281,7 @@ if __name__ == "__main__":
     argument_parser.add_argument('-v', '--verbose', help='print details, useful for debugging', type=int, default=1)
     argument_parser.add_argument('-r', '--render', help='render the process', type=int, default=0)
     argument_parser.add_argument('-c', '--clib', help='use C shared library', type=int, default=0)
-    argument_parser.add_argument('-n', '--intra', help='run intra_blobs after frame_blobs', type=int, default=0)
+    argument_parser.add_argument('-n', '--intra', help='run intra_blobs after frame_blobs', type=int, default=1)
     argument_parser.add_argument('-e', '--extra', help='run frame_recursive after frame_blobs', type=int, default=0)
     args = argument_parser.parse_args()
     image = imread(args.image)
