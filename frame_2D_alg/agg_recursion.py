@@ -193,8 +193,7 @@ def comp_G_(G_):  # cross-comp Gs (patterns of patterns): Gs, derGs, or segs ins
                 y0 = (G.y0+_G.y0)/2; x0 = (G.x0+_G.x0)/2  # new center coords
                 derG = Cgraph( node_=CQ(Q=[_G,G]), plevels=[mplevel,dplevel], alt_plevels=alt_plevels, y0=y0, x0=x0, # max distance from center:
                                xn=max((_G.x0+_G.xn)/2 -x0, (G.x0+G.xn)/2 -x0), yn=max((_G.y0+_G.yn)/2 -y0, (G.y0+G.yn)/2 -y0))
-                mval = derG.mplevels.val
-                dval = derG.dplevels.val
+                mval, dval = derG.plevels[0].val, derG.plevels[1].val 
                 tval = mval + dval
                 _G.link_.Q += [derG]; _G.link_.val += tval  # val of combined-fork' +- links?
                 G.link_.Q += [derG]; G.link_.val += tval
@@ -263,7 +262,10 @@ def sub_recursion_g(graph_, Sval, fseg, fd):  # rng+: extend G_ per graph, der+:
             for node in graph.node_:
                 for link in node.link_.Qd:  # always positive
                     if link not in node_:
-                        link.plevels = CpH(H=[link.plevels[1]], val=link.plevels[1].val, fds=[1])
+                        if isinstance(link.plevels, list):  # link may be converted from prior graph's link
+                            link.plevels = CpH(H=[link.plevels[1]], val=link.plevels[1].val, fds=[1]) 
+                            if link.alt_plevels:
+                                link.alt_plevels = CpH(H=[link.alt_plevels[1]], val=link.alt_plevels[1].val, fds=[0]) 
                         node_ += [link]
         else: node_ = graph.node_
 
@@ -350,6 +352,7 @@ def add_alt_graph_(graph_t):  # mgraph_, dgraph_
                     for G in derG.node_.Q:
                         if G not in graph.node_:  # alt graphs are roots of not-in-graph G in derG.node_
                             alt_graph = G.roott[1-fd]
+                            # from my checking, if G not in graph's node_, their G.roott[1-fd] is not Cgraph too, i think it is due to mval > ave_Gm and dval > ave_Gd will never happen in comp_G_ ?
                             if alt_graph not in graph.alt_graph_ and isinstance(alt_graph, Cgraph):  # not proto-graph or removed
                                 if Alt_plevels.H:  # der+: plevels[-1] += player, rng+: players[-1] = player?
                                     sum_pH(Alt_plevels, alt_graph.plevels)  # accum alt_graph_ params
@@ -360,7 +363,8 @@ def add_alt_graph_(graph_t):  # mgraph_, dgraph_
                                 # overlapping nodes, not bilateral: graph may already be in alt_graph.alt_graph:
                                 graph.alt_rdn += len(set(graph.node_).intersection(alt_graph.node_))
                                 graph.alt_graph_ += [alt_graph]
-                                alt_graph.alt_graph_ += [graph]  # bilateral assign
+                                # i think we shouldn't add it here because their plevels won't add to Alt_plevels of this alt_graph later if graph is already in alt_graph.alt_graph_
+                                # alt_graph.alt_graph_ += [graph]  # bilateral assign 
             if graph.alt_graph_:
                 graph.alt_plevels = Alt_plevels
 
