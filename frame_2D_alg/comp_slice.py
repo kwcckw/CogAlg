@@ -596,18 +596,14 @@ def comp_aangle(_aangle, aangle, dtuple, mtuple):
 
 def agg_recursion_eval(blob, PP_t):
     from agg_recursion import agg_recursion, Cgraph
-    from sub_recursion import CPP2graph, CBlob2graph
+    from sub_recursion import PP2graph, blob2graph
 
     if not isinstance(blob, Cgraph):
         fseg = isinstance(blob, CPP)
-        if fseg:
-            blob = CPP2graph(blob, fseg=fseg, Cgraph=Cgraph)  # convert root to graph
+        if fseg: blob = PP2graph(blob, fseg=fseg, Cgraph=Cgraph)  # convert root to graph
         else:
-            if blob.graph:
-                blob = blob.graph  # get converted graph    
-            else:
-                blob = CBlob2graph(blob, fseg=fseg, Cgraph=Cgraph)  # convert root to graph
-        
+            if blob.graph: blob = blob.graph  # get converted graph
+            else:          blob = blob2graph(blob, fseg=fseg, Cgraph=Cgraph)  # convert root to graph
         for fd, PP_ in enumerate(PP_t):
             for i, PP in enumerate(PP_):
                 PP_[i] = CPP2graph(PP, fseg=fseg, Cgraph=Cgraph)  # convert PP to graph
