@@ -268,8 +268,17 @@ def sub_recursion_g(graph_, Sval, fseg, fd):  # rng+: extend G_ per graph, der+:
             for node in graph.node_:
                 for link in node.link_.Qd:  # always positive
                     if link not in node_:
-                        # is there a simpler way?
-                        der_node = Cgraph(node_=link.node_, link_=link.link_, y0=link.y0, x0=link.x0, xn=link.xn, yn=link.yn,
+                        # is there a simpler way? I think no, the other way is to loop their numeric and list params, then assign them, but that actually making the process more complicated
+                        '''
+                        der_node = CpH()
+                        for numeric_param_name in link.numeric_params:
+                            setattr(der_node, numeric_param_name, getattr(link, numeric_param_name))
+                        for list_param_name in link.list_params:
+                            setattr(der_node, list_param_name, copy(getattr(link, list_param_name)))
+                        der_node.plevels = CpH(H=[link.plevels[1]], val=link.plevels[1].val, fds=[1])
+                        '''
+                        # link.link_'s Q|Qd|Qm will be always empty, i think there's no need to copy or assign it
+                        der_node = Cgraph(node_=copy(link.node_), link_=copy(link.link_), y0=link.y0, x0=link.x0, xn=link.xn, yn=link.yn,
                                    plevels = CpH(H=[link.plevels[1]], val=link.plevels[1].val, fds=[1]))
                         if link.alt_plevels:
                             der_node.alt_plevels = CpH(H=[link.alt_plevels[1]], val=link.alt_plevels[1].val, fds=[0])
@@ -322,6 +331,8 @@ def sum2graph_(G_, fd):  # sum node and link params into graph, plevel in agg+ o
             Yn = max(Yn,(node.y0+node.yn)-Y0)
             # node: G|derG, sum plevels ( pplayers ( players ( ptuples:
             sum_pH(graph_plevels, node.plevels)
+            # should we update derG's roott too?
+            node.roott[fd] = graph  # i checked and we forgot to include this hence causing there's no alt_graph
             rev=0
             while isinstance(node.plevels, list): # node is derG:
                 rev=1
@@ -365,9 +376,9 @@ def add_alt_graph_(graph_t):  # mgraph_, dgraph_
         for graph in graph_:
             if graph.alt_graph_:
                 graph.alt_plevels = CpH()  # players if fsub? der+: plevels[-1] += player, rng+: players[-1] = player?
-            for alt_graph in graph.alt_graph_:
-                sum_pH(graph.alt_plevels, alt_graph.plevels)  # accum alt_graph_ params
-                graph.alt_rdn += len(set(graph.node_).intersection(alt_graph.node_))  # overlap
+                for alt_graph in graph.alt_graph_:  # this should be run only if alt_graph is not empty
+                    sum_pH(graph.alt_plevels, alt_graph.plevels)  # accum alt_graph_ params
+                    graph.alt_rdn += len(set(graph.node_).intersection(alt_graph.node_))  # overlap
 
 
 def sum_pH(PH, pH, fneg=0):  # recursive unpack plevels ( pplayers ( players ( ptuples, no accum across fd: matched in comp_pH
