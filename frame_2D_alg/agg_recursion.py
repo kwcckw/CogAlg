@@ -76,6 +76,9 @@ class Cgraph(CPP):  # graph or generic PP of any composition
     rng = lambda: 1  # not for alt_graphs
     roott = lambda: [None, None]  # higher-order segG or graphs of two forks
 
+    Mdplevel = lambda: CpH() 
+    Ddplevel = lambda: CpH() 
+    
 
 def agg_recursion(root, G_, fseg):  # compositional recursion in root.PP_, pretty sure we still need fseg, process should be different
 
@@ -108,13 +111,12 @@ def form_graph_(root, G_): # form plevel in agg+ or player in sub+, G is node in
         if G.link_.Qm: mnode_ += [G]  # all nodes with +ve links, not clustered in graphs yet
         if G.link_.Qd: dnode_ += [G]
     graph_t = []
-    Gm_, Gd_ = copy(G_), copy(G_)
-    for fd, (node_, G_) in enumerate(zip([mnode_, dnode_], [Gm_, Gd_])):
+    for fd, node_ in enumerate([mnode_, dnode_]):  # actually we just need node_ here?
         graph_ = []  # form graphs by link val:
-        while G_:  # all Gs not removed in add_node_layer
-            G = G_.pop()
+        while node_:  # all Gs not removed in add_node_layer
+            G = node_.pop()
             gnode_ = [G]
-            val = add_node_layer(gnode_, G_, G, fd, val=0)  # recursive depth-first gnode_+=[_G]
+            val = add_node_layer(gnode_, node_, G, fd, val=0)  # recursive depth-first gnode_+=[_G]
             graph_ += [CQ(Q=gnode_, val=val)]
         # reform graphs by node val:
         regraph_ = graph_reval(graph_, [ave_G for graph in graph_], fd)  # init reval_ to start
@@ -259,6 +261,26 @@ def comp_ext(_spH, spH, mpH, dpH):
     mpH.val += mpH.A; dpH.val += dpH.A
 
 
+
+def cluster_dnode_(_node, node_, link_):
+    
+    for link in link_:
+        node = link.node_.Q[1] if link.node_.Q[0] is _node else link.node_.Q[0] 
+                            
+        if node in node_ and node.Ddplevel.val > 0:  # merge node into _node
+            # accumulate plevels and alt_plevels
+            sum_pH(_node.plevels, node.plevels)
+            sum_pH(_node.alt_plevels, node.alt_plevels)
+            # pack links
+            for link in node.link_.Q:
+                if link not in _node.link_.Q:
+                    _node.link_.Q += [link]
+            node_.remove(node)
+            # search continuously with links
+            next_link_ = copy(node.link_.Q)  # copy to prevent link added a same link_.Q while looping it in the nextl oop
+            cluster_dnode_(_node, node_, next_link_)
+    
+
 def sub_recursion_g(graph_, Sval, fseg, fd):  # rng+: extend G_ per graph, der+: replace G_ with derG_
 
     comb_layers_t = [[],[]]
@@ -269,7 +291,19 @@ def sub_recursion_g(graph_, Sval, fseg, fd):  # rng+: extend G_ per graph, der+:
             if fd:
                 for node in node_:
                     Mdplevel, Ddplevel = comp_links(node)  # forms quasi-gradient with variable link length
-                    # cluster nodes by Mdplevel.val or Ddplevel.val?
+                    node.Mdplevel = Mdplevel; node.Ddplevel = Ddplevel
+                    
+                clustered_node_ = []
+                while node_:
+                    _node = node_.pop(0)
+                    if _node.Ddplevel.val > 0:      
+                        link_ = copy(node.link_.Q)
+                        cluster_dnode_(_node, node_, link_)
+                        clustered_node_ += [_node]
+                        
+                node_ = clustered_node_
+                # cluster nodes by Mdplevel.val or Ddplevel.val? (Probably just Ddplevel.val)
+
             sub_mgraph_, sub_dgraph_ = form_graph_(graph, node_)  # cross-comp and clustering cycle
             # rng+:
             Rval = sum([sub_mgraph.plevels.val for sub_mgraph in sub_mgraph_])
@@ -298,7 +332,14 @@ def sub_recursion_g(graph_, Sval, fseg, fd):  # rng+: extend G_ per graph, der+:
     return comb_layers_t, Sval
 
 def comp_links(node):  # forms quasi-gradient with variable link length
-    pass
+    
+    Mdplevel = CpH(); Ddplevel = CpH(); 
+    for i, _link in enumerate(node.link_.Q):
+        for link in node.link_.Q[i+1:]:  
+            mdplevel, ddplevel = comp_pH(_link.plevels[1], link.plevels[1])  # compare dplevel, so actually we are getting mdtuples and ddtuples here, rename it ?
+            sum_pH(Mdplevel, mdplevel); sum_pH(Ddplevel, ddplevel); 
+        
+    return Mdplevel, Ddplevel
 
 
 def sum2graph_(G_, fd):  # sum node and link params into graph, plevel in agg+ or player in sub+: if fderG?
@@ -318,6 +359,7 @@ def sum2graph_(G_, fd):  # sum node and link params into graph, plevel in agg+ o
             Yn = max(Yn,(node.y0+node.yn)-Y0)
             # node: G|derG, sum plevels ( pplayers ( players ( ptuples:
             sum_pH(graph_plevels, node.plevels)
+            node.roott[fd] = graph
             rev=0
             while isinstance(node.plevels, list): # node is derG:
                 rev=1
