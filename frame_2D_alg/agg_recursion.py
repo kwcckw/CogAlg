@@ -119,19 +119,23 @@ def form_graph_(root, G_): # form plevel in agg+ or player in sub+, G is node in
         # reform graphs by node val:
         regraph_ = graph_reval(graph_, [ave_G for graph in graph_], fd)  # init reval_ to start
         if regraph_:
-            graph_[:] = sum2graph_(regraph_, fd)  # sum proto-graph node_ params in graph
+            graph_[:] = sum2graph_(regraph_, fd)  # sum proto-graph node_ params in graph            
+            # i checked and a same plevels.H will be used for both mgraph_ and dgraph_, so if we init new pplayers when fd == 1 below, we will need to sum it with last element (new_plevel) of graph.plevels.H   
             if fd:
                 root.plevels.H+=[CpH()]; root.plevels.fds+=[1]  # append empty plevel for sum_pH
             for graph in graph_:
-                if root.plevels.H or graph.plevels.H:  # or init plevels=list?
-                    if fd: sum_pH(root.plevels.H[-1], graph.plevels.H[0])  # single plevel
+                # if root.plevels.H or graph.plevels.H:  # or init plevels=list? (this should be not needed? They shouldn't be empty)
+                if fd: sum_pH(root.plevels.H[-1], graph.plevels.H[-1])  # single plevel
+                else:
+                    Plevels = root.plevels
+                    if len(Plevels.H)>1:  
+                        # actually why we need Plevels.H[:-1] here? I checked and graph.plevels.H should have a same length with plevels.H.
+                        for Plevel, plevel in zip(Plevels.H[:-1], graph.plevels.H):
+                            sum_pH(Plevel,plevel); Plevels.val+=plevel.val
                     else:
-                        Plevels = root.plevels
-                        if len(Plevels.H)>1:
-                            for Plevel, plevel in zip(Plevels.H[:-1], graph.plevels.H):
-                                sum_pH(Plevel,plevel); Plevels.val+=plevel.val
-                        else:
-                            Plevels.H+=graph.plevels.H[0].H; Plevels.val+=graph.plevels.H[0].val; Plevels.fds+=graph.plevels.H[0].fds
+                        # i think below should be adding the newest pplayers? Using the prior code `graph.plevels.H[0].H`, we are adding players into plevels.H, why we want to do that?
+                        Plevels.H+=[graph.plevels.H[-1]]; Plevels.val+=graph.plevels.H[-1].val; Plevels.fds+=[graph.plevels.fds[-1]]
+                        # Plevels.H+=graph.plevels.H[0].H; Plevels.val+=graph.plevels.H[0].val; Plevels.fds+=graph.plevels.H[0].fds
         graph_t += [graph_]
 
     add_alt_graph_(graph_t)  # overlap + contour, to compute value borrowed by specific vectors
@@ -365,8 +369,18 @@ def add_alt_graph_(graph_t):  # mgraph_, dgraph_
 # draft:
 def copy_G(G):
 
-    G_copy = Cgraph(link_=deepcopy(G.link_), node_=deepcopy(G.node_), alt_graph_=G.alt_graph_,
-                    mlevels=deepcopy(G.mlevels), dlevels=deepcopy(G.dlevels), rlayers=deepcopy(G.rlayers), dlayers=deepcopy(G.dlayers)
+    # we can't use deepcopy because it copy those graphs and roots within infinitely
+    # init new list, but objects inside remained the same
+    link_ = copy(G.link_)  
+    node_ = copy(G.node_)  
+    rlayers = copy(G.rlayers)
+    dlayers = copy(G.rlayers)
+    mlevels = copy(G.mlevels)
+    dlevels = copy(G.dlevels)
+       
+    G_copy = Cgraph(plevels = deepcopy(G.plevels), alt_plevels = deepcopy(G.alt_plevels),
+                    link_=link_, node_=node_, alt_graph_=G.alt_graph_,
+                    mlevels=mlevels, dlevels=dlevels, rlayers=rlayers, dlayers=dlayers
                     )
     return G_copy
 
