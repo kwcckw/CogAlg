@@ -59,8 +59,8 @@ class Cgraph(CPP):  # graph or generic PP of any composition
     link_ = lambda: Clink_()  # evaluated graph_as_node external links, replace alt_node if open, direct only?
     node_ = lambda: CQ()  # fd-selected elements, common root of layers,levels:
     # agg,sub forks: [[],0] if called
-    mlevels = list  # PPs) Gs) GGs.: node_ agg, each a flat list
-    dlevels = list  # no summed plevels?
+    mlevels = lambda: [[],[]]  # graph_s, Plevels
+    dlevels = lambda: [[],[]]  
     rlayers = list  # | mlayers: init from node_ for subdivision, micro relative to levels
     dlayers = list  # | alayers; init val = sum node_val, for sub_recursion
     # summed params in levels ( layers:
@@ -122,10 +122,11 @@ def form_graph_(root, G_, fd): # form plevel in agg+ or player in sub+, G is nod
             graph_[:] = sum2graph_(regraph_, fd)  # sum proto-graph node_ params in graph
         graph_t += [graph_]
 
-        [root.mlevels, root.dlevels][fd][0].insert(graph_)  # add top agg fork level
-        [root.mlevels, root.dlevels][fd][1].insert(CpH())
+        # insert at 1st element
+        [root.mlevels, root.dlevels][fd][0].insert(0, graph_)  # add top agg fork level
+        [root.mlevels, root.dlevels][fd][1].insert(0, CpH())
         for graph in graph_:
-            sum_pH([root.mlevels, root.dlevels][fd][1], graph.plevels)
+            sum_pH([root.mlevels, root.dlevels][fd][1][-1], graph.plevels)
 
     add_alt_graph_(graph_t)  # overlap+contour, cluster by common lender (cis graph), combined comp?
     return graph_t
@@ -190,9 +191,15 @@ def comp_G_(G_, fd):  # cross-comp Gs (patterns of patterns): Gs, derGs, or segs
             # proximity = ave_rng - distance?
             if distance < ave_distance * ((_G.plevels.val+_G.alt_plevels.val + G.plevels.val+G.alt_plevels.val) / (2*sum(G_aves))):
                 # combined G eval
-                if fd: _G_plevels, G_plevels = _G.plevels[-1], G.plevels[-1]  # not sure, maybe all plevels?
-                else:  _G_plevels, G_plevels = _G.plevels[:-1], G.plevels[:-1]
+                _G_plevels = deepcopy(_G.plevels); G_plevels = deepcopy(G.plevels)      
+                if fd:  # der+
+                    _G_plevels.H = [_G_plevels.H[-1]]; _G_plevels.fds = [_G_plevels.fds[-1]]  # not sure, maybe all plevels? (i think it should be just last pplayers for der+)
+                    G_plevels.H = [G_plevels.H[-1]]; G_plevels.fds = [G_plevels.fds[-1]]
+                elif len(G.plevels.H)>1:  # rng+ (only if length of H is >1)
+                    _G_plevels.H = _G_plevels.H[:-1]; _G_plevels.fds = _G_plevels.fds[:-1]
+                    _G_plevels.H = _G_plevels.H[:-1]; _G_plevels.fds = _G_plevels.fds[:-1]
 
+                # comp_pH accepts CpH only
                 mplevel, dplevel = comp_pH(_G_plevels, G_plevels)
                 mplevel.L, dplevel.L = 1,1; mplevel.S, dplevel.S = distance,distance; mplevel.A, dplevel.A = [dy,dx],[dy,dx]
                 # comp contour+overlap:
@@ -304,25 +311,24 @@ def sum2graph_(G_, fd):  # sum node and link params into graph, plevel in agg+ o
     graph_ = []
     for G in G_:
         X0,Y0, Xn,Yn = 0,0,0,0
-        node_, val = G.Q, G.val
+        node_, val = G.Q, G.val  # we didn't use val here?
         L = len(node_)
         for node in node_: X0+=node.x0; Y0+=node.y0  # first pass defines center
         X0/=L; Y0/=L
         graph = Cgraph(L=L,node_=node_)
-        # new_plevel = CpH(L=1): 1st link adds 2 nodes, other links add 1, one node is already in the graph?
 
         for node in node_:  # define max distance,A, sum plevels:
             Xn = max(Xn,(node.x0+node.xn)-X0)  # box xn = x0+xn
             Yn = max(Yn,(node.y0+node.yn)-Y0)
             # += ini new plevel:
-            node.plevels.H += [CpH()]; node.plevels.fds += [fd]
+            node.plevels.H += [CpH()]; node.plevels.fds += [fd]  # with this, we add new pplayers into node and graph? In prior scheme, we add to graph only.
             for derG in node.link_.Q:  # form quasi-gradient from links of variable length:
                 sum_pH(node.plevels.H[-1], derG.plevels[fd]) # new plevel: L=1, S=link.S, preA: [Xn,Yn], sum *= dangle?
                 node.plevels.val += derG.plevels[fd].val
             sum_pH(graph.plevels, node.plevels)  # plevels ( pplayers ( players ( ptuples
             node.roott[fd] = graph
 
-        graph.plevels.H[-1].A = [Xn*2,Yn*2]
+        graph.plevels.H[-1].A = [Xn*2,Yn*2]; graph.plevels.fds = copy(node.plevels.fds)
         graph.x0=X0; graph.xn=Xn; graph.y0=Y0; graph.yn=Yn
         graph_ += [graph]
 
