@@ -77,7 +77,7 @@ class Cgraph(CPP):  # graph or generic PP of any composition
     roott = lambda: [None, None]  # higher-order segG or graphs of two forks
 
 
-def agg_recursion(root, G_, fseg, fd):  # compositional recursion in root.PP_, pretty sure we still need fseg, process should be different
+def agg_recursion(root, G_, fseg, fd=1):  # compositional recursion in root.PP_, pretty sure we still need fseg, process should be different
 
     mgraph_, dgraph_ = form_graph_(root, [copy_G(G) for G in G_], fd)  # PP cross-comp and clustering
 
@@ -189,12 +189,26 @@ def comp_G_(G_, fd):  # cross-comp Gs (patterns of patterns): Gs, derGs, or segs
             distance = np.hypot(dy, dx)  # Euclidean distance between centers, sum in sparsity
             # proximity = ave-distance
             if distance < ave_distance * ((_G.plevels.val+_G.alt_plevels.val + G.plevels.val+G.alt_plevels.val) / (2*sum(G_aves))):  # comb G val
-                if not fd:  # rng+
-                    _G.plevels.val-=_G.plevels.H[-1].val; _G.plevels.H.pop(); _G.plevels.fds.pop()
-                    G.plevels.val-=G.plevels.H[-1].val; G.plevels.H.pop(); G.plevels.fds.pop()
-                    # replace last plevel:
+                
+                # when mlevels and dlevels is not empty (in higher agg+)
+                if [_G.mlevels[1], G.dlevels[1]][fd]: 
+                     _G_plevels = [_G.mlevels[1], _G.dlevels[1]][fd]
+                     G_plevels = [G.mlevels[1], G.dlevels[1]][fd]
+                else:  # 1st recursion, where G is converted G from PP, mlevels and dlevels should be empty
+                    _G_plevels = [_G.plevels]
+                    G_plevels = [G.plevels]
+                    
+                mplevel, dplevel = CpH(), CpH()
+                for _G_plevel, G_plevel in zip(_G_plevels, G_plevels):
+                    if not fd:  # rng+
+                        _G.plevels.val-=_G.plevels.H[-1].val; _G.plevels.H.pop(); _G.plevels.fds.pop()
+                        G.plevels.val-=G.plevels.H[-1].val; G.plevels.H.pop(); G.plevels.fds.pop()
+                        # replace last plevel:
 
-                mplevel, dplevel = comp_pH(_G.plevels, G.plevels)  # optional comp_links, in|between nodes?
+                    mmplevel, ddplevel = comp_pH(_G.plevels, G.plevels)  # optional comp_links, in|between nodes?
+                    # sum across derivative of multiple plevels?
+                    sum_pH(mplevel, mmplevel); sum_pH(dplevel, ddplevel); 
+
                 mplevel.L, dplevel.L = 1,1; mplevel.S, dplevel.S = distance,distance; mplevel.A, dplevel.A = [dy,dx],[dy,dx]
                 # comp contour+overlap:
                 if _G.alt_plevels and G.alt_plevels:  # or if comb plevels.val > ave * alt_rdn
@@ -315,11 +329,11 @@ def sum2graph_(G_, fd):  # sum node and link params into graph, plevel in agg+ o
             Xn = max(Xn,(node.x0+node.xn)-X0)  # box xn = x0+xn
             Yn = max(Yn,(node.y0+node.yn)-Y0)
             # += ini new plevel:
-            node.plevels.H += [CpH()]; node.plevels.fds += [fd]
+            node.plevels.H += [CpH(L=1)]; node.plevels.fds += [fd]
             for derG in node.link_.Q:  # form quasi-gradient from links of variable length:
                 sum_pH(node.plevels.H[-1], derG.plevels[fd])  # new plevel: L=1, S=link.S, preA: [Xn,Yn], sum *= dangle?
                 node.plevels.val += derG.plevels[fd].val
-            node.plevels.H[-1].L += 1  # initial _node? or for graph?
+                node.plevels.H[-1].L += 1  # initial _node? or for graph? (i think we need to increase L per derG here?) Else it stays at default value
             sum_pH(graph.plevels, node.plevels)  # plevels ( pplayers ( players ( ptuples
             node.roott[fd] = graph
 
