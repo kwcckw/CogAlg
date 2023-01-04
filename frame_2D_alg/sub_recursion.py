@@ -293,7 +293,7 @@ def blob2graph(blob, fseg, Cgraph):
 
     PPm_ = blob.PPm_; PPd_ = blob.PPd_
     x0, xn, y0, yn = blob.box
-    gblob = Cgraph(alt_plevels=CpH(), rng=PPm_[0].rng, rdn=blob.rdn, x0=(x0+xn)/2, xn=(xn-x0)/2, y0=(y0+yn)/2, yn=(yn-y0)/2)
+    gblob = Cgraph(plevels=CpH(mpH=CpH(),dpH=CpH()),alt_plevels=CpH(), rng=PPm_[0].rng, rdn=blob.rdn, x0=(x0+xn)/2, xn=(xn-x0)/2, y0=(y0+yn)/2, yn=(yn-y0)/2)
     blob.graph = gblob  # update graph reference
     # convert elements
     for fd, PP_ in enumerate([PPm_,PPd_]):  # if any
@@ -330,9 +330,9 @@ def PP2graph(PP, fseg, Cgraph):
     for ptuples, val in PP.players[0]:
         players.H += [CpH(H=deepcopy(ptuples), val=val)]
 
-    pplayer = CpH(H=[players], val=players.val, node_ = PP.P__)
+    pplayer = CpH(H=[players], val=players.val, node_ = [])  # if we assign node_ as PP.P__ here, we can't use list(set()) in sum_pH because each element in node_ is not object, but list instead
     plevels = CpH(H=[pplayer], val=pplayer.val, fds=[0], mpH=CpH(), dpH=CpH())
-    alt_pplayer = CpH(H=[alt_players], val=alt_players.val, node_ = PP.altPP_)
+    alt_pplayer = CpH(H=[alt_players], val=alt_players.val, node_ = [])
     alt_plevels = CpH(H=[alt_pplayer], val=alt_pplayer.val, fds=[1], mpH=CpH(), dpH=CpH())
 
     x0=PP.x0; xn=PP.xn; y0=PP.y0; yn=PP.yn
