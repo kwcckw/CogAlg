@@ -187,6 +187,10 @@ def add_node_layer(gnode_, G_, G, fd, val):  # recursive depth-first gnode_+=[_G
 
 def comp_G_(G_, fd):  # cross-comp Gs (patterns of patterns): Gs, derGs, or segs inside PP, same process, no fderG?
 
+    if not fd:  # rng+
+        for G in G_:  # we need to pop it before enumerate G_, else they will be popped multiple times
+            G.plevels.val-=G.plevels.H[-1].val; G.plevels.H.pop(); G.plevels.fds.pop()  # replace last plevel
+        
     for i, _G in enumerate(G_):
         for G in G_[i+1:]:
             # compare each G to other Gs in rng, bilateral link assign, val accum:
@@ -197,15 +201,12 @@ def comp_G_(G_, fd):  # cross-comp Gs (patterns of patterns): Gs, derGs, or segs
             distance = np.hypot(dy, dx)  # Euclidean distance between centers, sum in sparsity
             # proximity = ave-distance
             if distance < ave_distance * ((_G.plevels.val+_G.alt_plevels.val + G.plevels.val+G.alt_plevels.val) / (2*sum(G_aves))):  # comb G val
-                if not fd:  # rng+
-                    _G.plevels.val-=_G.plevels.H[-1].val; _G.plevels.H.pop(); _G.plevels.fds.pop()
-                    G.plevels.val-=G.plevels.H[-1].val; G.plevels.H.pop(); G.plevels.fds.pop()
-                    # replace last plevel:
                 mplevel, dplevel = comp_pH(_G.plevels, G.plevels)  # optional comp_links, in|between nodes?
                 # double assign to sum_pH:
                 mplevel.node_,dplevel.node_=[_G,G],[_G,G]; mplevel.S, dplevel.S = distance,distance; mplevel.A, dplevel.A = [dy,dx],[dy,dx]
                 derG = CderG(node0=_G, node1=G, mplevel=mplevel, dplevel=dplevel)
                 # compare contour+overlap:
+                # actually below will not be needed? Because graph alts will be added in add_alt_graph later
                 if _G.alt_plevels and G.alt_plevels:  # or if comb plevels.val > ave * alt_rdn
                     alt_mplevel, alt_dplevel = comp_pH(_G.alt_plevels, G.alt_plevels)
                     derG.alt_mplevel = alt_mplevel; derG.alt_dplevel = alt_dplevel
@@ -257,8 +258,10 @@ def comp_ext(_spH, spH, mpH, dpH):
     _sparsity = _S /(_L-1); sparsity = S /(L-1)  # average distance between connected nodes, single distance if derG
     dpH.S = _sparsity - sparsity; dpH.val += dpH.S
     mpH.S = min(_sparsity, sparsity); mpH.val += mpH.S
-    dpH.L = _L - L; dpH.val += dpH.L
-    mpH.L = ave_L - dpH.L; mpH.val += mpH.L
+    
+    # below should be not needed anymore?
+    # dpH.L = _L - L; dpH.val += dpH.L
+    # mpH.L = ave_L - dpH.L; mpH.val += mpH.L
 
     if _A and A:  # axis: dy,dx only for derG or high-aspect Gs, both val *= aspect?
         if isinstance(_A, list):
@@ -271,41 +274,37 @@ def comp_ext(_spH, spH, mpH, dpH):
     mpH.val += mpH.A; dpH.val += dpH.A
 
 
-# pending update
+# tentative update
 def sub_recursion_g(graph_, Sval, fseg, fd):  # rng+: extend G_ per graph, der+: replace G_ with derG_
 
-    comb_layers_t = [[],[]]
+    Mplevel, Dplevel = CpH(), CpH()  # per sub+
     for graph in graph_:
+        mplevel, dplevel = CpH(), CpH()  # per graph
         node_ = graph.plevels.H[-1].node_  # get only latest pplayers?
         if graph.plevels.val > G_aves[fd] and len(node_) > ave_nsub:
 
             sub_mgraph_, sub_dgraph_ = form_graph_(graph, node_, fd)  # cross-comp and clustering cycle
             # rng+:
+            # or get val from plevels.H[-1]?
             Rval = sum([sub_mgraph.plevels.val for sub_mgraph in sub_mgraph_])
             if Rval > ave_sub * graph.rdn:  # >cost of call:
-                # create new pplayers in graph, pack sub_graphs into pplayers.node_?
-                sub_rlayers, rval = sub_recursion_g(sub_mgraph_, Rval, fseg=fseg, fd=0)
-                Rval+=rval; graph.rlayers = [[sub_mgraph_]+[sub_rlayers], Rval]
-            else:
-                graph.rlayers = [[]]  # this can be skipped if we init layers as [[]]
+                sub_mmplevel, sub_dmplevel = sub_recursion_g(sub_mgraph_, Rval, fseg=fseg, fd=0)
+                Rval += sub_mmplevel.val; Rval += sub_dmplevel.val
+                sum_pH(Mplevel, sub_mmplevel); sum_pH(Mplevel, sub_dmplevel)  # sum both?
+                sum_pH(mplevel, sub_mmplevel); sum_pH(mplevel, sub_dmplevel)  
+                      
             # der+:
             Dval = sum([sub_dgraph.plevels.val for sub_dgraph in sub_dgraph_])
             if Dval > ave_sub * graph.rdn:
-                sub_dlayers, dval = sub_recursion_g(sub_dgraph_, Dval, fseg=fseg, fd=1)
-                Dval+=dval; graph.dlayers = [[sub_dgraph_]+[sub_dlayers], Dval]
-            else:
-                graph.dlayers = [[]]
+                sub_mdplevel, sub_ddplevel = sub_recursion_g(sub_dgraph_, Dval, fseg=fseg, fd=1)
+                Dval += sub_mdplevel.val; Dval += sub_ddplevel.val
+                sum_pH(Dplevel, sub_mdplevel); sum_pH(Dplevel, sub_ddplevel)  # sum both?
+                sum_pH(dplevel, sub_mdplevel); sum_pH(dplevel, sub_ddplevel)  # sum both?
 
-            for comb_layers, graph_layers in zip(comb_layers_t, [graph.rlayers[0], graph.dlayers[0]]):
-                for i, (comb_layer, graph_layer) in enumerate(zip_longest(comb_layers, graph_layers, fillvalue=[])):
-                    if graph_layer:
-                        if i > len(comb_layers) - 1:
-                            comb_layers += [graph_layer]  # add new r|d layer
-                        else:
-                            comb_layers[i] += graph_layer  # splice r|d PP layer into existing layer
-            Sval += Rval + Dval
+            graph.plevels.mpH.H += [mplevel]; graph.plevels.dpH.H += [dplevel]  # add new sub+ pplayers
+            Sval += Rval + Dval  # do we still need Sval here?
 
-    return comb_layers_t, Sval
+    return Mplevel, Dplevel
 
 
 def sum2graph_(G_, fd):  # sum node and link params into graph, plevel in agg+ or player in sub+: if fderG, also for alts?
