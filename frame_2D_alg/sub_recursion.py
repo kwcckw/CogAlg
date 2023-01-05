@@ -330,7 +330,7 @@ def PP2graph(PP, fseg, Cgraph):
     for ptuples, val in PP.players[0]:
         players.H += [CpH(H=deepcopy(ptuples), val=val)]
 
-    pplayer = CpH(H=[players], val=players.val, node_ = [])  # if we assign node_ as PP.P__ here, we can't use list(set()) in sum_pH because each element in node_ is not object, but list instead
+    pplayer = CpH(H=[players], val=players.val, node_ = [])
     plevels = CpH(H=[pplayer], val=pplayer.val, fds=[0], mpH=CpH(), dpH=CpH())
     alt_pplayer = CpH(H=[alt_players], val=alt_players.val, node_ = [])
     alt_plevels = CpH(H=[alt_pplayer], val=alt_pplayer.val, fds=[1], mpH=CpH(), dpH=CpH())
