@@ -76,8 +76,8 @@ class CderG(ClusterStructure):  # graph links
 
     node0 = lambda: Cgraph()
     node1 = lambda: Cgraph()
-    mplevel_t = CQ()
-    dplevel_t = CQ()
+    mplevel_t = lambda: CQ()
+    dplevel_t = lambda: CQ()
     # replacing:
     # mplevel = lambda: CpH()  # S: distance between nodes, summed in sparsity, hypot of A: Dy,Dx between nodes
     # dplevel = lambda: CpH()
@@ -185,10 +185,13 @@ def add_node_layer(gnode_, G_, G, fd, val):  # recursive depth-first gnode_+=[_G
 
 def comp_G_(G_, fd):  # cross-comp Gs (patterns of patterns): Gs, derGs, or segs inside PP, same process, no fderG?
 
+    mH_size = [len(G.plevels_t.Q[0].H) for G in G_]
+    dH_size = [len(G.plevels_t.Q[1].H) for G in G_]
+    
     for i, _G in enumerate(G_):
-        for G in G_[i+1:]:
+        for j, G in enumerate(G_[i+1:], start=i+1):
             # compare each G to other Gs in rng, bilateral link assign, val accum:
-            if G in [node for link in _G.link_.Q for node in [link.mplevel, link.mplevel][fd].node_]:
+            if G in [node for link in _G.link_.Q for node in [link.mplevel_t, link.dplevel_t][fd].Q[0].node_ + [link.mplevel_t, link.dplevel_t][fd].Q[1].node_]:
                 # G,_G was compared in prior rng+, add frng to skip?
                 continue
             dx = _G.x0 - G.x0; dy = _G.y0 - G.y0  # center x0,y0
@@ -196,21 +199,45 @@ def comp_G_(G_, fd):  # cross-comp Gs (patterns of patterns): Gs, derGs, or segs
             # proximity = ave-distance
             if distance < ave_distance * (_G.plevels_t.val + G.plevels_t.val) / (2*sum(G_aves)):  # comb G val
                 if not fd:  # rng+
-                    # not updated:
-                    _G.plevels.val-=_G.plevels.H[-1].val; _G.plevels.H.pop(); _G.plevels.fds.pop()
-                    G.plevels.val-=G.plevels.H[-1].val; G.plevels.H.pop(); G.plevels.fds.pop()
+                    # check _G
+                    if len(_G.plevels_t[0].H) != mH_size[i]:
+                        _G.plevels_t[0].val-=_G.plevels_t[0].H[-1].val; _G.plevels_t[0].H.pop(); _G.plevels_t[0].fds.pop()
+                    if len(_G.plevels_t[1].H) != dH_size[i]:
+                        _G.plevels_t[1].val-=_G.plevels_t[1].H[-1].val; _G.plevels_t[1].H.pop(); _G.plevels_t[1].fds.pop()
+                    # check G
+                    if len(G.plevels_t[0].H) != mH_size[j]:
+                        G.plevels_t[0].val-=G.plevels_t[0].H[-1].val; G.plevels_t[0].H.pop(); G.plevels_t[0].fds.pop()
+                    if len(G.plevels_t[1].H) != dH_size[j]:
+                        G.plevels_t[1].val-=G.plevels_t[1].H[-1].val; G.plevels_t[1].H.pop(); G.plevels_t[1].fds.pop()
                     # replace last plevel:
-                mplevel_t, dplevel_t = CQ(), CQ()
-                for _plevels, plevels in zip([_G.plevels_t, G.plevels_t]):
-                    if _plevels and plevels:
+                
+                # it's better to init them as empty CpH, else we need to evaluate whether they are list of CpH in many sections. We can know whether they are empty or not by using if plevel.H
+                mplevel_t, dplevel_t = CQ(Q=[CpH(),CpH(),CpH(),CpH()]), CQ(Q=[CpH(),CpH(),CpH(),CpH()])
+                # m|dplevels
+                for i, (_plevels, plevels) in enumerate(zip(_G.plevels_t.Q[:2], G.plevels_t.Q[:2])):  # exclude alts
+                    if _plevels.H and plevels.H:
                         mplevel, dplevel = comp_pH(_plevels, plevels)  # optional comp_links, in|between nodes?
-                        mplevel_t.Q += [mplevel]; mplevel_t.val += mplevel.val
-                        dplevel_t.Q += [dplevel]; dplevel_t.val += dplevel.val
-                    else:
-                        mplevel_t.Q += []; dplevel_t.Q += []
+                        if mplevel_t.Q[i]: sum_pH(mplevel_t.Q[i], mplevel)  # when mplevel_t.Q[i] is not empty (has existing mplevel), sum them
+                        else:              mplevel_t.Q[i] += [mplevel];     # when mplevel_t.Q[i] is empty, add mplevel into the list
+                        mplevel_t.val += mplevel.val
+                        if dplevel_t.Q[i]: sum_pH(dplevel_t.Q[i], dplevel)
+                        else:                dplevel_t.Q[i+1] += [dplevel]; 
+                        dplevel_t.val += dplevel.val
+                # alt m|dplevels
+                for i, (_plevels, plevels) in enumerate(zip(_G.plevels_t.Q[2:], G.plevels_t.Q[2:]), start=2):
+                    if _plevels.H and plevels.H:
+                        mplevel, dplevel = comp_pH(_plevels, plevels)  # optional comp_links, in|between nodes?
+                        if mplevel_t.Q[i]: sum_pH(mplevel_t.Q[i], mplevel)  # when mplevel_t.Q[i] is not empty (has existing mplevel), sum them
+                        else:              mplevel_t.Q[i] += [mplevel];     # when mplevel_t.Q[i] is empty, add mplevel into the list
+                        mplevel_t.val += mplevel.val
+                        if dplevel_t.Q[i]: sum_pH(dplevel_t.Q[i], dplevel)
+                        else:                dplevel_t.Q[i+1] += [dplevel]; 
+                        dplevel_t.val += dplevel.val
+
                 # double assign to sum_pH:
-                # not updated
-                mplevel.node_,dplevel.node_=[_G,G],[_G,G]; mplevel.S, dplevel.S = distance,distance; mplevel.A, dplevel.A = [dy,dx],[dy,dx]
+                for plevel_t in [mplevel_t, dplevel_t]:
+                    mplevel = plevel_t.Q[0]; dplevel = plevel_t.Q[1]
+                    mplevel.node_,dplevel.node_=[_G,G],[_G,G]; mplevel.S, dplevel.S = distance,distance; mplevel.A, dplevel.A = [dy,dx],[dy,dx]
                 derG = CderG(node0=_G, node1=G, mplevel_t=mplevel_t, dplevel_t=dplevel_t)
 
                 mval, dval = mplevel_t.val, dplevel_t.val
@@ -309,7 +336,7 @@ def sub_recursion_g(graph_, Sval, fseg, fd):  # rng+: extend G_ per graph, der+:
 
     return Mplevel, Dplevel
 
-
+# pending update
 def sum2graph_(G_, fd):  # sum node and link params into graph, plevel in agg+ or player in sub+: if fderG, also for alts?
 
     graph_ = []
