@@ -79,7 +79,7 @@ class CderG(ClusterStructure):  # graph links
     dplevel_t = lambda: CQ()
 
 
-def agg_recursion(root, G_, fseg, fd=1):  # compositional recursion in root.PP_, pretty sure we still need fseg, process should be different
+def agg_recursion(root, fseg, fd=1):  # compositional recursion in root.PP_, pretty sure we still need fseg, process should be different
 
     mgraph_, dgraph_ = form_graph_(root, fd)  # PP cross-comp and clustering
     mval = sum([mgraph.plevels_t.val for mgraph in mgraph_])
@@ -100,7 +100,7 @@ def agg_recursion(root, G_, fseg, fd=1):  # compositional recursion in root.PP_,
 
 def form_graph_(root, ifd): # form plevel in agg+ or player in sub+, G is node in GG graph; der+: comp_link if fderG, from sub+
 
-    G_ = root.plevels_t[ifd].H[0].node_  # root node_ for both forks is in fd higher plevel
+    G_ = root.plevels_t.Q[ifd].H[0].node_  # root node_ for both forks is in fd higher plevel
     comp_G_(G_, ifd)  # cross-comp all graphs within rng, graphs may be segs | fderGs, G.roott += link, link.node
 
     mnode_, dnode_ = [], []  # Gs with >0 +ve fork links:
@@ -109,8 +109,8 @@ def form_graph_(root, ifd): # form plevel in agg+ or player in sub+, G is node i
         if G.link_.Qd: dnode_ += [G]
     graph_t = []
     # not needed, always empty?:
-    if mnode_: root.plevels_t[ifd].mpH = CpH()  # reset new Plevel only if mnode_ or dnode_ is not empty
-    if dnode_: root.plevels_t[ifd].dpH = CpH()
+    if mnode_: root.plevels_t.Q[ifd].mpH = CpH()  # reset new Plevel only if mnode_ or dnode_ is not empty
+    if dnode_: root.plevels_t.Q[ifd].dpH = CpH()
 
     for fd, node_ in enumerate([mnode_, dnode_]):
         graph_ = []  # form graphs by link val:
@@ -125,7 +125,7 @@ def form_graph_(root, ifd): # form plevel in agg+ or player in sub+, G is node i
             graph_[:] = sum2graph_(regraph_, fd)  # sum proto-graph node_ params in graph
         graph_t += [graph_]
         # draft:
-        Plevels = [root.plevels_t[ifd].mpH, root.plevels_t[ifd].dpH][fd]
+        Plevels = [root.plevels_t.Q[ifd].mpH, root.plevels_t.Q[ifd].dpH][fd]
         for graph in graph_:
             sum_pH(Plevels, graph.plevels)
 
@@ -193,9 +193,12 @@ def comp_G_(G_, fd):  # cross-comp Gs (patterns of patterns): Gs, derGs, or segs
             # proximity = ave-distance
             if distance < ave_distance * (_G.plevels_t.val + G.plevels_t.val) / (2*sum(G_aves)):  # comb G val
                 mplevel_t, dplevel_t = CQ(),CQ()
-                for _plevels, plevels in zip([_G.plevels_t.Q, G.plevels_t.Q]):
+                for _plevels, plevels in zip(_G.plevels_t.Q, G.plevels_t.Q):
                     if _plevels and plevels:
-                        mplevel, dplevel = comp_pH(_plevels[:-1-fd], plevels[:-1-fd])  # plevels[:-1] if rng+
+                        if len(_plevels.H)> abs(-1-fd) and len(plevels.H)> abs(-1-fd):  # this only valid if len(H) > -1-fd? Else we get empty plevel
+                            mplevel, dplevel = comp_pH(_plevels.H[:-1-fd], plevels.H[:-1-fd])  # plevels[:-1] if rng+
+                        else:
+                            mplevel, dplevel = comp_pH(_plevels, plevels)
                         # optional comp_links, in|between nodes?
                         mplevel.node_,dplevel.node_ = [_G,G],[_G,G]  # double assign to sum_pH, only one added
                         mplevel.S,dplevel.S = distance,distance; mplevel.A,dplevel.A = [dy,dx],[dy,dx]
@@ -313,24 +316,30 @@ def sum2graph_(G_, fd):  # sum node and link params into graph, plevel in agg+ o
         node_, val = G.Q, G.val  # form graph if val>min?
         link_ = []
         for node in node_:
-            link_ = list(set(link_ + G.link_))  # unique links in graph
+            link_ = list(set(link_ + [derG for graph in G.Q for derG in graph.link_.Q]))  # unique links in graph
             X0+=node.x0; Y0+=node.y0  # first pass defines center
         L = len(node_); X0/=L; Y0/=L
 
         for node in node_:  # define max distance,A, sum plevels:
+            # node.plevels_t.Q[fd] might be empty list here so we skip node if their node.plevels_t.Q[fd] is empty?
+            # node.plevels_t.Q[fd] may empty because it is filled up only when fd == ifd
+            node.plevels_t.Q[fd].H[-1] = CpH()
             Xn = max(Xn,(node.x0+node.xn)-X0)  # box xn = x0+xn
             Yn = max(Yn,(node.y0+node.yn)-Y0)
             # += ini new plevel:
-            node.plevels.H += [CpH(mpH=CpH(),dpH=CpH())]; node.plevels.fds += [fd]
             for derG in node.link_.Q:  # form quasi-gradient from links of variable length:
-                der_plevel = [derG.mplevel, derG.dplevel][fd]
-                sum_pH(node.plevels.H[-1], der_plevel)  # new plevel: node_+=[G|_G], S=link.L, preA: [Xn,Yn], sum *= dangle?
-                node.plevels.val += der_plevel.val
+                
+                # sum both derG.mplevel_t[fd] and derG.dplevel_t[fd] into node?
+                for i in range(2):
+                    der_plevel = [derG.mplevel_t, derG.dplevel_t][i][fd]
+                    sum_pH(node.plevels_t.Q[fd].H[-1], der_plevel)  # new plevel: node_+=[G|_G], S=link.L, preA: [Xn,Yn], sum *= dangle?
+                    node.plevels_t.Q[fd].H[-1].val += der_plevel.val
 
             for Plevel, plevel in zip(graph.plevels, node.plevels[:-1]):  # skip last plevel: it's redundant between nodes
                 sum_pH(Plevel, plevel)  # plevels ( pplayers ( players ( ptuples
             node.roott[fd] = graph
 
+        # not fully review below, but if we already have summing section of derG above, why we need the below again?
         # need to check indent, something's wrong, we need for G_ in G__?
         # draft:
         new_plevel = CpH
