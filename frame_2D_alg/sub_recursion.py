@@ -274,8 +274,7 @@ def copy_P(P, Ptype=None):  # Ptype =0: P is CP | =1: P is CderP | =2: P is CPP 
 
     return new_P
 
-# where will we need this? Right now we only convert blob and PP to graph.
-def frame2graph(frame, fseg, Cgraph):  # not sure
+def frame2graph(frame, fseg, Cgraph):  # for frame_recursive
 
     mblob_ = frame.PPm_; dblob_ = frame.PPd_  # PPs are blobs here
     x0, xn, y0, yn = frame.box
@@ -301,7 +300,7 @@ def blob2graph(blob, fseg, Cgraph):
         for PP in PP_:
             graph = PP2graph(PP, fseg, Cgraph, fd)
             sum_pH(gblob.plevels_t.Q[fd], graph.plevels_t.Q[fd])  # sum mplevels and dplevels (need to sum plevels_t[fd] only because [1-fd] will be empty)
-    
+
     for alt_blob in blob.adj_blobs[0]:  # adj_blobs = [blobs, pose]
         if not alt_blob.graph:
             blob2graph(alt_blob, fseg, Cgraph)  # convert alt_blob to graph
