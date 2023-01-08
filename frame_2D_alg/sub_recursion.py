@@ -304,12 +304,12 @@ def blob2graph(blob, fseg, Cgraph):
             gblob.plevels_t.Q[fd].H[0].node_ += [graph]  # add first layer graph
 
     for alt_blob in blob.adj_blobs[0]:  # adj_blobs = [blobs, pose]
-        
+
         if not alt_blob.graph:
             blob2graph(alt_blob, fseg, Cgraph)  # convert alt_blob to graph
         if alt_blob.graph.plevels_t.Q[0]:
             if gblob.plevels_t.Q[2]: sum_pH(gblob.plevels_t.Q[2], alt_blob.graph.plevels_t.Q[0])  # sum gblob alt_mplevels with alt_blob's mplevels
-            else:                    gblob.plevels_t.Q[2] = deepcopy(alt_blob.graph.plevels_t.Q[0]) 
+            else:                    gblob.plevels_t.Q[2] = deepcopy(alt_blob.graph.plevels_t.Q[0])
             if gblob.plevels_t.Q[3]: sum_pH(gblob.plevels_t.Q[3], alt_blob.graph.plevels_t.Q[1])  # sum gblob alt_dplevels with alt_blob's dplevels
             else:                    gblob.plevels_t.Q[3] = deepcopy(alt_blob.graph.plevels_t.Q[1])
 
