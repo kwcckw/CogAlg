@@ -301,7 +301,7 @@ def blob2graph(blob, fseg, Cgraph):
             graph = PP2graph(PP, fseg, Cgraph, fd)
             if gblob.plevels_t[fd]: sum_pH(gblob.plevels_t[fd], graph.plevels_t[fd])  # sum mplevels and dplevels (need to sum plevels_t[fd] only because [1-fd] will be empty)
             else:                   gblob.plevels_t[fd] = deepcopy(graph.plevels_t[fd])
-            gblob.plevels_t[fd].H[0].node_ += [graph]  # add first layer graph
+            gblob.plevels_t[fd].H[0][fd].node_ += [graph]  # add first layer graph
 
     for alt_blob in blob.adj_blobs[0]:  # adj_blobs = [blobs, pose]
 
@@ -339,9 +339,9 @@ def PP2graph(PP, fseg, Cgraph, ifd):
         players.H += [CpH(H=deepcopy(ptuples), val=val)]
 
     pplayer = CpH(H=[players], val=players.val, node_ = [])
-    plevels = CpH(H=[pplayer], val=pplayer.val, fds=[0], mpH=CpH(), dpH=CpH())
+    plevels = CpH(H=[[[], pplayer] if ifd else [pplayer, []]], val=pplayer.val, fds=[0], mpH=CpH(), dpH=CpH())
     alt_pplayer = CpH(H=[alt_players], val=alt_players.val, node_ = [])
-    alt_plevels = CpH(H=[alt_pplayer], val=alt_pplayer.val, fds=[1], mpH=CpH(), dpH=CpH())
+    alt_plevels = CpH(H=[[[], alt_pplayer] if ifd else [alt_pplayer, []]], val=alt_pplayer.val, fds=[1], mpH=CpH(), dpH=CpH())
 
     x0=PP.x0; xn=PP.xn; y0=PP.y0; yn=PP.yn
     # update to center (x0,y0) and max_distance (xn,yn) in graph:
