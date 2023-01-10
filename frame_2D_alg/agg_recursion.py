@@ -386,7 +386,7 @@ def add_alt_graph_(graph_t):  # mgraph_, dgraph_
                     sum_pH(graph.alt_plevels, alt_graph.plevels)  # accum alt_graph_ params
                     graph.alt_rdn += len(set(graph.plevels.H[-1].node_).intersection(alt_graph.plevels.H[-1].node_))  # overlap
 
-
+# pending update
 def sum_pH(PH, pH, fneg=0):  # recursive unpack plevels ( pplayers ( players ( ptuples, no accum across fd: matched in comp_pH
 
     if pH.node_:  # valid extuple
@@ -400,17 +400,14 @@ def sum_pH(PH, pH, fneg=0):  # recursive unpack plevels ( pplayers ( players ( p
                 PH.A += pH.A
         else: PH.A = copy(pH.A)
 
-    for SpH, spH in zip_longest(PH.H, pH.H, fillvalue=None):  # assume same fds
-        if spH:
-            if SpH:
-                if isinstance(SpH, Cptuple):
-                    sum_ptuple(SpH, spH, fneg=fneg)
-                elif isinstance(SpH, list):
-                    for i in range(2):  # pplayers is pplayers_t
-                        if spH[i]:
-                            sum_pH(SpH[i], spH[i], fneg=0)
-                else:
-                    sum_pH(SpH, spH, fneg=0)  # unpack sub-hierarchy, recursively
-            elif not fneg:
-                PH.H.append(spH)  # new Sub_pH
+    for SpHt, spHt in zip_longest(PH.H, pH.H, fillvalue=None):  # assume same fds
+        for SpH, spH in zip(SpHt, spHt):
+            if spH:
+                if SpH:
+                    if isinstance(SpH, Cptuple):
+                        sum_ptuple(SpH, spH, fneg=fneg)
+                    else:
+                        sum_pH(SpH, spH, fneg=0)  # unpack sub-hierarchy, recursively
+                elif not fneg:
+                    PH.H.append(spH)  # new Sub_pH
     PH.val += pH.val

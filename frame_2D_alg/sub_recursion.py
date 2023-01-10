@@ -315,9 +315,10 @@ def blob2graph(blob, fseg, Cgraph):
 
     return gblob
 
-def PP2graph(PP, fseg, Cgraph, ifd):
 
-    alt_players = CpH()
+def PP2graph(PP, fseg, Cgraph, ifd=1):
+
+    alt_players_t = CpH(H=[[],[]])
     if not fseg and PP.altPP_:  # seg doesn't have altPP_
         alt_fds = copy(PP.altPP_[0].fds)
         for altPP in PP.altPP_[1:]:  # get fd sequence common for all altPPs:
@@ -330,18 +331,20 @@ def PP2graph(PP, fseg, Cgraph, ifd):
             for ptuples, alt_fd in zip(altPP.players[0], alt_fds):
                 for ptuple in ptuples[0][:2]:  # latuple and vertuple only
                     H += [ptuple]; val += ptuple.val
-            alt_ptuples = CpH(H=H,val=val)  # player/ptuples doesn't have fds
-            alt_players.H += [alt_ptuples]
+            alt_ptuples_t = [[], [CpH(H=H, val=val)]] if ifd else [[CpH(H=H, val=val)],[]]  # player/ptuples doesn't have fds
+            alt_players_t.H[ifd] += [alt_ptuples_t]; alt_players_t.val += val
+            
 
-    # Cgraph: plevels ( pplayer ( players ( ptuples ( ptuple:
-    players = CpH(val=PP.players[1], fds=copy(PP.fds))
+    # Cgraph: plevels_t ( pplayers_t ( players_t ( ptuples_t ( ptuple:
+    players_t = CpH(H=[[],[]])
     for ptuples, val in PP.players[0]:
-        players.H += [CpH(H=deepcopy(ptuples), val=val)]
+        ptuples_t = [[], [CpH(H=deepcopy(ptuples), val=val)]] if ifd else [[CpH(H=deepcopy(ptuples), val=val)],[]]
+        players_t.H[ifd] += [ptuples_t];  players_t.val += val
 
-    pplayer = CpH(H=[players], val=players.val, node_ = [])
-    plevels = CpH(H=[[[], pplayer] if ifd else [pplayer, []]], val=pplayer.val, fds=[0], mpH=CpH(), dpH=CpH())
-    alt_pplayer = CpH(H=[alt_players], val=alt_players.val, node_ = [])
-    alt_plevels = CpH(H=[[[], alt_pplayer] if ifd else [alt_pplayer, []]], val=alt_pplayer.val, fds=[1], mpH=CpH(), dpH=CpH())
+    pplayers_t = CpH(H=[[],[players_t]] if ifd else [[players_t], []], val=players_t.val)
+    plevels = CpH(H=[[], [pplayers_t]] if ifd else [[pplayers_t], []], val=pplayers_t.val, fds=[0], mpH=CpH(), dpH=CpH())
+    alt_pplayers_t = CpH(H=[[],[alt_players_t]] if ifd else [[alt_players_t], []], val=alt_players_t.val)
+    alt_plevels = CpH(H=[[], [alt_pplayers_t]] if ifd else [[alt_pplayers_t], []], val=alt_pplayers_t.val, fds=[1], mpH=CpH(), dpH=CpH())
 
     x0=PP.x0; xn=PP.xn; y0=PP.y0; yn=PP.yn
     # update to center (x0,y0) and max_distance (xn,yn) in graph:
