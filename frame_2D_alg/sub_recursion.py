@@ -289,36 +289,36 @@ def frame2graph(frame, fseg, Cgraph):  # for frame_recursive
 
     return gframe
 
-def blob2graph(blob, fseg, Cgraph):
+def blob2graph(blob, fseg):
 
     PPm_ = blob.PPm_; PPd_ = blob.PPd_
     x0, xn, y0, yn = blob.box
-    gblob = Cgraph(plevels_t=[[],[],[],[]], rng=PPm_[0].rng, rdn=blob.rdn, x0=(x0+xn)/2, xn=(xn-x0)/2, y0=(y0+yn)/2, yn=(yn-y0)/2)
+    gblob = CpH(plevels_4=[[],[],[],[]], fds=[1], rng=PPm_[0].rng, rdn=blob.rdn, x0=(x0+xn)/2, xn=(xn-x0)/2, y0=(y0+yn)/2, yn=(yn-y0)/2)
     blob.graph = gblob  # update graph reference
     # convert elements
     for fd, PP_ in enumerate([PPm_,PPd_]):  # if any
         for PP in PP_:
-            graph = PP2graph(PP, fseg, Cgraph, fd)
-            if gblob.plevels_t[fd]: sum_pH(gblob.plevels_t[fd], graph.plevels_t[fd])  # sum mplevels and dplevels (need to sum plevels_t[fd] only because [1-fd] will be empty)
-            else:                   gblob.plevels_t[fd] = deepcopy(graph.plevels_t[fd])
-            gblob.plevels_t[fd].H[0][fd].node_ += [graph]  # add first layer graph
+            graph = PP2graph(PP, fseg, fd)
+            if gblob.plevels_4[fd]: sum_pH(gblob.plevels_4[fd], graph.plevels_4[fd])  # sum mplevels and dplevels (need to sum plevels_t[fd] only because [1-fd] will be empty)
+            else:                   gblob.plevels_4[fd] = deepcopy(graph.plevels_4[fd])
+            gblob.node_ += [[graph, [graph.plevels_4]]]  # add first layer graph (in the structure of [node [plevels_4]])
 
     for alt_blob in blob.adj_blobs[0]:  # adj_blobs = [blobs, pose]
 
         if not alt_blob.graph:
-            blob2graph(alt_blob, fseg, Cgraph)  # convert alt_blob to graph
+            blob2graph(alt_blob, fseg)  # convert alt_blob to graph
         if alt_blob.graph.plevels_t.Q[0]:
-            if gblob.plevels_t[2]: sum_pH(gblob.plevels_t[2], alt_blob.graph.plevels_t[0])  # sum gblob alt_mplevels with alt_blob's mplevels
-            else:                    gblob.plevels_t[2] = deepcopy(alt_blob.graph.plevels_t[0])
-            if gblob.plevels_t[3]: sum_pH(gblob.plevels_t[3], alt_blob.graph.plevels_t[1])  # sum gblob alt_dplevels with alt_blob's dplevels
-            else:                    gblob.plevels_t[3] = deepcopy(alt_blob.graph.plevels_t[1])
+            if gblob.plevels_t[2]: sum_pH(gblob.plevels_4[2], alt_blob.graph.plevels_4[0])  # sum gblob alt_mplevels with alt_blob's mplevels
+            else:                    gblob.plevels_4[2] = deepcopy(alt_blob.graph.plevels_4[0])
+            if gblob.plevels_t[3]: sum_pH(gblob.plevels_4[3], alt_blob.graph.plevels_4[1])  # sum gblob alt_dplevels with alt_blob's dplevels
+            else:                    gblob.plevels_4[3] = deepcopy(alt_blob.graph.plevels_4[1])
 
     return gblob
 
 
-def PP2graph(PP, fseg, Cgraph, ifd=1):
+def PP2graph(PP, fseg, ifd=1):
 
-    alt_players_t = CpH(H=[[],[]])
+    alt_players_4 = [[],[],[],[]]
     if not fseg and PP.altPP_:  # seg doesn't have altPP_
         alt_fds = copy(PP.altPP_[0].fds)
         for altPP in PP.altPP_[1:]:  # get fd sequence common for all altPPs:
@@ -331,24 +331,30 @@ def PP2graph(PP, fseg, Cgraph, ifd=1):
             for ptuples, alt_fd in zip(altPP.players[0], alt_fds):
                 for ptuple in ptuples[0][:2]:  # latuple and vertuple only
                     H += [ptuple]; val += ptuple.val
-            alt_ptuples_t = [[], [CpH(H=H, val=val)]] if ifd else [[CpH(H=H, val=val)],[]]  # player/ptuples doesn't have fds
-            alt_players_t.H[ifd] += [alt_ptuples_t]; alt_players_t.val += val
+            alt_ptuples_4 = [[],[CpH(H=H, val=val)],[],[]]
+            alt_players = CpH(H=[alt_ptuples_4], val=val) 
+            alt_players_4[1] += [alt_players]
             
 
-    # Cgraph: plevels_t ( pplayers_t ( players_t ( ptuples_t ( ptuple:
-    players_t = CpH(H=[[],[]])
+    # graph: plevels_4 ( pplayers_4 ( players_4 ( ptuples_4 ( ptuple:
+    players_4 = [[],[],[],[]]
     for ptuples, val in PP.players[0]:
-        ptuples_t = [[], [CpH(H=deepcopy(ptuples), val=val)]] if ifd else [[CpH(H=deepcopy(ptuples), val=val)],[]]
-        players_t.H[ifd] += [ptuples_t];  players_t.val += val
+        ptuples_4 = [[],[CpH(H=deepcopy(ptuples), val=val)],[],[]]
+        players = CpH(H=[ptuples_4], val=val)
+        players_4[1] += [players]
 
-    pplayers_t = CpH(H=[[],[players_t]] if ifd else [[players_t], []], val=players_t.val)
-    plevels = CpH(H=[[], [pplayers_t]] if ifd else [[pplayers_t], []], val=pplayers_t.val, fds=[0], mpH=CpH(), dpH=CpH())
-    alt_pplayers_t = CpH(H=[[],[alt_players_t]] if ifd else [[alt_players_t], []], val=alt_players_t.val)
-    alt_plevels = CpH(H=[[], [alt_pplayers_t]] if ifd else [[alt_pplayers_t], []], val=alt_pplayers_t.val, fds=[1], mpH=CpH(), dpH=CpH())
+    pplayers = CpH(H=[players_4], val=players_4[1][0].val)
+    pplayers_4 = [[],[pplayers],[],[]]  
+    plevels = CpH(H=[pplayers_4], val=pplayers.val, fds=[0])
+    plevels_4 = [[],plevels,[],[]]
+    
+    alt_pplayers = CpH(H=[alt_players_4], val=sum([alt_players.val for alt_players in alt_players_4[1]]))
+    alt_pplayers_4 = [[],[alt_pplayers],[],[]]
+    alt_plevels = CpH(H=[alt_pplayers_4], val=alt_pplayers.val, fds=[1])
+    alt_plevels_4 = [[],alt_plevels,[],[]]
 
     x0=PP.x0; xn=PP.xn; y0=PP.y0; yn=PP.yn
     # update to center (x0,y0) and max_distance (xn,yn) in graph:
-    graph = Cgraph(plevels_t=[[],[],[],[]], x0=(x0+xn)/2, xn=(xn-x0)/2, y0=(y0+yn)/2, yn=(yn-y0)/2)
-    graph.plevels_t[ifd] = plevels; graph.plevels_t[ifd+2] = alt_plevels
-
+    graph = CpH(plevels_4=plevels_4, alt_plevels_4=alt_plevels_4, fds=[1], x0=(x0+xn)/2, xn=(xn-x0)/2, y0=(y0+yn)/2, yn=(yn-y0)/2)
+    # add alt_plevels_4 in CpH?
     return graph  # 1st plevel fd is always der+?
