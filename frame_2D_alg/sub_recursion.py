@@ -332,9 +332,9 @@ def PP2graph(PP, fseg, ifd=1):
                 for ptuple in ptuples[0][:2]:  # latuple and vertuple only
                     H += [ptuple]; val += ptuple.val
             alt_ptuples_4 = [[],[CpH(H=H, val=val)],[],[]]
-            alt_players = CpH(H=[alt_ptuples_4], val=val) 
+            alt_players = CpH(H=[alt_ptuples_4], val=val)
             alt_players_4[1] += [alt_players]
-            
+
 
     # graph: plevels_4 ( pplayers_4 ( players_4 ( ptuples_4 ( ptuple:
     players_4 = [[],[],[],[]]
@@ -344,10 +344,10 @@ def PP2graph(PP, fseg, ifd=1):
         players_4[1] += [players]
 
     pplayers = CpH(H=[players_4], val=players_4[1][0].val)
-    pplayers_4 = [[],[pplayers],[],[]]  
+    pplayers_4 = [[],[pplayers],[],[]]
     plevels = CpH(H=[pplayers_4], val=pplayers.val, fds=[0])
     plevels_4 = [[],plevels,[],[]]
-    
+
     alt_pplayers = CpH(H=[alt_players_4], val=sum([alt_players.val for alt_players in alt_players_4[1]]))
     alt_pplayers_4 = [[],[alt_pplayers],[],[]]
     alt_plevels = CpH(H=[alt_pplayers_4], val=alt_pplayers.val, fds=[1])
