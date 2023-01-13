@@ -190,10 +190,11 @@ def comp_G_(G_, fd):  # cross-comp Gs (patterns of patterns): Gs, derGs, or segs
             _G_val = sum([plevels.val for plevels in plevels_4 if plevels])
             # proximity = ave-distance
             if distance < ave_distance * (_G_val + G_val) / (2*sum(G_aves)):
+                # change the name mplevel_4 and dplevel_4 is a CpH, their plevel contains 4 tuples
                 mplevel_4, dplevel_4 = comp_pH(_G.plevel, G.plevel, 1-fd)  # comp G pplayers, except last players if rng+
                 derG = CderG(node0=[_G,_plevels_4], node1=[G,plevels_4], mplevel_4=mplevel_4, dplevel_4=dplevel_4)
                 # not revised:
-                mval, dval = sum([plevel_[0].val for plevel_ in mplevel_4 if plevel_]), sum([plevel_[0].val for plevel_ in dplevel_4 if plevel_])
+                mval, dval = sum([plevel[0].val for plevel_4 in mplevel_4.plevel for plevel in plevel_4 if plevel]), sum([plevel[0].val for plevel_4 in dplevel_4.plevel for plevel in plevel_4 if plevel])
                 tval = mval + dval
                 _G.link_.Q += [derG]; _G.link_.val += tval  # val of combined-fork' +- links?
                 G.link_.Q += [derG]; G.link_.val += tval
@@ -288,12 +289,16 @@ def comp_pH(_pH, pH, frng=0):  # recursive unpack plevels ( pplayer ( players ( 
                 mpH.plevel += [mtuple]; mpH.val += mtuple.val
                 dpH.plevel += [dtuple]; dpH.val += dtuple.val
             else:
-                for _spH_, spH_ in zip(_spH_4, spH_4):
-                    for _spH, spH in zip(_spH_, spH_):
-                        if spH.node_:  # extuple is valid, in pplayers
-                            comp_ext(_spH, spH, mpH, dpH)
-                        sub_mpH, sub_dpH = comp_pH(_spH, spH)
-                        mpH.plevel += sub_mpH.plevel; dpH.plevel += sub_dpH.plevel
+                mplevel_4, dplevel_4 = [[],[],[],[]], [[],[],[],[]]  # i think we need this because the output plevel need to be in tuple of 4 too
+                for i in range(4):
+                    _spH_, spH_ = _spH_4[i], spH_4[i]
+                    if _spH_ and spH_: 
+                        for _spH, spH in zip(_spH_, spH_):
+                            if spH.node_:  # extuple is valid, in pplayers
+                                comp_ext(_spH, spH, mpH, dpH)
+                            sub_mpH, sub_dpH = comp_pH(_spH, spH)
+                            mplevel_4[i] += [sub_mpH]; dplevel_4[i] += [sub_dpH]
+                mpH.plevel += [mplevel_4]; dpH.plevel += [dplevel_4]; 
         else:
             break
     return mpH, dpH
