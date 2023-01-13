@@ -346,7 +346,7 @@ def PP2graph(PP, fseg, ifd=1):
     pplayers = CpH(plevel=[players_4], val=players_4[1][0].val)
     pplayers_4 = [[],[pplayers],[],[]]
     plevels = CpH(plevel=[pplayers_4], val=pplayers.val, fds=[0])
-    
+
     alt_pplayers = CpH(plevel=[alt_players_4], val=sum([alt_players.val for alt_players in alt_players_4[1]]))
     alt_pplayers_4 = [[],[alt_pplayers],[],[]]
     alt_plevels = CpH(plevel=[alt_pplayers_4], val=alt_pplayers.val, fds=[1])
