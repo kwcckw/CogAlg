@@ -309,7 +309,7 @@ def blob2graph(blob, fseg):
         if not alt_blob.graph:
             blob2graph(alt_blob, fseg)  # convert alt_blob to graph
         alt_gplevels_4 = alt_blob.graph[1]
-        if alt_gplevels_4[0]:  
+        if alt_gplevels_4[0]:
             if gplevels_4[2]: sum_pH(gplevels_[2], alt_gplevels_4[0])  # sum gblob alt_mplevels with alt_blob's mplevels
             else:             gplevels_4[2] = deepcopy(alt_gplevels_4[0])
         if alt_gplevels_4[1]:
@@ -334,30 +334,30 @@ def PP2graph(PP, fseg, ifd=1):
             for ptuples, alt_fd in zip(altPP.players[0], alt_fds):
                 for ptuple in ptuples[0][:2]:  # latuple and vertuple only
                     plevel += [ptuple]; val += ptuple.val
-            alt_ptuples_4 = [[],[CpH(plevel=plevel, val=val)],[],[]]
-            alt_players = CpH(plevel=[alt_ptuples_4], val=val)
+            alt_ptuples_4 = [[],[CpH(H=plevel, val=val)],[],[]]
+            alt_players = CpH(H=[alt_ptuples_4], val=val)
             alt_players_4[1] += [alt_players]
 
 
     # graph: plevels_4 ( pplayers_4 ( players_4 ( ptuples_4 ( ptuple:
     players_4 = [[],[],[],[]]
     for ptuples, val in PP.players[0]:
-        ptuples_4 = [[],[CpH(plevel=deepcopy(ptuples), val=val)],[],[]]
-        players = CpH(plevel=[ptuples_4], val=val)
+        ptuples_4 = [[],[CpH(H=deepcopy(ptuples), val=val)],[],[]]
+        players = CpH(H=[ptuples_4], val=val)
         players_4[1] += [players]
 
-    pplayers = CpH(plevel=[players_4], val=players_4[1][0].val)
+    pplayers = CpH(H=[players_4], val=players_4[1][0].val)
     pplayers_4 = [[],[pplayers],[],[]]
-    plevels = CpH(plevel=[pplayers_4], val=pplayers.val, fds=[0])
+    plevels = CpH(H=[pplayers_4], val=pplayers.val, fds=[0])
 
-    alt_pplayers = CpH(plevel=[alt_players_4], val=sum([alt_players.val for alt_players in alt_players_4[1]]))
+    alt_pplayers = CpH(H=[alt_players_4], val=sum([alt_players.val for alt_players in alt_players_4[1]]))
     alt_pplayers_4 = [[],[alt_pplayers],[],[]]
-    alt_plevels = CpH(plevel=[alt_pplayers_4], val=alt_pplayers.val, fds=[1])
+    alt_plevels = CpH(H=[alt_pplayers_4], val=alt_pplayers.val, fds=[1])
 
     plevels_4 = [[],plevels,[],alt_plevels]
 
     x0=PP.x0; xn=PP.xn; y0=PP.y0; yn=PP.yn
     # update to center (x0,y0) and max_distance (xn,yn) in graph:
-    graph = CpH(plevel=pplayers, fds=[1], x0=(x0+xn)/2, xn=(xn-x0)/2, y0=(y0+yn)/2, yn=(yn-y0)/2)
+    graph = CpH(H=pplayers, fds=[1], x0=(x0+xn)/2, xn=(xn-x0)/2, y0=(y0+yn)/2, yn=(yn-y0)/2)
     # add alt_plevels_4 in CpH?
     return [graph, plevels_4]  # 1st plevel fd is always der+?
