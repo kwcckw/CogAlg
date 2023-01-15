@@ -91,8 +91,12 @@ class CderG(ClusterStructure):  # graph links, within root node_
 
 def agg_recursion(root, fseg):  # compositional recursion in root.PP_, pretty sure we still need fseg, process should be different
 
-    for graph_ in root:  # plevels_4_: mplevels, dplevels, alt_mplevels, alt_dplevels
-        mgraph_, dgraph_ = form_graph_(graph_)  # cross-comp in fork pplayers of top fork plevel: graph[1][ifd][0=top][ifd][0=G]?
+    Val = 0
+    Rdn = 0
+    # if root should be same with G, because root will be G in sub+
+    # so if root is a list (tree), each graph_ is CpH?
+    for ifd, graph_H in enumerate(root):  # plevels_4_: mplevels, dplevels, alt_mplevels, alt_dplevels
+        mgraph_, dgraph_ = form_graph_(graph_H, ifd%2)  # cross-comp in fork pplayers of top fork plevel: graph[1][ifd][0=top][ifd][0=G]?
 
         mval = sum([plevels.val for mgraph in mgraph_ for plevels in mgraph.plevels_4 if plevels])
         dval = sum([plevels.val for dgraph in dgraph_ for plevels in dgraph.plevels_4 if plevels])
@@ -100,18 +104,22 @@ def agg_recursion(root, fseg):  # compositional recursion in root.PP_, pretty su
         for fd, (graph_,val) in enumerate(zip([mgraph_,dgraph_],[mval,dval])):  # same graph_, val for sub+ and agg+
             # intra-graph sub+ comp node:
             if val > ave_sub * (root[0].rdn):  # same in blob, same base cost for both forks
-                root.rdn+=1  # estimate
+                
+                graph.H.rdn+=1  # estimate
                 sub_recursion_g(graph_, val, fseg, fd)  # subdivide graph_ by der+|rng+
-            # cross-graph agg+ comp graph:
-            if val > G_aves[fd] * ave_agg * (root[0].rdn) and len(graph_) > ave_nsub:
-                root[0].rdn+=1  # estimate
-                agg_recursion(root, fseg=fseg)
+                Val += val
+        Rdn += root.rdn  
+    # this should be outside of main root loops? Else only 1 of the fork of root is updated before we parse them for new recursion
+    # cross-graph agg+ comp graph:
+    if Val > sum(G_aves) * ave_agg * Rdn > ave_nsub:
+        graph_H.rdn+=1  # estimate
+        agg_recursion(root, fseg=fseg)
 
 
-def form_graph_(root): # form plevel in agg+ or player in sub+, G is node in GG graph; der+: comp_link if fderG, from sub+
+# not fully updated
+def form_graph_(graph_H, ifd): # form plevel in agg+ or player in sub+, G is node in GG graph; der+: comp_link if fderG, from sub+
 
-    ifd = root[0].fds[0]  # top pplayers forks
-    G_ = root[0].node_  # in top pplayers of root fork, agg+ per fork?
+    G_ = graph_H.H  # in top pplayers of root fork, agg+ per fork?
     comp_G_(G_, fd=ifd)  # cross-comp all graphs in rng, graphs may be segs | fderGs, root G += link, link.node
 
     mnode_, dnode_ = [], []  # Gs with >0 +ve fork links:
