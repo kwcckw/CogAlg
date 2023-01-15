@@ -45,10 +45,8 @@ class Clink_(ClusterStructure):
 
 class CpH(ClusterStructure):  # hierarchy of params + associated vars, potential graph: single-fork, single plevel node_ cluster
 
-    root_fork = list  # [CpH] in root_graph[1][ifd][0][ifd]: plevels | pplayers | players | ptuples
-                      # comp G pplayers: root_graph[1][ifd][0][ifd][0]?
-                      
-    H = list  # we will still need this, else we can't pack those pplayers, players and ptuples
+    H = list  # root fork: [CpH] in root_graph[1][ifd][0][ifd]: plevels | pplayers | players | ptuples
+              # comp G pplayers: root_graph[1][ifd][0][ifd][0]?
     fds = list  # m|d, only in plevels and players?
     val = int
     link_ = lambda: Clink_()  # evaluated external links (graph=node), replace alt_node if open, direct only
@@ -66,6 +64,12 @@ class CpH(ClusterStructure):  # hierarchy of params + associated vars, potential
     xn = float  # max distance from center
     yn = float
 ''' 
+    CpH graph is packed as a root of a tree:
+    plevels ( <=4 forks ( pplayers ( <=4 forks ( players ( ptuples
+    G: list of plevels, plevel: list of forks, fork: list of pplayers, pplayer: list of forks.. 
+        
+    Players and ptuples were formed in comp_slice, so they are not forking here?
+    old scheme:
     externally packed plevels_4: [mplevels, dplevels, alt_mplevels, alt_dplevels]
     full:
     plevels_4 [ plevels: [CpH( H=pplayers)]],
@@ -81,30 +85,32 @@ class CderG(ClusterStructure):  # graph links, within root node_
 
     node0 = lambda: CpH()
     node1 = lambda: CpH()
-    mplevel_4 = list  # mmplevel, dpmlevel, alt_mmplevel, alt_dmplevel
-    dplevel_4 = list
+    mplevel = lambda: CpH()  # to alt/contrast if open
+    dplevel = lambda: CpH()
 
 
 def agg_recursion(root, fseg):  # compositional recursion in root.PP_, pretty sure we still need fseg, process should be different
 
-    mgraph_, dgraph_ = form_graph_(root)  # cross-comp, cluster in top plevel of root fork: root_graph[1][ifd][0][ifd][0]
+    for graph_ in root:  # plevels_4_: mplevels, dplevels, alt_mplevels, alt_dplevels
+        mgraph_, dgraph_ = form_graph_(graph_)  # cross-comp in fork pplayers of top fork plevel: graph[1][ifd][0=top][ifd][0=G]?
 
-    mval = sum([plevels.val for mgraph in mgraph_ for plevels in mgraph.plevels_4 if plevels])
-    dval = sum([plevels.val for dgraph in dgraph_ for plevels in dgraph.plevels_4 if plevels])
+        mval = sum([plevels.val for mgraph in mgraph_ for plevels in mgraph.plevels_4 if plevels])
+        dval = sum([plevels.val for dgraph in dgraph_ for plevels in dgraph.plevels_4 if plevels])
 
-    for fd, (graph_,val) in enumerate(zip([mgraph_,dgraph_],[mval,dval])):  # same graph_, val for sub+ and agg+
-        # intra-graph sub+ comp node:
-        if val > ave_sub * (root[0].rdn):  # same in blob, same base cost for both forks
-            root.rdn+=1  # estimate
-            sub_recursion_g(graph_, val, fseg, fd)  # subdivide graph_ by der+|rng+
-        # cross-graph agg+ comp graph:
-        if val > G_aves[fd] * ave_agg * (root[0].rdn) and len(graph_) > ave_nsub:
-            root[0].rdn+=1  # estimate
-            agg_recursion(root, fseg=fseg)
+        for fd, (graph_,val) in enumerate(zip([mgraph_,dgraph_],[mval,dval])):  # same graph_, val for sub+ and agg+
+            # intra-graph sub+ comp node:
+            if val > ave_sub * (root[0].rdn):  # same in blob, same base cost for both forks
+                root.rdn+=1  # estimate
+                sub_recursion_g(graph_, val, fseg, fd)  # subdivide graph_ by der+|rng+
+            # cross-graph agg+ comp graph:
+            if val > G_aves[fd] * ave_agg * (root[0].rdn) and len(graph_) > ave_nsub:
+                root[0].rdn+=1  # estimate
+                agg_recursion(root, fseg=fseg)
+
 
 def form_graph_(root): # form plevel in agg+ or player in sub+, G is node in GG graph; der+: comp_link if fderG, from sub+
 
-    ifd = root[0].fds[0]  # pplayers forks
+    ifd = root[0].fds[0]  # top pplayers forks
     G_ = root[0].node_  # in top pplayers of root fork, agg+ per fork?
     comp_G_(G_, fd=ifd)  # cross-comp all graphs in rng, graphs may be segs | fderGs, root G += link, link.node
 
@@ -180,19 +186,20 @@ def add_node_layer(gnode_, G_, G, fd, val):  # recursive depth-first gnode_+=[_G
 
 def comp_G_(G_, fd):  # cross-comp Gs (patterns of patterns): Gs, derGs, or segs inside PP, same process, no fderG?
 
-    for i, [_G, _plevels_4] in enumerate(G_):
-        for [G, plevels_4] in G_[i+1:]:  # compare each G to other Gs in rng, bilateral link assign, val accum:
+    for i, [_G] in enumerate(G_):  # G is list of CpH: H=der_pplayerss, hierarchy of derivation similar to players
+        for [G] in G_[i+1:]:  # compare each G to other Gs in rng, bilateral link assign, val accum:
+
             if G in [node for link in _G.link_.Q for node in [link.node0[0],link.node1[0]]]:
                 # G,_G was compared in prior rng+, add frng to skip? + check node_ in alts?
                 continue
             dx = _G.x0 - G.x0; dy = _G.y0 - G.y0  # center x0,y0
             distance = np.hypot(dy, dx)  # Euclidean distance between centers, sum in sparsity
             # proximity = ave-distance
-            if distance < ave_distance * (_G.val + G.val) / (2*sum(G_aves)):
+            if distance < ave_distance * ((_G.val + G.val) / (2*sum(G_aves))):
                 # comp G.H pplayers:
-                mplevel_4, dplevel_4 = comp_pH(_G, G, 1-fd)  # skip last pplayers if rng+?
-                derG = CderG(node0=[_G,_plevels_4], node1=[G,plevels_4], mplevel_4=mplevel_4, dplevel_4=dplevel_4)
-                mval = mplevel_4.val; dval = dplevel_4.val 
+                mplevel_, dplevel_ = comp_pH(_G, G, 1-fd)  # if rng+: skip last der_pplayers in CpH.H?
+                derG = CderG(node0=[_G], node1=[G], mplevel_=mplevel_, dplevel_=dplevel_)
+                mval = mplevel_.val; dval = dplevel_.val
                 tval = mval + dval
                 _G.link_.Q += [derG]; _G.link_.val += tval  # val of combined-fork' +- links?
                 G.link_.Q += [derG]; G.link_.val += tval
@@ -248,44 +255,73 @@ def sum2graph_(graph_, root_fork, fd, ifd):  # sum node and link params into gra
         Plevels.fds = copy(plevels.fds) + [fd]
         # draft:
         for plevels in graph[1]:  # plevels_4
-            for Plevel, plevel in zip(root_fork, plevels):
+            for Plevel, plevel in zip(root_fork.H, plevels):
                 sum_pH(Plevel, plevel)
             root_fork.val += plevels.val
         Graph_ += [[Graph, [Plevels_4]]]  # Cgraph, reduction: root fork += all link forks?
 
     return Graph_
 
+def comp_pH_old(_pH, pH, frng=0):  # recursive unpack plevels ( pplayer ( players ( ptuples -> ptuple:
 
-# not revised (Each pH is G and G.H is [pplayers], so there will be no 4 tuples here?)
+    mpH, dpH = CpH(), CpH()
+    pri_fd = 0
+    if frng: _H_, H_ = _pH.H[:-1], _pH.H[:-1]
+    else:    _H_, H_ = _pH.H, pH.H
+
+    for i, (_spH, spH) in enumerate(zip(_pH.H, pH.H)):
+
+        fd = pH.fds[i] if len(pH.fds) else 0  # in plevels or players
+        _fd = _pH.fds[i] if len(_pH.fds) else 0
+        if _fd == fd:
+            if fd: pri_fd = 1  # all scalars
+            if isinstance(spH, Cptuple):
+                mtuple, dtuple = comp_ptuple(_spH, spH, pri_fd)
+                mpH.H += [mtuple]; mpH.val += mtuple.val
+                dpH.H += [dtuple]; dpH.val += dtuple.val
+            else:
+                if spH.L:  # extuple is valid, in pplayer only
+                    comp_ext(_spH, spH, mpH, dpH)
+                sub_mpH, sub_dpH = comp_pH(_spH, spH)
+                if isinstance(spH.H[0], CpH):
+                    mpH.H += [sub_mpH]; dpH.H += [sub_dpH]
+                else:
+                    # spH.H is ptuples, combine der_ptuples into single der_layer:
+                    mpH.H += sub_mpH.H; dpH.H += sub_dpH.H
+                mpH.val += sub_mpH.val; dpH.val += sub_dpH.val
+        else:
+            break
+    return mpH, dpH
+
+
 def comp_pH(_pH, pH, frng=0):  # recursive unpack plevels ( pplayer ( players ( ptuples -> ptuple:
 
     mpH, dpH = CpH(), CpH()  # new players in same top plevel?
     pri_fd = 0
     if frng: _H_, H_ = _pH.H[:-1], _pH.H[:-1]
     else:    _H_, H_ = _pH.H, pH.H
-    for i, (_spH_4, spH_4) in enumerate(zip(_H_, H_)):
+
+    for i, (_spH, spH) in enumerate(zip(_pH.H, pH.H)):
 
         fd = pH.fds[i] if len(pH.fds) else 0  # in plevels or players
         _fd = _pH.fds[i] if len(_pH.fds) else 0
         if _fd == fd:
             if fd: pri_fd = 1  # all scalars
-            if isinstance(_spH_4, Cptuple):
-                mtuple, dtuple = comp_ptuple(_spH_4, spH_4, pri_fd)
+            if isinstance(_spH, Cptuple):
+                mtuple, dtuple = comp_ptuple(_spH, spH, pri_fd)
                 mpH.H += [mtuple]; mpH.val += mtuple.val
                 dpH.H += [dtuple]; dpH.val += dtuple.val
-            elif isinstance(_spH_4, CpH):  # PH is players, H is ptuples
-                sub_mpH, sub_dpH = comp_pH(_spH_4, spH_4, frng=0)
+            elif isinstance(_spH, CpH):  # PH is players, H is ptuples
+                sub_mpH, sub_dpH = comp_pH(_spH, spH, frng=0)
                 mpH.H += [sub_mpH]; dpH.H += [sub_dpH]
                 mpH.val += sub_mpH.val; dpH.val += sub_dpH.val
             else:
-                mplevel_4, dplevel_4 = [[],[],[],[]], [[],[],[],[]]  # i think we need this because the output plevel need to be in tuple of 4 too
+                mplevel_4, dplevel_4 = [[],[],[],[]], [[],[],[],[]]
                 mval, dval = 0, 0
-                for i in range(4):
-                    _spH_, spH_ = _spH_4[i], spH_4[i]
-                    if _spH_ and spH_:
-                        for _spH, spH in zip(_spH_, spH_):
-                            if spH.node_:  # extuple is valid, in pplayers
-                                comp_ext(_spH, spH, mpH, dpH)
+                if _spH_ and spH_:
+                    for _spH, spH in zip(_spH_, spH_):
+                        if spH.node_:  # extuple is valid, in pplayers
+                            comp_ext(_spH, spH, mpH, dpH)
                             sub_mpH, sub_dpH = comp_pH(_spH, spH)
                             mplevel_4[i] += [sub_mpH]; dplevel_4[i] += [sub_dpH]
                             mval += sub_mpH.val; dval += sub_dpH.val
@@ -392,7 +428,7 @@ def sum_pH(PH, pH, fneg=0):  # recursive unpack plevels ( pplayers ( players ( p
 
     for SpH_4, spH_4 in zip_longest(PH.H, pH.H, fillvalue=None):  # assume same fds
         if SpH_4:
-            if spH_4:  # pH might have lesser H element compare to PH
+            if spH_4:  # pH.H may be shorter than PH.H
                 if isinstance(spH_4, Cptuple):  # PH is ptuples, SpH_4 is ptuple
                     sum_ptuple(SpH_4, spH_4, fneg=fneg)
                 elif isinstance(spH_4, CpH):  # PH is players, H is ptuples
@@ -405,6 +441,6 @@ def sum_pH(PH, pH, fneg=0):  # recursive unpack plevels ( pplayers ( players ( p
                                     sum_pH(SpH, spH, fneg=fneg)  # unpack sub-hierarchy, recursively
                                 elif not fneg:
                                     PH.H.append(spH)  # new Sub_pH
-        else:  # PH has lesser element in H, pack new H element
+        else:  # PH.H is shorter than pH.H, extend it:
             PH.H += [spH_4]
     PH.val += pH.val
