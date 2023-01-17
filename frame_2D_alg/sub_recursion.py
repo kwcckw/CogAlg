@@ -314,7 +314,7 @@ def blob2graph(blob, fseg):
         if alt_mpplayers:  # alt_mpplayers is not empty
             for Alt_mpplayer, alt_mpplayer in zip_longest(Pplayers_[2], alt_mpplayers, fillvalue=[]):
                 if Alt_mpplayer: sum_pH(Alt_mpplayer, alt_mpplayer)
-                else:            Pplayers_[2] += [alt_mpplayer]             
+                else:            Pplayers_[2] += [alt_mpplayer]
         if alt_dpplayers:  # alt_dpplayers is not empty
             for Alt_dpplayer, alt_dpplayer in zip_longest(Pplayers_[3], alt_dpplayers, fillvalue=[]):
                 if Alt_mpplayer: sum_pH(Alt_dpplayer, alt_dpplayer)
@@ -367,19 +367,19 @@ def agg_recursion_eval(blob, PP_t):
             for i, PP in enumerate(PP_):
                converted_graph  = PP2graph(PP, fseg=fseg, ifd=fd)  # convert PP to graph
                PP_[i] = converted_graph
-        if fseg: 
+        if fseg:
             converted_blob = PP2graph(blob, fseg=fseg, ifd=1)  # convert root to graph (root default fd = 1?)
-            for converted_graph in PP_t[1]:  
+            for converted_graph in PP_t[1]:
                 converted_blob[1][1][0].node_ += [converted_graph]  # add converted graph into dpplayer's node_, how about alt_dpplayer?
             # skip m fork because 1st fork is d fork
         else:
-            if blob.graph: 
+            if blob.graph:
                 converted_blob = blob.graph  # get converted graph
-            else:          
-                converted_blob = blob2graph(blob, fseg=fseg)  # convert root to graph 
+            else:
+                converted_blob = blob2graph(blob, fseg=fseg)  # convert root to graph
 
     agg_recursion(converted_blob, fseg=fseg)
-    
+
     M = converted_graph[1][0][0].val if converted_graph[1][0] else 0  # mpplayers[0].val (but m fork is always empty, so no value here?)
     G = converted_graph[1][1][0].val if converted_graph[1][1] else 0  # dpplayers[0].val
     valt = [M, G]
