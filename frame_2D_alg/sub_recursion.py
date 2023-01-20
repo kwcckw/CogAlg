@@ -295,20 +295,20 @@ def blob2graph(blob, fseg):
     x0, xn, y0, yn = blob.box
     gblob = CpH(fds=[1], rng=PPm_[0].rng, rdn=blob.rdn, x0=(x0+xn)/2, xn=(xn-x0)/2, y0=(y0+yn)/2, yn=(yn-y0)/2)
     Pplayers_ = [None,None,None,None]
-    blob.graph = [gblob, Pplayers_]  # update graph reference
+    blob.graph = [gblob, [Pplayers_], []]  # update graph reference
     # convert elements
     for fd, PP_ in enumerate([PPm_,PPd_]):  # if any
         for PP in PP_:
             graph = PP2graph(PP, fseg, fd)
-            if graph[1][fd]:  # if not empty dpplayers
-                if Pplayers_[fd]: sum_pH(Pplayers_[fd], graph[1][fd])
-                else:             Pplayers_[fd] = deepcopy(graph[1][fd])
+            if graph[1][0][fd]:  # if not empty dpplayers
+                if Pplayers_[fd]: sum_pH(Pplayers_[fd], graph[1][0][fd])
+                else:             Pplayers_[fd] = deepcopy(graph[1][0][fd])
                 Pplayers_[fd].node_ += [graph]  # add first layer graph (in the structure of [node [plevels_4]])
 
     for alt_blob in blob.adj_blobs[0]:  # adj_blobs = [blobs, pose]
         if not alt_blob.graph:
             blob2graph(alt_blob, fseg)  # convert alt_blob to graph
-        alt_mpplayers, alt_dpplayers = alt_blob.graph[1][:2]
+        alt_mpplayers, alt_dpplayers = alt_blob.graph[1][0][:2]
         if alt_mpplayers:  # alt_mpplayers is not empty
             if Pplayers_[2]: sum_pH(Pplayers_[2], alt_mpplayer)
             else:            Pplayers_[2] += [alt_mpplayers]
@@ -316,7 +316,7 @@ def blob2graph(blob, fseg):
             if Pplayers_[3]: sum_pH(Pplayers_[3], alt_dpplayer)
             else:            Pplayers_[3] += [alt_dpplayers]
 
-    return [gblob, Pplayers_]
+    return [gblob, [Pplayers_], []]
 
 
 def PP2graph(PP, fseg, ifd=1):
@@ -350,7 +350,10 @@ def PP2graph(PP, fseg, ifd=1):
     # update to center (x0,y0) and max_distance (xn,yn) in graph:
     graph = CpH(H=[pplayers], forks=[1], x0=(x0+xn)/2, xn=(xn-x0)/2, y0=(y0+yn)/2, yn=(yn-y0)/2)
     # no mpplayers and alt_mpplayers so assign as None?
-    return [graph, [None, pplayers, None, alt_pplayers] ]  # 1st plevel fd is always der+?
+
+    new_lev = []  # empty new_lev
+    pplayers__ = [[None, pplayers, None, alt_pplayers]]
+    return [graph, pplayers__, new_lev]  # 1st plevel fd is always der+?
 
 # move here temporary, for debug purpose
 def agg_recursion_eval(blob, PP_t):
