@@ -86,7 +86,10 @@ class CderG(ClusterStructure):  # graph links, within root node_
 def agg_recursion(root, fseg):  # compositional recursion in root.PP_, pretty sure we still need fseg, process should be different
 
     for fork, pplayers in enumerate(root[1]):  # root graph 1st plevel forks: mpplayers, dpplayers, alt_mpplayers, alt_dpplayers
-        if pplayers:
+        if pplayers:    
+            for G in pplayers.node_:  # ini new_lev forks:
+                if fork%2: G += [[CpH(),CpH(),CpH(),CpH()]]  # or we should init it as None? 
+                # else:  G[-1][:] = [CpH(),CpH(),CpH(),CpH()]  We still need the fork for comparison, so we should replace it in sum2graph?   
             mgraph_, dgraph_ = form_graph_(root, fork)  # cross-comp in fork pplayers[0]: CpH
 
             for fd, graph_ in enumerate(mgraph_,dgraph_):  # eval graphs for sub+ and agg+:
@@ -98,9 +101,6 @@ def agg_recursion(root, fseg):  # compositional recursion in root.PP_, pretty su
                 # cross-graph agg+ comp graph:
                 if val > G_aves[fd] * ave_agg * (root[0].rdn) and len(graph_) > ave_nsub:
                     pplayers[0].rdn += 1  # estimate
-                    for G in graph_:  # ini new_lev forks:
-                        if fd: G += [[CpH(),CpH(),CpH(),CpH()]]
-                        else:  G[-1][:] = CpH(),CpH(),CpH(),CpH()
                     agg_recursion(root, fseg=fseg)
 
 
@@ -183,9 +183,14 @@ def add_node_layer(gnode_, G_, G, fd, val):  # recursive depth-first gnode_+=[_G
 def comp_G_(G_, fork):  # cross-comp Gs (patterns of patterns): Gs, derGs, or segs inside PP, same process, no fderG?
 
     for i, _G in enumerate(G_):  # G is list of plevel CpH: H=der_pplayerss: hierarchy of derivation, ~players
-        _lev = _G[0]  # lev: root pplayers
         for G in G_[i+1:]:  # compare each G to other Gs in rng, bilateral link assign, val accum:
-            lev = G[0]
+            if fork%2:
+                # index -2 due to added fork in agg_recursion
+                _lev = _G[-2][fork]  # lev: root pplayers
+                lev = G[-2][fork]
+            else:
+                _lev = _G[-1][fork]  # lev: root pplayers
+                lev = G[-1][fork]
             if lev in [node for link in _lev.link_.Q for node in [link.node0[0],link.node1[0]]]:
                 continue  # this G pair was compared in prior rng+, add frng to skip?
             dx = _lev.x0 - lev.x0; dy = _lev.y0 - lev.y0  # center x0,y0
@@ -197,14 +202,15 @@ def comp_G_(G_, fork):  # cross-comp Gs (patterns of patterns): Gs, derGs, or se
                 derG = CderG(node0=_G,node1=G, mplevel=mplevel, dplevel=dplevel, S=distance, A=[dy,dx])
                 mval = mplevel.val; dval = dplevel.val
                 tval = mval + dval
-                _lev.link_.Q += [derG]; _lev.link_.val += tval  # val of combined-fork' +- links?
-                lev.link_.Q += [derG]; lev.link_.val += tval
+                # it should be G[0] here? lev is pplayers
+                _G[0].link_.Q += [derG]; _G[0].link_.val += tval  # val of combined-fork' +- links?
+                G[0].link_.Q += [derG]; G[0].link_.val += tval
                 if mval > ave_Gm:
-                    _lev.link_.Qm += [derG]; _lev.link_.mval += mval  # no dval for Qm
-                    lev.link_.Qm += [derG]; lev.link_.mval += mval
+                    _G[0].link_.Qm += [derG]; _G[0].link_.mval += mval  # no dval for Qm
+                    G[0].link_.Qm += [derG]; G[0].link_.mval += mval
                 if dval > ave_Gd:
-                    _lev.link_.Qd += [derG]; _lev.link_.dval += dval  # no mval for Qd
-                    lev.link_.Qd += [derG]; lev.link_.dval += dval
+                    _G[0].link_.Qd += [derG]; _G[0].link_.dval += dval  # no mval for Qd
+                    G[0].link_.Qd += [derG]; G[0].link_.dval += dval
 
 # draft:
 def sum2graph_(graph_, root, fd, fork):  # sum node and link params into graph, plevel in agg+ or player in sub+
@@ -216,7 +222,7 @@ def sum2graph_(graph_, root, fd, fork):  # sum node and link params into graph, 
         Glink_= []; X0,Y0 = 0,0
         # 1st pass: define center Y,X and Glink_:
         for node in graph.Q:  # not sure if node is a tree, before recursion?
-            Glink_ = list(set(Glink_ + [node.link_.Qm, node[0].link_.Qd][fd]))  # unique fork links over graph nodes
+            Glink_ = list(set(Glink_ + [node[0].link_.Qm, node[0].link_.Qd][fd]))  # unique fork links over graph nodes
             X0 += node[0].x0; Y0 += node[0].y0
         L = len(graph.Q); X0/=L; Y0/=L; Xn,Yn = 0,0
         # 2nd pass: extend and sum nodes in graph:
@@ -237,16 +243,17 @@ def sum2graph_(graph_, root, fd, fork):  # sum node and link params into graph, 
                 # or node = nested list: new_node = [old_node, new_lev], where old_node is old_node_levs, also nested
                 # so old node is immutable
             # replace with forks init in agg+?:
-            if len(node[0].forks)==len(node)-1: node[-1][fork] = [new_lev]
+            node[-1][fork] = new_lev
         new_Lev = CpH()
         for link in Glink_:
             sum_pH(new_Lev, [link.mplevel, link.dplevel][fd])
+            new_Lev.node_ += [link.node0] if link is link.node1 else [link.node1]  # we need to pack node to graph too 
         new_Lev.A = [Xn * 2, Yn * 2]  # not sure
         # replace with forks init in agg+?:
-        new_Lev_ = [CpH(), CpH(), CpH(), CpH()]
+        new_Lev_ = [CpH(), CpH(), CpH(), CpH()]  # or we should init it as None? So that we can test it in next agg+?
         new_Lev_[fork] = new_Lev
         Graph += [new_Lev_]
-        Graph[0] = Graph[0][0]  # remove forks: single-element
+        # Graph[0] = Graph[0][0]  # remove forks: single-element (Graph[0] is CpH, not quite sure what's the purpose of this line)
         Graph[0].node_ = graph.Q
         # Graph[0].H = Pplayers?
         Graph[0].x0=X0; Graph[0].xn=Xn; Graph[0].y0=Y0; Graph[0].yn=Yn
