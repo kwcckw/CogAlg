@@ -91,8 +91,8 @@ def agg_recursion(root, fseg):  # compositional recursion in root.PP_, pretty su
 
             # if not fork % 2: pplayers = root.H[0]  # rng+, H[1][fork][-1] remains as immutable
             for G in pplayers.node_:  # init forks:
-                G.H[1][fork] += [[[],[],[],[]]]  # der+|rng+, only compared pplayers may be different
-            mgraph_, dgraph_ = form_graph_(pplayers, fork)  # cross-comp in pplayers.H[0]
+                G.H[fork] += [[[],[],[],[]]]  # der+|rng+, only compared pplayers may be different (should be just H? Because we add it as new H element)
+            mgraph_, dgraph_ = form_graph_(root, fork)  # cross-comp in pplayers.H[0]
 
             for fd, graph_ in enumerate(mgraph_,dgraph_):  # eval graphs for sub+ and agg+:
                 val = sum([graph.val for graph in graph_])
@@ -166,9 +166,9 @@ def graph_reval(graph_, reval_, fd):  # recursive eval nodes for regraph, increa
 
 def readd_node_layer(regraph, graph_Q, node, fd):  # recursive depth-first regraph.Q+=[_node]
 
-    for link in [node[0].link_.Qm, node[0].link_.Qd][fd]:  # all positive
-        _node = link.node1 if link.node0[0] is node[0] else link.node0
-        _val = [_node[0].link_.mval, _node[0].link_.dval][fd]
+    for link in [node.link_.Qm, node.link_.Qd][fd]:  # all positive
+        _node = link.node1 if link.node0 is node else link.node0
+        _val = [_node.link_.mval, _node.link_.dval][fd]
         if _val > G_aves[fd] and _node in graph_Q:
             regraph.Q += [_node]
             graph_Q.remove(_node)
@@ -177,8 +177,8 @@ def readd_node_layer(regraph, graph_Q, node, fd):  # recursive depth-first regra
 
 def add_node_layer(gnode_, G_, G, fd, val):  # recursive depth-first gnode_+=[_G]
 
-    for link in G[0].link_.Q:  # all positive
-        _G = link.node1 if link.node0[0] is G[0] else link.node0
+    for link in G.link_.Q:  # all positive
+        _G = link.node1 if link.node0 is G else link.node0
         if _G in G_:  # _G is not removed in prior loop
             gnode_ += [_G]
             G_.remove(_G)
@@ -192,15 +192,23 @@ def comp_G_(G_, fork):  # cross-comp Gs (patterns of patterns): Gs, derGs, or se
     for i, _G in enumerate(G_):  # G is list of plevel CpH: H=der_pplayerss: hierarchy of derivation, ~players
         for G in G_[i+1:]:  # compare each G to other Gs in rng, bilateral link assign, val accum:
 
-            if G in [node for link in _G.link_.Q for node in [link.node0[0],link.node1[0]]]:
+            if G in [node for link in _G.link_.Q for node in [link.node0,link.node1]]:
                 continue  # this G pair was compared in prior rng+, add frng to skip?
             dx = _G.x0 - G.x0; dy = _G.y0 - G.y0  # center x0,y0
             distance = np.hypot(dy, dx)  # Euclidean distance between centers, sum in sparsity
             # proximity = ave-distance
             if distance < ave_distance * ((_G.val + G.val) / (2*sum(G_aves))):
                 # comp pplayers:
-                mplevel, dplevel = comp_pH(_G, G, 1-fork%2)  # comp H[0] if rng+, else H[1]
+                frng = 1-fork%2
+                mplevel, dplevel = comp_pH(_G, G, frng)  # comp H[0] if rng+, else H[1]
                 derG = CderG(node0=_G,node1=G, mplevel=mplevel, dplevel=dplevel, S=distance, A=[dy,dx])
+                if frng:
+                    mval = sum([mlevel.val for mlevel in mplevel])
+                    dval = sum([dlevel.val for dlevel in dplevel])
+                else:
+                    mval = mplevel.val
+                    dval = dplevel.val
+
                 mval = mplevel.val; dval = dplevel.val
                 tval = mval + dval
                 _G.link_.Q += [derG]; _G.link_.val += tval  # val of combined-fork' +- links?
@@ -230,7 +238,7 @@ def sum2graph_(graph_, root, fd, fork):  # sum node and link params into graph, 
         for node in graph.Q:  # CQ(Q=gnode_, val=val)], define max distance,A, sum plevels:
             Xn = max(Xn, (node.x0 + node.xn) - X0)  # box xn = x0+xn
             Yn = max(Yn, (node.y0 + node.yn) - Y0)
-            node_pplayers__ = [node[:-1], node][fd]  # plevels ( forks ( pplayers, skip last plevel if rng+
+            node_pplayers__ = [node.H[:-1], node.H][fd]  # plevels ( forks ( pplayers, skip last plevel if rng+
             sum_pH(Graph.H, node_pplayers__) # sum old plevels
             new_lev = CpH(L=0,A=[0,0]) # node[-1][fork]
             link_ = [node.link_.Qm, node.link_.Qd][fd]  # fork link_
@@ -250,7 +258,7 @@ def sum2graph_(graph_, root, fd, fork):  # sum node and link params into graph, 
         Graph.node_ = graph.Q
         Graph.x0=X0; Graph.xn=Xn; Graph.y0=Y0; Graph.yn=Yn
         # not revised:
-        for i, (pplayers_, root_pplayers_) in enumerate(zip(Graph[1:], root[1:])):
+        for i, (pplayers_, root_pplayers_) in enumerate(zip(Graph.H[1:], root.H[1:])):
             if root_pplayers_[fork]:
                 sum_pH(root_pplayers_[fork], pplayers_[fork])  # val should be already summed in sum_pH
             else:
@@ -260,17 +268,31 @@ def sum2graph_(graph_, root, fd, fork):  # sum node and link params into graph, 
     return Graph_
 
 
+# pHt contains forks 
+def comp_pHt(_pHt, pHt):
+    
+    mpHt, dpHt = [], []
+    for _pH, pH in zip(_pHt, pHt):
+        # compare all forks, or just mfork and alt_mfork in rng+?
+        mpH, dpH = comp_pH(_pH, pH, frng=0)
+        mpHt += [mpH] ; dpHt += [dpH]
+
+    return mpHt, dpHt
+
 def comp_pH(_pH, pH, frng=0):  # recursive unpack plevels ( pplayer ( players ( ptuples -> ptuple:
 
     mpH, dpH = CpH(), CpH()  # new players in same top plevel?
     pri_fd = 0
 
-    if frng: _H, H = _pH.H[0], pH.H[0]  # single pplayers, not _pH.H[:-1], _pH.H[:-1]?
-    else:    _H, H = _pH.H[1], pH.H[1]
-    for i, (_spH, spH) in enumerate(zip(_H, H)):
+    if frng: 
+        mpHt, dpHt = comp_pHt(_pH.H[1], pH.H[1])
+        return mpHt, dpHt
 
-        fork = pH.forks[i] if len(pH.forks) else 0  # in plevels or players
-        _fork = _pH.forks[i] if len(_pH.forks) else 0
+    for i, (_spH, spH) in enumerate(zip(_pH.H, pH.H)):
+
+        fork = pH.forks[i] if len(pH.forks)>i else 0  # in plevels or players
+        _fork = _pH.forks[i] if len(_pH.forks)>i else 0
+
         if _fork == fork:
             if fork%2:
                 pri_fd = 1  # all scalars
