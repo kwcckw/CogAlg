@@ -302,7 +302,8 @@ def blob2graph(blob, fseg):
             if graph.H[0][fd]:  # if not empty dpplayers
                 if Pplayers_[fd]: sum_pH(Pplayers_[fd], graph.H[0][fd])
                 else:             Pplayers_[fd] = deepcopy(graph.H[0][fd])
-                Pplayers_[fd].node_ += [graph]  # add first layer graph (in the structure of [node [plevels_4]])
+                # Pplayers_[fd].node_ += [graph]  # add first layer graph (in the structure of [node [plevels_4]])
+            gblob.node_ += [graph]  # merge PPm and Ppd converted graph?
 
     for alt_blob in blob.adj_blobs[0]:  # adj_blobs = [blobs, pose]
         if not alt_blob.graph:
@@ -335,7 +336,7 @@ def PP2graph(PP, fseg, ifd=1):
                     H += [ptuple]; val += ptuple.val
             alt_ptuples = CpH(H=H, val=val)
             alt_players.H += [alt_ptuples]; alt_players.val += val
-    alt_pplayers = CpH(H=[alt_players], fork=1, val=alt_players.val)
+    alt_pplayers = CpH(H=[alt_players], forks=[1], val=alt_players.val)
     # no need to update alt_pplayers' fork？
 
     # graph: [CpH, pplayers_1, pplayers_2, _]
@@ -343,11 +344,11 @@ def PP2graph(PP, fseg, ifd=1):
     for ptuples, val in PP.players[0]:
         ptuples = CpH(H=deepcopy(ptuples), val=val)
         players.H += [ptuples]; players.val += val
-    pplayers = CpH(H=[players], fork=1, val=players.val)
+    pplayers = CpH(H=[players], forks=[1], val=players.val)
 
     x0=PP.x0; xn=PP.xn; y0=PP.y0; yn=PP.yn
     # update to center (x0,y0) and max_distance (xn,yn) in graph:
-    graph = CpH(H=[[None, pplayers, None, alt_pplayers]], fork=1, x0=(x0+xn)/2, xn=(xn-x0)/2, y0=(y0+yn)/2, yn=(yn-y0)/2)
+    graph = CpH(H=[[None, pplayers, None, alt_pplayers]], forks=[1], x0=(x0+xn)/2, xn=(xn-x0)/2, y0=(y0+yn)/2, yn=(yn-y0)/2)
     # no mpplayers and alt_mpplayers so assign as None?
 
     return graph  # 1st plevel fd is always der+?

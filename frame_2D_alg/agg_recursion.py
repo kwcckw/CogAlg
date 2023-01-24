@@ -102,6 +102,8 @@ def agg_recursion(root, fseg):  # compositional recursion in root.PP_, pretty su
                 # cross-graph agg+ comp graph:
                 if val > G_aves[fd] * ave_agg * (root.rdn) and len(graph_) > ave_nsub:
                     pplayers.rdn += 1  # estimate
+                    # all forks sharing a same root, and we change root.node_ in every fork? because we unpack G_ = root.node_ in every form_graph_
+                    # i think it's more relevant to pack node_ per fork or pplayers
                     agg_recursion(root, fseg=fseg)
 
 
@@ -262,8 +264,9 @@ def comp_pH(_pH, pH, fork=None):  # recursive unpack plevels ( pplayer ( players
     mpH, dpH = CpH(), CpH()  # new players in same top plevel?
 
     for i, (_spH, spH) in enumerate(zip(_pH.H, pH.H)):
-        fork = pH.fork[i] if len(pH.fork) else 0  # in plevels or players
-        _fork = _pH.fork[i] if len(_pH.fork) else 0
+        fork = pH.forks[i] if not isinstance(pH.forks, int) else pH.forks  # in plevels or players
+        _fork = _pH.forks[i] if not isinstance(_pH.forks, int) else _pH.forks
+
         if _fork == fork:
             if isinstance(_spH, Cptuple):
                 mtuple, dtuple = comp_ptuple(_spH, spH, fork)
@@ -376,7 +379,11 @@ def sum_pH(PH, pH, fneg=0):  # recursive unpack plevels ( pplayers ( players ( p
     else:
         if pH.node_:  # valid extuple
             PH.node_ += [node for node in pH.node_ if node not in PH.node_]
-            if pH.L: PH.L += pH.L  # not sure
+            if pH.L: 
+                if PH.L:  # not empty list
+                    PH.L += pH.L  # not sure
+                else:
+                    PH.L = pH.L
             PH.S += pH.S
             if PH.A:
                 if isinstance(PH.A, list):
