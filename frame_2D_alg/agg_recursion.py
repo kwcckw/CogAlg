@@ -51,7 +51,7 @@ class CpH(ClusterStructure):  # hierarchy of params + associated vars, potential
     forks = list  # None in H=plevels, m|d|am|ad list in H=pplayers, m|d list in H=players|ptuples
     val = int
     nval = int  # of open links: alt_graph_?
-    plevel = lambda: CpH()  # current fork, no H, pplayers ( players ( ptuples
+    plevels = list  # current fork, no H, pplayers ( players ( ptuples  (should be 4 pplayers here? So it is list?) 
     # plevel params:
     link_ = lambda: Clink_()  # evaluated external links (graph=node), replace alt_node if open, direct only
     node_ = list  # sub-node_ s concatenated within root node_
@@ -88,7 +88,7 @@ class CderG(ClusterStructure):  # graph links, within root node_
 
 def agg_recursion(root, fseg):  # compositional recursion in root.PP_, pretty sure we still need fseg, process should be different
 
-    for fork, pplayers in enumerate(root.H[0]):  # root graph 1st plevel forks: mpplayers, dpplayers, alt_mpplayers, alt_dpplayers
+    for fork, pplayers in enumerate(root.H[-1]):  # root graph 1st plevel forks: mpplayers, dpplayers, alt_mpplayers, alt_dpplayers
         if pplayers: # H: plevels ( forks ( pplayers ( players ( ptuples
 
             for G in pplayers.node_:  # init forks, rng+ H[1][fork][-1] is immutable, comp frng pplayers
@@ -221,12 +221,11 @@ def sum2graph_(graph_, root, fd, fork):  # sum node and link params into graph, 
             X0 += node.x0; Y0 += node.y0
         L = len(graph.Q); X0/=L; Y0/=L; Xn,Yn = 0,0
         # 2nd pass: extend and sum nodes in graph:
-        old_Levs = []  # wrong, no old_Levs?
+        plevels = []
         for node in graph.Q:  # CQ(Q=gnode_, val=val)], define max distance,A, sum plevels:
             Xn = max(Xn, (node.x0 + node.xn) - X0)  # box xn = x0+xn
             Yn = max(Yn, (node.y0 + node.yn) - Y0)
-            node_pplayers__ = [node.H[:-1],node.H][fd]  # plevels ( forks ( pplayers, skip last plevel if rng+
-            sum_pH_(old_Levs, node_pplayers__)
+            sum_pH_(plevels, node.plevels)
             new_lev = CpH(L=0,A=[0,0])
             link_ = [node.link_.Qm, node.link_.Qd][fd]  # fork link_
             # form quasi-gradient per node from variable-length links:
@@ -240,9 +239,13 @@ def sum2graph_(graph_, root, fd, fork):  # sum node and link params into graph, 
         for link in Glink_:
             sum_pH(new_Lev, [link.mplevel, link.dplevel][fd])
         # not revised:
-        Graph = CpH(plevel=new_Lev, H=[[[],[],[],[]]], node_=graph.Q, A=[Xn*2,Yn*2], x0=X0,xn=Xn,y0=Y0,yn=Yn)
-        sum_pH_(root.H[fork], old_Levs + [new_Lev])
-
+        Graph = CpH(plevels=plevels, H=[[[],[],[],[]]], node_=graph.Q, A=[Xn*2,Yn*2], x0=X0,xn=Xn,y0=Y0,yn=Yn)
+        
+        # not sure how to pack new_Lev into Graph.H in new scheme yet
+        sum_pH_(root.H[-1][fork], new_Lev)  # or just pack new_Lev?
+        
+        # probably not needed now
+        '''
         # old, replaced by the above?:
         for i, (pplayers_, root_pplayers_) in enumerate(zip(Graph.H, root.H)):
             if root_pplayers_[fork]:
@@ -250,6 +253,7 @@ def sum2graph_(graph_, root, fd, fork):  # sum node and link params into graph, 
             else:
                 root_pplayers_[fork] = deepcopy(pplayers_[fork])
 
+        '''
         Graph_ += [Graph]  # Cgraph, reduction: root fork += all link forks?
     return Graph_
 

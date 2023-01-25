@@ -294,21 +294,21 @@ def blob2graph(blob, fseg):
     PPm_ = blob.PPm_; PPd_ = blob.PPd_
     x0, xn, y0, yn = blob.box
     Pplayers_ = [None,None,None,None]
-    gblob = CpH(H = [Pplayers_], fork=1, rng=PPm_[0].rng, rdn=blob.rdn, x0=(x0+xn)/2, xn=(xn-x0)/2, y0=(y0+yn)/2, yn=(yn-y0)/2)
+    gblob = CpH(plevels = Pplayers_, H=[Pplayers_], fork=1, rng=PPm_[0].rng, rdn=blob.rdn, x0=(x0+xn)/2, xn=(xn-x0)/2, y0=(y0+yn)/2, yn=(yn-y0)/2)
     blob.graph = gblob  # update graph reference
     for fd, PP_ in enumerate([PPm_,PPd_]):  # if any
         for PP in PP_:
             graph = PP2graph(PP, fseg, fd)
-            if graph.H[0][fd]:  # if not empty dpplayers
-                if Pplayers_[fd]: sum_pH(Pplayers_[fd], graph.H[0][fd])
-                else:             Pplayers_[fd] = deepcopy(graph.H[0][fd])
-                # Pplayers_[fd].node_ += [graph]  # add first layer graph (in the structure of [node [plevels_4]])
-            gblob.node_ += [graph]  # merge PPm and Ppd converted graph?
+            if graph.plevels[fd]:  # if not empty dpplayers
+                if Pplayers_[fd]: sum_pH(Pplayers_[fd], graph.plevels[fd])
+                else:             Pplayers_[fd] = deepcopy(graph.plevels[fd])
+                Pplayers_[fd].node_ += [graph]  # add first layer graph (in the structure of [node [plevels_4]])
+
 
     for alt_blob in blob.adj_blobs[0]:  # adj_blobs = [blobs, pose]
         if not alt_blob.graph:
             blob2graph(alt_blob, fseg)  # convert alt_blob to graph
-        alt_mpplayers, alt_dpplayers = alt_blob.graph.H[0][:2]
+        alt_mpplayers, alt_dpplayers = alt_blob.graph.plevels[:2]
         if alt_mpplayers:  # alt_mpplayers is not empty
             if Pplayers_[2]: sum_pH(Pplayers_[2], alt_mpplayers)
             else:            Pplayers_[2] += [alt_mpplayers]
@@ -348,7 +348,9 @@ def PP2graph(PP, fseg, ifd=1):
 
     x0=PP.x0; xn=PP.xn; y0=PP.y0; yn=PP.yn
     # update to center (x0,y0) and max_distance (xn,yn) in graph:
-    graph = CpH(H=[[None, pplayers, None, alt_pplayers]], forks=[1], x0=(x0+xn)/2, xn=(xn-x0)/2, y0=(y0+yn)/2, yn=(yn-y0)/2)
+
+    plevels = [None, pplayers, None, alt_pplayers]
+    graph = CpH(plevels=plevels, H=plevels, forks=[1], x0=(x0+xn)/2, xn=(xn-x0)/2, y0=(y0+yn)/2, yn=(yn-y0)/2)
     # no mpplayers and alt_mpplayers so assign as None?
 
     return graph  # 1st plevel fd is always der+?
@@ -378,8 +380,8 @@ def agg_recursion_eval(blob, PP_t):
 
     # agg_recursion(converted_blob, fseg=fseg)  # this line is not needed?
 
-    M = converted_graph.H[0][0].val if converted_graph.H[0][0] else 0  # mpplayers.val (but m fork is always empty, so no value here?)
-    G = converted_graph.H[0][1].val if converted_graph.H[0][1] else 0  # dpplayers.val
+    M = converted_graph.plevels[0].val if converted_graph.plevels[0] else 0  # mpplayers.val (but m fork is always empty, so no value here?)
+    G = converted_graph.plevels[1].val if converted_graph.plevels[1] else 0  # dpplayers.val
     valt = [M, G]
     fork_rdnt = [1+(G>M), 1+(M>=G)]
     # should be single call of agg_recursion here？
