@@ -70,7 +70,15 @@ class Cgraph(ClusterStructure):  # params of single-fork node_ cluster per pplay
     uH = list  # up H: higher Levs feedback accum, H[i] is CpH, H[0] is summed current Lev
     forks = list  # m|d|am|ad per uH[i]
     val = int  # summed across wH+uH? nval of open links: alt_graph_?
-    pplayers = lambda: CpH  # current Lev with all associated params, not summed as in wH|uH
+    pplayers = lambda: CpH()  # current Lev with all associated params, not summed as in wH|uH
+    
+    # so now the params below need to be in graph or CpH?
+    link_ = lambda: Clink_()  
+    x0 = float
+    y0 = float  # center: box x0|y0 + L/2
+    xn = float  # max distance from center
+    yn = float
+    
 ''' 
     Gtree: plevels ( forks ( pplayers ( players ( ptuples 
     H: [lev0, lev1, lev2..], forks/lev in wH for feedback; input: H[0 + 1/der+ sub_graph_, in sub+?
@@ -89,7 +97,7 @@ class CderG(ClusterStructure):  # graph links, within root node_
 
 def agg_recursion(root, fseg):  # compositional recursion in root.PP_, pretty sure we still need fseg, process should be different
 
-    for fork, pplayers in enumerate(root.H[0]):  # root graph 1st plevel forks: mpplayers, dpplayers, alt_mpplayers, alt_dpplayers
+    for fork, pplayers in enumerate(root.wH[0]):  # root graph 1st plevel forks: mpplayers, dpplayers, alt_mpplayers, alt_dpplayers
         if pplayers: # H: plevels ( forks ( pplayers ( players ( ptuples
 
             for G in pplayers.node_:  # init forks, rng+ H[1][fork][-1] is immutable, comp frng pplayers
@@ -110,7 +118,8 @@ def agg_recursion(root, fseg):  # compositional recursion in root.PP_, pretty su
 
 def form_graph_(root, fork): # form plevel in agg+ or player in sub+, G is node in GG graph; der+: comp_link if fderG, from sub+
 
-    G_ = [root.root.cLev.node_,root.root.cLev.node_][fork%2]  # rng+: cluster higher root, der+: cluster current root
+    # we can just use wH or uH here? If we use uH, then there's no need to parse fork too
+    G_ = root.wH[-1][fork%2].node_  # rng+: cluster higher root, der+: cluster current root
     comp_G_(G_, fork=fork)  # cross-comp all graphs in rng, graphs may be segs | fderGs, root G += link, link.node
 
     mnode_, dnode_ = [], []  # Gs with >0 +ve fork links:
@@ -193,8 +202,8 @@ def comp_G_(G_, fork):  # cross-comp Gs (patterns of patterns): Gs, derGs, or se
             dx = _G.x0 - G.x0; dy = _G.y0 - G.y0  # center x0,y0
             distance = np.hypot(dy, dx)  # Euclidean distance between centers, sum in sparsity, proximity = ave-distance
             if distance < ave_distance * ((_G.val + G.val) / (2*sum(G_aves))):  # comp pplayers:
-
-                mplevel, dplevel = comp_pH(_G, G)  # no need for fork in comp_pH?
+                # compare only latest uH
+                mplevel, dplevel = comp_pH(_G.uH[-1], G.uH[-1])  # no need for fork in comp_pH?
                 derG = CderG(node0=_G,node1=G, mplevel=mplevel,dplevel=dplevel, S=distance, A=[dy,dx])
                 mval = mplevel.val; dval = dplevel.val
                 tval = mval + dval
@@ -215,19 +224,17 @@ def sum2graph_(graph_, root, fd, fork):  # sum node and link params into graph, 
         if graph.val < ave_G:  # form graph if val>min only
             continue
         Glink_= []; X0,Y0 = 0,0
-        UH = CpH
+        UH = []; WH = []
         # 1st pass: define center Y,X and Glink_:
         for node in graph.Q:
             Glink_ = list(set(Glink_ + [node.link_.Qm, node.link_.Qd][fd]))  # unique fork links over graph nodes
             X0 += node.x0; Y0 += node.y0
         L = len(graph.Q); X0/=L; Y0/=L; Xn,Yn = 0,0
         # 2nd pass: extend and sum nodes in graph:
-        uH = []  # old levs
+        
         for node in graph.Q:  # CQ(Q=gnode_, val=val)], define max distance,A, sum plevels:
             Xn = max(Xn, (node.x0 + node.xn) - X0)  # box xn = x0+xn
             Yn = max(Yn, (node.y0 + node.yn) - Y0)
-            node_pplayers__ = [node.H[:-1],node.H][fd]  # plevels ( forks ( pplayers, skip last plevel if rng+
-            sum_pH_(uH, node_pplayers__)
             new_lev = CpH(L=0,A=[0,0])
             link_ = [node.link_.Qm, node.link_.Qd][fd]  # fork link_
             # form quasi-gradient per node from variable-length links:
@@ -236,13 +243,17 @@ def sum2graph_(graph_, root, fd, fork):  # sum node and link params into graph, 
                 sum_pH(new_lev,der_lev)
                 new_lev.L+=1; new_lev.S+=derG.S; new_lev.A[0]+=derG.A[0]; new_lev.A[1]+=derG.A[1]
                 new_lev.node_ += [derG.node0] if node is derG.node1 else [derG.node1]  # redundant to node.link_
-            sum_pH(UH, uH)
+            sum_pH(UH, node.uH)  # actually there's no need to init uH  here? We just need to sum UH with node.uH
+            # sum_pH(WH, node.WH)  # not sure about this, do we need to sum node's WH into WH too?
             node.uH += [new_lev]
         new_Lev = CpH()
         for link in Glink_: sum_pH(new_Lev, [link.mplevel, link.dplevel][fd])
+        UH += [new_Lev]  # we need to add new_Lev into UH too right?
 
-        Graph = Cgraph(cLev=new_Lev, uH=UH, wH=[[[],[],[],[]]], node_=graph.Q, A=[Xn*2,Yn*2], x0=X0,xn=Xn,y0=Y0,yn=Yn)
-        sum_pH_(root.uH + [root.wH[0][fork]], UH + [new_Lev])  # sum combined Hs, u|w shift across levels
+        # cLev ould be just uH[-1]?
+        Graph = Cgraph(uH=UH, wH=[[[],[],[],[]]], node_=graph.Q, A=[Xn*2,Yn*2], x0=X0,xn=Xn,y0=Y0,yn=Yn)
+        sum_pH_(root.uH, UH )  # sum combined Hs, u|w shift across levels
+        sum_pH(root.wH[0][fork], new_Lev)
 
         Graph_ += [Graph]  # Cgraph, reduction: root fork += all link forks?
     return Graph_
