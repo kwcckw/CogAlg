@@ -106,7 +106,7 @@ def agg_recursion(root, fseg):  # compositional recursion in root.PP_, pretty su
         # intra-graph sub+ comp node:
         if val > ave_sub * root.rdn:  # same in blob, same base cost for both forks
             for graph in graph_: graph.rdn+=1  # estimate
-            sub_recursion_g(graph_, val, fseg, fork_ + [fd])  # subdivide graph_ by der+|rng+
+            sub_recursion_g(graph_, fseg, fork_ + [fd])  # subdivide graph_ by der+|rng+
         # cross-graph agg+ comp graph:
         if val > G_aves[fd] * ave_agg * root.rdn and len(graph_) > ave_nsub:
             for graph in graph_: graph.rdn+=1   # estimate
@@ -205,7 +205,8 @@ def comp_G_(G_):  # cross-comp Graphs, or segs inside PP?
             distance = np.hypot(dy, dx)  # Euclidean distance between centers, sum in sparsity, proximity = ave-distance
             if distance < ave_distance * ((_G.val + G.val) / (2*sum(G_aves))):
                 # comp pplayers_:
-                mplevel, dplevel = comp_pH_(_G.uH, G.uH)  # compare taken forks only, no fork in comp_pH_?
+                mplevel, dplevel, exts = comp_pH_(_G.uH, G.uH)  # compare taken forks only, no fork in comp_pH_?
+                # pack ext params such as dS, mS, dL, mL, dA, mA to derG? 
                 derG = CderG(node0=_G,node1=G, mplevel=mplevel,dplevel=dplevel, S=distance, A=[dy,dx])
                 mplevel.G = derG; dplevel.G = derG  # to sum ext params
                 mval = mplevel.val; dval = dplevel.val
@@ -240,6 +241,7 @@ def sum2graph_(graph_, root, fd, fork_):  # sum node and link params into graph,
         for G in graph.Q:  # CQ(Q=gnode_, val=val)], define new G and graph:
             Xn = max(Xn, (G.x0 + G.xn) - X0)  # box xn = x0+xn
             Yn = max(Yn, (G.y0 + G.yn) - Y0)
+            G_root = G.uH[-1].G; G.uH[-1].G=[]  # if we reset it here, and reassign it back at line 257 below, then G.uH[-1] will be remained the same
             sum_pH_(UH, G.uH)
             new_lev = CpH()  # add root: corresponding node in root graph?
             L=0; S=0; A=[0, 0]
@@ -249,8 +251,10 @@ def sum2graph_(graph_, root, fd, fork_):  # sum node and link params into graph,
                 der_lev = [derG.mplevel,derG.dplevel][fd]
                 sum_pH(new_lev,der_lev)
                 L+=1; S+=derG.S; A[0]+=derG.A[0]; A[1]+=derG.A[1]
-            uH = deepcopy(G.uH); G.uH[-1].G=[]
-            new_G = Cgraph( root=Graph, G=G, uH=uH+[new_lev], ufork__=G.ufork__+[fork_], node_ = copy(G.node_),
+            
+            wH = deepcopy(G.wH); wH[0][fork_[-1]] += [new_lev]  # we need to copy wH too? else it stays as empty list
+            uH = deepcopy(G.uH) + [new_lev]; G.uH[-1].G = G_root
+            new_G = Cgraph( root=Graph, G=G, uH=uH, wH=wH, ufork__=G.ufork__+[fork_], node_ = copy(G.node_),
                             val=G.val+new_lev.val, L=L,S=S,A=A, x0=G.x0,xn=G.xn,y0=G.y0,yn=G.yn)
             new_lev.G = new_G  # G is immutable
             node_ += [new_G]
@@ -265,17 +269,17 @@ def sum2graph_(graph_, root, fd, fork_):  # sum node and link params into graph,
 
 def comp_pH_(_pH_, pH_):  # comp H-> nested MpH, DpH
 
-    MpH, DpH = CpH(), CpH()  # lists of mpH,dpH, with implicit nesting
+    MpH, DpH, exts = CpH(), CpH(), []  # lists of mpH,dpH, with implicit nesting
 
     for _pH, pH in zip(_pH_, pH_):
         # MpH and DpH doesn't have L,S,A, so i think we need to return L, S, A and pack it in derG later?
         if pH.G:  # extuple is valid in graph: pplayer only? (this should be here because PH is pplayers here)
-            comp_ext(_pH, pH, MpH, DpH)
+            exts = comp_ext(_pH, pH, MpH, DpH)
 
         mpH, dpH = comp_pH(_pH, pH)
         sum_pH(MpH, mpH)
         sum_pH(DpH, dpH)
-    return MpH, DpH
+    return MpH, DpH, exts
 
 def comp_pH(_pH, pH):  # recursive unpack plevels ( pplayer ( players ( ptuples -> ptuple:
 
@@ -301,24 +305,24 @@ def comp_pH(_pH, pH):  # recursive unpack plevels ( pplayer ( players ( ptuples 
 def comp_ext(_spH, spH, mpH, dpH):
     L, S, A = len(spH.G.node_), spH.G.S, spH.G.A
     _L, _S, _A = len(_spH.G.node_), _spH.G.S, _spH.G.A
-    # below pending update
-    _sparsity = _S /(_L-1); sparsity = S /(L-1)  # average distance between connected nodes, single distance if derG
-    dpH.S = _sparsity - sparsity; dpH.val += dpH.S
-    mpH.S = min(_sparsity, sparsity); mpH.val += mpH.S
-    if spH.L:  # dLs
-        L = spH.L; _L = _spH.L
-    dpH.L = _L - L; dpH.val += dpH.L
-    mpH.L = ave_L - dpH.L; mpH.val += mpH.L
 
+    _sparsity = _S /(_L-1); sparsity = S /(L-1)  # average distance between connected nodes, single distance if derG
+    dS = _sparsity - sparsity; mS = min(_sparsity, sparsity)
+    
+    if spH.G.L:  # dLs
+        L = spH.G.L; _L = _spH.G.L
+    dL = _L - L; mL = ave_L - dL
+ 
     if _A and A:  # axis: dy,dx only for derG or high-aspect Gs, both val *= aspect?
         if isinstance(_A, list):
-            m, d = comp_angle(None, _A, A)
-            mpH.A = m; dpH.A = d
+            mA, dA = comp_angle(None, _A, A)
         else:  # scalar mA or dA
-            dpH.A = _A - A; mpH.A = min(_A, A)
+            dA = _A - A; mA = min(_A, A)
     else:
-        mpH.A = 1; dpH.A = 0  # no difference, matching low-aspect, only if both?
-    mpH.val += mpH.A; dpH.val += dpH.A
+        mA = 1; dA = 0  # no difference, matching low-aspect, only if both?
+    
+    return dS, mS, dL, mL, dA, mA
+        
 
 # rough redraft
 def sub_recursion_g(graph_, fseg, fork_, RVal=0, DVal=0):  # rng+: extend G_ per graph, der+: replace G_ with derG_
@@ -335,20 +339,20 @@ def sub_recursion_g(graph_, fseg, fork_, RVal=0, DVal=0):  # rng+: extend G_ per
             # rng+:
             Rval = sum([sub_mgraph.uH[-1].val for sub_mgraph in sub_mgraph_])
             if RVal + Rval > ave_sub * graph.rdn:  # >cost of call:
-                rval, dval = sub_recursion_g(sub_mgraph_, fseg=fseg, fork_=fork_+[0], RVal, DVal)
+                rval, dval = sub_recursion_g(sub_mgraph_, fseg=fseg, fork_=fork_+[0], RVal=Rval, DVal=DVal)
                 RVal += rval+dval
             # der+:
             Dval = sum([sub_dgraph.uH[-1].val for sub_dgraph in sub_dgraph_])
             if DVal + Dval > ave_sub * graph.rdn:
-                rval, dval = sub_recursion_g(sub_dgraph_, Dval, fseg=fseg, fork_=fork_+[1], RVal, DVal)
+                rval, dval = sub_recursion_g(sub_dgraph_, fseg=fseg, fork_=fork_+[1], RVal=Rval, DVal=DVal)
                 Dval += rval+dval
             RVal += Rval
             DVal += Dval
         # rough draft:
         else: # bottom-up feedback to append root.wH, starting from wH[-1], breadth-first
             for node in node_:
-                graph.uH[-1] += [node.wH[0]]
-                for Lev, lev in zip_longest(graph.wH, node.wH[1:], fillvalue=[]):
+                graph.uH += node.wH[0][fork_[-1]]  # each uH is list, so we need to use graph.uH+= instead of graph.uH[-1]+=
+                for Lev, lev in zip_longest(graph.wH, node.wH[1:], fillvalue=[]):  # what if there's only single lev in node? Then there will be no summation?
                     for Fork, fork in zip_longest(Lev, lev, fillvalue=[]):
                         sum_pH(Fork, fork)  # add new sub+ pplayers
 
