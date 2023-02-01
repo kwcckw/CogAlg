@@ -295,12 +295,10 @@ def blob2graph(blob, fseg):
     x0, xn, y0, yn = blob.box
 
     mpplayers = CpH(); dpplayers = CpH()
-    mwH = [[[mpplayers],[],[],[]]]
-    dwH = [[[],[dpplayers],[],[]]]
-    wHs = [mwH, dwH]
     muH = [mpplayers]; duH = [dpplayers]
-    mblob = Cgraph(wH = mwH, uH=muH, ufork__=[[0]], wforkn_=[1], rng=PPm_[0].rng, rdn=blob.rdn, x0=(x0+xn)/2, xn=(xn-x0)/2, y0=(y0+yn)/2, yn=(yn-y0)/2)
-    dblob = Cgraph(wH = dwH, uH=duH, ufork__=[[1]], wforkn_=[1], rng=PPd_[0].rng, rdn=blob.rdn, x0=(x0+xn)/2, xn=(xn-x0)/2, y0=(y0+yn)/2, yn=(yn-y0)/2)
+    uHs = [muH, duH]
+    mblob = Cgraph(wH = [[]], uH=muH, ufork__=[[0]], wforkn_=[1], rng=PPm_[0].rng, rdn=blob.rdn, x0=(x0+xn)/2, xn=(xn-x0)/2, y0=(y0+yn)/2, yn=(yn-y0)/2)
+    dblob = Cgraph(wH = [[]], uH=duH, ufork__=[[1]], wforkn_=[1], rng=PPd_[0].rng, rdn=blob.rdn, x0=(x0+xn)/2, xn=(xn-x0)/2, y0=(y0+yn)/2, yn=(yn-y0)/2)
     mpplayers.G = mblob; dpplayers.G = dblob
 
     blob.mgraph = mblob  # update graph reference
@@ -310,9 +308,11 @@ def blob2graph(blob, fseg):
     for fd, PP_ in enumerate([PPm_,PPd_]):  # if any
         for PP in PP_:
             graph = PP2graph(PP, fseg, fd)
-            sum_pH(wHs[fd][0][fd][0], graph.uH[0])
+            sum_pH_(uHs[fd], graph.uH)
             blobs[fd].node_ += [graph]  # add first layer graph (in the structure of [node [plevels_4]])
 
+    # if converted graph doesn't have wH, then here will be no alts too
+    '''
     for alt_blob in blob.adj_blobs[0]:  # adj_blobs = [blobs, pose]
         if not alt_blob.mgraph:
             blob2graph(alt_blob, fseg)  # convert alt_blob to graph
@@ -323,6 +323,7 @@ def blob2graph(blob, fseg):
         if alt_dpplayers:  # alt_dpplayers is not empty
             if dwH[0][3]: sum_pH(dwH[0][3], alt_dpplayers)
             else:         dwH[0][3] = deepcopy(alt_dpplayers)
+    '''
 
     return mblob, dblob
 
@@ -346,6 +347,7 @@ def PP2graph(PP, fseg, ifd=1):
             alt_players.H += [alt_ptuples]; alt_players.val += val
     alt_pplayers = CpH(H=[alt_players], forks=[ifd], val=alt_players.val)
     # no need to update alt_pplayers' fork？
+    # if there's no wH in converted graph, no need to compute alt_pplayers?
 
     # graph: [CpH, pplayers_1, pplayers_2, _]
     players = CpH()
@@ -356,9 +358,7 @@ def PP2graph(PP, fseg, ifd=1):
 
     x0=PP.x0; xn=PP.xn; y0=PP.y0; yn=PP.yn
     # update to center (x0,y0) and max_distance (xn,yn) in graph:
-    if ifd: wH = [[[], [pplayers], [], [alt_pplayers]]]
-    else:   wH = [[[pplayers], [], [alt_pplayers], []]]
-    graph = Cgraph(wH=wH, uH =[pplayers], ufork__=[[ifd]], wforkn_=[2], x0=(x0+xn)/2, xn=(xn-x0)/2, y0=(y0+yn)/2, yn=(yn-y0)/2)
+    graph = Cgraph(wH=[[]], uH =[pplayers], ufork__=[[ifd]], wforkn_=[1], x0=(x0+xn)/2, xn=(xn-x0)/2, y0=(y0+yn)/2, yn=(yn-y0)/2)
     pplayers.G = graph
     # no mpplayers and alt_mpplayers so assign as None?
 
@@ -387,8 +387,8 @@ def agg_recursion_eval(blob, PP_t):
             else:
                 converted_blobt = blob2graph(blob, fseg=fseg)  # convert root to graph
 
-    M = converted_graph.wH[0][0][0].val if converted_graph.wH[0][0] else 0  # mpplayers.val (but m fork is always empty, so no value here?)
-    G = converted_graph.wH[0][1][0].val if converted_graph.wH[0][1] else 0  # dpplayers.val
+    M = converted_blobt[0].val  # mpplayers.val (but m fork is always empty, so no value here?)
+    G = converted_blobt[1].val  # dpplayers.val
     valt = [M, G]
     fork_rdnt = [1+(G>M), 1+(M>=G)]
     # should be single call of agg_recursion here？

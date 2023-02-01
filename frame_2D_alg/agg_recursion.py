@@ -79,7 +79,7 @@ class CpH(ClusterStructure):  # hierarchy of params + associated vars
     # in xpplayers, each m|d:
     derL = int
     derS = int
-    derA = list
+    derA = int  # this should be scalar?
 '''
     Gtree: plevels ( forks ( pplayers ( players ( ptuples 
     H: [lev0, lev1, lev2..], forks/lev in wH for feedback; input: H[0 + 1/der+ sub_graph_, in sub+?
@@ -123,7 +123,8 @@ def agg_recursion(root, fseg):  # compositional recursion in root.PP_, pretty su
 def form_graph_(root, fork_): # form plevel in agg+ or sub-pplayer in sub+, G is node in GG graph
 
     G_ = root.node_
-    comp_G_(G_)  # cross-comp all graph nodes in rng, graphs may be segs | fderGs, root G += link, link.node
+    # not sure is there a better way yet
+    comp_G_(G_, G_)  # cross-comp all graph nodes in rng, graphs may be segs | fderGs, root G += link, link.node
 
     mnode_, dnode_ = [], []  # Gs with >0 +ve fork links:
     for G in G_:
@@ -195,17 +196,17 @@ def add_node_layer(gnode_, G_, G, fd, val):  # recursive depth-first gnode_+=[_G
 
     return val
 
-def comp_G_(G_):  # cross-comp Graphs, or segs inside PP?
+def comp_G_(_G_, G_):  # cross-comp Graphs, or segs inside PP?
 
-    for i, _G in enumerate(G_):  # G_ is node_ of root graph
-        for G in G_[i+1:]:  # compare each G to other Gs in rng, bilateral link assign, val accum:
+    mxpplayers_, dxpplayers_ = [], []
+    for _G in G_:  # G_ is node_ of root graph
+        for G in G_:  # compare each G to other Gs in rng, bilateral link assign, val accum:
             # test if lev pair was compared in prior rng+, add frng to skip?:
-            if G in [node for link in _G.link_.Q for node in [link.node0,link.node1]]:
+            if G in [node for link in _G.link_.Q for node in [link.node0,link.node1]] or _G is G:
                 continue
             dx = _G.x0 - G.x0; dy = _G.y0 - G.y0  # center x0,y0
             distance = np.hypot(dy, dx)  # Euclidean distance between centers, sum in sparsity, proximity = ave-distance
             if distance < ave_distance * ((_G.val + G.val) / (2*sum(G_aves))):
-
                 mxpplayers, dxpplayers = comp_G(_G, G)  # compare uH(pplayers_), LSA, node_,link_? no fork in comp_pH_?
                 derG = CderG(node0=_G,node1=G, mplevel=mxpplayers,dplevel=dxpplayers, S=distance, A=[dy,dx])
                 mval = mxpplayers.val; dval = dxpplayers.val
@@ -219,6 +220,9 @@ def comp_G_(G_):  # cross-comp Graphs, or segs inside PP?
                     _G.link_.Qd += [derG]; _G.link_.dval += dval  # no mval for Qd
                     G.link_.Qd += [derG]; G.link_.dval += dval
 
+                mxpplayers_ += [mxpplayers]; dxpplayers_ += [dxpplayers] 
+
+    return mxpplayers_, dxpplayers_
 
 def sum2graph_(graph_, root, fd, fork_):  # sum node and link params into graph, plevel in agg+ or player in sub+
 
@@ -268,40 +272,68 @@ def sum2graph_(graph_, root, fd, fork_):  # sum node and link params into graph,
 def comp_G(_G, G):  # comp H-> nested MpH, DpH
 
     MpH, DpH = CpH(), CpH()  # lists of mpH,dpH, with implicit nesting
-    link_, node_, L, S, A = G.link_, G.node_, len(G.node_), G.S, G.A
-    _link_,_node_,_L,_S,_A = G.link_, G.node_, len(_G.node_), _G.S, _G.A
+    link_, node_, L, S, A = G.link_.Q, G.node_, len(G.node_), G.S, G.A
+    _link_,_node_,_L,_S,_A = G.link_.Q, G.node_, len(_G.node_), _G.S, _G.A
     # add other params?
     # draft:
     Val = _G.val+G.val
     if Val * (len(_link_)+len(link_)) > ave_G:
         mlink_, dlink_ = comp_derG_(_link_, link_)  # new function?
-        mlink_val, dlink_val = mlink_.val, dlink_.val
+        mlink_val = sum([mlink.val for mlink in mlink_])
+        dlink_val = sum([dlink.val for dlink in dlink_])
     else:
         mlink_val, dlink_val = 0,0
+    MpH.val += mlink_val; DpH.val += dlink_val
+    
     if Val * (len(_node_)+len(node_)) > ave_G:
-        mnode_, dnode_ = comp_G_(_node_, node_)  # not sure about fork_ here
-        mnode_val, dnode_val = mnode_.val, dnode_.val
+        mxpplayers_, dxpplayers_ = comp_G_(_node_, node_)  # not sure about fork_ here
+        mnode_val = sum([mxpplayers.val for mxpplayers in mxpplayers_])  # we just need their val here? If yes we can just return Val
+        dnode_val = sum([dxpplayers.val for dxpplayers in dxpplayers_])
     else:
         mnode_val, dnode_val = 0,0
+    MpH.val += mnode_val; DpH.val += dnode_val
+        
+    # pack below into comp_ext?
     _sparsity = _S /(_L-1); sparsity = S /(L-1)  # average distance between connected nodes, single distance if derG
     dS = _sparsity - sparsity; mS = min(_sparsity, sparsity)
+    MpH.derS += mS; DpH.derS += dS
     if G.L:  # dLs
         L = G.L; _L = _G.L
     dL = _L - L; mL = ave_L - dL
+    MpH.derL += mL; DpH.derL += dL
     if _A and A:  # axis: dy,dx only for derG or high-aspect Gs, both val *= aspect?
         if isinstance(_A, list): mA, dA = comp_angle(None, _A, A)
         else: dA = _A - A; mA = min(_A, A)  # scalar mA or dA
     else:
         mA = 1; dA = 0  # no difference, matching low-aspect, only if both?
+    MpH.derA += mA; DpH.derA += dA
 
     # for each der above: pack and sum all vals in MpH, DpH
-
+    for _lev, lev in zip(_G.uH, G.uH):
+        mpH, dpH = comp_pH(_lev, lev)
+        sum_pH(MpH, mpH); sum_pH(DpH, dpH)
+        
+    '''
     for _pH, pH in zip(_G.pH_, G.pH_):
         mpH, dpH = comp_pH(_pH, pH)
         sum_pH(MpH, mpH)
         sum_pH(DpH, dpH)
+    '''
 
     return MpH, DpH
+
+
+# very initial draft
+def comp_derG_(_derG_, derG_):
+    
+    mlink_, dlink_ = [], []
+    for _derG in _derG_:
+        for derG in derG_:
+            mmpH, dmpH = comp_pH(_derG.mplevel, derG.mplevel)
+            mdpH, ddpH = comp_pH(_derG.dplevel, derG.dplevel)
+            mlink_ += [mmpH, dmpH]; dlink_ += [mdpH, ddpH]
+            
+    return mlink_, dlink_
 
 def comp_pH(_pH, pH):  # recursive unpack plevels ( pplayer ( players ( ptuples -> ptuple:
 
