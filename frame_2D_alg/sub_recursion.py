@@ -354,7 +354,7 @@ def PP2graph(PP, fseg, ifd=1):
     alt_Graph = Cgraph(wH=[], uH =[[alt_pplayers]], ufd__=[[ifd]], wfdn_=[1], x0=(x0+xn)/2, xn=(xn-x0)/2, y0=(y0+yn)/2, yn=(yn-y0)/2)
     alt_pplayers.G = alt_Graph
     graph = Cgraph(wH=[], uH =[[pplayers]], ufd__=[[ifd]], wfdn_=[1], alt_Graph=alt_Graph, x0=(x0+xn)/2, xn=(xn-x0)/2, y0=(y0+yn)/2, yn=(yn-y0)/2)
-    pplayers.G = graph  
+    pplayers.G = graph
     # update alt_Graph.alt_Graph with graph?
 
     return graph  # 1st plevel fd is always der+?
