@@ -103,10 +103,11 @@ class CderG(ClusterStructure):  # graph links, within root node_
 def agg_recursion(root, fseg):  # compositional recursion in root.PP_, pretty sure we still need fseg, process should be different
 
     fd_ = root.ufds_[0]  # taken fork, H: plevels ( forks ( pplayers ( players ( ptuples
-    root.wH.insert(0,[Cgraph,Cgraph]); root.wfds_.insert(0, 2)  # to sum feedback
+    # lev should be CpH?
+    root.wH.insert(0,[CpH(),CpH()]); root.wfds_.insert(0, 2)  # to sum feedback
     for G in root.node_:
         # nodes add 2 roots (replace G.root with uH?):
-        G.uH.insert(0,[Cgraph,Cgraph]); G.wfds_.insert(0, 2)  # n forks = wfds * 2
+        G.uH.insert(0,[CpH(),CpH()]); G.wfds_.insert(0, 2)  # n forks = wfds * 2
 
     mgraph_, dgraph_ = form_graph_(root, fd_, fsub=0)  # node.H cross-comp and graph clustering, comp frng pplayers
 
@@ -254,32 +255,35 @@ def sum2graph_(graph_, root, fd, fd_, fsub):  # sum node and link params into gr
             Yn = max(Yn, (G.y0 + G.yn) - Y0)
             new_lev = CpH()
             L=0; S=0; A=[0, 0]
-            if isinstance(G.uH[-1], list):
-                root_G=[]; for guH in G.uH[0]: root_G.append(guH.G); guH.G=[]
-            else: root_G = G.uH[-1].G; G.uH[-1].G=[]  # reassign after deepcopy(G.uH)
-            sum_pH_(UH, G.uH)
-            sum_pH_(WH, G.WH)
             link_ = [G.link_.Qm, G.link_.Qd][fd]  # fork link_
             # form quasi-gradient per node from variable-length links:
             for derG in link_:
                 der_lev = [derG.mplevel,derG.dplevel][fd]
-                sum_pH(new_lev,der_lev)
+                if isinstance(G.uH[0],list):
+                    sum_pH(G.uH[0][fd],der_lev)  # we added new CpH in agg+, we need to add it in sub+ too?
+                else:
+                    sum_pH(G.uH[0],der_lev)
                 L+=1; S+=derG.S; A[0]+=derG.A[0]; A[1]+=derG.A[1]
-            if isinstance(G.uH[-1], list):
-                uH = deepcopy(G.uH); uH[0]+=[new_lev]; for guH, G in zip(G.uH[0], root_G): guH.G = G  # reassign G
-            else: uH = deepcopy(G.uH) + [new_lev]; G.uH[-1].G = root_G
-
-            new_G = Cgraph( root=Graph, G=G, uH=uH, wH=copy(G.wH), ufds_=G.ufds_+[fd_], node_ = copy(G.node_),
+                
+            new_G = Cgraph( root=Graph, G=G, uH=copy(G.uH), wH=copy(G.wH), ufds_=G.ufds_+[fd_], node_ = copy(G.node_),
                             val=G.val+new_lev.val, L=L,S=S,A=A, x0=G.x0,xn=G.xn,y0=G.y0,yn=G.yn)
             new_lev.G = new_G  # G is immutable
             node_ += [new_G]
+            sum_pH_(UH, new_G.uH)
+            sum_pH_(WH, new_G.wH)  # this shouldn't be needed?
 
         new_Lev = CpH(G=Graph, val=graph.val, A=[Xn*2,Yn*2], x0=X0,xn=Xn,y0=Y0,yn=Yn)
         for link in Glink_: sum_pH(new_Lev, [link.mplevel, link.dplevel][fd])
         if isinstance(UH[-1], list):
-            WH[0] += [new_Lev]; Graph.val = sum([lev.val for lev in UH[0]])
+            WH.insert(0, [new_Lev])
         else:
-            WH.insert(0,new_Lev); Graph.val = sum([lev.val for lev in UH])
+            WH.insert(0,new_Lev)
+               
+        for lev in UH:
+            if isinstance(lev, list):
+                Graph.val += sum([uH.val for uH in lev])
+            else:
+                Graph.val += lev.val
 
         Graph_ += [Graph]
     return Graph_
@@ -379,9 +383,9 @@ def sub_recursion_g(graph_, fseg, fd_, RVal=0, DVal=0):  # rng+: extend G_ per g
         else:
             Gval = graph.uH[-1].val
         if Gval > G_aves[fd_[-1]] and len(node_) > ave_nsub:
-            graph.wH = [[[],[]]]; graph.wfdn_ = [1]  # init, then extended through feedback, n fds = wforkn * 2
+            graph.wH = [[[],[]]]; graph.wfds_ = [1]  # init, then extended through feedback, n fds = wforkn * 2
             for G in node_:
-                G.wH = [[[],[]]]; G.wfdn_ = [1]  # same format
+                G.wH = [[[],[]]]; G.wfds_ = [1]  # same format
             # cross-comp and clustering cycle:
             sub_mgraph_, sub_dgraph_ = form_graph_(graph, fd_, fsub=1)
             # rng+:
@@ -443,7 +447,19 @@ def sum_pH_(PH_, pH_, fneg=0):  # we need another function to sum graphs?
             if PH:
                 if isinstance(pH, list): sum_pH_(PH, pH, fneg)
                 else:                    sum_pH(PH, pH, fneg)
-            else: PH_ += [deepcopy(pH)]
+            else:
+                if isinstance(pH, list):  # pH is a tuple of 2
+                    PH = []
+                    for spH in pH:
+                        if spH: # non empty list
+                            spH_G = spH.G; spH.G = []
+                            PH += [deepcopy(spH)]
+                            spH.G = spH_G; PH[-1].G = spH_G
+                    PH_.append(PH)  
+                else:
+                    pH_G = pH.G; pH.G = []
+                    PH_ += [deepcopy(pH)]
+                    pH.G = pH_G; PH_[-1].G = pH_G
 
 def sum_pH(PH, pH, fneg=0):  # recursive unpack plevels ( pplayers ( players ( ptuples, no accum across fd: matched in comp_pH
 
