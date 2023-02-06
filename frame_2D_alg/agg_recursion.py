@@ -68,6 +68,7 @@ class Cgraph(ClusterStructure):  # params of single-fork node_ cluster per pplay
     pplayers = lambda: CpH()  # summed node_ pplayers
     rdn = int  # recursion count + irdn, for eval
     rng = lambda: 1  # not for alt_graphs?
+    fd = int  # we still need fd per lev here?
     # extuple if S:
     L = list  # der L, init empty
     S = int  # sparsity: ave len link
@@ -253,24 +254,26 @@ def sum2graph_(graph_, fd, fds, fsub):  # sum node and link params into graph, p
                 sum_pH(new_lev,der_lev)  # also other lev params?
                 L+=1; S+=derG.S; A[0]+=derG.A[0]; A[1]+=derG.A[1]
             # draft, lev are currently not correct:
-            levfd = sum_pH(G.uH[-1][fd].pplayers, G.pplayers)
+            levfd = sum_pH(G.uH[0].H[fd].pplayers, G.pplayers)
             # G.uH[-2][fd].pplayers was new_lev? or higher levs are in G.G, etc?
-            new_G = Cgraph( pplayers=new_lev, G=G, wH=copy(G.wH), uH=copy(G.uH), # uH,wH are wrong
+            new_G = Cgraph( pplayers=new_lev, G=G, wH=copy(G.wH), uH=copy(G.uH), fd=fd, # uH,wH are wrong
                             node_=copy(G.node_), val=G.val+new_lev.val, L=L,S=S,A=A, x0=G.x0,xn=G.xn,y0=G.y0,yn=G.yn)
-            sum_pH(new_G.uH[-1][fd].pplayers, levfd)
+            # sum_pH(new_G.uH[-1].H[fd].pplayers, levfd)  # this line is not needed? This is same as summing G.pplayers into new_G.uH[-1].H[fd].pplayers
             node_ += [new_G]
 
-        sum_pH(UH[-1][fd].pplayers, Pplayers)  # or full sum_G, in feedback because Graph.val may call sub+?
+        sum_pH(UH[0].H[fd].pplayers, Pplayers)  # or full sum_G, in feedback because Graph.val may call sub+?
         new_Lev = CpH(A=[Xn*2,Yn*2], x0=X0,xn=Xn,y0=Y0,yn=Yn)
         for link in Glink_: sum_pH(new_Lev, [link.mplevel,link.dplevel][fd])
+
+        Graph = Cgraph(pplayers=new_Lev, node_=node_, uH=UH, wH=WH)
+        for node in Graph.node_: node.uH[-1].H[fd] = Graph  # assign root
+
         # if val > alt_val: rdn += 1+len_Q?
         Val = Pplayers.val  # init
         Val += sum([lev.val for lev in UH]) / sum([lev.rdn for lev in UH])
-        Val += sum([lev.val for lev in WH]) / sum([lev.rdn for lev in WH])
-        Val += Graph.alt_Graph.val / 1+(Graph.alt_Graph.val>Val)  # rdn=2 if lesser
-
-        Graph = Cgraph(pplayers=new_Lev, node_=node_, uH=UH, wH=WH),
-        for node in Graph.node_: node.uH[-1][fd] = Graph  # assign root
+        Val += sum([lev.val for lev in WH]) / sum([lev.rdn for lev in WH]) 
+        Val += Graph.alt_Graph.val / 1+(Graph.alt_Graph.val>Val) if Graph.alt_Graph else 0  # rdn=2 if lesser (but this newly initialized Graph shouldn't have any alt_Graph yet?)
+        Graph.val = Val
 
         Graph_ += [Graph]
     return Graph_
@@ -313,13 +316,12 @@ def comp_G(_G, G, fsub):  # comp H-> nested MpH, DpH
         mA = 1; dA = 0  # no difference, matching low-aspect, only if both?
     MpH.derA += mA; DpH.derA += dA
 
-    for _g_, g_ in zip(_G.uH, G.uH):
-        for _g in _g_:
-            if not _g: continue
-            for g in g_:
-                if not g: continue
-                mpH, dpH = comp_pH(_g.pplayers, g.pplayers)
-                sum_pH(MpH, mpH); sum_pH(DpH, dpH)
+    for _forks, forks in zip(_G.uH, G.uH):
+        for _g in _forks.H:
+            for g in forks.H:
+                if _g.fd == g.fd:  # compare only same fork's gs?
+                    mpH, dpH = comp_pH(_g.pplayers, g.pplayers)
+                    sum_pH(MpH, mpH); sum_pH(DpH, dpH)
 
     return MpH, DpH
 
@@ -391,13 +393,15 @@ def sub_recursion_g(graph_, fseg, fd_, RVal=0, DVal=0):  # rng+: extend G_ per g
 def feedback(graph, node_, fd_):  # bottom-up feedback to append root.uH[-1], root.wH, breadth-first
 
     for node in node_:
-       # so both graph and node's uH and wH could be list or graph, so we need check all of them and sum respectively?
-       if node.wH[0][fd_[-1]]:
-            sum_pH_(graph.uH[-1], node.wH[0][fd_[-1]])
+        if node.wH:
+            sum_pH(graph.uH[0].H[fd_[-1]].pplayers, node.wH[0].H[fd_[-1]].pplayers)
             # the rest of node.wH maps to graph.wH:
-            for Lev, lev in zip_longest(graph.wH, node.wH[1:], fillvalue=[]):
-                for Fork, fork in zip_longest(Lev, lev, fillvalue=[]):
-                    sum_pH(Fork, fork)  # add new sub+ pplayers
+            sum_pH_(graph.wH, node.wH[1:])
+        '''
+        for Lev, lev in zip_longest(graph.wH, node.wH[1:], fillvalue=[]):
+            for Fork, fork in zip_longest(Lev, lev, fillvalue=[]):
+                sum_pH(Fork, fork)  # add new sub+ pplayers
+        '''
 
 
 def add_alt_graph_(graph_t):  # mgraph_, dgraph_
@@ -425,47 +429,44 @@ def add_alt_graph_(graph_t):  # mgraph_, dgraph_
 
 
 def sum_pH_(PH_, pH_, fneg=0):
-
-    for PH, pH in zip_longest(PH_, pH_, fillvalue=[]):
-        if pH:
-            if PH:
-                if isinstance(pH, list): sum_pH_(PH, pH, fneg)
-                else:                    sum_pH(PH.pplayers, pH.pplayers, fneg)
+    for H, h in zip_longest(PH_, pH_, fillvalue=[]):  # each H is CpH
+        if h:
+            if H:
+                for G, g in zip_longest(H.H, h.H, fillvalue=[]):  # # each G is Cgraph
+                    if g:
+                        if G:    
+                            sum_pH(G.pplayers, g.pplayers, fneg)
+                        else:
+                            H.H += [deepcopy(g)]  # copy and pack single fork G 
             else:
-                PH_ += [deepcopy(pH)]
-
+                PH_ += [deepcopy(h)]  # copy and pack CpH
 
 def sum_pH(PH, pH, fneg=0):  # recursive unpack plevels ( pplayers ( players ( ptuples, no accum across fd: matched in comp_pH
 
     # add sum rdn, map by fds?
 
-    if isinstance(pH, list):
-        if isinstance(PH, CpH):  # convert PH to list if pH is list
-            PH = []
-        sum_pH_(PH, pH)
-    else:
-        if pH.G and PH.G:  # valid extuple
-            if not isinstance(pH.G, CderG) and pH.G.L:  # derG doesn't have L
-                if pH.G.L:
-                    if PH.G.L: PH.G.L += pH.G.L
-                    else:      PH.G.L = pH.G.L
-            PH.G.S += pH.G.S
-            if PH.G.A:
-                if isinstance(PH.G.A, list):
-                    PH.G.A[0] += pH.G.A[0]; PH.G.A[1] += pH.G.A[1]
-                else:
-                    PH.G.A += pH.G.A
-            else: PH.G.A = copy(pH.G.A)
+    if pH.G and PH.G:  # valid extuple
+        if not isinstance(pH.G, CderG) and pH.G.L:  # derG doesn't have L
+            if pH.G.L:
+                if PH.G.L: PH.G.L += pH.G.L
+                else:      PH.G.L = pH.G.L
+        PH.G.S += pH.G.S
+        if PH.G.A:
+            if isinstance(PH.G.A, list):
+                PH.G.A[0] += pH.G.A[0]; PH.G.A[1] += pH.G.A[1]
+            else:
+                PH.G.A += pH.G.A
+        else: PH.G.A = copy(pH.G.A)
 
-        for SpH, spH in zip_longest(PH.H, pH.H, fillvalue=None):  # assume same forks
-            if SpH:
-                if spH:  # pH.H may be shorter than PH.H
-                    if isinstance(spH, Cptuple):  # PH is ptuples, SpH_4 is ptuple
-                        sum_ptuple(SpH, spH, fneg=fneg)
-                    else:  # PH is players, H is ptuples
-                        sum_pH(SpH, spH, fneg=fneg)
+    for SpH, spH in zip_longest(PH.H, pH.H, fillvalue=None):  # assume same forks
+        if SpH:
+            if spH:  # pH.H may be shorter than PH.H
+                if isinstance(spH, Cptuple):  # PH is ptuples, SpH_4 is ptuple
+                    sum_ptuple(SpH, spH, fneg=fneg)
+                else:  # PH is players, H is ptuples
+                    sum_pH(SpH, spH, fneg=fneg)
 
-            else:  # PH.H is shorter than pH.H, extend it:
-                PH.H += [deepcopy(spH)]
-        PH.val += pH.val
+        else:  # PH.H is shorter than pH.H, extend it:
+            PH.H += [deepcopy(spH)]
+    PH.val += pH.val
     return PH
