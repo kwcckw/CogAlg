@@ -247,20 +247,22 @@ def sum2graph_(graph_, fd, fds, fsub):  # sum node and link params into graph, p
             sum_pH_(UH, G.uH); sum_pH_(WH, G.wH)
             link_ = [G.link_.Qm, G.link_.Qd][fd]  # fork link_
             # form quasi-gradient per node from variable-length links:
-            new_lev = CpH(root=G)
+            new_lev = CpH(root=G, fds=[fd])
             for derG in link_:
                 der_lev = [derG.mplevel,derG.dplevel][fd]
                 # draft:
-                der_lev.S += derG.S; der_lev.A[0]+=derG.A; der_lev.A[1]+=derG.A[1]
+                der_lev.derS += derG.S; der_lev.derA += sum(derG.A)
                 sum_pH(new_lev,der_lev)
-            node_ += [new_lev]
+            node_ += [Cgraph(pplayers=new_lev, uH=[CpH(H=[Cgraph(), Cgraph()])])]  # node should be graph? 
 
         sum_pH(UH[-1].H[fd].pplayers, Pplayers)  # or full sum_G, in feedback because Graph.val may call sub+?
         new_Lev = CpH(A=[Xn*2,Yn*2], x0=X0,xn=Xn,y0=Y0,yn=Yn)
         for link in Glink_: sum_pH(new_Lev, [link.mplevel,link.dplevel][fd])
 
         Graph = Cgraph(pplayers=new_Lev, node_=node_, uH=UH, wH=WH)
-        for node in Graph.node_: node.uH[-1].H[fd] = Graph  # assign root, or sum?
+        for node in Graph.node_: node.uH[-1].H[fd] = Graph  # assign root, or sum? Both should be the same if we init uH in line 257 above
+        # getting zero division here due to UH's lev didn't have any rdn value
+        # we didn't increase lev's rdn anywhere now, so we need to add it to node's pplayers.rdn at every sub+ and agg+?
         Graph.val = Pplayers.val \
                   + sum([lev.val for lev in UH]) / sum([lev.rdn for lev in UH]) \
                   + sum([lev.val for lev in WH]) / sum([lev.rdn for lev in WH]) # if val > alt_val: rdn += 1+len_Q?
@@ -350,10 +352,7 @@ def sub_recursion_g(graph_, fseg, fd_, RVal=0, DVal=0):  # rng+: extend G_ per g
 
     for graph in graph_:
         node_ = graph.node_
-        if isinstance(graph.uH[-1], list):
-            Gval = sum([uH.val for uH in graph.uH[-1]])
-        else:
-            Gval = graph.uH[-1].val
+        Gval = graph.pplayers.val
         if Gval > G_aves[fd_[-1]] and len(node_) > ave_nsub:
             graph.wH.insert(0, CpH(H=[Cgraph(), Cgraph()]))  # to sum feedback from new graphs
             for G in graph.node_:
@@ -361,12 +360,12 @@ def sub_recursion_g(graph_, fseg, fd_, RVal=0, DVal=0):  # rng+: extend G_ per g
             # cross-comp and clustering cycle:
             sub_mgraph_, sub_dgraph_ = form_graph_(graph, fd_, fsub=1)
             # rng+:
-            Rval = sum([sub_mgraph.uH[-1].val for sub_mgraph in sub_mgraph_])
+            Rval = sum([sub_mgraph.pplayers.val for sub_mgraph in sub_mgraph_])
             if RVal + Rval > ave_sub * graph.rdn:  # >cost of call:
                 rval, dval = sub_recursion_g(sub_mgraph_, fseg=fseg, fd_=fd_+[0], RVal=Rval, DVal=DVal)
                 RVal += rval+dval
             # der+:
-            Dval = sum([sub_dgraph.uH[-1].val for sub_dgraph in sub_dgraph_])
+            Dval = sum([sub_dgraph.pplayers.val for sub_dgraph in sub_dgraph_])
             if DVal + Dval > ave_sub * graph.rdn:
                 rval, dval = sub_recursion_g(sub_dgraph_, fseg=fseg, fd_=fd_+[1], RVal=Rval, DVal=DVal)
                 Dval += rval+dval
@@ -432,19 +431,18 @@ def sum_pH_(PH_, pH_, fneg=0):
 def sum_pH(PH, pH, fneg=0):  # recursive unpack plevels ( pplayers ( players ( ptuples, no accum across fd: matched in comp_pH
 
     # add sum rdn, map by fds?
-
-    if pH.G and PH.G:  # valid extuple
-        if not isinstance(pH.G, CderG) and pH.G.L:  # derG doesn't have L
-            if pH.G.L:
-                if PH.G.L: PH.G.L += pH.G.L
-                else:      PH.G.L = pH.G.L
-        PH.G.S += pH.G.S
-        if PH.G.A:
-            if isinstance(PH.G.A, list):
-                PH.G.A[0] += pH.G.A[0]; PH.G.A[1] += pH.G.A[1]
+    if pH.root and PH.root:  # valid extuple
+        if not isinstance(pH.root, CderG) and pH.root.L:  # derG doesn't have L
+            if pH.root.L:
+                if PH.root.L: PH.root.L += pH.root.L
+                else:         PH.root.L = pH.root.L
+        PH.root.S += pH.root.S
+        if PH.root.A:
+            if isinstance(PH.root.A, list):
+                PH.root.A[0] += pH.root.A[0]; PH.root.A[1] += pH.root.A[1]
             else:
-                PH.G.A += pH.G.A
-        else: PH.G.A = copy(pH.G.A)
+                PH.root.A += pH.root.A
+        else: PH.root.A = copy(pH.root.A)
 
     for SpH, spH in zip_longest(PH.H, pH.H, fillvalue=None):  # assume same forks
         if SpH:
@@ -457,4 +455,5 @@ def sum_pH(PH, pH, fneg=0):  # recursive unpack plevels ( pplayers ( players ( p
         else:  # PH.H is shorter than pH.H, extend it:
             PH.H += [deepcopy(spH)]
     PH.val += pH.val
+    PH.rdn += pH.rdn  # how about nval?
     return PH
