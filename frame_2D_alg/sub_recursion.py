@@ -386,6 +386,6 @@ def agg_recursion_eval(blob, PP_t):
     for fd, PP_ in enumerate(PP_t):  # PPm_, PPd_
         if (valt[fd] > PP_aves[fd] * ave_agg * (blob.rdn+1) * fork_rdnt[fd]) \
             and len(PP_) > ave_nsub : # and converted_blob[0].alt_rdn < ave_overlap:  # we don't have alt rdn now?
-                
+
             blob.rdn += 1  # estimate
             agg_recursion(converted_blobt[fd], fseg=fseg)
