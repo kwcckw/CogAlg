@@ -69,7 +69,7 @@ class Cgraph(ClusterStructure):  # params of single-fork node_ cluster per pplay
     # extuple if S:
     L = list  # der L, init empty
     S = int  # sparsity: ave len link
-    A = list  # area and axis: Dy,Dx
+    A = lambda: [0, 0]  # area and axis: Dy,Dx
     x0 = float
     y0 = float  # center: box x0|y0 + L/2
     xn = float  # max distance from center
@@ -243,9 +243,11 @@ def sum2graph_(graph_, fd, fds, fsub):  # sum node and link params into graph, p
             if fsub:
                 node_+=[Cgraph(G=G)]  # other params in final G, no need to copy
         Graph = Cgraph(A=[Xn*2,Yn*2], x0=X0,xn=Xn,y0=Y0,yn=Yn)
+        # if fsub, no new lev for node?
         if not fsub:
             for node in graph.Q:
-                node.uH[fd] = Cgraph(pplayers=node.pplayers)  # add new_lev, other params?
+                new_lev =  CpH(H=[Cgraph(),Cgraph(pplayers=node.pplayers)] if fd else [Cgraph(pplayers=node.pplayers), Cgraph()], fds=[fd])
+                node.uH[-1] = new_lev  # add new_lev, other params?
                 node.pplayers=[]  # fill in 3rd pass, Graph should not sum redundant links
                 sum_G(Graph, node)
             node_ = graph.Q
@@ -256,11 +258,10 @@ def sum2graph_(graph_, fd, fds, fsub):  # sum node and link params into graph, p
         for G in Graph.node_:
             link_ = [G.link_.Qm, G.link_.Qd][fd]  # fork link_
             for derG in link_:  # form quasi-gradient of node' variable-length links, not added to Graph
-                sum_pH(G.pplayers, [derG.mplevel,derG.dplevel][fd])
+                if G.pplayers: sum_pH(G.pplayers, [derG.mplevel,derG.dplevel][fd])
+                else:          G.pplayers = deepcopy([derG.mplevel,derG.dplevel][fd])
                 G.pplayers.derS += derG.S; G.pplayers.derA += sum(derG.A)  # derA = der_mA + der_dA?
             if fsub: G.root = Graph
-            else: sum_pH(G.uH[-1].H[fd].pplayers, Graph.pplayers)
-            # local subset of graph.uH[-1].H[fd]
         Graph.val = Graph.pplayers.val \
                   + sum([lev.val for lev in Graph.uH]) / max(1, sum([lev.rdn for lev in Graph.uH])) \
                   + sum([lev.val for lev in Graph.wH]) / max(1, sum([lev.rdn for lev in Graph.wH]))  # if val > alt_val: rdn += len_Q?
@@ -381,11 +382,6 @@ def feedback(graph, node_, fd_):  # bottom-up feedback to append root.uH[-1], ro
             sum_pH(graph.uH[0].H[fd_[-1]].pplayers, node.wH[0].H[fd_[-1]].pplayers)
             # the rest of node.wH maps to graph.wH:
             sum_pH_(graph.wH, node.wH[1:])
-        '''
-        for Lev, lev in zip_longest(graph.wH, node.wH[1:], fillvalue=[]):
-            for Fork, fork in zip_longest(Lev, lev, fillvalue=[]):
-                sum_pH(Fork, fork)  # add new sub+ pplayers
-        '''
 
 
 def add_alt_graph_(graph_t):  # mgraph_, dgraph_
@@ -443,7 +439,7 @@ def sum_G(G, g):
             G.link_.Q += [link]
 
     # alts
-    for alt_graph in g.alt_graph:
+    for alt_graph in g.alt_graph_:
         if alt_graph not in G.alt_graph:
             G.alt_graph_ += [alt_graph]
     if g.alt_Graph:
@@ -452,11 +448,10 @@ def sum_G(G, g):
         else:
             G.alt_Graph = deepcopy(g.alt_graph)
 
-
     # pplayers, uH and wH
-    sum_pH(G.pplayers, g.pplayers)
-    sum_pH_(G.uH, g.uH)
-    sum_pH_(G.wH, g.wH)
+    if g.pplayers: sum_pH(G.pplayers, g.pplayers)
+    if g.uH:       sum_pH_(G.uH, g.uH)
+    if g.wH:       sum_pH_(G.wH, g.wH)
 
 
 def sum_pH_(PH_, pH_, fneg=0):
@@ -485,5 +480,4 @@ def sum_pH(PH, pH, fneg=0):  # recursive unpack plevels ( pplayers ( players ( p
 
     PH.val += pH.val
     PH.rdn += pH.rdn
-    PH.nval += pH.nval
     return PH
