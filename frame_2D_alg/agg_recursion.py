@@ -148,13 +148,13 @@ def graph_reval(graph_, reval_, fd):  # recursive eval nodes for regraph, increa
         if reval < ave_G:  # same graph, skip re-evaluation:
             regraph_ += [graph]; rreval_ += [0]
             continue
-        while graph.Q:  # some links will be removed, graph may split into multiple regraphs, init each with graph.Q node:
+        while graph.H:  # some links will be removed, graph may split into multiple regraphs, init each with graph.Q node:
             regraph = CpH()
-            node = graph.Q.pop()  # node_, not removed below
+            node = graph.H.pop()  # node_, not removed below
             val = [node.link_.mval, node.link_.dval][fd]  # in-graph links only
             if val > G_aves[fd]:  # else skip
-                regraph.Q = [node]; regraph.val = val  # init for each node, then add _nodes
-                readd_node_layer(regraph, graph.Q, node, fd)  # recursive depth-first regraph.Q+=[_node]
+                regraph.H = [node]; regraph.val = val  # init for each node, then add _nodes
+                readd_node_layer(regraph, graph.H, node, fd)  # recursive depth-first regraph.Q+=[_node]
             reval = graph.val - regraph.val
             if regraph.val > ave_G:
                 regraph_ += [regraph]; rreval_ += [reval]; Reval += reval
@@ -163,16 +163,16 @@ def graph_reval(graph_, reval_, fd):  # recursive eval nodes for regraph, increa
 
     return regraph_
 
-def readd_node_layer(regraph, graph_Q, node, fd):  # recursive depth-first regraph.Q+=[_node]
+def readd_node_layer(regraph, graph_H, node, fd):  # recursive depth-first regraph.Q+=[_node]
 
     for link in [node.link_.Qm, node.link_.Qd][fd]:  # all positive
         _node = link.node1 if link.node0 is node else link.node0
         _val = [_node.link_.mval, _node.link_.dval][fd]
-        if _val > G_aves[fd] and _node in graph_Q:
-            regraph.Q += [_node]
-            graph_Q.remove(_node)
+        if _val > G_aves[fd] and _node in graph_H:
+            regraph.H += [_node]
+            graph_H.remove(_node)
             regraph.val += _val
-            readd_node_layer(regraph, graph_Q, _node, fd)
+            readd_node_layer(regraph, graph_H, _node, fd)
 
 def add_node_layer(gnode_, G_, G, fd, val):  # recursive depth-first gnode_+=[_G]
 
@@ -229,23 +229,23 @@ def sum2graph_(graph_, fd, fds, fsub):  # sum node and link params into graph, p
         X0,Y0 = 0,0
         for G in graph.H:  # CpH
             X0 += G.x0; Y0 += G.y0
-        L = len(graph.Q); X0/=L; Y0/=L; Xn,Yn = 0,0
+        L = len(graph.H); X0/=L; Y0/=L; Xn,Yn = 0,0
         Graph = Cgraph(A=[Xn*2, Yn*2], x0=X0, xn=Xn, y0=Y0, yn=Yn)
         # form G, keep iG:
         node_,Link_= [],[]
         for iG in graph.H:
             Xn = max(Xn, (iG.x0 + iG.xn) - X0)  # box xn = x0+xn
             Yn = max(Yn, (iG.y0 + iG.yn) - Y0)
-            sum_G(Graph, iG)  # sum(Graph.uH[-1][fd], iG.pplayers), higher levs += G.G.pplayers | G.uH, lower scope than iGraph
+            sum_G(Graph, iG, fd)  # sum(Graph.uH[-1][fd], iG.pplayers), higher levs += G.G.pplayers | G.uH, lower scope than iGraph
             link_ = [iG.link_.Qm, iG.link_.Qd][fd]
-            Link_ = list(set(Link_ + [link_]))  # unique links in node_
-            G = CpH(G=iG, root=Graph)
+            Link_ = list(set(Link_ + link_))  # unique links in node_
+            G = Cgraph(G=iG, root=Graph)  # G should be Cgraph?
             for derG in link_:  # form quasi-gradient of node' variable-length links, not added to Graph
                 sum_pH(G.pplayers, [derG.mplevel, derG.dplevel][fd])
                 G.pplayers.derS += derG.S; G.pplayers.derA += sum(derG.A)  # derA = der_mA + der_dA?
                 # or sum S,A in Graph?
             node_ += [G]
-        # Graph.root = iG.root?
+        # Graph.root = iG.root? (i think no, Graph.root will be assigned when this Graph becomes the node for the next agg+)
         Graph.node_ = node_ # lower nodes = G.G..
         for Link in Link_:  # sum unique links
             sum_pH(Graph.pplayers, [Link.mplevel,Link.dplevel][fd])
@@ -396,15 +396,27 @@ def add_alt_graph_(graph_t):  # mgraph_, dgraph_
 
 def sum_G(G, g, fd):
 
-    sum_pH(G.uH[-1][fd], g.pplayers)  # there is no g without pplayers
+    if G.uH:  # G's uH may empty
+        sum_pH(G.uH[-1].H[fd].pplayers, g.pplayers)  # there is no g without pplayers
+    else:  # add CpH
+        if fd:
+            G.uH += [CpH(H=[Cgraph(), Cgraph(pplayers=deepcopy(g.pplayers))])]
+        else:
+            G.uH += [CpH(H=[Cgraph(pplayers=deepcopy(g.pplayers)), Cgraph()])]
+
     # draft:
     UH=[]; i=0
     while g.G:
         i+=1
         sum_pH_(G.uH[-i][g.G.pplayers.fds].pplayers, g.G.pplayers)  # not sure about fds
         g = g.G
-    for i, (Lev, lev) in enumerate(zip_longest(UH, g.uH.H, fillvalue=[])):
-        UH[i][fds] = sum_pH(Lev[fds], lev[fds])
+    # why we don't just use sum_pH(UH, g.uH) here?
+    for i, (Lev, lev) in enumerate(zip_longest(UH, g.uH, fillvalue=[])):
+        if lev:
+            if Lev:
+                sum_pH(Lev.H[fd].pplayers, lev.H[fd].pplayers)  # lev is CpH, lev.H is graphs
+            else:
+                UH += [copy(lev)]
         # index in G.fds will be something like sum(g.pplayers.fds), but scaling each fd: fd**2**i.
     G.uH = UH + G.uH
 
@@ -412,14 +424,14 @@ def sum_G(G, g, fd):
     G.L += g.L
     G.S += g.S
     if isinstance(g.A, list):
-        if G.A:
-            G.A[0] += g.A[0]; G.A[1] += g.A[1]
-        else: G.A = copy(g.A)
+        if g.A:  # g.A could be empty too?
+            if G.A:
+                G.A[0] += g.A[0]; G.A[1] += g.A[1]
+            else: G.A = copy(g.A)
     else: G.A += g.A
 
     G.val += g.val
     G.rdn += g.rdn
-    G.rng = max(G.rng, g.rng)
     G.nval += g.nval
     # not sure if we need below for coordinates
     G.x0 = min(G.x0, g.x0)
