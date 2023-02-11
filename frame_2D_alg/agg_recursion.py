@@ -130,7 +130,7 @@ def form_graph_(root, fds, fsub): # form plevel in agg+ or sub-pplayer in sub+, 
         # reform graphs by node val:
         regraph_ = graph_reval(graph_, [ave_G for graph in graph_], fd)  # init reval_ to start
         if regraph_:
-            graph_[:] = sum2graph_(regraph_, fd, fds, fsub)  # sum proto-graph node_ params in graph
+            graph_[:] = sum2graph_(regraph_, fd)  # sum proto-graph node_ params in graph
             # root for feedback: sum val,node_, then selective unpack?
         graph_t += [graph_]
 
@@ -235,14 +235,15 @@ def sum2graph_(graph_, fd):  # sum node and link params into graph, plevel in ag
         for iG in graph.H:
             Xn = max(Xn, (iG.x0 + iG.xn) - X0)  # box xn = x0+xn
             Yn = max(Yn, (iG.y0 + iG.yn) - Y0)
-            sum_G(Graph, iG, fd)  # sum(Graph.uH[-1][fd], iG.pplayers), higher levs += G.G.pplayers | G.uH, lower scope than iGraph
+            sum_G(Graph, iG)  # sum(Graph.uH[-1][fd], iG.pplayers), higher levs += G.G.pplayers | G.uH, lower scope than iGraph
             link_ = [iG.link_.Qm, iG.link_.Qd][fd]
             Link_ = list(set(Link_ + link_))  # unique links in node_
-            G = Cgraph(G=iG, root=Graph)
+            G = Cgraph(G=iG, root=Graph) 
             for derG in link_:  # form quasi-gradient of node' variable-length links, not added to Graph
                 sum_pH(G.pplayers, [derG.mplevel, derG.dplevel][fd])
                 G.pplayers.derS += derG.S; G.pplayers.derA += sum(derG.A)  # derA = der_mA + der_dA?
                 # or sum S,A in Graph?
+            G.pplayers.fds = copy(iG.pplayers.fds)  # we need fds here too?
             node_ += [G]
         Graph.node_ = node_ # lower nodes = G.G..; Graph.root = iG.root
         for Link in Link_:  # sum unique links
@@ -250,7 +251,7 @@ def sum2graph_(graph_, fd):  # sum node and link params into graph, plevel in ag
         Graph.val = Graph.pplayers.val \
                   + sum([lev.val for lev in Graph.uH]) / max(1, sum([lev.rdn for lev in Graph.uH])) \
                   + sum([lev.val for lev in Graph.wH]) / max(1, sum([lev.rdn for lev in Graph.wH])) # if val > alt_val: rdn += len_Q?
-
+        Graph.pplayers.fds = copy(iG.pplayers.fds) + [fd]  # we need fds here?
         Graph_ += [Graph]
     return Graph_
 
@@ -348,14 +349,14 @@ def sum_G(G, g):
         n+=1; idx = sum(fd * (2**i) for i, fd in enumerate(fds[-n:]))
         sum_pH(G.uH[-n].H[idx].pplayers, g.G.pplayers)
         g = g.G
-    for Lev, lev in zip_longest(UH, reversed(g.uH), fillvalue=[]):
+    for Lev, lev in zip_longest(UH, reversed(g.uH), fillvalue=[]):  # UH is always empty here? Because we just init it above
         n += 1
         if Lev:
             idx = sum(fd * (2**i) for i, fd in enumerate(fds[-n:]))
             sum_pH(Lev.H[idx].pplayers, lev.H[idx].pplayers)  # lev is CpH, lev.H is graphs, len H = len fds
         else:
             UH += [copy(lev)]
-    G.uH = reversed(UH) + G.uH  # reversed because UH is appended bottom-up
+    G.uH = [H for H in reversed(UH)] + G.uH  # reversed because UH is appended bottom-up
     '''
     fds->index examples:
     0,1: i=int(fds)=2: 1st G in 2nd 2tuple:    0,1, (2),3; 4,5, 6,7;; 8,9, 10,11; 12,13, 14,15
