@@ -222,7 +222,7 @@ def comp_G_(G_, pri_G_=None, f1Q=1, fsub=0):  # cross-comp Graphs if f1Q else G_
 
 def comp_G(_G, G, fsub):  # comp-> MpH, DpH, H = xpplayers: implicitly nested lists of all lower xpplayers
 
-    MpH, DpH = CpH(), CpH()
+    MpH, DpH = CpH(fds=[0]), CpH(fds=[1])  # we need to at least assign it here? else the fd won't be summed into G
     Pplayers, link_, node_ = G.pplayers, G.link_.Q, G.node_
     _Pplayers,_link_,_node_ = _G.pplayers, G.link_.Q, G.node_
 
@@ -322,6 +322,7 @@ def sum_G(G, g):
     # indices: i/lev in uH, j/G in lev.H, k/fd in fds, len H = len fds
     while g.G:
         i += 1; j = sum(fd * (2**k) for k, fd in enumerate(fds[i:]))
+        # facing issue where i>1 but there's just single element in G.uH
         sum_pH(G.uH[-i].H[j].pplayers, g.G.pplayers)
         g = g.G
     for Lev, lev in zip_longest(G.uH, g.uH, fillvalue=[]):
@@ -395,11 +396,21 @@ def sum_pH(PH, pH, fneg=0):  # recursive unpack plevels ( pplayers ( players ( p
                 else:  # PH is players, H is ptuples
                     sum_pH(SpH, spH, fneg=fneg)
             else:
-                PH.fds += [fd]
+                if fd is not None: PH.fds += [fd]  # fd could be None for players, ptuples
                 PH.H += [deepcopy(spH)]
 
     PH.val += pH.val
     PH.rdn += pH.rdn
+    
+    PH.L += pH.L
+    PH.S += pH.S
+    if isinstance(pH.A, list):
+        if pH.A:
+            if PH.A:
+                PH.A[0] += pH.A[0]; PH.A[1] += pH.A[1]
+            else: PH.A = copy(pH.A)
+    else: PH.A += pH.A
+    
     return PH
 
 
