@@ -312,9 +312,13 @@ def sum_G(G, g):
 
     # sum pplayers:
     fd = g.pplayers.fds[-1]
-    if G.uH:
+    
+    if G.uH:  # G is summed in prior loops with prior gs
         sum_pH(G.uH[-1].H[fd].pplayers, g.pplayers)
-    else:  # add lev
+    else:  # G.uH is empty
+        # copy and pack existing uH
+        G.uH = deepcopy(g.uH)
+        # add new lev
         if fd: G.uH += [CpH(H=[Cgraph(), Cgraph(pplayers=deepcopy(g.pplayers))])]
         else:  G.uH += [CpH(H=[Cgraph(pplayers=deepcopy(g.pplayers)), Cgraph()])]
 
@@ -325,13 +329,14 @@ def sum_G(G, g):
         i += 1; j = sum(fd * (2**k) for k, fd in enumerate(fds[i:]))
         sum_pH(G.uH[i].H[j].pplayers, g.G.pplayers)
         g = g.G
-    for Lev, lev in zip_longest(G.uH, g.uH, fillvalue=[]):
-        i += 1
-        if Lev:
-            j = sum(fd * (2**k) for k, fd in enumerate(fds[i:]))
-            sum_pH(Lev.H[j].pplayers, lev.H[j].pplayers)  # lev is CpH, lev.H is graphs
-        else:
-            G.uH += [copy(lev)]
+    for i, (Lev, lev) in enumerate(zip_longest(G.uH, g.uH, fillvalue=[])):
+        if lev:  # size of Lev will be longer with added new lev, so we need to check lev first
+            # i += 1  # this i may not = zero from the while loop above, so we need to init i here?
+            if Lev:
+                j = sum(fd * (2**k) for k, fd in enumerate(fds[i:]))
+                sum_pH(Lev.H[j].pplayers, lev.H[j].pplayers)  # lev is CpH, lev.H is graphs
+            else:
+                G.uH += [copy(lev)]
     '''
     fds->index examples:
     0,1: 0*2^0 + 1*2^1->2: 1st G in 2nd 2tuple:  0,1, (2),3; 4,5, 6,7;; 8,9, 10,11; 12,13, 14,15
@@ -435,12 +440,14 @@ def sum2graph_(graph_, fd):  # sum node and link params into graph, plevel in ag
             G = Cgraph(G=iG, root=Graph)
             # sum quasi-gradient of G-external links in link_pplayers: redundant to Graph.pplayers, less valuable, optional?:
             for derG in link_:
+                # G.pplayers will be summed with iG.pplayers? But iG.pplayers should be packed into G.uH now (in sum_G), so iG.pplayers will be in both G.pplayes and uH?
                 sum_pH(G.link_pplayers, [derG.mplevel, derG.dplevel][fd])
                 G.link_pplayers.S += derG.S; G.link_pplayers.A += sum(derG.A)  # derA = der_mA + der_dA?
             l=len(link_); G.link_pplayers.L=l; G.link_pplayers.S/=l
             node_ += [G]
         Graph.node_ = node_ # lower nodes = G.G..; Graph.root = iG.root
         for Link in Link_:  # sum unique links
+            # link's mplevel's fds will be empty here because we didn't assign it anywhere else, so Graph.pplayers.fds will be empty too 
             sum_pH(Graph.pplayers, [Link.mplevel,Link.dplevel][fd])
             Graph.pplayers.S += Link.S
             # sum A from link_, or S from node_?
@@ -480,6 +487,7 @@ def sub_recursion_g(graph_, fseg, fd_, RVal=0, DVal=0):  # rng+: extend G_ per g
 
     return RVal, DVal  # or SVal= RVal+DVal, separate for each fork of sub+?
 
+# obsolete now, pending update
 # in sub+ and agg+?
 def feedback(graph, node_, fd_):  # bottom-up feedback to append root.uH[-1], root.wH, breadth-first
 
