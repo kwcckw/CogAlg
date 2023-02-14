@@ -345,6 +345,7 @@ def PP2graph(PP, fseg, ifd=1):
         alt_players.fds = [alt_fds]
     alt_pplayers = CpH(H=[alt_players], fds=[ifd], val=alt_players.val)
 
+    # number of H in rng+ is lesser than fds due to we didn't add lplayer in rng+
     players = CpH(fds=PP.fds)
     for ptuples, val in PP.players[0]:
         ptuples = CpH(H=deepcopy(ptuples), fds=[PP.fds[-1]], val=val)
@@ -383,13 +384,13 @@ def agg_recursion_eval(blob, PP_t):
             else:
                 converted_blobt = blob2graph(blob, fseg=fseg)  # convert root to graph
 
-    M = converted_blobt[0].val  # mpplayers.val (but m fork is always empty, so no value here?)
-    G = converted_blobt[1].val  # dpplayers.val
+    M = converted_blobt[0].pplayers.val  # mpplayers.val (but m fork is always empty, so no value here?)
+    G = converted_blobt[1].pplayers.val  # dpplayers.val
     valt = [M, G]
     fork_rdnt = [1+(G>M), 1+(M>=G)]
     # should be single call of agg_recursion here？
     for fd, PP_ in enumerate(PP_t):  # PPm_, PPd_
-        if (valt[fd] > PP_aves[fd] * ave_agg * (blob.rdn+1) * fork_rdnt[fd]) \
+        if (valt[fd] > PP_aves[fd] * ave_agg * (blob.pplayers.rdn+1) * fork_rdnt[fd]) \
             and len(PP_) > ave_nsub : # and converted_blob[0].alt_rdn < ave_overlap:  # we don't have alt rdn now?
 
             blob.rdn += 1  # estimate

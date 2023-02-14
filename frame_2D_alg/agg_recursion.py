@@ -94,15 +94,15 @@ def agg_recursion(root, fseg):  # compositional recursion in root.PP_, pretty su
     mgraph_, dgraph_ = form_graph_(root, fds, fsub=0)  # node.H cross-comp and graph clustering, comp frng pplayers
 
     for fd, graph_ in enumerate([mgraph_,dgraph_]):  # eval graphs for sub+ and agg+:
-        val = sum([graph.val for graph in graph_])
+        val = sum([graph.pplayers.val for graph in graph_])
         # intra-graph sub+ comp node:
-        if val > ave_sub * root.rdn:  # same in blob, same base cost for both forks
-            for graph in graph_: graph.rdn+=1  # estimate
+        if val > ave_sub * root.pplayers.rdn:  # same in blob, same base cost for both forks
+            for graph in graph_: graph.pplayers.rdn+=1  # estimate
             sub_recursion_g(graph_, fseg, fds + [fd])  # subdivide graph_ by der+|rng+
             # feedback per selected graph in sub_recursion_g
         # cross-graph agg+ comp graph:
-        if val > G_aves[fd] * ave_agg * root.rdn and len(graph_) > ave_nsub:
-            for graph in graph_: graph.rdn+=1   # estimate
+        if val > G_aves[fd] * ave_agg * root.pplayers.rdn and len(graph_) > ave_nsub:
+            for graph in graph_: graph.pplayers.rdn+=1   # estimate
             agg_recursion(root, fseg=fseg)
         else: feedback(root, graph_, fds)  # bottom-up feedback: root.wH[0][fd].node_ = graph_, etc, breadth-first
 
@@ -192,7 +192,8 @@ def comp_G_(G_, pri_G_=None, f1Q=1, fsub=0):  # cross-comp Graphs if f1Q else G_
                 continue
             dx = _iG.x0 - iG.x0; dy = _iG.y0 - iG.y0  # center x0,y0
             distance = np.hypot(dy, dx)  # Euclidean distance between centers, sum in sparsity, proximity = ave-distance
-            if distance < ave_distance * ((_iG.val + iG.val) / (2*sum(G_aves))):
+            # evaluate by epplayers t.val too?
+            if distance < ave_distance * ((_iG.pplayers.val + iG.pplayers.val) / (2*sum(G_aves))):
                 # same for cis and alt Gs:
                 for _G, G in ((_iG, iG), (_iG.alt_Graph, iG.alt_Graph)):
                     if not _G or not G:  # or G.val
@@ -204,6 +205,10 @@ def comp_G_(G_, pri_G_=None, f1Q=1, fsub=0):  # cross-comp Graphs if f1Q else G_
                         mval += emxpplayers.val; dval = edxpplayers.val; tval = mval + dval
                         mxpplayers = [mxpplayers,emxpplayers]  # may be list
                         dxpplayers = [dxpplayers,emxpplayers]
+                    else:
+                        mxpplayers = [mxpplayers, None]  # added list so that xpplayers[0] is always from internal and [1] is from external
+                        dxpplayers = [dxpplayers, None]
+                        
                     derG = CderG(node0=_G,node1=G, mplevel=mxpplayers,dplevel=dxpplayers, S=distance, A=[dy,dx])
 
                     _G.link_.Q += [derG]; _G.link_.val += tval  # val of combined-fork' +- links?
@@ -233,8 +238,10 @@ def comp_dir(_G, G, fsub, fup):  # up|down direction-> MpH,DpH, H = xpplayers: i
         MpH.H += [mpplayers]; MpH.val += mpplayers.val; MpH.rdn += mpplayers.rdn; MpH.fds += [mpplayers.fds]
         DpH.H += [dpplayers]; DpH.val += dpplayers.val; DpH.rdn += dpplayers.rdn; DpH.fds += [dpplayers.fds]
 
-    comp_ext(_Pplayers, Pplayers, MpH, DpH)  # comp LSA, added to the whole nested new pplayers in comp_G_
-    Val = (MpH.val + DpH.val) * (_G.val + G.val)
+    if Pplayers.L and _Pplayers.L:  # non empty L, G converted from PP doesn't have L
+        comp_ext(_Pplayers, Pplayers, MpH, DpH)  # comp LSA, added to the whole nested new pplayers in comp_G_
+
+    Val = (MpH.val + DpH.val) * (_G.pplayers.val + G.pplayers.val)
     if Val > ave_G:  # selective specification:
 
         if Val * (len(_node_)+len(node_)) > ave_G:
@@ -338,18 +345,6 @@ def sum_G(G, g):
     1,0,1,1: 1+4+8->13: 2'G, 1'2t, 2'4t, 2'8t:   0,1, 2,3; 4,5, 6,7;; 8,9, 10,11; 12,(13), 14,15
     '''
     # wH is summed in feedback
-    # ext params
-    G.L += g.L
-    G.S += g.S
-    if isinstance(g.A, list):
-        if g.A:
-            if G.A:
-                G.A[0] += g.A[0]; G.A[1] += g.A[1]
-            else: G.A = copy(g.A)
-    else: G.A += g.A
-    G.val += g.val
-    G.rdn += g.rdn
-    G.nval += g.nval
     # not sure if we need below for coordinates
     G.x0 = min(G.x0, g.x0)
     G.y0 = min(G.y0, g.y0)
@@ -432,24 +427,37 @@ def sum2graph_(graph_, fd):  # sum node and link params into graph, plevel in ag
             G = Cgraph(G=iG, root=Graph)
             # sum quasi-gradient of G-external links in link_pplayers: redundant to Graph.pplayers, less valuable, optional?:
             for derG in link_:
-                # G.pplayers will be summed with iG.pplayers?
-                # But iG.pplayers should be packed into G.uH now (in sum_G), so iG.pplayers will be in both G.pplayes and uH?
-                sum_pH(G.link_pplayers, [derG.mplevel, derG.dplevel][fd])
-                G.link_pplayers.S += derG.S; G.link_pplayers.A += sum(derG.A)  # derA = der_mA + der_dA?
-            l=len(link_); G.link_pplayers.L=l; G.link_pplayers.S/=l
+                xpplayers = [derG.mplevel, derG.dplevel][fd]
+                sum_pH(G.epplayers, xpplayers[0])
+                if xpplayers[1]: sum_pH(G.epplayers, xpplayers[1])  # sum up ders too if exist?
+                G.epplayers.S += derG.S
+                if G.epplayers.A:  # there's several combinations here, not sure if all applicable
+                    if isinstance(G.epplayers.A, list):
+                        if isinstance(derG.A, list):
+                            G.epplayers.A[0] += derG.A[0]  # derA = der_mA + der_dA?
+                            G.epplayers.A[1] += derG.A[1] 
+                    else:
+                        G.epplayers.A += sum(derG.A) if isinstance(derG.A, list) else derG.A
+                else:             
+                    G.epplayers.A = copy(derG.A)
+            l=len(link_); G.epplayers.L=l; G.epplayers.S/=l
             node_ += [G]
         Graph.node_ = node_ # lower nodes = G.G..; Graph.root = iG.root
         for Link in Link_:  # sum unique links
-            # link's mplevel's fds will be empty here because we didn't assign it anywhere else, so Graph.pplayers.fds will be empty too
-            sum_pH(Graph.pplayers, [Link.mplevel,Link.dplevel][fd])
+            xpplayers = [Link.mplevel,Link.dplevel][fd]
+            sum_pH(Graph.pplayers, xpplayers[0])  
+            if xpplayers[1]: sum_pH(G.pplayers, xpplayers[1])  # sum up ders too ?
+            
             Graph.pplayers.S += Link.S
             # sum A from link_, or S from node_?
         # LSA per whole nested pplayers:
         Graph.pplayers.A = [Xn*2,Yn*2]; L=len(Link_); Graph.pplayers.L=L; Graph.pplayers.S/=L
+        # this will not needed now? Since we pack val per pplayers now
+        '''
         Graph.val = Graph.pplayers.val \
                   + sum([lev.val for lev in Graph.uH]) / max(1, sum([lev.rdn for lev in Graph.uH])) \
                   + sum([lev.val for lev in Graph.wH]) / max(1, sum([lev.rdn for lev in Graph.wH])) # if val > alt_val: rdn += len_Q?
-
+        '''
         Graph_ += [Graph]
     return Graph_
 
@@ -465,12 +473,12 @@ def sub_recursion_g(graph_, fseg, fd_, RVal=0, DVal=0):  # rng+: extend G_ per g
             sub_mgraph_, sub_dgraph_ = form_graph_(graph, fd_, fsub=1)  # cross-comp and clustering
             # rng+:
             Rval = sum([sub_mgraph.pplayers.val for sub_mgraph in sub_mgraph_])
-            if RVal + Rval > ave_sub * graph.rdn:  # >cost of call:
+            if RVal + Rval > ave_sub * graph.pplayers.rdn:  # >cost of call:
                 rval, dval = sub_recursion_g(sub_mgraph_, fseg=fseg, fd_=fd_+[0], RVal=Rval, DVal=DVal)
                 RVal += rval+dval
             # der+:
             Dval = sum([sub_dgraph.pplayers.val for sub_dgraph in sub_dgraph_])
-            if DVal + Dval > ave_sub * graph.rdn:
+            if DVal + Dval > ave_sub * graph.pplayers.rdn:
                 rval, dval = sub_recursion_g(sub_dgraph_, fseg=fseg, fd_=fd_+[1], RVal=Rval, DVal=DVal)
                 Dval += rval+dval
             RVal += Rval
