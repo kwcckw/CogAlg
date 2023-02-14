@@ -345,16 +345,18 @@ def PP2graph(PP, fseg, ifd=1):
         alt_players.fds = [alt_fds]
     alt_pplayers = CpH(H=[alt_players], fds=[ifd], val=alt_players.val)
 
-    players = CpH(fds=PP.fds[1:])  # 1st fd is pre-initialized as [0] in comp_slice_root, so we skip that
-    for ptuples, val in PP.players[0]:     
+    players = CpH(fds=PP.fds)
+    for ptuples, val in PP.players[0]:
         ptuples = CpH(H=deepcopy(ptuples), fds=[PP.fds[-1]], val=val)
         players.H += [ptuples]; players.val += val
     pplayers = CpH(H=[players], fds=[ifd], val=players.val)
 
     x0=PP.x0; xn=PP.xn; y0=PP.y0; yn=PP.yn
     # update to center (x0,y0) and max_distance (xn,yn) in graph:
-    alt_Graph = Cgraph(pplayers=alt_pplayers,wH=[],uH=[CpH(H=[Cgraph(),Cgraph(pplayers=alt_pplayers)])], x0=(x0+xn)/2, xn=(xn-x0)/2, y0=(y0+yn)/2, yn=(yn-y0)/2)
-    graph = Cgraph(pplayers=pplayers,wH=[],uH=[CpH(H=[Cgraph(),Cgraph(pplayers=pplayers)])], alt_Graph=alt_Graph, x0=(x0+xn)/2, xn=(xn-x0)/2, y0=(y0+yn)/2, yn=(yn-y0)/2)
+    alt_Graph = Cgraph(
+        pplayers=alt_pplayers,wH=[],uH=[CpH(H=[Cgraph(),Cgraph(pplayers=alt_pplayers)])], x0=(x0+xn)/2, xn=(xn-x0)/2, y0=(y0+yn)/2, yn=(yn-y0)/2)
+    graph = Cgraph(
+        pplayers=pplayers,wH=[],uH=[CpH(H=[Cgraph(),Cgraph(pplayers=pplayers)])], alt_Graph=alt_Graph, x0=(x0+xn)/2, xn=(xn-x0)/2, y0=(y0+yn)/2, yn=(yn-y0)/2)
 
     return graph  # 1st plevel fd is always der+?
 
