@@ -51,7 +51,7 @@ class CpH(ClusterStructure):  # hierarchy of params + associated vars in pplayer
     val = float
     rdn = lambda: 1  # for all Qs?
     rng = lambda: 1
-    fds = str  # m|d in pplayers,players,ptuples, m|d|None in levs?
+    fds = list  # m|d in pplayers,players,ptuples, m|d|None in levs?
     nval = int  # of open links: base alt rep
     # in xpplayers and derGs, each m|d:
     L = list  # der L, init None
@@ -64,14 +64,16 @@ class Cgraph(ClusterStructure):  # params of single-fork node_ cluster per pplay
     G = lambda: None  # same-scope lower der|rng G.G.G.., for all nodes beyond PP
     root = lambda: None  # root graph, not summed as in uH[-1][fd], or inset G?
     # up||down trees:
-    exset = lambda: Cgraph()  # epplayers ) link_) uH: sum link_ pplayers, within uH[0][fd].node_
+    exset = object  # (Cgraph) epplayers ) link_) uH: sum link_ pplayers, within uH[0][fd].node_
+    # inset should be CpH or a list?
     inset = list  # impl.nested ipplayers ) node_) wH: sum Link_ pplayers, Lev += lev per agg+|sub+
     # unpacked inset params:
-    node_ = list  # conceptually wH[0] or concat sub-node_s in uH lev, for specification?
+    node_ = list  # conceptually wH[0] or concat sub-node_s in uH lev, for specification? (node is now per Graph again?)
     Link_ = lambda: Clink_()  # unique links within node_: inset source
+    link_ = lambda: Clink_()  # links for exset, or just use Links?
     H = list  # lower Lev += node_ tree feedback, same syntax for up-forking uH in exset?
     val = int
-    fds = str
+    fds = list  # i think it's better to stay as list of ints? So that we can use it in the indexing without conversion
     rdn = lambda: 1
     rng = lambda: 1
     nval = int  # of open links: base alt rep
@@ -103,7 +105,7 @@ def agg_recursion(root, fseg):  # compositional recursion in root.PP_, pretty su
     for G in root.node_:
         G.exset.H.insert(0, CpH(H=[Cgraph(),Cgraph()]))  # not for sub+: lower node =G.G?
 
-    fds = root.pplayers.fds
+    fds = root.inset[0].fds  # should be root fds? Or their pplayers.fds?
     mgraph_, dgraph_ = form_graph_(root, fds, fsub=0)  # node.H cross-comp and graph clustering, comp frng pplayers
 
     for fd, graph_ in enumerate([mgraph_,dgraph_]):  # eval graphs for sub+ and agg+:
@@ -115,6 +117,8 @@ def agg_recursion(root, fseg):  # compositional recursion in root.PP_, pretty su
             # feedback per selected graph in sub_recursion_g
         # cross-graph agg+ comp graph:
         if val > G_aves[fd] * ave_agg * root.rdn and len(graph_) > ave_nsub:
+            # root.rdn += 1    
+            # not increasing root.rdn here?
             for graph in graph_: graph.rdn+=1   # estimate
             agg_recursion(root, fseg=fseg)
         else: feedback(root, graph_, fds)  # bottom-up feedback: root.wH[0][fd].node_ = graph_, etc, breadth-first
@@ -217,6 +221,10 @@ def comp_G_(G_, pri_G_=None, f1Q=1, fsub=0):  # cross-comp Graphs if f1Q else G_
                         mval += mexset.val; dval = dexset.val; tval = mval + dval
                         minset = [minset,mexset]  # may be list
                         dinset = [dinset,dexset]
+                    else:
+                        # i think it's better to init as 2 tuple list? So that we check them directly without checking if they are list or not first.
+                        minset = [minset,[]]
+                        dinset = [dinset,[]]
                     derG = CderG(node0=_G,node1=G, mplevel=minset,dplevel=dinset, S=distance, A=[dy,dx])
 
                     _G.exset.link_.Q += [derG]; _G.exset.link_.val += tval  # val of combined-fork' +- links?
@@ -237,8 +245,8 @@ def comp_G_(G_, pri_G_=None, f1Q=1, fsub=0):  # cross-comp Graphs if f1Q else G_
 def comp_G(_G, G, fsub, fup):  # up|down direction-> MpH,DpH, H = xpplayers: implicitly nested lists of ders from all lower xpplayers
 
     MpH, DpH = CpH(), CpH()  
-    Pplayers, node_, H = G.inset, G.node_.Q if fup else G.node_, G.H  # node_ is link_ if fup
-    _Pplayers,_node_,_H =_G.inset,_G.node_.Q if fup else G.node_,_G.H
+    Pplayers, node_, H = G.inset, G.link_.Q if fup else G.node_, G.H  # node_ is link_ if fup (so we should use G.link_.Q?)
+    _Pplayers,_node_,_H =_G.inset,_G.link_.Q if fup else G.node_,_G.H
 
     for _pplayers, pplayers in zip(_Pplayers, Pplayers):  # Pplayers are implicitly nested ders of all lower Pplayers
         # fd = zip(_Pplayers.fds, Pplayers.fds)?
@@ -247,7 +255,7 @@ def comp_G(_G, G, fsub, fup):  # up|down direction-> MpH,DpH, H = xpplayers: imp
         MpH.H += [mpplayers]; MpH.val += mpplayers.val; MpH.rdn += mpplayers.rdn; MpH.fds += [mpplayers.fds]
         DpH.H += [dpplayers]; DpH.val += dpplayers.val; DpH.rdn += dpplayers.rdn; DpH.fds += [dpplayers.fds]
 
-    comp_ext(_G.L,_G.S,_G.A, G.L,G.S,G.A, MpH, DpH)  # comp LSA, added to the whole nested new pplayers in comp_G_
+    if _G.L and G.L: comp_ext(_G.L,_G.S,_G.A, G.L,G.S,G.A, MpH, DpH)  # comp LSA, added to the whole nested new pplayers in comp_G_
     Val = (MpH.val + DpH.val) * (_G.val + G.val)
     if Val > ave_G:  # selective specification:
 
@@ -323,27 +331,27 @@ def sum_G(G, g):
     # sum pplayers:
     fd = g.fds[-1]
     if G.exset.H:  # G summed with prior gs
-        sum_pH(G.exset.H[-1].H[fd].inset, g.inset)
+        sum_pH(G.exset.H[-1].H[fd].inset[0], g.inset[0])
     else:
         G.exset.H = deepcopy(g.exset.H)  # + new lev:
-        if fd: G.exset.H += [CpH(H=[Cgraph(), Cgraph(pplayers=deepcopy(g.inset))])]
-        else:  G.exset.H += [CpH(H=[Cgraph(pplayers=deepcopy(g.inset)), Cgraph()])]
+        if fd: G.exset.H += [CpH(H=[Cgraph(), Cgraph(inset=copy(g.inset))])]
+        else:  G.exset.H += [CpH(H=[Cgraph(inset=copy(g.inset)), Cgraph()])]
 
     # sum uH:
     i=0; fds = g.fds  # g.fds include g.G.fds
     # indices: i/lev in uH, j/G in lev.H, k/fd in fds, len H = len fds
     while g.G:
         i += 1; j = sum(fd * (2**k) for k, fd in enumerate(fds[i:]))
-        sum_pH(G.exset.H[i].H[j].inset, g.G.inset)  # adds G.uH lev if empty?
+        sum_pH(G.exset.H[i].H[j].inset[0], g.G.inset[0])  # adds G.uH lev if empty?
         g = g.G
-    for Lev, lev in zip_longest(G.uH, g.exset.H, fillvalue=[]):
+    for Lev, lev in zip_longest(G.exset.H, g.exset.H, fillvalue=[]):
         if lev:
             i += 1
             if Lev:
                 j = sum(fd * (2**k) for k, fd in enumerate(fds[i:]))
-                sum_pH(Lev.H[j].inset, lev.H[j].inset)  # lev is CpH, lev.H is graphs
+                sum_pH(Lev.H[j].inset[0], lev.H[j].inset[0])  # lev is CpH, lev.H is graphs
             else:
-                G.uH += [copy(lev)]
+                G.exset.H += [copy(lev)]
     '''
     fds->index examples:
     0,1: 0*2^0 + 1*2^1->2: 1st G in 2nd 2tuple:  0,1, (2),3; 4,5, 6,7;; 8,9, 10,11; 12,13, 14,15
@@ -422,7 +430,7 @@ def sum_pH(PH, pH, fneg=0):  # recursive unpack plevels ( pplayers ( players ( p
 
     return PH
 
-
+# pending update
 def sum2graph_(graph_, fd):  # sum node and link params into graph, plevel in agg+ or player in sub+
 
     Graph_ = []  # Cgraphs
