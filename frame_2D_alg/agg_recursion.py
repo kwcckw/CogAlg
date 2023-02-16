@@ -160,7 +160,7 @@ def graph_reval(graph_, reval_, fd):  # recursive eval nodes for regraph, increa
         while graph.H:  # some links will be removed, graph may split into multiple regraphs, init each with graph.Q node:
             regraph = CpH()
             node = graph.H.pop()  # node_, not removed below
-            val = [node.link_.mval, node.link_.dval][fd]  # in-graph links only
+            val = [node.ex.node_.mval, node.ex.node_.dval][fd]  # in-graph links only
             if val > G_aves[fd]:  # else skip
                 regraph.H = [node]; regraph.val = val  # init for each node, then add _nodes
                 readd_node_layer(regraph, graph.H, node, fd)  # recursive depth-first regraph.Q+=[_node]
@@ -174,9 +174,9 @@ def graph_reval(graph_, reval_, fd):  # recursive eval nodes for regraph, increa
 
 def readd_node_layer(regraph, graph_H, node, fd):  # recursive depth-first regraph.Q+=[_node]
 
-    for link in [node.link_.Qm, node.link_.Qd][fd]:  # all positive
+    for link in [node.ex.node_.Qm, node.ex.node_.Qd][fd]:  # all positive
         _node = link.node1 if link.node0 is node else link.node0
-        _val = [_node.link_.mval, _node.link_.dval][fd]
+        _val = [_node.ex.node_.mval, _node.ex.node_.dval][fd]
         if _val > G_aves[fd] and _node in graph_H:
             regraph.H += [_node]
             graph_H.remove(_node)
@@ -184,13 +184,13 @@ def readd_node_layer(regraph, graph_H, node, fd):  # recursive depth-first regra
             readd_node_layer(regraph, graph_H, _node, fd)
 
 def add_node_layer(gnode_, G_, G, fd, val):  # recursive depth-first gnode_+=[_G]
-
-    for link in G.link_.Q:  # all positive
+    # G.ex.node_ is link_
+    for link in G.ex.node_.Q:  # all positive
         _G = link.node1 if link.node0 is G else link.node0
         if _G in G_:  # _G is not removed in prior loop
             gnode_ += [_G]
             G_.remove(_G)
-            val += [_G.link_.mval,_G.link_.dval][fd]
+            val += [_G.ex.node_.mval,_G.ex.node_.dval][fd]
             val += add_node_layer(gnode_, G_, _G, fd, val)
     return val
 
@@ -213,22 +213,29 @@ def comp_G_(G_, pri_G_=None, f1Q=1, fsub=0):  # cross-comp Graphs if f1Q else G_
                         continue
                     minset, dinset = comp_G(_G, G, fsub, fex=0)  # comp pplayers, LSA? comp node_? comp H?
                     # add other params if needed:
-                    Minset= CpH(H=[minset],val=minset[0].val); if minset[1]: Minset.val+=minset[1].val
-                    Dinset= CpH(H=[dinset],val=dinset[0].val); if dinset[1]: Dinset.val+=dinset[1].val
+                    Minset= CpH(H=[minset],val=minset[0].val)
+                    if minset[1]: Minset.val+=minset[1].val
+                    Dinset= CpH(H=[dinset],val=dinset[0].val) 
+                    if dinset[1]: Dinset.val+=dinset[1].val
                     # comp lower-der Gs:
                     while (_G.G and G.G) and (Minset.val + Dinset.val > ave_G):
                         lo_minset, lo_dinset = comp_G(_G, G, fsub, fex=0)
-                        Minset.H+=[lo_minset]; Minset.val+=lo_minset[0].val; if lo_minset[1]: Minset.val+=minset[1].val
-                        Dinset.H+=[lo_dinset]; Dinset.val+=lo_dinset[0].val; if lo_dinset[1]: Dinset.val+=dinset[1].val
+                        Minset.H+=[lo_minset]; Minset.val+=lo_minset[0].val
+                        if lo_minset[1]: Minset.val+=minset[1].val
+                        Dinset.H+=[lo_dinset]; Dinset.val+=lo_dinset[0].val
+                        if lo_dinset[1]: Dinset.val+=dinset[1].val
                         _G.G = _G.G.G
                         G.G = G.G.G
                     mval = Dinset.val; dval = Dinset.val; tval = mval + dval
+                    
+                    # not sure below is correct, we already have this exact cmparison of ex in comp_G?
                     if (_G.ex and G.ex) and tval > ave_G:
                         mex, dex = comp_G(_G.ex, G.ex, fsub, fex=1)  # conditional: redundant to inset
                         Minset = [Minset, mex]; mval+=mex.val
                         Dinset = [Dinset, dex]; dval+=dex.val; tval=mval+dval
                     else:
                         Minset = [minset,[]]; Dinset = [dinset,[]]
+
                     derG = CderG(node0=_G, node1=G, mplevel=Minset, dplevel=Dinset, S=distance, A=[dy, dx])
                     # add links:
                     _G.ex.node_.Q += [derG]; _G.ex.node_.val += tval  # combined +-links val?
@@ -278,7 +285,7 @@ def comp_G(_G, G, fsub, fex):  # up|down direction-> MpH,DpH, H = xpplayers: imp
     mval = minset.val; dval = dinset.val; tval = mval + dval  # or sum der_pplayers vals?
     if tval > ave_G:
         mex, dex = comp_G(_G.ex, G.ex, fsub, fex=1)  # conditional: redundant to inset
-        minset = [minset,mex]; dinset = [dinset,dex]
+        minset = [minset,mex[0]]; dinset = [dinset,dex[0]]  # take only the minset of ex derivatives?
     else:
         minset = [minset,[]]; dinset = [dinset,[]]
 
@@ -440,32 +447,55 @@ def sum2graph_(graph_, fd):  # sum node and link params into graph, plevel in ag
         for G in graph.H:  # CpH
             X0 += G.x0; Y0 += G.y0
         L = len(graph.H); X0/=L; Y0/=L; Xn,Yn = 0,0
-        Graph = Cgraph(x0=X0, xn=Xn, y0=Y0, yn=Yn)
+        Graph = Cgraph(ex=Cgraph(node_=Clink_()), x0=X0, xn=Xn, y0=Y0, yn=Yn)
         # form G, keep iG:
         node_,Link_= [],[]
         for iG in graph.H:
             Xn = max(Xn, (iG.x0 + iG.xn) - X0)  # box xn = x0+xn
             Yn = max(Yn, (iG.y0 + iG.yn) - Y0)
             sum_G(Graph, iG)  # sum(Graph.uH[-1][fd], iG.pplayers), higher levs += G.G.pplayers | G.uH, lower scope than iGraph
-            link_ = [iG.node_.Qm, iG.node_.Qd][fd]
+            link_ = [iG.ex.node_.Qm, iG.ex.node_.Qd][fd]
             Link_ = list(set(Link_ + link_))  # unique links in node_
-            G = Cgraph(G=iG, root=Graph)
+            G = Cgraph(G=iG, root=Graph, ex=Cgraph(node_=Clink_()))
             # sum quasi-gradient of G-external links in link_pplayers: redundant to Graph.pplayers, less valuable, optional?:
             for derG in link_:
-                sum_pH(G.ex.inset, [derG.mplevel, derG.dplevel][fd])
-                G.ex.S += derG.S; G.ex.A += sum(derG.A)  # derA = der_mA + der_dA?
+                sum_derG(G.ex.inset, [derG.mplevel, derG.dplevel][fd])
+                G.ex.S += derG.S
+                # don't see a better way for now
+                if isinstance(G.ex.A, list):
+                    if G.ex.A:
+                        G.ex.A[0] += derG.A[0]
+                        G.ex.A[1] += derG.A[1]
+                    else:
+                        G.ex.A = copy(derG.A)
+                else:
+                    G.ex.A += sum(derG.A)  # derA = der_mA + der_dA?
             l=len(link_); G.ex.L=l; G.ex.S/=l
             node_ += [G]
         Graph.node_ = node_ # lower nodes = G.G..; Graph.root = iG.root
         for Link in Link_:  # sum unique links
-            sum_pH(Graph.inset, [Link.mplevel,Link.dplevel][fd])
-            Graph.inset.S += Link.S  # sum A from link_, or S from node_?
+            sum_derG(Graph.inset, [Link.mplevel,Link.dplevel][fd])
+            Graph.inset[-1].S += Link.S  # sum A from link_, or S from node_? (sum only last pplayers?)
         # LSA per whole nested pplayers:
         Graph.A = [Xn*2,Yn*2]; L=len(Link_); Graph.L=L; Graph.S/=L
         Graph.val = Graph.val + sum([lev.val for lev in Graph.H]) / max(1, sum([lev.rdn for lev in Graph.H])) # if val>alt_val: rdn+=len_Q?
 
         Graph_ += [Graph]
     return Graph_
+
+
+# very initial draft
+def sum_derG(Inset, plevel):
+    
+    for i, (inset,ex) in enumerate(plevel.H):  # each inset is a list of [inset, ex]
+       # sum both inset and ex to single element of graph.inset?
+        if i+1 > len(Inset):
+            Inset += [deepcopy(inset)]  
+            sum_pH(Inset[-1], ex)   
+        else:
+            sum_pH(Inset[i], inset)
+            sum_pH(Inset[i], ex)
+
 
 # draft
 def sub_recursion_g(graph_, fseg, fd_, RVal=0, DVal=0):  # rng+: extend G_ per graph, der+: replace G_ with derG_
