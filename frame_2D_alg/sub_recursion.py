@@ -301,13 +301,13 @@ def blob2graph(blob, fseg):
     alt_mgraph = Cgraph(pplayers=alt_mpplayers); alt_dgraph = Cgraph(pplayers=alt_dpplayers)
     muH = [CpH(H=[mgraph,Cgraph()])]; duH = [CpH(H=[Cgraph(),dgraph])]
     alt_muH = [CpH(H=[alt_mgraph,Cgraph()])]; alt_duH = [CpH(H=[Cgraph(),alt_dgraph])]
-    
+
     # pplayers, node_, wH
     minset = [mpplayers]; mexset = Cgraph(H=muH)
     alt_minset = [alt_mpplayers]; alt_mexset = Cgraph(H=alt_muH)
     dinset = [dpplayers]; dexset = Cgraph(H=duH)
     alt_dinset = [alt_dpplayers]; alt_dexset = Cgraph(H=alt_duH)
-    
+
     alt_mblob = Cgraph(inset=alt_minset,exset=alt_mexset,rng=PPm_[0].rng, rdn=blob.rdn, x0=(x0+xn)/2, xn=(xn-x0)/2, y0=(y0+yn)/2, yn=(yn-y0)/2)
     alt_dblob = Cgraph(inset=alt_dinset,exset=alt_dexset,rng=PPm_[0].rng, rdn=blob.rdn, x0=(x0+xn)/2, xn=(xn-x0)/2, y0=(y0+yn)/2, yn=(yn-y0)/2)
     mblob = Cgraph(inset=minset,exset=mexset, alt_Graph=alt_mblob, rng=PPm_[0].rng, rdn=blob.rdn, x0=(x0+xn)/2, xn=(xn-x0)/2, y0=(y0+yn)/2, yn=(yn-y0)/2)
@@ -367,10 +367,10 @@ def PP2graph(PP, fseg, ifd=1):
     alt_inset = [alt_pplayers]  # pplayers
     alt_exset = Cgraph(H=alt_uH)
     alt_Graph = Cgraph(val=alt_pplayers.val,inset=alt_inset,exset=alt_exset,x0=(x0+xn)/2, xn=(xn-x0)/2, y0=(y0+yn)/2, yn=(yn-y0)/2)
-    
+
     uH = [CpH(H=[Cgraph(),Cgraph(pplayers=pplayers)])]
     inset = [pplayers]  # pplayers
-    exset = Cgraph(H=uH)  
+    exset = Cgraph(H=uH)
     graph = Cgraph(val=pplayers.val,inset=inset,exset=exset,alt_Graph=alt_Graph, x0=(x0+xn)/2, xn=(xn-x0)/2, y0=(y0+yn)/2, yn=(yn-y0)/2)
 
     return graph  # 1st plevel fd is always der+?
