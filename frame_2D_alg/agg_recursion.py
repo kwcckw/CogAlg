@@ -120,7 +120,9 @@ def agg_recursion(root, fseg):  # compositional recursion in root.PP_, pretty su
         if val > G_aves[fd] * ave_agg * root.rdn and len(graph_) > ave_nsub:
             for graph in graph_: graph.rdn+=1  # estimate
             agg_recursion(root, fseg=fseg)
-        else: feedback(root, graph_, fds)  # bottom-up feedback: root.wH[0][fd].node_ = graph_, etc, breadth-first
+        else: 
+            for graph in graph_: feedback_recursive(graph)
+            # bottom-up feedback: root.wH[0][fd].node_ = graph_, etc, breadth-first
 
 
 def form_graph_(root, fds, fsub): # form plevel in agg+ or sub-pplayer in sub+, G is node in GG graph
@@ -517,33 +519,63 @@ def sub_recursion_g(graph_, fseg, fds, RVal=0, DVal=0):  # rng+: extend G_ per g
             RVal += Rval
             DVal += Dval
         # unpack?:
-        else: feedback(node_, fds)  # bottom-up feedback to append root.uH[-1], root.wH, breadth-first
+        else: 
+            for node in node_: feedback_recursive(node)
+            # bottom-up feedback to append root.uH[-1], root.wH, breadth-first
 
     return RVal, DVal  # or SVal= RVal+DVal, separate for each fork of sub+?
 
-# draft
-def feedback(node_, fds):  # bottom-up feedback to append root.H, breadth-first
+    
+def feedback_recursive(node):
+    
+    fds = node.fds  # get fds from node?
+    
+    # another version
+    '''
+    if node.G:
+        feedback_recursive(node.G)  # perform feedback on deeper lev first
+    
+    for lev in node.ex.H:  # uH (lev is CpH)
+        for g in lev.H:
+            root_g = node.root  # should be node.root? graph.lev.H didn't have root now
+            if root_g:
+                sum_inset(root_g.inset, node.inset)
+                sum_inset(root_g.inset, node.ex.inset)
+    '''
+    
+    if node.G:
+        feedback_recursive(node.G)  # perform feedback on deeper lev first
 
-    for node in node_:
-        k = 0
-        for lev in node.ex.H:  # uH
-            k += 1
-            # get fork index, draft, most likely wrong:
-            i = sum(fd * (2**j) for j, fd in enumerate(fds[-k:]))
-            if lev.H[i].inset:
-                root_H_lev = lev.H[i].root.H[-i]
-                if root_H_lev:
-                    sum_inset(root_H_lev.inset, [node.inset, node.ex.inset])
-                else:
-                    root_H_lev.inset = [deepcopy(node.inset), deepcopy(node.ex.inset)]
+    k = 0
+    for lev in node.ex.H:  # uH
+        k += 1
+        # get fork index, draft, most likely wrong:
+        i = sum(fd * (2**j) for j, fd in enumerate(fds[-k:]))
+        if lev.H[i].inset:
+            root_g = node.root  # should be node.root? graph.lev.H didn't have root now
+            for root_H_lev in root_g.H:
+                # root_H_lev is CpH, we need to retrieve their G again here?
+                root_H_lev_g  = root_H_lev[sum([fd * (2**j) for j, fd in enumerate(root_g.fds[-i:])])]
+                sum_inset(root_H_lev_g.inset, node.inset)
+                sum_inset(root_H_lev_g.inset, node.ex.inset)
+
     ''' 
     This is depth-first, which is wrong. 
     Breadth-first needs to pack feedback per lev for all nodes in node_T: undefinite nesting in the deepest lev, 
     accessed when top-down comp_node_ stops unpacking nodes, I guess in comp_G.
     Then get to next lev, etc.
     '''
+
+# almost similar with sum_derG, merge them?
 def sum_inset(Inset, inset):
-    pass
+
+    for (Pplayers,Expplayers), (pplayers,expplayers) in zip_longest(Inset, inset, fillvalue=[[],[]]):
+        if pplayers:
+            if Pplayers: sum_pH(Pplayers,pplayers)
+            else:        Inset += [[deepcopy(pplayers), []]]
+            if expplayers:
+                if Expplayers: sum_pH(Expplayers,expplayers)
+                else:          Inset[-1][1] = deepcopy(expplayers)  # Inset[-1]: [pplayers,[]]
 
 # old:
 def add_alt_graph_(graph_t):  # mgraph_, dgraph_
