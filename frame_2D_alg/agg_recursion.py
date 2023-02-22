@@ -233,18 +233,24 @@ def comp_G_(G_, pri_G_=None, f1Q=1, fsub=0):  # cross-comp Graphs if f1Q else G_
         return minset_, dinset_  # or packed in links
 
 def comp_GQ(_G,G,fsub):
-    Minset, Dinset = CpH(),CpH()
+    Minset, Dinset = CpH(H=[[],[]]),CpH(H=[[],[]])  # init [[],[]] for inlist and exlist
     Tval = ave_G+1  # start loop
 
     while (_G and G) and Tval > ave_G:
         # same-scope if sub+, no agg+ G.G
         minset, dinset = comp_G(_G, G, fsub, fex=0)
-        Minset.H += [minset]; Minset.val += minset[0].val; Minset.rdn += minset[0].rdn
-        if minset[1]:
-            Minset.val += minset[1].val; Minset.rdn += minset[1].rdn
-        Dinset.H += [dinset]; Dinset.val += dinset[0].val; Dinset.rdn += dinset[0].rdn
-        if dinset[1]:
-            Dinset.val += dinset[1].val; Dinset.rdn += dinset[1].rdn
+        
+        Minset.H[0] += [minset]; Minset.val += minset.val; Minset.rdn += minset.rdn
+        Dinset.H[0] += [dinset]; Dinset.val += dinset.val; Dinset.rdn += dinset.rdn
+            
+        # i think this should be here instead? So that the structure of inset is [inlist, exlist]
+        # comp ex:
+        if (minset.val + dinset.val) * _G.ex.val * G.ex.val > ave_G:  # also /rdn+1: to inset?
+            mexset, dexset = comp_G(_G.ex, G.ex, fsub, fex=1)
+            Minset.H[1] += [mexset]; dinset.H[1] += [dexset]
+            Minset.val += mexset.val; Minset.rdn += mexset[1].rdn
+            Dinset.val += dexset.val; Dinset.rdn += dexset[1].rdn
+
         _G = _G.G
         G = G.G
         Tval = (Minset.val + Dinset.val) / (Minset.rdn + Dinset.rdn)
@@ -254,17 +260,22 @@ def comp_GQ(_G,G,fsub):
 def comp_G(_G, G, fsub, fex):  # up|down direction-> MpH,DpH, H = xpplayers: implicitly nested lists of ders from all lower xpplayers
 
     minset, dinset = CpH(A=[0,0]), CpH(A=[0,0])
-    inset, node_, H = G.inset, G.node_.Q if fex else G.node_, G.H
-    _inset,_node_,_H =_G.inset,_G.node_.Q if fex else G.node_,_G.H  # node_ is link_ if fex
+    inset_t, node_, H = G.inset, G.node_.Q if fex else G.node_, G.H
+    _inset_t, _node_,_H = _G.inset, _G.node_.Q if fex else G.node_,_G.H  # node_ is link_ if fex
 
-    for (_pplayers, _ex), (pplayers, ex) in zip(_inset, inset):  # inset is implicitly nested ders of all lower insets
-        if _ex and ex:
-            mex, dex = comp_pH(_ex, ex); mexV=mex.val; dexV=dex.val  # CpH ders of ex.inset?
-        else:
-            mex, dex = [],[]; mexV, dexV = 0,0
-        mpplayers, dpplayers = comp_pH(_pplayers, pplayers)  # same explicit but incr implicit nesting in m|dinset vs. compared inset
-        minset.H += [mpplayers.H,mex]; minset.val += mpplayers.val+mexV; minset.rdn += mpplayers.rdn  # add rdn in form_?
-        dinset.H += [dpplayers.H,dex]; dinset.val += dpplayers.val+dexV; dinset.rdn += dpplayers.rdn
+    _inset_t = [[CpH(H=_inset_t)],[CpH(H=_inset_t)]]
+    inset_t = [[CpH(H=inset_t)], [CpH(H=inset_t)]]
+
+    for _inset_, inset_ in zip(_inset_t, inset_t):  # each inset_t is [inlist, exlist]
+        for _inset, inset, in zip(_inset_, inset_):  # each inset_ is a list, each inset_ contains list of insets, inset.H is [[pplayers, ex], ...]
+            for (_pplayers, _ex), (pplayers, ex) in zip(_inset.H, inset.H):  # inset is implicitly nested ders of all lower insets
+                if _ex and ex:
+                    mex, dex = comp_pH(_ex, ex); mexV=mex.val; dexV=dex.val  # CpH ders of ex.inset?
+                else:
+                    mex, dex = [],[]; mexV, dexV = 0,0
+                mpplayers, dpplayers = comp_pH(_pplayers, pplayers)  # same explicit but incr implicit nesting in m|dinset vs. compared inset
+                minset.H += [[mpplayers,mex]]; minset.val += mpplayers.val+mexV; minset.rdn += mpplayers.rdn  # add rdn in form_?
+                dinset.H += [[dpplayers,dex]]; dinset.val += dpplayers.val+dexV; dinset.rdn += dpplayers.rdn
     # same fds till += [fd]:
     minset.fds, dinset.fds = pplayers.fds, pplayers.fds
     if _G.S and G.S:
@@ -286,12 +297,6 @@ def comp_G(_G, G, fsub, fex):  # up|down direction-> MpH,DpH, H = xpplayers: imp
                             sum_pH(minset, mpH); sum_pH(dinset, dpH)
     else: _G.fterm=1
     # no G.fterm=1: it has it's own specification?
-    # comp ex:
-    if (minset.val + dinset.val) * _G.ex.val * G.ex.val > ave_G:  # also /rdn+1: to inset?
-        mex, dex = comp_G(_G.ex, G.ex, fsub, fex=1)
-        minset = [minset,mex[0]]; dinset = [dinset,dex[0]]  # no ex.ex
-    else:
-        minset = [minset,[]]; dinset = [dinset,[]]
 
     # comp alts,val,rdn?
     return minset, dinset
@@ -490,15 +495,29 @@ def sum2graph_(graph_, fd):  # sum node and link params into graph, inset in agg
     return Graph_
 
 # draft
-def sum_inset(Inset, inset):
+def sum_inset(Inset_t, inset_t):
 
-    for (Pplayers,Expplayers), (pplayers,expplayers) in zip_longest(Inset, inset, fillvalue=[[],[]]):
-        if pplayers:
-            if Pplayers: sum_pH(Pplayers,pplayers)
-            else:        Inset += [[deepcopy(pplayers), []]]
-            if expplayers:
-                if Expplayers: sum_pH(Expplayers,expplayers)
-                else:          Inset[-1][1] = deepcopy(expplayers)  # Inset[-1]: [pplayers,[]]
+    for i, (Inset_, inset_) in enumerate(zip_longest(Inset_t, inset_t, fillvalue=None)):
+        
+        if Inset_:
+            for Inset, inset in zip_longest(Inset_, inset_, fillvalue=[]):
+            
+                if inset:
+                    if Inset:
+                        for (Pplayers,Expplayers), (pplayers,expplayers) in zip_longest(Inset.H, inset.H, fillvalue=[[],[]]):
+                            if pplayers:
+                                if Pplayers: sum_pH(Pplayers,pplayers)
+                                else:        Inset.H += [[deepcopy(pplayers), []]]
+                                if expplayers:
+                                    if Expplayers: sum_pH(Expplayers,expplayers)
+                                    else:          Inset.H[-1][1] = deepcopy(expplayers)  # Inset[-1]: [pplayers,[]]
+                    else:
+                        Inset_ += [deepcopy(inset)]
+        elif inset_ is not None:
+            if i > len(Inset_t)-1:  # Inset_t is []
+                Inset_t += [deepcopy(inset_)]
+            else:  # # Inset_t is [inlist, []]
+                Inset_t[i] = [deepcopy(inset_)]  # for 1st inlist and exlist, they always in tuple of 2 [inlist, exlist], so we need to replace them 
 
 # draft
 def sub_recursion_g(graph_, fseg, fds, RVal=0, DVal=0):  # rng+: extend G_ per graph, der+: replace G_ with derG_
