@@ -243,16 +243,16 @@ def comp_GQ(_G,G,fsub):  # compare lower-derivation G.G.s and pack results in mi
     Tval = ave_G+1  # start loop
     while (_G and G) and Tval > ave_G:  # same-scope if sub+, no agg+ G.G
 
-        minder_, dinder_, mext, dext, mval, dval, mrdn, drdn = comp_G(_G, G, fsub, fex=0)
-        minder__+=[minder_, mext]; dinder__+=[dinder_, dext]
+        minder_, dinder_, mval, dval, mrdn, drdn = comp_G(_G, G, fsub, fex=0)
+        minder__+=minder_; dinder__+=dinder_  # there's no need bracket here, else they will not be flat
         Mval+=mval; Dval+=dval; Mrdn+=mrdn; Drdn+=drdn  # also /rdn+1: to inder_?
         # comp ex:
         if (Mval + Dval) * _G.ex.val * G.ex.val > ave_G:
-            mex_, dex_, mext, dext, mval, dval, mrdn, drdn = comp_G(_G.ex, G.ex, fsub, fex=1)
-            minder__+=[mex_]; dinder__+=[dex_]
+            mex_, dex_, mval, dval, mrdn, drdn = comp_G(_G.ex, G.ex, fsub, fex=1)
+            minder__+=mex_; dinder__+=dex_  # there's no need bracket here, else they will not be flat
             Mval+=mval; Dval+=dval; Mrdn+=mrdn; Drdn+=drdn
         else:
-            minder__+=[[],[]]; dinder__+=[[],[]]  # ex ders
+            minder__+=[[],[]]; dinder__+=[[],[]]  # ex ders (why it is 2 brackets here? pplayers and ext of G.ex derivatives?)
         _G = _G.G; G = G.G
         Tval = (Mval + Dval) / (Mrdn + Drdn)
 
@@ -269,17 +269,20 @@ def comp_G(_G, G, fsub, fex):
     Mrdn,Drdn = 1,1
     minder_,dinder_, Mval,Dval, Mrdn,Drdn = \
         comp_inder_(_inder_,inder_, minder_,dinder_, Mval,Dval, Mrdn,Drdn)
+    
+    mext, dext = [0,0,0], [0,0,0]
     if _G.S and G.S:
         mext, dext = comp_ext(_G.L,_G.S,_G.A, G.L,G.S,G.A)
         Mval += sum(mext); Dval += sum(dext)  # no separate rdn?
     # specification:
     if (Mval+Dval) * _G.val*G.val * len(_node_)*len(node_) > ave_G:
         if fex:  # comp link_
-            sub_minder_,sub_dinder_, mext,dext = comp_derG_(_node_, node_, G.fds[-1])
+            sub_minder_,sub_dinder_, sub_mext,sub_dext = comp_derG_(_node_, node_, G.fds[-1])
         else:    # comp node_
-            sub_minder_,sub_dinder_, mext,dext = comp_G_(_node_, node_, f1Q=0, fsub=fsub)
+            sub_minder_,sub_dinder_, sub_mext,sub_dext = comp_G_(_node_, node_, f1Q=0, fsub=fsub)
         minder_.val += sum([mxpplayers.val for mxpplayers in sub_minder_])  # add rdn?
         dinder_.val += sum([dxpplayers.val for dxpplayers in sub_dinder_])
+        # below is not updated
         # sub node_ in sub Gs
         if (minder_.val+dinder_.val) * _G.val*G.val * len(_H)*len(H) > ave_G:
             # comp uH|wH, wH is empty in top-down comp?
@@ -293,7 +296,7 @@ def comp_G(_G, G, fsub, fex):
     # no G.fterm=1: it has it's own specification?
     # comp alts,val,rdn?
 
-    return minder_, dinder_, mext, dext
+    return minder_ + [mext], dinder_ + [dext] , Mval, Dval, Mrdn, Drdn # merge them? Since we are gonna concatenate them later
 
 def comp_derG_(_derG_, derG_, fd):
 
@@ -312,15 +315,15 @@ def comp_inder_(_inder_, inder_, minder_,dinder_, Mval,Dval, Mrdn,Drdn):
 
     _lenlev = 3  # ini len of implicit Lev(Pplayers) in inder_ = 3: pplayers,ext,ex
     lenlev = 0  # next lenlev = sum lower lenlevs: lev is ders of all lower levs
-    nE = 0
+    nE = 2  # should be 2 here? else Lev won't include Ext's Ext in the first loop
     i=0;  end = i+_lenlev+nE
-    while end < len(_inder_):
+    while end <= len(_inder_):
         _Lev, Lev = _inder_[i:end], inder_[i:end]  # each Lev of implicit nesting is inder_,ext,ex formed by comp_G
-        i+=_lenlev; nE+=2  # +Ext,Ex per lev, +ders of lower-lev Ext,Ex's
         end=i+nE; lenlev+=_lenlev; _lenlev=lenlev  # delayed accum: _lenlev = 3,3,6,12., levLev = 3, 3+2, 6+4, 12+6..
-        _lev=_Lev[:nE]; lev=Lev[:nE]  # separate Lev Ext,Ex's
+        _lev=_Lev[:-nE]; lev=Lev[:-nE]  # separate Lev Ext,Ex's (should be the last nE index? Because Ext Ex's are packed last)
+
         j=0
-        while j+3 < len(_lev):
+        while j+3 <= len(_lev):  # should be <= 3? When j = 0, len(_lev) == 3
             (_pplayers,_ext,_ex), (pplayers,ext,ex) = _lev[j:j+3], lev[j:j+3]  # each is CpH|[]
             j+=3
             mpplayers, dpplayers = comp_pH(_pplayers, pplayers)  # same explicit but incr implicit nesting in m|dpplayers
@@ -337,20 +340,25 @@ def comp_inder_(_inder_, inder_, minder_,dinder_, Mval,Dval, Mrdn,Drdn):
                 dinder_ += [dex]; Dval += dex.val; Drdn += dex.rdn
             else:
                 minder_+=[[]]; dinder_+=[[]]
-        for (_Ext,_Ex), (Ext,Ex) in zip(_Lev[nE:nE+2],Lev[nE:nE+2]):
-            if _Ext and Ext:
-                mExt,dExt = comp_pH(_Ext,Ext)
-                minder_ += [mExt]; Mval += sum(mExt)
-                dinder_ += [dExt]; Dval += sum(dExt)
-            else:
-                minder_+=[[]]; dinder_+=[[]]
-            if _Ex and Ex:
-                mEx, dEx = comp_pH(_Ex, Ex)
-                minder_ += [mEx]; Mval += sum(mEx); Mrdn += sum(mExt.rdn)  # wrong, sum rdn in comp_pH
-                dinder_ += [dEx]; Dval += sum(dEx); Drdn += sum(dExt.rdn)
-            else:
-                minder_+=[[]]; dinder_+=[[]]
-            nE-=2
+        for i, (_E, E) in enumerate(zip(_Lev[nE:nE+2],Lev[nE:nE+2])):  # Lev is flat, we can unpack one of them at 1 time only
+            if i%2:  # ex
+                _Ex, Ex = _E, E
+                if _Ex and Ex:
+                    mEx, dEx = comp_pH(_Ex, Ex)
+                    minder_ += [mEx]; Mval += sum(mEx); Mrdn += sum(mEx.rdn)  # wrong, sum rdn in comp_pH
+                    dinder_ += [dEx]; Dval += sum(dEx); Drdn += sum(dEx.rdn)
+                else:
+                    minder_+=[[]]; dinder_+=[[]]
+            else:  # ext
+                _Ext, Ext = _E, E            
+                if _Ext and Ext:
+                    mExt,dExt = comp_ext(_Ext[:],Ext[:])  # comp_ext here? 
+                    minder_ += [mExt]; Mval += sum(mExt)
+                    dinder_ += [dExt]; Dval += sum(dExt)
+                else:
+                    minder_+=[[]]; dinder_+=[[]]
+            
+        i+=_lenlev; nE+=2  # +Ext,Ex per lev, +ders of lower-lev Ext,Ex's
     '''
     add sub_levs per lev: n = n_lowerlevs-1?
     '''
@@ -528,30 +536,25 @@ def sum2graph_(graph_, fd):  # sum node and link params into graph, inder_ in ag
     return Graph_
 
 # not revised
-def sum_inder_(Inder__, inder__):
+def sum_inder_(Inder_, inder_):
 
-    for i, (Inder_, inder_) in enumerate(zip_longest(Inder__, inder__, fillvalue=None)):
-
-        if inder_:
+    for i, (Inder, inder) in enumerate(zip_longest(Inder_, inder_, fillvalue=None)):
+        if inder:
             if Inder_:
-                for Inder, inder in zip_longest(Inder_, inder_, fillvalue=[]):
-                    if inder:
-                        if Inder_:
-                            for i, (Pplayers, pplayers) in enumerate(zip_longest(Inder_, inder_, fillvalue=None)):
-                                if pplayers:
-                                    if Pplayers:
-                                        sum_pH(Pplayers,pplayers)
-                                    elif Pplayers is None:
-                                        Inder_ += [deepcopy(pplayers)]
-                                    else:
-                                        Inder_[i] = deepcopy(pplayers)
+                for i, (Pplayers, pplayers) in enumerate(zip_longest(Inder_, inder_, fillvalue=None)):
+                    if pplayers:
+                        if Pplayers:
+                            sum_pH(Pplayers,pplayers)
+                        elif Pplayers is None:
+                            Inder_ += [deepcopy(pplayers)]
                         else:
-                            Inder_ += [deepcopy(inder_)]
-            elif Inder_ is None:  # differentiate between empty list and none
-                Inder__ += [deepcopy(inder_)]
-            else:  # Inder_ is empty list
-                Inder_[:] = deepcopy(inder_[:])
-
+                            Inder_[i] = deepcopy(pplayers)
+            elif Inder is None:
+                Inder_ += [deepcopy(inder_)]
+            else:
+                Inder_[i] = deepcopy(inder_)     
+                
+                
 # draft
 def sub_recursion_g(graph_, fseg, fds, RVal=0, DVal=0):  # rng+: extend G_ per graph, der+: replace G_ with derG_
 
