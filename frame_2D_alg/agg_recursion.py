@@ -309,48 +309,32 @@ def comp_derG_(_derG_, derG_, fd):
 
 def comp_inder_(_inder_, inder_, minder_,dinder_, Mval,Dval, Mrdn,Drdn):
 
-    _lenlev = 3  # ini len of implicit Lev(Pplayers) in inder_ = 3: pplayers,ext,ex
-    lenlev = 0  # next lenlev = sum lower lenlevs: lev is ders of all lower levs
     i=0;  end = 3
+    level = 0  
+    # level 0 = 1
+    # level 1 = 1+2, 
+    # level 2 = 4+2,
+    # level 3 = 10+2, 
+    # level 4 = 22+2,
+    # level 5 = 46+2, ...
+    # current sequence formula = prior number*2 + 2, except for level 0
+
     while end <= len(_inder_):
         _Lev, Lev = _inder_[i:end], inder_[i:end]  # each Lev of implicit nesting is inder_,ext,ex formed by comp_G
-        i+=_lenlev
-        lenlev+=_lenlev; _lenlev=lenlev  # delayed accum levLev: sum(lower pplayers+exts)+2 -> 3, 5, 10, 20, 40, 80
-        end = i+_lenlev+2  # +Ext,Ex per Lev
-        _lev=_Lev[:2]; lev=Lev[:2]
-        j=0
-        # not revised, wrong:
-        while j+3 <= len(_lev):
-            (_pplayers,_ext,_ex), (pplayers,ext,ex) = _lev[j:j+3], lev[j:j+3]  # each is CpH|[]
-            j+=3
-            mpplayers, dpplayers = comp_pH(_pplayers, pplayers)  # same explicit but incr implicit nesting in m|dpplayers
-            minder_ += [mpplayers]; Mval += mpplayers.val; Mrdn += mpplayers.rdn  # add rdn in form_?
-            dinder_ += [dpplayers]; Dval += dpplayers.val; Drdn += dpplayers.rdn
-            if _ext and ext: # if S
-                mext, dext = comp_ext(_ext[:],ext[:])
-                minder_+=[mext]; Mval+=sum(mext); dinder_+=[dext]; Dval+=sum(dext)
-            else:
-                minder_+=[[]]; dinder_+=[[]]
-            if _ex and ex:  # if _ex.val * ex.val > ave_G?
-                mex, dex = comp_pH(_ex, ex)  # pack results in comp_pH:
-                minder_ += [mex]; Mval += mex.val; Mrdn += mex.rdn  # add rdn in form_?
-                dinder_ += [dex]; Dval += dex.val; Drdn += dex.rdn
-            else:
-                minder_+=[[]]; dinder_+=[[]]
+        
+        # comp single Lev:  
+        mval, dval, mrdn, drdn = comp_lev(_Lev[:3], Lev[:3], minder_, dinder_)
+        Mval += mval; Dval += dval; Mrdn += mrdn; Drdn += drdn
+        
         # revised:
-        (_Ext, _Ex), (Ext, Ex) = _Lev[-2:], Lev[-2:]
-        if _Ex and Ex:
-            mEx, dEx = comp_pH(_Ex, Ex)
-            minder_ += [mEx]; Mval += sum(mEx); Mrdn += sum(mEx.rdn)  # wrong, sum rdn in comp_pH
-            dinder_ += [dEx]; Dval += sum(dEx); Drdn += sum(dEx.rdn)
-        else:
-            minder_+=[[]]; dinder_+=[[]]
-        if _Ext and Ext:
-            mExt,dExt = comp_ext(_Ext[:],Ext[:])
-            minder_ += [mExt]; Mval += sum(mExt)
-            dinder_ += [dExt]; Dval += sum(dExt)
-        else:
-            minder_+=[[]]; dinder_+=[[]]
+        if level > 0:  # no Ex, ex for level 0
+            mval, dval, mrdn, drdn = comp_ex(_Lev[-2:], Lev[-2:], minder_, dinder_)
+            Mval += mval; Dval += dval; Mrdn += mrdn; Drdn += drdn
+
+        i = end         # next level starting index += current end index
+        end = (end*2)+2 # end for next level = current len*2 + 2
+        level += 1
+                        
     '''
     Lev is formed by comp_G, and G has external link_-> link coords ext, link inder_ ex.
     When lower Levs are compared to form new Lev, they also form der Ext,Ex of lower Levs.
@@ -364,6 +348,49 @@ def comp_inder_(_inder_, inder_, minder_,dinder_, Mval,Dval, Mrdn,Drdn):
     '''
     # same fds till += [fd]
     return minder_,dinder_, Mval,Dval, Mrdn,Drdn
+
+
+def comp_ex(_exLev, exLev, minder_, dinder_):
+    
+    Mval = 0; Dval = 0; Mrdn = 0; Drdn = 0
+    
+    (_Ext, _Ex), (Ext, Ex) = _exLev[-2:], exLev[-2:]
+    if _Ex and Ex:
+        mEx, dEx = comp_pH(_Ex, Ex)
+        minder_ += [mEx]; Mval += sum(mEx); Mrdn += sum(mEx.rdn)  # wrong, sum rdn in comp_pH
+        dinder_ += [dEx]; Dval += sum(dEx); Drdn += sum(dEx.rdn)
+    else:
+        minder_+=[[]]; dinder_+=[[]]
+    if _Ext and Ext:
+        mExt,dExt = comp_ext(_Ext[:],Ext[:])
+        minder_ += [mExt]; Mval += sum(mExt)
+        dinder_ += [dExt]; Dval += sum(dExt)
+    else:
+        minder_+=[[]]; dinder_+=[[]]
+
+    return Mval, Dval, Mrdn, Drdn
+
+def comp_lev(_lev, lev, minder_, dinder_):
+
+    Mval = 0; Dval = 0; Mrdn = 0; Drdn = 0
+    
+    (_pplayers,_ext,_ex), (pplayers,ext,ex) = _lev[:3], lev[:3]  # each is CpH|[]
+    mpplayers, dpplayers = comp_pH(_pplayers, pplayers)  # same explicit but incr implicit nesting in m|dpplayers
+    minder_ += [mpplayers]; Mval += mpplayers.val; Mrdn += mpplayers.rdn  # add rdn in form_?
+    dinder_ += [dpplayers]; Dval += dpplayers.val; Drdn += dpplayers.rdn
+    if _ext and ext: # if S
+        mext, dext = comp_ext(_ext[:],ext[:])
+        minder_+=[mext]; Mval+=sum(mext); dinder_+=[dext]; Dval+=sum(dext)
+    else:
+        minder_+=[[]]; dinder_+=[[]]
+    if _ex and ex:  # if _ex.val * ex.val > ave_G?
+        mex, dex = comp_pH(_ex, ex)  # pack results in comp_pH:
+        minder_ += [mex]; Mval += mex.val; Mrdn += mex.rdn  # add rdn in form_?
+        dinder_ += [dex]; Dval += dex.val; Drdn += dex.rdn
+    else:
+        minder_+=[[]]; dinder_+=[[]]
+
+    return Mval, Dval, Mrdn, Drdn
 
 
 def comp_ext(_L,_S,_A, L,S,A):
