@@ -313,7 +313,8 @@ def comp_inder_(_inder_, inder_, minder_,dinder_, Mval,Dval, Mrdn,Drdn):
         _Lev, Lev = _inder_[i:end], inder_[i:end]  # each Lev of implicit nesting is inder_,ext,ex formed by comp_G
         for _der,der in zip(_Lev,Lev):
             if der:
-                if isinstance(der,CpH()):  # pplayers or ex_pplayers after ext, incr implicit nesting in m|dpplayers:
+                # CpH instead of CpH() because we just need the type
+                if isinstance(der,CpH):  # pplayers or ex_pplayers after ext, incr implicit nesting in m|dpplayers:
                     mpplayers, dpplayers = comp_pH(_der, der)
                     minder_ += [mpplayers]; Mval += mpplayers.val; Mrdn += mpplayers.rdn  # add rdn in form_?
                     dinder_ += [dpplayers]; Dval += dpplayers.val; Drdn += dpplayers.rdn
@@ -560,33 +561,56 @@ def sub_recursion_g(graph_, fseg, fds, RVal=0, DVal=0):  # rng+: extend G_ per g
 
 def feedback(root):  # bottom-up update root.H, breadth-first
 
-    while root:  # and fb val > aveG
+    fbval = aveG + 1
+    while root and fbval > aveG:  # and fb val > aveG
         if root.fterm:  # forward was terminated in all nodes
-            root.fterm = 0
+            
+            root.fterm = 0; fbval = 0
             for i, Lev in enumerate(root.H):
-                Lev.H[root.node_[0].fds[:i]].inder_ = []  # replace fork
+                Lev.H[root.node_[0].fds[i]].inder_ = []  # replace fork
             for node in root.node_:
                 for Lev,lev in zip_longest(root.H[1:], node.H, fillvalue=CpH()):  # root.H[1:] maps to node.H
                     sum_inder_(Lev.H[lev.fds[-1]].inder_, lev.H[lev.fds[-1]].inder_)
-            root = root.root
-        else:
-            break
-    root.fterm = 1  # feedback is terminated,
-    fforward(root)  # eval accum feedback forwarding, no cross-comp
+                    for inder in Lev.H[lev.fds[-1]].inder_:
+                        if isinstance(inder, CpH):  # pplayers or ex
+                            fbval += inder.val
+                        else:  # ext
+                            # Angle might be a list
+                            for val in inder: 
+                              if isinstance(val, list): fbval += sum(val)
+                              else:                     fbval += val
+        
+            # this should be here, else when we break, root might be = None
+            if root.root:
+                root = root.root
+            else:
+                root.fterm = 1  # feedback is terminated,
+                fforward(root)  # eval accum feedback forwarding, no cross-comp
+                break
 
+    
 def fforward(node):  # top-down update node.ex.H[0], breadth-first. Add update higher levs in node.ex.H?
 
-    while node:  # and ff val > aveG
-        if node.fterm:  # feedback was terminated in all sub_nodes
-            node.fterm = 0
-            for sub_node in node.node_:
-                fork_inder_ = []
-                for root in sub_node.ex.H[0].H[node.fds[-1]].H:  # same-fork root Gs
-                    sum_inder_(fork_inder_, root.inder_)
-                sub_node.ex.H[0].H[node.fds[-1]].inder_[:] = fork_inder_  # replace,!sum
-            node = node.node
-        else:
-            break
+    node.fterm = 0; ffval = 0
+    for sub_node in node.node_:
+        for exH in sub_node.ex.H:
+            fork_inder_ = []
+            for root in exH.H[node.fds[-1]].H:  # same-fork root Gs
+                sum_inder_(fork_inder_, root.inder_)    
+            exH.H[node.fds[-1]].inder_[:] = fork_inder_  # replace,!sum
+            for inder in fork_inder_:
+                if isinstance(inder, CpH):  # pplayers or ex
+                    ffval += inder.val
+                else:  # ext
+                    for val in inder: 
+                        if isinstance(val, list): ffval += sum(val)
+                        else:                     ffval += val
+    
+        if sub_node.fterm and ffval > aveG:
+            fforward(sub_node)
+    # node.node_ is sub_node, so we should call fforward with sub_node instead?
+    # node = node.node_
+
 
 # old:
 def add_alt_graph_(graph_t):  # mgraph_, dgraph_
