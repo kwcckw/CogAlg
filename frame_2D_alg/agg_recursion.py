@@ -101,9 +101,10 @@ class CderG(ClusterStructure):  # graph links, within root node_
 
 def agg_recursion(root, fseg):  # compositional recursion in root.PP_, pretty sure we still need fseg, process should be different
 
-    root.H += [CpH(H=[Cgraph(),Cgraph()])]  # to sum feedback from new graphs
+    # what would be a suitable value for new level's fds here?
+    root.H += [CpH(fds=[0,1], H=[Cgraph(),Cgraph()])]  # to sum feedback from new graphs
     for G in root.node_:
-        G.ex.H += [CpH(H=[Cgraph(),Cgraph()])]
+        G.ex.H += [CpH(fds=[0,1], H=[Cgraph(),Cgraph()])]
         # not for sub+: lower node =G.G?
     mgraph_, dgraph_ = form_graph_(root, fsub=0)  # node.H cross-comp and graph clustering, comp frng pplayers
 
@@ -284,6 +285,7 @@ def comp_G(_G, G, fsub, fex):
                 for _g, _fd in zip(forks.H, forks.fds):
                     for g, fd in zip(forks.H, forks.fds):
                         if _fd == fd:
+                            # below need update? compare g.inder_< sum them to minder_ and dinder_?
                             mpH, dpH = comp_pH(_g.pplayers, g.pplayers)
                             sum_pH(minder_, mpH); sum_pH(dinder_, dpH)
     else: _G.fterm=1
@@ -532,8 +534,8 @@ def sub_recursion_g(graph_, fseg, fds, RVal=0, DVal=0):  # rng+: extend G_ per g
     for graph in graph_:
         node_ = graph.node_
         if graph.val > G_aves[fds[-1]] and len(node_) > ave_nsub:
-
-            graph.H.append(CpH(H=[Cgraph(),Cgraph()]))  # to sum new graphs
+            # we need to add fds to new lev here, not sure if [fds[-1]] is correct
+            graph.H.append(CpH(fds=[fds[-1]],  H=[Cgraph(),Cgraph()]))  # to sum new graphs
             sub_mgraph_, sub_dgraph_ = form_graph_(graph, fsub=1)  # cross-comp and clustering
             # rng+:
             Rval = sum([sub_mgraph.val for sub_mgraph in sub_mgraph_])
@@ -553,6 +555,7 @@ def sub_recursion_g(graph_, fseg, fds, RVal=0, DVal=0):  # rng+: extend G_ per g
             DVal += Dval
         else:
             graph.fterm = 1  # forward is terminated
+            # graph.node_'s H will be empty here
             feedback(graph)  # bottom-up feedback to update root.H, then downward reforward to update node.ex.H
 
     return RVal, DVal  # or SVal= RVal+DVal, separate for each fork of sub+?
@@ -574,13 +577,14 @@ def feedback(root):  # bottom-up update root.H, breadth-first
                         sum_inder_(Lev.H[j].inder_, lev.H[j].inder_)  # same fork
             for Lev in root.H:
                 fbval += Lev.val; fbrdn += Lev.rdn
-            fbV = fbval/fbrdn
+            fbV = fbval/max(1, fbrdn)  # right now node.H could be empty
             if root.root:
                 root = root.root
             else:
-                root.fterm = 1  # feedback is terminated,
-                fforward(root)  # feedback forwarding, no cross-comp
                 break
+            
+    # this should be outside of while loop? else when fbV > aveG is false, fforward will not be run too
+    fforward(root)  # feedback forwarding, no cross-comp
 
 # rough draft
 def fforward(root):  # top-down update node.ex.H, breadth-first
@@ -590,16 +594,17 @@ def fforward(root):  # top-down update node.ex.H, breadth-first
             if rLev:
                 j = sum(fd*(2**k) for k,fd in enumerate(rLev.fds[i:]))
                 if not nLev:  # init:
-                    nLev=CpH(H=[Cgraph() for fork in rLev.fds[i:]])
+                    nLev=CpH(fds=copy(rLev.fds), H=[Cgraph() for fork in rLev.fds[i:]])
                 sum_inder_(nLev.H[j].inder_, rLev.H[j].inder_)  # same fork
         ffV,ffR = 0,0
         for Lev in root.ex.H:
             ffV += Lev.val; ffR += Lev.rdn
 
-        if node.fterm and ffV/ffR > aveG:
+        # converted G from PP doesn't have node_ assigned
+        if node.fterm and node.node_ and ffV/ffR > aveG:
             node.fterm = 0
             fforward(node)
-        # no else?
+        # no else? (should be no)
 
 # old:
 def add_alt_graph_(graph_t):  # mgraph_, dgraph_
