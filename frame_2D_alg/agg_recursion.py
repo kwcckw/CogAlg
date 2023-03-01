@@ -66,7 +66,7 @@ class Cgraph(ClusterStructure):  # params of single-fork node_ cluster per pplay
     G = lambda: None  # same-scope lower der|rng G.G.G.., for all nodes beyond PP
     root = lambda: None  # root graph or inder_ G, element of ex.H[-1][fd]
     # up,down trees:
-    ex = object # ex inder_ ) link_) uH: Lev+= root tree slice: reforward all forks?
+    ex = object # ex inder_ ) link_) uH: Lev+= root tree slice: reforward, all forks for comp?
     inder_ = list  # inder_ ) node_) wH: Lev+= node tree slice: feedback, Lev/agg+, lev/sub+?
     # inder_ params:
     node_ = list  # single-fork, conceptually H[0], concat sub-node_s in ex.H levs
@@ -214,7 +214,7 @@ def comp_G_(G_, pri_G_=None, f1Q=1, fsub=0):  # cross-comp Graphs if f1Q else G_
                         continue
                     minder_, dinder_, mval, dval, tval = comp_GQ(_G,G, fsub)  # comp inder_,LSA? comp node_? comp H?
                     if _G.S and G.S and tval > aveG:
-                        mext, dext = comp_ext(_G.L,_G.S,_G.A, G.L,G.S,G.A)  # per 0G: GQ is one distributed node
+                        mext,dext = comp_ext(_G.L,_G.S,_G.A, G.L,G.S,G.A)  # per 0G: GQ is one distributed node
                         minder_+=[mext]; dinder_+=[mext]; mval+=sum(mext); dval+=sum(dext)  # no separate rdn?
                     else:
                         minder_+=[[]]; dinder_+=[[]]
@@ -252,6 +252,7 @@ def comp_GQ(_G,G,fsub):  # compare lower-derivation G.G.s, pack results in minde
             Mval+=mval; Dval+=dval; Mrdn+=mrdn; Drdn+=drdn
         else:
             minder__+=[[]]; dinder__+=[[]]
+        # no ext added within GQ
         _G = _G.G
         G = G.G
         Tval = (Mval+Dval) / (Mrdn+Drdn)
@@ -267,8 +268,8 @@ def comp_G(_G, G, fsub, fex):
     Mval,Dval = 0,0
     Mrdn,Drdn = 1,1
     minder_,dinder_, Mval,Dval, Mrdn,Drdn = \
-        comp_inder_(_inder_,inder_, minder_,dinder_, Mval,Dval, Mrdn,Drdn)  # comp_ext per GQ: same node_
-    # specification:
+        comp_inder_(_inder_,inder_, minder_,dinder_, Mval,Dval, Mrdn,Drdn)
+    # spec+:
     if (Mval+Dval) * _G.val*G.val * len(_node_)*len(node_) > aveG:
         if fex:  # comp link_
             sub_minder_,sub_dinder_ = comp_derG_(_node_, node_, G.fds[-1])
@@ -313,7 +314,6 @@ def comp_inder_(_inder_, inder_, minder_,dinder_, Mval,Dval, Mrdn,Drdn):
         _Lev, Lev = _inder_[i:end], inder_[i:end]  # each Lev of implicit nesting is inder_,ext,ex formed by comp_G
         for _der,der in zip(_Lev,Lev):
             if der:
-                # CpH instead of CpH() because we just need the type
                 if isinstance(der,CpH):  # pplayers or ex_pplayers after ext, incr implicit nesting in m|dpplayers:
                     mpplayers, dpplayers = comp_pH(_der, der)
                     minder_ += [mpplayers]; Mval += mpplayers.val; Mrdn += mpplayers.rdn  # add rdn in form_?
@@ -518,8 +518,7 @@ def sum_inder_(Inder_, inder_, fext=1):
                     elif fext:  # fext = 0 to exclude summing ext
                         for i in range(2): Inder[i] += inder[i]  # ext params (L，S)
                         if isinstance(Inder[2], list):  # A is [0,0]
-                            Inder[2][0] += inder[2][0]
-                            Inder[2][1] += inder[2][1]
+                            Inder[2][0] += inder[2][0]; Inder[2][1] += inder[2][1]
                         else:  # A is int
                             Inder[2] += inder[2]
             elif Inder is None:  # to check if inder_ has more inders
@@ -561,56 +560,46 @@ def sub_recursion_g(graph_, fseg, fds, RVal=0, DVal=0):  # rng+: extend G_ per g
 
 def feedback(root):  # bottom-up update root.H, breadth-first
 
-    fbval = aveG + 1
-    while root and fbval > aveG:  # and fb val > aveG
+    fbV = aveG+1
+    while root and fbV > aveG:
         if root.fterm:  # forward was terminated in all nodes
-            
-            root.fterm = 0; fbval = 0
-            for i, Lev in enumerate(root.H):
-                Lev.H[root.node_[0].fds[i]].inder_ = []  # replace fork
+            root.fterm = 0  # or reuse for fforward?
+            fbval, fbrdn = 0,0
             for node in root.node_:
-                for Lev,lev in zip_longest(root.H[1:], node.H, fillvalue=CpH()):  # root.H[1:] maps to node.H
-                    sum_inder_(Lev.H[lev.fds[-1]].inder_, lev.H[lev.fds[-1]].inder_)
-                    for inder in Lev.H[lev.fds[-1]].inder_:
-                        if isinstance(inder, CpH):  # pplayers or ex
-                            fbval += inder.val
-                        else:  # ext
-                            # Angle might be a list
-                            for val in inder: 
-                              if isinstance(val, list): fbval += sum(val)
-                              else:                     fbval += val
-        
-            # this should be here, else when we break, root might be = None
+                for i, (Lev,lev) in enumerate(zip_longest(root.H[1:], node.H, fillvalue=[])):  # root.H[1:] maps to node.H
+                    if lev:
+                        j = sum(fd*(2**k) for k,fd in enumerate(lev.fds[i:]))
+                        if not Lev:  # init:
+                            Lev=CpH(H=[Cgraph() for fork in lev.fds[i:]])
+                        sum_inder_(Lev.H[j].inder_, lev.H[j].inder_)  # same fork
+            for Lev in root.H:
+                fbval += Lev.val; fbrdn += Lev.rdn
+            fbV = fbval/fbrdn
             if root.root:
                 root = root.root
             else:
                 root.fterm = 1  # feedback is terminated,
-                fforward(root)  # eval accum feedback forwarding, no cross-comp
+                fforward(root)  # feedback forwarding, no cross-comp
                 break
 
-    
-def fforward(node):  # top-down update node.ex.H[0], breadth-first. Add update higher levs in node.ex.H?
+# rough draft
+def fforward(root):  # top-down update node.ex.H, breadth-first
 
-    node.fterm = 0; ffval = 0
-    for sub_node in node.node_:
-        for exH in sub_node.ex.H:
-            fork_inder_ = []
-            for root in exH.H[node.fds[-1]].H:  # same-fork root Gs
-                sum_inder_(fork_inder_, root.inder_)    
-            exH.H[node.fds[-1]].inder_[:] = fork_inder_  # replace,!sum
-            for inder in fork_inder_:
-                if isinstance(inder, CpH):  # pplayers or ex
-                    ffval += inder.val
-                else:  # ext
-                    for val in inder: 
-                        if isinstance(val, list): ffval += sum(val)
-                        else:                     ffval += val
-    
-        if sub_node.fterm and ffval > aveG:
-            fforward(sub_node)
-    # node.node_ is sub_node, so we should call fforward with sub_node instead?
-    # node = node.node_
+    for node in root.node_:
+        for i, (rLev,nLev) in enumerate(zip_longest(root.ex.H, node.ex.H[1:], fillvalue=[])):  # root.ex.H maps to node.ex.H[1:]
+            if rLev:
+                j = sum(fd*(2**k) for k,fd in enumerate(rLev.fds[i:]))
+                if not nLev:  # init:
+                    nLev=CpH(H=[Cgraph() for fork in rLev.fds[i:]])
+                sum_inder_(nLev.H[j].inder_, rLev.H[j].inder_)  # same fork
+        ffV,ffR = 0,0
+        for Lev in root.ex.H:
+            ffV += Lev.val; ffR += Lev.rdn
 
+        if node.fterm and ffV/ffR > aveG:
+            node.fterm = 0
+            fforward(node)
+        # no else?
 
 # old:
 def add_alt_graph_(graph_t):  # mgraph_, dgraph_
