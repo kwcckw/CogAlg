@@ -102,6 +102,7 @@ class CderG(ClusterStructure):  # graph links, within root node_
 def agg_recursion(root, fseg):  # compositional recursion in root.PP_, pretty sure we still need fseg, process should be different
 
     mgraph_, dgraph_ = form_graph_(root, fsub=0)  # node.H cross-comp and graph clustering, comp frng pplayers
+    root.H += [CpH(H=[Cgraph(),Cgraph()])]  # new level for each agg+
 
     for fd, graph_ in enumerate([mgraph_,dgraph_]):  # eval graphs for sub+ and agg+:
         val = sum([graph.val for graph in graph_])
@@ -374,7 +375,7 @@ def sum_G(G, g):
         else:  G.ex.H = deepcopy(g.ex.H) + [CpH(H=[Cgraph(inder_=copy(g.inder_)), Cgraph()])]
     GH=[]  # sum H:
     for i, (Lev,lev) in enumerate(zip_longest(GH, g.H, fillvalue=CpH())):
-        for j, (Fork,fork, Fd,fd) in enumerate(zip_longest(Lev.H,lev.H, Lev.fds,lev.fds, fillvalue=[])):
+        for j, (Fork,fork) in enumerate(zip_longest(Lev.H,lev.H, fillvalue=[])):
             if fork:
                 if Fork:
                     if Fd==fd:
@@ -521,7 +522,7 @@ def sum_ex_H(root, node):  # add root.ex.H to node.ex.H, no eval but possible re
         if rLev:
             j = sum(fd*(2**k) for k,fd in enumerate(node.fds[i:]))
             if not nLev:  # init:
-                nLev = CpH(H=[Cgraph() for fork in range(len(node.fds[i:]))])
+                nLev = CpH(H=[Cgraph() for fork in range(len(node.fds[i:])*2)])  # single fd for a pair of graph, so we need *2 here? Else when j index is 1 (2nd element), we have single graph in H only
             sum_inder_(nLev.H[j].inder_, rLev.H[j].inder_)  # same fork
 
 
@@ -531,6 +532,7 @@ def sub_recursion_g(graph_, fseg, fds, RVal=0, DVal=0):  # rng+: extend G_ per g
     for graph in graph_:
         node_ = graph.node_
         if graph.val > G_aves[fds[-1]] and len(node_) > ave_nsub:
+            graph.H.append(CpH(H=[Cgraph(),Cgraph()]))  # # new level for each sub+
 
             sub_mgraph_, sub_dgraph_ = form_graph_(graph, fsub=1)  # cross-comp and clustering
             # rng+:
@@ -538,14 +540,14 @@ def sub_recursion_g(graph_, fseg, fds, RVal=0, DVal=0):  # rng+: extend G_ per g
             if RVal + Rval > ave_sub * graph.rdn:  # >cost of call:
                 rval, dval = sub_recursion_g(sub_mgraph_, fseg=fseg, fds=fds+[0], RVal=Rval, DVal=DVal)
                 RVal += rval+dval
-            else:
+            elif graph.H:  #  graph.H may empty here？
                 graph.H[-1].H[0] = []; graph.H[-1].fds.insert(0,None)
             # der+:
             Dval = sum([sub_dgraph.val for sub_dgraph in sub_dgraph_])
             if DVal + Dval > ave_sub * graph.rdn:
                 rval, dval = sub_recursion_g(sub_dgraph_, fseg=fseg, fds=fds+[1], RVal=Rval, DVal=DVal)
                 Dval += rval+dval
-            else:
+            elif graph.H:
                 graph.H[-1].H[1] = []; graph.H[-1].fds.insert(1,None)  # fds[1]?
             RVal += Rval
             DVal += Dval
@@ -563,7 +565,8 @@ def feedback(root):  # bottom-up update root.H, breadth-first
             root.fterm = 0  # or reuse for fforward?
             fbval, fbrdn = 0,0
             for node in root.node_:
-                for i, (Lev,lev) in enumerate(zip_longest(root.H[1:], node.H, fillvalue=[])):  # root.H[1:] maps to node.H
+                # should be node.ex.H? Because node.H actually is empty
+                for i, (Lev,lev) in enumerate(zip_longest(root.H, node.ex.H[1:], fillvalue=[])):  # root.H[1:] maps to node.H
                     if lev:
                         j = sum(fd*(2**k) for k,fd in enumerate(lev.fds[i:]))
                         if not Lev:  # init:
@@ -572,6 +575,10 @@ def feedback(root):  # bottom-up update root.H, breadth-first
             for Lev in root.H:
                 fbval += Lev.val; fbrdn += Lev.rdn
             fbV = fbval/fbrdn
+            
+            if len(root.ex.H)>1:  # pack prior levels to H, except latest level
+                root.H = root.ex.H[:-1]; root.ex.H = root.ex.H[-1]
+
             if root.root:
                 root = root.root
             else:
