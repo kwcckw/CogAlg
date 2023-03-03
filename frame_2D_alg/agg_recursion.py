@@ -368,11 +368,11 @@ def sum2graph_(root, graph_, fd):  # sum node and link params into graph, inder_
     for graph in graph_:  # CpHs
         if graph.val < aveG:  # form graph if val>min only
             continue
-        Graph = Cgraph(fds=copy(G.fds), ex=Cgraph(node_=Clink_(),A=[0,0]))
+        Graph = Cgraph(fds=copy(graph.H[0].fds), ex=Cgraph(node_=Clink_(),A=[0,0]))
         # form G, keep iG:
         node_,Link_= [],[]
         for iG in graph.H:
-            sum_H(iG, root)  # per der order?
+            sum_H(iG.H, root.H)  # per der order? (root.H is not empty only if it is terminated, but root shouldn't be terminated yet here?)
             sum_G(Graph, iG)  # this is a lower-der iG, already in root Graph?
             link_ = [iG.ex.node_.Qm, iG.ex.node_.Qd][fd]
             Link_ = list(set(Link_ + link_))  # unique links in node_
@@ -417,52 +417,54 @@ def sum_inder_(Inder_, inder_, fext=1):
             elif Inder is None: Inder_ += [deepcopy(inder)]
             else:               Inder_[i] = deepcopy(inder)
 
-def sum_H(G, g):  # add g.H to G.H, no eval but possible remove if weak?
+def sum_H(H, h):  # add g.H to G.H, no eval but possible remove if weak?
 
-    for i, (Lev, lev) in enumerate(zip_longest(G.ex.H, g.ex.H[1:], fillvalue=[])):  # root.ex.H maps to node.ex.H[1:]
+    for i, (Lev, lev) in enumerate(zip_longest(H, h, fillvalue=[])):  # root.ex.H maps to node.ex.H[1:]
         if lev:  # not needed: j = sum(fd*(2**k) for k,fd in enumerate(g.fds[i:]))
             if not Lev:  # init:
                 Lev = CpH(H=[[] for fork in range(2**(i+1))])
-                for Fork, fork in zip(Lev.H, lev.H):  # should be same length: same elevation?
+                for i, (Fork, fork) in enumerate(zip(Lev.H, lev.H)):  # should be same length: same elevation?
                     if fork:
-                        if not Fork: Fork[:] = Cgraph()
+                        if not Fork: 
+                            Lev.H[i] = Fork = Cgraph(Ex=Cgraph())
                         sum_G(Fork, fork)  # sum G.H across fork g_s
 
-def sum_G(G, g):  # g is a node in G.node_
+def sum_G(G, g, fmerge=0):  # g is a node in G.node_
 
     sum_inder_(G.inder_, g.inder_)  # direct node representation
-    if g.ex.H:
-        sum_H(G.ex, g.ex)  # sum in reverse order: g->G?
+    if isinstance(g.ex, Cgraph) and g.ex.H:  # G.ex.ex is object, but not cgraph
+        sum_H(G.ex.H, g.ex.H[1:])  # sum in reverse order: g->G?
     if g.H:  # not needed in sum2graph
-        sum_H(G, g)
+        sum_H(G.H, g.H[1:])
     G.L += g.L; G.S += g.S
     if isinstance(g.A, list):
-        if g.A:  # where is it empty?
-            if G.A:
-                G.A[0] += g.A[0]; G.A[1] += g.A[1]
-            else: G.A = copy(g.A)
+        if G.A:
+            G.A[0] += g.A[0]; G.A[1] += g.A[1]
+        else: G.A = copy(g.A)
     else: G.A += g.A
     G.val += g.val; G.rdn += g.rdn; G.nval += g.nval
     Y,X, Y0,Yn, X0,Xn = G.box[:]
     y,x, y0,yn, x0,xn = g.box[:]
-    G.box[:] = Y+y, X+x, min(X0.x0), max(Xn,xn), min(Y0,y0), max(Yn,yn)
-    G.node_ += [g]
-    '''
-    merge is not needed?
-    for node in g.node_:
-        if node not in G.node_: G.node_ += [node]
-    for link in g.Link_.Q:
-        if link not in G.Link_.Q: G.Link_.Q += [link]
-    '''
-    # alts
-    for alt_graph in g.alt_graph_:
-        if alt_graph not in G.alt_graph:
-            G.alt_graph_ += [alt_graph]
-    if g.alt_Graph:
-        if G.alt_Graph:
-            sum_G(G.alt_Graph, g.alt_Graph)
-        else:
-            G.alt_Graph = deepcopy(g.alt_graph)
+    G.box[:] = [Y+y, X+x, min(X0,x0), max(Xn,xn), min(Y0,y0), max(Yn,yn)]
+    
+    # I think we can include a flag in case we need to merge them instead of just summing them
+    if fmerge:
+        # nodes and links
+        for node in g.node_:
+            if node not in G.node_: G.node_ += [node]
+        for link in g.Link_.Q:
+            if link not in G.Link_.Q: G.Link_.Q += [link]    
+        # alts
+        for alt_graph in g.alt_graph_:
+            if alt_graph not in G.alt_graph:
+                G.alt_graph_ += [alt_graph]
+        if g.alt_Graph:
+            if G.alt_Graph:
+                sum_G(G.alt_Graph, g.alt_Graph)
+            else:
+                G.alt_Graph = deepcopy(g.alt_graph)      
+    else:
+        G.node_ += [g]
 
 def sum_pH_(PH_, pH_, fneg=0):
     for PH, pH in zip_longest(PH_, pH_, fillvalue=[]):  # each is CpH
@@ -542,6 +544,9 @@ def feedback(root):  # bottom-up update root.H, breadth-first
         if root.fterm:  # forward was terminated in all nodes
             root.fterm = 0
             fbval, fbrdn = 0,0
+
+            # we need to add this per feedback? Else root.H is empty
+            root.H.insert(0, CpH(H=[Cgraph(),Cgraph()]))
             for node in root.node_:
                 for sub_node in node.node_:
                     # sum nodes in root, sub_nodes in root.H:
@@ -549,12 +554,12 @@ def feedback(root):  # bottom-up update root.H, breadth-first
                     for i, (Lev, lev) in enumerate(zip_longest(root.H[1:], sub_node.H, fillvalue=[])):
                         if lev:
                             j = sum(fd*(2**k) for k,fd in enumerate(sub_node.fds[i:]))
-                            if not Lev: Lev = CpH(H=[[] for fork in range(2**(i+1))])
+                            if not Lev: Lev = CpH(H=[[] for fork in range(2**(i+1))])  # why not just init Cgraph in the H?
                             if not Lev.H[j]: Lev.H[j] = Cgraph()
                             sum_inder_(Lev.H[j].inder_, lev.H[j].inder_)  # in same fork
             for Lev in root.H:
                 fbval += Lev.val; fbrdn += Lev.rdn
-            fbV = fbval/fbrdn
+            fbV = fbval/max(1, fbrdn)  # node doesn't have node if it is converted G, and hence fbrdn will be 0
             if root.root:
                 root = root.root
             else:
