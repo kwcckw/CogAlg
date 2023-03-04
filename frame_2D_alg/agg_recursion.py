@@ -368,25 +368,28 @@ def sum2graph_(root, graph_, fd):  # sum node and link params into graph, inder_
     for graph in graph_:  # CpHs
         if graph.val < aveG:  # form graph if val>min only
             continue
-        Graph = Cgraph(root=root, fds=copy(graph.H[0].fds))
-        sum_H(Graph.ex.H, root.ex.H)  # root of Graph
+        Graph = Cgraph(root=root, fds=copy(graph.H[0].fds), ex=Cgraph(H=deepcopy(root.ex.H)))
+        # Graph.ex is always empty here, so we can just init it with root.ex.H?
+        # sum_H(Graph.ex.H, root.ex.H)  # root of Graph
         node_,Link_= [],[]
         # form G, keep iG:
         for iG in graph.H:
             # sum_G(Graph, iG)  # iG is already in lower-der root graph?
             link_ = [iG.ex.node_.Qm, iG.ex.node_.Qd][fd]
             Link_ = list(set(Link_ + link_))  # unique links in node_
-            G = Cgraph(fds=copy(iG.fds)+[fd], G=iG, root=Graph, ex=Cgraph(node_=Clink_(),A=[0,0]))
+            # we need to copy iG node and inder_? Else they will be empty since we didn't accumulate them anymore
+            G = Cgraph(node=copy(iG.node_), inder_ = deepcopy(iG.inder_), fds=copy(iG.fds)+[fd], G=iG, root=Graph, ex=Cgraph(node_=Clink_(),A=[0,0], H=deepcopy(Graph.ex.H)))
             # sum quasi-gradient of links in ex.inder_: redundant to Graph.inder_, if len node_:
             for derG in link_:
                 sum_inder_(G.ex.inder_, [derG.minder_, derG.dinder_][fd])  # conditional, remove if few links?
                 G.ex.S += derG.S; G.ex.A[0]+=derG.A[0]; G.ex.A[1]+=derG.A[1]
             l=len(link_); G.ex.L=l; G.ex.S/=l
-            sum_H(G.ex.H, Graph.ex.H)  # root of G, longer ex.H?
+            # Graph.ex.H is init from root, we can just have G.exH = deepcopy(root.ex.H) too
+            # sum_H(G.ex.H, Graph.ex.H)  # root of G, longer ex.H?
             node_ += [G]
         Graph.node_ = node_ # lower nodes = G.G..; Graph.root = iG.root
         for Link in Link_:  # sum unique links
-            sum_inder_(Graph.inder_, [Link.minder_, Link.dinder_][fd])
+            sum_inder_(Graph.inder_, [Link.minder_, Link.dinder_][fd])  # is it possible to get Link with different length of inder_?
             if Graph.inder_[-1]:  # top ext
                 Graph.inder_[-1][1]+=Link.S; Graph.inder_[-1][2][0]+=Link.A[0]; Graph.inder_[-1][2][1]+=Link.A[1]
             else: Graph.inder_[-1] = [1,Link.S,Link.A]
@@ -436,13 +439,16 @@ def sum_inder_(Inder_, inder_, fext=1):
         if inder is not None:
             if Inder:
                 if inder:  # not []
-                    if isinstance(inder, CpH):
-                        sum_pH(Inder,inder)
-                    elif fext:  # fext = 0 to exclude summing ext
-                        for i in range(2): Inder[i] += inder[i]  # ext params (L，S)
-                        if isinstance(Inder[2], list):  # A is [0,0]
-                            Inder[2][0] += inder[2][0]; Inder[2][1] += inder[2][1]
-                        else: Inder[2] += inder[2]  # A is int
+                    if type(Inder) == type (inder):  # same type
+                        if isinstance(inder, CpH):
+                            sum_pH(Inder,inder)
+                        elif fext:  # fext = 0 to exclude summing ext
+                            for i in range(2): Inder[i] += inder[i]  # ext params (L，S)
+                            if isinstance(Inder[2], list):  # A is [0,0]
+                                Inder[2][0] += inder[2][0]; Inder[2][1] += inder[2][1]
+                            else: Inder[2] += inder[2]  # A is int
+                    else:
+                        Inder_.insert(i,deepcopy(inder))  # insert inder into Inder_, not sure (for different length of Inder_ and inder_)
 
             elif Inder is None: Inder_ += [deepcopy(inder)]
             else:               Inder_[i] = deepcopy(inder)
@@ -540,7 +546,7 @@ def feedback(root):  # bottom-up update root.H, breadth-first
                     # sum nodes in root, sub_nodes in root.H:
                     fd = sub_node.fds[-1]
                     if not root.H: root.H = [CpH(H=[[],[]])]  # append bottom-up
-                    if not root.H[0].H[fd]: root.H[0].H[fd] = Cgraph
+                    if not root.H[0].H[fd]: root.H[0].H[fd] = Cgraph()
                     sum_inder_(root.H[0].H[fd].inder_, sub_node.inder_)
                     for i, (Lev,lev) in enumerate(zip_longest(root.H[1:], sub_node.H, fillvalue=[])):
                         if lev:
@@ -552,6 +558,8 @@ def feedback(root):  # bottom-up update root.H, breadth-first
                 fbval += Lev.val; fbrdn += Lev.rdn
             fbV = fbval/max(1, fbrdn)
             root = root.root
+            if root:  # set root.root.fterm = 1 too? else they won't be called in the next recursion
+                root.fterm = 1  
 
 # old:
 def add_alt_graph_(graph_t):  # mgraph_, dgraph_
