@@ -164,7 +164,7 @@ def graph_reval(graph_, reval_, fd):  # recursive eval nodes for regraph, increa
 def readd_node_layer(regraph, graph_H, node, fd):  # recursive depth-first regraph.Q+=[_node]
 
     for link in [node.link_.Qm, node.link_.Qd][fd]:  # all positive
-        _node = link.node_[1] if link.node_[0] is node else link.node_[0]
+        _node = link.G[1] if link.G[0] is node else link.G[0]
         _val = [_node.link_.mval, _node.link_.dval][fd]
         if _val > G_aves[fd] and _node in graph_H:
             regraph.H += [_node]
@@ -175,7 +175,7 @@ def readd_node_layer(regraph, graph_H, node, fd):  # recursive depth-first regra
 def add_node_layer(gnode_, G_, G, fd, val):  # recursive depth-first gnode_+=[_G]
 
     for link in G.link_.Q:  # all positive
-        _G = link.node_[1] if link.node_[0] is G else link.node_[0]
+        _G = link.G[1] if link.G[0] is G else link.G[0]
         if _G in G_:  # _G is not removed in prior loop
             gnode_ += [_G]
             G_.remove(_G)
@@ -237,9 +237,10 @@ def comp_G(_G, G):
 
     minder_,dinder_ = [],[]  # ders of implicitly nested list of pplayers in inder_
     Mval, Dval = 0,0; Mrdn, Drdn = 1,1
-    fd = _G.fds[-1]
+    _fd, fd = _G.fds[-1], G.fds[-1]
 
-    if fd: _inder_, inder_ = _G.inder_[_G.fd], G.inder_[G.fd]  # G is derG
+    # fds == [1] when we convert PP to graph, so we need to check if G.G is list, or just assign it as None during the conversion?
+    if fd and isinstance(G.G, list): _inder_, inder_ = _G.inder_[_fd], G.inder_[fd]  # G is derG
     else:  _inder_, inder_ = _G.inder_, G.inder_
     minder_,dinder_, Mval,Dval, Mrdn,Drdn = comp_inder_(_inder_,inder_, minder_,dinder_, Mval,Dval, Mrdn,Drdn)
 
@@ -267,7 +268,7 @@ def comp_G(_G, G):
 
 def comp_inder_(_inder_, inder_, minder_,dinder_, Mval,Dval, Mrdn,Drdn):
 
-    nLev = 0  # lenLev = (end*2)+1: 1, 1+1, 3+1, 7+1, 15+1, 31+1..: +ext per G in GQ, levs vs Levs?
+    nLev = 0  # lenLev = (end*2)+1: 1, 1+2, 4+2, 10+2, 22+2, 46+2..: +2 ext per G in GQ, levs vs Levs?
     Tval = aveG+1
     i=0; end=1
     while end <= min(len(_inder_),len(inder_)) and Tval > aveG:
@@ -285,7 +286,7 @@ def comp_inder_(_inder_, inder_, minder_,dinder_, Mval,Dval, Mrdn,Drdn):
                 minder_+=[[]]; dinder_+=[[]]
         Tval = (Mval+Dval) / (Mrdn+Drdn)  # no need to loop Levs if no eval
         i = end
-        end = (end*2) + 1*(not nLev)  # except 1st Lev
+        end = (end*2) + 2  # except 1st Lev (formula = 2n + 2)
         nLev += 1
     '''
     Lev1: pps: 1 pplayers  # inder_+= hLev/ comp_G: comp(inder_, ext:G.link_ coords)-> Levs(levs., max lenlevs = lenLevs-1
@@ -345,7 +346,7 @@ def sum2graph_(graph_, fd, fsub=0):  # sum node and link params into graph, inde
         '''
         node_,Link_ = [],[]  # form G, keep iG:
         for iG in graph.H:
-            sum_inder_(Graph.inder_, iG.inder_[fd] if fd else iG.inder_)  # local subset of lower ders in new graph
+            sum_inder_(Graph.inder_, iG.inder_[fd] if isinstance(iG.G, list) else iG.inder_)  # local subset of lower ders in new graph
             link_ = [iG.link_.Qm, iG.link_.Qd][fd]  # mlink_,dlink_
             Link_ = list(set(Link_ + link_))  # unique links in node_
             G = Cgraph(fds=copy(iG.fds)+[fd], root=Graph, A=[0,0], node_=link_)  # no sub_nodes if fder, remove if <ave?
@@ -501,7 +502,6 @@ def sub_recursion_g(graph_, fseg, fds, RVal=0, DVal=0):  # rng+: extend G_ per g
 
     return RVal, DVal  # or SVal= RVal+DVal, separate for each fork of sub+?
 
-# pending update
 def feedback(root):  # bottom-up update root.H, breadth-first
 
     fbV = aveG+1
@@ -515,8 +515,14 @@ def feedback(root):  # bottom-up update root.H, breadth-first
                     fd = sub_node.fds[-1]
                     if not root.H: root.H = [CpH(H=[[],[]])]  # append bottom-up
                     if not root.H[0].H[fd]: root.H[0].H[fd] = Cgraph()
-                    sum_inder_(root.H[0].H[fd].inder_, sub_node.inder_)
-                    # or sum_G?
+                    if isinstance(sub_node.G, list):
+                        sub_inder_ = sub_node.inder_[fd]
+                    else:
+                        sub_inder_ = sub_node.inder_
+                    sum_inder_(root.H[0].H[fd].inder_, sub_inder_)
+                    # or sum_G? 
+                    # or we can just sum_H here?
+                    # sum_H(root.H[1:], sub_node.H)
                     for i, (Lev,lev) in enumerate(zip_longest(root.H[1:], sub_node.H, fillvalue=[])):
                         if lev:
                             j = sum(fd*(2**k) for k,fd in enumerate(sub_node.fds[i:]))
