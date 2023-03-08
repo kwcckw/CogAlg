@@ -199,7 +199,7 @@ def comp_G_(G_, pri_G_=None, f1Q=1, fsub=0):  # cross-comp Graphs if f1Q, else G
                         continue
                     minder_, dinder_, mval, dval, tval = comp_GQ(_G,G)  # comp_G while G.G, H/0G: GQ is one distributed node?
                     ext = [1,distance,[dy,dx]]
-                    derG = Cgraph(fds=copy(_G.fds), G=[_G,G], inder_=[minder_+[ext], dinder_+[ext]])
+                    derG = Cgraph(fds=copy(_G.fds), G=[_G,G], inder_=[minder_+[ext], dinder_+[ext]])  # should we init [ext, ext] from here? Else derG's ext would be nested exts
                     # add links:
                     _G.link_.Q += [derG]; _G.link_.val += tval  # combined +-links val
                     G.link_.Q += [derG]; G.link_.val += tval
@@ -235,10 +235,12 @@ def comp_G(_G, G):
 
     minder_,dinder_ = [],[]  # ders of implicitly nested list of pplayers in inder_
     Mval, Dval = 0,0; Mrdn, Drdn = 1,1
-    _fd = _G.fds[-1] if _G.fds else 0; fd = G.fds[-1] if G.fds else 0
 
-    if fd: _inder_, inder_ = _G.inder_[_fd], G.inder_[fd]  # G is derG
-    else:  _inder_, inder_ = _G.inder_, G.inder_
+    if isinstance(_G.G, list):  # i  think this is the only way to check if G is derG 
+        _fd = _G.fds[-1] if _G.fds else 0; fd = G.fds[-1] if G.fds else 0
+        _inder_, inder_ = _G.inder_[_fd], G.inder_[fd]  # G is derG
+    else:                      
+        _inder_, inder_ = _G.inder_, G.inder_
     minder_,dinder_, Mval,Dval, Mrdn,Drdn = comp_inder_(_inder_,inder_, minder_,dinder_, Mval,Dval, Mrdn,Drdn)
     # spec:
     _node_, node_ = _G.node_, G.node_  # link_ if fd, sub_node should be empty
@@ -260,7 +262,7 @@ def comp_G(_G, G):
 
 def comp_inder_(_inder_, inder_, minder_,dinder_, Mval,Dval, Mrdn,Drdn):
 
-    i=0; end=1; Tval = aveG+1
+    i=0; end=1; Tval = aveG+1; lev=0
     while end <= min(len(_inder_),len(inder_)) and Tval > aveG:
 
         _Lev, Lev = _inder_[i:end], inder_[i:end]  # each Lev of implicit nesting is inder_,ext formed by comp_G
@@ -273,14 +275,16 @@ def comp_inder_(_inder_, inder_, minder_,dinder_, Mval,Dval, Mrdn,Drdn):
                 else:
                     mext2, dext2 = [],[]
                     for _ext, ext in _der, der:  # list [node_Ext, graph_ext], both are full|empty per der?
-                        mext, dext = comp_ext(_ext[:], ext[:])
+                        mext, dext = comp_ext(_ext[0],_ext[1],_ext[2],ext[0],ext[1],ext[2] )
                         mext2+=[mext]; dext2+=[dext]; Mval+=sum(mext); Dval+=sum(dext)
-                    minder_ += [mext]; dinder_ += [dext]
+                    minder_ += [mext2]; dinder_ += [dext2]
             else:
                 minder_+=[[]]; dinder_+=[[]]
         Tval = (Mval+Dval) / (Mrdn+Drdn)  # eval if looping Levs
         i = end
-        end = (end*2) + 1
+        if lev == 0: end = end*2
+        else:        end = (end*2) + 1
+        lev += 1  # i checked and we need to know this lev because we need to know if lev==0, the end is end*2
     '''
     lenLev = (end*2)+1: 1, 1+1, 3+1, 7+1, 15+1.: +[Ext,ext] per G in GQ, levs vs Levs? same fds till += [fd]?
     Lev1: pps: 1 pplayers  # inder_+= hLev/ comp_G: comp(inder_, ext:G.link_ coords)-> Levs(levs., max lenlevs = lenLevs-1
@@ -340,12 +344,15 @@ def sum2graph_(graph_, fd, fsub=0):  # sum node and link params into graph, inde
         '''
         node_,Link_ = [],[]  # form G, keep iG:
         for iG in graph.H:
-            sum_inder_(Graph.inder_, iG.inder_[fd] if fd else iG.inder_)  # local subset of lower ders in new graph
+            sum_inder_(Graph.inder_, iG.inder_[fd] if iG.fds and isinstance(iG.G, list) else iG.inder_)  # local subset of lower ders in new graph
             link_ = [iG.link_.Qm, iG.link_.Qd][fd]  # mlink_,dlink_
             Link_ = list(set(Link_ + link_))  # unique links in node_
-            G = Cgraph(fds=copy(iG.fds)+[fd], root=Graph, node_=link_)  # no sub_nodes if fder, remove if <ave?
+            G = Cgraph(fds=copy(iG.fds)+[fd], root=Graph, node_=link_, box=copy(iG.box))  # no sub_nodes if fder, remove if <ave?
             for derG in link_:  # form box?
                 sum_inder_(G.inder_, derG.inder_[fd])  # derGs are not modified, may be in both forks
+            y,x, y0,yn, x0,xn = G.box[:]; dy = yn-y0; dx = xn-x0; L = len(link_)
+            G.inder_[-1] = [G.inder_[-1], [L,dy*dx,[dy,dx]]]  # the new G's last inder_ should be [ext, ext] too?
+            
             node_ += [G]  # if mult roots: sum_H(G.uH[1:], Graph.uH)
         Graph.root = iG.root  # same root, lower derivation is higher composition
         Graph.node_ = node_  # G| G.G| G.G.G..
@@ -390,10 +397,14 @@ def sum_inder_(Inder_, inder_, fext=1):
                 if inder:
                     if isinstance(inder, CpH): sum_pH(Inder,inder)
                     else:
-                        for j in range(2): Inder[j] += inder[j]  # sum L，S
-                        if isinstance(Inder[2], list):  # A is [0,0]
-                            Inder[2][0] += inder[2][0]; Inder[2][1] += inder[2][1]
-                        else: Inder[2] += inder[2]  # A is int
+                        if not isinstance(Inder[0], list):
+                            Inder = [Inder]; inder = [inder]  # temporary, can be removed if derG's ext is [ext, ext] too
+                        for Ext, ext in zip(Inder,inder):
+                            for j in range(2): 
+                                Ext[j] += ext[j]  # sum L，S
+                            if isinstance(Ext[2], list):  # A is [0,0]
+                                Ext[2][0] += ext[2][0]; Ext[2][1] += ext[2][1]
+                            else: Ext[2] += Ext[2]  # A is int
                 else:
                     Inder_.insert(i,deepcopy(inder))  # for different-length Inder_, inder_
 
@@ -495,7 +506,7 @@ def feedback(root):  # bottom-up update root.H, breadth-first
                     if not root.H: root.H = [CpH(H=[[],[]])]  # append bottom-up
                     if not root.H[0].H[fd]: root.H[0].H[fd] = Cgraph()
                     # sum nodes in root, sub_nodes in root.H:
-                    sum_inder_(root.H[0].H[fd].inder_, sub_node.inder_[fd] if fd else sub_node.inder_)
+                    sum_inder_(root.H[0].H[fd].inder_, sub_node.inder_[fd] if isinstance(sub_node.G, list) else sub_node.inder_)  # both derG and converted G have fds = [], so a better way to test is using G.G because derG.G is list
                     sum_H(root.H[1:], sub_node.H)  # sum_G(sub_node.H forks)?
             for Lev in root.H:
                 fbval += Lev.val; fbrdn += Lev.rdn
