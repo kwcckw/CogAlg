@@ -199,6 +199,8 @@ def comp_G_(G_, pri_G_=None, f1Q=1, fsub=0):  # cross-comp Graphs if f1Q, else G
                         continue
                     minder_, dinder_, mval, dval, tval = comp_GQ(_G,G)  # comp_G while G.G, H/0G: GQ is one distributed node?
                     ext = [1,distance,[dy,dx]]
+
+                    # will it be better if we use [ minder_ + [[ext, [0,0,0]]]] , then replace it later?
                     derG = Cgraph(G=[_G,G], inder_=[minder_+[ext], dinder_+[ext]], box=[])  # box is redundant to 2 nodes
                     # add links:
                     _G.link_.Q += [derG]; _G.link_.val += tval  # combined +-links val
@@ -347,15 +349,15 @@ def sum2graph_(graph_, fd, fsub=0):  # sum node and link params into graph, inde
             G = Cgraph(fds=copy(iG.fds)+[fd], root=Graph, node_=link_, box=copy(iG.box))  # no sub_nodes if fder, remove if <ave?
             for derG in link_:
                 sum_inder_(G.inder_, derG.inder_[fd])  # derGs are not modified, may be in both forks
-                sum_box(G.box, G.G[0].box if G.G[1] is iG else G.G[1].box)  # not for Graph box?
-            add_ext(G.box, len(link_), G.inder_)  # + composed node ext
+                sum_box(G.box, derG.G[0].box if derG.G[1] is iG else derG.G[1].box)  # not for Graph box? (should be derG here?)
+            add_ext(G.box, len(link_), G.inder_)  # + composed node ext (convert ext to [ext, ext])
             # if mult roots: sum_H(G.uH[1:], Graph.uH)
             node_ += [G]
         Graph.root = iG.root  # same root, lower derivation is higher composition
         Graph.node_ = node_  # G| G.G| G.G.G..
         for derG in Link_:  # sum unique links, not box
             sum_inder_(Graph.inder_, derG.inder_[fd])
-        Ext = [0,0,[0,0]]
+        Ext = [[0,0,[0,0]], [0,0,[0,0]]]  # the 2nd ext will be replaced by add_ext below, but we can't sum them if Ext is single ext while G.indr_[-1] is [ext, ext] 
         for G in node_: sum_ext(Ext, G.inder_[-1])  # composed node ext, not in Link_
         Graph.inder_ += [Ext]
         add_ext(Graph.box, len(node_), Graph.inder_)  # composed graph ext
@@ -384,7 +386,7 @@ def add_ext(box, L, inder_):  # add ext per agg+
     y,x, y0,yn, x0,xn = box
     dY = yn-y0; dX = xn-x0
     box[:2] = y/L, x/L  # norm to ave
-    inder_ += [[L, dY*dX /L, [dY,dX]]]  # composed L,S,A, norm S/area
+    inder_[-1] = [inder_[-1], [L, dY*dX /L, [dY,dX]]]  # composed L,S,A, norm S/area
 
 def sum_G(G, g, fmerge=0):  # g is a node in G.node_
 
@@ -415,6 +417,9 @@ def sum_inder_(Inder_, inder_, fext=1):
                 if inder:
                     if isinstance(inder, CpH): sum_pH(Inder,inder)
                     else:
+                        if not isinstance(Inder[0], list):  # flat ext (for derG)
+                            Inder = [Inder]; inder = [inder]
+                        
                         for Ext,ext in zip(Inder,inder):  # if in pairs
                             sum_ext(Ext,ext)
                 else: Inder_.insert(i,deepcopy(inder))  # for different-length Inder_, inder_
@@ -512,7 +517,8 @@ def feedback(root):  # bottom-up update root.H, breadth-first
             root.fterm = 1
             fbval, fbrdn = 0,0
             for node in root.node_:
-                if not node.node_[0].box:  # link_ feedback is redundant, params are already in node.inder_
+                # node.node_ may empty when node is converted graph
+                if node.node_ and not node.node_[0].box:  # link_ feedback is redundant, params are already in node.inder_
                     continue
                 for sub_node in node.node_:
                     fd = sub_node.fds[-1] if sub_node.fds else 0
