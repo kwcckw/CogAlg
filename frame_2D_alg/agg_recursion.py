@@ -231,14 +231,13 @@ def comp_GQ(_G, G):  # compare lower-derivation G.G.s, pack results in mderH_,dd
 
 def comp_G(_G, G):  # in GQ
 
-    Mval, Dval = 0,0
     Mrdn, Drdn = 1,1
     if _G.box: _derH, derH = _G.derH, G.derH
     else:
         _fd = _G.root.fds[-1] if _G.root.fds else 0; fd = G.root.fds[-1] if G.root.fds else 0
         _derH, derH = _G.derH[_fd], G.derH[fd]  # derG in comp node_?
 
-    dderH, Mval,Dval, Mrdn,Drdn = comp_derH(_derH, derH, Mval,Dval, Mrdn,Drdn)
+    dderH, Mval,Dval, Mrdn,Drdn = comp_derH(_derH, derH, Mrdn,Drdn)
     # spec:
     _node_, node_ = _G.node_, G.node_  # link_ if fd, sub_node should be empty
     if (Mval+Dval)* sum(_G.valt)*sum(G.valt) * len(_node_)*len(node_) > aveG:  # / rdn?
@@ -256,8 +255,20 @@ def comp_G(_G, G):  # in GQ
     return dderH, Mval,Dval, Mrdn,Drdn
 
 # not sure we need it now, use comp_pH instead?
+def comp_derH(_derH, derH, Mrdn,Drdn):
+    
+    mderH_, dderH_ = [], []
+    Mval, Dval = 0, 0
+    for _lev, lev in zip(_derH, derH):  # compare same level
+        mderH, dderH = comp_pH(_lev, lev)
+        Mval += mderH.val; Dval += dderh.val
+        Mrdn += mderH.rdn; Drdn += dderH.rdn
+        mderH_ += [mderH]; dderH_ += [dderH] 
 
-def comp_derH(_derH, derH, dderH, Mval,Dval, Mrdn,Drdn):
+    return dderH_, Mval, Dval, Mrdn, Drdn   # why only dderH_?  Or it should be merging both mderH and dderH
+
+# below is outdated
+def comp_derH2(_derH, derH, dderH, Mval,Dval, Mrdn,Drdn):
 
     i=0; end=1; Tval = aveG+1; elev=0
     while end <= min(len(_derH),len(derH)) and Tval > aveG:
@@ -305,24 +316,34 @@ def comp_ext(_ext, ext):
         mA,dA = 0,0
     return (mL,mS,mA), (dL,dS,dA)
 
+# extended to sum ext, pair of ptuples and CpH
 def comp_pH(_pH, pH):  # recursive unpack derHs ( pplayer ( players ( ptuples -> ptuple:
 
-    mpH, dpH = CpH(), CpH()  # new players in same top derH?
+    # if fd|fi is per instance, we just need to init them here?
+    mpH, dpH = CpH(fds=[0]), CpH(fds=[1])  # new players in same top derH?
 
     for i, (_spH, spH) in enumerate(zip(_pH.H, pH.H)):  # s = sub
+        # guess below is no longer needed?
+        '''
         fd = pH.fds[i] if pH.fds else 0  # in derHs or players
         _fd = _pH.fds[i] if _pH.fds else 0
         if _fd == fd:
-            if isinstance(_spH, Cptuple):
-                mtuple, dtuple = comp_ptuple(_spH, spH, fd)
-                # not sure here, one of the val is always 0?
-                mpH.H += [mtuple]; mpH.valt[0] += mtuple.val; mpH.fds += [0]  # mpH.rdn += mtuple.rdn?
-                dpH.H += [dtuple]; dpH.valt[1] += dtuple.val; dpH.fds += [1]  # dpH.rdn += dtuple.rdn
-
-            elif isinstance(_spH, CpH):
-                smpH, sdpH = comp_pH(_spH, spH)
-                mpH.H +=[smpH]; mpH.valt[0]+=smpH.valt[0]; mpH.valt[1]+=smpH.valt[1]; mpH.rdn+=smpH.rdn; mpH.fds +=[smpH.fds]  # or 0 | fd?
-                dpH.H +=[sdpH]; dpH.valt[0]+=sdpH.valt[0]; dpH.valt[1]+=sdpH.valt[1]; dpH.rdn+=sdpH.rdn; dpH.fds +=[sdpH.fds]
+        '''
+        if isinstance(_spH, CpH):  # sub_lev (CpH)
+            smpH, sdpH = comp_pH(_spH, spH)
+            mpH.H +=[smpH]; mpH.valt[0]+=smpH.valt[0]; mpH.valt[1]+=smpH.valt[1]; mpH.rdn+=smpH.rdn; mpH.fds +=[smpH.fds]  # or 0 | fd?
+            dpH.H +=[sdpH]; dpH.valt[0]+=sdpH.valt[0]; dpH.valt[1]+=sdpH.valt[1]; dpH.rdn+=sdpH.rdn; dpH.fds +=[sdpH.fds]
+            
+        elif isinstance(_spH[0], Cptuple):  # pair of ptuples
+            mmtuple, dmtuple = comp_ptuple(_spH[0], spH[0], fd)
+            mdtuple, ddtuple = comp_ptuple(_spH[1], spH[1], fd)
+            mpH.H += [[mmtuple, mdtuple]]; mpH.valt[0] += mmtuple.val + mdtuple.val; mpH.fds += [0]  # mpH.rdn += mtuple.rdn?
+            dpH.H += [[dmtuple, ddtuple]]; dpH.valt[1] += dmtuple.val + ddtuple.val; dpH.fds += [1]  # dpH.rdn += dtuple.rdn  
+            
+        elif isinstance(_spH, list):
+            mext, dext = comp_ext(_spH,spH)
+            mpH.H += [mext]; mpH.valt[0] += sum(mext)
+            dpH.H += [dext]; dpH.valt[0] += sum(dext)
 
     return mpH, dpH
 
@@ -431,19 +452,31 @@ def sum_H(H, h):  # add g.H to G.H, no eval but possible remove if weak?
                     if not Fork: Lev.H[j] = Fork = Cgraph()
                     sum_G(Fork, fork)
 
+# extended version
+# should be sum_derH_ now?
 def sum_pH_(PH_, pH_, fneg=0):
-    for PH, pH in zip_longest(PH_, pH_, fillvalue=[]):  # each is CpH
+    for PH, pH in zip_longest(PH_, pH_, fillvalue=[]):  # each is CpH from each level
         if pH:
             if PH:
                 for Fork, fork in zip_longest(PH.H, pH.H, fillvalue=[]):
                     if fork:
                         if Fork:
+                            if isinstance(Fork, CpH):  # sub_lev
+                                sum_pH_(Fork.H, fork.H, fneg=0)
+                            elif isinstance(Fork[0], Cptuple):  # pair of m|dtuple
+                                sum_ptuple(Fork[0], fork[0])
+                                sum_ptuple(Fork[1], fork[1])
+                            else:  # ext
+                                sum_ext(Fork, fork)
+                                
+                            '''
                             if fork.derH:
                                 for (Pplayers, Expplayers),(pplayers, expplayers) in zip(Fork.derH, fork.derH):
                                     if Pplayers:   sum_pH(Pplayers, pplayers, fneg)
                                     else:          Fork.derH += [[deepcopy(pplayers),[]]]
                                     if Expplayers: sum_pH(Expplayers, expplayers, fneg)
                                     else:          Fork.derH[-1][1] = deepcopy(expplayers)
+                            '''
                         else: PH.H += [deepcopy(fork)]
             else:
                 PH_ += [deepcopy(pH)]  # CpH
