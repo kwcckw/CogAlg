@@ -312,7 +312,7 @@ def blob2graph(blob, fseg):
             graph = PP2graph(PP, fseg, fd)
             sum_inder_(blobs[fd].inder_, graph.inder_)
             blobs[fd].node_ += [graph]
-            blobs[fd].valt[0] += graph.valt[0]; blobs[fd].valt[1] += graph.valt[1] 
+            blobs[fd].valt[0] += graph.valt[0]; blobs[fd].valt[1] += graph.valt[1]
             graph.root = blobs[fd]
 
     for alt_blob in blob.adj_blobs[0]:  # adj_blobs = [blobs, pose]
@@ -339,11 +339,11 @@ def PP2graph(PP, fseg, ifd=1):
             H = [];  mval = 0; dval = 0
             for ptuples, alt_fd in zip(altPP.players[0], alt_fds):
                 for ptuple in ptuples[0][:2]:  # latuple and vertuple only
-                    H += [ptuple] 
+                    H += [ptuple]
                     if alt_fd: dval += ptuple.val
                     else:      mval += ptuple.val
             alt_ptuples = CpH(H=H, valt=[mval, dval], fds=[alt_fd])
-            alt_players.H += [alt_ptuples]; alt_players.valt[0] += mval; alt_players.valt[1] += dval; 
+            alt_players.H += [alt_ptuples]; alt_players.valt[0] += mval; alt_players.valt[1] += dval;
         alt_players.fds = [alt_fds]
     alt_pplayers = CpH(H=[alt_players], fds=[ifd], valt=copy(alt_players.valt))
 

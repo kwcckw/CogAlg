@@ -40,7 +40,7 @@ aveGd = 4
 G_aves = [aveGm, aveGd]
 ave_med = 3  # call cluster_node_layer
 ave_rng = 3  # rng per combined val
-ave_ext = 5  # to eval comp_inder_
+ave_ext = 5  # to eval comp_derH
 ave_len = 3
 ave_distance = 5
 ave_sparsity = 2
@@ -56,7 +56,6 @@ class Clink_(ClusterStructure):
 class CpH(ClusterStructure):  # hierarchy of params + associated vars in pplayers | players | ptuples
 
     H = list  # hierarchy of pplayers | players | ptuples, can be sequence
-    # convert pplayers and players to CpH?
     valt = lambda: [0,0]
     rdn = lambda: 1  # for all Qs?
     rng = lambda: 1
@@ -71,19 +70,19 @@ class CpH(ClusterStructure):  # hierarchy of params + associated vars in pplayer
 class Cgraph(ClusterStructure):  # params of single-fork node_ cluster per pplayers
 
     G = lambda: None  # same-scope lower-der|rng G.G.G., or [G0,G1] in derG, None in PP
-    root = lambda: None  # root graph or inder_ G, element of ex.H[-1][fd]
-    # uH: up-forking Levs if mult roots, not implemented yet
-    inder_ = list  # inder_ ) node_) H: contents, Lev+= node tree slice: feedback, Lev/agg+, lev/sub+?
-    node_ = list  # single-fork, conceptually H[0], concat sub-node_s in ex.H levs
-    link_ = lambda: Clink_()  # temporary holder for der+ node_, then unique links within graph?
-    fterm = lambda: 0  # G.node_ sub-comp was terminated
-    H = list  # down-forking tree of Levs: slice of nodes
+    root = lambda: None  # root graph or derH G, element of ex.H[-1][fd]
+    derH = list  # derH ) node_) H: contents, Lev+= node tree slice: feedback, Lev/agg+, lev/sub+?
     valt = lambda: [0,0]
     fds = list
     rdn = lambda: 1
     rng = lambda: 1
+    box = lambda: [0,0,0,0,0,0]  # y,x, y0,yn, x0,xn
+    node_ = list  # single-fork, conceptually H[0], concat sub-node_s in ex.H levs
+    link_ = lambda: Clink_()  # temporary holder for der+ node_, then unique links within graph?
+    fterm = lambda: 0  # G.node_ sub-comp was terminated
+    # uH: up-forking Levs if mult roots, not implemented yet
+    H = list  # down-forking tree of Levs: slice of nodes
     nval = int  # of open links: base alt rep
-    box = lambda: [0,0,0,0,0,0]  # ave y,x, y0,yn, x0,xn
     alt_graph_ = list  # contour + overlapping contrast graphs
     alt_Graph = None  # conditional, summed and concatenated params of alt_graph_
 
@@ -96,8 +95,7 @@ def agg_recursion(root, fseg):  # compositional recursion in root.PP_, pretty su
         val = sum([graph.valt[fd] for graph in graph_])
         # intra-graph sub+ comp node:
         if val > ave_sub * root.rdn:  # same in blob, same base cost for both forks
-            # estimate rdn, assign to the weaker per sub_graphs feedback:
-            for graph in graph_: graph.rdn+=1
+            for graph in graph_: graph.rdn+=1  # estimate, assign to the weaker in feedback
             sub_recursion_g(graph_, fseg, root.fds + [fd])  # divide graph_ in der+|rng+ sub_graphs
         else:
             root.fterm = 1; feedback(root)  # update root.root..H, breadth-first
@@ -109,7 +107,7 @@ def agg_recursion(root, fseg):  # compositional recursion in root.PP_, pretty su
             root.fterm = 1; feedback(root)  # update root.root..H, breadth-first
 
 
-def form_graph_(root, fsub): # form inder_ in agg+ or sub-pplayer in sub+, G is node in GG graph
+def form_graph_(root, fsub): # form derH in agg+ or sub-pplayer in sub+, G is node in GG graph
 
     G_ = root.node_
     comp_G_(G_, fsub=fsub)  # cross-comp all graph nodes in rng, graphs may be segs | fderGs, root G += link, link.node
@@ -184,7 +182,7 @@ def add_node_layer(gnode_, G_, G, fd, val):  # recursive depth-first gnode_+=[_G
 
 def comp_G_(G_, pri_G_=None, f1Q=1, fsub=0):  # cross-comp Graphs if f1Q, else G_s in comp_node_, or segs inside PP?
 
-    if not f1Q: minder__,dinder__ = [],[]
+    if not f1Q: dderH_ = []
 
     for i, _iG in enumerate(G_ if f1Q else pri_G_):  # G_ is node_ of root graph
         for iG in G_[i+1:] if f1Q else G_:  # compare each G to other Gs in rng, bilateral link assign, val accum:
@@ -198,9 +196,9 @@ def comp_G_(G_, pri_G_=None, f1Q=1, fsub=0):  # cross-comp Graphs if f1Q, else G
                 for _G, G in ((_iG, iG), (_iG.alt_Graph, iG.alt_Graph)):
                     if not _G or not G:  # or G.val
                         continue
-                    minder_, dinder_, mval, dval, tval = comp_GQ(_G,G)  # comp_G while G.G, H/0G: GQ is one distributed node?
+                    dderH, mval, dval, tval = comp_GQ(_G,G)  # comp_G while G.G, H/0G: GQ is one distributed node?
                     ext = [1,distance,[dy,dx]]
-                    derG = Cgraph(valt=[mval, dval], G=[_G,G], inder_=[minder_+[[ext]], dinder_+[[ext]]], box=[])  # box is redundant to 2 nodes
+                    derG = Cgraph(valt=[mval,dval], G=[_G,G], derH= dderH+[[ext]], box=[])  # box is redundant to G
                     # add links:
                     _G.link_.Q += [derG]; _G.link_.val += tval  # combined +-links val
                     G.link_.Q += [derG]; G.link_.val += tval
@@ -211,76 +209,75 @@ def comp_G_(G_, pri_G_=None, f1Q=1, fsub=0):  # cross-comp Graphs if f1Q, else G
                         _G.link_.Qd += [derG]; _G.link_.dval += dval  # no mval for Qd
                         G.link_.Qd += [derG]; G.link_.dval += dval
 
-                    if not f1Q:  # comp G_s
-                        minder__+= minder_; dinder__+= dinder_
-                # implicit cis, alt pair nesting in minder_, dinder_
+                    if not f1Q: dderH_+= dderH  # comp G_s
+                # implicit cis, alt pair nesting in mderH, dderH
     if not f1Q:
-        return minder__, dinder__  # else no return, packed in links
+        return dderH_  # else no return, packed in links
 
 
-def comp_GQ(_G, G):  # compare lower-derivation G.G.s, pack results in minder__,dinder__
+def comp_GQ(_G, G):  # compare lower-derivation G.G.s, pack results in mderH_,dderH_
 
-    minder__,dinder__ = [],[]; Mval,Dval = 0,0; Mrdn,Drdn = 1,1
+    dderH_ = []; Mval,Dval = 0,0; Mrdn,Drdn = 1,1
     Tval= aveG+1
     while (_G and G) and Tval > aveG:  # same-scope if sub+, no agg+ G.G
 
-        minder_, dinder_, mval, dval, mrdn, drdn = comp_G(_G, G)
-        minder__+=minder_; dinder__+=dinder_; Mval+=mval; Dval+=dval; Mrdn+=mrdn; Drdn+=drdn  # rdn+=1: to inder_?
+        dderH, mval, dval, mrdn, drdn = comp_G(_G, G)
+        dderH_+=dderH; Mval+=mval; Dval+=dval; Mrdn+=mrdn; Drdn+=drdn  # rdn+=1: to derH?
         _G = _G.G
         G = G.G
         Tval = (Mval+Dval) / (Mrdn+Drdn)
 
-    return minder__, dinder__, Mval, Dval, Tval  # ext added in comp_G_, not within GQ
+    return dderH_, Mval, Dval, Tval  # ext added in comp_G_, not within GQ
 
 def comp_G(_G, G):  # in GQ
 
-    minder_,dinder_ = [],[]  # ders of implicitly nested list of pplayers in inder_
     Mval, Dval = 0,0
     Mrdn, Drdn = 1,1
-    if _G.box: _inder_, inder_ = _G.inder_, G.inder_
+    if _G.box: _derH, derH = _G.derH, G.derH
     else:
         _fd = _G.root.fds[-1] if _G.root.fds else 0; fd = G.root.fds[-1] if G.root.fds else 0
-        _inder_, inder_ = _G.inder_[_fd], G.inder_[fd]  # derG if comp node_?
+        _derH, derH = _G.derH[_fd], G.derH[fd]  # derG in comp node_?
 
-    minder_,dinder_, Mval,Dval, Mrdn,Drdn = comp_inder_(_inder_,inder_, minder_,dinder_, Mval,Dval, Mrdn,Drdn)
+    dderH, Mval,Dval, Mrdn,Drdn = comp_derH(_derH, derH, Mval,Dval, Mrdn,Drdn)
     # spec:
     _node_, node_ = _G.node_, G.node_  # link_ if fd, sub_node should be empty
     if (Mval+Dval)* sum(_G.valt)*sum(G.valt) * len(_node_)*len(node_) > aveG:  # / rdn?
 
-        sub_minder_,sub_dinder_ = comp_G_(_node_, node_, f1Q=0)
-        Mval += sum([mxpplayers.val for mxpplayers in sub_minder_])  # + rdn?
-        Dval += sum([dxpplayers.val for dxpplayers in sub_dinder_])
-        # pack m|dnode_ in m|dinder_: implicit?
+        sub_dderH, mval, dval, mrdn, drdn = comp_G_(_node_, node_, f1Q=0)
+        Mval+=mval; Dval+=dval; Mrdn+=mrdn; Drdn+=drdn
+        # pack m|dnode_ in m|dderH: implicit?
     else: _G.fterm=1  # no G.fterm=1: it has it's own specification?
     '''
     comp alts,val,rdn?
     comp H in comp_G_?
-    select >ave m|d vars only: addressable salient mset / dset in inder_? 
+    select >ave m|d vars only: addressable salient mset / dset in derH? 
     cluster per var or set if recurring across root: type eval if root M|D?
     '''
-    return minder_, dinder_, Mval, Dval, Mrdn, Drdn
+    return dderH, Mval,Dval, Mrdn,Drdn
 
+# not sure we need it now, use comp_pH instead?
 
-def comp_inder_(_inder_, inder_, minder_,dinder_, Mval,Dval, Mrdn,Drdn):
+def comp_derH(_derH, derH, dderH, Mval,Dval, Mrdn,Drdn):
 
     i=0; end=1; Tval = aveG+1; elev=0
-    while end <= min(len(_inder_),len(inder_)) and Tval > aveG:
+    while end <= min(len(_derH),len(derH)) and Tval > aveG:
 
-        _Lev, Lev = _inder_[i:end], inder_[i:end]  # each Lev of implicit nesting is inder_,ext formed by comp_G
+        _Lev, Lev = _derH[i:end], derH[i:end]  # each Lev of implicit nesting is derH,ext formed by comp_G
         for _der,der in zip(_Lev,Lev):
             if der:
                 if isinstance(der,CpH):  # pplayers, incr implicit nesting in m|dpplayers:
-                    mpplayers, dpplayers = comp_pH(_der, der)
-                    minder_ += [mpplayers]; Mval += sum(mpplayers.valt); Mrdn += mpplayers.rdn  # add rdn in form_?
-                    dinder_ += [dpplayers]; Dval += sum(dpplayers.valt); Drdn += dpplayers.rdn
+                    dpplayers = comp_pH(_der, der)
+                    dderH += [dpplayers]
+                    Mval += dpplayers.valt[0]; Mrdn += dpplayers.rdn  # add rdn in form_?
+                    Dval += dpplayers.valt[1]; Drdn += dpplayers.rdn
                 else:
-                    mext2, dext2 = [],[]
-                    for _ext, ext in _der, der:  # list [node_ext, graph_ext], both are full|empty per der?
-                        mext, dext = comp_ext(_ext,ext)
-                        mext2+=[mext]; dext2+=[dext]; Mval+=sum(mext); Dval+=sum(dext)
-                    minder_ += [mext2]; dinder_ += [dext2]
+                    mextt, dextt = [],[]
+                    for _extt, extt in _der, der:  # [node_ext, graph_ext], both are full|empty per der+?
+                        mext, dext = comp_ext(_extt,extt)
+                        mextt+=[mext]; dextt+=[dext]; Mval+=sum(mext); Dval+=sum(dext)
+                    dderH += [mextt, dextt]  # not sure
             else:
-                minder_+=[[]]; dinder_+=[[]]
+                dderH+=[[]]
         Tval = (Mval+Dval) / (Mrdn+Drdn)  # eval if looping Levs
         i = end
         end = (end*2) + 1*elev
@@ -292,7 +289,7 @@ def comp_inder_(_inder_, inder_, minder_,dinder_, Mval,Dval, Mrdn,Drdn):
     Lev3: pps; pps,ext; ext: lenLev = 4
     Lev4: pps; pps,ext; pps,pps,ext,ext; ext: lenLev = 8
     '''
-    return minder_,dinder_, Mval,Dval, Mrdn,Drdn
+    return mderH,dderH, Mval,Dval, Mrdn,Drdn
 
 def comp_ext(_ext, ext):
     _L,_S,_A = _ext; L,S,A = ext
@@ -308,12 +305,12 @@ def comp_ext(_ext, ext):
         mA,dA = 0,0
     return (mL,mS,mA), (dL,dS,dA)
 
-def comp_pH(_pH, pH):  # recursive unpack inder_s ( pplayer ( players ( ptuples -> ptuple:
+def comp_pH(_pH, pH):  # recursive unpack derHs ( pplayer ( players ( ptuples -> ptuple:
 
-    mpH, dpH = CpH(), CpH()  # new players in same top inder_?
+    mpH, dpH = CpH(), CpH()  # new players in same top derH?
 
     for i, (_spH, spH) in enumerate(zip(_pH.H, pH.H)):  # s = sub
-        fd = pH.fds[i] if pH.fds else 0  # in inder_s or players
+        fd = pH.fds[i] if pH.fds else 0  # in derHs or players
         _fd = _pH.fds[i] if _pH.fds else 0
         if _fd == fd:
             if isinstance(_spH, Cptuple):
@@ -324,13 +321,13 @@ def comp_pH(_pH, pH):  # recursive unpack inder_s ( pplayer ( players ( ptuples 
 
             elif isinstance(_spH, CpH):
                 smpH, sdpH = comp_pH(_spH, spH)
-                mpH.H += [smpH]; mpH.valt[0] += smpH.valt[0]; mpH.valt[1] += smpH.valt[1]; mpH.rdn += smpH.rdn; mpH.fds += [smpH.fds]  # or 0 | fd?
-                dpH.H += [sdpH]; dpH.valt[0] += sdpH.valt[0]; dpH.valt[1] += sdpH.valt[1]; dpH.rdn += sdpH.rdn; dpH.fds += [sdpH.fds]
+                mpH.H +=[smpH]; mpH.valt[0]+=smpH.valt[0]; mpH.valt[1]+=smpH.valt[1]; mpH.rdn+=smpH.rdn; mpH.fds +=[smpH.fds]  # or 0 | fd?
+                dpH.H +=[sdpH]; dpH.valt[0]+=sdpH.valt[0]; dpH.valt[1]+=sdpH.valt[1]; dpH.rdn+=sdpH.rdn; dpH.fds +=[sdpH.fds]
 
     return mpH, dpH
 
 
-def sum2graph_(graph_, fd, fsub=0):  # sum node and link params into graph, inder_ in agg+ or player in sub+
+def sum2graph_(graph_, fd, fsub=0):  # sum node and link params into graph, derH in agg+ or player in sub+
 
     Graph_ = []  # Cgraphs
     for graph in graph_:  # CpHs
@@ -338,7 +335,7 @@ def sum2graph_(graph_, fd, fsub=0):  # sum node and link params into graph, inde
             continue
         Graph = Cgraph(fds=copy(graph.H[0].fds)+[fd])  # incr der
         ''' if mult roots: 
-        sum_inder_(Graph.uH[0][fd].inder_,root.inder_) or sum_G(Graph.uH[0][fd],root)? init if empty
+        sum_derH(Graph.uH[0][fd].derH,root.derH) or sum_G(Graph.uH[0][fd],root)? init if empty
         sum_H(Graph.uH[1:], root.uH)  # root of Graph, init if empty
         '''
         node_,Link_ = [],[]  # form G, keep iG:
@@ -346,23 +343,23 @@ def sum2graph_(graph_, fd, fsub=0):  # sum node and link params into graph, inde
             sum_G(Graph, iG, fmerge=0)  # local subset of lower Gs in new graph
             link_ = [iG.link_.Qm, iG.link_.Qd][fd]  # mlink_,dlink_
             Link_ = list(set(Link_ + link_))  # unique links in node_
-            G = Cgraph(fds=copy(iG.fds)+[fd], root=Graph, node_=link_, box=copy(iG.box))  # no sub_nodes if fder, remove if <ave?
+            G = Cgraph(fds=copy(iG.fds)+[fd], root=Graph, node_=link_, box=copy(iG.box))  # no sub_nodes in derG, remove if <ave?
             for derG in link_:
                 sum_box(G.box, derG.G[0].box if derG.G[1] is iG else derG.G[1].box)
-                sum_inder_(G.inder_, derG.inder_[fd])  # two-fork derGs are not modified
-                Graph.valt[0] += derG.valt[0]; Graph.valt[1] += derG.valt[1] 
-            add_ext(G.box, len(link_), G.inder_[-1])  # composed node ext, not in derG.inder_
+                sum_derH(G.derH, derG.derH[fd])  # two-fork derGs are not modified
+                Graph.valt[0] += derG.valt[0]; Graph.valt[1] += derG.valt[1]
+            add_ext(G.box, len(link_), G.derH[-1])  # composed node ext, not in derG.derH
             # if mult roots: sum_H(G.uH[1:], Graph.uH)
             node_ += [G]
         Graph.root = iG.root  # same root, lower derivation is higher composition
         Graph.node_ = node_  # G| G.G| G.G.G..
         for derG in Link_:  # sum unique links, not box
-            sum_inder_(Graph.inder_, derG.inder_[fd])
-            Graph.valt[0] += derG.valt[0]; Graph.valt[1] += derG.valt[1] 
+            sum_derH(Graph.derH, derG.derH[fd])
+            Graph.valt[0] += derG.valt[0]; Graph.valt[1] += derG.valt[1]
         Ext = [0,0,[0,0]]
-        Ext = [sum_ext(Ext, G.inder_[-1][1]) for G in node_]  # add composed node Ext
+        Ext = [sum_ext(Ext, G.derH[-1][1]) for G in node_]  # add composed node Ext
         add_ext(Graph.box, len(node_), Ext) # add composed graph Ext
-        Graph.inder_ += [Ext]  # [node Ext, graph Ext]
+        Graph.derH += [Ext]  # [node Ext, graph Ext]
         # if Graph.uH: Graph.val += sum([lev.val for lev in Graph.uH]) / sum([lev.rdn for lev in Graph.uH])  # if val>alt_val: rdn+=len_Q?
         Graph_ += [Graph]
 
@@ -370,10 +367,10 @@ def sum2graph_(graph_, fd, fsub=0):  # sum node and link params into graph, inde
 
 def sum_G(G, g, fmerge=0):  # g is a node in G.node_
 
-    sum_inder_(G.inder_, g.inder_)  # direct node representation
+    sum_derH(G.derH, g.derH)  # direct node representation
     # if g.uH: sum_H(G.uH, g.uH[1:])  # sum g->G
     # if g.H: sum_H(G.H[1:], g.H)  # not used yet
-    G.valt[0] += g.valt[0]; G.valt[1] += g.valt[1]; G.rdn += g.rdn; G.nval += g.nval
+    G.valt[0]+=g.valt[0]; G.valt[1]+=g.valt[1]; G.rdn += g.rdn; G.nval += g.nval
     sum_box(G.box, g.box)
     if fmerge:
         for node in g.node_:
@@ -387,26 +384,27 @@ def sum_G(G, g, fmerge=0):  # g is a node in G.node_
             else:           G.alt_Graph = deepcopy(g.alt_graph)
     else: G.node_ += [g]
 
-def sum_inder_(Inder_, inder_, fext=1):
+# draft, replace with sum_pH?
+def sum_derH(DerH, derH, fext=1):
 
-    for i, (Inder, inder) in enumerate(zip_longest(Inder_, inder_, fillvalue=None)):
-        if inder is not None:
-            if Inder:
-                if inder:
-                    if isinstance(inder, CpH): sum_pH(Inder,inder)
+    for i, (Lev, lev) in enumerate(zip_longest(DerH, derH, fillvalue=None)):
+        if lev is not None:
+            if lev:
+                if Lev:
+                    if isinstance(lev,CpH): sum_pH(Lev,lev)
                     else:
-                        for Ext,ext in zip(Inder,inder):  # pair
-                            sum_ext(Ext,ext)
-                else: Inder_.insert(i,deepcopy(inder))  # for different-length Inder_, inder_
+                        for Ext,ext in zip(Lev,lev): sum_ext(Ext, ext)
 
-            elif Inder is None: Inder_ += [deepcopy(inder)]
-            else:               Inder_[i] = deepcopy(inder)
+                else: DerH.insert(i,deepcopy(lev))
+                # for var-length DerH, derH
+            elif Lev is None: DerH += [deepcopy(lev)]
+            else:             DerH[i] = deepcopy(lev)
 
-def add_ext(box, L, ext_):  # add ext per composition level
+def add_ext(box, L, extt):  # add ext per composition level
     y,x, y0,yn, x0,xn = box
     dY = yn-y0; dX = xn-x0
     box[:2] = y/L, x/L  # norm to ave
-    ext_ += [[L, L/ dY*dX, [dY,dX]]]  # composed L,S,A, norm S = nodes per area
+    extt += [[L, L/ dY*dX, [dY,dX]]]  # composed L,S,A, norm S = nodes per area
 
 def sum_ext(Ext, ext):
     for i, param in enumerate(ext):
@@ -440,17 +438,17 @@ def sum_pH_(PH_, pH_, fneg=0):
                 for Fork, fork in zip_longest(PH.H, pH.H, fillvalue=[]):
                     if fork:
                         if Fork:
-                            if fork.inder_:
-                                for (Pplayers, Expplayers),(pplayers, expplayers) in zip(Fork.inder_, fork.inder_):
+                            if fork.derH:
+                                for (Pplayers, Expplayers),(pplayers, expplayers) in zip(Fork.derH, fork.derH):
                                     if Pplayers:   sum_pH(Pplayers, pplayers, fneg)
-                                    else:          Fork.inder_ += [[deepcopy(pplayers),[]]]
+                                    else:          Fork.derH += [[deepcopy(pplayers),[]]]
                                     if Expplayers: sum_pH(Expplayers, expplayers, fneg)
-                                    else:          Fork.inder_[-1][1] = deepcopy(expplayers)
+                                    else:          Fork.derH[-1][1] = deepcopy(expplayers)
                         else: PH.H += [deepcopy(fork)]
             else:
                 PH_ += [deepcopy(pH)]  # CpH
 
-def sum_pH(PH, pH, fneg=0):  # recursive unpack inder_s ( pplayers ( players ( ptuples, no accum across fd: matched in comp_pH
+def sum_pH(PH, pH, fneg=0):  # recursive unpack derHs ( pplayers ( players ( ptuples, no accum across fd: matched in comp_pH
 
     for SpH, spH, Fd, fd in zip_longest(PH.H, pH.H, PH.fds, pH.fds, fillvalue=None):  # assume same forks
         if spH:
@@ -512,14 +510,14 @@ def feedback(root):  # bottom-up update root.H, breadth-first
             fbval, fbrdn = 0,0
             for node in root.node_:
                 # node.node_ may empty when node is converted graph
-                if node.node_ and not node.node_[0].box:  # link_ feedback is redundant, params are already in node.inder_
+                if node.node_ and not node.node_[0].box:  # link_ feedback is redundant, params are already in node.derH
                     continue
                 for sub_node in node.node_:
                     fd = sub_node.fds[-1] if sub_node.fds else 0
                     if not root.H: root.H = [CpH(H=[[],[]])]  # append bottom-up
                     if not root.H[0].H[fd]: root.H[0].H[fd] = Cgraph()
                     # sum nodes in root, sub_nodes in root.H:
-                    sum_inder_(root.H[0].H[fd].inder_, sub_node.inder_)
+                    sum_derH(root.H[0].H[fd].derH, sub_node.derH)
                     sum_H(root.H[1:], sub_node.H)  # sum_G(sub_node.H forks)?
             for Lev in root.H:
                 fbval += Lev.val; fbrdn += Lev.rdn
@@ -535,8 +533,8 @@ def add_alt_graph_(graph_t):  # mgraph_, dgraph_
     '''
     for fd, graph_ in enumerate(graph_t):
         for graph in graph_:
-            for node in graph.inder_s.H[-1].node_:
-                for derG in node.link_.Q:  # contour if link.inder_s.val < aveGm: link outside the graph
+            for node in graph.derHs.H[-1].node_:
+                for derG in node.link_.Q:  # contour if link.derHs.val < aveGm: link outside the graph
                     for G in [derG.node0, derG.node1]:  # both overlap: in-graph nodes, and contour: not in-graph nodes
                         alt_graph = G.roott[1-fd]
                         if alt_graph not in graph.alt_graph_ and isinstance(alt_graph, CpH):  # not proto-graph or removed
@@ -546,7 +544,7 @@ def add_alt_graph_(graph_t):  # mgraph_, dgraph_
     for fd, graph_ in enumerate(graph_t):
         for graph in graph_:
             if graph.alt_graph_:
-                graph.alt_inder_s = CpH()  # players if fsub? der+: inder_s[-1] += player, rng+: players[-1] = player?
+                graph.alt_derHs = CpH()  # players if fsub? der+: derHs[-1] += player, rng+: players[-1] = player?
                 for alt_graph in graph.alt_graph_:
-                    sum_pH(graph.alt_inder_s, alt_graph.inder_s)  # accum alt_graph_ params
-                    graph.alt_rdn += len(set(graph.inder_s.H[-1].node_).intersection(alt_graph.inder_s.H[-1].node_))  # overlap
+                    sum_pH(graph.alt_derHs, alt_graph.derHs)  # accum alt_graph_ params
+                    graph.alt_rdn += len(set(graph.derHs.H[-1].node_).intersection(alt_graph.derHs.H[-1].node_))  # overlap
