@@ -57,7 +57,7 @@ class CpH(ClusterStructure):  # hierarchy of params + associated vars in pplayer
 
     H = list  # hierarchy of pplayers | players | ptuples, can be sequence
     valt = lambda: [0,0]
-    rdn = lambda: 1  # for all Qs?
+    rdnt = lambda: [1,1] # for all Qs?
     rng = lambda: 1
     fds = list  # m|d in pplayers,players,ptuples, m|d|None in levs?
     nval = int  # of open links: base alt rep
@@ -198,7 +198,7 @@ def comp_G_(G_, pri_G_=None, f1Q=1, fsub=0):  # cross-comp Graphs if f1Q, else G
                         continue
                     dderH, mval, dval, tval = comp_GQ(_G,G)  # comp_G while G.G, H/0G: GQ is one distributed node?
                     ext = [1,distance,[dy,dx]]  # ext -> ext pair: new der_nodes / Graph:
-                    derG = Cgraph(valt=[mval,dval], G=[_G,G], derH= dderH+[[ext]], box=[])  # box is redundant to G
+                    derG = Cgraph(valt=[mval,dval], G=[_G,G], derH= dderH+[ext], box=[])  # box is redundant to G
                     # add links:
                     _G.link_.Q += [derG]; _G.link_.val += tval  # combined +-links val
                     G.link_.Q += [derG]; G.link_.val += tval
@@ -262,15 +262,25 @@ def comp_derH(_derH, derH, Mval,Dval, Mrdn,Drdn):
         for _der,der in zip(_Lev,Lev):
             if _der and der:  # probably not needed
                 if isinstance(der,CpH):  # pplayers, incr implicit nesting in m|dpplayers:
-                    dplayers = comp_pH(_der, der)
+                    mplayers, dplayers = comp_pH(_der, der)
+                    sum_pH(dplayers, mplayers)  # merge them by summing mplayers into dplayers
                     Mval += dplayers.valt[0]; Mrdn += dplayers.rdnt[0]  # add rdn in form_?
                     Dval += dplayers.valt[1]; Drdn += dplayers.rdnt[1]
                     dderH += [dplayers]
                 else:  # list
-                    dder, Mval, Dval, Mrdn, Drdn = comp_derH(_der[0], der[0], Mval, Dval, Mrdn, Drdn)
-                    mext,dext = comp_ext(_der[1],der[1])
-                    Mval+=sum(mext); Dval+=sum(dext)
-                    dderH += [[dder, [mext,dext]]]
+                    if isinstance(der[0], int):  # ext
+                        mext,dext = comp_ext(_der,der)
+                        Mval+=sum(mext); Dval+=sum(dext)
+                        # sum mext into dext
+                        for i in range(2): dext[i] += mext[i]
+                        if isinstance(dext[2], list): dext[2][0] += mext[2][0]; dext[2][1] += mext[2][1] 
+                        else:                         dext[2] += mext[2] 
+                        dderH += [dext]  # should be combined here?
+                           
+                    else:  # deeper nested list
+                        dder, Mval, Dval, Mrdn, Drdn = comp_derH(_der, der, Mval, Dval, Mrdn, Drdn)
+                        dderH += [dder]
+                        
             else:
                 dderH += [[]]  # probably not needed
         if (Mval+Dval) / (Mrdn+Drdn) < ave_G:
@@ -296,7 +306,7 @@ def comp_ext(_ext, ext):
             dA = _A - A; mA = min(_A, A)
     else:
         mA,dA = 0,0
-    return (mL,mS,mA), (dL,dS,dA)
+    return [mL,mS,mA], [dL,dS,dA]
 
 
 def sum2graph_(graph_, fd, fsub=0):  # sum node and link params into graph, derH in agg+ or player in sub+
@@ -421,8 +431,8 @@ def comp_pH(_pH, pH):  # recursive unpack derHs ( pplayer ( players ( ptuples ->
 
             elif isinstance(_spH, CpH):
                 smpH, sdpH = comp_pH(_spH, spH)
-                mpH.H +=[smpH]; mpH.valt[0]+=smpH.valt[0]; mpH.valt[1]+=smpH.valt[1]; mpH.rdn+=smpH.rdn; mpH.fds +=[smpH.fds]  # or 0 | fd?
-                dpH.H +=[sdpH]; dpH.valt[0]+=sdpH.valt[0]; dpH.valt[1]+=sdpH.valt[1]; dpH.rdn+=sdpH.rdn; dpH.fds +=[sdpH.fds]
+                mpH.H +=[smpH]; mpH.valt[0]+=smpH.valt[0]; mpH.valt[1]+=smpH.valt[1]; mpH.rdnt[0]+=smpH.rdnt[0]; mpH.rdnt[1]+=smpH.rdnt[1]; mpH.fds +=[smpH.fds]  # or 0 | fd?
+                dpH.H +=[sdpH]; dpH.valt[0]+=sdpH.valt[0]; dpH.valt[1]+=sdpH.valt[1]; dpH.rdnt[0]+=sdpH.rdnt[0]; dpH.rdnt[1]+=sdpH.rdnt[1]; dpH.fds +=[sdpH.fds]
 
     return mpH, dpH
 
@@ -456,7 +466,8 @@ def sum_pH(PH, pH, fneg=0):  # recursive unpack derHs ( pplayers ( players ( ptu
                 PH.fds += [fd]
                 PH.H += [deepcopy(spH)]
     PH.valt[0] += pH.valt[0]; PH.valt[1] += pH.valt[1]
-    PH.rdn += pH.rdn
+    PH.rdnt[0] += pH.rdnt[0]; PH.rdnt[1] += pH.rdnt[1]
+    
     if not PH.L: PH.L = pH.L  # PH.L is empty list by default
     else:        PH.L += pH.L
     PH.S += pH.S
