@@ -348,22 +348,36 @@ def PP2graph(PP, fseg, ifd=1):
     alt_lays = CpH(H=alt_pPP, valt=alt_valt)
 
     pPP = [[] for _ in PP_vars]; valt = [0, 0]  # init each var derH
-
-    repack(pPP, PP.players[0][0], idx_=[0])  # single-element 1st lev
+    
+    # PP.players is [[ptuples,...], val], where ptuples is [[ptuple,...], val]
+    # pp.players[0] is [ptuples,...]
+    # pp.players[0][0] is ptuples
+    # pp.players[0][0][0] is [ptuple,...]   
+    for ptuple in PP.players[0][0][0]:
+        repack(pPP, ptuple, idx_=[0])  # single-element 1st lev
+        if PP.fds[0]: valt[1] += ptuple.val
+        else:         valt[0] += ptuple.val
+    
     if len(PP.players[0])>1:
-        repack(pPP, PP.players[0][1], idx_=[1])  # single-element 2nd lev
+        for ptuple in PP.players[0][1][0]:
+            repack(pPP, ptuple, idx_=[1])  # single-element 2nd lev
+            if PP.fds[1]: valt[1] += ptuple.val
+            else:         valt[0] += ptuple.val
         i=2; last=4
         idx = 2  # init incremental elevation = i
-        while last<len(PP.players[0]):
-            inpack_derH(pPP, PP.players[0][0], idx_=[idx])  # pack ptuple vars into derH of pPP vars
+        while last<=len(PP.players[0]):  # I think it is not possible for PP to get more than 2 levs?
+            ptuples = []
+            for Ptuples in PP.players[0][i:last]: ptuples += [Ptuples[0][0]] # pack nested ptuples into a flat list of ptuples
+            inpack_derH(pPP, ptuples, idx_=[idx])  # pack ptuple vars into derH of pPP vars
             i=last; last+=i  # last=i*2
             idx+=1  # elevation in derH
 
     x0=PP.x0; xn=PP.xn; y0=PP.y0; yn=PP.yn
     box=[(y0+yn)/2,(x0+xn)/2, y0,yn, x0,xn]
     # update to center (x0,y0) and max_distance (xn,yn) in graph:
-    alt_Graph = Cgraph(valt=copy(alt_lays.valt),derH=[alt_lays], box=copy(box))
-    graph = Cgraph(valt=copy(lays.valt),derH=[pPP],alt_Graph=alt_Graph,box=box)
+    alt_Graph = Cgraph(derH=[alt_lays], box=copy(box))
+    # derH should be = [pPP] or just derH=pPP?
+    graph = Cgraph(valt=valt,derH=[pPP],alt_Graph=alt_Graph,box=box)
 
     return graph  # 1st plevel fd is always der+?
 
@@ -376,7 +390,7 @@ def inpack_derH(pPP, ptuples, idx_=[]):  # pack ptuple vars in derH of pPP vars,
         repack(pPP, ptuples[1], idx_+[1])  # single-element 2nd lev
         i=2; last=4
         idx = 2  # init incremental elevation = i
-        while last<len(ptuples):
+        while last<=len(ptuples):
             lev = ptuples[i:last]  # lev is nested, max len_sublev = lenlev-1, etc.
             inpack_derH(pPP, lev, idx_+[idx])  # add idx per sublev
             i=last; last+=i  # last=i*2
@@ -387,7 +401,7 @@ def repack(pPP, ptuple, idx_):  # pack derH in elements of iderH
     for i, param_name in enumerate(PP_vars):
         par = getattr(ptuple, param_name)
         Par = pPP[i]
-        if len(Par > len(idx_)):  # Par is derH of pars
+        if len(Par) > len(idx_):  # Par is derH of pars
             Par[-1] += [par]  # pack par in top lev of Par, added per inpack_derH recursion
         else:
             Par += [[par]]  # add new Par lev, implicitly nested in ptuples?
