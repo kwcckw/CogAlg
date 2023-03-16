@@ -80,6 +80,10 @@ class CpLine(ClusterStructure):  # bottom-layer tuple of lateral compared params
     aangle = lambda: [0, 0, 0, 0]
     G = float  # for comparison, not summation:
     Ga = float
+    # x and L here is per pdert_?
+    x = int
+    L = int
+    valt = lambda: [0,0]
 
 class CpVert(CpLine):  # ders of vertically compared P params: dLine [par,[m,d]] in derP or derH in PP
 
@@ -117,6 +121,7 @@ class CderP(ClusterStructure):  # tuple of derivatives in P uplink_ or downlink_
     y0=int
     _P = object  # higher comparand
     P = object  # lower comparand
+    valt = lambda: [0,0]
     roott = lambda: [None,None]  # for der++
     # higher derivatives
     rdn = int  # mrdn, + uprdn if branch overlap?
@@ -165,7 +170,7 @@ def comp_slice_root(blob, verbose=False):  # always angle blob, composite dert c
 
     from sub_recursion import sub_recursion_eval, rotate_P_
     P__ = slice_blob(blob, verbose=False)  # form 2D array of blob slices in blob.dert__
-    rotate_P_(P__, blob.dert__, blob.mask__)  # rotate each P to align it with direction of P gradient
+#    rotate_P_(P__, blob.dert__, blob.mask__)  # rotate each P to align it with direction of P gradient
 
     comp_P_root(P__)  # rotated Ps are sparse or overlapping: derPs are partly redundant, but results are not biased?
     # segment is stack of (P,derP)s:
@@ -209,13 +214,19 @@ def slice_blob(blob, verbose=False):  # form blob slices nearest to slice Ga: Ps
                 params.Ga = (params.aangle[1] + 1) + (params.aangle[3] + 1)  # Cos_da0, Cos_da1
                 L = len(Pdert_)
                 params.L = L; params.x = x-L/2
+                # we need valt in latuple too? Else we don't have any val value in comp_P. Assign them both the same?
+                params.valt[0] = params.I+params.M+params.Ma,params.G+params.Ga
+                params.valt[1] = params.I+params.M+params.Ma,params.G+params.Ga
                 P_.append( CP(pLine=params, x0=x-(L-1), y0=y, dert_=Pdert_))
             _mask = mask
         # pack last P, same as above:
         if not _mask:
             params.G = np.hypot(*params.angle); params.Ga = (params.aangle[1] + 1) + (params.aangle[3] + 1)
-            L = len(Pdert_); params.L = L; params.x = x-L/2
-            P_.append(CP(pLine=params, x0=x - (L - 1), y0=y, dert_=Pdert_))
+            L = len(Pdert_); params.L = L; params.x = x-L/2 
+            # we need valt in latuple too? Else we don't have any val value in comp_P. Assign them both the same?
+            params.valt[0] = params.I+params.M+params.Ma,params.G+params.Ga
+            params.valt[1] = params.I+params.M+params.Ma,params.G+params.Ga
+            P_.append(CP(latuple=params, x0=x - (L - 1), y0=y, dert_=Pdert_))
         P__ += [P_]
 
     blob.P__ = P__
@@ -240,15 +251,15 @@ def comp_P_root(P__):  # vertically compares y-adjacent and x-overlapping Ps: bl
 def comp_P(_P, P):  # forms vertical derivatives of params per P in _P.uplink, conditional ders from norm and DIV comp
 
     if isinstance(_P, CP):
-        dLine = comp_ptuple(_P.pLine, P.pLine)
-        vertuple = [[[[_P.pLine],_P.pLine.valt]],_P.pLine.valt] # ["pLines"]
-        lastvert = [[[dLine],dLine.valt]]
+        dLine = comp_ptuple(_P.latuple, P.latuple)
+        vertuple = [[[[_P.latuple], _P.latuple.valt]], _P.latuple.valt] # ["pLines"]
+        lastvert = [[[[dLine],dLine.valt]],[[[dLine],dLine.valt]]]  # we need this as m,d pair?
     else:  # P is derP
         mvert, dvert = comp_ptuple(_P.vertuple, P.vertuple)
         vertuple = deepcopy(_P.vertuple)
         lastvert = [mvert, dvert]  # pack vals
 
-    return CderP(vertuple=vertuple, lastvert=lastvert, val=vertuple[1], P=P, _P=_P, x0=_P.x0, y0=_P.y0)
+    return CderP(vertuple=vertuple, lastvert=lastvert, valt=copy(vertuple[1]), P=P, _P=_P, x0=_P.x0, y0=_P.y0)
 
 
 def form_seg_root(P__, fd, fds):  # form segs from Ps
@@ -270,15 +281,15 @@ def form_seg_root(P__, fd, fds):  # form segs from Ps
 def link_eval(link_layers, fd):
 
     # sort derPs in link_layers[-2] by their value param:
-    derP_ = sorted( link_layers[-2], key=lambda derP: derP.lastvert[fd][1], reverse=True)
+    derP_ = sorted( link_layers[-2], key=lambda derP: derP.lastvert[fd][0][1], reverse=True)
 
     for i, derP in enumerate(derP_):
         if not fd:
             rng_eval(derP, fd)  # reset derP.valt, derP.rdn
-        mrdn = derP.lastvert[1][1] > derP.lastvert[0][1]
+        mrdn = sum(derP.lastvert[fd][0][1]) > sum(derP.lastvert[fd][0][1])  # sum because they are valt
         derP.rdn += not mrdn if fd else mrdn
 
-        if derP.lastvert[fd][1] > vaves[fd] * derP.rdn * (i+1):  # ave * rdn to stronger derPs in link_layers[-2]
+        if sum(derP.lastvert[fd][0][1]) > vaves[fd] * derP.rdn * (i+1):  # ave * rdn to stronger derPs in link_layers[-2]
             link_layers[-1][fd].append(derP)
             derP._P.downlink_layers[-1][fd] += [derP]
             # misses = link_layers[-2] not in link_layers[-1], sum as PP.nvalt[fd] in sum2seg and sum2PP
@@ -416,9 +427,9 @@ def accum_derP(seg, derP, fd):  # derP might be CP, though unlikely
     else:                       seg.x0 = min(seg.x0, derP.x0)
     if isinstance(derP, CP):
         derP.roott[fd] = seg
-        if seg.vertuple: sum_ptuple( seg.vertuple, [[[[derP.pLine], derP.pLine.valt]], derP.pLine.valt])
-        else:           seg.vertuple = [[[[derP.pLine], derP.pLine.valt]], derP.pLine.valt]  # init player
-        seg.xn = max(seg.xn, derP.x0 + derP.pLine.L)
+        if seg.vertuple: sum_ptuple( seg.vertuple, [[[[derP.latuple], derP.latuple.valt]], derP.latuple.valt])
+        else:           seg.vertuple = [[[[derP.latuple], derP.latuple.valt]], derP.latuple.valt]  # init player
+        seg.xn = max(seg.xn, derP.x0 + derP.latuple.L)
     else:
         sum_ptuple(seg.vertuple, derP.vertuple)  # last derP player is current mvert, dvert
         seg.xn = max(seg.xn, derP._P.x0 + derP.vertuple[0][0][0][0].L)  # or use derP._P.pLine.L?
@@ -524,25 +535,26 @@ def comp_ptuple(_params, params, fd=0):  # compare lateral or vertical tuples, s
 
     dLine = CpVert()
     comp = comp_derH if fd else comp_p
-    rn = _params.n / params.n  # normalize param as param*rn for n-invariant ratio: _param / param*rn = (_param/_n) / (param/n)
+    # we shouldn't need rn now?
+    # rn = _params.n / params.n  # normalize param as param*rn for n-invariant ratio: _param / param*rn = (_param/_n) / (param/n)
 
     if fd:  # comp vertuple, or replace with comp_derH?
         # all params are scalars:
-        comp("val", _params.val, params.val*rn, dLine, ave_mval, finv=0)
-        comp("axis", _params.axis, params.axis*rn, dLine, ave_dangle, finv=0)
-        comp("angle", _params.angle, params.angle*rn, dLine, ave_dangle, finv=0)
-        comp("aangle", _params.aangle, params.aangle*rn, dLine, ave_daangle, finv=0)
+        comp("val", _params.val, params.val, dLine, ave_mval, finv=0)
+        comp("axis", _params.axis, params.axis, dLine, ave_dangle, finv=0)
+        comp("angle", _params.angle, params.angle, dLine, ave_dangle, finv=0)
+        comp("aangle", _params.aangle, params.aangle, dLine, ave_daangle, finv=0)
     else:  # comp latuple
-        comp("G", _params.G, params.G*rn, dLine, ave_G, finv=0)
-        comp("Ga", _params.Ga, params.Ga*rn, dLine, ave_Ga, finv=0)
+        comp("G", _params.G, params.G, dLine, ave_G, finv=0)
+        comp("Ga", _params.Ga, params.Ga, dLine, ave_Ga, finv=0)
         comp_angle("axis", _params.axis, params.axis, dLine)  # rotated, thus no adjustment by daxis?
         comp_angle("angle", _params.angle, params.angle, dLine)
         comp_aangle(_params.aangle, params.aangle, dLine)
     # either:
-    comp("I", _params.I, params.I*rn, dLine, ave_dI, finv=not fd)  # inverse match if latuple
-    comp("M", _params.M, params.M*rn, dLine, ave_M, finv=0)
-    comp("Ma",_params.Ma, params.Ma*rn, dLine, ave_Ma, finv=0)
-    comp("L", _params.L, params.L*rn, dLine, ave_L, finv=0)
+    comp("I", _params.I, params.I, dLine, ave_dI, finv=not fd)  # inverse match if latuple
+    comp("M", _params.M, params.M, dLine, ave_M, finv=0)
+    comp("Ma",_params.Ma, params.Ma, dLine, ave_Ma, finv=0)
+    comp("L", _params.L, params.L, dLine, ave_L, finv=0)
     comp("x", _params.x, params.x, dLine, ave_x, finv=not fd)
     # adjust / daxis+dx: Dim compensation in same area, alt axis definition?
 
