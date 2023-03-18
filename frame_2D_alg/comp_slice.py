@@ -51,6 +51,7 @@ ave_L = 10
 ave_x = 1
 ave_dx = 5  # inv, difference between median x coords of consecutive Ps
 ave_dy = 5
+ave_daxis = 2
 ave_dangle = 2  # vertical difference between angles
 ave_daangle = 2
 ave_mval = ave_dval = 10  # should be different
@@ -62,27 +63,28 @@ ave_sub = 2  # cost of calling sub_recursion and looping
 ave_agg = 3  # cost of agg_recursion
 ave_overlap = 10
 
-aves = [ave_dx, ave_dI, ave_M, ave_Ma, ave_L, ave_G, ave_Ga, ave_mval, ave_dval]
+param_names = ["I", "M", "Ma", "axis", "angle", "aangle","G", "Ga", "x", "L"]
+aves = [ave_dI, ave_M, ave_Ma, ave_daxis, ave_dangle, ave_daangle, ave_G, ave_Ga, ave_dx, ave_L, ave_mval, ave_dval]
 vaves = [ave_mval, ave_dval]
 PP_aves = [ave_mPP, ave_dPP]
 
 
 class Cptuple(ClusterStructure):  # bottom-layer tuple of compared params in P, derH per par in derP, or PP
 
-    I = int
-    M = int
-    Ma = float
-    axis = lambda: [1, 0]  # ini dy=1,dx=0, old angle after rotation
-    angle = lambda: [0, 0]  # in latuple only, replaced by float in vertuple
-    aangle = lambda: [0, 0, 0, 0]
-    G = float  # for comparison, not summation:
-    Ga = float
-    x = int  # median: x0+L/2
-    L = int  # len dert_ in P, area in PP
+    I = list
+    M = list
+    Ma = list
+    axis = lambda: [[1, 0]]  # ini dy=1,dx=0, old angle after rotation
+    angle = lambda: [[0, 0]]  # in latuple only, replaced by float in vertuple
+    aangle = lambda: [[0, 0, 0, 0]]
+    G = list  # for comparison, not summation:
+    Ga = list
+    x = list  # median: x0+L/2
+    L = list  # len dert_ in P, area in PP
     n = lambda: 1  # accum count, combine from CpH?
     '''
     param derH in vertuple, only lower fd matters:
-    lay1: par  # fd=0
+    lay1: [par]  # fd=0 (add bracket for 1st lev so that we can have a same processing code on nested list)
     lay2: [mpar,dpar]   # ders of 0fd
     lay3: [[mpar,dpar], [m_fd_par,d_fd_par]]: 2 sLevs, ders of lay2'fd
     lay4: [[mpar,dpar], [m_fd_par,d_fd_par], [[m_fd_par,d_fd_par],[m_fdfd_par,d_fdfd_par]]]: 3 sLevs, <=2 ssLevs
@@ -169,7 +171,7 @@ def comp_slice_root(blob, verbose=False):  # always angle blob, composite dert c
             for _P in _P_:  # test for x overlap(_P,P) in 8 directions, derts are positive in all Ps:
                 _L = len(_P.dert_); L = len(P.dert_)
                 if (P.x0 - 1 < _P.x0 + _L) and (P.x0 + L > _P.x0):
-                    vertuple, valt = comp_ptuple(_P.ptuple, P.ptuple)  # latuples in Ps or vertuples in derPs
+                    vertuple, valt, rdnt = comp_ptuple(_P.ptuple, P.ptuple, _fds=[0], fds=[0])  # latuples in Ps or vertuples in derPs
                     derP = CderP(ptuple=vertuple, valt=valt, P=P, _P=_P, x0=_P.x0, y0=_P.y0)
                     P.uplink_layers[-2] += [derP]  # uplink_layers[-1] is match_derPs
                     _P.downlink_layers[-2] += [derP]
@@ -205,24 +207,24 @@ def slice_blob(blob, verbose=False):  # form blob slices nearest to slice Ga: Ps
             if not mask:  # masks: if 0,_1: P initialization, if 0,_0: P accumulation, if 1,_0: P termination
                 if _mask:  # ini P params with first unmasked dert (m, ma, i, dy, dx, sin_da0, cos_da0, sin_da1, cos_da1):
                     Pdert_ = [dert]
-                    params = Cptuple(M=ave_g-g,Ma=ave_ga-ga,I=ri, angle=angle, aangle=aangle)
+                    params = Cptuple(M=[ave_g-g],Ma=[ave_ga-ga],I=[ri], angle=[angle], aangle=[aangle])
                 else:
                     # dert and _dert are not masked, accumulate P params:
-                    params.M+=ave_g-g; params.Ma+=ave_ga-ga; params.I+=ri; params.angle[0]+=angle[0]; params.angle[1]+=angle[1]
-                    params.aangle = [sum(aangle_tuple) for aangle_tuple in zip(params.aangle, aangle)]
+                    params.M[0]+=ave_g-g; params.Ma[0]+=ave_ga-ga; params.I[0]+=ri; params.angle[0][0]+=angle[0]; params.angle[0][1]+=angle[1]
+                    params.aangle[0] = [sum(aangle_tuple) for aangle_tuple in zip(params.aangle[0], aangle)]
                     Pdert_.append(dert)
             elif not _mask:
                 # _dert is not masked, dert is masked, terminate P:
-                params.G = np.hypot(*params.angle)  # Dy, Dx  # recompute G, Ga, which can't reconstruct M, Ma
-                params.Ga = (params.aangle[1] + 1) + (params.aangle[3] + 1)  # Cos_da0, Cos_da1
+                params.G = [np.hypot(*params.angle[0])]  # Dy, Dx  # recompute G, Ga, which can't reconstruct M, Ma
+                params.Ga = [(params.aangle[0][1] + 1) + (params.aangle[0][3] + 1)]  # Cos_da0, Cos_da1
                 L = len(Pdert_)
-                params.L = L; params.x = x-L/2
+                params.L = [L]; params.x = [x-L/2]
                 P_.append( CP(ptuple=params, x0=x-(L-1), y0=y, dert_=Pdert_))
             _mask = mask
         # pack last P, same as above:
         if not _mask:
-            params.G = np.hypot(*params.angle); params.Ga = (params.aangle[1] + 1) + (params.aangle[3] + 1)
-            L = len(Pdert_); params.L = L; params.x = x-L/2
+            params.G = [np.hypot(*params.angle[0])]; params.Ga = [(params.aangle[0][1] + 1) + (params.aangle[0][3] + 1)]
+            L = len(Pdert_); params.L = [L]; params.x = [x-L/2]
             P_.append(CP(ptuple=params, x0=x - (L - 1), y0=y, dert_=Pdert_))
         P__ += [P_]
 
@@ -498,7 +500,7 @@ def comp_ptuple_(_layers, layers):  # unpack and compare der layers, if any from
 
     return [dLines,mval,dval]
 
-
+'''
 def comp_ptuple(_params, params, fd=0):  # compare latuples or vertuples, similar operations for m and d params
 
     ptuple = Cptuple()
@@ -525,35 +527,56 @@ def comp_ptuple(_params, params, fd=0):  # compare latuples or vertuples, simila
 
     # adjust / daxis+dx: Dim compensation in same area, alt axis definition?
     return ptuple, Valt
+'''
 
+
+def comp_ptuple(_ptuple, ptuple, _fds, fds):
+    
+    dtuple = Cptuple()
+    Valt = [0,0]; Rdnt = [0,0]
+    for param_name, ave in zip(param_names, aves):
+        _derH = getattr(_ptuple, param_name); derH = getattr(ptuple, param_name); 
+        dderH = comp_derH(param_name, _derH, derH, Valt, Rdnt, _fds, fds, ave)
+        setattr(dtuple, param_name, dderH)
+    
+    return dtuple, Valt, Rdnt
+    
 # draft, should call comp_p, combine into op_derH?
-
-def comp_derH(ptuple, param_name, _derH, derH, Mval, Dval, Mrdn, Drdn, _fds, fds):
+def comp_derH(param_name, _derH, derH, Valt, Rdnt, _fds, fds, ave):
     # idx_: derH indices, op: comp|sum, lenlev: 1, 1, 2, 4, 8...
 
     dderH = []
     if _fds[0]==fds[0]:  # else higher fds won't match either
-        dderH += [comp_p(_derH[0], derH[0])]  # single-element 1st lev
-        if (len(_derH)>1 and len(derH)>1) and _fds[1]==fds[1]:
-            dderH += [comp_p(_derH[1], derH[1])]  # single-element 2nd lev
+        if param_name == "x" or param_name == "I": finv = not fds[0]
+        else:                                      finv = 0  
+        dderH += [comp_p(param_name, _derH[0], derH[0], ave, Valt, finv)]  # single-element 1st lev
+        if (len(_derH)>1 and len(derH)>1) and isinstance(_derH[0], list) and _fds[1]==fds[1]:
+            dderH += [comp_p(param_name, _derH[1], derH[1], ave, Valt, finv)]  # single-element 2nd lev
             i,idx = 2,2; last=4  # multi-element 2nd+ levs, init incr elevation = i
             # append Mval, Dval, Mrdn, Drdn?
             while last < len(derH) and last < len(derH):  # loop _lev, lev, may be nested
-                dderH += comp_derH(_derH[i:last], derH[i:last], Mval, Dval, Mrdn, Drdn, idx_ + [idx])
+                dderH += comp_derH(_derH[i:last], derH[i:last], Valt, Rdnt, _fds[i:last], fds[i:last], ave)
                 i=last; last+=i  # last=i*2
                 idx+=1  # elevation in derH
-    getattr(ptuple, param_name.append([dderH]))  # append new lev
+                
+    return dderH
+    # I don't see how this is needed?    
+    # getattr(ptuple, param_name.append([dderH]))  # append new lev
 
 
-def comp_p(param_name, _param_, param_, ave, Valt, ptuple, finv):
+def comp_p(param_name, _param_, param_, ave, Valt, finv):
     # param derH is always a list, single-element if lev0, unpack recursively?
+
+    if not isinstance(_param_, list): _param_ = [_param_]; param_ = [param_]  # for lev 0
+    
     for i, (_param, param) in enumerate(zip(_param_, param_)):
         d = _param - param
         if finv: m = ave - abs(d)  # inverse match for primary params, no mag/value correlation
         else:    m = min(_param, param) - ave
         Valt[0] += m
         Valt[1] += abs(d)
-        getattr(ptuple, param_name)[i].append([m, d])
+
+    return [m, d]
 
 # not updated:
 def comp_angle(param_name, _angle, angle, Valt, ptuple=None):  # rn doesn't matter for angles
