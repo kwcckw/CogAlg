@@ -248,7 +248,7 @@ def form_seg_root(P__, fd, fds):  # form segs from Ps
 
 def link_eval(link_layers, fd):
 
-    # sort derPs in link_layers[-2] by their value param:  
+    # sort derPs in link_layers[-2] by their value param:
     derP_ = sorted( link_layers[-2], key=lambda derP: derP.valt[fd], reverse=True)
 
     for i, derP in enumerate(derP_):
@@ -392,11 +392,11 @@ def sum2seg(seg_Ps, fd, fds):  # sum params of vertically connected Ps into segm
 
 def accum_derP(seg, derP, fd):  # derP might be CP, though unlikely
 
-    if isinstance(derP, CderP): 
+    if isinstance(derP, CderP):
         seg.x0 = min(seg.x0, derP._P.x0)
         seg.xn = max(seg.xn, derP._P.x0 + derP._P.ptuple.L)  # or use derP._P.ptuple.L?
-    else:  
-        derP.roott[fd] = seg                     
+    else:
+        derP.roott[fd] = seg
         seg.x0 = min(seg.x0, derP.x0)
         seg.xn = max(seg.xn, derP.x0 + derP.ptuple.L)
     if seg.ptuple: sum_ptuple(seg.ptuple, derP.ptuple)  # last derP player is current mvert, dvert
@@ -498,95 +498,64 @@ def comp_ptuple_(_layers, layers):  # unpack and compare der layers, if any from
 
     return [dLines,mval,dval]
 
+
 def comp_ptuple(_params, params, fd=0):  # compare latuples or vertuples, similar operations for m and d params
 
     ptuple = Cptuple()
     Valt = [0,0]
     rn = _params.n / params.n  # normalize param as param*rn for n-invariant ratio: _param / param*rn = (_param/_n) / (param/n)
+    # replace comp_p with comp_derH below:
 
-    # level 1 and above
-    if isinstance(_params.I, list):
-        # level 2 or higher
-        if isinstance(_params.I[0], list):
-            # this section is unfinished, this for loop need to be done on all params, right now it shows only I param
-            for _par, par in zip(_params.I, params.I):
-                if isinstance(_par[0], list):
-                    Ituple = comp_ptuple(_par, par, fd=0)  # not sure here, probably wrong 
-                    ptuple.I += [Ituple.I]
-                else:
-                    m,d = comp_p("I", _par.I[fd], par.I[fd]*rn, ave_dI, finv=not fd)  # inverse match if latuple
-                    ptuple.I += [[m,d]]; Valt[0] += m; Valt[1] += abs(d)
-            
-        # level 1
-        else:
-                m,d = comp_p("I", _params.I[fd], params.I[fd]*rn, ave_dI, finv=not fd)  # inverse match if latuple
-                ptuple.I = [m,d]; Valt[0] += m; Valt[1] += abs(d)
-                m,d = comp_p("M", _params.M[fd], params.M[fd]*rn, ave_M, finv=0)
-                ptuple.M = [m,d]; Valt[0] += m; Valt[1] += abs(d)
-                m,d = comp_p("Ma",_params.Ma[fd], params.Ma[fd]*rn, ave_Ma, finv=0)
-                ptuple.Ma = [m,d]; Valt[0] += m; Valt[1] += abs(d)
-                m,d = comp_p("L", _params.L[fd], params.L[fd]*rn, ave_L, finv=0)
-                ptuple.L = [m,d]; Valt[0] += m; Valt[1] += abs(d)
-                m,d = comp_p("x", _params.x[fd], params.x[fd], ave_x, finv=not fd)
-                ptuple.x = [m,d]; Valt[0] += m; Valt[1] += abs(d)
-                m,d = comp_p("G", _params.G[fd], params.G[fd]*rn, ave_G, finv=0)
-                ptuple.G = [m,d]; Valt[0] += m; Valt[1] += abs(d)
-                m,d = comp_p("Ga", _params.Ga[fd], params.Ga[fd]*rn, ave_Ga, finv=0)
-                ptuple.Ga = [m,d]; Valt[0] += m; Valt[1] += abs(d)
-                
-                if fd:
-                    # all params are scalars:
-                    m,d = comp_p("axis", _params.axis[fd], params.axis[fd]*rn, ave_dangle, finv=0)
-                    ptuple.axis = [m,d]; Valt[0] += m; Valt[1] += abs(d)
-                    m,d = comp_p("angle", _params.angle[fd], params.angle[fd]*rn, ave_dangle, finv=0)
-                    ptuple.angle = [m,d]; Valt[0] += m; Valt[1] += abs(d)
-                    m,d = comp_p("aangle", _params.aangle[fd], params.aangle[fd]*rn, ave_daangle, finv=0)
-                    ptuple.aangle = [m,d]; Valt[0] += m; Valt[1] += abs(d)
-                else:
-                    comp_angle("axis", _params.axis[fd], params.axis[fd], Valt, ptuple)  # rotated, thus no adjustment by daxis?
-                    comp_angle("angle", _params.angle[fd], params.angle[fd], Valt, ptuple)
-                    comp_aangle(_params.aangle[fd], params.aangle[fd], ptuple, Valt)
-    # level 0
+    comp_p("I", _params.I[fd], params.I[fd]*rn, ave_dI, Valt, ptuple, finv=not fd)
+    comp_p("M", _params.M[fd], params.M[fd]*rn, ave_M, Valt, ptuple, finv=0)
+    comp_p("Ma", _params.Ma[fd], params.Ma[fd]*rn, ave_Ma, Valt, ptuple, finv=0)
+    comp_p("L", _params.L[fd], params.L[fd]*rn, ave_L, Valt, ptuple, finv=0)
+    comp_p("x", _params.x[fd], params.x[fd], ave_x, Valt, ptuple, finv=not fd)
+    comp_p("G", _params.G[fd], params.G[fd]*rn, ave_G, Valt, ptuple, finv=0)
+    comp_p("Ga", _params.Ga[fd], params.Ga[fd]*rn, ave_Ga, Valt, ptuple, finv=0)
+
+    if fd:
+        comp_p("axis", _params.axis[fd], params.axis[fd]*rn, ave_dangle, Valt, ptuple, finv=0)
+        comp_p("angle", _params.angle[fd], params.angle[fd]*rn, ave_dangle, Valt, ptuple, finv=0)
+        comp_p("aangle", _params.aangle[fd], params.aangle[fd]*rn, ave_daangle, Valt, ptuple, finv=0)
     else:
-        m,d = comp_p("I", _params.I, params.I*rn, ave_dI, finv=not fd)  # inverse match if latuple
-        ptuple.I = [m,d]; Valt[0] += m; Valt[1] += abs(d)
-        m,d = comp_p("M", _params.M, params.M*rn, ave_M, finv=0)
-        ptuple.M = [m,d]; Valt[0] += m; Valt[1] += abs(d)
-        m,d = comp_p("Ma",_params.Ma, params.Ma*rn, ave_Ma, finv=0)
-        ptuple.Ma = [m,d]; Valt[0] += m; Valt[1] += abs(d)
-        m,d = comp_p("L", _params.L, params.L*rn, ave_L, finv=0)
-        ptuple.L = [m,d]; Valt[0] += m; Valt[1] += abs(d)
-        m,d = comp_p("x", _params.x, params.x, ave_x, finv=not fd)
-        ptuple.x = [m,d]; Valt[0] += m; Valt[1] += abs(d)
-        m,d = comp_p("G", _params.G, params.G*rn, ave_G, finv=0)
-        ptuple.G = [m,d]; Valt[0] += m; Valt[1] += abs(d)
-        m,d = comp_p("Ga", _params.Ga, params.Ga*rn, ave_Ga, finv=0)
-        ptuple.Ga = [m,d]; Valt[0] += m; Valt[1] += abs(d)
-        
-        if fd:
-            # all params are scalars:
-            m,d = comp_p("axis", _params.axis, params.axis*rn, ave_dangle, finv=0)
-            ptuple.axis = [m,d]; Valt[0] += m; Valt[1] += abs(d)
-            m,d = comp_p("angle", _params.angle, params.angle*rn, ave_dangle, finv=0)
-            ptuple.angle = [m,d]; Valt[0] += m; Valt[1] += abs(d)
-            m,d = comp_p("aangle", _params.aangle, params.aangle*rn, ave_daangle, finv=0)
-            ptuple.aangle = [m,d]; Valt[0] += m; Valt[1] += abs(d)
-        else:
-            comp_angle("axis", _params.axis, params.axis, Valt, ptuple)  # rotated, thus no adjustment by daxis?
-            comp_angle("angle", _params.angle, params.angle, Valt, ptuple)
-            comp_aangle(_params.aangle, params.aangle, ptuple, Valt)
-    
-    # adjust / daxis+dx: Dim compensation in same area, alt axis definition?
+        comp_angle("axis", _params.axis[fd], params.axis[fd], Valt, ptuple)  # rotated, thus no adjustment by daxis?
+        comp_angle("angle", _params.angle[fd], params.angle[fd], Valt, ptuple)
+        comp_aangle(_params.aangle[fd], params.aangle[fd], ptuple, Valt)
 
+    # adjust / daxis+dx: Dim compensation in same area, alt axis definition?
     return ptuple, Valt
 
-def comp_p(param_name, _param, param, ave, finv):
+# draft, should call comp_p, combine into op_derH?
 
-    d = _param-param
-    if finv: m = ave - abs(d)  # inverse match for primary params, no mag/value correlation
-    else:    m = min(_param,param) - ave
-    return m, d  # [mpar,dpar]
+def comp_derH(ptuple, param_name, _derH, derH, Mval, Dval, Mrdn, Drdn, _fds, fds):
+    # idx_: derH indices, op: comp|sum, lenlev: 1, 1, 2, 4, 8...
 
+    dderH = []
+    if _fds[0]==fds[0]:  # else higher fds won't match either
+        dderH += [comp_p(_derH[0], derH[0])]  # single-element 1st lev
+        if (len(_derH)>1 and len(derH)>1) and _fds[1]==fds[1]:
+            dderH += [comp_p(_derH[1], derH[1])]  # single-element 2nd lev
+            i,idx = 2,2; last=4  # multi-element 2nd+ levs, init incr elevation = i
+            # append Mval, Dval, Mrdn, Drdn?
+            while last < len(derH) and last < len(derH):  # loop _lev, lev, may be nested
+                dderH += comp_derH(_derH[i:last], derH[i:last], Mval, Dval, Mrdn, Drdn, idx_ + [idx])
+                i=last; last+=i  # last=i*2
+                idx+=1  # elevation in derH
+    getattr(ptuple, param_name.append([dderH]))  # append new lev
+
+
+def comp_p(param_name, _param_, param_, ave, Valt, ptuple, finv):
+    # param derH is always a list, single-element if lev0, unpack recursively?
+    for i, (_param, param) in enumerate(zip(_param_, param_)):
+        d = _param - param
+        if finv: m = ave - abs(d)  # inverse match for primary params, no mag/value correlation
+        else:    m = min(_param, param) - ave
+        Valt[0] += m
+        Valt[1] += abs(d)
+        getattr(ptuple, param_name)[i].append([m, d])
+
+# not updated:
 def comp_angle(param_name, _angle, angle, Valt, ptuple=None):  # rn doesn't matter for angles
 
     _Dy, _Dx = _angle
