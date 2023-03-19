@@ -500,19 +500,23 @@ def comp_derH(pname, _derH, derH, Valt, Rdnt, _fds, fds, ave, fder0=0):  # simil
 
     dderH = []
     if _fds[0]==fds[0]:  # else higher fds won't match either
+        if pname=="x" or pname=="I": finv = not fds[0]
+        else:                        finv = 0
         if fder0:  # 1st layer is param
-            if pname=="x" or pname=="I": finv = not fds[0]
-            else: finv = 0
-            _lay0 = _derH[0]; lay0 = derH[0]
-        else:  # 1st sublayer is [m,d]
-            _lay0 = _derH[0][1]; lay0 = derH[0][1]
+            _lay0 = _derH; lay0 = derH
+        else:  
+            if isinstance(_derH[0], list):  # 1st sublayer is [m,d] from nested list
+                _lay0 = _derH[0][_fds[0]]; lay0 = derH[0][_fds[0]]
+            else:  # 1st sublayer is m or d from [m,d]
+                _lay0 = _derH[_fds[0]]; lay0 = derH[_fds[0]]  # we need to use fds[0] to get fd for for higher level comp?
         dderH += comp_p(_lay0, lay0, ave, Valt, finv)
         # optional 2nd+ levs:
-        if len(_derH)>1 and len(derH)>1 and _fds[1]==fds[1]:
-            dderH += comp_p(_derH[1][1], derH[1][1], ave, Valt, finv)  # 2nd layer is [m,d], always comp d
-            i,idx=2,2; last=4  # multi-element 2+ layers, init incr elevation = i
+        if len(_fds)>1 and len(fds)>1 and _fds[1]==fds[1]:
+            dderH = [dderH]  # we need this to pack them in nested list when len(derH)>1
+            dderH += [comp_p(_derH[1][_fds[1]], derH[1][fds[1]], ave, Valt, finv)]  # 2nd layer is [m,d], always comp d
+            i,idx=2,2; last=3  # multi-element 2+ layers, init incr elevation = i  ( i think this is no longer relevant?)
             # loop _lay,lay:
-            while last < len(derH) and last < len(derH) and sum(Valt)/sum(Rdnt) > ave and _fds[idx]==fds[idx]:
+            while last <= len(derH) and last <= len(derH) and sum(Valt)/sum(Rdnt) > ave and _fds[idx]==fds[idx]:
                 dderH += comp_derH(pname, _derH[i:last][0], derH[i:last][0], Valt, Rdnt, _fds[i:last], fds[i:last], ave, fder0=0)
                 i=last; last+=i  # last = i*2, lenlev: 1,1,2,4,8...
                 idx+=1  # elevation in derH
