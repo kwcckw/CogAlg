@@ -485,43 +485,52 @@ def comp_ptuple(_ptuple, ptuple, _fds, fds, fd, fder0=0):
     Valt = [0,0]
     Rdnt = [1,1]  # not sure we need it at this point
     rn = _ptuple.n / ptuple.n  # normalize param as param*rn for n-invariant ratio: _param / param*rn = (_param/_n) / (param/n)
+    fder0 = isinstance(_ptuple.I, float)  # 1st level of I param is float
 
     for pname, ave in zip(pnames, aves):
         _derH = getattr(_ptuple, pname); derH = getattr(ptuple, pname)
-        dderH = comp_derH(pname, _derH if fd else _derH[:-1], derH if fd else derH[:-1], Valt, Rdnt, rn, _fds, fds, ave, fder0=fder0)
+        # i think it's easier to move level 1 here? Then comp_derH will be deal with m,d only
+        if fder0:  
+            if pname=="aangle": dderH = comp_aangle(_derH, derH, Valt, ptuple=None)
+            elif pname in ("axis","angle"): dderH = comp_angle(pname, _derH, derH, Valt, ptuple=None)
+            else:
+                if pname!="x": derH *= rn  # normalize by relative accum count
+                if pname=="x" or pname=="I": finv = not fds[0]
+                else: finv=0
+                dderH = comp_p(_derH, derH, ave, Valt, finv)
+        else:
+            if not isinstance(_ptuple.I[0], list):  # for lay2 where it is [m,d] instead of nested [[m,d]]
+                if fd: _derH  = [_derH]; derH = [derH]       
+                else:  _derH  = [_derH, []]; derH = [derH, []]  # prevent empty list by using derH[:-1]
+            dderH = comp_derH(pname, _derH if fd else _derH[:-1], derH if fd else derH[:-1], Valt, Rdnt, rn, _fds, fds, ave)
         setattr(vertuple, pname, dderH)
 
     return vertuple, Valt, Rdnt
 
 # draft:
-def comp_derH(pname, _derH, derH, Valt, Rdnt, rn, _fds, fds, ave, fder0=0):  # similar sum_derH
+def comp_derH(pname, _derH, derH, Valt, Rdnt, rn, _fds, fds, ave):  # similar sum_derH
 
     dderH = []
     if _fds[0]==fds[0]:  # 1st fd only matters for sublayer? or always the same?
-        if fder0:  # 1st layer = param
-            _lay0 = _derH[0]; lay0 = derH[0]
-            if pname=="aangle": dderH += comp_aangle(_lay0, lay0, Valt, ptuple=None)
-            elif pname in ("axis","angle"): dderH += comp_angle(pname, _lay0, lay0, Valt, ptuple=None)
-            else:
-                if pname!="x": lay0 *= rn  # normalize by relative accum count
-                if pname=="x" or pname=="I": finv = not fds[0]
-                else: finv=0
-                dderH += comp_p(_lay0, lay0, ave, Valt, finv)
-        else:  # 1st sublayer = [m,d]
-            dderH += comp_p(_derH[0][1], derH[0][1]*rn, ave, Valt, finv=0)  # comp scalar ds
+        # 1st sublayer = [m,d]
+        dderH += [comp_p(_derH[0][1], derH[0][1]*rn, ave, Valt, finv=0)]  # comp scalar ds
         # optional 2+ levs:
         if len(_derH)>1 and len(derH)>1 and _fds[1]==fds[1]:  # 2nd fd is always 1, only matters for sublayer?
-            dderH += comp_p(_derH[1][1], derH[1][1]*rn, ave, Valt, finv)  # 2nd layer or sublayer= [m,d], always comp d
-            if fds[2]: i,idx=2,2; last=4  # we need generic form here?
+            dderH += [comp_p(_derH[1][1], derH[1][1]*rn, ave, Valt, finv=0)]  # 2nd layer or sublayer= [m,d], always comp d
+            '''
+            if len(fds)>2: i,idx=2,2; last=4  # we need generic form here?
             else:  # i,idx=1,1; last=2: re-comp 2nd lay, rng+ is defined in sub+?:
-                dderH += comp_p(_derH[1][1], derH[1][1]*rn, ave, Valt, finv)
+                dderH += [comp_p(_derH[1][1], derH[1][1]*rn, ave, Valt, finv=0)]  # this is exactly the same with 2nd layer comp, why we need this again?
+            '''
+            i,idx=2,2; last=4  # i think this should be already generic
             # loop 2+ _lay,lay, multi-element, init incr elevation=i:
-            while last < len(derH) and last < len(derH) and sum(Valt)/sum(Rdnt) > ave and _fds[idx+1]==fds[idx+1]:
+            while last <= len(derH) and last <= len(derH) and sum(Valt)/sum(Rdnt) > ave*-100000 and _fds[idx]==fds[idx]:  # index value starts from 0, so there's no need to +1 here (for eg, index 2 is for 3rd element)
                 # comp only d in param m,d from lower-lays comp:
-                if not _fds[idx+1]: i/=2; last/=2  # comp lower levs at rng+
-                dH = [md[1] for md in derH[i:last][0]]; _dH = [md[1] for md in _derH[i:last][0]]
+                if not _fds[idx]: i=int(i/2); last=int(last/2)  # comp lower levs at rng+ (index must be in int, not float)
+                dH = [md[1] for md in derH[i:last]]; _dH = [md[1] for md in _derH[i:last]]  # derH[i:last] should be a nested list of md: [[m,d]], why we need [0] here?
                 # lay fds = lower-lays fds + lay fork: skip prior lay if not fds[i+1]?
-                dderH += comp_derH(pname,_dH,dH, Valt,Rdnt,rn, _fds[:i+1],fds[:i+1], ave,fder0=0)
+                # here dH is single list of value, something like [0], why we want it to be this structure?
+                dderH += comp_derH(pname,_dH,dH, Valt,Rdnt,rn, _fds[:i+1],fds[:i+1], ave)
                 i=last; last+=i  # last = i*2, lenlev: 1,1,2,4,8...
                 idx+=1  # elevation in derH
 
@@ -552,9 +561,9 @@ def comp_angle(pname, _angle, angle, Valt, ptuple=None):  # rn doesn't matter fo
     if ptuple:  # not parsed in rotate_P
         setattr(ptuple, pname, [mangle,dangle]); Valt[0] += mangle; Valt[1] += abs(dangle)
 
-    return mangle, dangle
+    return [mangle, dangle]
 
-def comp_aangle(_aangle, aangle, ptuple, Valt):
+def comp_aangle(_aangle, aangle, Valt, ptuple):
 
     _sin_da0, _cos_da0, _sin_da1, _cos_da1 = _aangle
     sin_da0, cos_da0, sin_da1, cos_da1 = aangle
@@ -573,8 +582,11 @@ def comp_aangle(_aangle, aangle, ptuple, Valt):
     daangle = np.arctan2(gay, gax)  # diff between aangles, probably wrong
     maangle = ave_daangle - abs(daangle)  # inverse match, not redundant as summed
 
-    ptuple.aangle = [maangle,daangle]; Valt[0] += maangle; Valt[1] += abs(daangle)
+    Valt[0] += maangle; Valt[1] += abs(daangle)
+    if ptuple:
+        ptuple.aangle = [maangle,daangle]; 
 
+    return [maangle,daangle]
 
 def agg_recursion_eval(blob, PP_t):
     from agg_recursion import agg_recursion, Cgraph
