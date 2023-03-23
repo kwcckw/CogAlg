@@ -71,12 +71,13 @@ PP_aves = [ave_mPP, ave_dPP]
 
 class Cptuple(ClusterStructure):  # bottom-layer tuple of compared params in P, derH per par in derP, or PP
 
+    # actually all params here should be a list now, except n
     I = int  # [m,d] in higher layers:
     M = int
     Ma = float
-    axis = lambda: [1, 0]  # ini dy=1,dx=0, old angle after rotation
-    angle = lambda: [0, 0]  # in latuple only, replaced by float in vertuple
-    aangle = lambda: [0, 0, 0, 0]
+    axis = lambda: [[1, 0]]  # ini dy=1,dx=0, old angle after rotation
+    angle = lambda: [[0, 0]]  # in latuple only, replaced by float in vertuple
+    aangle = lambda: [[0, 0, 0, 0]]
     G = float  # for comparison, not summation:
     Ga = float
     x = int  # median: x0+L/2
@@ -202,24 +203,24 @@ def slice_blob(blob, verbose=False):  # form blob slices nearest to slice Ga: Ps
             if not mask:  # masks: if 0,_1: P initialization, if 0,_0: P accumulation, if 1,_0: P termination
                 if _mask:  # ini P params with first unmasked dert (m, ma, i, dy, dx, sin_da0, cos_da0, sin_da1, cos_da1):
                     Pdert_ = [dert]
-                    params = Cptuple(M=ave_g-g,Ma=ave_ga-ga,I=ri, angle=angle, aangle=aangle)
+                    params = Cptuple(M=[ave_g-g],Ma=[ave_ga-ga],I=[ri], angle=[angle], aangle=[aangle])
                 else:
                     # dert and _dert are not masked, accumulate P params:
-                    params.M+=ave_g-g; params.Ma+=ave_ga-ga; params.I+=ri; params.angle[0]+=angle[0]; params.angle[1]+=angle[1]
-                    params.aangle = [sum(aangle_tuple) for aangle_tuple in zip(params.aangle, aangle)]
+                    params.M[0]+=ave_g-g; params.Ma[0]+=ave_ga-ga; params.I[0]+=ri; params.angle[0][0]+=angle[0]; params.angle[0][1]+=angle[1]
+                    params.aangle[0] = [sum(aangle_tuple) for aangle_tuple in zip(params.aangle[0], aangle)]
                     Pdert_.append(dert)
             elif not _mask:
                 # _dert is not masked, dert is masked, terminate P:
-                params.G = np.hypot(*params.angle)  # Dy, Dx  # recompute G, Ga, which can't reconstruct M, Ma
-                params.Ga = (params.aangle[1] + 1) + (params.aangle[3] + 1)  # Cos_da0, Cos_da1
+                params.G = [np.hypot(*params.angle[0])]  # Dy, Dx  # recompute G, Ga, which can't reconstruct M, Ma
+                params.Ga = [(params.aangle[0][1] + 1) + (params.aangle[0][3] + 1)]  # Cos_da0, Cos_da1
                 L = len(Pdert_)
-                params.L = L; params.x = x-L/2
+                params.L = [L]; params.x = [x-L/2]
                 P_.append( CP(ptuple=params, x0=x-(L-1), y0=y, dert_=Pdert_))
             _mask = mask
         # pack last P, same as above:
         if not _mask:
-            params.G = np.hypot(*params.angle); params.Ga = (params.aangle[1] + 1) + (params.aangle[3] + 1)
-            L = len(Pdert_); params.L = L; params.x = x-L/2
+            params.G = [np.hypot(*params.angle[0])]; params.Ga = [(params.aangle[0][1] + 1) + (params.aangle[0][3] + 1)]
+            L = len(Pdert_); params.L = [L]; params.x = [x-L/2]
             P_.append(CP(ptuple=params, x0=x - (L - 1), y0=y, dert_=Pdert_))
         P__ += [P_]
 
@@ -365,7 +366,7 @@ def sum2seg(seg_Ps, fd, fds):  # sum params of vertically connected Ps into segm
     Dertuple = deepcopy(P.uplink_layers[-1][fd][0].ptuple) if len(seg_Ps)>1 else []  # 1 up derP per P in stack
     for P in seg_Ps[1:-1]:
         derP = P.uplink_layers[-1][fd][0]  # must exist
-        sum_ptuple(Ptuple, P.ptuple, 0, 0, fneg=0, fder=0)
+        sum_ptuple(Ptuple, P.ptuple, [0], [0], fneg=0, fder=0)  # fds here is always [0]? How about a deeper recursion?
         sum_ptuple(Dertuple, derP.ptuple, seg.fds, derP.fds, fneg=0, fder=isinstance(derP.ptuple.I, list))
         seg.box[2]= min(seg.box[2],P.x0); seg.box[3]= max(seg.box[3],P.x0+len(P.dert_)-1)
         # AND seg.fds?
@@ -375,13 +376,14 @@ def sum2seg(seg_Ps, fd, fds):  # sum params of vertically connected Ps into segm
                 seg.nval += derP.valt[fd]  # negative link
                 seg.nderP_ += [derP]
     P = seg_Ps[-1]  # sum last P only, last P uplink_layers are not part of seg:
-    sum_ptuple(Ptuple, P.ptuple, 0, 0, fneg=0, fder=0)
+    sum_ptuple(Ptuple, P.ptuple, [0], [0], fneg=0, fder=0)
     seg.box[2] = min(seg.box[2],P.x0); seg.box[3] = max(seg.box[3],P.x0+len(P.dert_)-1)
-    for pname in pnames:
-        DerH = getattr(Ptuple, pname)  # 0der: single-par derH
-        derH = getattr(Dertuple, pname)
-        if fd: DerH += derH  # der+
-        else:  DerH[:] = DerH[len(derH):] + derH  # rng+
+    if Dertuple:
+        for pname in pnames:
+            DerH = getattr(Ptuple, pname)  # 0der: single-par derH
+            derH = getattr(Dertuple, pname)
+            if fd: DerH += derH  # der+
+            else:  DerH[:] = DerH[len(derH):] + derH  # rng+
     seg.ptuple = Ptuple  # now includes Dertuple
 
     return seg
@@ -456,7 +458,8 @@ def sum_derH(pname, DerH, derH, Fds, fds, fneg, fder):  # not sure about fds
             else:
                 Par+= -par if fneg else par
         elif Fd==fd:
-            Par+= -par if fneg else par
+            for i, spar in enumerate(par):   # par is actually nested here - [m,d]
+                Par[i] += -spar if fneg else spar
         else:
             break
     return DerH
@@ -468,20 +471,30 @@ def comp_ptuple(_ptuple, ptuple, _fds, fds, fd):
     Valt = [0,0]
     Rdnt = [1,1]  # not sure we need it at this point
     rn = _ptuple.n / ptuple.n  # normalize param as param*rn for n-invariant ratio: _param / param*rn = (_param/_n) / (param/n)
+    fder0 = isinstance(_ptuple.I[0], float)
+    f_recursive = 1
 
     for pname, ave in zip(pnames, aves):
-        dderH = []
-        _derH = getattr(_ptuple, pname); derH = getattr(ptuple, pname)
-        _par = _derH[0]; par = derH[0]  # 0der layer=par, multiple while rng+, same fd
-        if pname=="aangle": dderH += comp_aangle(_par, par, Valt, ptuple=None)
-        elif pname in ("axis","angle"): dderH += comp_angle(pname, _par, par, Valt, ptuple=None)
-        else:
-            if pname!="x": par *= rn  # normalize by relative accum count
-            if pname=="x" or pname=="I": finv = not fds[0]
-            else: finv=0
-        dderH += [comp_p(_par, par, ave, Valt, finv)]
-        dderH = comp_derH(pname, _derH if fd else _derH[:-len(_derH)/2], derH if fd else derH[:-len(derH)/2], # replace top lev in rng+
-                          Valt, Rdnt, rn, _fds, fds, ave, first=1)
+        
+        if fder0:  # i added this because for rng+, after we replace the prior derH elements, the 1st single par will be removed
+            dderH = []
+            _derH = getattr(_ptuple, pname); derH = getattr(ptuple, pname)
+            _par = _derH[0]; par = derH[0]  # 0der layer=par, multiple while rng+, same fd
+            if pname=="aangle": dderH += [comp_aangle(_par, par, Valt, ptuple=None)]
+            elif pname in ("axis","angle"): dderH += [comp_angle(pname, _par, par, Valt, ptuple=None)]
+            else:
+                if pname!="x": par *= rn  # normalize by relative accum count
+                if pname=="x" or pname=="I": finv = not fds[0]
+                else: finv=0
+                dderH += [comp_p(_par, par, ave, Valt, finv)]
+            _derH = _derH[1:]; derH = derH[1:]  # remove the 1st compared param? 
+            if len(_derH)<=1 or len(derH)<=1:
+                f_recursive = 0
+        
+        if f_recursive:
+            dderH += comp_derH(pname, _derH if fd else _derH[:-len(_derH)/2], derH if fd else derH[:-len(derH)/2], # replace top lev in rng+
+                              Valt, Rdnt, rn, _fds, fds, ave, first=1)
+            
         setattr(vertuple, pname, dderH)
 
     return vertuple, Valt, Rdnt
