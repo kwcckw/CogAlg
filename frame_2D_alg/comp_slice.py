@@ -377,11 +377,12 @@ def sum2seg(seg_Ps, fd, fds):  # sum params of vertically connected Ps into segm
     P = seg_Ps[-1]  # sum last P only, last P uplink_layers are not part of seg:
     sum_ptuple(Ptuple, P.ptuple, fds,fds, fneg=0, fder=0)
     seg.box[2] = min(seg.box[2],P.x0); seg.box[3] = max(seg.box[3],P.x0+len(P.dert_)-1)
-    for pname in pnames:
-        DerH = getattr(Ptuple, pname)  # 0der: single-par derH
-        derH = getattr(Dertuple, pname)
-        if fd: DerH += derH  # der+
-        else:  DerH[:] = DerH[len(derH):] + derH  # rng+
+    if Dertuple:
+        for pname in pnames:
+            DerH = getattr(Ptuple, pname)  # 0der: single-par derH
+            derH = getattr(Dertuple, pname)
+            if fd: DerH += derH  # der+
+            else:  DerH[:] = DerH[len(derH):] + derH  # rng+
     seg.ptuple = Ptuple  # now includes Dertuple
 
     return seg
@@ -430,8 +431,11 @@ def sum2PP(PP_segs, base_rdn, fd):  # sum PP_segs into PP
 # draft
 def sum_ptuple(Ptuple, ptuple, Fds, fds, fneg, fder):
 
+    check_par = not isinstance(Ptuple.I, list)  # this need to be checked here because it will be replaced with setattr below
     for pname, ave in zip(pnames, aves):
         DerH = getattr(Ptuple, pname); derH = getattr(ptuple, pname)
+        if check_par: DerH = [DerH]
+        if not isinstance(ptuple.I, list): derH = [derH]
         DerH = sum_derH(pname, DerH, derH, Fds, fds, fneg, fder)
         setattr(Ptuple, pname, DerH)
     Ptuple.n += 1
@@ -454,10 +458,13 @@ def sum_derH(pname, DerH, derH, Fds, fds, fneg, fder):  # not sure about fds
                 cos_dda1 = (_cos_da1 * cos_da1) - (_sin_da1 * sin_da1)
                 DerH[i] = [sin_dda0, cos_dda0, sin_dda1, cos_dda1]
             else:
-                Par+= -par if fneg else par
+                DerH[i] = Par + (-par if fneg else par)
         elif Fd==fd:
-            for i, der in enumerate(par):
-                Par[i] += -der if fneg else der
+            if isinstance(Par, list):
+                for i, der in enumerate(par):
+                    Par[i] += -der if fneg else der
+            else:  # 1st level par
+                DerH[i] = Par + (-par if fneg else par)
         else:
             break
     return DerH
@@ -490,22 +497,31 @@ def comp_derH(pname, _derH, derH, Valt, Rdnt, rn, _fds, fds, ave, first):  # sim
             if pname!="x": par *= rn  # normalize by relative accum count
             if pname=="x" or pname=="I": finv = not fds[0]
             else: finv=0
-            dderH = [[comp_p(_par, par, ave, Valt, finv)]]
+            dderH = [comp_p(_par, par, ave, Valt, finv)]
     else:
-        dderH = [[comp_p(_par[1], par[1], ave, Valt, finv=0)]]
+        dderH = [comp_p(_par[1], par[1], ave, Valt, finv=0)]  # single bracket is sufficient here because comp_P return a [m,d] with bracket
         # comp_d in [m,d]
     if len(_derH)>1 or len(derH)>1:  # and tval, always fd=1?
-        # lay2 = [m,d]
-        dderH += [comp_p(_par[1], par[1], ave, Valt, finv=0)]  # comp_d in [m,d]
-        i=idx=1; last=2; tval=ave+1
-        _fd = _fds[idx+1]; fd=fds[idx+1]  # fd per lay
-        while len(_derH)>last and len(derH)>last and _fd==fd and tval > ave:
-            # each lay2+ is len>1 subH, unpack in sub comp_derH:
-            end = last if fd else last/2  # skip top lev in rng+
-            dderH += comp_derH(pname, _derH[i:end],derH[i:end], Valt,Rdnt,rn, _fds[:idx+1],fds[:idx+1], ave,first=0)
-            i=last; last+=i  # last = i*2
-            idx += 1  # elevation in derH
-            tval = sum(Valt) / sum(Rdnt)
+        # lay2 = [m,d] (should be derH[1] here for 2nd level)
+        dderH += [comp_p(_derH[1][1], derH[1][1], ave, Valt, finv=0)]  # comp_d in [m,d]
+        # last will be used for compute end, it should be idx*2, idx should be same with level
+        # i should start with 2 because 0 and 1 is level 1 and level 2, which we already compared them above?
+        i=idx=2; last=4; tval=ave+1
+        
+        if len(_fds)>=idx and len(fds)>=idx:  # we need to check length of fds first, else we can't use _fds[idx+1] because index of idx+1 didn't exist yet 
+            _fd = _fds[idx]; fd=fds[idx]  # fd per lay
+            while len(_derH)>=last and len(derH)>=last and _fd==fd and tval > ave:
+                # each lay2+ is len>1 subH, unpack in sub comp_derH:
+                # not sure here
+                # skip top lev in rng+ (we need int in indexing because float is causing error)
+                if fd:
+                    end = last
+                else:
+                    end = i+ int((last - i) /2)    
+                dderH += comp_derH(pname, _derH[i:end],derH[i:end], Valt,Rdnt,rn, _fds[:idx],fds[:idx], ave,first=0)
+                i=last; last+=i  # last = i*2
+                idx += 1  # elevation in derH
+                tval = sum(Valt) / sum(Rdnt)
 
     return dderH
 
