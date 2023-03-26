@@ -510,9 +510,10 @@ def comp_derH(pname, _derH, derH, Valt, Rdnt, rn, _fds, fds, ave, first):  # sim
             i=ilay=2; last=4
             # lay 2+ is len>1 subH, unpack in sub comp_derH:
             while len(_derH)>i and len(derH)>i:
-                if not _fds[ilay]==fds[ilay] or sum(Valt)/sum(Rdnt) > ave:  # next-lay fd
+                # should be not sum(Valt)/sum(Rdnt) > ave too?
+                if not _fds[ilay]==fds[ilay] or not sum(Valt)/sum(Rdnt) > ave:  # next-lay fd
                     break
-                dderH += comp_derH(pname, _derH[i:last],derH[i:last], Valt,Rdnt,rn, _fds[:ilay+1],fds[:ilay+1], ave,first=0)
+                dderH += comp_derH(pname, _derH[i:last],derH[i:last], Valt,Rdnt,rn, _fds[:ilay],fds[:ilay], ave,first=0)  # it shouldn't +1, because the last element in indexing is excluded
                 i=last; last+=i  # last = i*2
                 ilay += 1  # elevation in derH
 
