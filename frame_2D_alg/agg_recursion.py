@@ -54,7 +54,7 @@ class Clink_(ClusterStructure):
 
 class CpH(ClusterStructure):  # hierarchy of params + associated vars in pplayers | players | ptuples
 
-    H = list  # hierarchy of pplayers | players | ptuples, can be sequence
+    ptuple = lambda: Cptuple()
     valt = lambda: [0,0]
     rdnt = lambda: [1,1]  # for all Qs?
     rng = lambda: 1
@@ -70,7 +70,7 @@ class Cgraph(ClusterStructure):  # params of single-fork node_ cluster per pplay
 
     G = lambda: None  # same-scope lower-der|rng G.G.G., or [G0,G1] in derG, None in PP
     root = lambda: None  # root graph or derH G, element of ex.H[-1][fd]
-    derH = list  # derH ) node_) H: contents, Lev+= node tree slice: feedback, Lev/agg+, lev/sub+?
+    ptuple = lambda: Cptuple()
     valt = lambda: [0,0]
     rdnt = lambda: [1, 1]
     fds = list  # or fd, with sub fds in derH?
@@ -575,50 +575,46 @@ def add_alt_graph_(graph_t):  # mgraph_, dgraph_
                     graph.alt_rdn += len(set(graph.derHs.H[-1].node_).intersection(alt_graph.derHs.H[-1].node_))  # overlap
 
 
+# not fully updated
 # simplified alternative to multi-pass version of graph_reval, needs to be updated
 def comp_centroid(G_):  # comp node to average node in Graph, sum >ave nodes into new centroid, recursion while update>ave
 
     update_val = 0  # update val, terminate recursion if low
 
     for G in G_:
-        G_valt = [0 ,0]  # new total, may delete G
-        G_rdn = 0  # rdn of PPs to cPPs in other Gs
-        G_players_t = [[], []]
-        DerNode = CderG(player=[[], []])  # summed across PP_:
-        Valt = [0, 0]  # mval, dval
+        G_valt = [0, 0]  # new total, may delete G
+        G_rdnt = [0, 0]  # rdn of PPs to cPPs in other Gs
 
-        for i, (node, _, fint) in enumerate(G.PP_):  # comp PP to G centroid, derPP is replaced, use comp_plevels?
-            Mplayer, Dplayer = [],[]
+        DerNode = Cgraph(ptuple=Cptuple())  # summed across PP_:
+        Valt = [0, 0]  # mval, dval
+        Rdnt = [0,0]
+
+        for i, node in enumerate(G.node_):  # comp PP to G centroid, derPP is replaced, use comp_plevels?
             # both PP core and edge are compared to G core, results are summed or concatenated:
-            for fd in 0, 1:
-                if node.players_t[fd]:  # PP.players_t[1] may be empty
-                    mplayer, dplayer = comp_players(G.players_t[0], node.players_t[fd], G.fds, node.fds)  # params norm in comp_ptuple
-                    player_t = [Mplayer + mplayer, Dplayer + dplayer]
-                    valt = [sum([mtuple.val for mtuple in mplayer]), sum([dtuple.val for dtuple in dplayer])]
-                    Valt[0] += valt[0]; Valt[1] += valt[1]  # accumulate mval and dval
-                    # accum DerPP:
-                    for Ptuple, ptuple in zip_longest(DerNode.player_t[fd], player_t[fd], fillvalue=[]):
-                        if ptuple:
-                            if not Ptuple: DerNode.player_t[fd].append(ptuple)  # pack new layer
-                            else:          sum_players([[Ptuple]], [[ptuple]])
-                    DerNode.valt[fd] += valt[fd]
+            vertuple, valt, rdnt = comp_ptuple(G.ptuple, node.ptuple, G.fds, node.fds)  # params norm in comp_ptuple
+            for i in range(2):
+                Valt[i] += valt[i]  # accumulate mval and dval
+                Rdnt[i] += rdnt[i]   
+                DerNode.valt[i] += valt[i]
+                DerNode.rdnt[i] += rdnt[i]
+            sum_ptuple(DerNode.ptuple, vertuple)
+            
             # compute rdn:
-            cnode_ = node.cnode_  # sort by derNode value:
+            cnode_ = node.cnode_  # sort by derNode value: (add cnode into Cgraph?)
             cnode_ = sorted(cnode_, key=lambda cnode: sum(cnode[1].valt), reverse=True)
             rdn = 1
             fint = [0, 0]
             for fd in 0, 1:  # sum players per fork
                 for (cnode, CderG, cfint) in cnode_:
-                    if valt[fd] > G_aves[fd] and node.players_t[fd]:
+                    if valt[fd] > G_aves[fd]:
                         fint[fd] = 1  # nodes match, sum der_node in both G and _G:
-                        sum_players(G.players_t[fd], node.players_t[fd])
-                        sum_players(G.players_t[fd], node.players_t[fd])  # all node.players in each G.players
-
+                        sum_ptuple(G.ptuple, node.ptuple, G.fds, node.fds)  # not sure here because right now it will be summed twice in both m&d loops
                     if CderG.valt[fd] > Valt[fd]:  # cPP is instance of PP
-                        if cfint[fd]: G_rdn += 1  # n of cPPs redundant to PP, if included and >val
+                        if cfint[fd]: G_rdnt[fd] += 1  # n of cPPs redundant to PP, if included and >val
                     else:
                         break  # cnode_ is sorted by value
 
+            # below is not updated
             fnegm = Valt[0] < G_aves[0] * rdn;  fnegd = Valt[1] < G_aves[1] * rdn  # rdn per PP
             for fd, fneg, in zip([0, 1], [fnegm, fnegd]):
 
