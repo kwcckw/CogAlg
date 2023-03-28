@@ -27,9 +27,9 @@ But we have recursively structured param sets packed in each level of these tree
 Diagram: 
 https://github.com/boris-kz/CogAlg/blob/76327f74240305545ce213a6c26d30e89e226b47/frame_2D_alg/Illustrations/generic%20graph.drawio.png
 -
-Clustering criterion is G.M|D, summed across >ave vars if selective comp: <ave vars are not compared, so they don't add cost.
-Fork selection should be per var | der layer | agg level: co-derived params. There are different concepts that include same components, 
-they differ by specific subset of vars that matches within a cluster: size, density, color, stability, etc.
+Clustering criterion is G.M|D, summed across >ave vars if selective comp (<ave vars are not compared, so they don't add costs).
+Fork selection should be per var or co-derived der layer or agg level. 
+There are concepts that include same matching vars: size, density, color, stability, etc, but in different combinations.
 Weak value vars are combined into higher var, so derivation fork can be selected on different levels of param composition.
 '''
 # aves defined for rdn+1:
@@ -44,6 +44,13 @@ ave_len = 3
 ave_distance = 5
 ave_sparsity = 2
 
+class Cpar(ClusterStructure):
+
+    typ = int  # 0:[m.d], 1:scalar, 2:angle, 3:aangle, only for 0der: if typ: 1st lev 1st lay
+    valt = lambda: [0,0]
+    rdnt = lambda: [1,1]
+    n = lambda: 1  # accumulation order
+
 class Clink_(ClusterStructure):
     Q = list
     val = float
@@ -54,7 +61,7 @@ class Clink_(ClusterStructure):
 
 class CpH(ClusterStructure):  # hierarchy of params + associated vars in pplayers | players | ptuples
 
-    ptuple = lambda: Cptuple()
+    H = list  # Q or derH in most uses, where each fully unpacked element is Cpar
     valt = lambda: [0,0]
     rdnt = lambda: [1,1]  # for all Qs?
     rng = lambda: 1
@@ -70,9 +77,9 @@ class Cgraph(ClusterStructure):  # params of single-fork node_ cluster per pplay
 
     G = lambda: None  # same-scope lower-der|rng G.G.G., or [G0,G1] in derG, None in PP
     root = lambda: None  # root graph or derH G, element of ex.H[-1][fd]
-    ptuple = lambda: Cptuple()
+    derH = lambda: list  # unpacked to a list of Cpars, old: derH) node_) H: Lev+= node tree slice/fb, Lev/agg+, lev/sub+?
     valt = lambda: [0,0]
-    rdnt = lambda: [1, 1]
+    rdnt = lambda: [1,1]
     fds = list  # or fd, with sub fds in derH?
     rng = lambda: 1
     box = lambda: [0,0,0,0,0,0]  # y,x, y0,yn, x0,xn
@@ -574,31 +581,29 @@ def add_alt_graph_(graph_t):  # mgraph_, dgraph_
                     sum_pH(graph.alt_derHs, alt_graph.derHs)  # accum alt_graph_ params
                     graph.alt_rdn += len(set(graph.derHs.H[-1].node_).intersection(alt_graph.derHs.H[-1].node_))  # overlap
 
+# simplified alternative to multi-pass version of graph_reval, under revision
 
-# not fully updated
-# simplified alternative to multi-pass version of graph_reval, needs to be updated
 def comp_centroid(G_):  # comp node to average node in Graph, sum >ave nodes into new centroid, recursion while update>ave
 
     update_val = 0  # update val, terminate recursion if low
 
     for G in G_:
-        G_valt = [0, 0]  # new total, may delete G
-        G_rdnt = [0, 0]  # rdn of PPs to cPPs in other Gs
-
+        G_valt = [0,0]  # new total, may delete G
+        G_rdnt = [1,1]  # rdn of PPs to cPPs in other Gs
         DerNode = Cgraph(ptuple=Cptuple())  # summed across PP_:
-        Valt = [0, 0]  # mval, dval
-        Rdnt = [0,0]
+        Valt = [0,0]  # mval, dval
+        Rdnt = [1,1]
 
         for i, node in enumerate(G.node_):  # comp PP to G centroid, derPP is replaced, use comp_plevels?
             # both PP core and edge are compared to G core, results are summed or concatenated:
             vertuple, valt, rdnt = comp_ptuple(G.ptuple, node.ptuple, G.fds, node.fds)  # params norm in comp_ptuple
             for i in range(2):
                 Valt[i] += valt[i]  # accumulate mval and dval
-                Rdnt[i] += rdnt[i]   
+                Rdnt[i] += rdnt[i]
                 DerNode.valt[i] += valt[i]
                 DerNode.rdnt[i] += rdnt[i]
             sum_ptuple(DerNode.ptuple, vertuple)
-            
+
             # compute rdn:
             cnode_ = node.cnode_  # sort by derNode value: (add cnode into Cgraph?)
             cnode_ = sorted(cnode_, key=lambda cnode: sum(cnode[1].valt), reverse=True)
@@ -608,7 +613,8 @@ def comp_centroid(G_):  # comp node to average node in Graph, sum >ave nodes int
                 for (cnode, CderG, cfint) in cnode_:
                     if valt[fd] > G_aves[fd]:
                         fint[fd] = 1  # nodes match, sum der_node in both G and _G:
-                        sum_ptuple(G.ptuple, node.ptuple, G.fds, node.fds)  # not sure here because right now it will be summed twice in both m&d loops
+                        sum_ptuple(G.ptuple, node.ptuple, G.fds, node.fds)
+                        # not sure here because right now it will be summed twice in both m&d loops
                     if CderG.valt[fd] > Valt[fd]:  # cPP is instance of PP
                         if cfint[fd]: G_rdnt[fd] += 1  # n of cPPs redundant to PP, if included and >val
                     else:

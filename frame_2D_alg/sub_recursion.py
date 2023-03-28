@@ -56,7 +56,6 @@ def sub_recursion_eval(root):  # for PP or dir_blob
                 PPdm_ = [PPm_] + mcomb_layers; mVal = sum([PP.players[1] for PP_ in PPdm_ for PP in PP_])
                 PPdd_ = [PPd_] + dcomb_layers; dVal = sum([PP.players[1] for PP_ in PPdd_ for PP in PP_])
                 root.rlayers = [[PPdm_, mVal], [PPdd_, dVal]]
-
             # or higher der val?
             if isinstance(root, CPP):  # root is CPP
                 root.players[1] += PP.players[1]  # vals
@@ -64,7 +63,7 @@ def sub_recursion_eval(root):  # for PP or dir_blob
                 if fd: root.G += PP.alt_players[1] if PP.alt_players else 0
                 else:  root.M += PP.players[1]
             """
-                
+
 def sub_recursion(PP):  # evaluate each PP for rng+ and der+
 
     P__  = [P_ for P_ in reversed(PP.P__)]  # revert to top down
@@ -332,7 +331,7 @@ def blob2graph(blob, fseg):
             alt_mblob.rdnt[i] += alt_blob.mgraph.rdnt[i]
             alt_dblob.valt[i] += alt_blob.dgraph.valt[i]
             alt_dblob.rdnt[i] += alt_blob.dgraph.rdnt[i]
-        
+
     return mblob, dblob
 
 
@@ -346,11 +345,11 @@ def PP2graph(PP, fseg, ifd=1):
         for altPP in PP.alt_PP_[1:]:  # get fd sequence common for all altPPs:
             sum_ptuple(alt_ptuple, altPP.ptuple, PP.fds, PP.fds, fneg=0)
             Y0,Yn,X0,Xn = alt_box; y0,yn,x0,xn = altPP.box
-            alt_box[:] = min(Y0,y0),max(Yn,yn),min(X0,x0),max(Xn,xn)        
+            alt_box[:] = min(Y0,y0),max(Yn,yn),min(X0,x0),max(Xn,xn)
             for i in range(2):
                 alt_valt[i] += altPP.valt[i]
                 alt_rdnt[i] += altPP.rdnt[i]
-            
+
     alt_Graph = Cgraph(ptuple=alt_ptuple, valt=alt_valt, rdnt=alt_rdnt, box=alt_box)
 
     graph = Cgraph(ptuple=deepcopy(PP.ptuple), valt=copy(PP.valt), rndt=copy(PP.rdnt), box=copy(PP.box), alt_Graph=alt_Graph)

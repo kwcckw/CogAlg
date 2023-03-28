@@ -568,4 +568,3 @@ def comp_aangle(_aangle, aangle, Valt, ptuple):
     if ptuple: ptuple.aangle = [maangle,daangle]
 
     return [maangle,daangle]
-
