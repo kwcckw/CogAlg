@@ -161,19 +161,8 @@ def comp_slice_root(blob, verbose=False):  # always angle blob, composite dert c
     # rotate each P to align it with the direction of P gradient:
     rotate_P_(P__, blob.dert__, blob.mask__)  # rotated Ps are sparse or overlap via redundant derPs, results are not biased?
     # scan rows top-down, comp y-adjacent, x-overlapping Ps, form derP__:
-    _P_ = P__[0]  # higher row
-    for P_ in P__[1:]:  # lower row
-        for P in P_:
-            for _P in _P_:  # test for x overlap(_P,P) in 8 directions, derts are positive in all Ps:
-                _L = len(_P.dert_); L = len(P.dert_)
-                if (P.x0 - 1 < _P.x0 + _L) and (P.x0 + L > _P.x0):
-                    vertuple = comp_ptuple(_P.ptuple, P.ptuple)
-                    derP= CderP(derQ=[vertuple], valt=copy(vertuple.valt), rdnt=(vertuple.rdnt), P=P, _P=_P, x0=_P.x0, y0=_P.y0)
-                    P.uplink_layers[-2] += [derP]  # uplink_layers[-1] is match_derPs
-                    _P.downlink_layers[-2] += [derP]
-                elif (P.x0 + L) < _P.x0:
-                    break  # no xn overlap, stop scanning lower P_
-        _P_ = P_
+    comp_P_(P__)
+    
     # form segments: stacks of (P,derP)s:
     segm_ = form_seg_root([copy(P_) for P_ in P__], fd=0, fds=[0])  # shallow copy: same Ps in different lists
     segd_ = form_seg_root([copy(P_) for P_ in P__], fd=1, fds=[0])  # initial latuple fd=0
@@ -182,6 +171,23 @@ def comp_slice_root(blob, verbose=False):  # always angle blob, composite dert c
     # re comp, cluster:
     sub_recursion_eval(blob)  # intra PP, add rlayers, dlayers, seg_levels to select PPs, sum M,G
     agg_recursion_eval(blob, [copy(blob.PPm_), copy(blob.PPd_)])  # cross PP, Cgraph conversion doesn't replace PPs?
+
+# pack it into a function, we will need to call it from sub+
+def comp_P_(P__):
+        
+    _P_ = P__[0]  # higher row
+    for P_ in P__[1:]:  # lower row
+        for P in P_:
+            for _P in _P_:  # test for x overlap(_P,P) in 8 directions, derts are positive in all Ps:
+                _L = len(_P.dert_); L = len(P.dert_)
+                if (P.x0 - 1 < _P.x0 + _L) and (P.x0 + L > _P.x0):
+                    dderH_, valt, rdnt = comp_P(_P, P)  # dderH_ always a list now
+                    derP= CderP(derQ=dderH_, valt=valt, rdnt=rdnt, P=P, _P=_P, x0=_P.x0, y0=_P.y0)
+                    P.uplink_layers[-2] += [derP]  # uplink_layers[-1] is match_derPs
+                    _P.downlink_layers[-2] += [derP]
+                elif (P.x0 + L) < _P.x0:
+                    break  # no xn overlap, stop scanning lower P_
+        _P_ = P_
 
 
 def slice_blob(blob, verbose=False):  # form blob slices nearest to slice Ga: Ps, ~1D Ps, in select smooth edge (high G, low Ga) blobs
@@ -480,6 +486,21 @@ def sum_ptuple(Ptuple, ptuple, fneg=0):
 
     Ptuple.n += 1
 
+
+# should be working for P.ptuple, derP.derQ and PP.derH
+def comp_P(_P, P, fds=[0]):
+    
+    if isinstance(_P, CP):
+        _derH = [_P.ptuple]; derH = [P.ptuple]
+    elif isinstance(_P, CderP):
+        _derH = _P.derQ; derH = P.derQ
+    else:
+        _derH = _P.derH; derH = P.derH 
+
+    dderH_, Valt, Rdnt = comp_derH_(_derH, derH, fds)
+    
+    return dderH_, Valt, Rdnt
+
 def comp_derH_(_derH, derH, fds):  # unpack and compare der layers, if any from der+, no fds, same within PP
 
     dderH_ = []
@@ -487,13 +508,9 @@ def comp_derH_(_derH, derH, fds):  # unpack and compare der layers, if any from 
     Rdnt = [1,1]
     lev = 0
     for i, (_vertuple, vertuple) in enumerate(zip(_derH, derH), start=1):  # i count start from 1, so that it is same with number of minimum element
+        dtuple, valt, rdnt = comp_vertuple(_vertuple, vertuple, fds[lev])  
+        dderH_ += [dtuple]
 
-        if not isinstance(_vertuple.I, list):  # from 1st level, where param is just single par
-            dvertuple, valt, rdnt = comp_ptuple(_vertuple, vertuple)
-            dderH_ += [dvertuple]
-        else:
-            dderH, valt, rdnt = comp_vertuple(_vertuple, vertuple, fds[lev])
-            dderH_ += [dderH]
         for i in 0,1:
             Valt[i] += valt[i]
             Rdnt[i] += rdnt[i]
@@ -501,58 +518,37 @@ def comp_derH_(_derH, derH, fds):  # unpack and compare der layers, if any from 
         if lev in (0,1) or not i%(2**lev):  # first 2 levels has single element, consecutive levels has 2**level
             lev += 1
 
-    return dderH_
+    return dderH_, Valt, Rdnt
 
 
-# almost similar with comp_ptuple, probably can merge into comp_ptuple later
+# merged version
 def comp_vertuple(_vertuple, vertuple, fd):
 
-    vertuple = Cptuple()
+    dtuple = Cptuple()
     rn = _vertuple.n / vertuple.n  # normalize param as param*rn for n-invariant ratio: _param / param*rn = (_param/_n) / (param/n)
     Rdnt = [1,1]  # not sure we need it at this point
     Valt = [0,0]
 
+    fder0 = not isinstance(_vertuple.I, list)  # i think we can just check it here?
     for pname, ave in zip(pnames, aves):  # comp full derH of each param between ptuples:
         _part = getattr(_vertuple, pname); part = getattr(vertuple, pname)
-        _par = _part[fd]
-        if pname!="x":
-            par = part[fd] * rn
-        else:
-            par = part[fd]
-        m ,d = comp_par(_par, par, ave, Valt, 1 - fd)
-        Valt[0] += m; Valt[1] += d
-        setattr(vertuple, pname, [m,d])
-        vertuple.valt[0] += m; vertuple.valt[1] += d;  # actually vertuple.valt is same as Valt
-
-    return vertuple, Valt, Rdnt
-
-
-def comp_ptuple(_ptuple, ptuple):
-
-    vertuple = Cptuple()
-    rn = _ptuple.n / ptuple.n  # normalize param as param*rn for n-invariant ratio: _param / param*rn = (_param/_n) / (param/n)
-    Rdnt = [1,1]  # not sure we need it at this point
-    Valt = [0,0]
-
-    for pname, ave in zip(pnames, aves):  # comp full derH of each param between ptuples:
-    # we only need to check pnames if not i|fd, in combined comp_ptuple+vertuple
-        _par = getattr(_ptuple, pname); par = getattr(ptuple, pname)
-
-        if pname=="aangle" and isinstance(_par, list):
+        if fder0: _par = _part; par = part  # single par
+        else:    _par = _part[fd]; par = part[fd]  # select par from fd
+        if pname!="x" and pname not in ("angle", "axis", "aangle"): par *= rn  # no rn for angle?
+        if pname=="x" or pname=="I": finv = 1-fd  
+        else:                        finv = 0  
+        # comp:
+        if pname=="aangle" and fder0:
             m,d = comp_aangle(_par, par, Valt)
-        elif pname in ("axis","angle"):
+        elif pname in ("axis","angle") and fder0:
             m,d = comp_angle(pname, _par, par, Valt)
         else:
-            if pname!="x": par *= rn  # normalize by relative accum count
-            if pname=="x" or pname=="I": finv = 1  # not sure here, how to get fd when we doesn't have fd fork in comp_P?
-            else: finv=0
-            m,d = comp_par(_par, par, ave, Valt, finv)
-
+            m ,d = comp_par(_par, par, ave, Valt, finv)
         Valt[0] += m; Valt[1] += d
-        setattr(vertuple, pname, [m,d])
-        vertuple.valt[0] += m; vertuple.valt[1] += d  # actually vertuple.valt is same as Valt
+        setattr(dtuple, pname, [m,d])
+        dtuple.valt[0] += m; dtuple.valt[1] += d;  # actually vertuple.valt is same as Valt
 
-    return vertuple, Valt, Rdnt
+    return dtuple, Valt, Rdnt
 
 
 def comp_par(_param, param, ave, Valt, finv=0):  # comparand is always par or d in [m,d]
