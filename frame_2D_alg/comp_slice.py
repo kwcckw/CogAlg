@@ -83,6 +83,7 @@ class Cptuple(ClusterStructure):  # bottom-layer tuple of compared params in P, 
     L = int  # len dert_ in P, area in PP
     n = lambda: 1  # accum count, combine from CpH?
     valt = lambda: [0,0]
+    rdnt = lambda: [1,1]
 
 class CP(ClusterStructure):  # horizontal blob slice P, with vertical derivatives per param if derP, always positive
 
@@ -166,7 +167,8 @@ def comp_slice_root(blob, verbose=False):  # always angle blob, composite dert c
             for _P in _P_:  # test for x overlap(_P,P) in 8 directions, derts are positive in all Ps:
                 _L = len(_P.dert_); L = len(P.dert_)
                 if (P.x0 - 1 < _P.x0 + _L) and (P.x0 + L > _P.x0):
-                    derP = comp_P(_P, P)
+                    vertuple = comp_ptuple(_P.ptuple, P.ptuple)
+                    derP= CderP(derQ=[vertuple], valt=copy(vertuple.valt), rdnt=(vertuple.rdnt), P=P, _P=_P, x0=_P.x0, y0=_P.y0)
                     P.uplink_layers[-2] += [derP]  # uplink_layers[-1] is match_derPs
                     _P.downlink_layers[-2] += [derP]
                 elif (P.x0 + L) < _P.x0:
@@ -429,7 +431,7 @@ def sum2PP(PP_segs, base_rdn, fd):  # sum PP_segs into PP
 def sum_derH(DerH, derH, fneg=0):  # same fds from comp_derH
 
     for Vertuple, vertuple in zip_longest(DerH, derH, fillvalue=[]):
-        if vertuple:    
+        if vertuple:
             if Vertuple:
                 if isinstance(vertuple.I, list):
                     sum_vertuple(Vertuple, vertuple, fneg)
@@ -443,6 +445,7 @@ def sum_derH(DerH, derH, fneg=0):  # same fds from comp_derH
 def sum_vertuple(Vertuple, vertuple, fneg=0):
 
     for pname, ave in zip(pnames, aves):
+        # part: [mpar,dpar]
         Part = getattr(Vertuple, pname); part = getattr(vertuple, pname)
         Part[0] += (-part[0] if fneg else part[0])
         Part[1] += (-part[1] if fneg else part[1])
@@ -477,20 +480,6 @@ def sum_ptuple(Ptuple, ptuple, fneg=0):
 
     Ptuple.n += 1
 
-
-def comp_P(_P, P):  # forms vertical derivatives of params per P in _P.uplink, conditional ders from norm and DIV comp
-
-    if isinstance(_P, CP):
-        vertuple, valt, rdnt = comp_ptuple(_P.ptuple, P.ptuple)
-        derH = [deepcopy(_P.ptuple)]  # ["ptuples"]
-    else:  # P is derP (this section is not updated yet)
-        vertuple, valt, rdnt = comp_derH_(_P.derH, P.derH)
-        derH = deepcopy(_P.derH)
-    derQ = [vertuple]  # pack vals
-
-    return CderP(derH=derH, derQ=derQ, valt=valt, rdnt=rdnt, P=P, _P=_P, x0=_P.x0, y0=_P.y0)
-
-
 def comp_derH_(_derH, derH, fds):  # unpack and compare der layers, if any from der+, no fds, same within PP
 
     dderH_ = []
@@ -498,43 +487,42 @@ def comp_derH_(_derH, derH, fds):  # unpack and compare der layers, if any from 
     Rdnt = [1,1]
     lev = 0
     for i, (_vertuple, vertuple) in enumerate(zip(_derH, derH), start=1):  # i count start from 1, so that it is same with number of minimum element
-        
+
         if not isinstance(_vertuple.I, list):  # from 1st level, where param is just single par
             dvertuple, valt, rdnt = comp_ptuple(_vertuple, vertuple)
             dderH_ += [dvertuple]
         else:
             dderH, valt, rdnt = comp_vertuple(_vertuple, vertuple, fds[lev])
             dderH_ += [dderH]
-        
         for i in 0,1:
             Valt[i] += valt[i]
             Rdnt[i] += rdnt[i]
-            
+
         if lev in (0,1) or not i%(2**lev):  # first 2 levels has single element, consecutive levels has 2**level
-            lev += 1       
+            lev += 1
 
     return dderH_
 
 
 # almost similar with comp_ptuple, probably can merge into comp_ptuple later
 def comp_vertuple(_vertuple, vertuple, fd):
-    
+
     vertuple = Cptuple()
     rn = _vertuple.n / vertuple.n  # normalize param as param*rn for n-invariant ratio: _param / param*rn = (_param/_n) / (param/n)
     Rdnt = [1,1]  # not sure we need it at this point
     Valt = [0,0]
-    
+
     for pname, ave in zip(pnames, aves):  # comp full derH of each param between ptuples:
         _part = getattr(_vertuple, pname); part = getattr(vertuple, pname)
         _par = _part[fd]
-        if pname!="x": 
+        if pname!="x":
             par = part[fd] * rn
         else:
             par = part[fd]
         m ,d = comp_par(_par, par, ave, Valt, 1 - fd)
         Valt[0] += m; Valt[1] += d
         setattr(vertuple, pname, [m,d])
-        vertuple.valt[0] += m; vertuple.valt[1] += d;  # actually vertuple.valt is same as Valt 
+        vertuple.valt[0] += m; vertuple.valt[1] += d;  # actually vertuple.valt is same as Valt
 
     return vertuple, Valt, Rdnt
 
@@ -547,21 +535,22 @@ def comp_ptuple(_ptuple, ptuple):
     Valt = [0,0]
 
     for pname, ave in zip(pnames, aves):  # comp full derH of each param between ptuples:
+    # we only need to check pnames if not i|fd, in combined comp_ptuple+vertuple
         _par = getattr(_ptuple, pname); par = getattr(ptuple, pname)
 
         if pname=="aangle" and isinstance(_par, list):
-            m ,d = comp_aangle(_par, par, Valt)
+            m,d = comp_aangle(_par, par, Valt)
         elif pname in ("axis","angle"):
-            m ,d = comp_angle(pname, _par, par, Valt)
+            m,d = comp_angle(pname, _par, par, Valt)
         else:
             if pname!="x": par *= rn  # normalize by relative accum count
             if pname=="x" or pname=="I": finv = 1  # not sure here, how to get fd when we doesn't have fd fork in comp_P?
             else: finv=0
-            m ,d = comp_par(_par, par, ave, Valt, finv)
+            m,d = comp_par(_par, par, ave, Valt, finv)
 
         Valt[0] += m; Valt[1] += d
         setattr(vertuple, pname, [m,d])
-        vertuple.valt[0] += m; vertuple.valt[1] += d;  # actually vertuple.valt is same as Valt 
+        vertuple.valt[0] += m; vertuple.valt[1] += d  # actually vertuple.valt is same as Valt
 
     return vertuple, Valt, Rdnt
 
@@ -574,7 +563,6 @@ def comp_par(_param, param, ave, Valt, finv=0):  # comparand is always par or d 
     Valt[0] += m
     Valt[1] += abs(d)
     return [m,d]
-
 
 def comp_angle(pname, _angle, angle, Valt=None):  # rn doesn't matter for angles
 
