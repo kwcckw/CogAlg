@@ -265,24 +265,24 @@ def comp_aggH(_aggH, aggH):  # unpack aggH ( subH ( derH:
 
     daggH = []; valt = [0,0]; rdnt = [1,1]; elev=0
 
-    for i, (_subH, subH) in enumerate(zip(_aggH, aggH)):
+    for i, (_subH, subH) in enumerate(zip(_aggH.Q, aggH.Q)):
         if _aggH.fds[elev]!=aggH.fds[elev]:
             break
         if elev in (0,1) or not (i+1)%(2**elev): # first 2 levs are single-element, higher levs are 2**elev elements
             elev+=1
         dsubH = []; valt = [0,0]; rdnt = [1,1]; elay=0
-        for j, (_derH, derH) in enumerate(zip(_subH, subH)):
+        for j, (_derH, derH) in enumerate(zip(_subH.Q, subH.Q)):
             if _subH.fds[elay] != subH.fds[elay]:
                 break
             if elay in (0,1) or not (j+1)%(2**elay):  # first 2 levs are single-element, higher levs are 2**elev elements
                 elay+=1
-            dsubH += [comp_derH(_derH, derH, j)]  # comp_par(derH[0]) if j else comp_angle(derH[0]), return CpQ dderH
+            dsubH += [comp_derH(_derH, derH)]  # comp_par(derH[0]) if j else comp_angle(derH[0]), return CpQ dderH
         daggH += [CpQ(Q=dsubH)]
 
     return CpQ(Q=daggH)
 
 # old:
-def comp_derH(_derH, derH, _fds, fds):
+def comp_aggderH(_derH, derH, _fds, fds):
 
     dderH = []; valt = [0,0]; rdnt = [1,1]; elev=0
 
@@ -331,7 +331,7 @@ def op_derH(_derH, derH, op, Mval,Dval, Mrdn,Drdn, idx_=[]):  # idx_: derH indic
         pass  # fill into DerH if sum or dderH if comp?
 
 # old:
-def comp_derH(_derH, derH, Mval,Dval, Mrdn,Drdn):
+def comp_aggderH(_derH, derH, Mval,Dval, Mrdn,Drdn):
 
     dderH = []
     for _Lev, Lev in zip_longest(derH, derH, fillvalue=[]):  # each Lev or subLev is [CpQ|list, ext, valt, rdnt]:
@@ -361,7 +361,7 @@ def comp_derH(_derH, derH, Mval,Dval, Mrdn,Drdn):
     Lev4: [[dlays, [ddlays,dextp], [[[dddlays,ddextp]],dextp]], ext]: 3 sLevs, 2 ssLevs, 1 sssLev
 '''
 
-def comp_derH(_derH, derH, Mval, Dval, Mrdn, Drdn, _fds, fds):  # idx_: derH indices, op: comp|sum, lenlev: 1, 1, 2, 4, 8...
+def comp_aggderH(_derH, derH, Mval, Dval, Mrdn, Drdn, _fds, fds):  # idx_: derH indices, op: comp|sum, lenlev: 1, 1, 2, 4, 8...
 
     dderH = []
     if _fds[0]==fds[0]:  # else higher fds won't match either
@@ -434,21 +434,21 @@ def sum_G(G, g, fmerge=0):  # g is a node in G.node_
             else:           G.alt_Graph = deepcopy(g.alt_graph)
     else: G.node_ += [g]
 
-# not updated
-def sum_derH(DerH, derH, fext=1):
+# not fully updated
+def sum_aggH(AggH, aggH):
 
-    for i, (Lev, lev) in enumerate(zip_longest(DerH, derH, fillvalue=None)):
-        if lev is not None:
-            if lev:
-                if Lev:
-                    if isinstance(lev,CpQ): sum_pH(Lev,lev)
-                    else:
-                        for Ext,ext in zip(Lev,lev): sum_ext(Ext, ext)
+    for SubH, subH in zip_longest(AggH.Q, aggH.Q, fillvalue=None):
+        if subH:
+            if SubH:
+                for DerH, derH in(zip_longest(SubH.Q, subH.Q, fillvalue=None)):  # derH could be ext here? If yes we need to check and add 
+                    if derH:
+                        if DerH:
+                            sum_derH(DerH, derH)  # probably need to extend sum_derH for ext?
+                        else:
+                            SubH.Q += [deepcopy(derH)] 
+            else:
+                AggH.Q += [deepcopy(subH)]
 
-                else: DerH.insert(i,deepcopy(lev))
-                # for var-length DerH, derH
-            elif Lev is None: DerH += [deepcopy(lev)]
-            else:             DerH[i] = deepcopy(lev)
 
 def add_ext(box, L, extt):  # add ext per composition level
     y,x, y0,yn, x0,xn = box
