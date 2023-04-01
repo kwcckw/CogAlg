@@ -41,7 +41,7 @@ def sub_recursion_eval(root):  # for PP or dir_blob
                     if PP_layer:
                         if i > len(comb_layers) - 1: comb_layers += [PP_layer]  # add new r|d layer
                         else: comb_layers[i] += PP_layer  # splice r|d PP layer into existing layer
-            
+
             # below is pending update
             """
             # segs:
