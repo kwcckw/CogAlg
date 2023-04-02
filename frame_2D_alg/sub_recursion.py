@@ -3,8 +3,9 @@ from itertools import zip_longest
 from copy import copy, deepcopy
 import numpy as np
 from frame_blobs import CBlob, flood_fill, assign_adjacents
-from comp_slice import *
 from agg_recursion import *
+from comp_slice import *  # for same name functions, it will be using the functions from comp_slice
+
 '''
 comp_slice_ sub_recursion + utilities
 '''
@@ -68,6 +69,9 @@ def sub_recursion_eval(root):  # for PP or dir_blob
 def sub_recursion(PP):  # evaluate each PP for rng+ and der+
 
     P__  = [P_ for P_ in reversed(PP.P__)]  # revert to top down
+    # should we convert and add sub+ ext here?
+    # so in rng+, it will be added to PP.P's ptuple
+    # then in der+, it will be added to PP.P's links' derH?
     P__ = comp_P_der(P__) if PP.fds[-1] else comp_P_rng(P__, PP.rng + 1)   # returns top-down
     PP.rdnt[PP.fds[-1] ] += 1  # two-fork rdn, priority is not known?  rotate?
 
@@ -325,7 +329,7 @@ def blob2graph(blob, fseg):
     for fd, PP_ in enumerate([PPm_,PPd_]):  # if any
         for PP in PP_:
             graph = PP2graph(PP, fseg, fd)
-            sum_aggH(blobs[fd].aggH, graph.aggH, blobs[fd].fds, graph.fds)
+            sum_aggH(blobs[fd].aggH, graph.aggH)
             for i in range(2):
                 blobs[fd].valt[i] += graph.valt[i]
                 blobs[fd].rdnt[i] += graph.rdnt[i]

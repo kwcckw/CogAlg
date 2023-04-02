@@ -286,7 +286,7 @@ def comp_aggH(_aggH, aggH):  # unpack aggH ( subH ( derH:
 
 def comp_derH(_derH, derH, j,k):
 
-    dderH = CpQ; elev=0
+    dderH = CpQ(); elev=0
     for i, (_ptuple,ptuple) in enumerate(zip(_derH.Q, derH.Q)):
 
         if _derH.fds[elev]!=derH.fds[elev]:
@@ -297,10 +297,10 @@ def comp_derH(_derH, derH, j,k):
             # we need local versions of comp_vertuple and comp_ptuple, in the same fashion as updated comp_ext
             if i: dtuple = comp_vertuple(_ptuple, ptuple, dderH)
             else:
-                if j: dtuple = comp_ptuple(_ptuple, ptuple, dderH)
+                if j: dtuple = comp_ptuple(_ptuple, ptuple)
                 else: dtuple = comp_ext(_ptuple, ptuple, dderH, k)  # comp_angle if k: 1st layer in lev
         dderH.Q += [dtuple]
-
+        dderH.fds = copy(_derH.fds)
     return dderH
 
 

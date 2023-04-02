@@ -378,7 +378,7 @@ def sum2seg(seg_Ps, fd, fds):  # sum params of vertically connected Ps into segm
         sum_derH(derQ, derP.derQ)
         L = len(P.dert_) if isinstance(P,CP) else P.L
         seg.box[2]= min(seg.box[2],P.x0); seg.box[3]= max(seg.box[3],P.x0+L-1)
-        # AND seg.fds?
+        # AND seg.fds? (then it will be 1 only if both are 1)
         P.roott[fd] = seg
         for derP in P.uplink_layers[-2]:
             if derP not in P.uplink_layers[-1][fd]:
@@ -390,8 +390,7 @@ def sum2seg(seg_Ps, fd, fds):  # sum params of vertically connected Ps into segm
     seg.box[2] = min(seg.box[2],P.x0); seg.box[3] = max(seg.box[3],P.x0+L-1)
     seg.derH = derH
     if derQ:
-        if fd: seg.derH += derQ  # der+
-        else: seg.derH[int(len(derH)/2):] = derQ  # rng+, replace last layer
+        if fd: seg.derH += derQ  # der+ and rng+, always <2 elements in derH
 
     return seg
 
@@ -493,8 +492,8 @@ def comp_derH(_derH, derH):  # no need to check fds in comp_slice
 
     dderH = []; valt = [0,0]; rdnt = [1,1]
     for i, (_ptuple,ptuple) in enumerate(zip(_derH, derH)):
-
-        dtuple = comp_vertuple(_ptuple,ptuple) if i else comp_ptuple(_ptuple,ptuple)
+        # we need to check if isinstance(CpQ) because der+ derH's element is CpQ
+        dtuple = comp_vertuple(_ptuple,ptuple) if isinstance(_ptuple, CpQ) else comp_ptuple(_ptuple,ptuple)
         dderH += [dtuple]
         for j in 0,1:
             valt[j] += dtuple.valt[j]; rdnt[j] += dtuple.rdnt[j]
@@ -503,7 +502,7 @@ def comp_derH(_derH, derH):  # no need to check fds in comp_slice
 
 def comp_vertuple(_vertuple, vertuple):
 
-    dtuple=CpQ(n=_vertuple.n)
+    dtuple=CpQ(fds=copy(_vertuple.fds), n=_vertuple.n)
     rn = _vertuple.n/vertuple.n  # normalize param as param*rn for n-invariant ratio: _param/ param*rn = (_param/_n)/(param/n)
 
     for _par, par, ave in zip(_vertuple.Q, vertuple.Q, aves):
@@ -515,7 +514,8 @@ def comp_vertuple(_vertuple, vertuple):
 
 def comp_ptuple(_ptuple, ptuple):
 
-    dtuple = CpQ(n=_ptuple.n)
+    # derP.fds default value is 0? We will need fds in comp_derH later
+    dtuple=CpQ(fds=[0], n=_ptuple.n)
     rn = _ptuple.n / ptuple.n  # normalize param as param*rn for n-invariant ratio: _param / param*rn = (_param/_n) / (param/n)
 
     for pname, ave in zip(pnames, aves):  # comp full derH of each param between ptuples:
