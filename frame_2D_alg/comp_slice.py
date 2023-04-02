@@ -391,7 +391,6 @@ def sum2seg(seg_Ps, fd, fds):  # sum params of vertically connected Ps into segm
     seg.derH = derH
     if derQ:
         if fd: seg.derH += derQ  # der+
-        # i checked and right now this line is replacing 0 index(1st element) with derQ, it should be this way? So 1st element is not always ptuple?
         else: seg.derH[int(len(derH)/2):] = derQ  # rng+, replace last layer
 
     return seg

@@ -353,7 +353,7 @@ def PP2graph(PP, fseg, ifd=1):
         alt_subH[0].Q = [deepcopy(PP.alt_PP_[0].derH)]; alt_valt = copy(PP.alt_PP_[0].valt)
         alt_box = copy(PP.alt_PP_[0].box); alt_rdnt = copy(PP.alt_PP_[0].rdnt)
         for altPP in PP.alt_PP_[1:]:  # get fd sequence common for all altPPs:
-            
+
             sum_derH(alt_subH[0].Q[0], altPP.derH)
             Y0,Yn,X0,Xn = alt_box; y0,yn,x0,xn = altPP.box
             alt_box[:] = min(Y0,y0),max(Yn,yn),min(X0,x0),max(Xn,xn)
