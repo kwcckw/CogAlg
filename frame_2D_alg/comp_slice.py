@@ -456,11 +456,11 @@ def sum_derH(DerH, derH, fneg=0):  # same fds from comp_derH
 
 
 def sum_vertuple(Vertuple, vertuple, fneg=0):
+    # sum Vertuple regardless
+    for i, (m, d) in enumerate(zip(vertuple.Qm, vertuple.Qd)):
+        Vertuple.Qm[i] += -m if fneg else m ; Vertuple.Qd[i] += -d if fneg else d;
+        Vertuple.Q[i] = min(Vertuple.Q[i], vertuple.Q[i])  # Qn is updated with min of both?
 
-    for Part, part in zip(Vertuple.Q, vertuple.Q):
-        # [mpar,dpar] each
-        Part[0] += (-part[0] if fneg else part[0])
-        Part[1] += (-part[1] if fneg else part[1])
     for i in 0,1:
         Vertuple.valt[i] += vertuple.valt[i]
         Vertuple.rdnt[i] += vertuple.rdnt[i]
@@ -509,11 +509,16 @@ def comp_vertuple(_vertuple, vertuple):
 
     dtuple=CQ(n=_vertuple.n)
     rn = _vertuple.n/vertuple.n  # normalize param as param*rn for n-invariant ratio: _param/ param*rn = (_param/_n)/(param/n)
-
-    for _par, par, ave in zip(_vertuple.Q, vertuple.Q, aves):
-        m,d = comp_par(_par[1], par[1]*rn, ave)
-        dtuple.Q += [[m,d]]
-        dtuple.valt[0]+=m; dtuple.valt[1]+=d
+    gap, _ind, ind = 1, -1, -1  # -1 here so that it starts from 0 later
+    for _n, n in zip(_vertuple.Q, vertuple.Q): 
+        _ind += _n; ind += n
+        if (_ind == ind) and (ind != -1):
+            m,d = comp_par(_vertuple.Qd[_ind], vertuple.Qd[ind]*rn, aves[ind])
+            dtuple.Qm += [m]; dtuple.Qd += [d] 
+            dtuple.Q += [gap]; gap = 1  # assign and reset gap
+        else:  # increase gap
+            dtuple.Qm += [0]; dtuple.Qd += [0]; dtuple.Q += [0]  # add 0 as filler?
+            gap += 1 
 
     return dtuple
 
@@ -531,7 +536,8 @@ def comp_ptuple(_ptuple, ptuple):
             if pname=="x" or pname=="I": finv = 1
             else: finv=0
             m,d = comp_par(_par, par, ave, finv)
-        dtuple.Q += [[m,d]]
+            
+        dtuple.Qm += [m]; dtuple.Qd += [d]; dtuple.Q += [1] 
         dtuple.valt[0] += m; dtuple.valt[1] += d
 
     return dtuple

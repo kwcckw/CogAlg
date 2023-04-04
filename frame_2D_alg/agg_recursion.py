@@ -158,7 +158,7 @@ def prune_node_layer(regraph, graph_H, node, fd):  # recursive depth-first regra
             # adjust link val by _node.val, adjust node.val in next round?
             relink_+=[link]
 
-    node.link_.Qd[:] if fd else node.link_.Qm[:] = relink_  # contains links to graph nodes only
+    [node.link_.Qd,node.link_.Qm][fd][:]  = relink_  # contains links to graph nodes only
 
 
 def add_node_layer(gnode_, G_, G, fd, val):  # recursive depth-first gnode_+=[_G]
