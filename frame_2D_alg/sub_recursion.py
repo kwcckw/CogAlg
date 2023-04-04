@@ -45,7 +45,7 @@ def sub_recursion_eval(root):  # for PP or dir_blob
 
             # segs:
             agg_recursion_eval(PP, [copy(PP.mseg_levels[-1]), copy(PP.dseg_levels[-1])])
-            
+
             # include empty comb_layers:
             if fd:
                 PPmm_ = [PPm_] + mcomb_layers; mVal = sum([PP.valt[0] for PP_ in PPmm_ for PP in PP_])
@@ -63,7 +63,7 @@ def sub_recursion_eval(root):  # for PP or dir_blob
             else:  # root is CBlob
                 if fd: root.G += sum([alt_PP.valt[fd] for alt_PP in PP.alt_PP_]) if PP.alt_PP_ else 0
                 else:  root.M += PP.valt[fd]
-            
+
 
 def sub_recursion(PP):  # evaluate each PP for rng+ and der+
 
