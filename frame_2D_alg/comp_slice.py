@@ -456,11 +456,10 @@ def sum_derH(DerH, derH, fneg=0):  # same fds from comp_derH
 
 
 def sum_vertuple(Vertuple, vertuple, fneg=0):
-    # sum Vertuple regardless
-    for i, (m, d) in enumerate(zip(vertuple.Qm, vertuple.Qd)):
-        Vertuple.Qm[i] += -m if fneg else m ; Vertuple.Qd[i] += -d if fneg else d;
-        Vertuple.Q[i] = min(Vertuple.Q[i], vertuple.Q[i])  # Qn is updated with min of both?
 
+    for i, (m, d) in enumerate(zip(vertuple.Qm, vertuple.Qd)):
+        Vertuple.Qm[i] += -m if fneg else m
+        Vertuple.Qd[i] += -d if fneg else d
     for i in 0,1:
         Vertuple.valt[i] += vertuple.valt[i]
         Vertuple.rdnt[i] += vertuple.rdnt[i]
@@ -492,43 +491,27 @@ def sum_ptuple(Ptuple, ptuple, fneg=0):
 
     Ptuple.n += 1
 
-def comp_derH(_derH, derH):  # no need to check fds in comp_slice
-
-    dderH = []; valt = [0,0]; rdnt = [1,1]
-    for i, (_ptuple,ptuple) in enumerate(zip(_derH, derH)):
-
-        dtuple = comp_vertuple(_ptuple,ptuple) if isinstance(_ptuple, CQ) else comp_ptuple(_ptuple,ptuple)
-        # dtuple = comp_vertuple(_ptuple,ptuple) if i else comp_ptuple(_ptuple,ptuple)
-        dderH += [dtuple]
-        for j in 0,1:
-            valt[j] += dtuple.valt[j]; rdnt[j] += dtuple.rdnt[j]
-
-    return dderH, valt, rdnt
 
 def comp_vertuple(_vertuple, vertuple):
 
-    dtuple=CQ(n=_vertuple.n)
+    dtuple=CQ(n=_vertuple.n, Q=copy(_vertuple.Q))  # no selection here
     rn = _vertuple.n/vertuple.n  # normalize param as param*rn for n-invariant ratio: _param/ param*rn = (_param/_n)/(param/n)
-    gap, _ind, ind = 1, -1, -1  # -1 here so that it starts from 0 later
-    for _n, n in zip(_vertuple.Q, vertuple.Q): 
-        _ind += _n; ind += n
-        if (_ind == ind) and (ind != -1):
-            m,d = comp_par(_vertuple.Qd[_ind], vertuple.Qd[ind]*rn, aves[ind])
-            dtuple.Qm += [m]; dtuple.Qd += [d] 
-            dtuple.Q += [gap]; gap = 1  # assign and reset gap
-        else:  # increase gap
-            dtuple.Qm += [0]; dtuple.Qd += [0]; dtuple.Q += [0]  # add 0 as filler?
-            gap += 1 
+
+    for _par, par, ave in zip(_vertuple.Q, vertuple.Q, aves):
+
+        m,d = comp_par(_par[1], par[1]*rn, ave)
+        dtuple.Qm+=[m]; dtuple.Qd+=[d]; dtuple.valt[0]+=m; dtuple.valt[1]+=d
 
     return dtuple
 
 def comp_ptuple(_ptuple, ptuple):
 
-    dtuple = CQ(n=_ptuple.n)
+    dtuple = CQ(n=_ptuple.n, Q=[1 for par in pnames])
     rn = _ptuple.n / ptuple.n  # normalize param as param*rn for n-invariant ratio: _param / param*rn = (_param/_n) / (param/n)
 
-    for pname, ave in zip(pnames, aves):  # comp full derH of each param between ptuples:
-        _par = getattr(_ptuple, pname); par = getattr(ptuple, pname)
+    for pname, ave in zip(pnames, aves):
+        _par = getattr(_ptuple, pname)
+        par = getattr(ptuple, pname)
         if pname=="aangle": m,d = comp_aangle(_par, par)
         elif pname in ("axis","angle"): m,d = comp_angle(_par, par)
         else:
@@ -536,9 +519,8 @@ def comp_ptuple(_ptuple, ptuple):
             if pname=="x" or pname=="I": finv = 1
             else: finv=0
             m,d = comp_par(_par, par, ave, finv)
-            
-        dtuple.Qm += [m]; dtuple.Qd += [d]; dtuple.Q += [1] 
-        dtuple.valt[0] += m; dtuple.valt[1] += d
+
+        dtuple.Qm += [m]; dtuple.Qd += [d]; dtuple.valt[0] += m; dtuple.valt[1] += d
 
     return dtuple
 
