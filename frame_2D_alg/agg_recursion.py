@@ -75,13 +75,13 @@ def agg_recursion(root, fseg):  # compositional recursion in root.PP_, pretty su
     for fd, graph_ in enumerate([mgraph_,dgraph_]):  # eval graphs for sub+ and agg+:
         val = sum([graph.valt[fd] for graph in graph_])
         # intra-graph sub+ comp node:
-        if val > ave_sub * root.rdn:  # same in blob, same base cost for both forks
+        if val > ave_sub * root.rdnt[fd]:  # same in blob, same base cost for both forks
             for graph in graph_: graph.rdn+=1  # estimate, assign to the weaker in feedback
             sub_recursion_g(graph_, fseg, root.fds + [fd])  # divide graph_ in der+|rng+ sub_graphs
         else:
             root.fterm = 1; feedback(root)  # update root.root..H, breadth-first
         # cross-graph agg+ comp graph:
-        if val > G_aves[fd] * ave_agg * root.rdn and len(graph_) > ave_nsub:
+        if val > G_aves[fd] * ave_agg * root.rdnt[fd] and len(graph_) > ave_nsub:
             for graph in graph_: graph.rdn+=1  # estimate
             agg_recursion(root, fseg=fseg)  # replaces root.H
         else:
@@ -103,7 +103,7 @@ def form_graph_(root, fsub): # form derH in agg+ or sub-pplayer in sub+, G is no
         while node_:  # all Gs not removed in add_node_layer
             G = node_.pop(); gnode_ = [G]
             val = add_node_layer(gnode_, node_, G, fd, val=0)  # recursive depth-first gnode_+=[_G]
-            graph_ += [CQ(H=gnode_, val=val)]
+            graph_ += [CQ(Q=gnode_, val=val)]
         # reform graphs by node val:
         regraph_ = graph_reval(graph_, [aveG for graph in graph_], fd)  # init reval_ to start
         if regraph_:
@@ -126,13 +126,13 @@ def graph_reval(graph_, reval_, fd):  # recursive eval nodes for regraph, after 
         if reval < aveG:  # same graph, skip re-evaluation:
             regraph_ += [graph]; rreval_ += [0]
             continue
-        while graph.H:  # links may be revalued and removed, splitting graph to regraphs, init each with graph.Q node:
+        while graph.Q:  # links may be revalued and removed, splitting graph to regraphs, init each with graph.Q node:
             regraph = CQ()
-            node = graph.H.pop()  # node_, not removed below
+            node = graph.Q.pop()  # node_, not removed below
             val = [node.link_.mval, node.link_.dval][fd]  # in-graph links only
             if val > G_aves[fd]:  # else skip
-                regraph.H = [node]; regraph.valt[fd] = val  # init for each node, then add _nodes
-                prune_node_layer(regraph, graph.H, node, fd)  # recursive depth-first regraph.Q+=[_node]
+                regraph.Q = [node]; regraph.valt[fd] = val  # init for each node, then add _nodes
+                prune_node_layer(regraph, graph.Q, node, fd)  # recursive depth-first regraph.Q+=[_node]
             reval = graph.valt[fd] - regraph.valt[fd]
             if regraph.valt[fd] > aveG:
                 regraph_ += [regraph]; rreval_ += [reval]; Reval += reval
@@ -150,11 +150,11 @@ def prune_node_layer(regraph, graph_H, node, fd):  # recursive depth-first regra
         _val = [_node.link_.mval, _node.link_.dval][fd]
         # ave for link val + connected node val, or decay per mediation order?
         if _val > ave/ave_len + ave and _node in graph_H:
-            regraph.H += [_node]
+            regraph.Q += [_node]
             graph_H.remove(_node)
             regraph.valt[fd] += _val
             prune_node_layer(regraph, graph_H, _node, fd)
-            link.val += _val / len(_node.link_) - link.val  # adjust link val by _node.val, adjust node.val in next round?
+            link.valt[fd] += _val / len(_node.link_) - link.valt[fd]  # adjust link val by _node.val, adjust node.val in next round?
             relink_+=[link]
 
     [node.link_.Qd,node.link_.Qm][fd][:]  = relink_  # contains links to graph nodes only
@@ -175,7 +175,7 @@ def add_node_layer(gnode_, G_, G, fd, val):  # recursive depth-first gnode_+=[_G
 
 def comp_G_(G_, pri_G_=None, f1Q=1, fsub=0):  # cross-comp Graphs if f1Q, else G_s in comp_node_, or segs inside PP?
 
-    if not f1Q: dderH_ = []
+    if not f1Q: daggH_ = []
 
     for i, _iG in enumerate(G_ if f1Q else pri_G_):  # G_ is node_ of root graph
         for iG in G_[i+1:] if f1Q else G_:  # compare each G to other Gs in rng, bilateral link assign, val accum:
@@ -190,12 +190,12 @@ def comp_G_(G_, pri_G_=None, f1Q=1, fsub=0):  # cross-comp Graphs if f1Q, else G
                     if not _G or not G:  # or G.val
                         continue
                     # not revised:
-                    dderH, mval, dval, tval = comp_GQ(_G,G)  # comp_G while G.G, H/0G: GQ is one distributed node?
+                    daggH, (mval, dval) = comp_GQ(_G,G)  # comp_G while G.G, H/0G: GQ is one distributed node?
                     ext = [[1],[distance],[dy,dx]]  # ext -> ext pair: new der_nodes / Graph:
-                    derG = Cgraph(valt=[mval,dval], G=[_G,G], derH=ext+dderH, box=[])  # box is redundant to G
+                    derG = Cgraph(valt=[mval,dval], G=[_G,G], aggH=[ext]+daggH, box=[])  # box is redundant to G
                     # add links:
-                    _G.link_.Q += [derG]; _G.link_.val += tval  # combined +-links val
-                    G.link_.Q += [derG]; G.link_.val += tval
+                    _G.link_.Q += [derG]  # no longer need summation of tval?
+                    G.link_.Q += [derG]
                     if mval > aveGm:
                         _G.link_.Qm += [derG]; _G.link_.mval += mval  # no dval for Qm
                         G.link_.Qm += [derG]; G.link_.mval += mval
@@ -203,37 +203,39 @@ def comp_G_(G_, pri_G_=None, f1Q=1, fsub=0):  # cross-comp Graphs if f1Q, else G
                         _G.link_.Qd += [derG]; _G.link_.dval += dval  # no mval for Qd
                         G.link_.Qd += [derG]; G.link_.dval += dval
 
-                    if not f1Q: dderH_+= dderH  # comp G_s
+                    if not f1Q: daggH_+= daggH  # comp G_s
                 # implicit cis, alt pair nesting in mderH, dderH
     if not f1Q:
-        return dderH_  # else no return, packed in links
+        return daggH_  # else no return, packed in links
 
 
 def comp_GQ(_G, G):  # compare lower-derivation G.G.s, pack results in mderH_,dderH_
 
-    dderH_ = []; Mval,Dval = 0,0; Mrdn,Drdn = 1,1; Tval= aveG+1
+    daggH_ = []; Valt = [0,0]; Rdnt = [1,1]; Tval= aveG+1
 
     while (_G and G) and Tval > aveG:  # same-scope if sub+, no agg+ G.G
-        dderH, mval, dval, mrdn, drdn = comp_G(_G, G)
-        dderH_+=dderH; Mval+=mval; Dval+=dval; Mrdn+=mrdn; Drdn+=drdn  # rdn+=1: to derH?
-        _G = _G.G
-        G = G.G
-        Tval = (Mval+Dval) / (Mrdn+Drdn)
+        daggH = comp_G(_G, G)
+        daggH_+= [daggH] 
+        for i in 0,1:
+            Valt[i] += daggH.valt[i]; Rdnt[i] += daggH.rdnt[i];  
+        _G = _G.G; G = G.G
+        Tval = sum(Valt) / sum(Rdnt)
 
-    return dderH_, Mval, Dval, Tval  # ext added in comp_G_, not within GQ
+    return daggH_, Valt  # ext added in comp_G_, not within GQ
 
 def comp_G(_G, G):  # in GQ
 
     Mval, Dval = 0,0
     Mrdn, Drdn = 1,1
-    if _G.box: _derH, derH = _G.derH, G.derH
+    if _G.box: _aggH, aggH = _G.aggH, G.aggH
     else:
         _fd = _G.root.fds[-1] if _G.root.fds else 0; fd = G.root.fds[-1] if G.root.fds else 0
-        _derH, derH = _G.derH[_fd], G.derH[fd]  # derG in comp node_?
+        _aggH, aggH = _G.aggH[_fd], G.aggH[fd]  # derG in comp node_?
 
-    dderH, Mval,Dval, Mrdn,Drdn = comp_derH(_derH, derH, Mval,Dval, Mrdn,Drdn)
+    daggH = comp_aggH(_aggH, aggH)
     # spec:
     _node_, node_ = _G.node_, G.node_  # link_ if fd, sub_node should be empty
+    # below is not updated
     if (Mval+Dval)* sum(_G.valt)*sum(G.valt) * len(_node_)*len(node_) > aveG:  # / rdn?
 
         sub_dderH, mval, dval, mrdn, drdn = comp_G_(_node_, node_, f1Q=0)
@@ -247,40 +249,44 @@ def comp_G(_G, G):  # in GQ
     select >ave m|d vars only: addressable salient mset / dset in derH? 
     cluster per var or set if recurring across root: type eval if root M|D?
     '''
-    return dderH, Mval,Dval, Mrdn,Drdn
+    return daggH
 
 # draft:
 def comp_aggH(_aggH, aggH):  # aggH ( subH ( derH:
     # syntax = lower composition orders, represented selectively by Q: name'index'increments
     # not updated, may need changes similar to comp_derH
-
-    daggH = []; valt = [0,0]; rdnt = [1,1]; elev=0
+    # same fds?
+    daggH = CQ(fds=copy(_aggH.fds)); elev=0
 
     for i, (_subH, subH) in enumerate(zip(_aggH.Q, aggH.Q)):
         if _aggH.fds[elev]!=aggH.fds[elev]:
             break
         if elev in (0,1) or not (i+1)%(2**elev):  # first 2 levs are single-element, higher levs are 2**elev elements
             elev+=1  # elevation
-        dsubH = []; valt = [0,0]; rdnt = [1,1]; elay=0
+        dsubH = CQ(fds=copy(_subH.fds)); elay=0
         for j, (_derH, derH) in enumerate(zip(_subH.Q, subH.Q)):
             if _subH.fds[elay] != subH.fds[elay]:
                 break
             if elay in (0,1) or not (j+1)%(2**elay):  # first 2 levs are single-element, higher levs are 2**elev elements
                 elay+=1  # elevation
-            dsubH += [comp_derH(_derH, derH, j,i)]  # comp_par(derH[0]) if j else comp_angle(derH[0]), return CQ dderH
-        daggH += [CQ(Q=dsubH)]
-        # add summing valt, rdnt
+            # not sure on the i and j here, i think there's no need to use this anymore?
+            dderH = comp_derH(_derH, derH, j,i)  # comp_par(derH[0]) if j else comp_angle(derH[0]), return CQ dderH
+            dsubH.Q += [dderH]
+            for i in 0,1:
+                dsubH.valt[i] += dderH.valt[i]; dsubH.rdnt[i] += dderH.rdnt[i] 
+                daggH.valt[i] += dderH.valt[i]; daggH.rdnt[i] += dderH.rdnt[i] 
+        daggH.Q += [dsubH]
 
-    return CQ(Q=daggH)
+    return daggH
 
 
 def comp_derH(_derH, derH, j,k):
     dderH = CQ(fds=copy(_derH.fds))
-
-    dtuple = comp_ptuple(_derH.Qd[0], derH.Qd[0])  # all compared pars are in Qd, including 0der
+    # Qd will be only in vertuple?
+    dtuple = comp_ptuple(_derH.Q[0], derH.Q[0])  # all compared pars are in Qd, including 0der
     add_dtuple(dderH, dtuple)
     elev = 0
-    for i, (_ptuple,ptuple) in enumerate(zip(_derH.Qd[1:], derH.Qd[1:])):
+    for i, (_ptuple,ptuple) in enumerate(zip(_derH.Q[1:], derH.Q[1:])):
 
         if _derH.fds[elev]!=derH.fds[elev]:  # fds start from 2nd lay
             break
@@ -293,16 +299,14 @@ def comp_derH(_derH, derH, j,k):
 
     return dderH
 
-def comp_vertuple(_vertuple, vertuple, dderH):
+def comp_vertuple(_vertuple, vertuple):
 
     dtuple=CQ(n=_vertuple.n)
     rn = _vertuple.n/vertuple.n  # normalize param as param*rn for n-invariant ratio: _param/ param*rn = (_param/_n)/(param/n)
     _idx, idx, d_didx = 0,0,0
 
     for _i, _didx in enumerate(_vertuple.Q):
-        _idx +=_didx
         for i, didx in enumerate(vertuple.Q[_i:]):  # idx at i<_i won't match _idx
-            idx += didx
             if _idx==idx:
                 m,d = comp_par(_vertuple.Qd[_i], vertuple.Qd[i+_i]*rn, aves[idx])
                 dtuple.Qm += [m]; dtuple.Qd += [d]
@@ -312,6 +316,9 @@ def comp_vertuple(_vertuple, vertuple, dderH):
                 d_didx += _didx
                 break  # no par search beyond current index
             # else _idx > idx: continue search
+            idx += didx
+        _idx +=_didx
+        
     return dtuple
 
 
@@ -344,7 +351,7 @@ def sum2graph_(graph_, fd, fsub=0):  # sum node and link params into graph, derH
 
         if graph.valt[fd] < aveG:  # form graph if val>min only
             continue
-        Graph = Cgraph(fds=copy(graph.H[0].fds)+[fd])  # incr der
+        Graph = Cgraph(fds=copy(graph.Q[0].fds)+[fd])  # incr der
         ''' if n roots: 
         sum_derH(Graph.uH[0][fd].derH,root.derH) or sum_G(Graph.uH[0][fd],root)? init if empty
         sum_H(Graph.uH[1:], root.uH)  # root of Graph, init if empty
@@ -404,7 +411,7 @@ def sum_aggH(AggH, aggH):
                 for DerH, derH in(zip_longest(SubH.Q, subH.Q, fillvalue=None)):  # derH could be ext here? If yes we need to check and add 
                     if derH:
                         if DerH:
-                            sum_derH(DerH, derH)  # probably need to extend sum_derH for ext?
+                            sum_derH(DerH.Q, derH.Q)
                         else:
                             SubH.Q += [deepcopy(derH)] 
             else:
