@@ -258,39 +258,61 @@ def comp_aggH(_aggH, aggH):  # aggH ( subH ( derH:
     # syntax = lower composition orders, represented selectively by Q: name'index'increments
     # not updated, may need changes similar to comp_derH
     # same fds?
-    daggH = CQ(fds=copy(_aggH.fds)); elev=0
-
-    for i, (_subH, subH) in enumerate(zip(_aggH.Q, aggH.Q)):
-        if _aggH.fds[elev]!=aggH.fds[elev]:
-            break
-        if elev in (0,1) or not (i+1)%(2**elev):  # first 2 levs are single-element, higher levs are 2**elev elements
-            elev+=1  # elevation
-        dsubH = CQ(fds=copy(_subH.fds)); elay=0
-        for j, (_derH, derH) in enumerate(zip(_subH.Q, subH.Q)):
-            if _subH.fds[elay] != subH.fds[elay]:
+    # daggH:
+    daggH = CQ(fds=copy(_aggH.fds)); elev=0       
+    _idx, idx, d_didx = -1,-1,0
+    for _i, _didx in enumerate(_aggH.Q): 
+        _idx +=_didx
+        for i, didx in enumerate(aggH.Q[_i:]): 
+            idx += didx
+            if _idx==idx:
+                if _aggH.fds[elev]!=aggH.fds[elev]:
+                    break
+                if elev in (0,1) or not (_i+1)%(2**elev):  # first 2 levs are single-element, higher levs are 2**elev elements
+                    elev+=1  # elevation
+                    
+                # dsubH:
+                _subH = aggH.Qd[i]; subH = aggH.Qd[_i+i]
+                dsubH = CQ(fds=copy(_subH.fds)); selev = 0
+                
+                _sidx, sidx, d_sdidx = -1,-1,0
+                for _si, _sdidx in enumerate(_subH.Q): 
+                    _sidx +=_sdidx
+                    for si, sdidx in enumerate(subH.Q[_i:]): 
+                        sidx += sdidx
+                        if _sidx==sidx:
+                            if _subH.fds[selev] != subH.fds[selev]:
+                                break
+                            if selev in (0,1) or not (_si+1)%(2**selev):  
+                                selev+=1  # elevation     
+                                
+                            # dderH:
+                            _derH = _subH.Qd[_si]; derH = subH.Qd[si]
+                            dderH = comp_derH(_derH, derH, _si,_i)  
+                            dsubH.Qd += [dderH]; dsubH.Q += [_sidx+d_sdidx]       
+                        elif _sidx < sidx:  
+                            d_sdidx += _sdidx
+                            break  
+                daggH.Qd += [dsubH]; daggH.Q += [_idx+d_didx]    
                 break
-            if elay in (0,1) or not (j+1)%(2**elay):  # first 2 levs are single-element, higher levs are 2**elev elements
-                elay+=1  # elevation
-            # revise comp_aggH to use i and j, same as in comp_derH?
-            dderH = comp_derH(_derH, derH, j,i)  # comp_par(derH[0]) if j else comp_angle(derH[0]), return CQ dderH
-            dsubH.Q += [dderH]
-            for i in 0,1:
-                dsubH.valt[i] += dderH.valt[i]; dsubH.rdnt[i] += dderH.rdnt[i]
-                daggH.valt[i] += dderH.valt[i]; daggH.rdnt[i] += dderH.rdnt[i]
-        daggH.Q += [dsubH]
+
+            elif _idx < idx:  # no dpar per _par
+                d_didx += _didx
+                break  # no par search beyond current index
+            # else _idx > idx: continue search
 
     return daggH
 
-
+# not fully updated, unpack this in a similar way as in comp_aggH?
 def comp_derH(_derH, derH, j,k):
 
     dderH = CQ()
     # we need the same nested looping and if _idx==idx as in comp_vertuple, test if Cptuple for comp_ptuple?
     # old:
-    dtuple = comp_ptuple(_derH.Q[0], derH.Q[0])  # all compared pars are in Qd, including 0der
+    dtuple = comp_ptuple(_derH.Qd[0], derH.Qd[0])  # all compared pars are in Qd, including 0der
     add_dtuple(dderH, dtuple)
     elev = 0
-    for i, (_ptuple,ptuple) in enumerate(zip(_derH.Q[1:], derH.Q[1:])):
+    for i, (_ptuple,ptuple) in enumerate(zip(_derH.Qd[1:], derH.Qd[1:])):
 
         if _derH.fds[elev]!=derH.fds[elev]:  # fds start from 2nd lay
             break
@@ -308,10 +330,12 @@ def comp_vertuple(_vertuple, vertuple):
 
     dtuple=CQ(n=_vertuple.n)
     rn = _vertuple.n/vertuple.n  # normalize param as param*rn for n-invariant ratio: _param/ param*rn = (_param/_n)/(param/n)
-    _idx, idx, d_didx = 0,0,0
+    _idx, idx, d_didx = -1,-1,0
 
     for _i, _didx in enumerate(_vertuple.Q):  # i: index in Qd (select param set), idx: index in pnames (full param set)
+        _idx +=_didx
         for i, didx in enumerate(vertuple.Q[_i:]): # idx at i<_i won't match _idx
+            idx += didx
             if _idx==idx:
                 m,d = comp_par(_vertuple.Qd[_i], vertuple.Qd[i+_i]*rn, aves[idx])
                 dtuple.Qm += [m]; dtuple.Qd += [d]
@@ -321,8 +345,6 @@ def comp_vertuple(_vertuple, vertuple):
                 d_didx += _didx
                 break  # no par search beyond current index
             # else _idx > idx: continue search
-            idx += didx
-        _idx +=_didx
 
     return dtuple
 
@@ -409,13 +431,13 @@ def sum_G(G, g, fmerge=0):  # g is a node in G.node_
 # not fully updated
 def sum_aggH(AggH, aggH):
 
-    for SubH, subH in zip_longest(AggH.Q, aggH.Q, fillvalue=None):
+    for SubH, subH in zip_longest(AggH.Qd, aggH.Qd, fillvalue=None):
         if subH:
             if SubH:
-                for DerH, derH in(zip_longest(SubH.Q, subH.Q, fillvalue=None)):  # derH could be ext here? If yes we need to check and add
+                for DerH, derH in(zip_longest(SubH.Qd, subH.Qd, fillvalue=None)):  # derH could be ext here? If yes we need to check and add
                     if derH:
                         if DerH:
-                            sum_derH(DerH.Q, derH.Q)
+                            sum_derH(DerH.Qd, derH.Qd)
                         else:
                             SubH.Q += [deepcopy(derH)]
             else:
