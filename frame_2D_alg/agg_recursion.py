@@ -142,10 +142,17 @@ def graph_reval(graph_, reval_, fd):  # recursive eval nodes for regraph, after 
 
     return regraph_
 
-def prune_node_layer(regraph, graph_H, node, fd):  # recursive depth-first regraph.Q+=[_node]
+def prune_node_layer(regraph, graph_H, node, fd): # recursive depth-first regraph.Q+=[_node]
 
+    link_ = node.link_.Qd if fd else node.link_.Qm
+    for link in link_:  # all positive in-graph links, Qm is actually Qr: rng+
+
+        _node = link.G[1] if link.G[0] is node else link.G[0]
+        _val = [_node.link_.mval, _node.link_.dval][fd]
+        link.valt[fd] += (_val / len(_node.link_) * med_decay) - link.valt[fd]
+        # link val += norm _node.val, adjust node.val in next round
     relink_=[]
-    for link in node.link_.Qd if fd else node.link_.Qm:  # all positive in-graph links, Qm is actually Qr: rng+
+    for link in  link_:  # prune revalued nodes and links
 
         _node = link.G[1] if link.G[0] is node else link.G[0]
         _val = [_node.link_.mval, _node.link_.dval][fd]
@@ -154,13 +161,12 @@ def prune_node_layer(regraph, graph_H, node, fd):  # recursive depth-first regra
             regraph.Q += [_node]
             graph_H.remove(_node)
             regraph.valt[fd] += _val
-            prune_node_layer(regraph, graph_H, _node, fd)
-            # adjust link val by _node.val, adjust node.val in next round:
-            link.valt[fd] += (_val / len(_node.link_) * med_decay) - link.valt[fd]
-            relink_+=[link]
+            relink_ += [link]  # remove link?
 
-    [node.link_.Qd,node.link_.Qm][fd][:] = relink_  # contains links to graph nodes only
+    if regraph.valt[fd] > G_aves[fd]:  # else skip, currently in graph_reval, move here?
+        prune_node_layer(regraph, graph_H, _node, fd)  # not sure about _node
 
+    [node.link_.Qd,node.link_.Qm][fd][:] = relink_  # links to in-graph nodes only
 
 def add_node_layer(gnode_, G_, G, fd, val):  # recursive depth-first gnode_+=[_G]
 
@@ -253,47 +259,44 @@ def comp_G(_G, G):  # in GQ
     '''
     return daggH
 
-# draft:
+# # replace with comp_parQ
 def comp_aggH(_aggH, aggH):  # aggH ( subH ( derH:
     # syntax = lower composition orders, represented selectively by Q: name'index'increments
     # not updated, may need changes similar to comp_derH
     # same fds?
     # daggH:
-    daggH = CQ(fds=copy(_aggH.fds)); elev=0       
+    daggH = CQ(fds=copy(_aggH.fds)); elev=0
     _idx, idx, d_didx = -1,-1,0
-    for _i, _didx in enumerate(_aggH.Q): 
+    for _i, _didx in enumerate(_aggH.Q):
         _idx +=_didx
-        for i, didx in enumerate(aggH.Q[_i:]): 
+        for i, didx in enumerate(aggH.Q[_i:]):
             idx += didx
             if _idx==idx:
                 if _aggH.fds[elev]!=aggH.fds[elev]:
                     break
                 if elev in (0,1) or not (_i+1)%(2**elev):  # first 2 levs are single-element, higher levs are 2**elev elements
                     elev+=1  # elevation
-                    
                 # dsubH:
                 _subH = aggH.Qd[i]; subH = aggH.Qd[_i+i]
                 dsubH = CQ(fds=copy(_subH.fds)); selev = 0
-                
                 _sidx, sidx, d_sdidx = -1,-1,0
-                for _si, _sdidx in enumerate(_subH.Q): 
+                for _si, _sdidx in enumerate(_subH.Q):
                     _sidx +=_sdidx
-                    for si, sdidx in enumerate(subH.Q[_i:]): 
+                    for si, sdidx in enumerate(subH.Q[_i:]):
                         sidx += sdidx
                         if _sidx==sidx:
                             if _subH.fds[selev] != subH.fds[selev]:
                                 break
-                            if selev in (0,1) or not (_si+1)%(2**selev):  
-                                selev+=1  # elevation     
-                                
+                            if selev in (0,1) or not (_si+1)%(2**selev):
+                                selev+=1  # elevation
                             # dderH:
                             _derH = _subH.Qd[_si]; derH = subH.Qd[si]
-                            dderH = comp_derH(_derH, derH, _si,_i)  
-                            dsubH.Qd += [dderH]; dsubH.Q += [_sidx+d_sdidx]       
-                        elif _sidx < sidx:  
+                            dderH = comp_derH(_derH, derH, _si,_i)
+                            dsubH.Qd += [dderH]; dsubH.Q += [_sidx+d_sdidx]
+                        elif _sidx < sidx:
                             d_sdidx += _sdidx
-                            break  
-                daggH.Qd += [dsubH]; daggH.Q += [_idx+d_didx]    
+                            break
+                daggH.Qd += [dsubH]; daggH.Q += [_idx+d_didx]
                 break
 
             elif _idx < idx:  # no dpar per _par
@@ -303,12 +306,12 @@ def comp_aggH(_aggH, aggH):  # aggH ( subH ( derH:
 
     return daggH
 
-# not fully updated, unpack this in a similar way as in comp_aggH?
+# replace with comp_parQ
 def comp_derH(_derH, derH, j,k):
 
     dderH = CQ()
-    # we need the same nested looping and if _idx==idx as in comp_vertuple, test if Cptuple for comp_ptuple?
-    # old:
+
+    # This won't work in higher-der derHs, so it should be replaced with test if Cptuple for comp_ptuple:
     dtuple = comp_ptuple(_derH.Qd[0], derH.Qd[0])  # all compared pars are in Qd, including 0der
     add_dtuple(dderH, dtuple)
     elev = 0
@@ -428,7 +431,7 @@ def sum_G(G, g, fmerge=0):  # g is a node in G.node_
             else:           G.alt_Graph = deepcopy(g.alt_graph)
     else: G.node_ += [g]
 
-# not fully updated
+# not fully updated, should be summing both Qm and Qd, + adjusting didx s in Q by inserted aggH elements.
 def sum_aggH(AggH, aggH):
 
     for SubH, subH in zip_longest(AggH.Qd, aggH.Qd, fillvalue=None):
