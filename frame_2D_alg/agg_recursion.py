@@ -200,7 +200,7 @@ def comp_G_(G_, pri_G_=None, f1Q=1, fsub=0):  # cross-comp Graphs if f1Q, else G
                     # not revised:
                     daggH, (mval, dval) = comp_GQ(_G,G)  # comp_G while G.G, H/0G: GQ is one distributed node?
                     ext = [1,distance,[dy,dx]]  # ext -> ext pair: new der_nodes / Graph:
-                    derG = Cgraph(valt=[mval,dval], G=[_G,G], aggH=ext+daggH, box=[])  # box is redundant to G
+                    derG = Cgraph(valt=[mval,dval], G=[_G,G], aggH=[ext]+daggH, box=[])  # box is redundant to G
                     # add links:
                     _G.link_.Q += [derG]; _G.link_.valt[0]+=mval; _G.link_.valt[1]+=dval  # no didx
                     G.link_.Q += [derG]; G.link_.valt[0]+=mval; G.link_.valt[1]+=dval
@@ -240,7 +240,7 @@ def comp_G(_G, G):  # in GQ
         _fd = _G.root.fds[-1] if _G.root.fds else 0; fd = G.root.fds[-1] if G.root.fds else 0
         _aggH, aggH = _G.aggH[_fd], G.aggH[fd]  # derG in comp node_?
 
-    daggH = comp_aggH(_aggH, aggH)
+    daggH = comp_parQ(_aggH, aggH)
     # spec:
     _node_, node_ = _G.node_, G.node_  # link_ if fd, sub_node should be empty
     # below is not updated
@@ -259,97 +259,40 @@ def comp_G(_G, G):  # in GQ
     '''
     return daggH
 
-# # replace with comp_parQ
-def comp_aggH(_aggH, aggH):  # aggH ( subH ( derH:
-    # syntax = lower composition orders, represented selectively by Q: name'index'increments
-    # not updated, may need changes similar to comp_derH
-    # same fds?
-    # daggH:
-    daggH = CQ(fds=copy(_aggH.fds)); elev=0
-    _idx, idx, d_didx = -1,-1,0
-    for _i, _didx in enumerate(_aggH.Q):
+def comp_parQ(_QH, QH):
+    
+    dH = CQ(fds=copy(_QH.fds)); elev=0
+    _idx, idx, d_didx = -1,-1,0  # starts from -1 because Q starts from 1, while index starts from 0
+    for _i, _didx in enumerate(_QH.Q):
         _idx +=_didx
-        for i, didx in enumerate(aggH.Q[_i:]):
+        for i, didx in enumerate(QH.Q[_i:]):
             idx += didx
             if _idx==idx:
-                if _aggH.fds[elev]!=aggH.fds[elev]:
+                if _QH.fds and QH.fds and _QH.fds[elev]!=QH.fds[elev]:  # vertuple doesn't have fds
                     break
                 if elev in (0,1) or not (_i+1)%(2**elev):  # first 2 levs are single-element, higher levs are 2**elev elements
                     elev+=1  # elevation
-                # dsubH:
-                _subH = aggH.Qd[i]; subH = aggH.Qd[_i+i]
-                dsubH = CQ(fds=copy(_subH.fds)); selev = 0
-                _sidx, sidx, d_sdidx = -1,-1,0
-                for _si, _sdidx in enumerate(_subH.Q):
-                    _sidx +=_sdidx
-                    for si, sdidx in enumerate(subH.Q[_i:]):
-                        sidx += sdidx
-                        if _sidx==sidx:
-                            if _subH.fds[selev] != subH.fds[selev]:
-                                break
-                            if selev in (0,1) or not (_si+1)%(2**selev):
-                                selev+=1  # elevation
-                            # dderH:
-                            _derH = _subH.Qd[_si]; derH = subH.Qd[si]
-                            dderH = comp_derH(_derH, derH, _si,_i)
-                            dsubH.Qd += [dderH]; dsubH.Q += [_sidx+d_sdidx]
-                        elif _sidx < sidx:
-                            d_sdidx += _sdidx
-                            break
-                daggH.Qd += [dsubH]; daggH.Q += [_idx+d_didx]
-                break
-
-            elif _idx < idx:  # no dpar per _par
-                d_didx += _didx
-                break  # no par search beyond current index
-            # else _idx > idx: continue search
-
-    return daggH
-
-# replace with comp_parQ
-def comp_derH(_derH, derH, j,k):
-
-    dderH = CQ()
-
-    # This won't work in higher-der derHs, so it should be replaced with test if Cptuple for comp_ptuple:
-    dtuple = comp_ptuple(_derH.Qd[0], derH.Qd[0])  # all compared pars are in Qd, including 0der
-    add_dtuple(dderH, dtuple)
-    elev = 0
-    for i, (_ptuple,ptuple) in enumerate(zip(_derH.Qd[1:], derH.Qd[1:])):
-
-        if _derH.fds[elev]!=derH.fds[elev]:  # fds start from 2nd lay
-            break
-        if not i%(2**elev):  # first 2 levs are single-element, higher levs are 2**elev elements
-            elev += 1
-        if j: dtuple = comp_vertuple(_ptuple, ptuple)  # local comps pack results in dderH
-        else: dtuple = comp_ext(_ptuple, ptuple, k)  # if 1st derH in subH, comp_angle if 1st subH in aggH?
-
-        dderH.fds += _derH.fds[elev]
-        add_dtuple(dderH, dtuple)
-
-    return dderH
-
-def comp_vertuple(_vertuple, vertuple):
-
-    dtuple=CQ(n=_vertuple.n)
-    rn = _vertuple.n/vertuple.n  # normalize param as param*rn for n-invariant ratio: _param/ param*rn = (_param/_n)/(param/n)
-    _idx, idx, d_didx = -1,-1,0
-
-    for _i, _didx in enumerate(_vertuple.Q):  # i: index in Qd (select param set), idx: index in pnames (full param set)
-        _idx +=_didx
-        for i, didx in enumerate(vertuple.Q[_i:]): # idx at i<_i won't match _idx
-            idx += didx
-            if _idx==idx:
-                m,d = comp_par(_vertuple.Qd[_i], vertuple.Qd[i+_i]*rn, aves[idx])
-                dtuple.Qm += [m]; dtuple.Qd += [d]
-                dtuple.Q += [d_didx + _didx]
+                if _QH.n>0 and QH.n>0:
+                    rn = _QH.n/QH.n   
+                    m,d = comp_par(_QH.Qd[_i], QH.Qd[i+_i]*rn, aves[idx])
+                    dH.Qm += [m]; dH.Qd += [d]
+                    dH.n = _QH.n
+                else:
+                    if isinstance(_QH.Qd[_i],Cptuple):  # 1st derH may be ptuple
+                        sub_dH = comp_ptuple(_QH.Qd[_i], QH.Qd[_i+i]) 
+                    else:
+                        if isinstance(_QH.Qd[_i], list) and isinstance(_QH.Qd[_i][0],int):  # comp_ext
+                            sub_dH = comp_ext(_QH.Qd[_i], QH.Qd[_i+i])
+                        else:  
+                            sub_dH = comp_parQ(_QH.Qd[_i], QH.Qd[_i+i])
+                    dH.Qd += [sub_dH]
+                dH.Q += [d_didx + _didx] 
                 break
             elif _idx < idx:  # no dpar per _par
                 d_didx += _didx
                 break  # no par search beyond current index
             # else _idx > idx: continue search
-
-    return dtuple
+    return dH
 
 
 def comp_ext(_ext, ext, k):  # comp ds only, add Qn?
