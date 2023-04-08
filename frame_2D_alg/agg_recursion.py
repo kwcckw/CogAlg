@@ -270,24 +270,49 @@ def comp_parH(_parH, parH):  # may compare derH, subH, aggH
         for i, didx in enumerate(parH.Q[_i:]):
             idx += didx
             if _idx==idx:
-                if elev in (0,1) or not (_i+1)%(2**elev):  # first 2 levs are single-element, higher levs are 2**elev elements
-                    elev+=1  # elevation
-                if _parH.n and parH.n:  # parH is vertuple, ptuple, or ext, no fds
-                    dtuple = comp_ptuple(_parH, parH)
-                    add_dtuple(dparH,dtuple)
-                elif _parH.fds[elev]!=parH.fds[elev]:  # always fds if not n
-                    mH,dH = comp_parH(_parH.Qd[_i], parH.Qd[_i + i])
-                    dparH.Qm += [mH]; dparH.Qd += [dH]
-                    dparH.Q += [d_didx + _didx]
-                    dparH.fds += _parH.fds[elev]
+                if _parH.fds[elev]==parH.fds[elev]:  # always fds if not n (why we use !=， should be ==?)
+                    _d = _parH.Qd[_i]; d = parH.Qd[_i + i]                
+
+                    if _d.n and d.n:  # parH is vertuple, ptuple, or ext, no fds
+                        rn = _d.n/d.n
+                        # ptuple
+                        if isinstance(_d, Cptuple):  # ptuple
+                            for pname, ave in zip(pnames, aves):
+                                _par = getattr(_d, pname)
+                                par = getattr(d, pname)
+                                if pname=="aangle": m,d = comp_aangle(_par, par)
+                                elif pname in ("axis","angle"): m,d = comp_angle(_par, par)
+                                else:
+                                    if pname!="x": par*=rn  # normalize by relative accum count
+                                    if pname=="x" or pname=="I": finv = 1
+                                    else: finv=0
+                                    m,d = comp_par(_par, par, ave, finv)
+                                # this line should replace add_dtuple
+                                dparH.Qm += [m]; dparH.Qd += [d]; dparH.Q += [1]; dparH.valt[0] += m; dparH.valt[1] += d              
+                        # vertuple's param
+                        else:   
+                            m,d = comp_par(_d, d*rn, aves[idx])
+                            dparH.Qm += [m]; dparH.Qd += [d]; dparH.Q += [1]
+                            dparH.n = _parH.n
+                    else: 
+                        dH= comp_parH(_d, d)  # mH should be empty? unless it is from ptuple or vertuple
+                        dparH.Qd += [dH]
+                        dparH.Q += [d_didx + _didx]
+                        dparH.fds += _parH.fds[elev]
                 break
             elif _idx < idx:  # no dpar per _par
                 d_didx += _didx
                 break  # no par search beyond current index
             # else _idx > idx: continue search
+            
+        # elev should be incremented at the end？ Else it will be started at 1
+        if elev in (0,1) or not (_i+1)%(2**elev):  # first 2 levs are single-element, higher levs are 2**elev elements
+            elev+=1  # elevation  
 
     return dparH
 
+
+# actually this should be inside comp_parH too? Because this won't work for ptuple, they do not have Q
 def comp_ptuple(_ptuple, ptuple):  # may be ptuple, vertuple, or ext
 
     dtuple=CQ(n=_ptuple.n)  # combine with ptuple.n?
