@@ -270,15 +270,16 @@ def comp_parH(_parH, parH):  # unpack aggH( subH( derH -> ptuple
         for i, didx in enumerate(parH.Q[_i:]):  # idx at i<_i won't match _idx
             idx += didx
             if _idx==idx:
-                if _parH.fds[elev]==parH.fds[elev] and _parH.Qm[_i]+parH.Qd[_i+i] > aveG:  # same-type eval
+                Qval = sum(parH.Qd[_i+i].valt) + sum(_parH.Qm[_i].valt) if len(_parH.Qm) > (_i) else 0  # Qm maybe a empty list
+                if _parH.fds[elev]==parH.fds[elev] and Qval > aveG:  # same-type eval   
                     _sub = _parH.Qd[_i]; sub = parH.Qd[_i+i]
                     if sub.n:
                         dsub = comp_ptuple(_sub,sub)  # sub is vertuple, ptuple, or ext
                     else:
                         dsub = comp_parH(_sub,sub)  # keep unpacking
-                    dparH.Qm+=[[dsub.Qm]]; dparH.Qd+=[[dsub.Qd]]; dparH.Q+=[d_didx+_didx]
-                    dparH.valt[0]+=dsub.valt[0]; dparH+=dsub.valt[1]  # add rdnt?
-                    dparH.fds += _parH.fds[elev]
+                    dparH.Qm+=[[]]; dparH.Qd+=[dsub.Qd]; dparH.Q+=[d_didx+_didx]  # temporary fill with [], not sure
+                    dparH.valt[0]+=dsub.valt[0]; dparH.valt[1]+=dsub.valt[1]  # add rdnt?
+                    dparH.fds += [_parH.fds[elev]]
                     break
             elif _idx < idx:  # no dsub per _sub
                 d_didx += _didx
@@ -300,19 +301,25 @@ def comp_ptuple(_ptuple, ptuple):  # may be ptuple, vertuple, or ext
         _idx += _didx
         for i, didx in enumerate(ptuple.Q[_i:]):
             idx += didx
-            if _idx==idx and _ptuple.Qm[_i]+ptuple.Qd[_i+i] > aveG:
-                _par, par = _ptuple.Qd[_i], ptuple.Qd[_i+i]*rn  # may be scalar, angle, or aangle
+            if isinstance(_ptuple.Qm[_i], list):  # angle, aangle and axis
+                Qval = np.sum(_ptuple.Qm[_i]+ptuple.Qd[_i+i])
+            else:
+                Qval = _ptuple.Qm[_i]+ptuple.Qd[_i+i]            
+            if _idx==idx and Qval > aveG:
+                _par, par = _ptuple.Qd[_i], ptuple.Qd[_i+i]  # may be scalar, angle, or aangle (we can't *rn here because they might be a list)
                 if isinstance(par,list):
-                    if isinstance(par[0],list): m,d = comp_aangle(_par,par)
+                    if len(par) == 4: m,d = comp_aangle(_par,par)  # aangle is tuple of 4
                     else: m,d = comp_angle(_par,par)
                 else:
-                    m,d = comp_par(_par, par, aves[idx])  # pname=pnames[idx], but we don't need it
+                    m,d = comp_par(_par, par*rn, aves[idx])  # pname=pnames[idx], but we don't need it
                 dtuple.Qm+=[m]; dtuple.Qd+=[d]; dtuple.Q+=[d_didx+_didx]
                 dtuple.valt[0]+=m; dtuple.valt[1]+=d  # no rdnt?
                 break
             elif _idx < idx:  # no dpar per _par
                 d_didx+=_didx
                 break  # no par search beyond current index
+            else:  # should break here too? else it will continue searching and idx will be incremented regardless
+                break
             # else _idx>idx: keep searching
     return dtuple
 
