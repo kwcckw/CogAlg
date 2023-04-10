@@ -366,13 +366,14 @@ def PP2graph(PP, fseg, ifd=1):
                 pQ = CQ(n=dderH.n)
                 for pname in pnames:
                     par = getattr(dderH, pname)
-                    pQ.Qm += [0]; pQ.Qd += [par]; pQ.Q += [1]
-                    if pname not in ["angle", "aangle", "axis"]:
-                        pQ.dval += par; pQ.valt[1] += par
+                    if pname != "x":  # exclude x
+                        pQ.Qm += [0]; pQ.Qd += [par]; pQ.Q += [0]
+                        if pname not in ["angle", "aangle", "axis"]:
+                            pQ.dval += par; pQ.valt[1] += par
                 alt_derH.Qd += [pQ]
             else:  # vertuple
                 alt_derH.Qd += [dderH]
-            alt_derH.Q += [1]; alt_derH.fds += [1] 
+            alt_derH.Q += [1]; alt_derH.fds += [1]
     alt_Graph = Cgraph(aggH=alt_aggH, valt=alt_valt, rdnt=alt_rdnt, box=alt_box)
 
     Qd = []; Q = []; fds = []
@@ -381,9 +382,10 @@ def PP2graph(PP, fseg, ifd=1):
             pQ = CQ(n=dderH.n)
             for pname in pnames:
                 par = getattr(dderH, pname)
-                pQ.Qm += [0]; pQ.Qd += [par]; pQ.Q += [1]
-                if pname not in ["angle", "aangle", "axis"]:
-                    pQ.dval += par; pQ.valt[1] += par
+                if pname != "x":  # exclude x
+                    pQ.Qm += [0]; pQ.Qd += [par]; pQ.Q += [0]
+                    if pname not in ["angle", "aangle", "axis"]:
+                        pQ.dval += par; pQ.valt[1] += par
             Qd += [pQ]
         else:  # vertuple
             Qd += [dderH]
