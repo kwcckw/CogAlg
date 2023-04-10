@@ -268,7 +268,7 @@ def comp_parH(_parH, parH):  # unpack aggH( subH( derH -> ptuples
         _idx += _didx; idx = last_idx
         for i, didx in enumerate(parH.Q[last_i:]):  # start with last matching i and idx
             idx += didx
-            if _idx==idx:
+            if _idx==idx and len(_parH.fds)>elev and len(parH.fds)>elev:  # _parH and parH might have different number of Qd, might converted PP doesn't have vertuple
                 _fd = _parH.fds[elev]; fd = parH.fds[elev]
                 if _fd==fd and _parH.Qd[_i].valt[fd] + parH.Qd[_i+i].valt[fd] > aveG:  # same-type eval
                     _sub = _parH.Qd[_i]; sub = parH.Qd[_i+i]
@@ -296,13 +296,15 @@ def comp_ptuple(_ptuple, ptuple):  # may be ptuple, vertuple, or ext
 
     dtuple=CQ(n=_ptuple.n)  # combine with ptuple.n?
     rn = _ptuple.n/ptuple.n  # normalize param as param*rn for n-invariant ratio: _param/ param*rn = (_param/_n)/(param/n)
-    _idx, idx, last_i, last_idx, d_didx = 0,0,0,0,0
+    _idx, idx, last_i, d_didx = 0,0,0,0,
 
     for _i, _didx in enumerate(_ptuple.Q):  # i: index in Qd (select param set), idx: index in full param set
-        _idx += _didx; idx = last_idx
+        _idx += _didx
         for i, didx in enumerate(ptuple.Q[last_i:]):  # start with last matching i and idx
             idx += didx
-            if _idx == idx:
+             # i think we need to add evaluation for both skipped _idx and idx here?
+             # because below will be true even if a same index is skipped for both _ptuple and ptuple
+            if _idx == idx and False: 
                 if ptuple.Qm: val = _ptuple.Qm[_i]+ptuple.Qm[_i+i]
                 else: val = aveG+1  # default comp for 0der pars,
                     # set finv=0 for I?
@@ -314,8 +316,9 @@ def comp_ptuple(_ptuple, ptuple):  # may be ptuple, vertuple, or ext
                     else:
                         m,d = comp_par(_par, par*rn, aves[idx])
                     dtuple.Qm+=[m]; dtuple.Qd+=[d]; dtuple.Q+=[d_didx+_didx]
-                    dtuple.valt[0]+=m; dtuple.valt[1]+=d  # no rdnt?
-                last_i=i; last_idx=idx  # last matching i,idx
+                    dtuple.valt[0]+=m; dtuple.valt[1]+=d  # no rdnt? (rdn based on m>d or d>m?)
+                last_i=_i+1  # last matching i (should be _i+1 here, because i starts from last_i, and current index is _i, so we need to +1)
+                _idx += 1; idx+= 1 # if Q is init as 0, then we need to + 1 here so that it will be pointing to the next pname, then last idx actually will be not needed
                 break
             elif _idx < idx:  # no dpar per _par
                 d_didx += didx
