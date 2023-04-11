@@ -313,11 +313,11 @@ def blob2graph(blob, fseg):
     PPm_ = blob.PPm_; PPd_ = blob.PPd_
     x0, xn, y0, yn = blob.box
 
-    alt_mblob = Cgraph(fds=copy(PPm_[0].fds), aggH=CQ(Q=[CQ(Q=[])]), rng=PPm_[0].rng, box=[(y0+yn)/2,(x0+xn)/2, y0,yn, x0,xn])
-    alt_dblob = Cgraph(fds=copy(PPd_[0].fds), aggH=CQ(Q=[CQ(Q=[])]), rng=PPm_[0].rng, box=[(y0+yn)/2,(x0+xn)/2, y0,yn, x0,xn])
+    alt_mblob = Cgraph(fds=copy(PPm_[0].fds), aggH=CQ(Qd=[CQ(Qd=[])]), rng=PPm_[0].rng, box=[(y0+yn)/2,(x0+xn)/2, y0,yn, x0,xn])
+    alt_dblob = Cgraph(fds=copy(PPd_[0].fds), aggH=CQ(Qd=[CQ(Qd=[])]), rng=PPm_[0].rng, box=[(y0+yn)/2,(x0+xn)/2, y0,yn, x0,xn])
 
-    mblob = Cgraph(fds=copy(PPm_[0].fds), aggH=CQ(Q=[CQ(Q=[])]), alt_Graph=alt_mblob, rng=PPm_[0].rng, box=[(y0+yn)/2,(x0+xn)/2, y0,yn, x0,xn])
-    dblob = Cgraph(fds=copy(PPd_[0].fds), aggH=CQ(Q=[CQ(Q=[])]), alt_Graph=alt_dblob, rng=PPd_[0].rng, box=[(y0+yn)/2,(x0+xn)/2, y0,yn, x0,xn])
+    mblob = Cgraph(fds=copy(PPm_[0].fds), aggH=CQ(Qd=[CQ(Qd=[])]), alt_Graph=alt_mblob, rng=PPm_[0].rng, box=[(y0+yn)/2,(x0+xn)/2, y0,yn, x0,xn])
+    dblob = Cgraph(fds=copy(PPd_[0].fds), aggH=CQ(Qd=[CQ(Qd=[])]), alt_Graph=alt_dblob, rng=PPd_[0].rng, box=[(y0+yn)/2,(x0+xn)/2, y0,yn, x0,xn])
 
     blob.mgraph = mblob  # update graph reference
     blob.dgraph = dblob  # update graph reference
@@ -372,7 +372,9 @@ def PP2graph(PP, fseg, ifd=1):
                             pQ.dval += par; pQ.valt[1] += par
                 alt_derH.Qd += [pQ]
             else:  # vertuple
-                alt_derH.Qd += [dderH]
+                QdderH = deepcopy(dderH)
+                QdderH.Qm.pop(-2); QdderH.Qd.pop(-2); QdderH.Q.pop(-2)  # remove x from existing vertuple
+                alt_derH.Qd += [QdderH]
             alt_derH.Q += [1]; alt_derH.fds += [1]
     alt_Graph = Cgraph(aggH=alt_aggH, valt=alt_valt, rdnt=alt_rdnt, box=alt_box)
 
@@ -388,7 +390,9 @@ def PP2graph(PP, fseg, ifd=1):
                         pQ.dval += par; pQ.valt[1] += par
             Qd += [pQ]
         else:  # vertuple
-            Qd += [dderH]
+            QdderH = deepcopy(dderH)
+            QdderH.Qm.pop(-2); QdderH.Qd.pop(-2); QdderH.Q.pop(-2)  # remove x from existing vertuple
+            Qd += [QdderH]
         Q += [1]; fds += [1]
 
     derH = CQ(Qd=Qd, Q=Q, fds=fds)
