@@ -46,6 +46,7 @@ ave_sparsity = 2
 med_decay = .5  # decay of induction per med layer
 
 pnames = ["I", "M", "Ma", "axis", "angle", "aangle","G", "Ga", "L"]
+aves = [ave_dI, ave_M, ave_Ma, ave_daxis, ave_dangle, ave_daangle, ave_G, ave_Ga, ave_L, ave_mval, ave_dval]
 
 class Cgraph(ClusterStructure):  # params of single-fork node_ cluster per pplayers
     ''' ext / agg.sub.derH:
@@ -169,9 +170,9 @@ def graph_reval(graph, fd):  # recursive depth-first regraph+=[_node] for hierar
                 _node = link.G[1] if link.G[0] is node else link.G[0]
                 _val = [_node.link_.mval, _node.link_.dval][fd]
                 # ave / link val + linked node val:
-                if _val > G_aves[fd] and _node in graph:
+                if _val > G_aves[fd] and _node in graph.Q:
                     regraph.Q += [_node]
-                    graph.remove(_node)
+                    graph.Q.remove(_node)
                     regraph.valt[fd] += _val
                     relink_ += [link]  # remove link?
                     reval += _val  # probably wrong
@@ -226,7 +227,7 @@ def comp_GQ(_G, G):  # compare lower-derivation G.G.s, pack results in mderH_,dd
 
     while (_G and G) and Tval > aveG:  # same-scope if sub+, no agg+ G.G
         daggH = comp_G(_G, G)
-        daggH_+= [daggH]
+        daggH_+= [daggH]  # i checked and we have an additional layer of nesting here, suppose aggH.Q = list of subHs, but here we got list of aggHs, so we should merge those aggH instead? Else we may need another level, something like levH.Q to pack aggHs. 
         for i in 0,1:
             Valt[i] += daggH.valt[i]; Rdnt[i] += daggH.rdnt[i]
         _G = _G.G; G = G.G
@@ -275,13 +276,17 @@ def comp_parH(_parH, parH):  # unpack aggH( subH( derH -> ptuples
                 _fd = _parH.fds[elev]; fd = parH.fds[elev]  # fd per lev, not sub
                 if _fd==fd and _parH.Qd[_i].valt[fd] + parH.Qd[_i+i].valt[fd] > aveG:  # same-type eval
                     _sub = _parH.Qd[_i]; sub = parH.Qd[_i+i]
-                    if sub.n:
-                        dsub = comp_ptuple(_sub,sub, fd)  # sub is vertuple, ptuple, or ext
-                    else:
-                        dsub = comp_parH(_sub,sub)  # keep unpacking aggH | subH | derH
+                    if isinstance(_sub, list) and isinstance(sub, list):  # ext
+                        dsub = comp_ext(_sub, sub)   
+                    else: 
+                        if sub.n:
+                            dsub = comp_ptuple(_sub,sub, fd)  # sub is vertuple, ptuple, or ext (ext should be a list?)
+                        else:
+                            dsub = comp_parH(_sub,sub)  # keep unpacking aggH | subH | derH
+                        dparH.valt[0]+=dsub.valt[0]; dparH.valt[1]+=dsub.valt[1]  # add rdnt?
                     dparH.fds += [fd]
                     dparH.Qd+=[dsub]; dparH.Q+=[_didx+d_didx]
-                    dparH.valt[0]+=dsub.valt[0]; dparH.valt[1]+=dsub.valt[1]  # add rdnt?
+                    
                     last_i=i; last_idx=idx  # last matching i,idx
                     break
             elif _idx < idx:  # no dsub / _sub
@@ -295,6 +300,21 @@ def comp_parH(_parH, parH):  # unpack aggH( subH( derH -> ptuples
 
     return dparH
 
+
+# this is outdated, but we still need comp_ext right? Why it is removed earlier?
+def comp_ext(_ext, ext, k):  # comp ds only, add Qn?
+    _L,_S,_A = _ext; L,S,A = ext
+
+    dS = _S - S; mS = min(_S, S)  # average distance between connected nodes, single distance if derG
+    dL = _L - L; mL = min(_L, L)
+    if _A and A:
+        # axis: dy,dx only for derG or high-aspect Gs, both val *= aspect?
+        if k: dA = _A[1] - A[1]; mA = min(_A[1], A[1])  # scalar mA,dA
+        else: mA, dA = comp_angle(_A, A)
+    else:
+        mA,dA = 0,0
+
+    return CQ(Qm=[mL,mS,mA],Qd=[mL,mS,mA], valt=[mL+mS+mA,dL+dS+dA])
 
 def comp_ptuple(_ptuple, ptuple, fd):  # may be ptuple, vertuple, or ext
 
@@ -349,7 +369,7 @@ def sum2graph_(graph_, fd, fsub=0):  # sum node and link params into graph, derH
             G = Cgraph(fds=copy(iG.fds)+[fd], root=Graph, node_=link_, box=copy(iG.box))  # no sub_nodes in derG, remove if <ave?
             for derG in link_:
                 sum_box(G.box, derG.G[0].box if derG.G[1] is iG else derG.G[1].box)
-                sum_derH(G.derH, derG.derH[fd])  # two-fork derGs are not modified
+                sum_aggH(G.aggH, derG.aggH)  # two-fork derGs are not modified
                 Graph.valt[0] += derG.valt[0]; Graph.valt[1] += derG.valt[1]
             add_ext(G.box, len(link_), G.derH[-1])  # composed node ext, not in derG.derH
             # if mult roots: sum_H(G.uH[1:], Graph.uH)
@@ -357,12 +377,12 @@ def sum2graph_(graph_, fd, fsub=0):  # sum node and link params into graph, derH
         Graph.root = iG.root  # same root, lower derivation is higher composition
         Graph.node_ = node_  # G| G.G| G.G.G..
         for derG in Link_:  # sum unique links, not box
-            sum_derH(Graph.derH, derG.derH[fd])
+            sum_aggH(Graph.aggH, derG.aggH[fd])
             Graph.valt[0] += derG.valt[0]; Graph.valt[1] += derG.valt[1]
         Ext = [0,0,[0,0]]
-        Ext = [sum_ext(Ext, G.derH[-1][1]) for G in node_]  # add composed node Ext
+        Ext = [sum_ext(Ext, G.aggH.Qd[0]) for G in node_]  # add composed node Ext
         add_ext(Graph.box, len(node_), Ext) # add composed graph Ext
-        Graph.derH += [Ext]  # [node Ext, graph Ext]
+        Graph.aggH.Qd.insert(0, Ext)  # [node Ext, graph Ext]
         # if Graph.uH: Graph.val += sum([lev.val for lev in Graph.uH]) / sum([lev.rdn for lev in Graph.uH])  # if val>alt_val: rdn+=len_Q?
         Graph_ += [Graph]
 
