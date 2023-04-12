@@ -350,7 +350,8 @@ def blob2graph(blob, fseg):
 # tentative, will be finalized when structure in agg+ is finalized
 def PP2graph(PP, fseg, ifd=1):
 
-    alt_derH = CQ(); alt_subH = CQ(Qd=[alt_derH],Q=[1], fds=[0]); alt_aggH = CQ(Qd=[alt_subH], Q=[1], fds=[1]); alt_valt = [0,0]; alt_rdnt = [0,0]; alt_box = [0,0,0,0]
+    alt_derH = CQ();
+    alt_subH = CQ(Qd=[alt_derH],Q=[1], fds=[0]); alt_aggH = CQ(Qd=[alt_subH], Q=[1], fds=[1]); alt_valt = [0,0]; alt_rdnt = [0,0]; alt_box = [0,0,0,0]
     if not fseg and PP.alt_PP_:  # seg doesn't have alt_PP_
         pQd = deepcopy(PP.alt_PP_[0].derH); alt_valt = copy(PP.alt_PP_[0].valt)
         alt_box = copy(PP.alt_PP_[0].box); alt_rdnt = copy(PP.alt_PP_[0].rdnt)
@@ -358,7 +359,7 @@ def PP2graph(PP, fseg, ifd=1):
             sum_derH(pQd, altPP.derH)
             Y0,Yn,X0,Xn = alt_box; y0,yn,x0,xn = altPP.box
             alt_box[:] = min(Y0,y0),max(Yn,yn),min(X0,x0),max(Xn,xn)
-            for i in range(2):
+            for i in 0,1:
                 alt_valt[i] += altPP.valt[i]
                 alt_rdnt[i] += altPP.rdnt[i]
         for dderH in pQd:
