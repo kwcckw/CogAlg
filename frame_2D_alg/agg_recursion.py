@@ -142,7 +142,7 @@ def graph_reval_(graph_, reval_, fd):  # recursive eval nodes for regraph, after
             continue
         reval = graph_reval(graph, fd)  # recursive depth-first node and link revaluation
         if graph.valt[fd] < aveG:
-            graph_.remove(graph)
+            # graph_.remove(graph) (this line is not needed? We already pop graph above)
             reval = graph.valt[fd]
         rreval_ += [reval]
         Reval += reval
@@ -167,17 +167,20 @@ def graph_reval(graph, fd):  # recursive depth-first regraph+=[_node], hierarchi
         [node.link_.mval,node.link_.dval][fd] = link_val
     reval = 0
     if Dval > aveG:
+        new_node_ = []
         for node in graph.Q:
             val = [node.link_.mval, node.link_.dval][fd]
             if val < G_aves[fd] and node in graph.Q:
                 # prune revalued node and its links:
-                graph.Q.remove(node)
                 reval += val
-                for link in node.link_.Qd if fd else node.link_.Qm:
+                for link in node.link_.Qd if fd else node.link_.Qm:  # this is to remove the removed's node links from other links?
                     _node = link.G[1] if link.G[0] is node else link.G[0]
                     _link_ = _node.link_.Qd if fd else node.link_.Qm
                     _link_.remove(link)
-                    reval += link.valt.fd  # nor sure about scaling
+                    reval += link.valt[fd]  # nor sure about scaling
+            else:
+                new_node_ += [node]
+        graph.Q = new_node_
         # recursion:
         if reval > aveG:
             reval += graph_reval(graph, fd)
@@ -200,11 +203,11 @@ def comp_G_(G_, pri_G_=None, f1Q=1, fsub=0):  # cross-comp Graphs if f1Q, else G
                 for _G, G in ((_iG, iG), (_iG.alt_Graph, iG.alt_Graph)):
                     if not _G or not G:  # or G.val
                         continue
-                    # not revised:
                     daggH = comp_GQ(_G,G)  # comp_G while G.G, H/0G: GQ is one distributed node?
-                    ext = [1,distance,[dy,dx]]  # ext -> ext pair: new der_nodes / Graph:
-                    mval, dval = daggH.valt[:]
-                    derG = Cgraph(valt=[mval,dval], G=[_G,G], aggH=[ext]+daggH, box=[])  # box is redundant to G
+                    ext = CQ(Qd=[1,distance,[dy,dx]], Q=[0,0,0])  # ext -> ext pair: new der_nodes / Graph:
+                    daggH.Qd.insert(0, ext); daggH.Q.insert(0,0)  # pack ext as the 1st element
+                    mval, dval = daggH.valt
+                    derG = Cgraph(valt=[mval,dval], G=[_G,G], aggH=daggH, box=[])  # box is redundant to G
                     # add links:
                     _G.link_.Q += [derG]; _G.link_.valt[0]+=mval; _G.link_.valt[1]+=dval  # no didx
                     G.link_.Q += [derG]; G.link_.valt[0]+=mval; G.link_.valt[1]+=dval
@@ -227,8 +230,8 @@ def comp_GQ(_G, G):  # compare lower-derivation G.G.s, pack results in mderH_,dd
 
     while (_G and G) and Tval > aveG:  # same-scope if sub+, no agg+ G.G
         daggH = comp_G(_G, G)
-        daggH_.Qd[-1].Qd += [daggH]
-        daggH.Q[-1] += [0]
+        daggH_.Qd += [daggH]  # we do not have anything assigned to daggH_.Qd  yet (daggH_.Qd[-1] is not exist), so here should be daggH.Qd += [daggH]?
+        daggH_.Q += [0]
         for i in 0,1:
             daggH_.valt[i] += daggH.valt[i]; daggH_.rdnt[i] += daggH.rdnt[i]
         _G = _G.G; G = G.G
@@ -357,12 +360,18 @@ def sum2graph_(graph_, fd, fsub=0):  # sum node and link params into graph, derH
         Graph.root = iG.root  # same root, lower derivation is higher composition
         Graph.node_ = node_  # G| G.G| G.G.G..
         for derG in Link_:  # sum unique links, not box
-            sum_aggH(Graph.aggH, derG.aggH[fd])
+            sum_aggH(Graph.aggH, derG.aggH)
             Graph.valt[0] += derG.valt[0]; Graph.valt[1] += derG.valt[1]
-        Ext = [0,0,[0,0]]
-        Ext = [sum_ext(Ext, G.aggH.Qd[0]) for G in node_]  # add composed node Ext
-        add_ext(Graph.box, len(node_), Ext) # add composed graph Ext
-        Graph.aggH.Qd.insert(0, Ext)  # [node Ext, graph Ext]
+        Ext = deepcopy(G.aggH.Qd[0])  # 1st Ext
+        for G in node_[1:]: 
+            Ext.Qd[0] += G.aggH.Qd[0].Qd[0]  # L
+            Ext.Qd[1] += G.aggH.Qd[0].Qd[1]  # S
+            Par = Ext.Qd[2]; par = G.aggH.Qd[0].Qd[2]  # A
+            sin_da0 = (Par[0] * par[1]) + (Par[1] * par[0])  # sin(A+B)= (sinA*cosB)+(cosA*sinB)
+            cos_da0 = (Par[1] * par[1]) - (Par[0] * par[0])  # cos(A+B)=(cosA*cosB)-(sinA*sinB)
+            Ext.Qd[2] = [sin_da0, cos_da0]
+        Graph.aggH.Qd.insert(0, Ext);  Graph.aggH.Q.insert(0,0)
+        
         # if Graph.uH: Graph.val += sum([lev.val for lev in Graph.uH]) / sum([lev.rdn for lev in Graph.uH])  # if val>alt_val: rdn+=len_Q?
         Graph_ += [Graph]
 
@@ -413,6 +422,9 @@ def sum_aggH(AggH, aggH):
                 AggH.Qd.insert[idx, aggH.Qd[idx]]
                 break
 
+
+# below should be not needed now？
+'''
 def add_ext(box, L, extt):  # add ext per composition level
     y,x, y0,yn, x0,xn = box
     dY = yn-y0; dX = xn-x0
@@ -428,6 +440,7 @@ def sum_ext(Ext, ext):
                 Ext[i][0] += param[0]; Ext[i][1] += param[1]
             else:
                 Ext[i] += param
+'''
 
 def sum_box(Box, box):
     Y, X, Y0, Yn, X0, Xn = Box;  y, x, y0, yn, x0, xn = box
