@@ -56,6 +56,7 @@ class Cgraph(ClusterStructure):  # params of single-fork node_ cluster per pplay
     '''
     G = lambda: None  # same-scope lower-der|rng G.G.G., or [G0,G1] in derG, None in PP
     root = lambda: None  # root graph or derH G, element of ex.H[-1][fd]
+    # rename this to parH now?
     aggH = lambda: list  # list of CQ derHs: derH) node_) H: Lev+= node tree slice/fb, Lev/agg+, lev/sub+?
     valt = lambda: [0,0]
     rdnt = lambda: [1,1]
@@ -165,8 +166,9 @@ def graph_reval(graph, fd):  # recursive depth-first regraph+=[_node], hierarchi
         Dval += [node.link_.mval,node.link_.dval][fd] - link_val
         [node.link_.mval,node.link_.dval][fd] = link_val
     reval = 0
-    regraph = CQ()  # reformed proto-graph
+    regraph = graph  # reformed proto-graph
     if Dval > aveG:
+        regraph = CQ()
         for node in graph.Q:
             val = [node.link_.mval, node.link_.dval][fd]
             if val < G_aves[fd] and node in graph.Q:  # prune revalued node and its links:
@@ -174,7 +176,7 @@ def graph_reval(graph, fd):  # recursive depth-first regraph+=[_node], hierarchi
                 for link in node.link_.Qd if fd else node.link_.Qm:
                     _node = link.G[1] if link.G[0] is node else link.G[0]
                     _link_ = _node.link_.Qd if fd else node.link_.Qm
-                    _link_.remove(link)
+                    if link in _link_: _link_.remove(link)  # they might be removed in prior calls
                     reval += link.valt[fd]  # no scaling?
             else:
                 link_ = node.link_.Qd if fd else node.link_.Qm  # prune node links only:
@@ -187,9 +189,10 @@ def graph_reval(graph, fd):  # recursive depth-first regraph+=[_node], hierarchi
                 regraph.Q += [node]; regraph.valt[fd] += node.valt[fd]
         # recursion:
         if reval > aveG:
-            reval += graph_reval(graph, fd)
+            reregraph, rereval = graph_reval(graph, fd)
+            reval += rereval; regraph = reregraph  # replace regraph here?
 
-    return reval
+    return regraph, reval
 
 def comp_G_(G_, pri_G_=None, f1Q=1, fsub=0):  # cross-comp Graphs if f1Q, else G_s in comp_node_, or segs inside PP?
 
@@ -280,7 +283,7 @@ def comp_parH(_parH, parH):  # unpack aggH( subH( derH -> ptuples
             if _idx==idx:
                 _fd = _parH.fds[elev]; fd = parH.fds[elev]  # fd per lev, not sub
                 if _fd==fd and _parH.Qd[_i].valt[fd] + parH.Qd[_i+i].valt[fd] > aveG:  # same-type eval
-                    _sub = _parH.Qd[_i]; sub = parH.Qd[_i+i]
+                    _sub = _parH.Qd[_i]; sub = parH.Qd[_i+i]  # how about Qm? If Qm may not empty, then we need to add section for Qm in both comparison and summation too
                     if sub.n:
                         dsub = comp_ptuple(_sub, sub, fd)  # sub is vertuple, ptuple, or ext
                     else:
@@ -365,14 +368,10 @@ def sum2graph_(graph_, fd, fsub=0):  # sum node and link params into graph, derH
         for derG in Link_:  # sum unique links, not box
             sum_parH(Graph.aggH, derG.aggH)
             Graph.valt[0] += derG.valt[0]; Graph.valt[1] += derG.valt[1]
+        # we already have ext assigned in comp_G_ (derG.aggH.Qd[0], which is Graph.aggH.Qd[0]), so there's no need to pack Ext here again?
         Ext = deepcopy(G.aggH.Qd[0])  # 1st Ext
         for G in node_[1:]:
-            Ext.Qd[0] += G.aggH.Qd[0].Qd[0]  # L
-            Ext.Qd[1] += G.aggH.Qd[0].Qd[1]  # S
-            Par = Ext.Qd[2]; par = G.aggH.Qd[0].Qd[2]  # A
-            sin_da0 = (Par[0] * par[1]) + (Par[1] * par[0])  # sin(A+B)= (sinA*cosB)+(cosA*sinB)
-            cos_da0 = (Par[1] * par[1]) - (Par[0] * par[0])  # cos(A+B)=(cosA*cosB)-(sinA*sinB)
-            Ext.Qd[2] = [sin_da0, cos_da0]
+            sum_parH(Ext,G.aggH.Qd[0])
         Graph.aggH.Qd.insert(0, Ext);  Graph.aggH.Q.insert(0,0)
 
         # if Graph.uH: Graph.val += sum([lev.val for lev in Graph.uH]) / sum([lev.rdn for lev in Graph.uH])  # if val>alt_val: rdn+=len_Q?
@@ -413,7 +412,7 @@ def sum_parH(AggH, aggH):
             if Idx==idx:
                 Sub = AggH.Qd[I]; sub = aggH.Qd[I+i]
                 if AggH.n and aggH.n:
-                    sum_vertuple(Sub, sub)
+                    sum_ptuple(Sub, sub)
                 else:
                     sum_parH(Sub, sub)
                 last_i = idx
@@ -424,6 +423,32 @@ def sum_parH(AggH, aggH):
                 AggH.Qm.insert[idx, aggH.Qm[idx]]
                 AggH.Qd.insert[idx, aggH.Qd[idx]]
                 break
+
+def sum_ptuple(ParH, parH, fneg=0):  # guess there's no need to fneg hee?
+
+    for i, (m, d) in enumerate(zip_longest(ParH.Qm, parH.Qd, fillvalue=[])):
+        # d
+        if isinstance(d, list) and d:
+            Par = ParH.Qd[i]; par = d
+            sin_da0 = (Par[0] * par[1]) + (Par[1] * par[0])  # sin(A+B)= (sinA*cosB)+(cosA*sinB)
+            cos_da0 = (Par[1] * par[1]) - (Par[0] * par[0])  # cos(A+B)=(cosA*cosB)-(sinA*sinB)
+            ParH.Qd[i] = [sin_da0, cos_da0]
+        else:
+            ParH.Qd[i] += -d if fneg else d
+        # m
+        if isinstance(m, list) and m:
+            Par = ParH.Qd[i]; par = d
+            sin_da0 = (Par[0] * par[1]) + (Par[1] * par[0])  # sin(A+B)= (sinA*cosB)+(cosA*sinB)
+            cos_da0 = (Par[1] * par[1]) - (Par[0] * par[0])  # cos(A+B)=(cosA*cosB)-(sinA*sinB)
+            ParH.Qd[i] = [sin_da0, cos_da0]
+        else:
+            ParH.Qm[i] += -m if fneg else m
+    for i in 0,1:
+        ParH.valt[i] += parH.valt[i]
+        ParH.rdnt[i] += parH.rdnt[i]
+    ParH.n += 1
+
+
 
 def add_ext(box, L, extt):  # add ext per composition level
     y,x, y0,yn, x0,xn = box
