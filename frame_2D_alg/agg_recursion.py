@@ -251,7 +251,7 @@ def comp_G(_G, G):  # in GQ
     else:
         _fd = _G.root.fds[-1] if _G.root.fds else 0; fd = G.root.fds[-1] if G.root.fds else 0
         _aggH, aggH = _G.aggH[_fd], G.aggH[fd]  # derG in comp node_?
-    daggH = comp_parH(_aggH, aggH)
+    daggH = op_parH(_aggH, aggH, fcomp=1)
     # spec:
     _node_, node_ = _G.node_, G.node_  # link_ if fd, sub_node should be empty
     # below is not updated
@@ -270,10 +270,11 @@ def comp_G(_G, G):  # in GQ
     '''
     return daggH
 
-# draft
-def comp_parH(_parH, parH):  # unpack aggH( subH( derH -> ptuples
 
-    dparH = CQ(); elev, _idx, d_didx, last_i, last_idx = 0,0,0,-1,-1
+def op_parH(_parH, parH, fcomp, fneg=0):  # unpack aggH( subH( derH -> ptuples
+    
+    if fcomp: dparH = CQ()
+    elev, _idx, d_didx, last_i, last_idx = 0,0,0,-1,-1
 
     for _i, _didx in enumerate(_parH.Q):  # i: index in Qd (select param set), idx: index in ptypes (full param set)
         _idx += _didx; idx = last_idx+1
@@ -281,18 +282,28 @@ def comp_parH(_parH, parH):  # unpack aggH( subH( derH -> ptuples
             idx += didx
             if _idx==idx:
                 _fd = _parH.fds[elev]; fd = parH.fds[elev]  # fd per lev, not sub
-                if _fd==fd and _parH.Qd[_i].valt[fd] + parH.Qd[_i+i].valt[fd] > aveG:  # same-type eval
+                if fcomp: Qval = _parH.Qd[_i].valt[fd] + parH.Qd[_i+i].valt[fd]
+                else:     Qval = aveG + 1
+                
+                if _fd==fd and Qval > aveG:  # same-type eval
                     _sub = _parH.Qd[_i]; sub = parH.Qd[_i+i]
                     if sub.n:
-                        dsub = comp_ptuple(_sub, sub, fd)  # sub is vertuple, ptuple, or ext
+                        if fcomp:
+                            dsub = comp_ptuple(_sub, sub, fd)  # sub is vertuple, ptuple, or ext
+                            dparH.valt[0]+=dsub.valt[0]; dparH.valt[1]+=dsub.valt[1]  # add rdnt?
+                            dparH.Qd += [dsub]; dparH.Q += [_didx + d_didx]
+                            dparH.fds += [fd]
+                        else:
+                            sum_ptuple(_sub, sub, fneg)
                     else:
-                        dsub = comp_parH(_sub, sub)  # keep unpacking aggH | subH | derH
-                    dparH.valt[0]+=dsub.valt[0]; dparH.valt[1]+=dsub.valt[1]  # add rdnt?
-                    dparH.Qd += [dsub]; dparH.Q += [_didx + d_didx]
-                    dparH.fds += [fd]
+                        dsub = op_parH(_sub, sub, fcomp)  # keep unpacking aggH | subH | derH
+                    
                     last_i=i; last_idx=idx  # last matching i,idx
                     break
-            elif _idx < idx:  # no dsub / _sub
+            elif _idx < idx:  # no dsub / _sub         
+                if not fcomp:
+                    _parH.Q.insert[idx, didx+d_didx]
+                    _parH.Qd.insert[_i, parH.Qd[idx]]
                 d_didx += didx  # += missing didx
                 break  # no parH search beyond _idx
             # else _idx>idx: keep searching
@@ -301,7 +312,36 @@ def comp_parH(_parH, parH):  # unpack aggH( subH( derH -> ptuples
         if elev in (0,1) or not (_i+1)%(2**elev):  # first 2 levs are single-element, higher levs are 2**elev elements
             elev+=1  # elevation
 
-    return dparH
+    if fcomp: return dparH
+
+
+# not revised:
+def sum_ptuple(ParH, parH, fneg=0):
+
+    Idx, idx, last_i, last_idx = 0, 0, -1, -1
+    for I, Didx in enumerate(ParH.Q):  # i: index in Qd (select param set), idx: index in ptypes (full param set)
+        Idx += Didx; idx = last_idx+1
+        for i, didx in enumerate(parH.Q[last_i+1:]):
+            idx += didx
+            if Idx==idx:
+                D = ParH.Qd[I]; d = parH.Qd[I+i]
+                M = ParH.Qm[I]; m = parH.Qm[I+i]
+                if isinstance(d, list) :
+                    if len(d) == 2:
+                        sum_angle(D, d)
+                    else:
+                        sum_aangle(D, d)      
+                else:
+                    ParH.Qd[I] += -d if fneg else d
+                ParH.Qm[I] += -m if fneg else m
+                last_i = idx; last_idx
+                break
+            elif idx<Idx:
+                ParH.Q.insert[idx, 1]
+                if idx-1 >=0: ParH.Q[idx-1] -= 1  # reduce prior Q value by 1 because we insert new value here, so it should skip less 1 value
+                ParH.Qm.insert[idx, parH.Qm[idx]]
+                ParH.Qd.insert[idx, parH.Qd[idx]]
+                break
 
 
 def comp_ptuple(_ptuple, ptuple, fd):  # may be ptuple, vertuple, or ext
@@ -357,20 +397,20 @@ def sum2graph_(graph_, fd, fsub=0):  # sum node and link params into graph, derH
             G = Cgraph(fds=copy(iG.fds)+[fd], root=Graph, node_=link_, box=copy(iG.box))  # no sub_nodes in derG, remove if <ave?
             for derG in link_:
                 sum_box(G.box, derG.G[0].box if derG.G[1] is iG else derG.G[1].box)
-                sum_parH(G.aggH, derG.aggH)  # two-fork derGs are not modified
+                op_parH(G.aggH, derG.aggH, fcomp=0)  # two-fork derGs are not modified
                 Graph.valt[0] += derG.valt[0]; Graph.valt[1] += derG.valt[1]
-            add_ext(G.box, len(link_), G.derH[-1])  # composed node ext, not in derG.derH
+            # add_ext(G.box, len(link_), G.derH[-1])  # composed node ext, not in derG.derH (this should be not needed now)
             # if mult roots: sum_H(G.uH[1:], Graph.uH)
             node_ += [G]
         Graph.root = iG.root  # same root, lower derivation is higher composition
         Graph.node_ = node_  # G| G.G| G.G.G..
         for derG in Link_:  # sum unique links, not box
-            sum_parH(Graph.aggH, derG.aggH)
+            op_parH(Graph.aggH, derG.aggH, fcomp=0)
             Graph.valt[0] += derG.valt[0]; Graph.valt[1] += derG.valt[1]
         # we already have ext assigned in comp_G_ (derG.aggH.Qd[0], which is Graph.aggH.Qd[0]), so there's no need to pack Ext here again?
         Ext = deepcopy(G.aggH.Qd[0])  # 1st Ext
         for G in node_[1:]:
-            sum_parH(Ext,G.aggH.Qd[0])
+            op_parH(Ext,G.aggH.Qd[0], fcomp=0)
         Graph.aggH.Qd.insert(0, Ext);  Graph.aggH.Q.insert(0,0)
 
         # if Graph.uH: Graph.val += sum([lev.val for lev in Graph.uH]) / sum([lev.rdn for lev in Graph.uH])  # if val>alt_val: rdn+=len_Q?
@@ -380,7 +420,7 @@ def sum2graph_(graph_, fd, fsub=0):  # sum node and link params into graph, derH
 
 def sum_G(G, g, fmerge=0):  # g is a node in G.node_
 
-    sum_parH(G.aggH, g.aggH)
+    op_parH(G.aggH, g.aggH, fcomp=0)
     # if g.uH: sum_H(G.uH, g.uH[1:])  # sum g->G
     # if g.H: sum_H(G.H[1:], g.H)  # not used yet
     for i in 0,1:
@@ -400,58 +440,6 @@ def sum_G(G, g, fmerge=0):  # g is a node in G.node_
             else:           G.alt_Graph = deepcopy(g.alt_graph)
     else: G.node_ += [g]
 
-
-def sum_parH(ParH, parH):  # or op_parH
-
-    d_didx, elev, Idx, idx, last_i, last_idx = 0,0,0,0,-1,-1
-    for I, Didx in enumerate(ParH.Q):  # i: index in Qd (select param set), idx: index in ptypes (full param set)
-        Idx += Didx; idx = last_idx+1
-        for i, didx in enumerate(parH.Q[last_i+1:]):
-            idx += didx
-            if Idx==idx:
-                Fd = ParH.fds[elev]; fd = parH.fds[elev]  # fd per lev, not sub
-                Sub = ParH.Qd[I]; sub = parH.Qd[I+i]
-                if ParH.n and parH.n: sum_ptuple(Sub, sub)
-                else:                 sum_parH(Sub, sub)
-                last_i = idx; last_idx = idx  # last matching i,idx
-                break
-            elif Idx<idx:  # no Par per par
-                ParH.Q.insert[idx, didx+d_didx]
-                ParH.Qd.insert[I, parH.Qd[idx]]
-                # also compare fds, if miss: ParH.fds.insert[elev, fd]
-                d_didx += didx
-                break  # no par search beyond current index
-            # else _idx > idx: keep searching
-            idx += 1
-        Idx += 1
-
-# not revised:
-def sum_ptuple(ParH, parH, fneg=0):
-
-    Idx, idx, last_i, last_idx = 0, 0, -1, -1
-    for I, Didx in enumerate(ParH.Q):  # i: index in Qd (select param set), idx: index in ptypes (full param set)
-        Idx += Didx; idx = last_idx+1
-        for i, didx in enumerate(parH.Q[last_i+1:]):
-            idx += didx
-            if Idx==idx:
-                D = ParH.Qd[I]; d = parH.Qd[I+i]
-                M = ParH.Qm[I]; m = parH.Qm[I+i]
-                if isinstance(d, list) :
-                    Par = D; par = d
-                    sin_da0 = (Par[0] * par[1]) + (Par[1] * par[0])  # sin(A+B)= (sinA*cosB)+(cosA*sinB)
-                    cos_da0 = (Par[1] * par[1]) - (Par[0] * par[0])  # cos(A+B)=(cosA*cosB)-(sinA*sinB)
-                    ParH.Qd[I] = [sin_da0, cos_da0]
-                else:
-                    ParH.Qd[I] += -d if fneg else d
-                ParH.Qm[I] += -m if fneg else m
-                last_i = idx; last_idx
-                break
-            elif idx<Idx:
-                ParH.Q.insert[idx, 1]
-                ParH.Q[idx+1] -= 1
-                ParH.Qm.insert[idx, parH.Qm[idx]]
-                ParH.Qd.insert[idx, parH.Qd[idx]]
-                break
 
 def add_ext(box, L, extt):  # add ext per composition level
     y,x, y0,yn, x0,xn = box

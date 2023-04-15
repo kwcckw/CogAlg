@@ -472,17 +472,9 @@ def sum_ptuple(Ptuple, ptuple, fneg=0):
         Par = getattr(Ptuple, pname); par = getattr(ptuple, pname)
 
         if pname in ("angle","axis") and isinstance(Par, list):
-            sin_da0 = (Par[0] * par[1]) + (Par[1] * par[0])  # sin(A+B)= (sinA*cosB)+(cosA*sinB)
-            cos_da0 = (Par[1] * par[1]) - (Par[0] * par[0])  # cos(A+B)=(cosA*cosB)-(sinA*sinB)
-            Par = [sin_da0, cos_da0]
+            sum_angle(Par, par, fneg)
         elif pname == "aangle" and isinstance(Par, list):
-            _sin_da0, _cos_da0, _sin_da1, _cos_da1 = Par
-            sin_da0, cos_da0, sin_da1, cos_da1 = par
-            sin_dda0 = (_sin_da0 * cos_da0) + (_cos_da0 * sin_da0)
-            cos_dda0 = (_cos_da0 * cos_da0) - (_sin_da0 * sin_da0)
-            sin_dda1 = (_sin_da1 * cos_da1) + (_cos_da1 * sin_da1)
-            cos_dda1 = (_cos_da1 * cos_da1) - (_sin_da1 * sin_da1)
-            Par = [sin_dda0, cos_dda0, sin_dda1, cos_dda1]
+            sum_aangle(Par, par, fneg)
         else:
             Par += (-par if fneg else par)
         setattr(Ptuple, pname, Par)
@@ -491,6 +483,35 @@ def sum_ptuple(Ptuple, ptuple, fneg=0):
 
     Ptuple.n += 1
 
+
+def sum_angle(Angle, angle, fneg):
+    
+    if fneg:
+        sin_da0 = (Angle[0] * angle[1]) - (Angle[1] * angle[0])  # sin(A-B)= (sinA*cosB)-(cosA*sinB)
+        cos_da0 = (Angle[1] * angle[1]) + (Angle[0] * angle[0])  # cos(A-B)= (cosA*cosB)+(sinA*sinB)
+    else:
+        sin_da0 = (Angle[0] * angle[1]) + (Angle[1] * angle[0])  # sin(A+B)= (sinA*cosB)+(cosA*sinB)
+        cos_da0 = (Angle[1] * angle[1]) - (Angle[0] * angle[0])  # cos(A+B)= (cosA*cosB)-(sinA*sinB)
+    Angle[:] = [sin_da0, cos_da0]
+
+def sum_aangle(Aangle, aangle, fneg):
+    
+    _sin_da0, _cos_da0, _sin_da1, _cos_da1 = Aangle
+    sin_da0, cos_da0, sin_da1, cos_da1 = aangle
+    
+    if fneg:
+        sin_dda0 = (_sin_da0 * cos_da0) - (_cos_da0 * sin_da0)
+        cos_dda0 = (_cos_da0 * cos_da0) + (_sin_da0 * sin_da0)
+        sin_dda1 = (_sin_da1 * cos_da1) - (_cos_da1 * sin_da1)
+        cos_dda1 = (_cos_da1 * cos_da1) + (_sin_da1 * sin_da1)
+    else:
+        sin_dda0 = (_sin_da0 * cos_da0) + (_cos_da0 * sin_da0)
+        cos_dda0 = (_cos_da0 * cos_da0) - (_sin_da0 * sin_da0)
+        sin_dda1 = (_sin_da1 * cos_da1) + (_cos_da1 * sin_da1)
+        cos_dda1 = (_cos_da1 * cos_da1) - (_sin_da1 * sin_da1)
+
+    Aangle[:] = [sin_dda0, cos_dda0, sin_dda1, cos_dda1]
+    
 
 def comp_vertuple(_vertuple, vertuple):
 
