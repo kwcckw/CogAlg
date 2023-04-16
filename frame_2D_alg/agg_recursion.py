@@ -289,16 +289,15 @@ def op_parH(_parH, parH, fcomp, fneg=0):  # unpack aggH( subH( derH -> ptuples
                 if _fd==fd and val > aveG:  # same-type eval
                     _sub = _parH.Qd[_i]; sub = parH.Qd[_i+i]
                     if sub.n:
-                        if fcomp: dsub = comp_ptuple(_sub, sub, fd)  # sub is vertuple | ptuple | ext
-                        else:     sum_ptuple(_sub, sub, fneg)
+                        dsub = op_ptuple(_sub, sub, fcomp, fd, fneg)  # sub is vertuple | ptuple | ext
                     else:
                         dsub = op_parH(_sub, sub, fcomp)  # keep unpacking aggH | subH | derH
                     if fcomp:
                         dparH.valt[0]+=dsub.valt[0]; dparH.valt[1]+=dsub.valt[1]  # add rdnt?
                         dparH.Qd += [dsub]; dparH.Q += [_didx + d_didx]
                         dparH.fds += [fd]
-                    last_i=i; last_idx=idx  # last matching i,idx
-                    break
+                last_i=i; last_idx=idx  # last matching i,idx
+                break  # should be break here (within section of _idx == idx)? Same as line above
             # need else to insert compy(sub) if no _sub?
             elif _idx < idx:  # no dsub / _sub
                 if not fcomp:
@@ -315,37 +314,11 @@ def op_parH(_parH, parH, fcomp, fneg=0):  # unpack aggH( subH( derH -> ptuples
     if fcomp: return dparH
 
 
-# not revised:
-def sum_ptuple(ParH, parH, fneg=0):
+def op_ptuple(_ptuple, ptuple, fcomp, fd=0, fneg=0):  # may be ptuple, vertuple, or ext
 
-    Idx, idx, last_i, last_idx = 0, 0, -1, -1
-    for I, Didx in enumerate(ParH.Q):  # i: index in Qd (select param set), idx: index in ptypes (full param set)
-        Idx += Didx; idx = last_idx+1
-        for i, didx in enumerate(parH.Q[last_i+1:]):
-            idx += didx
-            if Idx==idx:
-                D = ParH.Qd[I]; d = parH.Qd[I+i]
-                M = ParH.Qm[I]; m = parH.Qm[I+i]
-                if isinstance(d, list):  # angle or aangle
-                    for j, (P,p) in enumerate(zip(D,d)):
-                        D[j] = P-p if fneg else P+p
-                else:
-                    ParH.Qd[I] += -d if fneg else d
-                ParH.Qm[I] += -m if fneg else m
-                last_i = idx; last_idx
-                break
-            elif idx<Idx:
-                ParH.Q.insert[idx, 1]
-                if idx-1 >=0: ParH.Q[idx-1] -= 1  # reduce prior Q value by 1 because we insert new value here, so it should skip less 1 value
-                ParH.Qm.insert[idx, parH.Qm[idx]]
-                ParH.Qd.insert[idx, parH.Qd[idx]]
-                break
-
-
-def comp_ptuple(_ptuple, ptuple, fd):  # may be ptuple, vertuple, or ext
-
-    dtuple=CQ(n=_ptuple.n)  # combine with ptuple.n?
-    rn = _ptuple.n/ptuple.n  # normalize param as param*rn for n-invariant ratio: _param/ param*rn = (_param/_n)/(param/n)
+    if fcomp:
+        dtuple=CQ(n=_ptuple.n)  # combine with ptuple.n?
+        rn = _ptuple.n/ptuple.n  # normalize param as param*rn for n-invariant ratio: _param/ param*rn = (_param/_n)/(param/n)
     _idx, d_didx, last_i, last_idx = 0,0,-1,-1
 
     for _i, _didx in enumerate(_ptuple.Q):  # i: index in Qd: select param set, idx: index in full param set
@@ -353,26 +326,41 @@ def comp_ptuple(_ptuple, ptuple, fd):  # may be ptuple, vertuple, or ext
         for i, didx in enumerate(ptuple.Q[last_i+1:]):  # start after last matching i and idx
             idx += didx
             if _idx == idx:
-                if ptuple.Qm: val = _ptuple.Qd[_i]+ptuple.Qd[_i+i] if fd else _ptuple.Qm[_i]+ptuple.Qm[_i+i]
-                else:         val = aveG+1  # default comp for 0der pars
-                if val > aveG:
-                    _par, par = _ptuple.Qd[_i], ptuple.Qd[_i+i]
-                    if isinstance(par,list):
-                        if len(par)==4: m,d = comp_aangle(_par,par)
-                        else: m,d = comp_angle(_par,par)
+                if fcomp:
+                    if ptuple.Qm: val = _ptuple.Qd[_i]+ptuple.Qd[_i+i] if fd else _ptuple.Qm[_i]+ptuple.Qm[_i+i]
+                    else:         val = aveG+1  # default comp for 0der pars
+                    if  val > aveG:
+                        _par, par = _ptuple.Qd[_i], ptuple.Qd[_i+i]
+                        if isinstance(par,list):
+                            if len(par)==4: m,d = comp_aangle(_par,par)
+                            else: m,d = comp_angle(_par,par)
+                        else:
+                            m,d = comp_par(_par, par*rn, aves[idx], finv = not i and not ptuple.Qm)  # finv=0 for 0der I only
+                        dtuple.Qm+=[m]; dtuple.Qd+=[d]; dtuple.Q+=[d_didx+_didx]
+                        dtuple.valt[0]+=m; dtuple.valt[1]+=d  # no rdnt, rdn = m>d or d>m?)
+                else:
+                    D, d = _ptuple.Qd[_i], ptuple.Qd[_i+i]
+                    M, m = _ptuple.Qm[_i], ptuple.Qm[_i+i]
+                    if isinstance(d, list):  # angle or aangle
+                        for j, (P,p) in enumerate(zip(D,d)):
+                            D[j] = P-p if fneg else P+p
                     else:
-                        m,d = comp_par(_par, par*rn, aves[idx], finv = not i and not ptuple.Qm)  # finv=0 for 0der I only
-                    dtuple.Qm+=[m]; dtuple.Qd+=[d]; dtuple.Q+=[d_didx+_didx]
-                    dtuple.valt[0]+=m; dtuple.valt[1]+=d  # no rdnt, rdn = m>d or d>m?)
+                        ParH.Qd[I] += -d if fneg else d
                 last_i=i; last_idx=idx  # last matching i,idx
                 break
-            elif _idx < idx:  # no dpar per _par
+            elif _idx < idx:  # no dpar per _par    
+                _ptuple.Q.insert[idx,  didx+d_didx]
+                if idx-1 >=0: _ptuple.Q[idx-1] -= 1 # reduce prior Q value by d_didx because we insert new value here, so it should skip lesser value
+                _ptuple.Qm.insert[idx, ptuple.Qm[idx]]
+                _ptuple.Qd.insert[idx, ptuple.Qd[idx]]
+                
                 d_didx += didx
                 break  # no par search beyond current index
             # else _idx > idx: keep searching
             idx += 1
         _idx += 1
-    return dtuple
+    if fcomp: return dtuple
+
 
 # not revised:
 def sum2graph_(graph_, fd, fsub=0):  # sum node and link params into graph, derH in agg+ or player in sub+
@@ -394,14 +382,16 @@ def sum2graph_(graph_, fd, fsub=0):  # sum node and link params into graph, derH
             G = Cgraph(fds=copy(iG.fds)+[fd], root=Graph, node_=link_, box=copy(iG.box))  # no sub_nodes in derG, remove if <ave?
             for derG in link_:
                 sum_box(G.box, derG.G[0].box if derG.G[1] is iG else derG.G[1].box)
-                op_parH(G.aggH, derG.aggH, fcomp=0)  # two-fork derGs are not modified
+                if G.aggH.Q: op_parH(G.aggH, derG.aggH, fcomp=0)  # two-fork derGs are not modified
+                else:        G.aggH = deepcopy(derG.aggH)
                 Graph.valt[0] += derG.valt[0]; Graph.valt[1] += derG.valt[1]
             # if mult roots: sum_H(G.uH[1:], Graph.uH)
             node_ += [G]
         Graph.root = iG.root  # same root, lower derivation is higher composition
         Graph.node_ = node_  # G| G.G| G.G.G..
         for derG in Link_:  # sum unique links only
-            op_parH(Graph.aggH, derG.aggH, fcomp=0)
+            if Graph.aggH.Q: op_parH(Graph.aggH, derG.aggH, fcomp=0)
+            else:            Graph.aggH = deepcopy(derG.aggH) 
             Graph.valt[0] += derG.valt[0]; Graph.valt[1] += derG.valt[1]
         # if Graph.uH: Graph.val += sum([lev.val for lev in Graph.uH]) / sum([lev.rdn for lev in Graph.uH])  # if val>alt_val: rdn+=len_Q?
         Graph_ += [Graph]
@@ -410,7 +400,9 @@ def sum2graph_(graph_, fd, fsub=0):  # sum node and link params into graph, derH
 
 def sum_G(G, g, fmerge=0):  # g is a node in G.node_
 
-    op_parH(G.aggH, g.aggH, fcomp=0)
+    if G.aggH.Q: op_parH(G.aggH, g.aggH, fcomp=0)    
+    else:        G.aggH = deepcopy(g.aggH)
+    
     # if g.uH: sum_H(G.uH, g.uH[1:])  # sum g->G
     # if g.H: sum_H(G.H[1:], g.H)  # not used yet
     for i in 0,1:

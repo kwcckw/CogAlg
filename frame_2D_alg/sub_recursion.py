@@ -326,7 +326,8 @@ def blob2graph(blob, fseg):
     for fd, PP_ in enumerate([PPm_,PPd_]):  # if any
         for PP in PP_:
             graph = PP2graph(PP, fseg, fd)
-            op_parH(blobs[fd].aggH, graph.aggH, fcomp=0)
+            if blobs[fd].aggH.Q: op_parH(blobs[fd].aggH, graph.aggH, fcomp=0)
+            else:                blobs[fd].aggH = deepcopy(graph.aggH)
             for i in range(2):
                 blobs[fd].valt[i] += graph.valt[i]
                 blobs[fd].rdnt[i] += graph.rdnt[i]
@@ -336,8 +337,10 @@ def blob2graph(blob, fseg):
     for alt_blob in blob.adj_blobs[0]:  # adj_blobs = [blobs, pose]
         if not alt_blob.mgraph:
             blob2graph(alt_blob, fseg)  # convert alt_blob to graph
-        op_parH(alt_mblob.aggH, alt_blob.mgraph.aggH, fcomp=0)
-        op_parH(alt_dblob.aggH, alt_blob.dgraph.aggH, fcomp=0)
+        if alt_mblob.aggH.Q: op_parH(alt_mblob.aggH, alt_blob.mgraph.aggH, fcomp=0)
+        else:                alt_mblob.aggH = deepcopy(alt_blob.mgraph.aggH)
+        if alt_dblob.aggH.Q: op_parH(alt_dblob.aggH, alt_blob.dgraph.aggH, fcomp=0)
+        else:                alt_dblob.aggH = deepcopy(alt_blob.dgraph.aggH)
         for i in range(2):
             alt_mblob.valt[i] += alt_blob.mgraph.valt[i]
             alt_mblob.rdnt[i] += alt_blob.mgraph.rdnt[i]
