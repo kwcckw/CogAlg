@@ -326,7 +326,7 @@ def blob2graph(blob, fseg):
     for fd, PP_ in enumerate([PPm_,PPd_]):  # if any
         for PP in PP_:
             graph = PP2graph(PP, fseg, fd)
-            op_parH(blobs[fd].aggH, graph.aggH, fcomp=0)  # we need op_parH here beecause graph.aggH has multiple layers of aggH, subH and derH, so sum derH won't work here 
+            op_parH(blobs[fd].aggH, graph.aggH, fcomp=0)
             for i in range(2):
                 blobs[fd].valt[i] += graph.valt[i]
                 blobs[fd].rdnt[i] += graph.rdnt[i]
@@ -399,7 +399,7 @@ def PP2graph(PP, fseg, ifd=1):
 
     derH = CQ(Qd=Qd, Q=Q, fds=fds)
     subH = CQ(Qd=[derH],Q=[0], fds=[0]); aggH = CQ(Qd=[subH], Q=[0], fds=[1])
-    
+
     box = [(PP.box[0]+PP.box[1]) /2, (PP.box[2]+PP.box[3]) /2] + PP.box
     graph = Cgraph(aggH=aggH, valt=copy(PP.valt), rndt=copy(PP.rdnt), box=box, alt_Graph=alt_Graph)
 
