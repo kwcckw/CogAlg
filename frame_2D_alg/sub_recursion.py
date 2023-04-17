@@ -461,7 +461,6 @@ def agg_recursion_eval(blob, PP_t):
     G = sum(converted_blobt[1].valt)  # dpplayers.val
     valt = [M, G]
     fork_rdnt = [1+(G>M), 1+(M>=G)]
-    # should be single call of agg_recursion here？
     for fd, PP_ in enumerate(PP_t):  # PPm_, PPd_
         if (valt[fd] > PP_aves[fd] * ave_agg * (converted_blobt[fd].rdnt[fd]+1) * fork_rdnt[fd]) \
             and len(PP_) > ave_nsub : # and converted_blob[0].alt_rdn < ave_overlap:

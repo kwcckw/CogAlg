@@ -88,14 +88,13 @@ class CQ(ClusterStructure):  # vertuple, hierarchy, or generic sequence
 
     Q = list  # generic sequence or index increments in ptuple, derH, etc
     Qm = list  # in-graph only
-    mval = float
-    Qd = list  # in-graph only
-    dval = float
+    Qd = list
+    valt = lambda: [0,0]  # in-graph vals
+    rdnt = lambda: [1,1]  # none if represented m and d?
+    out_valt = lambda: [0,0]  # of non-graph links, as alt?
     fds = list
-    n = int  # accum count in ptuple
     rng = lambda: 1  # is it used anywhere?
-    valt = lambda: [0,0]  # if all links, else per Qm,Qd:
-    rdnt = lambda: [1,1]  # redundant if both m and d are represented?
+    n = int  # accum count in ptuple
 
 
 class CP(ClusterStructure):  # horizontal blob slice P, with vertical derivatives per param if derP, always positive
@@ -465,53 +464,19 @@ def sum_vertuple(Vertuple, vertuple, fneg=0):
         Vertuple.rdnt[i] += vertuple.rdnt[i]
     Vertuple.n += 1
 
-
 def sum_ptuple(Ptuple, ptuple, fneg=0):
 
     for pname, ave in zip(pnames, aves):
         Par = getattr(Ptuple, pname); par = getattr(ptuple, pname)
-
-        if pname in ("angle","axis") and isinstance(Par, list):
-            sum_angle(Par, par, fneg)
-        elif pname == "aangle" and isinstance(Par, list):
-            sum_aangle(Par, par, fneg)
+        # angle or aangle:
+        if isinstance(Par, list):
+            for j, (P,p) in enumerate(zip(Par,par)): Par[j] = P-p if fneg else P+p
         else:
             Par += (-par if fneg else par)
         setattr(Ptuple, pname, Par)
 
     Ptuple.valt[0] += ptuple.valt[0]; Ptuple.valt[1] += ptuple.valt[1]
-
     Ptuple.n += 1
-
-
-def sum_angle(Angle, angle, fneg):
-    
-    if fneg:
-        sin_da0 = (Angle[0] * angle[1]) - (Angle[1] * angle[0])  # sin(A-B)= (sinA*cosB)-(cosA*sinB)
-        cos_da0 = (Angle[1] * angle[1]) + (Angle[0] * angle[0])  # cos(A-B)= (cosA*cosB)+(sinA*sinB)
-    else:
-        sin_da0 = (Angle[0] * angle[1]) + (Angle[1] * angle[0])  # sin(A+B)= (sinA*cosB)+(cosA*sinB)
-        cos_da0 = (Angle[1] * angle[1]) - (Angle[0] * angle[0])  # cos(A+B)= (cosA*cosB)-(sinA*sinB)
-    Angle[:] = [sin_da0, cos_da0]
-
-def sum_aangle(Aangle, aangle, fneg):
-    
-    _sin_da0, _cos_da0, _sin_da1, _cos_da1 = Aangle
-    sin_da0, cos_da0, sin_da1, cos_da1 = aangle
-    
-    if fneg:
-        sin_dda0 = (_sin_da0 * cos_da0) - (_cos_da0 * sin_da0)
-        cos_dda0 = (_cos_da0 * cos_da0) + (_sin_da0 * sin_da0)
-        sin_dda1 = (_sin_da1 * cos_da1) - (_cos_da1 * sin_da1)
-        cos_dda1 = (_cos_da1 * cos_da1) + (_sin_da1 * sin_da1)
-    else:
-        sin_dda0 = (_sin_da0 * cos_da0) + (_cos_da0 * sin_da0)
-        cos_dda0 = (_cos_da0 * cos_da0) - (_sin_da0 * sin_da0)
-        sin_dda1 = (_sin_da1 * cos_da1) + (_cos_da1 * sin_da1)
-        cos_dda1 = (_cos_da1 * cos_da1) - (_sin_da1 * sin_da1)
-
-    Aangle[:] = [sin_dda0, cos_dda0, sin_dda1, cos_dda1]
-    
 
 def comp_vertuple(_vertuple, vertuple):
 
