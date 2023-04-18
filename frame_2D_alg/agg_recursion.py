@@ -215,6 +215,7 @@ def comp_G_(G_, pri_G_=None, f1Q=1, fsub=0):  # cross-comp Graphs if f1Q, else G
                     daggH = comp_GQ(_G,G)  # comp_G while G.G, H/0G: GQ is one distributed node?
                     daggH.Qd.insert(0,CQ(Qd=[1,distance,[dy,dx]], Q=[0,0,0], n=1))  # add ext
                     daggH.Q.insert(0,0)  # no valt += 0der ext?
+                    daggH.fds = copy(_G.aggH.fds) + [1]  # we need init fds for daggH too, but what would be the new fd value?
                     mval, dval = daggH.valt
                     derG = Cgraph(valt=[mval,dval], G=[_G,G], aggH=daggH, box=[])  # box is redundant to G
                     # add links:
@@ -295,8 +296,8 @@ def op_parH(_parH, parH, fcomp, fneg=0):  # unpack aggH( subH( derH -> ptuples
                             dparH.Qd += [dsub]; dparH.Q += [_didx + d_didx]
                             dparH.fds += [fd]
                     else:  # no eval: no new dparH is formed
-                        if sub.n: _=op_ptuple(_sub, sub, fcomp, fd, fneg)  # sub is vertuple | ptuple | ext
-                        else:     _=op_parH(_sub, sub, fcomp)  # keep unpacking aggH | subH | derH
+                        if sub.n: op_ptuple(_sub, sub, fcomp, fd, fneg)  # sub is vertuple | ptuple | ext
+                        else:     op_parH(_sub, sub, fcomp)  # keep unpacking aggH | subH | derH
                 last_i=i; last_idx=idx  # last matching i,idx
                 break
             if not op:  # not sure
@@ -306,8 +307,10 @@ def op_parH(_parH, parH, fcomp, fneg=0):  # unpack aggH( subH( derH -> ptuples
                         break  # no parH search beyond _idx
                     # else _idx > idx: keep searching;  also insert parHs as dparHs?
                 elif _val>aveG and val>aveG:
-                    _parH.Q.insert(idx, didx+d_didx)  # reset d_didx?
-                    _parH.Qd.insert(_i, copy(parH.Qd[idx]))
+                    _parH.Q.insert[idx, didx+d_didx]
+                    _parH.Q[idx+1] -= didx+d_didx  # reduce next didx
+                    _parH.Qd.insert[idx, deepcopy(parH.Qd[idx])]
+                    d_didx = 0
                     # add sum valt, etc?
             idx += 1  # 1 sub/loop
         _idx += 1
@@ -379,8 +382,8 @@ def sum2graph_(graph_, fd, fsub=0):  # sum node and link params into graph, derH
         sum_H(Graph.uH[1:], root.uH)  # root of Graph, init if empty
         '''
         node_,Link_ = [],[]  # form G, keep iG:
-        for iG in graph.Q:  # use graph.Q[1:] after init
-            sum_G(Graph, iG, fmerge=0)  # local subset of lower Gs in new graph
+        for i, iG in enumerate(graph.Q):  # use graph.Q[1:] after init
+            sum_G(Graph, iG, i, fmerge=0)  # local subset of lower Gs in new graph
             link_ = [iG.link_.Qm, iG.link_.Qd][fd]  # mlink_,dlink_
             Link_ = list(set(Link_ + link_))  # unique links in node_
             G = Cgraph(fds=copy(iG.fds)+[fd], root=Graph, node_=link_, box=copy(iG.box))  # no sub_nodes in derG, remove if <ave?
@@ -393,20 +396,25 @@ def sum2graph_(graph_, fd, fsub=0):  # sum node and link params into graph, derH
             node_ += [G]
         Graph.root = iG.root  # same root, lower derivation is higher composition
         Graph.node_ = node_  # G| G.G| G.G.G..
-        SubH = deepcopy(Link_[0])
+        SubH = deepcopy(Link_[0].aggH)
         for derG in Link_[1:]:  # sum unique links only
-            op_parH(SubH, derG.subH, fcomp=0)
+            op_parH(SubH, derG.aggH, fcomp=0)
         Graph.valt[0] += SubH.valt[0]; Graph.valt[1] += SubH.valt[1]
         # if Graph.uH: Graph.val += sum([lev.val for lev in Graph.uH]) / sum([lev.rdn for lev in Graph.uH])  # if val>alt_val: rdn+=len_Q?
         # tentative:
-        op_parH(Graph.aggH, SubH, fcomp=0)
+        # i think we need a different way to sum them here
+        # SubH.Qd[0] is ext, while op_parH.Qd[0] may not be Ext
+        # or we just need to pack SubH as new element(level) in Graph.aggH.Qd?
+        op_parH(Graph.aggH, SubH, fcomp=0)  
+        
+        
         Graph_ += [Graph]
 
     return Graph_
 
-def sum_G(G, g, fmerge=0):  # g is a node in G.node_
+def sum_G(G, g, i, fmerge=0):  # g is a node in G.node_
 
-    op_parH(G.aggH, g.aggH, fcomp=0)  # G.aggH should be initialized
+    if i>0: op_parH(G.aggH, g.aggH, fcomp=0)  # G.aggH should be initialized
     # if g.uH: sum_H(G.uH, g.uH[1:])  # sum g->G
     # if g.H: sum_H(G.H[1:], g.H)  # not used yet
     for i in 0,1:
