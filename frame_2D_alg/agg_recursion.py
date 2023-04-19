@@ -375,58 +375,49 @@ def sum2graph_(graph_, fd, fsub=0):  # sum node and link params into graph, derH
         if graph.valt[fd] < aveG:  # form graph if val>min only
             continue
         Graph = Cgraph(aggH=deepcopy(graph.Q[0].aggH), fds=copy(graph.Q[0].fds)+[fd])  # incr der
-        Link_,node_ = [],[]
-        add_G(Graph, graph.Q[0], Link_, node_, fd)
-        for iG in graph.Q[1:]:  # form G, keep iG
-            sum_G(Graph, iG, fmerge=0)  # local subset of lower Gs in new graph
-            add_G(Graph, iG, Link_, node_, fd)
+        Graph.aggH.fds += [fd]  # we nmeed this fd in op_parH later
+        Link_ = []
+        for i, iG in enumerate(graph.Q):  # form G, keep iG
+            accum_G(Graph, iG, Link_, fd, fmerge=0, fsum=i)  # local subset of lower Gs in new graph
+
         Graph.root = iG.root  # same root, lower derivation is higher composition
-        Graph.node_ = node_  # G| G.G| G.G.G..
         SubH = deepcopy(Link_[0].aggH) # init
         for derG in Link_[1:]:  # sum unique links only
             op_parH(SubH, derG.aggH, fcomp=0)
         Graph.valt[0] += SubH.valt[0]; Graph.valt[1] += SubH.valt[1]
         # if Graph.uH: Graph.val += sum([lev.val for lev in Graph.uH]) / sum([lev.rdn for lev in Graph.uH])  # if val>alt_val: rdn+=len_Q?
         aggH = Graph.aggH
-        aggH.Qd += [SubH]; aggH.fds+=[fd]; aggH.Q+=[0]  # no gap?
+        aggH.Qd += [SubH]; aggH.Q+=[0]  # no gap?
         aggH.valt[0] += SubH.valt[0]; aggH.valt[1] += SubH.valt[1]  # add rdnt?
         Graph_ += [Graph]
 
     return Graph_
 
-def add_G(Graph, iG, fd, Link_, node_):
+def accum_G(Graph, iG, Link_, fd, fmerge, fsum):
 
-    link_ = [iG.link_.Qm, iG.link_.Qd][fd]  # mlink_,dlink_
-    Link_ = list(set(Link_ + link_))  # unique links in node_
-    G = Cgraph(fds=copy(iG.fds) + [fd], root=Graph, node_=link_, box=copy(iG.box))  # no sub_nodes in derG, remove if <ave?
-    for derG in link_:
-        sum_box(G.box, derG.G[0].box if derG.G[1] is iG else derG.G[1].box)
-        op_parH(G.aggH, derG.aggH, fcomp=0)  # two-fork derGs are not modified
-        Graph.valt[0] += derG.valt[0]; Graph.valt[1] += derG.valt[1]
-    # if mult roots: sum_H(G.uH[1:], Graph.uH)
-    node_ += [G]
-
-def sum_G(G, g, fmerge=0):  # g is a node in G.node_
-
-    op_parH(G.aggH, g.aggH, fcomp=0)  # G.aggH should be initialized
+    # sum existing iG to Graph
+    if fsum: op_parH(Graph.aggH, iG.aggH, fcomp=0)  # G.aggH should be initialized
     # if g.uH: sum_H(G.uH, g.uH[1:])  # sum g->G
     # if g.H: sum_H(G.H[1:], g.H)  # not used yet
     for i in 0,1:
-        G.valt[i]+=g.valt[i]
-        G.rdnt[i] += g.rdnt[i]
-    G.nval += g.nval
-    sum_box(G.box, g.box)
-    if fmerge:
-        for node in g.node_:
-            if node not in G.node_: G.node_ += [node]
-        for link in g.Link_.Q:  # redundant?
-            if link not in G.Link_.Q: G.Link_.Q += [link]
-        for alt_graph in g.alt_graph_:
-            if alt_graph not in G.alt_graph: G.alt_graph_ += [alt_graph]
-        if g.alt_Graph:
-            if G.alt_Graph: sum_G(G.alt_Graph, g.alt_Graph)
-            else:           G.alt_Graph = deepcopy(g.alt_graph)
-    else: G.node_ += [g]
+        Graph.valt[i] += iG.valt[i]
+        Graph.rdnt[i] += iG.rdnt[i]
+    Graph.nval += iG.nval
+    sum_box(Graph.box, iG.box)
+    
+    # create new G and pack into Graph
+    link_ = [iG.link_.Qm, iG.link_.Qd][fd]  # mlink_,dlink_
+    Link_[:] = list(set(Link_ + link_))  # unique links in node_ (we need [:] to preserve the object)
+    G = Cgraph(aggH=deepcopy(link_[0].aggH), fds=copy(iG.fds) + [fd], root=Graph, node_=link_, box=copy(iG.box))  # no sub_nodes in derG, remove if <ave?
+    G.aggH.fds += [fd]
+    for i, derG in enumerate(link_):
+        if i:
+            derG.aggH.fds +=[ fd]  # we need this fd in op_parH later
+            op_parH(G.aggH, derG.aggH, fcomp=0)  # two-fork derGs are not modified
+        sum_box(G.box, derG.G[0].box if derG.G[1] is iG else derG.G[1].box)
+        Graph.valt[0] += derG.valt[0]; Graph.valt[1] += derG.valt[1]
+    # if mult roots: sum_H(G.uH[1:], Graph.uH)
+    Graph.node_ += [G]
 
 def sum_box(Box, box):
     Y, X, Y0, Yn, X0, Xn = Box;  y, x, y0, yn, x0, xn = box
