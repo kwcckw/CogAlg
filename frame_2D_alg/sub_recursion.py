@@ -324,28 +324,20 @@ def blob2graph(blob, fseg):
     blobs= [mblob, dblob]
 
     for fd, PP_ in enumerate([PPm_,PPd_]):  # if any
-        for PP in PP_:
+        for i, PP in enumerate(PP_):
             graph = PP2graph(PP, fseg, fd)
-            if blobs[fd].aggH.Q: op_parH(blobs[fd].aggH, graph.aggH, fcomp=0)
-            else:                blobs[fd].aggH = deepcopy(graph.aggH)
-            for i in range(2):
-                blobs[fd].valt[i] += graph.valt[i]
-                blobs[fd].rdnt[i] += graph.rdnt[i]
+            if i: op_parH(blobs[fd].pH, graph.pH, [], fcomp=0)
+            else: blobs[fd].pH = deepcopy(graph.pH)
             graph.root = blobs[fd]
             blobs[fd].node_ += [graph]
 
     for alt_blob in blob.adj_blobs[0]:  # adj_blobs = [blobs, pose]
         if not alt_blob.mgraph:
             blob2graph(alt_blob, fseg)  # convert alt_blob to graph
-        if alt_mblob.aggH.Q: op_parH(alt_mblob.aggH, alt_blob.mgraph.aggH, fcomp=0)
-        else:                alt_mblob.aggH = deepcopy(alt_blob.mgraph.aggH)
-        if alt_dblob.aggH.Q: op_parH(alt_dblob.aggH, alt_blob.dgraph.aggH, fcomp=0)
-        else:                alt_dblob.aggH = deepcopy(alt_blob.dgraph.aggH)
-        for i in range(2):
-            alt_mblob.valt[i] += alt_blob.mgraph.valt[i]
-            alt_mblob.rdnt[i] += alt_blob.mgraph.rdnt[i]
-            alt_dblob.valt[i] += alt_blob.dgraph.valt[i]
-            alt_dblob.rdnt[i] += alt_blob.dgraph.rdnt[i]
+        if alt_mblob.pH.Q: op_parH(alt_mblob.pH, alt_blob.mgraph.pH, fcomp=0)
+        else:              alt_mblob.pH = deepcopy(alt_blob.mgraph.pH)
+        if alt_dblob.pH.Q: op_parH(alt_dblob.pH, alt_blob.dgraph.pH, fcomp=0)
+        else:              alt_dblob.pH = deepcopy(alt_blob.dgraph.pH)
 
     return mblob, dblob
 
@@ -371,7 +363,7 @@ def PP2graph(PP, fseg, ifd=1):
                 for pname in pnames:
                     par = getattr(dderH, pname)
                     if pname != "x":  # x is in box
-                        pQ.Qd += [par]; pQ.Qm += [0]; pQ.Q += [0]
+                        pQ.Qd += [par]; pQ.Q += [0]
                         if pname not in ["I", "angle", "aangle", "axis"]:
                             pQ.valt[1] += par
                 alt_derH.Qd += [pQ]
@@ -381,7 +373,7 @@ def PP2graph(PP, fseg, ifd=1):
                 alt_derH.Qd += [QdderH]
             alt_derH.Q += [0]; alt_derH.fds += [1]
     alt_box = [(alt_box[0]+alt_box[1]) /2, (alt_box[2]+alt_box[3]) /2] + alt_box
-    alt_Graph = Cgraph(aggH=alt_aggH, valt=alt_valt, rdnt=alt_rdnt, box=alt_box)
+    alt_Graph = Cgraph(pH=alt_aggH, valt=alt_valt, rdnt=alt_rdnt, box=alt_box)
 
     Qd = []; Q = []; fds = []
     for dderH in PP.derH:
@@ -390,7 +382,7 @@ def PP2graph(PP, fseg, ifd=1):
             for pname in pnames:
                 par = getattr(dderH, pname)
                 if pname != "x":  # x is in box
-                    pQ.Qd += [par]; pQ.Qm += [0]; pQ.Q += [0]  # Qm is just filler, else we need to check if they are empty before summing them
+                    pQ.Qd += [par]; pQ.Q += [0]  # Qm is just filler, else we need to check if they are empty before summing them
                     if pname not in ["I", "angle", "aangle", "axis"]:
                         pQ.valt[1] += par
             Qd += [pQ]
@@ -404,7 +396,7 @@ def PP2graph(PP, fseg, ifd=1):
     subH = CQ(Qd=[derH],Q=[0], fds=[0]); aggH = CQ(Qd=[subH], Q=[0], fds=[1])
 
     box = [(PP.box[0]+PP.box[1]) /2, (PP.box[2]+PP.box[3]) /2] + PP.box
-    graph = Cgraph(aggH=aggH, valt=copy(PP.valt), rndt=copy(PP.rdnt), box=box, alt_Graph=alt_Graph)
+    graph = Cgraph(pH=aggH, valt=copy(PP.valt), rndt=copy(PP.rdnt), box=box, alt_Graph=alt_Graph)
 
     return graph
 
@@ -457,8 +449,8 @@ def agg_recursion_eval(blob, PP_t):
         else:
             converted_blobt = blob2graph(blob, fseg=fseg)  # convert root to graph
 
-    M = sum(converted_blobt[0].valt)  # mpplayers.val (but m fork is always empty, so no value here?)
-    G = sum(converted_blobt[1].valt)  # dpplayers.val
+    M = sum(converted_blobt[0].pH.valt)  # mpplayers.val (but m fork is always empty, so no value here?)
+    G = sum(converted_blobt[1].pH.valt)  # dpplayers.val
     valt = [M, G]
     fork_rdnt = [1+(G>M), 1+(M>=G)]
     for fd, PP_ in enumerate(PP_t):  # PPm_, PPd_
