@@ -1,10 +1,12 @@
-import sys
+
 import numpy as np
-from itertools import zip_longest
 from copy import deepcopy, copy
-from class_cluster import ClusterStructure, NoneType, comp_param, Cdert
-import math as math
-from comp_slice import *
+from class_cluster import ClusterStructure
+
+from comp_slice import ave_sub, ave_nsub, ave_agg, ave_dI, ave_M, ave_Ma, ave_daxis, ave_dangle, ave_daangle, ave_G, ave_Ga, ave_L, ave_mval, ave_dval
+from comp_slice import CQ
+from comp_slice import comp_angle, comp_aangle, comp_par
+
 
 '''
 Blob edges may be represented by higher-composition patterns, etc., if top param-layer match,
@@ -209,7 +211,7 @@ def comp_G_(G_, pri_G_=None, f1Q=1, fsub=0):  # cross-comp Graphs if f1Q, else G
                     if not _G or not G:  # or G.val
                         continue
                     dpH = comp_GQ(_G,G)  # comp_G while G.G, H/0G: GQ is one distributed node?
-                    dpH.ext[1] = [1,distance,[dy,dx]]  # pack in ds
+                    dpH.ext[1] = [1,distance,[dy,dx]]  # pack in ds  (if it is always fd=1 here, why we still need pack them as m,d?)
                     mval, dval = dpH.valt
                     derG = Cgraph(valt=[mval,dval], G=[_G,G], pH=dpH, box=[])  # box is redundant to G
                     # add links:
@@ -285,7 +287,7 @@ def op_parH(_parH, parH, fcomp, fneg=0):  # unpack aggH( subH( derH -> ptuples
                                 dsub = op_ptuple(_sub, sub, fcomp, fd, fneg)  # sub is vertuple | ptuple | ext
                             else:  # sub is pH
                                 dsub = op_parH(_sub, sub, 0, fcomp)  # keep unpacking aggH | subH | derH
-                                if sub.ext:
+                                if sub.ext[1]:  # check if nested list is empty or not
                                     for _par, par in zip(_sub.ext[1], sub.ext[1]):  # comp ds only
                                         if isinstance(par, list): m,d = comp_angle(_par, par)
                                         else: m,d = comp_par(_par,par, ave_L)
@@ -296,7 +298,12 @@ def op_parH(_parH, parH, fcomp, fneg=0):  # unpack aggH( subH( derH -> ptuples
                             dparH.fds += [fd]
                     else:  # no eval: no new dparH
                         if sub.n: op_ptuple(_sub, sub, fcomp, fd, fneg)  # sub is vertuple | ptuple | ext
-                        else:     op_parH(_sub, sub, fcomp)  # keep unpacking aggH | subH | derH
+                        else:     
+                            if sub.ext[1]:  # check if nested list is empty or not
+                                for i, (_par, par) in enumerate(zip(_sub.ext[1], sub.ext[1])):  # comp ds only
+                                    if isinstance(par, list): sum_angle(_par, par)  # sum angle here? If yes we need to create a function for that
+                                    else: _sub.ext[1][i] += par
+                            op_parH(_sub, sub, fcomp)  # keep unpacking aggH | subH | derH
                         # not sure about summing ext
                 last_i=i; last_idx=idx  # last matching i,idx
                 break

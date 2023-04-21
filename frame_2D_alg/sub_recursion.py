@@ -1,10 +1,13 @@
-import cv2
+
 from itertools import zip_longest
 from copy import copy, deepcopy
 import numpy as np
-from frame_blobs import CBlob, flood_fill, assign_adjacents
-from agg_recursion import *
-from comp_slice import *
+
+from comp_slice import PP_aves, ave_nsub, ave_g, ave_ga
+from comp_slice import CP, Cptuple, CderP, CPP
+from comp_slice import comp_ptuple, comp_vertuple, comp_angle
+from comp_slice import form_seg_root, form_PP_root
+
 from agg_convert import agg_recursion_eval
 
 '''
@@ -136,7 +139,7 @@ def comp_P(_P, P):  # forms vertical derivatives of params per P in _P.uplink, c
         derQ = [vertuple]; valt=copy(vertuple.valt); rdnt=copy(vertuple.rdnt)
         L = len(_P.dert_)
     else:  # P is derP
-        derQ, rdnt, valt = comp_derH(_P.derQ, P.derQ)
+        derQ, rdnt, valt = comp_vertuple(_P.derQ, P.derQ)
         L = _P.L
 
     # derP is single-layer, links are compared individually?
