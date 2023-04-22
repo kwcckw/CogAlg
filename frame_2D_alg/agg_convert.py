@@ -174,4 +174,3 @@ def repack(pPP, ptuple, idx_):  # pack derH in elements of iderH
             Par[-1] += [par]  # pack par in top lev of Par, added per inpack_derH recursion
         else:
             Par += [[par]]  # add new Par lev, implicitly nested in ptuples?
-

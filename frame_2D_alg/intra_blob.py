@@ -13,7 +13,6 @@ from intra_comp import comp_r, comp_a
 from draw_frame_blobs import visualize_blobs
 from itertools import zip_longest
 from comp_slice import *
-from segment_by_direction import segment_by_direction
 
 # filters, All *= rdn:
 ave = 50   # cost / dert: of cross_comp + blob formation, same as in frame blobs, use rcoef and acoef if different
@@ -132,7 +131,7 @@ def extend_dert(blob):  # extend dert borders (+1 dert to boundaries)
     # take ext_dert__ from part of root_dert__:
     ext_dert__ = []
     for dert in blob.root_dert__:
-        if type(dert) == list:  # tuple of 2 for day, dax - (Dyy, Dyx) or (Dxy, Dxx)
+        if isinstance(dert,list):  # tuple of 2 for day, dax - (Dyy, Dyx) or (Dxy, Dxx)
             ext_dert__.append(dert[0][y0e:yne, x0e:xne])
             ext_dert__.append(dert[1][y0e:yne, x0e:xne])
         else:

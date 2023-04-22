@@ -1,4 +1,3 @@
-
 from itertools import zip_longest
 from copy import copy, deepcopy
 import numpy as np
@@ -136,14 +135,17 @@ def comp_P(_P, P):  # forms vertical derivatives of params per P in _P.uplink, c
 
     if isinstance(_P, CP):
         vertuple = comp_ptuple(_P.ptuple, P.ptuple)
-        derQ = [vertuple]; valt=copy(vertuple.valt); rdnt=copy(vertuple.rdnt)
+        derQ = [vertuple]; Valt=copy(vertuple.valt); Rdnt=copy(vertuple.rdnt)
         L = len(_P.dert_)
     else:  # P is derP
-        derQ, rdnt, valt = comp_vertuple(_P.derQ, P.derQ)
+        derQ=[]; Valt=[0,0]; Rdnt=[1,1]
+        for _ptuple, ptuple in zip(_P.derQ, P.derQ):
+            dtuple, rdnt, valt = comp_vertuple(_ptuple, ptuple)
+            derQ+=[dtuple]; Valt[0]+=valt[0]; Valt[1]+=valt[1]; Rdnt[0]+=rdnt[0]; Rdnt[1]+=rdnt[1]
         L = _P.L
 
-    # derP is single-layer, links are compared individually?
-    return CderP(derQ=derQ, valt=valt, rdnt=rdnt, P=P, _P=_P, x0=_P.x0, y0=_P.y0, L=L)
+    # derP is single-layer, links are compared individually, but higher layers have multiple vertuples?
+    return CderP(derQ=derQ, valt=Valt, rdnt=Rdnt, P=P, _P=_P, x0=_P.x0, y0=_P.y0, L=L)
 
 def rotate_P_(P__, dert__, mask__):  # rotate each P to align it with direction of P gradient
 
@@ -295,4 +297,3 @@ def copy_P(P, Ptype=None):  # Ptype =0: P is CP | =1: P is CderP | =2: P is CPP 
         new_P.mlevels, new_P.dlevels = copy(mlevels), copy(dlevels)
 
     return new_P
-
