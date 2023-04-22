@@ -139,9 +139,17 @@ def comp_P(_P, P):  # forms vertical derivatives of params per P in _P.uplink, c
         L = len(_P.dert_)
     else:  # P is derP
         derQ=[]; Valt=[0,0]; Rdnt=[1,1]
-        for _ptuple, ptuple in zip(_P.derQ, P.derQ):
-            dtuple, rdnt, valt = comp_vertuple(_ptuple, ptuple)
-            derQ+=[dtuple]; Valt[0]+=valt[0]; Valt[1]+=valt[1]; Rdnt[0]+=rdnt[0]; Rdnt[1]+=rdnt[1]
+        
+        # deeper comparison draft
+        deep_P = _P
+        while True:
+            for _ptuple, ptuple in zip(deep_P.derQ, P.derQ):
+                dtuple, rdnt, valt = comp_vertuple(_ptuple, ptuple)
+                derQ+=[dtuple]; Valt[0]+=valt[0]; Valt[1]+=valt[1]; Rdnt[0]+=rdnt[0]; Rdnt[1]+=rdnt[1]
+            if deep_P._P:  # how about P._P?
+                deep_P = deep_P._P
+            else:
+                break
         L = _P.L
 
     # derP is single-layer, links are compared individually, but higher layers have multiple vertuples?
@@ -156,7 +164,7 @@ def rotate_P_(P__, dert__, mask__):  # rotate each P to align it with direction 
             while P.ptuple.G * abs(daxis) > ave_rotate:
                 P.ptuple.axis = P.ptuple.angle
                 rotate_P(P, dert__, mask__, yn, xn)  # recursive reform P along new axis in blob.dert__
-                _, daxis = comp_angle("axis", P.ptuple.axis, P.ptuple.angle)
+                _, daxis = comp_angle(P.ptuple.axis, P.ptuple.angle)
             # store P.daxis to adjust params?
 
 def rotate_P(P, dert__t, mask__, yn, xn):
