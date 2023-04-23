@@ -68,9 +68,9 @@ def sub_recursion_eval(root):  # for PP or dir_blob
                 else:  root.M += PP.valt[fd]
 
 
-def sub_recursion(PP):  # evaluate each PP for rng+ and der+
+def sub_recursion(PP):  # evaluate PP for rng+ and der+
 
-    P__  = [P_ for P_ in reversed(PP.P__)]  # revert to top down
+    P__  = [P_ for P_ in reversed(PP.P__)]  # revert bottom-up to top-down
     P__ = comp_P_der(P__) if PP.fds[-1] else comp_P_rng(P__, PP.rng + 1)   # returns top-down
     PP.rdnt[PP.fds[-1] ] += 1  # two-fork rdn, priority is not known?  rotate?
 
@@ -131,29 +131,27 @@ def comp_P_der(P__):  # der+ sub_recursion in PP.P__, compare P.uplinks to P.dow
 
     return dderPs__
 
+# draft:
 def comp_P(_P, P):  # forms vertical derivatives of params per P in _P.uplink, conditional ders from norm and DIV comp
 
-    if isinstance(_P, CP):
+    if isinstance(_P.ptuple, Cptuple):
         vertuple = comp_ptuple(_P.ptuple, P.ptuple)
         derQ = [vertuple]; Valt=copy(vertuple.valt); Rdnt=copy(vertuple.rdnt)
         L = len(_P.dert_)
-    else:  # P is derP
-        derQ=[]; Valt=[0,0]; Rdnt=[1,1]
-        
-        # deeper comparison draft
-        deep_P = _P
-        while True:
-            for _ptuple, ptuple in zip(deep_P.derQ, P.derQ):
-                dtuple, rdnt, valt = comp_vertuple(_ptuple, ptuple)
-                derQ+=[dtuple]; Valt[0]+=valt[0]; Valt[1]+=valt[1]; Rdnt[0]+=rdnt[0]; Rdnt[1]+=rdnt[1]
-            if deep_P._P:  # how about P._P?
-                deep_P = deep_P._P
-            else:
-                break
+    else:  # P.ptuple is derH: list or CQ
+        derQ, Valt, Rdnt = comp_derH(_P.ptuple, P.ptuple, derQ=[],Valt=[0,0],Rdnt=[1,1])
+        # derH is formed by comparing / adding _P derH
         L = _P.L
 
-    # derP is single-layer, links are compared individually, but higher layers have multiple vertuples?
     return CderP(derQ=derQ, valt=Valt, rdnt=Rdnt, P=P, _P=_P, x0=_P.x0, y0=_P.y0, L=L)
+
+# for list derH:
+def comp_derH(_derH, derH, derQ,Valt,Rdnt):
+
+    # loop layers bottom-up, while lower match?
+    # or comp layer per der+, eval per PP?
+    pass
+
 
 def rotate_P_(P__, dert__, mask__):  # rotate each P to align it with direction of P gradient
 

@@ -40,7 +40,7 @@ def intra_blob_root(root_blob, render, verbose, fBa):  # recursive evaluation of
                 # comp_slice fork in angle blobs
                 # add evaluate splice_blobs(root_blob), normally in frame_bblobs?
                 AveB = aveB * (blob.rdn+1)  # comp_slice is doubling the costs, likely higher, adjust per nsub_blobs?
-                if (AveB - blob.G) + (blob.G - AveB * pcoef) > 0:  # val_comp_slice_blob = dev_G + inv_dev_Ga
+                if blob.G * (1/blob.Ga) > AveB * pcoef:  # value of comp_slice_blob is proportional to angle stability?
                     blob.fBa = 0; blob.rdn = root_blob.rdn+1
                     comp_slice_root(blob, verbose=True)
                     blob.prior_forks.extend('p')

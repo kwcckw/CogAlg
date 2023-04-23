@@ -118,7 +118,7 @@ class CP(ClusterStructure):  # horizontal blob slice P, with vertical derivative
 
 class CderP(ClusterStructure):  # tuple of derivatives in P uplink_ or downlink_: binary tree with latuple root and vertuple forks
 
-    derQ = list  # last player only, max ntuples in layer = ntuples in lower layers: 1, 1, 2, 4, 8...
+    derQ = list  # max ntuples per layer = ntuples in lower layers: 1, 1, 2, 4, 8...
     fds = list  # fd: der+|rng+, forming m,d per par of derH, same for clustering by m->rng+ or d->der+
     valt = lambda: [0,0]
     rdnt = lambda: [1,1]  # mrdn + uprdn if branch overlap?
