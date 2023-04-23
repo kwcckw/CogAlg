@@ -27,10 +27,13 @@ def sub_recursion_eval(root):  # for PP or dir_blob
             fd = _P.valt[1]+P.valt[1] > _P.valt[0]+_P.valt[0]  # if exclusive comp fork per latuple in P| vertuple in derP?
             '''
             if fd:  # add root to derP for der+:
+                # below is not needed if we use P in der+ now
+                '''
                 for P_ in PP.P__[1:-1]:  # skip 1st and last row
                     for P in P_:
                         for derP in P.uplink_layers[-1][fd]:
                             derP.roott[fd] = PP
+                '''
                 comb_layers = dcomb_layers; PP_layers = PP.dlayers; PPd_ += [PP]
             else:
                 comb_layers = mcomb_layers; PP_layers = PP.rlayers; PPm_ += [PP]
@@ -108,6 +111,28 @@ def comp_P_rng(P__, rng):  # rng+ sub_recursion in PP.P__, switch to rng+n to sk
 
 def comp_P_der(P__):  # der+ sub_recursion in PP.P__, compare P.uplinks to P.downlinks
 
+    for P_ in P__:
+        for P in P_:  # add 2 link layers: rng_derP_ and match_rng_derP_:
+            P.uplink_layers += [[],[[],[]]]; P.downlink_layers += [[],[[],[]]]
+            
+    for P_ in P__:  # higher compared row, exclude 1st: no +ve uplinks, and last: no +ve downlinks
+        # not revised:
+        for P in P_:
+            for _derP in P.uplink_layers[-3][1]:  # fd=1
+                for derP in P.downlink_layers[-3][1]:
+                    # there maybe no x overlap between recomputed Ls of _derP and derP, compare anyway,
+                    # mderP * (ave_olp_L / olp_L)? or olp(_derP._P.L, derP.P.L)?
+                    # gap: neg_olp, ave = olp-neg_olp?
+                    
+                    # compare their derP._P now? else actually it will be the same as rng+
+                    dderP = comp_P(_derP._P, derP._P)  # form higher vertical derivatives of derP.players,
+                    derP._P.uplink_layers[0] += [dderP]  # pre-init layer per derP
+                    _derP._P.downlink_layers[0] += [dderP]
+                # compute x overlap between dderP'__P and P, in form_seg_ or comp_layer?
+
+    return P__
+
+    """
     dderPs__ = []  # derP__ = [[] for P_ in P__[:-1]]  # init derP rows, exclude bottom P row
 
     for P_ in P__[1:-1]:  # higher compared row, exclude 1st: no +ve uplinks, and last: no +ve downlinks
@@ -131,6 +156,8 @@ def comp_P_der(P__):  # der+ sub_recursion in PP.P__, compare P.uplinks to P.dow
 
     return dderPs__
 
+    """
+
 # draft:
 def comp_P(_P, P):  # forms vertical derivatives of params per P in _P.uplink, conditional ders from norm and DIV comp
 
@@ -138,20 +165,33 @@ def comp_P(_P, P):  # forms vertical derivatives of params per P in _P.uplink, c
         vertuple = comp_ptuple(_P.ptuple, P.ptuple)
         derQ = [vertuple]; Valt=copy(vertuple.valt); Rdnt=copy(vertuple.rdnt)
         L = len(_P.dert_)
-    else:  # P.ptuple is derH: list or CQ
-        derQ, Valt, Rdnt = comp_derH(_P.ptuple, P.ptuple, derQ=[],Valt=[0,0],Rdnt=[1,1])
+    else:  # P.ptuple is derH: list or CQ (If P.ptuple could be list of derH, we should update them comp_ptuple?) P.ptuple = [P.ptuple, dtuple]
+        derQ, Valt, Rdnt = comp_derH(_P, P, derQ=[],Valt=[0,0],Rdnt=[1,1])
         # derH is formed by comparing / adding _P derH
         L = _P.L
 
     return CderP(derQ=derQ, valt=Valt, rdnt=Rdnt, P=P, _P=_P, x0=_P.x0, y0=_P.y0, L=L)
 
 # for list derH:
-def comp_derH(_derH, derH, derQ,Valt,Rdnt):
+def comp_derH(_P, P, derQ,Valt,Rdnt):
 
+    # not sure how to decode here yet
+    for _Q in _P.derH_:
+        for Q in P.derH_:
+            dderH = comp_vertuple(_Q, Q)
+            derQ += [dderH]
+            
+            for i in 0,1:
+                Valt[i] += dderH.valt[i]
+                Rdnt[i] += dderH.rdnt[i]
+
+    if _P._P and P._P:
+        derQ, Valt, Rdnt = comp_derH(_P._P and P._P, derQ, Valt, Rdnt)
+         
     # loop layers bottom-up, while lower match?
     # or comp layer per der+, eval per PP?
-    pass
 
+    return derQ, Valt, Rdnt
 
 def rotate_P_(P__, dert__, mask__):  # rotate each P to align it with direction of P gradient
 
