@@ -76,25 +76,18 @@ def sub_recursion(PP):  # evaluate PP for rng+ and der+
 
 def comp_P_rng(P__, rng):  # rng+ sub_recursion in PP.P__, switch to rng+n to skip clustering?
 
-    for P_ in P__:
-        for P in P_:  # add 2 link layers: rng_derP_ and match_rng_derP_:
-            P.uplink_layers += [[],[[],[]]]; P.downlink_layers += [[],[[],[]]]
-
-    for y, _P_ in enumerate(P__[:-rng]):  # higher compared row, skip last rng: no lower comparand rows
-        for x, _P in enumerate(_P_):
-            # get linked Ps at dy = rng-1:
-            for pri_derP in _P.downlink_layers[-3][0]:  # fd always = 0 here
-                pri_P = pri_derP.P
-                # compare linked Ps at dy = rng:
-                for ini_derP in pri_P.downlink_layers[0]:
-                    P = ini_derP.P
-                    # add new Ps, their link layers and reset their roots:
-                    if P not in [P for P_ in P__ for P in P_]:
-                        append_P(P__, P)
-                        P.uplink_layers += [[],[[],[]]]; P.downlink_layers += [[],[[],[]]]
-                    derP = comp_rng(_P, P)
-                    P.uplink_layers[-2] += [derP]
-                    _P.downlink_layers[-2] += [derP]
+    for _P_ in P__[:-rng]:  # higher compared row, skip last rng: no lower comparand rows
+        for _P in _P_:
+            for derP in _P.downlink_layers[1][0]:  # fd always = 0 here
+                # unpacked version
+                # forms vertical derivatives of params per P in _P.uplink, conditional ders from norm and DIV comp
+                _P, P = derP._P, derP.P
+                if isinstance(P.ptuple, Cptuple):
+                    vertuple = comp_ptuple(_P.ptuple, P.ptuple)
+                    derP.derQ = [vertuple]; derP.valt = copy(vertuple.valt); derP.rdnt = copy(vertuple.rdnt)
+                else:
+                    comp_layer(derP, 0, min(len(_P.ptuple)-1,len(P.ptuple)-1))  # this is actually comp derH, works the same here
+                derP.L = len(_P.dert_)
 
     return P__
 
@@ -103,13 +96,40 @@ def comp_P_der(P__):  # der+ sub_recursion in PP.P__, over the same derPs
 
     if isinstance(P__[0][0].ptuple, Cptuple):
         for P_ in P__:
-            for P in P_: P.ptuple = [P.ptuple]
+            for P in P_:
+                P.ptuple = [P.ptuple]
+
     for P_ in P__[1:]:  # exclude 1st row: no +ve uplinks
         for P in P_:
-            for _derP in P.uplink_layers[-1][1]:  # fd=1
-                comp_der(_derP)   # mderP * (ave_olp_L / olp_L)? or olp(_derP._P.L, derP.P.L)? gap: neg_olp, ave = olp-neg_olp?
+            for derP in P.uplink_layers[1][1]:  # fd=1
+                # mderP * (ave_olp_L / olp_L)? or olp(_derP._P.L, derP.P.L)? gap: neg_olp, ave = olp-neg_olp?
+                # unpacked version
+                # forms vertical derivatives of params per P in _P.uplink, conditional ders from norm and DIV comp
+                _P, P = derP._P, derP.P
+                # tentative:
+                elev = int( np.sqrt( len(derP.derQ)-1))
+                i = elev if elev < 3 else 2 ** (elev - 1)  # elev counts from 0, init index = 0,1,2,4,8...
+                j = elev + 1 if elev < 2 else 2 ** elev  # last index
+            
+                if len(_P.ptuple)>j-1 and len(P.ptuple)>j-1: # ptuples are derHs, extend derP.derQ:
+                    comp_layer(derP, i,j)
+                    
+    return P__
 
+def comp_layer(derP, i,j):  # list derH and derQ, single der+ count=elev, eval per PP
 
+    # each P.ptuple is a list , so each of their element is ptuple or Q 
+    for _Q, Q in zip(derP._P.ptuple[i:j], derP.P.ptuple[i:j]):  # ptuples are derHs
+        if isinstance(_Q, Cptuple):
+            dtuple = comp_ptuple(_Q,Q)
+        else:
+            dtuple = comp_vertuple(_Q,Q)
+        derP.derQ += [dtuple]
+        for k in 0, 1:
+            derP.valt[k] += dtuple.valt[k]
+            derP.rdnt[k] += dtuple.rdnt[k]
+
+'''
 def comp_der(derP):  # forms vertical derivatives of params per P in _P.uplink, conditional ders from norm and DIV comp
 
     _P, P = derP._P, derP.P
@@ -130,19 +150,7 @@ def comp_rng(derP):  # forms vertical derivatives of params per P in _P.uplink, 
     else:
         comp_layer(derP, 0, min(len(_P.derH)-1,len(P.derH)-1))  # this is actually comp derH, works the same here
     derP.L = len(_P.dert_)
-
-
-def comp_layer(derP, i,j):  # list derH and derQ, single der+ count=elev, eval per PP
-
-    for _Q, Q in zip(derP._P.ptuple[i:j], derP.P.ptuple[i:j]):  # ptuples are derHs
-        for _ptuple, ptuple in zip(_Q,Q):
-
-            dtuple = comp_vertuple(_ptuple,ptuple)
-            derP.derQ += [dtuple]
-            for k in 0, 1:
-                derP.valt[k] += dtuple.valt[k]
-                derP.rdnt[k] += dtuple.rdnt[k]
-
+'''
 
 def rotate_P_(P__, dert__, mask__):  # rotate each P to align it with direction of P gradient
 
@@ -227,7 +235,8 @@ def append_P(P__, P):  # pack P into P__ in top down sequence
 
     current_ys = [P_[0].y0 for P_ in P__]  # list of current-layer seg rows
     if P.y0 in current_ys:
-        P__[current_ys.index(P.y0)].append(P)  # append P row
+        if P not in P__[current_ys.index(P.y0)]:
+            P__[current_ys.index(P.y0)].append(P)  # append P row
     elif P.y0 > current_ys[0]:  # P.y0 > largest y in ys
         P__.insert(0, [P])
     elif P.y0 < current_ys[-1]:  # P.y0 < smallest y in ys
