@@ -188,15 +188,130 @@ def comp_slice_root(blob, verbose=False):  # always angle blob, composite dert c
                 elif (P.x0 + L) < _P.x0:
                     break  # no xn overlap, stop scanning lower P_
         _P_ = P_
+        
+    # can pack below into form_PP_root later
+    PP_t = []  # PP fork = PP.fds[-1]
+    for fd in 0, 1:       
+        for P_ in P__[1:]:  # scan bottom-up, append link_layers[-1] with branch-rdn adjusted matches in link_layers[-2]:
+            for P in P_: link_eval(P.uplink_layers, fd)  # uplinks_layers[-2] matches -> uplinks_layers[-1]         
+        PP_ = [] 
+        P_ = [P for P_ in reversed(P__) for P in P_]  # make P__ into a flat list, but from bottom P  
+        while P_:
+            terminated_P_ = []
+            form_PP_(P_, [P_[0]], terminated_P_, fd)
+            # form PP after checking through all uplinks and branches
+            PP_ += [sum2PP(terminated_P_, base_rdn=2, fds=[0], fd=fd)]
+
+        # here probably can run pruning function
+
+        for PP in PP_:
+            for P_ in PP.P__:
+                for P in P_:
+                    if fd:
+                        PPm = P.roott[0]
+                        if PPm not in PP.alt_PP_:
+                            PP.alt_PP_ += [PPm]  # bilateral assignment of alt_PPs
+                        if PP not in PPm.alt_PP_:
+                            PPm.alt_PP_ += [PP]  # PPd here
+        PP_t += [PP_]
+  
+    PPm_, PPd_ = PP_t
+    blob.PPm_, blob.PPd_ = PPm_, PPd_; blob.rlayers += [PPm_]; blob.dlayers += [PPd_]
+    
+    '''
     # form segments: stacks of (P,derP)s:
     segm_ = form_seg_root([copy(P_) for P_ in P__], fd=0, fds=[0])  # shallow copy: same Ps in different lists
     segd_ = form_seg_root([copy(P_) for P_ in P__], fd=1, fds=[0])  # initial latuple fd=0
     # form PPs: graphs of segs:
     PPm_, PPd_ = form_PP_root((segm_, segd_), base_rdn=2)
     blob.PPm_, blob.PPd_ = PPm_, PPd_; blob.rlayers += [PPm_]; blob.dlayers += [PPd_]
+    '''
+    
     # re comp, cluster:
     sub_recursion_eval(blob)  # intra PP, add rlayers, dlayers, seg_levels to select PPs, sum M,G
     agg_recursion_eval(blob, [copy(blob.PPm_), copy(blob.PPd_)])  # cross PP, Cgraph conversion doesn't replace PPs?
+
+
+        
+def form_PP_(P__, P_, terminated_P_, fd):  # scan uplinks recursively and pack Ps
+
+    uplink_ = [] 
+    # retrieve unique uplinks from all Ps
+    for P in P_:
+        for uplink in P.uplink_layers[-1][fd]:
+            if uplink not in uplink_:
+                uplink_ += [uplink]
+        terminated_P_ += [P]  # terminate P after adding their uplinks
+        P__.remove(P)
+        
+    next_P_ = []
+    for uplink in uplink_:
+        P = uplink._P
+        if (P not in terminated_P_ + next_P_) and (P in P__):
+            next_P_ += [P]  # add P to next_P_ so that we can check it in the next call
+        
+    # search Ps' uplinks recursively
+    if next_P_:
+        form_PP_(P__, next_P_, terminated_P_, fd)
+
+
+def sum2PP(P_, base_rdn, fds, fd):  # sum PP_segs into PP
+
+    from sub_recursion import append_P
+
+    PP = CPP(x0=P_[0].x0, rdn=base_rdn, fds=copy(fds)+[fd], rlayers=[[]], dlayers=[[]])
+
+    # To pack all matched link, so that we can check them in the 2nd step later
+    matched_uplink_, matched_downlink_ = [], []
+    for P in P_:
+        matched_uplink_ += P.uplink_layers[-1]
+        matched_downlink_ += P.downlink_layers[-1]
+            
+    derQ = []
+    PP.box = [P_[0].y0, 0, P_[0].x0, 0]
+    for P in P_:
+        P.roott[fd] = PP
+        
+        # update PP's uplinks and downlinks
+        for uplink in P.uplink_layers[-2]:
+            if uplink not in matched_uplink_:
+                PP.uplink_layers[0] += [uplink]
+        for downlink in P.downlink_layers[-2]:
+            if downlink not in matched_downlink_:
+                PP.downlink_layers[0] += [downlink]
+        
+        # update box
+        PP.box[0] = min(PP.box[0], P.y0)  # y0
+        PP.box[1] = max(PP.box[1], P.y0)  # yn
+        PP.box[2] = min(PP.box[2], P.x0)  # x0
+        PP.box[3] = max(PP.box[3], P.x0 + len(P.dert_))  # xn
+        
+        # sum P
+        sum_derH(PP.derH, [P.ptuple] if isinstance(P,CP) else P.derQ)
+        # sum links
+        if P.uplink_layers[-1][fd]:
+            # pack derQ
+            for derP in P.uplink_layers[-1][fd]:
+                sum_derH(derQ, derP.derQ) 
+            for derP in P.uplink_layers[-2]:
+                # positive links: update valt and rdnt
+                if derP in P.uplink_layers[-1][fd]:
+                    for i in 0, 1:
+                        PP.valt[i] += derP.valt[i]
+                        PP.rdnt[i] += derP.rdnt[i]              
+                # negative links: update nval and nderP
+                else:
+                    PP.nval += derP.valt[fd]  # negative link
+                    PP.nderP_ += [derP]
+                     
+        # pack P into PP.P__
+        if not PP.P__: PP.P__.append([P])  # pack 1st P
+        else: append_P(PP.P__, P)  # pa
+    
+    if derQ: # pack new derQ
+        PP.derH += derQ
+    
+    return PP
 
 
 def slice_blob(blob, verbose=False):  # form blob slices nearest to slice Ga: Ps, ~1D Ps, in select smooth edge (high G, low Ga) blobs
@@ -242,7 +357,7 @@ def slice_blob(blob, verbose=False):  # form blob slices nearest to slice Ga: Ps
     blob.P__ = P__
     return P__
 
-
+'''
 def form_seg_root(P__, fd, fds):  # form segs from Ps
 
     for P_ in P__[1:]:  # scan bottom-up, append link_layers[-1] with branch-rdn adjusted matches in link_layers[-2]:
@@ -257,6 +372,7 @@ def form_seg_root(P__, fd, fds):  # form segs from Ps
             else:
                 seg_.append( sum2seg([P], fd, fds))  # no link_s, terminate seg_Ps = [P]
     return seg_
+'''
 
 def link_eval(link_layers, fd):
     # sort derPs in link_layers[-2] by their value param:
@@ -296,6 +412,7 @@ def rng_eval(derP, fd):  # compute value of combined mutual derPs: overlap betwe
     '''
 #    derP.rdn += (rdn / nolp) > .5  # no fractional rdn?
 
+'''
 def form_seg_(seg_, P__, seg_Ps, fd, fds):  # form contiguous segments of vertically matching Ps
 
     if len(seg_Ps[-1].uplink_layers[-1][fd]) > 1:  # terminate seg
@@ -343,6 +460,7 @@ def form_PP_root(seg_t, base_rdn):  # form PPs from match-connected segs
                             PPm.alt_PP_ += [PP]  # PPd here
         PP_t += [PP_]
     return PP_t
+
 
 def form_PP_(PP_segs, link_, fup, fd):  # flood-fill PP_segs with vertically linked segments:
 
@@ -399,6 +517,7 @@ def sum2seg(seg_Ps, fd, fds):  # sum params of vertically connected Ps into segm
 
     return seg
 
+
 def sum2PP(PP_segs, base_rdn, fd):  # sum PP_segs into PP
 
     from sub_recursion import append_P
@@ -441,7 +560,7 @@ def sum2PP(PP_segs, base_rdn, fd):  # sum PP_segs into PP
                 PP.nval += derP.valt[fd]  # different from altuple val
                 PP.nderP_ += [derP]
     return PP
-
+'''
 
 def sum_derH(DerH, derH, fneg=0):  # same fds from comp_derH
 
