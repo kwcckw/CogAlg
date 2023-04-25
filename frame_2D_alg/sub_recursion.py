@@ -35,9 +35,8 @@ def sub_recursion_eval(root):  # for PP or dir_blob
                     if PP_layer:
                         if i > len(comb_layers) - 1: comb_layers += [PP_layer]  # add new r|d layer
                         else: comb_layers[i] += PP_layer  # splice r|d PP layer into existing layer
-            # segs:
-            agg_recursion_eval(PP, [copy(PP.mseg_levels[-1]), copy(PP.dseg_levels[-1])])
-            # include empty comb_layers:
+            # no segs but may keep pruned sub_PPs?
+            # include empty comb_layers: # revise?
             if fd:
                 PPmm_ = [PPm_] + mcomb_layers; mVal = sum([PP.valt[0] for PP_ in PPmm_ for PP in PP_])
                 PPmd_ = [PPm_] + dcomb_layers; dVal = sum([PP.valt[1] for PP_ in PPmd_ for PP in PP_])
@@ -62,33 +61,29 @@ def sub_recursion(PP):  # evaluate PP for rng+ and der+
     P__ = comp_P_der(P__) if PP.fds[-1] else comp_P_rng(P__, PP.rng + 1)   # returns top-down
     PP.rdnt[PP.fds[-1] ] += 1  # two-fork rdn, priority is not known?  rotate?
 
-    sub_segm_ = form_seg_root([copy(P_) for P_ in P__], fd=0, fds=PP.fds)
-    sub_segd_ = form_seg_root([copy(P_) for P_ in P__], fd=1, fds=PP.fds)  # returns bottom-up
-    # sub_PPm_, sub_PPd_:
-    sub_PPm_, sub_PPd_ = form_PP_root((sub_segm_, sub_segd_), PP.rdnt[PP.fds[-1]] + 1)
-    PP.rlayers[:] = [sub_PPm_]; PP.dlayers[:] = [sub_PPd_]
-
+    sub_PPm_, sub_PPd_ = form_PP_root([copy(P_) for P_ in P__], [copy(P_) for P_ in P__], PP.rdnt[PP.fds[-1]] + 1, fds=PP.fds)
+    PP.rlayers[:] = [sub_PPm_]
+    PP.dlayers[:] = [sub_PPd_]
     sub_recursion_eval(PP)  # add rlayers, dlayers, seg_levels to select sub_PPs
 
-# not revised,
 # __Ps compared in rng+ can be mediated through multiple layers of _Ps, with results are summed in derQ of the same link_[0].
-# The number of layers will be represented in corresponding PP.rng.
+# The number of layers is represented in corresponding PP.rng.
+# mderP * (ave_olp_L / olp_L)? or olp(_derP._P.L, derP.P.L)? gap: neg_olp, ave = olp-neg_olp?
+# draft:
 
 def comp_P_rng(P__, rng):  # rng+ sub_recursion in PP.P__, switch to rng+n to skip clustering?
 
     for _P_ in P__[:-rng]:  # higher compared row, skip last rng: no lower comparand rows
         for _P in _P_:
-            for derP in _P.downlink_layers[1][0]:  # fd always = 0 here
-                # unpacked version
-                # forms vertical derivatives of params per P in _P.uplink, conditional ders from norm and DIV comp
+            for derP in _P.downlink_layers[-1][0]:
                 _P, P = derP._P, derP.P
+                # if single P.link_: keep going up(down) beyond last compared row?
                 if isinstance(P.ptuple, Cptuple):
                     vertuple = comp_ptuple(_P.ptuple, P.ptuple)
                     derP.derQ = [vertuple]; derP.valt = copy(vertuple.valt); derP.rdnt = copy(vertuple.rdnt)
                 else:
                     comp_layer(derP, 0, min(len(_P.ptuple)-1,len(P.ptuple)-1))  # this is actually comp derH, works the same here
                 derP.L = len(_P.dert_)
-
     return P__
 
 
@@ -101,56 +96,28 @@ def comp_P_der(P__):  # der+ sub_recursion in PP.P__, over the same derPs
 
     for P_ in P__[1:]:  # exclude 1st row: no +ve uplinks
         for P in P_:
-            for derP in P.uplink_layers[1][1]:  # fd=1
-                # mderP * (ave_olp_L / olp_L)? or olp(_derP._P.L, derP.P.L)? gap: neg_olp, ave = olp-neg_olp?
-                # unpacked version
-                # forms vertical derivatives of params per P in _P.uplink, conditional ders from norm and DIV comp
+            for derP in P.uplink_[1]:  # fd=1
                 _P, P = derP._P, derP.P
-                # tentative:
-                elev = int( np.sqrt( len(derP.derQ)-1))
-                i = elev if elev < 3 else 2 ** (elev - 1)  # elev counts from 0, init index = 0,1,2,4,8...
-                j = elev + 1 if elev < 2 else 2 ** elev  # last index
-            
+                i= len(derP.derQ)-1
+                j= 2*i
                 if len(_P.ptuple)>j-1 and len(P.ptuple)>j-1: # ptuples are derHs, extend derP.derQ:
                     comp_layer(derP, i,j)
-                    
+
     return P__
 
 def comp_layer(derP, i,j):  # list derH and derQ, single der+ count=elev, eval per PP
 
-    # each P.ptuple is a list , so each of their element is ptuple or Q 
-    for _Q, Q in zip(derP._P.ptuple[i:j], derP.P.ptuple[i:j]):  # ptuples are derHs
-        if isinstance(_Q, Cptuple):
-            dtuple = comp_ptuple(_Q,Q)
+    for _ptuple, ptuple in zip(derP._P.ptuple[i:j], derP.P.ptuple[i:j]):  # P.ptuple is derH
+
+        if isinstance(_ptuple, CQ):
+            dtuple = comp_vertuple(_ptuple, ptuple)
         else:
-            dtuple = comp_vertuple(_Q,Q)
+            dtuple = comp_ptuple(_ptuple, ptuple)
         derP.derQ += [dtuple]
         for k in 0, 1:
             derP.valt[k] += dtuple.valt[k]
             derP.rdnt[k] += dtuple.rdnt[k]
 
-'''
-def comp_der(derP):  # forms vertical derivatives of params per P in _P.uplink, conditional ders from norm and DIV comp
-
-    _P, P = derP._P, derP.P
-    # tentative:
-    elev = int( np.sqrt( len(derP.derQ)-1))
-    i = elev if elev < 3 else 2 ** (elev - 1)  # elev counts from 0, init index = 0,1,2,4,8...
-    j = elev + 1 if elev < 2 else 2 ** elev  # last index
-
-    if len(_P.ptuple)>j-1 and len(P.ptuple)>j-1: # ptuples are derHs, extend derP.derQ:
-        comp_layer(derP, i,j)
-
-def comp_rng(derP):  # forms vertical derivatives of params per P in _P.uplink, conditional ders from norm and DIV comp
-
-    _P, P = derP._P, derP.P
-    if isinstance(P.ptuple, Cptuple):
-        vertuple = comp_ptuple(_P.ptuple, P.ptuple)
-        derP.derQ = [vertuple]; derP.valt = copy(vertuple.valt); derP.rdnt = copy(vertuple.rdnt)
-    else:
-        comp_layer(derP, 0, min(len(_P.derH)-1,len(P.derH)-1))  # this is actually comp derH, works the same here
-    derP.L = len(_P.dert_)
-'''
 
 def rotate_P_(P__, dert__, mask__):  # rotate each P to align it with direction of P gradient
 
