@@ -182,7 +182,7 @@ def comp_slice_root(blob, verbose=False):  # always angle blob, composite dert c
                 elif (P.x0 + L) < _P.x0:
                     break  # no xn overlap, stop scanning lower P_
         _P_ = P_
-    PPm_,PPd_ = form_PP_t(P__, base_rdn=2)
+    PPm_,PPd_ = form_PP_t(P__, fds=[0], base_rdn=2)
     blob.PPm_, blob.PPd_ = PPm_, PPd_; blob.rlayers += [PPm_]; blob.dlayers += [PPd_]
     # re comp, cluster:
     sub_recursion_eval(blob)  # intra PP, add rlayers, dlayers, seg_levels to select PPs, sum M,G
@@ -233,11 +233,11 @@ def slice_blob(blob, verbose=False):  # form blob slices nearest to slice Ga: Ps
     return P__
 
 
-def form_PP_t_Chee(P__, base_rdn):  # form PPs from derP.valt[fd] -connected Ps
+def form_PP_t(P__, fds, base_rdn):  # form PPs from derP.valt[fd] -connected Ps
 
     PP_t = []
     for fd in 0, 1:
-        fork_P__ = reversed([P for P in P_ for P_ in P__][1:])  # scan bottom-up, copy per fd (flat fork_P__ now)
+        fork_P__ = ([P for P_ in reversed(P__[1:]) for P in P_])  # scan bottom-up, copy per fd (flat fork_P__ now)
         PP_ = []
         while fork_P__:
             P = fork_P__.pop(0)
@@ -250,14 +250,84 @@ def form_PP_t_Chee(P__, base_rdn):  # form PPs from derP.valt[fd] -connected Ps
                         fork_P__.remove(derP._P)
                 PP_ += [qPP]
         # prune PPs by P val:
-        rePP_ = [reval_PP(qPP, aveB, fd, base_rdn) for qPP in PP_]  # qPP = [qPP,val]
+        rePP_ = reval_PP_(PP_, [aveB for _ in PP_], fd)  # qPP = [qPP,val]
         if rePP_:
-            PP_[:] = [sum2PP(rePP, fd) for rePP in rePP_]
+            PP_[:] = [sum2PP(rePP, base_rdn, fds, fd) for rePP in rePP_]
         PP_t += [rePP_]
 
     return PP_t  # add_alt_PPs_(graph_t)?
 
 
+def reval_PP_(PP_, reval_, fd):  # recursive eval nodes for regraph, after pruning weakly connected nodes
+
+    rePP_, rreval_ = [],[]
+    while PP_:  # P__
+        P_, val = PP_.pop(0)
+        reval = 0
+        
+        if val > aveB:
+            if reval < aveB:  # same graph, skip re-evaluation:
+                rePP_+=[[P_,val]]; rreval_+=[0]
+            else:
+                rePP, reval, rval = reval_PP(P_, val, fd)  # recursive depth-first node and link revaluation
+                if rval>aveB:
+                    rePP_+=[[rePP,rval]]; rreval_+=[reval]
+
+    if max([reval for reval in rreval_]) > aveB:
+        rePP_ = reval_PP_(rePP_, rreval_, fd)  # PP reval while min val reduction
+
+    return rePP_
+
+
+def reval_PP(qPP, Val, fd):  # prune qPP by link_ val adjusted by _P.val
+
+    reval = 0
+    for P in qPP[0]:
+        for i, derP in enumerate(P.link_t[fd]):
+            val = derP.valt[fd]
+            link_val = 0
+            for link in derP._P.link_t[fd]:  # _P.link_t was updated in previous round
+                if link != derP and link._P != P:
+                    link_val += val + link.valt[fd]*med_decay - val*med_decay  # not circular link
+            reval += val - link_val  #.link.valt was updated in previous round
+            derP.valt[fd] = link_val  # update     
+    rreval = 0
+    if reval > aveB:  # prune:   
+        rePP = [[], 0]  # reformed proto-PP
+        for P in qPP[0]:
+            val = sum([link.valt[fd] for link in P.link_t[fd]])
+            if val < vaves[fd]:  # prune revalued P and its links
+                for link in P.link_t[fd]:
+                    _P = link._P
+                    _link_ =_P.link_t[fd]
+                    if link in _link_: _link_.remove(link)
+                    rreval += link.valt[fd] + val*med_decay - link.valt[fd]*med_decay  # else same as rreval += link_.val
+            else:
+                link_ = P.link_t[fd]  # prune P links only:
+                remove_link_ = []
+                for link in link_:
+                    _P = link._P
+                    _val = sum([_link.valt[fd] for _link in _P.link_t[fd]])
+                    link_val = link.valt[fd] + _val*med_decay - link.valt[fd]*med_decay
+                    if link_val < aveB:  # prune link, else no change
+                        remove_link_ += [link]
+                        rreval += link_val
+                while remove_link_:
+                    link_.remove(remove_link_.pop(0))
+                        
+                Val+=val 
+                rePP[0] += [P]; rePP[1] += sum([link.valt[fd] for link in P.link_t[fd]])
+         
+         # recursion:
+        if rreval > aveB and Val > ave:
+            rePP, reval, Val = reval_PP(rePP, Val, fd)  # not sure about Val
+            rreval+= reval
+
+    else: rePP = qPP
+    return rePP, rreval, Val
+
+
+'''
 def form_PP_t(P__, base_rdn):  # form PPs from derP.valt[fd] -connected Ps
 
     PP_t = []
@@ -279,6 +349,7 @@ def form_PP_t(P__, base_rdn):  # form PPs from derP.valt[fd] -connected Ps
 
     return PP_t  # add_alt_PPs_(graph_t)?
 
+
 def init_PP(qPP, iPP_, P, fd, val):  # recursive qPP_+=[_P]
 
     for derP in P.link_t[fd]:  # all positive links init PP
@@ -290,24 +361,14 @@ def init_PP(qPP, iPP_, P, fd, val):  # recursive qPP_+=[_P]
             val += init_PP(qPP, iPP_, _P, fd, val)
     return [qPP, val]
 
-def reval_PP(qPP, ave, fd, base_rdn):  # prune qPP by link_ val adjusted by _P.val
-
-    for P_ in qPP[0]:  # P__
-        for P in P_:
-            link_eval(P, fd, qPP)  # prune P.link_ as in graph_reval, accum pre_PP_ and reval
-
-    if max([reval for (P,reval) in qPP]) > ave:  # if any node should be revalued
-        reval_PP(qPP, ave, fd, base_rdn)
-    else:
-        return sum2PP(qPP, fd=fd)
 
 # partial draft
 def link_eval(P, fd, qPP):  # prune P.link_ as in graph_reval, accum pre_PP_ and reval
-    '''
-    if not fd: rng_eval(derP, fd)  # reset derP.valt, derP.rdn
-    mrdn = derP.valt[1 - fd] > derP.valt[fd]
-    derP.rdnt[fd] += not mrdn if fd else mrdn
-    '''
+    
+    # if not fd: rng_eval(derP, fd)  # reset derP.valt, derP.rdn
+    # mrdn = derP.valt[1 - fd] > derP.valt[fd]
+    # derP.rdnt[fd] += not mrdn if fd else mrdn
+    
     reval = 0
     for i, derP in enumerate(P.link_t[fd]):
         med_val = 0
@@ -320,10 +381,13 @@ def link_eval(P, fd, qPP):  # prune P.link_ as in graph_reval, accum pre_PP_ and
     # add section to prune Ps, as graph_reval
     # append pre_PP in P.roott[fd] with P or merge in _P.roott[fd] if any,
     # term pre_PP if empty pre_PP link__
+'''
+
 
 # not fully updated
-def sum2PP(P_, base_rdn, fds, fd):  # sum PP_segs into PP
+def sum2PP(prePP, base_rdn, fds, fd):  # sum PP_segs into PP
 
+    P_, val = prePP  # not sure on how to pack val here
     from sub_recursion import append_P
 
     PP = CPP(rngH = [Cptuple()], x0=P_[0].x0, rdn=base_rdn, fds=copy(fds)+[fd], rlayers=[[]], dlayers=[[]])
@@ -334,7 +398,7 @@ def sum2PP(P_, base_rdn, fds, fd):  # sum PP_segs into PP
         P.roott[fd] = PP
 
         # get missed links
-        for link in P.link:
+        for link in P.link_:
             if link not in P.link_t[fd]:
                 PP.link__ += [link]
 
@@ -347,9 +411,9 @@ def sum2PP(P_, base_rdn, fds, fd):  # sum PP_segs into PP
         # sum P
         sum_ptuple(PP.rngH[0], P.ptuple)
         # sum links
-        if P.link_[fd]:
+        if P.link_t[fd]:
             # pack derQ
-            for derP in P.link_[fd]:
+            for derP in P.link_t[fd]:
                 sum_rngQ(rngQ, derP.rngQ)
             for derP in P.link_:
                 # positive links: update valt and rdnt
@@ -421,7 +485,7 @@ def sum2seg(seg_Ps, fd, fds):  # sum params of vertically connected Ps into segm
                             PPm.alt_PP_ += [PP]  # PPd here
 '''
 
-def sum2PP(PP_segs, base_rdn, fd):  # sum PP_segs into PP
+def sum2PP_old(PP_segs, base_rdn, fd):  # sum PP_segs into PP
     from sub_recursion import append_P
     PP = CPP(x0=PP_segs[0].x0, rdn=base_rdn, fds=copy(PP_segs[0].fds)+[fd], rlayers=[[]], dlayers=[[]])
     if fd: PP.dseg_levels, PP.mseg_levels = [PP_segs], [[]]  # empty alt_seg_levels
@@ -464,21 +528,15 @@ def sum2PP(PP_segs, base_rdn, fd):  # sum PP_segs into PP
 
 def sum_rngQ(RngQ, rngQ, fneg=0):
 
-    for DerQ, derQ  in zip_longest(RngQ[0], rngQ[0], fillvalue=[]):
-        if derQ:
-            if DerQ:
-                for Vertuple, vertuple  in zip_longest(DerQ, derQ, fillvalue=[]):
-                    if vertuple:
-                        if Vertuple:
-                            if isinstance(vertuple, CQ):
-                                sum_vertuple(Vertuple, vertuple, fneg)
-                            else:
-                                sum_ptuple(Vertuple, vertuple, fneg)
-                        else:
-                            DerQ += [deepcopy(vertuple)]
-            elif not fneg:
-                DerQ[:] = deepcopy(derQ)
-            RngQ[1] += rngQ[1]
+    for Vertuple, vertuple  in zip_longest(RngQ[0], rngQ[0], fillvalue=[]):
+        if vertuple:
+            if Vertuple:
+                if isinstance(vertuple, CQ):
+                    sum_vertuple(Vertuple, vertuple, fneg)
+                else:
+                    sum_ptuple(Vertuple, vertuple, fneg)
+            else:
+                RngQ[0] += [deepcopy(vertuple)]
 
 def sum_derH(DerH, derH, fneg=0):  # same fds from comp_derH
 
