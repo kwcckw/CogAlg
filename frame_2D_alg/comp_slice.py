@@ -220,12 +220,16 @@ def slice_blob(blob, verbose=False):  # form blob slices nearest to slice Ga: Ps
                 params.Ga = (params.aangle[1] + 1) + (params.aangle[3] + 1)  # Cos_da0, Cos_da1
                 L = len(Pdert_)
                 params.L = L; params.x = x-L/2
+                pval = params.I + params.M + params.Ma + params.G + params.Ga
+                params.valt= [pval, pval]
                 P_.append( CP(ptuple=params, x0=x-(L-1), y0=y, dert_=Pdert_))
             _mask = mask
         # pack last P, same as above:
         if not _mask:
             params.G = np.hypot(*params.angle); params.Ga = (params.aangle[1] + 1) + (params.aangle[3] + 1)
             L = len(Pdert_); params.L = L; params.x = x-L/2
+            pval = params.I + params.M + params.Ma + params.G + params.Ga
+            params.valt= [pval, pval]
             P_.append(CP(ptuple=params, x0=x - (L - 1), y0=y, dert_=Pdert_))
         P__ += [P_]
 
@@ -250,7 +254,7 @@ def form_PP_t(P__, base_rdn):  # form PPs of derP.valt[fd] - connected Ps
                         fork_P__.remove(derP._P)
                 PP_ += [qPP]
         # prune PP links by med val:
-        rePP_ = reval_PP_(PP_, [aveB for _ in PP_], fd)  # qPP = [qPP,val], aveB to be adjusted for rdn?
+        rePP_ = reval_PP_(PP_, aveB, fd)  # qPP = [qPP,val], aveB to be adjusted for rdn?
         if rePP_:
             PP_[:] = [sum2PP(rePP, base_rdn, fd) for rePP in rePP_]
         PP_t += [rePP_]
@@ -277,31 +281,49 @@ def reval_PP_(PP_, ave, fd):  # recursive eval nodes for regraph, after pruning 
 
     return rePP_
 
-def reval_P_(qPP, ave, fd):  # prune qPP by link_ val adjusted by _P.val
 
-    reval = 0
+def med_eval(P, pre_link_, med_val_, checked_P_, fd):
 
-    for P in qPP[0]:
-        # draft 2-level med_eval: recursive eval of mediated link_s per _P, __P_, ___P__, etc, while last layer val
-        med_val_, pre_link_ = [],[]  # per P
-        for derP in P.link_t[fd]:
-            med_val = 0
+    for derP in P.link_t[fd]:
+        med_val = 0
+        mediated_link_ = []
+        if derP._P not in checked_P_:
             for link in derP._P.link_t[fd]:  # _P.link_t was updated in previous round
-                if link!=derP: med_val += link.valt[fd]  # not circular link
+                if link!=derP: 
+                    med_val += link.valt[fd]  # not circular link
+                    mediated_link_ += [link]  # evaluated mediated links
             Val = med_val*med_decay
-            med_val_ += [Val]  # init vals of all evaluated mediated links
-            pre_link_ += derP._P.link_t[fd]  # evaluated mediated links
+            # med_val is per mediated_link?
+            med_val_ += [Val for _ in mediated_link_]  # init vals of all evaluated mediated links
+            pre_link_ += mediated_link_  
             # extend med_eval, fold into recursive med_eval():
             if Val > ave:
                 _med_val = 0
+                _mediated_link_ = []
                 for link in derP._P.link_t[fd]:
                     for _link in link._P.link_t[fd]:
                         if _link not in pre_link_:
                             _med_val += _link.valt[fd]  # not circular link
-                            pre_link_ += _link
+                            _mediated_link_ += [_link]
                 _Val = _med_val * (med_decay**2)
+                med_val_ += [_Val for _ in _mediated_link_] 
+                pre_link_ += _mediated_link_  
                 if _Val > ave:
-                    med_eval(derP._P.link_t[fd])  # extend med_eval
+                    med_eval(derP._P, pre_link_, med_val_, checked_P_, fd) # extend med_eval
+
+
+def reval_P_(P_, ave, fd):  # prune qPP by link_ val adjusted by _P.val
+
+    checked_P_ = []
+    for P in P_:
+        med_val_, pre_link_ = [],[]  # per P
+        if P not in checked_P_:
+            med_eval(P, pre_link_, med_val_, checked_P_, fd)
+
+        # what to do with pre_link_ and med_val_ per P here?
+        
+
+    '''
     # not revised:
     rreval = 0
     if reval > aveB:  # prune:
@@ -335,14 +357,15 @@ def reval_P_(qPP, ave, fd):  # prune qPP by link_ val adjusted by _P.val
 
     else: rePP = qPP
     return [rePP,Val], rreval
+    '''
 
 # not fully updated
-def sum2PP(prePP, base_rdn, fds, fd):  # sum PP_segs into PP
+def sum2PP(prePP, base_rdn, fd):  # sum PP_segs into PP
 
     P_, val = prePP  # not sure on how to pack val here
     from sub_recursion import append_P
 
-    PP = CPP(rngH = [Cptuple()], x0=P_[0].x0, rdn=base_rdn, fds=copy(fds)+[fd], rlayers=[[]], dlayers=[[]])
+    PP = CPP(rngH = [Cptuple()], x0=P_[0].x0, rdn=base_rdn, rlayers=[[]], dlayers=[[]])
 
     rngQ = [[], 0]
     PP.box = [P_[0].y0, 0, P_[0].x0, 0]
