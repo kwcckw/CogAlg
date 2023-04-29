@@ -277,8 +277,9 @@ def reval_PP_(PP_, fd):  # recursive eval Ps for rePP, prune weakly connected Ps
 def reval_P_(P_, fd):  # prune qPP by link_ val adjusted by _P.val
 
     for i, P in enumerate(P_):
-        P, val, dir_link_ = med_eval(P.link_t[fd], old_link_=[], med_val_=[], dir_link_=P.link_t[fd], fd=fd)  # recursive,
-        P.link_t[fd][:] = dir_link_
+        med_val_ = [aveB for _ in P.link_t[fd]]  # med_val_ should be per link?
+        _, val, dir_link_ = med_eval(P.link_t[fd], old_link_=[], med_val_=med_val_, dir_link_=P.link_t[fd], fd=fd)  # recursive,
+        P.link_t[fd] = dir_link_
         P_[i] = [P,val] # appends combined link val to P, prunes P.link_t[fd]
     # prune P_:
     Val, reval = 0, 0  # reval from P links only?
@@ -299,38 +300,44 @@ def reval_P_(P_, fd):  # prune qPP by link_ val adjusted by _P.val
 # draft
 def med_eval(last_link_, old_link_, med_val_, dir_link_, fd):  # reval, prune links
 
-    curr_link_, med_val = [],0
+    curr_link_, curr_med_val_, prune_llink_, Med_val  = [], [], [], 0
 
-    for llink in last_link_:
-        if len(med_val_)==1: fdir = 1;  # last_link_ is direct links
-        else: fdir=0
-        for _link in llink._P.link_t[fd]:
-            if _link not in old_link_:  # not a circular link
-                val =_link.valt[fd]; med_val+=val
-                old_link_ += [_link]  # evaluated mediated links
-                curr_link_+= [_link]  # current link layer,-> last_link_ in recursion
-            if fdir:
-                dmed_val = llink.valt[fd] + med_val * med_decay
-                if dmed_val > ave: dir_link_ += [_link]
-                else: pass  # adjust other links and vals:
-                '''
-                for link, med_val in zip(P.link_t[fd],
-                    prune_llink_ = []; del_val = 0
-                for llink, val in zip(last_link_,llink_val_):
-                    if val < aveB:
-                        prune_llink_+=[llink]; del_val += val
-                        llink.P.link_t[fd].remove(llink)
-                        llink._P.link_t[fd].remove(llink)
-                for llink in prune_llink_:
-                last_link_.remove(llink)
-                '''
-    Val = med_val * (med_decay ** (len(med_val_)+1))
-    med_val_ += [Val]
+    if len(med_val_)==1: fdir = 1  # last_link_ is direct links
+    else: fdir=0
+    for llink, med_val in zip(last_link_, med_val_):
+        if llink not in prune_llink_:
+            for _link in llink._P.link_t[fd]:
+                if _link not in old_link_:  # not a circular link
+                    val =_link.valt[fd]; Med_val+=val
+                    old_link_ += [_link]  # evaluated mediated links
+                    curr_link_+= [_link]  # current link layer,-> last_link_ in recursion
+                    curr_med_val_ += [med_val+val]
+                if fdir:
+                    dmed_val = llink.valt[fd] + med_val * med_decay
+                    if dmed_val > ave: 
+                        dir_link_ += [_link]
+                    else: 
+                        # adjust other links and vals:
+                        for llink, val in zip(last_link_,med_val_):
+                            if val < aveB:
+                                prune_llink_+=[llink]
+                                if llink in llink.P.link_t[fd]: llink.P.link_t[fd].remove(llink)
+                                if llink in llink._P.link_t[fd]: llink._P.link_t[fd].remove(llink)
+                      
+    for llink in prune_llink_:
+        last_link_.remove(llink)
+                
+    Val = Med_val * (med_decay ** (Med_val))
+    
+    # why this med_val_ is added per recursion?
+    # med_val_ += [Val]
+    
     if Val > aveB:  # val of last med layer
-        med_eval(curr_link_, old_link_, med_val_, dir_link_, fd)  # eval next med layer
+        last_link_, Val, dir_link_ = med_eval(curr_link_, old_link_, curr_med_val_, dir_link_, fd)  # eval next med layer
     else:
-        Val = sum([link.valt[fd] for link in last_link_]) + sum(med_val_)
-        return last_link_, Val, dir_link_
+        Val = sum([link.valt[fd] for link in last_link_]) + Med_val
+        
+    return last_link_, Val, dir_link_  # the indent should be like this, because we still need to return after recursive med_eval
 
 # not fully updated
 def sum2PP(prePP, base_rdn, fd):  # sum PP_segs into PP
