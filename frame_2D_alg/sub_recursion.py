@@ -5,7 +5,7 @@ import numpy as np
 from comp_slice import PP_aves, ave_nsub, ave_g, ave_ga
 from comp_slice import CP, Cptuple, CderP, CPP
 from comp_slice import comp_ptuple, comp_vertuple, comp_angle
-from comp_slice import form_seg_root, form_PP_root
+from comp_slice import form_PP_t
 
 from agg_convert import agg_recursion_eval
 
@@ -29,7 +29,7 @@ def sub_recursion_eval(root):  # for PP or dir_blob
             val = PP.valt[fd]; alt_val = sum([alt_PP.valt[fd] for alt_PP in PP.alt_PP_]) if PP.alt_PP_ else 0
             ave = PP_aves[fd] * (PP.rdnt[fd] + 1 + (alt_val > val))
             if val > ave and len(PP.P__) > ave_nsub:
-                sub_recursion(PP)  # comp_P_der | comp_P_rng in PPs -> param_layer, sub_PPs
+                sub_recursion(PP, fd)  # comp_P_der | comp_P_rng in PPs -> param_layer, sub_PPs
                 ave*=2  # rdn incr, splice deeper layers between PPs into comb_layers:
                 for i, (comb_layer, PP_layer) in enumerate(zip_longest(comb_layers, PP_layers, fillvalue=[])):
                     if PP_layer:
@@ -55,14 +55,14 @@ def sub_recursion_eval(root):  # for PP or dir_blob
                 else:  root.M += PP.valt[fd]
 
 
-def sub_recursion(PP):  # evaluate PP for rng+ and der+
+def sub_recursion(PP, fd):  # evaluate PP for rng+ and der+
 
     P__  = [P_ for P_ in reversed(PP.P__)]  # revert bottom-up to top-down
-    P__ = comp_P_der(P__) if PP.fds[-1] else comp_P_rng(P__, PP.rng + 1)   # returns top-down
-    PP.rdnt[PP.fds[-1] ] += 1  # two-fork rdn, priority is not known?  rotate?
+    P__ = comp_P_der(P__) if fd else comp_P_rng(P__, PP.rng + 1)   # returns top-down
+    PP.rdnt[fd] += 1  # two-fork rdn, priority is not known?  rotate?
 
     cP__ = [copy(P_) for P_ in P__]
-    sub_PPm_, sub_PPd_ = form_PP_root(cP__,cP__, fds=PP.fds)
+    sub_PPm_, sub_PPd_ = form_PP_t(cP__, base_rdn=PP.rdnt[fd])
     PP.rlayers[:] = [sub_PPm_]
     PP.dlayers[:] = [sub_PPd_]
     sub_recursion_eval(PP)  # add rlayers, dlayers, seg_levels to select sub_PPs
@@ -93,19 +93,20 @@ def comp_P_der(P__):  # der+ sub_recursion in PP.P__, over the same derPs
     if isinstance(P__[0][0].ptuple, Cptuple):
         for P_ in P__:
             for P in P_:
-                P.ptuple = [P.ptuple]
+                P.ptuple = [[[P.ptuple], 0]]  # convert to rngH
 
     for P_ in P__[1:]:  # exclude 1st row: no +ve uplinks
         for P in P_:
-            for derP in P.uplink_[1]:  # fd=1
+            for derP in P.link_t[1]:  # fd=1
                 _P, P = derP._P, derP.P
-                i= len(derP.derQ)-1
+                i= len(derP.rngH)-1
                 j= 2*i
                 if len(_P.ptuple)>j-1 and len(P.ptuple)>j-1: # ptuples are derHs, extend derP.derQ:
                     comp_layer(derP, i,j)
 
     return P__
 
+# pending update
 def comp_layer(derP, i,j):  # list derH and derQ, single der+ count=elev, eval per PP
 
     for _ptuple, ptuple in zip(derP._P.ptuple[i:j], derP.P.ptuple[i:j]):  # P.ptuple is derH
