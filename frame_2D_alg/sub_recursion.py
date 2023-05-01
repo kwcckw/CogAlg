@@ -15,33 +15,19 @@ PP_vars = ["I", "M", "Ma", "axis", "angle", "aangle", "G", "Ga", "x", "L"]
 
 def sub_recursion_eval(root):  # for PP or dir_blob
 
-    root_PPm_, root_PPd_ = root.rlayers[-1], root.dlayers[-1]
+    root_PPm_, root_PPd_ = root.derH[-1][1]
     for fd, PP_ in enumerate([root_PPm_, root_PPd_]):
-        mcomb_layers, dcomb_layers, PPm_, PPd_ = [], [], [], []
+        PPm_, PPd_ = [], []
 
         for PP in PP_:  # fd = _P.valt[1]+P.valt[1] > _P.valt[0]+_P.valt[0]  # if exclusive comp fork per latuple|vertuple?
-            if fd: comb_layers = dcomb_layers; PP_layers = PP.dlayers; PPd_ += [PP]
-            else:  comb_layers = mcomb_layers; PP_layers = PP.rlayers; PPm_ += [PP]
+            if fd:  PPd_ += [PP]
+            else:   PPm_ += [PP]
             # fork val, rdn:
             val = PP.valt[fd]; alt_val = sum([alt_PP.valt[fd] for alt_PP in PP.alt_PP_]) if PP.alt_PP_ else 0
             ave = PP_aves[fd] * (PP.rdnt[fd] + 1 + (alt_val > val))
             if val > ave and len(PP.P__) > ave_nsub:
-                sub_recursion(PP)  # comp_P_der | comp_P_rng in PPs -> param_layer, sub_PPs
-                ave*=2  # rdn incr, splice deeper layers between PPs into comb_layers:
-                for i, (comb_layer, PP_layer) in enumerate(zip_longest(comb_layers, PP_layers, fillvalue=[])):
-                    if PP_layer:
-                        if i > len(comb_layers) - 1: comb_layers += [PP_layer]  # add new r|d layer
-                        else: comb_layers[i] += PP_layer  # splice r|d PP layer into existing layer
-            # sub_PPs / sub+?
-            # include empty comb_layers: # revise?
-            if fd:
-                PPmm_ = [PPm_] + mcomb_layers; mVal = sum([PP.valt[0] for PP_ in PPmm_ for PP in PP_])
-                PPmd_ = [PPm_] + dcomb_layers; dVal = sum([PP.valt[1] for PP_ in PPmd_ for PP in PP_])
-                root.dlayers = [PPmd_,PPmm_]
-            else:
-                PPdm_ = [PPm_] + mcomb_layers; mVal = sum([PP.valt[0] for PP_ in PPdm_ for PP in PP_])
-                PPdd_ = [PPd_] + dcomb_layers; dVal = sum([PP.valt[1] for PP_ in PPdd_ for PP in PP_])
-                root.rlayers = [PPdm_, PPdd_]
+                sub_recursion(PP, fd)  # comp_P_der | comp_P_rng in PPs -> param_layer, sub_PPs
+
             # root is PP:
             if isinstance(root, CPP):
                 for i in 0,1:
@@ -52,9 +38,10 @@ def sub_recursion_eval(root):  # for PP or dir_blob
                 else:  root.M += PP.valt[fd]
 
 
-def sub_recursion(PP):  # evaluate PP for rng+ and der+
+def sub_recursion(PP, fd):  # evaluate PP for rng+ and der+
 
     P__  = [P_ for P_ in reversed(PP.P__)]  # revert bottom-up to top-down
+    # fd here should be parsed from sub_recursion_eval or PP.derH?
     P__ = comp_P_der(P__) if PP.fds[-1] else comp_P_rng(P__, PP.rng + 1)   # returns top-down
     PP.rdnt[PP.fds[-1] ] += 1  # two-fork rdn, priority is not known?  rotate?
 
@@ -227,17 +214,15 @@ def copy_P(P, Ptype=None):  # Ptype =0: P is CP | =1: P is CderP | =2: P is CPP 
         P.P, P._P = None, None  # reset
     elif Ptype == 2:
         mseg_levels, dseg_levels = P.mseg_levels, P.dseg_levels
-        rlayers, dlayers = P.rlayers, P.dlayers
         P__ = P.P__
-        P.mseg_levels, P.dseg_levels, P.rlayers, P.dlayers, P.P__ = [], [], [], [], []  # reset
+        P.mseg_levels, P.dseg_levels, P.P__ = [], [], []  # reset
     elif Ptype == 3:
         PP_derP, _PP_derP = P.PP, P._PP  # local copy of derP.P and derP._P
         P.PP, P._PP = None, None  # reset
     elif Ptype == 4:
         gPP_, cPP_ = P.gPP_, P.cPP_
-        rlayers, dlayers = P.rlayers, P.dlayers
         mlevels, dlevels = P.mlevels, P.dlevels
-        P.gPP_, P.cPP_, P.rlayers, P.dlayers, P.mlevels, P.dlevels = [], [], [], [], [], []  # reset
+        P.gPP_, P.cPP_, P, P.mlevels, P.dlevels = [], [], [], []  # reset
 
     new_P = deepcopy(P)  # copy P with empty root and link layers, reassign link layers:
     new_P.uplink_layers += copy(uplink_layers)
@@ -252,8 +237,6 @@ def copy_P(P, Ptype=None):  # Ptype =0: P is CP | =1: P is CderP | =2: P is CPP 
         P.P, P._P = P_derP, _P_derP
     elif Ptype == 2:
         P.mseg_levels, P.dseg_levels = mseg_levels, dseg_levels
-        P.rlayers, P.dlayers = rlayers, dlayers
-        new_P.rlayers, new_P.dlayers = copy(rlayers), copy(dlayers)
         new_P.P__ = copy(P__)
         new_P.mseg_levels, new_P.dseg_levels = copy(mseg_levels), copy(dseg_levels)
     elif Ptype == 3:
@@ -261,10 +244,8 @@ def copy_P(P, Ptype=None):  # Ptype =0: P is CP | =1: P is CderP | =2: P is CPP 
         P.PP, P._PP = PP_derP, _PP_derP
     elif Ptype == 4:
         P.gPP_, P.cPP_ = gPP_, cPP_
-        P.rlayers, P.dlayers = rlayers, dlayers
         P.roott = roott
         new_P.gPP_, new_P.cPP_ = [], []
-        new_P.rlayers, new_P.dlayers = copy(rlayers), copy(dlayers)
         new_P.mlevels, new_P.dlevels = copy(mlevels), copy(dlevels)
 
     return new_P

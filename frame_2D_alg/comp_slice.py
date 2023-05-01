@@ -174,7 +174,7 @@ def comp_slice_root(blob, verbose=False):  # always angle blob, composite dert c
                 _L = len(_P.dert_); L = len(P.dert_)
                 if (P.x0 - 1 < _P.x0 + _L) and (P.x0 + L > _P.x0):
                     vertuple = comp_ptuple(_P.ptuple, P.ptuple); valt = copy(vertuple.valt); rdnt = copy(vertuple.rdnt)
-                    derP = CderP(derH=[[vertuple],1], valt=valt, rdnt=rdnt, P=P, _P=_P, x0=_P.x0, y0=_P.y0, L=len(_P.dert_))
+                    derP = CderP(derH=[[[vertuple],[_P, P], 0]], valt=valt, rdnt=rdnt, P=P, _P=_P, x0=_P.x0, y0=_P.y0, L=len(_P.dert_))
                     P.link_+=[derP]  # all links
                     if valt[0] > aveB*rdnt[0]: P.link_t[0] += [derP]  # +ve links, fork overlap?
                     if valt[1] > aveB*rdnt[1]: P.link_t[1] += [derP]
@@ -182,7 +182,9 @@ def comp_slice_root(blob, verbose=False):  # always angle blob, composite dert c
                     break  # no xn overlap, stop scanning lower P_
         _P_ = P_
     PPm_,PPd_ = form_PP_t(P__, base_rdn=2)
-    blob.PPm_, blob.PPd_ = PPm_, PPd_; blob.rlayers += [PPm_]; blob.dlayers += [PPd_]
+    blob.PPm_, blob.PPd_ = PPm_, PPd_
+    blob.derH = [[[], [PPm_,PPd_], 0]]
+
     # re comp, cluster:
     sub_recursion_eval(blob)  # intra PP, add rlayers, dlayers, seg_levels to select PPs, sum M,G
     agg_recursion_eval(blob, [copy(blob.PPm_), copy(blob.PPd_)])  # cross PP, Cgraph conversion doesn't replace PPs?
@@ -328,10 +330,10 @@ def sum2PP(prePP, base_rdn, fd):  # sum PP_segs into PP
     P_, val, _ = prePP  # not sure on how to pack val here
     from sub_recursion import append_P
 
-    PP = CPP(derH=[Cptuple()], x0=P_[0].x0, rdn=base_rdn, rlayers=[[]], dlayers=[[]])
-    PP.rdnt[fd] += base_rdn
+    PP = CPP(derH=[[[Cptuple(), [], fd]]], x0=P_[0].x0, rdn=base_rdn, rlayers=[[]], dlayers=[[]])
+    PP.valt[fd] = val; PP.rdnt[fd] += base_rdn
 
-    derH = []
+    derH = [[[],[],fd]]  # init single layer derH
     PP.box = [P_[0].y0, 0, P_[0].x0, 0]
     for P in P_:
         P.roott[fd] = PP
@@ -348,17 +350,22 @@ def sum2PP(prePP, base_rdn, fd):  # sum PP_segs into PP
         PP.box[3] = max(PP.box[3], P.x0 + len(P.dert_))  # xn
 
         # sum P
-        sum_ptuple(PP.derH[0][0], P.ptuple)
+        sum_ptuple_(PP.derH[0][0], [P.ptuple])  # sum ptuple_
+        PP.derH[0][0][1] += [P]  # pack node_
+        
         # sum links
         if P.link_t[fd]:
             # pack derQ
             for derP in P.link_t[fd]:
-                sum_derH(derH, derP.derH)
+                sum_ptuple_(derH[0][0], derP.derH[0][0])  # sum ptuple_
+                for derP_P in derP.derH[0][1]:  # pack ndoe_
+                    if derP_P not in derH[0][1]:
+                        derH[0][1] += [derP_P]
+
             for derP in P.link_:
                 # positive links: update valt and rdnt
                 if derP in P.link_t[fd]:
                     for i in 0, 1:
-                        PP.valt[i] += derP.valt[i]
                         PP.rdnt[i] += derP.rdnt[i]
                 # negative links: update nval and nderP
                 else:
@@ -375,9 +382,9 @@ def sum2PP(prePP, base_rdn, fd):  # sum PP_segs into PP
     return PP
 
 
-def sum_derH(DerH, derH, fneg=0):  # same fds from comp_derH
+def sum_ptuple_(Ptuple_, ptuple_, fneg=0):  # same fds from comp_derH
 
-    for Vertuple, vertuple in zip_longest(DerH, derH, fillvalue=[]):
+    for Vertuple, vertuple in zip_longest(Ptuple_, ptuple_, fillvalue=[]):  # H[0] is ptuple_ 
         if vertuple:
             if Vertuple:
                 if isinstance(vertuple, CQ):
@@ -385,7 +392,28 @@ def sum_derH(DerH, derH, fneg=0):  # same fds from comp_derH
                 else:
                     sum_ptuple(Vertuple, vertuple, fneg)
             elif not fneg:
-                DerH += [deepcopy(vertuple)]
+                Ptuple_ += [deepcopy(vertuple)]
+
+
+# not sure if we need sum_derH
+def sum_derH(DerH, derH, fneg=0):  # same fds from comp_derH
+
+    for H, h in zip_longest(DerH, derH, fillvalue=[]):  # each H is [ptuple_, node_, fd]
+        if h:
+            if H:
+                for Vertuple, vertuple in zip_longest(H[0], h[0], fillvalue=[]):  # H[0] is ptuple_ 
+                    if vertuple:
+                        if Vertuple:
+                            if isinstance(vertuple, CQ):
+                                sum_vertuple(Vertuple, vertuple, fneg)
+                            else:
+                                sum_ptuple(Vertuple, vertuple, fneg)
+                        elif not fneg:
+                            H[0] += [deepcopy(vertuple)]
+                
+            else:
+                DerH += [[deepcopy(h[0]), copy(h[1]), h[2]]]  # ptuple_, node_, fd  (we can't deepcopy node_ in order to prevent endless recursion)
+
 
 
 def sum_vertuple(Vertuple, vertuple, fneg=0):
