@@ -101,6 +101,7 @@ class CQ(ClusterStructure):  # vertuple, hierarchy, or generic sequence
 class CP(ClusterStructure):  # horizontal blob slice P, with vertical derivatives per param if derP, always positive
 
     ptuple = object  # latuple: I, M, Ma, G, Ga, angle(Dy, Dx), aangle( Sin_da0, Cos_da0, Sin_da1, Cos_da1), ?[n, val, x, L, A]?
+    # replace with derH in sub+
     x0 = int
     y0 = int  # for vertical gap in PP.P__
     dert_ = list  # array of pixel-level derts, redundant to uplink_, only per blob?
@@ -116,7 +117,8 @@ class CP(ClusterStructure):  # horizontal blob slice P, with vertical derivative
 
 class CderP(ClusterStructure):  # tuple of derivatives in P link: binary tree with latuple root and vertuple forks
 
-    rngH = lambda: [[],0]  # [derQ, nlink]: sum links / rng+, max ntuples / der layer = ntuples in lower layers: 1, 1, 2, 4, 8...
+    derH = list  # each layer = [ptuple_,node_,fd], sum links / rng+, layers / der+?
+    # max ntuples / der layer = ntuples in lower layers: 1, 1, 2, 4, 8...
     valt = lambda: [0, 0]  # summed rngQ vals
     rdnt = lambda: [1, 1]  # mrdn + uprdn if branch overlap?
     _P = object  # higher comparand
@@ -135,9 +137,9 @@ lay4: [[m,d], [md,dd], [[md1,dd1],[mdd,ddd]]]: 3 sLays, <=2 ssLays:
 
 class CPP(CderP):  # derP params include P.ptuple
 
-    rngH = lambda: [[],0]  # [derQ, nlink] s, 1st plevel, zipped with alt_derH in comp_derH
-    valt = lambda: [0, 0]
-    rdnt = lambda: [1, 1]  # recursion count + Rdn / nderPs + mrdn + uprdn if branch overlap?
+    derH = list  # layer = [ptuple_,node_,fd], += link/rng+| lay/der+? 1st plevel, zipped with alt_derH in comp_derH
+    valt = lambda: [0,0]
+    rdnt = lambda: [1,1]  # recursion count + Rdn / nderPs + mrdn + uprdn if branch overlap?
     Rdn = int  # for accumulation only?
     rng = lambda: 1
     alt_rdn = int  # overlapping redundancy between core and edge
@@ -152,9 +154,7 @@ class CPP(CderP):  # derP params include P.ptuple
     nderP_ = list  # miss links, add with nvalt for complemented PP?
     mask__ = bool
     link__ = list  # combined P link_t[fd] s?
-    P__ = list  # input + derPs
-    rlayers = list  # or mlayers: sub_PPs from sub_recursion within PP?
-    dlayers = list  # or alayers
+    P__ = list  # input + derPs, derH[0][1]?
     roott = lambda: [None,None]  # PPPm, PPPd that contain this PP
     cPP_ = list  # rdn reps in other PPPs, to eval and remove
 
@@ -174,7 +174,7 @@ def comp_slice_root(blob, verbose=False):  # always angle blob, composite dert c
                 _L = len(_P.dert_); L = len(P.dert_)
                 if (P.x0 - 1 < _P.x0 + _L) and (P.x0 + L > _P.x0):
                     vertuple = comp_ptuple(_P.ptuple, P.ptuple); valt = copy(vertuple.valt); rdnt = copy(vertuple.rdnt)
-                    derP = CderP(rngH=[[[vertuple],1]], valt=valt, rdnt=rdnt, P=P, _P=_P, x0=_P.x0, y0=_P.y0, L=len(_P.dert_))
+                    derP = CderP(derH=[[vertuple],1], valt=valt, rdnt=rdnt, P=P, _P=_P, x0=_P.x0, y0=_P.y0, L=len(_P.dert_))
                     P.link_+=[derP]  # all links
                     if valt[0] > aveB*rdnt[0]: P.link_t[0] += [derP]  # +ve links, fork overlap?
                     if valt[1] > aveB*rdnt[1]: P.link_t[1] += [derP]
@@ -268,7 +268,6 @@ def reval_PP_(PP_, fd):  # recursive eval Ps for rePP, prune weakly connected Ps
                 rePP = reval_P_(P_, fd)  # recursive node and link revaluation by med val
                 if rePP[1] > ave:  # min adjusted val
                     rePP_ += [rePP]
-    # rePP_ may empty
     if rePP_ and max([rePP[2] for rePP in rePP_]) > ave:  # if any min reval
         rePP_[:] = reval_PP_(rePP_, fd)
     return rePP_
@@ -276,7 +275,7 @@ def reval_PP_(PP_, fd):  # recursive eval Ps for rePP, prune weakly connected Ps
 # draft:
 def reval_P_(P_, fd):  # prune qPP by (link_ + mediated link__) val
     reval = 0  # recursion val
-    Val, pruned_P_ = 0, []  # Val = reval from P links only
+    Val, prune_ = 0, []  # Val = reval from P links only
     for i, P in enumerate(P_):
         P_val = 0; remove_ = []
         for link in P.link_t[fd]:
@@ -289,25 +288,20 @@ def reval_P_(P_, fd):  # prune qPP by (link_ + mediated link__) val
             else: P_val += link_val
         for link in remove_:
             P.link_t[fd].remove(link)  # prune weak links
-            # not sure if this is bug, but is this possible with several rounds of deletion?>
-            if link in link._P.link_t[fd]:
-                link._P.link_t[fd].remove(link)  # bidirectional remove
-            
-        if P_val < vaves[fd]:
-            pruned_P_ += [P]
-        else:
-            Val += P_val  # adds comb links val to P
-
+            link._P.link_t[fd].remove(link)
+            # bidirectional remove
+        if P_val < vaves[fd]: prune_ += [P]
+        else: Val += P_val  # adds comb links val to P
     # prune P_:
-    for P in pruned_P_:
+    for P in prune_:
         for link in P.link_t[fd]:  # prune links, direct only?
             _P = link._P
             _link_ = _P.link_t[fd]
             if link in _link_:
                 _link_.remove(link); reval += link.valt[fd]
 
-    if reval > aveB: 
-        P_, Val, reval = reval_P_(P_, fd)  # recursion
+    if reval > aveB:
+        P_,Val,reval = reval_P_(P_, fd)  # recursion
     return [P_, Val, reval]
 
 def med_eval(last_link_, old_link_, med_valH, fd):  # compute med_valH
@@ -334,10 +328,10 @@ def sum2PP(prePP, base_rdn, fd):  # sum PP_segs into PP
     P_, val, _ = prePP  # not sure on how to pack val here
     from sub_recursion import append_P
 
-    PP = CPP(rngH=[ [[Cptuple()], 0]  ], x0=P_[0].x0, rdn=base_rdn, rlayers=[[]], dlayers=[[]])
+    PP = CPP(derH=[Cptuple()], x0=P_[0].x0, rdn=base_rdn, rlayers=[[]], dlayers=[[]])
     PP.rdnt[fd] += base_rdn
 
-    rngH = []
+    derH = []
     PP.box = [P_[0].y0, 0, P_[0].x0, 0]
     for P in P_:
         P.roott[fd] = PP
@@ -354,12 +348,12 @@ def sum2PP(prePP, base_rdn, fd):  # sum PP_segs into PP
         PP.box[3] = max(PP.box[3], P.x0 + len(P.dert_))  # xn
 
         # sum P
-        sum_ptuple(PP.rngH[0][0][0], P.ptuple)
+        sum_ptuple(PP.derH[0][0], P.ptuple)
         # sum links
         if P.link_t[fd]:
             # pack derQ
             for derP in P.link_t[fd]:
-                sum_rngH(rngH, derP.rngH)
+                sum_derH(derH, derP.derH)
             for derP in P.link_:
                 # positive links: update valt and rdnt
                 if derP in P.link_t[fd]:
@@ -375,29 +369,11 @@ def sum2PP(prePP, base_rdn, fd):  # sum PP_segs into PP
         if not PP.P__: PP.P__.append([P])  # pack 1st P
         else: append_P(PP.P__, P)  # pa
 
-    if rngH: # pack new rngH
-        PP.rngH += rngH  # 1st element of PP.rngH is a derQ with only Cptuple
+    if derH: # pack new derH
+        PP.derH += derH  # 1st element of PP.derH is a derQ with only Cptuple
 
     return PP
 
-
-def sum_rngH(RngH, rngH, fneg=0):
-
-    for DerQ, derQ  in zip_longest(RngH, rngH, fillvalue=[]):
-        if derQ:
-            if DerQ:
-                for Vertuple, vertuple  in zip_longest(DerQ[0], derQ[0], fillvalue=[]):
-                    if vertuple:
-                        if Vertuple:
-                            if isinstance(vertuple, CQ):
-                                sum_vertuple(Vertuple, vertuple, fneg)
-                            else:
-                                sum_ptuple(Vertuple, vertuple, fneg)
-                        else:
-                            DerQ[0] += [deepcopy(vertuple)]
-                DerQ[1] += derQ[1]  # sum nlink
-            else:
-                RngH += [deepcopy(derQ)]
 
 def sum_derH(DerH, derH, fneg=0):  # same fds from comp_derH
 
