@@ -37,16 +37,14 @@ def sub_recursion_eval(root):  # for PP or dir_blob
                 if fd: root.G += sum([alt_PP.valt[fd] for alt_PP in PP.alt_PP_]) if PP.alt_PP_ else 0
                 else:  root.M += PP.valt[fd]
 
-
 def sub_recursion(PP, fd):  # evaluate PP for rng+ and der+
 
     P__  = [P_ for P_ in reversed(PP.P__)]  # revert bottom-up to top-down
-    # fd here should be parsed from sub_recursion_eval or PP.derH?
-    P__ = comp_P_der(P__) if PP.fds[-1] else comp_P_rng(P__, PP.rng + 1)   # returns top-down
+    P__ = comp_P_der(P__) if fd else comp_P_rng(P__, PP.rng + 1)   # returns top-down
     PP.rdnt[PP.fds[-1] ] += 1  # two-fork rdn, priority is not known?  rotate?
 
     cP__ = [copy(P_) for P_ in P__]
-    sub_PPm_, sub_PPd_ = form_PP_t(cP__, base_rdn=PP.rdnt[PP.fds[-1]], fds=PP.fds)
+    sub_PPm_, sub_PPd_ = form_PP_t(cP__, base_rdn=PP.rdnt[PP.derH[-1][2]])
     PP.rlayers[:] = [sub_PPm_]
     PP.dlayers[:] = [sub_PPd_]
     sub_recursion_eval(PP)  # add rlayers, dlayers, seg_levels to select sub_PPs
@@ -249,3 +247,34 @@ def copy_P(P, Ptype=None):  # Ptype =0: P is CP | =1: P is CderP | =2: P is CPP 
         new_P.mlevels, new_P.dlevels = copy(mlevels), copy(dlevels)
 
     return new_P
+
+# draft, copied from sum2PP
+def sum2PPP(qPPP, base_rdn, fd):  # sum PP_segs into PP
+
+    PP_, val, _ = qPPP
+    from sub_recursion import append_P
+    # init:
+    P = P_[0]
+    derH = [[P.link_t[fd][0], P.link_t[fd], fd]]
+    if len(P.link_t[fd])>1: sum_links(derH, P.link_t[fd][1:])
+    # ptuple_ = [P.ptuple] if isinstance(P.ptuple, Cptuple) else P.ptuple
+    PP = CPP(derH=[[[P.ptuple], P_,fd]], box=[P.y0, P_[-1].y0, P.x0, P.x0 + len(P.dert_)], rdn=base_rdn)
+    PP.valt[fd] = val; PP.rdnt[fd] += base_rdn
+    # accum:
+    for i, P in enumerate(P_):
+        P.roott[fd] = PP
+        if i:  # not init
+            sum_links(derH, P.link_t[fd])
+            sum_ptuple_(PP.derH[0][0], P.ptuple)
+            # in sum2PPP: if isinstance(P.ptuple, Cptuple) else sum_derH(PP.derH, P.ptuple)
+            # this should be added to sum_derH: PP.derH[0][0][1] += [P]  # pack node_
+            PP.link_ = list(set(PP.link_ + P.link_))  # unique links only?
+            # same for link_t?
+            PP.box[0] = min(PP.box[0], P.y0)  # y0
+            PP.box[2] = min(PP.box[2], P.x0)  # x0
+            PP.box[3] = max(PP.box[3], P.x0 + len(P.dert_))  # xn
+        # sum links into new layer
+    if derH: # pack new derH
+        PP.derH += derH  # 1st element of PP.derH is a derQ with only Cptuple
+
+    return PPP
