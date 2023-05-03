@@ -15,11 +15,12 @@ PP_vars = ["I", "M", "Ma", "axis", "angle", "aangle", "G", "Ga", "x", "L"]
 
 def sub_recursion_eval(root):  # for PP or dir_blob
 
+    root_PP__, fd_ = [root.derH[-1][1]], [root.derH[-1][2] if isinstance(root, CPP) else root.derH[-1][2]]
     if isinstance(root, CPP):
         root_PP__, fd_ = [root.derH[-1][1]], [root.derH[-1][2]]
     else:
         root_PP__, fd_ = root.derH[-1][1], root.derH[-1][2]  # for blob, node and fd is node_t and fd_t
-        
+
     for fd, PP_ in zip(fd_, root_PP__):
         PPm_, PPd_ = [], []
 
@@ -49,9 +50,7 @@ def sub_recursion(PP, fd):  # evaluate PP for rng+ and der+
 
     cP__ = [copy(P_) for P_ in P__]
     sub_PPm_, sub_PPd_ = form_PP_t(cP__, base_rdn=PP.rdnt[PP.derH[-1][2]])
-
-    # if we call sub+  from this PP, their node is P__, but P doesn't have derH?
-    sub_recursion_eval(PP)  # add rlayers, dlayers, seg_levels to select sub_PPs
+    sub_recursion_eval(PP)  # add layers to select sub_PPs
 
 # __Ps compared in rng+ can be mediated through multiple layers of _Ps, with results are summed in derQ of the same link_[0].
 # The number of layers is represented in corresponding PP.rng.
@@ -270,8 +269,7 @@ def sum2PPP(qPPP, base_rdn, fd):  # sum PP_segs into PP
         if i:  # not init
             sum_links(derH, P.link_t[fd])
             sum_ptuple_(PP.derH[0][0], P.ptuple)
-            # in sum2PPP: if isinstance(P.ptuple, Cptuple) else sum_derH(PP.derH, P.ptuple)
-            # this should be added to sum_derH: PP.derH[0][0][1] += [P]  # pack node_
+            # if isinstance(P.ptuple, Cptuple) else sum_derH(PP.derH, P.ptuple)
             PP.link_ = list(set(PP.link_ + P.link_))  # unique links only?
             # same for link_t?
             PP.box[0] = min(PP.box[0], P.y0)  # y0
