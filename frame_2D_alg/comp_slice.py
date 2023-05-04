@@ -327,54 +327,56 @@ def med_eval(last_link_, old_link_, med_valH, fd):  # compute med_valH
 
     return curr_link_, old_link_, med_valH
 
-# not fully updated
+
 def sum2PP(qPP, base_rdn, fd):  # sum PP_segs into PP
 
     P__, val, _ = qPP
-    # init:
-    P = P__[0][0]
-    if P.link_t[fd]:
-        derP = P.link_t[fd][0]
-        derH = [[deepcopy(derP.derH[0][0]), copy(derP.derH[0][1]), fd]]
-        if len(P.link_t[fd]) > 1: sum_links(derH, P.link_t[fd][1:], fd)
-    else: derH = []
-    PP = CPP(derH=[[[P.ptuple], [[P]],fd]], box=[P.y0, P__[-1][0].y0, P.x0, P.x0 + len(P.dert_)], rdn=base_rdn, link__=[[copy(P.link_t[fd])]])
+    PP = CPP(derH=[[[], [],fd]], box=[P__[0][0].y0, P__[-1][0].y0, P__[0][0].x0, P__[0][0].x0 + len(P__[0][0].dert_)], rdn=base_rdn)
     PP.valt[fd] = val
     PP.rdnt[fd] += base_rdn
-    PP.nlink__ += [[nlink for nlink in P.link_ if nlink not in P.link_t[fd]]]
+    # init is not needed, they will be init in the accumulation related functions
     # accum:
+    DerH = []
     for i, P_ in enumerate(P__):  # top-down
-        P_ = []
+        derH, link_, nlink_ = [], [], []
         for j, P in enumerate(P_):
             P.roott[fd] = PP
-            if i or j:  # not init
-                sum_ptuple_(PP.derH[0][0], P.ptuple if isinstance(P.ptuple, list) else [P.ptuple])
-                P_ += [P]
-                if derH: sum_links(PP, derH, P.link_t[fd], fd)  # sum links into new layer
-                PP.link__ += [[P.link_t[fd]]]  # pack top down
+            sum_ptuple_(PP.derH[0][0], P.ptuple if isinstance(P.ptuple, list) else [P.ptuple])
+            if P.link_t[fd]:  # not top row with no links
+                link_ += P.link_t[fd]  # pack and merge current row's links  
+                for derP in P.link_t[fd]:  sum_derH(derH, derP.derH, fsamerow=1)  # sum links into new layer
                 # the links may overlap between Ps of the same row?
-                PP.nlink__ += [[nlink for nlink in P.link_ if nlink not in P.link_t[fd]]]
-                PP.box[0] = min(PP.box[0], P.y0)  # y0
-                PP.box[2] = min(PP.box[2], P.x0)  # x0
-                PP.box[3] = max(PP.box[3], P.x0 + len(P.dert_))  # xn
-        PP.derH[0][0] += [P_]  # pack new P top down
-    PP.derH += derH
+                nlink_ += [nlink for nlink in P.link_ if nlink not in P.link_t[fd]]
+            PP.box[0] = min(PP.box[0], P.y0)  # y0
+            PP.box[2] = min(PP.box[2], P.x0)  # x0
+            PP.box[3] = max(PP.box[3], P.x0 + len(P.dert_))  # xn
+        PP.derH[0][0] += [copy(P_)]  # pack new P top down
+        sum_derH(DerH, derH, fsamerow=0)
+        PP.link__ += [link_]  # pack top down
+        PP.nlink__ += [nlink_]
+    PP.derH += DerH
     return PP
 
-# not fully updated:
-def sum_links(DerH, P, fd, fneg=0):
+# looks like we need this instead of sum_links
+def sum_derH(DerH, derH, fsamerow=0, fneg=0):
 
-    for derP in P.link_t[fd]:
-        derH = derP.derH
-        for H, h in zip_longest(DerH, derH, fillvalue=[]):  # each H is [ptuple_, node_, fd]
-            if h:
-                if H:
-                    sum_ptuple_(H[0], h[0], fneg)  # H[0] is ptuple_, sum ptuples
-                    for node_ in h[1]:  # H[1] is node__, pack node__
-                        H[1] += [node_]
-                else:
-                    DerH += [[deepcopy(h[0]), copy(h[1]), h[2]]]  # ptuple_,node_,fd (deepcopy node_ causes endless recursion)
-
+    for H, h in zip_longest(DerH, derH, fillvalue=[]):  # each H is [ptuple_, node_, fd]
+        if h:
+            if H:
+                sum_ptuple_(H[0], h[0], fneg)  # H[0] is ptuple_, sum ptuples
+                if fsamerow:  # P in a same row, pack them side by side
+                    for Node_, node_ in zip_longest(H[1], h[1], fillvalue=[]):  # H[1] is node__, pack node__
+                        if node_:
+                            if Node_:
+                                Node_ += node_  # merge node _ in a same row
+                            else:
+                                Node_[:] = copy(node_)  # shallow copy, different list and same objects within
+            
+                else:  # pack lower rows because we scan top down
+                     for node_ in h[1]:
+                         H[1] += [node_]
+            else:
+                DerH += [[deepcopy(h[0]), [copy(node_) for node_ in h[1]], h[2]]]  # ptuple_,node_,fd (deepcopy node_ causes endless recursion)
 
 
 def sum_ptuple_(Ptuple_, ptuple_, fneg=0):  # same fds from comp_derH
