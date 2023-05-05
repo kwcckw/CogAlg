@@ -97,6 +97,10 @@ class CQ(ClusterStructure):  # vertuple, hierarchy, or generic sequence
     rng = lambda: 1  # is it used anywhere?
     n = int  # accum count in ptuple
 
+    # derH params (i think it's clearer to use the exact name)
+    ptuple_ = list
+    node__ = list
+
 class CP(ClusterStructure):  # horizontal blob slice P, with vertical derivatives per param if derP, always positive
 
     ptuple = object  # latuple: I, M, Ma, G, Ga, angle(Dy, Dx), aangle( Sin_da0, Cos_da0, Sin_da1, Cos_da1), ?[n, val, x, L, A]?
@@ -172,7 +176,7 @@ def comp_slice_root(blob, verbose=False):  # always angle blob, composite dert c
                 _L = len(_P.dert_); L = len(P.dert_)
                 if (P.x0 - 1 < _P.x0 + _L) and (P.x0 + L > _P.x0):
                     vertuple = comp_ptuple(_P.ptuple, P.ptuple); valt = copy(vertuple.valt); rdnt = copy(vertuple.rdnt)
-                    derP = CderP(derH=[[[vertuple],[[_P],[P]],0]], valt=valt, rdnt=rdnt, P=P, _P=_P, x0=_P.x0, y0=_P.y0, L=len(_P.dert_))
+                    derP = CderP(derH=[CQ(ptuple_=[vertuple],node__=[[_P],[P]],fds=[0])], valt=valt, rdnt=rdnt, P=P, _P=_P, x0=_P.x0, y0=_P.y0, L=len(_P.dert_))
                     P.link_+=[derP]  # all links
                     if valt[0] > aveB*rdnt[0]: P.link_t[0] += [derP]  # +ve links, fork overlap?
                     if valt[1] > aveB*rdnt[1]: P.link_t[1] += [derP]
@@ -180,8 +184,7 @@ def comp_slice_root(blob, verbose=False):  # always angle blob, composite dert c
                     break  # no xn overlap, stop scanning lower P_
         _P_ = P_
     PPm_,PPd_ = form_PP_t(P__, base_rdn=2)
-    blob.PPm_, blob.PPd_ = PPm_, PPd_
-    blob.derH = [[[], [PPm_,PPd_], [0,1]]]  # special case for blob, pack node_t and fd_t
+    blob.derH = [CQ(node__=[[PPm_]]], fds=0), CQ(node__=[[PPd_]]], fds=1) ]
     # re comp, cluster:
     sub_recursion_eval(blob)  # intra PP, add rlayers, dlayers, seg_levels to select PPs, sum M,G
     # pending update
@@ -333,22 +336,27 @@ def sum2PP(qPP, base_rdn, fd):  # sum PP_segs into PP
     PP.valt[fd] = val
     PP.rdnt[fd] += base_rdn
     # accum:
-    Ptuple = Cptuple; node__ = []
-    derH = [CQ()]  # layer Q: ptuple|vertuple, Qm: node__, fds: fd; if needed: Qd: link__, valt, rdnt, nval?
+    layer0, derH = CQ(fds=fd), CQ(fds=fd)  # layer Q: ptuple|vertuple, Qm: node__, fds: fd; if needed: Qd: link__, valt, rdnt, nval?
     for i, P_ in enumerate(P__):  # top-down
-        node_ = []
+        layer0_node_, der_node__ = [], []
         for j, P in enumerate(P_):
             P.roott[fd] = PP
-            sum_ptuple(Ptuple, P.ptuple)
-            node_ += [P]
+            sum_ptuple_(layer0.ptuple_, [P.ptuple])
+            layer0_node_ += [P]
             for derP in P.link_t[fd]:
-                sum_derH(derH, derP.derH)  # sum links into new layer
+                sum_ptuple_(derH.ptuple_, derP.derH[0].ptuple_)
+                for Node_, node_ in zip_longest(der_node__, derP.derH[0].node__, fillvalue=[]):  
+                    if node_:
+                        if Node_:
+                            Node_ += node_  # merge node _ in a same row
+                        else:
+                            der_node__ += [copy(node_)]  # shallow copy, different list of same objects within
             PP.box[0] = min(PP.box[0], P.y0)  # y0
             PP.box[2] = min(PP.box[2], P.x0)  # x0
             PP.box[3] = max(PP.box[3], P.x0 + len(P.dert_))  # xn
-        node__ += node_
-
-    layer0 = CQ(Q=Ptuple, Qm=node__, fds=fd)
+        
+        layer0.node__ += [layer0_node_]
+        derH.node__ += der_node__
     PP.derH = [layer0, derH]
     return PP
 

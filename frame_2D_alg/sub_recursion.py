@@ -15,11 +15,11 @@ PP_vars = ["I", "M", "Ma", "axis", "angle", "aangle", "G", "Ga", "x", "L"]
 
 def sub_recursion_eval(root):  # for PP or dir_blob
 
-    root_PP__, fd_ = [root.derH[-1][1]], [root.derH[-1][2] if isinstance(root, CPP) else root.derH[-1][2]]
+    # below is not updated yet
     if isinstance(root, CPP):
-        root_PP__, fd_ = [root.derH[-1][1]], [root.derH[-1][2]]
+        root_PP__, fd_ = root.derH[-1].node__, [root.derH[-1].fds]   
     else:
-        root_PP__, fd_ = root.derH[-1][1], root.derH[-1][2]  # for blob, node and fd is node_t and fd_t
+        root_PP__, fd_ = root.derH[-1].node__, [root.derH[-1].fds]  # for blob, node and fd is node_t and fd_t
 
     for fd, PP_ in zip(fd_, root_PP__):
         PPm_, PPd_ = [], []
@@ -44,12 +44,11 @@ def sub_recursion_eval(root):  # for PP or dir_blob
 
 def sub_recursion(PP, fd):  # evaluate PP for rng+ and der+
 
-    P__  = [P_ for P_ in reversed(PP.P__)]  # revert bottom-up to top-down
+    P__  = PP.derH[-1].node__  # revert bottom-up to top-down
     P__ = comp_P_der(P__) if fd else comp_P_rng(P__, PP.rng + 1)   # returns top-down
     PP.rdnt[fd] += 1  # two-fork rdn, priority is not known?  rotate?
-
     cP__ = [copy(P_) for P_ in P__]
-    sub_PPm_, sub_PPd_ = form_PP_t(cP__, base_rdn=PP.rdnt[PP.derH[-1][2]])
+    sub_PPm_, sub_PPd_ = form_PP_t(cP__, base_rdn=PP.rdnt[fd])
     sub_recursion_eval(PP)  # add layers to select sub_PPs
 
 # __Ps compared in rng+ can be mediated through multiple layers of _Ps, with results are summed in derQ of the same link_[0].
