@@ -2,7 +2,7 @@ from itertools import zip_longest
 from copy import copy, deepcopy
 import numpy as np
 
-from comp_slice import PP_aves, ave_nsub, ave_g, ave_ga
+from comp_slice import PP_aves, ave, ave_nsub, ave_g, ave_ga
 from comp_slice import CP, Cptuple, CderP, CPP
 from comp_slice import comp_ptuple, comp_vertuple, comp_angle, form_PP_t
 from agg_convert import agg_recursion_eval
@@ -37,10 +37,10 @@ def sub_recursion(PP, fd):  # evaluate PP for rng+ and der+
     PP.rdnt[fd] += 1  # two-fork rdn, priority is not known?  rotate?
 
     cP__ = [copy(P_) for P_ in P__]
-    sub_PPm_, sub_PPd_ = form_PP_t(cP__, base_rdn=PP.rdnt[PP.derH[-1][2]])
-    for i, PP_ in enumerate(sub_PPm_, sub_PPd_):
+    sub_PPm_, sub_PPd_ = form_PP_t(cP__, base_rdn=PP.rdnt[fd])
+    for i, sub_PP_ in enumerate([sub_PPm_, sub_PPd_]):
         if PP.valt[i] > ave*PP.rdnt[i]:
-            sub_recursion_eval(PP, PP_, fd=i)  # add layers to select sub_PPs
+            sub_recursion_eval(PP, sub_PP_, fd=i)  # add layers to select sub_PPs
 
 # __Ps compared in rng+ can be mediated through multiple layers of _Ps, with results are summed in derQ of the same link_[0].
 # The number of layers is represented in corresponding PP.rng.
@@ -49,14 +49,14 @@ def sub_recursion(PP, fd):  # evaluate PP for rng+ and der+
 
 def comp_P_rng(P__, rng):  # rng+ sub_recursion in PP.P__, switch to rng+n to skip clustering?
 
-    for _P_ in P__[:-rng]:  # higher compared row, skip last rng: no lower comparand rows
-        for _P in _P_:
-            for derP in _P.downlink_layers[-1][0]:
-                _P, P = derP._P, derP.P
+    for P_ in reversed(P__[:-rng]):  # higher compared row, skip last rng: no lower comparand rows (bottom up because link_t is uplinks now)
+        for P in P_:
+            for derP in P.link_t[-1]:
+                _P = derP._P
                 # if single P.link_: keep going up(down) beyond last compared row?
                 if isinstance(P.ptuple, Cptuple):
                     vertuple = comp_ptuple(_P.ptuple, P.ptuple)
-                    derP.derQ = [vertuple]; derP.valt = copy(vertuple.valt); derP.rdnt = copy(vertuple.rdnt)
+                    derP.derQ = [[vertuple]]; derP.valt = copy(vertuple.valt); derP.rdnt = copy(vertuple.rdnt)
                 else:
                     comp_layer(derP, 0, min(len(_P.ptuple)-1,len(P.ptuple)-1))  # this is actually comp derH, works the same here
                 derP.L = len(_P.dert_)
@@ -72,7 +72,7 @@ def comp_P_der(P__):  # der+ sub_recursion in PP.P__, over the same derPs
 
     for P_ in P__[1:]:  # exclude 1st row: no +ve uplinks
         for P in P_:
-            for derP in P.link_[1]:  # fd=1
+            for derP in P.link_t[1]:  # fd=1
                 _P, P = derP._P, derP.P
                 i= len(derP.derQ)-1
                 j= 2*i

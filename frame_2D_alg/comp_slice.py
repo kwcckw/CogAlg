@@ -100,7 +100,7 @@ class Cptuple(ClusterStructure):  # bottom-layer tuple of compared params in P, 
 
 class CP(ClusterStructure):  # horizontal blob slice P, with vertical derivatives per param if derP, always positive
 
-    ptuple = lambda: Cptuple  # latuple: I, M, Ma, G, Ga, angle(Dy, Dx), aangle( Sin_da0, Cos_da0, Sin_da1, Cos_da1), ?[n, val, x, L, A]?
+    ptuple = lambda: Cptuple()  # latuple: I, M, Ma, G, Ga, angle(Dy, Dx), aangle( Sin_da0, Cos_da0, Sin_da1, Cos_da1), ?[n, val, x, L, A]?
     derH = list  # added in sub+
     fds = list  # per derLay
     x0 = int
@@ -139,7 +139,7 @@ lay4: [[m,d], [md,dd], [[md1,dd1],[mdd,ddd]]]: 3 sLays, <=2 ssLays:
 
 class CPP(CderP):
 
-    ptuple = lambda: Cptuple  # summed P__ ptuples, = 0th derLay
+    ptuple = lambda: Cptuple()  # summed P__ ptuples, = 0th derLay
     P__ = list  # 2D array of nodes, may be sub-PPs
     derH = list  # vertuple_s added in sub+
     fds = list  # fd per derLay
@@ -182,10 +182,10 @@ def comp_slice_root(blob, verbose=False):  # always angle blob, composite dert c
                     break  # no xn overlap, stop scanning lower P_
         _P_ = P_
     PPm_,PPd_ = form_PP_t(P__, base_rdn=2)
-    blob.node__ = [PPm_,PPd_]  # double node__ in blob, also derH, fds, etc?
+    blob.PPm_, blob.PPd_  = PPm_,PPd_  # double node__ in blob, also derH, fds, etc? (we can just pack themas PPm_ and PPd_)? Did we need to use blob.node_ later?
     # re comp, cluster:
-    for i, PP_ in enumerate(blob.node__):  # derH, fds per PP
-        if blob.valt[i] > ave* blob.rdnt[i]:
+    for i, (Val, PP_) in enumerate(zip([blob.M, blob.G], [PPm_, PPd_])):  # derH, fds per PP
+        if Val > ave * sum([PP.rdnt[i] for PP in PP_]):  # blob doesn't have rdn, use PP.rdn?
             sub_recursion_eval(blob, PP_, fd=i)  # intra PP
             agg_recursion_eval(blob, copy(PP_))  # cross PP, Cgraph conversion doesn't replace PPs?
 
@@ -334,24 +334,20 @@ def sum2PP(qPP, base_rdn, fd):  # sum PP_segs into PP
     P__, val, _ = qPP
     # init:
     P0 = P__[0][0]
-    PP = CPP(box=[P0.y0,P__[-1][0].y0,P0.x0,P0.x0+len(P0.dert_)], fds=[fd])
+    PP = CPP(box=[P0.y0,P__[-1][0].y0,P0.x0,P0.x0+len(P0.dert_)], fds=[fd], P__ = P__)
     PP.valt[fd] = val; PP.rdnt[fd] += base_rdn
-    vertuple = CQ()
+    vertuple = None
     # accum:
     for P_ in P__:  # top-down
-        node_ = []
         for P in P_:  # left-to-right
             P.roott[fd] = PP
-            if PP.ptuple: sum_ptuple(PP.ptuple, P.ptuple)
-            else: PP.ptuple = copy(P.ptuple)
-            node_ += [P]
+            sum_ptuple(PP.ptuple, P.ptuple)  # PP ptuple is always init as Cptuple
             for derP in P.link_t[fd]:  # sum links in new layer, single vertuple per derH:
                 if vertuple: sum_vertuple(vertuple, derP.derH[0][0])
-                else: vertuple = copy(derP.derH[0][0])
+                else: vertuple = deepcopy(derP.derH[0][0])
             PP.box[0] = min(PP.box[0], P.y0)  # y0
             PP.box[2] = min(PP.box[2], P.x0)  # x0
             PP.box[3] = max(PP.box[3], P.x0 + len(P.dert_))  # xn
-        PP.node__ += node_
     PP.derH=[[vertuple]]  # derH before feedback is single-layer single vertuple
 
     return PP
