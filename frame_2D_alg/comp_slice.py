@@ -187,7 +187,8 @@ def comp_slice_root(blob, verbose=False):  # always angle blob, composite dert c
     for i, PP_ in enumerate([PPm_, PPd_]):  # derH, fds per PP
         if sum([PP.valt[i] for PP in PP_]) > ave * sum([PP.rdnt[i] for PP in PP_]):
             sub_recursion_eval(blob, PP_, fd=i)  # intra PP
-            agg_recursion_eval(blob, copy(PP_))  # cross PP, Cgraph conversion doesn't replace PPs?
+            # pending update
+            # agg_recursion_eval(blob, copy(PP_))  # cross PP, Cgraph conversion doesn't replace PPs?
 
 
 def slice_blob(blob, verbose=False):  # form blob slices nearest to slice Ga: Ps, ~1D Ps, in select smooth edge (high G, low Ga) blobs
@@ -278,6 +279,7 @@ def reval_PP_(PP_, fd):  # recursive eval / prune Ps for rePP
 
     return rePP_
 
+
 def reval_P_(P__, fd):  # prune qPP by (link_ + mediated link__) val
 
     prune_ = []; Val, reval = 0,0  # comb PP value and recursion value
@@ -341,14 +343,20 @@ def sum2PP(qPP, base_rdn, fd):  # sum PP_segs into PP
     for P_ in P__:  # top-down
         for P in P_:  # left-to-right
             P.roott[fd] = PP
+            P_vertuple = None
             sum_ptuple(PP.ptuple, P.ptuple)
             for derP in P.link_t[fd]:  # sum links in new layer, single vertuple per derH:
                 if vertuple: sum_vertuple(vertuple, derP.derH[0][0])
                 else: vertuple = deepcopy(derP.derH[0][0])
+                if P_vertuple: sum_vertuple(P_vertuple, derP.derH[0][0])
+                else: P_vertuple = deepcopy(derP.derH[0][0])
+            if P_vertuple: 
+                P.derH += [[P_vertuple]]  # add new layer of derH  (top Ps doesn't have this new layer of derH)
             PP.box[0] = min(PP.box[0], P.y0)  # y0
             PP.box[2] = min(PP.box[2], P.x0)  # x0
             PP.box[3] = max(PP.box[3], P.x0 + len(P.dert_))  # xn
-    PP.derH=[[vertuple]]  # derH before feedback is single-layer single vertuple
+    if vertuple: 
+        PP.derH=[[vertuple]]  # derH before feedback is single-layer single vertuple  (pack only non-empty vertuple)
 
     return PP
 
@@ -384,7 +392,7 @@ def comp_vertuple(_vertuple, vertuple):
 
     for _par, par, ave in zip(_vertuple.Qd, vertuple.Qd, aves):
 
-        m,d = comp_par(_par[1], par[1]*rn, ave)
+        m,d = comp_par(_par, par*rn, ave)  # why we have this [1]?
         dtuple.Qm+=[m]; dtuple.Qd+=[d]; dtuple.valt[0]+=m; dtuple.valt[1]+=d
 
     return dtuple

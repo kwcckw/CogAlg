@@ -4,7 +4,7 @@ import numpy as np
 
 from comp_slice import PP_aves, ave, ave_nsub, ave_g, ave_ga
 from comp_slice import CP, Cptuple, CderP, CPP
-from comp_slice import comp_ptuple, comp_vertuple, comp_angle, form_PP_t
+from comp_slice import sum_vertuple, comp_ptuple, comp_vertuple, comp_angle, form_PP_t
 from agg_convert import agg_recursion_eval
 '''
 comp_slice_ sub_recursion + utilities
@@ -32,8 +32,7 @@ def sub_recursion_eval(root, PP_, fd):  # for PP or blob
 
 def sub_recursion(PP, fd):  # evaluate PP for rng+ and der+
 
-    P__  = [P_ for P_ in reversed(PP.P__)]  # revert bottom-up to top-down
-    P__ = comp_P_der(P__) if fd else comp_P_rng(P__, PP.rng + 1)   # returns top-down
+    P__ = comp_P_der(PP.P__) if fd else comp_P_rng(PP.P__, PP.rng + 1)   # returns top-down
     PP.rdnt[fd] += 1  # two-fork rdn, priority is not known?  rotate?
 
     cP__ = [copy(P_) for P_ in P__]
@@ -60,32 +59,36 @@ def comp_P_rng(P__, rng):  # rng+ sub_recursion in PP.P__, switch to rng+n to sk
                     __P = _derP._P  # next layer of Ps
                     vertuple = comp_ptuple(P.ptuple, __P.ptuple)
                     if Vertuple: sum_vertuple(Vertuple, vertuple)
-                    else: Vertuple = deepcopy(vertuple)
-                    new_derP = CderP(derH=[[vertuple]])
+                    else: Vertuple = vertuple
+                    new_derP = CderP(derH=[[vertuple]], _P = __P, P=P, fds=copy(__P.fds), x0 = min(P.x0, __P.x0),y0 = min(P.y0, __P.y0))
                     new_derP.valt = copy(vertuple.valt); new_derP.rdnt = copy(vertuple.rdnt)
-                    new_derP.L = len(derP._P.dert_)
+                    new_derP.L = len(_derP._P.dert_)  # should be __P, which is _derP._P?
                     link_ += [new_derP]
 
-            P.derH[:] = [[Vertuple]]  # nested to extend in der+
-            P.link_t[0][:] = link_  # replace old links
+            if Vertuple: P.derH = [[Vertuple]]  # nested to extend in der+ (make sure Vertuple is not None)
+            P.link_t[0] = link_  # replace old links
     return P__
 
 # draft
 def comp_P_der(P__):  # der+ sub_recursion in PP.P__, over the same derPs
 
-    for P_ in reversed(P__[:-1]):  # exclude 1st row: no +ve uplinks
+    for P_ in reversed(P__[:-1]):  # exclude 1st row: no +ve uplinks (reversed to scan it bottom up)
         for P in P_:
             for derP in P.link_t[1]:  # fd=1
                 _P, P = derP._P, derP.P
-                i= len(derP.derQ)-1
-                j= 2*i
-                if len(_P.derH)>j-1 and len(P.derH)>j-1:  # extend derP.derH:
-                    comp_layer(derP, i,j)
+                for _derP in _P.link_t[1]:
+                    dtuple_ = []
+                    for DerH_, derH_ in zip(_P.derH, P.derH):
+                        for Vertuple, vertuple in zip(DerH_, derH_):
+                            dtuple = comp_vertuple(Vertuple, vertuple)
+                            dtuple_ += [dtuple]
+                    P.derH += [dtuple_] 
     return P__
 
+# i think there's no need comp_layer now
 def comp_layer(derP, i,j):  # list derH and derQ, single der+ count=elev, eval per PP
 
-    for _ptuple, ptuple in zip(derP._P.ptuple[i:j], derP.P.ptuple[i:j]):  # P.ptuple is derH
+    for _ptuple, ptuple in zip(derP._P.derH[i:j], derP.P.derH[i:j]):  # P.ptuple is derH
 
         dtuple = comp_vertuple(_ptuple, ptuple)
         derP.derH += [dtuple]
