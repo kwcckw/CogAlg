@@ -118,7 +118,7 @@ class CP(ClusterStructure):  # horizontal blob slice P, with vertical derivative
 
 class CderP(ClusterStructure):  # tuple of derivatives in P link: binary tree with latuple root and vertuple forks
 
-    derH = list  # ptuple_ per layer, unless implicit? sum links / rng+, layers / der+?
+    derH = list  # vertuple_ per layer, unless implicit? sum links / rng+, layers / der+?
     fds = list
     valt = lambda: [0, 0]  # summed rngQ vals
     rdnt = lambda: [1, 1]  # mrdn + uprdn if branch overlap?
@@ -141,7 +141,7 @@ class CPP(CderP):
 
     ptuple = lambda: Cptuple()  # summed P__ ptuples, = 0th derLay
     P__ = list  # 2D array of nodes, may be sub-PPs
-    derH = list  # vertuple_s added in sub+
+    derH = list  # sum vertuple_ s added in sub+
     fds = list  # fd per derLay
     valt = lambda: [0,0]
     rdnt = lambda: [1,1]  # recursion count + Rdn / nderPs + mrdn + uprdn if branch overlap?
@@ -182,10 +182,10 @@ def comp_slice_root(blob, verbose=False):  # always angle blob, composite dert c
                     break  # no xn overlap, stop scanning lower P_
         _P_ = P_
     PPm_,PPd_ = form_PP_t(P__, base_rdn=2)
-    blob.PPm_, blob.PPd_  = PPm_,PPd_  # double node__ in blob, also derH, fds, etc? (we can just pack themas PPm_ and PPd_)? Did we need to use blob.node_ later?
+    blob.PPm_, blob.PPd_  = PPm_, PPd_
     # re comp, cluster:
-    for i, (Val, PP_) in enumerate(zip([blob.M, blob.G], [PPm_, PPd_])):  # derH, fds per PP
-        if Val > ave * sum([PP.rdnt[i] for PP in PP_]):  # blob doesn't have rdn, use PP.rdn?
+    for i, PP_ in enumerate([PPm_, PPd_]):  # derH, fds per PP
+        if sum([PP.valt[i] for PP in PP_]) > ave * sum([PP.rdnt[i] for PP in PP_]):
             sub_recursion_eval(blob, PP_, fd=i)  # intra PP
             agg_recursion_eval(blob, copy(PP_))  # cross PP, Cgraph conversion doesn't replace PPs?
 
@@ -341,7 +341,7 @@ def sum2PP(qPP, base_rdn, fd):  # sum PP_segs into PP
     for P_ in P__:  # top-down
         for P in P_:  # left-to-right
             P.roott[fd] = PP
-            sum_ptuple(PP.ptuple, P.ptuple)  # PP ptuple is always init as Cptuple
+            sum_ptuple(PP.ptuple, P.ptuple)
             for derP in P.link_t[fd]:  # sum links in new layer, single vertuple per derH:
                 if vertuple: sum_vertuple(vertuple, derP.derH[0][0])
                 else: vertuple = deepcopy(derP.derH[0][0])
@@ -451,3 +451,29 @@ def comp_aangle(_aangle, aangle):
     maangle = ave_daangle - abs(daangle)  # inverse match, not redundant as summed
 
     return [maangle,daangle]
+
+'''
+replace rotate_P_ with directly forming axis-orthogonal Ps:
+'''
+def slice_blob_ortho(blob):
+
+    P_ = []
+    while blob.dert__:
+        dert = blob.dert__.pop()
+        P = CP(dert_= [dert])  # init cross-P per dert
+        # need to find/combine adjacent _dert in the direction of gradient:
+        _dert = blob.dert__.pop()
+        mangle,dangle = comp_angle(dert.angle, _dert.angle)
+        if mangle > ave:
+            P.dert_ += [_dert]  # also sum ptuple, etc.
+        else:
+            P_ += [P]
+            P = CP(dert_= [_dert])  # init cross-P per missing dert
+            # add recursive function to find/combine adjacent _dert in the direction of gradient:
+            _dert = blob.dert__.pop()
+            mangle, dangle = comp_angle(dert.angle, _dert.angle)
+            if mangle > ave:
+                P.dert_ += [_dert]  # also sum ptuple, etc.
+            else:
+                pass  # add recursive slice_blob
+
