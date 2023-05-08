@@ -278,7 +278,6 @@ def reval_PP_(PP_, fd):  # recursive eval / prune Ps for rePP
 
     return rePP_
 
-
 def reval_P_(P__, fd):  # prune qPP by (link_ + mediated link__) val
 
     prune_ = []; Val, reval = 0,0  # comb PP value and recursion value
@@ -356,8 +355,12 @@ def sum2PP(qPP, base_rdn, fd):  # sum Ps and links into PP
 def sum_vertuple(Vertuple, vertuple, fneg=0):
 
     for i, (m, d) in enumerate(zip(vertuple.Qm, vertuple.Qd)):
-        Vertuple.Qm[i] += -m if fneg else m
-        Vertuple.Qd[i] += -d if fneg else d
+        if len(Vertuple.Qm)>i: 
+            Vertuple.Qm[i] += -m if fneg else m
+            Vertuple.Qd[i] += -d if fneg else d
+        else:   # for empty CQ
+            Vertuple.Qm += [-m if fneg else m]
+            Vertuple.Qd += [-d if fneg else m]
     for i in 0,1:
         Vertuple.valt[i] += vertuple.valt[i]
         Vertuple.rdnt[i] += vertuple.rdnt[i]

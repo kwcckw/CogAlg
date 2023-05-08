@@ -3,7 +3,7 @@ from copy import copy, deepcopy
 import numpy as np
 
 from comp_slice import PP_aves, ave, ave_nsub, ave_g, ave_ga
-from comp_slice import CP, Cptuple, CderP, CPP
+from comp_slice import CP, CQ, Cptuple, CderP, CPP
 from comp_slice import sum_vertuple, comp_ptuple, comp_vertuple, comp_angle, form_PP_t
 from agg_convert import agg_recursion_eval
 '''
@@ -53,6 +53,7 @@ def comp_P_rng(iP__, rng):  # rng+ sub_recursion in PP.P__, switch to rng+n to s
         P_ = []
         for P in iP_:
             link_= []
+            derH = [[CQ]]  # we need new derH for the new P too?
             for derP in P.link_t[0]:  # mlinks
                 _P = derP._P
                 for _derP in _P.link_t[0]:  # next layer of mlinks
@@ -61,7 +62,8 @@ def comp_P_rng(iP__, rng):  # rng+ sub_recursion in PP.P__, switch to rng+n to s
                     sum_vertuple(P.derH[0][0], vertuple)
                     link_ += [CderP(derH=[[vertuple]], _P=__P, P=P, valt = copy(vertuple.valt), rdnt = copy(vertuple.rdnt),
                                     fds=copy(__P.fds), L = len(__P.dert_), x0 = min(P.x0, __P.x0), y0 = min(P.y0, __P.y0))]
-            P_ += [CP(link_t=[link_,P.link_t[1]])]  # keep Qd?
+                    sum_vertuple(derH[0][0], vertuple)                        
+            P_ += [CP(ptuple=deepcopy(P.ptuple), derH=derH, dert_=copy(P.dert_), fds=copy(P.fds), x0=P.x0, y0=P.y0, link_t=[link_,copy(P.link_t[1])])]  # keep Qd? (Copy dlink_ now)
             # add box and other params
         P__+= [P_]
     return P__
@@ -75,14 +77,19 @@ def comp_P_der(P__):  # der+ sub_recursion in PP.P__, over the same Ps and derPs
             for derP in P.link_t[1]:  # fd=1
                 _P = derP._P
                 _extend = len(_P.derH) == len(P.derH)
-                _derLay, derLay = P.derH[-1], _P.derH[-1+_extend]  # comp top layer only, no selection per sub-layer till agg+
+                # why we need to +_extend here? The last derH layer index should be -1 regardless of extend
+                _derLay, derLay = P.derH[-1], _P.derH[-1]  # comp top layer only, no selection per sub-layer till agg+
                 linkLay = []
-                for i, (_vertuple, vertuple, Dtuple) in enumerate(zip_longest(_derLay, derLay, PLay, fillvalue=CQ())):
-                    dtuple = comp_vertuple(_vertuple, vertuple)
-                    linkLay += [dtuple]
-                    sum_vertuple(Dtuple, dtuple)
-                    if not _extend: sum_vertuple(_P.derH[-1][i], dtuple)  # bilateral sum
-                if _extend: _P.derH += [deepcopy(linkLay)]  # bilateral init new _Lay
+                for i, (_vertuple, vertuple, Dtuple) in enumerate(zip_longest(_derLay, derLay, PLay, fillvalue=[])):
+                    if vertuple and _vertuple:
+                        dtuple = comp_vertuple(_vertuple, vertuple)
+                        linkLay += [dtuple]
+                        if Dtuple: sum_vertuple(Dtuple, dtuple)
+                        else:
+                            Dtuple = dtuple
+                            PLay += [Dtuple]  # pack new Dtuple into Play                            
+                        if not _extend: sum_vertuple(_P.derH[-1][i], dtuple)  # bilateral sum (if bilateral, why we didn't sum to P.derH?)
+                if _extend: _P.derH += [linkLay]  # bilateral init new _Lay  (there's no need to use copy here because we init new linkLay above)
                 derP.derH += [linkLay]
             P.derH += [PLay]
 
