@@ -385,7 +385,8 @@ def sum_ptuple(Ptuple, ptuple, fneg=0):
 def comp_vertuple(_vertuple, vertuple):
 
     dtuple=CQ(n=_vertuple.n, Q=copy(_vertuple.Q))
-    rn = _vertuple.n/vertuple.n  # normalize param as param*rn for n-invariant ratio: _param/ param*rn = (_param/_n)/(param/n)
+    if vertuple.n: rn = _vertuple.n/vertuple.n  # normalize param as param*rn for n-invariant ratio: _param/ param*rn = (_param/_n)/(param/n)
+    else:          rn = 1  # if rn is init as empty CQ, their n is 0
 
     for _par, par, ave in zip(_vertuple.Qd, vertuple.Qd, aves):
 

@@ -2,7 +2,7 @@ from itertools import zip_longest
 from copy import copy, deepcopy
 import numpy as np
 
-from comp_slice import PP_aves, ave, ave_nsub, ave_g, ave_ga
+from comp_slice import PP_aves, ave, aveB, ave_nsub, ave_g, ave_ga
 from comp_slice import CP, CQ, Cptuple, CderP, CPP
 from comp_slice import sum_vertuple, comp_ptuple, comp_vertuple, comp_angle, form_PP_t
 from agg_convert import agg_recursion_eval
@@ -80,21 +80,22 @@ def comp_rng(iP__, rng):  # form new Ps and links in rng+ PP.P__, switch to rng+
 def comp_der(iP__):  # form new Ps and links in rng+ PP.P__, extend their link.derH, P.derH, _P.derH
 
     P__ = []
+    # i think we need to preserve the top row now? Because they need to be packed into new P__ too. Same with rng+.
     for iP_ in reversed(iP__[:-1]):  # lower compared row, bottom up to follow uplinks, skip last row: no higher rows
         P_ = []
         for P in iP_:
             link_, link_m, link_d = [],[],[]  # for new P
             VerT0, VerT1 = CQ(),CQ()  # Vertuple0: old derLayer, Vertuple1: new derLayer
             mVal, dVal, mRdn, dRdn = 0,0,0,0
-            for derP in P.link_t[1]:  # dlinks
-                _P = derP._P
+            for iderP in P.link_t[1]:  # dlinks
+                _P = iderP._P
                 dL = len(_P.derH) > len(P.derH)  # dL = 0|1: _P.derH was extended by other P, compare _P.derH[-2]:
-                _verT0, verT0 = P.derH[-1][0][0], _P.derH[-(1+dL)][0][0]  # can be simpler but less general
+                _verT0, verT0 = P.derH[-1][0], _P.derH[-(1+dL)][0]  # can be simpler but less general
                 verT1 = comp_vertuple(_verT0, verT0)  # 1-vertuple derH before feedback
-                mval = sum(verT1.Qm)+derP.valt[0]  # sum from 2 layers
-                dval = sum(verT1.Qd)+derP.valt[1]
-                mrdn = 1+dval>mval + derP.rdnt[0]
-                drdn = 1+(not mrdn)+ derP.rdnt[1]
+                mval = sum(verT1.Qm)+iderP.valt[0]  # sum from 2 layers
+                dval = sum(verT1.Qd)+iderP.valt[1]
+                mrdn = 1+dval>mval + iderP.rdnt[0]
+                drdn = 1+(not mrdn)+ iderP.rdnt[1]
                 derP = CderP(derH=[[verT0],[verT1]], _P=_P, P=P, valt=[mval,dval], rdnt=[mrdn,drdn], fds=copy(P.fds),
                              L=len(_P.dert_), x0=min(P.x0,_P.x0), y0=min(P.y0,_P.y0))
                 link_ += [derP]  # all links
@@ -102,11 +103,15 @@ def comp_der(iP__):  # form new Ps and links in rng+ PP.P__, extend their link.d
                     link_m += [derP]; mVal+=mval; mRdn+=mrdn
                 if dval > aveB * drdn:
                     sum_vertuple(P.derH[0][0], verT0)  # +ve dlinks, up only, no bilateral assign
-                    sum_vertuple(P.derH[0][1], verT1)
+                    if len(P.derH)>1: sum_vertuple(P.derH[1][0], verT1)
+                    else:             P.derH += [[deepcopy(verT1)]]  # deepcopy to prevent same object reference with derP's verT1
                     link_d += [derP]; dVal+=dval; dRdn+=drdn
             sum_vertuple(VerT0, P.derH[0][0])  # from +ve dlinks only
-            sum_vertuple(VerT1, P.derH[0][1])
+            if len(P.derH)>1: sum_vertuple(VerT1, P.derH[1][0])
             # form new Ps in der+ PP:
+            # VerT1 could be empty here, we still need to pack them?
+            # Also should we merge P.derH into new P.derH here? Otherwise they will always getting replaced
+            # Something like this: derH = [P.derH[0] + [VerT0], P.derH[1] + [VerT1]] 
             P_ += [CP(ptuple=deepcopy(P.ptuple), derH=[[VerT0],[VerT1]], dert_=copy(P.dert_), fds=copy(P.fds)+[0], x0=P.x0, y0=P.y0,
                       valt=[mVal,dVal], rdnt=[mRdn,dRdn], rdnlink_=link_, link_t=[link_m,link_d])]
         P__+= [P_]
