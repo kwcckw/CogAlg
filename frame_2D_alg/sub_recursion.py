@@ -259,37 +259,6 @@ def copy_P(P, Ptype=None):  # Ptype =0: P is CP | =1: P is CderP | =2: P is CPP 
 def sum2PPP(qPPP, base_rdn, fd):  # sum PP_segs into PP
     pass
 
-# not revised:
-def sum_derH(DerH, derH, fsamerow=0, fneg=0):
-    for H, h in zip_longest(DerH, derH, fillvalue=[]):  # each H is [ptuple_, node_, fd]
-        if h:
-            if H:
-                sum_ptuple_(H[0], h[0], fneg)  # H[0] is ptuple_, sum ptuples
-                if fsamerow:  # pack Ps
-                    for Node_, node_ in zip_longest(H[1], h[1], fillvalue=[]):  # H[1] is node__, pack node__
-                        if node_:
-                            if Node_:
-                                Node_ += node_  # merge node _ in a same row
-                            else:
-                                Node_[:] = copy(node_)  # shallow copy, different list of same objects within
-                else:  # pack lower rows
-                    for node_ in h[1]:
-                        H[1] += [node_]
-            else:
-                DerH += [[deepcopy(h[0]), [copy(node_) for node_ in h[1]], h[2]]]  # ptuple_,node_,fd (deepcopy node_ causes endless recursion)
-
-
-def sum_ptuple_(Ptuple_, ptuple_, fneg=0):  # same fds from comp_derH
-
-    for Vertuple, vertuple in zip_longest(Ptuple_, ptuple_, fillvalue=[]):  # H[0] is ptuple_
-        if vertuple:
-            if Vertuple:
-                if isinstance(vertuple, CQ):
-                    sum_vertuple(Vertuple, vertuple, fneg)
-                else:
-                    sum_ptuple(Vertuple, vertuple, fneg)
-            elif not fneg:
-                Ptuple_ += [deepcopy(vertuple)]
 
 # copy from agg+:
 def feedback(root):  # bottom-up update root.H, breadth-first
