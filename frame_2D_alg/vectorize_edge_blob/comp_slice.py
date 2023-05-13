@@ -1,3 +1,7 @@
+import numpy as np
+from itertools import zip_longest
+from copy import copy, deepcopy
+
 from .classes import CQ, Cptuple, CP, CderP, CPP
 from .filters import (
     aves, vaves, PP_vars, PP_aves,
@@ -7,16 +11,18 @@ from .filters import (
     ave_rmP, ave_ortho, aveB, ave_dI, ave_M, ave_Ma, ave_G, ave_Ga, ave_L,
     ave_x, ave_dx, ave_dy, ave_daxis, ave_dangle, ave_daangle,
     ave_mval, ave_mPP, ave_dPP, ave_splice,
-    ave_nsub, ave_sub, ave_agg, ave_overlap, ave_rotate,
+    ave_nsub, ave_sub, ave_agg, ave_overlap, ave_rotate, ave_P,
     med_decay,
 )
-from .sub_recursion import sub_recursion_eval, copy
+
 from .agg_convert import agg_recursion_eval
 
 
 def comp_slice(blob, verbose=False):  # always angle blob, composite dert core param is v_g + iv_ga
     # scan rows top-down, comp y-adjacent, x-overlapping Ps to form derPs
 
+    from .sub_recursion import sub_recursion_eval
+    
     P__ = blob.P__
     _P_ = P__[0]  # higher row
     for P_ in P__[1:]:  # lower row
@@ -29,9 +35,12 @@ def comp_slice(blob, verbose=False):  # always angle blob, composite dert core p
                 if (P.x0 - 1 < _P.x0 + _L) and (P.x0 + L > _P.x0):
                     comp_P(_P,P, Mtuple,Dtuple, link_,link_m,link_d, Valt, Rdnt, fd=0)
                 elif (P.x0 + L) < _P.x0:
-                    P.derH=[[[Mtuple,Dtuple]]]  # single vertuple
-                    P.link_=link_; P.link_t=[link_m,link_d]; P.valt=Valt; P.rdnt = Rdnt
                     break  # no xn overlap, stop scanning lower P_
+            # i think this should be here? After scanning all upper _P_, we assign their params
+            # the older scheme will not pack params to P if there's single _P and the if loop is true
+            if link_:
+                P.derH=[[[Mtuple,Dtuple]]]  # single vertuple
+                P.link_=link_; P.link_t=[link_m,link_d]; P.valt=Valt; P.rdnt = Rdnt 
         _P_ = P_
     PPm_,PPd_ = form_PP_t(P__, base_rdn=2)
     blob.PPm_, blob.PPd_  = PPm_, PPd_
@@ -39,7 +48,7 @@ def comp_slice(blob, verbose=False):  # always angle blob, composite dert core p
     for i, PP_ in enumerate([PPm_, PPd_]):  # derH, fds per PP
         if sum([PP.valt[i] for PP in PP_]) > ave * sum([PP.rdnt[i] for PP in PP_]):
             sub_recursion_eval(blob, PP_, fd=i)  # intra PP
-            # agg_recursion_eval(blob, copy(PP_))  # cross PP, Cgraph conversion doesn't replace PPs?
+            agg_recursion_eval(blob, copy(PP_), ifd=i)  # cross PP, Cgraph conversion doesn't replace PPs?
 
 
 def form_PP_t(P__, base_rdn):  # form PPs of derP.valt[fd] + connected Ps'val
@@ -150,8 +159,11 @@ def sum2PP(qPP, base_rdn, fd):  # sum Ps and links into PP
         for P in P_:  # left-to-right
             P.roott[fd] = PP
             sum_ptuple(PP.ptuple, P.ptuple)
+            sum_derH(PP.derH, P.derH)
+            """
             if PP.derH: [sum_vertuple(L[0],l[0]) for L,l in zip_longest(PP.derH, P.derH, fillvalue=[])]
             else: PP.derH = deepcopy(P.derH)  # sum_derH(PP.derH, P.derH)
+            """
             PP.link_ += P.link_
             for Link_,link_ in zip(PP.link_t, P.link_t):
                 Link_ += link_  # all unique links in PP, to replace n
@@ -199,7 +211,7 @@ def sum_tuple(Ptuple,ptuple, fneg=0):  # mtuple or dtuple
 
 def sum_ptuple(Ptuple, ptuple, fneg=0):
 
-    for pname, ave in zip(pnames, aves):
+    for pname, ave in zip(PP_vars, aves):
         Par = getattr(Ptuple, pname); par = getattr(ptuple, pname)
 
         if isinstance(Par, list):  # angle or aangle
@@ -214,8 +226,8 @@ def sum_ptuple(Ptuple, ptuple, fneg=0):
 def comp_P(_P,P, Mtuple, Dtuple, link_,link_m,link_d, Valt, Rdnt, fd, derP=None, Mt0=None, Dt0=None):  #  last three if der+
 
     if fd:
-        _dtuple, dtuple = _P.derH[-1][0][1], P.derH[-1][0][1]  # 1-vertuple derH before feedback, compare dtuple
-        mtuple,dtuple = comp_vertuple(_dtuple, dtuple, rn=len(_P.link_t[1])/len(P.link_t[1]))  # comp_tuple
+        _vertuple, vertuple = _P.derH[-1][0], P.derH[-1][0]  # 1-vertuple derH before feedback, compare dtuple
+        mtuple,dtuple = comp_vertuple(_vertuple, vertuple, rn=len(_P.link_t[1])/len(P.link_t[1]))  # comp_tuple (it will compare der fork anyway)
     else:
         mtuple,dtuple = comp_ptuple(_P.ptuple, P.ptuple)
     mval = sum(mtuple)
@@ -251,7 +263,7 @@ def comp_ptuple(_ptuple, ptuple):
     mtuple, dtuple = [],[]  # in the order of ("I", "M", "Ma", "axis", "angle", "aangle","G", "Ga", "x", "L")
     rn = _ptuple.n / ptuple.n  # normalize param as param*rn for n-invariant ratio: _param / param*rn = (_param/_n) / (param/n)
 
-    for pname, ave in zip(pnames, aves):
+    for pname, ave in zip(PP_vars, aves):
         _par = getattr(_ptuple, pname)
         par = getattr(ptuple, pname)
         if pname=="aangle": m,d = comp_aangle(_par, par)

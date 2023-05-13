@@ -1,8 +1,19 @@
 from copy import copy, deepcopy
 import numpy as np
 
-from frame_2D_alg.vectorize_edge_blob.comp_slice import PP_aves, ave, ave_nsub, ave_g, ave_ga
-from frame_2D_alg.vectorize_edge_blob.comp_slice import CP, CQ, Cptuple, CderP, CPP
+from .classes import CQ, Cptuple, CP, CderP, CPP
+from .filters import (
+    aves, vaves, PP_vars, PP_aves,
+    ave_inv, ave, ave_g, ave_ga,
+    flip_ave, flip_ave_FPP,
+    div_ave,
+    ave_rmP, ave_ortho, aveB, ave_dI, ave_M, ave_Ma, ave_G, ave_Ga, ave_L,
+    ave_x, ave_dx, ave_dy, ave_daxis, ave_dangle, ave_daangle,
+    ave_mval, ave_mPP, ave_dPP, ave_splice,
+    ave_nsub, ave_sub, ave_agg, ave_overlap, ave_rotate, ave_P,
+    med_decay,
+)
+
 from frame_2D_alg.vectorize_edge_blob.comp_slice import comp_P, comp_angle, form_PP_t
 
 ave_rotate = 10
@@ -22,6 +33,7 @@ def sub_recursion_eval(root, PP_, fd):  # for PP or blob
             for i in 0,1:
                 root.valt[i] += PP.valt[i]  # vals
                 root.rdnt[i] += PP.rdnt[i]  # ad rdn too?
+        # not sure what happening here, root is CPP, but isinstance returns false
         else:  # root is Blob
             if fd: root.G += sum([alt_PP.valt[fd] for alt_PP in PP.alt_PP_]) if PP.alt_PP_ else 0
             else:  root.M += PP.valt[fd]
