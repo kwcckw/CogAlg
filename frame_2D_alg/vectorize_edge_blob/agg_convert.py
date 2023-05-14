@@ -4,18 +4,7 @@ Agg_recursion eval and PP->graph conversion
 from .agg_recursion import Cgraph, agg_recursion, op_parH
 from copy import copy, deepcopy
 from .classes import CQ, Cptuple, CP, CderP, CPP
-from .filters import (
-    aves, vaves, PP_vars, PP_aves,
-    ave_inv, ave, ave_g, ave_ga,
-    flip_ave, flip_ave_FPP,
-    div_ave,
-    ave_rmP, ave_ortho, aveB, ave_dI, ave_M, ave_Ma, ave_G, ave_Ga, ave_L,
-    ave_x, ave_dx, ave_dy, ave_daxis, ave_dangle, ave_daangle,
-    ave_mval, ave_mPP, ave_dPP, ave_splice,
-    ave_nsub, ave_sub, ave_agg, ave_overlap, ave_rotate, ave_P,
-    med_decay,
-)
-
+from .filters import PP_vars, PP_aves, ave_nsub, ave_agg
 
 # move here temporary, for debug purpose
 # not fully updated
@@ -32,9 +21,9 @@ def agg_recursion_eval(blob, PP_, ifd):
     else:
         converted_blob = blob2graph(blob, fseg=fseg)  # convert root to graph
 
-    Val = converted_blob.valt[ifd] 
+    Val = converted_blob.valt[ifd]
     fork_rdnt = [1+(converted_blob.valt[ifd] > converted_blob.valt[1-ifd]), 1+(converted_blob.valt[1-ifd] > converted_blob.valt[ifd])]
- 
+
     if (Val > PP_aves[ifd] * ave_agg * (converted_blob.rdnt[fd]+1) * fork_rdnt[fd]) \
         and len(PP_) > ave_nsub : # and converted_blob[0].alt_rdn < ave_overlap:
         converted_blobt[fd].pH.rdnt[fd] += 1  # estimate

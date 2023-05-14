@@ -91,12 +91,12 @@ def intra_blob_root(root_blob, render, verbose, fBa):  # recursive evaluation of
 
 
 def cluster_fork_recursive(blob, spliced_layers, new_dert__, sign__, new_mask__, verbose, render, fBa):
+
     fork = 'a' if fBa else 'r'
-    if verbose:
-        print('fork:', blob.prior_forks + fork)
+    if verbose: print('fork:', blob.prior_forks + fork)
     # form sub_blobs:
     sub_blobs, idmap, adj_pairs = \
-        flood_fill(new_dert__, sign__, prior_forks=blob.prior_forks + fork, verbose=False, mask__=new_mask__)
+        flood_fill(new_dert__, sign__, prior_forks=blob.prior_forks + fork, verbose=verbose, mask__=new_mask__)
     '''
     adjust per average sub_blob, depending on which fork is weaker, or not taken at all:
     sub_blob.rdn += 1 -|+ min(sub_blob_val, alt_blob_val) / max(sub_blob_val, alt_blob_val):
