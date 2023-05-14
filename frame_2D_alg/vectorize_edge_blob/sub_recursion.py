@@ -44,15 +44,15 @@ def comp_rng(iP__, rng):  # form new Ps and links in rng+ PP.P__, switch to rng+
         for P in iP_:
             link_, link_m, link_d = [],[],[]  # for new P
             Valt = [0,0]; Rdnt = [0,0]
-            DerH = [[],[]]  # just Mtuple, Dtuple here
+            DerLay = [[[],[]]]  # just Mtuple, Dtuple here (using DerLay is clearer? Using DerH is not correct for mdtuple pair, or suggest a better name)
             for iderP in P.link_t[0]:  # mlinks
                 _P = iderP._P
                 for _derP in _P.link_t[0]:  # next layer of mlinks
                     __P = _derP._P  # next layer of Ps
-                    comp_P(P,__P, link_,link_m,link_d, Valt, Rdnt, DerH, fd=0)
+                    comp_P(P,__P, link_,link_m,link_d, Valt, Rdnt, DerLay=DerLay, fd=0)
             if Valt[0] > ave_P * Rdnt[0]:
                 # add new P in rng+ PP:
-                P_ += [CP(ptuple=deepcopy(P.ptuple), derH=[[DerH]], dert_=copy(P.dert_), fds=copy(P.fds)+[0], x0=P.x0, y0=P.y0,
+                P_ += [CP(ptuple=deepcopy(P.ptuple), derH=[DerLay], dert_=copy(P.dert_), fds=copy(P.fds)+[0], x0=P.x0, y0=P.y0,
                       valt=Valt, rdnt=Rdnt, link_=link_, link_t=[link_m,link_d])]
         P__+= [P_]
     return P__
@@ -67,8 +67,9 @@ def comp_der(iP__):  # form new Ps and links in rng+ PP.P__, extend their link.d
             link_, link_m, link_d = [],[],[]  # for new P
             Valt = [0,0]; Rdnt = [0,0]
             for iderP in P.link_t[1]:  # dlinks
-                _P = iderP._P
-                comp_P(_P, P, link_,link_m,link_d, Valt, Rdnt, DerH, fd=1, derP=iderP, DerLay=DerLay)
+                if iderP._P.link_t[1]:  # not top row with empty links
+                    _P = iderP._P
+                    comp_P(_P, P, link_,link_m,link_d, Valt, Rdnt, DerH, fd=1, derP=iderP, DerLay=DerLay)
             if Valt[1] > ave_P * Rdnt[1]:
                 # add new P in der+ PP:
                 P_ += [CP(ptuple=deepcopy(P.ptuple), derH= DerH+[DerLay], dert_=copy(P.dert_), fds=copy(P.fds)+[1],
