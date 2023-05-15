@@ -2,7 +2,7 @@ from copy import copy, deepcopy
 import numpy as np
 from .filters import PP_aves, ave, ave_nsub, P_aves, G_aves
 from .classes import CP, CQ, CderP, CPP
-from .comp_slice import comp_P, form_PP_t
+from .comp_slice import comp_P, form_PP_t, sum_derH
 from .agg_convert import agg_recursion_eval
 
 def sub_recursion_eval(root, PP_, fd):  # for PP or blob
@@ -32,6 +32,11 @@ def sub_recursion(PP, fd):  # evaluate PP for rng+ and der+, add layers to selec
         if PP.valt[fd] > ave * PP.rdnt[fd]:
             sub_recursion_eval(PP, sub_PP_, fd=fd)
             agg_recursion_eval(PP, copy(sub_PP_), ifd=fd)  # cross sub_PPs, Cgraph conversion doesn't replace PPs?
+
+        # this section will be called in every sub_recursion, so feedback shouldn't be recursive?
+        elif PP.valt[fd]>G_aves[fd]:  
+            for sub_PP in sub_PP_:
+                sum_derH(PP.derH, sub_PP.derH, fd)
 
 # mderP * (ave_olp_L / olp_L)? or olp(_derP._P.L, derP.P.L)? gap: neg_olp, ave = olp-neg_olp?
 # __Ps in rng+ are mediated by PP.rng layers of _Ps:

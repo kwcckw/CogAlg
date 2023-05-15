@@ -26,7 +26,7 @@ def agg_recursion_eval(blob, PP_, ifd):
 
     if (Val > PP_aves[ifd] * ave_agg * (converted_blob.rdnt[fd]+1) * fork_rdnt[fd]) \
         and len(PP_) > ave_nsub : # and converted_blob[0].alt_rdn < ave_overlap:
-        converted_blobt[fd].pH.rdnt[fd] += 1  # estimate
+        converted_blob.rdnt[fd] += 1  # estimate
         agg_recursion(converted_blobt[fd], fseg=fseg)
 
 # old

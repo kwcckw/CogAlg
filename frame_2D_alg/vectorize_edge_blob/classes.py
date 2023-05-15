@@ -83,6 +83,7 @@ class CPP(CderP):
     alt_rdn = int  # overlapping redundancy between core and edge
     alt_PP_ = list  # adjacent alt-fork PPs per PP, from P.roott[1] in sum2PP
     altuple = list  # summed from alt_PP_, sub comp support, agg comp suppression?
+    alt_derH = lambda: [[[[],[]]]]
     box = lambda: [0,0,0,0]  # y0,yn, x0,xn
     fPPm = NoneType  # PPm if 1, else PPd; not needed if packed in PP_
     fdiv = NoneType
@@ -101,7 +102,11 @@ class Cgraph(ClusterStructure):  # params of single-fork node_ cluster per pplay
     '''
     G = lambda: None  # same-scope lower-der|rng G.G.G., or [G0,G1] in derG, None in PP
     root = lambda: None  # root graph or derH G, element of ex.H[-1][fd]
-    pH = lambda: CQ()  # aggH( subH( derH H: Lev+= node tree slice/fb, Lev/agg+, lev/sub+?  subH if derG
+    # should we use a similar with with derH now? Something like below:
+    # 2nd bracket for each level (extended in agg+)
+    # 3rd bracket for each layer (extended in sub+)
+    # 4th bracket packing each [mtuple, dtuple]
+    pH = lambda: [[[[[],[]]]]]  # aggH( subH( derH H: Lev+= node tree slice/fb, Lev/agg+, lev/sub+?  subH if derG
     H = list  # replace with node_ per pH[i]? down-forking tree of Levs: slice of nodes
     # uH: up-forking Levs if mult roots
     node_ = list  # single-fork, conceptually H[0], concat sub-node_s in ex.H levs

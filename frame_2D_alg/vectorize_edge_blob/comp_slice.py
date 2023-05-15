@@ -32,6 +32,19 @@ def comp_slice(blob, verbose=False):  # high-G, smooth-angle blob, composite der
     PPm_,PPd_ = form_PP_t(P__, base_rdn=2)
     blob.PPm_, blob.PPd_  = PPm_, PPd_
 
+    # pack alts (we missed out this part?)
+    for PP in PPm_:
+        for P_ in PP.P__:
+            for P in P_:
+                if P.roott[1] != None and P.roott[1] not in PP.alt_PP_:
+                    alt_PP = P.roott[1]
+                    # bilateral assignments and accumulations
+                    PP.alt_PP_ += [alt_PP]; alt_PP.alt_PP_ += [PP]
+                    for i in 0,1:
+                        PP.alt_rdnt[i] += alt_PP.rdnt[i]; alt_PP.alt_rdnt[i] += PP.rdnt[i]  
+                    sum_ptuple(PP.alt_ptuple, alt_PP.ptuple); sum_ptuple(alt_PP.alt_ptuple, PP.ptuple); 
+                    sum_derH(PP.alt_derH, alt_PP.derH); sum_derH(alt_PP.alt_derH, PP.derH)
+
 
 def form_PP_t(P__, base_rdn):  # form PPs of derP.valt[fd] + connected Ps'val
 
