@@ -9,15 +9,15 @@ def sub_recursion_eval(root, PP_, fd):  # for PP or blob
 
     for PP in PP_:  # fd = _P.valt[1]+P.valt[1] > _P.valt[0]+_P.valt[0]  # if exclusive comp fork per latuple|vertuple?
         # fork val, rdn:
-        val = PP.valt[fd]; alt_val = sum([alt_PP.valt[fd] for alt_PP in PP.alt_PP_]) if PP.alt_PP_ else 0
-        ave = PP_aves[fd] * (PP.rdnt[fd] + 1 + (alt_val > val))
+        val = PP.valt[fd]
+        ave = PP_aves[fd] * PP.rdnt[fd]
         if val > ave and len(PP.P__) > ave_nsub:
             sub_recursion(PP, fd)  # comp_der | comp_rng in PPs -> param_layer, sub_PPs
         if isinstance(root, CPP):
             for fd in 0,1:
                 root.valt[fd] += PP.valt[fd]; root.rdnt[fd] += PP.rdnt[fd]  # add rdn?
         else:  # root is Blob
-            if fd: root.G += sum([alt_PP.valt[fd] for alt_PP in PP.alt_PP_]) if PP.alt_PP_ else 0
+            if fd: root.G += PP.valt[1-fd]
             else:  root.M += PP.valt[fd]
 
 
@@ -30,6 +30,10 @@ def sub_recursion(PP, fd):  # evaluate PP for rng+ and der+, add layers to selec
     sub_PPm_, sub_PPd_ = form_PP_t(cP__, base_rdn=PP.rdnt[fd])
 
     for fd, sub_PP_ in enumerate([sub_PPm_, sub_PPd_]):
+        # we need to add root here? And then assign node_?
+        PP.node_t[fd] = sub_PP_
+        for sub_PP in sub_PP_:
+            sub_PP.roott[fd] = PP
         if PP.valt[fd] > ave * PP.rdnt[fd]:
             sub_recursion_eval(PP, sub_PP_, fd=fd)
         else:
@@ -38,12 +42,6 @@ def sub_recursion(PP, fd):  # evaluate PP for rng+ and der+, add layers to selec
             agg_recursion_eval(PP, copy(sub_PP_), fd=fd)  # comp sub_PPs, form intermediate PPs
         else:
             feedback(PP, fd)  # add aggH: levs of rngH( derH?
-
-
-        # this section will be called in every sub_recursion, so feedback shouldn't be recursive?
-        elif PP.valt[fd]>G_aves[fd]:  
-            for sub_PP in sub_PP_:
-                sum_derH(PP.derH, sub_PP.derH, fd)
 
 # mderP * (ave_olp_L / olp_L)? or olp(_derP._P.L, derP.P.L)? gap: neg_olp, ave = olp-neg_olp?
 # __Ps in rng+ are mediated by PP.rng layers of _Ps:
@@ -100,15 +98,15 @@ def feedback(root, fd):  # bottom-up update root.derH, breadth-first, separate f
     fbV = ave+1
 
     while root and fbV > ave:
-        if all([[node.fterm for node in root.node_]]):  # forward was terminated in all nodes
+        if all([[node.fterm for node in root.node_t[fd]]]):  # forward was terminated in all nodes
             root.fterm = 1
             fbval, fbrdn = 0,1
-            for node in root.node_:
-                for sub_node in node.node_:
+            for node in root.node_t[fd]:
+                for sub_node in node.node_t[fd]:
                     sum_derH(root.derH, sub_node.derH)  # node.derH is summed in root.derH in sum2PP?
                     fbval += sub_node.valt[fd]
                     fbrdn += sub_node.rdnt[fd]
             fbV = fbval/fbrdn
-            root = root.root
+            root = root.roott[fd]
         else:
             break

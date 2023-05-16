@@ -86,7 +86,8 @@ class CPP(CderP):
     link_t = lambda: [[],[]]  # +ve rlink_, dlink_
     roott = lambda: [None,None]  # PPPm, PPPd that contain this PP
     cPP_ = list  # rdn reps in other PPPs, to eval and remove?
-
+    node_t = lambda: [[],[]]  # sub_PPm_, sub_PPd_?
+    fterm = 0
 
 class Cgraph(ClusterStructure):  # params of single-fork node_ cluster per pplayers
     ''' ext / agg.sub.derH:
@@ -96,6 +97,8 @@ class Cgraph(ClusterStructure):  # params of single-fork node_ cluster per pplay
     '''
     G = lambda: None  # same-scope lower-der|rng G.G.G., or [G0,G1] in derG, None in PP
     root = lambda: None  # root graph or derH G, element of ex.H[-1][fd]
+    valt = lambda: [0,0]
+    rdnt = lambda: [1,1]
     pH = list  # aggH( subH( derH H: Lev+= node tree slice/fb, Lev/agg+, lev/sub+?  subH if derG
     H = list  # replace with node_ per pH[i]? down-forking tree of Levs: slice of nodes
     # uH: up-forking Levs if mult roots
