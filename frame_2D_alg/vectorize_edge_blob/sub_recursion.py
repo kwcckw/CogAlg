@@ -24,14 +24,21 @@ def sub_recursion_eval(root, PP_, fd):  # for PP or blob
 def sub_recursion(PP, fd):  # evaluate PP for rng+ and der+, add layers to select sub_PPs
 
     P__ = comp_der(PP.P__) if fd else comp_rng(PP.P__, PP.rng+1)   # returns top-down
-    PP.rdnt[fd] += PP.valt[fd] > PP.valt[1-fd]  # fork rdn
+    PP.rdnt[fd] += PP.valt[fd] > PP.valt[1-fd]
+    # link Rdn += PP rdn?
     cP__ = [copy(P_) for P_ in P__]
-
     sub_PPm_, sub_PPd_ = form_PP_t(cP__, base_rdn=PP.rdnt[fd])
+
     for fd, sub_PP_ in enumerate([sub_PPm_, sub_PPd_]):
         if PP.valt[fd] > ave * PP.rdnt[fd]:
             sub_recursion_eval(PP, sub_PP_, fd=fd)
-            agg_recursion_eval(PP, copy(sub_PP_), ifd=fd)  # cross sub_PPs, Cgraph conversion doesn't replace PPs?
+        else:
+            feedback(PP, fd)  # update derH, valt, rdnt, add rngH: rng lays are not represented in derH?
+        if PP.valt[fd] > ave * PP.rdnt[fd]:  # adjusted by sub+, ave*agg_coef?
+            agg_recursion_eval(PP, copy(sub_PP_), fd=fd)  # comp sub_PPs, form intermediate PPs
+        else:
+            feedback(PP, fd)  # add aggH: levs of rngH( derH?
+
 
         # this section will be called in every sub_recursion, so feedback shouldn't be recursive?
         elif PP.valt[fd]>G_aves[fd]:  
@@ -86,9 +93,8 @@ def comp_der(iP__):  # form new Ps and links in rng+ PP.P__, extend their link.d
 def sum2PPP(qPPP, base_rdn, fd):  # sum PP_segs into PP
     pass
 
-# draft,
-# copy from agg+:
-def feedback(root):  # bottom-up update root.H, breadth-first
+# draft
+def feedback(root, fd):  # bottom-up update root.derH, breadth-first, separate for each fork?
 
     ave = G_aves[root.fds[-1]]
     fbV = ave+1
@@ -96,21 +102,13 @@ def feedback(root):  # bottom-up update root.H, breadth-first
     while root and fbV > ave:
         if all([[node.fterm for node in root.node_]]):  # forward was terminated in all nodes
             root.fterm = 1
-            fbval, fbrdn = 0,0
+            fbval, fbrdn = 0,1
             for node in root.node_:
-                # node.node_ may empty when node is converted graph
-                if node.node_ and not node.node_[0].box:  # link_ feedback is redundant, params are already in node.derH
-                    continue
                 for sub_node in node.node_:
-                    fd = sub_node.fds[-1] if sub_node.fds else 0
-                    if not root.H: root.H = [CQ(H=[[],[]])]  # append bottom-up
-                    if not root.H[0].H[fd]: root.H[0].H[fd] = Cgraph()
-                    # sum nodes in root, sub_nodes in root.H:
-                    sum_parH(root.H[0].H[fd].derH, sub_node.derH)
-                    sum_H(root.H[1:], sub_node.H)  # sum_G(sub_node.H forks)?
-            for Lev in root.H:
-                fbval += Lev.val; fbrdn += Lev.rdn
-            fbV = fbval/max(1, fbrdn)
+                    sum_derH(root.derH, sub_node.derH)  # node.derH is summed in root.derH in sum2PP?
+                    fbval += sub_node.valt[fd]
+                    fbrdn += sub_node.rdnt[fd]
+            fbV = fbval/fbrdn
             root = root.root
         else:
             break
