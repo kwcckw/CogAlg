@@ -11,15 +11,10 @@ from .filters import PP_vars, PP_aves, ave_nsub, ave_agg
 # not fully updated
 def agg_recursion_eval(blob, PP_, fd):
 
-    fseg = isinstance(blob, CPP)
     for i, PP in enumerate(PP_):
-        converted_graph  = PP2graph(PP, fseg=fseg, ifd=fd)  # convert PP to graph
+        converted_graph  = PP2graph(PP, fd=fd)  # convert PP to graph
         PP_[i] = converted_graph
-    if fseg:
-        converted_blob = PP2graph(blob, fseg=fseg, ifd=fd)  # convert root to graph (root default fd = 1?)
-        for PP in PP_: PP.root = converted_blob
-    else:
-        converted_blob = blob2graph(blob, fseg=fseg, fd=fd)  # convert root to graph
+        converted_blob = blob2graph(blob, fd=fd)  # convert root to graph
 
     Val = converted_blob.valt[fd]
     fork_rdnt = [1+(converted_blob.valt[fd] > converted_blob.valt[1-fd]), 1+(converted_blob.valt[1-fd] > converted_blob.valt[fd])]
@@ -27,7 +22,7 @@ def agg_recursion_eval(blob, PP_, fd):
     if (Val > PP_aves[fd] * ave_agg * (converted_blob.rdnt[fd]+1) * fork_rdnt[fd]) \
         and len(PP_) > ave_nsub : # and converted_blob[0].alt_rdn < ave_overlap:
         converted_blob.rdnt[fd] += 1  # estimate
-        agg_recursion(converted_blob, fseg=fseg)
+        agg_recursion(converted_blob)
 
 # old
 def frame2graph(frame, fseg, Cgraph):  # for frame_recursive
