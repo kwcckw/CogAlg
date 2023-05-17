@@ -27,16 +27,14 @@ def sub_recursion(PP, fd):  # evaluate PP for rng+ and der+, add layers to selec
     PP.rdnt[fd] += PP.valt[fd] > PP.valt[1-fd]
     # link Rdn += PP rdn?
     cP__ = [copy(P_) for P_ in P__]
-    sub_PPm_, sub_PPd_ = form_PP_t(cP__, base_rdn=PP.rdnt[fd])
+    sub_PPm_, sub_PPd_ = form_PP_t(PP, cP__, base_rdn=PP.rdnt[fd])
+    PP.P__ = [sub_PPm_, sub_PPd_]  # node_t
 
     for fd, sub_PP_ in enumerate([sub_PPm_, sub_PPd_]):
-        # we need to add root here? And then assign node_?
-        PP.node_t[fd] = sub_PP_
-        for sub_PP in sub_PP_:
-            sub_PP.roott[fd] = PP
         if PP.valt[fd] > ave * PP.rdnt[fd]:
             sub_recursion_eval(PP, sub_PP_, fd=fd)
         else:
+            for sub_PP in sub_PP_: sub_PP.fterm = 1  # we need to terminate sub_PP here? Else their fterm will be 0 because they won't run through sub_recursion_eval
             feedback(PP, fd)  # update derH, valt, rdnt, add rngH: rng lays are not represented in derH?
         if PP.valt[fd] > ave * PP.rdnt[fd]:  # adjusted by sub+, ave*agg_coef?
             agg_recursion_eval(PP, copy(sub_PP_), fd=fd)  # comp sub_PPs, form intermediate PPs
@@ -91,22 +89,27 @@ def comp_der(iP__):  # form new Ps and links in rng+ PP.P__, extend their link.d
 def sum2PPP(qPPP, base_rdn, fd):  # sum PP_segs into PP
     pass
 
-# draft
+# draft, valid for sub+ only now 
 def feedback(root, fd):  # bottom-up update root.derH, breadth-first, separate for each fork?
 
     ave = G_aves[root.fds[-1]]
     fbV = ave+1
+    root.fterm = 1  # root need to be terminated here? Because if fbV > ave is false, they will never get terminated
 
     while root and fbV > ave:
-        if all([[node.fterm for node in root.node_t[fd]]]):  # forward was terminated in all nodes
-            root.fterm = 1
+        if isinstance(root, CPP):  # root is PP
+            PP_ = root.P__[fd]
+        else:  # root is blob
+            PP_ = [root.PPm_,root.PPd_][fd]
+        if all([node.fterm for node in PP_ ]):  # forward was terminated in all nodes
             fbval, fbrdn = 0,1
-            for node in root.node_t[fd]:
-                for sub_node in node.node_t[fd]:
-                    sum_derH(root.derH, sub_node.derH)  # node.derH is summed in root.derH in sum2PP?
-                    fbval += sub_node.valt[fd]
-                    fbrdn += sub_node.rdnt[fd]
+            for node in PP_:
+                if isinstance(node.P__[0], CPP):  # the last terminated sub_PP doesn't run through sub+, their P__ is still Ps, instead of PPs
+                    for sub_node in node.P__[fd]:
+                        sum_derH(root.derH, sub_node.derH)  # node.derH is summed in root.derH in sum2PP?
+                        fbval += sub_node.valt[fd]
+                        fbrdn += sub_node.rdnt[fd]
             fbV = fbval/fbrdn
-            root = root.roott[fd]
+            root = root.root
         else:
             break

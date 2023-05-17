@@ -29,11 +29,11 @@ def comp_slice(blob, verbose=False):  # high-G, smooth-angle blob, composite der
                 P.derH=[DerH]  # single [Mtuple, Dtuple] here
                 P.link_=link_; P.link_t=[link_m,link_d]; P.valt=Valt; P.rdnt=Rdnt
         _P_ = P_
-    PPm_,PPd_ = form_PP_t(P__, base_rdn=2)
+    PPm_,PPd_ = form_PP_t(blob, P__, base_rdn=2)
     blob.PPm_, blob.PPd_  = PPm_, PPd_
 
 
-def form_PP_t(P__, base_rdn):  # form PPs of derP.valt[fd] + connected Ps'val
+def form_PP_t(root, P__, base_rdn):  # form PPs of derP.valt[fd] + connected Ps'val
 
     PP_t = []
     for fd in 0, 1:
@@ -56,7 +56,7 @@ def form_PP_t(P__, base_rdn):  # form PPs of derP.valt[fd] + connected Ps'val
                     PP_ += [qPP + [ave+1]]  # + [ini reval]
         # prune qPPs by med links val:
         rePP_= reval_PP_(PP_, fd)  # PP = [qPP,val,reval]
-        CPP_ = [sum2PP(PP, base_rdn, fd) for PP in rePP_]
+        CPP_ = [sum2PP(root, PP, base_rdn, fd) for PP in rePP_]
         PP_t += [CPP_]  # may be empty
 
     return PP_t  # add_alt_PPs_(graph_t)?
@@ -129,12 +129,12 @@ def med_eval(last_link_, old_link_, med_valH, fd):  # compute med_valH
     return curr_link_, old_link_, med_valH
 
 
-def sum2PP(qPP, base_rdn, fd):  # sum Ps and links into PP
+def sum2PP(root, qPP, base_rdn, fd):  # sum Ps and links into PP
 
     P__, val, _ = qPP  # proto-PP is a list
     # init:
     P0 = P__[0][0]
-    PP = CPP(box=[P0.y0,P__[-1][0].y0,P0.x0,P0.x0+len(P0.dert_)], fds=[fd], P__ = P__)
+    PP = CPP(root=root, box=[P0.y0,P__[-1][0].y0,P0.x0,P0.x0+len(P0.dert_)], fds=[fd], P__ = P__)
     PP.valt[fd] = val; PP.rdnt[fd] += base_rdn
     # accum:
     for P_ in P__:  # top-down

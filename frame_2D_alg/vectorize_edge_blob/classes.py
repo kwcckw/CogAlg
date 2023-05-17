@@ -87,10 +87,10 @@ class CPP(CderP):
     P__ = list  # 2D array of nodes: Ps or sub-PPs
     link_ = list  # all links summed from Ps
     link_t = lambda: [[],[]]  # +ve rlink_, dlink_
-    roott = lambda: [None,None]  # PPPm, PPPd that contain this PP
+    root = NoneType
     cPP_ = list  # rdn reps in other PPPs, to eval and remove?
     node_t = lambda: [[],[]]  # sub_PPm_, sub_PPd_?
-    fterm = 0
+    fterm = int
 
 class Cgraph(ClusterStructure):  # params of single-fork node_ cluster per pplayers
     ''' ext / agg.sub.derH:
