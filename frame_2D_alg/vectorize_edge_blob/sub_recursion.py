@@ -27,11 +27,10 @@ def sub_recursion(PP, fd):  # evaluate PP for rng+ and der+, add layers to selec
     PP.rdnt[fd] += PP.valt[fd] > PP.valt[1-fd]
     # link Rdn += PP rdn?
     cP__ = [copy(P_) for P_ in P__]
-    PP.P__ = [form_PP_t(cP__, base_rdn=PP.rdnt[fd])]  # P__ = [sub_PPm_, sub_PPd_]
+    PP.P__ = form_PP_t(cP__, base_rdn=PP.rdnt[fd])  # P__ = [sub_PPm_, sub_PPd_]
 
     for fd, sub_PP_ in enumerate(PP.P__):
-        for sub_PP in sub_PP_:
-            sub_PP.roott[fd] = PP
+        for sub_PP in sub_PP_: sub_PP.root = PP
         sub_recursion_eval(PP, sub_PP_, fd=fd)
         if isinstance(PP.root, CPP) and all([node.fterm for node in sub_PP_]):  # not blob, forward was terminated in all nodes
             feedback(PP, fd)  # update derH, valt, rdnt, append rngH with derH if fd==0
@@ -96,23 +95,29 @@ def feedback(root, fd):  # bottom-up update root.derH, breadth-first, separate f
 
     ave = G_aves[root.fds[-1]]
     fbV = ave+1
-
-    while isinstance(root,CPP) and fbV > ave:  # no fb to blob
+    # root shouldn't be terminated, we should check it here?
+    while isinstance(root,CPP) and not root.fterm and fbV > ave:  # no fb to blob
         # if sub+ is terminated in all nodes:
         if all([[node.fterm for node in root.P__[fd]]]):
             # derH->rngH after sub+, comp in agg+ only:
-            if isinstance(root.root, Cblob):
+            """
+            if not isinstance(root.root, CPP):  # check CPP, then there's no need to import CBlob
                 root.derH = [root.derH]  # init convert to rngH
             elif not fd:
-                root.derH += []  # add rngLay
+                root.derH += [[]]  # add rngLay
+            """     
+            # i think we should just change it to rngH regardless here, because we check not root.fterm in the while loop above      
+            root.derH = [root.derH]  # init convert to rngH   
             root.fterm = 1
             fbval, fbrdn = 0,1
             for node in root.P__[fd]:
-                for sub_node in node.P__[fd]:
-                    # sum sub_node.derH into last rngLay only:
-                    sum_derH(root.derH[-1], sub_node.derH)  # root.derH += node.derH in sum2PP
-                    fbval += sub_node.valt[fd]
-                    fbrdn += sub_node.rdnt[fd]
+                P_ = [P for P_ in node.P__ for P in P_]  # node.P__ could be Ps here
+                if P_ and isinstance(P_[0], CPP):  
+                    for sub_node in node.P__[fd]:
+                        # sum sub_node.derH into last rngLay only:
+                        sum_derH(root.derH[-1], sub_node.derH[-1])  # root.derH += node.derH in sum2PP
+                        fbval += sub_node.valt[fd]
+                        fbrdn += sub_node.rdnt[fd]
             fbV = fbval/fbrdn
             root = root.root
         else:
