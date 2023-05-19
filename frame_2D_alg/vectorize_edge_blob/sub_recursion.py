@@ -11,9 +11,11 @@ def sub_recursion_eval(root, PP_, fd):  # fork PP_ in PP or blob, no rngH, valt,
         if PP.valt[fd] > PP_aves[fd] * PP.rdnt[fd] and len(PP.P__) > ave_nsub:
             sub_recursion(PP, fd)  # comp_der|rng in PP -> parLayer, sub_PPs
         else:
-            PP.fterm = 1
-            if all([[node.fterm for node in root.P__[fd]]]) and isinstance(root,CPP):  # not blob
-                feedback(PP, fd)  # always starts with PP.P__= CPs, updates root rngH, valt, rdnt
+            PP.fterm = 1; PP.derH = [PP.derH]  # this conversion should be with fterm assignment?
+            # if sub_recursion is false above, PP.P__ must be Ps here, so there's no need to chck for P's fterm?
+            if isinstance(root,CPP):  # not blob
+                # PP.P__ is always Ps here, so Ps doesn't have sub_node, we need to use PP.root here
+                feedback(PP.root, fd)  # always starts with PP.P__= CPs, updates root rngH, valt, rdnt
 
 
 def sub_recursion(PP, fd):  # evaluate PP for rng+ and der+, add layers to select sub_PPs
@@ -87,19 +89,21 @@ def feedback(root, fd):  # bottom-up update root.rngH, breadth-first, separate f
     fCP = 1  # bottom layer
     VAL = 0; RDN = 1  # sum across layers
     RngH, DerH = [],[]  # new rng|der lays, not in root.derH
-    root.derH = [root.derH]
-
     while True:
-        root.fterm = 1
+        if not root.fterm:
+            root.fterm = 1; root.derH = [root.derH]
         Val = 0; Rdn = 1
         DerLay = []  # not in root.derH
+        
         for PP in root.P__[fd]:
             if fCP:
                 for P_ in PP.P__:
                     for P in P_:  # sum in root, PP was updated in sum2PP:
-                        sum_derH(DerLay, P.derH[-1]); Val += P.valt[fd]; Rdn += P.rdnt[fd]
+                        if P.derH:  # top row Ps doesn't have derH
+                            # we need additional bracket because sum_derH sum derH, instead of layers
+                            sum_derH([DerLay], [P.derH[-1]]); Val += P.valt[fd]; Rdn += P.rdnt[fd]
             else:  # sum in PP:
-                sum_derH(DerLay, PP.derH[-1]); Val += PP.valt[fd]; Rdn += PP.rdnt[fd]
+                sum_derH([DerLay], [PP.derH[-1]]); Val += PP.valt[fd]; Rdn += PP.rdnt[fd]
         DerH += [DerLay]
         if fd:  # der+
             root.derH[-1] += [DerLay]   # new der lay in last derH
@@ -112,6 +116,6 @@ def feedback(root, fd):  # bottom-up update root.rngH, breadth-first, separate f
         root = root.root
         fCP = 0  # higher layers
         # continue while sub+ terminated in all nodes and root is not blob:
-        if VAL/RDN < G_aves[root.fds[-1]] or not isinstance(root,CPP) or not all([[node.fterm for node in root.P__[fd]]]):
+        if root is None or VAL/RDN < G_aves[root.fds[-1]] or not isinstance(root,CPP) or not all([[node.fterm for node in root.P__[fd]]]):
             break
         # locals are lost if not all nodes are terminated, they should be kept to accumulate for future terminated nodes?
