@@ -156,15 +156,20 @@ def sum_derH(DerH, derH, fd=2):  # derH is layers, not selective here. Sum mtupl
     for Layer, layer in zip_longest(DerH, derH, fillvalue=None):
         if layer != None:
             if Layer != None:
-                for Vertuple, vertuple in zip_longest(Layer, layer, fillvalue=None):  # vertuple is [mtuple, dtuple]
-                    if vertuple != None:
-                        if Vertuple != None:
-                            if fd==2: sum_vertuple(Vertuple, vertuple)  # not fork-selective
-                            else: sum_tuple(Vertuple[fd], vertuple[fd])
-                        else:
-                            Layer += [deepcopy(vertuple)]
+                sum_layer(Layer, layer, fd=2)
             else:
                 DerH += [deepcopy(layer)]
+
+def sum_layer(Layer, layer, fd=2):
+    
+    for Vertuple, vertuple in zip_longest(Layer, layer, fillvalue=None):  # vertuple is [mtuple, dtuple]
+        if vertuple != None:
+            if Vertuple != None:
+                if fd==2: sum_vertuple(Vertuple, vertuple)  # not fork-selective
+                else: sum_tuple(Vertuple[fd], vertuple[fd])
+            else:
+                Layer += [deepcopy(vertuple)]
+
 
 def sum_vertuple(Vertuple, vertuple):  # [mtuple,dtuple]
 
@@ -251,14 +256,14 @@ def comp_dtuple(_ituple, ituple, rn):
 
 def comp_ptuple(_ptuple, ptuple):
 
-    mtuple, dtuple = [],[]  # in the order of ("I", "M", "Ma", "axis", "angle", "aangle","G", "Ga", "x", "L")
+    mtuple, dtuple = [],[]  # in the order of ("I", "M", "Ma", "angle", "aangle","G", "Ga", "x", "L")
     rn = _ptuple.n / ptuple.n  # normalize param as param*rn for n-invariant ratio: _param / param*rn = (_param/_n) / (param/n)
 
     for pname, ave in zip(PP_vars, aves):
         _par = getattr(_ptuple, pname)
         par = getattr(ptuple, pname)
         if pname=="aangle": m,d = comp_aangle(_par, par)
-        elif pname in ("axis","angle"): m,d = comp_angle(_par, par)
+        elif pname == "angle": m,d = comp_angle(_par, par)
         else:
             if pname!="x": par*=rn  # normalize by relative accum count
             if pname=="x" or pname=="I": finv = 1

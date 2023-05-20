@@ -1,7 +1,8 @@
+from itertools import zip_longest
 from copy import copy, deepcopy
 from .filters import PP_aves, ave_nsub, P_aves, G_aves
 from .classes import CP, CPP
-from .comp_slice import comp_P, form_PP_t, sum_vertuple, sum_derH
+from .comp_slice import comp_P, form_PP_t, sum_vertuple, sum_layer, sum_derH
 
 
 def sub_recursion_eval(root, PP_, fd):  # fork PP_ in PP or blob, no rngH, valt,rdnt in blob?
@@ -13,23 +14,33 @@ def sub_recursion_eval(root, PP_, fd):  # fork PP_ in PP or blob, no rngH, valt,
             term = 0
             sub_recursion(PP, fd)  # comp_der|rng in PP -> parLayer, sub_PPs
         else:
-            PP.fterm = 1; PP.derH = [PP.derH]
+            PP.derH = [PP.derH]
 
     if term and isinstance(root,CPP):  # init feedback, PP.P__= CPs:
         VAL = 0; RDN = 1; DerLay = []  # not in root.derH
         root.derH = [root.derH]  # derH->rngH
-        root.fterm = 1
         for PP in root.P__[fd]:
             for P_ in PP.P__[1:]:  # no derH in top row
                 for P in P_:  # sum in root, PP was updated in sum2PP:
-                    [sum_vertuple(T,t) for T,t in zip(DerLay,P.derH[-1])]; VAL += P.valt[fd]; RDN += P.rdnt[fd]
+                    if P.derH:  # derH is empty for top row Ps
+                        sum_layer(DerLay,P.derH[-1])  # looks like we need append here, so we need sum_layer
+                        VAL += P.valt[fd]; RDN += P.rdnt[fd]
         # higher feedback,
         # draft:
         while isinstance(root.root, CPP) and VAL/RDN < G_aves[root.fds[-1]]:
             root = root.root
             root.fb_ += [DerLay, VAL, RDN]
             if len(root.fb_) == len(root.P__[fd]):
-                pass  # all nodes are terminated, sum root.fb_ into root.derH:
+                DerLay = []; VAL=0; RDN = 0
+                for derlay, val, rdn in root.fb_: 
+                    sum_layer(DerLay, derlay)
+                    root.valt[fd] += val; root.rdnt[fd] += rdn
+                    VAL += val; RDN += rdn 
+                if fd:  # der+
+                    root.derH[-1] += [DerLay]
+                else:  # rng+
+                    root.derH += [[DerLay]]  # add new rng layer here?
+
             '''
             Val = 0; Rdn = 1
             DerLay = []  # not in root.derH
@@ -62,6 +73,8 @@ def sub_recursion(PP, fd):  # evaluate PP for rng+ and der+, add layers to selec
     for fd, sub_PP_ in enumerate(PP.P__):
         for sub_PP in sub_PP_:
             sub_PP.root = PP
+
+        # we should have an evaluation here too?
         sub_recursion_eval(PP, sub_PP_, fd=fd)
         '''
         if PP.valt[fd] > ave * PP.rdnt[fd]:  # adjusted by sub+, ave*agg_coef?
