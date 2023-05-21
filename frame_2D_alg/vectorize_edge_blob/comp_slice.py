@@ -161,7 +161,7 @@ def sum_derH(DerH, derH, fd=2):  # derH is layers, not selective here. Sum mtupl
                 DerH += [deepcopy(layer)]
 
 def sum_layer(Layer, layer, fd=2):
-    
+
     for Vertuple, vertuple in zip_longest(Layer, layer, fillvalue=None):  # vertuple is [mtuple, dtuple]
         if vertuple != None:
             if Vertuple != None:
@@ -289,9 +289,8 @@ def comp_angle(_angle, angle):  # rn doesn't matter for angles
     sin = Dy / (.1 if G == 0 else G);     cos = Dx / (.1 if G == 0 else G)
     _sin = _Dy / (.1 if _G == 0 else _G); _cos = _Dx / (.1 if _G == 0 else _G)
     sin_da = (cos * _sin) - (sin * _cos)  # sin(α - β) = sin α cos β - cos α sin β
-    cos_da = (cos * _cos) + (sin * _sin)  # cos(α - β) = cos α cos β + sin α sin β
-
-    dangle = np.arctan2(sin_da, cos_da)  # scalar, vertical difference between angles
+    # cos_da = (cos * _cos) + (sin * _sin)  # cos(α - β) = cos α cos β + sin α sin β
+    dangle = sin_da
     mangle = ave_dangle - abs(dangle)  # inverse match, not redundant as summed across sign
 
     return [mangle, dangle]
@@ -312,6 +311,7 @@ def comp_aangle(_aangle, aangle):
     gay = np.arctan2((-sin_dda0 - sin_dda1), (cos_dda0 + cos_dda1))  # gradient of angle in y?
     gax = np.arctan2((-sin_dda0 + sin_dda1), (cos_dda0 + cos_dda1))  # gradient of angle in x?
 
+    # daangle = sin_dda0 + sin_dda1?
     daangle = np.arctan2(gay, gax)  # diff between aangles, probably wrong
     maangle = ave_daangle - abs(daangle)  # inverse match, not redundant as summed
 
