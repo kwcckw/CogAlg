@@ -83,13 +83,13 @@ def slice_blob(blob, verbose=False):  # form blob slices nearest to slice Ga: Ps
                 params.Ga = (params.aangle[1]+1) + (params.aangle[3]+1)  # Cos_da0, Cos_da1
                 L = len(Pdert_)
                 params.L = L; params.x = x-L/2  # params.valt = [params.M+params.Ma, params.G+params.Ga]
-                P_+=[CP(ptuple=params, x0=x-L, y0=y, dert_=Pdert_)]
+                P_+=[CP(ptuple=params, box=[y, y+1, x+1-L, x+1], dert_=Pdert_)]
             _mask = mask
         # pack last P, same as above:
         if not _mask:
             params.G = np.hypot(*params.angle); params.Ga = (params.aangle[1]+1) + (params.aangle[3]+1)
             L = len(Pdert_); params.L = L; params.x = x-L/2  # params.valt=[params.M+params.Ma,params.G+params.Ga]
-            P_ += [CP(ptuple=params, x0=x-L, y0=y, dert_=Pdert_)]
+            P_ += [CP(ptuple=params, box=[y, y+1, x+1-L, x+1], dert_=Pdert_)]  # +1 because xn is not inclusive, and x starts from 0 here
         P__ += [P_]
 
     if verbose: print("\r", end="")
