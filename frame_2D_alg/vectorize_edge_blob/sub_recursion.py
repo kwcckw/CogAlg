@@ -15,33 +15,33 @@ def sub_recursion_eval(root, PP_, fd):  # fork PP_ in PP or blob, no rngH, valt,
             term = 0
             sub_recursion(PP, fd)  # comp_der|rng in PP -> parLayer, sub_PPs
         else:
-            Ders=[0]  # init feedback from PP.P__ Ps, "0" means nesting depth = layer
+            Ders=[0, []]  # init feedback from PP.P__ Ps, "0" means nesting depth = layer
             for P_ in PP.P__[1:]:  # no derH in top row
                 for P in P_:
-                    sum_layer(Ders, P.derH[-1])
+                    sum_layer(Ders[1], P.derH[-1])
             PP.derH = [PP.derH]  # derH->rngH
             if isinstance(root, CPP):
                 # exclude blob
-                if fd: root.derH[-1] += [Ders]  # append derLay in last rngLay
-                else:  root.derH += [[Ders]]  # append rngLay derH in root rngH
+                if fd: root.derH[-1] += [Ders[1]]  # append derLay in last rngLay
+                else:  root.derH += [[Ders[1]]]  # append rngLay derH in root rngH
                 # extension of root derH:
                 root.fb_ += [[Ders, PP.valt[fd], PP.rdnt[fd]]]  # from sum2PP
 
-    if term and isinstance(root, CPP):
+    if term and isinstance(root, CPP):  # is it possible for PP_ to be empty here? Because we didn't eval them in sub_recursion
         feedback(root, fd)  # upward recursive, eval forward only
 
 # draft
 def feedback(root, fd):
 
-    Ders=[]; Val=0; Rdn=0
+    Ders=[0, []]; Val=0; Rdn=0
     for ders, val, rdn in root.fb_:
-
-        sum_parH(Ders, ders)  # Ders and ders are layer|derH|rngH, append Ders nesting level if missing?
+        sum_parH(Ders[1], ders[1], Ders[0], ders[0])  # Ders and ders are layer|derH|rngH, append Ders nesting level if missing?
         root.valt[fd] += val; root.rdnt[fd] += rdn
         Val += val; Rdn += rdn
 
+    # this is assuming root is only called once throughout the feedback process, if they are called multiple times, we add multiple brackets here, which is wrong
     root.derH = [root.derH]  # derH->rngH
-    append_parH(root.derH, Ders)  # root.derH is layer)derH)rngH, Ders is layer|derH|rngH
+    sum_parH(root.derH, Ders[1], 2, Ders[0])  # root.derH is layer)derH)rngH, Ders is layer|derH|rngH
 
     if isinstance(root.root, CPP):
         root = root.root
@@ -53,6 +53,30 @@ def feedback(root, fd):
      Feedback dpars may have any of these nesting depths, incremented during prior feedback.
      use sum_parH(root.derH, dpars), sum_parH(Dpars, dpars) with max nesting?
     '''
+
+# draft
+def sum_parH(Ders, ders, Depth, depth):
+    
+    if Depth > depth:  # if Ders has more nesting, sum only the last element
+        while Depth > depth:
+            Ders = Ders[-1]
+            Depth -= 1
+    elif depth > Depth:  # if ders has more nesting, add nesting to Ders
+        while depth>Depth:
+            Ders[:] = [Ders]
+            Depth += 1
+
+    for Der, der in zip_longest(Ders, ders, fillvalue=None):
+        if der != None:
+            if Der != None:
+                if depth == 0:
+                    sum_vertuple(Der, der)
+                else:
+                    sum_parH(Der, der,  Depth-1, depth-1)
+            else:
+                Ders += [deepcopy(der)]
+                
+    
 
 def sub_recursion(PP, fd):  # evaluate PP for rng+ and der+, add layers to select sub_PPs
 
