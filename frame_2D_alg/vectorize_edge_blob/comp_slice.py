@@ -19,11 +19,12 @@ def comp_slice(blob, verbose=False):  # high-G, smooth-angle blob, composite der
             link_,link_m,link_d = [],[],[]  # empty in initial Ps
             Valt = [0,0]; Rdnt = [0,0]
             DerH = [[[],[]]]
-            for _P in _P_:  # test for x overlap(_P,P) in 8 directions, derts are positive in all Ps:
-                _L = len(_P.dert_); L = len(P.dert_)
-                if (P.box[2] - 1 < _P.box[2] + _L) and (P.box[2] + L > _P.box[2]):
+            for _P in _P_:
+                _L = len(_P.dert_); L = len(P.dert_); _x0=_P.box[2]; x0=P.box[2]
+                # test for x overlap(_P,P) in 8 directions, all derts positive:
+                if (x0 - 1 < _x0 + _L) and (x0 + L > _x0):
                     comp_P(_P,P, link_,link_m,link_d, Valt, Rdnt, DerH, fd=0)
-                elif (P.box[2] + L) < _P.box[2]:
+                elif (x0 + L) < _x0:
                     break  # no xn overlap, stop scanning lower P_
             if link_:
                 P.derH=[DerH]  # single [Mtuple, Dtuple] here
@@ -145,11 +146,11 @@ def sum2PP(qPP, base_rdn, fd):  # sum Ps and links into PP
             PP.link_ += P.link_
             for Link_,link_ in zip(PP.link_t, P.link_t):
                 Link_ += link_  # all unique links in PP, to replace n
-            PP.box[0] = min(PP.box[0], P.box[0])  # y0
-            PP.box[2] = min(PP.box[2], P.box[2])  # x0
-            PP.box[3] = max(PP.box[3], P.box[2] + len(P.dert_))  # xn
+            Y0,Yn,X0,Xn = PP.box; y0,yn,x0,xn = P.box
+            PP.box = [min(Y0,y0), max(Yn,yn), min(X0,x0), max(Xn,xn)]
 
     return PP
+
 
 def sum_derH(DerH, derH, fd=2):  # derH is layers, not selective here. Sum mtuple is for future param select
 
@@ -212,7 +213,7 @@ def comp_P(_P,P, link_,link_m,link_d, Valt, Rdnt, DerH, fd=0, derP=None, DerLay=
         Mval,Dval, Mrdn,Drdn = 0,0,0,0
         # compare last Lay of any length:
         for i, (_vertuple, vertuple) in enumerate(zip_longest(_P.derH[-1], P.derH[-1])):
-            mtuple, dtuple = comp_dtuple(_vertuple[1], vertuple[1], rn=len(_P.link_t[1])/len(P.link_t[1]))
+            mtuple, dtuple = comp_dtuple(_vertuple[1], vertuple[1], rn = len(_P.link_t[1])/len(P.link_t[1]))
             if DerLay:
                 sum_tuple(DerLay[i][0],mtuple); sum_tuple(DerLay[i][1],dtuple)
             else:
@@ -229,8 +230,8 @@ def comp_P(_P,P, link_,link_m,link_d, Valt, Rdnt, DerH, fd=0, derP=None, DerLay=
         Mval = sum(mtuple); Dval = sum(dtuple)
         Mrdn = 1+(Dval>Mval); Drdn = 1+(1-Mrdn)
         # replace with greyscale rdn: Dval/Mval?
-        derP = CderP(derH=[[[mtuple,dtuple]]], fds=P.fds+[fd], valt=[Mval,Dval],rdnt=[Mrdn,Drdn], P=P,_P=_P,box=copy(_P.box),L=len(_P.dert_))
-
+        derP = CderP(derH=[[[mtuple,dtuple]]], fds=P.fds+[fd], valt=[Mval,Dval],rdnt=[Mrdn,Drdn], P=P,_P=_P,
+                     box=copy(_P.box),L=len(_P.dert_))  # or recompute box from means?
     link_ += [derP]  # all links
     if Mval > aveB*Mrdn:
         link_m+=[derP]; Valt[0]+=Mval; Rdnt[0]+=Mrdn  # +ve links, fork selection in form_PP_t
