@@ -84,7 +84,7 @@ class CPP(CderP):
     link_t = lambda: [[],[]]  # +ve rlink_, dlink_
     root = NoneType  # PPPm|PPPd containing this PP
     cPP_ = list  # rdn reps in other PPPs, to eval and remove?
-    fb_ = list # Ders,RngH,VAL,RDN: feedback accumulated across nodes (they will be assigned anyway if there's feedback)
+    fb_ = list  # [[new_ders,val,rdn]]: [feedback per node]
 
 
 class Cgraph(ClusterStructure):  # params of single-fork node_ cluster per pplayers
