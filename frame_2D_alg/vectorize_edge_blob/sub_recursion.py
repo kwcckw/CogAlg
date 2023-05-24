@@ -9,11 +9,13 @@ def sub_recursion_eval(root, PP_, fd):  # fork PP_ in PP or blob, no derH,valH,r
 
     term = 1
     for PP in PP_:
-        if PP.valt[fd] > PP_aves[fd] * PP.rdnt[fd] and len(PP.P__) > ave_nsub:  # no select per ptuple
+        if PP.valH[-1][fd] > PP_aves[fd] * PP.rdnH[-1][fd] and len(PP.P__) > ave_nsub:  # no select per ptuple
             term = 0
             sub_recursion(PP, fd)  # comp_der|rng in PP -> parLayer, sub_PPs
         elif isinstance(root, CPP):
-            root.fd_ += [[PP.derH[-1], [fd], PP.valH[-1][fd], PP.rdnH[-1][fd]]]
+            valH = [[0, PP.valH[-1][fd]] if fd else [PP.valH[-1][fd],0]]
+            rdnH = [[0, PP.rdnH[-1][fd]] if fd else [PP.rdnH[-1][fd],0]]
+            root.fb_ += [[[PP.derH[-1]], [fd], valH, rdnH]] # [derH, fds, valH, rdnH]
             # feed back last layer, added in sum2PP
     if term and isinstance(root, CPP):
         feedback(root, fd)  # upward recursive extend root.derH, forward eval only
@@ -25,12 +27,13 @@ def feedback(root, fd):  # append new der layers to root
     while root.fb_:
         sum_ders(Fback, root.fb_.pop())  # sum fback in Fback, add Fback nesting if missing
     # append Fback params to root params:
-    root.derH += Fback[0]
-    root.fds  += Fback[1]
-    root.valH += Fback[2]
-    root.rdnH += Fback[3]
-    if isinstance(root.root, CPP):
-        root = root.root
+    root.derH += Fback[0]  # add new layers
+    root.fds  += Fback[1]  # concatenate 2 fds
+    # below should be concatenation? Or sum?
+    root.valH += Fback[2]  # concatenate valH
+    root.rdnH += Fback[3]  # concatenate rdnH
+    if isinstance(root.roott[fd], CPP):
+        root = root.roott[fd]
         root.fb_ += [Fback]
         if len(root.fb_) == len(root.P__[fd]):  # all nodes terminated, fed back to root.fb_
             feedback(root, fd)
@@ -43,22 +46,32 @@ def sum_ders(Fback, fback):  # sum or append fb in Fb, for deeper feedback:
 
     DerH, Fds, ValH, RdnH = Fback
     derH, fds, valH, rdnH = fback
-    while True:
-        for Lay, Fd, Val, Rdn, lay, fd, val, rdn in zip_longest(
-            DerH, Fds, ValH, RdnH, derH, fds, valH, rdnH, fillvalue=None):  # loop bottom-up,
-            # terminate summation at 1st None or Fd!=fd?
-            # not sure:
-            if lay != None and Lay != None and Fd==fd:
-                sum_layer(Lay,lay); Val+=val; Rdn+=rdn
-            # else append copy?
 
+    # why we need the while loop?
+    for Lay, Fd, Valt, Rdnt, lay, fd, valt, rdnt in zip_longest(
+        DerH, Fds, ValH, RdnH, derH, fds, valH, rdnH, fillvalue=None):  # loop bottom-up,
+        # terminate summation at 1st None or Fd!=fd? (i think no, because the subsequent fds might be the same?)
+        if lay != None:
+            if Fd==fd:
+                if Lay != None:
+                    sum_layer(Lay,lay)
+                    for i in 0,1:
+                        Valt[i]+=valt[i]
+                        Rdnt[i]+=rdnt[i]
+                    
+                else:
+                    DerH += [deepcopy(lay)]
+                    ValH += [copy(valt)]
+                    rdnH += [copy(rdnt)]
+                        
+                    
 def sub_recursion(PP, fd):  # evaluate PP for rng+ and der+, add layers to select sub_PPs
 
     P__ = comp_der(PP.P__) if fd else comp_rng(PP.P__, PP.rng+1)   # returns top-down
-    PP.rdnt[fd] += PP.valt[fd] > PP.valt[1-fd]
+    PP.rdnH[-1][fd] += PP.valH[-1][fd] > PP.valH[-1][1-fd]
     # link Rdn += PP rdn?
     cP__ = [copy(P_) for P_ in P__]
-    PP.P__ = form_PP_t(cP__,base_rdn=PP.rdnt[fd])  # P__ = sub_PPm_, sub_PPd_
+    PP.P__ = form_PP_t(cP__,base_rdn=PP.rdnH[-1][fd])  # P__ = sub_PPm_, sub_PPd_
 
     for fd, sub_PP_ in enumerate(PP.P__):
         if sub_PP_:  # der+ | rng+

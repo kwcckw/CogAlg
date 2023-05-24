@@ -26,9 +26,10 @@ def comp_slice(blob, verbose=False):  # high-G, smooth-angle blob, composite der
                     comp_P(_P,P, link_,link_m,link_d, Valt, Rdnt, DerH, fd=0)
                 elif (x0 + L) < _x0:
                     break  # no xn overlap, stop scanning lower P_
+            # if there's no link here, non top row Ps' derH could be empty too
             if link_:
                 P.derH=[DerH]  # single [Mtuple, Dtuple] here
-                P.link_=link_; P.link_t=[link_m,link_d]; P.valt=Valt; P.rdnt=Rdnt
+                P.link_=link_; P.link_t=[link_m,link_d]; P.valH=[Valt]; P.rdnH=[Rdnt]
         _P_ = P_
     PPm_,PPd_ = form_PP_t(P__, base_rdn=2)
     blob.PPm_, blob.PPd_  = PPm_, PPd_
@@ -43,7 +44,7 @@ def form_PP_t(P__, base_rdn):  # form PPs of derP.valt[fd] + connected Ps'val
         for P_ in fork_P__:
             for P in P_:
                 if P not in packed_P_:
-                    qPP = [[[P]], P.valt[fd]]  # init PP is 2D queue of node Ps and sum([P.val+P.link_val])
+                    qPP = [[[P]], P.valH[-1][fd]]  # init PP is 2D queue of node Ps and sum([P.val+P.link_val])
                     uplink_ = P.link_t[fd]; uuplink_ = []  # next-line links for recursive search
                     while uplink_:
                         for derP in uplink_:
@@ -136,7 +137,7 @@ def sum2PP(qPP, base_rdn, fd):  # sum Ps and links into PP
     # init:
     P0 = P__[0][0]
     PP = CPP(box=copy(P0.box), fds=[fd], P__ = P__)
-    PP.valt[fd] = val; PP.rdnt[fd] += base_rdn
+    PP.valH[-1][fd] = val; PP.rdnH[-1][fd] += base_rdn
     # accum:
     for P_ in P__:  # top-down
         for P in P_:  # left-to-right
