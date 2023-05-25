@@ -18,17 +18,16 @@ def comp_slice(blob, verbose=False):  # high-G, smooth-angle blob, composite der
         for P in P_:
             link_,link_m,link_d = [],[],[]  # empty in initial Ps
             Valt = [0,0]; Rdnt = [0,0]
-            DerH = [[[],[]]]
+            Lay= [[[],[]]]
             for _P in _P_:
                 _L = len(_P.dert_); L = len(P.dert_); _x0=_P.box[2]; x0=P.box[2]
                 # test for x overlap(_P,P) in 8 directions, all derts positive:
                 if (x0 - 1 < _x0 + _L) and (x0 + L > _x0):
-                    comp_P(_P,P, link_,link_m,link_d, Valt, Rdnt, DerH, fd=0)
+                    comp_P(_P,P, link_,link_m,link_d, Valt, Rdnt, Lay, fd=0)
                 elif (x0 + L) < _x0:
                     break  # no xn overlap, stop scanning lower P_
-            # if there's no link here, non top row Ps' derH could be empty too
-            if link_:
-                P.derH=[DerH]  # single [Mtuple, Dtuple] here
+            if link_:  # not link_t?
+                P.derH =[Lay]  # single [Mtuple, Dtuple] derH
                 P.link_=link_; P.link_t=[link_m,link_d]; P.valH=[Valt]; P.rdnH=[Rdnt]
         _P_ = P_
     PPm_,PPd_ = form_PP_t(P__, base_rdn=2)
@@ -137,7 +136,8 @@ def sum2PP(qPP, base_rdn, fd):  # sum Ps and links into PP
     # init:
     P0 = P__[0][0]
     PP = CPP(box=copy(P0.box), fds=[fd], P__ = P__)
-    PP.valH[-1][fd] = val; PP.rdnH[-1][fd] += base_rdn
+    PP.valH[-1][fd] = val; PP.rdnH[-1][fd] += base_rdn  # valH = lambda: [[0,0]], rdnH = lambda: [[1,1]]
+    PP.fd_H = [[fd]]  # single fd / 1st layer
     # accum:
     for P_ in P__:  # top-down
         for P in P_:  # left-to-right
@@ -149,7 +149,6 @@ def sum2PP(qPP, base_rdn, fd):  # sum Ps and links into PP
                 Link_ += link_  # all unique links in PP, to replace n
             Y0,Yn,X0,Xn = PP.box; y0,yn,x0,xn = P.box
             PP.box = [min(Y0,y0), max(Yn,yn), min(X0,x0), max(Xn,xn)]
-
     return PP
 
 
