@@ -80,7 +80,7 @@ class CPP(CderP):
     P__ = list  # 2D array of nodes: Ps or sub-PPs
     link_ = list  # all links summed from Ps
     link_t = lambda: [[],[]]  # +ve rlink_, dlink_
-    root = NoneType  # PPPm|PPPd containing this PP
+    roott = lambda: [None,None]  # PPPm|PPPd containing this PP
     cPP_ = list  # rdn reps in other PPPs, to eval and remove?
     fb_ = list  # [[new_ders,val,rdn]]: [feedback per node]
     # fdiv = NoneType  # if div_comp?

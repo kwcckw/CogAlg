@@ -45,7 +45,7 @@ def vectorize_root(blob, verbose=False):  # always angle blob, composite dert co
     for fd, PP_ in enumerate([blob.PPm_, blob.PPd_]):
         sub_recursion_eval(blob, PP_, fd=fd)  # intra PP, no blob fb
         # compare PPs, cluster in graphs:
-        if sum([PP.valt[fd] for PP in PP_]) > ave * sum([PP.rdnt[fd] for PP in PP_]):
+        if sum([PP.valH[-1][fd] for PP in PP_]) > ave * sum([PP.rdnH[-1][fd] for PP in PP_]):
             agg_recursion_eval(blob, copy(PP_), fd=fd)  # comp sub_PPs, form intermediate PPs
 
 '''
@@ -81,14 +81,14 @@ def slice_blob(blob, verbose=False):  # form blob slices nearest to slice Ga: Ps
                 params.G = np.hypot(*params.angle)  # Dy,Dx  # recompute G,Ga, it can't reconstruct M,Ma
                 params.Ga = (params.aangle[1]+1) + (params.aangle[3]+1)  # Cos_da0, Cos_da1
                 L = len(Pdert_)
-                params.L = L; params.x = x-L/2  # params.valt = [params.M+params.Ma, params.G+params.Ga]
+                params.L = L # params.valt = [params.M+params.Ma, params.G+params.Ga]
                 P_+=[CP(ptuple=params, box=[y,y, x-L,x], dert_=Pdert_)]
             _mask = mask
             x += 1
         # pack last P, same as above:
         if not _mask:
             params.G = np.hypot(*params.angle); params.Ga = (params.aangle[1]+1) + (params.aangle[3]+1)
-            L = len(Pdert_); params.L = L; params.x = x-L/2  # params.valt=[params.M+params.Ma,params.G+params.Ga]
+            L = len(Pdert_); params.L = L;   # params.valt=[params.M+params.Ma,params.G+params.Ga]
             P_ += [CP(ptuple=params, box=[y,y, x-L,x], dert_=Pdert_)]
         P__ += [P_]
 

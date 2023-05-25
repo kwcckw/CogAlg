@@ -2,7 +2,7 @@ from itertools import zip_longest
 from copy import copy, deepcopy
 from .filters import PP_aves, ave_nsub, P_aves, G_aves
 from .classes import CP, CPP
-from .comp_slice import comp_P, form_PP_t, sum_vertuple, sum_layer, sum_derH
+from .comp_slice import comp_P, form_PP_t, sum_vertuple, sum_layer, sum_fork, sum_derH
 
 
 def sub_recursion_eval(root, PP_, fd):  # fork PP_ in PP or blob, no derH,valH,rdnH in blob
@@ -13,7 +13,8 @@ def sub_recursion_eval(root, PP_, fd):  # fork PP_ in PP or blob, no derH,valH,r
             term = 0
             sub_recursion(PP, fd)  # comp_der|rng in PP -> parLayer, sub_PPs
         elif isinstance(root, CPP):
-            root.fb_ += [[[PP.derH[-1]],[[fd]], PP.valH[-1][fd],PP.rdnH[-1][fd]]]  # [derH, fd_H, valH, rdnH]
+            # we can remove fds now?
+            root.fb_ += [[[PP.derH[-1]],[[fd]], [PP.valH[-1]],[PP.rdnH[-1]] ]]  # [derH, fd_H, valH, rdnH]
             # feedback last layer, added in sum2PP
     if term and isinstance(root, CPP):
         feedback(root, fd)  # upward recursive extend root.derH, forward eval only
@@ -38,8 +39,8 @@ def feedback(root, fd):  # append new der layers to root
 # draft
 def sum_fback(Fback, fback):  # sum or append fb in Fb, for deeper feedback:
 
-    DerH, ValH, RdnH = Fback
-    derH, valH, rdnH = fback
+    DerH, _, ValH, RdnH = Fback
+    derH, _, valH, rdnH = fback
 
     for Lay, Valt, Rdnt, lay, valt, rdnt in zip_longest(
         DerH, ValH, RdnH, derH, valH, rdnH, fillvalue=[]):  # loop bottom-up
@@ -48,7 +49,7 @@ def sum_fback(Fback, fback):  # sum or append fb in Fb, for deeper feedback:
                 for i, (Fork,fork, Val,Rdn, val,rdn) in enumerate(zip(Lay,lay, Valt,valt, Rdnt,rdnt)):
                     # all per fork, valt and rdnt here are actually lists, not pairs
                     if Fork and fork:
-                        sum_layer(Fork, fork)
+                        sum_fork(Fork, fork)
                     else:
                         Fork += fork  # stays empty if fork is empty
                     fd = i>len(fork)/2  # sum left|right half of forks, which maps to top-layer fd:
@@ -87,7 +88,7 @@ def comp_rng(iP__, rng):  # form new Ps and links in rng+ PP.P__, switch to rng+
         for P in iP_:
             link_, link_m, link_d = [],[],[]  # for new P
             Valt = [0,0]; Rdnt = [0,0]
-            DerH = [[[],[]]]  # Mt,Dt
+            DerH = [[[[[],[]]]]]  # Mt,Dt
             for iderP in P.link_t[0]:  # mlinks
                 _P = iderP._P
                 for _derP in _P.link_t[0]:  # next layer of mlinks
