@@ -17,19 +17,19 @@ def comp_slice(blob, verbose=False):  # high-G, smooth-angle blob, composite der
     for P_ in P__[1:]:  # lower row
         for P in P_:
             link_,link_m,link_d = [],[],[]  # empty in initial Ps
-            Valt = [0,0]; Rdnt = [0,0]
+            ValH = [[0,0]]; RdnH = [[1,1]]
             Lay= [[[],[]]]
             for _P in _P_:
                 _L = len(_P.dert_); L = len(P.dert_); _x0=_P.box[2]; x0=P.box[2]
                 # test for x overlap(_P,P) in 8 directions, all derts positive:
                 if (x0 - 1 < _x0 + _L) and (x0 + L > _x0):
-                    comp_P(_P,P, link_,link_m,link_d, Valt, Rdnt, Lay, fd=0)
+                    comp_P(_P,P, link_,link_m,link_d, Lay, ValH, RdnH, fd=0)
                 elif (x0 + L) < _x0:
                     break  # no xn overlap, stop scanning lower P_
             if link_:  # not link_t?
                 P.derH = [[Lay]]  # single [Mtuple, Dtuple] derH
                 P.link_=link_; P.link_t=[link_m,link_d]
-                P.valH=[[Valt[P.fd]]]; P.rdnH=[[Rdnt[P.fd]]]  # not sure, this should be selective per P.fd?
+                P.valH=ValH; P.rdnH=RdnH  # not sure, this should be selective per P.fd? (i think no, because there is no fd here yet)
         _P_ = P_
     PPm_,PPd_ = form_PP_t(P__, base_rdn=2)
     blob.PPm_, blob.PPd_  = PPm_, PPd_
@@ -137,36 +137,43 @@ def sum2PP(qPP, base_rdn, fd):  # sum Ps and links into PP
     # init:
     P0 = P__[0][0]
     PP = CPP(box=copy(P0.box), fd=[fd], P__ = P__)
-    Der,Val,Rdn = [],[],[]  # PP.valH[-1][fd] = val; PP.rdnH[-1][fd] += base_rdn  # valH = lambda: [[0,0]], rdnH = lambda: [[1,1]]
+    Der,Val,Rdn = [],[],[1]  # PP.valH[-1][fd] = val; PP.rdnH[-1][fd] += base_rdn  # valH = lambda: [[0,0]], rdnH = lambda: [[1,1]]
     # accum:
     for P_ in P__:  # top-down
         for P in P_:  # left-to-right
             P.roott[fd] = PP
             sum_ptuple(PP.ptuple, P.ptuple)
-            sum_unpack([Der,Val,Rdn], [P.derH[-1],P.valH[-1],P.rdnH[-1]])  # sum layer
-            PP.link_ += P.link_
-            for Link_,link_ in zip(PP.link_t, P.link_t):
-                Link_ += link_  # all unique links in PP, to replace n
+            if P.derH:  # middle Ps might not getting uplinks too
+                valH = []; rdnH = []
+                for valt, rdnt in zip(P.valH, P.rdnH):
+                    if isinstance(valt, list):  # valt and rdnt is list
+                        valH += [valt[fd]]; rdnH += [rdnt[fd]]
+                    else:  
+                        valH = [valt]; rdnH += [rdnt]
+                sum_unpack([Der,Val,Rdn], [P.derH[-1],valH, rdnH])  # sum layer
+                PP.link_ += P.link_
+                for Link_,link_ in zip(PP.link_t, P.link_t):
+                    Link_ += link_  # all unique links in PP, to replace n
             Y0,Yn,X0,Xn = PP.box; y0,yn,x0,xn = P.box
             PP.box = [min(Y0,y0), max(Yn,yn), min(X0,x0), max(Xn,xn)]
     PP.derH += [Der]
-    PP.valH += [Val]
-    PP.rdnH += [Rdn]
+    PP.valH = Val  # should be assignment here?
+    PP.rdnH = Rdn
     return PP
 
 def sum_unpack(Q,q):  # recursive unpack nested sequence to sum final elements
 
     Que, Val_, Rdn_ = Q; que, val_, rdn_ = q
 
-    for Ele,Val,Rdn, ele,val,rdn in zip_longest(Que,Val_,Rdn_, que,val_,rdn_, fillvalue=[]):
+    for i, (Ele,Val,Rdn, ele,val,rdn) in enumerate(zip_longest(Que,Val_,Rdn_, que,val_,rdn_, fillvalue=[])):
         if ele:
             if Ele:
                 if isinstance(Ele[0],list):
-                    sum_unpack([Ele,Val,Rdn], [ele,val,rdn])
-                    for i, (v,r) in enumerate(zip(val,rdn)):
-                        Val[i]+=v; Rdn[i]+=r
+                    sum_unpack([Ele,[],[]], [ele,[],[]])  # val and rdn doesn't have deeper nesting here
+                    if Val_ and Rdn_:
+                        Val_[i] = Val + val; Rdn_[i] = Rdn + rdn
                 else:
-                    sum_tuple(Ele,ele); Val+=val; Rdn+=rdn
+                    sum_tuple(Ele,ele)  # we don't have val and rdn at deeper nesting
             else:
                 Que += [deepcopy(ele)]
                 Val_+= [deepcopy(val)]
@@ -223,11 +230,11 @@ def comp_P(_P,P, link_,link_m,link_d, Lay, ValH, RdnH, fd=0, derP=None):  #  if 
                      box=copy(_P.box),L=len(_P.dert_))  # or recompute box from means?
     link_ += [derP]  # all links
     if Mval > aveB*Mrdn:
-        link_m+=[derP]; Valt[0]+=Mval; Rdnt[0]+=Mrdn  # +ve links, fork selection in form_PP_t
+        link_m+=[derP]; ValH[-1][0]+=Mval; RdnH[-1][0]+=Mrdn  # +ve links, fork selection in form_PP_t
         if fd: sum_unpack(Lay, derP.derH[-1])  # sum fork of old layers
         else:  sum_tuple(Lay[0][0], mtuple)
     if Dval > aveB*Drdn:
-        link_d+=[derP]; Valt[1]+=Dval; Rdnt[1]+=Drdn
+        link_d+=[derP]; ValH[-1][1]+=Dval; RdnH[-1][1]+=Drdn
         if fd: sum_unpack(Lay, derP.derH)
         else:  sum_tuple(Lay[0][1], dtuple)
 
@@ -246,8 +253,7 @@ def comp_dtuple(_ituple, ituple, rn):
 
 def comp_ptuple(_ptuple, ptuple):
 
-    mtuple, dtuple = [],[]  # in the order of ("I", "M", "Ma", "angle", "aangle","G", "Ga", "x", "L")
-    rn = _ptuple.n / ptuple.n  # normalize param as param*rn for n-invariant ratio: _param / param*rn = (_param/_n) / (param/n)
+    mtuple, dtuple = [],[]  # in the order of ("I", "M", "Ma", "angle", "aangle","G", "Ga", "L")
 
     for pname, ave in zip(PP_vars, aves):
         _par = getattr(_ptuple, pname)
@@ -255,7 +261,6 @@ def comp_ptuple(_ptuple, ptuple):
         if pname=="aangle": m,d = comp_aangle(_par, par)
         elif pname == "angle": m,d = comp_angle(_par, par)
         else:
-            if pname!="x": par*=rn  # normalize by relative accum count
             if pname=="x" or pname=="I": finv = 1
             else: finv=0
             m,d = comp_par(_par, par, ave, finv)
