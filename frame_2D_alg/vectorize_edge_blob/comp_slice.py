@@ -17,7 +17,7 @@ def comp_slice(blob, verbose=False):  # high-G, smooth-angle blob, composite der
     for P_ in P__[1:]:  # lower row
         for P in P_:
             link_,link_m,link_d = [],[],[]  # empty in initial Ps
-            Lay=[[[],[]]], ValH = [[0,0]]; RdnH = [[1,1]]
+            Lay=[[[],[]]]; ValH = [[0,0]]; RdnH = [[1,1]]
             for _P in _P_:
                 _L = len(_P.dert_); L = len(P.dert_); _x0=_P.box[2]; x0=P.box[2]
                 # test for x overlap(_P,P) in 8 directions, all derts positive:
@@ -27,7 +27,8 @@ def comp_slice(blob, verbose=False):  # high-G, smooth-angle blob, composite der
                     break  # no xn overlap, stop scanning lower P_
             if link_:  # not link_t?
                 P.link_= link_; P.link_t=[link_m,link_d]
-                P.derH=[[Lay]]; P.valH=ValH; P.rdnH=RdnH  # single [[Mtuple, Dtuple]] derH, no global fd
+                # derH should be single bracket containing Layer here?
+                P.derH=[Lay]; P.valH=ValH; P.rdnH=RdnH  # single [[Mtuple, Dtuple]] derH, no global fd
         _P_ = P_
     PPm_,PPd_ = form_PP_t(P__, base_rdn=2)
     blob.PPm_, blob.PPd_  = PPm_, PPd_
@@ -133,12 +134,12 @@ def sum2PP(qPP, base_rdn, fd):  # sum Ps and links into PP
 
     P__,_,_ = qPP  # proto-PP is a list
     PP = CPP(box=copy(P__[0][0].box), fd=[fd], P__ = P__)
-    Der,Val,Rdn = [],[],[base_rdn]
+    Der,Val,Rdn = [],[[]],[[base_rdn]]
     # accum:
     for P_ in P__:  # top-down
         for P in P_:  # left-to-right
             P.roott[fd] = PP
-            sum_ptuple(PP.ptuple, P.ptuple)
+            sum_tuple(PP.ptuple, P.ptuple)
             if P.derH:
                 sum_unpack([Der,Val,Rdn],[P.derH,P.valH,P.rdnH])  # always single-layer
                 PP.link_ += P.link_
@@ -159,9 +160,20 @@ def sum_unpack(Q,q):  # recursive unpack nested sequence to sum final ptuples
         if ele:
             if Ele:
                 if isinstance(Ele[0][0],list):
-                    sum_unpack([Ele,Val,Rdn], [ele,val,rdn])
-                    for i, (v,r) in enumerate(zip(val,rdn)):  # loop all forks
-                        Val[i]+=v; Rdn[i]+=r
+                    sum_unpack([Ele,Val,Rdn], [ele,val,rdn])  
+                    if val and not isinstance(val[0], list):
+                        for i, (V,v) in enumerate(zip_longest(Val, val, fillvalue=None)):  # loop all forks
+                            if v != None:
+                                if V != None:
+                                    Val[i]=V+v
+                                else:
+                                    Val += [v]
+                        for i, (R,r) in enumerate(zip_longest(Rdn, rdn, fillvalue=None)):  # loop all forks
+                            if r != None:
+                                if R != None:
+                                    Rdn[i]=R+r
+                                else:
+                                    Rdn += [r]        
                 else:  # vertuple:
                     sum_tuple(Ele[0],ele[0])
                     sum_tuple(Ele[1],ele[1])
@@ -170,6 +182,7 @@ def sum_unpack(Q,q):  # recursive unpack nested sequence to sum final ptuples
                 Val_+= [deepcopy(val)]
                 Rdn_+= [deepcopy(rdn)]
 
+"""
 def sum_tuple(Ptuple,ptuple, fneg=0):  # mtuple or dtuple
 
     for i, (Par, par) in enumerate(zip_longest(Ptuple, ptuple, fillvalue=None)):
@@ -178,18 +191,21 @@ def sum_tuple(Ptuple,ptuple, fneg=0):  # mtuple or dtuple
                 Ptuple[i] = Par + -par if fneg else par
             elif not fneg:
                 Ptuple += [par]
+"""
 
-def sum_ptuple(Ptuple, ptuple, fneg=0):
+# this can replace sum_tuple now
+def sum_tuple(Ptuple, ptuple, fneg=0):
 
-    for pname, ave in zip(PP_vars, aves):
-        Par = getattr(Ptuple, pname); par = getattr(ptuple, pname)
-
-        if isinstance(Par, list):  # angle or aangle
-            for i,(P,p) in enumerate(zip(Par,par)):
-                Par[i] = P-p if fneg else P+p
-        else:
-            Par += (-par if fneg else par)
-        setattr(Ptuple, pname, Par)
+    for i, (Par, par) in enumerate(zip_longest(Ptuple, ptuple, fillvalue=None)):
+        if par != None:
+            if Par != None:
+                if isinstance(Par, list):  # angle or aangle
+                    for i,(P,p) in enumerate(zip(Par,par)):
+                        Par[i] = P-p if fneg else P+p
+                else:
+                    Ptuple[i] += (-par if fneg else par)
+            elif not fneg:
+                Ptuple += [copy(par)]
 
 # not fully updated:
 def comp_P(_P,P, link_,link_m,link_d, Lay, ValH, RdnH, fd=0, derP=None):  #  if der+
@@ -203,7 +219,7 @@ def comp_P(_P,P, link_,link_m,link_d, Lay, ValH, RdnH, fd=0, derP=None):  #  if 
         mrdn = 1+(dval>mval); drdn = 1+(1-mrdn)
         derP.valt[0]+=mval; derP.valt[1]+=mval; derP.rdnt[0]+=mrdn; derP.rdnt[1]+=drdn
     else:   # rng+: add new link
-        mtuple,dtuple = comp_ptuple(_P.ptuple, P.ptuple, rn)
+        mtuple,dtuple = comp_dtuple(_P.ptuple, P.ptuple, rn)
         mval = sum(mtuple); dval = sum(dtuple)
         mrdn = 1+(dval>mval); drdn = 1+(1-mrdn)  # or greyscale rdn = Dval/Mval?
         derP = CderP(derH=[[[mtuple,dtuple]]], valt=[mval,dval],rdnt=[mrdn,drdn], P=P,_P=_P, box=copy(_P.box),L=len(_P.dert_))
@@ -248,28 +264,17 @@ def comp_dtuple(_ituple, ituple, rn):
 
     mtuple, dtuple = [],[]
     for _par, par, ave in zip(_ituple, ituple, aves):  # compare ds only?
-
-        m,d = comp_par(_par, par*rn, ave)
+        if isinstance(_par, list):
+            if len(_par) == 2:  # angle
+                m,d = comp_angle(_par, par)
+            else:  # aangle
+                m,d = comp_aangle(_par, par)
+        else:  # I, M, Ma, G, Ga, L
+            m,d = comp_par(_par, par*rn, ave)
         mtuple+=[m]; dtuple+=[d]
 
     return [mtuple, dtuple]
 
-# I don't think we need names now, just make ptuple a list? Then combine with comp_dtuple?
-def comp_ptuple(_ptuple, ptuple, rn):
-
-    mtuple, dtuple = [],[]  # in the order of ("I", "M", "Ma", "angle", "aangle","G", "Ga")
-
-    for pname, ave in zip(PP_vars, aves):
-        _par = getattr(_ptuple, pname)
-        par = getattr(ptuple, pname)
-        if pname=="aangle": m,d = comp_aangle(_par, par)
-        elif pname == "angle": m,d = comp_angle(_par, par)
-        else:
-            m,d = comp_par(_par, par*rn, ave, finv = 1 if pname=="I" else 0)
-        mtuple += [m]
-        dtuple += [d]
-
-    return [mtuple, dtuple]
 
 def comp_par(_param, param, ave, finv=0):  # comparand is always par or d in [m,d]
 

@@ -29,7 +29,7 @@ class Cptuple(ClusterStructure):  # bottom-layer tuple of compared params in P, 
 
 class CP(ClusterStructure):  # horizontal blob slice P, with vertical derivatives per param if derP, always positive
 
-    ptuple = Cptuple  # latuple: I, M, Ma, G, Ga, angle(Dy, Dx), aangle( Sin_da0, Cos_da0, Sin_da1, Cos_da1)
+    ptuple = list  # latuple: I, M, Ma, G, Ga, angle(Dy, Dx), aangle( Sin_da0, Cos_da0, Sin_da1, Cos_da1)
     derH = list  # 1vertuple / 1layer in comp_slice, extend in der+
     fds = list  # derH params:
     valH = lambda: [[0,0]]
@@ -68,7 +68,7 @@ lay4: [[m,d], [md,dd], [[md1,dd1],[mdd,ddd]]]: 3 sLays, <=2 ssLays:
 
 class CPP(CderP):
 
-    ptuple = Cptuple  # summed P__ ptuples, = 0th derLay
+    ptuple = list  # summed P__ ptuples, = 0th derLay
     derH = list  # 1vert'1lay in comp_slice, extend in sub+, no comp rngH till agg+
     valH = list  # per derH( layer( fork
     rdnH = list
