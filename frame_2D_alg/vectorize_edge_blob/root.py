@@ -75,7 +75,7 @@ def slice_blob(blob, verbose=False):  # form blob slices nearest to slice Ga: Ps
                     params = [ri,ave_g-g,ave_ga-ga,[dy,dx],[sin_da0, cos_da0, sin_da1, cos_da1], 0, 0, 0]
                 else:
                     # dert and _dert are not masked, accumulate P params:
-                    params[0] +=ri; params[1]+=ave_g-g; params[2]+=ave_ga-ga;  # I, M, Ma 
+                    params[0] +=ri; params[1]+=ave_g-g; params[2]+=ave_ga-ga  # I, M, Ma
                     params[3][0]+=dy; params[3][1]+=dx  # angle
                     params[4] = [_par+par for _par,par in zip(params[4],[sin_da0,cos_da0,sin_da1,cos_da1])]  # aangle
                     Pdert_ += [dert]
@@ -85,14 +85,14 @@ def slice_blob(blob, verbose=False):  # form blob slices nearest to slice Ga: Ps
                 params[6] = (params[4][1]+1) + (params[4][3]+1)  # Cos_da0, Cos_da1
                 L = len(Pdert_)
                 params[7] = L # params.valt = [params.M+params.Ma, params.G+params.Ga]
-                P_+=[CP(ptuple=params, box=[y,y, x-L,x-1], dert_=Pdert_)]
+                P_+=[CP(ptuple=params, box=[y,y, x-L,x], dert_=Pdert_)]
             _mask = mask
             x += 1
         # pack last P, same as above:
         if not _mask:
             params[5] = np.hypot(*params[3]); params[6] = (params[4][1]+1) + (params[4][3]+1)
-            L = len(Pdert_); params[7] = L;   # params.valt=[params.M+params.Ma,params.G+params.Ga]
-            P_ += [CP(ptuple=params, box=[y,y, x-L,x-1], dert_=Pdert_)]
+            L = len(Pdert_); params[7] = L   # params.valt=[params.M+params.Ma,params.G+params.Ga]
+            P_ += [CP(ptuple=params, box=[y,y, x-L,x], dert_=Pdert_)]
         P__ += [P_]
 
     if verbose: print("\r", end="")
