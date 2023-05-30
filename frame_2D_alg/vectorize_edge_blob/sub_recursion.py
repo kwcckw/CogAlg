@@ -3,7 +3,7 @@ import numpy as np
 from copy import copy, deepcopy
 from .filters import PP_aves, ave_nsub, P_aves, G_aves
 from .classes import CP, CPP
-from .comp_slice import comp_P, form_PP_t, sum_unpack
+from .comp_slice import comp_P, form_PP_t, sum_unpack, nest
 
 
 def sub_recursion_eval(root, PP_, fd):  # fork PP_ in PP or blob, no derT,valT,rdnT in blob
@@ -88,7 +88,7 @@ def comp_der(iP__):  # form new Ps and links in rng+ PP.P__, extend their link.d
         P_ = []
         for P in iP_:
             link_, link_m, link_d = [],[],[]  # for new P
-            derT,valT,rdnT = [[],[]],[0,0],[1,1]
+            derT,valT,rdnT = [[[[]]],[[[]]]],[[[]],[[]]],[[[]],[[]]]  # looks like we need to init this in der+
             # not sure
             for iderP in P.link_t[1]:  # dlinks
                 if iderP._P.link_t[1]:  # else no _P links and derT to compare
@@ -101,11 +101,3 @@ def comp_der(iP__):  # form new Ps and links in rng+ PP.P__, extend their link.d
         P__+= [P_]
     return P__
 
-def nest(P, depth):  
-    
-    # depth is the number brackets before the tested one: P.valT[0], P.valT[0][0], etc,
-    # add two levels in der+: layers ( forks?
-
-    if not isinstance(P.valT[0],list):
-        P.derT[0]=[P.derT[0]]; P.valT[0]=[P.valT[0]]; P.rdnT[0]=[P.rdnT[0]]
-        P.derT[1]=[P.derT[1]]; P.valT[1]=[P.valT[1]]; P.rdnT[1]=[P.rdnT[1]]
