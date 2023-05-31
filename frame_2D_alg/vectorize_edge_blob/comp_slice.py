@@ -49,7 +49,7 @@ def form_PP_t(P__, base_rdn):  # form PPs of derP.valt[fd] + connected Ps'val
                         for derP in uplink_:
                             if derP._P not in packed_P_:
                                 qPP[0].insert(0, [derP._P])  # pack top down
-                                qPP[1] += derP.valT[fd]
+                                qPP[1] += np.sum(derP.valT[fd])
                                 packed_P_ += [derP._P]
                                 uuplink_ += derP._P.link_t[fd]
                         uplink_ = uuplink_
@@ -135,18 +135,15 @@ def sum2PP(qPP, base_rdn, fd):  # sum Ps and links into PP
 
     P__,_,_ = qPP  # proto-PP is a list
     PP = CPP(box=copy(P__[0][0].box), fd=fd, P__ = P__)
-    DerT,ValT,RdnT = [[],[]],[0,0],[1,1]  # ptuple|scalar )fork )layer )H)T
+    DerT,ValT,RdnT = [[],[]],[[],[]],[[],[]]  # ptuple|scalar )fork )layer )H)T
     # accum:
     for P_ in P__:  # top-down
         for P in P_:  # left-to-right
             P.roott[fd] = PP
             sum_ptuple(PP.ptuple, P.ptuple)
             if P.derT[0]:  # P links and both forks are not empty
-                for i in 0,1:
-                    if isinstance(P.valT[0], list):  # der+: H = 1fork) 1layer before feedback
-                        sum_unpack([DerT[i],ValT[i],RdnT[i]], [P.derT[i],P.valT[i],P.rdnT[i]])
-                    else:  # rng+: 1 vertuple
-                        sum_ptuple(DerT[i], P.derT[i]); ValT[i]+=P.valT[i]; RdnT[i]+=P.rdnT[i]
+                sum_unpack([DerT, ValT, RdnT],[P.derT,P.valT,P.rdnT], fd=0)  # we need to parse in the whole ValT because we can't reference their elements if they contain ints
+                sum_unpack([DerT, ValT, RdnT],[P.derT,P.valT,P.rdnT], fd=1)
                 PP.link_ += P.link_
                 for Link_,link_ in zip(PP.link_t, P.link_t):
                     Link_ += link_  # all unique links in PP, to replace n
@@ -158,14 +155,26 @@ def sum2PP(qPP, base_rdn, fd):  # sum Ps and links into PP
     return PP
 
 
-def sum_unpack(Q,q):  # recursive unpack two pairs of nested sequences to sum final ptuples
+def sum_unpack(Q, q, fd):
+    
+    Quet,Val_t,Rdn_t = Q; quet,val_t,rdn_t = q  # max nesting: H( layer( fork( ptuple|scalar)))
+    if isinstance(val_t[fd], list):
+        sum_unpack_recursive([Quet[fd], Val_t[fd], Rdn_t[fd]],[quet[fd], val_t[fd], rdn_t[fd]])
+    else:
+        sum_ptuple(Quet[fd], quet[fd])
+        if isinstance(Val_t[fd], list):  # we init them as list
+            Val_t[:] = [0,0];Rdn_t[:] = [1,1] 
+        Val_t[fd] += val_t[fd]; Rdn_t[fd] += rdn_t[fd]
+        
+
+def sum_unpack_recursive(Q,q):  # recursive unpack two pairs of nested sequences to sum final ptuples
 
     Que,Val_,Rdn_ = Q; que,val_,rdn_ = q  # max nesting: H( layer( fork( ptuple|scalar)))
     for i, (Ele,Val,Rdn, ele,val,rdn) in enumerate(zip_longest(Que,Val_,Rdn_, que,val_,rdn_, fillvalue=[])):
         if ele:
             if Ele:
                 if isinstance(val,list):  # element is layer or fork
-                    sum_unpack([Ele,Val,Rdn], [ele,val,rdn])
+                    sum_unpack_recursive([Ele,Val,Rdn], [ele,val,rdn])
                 else:  # ptuple
                     Val_[i] += val; Rdn_[i] += rdn
                     sum_ptuple(Ele, ele)
@@ -195,11 +204,11 @@ def comp_P(_P,P, link_,link_m,link_d, layT, ValT, RdnT, fd=0, derP=None):  #  de
     if fd:  # der+: extend old link
         rn *= len(_P.link_t[1]) / len(P.link_t[1])  # derT is summed from links
         # comp last layer, comp lower lays formed derP.derT:
-        derT, valT, rdnT = comp_unpack(_P.derT[1][-1], P.derT[1][-1], rn)
+        derT, valT, rdnT = comp_unpack([_P.derT[1][-1]], [P.derT[1][-1]], rn)  # we need to add bracket, else it returns derLay instead of derT
         mval = valT[0][-1][-1]; dval = valT[1][-1][-1]  # should be scalars here
         mrdn = 1+(dval>mval); drdn = 1+(1-mrdn)
         for i in 0,1:  # append layer:
-            derP.derT[i]+=derT[i]; derP.valt[i]+= dval if i else mval; derP.rdnt[i]+= drdn if i else mrdn
+            derP.derT[i]+=derT[i]; derP.valT[i][-1][-1]+= dval if i else mval; derP.rdnT[i][-1][-1]+= drdn if i else mrdn
     else:
         # rng+: add new link
         mtuple,dtuple = comp_ptuple(_P.ptuple, P.ptuple, rn)
@@ -210,12 +219,12 @@ def comp_P(_P,P, link_,link_m,link_d, layT, ValT, RdnT, fd=0, derP=None):  #  de
     link_ += [derP]  # all links
     if mval > aveP*mrdn:
         link_m+=[derP]  # +ve links, fork selection in form_PP_t
-        if fd: sum_unpack([layT[0],ValT[0],RdnT[0]], [derP.derT[0],derP.valT[0],derP.rdnT[0]])
+        if fd: sum_unpack([layT,ValT,RdnT], [derP.derT,derP.valT,derP.rdnT],fd=0)
         else:
             sum_ptuple(layT[0],mtuple); ValT[0]+=mval; RdnT[0]+=mrdn
     if dval > aveP*drdn:
         link_d+=[derP]
-        if fd: sum_unpack([layT[1],ValT[1],RdnT[1]], [derP.derT[1],derP.valT[1],derP.rdnT[1]])
+        if fd: sum_unpack([layT,ValT,RdnT], [derP.derT,derP.valT,derP.rdnT],fd=1)
         else:
             sum_ptuple(layT[1],dtuple); ValT[1]+=dval; RdnT[1]+=drdn
     if fd:
