@@ -106,7 +106,8 @@ def comp_der(iP__):  # form new Ps and links in rng+ PP.P__, extend their link.d
     return P__
 
 
-def nest(P, depth, ddepth=3):  # default ddepth is nest 3 times: tuple->fork->layer->H
+# ddepth should be 4 here because cdepth starts at 1, so we need to add nesting 3 times (fork->layer->H) and get ddepth = 4
+def nest(P, depth, ddepth=4):  # default ddepth is nest 3 times: tuple->fork->layer->H
     # not yet implemented:
     # depth: number brackets before the tested bracket: P.valT[0], P.valT[0][0], etc
 
