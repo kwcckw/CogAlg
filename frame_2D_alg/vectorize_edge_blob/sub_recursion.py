@@ -10,10 +10,7 @@ def sub_recursion_eval(root, PP_, fd):  # fork PP_ in PP or blob, no derT,valT,r
 
     term = 1
     for PP in PP_:
-        # PP.valT could be just [[],[]] here if there's no derH
-        Pval = np.sum(PP.valT[fd][-1]) if isinstance(PP.valT[fd], list) and PP.valT[fd] else 0
-        Prdn = np.sum(PP.rdnT[fd][-1]) if isinstance(PP.rdnT[fd], list) and PP.rdnT[fd] else 1 
-        if Pval > PP_aves[fd] * Prdn and len(PP.P__) > ave_nsub:
+        if np.sum(PP.valT[fd][-1]) > PP_aves[fd] * np.sum(PP.rdnT[fd][-1]) and len(PP.P__) > ave_nsub:
             term = 0
             sub_recursion(PP, fd)  # comp_der|rng in PP -> parLayer, sub_PPs
         elif isinstance(root, CPP):
@@ -109,7 +106,7 @@ def comp_der(iP__):  # form new Ps and links in rng+ PP.P__, extend their link.d
     return P__
 
 
-def nest(P, depth, ddepth=3):  # default is nest 3 times: tuple->fork->layer->derH (we need add another bracket to pack layer into derH, else we can't have more than 1 layer)
+def nest(P, depth, ddepth=3):  # default ddepth is nest 3 times: tuple->fork->layer->H
     # not yet implemented:
     # depth: number brackets before the tested bracket: P.valT[0], P.valT[0][0], etc
 
@@ -119,15 +116,11 @@ def nest(P, depth, ddepth=3):  # default is nest 3 times: tuple->fork->layer->de
             P.derT[0]=[P.derT[0]]; P.valT[0]=[P.valT[0]]; P.rdnT[0]=[P.rdnT[0]]
             P.derT[1]=[P.derT[1]]; P.valT[1]=[P.valT[1]]; P.rdnT[1]=[P.rdnT[1]]
             cdepth += 1
-       
-    for derP in P.link_t[1]: 
+
+    for derP in P.link_t[1]:
         if not isinstance(derP.valT[0],list):
             cdepth = 1  # at least ptuple
             while cdepth < ddepth:
                 derP.derT[0]=[derP.derT[0]]; derP.valT[0]=[derP.valT[0]]; derP.rdnT[0]=[derP.rdnT[0]]
                 derP.derT[1]=[derP.derT[1]]; derP.valT[1]=[derP.valT[1]]; derP.rdnT[1]=[derP.rdnT[1]]
                 cdepth += 1
-            
-            
-            
-            
