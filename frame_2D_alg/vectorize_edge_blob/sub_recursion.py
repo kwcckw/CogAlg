@@ -10,11 +10,12 @@ def sub_recursion_eval(root, PP_, fd):  # fork PP_ in PP or blob, no derT,valT,r
 
     term = 1
     for PP in PP_:
-        if np.sum(PP.valT[fd][-1]) > PP_aves[fd] * np.sum(PP.rdnT[fd][-1]) and len(PP.P__) > ave_nsub:
+        # we will be not able not use -1 if valT is [1,1], so we can just use np sum here? 
+        if np.sum(PP.valT[fd]) > PP_aves[fd] * np.sum(PP.rdnT[fd]) and len(PP.P__) > ave_nsub:
             term = 0
             sub_recursion(PP, fd)  # comp_der|rng in PP -> parLayer, sub_PPs
         elif isinstance(root, CPP):
-            root.fb_ += [[[PP.derT[fd][-1]], PP.valT[fd][-1],PP.rdnT[fd][-1]]]  # [derT,valT,rdnT]
+            root.fback_ += [[[PP.derT[fd][-1]], PP.valT[fd][-1],PP.rdnT[fd][-1]]]  # [derT,valT,rdnT]
             # feedback last layer, added in sum2PP
     if term and isinstance(root, CPP):
         feedback(root, fd)  # upward recursive extend root.derT, forward eval only
@@ -41,10 +42,16 @@ def sub_recursion(PP, fd):  # evaluate PP for rng+ and der+, add layers to selec
     if fd: [[nest(P,0) for P in P_] for P_ in PP.P__]  # add layers and forks?
 
     P__ = comp_der(PP.P__) if fd else comp_rng(PP.P__, PP.rng+1)   # returns top-down
-    PP.rdnT[fd][-1] += np.sum(PP.valT[fd][-1]) > np.sum(PP.valT[1-fd][-1])
+    if isinstance(PP.valT[0], list):
+        PP.rdnT[fd][-1][-1][-1] += np.sum(PP.valT[fd][-1]) > np.sum(PP.valT[1-fd][-1])
+        base_rdn = PP.rdnT[fd][-1][-1][-1]
+    else:
+        PP.rdnT[fd] += PP.valT[fd] > PP.valT[1-fd]
+        base_rdn = PP.rdnT[fd]
+    
     # link Rdn += PP rdn?
     cP__ = [copy(P_) for P_ in P__]
-    PP.P__ = form_PP_t(cP__,base_rdn=np.sum(PP.rdnT[fd][-1]))  # P__ = sub_PPm_, sub_PPd_
+    PP.P__ = form_PP_t(cP__,base_rdn=base_rdn)  # P__ = sub_PPm_, sub_PPd_
 
     for fd, sub_PP_ in enumerate(PP.P__):
         if sub_PP_:  # der+ | rng+
@@ -76,7 +83,7 @@ def comp_rng(iP__, rng):  # form new Ps and links in rng+ PP.P__, switch to rng+
                     comp_P(P,__P, link_,link_m,link_d, derT,valT,rdnT, fd=0)
             if np.sum(valT[0]) > P_aves[0] * np.sum(rdnT[0]):  # not sure
                 # add new P in rng+ PP:
-                P_ += [CP(ptuple=deepcopy(P.ptuple), dert_=copy(P.dert_), fd=0, box=copy(P.box),
+                P_ += [CP(ptuple=deepcopy(P.ptuple), dert_=copy(P.dert_), box=copy(P.box),
                           derT=derT, valT=valT, rdnT=rdnT, link_=link_, link_t=[link_m,link_d])]
         P__+= [P_]
     return P__
@@ -98,16 +105,16 @@ def comp_der(iP__):  # form new Ps and links in rng+ PP.P__, extend their link.d
                 # add new P in der+ PP:
                 DerT = deepcopy(P.derT); ValT = deepcopy(P.valT); RdnT = deepcopy(P.rdnT)
                 for i in 0,1:
+                    valT[i] = [valT[i]]; rdnT[i] = [rdnT[i]]  # convert layer val and rdn into H val and rdn  
                     DerT[i]+=derT[i]; ValT[i]+=valT[i]; RdnT[i]+=rdnT[i]
 
-                P_ += [CP(ptuple=deepcopy(P.ptuple), dert_=copy(P.dert_), fd=1, box=copy(P.box),
-                          derT=DerT, valT=ValT, rdnT=RdnT, rdnlink_=link_, link_t=[link_m,link_d])]
+                P_ += [CP(ptuple=deepcopy(P.ptuple), dert_=copy(P.dert_), box=copy(P.box),
+                          derT=DerT, valT=ValT, rdnT=RdnT, link_=link_, link_t=[link_m,link_d])]
         P__+= [P_]
     return P__
 
 
-# ddepth should be 4 here because cdepth starts at 1, so we need to add nesting 3 times (fork->layer->H) and get ddepth = 4
-def nest(P, depth, ddepth=4):  # default ddepth is nest 3 times: tuple->fork->layer->H
+def nest(P, depth, ddepth=3):  # default ddepth is nest 3 times: tuple->fork->layer->H
     # not yet implemented:
     # depth: number brackets before the tested bracket: P.valT[0], P.valT[0][0], etc
 
