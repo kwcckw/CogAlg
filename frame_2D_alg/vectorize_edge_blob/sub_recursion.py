@@ -10,8 +10,7 @@ def sub_recursion_eval(root, PP_, fd):  # fork PP_ in PP or blob, no derT,valT,r
 
     term = 1
     for PP in PP_:
-        # we will be not able not use -1 if valT is [1,1], so we can just use np sum here? 
-        if np.sum(PP.valT[fd]) > PP_aves[fd] * np.sum(PP.rdnT[fd]) and len(PP.P__) > ave_nsub:
+        if np.sum(PP.valT[fd][-1]) > PP_aves[fd] * np.sum(PP.rdnT[fd][-1]) and len(PP.P__) > ave_nsub:
             term = 0
             sub_recursion(PP, fd)  # comp_der|rng in PP -> parLayer, sub_PPs
         elif isinstance(root, CPP):
@@ -39,19 +38,13 @@ def feedback(root, fd):  # append new der layers to root
 
 def sub_recursion(PP, fd):  # evaluate PP for rng+ and der+, add layers to select sub_PPs
 
-    if fd: [[nest(P,0) for P in P_] for P_ in PP.P__]  # add layers and forks?
+    if fd: [[nest(P,0) for P in P_] for P_ in PP.P__]  # add layers(forks to Ps and links
 
     P__ = comp_der(PP.P__) if fd else comp_rng(PP.P__, PP.rng+1)   # returns top-down
-    if isinstance(PP.valT[0], list):
-        PP.rdnT[fd][-1][-1][-1] += np.sum(PP.valT[fd][-1]) > np.sum(PP.valT[1-fd][-1])
-        base_rdn = PP.rdnT[fd][-1][-1][-1]
-    else:
-        PP.rdnT[fd] += PP.valT[fd] > PP.valT[1-fd]
-        base_rdn = PP.rdnT[fd]
-    
+    PP.rdnT[fd][-1] += np.sum(PP.valT[fd][-1]) > np.sum(PP.valT[1-fd][-1])
     # link Rdn += PP rdn?
     cP__ = [copy(P_) for P_ in P__]
-    PP.P__ = form_PP_t(cP__,base_rdn=base_rdn)  # P__ = sub_PPm_, sub_PPd_
+    PP.P__ = form_PP_t(cP__,base_rdn=np.sum(PP.rdnT[fd][-1]))  # P__ = sub_PPm_, sub_PPd_
 
     for fd, sub_PP_ in enumerate(PP.P__):
         if sub_PP_:  # der+ | rng+
@@ -81,7 +74,7 @@ def comp_rng(iP__, rng):  # form new Ps and links in rng+ PP.P__, switch to rng+
                 for _derP in _P.link_t[0]:  # next layer of mlinks
                     __P = _derP._P  # next layer of Ps
                     comp_P(P,__P, link_,link_m,link_d, derT,valT,rdnT, fd=0)
-            if np.sum(valT[0]) > P_aves[0] * np.sum(rdnT[0]):  # not sure
+            if np.sum(valT[0]) > P_aves[0] * np.sum(rdnT[0]):
                 # add new P in rng+ PP:
                 P_ += [CP(ptuple=deepcopy(P.ptuple), dert_=copy(P.dert_), box=copy(P.box),
                           derT=derT, valT=valT, rdnT=rdnT, link_=link_, link_t=[link_m,link_d])]
@@ -96,8 +89,8 @@ def comp_der(iP__):  # form new Ps and links in rng+ PP.P__, extend their link.d
         for P in iP_:
             link_, link_m, link_d = [],[],[]  # for new P
             derT,valT,rdnT = [[],[]],[[],[]],[[],[]]
-            # not sure
-            for iderP in P.link_t[1]:  # dlinks
+            # trace dlinks:
+            for iderP in P.link_t[1]:
                 if iderP._P.link_t[1]:  # else no _P links and derT to compare
                     _P = iderP._P
                     comp_P(_P,P, link_,link_m,link_d, derT,valT,rdnT, fd=1, derP=iderP)
@@ -105,8 +98,7 @@ def comp_der(iP__):  # form new Ps and links in rng+ PP.P__, extend their link.d
                 # add new P in der+ PP:
                 DerT = deepcopy(P.derT); ValT = deepcopy(P.valT); RdnT = deepcopy(P.rdnT)
                 for i in 0,1:
-                    valT[i] = [valT[i]]; rdnT[i] = [rdnT[i]]  # convert layer val and rdn into H val and rdn  
-                    DerT[i]+=derT[i]; ValT[i]+=valT[i]; RdnT[i]+=rdnT[i]
+                    DerT[i]+=[derT[i]]; ValT[i]+=[valT[i]]; RdnT[i]+=[rdnT[i]]  # append layer
 
                 P_ += [CP(ptuple=deepcopy(P.ptuple), dert_=copy(P.dert_), box=copy(P.box),
                           derT=DerT, valT=ValT, rdnT=RdnT, link_=link_, link_t=[link_m,link_d])]
