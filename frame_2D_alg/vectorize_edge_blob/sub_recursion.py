@@ -43,7 +43,7 @@ def feedback(root, fd):  # append new der layers to root
 
 def sub_recursion(PP, fd):  # evaluate PP for rng+ and der+, add layers to select sub_PPs
 
-    if fd: [[nest(P,0) for P in P_] for P_ in PP.P__]  # add layers(forks to Ps and links
+    if fd: [[nest(P) for P in P_] for P_ in PP.P__]  # add layers(forks to Ps and links
     P__ = comp_der(PP.P__) if fd else comp_rng(PP.P__, PP.rng+1)   # returns top-down
     if isinstance(PP.valT[fd], list):
         PP.rdnT[fd][-1] += np.sum(PP.valT[fd][-1]) > np.sum(PP.valT[1-fd][-1])
@@ -116,7 +116,7 @@ def comp_der(iP__):  # form new Ps and links in rng+ PP.P__, extend their link.d
     return P__
 
 
-def nest(P, ddepth=3):  # default ddepth is nest 3 times: tuple->fork->layer->H
+def nest(P,ddepth=3):  # default ddepth is nest 3 times: tuple->fork->layer->H
     # not yet implemented:
     # depth: number brackets before the tested bracket: P.valT[0], P.valT[0][0], etc
 
@@ -128,7 +128,6 @@ def nest(P, ddepth=3):  # default ddepth is nest 3 times: tuple->fork->layer->H
             curr_depth += 1
 
         for derP in P.link_t[1]:
-            nest(derP._P)
             curr_depth = 0
             while curr_depth < ddepth:
                 derP.derT[0]=[derP.derT[0]]; derP.valT[0]=[derP.valT[0]]; derP.rdnT[0]=[derP.rdnT[0]]

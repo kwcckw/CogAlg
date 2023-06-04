@@ -53,6 +53,19 @@ def form_PP_t(P__, base_rdn):  # form PPs of derP.valt[fd] + connected Ps'val
                                     valt[i] += np.sum(derP.valT[i])
                                 packed_P_ += [derP._P]
                                 uuplink_ += derP._P.link_t[fd]
+                            else:
+                                for _qPP in qPP_:  # merge _qPP into qPP
+                                    _P__ = [_P for _P_ in _qPP[0] for _P in _P_]
+                                    if derP._P in _P__:
+                                        for _P_ in _qPP[0]:  # pack Ps into P__ based on their y location
+                                            for _P in _P_:
+                                                if _P is not derP._P and _P not in _P__:
+                                                    append_P(qPP, _P)
+                                        for i in 0,1:  # valt
+                                            valt[i] += _qPP[1][i]          
+                                        # remove the merged _qPP
+                                        qPP_.remove(_qPP)   
+                                        break
                         uplink_ = uuplink_
                         uuplink_ = []
                     qPP_ += [[qPP, valt, ave+1]]  # ini reval=ave+1
@@ -118,9 +131,9 @@ def sum2PP(qPP, base_rdn, fd):  # sum Ps and links into PP
 
     P__,_,_ = qPP  # proto-PP is a list
     # init:
-    P = (P__[0][0])
+    P = P__[0][0]
     Ptuple, DerT,ValT,RdnT, (Y0,Yn,X0,Xn), Link_, (Link_m,Link_d) \
-    = deepcopy(P.ptuple),deepcopy(P.derT),deepcopy(P.valT),deepcopy(P.rdnT),copy(P.box),copy(P.link_),copy(P.link_t)
+    = deepcopy(P.ptuple),deepcopy(P.derT),deepcopy(P.valT),deepcopy(P.rdnT),copy(P.box),copy(P.link_),deepcopy(P.link_t)  # we need deepcopy for link_t, else the nested link_ will be referencing P.link_t
     PP = CPP(fd=fd, P__=P__)
     # accum:
     for i, P_ in enumerate(P__):  # top-down
@@ -286,3 +299,17 @@ def comp_aangle(_aangle, aangle):
     maangle = ave_daangle - abs(daangle)  # inverse match, not redundant as summed
 
     return [maangle,daangle]
+
+def append_P(P__, P):  # pack P into P__ in top down sequence
+
+    current_ys = [P_[0].box[0] for P_ in P__]  # list of current-layer seg rows
+    if P.box[0] in current_ys:
+        if P not in P__[current_ys.index(P.box[0])]:
+            P__[current_ys.index(P.box[0])].append(P)  # append P row
+    elif P.box[0] > current_ys[0]:  # P.y0 > largest y in ys
+        P__.insert(0, [P])
+    elif P.box[0] < current_ys[-1]:  # P.y0 < smallest y in ys
+        P__.append([P])
+    elif P.box[0] < current_ys[0] and P.box[0] > current_ys[-1]:  # P.y0 in between largest and smallest value
+        for i, y in enumerate(current_ys):  # insert y if > next y
+            if P.box[0] > y: P__.insert(i, [P])  # PP.P__.insert(P.y0 - current_ys[-1], [P])
