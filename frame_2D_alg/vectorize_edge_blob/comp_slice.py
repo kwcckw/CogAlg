@@ -42,37 +42,26 @@ def form_PP_t(P__, base_rdn):  # form PPs of derP.valt[fd] + connected Ps'val
         for P_ in fork_P__:
             for P in P_:
                 if not P.roott[fd]:
-                    qPP = [[P]]  # init PP is 2D queue of Ps, + valt of all layers?
-                    P.roott[fd]=qPP; valt = [0,0]
+                    valt = [0,0]; qPP = [[[P]], valt, ave+1]  # init PP is 2D queue of Ps, + valt of all layers?
+                    P.roott[fd]=qPP   
                     uplink_ = P.link_t[fd]; uuplink_ = []
                     # next-line links for recursive search
                     while uplink_:
                         for derP in uplink_:
-                            _P = derP._P; _qPP = _P.roott[fd]
-                            if _qPP:
-                                for i in 0, 1: valt[i] += _qPP[1][i]
-                                merge(qPP[0],_qPP[0])  # merge P__s, not sure how to align them
-                            else:
-                                qPP[0].insert(0,_P)  # pack top down
-                                _P.root[fd] = qPP
-                                for i in 0,1: valt[i] += np.sum(derP.valT[i])
-                                uuplink_ += derP._P.link_t[fd]
-                            else:
-                                for _qPP in qPP_:  # merge _qPP into qPP
-                                    _P__ = [_P for _P_ in _qPP[0] for _P in _P_]
-                                    if derP._P in _P__:
-                                        for _P_ in _qPP[0]:  # pack Ps into P__ based on their y location
-                                            for _P in _P_:
-                                                if _P is not derP._P and _P not in _P__:
-                                                    append_P(qPP, _P)
-                                        for i in 0,1:  # valt
-                                            valt[i] += _qPP[1][i]          
-                                        # remove the merged _qPP
-                                        qPP_.remove(_qPP)   
-                                        break
+                            if derP._P not in [qP_[0] for qP_ in qPP[0]]:  # _P is not merged before, when derP has different P and a same _P
+                                _P = derP._P; _qPP = _P.roott[fd]
+                                if _qPP:
+                                    for i in 0, 1: valt[i] += _qPP[1][i]
+                                    merge(qPP,_qPP[0], fd)  # merge P__s, not sure how to align them 
+                                    qPP_.remove(_qPP)
+                                else:
+                                    qPP[0].insert(0,[_P])  # pack top down
+                                    _P.roott[fd] = qPP
+                                    for i in 0,1: valt[i] += np.sum(derP.valT[i])
+                                    uuplink_ += derP._P.link_t[fd]   
                         uplink_ = uuplink_
                         uuplink_ = []
-                    qPP_ += [[qPP, valt, ave+1]]  # ini reval=ave+1
+                    qPP_ += [qPP]  # ini reval=ave+1
         # prune qPPs by med links val:
         rePP_= reval_PP_(qPP_, fd)  # PP = [qPP,valt,reval]
         CPP_ = [sum2PP(qPP, base_rdn, fd) for qPP in rePP_]
@@ -81,10 +70,48 @@ def form_PP_t(P__, base_rdn):  # form PPs of derP.valt[fd] + connected Ps'val
     return PP_t  # add_alt_PPs_(graph_t)?
 
 # draft
-def merge(P__, _P__):  # the P__s should not have shared Ps
-
-    '''
-    not sure how align P__s at the moment
+def merge(qPP, _P__, fd):  # the P__s should not have shared Ps
+    
+    P__ = qPP[0]
+    for _P_ in _P__:
+        for _P in _P_:
+            _P.roott[fd] = qPP
+            ys = [P_[0].box[0] for P_ in P__]  # list of current-layer seg rows
+            _y0 = _P.box[0]
+            if _y0 in ys:  # append P row in an existing P_   
+                
+                # pack P into P_ based on their x：
+                ry = _y0-min(ys)  # relative y, we can't pack based on y0 because here is just a section of P__
+                P_ = P__[ry]
+                # current P x0
+                cx0 = _P.box[2]
+                # prior P's x0 in P_
+                _x0 = P_[0].box[2]
+                if cx0 < _x0:  # cP's x is smaller than 1st P in P_
+                    P_.insert(0, _P)
+                elif cx0 > P_[-1].box[2]:  # P's x is larger than last P in P_
+                    P_ += [_P]
+                else:  # P's x is somewhere between P_
+                    for i, P in enumerate(P_[1:], start=1):
+                        x0 = P.box[2]  # current P's x0 
+                        if cx0>_x0 and cx0 < x0:
+                            P_.insert(i,_P)
+                            break
+                        _x0 = x0
+                            
+            elif _y0 < ys[0]:  # _P.y0 < smallest y in ys
+                P__.insert(0, [_P])
+            elif _y0 > ys[-1]:  # _P.y0 > largest y in ys
+                P__ += [[_P]]
+            else:  # _P.y0 doesn't exist in existing P__ but in between P__
+                prior_y0 = ys[0]
+                for current_y0 in ys[1:]:
+                    if _y0 > prior_y0 and _y0 < current_y0:
+                        P__.insert(current_y0, [_P])
+                    prior_y0 = current_y0
+        
+    """
+    # not sure how align P__s at the moment
     _P__ = [_P for _P_ in _qPP[0] for _P in _P_]
     if derP._P in _P__:
         for _P_ in _qPP[0]:  # pack Ps into P__ based on y
@@ -102,7 +129,7 @@ def merge(P__, _P__):  # the P__s should not have shared Ps
                     elif P.box[0] < current_ys[0] and P.box[0] > current_ys[-1]:  # P.y0 in between largest and smallest value
                         for i, y in enumerate(current_ys):  # insert y if > next y
                             if P.box[0] > y: P__.insert(i, [P])  # PP.P__.insert(P.y0 - current_ys[-1], [P])
-    '''
+    """
 
 def reval_PP_(PP_, fd):  # recursive eval / prune Ps for rePP
 
