@@ -51,8 +51,49 @@ def vectorize_root(blob, verbose=False):  # always angle blob, composite dert co
             agg_recursion_eval(blob, copy(PP_), fd=fd)  # comp sub_PPs, form intermediate PPs
 
 def form_link_(blob):  # trace adjacent Ps by adjacent dert roots, fill|prune if missing or redundant, add to P.link_ if >ave*rdn
-    pass
+    
+    # using overlapping roots
+    for dert_roots_ in blob.dert_roots__:
+        for dert_roots in dert_roots_:
+            if dert_roots:  # masked area may empty
+                _P = dert_roots[0]
+                for P in dert_roots[1:]:  # search overlapping roots
+                    if P not in _P.link_:
+                        # rdn is length of overlapping roots?
+                        rdn = len(dert_roots_)
+                        if P.ptuple[1] + P.ptuple[5] > ave * rdn:
+                            # bilateral assignment
+                            _P.link_ += [P]
+                            P.link_ += [_P]
+    
 
+    # something like flood fill method
+    '''    
+    flags = np.ones(blob.mask__.shape)
+    for _y, _dert_roots_ in enumerate(blob.dert_roots__):
+        for _x, _Ps in enumerate(_dert_roots_):
+            if flags[_y,_x]:  # _P is not added to _P.link_ in prior loops
+                flags[_y,_x] = 0
+                for _P in _Ps:
+                    fbreak = 1
+                    for y, dert_roots_ in enumerate(blob.dert_roots__[_y+1:]):
+                        for x, Ps in enumerate(dert_roots_[_x+1:]):
+                            for P in Ps:
+                                rdn = len(dert_roots_) + len(_dert_roots_) 
+                                # M+G ?
+                                if P.ptuple[1] + P.ptuple[5] > ave * rdn and P not in _P.link_:
+                                    _P.link_ += [P]
+                                    P.link_ += [_P]
+                                    flags[y,x] = 0
+                                    fbreak = 0
+                                else: 
+                                    break
+                    
+                        # break from y
+                        if fbreak:
+                            break
+     
+    '''
 '''
 or only compute params needed for rotate_P_?
 '''
@@ -61,7 +102,7 @@ def slice_blob(blob, verbose=False):  # form blob slices nearest to slice Ga: Ps
     mask__ = blob.mask__  # same as positive sign here
     dert__ = zip(*blob.dert__)  # convert 10-tuple of 2D arrays into 1D array of 10-tuple blob rows
     dert__ = [zip(*dert_) for dert_ in dert__]  # convert 1D array of 10-tuple rows into 2D array of 10-tuples per select blob
-    blob.dert__ = dert__
+    blob.dert__ = [zip(*dert_) for dert_ in zip(*blob.dert__)]
     P__ = []
     height, width = mask__.shape
     if verbose: print("Converting to image...")
@@ -88,14 +129,14 @@ def slice_blob(blob, verbose=False):  # form blob slices nearest to slice Ga: Ps
                 G = np.hypot(Dy, Dx)  # Dy,Dx  # recompute G,Ga, it can't reconstruct M,Ma
                 Ga = (Cos_da0 + 1) + (Cos_da1 + 1)  # Cos_da0, Cos_da1
                 L = len(Pdert_)  # params.valt = [params.M+params.Ma, params.G+params.Ga]?
-                P_ += [Dert2P(I, M, Ma, Dy, Dx, Sin_da0, Cos_da0, Sin_da1, Cos_da1, G, Ga, L, y, x, Pdert_, blob.root__)]
+                P_ += [Dert2P(I, M, Ma, Dy, Dx, Sin_da0, Cos_da0, Sin_da1, Cos_da1, G, Ga, L, y, x, Pdert_, blob.dert_roots__)]
             _mask = mask
             x += 1
         # pack last P, same as above:
         if not _mask:
             G = np.hypot(Dy, Dx); Ga = (Cos_da0 + 1) + (Cos_da1 + 1)
             L = len(Pdert_) # params.valt=[params.M+params.Ma,params.G+params.Ga]
-            P_ += [Dert2P(I, M, Ma, Dy, Dx, Sin_da0, Cos_da0, Sin_da1, Cos_da1, G, Ga, L, y, x, Pdert_, blob.root__)]
+            P_ += [Dert2P(I, M, Ma, Dy, Dx, Sin_da0, Cos_da0, Sin_da1, Cos_da1, G, Ga, L, y, x, Pdert_, blob.dert_roots__)]
         P__ += [P_]
 
     if verbose: print("\r", end="")
@@ -108,7 +149,7 @@ def Dert2P(I, M, Ma, Dy, Dx, Sin_da0, Cos_da0, Sin_da1, Cos_da1, G, Ga, L, y, x,
     P.dert_roots_ = [[P] for dert in Pdert_]
 
     bx = P.box[2]
-    while bx < P.box[3]:  # x0->xn
+    while bx <= P.box[3]:  # x0->xn (we use -1 above, so it is inclusive)
         root__[y][bx] += [P]
         bx += 1
 
@@ -116,7 +157,7 @@ def Dert2P(I, M, Ma, Dy, Dx, Sin_da0, Cos_da0, Sin_da1, Cos_da1, G, Ga, L, y, x,
 
 def rotate_P_(blob):  # rotate each P to align it with direction of P gradient
 
-    P__, dert__, mask__ = blob.P__, blob.dert__, blob.mask__
+    P__, dert__, dert_roots__, mask__ = blob.P__, blob.dert__, blob.dert_roots__, blob.mask__
 
     for P_ in P__:
         for P in P_:
@@ -125,15 +166,15 @@ def rotate_P_(blob):  # rotate each P to align it with direction of P gradient
             G = P.ptuple[5]
             while abs(daxis)*G > ave_rotate:  # recursive reform P along new G angle in blob.dert__, P.daxis for future reval?
 
-                rotate_P(P, dert__, mask__, ave_a=None)  # rescan in the direction of ave_a, if any
+                rotate_P(P, dert__, dert_roots__, mask__, ave_a=None)  # rescan in the direction of ave_a, if any
                 maxis, daxis = comp_angle(P.ptuple[3], P.axis)
                 ddaxis = daxis +_daxis  # cancel-out if opposite-sign
                 # terminate if oscillation
                 if ddaxis*G < ave_rotate:
-                    rotate_P(P, dert__, mask__, ave_a=np.add(P.ptuple[3], P.axis))  # rescan in the direction of ave_a, if any
+                    rotate_P(P, dert__, dert_roots__, mask__, ave_a=np.add(P.ptuple[3], P.axis))  # rescan in the direction of ave_a, if any
                     break
 
-def rotate_P(P, dert__, mask__, ave_a):
+def rotate_P(P, dert__, dert_roots__, mask__, ave_a):
 
     if ave_a is None:
         sin, cos = np.divide(P.ptuple[3], P.ptuple[5])
@@ -152,6 +193,9 @@ def rotate_P(P, dert__, mask__, ave_a):
         if rdert is None: break  # dert is not in blob: masked or out of bound
         rdert_ = [rdert] + rdert_  # append left
         rx-=cos; ry-=sin  # next rx,ry
+        # probably update dert_roots__ based on rx and ry here?
+        
+        
     x0 = rx; yleft = ry
     # scan right:
     rx=xcenter+cos; ry=ycenter+sin  # center dert was included in scan left
@@ -160,6 +204,8 @@ def rotate_P(P, dert__, mask__, ave_a):
         if rdert is None: break  # dert is not in blob: masked or out of bound
         rdert_ += [rdert]  # append right
         rx+=cos; ry+=sin  # next rx,ry
+        # probably update dert_roots__ based on rx and ry here?
+        
     # form rP:
     if not rdert_: return
     rdert = rdert_[0]  # initialization:
