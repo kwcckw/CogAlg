@@ -113,7 +113,7 @@ def frame_blobs_root(image, intra=False, render=False, verbose=False, use_c=Fals
     I, Dy, Dx = 0, 0, 0
     for blob in blob_: I += blob.I; Dy += blob.Dy; Dx += blob.Dx
 
-    frame = CBlob(I=I, Dy=Dy, Dx=Dx, root_dert__=dert__, dert__=dert__, rlayers=[blob_], box=(0, Y, 0, X))
+    frame = CBlob(I=I, Dy=Dy, Dx=Dx, dert__=dert__, rlayers=[blob_], box=(0, Y, 0, X))
     # dlayers = []: no comp_a yet
     if verbose: print(f"{len(frame.rlayers[0])} blobs formed in {time() - start_time} seconds")
 
