@@ -35,7 +35,6 @@ from time import time
 from collections import deque
 from visualization.draw_frame_blobs import visualize_blobs
 from class_cluster import ClusterStructure, init_param as z
-from dataclasses import replace
 from copy import copy
 # from frame_blobs_wrapper import wrapped_flood_fill, from utils import minmax
 
@@ -62,8 +61,7 @@ class CBlob(ClusterStructure):
     box : tuple = (0, 0, 0, 0)  # x0, xn, y0, yn
     mask__ : object = None
     dert__ : object = None
-    root_dert__ : object = None
-    dert_roots__ : object = None  # map to dert__
+    dert_ext__ : object = None  # map to dert__
     adj_blobs : list = z([])  # adjacent blobs
     fopen : bool = False
     # intra_blob params: # or pack in intra = lambda: Cintra
@@ -108,7 +106,6 @@ def frame_blobs_root(image, intra=False, render=False, verbose=False, use_c=Fals
     if verbose: start_time = time()
     Y, X = image.shape[:2]
     dert__ = comp_pixel(image)
-    dert_roots__ = [[[] for dert in dert_] for dert_ in dert__]
 
     blob_, idmap, adj_pairs = flood_fill(dert__, sign__= ave-dert__[3] > 0,
                                          prior_forks='', verbose=verbose)  # dert__[3] is g, https://en.wikipedia.org/wiki/Flood_fill
@@ -116,8 +113,7 @@ def frame_blobs_root(image, intra=False, render=False, verbose=False, use_c=Fals
     I, Dy, Dx = 0, 0, 0
     for blob in blob_: I += blob.I; Dy += blob.Dy; Dx += blob.Dx
 
-    # we will not using dert_roots__ in frame?
-    frame = CBlob(I=I, Dy=Dy, Dx=Dx, root_dert__=dert__, dert__=dert__, dert_roots__=dert_roots__, rlayers=[blob_], box=(0, Y, 0, X))
+    frame = CBlob(I=I, Dy=Dy, Dx=Dx, root_dert__=dert__, dert__=dert__, rlayers=[blob_], box=(0, Y, 0, X))
     # dlayers = []: no comp_a yet
     if verbose: print(f"{len(frame.rlayers[0])} blobs formed in {time() - start_time} seconds")
 
@@ -238,9 +234,7 @@ def flood_fill(dert__, sign__, prior_forks, verbose=False, mask__=None, fseg=Fal
                 yn += 1; xn += 1
                 blob.box = y0, yn, x0, xn
                 blob.dert__ = tuple([param_dert__[y0:yn, x0:xn] for param_dert__ in dert__])  # add None__ for m__?
-                blob.root_dert__ = tuple([ copy(param_dert__[y0:yn, x0:xn]) for param_dert__ in dert__])  # add None__ for m__?
-                blob.dert_roots__ = [ [ [] for dert in dert_[x0:xn] ]  for dert_ in dert__[0][y0:yn] ]
-        
+                blob.dert_ext__= [[[] for dert in dert_[x0:xn]] for dert_ in dert__[0][y0:yn]]
                 blob.mask__ = (idmap[y0:yn, x0:xn] != blob.id)
                 blob.adj_blobs = [[],[]] # iblob.adj_blobs[0] = adj blobs, blob.adj_blobs[1] = poses
                 blob.G = np.hypot(blob.Dy, blob.Dx)  # recompute G
