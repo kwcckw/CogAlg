@@ -42,8 +42,8 @@ def vectorize_root(blob, verbose=False):  # always angle blob, composite dert co
     slice_blob(blob, verbose=verbose)  # form 2D array of Ps: horizontal blob slices in dert__
     rotate_P_(blob)  # re-form Ps around centers along P.G, P sides may overlap, if sum(P.M s + P.Ma s)?
     cP_ = copy(blob.P_)  # copy for popping, including in scan_rim
-    for P in cP_.pop:
-        form_link_(P, cP_, blob)  # trace adjacent Ps, fill|prune if missing or redundant, add them to P.link_
+    while cP_:   
+        form_link_(cP_.pop(0), cP_, blob)  # trace adjacent Ps, fill|prune if missing or redundant, add them to P.link_
 
     comp_slice(blob, verbose=verbose)  # scan rows top-down, compare y-adjacent, x-overlapping Ps to form derPs
     for fd, PP_ in enumerate([blob.PPm_, blob.PPd_]):
@@ -137,8 +137,8 @@ def rotate_P(P, dert__, mask__, ave_a, center=None):
     dert_ext_ = []  # new P.dert_ext_
 
     if center:  # form new P from central dert
-        ycenter, xcenter, dert = center[0,1,2]
-        sin,cos = dert[3,4] / dert[9]  # dy,dx / G
+        ycenter, xcenter, dert = center[0:3]
+        sin,cos = dert[3]/dert[9], dert[4] / dert[9]  # dy,dx / G
         P = CP()
     else:  # rotate arg P
         if ave_a is None: sin,cos = np.divide(P.ptuple[3], P.ptuple[5])
@@ -252,28 +252,31 @@ def scan_rim(P, blob, rim_, cP_, fup):  # scan rim roots up and down from curren
 
     for dert, roots, y,x in rim_:
         if roots:
-            set(link_+ roots)  # unique only
+            # right now set is not working, probably is due to the changes of class cluster
+            # getthing this error : *** TypeError: unhashable type: 'CP
+            link_ += [root for root in roots if root not in link_]  # unique only
         elif dert[9] > ave:  # no adj root in strong dert, try form new P from central dert
-            new_link_ += [y,x,dert]
+            new_link_ += [[y,x,dert] if [y,x,dert] not in new_link_ else []]
     rdn = 1
-    for i, _P in enumerate( sorted( link_, key=lambda:link_.ptuple[5], reverse=True)):  # sort by P.G, rdn for lower-G _Ps only
+    for i, _P in enumerate( sorted(link_, key=lambda x:x.ptuple[5], reverse=True)):  # sort by P.G, rdn for lower-G _Ps only
         if _P.ptuple[5] > ave*(i+1):  # fork redundancy
-            rdn += 1
-            if fup: P.link_ += [_P]  # represent uplinks only
-            else:  _P.link_ += [P]
-            cP_.remove(_P)
-            form_link_(_P, cP_, blob)
+            if _P in cP_:  # _P not in cP_, probably checked in prior loops
+                rdn += 1
+                if fup: P.link_ += [_P]  # represent uplinks only
+                else:  _P.link_ += [P]
+                cP_.remove(_P)
+                form_link_(_P, cP_, blob)
         else:
             break  # the rest of link_ is weaker
-    set(new_link_)
-    for j, (y,x,dert) in enumerate(sorted(new_link_, key=lambda: new_link_[2][9], reverse=True)):  # sort by dert G
+    for j, (y,x,dert) in enumerate(sorted(new_link_, key=lambda x:x[2][9], reverse=True)):  # sort by dert G
         if dert[9] > ave*(rdn+j):  # fork redundancy includes old links
             # form new P from central dert:
             _P = rotate_P(None, blob.dert__, blob.mask__, ave, center=[y, x, dert])  # recursive rotate?
-            if fup:  P.link_ += [_P]  # represent uplinks only
-            else:   _P.link_ += [P]
-            blob.P_ += [_P]
-            form_link_(_P, cP_, blob)
+            if _P:  # _P maybe None, where there's no rdert
+                if fup:  P.link_ += [_P]  # represent uplinks only
+                else:   _P.link_ += [P]
+                blob.P_ += [_P]
+                form_link_(_P, cP_, blob)
         else:
             break  # the rest of new_link_ is weaker
 
