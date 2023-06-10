@@ -24,14 +24,16 @@ def comp_slice(blob, verbose=False):  # high-G, smooth-angle blob, composite der
         derT=[[],[]]; valT=[0,0]; rdnT=[1,1]  # to sum links in comp_P
 
         for _P in P.link_:
+            link_ = []
             _L = len(_P.dert_); L = len(P.dert_); _x0=_P.box[2]; x0=P.box[2]
             # test for x overlap(_P,P) in 8 directions, all derts positive?:
             if (x0 - 1 < _x0 + _L) and (x0 + L > _x0):
-                comp_P(_P,P, P.link_,link_m,link_d, derT,valT,rdnT, fd=0)
+                comp_P(_P,P, link_, link_m,link_d, derT,valT,rdnT, fd=0)
+            P.link_ = link_  # update from P to derP
         if P.link_:
             P.link_t=[link_m,link_d]
             P.derT=derT; P.valT=valT; P.rdnT=rdnT  # single Mtuple, Dtuple
-        _P_ = P_
+
     PPm_,PPd_ = form_PP_t(P_, base_rdn=2)
     blob.PPm_, blob.PPd_  = PPm_, PPd_
 
@@ -42,27 +44,31 @@ def form_PP_t(P_, base_rdn):  # form PPs of derP.valt[fd] + connected Ps'val
     for fd in 0,1:
         qPP_ = []  # form initial sequence-PPs:
         for P in copy(P_):
+            checked_link_ = []
             if not P.roott[fd]:
-                qPP = [[[P]]]  # init PP is 2D queue of Ps, + valt of all layers?
-                P.roott[fd]=qPP; valt = [0,0]
+                valt = [0,0]; qPP = [[P], valt, ave+1]  # init PP is 2D queue of Ps, + valt of all layers?
+                P.roott[fd]=qPP; 
                 uplink_ = P.link_t[fd]; uuplink_ = []
                 # next-line links for recursive search
                 while uplink_:
                     for derP in uplink_:
-                        _P = derP._P; _qPP = _P.roott[fd]
-                        if _qPP:
-                            for i in 0, 1: valt[i] += _qPP[1][i]
-                            for qP in _qPP.P_:
-                                qP.roott[fd] = qPP; qPP[0] += [qP]  # append qP_
-                            qPP_.remove(_qPP)
-                        else:
-                            qPP[0].insert(0,_P)  # pack top down
-                            _P.root[fd] = qPP
-                            for i in 0,1: valt[i] += np.sum(derP.valT[i])
-                            uuplink_ += derP._P.link_t[fd]
+                        if derP not in checked_link_:
+                            checked_link_ += [derP]
+                            _P = derP._P; _qPP = _P.roott[fd]
+                            if qPP is not _qPP:  # same _P checked in prior loop, but it is different derPs with different P
+                                if _qPP:
+                                    for i in 0, 1:  valt[i] += _qPP[1][i]
+                                    for qP in _qPP[0]:
+                                        qP.roott[fd] = qPP; qPP[0] += [qP]  # append qP_
+                                    qPP_.remove(_qPP)
+                                else:
+                                    qPP[0].insert(0,_P)  # pack top down
+                                    _P.roott[fd] = qPP
+                                    for i in 0,1: valt[i] += np.sum(derP.valT[i])
+                                    uuplink_ += derP._P.link_t[fd]
                     uplink_ = uuplink_
                     uuplink_ = []
-                qPP_ += [qPP + [valt,ave+1]]  # ini reval=ave+1
+                qPP_ += [qPP]  # ini reval=ave+1
         # prune qPPs by med links val:
         rePP_= reval_PP_(qPP_, fd)  # PP = [qPP,valt,reval]
         CPP_ = [sum2PP(qPP, base_rdn, fd) for qPP in rePP_]

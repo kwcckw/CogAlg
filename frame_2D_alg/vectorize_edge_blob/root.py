@@ -10,6 +10,8 @@ from .filters import ave, ave_g, ave_ga, ave_rotate
 from .comp_slice import comp_slice, comp_angle
 from .agg_convert import agg_recursion_eval
 from .sub_recursion import sub_recursion_eval
+from class_cluster import ClusterStructure, init_param as z
+
 
 '''
 Vectorize is a terminal fork of intra_blob.
@@ -126,8 +128,9 @@ def rotate_P_(blob):  # rotate each P to align it with direction of P gradient
             if ddaxis * P.ptuple[5] < ave_rotate:  # terminate if oscillation
                 rotate_P(P, dert__, mask__, ave_a=np.add(P.ptuple[3], P.axis))  # rescan in the direction of ave_a, if any
                 break
-        for y,x,_ in P.dert_ext_:
-            blob.dert_roots__[y][x] += [P]  # final rotated P
+        for _, y,x in P.dert_ext_:
+            # y and x are float here
+            blob.dert_roots__[int(y)][int(x)] += [P]  # final rotated P
 
 def rotate_P(P, dert__, mask__, ave_a, center=None):
 
@@ -255,6 +258,11 @@ def scan_P_rim(P, blob, rim_, cP_, fup):  # scan rim roots up and down from curr
 
     for dert, roots, y,x in rim_:
         if roots:  # set(link_+ roots): TypeError: unhashable type: 'CP, probably is due to the changes of class cluster
+            # link_ = z(roots+link_)
+            # by using above, we are getting this:
+            # Field(name=None,type=None,default=<dataclasses._MISSING_TYPE object at 0x000001CC0C0DA148>,default_factory=<function init_param.<locals>.<lambda> at 0x000001CC127F5708>,init=True,repr=False,hash=None,compare=True,metadata=mappingproxy({}),_field_type=None)
+            # and getting this error when use link_[0]
+            # TypeError: 'Field' object is not subscriptable
             link_ += [root for root in roots if root not in link_]  # unique only
         else:  # no adj root
             y0,yn,x0,xn = blob.box
@@ -265,8 +273,12 @@ def scan_P_rim(P, blob, rim_, cP_, fup):  # scan rim roots up and down from curr
     for i, _P in enumerate( sorted(link_, key=lambda x:x.ptuple[5], reverse=True)):  # sort by P.G, rdn for lower-G _Ps only
         if _P.ptuple[5] > ave*(i+1):  # fork redundancy
             rdn += 1
-            if fup: P.link_ += [_P]  # represent uplinks only
-            else:  _P.link_ += [P]
+            if fup: 
+                if _P not in P.link_:  # from my checking, we may scan a same P and add them to link_ multiple times during the rotation process, so we need to check before pack them ?
+                    P.link_ += [_P]  # represent uplinks only
+            else:  
+                if P not in _P.link_:
+                    _P.link_ += [P]
             if _P in cP_:
                 cP_.remove(_P)
                 form_link_(_P, cP_, blob)
@@ -288,8 +300,12 @@ def scan_P_rim(P, blob, rim_, cP_, fup):  # scan rim roots up and down from curr
                 rot_val = abs(daxis) * P.ptuple[5]
             for y,x,_ in P.dert_ext_:
                 blob.dert_roots__[y][x] += [P]  # final rotated P
-            if fup:  P.link_ += [_P]  # represent uplinks only
-            else:   _P.link_ += [P]
+            if fup: 
+                if _P not in P.link_:
+                    P.link_ += [_P]  # represent uplinks only
+            else:
+                if P not in _P.link_:
+                    _P.link_ += [P]
             blob.P_ += [_P]
             form_link_(_P, cP_, blob)
         else:
