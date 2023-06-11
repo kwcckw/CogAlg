@@ -129,7 +129,8 @@ def rotate_P_(blob):  # rotate each P to align it with direction of P gradient
                 rotate_P(P, dert__, mask__, ave_a=np.add(P.ptuple[3], P.axis))  # rescan in the direction of ave_a, if any
                 break
         for _, y,x in P.dert_ext_:
-            blob.dert_roots__[int(y)][int(x)] += [P]  # final rotated P
+            if P not in blob.dert_roots__[int(y)][int(x)]:  # we need to add this? Else we may add a same P multiple times
+                blob.dert_roots__[int(y)][int(x)] += [P]  # final rotated P
 
 def rotate_P(P, dert__, mask__, ave_a, center=None):
 
@@ -250,7 +251,6 @@ def form_link_(P, cP_, blob):  # trace adj Ps up and down by adj dert roots, fil
 def scan_P_rim(P, blob, rim_, cP_, fup):  # scan rim roots up and down from current P, repeat with adj_Ps:
 
     link_, new_link_ = [],[]  # potential links per direction
-
     for dert, roots, y,x in rim_:
         if roots:  # set(link_+ roots): TypeError: unhashable type: 'CP, probably is due to the changes of class cluster
             # link_ = z(roots+link_)
@@ -288,11 +288,19 @@ def scan_P_rim(P, blob, rim_, cP_, fup):  # scan rim roots up and down from curr
                     break
                 rot_val = abs(daxis) * P.ptuple[5]
             for y,x,_ in P.dert_ext_:
-                blob.dert_roots__[int(y)][int(x)] += [P]  # final rotated P
+                if P not in blob.dert_roots__[int(y)][int(x)]:
+                    blob.dert_roots__[int(y)][int(x)] += [P]  # final rotated P
+            
+            # i don't get where we get this _P? 
+            # new_link_ is added when roots (_Ps ) is empty, so why we have _P here?
+            # also the addition of P into _P.link_ here is causing _P in P.link_ in line 271 above
+
+            '''
             if fup: P.link_ += [_P]  # represent uplinks only
             else:  _P.link_ += [P]
             blob.P_ += [_P]
             form_link_(_P, cP_, blob)
+            '''
         else:
             break  # the rest of new_link_ is weaker
 
