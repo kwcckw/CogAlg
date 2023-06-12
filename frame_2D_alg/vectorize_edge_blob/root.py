@@ -111,15 +111,18 @@ def term_P(I, M, Ma, Dy, Dx, Sin_da0, Cos_da0, Sin_da1, Cos_da1, y,x, Pdert_):
 
 def rotate_P_(blob, verbose=False):  # rotate each P to align it with direction of P gradient
 
-    P_, der__t, mask__ = blob.P_, blob.der__t, blob.mask__; if verbose: i = 0
+    P_, der__t, mask__ = blob.P_, blob.der__t, blob.mask__; 
+    if verbose: i = 0
 
     for P in P_:
-        G = P.ptuple[5]; if verbose: i += 1
+        G = P.ptuple[5]
+        if verbose: i += 1
         daxis = P.ptuple[3][0] / G  # dy: deviation from horizontal axis
         _daxis, nrot = 0,0
 
         while abs(daxis) * G > ave_rotate and nrot < 10:  # recursive reform P in blob.der__t along new G angle:
-            nrot+=1; if verbose: print(f"\rRotating... {i}/{len(P_)}: {round(np.degrees(np.arctan2(*P.axis)))}°", end=" " * 79); sys.stdout.flush()
+            nrot+=1
+            if verbose: print(f"\rRotating... {i}/{len(P_)}: {round(np.degrees(np.arctan2(*P.axis)))}°", end=" " * 79); sys.stdout.flush()
 
             y0,yn,x0,xn = P.box; y= (y0+yn)//2; x= (x0+xn)//2  # rescan in the direction of ave_a, if any, P.daxis for future reval?
             rotate_P(P, der__t, mask__, ave_a=None, pivot=[y,x,None])  # not pivoting to dert G
@@ -131,15 +134,14 @@ def rotate_P_(blob, verbose=False):  # rotate each P to align it with direction 
                 rotate_P(P, der__t, mask__, ave_a=np.add(P.ptuple[3], P.axis), pivot=[y,x,None])  # not pivoting to dert G
                 break
         for _, y,x in P.dert_ext_:
-            if P not in blob.dert_roots__[int(y)][int(x)]:  # we need to add this? Else we may add a same P multiple times
-                blob.dert_roots__[int(y)][int(x)] += [P]  # final rotated P
+            blob.dert_roots__[int(y)][int(x)] += [P]  # final rotated P
 
     if verbose: print("\r", end=" " * 79); sys.stdout.flush(); print("\r", end="")
 
 def rotate_P(P, der__t, mask__, ave_a, pivot):
 
     ypivot, xpivot, dert = pivot
-    if dert:  # dert=None if rotating old P
+    if dert is not None:  # dert=None if rotating old P
         sin,cos = dert[3]/dert[9], dert[4]/dert[9]  # dy,dx / G
         P = CP()
     else:  # rotate arg P
@@ -149,7 +151,9 @@ def rotate_P(P, der__t, mask__, ave_a, pivot):
         # dx always >= 0, dy can be < 0
     new_axis = sin, cos
     dert_ext_ = [[P, ypivot, xpivot]]  # new P.dert_ext_, or not used in rotation?
-    rdert_ = [[par__[ypivot, xpivot] for par__ in der__t[1:]]]
+    # right now we use int to round down, so is there a better way to get a more accurate x and y pivot?
+    rdert_ = [[par__[int(ypivot)][int(xpivot)] for par__ in der__t[1:]]]
+
     # scan left:
     rx=ypivot - cos; ry=xpivot - sin
     while True:  # terminating condition is in form_rdert()
@@ -158,6 +162,7 @@ def rotate_P(P, der__t, mask__, ave_a, pivot):
         rdert_ = [rdert] + rdert_  # append left
         rx-=cos; ry-=sin  # next rx,ry
         dert_ext_.insert(0, [[[P],ry,rx]])  # append left external params: roots and coords per dert
+    x0=rx; yleft=ry
     # scan right:
     rx=xpivot+cos; ry=ypivot+sin  # center dert was included in scan left
     while True:
@@ -180,6 +185,7 @@ def rotate_P(P, der__t, mask__, ave_a, pivot):
     P.ptuple = [I, M, Ma, [Dy, Dx], [Sin_da0, Cos_da0, Sin_da1, Cos_da1], G, Ga, L]
     P.dert_ = dert_
     P.dert_ext_ = dert_ext_
+    P.box = [min(yleft, ry), max(yleft, ry), x0, rx]  # P may go up-right or down-right
     P.axis = new_axis
 
     return P
@@ -240,10 +246,10 @@ def form_link_(P, cP_, blob):  # trace adj Ps up and down by adj dert roots, fil
             try:  # if rim_x > 0 and rim_y > 0 and rim_x < len(blob.der__t[0]) and rim_y < len(blob.der__t):
                 if i in up_indices and (rim_y not in up_y_ and rim_x not in up_x_):
                     up_y_ += [rim_y]; up_x_ += [rim_x]
-                    up_rim_ += [[blob.der__t[rim_y][rim_x], blob.dert_roots__[rim_y][rim_x], rim_y,rim_x]]  # up-adjacent derts,roots
+                    up_rim_ += [[[der__[rim_y][rim_x] for der__ in blob.der__t], blob.dert_roots__[rim_y][rim_x], rim_y,rim_x]]  # up-adjacent derts,roots
                 elif i in down_indices and (rim_y not in down_y_ and rim_x not in down_x_):
                     down_y_ += [rim_y]; down_x_ += [rim_x]
-                    down_rim_ += [[blob.der__t[rim_y][rim_x], blob.dert_roots__[rim_y][rim_x], rim_y,rim_x]]  # down-adjacent derts,roots
+                    down_rim_ += [[[der__[rim_y][rim_x] for der__ in blob.der__t], blob.dert_roots__[rim_y][rim_x], rim_y,rim_x]]  # down-adjacent derts,roots
             except:
                 pass  # rim dert is outside the blob
     # scan rim roots up and down from current P, repeat with adj_Ps:
@@ -279,7 +285,7 @@ def scan_P_rim(P, blob, rim_, cP_, fup):  # scan rim roots up and down from curr
     for j, (y,x,dert) in enumerate(sorted(new_link_, key=lambda x:x[2][9], reverse=True)):  # sort by dert G
         if dert[9] > ave*(rdn+j):  # fork redundancy includes old links
             # form new P from central dert:
-            _daxis = 0
+            _P = None; _daxis = 0
             rot_val = ave_rotate+1
             while rot_val > ave_rotate:
                 # recursive form P in blob.der__t along new G angle, P.daxis for future reval?
@@ -290,20 +296,16 @@ def scan_P_rim(P, blob, rim_, cP_, fup):  # scan rim roots up and down from curr
                     _P = rotate_P(None, blob.der__t,blob.mask__, ave_a=np.add(P.ptuple[3],P.axis), pivot=[y,x,dert])  # rescan in ave_a
                     break
                 rot_val = abs(daxis) * P.ptuple[5]
-            for y,x,_ in P.dert_ext_:
+            for _,y,x in P.dert_ext_:
                 if P not in blob.dert_roots__[int(y)][int(x)]:
                     blob.dert_roots__[int(y)][int(x)] += [P]  # final rotated P
             
-            # i don't get where we get this _P? 
-            # new_link_ is added when roots (_Ps ) is empty, so why we have _P here?
-            # also the addition of P into _P.link_ here is causing _P in P.link_ in line 271 above
-
-            '''
-            if fup: P.link_ += [_P]  # represent uplinks only
-            else:  _P.link_ += [P]
-            blob.P_ += [_P]
-            form_link_(_P, cP_, blob)
-            '''
+            if _P is not None:
+                if fup: P.link_ += [_P]  # represent uplinks only
+                else:  _P.link_ += [P]
+                blob.P_ += [_P]
+                form_link_(_P, cP_, blob)
+            
         else:
             break  # the rest of new_link_ is weaker
 

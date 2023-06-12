@@ -39,19 +39,20 @@ def feedback(root, fd):  # append new der layers to root
 def sub_recursion(PP, fd):  # evaluate PP for rng+ and der+, add layers to select sub_PPs
 
     if fd:
-        [[nest(P) for P in P_] for P_ in PP.P__]  # add layers and forks?
-        P__ = comp_der(PP.P__)  # returns top-down
+        if not isinstance(PP.valT[0], list): nest(PP)  # PP created from 1st rng+ is not nested too
+        [nest(P) for P in PP.P_]  # add layers and forks?
+        P_ = comp_der(PP.P_)  # returns top-down
         PP.rdnT[fd][-1][-1][-1] += np.sum(PP.valT[fd][-1]) > np.sum(PP.valT[1 - fd][-1])
         base_rdn = PP.rdnT[fd][-1][-1][-1]  # link Rdn += PP rdn?
     else:
-        P__ = comp_rng(PP.P__, PP.rng + 1)
+        P_ = comp_rng(PP.P_, PP.rng + 1)
         PP.rdnT[fd] += PP.valT[fd] > PP.valT[1 - fd]
         base_rdn = PP.rdnT[fd]
 
-    cP__ = [[replace(P, roott=[None, None]) for P in P_] for P_ in P__]
-    PP.P__ = form_PP_t(cP__, base_rdn=base_rdn)  # P__ = sub_PPm_, sub_PPd_
+    cP_ = [replace(P, roott=[None, None]) for P in P_]
+    PP.P_ = form_PP_t(cP_, base_rdn=base_rdn)  # P__ = sub_PPm_, sub_PPd_
 
-    for fd, sub_PP_ in enumerate(PP.P__):
+    for fd, sub_PP_ in enumerate(PP.P_):
         if sub_PP_:  # der+ | rng+
             for sub_PP in sub_PP_: sub_PP.roott[fd] = PP
             sub_recursion_eval(PP, sub_PP_, fd=fd)
@@ -65,49 +66,45 @@ def sub_recursion(PP, fd):  # evaluate PP for rng+ and der+, add layers to selec
 
 # mderP * (ave_olp_L / olp_L)? or olp(_derP._P.L, derP.P.L)? gap: neg_olp, ave = olp-neg_olp?
 # __Ps: above PP.rng layers of _Ps:
-def comp_rng(iP__, rng):  # form new Ps and links in rng+ PP.P__, switch to rng+n to skip clustering?
+def comp_rng(iP_, rng):  # form new Ps and links in rng+ PP.P__, switch to rng+n to skip clustering?
 
-    P__ = []
-    for iP_ in reversed(iP__[:-rng]):  # lower compared row, follow uplinks, no uplinks in last rng rows
-        P_ = []
-        for P in iP_:
-            link_, link_m, link_d = [],[],[]  # for new P
-            derT,valT,rdnT = [[],[]],[0,0],[1,1]
-            for iderP in P.link_t[0]:  # mlinks
+    # with P_ instead of P__ and rotated Ps, how can get get specific rng's Ps for comparison? Through link distance?
+    P_ = []
+    for P in iP_:
+        link_, link_m, link_d = [],[],[]  # for new P
+        derT,valT,rdnT = [[],[]],[0,0],[1,1]
+        for iderP in P.link_t[0]:  # mlinks
+            _P = iderP._P
+            for _derP in _P.link_t[0]:  # next layer of mlinks
+                __P = _derP._P  # next layer of Ps
+                comp_P(P,__P, link_,link_m,link_d, derT,valT,rdnT, fd=0)
+        if np.sum(valT[0]) > P_aves[0] * np.sum(rdnT[0]):
+            # add new P in rng+ PP:
+            P_ += [CP(ptuple=deepcopy(P.ptuple), dert_=copy(P.dert_), box=copy(P.box),
+                      derT=derT, valT=valT, rdnT=rdnT, link_=link_, link_t=[link_m,link_d])]
+    
+    return P_
+
+def comp_der(iP_):  # form new Ps and links in rng+ PP.P__, extend their link.derT, P.derT, _P.derT
+
+    P_ = []
+    for P in iP_:
+        link_, link_m, link_d = [],[],[]  # for new P
+        derT,valT,rdnT = [[],[]],[[],[]],[[],[]]
+        # trace dlinks:
+        for iderP in P.link_t[1]:
+            if iderP._P.link_t[1]:  # else no _P links and derT to compare
                 _P = iderP._P
-                for _derP in _P.link_t[0]:  # next layer of mlinks
-                    __P = _derP._P  # next layer of Ps
-                    comp_P(P,__P, link_,link_m,link_d, derT,valT,rdnT, fd=0)
-            if np.sum(valT[0]) > P_aves[0] * np.sum(rdnT[0]):
-                # add new P in rng+ PP:
-                P_ += [CP(ptuple=deepcopy(P.ptuple), dert_=copy(P.dert_), box=copy(P.box),
-                          derT=derT, valT=valT, rdnT=rdnT, link_=link_, link_t=[link_m,link_d])]
-        P__+= [P_]
-    return P__
+                comp_P(_P,P, link_,link_m,link_d, derT,valT,rdnT, fd=1, derP=iderP)
+        if np.sum(valT[1]) > P_aves[1] * np.sum(rdnT[1]):
+            # add new P in der+ PP:
+            DerT = deepcopy(P.derT); ValT = deepcopy(P.valT); RdnT = deepcopy(P.rdnT)
+            for i in 0,1:
+                DerT[i]+=[derT[i]]; ValT[i]+=[valT[i]]; RdnT[i]+=[rdnT[i]]  # append layer
 
-def comp_der(iP__):  # form new Ps and links in rng+ PP.P__, extend their link.derT, P.derT, _P.derT
-
-    P__ = []
-    for iP_ in reversed(iP__[:-1]):  # lower compared row, follow uplinks, no uplinks in last row
-        P_ = []
-        for P in iP_:
-            link_, link_m, link_d = [],[],[]  # for new P
-            derT,valT,rdnT = [[],[]],[[],[]],[[],[]]
-            # trace dlinks:
-            for iderP in P.link_t[1]:
-                if iderP._P.link_t[1]:  # else no _P links and derT to compare
-                    _P = iderP._P
-                    comp_P(_P,P, link_,link_m,link_d, derT,valT,rdnT, fd=1, derP=iderP)
-            if np.sum(valT[1]) > P_aves[1] * np.sum(rdnT[1]):
-                # add new P in der+ PP:
-                DerT = deepcopy(P.derT); ValT = deepcopy(P.valT); RdnT = deepcopy(P.rdnT)
-                for i in 0,1:
-                    DerT[i]+=[derT[i]]; ValT[i]+=[valT[i]]; RdnT[i]+=[rdnT[i]]  # append layer
-
-                P_ += [CP(ptuple=deepcopy(P.ptuple), dert_=copy(P.dert_), box=copy(P.box),
-                          derT=DerT, valT=ValT, rdnT=RdnT, link_=link_, link_t=[link_m,link_d])]
-        P__+= [P_]
-    return P__
+            P_ += [CP(ptuple=deepcopy(P.ptuple), dert_=copy(P.dert_), box=copy(P.box),
+                      derT=DerT, valT=ValT, rdnT=RdnT, link_=link_, link_t=[link_m,link_d])]
+    return P_
 
 
 def nest(P, ddepth=3):  # default ddepth is nest 3 times: tuple->fork->layer->H
@@ -120,9 +117,10 @@ def nest(P, ddepth=3):  # default ddepth is nest 3 times: tuple->fork->layer->H
             P.derT[1]=[P.derT[1]]; P.valT[1]=[P.valT[1]]; P.rdnT[1]=[P.rdnT[1]]
             curr_depth += 1
 
-        for derP in P.link_t[1]:
-            curr_depth = 0
-            while curr_depth < ddepth:
-                derP.derT[0]=[derP.derT[0]]; derP.valT[0]=[derP.valT[0]]; derP.rdnT[0]=[derP.rdnT[0]]
-                derP.derT[1]=[derP.derT[1]]; derP.valT[1]=[derP.valT[1]]; derP.rdnT[1]=[derP.rdnT[1]]
-                curr_depth += 1
+        if isinstance(P, CP):
+            for derP in P.link_t[1]:
+                curr_depth = 0
+                while curr_depth < ddepth:
+                    derP.derT[0]=[derP.derT[0]]; derP.valT[0]=[derP.valT[0]]; derP.rdnT[0]=[derP.rdnT[0]]
+                    derP.derT[1]=[derP.derT[1]]; derP.valT[1]=[derP.valT[1]]; derP.rdnT[1]=[derP.rdnT[1]]
+                    curr_depth += 1
