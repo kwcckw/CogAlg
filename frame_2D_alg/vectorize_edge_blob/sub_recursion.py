@@ -10,7 +10,10 @@ def sub_recursion_eval(root, PP_, fd):  # fork PP_ in PP or blob, no derT,valT,r
 
     term = 1
     for PP in PP_:
-        if np.sum(PP.valT[fd][-1]) > PP_aves[fd] * np.sum(PP.rdnT[fd][-1]) and len(PP.P__) > ave_nsub:
+        if isinstance(PP.valT[0], list):  Val = np.sum(PP.valT[fd][-1]); Rdn = np.sum(PP.rdnT[fd][-1]) 
+        else:                             Val = PP.valT[fd]; Rdn = PP.rdnT[fd]
+            
+        if Val > PP_aves[fd] * Rdn and len(PP.P_) > ave_nsub:
             term = 0
             sub_recursion(PP, fd)  # comp_der|rng in PP -> parLayer, sub_PPs
         elif isinstance(root, CPP):
@@ -38,6 +41,7 @@ def feedback(root, fd):  # append new der layers to root
 
 def sub_recursion(PP, fd):  # evaluate PP for rng+ and der+, add layers to select sub_PPs
 
+    for P in PP.P_:  P.dert_ext_, P.roott =[], [None, None]  # reset them in new sub+
     if fd:
         if not isinstance(PP.valT[0], list): nest(PP)  # PP created from 1st rng+ is not nested too
         [nest(P) for P in PP.P_]  # add layers and forks?
@@ -68,19 +72,20 @@ def sub_recursion(PP, fd):  # evaluate PP for rng+ and der+, add layers to selec
 # __Ps: above PP.rng layers of _Ps:
 def comp_rng(iP_, rng):  # form new Ps and links in rng+ PP.P__, switch to rng+n to skip clustering?
 
-    # with P_ instead of P__ and rotated Ps, how can get get specific rng's Ps for comparison? Through link distance?
     P_ = []
     for P in iP_:
         link_, link_m, link_d = [],[],[]  # for new P
         derT,valT,rdnT = [[],[]],[0,0],[1,1]
         for iderP in P.link_t[0]:  # mlinks
-            _P = iderP._P
+            _P = iderP._P 
             for _derP in _P.link_t[0]:  # next layer of mlinks
                 __P = _derP._P  # next layer of Ps
-                comp_P(P,__P, link_,link_m,link_d, derT,valT,rdnT, fd=0)
+                distance = (((__P.x-P.x)**2) + ((__P.y-P.y)**2)) ** (1/2)  # distance between mid point
+                if distance >rng:
+                    comp_P(P,__P, link_,link_m,link_d, derT,valT,rdnT, fd=0)
         if np.sum(valT[0]) > P_aves[0] * np.sum(rdnT[0]):
             # add new P in rng+ PP:
-            P_ += [CP(ptuple=deepcopy(P.ptuple), dert_=copy(P.dert_), box=copy(P.box),
+            P_ += [CP(ptuple=deepcopy(P.ptuple), dert_=copy(P.dert_),
                       derT=derT, valT=valT, rdnT=rdnT, link_=link_, link_t=[link_m,link_d])]
     
     return P_

@@ -112,10 +112,13 @@ def term_P(I, M, Ma, Dy, Dx, Sin_da0, Cos_da0, Sin_da1, Cos_da1, y,x, Pdert_):
 
 def rotate_P_(blob, verbose=False):  # rotate each P to align it with direction of P gradient
 
-    P_, der__t, mask__ = blob.P_, blob.der__t, blob.mask__; if verbose: i = 0
+    P_, der__t, mask__ = blob.P_, blob.der__t, blob.mask__
+    Y, X = mask__.shape[:2]
+    if verbose: i = 0
 
     for P in P_:
-        G = P.ptuple[5]; if verbose: i += 1
+        G = P.ptuple[5]
+        if verbose: i += 1
         daxis = P.ptuple[3][0] / G  # dy: deviation from horizontal axis
         _daxis = 0
 
@@ -129,14 +132,21 @@ def rotate_P_(blob, verbose=False):  # rotate each P to align it with direction 
             if ddaxis * P.ptuple[5] < ave_rotate:  # terminate if oscillation
                 rotate_P(P, der__t, mask__, ave_a=np.add(P.ptuple[3], P.axis), pivot=[P.y,P.x,None])  # not pivoting to dert G
                 break
-        for _,y,x in P.dert_ext_:
-            blob.dert_roots__[int(y)][int(x)] += [P]  # final rotated P, use nearest cell instead of int?
+            
+        for (_, y,x) in P.dert_ext_:
+            # suggested from Khanh, use round:
+            if (round(y)>=0 and round(y)<Y) and (round(x)>=0 and round(x)<X):
+                blob.dert_roots__[round(y)][round(x)] += [P]  # final rotated P, use nearest cell instead of int?
 
     if verbose: print("\r", end=" " * 79); sys.stdout.flush(); print("\r", end="")
 
 def rotate_P(P, der__t, mask__, ave_a, pivot):
 
     ypivot, xpivot, dert = pivot
+    x1 = int(np.floor(xpivot)); x2 = int(np.ceil(xpivot))
+    y1 = int(np.floor(ypivot)); y2 = int(np.ceil(ypivot))
+    Y, X = mask__.shape
+    
     if dert:  # rotate to dert G angle
         sin,cos = dert[3]/dert[9], dert[4]/dert[9]  # dy,dx / G
         P = CP()
@@ -146,9 +156,20 @@ def rotate_P(P, der__t, mask__, ave_a, pivot):
         if cos < 0: sin,cos = -sin,-cos
         # dx always >= 0, dy can be < 0
     new_axis = sin, cos
-    dert_ext_ = [[P, ypivot, xpivot]]  # not used in rotation?
-    # right now we use int to round down, so is there a better way to get a more accurate x and y pivot?
-    rdert_ = [[par__[int(ypivot)][int(xpivot)] for par__ in der__t[1:]]]
+    dert_ext_ = [[[P], ypivot, xpivot]]  # not used in rotation?
+ 
+    # below can be simplified with zip, but it will be clearer in current way
+    rdert_ = []
+    for par__ in der__t[1:]:
+       if (x1 >= 0 or x1 < X) and  (y1 >= 0 or y1 < Y): 
+           rdert_ += [[par__[y1][x1] for par__ in der__t[1:]]]
+       if (x1 >= 0 or x1 < X) and  (y2 >= 0 or y2 < Y): 
+           rdert_ += [[par__[y2][x1] for par__ in der__t[1:]]]
+       if (x2 >= 0 or x2 < X) and  (y1 >= 0 or y1 < Y): 
+           rdert_ += [[par__[y1][x2] for par__ in der__t[1:]]]
+       if (x2 >= 0 or x2 < X) and  (y2 >= 0 or y2 < Y): 
+           rdert_ += [[par__[y2][x2] for par__ in der__t[1:]]]
+    
     # scan left:
     rx=ypivot-cos; ry=xpivot-sin
     while True:  # terminating condition is in form_rdert()
@@ -156,7 +177,7 @@ def rotate_P(P, der__t, mask__, ave_a, pivot):
         if rdert is None: break  # dert is not in blob: masked or out of bound
         rdert_ = [rdert] + rdert_  # append left
         rx-=cos; ry-=sin  # next rx,ry
-        dert_ext_.insert(0, [[[P],ry,rx]])  # append left external params: roots and coords per dert
+        dert_ext_.insert(0, [[P],ry,rx])  # append left external params: roots and coords per dert
     x0=rx; yleft=ry
     # scan right:
     rx=xpivot+cos; ry=ypivot+sin  # center dert was included in scan left
