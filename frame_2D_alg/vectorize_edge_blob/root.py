@@ -112,7 +112,8 @@ def term_P(I, M, Ma, Dy, Dx, Sin_da0, Cos_da0, Sin_da1, Cos_da1, y,x, Pdert_):
 
 def rotate_P_(blob, verbose=False):  # rotate each P to align it with direction of P gradient
 
-    P_, der__t, mask__ = blob.P_, blob.der__t, blob.mask__; if verbose: i = 0
+    P_, der__t, mask__ = blob.P_, blob.der__t, blob.mask__
+    if verbose: i = 0
 
     for P in P_:
         G = P.ptuple[5]
@@ -130,7 +131,11 @@ def rotate_P_(blob, verbose=False):  # rotate each P to align it with direction 
                 rotate_P(P, der__t, mask__, ave_a=np.add(P.ptuple[3], P.axis), pivot=[P.y,P.x,None])  # not pivoting to dert G
                 break
         for _,y,x in P.dert_ext_:
-            blob.dert_roots__[int(y)][int(x)] += [P]  # final rotated P, use nearest cell instead of int?
+            try:
+                if P not in blob.dert_roots__[round(y)][round(x)]:
+                    blob.dert_roots__[round(y)][round(x)] += [P]  # final rotated P, use nearest cell instead of int?
+            except:
+                pass
 
     if verbose: print("\r", end=" " * 79); sys.stdout.flush(); print("\r", end="")
 
@@ -147,8 +152,8 @@ def rotate_P(P, der__t, mask__, ave_a, pivot):
         # dx always >= 0, dy can be < 0
     new_axis = sin, cos
     rdert_, dert_ext_ = [],[]
-    # scan left, inclide pivot y,x:
-    rx=y; ry=x
+    # scan left, include pivot y,x:
+    rx=x; ry=y  # typo?
     while True:  # terminating condition is in form_rdert()
         rdert = form_rdert(rx,ry, der__t, mask__)
         if rdert is None: break  # dert is not in blob: masked or out of bound
@@ -165,28 +170,29 @@ def rotate_P(P, der__t, mask__, ave_a, pivot):
         rx+=cos; ry+=sin  # next rx,ry
         dert_ext_ += [[[P],ry,rx]]
     # form rP:
-    rdert = rdert_[0]  # initialization:
-    G, Ga, I, Dy, Dx, Sin_da0, Cos_da0, Sin_da1, Cos_da1 = rdert; M=ave_g-G; Ma=ave_ga-Ga; dert_=[rdert]
-    # accumulation:
-    for rdert in rdert_[1:]:
-        g, ga, i, dy, dx, sin_da0, cos_da0, sin_da1, cos_da1 = rdert
-        I+=i; M+=ave_g-g; Ma+=ave_ga-ga; Dy+=dy; Dx+=dx; Sin_da0+=sin_da0; Cos_da0+=cos_da0; Sin_da1+=sin_da1; Cos_da1+=cos_da1
-        dert_ += [rdert]
-    # re-form gradients:
-    G = np.hypot(Dy,Dx);  Ga = (Cos_da0 + 1) + (Cos_da1 + 1); L = len(rdert_)
-    # do we need this prior P?
-    P.ptuple = [I, M, Ma, [Dy, Dx], [Sin_da0, Cos_da0, Sin_da1, Cos_da1], G, Ga, L]
-    P.dert_ = dert_
-    P.dert_ext_ = dert_ext_
-    P.y = yleft + ry*(L//2); P.x = x0 + rx*(L//2)  # central coords, P may go up-right or down-right
-    P.axis = new_axis
+    if rdert_:  # we need to check for non empty rdert_? I'm getting None rdert here
+        rdert = rdert_[0]  # initialization:
+        G, Ga, I, Dy, Dx, Sin_da0, Cos_da0, Sin_da1, Cos_da1 = rdert; M=ave_g-G; Ma=ave_ga-Ga; dert_=[rdert]
+        # accumulation:
+        for rdert in rdert_[1:]:
+            g, ga, i, dy, dx, sin_da0, cos_da0, sin_da1, cos_da1 = rdert
+            I+=i; M+=ave_g-g; Ma+=ave_ga-ga; Dy+=dy; Dx+=dx; Sin_da0+=sin_da0; Cos_da0+=cos_da0; Sin_da1+=sin_da1; Cos_da1+=cos_da1
+            dert_ += [rdert]
+        # re-form gradients:
+        G = np.hypot(Dy,Dx);  Ga = (Cos_da0 + 1) + (Cos_da1 + 1); L = len(rdert_)
+        # do we need this prior P?
+        P.ptuple = [I, M, Ma, [Dy, Dx], [Sin_da0, Cos_da0, Sin_da1, Cos_da1], G, Ga, L]
+        P.dert_ = dert_
+        P.dert_ext_ = dert_ext_
+        P.y = yleft + ry*(L//2); P.x = x0 + rx*(L//2)  # central coords, P may go up-right or down-right
+        P.axis = new_axis
 
     return P
 
 def form_rdert(rx,ry, der__t, mask__):
 
     # coord, distance of four int-coord derts, overlaid by float-coord rdert in der__t, int for indexing
-    # always in der__t for intermediate float rx,ry:
+    # always in der__t for intermediate float rx,ry: (i'm facing issue where x and y out of der__t, but with rotation it is expected to out of der__t?)
     x0 = int(np.floor(rx)); dx0 = abs(rx - x0)
     x1 = int(np.ceil(rx));  dx1 = abs(rx - x1)
     y0 = int(np.floor(ry)); dy0 = abs(ry - y0)
