@@ -39,27 +39,26 @@ def form_PP_t(P_, base_rdn):  # form PPs of derP.valt[fd] + connected Ps'val
         qPP_ = []  # initial sequence-PPs
         for P in copy(P_):
             if not P.roott[fd]:  # else already packed in qPP
-                valt = [0,0]; qPP = [[P], valt, ave+1]  # init PP is 2D queue of Ps, + valt of all layers?
-                P.roott[fd]=qPP; 
+                qPP = [[[P]]]  # init PP is 2D queue of Ps, + valt of all layers?
+                P.roott[fd]=qPP; valt = [0,0]
                 uplink_ = P.link_t[fd]; uuplink_ = []
                 # next-line links for recursive search
                 while uplink_:
                     for derP in uplink_:
                         _P = derP._P; _qPP = _P.roott[fd]
-                        if _qPP is not qPP:
-                            if _qPP:  # merge _qPP in qPP:
-                                for i in 0, 1: valt[i] += _qPP[1][i]
-                                for qP in _qPP[0]:
-                                    qP.roott[fd] = qPP; qPP[0] += [qP]  # append qP_
-                                qPP_.remove(_qPP)
-                            else:
-                                qPP[0].insert(0,_P)  # pack top down
-                                _P.roott[fd] = qPP
-                                for i in 0,1: valt[i] += np.sum(derP.valT[i])
-                                uuplink_ += derP._P.link_t[fd]
+                        if _qPP:  # merge _qPP in qPP:
+                            for i in 0, 1: valt[i] += _qPP[1][i]
+                            for qP in _qPP.P_:
+                                qP.roott[fd] = qPP; qPP[0] += [qP]  # append qP_
+                            qPP_.remove(_qPP)
+                        else:
+                            qPP[0].insert(0,_P)  # pack top down
+                            _P.root[fd] = qPP
+                            for i in 0,1: valt[i] += np.sum(derP.valT[i])
+                            uuplink_ += derP._P.link_t[fd]
                     uplink_ = uuplink_
                     uuplink_ = []
-                qPP_ += [qPP]  # ini reval=ave+1
+                qPP_ += [qPP + [valt,ave+1]]  # ini reval=ave+1
         # prune qPPs by med links val:
         rePP_= reval_PP_(qPP_, fd)  # PP = [qPP,valt,reval]
         CPP_ = [sum2PP(qPP, base_rdn, fd) for qPP in rePP_]
@@ -132,7 +131,7 @@ def sum2PP(qPP, base_rdn, fd):  # sum Ps and links into PP
         if i:  # exclude init P
             sum_ptuple(Ptuple, P.ptuple)
             Link_+=P.link_; Link_m+=P.link_t[0]; Link_d+=P.link_t[1]
-            L=P.ptuple[7]; Dy = P.axis[0]*L/2; Dx = P.axis[1]*L/2; y=P.y; x=P.x
+            L=P.ptuple[7]; Dy=P.axis[0]*L/2; Dx=P.axis[1]*L/2; y=P.y; x=P.x
             Y0=min(Y0,(y-Dy)); Yn=max(Yn,(y+Dy)); X0=min(X0,(x-Dx)); Xn=max(Xn,(x-Dx))
             if P.derT[0]:
                 for j in 0,1:
@@ -142,7 +141,7 @@ def sum2PP(qPP, base_rdn, fd):  # sum Ps and links into PP
                         sum_ptuple(DerT[j], P.derT[j]); ValT[j]+=P.valT[j]; RdnT[j]+=P.rdnT[j]
 
     PP.ptuple, PP.derT, PP.valT, PP.rdnT, PP.box, PP.link_, PP.link_t \
-    = Ptuple, DerT, ValT, RdnT, (int(Y0),int(Yn),int(X0),int(Xn)), Link_, (Link_m,Link_d)  # use int to convert float into int? Else we will need to use int(round(float))
+    = Ptuple, DerT, ValT, RdnT, (Y0,Yn,X0,Xn), Link_, (Link_m,Link_d)
     return PP
 
 
@@ -192,8 +191,7 @@ def comp_P(_P,P, link_,link_m,link_d, LayT,ValT,RdnT, fd=0, derP=None):  #  derP
         mtuple,dtuple = comp_ptuple(_P.ptuple, P.ptuple, rn)
         mval = sum(mtuple); dval = sum(dtuple)
         mrdn = 1+(dval>mval); drdn = 1+(1-(dval>mval))  # or greyscale rdn = Dval/Mval?
-        derP = CderP(derT=[mtuple,dtuple],valT=[mval,dval],rdnT=[mrdn,drdn], P=P,_P=_P, # or box of means?
-                     L=len(_P.dert_))
+        derP = CderP(derT=[mtuple,dtuple],valT=[mval,dval],rdnT=[mrdn,drdn], P=P,_P=_P, L=len(_P.dert_))
     link_ += [derP]  # all links
     if mval > aveP*mrdn:
         link_m+=[derP]  # +ve links, fork selection in form_PP_t

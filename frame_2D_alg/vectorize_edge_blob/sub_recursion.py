@@ -10,9 +10,9 @@ def sub_recursion_eval(root, PP_, fd):  # fork PP_ in PP or blob, no derT,valT,r
 
     term = 1
     for PP in PP_:
-        if isinstance(PP.valT[0], list):  Val = np.sum(PP.valT[fd][-1]); Rdn = np.sum(PP.rdnT[fd][-1]) 
+        if isinstance(PP.valT[0], list):  Val = np.sum(PP.valT[fd][-1]); Rdn = np.sum(PP.rdnT[fd][-1])
         else:                             Val = PP.valT[fd]; Rdn = PP.rdnT[fd]
-            
+
         if Val > PP_aves[fd] * Rdn and len(PP.P_) > ave_nsub:
             term = 0
             sub_recursion(PP, fd)  # comp_der|rng in PP -> parLayer, sub_PPs
@@ -77,7 +77,7 @@ def comp_rng(iP_, rng):  # form new Ps and links in rng+ PP.P__, switch to rng+n
         link_, link_m, link_d = [],[],[]  # for new P
         derT,valT,rdnT = [[],[]],[0,0],[1,1]
         for iderP in P.link_t[0]:  # mlinks
-            _P = iderP._P 
+            _P = iderP._P
             for _derP in _P.link_t[0]:  # next layer of mlinks
                 __P = _derP._P  # next layer of Ps
                 distance = (((__P.x-P.x)**2) + ((__P.y-P.y)**2)) ** (1/2)  # distance between mid point
@@ -87,7 +87,7 @@ def comp_rng(iP_, rng):  # form new Ps and links in rng+ PP.P__, switch to rng+n
             # add new P in rng+ PP:
             P_ += [CP(ptuple=deepcopy(P.ptuple), dert_=copy(P.dert_),
                       derT=derT, valT=valT, rdnT=rdnT, link_=link_, link_t=[link_m,link_d])]
-    
+
     return P_
 
 def comp_der(iP_):  # form new Ps and links in rng+ PP.P__, extend their link.derT, P.derT, _P.derT
