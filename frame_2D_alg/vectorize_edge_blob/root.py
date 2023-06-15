@@ -112,16 +112,18 @@ def term_P(I, M, Ma, Dy, Dx, Sin_da0, Cos_da0, Sin_da1, Cos_da1, y,x, Pdert_):
 
 def rotate_P_(blob, verbose=False):  # rotate each P to align it with direction of P gradient
 
-    iP_, der__t, mask__ = blob.P_, blob.der__t, blob.mask__; if verbose: i = 0
+    iP_, der__t, mask__ = copy(blob.P_), blob.der__t, blob.mask__
+    if verbose: i = 0
     P_ = []
-    for P in iP_.pop:
+
+    while iP_:
+        P = iP_.pop(0)
         G = P.ptuple[5]
         daxis = P.ptuple[3][0] / G  # dy: deviation from horizontal axis
         _daxis = 0
         if verbose: i += 1
         while abs(daxis) * G > ave_rotate:  # recursive reform P in blob.der__t along new G angle:
             if verbose: print(f"\rRotating... {i}/{len(P_)}: {round(np.degrees(np.arctan2(*P.axis)))}°", end=" " * 79); sys.stdout.flush()
-
             P = rotate_P(der__t, mask__, ave_a=None, pivot=[P.y,P.x,None])  # not pivoting to dert G
             maxis, daxis = comp_angle(P.ptuple[3], P.axis)
             ddaxis = daxis +_daxis  # cancel-out if opposite-sign
@@ -152,8 +154,10 @@ def rotate_P(der__t, mask__, ave_a, pivot):
     if dert and not ave_a:  # rotate to central dert G angle
         sin,cos = dert[3]/dert[9], dert[4]/dert[9]  # dy,dx / G
     else:  # rotate P to
-        if ave_a is None: sin,cos = np.divide(P.ptuple[3], P.ptuple[5])
-        else:             sin,cos = np.divide(ave_a, np.hypot(*ave_a))
+        if ave_a is None:  # if we init P above, their dy, dx and G is empty , so sin and cos should have some default value?
+            sin,cos = np.divide(P.ptuple[3], P.ptuple[5])  
+        else:             
+            sin,cos = np.divide(ave_a, np.hypot(*ave_a))
         if cos < 0: sin,cos = -sin,-cos
         # dx always >= 0, dy can be < 0
     new_axis = sin, cos
@@ -188,6 +192,7 @@ def rotate_P(der__t, mask__, ave_a, pivot):
     P.ptuple = [I, M, Ma, [Dy, Dx], [Sin_da0, Cos_da0, Sin_da1, Cos_da1], G, Ga, L]
     P.dert_ = dert_
     P.dert_ext_ = dert_ext_
+    # if ave_a is None, getting a large number of P.x here (around 2000) when sin and cos is init with 0, 1
     P.y = yleft + ry*(L//2); P.x = x0 + rx*(L//2)  # central coords, P may go up-right or down-right
     P.axis = new_axis
 
@@ -195,30 +200,43 @@ def rotate_P(der__t, mask__, ave_a, pivot):
 
 def form_rdert(rx,ry, der__t, mask__):
 
+    Y, X = mask__.shape
+
     # coord, distance of four int-coord derts, overlaid by float-coord rdert in der__t, int for indexing
     x0 = int(np.floor(rx)); dx0 = abs(rx - x0)
     x1 = int(np.ceil(rx));  dx1 = abs(rx - x1)
     y0 = int(np.floor(ry)); dy0 = abs(ry - y0)
     y1 = int(np.ceil(ry));  dy1 = abs(ry - y1)
 
-    if not mask__[y0][x0] or not mask__[y1][x0] or not mask__[y0][x1] or not mask__[y1][x1]:
+    valid_x0 = x0 >= 0 and x0 < X
+    valid_y0 = y0 >= 0 and y0 < Y
+    valid_x1 = x1 >= 0 and x1 < X
+    valid_y1 = y1 >= 0 and y1 < Y
+
+    valid_points, valid_k_ = [], []
+    if valid_x0 and valid_y0:
+        valid_points += [[x0, y0]]; valid_k_ += [2 - dx0*dx0 - dy0*dy0]
+    if valid_x0 and valid_y1:
+        valid_points += [[x0, y1]]; valid_k_ += [2 - dx0*dx0 - dy1*dy1]
+    if valid_x1 and valid_y0:
+        valid_points += [[x1, y0]]; valid_k_ += [2 - dx1*dx1 - dy0*dy0]
+    if valid_x1 and valid_y1:
+        valid_points += [[x1, y1]]; valid_k_ += [2 - dx1*dx1 - dy1*dy1]  
+
+    if valid_points:
         # scale all dert params in proportion to inverted distance from rdert, sum(distances) = 1
         # approximation, square of rpixel is rotated, won't fully match not-rotated derts
-        k0 = 2 - dx0*dx0 - dy0*dy0
-        k1 = 2 - dx0*dx0 - dy1*dy1
-        k2 = 2 - dx1*dx1 - dy0*dy0
-        k3 = 2 - dx1*dx1 - dy1*dy1
-        K = k0 + k1 + k2 + k3
-        ptuple = tuple(
-            (
-                par__[y0, x0] * k0 +
-                par__[y1, x0] * k1 +
-                par__[y0, x1] * k2 +
-                par__[y1, x1] * k3
-            ) / K
-            for par__ in der__t[1:])    # exclude i
-        return ptuple
 
+        K = sum(valid_k_)
+        ptuple = []
+        for par__ in der__t[1:]:  # exclude i
+            pvalue = 0
+            for ((x,y),(k)) in zip(valid_points, valid_k_):
+                pvalue += par__[y,x] * k
+            ptuple += [pvalue/K]
+                
+        ptuple = tuple(ptuple)
+        return ptuple
     else: return None
 
 # draft
