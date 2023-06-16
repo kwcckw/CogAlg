@@ -11,6 +11,7 @@ from .comp_slice import comp_slice, comp_angle
 from .agg_convert import agg_recursion_eval
 from .sub_recursion import sub_recursion_eval
 from class_cluster import ClusterStructure, init_param as z
+from copy import copy
 
 '''
 Vectorize is a terminal fork of intra_blob.
@@ -111,7 +112,7 @@ def term_P(I, M, Ma, Dy, Dx, Sin_da0, Cos_da0, Sin_da1, Cos_da1, y,x, Pdert_):
 
 def xmask__(mask__):
     # pad blob.mask__ with rim of 1s:
-    return [[mask_+[1] for mask_ in mask__]] + [1 for mask in mask__[0]]
+    return np.pad(mask__,  pad_width=[(1, 1), (1, 1)], mode='constant',constant_values=True)  # actually we can use this for padding
 
 def rotate_P_(blob, verbose=False):  # rotate each P to align it with direction of P gradient
 
@@ -127,8 +128,8 @@ def rotate_P_(blob, verbose=False):  # rotate each P to align it with direction 
             if verbose: print(f"\rRotating... {i}/{len(P_)}: {round(np.degrees(np.arctan2(*P.axis)))}°", end=" " * 79); sys.stdout.flush()
             _axis = P.axis
             cdert = P.dert_[int(P.ptuple[-1]/2)] # L/2
-            g=cdert[9]; sin=cdert[3]/g; cos=cdert[4]/g
-
+            g=cdert[1]; sin=cdert[4]/g; cos=cdert[5]/g  # dert should be : i, g, ga, ri, dy, dx, day0, dax0, day1, dax1
+            # need to verify the value of sin and cos here, getting sin with value < -1 here, probably index of g , dy, dx above is wrong
             P = form_P(der__t, mask__, axis=(sin,cos), pivot=[P.y,P.x,cdert])  # pivot to dert G angle
             maxis, daxis = comp_angle(_axis, P.axis)
             ddaxis = daxis +_daxis  # cancel-out if opposite-sign
@@ -140,10 +141,10 @@ def rotate_P_(blob, verbose=False):  # rotate each P to align it with direction 
         for _,y,x in P.dert_ext_:
             x0 = int(np.floor(x)); x1 = int(np.ceil(x)); y0 = int(np.floor(y)); y1 = int(np.ceil(y))
             kernel = []
-            if not mask__[y0][x0]: kernel += [[[y0,x0], np.hypot((y-y0),(x-x0))]]
-            if not mask__[y0][x1]: kernel += [[[y0,x1], np.hypot((y-y0),(x-x1))]]
-            if not mask__[y1][x0]: kernel += [[[y1,x0], np.hypot((y-y1),(x-x0))]]
-            if not mask__[y1][x1]: kernel += [[[y1,x1], np.hypot((y-y1),(x-x1))]]
+            if not mask__[y0+1][x0+1]: kernel += [[[y0,x0], np.hypot((y-y0),(x-x0))]]
+            if not mask__[y0+1][x1+1]: kernel += [[[y0,x1], np.hypot((y-y0),(x-x1))]]
+            if not mask__[y1+1][x0+1]: kernel += [[[y1,x0], np.hypot((y-y1),(x-x0))]]
+            if not mask__[y1+1][x1+1]: kernel += [[[y1,x1], np.hypot((y-y1),(x-x1))]]
 
             y,x = sorted(kernel, key=lambda x:x[1], reverse=True)[0][0]  # nearest unmasked cell
             blob.dert_roots__[y][x] += [P]  # final rotated P
@@ -158,7 +159,8 @@ def form_P(der__t, mask__, axis, pivot):
     y,x,dert = pivot
     P = CP()
     rdert_, dert_ext_ = [],[]
-    rdert_,dert_ext_, ry,rx = scan_dir(P, rdert_,dert_ext_, y,x, axis, der__t,mask__, fleft=1)  # scan left, include pivot
+    # there's a typo here and causing out of boundary problem
+    rdert_,dert_ext_, ry,rx = scan_dir(P, rdert_,dert_ext_, x,y, axis, der__t,mask__, fleft=1)  # scan left, include pivot
     x0=rx; yleft=ry
     rdert_,dert_ext_, ry,rx = scan_dir(P, rdert_,dert_ext_, rx,ry, axis, der__t,mask__, fleft=0)  # scan right:
     # initialization:
@@ -180,26 +182,29 @@ def form_P(der__t, mask__, axis, pivot):
     return P
 
 def scan_dir(P, rdert_,dert_ext_, x,y, axis, der__t,mask__, fleft):
-
     sin,cos = axis  # do we still need this: if cos < 0: sin,cos = -sin,-cos # dx always >= 0, dy can be < 0?
     while True:
         # coord, distance of four int-coord derts, overlaid by float-coord rdert in der__t, int for indexing
         x0 = int(np.floor(x)); x1 = int(np.ceil(x)); y0 = int(np.floor(y)); y1 = int(np.ceil(y))
         kernel = []
-        if not mask__[y0][x0]: kernel += [[[y0,x0], np.hypot((y-y0),(x-x0))]]
-        if not mask__[y0][x1]: kernel += [[[y0,x1], np.hypot((y-y0),(x-x1))]]
-        if not mask__[y1][x0]: kernel += [[[y1,x0], np.hypot((y-y1),(x-x0))]]
-        if not mask__[y1][x1]: kernel += [[[y1,x1], np.hypot((y-y1),(x-x1))]]
+        # after the padding, we need +1? Because we added new row and column from top and left too
+        if not mask__[y0+1][x0+1]: kernel += [[[y0,x0], np.hypot((y-y0),(x-x0))]]
+        if not mask__[y0+1][x0+1]: kernel += [[[y0,x1], np.hypot((y-y0),(x-x1))]]
+        if not mask__[y1+1][x0+1]: kernel += [[[y1,x0], np.hypot((y-y1),(x-x0))]]
+        if not mask__[y1+1][x1+1]: kernel += [[[y1,x1], np.hypot((y-y1),(x-x1))]]
         K = 0
         ptuples = []  # in partially masked kernel
         # scale params in proportion to inverted distance from y,x; approximation, square of rpixel is rotated, won't fully match init derts:
         for [ky,kx], dist in kernel:  # kernel excludes masked derts
             K += 2 - dist
-            ptuples += [[par__[ky,kx] * dist] for par__ in der__t[1:]]  # exclude i
-        Ptuple = ptuples[0]
-        for ptuple in ptuples[1:]:
-            Ptuple = [Par+par for Par,par in zip(Ptuple,ptuple)]
-        ptuple = [Par/K for Par in Ptuple]
+            ptuple = [par__[ky,kx] * dist for par__ in der__t[1:]]  # exclude i
+            ptuples += [ptuple]  # prevent them become flat, so that we can retrieve each 9 params from each quadrant
+
+        ptuple = ptuples[0]  # init with 1st quadrant
+        for _ptuple in ptuples[1:]:  # loop the rest of quadrant in 2x2 kernel
+            for i,par in enumerate(_ptuple): ptuple[i] += par  # param wise summing
+        ptuple = [Par/K for Par in ptuple]  # normalize with K
+        
         if fleft:
             y -= sin; x -= cos  # next x,ry
             rdert_.insert(0, ptuple)  # append left
