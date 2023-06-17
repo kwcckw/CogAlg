@@ -110,13 +110,12 @@ def term_P(I, M, Ma, Dy, Dx, Sin_da0, Cos_da0, Sin_da1, Cos_da1, y,x, Pdert_):
     L = len(Pdert_)  # params.valt = [params.M+params.Ma, params.G+params.Ga]?
     return CP(ptuple=[I, M, Ma, [Dy, Dx], [Sin_da0, Cos_da0, Sin_da1, Cos_da1], G, Ga, L], dert_=Pdert_, y=y, x=x-L/2)
 
-def xmask__(mask__):
-    # pad blob.mask__ with rim of 1s:
-    return np.pad(mask__,  pad_width=[(1, 1), (1, 1)], mode='constant',constant_values=True)  # actually we can use this for padding
+def pad1(mask__):  # pad blob.mask__ with rim of 1s:
+    return np.pad(mask__,pad_width=[(1,1),(1,1)], mode='constant',constant_values=True)  
 
-def rotate_P_(blob, verbose=False):  # rotate each P to align it with direction of P gradient
+def rotate_P_(blob, verbose=False):  # rotate each P to align it with direction of P or dert gradient
 
-    iP_ = copy(blob.P_); der__t = blob.der__t; mask__= xmask__(blob.mask__)
+    iP_ = copy(blob.P_); der__t = blob.der__t; mask__= pad1(blob.mask__)
     if verbose: i = 0
     P_ = []
     for P in iP_:
@@ -127,16 +126,13 @@ def rotate_P_(blob, verbose=False):  # rotate each P to align it with direction 
         while abs(daxis) * G > ave_rotate:  # recursive reform P in blob.der__t along new G angle:
             if verbose: print(f"\rRotating... {i}/{len(P_)}: {round(np.degrees(np.arctan2(*P.axis)))}°", end=" " * 79); sys.stdout.flush()
             _axis = P.axis
-            cdert = P.dert_[int(P.ptuple[-1]/2)] # L/2
-            g=cdert[1]; sin=cdert[4]/g; cos=cdert[5]/g  # dert should be : i, g, ga, ri, dy, dx, day0, dax0, day1, dax1
-            # need to verify the value of sin and cos here, getting sin with value < -1 here, probably index of g , dy, dx above is wrong
-            P = form_P(der__t, mask__, axis=(sin,cos), pivot=[P.y,P.x,cdert])  # pivot to dert G angle
+            P = form_P(der__t, mask__, axis=(P.ptuple[3]/G, P.ptuple[4]/G), y=P.y, x=P.x)  # pivot to P angle
             maxis, daxis = comp_angle(_axis, P.axis)
             ddaxis = daxis +_daxis  # cancel-out if opposite-sign
             _daxis = daxis
             G = P.ptuple[5]  # rescan in the direction of ave_a, P.daxis if future reval:
             if ddaxis * G < ave_rotate:  # terminate if oscillation
-                P = form_P(der__t, mask__, axis=np.add(_axis, P.axis), pivot=[P.y,P.x,None])  # not pivoting to dert G
+                P = form_P(der__t, mask__, axis=np.add(_axis, P.axis), y=P.y, x=P.x)  # not pivoting to dert G
                 break
         for _,y,x in P.dert_ext_:
             x0 = int(np.floor(x)); x1 = int(np.ceil(x)); y0 = int(np.floor(y)); y1 = int(np.ceil(y))
@@ -154,15 +150,13 @@ def rotate_P_(blob, verbose=False):  # rotate each P to align it with direction 
 
     if verbose: print("\r", end=" " * 79); sys.stdout.flush(); print("\r", end="")
 
-def form_P(der__t, mask__, axis, pivot):
+def form_P(der__t, mask__, axis, y,x):
 
-    y,x,dert = pivot
+    rdert_,dert_ext_ = [],[]
     P = CP()
-    rdert_, dert_ext_ = [],[]
-    # there's a typo here and causing out of boundary problem
-    rdert_,dert_ext_, ry,rx = scan_dir(P, rdert_,dert_ext_, x,y, axis, der__t,mask__, fleft=1)  # scan left, include pivot
+    rdert_,dert_ext_, ry,rx = scan_direction(P, rdert_,dert_ext_, y,x, axis, der__t,mask__, fleft=1)  # scan left, include pivot
     x0=rx; yleft=ry
-    rdert_,dert_ext_, ry,rx = scan_dir(P, rdert_,dert_ext_, rx,ry, axis, der__t,mask__, fleft=0)  # scan right:
+    rdert_,dert_ext_, ry,rx = scan_direction(P, rdert_,dert_ext_, ry,rx, axis, der__t,mask__, fleft=0)  # scan right:
     # initialization:
     rdert = rdert_[0]
     G, Ga, I, Dy, Dx, Sin_da0, Cos_da0, Sin_da1, Cos_da1 = rdert; M=ave_g-G; Ma=ave_ga-Ga; dert_=[rdert]
@@ -181,36 +175,37 @@ def form_P(der__t, mask__, axis, pivot):
 
     return P
 
-def scan_dir(P, rdert_,dert_ext_, x,y, axis, der__t,mask__, fleft):
-    sin,cos = axis  # do we still need this: if cos < 0: sin,cos = -sin,-cos # dx always >= 0, dy can be < 0?
+def scan_direction(P, rdert_,dert_ext_, y,x, axis, der__t,mask__, fleft):  # leftward or rightward from y,x
+
+    sin,cos = axis
     while True:
         # coord, distance of four int-coord derts, overlaid by float-coord rdert in der__t, int for indexing
-        x0 = int(np.floor(x)); x1 = int(np.ceil(x)); y0 = int(np.floor(y)); y1 = int(np.ceil(y))
+        x0 = int(np.floor(x)); dx0 = abs(x-x0)
+        x1 = int(np.ceil(x));  dx1 = abs(x-x1)
+        y0 = int(np.floor(y)); dy0 = abs(y-y0)
+        y1 = int(np.ceil(y));  dy1 = abs(y-y1)
         kernel = []
-        # after the padding, we need +1? Because we added new row and column from top and left too
         if not mask__[y0+1][x0+1]: kernel += [[[y0,x0], np.hypot((y-y0),(x-x0))]]
         if not mask__[y0+1][x0+1]: kernel += [[[y0,x1], np.hypot((y-y0),(x-x1))]]
         if not mask__[y1+1][x0+1]: kernel += [[[y1,x0], np.hypot((y-y1),(x-x0))]]
         if not mask__[y1+1][x1+1]: kernel += [[[y1,x1], np.hypot((y-y1),(x-x1))]]
         K = 0
-        ptuples = []  # in partially masked kernel
-        # scale params in proportion to inverted distance from y,x; approximation, square of rpixel is rotated, won't fully match init derts:
+        ktuples = []  # scale params by inverted distance, approx: square of rpixel is rotated, won't fully match init derts:
         for [ky,kx], dist in kernel:  # kernel excludes masked derts
             K += 2 - dist
             ptuple = [par__[ky,kx] * dist for par__ in der__t[1:]]  # exclude i
-            ptuples += [ptuple]  # prevent them become flat, so that we can retrieve each 9 params from each quadrant
-
-        ptuple = ptuples[0]  # init with 1st quadrant
-        for _ptuple in ptuples[1:]:  # loop the rest of quadrant in 2x2 kernel
-            for i,par in enumerate(_ptuple): ptuple[i] += par  # param wise summing
-        ptuple = [Par/K for Par in ptuple]  # normalize with K
-        
+            ktuples += [ptuple]
+        Ptuple = ktuples[0]  # init with 1st not masked quadrant
+        for _ptuple in ktuples[1:]:
+            for i,par in enumerate(_ptuple):
+                Ptuple[i] += par
+        ptuple = [Par/K for Par in Ptuple]  # normalize with K
         if fleft:
-            y -= sin; x -= cos  # next x,ry
+            y -= sin; x -= cos  # next y,x
             rdert_.insert(0, ptuple)  # append left
             dert_ext_.insert(0, [[P],y,x])  # append left external params: roots and coords per dert
         else:
-            y += sin; x += cos   # next rx,ry
+            y += sin; x += cos   # next ry,rx
             rdert_ += [ptuple]  # append right
             dert_ext_ += [[[P],y,x]]
 
@@ -269,7 +264,7 @@ def scan_P_rim(P, blob, rim_, cP_, fup):  # scan rim roots up and down from curr
     if not link_ and new_link_:  # add not-redundant new P:
         dert,y,x = sorted(new_link_, key=lambda x:x[0][9], reverse=True)[0]
         # form new _P from max-G rim dert along P.axis:
-        _P = form_P(blob.der__t, xmask__(blob.mask__), axis=P.axis, pivot=[y,x,dert])
+        _P = form_P(blob.der__t, pad1(blob.mask__), axis=P.axis, y=y, x=x)
         if fup: P.link_ += [_P]  # represent uplinks only
         else:  _P.link_ += [P]
         blob.P_ += [_P]
