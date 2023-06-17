@@ -11,7 +11,6 @@ from .comp_slice import comp_slice, comp_angle
 from .agg_convert import agg_recursion_eval
 from .sub_recursion import sub_recursion_eval
 from class_cluster import ClusterStructure, init_param as z
-from copy import copy
 
 '''
 Vectorize is a terminal fork of intra_blob.
@@ -126,7 +125,8 @@ def rotate_P_(blob, verbose=False):  # rotate each P to align it with direction 
         while abs(daxis) * G > ave_rotate:  # recursive reform P in blob.der__t along new G angle:
             if verbose: print(f"\rRotating... {i}/{len(P_)}: {round(np.degrees(np.arctan2(*P.axis)))}°", end=" " * 79); sys.stdout.flush()
             _axis = P.axis
-            P = form_P(der__t, mask__, axis=(P.ptuple[3]/G, P.ptuple[4]/G), y=P.y, x=P.x)  # pivot to P angle
+            # should be dy and dx?
+            P = form_P(der__t, mask__, axis=(P.ptuple[3][0]/G, P.ptuple[3][1]/G), y=P.y, x=P.x)  # pivot to P angle
             maxis, daxis = comp_angle(_axis, P.axis)
             ddaxis = daxis +_daxis  # cancel-out if opposite-sign
             _daxis = daxis
@@ -142,8 +142,9 @@ def rotate_P_(blob, verbose=False):  # rotate each P to align it with direction 
             if not mask__[y1+1][x0+1]: kernel += [[[y1,x0], np.hypot((y-y1),(x-x0))]]
             if not mask__[y1+1][x1+1]: kernel += [[[y1,x1], np.hypot((y-y1),(x-x1))]]
 
-            y,x = sorted(kernel, key=lambda x:x[1], reverse=True)[0][0]  # nearest unmasked cell
-            blob.dert_roots__[y][x] += [P]  # final rotated P
+            for (y,x), distance in sorted(kernel, key=lambda x:x[1], reverse=False):  # nearest is ascending order, so reverse is not needed here
+                blob.dert_roots__[y][x] += [P]  # final rotated P
+                break   
 
         P_ += [P]
     blob.P_[:] = P_
@@ -180,7 +181,7 @@ def scan_direction(P, rdert_,dert_ext_, y,x, axis, der__t,mask__, fleft):  # lef
     sin,cos = axis
     while True:
         # coord, distance of four int-coord derts, overlaid by float-coord rdert in der__t, int for indexing
-        x0 = int(np.floor(x)); dx0 = abs(x-x0)
+        x0 = int(np.floor(x)); dx0 = abs(x-x0)  # d here is not needed?
         x1 = int(np.ceil(x));  dx1 = abs(x-x1)
         y0 = int(np.floor(y)); dy0 = abs(y-y0)
         y1 = int(np.ceil(y));  dy1 = abs(y-y1)
