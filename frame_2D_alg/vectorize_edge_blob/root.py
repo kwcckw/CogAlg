@@ -5,7 +5,7 @@ import sys
 import numpy as np
 from copy import copy, deepcopy
 from itertools import product
-from .classes import Cptuple, CP, CPP, CderP
+from .classes import CP, CPP, CderP
 from .filters import ave, ave_g, ave_ga, ave_rotate
 from .comp_slice import comp_slice, comp_angle
 from .agg_convert import agg_recursion_eval
@@ -167,10 +167,10 @@ def form_P(der__t, mask__, axis, y,x):
     P.dert_ = dert_
     P.dert_ext_ = dert_ext_
     P.y = (yleft+ry)/2; P.x = (x0+rx)/2
-    P.axis = np.divide(P.ptuple[3], P.ptuple[5])  # new axis
     G = np.hypot(Dy,Dx);  Ga = (Cos_da0+1) + (Cos_da1+1); L = len(rdert_)
     P.ptuple = [I, M, Ma, [Dy, Dx], [Sin_da0, Cos_da0, Sin_da1, Cos_da1], G, Ga, L]
-
+    # move here after ptuple is assigned
+    P.axis = np.divide(P.ptuple[3], P.ptuple[5])  # new axis
     return P
 
 def scan_direction(P, rdert_,dert_ext_, y,x, axis, der__t,mask__, fleft):  # leftward or rightward from y,x
@@ -185,12 +185,37 @@ def scan_direction(P, rdert_,dert_ext_, y,x, axis, der__t,mask__, fleft):  # lef
             (y0,x1, (y1-y) * (x-x0)),
             (y1,x0, (y-y0) * (x1-x)),
             (y1,x1, (y-y0) * (x-x0))]
-        mask = sum((mask__[cy,cx] * weight for cy,cx, weight in kernel))  # weighted average of four kernel cells
-        if mask > 0:
+        
+        mask = 0
+        for cy,cx, weight in kernel:  # some subpixel might not within the boundary, so we can use try here?
+            try:
+                mask += mask__[cy+1,cx+1] * weight
+            except:
+                mask += 1
+                
+        # +1 to cy and cx because we padded mask__
+        '''
+        mask = sum((mask__[cy+1,cx+1] * weight for cy,cx, weight in kernel))  # weighted average of four kernel cells
+        '''
+        
+        if mask == 4:
             break  # terminate direction in P
+        '''
         ptuple = [
             sum((par__[cy,cx] * weight for cy,cx, weight in kernel))
             for par__ in der__t[1:]]
+        '''
+        # When there's less than 4 valid subpixels, we need to sum them separately?
+        ptuple = []
+        for par__ in der__t[1:]:
+            Par = 0
+            for cy,cx, weight in kernel:
+                try:
+                    Par += (par__[cy,cx] * weight)
+                except:
+                    pass
+            ptuple += [Par]
+                         
         if fleft:
             y -= sin; x -= cos  # next y,x
             rdert_ = [ptuple] + rdert_ # append left
