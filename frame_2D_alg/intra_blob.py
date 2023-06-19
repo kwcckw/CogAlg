@@ -40,34 +40,40 @@ def intra_blob_root(root_blob, render, verbose, fBa):  # recursive evaluation of
             if root_blob.fBa:
                 # comp_slice fork in angle blobs
                 Rdn = (blob.rdn+1) * pcoef  # comp_slice is doubling the costs, likely higher, adjust per nsub_blobs?
+                
+                # looks like we are getting positive and negative angle blob now
+                # positive blob when blob.G > aveB*Rdn, and aveBa * Rdn > blob.Ga
+                # positive blob when blob.G < aveB*Rdn, and aveBa * Rdn < blob.Ga
+                # negative blob when blob.G > aveB*Rdn, and blob.Ga<0
                 if (blob.G - aveB*Rdn) * (aveBa*Rdn - blob.Ga) > 0:  # G * angle stability
                     blob.fBa = 0; blob.rdn = root_blob.rdn+1
                     blob.prior_forks += 'p'
                     if verbose: print('fork: p')  # if render and blob.A < 100: deep_blobs += [blob]
-                    # vectorize_root(blob, verbose=verbose)
-        else:
-            if blob.G < aveB * blob.rdn and blob.sign:  # below-average G, eval for comp_r
-                # root values for sub_blobs:
-                blob.fBa = 0; blob.rng = root_blob.rng + 1; blob.rdn = root_blob.rdn + 1.5  # comp cost * fork rdn
-                # comp_r 4x4:
-                new_der__t, new_mask__ = comp_r(blob.der__t, blob.mask__)
-                sign__ = ave * (blob.rdn+1) - new_der__t[3] > 0  # m__ = ave - g__
-                # if min Ly and Lx, der__t>=1: form, splice sub_blobs:
-                if new_mask__.shape[0] > 2 and new_mask__.shape[1] > 2 and False in new_mask__:
-                    spliced_layers[:] \
-                        = cluster_fork_recursive( blob, spliced_layers, new_der__t, sign__, new_mask__, verbose, render, fBa=0)
-
-                if blob.G > aveB * aveBa * blob.rdn and not blob.sign:  # above-average G, eval for comp_a
+#                    vectorize_root(blob, verbose=verbose)
+            # the section below should be within the if loop after evaluating width and height?
+            else:
+                if blob.G < aveB * blob.rdn and blob.sign:  # below-average G, eval for comp_r
                     # root values for sub_blobs:
-                    blob.fBa = 1; blob.rdn = root_blob.rdn + 1.5  # comp cost * fork rdn
-                    # comp_a 2x2:
-                    new_der__t, new_mask__ = comp_a(blob.der__t, blob.mask__)
-                    Ave = ave * (blob.rdn + 1)
-                    sign__ = (new_der__t[1] - Ave) + (Ave * pcoef - new_der__t[2]) > 0  # val_comp_slice_= dev_gr + inv_dev_ga
+                    blob.fBa = 0; blob.rng = root_blob.rng + 1; blob.rdn = root_blob.rdn + 1.5  # comp cost * fork rdn
+                    # comp_r 4x4:
+                    new_der__t, new_mask__ = comp_r(blob.der__t, blob.rng, blob.mask__)
+                    sign__ = ave * (blob.rdn+1) - new_der__t[3] > 0  # m__ = ave - g__
                     # if min Ly and Lx, der__t>=1: form, splice sub_blobs:
                     if new_mask__.shape[0] > 2 and new_mask__.shape[1] > 2 and False in new_mask__:
                         spliced_layers[:] \
-                            = cluster_fork_recursive( blob, spliced_layers, new_der__t, sign__, new_mask__, verbose, render, fBa=1)
+                            = cluster_fork_recursive( blob, spliced_layers, new_der__t, sign__, new_mask__, verbose, render, fBa=0)
+
+                    if blob.G > aveB * aveBa * blob.rdn and not blob.sign:  # above-average G, eval for comp_a
+                        # root values for sub_blobs:
+                        blob.fBa = 1; blob.rdn = root_blob.rdn + 1.5  # comp cost * fork rdn
+                        # comp_a 2x2:
+                        new_der__t, new_mask__ = comp_a(blob.der__t, blob.mask__)
+                        Ave = ave * (blob.rdn + 1)
+                        sign__ = (new_der__t[1] - Ave) + (Ave * pcoef - new_der__t[2]) > 0  # val_comp_slice_= dev_gr + inv_dev_ga
+                        # if min Ly and Lx, der__t>=1: form, splice sub_blobs:
+                        if new_mask__.shape[0] > 2 and new_mask__.shape[1] > 2 and False in new_mask__:
+                            spliced_layers[:] \
+                                = cluster_fork_recursive( blob, spliced_layers, new_der__t, sign__, new_mask__, verbose, render, fBa=1)
             '''
             this is comp_r || comp_a, gap or overlap version:
             if aveBa < 1: blobs of ~average G are processed by both forks
@@ -100,8 +106,8 @@ def cluster_fork_recursive(blob, spliced_layers, new_der__t, sign__, new_mask__,
     + if sub_blob_val > alt_blob_val, else -?  
     '''
     adj_rdn = ave_nsub - len(sub_blobs)  # adjust ave cross-layer rdn to actual rdn after flood_fill:
-    blob.rdn += adj_rdn
-    for sub_blob in sub_blobs: sub_blob.rdn += adj_rdn
+    # blob.rdn += adj_rdn
+    # for sub_blob in sub_blobs: sub_blob.rdn += adj_rdn
     assign_adjacents(adj_pairs)
     # if render: visualize_blobs(idmap, sub_blobs, winname=f"Deep blobs (froot_Ba = {blob.fBa}, froot_Ba = {blob.prior_forks[-1] == 'a'})")
     if fBa: sublayers = blob.dlayers
@@ -140,7 +146,8 @@ def extend_der__t(blob):  # extend dert borders (+1 dert to boundaries)
                         constant_values=True, mode='constant')
     blob.der__t = ext_der__t
     blob.mask__ = ext_mask__
-    # return ext_der__t, ext_mask__
+    if y0e != y0: blob.box = (y0+1, yn+1, x0, xn)  # we need to +1 here? Else their box will be pointing the box before extension
+    if x0e != x0: blob.box = (y0, yn, x0+1, xn+1)
 
 
 def print_deep_blob_forking(deep_layers):

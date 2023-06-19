@@ -5,7 +5,7 @@ import sys
 import numpy as np
 from copy import copy, deepcopy
 from itertools import product
-from .classes import Cptuple, CP, CPP, CderP
+from .classes import CP, CPP, CderP
 from .filters import ave, ave_g, ave_ga, ave_rotate
 from .comp_slice import comp_slice, comp_angle
 from .agg_convert import agg_recursion_eval
@@ -73,11 +73,12 @@ def slice_blob(blob, verbose=False):  # form blob slices nearest to slice Ga: Ps
     P_ = []
     height, width = blob.mask__.shape
 
-    for y in range(height):  # iterate through lines, each may have multiple slices -> Ps:
+    # loop y from 1 to second last element, first and last index are extended mask
+    for y in range(1, height, 1):  # iterate through lines, each may have multiple slices -> Ps:
         if verbose: print(f"\rConverting to image... Processing line {y + 1}/{height}", end=""); sys.stdout.flush()
         _mask = True  # mask -1st dert
-        x = 0
-        while x < width:  # iterate through pixels in a line
+        x = 1  # index 0 is extended mask
+        while x < width-1:  # iterate through pixels in a line (last index is extended mask)
             mask = blob.mask__[y, x]
             dert = [par__[y, x] for par__ in blob.der__t[1:]]   # exclude i
             g, ga, ri, dy, dx, sin_da0, cos_da0, sin_da1, cos_da1 = dert
@@ -186,6 +187,7 @@ def scan_direction(P, rdert_,dert_ext_, y,x, axis, der__t,mask__, fleft):  # lef
             (y1,x0, (y-y0) * (x1-x)),
             (y1,x1, (y-y0) * (x-x0))]
         mask = sum((mask__[cy,cx] * weight for cy,cx, weight in kernel))  # weighted average of four kernel cells
+        # i checked and we may get empty rdert_ here because if we use mask>0 here, all 4 sub pixels must be unmasked to prevent the break
         if mask > 0:
             break  # terminate direction in P
         ptuple = [
