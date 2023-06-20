@@ -37,19 +37,18 @@ def form_PP_t(P_, base_rdn):  # form PPs of derP.valt[fd] + connected Ps'val
     PP_t = []
     for fd in 0,1:
         qPP_ = []  # initial sequence-PPs
-        for P in copy(P_):
+        for P in P_:
             if not P.roott[fd]:  # else already packed in qPP
                 valt = [0,0]; qPP = [[P], valt, ave+1]  # init PP is 2D queue of Ps, + valt of all layers?
                 P.roott[fd]=qPP; 
-                uplink_ = P.link_t[fd]; 
-
+                uplink_ = P.link_t[fd];
                 # next-line links for recursive search
                 checked_P_ = [P]  # i checked and we may check a same _P multiple times due to different P's _P are the same, so we need to evaluate and skip if _P is checked
                 while uplink_:
                     uuplink_ = []  # insert here so that no need to init twice
                     for derP in uplink_:
                         _P = derP._P; _qPP = _P.roott[fd]
-                        if _P not in checked_P_:
+                        if _P not in checked_P_ and _P not in qPP[0]:  # need additional check since _P might be in qPP after merging
                             checked_P_ += [_P]
                             if _qPP:  # merge _qPP in qPP:
                                 for i in 0, 1: valt[i] += _qPP[1][i]
@@ -63,7 +62,7 @@ def form_PP_t(P_, base_rdn):  # form PPs of derP.valt[fd] + connected Ps'val
                                 
                                 uuplink_ += derP._P.link_t[fd]
                     uplink_ = uuplink_
-                qPP_ += [qPP ]  # ini reval=ave+1
+                qPP_ += [qPP]  # ini reval=ave+1
         # prune qPPs by med links val:
         rePP_= reval_PP_(qPP_, fd)  # PP = [qPP,valt,reval]
         CPP_ = [sum2PP(qPP, base_rdn, fd) for qPP in rePP_]

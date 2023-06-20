@@ -1,6 +1,6 @@
 import numpy as np
 from copy import deepcopy, copy
-from .classes import CQ, Cgraph
+from .classes import Cgraph
 from .filters import aves, ave, ave_nsub, ave_sub, ave_agg, G_aves, med_decay, ave_distance, ave_Gm, ave_Gd
 from .comp_slice import comp_angle, comp_aangle
 
@@ -219,6 +219,7 @@ Clusters of different forks / param sets may overlap, else no use of redundant i
 No centroid clustering, but cluster may have core subset.
 '''
 
+# change this into op_G, compare parT, or sum  parT, valT and rdnT?
 def op_parH(_parH, parH, fcomp, fneg=0):  # unpack aggH( subH( derH -> ptuples
 
     if fcomp: dparH = CQ()
