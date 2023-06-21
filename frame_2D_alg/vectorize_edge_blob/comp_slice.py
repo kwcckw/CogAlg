@@ -81,11 +81,11 @@ def reval_PP_(PP_, fd):  # recursive eval / prune Ps for rePP
             if reval < Ave:  # same graph, skip re-evaluation:
                 rePP_ += [[P_,valt,0]]  # reval=0
             else:
-                rePP = reval_P_(P_, fd)  # recursive node and link revaluation by med val
+                rePP = reval_P_(P_,fd)  # recursive node and link revaluation by med val
                 if valt[fd] > Ave:  # min adjusted val
                     rePP_ += [rePP]
     if rePP_ and max([rePP[2] for rePP in rePP_]) > ave:  # recursion if any min reval:
-        rePP_ = reval_PP_(rePP_, fd)
+        rePP_ = reval_PP_(rePP_,fd)
 
     return rePP_
 

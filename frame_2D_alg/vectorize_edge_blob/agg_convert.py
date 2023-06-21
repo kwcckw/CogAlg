@@ -2,10 +2,10 @@
 Agg_recursion eval and PP->graph conversion
 '''
 
-from .agg_recursion import Cgraph, agg_recursion, op_parH
+from .agg_recursion import Cgraph, agg_recursion, op_parT
 from copy import copy, deepcopy
 from .classes import CP, CderP, CPP
-from .filters import PP_vars, PP_aves, ave_nsub, ave_agg
+from .filters import PP_vars, PP_aves, ave_nsub, ave_agg, med_decay
 
 # move here temporary, for debug purpose
 # not fully updated
@@ -113,4 +113,3 @@ def med_eval(last_link_, old_link_, med_valH, fd):  # recursive eval of mediated
         curr_link_, old_link_, med_valH = med_eval(curr_link_, old_link_, med_valH, fd)  # eval next med layer
 
     return curr_link_, old_link_, med_valH
-
