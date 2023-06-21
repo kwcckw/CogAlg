@@ -38,30 +38,30 @@ def form_PP_t(P_, base_rdn):  # form PPs of derP.valt[fd] + connected Ps'val
     for fd in 0,1:
         qPP_ = []  # initial sequence-PPs
         for P in P_:
+            # below mostly is still buggy
             if not P.roott[fd]:  # else already packed in qPP
-                valt = [0,0]; qPP = [[P], valt, ave+1]  # init PP is 2D queue of Ps, + valt of all layers?
-                P.roott[fd]=qPP; 
-                uplink_ = P.link_t[fd];
+                # we only need 2 brackets here because this qPP will be packed to qPP_?
+                qPP = [[P]]  # init PP is 2D queue of Ps, + valt of all layers?
+                P.roott[fd]=qPP;valt = [0,0] 
+                uplink_ = P.link_t[fd]; uuplink_ = []
                 # next-line links for recursive search
-                checked_P_ = [P]  # i checked and we may check a same _P multiple times due to different P's _P are the same, so we need to evaluate and skip if _P is checked
-                while uplink_:
-                    uuplink_ = []  # insert here so that no need to init twice
+                while uplink_:  # change the term uplink and uuplink?
                     for derP in uplink_:
                         _P = derP._P; _qPP = _P.roott[fd]
-                        if _P not in checked_P_ and _P not in qPP[0]:  # need additional check since _P might be in qPP after merging
-                            checked_P_ += [_P]
-                            if _qPP:  # merge _qPP in qPP:
+                        if _qPP:  # merge _qPP in qPP:
+                            if _qPP is not qPP:
                                 for i in 0, 1: valt[i] += _qPP[1][i]
                                 for qP in _qPP[0]:
                                     qP.roott[fd] = qPP; qPP[0] += [qP]  # append qP_
                                 qPP_.remove(_qPP)
-                            else:
-                                qPP[0].insert(0,_P)  # pack top down
-                                _P.roott[fd] = qPP
-                                for i in 0,1: valt[i] += np.sum(derP.valT[i])
-                                
-                                uuplink_ += derP._P.link_t[fd]
+                        else:
+                            qPP[0].insert(0,_P)  # pack top down
+                            _P.roott[fd] = qPP
+                            for i in 0,1: valt[i] += np.sum(derP.valT[i])
+                            uuplink_ += derP._P.link_t[fd]
                     uplink_ = uuplink_
+                    uuplink_ = []
+                qPP += [valt,ave+1]  # move here so that qPP will be remained as a same object since P.roott is referencing this qPP
                 qPP_ += [qPP]  # ini reval=ave+1
         # prune qPPs by med links val:
         rePP_= reval_PP_(qPP_, fd)  # PP = [qPP,valt,reval]

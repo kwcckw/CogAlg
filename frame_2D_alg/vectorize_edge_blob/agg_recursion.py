@@ -219,49 +219,73 @@ Clusters of different forks / param sets may overlap, else no use of redundant i
 No centroid clustering, but cluster may have core subset.
 '''
 
+# very initial draft
 def op_parT(_parT, parT, fcomp, fneg=0):  # unpack aggH( subH( derH -> ptuples
 
     # not updated below:
-    if fcomp: dparH = CQ()
-    elev, _idx, d_didx, last_i, last_idx = 0,0,0,-1,-1
+    if fcomp: dparH = [[],[]]
 
-    for _i, _didx in enumerate(_parH.Q):  # i: index in Qd (select param set), idx: index in ptypes (full param set)
-        _idx += _didx; idx = last_idx+1; _fd = _parH.fds[elev]; _val = _parH.Qd[_i].valt[_fd]
-        for i, didx in enumerate(parH.Q[last_i+1:]):  # start after last matching i and idx
-            idx += didx; fd = _parH.fds[elev]; val = parH.Qd[_i+i].valt[fd]
-            if _idx==idx:
-                if _fd==fd:
-                    _sub = _parH.Qd[_i]; sub = parH.Qd[_i+i]
+    for i in 0,1:
+        _parH, parH = _parT[i], parT[i]
+        for _aggH, aggH in _parH, parH:
+            daggH = []
+            for _subH, subH in _aggH, aggH:
+                dsubH = []
+                for Que, que in _subH, subH:
                     if fcomp:
-                        if _val > G_aves[fd] and val > G_aves[fd]:
-                            if sub.n:  # sub is ptuple
-                                dsub = op_ptuple(_sub, sub, fcomp, fd, fneg)  # sub is vertuple | ptuple | ext
-                            else:  # sub is pH
-                                dsub = op_parH(_sub, sub, 0, fcomp)  # keep unpacking aggH | subH | derH
-                                if sub.ext[1]: comp_ext(_sub.ext[1],sub.ext[1], dsub)
-                            dparH.valt[0]+=dsub.valt[0]; dparH.valt[1]+=dsub.valt[1]  # add rdnt?
-                            dparH.Qd += [dsub]; dparH.Q += [_didx+d_didx]
-                            dparH.fds += [fd]
-                    else:  # no eval: no new dparH
-                        if sub.n: op_ptuple(_sub, sub, fcomp, fd, fneg)  # sub is vertuple | ptuple | ext
-                        else:
-                            op_parH(_sub, sub, fcomp)  # keep unpacking aggH | subH | derH
-                            if sub.ext[1]: sum_ext(_sub.ext, sub.ext)
-                last_i=i; last_idx=idx  # last matching i,idx
-                break
-            elif fcomp:
-                if _idx < idx: d_didx+=didx  # += missing didx
-            else:
-                _parH.Q.insert[idx, didx+d_didx]
-                _parH.Q[idx+1] -= didx+d_didx  # reduce next didx
-                _parH.Qd.insert[idx, deepcopy(parH.Qd[idx])]
-                d_didx = 0
-            if _idx < idx: break  # no par search beyond current index
-            # else _idx > idx: keep searching
-            idx += 1  # 1 sub/loop
-        _idx += 1
-        if elev in (0,1) or not _i%(2**elev):  # first 2 levs are single-element, higher levs are 2**elev elements
-            elev+=1  # elevation
+                        pass
+                        # i think we can just use comp_unpack here?
+                        # derT,valT,rdnT = comp_unpack(Ele, ele, rn)
+                        # dsubH += [derT]
+                    else:
+                        pass
+                        # use sum_unpack here?
+                daggH += [dsubH]
+            dparH[i] += [daggH]
+            
+                
+        """
+        
+        elev, _idx, d_didx, last_i, last_idx = 0,0,0,-1,-1
+        for _i, _didx in enumerate(_parH.Q):  # i: index in Qd (select param set), idx: index in ptypes (full param set)
+            _idx += _didx; idx = last_idx+1; _fd = _parH.fds[elev]; _val = _parH.Qd[_i].valt[_fd]
+            for i, didx in enumerate(parH.Q[last_i+1:]):  # start after last matching i and idx
+                idx += didx; fd = _parH.fds[elev]; val = parH.Qd[_i+i].valt[fd]
+                if _idx==idx:
+                    if _fd==fd:
+                        _sub = _parH.Qd[_i]; sub = parH.Qd[_i+i]
+                        if fcomp:
+                            if _val > G_aves[fd] and val > G_aves[fd]:
+                                if sub.n:  # sub is ptuple
+                                    dsub = op_ptuple(_sub, sub, fcomp, fd, fneg)  # sub is vertuple | ptuple | ext
+                                else:  # sub is pH
+                                    dsub = op_parH(_sub, sub, 0, fcomp)  # keep unpacking aggH | subH | derH
+                                    if sub.ext[1]: comp_ext(_sub.ext[1],sub.ext[1], dsub)
+                                dparH.valt[0]+=dsub.valt[0]; dparH.valt[1]+=dsub.valt[1]  # add rdnt?
+                                dparH.Qd += [dsub]; dparH.Q += [_didx+d_didx]
+                                dparH.fds += [fd]
+                        else:  # no eval: no new dparH
+                            if sub.n: op_ptuple(_sub, sub, fcomp, fd, fneg)  # sub is vertuple | ptuple | ext
+                            else:
+                                op_parH(_sub, sub, fcomp)  # keep unpacking aggH | subH | derH
+                                if sub.ext[1]: sum_ext(_sub.ext, sub.ext)
+                    last_i=i; last_idx=idx  # last matching i,idx
+                    break
+                elif fcomp:
+                    if _idx < idx: d_didx+=didx  # += missing didx
+                else:
+                    _parH.Q.insert[idx, didx+d_didx]
+                    _parH.Q[idx+1] -= didx+d_didx  # reduce next didx
+                    _parH.Qd.insert[idx, deepcopy(parH.Qd[idx])]
+                    d_didx = 0
+                if _idx < idx: break  # no par search beyond current index
+                # else _idx > idx: keep searching
+                idx += 1  # 1 sub/loop
+            _idx += 1
+            if elev in (0,1) or not _i%(2**elev):  # first 2 levs are single-element, higher levs are 2**elev elements
+                elev+=1  # elevation
+    
+        """
     if fcomp:
         return dparH
     else:
