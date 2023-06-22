@@ -31,13 +31,15 @@ There are concepts that include same matching vars: size, density, color, stabil
 Weak value vars are combined into higher var, so derivation fork can be selected on different levels of param composition.
 '''
 
+# only partly revised:
+
 def agg_recursion(root):  # compositional recursion in root.PP_
 
     comp_G_(root, pri_G_=None, f1Q=1, fsub=0)  # cross-comp all Gs within rng, in node.H?
     mgraph_, dgraph_ = form_graph_(root, fsub=0)  # clustering via link_t, comp frng pplayers?
 
     # sub+:
-    Rdnt = [np.sum(root.rdnT[i]) for i in [0,1]]  # no Valt for sub+,
+    Rdnt = [np.sum(root.rdnT[i]) for i in [0,1]]  # no Valt for sub+
     for fd, graph_ in enumerate([mgraph_,dgraph_]):
         val = sum([np.sum(graph.valT[fd]) for graph in graph_])
         rdn = sum([np.sum(graph.rdnT[fd]) for graph in graph_]) + Rdnt[fd]
@@ -57,13 +59,12 @@ def agg_recursion(root):  # compositional recursion in root.PP_
         else: feedback(root)  # update root.root..H, breadth-first
 
 
-def comp_G_(G_, pri_G_=None, f1Q=1, fd = 0, fsub=0):  # cross-comp Graphs if f1Q, else G_s in comp_node_
+def comp_G_(G_, pri_G_=None, f1Q=1, fd = 0, fsub=0):  # cross-comp Graphs if f1Q, else comp G_s in comp_node_
 
-    if not f1Q: dpH_ = []
+    if not f1Q:  # not sure needed:
+        Link_,Link_m,Link_d = [],[],[]  # empty in converted PPs or new Gs
+        ParT=[[],[]]; ValT=[0,0]; RdnT=[1,1]  # to sum links in comp_G
     '''
-    comp_slice:
-    link_,link_m,link_d = [],[],[]  # empty in converted PPs or new Gs
-    derT=[[],[]]; valT=[0,0]; rdnT=[1,1]  # to sum links in comp_G
     for _P in P.link_:
         comp_P(_P,P, link_,link_m,link_d, derT,valT,rdnT, fd=0)
             P.link_ = link_  # convert links from Ps to derPs
@@ -72,6 +73,8 @@ def comp_G_(G_, pri_G_=None, f1Q=1, fd = 0, fsub=0):  # cross-comp Graphs if f1Q
         P.derT=derT; P.valT=valT; P.rdnT=rdnT  # single Mtuple, Dtuple
     '''
     for i, _iG in enumerate(G_ if f1Q else pri_G_):  # G_ is node_ of root graph, initially converted PPs
+        link_,link_m,link_d = [],[],[]  # empty in converted PPs or new Gs
+        parT=[[],[]]; valT=[0,0]; rdnT=[1,1]  # to sum links in comp_G
         if fd:
             for iG in _iG.link_:
                 pass  #
@@ -88,18 +91,19 @@ def comp_G_(G_, pri_G_=None, f1Q=1, fd = 0, fsub=0):  # cross-comp Graphs if f1Q
                 for _G, G in ((_iG, iG), (_iG.alt_Graph, iG.alt_Graph)):
                     if not _G or not G:  # or G.val
                         continue
+                    # pass parT, valT, rdnT?
                     dpH = op_parT(_G.pH, G.pH, fcomp=1)  # comp layers while lower match?
                     dpH.ext[1] = [1,distance,[dy,dx]]  # pack in ds
                     mval, dval = dpH.valt
                     derG = Cgraph(valt=[mval,dval], G=[_G,G], pH=dpH, box=[])  # box is redundant to G
                     # add links:
-                    _G.link_.Q += [derG]; G.link_.Q += [derG]  # no didx, no ext_valt accum?
+                    _G.link_ += [derG]; G.link_ += [derG]  # no didx, no ext_valt accum?
                     if mval > ave_Gm:
-                        _G.link_.Qm += [derG]; _G.link_.valt[0] += mval
-                        G.link_.Qm += [derG]; G.link_.valt[0] += mval
+                        _G.link_t[0] += [derG]; _G.link_.valt[0] += mval
+                        G.link_t[0] += [derG]; G.link_.valt[0] += mval
                     if dval > ave_Gd:
-                        _G.link_.Qd += [derG]; _G.link_.valt[1] += dval
-                        G.link_.Qd += [derG]; G.link_.valt[1] += dval
+                        _G.link_t[1] += [derG]; _G.link_.valt[1] += dval
+                        G.link_t[1] += [derG]; G.link_.valt[1] += dval
 
                     if not f1Q: dpH_+= dpH  # comp G_s
                 # implicit cis, alt pair nesting in mderH, dderH
@@ -218,14 +222,16 @@ In rng+, graph may be extended with out-linked nodes, merged with their graphs a
 Clusters of different forks / param sets may overlap, else no use of redundant inclusion?
 No centroid clustering, but cluster may have core subset.
 '''
+# very initial draft, pass valT, rdnT?
 
-# very initial draft
 def op_parT(_parT, parT, fcomp, fneg=0):  # unpack aggH( subH( derH -> ptuples
 
-    # not updated below:
-    if fcomp: dparH = [[],[]]
-
     for i in 0,1:
+        if fcomp:
+            dparT = comp_unpack(_parT, parT, rn)
+        else: sum_unpack(_parT, parT)
+        pass
+        # use sum_unpack here?
         _parH, parH = _parT[i], parT[i]
         for _aggH, aggH in _parH, parH:
             daggH = []
@@ -233,19 +239,15 @@ def op_parT(_parT, parT, fcomp, fneg=0):  # unpack aggH( subH( derH -> ptuples
                 dsubH = []
                 for Que, que in _subH, subH:
                     if fcomp:
-                        pass
-                        # i think we can just use comp_unpack here?
-                        # derT,valT,rdnT = comp_unpack(Ele, ele, rn)
-                        # dsubH += [derT]
+                        parT,valT,rdnT = comp_unpack(Ele, ele, rn)
+                        for i, parH in enumerate(0,1):
+                            dparT[i] += [parT[1]]
                     else:
                         pass
                         # use sum_unpack here?
                 daggH += [dsubH]
             dparH[i] += [daggH]
-            
-                
-        """
-        
+        """  
         elev, _idx, d_didx, last_i, last_idx = 0,0,0,-1,-1
         for _i, _didx in enumerate(_parH.Q):  # i: index in Qd (select param set), idx: index in ptypes (full param set)
             _idx += _didx; idx = last_idx+1; _fd = _parH.fds[elev]; _val = _parH.Qd[_i].valt[_fd]
@@ -291,7 +293,6 @@ def op_parT(_parT, parT, fcomp, fneg=0):  # unpack aggH( subH( derH -> ptuples
     else:
         _parH.valt[0] += parH.valt[0]; _parH.valt[1] += parH.valt[1]
         _parH.rdnt[0] += parH.rdnt[0]; _parH.rdnt[1] += parH.rdnt[1]
-
 
 def op_ptuple(_ptuple, ptuple, fcomp, fd=0, fneg=0):  # may be ptuple, vertuple, or ext
 

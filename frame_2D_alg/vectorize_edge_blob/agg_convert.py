@@ -46,24 +46,21 @@ def blob2graph(blob, fseg, fd):
     PP_ = [blob.PPm_, blob.PPd_][fd]
     x0, xn, y0, yn = blob.box
     Graph = Cgraph(fd=PP_[0].fd, rng=PP_[0].rng, box=[(y0+yn)/2,(x0+xn)/2, y0,yn, x0,xn])
-
     [blob.mgraph, blob.dgraph][fd] = Graph  # update graph reference
 
     for i, PP in enumerate(PP_):
         graph = PP2graph(PP, fseg, fd)
-        op_G(Graph, graph, fcomp=0)
+        op_parT(Graph, graph, fcomp=0)
         graph.root = Graph
         Graph.node_ += [graph]
 
-
     return Graph
-
 
 # tentative, will be finalized when structure in agg+ is finalized
 def PP2graph(PP, fseg, ifd=1):
 
     box = [(PP.box[0]+PP.box[1]) /2, (PP.box[2]+PP.box[3]) /2] + list(PP.box)
-    # add nesting for subH and aggH?
+    # add nesting for subH and aggH:
     graph = Cgraph(parT=[[[copy(PP.derT[0])]],[[copy(PP.derT[1])]]] , valT=copy(PP.valT), rdnT=copy(PP.rdnT), box=box)
 
     return graph
