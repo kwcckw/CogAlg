@@ -35,7 +35,6 @@ Weak value vars are combined into higher var, so derivation fork can be selected
 
 def agg_recursion(root):  # compositional recursion in root.PP_
 
-    # should be comp_G_ on root's node_?
     comp_G_(root.node_, pri_G_=None, f1Q=1, fsub=0)  # cross-comp all Gs within rng, in node.H?
     mgraph_, dgraph_ = form_graph_(root, fsub=0)  # clustering via link_t, comp frng pplayers?
 
@@ -46,7 +45,7 @@ def agg_recursion(root):  # compositional recursion in root.PP_
         rdn = sum([np.sum(graph.rdnT[fd]) for graph in graph_]) + Rdnt[fd]
 
         if val > ave_sub * rdn:  # fixed costs, same per fork
-            for graph in graph_: graph.rdnT[-1][fd] += 1  # estimate, assign to the weaker in feedback
+            for graph in graph_: add_unpack(graph.rdnT[fd],1)  # estimate, assign to the weaker in feedback
             # eval to divide each graph into der+|rng+ sub_graphs:
             sub_recursion_eval(graph_, fd)
         else: feedback(root)  # update root.root..H, breadth-first
@@ -54,66 +53,73 @@ def agg_recursion(root):  # compositional recursion in root.PP_
     Rdnt = [np.sum(root.rdnT[i]) for i in [0,1]]; Valt = [np.sum(root.valT[i]) for i in [0,1]]  # updated in sub+
     for fd, graph_ in enumerate([mgraph_, dgraph_]):
         if Valt[fd] > G_aves[fd] * ave_agg * Rdnt[fd] and len(graph_) > ave_nsub:
-            for graph in graph_: graph.rdnT[-1][fd] += 1  # estimate
+            for graph in graph_: add_unpack(graph.rdnT[fd],1)  # estimate
             # replace root.H with new graphs
             agg_recursion(root)
         else: feedback(root)  # update root.root..H, breadth-first
 
-
+# very tentative:
 def comp_G_(G_, pri_G_=None, f1Q=1, fd = 0, fsub=0):  # cross-comp Graphs if f1Q, else comp G_s in comp_node_
 
-    if not f1Q:  # not sure needed:
-        Link_,Link_m,Link_d = [],[],[]  # empty in converted PPs or new Gs
-        ParT=[[],[]]; ValT=[0,0]; RdnT=[1,1]  # to sum links in comp_G
-    '''
-    for _P in P.link_:
-        comp_P(_P,P, link_,link_m,link_d, derT,valT,rdnT, fd=0)
-            P.link_ = link_  # convert links from Ps to derPs
-    if P.link_:
-        P.link_t=[link_m,link_d]
-        P.derT=derT; P.valT=valT; P.rdnT=rdnT  # single Mtuple, Dtuple
-    '''
+    if not f1Q: dpars_=[]
+    # this was for nested node, we need single node with link-specific partial-parT access now
+
     for i, _iG in enumerate(G_ if f1Q else pri_G_):  # G_ is node_ of root graph, initially converted PPs
-        link_,link_m,link_d = [],[],[]  # empty in converted PPs or new Gs
-        parT=[[],[]]; valT=[0,0]; rdnT=[1,1]  # to sum links in comp_G
-        if fd:
-            for iG in _iG.link_:
-                pass  #
-      # else: # rng+, no following links?
-        for iG in G_[i+1:] if f1Q else G_:  # compare each G to other Gs in rng, bilateral link assign, val accum:
+        # follow links in der+, loop all Gs in rng+:
+        for iG in _iG.link_ if fd \
+            else G_[i+1:] if f1Q else G_:  # compare each G to other Gs in rng+, bilateral link assign, val accum:
             # no new G per sub+, just compare corresponding layers?
             # if the pair was compared in prior rng+:
             if iG in [node for link in _iG.link_ for node in link.node_]:  # if f1Q? add frng to skip?
                 continue
             dy = _iG.box[0]-iG.box[0]; dx = _iG.box[1]-iG.box[1]  # between center x0,y0
             distance = np.hypot(dy, dx)  # Euclidean distance between centers, sum in sparsity, proximity = ave-distance
-            if distance < ave_distance * ((sum(_iG.pH.valt) + sum(iG.pH.valt)) / (2*sum(G_aves))):
+            if distance < ave_distance * ((sum(_iG.valT) + sum(iG.valT)) / (2*sum(G_aves))):
                 # same for cis and alt Gs:
                 for _G, G in ((_iG, iG), (_iG.alt_Graph, iG.alt_Graph)):
                     if not _G or not G:  # or G.val
                         continue
                     # pass parT, valT, rdnT?
-                    dpH = op_parT(_G.pH, G.pH, fcomp=1)  # comp layers while lower match?
-                    dpH.ext[1] = [1,distance,[dy,dx]]  # pack in ds
-                    mval, dval = dpH.valt
-                    derG = Cgraph(valt=[mval,dval], G=[_G,G], pH=dpH, box=[])  # box is redundant to G
+                    dparT,valT,rdnT = comp_unpack(_G.parT, G.parT, rn=1)  # comp layers while lower match?
+                    # tentative:
+                    bottom_layer = unpack(dparT[1])
+                    bottom_layer += [1,distance,[dy,dx]]  # pack in ds
+                    derG = Cgraph(G=[_G,G], dparT=dparT,valT=valT,rdnT=rdnT, box=[])  # box is redundant to G
                     # add links:
+                    mval, dval = valT
                     _G.link_ += [derG]; G.link_ += [derG]  # no didx, no ext_valt accum?
                     if mval > ave_Gm:
-                        _G.link_t[0] += [derG]; _G.link_.valt[0] += mval
-                        G.link_t[0] += [derG]; G.link_.valt[0] += mval
+                        _G.link_t[0] += [derG]; add_unpack(_G.valT[0],mval)  # also add rdnT?
+                        G.link_t[0] += [derG];  add_unpack(G.valT[0],mval)
                     if dval > ave_Gd:
-                        _G.link_t[1] += [derG]; _G.link_.valt[1] += dval
-                        G.link_t[1] += [derG]; G.link_.valt[1] += dval
+                        _G.link_t[1] += [derG]; add_unpack(_G.valT[1],dval)
+                        G.link_t[1] += [derG];  add_unpack(G.valT[1],dval)
 
-                    if not f1Q: dpH_+= dpH  # comp G_s
+                    if not f1Q: dpars_ += [[dparT,valT,rdnT]]  # comp G_s? not sure
                 # implicit cis, alt pair nesting in mderH, dderH
     if not f1Q:
-        return dpH_  # else no return, packed in links
+        return dpars_  # else no return, packed in links
 
     '''
     comp alts,val,rdn? cluster per var set if recurring across root: type eval if root M|D?
     '''
+
+def add_unpack(H, i):  # recursive unpack hierarchy of unknown nesting to add input
+
+    while isinstance(H,list):
+        H=H[-1]
+    H+=i
+
+def unpack(H):  # recursive unpack hierarchy of unknown nesting
+
+    while isinstance(H,list):
+        last_H = H
+        H=H[-1]
+    return last_H
+'''
+        link_,link_m,link_d = [],[],[]  # empty in converted PPs or new Gs
+        parT=[[],[]]; valT=[0,0]; rdnT=[1,1]  # to sum links in comp_G
+'''
 
 def form_graph_(root, fsub): # form derH in agg+ or sub-pplayer in sub+, G is node in GG graph
 
@@ -228,7 +234,7 @@ No centroid clustering, but cluster may have core subset.
 def op_parT(_graph, graph, fcomp, fneg=0):  # unpack aggH( subH( derH -> ptuples
 
     _parT, parT = _graph.parT, graph.parT
-    # with comp_unpack and sum_unpack, i think we can separate them>
+
     if fcomp:
         dparT,valT,rdnT = comp_unpack(_parT, parT, rn=1)
         return dparT,valT,rdnT
@@ -237,7 +243,7 @@ def op_parT(_graph, graph, fcomp, fneg=0):  # unpack aggH( subH( derH -> ptuples
         _rdnT, rdnT = _graph.rdnT, graph.rdnT
         for i in 0,1:
             sum_unpack([_parT[i], _valT[i], _rdnT[i]], [parT[i], valT[i],rdnT[i]])
-            
+
 
 
 def op_ptuple(_ptuple, ptuple, fcomp, fd=0, fneg=0):  # may be ptuple, vertuple, or ext

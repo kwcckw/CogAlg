@@ -22,8 +22,9 @@ def agg_recursion_eval(blob, PP_, fd):
 
     if (Valt[fd] > PP_aves[fd] * ave_agg * (Rdnt[fd]+1) * fork_rdnt[fd]) \
         and len(PP_) > ave_nsub : # and converted_blob[0].alt_rdn < ave_overlap:
-        # is there a better way instead of recursively unpack their rdnT and increase the value?
-        # converted_blob.rdnT[fd] += 1  # estimate
+        rdn = converted_blob.rdnT[fd]
+        while isinstance(rdn,list): rdn = rdn[0]
+        rdn += 1
         agg_recursion(converted_blob)
 
 # old
@@ -63,8 +64,8 @@ def PP2graph(PP, fseg, ifd=1):
 
     box = [(PP.box[0]+PP.box[1]) /2, (PP.box[2]+PP.box[3]) /2] + list(PP.box)
     # add nesting for subH and aggH:
-    graph = Cgraph(parT=[[[copy(PP.derT[0])]],[[copy(PP.derT[1])]]] , valT=[[[copy(PP.valT[0])]],[[copy(PP.valT[1])]]], rdnT=[[[copy(PP.rdnT[0])]],[[copy(PP.rdnT[1])]]], box=box)
-
+    graph = Cgraph( parT=[[[copy(PP.derT[0])]],[[copy(PP.derT[1])]]],
+                    valT=[[[copy(PP.valT[0])]],[[copy(PP.valT[1])]]], rdnT=[[[copy(PP.rdnT[0])]],[[copy(PP.rdnT[1])]]], box=box)
     return graph
 
 # drafts:
