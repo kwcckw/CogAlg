@@ -136,12 +136,12 @@ def sum2PP(qPP, base_rdn, fd):  # sum Ps and links into PP
             Link_+=P.link_; Link_m+=P.link_t[0]; Link_d+=P.link_t[1]
             L=P.ptuple[-1]; Dy=P.axis[0]*L/2; Dx=P.axis[1]*L/2; y=P.y; x=P.x
             Y0=min(Y0,(y-Dy)); Yn=max(Yn,(y+Dy)); X0=min(X0,(x-Dx)); Xn=max(Xn,(x-Dx))
-            if P.derT[0]:
-                for j in 0,1:
-                    if isinstance(P.valT[0], list):  # der+: H = 1fork) 1layer before feedback
-                        sum_unpack([DerT[j],ValT[j],RdnT[j]], [P.derT[j],P.valT[j],P.rdnT[j]])
-                    else:  # rng+: 1 vertuple
-                        sum_ptuple(DerT[j], P.derT[j]); ValT[j]+=P.valT[j]; RdnT[j]+=P.rdnT[j]
+            # why we need to check m fork here? This is causing empty derT in d fork later
+            for j in 0,1:
+                if isinstance(P.valT[0], list):  # der+: H = 1fork) 1layer before feedback
+                    sum_unpack([DerT[j],ValT[j],RdnT[j]], [P.derT[j],P.valT[j],P.rdnT[j]])
+                else:  # rng+: 1 vertuple
+                    sum_ptuple(DerT[j], P.derT[j]); ValT[j]+=P.valT[j]; RdnT[j]+=P.rdnT[j]
 
     PP.ptuple, PP.derT, PP.valT, PP.rdnT, PP.box, PP.link_, PP.link_t \
     = Ptuple, DerT, ValT, RdnT, (Y0,Yn,X0,Xn), Link_, (Link_m,Link_d)
@@ -224,7 +224,8 @@ def comp_unpack(Que,que, rn):  # recursive unpack nested sequence to compare fin
                 valT = [mval, dval]
                 rdnT = [int(mval<dval),int(mval>=dval)]  # to use np.sum
             for i in 0,1:
-                DerT[i]+=[derT[i]]; ValT[i]+=[valT[i]]; RdnT[i]+=[rdnT[i]]
+                if DerT[i]: DerT[i]+=derT[i]; ValT[i]+=valT[i]; RdnT[i]+=rdnT[i]  # merge them
+                else:       DerT[i]+=[derT[i]]; ValT[i]+=[valT[i]]; RdnT[i]+=[rdnT[i]]  # add as new element
 
     return DerT,ValT,RdnT
 

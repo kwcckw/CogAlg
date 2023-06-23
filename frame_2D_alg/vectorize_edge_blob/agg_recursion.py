@@ -74,7 +74,7 @@ def comp_G_(G_, pri_G_=None, f1Q=1, fd = 0, fsub=0):  # cross-comp Graphs if f1Q
                 continue
             dy = _iG.box[0]-iG.box[0]; dx = _iG.box[1]-iG.box[1]  # between center x0,y0
             distance = np.hypot(dy, dx)  # Euclidean distance between centers, sum in sparsity, proximity = ave-distance
-            if distance < ave_distance * ((sum(_iG.valT) + sum(iG.valT)) / (2*sum(G_aves))):
+            if distance < ave_distance * ((np.sum(_iG.valT) + np.sum(iG.valT)) / (2*sum(G_aves))):
                 # same for cis and alt Gs:
                 for _G, G in ((_iG, iG), (_iG.alt_Graph, iG.alt_Graph)):
                     if not _G or not G:  # or G.val
@@ -83,10 +83,10 @@ def comp_G_(G_, pri_G_=None, f1Q=1, fd = 0, fsub=0):  # cross-comp Graphs if f1Q
                     dparT,valT,rdnT = comp_unpack(_G.parT, G.parT, rn=1)  # comp layers while lower match?
                     # tentative:
                     bottom_layer = unpack(dparT[1])
-                    bottom_layer += [1,distance,[dy,dx]]  # pack in ds
-                    derG = Cgraph(G=[_G,G], dparT=dparT,valT=valT,rdnT=rdnT, box=[])  # box is redundant to G
+                    bottom_layer += [1,distance,[dy,dx]]  # pack in ds (add L,S,A here?) Else what would be these 3 params?
+                    derG = Cgraph(G=[_G,G], parT=dparT,valT=valT,rdnT=rdnT, box=[])  # box is redundant to G
                     # add links:
-                    mval, dval = valT
+                    mval, dval = unpack(valT[0])[0], unpack(valT[1])[0] 
                     _G.link_ += [derG]; G.link_ += [derG]  # no didx, no ext_valt accum?
                     if mval > ave_Gm:
                         _G.link_t[0] += [derG]; add_unpack(_G.valT[0],mval)  # also add rdnT?
