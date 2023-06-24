@@ -18,8 +18,14 @@ def comp_slice(blob, verbose=False):  # high-G, smooth-angle blob, composite der
 
     P_ = blob.P_  # must be contiguous, gaps filled after slice_blob
 
+    # reset link_from P to derP
+    link__ = []
     for P in P_:
-        for _P in P.link_: comp_P(_P,P)
+        link__ += [copy(P.link_)]
+        P.link_ = []
+    for P, link_ in zip(P_, link__):
+        for _P in link_: 
+            comp_P(_P,P)
 
     PPm_,PPd_ = form_PP_t(P_, base_rdn=2)
     blob.PPm_, blob.PPd_  = PPm_, PPd_
@@ -139,7 +145,7 @@ def sum2PP(qPP, base_rdn, fd):  # sum Ps and links into PP
     P_,_,_ = qPP  # proto-PP is a list
     # init:
     P = (P_[0])
-    sum_links(P,fd)  # P.link_t[fd] can't be empty here
+    if P.link_t[fd]: sum_links(P,fd)  # P.link_t[fd] can't be empty here
 
     Ptuple, DerT,ValT,RdnT, Link_,Link_m,Link_d, y,x = \
     deepcopy(P.ptuple),deepcopy(P.derT),deepcopy(P.valT),deepcopy(P.rdnT), copy(P.link_),copy(P.link_t[0]),copy(P.link_t[1]), P.y,P.x
@@ -151,17 +157,20 @@ def sum2PP(qPP, base_rdn, fd):  # sum Ps and links into PP
         P.roott[fd] = PP
         if i:  # exclude init P
             sum_ptuple(Ptuple, P.ptuple)
-            sum_links(P,fd)
-            Link_+=P.link_; Link_m+=P.link_t[0]; Link_d+=P.link_t[1]
-            # or internal links representation is redundant?
-            L=P.ptuple[-1]; Dy=P.axis[0]*L/2; Dx=P.axis[1]*L/2; y=P.y; x=P.x
-            Y0=min(Y0,(y-Dy)); Yn=max(Yn,(y+Dy)); X0=min(X0,(x-Dx)); Xn=max(Xn,(x-Dx))
-            if P.derT[0]:  # summed from links, which may not exist
-                for j in 0,1:
-                    if isinstance(P.valT[0], list):  # der+: H = 1fork) 1layer before feedback
-                        sum_unpack([DerT[j],ValT[j],RdnT[j]], [P.derT[j],P.valT[j],P.rdnT[j]])
-                    else:  # rng+: 1 vertuple
-                        sum_ptuple(DerT[j], P.derT[j]); ValT[j]+=P.valT[j]; RdnT[j]+=P.rdnT[j]
+            if fd: link_ = [link for link in P.link_t[1] if link not in P.link_t[0]]
+            else:  link_ = P.link_t[0]
+            if link_:  # temporary because P.link_ may empty now
+                sum_links(P,fd)
+                Link_+=P.link_; Link_m+=P.link_t[0]; Link_d+=P.link_t[1]
+                # or internal links representation is redundant?
+                L=P.ptuple[-1]; Dy=P.axis[0]*L/2; Dx=P.axis[1]*L/2; y=P.y; x=P.x
+                Y0=min(Y0,(y-Dy)); Yn=max(Yn,(y+Dy)); X0=min(X0,(x-Dx)); Xn=max(Xn,(x-Dx))
+                if P.derT[0]:  # summed from links, which may not exist
+                    for j in 0,1:
+                        if isinstance(P.valT[0], list):  # der+: H = 1fork) 1layer before feedback
+                            sum_unpack([DerT[j],ValT[j],RdnT[j]], [P.derT[j],P.valT[j],P.rdnT[j]])
+                        else:  # rng+: 1 vertuple
+                            sum_ptuple(DerT[j], P.derT[j]); ValT[j]+=P.valT[j]; RdnT[j]+=P.rdnT[j]
 
     PP.ptuple, PP.derT, PP.valT, PP.rdnT, PP.box, PP.link_, PP.link_t \
     = Ptuple, DerT, ValT, RdnT, (Y0,Yn,X0,Xn), Link_, (Link_m,Link_d)
@@ -170,16 +179,21 @@ def sum2PP(qPP, base_rdn, fd):  # sum Ps and links into PP
 def sum_links(P, fd):  # call from sum2PP, need to add checking for unique links before summation?
 
     link_ = P.link_t[fd]
-    # if fd:  # prevent redundant summation from both forks:
-    #    link_ = [link for link in link_ if link not in P.link_t[0]]
+    if fd:  # prevent redundant summation from both forks:
+        link_ = [link for link in link_ if link not in P.link_t[0]]
 
     derP = link_[0]  # can't be empty here
     LayT,ValT,RdnT = deepcopy(derP.derT),deepcopy(derP.valT),deepcopy(derP.rdnT),
 
-    for derP in P.link_t[1:]:
+    for derP in link_[1:]:
         for i in 0,1:  # sum last layer only?:
-            sum_unpack([LayT[i],ValT[i],RdnT[i]], [derP.derT[i][-1],derP.valT[i][-1],derP.rdnT[i][-1]])
+            if isinstance(LayT[i][0], list):
+                sum_unpack([LayT[i][-1],ValT[i][-1],RdnT[i][-1]], [derP.derT[i][-1],derP.valT[i][-1],derP.rdnT[i][-1]]) 
+            else:
+                sum_unpack([LayT,ValT,RdnT], [derP.derT,derP.valT,derP.rdnT])  # rng + doesn't have nested derP's params
+                break  # prevent sum twice in md fork since sum_unpack sum both forks
 
+    P.derT = LayT; P.valT = ValT; P.rdnT = RdnT  # we need assign them here?
 
 def sum_unpack(Q,q):  # recursive unpack two pairs of nested sequences to sum final ptuples
 
