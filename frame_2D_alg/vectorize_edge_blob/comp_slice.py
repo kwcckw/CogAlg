@@ -24,7 +24,7 @@ def comp_slice(blob, verbose=False):  # high-G, smooth-angle blob, composite der
         for _P in link_:
             comp_P(_P,P)  # replaces P.link_ Ps with derPs
 
-    PPm_,PPd_ = form_PP_t(P_, base_rdn=2)
+    PPm_,PPd_ = form_PP_t([Pt[0]for Pt in P_], base_rdn=2)
     blob.PPm_, blob.PPd_  = PPm_, PPd_
 
 def comp_P(_P,P, fd=0, derP=None):  #  derP if der+, S if rng+
@@ -52,14 +52,14 @@ def comp_P(_P,P, fd=0, derP=None):  #  derP if der+, S if rng+
     if dval > aveP*drdn: P.link_t[1] += [derP]
 
 
-def form_PP_t(P_, base_rdn):  # form PPs of derP.valt[fd] + connected Ps'val
+def form_PP_t(P_, base_rdn):  # form PPs of derP.valt[fd] + connected Ps'va
 
     PP_t = []
     for fd in 0,1:
         qPP_ = []  # initial sequence-PPs
         for P in P_:
             # below is still buggy
-            if not P.roott[fd]:  # else already packed in qPP
+            if not P.roott[fd] and P.link_t[fd]:  # else already packed in qPP
                 qPP = [[P]]  # init PP is 2D queue of Ps, + valt of all layers?
                 P.roott[fd]=qPP; valt = [0,0]
                 uplink_ = P.link_t[fd]
@@ -73,6 +73,9 @@ def form_PP_t(P_, base_rdn):  # form PPs of derP.valt[fd] + connected Ps'val
                                 qP.roott[fd] = qPP; qPP[0] += [qP]  # append qP_
                             qPP_.remove(_qPP)
                         else:
+                            # we didn't assign links bidirectionally, so _P.link_t might be empty here, i guess we need to assign them bidirectionally?
+                            if derP not in _P.link_t[fd]:
+                                _P.link_t[fd] += [derP]
                             qPP[0].insert(0,_P)  # pack top down
                             _P.roott[fd] = qPP
                             for i in 0,1: valt[i] += np.sum(derP.valT[i])
@@ -143,7 +146,10 @@ def sum2PP(qPP, base_rdn, fd):  # sum Ps and links into PP
     # init:
     P = P_[0]
     VAlt, RDnt = [0,0], [base_rdn,base_rdn]
-    LAyt = deepcopy(P.link_t[fd][0].derT[-1] if fd else P.link_t[fd][0].derT)
+    if fd and isinstance(P.link_t[fd][0].derT[0][0], list):  # if prior fork is rng+, they only single layer
+        LAyt = [deepcopy(P.link_t[fd][0].derT[0][-1]), deepcopy(P.link_t[fd][0].derT[1][-1])]
+    else:
+        LAyt = deepcopy(P.link_t[fd][0].derT)
     sum_links(P, LAyt,VAlt,RDnt, fd, first=1)  # P.link_t[fd] can't be empty
 
     Ptuple, Link_,Link_m,Link_d, y,x = deepcopy(P.ptuple), copy(P.link_),copy(P.link_t[0]),copy(P.link_t[1]), P.y,P.x
@@ -191,11 +197,11 @@ def sum_link(Layt,Valt,Rdnt, derP):
         layt,valt,rdnt = derP.derT[0,1][-1], derP.valT[0,1][-1], derP.rdnT[0,1][-1]
     else:  # rng+: single-layer, 1 vertuple:
         layt,valt,rdnt = derP.derT, derP.valT, derP.rdnT
-    for i in 0,1:
-        for Ptuple, ptuple in zip(Layt[i], layt[i]):  # or single ptuple?
-            sum_ptuple(Ptuple, ptuple)
-            Valt[i] += valt[i]  # scalar per layer
-            Rdnt[i] += rdnt[i]
+
+    for i, (Ptuple, ptuple) in enumerate(zip(Layt, layt)):  # or single ptuple?
+        sum_ptuple(Ptuple, ptuple)
+        Valt[i] += valt[i]  # scalar per layer
+        Rdnt[i] += rdnt[i]
 
 
 def sum_unpack(Q,q):  # recursive unpack two pairs of nested sequences to sum final ptuples
