@@ -3,7 +3,7 @@ import numpy as np
 from copy import copy, deepcopy
 from .filters import PP_aves, ave_nsub, P_aves, G_aves
 from .classes import CP, CPP
-from .comp_slice import comp_P, form_PP_t, sum_unpack
+from .comp_slice import comp_P, form_PP_t, sum_unpack, add_unpack, unpack
 from dataclasses import replace
 
 def sub_recursion_eval(root, PP_, fd):  # fork PP_ in PP or blob, no derT,valT,rdnT in blob
@@ -42,8 +42,9 @@ def sub_recursion(PP, fd):  # evaluate PP for rng+ and der+, add layers to selec
         if not isinstance(PP.valT[0], list): nest(PP)  # PP created from 1st rng+ is not nested too
         [nest(P) for P in PP.P_]  # add layers and forks?
         P_ = comp_der(PP.P_)  # returns top-down
-        PP.rdnT[fd][-1][-1][-1] += np.sum(PP.valT[fd][-1]) > np.sum(PP.valT[1 - fd][-1])
-        base_rdn = PP.rdnT[fd][-1][-1][-1]  # link Rdn += PP rdn?
+        rdn = np.sum(PP.valT[fd][-1]) > np.sum(PP.valT[1 - fd][-1])
+        add_unpack(PP.rdnT[fd], rdn) 
+        base_rdn = unpack(PP.rdnT[fd])[-1]  # link Rdn += PP rdn?
     else:
         P_ = comp_rng(PP.P_, PP.rng + 1)
         PP.rdnT[fd] += PP.valT[fd] > PP.valT[1 - fd]
@@ -70,7 +71,7 @@ def comp_rng(iP_, rng):  # form new Ps and links, switch to rng+n to skip cluste
                 __P = _derP._P  # next layer of Ps
                 distance = np.hypot(__P.x-P.x, __P.y-P.y)  # distance between mid points
                 if distance > rng:
-                    comp_P(cP,__P, fd=0, derP=distance)  # distance=S, mostly lateral, relative to L for eval?
+                    comp_P(cP,__P, fd=0)  # distance=S, mostly lateral, relative to L for eval?
         P_ += [cP]
     return P_
 
@@ -81,9 +82,10 @@ def comp_der(P_):  # keep same Ps and links, increment link derTs, then P derTs 
             if derP._P.link_t[1]:  # else no _P.derT to compare
                 _P = derP._P
                 comp_P(_P,P, fd=1, derP=derP)
+    return P_
 
 
-def nest(P, ddepth=3):  # default ddepth is nest 3 times: tuple->fork->layer->H
+def nest(P, ddepth=4):  # default ddepth is nest 4 times: tuple-> tuples ->fork->layer->H (we need add an additional layer to pack ptuple in 1,1,2,4 now?)
     # agg+ adds depth: number brackets before the tested bracket: P.valT[0], P.valT[0][0], etc?
 
     if not isinstance(P.valT[0],list):
