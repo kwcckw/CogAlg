@@ -40,10 +40,10 @@ def sub_recursion(PP, fd):  # evaluate PP for rng+ and der+, add layers to selec
 
     if fd:
         if not isinstance(PP.valT[0], list): nest(PP)  # PP created from 1st rng+ is not nested too
-        [nest(P) for P in PP.P_]  # add layers and forks?
-        P_ = comp_der(PP.P_)  # returns top-down
-        rdn = np.sum(PP.valT[fd][-1]) > np.sum(PP.valT[1 - fd][-1])
-        add_unpack(PP.rdnT[fd], rdn) 
+        [nest(P) for P in PP.P_]  # add layer)H to ptuple
+        P_ = comp_der(PP.P_)  # P_ doesn't change
+        rdn = np.sum(PP.valT[fd][-1]) > np.sum(PP.valT[1-fd][-1])
+        add_unpack(PP.rdnT[fd],rdn)
         base_rdn = unpack(PP.rdnT[fd])[-1]  # link Rdn += PP rdn?
     else:
         P_ = comp_rng(PP.P_, PP.rng + 1)
@@ -71,7 +71,7 @@ def comp_rng(iP_, rng):  # form new Ps and links, switch to rng+n to skip cluste
                 __P = _derP._P  # next layer of Ps
                 distance = np.hypot(__P.x-P.x, __P.y-P.y)  # distance between mid points
                 if distance > rng:
-                    comp_P(cP,__P, fd=0)  # distance=S, mostly lateral, relative to L for eval?
+                    comp_P(cP,__P, fd=0, derP=distance)  # distance=S, mostly lateral, relative to L for eval?
         P_ += [cP]
     return P_
 
@@ -84,8 +84,9 @@ def comp_der(P_):  # keep same Ps and links, increment link derTs, then P derTs 
                 comp_P(_P,P, fd=1, derP=derP)
     return P_
 
+def nest(P, ddepth=2):  # default ddepth is nest 2 times: tuple->layer->H, rng+H is ptuple, der+H is 1,2,4.. ptuples'layers?
 
-def nest(P, ddepth=4):  # default ddepth is nest 4 times: tuple-> tuples ->fork->layer->H (we need add an additional layer to pack ptuple in 1,1,2,4 now?)
+    # fback adds alt fork per layer, may be empty?
     # agg+ adds depth: number brackets before the tested bracket: P.valT[0], P.valT[0][0], etc?
 
     if not isinstance(P.valT[0],list):

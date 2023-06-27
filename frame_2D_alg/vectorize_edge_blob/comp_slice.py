@@ -36,7 +36,7 @@ def comp_P(_P,P, fd=0, derP=None):  #  derP if der+, S if rng+
         rn *= len(_P.link_t[1]) / len(P.link_t[1])  # derT is summed from links
         # comp derH (all are der+ layers)?
         layT,valT,rdnT = comp_unpack(_P.derT[1], P.derT[1], rn)
-        mval = unpack(valT[0])[-1]; dval = unpack(valT[1])[-1]  # should be scalars here
+        mval = sum(valT[0][-1]); dval = sum(valT[1][-1])  # last layer val
         mrdn = 1+(dval>mval); drdn = 1+(1-(dval>mval))
         for i in 0,1:  # append new layer
             derP.derT[i]+=[layT[i]]; derP.valT[i] += [valT[i]]; derP.rdnT[i] += [rdnT[i]]
@@ -140,8 +140,8 @@ def sum2PP(qPP, base_rdn, fd):  # sum Ps and links into PP
     P_,_,_ = qPP  # proto-PP is a list
     # init:
     P = P_[0]
-    link = P.link_t[fd][0]
-    Dert, Valt, Rdnt = deepcopy(link.derT), deepcopy(link.valT), deepcopy(link.rdnT)  # first P.link_t[fd] can't be empty
+    link = P.link_t[fd][0]  # can't be empty
+    Dert, Valt, Rdnt = deepcopy(link.derT), deepcopy(link.valT), deepcopy(link.rdnT)
     for i in 0,1: add_unpack(Rdnt[i], base_rdn)
     if len(P.link_t[fd]) > 1:
         sum_links(P.link_t[fd][1:], Dert,Valt,Rdnt)
@@ -167,15 +167,12 @@ def sum2PP(qPP, base_rdn, fd):  # sum Ps and links into PP
     = Ptuple, Dert, Valt, Rdnt, (Y0,Yn,X0,Xn), Link_, (Link_m,Link_d)
     return PP
 
-
 def add_unpack(H, i):  # recursive unpack hierarchy of unknown nesting to add input
-
     while isinstance(H,list):
         H=H[-1]
     H+=i
 
 def unpack(H):  # recursive unpack hierarchy of unknown nesting
-
     while isinstance(H,list):
         last_H = H
         H=H[-1]
@@ -240,9 +237,11 @@ def comp_unpack(Que,que, rn):  # recursive unpack nested sequence to compare fin
                 valT = [mval, dval]
                 rdnT = [int(mval<dval),int(mval>=dval)]  # to use np.sum
 
-            # we need this here else they will not be nested
-            for i in 0,1:
-                DerT[i]+=[derT[i]]; ValT[i]+=[valT[i]]; RdnT[i]+=[rdnT[i]]
+            if DerT:  # accum, or both if fixed nesting?
+                for i in 0,1:
+                    DerT[i]+=[derT[i]]; ValT[i]+=[valT[i]]; RdnT[i]+=[rdnT[i]]
+            else:  # init
+                DerT = deepcopy(derT); ValT = deepcopy(valT); RdnT = deepcopy(rdnT)
 
     return DerT,ValT,RdnT
 
