@@ -163,8 +163,11 @@ def sum2PP(qPP, base_rdn, fd):  # sum Ps and links into PP
                 sum_links(P.link_t[fd], Dert,Valt,Rdnt, P)
                 Link_+=P.link_; Link_m+=P.link_t[0]; Link_d+=P.link_t[1]
                 # links inside PP, redundant?
-    PP.ptuple, PP.derT, PP.valT, PP.rdnT, PP.box, PP.link_, PP.link_t \
-    = Ptuple, Dert, Valt, Rdnt, (Y0,Yn,X0,Xn), Link_, (Link_m,Link_d)
+    PP.ptuple, PP.box, PP.link_, PP.link_t  = Ptuple, (Y0,Yn,X0,Xn), Link_, (Link_m,Link_d)    
+    if isinstance(Dert[0][0], list):  # add extra fork nesting for PP?
+        PP.derT, PP.valT, PP.rdnT = [[Dert[0]], [Dert[1]]], [[Valt[0]], [Valt[1]]], [[Rdnt[0]],[Rdnt[1]]]
+    else:
+        PP.derT, PP.valT, PP.rdnT = Dert, Valt, Rdnt
     return PP
 
 def add_unpack(H, i):  # recursive unpack hierarchy of unknown nesting to add input

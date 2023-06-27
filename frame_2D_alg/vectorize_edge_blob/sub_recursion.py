@@ -14,7 +14,10 @@ def sub_recursion_eval(root, PP_, fd):  # fork PP_ in PP or blob, no derT,valT,r
             term = 0
             sub_recursion(PP, fd)  # comp_der|rng in PP -> parLayer, sub_PPs
         elif isinstance(root, CPP):
-            root.fback_ += [[[PP.derT[fd][-1]], PP.valT[fd][-1], PP.rdnT[fd][-1]]]  # [derT,valT,rdnT]
+            if isinstance(PP.derT[fd][0], list):
+                root.fback_ += [[[PP.derT[fd][-1]], PP.valT[fd][-1], PP.rdnT[fd][-1]]]  # [derT,valT,rdnT]
+            else:
+                root.fback_ += [[[PP.derT[fd]], PP.valT[fd], PP.rdnT[fd]]]   # single layer in rng+
             # feedback last layer, added in sum2PP
     if term and isinstance(root, CPP):
         feedback(root, fd)  # upward recursive extend root.derT, forward eval only
