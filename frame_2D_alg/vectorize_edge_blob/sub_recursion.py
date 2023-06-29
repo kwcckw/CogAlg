@@ -75,9 +75,12 @@ def comp_rng(iP_, rng):  # form new Ps and links, switch to rng+n to skip cluste
 def comp_der(P_):  # keep same Ps and links, increment link derTs, then P derTs in sum2PP
 
     for P in P_:
-        for derP in P.link_t[1]:  # trace dlinks
+        # use copy because we may add new derPs in comp_P_, or we reset their link here?
+        for derP in copy(P.link_t[1]):  # trace dlinks
             if derP._P.link_t[1]:  # else no _P.derT to compare
                 _P = derP._P
+                # if _P is top P, they shouldn't have link, and hence their derT is empty too
+                # so those Ps should be filtered in reval_P_ and top P will be skipped？ 
                 comp_P(_P,P, fd=1, derP=derP)
     return P_
 

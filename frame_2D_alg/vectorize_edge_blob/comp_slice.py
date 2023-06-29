@@ -141,7 +141,8 @@ def sum2PP(qPP, base_rdn, fd):  # sum links in Ps and Ps in PP
     # init:
     P = P_[0]
     link = P.link_t[fd][0]  # not empty
-    Dert = deepcopy(link.dert); Valt = deepcopy(link.valt); Rdnt = add_unpack(link.rdnT, base_rdn)
+    Dert = deepcopy(link.derT); Valt = deepcopy(link.valT)
+    Rdnt = [add_unpack(deepcopy(link.rdnT[0]), base_rdn), add_unpack(deepcopy(link.rdnT[1]), base_rdn)]  # or add them based on fd only?
     if len(P.link_t[fd]) > 1:
         sum_links(P.link_t[fd][1:], Dert,Valt,Rdnt)
     P.dert, P.valt, P.rdnt = deepcopy(Dert), deepcopy(Valt), deepcopy(Rdnt)
@@ -213,6 +214,7 @@ def add_unpack(H, i):  # recursive unpack hierarchy of unknown nesting to add in
     while isinstance(H,list):
         H=H[-1]
     H+=i
+    return H  # return so that we can use it to sum rdn
 
 def unpack(H):  # recursive unpack hierarchy of unknown nesting
     while isinstance(H,list):
