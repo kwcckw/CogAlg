@@ -138,56 +138,60 @@ def reval_P_(P_, fd):  # prune qPP by link_val + mediated link__val
 def sum2PP(qPP, base_rdn, fd):  # sum links in Ps and Ps in PP
 
     P_,_,_ = qPP  # proto-PP is a list
-    # init:
-    P = P_[0]
-    link = P.link_t[fd][0]  # not empty
-    Dert = deepcopy(link.dert); Valt = deepcopy(link.valt)
-    Rdnt = add_unpack(deepcopy(link.rdnT), base_rdn)
-    if len(P.link_t[fd]) > 1:
-        sum_links(P.link_t[fd][1:], Dert,Valt,Rdnt)
-    P.dert,P.valt,P.rdnt = deepcopy(Dert),deepcopy(Valt),deepcopy(Rdnt)
-
-    Ptuple, Link_,Link_m,Link_d, y,x = deepcopy(P.ptuple), copy(P.link_),copy(P.link_t[0]),copy(P.link_t[1]), P.y,P.x
-    L = Ptuple[-1]; Dy = P.axis[0]*L/2; Dx = P.axis[1]*L/2  # side-accumulated sin,cos
-    Y0 = y-Dy; Yn = y+Dy; X0 = x-Dx; Xn = x+Dx
     PP = CPP(fd=fd, P_=P_)
     # accum:
     for i, P in enumerate(P_):
         P.roott[fd] = PP
-        if i:  # exclude init P
-            sum_ptuple(Ptuple, P.ptuple)
-            L=P.ptuple[-1]; Dy=P.axis[0]*L/2; Dx=P.axis[1]*L/2; y=P.y; x=P.x
-            Y0=min(Y0,(y-Dy)); Yn=max(Yn,(y+Dy)); X0=min(X0,(x-Dx)); Xn=max(Xn,(x-Dx))
-            # if not top P:
-            if P.link_t[fd]:
-                sum_links(P.link_t[fd], Dert,Valt,Rdnt, P)
-                Link_+=P.link_; Link_m+=P.link_t[0]; Link_d+=P.link_t[1]
+        sum_ptuple(PP.ptuple, P.ptuple)
+        L=P.ptuple[-1]; Dy=P.axis[0]*L/2; Dx=P.axis[1]*L/2; y=P.y; x=P.x
+        if i: Y0=min(Y0,(y-Dy)); Yn=max(Yn,(y+Dy)); X0=min(X0,(x-Dx)); Xn=max(Xn,(x+Dx))
+        else: Y0=y-Dy; Yn=y+Dy; X0=x-Dx; Xn=x+Dx  # init
+        # if not top P:
+        if P.link_t[fd]:
+            sum_links(P.link_t[fd], PP.derH, P)
+            PP.link_+=P.link_; PP.link_t[0]+=P.link_t[0]; PP.link_t[1]+=P.link_t[1]
                 # PP-wide links?
-    PP.ptuple, PP.derT, PP.valT, PP.rdnT, PP.box, PP.link_, PP.link_t = Ptuple, Dert, Valt, Rdnt, (Y0,Yn,X0,Xn), Link_, (Link_m,Link_d)
+    PP.box =(Y0,Yn,X0,Xn)
 
     return PP
 
-def sum_links(link_, Dert,Valt,Rdnt, P=None):  # called from sum2PP, args per PP
+def sum_links(link_, DerH, P):  # called from sum2PP, args per PP
 
-    # if fd: link_ = [link for link in link_ if link not in P.link_t[0]]  # if P sums from both forks, prevent redundancy
-    # init:
-    derP = link_[0]; _P=derP._P  # not empty
-    derT,valT,rdnT = derP.derT,derP.valT,derP.rdnT
-    sum_unpack([Dert,Valt,Rdnt], [derT,valT,rdnT])  # accum PP dert
-    sum_unpack([_P.derT,_P.valT,_P.rdnT], [derP.derT,derP.valT,derP.rdnT])
-    dert,valt,rdnt = deepcopy(derP.derT),deepcopy(derP.valT),deepcopy(derP.rdnT)
     # accum:
-    for derP in link_[1:]:
-        _P = derP._P
-        derT,valT,rdnT = derP.derT,derP.valT,derP.rdnT
-        sum_unpack([dert,valt,rdnt], [derT,valT,rdnT])
-        sum_unpack([_P.derT,_P.valT,_P.rdnT], [derT,valT,rdnT])
-    # term:
-    sum_unpack([Dert,Valt,Rdnt], [dert,valt,rdnt])  # sum P lay into PP lay
-    if P:  # not 1st P
-        P.derT=dert; P.valT=valt; P.rdnT=rdnt
+    for derP in link_:
+        sum_T(P, derP)  # sum P
+        sum_T(derP._P  , derP)  # bilateral summation on _P
+        sum_derH_derT(DerH, derP.derT, derP.valT, derP.rdnT)  # sum P lay into PP lay
+
+# sum derT, valT and rdnT
+def sum_T(P, p):    
+    for i in 0,1:
+        sum_ptuple(P.derT[i], p.derT[i])
+        P.valT[i] += p.valT[i]
+        P.rdnT[i] += p.rdnT[i]
 
 
+# convert and sum T into derH
+def sum_derH_derT(DerH, derT, valT, rdnT):
+    sum_derH(DerH, [derT[0],derT[1],valT[0],valT[1],rdnT[0],valT[1]])
+    
+
+# sum mtuple, dtuple, mval, dval, mrdn, drdn
+def sum_derH(DerH, derH):
+    
+    if DerH:
+        for i, param in enumerate(DerH):
+            # mtuple, dtuple
+            if i<2:
+                sum_ptuple(DerH[i], derH[i])
+            # mval, dval, mrdn, drdn
+            else:
+                DerH[i] += derH[i]
+    else:
+        DerH = deepcopy(derH)
+
+# this should be not needed now
+'''
 def sum_unpack(Q,q):  # recursive unpack of two pairs of nested sequences, to sum final ptuples
 
     Que,Val_,Rdn_ = Q; que,val_,rdn_ = q  # alternating rngH( derH( rngH... nesting, down to ptuple|val|rdn
@@ -201,6 +205,7 @@ def sum_unpack(Q,q):  # recursive unpack of two pairs of nested sequences, to su
                     sum_ptuple(Ele, ele)
             else:
                 Que += [deepcopy(ele)]; Val_+= [deepcopy(val)]; Rdn_+= [deepcopy(rdn)]
+'''
 
 def sum_ptuple(Ptuple, ptuple, fneg=0):
 
