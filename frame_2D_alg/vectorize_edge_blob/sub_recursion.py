@@ -1,18 +1,19 @@
 from itertools import zip_longest
 import numpy as np
 from copy import copy, deepcopy
-from .filters import PP_aves, ave_nsub, P_aves, G_aves
+from .filters import PP_aves, ave_nsub
 from .classes import CP, CPP
-from .comp_slice import comp_P, form_PP_t, sum_derH  # sum_ptuple, sum_unpack, last_add, add_unpack, unpack
+from .comp_slice import comp_P, form_PP_t, sum_derH
 from dataclasses import replace
 
-def sub_recursion_eval(root, PP_, fd):  # fork PP_ in PP or blob, no derT,valT,rdnT in blob
+def sub_recursion_eval(root, PP_, fd):  # fork PP_ in PP or blob, no derH in blob
 
+    # add RVal=0, DVal=0 to return?
     term = 1
     for PP in PP_:
         if PP.valt[fd] > PP_aves[fd] * PP.rdnt[fd] and len(PP.P_) > ave_nsub:
             term = 0
-            sub_recursion(PP, fd)  # comp_der|rng in PP -> parLayer, sub_PPs
+            sub_recursion(PP)  # comp_der|rng in PP -> parLayer, sub_PPs
         elif isinstance(root, CPP):
             root.fback_ += [[PP.derH, PP.valt, PP.rdnt]]
     if term and isinstance(root, CPP):
@@ -21,10 +22,10 @@ def sub_recursion_eval(root, PP_, fd):  # fork PP_ in PP or blob, no derT,valT,r
 
 def feedback(root, fd):  # append new der layers to root
 
-    Fback = root.fback_.pop()  # init with 1st fback: [derH,valt,rdnt]
+    Fback = root.fback_.pop()  # init with 1st fback: [derH,valt,rdnt], derH: [[mtuple,dtuple, mval,dval, mrdn, drdn]]
     while root.fback_:
         sum_derH(Fback,root.fback_.pop(), base_rdn=0)
-    sum_derH([root.derH, root.valt,root.rdnt], Fback, base_rdn=0)  # derH = [[mtuple,dtuple, mval,dval, mrdn, drdn]]
+    sum_derH([root.derH, root.valt,root.rdnt], Fback, base_rdn=0)
 
     if isinstance(root.roott[fd], CPP):  # not blob
         root = root.roott[fd]
@@ -33,21 +34,22 @@ def feedback(root, fd):  # append new der layers to root
             feedback(root, fd)  # derT/ rng layer in sum2PP, deeper rng layers are appended by feedback
 
 
-def sub_recursion(PP, fd):  # evaluate PP for rng+ and der+, add layers to select sub_PPs
+def sub_recursion(PP):  # evaluate PP for rng+ and der+, add layers to select sub_PPs
 
-    if fd: P_ = comp_der(PP.P_)  # same P_
-    else:  P_ = comp_rng(PP.P_, PP.rng + 1)
+    for fd in 0,1:
+        # same else new P_:
+        P_ = comp_der(PP.P_) if fd else comp_rng(PP.P_, PP.rng+1)
+        PP.rdnt[fd] += PP.valt[fd] - PP_aves[fd]*PP.rdnt[fd] > PP.valt[1-fd] - PP_aves[1-fd]*PP.rdnt[1-fd]  # not last layer val?
 
-    PP.rdnt[fd] += \
-        PP.valt[fd] - PP_aves[fd]*PP.rdnt[fd] > PP.valt[1-fd] - PP_aves[1-fd]*PP.rdnt[1-fd]  # not only last layer val?
+        cP_ = [replace(P, roott=[None,None], link_t=[[],[]]) for P in P_]  # reassign roots to sub_PPs
+        PP.P_ = form_PP_t(cP_, base_rdn=PP.rdnt[fd])  # replace P_ with sub_PPm_, sub_PPd_
 
-    cP_ = [replace(P, roott=[None, None], link_t=[[], []]) for P in P_]  # reassign roots to sub_PPs
-    PP.P_ = form_PP_t(cP_, base_rdn=PP.rdnt[fd])  # replace P_ with sub_PPm_, sub_PPd_
-
-    for fd, sub_PP_ in enumerate(PP.P_):
-        if sub_PP_:
-            for sub_PP in sub_PP_: sub_PP.roott[fd] = PP
-            sub_recursion_eval(PP, sub_PP_, fd=fd)
+        for i, sub_PP_ in enumerate(PP.P_):
+            if sub_PP_:
+                for sPP in sub_PP_: sPP.roott[i] = PP
+                sub_recursion_eval(PP, sub_PP_, fd=1)
+            else:
+                feedback(PP, fd=i)  # not sure
 
 
 def comp_rng(iP_, rng):  # form new Ps and links, switch to rng+n to skip clustering?
@@ -69,13 +71,8 @@ def comp_rng(iP_, rng):  # form new Ps and links, switch to rng+n to skip cluste
 def comp_der(P_):  # keep same Ps and links, increment link derTs, then P derTs in sum2PP
 
     for P in P_:
-        # use copy because we may add new derPs in comp_P_, or we reset their link here?
-        for derP in copy(P.link_t[1]):  # trace dlinks
+        for derP in P.link_t[1]:  # trace dlinks
             if derP._P.link_t[1]:  # else no _P.derT to compare
                 _P = derP._P
-                # if _P is top P, they shouldn't have link, and hence their derT is empty too
-                # so those Ps should be filtered in reval_P_ and top P will be skipped？ 
                 comp_P(_P,P, fd=1, derP=derP)
     return P_
-
-# nested is not needed now

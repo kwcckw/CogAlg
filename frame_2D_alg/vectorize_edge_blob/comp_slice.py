@@ -50,20 +50,18 @@ def comp_P(_P,P, fd=0, derP=None):  #  derP if der+, S if rng+
 
 def comp_derH(_derH, derH, rn):  # derH is a list of layers or sub-layers, each = [mtuple,dtuple, mval,dval, mrdn,drdn]
 
-    DderH = []  # or = not-missing comparand if xor?
-    mval, dval, mrdn, drdn = 0,0,1,1
+    dderH = []  # or = not-missing comparand if xor?
+    Mval, Dval, Mrdn, Drdn = 0,0,1,1
 
     for _lay, lay in zip_longest(_derH, derH, fillvalue=[]):
         if _lay and lay:
             mtuple, dtuple = comp_dtuple(_lay[1], lay[1], rn)
-            mval += sum(mtuple); dval += sum(dtuple)
-            mrdn += dval > mval; drdn += dval < mval
-            dderH = [mtuple, dtuple, mval, dval, mrdn, drdn]  # should we concatenate them? Or sum them into DderH?   
-            sum_derH([DderH,None, None],[dderH,None,None], 0)        
-            # or we concatenate them? But with concatenation we will get multiple derHs per der+
-            # DderH += [dderH] ?
-            
-    return DderH, [mval,dval], [mrdn,drdn]  # new layer, 1/2 combined derH
+            mval = sum(mtuple); dval = sum(dtuple)
+            mrdn = dval > mval; drdn = dval < mval
+            dderH += [[mtuple,dtuple,mval,dval,mrdn,drdn]]
+            Mval+=mval; Dval+=dval; Mrdn+=mrdn; Drdn+=drdn
+
+    return dderH, [Mval,Dval], [Mrdn,Drdn]  # new layer, 1/2 combined derH
 
 def comp_dtuple(_ptuple, ptuple, rn):
 
@@ -187,11 +185,9 @@ def sum_derH(T, t, base_rdn):  # derH is a list of layers or sub-layers, each = 
 
     DerH, Valt, Rdnt = T
     derH, valt, rdnt = t
-    # not None
-    if Valt:
-        for i in 0, 1:
-            Valt[i] += valt[i]
-            Rdnt[i] += rdnt[i] + base_rdn
+    for i in 0, 1:
+        Valt[i] += valt[i]
+        Rdnt[i] += rdnt[i] + base_rdn
     if DerH:
         for Layer, layer in zip_longest(DerH,derH, fillvalue=[]):
             if layer:
