@@ -36,21 +36,25 @@ def feedback(root, fd):  # append new der layers to root
 
 def sub_recursion(PP):  # evaluate PP for rng+ and der+, add layers to select sub_PPs
 
+    # do we really need fd here? Since we already form sub_PP_t from each P_
+    # with fd here, we are forming sub_PP_dm, sub_PP_mm, sub_PP_md, sub_PP_dd 
+    P_ = PP.P_; PP.P_ = [[],[]]
     for fd in 0,1:
         # same else new P_:
-        P_ = comp_der(PP.P_) if fd else comp_rng(PP.P_, PP.rng+1)
+        P_ = comp_der(P_) if fd else comp_rng(P_, PP.rng+1)
         PP.rdnt[fd] += PP.valt[fd] - PP_aves[fd]*PP.rdnt[fd] > PP.valt[1-fd] - PP_aves[1-fd]*PP.rdnt[1-fd]  # not last layer val?
 
         cP_ = [replace(P, roott=[None,None], link_t=[[],[]]) for P in P_]  # reassign roots to sub_PPs
-        PP.P_ = form_PP_t(cP_, base_rdn=PP.rdnt[fd])  # replace P_ with sub_PPm_, sub_PPd_
+        PP_t = form_PP_t(cP_, base_rdn=PP.rdnt[fd]) # replace P_ with sub_PPm_, sub_PPd_
 
-        for i, sub_PP_ in enumerate(PP.P_):
+        for i, sub_PP_ in enumerate(PP_t):
             if sub_PP_:
-                for sPP in sub_PP_: sPP.roott[i] = PP
+                for sub_PP in sub_PP_: 
+                    sub_PP.roott[i] = PP
                 sub_recursion_eval(PP, sub_PP_, fd=1)
             else:
                 feedback(PP, fd=i)  # not sure
-
+        PP.P_[fd] = PP_t[fd]  # update based on fd only?
 
 def comp_rng(iP_, rng):  # form new Ps and links, switch to rng+n to skip clustering?
 

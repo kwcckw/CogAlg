@@ -2,7 +2,7 @@ import numpy as np
 from copy import deepcopy, copy
 from .classes import Cgraph
 from .filters import aves, ave, ave_nsub, ave_sub, ave_agg, G_aves, med_decay, ave_distance, ave_Gm, ave_Gd
-from .comp_slice import comp_angle, comp_aangle  # comp_unpack, sum_unpack
+from .comp_slice import comp_angle, comp_aangle, comp_derH, sum_derH
 from .sub_recursion import feedback  # temporary
 
 '''
@@ -32,6 +32,7 @@ There are concepts that include same matching vars: size, density, color, stabil
 Weak value vars are combined into higher var, so derivation fork can be selected on different levels of param composition.
 '''
 
+# below not fully updated
 def agg_recursion(root):  # compositional recursion in root.PP_
 
     for i in 0,1: root.rdnt[i] += 1  # estimate, no node.rdnt[fd] += 1?
@@ -64,12 +65,12 @@ def comp_G_(G_, pri_G_=None, f1Q=1, fd = 0, fsub=0):  # cross-comp Graphs if f1Q
                     continue
             dy = _iG.box[0]-iG.box[0]; dx = _iG.box[1]-iG.box[1]  # between center x0,y0
             distance = np.hypot(dy,dx) # Euclidean distance between centers, sum in sparsity, proximity = ave-distance
-            if distance < ave_distance * ((np.sum(_iG.valT) + np.sum(iG.valT)) / (2*sum(G_aves))):
+            if distance < ave_distance * ((np.sum(_iG.valt) + np.sum(iG.valt)) / (2*sum(G_aves))):
                 # same for cis and alt Gs:
                 for _G, G in ((_iG, iG), (_iG.alt_Graph, iG.alt_Graph)):
                     if not _G or not G:  # or G.val
                         continue
-                    derH,valt,rdnt = comp_derH([_G.derH,_G.valt,_G.rdnt], [G.derH,G.valt,G.rdnt], rn=1)  # comp layers while lower match?
+                    derH,valt,rdnt = comp_derH(_G.derH, G.derH, rn=1)  # comp layers while lower match?
                     derG = Cgraph(G=[_G,G], derH=derH,valt=valt,rdnt=rdnt, S=distance, A=[dy,dx], box=[])  # box is redundant to G
                     # add links:
                     _G.link_ += [derG]; G.link_ += [derG]  # no didx, no ext_valt accum?
