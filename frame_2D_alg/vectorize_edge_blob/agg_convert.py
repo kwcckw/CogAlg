@@ -45,7 +45,7 @@ def blob2graph(blob, fseg, fd):
 
     PP_ = [blob.PPm_, blob.PPd_][fd]
     x0, xn, y0, yn = blob.box
-    Graph = Cgraph(fd=PP_[0].fd, rng=PP_[0].rng, box=[(y0+yn)/2,(x0+xn)/2, y0,yn, x0,xn])
+    Graph = Cgraph(fd=PP_[0].fd, rng=PP_[0].rng, id_H = [0], box=[(y0+yn)/2,(x0+xn)/2, y0,yn, x0,xn])
     [blob.mgraph, blob.dgraph][fd] = Graph  # update graph reference
 
     for i, PP in enumerate(PP_):
@@ -53,6 +53,7 @@ def blob2graph(blob, fseg, fd):
         sum_derH([Graph.derH, Graph.valt, Graph.rdnt], [graph.derH, graph.valt, graph.rdnt], 0)
         graph.root = Graph
         Graph.node_ += [graph]
+    Graph.id_H += [len(Graph.derH)]  # add index of derH
 
     return Graph
 
@@ -60,7 +61,7 @@ def blob2graph(blob, fseg, fd):
 def PP2graph(PP, fseg, ifd=1):
 
     box = [(PP.box[0]+PP.box[1]) /2, (PP.box[2]+PP.box[3]) /2] + list(PP.box)
-    graph = Cgraph(derH = deepcopy(PP.derH),valt=copy(PP.valt),rdnt=copy(PP.rdnt), box=box)
+    graph = Cgraph(derH = deepcopy(PP.derH),valt=copy(PP.valt),rdnt=copy(PP.rdnt), id_H=[0, len(PP.derH)], box=box)
     return graph
 
 # drafts:

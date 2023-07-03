@@ -8,22 +8,26 @@ from dataclasses import replace
 
 
 def sub_recursion_eval(root, PP_):  # fork PP_ in PP or blob, no derH in blob
+    
+    P__ = []
+    for PP in PP_:
+        P__ += [PP.P_]  # pack P_, to be used in both forks
+        PP.P_ = []  # reset, to pack sub_PP_t later
 
     for fd in 0,1:
         term = 1
-        for PP in PP_:
+        for PP, P_ in zip(PP_, P__):
             if PP.valt[fd] > PP_aves[fd] * PP.rdnt[fd] and len(PP.P_) > ave_nsub:
                term = 0
-               PP.P_ = sub_recursion(PP, fd=fd)  # comp_der|rng in PP -> parLayer, sub_PP_t
+               PP.P_ +=  [sub_recursion(PP, P_, fd=fd)]  # comp_der|rng in PP -> parLayer, sub_PP_t
             elif isinstance(root, CPP):
                 root.fback_ += [[PP.derH, PP.valt, PP.rdnt]]
                 # or root.fback_t[fd]?
         if term and isinstance(root, CPP):
             feedback(root, fd)  # upward recursive extend root.derT, forward eval only
 
-def sub_recursion(PP, fd):  # evaluate PP for rng+ and der+, add layers to select sub_PPs
+def sub_recursion(PP, P_, fd):  # evaluate PP for rng+ and der+, add layers to select sub_PPs
 
-    P_ = PP.P_  # same else new P_:
     P_ = comp_der(P_) if fd else comp_rng(P_, PP.rng+1)
 
     PP.rdnt[fd] += PP.valt[fd] - PP_aves[fd]*PP.rdnt[fd] > PP.valt[1-fd] - PP_aves[1-fd]*PP.rdnt[1-fd]  # not last layer val?

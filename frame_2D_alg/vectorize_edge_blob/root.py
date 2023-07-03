@@ -264,7 +264,9 @@ def scan_P_rim(P, blob, rim_, cP_, fup):  # scan rim roots up and down from curr
     if not link_ and new_link_:  # add not-redundant new P:
         _, y,x = sorted(new_link_, key=lambda x:x[0], reverse=True)[0]  # sort by G
         # form new _P from max-G rim dert along P.axis:
-        _P = form_P(CP(), blob.der__t, blob.mask__, axis=P.axis, y=y, x=x)
+        # use location x and y as cdert?
+        cdert = [der__[y,x] for der__ in blob.der__t[1:]]
+        _P = form_P(CP(), blob.der__t, blob.mask__, axis=P.axis, y=y, x=x, cdert=cdert)
         if fup and _P not in P.link_: P.link_ += [_P]  # represent uplinks only
         elif P not in _P.link_:      _P.link_ += [P]
         blob.P_ += [_P]
