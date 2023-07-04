@@ -42,14 +42,12 @@ def agg_recursion(root):  # compositional recursion in root.PP_
     # sub+:
     for fd, graph_ in enumerate(graph_t):
         if root.valt[fd] > ave_sub * root.rdnt[fd] and graph_:  # fixed costs and non empty graph_, same per fork
-            sub_recursion_eval(root, graph_, fd)
-        # feedback should be in sub_recursion_eval now?
-        # else: feedback(root, fd)  # not sure; update root.root..H, breadth-first
+            sub_recursion_eval(root, graph_)
     # agg+:
     for fd, graph_ in enumerate(graph_t):
         if root.valt[fd] > G_aves[fd] * ave_agg * root.rdnt[fd] and len(graph_) > ave_nsub:
             agg_recursion(root)  # replace root.node_ with new graphs
-        else:  # not sure on the feedback here, it will be based on all graph_? 
+        else:
             feedback(root, fd)  # update root.root..H, breadth-first
 
 # draft:
@@ -141,9 +139,10 @@ def graph_reval_(graph_, reval_, fd):  # recursive eval nodes for regraph, after
                 regraph, reval, rval = graph_reval(graph, val, fd)  # recursive depth-first node and link revaluation
                 if rval>aveG:
                     regraph_+=[[regraph,rval]]; rreval_+=[reval]
-    # else remove graph
-    if rreval_ and max([reval for reval in rreval_]) > aveG:
-        regraph_ = graph_reval_(regraph_, rreval_, fd)  # graph reval while min val reduction
+        # else remove graph
+    if rreval_:
+        if max([reval for reval in rreval_]) > aveG:
+            regraph_ = graph_reval_(regraph_, rreval_, fd)  # graph reval while min val reduction
 
     return regraph_
 
@@ -354,29 +353,32 @@ def add_alt_graph_(graph_t):  # mgraph_, dgraph_
                     sum_pH(graph.alt_derHs, alt_graph.derHs)  # accum alt_graph_ params
                     graph.alt_rdn += len(set(graph.derHs.H[-1].node_).intersection(alt_graph.derHs.H[-1].node_))  # overlap
 
-# draft: (not sure if we need this ifd since we only need fd here)
-def sub_recursion_eval(root, graph_, ifd):  # eval per fork, same as in comp_slice, still flat derH, add Valt to return?
+# draft:
+def sub_recursion_eval(root, graph_):  # eval per fork, same as in comp_slice, still flat derH, add Valt to return?
 
-    node__ = []
+    termt = [1,1]
     for graph in graph_:
-        node__ += [graph.node_]
-        graph.node_ = []
-    for fd in 0,1:
-        term = 1
-        for graph, node_ in zip(graph_, node__):
+        node_ = copy(graph.node_); sub_G_t = []
+        fr = 0
+        for fd in 0,1:
             if graph.valt[fd] > G_aves[fd] * graph.rdnt[fd] and len(graph.node_) > ave_nsub:
                 graph.rdnt[fd] += 1  # estimate, no node.rdnt[fd] += 1?
-                term = 0
-                graph.node_ += sub_recursion(graph, node_, fd)  # comp_der|rng in graph -> parLayer, sub_Gs
-            elif isinstance(root, Cgraph):
-                root.fback_ += [[graph.derH, graph.valt, graph.rdnt]]
+                termt[fd] = 0; fr = 1
+                sub_G_t += [sub_recursion(graph, node_, fd)]  # comp_der|rng in graph -> parLayer, sub_Gs
+            else:
+                sub_G_t += [node_]
+                if isinstance(root, Cgraph):
+                    root.fback_ += [[graph.derH, graph.valt, graph.rdnt]]
+        if fr:
+            graph.node_ = sub_G_t
+    for fd in 0,1:
+        if termt[fd]:  # no lower layers in any graph
+           feedback(root, fd)
 
-        if term and isinstance(root, Cgraph):  # no lower layers in any graph
-            feedback(root, fd)
 
 def sub_recursion(graph, node_, fd):  # rng+: extend G_ per graph, der+: replace G_ with derG_, Valt=[0,0]?
 
-    comp_G_(node_, pri_G_=None, f1Q=1, fd=fd)  # cross-comp all Gs in rng
+    comp_G_(graph.node_, pri_G_=None, f1Q=1, fd=fd)  # cross-comp all Gs in rng
     sub_G_t = form_graph_(graph)  # cluster sub_graphs via link_t
 
     for i, sub_G_ in enumerate(sub_G_t):
