@@ -50,9 +50,10 @@ def blob2graph(blob, fseg, fd):
 
     for i, PP in enumerate(PP_):
         graph = PP2graph(PP, fseg, fd)
-        sum_derH([Graph.derH, Graph.valt, Graph.rdnt], [graph.derH, graph.valt, graph.rdnt], 0)
+        sum_derH([Graph.derH, Graph.sub_valt, Graph.rdnt], [graph.derH, graph.valt, graph.rdnt], 0)
         graph.root = Graph
         Graph.node_ += [graph]
+    Graph.valt = copy(Graph.sub_valt)  # same valt for converted graph?
     Graph.id_H += [len(Graph.derH)]  # add index of derH
 
     return Graph
@@ -61,8 +62,8 @@ def blob2graph(blob, fseg, fd):
 def PP2graph(PP, fseg, ifd=1):
 
     box = [(PP.box[0]+PP.box[1]) /2, (PP.box[2]+PP.box[3]) /2] + list(PP.box)
-    graph = Cgraph(derH = deepcopy(PP.derH),valt=copy(PP.valt),rdnt=copy(PP.rdnt), id_H=[0, len(PP.derH)], box=box)
-    return graph
+    graph = Cgraph(derH = deepcopy(PP.derH), valt=copy(PP.valt), sub_valt=copy(PP.valt),rdnt=copy(PP.rdnt), id_H=[0, len(PP.derH)], box=box)
+    return graph  # the converted graph doesn't have links yet, so init their valt with PP.valt?
 
 # drafts:
 def inpack_derH(pPP, ptuples, idx_=[]):  # pack ptuple vars in derH of pPP vars, converting macro derH -> micro derH
