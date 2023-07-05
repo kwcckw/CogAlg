@@ -9,20 +9,21 @@ from dataclasses import replace
 
 def sub_recursion_eval(root, PP_):  # fork PP_ in PP or blob, no derH in blob
 
-    termt = [0,0]
-    for i, PP in enumerate(PP_):
-        P_ = copy(PP.P_); sub_PP_t = []; fr=0
+    termt = [1,1]
+    for PP in PP_:
+        P_ = copy(PP.P_); sub_PP_t = []
+        fr = 0
         for fd in 0,1:
             if PP.valt[fd] > PP_aves[fd] * PP.rdnt[fd] and len(PP.P_) > ave_nsub:
-                fr = 1
+                termt[fd] = 0; fr = 1
                 sub_PP_t += [sub_recursion(PP, P_, fd=fd)]  # comp_der|rng in PP -> parLayer
             else:
+                sub_PP_t += [P_]
                 if isinstance(root, CPP):  # separate feedback per fork?:
-                    termt[fd] = 1  # term is true only if there's fback
                     root.fback_t[fd] += [[PP.derH, PP.valt, PP.rdnt]]
         if fr: PP.P_ = sub_PP_t
     for fd in 0,1:
-        if termt[fd] and isinstance(root, CPP):
+        if termt[fd] and root.fback_t[fd] and isinstance(root, CPP):
             feedback(root, fd)  # upward recursive extend root.derT, forward eval only
 
 
@@ -39,11 +40,6 @@ def sub_recursion(PP, P_, fd):  # evaluate PP for rng+ and der+, add layers to s
         if sub_PP_:  # add eval
             for sPP in sub_PP_: sPP.roott[i] = PP
             sub_recursion_eval(PP, sub_PP_)
-        # below should be not needed because if there's no sub_PPs, we don't have anything to feedback?
-        '''
-        else:
-            feedback(PP, fd=i)  # not sure
-        '''
 
     return sub_PP_t  # for 4 nested forks in replaced P_?
 
