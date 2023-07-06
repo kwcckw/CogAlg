@@ -246,8 +246,9 @@ def scan_P_rim(P, blob, rim_, cP_, fup):  # scan rim roots up and down from curr
         if roots: link_ = list(set(link_ + roots))  # unique only
         else:  # no adj root, may form new P from dert:
             g = blob.der__t[1][y,x] # der__t[1] is G
-            new_link_.add((g, y, x))
-
+            # we should at least check g>0 here? else we may get divide by 0 when computing axis
+            if g>0:
+                new_link_.add((g, y, x))
     if link_:
         for i, _P in enumerate(sorted(link_, key=lambda P:P.ptuple[1], reverse=True)):  # sort by P.G, rdn for lower-G _Ps only
             if _P.ptuple[1] > ave*(i+1):  # fork redundancy

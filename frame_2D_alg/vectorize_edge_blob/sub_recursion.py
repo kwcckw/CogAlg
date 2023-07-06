@@ -76,10 +76,11 @@ def feedback(root, fd):  # append new der layers to root
         sum_derH(Fback,root.fback_t[fd].pop(), base_rdn=0)
     sum_derH([root.derH, root.valt,root.rdnt], Fback, base_rdn=0)
 
-    if isinstance(root.root, CPP):  # not blob
-        root = root.root
-        root.fback_t[fd] += [Fback]
-        if len(root.fback_t[fd]) == len(root.P_[fd]):  # all nodes term, fed back to root.fback_
-            feedback(root, fd)  # derT/ rng layer in sum2PP, deeper rng layers are appended by feedback
+    for next_root in root.root_:
+        if isinstance(next_root, CPP):  # not blob
+            next_root.fback_t[fd] += [Fback]
+            # root.P_ might not relevant in agg+, we need to use node_ instead
+            if len(next_root.fback_t[fd]) == len(next_root.P_[fd]):  # all nodes term, fed back to root.fback_
+                feedback(next_root, fd)  # derT/ rng layer in sum2PP, deeper rng layers are appended by feedback
 
 

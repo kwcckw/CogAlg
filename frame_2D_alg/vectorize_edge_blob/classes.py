@@ -108,6 +108,7 @@ class Cgraph(ClusterStructure):  # params of single-fork node_ cluster per pplay
     derT : list = z([[],[]])  # [[[mtuple,dtuple, mval,dval, mrdn,drdn]]]: cross-fork composition layers
     id_T : list = z([[],[]])  # indices in the list of all possible layers | forks, for sparse representation?
     # also top Lay from links, lower Lays from nodes:
+    # rename below to valT and rdnT too?
     valt : list = z([[0,0],[0,0]])
     rdnt : list = z([[1,1],[1,1]])
     node_: list = z([])  # same-fork, incremental nesting if wH: down-forking tree of node Levs, forks in id_T?
