@@ -11,19 +11,19 @@ def sub_recursion_eval(root, PP_):  # fork PP_ in PP or blob, no derH in blob
 
     termt = [1,1]
     for PP in PP_:
-        P_ = copy(PP.P_); sub_PP_t = []
+        P_ = copy(PP.node_); sub_PP_t = []
         fr = 0
         for fd in 0,1:
-            if PP.valt[fd] > PP_aves[fd] * PP.rdnt[fd] and len(PP.P_) > ave_nsub:
+            if PP.valt[fd] > PP_aves[fd] * PP.rdnt[fd] and len(PP.node_) > ave_nsub:
                 termt[fd] = 0; fr = 1
                 sub_PP_t += [sub_recursion(PP, P_, fd=fd)]  # comp_der|rng in PP -> parLayer
             else:
                 sub_PP_t += [P_]
                 if isinstance(root, CPP):  # separate feedback per fork?:
                     root.fback_t[fd] += [[PP.derH, PP.valt, PP.rdnt]]
-        if fr: PP.P_ = sub_PP_t
+        if fr: PP.node_ = sub_PP_t
     for fd in 0,1:
-        if termt[fd] and isinstance(root, CPP) and root.fback_t[fd]:
+        if termt[fd] and root.fback_t[fd] and isinstance(root, CPP):
             feedback(root, fd)  # upward recursive extend root.derT, forward eval only
 
 
@@ -76,11 +76,10 @@ def feedback(root, fd):  # append new der layers to root
         sum_derH(Fback,root.fback_t[fd].pop(), base_rdn=0)
     sum_derH([root.derH, root.valt,root.rdnt], Fback, base_rdn=0)
 
-    for next_root in root.root_:
-        if isinstance(next_root, CPP):  # not blob
-            next_root.fback_t[fd] += [Fback]
-            # root.P_ might not relevant in agg+, we need to use node_ instead
-            if len(next_root.fback_t[fd]) == len(next_root.P_[fd]):  # all nodes term, fed back to root.fback_
-                feedback(next_root, fd)  # derT/ rng layer in sum2PP, deeper rng layers are appended by feedback
+    if isinstance(root.roott[fd], CPP):  # not blob
+        root = root.roott[fd]
+        root.fback_t[fd] += [Fback]
+        if len(root.fback_t[fd]) == len(root.node_[fd]):  # all nodes term, fed back to root.fback_t
+            feedback(root, fd)  # derH/ rng layer in sum2PP, deeper rng layers are appended by feedback
 
 
