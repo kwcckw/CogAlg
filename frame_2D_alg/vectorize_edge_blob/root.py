@@ -238,14 +238,14 @@ def form_link_(P, cP_, blob):  # trace adj Ps up and down by adj dert roots, fil
     scan_P_rim(P, blob, up_rim_, cP_, blob.mask__, fup=1)
     scan_P_rim(P, blob, down_rim_, cP_, blob.mask__, fup=0)
 
-
 def scan_P_rim(P, blob, rim_, cP_, mask__, fup):  # scan rim roots up and down from current P, repeat with adj_Ps:
 
-    link_, new_link_ = [],set()  # potential links per direction
-    for roots,y,x in rim_:
-        if roots: link_ = list(set(link_ + roots))  # unique only
-        elif not mask__[y,x]:  # no adj root, may form new P from unmasked dert:
-            g = blob.der__t[1][y,x] # der__t[1] is G
+    link_, new_link_ = [], set()  # potential links per direction
+    for roots, y, x in rim_:
+        if roots:
+            link_ = list(set(link_ + roots))  # unique only
+        elif not mask__[y, x]:  # no adj root, may form new P from unmasked dert:
+            g = blob.der__t[1][y, x]  # der__t[1] is G
             new_link_.add((g, y, x))
     if link_:
         for i, _P in enumerate(sorted(link_, key=lambda P:P.ptuple[1], reverse=True)):  # sort by P.G, rdn for lower-G _Ps only

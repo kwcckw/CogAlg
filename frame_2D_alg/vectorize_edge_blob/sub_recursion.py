@@ -23,7 +23,7 @@ def sub_recursion_eval(root, PP_):  # fork PP_ in PP or blob, no derH in blob
                     root.fback_t[fd] += [[PP.derH, PP.valt, PP.rdnt]]
         if fr: PP.node_ = sub_PP_t
     for fd in 0,1:
-        if termt[fd] and isinstance(root, CPP) and root.fback_t[fd]:  # we need to check isinstance CPP first because blob doesn't have fback_t
+        if termt[fd] and isinstance(root, CPP) and root.fback_t[fd]:
             feedback(root, fd)  # upward recursive extend root.derT, forward eval only
 
 
@@ -71,17 +71,13 @@ def comp_der(P_):  # keep same Ps and links, increment link derTs, then P derTs 
 
 def feedback(root, fd):  # append new der layers to root
 
-    # use deepcopy so that it won't reference the graph's params
     Fback = deepcopy(root.fback_t[fd].pop())  # init with 1st fback: [derH,valt,rdnt], derH: [[mtuple,dtuple, mval,dval, mrdn, drdn]]
     while root.fback_t[fd]:
-        derT, valT, rdnT = root.fback_t[fd].pop()
-        for i in 0,1:
-            sum_derH([Fback[0][i],Fback[0][i],Fback[0][i]], [derT[i], valT[i], rdnT[i]] , base_rdn=0)
-    for i in 0, 1:
-        sum_derH([root.derT[i], root.valt[i],root.rdnt[i]], [Fback[0][i],Fback[0][i],Fback[0][i]], base_rdn=0)
+        sum_derH(Fback,root.fback_t[fd].pop(), base_rdn=0)
+    sum_derH([root.derH, root.valt,root.rdnt], Fback, base_rdn=0)
 
-    if isinstance(root.root, CPP):  # not blob
-        root = root.root
+    if isinstance(root.roott[fd], CPP):  # not blob
+        root = root.roott[fd]
         root.fback_t[fd] += [Fback]
         if len(root.fback_t[fd]) == len(root.node_[fd]):  # all nodes term, fed back to root.fback_t
             feedback(root, fd)  # derH/ rng layer in sum2PP, deeper rng layers are appended by feedback
