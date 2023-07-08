@@ -33,7 +33,9 @@ def sub_recursion(PP, P_, fd):  # evaluate PP for rng+ and der+, add layers to s
     P_ = comp_der(P_) if fd else comp_rng(P_, PP.rng+1)
     PP.rdnt[fd] += PP.valt[fd] - PP_aves[fd]*PP.rdnt[fd] > PP.valt[1-fd] - PP_aves[1-fd]*PP.rdnt[1-fd]  # not last layer val?
 
-    cP_ = [replace(P, roott=[None,None], link_t=[[],[]]) for P in P_]  # reassign roots to sub_PPs
+    # i think we shouldn't reset link_t, else there will be no link for form_PP_t later
+    # or we should reform those links ?
+    cP_ = [replace(P, roott=[None,None]) for P in P_]  # reassign roots to sub_PPs
     sub_PP_t = form_PP_t(cP_, base_rdn=PP.rdnt[fd])  # replace P_ with sub_PPm_, sub_PPd_
 
     for i, sub_PP_ in enumerate(sub_PP_t):
@@ -74,7 +76,8 @@ def feedback(root, fd):  # append new der layers to root
     Fback = deepcopy(root.fback_t[fd].pop())  # init with 1st fback: [derH,valt,rdnt], derH: [[mtuple,dtuple, mval,dval, mrdn, drdn]]
     while root.fback_t[fd]:
         sum_derH(Fback,root.fback_t[fd].pop(), base_rdn=0)
-    sum_derH([root.derH, root.valt,root.rdnt], Fback, base_rdn=0)
+    # sum to root external? Or internal?
+    sum_derH([root.derT[0], root.valt,root.rdnt], Fback, base_rdn=0)
 
     if isinstance(root.roott[fd], CPP):  # not blob
         root = root.roott[fd]

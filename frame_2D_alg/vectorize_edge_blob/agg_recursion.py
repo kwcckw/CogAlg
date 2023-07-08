@@ -56,11 +56,9 @@ def comp_G_(G_, pri_G_=None, f1Q=1, fd=0, fsub=0):  # cross-comp Graphs if f1Q, 
     if not f1Q: dpars_=[]  # this was for nested node, we need single node with link-specific partial-parT access now
 
     for i, _iG in enumerate(G_ if f1Q else pri_G_):  # G_ is node_ of root graph, initially converted PPs
-        merge_externals(_iG)
         # follow links in der+, loop all Gs (or link_?) in rng+:
         for iG in _iG.link_t[1] if fd \
             else G_[i+1:] if f1Q else G_:  # compare each G to other Gs in rng+, bilateral link assign, val accum:
-            merge_externals(iG)
             if not fd:   # not fd if f1Q?
                 if iG in [node for link in _iG.link_ for node in link.node_]:  # the pair compared in prior rng+
                     continue
@@ -71,7 +69,7 @@ def comp_G_(G_, pri_G_=None, f1Q=1, fd=0, fsub=0):  # cross-comp Graphs if f1Q, 
                 for _G, G in ((_iG, iG), (_iG.alt_Graph, iG.alt_Graph)):
                     if not _G or not G:  # or G.val
                         continue
-                    derH, valt, rdnt = comp_derH(_G.derT[1], G.derT[1], rn=1)  # comp aggH, or layers while lower match?
+                    derH, valt, rdnt = comp_derH([merge_externals(_G)], [merge_externals(G)], rn=1)  # comp aggH, or layers while lower match?
                     derG = Cgraph(node_=[_G,G], derT=derH,valt=valt,rdnt=rdnt, S=distance, A=[dy,dx], box=[])  # box is redundant to G
                     # add links:
                     _G.link_ += [derG]; G.link_ += [derG]  # no didx, no ext_valt accum?
@@ -87,12 +85,19 @@ def comp_G_(G_, pri_G_=None, f1Q=1, fd=0, fsub=0):  # cross-comp Graphs if f1Q, 
 
 def merge_externals(G):  # merge external params into internal params:
 
+    # we can just sum them here and remained G.derT[0] incase we need it later?
+    derH = [[], [0,0], [1,1]]
+    for i in 0, 1: sum_derH(derH, [G.derT[i], G.valt[i], G.rdnt[i]], 0)
+    return derH
+
+    '''
     G.derT[1] += [G.derT[0]]
     G.derT[0] = []
     for i in 0,1:
         for j in 0,1:  # not sure:
             G.valt[i][j] += G.valt[i][j]
             G.rdnt[i][j] += G.rdnt[i][j]
+    '''
     '''
     comp alts,val,rdn? cluster per var set if recurring across root: type eval if root M|D?
     '''
