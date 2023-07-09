@@ -33,6 +33,12 @@ def sub_recursion(PP, P_, fd):  # evaluate PP for rng+ and der+, add layers to s
     PP.rdnt[fd] += PP.valt[fd] - PP_aves[fd]*PP.rdnt[fd] > PP.valt[1-fd] - PP_aves[1-fd]*PP.rdnt[1-fd]  # not last layer val?
 
     cP_ = [replace(P, roott=[None,None]) for P in P_]  # reassign roots to sub_PPs
+    
+    # would it be possible link._P not in cP_?
+    # we will search through _P.roott[fd] in form_PP_t later, so we need to reset link._P.roott too if it's not in cP_
+    for P in cP_:
+        for link in P.link_t[fd]:
+            link._P.roott = [None, None]
     sub_PP_t = form_PP_t(cP_, base_rdn=PP.rdnt[fd])  # replace P_ with sub_PPm_, sub_PPd_
 
     for i, sub_PP_ in enumerate(sub_PP_t):
@@ -78,7 +84,9 @@ def feedback(root, fd):  # append new der layers to root
     if isinstance(root.roott[fd], CPP):  # not blob
         root = root.roott[fd]
         root.fback_t[fd] += [Fback]
-        if len(root.fback_t[fd]) == len(root.node_[fd]):  # all nodes term, fed back to root.fback_t
-            feedback(root, fd)  # derH/ rng layer in sum2PP, deeper rng layers are appended by feedback
+
+        if isinstance(root.node_[0], list):  # higher level root actually didn't update their node to sub_PPs yet
+            if len(root.fback_t[fd]) == len(root.node_[fd]):  # all nodes term, fed back to root.fback_t
+                feedback(root, fd)  # derH/ rng layer in sum2PP, deeper rng layers are appended by feedback
 
 

@@ -78,7 +78,7 @@ class CPP(CderP):
     rng : int = 1  # sum of rng+: odd forks in last layer?
     box : list = z([0,0,0,0])  # y0,yn,x0,xn
     # temporary:
-    fback_t : list = z([])  # [feedback derT,valT,rdnT per node]
+    fback_t : list = z([[],[]])  # [feedback derT,valT,rdnT per node]
     coPP_ : list = z([])  # rdn reps in other PPPs, to eval and remove?
     Rdn : int = 0  # for accumulation or separate recursion count?
     # fdiv = NoneType  # if div_comp?

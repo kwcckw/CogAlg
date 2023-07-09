@@ -226,16 +226,14 @@ def sum2graph_(graph_, fd):  # sum node and link params into graph, derH in agg+
 
     return Graph_
 
-def merge_externals(int, ext):  # merge external params into internal params:
+# int is built-in function int
+def merge_externals(intl, extl):  # merge external params into internal params:
 
-    DerH, Valt, Rdnt = int
-    derH, valt, rdnt = ext
-    DerH += derH
-    derH[:] = []
+    DerH, Valt, Rdnt = intl
+    derH, valt, rdnt = extl
+    DerH += derH  # actually there's no need to reset extl here? Because they are local anyway
     for i in 0,1:
         Valt[i] += valt[i]; Rdnt[i] += rdnt[i]
-    valt[:] = [0,0]
-    rdnt[:] = [1,1]
 
 def comp_ext(_ext, ext, dsub):
     # comp ds:
