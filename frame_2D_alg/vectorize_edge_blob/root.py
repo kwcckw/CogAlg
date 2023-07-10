@@ -229,23 +229,25 @@ def form_link_(P, cP_, blob):  # trace adj Ps up and down by adj dert roots, fil
 
     # form links:
     for _P in link_:
-        P.link_ += [_P]; _P.link_ += [P]
+        P.link_ += [_P]  # _P.link_ += [P]  # i think the bidirectional assignment is not needed, else we will get cyclic uplinks in form_PP_t later
     # check empty link_:
     if not P.link_:
         # filter non-empty roots and get max-G dert coord:
-        y, x = max([(y, x) for y, x in rim_ if not rim_[y, x]],     # filter non-empty roots
-                     key=lambda yx: blob.der__t[1][yx])             # get max-G dert coord
-        # get max-G dert:
-        dert = [par__[y,x] for par__ in blob.der__t[1:]]       # get max-G dert
-        # form new P
-        _P = form_P(CP(dert, dert_=[dert], dert_ext_=[(y,x)], dert_olp_={(y,x)}, anchor=(y, x)),
-                    blob.der__t, blob.mask__,
-                    axis=np.divide(dert[3:5], dert[0]))
-        # link _P:
-        P.link_ += [_P]; _P.link_ += [P]    # form link with P first to avoid further recursion
-        _cP_ = set(blob.P_) - {P}           # exclude P
-        form_link_(_P, _cP_, blob)          # call form_link_ for the newly formed _P
-        blob.P_ += [_P]                     # add _P to blob.P_ for further linking with remaining cP_
+        yx_ = [(y, x) for y, x in rim_ if not rim_[y, x]]      
+        if yx_:  # max can't be used on empty list
+            # filter non-empty roots
+            y, x = max(yx_, key=lambda yx: blob.der__t[1][yx])     # get max-G dert coord
+            # get max-G dert:
+            dert = [par__[y,x] for par__ in blob.der__t[1:]]       # get max-G dert
+            # form new P
+            _P = form_P(CP(dert, dert_=[dert], dert_ext_=[(y,x)], dert_olp_={(y,x)}, anchor=(y, x)),
+                        blob.der__t, blob.mask__,
+                        axis=np.divide(dert[3:5], dert[0]))
+            # link _P:
+            P.link_ += [_P]                     # form link with P first to avoid further recursion
+            _cP_ = set(blob.P_) - {P}           # exclude P
+            form_link_(_P, _cP_, blob)          # call form_link_ for the newly formed _P
+            blob.P_ += [_P]                     # add _P to blob.P_ for further linking with remaining cP_
 
 
 def slice_blob_ortho(blob, verbose=False):  # slice_blob with axis-orthogonal Ps

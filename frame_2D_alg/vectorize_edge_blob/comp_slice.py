@@ -111,16 +111,17 @@ def form_PP_t(P_, base_rdn):  # form PPs of derP.valt[fd] + connected Ps val
                 while uplink_:
                     for derP in uplink_:
                         _P = derP._P; _qPP = _P.roott[fd]
-                        if _qPP:  # merge _qPP into qPP:
-                            for i in 0,1: valt[i] += _qPP[1][i]
-                            for qP in _qPP[0]:
-                                qP.roott[fd] = qPP; qPP[0] += [qP]  # append qP_
-                            qPP_.remove(_qPP)
-                        else:
-                            qPP[0] += [_P]  # pack bottom up
-                            _P.roott[fd] = qPP
-                            for i in 0,1: valt[i] += derP.valt[i]
-                            uuplink_ += derP._P.link_t[fd]
+                        if _qPP is not qPP:  # when _P has multiple downlinks, and downlink's P is already assigned with qPP
+                            if _qPP:  # merge _qPP into qPP:
+                                for i in 0,1: valt[i] += _qPP[1][i]
+                                for qP in _qPP[0]:
+                                    qP.roott[fd] = qPP; qPP[0] += [qP]  # append qP_
+                                qPP_.remove(_qPP)
+                            else:
+                                qPP[0] += [_P]  # pack bottom up
+                                _P.roott[fd] = qPP
+                                for i in 0,1: valt[i] += derP.valt[i]
+                                uuplink_ += derP._P.link_t[fd]
                     uplink_ = uuplink_
                     uuplink_ = []
                 qPP += [valt,ave+1]  # ini reval=ave+1, keep qPP same object for ref in P.roott
