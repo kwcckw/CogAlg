@@ -59,9 +59,11 @@ def comp_P(_P,P, fd=0, derP=None):  #  derP if der+, S if rng+
     if fd:  # der+: extend old link derP
         rn *= len(_P.link_t[1]) / len(P.link_t[1])  # derH is summed from links
         dderH, valt, rdnt = comp_derH(_P.derH, P.derH, rn)
+        mval, dval = rdnt
+        frdnt = [1+(dval>mval), 1+(1-(dval>mval))]  # fork rdn
         derP.derH += [dderH]  # flat, appended with each der+
         for i in 0,1:
-            derP.valt[i]+=valt[i]; derP.rdnt[i]+=rdnt[i]
+            derP.valt[i]+=valt[i]; derP.rdnt[i]+=rdnt[i] + frdnt[i]
     else:
         # rng+: add new link derP
         mtuple,dtuple = comp_ptuple(_P.ptuple, P.ptuple, rn)
@@ -69,8 +71,12 @@ def comp_P(_P,P, fd=0, derP=None):  #  derP if der+, S if rng+
         mrdn = 1+(dval>mval); drdn = 1+(1-(dval>mval))  # rdn = Dval/Mval?
         derP = CderP(derH=[[mtuple,dtuple, mval,dval,mrdn,drdn]], valt=[mval,dval], rdnt=[mrdn,drdn], P=P,_P=_P, S=derP)
         P.link_ += [derP]  # all links
-        if mval > aveP*mrdn: P.link_t[0] += [derP]  # +ve links, fork selection in form_PP_t
-        if dval > aveP*drdn: P.link_t[1] += [derP]
+        if mval > aveP*mrdn: 
+            P.link_t[0] += [derP]  # +ve links, fork selection in form_PP_t
+            derP._P.roott[0] = None  # reset
+        if dval > aveP*drdn: 
+            P.link_t[1] += [derP]
+            derP._P.roott[1] = None
 
 def comp_derH(_derH, derH, rn):  # derH is a list of layers or sub-layers, each = [mtuple,dtuple, mval,dval, mrdn,drdn]
 
@@ -190,7 +196,7 @@ def sum2PP(qPP, base_rdn, fd):  # sum links in Ps and Ps in PP
         P.roott[fd] = PP
         sum_ptuple(PP.ptuple, P.ptuple)
         L = P.ptuple[-1]
-        Dy = P.axis[0]*L/2; Dx = P.axis[1]*L/2; y=P.y; x=P.x
+        Dy = P.axis[0]*L/2; Dx = P.axis[1]*L/2; y,x =P.yx
         if i: Y0=min(Y0,(y-Dy)); Yn=max(Yn,(y+Dy)); X0=min(X0,(x-Dx)); Xn=max(Xn,(x+Dx))
         else: Y0=y-Dy; Yn=y+Dy; X0=x-Dx; Xn=x+Dx  # init
 

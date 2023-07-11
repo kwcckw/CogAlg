@@ -32,10 +32,14 @@ def sub_recursion(PP, node_, fd):  # evaluate PP for rng+ and der+, add layers t
     node_ = comp_der(node_) if fd else comp_rng(node_, PP.rng+1)  # same else new P_ and links
     PP.rdnt[fd] += PP.valt[fd] - PP_aves[fd]*PP.rdnt[fd] > PP.valt[1-fd] - PP_aves[1-fd]*PP.rdnt[1-fd]  # not last layer val?
 
-    cnode_ = [replace(node, roott=[None,None]) for node in node_]  # reassign roots to sub_PPs
-    sub_PP_t = form_PP_t(cnode_, base_rdn=PP.rdnt[fd])  # replace P_ with sub_PPm_, sub_PPd_
+    # the link reference is lost after the usage of replace, so i think we just need to reset their roott?
+    # cnode_ = [replace(node, roott=[None,None]) for node in node_]  # reassign roots to sub_PPs
+    for node in node_: node.roott = [None, None]
 
-    PP.node_ = sub_PP_t
+    # i checked and some P's uplinks P may not in node_ because they are just added in comp_rng above, i guess we need to reset their roott in comp_P too
+    sub_PP_t = form_PP_t(node_, base_rdn=PP.rdnt[fd])  # replace P_ with sub_PPm_, sub_PPd_
+
+    PP.node_ = sub_PP_t  # this assignment is temporary for feedback? Because it will be assigned in sub_recursion_eval later
     for i, sub_PP_ in enumerate(sub_PP_t):
         if sub_PP_:
             for sPP in sub_PP_: sPP.roott[i] = PP
@@ -58,7 +62,7 @@ def comp_rng(iP_, rng):  # form new Ps and links, switch to rng+n to skip cluste
             _P = derP._P
             for _derP in _P.link_:  # next layer, of all links?
                 __P = _derP._P  # next layer of Ps
-                distance = np.hypot(__P.x-P.x, __P.y-P.y)  # distance between mid points
+                distance = np.hypot(__P.yx[1]-P.yx[1], __P.yx[0]-P.yx[0])  # distance between mid points
                 if distance > rng:
                     comp_P(cP,__P, fd=0, derP=distance)  # distance=S, mostly lateral, relative to L for eval?
         P_ += [cP]
