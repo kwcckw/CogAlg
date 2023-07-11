@@ -10,6 +10,7 @@ from dataclasses import replace
 def sub_recursion_eval(root, PP_):  # fork PP_ in PP or blob, no derH in blob
 
     termt = [1,1]
+    # PP_ in PP_t:
     for PP in PP_:
         P_ = copy(PP.node_); sub_PP_t = []
         fr = 0
@@ -21,30 +22,28 @@ def sub_recursion_eval(root, PP_):  # fork PP_ in PP or blob, no derH in blob
                 sub_PP_t += [P_]
                 if isinstance(root, CPP):  # separate feedback per fork?:
                     root.fback_t[fd] += [[PP.derH, PP.valt, PP.rdnt]]
-        if fr: PP.node_ = sub_PP_t
-    for fd in 0,1:
-        if termt[fd] and isinstance(root, CPP) and root.fback_t[fd]:
-            feedback(root, fd)  # upward recursive extend root.derT, forward eval only
+        if fr:
+            PP.node_ = sub_PP_t
 
+    return termt
 
-def sub_recursion(PP, P_, fd):  # evaluate PP for rng+ and der+, add layers to select sub_PPs
+def sub_recursion(PP, node_, fd):  # evaluate PP for rng+ and der+, add layers to select sub_PPs
 
-    P_ = comp_der(P_) if fd else comp_rng(P_, PP.rng+1)  # same else new P_ and links
+    node_ = comp_der(node_) if fd else comp_rng(node_, PP.rng+1)  # same else new P_ and links
     PP.rdnt[fd] += PP.valt[fd] - PP_aves[fd]*PP.rdnt[fd] > PP.valt[1-fd] - PP_aves[1-fd]*PP.rdnt[1-fd]  # not last layer val?
 
-    cP_ = [replace(P, roott=[None,None]) for P in P_]  # reassign roots to sub_PPs
-    
-    # would it be possible link._P not in cP_?
-    # we will search through _P.roott[fd] in form_PP_t later, so we need to reset link._P.roott too if it's not in cP_
-    for P in cP_:
-        for link in P.link_t[fd]:
-            link._P.roott = [None, None]
-    sub_PP_t = form_PP_t(cP_, base_rdn=PP.rdnt[fd])  # replace P_ with sub_PPm_, sub_PPd_
+    cnode_ = [replace(node, roott=[None,None]) for node in node_]  # reassign roots to sub_PPs
+    sub_PP_t = form_PP_t(cnode_, base_rdn=PP.rdnt[fd])  # replace P_ with sub_PPm_, sub_PPd_
 
+    PP.node_ = sub_PP_t
     for i, sub_PP_ in enumerate(sub_PP_t):
-        if sub_PP_:  # add eval
+        if sub_PP_:
             for sPP in sub_PP_: sPP.roott[i] = PP
-            sub_recursion_eval(PP, sub_PP_)
+            termt = sub_recursion_eval(PP, sub_PP_)
+            if any(termt):
+                for fd in 0, 1:
+                    if termt[fd] and PP.fback_t[fd]:
+                        feedback(PP, fd)  # upward recursive extend root.derH, forward eval only
 
     return sub_PP_t  # for 4 nested forks in replaced P_?
 
@@ -84,9 +83,7 @@ def feedback(root, fd):  # append new der layers to root
     if isinstance(root.roott[fd], CPP):  # not blob
         root = root.roott[fd]
         root.fback_t[fd] += [Fback]
-
-        if isinstance(root.node_[0], list):  # higher level root actually didn't update their node to sub_PPs yet
-            if len(root.fback_t[fd]) == len(root.node_[fd]):  # all nodes term, fed back to root.fback_t
-                feedback(root, fd)  # derH/ rng layer in sum2PP, deeper rng layers are appended by feedback
+        if len(root.fback_t[fd]) == len(root.node_[fd]):  # all nodes term, fed back to root.fback_t
+            feedback(root, fd)  # derH/ rng layer in sum2PP, deeper rng layers are appended by feedback
 
 
