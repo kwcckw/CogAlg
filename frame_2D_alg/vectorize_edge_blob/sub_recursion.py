@@ -32,7 +32,6 @@ def sub_recursion(PP, node_, fd):  # evaluate PP for rng+ and der+, add layers t
     node_ = comp_der(node_) if fd else comp_rng(node_, PP.rng+1)  # same else new P_ and links
     PP.rdnt[fd] += PP.valt[fd] - PP_aves[fd]*PP.rdnt[fd] > PP.valt[1-fd] - PP_aves[1-fd]*PP.rdnt[1-fd]  # not last layer val?
 
-    for node in node_: node.roott = [None, None]  # reassign roots to sub_PPs:
     sub_PP_t = form_PP_t(node_, base_rdn=PP.rdnt[fd])  # replace P_ with sub_PPm_, sub_PPd_
 
     for i, sub_PP_ in enumerate(sub_PP_t):  # sub_PP_ has at least one sub_PP: len node_ > ave_nsubt[fd]
@@ -62,7 +61,10 @@ def comp_rng(iP_, rng):  # form new Ps and links, switch to rng+n to skip cluste
 
     P_ = []
     for P in iP_:
-        cP = CP(ptuple=deepcopy(P.ptuple), dert_=copy(P.dert_))  # replace links, then derT in sum2PP
+        
+        # replace links, then derT in sum2PP
+        cP = CP(ptuple=deepcopy(P.ptuple), dert_=copy(P.dert_),derH=deepcopy(P.derH),
+                valt=copy(P.valt), rdnt=copy(P.rdnt), axis=copy(P.axis), yx=copy(P.yx))  
         # trace mlinks:
         for derP in P.link_t[0]:
             _P = derP._P
@@ -70,7 +72,9 @@ def comp_rng(iP_, rng):  # form new Ps and links, switch to rng+n to skip cluste
                 __P = _derP._P  # next layer of Ps
                 distance = np.hypot(__P.yx[1]-P.yx[1], __P.yx[0]-P.yx[0])   # distance between mid points
                 if distance > rng:
-                    c__P = CP(ptuple=deepcopy(__P.ptuple), dert_=copy(__P.dert_))
+                    # we need to copy the other params such as derH, valt, rdnt and etc too?
+                    c__P = CP(ptuple=deepcopy(__P.ptuple), dert_=copy(__P.dert_), derH=deepcopy(__P.derH),
+                              valt=copy(__P.valt), rdnt=copy(__P.rdnt), axis=copy(__P.axis), yx=copy(__P.yx))
                     comp_P(cP,c__P, fd=0, derP=distance)  # distance=S, mostly lateral, relative to L for eval?
         P_ += [cP]
     return P_
@@ -78,6 +82,7 @@ def comp_rng(iP_, rng):  # form new Ps and links, switch to rng+n to skip cluste
 def comp_der(P_):  # keep same Ps and links, increment link derTs, then P derTs in sum2PP
 
     for P in P_:
+        P.roott = [None, None]
         for derP in P.link_t[1]:  # trace dlinks
             if derP._P.link_t[1]:  # else no _P.derT to compare
                 _P = derP._P

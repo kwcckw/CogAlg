@@ -126,6 +126,10 @@ def form_PP_t(P_, base_rdn):  # form PPs of derP.valt[fd] + connected Ps val
                     uuplink_ = []
                 qPP += [val,ave+1]  # ini reval=ave+1, keep qPP same object for ref in P.roott
                 qPP_ += [qPP]
+                     
+        # m fork rePP is not empty, d fork rePP is empty, so PP_t = has 1 PPm, but no PPd 
+        # in the next recursion with this PPm, when we run through both forks m|d, 
+        # their link_t[1] is referencing old d links,  and some of their _P is no longer in PPm's node_  
         # prune qPPs by mediated links vals:
         rePP_= reval_PP_(qPP_, fd)  # PP = [qPP,valt,reval]
         CPP_ = [sum2PP(qPP, base_rdn, fd) for qPP in rePP_]
