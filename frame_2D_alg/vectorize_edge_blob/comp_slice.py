@@ -58,12 +58,10 @@ def comp_P(_P,P, fd=0, derP=None):  #  derP if der+, S if rng+
 
     if fd:  # der+: extend old link derP
         rn *= len(_P.link_t[1]) / len(P.link_t[1])  # derH is summed from links
-        dderH, valt, rdnt = comp_derH(_P.derH, P.derH, rn)
-        mval, dval = rdnt
-        frdnt = [1+(dval>mval), 1+(1-(dval>mval))]  # fork rdn
+        dderH, valt, rdnt = comp_derH(_P.derH, P.derH, rn)  # +=fork rdn
         derP.derH += [dderH]  # flat, appended with each der+
         for i in 0,1:
-            derP.valt[i]+=valt[i]; derP.rdnt[i]+=rdnt[i] + frdnt[i]
+            derP.valt[i]+=valt[i]; derP.rdnt[i]+=rdnt[i]
     else:
         # rng+: add new link derP
         mtuple,dtuple = comp_ptuple(_P.ptuple, P.ptuple, rn)
@@ -71,12 +69,8 @@ def comp_P(_P,P, fd=0, derP=None):  #  derP if der+, S if rng+
         mrdn = 1+(dval>mval); drdn = 1+(1-(dval>mval))  # rdn = Dval/Mval?
         derP = CderP(derH=[[mtuple,dtuple, mval,dval,mrdn,drdn]], valt=[mval,dval], rdnt=[mrdn,drdn], P=P,_P=_P, S=derP)
         P.link_ += [derP]  # all links
-        if mval > aveP*mrdn: 
-            P.link_t[0] += [derP]  # +ve links, fork selection in form_PP_t
-            derP._P.roott[0] = None  # reset
-        if dval > aveP*drdn: 
-            P.link_t[1] += [derP]
-            derP._P.roott[1] = None
+        if mval > aveP*mrdn: P.link_t[0] += [derP]  # +ve links, fork selection in form_PP_t
+        if dval > aveP*drdn: P.link_t[1] += [derP]
 
 def comp_derH(_derH, derH, rn):  # derH is a list of layers or sub-layers, each = [mtuple,dtuple, mval,dval, mrdn,drdn]
 
@@ -202,8 +196,6 @@ def sum2PP(qPP, base_rdn, fd):  # sum links in Ps and Ps in PP
 
         for derP in P.link_t[fd]:
             derH, valt, rdnt = derP.derH, derP.valt, derP.rdnt
-            if valt[0] < valt[1]: valt[0]+=1  # fork rdn
-            else: valt[1]+=1
             sum_derH([P.derH,P.valt,P.rdnt], [derH,valt,rdnt], base_rdn)
             _P = derP._P  # bilateral summation:
             sum_derH([_P.derH,_P.valt,_P.rdnt], [derH,valt,rdnt], base_rdn)
