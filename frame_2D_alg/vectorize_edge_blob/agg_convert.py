@@ -21,7 +21,7 @@ def agg_recursion_eval(blob, PP_, fd):
     # use internal params?
     fork_rdnt = [1+(converted_blob.valt[1][fd] > converted_blob.valt[1][1-fd]), 1+(converted_blob.valt[1][1-fd] > converted_blob.valt[1][fd])]
     if (converted_blob.valt[1][fd] > PP_aves[fd] * ave_agg * (converted_blob.rdnt[1][fd]+1) * fork_rdnt[fd]) \
-        and len(PP_) > ave_nsubt[fd] : # and converted_blob[0].alt_rdn < ave_overlap:
+        and len(PP_) > ave_nsubt : # and converted_blob[0].alt_rdn < ave_overlap:
         converted_blob.rdnt[1][fd] += 1
         agg_recursion(converted_blob)
 
