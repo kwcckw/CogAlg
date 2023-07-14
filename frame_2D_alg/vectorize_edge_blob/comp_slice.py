@@ -103,23 +103,23 @@ def form_PP_t(P_, base_rdn):  # form PPs of derP.valt[fd] + connected Ps val
     for fd in 0,1:
         qPP_ = []  # initial sequence_PP s
         for P in P_:
-            if not P.roottH[-1][fd]:  # else already packed in qPP
+            if not P.root_tH[-1][fd]:  # else already packed in qPP
                 qPP = [[P]]  # init PP is 2D queue of (P,val)s of all layers?
-                P.roottH[-1][fd]=qPP; val = 0
+                P.root_tH[-1][fd]=qPP; val = 0
                 uplink_ = P.link_tH[-1][fd]
                 uuplink_ = []  # next layer of links
                 while uplink_:
                     for derP in uplink_:
-                        _P = derP._P; _qPP = _P.roottH[-1][fd]
+                        _P = derP._P; _qPP = _P.root_tH[-1][fd]
                         if _qPP:
                             if _qPP is not qPP:  # _P may be added to qPP via other downlinked P
                                 val += _qPP[1]  # merge _qPP in qPP:
                                 for qP in _qPP[0]:
-                                    qP.roottH[-1][fd] = qPP; qPP[0] += [qP]  # append qP_
+                                    qP.root_tH[-1][fd] = qPP; qPP[0] += [qP]  # append qP_
                                 qPP_.remove(_qPP)
                         else:
                             qPP[0] += [_P]  # pack bottom up
-                            _P.roottH[-1][fd] = qPP
+                            _P.root_tH[-1][fd] = qPP
                             val += derP.valt[fd]
                             uuplink_ += derP._P.link_tH[-1][fd]
                     uplink_ = uuplink_
@@ -189,7 +189,7 @@ def sum2PP(qPP, base_rdn, fd):  # sum links in Ps and Ps in PP
     PP = CPP(fd=fd, node_=P_)
     # accum:
     for i, P in enumerate(P_):
-        P.roottH[-1][fd] = PP
+        P.root_tH[-1][fd] = PP
         sum_ptuple(PP.ptuple, P.ptuple)
         L = P.ptuple[-1]
         Dy = P.axis[0]*L/2; Dx = P.axis[1]*L/2; y,x =P.yx

@@ -15,9 +15,9 @@ def sub_recursion_eval(root, PP_, ifd):  # fork PP_ in PP or blob, no derH in bl
         # update new layer link and root
         for P in P_:
             _link_ = P.link_tH[-1][ifd]  # select links based on prior fork
-            P.link_H += [copy(P.link_H[-1])]  # inherit from last layer?
+            P.link_H += [copy(P.link_H[-1])]  # inherit from last layer
             P.link_tH += [[copy(_link_), copy(_link_)]]  # use a same link_, so that all nodes present in PP.node_
-            P.roottH += [[None, None]]
+            P.root_tH += [[None, None]]
         fr = 0
         for fd in 0,1:  # rng+ and der+:
             if len(PP.node_) > ave_nsubt[fd] and PP.valt[fd] > PP_aves[fd] * PP.rdnt[fd]:
@@ -87,5 +87,4 @@ def comp_der(P_):  # keep same Ps and links, increment link derTs, then P derTs 
                 _P = derP._P
                 comp_P(_P,P, fd=1, derP=derP)
     return P_
-
 
