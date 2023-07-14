@@ -3,21 +3,17 @@ import numpy as np
 from copy import copy, deepcopy
 from .filters import PP_aves, ave_nsubt
 from .classes import CP, CPP
-from .comp_slice import comp_P, form_PP_t, sum_derH
+from .comp_slice import comp_P, form_PP_t, sum_derH, add_new_layer
 from dataclasses import replace
 
-def sub_recursion_eval(root, PP_, ifd):  # fork PP_ in PP or blob, no derH in blob
+def sub_recursion_eval(root, PP_):  # fork PP_ in PP or blob, no derH in blob
 
     termt = [1,1]
     # PP_ in PP_t:
     for PP in PP_:
         P_ = copy(PP.node_); sub_tt = []  # from rng+, der+
         # update new layer link and root
-        for P in P_:
-            _link_ = P.link_tH[-1][ifd]  # select links based on prior fork
-            P.link_H += [copy(P.link_H[-1])]  # inherit from last layer
-            P.link_tH += [[copy(_link_), copy(_link_)]]  # use a same link_, so that all nodes present in PP.node_
-            P.root_tH += [[None, None]]
+        for P in P_: add_new_layer(P)
         fr = 0
         for fd in 0,1:  # rng+ and der+:
             if len(PP.node_) > ave_nsubt[fd] and PP.valt[fd] > PP_aves[fd] * PP.rdnt[fd]:
@@ -42,7 +38,7 @@ def sub_recursion(PP, node_, fd):  # evaluate PP for rng+ and der+, add layers t
 
     for i, sub_PP_ in enumerate(sub_PP_t):  # sub_PP_ has at least one sub_PP: len node_ > ave_nsubt[fd]
         for sPP in sub_PP_: sPP.roott[i] = PP
-        termt = sub_recursion_eval(PP, sub_PP_, ifd=fd)
+        termt = sub_recursion_eval(PP, sub_PP_)
         if any(termt):
             for fd in 0, 1:
                 if termt[fd] and PP.fback_t[fd]:
