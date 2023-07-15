@@ -108,37 +108,41 @@ def form_PP_t(P_, base_rdn):  # form PPs of derP.valt[fd] + connected Ps val
                 P.root_tH[-1][fd] = qPP; val = 0
                 uplink_ = P.link_tH[-1][fd]
                 uuplink_ = []  # next layer of links
+                remove_link_ = []
                 while uplink_:
                     for derP in uplink_:
                         _P = derP._P
                         if _P not in P_:  # _P is outside of current PP, merge their root PP
-                            if len(P.root_tH) > len(_P.root_tH): add_ext_layer(_P)
-                            # not fully reviewed:
-                            PP = P.root_tH[-2][fd]
-                            _PP = _P.root_tH[-2][fd]
-                            if isinstance(_PP, CPP):  # _PP is CPP, not qPP, they may remain in qPP if reval_PP_ filtered them
-                                for _node in _PP.node_:
-                                    if _node not in P_:
-                                        if len(P.root_tH) > len(_node.root_tH): add_ext_layer(_node)
-                                        P_ += [_node]
-                                        _node.root_tH[-2][fd] = PP  # reassign root
-                                        _node.root_tH[-1][fd] = None  # reset node, in case they already form sub_PP
-                                        _PP.node_ = []  # reset them so that no sub_PPs is formed from the merged _PP
-                            _qPP = None
+                            if len(P.root_tH) == len(_P.root_tH):  #  same depth (all Ps should have added new ext layer from sub_recursion_eval)
+                                # not fully reviewed:
+                                PP = P.root_tH[-2][fd]
+                                _PP = _P.root_tH[-2][fd]
+                                if isinstance(_PP, CPP):  # _PP is CPP, not qPP, they may remain in qPP if reval_PP_ filtered them
+                                    for _node in _PP.node_:
+                                        if _node not in P_:
+                                            if len(P.root_tH) > len(_node.root_tH): add_ext_layer(_node)
+                                            P_ += [_node]
+                                            _node.root_tH[-2][fd] = PP  # reassign root
+                                            _node.root_tH[-1][fd] = None  # reset node, in case they already form sub_PP
+                                            _PP.node_ = []  # reset them so that no sub_PPs is formed from the merged _PP
+                            else:  # remove derP with different depth 
+                                remove_link_ += [derP]
                         else:
                             _qPP = _P.root_tH[-1][fd]
-                        if _qPP:
-                            if _qPP is not qPP:  # _P may be added to qPP via other downlinked P
-                                val += _qPP[1]  # merge _qPP in qPP:
-                                for qP in _qPP[0]:
-                                    qP.root_tH[-1][fd] = qPP
-                                    qPP[0] += [qP]  # append qP_
-                                qPP_.remove(_qPP)
-                        else:
-                            qPP[0] += [_P]  # pack bottom up
-                            _P.root_tH[-1][fd] = qPP
-                            val += derP.valt[fd]
-                            uuplink_ += derP._P.link_tH[-1][fd]
+                            if _qPP:
+                                if _qPP is not qPP:  # _P may be added to qPP via other downlinked P
+                                    val += _qPP[1]  # merge _qPP in qPP:
+                                    for qP in _qPP[0]:
+                                        qP.root_tH[-1][fd] = qPP
+                                        qPP[0] += [qP]  # append qP_
+                                    qPP_.remove(_qPP)
+                            else:
+                                qPP[0] += [_P]  # pack bottom up
+                                _P.root_tH[-1][fd] = qPP
+                                val += derP.valt[fd]
+                                uuplink_ += derP._P.link_tH[-1][fd]
+                    # remove links with different root depth
+                    while remove_link_: uplink_.remove(remove_link_.pop())
                     uplink_ = uuplink_
                     uuplink_ = []
                 qPP += [val, ave + 1]  # ini reval=ave+1, keep qPP same object for ref in P.roott

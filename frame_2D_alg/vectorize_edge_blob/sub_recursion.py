@@ -8,23 +8,25 @@ from dataclasses import replace
 
 def sub_recursion_eval(root, PP_):  # fork PP_ in PP or blob, no derH in blob
 
+    for PP in PP_:
+        for P in PP.node_: add_ext_layer(P)  # update new layer link and root for all PP first
     termt = [1,1]
     # PP_ in PP_t:
     for PP in PP_:
-        P_ = copy(PP.node_); sub_tt = []  # from rng+, der+
-        for P in P_: add_ext_layer(P)  # update new layer link and root
+        sub_tt = []  # from rng+, der+
         fr = 0
         for fd in 0,1:  # rng+ and der+:
             if len(PP.node_) > ave_nsubt[fd] and PP.valt[fd] > PP_aves[fd] * PP.rdnt[fd]:
                 termt[fd] = 0; fr = 1
                 sub_tt += [sub_recursion(PP, fd=fd)]  # comp_der|rng in PP->parLayer
             else:
-                sub_tt += [P_]
+                sub_tt += [PP.node_]
                 if isinstance(root, CPP):  # separate feedback per terminated comp fork:
                     root.fback_t[fd] += [[PP.derH, PP.valt, PP.rdnt]]
-            if fr:
-                PP.node_ = sub_tt
-                # nested PP_ tuple from 2 comp forks, each returns sub_PP_t: 2 clustering forks, if taken
+        # the indentation should be reduced?
+        if fr:
+            PP.node_ = sub_tt
+            # nested PP_ tuple from 2 comp forks, each returns sub_PP_t: 2 clustering forks, if taken
     return termt
 
 def sub_recursion(PP, fd):  # evaluate PP for rng+ and der+, add layers to select sub_PPs
