@@ -24,7 +24,7 @@ def comp_slice(blob, verbose=False):  # high-G, smooth-angle blob, composite der
         for _P in link_:  # or spliced_link_ if active
             comp_P(_P,P)  # replaces P.link_ Ps with derPs
 
-    PPm_,PPd_ = form_PP_t([Pt[0] for Pt in P_], base_rdn=2)
+    PPm_,PPd_ = form_PP_t([Pt[0] for Pt in P_], None, base_rdn=2)
     blob.PPm_, blob.PPd_  = PPm_, PPd_
 
 
@@ -74,7 +74,7 @@ def comp_dtuple(_ptuple, ptuple, rn):
 
     return [mtuple, dtuple]
 
-def form_PP_t(P_, base_rdn):  # form PPs of derP.valt[fd] + connected Ps val
+def form_PP_t(P_, PP_, base_rdn):  # form PPs of derP.valt[fd] + connected Ps val
 
     PP_t = []
     for fd in 0, 1:
@@ -89,7 +89,8 @@ def form_PP_t(P_, base_rdn):  # form PPs of derP.valt[fd] + connected Ps val
                     for derP in uplink_:
                         _P = derP._P
                         if _P not in P_:  # _P is outside of current PP, merge its root PP:
-                            merge_PP(P.root_tH[-1][fd],_P.root_tH[-1][fd], fd)
+                            if _P.root_tH[-1][fd]:  # not None
+                                merge_PP(P.root_tH[-2][fd],_P.root_tH[-1][fd], PP_, fd)  # P.root_tH[-2] is PP, [-1] is qPP
                         else:
                             _qPP = _P.root_tH[-1][fd]
                             if _qPP:
@@ -132,8 +133,9 @@ def reval_PP_(PP_, fd):  # recursive eval / prune Ps for rePP
                 if val > ave:  # min adjusted val
                     rePP_ += [rePP]
                 else:
-                    for P in rePP:
-                        P.root_tH[-1][fd] = None  # not sure 
+                    for P in rePP: P.root_tH[-1][fd] = None  # not sure 
+        else:
+            for P in P_: P.root_tH[-1][fd] = None  # we need reset here too
     if rePP_ and max([rePP[2] for rePP in rePP_]) > ave:  # recursion if any min reval:
         rePP_ = reval_PP_(rePP_,fd)
 
@@ -168,15 +170,16 @@ def reval_P_(P_, fd):  # prune qPP by link_val + mediated link__val
     return [P_, Val, reval]
 
 # draft:
-def merge_PP(PP, _PP, fd):
+def merge_PP(PP, _PP, PP_, fd):
 
+    if PP_ is not None: PP_.remove(_PP)
     node_=PP.node_
     for _node in _PP.node_:
         if _node not in node_:
             node_ += [_node]
             _node.root_tH[-1][fd] = PP  # reassign root
-    # add sum derH, etc?
-    
+    # add sum derH, etc? Yes.
+    sum_derH([PP.derH, PP.valt, PP.rdnt], [_PP.derH, _PP.valt, _PP.rdnt])
 
 def sum2PP(qPP, base_rdn, fd):  # sum links in Ps and Ps in PP
 

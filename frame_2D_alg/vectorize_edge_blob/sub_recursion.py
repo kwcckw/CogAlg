@@ -17,7 +17,7 @@ def sub_recursion_eval(root, PP_):  # fork PP_ in PP or blob, no derH in blob
             if len(PP.node_) > ave_nsubt[fd] and PP.valt[fd] > PP_aves[fd] * PP.rdnt[fd]:
                 termt[fd] = 0
                 for P in PP.node_: add_ext_layer(PP, P, fd, fr)  # add link_ and root, for both forks if not fr
-                sub_tt += [sub_recursion(PP, fd=fd)]  # comp_der|rng in PP->parLayer
+                sub_tt += [sub_recursion(PP, PP_, fd=fd)]  # comp_der|rng in PP->parLayer
                 fr = 1
             else:
                 sub_tt += [PP.node_]
@@ -28,13 +28,12 @@ def sub_recursion_eval(root, PP_):  # fork PP_ in PP or blob, no derH in blob
             # nested PP_ tuple from 2 comp forks, each returns sub_PP_t: 2 clustering forks, if taken
     return termt
 
-def sub_recursion(PP, fd):  # evaluate PP for rng+ and der+, add layers to select sub_PPs
+def sub_recursion(PP, PP_, fd):  # evaluate PP for rng+ and der+, add layers to select sub_PPs
 
     comp_der(PP.node_) if fd else comp_rng(PP.node_, PP.rng+1)  # same else new P_ and links
     # eval all or last layer?:
     PP.rdnt[fd] += PP.valt[fd] - PP_aves[fd]*PP.rdnt[fd] > PP.valt[1-fd] - PP_aves[1-fd]*PP.rdnt[1-fd]
-
-    sub_PP_t = form_PP_t(PP.node_, base_rdn=PP.rdnt[fd])  # replace P_ with sub_PPm_, sub_PPd_
+    sub_PP_t = form_PP_t(PP.node_, PP_, base_rdn=PP.rdnt[fd])  # replace P_ with sub_PPm_, sub_PPd_
 
     for i, sub_PP_ in enumerate(sub_PP_t):  # sub_PP_ has at least one sub_PP: len node_ > ave_nsubt[fd]
         for sPP in sub_PP_: sPP.roott[i] = PP
@@ -80,9 +79,7 @@ def comp_der(P_):  # keep same Ps and links, increment link derH, then P derH in
 
     for P in P_:
         link_ = []  # exclude uplinks to nested _sub_PPs
-
-        while P.link_tH[-1][1]:
-            derP = P.link_tH[-1][1].pop()  # trace dlinks
+        for derP in P.link_tH[-1][1]:  # we shouldn't pop it here because we need links to compute rn in comp_P later
             _P = derP._P
             if len(_P.derH) == len(P.derH):  # if _P is not _sub_PP:
                 comp_P(_P,P, fd=1, derP=derP)
@@ -93,7 +90,6 @@ def comp_der(P_):  # keep same Ps and links, increment link derH, then P derH in
 
 
 def add_ext_layer(PP, P, fd, fr):
-
     if not fr:
         P.root_tH += [[None, None]]
     if fd:
@@ -101,8 +97,8 @@ def add_ext_layer(PP, P, fd, fr):
         mlink_, dlink_ = P.link_tH[-1]
         P.link_tH += [[copy(mlink_), copy(dlink_)]]
     else:
-        P.link_H += []
-        P.link_tH += [[], []]  # rng+ forms new links
+        P.link_H += [[]]  # extra bracket for append
+        P.link_tH += [[[], []]]  # rng+ forms new links
 
     P.root_tH[-1][fd] = PP
 
