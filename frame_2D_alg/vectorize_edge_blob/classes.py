@@ -33,8 +33,9 @@ class CP(ClusterStructure):  # horizontal blob slice P, with vertical derivative
     dert_ext_: list = z([])  # external params: roots and coords per dert
     dert_olp_: list = z(set())
     link_H : list = z([[]])  # all links per rng layer
-    link_tH : list = z([[[],[]]])  # +ve rlink_, dlink_ per rng layer
-    root_tH : list = z([[None, None]])  # mPP,dPP that contain this P, per rng layer
+    link_ttH : list = z([ [ [[],[]], [[],[]]  ] ]  )  # +ve rlink_, dlink_ per rng layer
+    # 1st bracket = root_ttH, 2nd bracket = root_tt, 3rd bracket = each root_t
+    root_ttH : list = z([ [ [None,None], [None,None]  ] ])  # mPP,dPP that contain this P, per rng layer
     yx : list = z([])
     ''' 
     add L,S,A from links?
