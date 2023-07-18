@@ -18,18 +18,17 @@ def sub_recursion_eval(root, PP_):  # fork PP_ in PP or blob, no derH in blob
                 termt[fd] = 0
                 if not fr:  # add link_tt and root_tt for both comp forks:
                     for P in PP.node_:
-                        P.root_ttH += [ [[None,None], [None,None]] ]  # pack new root_tt (first bracket for append)
-                        mdlink_, ddlink_ = copy(P.link_ttH[-1][0][1]), copy(P.link_ttH[-1][1][1])  # for der+, inherit links 
-                        P.link_ttH += [ [[[],mdlink_], [[],ddlink_]] ]
+                        P.root_tt = [[None,None],[None,None]]  # replace root PPs with sub_PPs, not sure it will work here?
+                        P.link_H += [[]]; P.link_tH += [[[],[]]]
                         # root_t and link_t of form forks are added in sub+:
-                sub_tt += [sub_recursion(PP, PP_, fd=fd)]  # comp_der|rng in PP->parLayer
+                sub_tt += [sub_recursion(PP, PP_, fd=fd)]  # fd is actually fder, comp_der|rng in PP->parLayer
                 fr = 1
             else:
                 sub_tt += [PP.node_]
                 if isinstance(root, CPP):  # separate feedback per terminated comp fork:
                     root.fback_t[fd] += [[PP.derH, PP.valt, PP.rdnt]]
         if fr:
-            PP.node_ = sub_tt  # actually node should be node_ttH too?
+            PP.node_ = sub_tt
             # nested PP_ tuple from 2 comp forks, each returns sub_PP_t: 2 clustering forks, if taken
     return termt
 
@@ -39,7 +38,7 @@ def sub_recursion(PP, PP_, fd):  # evaluate PP for rng+ and der+, add layers to 
     comp_der(PP.node_) if fd else comp_rng(PP.node_, PP.rng+1)  # same else new P_ and links
     # eval all| last layer?:
     PP.rdnt[fd] += PP.valt[fd] - PP_aves[fd]*PP.rdnt[fd] > PP.valt[1-fd] - PP_aves[1-fd]*PP.rdnt[1-fd]
-    sub_PP_t = form_PP_t(PP.node_, PP_, base_rdn=PP.rdnt[fd], ifd=fd)  # replace node_ with sub_PPm_, sub_PPd_
+    sub_PP_t = form_PP_t(PP.node_, PP_, base_rdn=PP.rdnt[fd], fder=fd)  # replace node_ with sub_PPm_, sub_PPd_
 
     for i, sub_PP_ in enumerate(sub_PP_t):  # not empty: len node_ > ave_nsubt[fd]
         for sPP in sub_PP_: sPP.roott[i] = PP
@@ -71,36 +70,24 @@ def comp_rng(iP_, rng):  # form new Ps and links, switch to rng+n to skip cluste
     P_ = []
     for P in iP_:
         # trace mlinks:
-        for derP in P.link_ttH[-2][0][0]:  # should be -2 here because we added new link_tt in sub_recursion_eval, last layer is empty
+        for derP in P.link_tH[-2][0]:  # scan lower-layer mlinks
             _P = derP._P
-            for _derP in _P.link_ttH[-1][0][0]:  # next layer of all links
+            for _derP in _P.link_tH[-2][0]:  # next layer of all links, also lower-layer?
                 __P = _derP._P  # next layer of Ps
                 distance = np.hypot(__P.yx[1]-P.yx[1], __P.yx[0]-P.yx[0])   # distance between mid points
                 if distance > rng:
-                    comp_P(P,__P, fd=0, ifd=0, derP=distance)  # distance=S, mostly lateral, relative to L for eval?
+                    comp_P(P,__P, fd=0, fder=0, derP=distance)  # distance=S, mostly lateral, relative to L for eval?
         P_ += [P]
     return P_
 
 def comp_der(P_):  # keep same Ps and links, increment link derH, then P derH in sum2PP
 
     for P in P_:
-        for derP in P.link_ttH[-1][1][1]:  # dlinks only 
+        for derP in P.link_tH[-2][1]:  # scan lower-layer dlinks
             _P = derP._P
             if len(_P.derH) == len(P.derH):  # if _P is not _sub_PP:
-                comp_P(_P,P, fd=1, ifd=1, derP=derP)
+                comp_P(_P,P, fd=1, fder=1, derP=derP)
     return P_
-
-# obsolete
-def add_ext_rlayer(PP, P, fd, fr):
-
-    if not fr:  # no prior sub+ from either fork
-        P.root_tH += [[None, None]]
-
-        if not fd:  # only rng+ forms new links, same for PPs: der+ extends PP derH based on combined val of all prior links?
-            P.link_H += [[]]
-            P.link_tH += [[[],[]]]
-
-    P.root_tH[-1][fd] = PP
 
 ''' 
 lateral splicing of initial Ps, not needed: will be spliced in PPs through common forks? 
