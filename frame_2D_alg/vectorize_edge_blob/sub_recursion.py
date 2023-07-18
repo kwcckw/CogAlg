@@ -41,16 +41,16 @@ def sub_recursion(PP, PP_, fd):  # evaluate PP for rng+ and der+, add layers to 
     sub_PP_t = form_PP_t(PP.node_, PP_, base_rdn=PP.rdnt[fd], fder=fd)  # replace node_ with sub_PPm_, sub_PPd_
 
     for i, sub_PP_ in enumerate(sub_PP_t):  # not empty: len node_ > ave_nsubt[fd]
-        for sPP in sub_PP_: sPP.roott[i] = PP
+        for sPP in sub_PP_: sPP.root_tt[fd][i] = PP
         termt = sub_recursion_eval(PP, sub_PP_)
         if any(termt):
             for fd in 0,1:
                 if termt[fd] and PP.fback_t[fd]:
-                    feedback(PP, fd)
+                    feedback(PP, fder=fd, fd=i)
                     # upward recursive extend root.derH, forward eval only
     return sub_PP_t
 
-def feedback(root, fd):  # append new der layers to root
+def feedback(root, fder, fd):  # append new der layers to root
 
     Fback = deepcopy(root.fback_t[fd].pop())
     # init with 1st fback: [derH,valt,rdnt], derH: [[mtuple,dtuple, mval,dval, mrdn, drdn]]
@@ -58,11 +58,11 @@ def feedback(root, fd):  # append new der layers to root
         sum_derH(Fback,root.fback_t[fd].pop(), base_rdn=0)
     sum_derH([root.derH, root.valt,root.rdnt], Fback, base_rdn=0)
 
-    if isinstance(root.roott[fd], CPP):  # not blob
-        root = root.roott[fd]
+    if isinstance(root.root_tt[fder][fd], CPP):  # not blob
+        root = root.root_tt[fder][fd]
         root.fback_t[fd] += [Fback]
         if len(root.fback_t[fd]) == len(root.node_):  # all original nodes term, fed back to root.fback_t
-            feedback(root, fd)  # derH/ rng layer in sum2PP, deeper rng layers are appended by feedback
+            feedback(root, fder, fd)  # derH/ rng layer in sum2PP, deeper rng layers are appended by feedback
 
 
 def comp_rng(iP_, rng):  # form new Ps and links, switch to rng+n to skip clustering?
@@ -85,7 +85,7 @@ def comp_der(P_):  # keep same Ps and links, increment link derH, then P derH in
     for P in P_:
         for derP in P.link_tH[-2][1]:  # scan lower-layer dlinks
             _P = derP._P
-            if len(_P.derH) == len(P.derH):  # if _P is not _sub_PP:
+            if len(_P.derH) == len(P.derH):  # if _P is not _sub_PP: (if we compare shorted derH, this is not needed?)
                 comp_P(_P,P, fd=1, fder=1, derP=derP)
     return P_
 

@@ -34,11 +34,13 @@ def comp_P(_P,P, fd=0, fder=1, derP=None):  #  derP if der+, S if rng+
     rn = len(_P.dert_)/ len(P.dert_)
 
     if fd:  # der+: extend old link derP
-        rn *= len(_P.link_tH[-1][fder]) / len(P.link_tH[-1][fder])  # derH is summed from links
+        rn *= len(_P.link_tH[-2][fder]) / len(P.link_tH[-2][fder])  # derH is summed from links (should be -2 here because we add new layer in sub+)
         dderH, valt, rdnt = comp_derH(_P.derH, P.derH, rn)  # +=fork rdn
         derP.derH += dderH  # flat, concatenated per der+
         for i in 0,1:
             derP.valt[i]+=valt[i]; derP.rdnt[i]+=rdnt[i]
+        # we need additional evaluation to select those links? Else their links will be the same with prior layer links
+        P.link_tH[-1][fder] += [derP]; _P.link_tH[-1][fder] += [derP] 
     else:
         # rng+: add new link derP
         mtuple,dtuple = comp_ptuple(_P.ptuple, P.ptuple, rn)
