@@ -233,13 +233,14 @@ def form_link_(P, cP_, blob):  # trace adj Ps up and down by adj dert roots, fil
     link_ = {*sum(rim_.values(), start=[])} & cP_   # intersect with cP_ to prevent duplicate links and self linking (P not in cP_)
     # form links:
     for _P in link_:
-        P.link_H[-1] += [_P]
-        _P.link_H[-1] += [P]  # bidirectional assign maybe needed in ortho version, else uplinks only?
+        P.link_tH[-1][0] += [_P]
+        # if we trace uplinks only, then we don't need bidirectional assignment here too
+        # _P.link_tH[-1][0] += [P]  # bidirectional assign maybe needed in ortho version, else uplinks only?
     # check empty link_:
-    if not P.link_H[-1]:
-        # filter non-empty roots and get max-G dert coord:
-        y, x = max([(y, x) for y, x in rim_ if not rim_[y, x]],     # filter non-empty roots
-                     key=lambda yx: blob.der__t[1][yx])             # get max-G dert coord
+    yx_= [(y, x) for y, x in rim_ if not rim_[y, x]]
+    if not P.link_tH[-1][0] and yx_:
+        # filter non-empty roots and get max-G dert coord: # filter non-empty roots
+        y, x = max(yx_ , key=lambda yx: blob.der__t[1][yx])             # get max-G dert coord
         # get max-G dert:
         dert = [par__[y,x] for par__ in blob.der__t[1:]]       # get max-G dert
         # form new P
@@ -247,8 +248,9 @@ def form_link_(P, cP_, blob):  # trace adj Ps up and down by adj dert roots, fil
                     blob.der__t, blob.mask__,
                     axis=np.divide(dert[3:5], dert[0]))
         # link _P:
-        P.link_H[-1] += [_P]; _P.link_H[-1] += [P]    # form link with P first to avoid further recursion
+        P.link_tH[-1][0] += [_P]; # _P.link_tH[-1][0] += [P]    # form link with P first to avoid further recursion
         _cP_ = set(blob.P_) - {P}           # exclude P
+        # with this form_link_ here, getting very large or endless recursion
         form_link_(_P, _cP_, blob)          # call form_link_ for the newly formed _P
         blob.P_ += [_P]                     # add _P to blob.P_ for further linking with remaining cP_
 

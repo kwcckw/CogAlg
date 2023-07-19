@@ -19,10 +19,11 @@ def agg_recursion_eval(blob, PP_, fd):
     converted_blob = blob2graph(blob, 0, fd)  # convert root to graph
 
     # use internal params?
-    fork_rdnt = [1+(converted_blob.valt[1][fd] > converted_blob.valt[1][1-fd]), 1+(converted_blob.valt[1][1-fd] > converted_blob.valt[1][fd])]
-    if (converted_blob.valt[1][fd] > PP_aves[fd] * ave_agg * (converted_blob.rdnt[1][fd]+1) * fork_rdnt[fd]) \
+    # with scheme of tt, we should use index 0 or 1 here with every new agg+ valtt[0] or valtt[1]?
+    fork_rdnt = [1+(converted_blob.valtt[0][fd] > converted_blob.valtt[0][1-fd]), 1+(converted_blob.valtt[0][1-fd] > converted_blob.valtt[0][fd])]
+    if (converted_blob.valtt[0][fd] > PP_aves[fd] * ave_agg * (converted_blob.rdntt[0][fd]+1) * fork_rdnt[fd]) \
         and len(PP_) > ave_nsubt[fd]: # and converted_blob[0].alt_rdn < ave_overlap:
-        converted_blob.rdnt[1][fd] += 1
+        converted_blob.rdntt[0][fd] += 1
         agg_recursion(converted_blob)
 
 # old
@@ -46,15 +47,15 @@ def blob2graph(blob, fseg, fd):
 
     PP_ = [blob.PPm_, blob.PPd_][fd]
     x0, xn, y0, yn = blob.box
-    Graph = Cgraph(fd=PP_[0].fd, rng=PP_[0].rng, id_T = [[],[0]], box=[(y0+yn)/2,(x0+xn)/2, y0,yn, x0,xn])
+    Graph = Cgraph(fd=PP_[0].fd, rng=PP_[0].rng, id_Ht = [[0],[]], box=[(y0+yn)/2,(x0+xn)/2, y0,yn, x0,xn])
     [blob.mgraph, blob.dgraph][fd] = Graph  # update graph reference
 
     for i, PP in enumerate(PP_):
         graph = PP2graph(PP, fseg, fd)
-        sum_derH([Graph.derT[1], Graph.valt[1], Graph.rdnt[1]], [graph.derT[1], graph.valt[1], graph.rdnt[1]], 0)  # skip index 0, external params are empty now
+        sum_derH([Graph.derHt[0], Graph.valtt[0], Graph.rdntt[0]], [graph.derHt[0], graph.valtt[0], graph.rdntt[0]], 0)  # skip index 0, external params are empty now
         graph.root = Graph
         Graph.node_ += [graph]
-    Graph.id_T[1] += [len(Graph.derT[1])]  # add index of derH
+    Graph.id_Ht[0] += [len(Graph.derHt[0])]  # add index of derH
 
     return Graph
 
@@ -62,7 +63,7 @@ def blob2graph(blob, fseg, fd):
 def PP2graph(PP, fseg, ifd=1):
 
     box = [(PP.box[0]+PP.box[1]) /2, (PP.box[2]+PP.box[3]) /2] + list(PP.box)
-    graph = Cgraph(derT = [[], deepcopy(PP.derH)], valt=[[0,0],copy(PP.valt)],rdnt=[[1,1,], copy(PP.rdnt)], id_T=[[], [0, len(PP.derH)]], box=box)
+    graph = Cgraph(derHt = [deepcopy(PP.derH), []], valtt=[copy(PP.valt), [0,0]], rdntt=[copy(PP.rdnt)], id_Ht=[[0, len(PP.derH)], []], box=box)
     return graph  # the converted graph doesn't have links yet, so init their valt with PP.valt?
 
 # all the code below should be not needed now

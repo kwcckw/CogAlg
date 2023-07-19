@@ -57,28 +57,31 @@ def comp_G_(G_, pri_G_=None, f1Q=1, fd=0, fsub=0):  # cross-comp Graphs if f1Q, 
 
     for i, _iG in enumerate(G_ if f1Q else pri_G_):  # G_ is node_ of root graph, initially converted PPs
         # follow links in der+, loop all Gs (or link_?) in rng+:
-        for iG in _iG.link_tH[1] if fd \
+        for iG in _iG.link_tH[-1][1] if fd \
             else G_[i+1:] if f1Q else G_:  # compare each G to other Gs in rng+, bilateral link assign, val accum:
             if not fd:   # not fd if f1Q?
-                if iG in [node for link in _iG.link_ for node in link.node_]:  # the pair compared in prior rng+
+                if iG in [node for link in _iG.link_tH[-1][fd] for node in link.node_]:  # the pair compared in prior rng+
                     continue
             dy = _iG.box[0]-iG.box[0]; dx = _iG.box[1]-iG.box[1]  # between center x0,y0
             distance = np.hypot(dy,dx) # Euclidean distance between centers, sum in sparsity, proximity = ave-distance
-            if distance < ave_distance * ((sum(_iG.valtt[1]) + sum(iG.valtt[1])) / (2*sum(G_aves))):
+            if distance < ave_distance * ((sum(_iG.valtt[fd]) + sum(iG.valtt[fd])) / (2*sum(G_aves))):
                 # same for cis and alt Gs:
                 for _G, G in ((_iG, iG), (_iG.alt_Graph, iG.alt_Graph)):
                     if not _G or not G:  # or G.val
                         continue
-                    derH, valtt, rdntt = comp_derH(_G.derHt[1], G.derHt[1], rn=1)  # comp aggH, or layers while lower match?
-                    derG = Cgraph(node_=[_G,G], derHt=derH,valtt=valtt,rdntt=rdntt, S=distance, A=[dy,dx], box=[])  # box is redundant to G
+                    derHt, valtt, rdntt = [], [], []
+                    # we need compare both forks here? Else i don't see how we can get tt derivatives here
+                    for i in 0, 1:
+                        derH, valt, rdnt = comp_derH(_G.derHt[i], G.derHt[i], rn=1)  # comp aggH, or layers while lower match?
+                        derHt += [derH]; valtt += [valt]; rdntt += [rdnt]
+                    derG = Cgraph(node_=[_G,G], derHt=derHt,valtt=valtt,rdntt=rdntt, S=distance, A=[dy,dx], box=[])  # box is redundant to G
                     # add links:
-                    _G.link_ += [derG]; G.link_ += [derG]  # no didx, no ext_valtt accum?
-                    if valtt[0] > ave_Gm:
-                        _G.link_tH[0] += [derG]; G.link_tH[0] += [derG]  # bi-directional
-                    if valtt[1] > ave_Gd:
-                        _G.link_tH[1] += [derG]; G.link_tH[1] += [derG]
+                    if sum(valtt[fd]) > ave_Gm:
+                        _G.link_tH[-1][0] += [derG]; G.link_tH[-1][0] += [derG]  # bi-directional
+                    if sum(valtt[fd]) > ave_Gd:
+                        _G.link_tH[-1][1] += [derG]; G.link_tH[-1][1] += [derG]
 
-                    if not f1Q: dpars_ += [[derH,valtt,rdntt]]  # comp G_s? not sure
+                    if not f1Q: dpars_ += [[derHt,valtt,rdntt]]  # comp G_s? not sure
                 # implicit cis, alt pair nesting in mderH, dderH
     if not f1Q:
         return dpars_  # else no return, packed in links
@@ -92,8 +95,8 @@ def form_graph_(root):  # form list graphs and their derHs, G is node in GG grap
     mnode_, dnode_ = [],[]  # Gs with >0 +ve fork links:
 
     for G in G_:
-        if G.link_tH[0]: mnode_ += [G]  # all nodes with +ve links, not clustered in graphs yet
-        if G.link_tH[1]: dnode_ += [G]
+        if G.link_tH[-1][0]: mnode_ += [G]  # all nodes with +ve links, not clustered in graphs yet
+        if G.link_tH[-1][1]: dnode_ += [G]
     graph_t = []
     for fd, node_ in enumerate([mnode_, dnode_]):
         graph_ = []  # init graphs by link val:
@@ -113,7 +116,7 @@ def form_graph_(root):  # form list graphs and their derHs, G is node in GG grap
 
 def init_graph(gnode_, G_, G, fd, val):  # recursive depth-first gnode_+=[_G]
 
-    for link in G.link_:
+    for link in G.link_tH[-1][fd]:
         # all positive links init graph, eval node.link_ in prune_node_layer
         _G = link.node_[1] if link.node_[0] is G else link.node_[0]
         if _G in G_:  # _G is not removed in prior loop
@@ -153,9 +156,10 @@ def graph_reval(graph, fd):  # exclusive graph segmentation by reval,prune nodes
 
     for node in graph[0]:  # compute reval: link_Val reinforcement by linked nodes Val:
         lval = 0  # link value
+        # or sum valtt[fd] here?
         _lval = node.valtt[0][fd]  # = sum([link.valtt[fd] for link in node.link_tH[fd]])?
-        for derG in node.link_tH[fd]:
-            val = derG.valtt[fd]  # of top derH only
+        for derG in node.link_tH[-1][fd]:
+            val = derG.valtt[0][fd]  # of top derH only
             _node = derG.node_[1] if derG.node_[0] is node else derG.node_[0]
             lval += val + (_node.valtt[0][fd]-val) * med_decay
         reval += _lval - lval  # _node.link_tH val was updated in previous round
@@ -166,17 +170,17 @@ def graph_reval(graph, fd):  # exclusive graph segmentation by reval,prune nodes
         for node in graph[0]:
             val = node.valtt[0][fd]
             if val < G_aves[fd] and node in graph:  # prune revalued node and its links
-                for derG in node.link_tH[fd]:
+                for derG in node.link_tH[-1][fd]:
                     _node = derG.node_[1] if derG.node_[0] is node else derG.node_[0]
-                    _link_ = _node.link_tH[fd]
+                    _link_ = _node.link_tH[-1][fd]
                     if derG in _link_: _link_.remove(derG)
-                    rreval += derG.valtt[fd] + (_node.valtt[0][fd]-derG.valtt[fd]) * med_decay  # else same as rreval += link_.val
+                    rreval += derG.valtt[0][fd] + (_node.valtt[0][fd]-derG.valtt[0][fd]) * med_decay  # else same as rreval += link_.val
             else:
-                link_ = node.link_tH[fd]  # prune node links only:
+                link_ = node.link_tH[-1][fd]  # prune node links only:
                 remove_link_ = []
                 for derG in link_:
                     _node = derG.node_[1] if derG.node_[0] is node else derG.node_[0]  # add med_link_ val to link val:
-                    lval = derG.valtt[fd] + (_node.valtt[0][fd]-derG.valtt[fd]) * med_decay
+                    lval = derG.valtt[0][fd] + (_node.valtt[0][fd]-derG.valtt[0][fd]) * med_decay
                     if lval < aveG:  # prune link, else no change
                         remove_link_ += [derG]
                         rreval += lval
@@ -197,7 +201,7 @@ In rng+, graph may be extended with out-linked nodes, merged with their graphs a
 Clusters of different forks / param sets may overlap, else no use of redundant inclusion?
 No centroid clustering, but cluster may have core subset.
 '''
-
+#not updated
 def sum2graph_(graph_, fd):  # sum node and link params into graph, derH in agg+ or player in sub+
 
     Graph_ = []
