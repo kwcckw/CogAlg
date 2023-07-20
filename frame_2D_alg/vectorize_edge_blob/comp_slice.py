@@ -17,9 +17,9 @@ def comp_slice(blob, verbose=False):  # high-G, smooth-angle blob, composite der
 
     P_ = []
     for P in blob.P_:  # must be contiguous, gaps filled in scan_P_rim
-        link_ = copy(P.link_tH[-1][0])
-        P.link_tH[-1][0] = []  # reset P so that it fills derP in comp_P later
-        P_+=[[P,link_]]
+        link_ = copy(P.link_tH[-1][0])  # init rng+
+        P.link_tH[-1][0] = []  # fill with derPs in comp_P
+        P_ +=[[P,link_]]
     for P, link_ in P_:
         for _P in link_:  # or spliced_link_ if active
             comp_P(_P,P, fder=0)  # replaces P.link_ Ps with derPs
@@ -285,4 +285,3 @@ def comp_aangle(_aangle, aangle):
     maangle = ave_daangle - abs(daangle)  # inverse match, not redundant as summed
 
     return [maangle,daangle]
-
