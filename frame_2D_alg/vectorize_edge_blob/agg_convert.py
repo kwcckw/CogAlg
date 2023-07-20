@@ -7,7 +7,7 @@ from .agg_recursion import Cgraph, agg_recursion
 from copy import copy, deepcopy
 from .classes import CP, CderP, CPP
 from .filters import PP_vars, PP_aves, ave_nsubt, ave_agg, med_decay
-from .comp_slice import sum_derH
+from .comp_slice import sum_derH, sum_aggH
 
 # move here temporary, for debug purpose
 # not fully updated
@@ -47,15 +47,16 @@ def blob2graph(blob, fseg, fd):
 
     PP_ = [blob.PPm_, blob.PPd_][fd]
     x0, xn, y0, yn = blob.box
-    Graph = Cgraph(fd=PP_[0].fd, rng=PP_[0].rng, id_Ht = [[0],[]], box=[(y0+yn)/2,(x0+xn)/2, y0,yn, x0,xn])
+    Graph = Cgraph(fd=PP_[0].fd, rng=PP_[0].rng, box=[(y0+yn)/2,(x0+xn)/2, y0,yn, x0,xn])
     [blob.mgraph, blob.dgraph][fd] = Graph  # update graph reference
 
     for i, PP in enumerate(PP_):
         graph = PP2graph(PP, fseg, fd)
-        sum_derH([Graph.derHt[0], Graph.valtt[0], Graph.rdntt[0]], [graph.derHt[0], graph.valtt[0], graph.rdntt[0]], 0)  # skip index 0, external params are empty now
+        sum_aggH([[Graph.derH,[]], Graph.valt, Graph.rdnt], [[graph.derH, []], graph.valt, graph.rdnt], 0)  # skip index 0, external params are empty now
+        sum_aggH([[Graph.derH,[]], Graph.valt, Graph.rdnt], [[graph.derH, []], graph.valt, graph.rdnt], 0) 
         graph.root = Graph
         Graph.node_ += [graph]
-    Graph.id_Ht[0] += [len(Graph.derHt[0])]  # add index of derH
+    Graph.id_H += [[ [0, len(Graph.derH)] ]]  # add index of derH (not sure here)
 
     return Graph
 
@@ -63,7 +64,9 @@ def blob2graph(blob, fseg, fd):
 def PP2graph(PP, fseg, ifd=1):
 
     box = [(PP.box[0]+PP.box[1]) /2, (PP.box[2]+PP.box[3]) /2] + list(PP.box)
-    graph = Cgraph(derHt = [deepcopy(PP.derH), []], valtt=[copy(PP.valt), [0,0]], rdntt=[copy(PP.rdnt)], id_Ht=[[0, len(PP.derH)], []], box=box)
+    subH = [ [[deepcopy(PP.derH), []], copy(PP.valt), copy(PP.rdnt)] ]
+    aggH = [ [[subH, []], copy(PP.valt), copy(PP.rdnt)] ]
+    graph = Cgraph(derH = aggH , valt=copy(PP.valt), rdnt=copy(PP.rdnt), id_H=[[[0, len(PP.derH)]]], box=box)
     return graph  # the converted graph doesn't have links yet, so init their valt with PP.valt?
 
 # all the code below should be not needed now

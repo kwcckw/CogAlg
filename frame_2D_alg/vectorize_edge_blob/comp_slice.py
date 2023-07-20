@@ -73,6 +73,46 @@ def comp_dtuple(_ptuple, ptuple, rn):
 
     return [mtuple, dtuple]
 
+
+def comp_aggH():
+    pass
+
+# very initial draft
+def sum_aggH(T, t, base_rdn):
+    
+    AggH, Valt, Rdnt = T
+    aggH, valt, rdnt = t
+    for i in 0, 1:
+        Valt[i] += valt[i]
+        Rdnt[i] += rdnt[i]
+    
+    if AggH:
+        for Ht, ht in zip_longest(AggH, aggH, fillvalue=None):
+            if ht != None:
+                if Ht:
+                    # check for layer, mdtuple and finally value in each tuple
+                    if ht[0] and isinstance(ht[0], list) and ht[0][0] and isinstance(ht[0][0], list) and not isinstance(ht[0][0][0], list):
+                        for Layer, layer in zip_longest(Ht,ht, fillvalue=None):
+                            if layer != None:
+                                if Layer:
+                                    for i, param in enumerate(layer):
+                                        if i<2: sum_ptuple(Layer[i], param)  # mtuple | dtuple
+                                        elif i<4: Layer[i] += param  # mval | dval
+                                        else:     Layer[i] += param + base_rdn # | mrdn | drdn
+                                elif Layer!=None:
+                                    Layer[:] = deepcopy(layer)
+                                else: 
+                                    Ht += [deepcopy(layer)]
+                    else:
+                        for H, h in zip(Ht, ht):  # recursively sum of each t of [t, valt, rdnt] (always 2 elements here)
+                            sum_aggH(H, h, base_rdn) 
+                elif Ht != None:
+                    Ht[:] = deepcopy(ht)
+                else:
+                    AggH += [deepcopy(ht)]
+    else:
+        AggH[:] = deepcopy(aggH)
+
 def form_PP_t(P_, PP_, base_rdn, fder):  # form PPs of derP.valt[fd] + connected Ps val
 
     PP_t = []
@@ -206,6 +246,7 @@ def sum_derH(T, t, base_rdn):  # derH is a list of layers or sub-layers, each = 
     for i in 0, 1:
         Valt[i] += valt[i]
         Rdnt[i] += rdnt[i] + base_rdn
+    
     if DerH:
         for Layer, layer in zip_longest(DerH,derH, fillvalue=[]):
             if layer:
