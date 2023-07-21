@@ -7,7 +7,7 @@ from .agg_recursion import Cgraph, agg_recursion
 from copy import copy, deepcopy
 from .classes import CP, CderP, CPP
 from .filters import PP_vars, PP_aves, ave_nsubt, ave_agg, med_decay
-from .comp_slice import sum_derH, sum_aggH
+from .comp_slice import sum_derH, sum_H
 
 # move here temporary, for debug purpose
 # not fully updated
@@ -52,11 +52,10 @@ def blob2graph(blob, fseg, fd):
 
     for i, PP in enumerate(PP_):
         graph = PP2graph(PP, fseg, fd)
-        sum_aggH([[Graph.derH,[]], Graph.valt, Graph.rdnt], [[graph.derH, []], graph.valt, graph.rdnt], 0)  # skip index 0, external params are empty now
-        sum_aggH([[Graph.derH,[]], Graph.valt, Graph.rdnt], [[graph.derH, []], graph.valt, graph.rdnt], 0) 
+        sum_H([Graph.derH, Graph.valt, Graph.rdnt], [graph.derH, graph.valt, graph.rdnt], 0)
+        sum_H([Graph.aggH, Graph.valt, Graph.rdnt], [graph.aggH, graph.valt, graph.rdnt], 0)  
         graph.root = Graph
         Graph.node_ += [graph]
-    Graph.id_H += [[ [0, len(Graph.derH)] ]]  # add index of derH (not sure here)
 
     return Graph
 
@@ -66,7 +65,7 @@ def PP2graph(PP, fseg, ifd=1):
     box = [(PP.box[0]+PP.box[1]) /2, (PP.box[2]+PP.box[3]) /2] + list(PP.box)
     subH = [ [[deepcopy(PP.derH), []], copy(PP.valt), copy(PP.rdnt)] ]
     aggH = [ [[subH, []], copy(PP.valt), copy(PP.rdnt)] ]
-    graph = Cgraph(derH = aggH , valt=copy(PP.valt), rdnt=copy(PP.rdnt), id_H=[[[0, len(PP.derH)]]], box=box)
+    graph = Cgraph(derH = copy(PP.derH), aggH=aggH, valt=copy(PP.valt), rdnt=copy(PP.rdnt), box=box)
     return graph  # the converted graph doesn't have links yet, so init their valt with PP.valt?
 
 # all the code below should be not needed now
