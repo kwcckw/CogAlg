@@ -3,9 +3,9 @@ import numpy as np
 from copy import copy, deepcopy
 from itertools import product
 from frame_blobs import recompute_dert, recompute_adert
-from .classes import CP, CPP, CderP, Cgraph
+from .classes import CP, CPP, CderP, Cgraph, Cedge
 from .filters import ave, ave_g, ave_ga, ave_rotate
-from .comp_slice import comp_slice, comp_angle
+from .comp_slice import comp_slice, comp_angle, sum_derH, sum_aggH
 from .hough_P import new_rt_olp_array, hough_check
 from .agg_recursion import agg_recursion
 from .sub_recursion import sub_recursion_eval
@@ -60,19 +60,26 @@ def vectorize_root(blob, verbose=False):  # always angle blob, composite dert co
     while cP_:
         form_link_(cP_.pop(), cP_, blob)  # trace adjacent Ps, fill|prune if missing or redundant, add them to P.link_
 
-    comp_slice(blob, verbose=verbose)  # scan rows top-down, compare y-adjacent, x-overlapping Ps to form derPs
+    PPm_, PPd_ = comp_slice(blob, verbose=verbose)  # scan rows top-down, compare y-adjacent, x-overlapping Ps to form derPs
 
-    for fder, PP_t in enumerate(blob.PP_tt):  # [rng+ PPm_,PPd_, der+ PPm_,PPd_]
-        for fd, PP_ in enumerate(PP_t):
-            # intra PP, no fback to blob:
-            sub_recursion_eval(blob, PP_)
-            # agg+, inter-PP:
-            if sum([PP.valt[fd] for PP in PP_]) > ave * sum([PP.rdnt[fd] for PP in PP_]):
-                # convert PPs to graphs, cross-comp, cluster:
-                node_ = [Cgraph(derH=[copy(PP.derH), PP.valt, PP.rdnt], box=[(PP.box[0]+PP.box[1])/2, (PP.box[2]+PP.box[3])/2] + list(PP.box))
-                         for PP in PP_]
-                blob.node_tt[fder][fd] = node_
-                agg_recursion(blob, PP_)
+    edge = Cedge(I=blob.I, Dy=blob.Dy, Dx=blob.Dx, G=blob.G, M=blob.M, \
+                 Dyy=blob.Dyy, Dyx=blob.Dyx, Dxy=blob.Dxy, Dxx=blob.Dxx, Ga=blob.Ga, blob=blob) 
+    # we only have single P_ here, i don't see how we can get 2 PP_t?
+    # this may possible only if we call agg+ within sub+, so we need include agg+ in sub+?
+    # for fder, PP_t in enumerate(blob.PP_tt):  # [rng+ PPm_,PPd_, der+ PPm_,PPd_] 
+    for fd, PP_ in enumerate([PPm_, PPd_]):
+        # intra PP, no fback to blob:
+        sub_recursion_eval(blob, PP_)
+        # agg+, inter-PP:
+        if sum([PP.valt[fd] for PP in PP_]) > ave * sum([PP.rdnt[fd] for PP in PP_]):
+            # convert PPs to graphs, cross-comp, cluster:
+            for PP in PP_:
+                # derH should be separated with valt and rdnt?
+                node = Cgraph(derH=[copy(PP.derH)], valt= copy(PP.valt), rdnt=copy(PP.rdnt), box=[(PP.box[0]+PP.box[1])/2, (PP.box[2]+PP.box[3])/2] + list(PP.box))
+                sum_derH([edge.derH, edge.valt, edge.rdnt], [node.derH, node.valt, node.rdnt], 0)
+                edge.node_t[fd] += [node]                
+
+            agg_recursion(edge, edge.node_t[fd])
 
 '''
 or only compute params needed for rotate_P_?

@@ -25,7 +25,7 @@ def comp_slice(blob, verbose=False):  # high-G, smooth-angle blob, composite der
             comp_P(_P,P, fder=0)  # replaces P.link_ Ps with derPs
 
     PPm_,PPd_ = form_PP_t([Pt[0] for Pt in P_], PP_=None, base_rdn=2, fder=0)  # root fork is rng+
-    blob.PPm_, blob.PPd_  = PPm_, PPd_
+    return PPm_, PPd_
 
 
 def comp_P(_P,P, fder=1, derP=None):  #  derP if der+, S if rng+
@@ -77,8 +77,8 @@ def comp_dtuple(_ptuple, ptuple, rn):
 def comp_aggH():
     pass
 
-# very initial draft, this can replace sum_derH now
-def sum_H(T, t, base_rdn):
+# very initial draft
+def sum_aggH(T, t, base_rdn):
     
     AggH, Valt, Rdnt = T
     aggH, valt, rdnt = t
@@ -88,34 +88,30 @@ def sum_H(T, t, base_rdn):
     
     if aggH:
         if AggH:
-            # check for layer, mdtuple and finally value in each tuple
-            if aggH[0] and isinstance(aggH[0], list) and aggH[0][0] and isinstance(aggH[0][0], list) and not isinstance(aggH[0][0][0], list):
-                for Layer, layer in zip_longest(AggH,aggH, fillvalue=None):
-                    if layer != None:
-                        if Layer:
-                            for i, param in enumerate(layer):
-                                if i<2: sum_ptuple(Layer[i], param)  # mtuple | dtuple
-                                elif i<4: Layer[i] += param  # mval | dval
-                                else:     Layer[i] += param + base_rdn # | mrdn | drdn
-                        elif Layer!=None:
-                            Layer[:] = deepcopy(layer)
-                        else: 
-                            AggH += [deepcopy(layer)]
-            else:
-                for Ht, ht in zip_longest(AggH, aggH, fillvalue=None):
-                    if ht != None:
-                        if Ht:
-                            if len(Ht)>1 and Ht[1] and not isinstance(Ht[1][0], list):  # unpack each nested level
-                                sum_H(Ht, ht, base_rdn)  
-                            elif Ht[0] and isinstance(Ht[0], list) and Ht[0][0] and isinstance(Ht[0][0], list) and not isinstance(Ht[0][0][0], list):  # not sure if there's a better way, check for derH in aggH
-                                sum_H([Ht, [0,0], [0,0]], [ht, [0,0], [0,0]], base_rdn)    
-                            else:
-                                for H, h in zip(Ht, ht):  # recursively sum of each t of [t, valt, rdnt] (always 2 elements here)
-                                    sum_H(H, h, base_rdn)
-                        elif Ht != None:
-                            Ht[:] = deepcopy(ht)
+            for Ht, ht in zip_longest(AggH, aggH, fillvalue=None):
+                if ht != None:
+                    if Ht:
+                        if len(Ht)>1 and Ht[1] and not isinstance(Ht[1][0], list):  # unpack each nested level
+                            sum_aggH(Ht, ht, base_rdn)  
+                        elif Ht[0] and isinstance(Ht[0], list) and Ht[0][0] and isinstance(Ht[0][0], list) and not isinstance(Ht[0][0][0], list):  # not sure if there's a better way, check for derH in aggH
+                            for Layer, layer in zip_longest(Ht,ht, fillvalue=None):
+                                if layer != None:
+                                    if Layer:
+                                        for i, param in enumerate(layer):
+                                            if i<2: sum_ptuple(Layer[i], param)  # mtuple | dtuple
+                                            elif i<4: Layer[i] += param  # mval | dval
+                                            else:     Layer[i] += param + base_rdn # | mrdn | drdn
+                                    elif Layer!=None:
+                                        Layer[:] = deepcopy(layer)
+                                    else: 
+                                        Ht += [deepcopy(layer)]   
                         else:
-                            AggH += [deepcopy(ht)]
+                            for H, h in zip(Ht, ht):  # recursively sum of each t of [t, valt, rdnt] (always 2 elements here)
+                                sum_aggH(H, h, base_rdn)
+                    elif Ht != None:
+                        Ht[:] = deepcopy(ht)
+                    else:
+                        AggH += [deepcopy(ht)]
         else:
             AggH[:] = deepcopy(aggH)
 
@@ -235,11 +231,11 @@ def sum2PP(qPP, base_rdn, fder, fd):  # sum links in Ps and Ps in PP
 
         for derP in P.link_tH[-1][fder]:
             derH, valt, rdnt = derP.derH, derP.valt, derP.rdnt
-            sum_H([P.derH,P.valt,P.rdnt], [derH,valt,rdnt], base_rdn)
+            sum_derH([P.derH,P.valt,P.rdnt], [derH,valt,rdnt], base_rdn)
             _P = derP._P  # bilateral summation:
-            sum_H([_P.derH,_P.valt,_P.rdnt], [derH,valt,rdnt], base_rdn)
+            sum_derH([_P.derH,_P.valt,_P.rdnt], [derH,valt,rdnt], base_rdn)
         # excluding bilateral sums:
-        sum_H([PP.derH,PP.valt,PP.rdnt], [P.derH,P.valt,P.rdnt], base_rdn)
+        sum_derH([PP.derH,PP.valt,PP.rdnt], [P.derH,P.valt,P.rdnt], base_rdn)
 
     PP.box =(Y0,Yn,X0,Xn)
     return PP

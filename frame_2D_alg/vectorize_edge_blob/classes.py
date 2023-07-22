@@ -24,8 +24,29 @@ class Cptuple(ClusterStructure):  # bottom-layer tuple of compared params in P, 
 
 class Cedge(ClusterStructure):  # edge blob
 
+    I : float = 0.0
+    Dy : float = 0.0
+    Dx : float = 0.0
+    G : float = 0.0
+    M : float = 0.0 # summed PP.M, for both types of recursion?
+    # comp_angle:
+    Dyy : float = 0.0
+    Dyx : float = 0.0
+    Dxy : float = 0.0
+    Dxx : float = 0.0
+    Ga : float = 0.0
+    # params such as dert and mask should be not needed?
+    
+    derH : list = z([])
+    aggH : list = z([[]])  # [[subH, valt, rdnt]]: cross-fork composition layers
+    valt : list = z([0,0])
+    rdnt : list = z([1,1])
+    node_t: list = z([[],[]])  # same-fork, incremental nesting if wH: down-forking tree of node Levs, 4 top forks if sub+:
+    root: object= None  # root_: li
+    blob: object=None  # blob reference, in case we need to retrieve their Cblob?
+ 
     # move all edge blob - specific params here, and remove them from Cblob, it's overloaded already?
-    pass
+
 
 class CP(ClusterStructure):  # horizontal blob slice P, with vertical derivatives per param if derP, always positive
 
@@ -93,7 +114,7 @@ class Cgraph(ClusterStructure):  # params of single-fork node_ cluster per pplay
     fd: int = 0  # not fder
     link_tH : list = z([[[],[]]])  # +ve rlink_, dlink_ H, ~ derH layers
     derH : list = z([])  # [[derH, valt, rdnt]]: default input from PP, for both rng+ and der+, sum min len?
-    aggH : list = z([[]])  # [[subH, valt, rdnt]]: cross-fork composition layers
+    aggH : list = z([])  # [[subH, valt, rdnt]]: cross-fork composition layers
     valt : list = z([0,0])
     rdnt : list = z([1,1])
     node_: list = z([])  # same-fork, incremental nesting if wH: down-forking tree of node Levs, 4 top forks if sub+:
