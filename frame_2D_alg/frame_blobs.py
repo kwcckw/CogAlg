@@ -116,6 +116,12 @@ class CEdge(ClusterStructure):  # edge blob
     aggH : list = z([[]])  # [[subH, valt, rdnt]]: cross-fork composition layers
     valt : list = z([0,0])
     rdnt : list = z([1,1])
+    fback_ : list = z([])  
+    
+    # not sure below
+    blob : object= None
+    P_ : list = z([])   # we only need this in comp_slice, probably we can parse P_ into comp_slice too
+    
 '''
     Conventions:
     postfix 't' denotes tuple, multiple ts is a nested tuple
