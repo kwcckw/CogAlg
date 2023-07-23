@@ -22,41 +22,15 @@ class Cptuple(ClusterStructure):  # bottom-layer tuple of compared params in P, 
     L : int = 0  # replaces n, still redundant to len dert_ in P, nlinks in PP or graph
 '''
 
-class Cedge(ClusterStructure):  # edge blob
-
-    I : float = 0.0
-    Dy : float = 0.0
-    Dx : float = 0.0
-    G : float = 0.0
-    M : float = 0.0 # summed PP.M, for both types of recursion?
-    # comp_angle:
-    Dyy : float = 0.0
-    Dyx : float = 0.0
-    Dxy : float = 0.0
-    Dxx : float = 0.0
-    Ga : float = 0.0
-    # params such as dert and mask should be not needed?
-    
-    derH : list = z([])
-    aggH : list = z([[]])  # [[subH, valt, rdnt]]: cross-fork composition layers
-    valt : list = z([0,0])
-    rdnt : list = z([1,1])
-    node_t: list = z([[],[]])  # same-fork, incremental nesting if wH: down-forking tree of node Levs, 4 top forks if sub+:
-    root: object= None  # root_: li
-    blob: object=None  # blob reference, in case we need to retrieve their Cblob?
- 
-    # move all edge blob - specific params here, and remove them from Cblob, it's overloaded already?
-
-
 class CP(ClusterStructure):  # horizontal blob slice P, with vertical derivatives per param if derP, always positive
 
     ptuple : list = z([0,0,0,0,0,[0,0],[0,0,0,0],0])  # latuple: I,G,Ga,M,Ma, angle(Dy,Dx), aangle(Dyy,Dyx,Dxy,Dxx), L
-    derH : list = z([])  # [[mtuple,dtuple,mval,dval,mrdn,drdn]] vertical derivatives summed from P links
+    derH : list = z([])  # [[tuplet,valt,rdnt]] vertical derivatives summed from P links
     valt : list = z([0,0])  # summed from the whole derH
     rdnt : list = z([1,1])
     dert_ : list = z([])  # array of pixel-level derts, ~ node_
     link_tH : list = z([[[],[]]])  # +ve rlink_, dlink_ H from lower sub+
-    root_tt : list = z([[None,None],[None,None]])  # rmPP,rdPP, dmPP,ddPP that contain this P, single-layer
+    root_tt : list = z([[None,None],[None,None]])  # PPrm,PPrd, PPdm,PPdd that contain this P, single-layer
     dert_yx_ : list = z([])  # mappings to blob der_t
     dert_olp_: list = z(set())
     axis : list = z([0,1])  # prior slice angle, init sin=0,cos=1
@@ -99,8 +73,8 @@ class CPP(CderP):
     valt : list = z([0,0])
     rdnt : list = z([1,1])
     mask__: object = None
-    node_ : list = z([])  # Ps or node_tt: [rng+'[sub_PPm_,sub_PPd_], der+'[sub_PPm_,sub_PPd_]]
-    root_tt : list = z([[None,None],[None,None]])  # higher rmPP,rdPP,dmPP,ddPP that contain this PP, for sub+ only
+    node_ : list = z([])  # P_, or node_tt: [rng+'[sub_PPm_,sub_PPd_], der+'[sub_PPm_,sub_PPd_]]
+    root_tt : list = z([[None,None],[None,None]])  # higher PPrm,PPrd, PPdm,PPdd that contain this PP, for sub+ only
     rng : int = 1  # sum of rng+: odd forks in last layer?
     box : list = z([0,0,0,0])  # y0,yn,x0,xn
     # temporary:

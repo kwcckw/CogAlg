@@ -2,7 +2,7 @@ import numpy as np
 from copy import deepcopy, copy
 from .classes import Cgraph
 from .filters import aves, ave, ave_nsubt, ave_sub, ave_agg, G_aves, med_decay, ave_distance, ave_Gm, ave_Gd
-from .comp_slice import comp_angle, comp_aangle, com_derH, comp_aggH, sum_derH, sum_aggH
+from .comp_slice import comp_angle, comp_aangle
 # from .sub_recursion import feedback  # temporary
 
 '''
@@ -40,21 +40,21 @@ def agg_recursion(root, node_):  # compositional recursion in root.PP_
 
     for i in 0,1: root.rdnt[i] += 1  # estimate, no node.rdnt[fder] += 1?
 
-    comp_G_(node_, pri_G_=None, f1Q=1, fsub=0)  # cross-comp all Gs within rng
-    graph_t = form_graph_(root, node_)  # clustering via link_t
-    # sub+:
-    for fd, graph_ in enumerate(graph_t):  # eval by external (last layer):
-        if root.valt[fd] > ave_sub * root.rdnt[fd] and graph_:  # fixed costs and non empty graph_, same per fork
-            sub_recursion_eval(root, graph_)
-    # agg+:
-    for fd, graph_ in enumerate(graph_t):
-        if  np.sum(root.valt) > G_aves[fd] * ave_agg * np.sum(root.rdnt) and len(graph_) > ave_nsubt[fd]:
-            agg_recursion(root, node_)  # replace root.node_ with new graphs
-        elif root.root:  # if deeper agg+
-            feedback(root, fd)  # update root.root..H, breadth-first
-
+    for fder in 0,1:
+        comp_G_(node_, pri_G_=None, f1Q=1, fder=fder)  # cross-comp all Gs within rng
+        for fd in 0,1:
+            graph_ = form_graph_(root, fd)  # clustering via link_t, select by fd
+            # sub+, eval last layer?:
+            if root.valt[fd] > ave_sub * root.rdnt[fd] and graph_:  # fixed costs and non empty graph_, same per fork
+                sub_recursion_eval(root, graph_)
+            # agg+, eval all layers?:
+            if  sum(root.valt) > G_aves[fd] * ave_agg * sum(root.rdnt) and len(graph_) > ave_nsubt[fd]:
+                agg_recursion(root, node_)  # replace root.node_ with new graphs
+            elif root.root:  # if deeper agg+
+                feedback(root, fd)  # update root.root..H, breadth-first
+            root.node_tt[fder][fd] = graph_
 # draft:
-def comp_G_(G_, pri_G_=None, f1Q=1, fd=0, fsub=0):  # cross-comp Graphs if f1Q, else comp G_s in comp_node_
+def comp_G_(G_, pri_G_=None, f1Q=1, fd=0, fder=0):  # cross-comp Graphs if f1Q, else comp G_s in comp_node_
 
     if not f1Q: dpars_=[]  # this was for nested node, we need single node with link-specific partial-parT access now
 
@@ -63,7 +63,7 @@ def comp_G_(G_, pri_G_=None, f1Q=1, fd=0, fsub=0):  # cross-comp Graphs if f1Q, 
         for iG in _iG.link_tH[1] if fd \
             else G_[i+1:] if f1Q else G_:  # compare each G to other Gs in rng+, bilateral link assign, val accum:
             if not fd:   # not fd if f1Q?
-                if iG in [node for link in _iG.link_tH[-1][fd] for node in link.node_]:  # the pair compared in prior rng+
+                if iG in [node for link in _iG.link_ for node in link.node_]:  # the pair compared in prior rng+
                     continue
             dy = _iG.box[0]-iG.box[0]; dx = _iG.box[1]-iG.box[1]  # between center x0,y0
             distance = np.hypot(dy,dx) # Euclidean distance between centers, sum in sparsity, proximity = ave-distance
@@ -72,19 +72,14 @@ def comp_G_(G_, pri_G_=None, f1Q=1, fd=0, fsub=0):  # cross-comp Graphs if f1Q, 
                 for _G, G in ((_iG, iG), (_iG.alt_Graph, iG.alt_Graph)):
                     if not _G or not G:  # or G.val
                         continue
-                    if _G.aggH and G.aggH:
-                        aggH, valt, rdnt = comp_aggH(_G.aggH, G.aggH, rn=1)
-                    else:  # 1st converted Graph, compare input derH
-                        # index = 1 (dtuple) is selected within comp_derH, so comp_aggH should be the same too?
-                        dderH, valt, rdnt = comp_derH(_G.derH, G.derH, rn=1)  # comp aggH, or layers while lower match?
-                        dsubH = [ [[[], dderH], valt, rdnt] ]  
-                        aggH  = [ [[[], dsubH], copy(valt), copy(rdnt)] ]  # dderH and dsubH should be at index = 1?
-                    derG = Cgraph(node_=[_G,G], derH=deepcopy(_G.derH), aggH=aggH,valt=valt,rdnt=rdnt, S=distance, A=[dy,dx], box=[])  # box is redundant to G
+                    aggH, valt, rdnt = comp_aggH(_G.aggH[1], G.aggH[1], rn=1)  # comp aggH, or layers while lower match?
+                    derG = Cgraph(node_=[_G,G], aggH=aggH,valt=valt,rdnt=rdnt, S=distance, A=[dy,dx], box=[])  # box is redundant to G
                     # add links:
                     if valt[0] > ave_Gm:
                         _G.link_tH[0] += [derG]; G.link_tH[0] += [derG]  # bi-directional
                     if valt[1] > ave_Gd:
                         _G.link_tH[1] += [derG]; G.link_tH[1] += [derG]
+
                     if not f1Q: dpars_ += [[aggH,valt,rdnt]]  # comp G_s? not sure
                 # implicit cis, alt pair nesting in maggH, daggH
     if not f1Q:
@@ -93,13 +88,14 @@ def comp_G_(G_, pri_G_=None, f1Q=1, fd=0, fsub=0):  # cross-comp Graphs if f1Q, 
     comp alts,val,rdn? cluster per var set if recurring across root: type eval if root M|D?
     '''
 
-def form_graph_(root, G_):  # form list graphs and their aggHs, G is node in GG graph
+def form_graph_(root):  # form list graphs and their aggHs, G is node in GG graph
 
+    G_ = root.node_
     mnode_, dnode_ = [],[]  # Gs with >0 +ve fork links:
 
     for G in G_:
-        if G.link_tH[-1][0]: mnode_ += [G]  # all nodes with +ve links, not clustered in graphs yet
-        if G.link_tH[-1][1]: dnode_ += [G]
+        if G.link_tH[0]: mnode_ += [G]  # all nodes with +ve links, not clustered in graphs yet
+        if G.link_tH[1]: dnode_ += [G]
     graph_t = []
     for fd, node_ in enumerate([mnode_, dnode_]):
         graph_ = []  # init graphs by link val:
@@ -345,50 +341,6 @@ def feedback(root, fd):  # append new der layers to root
 
 # not reviewed:
 
-def sum_H(T, t, base_rdn):
-    AggH, Valt, Rdnt = T
-    aggH, valt, rdnt = t
-    for i in 0, 1:
-        Valt[i] += valt[i]
-        Rdnt[i] += rdnt[i]
-
-    if aggH:
-        if AggH:
-            # check for layer, mdtuple and finally value in each tuple
-            if aggH[0] and isinstance(aggH[0], list) and aggH[0][0] and isinstance(aggH[0][0], list) and not isinstance(aggH[0][0][0], list):
-                for Layer, layer in zip_longest(AggH, aggH, fillvalue=None):
-                    if layer != None:
-                        if Layer:
-                            for i, param in enumerate(layer):
-                                if i < 2:
-                                    sum_ptuple(Layer[i], param)  # mtuple | dtuple
-                                elif i < 4:
-                                    Layer[i] += param  # mval | dval
-                                else:
-                                    Layer[i] += param + base_rdn  # | mrdn | drdn
-                        elif Layer != None:
-                            Layer[:] = deepcopy(layer)
-                        else:
-                            AggH += [deepcopy(layer)]
-            else:
-                for Ht, ht in zip_longest(AggH, aggH, fillvalue=None):
-                    if ht != None:
-                        if Ht:
-                            if len(Ht) > 1 and Ht[1] and not isinstance(Ht[1][0], list):  # unpack each nested level
-                                sum_H(Ht, ht, base_rdn)
-                            elif Ht[0] and isinstance(Ht[0], list) and Ht[0][0] and isinstance(Ht[0][0], list) and not isinstance(Ht[0][0][0], list):  # not sure if there's a better way, check for derH in aggH
-                                sum_H([Ht, [0, 0], [0, 0]], [ht, [0, 0], [0, 0]], base_rdn)
-                            else:
-                                for H, h in zip(Ht, ht):  # recursively sum of each t of [t, valt, rdnt] (always 2 elements here)
-                                    sum_H(H, h, base_rdn)
-                        elif Ht != None:
-                            Ht[:] = deepcopy(ht)
-                        else:
-                            AggH += [deepcopy(ht)]
-        else:
-            AggH[:] = deepcopy(aggH)
-
-
 def sum_aggH(T, t, base_rdn):
 
     AggH, Valt, Rdnt = T
@@ -397,29 +349,32 @@ def sum_aggH(T, t, base_rdn):
         Valt[i] += valt[i]
         Rdnt[i] += rdnt[i]
 
-    if AggH:
-        for Ht, ht in zip_longest(AggH, aggH, fillvalue=None):
-            if ht != None:
-                if Ht:
-                    # check for layer, mdtuple and finally value in each tuple
-                    if ht[0] and isinstance(ht[0], list) and ht[0][0] and isinstance(ht[0][0], list) and not isinstance(ht[0][0][0], list):
-                        for Layer, layer in zip_longest(Ht,ht, fillvalue=None):
-                            if layer != None:
-                                if Layer:
-                                    for i, param in enumerate(layer):
-                                        if i<2: sum_ptuple(Layer[i], param)  # mtuple | dtuple
-                                        elif i<4: Layer[i] += param  # mval | dval
-                                        else:     Layer[i] += param + base_rdn # | mrdn | drdn
-                                elif Layer!=None:
-                                    Layer[:] = deepcopy(layer)
-                                else:
-                                    Ht += [deepcopy(layer)]
+    if aggH:
+        if AggH:
+            for Ht, ht in zip_longest(AggH, aggH, fillvalue=None):
+                if ht != None:
+                    if Ht:
+                        if len(Ht)>1 and Ht[1] and not isinstance(Ht[1][0], list):  # unpack each nested level
+                            sum_aggH(Ht, ht, base_rdn)
+                        elif Ht[0] and isinstance(Ht[0], list) and Ht[0][0] and isinstance(Ht[0][0], list) and not isinstance(Ht[0][0][0], list):  # not sure if there's a better way, check for derH in aggH
+                            for Layer, layer in zip_longest(Ht,ht, fillvalue=None):
+                                if layer != None:
+                                    if Layer:
+                                        for i, param in enumerate(layer):
+                                            if i<2: sum_ptuple(Layer[i], param)  # mtuple | dtuple
+                                            elif i<4: Layer[i] += param  # mval | dval
+                                            else:     Layer[i] += param + base_rdn # | mrdn | drdn
+                                    elif Layer!=None:
+                                        Layer[:] = deepcopy(layer)
+                                    else:
+                                        Ht += [deepcopy(layer)]
+                        else:
+                            for H, h in zip(Ht, ht):  # recursively sum of each t of [t, valt, rdnt] (always 2 elements here)
+                                sum_aggH(H, h, base_rdn)
+                    elif Ht != None:
+                        Ht[:] = deepcopy(ht)
                     else:
-                        for H, h in zip(Ht, ht):  # recursively sum of each t of [t, valt, rdnt] (always 2 elements here)
-                            sum_aggH(H, h, base_rdn)
-                elif Ht != None:
-                    Ht[:] = deepcopy(ht)
-                else:
-                    AggH += [deepcopy(ht)]
-    else:
-        AggH[:] = deepcopy(aggH)
+                        AggH += [deepcopy(ht)]
+        else:
+            AggH[:] = deepcopy(aggH)
+

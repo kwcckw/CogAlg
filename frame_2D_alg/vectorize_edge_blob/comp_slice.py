@@ -13,10 +13,10 @@ P: any angle, connectivity in P_ is traced through root_s of derts adjacent to P
 len prior root_ sorted by G is rdn of each root, to evaluate it for inclusion in PP, or starting new P by ave*rdn.
 '''
 
-def comp_slice(blob, verbose=False):  # high-G, smooth-angle blob, composite dert core param is v_g + iv_ga
+def comp_slice(edge, verbose=False):  # high-G, smooth-angle blob, composite dert core param is v_g + iv_ga
 
     P_ = []
-    for P in blob.P_:  # must be contiguous, gaps filled in scan_P_rim
+    for P in edge.P_:  # must be contiguous, gaps filled in scan_P_rim
         link_ = copy(P.link_tH[-1][0])  # init rng+
         P.link_tH[-1][0] = []  # fill with derPs in comp_P
         P_ +=[[P,link_]]
@@ -24,8 +24,7 @@ def comp_slice(blob, verbose=False):  # high-G, smooth-angle blob, composite der
         for _P in link_:  # or spliced_link_ if active
             comp_P(_P,P, fder=0)  # replaces P.link_ Ps with derPs
 
-    PPm_,PPd_ = form_PP_t([Pt[0] for Pt in P_], PP_=None, base_rdn=2, fder=0)  # root fork is rng+
-    return PPm_, PPd_
+    edge.PP_tt[0] = form_PP_t([Pt[0] for Pt in P_], PP_=None, base_rdn=2, fder=0)  # root fork is rng+ only
 
 
 def comp_P(_P,P, fder=1, derP=None):  #  derP if der+, S if rng+
@@ -73,47 +72,6 @@ def comp_dtuple(_ptuple, ptuple, rn):
 
     return [mtuple, dtuple]
 
-
-def comp_aggH():
-    pass
-
-# very initial draft
-def sum_aggH(T, t, base_rdn):
-    
-    AggH, Valt, Rdnt = T
-    aggH, valt, rdnt = t
-    for i in 0, 1:
-        Valt[i] += valt[i]
-        Rdnt[i] += rdnt[i]
-    
-    if aggH:
-        if AggH:
-            for Ht, ht in zip_longest(AggH, aggH, fillvalue=None):
-                if ht != None:
-                    if Ht:
-                        if len(Ht)>1 and Ht[1] and not isinstance(Ht[1][0], list):  # unpack each nested level
-                            sum_aggH(Ht, ht, base_rdn)  
-                        elif Ht[0] and isinstance(Ht[0], list) and Ht[0][0] and isinstance(Ht[0][0], list) and not isinstance(Ht[0][0][0], list):  # not sure if there's a better way, check for derH in aggH
-                            for Layer, layer in zip_longest(Ht,ht, fillvalue=None):
-                                if layer != None:
-                                    if Layer:
-                                        for i, param in enumerate(layer):
-                                            if i<2: sum_ptuple(Layer[i], param)  # mtuple | dtuple
-                                            elif i<4: Layer[i] += param  # mval | dval
-                                            else:     Layer[i] += param + base_rdn # | mrdn | drdn
-                                    elif Layer!=None:
-                                        Layer[:] = deepcopy(layer)
-                                    else: 
-                                        Ht += [deepcopy(layer)]   
-                        else:
-                            for H, h in zip(Ht, ht):  # recursively sum of each t of [t, valt, rdnt] (always 2 elements here)
-                                sum_aggH(H, h, base_rdn)
-                    elif Ht != None:
-                        Ht[:] = deepcopy(ht)
-                    else:
-                        AggH += [deepcopy(ht)]
-        else:
-            AggH[:] = deepcopy(aggH)
 
 def form_PP_t(P_, PP_, base_rdn, fder):  # form PPs of derP.valt[fd] + connected Ps val
 
@@ -248,7 +206,7 @@ def sum_derH(T, t, base_rdn):  # derH is a list of layers or sub-layers, each = 
     for i in 0, 1:
         Valt[i] += valt[i]
         Rdnt[i] += rdnt[i] + base_rdn
-    
+
     if DerH:
         for Layer, layer in zip_longest(DerH,derH, fillvalue=[]):
             if layer:
