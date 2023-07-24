@@ -59,19 +59,20 @@ def comp_G_(G_, pri_G_=None, f1Q=1, fder=0):  # cross-comp Graphs if f1Q, else c
 
     while G_:
         G = G_.pop()  # node_
-        if fder: _G_ = [link.node_[1] for link in G.link_tH[-1][1]]
+        if fder: _G_ = [link.node_[1] for link in G.link_tH[-(1+fder)][1]]
         else:    _G_ = G_ if f1Q else pri_G_  # all Gs in rng+
         for _G in _G_:
-            if _G in G.compared:  # was compared in prior rng
+            if _G in G.compared_:  # was compared in prior rng
                 continue
             dy = _G.box[0]-G.box[0]; dx = _G.box[1]-G.box[1]
             distance = np.hypot(dy,dx) # Euclidean distance between centers, sum in sparsity
             if distance < ave_distance * ((sum(_G.valt) + sum(G.valt)) / (2*sum(G_aves))):
-                G.compared += [_G]
-                _G.compared += [G]
+                G.compared_ += [_G]
+                _G.compared_ += [G]
                 for _cG, cG in ((_G, G), (_G.alt_Graph, G.alt_Graph)):  # same comp for cis and alt components?
                     if not _cG or not cG:  # for alt Gs
                         continue
+                    # aggH is aggHt now? where each aggH in aggHt is [ [[[msubH, dsubH], valt, rdnt]] ]?
                     aggH, valt, rdnt = comp_aggH(_cG.aggHt[1], cG.aggHt[1], rn=1)  # comp aggH, or layers while lower match?
                     derG = Cgraph(node_=[_cG,cG], aggH=aggH,valt=valt,rdnt=rdnt, S=distance, A=[dy,dx], box=[])  # box is redundant to G
                     # add links:

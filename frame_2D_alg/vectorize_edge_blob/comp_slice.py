@@ -16,7 +16,7 @@ len prior root_ sorted by G is rdn of each root, to evaluate it for inclusion in
 def comp_slice(edge, verbose=False):  # high-G, smooth-angle blob, composite dert core param is v_g + iv_ga
 
     P_ = []
-    for P in edge.P_:  # must be contiguous, gaps filled in scan_P_rim
+    for P in edge.node_tt[0][0]:  # must be contiguous, gaps filled in scan_P_rim
         link_ = copy(P.link_tH[-1][0])  # init rng+
         P.link_tH[-1][0] = []  # fill with derPs in comp_P
         P_ +=[[P,link_]]
