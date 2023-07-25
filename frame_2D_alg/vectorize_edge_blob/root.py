@@ -73,7 +73,7 @@ def vectorize_root(blob, verbose=False):  # always angle blob, composite dert co
             for PP in PP_:  # convert PPs to graphs:
                 node_ += [Cgraph(derH=[copy(PP.derH), PP.valt, PP.rdnt], box=[(PP.box[0]+PP.box[1])/2, (PP.box[2]+PP.box[3])/2] + list(PP.box))]
                 der0 = [[[],PP.ptuple],[0,0],[1,1]]
-                # appendleft ptuple: single root fork of derH, no val,rdn:
+                # derH appendleft ptuple: single root fork, no val,rdn:
                 sum_derH([edge.derH, edge.valt, edge.rdnt], [[der0]+PP.derH, PP.valt, PP.rdnt], 0)
             # node_ = edge.node_tt[0][fd]
             agg_recursion(edge, node_)
