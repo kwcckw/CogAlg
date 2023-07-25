@@ -94,13 +94,16 @@ class CEdge(ClusterStructure):  # edge blob
 
     # replace with directional params:
     I : float = 0.0
+    A : float = 0.0 # edge area
     Dt : list = z([0.0,0.0,0.0,0.0])  # if four directions
     box: tuple = (0, 0, 0, 0)  # y0, yn, x0, xn
     mask__ : object = None
     dir__t : object = None
     dir__t_roots: object = None  # map to dir__t
     adj_blobs: list = z([])  # adjacent blobs
-    node_ : list = z([])  # default P_, node_tt: list = z([[[],[]],[[],[]]]) in select PP_ or G_ forks
+    fopen : bool = False
+    # we need node_tt here? 
+    node_tt : list = z([[[],[]],[[],[]]])  # default P_, node_tt: list = z([[[],[]],[[],[]]]) in select PP_ or G_ forks
     root : object= None  # list root_ if fork overlap?
     derH : list = z([])  # formed in PPs, inherited in graphs
     aggH : list = z([[]])  # [[subH, valt, rdnt]]: cross-fork composition layers
@@ -134,15 +137,15 @@ def frame_blobs_root(image, intra=False, render=False, verbose=False):
     dsign__ = (ave - np.max([np.abs(up_left__), np.abs(up__), np.abs(up_right__), np.abs(right__)], axis=0)) > 0   # max d per kernel
     gsign__ = ave - der__t[3] > 0  # below-average g in [i__, dy__, dx__, g__]
     ## https://en.wikipedia.org/wiki/Flood_fill
-    edge_, idmap, adj_pairs = flood_fill([dir__t[0]]+list(dir__t[1]), dsign__, prior_forks='', verbose=verbose)
+    edge_, idmap, adj_pairs = flood_fill([dir__t[0]]+list(dir__t[1]), dsign__, prior_forks='', cluster=CEdge, verbose=verbose)
     assign_adjacents(adj_pairs)  # forms adj_blobs per blob in adj_pairs
-    blob_, idmap, adj_pairs = flood_fill(der__t, gsign__, prior_forks='', verbose=verbose)  # overlap or for negative edge blobs only?
+    blob_, idmap, adj_pairs = flood_fill(der__t, gsign__, prior_forks='', cluster=CBlob, verbose=verbose)  # overlap or for negative edge blobs only?
     assign_adjacents(adj_pairs)
     # not updated:
     I, Dy, Dx = 0, 0, 0
     for blob in blob_: I += blob.I; Dy += blob.Dy; Dx += blob.Dx
 
-    frameE = CEdge(I=I, Dy=Dy, Dx=Dx, dir__t=dir__t, node_tt=[[[], blob_], [[], []]], box=(0,Y,0,X))
+    frameE = CEdge(I=I, dir__t=dir__t, node_tt=[[[], blob_], [[], []]], box=(0,Y,0,X))
     frameB = CBlob(I=I, Dy=Dy, Dx=Dx, der__t=der__t, rlayers=[blob_], box=(0,Y,0,X))
     if verbose: print(f"{len(frameB.rlayers[0])} blobs formed in {time() - start_time} seconds")  # dlayers = []: no comp_a yet
 
@@ -172,7 +175,7 @@ def comp_axis(image):
 
 # not fully revised to include edge fork:
 
-def flood_fill(der__t, sign__, prior_forks, verbose=False, mask__=None, fseg=False):
+def flood_fill(der__t, sign__, prior_forks, cluster=CBlob, verbose=False, mask__=None, fseg=False):
 
     if mask__ is None: height, width = der__t[0].shape  # init der__t
     else:              height, width = mask__.shape  # intra der__t
@@ -191,7 +194,10 @@ def flood_fill(der__t, sign__, prior_forks, verbose=False, mask__=None, fseg=Fal
         for x in range(width):
             if idmap[y, x] == UNFILLED:  # ignore filled/clustered derts
 
-                blob = CBlob(sign=sign__[y, x], root_der__t=der__t, prior_forks=prior_forks)
+                if cluster is CBlob:
+                    blob = cluster(sign=sign__[y, x], root_der__t=der__t, prior_forks=prior_forks)
+                else:
+                    blob = cluster()     
                 blob_ += [blob]
                 idmap[y, x] = blob.id
                 y0, yn = y, y
@@ -215,14 +221,15 @@ def flood_fill(der__t, sign__, prior_forks, verbose=False, mask__=None, fseg=Fal
                                         Dx = der__t[2][y1][x1])
                     else:  # edge
                         blob.accumulate(I  = der__t[0][y1][x1],
-                                        Dt = [D for D in der__t[1][y1][x1]])  #?
+                                        Dt = [D[y1][x1] for D in der__t])  # sum value in each direction
+
                     blob.A += 1
                     if y1 < y0:   y0 = y1
                     elif y1 > yn: yn = y1
                     if x1 < x0:   x0 = x1
                     elif x1 > xn: xn = x1
                     # neighbors coordinates, 4 for -, 8 for +
-                    if blob.sign or fseg:   # include diagonals
+                    if sign__[y, x] or fseg:   # include diagonals
                         adj_dert_coords = [(y1 - 1, x1 - 1), (y1 - 1, x1),
                                            (y1 - 1, x1 + 1), (y1, x1 + 1),
                                            (y1 + 1, x1 + 1), (y1 + 1, x1),
@@ -240,11 +247,11 @@ def flood_fill(der__t, sign__, prior_forks, verbose=False, mask__=None, fseg=Fal
                         # pixel is filled:
                         elif idmap[y2, x2] == UNFILLED:
                             # same-sign dert:
-                            if blob.sign == sign__[y2, x2]:
+                            if sign__[y, x] == sign__[y2, x2]:
                                 idmap[y2, x2] = blob.id  # add blob ID to each dert
                                 unfilled_derts += [(y2, x2)]
                         # else check if same-signed
-                        elif blob.sign != sign__[y2, x2]:
+                        elif sign__[y, x] != sign__[y2, x2]:
                             adj_pairs.add((idmap[y2, x2], blob.id))  # blob.id always increases
                 # terminate blob
                 yn += 1; xn += 1
@@ -254,12 +261,16 @@ def flood_fill(der__t, sign__, prior_forks, verbose=False, mask__=None, fseg=Fal
                     *(par__[y0:yn, x0:xn] for par__ in der__t))
                 '''
                 # getting error above : list/tuple expected at most 1 arguments, got 5
-                blob.der__t = [(par__[y0:yn, x0:xn] for par__ in der__t)]
                 blob.mask__ = (idmap[y0:yn, x0:xn] != blob.id)
                 blob.adj_blobs = [[],[]] # iblob.adj_blobs[0] = adj blobs, blob.adj_blobs[1] = poses
-                blob.G = recompute_dert(blob.Dy, blob.Dx)
-                if len(der__t) > 5:
-                    blob.Ga, blob.Dyy, blob.Dyx, blob.Dxy, blob.Dxx = recompute_adert(blob.Dyy, blob.Dyx, blob.Dxy, blob.Dxx)
+                if cluster is CBlob:
+                    blob.der__t = [(par__[y0:yn, x0:xn] for par__ in der__t)]
+                    blob.G = recompute_dert(blob.Dy, blob.Dx)
+                    if len(der__t) > 5:
+                        blob.Ga, blob.Dyy, blob.Dyx, blob.Dxy, blob.Dxx = recompute_adert(blob.Dyy, blob.Dyx, blob.Dxy, blob.Dxx)
+                else:
+                    blob.dir__t = [(par__[y0:yn, x0:xn] for par__ in der__t)]
+                    
                 if verbose:
                     progress += blob.A * step; print(f"\rClustering... {round(progress)} %", end=""); sys.stdout.flush()
     if verbose: print("\r" + " " * 79, end=""); sys.stdout.flush(); print("\r", end="")

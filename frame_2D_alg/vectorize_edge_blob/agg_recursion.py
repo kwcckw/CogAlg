@@ -66,30 +66,57 @@ def comp_G_(G_, pri_G_=None, f1Q=1, fder=0):  # cross-comp Graphs if f1Q, else c
             if _G in G.compared_:  # was compared in prior rng
                 continue
             dy = _G.box[0]-G.box[0]; dx = _G.box[1]-G.box[1]
-            distance = np.hypot(dy,dx) # Euclidean distance between centers, sum in sparsity
             if distance < ave_distance * ((sum(_G.valt) + sum(G.valt)) / (2*sum(G_aves))):
+                distance = np.hypot(dy,dx) # Euclidean distance between centers, sum in sparsity
+                L = len(G_)
                 G.compared_ += [_G]; _G.compared_ += [G]
                 # same comp for cis and alt components:
                 for _cG, cG in ((_G, G), (_G.alt_Graph, G.alt_Graph)):
                     if _cG and cG:  # alt Gs maybe empty
-                        comp_G(_cG,cG)
-                    # draft, pack in comp_G:
-                    # add separate G.ptuple, comp_ptuple()
-                    dderH, valt, rdnt = comp_derH(_cG.derH, cG.derH, rn=1)
-                    daggH, valt, rdnt = comp_aggH(_cG.aggH, cG.aggH, rn=1)  # comp aggH: loop layers while lower match?
-                    # tentative, append to last derH in last subH:
-                    mext,dext = comp_ext([len(_cG.node_tt[fder][fd]),_cG.S,_cG.A],[len(cG.node_tt[fder][fd]),cG.S,cG.A])
-                    # sum valt,rdnt here
-                    derG = Cgraph(node_=[_cG,cG], derH=dderH, aggH=daggH, valt=valt,rdnt=rdnt, S=distance, A=[dy,dx])  # box is redundant
-                    # add links:
-                    if valt[0] > ave_Gm:
-                        _cG.link_tH[-1][0] += [derG]; cG.link_tH[-1][0] += [derG]  # bi-directional
-                    if valt[1] > ave_Gd:
-                        _cG.link_tH[-1][1] += [derG]; cG.link_tH[-1][1] += [derG]
+                        comp_G(_cG, cG, L, distance, [dy, dx], fder)
                 # combine cis,alt in aggH?
     '''
     comp alts,val,rdn? cluster per var set if recurring across root: type eval if root M|D?
     '''
+
+def comp_G(_cG, cG, L, distance, A, fder):
+
+    # compute dderH
+    dderH, dvalt, drdnt = comp_derH(_cG.derH, cG.derH, rn=1)
+    
+    # compare ptuples and pack as last element in dderH
+    mtuple,dtuple = comp_ptuple(_cG.ptuple, cG.ptuple, rn=1)
+    mval, dval = sum(mtuple), sum(dtuple) 
+    mrdn, drdn = 1+(dval>mval), 1+(1-(dval>mval))
+    dderH += [[[mtuple, dtuple], [mval, dval],[mrdn, drdn]]]
+    
+    # subH
+    Mval = sum(derH[1][0] for derH in dderH)  # sum all mval
+    Dval = sum(derH[1][1] for derH in dderH)  # sum all dval
+    Mrdn = sum(derH[2][0] for derH in dderH)  # sum all mrdn
+    Drdn = sum(derH[2][1] for derH in dderH)  # sum all drdn
+    dsubH = [ [[[], dderH], [Mval, Dval], [Mrdn, Drdn]] ]
+    
+    # base fork doesn't have aggH yet?
+    if _cG.aggH and cG.aggH: 
+        daggH, valt, rdnt = comp_aggH(_cG.aggH, cG.aggH, rn=1)  # comp aggH: loop layers while lower match?
+        daggH += [dsubH]
+        valt[0] += Mval; valt[1] += Dval
+        rdnt[0] += Mrdn; rdnt[1] += Drdn
+    else:
+        valt = [Mval, Dval]; rdnt = [Mrdn, Drdn]
+        daggH = [ [[[], dsubH],  valt, rdnt] ]
+        
+    # tentative, append to last derH in last subH: (something like aggH[-1] += [[mext, dext]]?)
+    mext,dext = comp_ext([L,_cG.S,_cG.A],[L,cG.S,cG.A])
+    # sum valt,rdnt here
+    derG = Cgraph(node_=[_cG,cG], ptuple=dtuple, derH=dderH, aggH=daggH, valt=valt,rdnt=rdnt, S=distance, A=A)  # box is redundant
+    # add links:
+    if valt[0] > ave_Gm:
+        _cG.link_tH[-1][0] += [derG]; cG.link_tH[-1][0] += [derG]  # bi-directional
+    if valt[1] > ave_Gd:
+        _cG.link_tH[-1][1] += [derG]; cG.link_tH[-1][1] += [derG]
+
 
 def form_graph_(G_, fder, fd):  # form list graphs and their aggHs, G is node in GG graph
 
