@@ -53,7 +53,7 @@ def agg_recursion(root, node_):  # compositional recursion in root.PP_
                 agg_recursion(root, node_)  # replace root.node_ with new graphs
             elif root.root:  # if deeper agg+
                 feedback(root, fd)  # update root.root..H, breadth-first
-            root.node_tt[fder][fd] = graph_
+            root.node_[fder][fd] = graph_
 
 # draft:
 def comp_G_(G_, pri_G_=None, f1Q=1, fder=0):  # cross-comp in G_ if f1Q, else comp between G_ and pri_G_, if comp_node_?
@@ -84,7 +84,7 @@ def comp_G(_G, G, distance, A):
     mval, dval = sum(mtuple), sum(dtuple)
     Mval = mval; Dval = dval; Mrdn = 1+(dval>mval); Drdn = 1+dval<=mval
     # / PP:
-    dderH, valt, rdnt = comp_derH(_G.derH, G.derH, rn=1)
+    dderH, valt, rdnt = comp_derH(_G.derH[0], G.derH[0], rn=1)  # use index [0] only because there's no need to parse valt and rdnt
     dderH = [[[mtuple,dtuple],[Mval,Dval],[Mrdn,Drdn]]] + dderH  # add der_tuple as 1st der order
     mval,dval =valt
     Mval += valt[0]; Dval += valt[1]; Mrdn += rdnt[0]+dval>mval; Drdn += rdnt[1] + dval<=mval
@@ -93,17 +93,19 @@ def comp_G(_G, G, distance, A):
     dL = _L-L; Dval+=dL; mL = ave-abs(dL); Mval+=mL
     dS = _S/_L-S/L; Dval+=dS; mS=ave-abs(dS); Mval+=mS
     mA, dA = comp_angle(_A,A); Mval+=mA; Dval+=dA
-    dderH = [[[mL,mS,mA][dL,dS,dA]]] + dderH  # der_ext in dderH[0]
+    dderH = [[[mL,mS,mA],[dL,dS,dA]]] + dderH  # der_ext in dderH[0]
+    
+    subH = [[[[], dderH],[Mval,Dval],[Mrdn,Drdn]]] # add dderH as 1st der order
     # / G:
     if _G.aggH and G.aggH:  # empty in base fork
-        subH, valt, rdnt = comp_aggH(_G.aggH, G.aggH, rn=1)
-        subH = [dderH,[Mval,Dval],[Mrdn,Drdn]] + subH  # add dderH as 1st der order
+        aggH, valt, rdnt = comp_aggH(_G.aggH, G.aggH, rn=1)  # if we compare aggH, we always get aggH unless we flatten and merge them to reduce the nesting
+        aggH = subH + [aggH]
         mval,dval =valt
         Mval += valt[0]; Dval += valt[1]; Mrdn += rdnt[0]+dval>mval; Drdn += rdnt[1] + dval<=mval
     else:
-        subH = [[dderH,[Mval,Dval],[Mrdn,Drdn]]]  # add nesting
+        aggH = [[[[], subH],[Mval,Dval],[Mrdn,Drdn]]]  # add nesting
 
-    derG = CderG(G1=_G, G2=G, subH=subH, valt=[Mval,Dval], rdnt=[Mrdn,Drdn], S=distance, A=A)
+    derG = CderG(G0=_G, G1=G, aggH=aggH, valt=[Mval,Dval], rdnt=[Mrdn,Drdn], S=distance, A=A)
     # add links:
     if valt[0] > ave_Gm:
         _G.link_tH[-1][0] += [derG]; G.link_tH[-1][0] += [derG]  # bi-directional
@@ -375,8 +377,8 @@ def comp_subH(_subH, subH, rn):
             dA = _A-A;  Dval+=dA; mA = ave-abs(dL); Mval += mA
             # comp dderH:
             dderH, valt, rdnt = comp_derH(_derH[1:], derH[1:], rn)
-            dderH = [[[mL,mS,mA],[dL,dS,dA]]] + dderH  # 1st element in each subLay is der_ext
-            dsubH += [[dderH, valt, rdnt]]
+            dderH = [[[mL,mS,mA],[dL,dS,dA]]] + [dderH]  # 1st element in each subLay is der_ext
+            dsubH += [[[[],dderH], valt, rdnt]]
             mval,dval = valt
             Mval += mval; Dval += dval; Mrdn += rdnt[0] + dval > mval; Drdn += rdnt[1] + dval <= mval
 
@@ -391,7 +393,7 @@ def comp_aggH(_aggH, aggH, rn):  # no separate ext processing?
         if _lev and lev:  # also if lower-layers match: Mval > ave * Mrdn?
             # compare dsubH only:
             dsubH, valt, rdnt = comp_subH(_lev[0][1], lev[0][1], rn)
-            daggH += [[dsubH, valt, rdnt]]
+            daggH += [[[[],dsubH], valt, rdnt]]
             mval,dval = valt
             mrdn = dval > mval; drdn = dval < mval
             Mrdn += rdnt[0] + mrdn; Drdn += rdnt[1] + drdn
