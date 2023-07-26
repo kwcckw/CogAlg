@@ -71,11 +71,10 @@ def vectorize_root(blob, verbose=False):  # always angle blob, composite dert co
         if sum([PP.valt[fd] for PP in PP_]) > ave * sum([PP.rdnt[fd] for PP in PP_]):
             node_= []
             for PP in PP_:  # convert PPs to graphs:
-                # we shouldn't add valt and rdnt to derH here? Else it's like we are adding another nesting here
-                node_ += [Cgraph(ptuple=copy(PP.ptuple), derH=copy(PP.derH), box=[(PP.box[0]+PP.box[1])/2, (PP.box[2]+PP.box[3])/2] + list(PP.box))]
-                # derH appendleft ptuple: single root fork, no val,rdn:
+                node_ += [Cgraph(ptuple=PP.ptuple, derH=[PP.derH, PP.valt, PP.rdnt], L=len(PP.node_), # empty aggH, etc.
+                                 box=[(PP.box[0]+PP.box[1])/2, (PP.box[2]+PP.box[3])/2] + list(PP.box))]
                 sum_derH([edge.derH, edge.valt, edge.rdnt], [PP.derH, PP.valt, PP.rdnt], 0)
-            # node_ = edge.node_tt[0][fd]
+            # node_: edge.node_tt[0][fd]
             agg_recursion(edge, node_)
 
 '''
