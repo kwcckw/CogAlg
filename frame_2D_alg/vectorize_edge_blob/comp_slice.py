@@ -23,8 +23,7 @@ def comp_slice(edge, verbose=False):  # high-G, smooth-angle blob, composite der
     for P, link_ in P_:
         for _P in link_:  # or spliced_link_ if active
             comp_P(_P,P, fder=0)  # replaces P.link_ Ps with derPs
-
-    # node_tt[0]
+    # convert node_ to node_tt:
     edge.node_ = [form_PP_t([Pt[0] for Pt in P_], PP_=None, base_rdn=2, fder=0), [[], []]]  # root fork is rng+ only
 
 
