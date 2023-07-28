@@ -42,7 +42,7 @@ def agg_recursion(root, node_):  # compositional recursion in root.PP_
     for i in 0,1: root.rdnt[i] += 1  # estimate, no node.rdnt[fder] += 1?
 
     for fder in 0, 1:
-        if fder and len(node_[0].link_tH) < 2:  # 1st call, no der+ links yet?
+        if fder and len(node_[0].link_H) < 2:  # 1st call, no der+ links yet?
             continue
         comp_G_(node_, pri_G_=None, f1Q=1, fder=fder)  # cross-comp all Gs within rng
         for fd in 0, 1:
@@ -61,8 +61,11 @@ def agg_recursion(root, node_):  # compositional recursion in root.PP_
 def comp_G_(G_, pri_G_=None, f1Q=1, fder=0):  # cross-comp in G_ if f1Q, else comp between G_ and pri_G_, if comp_node_?
 
     for G in G_:  # node_
-        if fder:
-            _G_ = [link.G1 if G is link.G0 else link.G0 for link in G.link_tH[-(1+fder)][1]]
+        if fder:  # i don't see a better a line method yet
+            _G_ = []
+            for link in G.link_H[-2]:
+                if link.valt[1] > ave_Gd:
+                    _G_ += [link.G1 if G is link.G0 else link.G0]
         else:    _G_ = G_ if f1Q else pri_G_  # all Gs in rng+
         for _G in _G_:
             if _G in G.compared_:  # was compared in prior rng
@@ -107,17 +110,14 @@ def comp_G(_G, G, distance, A, fder):
 
     derG = CderG(G0=_G, G1=G, subH=subH, valt=[Mval,Dval], rdnt=[Mrdn,Drdn], S=distance, A=A)
     # add links:
-    if valt[0] > ave_Gm:
-        _G.link_tH[-1][0] += [derG]; G.link_tH[-1][0] += [derG]  # bi-directional
-    if valt[1] > ave_Gd:
-        _G.link_tH[-1][1] += [derG]; G.link_tH[-1][1] += [derG]
+    _G.link_H[-1] += [derG]; G.link_H[-1] += [derG]  # bi-directional
 
 
 def form_graph_(G_, fder, fd):  # form list graphs and their aggHs, G is node in GG graph
 
     node_ = []  # Gs with >0 +ve fork links:
     for G in G_:
-        if G.link_tH[-(1+fder)][fd]: node_ += [G]  # all nodes with +ve links, not clustered in graphs yet
+        if G.link_H[-(1+fder)][fd]: node_ += [G]  # all nodes with +ve links, not clustered in graphs yet
     graph_ = []
     # init graphs by link val:
     while node_:  # all Gs not removed in add_node_layer
@@ -135,14 +135,15 @@ def form_graph_(G_, fder, fd):  # form list graphs and their aggHs, G is node in
 
 def init_graph(gnode_, G_, G, fder, fd, val):  # recursive depth-first gnode_+=[_G]
 
-    for link in G.link_tH[-(1+fder)][fd]:
-        # all positive links init graph, eval node.link_ in prune_node_layer
-        _G = link.G1 if link.G0 is G else link.G0
-        if _G in G_:  # _G is not removed in prior loop
-            gnode_ += [_G]
-            G_.remove(_G)
-            val += _G.valt[fd]  # interval
-            val += init_graph(gnode_, G_, _G, fder, fd, val)
+    for link in G.link_H[-(1+fder)]:
+        if link.valt[fd] > [ave_Gm, ave_Gd][fd]:
+            # all positive links init graph, eval node.link_ in prune_node_layer
+            _G = link.G1 if link.G0 is G else link.G0
+            if _G in G_:  # _G is not removed in prior loop
+                gnode_ += [_G]
+                G_.remove(_G)
+                val += _G.valt[fd]  # interval
+                val += init_graph(gnode_, G_, _G, fder, fd, val)
     return val
 
 
@@ -176,10 +177,11 @@ def graph_reval(graph, fd):  # exclusive graph segmentation by reval,prune nodes
     for node in graph[0]:  # compute reval: link_Val reinforcement by linked nodes Val:
         lval = 0  # link value
         _lval = node.valt[fd]  # = sum([link.valt[fd] for link in node.link_tH[-1][fd]])?
-        for derG in node.link_tH[-1][fd]:
-            val = derG.valt[fd]  # of top aggH only
-            _node = derG.G1 if derG.G0 is node else derG.G0
-            lval += val + (_node.valt[fd]-val) * med_decay
+        for derG in node.link_H[-1]:
+            if derG.valt[fd] > [ave_Gm, ave_Gd][fd]:
+                val = derG.valt[fd]  # of top aggH only
+                _node = derG.G1 if derG.G0 is node else derG.G0
+                lval += val + (_node.valt[fd]-val) * med_decay
         reval += _lval - lval  # _node.link_tH val was updated in previous round
     rreval = 0
     if reval > aveG:
@@ -188,18 +190,20 @@ def graph_reval(graph, fd):  # exclusive graph segmentation by reval,prune nodes
         for node in graph[0]:
             val = node.valt[fd]
             if val < G_aves[fd] and node in graph:  # prune revalued node and its links
-                for derG in node.link_tH[-1][fd]:
+                # not quite sure here, i guess we need evaluate node.valt here instead of valt[fd]?
+                for derG in node.link_H[-1]:
                     _node = derG.G1 if derG.G0 is node else derG.G0
-                    _link_ = _node.link_tH[-1][fd]
+                    _link_ = _node.link_H[-1]
                     if derG in _link_: _link_.remove(derG)
                     rreval += derG.valt[fd] + (_node.valt[fd]-derG.valt[fd]) * med_decay  # else same as rreval += link_.val
             else:
-                link_ = node.link_tH[-1][fd]  # prune node links only:
+                link_ = node.link_H[-1][fd]  # prune node links only:
                 remove_link_ = []
                 for derG in link_:
                     _node = derG.G1 if derG.G0 is node else derG.G0  # add med_link_ val to link val:
                     lval = derG.valt[fd] + (_node.valt[fd]-derG.valt[fd]) * med_decay
-                    if lval < aveG:  # prune link, else no change
+                    lval_alt = derG.valt[1-fd] + (_node.valt[1-fd]-derG.valt[1-fd]) * med_decay
+                    if lval < aveG and lval_alt < aveG:  # prune link, else no change
                         remove_link_ += [derG]
                         rreval += lval
                 while remove_link_:
@@ -233,12 +237,13 @@ def sum2graph_(graph_, fd):  # sum node and link params into graph, aggH in agg+
             sum_ptuple(Graph.ptuple, G.ptuple)
             sum_derH(Graph.derH, G.derH, base_rdn=1)  # base_rdn?
             sum_aggH([Graph.aggH,Graph.valt,Graph.rdnt], [G.aggH,G.valt,G.rdnt], base_rdn=1)
-            link_ = G.link_tH[-1][fd]
+            link_ = G.link_H[-1]
             Link_[:] = list(set(Link_ + link_))
             subH=[]; valt=[0,0]; rdnt=[1,1]
             for derG in link_:
-                sum_subH([subH,valt,rdnt], [derG.subH,derG.valt,derG.rdnt], base_rdn=1)
-                sum_box(G.box, derG.G0.box if derG.G1 is G else derG.G1.box)
+                if derG.valt[fd] > [ave_Gm, ave_Gd][fd]:
+                    sum_subH([subH,valt,rdnt], [derG.subH,derG.valt,derG.rdnt], base_rdn=1)
+                    sum_box(G.box, derG.G0.box if derG.G1 is G else derG.G1.box)
             G.aggH += [subH]
             for i in 0,1:
                 G.valt[i] += valt[i]; G.rdnt[i] += rdnt[i]
