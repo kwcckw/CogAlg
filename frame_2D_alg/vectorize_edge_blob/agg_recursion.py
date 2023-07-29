@@ -96,19 +96,19 @@ def comp_G(_G, G, distance, A):
     DerH = [[[mtuple,dtuple],[Mval,Dval],[Mrdn,Drdn]]]  # 1st lay in DerH
     # / PP:
     dderH, valt, rdnt = comp_derH(_G.derH[0], G.derH[0], rn=1)
-    SubH += [DerH+ dderH]  # 2nd lay in SubH, both flat
+
     mval,dval =valt
     Mval += valt[0]; Dval += valt[1]; Mrdn += rdnt[0]+dval>mval; Drdn += rdnt[1]+dval<=mval
+    SubH += [[[], [DerH+ dderH], [Mval, Dval], [Mrdn, Drdn]]]  # 2nd lay in SubH, both flat
+
     # / G:
     if _G.aggH and G.aggH:  # empty in base fork
         subH, valt, rdnt = comp_aggH(_G.aggH, G.aggH, rn=1)
         SubH += subH  # SubH is a flat list of der_ext | derH s
         mval,dval =valt
         Mval += valt[0]; Dval += valt[1]; Mrdn += rdnt[0]+dval>mval; Drdn += rdnt[1]+dval<=mval
-    else:
-        subH = [[dderH,[Mval,Dval],[Mrdn,Drdn]]]  # add nesting
 
-    derG = CderG(G0=_G, G1=G, subH=subH, valt=[Mval,Dval], rdnt=[Mrdn,Drdn], S=distance, A=A)
+    derG = CderG(G0=_G, G1=G, subH=SubH, valt=[Mval,Dval], rdnt=[Mrdn,Drdn], S=distance, A=A)
     if valt[0] > ave_Gm or valt[1] > ave_Gd:
         _G.link_H[-1] += [derG]; G.link_H[-1] += [derG]  # bi-directional add links
 
@@ -117,7 +117,7 @@ def form_graph_(G_, fder, fd):  # form list graphs and their aggHs, G is node in
 
     node_ = []  # Gs with >0 +ve fork links:
     for G in G_:
-        if G.link_H[-(1+fder)][fd]: node_ += [G]  # node with +ve links, not clustered in graphs yet
+        if G.link_H[-(1+fder)]: node_ += [G]  # node with +ve links, not clustered in graphs yet
         # der+: eval lower link_ layer, rng+: new link_ layer
     graph_ = []
     # init graphs by link val:
@@ -137,7 +137,7 @@ def form_graph_(G_, fder, fd):  # form list graphs and their aggHs, G is node in
 def init_graph(gnode_, G_, G, fder, fd, val):  # recursive depth-first gnode_+=[_G]
 
     for link in G.link_H[-(1+fder)]:
-        if link.valt[fd] > [G_aves][fd]:
+        if link.valt[fd] > G_aves[fd]:
             # all positive links init graph, eval node.link_ in prune_node_layer:
             _G = link.G1 if link.G0 is G else link.G0
             if _G in G_:  # _G is not removed in prior loop
@@ -229,17 +229,17 @@ def sum2graph_(graph_, fd):  # sum node and link params into graph, aggH in agg+
             Link_[:] = list(set(Link_ + link_))
             subH=[]; valt=[0,0]; rdnt=[1,1]
             for derG in link_:
-                if derG.valt[fd] > [G_aves][fd]:
+                if derG.valt[fd] > G_aves[fd]:
                     sum_subH([subH,valt,rdnt], [derG.subH,derG.valt,derG.rdnt], base_rdn=1)
                     sum_box(G.box, derG.G0.box if derG.G1 is G else derG.G1.box)
-            G.aggH += [subH]
+            G.aggH += [[subH, valt, rdnt]]  # we need add subH layer here?
             for i in 0,1:
                 G.valt[i] += valt[i]; G.rdnt[i] += rdnt[i]
             Graph.node_ += [G]  # converted to node_tt by feedback
         subH=[]; valt=[0,0]; rdnt=[1,1]
         for derG in Link_:
             sum_subH([subH,valt,rdnt], [derG.subH, derG.valt, derG.rdnt], base_rdn=1)  # sum unique links
-        Graph.aggH += [subH]
+        Graph.aggH += [[subH, valt, rdnt]]
         for i in 0,1:
             Graph.valt[i] += valt[i]; Graph.rdnt[i] += rdnt[i]
         Graph_ += [Graph]
@@ -407,7 +407,7 @@ def sum_subH(T, t, base_rdn):
         for Layer, layer in zip_longest(SubH,subH, fillvalue=[]):
             if layer:
                 if Layer:
-                    if isinstance(Layer[0][0], list):  # _lay[0][0] is derH
+                    if layer[0] and isinstance(Layer[0][0], list):  # _lay[0][0] is derH
                         sum_derH(Layer, layer, base_rdn)
                     else: sum_ext(Layer, layer)
                 else:
