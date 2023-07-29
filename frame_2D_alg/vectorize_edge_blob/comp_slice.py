@@ -43,7 +43,8 @@ def comp_P(_P,P, fder=1, derP=None):  #  derP if der+, S if rng+
         mrdn = 1+(dval>mval); drdn = 1+(1-(dval>mval))  # rdn = Dval/Mval?
         derP = CderP(derH=[[[mtuple,dtuple], [mval,dval],[mrdn,drdn]]], valt=[mval,dval], rdnt=[mrdn,drdn], P=P,_P=_P, S=derP)
 
-    P.link_H[-1] += [derP]
+    if mval > aveP*mrdn or dval > aveP*drdn:
+        P.link_H[-1] += [derP]
 
 
 def comp_derH(_derH, derH, rn):  # derH is a list of der layers or sub-layers, each = [mtuple,dtuple, mval,dval, mrdn,drdn]
@@ -72,7 +73,7 @@ def comp_dtuple(_ptuple, ptuple, rn):
 
     return [mtuple, dtuple]
 
-
+# not reviewed:
 def form_PP_t(P_, PP_, base_rdn, fder):  # form PPs of derP.valt[fd] + connected Ps val
 
     PP_t = []
@@ -146,31 +147,19 @@ def reval_PP_(PP_, fder, fd):  # recursive eval / prune Ps for rePP
 
     return rePP_
 
+# draft:
 def reval_P_(P_, fd):  # prune qPP by link_val + mediated link__val
 
-    prune_=[]; Val=0; reval=0  # comb PP value and recursion value
+    Val=0; reval=0  # comb PP value and recursion value
 
     for P in P_:
-        P_val = 0; remove_ = []
+        P_val = 0
         for link in P.link_H[-1]:  # link val + med links val: single mediation layer in comp_slice:
             link_val = link.valt[fd] + sum([link.valt[fd] for link in link._P.link_H[-1]]) * med_decay
-            link_val_alt = link.valt[1-fd] + sum([link.valt[1-fd] for link in link._P.link_H[-1]]) * med_decay
-            if link_val < vaves[fd] and link_val_alt < vaves[1-fd]:  # remove link only if both evaluations are true
-                remove_ += [link]; reval += link_val
-            elif link_val >= vaves[fd]: 
+            if link_val >= vaves[fd]:
                 P_val += link_val
-        for link in remove_:
-            P.link_H[-1].remove(link)  # prune weak links
-        if P_val * P.rdnt[fd] < vaves[fd]:
-            prune_ += [P]
-        else:
+        if P_val * P.rdnt[fd] > vaves[fd]:
             Val += P_val * P.rdnt[fd]
-    for P in prune_:
-        for link in P.link_H[-1]:  # prune direct links only?
-            _P = link._P
-            _link_ = _P.link_H[-1]
-            if link in _link_:
-                _link_.remove(link); reval += link.valt[fd]
 
     if reval > aveB:
         P_, Val, reval = reval_P_(P_, fd)  # recursion
@@ -199,7 +188,6 @@ def sum2PP(qPP, base_rdn, fder, fd):  # sum links in Ps and Ps in PP
         # excluding bilateral sums:
         sum_derH([PP.derH,PP.valt,PP.rdnt], [P.derH,P.valt,P.rdnt], base_rdn)
 
-    # with the updated scheme, PP.derH may empty here, i guess we need to remove them?
     PP.box =(Y0,Yn,X0,Xn)
     return PP
 
