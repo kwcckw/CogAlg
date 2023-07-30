@@ -91,8 +91,8 @@ class Cgraph(ClusterStructure):  # params of single-fork node_ cluster per pplay
     rdnt : list = z([1,1])
     node_ : list = z([])  # same-fork, incremental nesting if wH: down-forking tree of node Levs, 4 top forks if sub+:
     # node_tt: list = z([[[],[]],[[],[]]])  # rng+'Gm_,Gd_, der+'Gm_,Gd_, may not overlap
-    root: object= None  # root_: list = z([])  # agg|sub+ mset forks, incr.nest if uH: up-forking tree of root Levs,
-    # root_tt: list = z([[None,None],[None,None]])  # rng+'Gm,Gd, der+'Gm,Gd, if both comp and form are overlapping
+    # root: object= None  # root_: list = z([])  # agg|sub+ mset forks, incr.nest if uH: up-forking tree of root Levs,
+    root_tt: list = z([[None,None],[None,None]])  # rng+'Gm,Gd, der+'Gm,Gd, if both comp and form are overlapping
     L : int = 0 # len base node_; from internal links:
     S : float = 0.0  # sparsity: average distance to link centers
     A : list = z([0,0])  # angle: average dy,dx to link centers

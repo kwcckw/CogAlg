@@ -64,15 +64,14 @@ def vectorize_root(blob, verbose=False):  # always angle blob, composite dert co
 
     comp_slice(edge, verbose=verbose)  # scan rows top-down, compare y-adjacent, x-overlapping Ps to form derPs
     # rng+ in comp_slice adds edge.node_tt[0]:
-    # use copy because they will be overwritten in agg+ later
-    for fd, PP_ in enumerate(copy(edge.node_[0])):  # [rng+ PPm_,PPd_, der+ PPm_,PPd_]
+    for fd, PP_ in enumerate(edge.node_[0]):  # [rng+ PPm_,PPd_, der+ PPm_,PPd_]
         # sub+, intra PP:
         sub_recursion_eval(edge, PP_)
         # agg+, inter-PP:
         if sum([PP.valt[fd] for PP in PP_]) > ave * sum([PP.rdnt[fd] for PP in PP_]):
             node_= []
             for PP in PP_:  # convert PPs to graphs:
-                node_ += [Cgraph(valt=copy(PP.valt), rdnt=copy(PP.rdnt), ptuple=PP.ptuple, derH=[PP.derH, PP.valt, PP.rdnt], L=len(PP.node_), # empty aggH, etc.
+                node_ += [Cgraph(valt=PP.valt, rdnt=PP.rdnt, ptuple=PP.ptuple, derH=[PP.derH, PP.valt, PP.rdnt], L=len(PP.node_), # empty aggH, etc.
                                  box=[(PP.box[0]+PP.box[1])/2, (PP.box[2]+PP.box[3])/2] + list(PP.box))]
                 sum_derH([edge.derH, edge.valt, edge.rdnt], [PP.derH, PP.valt, PP.rdnt], 0)
             # node_: edge.node_tt[0][fd]
