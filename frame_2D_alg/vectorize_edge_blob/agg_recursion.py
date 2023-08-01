@@ -33,10 +33,10 @@ There are concepts that include same matching vars: size, density, color, stabil
 Weak value vars are combined into higher var, so derivation fork can be selected on different levels of param composition.
 '''
 
-def agg_recursion(root, node_):  # compositional recursion in root.PP_
+def agg_recursion(root, node_, node_T):  # compositional recursion in root.PP_
 
     for i in 0,1: root.rdnt[i] += 1  # estimate, no node.rdnt[fder] += 1?
-
+    node_tt = [ [[], []],[[], []] ]
     for fder in 0,1:  # comp forks, each adds a layer of links
         if fder and len(node_[0].link_H) < 2:  # 1st call, no der+ yet?
             continue
@@ -48,11 +48,12 @@ def agg_recursion(root, node_):  # compositional recursion in root.PP_
                 sub_recursion_eval(root, graph_)
             # agg+, eval all layers?:
             if  sum(root.valt) > G_aves[fd] * ave_agg * sum(root.rdnt) and len(graph_) > ave_nsubt[fd]:
-                agg_recursion(root, node_)  # replace root.node_ with new graphs
+                agg_recursion(root, node_, node_T)  # replace root.node_ with new graphs
             elif root.root:  # if deeper agg+
                 feedback(root, fd)  # update root.root..H, breadth-first
-            root.node_[fder][fd] = graph_
-
+            node_tt[fder][fd] = graph_
+    node_T += [node_tt]  # not sure
+        
 
 def comp_G_(G_, pri_G_=None, f1Q=1, fder=0):  # cross-comp in G_ if f1Q, else comp between G_ and pri_G_, if comp_node_?
 
@@ -345,7 +346,7 @@ def comp_ext(_ext, ext, Valt, Rdnt):  # comp ds:
     Valt[0] += M; Valt[1] += D
     Rdnt[0] += D>M; Rdnt[1] += D<=M
 
-    return [[[mL,mS,mA], [dL,dS,dA]]]
+    return [[mL,mS,mA], [dL,dS,dA]]
 
 
 def sum_ext(Extt, extt):

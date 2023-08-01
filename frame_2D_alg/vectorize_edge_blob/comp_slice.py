@@ -230,9 +230,8 @@ def comp_ptuple(_ptuple, ptuple, rn):  # 0der
     # _n, n = _ptuple, ptuple: add to rn?
     for i, (_par, par, ave) in enumerate(zip(_ptuple, ptuple, aves)):
         if isinstance(_par, list):
-            if len(_par)==2: m,d = comp_angle(_par, par)
-            else:            m,d = comp_aangle(_par, par)
-        else:  # I | M | Ma | G | Ga | L
+             m,d = comp_angle(_par, par)
+        else:  # I | M | G L
             npar= par*rn  # accum-normalized par
             d = _par - npar
             if i: m = min(_par,npar)-ave

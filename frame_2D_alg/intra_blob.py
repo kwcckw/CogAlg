@@ -8,7 +8,7 @@
 '''
 import numpy as np
 from itertools import zip_longest
-from class_cluster import ClusterStructure
+from class_cluster import ClusterStructure, init_param as z
 from frame_blobs import assign_adjacents, flood_fill
 from intra_comp import comp_r, comp_a
 from vectorize_edge_blob.root import vectorize_root
