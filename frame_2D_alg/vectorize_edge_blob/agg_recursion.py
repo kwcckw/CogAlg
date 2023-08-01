@@ -31,11 +31,7 @@ Clustering criterion is G.M|D, summed across >ave vars if selective comp (<ave v
 Fork selection should be per var or co-derived der layer or agg level. 
 There are concepts that include same matching vars: size, density, color, stability, etc, but in different combinations.
 Weak value vars are combined into higher var, so derivation fork can be selected on different levels of param composition.
-
-agg+: [[new_aggLev]] += Node_aggH, where each lower aggLev is subH
-separate G.derH, with len = min([len(node.derH) for node in G.node_])
 '''
-
 
 def agg_recursion(root, node_):  # compositional recursion in root.PP_
 
@@ -55,8 +51,6 @@ def agg_recursion(root, node_):  # compositional recursion in root.PP_
                 agg_recursion(root, node_)  # replace root.node_ with new graphs
             elif root.root:  # if deeper agg+
                 feedback(root, fd)  # update root.root..H, breadth-first
-            
-            # we need to be selective here
             root.node_[fder][fd] = graph_
 
 
@@ -85,11 +79,11 @@ def comp_G_(G_, pri_G_=None, f1Q=1, fder=0):  # cross-comp in G_ if f1Q, else co
     combine cis,alt in aggH: alt represents node isolation?
     comp alts,val,rdn? cluster per var set if recurring across root: type eval if root M|D?
     '''
+
 def comp_G(_G, G, distance, A):
 
     Mval,Dval = 0,0
     Mrdn,Drdn = 1,1
-    der_ext = comp_ext([_G.L,_G.S,_G.A], [G.L,G.S,G.A], [Mval,Dval], [Mrdn,Drdn])
     # / P:
     mtuple, dtuple = comp_ptuple(_G.ptuple, G.ptuple, rn=1)
     mval, dval = sum(mtuple), sum(dtuple)
@@ -100,12 +94,14 @@ def comp_G(_G, G, distance, A):
     dderH, valt, rdnt = comp_derH(_G.derH[0], G.derH[0], rn=1)
     mval,dval = valt
     Mval += dval; Dval += mval; Mrdn += rdnt[0]+dval>mval; Drdn += rdnt[1]+dval<=mval
-    # SubH [0]:der_ext, [1]:derLay, then [2:]:subH from comp_aggH:
-    SubH = der_ext + [ [[derLay0] +dderH, [Mval, Dval], [Mrdn ,Drdn]] ] 
+
+    derH = [[derLay0]+dderH, [Mval,Dval], [Mrdn,Drdn]]  # appendleft derLay0 from comp_ptuple
+    der_ext = comp_ext([_G.L,_G.S,_G.A],[G.L,G.S,G.A], [Mval,Dval], [Mrdn,Drdn])
+    SubH = [der_ext, derH]  # 1st two layers of SubH, higher layers may be added by comp_aggH:
     # / G:
     if _G.aggH and G.aggH:  # empty in base fork
         subH, valt, rdnt = comp_aggH(_G.aggH, G.aggH, rn=1)
-        SubH += subH  # SubH is a flat list of der_ext | derH s
+        SubH += subH  # append higher subLayers: list of der_ext | derH s
         mval,dval =valt
         Mval += valt[0]; Dval += valt[1]; Mrdn += rdnt[0]+dval>mval; Drdn += rdnt[1]+dval<=mval
 
@@ -218,7 +214,7 @@ def sum2graph_(graph_, fd):  # sum node and link params into graph, aggH in agg+
     for graph in graph_:  # seq Gs
         if graph[1] < G_aves[fd]:  # form graph if val>min only
             continue
-        Graph = Cgraph(L=len(graph_))
+        Graph = Cgraph(L=len(graph[0]))  # n nodes
         Link_ = []
         for G in graph[0]:
             sum_box(Graph.box, G.box)
@@ -232,17 +228,16 @@ def sum2graph_(graph_, fd):  # sum node and link params into graph, aggH in agg+
                 if derG.valt[fd] > G_aves[fd]:
                     sum_subH([subH,valt,rdnt], [derG.subH,derG.valt,derG.rdnt], base_rdn=1)
                     sum_box(G.box, derG.G0.box if derG.G1 is G else derG.G1.box)
-                    Graph.A[0] += derG.A[0]; Graph.A[1] += derG.A[1] 
             G.aggH += [[subH,valt,rdnt]]
             for i in 0,1:
                 G.valt[i] += valt[i]; G.rdnt[i] += rdnt[i]
             Graph.node_ += [G]  # converted to node_tt by feedback
         subH=[]; valt=[0,0]; rdnt=[1,1]
-        for derG in Link_:
-            sum_subH([subH,valt,rdnt], [derG.subH, derG.valt, derG.rdnt], base_rdn=1)  # sum unique links
-        Graph.aggH += [[subH, valt, rdnt]]
-        Graph.S = np.hypot(Graph.A[0], Graph.A[1])
-
+        for derG in Link_:  # sum unique links:
+            sum_subH([subH,valt,rdnt], [derG.subH, derG.valt, derG.rdnt], base_rdn=1)
+            Graph.A[0] += derG.A[0]; Graph.A[1] += derG.A[1]
+            Graph.S += derG.S
+        Graph.aggH += [[subH, valt, rdnt]]  # new aggLev
         for i in 0,1:
             Graph.valt[i] += valt[i]; Graph.rdnt[i] += rdnt[i]
         Graph_ += [Graph]
@@ -307,10 +302,10 @@ def sub_recursion_eval(root, graph_):  # eval per fork, same as in comp_slice, s
            feedback(root, fd)
 
 
-def sub_recursion(graph, node_, fd):  # rng+: extend G_ per graph, der+: replace G_ with derG_, valt=[0,0]?
+def sub_recursion(graph, fder, fd):  # rng+: extend G_ per graph, der+: replace G_ with derG_, valt=[0,0]?
 
     comp_G_(graph.node_, pri_G_=None, f1Q=1, fd=fd)  # cross-comp all Gs in rng
-    sub_G_t = form_graph_(graph)  # cluster sub_graphs via link_tH
+    sub_G_t = form_graph_(graph, fder, fd)  # cluster sub_graphs via link_H
 
     for i, sub_G_ in enumerate(sub_G_t):
         if sub_G_:  # and graph.rdn > ave_sub * graph.rdn:  # from sum2graph, not last-layer valt,rdnt?
@@ -327,7 +322,7 @@ def feedback(root, fd):  # append new der layers to root
         aggH, valt, rdnt = root.fback_.pop()
         sum_aggH(Fback, [aggH, valt, rdnt] , base_rdn=0)
     for i in 0, 1:
-        sum_aggH([root.aggH[i], root.valt[i],root.rdnt[i]], [Fback[0][i],Fback[0][i],Fback[0][i]], base_rdn=0)
+        sum_aggH([root.aggH[i], root.valt[i],root.rdnt[i]], [Fback[i],Fback[0][i],Fback[0][i]], base_rdn=0)
 
     if isinstance(root.root, Cgraph):  # not blob
         root = root.root
@@ -348,7 +343,7 @@ def comp_ext(_ext, ext, Valt, Rdnt):  # comp ds:
 
     M = mL+mS+mA; D = dL+dS+dA
     Valt[0] += M; Valt[1] += D
-    Rdnt[0] += D>M; Valt[1] += D<=M
+    Rdnt[0] += D>M; Rdnt[1] += D<=M
 
     return [[[mL,mS,mA], [dL,dS,dA]]]
 
@@ -418,7 +413,6 @@ def sum_subH(T, t, base_rdn):
                     SubH += [deepcopy(layer)]  # _lay[0][0] is mL
     else:
         SubH[:] = deepcopy(subH)
-
 
 def sum_aggH(T, t, base_rdn):
 

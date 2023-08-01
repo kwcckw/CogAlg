@@ -50,11 +50,8 @@ octants = lambda: [
 oct_sep = 0.3826834323650898
 
 
-def vectorize_root(blob, verbose=False):  # always angle blob, composite dert core param is v_g + iv_ga
+def vectorize_root(edge, verbose=False):  # always angle blob, composite dert core param is v_g + iv_ga
 
-    # convert Cblob to Cedge: (temporary)
-    edge = CEdge(dir__t=blob.der__t, dir__t_roots=[[[] for col in row] for row in blob.der__t[0]], mask__=blob.mask__,
-                 I=blob.I)
 
     slice_edge(edge, verbose)  # form 2D array of Ps: horizontal blob slices in dir__t
     rotate_P_(edge, verbose)  # re-form Ps around centers along P.G, P sides may overlap, if sum(P.M s + P.Ma s)?
@@ -67,15 +64,19 @@ def vectorize_root(blob, verbose=False):  # always angle blob, composite dert co
     for fd, PP_ in enumerate(edge.node_[0]):  # [rng+ PPm_,PPd_, der+ PPm_,PPd_]
         # sub+, intra PP:
         sub_recursion_eval(edge, PP_)
-        # agg+, inter-PP:
+        # agg+, inter-PP, 1st layer is two forks only:
         if sum([PP.valt[fd] for PP in PP_]) > ave * sum([PP.rdnt[fd] for PP in PP_]):
             node_= []
-            for PP in PP_:  # convert PPs to graphs:
-                node_ += [Cgraph(valt=PP.valt, rdnt=PP.rdnt, ptuple=PP.ptuple, derH=[PP.derH, PP.valt, PP.rdnt], L=len(PP.node_), # empty aggH, etc.
+            for PP in PP_:  # convert to graphs:
+                derH,valt,rdnt = PP.derH,PP.valt,PP.rdnt
+                node_ += [Cgraph(ptuple=PP.ptuple, derH=[derH,valt,rdnt], valt=valt,rdnt=rdnt, L=len(PP.node_),
                                  box=[(PP.box[0]+PP.box[1])/2, (PP.box[2]+PP.box[3])/2] + list(PP.box))]
-                sum_derH([edge.derH, edge.valt, edge.rdnt], [PP.derH, PP.valt, PP.rdnt], 0)
-            # node_: edge.node_tt[0][fd]
-            edge.fback_ = []  # reset fback_ from comp_slice's sub+
+                sum_derH([edge.derH,edge.valt,edge.rdnt], [derH,valt,rdnt], 0)
+            '''
+            edge.node_tt[0][fd] = node_, then agg+ can convert selected element node_ to node_tt.
+            should be root.node_T: indefinite nesting, x4 if all forks agg+ per cycle.
+            this is unlikely: there will be fewer nodes in each agg+.
+            '''
             agg_recursion(edge, node_)
 
 '''
@@ -136,7 +137,7 @@ def rotate_P_(edge, verbose=False):  # rotate each P to align it with direction 
         daxis = P.ptuple[5][0] / G  # dy: deviation from horizontal axis
         _daxis = 0
         if verbose: i += 1
-        while abs(daxis) * G > ave_rotate + 20:  # recursive reform P in blob.dir__t along new G angle:
+        while abs(daxis) * G > ave_rotate:  # recursive reform P in blob.dir__t along new G angle:
             if verbose: print(f"\rRotating... {i}/{len(P_)}: {round(np.degrees(np.arctan2(*P.axis)))}°", end=" " * 79); sys.stdout.flush()
             _axis = P.axis
             P = form_P(P, dir__t, mask__, axis=np.divide(P.ptuple[5], np.hypot(*P.ptuple[5])))  # pivot to P angle
