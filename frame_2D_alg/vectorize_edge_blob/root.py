@@ -2,7 +2,8 @@ import sys
 import numpy as np
 from copy import copy, deepcopy
 from itertools import product
-from .classes import CP, CPP, CderP, Cgraph
+from frame_blobs import UNFILLED, EXCLUDED
+from .classes import CEdge, CP, CPP, CderP, Cgraph
 from .filters import ave, ave_g, ave_ga, ave_rotate
 from .comp_slice import comp_slice, comp_angle, sum_derH
 from .hough_P import new_rt_olp_array, hough_check
@@ -49,8 +50,10 @@ octants = lambda: [
 oct_sep = 0.3826834323650898
 
 
-def vectorize_root(edge, verbose=False):  # always angle blob, composite dert core param is v_g + iv_ga
-
+def vectorize_root(blob, verbose=False):  # always angle blob, composite dert core param is v_g + iv_ga
+    # Cblob-> Cedge:
+    edge = CEdge( I=blob.I, Dy=blob.Dy, Dx=blob.Dx, G=blob.G, A=blob.A, M=blob.M, box=blob.box, mask__=blob.mask__,
+        der__t=blob.der__t, der__t_roots=[[[] for col in row] for row in blob.der__t[0]], adj_blobs=blob.adj_blobs)
 
     slice_edge(edge, verbose)  # form 2D array of Ps: horizontal blob slices in dir__t
     rotate_P_(edge, verbose)  # re-form Ps around centers along P.G, P sides may overlap, if sum(P.M s + P.Ma s)?
@@ -59,29 +62,23 @@ def vectorize_root(edge, verbose=False):  # always angle blob, composite dert co
         form_link_(cP_.pop(), cP_, edge)  # trace adjacent Ps, fill|prune if missing or redundant, add them to P.link_
 
     comp_slice(edge, verbose=verbose)  # scan rows top-down, compare y-adjacent, x-overlapping Ps to form derPs
-    # rng+ in comp_slice adds edge.node_tt[0]:
-    node_T = [[], []]
-    for fd, PP_ in enumerate(edge.node_[0]):  # [rng+ PPm_,PPd_, der+ PPm_,PPd_]
+    # rng+ in comp_slice adds edge.node_T[0]:
+    for fd, PP_ in enumerate(edge.node_T[0]):  # [rng+ PPm_,PPd_, der+ PPm_,PPd_]
         # sub+, intra PP:
         sub_recursion_eval(edge, PP_)
         # agg+, inter-PP, 1st layer is two forks only:
         if sum([PP.valt[fd] for PP in PP_]) > ave * sum([PP.rdnt[fd] for PP in PP_]):
             node_= []
-            for PP in PP_:  # convert to graphs:
+            for PP in PP_: # CPP -> Cgraph:
                 derH,valt,rdnt = PP.derH,PP.valt,PP.rdnt
                 node_ += [Cgraph(ptuple=PP.ptuple, derH=[derH,valt,rdnt], valt=valt,rdnt=rdnt, L=len(PP.node_),
                                  box=[(PP.box[0]+PP.box[1])/2, (PP.box[2]+PP.box[3])/2] + list(PP.box))]
                 sum_derH([edge.derH,edge.valt,edge.rdnt], [derH,valt,rdnt], 0)
-            '''
-            edge.node_tt[0][fd] = node_, then agg+ can convert selected element node_ to node_tt.
-            should be root.node_T: indefinite nesting, x4 if all forks agg+ per cycle.
-            this is unlikely: there will be fewer nodes in each agg+.
-            '''
-            agg_recursion(edge, node_, node_T[fd])
-    edge.node_ = node_T
-'''
-or only compute params needed for rotate_P_?
-'''
+            edge.node_T[0][fd][:] = node_
+            # node_[:] = new node_tt in the end:
+            agg_recursion(edge, node_)
+
+# or only compute params needed for rotate_P_?
 def slice_edge(edge, verbose=False):  # form blob slices nearest to slice Ga: Ps, ~1D Ps, in select smooth edge (high G, low Ga) blobs
 
     P_ = []
@@ -173,7 +170,7 @@ def form_P(P, dir__t, mask__, axis):
     L = len(dert_)
     P.dert_ = dert_; P.dert_yx_ = dert_yx_  # new dert and dert_yx
     P.yx = P.dert_yx_[L//2]              # new center
-    G = np.hypot(Dy, Dx);  # recompute G
+    G = np.hypot(Dy, Dx)  # recompute G
     P.ptuple = [I,G,M,[Dy,Dx], L]
     P.axis = axis
     P.dert_olp_ = dert_olp_
@@ -271,7 +268,7 @@ def slice_edge_ortho(edge, verbose=False):  # slice_blob with axis-orthogonal Ps
     Y, X = edge.mask__.shape
     yx_ = sort_cell_by_da(edge)
     idmap = np.full(edge.mask__.shape, UNFILLED, dtype=int)
-    idmap[edge.mask__] = EXCLUDED_ID
+    idmap[edge.mask__] = EXCLUDED
 
     edge.P_ = []
     adj_pairs = set()
@@ -288,7 +285,7 @@ def slice_edge_ortho(edge, verbose=False):  # slice_blob with axis-orthogonal Ps
 
             for _y, _x in P.dert_olp_:
                 for __y, __x in product(range(_y-1,y+2), range(x-1,x+2)):
-                    if (0 <= __y < Y) and (0 <= __x < X) and idmap[__y, __x] not in (UNFILLED, EXCLUDED_ID):
+                    if (0 <= __y < Y) and (0 <= __x < X) and idmap[__y, __x] not in (UNFILLED, EXCLUDED):
                         adj_pairs.add((idmap[__y, __x], P.id))
 
             # check for adjacent Ps using idmap
