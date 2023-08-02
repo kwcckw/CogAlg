@@ -24,7 +24,7 @@ def comp_slice(edge, verbose=False):  # high-G, smooth-angle blob, composite der
         for _P in link_:  # or spliced_link_ if active
             comp_P(_P,P, fder=0)  # replaces P.link_ Ps with derPs
     # convert node_ to node_tt:
-    edge.node_ = [form_PP_t([Pt[0] for Pt in P_], PP_=None, base_rdn=2, fder=0), [[], []]]  # root fork is rng+ only
+    edge.node_T = [form_PP_t([Pt[0] for Pt in P_], PP_=None, base_rdn=2, fder=0), [[], []]]  # root fork is rng+ only
 
 
 def comp_P(_P,P, fder=1, derP=None):  #  derP if der+, S if rng+
@@ -169,7 +169,7 @@ def reval_P_(P_, fd):  # prune qPP by link_val + mediated link__val
 def sum2PP(qPP, base_rdn, fder, fd):  # sum links in Ps and Ps in PP
 
     P_,_,_ = qPP  # proto-PP is a list
-    PP = CPP(fd=fd, node_=P_)
+    PP = CPP(fd=fd, node_T=P_)
     # accum:
     for i, P in enumerate(P_):
         P.root_tt[fder][fd] = PP

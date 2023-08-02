@@ -131,10 +131,12 @@ def form_graph_(G_, fder, fd):  # form list graphs and their aggHs, G is node in
     # init graphs by link val:
     while node_:  # all Gs not removed in add_node_layer
         G = node_.pop(); gnode_ = [G]
-        val = init_graph(gnode_, node_, G, fder, fd, val=0)  # recursive depth-first gnode_ += [_G]
-        graph_ += [[gnode_,val]]
+        pre_graph = [gnode_, 0]
+        G.root_T += [pre_graph]
+        init_graph(gnode_, node_, G, pre_graph, fder, fd)  # recursive depth-first gnode_ += [_G]
+        graph_ += [pre_graph]
     # prune graphs by node val:
-    regraph_ = graph_reval_(graph_, [G_aves[fder] for graph in graph_], fder)  # init reval_ to start
+    regraph_ = graph_reval_(graph_, fder)  # init reval_ to start
     if regraph_:
         graph_[:] = sum2graph_(regraph_, fder)  # sum proto-graph node_ params in graph
 
@@ -142,7 +144,7 @@ def form_graph_(G_, fder, fd):  # form list graphs and their aggHs, G is node in
     return graph_
 
 
-def init_graph(gnode_, G_, G, fder, fd, val):  # recursive depth-first gnode_+=[_G]
+def init_graph(gnode_, G_, G, pre_graph, fder, fd):  # recursive depth-first gnode_+=[_G]
 
     for link in G.link_H[-(1+fder)]:
         if link.valt[fd] > G_aves[fd]:
@@ -151,12 +153,45 @@ def init_graph(gnode_, G_, G, fder, fd, val):  # recursive depth-first gnode_+=[
             if _G in G_:  # _G is not removed in prior loop
                 gnode_ += [_G]
                 G_.remove(_G)
-                val += _G.valt[fd]  # interval
-                val += init_graph(gnode_, G_, _G, fder, fd, val)
-    return val
+                pre_graph[1] += _G.valt[fd]  # interval
+                _G.root_T += [pre_graph]
+                init_graph(gnode_, G_, _G, pre_graph, fder, fd)
 
 
-def graph_reval_(graph_, reval_, fd):  # recursive eval nodes for regraph, after pruning weakly connected nodes
+# very initial draft, to prune nodes based on their n overlapping 
+def graph_reval_(graph_, fd):  
+    
+    regraph_ = []
+    f_reval = 0
+    while graph_:
+        pre_graph = graph_.pop()  # pre_graph or cluster
+        node_, val = pre_graph
+
+        # check each node, evaluate based on their overlapping root_T and remove them from cluster if val < ave * rdn
+        remove_ = []
+        for node in node_:
+            rdn = 1 + len(node.root_T)
+            if node.valt[fd] < G_aves[fd] * rdn:
+                remove_ += [node]              # to remove node from cluster
+                node.root_T.remove(pre_graph)  # remove root cluster from node
+
+        # remove node
+        while remove_:
+            f_reval = 0
+            remove_node = remove_.pop()
+            node_.remove(remove_node)             # remove node
+            pre_graph[1] -= remove_node.valt[fd]  # reduce val
+                
+        # repack pre_graph
+        regraph_ += [pre_graph]
+            
+    # if there's a node is removed from any cluster, reval all cluster because their rdn will be different now
+    if f_reval:
+        regraph_ = graph_reval_(regraph_, fd)
+
+    return regraph_
+
+def graph_reval_old(graph_, reval_, fd):  # recursive eval nodes for regraph, after pruning weakly connected nodes
 
     regraph_, rreval_ = [],[]
     aveG = G_aves[fd]
@@ -242,7 +277,7 @@ def sum2graph_(graph_, fd):  # sum node and link params into graph, aggH in agg+
             G.aggH += [[subH,valt,rdnt]]
             for i in 0,1:
                 G.valt[i] += valt[i]; G.rdnt[i] += rdnt[i]
-            Graph.node_ += [G]  # converted to node_tt by feedback
+            Graph.node_T += [G]  # converted to node_tt by feedback
         subH=[]; valt=[0,0]; rdnt=[1,1]
         for derG in Link_:  # sum unique links:
             sum_subH([subH,valt,rdnt], [derG.subH, derG.valt, derG.rdnt], base_rdn=1)
@@ -293,7 +328,7 @@ def sub_recursion_eval(root, graph_):  # eval per fork, same as in comp_slice, s
 
     termt = [1,1]
     for graph in graph_:
-        node_ = copy(graph.node_); sub_G_t = []
+        node_ = copy(graph.node_T); sub_G_t = []
         fr = 0
         for fd in 0,1:
             # not sure int or/and ext:

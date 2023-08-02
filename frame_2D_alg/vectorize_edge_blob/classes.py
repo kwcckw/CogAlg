@@ -36,7 +36,7 @@ class CEdge(ClusterStructure):  # edge blob
     der__t : object = None
     der__t_roots: object = None  # map to dir__t
     adj_blobs: list = z([])  # adjacent blobs
-    node_ : list = z([])  # default P_, node_tt: list = z([[[],[]],[[],[]]]) in select PP_ or G_ forks
+    node_T : list = z([])  # default P_, node_tt: list = z([[[],[]],[[],[]]]) in select PP_ or G_ forks
     root : object= None  # list root_ if fork overlap?
     derH : list = z([])  # formed in PPs, inherited in graphs
     aggH : list = z([[]])  # [[subH, valt, rdnt]]: cross-fork composition layers

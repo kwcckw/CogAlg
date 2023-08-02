@@ -44,7 +44,7 @@ def intra_blob_root(root_blob, render, verbose, fBa):  # recursive evaluation of
             if blob.G < aveR * blob.rdn and blob.sign:  # below-average G, eval for comp_r
                 blob.rng = root_blob.rng + 1; blob.rdn = root_blob.rdn + 1.5  # sub_blob root values
                 # TODO: revise comp_r:
-                new_der__t, new_mask__ = comp_r(blob.der__t, blob.rng, blob.mask__)
+                new_der__t, new_mask__ = comp_r(blob.der__t, ave, blob.rng, blob.mask__)
                 sign__ = ave * (blob.rdn+1) - new_der__t.g > 0  # m__ = ave - g__
                 if new_mask__.shape[0] > 2 and new_mask__.shape[1] > 2 and False in new_mask__:
                     # TODO: revise layers:
@@ -124,7 +124,7 @@ def print_deep_blob_forking(deep_layers):
             check_deep_blob(deep_layer,i)
 
 
-def comp_r(dert__, ave, rng, root_fia, mask__=None):
+def comp_r(dert__, ave, rng , mask__=None):
     '''
     Selective sampling: skipping current rim derts as kernel-central derts in following comparison kernels.
     Skipping forms increasingly sparse output dert__ for greater-range cross-comp, hence
@@ -190,7 +190,6 @@ def comp_r(dert__, ave, rng, root_fia, mask__=None):
      # root fork is comp_r, accumulate derivatives:
     dy__ = dert__[1][1:-1:2, 1:-1:2].copy()  # sparse to align with i__center
     dx__ = dert__[2][1:-1:2, 1:-1:2].copy()
-    m__ = dert__[4][1:-1:2, 1:-1:2].copy()
 
     # compare four diametrically opposed pairs of rim pixels, with Sobel coeffs * rim skip ratio:
 
@@ -212,6 +211,8 @@ def comp_r(dert__, ave, rng, root_fia, mask__=None):
     inverse match = SAD, direction-invariant and more precise measure of variation than g
     (all diagonal derivatives can be imported from prior 2x2 comp)
     '''
+   # m is not needed here?
+    '''
     m__ += ( abs(i__center - i__topleft) * 1 * rngSkip
            + abs(i__center - i__top) * 2 * rngSkip
            + abs(i__center - i__topright) * 1 * rngSkip
@@ -221,6 +222,7 @@ def comp_r(dert__, ave, rng, root_fia, mask__=None):
            + abs(i__center - i__bottomleft) * 1 * rngSkip
            + abs(i__center - i__left) * 2 * rngSkip
            )
+    '''
     return idert(i__center, dy__, dx__, g__), majority_mask__
 
 
