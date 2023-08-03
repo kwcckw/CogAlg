@@ -39,8 +39,8 @@ def agg_recursion(root, node_):  # compositional recursion in root.PP_
     node_tt = [[[],[]],[[],[]]]  # fill with 4 clustering forks
     pri_root_T_ = []
     for node in node_:
-        node = [node, node_.root_T]  # save root_T for new graphs, different per node
-        node[0].root_T = [[[],[]],[[],[]]]  # replace node.root_T, then append [root,val] in each fork
+        pri_root_T_ += [node.root_T]  # save root_T for new graphs, different per node
+        node.root_T = [[[],[]],[[],[]]]  # replace node.root_T, then append [root,val] in each fork
         # |node.root_T = [[[None,0]],[[None,0]],[[None,0]],[[None,0]]]
 
     for fder in 0,1:  # comp forks, each adds a layer of links
@@ -48,7 +48,7 @@ def agg_recursion(root, node_):  # compositional recursion in root.PP_
             continue
         comp_G_(node_, pri_G_=None, f1Q=1, fder=fder)  # cross-comp all Gs in (rng,der), nD array? form link_H per G
         for fd in 0, 1:
-            graph_ = form_graph_(node_, fder, fd)  # clustering via link_t, select by fder
+            graph_ = form_graph_(node_, pri_root_T_, fder, fd)  # clustering via link_t, select by fder
             # sub+, eval last layer?:
             if root.valt[fd] > ave_sub * root.rdnt[fd] and graph_:  # fixed costs and non empty graph_, same per fork
                 sub_recursion_eval(root, graph_)
@@ -62,21 +62,20 @@ def agg_recursion(root, node_):  # compositional recursion in root.PP_
     node_[:] = node_tt  # replace local element of root.node_T
 
 
-def form_graph_(node_, fder, fd):  # form fuzzy graphs of nodes per fder,fd, initially fully overlapping
+def form_graph_(node_, pri_root_T_, fder, fd):  # form fuzzy graphs of nodes per fder,fd, initially fully overlapping
 
     graph_ = []
-    for G in node_:
-        node, pri_root_T = G
+    for node, pri_root_T in zip(node_, pri_root_T_):
         GQ = [[node], [pri_root_T], 0]  # positively linked node +_nodes, prior node roots, links_val
         for link in node.link_H[-(1+fder)]:
             val = link.valt[fd]
             if val > G_aves[fd]:
-                _node = link.G1 if link.G0 is node else link.G0
-                GQ[0] += [_node[0]]  # append node
-                GQ[1] += [_node[1]]  # append root_T
+                _node = link.G1 if link.G0 is node else link.G0  # node here is not in the structure of [node, root_T], so we need to pack pri_root_T separately
+                GQ[0] += [_node]  # append node
+                GQ[1] += [pri_root_T_[node_.index(_node)]]  # append root_T
                 GQ[2] += val  # links Val
-                _node.root_T[fder][fd] += [[GQ,val]]  # append in fork root_, sum val in graph_reval_
-        node.root_T[fder][fd] = [GQ]  # assign [new graph] as root_, including local links_val
+                _node.root_T[fder][fd] += [GQ]  # append in fork root_, sum val in graph_reval_
+        node.root_T[fder][fd] += [GQ]  # assign [new graph] as root_, including local links_val (we need append root here, else it overwrites those roots when node is _node )
         graph_ += [GQ]
     # prune by rdn:
     regraph_ = graph_reval_(graph_, [G_aves[fder] for graph in graph_], fder,fd)  # init reval_ to start
@@ -101,7 +100,9 @@ def graph_reval_Chee(graph_, fder,fd):
     reval = 0
     for GQ in graph_:
         for node in GQ[0]:
-            # sort node root_(local) by root val
+            # why we want to sort them?
+            # sort node root_(local) by root val (ascending)
+            node.root_T[fder][fd] = sorted(node.root_T[fder][fd], key=lambda root:root[2], reverse=False)  # index 2 is links val
 
     while graph_:
         GQ = graph_.pop()  # pre_graph or cluster
@@ -110,18 +111,20 @@ def graph_reval_Chee(graph_, fder,fd):
         for node in node_:
             rdn = 1 + len(node.root_T)
             if node.valt[fd] < G_aves[fd] * rdn:
-                remove_ += [node]              # to remove node from cluster
-                node.root_T.remove(GQ)  # remove root cluster from node
+                remove_ += [node]       # to remove node from cluster
+                node.root_T[fder][fd].remove(GQ)  # remove root cluster from node
         # remove node
         while remove_:
-            reval = 0
             remove_node = remove_.pop()
-            node_.remove(remove_node)             # remove node
-            GQ[1] -= remove_node.valt[fd]  # reduce val
+            node_.remove(remove_node)       # remove node
+            GQ[2] -= remove_node.valt[fd]   # reduce val
+            reval += remove_node.valt[fd]
         # repack pre_graph
         regraph_ += [GQ]
+
+    # re-eval if reval is high 
     if reval > ave:
-        regraph_ = graph_reval_(regraph_, fder,fd)
+        regraph_ = graph_reval_Chee(regraph_, fder,fd)
 
     return regraph_
 
@@ -249,8 +252,9 @@ def sum2graph_(graph_, fd):  # sum node and link params into graph, aggH in agg+
 
     Graph_ = []
     for graph in graph_:  # seq Gs
-        if graph[1] < G_aves[fd]:  # form graph if val>min only
+        if graph[2] < G_aves[fd]:  # form graph if val>min only
             continue
+        pri_roots = graph[1]  # not sure how to pack this pri_roots into Graph since we have only fd here, so Graph.root_T[fd] = pri_roots?
         Graph = Cgraph(L=len(graph[0]))  # n nodes
         Link_ = []
         for G in graph[0]:

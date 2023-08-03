@@ -42,7 +42,7 @@ def intra_blob_root(root_blob, render, verbose):  # recursive evaluation of cros
         # extend mask__:
         blob.mask__ = np.pad(
             blob.mask__, constant_values=True, mode='constant',
-            pad_with=((y0 - y0e, yne - yn), (x0 - x0e, xne - xn)))
+            pad_width=((y0 - y0e, yne - yn), (x0 - x0e, xne - xn)))
         # extends blob box
         blob.box = (y0e, yne, x0e, xne)
         Ye = yne - y0e; Xe = xne - x0e
