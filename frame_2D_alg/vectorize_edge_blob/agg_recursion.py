@@ -41,7 +41,7 @@ def agg_recursion(root, node_):  # compositional recursion in root.PP_
     for node in node_:
         pri_root_T_ += [node.root_T]  # save root_T for new graphs, different per node
         node.root_T = [[[],[]],[[],[]]]  # replace node.root_T, then append [root,val] in each fork
-        # |node.root_T = [[[None,0]],[[None,0]],[[None,0]],[[None,0]]]
+        # then node.root_T = [[[None,0]],[[None,0]],[[None,0]],[[None,0]]]?
 
     for fder in 0,1:  # comp forks, each adds a layer of links
         if fder and len(node_[0].link_H) < 2:  # 1st call, no der+ yet?
@@ -61,26 +61,32 @@ def agg_recursion(root, node_):  # compositional recursion in root.PP_
             node_tt[fder][fd] = graph_
     node_[:] = node_tt  # replace local element of root.node_T
 
-
+# partial re-draft:
 def form_graph_(node_, pri_root_T_, fder, fd):  # form fuzzy graphs of nodes per fder,fd, initially fully overlapping
 
     graph_ = []
-    for node, pri_root_T in zip(node_, pri_root_T_):
+    for G in node_:
+        G.root_T[fder][fd] = [[[],0]]  # init root for each node?
+
+    for i, (node, pri_root_T) in enumerate(zip(node_, pri_root_T_)):
         GQ = [[node], [pri_root_T], 0]  # positively linked node +_nodes, prior node roots, links_val
+        Val = 0
         for link in node.link_H[-(1+fder)]:
             val = link.valt[fd]
             if val > G_aves[fd]:
-                _node = link.G1 if link.G0 is node else link.G0  # node here is not in the structure of [node, root_T], so we need to pack pri_root_T separately
+                _node = link.G1 if link.G0 is node else link.G0
                 GQ[0] += [_node]  # append node
                 GQ[1] += [pri_root_T_[node_.index(_node)]]  # append root_T
                 GQ[2] += val  # links Val
-                _node.root_T[fder][fd] += [GQ]  # append in fork root_, sum val in graph_reval_
-        node.root_T[fder][fd] += [GQ]  # assign [new graph] as root_, including local links_val (we need append root here, else it overwrites those roots when node is _node )
+                Val += val  # in-graph links val per node?
+                _node.root_T[fder][fd][i][1] += val   # append in fork root_, sum val in graph_reval_
+        # draft
+        node.root_T[fder][fd] += [[GQ,Val]]  # assign [new graph] as root_, including local links_val
         graph_ += [GQ]
     # prune by rdn:
     regraph_ = graph_reval_(graph_, [G_aves[fder] for graph in graph_], fder,fd)  # init reval_ to start
     if regraph_:
-        graph_[:] = sum2graph_(regraph_, fder)  # sum proto-graph node_ params in graph
+        graph_[:] = sum2graph_(regraph_, fder, fd)  # sum proto-graph node_ params in graph
 
     # add_alt_graph_(graph_t)  # overlap+contour, cluster by common lender (cis graph), combined comp?
     return graph_
@@ -94,16 +100,14 @@ while dMatch per cluster > ave:
 '''
 
 # draft:
-def graph_reval_Chee(graph_, fder,fd):
+def graph_reval_(graph_, fder,fd):
 
     regraph_ = []
     reval = 0
     for GQ in graph_:
         for node in GQ[0]:
-            # why we want to sort them?
             # sort node root_(local) by root val (ascending)
             node.root_T[fder][fd] = sorted(node.root_T[fder][fd], key=lambda root:root[2], reverse=False)  # index 2 is links val
-
     while graph_:
         GQ = graph_.pop()  # pre_graph or cluster
         node_, root_, val = GQ
@@ -111,6 +115,8 @@ def graph_reval_Chee(graph_, fder,fd):
         for node in node_:
             rdn = 1 + len(node.root_T)
             if node.valt[fd] < G_aves[fd] * rdn:
+            # replace with node.root_T[i][1] < G_aves[fd] * i:
+            # val graph links per node, graph is node.root_T[i], i=rdn: index in fork root_ sorted by val
                 remove_ += [node]       # to remove node from cluster
                 node.root_T[fder][fd].remove(GQ)  # remove root cluster from node
         # remove node
@@ -122,31 +128,9 @@ def graph_reval_Chee(graph_, fder,fd):
         # repack pre_graph
         regraph_ += [GQ]
 
-    # re-eval if reval is high 
+    # re-eval if reval is high
     if reval > ave:
-        regraph_ = graph_reval_Chee(regraph_, fder,fd)
-
-    return regraph_
-
-
-def graph_reval_(graph_, reval_, fd):  # recursive eval nodes for regraph, after pruning weakly connected nodes
-
-    regraph_, rreval_ = [],[]
-    aveG = G_aves[fd]
-
-    while graph_:
-        graph,val = graph_.pop()
-        reval = reval_.pop()  # each link *= other_G.aggH.valt
-        if val > aveG:  # else graph is not re-inserted
-            if reval < aveG:  # same graph, skip re-evaluation:
-                regraph_+=[[graph,val]]; rreval_+=[0]
-            else:
-                regraph, reval = graph_reval([graph,val], fd)  # recursive depth-first node and link revaluation
-                if regraph[1] > aveG:
-                    regraph_ += [regraph]; rreval_+=[reval]
-    if rreval_:
-        if max([reval for reval in rreval_]) > aveG:
-            regraph_ = graph_reval_(regraph_, rreval_, fd)  # graph reval while min val reduction
+        regraph_ = graph_reval_(regraph_, fder,fd)
 
     return regraph_
 
@@ -248,7 +232,7 @@ def comp_G(_G, G, distance, A):
         _G.link_H[-1] += [derG]; G.link_H[-1] += [derG]  # bilateral add links
 
 
-def sum2graph_(graph_, fd):  # sum node and link params into graph, aggH in agg+ or player in sub+
+def sum2graph_(graph_, fder, fd):  # sum node and link params into graph, aggH in agg+ or player in sub+
 
     Graph_ = []
     for graph in graph_:  # seq Gs
