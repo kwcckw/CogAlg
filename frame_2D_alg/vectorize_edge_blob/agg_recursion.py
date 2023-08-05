@@ -60,6 +60,26 @@ def agg_recursion(root, node_):  # compositional recursion in root.PP_
             node_tt[fder][fd] = graph_
     node_[:] = node_tt  # replace local element of root.node_T
 
+
+def add_nodes(node, GQt, link_, fder, fd):
+    
+    for link in link_:
+        val = link.valt[fd]
+        if val > G_aves[fd]:
+            GQt[1] += val  # in-graph links val per node
+            _node = link.G1 if link.G0 is node else link.G0
+            if _node not in GQt[0][0]:
+                _GQt = _node.root_T[fder][fd][0]   # [_GQ,_Val]
+                # cross-assign nodes, pri_roots, accum val:
+                if _GQt[0][1][0]:  # base fork pri_root is empty, and we can't use set with empty list 
+                    unique_pri_roots = list(set(_GQt[0][1] + GQt[0][1]))
+                else:
+                    unique_pri_roots = [[]] 
+                _GQt[0][1][:] = unique_pri_roots
+                GQt[0][1] = unique_pri_roots
+                link_ = _node.link_H[-(1+fder)]
+                add_nodes(_node, GQt, link_, fder, fd)  # add indirect nodes and their roots recursively
+
 # draft:
 def form_graph_(node_, pri_root_T_, fder, fd):  # form fuzzy graphs of nodes per fder,fd, initially fully overlapping
 
@@ -70,23 +90,9 @@ def form_graph_(node_, pri_root_T_, fder, fd):  # form fuzzy graphs of nodes per
         graph_ += [GQ]
     for node in node_:
         GQt = node.root_T[fder][fd][0]  # [GQ,Val]
-        for link in node.link_H[-(1+fder)]:
-            val = link.valt[fd]
-            if val > G_aves[fd]:
-                GQt[1] += val  # in-graph links val per node
-                _node = link.G1 if link.G0 is node else link.G0
-                _GQt = _node.root_T[fder][fd][0]   # [_GQ,_Val]
-                # cross-assign nodes, pri_roots, accum val:
-                unique_pri_roots = set(_GQt[0][1] + GQt[0][1])
-                _GQt[0][1][:] = unique_pri_roots
-                GQt[0][1] = unique_pri_roots
-                for __node in _GQt[0][0]:
-                    if __node not in GQt[0][0]:
-                        GQt[0][0] += [__node]; GQt[0][2] += __node.root_T[fder][fd][0][1]  # draft sum __node in-graph val, incorrect
-                        _GQt[0][0] += [node]; _GQt[0][2] += node.root_T[fder][fd][0][1]
-                # bilateral accum:
-                GQt[0][2] += val; _node.root_T[fder][fd] += [GQt]
-                _GQt[0][2] += val; node.root_T[fder][fd] += [_GQt]
+        link_ = node.link_H[-(1+fder)]
+        add_nodes(node, GQt, link_, fder, fd)
+
     # keep adding indirectly connected nodes?
     # prune by rdn:
     regraph_ = graph_reval_(graph_, fder,fd)  # init reval_ to start
