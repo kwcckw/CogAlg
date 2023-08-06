@@ -64,14 +64,14 @@ def agg_recursion(root, node_):  # compositional recursion in root.PP_
 def form_graph_(node_, pri_root_T_, fder, fd):  # form fuzzy graphs of nodes per fder,fd, initially fully overlapping
 
     graph_ = []
-    nodet_ = []
     for node, pri_root_T in zip(node_, pri_root_T_):
-        nodet = [node, pri_root_T, 0]
-        nodet_ += [nodet]
-        graph = [[nodet], [pri_root_T], 0]  # init graph per node?
+        # the usage of nodet looks redundant to me, we can retrieve pri_root_t via node.root_T[fder][fd] too
+        # we can use an additional checked_node_ to check for checked node since we didn't pop nodet now
+        graph = [[node], [pri_root_T], 0]  # init graph per node?
         node.root_T[fder][fd] = [[graph, 0]]  # init with 1st root, node-specific val
-    for nodet, graph in zip(nodet_, graph_):
-        graph_ += [init_graph(nodet, nodet_, graph, fder, fd)]  # recursive depth-first GQ_+=[_nodet]
+        graph_ += [graph]
+    for node, graph in zip(node_, graph_):
+        init_graph(node, [node],  graph, fder, fd)  # recursive depth-first GQ_+=[_nodet]
     # prune by rdn:
     regraph_ = graph_reval_(graph_, fder,fd)  # init reval_ to start
     if regraph_:
@@ -80,23 +80,27 @@ def form_graph_(node_, pri_root_T_, fder, fd):  # form fuzzy graphs of nodes per
     # add_alt_graph_(graph_t)  # overlap+contour, cluster by common lender (cis graph), combined comp?
     return graph_
 
-def init_graph(nodet, nodet_, graph, fder, fd):  # recursive depth-first GQ_+=[_nodet]
+def init_graph(node, checked_node_, graph, fder, fd):  # recursive depth-first GQ_+=[_nodet]
 
-    node, pri_root_T, val = nodet
-
+    graph, val = node.root_T[fder][fd][0]
+    pri_root_T = graph[1][0]
     for link in node.link_H[-(1+fder)]:
         if link.valt[fd] > G_aves[fd]:
             # link is in node GQ
-            _nodet = link.G1 if link.G0 is nodet else link.G0
-            if _nodet in nodet_:  # not removed in prior loop
-                _node,_pri_root_T,_val = _nodet
+            _node = link.G1 if link.G0 is node else link.G0
+            _graph, _val = _node.root_T[fder][fd][0]
+            _pri_root_T = _graph[1][0]
+            if _node not in checked_node_:  # not checked in prior loop
                 graph[0] += [_node]
                 graph[2] += _val
+                _graph[2] += val  # bilateral assignment ?
                 if _pri_root_T not in graph[1]:
                     graph[1] += [_pri_root_T]
-                nodet_.remove(_nodet)
-                init_graph(_nodet, nodet_, graph, fder, fd)
-    return graph
+                if pri_root_T not in _graph[1]:  # bilateral assignment here?
+                    _graph[1] += [pri_root_T]                    
+                checked_node_ += [_node]
+                init_graph(_node, checked_node_, graph, fder, fd)
+
 '''
 Nodes in GQ form sub-GQs, initially fully overlapping: same root for all nodes.
 But they have different direct and mediated (link,val)s, so their sub-GQs are pruned to different shapes.
@@ -117,13 +121,13 @@ while dMatch per cluster > ave:
 def graph_reval_(graph_, fder,fd):
 
     regraph_ = []
-    reval = 0
-    for GQ in graph_:
-        for node in GQ[0]:  # sort node root_(local) by root val (ascending)
+    reval, error  = 0, 0
+    for graph in graph_:
+        for node in graph[0]:  # sort node root_(local) by root val (ascending)
             node.root_T[fder][fd] = sorted(node.root_T[fder][fd], key=lambda root:root[0][2], reverse=False)  # index 2 is links val
     while graph_:
-        GQ = graph_.pop()  # pre_graph or cluster
-        node_, root_, val = GQ
+        graph = graph_.pop()  # pre_graph or cluster
+        node_, root_, val = graph
         remove_ = []  # sum rdn (overlap) per node root_T, remove if val < ave * rdn:
         for node in node_:
             rdn = 1 + len(node.root_T)
@@ -131,21 +135,27 @@ def graph_reval_(graph_, fder,fd):
             # replace with node.root_T[i][1] < G_aves[fd] * i:
             # val graph links per node, graph is node.root_T[i], i=rdn: index in fork root_ sorted by val
                 remove_ += [node]       # to remove node from cluster
-                for i, GQt in enumerate(node.root_T[fder][fd]):  # each root is [GQ, Val]
-                    if GQ is GQt[0]:
+                for i, grapht in enumerate(node.root_T[fder][fd]):  # each root is [graph, Val]
+                    if graph is grapht[0]:
                         node.root_T[fder][fd].pop(i)  # remove root cluster from node
                         break
         # remove node
         while remove_:
             remove_node = remove_.pop()
             node_.remove(remove_node)       # remove node
-            GQ[2] -= remove_node.valt[fd]   # reduce val
+            graph[2] -= remove_node.valt[fd]   # reduce val
             reval += remove_node.valt[fd]
+            
+        for node in node_:
+            sum_root_val = sum([root[1] for root in node.root_T[fder][fd]])
+            max_root_val = max([root[1] for root in node.root_T[fder][fd]])
+            error += sum_root_val/ max_root_val
+
         # repack pre_graph
-        regraph_ += [GQ]
+        regraph_ += [graph]
 
     # re-eval if reval is high
-    if reval > ave:
+    if reval > ave and error > 0.5:  # 0.5 can be a new ave here
         regraph_ = graph_reval_(regraph_, fder,fd)
 
     return regraph_
