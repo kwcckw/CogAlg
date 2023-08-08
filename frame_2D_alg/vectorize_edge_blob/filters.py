@@ -39,5 +39,5 @@ ave_overlap = 10
 ave_distance = 3
 med_decay = .5  # decay of induction per med layer
 PP_vars = ["I", "M", "Ma", "angle", "aangle", "G", "Ga", "L"]
-aves = [ave_dI, ave_G, ave_M, ave_dangle, ave_L, ave_mval, ave_dval]
+aves = [ave_G, ave_M, ave_dangle, ave_L, ave_mval, ave_dval]
 ave_rotate = 10

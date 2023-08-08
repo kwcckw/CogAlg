@@ -102,20 +102,49 @@ def form_mediation_layers(layer, layers, near_nodes, fder):  # layers are initia
     layers += [out_layer]
 
     if mediated_val > ave:
-        form_mediation_layers(out_layer, layers, near_nodes, fder)
+        form_mediation_layers(out_layer, layers, [], fder)  # near_nodes should be reset every layer?
 
 # partial draft:
 def suppress_overlap(layers, fder):  # adjust link vals by stronger overlap per node across layers:
 
-    for layer in layers:  # loop top-down, also accumulate rdn per node from higher layers?
-        for (node, links, _nodes, val) in layer:
+    overlap = 0
+    for i, _layer in enumerate(layers):  # loop top-down, also accumulate rdn per node from higher layers?
+        for (_node, _links, __nodes, _val) in _layer:   
+            # current layer
             # sort all node-mediated links by link_val * med_coef:
-            link_ = sorted(links, key=lambda link: link.valt[fder], reverse=False)
-            rdn = 0
-            for link in link_:
-                val = link.valt[fder]
-                rdn += val  # sum equal+higher link_val*med_coef links in all mediation layers per node
-                val = val * (val / rdn)  # adjust by stronger overlap
+            _link_ = sorted(_links, key=lambda link: link.valt[fder], reverse=False)
+            _rdn = 0  # rdn per node
+            for _link in _link_:
+                _rdn += _link.valt[fder]  # sum equal+higher link_val*med_coef links in all mediation layers per node
+            
+            # next layer
+            rdn = 0  # rdn per node
+            for layer in layers:
+                for (node, links, _nodes, val) in layer:
+                    if node is _node:  # get same node is next layer
+                        link_ = sorted(links, key=lambda link: link.valt[fder], reverse=False)
+                        for link in link_:
+                            rdn += link.valt[fder]  # sum equal+higher link_val*med_coef links in all mediation layers per node
+
+            # adjust current layer link's val based on current and next layer rdn
+            for _link in _link_:
+                # below are tentative, adjust link val based on next layer rdn
+                drdn = _rdn - rdn
+                if drdn > 0:  # next layer has higher overlap
+                    ratio = _rdn/rdn  # ratio should be > 1 
+                elif drdn < 0:  # next layer has lower overlap
+                    ratio = _rdn/rdn  # ratio should be < 1
+                else:
+                    ratio = 1
+                _link.valt[fder] *= ratio  # adjust by ratio of difference in rdn
+            
+            # temporary, not sure
+            overlap = _rdn + rdn
+
+    # stopping criteria, temporary
+    while overlap > ave:
+        suppress_overlap(layers, fder)
+        
 
 
 def segment_network(layers, pri_root_T_, fder, fd):
