@@ -79,7 +79,7 @@ def form_graph_(node_, pri_root_T_, fder, fd):  # form fuzzy graphs of nodes per
     # adjust link vals by stronger overlap per node across layers:
     suppress_overlap(layers, fder)
     # segment sparse layers to graphs, as in init_graphs:
-    graphs = segment_network(layers, pri_root_T_, fder, fd)
+    graphs = segment_network(layers, node_, pri_root_T_, fder, fd)
 
     return graphs
 
@@ -116,8 +116,18 @@ def suppress_overlap(layers, fder):  # adjust link vals by stronger overlap per 
             links = sorted(links, key=lambda link: link.valt[fder], reverse=False)
             for link in links:
                 val = link.valt[fder]
-                link.rdnt[fder] += val  # rnd = equal+higher link_val*med_coef links in all mediation layers per node
-                overlap += val  # full overlap: linked nodes represent all others when segmented in graphs
+                link.rdnt[fder] += val  # rdn = equal+higher link_val*med_coef links in all mediation layers per node
+                # include direct link rdn here?
+                overlap += link.rdnt[fder]  # full overlap: linked nodes represent all others when segmented in graphs
+                
+                _node = link.G1 if link.G0 is node else link.G0 
+                for (__node, _links, __nodes, _node_val) in layer:  # get mediated links from _node
+                    if __node is _node: break
+                _val = 0
+                for _link in _links:
+                    _val += _link.valt[fder]
+                med_coef = _val/ (val+_val)  # not sure, but this should be the ratio of mediated vals in (val+ mediated vals)
+                link.valt[fder] += _val * med_coef
                 # add:
                 # direct link_val += vals * med_coef: med link nodes won't be in graph if direct links are pruned,
                 # and direct links rdn should be re-evaluated in recursive suppress_overlap?
@@ -125,10 +135,41 @@ def suppress_overlap(layers, fder):  # adjust link vals by stronger overlap per 
         suppress_overlap(layers, fder)
 
 
-def segment_network(layers, pri_root_T_, fder, fd):
+def segment_network(layers, node_, pri_root_T_, fder, fd):
+
+    graph_ = []
+    for layer in layers:  # loop top-down, accumulate rdn per link from higher layers?
+        for (node, links, _nodes, node_val) in layer:
+            if not node.root_T[fder][fd]:  # not forming graph in prior loops    
+                graph = [[node], [pri_root_T_[node_.index(node)]], node_val]
+                node.root_T[fder][fd] = graph
+                graph_ += [graph] 
+                
+                # search links recursively
+                nodes = [node];links_ = [links]
+                while links_:      
+                    node = nodes.pop()  # unpack node per links
+                    links = links_.pop()
+                    
+                    for link in links:
+                        _node = link.G1 if link.G0 is node else link.G0
+                        if not _node.root_T[fder][fd] and link.valt[fder] > ave * link.rdnt[fder]:  # if _node has root, merge them?                
+                            # get _node's links
+                            for (__node, _links, __nodes, _node_val) in layer:
+                                if __node is _node: break
+                            
+                            # pack _node into graph
+                            graph[0] += [_node]
+                            graph[1] += [pri_root_T_[node_.index(_node)]]
+                            graph[2] += _node_val
+                            _node.root_T[fder][fd] = graph
+                             
+                            # pack new links and _node
+                            links_ += [_links]
+                            nodes += [_node]
 
     # evaluate links by val > ave*rdn, for fuzzy segmentation, no change in link vals
-    pass
+    return graph_
 
 # not updated, ~segment_network:
 def form_graph_direct(node_, pri_root_T_, fder, fd):  # form fuzzy graphs of nodes per fder,fd, initially fully overlapping
