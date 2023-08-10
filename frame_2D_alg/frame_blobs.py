@@ -50,9 +50,7 @@ EXCLUDED = -2
 
 Tdert = namedtuple('Tdert', 'dy, dx, g') # 'T' for tuple
 Tbox = namedtuple('Tbox', 'n, w, s, e')  # 'T' for tuple
-#Tbox.slice = lambda b: (Ellipsis, slice(b.n,b.b.s), slice(b.w,b.e))  
-# getting error with the code above
-Tbox.slice = lambda b: (slice(b.n, b.s), slice(b.w, b.e))  # box to array slice conversion
+Tbox.slice = lambda b: (Ellipsis, slice(b.n,b.s), slice(b.w,b.e))  # box to array slice conversion
 Tbox.accumulate = lambda b,y,x: Tbox(min(b.n,y),min(b.w,x),max(b.s,y+1),max(b.e,x+1))  # box coordinate accumulation
 Tbox.expand = lambda b,r,Y,X: Tbox(max(0,b.n-r),max(0,b.w-r),min(Y,b.s+r),min(X,b.e+r))  # box expansion by margin r
 Tbox.shrink = lambda b,r: Tbox(b.n+r,b.w+r,b.s-r,b.e-r)  # box shrink by margin r
@@ -156,7 +154,7 @@ def flood_fill(root_blob, fork_data, verbose=False):
     # unpack and derive required fork data
     fork, fork_ibox, der__t, sign__, mask__ = fork_data
     height, width = der__t.g.shape  # der__t is consistent in shape
-    fork_i__ = root_blob.i__[fork_ibox.slice()]
+    fork_i__ = blob.i__[fork_ibox.slice()]
     assert height, width == fork_i__.shape  # fork_i__ is consistent in shape with der__t
 
     idmap = np.full((height, width), UNFILLED, 'int32')  # blob's id per dert, initialized UNFILLED
@@ -212,9 +210,10 @@ def flood_fill(root_blob, fork_data, verbose=False):
                         elif blob.sign != sign__[y2, x2]:
                             adj_pairs.add((idmap[y2, x2], blob.id))  # blob.id always increases
                 # terminate blob
-                blob.ibox = fork_ibox.sub_box2box(blob.box) 
-                blob.der__t = Tdert(*[der__[blob.ibox.slice()] for der__ in der__t])
-                blob.mask__ =  idmap[blob.ibox.slice()] != blob.id
+                blob.ibox = fork_ibox.sub_box2box(blob.box)
+                blob.der__t = Tdert(
+                    *(par__[y0:yn, x0:xn] for par__ in der__t))
+                blob.mask__ = (idmap[y0:yn, x0:xn] != blob.id)
                 blob.adj_blobs = [[],[]] # iblob.adj_blobs[0] = adj blobs, blob.adj_blobs[1] = poses
                 blob.G = np.hypot(blob.Dy, blob.Dx)
                 if verbose:
