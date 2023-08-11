@@ -88,18 +88,20 @@ def form_mediation_layers(layer, layers, fder):  # layers are initialized with s
     out_layer = []  # new layer
     out_val = 0  # new layer val
 
-    for (node, _links, Nodes, node_val) in layer:  # higher layers have incrementally mediated links
-        links = []; _Nodes = []  # init separately to append at the end
-        for _node in Nodes:
+    for (node, _Val, _links, _nodes, Nodes) in layer:  # higher layers have incrementally mediated links
+        links, nodes = [], []
+        Val = 0
+        for _node in _nodes:
             for link in _node.link_H[-(1+fder)]:  # mediated links
                 __node = link.G1 if link.G0 is _node else link.G0
-                if __node not in Nodes + _Nodes and __node is not node:
-                    _Nodes += [__node]  # add from all lower layers: more direct for next layer
+                if __node not in Nodes:  # in all lower layers
+                    nodes += [__node]  # current layer: more direct for the next layer
                     links += [link]  # to adjust val in suppress_overlap
-                    out_val += link.valt[fder]  # to form next layer, no sort,rdn+ yet
-                    # more direct links val,rdn += val * med_coef via backprop?
-        _links += links  # overlap includes indirect links, also in potential node graph ( with this merging, a deeper layer should have more mediated links)
-        out_layer += [[node, _links, Nodes+_Nodes, node_val]]  # add links of current mediation order
+                    Val += link.valt[fder]  # node_val
+
+        _links += links  # overlap includes indirect links, also in potential node graph
+        out_layer += [[node, Val, links, nodes, Nodes+nodes]]  # current mediation order
+        out_val += Val
 
     layers += [out_layer]
     if out_val > ave:
@@ -108,43 +110,26 @@ def form_mediation_layers(layer, layers, fder):  # layers are initialized with s
 # draft:
 def suppress_overlap(layers, fder):  # adjust link vals by stronger overlap per node across layers:
 
-    overlap = 0
+    Rdn = 0  # overlap: each positively linked node represents all others when segmented in graphs
 
-    for i, layer in enumerate(layers):
-        # loop bottom-up, accumulate rdn per link from higher layers?
-        for j, (node, links, Nodes, node_val) in enumerate(layer):
-            # sort all node-mediated links by link_val * med_coef:
+    for i, layer in enumerate(layers):  # loop bottom-up, accum rdn per link from higher layers?
+        for j, (node, Val, links, nodes, Nodes) in enumerate(layer):
+            # sort same-layer links to assign rdn:
             links = sorted(links, key=lambda link: link.valt[fder], reverse=False)
-            Val = 0
+            # or sort and rdn+ all lower-layer links by backprop: checked before but still add to rdn?
             for link in links:
-                val = link.valt[fder]
-                link.rdnt[fder] += val  # rdn = current+higher link_val*med_coef links in all mediation layers per node
-                overlap += val  # full overlap: linked nodes represent all others when segmented in graphs
-                Val += val  # per node, not sure
-
-            val = (Val / max(1, len(links))) * med_decay  # use max prevent empty links
-            n = i + 1
-            while n < len(layers):  # backprop to deepeest layer recursively
-                # for link in all mediating Links: val,rnd += val*med_decay, replace the below with backprop?
-                # tentative:
-                # next layer
-                _node, _links, _Nodes, _node_val = layers[n][j]  # get mediating links from same node in lower layer
-                _Val = 0
+                val = link.valt[fder] + link.Valt[fder]  # to prune links, not nodes, in segment_network
+                link.Rdnt[fder] += val  # graph overlap: current+higher val links per node, all layers?
+                Rdn += val  # stronger overlap within layer
+            # backprop to direct Links:
+            val = (Val / len(links)) * med_decay * i  # simplified redundancy and reinforcement by higher layer?
+            for _layer in reversed(layers[i-1:]):  # loop down from current layer
+                _node, _Val, _links, _nodes, _Nodes = _layer[j]  # more direct links of same node in lower layer
                 for _link in _links:
-                    _val = _link.valt[fder]
-                    if _val < val: _link.rdnt[fder] += val 
-                    if _link in links:  # if link in both current and prior layer, it is a more direct link, so we should decrease their rdn?
-                        pass
-                    # we may need separate combined valt here instead:
-                    _link.valt[fder] += _val  # else med link nodes won't be in graph if direct links are pruned?
-                     overlap += _val
-                    _Val += _val      
-                # for next layer
-                val = (_Val / max(1, len(_links))) * med_decay
-                links = _links
-                n += 1
-
-    while overlap > ave:
+                    _link.Valt[fder] += val  # direct links reinforced by ave mediated links val: higher layer, not sure
+                    if _link.valt[fder] < val:
+                        _link.Rdnt[fder] += val  # average higher-layer val is rdn if greater?
+    while Rdn > ave:
         suppress_overlap(layers, fder)
 
 # not revised:
