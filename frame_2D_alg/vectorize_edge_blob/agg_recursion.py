@@ -71,7 +71,7 @@ def form_graph_(node_, pri_root_T_, fder, fd):  # form fuzzy graphs of nodes per
             _node = link.G1 if link.G0 is node else link.G0
             links += [link]; _nodes += [_node]
             val += link.valt[fder]
-        layer += [[node, links, _nodes, val]]
+        layer += [[node, val, links, _nodes, [node] + _nodes]]
     # init hierarchical network:
     layers = [layer]
     # form layers of same nodes with incrementally mediated links:
@@ -122,8 +122,10 @@ def suppress_overlap(layers, fder):  # adjust link vals by stronger overlap per 
                 link.Rdnt[fder] += val  # graph overlap: current+higher val links per node, all layers?
                 Rdn += val  # stronger overlap within layer
             # backprop to direct Links:
+            # i checked and links may empty because we may not add any links in comp_G
             val = (Val / len(links)) * med_decay * i  # simplified redundancy and reinforcement by higher layer?
-            for _layer in reversed(layers[i-1:]):  # loop down from current layer
+            #  i checked again and if we need to loop backwards from prior layer, we need to use reversed(layers[:i]), then i is not needed now
+            for _layer in reversed(layers[:i]):  # loop down from current layer
                 _node, _Val, _links, _nodes, _Nodes = _layer[j]  # more direct links of same node in lower layer
                 for _link in _links:
                     _link.Valt[fder] += val  # direct links reinforced by ave mediated links val: higher layer, not sure
@@ -137,9 +139,9 @@ def segment_network(layers, node_, pri_root_T_, fder, fd):
 
     graph_ = []
     for layer in layers:  # loop top-down, accumulate rdn per link from higher layers?
-        for (node, links, _nodes, node_val) in layer:
+        for i, (node, Val, links, _nodes, Nodes) in enumerate(layer):
             if not node.root_T[fder][fd]:  # not forming graph in prior loops
-                graph = [[node], [pri_root_T_[node_.index(node)]], node_val]
+                graph = [[node], [pri_root_T_[node_.index(node)]], Val]
                 node.root_T[fder][fd] = graph
                 graph_ += [graph]
 
@@ -151,20 +153,32 @@ def segment_network(layers, node_, pri_root_T_, fder, fd):
 
                     for link in links:
                         _node = link.G1 if link.G0 is node else link.G0
-                        if not _node.root_T[fder][fd] and link.valt[fder] > ave * link.rdnt[fder]:  # if _node has root, merge them?
-                            # get _node's links
-                            for (__node, _links, __nodes, _node_val) in layer:
-                                if __node is _node: break
-
-                            # pack _node into graph
-                            graph[0] += [_node]
-                            graph[1] += [pri_root_T_[node_.index(_node)]]
-                            graph[2] += _node_val
-                            _node.root_T[fder][fd] = graph
-
-                            # pack new links and _node
-                            links_ += [_links]
-                            nodes += [_node]
+                        if _node not in graph[0] and link.Valt[fder] > ave * link.Rdnt[fder]:
+                            if _node.root_T[fder][fd]:   # if _node has root, merge them?
+                                [__node_, _pri_root_T_, _Val] = _node.root_T[fder][fd]    
+                                for __node in __node_:
+                                    if __node not in graph[0]:
+                                        for (___node, _Val, _links, __nodes, _Nodes) in layer:  # find _node in a same layer
+                                            if ___node is __node: break  
+                                        graph[0] += [__node]
+                                        graph[1] += [pri_root_T_[node_.index(__node)]]
+                                        graph[2] += _Val
+                                        links_ += [_links]
+                                        nodes += [_node]               
+                            else:
+                        
+                                for (__node, _Val, _links, __nodes, _Nodes) in layer:  # find _node in a same layer
+                                    if __node is _node: break
+    
+                                # pack _node into graph
+                                graph[0] += [_node]
+                                graph[1] += [pri_root_T_[node_.index(_node)]]
+                                graph[2] += _Val
+                                _node.root_T[fder][fd] = graph
+    
+                                # pack new links and _node
+                                links_ += [_links]
+                                nodes += [_node]
 
     # evaluate links by val > ave*rdn, for fuzzy segmentation, no change in link vals
     return graph_
