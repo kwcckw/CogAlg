@@ -112,6 +112,8 @@ class Cgraph(ClusterStructure):  # params of single-fork node_ cluster per pplay
     aggH : list = z([])  # [[subH_t, valt, rdnt]], subH: [[derH_t, valt, rdnt]]; cross-fork composition layers
     valt : list = z([0,0])
     rdnt : list = z([1,1])
+    valH : list = z([[0,0]])
+    rdnH : list = z([[1,1]])
     node_T : list = z([])  # nest by agg+/ node_->node_tt: rng+ Gm_,Gd_, der+ Gm_,Gd_, incr if wH: down-forking tree of node Levs
     root_T : list = z([])  # up reciprocal to down node_T; agg+| sub+ mset forks, incr.nest if uH: up-forking tree of root Levs?
     L : int = 0 # len base node_; from internal links:
