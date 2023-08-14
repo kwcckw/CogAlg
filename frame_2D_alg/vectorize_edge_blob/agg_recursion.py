@@ -81,7 +81,6 @@ def form_graph_(node_, pri_root_T_, fder, fd):  # form fuzzy graphs of nodes per
         layers = [layer]
         # form layers of same nodes with incrementally mediated links:
         form_mediation_layers(layer, layers, fder=fder)
-
         # segment suppressed-overlap layers to graphs:
         return segment_network(layers, node_, pri_root_T_, fder, fd)
     else:
@@ -104,13 +103,11 @@ def form_mediation_layers(layer, layers, fder):  # layers are initialized with s
         # add fork val of link layer:
         node.val_Ht[fder] += [Val]
         out_layer += [[node, links, nodes, Nodes+nodes]]  # current link mediation order
-        out_val += Val  # no permanent val per layer?
-
+        out_val += Val
+        # no permanent val per layer?
     layers += [out_layer]
-    
-    # adjust node val and rdn by stronger overlap per node across layers:
-    suppress_overlap(layers, fder)  
-    
+    suppress_overlap(layers, fder)  # adjust node val and rdn by stronger overlap per node across layers
+
     if out_val > ave:
         form_mediation_layers(out_layer, layers, fder)
 
@@ -132,8 +129,6 @@ def suppress_overlap(layers, fder):  # adjust node vals by overlap, to combine w
                         val = sum(_node.val_Ht[fder])  # to scale links for pruning in segment_network
                         node.Rdn_Ht[fder] += [val]  # graph overlap: current+higher val links per node, all layers?
                         Rdn += val  # stronger overlap within layer
-
-                # with each layered val_Ht and rdn_Ht, below is not needed?
                 '''
                 # not updated:
                 # backprop to more direct links per node:
@@ -156,7 +151,7 @@ def segment_network(layers, node_, pri_root_T_, fder, fd):
     # link val,rnd are combined with G0+G1 valH, rdnH for evaluation
     graph_ = []
     for layer in layers:  # loop top-down, accumulate rdn per link from higher layers?
-        
+
         max_nodes = []
         for i, (node, links, nodes, Nodes) in enumerate(layer):
             # get local max and max node based on rdn and val
@@ -167,7 +162,7 @@ def segment_network(layers, node_, pri_root_T_, fder, fd):
         for node in max_nodes:
             for (_node, links, nodes, Nodes) in layer:  # get max nodes' linksn nodes and etc
                 if _node is node: break
-            
+
             # below is not updated
             if not node.root_T[fder][fd]:  # not forming graph in prior loops
                 graph = [[node], [pri_root_T_[node_.index(node)]], Val]
