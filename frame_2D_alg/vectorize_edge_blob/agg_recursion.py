@@ -32,41 +32,67 @@ There are concepts that include same matching vars: size, density, color, stabil
 Weak value vars are combined into higher var, so derivation fork can be selected on different levels of param composition.
 '''
 
-def agg_recursion(root, node_):  # compositional recursion in root.PP_
+def agg_recursion(root, layers):  # compositional recursion in root.PP_
 
     for i in 0,1: root.rdnt[i] += 1  # estimate, no node.rdnt[fder] += 1?
 
     node_tt = [[[],[]],[[],[]]]  # fill with 4 clustering forks
     pri_root_T_ = []
-    for node in node_:
+    _node_, _link_t_ = layers[-1]  # _link_t_ on base fork will be empty, unless we add them before agg_recursion
+    for node in _node_:
         pri_root_T_ += [node.root_T]  # save root_T for new graphs, different per node
         node.root_T = [[[],[]],[[],[]]]  # replace node.root_T, then append [root,val] in each fork
 
+    link_t_ = [[[],[]] for _ in _node_]  # init new layer of link_t_
     for fder in 0,1:  # comp forks, each adds a layer of links
-        if fder and len(node_[0].link_H) < 2:  # 1st call, no der+ yet
+        if fder and len(_node_[0].link_H) < 2:  # 1st call, no der+ yet
             continue
-        comp_G_(node_, pri_G_=None, f1Q=1, fder=fder)  # cross-comp all Gs in (rng,der), nD array? form link_H per G
+        comp_G_(_node_, link_t_, pri_G_=None, f1Q=1, fder=fder)  # cross-comp all Gs in (rng,der), nD array? form link_H per G
 
         for fd in 0,1: # clustering forks, each adds graph_: new node_ in node_tt:
-            graph_ = form_graph_(node_, pri_root_T_, fder, fd)  # clustering via link_H[-1], select by fder
+            # skip 1st layer with empty links
+            graph_ = form_graph_(layers[1:], pri_root_T_, fder, fd)  # clustering via link_H[-1], select by fder
             # sub+, eval last layer?:
             if root.valt[fd] > ave_sub * root.rdnt[fd] and graph_:  # fixed costs and non empty graph_, same per fork
                 sub_recursion_eval(root, graph_)
             # agg+, eval all layers?:
-            if sum(root.valt) > G_aves[fd] * ave_agg * sum(root.rdnt) and len(graph_) > ave_nsubt[fd]:
-                agg_recursion(root, node_) # replace root.node_ with new graphs
+            # 1st layer links are empty, so no evaluation is needed
+            if len(layers)==1 or sum(root.valt) > G_aves[fd] * ave_agg * sum(root.rdnt) and len(graph_) > ave_nsubt[fd]:
+                new_layer = [copy(_node_), link_t_]
+                agg_recursion(root, layers+[new_layer]) # replace root.node_ with new graphs
             elif root.root:  # if deeper agg+
                 feedback(root, fd)  # update root.root..H, breadth-first
 
             node_tt[fder][fd] = graph_
-    node_[:] = node_tt  # replace local element of root.node_T
+    _node_[:] = node_tt  # replace local element of root.node_T
 
 
-def form_graph_(node_, pri_root_T_, fder, fd):  # form fuzzy graphs of nodes per fder,fd, initially distributed across layers
+def form_graph_(layers, pri_root_T_, fder, fd):  # form fuzzy graphs of nodes per fder,fd, initially distributed across layers
 
+    # very tentative draft
+    Val = 0  # of new links
+    for node_, link_t_ in layers:
+        Val = 0
+        for node, links in zip(node_, link_t_[fder]):
+            val = 0
+            for link in links:
+                val += link.valt[fder] 
+            # add fork val of direct (1st layer) links:
+            node.val_Ht[fder] += [val]
+            Val += val
+                
+    if Val > ave:  # init hierarchical network:
+        # form layers of same nodes with incrementally mediated links:
+        form_mediation_layers(layers, fder=fder)
+        # segment suppressed-overlap layers to graphs:
+        return segment_network(layers, node_, pri_root_T_, fder, fd)
+    else:
+        return node_
+        
+    '''
     layer = []; Val = 0  # of new links
 
-    for node in copy(node_):  # initial node_-> layer conversion
+    for node in node_:  # initial node_-> layer conversion
         links, _nodes = [],[node]
         val = 0  # sum all lower (link_val * med_coef)s per node, for node eval?
         for link in node.link_H[-(1+fder)]:
@@ -78,6 +104,7 @@ def form_graph_(node_, pri_root_T_, fder, fd):  # form fuzzy graphs of nodes per
         layer += [[node, links, _nodes, copy(_nodes)]]
         Val += val
     if Val > ave:  # init hierarchical network:
+    
         layers = [layer]
         # form layers of same nodes with incrementally mediated links:
         form_mediation_layers(layer, layers, fder=fder)
@@ -85,6 +112,7 @@ def form_graph_(node_, pri_root_T_, fder, fd):  # form fuzzy graphs of nodes per
         return segment_network(layers, node_, pri_root_T_, fder, fd)
     else:
         return node_
+    '''
 
 def form_mediation_layers(layer, layers, fder):  # layers are initialized with same nodes and incrementally mediated links
 
@@ -127,7 +155,7 @@ def suppress_overlap(layers, fder):  # adjust node vals by overlap, to combine w
                 for _node in nodes:
                     if _node is not node:
                         val = sum(_node.val_Ht[fder])  # to scale links for pruning in segment_network
-                        node.Rdn_Ht[fder] += [val]  # graph overlap: current+higher val links per node, all layers?
+                        node.rdn_Ht[fder] += [val]  # graph overlap: current+higher val links per node, all layers?
                         Rdn += val  # stronger overlap within layer
                 '''
                 # not updated:
@@ -317,9 +345,9 @@ Clusters of different forks / param sets may overlap, else no use of redundant i
 No centroid clustering, but cluster may have core subset.
 '''
 
-def comp_G_(G_, pri_G_=None, f1Q=1, fder=0):  # cross-comp in G_ if f1Q, else comp between G_ and pri_G_, if comp_node_?
+def comp_G_(G_, link_t_, pri_G_=None, f1Q=1, fder=0):  # cross-comp in G_ if f1Q, else comp between G_ and pri_G_, if comp_node_?
 
-    for G in G_:  # node_
+    for G, link_t in zip(G_, link_t_), :  # node_
         if fder:  # follow prior link_ layer
             _G_ = []
             for link in G.link_H[-2]:
@@ -337,13 +365,13 @@ def comp_G_(G_, pri_G_=None, f1Q=1, fder=0):  # cross-comp in G_ if f1Q, else co
                 for _cG, cG in ((_G, G), (_G.alt_Graph, G.alt_Graph)):
                     if _cG and cG:  # alt Gs maybe empty
                         # form new layer of links:
-                        comp_G(_cG, cG, distance, [dy,dx])
+                        comp_G(_cG, cG, link_t[fder], distance, [dy,dx])
     '''
     combine cis,alt in aggH: alt represents node isolation?
     comp alts,val,rdn? cluster per var set if recurring across root: type eval if root M|D?
     '''
 
-def comp_G(_G, G, distance, A):
+def comp_G(_G, G, link_, distance, A):
 
     Mval,Dval = 0,0
     Mrdn,Drdn = 1,1
@@ -370,7 +398,7 @@ def comp_G(_G, G, distance, A):
 
     derG = CderG(G0=_G, G1=G, subH=SubH, valt=[Mval,Dval], rdnt=[Mrdn,Drdn], S=distance, A=A)
     if valt[0] > ave_Gm or valt[1] > ave_Gd:
-        _G.link_H[-1] += [derG]; G.link_H[-1] += [derG]  # bilateral add links
+        _G.link_H[-1] += [derG]; G.link_H[-1] += [derG]; link_ += [derG]  # bilateral add links
 
 
 def sum2graph_(graph_, fder, fd):  # sum node and link params into graph, aggH in agg+ or player in sub+
