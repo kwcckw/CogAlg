@@ -34,13 +34,15 @@ Weak value vars are combined into higher var, so derivation fork can be selected
 
 def agg_recursion(root, node_):  # compositional recursion in root.PP_
 
-    for i in 0,1: root.rdnt[i] += 1  # estimate, no node.rdnt[fder] += 1?
+    for i in 0,1: root.rdn_Ht[i][0] += 1  # estimate, no node.rdnt[fder] += 1?
 
     node_tt = [[[],[]],[[],[]]]  # fill with 4 clustering forks
     pri_root_T_ = []
     for node in node_:
         pri_root_T_ += [node.root_T]  # save root_T for new graphs, different per node
         node.root_T = [[[],[]],[[],[]]]  # replace node.root_T, then append [root,val] in each fork
+        node.val_Ht[0] += [0]; node.val_Ht[1] += [0]  # new layer of val and rdn, to be accumulated later in comp_G
+        node.rdn_Ht[0] += [0]; node.rdn_Ht[1] += [0]
 
     for fder in 0,1:  # comp forks, each adds a layer of links
         if fder and len(node_[0].link_H) < 2:  # 1st call, no der+ yet
@@ -55,7 +57,7 @@ def agg_recursion(root, node_):  # compositional recursion in root.PP_
                 if sum(root.val_Ht[fder]) > G_aves[fder] * sum(root.rdn_Ht[fder]):  # updated in sub+
                     agg_recursion(root, node_)  # agg+, replace root.node_ with new graphs
                 node_tt[fder][fd] = graph_
-            elif root.root:  # if deeper agg+
+            elif root.root_T:  # if deeper agg+
                 node_tt[fder][fd] = node_
                 feedback(root, fd)  # update root.root..H, breadth-first
 
@@ -76,11 +78,32 @@ def form_graph_(node_, pri_root_T_, fder, fd):  # form fuzzy graphs of nodes per
             Rdn = 0; _node_ = []
             for link in node.link_H[-1]: _node_ += [link.G1 if link.G0 is node else link.G0]
             # sort to assign rdn: soft non-max, by backprop?
-            _node_ = sorted(_node_+[node], key=lambda _node: sum(_node.val_Ht[fder]) - ave * sum(_node.rdn_Ht[fder]), reverse=False)
+            _node_ = sorted(_node_+[node], key=lambda _node: sum(_node.val_Ht[fder]) - ave * sum(_node.rdn_Ht[fder]), reverse=True)
             for _node in _node_:
                 Rdn += sum(_node.val_Ht[fder])  # stronger overlap within links
-                # not correct:
-                nodet_ += [_node, Rdn]
+            # draft: per node
+            nodet_ += [[_node_, Rdn]]
+
+    # recursively update rdn
+    while True:
+        new_nodet_ = []
+        total_Rdn = 0
+        for node_, Rdn in nodet_:  
+            _node_ = []; _Rdn = 0  
+            for node in node_:
+                for link in node.link_H[-1]:
+                    _node =  link.G1 if link.G0 is node else link.G0
+                    if _node not in node_ + _node_:
+                        _Rdn += sum(_node.val_Ht[fder])  # add rdn per overlap
+                        _node_ += [_node]
+            # first node is always local max
+            _node_ = sorted(_node_+node_, key=lambda _node: sum(_node.val_Ht[fder]) - ave * sum(_node.rdn_Ht[fder]), reverse=True)
+            new_nodet_ += [[_node_, Rdn+ _Rdn]]
+            total_Rdn += _Rdn
+        
+        nodet_ = new_nodet_  # update for next recursion
+        if total_Rdn < ave:  # if overlap is small, stop the updating
+            break  # stop updating rdn
 
     segment_network(nodet_, pri_root_T_, fder, fd)
 
@@ -312,7 +335,8 @@ def comp_G(_G, G, distance, A):
     derG = CderG(G0=_G, G1=G, subH=SubH, valt=[Mval,Dval], rdnt=[Mrdn,Drdn], S=distance, A=A)
     if valt[0] > ave_Gm or valt[1] > ave_Gd:
         _G.link_H[-1] += [derG]; G.link_H[-1] += [derG]  # bilateral add links
-
+        _G.val_Ht[0][-1] += Mval; _G.val_Ht[1][-1] += Dval; _G.rdn_Ht[0][-1] += Mrdn; _G.rdn_Ht[1][-1] += Drdn
+        G.val_Ht[0][-1] += Mval;   G.val_Ht[1][-1] += Dval;  G.rdn_Ht[0][-1] += Mrdn;  G.rdn_Ht[1][-1] += Drdn
 
 def sum2graph_(graph_, fder, fd):  # sum node and link params into graph, aggH in agg+ or player in sub+
 
