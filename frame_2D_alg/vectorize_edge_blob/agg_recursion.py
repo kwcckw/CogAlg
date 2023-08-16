@@ -55,7 +55,7 @@ def agg_recursion(root, node_):  # compositional recursion in root.PP_
                 graph_ = form_graph_(node_, pri_root_T_, fder, fd)
                 sub_recursion_eval(root, graph_)  # sub+, eval last layer?
                 if sum(root.val_Ht[fder]) > G_aves[fder] * sum(root.rdn_Ht[fder]):  # updated in sub+
-                    agg_recursion(root, node_)  # agg+, replace root.node_ with new graphs
+                    agg_recursion(root, node_)  # agg+, replace root.node_ with new graphs, if any
                 node_tt[fder][fd] = graph_
             elif root.root_T:  # if deeper agg+
                 node_tt[fder][fd] = node_
@@ -66,41 +66,47 @@ def agg_recursion(root, node_):  # compositional recursion in root.PP_
 # partial redraft:
 def form_graph_(node_, pri_root_T_, fder, fd):  # form fuzzy graphs of nodes per fder,fd, within root
 
-    # rdn: stronger overlap per node for local max selection in linked nodes, all-layers
-    # direct or iterative up to rng for partial overlap:
-    # each node represents all other positively linked nodes when segmented in graphs
-
     ave = G_aves[fder]  # val = (Val / len(links)) * med_decay * i?
-    nodet_ = []
-    # tentative:
+    Rdn_ = [0 for node in node_]  # to accum stronger linked nodes as potential graph overlap
+    '''
+    compute stronger overlap per node for fuzzy max selection in linked nodes, 
+    easier than forming fully overlapping graphs (each node'graph may represent all other positively linked nodes)
+    '''
     for node in node_:
-        if sum(node.val_Ht[fder]) - ave * sum(node.rdn_Ht[fder]):
-            Rdn = 0; _node_ = []
-            for link in node.link_H[-1]: _node_ += [link.G1 if link.G0 is node else link.G0]
-            # sort to assign rdn: soft non-max, by backprop?
-            _node_ = sorted(_node_+[node], key=lambda _node: sum(_node.val_Ht[fder]) - ave * sum(_node.rdn_Ht[fder]), reverse=True)
-            for _node in _node_:
-                Rdn += sum(_node.val_Ht[fder])  # stronger overlap within links
-            # draft: per node
-            nodet_ += [[_node_, Rdn]]
-
-    # recursively update rdn
+        if sum(node.val_Ht[fder]) - ave * sum(node.rdn_Ht[fder]):  # potential graph init
+            layer = []
+            for link in node.link_H[-1]:
+                layer += [[link.G1 if link.G0 is node else link.G0, link]]  # nodet: [node,link]
+            # sort, lower-val node rdn += higher vals:
+            layer = sorted(layer+[[node,1]], key=lambda _nodet:  # effective node rdn is proportional to relative link val:
+                    sum(_nodet[0].val_Ht[fder]) - ave*sum(_nodet[0].rdn_Ht[fder]) * (_nodet[1].valt[fder] / (_nodet[1].val+ave)),
+                    reverse=True)
+            __node = layer[0]  # local max
+            Rdn = sum(__node.val_Ht[fder])
+            for _node in layer[1:]:
+                Rdn_[node_.index(_node)] += Rdn  # stronger vals is potential overlap between node-initialized graphs
+                Rdn += sum(__node.val_Ht[fder])
+                '''
+                or Rdn += val * link.val / (link.val+ave): effective overlap is proportional to connection strength?
+                recursion to adjust for indirectly connected nodes: 
+                sort, then Rdn += stronger (med_Val * med_decay * med_depth): soft fuzzy global maxes?
+                '''
+    # not revised:
     while True:
         new_nodet_ = []
         total_Rdn = 0
-        for node_, Rdn in nodet_:  
-            _node_ = []; _Rdn = 0  
+        for node_, Rdn in nodet_:
+            _node_ = []; _Rdn = 0
             for node in node_:
                 for link in node.link_H[-1]:
                     _node =  link.G1 if link.G0 is node else link.G0
                     if _node not in node_ + _node_:
                         _Rdn += sum(_node.val_Ht[fder])  # add rdn per overlap
                         _node_ += [_node]
-            # first node is always local max
             _node_ = sorted(_node_+node_, key=lambda _node: sum(_node.val_Ht[fder]) - ave * sum(_node.rdn_Ht[fder]), reverse=True)
             new_nodet_ += [[_node_, Rdn+ _Rdn]]
             total_Rdn += _Rdn
-        
+
         nodet_ = new_nodet_  # update for next recursion
         if total_Rdn < ave:  # if overlap is small, stop the updating
             break  # stop updating rdn
