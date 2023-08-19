@@ -69,6 +69,7 @@ def form_graph_(node_, pri_root_T_, fder, fd):  # form fuzzy graphs of nodes per
     ave = G_aves[fder]  # val = (Val / len(links)) * med_decay * i?
     _Rdn_, Rdn_ = [1 for node in node_], [1 for node in node_]  # accum >vals of linked nodes to reduce graph overlap
     dRdn = ave+1
+    for node in node_: node.link_H += [[]]  # add new layer of mediated nodes (will be popped later)
 
     while dRdn > ave:  # iteratively propagate lateral Rdn (soft non-max per node) through mediating links, to define ultimate maxes?
 
@@ -78,13 +79,14 @@ def form_graph_(node_, pri_root_T_, fder, fd):  # form fuzzy graphs of nodes per
         for node, Rdn in zip(node_, Rdn_):
             if (sum(node.val_Ht[fder]) * Rdn/(Rdn+ave))  - ave * sum(node.rdn_Ht[fder]):  # potential graph init
                 nodet_ = []
-                for link in node.link_H[-1]:
+                for link in node.link_H[-2]:
                     _node = link.G1 if link.G0 is node else link.G0
                     nodet_ += [[_node, link.valt[fder], Rdn_[node_.index(_node)]]]
                 # [[_node,link_val,_rdn_val]]:
                 nodet_ = sorted(nodet_+[[node,1,1]], key=lambda _nodet:  # lower-val node rdn += higher val*medDecay, because links maybe pruned:
                          sum(_nodet[0].val_Ht[fder]) - ave * sum(_nodet[0].rdn_Ht[fder]) * _nodet[1]/(_nodet[1]+ave) * _nodet[2]/(_nodet[2]+ave),
                          reverse=True)
+                node.link_H[-1] = nodet_  # mediated nodes
                 __node, __val, __Rdn = nodet_[0]  # local max  # adjust overlap val by mediating link vals:
                 Rdn = sum(__node.val_Ht[fder]) *__val/(__val+ave) *__Rdn/(__Rdn+ave)  # effective overlap *= connection strength?
                 # add to weaker nodes Rdn_[i], accum for next:
@@ -99,27 +101,38 @@ def form_graph_(node_, pri_root_T_, fder, fd):  # form fuzzy graphs of nodes per
     or form longer-range more mediated soft maxes, Rdn += stronger (med_Val * med_decay * med_depth)?
     '''
     # not revised, we may need to check mediating links to sparsify maxes:
-    while layers:
-        new_layers = []
-        for layer in layers:
-            __node, __val, __Rdn = layer[0]  # 1st index: local max
-            for (node, val, Rdn) in layer[1:]:  # each element in layer is [node, link's val, rdn]
+    while True:  
+        for inode in node_:
+            __node, __val, __Rdn = inode.link_H[-1][-1]  # local max
+            for node, val, Rdn in inode.link_H[-1][1:]:  # mediated links
                  if (sum(node.val_Ht[fder]) * Rdn/ (Rdn+ave))  - ave * sum(node.rdn_Ht[fder]):
-                    layer = []
+                    nodet_ = []
                     for link in node.link_H[-1]:  # mediated nodes
                         _node = link.G1 if link.G0 is node else link.G0
                         _Rdn = Rdn_[node_.index(_node)]
-                        layer += [[_node, link.valt[fder], _Rdn]]
+                        nodet_ += [[_node, link.valt[fder], _Rdn]]
                     # sort, lower-val node rdn += higher (val * rel_med_val: links may be pruned)s:
-                    layer = sorted(layer+[[node,1, 1]], key=lambda _nodet:  # add adjust by _Rdn here:
+                    nodet_ = sorted(nodet_+[[node,1, 1]], key=lambda _nodet:  # add adjust by _Rdn here:
                             sum(_nodet[0].val_Ht[fder]) - ave * sum(_nodet[0].rdn_Ht[fder]) * (_nodet[1]/(_nodet[1]+ave)) * (_nodet[2]/(_nodet[2]+ave)) ,
                             reverse=True)
+                    # check for new local max
+                    if nodet_[0] > __val:
+                        __node, __val, __Rdn = nodet_[0]
+                        i = 1
+                    else:
+                        i = 0     
                     Rdn = sum(__node.val_Ht[fder]) *__val/(__val+ave) *__Rdn/(__Rdn+ave)
-                    for _node, _val, _Rdn in layer:
+                    for _node, _val, _Rdn in nodet_[i:]:
                         Rdn_[node_.index(_node)] += Rdn
                         Rdn += sum(_node.val_Ht[fder]) * _val/(_val+ave) * _Rdn/(_Rdn+ave)
-                    new_layers += [layer]
-        layers = new_layers  # for next recursion
+                    
+                    # merge nodet_
+                    for nodet in nodet_:
+                        existing_node_ = [nodet[0] for nodet in inode.link_H[-1]]
+                        if nodet[0] not in existing_node_:  # not packed in prior loop, prevent circular searching 
+                            inode.link_H[-1] += [nodet]
+
+        # use dRdn to stop the recursion too?
 
     segment_network(nodet_, pri_root_T_, fder, fd)
 
