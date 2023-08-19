@@ -67,35 +67,33 @@ def agg_recursion(root, node_):  # compositional recursion in root.PP_
 def form_graph_(node_, pri_root_T_, fder, fd):  # form fuzzy graphs of nodes per fder,fd, within root
 
     ave = G_aves[fder]  # val = (Val / len(links)) * med_decay * i?
-    # we need init them differently else they will be pointing into a same object. Init as 1 to prevent getting 0 value after the multiplication
-    _Rdn_, Rdn_ = [1 for node in node_], [1 for node in node_]  # accum >vals of linked nodes: pot.graph overlap, vs. overlapping graphs init with each node
-    dRdn = ave+1   # layers = []  # layers of mediating links to sparsify maxes?
+    _Rdn_, Rdn_ = [1 for node in node_], [1 for node in node_]  # accum >vals of linked nodes to reduce graph overlap
+    dRdn = ave+1
 
-    while dRdn > ave:
-        layers = []
+    while dRdn > ave:  # iteratively propagate lateral Rdn (soft non-max per node) through mediating links, to define ultimate maxes?
+
+        # or compute local_max(val + sum(surround_vals*mediation_decay)), with incremental mediation rng?
+        # similar to Gaussian blurring, but only to select graph pivots?
+        
         for node, Rdn in zip(node_, Rdn_):
-            if (sum(node.val_Ht[fder]) * Rdn/ (Rdn+ave))  - ave * sum(node.rdn_Ht[fder]):  # potential graph init
-                layer = []
-                for link in node.link_H[-1]: 
+            if (sum(node.val_Ht[fder]) * Rdn/(Rdn+ave))  - ave * sum(node.rdn_Ht[fder]):  # potential graph init
+                nodet_ = []
+                for link in node.link_H[-1]:
                     _node = link.G1 if link.G0 is node else link.G0
-                    _Rdn = Rdn_[node_.index(_node)]
-                    layer += [[_node, link.valt[fder], _Rdn]]
-                # sort, lower-val node rdn += higher (val * rel_med_val: links may be pruned)s:
-                layer = sorted(layer+[[node,1, 1]], key=lambda _nodet:  # add adjust by _Rdn here:
-                        sum(_nodet[0].val_Ht[fder]) - ave * sum(_nodet[0].rdn_Ht[fder]) * (_nodet[1]/(_nodet[1]+ave)) * (_nodet[2]/(_nodet[2]+ave)) ,
-                        reverse=True)
-                __node, __val, __Rdn = layer[0]  # local max  # adjust overlap val by mediating link vals:
+                    nodet_ += [[_node, link.valt[fder], Rdn_[node_.index(_node)]]]
+                # [[_node,link_val,_rdn_val]]:
+                nodet_ = sorted(nodet_+[[node,1,1]], key=lambda _nodet:  # lower-val node rdn += higher val*medDecay, because links maybe pruned:
+                         sum(_nodet[0].val_Ht[fder]) - ave * sum(_nodet[0].rdn_Ht[fder]) * _nodet[1]/(_nodet[1]+ave) * _nodet[2]/(_nodet[2]+ave),
+                         reverse=True)
+                __node, __val, __Rdn = nodet_[0]  # local max  # adjust overlap val by mediating link vals:
                 Rdn = sum(__node.val_Ht[fder]) *__val/(__val+ave) *__Rdn/(__Rdn+ave)  # effective overlap *= connection strength?
                 # add to weaker nodes Rdn_[i], accum for next:
-                for _node, _val, _Rdn in layer[1:]:
+                for _node, _val, _Rdn in nodet_[1:]:
                     Rdn_[node_.index(_node)] += Rdn  # stronger-node-init graphs would overlap current-node-init graph
-                    # this should be based on _node's val and rdn? __Rdn is initialized prior the loop
-                    Rdn += sum(_node.val_Ht[fder]) * _val/(_val+ave) * _Rdn/(_Rdn+ave)  # adjust overlap by rel_med_val
-                layers += [layer]                        
+                    Rdn += sum(_node.val_Ht[fder]) * _val/(_val+ave) * _Rdn/(_Rdn+ave)  # adjust overlap by medDecay
 
-        dRdn = abs(sum(Rdn_) - sum(_Rdn_))
-        _Rdn_ = Rdn_; Rdn_ = [0 for node in node_]
-
+        dRdn = sum([abs(Rdn-_Rdn) for Rdn,_Rdn in zip(Rdn_,_Rdn_)])
+        _Rdn_ = Rdn_; Rdn_ = [1 for node in node_]
     '''            
     no explicit layers, recursion to re-sort and re-sum with previously adjusted directly-linked _node Rdns? 
     or form longer-range more mediated soft maxes, Rdn += stronger (med_Val * med_decay * med_depth)?
@@ -112,16 +110,13 @@ def form_graph_(node_, pri_root_T_, fder, fd):  # form fuzzy graphs of nodes per
                         _node = link.G1 if link.G0 is node else link.G0
                         _Rdn = Rdn_[node_.index(_node)]
                         layer += [[_node, link.valt[fder], _Rdn]]
-                        
                     # sort, lower-val node rdn += higher (val * rel_med_val: links may be pruned)s:
                     layer = sorted(layer+[[node,1, 1]], key=lambda _nodet:  # add adjust by _Rdn here:
                             sum(_nodet[0].val_Ht[fder]) - ave * sum(_nodet[0].rdn_Ht[fder]) * (_nodet[1]/(_nodet[1]+ave)) * (_nodet[2]/(_nodet[2]+ave)) ,
                             reverse=True)
-                    
-                    # what if the mediated node has higher val than the local max __node?
                     Rdn = sum(__node.val_Ht[fder]) *__val/(__val+ave) *__Rdn/(__Rdn+ave)
-                    for _node, _val, _Rdn in layer:  # i think we need to add rdn from strongest to weakest here so that the weaker node's rdn will be added with all rdn from prior stronger nodes
-                        Rdn_[node_.index(_node)] += Rdn 
+                    for _node, _val, _Rdn in layer:
+                        Rdn_[node_.index(_node)] += Rdn
                         Rdn += sum(_node.val_Ht[fder]) * _val/(_val+ave) * _Rdn/(_Rdn+ave)
                     new_layers += [layer]
         layers = new_layers  # for next recursion
