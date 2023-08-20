@@ -303,28 +303,29 @@ def comp_G(_G, G, distance, A):
 
     Mval,Dval = 0,0
     Mrdn,Drdn = 1,1
+    Max_val, Min_val = 0, 0
     # / P:
-    mtuple, dtuple = comp_ptuple(_G.ptuple, G.ptuple, rn=1)
+    mtuple, dtuple, max_val, min_val = comp_ptuple(_G.ptuple, G.ptuple, rn=1)
     mval, dval = sum(mtuple), sum(dtuple)
     mrdn = dval>mval; drdn = dval<=mval
     derLay0 = [[mtuple,dtuple], [mval,dval], [mrdn,drdn]]
-    Mval += mval; Dval += dval; Mrdn += mrdn; Drdn += drdn
+    Mval += mval; Dval += dval; Mrdn += mrdn; Drdn += drdn; Max_val += max_val; Min_val += min_val
     # / PP:
-    dderH, valt, rdnt = comp_derH(_G.derH[0], G.derH[0], rn=1)
+    dderH, valt, rdnt, max_val, min_val = comp_derH(_G.derH[0], G.derH[0], rn=1)
     mval,dval = valt
-    Mval += dval; Dval += mval; Mrdn += rdnt[0]+dval>mval; Drdn += rdnt[1]+dval<=mval
+    Mval += dval; Dval += mval; Mrdn += rdnt[0]+dval>mval; Drdn += rdnt[1]+dval<=mval ; Max_val += max_val; Min_val += min_val
 
     derH = [[derLay0]+dderH, [Mval,Dval],[Mrdn,Drdn]]  # appendleft derLay0 from comp_ptuple
     der_ext = comp_ext([_G.L,_G.S,_G.A],[G.L,G.S,G.A], [Mval,Dval], [Mrdn,Drdn])
     SubH = [der_ext, derH]  # two init layers of SubH, higher layers added by comp_aggH:
     # / G:
     if _G.aggH and G.aggH:  # empty in base fork
-        subH, valt, rdnt = comp_aggH(_G.aggH, G.aggH, rn=1)
+        subH, valt, rdnt, max_val, min_val = comp_aggH(_G.aggH, G.aggH, rn=1)
         SubH += subH  # append higher subLayers: list of der_ext | derH s
         mval,dval =valt
-        Mval += valt[0]; Dval += valt[1]; Mrdn += rdnt[0]+dval>mval; Drdn += rdnt[1]+dval<=mval
+        Mval += valt[0]; Dval += valt[1]; Mrdn += rdnt[0]+dval>mval; Drdn += rdnt[1]+dval<=mval; Max_val+=max_val; Min_val+=min_val
 
-    derG = CderG(G0=_G, G1=G, subH=SubH, valt=[Mval,Dval], rdnt=[Mrdn,Drdn], S=distance, A=A)
+    derG = CderG(G0=_G, G1=G, subH=SubH, valt=[Mval,Dval], rdnt=[Mrdn,Drdn], Valt=[Max_val, Min_val],S=distance, A=A)
     if valt[0] > ave_Gm or valt[1] > ave_Gd:
         _G.link_H[-1] += [derG]; G.link_H[-1] += [derG]  # bilateral add links
         _G.val_Ht[0][-1] += Mval; _G.val_Ht[1][-1] += Dval; _G.rdn_Ht[0][-1] += Mrdn; _G.rdn_Ht[1][-1] += Drdn
@@ -489,34 +490,34 @@ aggH: [[subH_t, valt, rdnt]]: composition layers, ext per G
 
 def comp_subH(_subH, subH, rn):
     DerH = []
-    Mval, Dval, Mrdn, Drdn = 0,0,1,1
+    Mval, Dval, Mrdn, Drdn, Max_val, Min_val = 0,0,1,1
 
     for _lay, lay in zip_longest(_subH, subH, fillvalue=[]):  # compare common lower layer|sublayer derHs
         if _lay and lay:  # also if lower-layers match: Mval > ave * Mrdn?
             if _lay[0] and isinstance(_lay[0][0],list):  # _lay[0][0] is derHt
 
-                dderH, valt, rdnt = comp_derH(_lay[0], lay[0], rn)
+                dderH, valt, rdnt, max_val, min_val = comp_derH(_lay[0], lay[0], rn)
                 DerH += [[dderH, valt, rdnt]]  # for flat derH
                 mval,dval = valt
-                Mval += mval; Dval += dval; Mrdn += rdnt[0] + dval > mval; Drdn += rdnt[1] + dval <= mval
+                Mval += mval; Dval += dval; Mrdn += rdnt[0] + dval > mval; Drdn += rdnt[1] + dval <= mval; Max_val += max_val; Min_val += min_val
             else:  # _lay[0][0] is L, comp dext:
                 DerH += comp_ext(_lay[1],lay[1], [Mval,Dval], [Mrdn,Drdn])
 
-    return DerH, [Mval,Dval], [Mrdn,Drdn]  # new layer, 1/2 combined derH
+    return DerH, [Mval,Dval], [Mrdn,Drdn], Max_val, Min_val  # new layer, 1/2 combined derH
 
 def comp_aggH(_aggH, aggH, rn):  # no separate ext processing?
       SubH = []
-      Mval, Dval, Mrdn, Drdn = 0,0,1,1
+      Mval, Dval, Mrdn, Drdn, Max_val, Min_val = 0,0,1,1,0,0
 
       for _lev, lev in zip_longest(_aggH, aggH, fillvalue=[]):  # compare common lower layer|sublayer derHs
           if _lev and lev:  # also if lower-layers match: Mval > ave * Mrdn?
               # compare dsubH only:
-              dsubH, valt, rdnt = comp_subH(_lev[0], lev[0], rn)
+              dsubH, valt, rdnt, max_val, min_val = comp_subH(_lev[0], lev[0], rn)
               SubH += [[dsubH, valt, rdnt]]
               mval,dval = valt
-              Mval += mval; Dval += dval; Mrdn += rdnt[0]+dval>mval; Drdn += rdnt[1]+mval<=dval
+              Mval += mval; Dval += dval; Mrdn += rdnt[0]+dval>mval; Drdn += rdnt[1]+mval<=dval; Max_val+=max_val; Min_val+=min_val
 
-      return SubH, [Mval,Dval], [Mrdn,Drdn]
+      return SubH, [Mval,Dval], [Mrdn,Drdn], Max_val, Min_val
 
 
 def sum_subH(T, t, base_rdn):
