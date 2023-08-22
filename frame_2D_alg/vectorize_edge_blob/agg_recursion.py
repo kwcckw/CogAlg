@@ -99,7 +99,7 @@ def select_max_(node_, fder, ave):  # final maxes are graph-initializing nodes
         fmax = 1
         for link in node.link_H[-1]:
             _node = link.G1 if link.G0 is node else link.G0
-            if Val > _Val_[node_.index(_node)]:
+            if Val > Val_[node_.index(_node)]:  # should be Val_ here
                 non_max_ += [_node]  # skip in the future
             else:
                 fmax = 0
@@ -253,13 +253,13 @@ def comp_G(_G, G, distance, A):
 
     # / P:
     mtuple, dtuple, Mtuple = comp_ptuple(_G.ptuple, G.ptuple, rn=1)
-    mval, dval, maxv = sum(mtuple), sum(dtuple), sum(Mtuple)
+    mval, dval, maxv = sum(mtuple), sum(dtuple), sum(Mtuple)  # sum angle - dy and dx too?
     mrdn = dval>mval; drdn = dval<=mval
     derLay0 = [[mtuple,dtuple], [mval,dval,maxv], [mrdn,drdn]]
     Mval+=mval; Dval+=dval; Maxv+=maxv; Mrdn += mrdn; Drdn += drdn
     # / PP:
     dderH, valt, rdnt = comp_derH(_G.derH[0], G.derH[0], rn=1)
-    mval, dval, max = valt
+    mval, dval, maxv = valt
     Mval+=dval; Dval+= mval; Maxv+=maxv; Mrdn += rdnt[0]+dval>mval; Drdn += rdnt[1]+dval<=mval
 
     derH = [[derLay0]+dderH, [Mval,Dval,Maxv], [Mrdn,Drdn]]  # appendleft derLay0 from comp_ptuple
@@ -427,7 +427,7 @@ def comp_subH(_subH, subH, rn):
                 mval,dval,maxv = valt
                 Mval += mval; Dval += dval; Maxv += maxv; Mrdn += rdnt[0] + dval > mval; Drdn += rdnt[1] + dval <= mval
             else:  # _lay[0][0] is L, comp dext:
-                DerH += comp_ext(_lay[1],lay[1], [Mval,Dval], [Mrdn,Drdn])
+                DerH += comp_ext(_lay[1],lay[1], [Mval,Dval,0], [Mrdn,Drdn])
 
     return DerH, [Mval,Dval,Maxv], [Mrdn,Drdn]  # new layer, 1/2 combined derH
 
@@ -450,7 +450,7 @@ def sum_subH(T, t, base_rdn):
 
     SubH, Valt, Rdnt = T
     subH, valt, rdnt = t
-    for i in 0, 1:
+    for i in 0, 1, 2:
         Valt[i] += valt[i]; Rdnt[i] += rdnt[i]
     if SubH:
         for Layer, layer in zip_longest(SubH,subH, fillvalue=[]):
@@ -468,7 +468,7 @@ def sum_aggH(T, t, base_rdn):
 
     AggH, Valt, Rdnt = T
     aggH, valt, rdnt = t
-    for i in 0, 1:
+    for i in 0, 1, 2:
         Valt[i] += valt[i]; Rdnt[i] += rdnt[i]
     if aggH:
         if AggH:
