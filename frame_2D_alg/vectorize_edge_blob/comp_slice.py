@@ -27,6 +27,7 @@ def comp_slice(edge, verbose=False):  # high-G, smooth-angle blob, composite der
     edge.node_T = [form_PP_t([Pt[0] for Pt in P_], PP_=None, base_rdn=2, fder=0), [[], []]]  # root fork is rng+ only
 
 
+# not revised:
 def comp_P(_P,P, fder=1, derP=None):  #  derP if der+, S if rng+
 
     aveP = P_aves[fder]
