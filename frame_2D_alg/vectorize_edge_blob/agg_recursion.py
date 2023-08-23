@@ -113,7 +113,7 @@ def segment_node_(node_, max_, pri_root_T_, fder, fd):
     graph_ = []  # initialize graphs with local maxes, then prune links to add other nodes:
 
     for max_node in max_:
-        graph = [[max_node], [pri_root_T_[node_.index(max_node)]], sum(max_node.val_Ht[fder])]
+        graph = [[max_node], [pri_root_T_[node_.index(max_node)]], sum(max_node.val_Ht[fder]), [0]]  # add new element of link_rel_val * val, so that we can use it in pruning later
         max_node.root_T[fder][fd] = graph
         _nodes = [max_node]  # current periphery of the graph
         # search links recursively outwards:
@@ -133,6 +133,7 @@ def segment_node_(node_, max_, pri_root_T_, fder, fd):
                             if pri_root_T not in graph[1]:
                                 graph[1] += [pri_root_T]  # transfer node roots to new intermediate graph
                             graph[2] += link_rel_val * _val
+                            graph[3] += [link_rel_val * _val]
                             _node.root_T[fder][fd] = graph  # single root per fork?
                             nodes += [_node]
             _nodes = nodes
@@ -140,7 +141,27 @@ def segment_node_(node_, max_, pri_root_T_, fder, fd):
     return graph_
 
 def prune_graphs(graph_, fder, fd):
-    pass
+    
+    pruned_graph_ = []
+    while graph_:
+        nodes, pri_root_T_, Val, Val_ = graph_.pop()
+        nodes = sorted(nodes, key=lambda node,ave:sum(node.val_Ht) - sum(node.rdn_Ht), reverse=True)
+    
+        new_nodes = []
+        for j, node in enumerate(nodes):
+            if sum(node.val_Ht) > ave * sum(node.rdn_Ht):
+                new_nodes += [node]
+            else:
+                node.root_T[fder][fd] = []  # reset root
+                pri_root_T_.pop(j)  # remove pri_root_T
+                Val -= Val_[j]  # reduce by link_rel_val * _val
+
+        # evaluate and prune graphs
+        if Val > ave:
+            pruned_graph_ += [[new_nodes, pri_root_T_, Val]]
+
+    return pruned_graph_
+
 
 # replace with prune_graphs:
 def graph_reval_(graph_, fder,fd):
