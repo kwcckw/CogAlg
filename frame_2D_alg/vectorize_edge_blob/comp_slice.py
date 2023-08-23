@@ -60,7 +60,7 @@ def comp_derH(_derH, derH, rn):  # derH is a list of der layers or sub-layers, e
             mval = sum(mtuple); dval = sum(dtuple); maxv = sum(Mtuple)
             mrdn = dval > mval; drdn = dval < mval
             dderH += [[[mtuple,dtuple],[mval,dval,maxv],[mrdn,drdn]]]
-            Mval+=mval; Dval+=dval; Mrdn+=mrdn; Drdn+=drdn; Maxv+=maxv
+            Mval+=mval; Dval+=dval; Maxv+=maxv; Mrdn+=mrdn; Drdn+=drdn
 
     return dderH, [Mval,Dval,Maxv], [Mrdn,Drdn]  # new layer, 1/2 combined derH
 
@@ -71,12 +71,7 @@ def comp_dtuple(_ptuple, ptuple, rn):
         npar= par*rn
         mtuple += [min(_par, npar) - ave]
         dtuple += [_par - npar]
-        if isinstance(_par, list):
-            for j in 0,1:
-                Mtuple+=[max(_par[j], par[j])]  # angle (Dy, Dx)
-        else:
-            Mtuple+=[max(_par, par)]
-        Mtuple += [max(_par, par)]
+        Mtuple += [max(_par, npar)]
 
     return [mtuple, dtuple, Mtuple]
 
@@ -238,17 +233,16 @@ def comp_ptuple(_ptuple, ptuple, rn):  # 0der
     for i, (_par, par, ave) in enumerate(zip(_ptuple, ptuple, aves)):
         if isinstance(_par, list):
              m,d = comp_angle(_par, par)
+             maxv = 2
         else:  # I | M | G L
             npar= par*rn  # accum-normalized par
             d = _par - npar
             if i: m = min(_par,npar)-ave
             else: m = ave-abs(d)  # inverse match for I, no mag/value correlation
-        mtuple+=[m]; dtuple+=[d]
-        if isinstance(_par, list):
-            for j in 0,1:
-                Mtuple+=[max(_par[j], par[j])]  # angle (Dy, Dx)
-        else:
-            Mtuple+=[max(_par, par)]
+            maxv = max(_par, par)
+        mtuple+=[m]
+        dtuple+=[d]
+        Mtuple+=[maxv]
     return [mtuple, dtuple, Mtuple]
 
 
