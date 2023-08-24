@@ -114,7 +114,7 @@ def segment_node_(node_, max_, pri_root_T_, fder, fd):
 
     for max_node in max_:
         graph = [[max_node], [pri_root_T_[node_.index(max_node)]], sum(max_node.val_Ht[fder])]
-        max_node.root_T[fder][fd] = graph
+        max_node.root_T[fder][fd] += [graph]
         _nodes = [max_node]  # current periphery of the graph
         # search links recursively outwards:
         while _nodes:
@@ -131,45 +131,63 @@ def segment_node_(node_, max_, pri_root_T_, fder, fd):
                             graph[0] += [_node]
                             pri_root_T = pri_root_T_[node_.index(_node)]
                             if pri_root_T not in graph[1]:
-                                # need ro unpack root tree and align forks?:
-                                graph[1] += [pri_root_T]  # transfer node roots to new intermediate graph
+                                merge_root_tree(graph[1], pri_root_T)  # transfer node roots to new intermediate graph
                             graph[2] += link_rel_val * _val
-                            _node.root_T[fder][fd] = graph  # single root per fork?
+                            _node.root_T[fder][fd] += [graph]  # single root per fork?
                             nodes += [_node]
             _nodes = nodes
         graph_ += [graph]
     return graph_
 
+
+def merge_root_tree(Root_T, root_T):
+    for Root_t, root_t in zip(Root_T, root_T):  # fder loop
+        for Root_, root_ in zip(Root_t, root_t):  # fd loop
+            Root_ += root_  # merge root
+
 def prune_graphs(_graph_, fder, fd):
 
     graph_ = []
-    for _node_, _pri_root_T_, _Val in _graph_:
-        node_, pri_root_T_ = [],[]
+    for _node_, _, _ in _graph_:
         for node in _node_:
             roots = sorted(node.root_T[fder][fd], key=lambda root: root[2], reverse=True)
-            rdn_Val = 1  # val of stronger inclusion in overlapping graphs, in same fork
+            rdn_Val = 0  # val of stronger inclusion in overlapping graphs, in same fork (strongest root with 0 rdn)
+                
             for root in roots:
-                Val = sum(node.val_Ht) - ave * (sum(node.rdn_Ht) + rdn_Val/ave)  # not sure
-                if Val > 0:
-                    node_ += [node]
-                    for link in node.link_Ht[fder]:
+                pruned_node_ = []  # per root
+                Val = np.sum(node.val_Ht) - ave * (np.sum(node.rdn_Ht) + rdn_Val/ave)  # not sure
+                if Val > 0:    
+                    pruned_link_ = []  # per node
+                    for link in node.link_H[fder]:
                         # tentative re-eval node links:
                         _node = link.G1 if link.G0 is node else link.G0
-                        sum(_node.val_ht)  * (link.valt[fder]/link.valt[2]) - ave * (sum(_node.rdn_Ht[fder]) + node.Rdn)
-                        # prune the value above is negative?
+                        # prune _node along with their link
+                        if not np.sum(_node.val_Ht)  * (link.valt[fder]/link.valt[2]) - ave * (np.sum(_node.rdn_Ht[fder]) + rdn_Val):
+                            pruned_node_ += [_node]
+                            pruned_link_ += [link]     
+                    # prune links
+                    for pruned_link in pruned_link_: node.link_Ht[fder].pop(pruned_link)   
+                    # prune nodes
+                    for pruned_node in pruned_node_:
+                        if pruned_node in root[0]:
+                             remove_node(root, pruned_node)  # prune node from current root
+                        
                     rdn_Val += root[2]
-                    
-            # not revised:
-            else:
-                node.root_T[fder][fd] = []  # reset root
-                pri_root_T_.pop(j)  # remove pri_root_T
-                Val -= Val_[j]  # reduce by link_rel_val * _val
+                elif node in root[0]: 
+                    remove_node(root, node)  # prune node from current root
 
-        # evaluate and prune graphs
+    # check and prune graph after all graphs' nodes are evaluated
+    for  node_, pri_root_T, Val in _graph_:
         if Val > ave:
-            graph_ += [[new_nodes, pri_root_T_, Val]]
+            graph_ += [node_, pri_root_T, Val]
 
     return graph_
+
+# or use prune_node?
+def remove_node(root, node):
+    root[1].pop(root[0].index(node))  # remove pri_root_T
+    root[0].remove(node)              # remove node
+    root[2] -= sum(node.val_ht)       # reduce Val, not sure
 
 # replace with prune_graphs:
 def graph_reval_(graph_, fder,fd):
