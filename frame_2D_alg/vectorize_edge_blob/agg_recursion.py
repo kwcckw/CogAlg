@@ -71,7 +71,7 @@ def form_graph_(node_, pri_root_T_, fder, fd):  # form fuzzy graphs of nodes per
     max_ = select_max_(node_, fder, ave)
 
     graph_ = segment_node_(node_, max_, pri_root_T_, fder, fd)
-    prune_graphs(graph_, fder, fd)  # sort node roots and prune the weak
+    prune_graphs(graph_, node_, pri_root_T_, fder, fd)  # sort node roots and prune the weak
 
 
 def select_max_(node_, fder, ave):  # final maxes are graph-initializing nodes
@@ -154,47 +154,41 @@ def merge_root_tree(Root_T, root_T):
                     else: Root.root_T[:] = root.root_T  # Root_T is empty list
 
 
-def prune_graphs(_graph_, fder, fd):
+def prune_graphs(_graph_, node_, pri_root_T_, fder, fd):
 
-    graph_ = []
-    for _node_, _, _ in _graph_:
-        for node in _node_:
+    while True:  # pruning should be recursive?
+        prune_Val = -1
+        graph_ = []
+        # for _node_, _, _ in _graph_: I think this is not needed, we can just loop node_?
+        for node in node_:
             roots = sorted(node.root_T[fder][fd], key=lambda root: root[2], reverse=True)
             # rdn_Val = 0  # val of stronger inclusion in overlapping graphs, in same fork (strongest root with 0 rdn)
             for root_rdn, root in enumerate(roots):
-                pruned_node_ = []  # per root
                 Val = np.sum(node.val_Ht) - ave * (np.sum(node.rdn_Ht) + root_rdn)  # not sure
                 if Val > 0:
+                    prune_Val += Val
                     pruned_link_ = []  # per node
                     for link in node.link_H[fder]:
                         # tentative re-eval node links:
                         _node = link.G1 if link.G0 is node else link.G0
-                        # prune _node along with their link
+                        # prune links from node
                         if not np.sum(_node.val_Ht)  * (link.valt[fder]/link.valt[2]) - ave * (np.sum(_node.rdn_Ht[fder]) + root_rdn):
-                            pruned_node_ += [_node]
                             pruned_link_ += [link]
                     # prune links
-                    for pruned_link in pruned_link_: node.link_Ht[fder].pop(pruned_link)
-                    # prune nodes
-                    for pruned_node in pruned_node_:
-                        if pruned_node in root[0]:
-                             remove_node(root, pruned_node)  # prune node from current root
-                    # root_rdn += root[2]?
-                elif node in root[0]:
-                    remove_node(root, node)  # prune node from current root
+                    for pruned_link in pruned_link_: 
+                        node.link_Ht[fder].remove(pruned_link)
+                # if Val is < 0, increase their rdn so that we will not select them as max?
+                else:
+                    node.rdn_Ht[-1] += root_rdn * abs(Val)
+    
+        # reform graphs after pruning
+        max_ = select_max_(node_, fder, ave)
+        graph_ = segment_node_(node_, max_, pri_root_T_, fder, fd)
 
-    # check and prune graph after all graphs' nodes are evaluated
-    for  node_, pri_root_T, Val in _graph_:
-        if Val > ave:
-            graph_ += [node_, pri_root_T, Val]
+        if prune_Val < 0:
+            break
 
     return graph_
-
-# recompute graphs in feedback: we need to wait till we get it from all nodes?
-def remove_node(root, node):
-    root[1].pop(root[0].index(node))  # remove pri_root_T
-    root[0].remove(node)              # remove node
-    root[2] -= sum(node.val_ht)       # reduce Val, not sure
 
 
 def prune_old(_graph_, fder, fd):
