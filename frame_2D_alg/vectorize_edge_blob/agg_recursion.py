@@ -37,10 +37,10 @@ def agg_recursion(root, node_):  # compositional recursion in root.PP_
     for i in 0,1: root.rdn_Ht[i][0] += 1  # estimate, no node.rdnt[fder] += 1?
 
     node_tt = [[[],[]],[[],[]]]  # fill with 4 clustering forks
-    pri_root_T_ = []
+    pri_root_tt_ = []
     for node in node_:
-        pri_root_T_ += [node.root_T]  # save root_T for new graphs, different per node
-        node.root_T = [[[],[]],[[],[]]]  # replace node.root_T, then append [root,val] in each fork
+        pri_root_tt_ += [node.root_tt]  # save root_T for new graphs, different per node
+        node.root_tt = [[[],[]],[[],[]]]  # replace node.root_T, then append [root,val] in each fork
         for i in 0,1:
             node.val_Ht[i]+=[0]; node.rdn_Ht[i]+=[1]  # new val,rdn layer, accum in comp_G_
 
@@ -52,7 +52,7 @@ def agg_recursion(root, node_):  # compositional recursion in root.PP_
         for fd in 0,1:  # clustering forks, each adds graph_: new node_ in node_tt:
             if sum(root.val_Ht[fder]) > G_aves[fder] * sum(root.rdn_Ht[fder]):
                 # cluster link_H[-1]:
-                graph_ = form_graph_(node_, pri_root_T_, fder, fd)
+                graph_ = form_graph_(node_, pri_root_tt_, fder, fd)
                 sub_recursion_eval(root, graph_)  # sub+, eval last layer?
                 if sum(root.val_Ht[fder]) > G_aves[fder] * sum(root.rdn_Ht[fder]):  # updated in sub+
                     agg_recursion(root, node_)  # agg+, replace root.node_ with new graphs, if any
@@ -64,14 +64,15 @@ def agg_recursion(root, node_):  # compositional recursion in root.PP_
     node_[:] = node_tt  # replace local element of root.node_T
 
 
-def form_graph_(node_, pri_root_T_, fder, fd):  # form fuzzy graphs of nodes per fder,fd, within root
+def form_graph_(node_, pri_root_tt_, fder, fd):  # form fuzzy graphs of nodes per fder,fd, within root
 
     ave = G_aves[fder]
     max_ = select_max_(node_, fder, ave)  # compute max of quasi-Gaussians: val + sum([_val * (link_val/max_val])
 
-    graph_ = segment_node_(node_, max_, pri_root_T_, fder, fd)
-    prune_graph_(graph_, fder, fd)  # sort node roots and prune the weak
+    pre_graph_ = segment_node_(node_, max_, pri_root_tt_, fder, fd)
+    graph_ = prune_graph_(pre_graph_, fder, fd)  # sort node roots and prune the weak
 
+    return graph_
 
 def select_max_(node_, fder, ave):  # final maxes are graph-initializing nodes
 
@@ -106,13 +107,13 @@ def select_max_(node_, fder, ave):  # final maxes are graph-initializing nodes
         if fmax: max_ += [node]
     return max_
 
-def segment_node_(node_, max_, pri_root_T_, fder, fd):
+def segment_node_(node_, max_, pri_root_tt_, fder, fd):
 
     graph_ = []  # initialize graphs with local maxes, then prune links to add other nodes:
 
     for max_node in max_:
-        graph = [[max_node], [pri_root_T_[node_.index(max_node)]], sum(max_node.val_Ht[fder])]
-        max_node.root_T[fder][fd] += [graph]
+        graph = [[max_node], [pri_root_tt_[node_.index(max_node)]], sum(max_node.val_Ht[fder])]
+        max_node.root_tt[fder][fd] += [graph]
         _nodes = [max_node]  # current periphery of the graph
         # search links recursively outwards:
         while _nodes:
@@ -127,11 +128,11 @@ def segment_node_(node_, max_, pri_root_T_, fder, fd):
                         # link eval, tentative:
                         if (val+_val) * link_rel_val > 0:  # pack _node in graph:
                             graph[0] += [_node]
-                            pri_root_T = pri_root_T_[node_.index(_node)]
-                            if pri_root_T not in graph[1]:
-                                merge_root_tree(graph[1], pri_root_T)  # transfer node roots to new intermediate graph
+                            pri_root_tt = pri_root_tt_[node_.index(_node)]
+                            if pri_root_tt not in graph[1]:
+                                merge_root_tree(graph[1], pri_root_tt)  # transfer node roots to new intermediate graph
                             graph[2] += link_rel_val * _val
-                            _node.root_T[fder][fd] += [graph]  # single root per fork?
+                            _node.root_tt[fder][fd] += [graph]  # single root per fork?
                             nodes += [_node]
             _nodes = nodes
         graph_ += [graph]
@@ -142,13 +143,11 @@ def merge_root_tree(Root_tt, root_tt):  # not-empty fork layer is root_tt, each 
 
     for Root_t, root_t in zip(Root_tt, root_tt):  # fder loop
         for Root_, root_ in zip(Root_t, root_t):  # fd loop
-            Root_ += root_  # merge root, may be empty
-
             for Root, root in zip(Root_, root_):  # not-empty fork layer is root_tt:
                 if root.root_tt:
                     if Root.root_tt: merge_root_tree(Root.root_tt, root.root_tt)
                     else: Root.root_tt[:] = root.root_tt
-
+            Root_ += root_  # merge root, may be empty (after scanning Root_ and root_)
 
 def prune_graph_(_graph_, fder, fd):
 
@@ -159,16 +158,18 @@ def prune_graph_(_graph_, fder, fd):
 
             roots = sorted(node.root_tt[fder][fd], key=lambda root: root[2], reverse=True)
             for rdn, root in enumerate(roots):
-                val = sum(node.val_Ht) - ave * (sum(node.rdn_Ht) + rdn)  # +rdn to stronger inclusion in overlapping graphs, same fork
+                val = sum(node.val_Ht[fder]) - ave * (sum(node.rdn_Ht[fder]) + rdn)  # +rdn to stronger inclusion in overlapping graphs, same fork
                 # no link pruning: they are not a component of graph, don't depend on rdn?
                 if val > 0:
-                    graph_[i][0] += [node]
-                    graph_[i][1] += [_pri_root_tt_]
-                    graph_[i][2] += val
+                    graph_index = _graph_.index(root)
+                    graph_[graph_index][0] += [node]
+                    graph_[graph_index][1] += [_pri_root_tt_]
+                    graph_[graph_index][2] += val
                 else:
                     node.root_tt[fder][fd].remove(root)
-        # graph pruning:
-        return [graph for graph in graph_ if graph[2] > G_aves[fder]]
+
+    # graph pruning:
+    return sum2graph_([graph for graph in graph_ if graph[2] > G_aves[fder]], fder, fd)
 
 
 # replace with prune_graphs:
@@ -314,15 +315,13 @@ def sum2graph_(graph_, fder, fd):  # sum node and link params into graph, aggH i
 
     Graph_ = []
     for graph in graph_:  # seq Gs
-        if graph[2] < G_aves[fd]:  # form graph if val>min only
-            continue
-        Graph = Cgraph(root_T = graph[1], L=len(graph[0]))  # n nodes
+        Graph = Cgraph(root_tt = graph[1], L=len(graph[0]))  # n nodes
         Link_ = []
         for G in graph[0]:
             sum_box(Graph.box, G.box)
             sum_ptuple(Graph.ptuple, G.ptuple)
             sum_derH(Graph.derH, G.derH, base_rdn=1)  # base_rdn?
-            sum_aggH([Graph.aggH,Graph.valt,Graph.rdnt], [G.aggH,G.valt,G.rdnt], base_rdn=1)
+            sum_aggH([Graph.aggH,Graph.val_Ht,Graph.rdn_Ht], [G.aggH,G.val_Ht,G.rdn_Ht], base_rdn=1)
             link_ = G.link_H[-1]
             Link_[:] = list(set(Link_ + link_))
             subH=[]; valt=[0,0]; rdnt=[1,1]  # no max in G.valt?
@@ -332,8 +331,8 @@ def sum2graph_(graph_, fder, fd):  # sum node and link params into graph, aggH i
                     sum_box(G.box, derG.G0.box if derG.G1 is G else derG.G1.box)
             G.aggH += [[subH,valt,rdnt]]
             for i in 0,1:
-                G.valt[i] += valt[i]; G.rdnt[i] += rdnt[i]
-            Graph.node_T += [G]  # then converted to node_tt by feedback
+                G.val_Ht[i][-1] += valt[i]; G.rdn_Ht[i][-1] += rdnt[i]  # not sure,summing on last Ht?
+            Graph.node_tt += [G]  # then converted to node_tt by feedback
         subH=[]; valt=[0,0]; rdnt=[1,1]
         for derG in Link_:  # sum unique links:
             sum_subH([subH,valt,rdnt], [derG.subH, derG.valt, derG.rdnt], base_rdn=1)
@@ -341,7 +340,7 @@ def sum2graph_(graph_, fder, fd):  # sum node and link params into graph, aggH i
             Graph.S += derG.S
         Graph.aggH += [[subH, valt, rdnt]]  # new aggLev
         for i in 0,1:
-            Graph.valt[i] += valt[i]; Graph.rdnt[i] += rdnt[i]
+            Graph.val_Ht[i][-1] += valt[i]; Graph.rdn_Ht[i][-1] += rdnt[i]  # not sure,summing on last Ht?
         Graph_ += [Graph]
 
     return Graph_
@@ -360,21 +359,21 @@ def sub_recursion_eval(root, graph_):  # eval per fork, same as in comp_slice, s
 
     termt = [1,1]
     for graph in graph_:
-        node_ = copy(graph.node_T); sub_G_t = []
+        node_ = copy(graph.node_tt); sub_G_t = []
         fr = 0
         for fd in 0,1:
             # not sure int or/and ext:
-            if graph.val_Ht[fd][-1] > G_aves[fd] * graph.rdn_Ht[fd][-1] and len(graph.node_T) > ave_nsubt[fd]:
-                graph.rdnt[fd] += 1  # estimate, no node.rdnt[fd] += 1?
+            if graph.val_Ht[fd][-1] > G_aves[fd] * graph.rdn_Ht[fd][-1] and len(graph.node_tt) > ave_nsubt[fd]:
+                graph.rdn_Ht[fd][-1] += 1  # estimate, no node.rdnt[fd] += 1?
                 termt[fd] = 0; fr = 1
                 sub_G_t += [sub_recursion(graph, node_, fd)]  # comp_der|rng in graph -> parLayer, sub_Gs
             else:
                 sub_G_t += [node_]
                 if isinstance(root, Cgraph):
                     # merge_externals?
-                    root.fback_ += [[graph.aggH, graph.valt, graph.rdnt]]  # fback_t vs. flat?
+                    root.fback_ += [[graph.aggH, graph.val_Ht, graph.rdn_Ht]]  # fback_t vs. flat?
         if fr:
-            graph.node_T = sub_G_t  # still node_ here
+            graph.node_tt = sub_G_t  # still node_ here
     for fd in 0,1:
         if termt[fd] and root.fback_:  # no lower layers in any graph
            feedback(root, fd)
@@ -382,8 +381,15 @@ def sub_recursion_eval(root, graph_):  # eval per fork, same as in comp_slice, s
 
 def sub_recursion(graph, fder, fd):  # rng+: extend G_ per graph, der+: replace G_ with derG_, valt=[0,0]?
 
-    comp_G_(graph.node_, pri_G_=None, f1Q=1, fd=fd)  # cross-comp all Gs in rng
-    sub_G_t = form_graph_(graph, fder, fd)  # cluster sub_graphs via link_H
+    pri_root_tt_ = []
+    for node in graph.node_tt:
+        pri_root_tt_ += [node.root_tt]  # save root_T for new graphs, different per node
+        node.root_tt = [[[],[]],[[],[]]]  # replace node.root_T, then append [root,val] in each fork
+        for i in 0,1:
+            node.val_Ht[i]+=[0]; node.rdn_Ht[i]+=[1]  # new val,rdn layer, accum in comp_G_
+    
+    comp_G_(graph.node_tt, pri_G_=None, f1Q=1, fd=fd)  # cross-comp all Gs in rng
+    sub_G_t = form_graph_(graph, pri_root_tt_, fder, fd)  # cluster sub_graphs via link_H
 
     for i, sub_G_ in enumerate(sub_G_t):
         if sub_G_:  # and graph.rdn > ave_sub * graph.rdn:  # from sum2graph, not last-layer valt,rdnt?
@@ -498,11 +504,19 @@ def sum_subH(T, t, base_rdn):
 
 def sum_aggH(T, t, base_rdn):
 
-    AggH, Valt, Rdnt = T
-    aggH, valt, rdnt = t
+    AggH, Val_Ht, Rdn_Ht = T
+    aggH, val_Ht, rdn_Ht = t
 
     for i in 0,1:  # link maxv is not summed in G.valt
-        Valt[i] += valt[i]; Rdnt[i] += rdnt[i]
+        for i, (Val, val) in enumerate(zip_longest(Val_Ht[i], val_Ht[i], fillvalue=None)):
+            if val != None:
+                if Val != None: Val_Ht[i] += val
+                else:           Val_Ht[i] += [val]
+        for i, (Rdn, rdn) in enumerate(zip_longest(Rdn_Ht[i], rdn_Ht[i], fillvalue=None)):
+            if rdn != None:
+                if Rdn != None: Rdn_Ht[i] += rdn
+                else:           Rdn_Ht[i] += [rdn] 
+
     if aggH:
         if AggH:
             for Layer, layer in zip_longest(AggH,aggH, fillvalue=[]):
