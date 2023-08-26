@@ -67,11 +67,10 @@ def agg_recursion(root, node_):  # compositional recursion in root.PP_
 def form_graph_(node_, pri_root_T_, fder, fd):  # form fuzzy graphs of nodes per fder,fd, within root
 
     ave = G_aves[fder]
-    # compute max of quasi-Gaussians: val + sum([_val * (link_val/max_val]):
-    max_ = select_max_(node_, fder, ave)
+    max_ = select_max_(node_, fder, ave)  # compute max of quasi-Gaussians: val + sum([_val * (link_val/max_val])
 
     graph_ = segment_node_(node_, max_, pri_root_T_, fder, fd)
-    prune_graphs(graph_, node_, pri_root_T_, fder, fd)  # sort node roots and prune the weak
+    prune_graph_(graph_, fder, fd)  # sort node roots and prune the weak
 
 
 def select_max_(node_, fder, ave):  # final maxes are graph-initializing nodes
@@ -107,7 +106,6 @@ def select_max_(node_, fder, ave):  # final maxes are graph-initializing nodes
         if fmax: max_ += [node]
     return max_
 
-
 def segment_node_(node_, max_, pri_root_T_, fder, fd):
 
     graph_ = []  # initialize graphs with local maxes, then prune links to add other nodes:
@@ -140,74 +138,37 @@ def segment_node_(node_, max_, pri_root_T_, fder, fd):
     return graph_
 
 
-def merge_root_tree(Root_T, root_T):
+def merge_root_tree(Root_tt, root_tt):  # not-empty fork layer is root_tt, each fork may be empty list:
 
-    # not-empty fork layer is root_tt, each fork may be empty list:
-
-    for Root_t, root_t in zip(Root_T, root_T):  # fder loop
+    for Root_t, root_t in zip(Root_tt, root_tt):  # fder loop
         for Root_, root_ in zip(Root_t, root_t):  # fd loop
             Root_ += root_  # merge root, may be empty
 
             for Root, root in zip(Root_, root_):  # not-empty fork layer is root_tt:
-                if root.root_T:
-                    if Root.root_T: merge_root_tree(Root.root_T, root.root_T)
-                    else: Root.root_T[:] = root.root_T  # Root_T is empty list
+                if root.root_tt:
+                    if Root.root_tt: merge_root_tree(Root.root_tt, root.root_tt)
+                    else: Root.root_tt[:] = root.root_tt
 
 
-def prune_graphs(_graph_, node_, pri_root_T_, fder, fd):
+def prune_graph_(_graph_, fder, fd):
 
-    while True:  # pruning should be recursive?
-        prune_Val = -1
-        graph_ = []
-        # for _node_, _, _ in _graph_: I think this is not needed, we can just loop node_?
-        for node in node_:
-            roots = sorted(node.root_T[fder][fd], key=lambda root: root[2], reverse=True)
-            # rdn_Val = 0  # val of stronger inclusion in overlapping graphs, in same fork (strongest root with 0 rdn)
-            for root_rdn, root in enumerate(roots):
-                Val = np.sum(node.val_Ht) - ave * (np.sum(node.rdn_Ht) + root_rdn)  # not sure
-                if Val > 0:
-                    prune_Val += Val
-                    pruned_link_ = []  # per node
-                    for link in node.link_H[fder]:
-                        # tentative re-eval node links:
-                        _node = link.G1 if link.G0 is node else link.G0
-                        # prune links from node
-                        if not np.sum(_node.val_Ht)  * (link.valt[fder]/link.valt[2]) - ave * (np.sum(_node.rdn_Ht[fder]) + root_rdn):
-                            pruned_link_ += [link]
-                    # prune links
-                    for pruned_link in pruned_link_: 
-                        node.link_Ht[fder].remove(pruned_link)
-                # if Val is < 0, increase their rdn so that we will not select them as max?
+    graph_ = [ [[],[],0] for graph in _graph_]  # init new graphs: [[node_, pri_root_tt_, Val]]
+
+    for i, (_node_, _pri_root_tt_, _Val) in enumerate(_graph_):
+        for node, pri_root_tt  in zip(_node_, _pri_root_tt_):
+
+            roots = sorted(node.root_tt[fder][fd], key=lambda root: root[2], reverse=True)
+            for rdn, root in enumerate(roots):
+                val = sum(node.val_Ht) - ave * (sum(node.rdn_Ht) + rdn)  # +rdn to stronger inclusion in overlapping graphs, same fork
+                # no link pruning: they are not a component of graph, don't depend on rdn?
+                if val > 0:
+                    graph_[i][0] += [node]
+                    graph_[i][1] += [_pri_root_tt_]
+                    graph_[i][2] += val
                 else:
-                    node.rdn_Ht[-1] += root_rdn * abs(Val)
-    
-        # reform graphs after pruning
-        max_ = select_max_(node_, fder, ave)
-        graph_ = segment_node_(node_, max_, pri_root_T_, fder, fd)
-
-        if prune_Val < 0:
-            break
-
-    return graph_
-
-
-def prune_old(_graph_, fder, fd):
-
-    graph_ = []
-    for _node_, _pri_root_T_, _Val in _graph_:
-        node_, pri_root_T_ = [],[]
-        for node in _node_:
-            roots = sorted(node.root_T[fder][fd], key=lambda root: root[2], reverse=True)
-            rdn_Val = 1  # val of stronger inclusion in overlapping graphs, in same fork
-            for root in roots:
-                Val = sum(node.val_Ht) - ave * (sum(node.rdn_Ht) + rdn_Val/ave)  # not sure
-                if Val > 0:
-                    node_ += [node]
-                    for link in node.link_Ht[fder]:
-                        _node = link.G1 if link.G0 is node else link.G0
-                        _Val * (link.valt[fder]/link.valt[2]) - ave * (sum(_node.rdn_Ht[fder]) + node.Rdn)
-                        # prune the value above is negative?
-                    rdn_Val += root[2]
+                    node.root_tt[fder][fd].remove(root)
+        # graph pruning:
+        return [graph for graph in graph_ if graph[2] > G_aves[fder]]
 
 
 # replace with prune_graphs:
