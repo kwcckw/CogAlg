@@ -214,9 +214,12 @@ def prune_graph_(graph_, fder, fd):
         for node in graph[0]:
             roots = sorted(node.root_tt[fder][fd], key=lambda root: root[2], reverse=True)
             # we need to sort roots by the sum of in-graph links Val per node, whole-graph Val is not specific
-            for rdn, root in enumerate(roots):
+            for rdn, graph in enumerate(roots):
                 # rdn to stronger inclusion in same-fork overlapping graphs
-                graph_[graph_.index(root)][2] -= ave*rdn  # reduce Val of current root graph of current node by overlap
+                # graph_[graph_.index(root)][2] -= ave*rdn  # reduce Val of current root graph of current node by overlap
+                # the line above is not needed, root is the same with graph_[index] now
+                graph[2] -= ave *rdn
+                    
     pruned_graph_ = []
     for graph in graph_:
         if graph[2] > G_aves[fder]:  # eval adjusted Val to reduce graph overlap
@@ -275,44 +278,55 @@ def sum_box(Box, box):
 # draft:
 def sub_recursion_eval(root, graph_):  # eval per fork, same as in comp_slice, still flat aggH, add valt to return?
 
-    termt = [1,1]
+    term = 1
     for graph in graph_:
-        node_ = copy(graph.node_tt); sub_G_t = []
         fr = 0
-        for fd in 0,1:
-            if graph.val_Ht[fd][-1] > G_aves[fd] * graph.rdn_Ht[fd][-1] and len(graph.node_tt) > ave_nsubt[fd]:
-                graph.rdn_Ht[fd][-1] += 1  # estimate, no node.rdnt[fd] += 1?
-                termt[fd] = 0; fr = 1
-                sub_G_t += [sub_recursion(graph, node_, fd)]  # comp_der|rng in graph -> parLayer, sub_Gs
-            else:
-                sub_G_t += [node_]
-                if isinstance(root, Cgraph):
-                    root.fback_ += [[graph.aggH, graph.val_Ht, graph.rdn_Ht]]  # fback_t vs. flat?
+        node_ = copy(graph.node_tt); sub_G_t = []
+        # to make this consistent with the structure in agg+, i think we need to change the evaluation so that fder and fd loop is inside sub_recursion?
+        if (len(graph.node_tt) > ave) and \
+           (sum(graph.val_Ht[0]) > G_aves[0] * sum(graph.rdn_Ht[0]) or \
+            sum(graph.val_Ht[1]) > G_aves[1] * sum(graph.rdn_Ht[1])):
+         
+            fr = 1
+            sub_recursion(graph, sub_G_t)  # comp_der|rng in graph -> parLayer, sub_Gs
+        else:
+            term = 0
+            sub_G_t += [node_]
+            if isinstance(root, Cgraph):
+                root.fback_ += [[graph.aggH, graph.val_Ht, graph.rdn_Ht]]  # fback_t vs. flat?
         if fr:
             graph.node_tt = sub_G_t  # still node_ here
-    for fd in 0,1:
-        if termt[fd] and root.fback_:  # no lower layers in any graph
-           feedback(root, fd)
+
+    if term and root.fback_:  # no lower layers in any graph
+       feedback(root, fd)
 
 
-def sub_recursion(graph, fder, fd):  # rng+: extend G_ per graph, der+: replace G_ with derG_, valt=[0,0]?
+def sub_recursion(graph, sub_G_t):  # rng+: extend G_ per graph, der+: replace G_ with derG_, valt=[0,0]?
 
+    G_tt = [[[],[]],[[],[]]]  # fill with 4 clustering forks
     pri_root_tt_ = []
     for node in graph.node_tt:
         pri_root_tt_ += [node.root_tt]  # save root_T for new graphs, different per node
         node.root_tt = [[[],[]],[[],[]]]  # replace node.root_T, then append [root,val] in each fork
         for i in 0,1:
             node.val_Ht[i]+=[0]; node.rdn_Ht[i]+=[1]  # new val,rdn layer, accum in comp_G_
+        # add new layer of link_
+        node.link_H += [[]]
+    
+    for fder in 0, 1:
+        comp_G_(graph.node_tt, pri_G_=None, f1Q=1, fder=fder)  # cross-comp all Gs in rng
+                
+        for fd in 0,1:
+            graph.rdn_Ht[fd][-1] += 1  # estimate, no node.rdnt[fd] += 1?
+            sub_G_t = form_graph_(graph, pri_root_tt_, fder, fd)  # cluster sub_graphs via link_H
+            G_tt[fder][fd] = sub_G_t
+            
+            for i, sub_G_ in enumerate(sub_G_t):
+                if sub_G_:  # and graph.rdn > ave_sub * graph.rdn:  # from sum2graph, not last-layer valt,rdnt?
+                    for sub_G in sub_G_: sub_G.root = graph
+                    sub_recursion_eval(graph, sub_G_)
 
-    comp_G_(graph.node_tt, pri_G_=None, f1Q=1, fder=fder)  # cross-comp all Gs in rng
-    sub_G_t = form_graph_(graph, pri_root_tt_, fder, fd)  # cluster sub_graphs via link_H
-
-    for i, sub_G_ in enumerate(sub_G_t):
-        if sub_G_:  # and graph.rdn > ave_sub * graph.rdn:  # from sum2graph, not last-layer valt,rdnt?
-            for sub_G in sub_G_: sub_G.root = graph
-            sub_recursion_eval(graph, sub_G_)
-
-    return sub_G_t  # for 4 nested forks in replaced P_?
+    sub_G_t[:] = G_tt  # for 4 nested forks in replaced P_?
 
 # not revised:
 def feedback(root, fd):  # append new der layers to root
