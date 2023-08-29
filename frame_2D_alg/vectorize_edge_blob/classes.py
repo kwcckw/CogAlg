@@ -112,7 +112,7 @@ class Cgraph(ClusterStructure):  # params of single-fork node_ cluster per pplay
     alt_Graph : object = None  # conditional, summed and concatenated params of alt_graph_
     # temporary:
     compared_ : list = z([])
-    fback_ : list = z([])  # [feedback aggH,valt,rdnt per node]
+    fback_t : list = z([[],[]])  # [feedback aggH,valt,rdnt per node]
     Rdn : int = 0  # for accumulation or separate recursion count?
 
     # id_H : list = z([[]])  # indices in the list of all possible layers | forks, not used with fback merging
