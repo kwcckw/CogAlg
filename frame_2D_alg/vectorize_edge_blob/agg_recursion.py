@@ -324,10 +324,11 @@ def feedback(root, fder):  # append new der layers to root
     if isinstance(root.root_tt, list):  # not blob
         for fder, root_t in enumerate(root.root_tt):
             for fd, root_ in enumerate(root_t):
-                for rroot in root_:
-                    rroot.fback_t[fder] += [Fback]
-                if len(rroot.fback_t[fder]) == len(rroot.node_tt[fder][fd]):  # all nodes term, fed back to root.fback_
-                    feedback(rroot, fder)  # aggH/ rng layer in sum2PP, deeper rng layers are appended by feedback
+                if root_:  # default root_ is empty list
+                    for rroot in root_:
+                        rroot.fback_t[fder] += [Fback]
+                    if len(rroot.fback_t[fder]) == len(rroot.node_tt[fder][fd]):  # all nodes term, fed back to root.fback_
+                        feedback(rroot, fder)  # aggH/ rng layer in sum2PP, deeper rng layers are appended by feedback
 
 
 def comp_ext(_ext, ext, Valt, Rdnt):  # comp ds:
@@ -379,23 +380,24 @@ def comp_subH(_subH, subH, rn):
                 mval,dval,maxv = valt
                 Mval += mval; Dval += dval; Maxv += maxv; Mrdn += rdnt[0] + dval > mval; Drdn += rdnt[1] + dval <= mval
             else:  # _lay[0][0] is L, comp dext:
-                DerH += comp_ext(_lay[1],lay[1], [Mval,Dval,Maxv], [Mrdn,Drdn])
+                DerH += [comp_ext(_lay[1],lay[1], [Mval,Dval,Maxv], [Mrdn,Drdn])]  # pack as new element
 
     return DerH, [Mval,Dval,Maxv], [Mrdn,Drdn]  # new layer, 1/2 combined derH
 
 def comp_aggH(_aggH, aggH, rn):  # no separate ext processing?
-      SubH = []
-      Mval, Dval, Maxv, Mrdn, Drdn = 0,0,0,1,1
+    SubH = []
+    Mval, Dval, Maxv, Mrdn, Drdn = 0,0,0,1,1
 
-      for _lev, lev in zip_longest(_aggH, aggH, fillvalue=[]):  # compare common lower layer|sublayer derHs
-          if _lev and lev:  # also if lower-layers match: Mval > ave * Mrdn?
-              # compare dsubH only:
-              dsubH, valt, rdnt = comp_subH(_lev[0], lev[0], rn)
-              SubH += [[dsubH, valt, rdnt]]
-              mval,dval,maxv = valt
-              Mval += mval; Dval += dval; Maxv+=maxv; Mrdn += rdnt[0]+dval>mval; Drdn += rdnt[1]+mval<=dval
+    for _lev, lev in zip_longest(_aggH, aggH, fillvalue=[]):  # compare common lower layer|sublayer derHs
+        if _lev and lev:  # also if lower-layers match: Mval > ave * Mrdn?
+            # compare dsubH only:
+            dsubH, valt, rdnt = comp_subH(_lev[0], lev[0], rn)
+            # so i checked and we need to flatten subH here, with additional brackets, it's actually an aggH
+            SubH += dsubH
+            mval,dval,maxv = valt
+            Mval += mval; Dval += dval; Maxv+=maxv; Mrdn += rdnt[0]+dval>mval; Drdn += rdnt[1]+mval<=dval
 
-      return SubH, [Mval,Dval,Maxv], [Mrdn,Drdn]
+    return SubH, [Mval,Dval,Maxv], [Mrdn,Drdn]
 
 
 def sum_subH(T, t, base_rdn):
