@@ -32,9 +32,10 @@ There are concepts that include same matching vars: size, density, color, stabil
 Weak value vars are combined into higher var, so derivation fork can be selected on different levels of param composition.
 '''
 
+# not revised:
 def agg_recursion(root, node_, pri_root_tt_=[]):  # compositional recursion in root.PP_
 
-    if not pri_root_tt_:  pri_root_tt_ = [ [[[],[]], [[],[]]] for _ in node_]  # for root fork
+    if not pri_root_tt_:  pri_root_tt_ = [[[[],[]],[[],[]]] for _ in node_]  # for root fork
     for i in 0,1: root.rdn_Ht[i][0] += 1  # estimate, no node.rdnt[fder] += 1?
 
     node_tt = [[[],[]],[[],[]]]  # fill with 4 clustering forks
@@ -286,14 +287,12 @@ def sub_recursion_eval(root, graph_):  # eval per fork, same as in comp_slice, s
                 sub_tt += [sub_recursion(graph, node_, fder)]  # comp_der|rng in graph -> parLayer, sub_Gs
             else:
                 sub_tt += [node_]
-                if isinstance(root, Cgraph):
-                    # should be fback_t here? so that it is per fder fork? Because it is in fder loop.
-                    root.fback_t[fder] += [[graph.aggH, graph.val_Ht, graph.rdn_Ht]]  # fback_t vs. flat?
+                root.fback_t[fder] += [[graph.aggH, graph.val_Ht, graph.rdn_Ht]]
         if fr:
             graph.node_tt = sub_tt  # else still graph.node_
     for fder in 0, 1:
         if termt[fder] and root.fback_t[fder]:  # no lower layers in any graph
-            feedback_Ht(root, fder)
+            feedback(root, fder)
 
 def sub_recursion(graph, node_, fder):  # rng+: extend G_ per graph, der+: replace G_ with derG_, valt=[0,0]?
 
@@ -313,7 +312,7 @@ def sub_recursion(graph, node_, fder):  # rng+: extend G_ per graph, der+: repla
 
     return sub_t
 
-def feedback_Ht(root, fder):  # append new der layers to root
+def feedback(root, fder):  # append new der layers to root
 
     Fback = deepcopy(root.fback_t[fder].pop())  # init with 1st fback: [aggH,val_Ht,rdn_Ht]
     while root.fback_t[fder]:
@@ -325,27 +324,10 @@ def feedback_Ht(root, fder):  # append new der layers to root
     if isinstance(root.root_tt, list):  # not blob
         for fder, root_t in enumerate(root.root_tt):
             for fd, root_ in enumerate(root_t):
-                for new_root in root_:
-                    new_root.fback_t[fder] += [Fback]
-                if len(new_root.fback_t[fder]) == len(new_root.node_tt[fder][fd]):  # all nodes term, fed back to root.fback_
-                    feedback_Ht(new_root, fder)
-                    # feedback(new_root, fder)  # aggH/ rng layer in sum2PP, deeper rng layers are appended by feedback
-
-
-def feedback(root, fd):  # append new der layers to root
-
-    Fback = deepcopy(root.fback_.pop())  # init with 1st fback: [aggH,valt,rdnt]
-    while root.fback_:
-        aggH, valt, rdnt = root.fback_.pop()
-        sum_aggH(Fback, [aggH, valt, rdnt] , base_rdn=0)
-    for i in 0, 1:
-        sum_aggH([root.aggH[i], root.valt[i],root.rdnt[i]], [Fback[i],Fback[0][i],Fback[0][i]], base_rdn=0)
-
-    if isinstance(root.root, Cgraph):  # not blob
-        root = root.root
-        root.fback_ += [Fback]
-        if len(root.fback_) == len(root.node_[fd]):  # all nodes term, fed back to root.fback_
-            feedback(root, fd)  # aggH/ rng layer in sum2PP, deeper rng layers are appended by feedback
+                for rroot in root_:
+                    rroot.fback_t[fder] += [Fback]
+                if len(rroot.fback_t[fder]) == len(rroot.node_tt[fder][fd]):  # all nodes term, fed back to root.fback_
+                    feedback(rroot, fder)  # aggH/ rng layer in sum2PP, deeper rng layers are appended by feedback
 
 
 def comp_ext(_ext, ext, Valt, Rdnt):  # comp ds:
