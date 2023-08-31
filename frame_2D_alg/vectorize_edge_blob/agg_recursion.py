@@ -36,10 +36,9 @@ Weak value vars are combined into higher var, so derivation fork can be selected
 def agg_recursion(root, node_):  # compositional recursion in root graph
 
     for i in 0,1: root.rdn_Ht[i][0] += 1  # estimate, no node.rdnt[fder] += 1?
-    pri_root_tt_ = [[[[],[]],[[],[]]] for _ in node_]
-
-    for node, pri_root_tt in zip(node_, pri_root_tt_):
-        merge_root_tree(pri_root_tt, node.root_tt)  # save node roots for new graphs
+    pri_root_tt_ = []
+    for node in node_:
+        pri_root_tt_ += [node.root_tt]  # save node roots for new graphs
         node.root_tt = [[[],[]],[[],[]]]  # to replace node roots
         for i in 0,1:
             node.val_Ht[i]+=[0]; node.rdn_Ht[i]+=[1]  # new val,rdn layer, accum in comp_G_
@@ -56,10 +55,10 @@ def agg_recursion(root, node_):  # compositional recursion in root graph
                 fr = 1  # cluster link_H[-1]:
                 graph_ = form_graph_(node_, fder, fd, pri_root_tt_)
                 sub_recursion_eval(root, graph_)  # sub+, eval last layer?
-                if sum(root.val_Ht[fder]) > G_aves[fder] * sum(root.rdn_Ht[fder]):  # updated in sub+
+                if sum(root.val_Ht[fder]) > G_aves[fder] * sum(root.rdn_Ht[fder]) and len(graph_)>1:  # updated in sub+
                     agg_recursion(root, graph_)  # agg+, replace root.node_ with new graphs, if any
                 node_tt[fder][fd] = graph_
-            elif root.root_T:  # if deeper agg+
+            elif root.root_tt[fder][fd]:  # if deeper agg+
                 node_tt[fder][fd] = node_
                 feedback(root, fder, fd)  # update root.root..H, breadth-first
     if fr:
@@ -276,15 +275,14 @@ def sum_box(Box, box):
 # tentative:
 def sub_recursion_eval(root, graph_):  # eval per fork, same as in comp_slice, still flat aggH, add valt to return?
 
-    term_tt = [[],[]]  # term if both empty, not sure its needed, just check fback_tt?
-    for graph in graph_:
+    term_tt = [[[],[]],[[],[]]]
+    for i, graph in enumerate(graph_):
         node_ = copy(graph.node_tt)  # still graph.node_
         sub_tt = []
         fr = 0
         for fder in 0,1:
             if graph.val_Ht[fder][-1] > G_aves[fder] * graph.rdn_Ht[fder][-1] and len(graph.node_tt) > ave_nsubt[fder]:
                 graph.rdn_Ht[fder][-1] += 1  # estimate, no node.rdnt[fd]+=1?
-                term_tt[fder] = [1,1]
                 fr = 1
                 sub_tt += [sub_recursion(root, graph, node_, fder, term_tt)]  # comp_der|rng in graph -> parLayer, sub_Gs
             else:
@@ -295,9 +293,8 @@ def sub_recursion_eval(root, graph_):  # eval per fork, same as in comp_slice, s
     for fder in 0,1:
         for fd in 0,1:
             # or no term_tt is needed: all forks must terminate here?
-            if term_tt[fder][fd] and root.fback_tt[fder][fd]:  # no lower layers in any graph
+            if root.fback_tt[fder][fd] and sum( term_tt[fder][fd]) == len(root.fback_tt[fder][fd]):  # all lower graphs are terminated
                 feedback(root, fder, fd)
-
 
 def sub_recursion(root, graph, node_, fder, term_tt):  # rng+: extend G_ per graph, der+: replace G_ with derG_, valt=[0,0]?
 
@@ -316,7 +313,8 @@ def sub_recursion(root, graph, node_, fder, term_tt):  # rng+: extend G_ per gra
         for G in sub_G_:  # tentative, move to form_graph_?
             root.fback_tt[fder][fd] += [[G.aggH, G.val_Ht, G.rdn_Ht]]
         # not sure its needed:
-        if sub_G_: term_tt[fder][fd] = 0
+        if sub_G_: term_tt[fder][fd] += [1]  # should be 1 here? Else there will be nothing in feedback too
+        else:      term_tt[fder][fd] += [0]
         sub_t += [sub_G_]
 
     return sub_t
@@ -325,9 +323,9 @@ def sub_recursion(root, graph, node_, fder, term_tt):  # rng+: extend G_ per gra
 def feedback(root, fder, fd):  # append new der layers to root
 
     # not revised:
-    Fback = deepcopy(root.fback_t[fder].pop())  # init with 1st fback: [aggH,val_Ht,rdn_Ht]
-    while root.fback_t[fder]:
-        aggH, val_Ht, rdn_Ht = root.fback_t[fder].pop()
+    Fback = deepcopy(root.fback_tt[fder][fd].pop())  # init with 1st fback: [aggH,val_Ht,rdn_Ht]
+    while root.fback_tt[fder][fd]:
+        aggH, val_Ht, rdn_Ht = root.fback_tt[fder].pop()
         sum_aggH(Fback, [aggH, val_Ht, rdn_Ht], base_rdn=0)
 
     sum_aggH([root.aggH, root.val_Ht,root.rdn_Ht], Fback, base_rdn=0)  # both fder forks sum into a same root?
@@ -335,7 +333,7 @@ def feedback(root, fder, fd):  # append new der layers to root
     for fder, root_t in enumerate(root.root_tt):
         for fd, root_ in enumerate(root_t):
                 for rroot in root_:
-                    rroot.fback_t[fder] += [Fback]
+                    rroot.fback_tt[fder] += [Fback]
                     # it's not rroot.node_tt, we need to concat and check the deepest levels of node nesting?:
                     if len(rroot.fback_tt[fder][fd]) == len(rroot.node_tt[fder][fd]):  # all nodes term and fed back to root
                         feedback(rroot, fder, fd)  # aggH/rng in sum2PP, deeper rng layers are appended by feedback
