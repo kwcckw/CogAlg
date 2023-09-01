@@ -101,7 +101,7 @@ class Cgraph(ClusterStructure):  # params of single-fork node_ cluster per pplay
     val_Ht : list = z([[0],[0]])  # H of link vals per fder
     rdn_Ht : list = z([[1],[1]])
     node_tt : list = z([])  #-> Gmr_,Gdr_, Gmd_,Gdd_ by agg+/sub+, nested if wH: down-forking tree of node Levs
-    root_tt : list = z([[],[]],[[],[]])  # up reciprocal to node_tt, nested if uH: up-forking tree of root Levs
+    root_tt : list = z([[[],[]],[[],[]]])  # up reciprocal to node_tt, nested if uH: up-forking tree of root Levs
     L : int = 0 # len base node_; from internal links:
     S : float = 0.0  # sparsity: average distance to link centers
     A : list = z([0,0])  # angle: average dy,dx to link centers
@@ -112,7 +112,7 @@ class Cgraph(ClusterStructure):  # params of single-fork node_ cluster per pplay
     alt_Graph : object = None  # conditional, summed and concatenated params of alt_graph_
     # temporary:
     compared_ : list = z([])
-    fback_tt : list = z([])  # feedback [[aggH,valt,rdnt]] per node fork, init empty
+    fback_tt : list = z([[[],[]],[[],[]]])  # feedback [[aggH,valt,rdnt]] per node fork, init empty
     Rdn : int = 0  # for accumulation or separate recursion count?
 
     # id_H : list = z([[]])  # indices in the list of all possible layers | forks, not used with fback merging

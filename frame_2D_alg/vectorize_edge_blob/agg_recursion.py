@@ -52,10 +52,11 @@ def agg_recursion(root, node_):  # compositional recursion in root graph
         for fd in 0,1:  # clustering forks, each adds graph_: new node_ in node_tt:
             if sum(root.val_Ht[fder]) > G_aves[fder] * sum(root.rdn_Ht[fder]):
                 # cluster link_H[-1]:
+                # should we separate root for agg+ and sub+ here?
                 graph_ = form_graph_(node_, fder, fd, pri_root_tt_)
                 sub_recursion_eval(root, graph_)  # sub+, eval last layer?
                 fr = 1
-                if (sum(root.val_Ht[fder]) * np.sqrt(len(graph_)-1) if graph_ else 0 > G_aves[fder] * sum(root.rdn_Ht[fder])):
+                if sum(root.val_Ht[fder]) * np.sqrt(len(graph_)-1) if graph_ else 0 > G_aves[fder] * sum(root.rdn_Ht[fder]):
                     # updated in sub+, *len: n comp graphs -> n potential matches, at decreasing rate
                     agg_recursion(root, graph_)  # agg+, replace root.node_ with new graphs
                 node_tt[fder][fd] = graph_
@@ -267,7 +268,7 @@ def sum_box(Box, box):
     Y,X,Y0,Yn,X0,Xn = Box; y,x,y0,yn,x0,xn = box
     Box[:] = [Y+y, X+x, min(X0,x0), max(Xn,xn), min(Y0,y0), max(Yn,yn)]
 
-
+'''
 def sub_recursion_eval(root, graph_):  # eval per fork, same as in comp_slice, still flat aggH, add valt to return?
 
     Sub_tt = [[[],[]],[[],[]]]  # graph_-wide, maps to root.fback_tt
@@ -292,9 +293,9 @@ def sub_recursion_eval(root, graph_):  # eval per fork, same as in comp_slice, s
         for fd in 0,1:
             if Sub_tt[fder][fd]:  # new nodes, all terminated, all send feedback
                 feedback(root, fder, fd)
+'''
 
-
-def sub_recursion_eval_frt(root, graph_): # eval per fork, same as in comp_slice, still flat aggH, add valt to return?
+def sub_recursion_eval(root, graph_): # eval per fork, same as in comp_slice, still flat aggH, add valt to return?
 
     Sub_tt = [[[],[]],[[],[]]]  # graph_-wide, maps to root.fback_tt
 
@@ -312,7 +313,7 @@ def sub_recursion_eval_frt(root, graph_): # eval per fork, same as in comp_slice
         for fder in 0,1:
             if frt[fder]:
                 for fd in 0, 1:
-                    Sub_tt[fder][fd] += [sub_tt[fder][fd]]  # graph_-wide, even if empty, to count graphs for higher feedback
+                    Sub_tt[fder][fd] += sub_tt[fder][fd]  # graph_-wide, even if empty, to count graphs for higher feedback (remove bracket for merging purpose)
                 graph.node_tt[fder] = sub_tt[fder]  # else still graph.node_
     for fder in 0,1:
         for fd in 0,1:
@@ -347,7 +348,7 @@ def feedback(root, fder, fd):  # append new der layers to root
     # not revised:
     Fback = deepcopy(root.fback_tt[fder][fd].pop())  # init with 1st fback: [aggH,val_Ht,rdn_Ht]
     while root.fback_tt[fder][fd]:
-        aggH, val_Ht, rdn_Ht = root.fback_tt[fder].pop()
+        aggH, val_Ht, rdn_Ht = root.fback_tt[fder][fd].pop()
         sum_aggH(Fback, [aggH, val_Ht, rdn_Ht], base_rdn=0)
 
     sum_aggH([root.aggH, root.val_Ht,root.rdn_Ht], Fback, base_rdn=0)  # both fder forks sum into a same root?
