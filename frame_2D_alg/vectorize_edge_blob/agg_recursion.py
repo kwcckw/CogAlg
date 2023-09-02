@@ -36,10 +36,11 @@ Weak value vars are combined into higher var, so derivation fork can be selected
 def agg_recursion(root, node_):  # compositional recursion in root graph
 
     for i in 0,1: root.rdn_Ht[i][0] += 1  # estimate, no node.rdnt[fder] += 1?
-    pri_root_tt_ = []
+    pri_root_tt_, root_tt_ = [], []
     for node in node_:
         pri_root_tt_ += [node.root_tt]  # merge node roots for new graphs in segment_node_
         node.root_tt = [[[],[]],[[],[]]]  # replace node roots
+        root_tt_ += [node.root_tt]
         for i in 0,1:
             node.val_Ht[i]+=[0]; node.rdn_Ht[i]+=[1]  # new val,rdn layer, accum in comp_G_
     node_tt = [[[],[]],[[],[]]]  # fill with 4 clustering forks:
@@ -57,6 +58,7 @@ def agg_recursion(root, node_):  # compositional recursion in root graph
                 fr = 1
                 if sum(root.val_Ht[fder]) * np.sqrt(len(graph_)-1) if graph_ else 0 > G_aves[fder] * sum(root.rdn_Ht[fder]):
                     # updated in sub+, *len: n comp graphs -> n potential matches, at decreasing rate
+                    for i, node in enumerate(node_): node.root_tt[fder][fd] = root_tt_[i][fder][fd]  # reset root_tt to current agg+'s root_tt after sub+
                     agg_recursion(root, graph_)  # agg+, replace root.node_ with new graphs
                 node_tt[fder][fd] = graph_
             elif root.root_tt[fder][fd]:  # if deeper agg+
@@ -290,7 +292,8 @@ def sub_recursion_eval(root, graph_): # eval per fork, same as in comp_slice, st
                 graph.node_tt[fder] = sub_tt[fder]  # else still graph.node_
     for fder in 0,1:
         for fd in 0,1:
-            if Sub_tt[fder][fd]:  # new nodes, all terminated, all send feedback
+            # sub_ may empty
+            if [sub for sub_ in Sub_tt[fder][fd] for sub in sub_]:  # new nodes, all terminated, all send feedback
                 feedback(root, fder, fd)
 
 
@@ -335,7 +338,7 @@ def feedback(root, fder, fd):  # append new der layers to root
     for fder, root_t in enumerate(root.root_tt):
         for fd, root_ in enumerate(root_t):
                 for rroot in root_:
-                    rroot.fback_tt[fder] += [Fback]
+                    rroot.fback_tt[fder][fd] += [Fback]
                     # it's not rroot.node_tt, we need to concat and check the deepest levels of node nesting?:
                     if len(rroot.fback_tt[fder][fd]) == len(rroot.node_tt[fder][fd]):  # all nodes term and fed back to root
                         feedback(rroot, fder, fd)  # aggH/rng in sum2PP, deeper rng layers are appended by feedback
