@@ -52,7 +52,6 @@ def agg_recursion(root, node_):  # compositional recursion in root graph
         for fd in 0,1:  # clustering forks, each adds graph_: new node_ in node_tt:
             if sum(root.val_Ht[fder]) > G_aves[fder] * sum(root.rdn_Ht[fder]):
                 # cluster link_H[-1]:
-                # should we separate root for agg+ and sub+ here?
                 graph_ = form_graph_(node_, fder, fd, pri_root_tt_)
                 sub_recursion_eval(root, graph_)  # sub+, eval last layer?
                 fr = 1
@@ -268,32 +267,6 @@ def sum_box(Box, box):
     Y,X,Y0,Yn,X0,Xn = Box; y,x,y0,yn,x0,xn = box
     Box[:] = [Y+y, X+x, min(X0,x0), max(Xn,xn), min(Y0,y0), max(Yn,yn)]
 
-'''
-def sub_recursion_eval(root, graph_):  # eval per fork, same as in comp_slice, still flat aggH, add valt to return?
-
-    Sub_tt = [[[],[]],[[],[]]]  # graph_-wide, maps to root.fback_tt
-
-    for graph in graph_:
-        node_ = copy(graph.node_tt)  # still graph.node_
-        sub_tt = []  # each new fork adds fback
-        fr = 0
-        for fder in 0,1:
-            if graph.val_Ht[fder][-1] * np.sqrt(len(node_)-1) if node_ else 0 > G_aves[fder] * graph.rdn_Ht[fder][-1]:
-                graph.rdn_Ht[fder][-1] += 1  # estimate, no node.rdnt[fd]+=1?
-                fr = 1
-                sub_tt += [sub_recursion(root, graph, node_, fder)]  # comp_der|rng in graph -> parLayer, sub_Gs
-            else:
-                sub_tt += [node_]
-        for fder in 0,1:
-            for fd in 0,1:
-                Sub_tt[fder][fd] += [sub_tt[fder][fd]]  # graph_-wide, even if empty, to count graphs for higher feedback
-        if fr:
-            graph.node_tt = sub_tt  # else still graph.node_
-    for fder in 0,1:
-        for fd in 0,1:
-            if Sub_tt[fder][fd]:  # new nodes, all terminated, all send feedback
-                feedback(root, fder, fd)
-'''
 
 def sub_recursion_eval(root, graph_): # eval per fork, same as in comp_slice, still flat aggH, add valt to return?
 
@@ -313,7 +286,7 @@ def sub_recursion_eval(root, graph_): # eval per fork, same as in comp_slice, st
         for fder in 0,1:
             if frt[fder]:
                 for fd in 0, 1:
-                    Sub_tt[fder][fd] += sub_tt[fder][fd]  # graph_-wide, even if empty, to count graphs for higher feedback (remove bracket for merging purpose)
+                    Sub_tt[fder][fd] += [sub_tt[fder][fd]]  # graph_-wide, even if empty, nest to count graphs for higher feedback
                 graph.node_tt[fder] = sub_tt[fder]  # else still graph.node_
     for fder in 0,1:
         for fd in 0,1:
@@ -323,8 +296,14 @@ def sub_recursion_eval(root, graph_): # eval per fork, same as in comp_slice, st
 
 def sub_recursion(root, graph, node_, fder):  # rng+: extend G_ per graph, der+: replace G_ with derG_, valt=[0,0]?
 
-    if not fder:  # add link layer:
-        for node in node_: node.link_H += [[]]
+    for i in 0,1: root.rdn_Ht[i][0] += 1  # estimate, no node.rdnt[fder] += 1?
+    pri_root_tt_ = []
+    for node in node_:
+        if not fder: node.link_H += [[]]  # add link layer:
+        pri_root_tt_ += [node.root_tt]  # merge node roots for new graphs in segment_node_
+        node.root_tt = [[[],[]],[[],[]]]  # replace node roots
+        for i in 0,1:
+            node.val_Ht[i]+=[0]; node.rdn_Ht[i]+=[1]  # new val,rdn layer, accum in comp_G_
 
     comp_G_(node_, pri_G_=None, f1Q=1, fder=fder)  # cross-comp all nodes in rng
     sub_t = []
@@ -463,7 +442,6 @@ def sum_aggH(T, t, base_rdn):
             if rdn != None:
                 if Rdn != None: Rdn_Ht[i][j] += rdn
                 else:           Rdn_Ht[i] += [rdn]
-
     if aggH:
         if AggH:
             for Layer, layer in zip_longest(AggH,aggH, fillvalue=[]):
