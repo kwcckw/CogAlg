@@ -35,7 +35,9 @@ Weak value vars are combined into higher var, so derivation fork can be selected
 
 def agg_recursion(root, node_):  # compositional recursion in root graph
 
-    pri_root_tt_, node_tt = [[],[]], [[],[]]  # fill with select comp forks:
+    pri_root_tt_, node_tt = [[[[],[]],[[],[]]] for _ in node_], [[[],[]],[[],[]]]  # fill with select comp forks:
+    for node in node_: node.link_H += [[]]  # add new layer of links
+
     # draft:
     for fder in 0,1:
         # eval per comp fork, each adds a layer of links and val_H, rdn_H:
@@ -44,8 +46,8 @@ def agg_recursion(root, node_):  # compositional recursion in root graph
         if sum(root.val_Ht[fder]) * np.sqrt(len(node_) - 1) if node_ else 0 > G_aves[fder] * sum(root.rdn_Ht[fder]):
             if fder and len(node_[0].link_H) < 2:  # 1st call, no der+ yet
                 continue
-            for node in node_:  # draft
-                pri_root_tt_[fder] += [node.root_tt[fder]]  # merge node roots for new graphs in segment_node_
+            for i, node in enumerate(node_):  # draft
+                pri_root_tt_[i][fder] = node.root_tt[fder]  # merge node roots for new graphs in segment_node_
                 node.root_tt[fder] = [[],[]]  # replace node roots, per select comp fork?
                 node.val_Ht[fder] += [0]; node.rdn_Ht[fder] += [1]  # new val,rdn layer, accum in comp_G_
 
@@ -55,12 +57,19 @@ def agg_recursion(root, node_):  # compositional recursion in root graph
                 graph_ = form_graph_(node_, fder, fd, pri_root_tt_)
                 if sum(root.val_Ht[fder]) * np.sqrt(len(graph_)-1) if graph_ else 0 > G_aves[fder] * sum(root.rdn_Ht[fder]):
                     agg_recursion(root, graph_)  # replaces graph_ formed above with graphs-of-graphs node_tt, recursive
+                else:
+                    for graph in graph_:
+                        root.fback_tt[fder][fd] += [[graph.aggH, graph.val_Ht, graph.rdn_Ht]]
+                if root.fback_tt[fder][fd]: feedback(root, fder, fd)  # update root.root..aggH, breadth-first
                 node_tt[fder][fd] = graph_
+                
+    '''
     for fder in 0,1:
         if node_tt[fder]:  # new nodes, all terminated, all send feedback
             for fd in 0,1:
                 if node_tt[fder][fd]:  # new nodes, all terminated, all send feedback
                     feedback(root, fder, fd)  # update root.root..aggH, breadth-first
+    '''
 
     node_[:] = node_tt  # replace local element with new graph forks, possibly empty
 
@@ -129,15 +138,25 @@ def form_graph_(node_, fder, fd, pri_root_tt_):  # form fuzzy graphs of nodes pe
     max_ = select_max_(node_, fder, ave)  # compute max of quasi-Gaussians: val + sum([_val * (link_val/max_val])
 
     pre_graph_ = segment_node_(node_, max_, fder, fd, pri_root_tt_)
-    graph_ = prune_graph_(pre_graph_, fder, fd)  # sort node roots and prune the weak
-    sum2graph_(graph_, fder, fd)  # convert seq_graphs to Cgraphs
+    pruned_graph_ = prune_graph_(pre_graph_, fder, fd)  # sort node roots and prune the weak
+    graph_ = sum2graph_(pruned_graph_, fder, fd)  # convert seq_graphs to Cgraphs
+
     # sub+:
     for graph in graph_:
+        node_tt_ = []
         for fder in 0,1:
             for fd in 0,1:
-                node_ = graph.node_[fder][fd]
+                node_ = copy(graph.node_tt)  # this is just a flat list of node_ here
+                # with current scheme, there will be 4 sub+ per graph here?
                 if sum(graph.val_Ht[fder]) * np.sqrt(len(node_) - 1) if node_ else 0 > G_aves[fder] * sum(graph.rdn_Ht[fder]):
                     agg_recursion(graph, node_)  # replaces node_ formed above with new graphs in node_tt, recursive
+                else:
+                    for node in node_:
+                        graph.fback_tt[fder][fd] += [[node.aggH, node.val_Ht, node.rdn_Ht]]
+                # we can just call this with the loop method? Same with the feedback in agg+
+                if graph.fback_tt[fder][fd]: feedback(graph, fder, fd)
+                node_tt_ += [node_]
+        graph.node_tt = node_tt_  # should be a list of 4 elements here, each packing each sub+'s node_tt
 
     return graph_
 
