@@ -3,7 +3,7 @@ from copy import deepcopy, copy
 from itertools import zip_longest
 from .classes import Cgraph, CderG
 from .filters import aves, ave, ave_nsubt, ave_sub, ave_agg, G_aves, med_decay, ave_distance, ave_Gm, ave_Gd
-from .comp_slice import comp_angle, comp_ptuple, sum_ptuple, sum_derH, comp_derH, comp_aangle
+from .comp_utils import comp_angle, comp_ptuple, sum_ptuple, sum_derH, comp_derH, comp_aangle
 # from .sub_recursion import feedback
 '''
 Blob edges may be represented by higher-composition patterns, etc., if top param-layer match,
@@ -33,7 +33,7 @@ Weak value vars are combined into higher var, so derivation fork can be selected
 '''
 
 
-def agg_recursion(root, node_):  # compositional recursion in root graph
+def agg_recursion(root, node_, fsub=0):  # compositional recursion in root graph
 
     pri_root_tt_ = [node.root_tt for node in node_]  # merge node roots for new graphs, same for both comp forks
     node_tt = [[],[]]  # fill with comp fork if selected, else stays empty
@@ -137,7 +137,7 @@ def form_graph_(node_, fder, fd, pri_root_tt_):  # form fuzzy graphs of nodes pe
     for graph in graph_:
         node_ = copy(graph.node_tt)  # still node_ here
         if sum(graph.val_Ht[fder]) * np.sqrt(len(node_)-1) if node_ else 0 > G_aves[fder] * sum(graph.rdn_Ht[fder]):
-            agg_recursion(graph, node_)  # replaces node_ formed above with new graphs in node_tt, recursive
+            agg_recursion(graph, node_, fsub=1)  # replaces node_ formed above with new graphs in node_tt, recursive
 
     return graph_
 

@@ -4,7 +4,7 @@ from collections import namedtuple, deque, defaultdict
 from itertools import product, combinations
 from .classes import CEdge, CP
 from .filters import ave_g, ave_dangle
-from .comp_slice import comp_angle
+from .comp_utils import comp_angle
 
 '''
 In natural images, objects look very fuzzy and frequently interrupted, only vaguely suggested by initial blobs and contours.
@@ -147,7 +147,8 @@ def form_P(blob, P):
     L = len(P.dert_)
     M = ave_g*L - G
     G = np.hypot(Dy, Dx)  # recompute G
-    P.ptuple = Tptuple(I, Dy, Dx, G, M, Ma, L)
+    # P.ptuple = Tptuple(I, Dy, Dx, G, M, Ma, L)
+    P.ptuple = [I, G, M, Ma, [Dy, Dx], L]  # Dy and Dx needs to be in a list, so that we can sum or comp them differently?
     P.yx = P.dert_[L//2][:2]  # new center
 
     return P
