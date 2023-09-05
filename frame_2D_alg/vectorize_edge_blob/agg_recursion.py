@@ -45,8 +45,7 @@ def agg_recursion(root, node_):  # compositional recursion in root graph
                 continue
             root.val_Ht[fder] += [0]; root.rdn_Ht[fder] += [1]  # estimate, no node.rdnt[fder] += 1?
             for node in node_:
-                if not fder: node.root_tt = [[[],[]],node.root_tt[1]]  # we need this to reinit root_tt, else root_tt is still pointing to pri_root_tt.
-                else:        node.root_tt[fder] = [[],[]]  # to replace node roots per comp fork
+                node.root_tt[fder] = [[],[]]  # to replace node roots per comp fork
                 node.val_Ht[fder] += [0]; node.rdn_Ht[fder] += [1]  # new layer, accum in comp_G_:
             if not fder:  # add layer of links if rng+
                 for node in node_: node.link_H += [[]]
@@ -58,8 +57,6 @@ def agg_recursion(root, node_):  # compositional recursion in root graph
                 graph_ = form_graph_(node_, fder, fd, pri_root_tt_)
                 if sum(root.val_Ht[fder]) * np.sqrt(len(graph_)-1) if graph_ else 0 > G_aves[fder] * sum(root.rdn_Ht[fder]):
                     agg_recursion(root, graph_)  # replaces graph_ with node_tt graphs-of-graphs, recursive
-                else:
-                    for graph in graph_: root.fback_tt[fder][fd] += [[graph.aggH, graph.val_Ht, graph.rdn_Ht]]
                 node_tt[fder][fd] = graph_
     for fder in 0,1:
         if node_tt[fder]:  # new nodes, all terminated, all send feedback
@@ -138,7 +135,7 @@ def form_graph_(node_, fder, fd, pri_root_tt_):  # form fuzzy graphs of nodes pe
     graph_ = sum2graph_(list_graph_, fder, fd)  # convert list graphs to Cgraphs
     # sub+:
     for graph in graph_:
-        node_ = copy(graph.node_tt[fder][fd])  # still node_ here
+        node_ = copy(graph.node_tt)  # still node_ here
         if sum(graph.val_Ht[fder]) * np.sqrt(len(node_)-1) if node_ else 0 > G_aves[fder] * sum(graph.rdn_Ht[fder]):
             agg_recursion(graph, node_)  # replaces node_ formed above with new graphs in node_tt, recursive
 
@@ -240,9 +237,9 @@ def sum2graph_(graph_, fder, fd):  # sum node and link params into graph, aggH i
 
     Graph_ = []
     for graph in graph_:  # seq graphs
-        Graph = Cgraph(L=len(graph[0]))  # pri_root_tt_, n nodes
-        for root_tt in graph[2]: 
-            merge_root_tree(Graph.root_tt, root_tt)  # graph[2] is pri_root_tt_, a list of multiple root_tts, we need to merge them instead
+        Root_tt = copy(graph[2][0])  # merge pri_root_tt_ into Root_tt:
+        [merge_root_tree(Root_tt, root_tt) for root_tt in graph[2][1:]]
+        Graph = Cgraph(root_tt=Root_tt, L=len(graph[0]))  # n nodes
         Link_ = []
         for G in graph[0]:
             sum_box(Graph.box, G.box)
@@ -260,7 +257,7 @@ def sum2graph_(graph_, fder, fd):  # sum node and link params into graph, aggH i
             for i in 0,1:
                 G.val_Ht[i][-1] += valt[i]; G.rdn_Ht[i][-1] += rdnt[i]
             G.root_tt[fder][fd][G.root_tt[fder][fd].index(graph)] = Graph  # replace list graph in root_tt
-            Graph.node_tt[fder][fd] += [G]  # then converted to node_tt by feedback
+            Graph.node_tt += [G]  # then converted to node_tt by feedback
         subH=[]; valt=[0,0]; rdnt=[1,1]
         for derG in Link_:  # sum unique links:
             sum_subH([subH,valt,rdnt], [derG.subH, derG.valt, derG.rdnt], base_rdn=1)
