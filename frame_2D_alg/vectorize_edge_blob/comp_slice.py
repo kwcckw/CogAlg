@@ -1,12 +1,10 @@
 import numpy as np
 from copy import copy, deepcopy
 from itertools import zip_longest
-from .slice_edge import slice_edge
-from .classes import Cgraph, CP, CderP, CPP, CEdge
-from .filters import ave, aves, vaves, ave_dangle, ave_daangle, med_decay, aveB, P_aves, PP_aves, G_aves, ave_nsubt
+from .slice_edge import comp_angle
+from .classes import CEdge, CderP, CPP
+from .filters import ave, aves, vaves, med_decay, aveB, P_aves, PP_aves, ave_nsubt
 from dataclasses import replace
-from .comp_utils import comp_angle, comp_ptuple, sum_ptuple, sum_derH, comp_derH, comp_dtuple, comp_aangle
-from .agg_recursion import agg_recursion
 
 '''
 Vectorize is a terminal fork of intra_blob.
@@ -29,44 +27,14 @@ len prior root_ sorted by G is rdn of each root, to evaluate it for inclusion in
 '''
 
 
-def vectorize_root(edge, verbose=False):
+def comp_slice(edge, verbose=False):  # high-G, smooth-angle blob, composite dert core param is v_g + iv_ga
 
-    slice_edge(edge, verbose=False)
-
-    P_link_ = []  # links per P
-    for P in edge.P_:
-        current_link_ = []
-        for P_link in edge.P_link_:
-            if P in P_link:
-                current_link_ += [P_link[1] if P_link[0] is P else P_link[1]]  # check and pack the other P as links
-        P_link_ += [current_link_]
-
-    # temporary, we need to convert blob into Cgraph? Else we need to kadd additional graphs params into Cedge
-    edge = CEdge( I=edge.I, Dy=edge.Dy, Dx=edge.Dx, G=edge.G, A=edge.A, M=edge.M, box=edge.box, mask__=edge.mask__,
-                  node_ = edge.P_, der__t=edge.der__t, der__t_roots=[[[] for col in row] for row in edge.der__t[0]], adj_blobs=edge.adj_blobs)
-    
-    comp_slice(edge, P_link_, verbose=verbose)  # scan rows top-down, compare y-adjacent, x-overlapping Ps to form derPs
-    # not revised:
-    for fd, PP_ in enumerate(edge.node_tt[0]):  # [rng+ PPm_,PPd_, der+ PPm_,PPd_]
-        # sub+, intra PP:
-        sub_recursion_eval(edge, PP_)
-        # agg+, inter-PP, 1st layer is two forks only:
-        if sum([PP.valt[fd] for PP in PP_]) > ave * sum([PP.rdnt[fd] for PP in PP_]):
-            node_= []
-            for PP in PP_: # CPP -> Cgraph:
-                derH,valt,rdnt = PP.derH,PP.valt,PP.rdnt
-                node_ += [Cgraph(ptuple=PP.ptuple, derH=[derH,valt,rdnt], val_Ht=[[valt[0]], [valt[1]]],rdn_Ht=[[rdnt[0]], [rdnt[1]]], L=len(PP.node_),
-                                 box=[(PP.box[0]+PP.box[1])/2, (PP.box[2]+PP.box[3])/2] + list(PP.box))]
-                sum_derH([edge.derH,edge.valt,edge.rdnt], [derH,valt,rdnt], 0)
-            edge.node_tt[0][fd][:] = node_
-            # rng+ comp new graphs:
-            while sum(edge.val_Ht[0]) * np.sqrt(len(node_)-1) if node_ else 0 > G_aves[0] * sum(edge.rdn_Ht[0]):
-                agg_recursion(edge, node_)  # node_[:] = new node_tt in the end, with sub+
-
-def comp_slice(edge, P_link_, verbose=False):  # high-G, smooth-angle blob, composite dert core param is v_g + iv_ga
-
+    edge = CEdge(I=edge.I, Dy=edge.Dy, Dx=edge.Dx, G=edge.G, A=edge.A, M=edge.M, box=edge.box, mask__=edge.mask__,
+                 node_=edge.P_, der__t=edge.der__t, der__t_roots=[[[] for col in row] for row in edge.der__t[0]], adj_blobs=edge.adj_blobs)
     P_ = []
-    for P, link_ in zip(edge.node_, P_link_):  # init P_, must be contiguous, gaps filled in scan_P_rim
+    for P in edge.node_:  # init P_, must be contiguous, gaps filled in scan_P_rim
+        link_ = copy(P.link_H[-1])  # init rng+
+        P.link_H[-1] = []  # fill with derPs in comp_P
         P_ +=[[P,link_]]
     for P, link_ in P_:
         for _P in link_:  # or spliced_link_ if active
@@ -95,6 +63,33 @@ def comp_P(_P,P, fder=1, derP=None):  #  derP if der+, S if rng+
     if mval > aveP*mrdn or dval > aveP*drdn:
         P.link_H[-1] += [derP]
 
+
+def comp_derH(_derH, derH, rn):  # derH is a list of der layers or sub-layers, each = [mtuple,dtuple, mval,dval, mrdn,drdn]
+
+    dderH = []  # or = not-missing comparand if xor?
+    Mval, Dval, Mrdn, Drdn, Maxv = 0,0,1,1,0
+
+    for _lay, lay in zip_longest(_derH, derH, fillvalue=[]):  # compare common lower der layers | sublayers in derHs
+        if _lay and lay:  # also if lower-layers match: Mval > ave * Mrdn?
+
+            mtuple, dtuple, Mtuple = comp_dtuple(_lay[0][1], lay[0][1], rn)  # compare dtuples only, mtuples are for evaluation
+            mval = sum(mtuple); dval = sum(dtuple); maxv = sum(Mtuple)
+            mrdn = dval > mval; drdn = dval < mval
+            dderH += [[[mtuple,dtuple],[mval,dval,maxv],[mrdn,drdn]]]
+            Mval+=mval; Dval+=dval; Maxv+=maxv; Mrdn+=mrdn; Drdn+=drdn
+
+    return dderH, [Mval,Dval,Maxv], [Mrdn,Drdn]  # new layer, 1/2 combined derH
+
+def comp_dtuple(_ptuple, ptuple, rn):
+
+    mtuple, dtuple, Mtuple = [],[], []
+    for _par, par, ave in zip(_ptuple, ptuple, aves):  # compare ds only?
+        npar= par*rn
+        mtuple += [min(_par, npar) - ave]
+        dtuple += [_par - npar]
+        Mtuple += [max(_par, npar)]
+
+    return [mtuple, dtuple, Mtuple]
 
 # not reviewed:
 def form_PP_t(P_, PP_, base_rdn, fder):  # form PPs of derP.valt[fd] + connected Ps val
@@ -191,7 +186,7 @@ def reval_P_(P_, fd):  # prune qPP by link_val + mediated link__val
 def sum2PP(qPP, base_rdn, fder, fd):  # sum links in Ps and Ps in PP
 
     P_,_,_ = qPP  # proto-PP is a list
-    PP = CPP(fd=fd, node_=P_)
+    PP = CPP(fd=fd, node_tt=P_)
     # accum:
     for i, P in enumerate(P_):
         P.root_tt[fder][fd] = PP
@@ -213,6 +208,57 @@ def sum2PP(qPP, base_rdn, fder, fd):  # sum links in Ps and Ps in PP
     PP.box =(Y0,Yn,X0,Xn)
     return PP
 
+
+def sum_derH(T, t, base_rdn):  # derH is a list of layers or sub-layers, each = [mtuple,dtuple, mval,dval, mrdn,drdn]
+
+    DerH, Valt, Rdnt = T
+    derH, valt, rdnt = t
+    for i in 0, 1:
+        Valt[i] += valt[i]; Rdnt[i] += rdnt[i] + base_rdn
+    if DerH:
+        for Layer, layer in zip_longest(DerH,derH, fillvalue=[]):
+            if layer:
+                if Layer:
+                    for i in range(0,1):
+                        sum_ptuple(Layer[0][i], layer[0][i])  # ptuplet
+                        Layer[1][i] += layer[1][i]  # valt
+                        Layer[2][i] += layer[2][i] + base_rdn  # rdnt
+                else:
+                    DerH += [deepcopy(layer)]
+    else:
+        DerH[:] = deepcopy(derH)
+
+def sum_ptuple(Ptuple, ptuple, fneg=0):
+
+    for i, (Par, par) in enumerate(zip_longest(Ptuple, ptuple, fillvalue=None)):
+        if par != None:
+            if Par != None:
+                if isinstance(Par, list):  # angle or aangle
+                    for i,(P,p) in enumerate(zip(Par,par)):
+                        Par[i] = P-p if fneg else P+p
+                else:
+                    Ptuple[i] += (-par if fneg else par)  # now includes n in ptuple[-1]?
+            elif not fneg:
+                Ptuple += [copy(par)]
+
+def comp_ptuple(_ptuple, ptuple, rn):  # 0der
+
+    mtuple, dtuple, Mtuple = [],[], []
+    # _n, n = _ptuple, ptuple: add to rn?
+    for i, (_par, par, ave) in enumerate(zip(_ptuple, ptuple, aves)):
+        if isinstance(_par, list):
+             m,d = comp_angle(_par, par)
+             maxv = 2
+        else:  # I | M | G L
+            npar= par*rn  # accum-normalized par
+            d = _par - npar
+            if i: m = min(_par,npar)-ave
+            else: m = ave-abs(d)  # inverse match for I, no mag/value correlation
+            maxv = max(_par, par)
+        mtuple+=[m]
+        dtuple+=[d]
+        Mtuple+=[maxv]
+    return [mtuple, dtuple, Mtuple]
 
 
 '''
