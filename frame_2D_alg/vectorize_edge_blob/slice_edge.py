@@ -116,16 +116,21 @@ def trace_edge(blob, mask__, verbose=False):
             if yx_dist >= 1.0:  # or axis_match < ave_dangle - 0.1:
                 continue
             olp_pairs |= {(_P, P)}
+    new_P_ = []  # prevent looping P_ while adding new P into a same P_, this is to prevent endless recursion
     for P in P_:
         y,x = P.yx
         summed_axis = np.sum([P.axis for P in P_], axis=0)
         axis = summed_axis / np.hypot(*summed_axis)
-        i, dy, dx, g = interpolate2dert(blob, y, x)
-        ma = ave_dangle
-        P = form_P(blob, CP(yx=(y,x), axis=axis, cells={(y,x)}, dert_=[(y,x,i,dy,dx,g,ma)]))
-        # link_ -= combinations(P_, r=2)      # remove links between merged Ps, if any
-        # P_ = [P for P in P_ if P not in P_] # remove P
-        P_ += [P]
+        
+        dert = interpolate2dert(blob, y, x)  # dert could be None
+        if dert:
+            i, dy, dx, g = dert
+            ma = ave_dangle
+            P = form_P(blob, CP(yx=(y,x), axis=axis, cells={(y,x)}, dert_=[(y,x,i,dy,dx,g,ma)]))
+            # link_ -= combinations(P_, r=2)      # remove links between merged Ps, if any
+            # P_ = [P for P in P_ if P not in P_] # remove P
+        new_P_ += [P]
+    P_ = new_P_
 
     return P_, link_
 

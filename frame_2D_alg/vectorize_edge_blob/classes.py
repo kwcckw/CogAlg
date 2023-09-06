@@ -17,6 +17,7 @@ class CEdge(ClusterStructure):  # edge blob
     Dy: float = 0.0
     Dx: float = 0.0
     G: float = 0.0
+    M: float = 0.0
     Ma: float = 0.0  # summed PP.Ma, for both types of recursion?
     A: float = 0.0  # blob area
     # composite params:
@@ -27,12 +28,15 @@ class CEdge(ClusterStructure):  # edge blob
     adj_blobs: list = z([])  # adjacent blobs
     node_ : list = z([])  # default P_, node_tt: list = z([[[],[]],[[],[]]]) in select PP_ or G_ forks
     root_ : object= None  # list root_ if fork overlap?
+    root_tt : list = z([[[],[]],[[],[]]])
     derH : list = z([])  # formed in PPs, inherited in graphs
     aggH : list = z([[]])  # [[subH, valt, rdnt]]: cross-fork composition layers
+    valt : list = z([0,0])  # not sure, we have fback_ for derH, so we need valt and rdnt too
+    rdnt : list = z([1,1]) 
     val_Ht : list = z([[0],[0]])  # H of link vals per fder
     rdn_Ht : list = z([[1],[1]])
     fback_ : list = z([])  # [feedback aggH,valt,rdnt per node]
-
+    fback_tt : list = z([])
 
 class CP(ClusterStructure):  # horizontal blob slice P, with vertical derivatives per param if derP, always positive
 

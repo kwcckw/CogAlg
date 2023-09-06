@@ -36,7 +36,7 @@ Weak value vars are combined into higher var, so derivation fork can be selected
 def vectorize_root(edge, verbose=False):
 
     slice_edge(edge, verbose=False)
-    comp_slice(edge, verbose=verbose)  # scan rows top-down, compare y-adjacent, x-overlapping Ps to form derPs
+    edge = comp_slice(edge, verbose=verbose)  # scan rows top-down, compare y-adjacent, x-overlapping Ps to form derPs
     # not revised:
     for fd, PP_ in enumerate(edge.node_tt[0]):  # [rng+ PPm_,PPd_, der+ PPm_,PPd_]
         # sub+, intra-PP:
@@ -47,7 +47,7 @@ def vectorize_root(edge, verbose=False):
             for PP in PP_: # CPP -> Cgraph:
                 derH,valt,rdnt = PP.derH,PP.valt,PP.rdnt
                 node_ += [Cgraph(ptuple=PP.ptuple, derH=[derH,valt,rdnt], val_Ht=[[valt[0]],[valt[1]]], rdn_Ht=[[rdnt[0]],[rdnt[1]]],
-                                 L=len(PP.node_), box=[(PP.box[0]+PP.box[1])/2, (PP.box[2]+PP.box[3])/2] + list(PP.box))]
+                                 L=PP.ptuple[-1], box=[(PP.box[0]+PP.box[1])/2, (PP.box[2]+PP.box[3])/2] + list(PP.box))]  # use PP.ptuple[-1] for L because node might be updated with sub_tt
                                  # init aggH is empty
                 sum_derH([edge.derH,edge.valt,edge.rdnt], [derH,valt,rdnt], 0)
             edge.node_tt[0][fd][:] = node_
@@ -55,6 +55,7 @@ def vectorize_root(edge, verbose=False):
             # form incrementally higher-composition graphs, graphs-of-graphs, etc., rng+ comp only because they are not linked yet:
             while sum(edge.val_Ht[0]) * np.sqrt(len(node_)-1) if node_ else 0 > G_aves[0] * sum(edge.rdn_Ht[0]):
                 agg_recursion(edge, node_)  # node_[:] = new node_tt in the end, with sub+
+                # no feedback of node_ in agg+ here?
 
 def agg_recursion(root, node_):  # compositional recursion in root graph
 
@@ -160,6 +161,7 @@ def form_graph_(root, node_, fder, fd, pri_root_tt_):  # form fuzzy graphs of no
         if sum(graph.val_Ht[fder]) * np.sqrt(len(node_)-1) if node_ else 0 > G_aves[fder] * sum(graph.rdn_Ht[fder]):
             agg_recursion(graph, node_)  # replaces node_ formed above with new graphs in node_tt, recursive
         else:
+            if not root.fback_tt: root.fback_tt = [[[],[]], [[],[]]]  # fback_tt is init as empty list, we need to reinit forks here
             for graph in graph_: root.fback_tt[fder][fd] += [[graph.aggH, graph.val_Ht, graph.rdn_Ht]]
 
     return graph_
@@ -201,7 +203,8 @@ def segment_node_(node_, max_, fder, fd, pri_root_tt_):
 
     graph_ = []  # initialize graphs with local maxes, then prune links to add other nodes:
 
-    for max_node, pri_root_tt in zip(max_, pri_root_tt_):
+    for max_node in max_:
+        pri_root_tt = pri_root_tt_[node_.index(max_node)]
         graph = [[max_node], sum(max_node.val_Ht[fder]), [pri_root_tt]]
         max_node.root_tt[fder][fd] += [graph]
         _nodes = [max_node]  # current periphery of the graph

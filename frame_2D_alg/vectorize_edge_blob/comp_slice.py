@@ -29,6 +29,12 @@ len prior root_ sorted by G is rdn of each root, to evaluate it for inclusion in
 
 def comp_slice(edge, verbose=False):  # high-G, smooth-angle blob, composite dert core param is v_g + iv_ga
 
+    # temporary, for debug purpose, please ignore
+    for P in edge.P_:
+        for P_link in edge.P_link_:
+            if P in P_link:
+                P.link_H[-1] += [P_link[1] if P_link[0] is P else P_link[1]]  # check and pack the other P as links
+    
     edge = CEdge(I=edge.I, Dy=edge.Dy, Dx=edge.Dx, G=edge.G, A=edge.A, M=edge.M, box=edge.box, mask__=edge.mask__,
                  node_=edge.P_, der__t=edge.der__t, der__t_roots=[[[] for col in row] for row in edge.der__t[0]], adj_blobs=edge.adj_blobs)
     P_ = []
@@ -42,6 +48,7 @@ def comp_slice(edge, verbose=False):  # high-G, smooth-angle blob, composite der
     # convert node_ to node_tt:
     edge.node_tt = [form_PP_t([Pt[0] for Pt in P_], PP_=None, base_rdn=2, fder=0), [[], []]]  # root fork is rng+ only
 
+    return edge  # return new CEdge to replace Cblob
 
 # not revised:
 def comp_P(_P,P, fder=1, derP=None):  #  derP if der+, S if rng+
@@ -246,7 +253,7 @@ def comp_ptuple(_ptuple, ptuple, rn):  # 0der
     mtuple, dtuple, Mtuple = [],[], []
     # _n, n = _ptuple, ptuple: add to rn?
     for i, (_par, par, ave) in enumerate(zip(_ptuple, ptuple, aves)):
-        if isinstance(_par, list):
+        if isinstance(_par, tuple) or isinstance(_par, list):  # tuple in P, list in G because G.ptuple needs to accumulate new params
              m,d = comp_angle(_par, par)
              maxv = 2
         else:  # I | M | G L
@@ -274,19 +281,20 @@ def sub_recursion_eval(root, PP_):  # fork PP_ in PP or blob, no derH in blob
         sub_tt = []  # from rng+, der+
         fr = 0  # recursion in any fork
         for fder in 0,1:  # rng+ and der+:
-            if len(PP.node_) > ave_nsubt[fder] and PP.valt[fder] > PP_aves[fder] * PP.rdnt[fder]:
+            if len(PP.node_tt) > ave_nsubt[fder] and PP.valt[fder] > PP_aves[fder] * PP.rdnt[fder]:
                 termt[fder] = 0
                 if not fr:  # add link_tt and root_tt for both comp forks:
-                    for P in PP.node_:
+                    for P in PP.node_tt:
                         P.root_tt = [[None,None],[None,None]]
                         P.link_H += [[]]  # form root_t, link_t in sub+:
                 sub_tt += [sub_recursion(PP, PP_, fder)]  # comp_der|rng in PP->parLayer
                 fr = 1
             else:
-                sub_tt += [PP.node_]
+                sub_tt += [PP.node_tt]
+                # we have a separated fback for PPs here, not sure if this should be merged into fback_tt? Because this is derH instead of aggH here
                 root.fback_ += [[PP.derH, PP.valt, PP.rdnt]]  # separate feedback per terminated comp fork
         if fr:
-            PP.node_ = sub_tt  # nested PP_ tuple from 2 comp forks, each returns sub_PP_t: 2 clustering forks, if taken
+            PP.node_tt = sub_tt  # nested PP_ tuple from 2 comp forks, each returns sub_PP_t: 2 clustering forks, if taken
 
     return termt
 
