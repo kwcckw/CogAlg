@@ -30,7 +30,7 @@ len prior root_ sorted by G is rdn of each root, to evaluate it for inclusion in
 def comp_slice(edge, verbose=False):  # high-G, smooth-angle blob, composite dert core param is v_g + iv_ga
 
     P_ = []
-    for P in edge.node_:  # init P_, must be contiguous, gaps filled in scan_P_rim
+    for P in edge.P_:  # init P_, must be contiguous, gaps filled in scan_P_rim
         link_ = copy(P.link_H[-1])  # init rng+
         P.link_H[-1] = []  # fill with derPs in comp_P
         P_ +=[[P,link_]]
@@ -39,8 +39,12 @@ def comp_slice(edge, verbose=False):  # high-G, smooth-angle blob, composite der
             comp_P(_P,P, fder=0)  # replaces P.link_ Ps with derPs
     node_t = []
     for fd in 0,1:
-        node_t += [form_PP_(P_, PP_=None, base_rdn=2, fder=0, fd=fd)]  # may be nested by sub+ in form_PP_
-        edge.node_tt = [node_t,[]]  # root fork is rng+ only
+        node_ = form_PP_(edge, P_, PP_=None, base_rdn=2, fder=0, fd=fd)  # may be nested by sub+ in form_PP_
+        node_t += [node_]
+        for node in node_:
+            # we need to accumulate their params here so that we can use it to evaluate agg+ later? or this params should be accumulated in feedback only? 
+            sum_derH([edge.derH, edge.valt, edge.rdnt], [node.derH, node.valt, node.rdnt], 0 )
+    edge.node_tt = [node_t,[]]  # root fork is rng+ only
 
 # not revised:
 def comp_P(_P,P, fder=1, derP=None):  #  derP if der+, S if rng+
@@ -91,10 +95,10 @@ def comp_dtuple(_ptuple, ptuple, rn):
     return [mtuple, dtuple, Mtuple]
 
 # tentative:
-def form_PP_(P_, PP_, base_rdn, fder, fd):  # form PPs of derP.valt[fd] + connected Ps val
+def form_PP_(root, P_, PP_, base_rdn, fder, fd):  # form PPs of derP.valt[fd] + connected Ps val
 
     qPP_ = []  # initial sequence_PP s
-    for P in P_:
+    for P, _ in P_:
         if not P.root_tt[fder][fd]:  # else already packed in qPP
             qPP = [[P]]  # init PP is 2D queue of (P,val)s of all layers?
             P.root_tt[fder][fd] = qPP; val = 0
@@ -106,8 +110,8 @@ def form_PP_(P_, PP_, base_rdn, fder, fd):  # form PPs of derP.valt[fd] + connec
                         _P = derP._P
                         if _P not in P_:  # _P is outside of current PP, merge its root PP:
                             _PP = _P.root_tt[fder][fd]
-                            if _PP:  # _P is already clustered
-                                for _node in _PP.node_:
+                            if _PP and isinstance(_PP, CPP):  # _P is already clustered
+                                for _node in _PP.node_tt:
                                     if _node not in qPP[0]:
                                         qPP[0] += [_node]; _node.root_tt[fder][fd] = qPP  # reassign root
                                 PP_.remove(_PP)
@@ -131,8 +135,9 @@ def form_PP_(P_, PP_, base_rdn, fder, fd):  # form PPs of derP.valt[fd] + connec
             qPP_ += [qPP]
 
     rePP_ = reval_PP_(qPP_, fder, fd)  # prune qPPs by mediated links vals, PP = [qPP,valt,reval]
-    PP_ = [sum2PP(qPP, base_rdn, fder, fd) for qPP in rePP_]
+    PP_ = [sum2PP(qPP, root, base_rdn, fder, fd) for qPP in rePP_]
     # eval P_ comp_der|rng per PP-> parLayer:
+    # with this scheme, root is always PP or Cedge, i guess there's no conversion needed.
     sub_recursion(PP_)
 
     return PP_  # add_alt_PPs_(graph_t)?
@@ -180,10 +185,11 @@ def reval_P_(P_, fd):  # prune qPP by link_val + mediated link__val
     return [P_, Val, reval]
 
 
-def sum2PP(qPP, base_rdn, fder, fd):  # sum links in Ps and Ps in PP
+def sum2PP(qPP, root, base_rdn, fder, fd):  # sum links in Ps and Ps in PP
 
     P_,_,_ = qPP  # proto-PP is a list
     PP = CPP(fd=fd, node_tt=P_)
+    PP.root_tt[fder][fd] = root
     # accum:
     for i, P in enumerate(P_):
         P.root_tt[fder][fd] = PP
@@ -230,7 +236,7 @@ def sum_ptuple(Ptuple, ptuple, fneg=0):
     for i, (Par, par) in enumerate(zip_longest(Ptuple, ptuple, fillvalue=None)):
         if par != None:
             if Par != None:
-                if isinstance(Par, list):  # angle or aangle
+                if isinstance(Par, list) or isinstance(Par, tuple):  # angle or aangle
                     for i,(P,p) in enumerate(zip(Par,par)):
                         Par[i] = P-p if fneg else P+p
                 else:
@@ -243,7 +249,7 @@ def comp_ptuple(_ptuple, ptuple, rn):  # 0der
     mtuple, dtuple, Mtuple = [],[], []
     # _n, n = _ptuple, ptuple: add to rn?
     for i, (_par, par, ave) in enumerate(zip(_ptuple, ptuple, aves)):
-        if isinstance(_par, list):
+        if isinstance(_par, list) or isinstance(_par, tuple):
              m,d = comp_angle(_par, par)
              maxv = 2
         else:  # I | M | G L
@@ -275,33 +281,34 @@ def sub_recursion(PP_):  # evaluate PP for rng+ and der+, add layers to select s
                 comp_der(PP.node_) if fder else comp_rng(PP.node_, PP.rng + 1)  # same else new P_ and links
                 PP.rdnt[fder] += PP.valt[fder] - PP_aves[fder] * PP.rdnt[fder] > PP.valt[1-fder] - PP_aves[1-fder] * PP.rdnt[1-fder]
                 for fd in 0,1:
-                    sub_PP_ = form_PP_(PP.node_, PP_, base_rdn=PP.rdnt[fder], fder=fder, fd=fd)  # replace node_ with sub_PPm_, sub_PPd_
-                    for sPP in sub_PP_: sPP.root_tt[fder][fd] = PP
-
-                    if not PP.fback_tt: PP.fback_tt = [[[], []], [[], []]]  # init empty
-                    PP.fback_tt[fder][fd] += [[PP.derH, PP.valt, PP.rdnt]]
+                    sub_PP_ = form_PP_(PP, PP.node_, PP_, base_rdn=PP.rdnt[fder], fder=fder, fd=fd)  # replace node_ with sub_PPm_, sub_PPd_
+                    root = PP.root_tt[fder][fd]  # root is assigned in sum2graph now
+                    if not root.fback_tt: PP.fback_tt = [[[], []], [[], []]]  # init empty 
+                    root.fback_tt[fder][fd] += [[PP.derH, PP.valt, PP.rdnt]]
                     node_tt[fder][fd] = sub_PP_
         if fr:
             PP.node_tt = node_tt
-        # not sure:
-        elif PP.root.fback_tt:
+        else:
             for fder in 0,1:
                 for fd in 0,1:
-                    feedback(PP.root, fder=fder, fd=fd)  # upward recursive extend root.derH, forward eval only
+                    if PP.root_tt[fder][fd] and PP.root_tt[fder][fd].fback_tt:
+                        feedback(PP.root_tt[fder][fd], fder=fder, fd=fd)  # upward recursive extend root.derH, forward eval only
 
+# almost same with the feedback in agg+
 def feedback(root, fder, fd):  # append new der layers to root, not updated
 
-    Fback = deepcopy(root.fback_.pop())
-    # init with 1st fback: [derH,valt,rdnt], derH: [[mtuple,dtuple, mval,dval, mrdn, drdn]]
-    while root.fback_:
-        sum_derH(Fback,root.fback_.pop(), base_rdn=0)
-    sum_derH([root.derH, root.valt,root.rdnt], Fback, base_rdn=0)
+    Fback = deepcopy(root.fback_tt[fder][fd][0])  # init with 1st [aggH,val_Ht,rdn_Ht]
+    for derH, valt, rdnt in root.fback_tt[fder][fd][1:]:
+        sum_derH(Fback, [derH, valt, rdnt], base_rdn=0)
+    sum_derH([root.derH, root.valt,root.rdnt], Fback, base_rdn=0)  # both fder forks sum into a same root?
 
-    if isinstance(root.root_tt[fder][fd], CPP):  # not blob
-        root = root.root_tt[fder][fd]
-        root.fback_ += [Fback]
-        if len(root.fback_) == len(root.node_):  # all original nodes term, fed back to root.fback_t
-            feedback(root, fder, fd)  # derH per comp layer in sum2PP, add deeper layers by feedback
+    for fder, root_t in enumerate(root.root_tt):
+        for fd, root_ in enumerate(root_t):
+                for rroot in root_:
+                    rroot.fback_tt[fder][fd] += [Fback]
+                    # it's not rroot.node_tt, we need to concat and check the deepest levels of node nesting?:
+                    if len(rroot.fback_tt[fder][fd]) == len(rroot.node_tt[fder][fd]):  # all nodes term and fed back to root
+                        feedback(rroot, fder, fd)  # aggH/rng in sum2PP, deeper rng layers are appended by feedback
 
 def comp_rng(iP_, rng):  # form new Ps and links, switch to rng+n to skip clustering?
 

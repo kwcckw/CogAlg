@@ -23,9 +23,15 @@ class CEdge(ClusterStructure):  # edge blob
     root_ : object= None  # list root_ if fork overlap?
     derH : list = z([])  # formed in PPs, inherited in graphs
     aggH : list = z([[]])  # [[subH, valt, rdnt]]: cross-fork composition layers
-    valt : list = z(0,0)  # for PPs, then Ht of link vals per fder
-    rdnt : list = z(1,1)
+    valt : list = z([0,0])  # for PPs, then Ht of link vals per fder
+    rdnt : list = z([1,1])
     fback_ : list = z([])  # [feedback aggH,valt,rdnt per node]
+    
+    # graph params:
+    val_Ht : list = z([[0],[0]])
+    rdn_Ht : list = z([[1],[1]])
+    fback_tt: list = z([])
+    root_tt : list = z([[[],[]],[[],[]]])
     # params from blob, can be accessed via edge.blob, for example, edge.blob.I:I: float = 0.0
     # Dy: float = 0.0
     # Dx: float = 0.0
@@ -85,11 +91,12 @@ class CPP(CderP):
     rdnt : list = z([1,1])
     mask__ : object = None
     node_tt : list = z([])  # init P_, -> node_tt if sub+: [rng+ [sub_PPm_,sub_PPd_], der+ [sub_PPm_,sub_PPd_]]
-    root_tt : list = z([[None,None],[None,None]])  # init edge, higher PPrm,PPrd, PPdm,PPdd that contain PP if sub+
+    # init as empty list because we need to loop them in feedback
+    root_tt : list = z([[[],[]],[[],[]]])  # init edge, higher PPrm,PPrd, PPdm,PPdd that contain PP if sub+
     rng : int = 1  # sum of rng+: odd forks in last layer?
     box : list = z([0,0,0,0])  # y0,yn,x0,xn
     # temporary:
-    fback_ : list = z([])  # [feedback derH,valt,rdnt per node]
+    fback_tt : list = z([])  # [feedback derH,valt,rdnt per node]
     coPP_ : list = z([])  # rdn reps in other PPPs, to eval and remove?
     Rdn : int = 0  # for accumulation or separate recursion count?
     # fdiv = NoneType  # if div_comp?

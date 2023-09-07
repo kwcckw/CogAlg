@@ -40,9 +40,11 @@ def vectorize_root(blob, verbose=False):  # vectorization pipeline: three compos
     # vertical P cross-comp -> PP clustering
     comp_slice(edge, verbose=verbose)  # scan rows top-down, compare y-adjacent, x-overlapping Ps to form derPs
     # PP cross-comp -> graph clustering
-    node_ = edge.node_tt  # PP_|G_ before feedback, rng+ only: they are not linked yet
+    # not sure, edge.node_tt[0] is node_t, so we should use node_t[0] or node_t[1]?
+    node_ = edge.node_tt[0][0]  # PP_|G_ before feedback, rng+ only: they are not linked yet
     ini = 1
-    while sum(edge.val_Ht[0]) * np.sqrt(len(node_)-1) if node_ else 0 > G_aves[0] * sum(edge.rdn_Ht[0]):
+    # edge's val_Ht and rdn_Ht is empty here, use valt and rdnt?
+    while edge.valt[0] * np.sqrt(len(node_)-1) if node_ else 0 > G_aves[0] * edge.rdnt[0]:
         if ini:  # CPPs -> Cgraphs:
             for PP in node_:
                 derH, valt, rdnt = PP.derH, PP.valt, PP.rdnt

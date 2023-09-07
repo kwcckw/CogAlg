@@ -90,8 +90,8 @@ def trace_edge(blob, mask__, verbose=False):
             P = form_P(blob, CP(yx=(y,x), axis=(dy/g, dx/g), cells={(y,x)}, dert_=[(y,x,i,dy,dx,g,ma)]))
             edge.P_ += [P]
             if _P is not None:  # form link
-                _P.link_H[0] += [(P, None)]    # None : place holder for link params
-                P.link_H[0] += [(_P, None)]
+                _P.link_H[0] += [P]    # None : place holder for link params (do we really need the None?)
+                P.link_H[0] += [_P]
             # search in max_ path
             adjacents = max_ & {*product(range(y-1,y+2), range(x-1,x+2))}   # search neighbors
             maxQue.extend(((_y, _x, P) for _y, _x in adjacents))
