@@ -25,6 +25,11 @@ class CEdge(ClusterStructure):  # edge blob
     aggH : list = z([[]])  # [[subH, valt, rdnt]]: cross-fork composition layers
     valt : list = z([0,0])  # for PPs, then Ht of link vals per fder
     rdnt : list = z([1,1])
+    
+    # edge could be root for graphs and PP, so we need both
+    val_Ht : list = z([[0],[0]])  # H of link vals per fder
+    rdn_Ht : list = z([[1],[1]])
+    
     # params from blob, can be accessed via edge.blob, for example, edge.blob.I:I: float = 0.0
     # Dy: float = 0.0
     # Dx: float = 0.0
