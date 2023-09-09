@@ -40,9 +40,6 @@ def vectorize_root(blob, verbose=False):  # vectorization pipeline: three compos
     # vertical P cross-comp -> PP clustering
     comp_slice(edge)  # scan rows top-down, compare y-adjacent, x-overlapping Ps to form derPs
     # PP cross-comp -> graph clustering
-    # conversion before agg+, because we need to use edge.val_Ht and rdn_Ht in agg+ evaluation
-    edge.val_Ht = [[edge.valt[0]], [edge.valt[1]]]
-    edge.rdn_Ht=  [[edge.rdnt[0]], [edge.rdnt[1]]]
     for fd in 0,1:
         node_ = edge.node_t[fd]  # only comp rng+ for edge
         if edge.valt[0] * np.sqrt(len(node_)-1) if node_ else 0 > G_aves[0] * edge.rdnt[0]:  # still valt and rdnt
@@ -52,9 +49,10 @@ def vectorize_root(blob, verbose=False):  # vectorization pipeline: three compos
                 G_ += [Cgraph(ptuple=PP.ptuple, derH=[derH, valt, rdnt], val_Ht=[[valt[0]], [valt[1]]], rdn_Ht=[[rdnt[0]], [rdnt[1]]],
                                  L=PP.ptuple[-1], box=[(PP.box[0] + PP.box[1]) / 2, (PP.box[2] + PP.box[3]) / 2] + list(PP.box))]
             edge.node_t[fd] = G_
-        while sum(edge.val_Ht[0]) * np.sqrt(len(node_)-1) if node_ else 0 > G_aves[0] * sum(edge.rdn_Ht[0]):
-            agg_recursion(edge, node_)  # node_[:] = new node_tt in sub+ feedback?
-
+            while True:
+                agg_recursion(edge, node_)  # node_[:] = new node_tt in sub+ feedback?
+                if sum(edge.valt[0]) * np.sqrt(len(node_)-1) if node_ else 0 <= G_aves[0] * sum(edge.rdnt[0]):
+                    break
 
 def agg_recursion(root, node_):  # compositional recursion in root graph
 
@@ -306,15 +304,19 @@ def feedback(root, fder, fd):  # append new der layers to root
     Fback = deepcopy(root.fback_tt[fder][fd][0])  # init with 1st [aggH,val_Ht,rdn_Ht]
     for aggH, val_Ht, rdn_Ht in root.fback_tt[fder][fd][1:]:
         sum_aggH(Fback, [aggH, val_Ht, rdn_Ht], base_rdn=0)
-    sum_aggH([root.aggH, root.val_Ht,root.rdn_Ht], Fback, base_rdn=0)  # both fder forks sum into a same root?
 
-    for fder, root_t in enumerate(root.root_tt):
-        for fd, root_ in enumerate(root_t):
-                for rroot in root_:
-                    rroot.fback_tt[fder][fd] += [Fback]
-                    # it's not rroot.node_tt, we need to concat and check the deepest levels of node nesting?:
-                    if len(rroot.fback_tt[fder][fd]) == len(rroot.node_tt[fder][fd]):  # all nodes term and fed back to root
-                        feedback(rroot, fder, fd)  # aggH/rng in sum2PP, deeper rng layers are appended by feedback
+    if isinstance(root, Cgraph):  # root is not CEdge, which has no roots
+        sum_aggH([root.aggH, root.val_Ht,root.rdn_Ht], Fback, base_rdn=0)  # both fder forks sum into a same root?
+
+        for fder, root_t in enumerate(root.root_tt):
+            for fd, root_ in enumerate(root_t):
+                    for rroot in root_:
+                        rroot.fback_tt[fder][fd] += [Fback]  # merged per root
+                        if len(rroot.fback_tt[fder][fd]) == len(rroot.node_tt[fder][fd]):  # all nodes term and fed back to root
+                            feedback(rroot, fder, fd)  # aggH/rng in sum2PP, deeper rng layers are appended by feedback
+    else:
+        aggH, val_Ht, rdn_Ht = Fback  # root is CEdge, sum valt,rdnt:
+        sum_aggH([root.aggH, root.valt, root.rdnt], [aggH, [sum(val_Ht[0]),sum(val_Ht[0])],[sum(rdn_Ht[0]),sum(rdn_Ht[0])]], base_rdn=0)
 
 
 def comp_ext(_ext, ext, Valt, Rdnt):  # comp ds:
