@@ -48,10 +48,11 @@ def vectorize_root(blob, verbose=False):  # vectorization pipeline: three compos
                 derH, valt, rdnt = PP.derH, PP.valt, PP.rdnt  # init aggH is empty:
                 G_ += [Cgraph(ptuple=PP.ptuple, derH=[derH, valt, rdnt], val_Ht=[[valt[0]], [valt[1]]], rdn_Ht=[[rdnt[0]], [rdnt[1]]],
                                  L=PP.ptuple[-1], box=[(PP.box[0] + PP.box[1]) / 2, (PP.box[2] + PP.box[3]) / 2] + list(PP.box))]
-            edge.node_t[fd] = G_
+            node_[:] = G_  # replace PP with G
             while True:
                 agg_recursion(edge, node_)  # node_[:] = new node_tt in sub+ feedback?
-                if sum(edge.valt[0]) * np.sqrt(len(node_)-1) if node_ else 0 <= G_aves[0] * sum(edge.rdnt[0]):
+                # this edge valt will be remained the same in the while loop, so we should use val_Ht instead?
+                if sum(edge.val_Ht[0]) * np.sqrt(len(node_)-1) if node_ else 0 <= G_aves[0] * sum(edge.rdn_Ht[0]):
                     break
 
 def agg_recursion(root, node_):  # compositional recursion in root graph
