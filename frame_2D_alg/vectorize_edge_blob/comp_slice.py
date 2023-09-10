@@ -39,13 +39,13 @@ def comp_slice(edge):  # edge is high-gradient blob, sliced in Ps in the directi
         for fd in (0, 1)
     ]
 
-def comp_P(_P,P, fder=1, derP=None):  #  derP if der+, S if rng+
+def comp_P(_P,P, fder=1, frng=0, derP=None):  #  derP if der+, S if rng+
 
     aveP = P_aves[fder]
     rn = len(_P.dert_)/ len(P.dert_)
 
     if fder:  # der+: extend in-link derH
-        rn *= len(_P.link_H[-2]) / len(P.link_H[-2])  # derH is summed from links
+        rn *= len(_P.link_H[-(1+frng)]) / len(P.link_H[-(1+frng)])  # derH is summed from links
         dderH, valt, rdnt = comp_derH(_P.derH, P.derH, rn)  # += fork rdn
         derP = CderP(derH = derP.derH+dderH, valt=valt, rdnt=rdnt, P=P,_P=_P, S=derP.S)  # dderH valt,rdnt for new link
         mval,dval = valt[:2]; mrdn,drdn = rdnt  # exclude maxv
@@ -88,7 +88,7 @@ def comp_der(P_, frng):  # keep same Ps and links, increment link derH, then P d
         for derP in P.link_H[-(1+frng)]:  # scan root-PP links, exclude top layer if formed by concurrent rng+
             if derP.valt[1] >  P_aves[1]* derP.rdnt[1]:
                 # comp extended derH of the same Ps, to sum in lower-composition sub_PPs:
-                derP = comp_P(derP._P,P, fder=1, derP=derP)
+                derP = comp_P(derP._P,P, fder=1, frng=frng, derP=derP)
                 if derP: derP_ += [derP]  # not None
         P.link_H[-(1+frng)] = derP_  # replacing derPs have extended derH
     return P_
@@ -138,6 +138,7 @@ def form_PP_(root, P_, base_rdn, fder, fd):  # form PPs of derP.valt[fd] + conne
     rePP_ = reval_PP_(qPP_, fder, fd)  # prune qPPs by mediated links vals, PP = [qPP,valt,reval]
     PP_ = [sum2PP(root, qPP, base_rdn, fder, fd) for qPP in rePP_]
 
+    # we should add evaluation on sub+ here?
     sub_recursion(root, PP_)  # eval rng+,der+ per PP.P_
     if root.fback_tt and root.fback_tt[fder][fd]:
         feedback(root, fder, fd)  # sub+ is terminated in all root fork nodes, initiate feedback
@@ -223,9 +224,23 @@ def feedback(root, fder, fd):  # append new der layers to root PP, one per fork 
     if isinstance(root, CPP):  # root is not CEdge, which has no roots
         for fder, root_t in enumerate(root.root_tt):
             for fd, rroot in enumerate(root_t):
-                rroot.fback_tt[fder][fd] += [Fback]  # merged per root
-                if len(rroot.fback_tt[fder][fd]) == len(rroot.node_tt[fder][fd]):  # all nodes term and fed back to root
-                    feedback(rroot, fder, fd)  # aggH/rng in sum2PP, deeper rng layers are appended by feedback
+                # its kind of messy below, but i don't see any option to skip them yet
+                # this rroot may empty because fder and fd is per root, not per rroot, so we need to check again
+                if rroot and rroot.fback_tt and  rroot.fback_tt[fder][fd]:
+                    rroot.fback_tt[fder][fd] += [Fback]  # merged per root
+                    
+                    if isinstance(rroot, CPP):
+                        if isinstance(rroot.node_tt[0], list):  # when we check root of root, their node_tt is not updated with the forking node_tt yet
+                            len_node = len(rroot.node_tt[fder][fd])
+                        else:
+                            len_node = len(rroot.node_tt)
+                    else:  # CEdge has node_t only, it has 0 nodes when fder = 1
+                        len_node = 0
+                        if not fder and rroot.node_t:  # we need this check because we may not pack node_t into rroot.node_t yet
+                            # root's node_t is not updated with node_t yet in form_PP_, we updated it after form_PP_
+                            len_node = len(rroot.node_t) 
+                        if len(rroot.fback_tt[fder][fd]) == len_node:  # all nodes term and fed back to root
+                            feedback(rroot, fder, fd)  # aggH/rng in sum2PP, deeper rng layers are appended by feedback
 
 
 def sum_derH(T, t, base_rdn):  # derH is a list of layers or sub-layers, each = [mtuple,dtuple, mval,dval, mrdn,drdn]
@@ -320,11 +335,15 @@ def sub_recursion(root, PP_):  # called in form_PP_, evaluate PP for rng+ and de
 
         for fder in 0,1:  # eval all| last layer?
             if PP.valt[fder] * np.sqrt(len(P_)-1) if P_ else 0 > P_aves[fder] * PP.rdnt[fder]:  # comp_der|rng in PP->parLayer
-
-                comp_der(P_, fr) if fder else comp_rng(P_, PP.rng+1)  # same else new P_ and links
+                if fder: comp_der(P_, fr)
+                else:
+                    PP.rng += 1  # we need to increase rng?
+                    comp_rng(P_, PP.rng)
                 fr = 1  # per comp fork, both form sub-forks will be taken
                 PP.rdnt[fder] += PP.valt[fder] - PP_aves[fder] * PP.rdnt[fder] > PP.valt[1-fder] - PP_aves[1-fder] * PP.rdnt[1-fder]
                 for fd in 0,1:
+                    if not fd:  # new layer per rng+
+                        for P in P_: P.link_H += [[]]  # so we will added 2 layers here, each layer is per fder's rng+
                     sub_PP_ = form_PP_(root=PP, P_=P_, base_rdn=PP.rdnt[fder], fder=fder, fd=fd)
                     if not root.fback_tt:  # init empty
                         root.fback_tt = [[[],[]],[[],[]]]

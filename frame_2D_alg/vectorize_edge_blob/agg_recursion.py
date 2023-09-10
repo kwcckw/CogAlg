@@ -51,8 +51,7 @@ def vectorize_root(blob, verbose=False):  # vectorization pipeline: three compos
             node_[:] = G_  # replace PP with G
             while True:
                 agg_recursion(edge, node_)  # node_[:] = new node_tt in sub+ feedback?
-                # this edge valt will be remained the same in the while loop, so we should use val_Ht instead?
-                if sum(edge.val_Ht[0]) * np.sqrt(len(node_)-1) if node_ else 0 <= G_aves[0] * sum(edge.rdn_Ht[0]):
+                if edge.valt[0] * np.sqrt(len(node_)-1) if node_ else 0 <= G_aves[0] * edge.rdn_Ht[0]:
                     break
 
 def agg_recursion(root, node_):  # compositional recursion in root graph
@@ -62,6 +61,7 @@ def agg_recursion(root, node_):  # compositional recursion in root graph
 
     for fder in 0,1:
         # eval per comp fork, n comp graphs ~-> n matches, match rate decreases with distance:
+        # root could be Cedge here, so we need to add val_Ht and rdn_Ht into Cedge?
         if sum(root.val_Ht[fder]) * np.sqrt(len(node_)-1) if node_ else 0 > G_aves[fder] * sum(root.rdn_Ht[fder]):
             if fder and len(node_[0].link_H) < 2:  # 1st call, no der+ yet
                 continue
