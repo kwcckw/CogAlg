@@ -309,11 +309,12 @@ def sub_recursion(root, PP_):  # called in form_PP_, evaluate PP for rng+ and de
                 fr = 1  # eval is per comp fork, both clustering sub-forks will be taken
                 PP.rdnt[fder] += PP.valt[fder] - PP_aves[fder] * PP.rdnt[fder] > PP.valt[1-fder] - PP_aves[1-fder] * PP.rdnt[1-fder]
                 for fd in 0,1:
-                    sub_PP_ = form_PP_(root=PP, P_=P_, base_rdn=PP.rdnt[fder], fder=fder, fd=fd)
+                    # we need the section below to be before form_PP_, so that root of root has fback_tt, else it will be empty
                     if not root.fback_tt:  # init empty
                         root.fback_tt = [[[],[]],[[],[]]]
                     root.fback_tt[fder][fd] += [[PP.derH, PP.valt, PP.rdnt]]
-                    node_tt[fder][fd] = sub_PP_
+                    # pack sub_PP_
+                    node_tt[fder][fd] = form_PP_(root=PP, P_=P_, base_rdn=PP.rdnt[fder], fder=fder, fd=fd)
         if fr:
             PP.node_tt = node_tt  # replace node_ with sub_PPm_, sub_PPd_, not empty
 
@@ -324,34 +325,17 @@ def feedback(root, fder, fd):  # from form_PP_, append new der layers to root PP
 
     for derH, valt, rdnt in root.fback_tt[fder][fd][1:]:
         sum_derH(Fback, [derH, valt, rdnt], base_rdn=0)
-    sum_derH([root.derH, root.valt, root.rdnt], Fback, base_rdn=0)  # both fder forks sum into a same root
+    if isinstance(root, CPP):  # Cedge has val_Ht and rdn_Ht instead
+        sum_derH([root.derH, root.valt, root.rdnt], Fback, base_rdn=0)  # both fder forks sum into a same root
+    else:
+        sum_derH([root.derH, root.val_Ht, root.rdn_Ht], Fback, base_rdn=0)
 
     # probably wrong, root may be an element in multiple higher PPs?
     if isinstance(root, CPP):  # root has root_tt: is not CEdge
         rroot = root.root_tt[fder][fd]  # same fork, higher level
         if rroot:  # CPP, fder rroots are empty in top PPs
             rroot.fback_tt[fder][fd] += [Fback]
-            if len(rroot.fback_tt[fder][fd]) == len(rroot.node_tt[fder][fd]):
+            if len(rroot.fback_tt[fder][fd]) >= len(rroot.node_tt):  # we always pack node_tt at the end of the functon, so node_tt from root of root will not be updated yet
                 # all rroot nodes terminated and fed back
                 feedback(rroot, fder, fd)
                 # derH is added per rng in sum2PP, deeper layers are appended by feedback
-    # Chee:
-    if isinstance(root, CPP):  # root is not CEdge, which has no roots
-        for fder, root_t in enumerate(root.root_tt):
-            for fd, rroot in enumerate(root_t):
-                # check next layer of up-forking rrots:
-                if rroot and rroot.fback_tt and rroot.fback_tt[fder][fd]:
-                    rroot.fback_tt[fder][fd] += [Fback]  # each node is all root forks?
-                    if isinstance(rroot, CPP):
-                        if isinstance(rroot.node_tt[0], list):  # rroot.node_tt is not updated with node_tt yet
-                            len_node = len(rroot.node_tt[fder][fd])
-                        else:
-                            len_node = len(rroot.node_tt)
-                    else:  # CEdge has no fder nodes
-                        len_node = 0
-                        if not fder and rroot.node_t:  # node_t in rroot.node_t only after form_PP_?
-                            len_node = len(rroot.node_t)
-                    if len(rroot.fback_tt[fder][fd]) == len_node:  # all nodes term and fed back to root
-                        feedback(rroot, fder, fd)
-
-

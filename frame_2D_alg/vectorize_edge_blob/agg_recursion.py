@@ -40,15 +40,18 @@ def vectorize_root(blob, verbose=False):  # vectorization pipeline: three compos
     # vertical P cross-comp -> PP clustering
     comp_P_(edge)  # compare vertically-adjacent, laterally-overlapping Ps to form derPs, top-down
     # PP cross-comp -> graph clustering
+    edge.val_Ht =[[edge.val_Ht[0]], [edge.val_Ht[1]]]  # convert valt and rdnt to val_Ht and rdn_Ht
+    edge.rdn_Ht =[[edge.rdn_Ht[0]], [edge.rdn_Ht[1]]]
+    edge.fback_tt = []  # reset fback_tt from comp_slice
     for fd in 0,1:
         node_ = edge.node_t[fd]  # only comp rng+ for edge
-        if edge.val_Ht[0] * np.sqrt(len(node_)-1) if node_ else 0 > G_aves[0] * edge.rdn_Ht[0]:  # still valt and rdnt here
+        if sum(edge.val_Ht[fd]) * np.sqrt(len(node_)-1) if node_ else 0 > G_aves[0] * sum(edge.rdn_Ht[fd]):  # still valt and rdnt here
             G_ = []  # CPP -> Cgraph
             for PP in node_:
                 derH, valt, rdnt = PP.derH, PP.valt, PP.rdnt  # init aggH is empty:
                 G_ += [Cgraph(ptuple=PP.ptuple, derH=[derH, valt, rdnt], val_Ht=[[valt[0]], [valt[1]]], rdn_Ht=[[rdnt[0]], [rdnt[1]]],
                                  L=PP.ptuple[-1], box=[(PP.box[0] + PP.box[1]) / 2, (PP.box[2] + PP.box[3]) / 2] + list(PP.box))]
-            edge.node_t[fd] = G_ # replace PPs with Gs
+            node_[:] = G_ # replace PPs with Gs
             while True:
                 agg_recursion(edge, node_)  # node_[:] = new node_tt in sub+ feedback?
                 if np.sum(edge.val_Ht[0]) * np.sqrt(len(node_)-1) if node_ else 0 <= G_aves[0] * np.sum(edge.rdn_Ht[0]):
