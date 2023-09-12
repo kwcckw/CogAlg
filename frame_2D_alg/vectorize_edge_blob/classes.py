@@ -14,7 +14,8 @@ from class_cluster import ClusterStructure, init_param as z
 class CEdge(ClusterStructure):  # edge blob
 
     der__t_roots: object = None  # map to dir__t
-    node_t : list = z([])  # default P_, node_t in select PP_ or G_ fder forks
+    # rename to reduce clutter too?
+    node_tt : list = z([])  # default P_, node_t in select PP_ or G_ fder forks
     fback_tt : list = z([[[],[]],[[],[]]])  # for consistency, only fder=0 is used
     # for comp_slice:
     derH : list = z([])  # formed in PPs, inherited in graphs

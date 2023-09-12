@@ -29,8 +29,8 @@ len prior root_ sorted by G is rdn of each root, to evaluate it for inclusion in
 
 def comp_P_(edge):  # renamed for consistency, cross-comp P_ in edge: high-gradient blob, sliced in Ps in the direction of G
 
-    P_ = edge.node_t  # init as P_
-    edge.node_t = [[[],[]],[]]
+    P_ = edge.node_tt  # init as P_
+    edge.node_tt = [[[],[]],[]]
     # ~ sub+:
     for P in P_:  # scan and compare contiguously uplinked Ps, rn = relative weight of comparand:
 
@@ -86,7 +86,8 @@ def comp_der(P_, frng):  # keep same Ps and links, increment link derH, then P d
     for P in P_:
         link_ = P.link_H[-(1+frng)]
         for derP in link_:  # scan root-PP links, exclude top layer if formed by concurrent rng+
-            if derP.valt[1] >  P_aves[1]* derP.rdnt[1]:
+            # derP._P may not in _P if their derP evaluation is false in prior form_PP_ (line 113 below), so we need to add this check, or we remove the derP from link_?
+            if derP._P in P_ and derP.valt[1] >  P_aves[1]* derP.rdnt[1]:
                 _P = derP._P  # comp extended derH of previously compared Ps, sum in lower-composition sub_PPs
                 # weight of compared derH is relative compound scope: summed from linked Ps( summed from derts:
                 rn = (len(_P.dert_) / len(P.dert_)) * (len(_P.link_H[-(1+frng)]) / len(link_))
@@ -140,9 +141,10 @@ def form_PP_(root, P_, base_rdn, fder, fd):  # form PPs of derP.valt[fd] + conne
     PP_ = [sum2PP(root, qPP, base_rdn, fder, fd) for qPP in rePP_]
 
     sub_recursion(root, PP_)  # eval rng+,der+ per PP.P_
+    # root.fback_tt will not be empty by the feedback below
     if root.fback_tt and root.fback_tt[fder][fd]:
         feedback(root, fder, fd)  # feedback after sub+ is terminated in all root fork nodes, to avoid individual traffic
-
+    # this root could be edge and PP, so we need a consistent node_tt naming
     root.node_tt[fder][fd] = PP_  # PPs maybe nested in sub+, revert node_tt if empty, add_alt_PPs_(graph_t)?
 
 
@@ -326,8 +328,8 @@ def feedback(root, fder, fd):  # from form_PP_, append new der layers to root PP
     sum_derH([root.derH, root.valt, root.rdnt], Fback, base_rdn=0)  # both fder forks sum into a same root
 
     if isinstance(root, CPP):  # root is not CEdge, which has no roots
-        for fder, root_tt in enumerate(root.root_tt):
-            for fd, rroot in enumerate(root.root_t):
+        for fder, root_t in enumerate(root.root_tt):
+            for fd, rroot in enumerate(root_t):
                 if rroot:  # may be empty if the fork was not taken
                     rroot.fback_tt[fder][fd] += [Fback]
                     fback_ = rroot.fback_tt[fder][fd]

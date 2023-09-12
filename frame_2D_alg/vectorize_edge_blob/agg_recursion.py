@@ -41,7 +41,7 @@ def vectorize_root(blob, verbose=False):  # vectorization pipeline is 3 composit
     comp_P_(edge)  # compare vertically-adjacent, laterally-overlapping Ps to form derPs, top-down
     # PP cross-comp -> graph clustering
     for fd in 0,1:
-        node_ = edge.node_t[0][fd]  # only comp rng+ for edge
+        node_ = edge.node_tt[0][fd]  # only comp rng+ for edge
         if edge.valt[0] * np.sqrt(len(node_)-1) if node_ else 0 > G_aves[0] * edge.rdnt[0]:
             G_ = []  # CPP -> Cgraph
             for PP in node_:
