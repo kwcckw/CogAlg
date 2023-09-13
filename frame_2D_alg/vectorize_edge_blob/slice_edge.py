@@ -87,7 +87,7 @@ def trace_edge(blob, mask__, verbose=False):
             ma = ave_dangle  # max value because P direction is the same as dert gradient direction
             assert g > 0, "g must be positive"
             P = form_P(blob, CP(yx=(y,x), axis=(dy/g, dx/g), cells={(y,x)}, dert_=[(y,x,i,dy,dx,g,ma)]))
-            edge.node_tt += [P]
+            edge.node_t += [P]
             if _P is not None:
                 P.link_H[0] += [_P]  # add up links only
             # search in max_ path
