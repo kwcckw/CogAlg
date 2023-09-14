@@ -100,11 +100,12 @@ def comp_der(P_):  # keep same Ps and links, increment link derH, then P derH in
 def form_PP_(root, P_, base_rdn, fd):  # form PPs of derP.valt[fd] + connected Ps val
 
     qPP_ = []  # initial pre_PPs are in list format
+    root_tH_ = [P.root_tH[-1] for P in P_]  # we may add new layer of root_t in sub+ below, so we need this to preverse current layer root_t
 
-    for P in P_:
-        if P.root_t[fd]:  continue  # skip if already packed in some qPP
+    for P, root_t in zip(P_, root_tH_):
+        if root_t[fd]:  continue  # skip if already packed in some qPP
         qPP = [[P]]  # init PP is 2D queue of Ps
-        P.root_t[fd] = qPP
+        root_t[fd] = qPP
         val = 0  # sum of in-graph link vals, added to qPP in the end
         uplink_ = P.link_H[-1] # 1st layer of uplinks
         uuplink_ = []  # next layer of uplinks
@@ -112,18 +113,19 @@ def form_PP_(root, P_, base_rdn, fd):  # form PPs of derP.valt[fd] + connected P
 
         while uplink_:  # test for next-line uuplink_, set at loop's end
             for derP in uplink_:
-                if derP.valt[fd] <= P_aves[fd]*derP.rdnt[fd]: continue  # link _P should not be in qPP
+                # upper P maybe checked already from another P's uplinks
+                if derP.valt[fd] <= P_aves[fd]*derP.rdnt[fd] or derP._P in qPP[0]: continue  # link _P should not be in qPP
                 # else qPP += [derP], links are visited once
                 val += derP.valt[fd]
                 _P = derP._P
-                _qPP = _P.root_t[fd]
+                _qPP = root_tH_[P_.index(_P)][fd]
                 if _qPP:  # _P was clustered in prior loops, can't be qPP: links are visited once
                     for __P in _qPP[0]:  # merge _PP into qPP
-                        qPP[0] += [__P]; __P.root_t[fd] = qPP
+                        qPP[0] += [__P]; root_tH_[P_.index(__P)][fd] = qPP
                     val += _qPP[1]  # _qPP Val
                     qPP_.remove(_qPP)
                 else:  # no root yet
-                    qPP[0] += [_P]; _P.root_t[fd] = qPP
+                    qPP[0] += [_P]; root_tH_[P_.index(_P)][fd] = qPP
                 # pack bottom up
                 uuplink_ += derP._P.link_H[-1]
             uplink_ = uuplink_
@@ -134,6 +136,7 @@ def form_PP_(root, P_, base_rdn, fd):  # form PPs of derP.valt[fd] + connected P
     rePP_ = reval_PP_(qPP_, fd)  # prune qPPs by mediated links vals, PP = [qPP,valt,reval]
     PP_ = [sum2PP(root, qPP, base_rdn, fd) for qPP in rePP_]
 
+    # we probably need P.root_Ht now? Because sub_recursion fills a same root_t for all Ps, and that is causing _P.root_t[1] = CPP
     sub_recursion(root.fback_t[fd], PP_, fd)  # eval rng+|der+ in PP.P_
     if root.fback_t and root.fback_t[fd]:
         feedback(root, fd)  # feedback after sub+ is terminated in all root fork nodes, to avoid individual traffic
@@ -189,7 +192,7 @@ def sum2PP(root, pre_PP, base_rdn, fd):  # sum links in Ps and Ps in PP
     PP.root_t[fd] = root
     # accum:
     for i, P in enumerate(P_):
-        P.root_t[fd] = PP
+        P.root_tH[-1][fd] = PP
         sum_ptuple(PP.ptuple, P.ptuple)
         L = P.ptuple[-1]
         Dy = P.axis[0]*L/2; Dx = P.axis[1]*L/2; y,x =P.yx
@@ -295,6 +298,7 @@ def sub_recursion(fback_, PP_, fd):  # called in form_PP_, evaluate PP for rng+ 
 
     for PP in PP_:
         P_ = PP.node_t  # flat before sub+
+        for P in P_:  P.root_tH += [[None, None]]  # add new layer of roots (per sub+)
         if PP.valt[fd] * np.sqrt(len(P_)-1) if P_ else 0 > P_aves[fd] * PP.rdnt[fd]:  # comp_der|rng in PP->parLayer
 
             PP.node_t = [[],[]]  # sub_PPm_, sub_PPd_

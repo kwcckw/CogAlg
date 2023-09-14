@@ -157,7 +157,8 @@ def form_graph_(root, Node_, fd, pri_root_tt_):  # root function to form fuzzy g
     if root.fback_t and root.fback_t[fd]:
         feedback(root, fd)  # update root.root.. aggH, val_Ht,rdn_Ht
 
-    root.node_t[fd] = graph_  # graphs maybe nested in sub+, revert node_tt if empty, add_alt_PPs_(graph_t)?
+    # we need [:] here because we are replacing elements in tuple
+    root.node_t[fd][:] = graph_  # graphs maybe nested in sub+, revert node_tt if empty, add_alt_PPs_(graph_t)?
 
 
 def select_max_(node_, fd, ave):  # final maxes are graph-initializing nodes

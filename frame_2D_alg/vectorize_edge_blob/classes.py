@@ -48,7 +48,7 @@ class CP(ClusterStructure):  # horizontal blob slice P, with vertical derivative
     dert_ : list = z([])  # array of pixel-level derts, ~ node_
     cells : set = z(set())  # pixel-level kernels adjacent to P axis, combined into corresponding derts projected on P axis.
     link_H : list = z([[]])  # +ve rlink_, dlink_ H from lower sub+
-    root_t : list = z([None,None])  # PPrm,PPrd, PPdm,PPdd that contain this P, single-layer
+    root_tH : list = z([[None,None]])
     axis : tuple = (0,1)  # prior slice angle, init sin=0,cos=1
     yx : tuple = None
     ''' 
