@@ -67,7 +67,7 @@ def agg_recursion(rroot, root, G_, fd=0):  # compositional recursion in root gra
         comp_G_(G_, pri_G_=None, f1Q=1, fder=fd)  # cross-comp all Gs in (rng,der), nD array? form link_H per G
 
         root.val_Ht[fd] += [0]; root.rdn_Ht[fd] += [1]  #  estimate, no node.rdn += 1, refine?:
-        root.rdn_Ht[fd][-1] += (root.val_Ht[fd][-1] - ave*root.rdn_Ht[fd][-1] > root.val_Ht[1-fd][-1] - ave[1-fd]*root.rdn_Ht[1-fd][-1])
+        root.rdn_Ht[fd][-1] += (root.val_Ht[fd][-1] - ave*root.rdn_Ht[fd][-1] > root.val_Ht[1-fd][-1] - G_aves[1-fd]*root.rdn_Ht[1-fd][-1])
         for G in G_: G.root_t = [[],[]]  # to fill with GGs
         for fd in 0,1:
             form_graph_(root, G_, fd, _root_t_)  # cluster link_H[-1] -> graph_,= node_ in node_tt, default, agg+ eval per graph
