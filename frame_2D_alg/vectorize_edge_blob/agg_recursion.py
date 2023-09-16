@@ -69,10 +69,8 @@ def agg_recursion(rroot, root, G_, fd=0):  # compositional recursion in root gra
         root.val_Ht[fd] += [0]; root.rdn_Ht[fd] += [1]  #  estimate, no node.rdn += 1, refine?:
         root.rdn_Ht[fd][-1] += (root.val_Ht[fd][-1] - ave*root.rdn_Ht[fd][-1] > root.val_Ht[1-fd][-1] - G_aves[1-fd]*root.rdn_Ht[1-fd][-1])
         for G in G_: G.root_t = [[],[]]  # to fill with GGs
-        for fd in 0,1:
-            form_graph_(root, G_, fd, _root_t_)  # cluster link_H[-1] -> graph_,= node_ in node_tt, default, agg+ eval per graph
-            if rroot:
-                rroot.fback_t[fd] += [[root.aggH, root.val_Ht, root.rdn_Ht]]  # merge across forks
+        form_graph_t(root, G_, _root_t_)  # cluster link_H[-1] -> graph_,= node_ in node_tt, default, agg+ eval per graph
+        if rroot: rroot.fback_t[fd] += [[root.aggH, root.val_Ht, root.rdn_Ht]]  # merge across forks (feedback rroot using input fd)
 
 
 def comp_G_(G_, pri_G_=None, f1Q=1, fder=0):  # cross-comp in G_ if f1Q, else comp between G_ and pri_G_, if comp_node_?
@@ -136,28 +134,33 @@ def comp_G(_G, G, distance, A):
         G.val_Ht[0][-1] += Mval; G.val_Ht[1][-1] += Dval; G.rdn_Ht[0][-1] += Mrdn; G.rdn_Ht[1][-1] += Drdn
 
 # tentative
-def form_graph_(root, Node_, fd, _root_t_):  # root function to form fuzzy graphs of nodes per fder,fd
+def form_graph_t(root, Node_, _root_t_):  # root function to form fuzzy graphs of nodes per fder,fd
 
-    ave = G_aves[fd]
-    max_ = select_max_(Node_, fd, ave)  # compute max of quasi-Gaussians: val + sum([_val * (link_val/max_val])
+# edits to make it consistent with comp_slice
+    node_t = []
+    for fd in 0, 1:
+        ave = G_aves[fd]
+        max_ = select_max_(Node_, fd, ave)  # compute max of quasi-Gaussians: val + sum([_val * (link_val/max_val])
+        full_graph_ = segment_node_(Node_, max_, fd, _root_t_)
+        list_graph_ = prune_graph_(full_graph_, fd)  # sort node roots and prune the weak
+        graph_ = sum2graph_(list_graph_, fd)  # convert to Cgraphs
+        node_t += [graph_]  # graphs maybe nested in sub+, revert node_t if empty, add_alt_PPs_(graph_t)?
 
-    full_graph_ = segment_node_(Node_, max_, fd, _root_t_)
-    list_graph_ = prune_graph_(full_graph_, fd)  # sort node roots and prune the weak
-    graph_ = sum2graph_(list_graph_, fd)  # convert to Cgraphs
     # sub+:
-    for graph in graph_:
-        node_ = copy(graph.node_t)  # still node_
-        if sum(graph.val_Ht[fd]) * np.sqrt(len(node_)-1) if node_ else 0 > G_aves[fd] * sum(graph.rdn_Ht[fd]):
-            agg_recursion(root, graph, node_, fd)  # replace node_ with node_t, recursive
-        else:
-            # feed back new params after G sub+:
-            for graph in graph_: root.fback_t[fd] += [[graph.aggH, graph.val_Ht, graph.rdn_Ht]]
+    for fd, graph_ in enumerate(node_t):
+        if not fd: node__ = [graph.node_t for graph in graph_]  # pack a copy of flat node_ per graph because they will be updated in sub+ below when fd = 0, and we need it in fd=1 too
+        for graph, node_ in zip(graph_, node__):
+            if sum(graph.val_Ht[fd]) * np.sqrt(len(node_)-1) if node_ else 0 > G_aves[fd] * sum(graph.rdn_Ht[fd]):
+                agg_recursion(root, graph, node_, fd)  # replace node_ with node_t, recursive
+            else:
+                # feed back new params after G sub+:
+                root.fback_t[fd] += [[graph.aggH, graph.val_Ht, graph.rdn_Ht]]
+ 
+    root.node_t = node_t
     # next-level feedback after all Gs sub+:
     if root.fback_t and root.fback_t[fd]:
         feedback(root, fd)  # update root.root.. aggH, val_Ht,rdn_Ht
 
-    # we need [:] here because we are replacing elements in tuple
-    root.node_t[fd][:] = graph_  # graphs maybe nested in sub+, revert node_tt if empty, add_alt_PPs_(graph_t)?
 
 
 def select_max_(node_, fd, ave):  # final maxes are graph-initializing nodes

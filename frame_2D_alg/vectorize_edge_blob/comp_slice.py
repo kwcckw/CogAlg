@@ -177,9 +177,9 @@ def form_PP_t(root, P_, base_rdn):  # form PPs of derP.valt[fd] + connected Ps v
         PP_t += [[sum2PP(root, qPP, base_rdn, fd) for qPP in rePP_]]
 
     for fd in 0,1:   # after form_PP_t: root_t is filled in each sub+ layer
-        sub_recursion(root.fback_t[fd], PP_t[fd], fd)  # eval P_ rng+ per PPm or der+ per PP
+        sub_recursion(root, PP_t[fd], fd)  # eval P_ rng+ per PPm or der+ per PP
         if root.fback_t and root.fback_t[fd]:
-            feedback(root, fd)  # feedback after sub+ is terminated in all root fork nodes, to avoid individual traffic
+            feedback(root, fd)
 
     root.node_t = PP_t  # PPs maybe nested in sub+, add_alt_PPs_(graph_t)?
 
@@ -263,7 +263,7 @@ def sub_recursion(root, PP_, fd):  # called in form_PP_, evaluate PP for rng+ an
             comp_der(P_) if fd else comp_rng(P_, PP.rng+1)  # same else new links
             PP.rdnt[fd] += PP.valt[fd] - PP_aves[fd] * PP.rdnt[fd] > PP.valt[1-fd] - PP_aves[1-fd] * PP.rdnt[1-fd]
             for P in P_: P.root_t = [[],[]]  # fill with sub_PPs: layer between nodes and PP
-            PP.node_t = [[],[]]   # fill with sub_PPm_, sub_PPd_:
+            # PP.node_t = [[],[]]   # fill with sub_PPm_, sub_PPd_: (there's no need to reset here? Because we just need to replace it)
             form_PP_t(PP, P_, base_rdn=PP.rdnt[fd])
             root.fback_t[fd] += [[PP.derH, PP.valt, PP.rdnt]]  # merge in root.fback_t fork, else fback_tree
 
@@ -280,7 +280,8 @@ def feedback(root, fd):  # from form_PP_, append new der layers to root PP, sing
         if rroot:  # may be empty if the fork was not taken
             fback_ = rroot.fback_t[fd]
             fback_ += [Fback]
-            if fback_ and (len(fback_) == len(rroot.node_t[fd])):  # all rroot nodes terminated and fed back
+            # rroot.node_t shouldn't updated to node_t yet
+            if fback_ and (len(fback_) == len(rroot.node_t)):  # all rroot nodes terminated and fed back
                 feedback(rroot, fd) # sum2PP adds derH per rng, feedback adds deeper sub+ layers
 
 
