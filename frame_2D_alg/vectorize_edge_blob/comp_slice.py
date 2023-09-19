@@ -123,7 +123,7 @@ def form_PP_t(root, P_, base_rdn):  # form PPs of derP.valt[fd] + connected Ps v
                 P_layer += link_map[_P]  # append linked __Ps to extended perimeter of P
             # eval cP_:
             if Val > PP_aves[fd] * Rdn:
-                PP_t[fd] += sum2PP(root, cP_, base_rdn, fd)
+                PP_t[fd] += [sum2PP(root, cP_, base_rdn, fd)]  # we need bracket here to pack PP
 
     for fd, PP_ in enumerate(PP_t):   # after form_PP_t -> P.root_t
         sub_recursion(root, PP_, fd)  # eval rng+/ PPm or der+/ PPd

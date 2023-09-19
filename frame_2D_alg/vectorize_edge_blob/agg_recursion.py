@@ -38,8 +38,9 @@ def vectorize_root(blob):  # vectorization pipeline is 3 composition levels of c
     edge = slice_edge(blob, verbose=False)  # lateral kernel cross-comp -> P clustering
     comp_P_(edge)  # vertical, lateral-overlap P cross-comp -> PP clustering
     # PP cross-comp -> discontinuous graph clustering:
+    node_t = copy(edge.node_t)  # copy a list of edge input node_, because they may get replaced in the first rng+ agg_recursion
     for fd in 0,1:
-        node_ = edge.node_t[fd]
+        node_ = node_t[fd]
         if edge.valt[0] * np.sqrt(len(node_)-1) if node_ else 0 > G_aves[0] * edge.rdnt[0]:  # init rng+
             G_ = []  # convert CPPs to Cgraphs:
             for PP in node_:
@@ -62,14 +63,14 @@ def agg_recursion(rroot, root, G_, fd=0):  # compositional agg+|sub+ recursion i
     for G in G_:
         _root_t_+= [G.root_t]  # merge G roots in)between forks into GG roots: between Gs and root
         G.root_t = [[],[]]  # fill with GGs:
-    form_graph_t(root, G_, _root_t_, fd)  # internal eval sub+/graph and feedback
+    form_graph_t(root, G_, _root_t_)  # internal eval sub+/graph and feedback
 
     # eval last link layer for rng+|der+, n comp graphs ~-> n matches, match rate decreases with distance:
     if root.val_Ht[fd][-1] * np.sqrt(len(G_)-1) if G_ else 0 > ave * root.rdn_Ht[fd][-1]:
         agg_recursion(rroot, root, G_, fd)  # actual agg+ with arg fd?
 
 
-def form_graph_t(root, Node_, _root_t_, root_fd):  # root function to form fuzzy graphs of nodes per fder,fd
+def form_graph_t(root, Node_, _root_t_):  # root function to form fuzzy graphs of nodes per fder,fd
 
     graph_t = []
     for fd in 0,1:
@@ -85,10 +86,12 @@ def form_graph_t(root, Node_, _root_t_, root_fd):  # root function to form fuzzy
             if sum(graph.val_Ht[fd]) * np.sqrt(len(node_)-1) if node_ else 0 > G_aves[fd] * sum(graph.rdn_Ht[fd]):
                 agg_recursion(root, graph, node_, fd)  # replace node_ with node_t, recursive
             else:  # feedback after sub+:
-                root.fback_t[root_fd] += [[graph.aggH, graph.val_Ht, graph.rdn_Ht]]  # merge forks in root fork
+                root.fback_t[fd] += [[graph.aggH, graph.val_Ht, graph.rdn_Ht]]  # merge forks in root fork
 
-    if root.fback_t and root.fback_t[root_fd]:  # next-level feedback after all Gs sub+
-        feedback(root, root_fd)  # update root.root.. aggH, val_Ht,rdn_Ht
+    # since we use graph.fd for rroot in feedback, we need fd fork here and remove root_fd? This will be the same with comp_slice now.
+    for fd in range(0,1):
+        if root.fback_t and root.fback_t[fd]:  # next-level feedback after all Gs sub+
+            feedback(root, fd)  # update root.root.. aggH, val_Ht,rdn_Ht
 
     root.node_t = graph_t
 
@@ -255,7 +258,8 @@ def sum2graph_(graph_, fd):  # sum node and link params into graph, aggH in agg+
         Root_t = graph[2][0]  # merge _root_t_ into Root_t:
         [merge_root_tree(Root_t, root_t) for root_t in graph[2][1:]]
 
-        Graph = Cgraph(root_t=Root_t, L=len(graph[0]))  # n nodes
+        # assign root fd here?
+        Graph = Cgraph(fd=fd, root_t=Root_t, L=len(graph[0]))  # n nodes
         Link_ = []
         for G in graph[0]:
             sum_box(Graph.box, G.box)
@@ -419,4 +423,5 @@ def feedback(root, fd):  # called from form_graph_, append new der layers to roo
                 fback_ = rroot.fback_t[fd]
                 fback_ += [Fback]
                 if fback_ and (len(fback_) == len(rroot.node_t)):  # flat, all rroot nodes terminated and fed back
+                    # getting cyclic rroot here not sure why it can happen, need to check further
                     feedback(rroot, fd)  # sum2graph adds aggH per rng, feedback adds deeper sub+ layers
