@@ -62,14 +62,15 @@ def agg_recursion(rroot, root, G_, fd=0):  # compositional agg+|sub+ recursion i
     for G in G_:
         _root_t_+= [G.root_t]  # merge G roots in)between forks into GG roots: between Gs and root
         G.root_t = [[],[]]  # fill with GGs:
-    form_graph_t(root, G_, _root_t_)  # internal eval sub+/graph and feedback
+    node_t = form_graph_t(root, G_, _root_t_)  # internal eval sub+/graph and feedback
     '''
     sub+: looping-> evaluation-> cross-comp, in comp_slice,
     agg+: cross-comp, loop for form_graph_t sub+, eval comp graphs: n~-> n matches, match rate decreases with distance:
     '''
     if root.val_Ht[fd][-1] * np.sqrt(len(G_)-1) if G_ else 0 > ave * root.rdn_Ht[fd][-1]:
         agg_recursion(rroot, root, G_, fd)
-
+    # replace G_ at the end
+    G_[:] = node_t
 
 def form_graph_t(root, Node_, _root_t_):  # root function to form fuzzy graphs of nodes per fder,fd
 
@@ -92,8 +93,8 @@ def form_graph_t(root, Node_, _root_t_):  # root function to form fuzzy graphs o
         if root.fback_t and root.fback_t[fd]:
             feedback(root, fd)  # update root.root.. aggH, val_Ht,rdn_Ht
 
-    Node_[:] = graph_t  # root.node_T: incrementally nested with each agg+?
-
+    # Node_[:] = graph_t  # root.node_T: incrementally nested with each agg+?
+    return graph_t
 
 def comp_G_(G_, pri_G_=None, f1Q=1, fd=0):  # cross-comp in G_ if f1Q, else comp between G_ and pri_G_, if comp_node_?
 
