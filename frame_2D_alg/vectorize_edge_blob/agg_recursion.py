@@ -51,9 +51,9 @@ def vectorize_root(blob):  # vectorization pipeline is 3 composition levels of c
             agg_recursion(None, edge, node_, fd=0)  # edge.node_t = graph_t, both macro and micro recursive
 
 
-def agg_recursion(rroot, root, G_, fd=0):  # compositional agg+|sub+ recursion in root graph, clustering G_
+def agg_recursion(rroot, root, G_, fd=0, fr=0):  # compositional agg+|sub+ recursion in root graph, clustering G_
 
-    comp_G_(G_, pri_G_=None, f1Q=1, fd=fd)  # cross-comp all Gs in (rng,der), nD array? form link_H per G
+    comp_G_(G_, pri_G_=None, f1Q=1, fd=fd, fr=fr)  # cross-comp all Gs in (rng,der), nD array? form link_H per G
 
     root.val_Ht[fd] += [0]; root.rdn_Ht[fd] += [1]  #  estimate, no node.rdn += 1
     ave = G_aves[fd]  # add current fork rdn:
@@ -65,9 +65,11 @@ def agg_recursion(rroot, root, G_, fd=0):  # compositional agg+|sub+ recursion i
     GG_t = form_graph_t(root, G_, _root_t_)  # internal eval sub+/graph and feedback
     # agg+ cross-comp-> form_graph_t loop sub+) recursive agg+, vs. comp_slice sub+ looping-> evaluation-> cross-comp
 
+    fr = 0
     for fd, GG_ in enumerate(GG_t):  # comp_G_ eval: n_matches ~ nG, match rate decreases with distance, root vals updated in form_t:
         if root.val_Ht[fd][-1] * np.sqrt(len(GG_)-1) if GG_ else 0 > ave * root.rdn_Ht[fd][-1]:
-            agg_recursion(rroot, root, GG_, fd)  # comp fd = GG form fd
+            agg_recursion(rroot, root, GG_, fd, fr)  # comp fd = GG form fd
+            fr = 1
 
     G_[:] = GG_t
 
@@ -95,12 +97,12 @@ def form_graph_t(root, Node_, _root_t_):  # root function to form fuzzy graphs o
     return graph_t  # root.node_t'node_ -> node_t: incr nested with each agg+?
 
 
-def comp_G_(G_, pri_G_=None, f1Q=1, fd=0):  # cross-comp in G_ if f1Q, else comp between G_ and pri_G_, if comp_node_?
+def comp_G_(G_, pri_G_=None, f1Q=1, fd=0, fr=0):  # cross-comp in G_ if f1Q, else comp between G_ and pri_G_, if comp_node_?
 
     for G in G_:  # node_
         if fd:  # follow prior link_ layer
             _G_ = []
-            for link in G.link_H[-2]:
+            for link in G.link_H[-(1+fr)]:
                 if link.valt[1] > ave_Gd:
                     _G_ += [link.G1 if G is link.G0 else link.G0]
         else:
