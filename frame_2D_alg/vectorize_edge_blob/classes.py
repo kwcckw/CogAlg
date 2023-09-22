@@ -101,7 +101,7 @@ class CPP(CderP):
 class Cgraph(ClusterStructure):  # params of single-fork node_ cluster per pplayers
 
     fd: int = 0  # graph is defined by m|d value
-    ptuple : list = z([])  # default from P
+    ptuple : list = z([0,0,0,0,[0,0],0])  # default from P
     derH : list = z([[], [0,0], [1,1]])  # [[tuplet, valt, rdnt]]: default from PP, for both rng+ and der+, sum min len?
     aggH : list = z([])  # [[sub_Ht, valt, rdnt]], subH: [[der_Ht, valt, rdnt]]; cross-fork composition layers
     link_H : list = z([[]])  # added per rng+ comp_G_

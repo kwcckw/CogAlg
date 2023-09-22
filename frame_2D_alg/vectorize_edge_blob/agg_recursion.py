@@ -113,6 +113,7 @@ def comp_G_(G_, fd=0, oG_=None, fin=1):  # cross-comp in G_ if fin, else comp be
                 if distance < ave_distance * ((sum(_G.val_Ht[fd]) + sum(G.val_Ht[fd])) / (2*sum(G_aves))):  # very tentative
                     # close enough to compare:
                     G.compared_ += [_G]; _G.compared_ += [G]
+                    # we need valt, rdnt, max val, S and A too?
                     G.link_H[-1] += [CderG( G0=G, G1=_G, S=distance, A=[dy,dx])]  # proto-links, in G only
     for G in G_:
         for link in G.link_H[-1]:  # if fd: follow links, comp old derH, else follow proto-links, form new derH
@@ -157,7 +158,8 @@ def comp_G(link, fd):
 
     if valt[0] > ave_Gm or valt[1] > ave_Gd:
         link.subH = SubH; link.valt = [Mval, Dval, Maxv]; link.rdnt = [Mrdn, Drdn]
-        _G.link_H[-1] += [link]  # bilateral add link, or replace if fd?
+        # link should be always in G.link_H[-1] here? Why we need to add them again?
+        # _G.link_H[-1] += [link]  # bilateral add link, or replace if fd?
         # add new val, rdn? or all this is in sum2graph?:
         _G.val_Ht[0][-1] += Mval; _G.val_Ht[1][-1] += Dval; _G.rdn_Ht[0][-1] += Mrdn; _G.rdn_Ht[1][-1] += Drdn
         G.val_Ht[0][-1] += Mval; G.val_Ht[1][-1] += Dval; G.rdn_Ht[0][-1] += Mrdn; G.rdn_Ht[1][-1] += Drdn
@@ -170,7 +172,7 @@ def select_init_node_(node_, fd):  # sum surrounding link values to select nodes
     _Val_ = [(node.val_Ht[fd][-1] - ave * node.rdn_Ht[fd][-1]) for node in node_]
 
     while dVal > ave:  # iterative adjust Val by surround propagation, no direct increment mediation rng?
-        Val_ = []; dVal = 0
+        Val_ = [0 for _ in node_]; dVal = 0
 
         for i, (node,_Val) in enumerate(zip(node_, _Val_)):
             if _Val > 0:  # potential graph init
