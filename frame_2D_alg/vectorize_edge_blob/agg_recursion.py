@@ -116,7 +116,7 @@ def comp_G_(G_, fd=0, oG_=None, fin=1):  # cross-comp in G_ if fin, else comp be
                     G.link_H[-1] += [CderG( G0=G, G1=_G, S=distance, A=[dy,dx])]  # proto-links, in G only
     for G in G_:
         for link in G.link_H[-1]:  # if fd: follow links, comp old derH, else follow proto-links, form new derH
-            _G = link.G1 if G is link.G0 else link.G0
+            _G = link.G1 if G is link.G0 else link.G0  # why we need this line?
             if fd and link.valt[1] < G_aves[1]: continue  # weak link
             comp_G(link, fd)
             '''
@@ -153,13 +153,14 @@ def comp_G(link, fd):
         subH, valt, rdnt = comp_aggH(_G.aggH, G.aggH, rn=1)
         SubH += subH  # append higher subLayers: list of der_ext | derH s
         mval, dval, maxv = valt
+        # if we add vals only in der+ fork, rng+ fork's vals will be empty because derG is init with their valt, rdnt and etc as empty
         Mval+=mval; Dval+=dval; Maxv+=maxv; Mrdn += rdnt[0]+dval>mval; Drdn += rdnt[1]+dval<=mval
 
     if valt[0] > ave_Gm or valt[1] > ave_Gd:  # or sum valt?
         link.subH = SubH; link.valt = [Mval, Dval, Maxv]; link.rdnt = [Mrdn, Drdn]
         _G.link_H[-1] += [link]  # bilateral add link, or replace if fd?
     else:
-        link.G0.link_H[-1].remove(link)  # or G1?
+        link.G0.link_H[-1].remove(link)  # or G1? (should be just G0 because we assign G.link_H[-1] += [CderG( G0=G... above )
 
 
 def select_max_(node_, fd):  # sum surrounding link values to select nodes that will initialize graphs
@@ -168,7 +169,8 @@ def select_max_(node_, fd):  # sum surrounding link values to select nodes that 
     Gt_ = []
     for i, G in enumerate(node_):
         G.it[fd] = i  # or assigned in last sum2graph?
-        Gt_ += [G, G.val_Ht[fd][-1] - ave * G.rdn_Ht[fd][-1]]  # Gt = [G,_Val], ave is normalized for circular links?
+        # we need extra bracket to pack them as new element
+        Gt_ += [[G, G.val_Ht[fd][-1] - ave * G.rdn_Ht[fd][-1]]]  # Gt = [G,_Val], ave is normalized for circular links?
 
     while True:  # iterative Val range expansion by summing decayed surround nodes Vals, via same direct links
         dVal = 0
