@@ -115,8 +115,10 @@ def comp_G_(G_, fd=0, oG_=None, fin=1):  # cross-comp in G_ if fin, else comp be
                     G.compared_ += [_G]; _G.compared_ += [G]
                     G.link_H[-1] += [CderG( G=G, _G=_G, S=distance, A=[dy,dx])]  # proto-links, in G only
     for G in G_:
-        for link in G.link_H[-1]:  # if fd: follow links, comp old derH, else follow proto-links, form new derH
-            if fd and link.valt[1] > G_aves[1]*link.rdnt[1]:  # maybe weak after rdn incr?
+        # we might remove links in comp_G below and mess up the looping (some links will be skipped if we remove elements while looping a list), so we need to use copy here
+        for link in copy(G.link_H[-1]):  # if fd: follow links, comp old derH, else follow proto-links, form new derH
+            # for not fd, i think we need to comp_G for newly added link, which is when sum of their valt==0?
+            if (not fd and sum(link.valt)==0) or (fd and link.valt[1] > G_aves[1]*link.rdnt[1]):  # maybe weak after rdn incr?
                 comp_G(link, fd)
             '''
             same comp for cis and alt components?
@@ -175,6 +177,7 @@ def eval_node_connectivity(node_, fd):  # sum surrounding link values to select 
             for link in _G.link_H[-1]:
                 G = link.G if link._G is _G else link._G
                 GVal = Gt_[G.it[fd]][1]
+                # getting infinity loop here because link.valt[fd] is > link.valt[2]
                 Val += GVal * (link.valt[fd] / link.valt[2])  # _G Val * link decay (m|d / max: self=100%?)
             Gt_[i][1] = Val  # _G Val update, unilateral for simplicity: computed separately for _G
             DVal += abs(_Val-Val)  # node_Val update / surround extension, eval in init

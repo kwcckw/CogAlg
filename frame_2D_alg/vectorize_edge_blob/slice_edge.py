@@ -91,6 +91,7 @@ def trace_edge(blob, mask__, verbose=False):
             if _P is not None:
                 P.link_H[0] += [_P]  # add up links only
             # search in max_ path
+            # why it is +2 for both x and y here? It is due to adjacents in diagonal ? But why not -2? 
             adjacents = max_ & {*product(range(y-1,y+2), range(x-1,x+2))}   # search neighbors
             maxQue.extend(((_y, _x, P) for _y, _x in adjacents))
             max_ -= adjacents   # set difference = first set AND not both sets: https://www.scaler.com/topics/python-set-difference/

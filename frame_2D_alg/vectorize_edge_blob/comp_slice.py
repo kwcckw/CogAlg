@@ -146,7 +146,8 @@ def sum2PP(root, P_, base_rdn, fd):  # sum links in Ps and Ps in PP
             if derP.valt[fd] > P_aves[fd] * derP.rdnt[fd]:
                 derH, valt, rdnt = derP.derH, derP.valt, derP.rdnt
                 sum_derH([P.derH,P.valt,P.rdnt], [derH,valt,rdnt], base_rdn, fneg=0)  # uplink
-                _P = derH._P  # bilateral accum downlink, reverse d signs:
+                # typo here
+                _P = derP._P  # bilateral accum downlink, reverse d signs:
                 sum_derH([_P.derH,_P.valt,_P.rdnt], [derH,valt,rdnt], base_rdn, fneg=1)
         # unilateral sum:
         sum_derH([PP.derH,PP.valt,PP.rdnt], [P.derH,P.valt,P.rdnt], base_rdn)
@@ -196,11 +197,11 @@ def sum_derH(T, t, base_rdn, fneg=0):  # derH is a list of layers or sub-layers,
         Rdnt[i] += rdnt[i] + base_rdn
     DerH[:] = [  # sum der layers:
         [ [sum_dertuple(Mtuple,mtuple), sum_dertuple(Dtuple,dtuple,fneg)],  # ptuplet, only dtuple is directional: needs fneg
-          [Mval + mval, Dval + dval],  # valt
+          [Val + val for Val, val in zip(Vals, vals)],  # valt
           [Mrdn + mrdn + base_rdn, Drdn + drdn + base_rdn],  # rdnt
         ]
-        for [(Mtuple,Dtuple),(Mval,Dval),(Mrdn,Drdn)], [(mtuple,dtuple),(mval,dval),(mrdn,drdn)]
-        in zip_longest(DerH, derH, fillvalue=[((0,0,0,0,0,0),(0,0,0,0,0,0)), (0,0),(0,0)])  # ptuplet, valt, rdnt
+        for [(Mtuple,Dtuple),(Vals),(Mrdn,Drdn)], [(mtuple,dtuple),(vals),(mrdn,drdn)]
+        in zip_longest(DerH, derH, fillvalue=[([0,0,0,0,0,0],[0,0,0,0,0,0]), (0,0),(0,0)])  # ptuplet, valt, rdnt
     ]
 
 def sum_ptuple(Ptuple, ptuple, fneg=0):
@@ -212,8 +213,8 @@ def sum_ptuple(Ptuple, ptuple, fneg=0):
 def sum_dertuple(Ptuple, ptuple, fneg=0):
     I, G, M, Ma, A, L = Ptuple
     _I, _G, _M, _Ma, _A, _L = ptuple
-    if fneg: Ptuple[:] = (_I-I, _G-G, _M-M, _Ma-Ma, _A-A, _L-L)
-    else:    Ptuple[:] = (_I+I, _G+G, _M+M, _Ma+Ma, _A+A, _L+L)
+    if fneg: Ptuple[:] = [_I-I, _G-G, _M-M, _Ma-Ma, _A-A, _L-L]  # we need a list here because we reassign ptuple with [:]
+    else:    Ptuple[:] = [_I+I, _G+G, _M+M, _Ma+Ma, _A+A, _L+L]
     return   Ptuple
 
 
