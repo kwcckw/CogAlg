@@ -104,7 +104,7 @@ def comp_G_(G_, fd=0, oG_=None, fin=1):  # cross-comp in G_ if fin, else comp be
             for oG in oG_: oG.link_H += [[]]
         # form new links:
         for i, G in enumerate(G_):
-            if fin: _G_ = G_[i:]  # xcomp in G_
+            if fin: _G_ = G_[i+1:]  # xcomp in G_  # we need +1 here because starting index is inclusive
             else:   _G_ = oG_  # xcomp G_,other_G_, also start @ i? not used yet
             for _G in _G_:
                 if _G in G.compared_: continue  # skip if previously compared
@@ -115,9 +115,12 @@ def comp_G_(G_, fd=0, oG_=None, fin=1):  # cross-comp in G_ if fin, else comp be
                     G.compared_ += [_G]; _G.compared_ += [G]
                     G.link_H[-1] += [CderG( G=G, _G=_G, S=distance, A=[dy,dx])]  # proto-links, in G only
     for G in G_:
+        remove_link_= []
         for link in G.link_H[-1]:  # if fd: follow links, comp old derH, else follow proto-links, form new derH
             if fd and link.valt[1] < G_aves[1]*link.rdnt[1]: continue  # maybe weak after rdn incr?
-            comp_G(link, fd)
+            comp_G(G, link, remove_link_, fd)
+        while remove_link_:
+            G.link_H[-1].remove(remove_link_.pop())
             '''
             same comp for cis and alt components?
             for _cG, cG in ((_G, G), (_G.alt_Graph, G.alt_Graph)):
@@ -126,15 +129,15 @@ def comp_G_(G_, fd=0, oG_=None, fin=1):  # cross-comp in G_ if fin, else comp be
             combine cis,alt in aggH: alt represents node isolation?
             comp alts,val,rdn? cluster per var set if recurring across root: type eval if root M|D?
             '''
-def comp_G(link, fd):
+def comp_G(G, link, remove_link_, fd):
 
     Mval,Dval,Maxv = 0,0,0
     Mrdn,Drdn = 1,1
-    _G, G = link._G, link.G
+    _G = link._G if link.G is G else link.G  # we need input G and this line to differentiate between G and _G
 
     # / P:
     mtuple, dtuple, Mtuple = comp_ptuple(_G.ptuple, G.ptuple, rn=1)
-    mval, dval, maxv = sum(mtuple), sum(abs(x) for x in dtuple), sum(Mtuple)
+    mval, dval, maxv = sum(mtuple), sum(abs(x) for x in dtuple), sum(Mtuple)  # still getting infinity loop
     mrdn = dval>mval; drdn = dval<=mval
     derLay0 = [[mtuple,dtuple], [mval,dval,maxv], [mrdn,drdn]]
     Mval+=mval; Dval+=dval; Maxv+=maxv; Mrdn += mrdn; Drdn += drdn
@@ -157,7 +160,7 @@ def comp_G(link, fd):
         link.subH = SubH; link.valt = [Mval,Dval,Maxv]; link.rdnt = [Mrdn,Drdn]  # complete proto-link
         _G.link_H[-1] += [link]  # bilateral add link, replace if fd?
     elif not fd:
-        G.link_H[-1].remove(link)  # for rng+ only
+        remove_link_ += [link]  # for rng+ only (we shouldn't remove link while looping it, so we need to pack it first and remove them later)
 
 
 def eval_node_connectivity(node_, fd):  # sum surrounding link values to select nodes, to initialize graphs

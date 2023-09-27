@@ -59,9 +59,10 @@ def comp_P(_P,P, rn, fd=1, derP=None):  #  derP if der+, reused as S if rng+
 # rng+ and der+ are called from sub_recursion
 
 def comp_rng(iP_, rng):  # form new Ps and links, switch to rng+n to skip clustering?
-    P_, derP_ = [], []
+    P_  = []
 
     for P in iP_:
+        derP_ = []  # this should be per P? It doesn't looks correct if multiple PS shared a same derP_ 
         for derP in P.link_H[-1]:  # scan last-layer links
             if derP.valt[0] > P_aves[0] * derP.rdnt[0]:
                 _P = derP._P
@@ -196,8 +197,8 @@ def sum_derH(T, t, base_rdn, fneg=0):  # derH is a list of layers or sub-layers,
         Rdnt[i] += rdnt[i] + base_rdn
     DerH[:] = [
         # sum der layers, fneg*i: for dtuple only:
-        [ [sum_dertuple(Dertuple,dertuple, fneg*i) for i,(Dertuple,dertuple) in enumerate(zip(Tuplet[0,1],tuplet[0,1]))],
-          [Val + val for Val, val in zip(Valt[0,1], valt[0,1])],  # skip maxvs and Mtuples
+        [ [sum_dertuple(Dertuple,dertuple, fneg*i) for i,(Dertuple,dertuple) in enumerate(zip(Tuplet[0:2],tuplet[0:2]))],
+          [Val + val for Val, val in zip(Valt[0:2], valt[0:2])],  # skip maxvs and Mtuples
           [Rdn + rdn + base_rdn for Rdn, rdn in zip(Rdnt,rdnt)]
         ]
         for [Tuplet,Valt,Rdnt], [tuplet,valt,rdnt]
