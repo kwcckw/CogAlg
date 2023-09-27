@@ -78,7 +78,7 @@ def form_graph_t(root, G_, _root_t_):  # root function to form fuzzy graphs of n
         Gt_ = eval_node_connectivity(G_, fd)  # sum surround link values @ incr rng,decay: val += linkv/maxv * _node_val
         init_ = select_init_(Gt_, fd)  # select sparse max nodes to initialize graphs
         graph_ = segment_node_(init_, Gt_, fd, _root_t_)
-        graph_ = prune_graph_(graph_, fd)  # sort node roots and prune the weak, or only whole graphs?
+        graph_ = prune_graph_(graph_, fd)  # sort node roots to add rdn, prune weak graphs
         graph_ = sum2graph_(graph_, fd)  # convert to Cgraphs
         graph_t += [graph_]  # add alt_graphs?
     # sub+:
@@ -115,11 +115,9 @@ def comp_G_(G_, fd=0, oG_=None, fin=1):  # cross-comp in G_ if fin, else comp be
                     G.compared_ += [_G]; _G.compared_ += [G]
                     G.link_H[-1] += [CderG( G=G, _G=_G, S=distance, A=[dy,dx])]  # proto-links, in G only
     for G in G_:
-        # we might remove links in comp_G below and mess up the looping (some links will be skipped if we remove elements while looping a list), so we need to use copy here
-        for link in copy(G.link_H[-1]):  # if fd: follow links, comp old derH, else follow proto-links, form new derH
-            # for not fd, i think we need to comp_G for newly added link, which is when sum of their valt==0?
-            if (not fd and sum(link.valt)==0) or (fd and link.valt[1] > G_aves[1]*link.rdnt[1]):  # maybe weak after rdn incr?
-                comp_G(link, fd)
+        for link in G.link_H[-1]:  # if fd: follow links, comp old derH, else follow proto-links, form new derH
+            if fd and link.valt[1] < G_aves[1]*link.rdnt[1]: continue  # maybe weak after rdn incr?
+            comp_G(link, fd)
             '''
             same comp for cis and alt components?
             for _cG, cG in ((_G, G), (_G.alt_Graph, G.alt_Graph)):
@@ -136,7 +134,7 @@ def comp_G(link, fd):
 
     # / P:
     mtuple, dtuple, Mtuple = comp_ptuple(_G.ptuple, G.ptuple, rn=1)
-    mval, dval, maxv = sum(mtuple), sum(dtuple), sum(Mtuple)
+    mval, dval, maxv = sum(mtuple), sum(abs(x) for x in dtuple), sum(Mtuple)
     mrdn = dval>mval; drdn = dval<=mval
     derLay0 = [[mtuple,dtuple], [mval,dval,maxv], [mrdn,drdn]]
     Mval+=mval; Dval+=dval; Maxv+=maxv; Mrdn += mrdn; Drdn += drdn
@@ -155,7 +153,7 @@ def comp_G(link, fd):
         mval, dval, maxv = valt
         Mval+=mval; Dval+=dval; Maxv+=maxv; Mrdn += rdnt[0]+dval>mval; Drdn += rdnt[1]+dval<=mval
 
-    if valt[0] > ave_Gm or valt[1] > ave_Gd:  # or sum valt?
+    if Mval > ave_Gm or Dval > ave_Gd:  # or sum?
         link.subH = SubH; link.valt = [Mval,Dval,Maxv]; link.rdnt = [Mrdn,Drdn]  # complete proto-link
         _G.link_H[-1] += [link]  # bilateral add link, replace if fd?
     elif not fd:
@@ -177,7 +175,6 @@ def eval_node_connectivity(node_, fd):  # sum surrounding link values to select 
             for link in _G.link_H[-1]:
                 G = link.G if link._G is _G else link._G
                 GVal = Gt_[G.it[fd]][1]
-                # getting infinity loop here because link.valt[fd] is > link.valt[2]
                 Val += GVal * (link.valt[fd] / link.valt[2])  # _G Val * link decay (m|d / max: self=100%?)
             Gt_[i][1] = Val  # _G Val update, unilateral for simplicity: computed separately for _G
             DVal += abs(_Val-Val)  # node_Val update / surround extension, eval in init
@@ -234,19 +231,17 @@ def segment_node_(init_, Gt_, fd, root_t_):
     return graph_
 
 
-def prune_graph_(graph_, fd):  # compute graph overlap to evaluate rdn-adjusted vals and prune weak graphs
+def prune_graph_(graph_, fd):  # compute graph overlap to prune weak graphs, not nodes: rdn doesn't change the structure
 
-    # prune whole graphs only, pruning weak nodes would segment the graph, too complex?
-
-    for graph in graph_:  # sort node roots, sum the ranking in graph overlap:
+    for graph in graph_:  # sort node roots, sum the ranking into node overlap and then graph overlap:
         for node in graph[0]:
-            roots = sorted(node.root_t[fd], key=lambda root: root[1], reverse=True)
+            roots = sorted(node.root_t[fd], key=lambda root: root[1], reverse=True)  # sort by net val
             for rdn, graph in enumerate(roots):
-                graph[1] -= ave*rdn  # rdn to stronger overlapping graphs, + stronger forks, select param sets?
-                # node is shared by multiple max-initialized graphs, pruning here still allows for some overlap
+                graph[1] -= ave*rdn  # rdn to >val overlapping graphs per node, also >val forks, alt sparse param sets?
+                # nodes are shared by multiple max-initialized graphs, pruning here still allows for some overlap
     pruned_graph_ = []
     for graph in graph_:
-        if graph[1] > G_aves[fd]:  # eval adjusted Val to reduce graph overlap, for local sparsity?
+        if graph[1] > G_aves[fd]:  # rdn-adjusted Val for local sparsity, doesn't affect G val?
             pruned_graph_ += [graph]
         else:
             for node in graph[0]:
