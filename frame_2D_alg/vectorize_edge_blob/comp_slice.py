@@ -34,7 +34,7 @@ def comp_P_(edge):  # renamed for consistency, cross-comp P_ in edge: high-gradi
     for P in P_:
         # scan, comp contiguously uplinked Ps, rn: relative weight of comparand
         derP_ = [comp_P(_P, P, rn=len(_P.dert_)/len(P.dert_), fd=0) for _P in P.link_H[-1]]
-        P.link_H[-1] = derP_
+        P.link_H[-1] = [derP for derP in derP_ if derP]  # remove empty derP
 
     form_PP_t(edge, P_, base_rdn=2)  # replace edge.node_t with PP_t, may be nested by sub+
 
@@ -55,7 +55,6 @@ def comp_P(_P,P, rn, fd=1, derP=None):  #  derP if der+, reused as S if rng+
 
     if mval > aveP*mrdn or dval > aveP*drdn:
         return derP
-    else: return []
 
 # rng+ and der+ are called from sub_recursion
 
@@ -92,7 +91,6 @@ def comp_der(P_):  # keep same Ps and links, increment link derH, then P derH in
                 rn = (len(_P.dert_) / len(P.dert_)) * (len(_P.link_H[-1]) / len(link_))
                 derP = comp_P(_P,P, rn, fd=1, derP=derP)
                 if derP: derP_ += [derP]  # not None
-
         link_[:] = derP_  # replace with extended-derH derPs
     return P_
 
@@ -228,7 +226,7 @@ def comp_derH(_derH, derH, rn, fagg=0):  # derH is a list of der layers or sub-l
     for _lay, lay in zip_longest(_derH, derH, fillvalue=[]):  # compare common lower der layers | sublayers in derHs
         if _lay and lay:  # also if lower-layers match: Mval > ave * Mrdn?
 
-            ret = comp_dtuple(_lay[0][1], lay[0][1], rn)  # compare dtuples only, mtuples are for evaluation
+            ret = comp_dtuple(_lay[0][1], lay[0][1], rn, fagg)  # compare dtuples only, mtuples are for evaluation
             mtuple, dtuple = ret[:2]
             mval = sum(mtuple); dval = sum(abs(d) for d in dtuple)
             mrdn = dval > mval; drdn = dval < mval

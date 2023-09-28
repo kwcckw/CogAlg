@@ -117,7 +117,8 @@ def comp_G_(G_, fd=0, oG_=None, fin=1):  # cross-comp in G_ if fin, else comp be
         link_ = []
         for link in G.link_H[-1]:  # if fd: follow links, comp old derH, else follow proto-links, form new derH
             if fd and link.valt[1] < G_aves[1]*link.rdnt[1]: continue  # maybe weak after rdn incr?
-            link_ += comp_G(link, fd)
+            derG = comp_G(link, fd)
+            if derG: link_ += [derG]
         G.link_H[-1] = link_
         '''
         same comp for cis and alt components?
@@ -162,7 +163,8 @@ def comp_G(link, fd):
     elif Mval > ave_Gm or Dval > ave_Gd:  # or sum?
         link.subH = SubH; link.maxt = [maxM,maxD]; link.valt = [Mval,Dval]; link.rdnt = [Mrdn,Drdn]  # complete proto-link
         return link
-    else: return []  # rng+ proto-link is not replaced
+    # actually there's no need to return, the default return value isNone
+    # else: return []  # rng+ proto-link is not replaced
 
 
 def eval_node_connectivity(node_, fd):  # sum surrounding link values to select nodes, to initialize graphs
@@ -180,7 +182,7 @@ def eval_node_connectivity(node_, fd):  # sum surrounding link values to select 
             for link in _G.link_H[-1]:
                 G = link.G if link._G is _G else link._G
                 GVal = Gt_[G.it[fd]][1]
-                Val += GVal * (link.valt[fd] / link.valt[2])  # _G Val * link decay (m|d / max: self=100%?)
+                Val += GVal * (link.valt[fd] / link.maxt[fd])  # _G Val * link decay (m|d / max: self=100%?)
             Gt_[i][1] = Val  # _G Val update, unilateral for simplicity: computed separately for _G
             DVal += abs(_Val-Val)  # node_Val update / surround extension, eval in init
         if DVal < ave:  # low node_Val update, also if low node_Val?
@@ -215,7 +217,7 @@ def segment_node_(init_, Gt_, fd, root_t_):
         iroot_t = [root_t_[inode.it[fd]]]  # same order as Gt_, assign node roots to new graphs, init with max
         graph = [[inode],ival,[iroot_t]]
         inode.root_t[fd] += [graph]
-        _nodet_ = [inode,ival,iroot_t]  # current perimeter of the graph, init = graph?
+        _nodet_ = [[inode,ival,iroot_t]]  # current perimeter of the graph, init = graph?
 
         while _nodet_:  # search links outwards recursively to form overlapping graphs:
             nodet_ = []
@@ -225,7 +227,7 @@ def segment_node_(init_, Gt_, fd, root_t_):
                     if node in graph[0]: continue
                     val = Gt_[node.it[fd]][1]
                     root_t = root_t_[node.it[fd]]  # if agg+?
-                    if val * (link.valt[fd] / link.valt[2]) > ave:  # tentative
+                    if val * (link.valt[fd] / link.maxt[fd]) > ave:  # tentative
                         graph[0] += [node]
                         graph[1] += val
                         graph[2] += [root_t]
@@ -322,7 +324,7 @@ def comp_ext(_ext, ext, Valt, Rdnt):  # comp ds:
     D = dL+dS+dA
     maxv = max(L,_L)+max(S,_S)+max_mA
 
-    Valt[0] += M; Valt[1] += D; Valt[2] += maxv
+    Valt[0] += M; Valt[1] += D  # ; Valt[2] += maxv  # no summation on max val? or return them separately?
     Rdnt[0] += D>M; Rdnt[1] += D<=M
 
     return [[mL,mS,mA], [dL,dS,dA]]  # no Mtuple?

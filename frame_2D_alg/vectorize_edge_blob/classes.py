@@ -23,6 +23,7 @@ class CEdge(ClusterStructure):  # edge blob
     valt : list = z([0,0])
     rdnt : list = z([1,1])
     # for agg+:
+    rng = 1
     aggH : list = z([[]])  # formed in Gs: [[subH, valt, rdnt]]: cross-fork composition layers
     val_Ht : list = z([[0],[0]])  # Ht of link vals | rdns per fder
     rdn_Ht : list = z([[1],[1]])
