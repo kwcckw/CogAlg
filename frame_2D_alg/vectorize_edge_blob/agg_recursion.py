@@ -212,10 +212,10 @@ def segment_node_(init_, Gt_, fd, root_t_):
     graph_ = []  # initialize graphs with local maxes, eval their links to add other nodes:
     for inode, ival in init_:
 
-        iroot_t = [root_t_[inode.it[fd]]]  # same order as Gt_, assign node roots to new graphs, init with max
+        iroot_t = root_t_[inode.it[fd]]  # same order as Gt_, assign node roots to new graphs, init with max
         graph = [[inode],ival,[iroot_t]]
         inode.root_t[fd] += [graph]
-        _nodet_ = [[inode,ival,iroot_t]]  # current perimeter of the graph, init = graph?
+        _nodet_ = [[inode,ival,[iroot_t]]]  # current perimeter of the graph, init = graph?
 
         while _nodet_:  # search links outwards recursively to form overlapping graphs:
             nodet_ = []
@@ -264,7 +264,7 @@ def sum2graph_(graph_, fd):  # sum node and link params into graph, aggH in agg+
         [merge_root_tree(Root_t, root_t) for root_t in graph[2][1:]]
         Graph = Cgraph(fd=fd, root_t=Root_t, L=len(graph[0]))  # n nodes
         Link_ = []
-        for G in enumerate(graph[0]):
+        for G in graph[0]:
             sum_box(Graph.box, G.box)
             sum_ptuple(Graph.ptuple, G.ptuple)
             sum_derH(Graph.derH, G.derH, base_rdn=1)  # base_rdn?
@@ -390,7 +390,7 @@ def sum_aggH(T, t, base_rdn):
             AggH[:] = deepcopy(aggH)
 
 
-def comp_ext(_ext, ext, Valt, Rdnt, Maxt):  # comp ds:
+def comp_ext(_ext, ext, Valt, Rdnt, Maxt): # comp ds:
 
     (_L,_S,_A),(L,S,A) = _ext,ext
 
@@ -399,18 +399,22 @@ def comp_ext(_ext, ext, Valt, Rdnt, Maxt):  # comp ds:
     if isinstance(A,list):
         mA, dA = comp_angle(_A,A); adA=dA; max_mA = max_dA = .5  # = ave_dangle
     else:
-        dA= _A-A; adA = abs(dA);  max_dA = abs(_A)+abs(A); max_mA = max(A,_A)
-        mA = min(abs(_A),abs(A)); if _A<0!=L<0: mA=-mA; mA -= ave_dangle
-    mL = min(abs(_L),abs(L));     if _L<0!=L<0: mL=-mL; mL -= ave_L
-    mS = min(abs(_S),abs(S));     if _S<0!=S<0: mS=-mS; mS -= ave_L
+        dA= _A-A; adA = abs(dA); _aA=abs(_A); aA=abs(A); max_dA =_aA+aA; max_mA = max(_aA,aA)
+        mA = min(abs(_A),abs(A))
+        if _A<0!=L<0: mA=-mA; mA -= ave_dangle
+    mL = min(abs(_L),abs(L))
+    if _L<0!=L<0: mL=-mL; mL -= ave_L
+    mS = min(abs(_S),abs(S))
+    if _S<0!=S<0: mS=-mS; mS -= ave_L
 
     d = abs(dL) + abs(dS) + adA
     m = mL + mS + mA
     Valt[0] += m; Valt[1] += d
     Rdnt[0] += d>m; Rdnt[1] += d<=m
-    Maxt[0] += max(L,_L) + max(S,_S) + max_mA
-    Maxt[1] += abs(_L)+abs(L) + abs(_S)+abs(S) + max_dA
-
+    _aL = abs(_L); aL = abs(L); _aS=abs(_S); aS=abs(S)
+    Maxt[0] += max(aL,_aL) + max(aS,_aS) + max_mA
+    Maxt[1] += _aL+aL + _aS+aS + max_dA
+    
     return [[mL,mS,mA], [dL,dS,dA]]  # no Mtuple, Dtuple?
 
 def sum_ext(Extt, extt):
