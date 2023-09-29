@@ -26,7 +26,7 @@ Connectivity in P_ is traced through root_s of derts adjacent to P.dert_, possib
 len prior root_ sorted by G is rdn of each root, to evaluate it for inclusion in PP, or starting new P by ave*rdn.
 '''
 
-def comp_P_(edge):  # renamed for consistency, cross-comp P_ in edge: high-gradient blob, sliced in Ps in the direction of G
+def comp_P_(edge):  # cross-comp P_ in edge: high-gradient blob, sliced in Ps in the direction of G
 
     P_ = edge.node_t  # init as P_
     edge.node_t = [[],[]]  # fill with sub_PPm_, sub_PPd_ in form_PP_t:
@@ -34,7 +34,7 @@ def comp_P_(edge):  # renamed for consistency, cross-comp P_ in edge: high-gradi
     for P in P_:
         # scan, comp contiguously uplinked Ps, rn: relative weight of comparand
         derP_ = [comp_P(_P, P, rn=len(_P.dert_)/len(P.dert_), fd=0) for _P in P.link_H[-1]]
-        P.link_H[-1] = [derP for derP in derP_ if derP]  # remove empty derP
+        P.link_H[-1] = [derP for derP in derP_ if derP]
 
     form_PP_t(edge, P_, base_rdn=2)  # replace edge.node_t with PP_t, may be nested by sub+
 
@@ -56,8 +56,7 @@ def comp_P(_P,P, rn, fd=1, derP=None):  #  derP if der+, reused as S if rng+
     if mval > aveP*mrdn or dval > aveP*drdn:
         return derP
 
-# rng+ and der+ are called from sub_recursion
-
+# rng+ and der+ are called from sub_recursion:
 def comp_rng(iP_, rng):  # form new Ps and links, switch to rng+n to skip clustering?
 
     P_ = []
@@ -250,9 +249,10 @@ def comp_dtuple(_ptuple, ptuple, rn, fagg=0):
     mtuple, dtuple = [],[]
     if fagg: Mtuple, Dtuple = [],[]
 
-    for _par, par, ave in zip(_ptuple, ptuple, aves):  # compare ds only?
+    for _par, par, ave in zip(_ptuple, ptuple, aves):  # compare ds only
         npar = par*rn
-        mtuple += [min(_par, npar) - ave]  # add fneg for
+        match = min(abs(_par),abs(npar)); if _par<0 != npar<0: match = -match  # match = neg min if opposite-sign comparands
+        mtuple += [match - ave]
         dtuple += [_par - npar]
         if fagg:
             Mtuple += [max(_par, npar)]; Dtuple += [abs(_par)+abs(npar)]
@@ -261,14 +261,14 @@ def comp_dtuple(_ptuple, ptuple, rn, fagg=0):
     if fagg: ret += [Mtuple, Dtuple]
     return ret
 
-def comp_ptuple(_ptuple, ptuple, rn, fagg=0):  # 0der
+def comp_ptuple(_ptuple, ptuple, rn, fagg=0):  # 0der params
 
     I, G, M, Ma, (Dy, Dx), L = _ptuple
     _I, _G, _M, _Ma, (_Dy, _Dx), _L = ptuple
 
     dI = _I - I*rn;  mI = ave-dI
     dG = _G - G*rn;  mG = min(_G, G*rn) - ave
-    dM = _M - M*rn;  mM = min(_M, M*rn) - ave
+    dM = _M - M*rn;  mM = min(_M, M*rn) - ave  # M, Ma can be negative?
     dMa= _Ma- Ma*rn; mMa= min(_Ma,Ma*rn)- ave
     dL = _L - L*rn;  mL = min(_L, L*rn) - ave
     mAngle, dAngle = comp_angle((_Dy,_Dx), (Dy,Dx))

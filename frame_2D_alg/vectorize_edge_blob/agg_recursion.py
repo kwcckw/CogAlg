@@ -2,7 +2,7 @@ import numpy as np
 from copy import deepcopy, copy
 from itertools import zip_longest
 from .classes import Cgraph, CderG, CPP
-from .filters import aves, ave, ave_distance, G_aves, ave_Gm, ave_Gd
+from .filters import ave_L, ave_dangle, ave, ave_distance, G_aves, ave_Gm, ave_Gd
 from .slice_edge import slice_edge, comp_angle
 from .comp_slice import comp_P_, comp_ptuple, sum_ptuple, sum_derH, comp_derH
 '''
@@ -77,7 +77,7 @@ def form_graph_t(root, G_, _root_t_):  # root function to form fuzzy graphs of n
         Gt_ = eval_node_connectivity(G_, fd)  # sum surround link values @ incr rng,decay: val += linkv/maxv * _node_val
         init_ = select_init_(Gt_, fd)  # select sparse max nodes to initialize graphs
         graph_ = segment_node_(init_, Gt_, fd, _root_t_)
-        graph_ = prune_graph_(graph_, fd)  # sort node roots to add rdn, prune weak graphs
+        graph_ = prune_graph_(graph_, fd)  # sort node roots to add to graph rdn, prune weak graphs
         graph_ = sum2graph_(graph_, fd)  # convert to Cgraphs
         graph_t += [graph_]  # add alt_graphs?
     # sub+:
@@ -149,7 +149,7 @@ def comp_G(link, fd):
     Mrdn += rdnt[0]+dval>mval; Drdn += rdnt[1]+dval<=mval
 
     derH = [[derLay0]+dderH, [Mval,Dval], [Mrdn,Drdn]]  # appendleft derLay0 from comp_ptuple
-    der_ext = comp_ext([_G.L,_G.S,_G.A],[G.L,G.S,G.A], [Mval,Dval], [Mrdn,Drdn])
+    der_ext = comp_ext([_G.L,_G.S,_G.A],[G.L,G.S,G.A], [Mval,Dval],[Mrdn,Drdn],[maxM,maxD])
     SubH = [der_ext, derH]  # two init layers of SubH, higher layers added by comp_aggH:
     # / G:
     if fd:  # else no aggH yet?
@@ -163,8 +163,6 @@ def comp_G(link, fd):
     elif Mval > ave_Gm or Dval > ave_Gd:  # or sum?
         link.subH = SubH; link.maxt = [maxM,maxD]; link.valt = [Mval,Dval]; link.rdnt = [Mrdn,Drdn]  # complete proto-link
         return link
-    # actually there's no need to return, the default return value isNone
-    # else: return []  # rng+ proto-link is not replaced
 
 
 def eval_node_connectivity(node_, fd):  # sum surrounding link values to select nodes, to initialize graphs
@@ -226,8 +224,8 @@ def segment_node_(init_, Gt_, fd, root_t_):
                     node = link.G if link._G is _node else link._G
                     if node in graph[0]: continue
                     val = Gt_[node.it[fd]][1]
-                    root_t = root_t_[node.it[fd]]  # if agg+?
-                    if val * (link.valt[fd] / link.maxt[fd]) > ave:  # tentative
+                    root_t = root_t_[node.it[fd]]
+                    if val * (link.valt[fd] / link.maxt[fd]) > ave:  # node val * link decay
                         graph[0] += [node]
                         graph[1] += val
                         graph[2] += [root_t]
@@ -239,10 +237,11 @@ def segment_node_(init_, Gt_, fd, root_t_):
 
 
 def prune_graph_(graph_, fd):  # compute graph overlap to prune weak graphs, not nodes: rdn doesn't change the structure
-
-    for graph in graph_:  # sort node roots, sum the ranking into node overlap and then graph overlap:
-        for node in graph[0]:
-            roots = sorted(node.root_t[fd], key=lambda root: root[1], reverse=True)  # sort by net val
+                               # prune rootless nodes?
+    for graph in graph_:
+        for node in graph[0]:  # sort node roots, sum rank as graph/node rdn:
+            roots = sorted(node.root_t[fd], key=lambda root: root[1], reverse=True)  # roots~backprop, sort by net val
+            # or rdn = root_val/ sum_higher_root_vals?
             for rdn, graph in enumerate(roots):
                 graph[1] -= ave*rdn  # rdn to >val overlapping graphs per node, also >val forks, alt sparse param sets?
                 # nodes are shared by multiple max-initialized graphs, pruning here still allows for some overlap
@@ -309,37 +308,6 @@ def sum_box(Box, box):
     Y,X,Y0,Yn,X0,Xn = Box; y,x,y0,yn,x0,xn = box
     Box[:] = [Y+y, X+x, min(X0,x0), max(Xn,xn), min(Y0,y0), max(Yn,yn)]
 
-
-def comp_ext(_ext, ext, Valt, Rdnt):  # comp ds:
-
-    (_L,_S,_A),  (L,S,A) = _ext, ext
-
-    dL=_L-L;      mL=ave-abs(dL)
-    dS=_S/_L-S/L; mS=ave-abs(dS)
-    if isinstance(A,list):
-        mA, dA = comp_angle(_A,A); max_mA = .5  # = ave_dangle
-    else:
-        dA= _A-A; mA= ave-abs(dA); max_mA = max(A,_A)
-    M = mL+mS+mA
-    D = dL+dS+dA
-    maxv = max(L,_L)+max(S,_S)+max_mA
-
-    Valt[0] += M; Valt[1] += D  # ; Valt[2] += maxv  # no summation on max val? or return them separately?
-    Rdnt[0] += D>M; Rdnt[1] += D<=M
-
-    return [[mL,mS,mA], [dL,dS,dA]]  # no Mtuple?
-
-
-def sum_ext(Extt, extt):
-
-    if isinstance(Extt[0], list):
-        for Ext,ext in zip(Extt,extt):  # ext: m,d tuple
-            for i,(Par,par) in enumerate(zip(Ext,ext)):
-                Ext[i] = Par+par
-    else:  # single ext
-        for i in 0,1: Extt[i]+=extt[i]  # sum L,S
-        for j in 0,1: Extt[2][j]+=extt[2][j]  # sum dy,dx in angle
-
 '''
 derH: [[tuplet, valt, rdnt]]: default input from PP, for both rng+ and der+, sum min len?
 subH: [[derH_t, valt, rdnt]]: m,d derH, m,d ext added by agg+ as 1st tuplet
@@ -360,7 +328,7 @@ def comp_subH(_subH, subH, rn):
                 Mval += mval; Dval += dval; maxM += maxm; maxD += maxd
                 Mrdn += rdnt[0] + dval > mval; Drdn += rdnt[1] + dval <= mval
             else:  # _lay[0][0] is L, comp dext:
-                DerH += [comp_ext(_lay[1],lay[1],[Mval,Dval], [Mrdn,Drdn])]  # pack extt as ptuple
+                DerH += [comp_ext(_lay[1],lay[1],[Mval,Dval],[Mrdn,Drdn],[maxM,maxD])]  # pack extt as ptuple
 
     return DerH, [Mval,Dval],[Mrdn,Drdn],[maxM,maxD]  # new layer,= 1/2 combined derH
 
@@ -378,7 +346,6 @@ def comp_aggH(_aggH, aggH, rn):  # no separate ext
             Mrdn += rdnt[0] + dval > mval; Drdn += rdnt[1] + mval <= dval
 
     return SubH, [Mval,Dval],[Mrdn,Drdn],[maxM,maxD]
-
 
 def sum_subH(T, t, base_rdn, fneg=0):
 
@@ -421,6 +388,40 @@ def sum_aggH(T, t, base_rdn):
                         AggH += [deepcopy(layer)]
         else:
             AggH[:] = deepcopy(aggH)
+
+
+def comp_ext(_ext, ext, Valt, Rdnt, Maxt):  # comp ds:
+
+    (_L,_S,_A),(L,S,A) = _ext,ext
+
+    dL = _L-L
+    dS = _S/_L - S/L
+    if isinstance(A,list):
+        mA, dA = comp_angle(_A,A); adA=dA; max_mA = max_dA = .5  # = ave_dangle
+    else:
+        dA= _A-A; adA = abs(dA);  max_dA = abs(_A)+abs(A); max_mA = max(A,_A)
+        mA = min(abs(_A),abs(A)); if _A<0!=L<0: mA=-mA; mA -= ave_dangle
+    mL = min(abs(_L),abs(L));     if _L<0!=L<0: mL=-mL; mL -= ave_L
+    mS = min(abs(_S),abs(S));     if _S<0!=S<0: mS=-mS; mS -= ave_L
+
+    d = abs(dL) + abs(dS) + adA
+    m = mL + mS + mA
+    Valt[0] += m; Valt[1] += d
+    Rdnt[0] += d>m; Rdnt[1] += d<=m
+    Maxt[0] += max(L,_L) + max(S,_S) + max_mA
+    Maxt[1] += abs(_L)+abs(L) + abs(_S)+abs(S) + max_dA
+
+    return [[mL,mS,mA], [dL,dS,dA]]  # no Mtuple, Dtuple?
+
+def sum_ext(Extt, extt):
+
+    if isinstance(Extt[0], list):
+        for Ext,ext in zip(Extt,extt):  # ext: m,d tuple
+            for i,(Par,par) in enumerate(zip(Ext,ext)):
+                Ext[i] = Par+par
+    else:  # single ext
+        for i in 0,1: Extt[i]+=extt[i]  # sum L,S
+        for j in 0,1: Extt[2][j]+=extt[2][j]  # sum dy,dx in angle
 
 
 def feedback(root, fd):  # called from form_graph_, append new der layers to root
