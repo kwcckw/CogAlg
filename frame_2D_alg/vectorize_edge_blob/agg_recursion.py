@@ -109,7 +109,8 @@ def comp_G_(G_, fd=0, oG_=None, fin=1):  # cross-comp in G_ if fin, else comp be
                 if _G in G.compared_: continue  # skip if previously compared
                 dy = _G.box[0] - G.box[0]; dx = _G.box[1] - G.box[1]
                 distance = np.hypot(dy, dx)  # Euclidean distance between centers of Gs
-                if distance < ave_distance * ((sum(_G.val_Ht[fd]) + sum(G.val_Ht[fd])) / (2*sum(G_aves))):  # very tentative
+                # ave_distance * ((sum(_G.val_Ht[fd]) + sum(G.val_Ht[fd])) / (sum(G_aves))) gives a very large value (>10k), so i can see this is true all the time. Why not we just use ave_distance? 
+                if distance < ave_distance * ((sum(_G.val_Ht[fd]) + sum(G.val_Ht[fd])) / (sum(G_aves))):  # very tentative
                     # close enough to compare:
                     G.compared_ += [_G]; _G.compared_ += [G]
                     G.link_H[-1] += [CderG( G=G, _G=_G, S=distance, A=[dy,dx])]  # proto-links, in G only
@@ -180,6 +181,7 @@ def eval_node_connectivity(node_, fd):  # sum surrounding link values to select 
                 G = link.G if link._G is _G else link._G
                 GVal = Gt_[G.it[fd]][1]
                 Val += GVal * (link.valt[fd] / link.maxt[fd])  # _G Val * link decay (m|d / max: self=100%?)
+            # if _G has no links here, their Val will be replaced with zero, is this intended? So that's mean we won't have single node's Graph?
             Gt_[i][1] = Val  # _G Val update, unilateral for simplicity: computed separately for _G
             DVal += abs(_Val-Val)  # node_Val update / surround extension, eval in init
         if DVal < ave:  # low node_Val update, also if low node_Val?

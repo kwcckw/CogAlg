@@ -55,7 +55,7 @@ def comp_P(link_, _P,P, rn, fd=1, derP=None):  #  derP if der+, reused as S if r
         derP = CderP(derH=[[[mtuple,dtuple], [mval,dval],[mrdn,drdn]]], valt=[mval,dval], rdnt=[mrdn,drdn], P=P,_P=_P, S=derP)
 
     if mval > aveP*mrdn or dval > aveP*drdn:
-        link_ += derP
+        link_ += [derP]
 
 # rng+ and der+ are called from sub_recursion:
 def comp_rng(iP_, rng):  # form new Ps and links, switch to rng+n to skip clustering?
@@ -86,7 +86,7 @@ def comp_der(P_):  # keep same Ps and links, increment link derH, then P derH in
             if derP._P in P_ and derP.valt[1] > P_aves[1] * derP.rdnt[1]:
                 _P = derP._P  # comp extended derH of previously compared Ps, sum in lower-composition sub_PPs
                 # weight of compared derH is relative compound scope of (sum linked Ps( sum P derts)):
-                rn = (len(_P.dert_) / len(P.dert_)) * (len(_P.link_H[-1]) / len(link_))
+                rn = (len(_P.dert_) / len(P.dert_)) * (len(_P.link_H[-1]) / max(1, len(link_)))  # input link_ may empty (the first initialized link_), so we need to use max here to prevent zero division, or change the rn computation method in der+?
                 comp_P(link_,_P,P, rn, fd=1, derP=derP)
 
         P.link_H[-1] = link_  # replace with extended-derH derPs
