@@ -178,7 +178,7 @@ def eval_node_connectivity(node_, fd):  # sum surrounding link values to select 
 
     while True:  # iterative Val range expansion by summing decayed surround node Vals, via same direct links
         DVal = 0  # node_Val update
-        for i, (_G,_val,_Val) in enumerate(Gt_):
+        for i, (_G, _Val) in enumerate(Gt_):  # typo?
             Val = 0  # updated _G surround value
             for link in _G.link_H[-1]:
                 if link.valt[fd] < ave*link.rdnt[fd]: continue  # skip negative links
@@ -198,7 +198,9 @@ def select_init_(Gt_, fd):  # local max selection for sparse graph init, if posi
     init_, non_max_ = [],[]  # pick max in direct links, no recursively mediated links max: discontinuous?
 
     for node, val in Gt_:
-        if val<=0 or node in non_max_: continue  # can't init graph
+        # we need to add this evaluation too? (node.val_Ht[fd][-1] - ave * node.rdn_Ht[fd][-1]) <=0)
+        # the reason is Val may become 0 from eval_node_connectivity, but their val_Ht is still positive, using val<=0 alone will skip them
+        if (val<=0 and (node.val_Ht[fd][-1] - ave * node.rdn_Ht[fd][-1]) <=0) or node in non_max_: continue  # can't init graph
         fmax = 1
         for link in node.link_H[-1]:
             _node = link.G if link._G is node else link._G
