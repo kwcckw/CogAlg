@@ -91,7 +91,7 @@ def form_graph_t(root, G_, _root_t_):  # root function to form fuzzy graphs of n
                 root.val_Ht[fd][-1] += graph.val_Ht[fd][-1]  # last layer, or all new layers via feedback?
                 root.rdn_Ht[fd][-1] += graph.rdn_Ht[fd][-1]
             i = sum(graph.val_Ht[0]) > sum(graph.val_Ht[1])
-            root.rdn_Ht[i][-1] += 1  # add fork rdn to last layer, representing all layers after feedback?
+            root.rdn_Ht[i][-1] += 1  # add fork rdn to last layer, representing all layers after feedback? (i think yes because they are accumulating last layer rdn, layer by layer from the top layer)
         # recursive feedback after all G_ sub+:
         if root.fback_t and root.fback_t[fd]:
             feedback(root, fd)  # update root.root.. aggH, val_Ht,rdn_Ht
@@ -132,7 +132,7 @@ def select_init_(Gt_, fd):  # local max selection for sparse graph init, if posi
         if node in non_max_: continue  # can't init graph
         if val<=0:  # no +ve links
             if sum(node.val_Ht[fd]) > ave * sum(node.rdn_Ht[fd]):
-                init_+= [node]  # single-node graph?
+                init_+= [[node, sum(node.val_Ht[fd])]]  # single-node graph? (or use 0 as val value?)
             continue
         fmax = 1
         for link in node.link_H[-1]:
@@ -225,7 +225,7 @@ def sum2graph_(graph_, fd):  # sum node and link params into graph, aggH in agg+
             sum_subH([subH,valt,rdnt], [derG.subH, derG.valt, derG.rdnt], base_rdn=1)
             Graph.A[0] += derG.A[0]; Graph.A[1] += derG.A[1]
             Graph.S += derG.S
-        Graph.aggH += [subH]  # new aggLev, not summed from the nodes because their links overlap
+        Graph.aggH += [[subH]]  # new aggLev, not summed from the nodes because their links overlap
         for i in 0,1:  # aggLev should not have valt,rdnt, it's redundant to G val_Ht, rdn_Ht:
             Graph.val_Ht[i] += [valt[i]]; Graph.rdn_Ht[i] += [rdnt[i]]
         Graph_ += [Graph]
@@ -378,10 +378,14 @@ def sum_aggH(T, t, base_rdn):
 
 def sum_subH(T, t, base_rdn, fneg=0):
 
-    SubH, Valt, Rdnt = T; subH, valt, rdnt = t
-
-    for i in 0,1:
-        Valt[i] += valt[i]; Rdnt[i] += rdnt[i]
+    # we need this check after we move valt and rdnt out of subH, because sometimes they are in tuple of 3 , sometimes they are not
+    if len(t) == 3 and len(T) == 3:
+        SubH, Valt, Rdnt = T; subH, valt, rdnt = t
+        for i in 0,1:
+            Valt[i] += valt[i]; Rdnt[i] += rdnt[i]
+    else:
+        SubH = T[0]; subH = t[0]
+        
     if SubH:
         for Layer, layer in zip_longest(SubH,subH, fillvalue=[]):
             if layer:
