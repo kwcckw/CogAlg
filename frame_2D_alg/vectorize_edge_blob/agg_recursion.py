@@ -80,9 +80,9 @@ def form_graph_t(roott, root, G_):  # root function to form fuzzy graphs of node
         for graph in graph_:  # external to agg+ vs internal in comp_slice sub+
             node_ = graph.node_t  # still flat?  eval fd comp_G_ in sub+:
             if sum(graph.val_Ht[fd]) * (len(node_)-1)*root.rng > G_aves[fd] * sum(graph.rdn_Ht[fd]):
-                agg_recursion(root, graph, node_, fd)  # replace node_ with node_t, recursive
+                agg_recursion(root, [graph, graph], node_, fd)  # replace node_ with node_t, recursive(same root here?)
             else:  # feedback after graph sub+:
-                root.fback_t[fd] += [[graph.aggH, graph.val_Ht, graph.rdn_Ht]]  # merge forks in root fork
+                root.fback_t[fd] += [[deepcopy(graph.aggH), deepcopy(graph.val_Ht), deepcopy(graph.rdn_Ht)]]  # merge forks in root fork
                 root.val_Ht[fd][-1] += graph.val_Ht[fd][-1]  # last layer, or all new layers via feedback?
                 root.rdn_Ht[fd][-1] += graph.rdn_Ht[fd][-1]
             i = sum(graph.val_Ht[0]) > sum(graph.val_Ht[1])
@@ -100,7 +100,7 @@ def eval_node_connectivity(node_, fd):  # sum surrounding link values to define 
     Gt_ = []
     for i,G in enumerate(node_):
         G.it[fd] = i  # used here, in segment_node_
-        Gt_ += [[G, G.val_Ht[fd][-1], G.rdn_Ht[fd][-1]]]  # init surround val,rdn
+        Gt_ += [[G, 0, 1]]  # init surround val,rdn
 
     while True:  # iterative eval rng expansion by summing decayed surround node Vals, prune links and cluster per rng?
         DVal = 0
@@ -157,8 +157,9 @@ def segment_node_(roott, Gt_, fd):
                     tVal += (sum(G.val_Ht[fd])+Val) * decay  # internal+external vals, or *decay for external only?
                     tRdn += (sum(G.rdn_Ht[fd])+Rdn) * decay  # tentative
                     cG_ += [G]; G.roott[fd] = cG_
-                    # append linked Gs to extended perimeter of iG:
-                    perimeter += link_map[G]  # perimeter += [G for G in link_map[_G] if G not in cG_ + perimeter]
+                    # append linked Gs to extended perimeter of iG:  
+                    # i checked and it's still possible for link_map of G in perimeter, this should be possible because we are getting multiple links of perimeter Gs per G, so it's not wrong if they are already added to perimeter from the other G 
+                    perimeter += [G for G in link_map[G] if G not in perimeter]  # perimeter += [G for G in link_map[_G] if G not in cG_ + perimeter]
         if tVal > ave * tRdn:
             graph_ += [sum2graph(roott, cG_, fd)]  # convert to Cgraphs
 
@@ -169,15 +170,13 @@ def sum2graph(roott, cG_, fd):  # sum node and link params into graph, aggH in a
     graph = Cgraph(roott=roott, fd=fd, L=len(cG_))  # n nodes
     SubH = []; Mval,Dval, Mrdn,Drdn = 0,0, 0,0
     Link_= []
-    for G in cG_[0]:
+    for G in cG_:
         sum_box(graph.box, G.box)
         sum_ptuple(graph.ptuple, G.ptuple)
         sum_derH(graph.derH, G.derH, base_rdn=1)  # base_rdn?
         sum_aggH(graph.aggH, G.aggH, base_rdn=1)
         # sum graph from nodes without links:
-        for ValH, valH, RdnH, rdnH in zip(graph.val_Ht, graph.rdn_Ht, G.val_Ht, G.rdn_Ht):
-            ValH[:] = [Val + val for i, (Val, val) in zip_longest(ValH, valH, fillvalue=0)]
-            RdnH[:] = [max(1,Rdn+rdn) for i,(Rdn,rdn) in zip_longest(RdnH, rdnH, fillvalue=0)]
+        sum_Ht(graph.val_Ht, graph.rdn_Ht, G.val_Ht, G.rdn_Ht)
         link_ = G.link_H[-1]
         subH=[]; mval,dval, mrdn,drdn = 0,0, 0,0
         for derG in link_:
@@ -191,14 +190,22 @@ def sum2graph(roott, cG_, fd):  # sum node and link params into graph, aggH in a
                 mval+=derG.valt[0]; dval+=derG.valt[1]; mrdn+=derG.rdnt[0]; drdn+=derG.rdnt[1]
                 sum_subH(subH, derG.subH, base_rdn=1, fneg = G is derG.G)  # fneg: reverse link sign
                 sum_box(G.box, derG.G.box if derG._G is G else derG._G.box)
-        G.aggH += [[subH]]   # append external links val to internal links vals:
+        # the extra bracket is not needed
+        if subH: G.aggH += [subH]   # append external links val to internal links vals: (subH may empty if there's no link)
         G.val_Ht[0]+=[mval]; G.val_Ht[1]+=[dval]; G.rdn_Ht[0]+=[mrdn]; G.rdn_Ht[1]+=[drdn]
         G.roott[fd] = graph  # replace list graph in roott
         graph.node_t += [G]  # converted to node_t by feedback
     # add layer from links:
-    graph.val_Ht[0]+=[Mval]; graph.val_Ht[1]+=[Dval]; graph.rdn_Ht[0]=Mrdn; graph.rdn_Ht[1]=Drdn
+    graph.val_Ht[0]+=[Mval]; graph.val_Ht[1]+=[Dval]; graph.rdn_Ht[0]+=[Mrdn]; graph.rdn_Ht[1]+=[Drdn]  # typo? We should add new rdn too?
 
     return graph
+
+
+def sum_Ht(Val_Ht, val_Ht, Rdn_Ht, rdn_Ht):
+    for ValH, valH, RdnH, rdnH in zip(Val_Ht, Rdn_Ht, val_Ht, rdn_Ht):
+        ValH[:] = [Val + val for Val, val in zip_longest(ValH, valH, fillvalue=0)]
+        RdnH[:] = [max(1,Rdn+rdn) for Rdn,rdn in zip_longest(RdnH, rdnH, fillvalue=0)]
+
 '''
 derH: [[tuplet, valt, rdnt]]: default input from PP, rng+|der+, sum min len?
 subH: [derH_t]: m,d derH, m,d ext added by agg+ as 1st tuplet
@@ -384,17 +391,18 @@ def sum_box(Box, box):
 
 def feedback(root, fd):  # called from form_graph_, append new der layers to root
 
-    Fback = root.fback_t[fd].pop(0)  # init with 1st [aggH,val_Ht,rdn_Ht]
+    AggH, Val_Ht, Rdn_Ht = root.fback_t[fd].pop(0)  # init with 1st [aggH,val_Ht,rdn_Ht]
     while root.fback_t[fd]:
-        sum_aggH(Fback, root.fback_t[fd].pop(0), base_rdn=0)
-    sum_aggH([root.aggH, root.val_Ht, root.rdn_Ht], Fback, base_rdn=0)  # both fder forks sum into a same root?
+        aggH, val_Ht, rdn_Ht, = root.fback_t[fd].pop(0)
+        sum_aggH(AggH, aggH, base_rdn=0); sum_Ht(Val_Ht, val_Ht, Rdn_Ht, rdn_Ht)
+    sum_aggH(root.aggH, AggH, base_rdn=0); sum_Ht(root.val_Ht, Val_Ht, root.rdn_Ht, Rdn_Ht)   # both fder forks sum into a same root?
 
     if isinstance(root, Cgraph):  # root is not CEdge, which has no roots
         for fd, rroot_ in enumerate(root.root_t):
             for rroot in rroot_:
                 fd = root.fd  # current node_ fd
                 fback_ = rroot.fback_t[fd]
-                fback_ += [Fback]
+                fback_ += [[AggH, Val_Ht, Rdn_Ht]]
                 if fback_ and (len(fback_) == len(rroot.node_t)):  # flat, all rroot nodes terminated and fed back
                     # getting cyclic rroot here not sure why it can happen, need to check further
                     feedback(rroot, fd)  # sum2graph adds aggH per rng, feedback adds deeper sub+ layers
