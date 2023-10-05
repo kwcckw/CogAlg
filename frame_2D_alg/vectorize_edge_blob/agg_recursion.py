@@ -134,11 +134,9 @@ def segment_node_(root, Gt_, fd):
     for iG, iVal, iRdn in Gt_:  # initialize proto-graphs with each node, eval links to add other nodes
         if iG.root[fd]: continue
         # draft:
-        iG_decay = sum([link.dect[fd] for link in iG.link_H[-1]]) / len(iG.link_H[-1])  # make G param?
+        iG_decay = sum([link.dect[fd] for link in iG.link_H[-1]]) / max(1, len(iG.link_H[-1]))  # make G param? (G might not have any link)
         tVal = sum(iG.valHt[fd]) * iG_decay + iVal
-        # old:
-        tVal = sum(iG.valHt[fd]) + iVal  # graph totals,
-        tRdn = sum(iG.rdnHt[fd]) + iRdn
+        tRdn = sum(iG.rdnHt[fd]) * iG_decay + iRdn
         cG_ = [iG]; iG.root[fd] = cG_  # clustered Gs
         perimeter = link_map[iG]  # recycle in breadth-first search
         while perimeter:  # search links outwards recursively to form overlapping graphs:
@@ -153,8 +151,9 @@ def segment_node_(root, Gt_, fd):
                 val, rdn, decay = link.valt[fd], link.rdnt[fd], link.dect[fd]
                 rVal=(_Val+Val)*decay; rRdn=(_Rdn+Rdn)*decay  # * link decay coef -> relative Val,Rdn, tentative
                 if rVal > ave * rRdn:
-                    tVal += (sum(G.valHt[fd])+Val) * decay  # internal+external vals, or *decay for external only?
-                    tRdn += (sum(G.rdnHt[fd])+Rdn) * decay  # tentative
+                    # add val and rdn from link too?
+                    tVal += (sum(G.valHt[fd])+Val+val) * decay  # internal+external vals, or *decay for external only?
+                    tRdn += (sum(G.rdnHt[fd])+Rdn+rdn) * decay  # tentative
                     cG_ += [G]; G.root[fd] = cG_
                     perimeter += [G for G in link_map[G] if G not in perimeter]  # extend perimeter, skip if added by another _G
         if tVal > ave * tRdn:
@@ -253,32 +252,34 @@ def comp_G(link_, link, fd):
     derLay0 = [[mtuple,dtuple], [mval,dval], [mrdn,drdn]]
     L = len(mtuple)
     # not sure:
-    for i, (par_, max_, Dec) in enumerate(zip((mtuple,dtuple), (Mtuple,Dtuple), (Mdec,Ddec))):
+    for i, (par_, max_) in enumerate(zip((mtuple,dtuple), (Mtuple,Dtuple))):
+        Dec = 0
         for par,max in zip(par_, max_):
             Dec += par/max  # may be weighted per param
-        [Mdec,Ddec][i] = Dec/L  # ave decay per link param, not cumulative with the below?
+        if i: Ddec += Dec/L  # ave decay per link param, not cumulative with the below?
+        else: Mdec += Dec/L
     Mval+=mval; Dval+=dval; Mrdn += mrdn; Drdn += drdn
-    # below is not revised:
+
     # / PP:
-    dderH, valt, rdnt, maxt = comp_derH(_G.derH[0], G.derH[0], rn=1, fagg=1)
-    mval,dval = valt; maxm,maxd = maxt
-    Mval+=dval; Dval+=mval; maxM+=maxm; maxD+=maxd
+    dderH, valt, rdnt, dect = comp_derH(_G.derH[0], G.derH[0], rn=1, fagg=1)
+    mval,dval = valt; mdec, ddec = dect
+    Mval+=dval; Dval+=mval; Mdec += mdec; Ddec += ddec
     Mrdn += rdnt[0]+dval>mval; Drdn += rdnt[1]+dval<=mval
 
-    derH = [[derLay0]+dderH, [Mval,Dval], [Mrdn,Drdn]]  # appendleft derLay0 from comp_ptuple
-    der_ext = comp_ext([_G.L,_G.S,_G.A],[G.L,G.S,G.A], [Mval,Dval],[Mrdn,Drdn],[maxM,maxD])
+    derH = [[derLay0]+dderH, [Mval,Dval], [Mrdn,Drdn], [Mdec, Ddec]]  # appendleft derLay0 from comp_ptuple
+    der_ext = comp_ext([_G.L,_G.S,_G.A],[G.L,G.S,G.A], [Mval,Dval],[Mrdn,Drdn], [Mdec, Ddec])
     SubH = [der_ext, derH]  # two init layers of SubH, higher layers added by comp_aggH:
     # / G:
     if fd:  # else no aggH yet?
-        subH, valt, rdnt, maxt = comp_aggH(_G.aggH, G.aggH, rn=1)
+        subH, valt, rdnt, dect = comp_aggH(_G.aggH, G.aggH, rn=1)
         SubH += subH  # append higher subLayers: list of der_ext | derH s
-        mval,dval = valt; maxm,maxd = maxt
-        Mval+=mval; Dval+=dval; maxM += maxm; maxD += maxd
+        mval,dval = valt; mdec, ddec = dect
+        Mval+=mval; Dval+=dval; Mdec += mdec; Ddec += ddec
         Mrdn += rdnt[0]+dval>mval; Drdn += rdnt[1]+dval<=mval
         link_ += [link]
 
     elif Mval > ave_Gm or Dval > ave_Gd:  # or sum?
-        link.subH = SubH; link.maxt = [maxM,maxD]; link.valt = [Mval,Dval]; link.rdnt = [Mrdn,Drdn]  # complete proto-link
+        link.subH = SubH; link.dect = [Mdec, Ddec]; link.valt = [Mval,Dval]; link.rdnt = [Mrdn,Drdn]  # complete proto-link
         link_ += [link]
 
 # draft:
@@ -354,7 +355,7 @@ def sum_subH(SubH, subH, base_rdn, fneg=0):
     ]
 '''
 
-def comp_ext(_ext, ext, Valt, Rdnt, Maxt):  # comp ds:
+def comp_ext(_ext, ext, Valt, Rdnt, Dect):  # comp ds:
 
     (_L,_S,_A),(L,S,A) = _ext,ext
 
@@ -373,8 +374,9 @@ def comp_ext(_ext, ext, Valt, Rdnt, Maxt):  # comp ds:
     Rdnt[0] += d>m; Rdnt[1] += d<=m
 
     _aL = abs(_L); aL = abs(L); _aS = abs(_S); aS = abs(S)
-    Maxt[0] += max(aL,_aL) + max(aS,_aS) + max_mA
-    Maxt[1] += _aL+aL + _aS+aS + max_dA
+    # not sure with Dect here
+    # Maxt[0] += max(aL,_aL) + max(aS,_aS) + max_mA
+    # Maxt[1] += _aL+aL + _aS+aS + max_dA
 
     return [[mL,mS,mA], [dL,dS,dA]]  # no Mtuple, Dtuple?
 

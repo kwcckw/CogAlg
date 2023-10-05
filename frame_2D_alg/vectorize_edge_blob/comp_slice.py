@@ -184,7 +184,7 @@ def feedback(root, fd):  # in form_PP_, append new der layers to root PP, single
 
 def sum_derH(T, t, base_rdn, fneg=0):  # derH is a list of layers or sub-layers, each = [mtuple,dtuple, mval,dval, mrdn,drdn]
 
-    DerH, Valt, Rdnt = T; derH, valt, rdnt = t
+    DerH, Valt, Rdnt = T[:3]; derH, valt, rdnt = t[:3]  # do we need to sum Dect too?
 
     for i in 0, 1:
         Valt[i] += valt[i]
@@ -214,7 +214,7 @@ def sum_dertuple(Ptuple, ptuple, fneg=0):
 
 def comp_derH(_derH, derH, rn, fagg=0):  # derH is a list of der layers or sub-layers, each = [mtuple,dtuple, mval,dval, mrdn,drdn]
 
-    dderH = []  # or = not-missing comparand if xor?
+    dderH, decay_t = [], [0, 0]  # or = not-missing comparand if xor?
     Mval, Dval, Mrdn, Drdn = 0,0,1,1
 
     for _lay, lay in zip_longest(_derH, derH, fillvalue=[]):  # compare common lower der layers | sublayers in derHs
@@ -229,15 +229,16 @@ def comp_derH(_derH, derH, rn, fagg=0):  # derH is a list of der layers or sub-l
             if fagg:
                 Mtuple, Dtuple = ret[2:]
                 derLay[0] += [Mtuple,Dtuple]
-                Decay_t = [0,0]; decay_t = []; L = len(mtuple)
-                for par_, max_, Dec in zip((mtuple,dtuple), (Mtuple,Dtuple), Decay_t):
-                    for par,max in zip(par_, max_):
-                        Dec += par/max  # may be weighted per param
-                    decay_t += [Dec/L]  # average decay per link param
+                L = len(mtuple)
+                for i, (par_, max_) in enumerate(zip((mtuple,dtuple), (Mtuple,Dtuple))):
+                    Decay = 0
+                    for par,maxv in zip(par_, max_):
+                        Decay += par/max(1, maxv)  # may be weighted per param (getting 0 value of maxv here due to 0 value of M and angle value in dtuple )
+                    decay_t[i] += Decay/L  # average decay per link param
             dderH += [derLay]
 
     ret = [dderH, [Mval,Dval], [Mrdn,Drdn]]  # new derLayer,= 1/2 combined derH
-    if fagg: ret += [decay_t]
+    if fagg : ret += [decay_t]  # we might pack empty decay_t here, when one of the derH is empty                                                                                 
     return ret
 
 
