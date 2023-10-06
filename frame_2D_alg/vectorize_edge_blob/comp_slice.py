@@ -80,10 +80,12 @@ def comp_rng(iP_, rng):  # form new Ps and links, switch to rng+n to skip cluste
 def comp_der(P_):  # keep same Ps and links, increment link derH, then P derH in sum2PP
 
     for P in P_:
+        if not P.derH: continue
         link_ = []
         for derP in P.link_H[-1]:  # scan root PP links, no concurrent rng+
             if derP._P in P_ and derP.valt[1] > P_aves[1] * derP.rdnt[1]:
                 _P = derP._P  # comp extended derH of previously compared Ps, sum in lower-composition sub_PPs
+                if not _P.derH: continue  # no links to compare
                 # weight of compared derH is relative compound scope of (sum linked Ps( sum P derts)):
                 rn = (len(_P.dert_) / len(P.dert_)) * (len(_P.link_H[-1]) / len(P.link_H[-1]))
                 comp_P(link_,_P,P, rn, fd=1, derP=derP)
@@ -184,7 +186,7 @@ def feedback(root, fd):  # in form_PP_, append new der layers to root PP, single
 
 def sum_derH(T, t, base_rdn, fneg=0):  # derH is a list of layers or sub-layers, each = [mtuple,dtuple, mval,dval, mrdn,drdn]
 
-    DerH, Valt, Rdnt = T[:3]; derH, valt, rdnt = t[:3]  # do we need to sum Dect too?
+    DerH, Valt, Rdnt = T; derH, valt, rdnt = t
 
     for i in 0, 1:
         Valt[i] += valt[i]
@@ -211,11 +213,11 @@ def sum_dertuple(Ptuple, ptuple, fneg=0):
     else:    Ptuple[:] = [_I+I, _G+G, _M+M, _Ma+Ma, _A+A, _L+L]
     return   Ptuple
 
-
 def comp_derH(_derH, derH, rn, fagg=0):  # derH is a list of der layers or sub-layers, each = [mtuple,dtuple, mval,dval, mrdn,drdn]
 
-    dderH, decay_t = [], [0, 0]  # or = not-missing comparand if xor?
+    dderH = [0,0]  # or = not-missing comparand if xor?
     Mval, Dval, Mrdn, Drdn = 0,0,1,1
+    if fagg: Mdecay,Ddecay = 0,0
 
     for _lay, lay in zip_longest(_derH, derH, fillvalue=[]):  # compare common lower der layers | sublayers in derHs
         if _lay and lay:  # also if lower-layers match: Mval > ave * Mrdn?
@@ -230,15 +232,12 @@ def comp_derH(_derH, derH, rn, fagg=0):  # derH is a list of der layers or sub-l
                 Mtuple, Dtuple = ret[2:]
                 derLay[0] += [Mtuple,Dtuple]
                 L = len(mtuple)
-                for i, (par_, max_) in enumerate(zip((mtuple,dtuple), (Mtuple,Dtuple))):
-                    Decay = 0
-                    for par,maxv in zip(par_, max_):
-                        Decay += par/max(1, maxv)  # may be weighted per param (getting 0 value of maxv here due to 0 value of M and angle value in dtuple )
-                    decay_t[i] += Decay/L  # average decay per link param
-            dderH += [derLay]
+                Mdecay += sum([par/max(1,max)] for par,max in zip(mtuple,Mtuple)) / L  # average decay per link param
+                Ddecay += sum([par/max(1,max)] for par,max in zip(dtuple,Dtuple)) / L
 
     ret = [dderH, [Mval,Dval], [Mrdn,Drdn]]  # new derLayer,= 1/2 combined derH
-    if fagg : ret += [decay_t]  # we might pack empty decay_t here, when one of the derH is empty                                                                                 
+    if fagg:
+        L = len(derH); ret += [[Mdecay/L,Ddecay/L]]
     return ret
 
 
