@@ -146,7 +146,7 @@ def segment_node_(root, Gt_, fd):
                 G = link.G if link._G is _G else link._G
                 if G in cG_: continue    # circular link
                 Gt = Gt_[G.it[fd]]; Val, Rdn = Gt[1], Gt[2]
-                val, rdn, decay = link.valt[fd], link.rdnt[fd], link.dect[fd]
+                _, _, decay = link.valt[fd], link.rdnt[fd], link.dect[fd]
                 rVal=(_Val+Val)*decay; rRdn=(_Rdn+Rdn)*decay  # * link decay coef -> relative Val,Rdn
                 if rVal > ave * rRdn:
                     # add val and rdn from link too?
@@ -187,7 +187,7 @@ def sum2graph(root, cG_, fd):  # sum node and link params into graph, aggH in ag
         # add params of external G links:
         if subH: G.aggH += [subH]
         G.valHt[0]+=[mval]; G.valHt[1]+=[dval]; G.rdnHt[0]+=[mrdn]; G.rdnHt[1]+=[drdn]
-        L = len(link_); G.decHt[0]+=[mdec/L]; G.decHt[1]+=[ddec/L]
+        L = max(1, len(link_)); G.decHt[0]+=[mdec/L]; G.decHt[1]+=[ddec/L]
         G.root[fd] = graph  # replace cG_
         graph.node_t += [G]  # converted to node_t by feedback
     # add layer from links:
@@ -262,10 +262,13 @@ def comp_G(link_, link, fd):
     Mval+=mval; Dval+=dval; Mrdn += mrdn; Drdn += drdn
 
     # / PP:
-    dderH, valt, rdnt, dect = comp_derH(_G.derH[0], G.derH[0], rn=1, fagg=1)
-    mdec,ddec = dect; Mdec = (Mdec+mdec)/2; Ddec = (Ddec+ddec)/2  # averages
-    mval,dval = valt; Mval+=dval; Dval+=mval
-    Mrdn += rdnt[0]+dval>mval; Drdn += rdnt[1]+dval<=mval
+    if _G.derH[0] and G.derH[0]:  # non empty derH from single node's G
+        dderH, valt, rdnt, dect = comp_derH(_G.derH[0], G.derH[0], rn=1, fagg=1)
+        mdec,ddec = dect; Mdec = (Mdec+mdec)/2; Ddec = (Ddec+ddec)/2  # averages
+        mval,dval = valt; Mval+=dval; Dval+=mval
+        Mrdn += rdnt[0]+dval>mval; Drdn += rdnt[1]+dval<=mval
+    else:
+        dderH = []
 
     derH = [[derLay0]+dderH, [Mval,Dval], [Mrdn,Drdn], [Mdec, Ddec]]  # appendleft derLay0 from comp_ptuple
     der_ext = comp_ext([_G.L,_G.S,_G.A],[G.L,G.S,G.A], [Mval,Dval],[Mrdn,Drdn], [Mdec,Ddec])
