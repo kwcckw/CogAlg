@@ -186,12 +186,11 @@ def feedback(root, fd):  # in form_PP_, append new der layers to root PP, single
 
 def sum_derH(T, t, base_rdn, fneg=0):  # derH is a list of layers or sub-layers, each = [mtuple,dtuple, mval,dval, mrdn,drdn]
 
-    DerH, Valt, Rdnt = T[:3]; derH, valt, rdnt = t[3]
+    DerH, Valt, Rdnt = T; derH, valt, rdnt = t
 
     for i in 0,1:
         Valt[i] += valt[i]
         Rdnt[i] += rdnt[i] + base_rdn
-        if len(T)>3: T[3][i] += t[3][i]  # Dect in agg+
     DerH[:] = [
         # sum der layers, dertuple is mtuple | dtuple, fneg*i: for dtuple only:
         [ [sum_dertuple(Dertuple,dertuple, fneg*i) for i,(Dertuple,dertuple) in enumerate(zip(Tuplet,tuplet))],
@@ -218,7 +217,7 @@ def comp_derH(_derH, derH, rn, fagg=0):  # derH is a list of der layers or sub-l
 
     dderH = []  # or not-missing comparand: xor?
     Mval, Dval, Mrdn, Drdn = 0,0,1,1
-    if fagg: Mdecay,Ddecay = 0,0
+    if fagg: maxM, maxD = 0,0
 
     for _lay, lay in zip_longest(_derH, derH, fillvalue=[]):  # compare common lower der layers | sublayers in derHs
         if _lay and lay:  # also if lower-layers match: Mval > ave * Mrdn?
@@ -232,13 +231,11 @@ def comp_derH(_derH, derH, rn, fagg=0):  # derH is a list of der layers or sub-l
             if fagg:
                 Mtuple, Dtuple = ret[2:]
                 derLay[0] += [Mtuple,Dtuple]
-                L = len(mtuple)
-                Mdecay += sum([par/max(1,M)] for par,M in zip(mtuple,Mtuple)) / L  # average decay per link param
-                Ddecay += sum([par/max(1,D)] for par,D in zip(dtuple,Dtuple)) / L
+                maxm = sum(Mtuple); maxd = sum(Dtuple)
+                maxM += maxm; maxD += maxd
             dderH += [derLay]
     ret = [dderH, [Mval,Dval], [Mrdn,Drdn]]  # new derLayer,= 1/2 combined derH
-    if fagg:
-        L = len(derH); ret += [[Mdecay/L,Ddecay/L]]
+    if fagg: ret += [[maxM,maxD]]
     return ret
 
 

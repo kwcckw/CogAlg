@@ -26,7 +26,7 @@ class CEdge(ClusterStructure):  # edge blob
     rng = 1
     aggH : list = z([[]])  # formed in Gs: [[subH, valt, rdnt]]: cross-fork composition layers
     valHt : list = z([[0],[0]])  # Ht of link vals,rdns, decays per fder
-    decHt : list = z([[0],[0]])
+    maxt : list = z([[0],[0]])
     rdnHt : list = z([[1],[1]])
     rng = 1
     # initializing blob:
@@ -108,7 +108,7 @@ class Cgraph(ClusterStructure):  # params of single-fork node_ cluster per pplay
     derH : list = z([[], [0,0], [1,1]])  # default from PP: [[tuplet,valt,rdnt]] from rng+| der+, sum min len?
     aggH : list = z([])  # [[sub_Ht, valt, rdnt]], subH: [[der_Ht, valt, rdnt]]; cross-fork composition layers
     valHt : list = z([[0],[0]])  # Ht of link vals,rdns, decays / fder:
-    decHt : list = z([[0],[0]])
+    maxHt : list = z([[0],[0]])
     rdnHt : list = z([[1],[1]])
     link_H : list = z([[]])  # added per rng+ comp_G_
     root : object = None  # ini graph, replace with mroot,droot for nodes in sub+, nest in up-forking tree: root_ fork / agg+
@@ -134,7 +134,7 @@ class Cgraph(ClusterStructure):  # params of single-fork node_ cluster per pplay
 class CderG(ClusterStructure):  # params of single-fork node_ cluster per pplayers
 
     subH : list = z([])  # [[derH_t, valt, rdnt]]: top aggLev derived in comp_G
-    dect : list = z([0,0])  # m/maxm, d/maxd
+    maxt : list = z([0,0])  # m/maxm, d/maxd
     valt : list = z([0,0])  # m,d
     rdnt : list = z([1,1])
     _G : object = None  # comparand
