@@ -186,19 +186,20 @@ def feedback(root, fd):  # in form_PP_, append new der layers to root PP, single
 
 def sum_derH(T, t, base_rdn, fneg=0):  # derH is a list of layers or sub-layers, each = [mtuple,dtuple, mval,dval, mrdn,drdn]
 
-    DerH, Valt, Rdnt = T[:3]; derH, valt, rdnt = t[3]
+    DerH, Valt, Rdnt = T[:3]; derH, valt, rdnt = t[:3]
+    if len(T)>3: fmax = 1
+    else:        fmax = 0
 
     for i in 0,1:
         Valt[i] += valt[i]
         Rdnt[i] += rdnt[i] + base_rdn
-        if len(T)>3: T[3][i] += t[3][i]  # Maxt in agg+
+        if fmax: T[3][i] += t[3][i]  # Maxt in agg+
     DerH[:] = [
         # sum der layers, dertuple is mtuple | dtuple, fneg*i: for dtuple only:
-        [ [sum_dertuple(Dertuple,dertuple, fneg*i) for i,(Dertuple,dertuple) in enumerate(zip(Tuplet,tuplet))],
-          [Val + val for Val, val in zip(Valt, valt)], [Rdn + rdn + base_rdn for Rdn, rdn in zip(Rdnt,rdnt)]
-        ]
-        for [Tuplet,Valt,Rdnt], [tuplet,valt,rdnt]
-        in zip_longest(DerH, derH, fillvalue=[([0,0,0,0,0,0],[0,0,0,0,0,0]), (0,0),(0,0)])  # ptuplet, valt, rdnt
+        [ [sum_dertuple(Dertuple,dertuple, fneg*i) for i,(Dertuple,dertuple) in enumerate(zip(T[0],t[0]))],
+          [Val + val for Val, val in zip(T[1], t[1])], [Rdn + rdn + base_rdn for Rdn, rdn in zip(T[2],t[2])]
+        ] + [[Maxv + maxv for Maxv, maxv in zip(T[3],t[3])]] if fmax else []  # conditional maxv
+        for T, t in zip_longest(DerH, derH, fillvalue=[([0,0,0,0,0,0],[0,0,0,0,0,0]), (0,0),(0,0)] + [(0,0)] if fmax else [])  # ptuplet, valt, rdnt
     ]
 
 def sum_ptuple(Ptuple, ptuple, fneg=0):

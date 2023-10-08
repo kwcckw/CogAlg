@@ -107,7 +107,7 @@ class Cgraph(ClusterStructure):  # params of single-fork node_ cluster per pplay
     derH : list = z([[], [0,0], [1,1]])  # default from PP: [[tuplet,valt,rdnt]] from rng+| der+, sum min len?
     aggH : list = z([])  # [[sub_Ht, valt, rdnt]], subH: [[der_Ht, valt, rdnt]]; cross-fork composition layers
     valHt : list = z([[0],[0]])  # Ht of link vals,rdns, decays / fder:
-    maxHt : list = z([[0],[0]])
+    maxHt : list = z([[1],[1]])
     rdnHt : list = z([[1],[1]])
     link_H : list = z([[]])  # added per rng+ comp_G_
     root : object = None  # ini graph, replace with mroot,droot for nodes in sub+, nest in up-forking tree: root_ fork / agg+

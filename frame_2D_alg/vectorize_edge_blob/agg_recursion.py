@@ -82,9 +82,10 @@ def form_graph_t(root, G_):  # form mgraphs and dgraphs of same-root nodes
             if sum(graph.valHt[fd]) * (len(node_)-1)*root.rng > G_aves[fd] * sum(graph.rdnHt[fd]):  # eval fd comp_G_ in sub+
                 agg_recursion(root, graph, node_, fd)  # replace node_ with node_t, recursive
             else:  # feedback after graph sub+:
-                root.fback_t[fd] += [[deepcopy(graph.aggH), deepcopy(graph.valHt), deepcopy(graph.rdnHt)]]  # merge forks in root fork
+                root.fback_t[fd] += [[deepcopy(graph.aggH), deepcopy(graph.valHt), deepcopy(graph.rdnHt), deepcopy(graph.maxHt)]]  # merge forks in root fork
                 root.valHt[fd][-1] += graph.valHt[fd][-1]  # last layer, or all new layers via feedback?
                 root.rdnHt[fd][-1] += graph.rdnHt[fd][-1]
+                root.maxHt[fd][-1] += graph.maxHt[fd][-1]
             i = sum(graph.valHt[0]) > sum(graph.valHt[1])
             root.rdnHt[i][-1] += 1  # add fork rdn to last layer, representing all layers after feedback
 
@@ -100,7 +101,8 @@ def link_tree_(node_,fd):  # sum surrounding link values to define connected nod
     Gt_ = []
     for i, G in enumerate(node_):
         G.it[fd] = i  # used here, in segment_node_
-        Gt_ += [[G,0,1]]  # init surround val,rdn
+        # so i think we need to init Gval with graph's valHt here, else they will be remained as 0 all the time
+        Gt_ += [[G,G.valHt[fd][-1],G.rdnHt[fd][-1]]]  # init surround val,rdn
     # iterative eval rng expansion by summing decayed surround node Vals, while significant Val update:
     while True:
         DVal = 0
@@ -108,7 +110,7 @@ def link_tree_(node_,fd):  # sum surrounding link values to define connected nod
             Val, Rdn = 0, 0  # updated surround
             for link in _G.link_H[-1]:
                 if link.valt[fd] < ave * link.rdnt[fd]: continue  # skip negative links
-                G = link.G if link._G is _G else link._G
+                G = link.G if link._G is _G else link._G  # is it possible for G here to not in node_?
                 Gt = Gt_[G.it[fd]]
                 Gval = Gt[1]; Grdn = Gt[2]; decay = link.valt[fd]/link.maxt[fd]  # val rng incr per loop, per node?
                 Val += Gval * decay
@@ -252,7 +254,7 @@ def comp_G(link_, link, fd):
     maxm, maxd = sum(Mtuple), sum(Dtuple)
     mval, dval = sum(mtuple), sum(abs(d) for d in dtuple)  # mval is signed, m=-min in comp x sign
     mrdn = dval>mval; drdn = dval<=mval
-    derLay0 = [[mtuple,dtuple],[mval,dval],[mrdn,drdn],[maxm,maxd]]
+    derLay0 = [[mtuple,dtuple],[mval,dval],[mrdn,drdn],[maxm,maxd]]  # do we really need this maxm and maxd here? only derH, but not subH ?
     Mval+=mval; Dval+=dval; Mrdn += mrdn; Drdn += drdn; maxM+=maxm; maxD+=maxd
     # / PP:
     _derH,derH = _G.derH,G.derH
@@ -287,7 +289,7 @@ def comp_aggH(_aggH, aggH, rn):  # no separate ext
     for _lev, lev in zip_longest(_aggH, aggH, fillvalue=[]):  # compare common lower layer|sublayer derHs
         if _lev and lev:  # also if lower-layers match: Mval > ave * Mrdn?
             # compare dsubH only:
-            dsubH, valt,rdnt,maxt = comp_subH(_lev[0], lev[0], rn)
+            dsubH, valt,rdnt,maxt = comp_subH(_lev, lev, rn)  # no more valt and rdnt in subH now
             SubH += dsubH  # flatten to keep subH
             maxm,maxd = maxt; maxM += maxm; maxD += maxd
             mval,dval = valt; Mval += mval; Dval += dval
