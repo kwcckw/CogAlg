@@ -43,8 +43,9 @@ def vectorize_root(blob, verbose):  # vectorization pipeline is 3 composition le
         if edge.valt[fd] * (len(node_)-1)*(edge.rng+1) > G_aves[fd] * edge.rdnt[fd]:
             G_= []
             for PP in node_:  # convert CPPs to Cgraphs:
-                derH, valt, rdnt = PP.derH, PP.valt, PP.rdnt  # init aggH is empty:
-                G_ += [Cgraph( ptuple=PP.ptuple, derH=[derH,valt,rdnt], valHt=[[valt[0]],[valt[1]]], rdnHt=[[rdnt[0]],[rdnt[1]]],
+                derH, valt, rdnt, maxt = PP.derH, PP.valt, PP.rdnt, [0,0]  # init aggH is empty:
+                for dderH in derH: dderH += [[0,0]]  # add maxt
+                G_ += [Cgraph( ptuple=PP.ptuple, derH=[derH,valt,rdnt,maxt], valHt=[[valt[0]],[valt[1]]], rdnHt=[[rdnt[0]],[rdnt[1]]],
                                L=PP.ptuple[-1], box=[(PP.box[0]+PP.box[1])/2, (PP.box[2]+PP.box[3])/2] + list(PP.box))]
             node_ = G_
             edge.valHt[0][0] = edge.valt[0]; edge.rdnHt[0][0] = edge.rdnt[0]  # copy
@@ -110,6 +111,7 @@ def sum_link_tree_(node_,fd):  # sum surrounding link values to define connected
             for link in _G.link_H[-1]:
                 if link.valt[fd] < ave * link.rdnt[fd]: continue  # skip negative links
                 G = link.G if link._G is _G else link._G
+                if G not in node_: continue
                 Gt = Gt_[G.it[fd]]
                 Gval = Gt[1]; Grdn = Gt[2]
                 try: decay = link.valt[fd]/link.maxt[fd]  # val rng incr per loop, per node?
@@ -264,7 +266,7 @@ def comp_G(link_, link, fd):
         Mrdn += rdnt[0]+dval>mval; Drdn += rdnt[1]+dval<=mval
     else:
         dderH = []
-    derH = [[derLay0]+dderH, [Mval,Dval], [Mrdn,Drdn]]  # appendleft derLay0 from comp_ptuple
+    derH = [[derLay0]+dderH, [Mval,Dval], [Mrdn,Drdn], [maxM, maxD]]  # appendleft derLay0 from comp_ptuple
     der_ext = comp_ext([_G.L,_G.S,_G.A],[G.L,G.S,G.A], [Mval,Dval],[Mrdn,Drdn], [maxM,maxD])
     SubH = [der_ext, derH]  # two init layers of SubH, higher layers added by comp_aggH:
     # / G:
@@ -305,7 +307,7 @@ def comp_subH(_subH, subH, rn):
             if _lay[0] and isinstance(_lay[0][0],list):  # _lay[0][0] is derHt
 
                 dderH, valt, rdnt, maxt = comp_derH(_lay[0], lay[0], rn, fagg=1)
-                DerH += [[dderH, valt, rdnt]]  # flat derH
+                DerH += [[dderH, valt, rdnt, maxt]]  # flat derH
                 maxM += maxt[0]; maxD += maxt[1]
                 mval,dval = valt; Mval += mval; Dval += dval
                 Mrdn += rdnt[0] + dval > mval; Drdn += rdnt[1] + dval <= mval
@@ -348,7 +350,7 @@ def sum_derH(T, t, base_rdn, fneg=0):  # derH is a list of layers or sub-layers,
         Maxt[i] += maxt[i]; Valt[i] += valt[i]; Rdnt[i] += rdnt[i]+ base_rdn
     DerH[:] = [
         [ [sum_dertuple(Dertuple,dertuple, fneg*i) for i,(Dertuple,dertuple) in enumerate(zip(Tuplet,tuplet))],
-          [M+m for M,m in zip(Maxt,maxt)], [V+v for V,v in zip(Valt,valt)], [R+r+base_rdn for R,r in zip(Rdnt,rdnt)]
+          [V+v for V,v in zip(Valt,valt)], [R+r+base_rdn for R,r in zip(Rdnt,rdnt)],[M+m for M,m in zip(Maxt,maxt)],
         ]
         for [Tuplet, Valt,Rdnt,Maxt], [tuplet, valt,rdnt,maxt]
         in zip_longest(DerH, derH, fillvalue=[([0,0,0,0,0,0],[0,0,0,0,0,0]), (0,0),(0,0),(0,0)])  # ptuplet, valt,rdnt.maxt
