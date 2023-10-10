@@ -38,6 +38,7 @@ ave_sub = 2  # cost of calling sub_recursion and looping
 ave_agg = 3  # cost of agg_recursion
 ave_overlap = 10
 ave_distance = 3
+ave_cluster = 10
 med_decay = .5  # decay of induction per med layer
 PP_vars = ["I", "M", "Ma", "angle", "aangle", "G", "Ga", "L"]
 aves = [ave_G, ave_M, ave_dangle, ave_L, ave_mval, ave_dval]

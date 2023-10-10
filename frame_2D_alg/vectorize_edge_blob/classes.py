@@ -106,11 +106,11 @@ class Cgraph(ClusterStructure):  # params of single-fork node_ cluster per pplay
     ptuple : list = z([0,0,0,0,[0,0],0])  # default from P
     derH : list = z([[],[0,0],[1,1],[0,0]])  # default from PP: [[tuplet,valt,rdnt,maxt]] from rng+| der+, sum min len?
     aggH : list = z([])  # [[sub_Ht, valt, rdnt]], subH: [[der_Ht, valt, rdnt]]; cross-fork composition layers
-    valHt : list = z([[0],[0]])  # Ht of link vals,rdns, decays / fder:
-    maxHt : list = z([[0],[0]])
-    rdnHt : list = z([[1],[1]])
-    link_H : list = z([[]])  # added per rng+ comp_G_
-    root : object = None  # ini graph, replace with mroot,droot for nodes in sub+, nest in up-forking tree: root_ fork / agg+
+    valHt : dict = z({"I":[[0],[0]], "G":[[0],[0]], "M":[[0],[0]], "Ma":[[0],[0]], "angle":[[0],[0]], "L":[[0],[0]], "distance":[[0],[0]]})  # Ht of link vals,rdns, decays / fder:
+    maxHt : dict = z({"I":[[0],[0]], "G":[[0],[0]], "M":[[0],[0]], "Ma":[[0],[0]], "angle":[[0],[0]], "L":[[0],[0]], "distance":[[0],[0]]})
+    rdnHt : dict = z({"I":[[1],[1]], "G":[[1],[1]], "M":[[1],[1]], "Ma":[[1],[1]], "angle":[[1],[1]], "L":[[1],[1]], "distance":[[1],[1]]})
+    link_H : dict = z({"I":[], "G":[], "M":[], "Ma":[], "angle":[], "L":[], "distance":[]})  # added per rng+ comp_G_
+    root : dict = z({"I":[None,None], "G":[None,None], "M":[None,None], "Ma":[None,None], "angle":[None,None], "L":[None,None], "distance":[None,None]})  # ini graph, replace with mroot,droot for nodes in sub+, nest in up-forking tree: root_ fork / agg+
     node_t : list = z([])  # init G_-> Gm_,Gd_, nested in down-forking tree: node_ fork/ sub+
     fback_t : list = z([[],[]])  # maps to node_t: feedback [[aggH,valt,rdnt]] per node fork
     L : int = 0 # len base node_; from internal links:
@@ -124,7 +124,7 @@ class Cgraph(ClusterStructure):  # params of single-fork node_ cluster per pplay
     alt_Graph : object = None  # conditional, summed and concatenated params of alt_graph_
     # temporary:
     it : list = z([0,0])  # indices in root.node_t, maybe nested?
-    compared_ : list = z([])
+    compared_ : dict = z({"I":[], "G":[], "M":[], "Ma":[], "angle":[], "L":[], "distance":[]})
     Rdn : int = 0  # for accumulation or separate recursion count?
     # id_H : list = z([[]])  # indices in the list of all possible layers | forks, not used with fback merging
     # top aggLay: derH from links, lower aggH from nodes, only top Lay in derG:
