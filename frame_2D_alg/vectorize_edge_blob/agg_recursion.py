@@ -115,7 +115,7 @@ def sum_link_tree_(node_,fd):  # sum surrounding link values to define connected
                 Gt = Gt_[G.it[fd]]
                 Gval = Gt[1]; Grdn = Gt[2]
                 try: decay = link.valt[fd]/link.maxt[fd]  # val rng incr per loop, per node?
-                except: decay = 1
+                except: decay = 1  # /0
                 Val += Gval * decay; Rdn += Grdn * decay  # link decay coef: m|d / max, base self/same
                 # prune links by rng Val-ave*Rdn?
             Gt_[i][1] = Val; Gt_[i][2] = Rdn  # unilateral update, computed separately for _G
@@ -152,7 +152,7 @@ def segment_node_(root, Gt_, fd):  # replace with root backprop, sorted in node,
                     Gt = Gt_[G.it[fd]]; Val = Gt[1]; Rdn = Gt[2]
                     if Val > ave * Rdn:
                         try: decay = G.valHt[fd][-1] / G.maxHt[fd][-1]  # current link layer surround decay
-                        except: decay = 1
+                        except: decay = 1  # /0
                         tVal += Val + sum(G.valHt[fd])*decay  # ext+ int*decay: proj match to distant nodes in higher graphs?
                         tRdn += Rdn + sum(G.rdnHt[fd])*decay
                         cG_ += [G]; G.root[fd] = cG_
@@ -233,7 +233,7 @@ def comp_G_(G_, fd=0, oG_=None, fin=1):  # cross-comp in G_ if fin, else comp be
         link_ = []
         for link in G.link_H[-1]:  # if fd: follow links, comp old derH, else follow proto-links, form new derH
             if fd and link.valt[1] < G_aves[1]*link.rdnt[1]: continue  # maybe weak after rdn incr?
-            comp_G(link_, link, fd)
+            comp_G(link_,link, fd)
         G.link_H[-1] = link_
         '''
         same comp for cis and alt components?
@@ -316,6 +316,7 @@ def comp_subH(_subH, subH, rn):
                 # pack extt as ptuple
     return DerH, [Mval,Dval],[Mrdn,Drdn],[maxM,maxD]  # new layer,= 1/2 combined derH
 
+
 def sum_aggH(AggH, aggH, base_rdn):
 
     if aggH:
@@ -347,10 +348,10 @@ def sum_derH(T, t, base_rdn, fneg=0):  # derH is a list of layers or sub-layers,
 
     DerH, Valt,Rdnt,Maxt = T; derH, valt,rdnt,maxt = t
     for i in 0,1:
-        Maxt[i] += maxt[i]; Valt[i] += valt[i]; Rdnt[i] += rdnt[i]+ base_rdn
+        Valt[i] += valt[i]; Rdnt[i] += rdnt[i]+ base_rdn; Maxt[i] += maxt[i]
     DerH[:] = [
         [ [sum_dertuple(Dertuple,dertuple, fneg*i) for i,(Dertuple,dertuple) in enumerate(zip(Tuplet,tuplet))],
-          [V+v for V,v in zip(Valt,valt)], [R+r+base_rdn for R,r in zip(Rdnt,rdnt)],[M+m for M,m in zip(Maxt,maxt)],
+          [V+v for V,v in zip(Valt,valt)], [R+r+base_rdn for R,r in zip(Rdnt,rdnt)], [M+m for M,m in zip(Maxt,maxt)],
         ]
         for [Tuplet, Valt,Rdnt,Maxt], [tuplet, valt,rdnt,maxt]
         in zip_longest(DerH, derH, fillvalue=[([0,0,0,0,0,0],[0,0,0,0,0,0]), (0,0),(0,0),(0,0)])  # ptuplet, valt,rdnt.maxt
