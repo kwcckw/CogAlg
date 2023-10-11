@@ -5,7 +5,7 @@ from collections import deque, defaultdict
 from .classes import Cgraph, CderG, CPP
 from .filters import ave_L, ave_dangle, ave, ave_distance, G_aves, ave_Gm, ave_Gd
 from .slice_edge import slice_edge, comp_angle
-from .comp_slice import comp_P_, comp_ptuple, sum_ptuple, sum_dertuple, comp_derH, matchF
+from .comp_slice import comp_P_, comp_ptuple, comp_dtuple, sum_ptuple, sum_dertuple, matchF
 '''
 Blob edges may be represented by higher-composition patterns, etc., if top param-layer match,
 in combination with spliced lower-composition patterns, etc, if only lower param-layers match.
@@ -45,7 +45,8 @@ def vectorize_root(blob, verbose):  # vectorization pipeline is 3 composition le
             for PP in node_:  # convert CPPs to Cgraphs:
                 derH,valt,rdnt = PP.derH,PP.valt,PP.rdnt  # init aggH is empty:
                 for dderH in derH: dderH += [[0,0]]  # add maxt
-                G_ += [Cgraph( ptuple=PP.ptuple, derH=[derH,valt,rdnt,[0,0]], valHt=[[valt[0]],[valt[1]]], rdnHt=[[rdnt[0]],[rdnt[1]]],
+                # flat derH, each element in derH is [(mtuple,dtuple),valt,rdnt,maxt]
+                G_ += [Cgraph( ptuple=PP.ptuple, derH=derH, valHt=[[valt[0]],[valt[1]]], rdnHt=[[rdnt[0]],[rdnt[1]]],
                                L=PP.ptuple[-1], box=[(PP.box[0]+PP.box[1])/2, (PP.box[2]+PP.box[3])/2] + list(PP.box))]
             node_ = G_
             edge.valHt[0][0] = edge.valt[0]; edge.rdnHt[0][0] = edge.rdnt[0]  # copy
@@ -248,8 +249,7 @@ def comp_G_(G_, fd=0, oG_=None, fin=1):  # cross-comp in G_ if fin, else comp be
 def comp_G(link_, link, fd):
 
     _G, G = link._G, link.G
-    maxM,maxD = 0,0  # max possible m|d
-    Mval,Dval = 0,0; Mrdn,Drdn = 1,1
+    Mval,Dval, maxM,maxD, Mrdn,Drdn = 0,0,0,0,1,1
 
     # / P:
     mtuple, dtuple, Mtuple, Dtuple = comp_ptuple(_G.ptuple, G.ptuple, rn=1, fagg=1)
@@ -260,64 +260,55 @@ def comp_G(link_, link, fd):
     Mval+=mval; Dval+=dval; Mrdn += mrdn; Drdn += drdn; maxM+=maxm; maxD+=maxd
     # / PP:
     _derH,derH = _G.derH,G.derH
-    if _derH[0] and derH[0]:  # empty in single-node Gs
-        dderH, valt, rdnt, maxt = comp_derH(_derH[0], derH[0], rn=1, fagg=1)
+    if _derH and derH:  # empty in single-node Gs
+        dderH, valt, rdnt, maxt = comp_derH(_derH, derH, rn=1)
         maxM += maxt[0]; maxD += maxt[0]
         mval,dval = valt; Mval+=dval; Dval+=mval
         Mrdn += rdnt[0]+dval>mval; Drdn += rdnt[1]+dval<=mval
     else:
         dderH = []
-    derH = [[derLay0]+dderH, [Mval,Dval], [Mrdn,Drdn], [maxM, maxD]]  # appendleft derLay0 from comp_ptuple
+    derH = [derLay0]+dderH  # appendleft derLay0 from comp_ptuple (flat derH)
     der_ext = comp_ext([_G.L,_G.S,_G.A],[G.L,G.S,G.A], [Mval,Dval],[Mrdn,Drdn], [maxM,maxD])
-    SubH = [der_ext, derH]  # two init layers of SubH, higher layers added by comp_aggH:
+    derH = [der_ext] + derH
     # / G:
     if fd:  # else no aggH yet?
-        subH, valt, rdnt, maxt = comp_aggH(_G.aggH, G.aggH, rn=1)
-        SubH += subH  # append higher subLayers: list of der_ext | derH s
+        daggH, valt, rdnt, maxt = comp_derH(_G.aggH, G.aggH, rn=1)
+        daggH = daggH + derH  # flat
         maxM += maxt[0]; maxD += maxt[0]
         mval,dval = valt; Mval+=dval; Dval+=mval
         Mrdn += rdnt[0]+dval>mval; Drdn += rdnt[1]+dval<=mval
+        link.aggH += daggH  # merge flat sequence
         link_ += [link]
-
     elif Mval > ave_Gm or Dval > ave_Gd:  # or sum?
-        link.subH = SubH; link.maxt = [maxM,maxD]; link.valt = [Mval,Dval]; link.rdnt = [Mrdn,Drdn]  # complete proto-link
+        link.aggH = derH; link.maxt = [maxM,maxD]; link.valt = [Mval,Dval]; link.rdnt = [Mrdn,Drdn]  # complete proto-link
         link_ += [link]
 
 # draft:
-def comp_aggH(_aggH, aggH, rn):  # no separate ext
-    SubH = []
-    maxM,maxD, Mval,Dval, Mrdn,Drdn = 0,0,0,0,1,1
+# for flat sequence, mixing elements of sequence and ext
+def comp_derH(_derH, derH, rn):  # derH is a list of der layers or sub-layers, each = [mtuple,dtuple, mval,dval, mrdn,drdn]
 
-    for _lev, lev in zip_longest(_aggH, aggH, fillvalue=[]):  # compare common lower layer|sublayer derHs
-        if _lev and lev:  # also if lower-layers match: Mval > ave * Mrdn?
-            # compare dsubH only:
-            dsubH, valt,rdnt,maxt = comp_subH(_lev, lev, rn)  # no more valt and rdnt in subH now
-            SubH += dsubH  # flatten to keep subH
-            maxM += maxt[0]; maxD += maxt[1]
-            mval,dval = valt; Mval += mval; Dval += dval
-            Mrdn += rdnt[0] + dval > mval; Drdn += rdnt[1] + mval <= dval
+    dderH = []  # or not-missing comparand: xor?
+    Mval, Dval, Mrdn, Drdn, maxM,maxD  = 0,0,1,1,0,0
 
-    return SubH, [Mval,Dval],[Mrdn,Drdn],[maxM,maxD]
-
-def comp_subH(_subH, subH, rn):
-    DerH = []
-    maxM,maxD, Mval,Dval, Mrdn,Drdn = 0,0,0,0,1,1
-
-    for _lay, lay in zip_longest(_subH, subH, fillvalue=[]):  # compare common lower layer|sublayer derHs
+    for _lay, lay in zip_longest(_derH, derH, fillvalue=[]):  # compare common lower der layers | sublayers in derHs
         if _lay and lay:  # also if lower-layers match: Mval > ave * Mrdn?
-            if _lay[0] and isinstance(_lay[0][0],list):  # _lay[0][0] is derHt
+            if len(_lay) == 4 and len(lay) == 4:  # length =4 for non ext: [ptuplet, valt, rdnt, maxt]
+                ret = comp_dtuple(_lay[0][1], lay[0][1], rn, fagg=1)  # compare dtuples only, mtuples are for evaluation
+                mtuple, dtuple, Mtuple, Dtuple = ret
+                mval = sum(mtuple); dval = sum(abs(d) for d in dtuple)
+                mrdn = dval > mval; drdn = dval < mval
+                Mval+=mval; Dval+=dval; Mrdn+=mrdn; Drdn+=drdn
+                maxm = sum(Mtuple); maxd = sum(Dtuple)
+                maxM+= maxm; maxD+= maxd
+                derLay = [[mtuple,dtuple],[mval,dval],[mrdn,drdn],[maxm,maxd]]
+                dderH += [derLay]
+            elif len(_lay) == 2 and len(lay) == 2:  # length =2 for [mext, dext]
+                dderH += [comp_ext(_lay[1],lay[1],[Mval,Dval],[Mrdn,Drdn],[maxM,maxD])]
 
-                dderH, valt, rdnt, maxt = comp_derH(_lay[0], lay[0], rn, fagg=1)
-                DerH += [[dderH, valt, rdnt, maxt]]  # flat derH
-                maxM += maxt[0]; maxD += maxt[1]
-                mval,dval = valt; Mval += mval; Dval += dval
-                Mrdn += rdnt[0] + dval > mval; Drdn += rdnt[1] + dval <= mval
-            else:  # _lay[0][0] is L, comp dext:
-                DerH += [comp_ext(_lay[1],lay[1],[Mval,Dval],[Mrdn,Drdn],[maxM,maxD])]
-                # pack extt as ptuple
-    return DerH, [Mval,Dval],[Mrdn,Drdn],[maxM,maxD]  # new layer,= 1/2 combined derH
+    ret = [dderH, [Mval,Dval], [Mrdn,Drdn], [maxM,maxD]]  # new derLayer,= 1/2 combined derH
+    return ret
 
-
+# below not updated
 def sum_aggH(AggH, aggH, base_rdn):
 
     if aggH:
