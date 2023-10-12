@@ -281,6 +281,27 @@ def comp_G(link_, link, fd):
         link.subH = SubH; link.maxt = [maxM,maxD]; link.valt = [Mval,Dval]; link.rdnt = [Mrdn,Drdn]  # complete proto-link
         link_ += [link]
 
+def comp_params(ptuple):
+    
+    mtuple, dtuple, Mtuple, Dtuple = [], [], [], []
+    for i, _par in enumerate(ptuple):
+        for par in ptuple[i+1:]:  # comparison starts from the next param
+            
+            # for angle, use hypot first?
+            if isinstance(_par, list):
+                _par = np.hypot(_par[0], _par[1])
+            if isinstance(par, list):
+                par = np.hypot(par[0], par[1])
+                
+            dpar = _par - par
+            # not sure here, i guess it should be varied for different params?
+            mpar = min(_par, par)- ave
+    
+            dtuple += [dpar]; mtuple += [mpar]
+            Dtuple += [abs(_par) + abs(par)]; Mtuple += [max(_par, par)]
+
+    return mtuple, dtuple, Mtuple, Dtuple
+
 # draft:
 def comp_aggH(_aggH, aggH, rn):  # no separate ext
     SubH = []
