@@ -56,6 +56,7 @@ def agg_recursion(rroot, root, G_, fd):  # compositional agg+|sub+ recursion in 
 
     comp_G_(G_, fd)  # rng|der cross-comp all Gs, nD array? form link_H per G
     root.valHt[fd] += [0]; root.rdnHt[fd] += [1]  # sum in form_graph_t feedback
+    comp_param_(G_, fd)
 
     GG_t = form_graph_t(root, G_)  # eval sub+ and feedback per graph
     # agg+ xcomp-> form_graph_t loop sub)agg+, vs. comp_slice:
@@ -148,7 +149,7 @@ def segment_node_(root, Gt_, fd):  # replace with root backprop, sorted in node,
                 _G = perimeter.pop(0)
                 for link in _G.link_H[-1]:
                     G = link.G if link._G is _G else link._G
-                    if G in cG_: continue   # circular link
+                    if G in cG_ or G not in [Gt[0] for Gt in Gt_]: continue   # circular link
                     Gt = Gt_[G.it[fd]]; Val = Gt[1]; Rdn = Gt[2]
                     if Val > ave * Rdn:
                         try: decay = G.valHt[fd][-1] / G.maxHt[fd][-1]  # current link layer surround decay
@@ -281,26 +282,73 @@ def comp_G(link_, link, fd):
         link.subH = SubH; link.maxt = [maxM,maxD]; link.valt = [Mval,Dval]; link.rdnt = [Mrdn,Drdn]  # complete proto-link
         link_ += [link]
 
-def comp_params(ptuple):
-    
-    mtuple, dtuple, Mtuple, Dtuple = [], [], [], []
-    for i, _par in enumerate(ptuple):
-        for par in ptuple[i+1:]:  # comparison starts from the next param
-            
-            # for angle, use hypot first?
-            if isinstance(_par, list):
-                _par = np.hypot(_par[0], _par[1])
-            if isinstance(par, list):
-                par = np.hypot(par[0], par[1])
-                
-            dpar = _par - par
-            # not sure here, i guess it should be varied for different params?
-            mpar = min(_par, par)- ave
-    
-            dtuple += [dpar]; mtuple += [mpar]
-            Dtuple += [abs(_par) + abs(par)]; Mtuple += [max(_par, par)]
+def comp_param_(G_, fd):
+    for G in G_:
+        if len(G.aggH)>1:  # at least 2 comparands
+            part_P_ = []; VAl,RDn,MAxv = 0,0,0  # Ps of par tuples
+            part_P = [];  Val,Rdn,Maxv = 0,0,0  # P of par tuples
 
-    return mtuple, dtuple, Mtuple, Dtuple
+            for i, _subH in enumerate(G.aggH):  # each element in aggH is a subH, aggH = [subH1, subH2...],  subH doesn't have valt, rdnt, maxt
+                for _layer in _subH:  # subH layer, packing [ext, derH1, derH2...]
+                    if _layer[0] and isinstance(_layer[0][0], list):  # non ext
+                        _derH,_valt,_rdnt,_maxt = _layer
+                        _val =_valt[fd]; _rdn =_rdnt[fd]; _maxv =_maxt[fd]  # no H level here, H level only exist in G.params
+            
+                        for subH in G.aggH[i:]:  # top-down?
+                            for layer in subH:
+                                if layer[0] and isinstance(layer[0][0], list):  # non ext
+                                    derH,valt,rdnt,maxt = layer
+
+                                    val = valt[fd]; rdn = rdnt[fd]; maxv = maxt[fd]
+                                    if _val > ave and val > ave:
+                                        # recursive comp, unpack, += nested sub_pP_:
+                                        sub_part_P = comp_param(derH, fd)
+                                        sval, srdn, smax = sub_part_P[1:]
+                                        Val += min(_val,val) + sval
+                                        Rdn += min(_rdn,rdn) + srdn
+                                        Maxv += min(_maxv,maxv) + smax
+                                        part_P += [[derH,sub_part_P]]
+                                    else:  # terminate part_P and reset
+                                        if Val:
+                                            part_P_ += [[part_P, Val, Rdn, Maxv]]
+                                            VAl += Val; RDn += Rdn; MAxv += Maxv
+                                        part_P = []; Val,Rdn,Maxv = 0,0,0  # reset (typo, should be part_P?)
+
+            # last termination (if there's no reset at all in the section above)
+            if part_P: 
+                part_P_ += [[part_P, Val, Rdn, Maxv]]
+                VAl += Val; RDn += Rdn; MAxv += Maxv
+
+            G.agg_P_ += [[part_P_,VAl,RDn,MAxv]]
+
+
+def comp_param(derH, fd):
+    
+    part_P_ = []; VAl,RDn,MAxv = 0,0,0  # Ps of par tuples
+    part_P = [];  Val,Rdn,Maxv = 0,0,0  # P of par tuples
+    # compare each element in derH
+    for i, _derlay in enumerate(derH):
+        _ptuplet,_valt,_rdnt,_maxt = _derlay
+        _val =_valt[fd]; _rdn =_rdnt[fd]; _maxv =_maxt[fd]
+        for derlay in derH[i:]:
+            ptuplet,valt,rdnt,maxt = derlay
+            val = valt[fd]; rdn = rdnt[fd]; maxv = maxt[fd]
+            
+            if _val > ave and val > ave:
+                # compare ptuplet here? but how to compare _ptuplet?
+                dderlay = [0,0,0,0,0]  # temporary, should be computed by comparing _ptuplet
+                sval, srdn, smax = 0, 0, 0  # temporary, should be computed by comparing _ptuplet
+                Val += min(_val,val) + sval
+                Rdn += min(_rdn,rdn) + srdn
+                Maxv += min(_maxv,maxv) + smax
+                part_P += [[derlay, dderlay]]
+            else:  # terminate part_P and reset
+                if Val:
+                    part_P_ += [[part_P, Val, Rdn, Maxv]]
+                    VAl += Val; RDn += Rdn; MAxv += Maxv
+                part_P = []; Val,Rdn,Maxv = 0,0,0  # reset
+
+    return [part_P_,VAl,RDn,MAxv]
 
 # draft:
 def comp_aggH(_aggH, aggH, rn):  # no separate ext
