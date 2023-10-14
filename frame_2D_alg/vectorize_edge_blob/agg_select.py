@@ -22,38 +22,42 @@ exclusively deeper param cluster has empty (unpacked) higher param nesting level
 '''
 
 # draft
-def cluster_params(parH, rVal,rRdn,rMax, fd, G=None):  # G for parH=aggH
+def cluster_params(parH, rVal,rRdn,rMaxv, fd, G=None):  # G for parH=aggH
 
     part_P_ = []  # Ps of [subH, sub_part_P_t] tuples
     part_ = []  # [[subH, sub_part_P_t]]
-    Val, Rdn, Max = 0, 0, 0
+    Val, Rdn, Maxv = 0, 0, 0
     parH = copy(parH)
     i=1
     while parH:  # top-down
         subH = parH.pop(); fsub=1
         if G:  # parH is aggH
-            val=G.valHt[fd][-i]; rdn=G.rdnHt[fd][-i]; max=G.maxHt[fd][-i]; i+=1
+            val=G.valHt[fd][-i]; rdn=G.rdnHt[fd][-i]; maxv=G.maxHt[fd][-i]; i+=1
         elif isinstance(subH[0], list):  # not ext or ptuple
-            subH,val,rdn,max = subH
+            if len(subH) == 2:  # ext
+                val = sum(subH[fd]); rdn = 0; maxv=0
+            else:  # [ptuplet, valt, rdnt, maxt]
+                subH,valt,rdnt,maxvt = subH
+                val = valt[fd]; rdn = rdnt[fd]; maxv = maxvt[fd]  # it's a tuple for params here
         else: fsub=0  # subH is ext or ptuple
         if fsub:
             if val > ave:  # recursive eval,unpack
-                Val+=val; Rdn+=rdn; Max+=max  # summed with sub-values:
-                sub_part_P_t = cluster_params(subH, Val,Rdn,Max, fd)
+                Val+=val; Rdn+=rdn; Maxv+=maxv  # summed with sub-values:
+                sub_part_P_t = cluster_params(subH, Val,Rdn,Maxv, fd)
                 part_ += [[subH, sub_part_P_t]]
             else:
                 if Val:
-                    part_P_ += [[part_,Val,Rdn,Max]]
-                    rVal+=Val; rRdn+=Rdn; rMax+=Max  # root values
-                part_=[]; Val,Rdn,Max = 0,0,0  # reset
+                    part_P_ += [[part_,Val,Rdn,Maxv]]
+                    rVal+=Val; rRdn+=Rdn; rMaxv+=Maxv  # root values
+                part_=[]; Val,Rdn,Maxv = 0,0,0  # reset
         else:
             part_ += [[subH, cluster_vals(subH)]]  # ext or ptuple, params=vals, no sum Val,Rdn,Max?
     # last term if no reset above:
     if part_:
-        part_P_ += [[part_,Val,Rdn,Max]]
-        rVal+=Val; rRdn+=Rdn; rMax+=Max
+        part_P_ += [[part_,Val,Rdn,Maxv]]
+        rVal+=Val; rRdn+=Rdn; rMaxv+=Maxv
 
-    return [part_P_,rVal,rRdn,rMax]  # root values
+    return [part_P_,rVal,rRdn,rMaxv]  # root values
 
 # draft:
 def cluster_vals(ptuple):  # ext or ptuple, params=vals
