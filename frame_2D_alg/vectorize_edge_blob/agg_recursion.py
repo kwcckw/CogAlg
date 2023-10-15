@@ -6,7 +6,7 @@ from .classes import Cgraph, CderG, CPP
 from .filters import ave_L, ave_dangle, ave, ave_distance, G_aves, ave_Gm, ave_Gd
 from .slice_edge import slice_edge, comp_angle
 from .comp_slice import comp_P_, comp_ptuple, sum_ptuple, sum_dertuple, comp_derH, matchF
-from .agg_select import cluster_params
+
 
 '''
 Blob edges may be represented by higher-composition patterns, etc., if top param-layer match,
@@ -65,10 +65,6 @@ def agg_recursion(rroot, root, G_, fd):  # compositional agg+|sub+ recursion in 
     for GG_ in GG_t:  # comp_G_ eval: ave_m * len*rng - fixed cost, root update in form_t:
         if root.valHt[0][-1] * (len(GG_)-1)*root.rng > G_aves[fd] * root.rdnHt[0][-1]:
             agg_recursion(rroot, root, GG_, fd=0)  # 1st xcomp in GG_
-
-    # something like this?
-    if sum(rroot.valHt[fd]) > ave and isinstance(rroot, Cgraph):  # non Cedge
-        cluster_params(parH=rroot.aggH, rVal=0,rRdn=0,rMaxv=0, fd=fd, G=rroot)
 
     G_[:] = GG_t
 

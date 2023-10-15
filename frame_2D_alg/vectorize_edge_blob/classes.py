@@ -23,7 +23,7 @@ class CEdge(ClusterStructure):  # edge blob
     valt : list = z([0,0])
     rdnt : list = z([1,1])
     # for agg+:
-    aggH : list = z([[]])  # formed in Gs: [[subH, valt, rdnt]]: cross-fork composition layers
+    aggH : list = z([])  # formed in Gs: [[subH, valt, rdnt]]: cross-fork composition layers
     valHt : list = z([[0],[0]])  # Ht of link vals,rdns, decays per fder
     maxHt : list = z([[0],[0]])
     rdnHt : list = z([[1],[1]])
@@ -111,7 +111,7 @@ class Cgraph(ClusterStructure):  # params of single-fork node_ cluster per pplay
     maxHt : list = z([[0],[0]])
     rdnHt : list = z([[1],[1]])
     link_H : list = z([[]])  # added per rng+ comp_G_
-    root : object = None  # ini graph, replace with mroot,droot for nodes in sub+, nest in up-forking tree: root_ fork / agg+
+    root : list = z([[],[]])   # ini graph, replace with mroot,droot for nodes in sub+, nest in up-forking tree: root_ fork / agg+
     node_t : list = z([])  # init G_-> Gm_,Gd_, nested in down-forking tree: node_ fork/ sub+
     fback_t : list = z([[],[]])  # maps to node_t: feedback [[aggH,valt,rdnt]] per node fork
     L : int = 0 # len base node_; from internal links:
