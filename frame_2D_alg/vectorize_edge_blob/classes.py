@@ -23,7 +23,7 @@ class CEdge(ClusterStructure):  # edge blob
     valt : list = z([0,0])
     rdnt : list = z([1,1])
     # for agg+:
-    aggH : list = z([])  # formed in Gs: [[subH, valt, rdnt]]: cross-fork composition layers
+    aggH : list = z([])  # from Gs: [[subH,valt,rdnt]]: cross-fork composition layers
     valHt : list = z([[0],[0]])  # Ht of link vals,rdns, decays per fder
     maxHt : list = z([[0],[0]])
     rdnHt : list = z([[1],[1]])
@@ -105,13 +105,12 @@ class Cgraph(ClusterStructure):  # params of single-fork node_ cluster per pplay
     fd: int = 0  # graph is defined by m|d value
     ptuple : list = z([0,0,0,0,[0,0],0])  # default from P
     derH : list = z([[],[0,0],[1,1],[0,0]])  # default from PP: [[tuplet,valt,rdnt,maxt]] from rng+| der+, sum min len?
-    aggH : list = z([])  # [[sub_Ht, valt, rdnt]], subH: [[der_Ht, valt, rdnt]]; cross-fork composition layers
-    part_P_t : list = z([[],[]])  # param clusters per fork, in aggH?
+    aggH : list = z([])  # [[sub_Ht,valt,rdnt]], subH: [[der_Ht,valt,rdnt]]; 2-fork composition layers, compress-> pP_?
     valHt : list = z([[0],[0]])  # Ht of link vals,rdns, decays / fder:
     maxHt : list = z([[0],[0]])
     rdnHt : list = z([[1],[1]])
     link_H : list = z([[]])  # added per rng+ comp_G_
-    root : list = z([[],[]])   # ini graph, replace with mroot,droot for nodes in sub+, nest in up-forking tree: root_ fork / agg+
+    root : object = None  # ini graph, replace with mroot,droot for nodes in sub+, nest in up-forking tree: root_ fork / agg+
     node_t : list = z([])  # init G_-> Gm_,Gd_, nested in down-forking tree: node_ fork/ sub+
     fback_t : list = z([[],[]])  # maps to node_t: feedback [[aggH,valt,rdnt]] per node fork
     L : int = 0 # len base node_; from internal links:
