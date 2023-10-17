@@ -217,7 +217,6 @@ aggH: [subH_t]: composition levels, ext per G,
 # added version with val and rdn
 def comp_G_(G_, fd=0, oG_=None, fin=1):  # cross-comp in G_ if fin, else comp between G_ and other_G_, for comp_node_
 
-    Val, Rdn = 0, 0
     if not fd:  # cross-comp all Gs in extended rng, add proto-links regardless of prior links
         for G in G_: G.link_H += [[]]  # add empty link layer, may remove if stays empty
         
@@ -239,8 +238,7 @@ def comp_G_(G_, fd=0, oG_=None, fin=1):  # cross-comp in G_ if fin, else comp be
         link_ = []
         for link in G.link_H[-1]:  # if fd: follow links, comp old derH, else follow proto-links, form new derH
             if fd and link.valt[1] < G_aves[1]*link.rdnt[1]: continue  # maybe weak after rdn incr?
-            val, rdn = comp_G(link_,link, fd)
-            Val += val; Rdn += rdn
+            comp_G(link_,link, fd)
         G.link_H[-1] = link_
         
         '''
@@ -250,8 +248,6 @@ def comp_G_(G_, fd=0, oG_=None, fin=1):  # cross-comp in G_ if fin, else comp be
                 comp_G(_cG, cG, fd)  # form new layer of links:
         combine cis,alt in aggH: alt represents node isolation?
         comp alts,val,rdn? cluster per var set if recurring across root: type eval if root M|D? '''
-        
-    return Val, Rdn
 
 # draft
 def comp_G(link_, link, fd):
@@ -286,11 +282,9 @@ def comp_G(link_, link, fd):
         mval,dval = valt; Mval+=dval; Dval+=mval
         Mrdn += rdnt[0]+dval>mval; Drdn += rdnt[1]+dval<=mval
         link_ += [link]
-        return Dval, Drdn
     elif Mval > ave_Gm or Dval > ave_Gd:  # or sum?
         link.subH = SubH; link.maxt = [maxM,maxD]; link.valt = [Mval,Dval]; link.rdnt = [Mrdn,Drdn]  # complete proto-link
         link_ += [link]
-        return Mval, Mrdn
 
 # draft:
 def comp_aggH(_aggH, aggH, rn):  # no separate ext

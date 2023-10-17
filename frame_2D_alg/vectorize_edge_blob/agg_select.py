@@ -6,7 +6,7 @@ from .classes import Cgraph, CderG, CPP
 from .filters import ave_L, ave_dangle, ave, ave_distance, G_aves, ave_Gm, ave_Gd, ave_dI, ave_G, ave_M, ave_Ma
 from .slice_edge import slice_edge, comp_angle
 from .comp_slice import comp_P_, comp_ptuple, sum_ptuple, sum_dertuple, comp_derH, matchF
-from .agg_recursion import comp_G_, sum_link_tree_, segment_node_, sum2graph, feedback
+from .agg_recursion import comp_G_, sum2graph, feedback
 
 '''
 Implement sparse param tree in aggH: new graphs represent only high m|d params + their root params.
@@ -51,8 +51,10 @@ def agg_recursion(rroot, root, G_, fd):  # compositional agg+|sub+ recursion in 
     cluster_params(parH=root.aggH, rVal=0,rRdn=0,rMax=0, fd=fd, G=root)
     # aggH-> pP_v: [part_P_,V,R,M] for compressed comp
 
-    Val,Rdn = comp_G_(G_, fd)  # rng|der cross-comp all Gs, form link_H[-1] per G, sum in Val,Rdn
-    if Val > ave*Rdn > ave:  # else no clustering?
+    comp_G_(G_, fd)  # rng|der cross-comp all Gs, form link_H[-1] per G, sum in Val,Rdn
+    
+    # why there's an additional > ave?
+    if sum([G.valHt[fd][-1] for G in G_]) > ave*sum([G.rdnHt[fd][-1] for G in G_]):  # else no clustering?
         root.valHt[fd]+=[0]; root.rdnHt[fd] += [1]  # sum in form_graph_t feedback, +root.maxHt[fd]?
 
         GG_t = form_graph_t(root, G_)  # eval sub+ and feedback per graph
@@ -81,6 +83,8 @@ def cluster_params(parH, rVal,rRdn,rMax, fd, G=None):  # G for parH=aggH
             subH, valt, rdnt, maxt = subH  # initial derH is a tuple
             sub_cluster(subH, valt[fd],rdnt[fd],maxt[fd], part_P_,[part_,Val,Rdn,Max], rVal,rRdn,rMax, fd)
         else:
+            if len(subH) != 2:  # subH is derlay
+                subH = subH[0]  # retrieve ptuplet
             valP_t = [[cluster_vals(ptuple) for ptuple in subH if sum(ptuple)>ave]]  # extt in subH or ptuplet in derH
             if valP_t:
                 part_ += [valP_t]  # params=vals, no sum-> Val,Rdn,Max?
@@ -121,7 +125,7 @@ def cluster_vals(ptuple):  # ext or ptuple, params=vals
     return parP_  # may be empty
 
 
-def form_mediation_layers(layer, layers, fder):  # layers are initialized with same nodes and incrementally mediated links
+def form_mediation_layers(G_, positive_link_, layer, layers, fder):  # layers are initialized with same nodes and incrementally mediated links
 
     # form link layers to back-propagate overlap of root graphs to segment node_, pruning non-max roots?
     out_layer = []; out_val = 0   # new layer, val
@@ -129,21 +133,30 @@ def form_mediation_layers(layer, layers, fder):  # layers are initialized with s
     for (node, _links, _nodes, Nodes) in layer:  # higher layers have incrementally mediated _links and _nodes
         links, nodes = [], []  # per current-layer node
         Val = 0
-        for _node in _nodes:
+        for _node, _link in zip(_nodes, _links):
             for link in _node.link_H[-(1+fder)]:  # mediated links
-                __node = link.G1 if link.G0 is _node else link.G0
+                __node = link.G if link._G is _node else link._G
                 if __node not in Nodes:  # not in lower-layer links
                     nodes += [__node]
                     links += [link]  # to adjust link.val in suppress_overlap
                     Val += link.valt[fder]
+                    if (link.valt[fder] + _link.valt[fder])>0:  # add temporary combined positive links
+                        pos_G_link_ = positive_link_[G_.index(node)]  
+                        if link not in pos_G_link_: pos_G_link_ += [link]
+                        if _link not in pos_G_link_: pos_G_link_ += [_link]
+                        # bidirectional assignment?
+                        __pos_G_link_ = positive_link_[G_.index(__node)]
+                        if link not in __pos_G_link_: __pos_G_link_ += [link]
+                        if _link not in __pos_G_link_: __pos_G_link_ += [_link]
+
         # add fork val of link layer:
-        node.val_Ht[fder] += [Val]
+        node.valHt[fder][-1] += Val  # add only to last layer's val?
         out_layer += [[node, links, nodes, Nodes+nodes]]  # current link mediation order
         out_val += Val  # no permanent val per layer?
 
     layers += [out_layer]
     if out_val > ave:
-        form_mediation_layers(out_layer, layers, fder)
+        form_mediation_layers(G_, positive_link_, out_layer, layers, fder)
 
 '''
 - sum_link_tree_: defines combined value of each node, to compute combined value of their links and to select max root
@@ -191,12 +204,39 @@ def segment_node_(root, Gt_, fd):
 
     return graph_
 
+
+# not sure, define combined positive value of links per G
+def sum_link_tree_(G_, layers, positive_link_, fd):
+    
+    combined_val_ = []
+    for link_ in positive_link_:  
+       combined_val = sum([link.valt[fd] for link in link_]) 
+       combined_val_ += [combined_val]
+
+    # we may need additional eval here in case there's no positive links at all
+    max_G = G_[np.argmax(combined_val_)]
+    
+    # get the max cluster in bottom layer
+    for layer in layers[-1]:
+        if layer[0] is max_G:
+            max_layer = layer
+            break
+    
+    return max_layer, max_G
+
+
 def form_graph_t(root, G_):  # form mgraphs and dgraphs of same-root nodes
 
     graph_t = []
     for G in G_: G.root = [None,None]  # replace with mcG_|dcG_ in segment_node_, replace with Cgraphs in sum2graph
     for fd in 0,1:
-        Gt_ = sum_link_tree_(G_, fd)  # sum surround link values @ incr rng,decay
+        layer = []; layers = [layer]; positive_link_ = [[] for _ in G_]
+        for G in G_:
+            nodes = [link.G if link.G is G else link._G for link in G.link_H[-1]]
+            Nodes = [link.G if link.G is G else link._G for link in G.link_H[-1]] + [G]
+            layer += [[G, G.link_H[-1],nodes, Nodes]]  # add top layer
+        form_mediation_layers(G_, positive_link_, layer, layers, fd)
+        max_layer, max_G = sum_link_tree_(G_, layers, positive_link_, fd)  # sum surround link values @ incr rng,decay
         graph_t += [segment_node_(root, Gt_, fd)]  # add alt_graphs?
 
     # eval sub+, not in segment_node_: full roott must be replaced per node within recursion
