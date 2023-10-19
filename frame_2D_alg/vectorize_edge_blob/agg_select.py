@@ -63,7 +63,7 @@ def agg_recursion(rroot, root, G_, fd):  # compositional agg+|sub+ recursion in 
 
     G_[:] = GG_t
 
-def cluster_params(parHv, fd):  # last v: value tuple valt,rdnt,maxt
+def cluster_params_old(parHv, fd):  # last v: value tuple valt,rdnt,maxt
 
     parH, rVal, rRdn, rMax = parHv  # compressed valt,rdnt,maxt per aggH replace initial summed G vals
     part_P_ = []  # pPs: nested clusters of >ave param tuples, as below:
@@ -72,9 +72,9 @@ def cluster_params(parHv, fd):  # last v: value tuple valt,rdnt,maxt
     parH = copy(parH)
     while parH:  # aggHv | subHv | derHv (ptupletv_), top-down
         subt = parH.pop()   # Hv | extt | ptupletv
-
-        if isinstance(subt[0][0],list):  # not extt
-            if isinstance(subt[0][0][0],list):
+        if isinstance(subt[-1][0],list):  # not extt
+            if isinstance(subt[-1][0][0],list):
+                # use last index will not work here because we still need another loop to loop each ext, derH from subH, the next line will be getting error if subt = [ext, derH1, derH2...] 
                 subH, valt, rdnt, maxt = subt  # subt is Hv
                 val, rdn, max = valt[fd],rdnt[fd],maxt[fd]
                 if val > ave:  # recursive eval,unpack
@@ -93,7 +93,7 @@ def cluster_params(parHv, fd):  # last v: value tuple valt,rdnt,maxt
 
     return [part_P_,rVal,rRdn,rMax]  # root values
 
-def cluster_params_Chee(parHv, fderlay, fd):  # last v: value tuple valt,rdnt,maxt
+def cluster_params(parHv, fderlay, fd):  # last v: value tuple valt,rdnt,maxt
 
     parH, rVal, rRdn, rMax = parHv  # compressed valt,rdnt,maxt per aggH replace initial summed G vals
     part_P_ = []  # pPs: nested clusters of >ave param tuples, as below:
@@ -168,7 +168,7 @@ def sum_link_tree_(G_,fd):  # sum surrounding link values to define connected no
     while True:
         DVal,DRdn = 0,0
         Val,Rdn = 0,0  # updated surround of all nodes
-        for i, (G,val,rdn, node_,perimeter) in enumerate(graph_):
+        for i, (G,val,rdn) in enumerate(graph_):
             for link in G.link_H[-1]:
                 if link.valt[fd] < ave * link.rdnt[fd]: continue  # skip negative links
                 _G = link.G if link._G is G else link._G
@@ -192,43 +192,51 @@ def segment_node_(Gt_, fd):  # form proto-graph_
 
     graph_ = []
     for Gt in Gt_:  # [G,Val,Rdn] from sum_link_tree_
-        graph_ += [[Gt + [[Gt]] + [[Gt]]]]  # exemplar, node_, perimeter
+        # if we need node only, we should use Gt[0]?
+        graph_ += [Gt + [[]] + [[Gt[0]]] + [[Gt[0]]]]  # exemplar, decay, node_, perimeter (add decay for pruning purpose)
 
     while True:  # add incrementally mediated _links and _nodes to each node
         extend_val = 0
-        for (graph, Val, Rdn, node_, perimeter) in graph_:
-            new_perimeter = []
+        for nodet in graph_:
+            _, _, _, decay_, node_, perimeter = nodet  # the 1st index, Gt is not needed?
+            Val, Rdn, new_perimeter = 0, 0, []
             for node in perimeter:
                 for link in node.link_H[-1]:  # mediated links
                     _node = link._G if link.G is node else link.G
                     if _node not in node_:  # not in lower-layer links
-                        if link.dect[fd] * _node.Val > ave:  # actually _node' Val-ave*Rdn?
+                        decay = link.valt[fd]/link.maxt[fd]
+                        if  decay * _node.valHt[fd][-1] > ave * _node.rdnHt[fd][-1]:  # actually _node' Val-ave*Rdn?
                             node_ += [_node]
                             new_perimeter += [_node]
+                            Val += _node.valHt[fd][-1] * decay  # we need to increase Val and Rdn too?
+                            Rdn += _node.rdnHt[fd][-1] * decay
+                            decay_ += [decay]
                             extend_val += link.valt[fd]  # * (__node Val - ave *__node Rdn)?
             perimeter[:] = new_perimeter
-
+            nodet[1] = Val; nodet[2] = Rdn  # update new Val and Rdn
         if extend_val < ave: break
 
-    # not revised:
     # prune max graph's nodes from other graph
-    max_nodes, max_links, max_graph = nodes_[max_index], links_[max_index], graph_[max_index]
-    for node, link in zip(max_nodes, max_links):
+    max_index = np.argmax([graph[1] for graph in graph_])
+    max_graph = graph_[max_index]
+    max_node_ = max_graph[4]
+    for max_node in max_node_:
         for graph in graph_:
-            if graph is not max_graph:
-                nodes, links = graph[4], graph[3]
-                if node in nodes:
-                    nodes.remove(node)
-                if link in links:
-                    links.remove(link)
+            if graph is not max_graph:  # non max graph
+                node_, decay_ = graph[3], graph[4]
+                if max_node in node_:
+                    pop_index = node_.index(max_node)
+                    node_.pop(pop_index)  # remove node
+                    graph[1] -= max_node.valHt[fd][-1] * decay_[pop_index]  # reduce Val
+                    graph[2] -= max_node.rdnHt[fd][-1] * decay_[pop_index]  # reduce Rdn
+        
     # prune weak graphs
-    graph_ = []
+    cgraph_ = []
     for graph in graph_:
-        nodes, links = graph[4], graph[3]
-        if sum([link.valt[fd] for link in links])>ave:
-            graph_ += [sum2graph(graph, fd)]
+        if graph[1] > ave * graph[2]:  # Val > ave * Rdn
+            cgraph_ += [sum2graph(graph, fd)]
 
-    return graph_
+    return cgraph_
 '''
 prune links in segment_node_  by decay * _node' Val-ave*Rdn?
 node_ = [Gt + [graph_] for Gt in Gt_]  # add graph_ as roots per node, initially fully connected
