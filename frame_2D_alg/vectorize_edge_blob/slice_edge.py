@@ -26,8 +26,8 @@ octant = 0.3826834323650898
 def slice_edge(blob, verbose=False):
     max_mask__ = max_selection(blob)  # mask of local directional maxima of dy, dx, g
     # form slices (Ps) from max_mask__ and form links by tracing max_mask__:
-    edge = trace_edge(blob, max_mask__, verbose=verbose)
-    return edge
+    edge, Pt_ = trace_edge(blob, max_mask__, verbose=verbose)
+    return edge, Pt_
 
 def max_selection(blob):
 
@@ -77,6 +77,8 @@ def trace_edge(blob, mask__, verbose=False):
     if verbose:
         step = 100 / len(max_)  # progress % percent per pixel
         progress = 0.0; print(f"\rTracing max... {round(progress)} %", end="");  sys.stdout.flush()
+    edge.node_t = []
+    Pt_ = []
     while max_:  # queue of (y,x,P)s
         y,x = max_.pop()
         maxQue = deque([(y,x,None)])
@@ -90,9 +92,8 @@ def trace_edge(blob, mask__, verbose=False):
             P = form_P(blob, CP(yx=(y,x), axis=(dy/g, dx/g), cells={(y,x)}, dert_=[(y,x,i,dy,dx,g,ma)]))
             edge.node_t += [P]
             if _P is not None:
-                P.link_H[0] += [_P]  # add up links only
+                Pt_ += [(_P, P)]  # add up links only
             # search in max_ path
-            # why it is +2 for both x and y here? It is due to adjacents in diagonal ? But why not -2? 
             adjacents = max_ & {*product(range(y-1,y+2), range(x-1,x+2))}   # search neighbors
             maxQue.extend(((_y, _x, P) for _y, _x in adjacents))
             max_ -= adjacents   # set difference = first set AND not both sets: https://www.scaler.com/topics/python-set-difference/
@@ -103,7 +104,7 @@ def trace_edge(blob, mask__, verbose=False):
 
     if verbose: print("\r" + " " * 79, end=""); sys.stdout.flush(); print("\r", end="")
 
-    return edge
+    return edge, Pt_
 
 def form_P(blob, P):
 

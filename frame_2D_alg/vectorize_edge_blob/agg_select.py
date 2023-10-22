@@ -52,8 +52,8 @@ def agg_recursion(rroot, root, G_, fd):  # compositional agg+|sub+ recursion in 
     # compress aggH-> pP_,V,R,M: select G V,R,M?
     Valt,Rdnt = comp_G_(G_,fd)  # rng|der cross-comp all Gs, form link_H[-1] per G, sum in Val,Rdn
 
-    root.valHt[fd]+=[0]; root.rdnHt[fd] += [1]  # sum in form_graph_t feedback, +root.maxHt[fd]?
-    # or per fork in form_graph_t?
+    root.valHt[fd]+=[0]; root.rdnHt[fd] += [1]; root.maxHt[fd] += [0]
+    # combined forks sum in form_graph_t feedback
     GG_t = form_graph_t(root, Valt,Rdnt, G_)  # eval sub+ and feedback per graph
     # agg+ xcomp-> form_graph_t loop sub)agg+, vs. comp_slice:
     # sub+ loop-> eval-> xcomp
@@ -63,17 +63,6 @@ def agg_recursion(rroot, root, G_, fd):  # compositional agg+|sub+ recursion in 
 
     G_[:] = GG_t
 
-
-# the current structure:
-# aggHv [ aggH, valt, rdnt, maxt]
-# aggH = [subHv1, subHv2,...]   
-# subHv = [subH, valt, rdnt, maxt]
-# subH = [ext, derH1, derH2,...]
-# derH = [derLays, valt, rdnt, maxt]
-# derLays = [derLay1, derLay2,...]
-# derLay = [ptuplet, valt, rdnt, maxt]
-
-# below should be working correctly according to above now
 def cluster_params(parHv, fd):  # last v: value tuple valt,rdnt,maxt
 
     parH, rVal, rRdn, rMax = parHv  # compressed valt,rdnt,maxt per aggH replace initial summed G vals
@@ -81,11 +70,16 @@ def cluster_params(parHv, fd):  # last v: value tuple valt,rdnt,maxt
     part_ = []  # [[subH, sub_part_P_t], Val,Rdn,Max]
     Val,Rdn,Max = 0,0,0; parH = copy(parH)
 
-    while parH:  # aggHv | subHv | derHv (ptupletv_), top-down
-        subt = parH.pop()  # Hv: >4-level list, or ptupletv: 3-level list, or extt: 2-level list,
-        # id / nesting:
-        if isinstance(subt[0][0],list):  # check for ext
-            if isinstance(subt[0][0][0],list):  # subt==Hv (Hv structure (hv, valt, rdnt, maxt))
+    while parH:  # aggHv | subHv | derHv (ptv_), top-down
+        subt = parH.pop()
+        '''    subt = Hv: >4-level list, | ptv: 3-level list, | extt: 2-level list:
+        aggHv: [aggH = subHv_, valt, rdnt, maxt],
+        subHv: [subH = derHv_, valt, rdnt, maxt],
+        derHv: [derH = ptv_,   valt, rdnt, maxt] or extt, interlaced in subH
+        ptv: [[mtuple,dtuple], valt, rdnt, maxt] 
+        '''
+        if isinstance(subt[0][0],list):  # not extt
+            if isinstance(subt[0][0][0],list):  # subt==Hv
                 subH, val, rdn, max = subt[0], subt[1][fd], subt[2][fd], subt[3][fd]
                 if val > ave:  # recursive eval,unpack
                     Val+=val; Rdn+=rdn; Max+=max  # sum with sub-vals:
@@ -205,14 +199,19 @@ def segment_node_(root, G_,fd):  # sum surrounding link values to define connect
         for i, root in enumerate(node_):  # reciprocal graph to graph_ refs
             if i != max_root_i:
                 ipop_ += [root.i]  # index in graph_
-    ipop_.sort(reverse=True)  # reverse sort so that pop from largest index, else we will pop the wrong index 
+    ipop_.sort(reverse=True)  # to prevent missing indices while popping
     [graph_.pop(i) for i in ipop_]  # graphs don't overlap, no need to remove individual nodes
     # prune weak graphs:
     cgraph_ = []
     for graph in graph_:
         if graph[1] > ave * graph[2]:  # Val > ave * Rdn
             cgraph_ += [sum2graph(root, graph, fd)]
-
+    '''
+    + roots per G to form graph_ over broad range of G_ in parallel:
+    - graphs sum and buffer link tree Gs in their node_s,
+    - graphs send their i,vals to roots of all Gs in their node_,  
+    - each G selects max val root, sends deletes to other root graphs
+    '''
     return cgraph_
 
 
@@ -232,14 +231,15 @@ def sum2graph(root, cG_, fd):  # sum node and link params into graph, aggH in ag
         subH=[[],[0,0],[1,1],[0,0]]; mval,dval, mrdn,drdn, maxm,maxd = 0,0, 0,0, 0,0
         for derG in G.link_H[-1]:
             if derG.valt[fd] > G_aves[fd] * derG.rdnt[fd]:  # sum positive links only:
-                (_mval,_dval),(_mrdn,_drdn),(_maxm,_maxd) = derG.valt, derG.rdnt, derG.maxt
+                _subH = derG.subH
+                (_mval,_dval),(_mrdn,_drdn),(_maxm,_maxd) = valt,rdnt,maxt = derG.valt, derG.rdnt, derG.maxt
                 if derG not in Link_:
-                    sum_subH(SubH, [derG.subH,derG.valt, derG.rdnt, derG.maxt] , base_rdn=1)  # new aggLev, not from nodes: links overlap
+                    sum_subH(SubH, [_subH,valt,rdnt,maxt] , base_rdn=1)  # new aggLev, not from nodes: links overlap
                     Mval+=_mval; Dval+=_dval; Mrdn+=_mrdn; Drdn+=_drdn; maxM+=_maxm; maxD+=_maxd
                     graph.A[0] += derG.A[0]; graph.A[1] += derG.A[1]; graph.S += derG.S
                     Link_ += [derG]
                 mval+=_mval; dval+=_dval; mrdn+=_mrdn; drdn+=_drdn; maxm+=_maxm; maxd+=_maxd
-                sum_subH(subH, [derG.subH,derG.valt, derG.rdnt, derG.maxt], base_rdn=1, fneg = G is derG.G)  # fneg: reverse link sign
+                sum_subH(subH, [_subH,valt,rdnt,maxt], base_rdn=1, fneg = G is derG.G)  # fneg: reverse link sign
                 sum_box(G.box, derG.G.box if derG._G is G else derG._G.box)
         # from G links:
         if subH: G.aggH += [subH]
