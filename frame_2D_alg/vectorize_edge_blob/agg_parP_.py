@@ -5,8 +5,8 @@ from collections import deque, defaultdict
 from .classes import Cgraph, CderG, CPP
 from .filters import ave_L, ave_dangle, ave, ave_distance, G_aves, ave_Gm, ave_Gd, ave_dI, ave_G, ave_M, ave_Ma
 from .slice_edge import slice_edge, comp_angle
-from .comp_slice import comp_P_, comp_ptuple, sum_ptuple, sum_dertuple, comp_derH, match_func
-from .agg_recursion import comp_aggH, comp_ext, sum_box, sum_Hts, sum_derH,sum_ext
+from .comp_slice import comp_P_, comp_ptuple, sum_ptuple, sum_dertuple, match_func
+from .agg_recursion import comp_aggH, comp_ext, comp_dtuple, sum_box, sum_Hts, sum_derH,sum_ext
 
 '''
 Implement sparse param tree in aggH: new graphs represent only high m|d params + their root params.
@@ -33,12 +33,13 @@ def vectorize_root(blob, verbose):  # vectorization pipeline is 3 composition le
     comp_P_(edge, adj_Pt_)  # vertical, lateral-overlap P cross-comp -> PP clustering
     # PP cross-comp -> discontinuous graph clustering:
     for fd in 0,1:
-        node_ = edge.node_t[fd]  # always PP_t
+        node_ = edge.node_[fd]  # always PP_t
         if edge.valt[fd] * (len(node_)-1)*(edge.rng+1) > G_aves[fd] * edge.rdnt[fd]:
             G_= []
             for i, PP in enumerate(node_):  # convert CPPs to Cgraphs:
                 derH,valt,rdnt = PP.derH,PP.valt,PP.rdnt  # init aggH is empty:
-                for dderH in derH: dderH += [[0,0]]  # add maxt
+                for dderH in derH: # PP.derH is not derHv now?
+                    dderH[:] = [dderH, [valt[0], valt[1]], [rdnt[0], rdnt[1]], [0,0]]  # convert to derHv
                 G_ += [Cgraph( ptuple=PP.ptuple, derH=[derH,valt,rdnt,[0,0]], valHt=[[valt[0]],[valt[1]]], rdnHt=[[rdnt[0]],[rdnt[1]]],
                                L=PP.ptuple[-1], i=i, box=[(PP.box[0]+PP.box[1])/2, (PP.box[2]+PP.box[3])/2] + list(PP.box))]
             node_ = G_
@@ -163,69 +164,45 @@ def segment_node_(root, G_, fd):  # sum surrounding link values to define connec
     ave = G_aves[fd]
     graph_ = []
     # initialize proto-graphs with each node, eval links to add other nodes, skip added nodes next
-    for G in G_:
-        graph_ += [[G, G.valHt[fd][-1], G.rdnHt[fd][-1], [G], [G]]]  # init val,rdn, node_,perimeter
-        # if using dict:
+    for i, G in enumerate(G_):
+        graph_ += [[G, G.valHt[fd][-1], G.rdnHt[fd][-1], [G]]]  # init val,rdn, node_
+        G.i = i
+        # using dict:
         for derG in G.link_H[-1]:
             if derG.valt[fd] > ave * derG.rdnt[fd]:  # or link val += node Val: prune +ve links to low Vals?
                 link_map[G] += [derG._G]  # keys:Gs, vals: linked _G_s
                 link_map[derG._G] += [G]
-    _Val,_Rdn = 0,0
-    # eval incr mediated links, sum perimeter Vals, append node_, while significant Val update:
-    while True:
-        DVal,DRdn, Val,Rdn = 0,0, 0,0
-        # update surround per node:
-        for G, val,rdn, node_,perimeter in graph_:
-            # not updated:
-            new_perimeter = []
-            for node in perimeter:
-                periVal, periRdn = 0,0
-                for link in node.link_H[-1]:
-                    _node = link.G if link._G is G else link._G
-                    if _node not in G_ or _node in node_: continue
-                    j = _node.i; _val = graph_[j][1]; _rdn = graph_[j][2]
-                    # use relative link vals only:
-                    try: decay = link.valt[fd]/link.maxt[fd]  # link decay coef: m|d / max, base self/same
-                    except ZeroDivisionError: decay = 1
-                    # sum mediated vals per node and perimeter node:
-                    med_val = (val+_val) * decay; Val += med_val; periVal += med_val
-                    med_rdn = (rdn+_rdn) * decay; Rdn += med_rdn; periRdn += med_rdn
-                    new_perimeter += [_node]
-                    node_ += [_node]
-                k = node.i; graph_[k][1] += periVal; graph_[k][2] += periRdn
 
-            i = G.i; graph_[i][1] = Val; graph_[i][2] = Rdn
-            DVal += Val-_Val; DRdn += Rdn-_Rdn  # update / surround extension, signed
-            perimeter[:] = new_perimeter
-        if DVal < ave*DRdn:  # even low-Dval extension may be valuable if Rdn decreases?
-            break
-        _Val,_Rdn = Val,Rdn
-
-    return [sum2graph(root, graph, fd) for graph in graph_ if graph[1] > ave * graph[2]]  # Val > ave * Rdn
-
-''' use dict to avoid graph overlap:
-
-        if iVal > ave * iRdn and not iG.root[fd]:
-            try: dec = iG.valHt[fd][-1] / iG.maxHt[fd][-1]
+    for graph in graph_:
+        tVal, tRdn = 0, 0
+        G, Val, Rdn, node_ = graph
+        if Val > ave * Rdn and not G.root[fd]:
+            try: dec = G.valHt[fd][-1] / G.maxHt[fd][-1]
             except ZeroDivisionError: dec = 1  # add internal layers Val *= current-layer decay to init graph totals:
-            tVal = iVal + sum(iG.valHt[fd]) * dec
-            tRdn = iRdn + sum(iG.rdnHt[fd]) * dec
-            cG_ = [iG]; iG.root[fd] = cG_  # clustered Gs
-            perimeter = link_map[iG]       # recycle perimeter in breadth-first search, outward from iG:
+            tVal = Val + sum(G.valHt[fd]) * dec  # why sum(G.valHt[fd])? Val is part of this too
+            tRdn = Rdn + sum(G.rdnHt[fd]) * dec
+            cG_ = [G]; G.root[fd] = cG_  # clustered Gs
+            perimeter = link_map[G].copy()       # recycle perimeter in breadth-first search, outward from iG:
             while perimeter:
                 _G = perimeter.pop(0)
-                for link in _G.link_H[-1]:
-                    G = link.G if link._G is _G else link._G
-                    if G in cG_ or G not in [Gt[0] for Gt in Gt_]: continue   # circular link
-                    Gt = Gt_[G.it[fd]]; Val = Gt[1]; Rdn = Gt[2]
-                    if Val > ave * Rdn:
-                        try: decay = G.valHt[fd][-1] / G.maxHt[fd][-1]  # current link layer surround decay
-                        except ZeroDivisionError: decay = 1
-                        tVal += Val + sum(G.valHt[fd])*decay  # ext+ int*decay: proj match to distant nodes in higher graphs?
-                        tRdn += Rdn + sum(G.rdnHt[fd])*decay
-                        cG_ += [G]; G.root[fd] = cG_
-                        perimeter += [G]
+                _graph = graph_[_G.i]
+                _, _Val, _Rdn, _ = _graph  
+                if _Val > ave * _Rdn and not _G.root[fd]:
+                    try: decay = _G.valHt[fd][-1] / _G.maxHt[fd][-1]  # current link layer surround decay
+                    except ZeroDivisionError: decay = 1
+                    tVal += _Val + sum(_G.valHt[fd])*decay  # ext+ int*decay: proj match to distant nodes in higher graphs?
+                    tRdn += _Rdn + sum(_G.rdnHt[fd])*decay
+                    cG_ += [_G]; _G.root[fd] = cG_
+                    perimeter += [_G]
 
+                    # non root method (remove perimeter reference of _G)
+                    '''
+                    _perimeter = link_map[_G]
+                    for __G in _perimeter:
+                        if _G in link_map[__G] and _G is not G: 
+                            link_map[__G].remove(_G)
+                    '''
+        '''
         graph-parallel to cluster broad range of G_, same stop in overlapping Gs:
         graphs sum and buffer link tree Gs in their node_s, separate stopping
         runtime overlap | stop test, reuse PU for continuing | new_node: added to node_ from Node_?
@@ -426,3 +403,21 @@ def select_init_(Gt_, fd):  # local max selection for sparse graph init, if posi
         if fmax:
             init_ += [[node,val]]
     return init_
+
+
+def comp_derH(_derH, derH, rn):  # derH is a list of der layers or sub-layers, each = ptuple_tv
+
+    dderH = []  # or not-missing comparand: xor?
+    Mval, Dval, Mrdn, Drdn, maxM, maxD = 0,0,1,1, 0, 0
+
+    for _lay, lay in zip_longest(_derH, derH, fillvalue=[]):  # compare common lower der layers | sublayers in derHs
+        if _lay and lay:  # also if lower-layers match: Mval > ave * Mrdn?
+            # compare dtuples only:
+            mtuple, dtuple, Mtuple, Dtuple = comp_dtuple(_lay[1], lay[1], rn, fagg=1)
+            mval = sum(mtuple); dval = sum(abs(d) for d in dtuple); maxm = sum(Mtuple); maxd = sum(Dtuple)
+            mrdn = dval > mval; drdn = dval < mval
+            Mval+=mval; Dval+=dval; Mrdn+=mrdn; Drdn+=drdn; maxM+= maxm; maxD+= maxd
+            ptupletv = [[mtuple,dtuple],[mval,dval],[mrdn,drdn],[maxm, maxd]]
+            dderH += [ptupletv]
+
+    return dderH, [Mval,Dval], [Mrdn,Drdn], [maxM, maxD]  # new derLayer,= 1/2 combined derH
