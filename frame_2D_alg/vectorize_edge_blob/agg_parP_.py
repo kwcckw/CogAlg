@@ -33,15 +33,23 @@ def vectorize_root(blob, verbose):  # vectorization pipeline is 3 composition le
     comp_P_(edge, adj_Pt_)  # vertical, lateral-overlap P cross-comp -> PP clustering
     # PP cross-comp -> discontinuous graph clustering:
     for fd in 0,1:
-        node_ = edge.node_t[fd]  # always PP_t
+        node_ = edge.node_[fd]  # always PP_t
         if edge.valt[fd] * (len(node_)-1)*(edge.rng+1) > G_aves[fd] * edge.rdnt[fd]:
             G_= []
             for i, PP in enumerate(node_):  # convert CPPs to Cgraphs:
                 derH,valt,rdnt = PP.derH,PP.valt,PP.rdnt
                 # convert to ptuple_tv_, not sure:
-                derH[:] = [[[mtuple,dtuple],[sum(mtuple),sum(dtuple)],[],[]] for mtuple,dtuple in derH]
+                ptuple_tv_ = []; Maxt = [0,0]
+                for mtuple,dtuple in derH:
+                    ptuplet = [mtuple, dtuple]
+                    valt = [sum(mtuple),sum(dtuple)]
+                    rdnt = [sum([ 0 if m>d else 1 for m, d in zip(mtuple, dtuple)]), sum([ 0 if d>m else 1 for m, d in zip(mtuple, dtuple)])]
+                    maxt = [sum([ abs(m) for m in mtuple]), sum([ abs(d) for d in dtuple])]  # not sure, but don't see any other way yet
+                    ptuple_tv_ += [[ptuplet, valt, rdnt, maxt]]
+                    Maxt[0] += maxt[0]; Maxt[1] += maxt[1] 
+                derH[:] = ptuple_tv_
                 # init aggH is empty:
-                G_ += [Cgraph( ptuple=PP.ptuple, derH=[derH,valt,rdnt,[0,0]], valHt=[[valt[0]],[valt[1]]], rdnHt=[[rdnt[0]],[rdnt[1]]],
+                G_ += [Cgraph( ptuple=PP.ptuple, derH=[derH,valt,rdnt,Maxt], valHt=[[valt[0]],[valt[1]]], rdnHt=[[rdnt[0]],[rdnt[1]]],
                                L=PP.ptuple[-1], i=i, box=[(PP.box[0]+PP.box[1])/2, (PP.box[2]+PP.box[3])/2] + list(PP.box))]
             node_ = G_
             edge.valHt[0][0] = edge.valt[0]; edge.rdnHt[0][0] = edge.rdnt[0]  # copy
@@ -171,17 +179,19 @@ def segment_node_(root, G_, fd):  # sum surrounding link values to define connec
     graph_ = []
     # initialize proto-graphs with each node | max, eval perimeter links to add other nodes
     for G in G_:
-        graph_ += [[G, G.valHt[fd][-1], G.rdnHt[fd][-1], [G], [G.link_H[-1]]]]
+        graph_ += [[G, G.valHt[fd][-1], G.rdnHt[fd][-1], [G], G.link_H[-1]]]
         # init graph = G,val,rdn,node_, perimeter: negative or new links
     for G in G_:
         for link in G.link_H[-1]:  # these are G-external links, not internal as in comp_slice
-            _G = link.G if link._G is G else link._G
+            G_link = link.G[0] if isinstance(link.G, list) else link.G  # we need additional checking here because some link's G or _G might be converted in prior fd loop
+            _G_link = link._G[0] if isinstance(link._G, list) else link._G 
+            _G = _G_link if G_link is G else G_link
             # tentative convert link Gs to proto-graphs:
             link.G = graph_[G.i]; link._G = graph_[_G.i]
     _Val,_Rdn = 0,0
     # eval incr mediated links, sum perimeter Vals, append node_, while significant Val update:
     while True:
-        DVal,DRdn, Val,Rdn = 0,0,0,0
+        DVal,DRdn, Val,Rdn = 0,1,0,1  # init rdn as 1? Else ave might be scaled with 0
         # update surround per graph:
         for graph in graph_:
             G, val, rdn, node_, perimeter = graph
@@ -200,17 +210,19 @@ def segment_node_(root, G_, fd):  # sum surrounding link values to define connec
                 if med_val > ave * med_rdn:
                     Val += med_val; periVal += med_val
                     Rdn += med_rdn; periRdn += med_rdn
-                    new_perimeter = set(new_perimeter+_perimeter)
+                    new_perimeter = list(set(new_perimeter+_perimeter))
                     # merge mediated _graph in graph:
-                    val+=_val; rdn+=_rdn; node_ = set(node_+_node_); perimeter = set(perimeter+_perimeter)
+                    val+=_val; rdn+=_rdn; node_ = list(set(node_+_node_)); perimeter = list(set(perimeter+_perimeter))
                 else:
-                    new_perimeter = set(new_perimeter + link)  # for re-evaluation?
+                    new_perimeter = list(set(new_perimeter + [link]))  # for re-evaluation? (use consistent structure of list because we can't concatenate dict with list)
             # if links per node_link_: evaluate for inclusion in perimeter as a group?
             # k = node.i; graph_[k][1] += periVal; graph_[k][2] += periRdn
             # not updated:
             i = G.i; graph_[i][1] = Val; graph_[i][2] = Rdn
             DVal += Val-_Val; DRdn += Rdn-_Rdn  # update / surround extension, signed
             perimeter[:] = new_perimeter
+        
+        # something is wrong? Right now DVal is increasing in the while loop, and hence causing infinity loop
         if DVal < ave*DRdn:  # even low-Dval extension may be valuable if Rdn decreases?
             break
         _Val,_Rdn = Val,Rdn
@@ -227,7 +239,7 @@ def sum2graph(root, cG_, fd):  # sum node and link params into graph, aggH in ag
         # sum nodes in graph:
         sum_box(graph.box, G.box)
         sum_ptuple(graph.ptuple, G.ptuple)
-        sum_derH(graph.derH, G.derH, base_rdn=1)
+        sum_derHv(graph.derH, G.derH, base_rdn=1)
         sum_aggH(graph.aggH, G.aggH, base_rdn=1)
         sum_Hts(graph.valHt, graph.rdnHt, graph.maxHt, G.valHt, G.rdnHt, G.maxHt)
 
@@ -243,7 +255,7 @@ def sum2graph(root, cG_, fd):  # sum node and link params into graph, aggH in ag
                     Link_ += [derG]
                 mval+=_mval; dval+=_dval; mrdn+=_mrdn; drdn+=_drdn; maxm+=_maxm; maxd+=_maxd
                 sum_subH(subH, [_subH,valt,rdnt,maxt], base_rdn=1, fneg = G is derG.G)  # fneg: reverse link sign
-                sum_box(G.box, derG.G.box if derG._G is G else derG._G.box)
+                sum_box(G.box, derG.G[0].box if derG._G[0] is G else derG._G[0].box)  # derG.G is proto-graph
         # from G links:
         if subH: G.aggH += [subH]
         G.i = i
@@ -342,7 +354,7 @@ def comp_G(link_, link, fd):
     # / PP:
     _derH,derH = _G.derH,G.derH
     if _derH[0] and derH[0]:  # empty in single-node Gs
-        dderH, valt, rdnt, maxt = comp_derH(_derH[0], derH[0], rn=1)
+        dderH, valt, rdnt, maxt = comp_derHv(_derH[0], derH[0], rn=1)
         maxM += maxt[0]; maxD += maxt[0]
         mval,dval = valt; Mval+=dval; Dval+=mval
         Mrdn += rdnt[0]+dval>mval; Drdn += rdnt[1]+dval<=mval
