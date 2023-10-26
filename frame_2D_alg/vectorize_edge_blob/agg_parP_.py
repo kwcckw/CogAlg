@@ -38,15 +38,13 @@ def vectorize_root(blob, verbose):  # vectorization pipeline is 3 composition le
             G_= []
             for i, PP in enumerate(node_):  # convert CPPs to Cgraphs:
                 derH,valt,rdnt = PP.derH,PP.valt,PP.rdnt
-                # convert to ptuple_tv_, not sure:
                 ptuple_tv_ = []; Maxt = [0,0]
-                for mtuple,dtuple in derH:
-                    ptuplet = [mtuple, dtuple]
-                    valt = [sum(mtuple),sum(dtuple)]
-                    rdnt = [sum([ 0 if m>d else 1 for m, d in zip(mtuple, dtuple)]), sum([ 0 if d>m else 1 for m, d in zip(mtuple, dtuple)])]
-                    maxt = [sum([ abs(m) for m in mtuple]), sum([ abs(d) for d in dtuple])]  # not sure, but don't see any other way yet
+                for mtuple,dtuple, Mtuple,Dtuple in derH:
+                    ptuplet = [mtuple,dtuple]
+                    valt = [sum(mtuple),sum(dtuple)]; maxt = [sum(Mtuple),sum(Dtuple)]
+                    rdnt = [sum([0 if m>d else 1 for m,d in zip(mtuple,dtuple)]), sum([0 if d>m else 1 for m,d in zip(mtuple,dtuple)])]
                     ptuple_tv_ += [[ptuplet, valt, rdnt, maxt]]
-                    Maxt[0] += maxt[0]; Maxt[1] += maxt[1] 
+                    Maxt[0] += maxt[0]; Maxt[1] += maxt[1]
                 derH[:] = ptuple_tv_
                 # init aggH is empty:
                 G_ += [Cgraph( ptuple=PP.ptuple, derH=[derH,valt,rdnt,Maxt], valHt=[[valt[0]],[valt[1]]], rdnHt=[[rdnt[0]],[rdnt[1]]],
@@ -167,40 +165,48 @@ def form_graph_t(root, Valt,Rdnt, G_):  # form mgraphs and dgraphs of same-root 
     return graph_t  # root.node_t'node_ -> node_t: incr nested with each agg+?
 
 '''
-graphs add nodes if med_val = (val+_val) * decay > ave: connectivity is aggregate, individual link may be a fluke. 
-this is density-based clustering, but much more subtle than conventional versions.
+Graphs add nodes if med_val = (val+_val) * decay > ave: connectivity is aggregate, individual link may be a fluke. 
+This is density-based clustering, but much more subtle than conventional versions.
+evaluate perimeter: negative or new links
 negative perimeter links may turn positive with increasing mediation: linked node val may grow faster than rdn
-positive links are core, it's density can't decrease, evaluate perimeter: negative or new links
+positive links are core, it's density can't decrease, so they don't change 
 '''
 # tentative
-def segment_node_(root, G_, fd):  # sum surrounding link values to define connected nodes, incrementally mediated
+def segment_node_(root, iG_, fd):  # sum surrounding link values to define connected nodes, incrementally mediated
 
     ave = G_aves[fd]
     graph_ = []
-    # initialize proto-graphs with each node | max, eval perimeter links to add other nodes
-    for G in G_:
-        graph_ += [[G, G.valHt[fd][-1], G.rdnHt[fd][-1], [G], G.link_H[-1]]]
-        # init graph = G,val,rdn,node_, perimeter: negative or new links
-    for G in G_:
-        for link in G.link_H[-1]:  # these are G-external links, not internal as in comp_slice
-            G_link = link.G[0] if isinstance(link.G, list) else link.G  # we need additional checking here because some link's G or _G might be converted in prior fd loop
-            _G_link = link._G[0] if isinstance(link._G, list) else link._G 
-            _G = _G_link if G_link is G else G_link
-            # tentative convert link Gs to proto-graphs:
-            link.G = graph_[G.i]; link._G = graph_[_G.i]
-    _Val,_Rdn = 0,0
+
+    for G in iG_:
+        ival, irdn = sum(G.valHt[fd]), sum(G.rdnHt[fd])  # internal val,rdn
+        nodet = [G, 0,0,ival,irdn]  # node, val,rdn, ival,irdn, perimeter: negative or new links
+        perimeter = []
+        for link in G.link_H[-1]:
+            link.G if link.G is G else link._G = nodet  # these are G-external links, not internal as in comp_slice
+            '''  not sure:
+            G_link = link.G[0] if isinstance(link.G, list) else link.G  # G or _G might be converted in prior fd loop
+            _G_link = link._G[0] if isinstance(link._G, list) else link._G '''
+            perimeter += [link]
+        nodet += [perimeter]
+        grapht = [[nodet], 0,0,ival,irdn, copy(perimeter)]  # nodet_, Val,Rdn, iVal,iRdn, Perimeter
+        G.root_t[fd] = grapht
+        graph_ += [grapht]  # separate node_ += [nodet] for parallelization?
+
+    _Val, _Rdn = 0,0
     # eval incr mediated links, sum perimeter Vals, append node_, while significant Val update:
     while True:
-        DVal,DRdn, Val,Rdn = 0,1,0,1  # init rdn as 1? Else ave might be scaled with 0
+        DVal,DRdn, Val,Rdn = 0,0,0,0
         # update surround per graph:
         for graph in graph_:
-            G, val, rdn, node_, perimeter = graph
+            node_, val,rdn, ival,irdn, perimeter = graph  # ival,irdn are currently not used
             new_perimeter = []
             periVal, periRdn = 0,0
             for link in perimeter:
-                _graph = link.G if link._G is G else link._G
-                _G,_val,_rdn,_node_,_perimeter = _graph
-                if _G not in G_ or _G in node_: continue
+                # tentative:
+                _nodet = link.G[0].root[fd] if link._G[0].root[fd] is graph else link._G[0].root[fd]
+                _node,_val,_rdn, _ival,_irdn,_perimeter = _nodet
+                # not sure:
+                if _node not in iG_ or _nodet in node_: continue
                 # use relative link vals only:
                 try: decay = link.valt[fd]/link.maxt[fd]  # link decay coef: m|d / max, base self/same
                 except ZeroDivisionError: decay = 1
@@ -210,19 +216,19 @@ def segment_node_(root, G_, fd):  # sum surrounding link values to define connec
                 if med_val > ave * med_rdn:
                     Val += med_val; periVal += med_val
                     Rdn += med_rdn; periRdn += med_rdn
-                    new_perimeter = list(set(new_perimeter+_perimeter))
                     # merge mediated _graph in graph:
-                    val+=_val; rdn+=_rdn; node_ = list(set(node_+_node_)); perimeter = list(set(perimeter+_perimeter))
+                    val+=_val; rdn+=_rdn; node_ = list(set(node_+_node.root[fd][0]))  # _node_
+                    perimeter = list(set(perimeter+_perimeter))
+                    new_perimeter = list(set(new_perimeter + _perimeter))
                 else:
-                    new_perimeter = list(set(new_perimeter + [link]))  # for re-evaluation? (use consistent structure of list because we can't concatenate dict with list)
+                    new_perimeter = list(set(new_perimeter + [link]))  # negative link for reevaluation
             # if links per node_link_: evaluate for inclusion in perimeter as a group?
             # k = node.i; graph_[k][1] += periVal; graph_[k][2] += periRdn
             # not updated:
             i = G.i; graph_[i][1] = Val; graph_[i][2] = Rdn
             DVal += Val-_Val; DRdn += Rdn-_Rdn  # update / surround extension, signed
             perimeter[:] = new_perimeter
-        
-        # something is wrong? Right now DVal is increasing in the while loop, and hence causing infinity loop
+
         if DVal < ave*DRdn:  # even low-Dval extension may be valuable if Rdn decreases?
             break
         _Val,_Rdn = Val,Rdn
@@ -233,7 +239,7 @@ def segment_node_(root, G_, fd):  # sum surrounding link values to define connec
 def sum2graph(root, cG_, fd):  # sum node and link params into graph, aggH in agg+ or player in sub+
 
     graph = Cgraph(root=root, fd=fd, L=len(cG_))  # n nodes, transplant both node roots
-    SubH = [[],[0,0],[1,1],[0,0]]; maxM,maxD, Mval,Dval, Mrdn,Drdn = 0,0, 0,0, 0,0
+    SubH = [[],[0,0],[1,1],[0,0]]; maxM,maxD, Mval,Dval, Mrdn,Drdn = 0,0,0,0,0,0
     Link_= []
     for i, G in enumerate(cG_[3]):
         # sum nodes in graph:
@@ -264,6 +270,7 @@ def sum2graph(root, cG_, fd):  # sum node and link params into graph, aggH in ag
         G.root[fd] = graph  # replace cG_
         graph.node_t += [G]  # converted to node_t by feedback
     # + link layer:
+    graph.link_ = Link_  # use in sub_recursion, as with PPs, no link_H?
     graph.valHt[0]+=[Mval]; graph.valHt[1]+=[Dval]; graph.rdnHt[0]+=[Mrdn]; graph.rdnHt[1]+=[Drdn]
     graph.maxHt[0]+=[maxM]; graph.maxHt[1]+=[maxD]
 
