@@ -2,7 +2,7 @@ import numpy as np
 from copy import deepcopy, copy
 from itertools import zip_longest
 from collections import deque, defaultdict
-from .classes import Cgraph, CderG, CPP
+from .classes import Cgraph, CderG, CPP, CEdge
 from .filters import ave_L, ave_dangle, ave, ave_distance, G_aves, ave_Gm, ave_Gd, ave_dI, ave_G, ave_M, ave_Ma
 from .slice_edge import slice_edge, comp_angle
 from .comp_slice import comp_P_, comp_ptuple, sum_ptuple, comp_derH, sum_derH, sum_dertuple, match_func
@@ -29,8 +29,12 @@ Then combine graph with alt_graphs?
 
 def vectorize_root(blob, verbose):  # vectorization pipeline is 3 composition levels of cross-comp,clustering:
 
-    edge, adj_Pt_ = slice_edge(blob, verbose)  # lateral kernel cross-comp -> P clustering
-    comp_P_(edge, adj_Pt_)  # vertical, lateral-overlap P cross-comp -> PP clustering
+    slice_edge(blob, verbose)  # lateral kernel cross-comp -> P clustering
+
+    # temporary
+    edge = CEdge(blob=blob, node_=blob.P_)
+    
+    comp_P_(edge, blob.P_link_)  # vertical, lateral-overlap P cross-comp -> PP clustering
     # PP cross-comp -> discontinuous graph clustering:
     for fd in 0,1:
         node_ = edge.node_[fd]  # always PP_t
@@ -182,31 +186,38 @@ def segment_node_(root, iG_, fd):  # sum surrounding link values to define conne
         nodet = [G, 0,0,ival,irdn]  # node, val,rdn, ival,irdn, perimeter: negative or new links
         perimeter = []
         for link in G.link_H[-1]:
-            link.G if link.G is G else link._G = nodet  # these are G-external links, not internal as in comp_slice
-            '''  not sure:
-            G_link = link.G[0] if isinstance(link.G, list) else link.G  # G or _G might be converted in prior fd loop
-            _G_link = link._G[0] if isinstance(link._G, list) else link._G '''
+            # don't see a better way on the section below yet
+            # since link is bidiectional, we only need to update it from G, _G will be updated in their loop
+            if not isinstance(link.G, list):  # not updated to nodet yet
+                if link.G is G: link.G = nodet    
+            else:
+                if link.G is not nodet: link.G = nodet  # update nodet from fd=0 to nodet in fd=1     
+            if not isinstance(link._G, list):  # not updated to nodet yet
+                if link._G is G: link._G = nodet    
+            else:
+                if link._G is not nodet: link._G = nodet  # update nodet from fd=0 to nodet in fd=1     
+            # these are G-external links, not internal as in comp_slice
             perimeter += [link]
         nodet += [perimeter]
         grapht = [[nodet], 0,0,ival,irdn, copy(perimeter)]  # nodet_, Val,Rdn, iVal,iRdn, Perimeter
-        G.root_t[fd] = grapht
+        G.root[fd] = grapht
         graph_ += [grapht]  # separate node_ += [nodet] for parallelization?
 
     _Val, _Rdn = 0,0
     # eval incr mediated links, sum perimeter Vals, append node_, while significant Val update:
     while True:
-        DVal,DRdn, Val,Rdn = 0,0,0,0
+        # i checked and if DRdn = 0,  if DVal < ave*DRdn is false and if med_val evaluation is false, this is causing endless loop
+        DVal,DRdn,Val,Rdn = 0,1,0,0
         # update surround per graph:
-        for graph in graph_:
-            node_, val,rdn, ival,irdn, perimeter = graph  # ival,irdn are currently not used
+        for grapht in graph_:
+            nodet_, val,rdn, ival,irdn, perimeter = grapht  # ival,irdn are currently not used
             new_perimeter = []
             periVal, periRdn = 0,0
             for link in perimeter:
                 # tentative:
-                _nodet = link.G[0].root[fd] if link._G[0].root[fd] is graph else link._G[0].root[fd]
+                _nodet = link.G if link._G in nodet_ else link._G  # why use root? root is grapht?
+                if _nodet not in [nodet for grapht in graph_ for nodet in grapht[0]] or _nodet in nodet_: continue
                 _node,_val,_rdn, _ival,_irdn,_perimeter = _nodet
-                # not sure:
-                if _node not in iG_ or _nodet in node_: continue
                 # use relative link vals only:
                 try: decay = link.valt[fd]/link.maxt[fd]  # link decay coef: m|d / max, base self/same
                 except ZeroDivisionError: decay = 1
@@ -217,17 +228,15 @@ def segment_node_(root, iG_, fd):  # sum surrounding link values to define conne
                     Val += med_val; periVal += med_val
                     Rdn += med_rdn; periRdn += med_rdn
                     # merge mediated _graph in graph:
-                    val+=_val; rdn+=_rdn; node_ = list(set(node_+_node.root[fd][0]))  # _node_
+                    val+=_val; rdn+=_rdn; nodet_ = list(set(nodet_+_nodet[0].root[fd][0]))  # _node_
                     perimeter = list(set(perimeter+_perimeter))
                     new_perimeter = list(set(new_perimeter + _perimeter))
                 else:
                     new_perimeter = list(set(new_perimeter + [link]))  # negative link for reevaluation
             # if links per node_link_: evaluate for inclusion in perimeter as a group?
             # k = node.i; graph_[k][1] += periVal; graph_[k][2] += periRdn
-            # not updated:
-            i = G.i; graph_[i][1] = Val; graph_[i][2] = Rdn
+            grapht[1] = periVal; grapht[2] = periRdn
             DVal += Val-_Val; DRdn += Rdn-_Rdn  # update / surround extension, signed
-            perimeter[:] = new_perimeter
 
         if DVal < ave*DRdn:  # even low-Dval extension may be valuable if Rdn decreases?
             break
@@ -352,7 +361,7 @@ def comp_G(link_, link, fd):
     _G, G = link._G, link.G
     # keep separate P ptuple and PP derH, empty derH in single-P G, + empty aggH in single-PP G:
     # / P:
-    mtuple, dtuple, Mtuple, Dtuple = comp_ptuple(_G.ptuple, G.ptuple, rn=1, fagg=1)
+    mtuple, dtuple, Mtuple, Dtuple = comp_ptuple(_G.ptuple, G.ptuple, rn=1)
     maxm, maxd = sum(Mtuple), sum(Dtuple)
     mval, dval = sum(mtuple), sum(abs(d) for d in dtuple)  # mval is signed, m=-min in comp x sign
     mrdn = dval>mval; drdn = dval<=mval

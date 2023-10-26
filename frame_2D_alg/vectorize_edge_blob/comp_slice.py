@@ -43,10 +43,10 @@ def comp_P(link_,_P, P, rn, fd=1, derP=None):  #  derP if der+, reused as S if r
         mval,dval = valt[:2]; mrdn,drdn = rdnt  # exclude maxv
 
     else:  # rng+: add derH
-        mtuple,dtuple = comp_ptuple(_P.ptuple, P.ptuple, rn)
+        mtuple,dtuple, Mtuple, Dtuple = comp_ptuple(_P.ptuple, P.ptuple, rn)
         mval = sum(mtuple); dval = sum(dtuple)
         mrdn = 1+(dval>mval); drdn = 1+(1-(dval>mval))  # or rdn = Dval/Mval?
-        derP = CderP(derH=[[mtuple,dtuple]], valt=[mval,dval], rdnt=[mrdn,drdn], P=P,_P=_P, S=derP)
+        derP = CderP(derH=[[mtuple,dtuple, Mtuple, Dtuple]], valt=[mval,dval], rdnt=[mrdn,drdn], P=P,_P=_P, S=derP)
 
     if mval > aveP*mrdn or dval > aveP*drdn:
         link_ += [derP]
@@ -189,9 +189,10 @@ def sum_derH(T, t, base_rdn, fneg=0):  # derH is a list of layers or sub-layers,
         Rdnt[i] += rdnt[i] + base_rdn
     DerH[:] = [
         # sum der layers, dertuple is mtuple | dtuple, fneg*i: for dtuple only:
-        [ sum_dertuple(Mtuple, mtuple, fneg=0), sum_dertuple(Dtuple, dtuple, fneg=fneg) ]
-        for [mtuple,dtuple],[Mtuple,Dtuple]
-        in zip_longest(DerH, derH, fillvalue=[[[0,0,0,0,0,0],[0,0,0,0,0,0]],[[0,0,0,0,0,0],[0,0,0,0,0,0]]])  # mtuple,dtuple,Mtuple,Dtuple
+        [sum_dertuple(Mtuple, mtuple, fneg=0), sum_dertuple(Dtuple, dtuple, fneg=0),
+         sum_dertuple(maxMtuple, maxmtuple, fneg=0), sum_dertuple(maxDtuple, maxdtuple, fneg=0)] 
+          for [Mtuple, Dtuple,maxMtuple, maxDtuple],[mtuple,dtuple, maxmtuple,maxdtuple]
+        in zip_longest(DerH, derH, fillvalue=[[0,0,0,0,0,0],[0,0,0,0,0,0],[0,0,0,0,0,0],[0,0,0,0,0,0]])  # mtuple,dtuple,Mtuple,Dtuple
     ]
 
 def sum_ptuple(Ptuple, ptuple, fneg=0):
@@ -220,7 +221,7 @@ def comp_derH(_derH, derH, rn):  # derH is a list of der layers or sub-layers, e
         mrdn = dval > mval; drdn = dval < mval
         Mval+=mval; Dval+=dval; Mrdn+=mrdn; Drdn+=drdn
 
-        dderH += [[mtuple,dtuple],[Mtuple,Dtuple]]
+        dderH += [[mtuple,dtuple,Mtuple,Dtuple]]
 
     return dderH, [Mval,Dval], [Mrdn,Drdn]  # new derLayer,= 1/2 combined derH
 

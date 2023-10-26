@@ -110,8 +110,8 @@ class Cgraph(ClusterStructure):  # params of single-fork node_ cluster per pplay
     valHt : list = z([[0],[0]])  # Ht of link vals,rdns, decays / fder:
     maxHt : list = z([[0],[0]])
     rdnHt : list = z([[1],[1]])
-    root : object = None  # ini graph, replace with mroot,droot for nodes in sub+, nest in up-forking tree: root_ fork / agg+
-    link_ : list = z([])  # added per sub+, as in comp_slice
+    root : list = z([None,None])  # ini graph, replace with mroot,droot for nodes in sub+, nest in up-forking tree: root_ fork / agg+
+    link_H : list = z([])  # added per sub+, as in comp_slice
     node_ : list = z([])  # init G_-> Gm_,Gd_, nested in down-forking tree: node_ fork/ sub+
     fback_t : list = z([[],[]])  # maps to node_t: feedback [[aggH,valt,rdnt]] per node fork
     L : int = 0 # len base node_; from internal links:
