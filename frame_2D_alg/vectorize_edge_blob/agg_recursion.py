@@ -46,7 +46,23 @@ def vectorize_root(blob, verbose):  # vectorization pipeline is 3 composition le
             G_= []
             for PP in node_:  # convert CPPs to Cgraphs:
                 derH,valt,rdnt = PP.derH,PP.valt,PP.rdnt  # init aggH is empty:
-                for dderH in derH: dderH += [[0,0]]  # add maxt
+                ptuple_tv_ = []
+                for i, (mtuple,dtuple) in enumerate(derH):
+                    ptuplet = [mtuple,dtuple]
+                    valt = [sum(mtuple),sum(dtuple)]
+                    maxt = [0,0]
+                    for link in PP.link_:  # we will need link_H in PP to get max val for each derLay
+                        _P, P = link._P, link.P
+                        rn = len(_P.dert_)/len(P.dert_)
+                        for _par, par in zip(_P.ptuple, P.ptuple):
+                            if isinstance(_par, tuple): _par = np.hypot(*_par)  # angle   
+                            if isinstance(par, tuple): par = np.hypot(*par)  # angle   
+                            npar = par * rn 
+                            maxt[0] += max(abs(_par),abs(npar))
+                            maxt[1] += abs(_par)+abs(npar)
+                    rdnt = [sum([0 if m>d else 1 for m,d in zip(mtuple,dtuple)]), sum([0 if d>m else 1 for m,d in zip(mtuple,dtuple)])]
+                    ptuple_tv_ += [[ptuplet, valt, rdnt, maxt]]
+                derH[:] = ptuple_tv_
                 G_ += [Cgraph( ptuple=PP.ptuple, derH=[derH,valt,rdnt,[0,0]], valHt=[[valt[0]],[valt[1]]], rdnHt=[[rdnt[0]],[rdnt[1]]],
                                L=PP.ptuple[-1], box=[(PP.box[0]+PP.box[1])/2, (PP.box[2]+PP.box[3])/2] + list(PP.box))]
             node_ = G_
@@ -141,16 +157,16 @@ def segment_node_(root, iG_, Glink__, fd):  # local external Glink_ per G is for
                 # use relative link vals only:
                 try: decay = link.valt[fd]/link.maxt[fd]  # link decay coef: m|d / max, base self/same
                 except ZeroDivisionError: decay = 1
-                med_val = (rdn+_val) * decay; periVal += med_val
+                med_val = (val+_val) * decay; periVal += med_val
                 med_rdn = (rdn+_rdn) * decay; periRdn += med_rdn
                 # tentative:
-                if med_val > ave * med_rdn:
+                if med_val > ave * med_rdn:  # med val is from Gt[1], but we init it as 0, so it will be never true here, so val should be init with ival?
                     inVal += med_val; Gt[1] += med_val; _Gt[1] += med_val  # also sum per node
                     inRdn += med_rdn; Gt[2] += med_val; _Gt[2] += med_val
                     # merge _graph in graph:
                     _nodet_,_Val,_Vdn,_iVal,_iRdn,_Perimeter = _G.root[fd]
                     Val += _val; rdn += _rdn
-                    nodet_ = list(set(nodet_ + _Gt[0].root[fd][0]))  # append _nodet_
+                    nodet_ = nodet_ + [__nodet for __nodet in _Gt[0].root[fd][0] if __nodet not in nodet_]  # append _nodet_ (set can't be used on list)
                     Perimeter = list(set(Perimeter + _Perimeter))
                     new_Perimeter = list(set(new_Perimeter + _Perimeter))
                 else:  # negative link, for reevaluation:
@@ -160,7 +176,7 @@ def segment_node_(root, iG_, Glink__, fd):  # local external Glink_ per G is for
             grapht[1] += inVal; tVal += inVal  # if eval per graph: DVal += inVal -_inVal?
             grapht[2] += inRdn; tRdn += inRdn  # DRdn += inRdn -_inRdn
 
-        if (tVal-_tVal) < ave * (tRdn-_tRdn):  # even low-Val extension may be valuable if Rdn decreases?
+        if (tVal-_tVal) <= ave * (tRdn-_tRdn):  # even low-Val extension may be valuable if Rdn decreases?
             break
         _tVal,_tRdn = tVal,_tRdn
 
@@ -225,7 +241,7 @@ def comp_G_(G_, fd=0, oG_=None, fin=1):  # cross-comp in G_ if fin, else comp be
 
     Mval,Dval, Mrdn,Drdn = 0,0,0,0
     if not fd:  # cross-comp all Gs in extended rng, add proto-links regardless of prior links
-        for G in G_: G.link_ += [[]]  # add empty link layer, may remove if stays empty
+        for G in G_: G.link_H += [[]]  # add empty link layer, may remove if stays empty
 
         if oG_:
             for oG in oG_: oG.link_ += [[]]
@@ -241,15 +257,16 @@ def comp_G_(G_, fd=0, oG_=None, fin=1):  # cross-comp in G_ if fin, else comp be
                     # * ((sum(_G.valHt[fd]) + sum(G.valHt[fd])) / (2*sum(G_aves)))):  # comp rng *= rel value of comparands?
                     G.compared_ += [_G]; _G.compared_ += [G]
                     # old:
-                    G.link_ += [CderG( G=G, _G=_G, S=distance, A=[dy,dx])]  # proto-links, in G only
+                    G.link_H[-1] += [CderG( G=G, _G=_G, S=distance, A=[dy,dx])]  # proto-links, in G only
     link__ = []
     for G in G_:
         link_ = []
-        for link in G.link_:  # if fd: follow links, comp old derH, else follow proto-links, form new derH
+        for link in G.link_H[-1]:  # if fd: follow links, comp old derH, else follow proto-links, form new derH
             if fd and link.valt[1] < G_aves[1]*link.rdnt[1]: continue  # maybe weak after rdn incr?
             mval,dval, mrdn,drdn = comp_G(link_,link, fd)
             Mval+=mval;Dval+=dval; Mrdn+=mrdn;Drdn+=drdn
-        link__ = [link_]
+            link_  += [link]  # we need to pack link too
+        link__ += [link_]
         '''
         same comp for cis and alt components?
         for _cG, cG in ((_G, G), (_G.alt_Graph, G.alt_Graph)):
@@ -345,7 +362,7 @@ def comp_derHv(_derH, derH, rn):  # derH is a list of der layers or sub-layers, 
     for _lay, lay in zip_longest(_derH, derH, fillvalue=[]):  # compare common lower der layers | sublayers in derHs
         if _lay and lay:  # also if lower-layers match: Mval > ave * Mrdn?
             # compare dtuples only, mtuples are for evaluation:
-            mtuple, dtuple, Mtuple, Dtuple = comp_dtuple(_lay[0][1], lay[0][1], rn)
+            mtuple, dtuple, Mtuple, Dtuple = comp_dtuple(_lay[0][1], lay[0][1], rn, fagg=1)
             # sum params:
             mval = sum(mtuple); dval = sum(abs(d) for d in dtuple)
             mrdn = dval > mval; drdn = dval < mval
