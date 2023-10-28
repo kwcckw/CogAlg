@@ -47,32 +47,55 @@ def vectorize_root(blob, verbose):  # vectorization pipeline is 3 composition le
             for PP in node_:  # convert CPPs to Cgraphs:
                 derH,valt,rdnt = PP.derH,PP.valt,PP.rdnt  # init aggH is empty:
                 ptuple_tv_ = []
-                for mtuple,dtuple in derH:
-                    ptuple_tv_ += [  # [ptuplet, valt, maxt, rdnt]:
-                     [[mtuple,dtuple], [sum(mtuple),sum(dtuple)], reform_maxt(PP),
-                      [sum([0 if m>d else 1 for m,d in zip(mtuple,dtuple)]), sum([0 if d>m else 1 for m,d in zip(mtuple,dtuple)])]
+                maxt_ = reform_maxt(PP, fd)
+                for (mtuple,dtuple), maxt in zip(derH, maxt_):
+                    ptuple_tv_ += [  # [ptuplet, valt, rdnt, maxt]:
+                     [[mtuple,dtuple], [sum(mtuple),sum(dtuple)],
+                      [sum([0 if m>d else 1 for m,d in zip(mtuple,dtuple)]), sum([0 if d>m else 1 for m,d in zip(mtuple,dtuple)])],
+                      maxt,
                      ]]
                 derH[:] = ptuple_tv_
                 G_ += [Cgraph( ptuple=PP.ptuple, derH=[derH,valt,rdnt,[0,0]], valHt=[[valt[0]],[valt[1]]], rdnHt=[[rdnt[0]],[rdnt[1]]],
                                L=PP.ptuple[-1], box=[(PP.box[0]+PP.box[1])/2, (PP.box[2]+PP.box[3])/2] + list(PP.box))]
+            
+            # create and pack derG into root
+            for PP in node_:
+                for link in PP.link_:
+                    G = G_[node_.index(link.P.root_t[fd])]  # some link'P's root not in node_, is it due to sub+ where 
+                    _G = G_[node_.index(link._P.root_t[fd])]
+                    derG = CderG( G=G, _G=_G, S=link.S, A=link.A) 
+                    edge.link_ += [derG]
+                    
             node_ = G_
             edge.valHt[0][0] = edge.valt[0]; edge.rdnHt[0][0] = edge.rdnt[0]  # copy
             agg_recursion(None, edge, node_, fd=0)  # edge.node_ = graph_t, micro and macro recursive
 
 # draft, need to go through sub_PPs:
-def reform_maxt(PP):
-    maxt = [0,0]
+def reform_maxt(PP, fd):
+    
+    maxt_ = [] 
+    PP_ = [PP]
 
-    for link in PP.link_:  # need to go through sub_PPs to get lower-der comparand pairs and find their max
-        _P, P = link._P, link.P
-        rn = len(_P.dert_) / len(P.dert_)
-        for _par, par in zip(_P.ptuple, P.ptuple):
-            if isinstance(_par, tuple): _par = np.hypot(*_par)  # angle
-            if isinstance(par, tuple): par = np.hypot(*par)  # angle
-            npar = par * rn
-            maxt[0] += max(abs(_par), abs(npar))
-            maxt[1] += abs(_par) + abs(npar)
-    return maxt
+    while True:
+        new_PP_ = []; maxt = [0,0]
+        for PP in PP_:
+            for link in PP.link_:  # need to go through sub_PPs to get lower-der comparand pairs and find their max
+                _P, P = link._P, link.P
+                rn = len(_P.dert_) / len(P.dert_)
+                for _par, par in zip(_P.ptuple, P.ptuple):
+                    if isinstance(_par, tuple): _par = np.hypot(*_par)  # angle
+                    if isinstance(par, tuple): par = np.hypot(*par)  # angle
+                    npar = par * rn
+                    maxt[0] += max(abs(_par), abs(npar))
+                    maxt[1] += abs(_par) + abs(npar)
+            # add deeper layer sub_PPs
+            if PP.node_ and isinstance(PP.node_[0], CPP): new_PP_ += PP.node_
+        maxt_ += [maxt]
+
+        if not new_PP_: break  # break from checking
+        else:           PP_ = new_PP_  # for next layer checking
+    
+    return maxt_
 
 def agg_recursion(rroot, root, G_, fd):  # compositional agg+|sub+ recursion in root graph, clustering G_
 
