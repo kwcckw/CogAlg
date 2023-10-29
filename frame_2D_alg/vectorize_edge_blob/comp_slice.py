@@ -31,7 +31,7 @@ def comp_P_(edge, adj_Pt_):  # cross-comp P_ in edge: high-gradient blob, sliced
     for _P, P in adj_Pt_:  # scan, comp contiguously uplinked Ps, rn: relative weight of comparand
         comp_P(edge.link_, _P,P, rn=len(_P.dert_)/len(P.dert_), fd=0)
 
-    form_PP_t(edge, P_= edge.node_, base_rdn=2)
+    form_PP_t(edge, edge.link_, P_= edge.node_, base_rdn=2)
     # replace edge.node_ with PP_t, may be nested by sub+
 
 def comp_P(link_, _P, P, rn, fd=1, derP=None):  #  derP if der+, reused as S if rng+
@@ -83,13 +83,13 @@ def comp_der(ilink_):  # keep same Ps and links, increment link derH, then P der
     return link_
 
 
-def form_PP_t(root, P_, base_rdn):  # form PPs of derP.valt[fd] + connected Ps val
+def form_PP_t(root, root_link_, P_, base_rdn):  # form PPs of derP.valt[fd] + connected Ps val
 
     PP_t = [[],[]]
     for fd in 0,1:
         link_map = defaultdict(list)
         derP_ = []
-        for derP in root.link_:
+        for derP in root_link_:
             if derP.valt[fd] > P_aves[fd] * derP.rdnt[fd]:
                 link_map[derP.P] += [derP._P]  # keys:Ps, vals: linked _P_s, up and down
                 link_map[derP._P] += [derP.P]
@@ -111,8 +111,9 @@ def form_PP_t(root, P_, base_rdn):  # form PPs of derP.valt[fd] + connected Ps v
             PP = sum2PP(root, cP_, derP_, base_rdn, fd)
             PP_t[fd] += [PP]  # no if Val > PP_aves[fd] * Rdn:
 
-    for fd in 0,1:  # after form_PP_t -> P.root_t
-        sub_recursion(root, PP, fd)  # eval rng+/ PPm or der+/ PPd
+    for fd, PP_ in enumerate(PP_t):  # after form_PP_t -> P.root_t
+        for PP in PP_:  # we miss out this loop?
+            sub_recursion(root, PP, fd)  # eval rng+/ PPm or der+/ PPd
         if root.fback_t and root.fback_t[fd]:
             feedback(root, fd)  # after sub+ in all nodes, no single node feedback up multiple layers
 
@@ -122,7 +123,6 @@ def form_PP_t(root, P_, base_rdn):  # form PPs of derP.valt[fd] + connected Ps v
 def sum2PP(root, P_, derP_, base_rdn, fd):  # sum links in Ps and Ps in PP
 
     PP = CPP(fd=fd, root=root, node_=P_, rng=root.rng +(1-fd))  # initial PP.box = (inf,inf,-inf,-inf)
-
     # accum derP:
     for derP in derP_:
         if derP.P not in P_ or derP._P not in P_: continue
@@ -132,6 +132,7 @@ def sum2PP(root, P_, derP_, base_rdn, fd):  # sum links in Ps and Ps in PP
         _P = derP._P  # bilateral accum downlink, reverse d signs:
         sum_derH([_P.derH,_P.valt,_P.rdnt], [derH,valt,rdnt], base_rdn, fneg=1)  # downlink
         PP.link_ += [derP]
+        derP.roott[fd] = PP
     # accum P:
     celly_,cellx_ = [],[]
     for P in P_:
@@ -160,10 +161,10 @@ def sub_recursion(root, PP, fd):  # called in form_PP_, evaluate PP for rng+ and
     rng = PP.rng+(1-fd)
     if PP.valt[fd] * (len(P_)-1)*rng <= PP_aves[fd] * PP.rdnt[fd]: return    # val*len*rng: sum ave matches, - fixed PP costs?
     # der+|rng+:
-    PP.link_ = comp_der(PP.link_) if fd else comp_rng(PP.link_, rng)  # same else new links
+    link_ = comp_der(PP.link_) if fd else comp_rng(PP.link_, rng)  # same else new links
     PP.rdnt[fd] += (PP.valt[fd] - PP_aves[fd] * PP.rdnt[fd]) > (PP.valt[1-fd] - PP_aves[1-fd] * PP.rdnt[1-fd])
     for P in P_: P.root_t = [None,None]  # fill with sub_PPm_,sub_PPd_ between nodes and PP:
-    form_PP_t(PP, P_, base_rdn=PP.rdnt[fd])
+    form_PP_t(PP, link_, P_, base_rdn=PP.rdnt[fd])
     root.fback_t[fd] += [[PP.derH, PP.valt, PP.rdnt]]  # merge in root.fback_t fork, else need fback_tree
 
 
