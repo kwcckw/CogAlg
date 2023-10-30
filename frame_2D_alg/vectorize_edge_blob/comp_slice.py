@@ -95,7 +95,7 @@ def form_PP_t(root, root_link_, P_, base_rdn):  # form PPs of derP.valt[fd] + co
                 link_map[derP._P] += [derP.P]
                 derP_ += [derP]     # filtered derP
         for P in P_:
-            if P.root_t[fd]: continue  # skip if already packed in some PP
+            if P.roott[fd]: continue  # skip if already packed in some PP
             cP_ = [P]  # clustered Ps and their val,rdn s
             perimeter = deque(link_map[P])  # recycle with breadth-first search, up and down:
             while perimeter:
@@ -111,9 +111,10 @@ def form_PP_t(root, root_link_, P_, base_rdn):  # form PPs of derP.valt[fd] + co
             PP = sum2PP(root, cP_, derP_, base_rdn, fd)
             PP_t[fd] += [PP]  # no if Val > PP_aves[fd] * Rdn:
 
-    for fd, PP_ in enumerate(PP_t):  # after form_PP_t -> P.root_t
-        for PP in PP_:  # we miss out this loop?
-            sub_recursion(root, PP, fd)  # eval rng+/ PPm or der+/ PPd
+    for fd, PP_ in enumerate(PP_t):  # after form_PP_t -> P.roott
+        for PP in PP_:
+            if PP.valt[fd]* (len(P_)-1)*PP.rng > PP_aves[fd]* PP.rdnt[fd]:  # val*len*rng: sum ave matches - fixed PP cost
+                sub_recursion(root, PP, fd)  # eval rng+/PPm or der+/PPd
         if root.fback_t and root.fback_t[fd]:
             feedback(root, fd)  # after sub+ in all nodes, no single node feedback up multiple layers
 
@@ -126,24 +127,23 @@ def sum2PP(root, P_, derP_, base_rdn, fd):  # sum links in Ps and Ps in PP
     # accum derP:
     for derP in derP_:
         if derP.P not in P_ or derP._P not in P_: continue
+        if fd: derP.roott[fd] = PP
         derH,valt,rdnt = derP.derH,derP.valt,derP.rdnt
-        P = derP.P
-        sum_derH([P.derH,P.valt,P.rdnt], [derH,valt,rdnt], base_rdn, fneg=0)  # uplink
+        P = derP.P  # uplink
+        sum_derH([P.derH,P.valt,P.rdnt], [derH,valt,rdnt], base_rdn, fneg=0)
         _P = derP._P  # bilateral accum downlink, reverse d signs:
         sum_derH([_P.derH,_P.valt,_P.rdnt], [derH,valt,rdnt], base_rdn, fneg=1)  # downlink
         PP.link_ += [derP]
-        derP.roott[fd] = PP
     # accum P:
     celly_,cellx_ = [],[]
     for P in P_:
-        P.root_t[fd] = PP
+        if not fd: P.roott[fd] = PP
         sum_ptuple(PP.ptuple, P.ptuple)  # accum ptuple
         for y, x in P.cells:
             PP.box = PP.box.accumulate(y, x)
             celly_ += [y]; cellx_ += [x]
-        # unilateral sum:
-        sum_derH([PP.derH, PP.valt, PP.rdnt], [P.derH, P.valt, P.rdnt], base_rdn)
-
+        sum_derH([PP.derH,PP.valt,PP.rdnt], [P.derH,P.valt,P.rdnt], base_rdn)
+        # unilateral sum
     y0, x0, yn, xn = PP.box
     PP.mask__ = np.zeros((yn-y0, xn-x0), bool)
     celly_ = np.array(celly_); cellx_ = np.array(cellx_)
@@ -159,11 +159,12 @@ def sub_recursion(root, PP, fd):  # called in form_PP_, evaluate PP for rng+ and
 
     P_ = PP.node_  # flat before sub+
     rng = PP.rng+(1-fd)
-    if PP.valt[fd] * (len(P_)-1)*rng <= PP_aves[fd] * PP.rdnt[fd]: return    # val*len*rng: sum ave matches, - fixed PP costs?
-    # der+|rng+:
-    link_ = comp_der(PP.link_) if fd else comp_rng(PP.link_, rng)  # same else new links
+    # der+|rng+: reform old else form new links:
+    link_ = comp_der(PP.link_) if fd else comp_rng(PP.link_, rng)
+
     PP.rdnt[fd] += (PP.valt[fd] - PP_aves[fd] * PP.rdnt[fd]) > (PP.valt[1-fd] - PP_aves[1-fd] * PP.rdnt[1-fd])
-    for P in P_: P.root_t = [None,None]  # fill with sub_PPm_,sub_PPd_ between nodes and PP:
+    for P in P_: P.roott = [None,None]  # fill with sub_PPm_,sub_PPd_ between nodes and PP:
+
     form_PP_t(PP, link_, P_, base_rdn=PP.rdnt[fd])
     root.fback_t[fd] += [[PP.derH, PP.valt, PP.rdnt]]  # merge in root.fback_t fork, else need fback_tree
 
