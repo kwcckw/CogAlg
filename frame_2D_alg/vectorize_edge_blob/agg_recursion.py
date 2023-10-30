@@ -40,8 +40,7 @@ def vectorize_root(blob, verbose):  # vectorization pipeline is 3 composition le
     edge, adj_Pt_ = slice_edge(blob, verbose)  # lateral kernel cross-comp -> P clustering
     comp_P_(edge, adj_Pt_)  # vertical, lateral-overlap P cross-comp -> PP clustering
     # PP cross-comp -> discontinuous graph clustering:
-    for fd in 0,1:
-        node_ = edge.node_
+    for fd, node_ in enumerate(edge.node_):  # edge.node_ is always a node_t
         if edge.valt[fd] * (len(node_)-1)*(edge.rng+1) <= G_aves[fd] * edge.rdnt[fd]:   continue
         G_= []
         for PP in node_:  # always PP_t, convert CPPs to Cgraphs:
@@ -56,8 +55,13 @@ def vectorize_root(blob, verbose):  # vectorization pipeline is 3 composition le
                            L=PP.ptuple[-1], box=[(PP.box[0]+PP.box[1])/2, (PP.box[2]+PP.box[3])/2] + list(PP.box))]
         for PP in node_:
             for link in PP.link_:  # convert link_ to derGs:
-                G = G_[node_.index(link.roott[fd])]  # some link'P's root not in node_, is it due to sub+ where
-                _G = G_[node_.index(link.roott[fd])]
+                if fd:
+                    G = G_[node_.index(link.roott[fd])]  # some link'P's root not in node_, is it due to sub+ where
+                    _G = G_[node_.index(link.roott[fd])]
+                else:
+                    # P.roott may updated to deeper roots, so it's either we have root_Ht or pack root into links in rng+ too
+                    G = G_[node_.index(link.P.roott[fd])]  # some link'P's root not in node_, is it due to sub+ where
+                    _G = G_[node_.index(link._P.roott[fd])]
                 derG = CderG( G=G, _G=_G, S=link.S, A=link.A)
                 edge.link_ += [derG]
         node_ = G_
@@ -77,7 +81,7 @@ def reform_maxtuplet_(node_t_):   # form maxt per derLayer in PP.derH, from PP.n
         maxtuplet = [[0,0,0,0,0,0],[0,0,0,0,0,0]]  # current layer, 0 per param type
         for node_t in node_t_:
             # check for CP
-            if node_t[0] and isinstance(node_t[0],list) and (isinstance(node_t[0][0],CPP) or (node_t[1] and isinstance(node_t[1][0],CPP))):
+            if node_t[0] and isinstance(node_t[0],list) :
                 # PP.node_ is [subPPm_,subPPd_], unpack each
                 for fd, PP_ in enumerate(node_t):  # [sub_PPm_,sub_PPd_]
                     for PP in PP_:
@@ -90,8 +94,7 @@ def reform_maxtuplet_(node_t_):   # form maxt per derLayer in PP.derH, from PP.n
                                     maxm = max(abs(_par),abs(par*rn)); maxd = abs(_par)+abs(par*rn)
                                 maxtuplet[0][i] += maxm
                                 maxtuplet[1][i] += maxd
-                                if PP.node_[0] and isinstance(PP.node_[0],list) and (isinstance(PP.node_[0][0],CPP)
-                                    or (PP.node_[1] and isinstance(PP.node_[1][0],CPP))):
+                                if PP.node_[0] and isinstance(PP.node_[0],list):
                                     sub_node_t_ += [PP.node_]
         maxtuplet_ += [maxtuplet]  # pack current layer maxt
 
