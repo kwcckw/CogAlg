@@ -70,6 +70,7 @@ class CderP(ClusterStructure):  # tuple of derivatives in P link: binary tree wi
     derH : list = z([])  # [[[mtuple,dtuple],[mval,dval],[mrdn,drdn]]], single ptuplet in rng+
     valt : list = z([0,0])
     rdnt : list = z([1,1])  # mrdn + uprdn if branch overlap?
+    dect_ : list = z([[0,0]])  # decays, each element in dect corresponding to each element in derH
     roott : list = z([None, None])  # PPdm,PPdd that contain this derP
     _P : object = None  # higher comparand
     P : object = None  # lower comparand

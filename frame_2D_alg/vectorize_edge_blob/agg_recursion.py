@@ -45,10 +45,12 @@ def vectorize_root(blob, verbose):  # vectorization pipeline is 3 composition le
         G_= []
         for PP in node_:  # convert PP_t CPPs to Cgraphs:
             derH,valt,rdnt = PP.derH,PP.valt,PP.rdnt
-            derH[:] = [  # convert to ptuple_tv_: [[ptuplet, maxtuplet, valt, rdnt]]:
-                [[mtuple,dtuple], maxtuplet, [sum(mtuple),sum(dtuple)],
-                 [sum([0 if m>d else 1 for m,d in zip(mtuple,dtuple)]), sum([0 if d > m else 1 for m, d in zip(mtuple,dtuple)])]
-                ] for (mtuple,dtuple), maxtuplet in zip(derH, reform_maxtuplet_([PP.node_]))
+            derH[:] = [  # convert to ptuple_tv_: [[ptuplet, valt, rdnt, dect]]:
+                [[mtuple,dtuple], 
+                 [sum(mtuple),sum(dtuple)],
+                 [sum([0 if m>d else 1 for m,d in zip(mtuple,dtuple)]), sum([0 if d > m else 1 for m, d in zip(mtuple,dtuple)])],
+                 dect,
+                ] for (mtuple,dtuple), dect in zip(derH, reform_dect_([PP.node_]))
             ]
             G_ += [Cgraph( ptuple=PP.ptuple, derH=[derH,valt,rdnt,[0,0]], valHt=[[valt[0]],[valt[1]]], rdnHt=[[rdnt[0]],[rdnt[1]]],
                            L=PP.ptuple[-1], box=[(PP.box[0]+PP.box[1])/2, (PP.box[2]+PP.box[3])/2] + list(PP.box))]
@@ -56,44 +58,29 @@ def vectorize_root(blob, verbose):  # vectorization pipeline is 3 composition le
         edge.valHt[0][0] = edge.valt[0]; edge.rdnHt[0][0] = edge.rdnt[0]  # copy
         agg_recursion(None, edge, node_, fd=0)  # edge.node_ = graph_t, micro and macro recursive
 
-# draft
-def reform_maxtuplet_(node_t_):  # form maxtuplet per derLayer in PP.derH from PP.node_
 
-    maxtuplet_ = [[[0,0,0,0,0,0],[0,0,0,0,0,0]]]  # maps to derH, default 0der from P.ptuple
-    S_ = [0]  # accum count per derLay, derivation+ / composition+, sum from nesting layers:
+# for top layer, should be per fd?
+def reform_dect_(node_t_):
 
+    Dect_ = []
+    
     while True:  # unpack lower node_ layer
         sub_node_t_ = []  # subPP_t or P_ per higher PP
+        dect_ = []  # current layer decays
         for node_t in node_t_:
-            if node_t[0] and isinstance(node_t[0],list):  # node_t is not P_
+            if node_t[0] and isinstance(node_t[0],list) and (isinstance(node_t[0][0],CPP) or (node_t[1] and isinstance(node_t[1][0],CPP))):  # node_t is not P_
                 for fd, PP_ in enumerate(node_t):  # [sub_PPm_,sub_PPd_]
                     for PP in PP_:
                         for link in PP.link_:  # get lower-der comp pairs and find their max
-                            _P, P = link._P, link.P
-                            rn = len(_P.dert_) / len(P.dert_)
-                            for i, (_par, par) in enumerate(zip(_P.ptuple, P.ptuple)):
-                                if hasattr(par,'__len__'):
-                                    maxm = maxd = 2  # angle
-                                else:
-                                    maxm = max(abs(_par),abs(par*rn)); maxd = abs(_par)+abs(par*rn)
-                                maxtuplet_[0][0][i] += maxm
-                                maxtuplet_[0][1][i] += maxd
-                            S_[0] += 1
-                            for j, (_tuplet, tuplet, maxtuplet) in enumerate( zip_longest(  # loop derLayers bottom-up:
-                                    reversed(_P.derH),reversed(P.derH),reversed(maxtuplet_[1:]),
-                                    fillvalue=[[0,0,0,0,0,0],[0,0,0,0,0,0]])):
-                                for i, (_par, par) in enumerate(zip(_tuplet, tuplet, maxtuplet)):
-                                    maxtuplet[j][0][i] += max(abs(_par),abs(par*rn))  # maxm
-                                    maxtuplet[j][1][i] += abs(_par) + abs(par*rn)  # maxd
-                                S_[j] += 1 if S_[j] else S_.append(1)
-
-                                if PP.node_[0] and isinstance(PP.node_[0],list):
-                                    sub_node_t_ += [PP.node_]
+                            dect_[:] = [[Dect[0]+dect[0],Dect[1] + dect[1]] for Dect, dect in zip_longest(dect_, link.dect_, fillvalue=[0,0])]  # merge 
+                        if PP.node_[0] and isinstance(PP.node_[0],list) and (isinstance(PP.node_[0][0],CPP) or (PP.node_[1] and isinstance(PP.node_[1][0],CPP))):
+                            sub_node_t_ += [PP.node_]
+        Dect_ += dect_  # merge dects
         if sub_node_t_:
             node_t_ = sub_node_t_  # deeper nesting layer
         else:
             break
-    return maxtuplet_, S_  # maps to derH
+    return dect_
 
 
 def agg_recursion(rroot, root, G_, fd):  # compositional agg+|sub+ recursion in root graph, clustering G_
@@ -106,8 +93,8 @@ def agg_recursion(rroot, root, G_, fd):  # compositional agg+|sub+ recursion in 
             mval,dval, mrdn,drdn = comp_G(link_, link._G,link.G, fd)
             Mval+=mval; Dval+=dval; Mrdn+=mrdn; Drdn+=drdn
     else:
-        for i, _node in enumerate(root.node_):  # original node_ for rng+
-            for node in root.node_[i+1:]:
+        for i, _node in enumerate(G_):  # original node_ for rng+
+            for node in G_[i+1:]:
                 dy = _node.box[0]-node.box[0]; dx = _node.box[1]-node.box[1]; distance = np.hypot(dy,dx)
                 if distance < root.rng:  # <ave Euclidean distance between G centers
                     # or rng * (_G_val+G_val) / ave*2?
@@ -298,29 +285,43 @@ def comp_G(link_, _G, G, fd):
     # keep separate P ptuple and PP derH, empty derH in single-P G, + empty aggH in single-PP G
     # / P:
     mtuple, dtuple, Mtuple, Dtuple = comp_ptuple(_G.ptuple, G.ptuple, rn=1, fagg=1)
-    for ptuple, maxtuple, Dec in zip((mtuple,Mtuple),(dtuple,Dtuple),(Mdec,Ddec)):
+    for i, (ptuple, maxtuple) in enumerate(zip((mtuple,Mtuple),(dtuple,Dtuple))):
         for par,max in zip(ptuple,maxtuple):
-            try: Dec += par/max  # link decay coef: m|d / max, base self/same
+            try: 
+                # angle
+                if hasattr(par, "__len__"):
+                    Mdec += 2; Ddec += 2
+                # scalar
+                else:
+                    if i: Ddec += par/max  # link decay coef: m|d / max, base self/same
+                    else: Mdec += par/max
             except ZeroDivisionError: pass
     mval, dval = sum(mtuple), sum(abs(d) for d in dtuple)  # mval is signed, m=-min in comp x sign
     mrdn = dval>mval; drdn = dval<=mval
-    derLay0 = [[mtuple,dtuple],[mval,dval],[mrdn,drdn]]
+    derLay0 = [[mtuple,dtuple],[mval,dval],[mrdn,drdn], [Mdec, Ddec]]
     Mval+=mval; Dval+=dval; Mrdn += mrdn; Drdn += drdn
     # / PP:
     _derH,derH = _G.derH,G.derH
     if _derH[0] and derH[0]:  # empty in single-node Gs
         dderH, valt, rdnt = comp_derHv(_derH[0], derH[0], rn=1)
         # or pack this in comp_derHv?:
-        for ((mtuple,dtuple),(Mtuple,Dtuple)),_,_ in dderH:
-            for ptuple, maxtuple, Dec in zip((mtuple,Mtuple),(dtuple,Dtuple),(Mdec,Ddec)):
-                for par, max in zip(ptuple, maxtuple):
-                    try: Dec += par/max  # link decay coef: m|d / max, base self/same
+        for ptuplet, valt,_rdnt, Ptuplet in dderH:
+            for i, (ptuple, maxtuple) in enumerate(zip((mtuple,Mtuple),(dtuple,Dtuple))):
+                for par,max in zip(ptuple,maxtuple):
+                    try: 
+                        # angle
+                        if hasattr(par, "__len__"):
+                            Mdec += 2; Ddec += 2
+                        # scalar
+                        else:
+                            if i: Ddec += par/max  # link decay coef: m|d / max, base self/same
+                            else: Mdec += par/max
                     except ZeroDivisionError: pass
         mval,dval = valt; Mval+=dval; Dval+=mval
         Mrdn += rdnt[0]+dval>mval; Drdn += rdnt[1]+dval<=mval
     else:
         dderH = []
-    derH = [[derLay0]+dderH, [Mval,Dval], [Mrdn,Drdn]]  # appendleft derLay0 from comp_ptuple
+    derH = [[derLay0]+dderH, [Mval,Dval], [Mrdn,Drdn], [Mdec, Ddec]]  # appendleft derLay0 from comp_ptuple
     der_ext = comp_ext([_G.L,_G.S,_G.A],[G.L,G.S,G.A], [Mval,Dval],[Mrdn,Drdn])
     SubH = [der_ext, derH]  # two init layers of SubH, higher layers added by comp_aggH:
     # / G:
@@ -378,7 +379,7 @@ def comp_subHv(_subH, subH, rn):
 def comp_derHv(_derH, derH, rn):  # derH is a list of der layers or sub-layers, each is ptuple_tv
 
     dderH = []  # or not-missing comparand: xor?
-    Mval,Dval, Mrdn,Drdn, maxM,maxD = 0,0,1,1,0,0
+    Mval,Dval, Mrdn,Drdn = 0,0,1,1
 
     for _lay, lay in zip(_derH, derH):  # compare common lower der layers | sublayers in derHs, if lower-layers match?
         # compare dtuples only, mtuples are for evaluation:
@@ -386,12 +387,10 @@ def comp_derHv(_derH, derH, rn):  # derH is a list of der layers or sub-layers, 
         # sum params:
         mval = sum(mtuple); dval = sum(abs(d) for d in dtuple)
         mrdn = dval > mval; drdn = dval < mval
-        maxm = sum(Mtuple); maxd = sum(Dtuple)
-        Mval+=mval; Dval+=dval; Mrdn+=mrdn; Drdn+=drdn; maxM+= maxm; maxD+= maxd
-        ptuple_tv = [[mtuple,dtuple],[mval,dval],[mrdn,drdn],[maxm,maxd]]  # or += [Mtuple,Dtuple] for future comp?
-        dderH += [ptuple_tv]  # derLay
+        Mval+=mval; Dval+=dval; Mrdn+=mrdn; Drdn+=drdn
+        ptuple_tv = [[mtuple,dtuple],[mval,dval],[mrdn,drdn],[Mtuple,Dtuple]]  
 
-    return dderH, [Mval,Dval],[Mrdn,Drdn],[maxM,maxD]  # new derLayer,= 1/2 combined derH
+    return dderH, [Mval,Dval],[Mrdn,Drdn]  # new derLayer,= 1/2 combined derH
 
 
 def sum_aggHv(AggH, aggH, base_rdn):
@@ -435,7 +434,7 @@ def sum_derHv(T, t, base_rdn, fneg=0):  # derH is a list of layers or sub-layers
         in zip_longest(DerH, derH, fillvalue=[([0,0,0,0,0,0],[0,0,0,0,0,0]), ([0,0,0,0,0,0],[0,0,0,0,0,0]), (0,0),(0,0)])
     ]
 
-def comp_ext(_ext, ext, Valt, Rdnt, Maxt):  # comp ds:
+def comp_ext(_ext, ext, Valt, Rdnt):  # comp ds:
 
     (_L,_S,_A),(L,S,A) = _ext,ext
     dL = _L-L
@@ -454,8 +453,11 @@ def comp_ext(_ext, ext, Valt, Rdnt, Maxt):  # comp ds:
     Rdnt[0] += d>m; Rdnt[1] += d<=m
     _aL = abs(_L); aL = abs(L)
     _aS = abs(_S); aS = abs(S)
+    
+    '''
     Maxt[0] += max(aL,_aL) + max(aS,_aS) + max_mA
     Maxt[1] += _aL+aL + _aS+aS + max_dA
+    '''
 
     return [[mL,mS,mA], [dL,dS,dA]]
 
