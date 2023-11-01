@@ -39,23 +39,14 @@ def comp_P(link_, _P, P, rn, fd=1, derP=None):  #  derP if der+, reused as S if 
 
     if fd:  # der+: extend in-link derH, in sub+ only
         dderH, valt, rdnt = comp_derH(_P.derH, P.derH, rn)  # += fork rdn
-        dect_ = []  # this should be layered too
-        for derlay, _derH, derH, in zip(dderH, _P.derH, P.derH):
-            dect= [0,0]
-            dect[0] += sum(derlay[0]/np.maximum([_par for _par in _derH[1]],[par for par in derH[1]]))
-            dect[1] += sum(derlay[1]/np.add([abs(_par) for _par in _derH[1]],[abs(par) for par in derH[1]]))
-            dect_ += [dect]
-        
-        derP = CderP(derH = derP.derH+dderH, valt=valt, rdnt=rdnt, dect_=dect_, P=P,_P=_P, S=derP.S)  # dderH valt,rdnt for new link
+        derP = CderP(derH = derP.derH+dderH, valt=valt, rdnt=rdnt, P=P,_P=_P, S=derP.S)  # dderH valt,rdnt for new link
         mval,dval = valt; mrdn,drdn = rdnt
 
     else:  # rng+: add derH
         mtuple,dtuple = comp_ptuple(_P.ptuple, P.ptuple, rn)
         mval = sum(mtuple); dval = sum(dtuple)
         mrdn = 1+(dval>mval); drdn = 1+(1-(dval>mval))  # or rdn = Dval/Mval?
-        mdec = sum(mtuple/np.maximum([2 if hasattr(_par, "__len__") else _par for _par in _P.ptuple],[2 if hasattr(par, "__len__") else par for par in P.ptuple] ))  # np.maximum for element wise max
-        ddec = sum(dtuple/np.add([2 if hasattr(_par, "__len__") else abs(_par) for _par in _P.ptuple],[2 if hasattr(par, "__len__") else abs(par) for par in P.ptuple] ))  # np.add for element wise addition
-        derP = CderP( derH=[[mtuple,dtuple]], valt=[mval,dval], rdnt=[mrdn,drdn], dect_=[[mdec, ddec]],P=P,_P=_P, S=derP)
+        derP = CderP( derH=[[mtuple,dtuple]], valt=[mval,dval], rdnt=[mrdn,drdn],P=P,_P=_P, S=derP)
 
     if mval > aveP*mrdn or dval > aveP*drdn:
         link_ += [derP]

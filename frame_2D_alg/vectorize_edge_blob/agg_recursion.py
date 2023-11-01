@@ -70,8 +70,32 @@ def reform_dect_(node_t_):
                 for fd, PP_ in enumerate(node_t):  # node_t is [sub_PPm_,sub_PPd_]
                     for PP in PP_:
                         for link in PP.link_:  # get lower-der comp pairs and find their max
-                            # compute dect, it's not in link yet:
-                            dect_[:] = [[Dect[0]+dect[0],Dect[1] + dect[1]] for Dect, dect in zip_longest(dect_, link.dect_, fillvalue=[0,0])]  # merge
+                            link_dect_ = []  # current link's decay  
+                            _P, P = link._P, link.P
+                             
+                            # layer 0: ptuple's decays
+                            dect0 = [0,0]
+                            for _par, par in zip(_P.ptuple, P.ptuple): 
+                                if hasattr(par, "__len__"): dect0[fd] += 2  # angle
+                                else:  # scalar
+                                    if _par == 0 and par == 0: continue  # prevent zero division
+                                    if fd:  dect0[fd] += par/(abs(_par)+abs(par))  # link decay coef: m|d / max, base self/same
+                                    else:   dect0[fd] += par/max(_par, par)  
+                            link_dect_ += [dect0]
+                                    
+                            # layer1 and above: derHs' decays
+                            for (_mtuple, _dtuple), (mtuple, dtuple) in zip(_P.derH, P.derH):
+                                dect = [0,0]
+                                for fd, (_ptuple, ptuple) in enumerate(zip((_mtuple, _dtuple),  (mtuple, dtuple))): 
+                                    for _par, par in zip(_ptuple, ptuple):
+                                        if _par == 0 and par == 0: continue
+                                        if fd:  dect[fd] += par/ (abs(_par)+abs(par)) 
+                                        else:   dect[fd] += par/max(_par, par)  
+                                link_dect_ += [dect]  # pack new layer of decays
+ 
+                            # sum current link's decays into current layer decays
+                            dect_[:] = [[Dect[0]+dect[0],Dect[1] + dect[1]] for Dect, dect in zip_longest(dect_, link_dect_, fillvalue=[0,0])]  # merge
+                         
                         if PP.node_[0] and isinstance(PP.node_[0],list) and (isinstance(PP.node_[0][0],CPP) or (PP.node_[1] and isinstance(PP.node_[1][0],CPP))):
                             sub_node_t_ += [PP.node_]
         Dect_ += dect_  # merge dects
@@ -79,7 +103,7 @@ def reform_dect_(node_t_):
             node_t_ = sub_node_t_  # deeper nesting layer
         else:
             break
-    return dect_
+    return Dect_
 
 
 def agg_recursion(rroot, root, G_, fd):  # compositional agg+|sub+ recursion in root graph, clustering G_
@@ -289,8 +313,8 @@ def comp_G(link_, _G, G, fd):
     dect = [0,0]
     for fd, (ptuple,Ptuple) in enumerate(zip((mtuple,Mtuple),(dtuple,Dtuple))):
         for par,max in zip(ptuple,Ptuple):
-            try: [dect][fd] += par/max  # link decay coef: m|d / max, base self/same
-            except ZeroDivisionError: [dect][fd] += 1
+            try: dect[fd] += par/max  # link decay coef: m|d / max, base self/same
+            except ZeroDivisionError: dect[fd] += 1
     derLay0 = [[mtuple,dtuple],[mval,dval],[mrdn,drdn],dect]
     Mval+=mval; Dval+=dval; Mrdn+=mrdn; Drdn+=drdn; Mdec+=dect[0]; Ddec+=dect[1]
     # / PP:
@@ -370,8 +394,8 @@ def comp_derHv(_derH, derH, rn):  # derH is a list of der layers or sub-layers, 
         dect = [0,0]
         for fd, (ptuple,Ptuple) in enumerate(zip((mtuple,Mtuple),(dtuple,Dtuple))):
             for par,max in zip(ptuple,Ptuple):
-                try: [dect][fd] += par/max  # link decay coef: m|d / max, base self/same
-                except ZeroDivisionError: [dect][fd] += 1
+                try: dect[fd] += par/max  # link decay coef: m|d / max, base self/same
+                except ZeroDivisionError: dect[fd] += 1  # why +1 here?
         ptuple_tv = [[mtuple,dtuple],[mval,dval],[mrdn,drdn],dect]
         Mval+=mval; Dval+=dval; Mrdn+=mrdn; Drdn+=drdn; Mdec+=dect[0]; Ddec+=dect[1]
 
@@ -439,8 +463,8 @@ def comp_ext(_ext, ext, Valt, Rdnt, Dect):  # comp ds:
     _aL = abs(_L); aL = abs(L)
     _aS = abs(_S); aS = abs(S)
 
-    Dect[0] += mL/ max(aL,_aL) + mS/ max(aS,_aS) + mA/ max_mA
-    Dect[1] += dL/(_aL+aL) + dS/(_aS+aS) + dA/ max_dA
+    Dect[0] += mL/ aL,_aL + mS/ max(aS,_aS, 1) + mA/ max(max_mA, 1)  # S, A may empty
+    Dect[1] += dL/(_aL+aL) + dS/max(_aS+aS, 1) + dA/ max(max_dA, 1)
 
     return [[mL,mS,mA], [dL,dS,dA]]
 
