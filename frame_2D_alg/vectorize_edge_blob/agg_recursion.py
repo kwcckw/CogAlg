@@ -63,40 +63,47 @@ def vectorize_root(blob, verbose):  # vectorization pipeline is 3 composition le
 
 def reform_dect_(node_t_):
 
-    Dect_ = [[0,0]]  # default 1st layer dect from ptuple
-    S_ = [0]  # accum count per derLay
+    Dect_ = []  # default 1st layer dect from ptuple
+    S_ = []  # accum count per derLay
 
     while True:  # unpack lower node_ layer
         sub_node_t_ = []  # subPP_t or P_ per higher PP
+        dect_, s_ = [[0,0]], [0]  # decays, S per layer
         for node_t in node_t_:
             if node_t[0] and isinstance(node_t[0],list) and (isinstance(node_t[0][0],CPP) or (node_t[1] and isinstance(node_t[1][0],CPP))):
                 for fd, PP_ in enumerate(node_t):  # node_t is [sub_PPm_,sub_PPd_]
                     for PP in PP_:
                         for link in PP.link_:  # get lower-der comp pairs and find their max
                             _P, P = link._P, link.P
-                            S_[0] += 6  # 6 pars
+                            s_[0] += 6  # 6 pars
                             for _par, par in zip(_P.ptuple, P.ptuple):
                                 if hasattr(par,"__len__"):
-                                    Dect_[0][0]+=2; Dect_[0][1]+=2  # angle
+                                    dect_[0][0]+=2; dect_[0][1]+=2  # angle
                                 else:  # scalar
                                     if _par and par:  # link decay coef: m|d / max, base self/same
-                                        Dect_[0][0] += par/ (abs(_par)+abs(par)); Dect_[0][1] += par/ max(_par,par)
+                                        dect_[0][0] += par/ (abs(_par)+abs(par)); dect_[0][1] += par/ max(_par,par)
                                     else:
-                                        Dect_[0][0] += 1; Dect_[0][1] += 1  # prevent /0
-                            for i, (_tuplet,_tuplet, Dect) in enumerate(zip_longest(_P.derH,P.derH, Dect_[1:], fillvalue=[0,0])):
-                                # loop derLayers bottom-up:
-                                for fd, (_ptuple,ptuple) in enumerate(zip(_tuplet,_tuplet)):
-                                    if len(S_) > i: S_[i] += 6
-                                    else: S_.append(6)  # 6 pars
-                                    for _par, par in zip(_ptuple,ptuple):
-                                        if _par and par:
-                                            if fd: Dect_[i][fd] += par/ max(_par, par)
-                                            else:  Dect_[i][fd] += par/ (abs(_par) + abs(par))
-                                        else:
-                                            Dect_[i][fd] += 1  # prevent /0
+                                        dect_[0][0] += 1; dect_[0][1] += 1  # prevent /0
+                            
+                            for i, (_tuplet,tuplet, Dect) in enumerate(zip_longest(_P.derH,P.derH, dect_[1:], fillvalue=[0,0])):
+                                if (_tuplet != [0,0]) and (tuplet != [0,0]):  # not the filled [0,0]
+                                    if len(dect_)-1 < i: # pack new layer of decay and S
+                                        dect_ += [Dect]  
+                                        s_ += [6] 
+                                    # loop derLayers bottom-up:
+                                    for fd, (_ptuple,ptuple) in enumerate(zip(_tuplet,tuplet)):
+                                        for _par, par in zip(_ptuple,ptuple):
+                                            if _par and par:
+                                                if fd: dect_[i][fd] += par/ max(_par, par)
+                                                else:  dect_[i][fd] += par/ (abs(_par) + abs(par))
+                                            else:
+                                                dect_[i][fd] += 1  # prevent /0
+
                         if PP.node_[0] and isinstance(PP.node_[0],list) and (isinstance(PP.node_[0][0],CPP)
                             or (PP.node_[1] and isinstance(PP.node_[1][0],CPP))):
                             sub_node_t_ += [PP.node_]
+                            
+        if s_[0] != 0: Dect_ += dect_; S_ += s_  # concatenate layers if there's accumulation of dect       
         if sub_node_t_:
             node_t_ = sub_node_t_  # deeper nesting layer
         else:
@@ -463,8 +470,8 @@ def comp_ext(_ext, ext, Valt, Rdnt, Dect):  # comp ds:
     _aL = abs(_L); aL = abs(L)
     _aS = abs(_S); aS = abs(S)
 
-    Dect[0] += mL/ max(aL,_aL) + (mS/ max(aS,_aS)) if aS or _aS else 1 + (mA/ max(max_mA)) if max_mA else 1
-    Dect[1] += dL / (_aL+aL) + (dS / max(_aS+aS)) if aS or _aS else 1 + (dA / max(max_dA)) if max_mA else 1
+    Dect[0] += mL/ max(aL,_aL) + (mS/ max(aS,_aS)) if aS or _aS else 1 + (mA/ max_mA) if max_mA else 1
+    Dect[1] += dL / (_aL+aL) + (dS / max(_aS+aS)) if aS or _aS else 1 + (dA / max_dA) if max_mA else 1
 
     return [[mL,mS,mA], [dL,dS,dA]]
 
