@@ -106,7 +106,7 @@ class Cgraph(ClusterStructure):  # params of single-fork node_ cluster per pplay
 
     fd: int = 0  # graph is defined by m|d value
     ptuple : list = z([0,0,0,0,[0,0],0])  # default from P
-    derH : list = z([[],[],[0,0],[1,1]])  # default from converted PP: [[tuplet,maxtuplet,valt,rdnt]]
+    derH : list = z([[],[0,0],[1,1],[0,0]])  # default from converted PP: [[tuplet,valt,rdnt,dect]]
     aggH : list = z([])  # [[subH,valt,rdnt]], subH: [[derH,valt,rdnt,maxt]]: 2-fork composition layers, -> pP_?
     valHt : list = z([[0],[0]])  # Ht of link vals,rdns, decays / fder:
     rdnHt : list = z([[1],[1]])
@@ -143,4 +143,5 @@ class CderG(ClusterStructure):  # params of single-fork node_ cluster per pplaye
     G: object = None  # comparand
     S : float = 0.0  # sparsity: average distance to link centers
     A : list = z([0,0])  # angle: average dy,dx to link centers
+    roott : list = z([None,None])
     # dir : bool  # direction of comparison if not G0,G1, only needed for comp link?

@@ -102,7 +102,9 @@ def reform_dect_(node_t_):
             node_t_ = sub_node_t_  # deeper nesting layer
         else:
             break
-    return [[Dect[0]/S, Dect[1]/S] for Dect, S in zip(Dect_, S_)]  # normalize by n sum
+
+    # skip when S = 0
+    return [[Dect[0]/S, Dect[1]/S] if S>0 else Dect for Dect, S in zip(Dect_, S_)]  # normalize by n sum
 
 
 def agg_recursion(rroot, root, G_, fd):  # compositional agg+|sub+ recursion in root graph, clustering G_
@@ -178,7 +180,8 @@ def node_connect(iG_,link_,fd):  # sum surround values to define node connectivi
         for link in rim:
             if link.valt[fd] > ave * link.rdnt[fd]:  # skip negative links
                 val+= link.valt[fd]; rdn+= link.rdnt[fd]
-        Gt_ += [G,val,rdn, ival,irdn, rim]  # perimeter: negative or new links, separate termination per node?
+        # we need extra bracket to pack as new element
+        Gt_ += [[G,val,rdn, ival,irdn, rim]]  # perimeter: negative or new links, separate termination per node?
     _tVal, _tRdn = 0,0
 
     while True:  # eval same Gs,links with cumulative mediated values
@@ -246,10 +249,11 @@ def segment_node_(root, Gt_, fd):  # eval rim links with summed surround vals
 def sum2graph(root, cG_, fd):  # sum node and link params into graph, aggH in agg+ or player in sub+
 
     graph = Cgraph(root=root, fd=fd, L=len(cG_))  # n nodes, transplant both node roots
-    SubH = [[],[0,0],[1,1]]
+    SubH = [[],[0,0],[1,1], [0,0]]
     Mval,Dval, Mrdn,Drdn, Mdec,Ddec = 0,0, 1,1, 0,0
     Link_= []
-    for i, (G,link_) in enumerate(cG_[3]):
+    for i, Gt in enumerate(cG_[0]):
+        G,link_ = Gt[0], Gt[5]
         # sum nodes in graph:
         sum_box(graph.box, G.box)
         sum_ptuple(graph.ptuple, G.ptuple)
@@ -270,13 +274,13 @@ def sum2graph(root, cG_, fd):  # sum node and link params into graph, aggH in ag
                     Link_ += [derG]
                 mval+=_mval; dval+=_dval; mrdn+=_mrdn; drdn+=_drdn; mdec+=_mdec; ddec+=_ddec
                 sum_subHv(subH, [_subH,valt,rdnt,dect], base_rdn=1, fneg = G is derG.G)  # fneg: reverse link sign
-                sum_box(G.box, derG.G[0].box if derG._G[0] is G else derG._G[0].box)  # derG.G is proto-graph
+                sum_box(G.box, derG.G.box if derG._G is G else derG._G.box)  # derG.G is proto-graph
         # from G links:
         if subH: G.aggH += [subH]
         G.i = i
         G.valHt[0]+=[mval];G.valHt[1]+=[dval]; G.rdnHt[0]+=[mrdn];G.rdnHt[1]+=[drdn]; G.decHt[0]+=[mdec];G.decHt[1]+=[ddec]
-        # G.root[fd] = graph  # replace cG_
-        graph.node_t += [G]  # converted to node_t by feedback
+        G.root[fd] = graph  # replace cG_  (we need assign root too?)
+        graph.node_ += [G]  # converted to node_t by feedback
     # + link layer:
     graph.link_ = Link_  # use in sub_recursion, as with PPs, no link_?
     graph.valHt[0]+=[Mval];graph.valHt[1]+=[Dval]; graph.rdnHt[0]+=[Mrdn];graph.rdnHt[1]+=[Drdn]; graph.decHt[0]+=[Mdec];graph.decHt[1]+=[Ddec]
@@ -311,8 +315,12 @@ def comp_G(link_, _G, G, fd):
     dect = [0,0]
     for fd, (ptuple,Ptuple) in enumerate(zip((mtuple,Mtuple),(dtuple,Dtuple))):
         for par,max in zip(ptuple,Ptuple):
+            if max == 0: dect[fd] += 1  
+            else:        dect[fd] += par/max  # link decay coef: m|d / max, base self/same
+            '''
             try: dect[fd] += par/max  # link decay coef: m|d / max, base self/same
             except ZeroDivisionError: dect[fd] += 1
+            '''
     derLay0 = [[mtuple,dtuple],[mval,dval],[mrdn,drdn],dect]
     Mval+=mval; Dval+=dval; Mrdn+=mrdn; Drdn+=drdn; Mdec+=dect[0]; Ddec+=dect[1]
     # / PP:
@@ -395,8 +403,12 @@ def comp_derHv(_derH, derH, rn):  # derH is a list of der layers or sub-layers, 
         dect = [0,0]
         for fd, (ptuple,Ptuple) in enumerate(zip((mtuple,Mtuple),(dtuple,Dtuple))):
             for par, max in zip(ptuple, Ptuple):
+                if max == 0: dect[fd] += 1  # why not we use an if loop here?
+                else:        dect[fd] += par/max  # link decay coef: m|d / max, base self/same
+                '''
                 try: dect[fd] += par/max  # link decay coef: m|d / max, base self/same
-                except ZeroDivisionError: dect[fd] += 1
+                except ZeroDivisionError:  dect[fd] += 1
+                '''
         dderH += [[mtuple,dtuple],[mval,dval],[mrdn,drdn],dect]
         Mval+=mval; Dval+=dval; Mrdn+=mrdn; Drdn+=drdn; Mdec+=dect[0]; Ddec+=dect[1]
 
@@ -416,8 +428,11 @@ def sum_aggHv(AggH, aggH, base_rdn):
         else:
             AggH[:] = deepcopy(aggH)
 
-def sum_subHv(SubH, subH, base_rdn, fneg=0):
+def sum_subHv(T, t, base_rdn, fneg=0):
 
+    SubH,Valt,Rdnt,Dect = T; subH,valt,rdnt,dect = t
+    for i in 0,1:
+        Valt[i] += valt[i]; Rdnt[i] += rdnt[i]+base_rdn; Dect[i] += dect[i]
     if SubH:
         for Layer, layer in zip_longest(SubH,subH, fillvalue=[]):
             if layer:
@@ -449,7 +464,11 @@ def comp_ext(_ext, ext, Valt, Rdnt, Dect):  # comp ds:
     dL = _L-L
     dS = _S/_L - S/L
     if isinstance(A,list):
-        mA, dA = comp_angle(_A,A); adA=dA; max_mA = max_dA = .5  # = ave_dangle
+        if any(A) and any(_A): 
+            mA, dA = comp_angle(_A,A); adA=dA
+        else:
+            mA, dA, adA = 0, 0, 0  # if both of them are zeros, we get nan instead of a valid value, so we need to check and update it with another value. Otherwise we will get problem of endless loop with nan value in node_connect later   
+        max_mA = max_dA = .5  # = ave_dangle
     else:
         mA = match_func(_A,A)- ave_dangle; dA = _A-A; adA = abs(dA); _aA=abs(_A); aA=abs(A)
         max_dA = _aA + aA; max_mA = max(_aA, aA)
