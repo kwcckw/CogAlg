@@ -106,6 +106,7 @@ def form_PP_t(root, root_link_, base_rdn):  # form PPs of derP.valt[fd] + connec
                         cP_ += [_P]
                         perimeter += link_map[_P]  # append linked __Ps to extended perimeter of P
                         break   # break to avoid duplicate P
+            # we need evaluation on number of cP_ too? Because if cP is low, we might not have link in PP too
             PP = sum2PP(root, cP_, derP_, base_rdn, fd)
             PP_t[fd] += [PP]  # no if Val > PP_aves[fd] * Rdn:
 
@@ -116,7 +117,8 @@ def form_PP_t(root, root_link_, base_rdn):  # form PPs of derP.valt[fd] + connec
         if root.fback_t and root.fback_t[fd]:
             feedback(root, fd)  # after sub+ in all nodes, no single node feedback up multiple layers
 
-    root.node_ = PP_t  # nested in sub+, add_alt_PPs_?
+    # should be node_t here
+    root.node_t = PP_t  # nested in sub+, add_alt_PPs_?
 
 
 def sum2PP(root, P_, derP_, base_rdn, fd):  # sum links in Ps and Ps in PP
