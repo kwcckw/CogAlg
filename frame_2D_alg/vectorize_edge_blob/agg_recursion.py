@@ -95,6 +95,8 @@ def reform_dect_(node_):
             sub_node_ += PP.node_t[0] + PP.node_t[1]
         if not sub_node_: break
         node_ = sub_node_  # deeper nesting layer
+    
+    # S is still 0 here when there's single PP and that PP has no link
     # decHt:
     return [[mDec/S for mDec,S in zip(Dec_t[0],S_)], [dDec/S for dDec,S in zip(Dec_t[1],S_)]]  # normalize by n sum
 
@@ -131,7 +133,7 @@ def form_graph_t(root, Valt,Rdnt, G_, link_):  # form mgraphs and dgraphs of sam
     for fd in 0,1:
         if Valt[fd] > ave * Rdnt[fd]:  # else no clustering
             Gt_ = node_connect(G_, link_, fd)
-            graph_t += [segment_node_(root, Gt_, fd)]  # add alt_graphs?
+            graph_t += [segment_node_(Gt_, fd)]  # add alt_graphs?
         else:
             graph_t += [[]]  # or G_?
             # eval sub+, not in segment_node_: full roott must be replaced per node within recursion
@@ -139,7 +141,7 @@ def form_graph_t(root, Valt,Rdnt, G_, link_):  # form mgraphs and dgraphs of sam
         root.valHt[fd]+=[0]; root.rdnHt[fd]+=[1]  # remove if stays 0?
 
         for graph in graph_:  # external to agg+ vs internal in comp_slice sub+
-            node_ = graph.node_t  # init flat
+            node_ = graph.node_t[fd]  # init flat
             if sum(graph.valHt[fd]) * (len(node_)-1)*root.rng > G_aves[fd] * sum(graph.rdnHt[fd]):  # eval fd comp_G_ in sub+
                 agg_recursion(root, graph, node_, fd)  # replace node_ with node_t, recursive
             else:  # feedback after graph sub+:
@@ -202,6 +204,7 @@ def segment_node_(Gt_, fd):  # eval rim links with summed surround vals
     igraph_ = []; ave = G_aves[fd]
 
     for Gt in Gt_:
+        # ival, irdn, iVal and iRdn is redundant?
         G,rim,val,rdn,ival,irdn = Gt  # ival,irdn are currently not used
         grapht = [[Gt],copy(rim),val,rdn, ival,irdn]  # nodet_,Rim,Val,Rdn, iVal,iRdn: negative or new links
         G.root[fd] = grapht; igraph_ += [grapht]
@@ -214,7 +217,7 @@ def segment_node_(Gt_, fd):  # eval rim links with summed surround vals
             nodet_,Rim,Val,Rdn, iVal,iRdn = grapht
             # new rim: neg+unknown, and in-graph: positive, values:
             inVal,inRdn = 0,0
-            new_Rim = []  # new or negative
+            new_Rim = []  # new or negative (we didn't pack negative now? should be in else loop of if link.Vt?)
             for link in Rim:
                 if link.Vt[fd] > 0:  # combined net val from node_connect, merge linked graphs:
                     if link.G in grapht[0]: _Gt = Gt_[link._G.i]
@@ -222,7 +225,7 @@ def segment_node_(Gt_, fd):  # eval rim links with summed surround vals
                     if _Gt in nodet_: continue
                     _nodet_,_Rim,_Val,_Rdn,_iVal,_iRdn = _Gt[0].root[fd]
                     Val += _Val; inVal+=_Val;  iVal+=_iVal
-                    Rdn += _Rdn; inRdn+=_Rdn;  iRdn+=_iRdn
+                    Rdn += _Rdn; inRdn+=_Rdn;  iRdn+=_iRdn     
                     nodet_ += [__Gt for __Gt in _Gt[0].root[fd][0] if __Gt not in nodet_]
                     Rim = list(set(Rim + _Rim))
                     new_Rim = list(set(new_Rim + _Rim))
@@ -231,7 +234,7 @@ def segment_node_(Gt_, fd):  # eval rim links with summed surround vals
             grapht[3] += inRdn; tRdn += inRdn  # DRdn += inRdn -_inRdn, signed
             # eval per graph:
             if len(new_Rim) * inVal > ave * inRdn:
-                graph_ += [nodet_,new_Rim,Val,Rdn, iVal,iRdn]  # eval new_Rim of this graph
+                graph_ += [[nodet_,new_Rim,Val,Rdn, iVal,iRdn]]  # eval new_Rim of this graph
 
         if len(graph_) * (tVal-_tVal) <= ave * (tRdn-_tRdn):  # even low-Val extension may be valuable if Rdn decreases?
             break
@@ -241,8 +244,9 @@ def segment_node_(Gt_, fd):  # eval rim links with summed surround vals
     return [sum2graph(graph, fd) for graph in igraph_ if graph[2] > ave * graph[3]]  # Val > ave * Rdn
 
 
-def sum2graph(Gt_, fd):  # sum node and link params into graph, aggH in agg+ or player in sub+
+def sum2graph(grapht, fd):  # sum node and link params into graph, aggH in agg+ or player in sub+
 
+    Gt_,Rim,Val,Rdn, iVal,iRdn  = grapht  
     graph = Cgraph(fd=fd, L=len(Gt_))  # n nodes, transplant both node roots
     SubH = [[],[0,0],[1,1],[0,0]]
     Mval,Dval, Mrdn,Drdn, Mdec,Ddec = 0,0, 1,1, 0,0
@@ -255,7 +259,7 @@ def sum2graph(Gt_, fd):  # sum node and link params into graph, aggH in agg+ or 
         sum_aggHv(graph.aggH, G.aggH, base_rdn=1)
         sum_Hts(graph.valHt,graph.rdnHt,graph.decHt, G.valHt,G.rdnHt,G.decHt)
         # sum unique node links:
-        for derG in Gt[1]:
+        for derG in Rim:
             if derG.valt[fd] > G_aves[fd] * derG.rdnt[fd]:  # sum positive links only
                 _subH = derG.subH
                 (_mval,_dval),(_mrdn,_drdn),(_mdec,_ddec) = valt,rdnt,dect = derG.valt,derG.rdnt,derG.dect
@@ -265,13 +269,14 @@ def sum2graph(Gt_, fd):  # sum node and link params into graph, aggH in agg+ or 
                     Mval+=_mval; Dval+=_dval; Mrdn+=_mrdn; Drdn+=_drdn; Mdec+=_mdec; Ddec+=_ddec
                     graph.A[0] += derG.A[0]; graph.A[1] += derG.A[1]; graph.S += derG.S
                     link_ += [derG]
+        # no higher root per graph now, how should we get G's root?
         G.i = i
         graph.node_t[fd] += [G]  # or converted to node_t by feedback?
         graph.connec_t[fd] += [[Gt[1:]]]  # node connectivity params [rim,val,rdn, ival,irdn]
         # currently not used
     graph.link_ = link_  # use in sub_recursion, as with PPs, no link_?
-    graph.valHt[0]+=[Mval]; graph.valHt[1]+=[Dval]
-    graph.rdnHt[0]+=[Mrdn]; graph.rdnHt[1]+=[Drdn]
+    graph.valHt[0]+=[Mval + (Val if not fd else 0)]; graph.valHt[1]+=[Dval + (Val if fd else 0)]  # add those accumulated valus too?
+    graph.rdnHt[0]+=[Mrdn + (Rdn if not fd else 0)]; graph.rdnHt[1]+=[Drdn + (Rdn if fd else 0)]
     graph.decHt[0]+=[Mdec]; graph.decHt[1]+=[Ddec]
     Y,X,Y0,X0,Yn,Xn = graph.box
     graph.box[:2] = [(Y0+Yn)/2, (X0+Xn)/2]
