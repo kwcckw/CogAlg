@@ -69,6 +69,7 @@ def reform_dect_(node_):
     while True:  # unpack lower node_ layer
         sub_node_ = []  # subPP_
         for PP in node_:
+            # PP.link_ might be empty here when root's link is not empty. In rng+ , if there's single link, there will be no link in PP
             for link in PP.link_:  # get compared Ps and find param maxes
                 _P, P = link._P, link.P
                 S_[0] += 6  # 6 pars
@@ -230,14 +231,16 @@ def segment_node_(root, Gt_, fd):  # eval rim links with summed surround vals
             grapht[3] += inRdn; tRdn += inRdn  # DRdn += inRdn -_inRdn, signed
             # eval per graph:
             if len(new_Rim) * inVal > ave * inRdn:
-                graph_ += [nodet_,new_Rim,Val,Rdn]  # eval new_Rim of this graph
+                # we need extra bracket here to pack them as new element
+                graph_ += [[nodet_,new_Rim,Val,Rdn]]  # eval new_Rim of this graph
 
         if len(graph_) * (tVal-_tVal) <= ave * (tRdn-_tRdn):  # even low-Val extension may be valuable if Rdn decreases?
             break
         _graph_ = graph_
         _tVal,_tRdn = tVal,_tRdn
 
-    return [sum2graph(root, graph, fd) for graph in igraph_ if graph[2] > ave * graph[3]]  # Val > ave * Rdn
+    # parse Gt_ only?
+    return [sum2graph(root, graph[0], fd) for graph in igraph_ if graph[2] > ave * graph[3]]  # Val > ave * Rdn
 
 
 def sum2graph(root, Gt_, fd):  # sum node and link params into graph, aggH in agg+ or player in sub+
@@ -267,7 +270,8 @@ def sum2graph(root, Gt_, fd):  # sum node and link params into graph, aggH in ag
                     link_ += [derG]
         G.i = i
         graph.node_t[fd] += [G]
-        graph.connec_t[fd] += [[Gt[1:]]]  # node connectivity params: rim,val,rdn
+        # the extra bracket is not needed here since Gt[1:] will be a list too
+        graph.connec_t[fd] += [Gt[1:]]  # node connectivity params: rim,val,rdn
 
     graph.link_ = link_  # use in sub_recursion, as with PPs, no link_?
     graph.valHt[0]+=[Mval]; graph.valHt[1]+=[Dval]
@@ -490,8 +494,8 @@ def feedback(root, fd):  # called from form_graph_, append new der layers to roo
     sum_aggHv(root.aggH,AggH, base_rdn=0)
     sum_Hts(root.valHt,root.rdnHt,root.decHt, ValHt,RdnHt,DecHt)  # both forks sum in same root
 
-    if isinstance(root, Cgraph) and root.root:  # root is not CEdge, which has no roots
-        rroot = root.root
+    if isinstance(root, Cgraph) and root.connec_t[fd]:  # root is not CEdge, which has no roots
+        rroot = root.connec_t[fd][0][-1]  # get root from 1st connect [rim,val,rdn,root]
         fd = root.fd  # current node_ fd
         fback_ = rroot.fback_t[fd]
         fback_ += [[AggH, ValHt, RdnHt, DecHt]]
