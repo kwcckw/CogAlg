@@ -69,7 +69,6 @@ def reform_dect_(node_):
     while True:  # unpack lower node_ layer
         sub_node_ = []  # subPP_
         for PP in node_:
-            # PP.link_ might be empty here when root's link is not empty. In rng+ , if there's single link, there will be no link in PP
             for link in PP.link_:  # get compared Ps and find param maxes
                 _P, P = link._P, link.P
                 S_[0] += 6  # 6 pars
@@ -173,7 +172,7 @@ def node_connect(iG_,link_,fd):  # sum surround values to define node connectivi
         Gt_ += [[G, rim,val,rdn]]
     _tVal,_tRdn = 0,0
 
-    while True:  # eval same Gs,links, but with cross-accumulated values
+    while True:  # eval same Gs,links, but with cross-accumulated node connectivity values
         tVal, tRdn = 0,0  # loop totals
         for G,rim,val,rdn in Gt_:
             rim_val, rim_rdn = 0,0
@@ -186,7 +185,7 @@ def node_connect(iG_,link_,fd):  # sum surround values to define node connectivi
                 decay = link.dect[fd]  # node vals * relative link val:
                 linkV = _val * decay; val+=linkV; rim_val+=linkV
                 linkR = _rdn * decay; rdn+=linkR; rim_rdn+=linkR
-                link.Vt[fd] += linkV  # for segment_node_, separately add from _G, no need for link.Rt
+                link.Vt[fd] += linkV  # for segment_node_, separate add from _G, no need for link.Rt
             tVal += rim_val
             tRdn += rim_rdn
         if tVal-_tVal <= ave * (tRdn-_tRdn):
@@ -198,7 +197,7 @@ def node_connect(iG_,link_,fd):  # sum surround values to define node connectivi
 def segment_node_(root, Gt_, fd):  # eval rim links with summed surround vals
     '''
     Graphs add nodes if their (surround connectivity * relative value of link to internal node) is above average
-    It's a density-based clustering, but much more subtle than conventional versions.
+    It's a version of density-based clustering.
     '''
     igraph_ = []; ave = G_aves[fd]
 
@@ -216,10 +215,15 @@ def segment_node_(root, Gt_, fd):  # eval rim links with summed surround vals
             inVal,inRdn = 0,0  # in-graph: positive
             new_Rim = []
             for link in Rim:
-                if link.Vt[fd] > 0:  # combined net val from node_connect, merge linked graphs:
-                    if link.G in grapht[0]: _Gt = Gt_[link._G.i]
-                    else:                   _Gt = Gt_[link.G.i]
-                    if _Gt in nodet_: continue
+                if link.G in grapht[0]:
+                    Gt = Gt_[link.G.i]; _Gt = Gt_[link._G.i]
+                else:
+                    Gt = Gt_[link._G.i]; _Gt = Gt_[link.G.i]
+                if _Gt in nodet_: continue
+                # draft: node match * match of final surround match|diff?
+                comb_val = link.valt[fd] + match_func(Gt[2],_Gt[2])
+                comb_rdn = link.rdnt[fd] + (Gt[3]+_Gt[3]) / 2
+                if comb_val > ave*comb_rdn:
                     _nodet_,_Rim,_Val,_Rdn = _Gt[0].root[fd]
                     Val += _Val; inVal += _Val
                     Rdn += _Rdn; inRdn += _Rdn
@@ -231,7 +235,6 @@ def segment_node_(root, Gt_, fd):  # eval rim links with summed surround vals
             grapht[3] += inRdn; tRdn += inRdn  # DRdn += inRdn -_inRdn, signed
             # eval per graph:
             if len(new_Rim) * inVal > ave * inRdn:
-                # we need extra bracket here to pack them as new element
                 graph_ += [[nodet_,new_Rim,Val,Rdn]]  # eval new_Rim of this graph
 
         if len(graph_) * (tVal-_tVal) <= ave * (tRdn-_tRdn):  # even low-Val extension may be valuable if Rdn decreases?
@@ -239,10 +242,9 @@ def segment_node_(root, Gt_, fd):  # eval rim links with summed surround vals
         _graph_ = graph_
         _tVal,_tRdn = tVal,_tRdn
 
-    # parse Gt_ only?
-    return [sum2graph(root, graph[0], fd) for graph in igraph_ if graph[2] > ave * graph[3]]  # Val > ave * Rdn
+    return [sum2graph(root, graph, fd) for graph in igraph_ if graph[2] > ave * graph[3]]  # Val > ave * Rdn
 
-
+# draft, need to sum Gt params instead?
 def sum2graph(root, Gt_, fd):  # sum node and link params into graph, aggH in agg+ or player in sub+
 
     graph = Cgraph(fd=fd, L=len(Gt_))  # n nodes
@@ -270,7 +272,6 @@ def sum2graph(root, Gt_, fd):  # sum node and link params into graph, aggH in ag
                     link_ += [derG]
         G.i = i
         graph.node_t[fd] += [G]
-        # the extra bracket is not needed here since Gt[1:] will be a list too
         graph.connec_t[fd] += [Gt[1:]]  # node connectivity params: rim,val,rdn
 
     graph.link_ = link_  # use in sub_recursion, as with PPs, no link_?
@@ -496,6 +497,9 @@ def feedback(root, fd):  # called from form_graph_, append new der layers to roo
 
     if isinstance(root, Cgraph) and root.connec_t[fd]:  # root is not CEdge, which has no roots
         rroot = root.connec_t[fd][0][-1]  # get root from 1st connect [rim,val,rdn,root]
+
+    if isinstance(root, Cgraph) and root.root:  # root is not CEdge, which has no roots
+        rroot = root.root
         fd = root.fd  # current node_ fd
         fback_ = rroot.fback_t[fd]
         fback_ += [[AggH, ValHt, RdnHt, DecHt]]
