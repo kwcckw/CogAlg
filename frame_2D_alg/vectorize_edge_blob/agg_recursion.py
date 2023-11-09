@@ -170,8 +170,8 @@ def node_connect(iG_,link_,fd):  # sum surround values to define node connectivi
         valt,rdnt,dect = [0,0],[0,0], [0,0]; rim = copy(link_[G])  # all links that contain G
         for link in rim:
             if link.valt[fd] > ave * link.rdnt[fd]:  # skip negative links
-                for lfd in 0, 1:
-                    valt[lfd] += link.valt[lfd]; rdnt[lfd] += link.rdnt[lfd]; dect[lfd] += link.dect[lfd]  # sum direct link vals
+                for i in 0,1:
+                    valt[i] += link.valt[i]; rdnt[i] += link.rdnt[i]; dect[i] += link.dect[i]  # sum direct link vals
         Gt_ += [[G, rim,valt,rdnt,dect]]
     _tVal,_tRdn = 0,0
 
@@ -186,13 +186,10 @@ def node_connect(iG_,link_,fd):  # sum surround values to define node connectivi
                 _Gt = Gt_[G.i]
                 _G,_rim_,_valt,_rdnt,_dect = _Gt
                 decay = link.dect[fd]  # node vals * relative link val:
-                for lfd in 0, 1:
-                    linkV = _valt[lfd] * decay; valt[lfd]+=linkV 
-                    linkR = _rdnt[lfd] * decay; rdnt[lfd]+=linkR
-                    dect[lfd] += link.dect[lfd] 
-                    if fd == lfd: 
-                        link.Vt[fd] += linkV  # for segment_node_, separate add from _G, no need for link.Rt
-                        rim_val+=linkV; rim_rdn+=linkR
+                for i in 0,1:
+                    linkV = _valt[i] * decay; valt[i]+=linkV; if fd==i: rim_val+=linkV
+                    linkR = _rdnt[i] * decay; rdnt[i]+=linkR; if fd==i: rim_rdn+=linkR
+                    dect[i] += link.dect[i]
             tVal += rim_val
             tRdn += rim_rdn
         if tVal-_tVal <= ave * (tRdn-_tRdn):
@@ -210,12 +207,13 @@ def segment_node_(root, Gt_, fd):  # eval rim links with summed surround vals
 
     for Gt in Gt_:
         G,rim,valt,rdnt,dect = Gt
-        SubH, A, S, Link_ = [[],[0,0],[1,1],[0,0]], [0,0], 0, []
+        subH = [[],[0,0],[1,1],[0,0]]
+        Link_= []; A,S = [0,0],0
         for link in rim:
             if link.valt[fd] > G_aves[fd] * link.rdnt[fd]:
-                sum_subHv(SubH, [link.subH,link.valt,link.rdnt,link.dect], base_rdn=1)
-                Link_ += [link]; A[0] += link.A[0]; A[1] += link.A[1]; S += link.S     
-        grapht = [[Gt],copy(rim),copy(valt),copy(rdnt),copy(dect),A,S,SubH,Link_]  # init nodet_,Rim,Valt,Rdnt,Dect,A,S,SubH,Link_(positive)
+                sum_subHv(subH, [link.subH,link.valt,link.rdnt,link.dect], base_rdn=1)
+                Link_ += [link]; A[0] += link.A[0]; A[1] += link.A[1]; S += link.S
+        grapht = [[Gt],copy(rim),copy(valt),copy(rdnt),copy(dect),A,S, subH,Link_]
         G.root[fd] = grapht; igraph_ += [grapht]
     _tVal,_tRdn = 0,0
     _graph_ = igraph_  # prune while eval node rim links with surround vals for graph inclusion and merge:
@@ -223,7 +221,7 @@ def segment_node_(root, Gt_, fd):  # eval rim links with summed surround vals
         tVal,tRdn = 0,0  # loop totals
         graph_ = []
         for grapht in _graph_:  # extend graph Rim
-            nodet_,Rim,Valt,Rdnt,Dect,A,S,SubH,link_ = grapht
+            nodet_,Rim, Valt,Rdnt,Dect, A,S, subH,link_ = grapht
             inVal,inRdn = 0,0  # in-graph: positive
             new_Rim = []
             for link in Rim:
@@ -232,66 +230,60 @@ def segment_node_(root, Gt_, fd):  # eval rim links with summed surround vals
                 else:
                     Gt = Gt_[link._G.i]; _Gt = Gt_[link.G.i]
                 if _Gt in nodet_: continue
-                # draft: node match * match of final surround match|diff?
+                # node match * surround M|D match: of potential in-graph position?
                 comb_val = link.valt[fd] + match_func(Gt[2][fd],_Gt[2][fd])
-                comb_rdn = link.rdnt[fd] + (Gt[3][fd]+_Gt[3][fd]) / 2
+                comb_rdn = link.rdnt[fd] + (Gt[3][fd] + _Gt[3][fd]) / 2
                 if comb_val > ave*comb_rdn:
-                    # sum link's params
-                    _nodet_,_Rim,_Valt,_Rdnt,_Dect,_A,_S,_SubH,_Link_ = _Gt[0].root[fd]
-                    sum_subHv(SubH, _SubH, base_rdn=1)     # sum subH
-                    A[0] += _A[0]; A[1] += _A[1]; S += _S  # sum A and S
-                    Link_ += _Link_  # merge positive links
-                    for lfd in 0, 1:
-                        Valt[lfd] += _Valt[lfd]; Rdnt[lfd] += _Rdnt[lfd]; Dect[lfd] += _Dect[lfd]
-                    inVal += _Valt[fd]
-                    inRdn += _Rdnt[fd]
+                    # sum links
+                    _nodet_,_Rim,_Valt,_Rdnt,_Dect,_A,_S,_subH,_link_ = _Gt[0].root[fd]
+                    sum_subHv(subH, _subH, base_rdn=1)
+                    A[0] += _A[0]; A[1] += _A[1]; S += _S; link_ += _link_
+                    for i in 0,1:
+                        Valt[i] += _Valt[i]; Rdnt[i] += _Rdnt[i]; Dect[i] += _Dect[i]
+                    inVal += _Valt[fd]; inRdn += _Rdnt[fd]
                     nodet_ += [__Gt for __Gt in _Gt[0].root[fd][0] if __Gt not in nodet_]
                     Rim = list(set(Rim + _Rim))
                     new_Rim = list(set(new_Rim + _Rim))
-            # extend:
-            tVal += inVal  # DVal += inVal -_inVal?  # grapht's val and rdn is already summed while looping Rim?
-            tRdn += inRdn  # DRdn += inRdn -_inRdn, signed
-            # eval per graph:
-            if len(new_Rim) * inVal > ave * inRdn:
-                graph_ += [[nodet_,new_Rim,Valt,Rdnt,Dect,A,S, SubH, Link_]]  # eval new_Rim of this graph
+
+            tVal += inVal; tRdn += inRdn  # signed?
+            if len(new_Rim) * inVal > ave * inRdn:  # eval new_Rim
+                graph_ += [[nodet_,new_Rim,Valt,Rdnt,Dect,A,S, subH, link_]]
 
         if len(graph_) * (tVal-_tVal) <= ave * (tRdn-_tRdn):  # even low-Val extension may be valuable if Rdn decreases?
             break
         _graph_ = graph_
         _tVal,_tRdn = tVal,_tRdn
-
-    for i, graph in enumerate(graph_): 
-        if graph[2][fd] > ave * graph[3][fd]:  # Val > ave * Rdn
-            # or unpack sum2graph here
-            graph_[i] = sum2graph(root, graph, fd)
-
-    return graph_ 
+    # -> Cgraphs if Val > ave * Rdn:
+    return [sum2graph(root, graph, fd) for graph in graph_ if graph[2] > ave * graph[3]]
 
 
 def sum2graph(root, grapht, fd):  # sum node and link params into graph, aggH in agg+ or player in sub+
-    Gt_,Rim,(Mval, Dval),(Mrdn, Drdn),(Mdec, Ddec),A,S,SubH,Link_ = grapht
-    graph = Cgraph(fd=fd, L=len(Gt_),link_=Link_,A=A, S=S)  # n nodes
-    for link in Link_: link.roott[fd] = graph  # update root per link
+
+    Gt_,Rim,(Mval,Dval),(Mrdn,Drdn),(Mdec,Ddec), A,S, subH,Link_ = grapht
+
+    graph = Cgraph(fd=fd, L=len(Gt_),link_=Link_,A=A,S=S)  # n nodes
+    for link in Link_: link.roott[fd] = graph
+    graph.aggH += [subH]
 
     for i, Gt in enumerate(Gt_):
         Gt += [root]  # Gt: [G,rim,valt,rdnt,dect,root]
         G = Gt[0]
-        # or sum links only?
-        sum_box(graph.box, G.box)
-        graph.ptuple += G.ptuple
-        sum_derHv(graph.derH, G.derH, base_rdn=1)
-        sum_aggHv(graph.aggH, G.aggH, base_rdn=1)
         G.i = i
+        sum_box(graph.box, G.box)
         graph.node_t[fd] += [G]
         graph.connec_t[fd] += [Gt[1:]]  # node connectivity params: rim,valt,rdnt,dect
-
-    # add new der
-    graph.aggH += [SubH]
+        if (Mval,Dval)[fd] > ave * (Mrdn,Drdn)[fd]:
+            # redundant to nodes, only link_ params are necessary for Cgraph
+            graph.ptuple += G.ptuple
+            sum_derHv(graph.derH, G.derH, base_rdn=1)
+            sum_aggHv(graph.aggH, G.aggH, base_rdn=1)
+            sum_Hts(graph.valHt,graph.rdnHt,graph.decHt, G.valHt,G.rdnHt,G.decHt)
+    # add new derLay
+    Y,X,Y0,X0,Yn,Xn = graph.box
+    graph.box[:2] = [(Y0+Yn)/2, (X0+Xn)/2]
     graph.valHt[0]+=[Mval]; graph.valHt[1]+=[Dval]
     graph.rdnHt[0]+=[Mrdn]; graph.rdnHt[1]+=[Drdn]
     graph.decHt[0]+=[Mdec]; graph.decHt[1]+=[Ddec]
-    Y,X,Y0,X0,Yn,Xn = graph.box
-    graph.box[:2] = [(Y0+Yn)/2, (X0+Xn)/2]
 
     return graph
 
