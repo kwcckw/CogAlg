@@ -175,9 +175,15 @@ def node_connect(iG_,link_,fd):  # sum surround values to define node connectivi
         Gt_ += [[G, rim,valt,rdnt,dect]]
     _tVal,_tRdn = 0,0
 
+    n = 1
     while True:  # eval same Gs,links, but with cross-accumulated node connectivity values
         tVal, tRdn = 0,0  # loop totals
         for G,rim,valt,rdnt,dect in Gt_:
+            for i in 0,1:
+                valt[i] /= n
+                rdnt[i] /= n
+                dect[i] /= n
+        for G,rim,valt,rdnt,dect in Gt_:       
             rim_val, rim_rdn = 0,0
             for link in rim:
                 if link.valt[fd] < ave * link.rdnt[fd]: continue  # skip negative links
@@ -187,11 +193,15 @@ def node_connect(iG_,link_,fd):  # sum surround values to define node connectivi
                 _G,_rim_,_valt,_rdnt,_dect = _Gt
                 decay = link.dect[fd]  # node vals * relative link val:
                 for i in 0,1:
-                    linkV = _valt[i] * decay; valt[i]+=linkV; if fd==i: rim_val+=linkV
-                    linkR = _rdnt[i] * decay; rdnt[i]+=linkR; if fd==i: rim_rdn+=linkR
+                    linkV = _valt[i] * decay; valt[i]+=linkV;  
+                    linkR = _rdnt[i] * decay; rdnt[i]+=linkR; 
+                    if fd==i:  # if loop can't in a same line, limited by syntax 
+                        rim_rdn+=linkR
+                        rim_val+=linkV
                     dect[i] += link.dect[i]
             tVal += rim_val
             tRdn += rim_rdn
+        n += 1
         if tVal-_tVal <= ave * (tRdn-_tRdn):
             break
         _tVal,_tRdn = tVal,tRdn
@@ -263,7 +273,7 @@ def sum2graph(root, grapht, fd):  # sum node and link params into graph, aggH in
 
     graph = Cgraph(fd=fd, L=len(Gt_),link_=Link_,A=A,S=S)  # n nodes
     for link in Link_: link.roott[fd] = graph
-    graph.aggH += [subH]
+    
 
     for i, Gt in enumerate(Gt_):
         Gt += [root]  # Gt: [G,rim,valt,rdnt,dect,root]
@@ -278,6 +288,7 @@ def sum2graph(root, grapht, fd):  # sum node and link params into graph, aggH in
             sum_derHv(graph.derH, G.derH, base_rdn=1)
             sum_aggHv(graph.aggH, G.aggH, base_rdn=1)
             sum_Hts(graph.valHt,graph.rdnHt,graph.decHt, G.valHt,G.rdnHt,G.decHt)
+    graph.aggH += [subH]  # add new layer of subH after summing G.aggH
     # add new derLay
     Y,X,Y0,X0,Yn,Xn = graph.box
     graph.box[:2] = [(Y0+Yn)/2, (X0+Xn)/2]
@@ -356,7 +367,7 @@ def comp_aggHv(_aggH, aggH, rn):  # no separate ext
     for _lev, lev in zip_longest(_aggH, aggH, fillvalue=[]):  # compare common lower layer|sublayer derHs
         if _lev and lev:  # also if lower-layers match: Mval > ave * Mrdn?
             # compare dsubH only:
-            dsubH, valt,rdnt,dect, s = comp_subHv(_lev, lev, rn)  # no more valt and rdnt in subH now
+            dsubH, valt,rdnt,dect, s = comp_subHv(_lev[0], lev[0], rn)  # skip valt,rdnt and dect
             SubH += dsubH; S += s  # flatten to keep as subH
             Mdec += dect[0]; Ddec += dect[1]
             mval,dval = valt; Mval += mval; Dval += dval
@@ -451,7 +462,7 @@ def comp_ext(_ext, ext, Valt, Rdnt, Dect):  # comp ds:
 
     (_L,_S,_A),(L,S,A) = _ext,ext
     dL = _L-L
-    dS = _S/_L - S/L
+    dS = (_S/_L if _L != 0 else 0) - (S/L if L != 0 else 0)  # L could be 0 if both Ls have a same value
     if isinstance(A,list):
         if any(A) and any(_A):
             mA,dA = comp_angle(_A,A); adA=dA
