@@ -72,10 +72,10 @@ def reform_dect_(node_, link_):
             S_[0] += 6  # 6 pars
             for _par, par in zip(_P.ptuple, P.ptuple):
                 if hasattr(par,"__len__"):
-                    Dec_t[0][0] +=2; Dec_t[1][0] +=2  # angle
+                    Dec_t[0][0] +=1; Dec_t[1][0] +=1  # angle
                 else:  # scalar
                     if _par and par:  # link decay coef: m|d / max, base self/same:
-                        Dec_t[0][0] += par/ (abs(_par)+abs(par)); Dec_t[1][0] += par/ max(_par,par)
+                        Dec_t[0][0] += par/ max(abs(_par),abs(par)); Dec_t[1][0] += par/ (abs(_par)+abs(par))
                     else:
                         Dec_t[0][0] += 1; Dec_t[1][0] += 1  # prevent /0
             for i, (_tuplet,tuplet, mDec,dDec) in enumerate(zip_longest(_P.derH,P.derH, Dec_t[0][1:],Dec_t[1][1:], fillvalue=None)):
@@ -83,8 +83,8 @@ def reform_dect_(node_, link_):
                     mdec,ddec = 0,0
                     for fd,(_ptuple,ptuple) in enumerate(zip(_tuplet,tuplet)):
                         for _par, par in zip(_ptuple,ptuple):
-                            if fd: mdec += par/ max(_par,par) if _par and par else 1  # prevent /0
-                            else:  ddec += par/ (abs(_par)+abs(par)) if _par and par else 1
+                            if fd: ddec += par/ (abs(_par)+abs(par)) if _par and par else 1
+                            else:  mdec += par/ max(abs(_par),abs(par)) if _par and par else 1  # prevent /0
                     if mDec:
                         Dec_t[0][i]+=mdec; Dec_t[1][i]+=ddec; S_[i] += 6  # accum 6 pars
                     else:
@@ -172,16 +172,16 @@ def node_connect(iG_,link_,fd):  # sum surround values to define node connectivi
             if link.valt[fd] > ave * link.rdnt[fd]:  # skip negative links
                 for i in 0,1:
                     valt[i] += link.valt[i]; rdnt[i] += link.rdnt[i]; dect[i] += link.dect[i]  # sum direct link vals
-        _Gt_ += [[G, rim,valt,rdnt,dect, len(rim)]]  # no norm here
+        _Gt_ += [[G, rim,valt,rdnt,dect]]  # no norm here
     _tVal,_tRdn = 0,0
 
     while True:  # eval same Gs,links, but with cross-accumulated node connectivity values
         tVal, tRdn = 0,0  # loop totals
         Gt_ = []
-        for G, rim, ivalt, irdnt, idect, N in _Gt_:
+        for G, rim, ivalt, irdnt, idect in _Gt_:
             valt, rdnt, dect = [0,0],[0,0],[0,0]
             rim_val, rim_rdn = 0,0
-            for n, link in enumerate(rim):
+            for link in rim:
                 if link.valt[fd] < ave * link.rdnt[fd]: continue  # skip negative links
                 _G = link.G if link._G is G else link._G
                 if _G not in iG_: continue
@@ -194,14 +194,7 @@ def node_connect(iG_,link_,fd):  # sum surround values to define node connectivi
                     linkR = _rdnt[i] * decay; rdnt[i]+=linkR
                     if fd==i: rim_rdn+=linkR
                     dect[i] += link.dect[i]
-            if rim:
-                n += 1  # normalize for rim accum to prevent overflow, there's got to be a better way:
-                for i in 0,1:
-                    ivalt[i] = (ivalt[i] + valt[i]/n) / 2
-                    irdnt[i] = (irdnt[i] + rdnt[i]/n) / 2
-                    idect[i] = (idect[i] + dect[i]/n) / 2
-            else: n = 0
-            Gt_ += [[G, rim, ivalt,irdnt,idect, N+n]]
+            Gt_ += [[G, rim, ivalt,irdnt,idect]]
             tVal += rim_val
             tRdn += rim_rdn
         if tVal-_tVal <= ave * (tRdn-_tRdn):
