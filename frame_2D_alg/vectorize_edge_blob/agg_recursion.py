@@ -78,17 +78,24 @@ def reform_dect_(node_, link_):
                     _mmax_ += [max(abs(_par),abs(par))]; _dmax_ += [(abs(_par)+abs(par))]
             for i, (_tuplet,tuplet, mDec,dDec) in enumerate(zip_longest(_P.derH,P.derH, Dec_t[0][1:],Dec_t[1][1:], fillvalue=None)):
                 if _tuplet and tuplet:
-                    mmax_,dmax_ = [],[]; mdec,ddec = 0,0
-                    # bottom-up, tuplet is Lay|sLay|ssLay.: vmax/ 1,1,2,4. subsequent ders, empty if weak fork?:
-                    for fd,(_ptuple, ptuple, vmax) in enumerate(zip(_tuplet,tuplet,(_mmax_,_dmax_))):
-                        for _par, par in zip(_ptuple,ptuple):
-                            (mdec,ddec)[fd] += par/vmax if vmax else 1  # link decay = val/max, no/0 for no comp
-                            if fd: dmax_ += [abs(_par)+abs(par)] if _par and par else 0  # not compared
-                            else:  mmax_ += [max(abs(_par),abs(par))] if _par and par else 0
+                    mmax_,dmax_ = [],[]; dect = [0,0]  # mdec,ddec
+                    # bottom-up, tuplet is Lay|sLay|ssLay.: vmax/ 1,1,2,4. subsequent ders, empty if weak fork?:                    
+                    '''
+                    1. ptuple
+                    2. derH (from prior layer ptuple)
+                    3. derH, dderH (from prior layer ptuple, from prior layer derH)
+                    4. derH, dderH, ddderH (from prior layer ptuple, from prior layer derH, from prior layer dderH)
+                    5. derH, dderH, ddderH, dddderH (from prior layer ptuple, from prior layer derH, from prior layer dderH,from prior layer ddderH)
+                    '''
+                    for fd,(_ptuple, ptuple, vmax_) in enumerate(zip(_tuplet,tuplet,(_mmax_,_dmax_))):
+                        for _par, par, vmax in zip(_ptuple,ptuple, vmax_):
+                            dect[fd] += par/vmax if vmax else 1  # link decay = val/max, no/0 for no comp （using (mdec,ddec)[fd]  will not add value into mdec or ddec due to they are ints)
+                            if fd: dmax_ += [abs(_par)+abs(par) if _par and par else 0]  # not compared
+                            else:  mmax_ += [max(abs(_par),abs(par)) if _par and par else 0]
                     if mDec:
-                        Dec_t[0][i]+=mdec; Dec_t[1][i]+=ddec; S_[i] += 6  # accum 6 pars
+                        Dec_t[0][i]+=dect[0]; Dec_t[1][i]+=dect[1]; S_[i] += 6  # accum 6 pars
                     else:
-                        Dec_t[0]+=[mdec]; Dec_t[1]+=[ddec]; S_ += [6]  # extend both
+                        Dec_t[0]+=[dect[0]]; Dec_t[1]+=[dect[1]]; S_ += [6]  # extend both
                     _mmax_,_dmax_ = mmax_,dmax_
         sub_node_, sub_link_ = [],[]
         for sub_PP in node_:
