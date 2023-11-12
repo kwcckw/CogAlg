@@ -37,11 +37,13 @@ def comp_P(link_, _P, P, rn, fd=1, derP=None):  #  derP if der+, reused as S if 
 
     if fd:  # der+: extend in-link derH, in sub+ only
         dderH, valt, rdnt = comp_derH(_P.derH, P.derH, rn)  # += fork rdn
+        P.rnpar_H += [[rn for _ in P.ptuple]]
         derP = CderP(derH = derP.derH+dderH, valt=valt, rdnt=rdnt, P=P,_P=_P, S=derP.S)  # dderH valt,rdnt for new link
         mval,dval = valt; mrdn,drdn = rdnt
 
     else:  # rng+: add derH
         mtuple,dtuple = comp_ptuple(_P.ptuple, P.ptuple, rn)
+        P.rnpar_H += [[rn for _ in P.ptuple]]  # all pars are filled now, 0 value for gap later?
         mval = sum(mtuple); dval = sum(dtuple)
         mrdn = 1+(dval>mval); drdn = 1+(1-(dval>mval))  # or rdn = Dval/Mval?
         derP = CderP( derH=[[mtuple,dtuple]], valt=[mval,dval], rdnt=[mrdn,drdn], P=P,_P=_P, S=derP)
@@ -110,6 +112,7 @@ def form_PP_t(root, root_link_, base_rdn):  # form PPs of derP.valt[fd] + connec
             PP_t[fd] += [PP]  # no if Val > PP_aves[fd] * Rdn:
 
     for fd, PP_ in enumerate(PP_t):  # after form_PP_t -> P.roott
+        PP_[:] = PP_[:30]
         for PP in PP_:
             if PP.valt[fd]* (len(PP.P_)-1)*PP.rng > PP_aves[fd]* PP.rdnt[fd]:  # val*len*rng: sum ave matches - fixed PP cost
                 sub_recursion(root, PP, fd)  # eval rng+/PPm or der+/PPd

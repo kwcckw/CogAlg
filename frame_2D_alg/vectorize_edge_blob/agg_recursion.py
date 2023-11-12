@@ -79,25 +79,26 @@ def reform_dect_(node_, link_):
             _mmaxt_,_dmaxt_ = [_mmaxt],[_dmaxt]  # append with maxes from all lower dertuples, empty if no comp
             L=0
             # tentative:
-            while len(_P.derH) >= L and len(P.derH) >= L:  # len derLay = len low Lays: 1,1,2,4. tuplets, map to _vmaxt_
-                _Lay = _P.derH[L: 2*L]; Lay = P.derH[L: 2*L]
+            # should be > instead of >=? Because L starts with 0.
+            while len(_P.derH) > L and len(P.derH) > L:  # len derLay = len low Lays: 1,1,2,4. tuplets, map to _vmaxt_
+                _Lay = _P.derH[L: max(2*L, 1)]; Lay = P.derH[L: max(2*L,1)]; rnpar_lay = P.rnpar_H[L: max(2*L,1)]  # max to prevent 0:0 on the 1st index
                 mmaxt_,dmaxt_ = [],[]; dect_ = []
-                for i, (_tuplet,tuplet, _mmaxt,_dmaxt, mDec,dDec) in enumerate(zip_longest(
-                        _Lay,Lay, _mmaxt_,_dmaxt_, Dec_t[0][L:],Dec_t[1][L:], fillvalue=None)):
+                for i, (_tuplet,tuplet, rnpar_, mDec,dDec) in enumerate(zip_longest(_Lay,Lay, rnpar_lay, Dec_t[0][L:], Dec_t[1][L:], fillvalue=None)):
                     if _tuplet and tuplet:
+                        _mmaxt,_dmaxt = _mmaxt_[int(i/2)], _dmaxt_[int(i/2)]  # prior layer has 1/2 of current maxt_
                         mmaxt,dmaxt = [],[]; dect = [0,0]
                         for fd,(_ptuple, ptuple, vmax_) in enumerate(zip(_tuplet,tuplet,(_mmaxt,_dmaxt))):
-                            for _par, par, vmax in zip(_ptuple,ptuple, vmax_):
-                                dect[fd] += par/vmax if vmax else 1  # link decay = val/max, 0 if no prior comp
-                                if fd: dmaxt += [abs(_par)+abs(par) if _par and par else 0]  # was not compared
-                                else:  mmaxt += [max(abs(_par),abs(par)) if _par and par else 0]
+                            for _par, par, rn, vmax in zip(_ptuple,ptuple, rnpar_, vmax_):
+                                dect[fd] += par*rn/vmax if vmax else 1  # link decay = val/max, 0 if no prior comp
+                                if fd: dmaxt += [abs(_par)+abs(par*rn) if _par and par else 0]  # was not compared
+                                else:  mmaxt += [max(abs(_par),abs(par*rn)) if _par and par else 0]
                         if mDec:
                             Dec_t[0][L]+=dect[0]; Dec_t[1][L]+=dect[1]; S_[i] += 6  # accum 6 pars
                         else:
                             Dec_t[0]+=[dect[0]]; Dec_t[1]+=[dect[1]]; S_ += [6]  # extend both
                         _mmaxt,_dmaxt = mmaxt,dmaxt
                         mmaxt_+=[mmaxt]; dmaxt_+=[dmaxt]; dect_+= [dect]
-                        L += i+1
+                L += i+1  # this should be at the end? Else we add every loop's i
                 _mmaxt_,_dmaxt_ = mmaxt_,dmaxt_
                 # maxes from all lower dertuples
         sub_node_, sub_link_ = [],[]
