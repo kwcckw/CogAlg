@@ -61,15 +61,15 @@ def vectorize_root(blob, verbose):  # vectorization pipeline is 3 composition le
             agg_recursion(None, edge, node_, fd=0)  # edge.node_ = graph_t, micro and macro recursive
 
 
+# still getting > 1 decay now
 def reform_dect_(node_, link_):
 
-    Dec_t = [[0],[0]]  # default 1st layer dect from ptuple
-    S_ = [0]  # accum count per derLay
+    Dec_t = [[],[]]  # default 1st layer dect from ptuple
+    S_ = []  # accum count per derLay
 
     while True:  # unpack lower node_ layer
         for link in link_:  # get compared Ps and find param maxes
             _P, P = link._P, link.P
-            S_[0] += 6  # 6 pars
             _mmaxt,_dmaxt = [],[]
             for _par, par in zip(_P.ptuple, P.ptuple):
                 if hasattr(par,"__len__"):
@@ -83,19 +83,20 @@ def reform_dect_(node_, link_):
                 hL = max(2*L,1)  # ini 0
                 _Lay,Lay, mDec_,dDec_ = _P.derH[L:hL],P.derH[L:hL],Dec_t[0][L:hL],Dec_t[1][L:hL]
                 for _tuplet,tuplet,_mmaxt,_dmaxt, mDec,dDec in zip_longest(_Lay,Lay,mmaxt_,dmaxt_,mDec_,dDec_, fillvalue=None):
-                    L += 1  # combined len of all lower layers = len next layer
-                    if _tuplet and tuplet:
-                        mmaxt,dmaxt = [],[]; dect = [0,0]
-                        for fd,(_ptuple, ptuple, vmax_) in enumerate(zip(_tuplet,tuplet,(_mmaxt,_dmaxt))):
-                            for _par, par, vmax in zip(_ptuple,ptuple, vmax_):
-                                dect[fd] += par*rn/vmax if vmax else 1  # link decay = val/max, 0 if no prior comp
-                                if fd: dmaxt += [abs(_par)+abs(par*rn) if _par and par else 0]  # was not compared
-                                else:  mmaxt += [max(abs(_par),abs(par*rn)) if _par and par else 0]
-                        if mDec:
-                            Dec_t[0][L]+=dect[0]; Dec_t[1][L]+=dect[1]; S_[L] += 6  # accum 6 pars
-                        else:
-                            Dec_t[0] +=[dect[0]]; Dec_t[1] +=[dect[1]]; S_ += [6]  # extend both
-                        mmaxt_+=[mmaxt]; dmaxt_+=[dmaxt]  # from all lower layers
+                    if not _tuplet or not tuplet: continue  # from Khanh update
+                    mmaxt,dmaxt = [],[]; dect = [0,0]
+                    for fd,(_ptuple, ptuple, vmax_) in enumerate(zip(_tuplet,tuplet,(_mmaxt,_dmaxt))):
+                        for _par, par, vmax in zip(_ptuple,ptuple, vmax_):
+                            dect[fd] += par*rn/vmax if vmax else 1  # link decay = val/max, 0 if no prior comp
+                            if fd: dmaxt += [abs(_par)+abs(par*rn) if _par and par else 0]  # was not compared
+                            else:  mmaxt += [max(abs(_par),abs(par*rn)) if _par and par else 0]
+                    if mDec:
+                        Dec_t[0][L]+=dect[0]; Dec_t[1][L]+=dect[1]; S_[L] += 6  # accum 6 pars
+                    else:
+                        Dec_t[0] +=[dect[0]]; Dec_t[1] +=[dect[1]]; S_ += [6]  # extend both
+                    mmaxt_+=[mmaxt]; dmaxt_+=[dmaxt]  # from all lower layers
+                    L += 1  # combined len of all lower layers = len next layer (this should be at the end now since there's no decay on ptuple)
+                    
         sub_node_, sub_link_ = [],[]
         for sub_PP in node_:
             sub_link_ += list(set(sub_link_ + sub_PP.link_))
