@@ -16,7 +16,7 @@ from collections import namedtuple
 ptupleT = namedtuple("ptupleT", "I G M Ma angle L")
 ptupleT.__pos__ = lambda t: t
 ptupleT.__neg__ = lambda t: ptupleT(-t.I, -t.G, -t.M, -t.Ma, -t.angle, -t.L)
-ptupleT.__add__ = lambda _t, t: ptupleT(_t.I-t.I, _t.G-t.G, _t.M-t.M, _t.Ma-t.Ma, _t.angle-t.angle, _t.L-t.L)
+ptupleT.__add__ = lambda _t, t: ptupleT(_t.I+t.I, _t.G+t.G, _t.M+t.M, _t.Ma+t.Ma, _t.angle+t.angle, _t.L+t.L)  # typo here
 ptupleT.__sub__ = lambda _t, t: _t+(-t)
 
 angleT = namedtuple('angleT', 'dy dx')

@@ -112,7 +112,6 @@ def form_PP_t(root, root_link_, base_rdn):  # form PPs of derP.valt[fd] + connec
             PP_t[fd] += [PP]  # no if Val > PP_aves[fd] * Rdn:
 
     for fd, PP_ in enumerate(PP_t):  # after form_PP_t -> P.roott
-        PP_[:] = PP_[:30]
         for PP in PP_:
             if PP.valt[fd]* (len(PP.P_)-1)*PP.rng > PP_aves[fd]* PP.rdnt[fd]:  # val*len*rng: sum ave matches - fixed PP cost
                 sub_recursion(root, PP, fd)  # eval rng+/PPm or der+/PPd
@@ -251,7 +250,8 @@ def comp_ptuple(_ptuple, ptuple, rn, fagg=0):  # 0der params
     dtuple = [dI, dG, dM, dMa, dAngle, dL]
     ret = [mtuple, dtuple]
     if fagg:
-        Mtuple = [max(_I,I), max(_G,G), max(abs(_M),abs(M)), max(abs(_Ma),abs(Ma)), 2, max(_L,L)]
+        # add ave into mMax
+        Mtuple = [max(ave, max(_I,I)), max(_G,G)+ave, max(abs(_M),abs(M))+ave, max(abs(_Ma),abs(Ma))+ave, 2, max(_L,L)+ave]
         Dtuple = [abs(_I)+abs(I), abs(_G)+abs(G), abs(_M)+abs(M), abs(_Ma)+abs(Ma), 2, abs(_L)+abs(L)]
         ret += [Mtuple, Dtuple]
     return ret
