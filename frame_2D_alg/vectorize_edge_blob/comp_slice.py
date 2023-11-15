@@ -37,13 +37,11 @@ def comp_P(link_, _P, P, rn, fd=1, derP=None):  #  derP if der+, reused as S if 
 
     if fd:  # der+: extend in-link derH, in sub+ only
         dderH, valt, rdnt = comp_derH(_P.derH, P.derH, rn)  # += fork rdn
-        P.rnpar_H += [[rn for _ in P.ptuple]]
         derP = CderP(derH = derP.derH+dderH, valt=valt, rdnt=rdnt, P=P,_P=_P, S=derP.S)  # dderH valt,rdnt for new link
         mval,dval = valt; mrdn,drdn = rdnt
 
     else:  # rng+: add derH
         mtuple,dtuple = comp_ptuple(_P.ptuple, P.ptuple, rn)
-        P.rnpar_H += [[rn for _ in P.ptuple]]  # all pars are filled now, 0 value for gap later?
         mval = sum(mtuple); dval = sum(dtuple)
         mrdn = 1+(dval>mval); drdn = 1+(1-(dval>mval))  # or rdn = Dval/Mval?
         derP = CderP( derH=[[mtuple,dtuple]], valt=[mval,dval], rdnt=[mrdn,drdn], P=P,_P=_P, S=derP)
@@ -250,8 +248,7 @@ def comp_ptuple(_ptuple, ptuple, rn, fagg=0):  # 0der params
     dtuple = [dI, dG, dM, dMa, dAngle, dL]
     ret = [mtuple, dtuple]
     if fagg:
-        # add ave into mMax
-        Mtuple = [max(ave, max(_I,I)), max(_G,G)+ave, max(abs(_M),abs(M))+ave, max(abs(_Ma),abs(Ma))+ave, 2, max(_L,L)+ave]
+        Mtuple = [max(_I,I), max(_G,G), max(_M,M), max(_Ma,Ma), 2, max(_L,L)]
         Dtuple = [abs(_I)+abs(I), abs(_G)+abs(G), abs(_M)+abs(M), abs(_Ma)+abs(Ma), 2, abs(_L)+abs(L)]
         ret += [Mtuple, Dtuple]
     return ret
