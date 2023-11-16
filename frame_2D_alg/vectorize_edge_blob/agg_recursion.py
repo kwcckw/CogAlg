@@ -125,7 +125,7 @@ def node_connect(iG_,link_,fd):  # node connectivity = sum surround link vals, i
     '''
     Gt_ =[]; ave = G_aves[fd]
     for G in iG_:
-        valt,rdnt,dect = [0,0],[0,0], [0,0]; rim = copy(link_[G])  # all links that contain G
+        valt,rdnt,dect = [0,0],[0,0],[0,0]; rim = copy(link_[G])  # all links that contain G
         for link in rim:
             if link.valt[fd] > ave * link.rdnt[fd]:  # skip negative links
                 for i in 0,1:
@@ -270,11 +270,10 @@ def comp_G(link_, _G, G, fd):
     mrdn = dval>mval; drdn = dval<=mval
     dect = [0,0]
     for fd, (ptuple,Ptuple) in enumerate(zip((mtuple,dtuple),(Mtuple,Dtuple))):  # the prior zipping elements are wrong
-        for i, (par,max) in enumerate(zip(ptuple,Ptuple)):
-            if fd or i == 4: ave_par = 0  # no ave in d fork or angle
-            else:            ave_par = ave
-            dect[fd] += (par+ave_par)/max if max else 1  # link decay coef: m|d / max, base self/same
-    derLay0 = [[mtuple,dtuple],[mval,dval],[mrdn,drdn],[dect[0]/6, dect[1]/6]]  # normalize decay by 6 params
+        for i, (par, max, ave) in enumerate(zip(ptuple, Ptuple, aves)):  # compute link decay coef: par/ max(self/same)
+            if fd: dect[fd] += par/max if max else 1
+            else:  dect[fd] += (par+ave)/(max+ave) if max+ave else 1
+    derLay0 = [[mtuple,dtuple],[mval,dval],[mrdn,drdn],[dect[0]/6, dect[1]/6]]  # ave of 6 params
     Mval+=mval; Dval+=dval; Mrdn+=mrdn; Drdn+=drdn; Mdec+=dect[0]/6; Ddec+=dect[1]/6
     # / PP:
     _derH,derH = _G.derH,G.derH
@@ -308,7 +307,8 @@ def comp_G(link_, _G, G, fd):
 def comp_aggHv(_aggH, aggH, rn):  # no separate ext
 
     Mval,Dval, Mrdn,Drdn, Mdec,Ddec = 0,0,1,1,0,0
-    SubH = []; S = min(len(_aggH), len(aggH))  # using S is clearer?
+    SubH = []; S = min(len(_aggH), len(aggH))
+
     for _lev, lev in zip(_aggH, aggH):  # compare common subHs, if lower-der match?
         if _lev and lev:
             dsubH, valt,rdnt,dect = comp_subHv(_lev[0], lev[0], rn)  # skip valt,rdnt,dect
@@ -323,6 +323,7 @@ def comp_subHv(_subH, subH, rn):
 
     Mval,Dval, Mrdn,Drdn, Mdec,Ddec = 0,0,1,1,0,0
     dsubH =[]; S = min(len(_subH), len(subH))
+
     for _lay, lay in zip(_subH, subH):  # compare common lower layer|sublayer derHs
         # if lower-layers match: Mval > ave * Mrdn?
         if _lay[0] and isinstance(_lay[0][0],list):
@@ -333,7 +334,6 @@ def comp_subHv(_subH, subH, rn):
             Mrdn += rdnt[0] + dval > mval; Drdn += rdnt[1] + dval <= mval
         else:  # _lay[0][0] is L, comp dext:
             dsubH += [comp_ext(_lay[1],lay[1],[Mval,Dval],[Mrdn,Drdn],[Mdec,Ddec])]
-            S -= 1  # remove layer count
     if S: Mdec/= S; Ddec /= S  # normalize
     return dsubH, [Mval,Dval],[Mrdn,Drdn],[Mdec,Ddec]  # new layer,= 1/2 combined derH
 
@@ -342,6 +342,7 @@ def comp_derHv(_derH, derH, rn):  # derH is a list of der layers or sub-layers, 
 
     Mval,Dval, Mrdn,Drdn, Mdec,Ddec = 0,0,1,1,0,0
     dderH =[]; S = min(len(_derH), len(derH))
+
     for _lay, lay in zip(_derH, derH):  # compare common lower der layers | sublayers in derHs, if lower-layers match?
         # comp dtuples, eval mtuples
         mtuple, dtuple, Mtuple, Dtuple = comp_dtuple(_lay[0][1], lay[0][1], rn, fagg=1)
@@ -351,9 +352,9 @@ def comp_derHv(_derH, derH, rn):  # derH is a list of der layers or sub-layers, 
         dect = [0,0]
         for fd, (ptuple,Ptuple) in enumerate(zip((mtuple,dtuple),(Mtuple,Dtuple))):  # the zipping sequence is wrong
             for (par, max, ave) in zip(ptuple, Ptuple, aves):  # different ave for comp_dtuple
-                if fd: ave_par = 0  # no ave in d fork or angle
-                else:  ave_par = ave
-                dect[fd] += (par+ave_par)/max if max else 1  # link decay coef: m|d / max, base self/same
+                if fd: dect[fd] += par/max if max else 1
+                else:  dect[fd] += (par+ave)/(max+ave) if max+ave else 1
+
         dderH += [[[mtuple,dtuple],[mval,dval],[mrdn,drdn],[dect[0]/6,dect[1]/6]]]
         Mval+=mval; Dval+=dval; Mrdn+=mrdn; Drdn+=drdn; Mdec+=dect[0]/6; Ddec+=dect[1]/6
     if S: Mdec /= S; Ddec /= S  # normalize when non zero layer

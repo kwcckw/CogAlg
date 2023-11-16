@@ -8,13 +8,6 @@ div_ave = 200
 ave_rmP = .7  # the rate of mP decay per relative dX (x shift) = 1: initial form of distance
 ave_ortho = 20
 aveB = 50  # same for m and d?
-# comp_param coefs:
-ave_dI = ave_inv
-ave_M = ave  # replace the rest with coefs:
-ave_Ma = 10
-ave_G = 10
-ave_Ga = 2  # related to dx?
-ave_L = 10
 ave_x = 1
 ave_dx = 5  # inv, difference between median x coords of consecutive Ps
 ave_dy = 5
@@ -38,8 +31,15 @@ ave_sub = 2  # cost of calling sub_recursion and looping
 ave_agg = 3  # cost of agg_recursion
 ave_overlap = 10
 ave_distance = 3
-ave_cluster = 10
 med_decay = .5  # decay of induction per med layer
-PP_vars = ["I", "M", "Ma", "angle", "aangle", "G", "Ga", "L"]
-aves = [ave_G, ave_M, ave_dangle, ave_L, ave_mval, ave_dval]
+PP_vars = ["I", "M", "Ma", "angle", "aangle", "G", "Ga", "x", "L"]
+# comp_param coefs:
+ave_Id = ave_inv
+ave_Im = ave # replace the rest with coefs:
+ave_Gm = 10
+ave_Mm = 2
+ave_Mam = .1
+ave_Am = .2
+ave_Lm = 2
+aves = [ave_Im, ave_Gm, ave_Mm, ave_Mam, ave_Am, ave_Lm]
 ave_rotate = 10
