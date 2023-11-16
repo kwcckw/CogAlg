@@ -3,7 +3,7 @@ from copy import deepcopy, copy
 from itertools import zip_longest
 from collections import defaultdict
 from .classes import Cgraph, CderG
-from .filters import aves, ave_L, ave_dangle, ave, ave_distance, G_aves, ave_Gm, ave_Gd
+from .filters import aves, ave_Lm, ave_dangle, ave, ave_distance, G_aves, ave_Gm, ave_Gd
 from .slice_edge import slice_edge, comp_angle
 from .comp_slice import comp_P_, comp_derH, sum_derH, comp_ptuple, sum_dertuple, comp_dtuple, get_match
 
@@ -51,7 +51,8 @@ def vectorize_root(blob, verbose):  # vectorization pipeline is 3 composition le
                  [sum([m<d for m,d in zip(mtuple,dtuple)]), sum([d<=m for m,d in zip(mtuple,dtuple)])],
                  []] # empty PP.derH dects
                 for mtuple,dtuple in derH]
-            G_ += [Cgraph( ptuple=PP.ptuple, derH=[derH,valt,rdnt,[]], valHt=[[valt[0]],[valt[1]]], rdnHt=[[rdnt[0]],[rdnt[1]]], L=PP.ptuple[-1],
+            # looks like we need [1,1] on dect here because they are summed by index along with valt and rdnt in sum_derHv
+            G_ += [Cgraph( ptuple=PP.ptuple, derH=[derH,valt,rdnt,[1,1]], valHt=[[valt[0]],[valt[1]]], rdnHt=[[rdnt[0]],[rdnt[1]]], L=PP.ptuple[-1],
                            box=[(PP.box[0]+PP.box[1])/2, (PP.box[2]+PP.box[3])/2] + list(PP.box), link_=PP.link_, node_t=PP.node_t)]
         if G_:
             node_ = G_
@@ -133,6 +134,7 @@ def node_connect(iG_,link_,fd):  # node connectivity = sum surround link vals, i
         Gt_ += [[G, rim,valt,rdnt,dect]]
     _tVal,_tRdn = 0,0
 
+    # infinity loops here
     while True:  # eval same Gs,links, but with cross-accumulated node connectivity values
         tVal, tRdn = 0,0  # loop totals
         for G,rim,valt,rdnt,dect in Gt_:
@@ -272,7 +274,7 @@ def comp_G(link_, _G, G, fd):
     for fd, (ptuple,Ptuple) in enumerate(zip((mtuple,dtuple),(Mtuple,Dtuple))):  # the prior zipping elements are wrong
         for i, (par, max, ave) in enumerate(zip(ptuple, Ptuple, aves)):  # compute link decay coef: par/ max(self/same)
             if fd: dect[fd] += par/max if max else 1
-            else:  dect[fd] += (par+ave)/(max+ave) if max+ave else 1
+            else:  dect[fd] += (par+ave)/(max) if max else 1  # why we need to add ave to max too?
     derLay0 = [[mtuple,dtuple],[mval,dval],[mrdn,drdn],[dect[0]/6, dect[1]/6]]  # ave of 6 params
     Mval+=mval; Dval+=dval; Mrdn+=mrdn; Drdn+=drdn; Mdec+=dect[0]/6; Ddec+=dect[1]/6
     # / PP:
@@ -290,7 +292,7 @@ def comp_G(link_, _G, G, fd):
         subH, valt,rdnt,dect = comp_aggHv(_G.aggH, G.aggH, rn=1)
         mval,dval = valt; Mval+=dval; Dval+=mval
         Mrdn += rdnt[0]+dval>mval; Drdn += rdnt[1]+dval<=mval
-        Mdec += dect[0]; Ddec += dect[1]
+        Mdec = (Mdec+dect[0])/2; Ddec = (Ddec+dect[1])/2
         link.subH = SubH+subH  # append higher subLayers: list of der_ext | derH s
         link.valt = [Mval,Dval]; link.rdnt = [Mrdn,Drdn]; link.dect = [Mdec,Ddec]  # complete proto-link
         link_[G] += [link]
@@ -353,7 +355,7 @@ def comp_derHv(_derH, derH, rn):  # derH is a list of der layers or sub-layers, 
         for fd, (ptuple,Ptuple) in enumerate(zip((mtuple,dtuple),(Mtuple,Dtuple))):  # the zipping sequence is wrong
             for (par, max, ave) in zip(ptuple, Ptuple, aves):  # different ave for comp_dtuple
                 if fd: dect[fd] += par/max if max else 1
-                else:  dect[fd] += (par+ave)/(max+ave) if max+ave else 1
+                else:  dect[fd] += (par+ave)/(max) if max else 1
 
         dderH += [[[mtuple,dtuple],[mval,dval],[mrdn,drdn],[dect[0]/6,dect[1]/6]]]
         Mval+=mval; Dval+=dval; Mrdn+=mrdn; Drdn+=drdn; Mdec+=dect[0]/6; Ddec+=dect[1]/6
@@ -420,8 +422,8 @@ def comp_ext(_ext, ext, Valt, Rdnt, Dect):  # comp ds:
         mA = get_match(_A,A)- ave_dangle; dA = _A-A; adA = abs(dA); _aA=abs(_A); aA=abs(A)
         max_dA = _aA + aA; max_mA = max(_aA, aA)
         dS = _S - S
-    mL = get_match(_L,L) - ave_L
-    mS = get_match(_S,S) - ave_L
+    mL = get_match(_L,L) - ave_Lm
+    mS = get_match(_S,S) - ave_Lm
 
     m = mL+mS+mA; d = abs(dL)+ abs(dS)+ adA
     Valt[0] += m; Valt[1] += d

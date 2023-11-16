@@ -237,14 +237,14 @@ def comp_ptuple(_ptuple, ptuple, rn, fagg=0):  # 0der params
     _I, _G, _M, _Ma, (_Dy, _Dx), _L = _ptuple
     I, G, M, Ma, (Dy, Dx), L = ptuple
 
-    dI = _I - I*rn;  mI = ave-dI
-    dG = _G - G*rn;  mG = min(_G, G*rn) - ave
-    dL = _L - L*rn;  mL = min(_L, L*rn) - ave
-    dM = _M - M*rn;  mM = get_match(_M, M*rn) - ave  # M, Ma may be negative
-    dMa= _Ma- Ma*rn; mMa = get_match(_Ma, Ma*rn) - ave
+    dI = _I - I*rn;  mI = aves[0]-dI
+    dG = _G - G*rn;  mG = min(_G, G*rn) - aves[1]
+    dL = _L - L*rn;  mL = min(_L, L*rn) - aves[2]
+    dM = _M - M*rn;  mM = get_match(_M, M*rn) - aves[3]  # M, Ma may be negative
+    dMa= _Ma- Ma*rn; mMa = get_match(_Ma, Ma*rn) - aves[4]
     mAngle, dAngle = comp_angle((_Dy,_Dx), (Dy,Dx))
 
-    mtuple = [mI, mG, mM, mMa, mAngle, mL]
+    mtuple = [mI, mG, mM, mMa, mAngle-aves[5], mL]
     dtuple = [dI, dG, dM, dMa, dAngle, dL]
     ret = [mtuple, dtuple]
     if fagg:
