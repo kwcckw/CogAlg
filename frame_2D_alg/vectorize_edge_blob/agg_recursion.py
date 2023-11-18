@@ -134,14 +134,15 @@ def node_connect(iG_,link_,fd):  # node connectivity = sum surround link vals, i
     while True:  # eval same Gs,links, but with cross-accumulated node connectivity values, indirectly extending their range
         Gt_ = []
         Dval, Len = 0,0  # _Gt_ updates per loop
-        for Gt in Gt_:
+        for Gt in _Gt_:
             G, rim, valt, rdnt, dect, _rim_v_t, rim_v_t = Gt
+            # this val per G in each iteration is no longer needed?
             rimV,rimR = 0,0
             for link in rim:
                 if link.Vt[fd] < ave: continue  # skip negative links, former link.valt[fd] < ave * link.rdnt[fd]
                 _G = link.G if link._G is G else link._G
                 if _G not in iG_: continue  # outside root graph
-                _Gt = Gt_[G.i]
+                _Gt = _Gt_[G.i]
                 _G,_rim,_valt,_rdnt,_dect, _rim__v_t,rim__v_t = _Gt
                 # if G in _rim: continue  # always true, but need to exclude self-contribution?
                 decay = link.dect[fd]  # node vals * relative link val:
@@ -157,9 +158,9 @@ def node_connect(iG_,link_,fd):  # node connectivity = sum surround link vals, i
             L = len(rim); Len += L
             if dval > ave * L:
                 _rim_v_t[:] = rim_v_t
-                rim_v_t[:] = [0 for _ in rim_v_t]
+                rim_v_t[:] = [[0 for _ in rim_v_t[0]], [0 for _ in rim_v_t[0]]]
                 Dval += dval
-                Gt_ += Gt
+                Gt_ += [Gt]
         if Dval <= ave * Len:  # may need to scale by rdn?
             break
         _Gt_ = Gt_  # exclude weakly incremented Gts from connectivity expansion
@@ -174,7 +175,7 @@ def segment_node_(root, Gt_, fd):  # eval rim links with summed surround vals
     igraph_ = []; ave = G_aves[fd]
 
     for Gt in Gt_:
-        G,rim,valt,rdnt,dect = Gt
+        G,rim,valt,rdnt,dect, _, _ = Gt
         subH = [[],[0,0],[1,1],[0,0]]
         Link_= []; A,S = [0,0],0
         for link in rim:
