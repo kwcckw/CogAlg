@@ -116,15 +116,15 @@ def node_connect(iG_,link_,fd):  # node connectivity = sum surround link vals, i
     for G in iG_:
         valt,rdnt,dect = [0,0],[0,0],[0,0]
         _rim_v_t, rim_v_t = [[],[]], [[],[]]
-        rim = []
+        rim = defaultdict(list); _uprim = defaultdict(list)
         for link in link_[G]:  # init all links that contain G
             if link.valt[fd] > ave * link.rdnt[fd]:  # skip negative links
                 link.Vt[fd] = link.valt[fd]
-                rim += [link]
+                rim[G] += [link]; _uprim[G] += [link]
                 for i in 0,1:
                     valt[i] += link.valt[i]; rdnt[i] += link.rdnt[i]; dect[i] += link.dect[i]  # sum direct link vals
                     _rim_v_t[i] += [link.valt[i]]; rim_v_t[i] += [0]  # init with direct connectivity vals only
-        iGt_ += [[G, rim,valt,rdnt,dect, _rim_v_t, rim_v_t]]
+        iGt_ += [[G, rim,valt,rdnt,dect, _uprim, _rim_v_t, rim_v_t]]  # uprim init with rim?
         _Gt_ = copy(iGt_)  # for pruned connectivity expansion, not affecting return iGt_
     '''
     Aggregate direct * indirect connectivity per node from indirect links via associated nodes, in multiple cycles. 
@@ -136,15 +136,15 @@ def node_connect(iG_,link_,fd):  # node connectivity = sum surround link vals, i
         Dval, Len = 0,0  # _Gt_ updates per loop
         for Gt in _Gt_:
             G, rim, valt,rdnt,dect, _up_rim,_rim_v_t,rim_v_t = Gt
-            up_rim = []
+            up_rim = defaultdict(list)
             rimV = 0  # rimR = 0?
-            for link, _linkV in zip(up_rim,_rim_v_t[fd]):
+            for link, _linkV in zip(_up_rim[G],_rim_v_t[fd]):
                 # only links with >ave update of linkVs should be re-evaluated
                 if link.Vt[fd] < ave: continue  # skip negative links, was link.valt[fd] < ave * link.rdnt[fd]
                 _G = link.G if link._G is G else link._G
                 if _G not in iG_: continue  # outside root graph
                 _Gt = _Gt_[G.i]   # but it may represent Gt indirectly?
-                _G,_rim,_valt,_rdnt,_dect, _,_ = _Gt
+                _G,_rim,_valt,_rdnt,_dect, _, _,_ = _Gt
                 if _valt[fd] < ave: continue  # weak _G connect should not be added to G connect?
                 decay = link.dect[fd]  # node vals * relative link val:
                 for i in 0,1:
@@ -155,10 +155,11 @@ def node_connect(iG_,link_,fd):  # node connectivity = sum surround link vals, i
                     rim_v_t[i] += [linkV]  # + rim_r_t[i] += [linkR]?
                     link.Vt[i] = linkV
                     if linkV-_linkV > ave:
-                        up_rim += [link]
-            _up_rim[:] = up_rim
+                        if link not in up_rim[G]:  # temporary. We have 2 forks here, so we need up_rimt too?
+                            up_rim[G] += [link]
+            _up_rim[G][:] = up_rim[G]
             dval = sum(rim_v_t[fd]) - sum(_rim_v_t[fd])
-            L = len(rim); Len += L
+            L = len(up_rim[G]); Len += L
             if dval > ave * L:
                 _rim_v_t[:] = rim_v_t
                 rim_v_t[:] = [[0 for _ in rim_v_t[0]], [0 for _ in rim_v_t[0]]]
@@ -176,14 +177,14 @@ def segment_node_(root, Gt_, fd):  # eval rim links with summed surround vals fo
     igraph_ = []; ave = G_aves[fd]
 
     for Gt in Gt_:
-        G,rim,valt,rdnt,dect, _,_ = Gt
+        G,rim,valt,rdnt,dect, up_rim, _,_ = Gt
         subH = [[],[0,0],[1,1],[0,0]]
-        Link_= []; A,S = [0,0],0
-        for link in rim:
+        Link_= defaultdict(list); A,S = [0,0],0
+        for link in rim[G]:
             if link.valt[fd] > G_aves[fd] * link.rdnt[fd]:
                 sum_subHv(subH, [link.subH,link.valt,link.rdnt,link.dect], base_rdn=1)
-                Link_ += [link]; A[0] += link.A[0]; A[1] += link.A[1]; S += link.S
-        grapht = [[Gt],copy(rim),copy(valt),copy(rdnt),copy(dect),A,S,subH,Link_]
+                Link_[G] += [link]; A[0] += link.A[0]; A[1] += link.A[1]; S += link.S
+        grapht = [[Gt],deepcopy(rim),copy(valt),copy(rdnt),copy(dect),A,S,subH,Link_]
         G.root[fd] = grapht; igraph_ += [grapht]
     _tVal,_tRdn = 0,0
     _graph_ = igraph_  # prune while eval node rim links with surround vals for graph inclusion and merge:
@@ -194,8 +195,8 @@ def segment_node_(root, Gt_, fd):  # eval rim links with summed surround vals fo
         for grapht in _graph_:  # extend graph Rim
             nodet_,Rim, Valt,Rdnt,Dect, A,S, subH,link_ = grapht
             inVal,inRdn = 0,0  # in-graph: positive
-            new_Rim = []
-            for link in Rim:
+            new_Rim = defaultdict(list)
+            for link in [rim for rims in Rim.values() for rim in rims]:   
                 if link.G in grapht[0]:
                     Gt = Gt_[link.G.i]; _Gt = Gt_[link._G.i]
                 else:
@@ -208,16 +209,16 @@ def segment_node_(root, Gt_, fd):  # eval rim links with summed surround vals fo
                     # sum links
                     _nodet_,_Rim,_Valt,_Rdnt,_Dect,_A,_S,_subH,_link_ = _Gt[0].root[fd]
                     sum_subHv(subH, _subH, base_rdn=1)
-                    A[0] += _A[0]; A[1] += _A[1]; S += _S; link_ += _link_
+                    A[0] += _A[0]; A[1] += _A[1]; S += _S; link_.update(_link_)
                     for i in 0,1:
                         Valt[i] += _Valt[i]; Rdnt[i] += _Rdnt[i]; Dect[i] += _Dect[i]
                     inVal += _Valt[fd]; inRdn += _Rdnt[fd]
                     nodet_ += [__Gt for __Gt in _Gt[0].root[fd][0] if __Gt not in nodet_]
-                    Rim = list(set(Rim + _Rim))
-                    new_Rim = list(set(new_Rim + _Rim))
+                    Rim.update(_Rim)
+                    new_Rim.update(_Rim)
 
             tVal += inVal; tRdn += inRdn  # signed?
-            if len(new_Rim) * inVal > ave * inRdn:  # eval new_Rim
+            if len([rim for rims in new_Rim.values() for rim in rims]) * inVal > ave * inRdn:  # eval new_Rim
                 graph_ += [[nodet_,new_Rim,Valt,Rdnt,Dect,A,S, subH, link_]]
 
         if len(graph_) * (tVal-_tVal) <= ave * (tRdn-_tRdn):  # even low-Val extension may be valuable if Rdn decreases?
