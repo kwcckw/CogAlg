@@ -59,7 +59,7 @@ def agg_recursion(rroot, root, G_, fd):  # + fpar for agg_parP_? compositional a
     Mval,Dval, Mrdn,Drdn, Mdec,Ddec = 0,0,0,0,0,0
     link_ = defaultdict(list)  # lists of link per node, should be named node2link_ instead ?
     if fd:
-        for link in root.link_:
+        for link in get_link_(root.link_):
             if link.valt[1] < G_aves[1]*link.rdnt[1]: continue  # maybe weak after rdn incr?
             mval,dval, mrdn,drdn, mdec,ddec = comp_G(link_,link._G,link.G, fd)
             Mval+=mval; Dval+=dval; Mrdn+=mrdn; Drdn+=drdn; Mdec+=mdec; Ddec+=ddec
@@ -114,16 +114,17 @@ def form_graph_t(root, Valt,Rdnt, G_, link_):  # form mgraphs and dgraphs of sam
 def node_connect(iG_,link_):  # node connectivity = sum surround link vals, incr.mediated: Graph Convolution of Correlations
 
     iGt_ = []
-    for G in iG_:
+    for i, G in enumerate(iG_):
+        G.i = i
         valt,rdnt,dect = [0,0],[0,0],[0,0]
         rimt = [defaultdict(list),defaultdict(list)]
-        uprimt = [defaultdict(list), defaultdict(list)]
+        uprimt = [[], []]  # uprimt can be in list ? Since we just need it in node_connect
         for link in link_[G]:  # dict all links containing G
             for i in 0,1:
                 if link.valt[i] > G_aves[i] * link.rdnt[i]:  # skip negative, init with direct connectivity vals:
                     valt[i] += link.valt[i]; rdnt[i] += link.rdnt[i]; dect[i] += link.dect[i]
                     link.Vt[i][0] = link.Vt[i][1] = link.valt[i]
-                    rimt[i][G] += [link]; uprimt[i][G] += [link] # same
+                    rimt[i][G] += [link]; uprimt[i] += [link] # same
         iGt_ += [[G, rimt,valt,rdnt,dect,uprimt,[None, None]]]   # roott
     _Gt_ = copy(iGt_)  # for selective connectivity expansion, not affecting return iGt_
     '''
@@ -135,12 +136,12 @@ def node_connect(iG_,link_):  # node connectivity = sum surround link vals, incr
         Gt_ = []
         DVt, Lent = [0,0],[0,0]  # _Gt_ updates per loop
         for Gt in _Gt_:
-            G, rimt, valt,rdnt,dect,_uprimt = Gt
+            G, rimt, valt,rdnt,dect,_uprimt,_ = Gt
             uprimt = [[],[]]  # for >ave updates
             dVt = [0,0]  # dRt?
             for i in 0,1:
                 ave = G_aves[i]
-                for link in _uprimt[i][G]:  # eval former >ave updates, +ve only?
+                for link in _uprimt[i]:  # eval former >ave updates, +ve only?
                     _G, j = (link.G, 1) if link._G is G else (link._G, 0)
                     if _G not in iG_: continue  # outside root graph
                     _Gt = iGt_[_G.i]  # may represent Gt indirectly?
@@ -152,10 +153,10 @@ def node_connect(iG_,link_):  # node connectivity = sum surround link vals, incr
                     linkV = _valt[i] * decay  # _node connect val * relative link val
                     dv = linkV - link.Vt[i][j]; valt[i] += dv; link.Vt[i][j] = linkV
                     if dv > ave * rdnt[i]:
-                        dVt[i] += dv; uprimt[i][G] += [link]
+                        dVt[i] += dv; uprimt[i]+= [link]
                 L = len(uprimt[i]); Lent[i] += L
                 if dVt[i] > ave * rdnt[i] * L:
-                    _uprimt[i][G][:] = uprimt[i][G]  # pruned for next loop
+                    _uprimt[i][:] = uprimt[i]  # pruned for next loop
                     DVt[i] += dVt[i]
                     if Gt not in Gt_: Gt_ += [Gt]
         if DVt[0] <= ave_Gm * Lent[0] and DVt[1] <= ave_Gd * Lent[1]:  # scale by rdn too?
@@ -169,8 +170,9 @@ def segment_node_(root, Gt_, fd):  # eval rim links with summed surround vals fo
     # graph += [node] if >ave (surround connectivity * relative value of link to any internal node)
     igraph_ = []; ave = G_aves[fd]
 
-    for Gt in Gt_:
+    for i, Gt in enumerate(Gt_):
         G,rimt,valt,rdnt,dect, uprimt, *_ = Gt
+        G.i = i  # if we update G.i in sum2graph, fd == 1 loop might be using G.i assigned in fd == 0's sum2graph 
         subH = [[],[0,0],[1,1],[0,0]]
         Link_= defaultdict(list)
         A, S = [0,0],0
@@ -186,14 +188,16 @@ def segment_node_(root, Gt_, fd):  # eval rim links with summed surround vals fo
         tVal,tRdn = 0,0  # loop totals
         graph_ = []
         for grapht in _graph_:  # extend graph Rim
-            nodet_,Rimt, Valt,Rdnt,Dect, A,S, subH,link_,_ = grapht
+            nodet_,Rim, Valt,Rdnt,Dect, A,S, subH,link_ = grapht  # Rim in segment_node_ is per fork, so RImt is not needed
             inVal,inRdn = 0,0  # in-graph: positive
-            new_Rimt = [defaultdict(list), defaultdict(list)]
-            for link in get_link_(Rimt[fd]):  # unique links
-                if link.G in grapht[0]:
-                    Gt = Gt_[link.G.i]; _Gt = Gt_[link._G.i]
-                else:
-                    Gt = Gt_[link._G.i]; _Gt = Gt_[link.G.i]
+            new_Rim = defaultdict(list)
+            for link in get_link_(Rim):  # unique links
+                if link.G in [Gt[0] for Gt in Gt_] and link._G in [Gt[0] for Gt in Gt_]:  # both Gs present in Gt_
+                    if link.G is nodet_[0][0]:
+                        Gt = Gt_[link.G.i]; _Gt = Gt_[link._G.i]
+                    else:
+                        Gt = Gt_[link._G.i]; _Gt = Gt_[link.G.i]
+                else: continue
                 if _Gt in nodet_: continue
                 # node match * surround M|D match: of potential in-graph position?
                 comb_val = link.valt[fd] + get_match(Gt[2][fd],_Gt[2][fd])
@@ -207,12 +211,12 @@ def segment_node_(root, Gt_, fd):  # eval rim links with summed surround vals fo
                         Valt[i] += _Valt[i]; Rdnt[i] += _Rdnt[i]; Dect[i] += _Dect[i]
                     inVal += _Valt[fd]; inRdn += _Rdnt[fd]
                     nodet_ += [__Gt for __Gt in _Gt[0].root[fd][0] if __Gt not in nodet_]
-                    Rimt[fd].update(_Rim[fd])
-                    new_Rimt[fd].update(_Rim[fd])
+                    Rim.update(_Rim)
+                    new_Rim.update(_Rim)
             tVal += inVal; tRdn += inRdn  # signed?
-            if len(get_link_(new_Rimt[fd])) * inVal > ave * inRdn:
+            if len(get_link_(new_Rim)) * inVal > ave * inRdn:
                 # eval new_Rim for extension:
-                graph_ += [[nodet_,new_Rimt,Valt,Rdnt,Dect,A,S, subH, link_]]
+                graph_ += [[nodet_,new_Rim,Valt,Rdnt,Dect,A,S, subH, link_]]
 
         if len(graph_) * (tVal-_tVal) <= ave * (tRdn-_tRdn):  # even low-Val extension may be valuable if Rdn decreases?
             break
@@ -232,7 +236,6 @@ def sum2graph(root, grapht, fd):  # sum node and link params into graph, aggH in
     for i, Gt in enumerate(Gt_):
         Gt[-1][fd] = root  # Gt: [G,rimt,valt,rdnt,dect,roott]
         G = Gt[0]
-        G.i = i
         sum_box(graph.box, G.box)
         graph.node_t[fd] += [G]
         graph.connec_t[fd] += [Gt[1:]]  # node connectivity params: rim,valt,rdnt,dect,n
@@ -476,4 +479,4 @@ def feedback(root, fd):  # called from form_graph_, append new der layers to roo
             feedback(rroot, fd)  # sum2graph adds aggH per rng, feedback adds deeper sub+ layers
 
 def get_link_(linkmap):
-    return [link for node, link_ in linkmap.items() for link in link_ if link.G is node]
+    return list(set([link for node, link_ in linkmap.items() for link in link_ if linkmap]))  # why we need if link.G is node? I can see it could be link._G too. Also we just need to retrieve all links?
