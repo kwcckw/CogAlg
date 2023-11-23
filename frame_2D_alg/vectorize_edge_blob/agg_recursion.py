@@ -87,7 +87,7 @@ def form_graph_t(root, Valt,Rdnt, G_, link_, fd):  # form mgraphs and dgraphs of
     graph_t = []
     for i in 0,1:
         if Valt[i] > ave * Rdnt[i]:  # else no clustering
-            graph_t += [segment_node_(root, Gt_, i, fd)]  # if fd: node-mediated Correlation Clustering; add alt_graphs?
+            graph_t += [segment_node_(root, Gt_, link_, i, fd)]  # if fd: node-mediated Correlation Clustering; add alt_graphs?
         else:
             graph_t += [[]]  # or G_?
     # sub+, external to agg+ vs. internal in comp_slice sub+:
@@ -180,8 +180,8 @@ def segment_node_(root, Gt_, fd, root_fd):  # eval rim links with summed surroun
                 Link_[G] += [link]; A[0] += link.A[0]; A[1] += link.A[1]; S += link.S
         grapht = [[Gt],{node:list(link_) for node,link_ in rimt[fd].items()}, copy(valt),copy(rdnt),copy(dect),A,S,subH,Link_]
         G.root[fd] = grapht; igraph_ += [grapht]
-    _tVal,_tRdn = 0,0
-    _graph_ = igraph_
+
+    _graph_ = igraph_; _tVal,_tRdn = 0,0
     while True:
         tVal,tRdn = 0,0  # loop totals
         graph_ = []
@@ -200,12 +200,12 @@ def segment_node_(root, Gt_, fd, root_fd):  # eval rim links with summed surroun
                 # node match * surround M|D match: of potential in-graph position?
                 comb_val = link.valt[fd] + get_match(Gt[2][fd],_Gt[2][fd])
                 comb_rdn = link.rdnt[fd] + (Gt[3][fd] + _Gt[3][fd]) / 2
-                # merge nodes
                 if comb_val > ave*comb_rdn:
-                    # sum links
+                    # merge node.root:
                     _nodet_,_Rim,_Valt,_Rdnt,_Dect,_A,_S,_subH,_link_ = _Gt[0].root[fd]
-                    if _Gt[0].root[fd] in grapht: grapht.remove(_Gt[0].root[fd])   # remove overlapping root
-                    for _nodet in _nodet_: _nodet[0].root[fd] = grapht  # assign new merged root  
+                    if _Gt[0].root[fd] in grapht:  # grapht is not graphts?
+                        grapht.remove(_Gt[0].root[fd])   # remove overlapping root
+                    for _nodet in _nodet_: _nodet[0].root[fd] = grapht  # assign new merged root
                     sum_subHv(subH, _subH, base_rdn=1)
                     A[0] += _A[0]; A[1] += _A[1]; S += _S; link_.update(_link_)
                     for i in 0,1:
