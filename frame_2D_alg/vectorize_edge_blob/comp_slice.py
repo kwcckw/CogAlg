@@ -54,7 +54,7 @@ def comp_rng(ilink_, rng):  # form new Ps and links, switch to rng+n to skip clu
 
     link_ = []  # rng+ links
     for _derP, derP in combinations(ilink_, 2):  # scan last-layer link pairs
-        _P = _derP.P; P = derP.P
+        P = derP.P
         if _derP.P is not derP._P: continue  # same as derP._P is _derP._P or derP.P is _derP.P
         __P = _derP._P  # next layer of Ps
         distance = np.hypot(__P.yx[1]-P.yx[1],__P.yx[0]-P.yx[0])   # distance between midpoints
@@ -100,7 +100,7 @@ def form_PP_t(root, root_link_, base_rdn):  # form PPs of derP.valt[fd] + connec
             while perimeter:
                 _P = perimeter.popleft()
                 if _P in inP_: continue
-                cP_ += [_P]
+                cP_ += [_P]; inP_ += [_P]  # we need to pack _P too
                 perimeter += P_Ps[_P]  # append linked __Ps to extended perimeter of P
             PP = sum2PP(root, cP_, derP_, base_rdn, fd)
             PP_t[fd] += [PP]  # no if Val > PP_aves[fd] * Rdn:
