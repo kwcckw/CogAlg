@@ -85,29 +85,23 @@ def form_PP_t(root, root_link_, base_rdn):  # form PPs of derP.valt[fd] + connec
 
     PP_t = [[],[]]
     for fd in 0,1:
-        link_map = defaultdict(list)
+        P_Ps = defaultdict(list)
         derP_ = []
         for derP in root_link_:
             if derP.valt[fd] > P_aves[fd] * derP.rdnt[fd]:
-                link_map[derP.P] += [derP._P]  # keys:Ps, vals: linked _P_s, up and down
-                link_map[derP._P] += [derP.P]
-                derP_ += [derP]     # filtered derP
-        CP_ = []  # clustered Ps and their val,rdn s for all Ps
+                P_Ps[derP.P] += [derP._P]  # key:P, vals:linked _Ps, up and down
+                P_Ps[derP._P] += [derP.P]
+                derP_ += [derP]  # filtered derP
+        inP_ = []  # clustered Ps and their val,rdn s for all Ps
         for P in root.P_:
-            if P in CP_: continue  # skip if already packed in some PP
-            cP_ = [P]; CP_ += [P]
-            perimeter = deque(link_map[P])  # recycle with breadth-first search, up and down:
+            if P in inP_: continue  # already packed in some PP
+            cP_ = [P]; inP_ += [P]  # clustered Ps and their val,rdn s
+            perimeter = deque(P_Ps[P])  # recycle with breadth-first search, up and down:
             while perimeter:
                 _P = perimeter.popleft()
-                if _P in CP_: continue
-                for derP in derP_:
-                    # check for pair
-                    if (derP.P is P) and (_P is not derP._P): continue
-                    if (derP._P is P) and (_P is not derP.P): continue
-                    if derP.valt[fd] > P_aves[fd]/2 * derP.rdnt[fd]:  # no interference by -ve links? lower filter for link vs. P
-                        cP_ += [_P]; CP_ += [_P]
-                        perimeter += link_map[_P]  # append linked __Ps to extended perimeter of P
-                        break   # break to avoid duplicate P
+                if _P in inP_: continue
+                cP_ += [_P]
+                perimeter += P_Ps[_P]  # append linked __Ps to extended perimeter of P
             PP = sum2PP(root, cP_, derP_, base_rdn, fd)
             PP_t[fd] += [PP]  # no if Val > PP_aves[fd] * Rdn:
 
