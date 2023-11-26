@@ -67,9 +67,7 @@ def agg_recursion(rroot, root, G_, fd):  # + fpar for agg_parP_? compositional a
         for i, _node in enumerate(G_):  # form new link_ from original node_
             for node in G_[i+1:]:
                 dy = _node.box[0]-node.box[0]; dx = _node.box[1]-node.box[1]; distance = np.hypot(dy,dx)
-                # root rng is init with 1, so the value is too low and it becomes false most of the time
-                # the value from root.rng * (_node.valHt[fd][-1]+node.valHt[fd][-1])/ ave*2 is too high, probably we need to scale it by rdnHt too?
-                if distance < root.rng * (_node.valHt[fd][-1]+node.valHt[fd][-1])/ ave*2:  # <ave Euclidean distance between G centers; or rng * (_G_val+G_val)/ ave*2?
+                if distance < ave_distance * ((_node.valHt[fd][-1]+node.valHt[fd][-1]) / (ave*(_node.rdnHt[fd][-1]+node.rdnHt[fd][-1]))):
                     derG, mval,dval, mrdn,drdn, mdec,ddec = comp_G(_node,node, None)
                     link_ += [derG]; Mval+=mval; Dval+=dval; Mrdn+=mrdn; Drdn+=drdn; Mdec+=mdec; Ddec+=ddec
 
@@ -156,31 +154,37 @@ def form_graph_t(root, link_, Valt,Rdnt, G_, fd):  # form mgraphs and dgraphs of
 
 
 def node_connect(iG_,link_,fd):  # node connectivity = sum surround link vals, incr.mediated: Graph Convolution of Correlations
-
     iGt_ = []
-    for G in iG_:
+    # init Gt from links per G:
+    G_links_ = defaultdict(list)
+    for link in link_:
+        if link.valt[fd] > 5 * link.rdnt[fd]:
+            if link not in G_links_[link.G]: G_links_[link.G] += [link]  # we need the if checking because we assign them bidrectionally, we can't skip bidirectional because some G is in uplink only
+            if link not in G_links_[link._G]: G_links_[link._G] += [link]
+
+    # some G in IGs may not in link_ because we filtered them in agg_recursion with distance, so we need to loop iGs here
+    for i, G in enumerate(iG_):
+        G.it[fd] = i  # assign here for both agg+ and sub+? assign it in sum2graph only work for node, but not the formed graph
         valt,rdnt,dect = [0,0],[0,0],[0,0]
-        rimt = [[],[]]
-        uprimt = [[],[]]
-        for link in link_:  # list, all links containing G
-            if G is link.G or G is link._G:  # add both sides?
-                for i in 0,1:
-                    if link.valt[i] > G_aves[i] * link.rdnt[i]:  # skip negative, init with direct connectivity vals:
-                        valt[i] += link.valt[i]; rdnt[i] += link.rdnt[i]; dect[i] += link.dect[i]
-                        link.Vt[i][0] = link.Vt[i][1] = link.valt[i]
-                        rimt[i] += [link]; uprimt[i] += [link]  # same
-        iGt_ += [[G,rimt,valt,rdnt,dect,uprimt]]
+        rimt,uprimt = [[],[]], [[],[]]
+        for link in G_links_[G]:
+            for i in 0,1:
+                if link.valt[i] > G_aves[i] * link.rdnt[i]:  # skip negative, init with direct connectivity vals:
+                    valt[i] += link.valt[i]; rdnt[i] += link.rdnt[i]; dect[i] += link.dect[i]
+                    link.Vt[i][0] = link.Vt[i][1] = link.valt[i]
+                    rimt[i] += [link]; uprimt[i] += [link]  # same
+        iGt_ += [[G,rimt,valt,rdnt,dect,[None, None],uprimt]]  # 2nd last element is roott, per Gt
     _Gt_ = copy(iGt_)  # for selective connectivity expansion, not affecting return iGt_
     '''
-    Aggregate direct * indirect connectivity per node from indirect links via associated nodes, in multiple cycles. 
-    Each cycle adds contributions of previous cycles to linked-nodes connectivity, propagated through the network.
-    Math: https://github.com/boris-kz/CogAlg/blob/master/frame_2D_alg/Illustrations/node_connect.png 
-    '''
+   Aggregate direct * indirect connectivity per node from indirect links via associated nodes, in multiple cycles. 
+   Each cycle adds contributions of previous cycles to linked-nodes connectivity, propagated through the network.
+   Math: https://github.com/boris-kz/CogAlg/blob/master/frame_2D_alg/Illustrations/node_connect.png 
+   '''
     while True:  # eval same Gs,links, but with cross-accumulated node connectivity values, indirectly extending their range
         Gt_ = []
         DVt, Lent = [0,0],[0,0]  # _Gt_ updates per loop
         for Gt in _Gt_:
-            G, rimt, valt,rdnt,dect,_uprimt = Gt
+            G, rimt, valt,rdnt,dect,_,_uprimt = Gt
             uprimt = [[],[]]  # for >ave updates
             dVt = [0,0]  # dRt?
             for i in 0,1:
@@ -189,7 +193,7 @@ def node_connect(iG_,link_,fd):  # node connectivity = sum surround link vals, i
                     _G, j = (link.G, 1) if link._G is G else (link._G, 0)
                     if _G not in iG_: continue  # outside root graph
                     _Gt = iGt_[_G.it[fd]]  # may represent Gt indirectly?
-                    _G,_rimt,_valt,_rdnt,_dect,_ = _Gt
+                    _G,_rimt,_valt,_rdnt,_dect,_,_ = _Gt
                     if _valt[i] < ave: continue  # _valt is updated after _linkV?
                     decay = link.dect[i]
                     dect[i] += link.dect[i]
@@ -199,14 +203,13 @@ def node_connect(iG_,link_,fd):  # node connectivity = sum surround link vals, i
                     if dv > ave * rdnt[i]:
                         dVt[i] += dv; uprimt[i]+= [link]
                 L = len(uprimt[i]); Lent[i] += L
-                if dVt[i] > ave * rdnt[i] * L:
-                    _uprimt[i][:] = uprimt[i]  # pruned for next loop
-                    DVt[i] += dVt[i]
-                    if Gt not in Gt_: Gt_ += [Gt[:5]+[[[],[]]]]  # why we need this line? And why Gt[:3]? only G, rimt and valt is included? should be excluding uprimt only?
-        if DVt[0] <= ave_Gm * Lent[0] and DVt[1] <= ave_Gd * Lent[1]:  # scale by rdn too?
-            break
-        _Gt_ = Gt_  # exclude weakly incremented Gts from next connectivity expansion loop
-
+            if any(uprimt):  # both pruned for next loop
+                Gt_ += [Gt[:6]+[uprimt]]
+                for i in 0,1: 
+                    DVt[i] += dVt[i]  
+                    # also rdn?
+        if Gt_: _Gt_ = Gt_  # exclude weakly incremented Gts from next connectivity expansion loop
+        else:   break          
     return iGt_
 
 def segment_node_(root, Gt_, fd, root_fd):  # eval rim links with summed surround vals for density-based clustering
@@ -215,7 +218,7 @@ def segment_node_(root, Gt_, fd, root_fd):  # eval rim links with summed surroun
     igraph_ = []; ave = G_aves[fd]
 
     for i, Gt in enumerate(Gt_):
-        G,rimt,valt,rdnt,dect,_ = Gt
+        G,rimt,valt,rdnt,dect,_,_ = Gt
         subH = [[],[0,0],[1,1],[0,0]]
         Link_ = []; A,S = [0,0],0
         for link in rimt[fd]:
@@ -224,7 +227,6 @@ def segment_node_(root, Gt_, fd, root_fd):  # eval rim links with summed surroun
                 Link_ += [link]; A[0] += link.A[0]; A[1] += link.A[1]; S += link.S
         grapht = [[Gt],Link_, copy(valt),copy(rdnt),copy(dect),A,S,subH, copy(Link_)]
         G.root[fd] = grapht; igraph_ += [grapht]
-        G.it[fd] = i
     _tVal,_tRdn = 0,0
     _graph_ = igraph_
     while True:
@@ -279,7 +281,7 @@ def sum2graph(root, grapht, fd):  # sum node and link params into graph, aggH in
     nodet_ = []
     for i, Gt in enumerate(Gt_):
         G = Gt[0]
-        G.it[fd] = i
+        Gt[-2][fd] = root
         sum_box(graph.box, G.box)
         nodet_ += [Gt]  # node,rimt,valt,rdnt,dect
         if (Mval,Dval)[fd] > ave * (Mrdn,Drdn)[fd]:  # redundant to nodes, only link_ params are necessary
@@ -468,7 +470,10 @@ def feedback(root, fd):  # called from form_graph_, append new der layers to roo
     sum_Hts(root.valHt,root.rdnHt,root.decHt, ValHt,RdnHt,DecHt)  # both forks sum in same root
 
     if isinstance(root, Cgraph):  # root is not CEdge, which has no roots
-        rroot = root.root
+        # [-1] = last element nodet
+        # [0] = 1st Gt
+        # [-2] index of roott in Gt
+        rroot = root.nodet_H[-1][0][-2][fd]
         fd = root.fd  # node_ fd
         fback_ = rroot.fback_t[fd]
         fback_ += [[AggH, ValHt, RdnHt, DecHt]]
