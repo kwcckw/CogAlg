@@ -140,7 +140,7 @@ class Cgraph(ClusterStructure):  # params of single-fork node_ cluster per pplay
     alt_Graph : object = None  # conditional, summed and concatenated params of alt_graph_
     # temporary:
     it : list = z([None,None])  # graph indices in root node_s, implicitly nested
-    root : object = None  # for feedback
+    root : list = z([None,None])  # for feedback  (actually is roott, change to roott?)
     fback_t : list = z([[],[]])  # maps to node_t: feedback [[aggH,valt,rdnt,dect]] per node fork
     compared_ : list = z([])
     Rdn : int = 0  # for accumulation or separate recursion count?
