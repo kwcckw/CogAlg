@@ -57,23 +57,23 @@ def vectorize_root(blob, verbose):  # vectorization pipeline is 3 composition le
 def agg_recursion(rroot, root, G_, fd):  # + fpar for agg_parP_? compositional agg|sub recursion in root graph, cluster G_
 
     Mval,Dval, Mrdn,Drdn, Mdec,Ddec = 0,0,0,0,0,0
-    Gt_,link_ = [],[]
-    for G in G_: G.it = [None, None]  # reset for reassignment later
+    Gc_, link_ = [],[]
+    for G in G_: G.it = [None, None]  # reassign
     if fd:  # der+
         for link in root.link_:  # reform links
             if link.valt[1] < G_aves[1]*link.rdnt[1]: continue  # maybe weak after rdn incr?
-            form_Gt_(comp_G(link._G,link.G,link), fd, G_,link_,Gt_, [Mval,Dval,Mrdn,Drdn,Mdec,Ddec])
+            form_Gt_(comp_G(link._G,link.G,link), fd, G_,link_,Gc_, [Mval,Dval,Mrdn,Drdn,Mdec,Ddec])
     else:   # rng+
         for i, _node in enumerate(G_):  # form new link_ from original node_
             for node in G_[i+1:]:
                 dy = _node.box[0] - node.box[0]; dx = _node.box[1] - node.box[1]
                 distance = np.hypot(dy, dx)  # distance between node centers, init ave_rng = 3:
                 if distance < 3 * ((_node.valHt[fd][-1] + node.valHt[fd][-1]) / ave * (_node.rdnHt[fd][-1] + node.rdnHt[fd][-1])):
-                    # int won't be referenced
-                    Mval,Dval,Mrdn,Drdn,Mdec,Ddec = form_Gt_(comp_G(_node,node,CderG(_G=_node,G=node)), fd, G_,link_,Gt_, [Mval,Dval,Mrdn,Drdn,Mdec,Ddec])
+                    Mval,Dval,Mrdn,Drdn,Mdec,Ddec = \
+                        form_Gt_(comp_G(_node,node,CderG(_G=_node,G=node)), fd, G_,link_,Gc_, [Mval,Dval,Mrdn,Drdn,Mdec,Ddec])
 
     root.valHt[fd] += [0]; root.rdnHt[fd] += [1]  # sum in feedback:
-    GG_t = form_graph_t(root, Gt_, link_, [Mval,Dval],[Mrdn,Drdn], fd)  # eval sub+, feedback per graph
+    GG_t = form_graph_t(root, Gc_, [Mval,Dval],[Mrdn,Drdn], fd)  # eval sub+, feedback per graph
     # agg+ xcomp-> form_graph_t loop sub)agg+, vs. comp_slice sub+ loop-> eval-> xcomp
     for GG_ in GG_t:  # comp_G_ eval: ave_m * len*rng - fixed cost, root update in form_t:
         if root.valHt[0][-1] * (len(GG_)-1)*root.rng > G_aves[fd] * root.rdnHt[0][-1]:
@@ -84,35 +84,29 @@ def agg_recursion(rroot, root, G_, fd):  # + fpar for agg_parP_? compositional a
     else:
         root.node_t[:] = GG_t   # Cedge
 
-def form_Gt_(compG, fd, G_,link_,Gt_, Vt):  # Mval,Dval,Mrdn,Drdn,Mdec,Ddec
+
+def form_Gt_(compG, fd, G_,link_,Gc_, Vt):  # Mval,Dval,Mrdn,Drdn,Mdec,Ddec
 
     link, mval, dval, mrdn, drdn, mdec, ddec = compG
+    valt, rdnt, dect = [mval,dval],[mrdn,drdn],[mdec,ddec]
 
     for i,v in enumerate([mval,dval,mrdn,drdn,mdec,ddec]):
         Vt[i] += v
-    link.Vt[fd][0] = link.Vt[fd][1] = [mval,dval][fd]
-
-    # this shouldn't based on root fork?
-    # if link.valt[fd] < G_aves[fd] * link.rdnt[fd]:  # skip negative, init with direct connectivity vals:
-
-    flink = 0
+    link.Vt[fd][0] = link.Vt[fd][1] = valt[fd]
+    fadd = 0
     for node in link._G, link.G:
         if node in G_:
-            if node.it[fd]:  # defined for local agg+ only
-                _,rimt,valt,rdnt,dect,_,uprimt = Gt_[node.it[fd]]
-                for i in 0, 1:
-                    if link.valt[fd] > G_aves[fd] * link.rdnt[fd]:
-                        rimt[i] +=[link]; uprimt[i] +=[link]; flink =1  # both are fork-specific?
-                valt[0]+=mval; valt[1]+=dval; rdnt[0]+=mrdn; rdnt[1]+=drdn; dect[0]+=mdec; dect[1]+=ddec
-            else:
-                mrim,drim = [],[]
-                for i in 0, 1:
-                    if link.valt[fd] > G_aves[fd] * link.rdnt[fd]: 
-                        [mrim,drim][i] += [link]; flink = 1
-                node.it[fd] = len(Gt_)
-                Gt_ += [[node,[mrim,drim],[mval,dval],[mrdn,drdn],[mdec,ddec],[None,None],[copy(mrim), copy(drim)]]]
-            if flink: link_ += [link]        
-
+            if node.it[fd]:  # in agg+ Gc_
+                fini=0; _,rimt,_valt,_rdnt,_dect,_,uprimt = Gc_[node.it[fd]]
+            else:  # add new Gc
+                fini=1; rimt,_valt,_rdnt,_dect,uprimt = [[],[]],[0,0],[0,0],[0,0],[[],[]]; node.it[fd] = len(Gc_)
+            for i in 0,1:
+                if valt[i] > G_aves[i] * rdnt[i]:
+                    rimt[i] += [link]; uprimt[i] += [link]; fadd = 1
+                    _valt[i] += valt[i]; _rdnt[i] += rdnt[i]; _dect[i] += dect[i]
+            if fadd:
+                link_ += [link]
+                if fini: Gc_ += [[node,rimt,_valt,_rdnt,_dect,[None,None],uprimt]]
     return Vt
 
 def comp_G(_G, G, link):
@@ -154,17 +148,18 @@ def comp_G(_G, G, link):
 
     return [link, Mval,Dval, Mrdn,Drdn, Mdec,Ddec]
 
+# below is not revised:
 
-def form_graph_t(root, Gt_, link_, Valt,Rdnt, fd):  # form mgraphs and dgraphs of same-root nodes
+def form_graph_t(root, Gc_, Valt,Rdnt, fd):  # form mgraphs and dgraphs of same-root nodes
 
-    if isinstance(root, Cgraph): G_ = [Gt[0] for Gt in root.nodet_H[-1]]  # nodet has no fork yet before feedback?
+    if isinstance(root, Cgraph): G_ = [Gt[0] for Gt in root.nodec_H[-1]]  # no fork before feedback?
     else:                        G_ = root.node_t[fd]
-        
-    node_connect(Gt_, G_, fd)  # AKA Graph Convolution of Correlations
+
+    node_connect(Gc_, G_, fd)  # AKA Graph Convolution of Correlations
     graph_t = [[],[]]
     for i in 0,1:
         if Valt[i] > ave * Rdnt[i]:  # else no clustering
-            graph_t[i] = segment_node_(root,Gt_,i,fd) # if fd: node-mediated Correlation Clustering
+            graph_t[i] = segment_node_(root,Gc_,i,fd) # if fd: node-mediated Correlation Clustering
             # add alt_graphs?
     # sub+, external to agg+ vs. internal in comp_slice sub+:
     for fd, graph_ in enumerate(graph_t):  # breadth-first for in-layer-only roots
