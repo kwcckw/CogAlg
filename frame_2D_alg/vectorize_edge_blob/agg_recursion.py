@@ -46,7 +46,7 @@ def vectorize_root(blob, verbose):  # vectorization pipeline is 3 composition le
             if PP.valt[fd] * (len(node_)-1) * (PP.rng+1) <= G_aves[fd] * PP.rdnt[fd]: continue
             derH,valt,rdnt = PP.derH,PP.valt,PP.rdnt
             G_ += [Cgraph( ptuple=PP.ptuple, derH=derH, valHt=[[valt[0]],[valt[1]]], rdnHt=[[rdnt[0]],[rdnt[1]]], L=PP.ptuple[-1],
-                           box=[(PP.box[0]+PP.box[1])/2, (PP.box[2]+PP.box[3])/2] + list(PP.box), link_=PP.link_, nodet_H=[PP.node_t] )]
+                           box=[(PP.box[0]+PP.box[1])/2, (PP.box[2]+PP.box[3])/2] + list(PP.box), link_=PP.link_, nodec_H=[PP.node_t] )]
             i += 1  # G index in node_
         if G_:
             node_[:] = G_  # replace  PPs with Gs
@@ -80,7 +80,7 @@ def agg_recursion(rroot, root, G_, fd):  # + fpar for agg_parP_? compositional a
             agg_recursion(rroot, root, GG_, fd=0)  # 1st xcomp in GG_
 
     if isinstance(root, Cgraph):
-        root.nodet_H += [GG_t]  # Cgraph
+        root.nodec_H += [GG_t]  # Cgraph
     else:
         root.node_t[:] = GG_t   # Cedge
 
@@ -165,9 +165,9 @@ def form_graph_t(root, Gc_, Valt,Rdnt, fd):  # form mgraphs and dgraphs of same-
     for fd, graph_ in enumerate(graph_t):  # breadth-first for in-layer-only roots
         root.valHt[fd]+=[0]; root.rdnHt[fd]+=[1]  # remove if stays 0?
         for graph in graph_:
-            nodet_ = graph.nodet_H[0]  # no H yet
-            if sum(graph.valHt[fd]) * (len(nodet_)-1)*root.rng > G_aves[fd] * sum(graph.rdnHt[fd]):  # eval fd comp_G_ in sub+
-                agg_recursion(root, graph,  [nodet[0] for nodet in nodet_], fd)  # replace node_ with node_t, recursive
+            nodec_ = graph.nodec_H[0]  # no H yet
+            if sum(graph.valHt[fd]) * (len(nodec_)-1)*root.rng > G_aves[fd] * sum(graph.rdnHt[fd]):  # eval fd comp_G_ in sub+
+                agg_recursion(root, graph,  [nodec[0] for nodec in nodec_], fd)  # replace node_ with node_t, recursive
             else:  # feedback after graph sub+, not revised
                 root.fback_t[fd] += [[graph.aggH, graph.valHt, graph.rdnHt, graph.decHt]]
                 root.valHt[fd][-1] += graph.valHt[fd][-1]  # last layer, or all new layers via feedback?
@@ -234,50 +234,52 @@ def segment_node_(root, Gt_, fd, root_fd):  # eval rim links with summed surroun
     _tVal,_tRdn = 0,0
     _graph_ = igraph_
 
-    if isinstance(root,Cgraph): root_node_ = root.nodet_H[-1]      # root is Cgraph
+    if isinstance(root,Cgraph): root_node_ = root.nodec_H[-1]      # root is Cgraph
     else:                       root_node_ = root.node_t[root_fd]  # root is Cedge
     while True:
         tVal,tRdn = 0,0  # loop totals
         graph_ = []
-        while _graph_:  # extend graph Rim
-            grapht = _graph_.pop()
-            nodet_,Rim, Valt,Rdnt,Dect, A,S, subH,_upRim = grapht
+        for grapht in _graph_:  # extend graph Rim
+            nodec_,Rim, Valt,Rdnt,Dect, A,S, subH,_upRim = grapht
             inVal,inRdn = 0,0  # in-graph: positive
             upRim = []
             for link in Rim:  # unique links
-                if link.G is nodet_[0][0]:
+                if link.G is nodec_[0][0]:
                     Gt = Gt_[link.G.it[root_fd]]; _Gt = Gt_[link._G.it[root_fd]] if Gt[0] in root_node_ else None
                 else:
                     Gt = Gt_[link._G.it[root_fd]]; _Gt = Gt_[link.G.it[root_fd]] if Gt[0] in root_node_ else None
                 if _Gt is None: continue  # not in root.node_
-                if _Gt in nodet_: continue
+                if _Gt in nodec_: continue
                 # node match * surround M|D match: of potential in-graph position?
                 comb_val = link.valt[fd] + get_match(Gt[2][fd],_Gt[2][fd])
                 comb_rdn = link.rdnt[fd] + (Gt[3][fd] + _Gt[3][fd]) / 2
                 if comb_val > ave*comb_rdn:
                     # merge node.root:
-                    _nodet_,_Rim,_Valt,_Rdnt,_Dect,_A,_S,_subH,__upRim = _Gt[0].root[fd]
+                    _nodec_,_Rim,_Valt,_Rdnt,_Dect,_A,_S,_subH,__upRim = _Gt[0].root[fd]
                     if _Gt[0].root[fd] in grapht:  # grapht is not graphts?
                         grapht.remove(_Gt[0].root[fd])   # remove overlapping root
-                    for _nodet in _nodet_: _nodet[0].root[fd] = grapht  # assign new merged root
+                    for _nodec in _nodec_: _nodec[0].root[fd] = grapht  # assign new merged root
                     sum_subHv(subH, _subH, base_rdn=1)
                     A[0] += _A[0]; A[1] += _A[1]; S += _S
                     upRim = list(set(upRim +__upRim))  # not sure, also need to exclude Rim?
                     for i in 0,1:
                         Valt[i] += _Valt[i]; Rdnt[i] += _Rdnt[i]; Dect[i] += _Dect[i]
                     inVal += _Valt[fd]; inRdn += _Rdnt[fd]
-                    nodet_ += [__Gt for __Gt in _nodet_ if __Gt not in nodet_]
+                    nodec_ += [__Gt for __Gt in _nodec_ if __Gt not in nodec_]
             tVal += inVal
             tRdn += inRdn  # signed?
             if len(Rim) * inVal > ave * inRdn:
-                graph_ += [[nodet_,Rim, Valt,Rdnt,Dect,A,S, subH,upRim]]  # eval Rim for extension
+                graph_ += [[nodec_,Rim, Valt,Rdnt,Dect,A,S, subH,upRim]]  # eval Rim for extension
 
         if len(graph_) * (tVal-_tVal) <= ave * (tRdn-_tRdn):  # even low-Val extension may be valuable if Rdn decreases?
+            if not graph_:  graph_ = _graph_  # graph_ may empty, so if they are empty, use the prior loop _graph_? Otherwise they will be empty most of the time
             break
-        _graph_ = graph_
-        _tVal,_tRdn = tVal,_tRdn
+        else:
+            _graph_ = graph_
+            _tVal,_tRdn = tVal,_tRdn
     # -> Cgraphs if Val > ave * Rdn:
-    return [sum2graph(root, graph, fd) for graph in graph_ if graph[2] > ave * graph[3]]
+    return [sum2graph(root, graph, fd) for graph in graph_ if graph[2][fd] > ave * graph[3][fd]]
+
 
 def sum2graph(root, grapht, fd):  # sum node and link params into graph, aggH in agg+ or player in sub+
 
@@ -286,12 +288,12 @@ def sum2graph(root, grapht, fd):  # sum node and link params into graph, aggH in
     graph = Cgraph(fd=fd, L=len(Gt_),link_=Link_,A=A,S=S)  # n nodes
     graph.root[fd] = root
     for link in Link_: link.roott[fd]=graph
-    nodet_ = []
+    nodec_ = []
     for i, Gt in enumerate(Gt_):
         G = Gt[0]
         Gt[-2][fd] = root
         sum_box(graph.box, G.box)
-        nodet_ += [Gt]  # node,rimt,valt,rdnt,dect
+        nodec_ += [Gt]  # node,rimt,valt,rdnt,dect
         if (Mval,Dval)[fd] > ave * (Mrdn,Drdn)[fd]:  # redundant to nodes, only link_ params are necessary
             graph.ptuple += G.ptuple
             sum_derH([graph.derH,[0,0],[1,1]], [G.derH,[0,0],[1,1]], base_rdn=1)
@@ -304,7 +306,7 @@ def sum2graph(root, grapht, fd):  # sum node and link params into graph, aggH in
     graph.valHt[0]+=[Mval]; graph.valHt[1]+=[Dval]
     graph.rdnHt[0]+=[Mrdn]; graph.rdnHt[1]+=[Drdn]
     graph.decHt[0]+=[Mdec]; graph.decHt[1]+=[Ddec]
-    graph.nodet_H = [nodet_]
+    graph.nodec_H = [nodec_]
 
     return graph
 
@@ -479,10 +481,12 @@ def feedback(root, fd):  # called from form_graph_, append new der layers to roo
 
     if isinstance(root, Cgraph):  # root is not CEdge, which has no roots
 
-        rroot = root.nodet_H[-1][0][-2][fd]  # nodet is still flat in nodet_H
+        rroot = root.nodec_H[-1][0][-2][fd]  # nodec_H is a flat list of nodec
         fd = root.fd  # node_ fd
         fback_ = rroot.fback_t[fd]
         fback_ += [[AggH, ValHt, RdnHt, DecHt]]
-        if fback_ and (len(fback_) == len(rroot.node_t)):  # flat, all rroot nodes terminated and fed back
+        if isinstance(rroot, Cgraph): len_node_ = len(rroot.nodec_H[-1])  # Cgraph
+        else:                         len_node_ = len(rroot.node_t[fd])   # Cedge
+        if fback_ and (len(fback_) == len_node_):  # flat, all rroot nodes terminated and fed back
             # getting cyclic rroot here not sure why it can happen, need to check further
             feedback(rroot, fd)  # sum2graph adds aggH per rng, feedback adds deeper sub+ layers

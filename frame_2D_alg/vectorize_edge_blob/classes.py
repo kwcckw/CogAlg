@@ -128,7 +128,7 @@ class Cgraph(ClusterStructure):  # params of single-fork node_ cluster per pplay
     rdnHt : list = z([[1],[1]])
     decHt : list = z([[0],[0]])
     link_ : list = z([])  # defines graph, added per sub+, as in comp_slice
-    nodet_H : list = z([[]])  # init Gm_,-> Gm_,Gd_, nested in down-forking tree: node_ fork/ sub+; or node_H?
+    nodec_H : list = z([[]])  # init Gm_,-> Gm_,Gd_, nested in down-forking tree: node_ fork/ sub+; or node_H?
     L : int = 0 # len base node_; from internal links:
     S : float = 0.0  # sparsity: average distance to link centers
     A : list = z([0,0])  # angle: average dy,dx to link centers
