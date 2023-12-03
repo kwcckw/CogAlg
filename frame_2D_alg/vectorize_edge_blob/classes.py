@@ -37,11 +37,9 @@ class CEdge(ClusterStructure):  # edge blob
     derH : list = z([])  # formed in PPs, inherited in graphs
     valt : list = z([0,0])
     rdnt : list = z([1,1])
+    dect : list = z([0,0])  # consistent with graph
     # for agg+:
     aggH : list = z([])  # from Gs: [[subH,valt,rdnt]]: cross-fork composition layers
-    valHt : list = z([[0],[0]])  # Ht of link vals,rdns,decays per fder
-    decHt : list = z([[1],[1]])
-    rdnHt : list = z([[1],[1]])
     rng = 1
     # initializing blob:
     blob : object = None
@@ -134,9 +132,9 @@ class Cgraph(ClusterStructure):  # params of single-fork node_ cluster per pplay
     rim_tH : list = z([[[],[]]])  # directly connected nodes, per fork ) layer
     Rim_tH : list = z([[[],[]]])  # the most mediated evaluated nodes
     esubH : list = z([])  # external subH: [[daggH,valt,rdnt,dect]], summed from rim links
-    evalt : list = z([[0],[0]])
-    erdnt : list = z([[1],[1]])
-    edect : list = z([[0],[0]])
+    evalt : list = z([0,0])
+    erdnt : list = z([1,1])
+    edect : list = z([0,0])
     # ext params:
     L : int = 0 # len base node_; from internal links:
     S : float = 0.0  # sparsity: average distance to link centers

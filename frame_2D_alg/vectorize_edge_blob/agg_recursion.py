@@ -77,7 +77,7 @@ def agg_recursion(rroot, root, G_, fd):  # + fpar for agg_parP_? compositional a
             agg_recursion(rroot, root, GG_, fd=0)  # 1st xcomp in GG_
 
     if isinstance(root, Cgraph):
-        root.node_H += [GG_t]  # Cgraph
+        root.node_tH += [GG_t]  # Cgraph
     else:
         root.node_t[:] = GG_t   # Cedge
 
@@ -129,11 +129,11 @@ def comp_G(_G, G, link, G_,link_, Valt, Rdnt, Dect, ifd):
                 # link.Vt,link.Rt,link.Dt and node external params are initialized for node_connect:
                 for node in link._G, link.G:
                     if link.valt[fd] < G_aves[fd] * link.rdnt[fd]: continue  # exclude neg links
-                    [node.evalt, node.erdnt, node.edect][typ][fd] = par
+                    [node.evalt, node.erdnt, node.edect][typ][fd] = par  # (for link's params, it should be redundant to sum_subhv below ?)
                     if typ: continue  # once per link
                     node.rim_tH[-1][fd] += [link]
                     node.Rim_tH[-1][fd] += [link]
-                    sum_subHv(node.esubH,link.subH, link.rdnt[fd])  # this should be fork-specific?
+                    sum_subHv([node.esubH, node.evalt, node.erdnt,node.edect], [link.subH,link.valt,link.rdnt, link.dect], link.rdnt[fd])  # this should be fork-specific?
         link_ += [link]  # in some graph
 
 
@@ -150,12 +150,13 @@ def form_graph_t(root, G_, Valt,Rdnt, fd):  # form mgraphs and dgraphs of same-r
         for graph in graph_:
             # eval sub+, external to agg+ vs. internal in comp_slice sub+:
             # or eval aggH[-1][1][fd]: last subH only?
-            if graph.valt[fd] * (len(graph.node.tH[-1])-1)*root.rng > G_aves[fd] * graph.rdnt[fd]:
-                for G in graph.node.tH[-1]:  # still node_
-                    G.rim_tH += [[],[]]; G.Rim_tH += [[],[]]  # add layer
+            # why -1 to length node?
+            if graph.valt[fd] * (len(graph.node_tH[-1])-1)*root.rng > G_aves[fd] * graph.rdnt[fd]:
+                for G in graph.node_tH[-1]:  # still node_
+                    G.rim_tH += [[[],[]]]; G.Rim_tH += [[[],[]]]  # add layer
                 agg_recursion(root, graph,  graph.node_tH[-1], fd)  # replace node_ with node_t, recursive
             else:  # feedback after graph sub+, not revised
-                root.fback_t[fd] += [[graph.aggH, graph.valHt, graph.rdnHt, graph.decHt]]
+                root.fback_t[fd] += [[graph.aggH, graph.valt, graph.rdnt, graph.dect]]
                 root.valt[fd] += graph.valt[fd]  # merge forks into root fork
                 root.rdnt[fd] += graph.rdnt[fd]
                 root.dect[fd] += graph.dect[fd]
@@ -200,89 +201,90 @@ def node_connect(iG_,fd):  # node connectivity = sum surround link vals, incr.me
         if G_: _G_ = G_  # exclude weakly incremented Gs from next connectivity expansion loop
         else:   break
 
-# the below is not reviewed:
 
-def segment_node_(root, Gc_, fd, root_fd):  # eval rim links with summed surround vals for density-based clustering
+def segment_node_(root, G_, fd, root_fd):  # eval rim links with summed surround vals for density-based clustering
 
     # graph += [node] if >ave (surround connectivity * relative value of link to any internal node)
     igraph_ = []; ave = G_aves[fd]
-
-    for i, Gc in enumerate(Gc_):
-        G,rimt,valt,rdnt,dect,_,_ = Gc
+    for i, G in enumerate(G_):
         subH = [[],[0,0],[1,1],[0,0]]
         Link_ = []; A,S = [0,0],0
-        for link in rimt[fd]:
+        for link in G.rim_tH[-1][fd]:
             if link.valt[fd] > G_aves[fd] * link.rdnt[fd]:
                 sum_subHv(subH, [link.subH,link.valt,link.rdnt,link.dect], base_rdn=1)
-                Link_ += [link]; A[0] += link.A[0]; A[1] += link.A[1]; S += link.S
-        grapht = [[Gc],Link_,copy(valt),copy(rdnt),copy(dect),A,S,subH, copy(Link_)]
-        G.root[fd] = grapht; igraph_ += [grapht]
+                Link_ += [link]; A[0] += link.A[0]; A[1] += link.A[1]; S += link.S   
+        grapht = [[G],Link_,copy(G.valt),copy(G.rdnt),copy(G.dect), copy(G.evalt), copy(G.erdnt), copy(G.edect),A,S,subH,copy(Link_)]
+        G.roott[fd] = grapht; igraph_ += [grapht]
 
     _graph_ = igraph_
     while True:
         graph_ = []
         for grapht in _graph_:  # extend grapht Rim with +ve in-root links
-            nodec_,Rim, Valt,Rdnt,Dect, A,S, subH,_upRim = grapht
-            inVal, inRdn = 0,0  # new in-graph: positive
+            G_, Rim, Valt, Rdnt, Dect, eValt, eRdnt, eDect, A,S, subH,_upRim = grapht
+            inVal, inRdn, exVal, exRdn = 0,0,0,0  # new in-graph: positive
             upRim = []
             for link in Rim:  # unique links
-                if link.Gc in nodec_:
-                    Gc = Gc_[link.Gc.it[root_fd]]; _Gc = Gc_[link._Gc.it[root_fd]]
+                if link.G in G_:
+                    G = link.G; _G = link._G
                 else:
-                    Gc = Gc_[link._Gc.it[root_fd]]; _Gc = Gc_[link.Gc.it[root_fd]]
-                if _Gc in nodec_: continue
+                    G = link._G; _G = link.G
+                if _G in G_: continue
                 # node match * surround M|D match: of potential in-graph position?
-                comb_val = link.valt[fd] + get_match(Gc[2][fd],_Gc[2][fd])
-                comb_rdn = link.rdnt[fd] + (Gc[3][fd] + _Gc[3][fd]) / 2
+                comb_val = link.valt[fd] + get_match(G.evalt[fd],_G.evalt[fd])
+                comb_rdn = link.rdnt[fd] + (G.erdnt[fd] + _G.erdnt[fd]) / 2
                 if comb_val > ave*comb_rdn:
                     # merge node.root:
-                    _nodec_,_Rim,_Valt,_Rdnt,_Dect,_A,_S,_subH,__upRim = _Gc[0].root[fd]
-                    # ?:
-                    if _Gc[-2] is grapht:
-                        grapht.remove(_Gc[0].root[fd])   # remove overlapping root
-                    for _nodec in _nodec_: _nodec[0].root[fd] = grapht  # assign new merged root
+                    _G_,_Rim,_Valt,_Rdnt,_Dect,_eValt,_eRdnt,_eDect,_A,_S,_subH,__upRim = _G.roott[fd]
+                    for __G in _G_: __G.roott[fd] = grapht  # assign new merged root
                     sum_subHv(subH, _subH, base_rdn=1)
                     A[0] += _A[0]; A[1] += _A[1]; S += _S
-                    upRim = list(set(upRim +__upRim) -set(Rim))  # not sure, also need to exclude Rim?
+                    upRim = list(set([rim for rim in upRim +__upRim if rim not in Rim]))  # not sure, also need to exclude Rim?
                     for i in 0,1:
                         Valt[i] += _Valt[i]; Rdnt[i] += _Rdnt[i]; Dect[i] += _Dect[i]
-                    inVal += _Valt[fd]; inRdn += _Rdnt[fd]
-                    nodec_ += [__Gt for __Gt in _nodec_ if __Gt not in nodec_]
-            if len(Rim) * inVal > ave * inRdn:
-                graph_ += [[nodec_,Rim, Valt,Rdnt,Dect,A,S, subH,upRim]]  # eval Rim for extension
+                        eValt[i] += _eValt[i]; eRdnt[i] += _eRdnt[i]; eDect[i] += _eDect[i]
+                    inVal += _Valt[fd]; inRdn += _Rdnt[fd]; exVal += _eValt[fd]; exRdn += _eRdnt[fd]
+                    G_ += [__G for __G in _G_ if __G not in G_]
+            if len(Rim) * (inVal + exVal) > ave * (inRdn+exRdn):
+                graph_ += [[G_,Rim, Valt,Rdnt,Dect,eValt, eRdnt, eDect,A,S, subH,upRim]]  # eval Rim for extension
 
         if graph_: _graph_ = graph_
         else: break
     # -> Cgraphs if Val > ave * Rdn:
-    return [sum2graph(root, graph, fd) for graph in igraph_ if graph[2][fd] > ave * graph[3][fd]]
+    return [sum2graph(root, graph, fd) for graph in igraph_ if graph[2][fd]+graph[5][fd] > ave * (graph[3][fd] + graph[6][fd])]
 
-# not updated
+
 def sum2graph(root, grapht, fd):  # sum node and link params into graph, aggH in agg+ or player in sub+
 
-    Gc_,Rim,(Mval,Dval),(Mrdn,Drdn),(Mdec,Ddec), A,S, subH,Link_ = grapht
+    G_,Rim,valt,rdnt,dect, evalt,erdnt,edect, A,S, subH,Link_ = grapht
 
-    graph = Cgraph(fd=fd, L=len(Gc_),link_=Link_,A=A,S=S)  # n nodes
-    graph.root[fd] = root
+    graph = Cgraph(fd=fd,L=len(G_),link_=Link_,A=A,S=S,\
+                   valt=valt,rdnt=rdnt,dect=dect,evalt=evalt,erdnt=erdnt,edect=edect)  # n nodes
+    graph.roott[fd] = root
     for link in Link_: link.roott[fd]=graph
-    nodec_ = []
-    for i, Gc in enumerate(Gc_):
-        G = Gc[0]
-        Gc[-2][fd] = root
+    node_ = []  # flat node_ for now
+    for i, G in enumerate(G_):
         graph.box += G.box
-        nodec_ += [Gc]  # node,rimt,valt,rdnt,dect
-        if (Mval,Dval)[fd] > ave * (Mrdn,Drdn)[fd]:  # redundant to nodes, only link_ params are necessary
+        node_ += [G]
+        # internal + externaL? where external of nodes will be internal of graph now
+        if (valt[fd]+evalt[fd]) > ave * (rdnt[fd]+erdnt[fd]):  # redundant to nodes, only link_ params are necessary
             graph.ptuple += G.ptuple
             sum_derH([graph.derH,[0,0],[1,1]], [G.derH,[0,0],[1,1]], base_rdn=1)
             sum_aggHv(graph.aggH, G.aggH, base_rdn=1)
-            sum_Hts(graph.valHt,graph.rdnHt,graph.decHt, G.valHt,G.rdnHt,G.decHt)
+            sum_ts(graph.valt, graph.rdnt, graph.dect, G.valt, G.rdnt, G.dect)
+            sum_subHv([graph.esubH,graph.evalt,graph.erdnt,graph.edect],[G.esubH,G.evalt,G.erdnt,G.edect], base_rdn=1)  # or concatenate them?
     # add derLay:
     graph.aggH += [subH]
-    graph.valHt[0]+=[Mval]; graph.valHt[1]+=[Dval]
-    graph.rdnHt[0]+=[Mrdn]; graph.rdnHt[1]+=[Drdn]
-    graph.decHt[0]+=[Mdec]; graph.decHt[1]+=[Ddec]
-    graph.nodec_H = [nodec_]
+    graph.node_tH += [node_]
 
     return graph
+
+def sum_ts(Valt,Rdnt,Dect, valt,rdnt,dect):
+    
+    for fd in 0,1:
+        Valt[fd] += valt[fd]
+        Rdnt[fd] += rdnt[fd]
+        Dect[fd] += dect[fd]
+    
 
 def sum_Hts(ValHt,RdnHt,DecHt, valHt,rdnHt,decHt):
     # loop m,d Hs, add combined decayed lower H/layer?
@@ -441,22 +443,23 @@ def sum_ext(Extt, extt):
 
 def feedback(root, fd):  # called from form_graph_, append new der layers to root
 
-    AggH, ValHt, RdnHt, DecHt = deepcopy(root.fback_t[fd].pop(0))  # init with 1st tuple
+    AggH, Valt, Rdnt, Dect = deepcopy(root.fback_t[fd].pop(0))  # init with 1st tuple
     while root.fback_t[fd]:
-        aggH, valHt, rdnHt, decHt = root.fback_t[fd].pop(0)
+        aggH, valt, rdnt, dect = root.fback_t[fd].pop(0)
         sum_aggHv(AggH, aggH, base_rdn=0)
-        sum_Hts(ValHt,RdnHt,DecHt, valHt,rdnHt,decHt)
+        sum_ts(Valt, Rdnt, Dect, valt, rdnt,rdnt)
     sum_aggHv(root.aggH,AggH, base_rdn=0)
-    sum_Hts(root.valHt,root.rdnHt,root.decHt, ValHt,RdnHt,DecHt)  # both forks sum in same root
+    sum_ts(root.valt,root.rdnt,root.dect, Valt,Rdnt,Dect)  # both forks sum in same root
 
     if isinstance(root, Cgraph):  # root is not CEdge, which has no roots
 
-        rroot = root.nodec_H[-1][0][-2][fd]  # nodec_H is a flat list of nodec
-        fd = root.fd  # node_ fd
-        fback_ = rroot.fback_t[fd]
-        fback_ += [[AggH, ValHt, RdnHt, DecHt]]
-        if isinstance(rroot, Cgraph): len_node_ = len(rroot.nodec_H[-1])  # Cgraph
-        else:                         len_node_ = len(rroot.node_t[fd])   # Cedge
-        if fback_ and (len(fback_) == len_node_):  # flat, all rroot nodes terminated and fed back
-            # getting cyclic rroot here not sure why it can happen, need to check further
-            feedback(rroot, fd)  # sum2graph adds aggH per rng, feedback adds deeper sub+ layers
+        rroot = root.roott[fd]  # nodec_H is a flat list of nodec
+        if rroot:
+            fd = root.fd  # node_ fd
+            fback_ = rroot.fback_t[fd]
+            fback_ += [[AggH, Valt, Rdnt, Dect]]
+            if isinstance(rroot, Cgraph): len_node_ = len(rroot.node_tH[-1])  # Cgraph
+            else:                         len_node_ = len(rroot.node_t[fd])   # Cedge
+            if fback_ and (len(fback_) == len_node_):  # flat, all rroot nodes terminated and fed back
+                # getting cyclic rroot here not sure why it can happen, need to check further
+                feedback(rroot, fd)  # sum2graph adds aggH per rng, feedback adds deeper sub+ layers
