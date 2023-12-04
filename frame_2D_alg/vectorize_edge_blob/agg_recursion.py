@@ -57,11 +57,11 @@ def agg_recursion(rroot, root, G_, fd):  # + fpar for agg_parP_? compositional a
 
     Et = [[0,0],[0,0],[0,0]]  # eValt, eRdnt, eDect
     link_ = []
-    for G in G_: G.it = [None, None]  # reassign
+    # for G in G_: G.it = [None, None]  # reassign (this is not needed now)
     if fd:  # der+
         for link in root.link_:  # reform links
             if link.valt[1] < G_aves[1]*link.rdnt[1]: continue  # maybe weak after rdn incr?
-            comp_G(link._G,link.G,link, G_,link_,Et, fd)
+            comp_G(link._G,link.G,link, G_,link_,Et)
     else:   # rng+
         for i, _node in enumerate(G_):  # form new link_ from original node_
             for node in G_[i+1:]:
@@ -77,7 +77,7 @@ def agg_recursion(rroot, root, G_, fd):  # + fpar for agg_parP_? compositional a
             agg_recursion(rroot, root, GG_, fd=0)  # 1st xcomp in GG_
 
     if isinstance(root, Cgraph): root.node_tH += [GG_t]  # Cgraph
-    else: root.node_t[:] = GG_t   # Cedge
+    else: root.node_t[fd][:] = GG_t   # Cedge  (should we replace per fork here? else d fork GG_t is replacing m fork GG_t)
 
 
 def comp_G(_G, G, link, G_,link_, Et):
@@ -143,16 +143,17 @@ def form_graph_t(root, G_, Et, fd):  # form mgraphs and dgraphs of same-root nod
             graph_t[i] = segment_node_(root,G_,Et,i,fd) # if fd: node-mediated Correlation Clustering
             # add alt_graphs?
     for fd, graph_ in enumerate(graph_t):  # breadth-first for in-layer-only roots
-        root.valt[fd]+=[0]; root.rdnt[fd]+=[1]  # remove if stays 0?
+        # root.valt[fd]+=[0]; root.rdnt[fd]+=[1]  # remove if stays 0? (why we need this?)
         for graph in graph_:
             # sub+ is external to agg+ vs. internal in comp_slice sub+,
             Val,Rdn = 0,0
             for subH in graph.aggH[1:]:  # eval by sum of val,rdn of top subLays in lower aggLevs:
-                Val+=subH[-1][1][fd]; Rdn+=subH[-1][2][fd]
+                if not subH[0]: continue  # empty subH when there's no rim because rim may empty in one of the fork
+                Val+=subH[0][-1][1][fd]; Rdn+=subH[0][-1][2][fd]  # subH is [derH, valt,rdnt, dect]
             if Val * (len(graph.node_tH[-1])-1)*root.rng > G_aves[fd] * Rdn:
                 for G in graph.node_tH[-1]:  # still node_
                     G.rim_tH += [[[],[]]]; G.Rim_tH += [[[],[]]]  # add layer
-                agg_recursion(root, graph, graph.node_tH[-1][fd], fd)  # replace node_ with node_t, recursive
+                agg_recursion(root, graph, graph.node_tH[-1], fd)  # replace node_ with node_t, recursive (node_tH[-1] is still node_ here)
             else:  # feedback after sub+
                 root.fback_t[fd] += [[graph.aggH, graph.valt, graph.rdnt, graph.dect]]
                 root.valt[fd] += graph.valt[fd]  # merge forks into root fork
@@ -453,7 +454,11 @@ def feedback(root, fd):  # called from form_graph_, append new der layers to roo
             fd = root.fd  # node_ fd
             fback_ = rroot.fback_t[fd]
             fback_ += [[AggH, Valt, Rdnt, Dect]]
-            if isinstance(rroot, Cgraph): len_node_ = len(rroot.node_tH[-1])  # Cgraph
+            if isinstance(rroot, Cgraph):  # Cgraph 
+                if isinstance(rroot.node_tH[-1][0], list): 
+                    len_node_ = len(rroot.node_tH[-1][fd])  # # node_tH[-1] is updated with node_t
+                else: 
+                    len_node_ = len(rroot.node_tH[-1])  # node_tH[-1] is still flat
             else:                         len_node_ = len(rroot.node_t[fd])   # Cedge
             if fback_ and (len(fback_) == len_node_):  # flat, all rroot nodes terminated and fed back
                 # getting cyclic rroot here not sure why it can happen, need to check further
