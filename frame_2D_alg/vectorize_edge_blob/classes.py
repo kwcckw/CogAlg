@@ -162,7 +162,8 @@ class CderG(ClusterStructure):  # params of single-fork node_ cluster per pplaye
     valt : list = z([0,0])  # m,d
     rdnt : list = z([1,1])
     dect : list = z([0,0])  # mdecay, ddecay
-    Vt : list = z([0,0])  # link.dect[fd] * (_G.valt[fd] + G.valt[fd]), accum in node_connect?
+    # combined vals: link.dect[fd] * (_G.valt[fd] + G.valt[fd]), accum in node_connect:
+    Vt : list = z([0,0])
     Rt : list = z([0,0])
     Dt : list = z([0,0])
     _G : object = None  # comparand + connec params
@@ -171,4 +172,3 @@ class CderG(ClusterStructure):  # params of single-fork node_ cluster per pplaye
     A : list = z([0,0])  # angle: average dy,dx to link centers
     roott : list = z([None,None])
     # dir : bool  # direction of comparison if not G0,G1, only needed for comp link?
-
