@@ -144,12 +144,12 @@ def form_graph_t(root, G_, Et, fd):  # root_fd, form mgraphs and dgraphs of same
     for fd, graph_ in enumerate(graph_t):  # breadth-first for in-layer-only roots
         for graph in graph_:
             # sub+ is external to agg+ vs. internal in comp_slice sub+,
-            Val,Rdn = 0,0
+            Val,Rdn = 0,1  # Rdn should be at least 1 here?
             for subH in graph.aggH[1:]:  # eval by sum of val,rdn of top subLays in lower aggLevs:
                 if not subH[0]: continue  # empty rim if no comp
                 Val+=subH[0][-1][1][fd]  # subH = [derH,valt,rdnt,dect]
                 Rdn+=subH[0][-1][2][fd]
-            if Val * (len(graph.node_tH[-1])-1)*root.rng > G_aves[fd] * Rdn:
+            if Val * (len(graph.node_tH[-1])-1)*root.rng > G_aves[fd] * Rdn:  # getting endless recursion here
                 for G in graph.node_tH[-1]:  # still node_
                     G.rim_tH += [[[],[]]]; G.Rim_tH += [[[],[]]]  # add layer
                 agg_recursion(root, graph, graph.node_tH[-1], fd)  # flat node_
@@ -208,11 +208,11 @@ def segment_node_(root, iG_, fd):  # eval rim links with summed surround vals fo
         for link in G.rim_tH[-1][fd]:
             A[0] += link.A[0]; A[1] += link.A[1]; S += link.S
         grapht = [[G],copy(G.rim_tH[-1][fd]),
-                  # or ext only, sum in sum2graph instead:
-                  [val+_val for val,_val in zip(G.valt,G.evalt)],  # grapht int = node int+ext
-                  [rdn+_rdn for rdn,_rdn in zip(G.rdnt,G.erdnt)],
-                  [dec+_dec for dec,_dec in zip(G.dect,G.edect)],
-                  A, S, copy(G.esubH), copy(G.rim_tH[-1][fd])]  # uprim
+                  # ext only, G's params will be summed in sum2graph instead:
+                  copy(G.evalt),  # grapht int = node int+ext
+                  copy(G.erdnt),
+                  copy(G.edect),
+                  A, S, deepcopy(G.esubH), copy(G.rim_tH[-1][fd])]  # uprim
         G.roott[fd] = grapht  # for feedback
         igraph_ += [grapht]
     _graph_ = igraph_
@@ -254,8 +254,10 @@ def segment_node_(root, iG_, fd):  # eval rim links with summed surround vals fo
 # not finished:
 def sum2graph(root, grapht, fd):  # sum node and link params into graph, aggH in agg+ or player in sub+
 
-    G_,Link_,valt,rdnt,dect, A,S, esubH,_  = grapht
+    G_,Link_,valt,rdnt,dect, A,S, subH,_  = grapht
 
+    # prune link if either one of link's G is not in G_
+    Link_ = [link for link in Link_ if link.G in G_ and link._G in G_]
     graph = Cgraph(fd=fd,L=len(G_),link_=Link_,A=A,S=S, valt=valt,rdnt=rdnt,dect=dect)
     graph.roott[fd] = root
     for link in Link_: link.roott[fd]=graph
@@ -267,14 +269,18 @@ def sum2graph(root, grapht, fd):  # sum node and link params into graph, aggH in
         graph.ptuple += G.ptuple
         sum_derH([graph.derH,[0,0],[1,1]], [G.derH,[0,0],[1,1]], base_rdn=1)
         sum_aggHv(graph.aggH, G.aggH, base_rdn=1)
-        for j in 0, 1:
-            graph.valt[j] += G.valt[j]; graph.rdnt[j] += G.rdnt[j]; graph.dect[j] += G.dect[j]
+        sum_ts(graph.valt, graph.rdnt, graph.dect, G.valt, G.rdnt, G.dect)
     # add derLay:
-    graph.aggH += [[subH, copy(cvalt), copy(crdnt), copy(cdect)]]
+    graph.aggH += [[subH, copy(valt), copy(rdnt), copy(dect)]]
     graph.node_tH += [G_]
 
     return graph
 
+def sum_ts(Valt,Rdnt,Dect, valt,rdnt,dect):
+    for fd in 0,1:
+        Valt[fd] += valt[fd]
+        Rdnt[fd] += rdnt[fd]
+        Dect[fd] += dect[fd]
 
 def sum_Hts(ValHt,RdnHt,DecHt, valHt,rdnHt,decHt):
     # loop m,d Hs, add combined decayed lower H/layer?
