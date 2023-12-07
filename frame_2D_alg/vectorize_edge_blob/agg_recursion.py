@@ -147,6 +147,7 @@ def form_graph_t(root, G_, Et, fd):  # root_fd, form mgraphs and dgraphs of same
             if graph.Vt[fd] * (len(graph.node_tH[-1])-1)*root.rng > G_aves[fd] * graph.Rt[fd]:
                 for G in graph.node_tH[-1]:  # still node_
                     G.rim_tH += [[[],[]]]; G.Rim_tH += [[[],[]]]  # add layer
+                    G.evalt = [0,0]; G.erdnt = [0,0]; G.edect = [0,0]  # we need reset this ? Else they will be accumulated over sub+
                 agg_recursion(root, graph, graph.node_tH[-1], fd)  # flat node_
             else:  # feedback after sub+
                 root.fback_t[root.fd] += [[graph.aggH, graph.valt, graph.rdnt, graph.dect]]
@@ -201,7 +202,7 @@ def segment_node_(root, root_G_, fd):  # eval rim links with summed surround val
 
     for G in root_G_:
         # init grapht per node, last-layer Vt,Vt,Dt:
-        grapht = [[G], copy(G.rim_tH[-1][fd]), *G.Vt, *G.Rt, *G.Dt, copy(G.rim_tH[-1][fd])]
+        grapht = [[G], [], G.Vt, G.Rt, G.Dt, copy(G.rim_tH[-1][fd])]
         G.roott[fd] = grapht  # for feedback
         igraph_ += [grapht]
     _graph_ = igraph_
@@ -211,7 +212,7 @@ def segment_node_(root, root_G_, fd):  # eval rim links with summed surround val
             G_, Link_, Valt, Rdnt, Dect, Rim = grapht
             inVal, inRdn = 0,0  # new in-graph: positive
             newRim = []
-            for link in Link_:  # unique links
+            for link in Rim:  # unique links
                 if link.G in G_:
                     G = link.G; _G = link._G
                 else:
@@ -224,10 +225,12 @@ def segment_node_(root, root_G_, fd):  # eval rim links with summed surround val
                     # merge _root grapht:
                     _G_,_Link_,_Valt,_Rdnt,_Dect,_Rim = _G.roott[fd]
                     for g in _G_: g.roott[fd] = grapht
-                    newRim = list(set([l for l in newRim+_Rim if l not in Link_]))
+                    newRim = list(set([l for l in newRim+_Rim if l not in Link_+newRim+_Rim]))  # should exclude newRim+_Rim too? Link 
                     inVal += _Valt[fd]; inRdn += _Rdnt[fd]
-                    G_ = list(set(G_ + _G_))
-                    Link_ += _Link_
+                    G_[:] = list(set(G_ + _G_)) 
+                    if link not in Link_: Link_ += [link]  # add current evaluated link (a same link might be added in prior while loop so we need to check)
+                    Link_ += [_link for _link in _Link_ if _link not in Link_]  # add other links from another graph
+
             if len(newRim) * inVal > ave * inRdn:
                 graph_ += [[G_,Link_, Valt,Rdnt,Dect,newRim]]  # eval Rim for extension
 
@@ -258,6 +261,7 @@ def sum2graph(root, grapht, fd):  # sum node and link params into graph, aggH in
         A0+=G.A[0]; A1+=G.A[1]; S+=G.S
         for j in 0,1:
             valt[j] += G.valt[j]; graph.rdnt[j] += G.rdnt[j]; graph.dect[j] += G.dect[j]
+            graph.Vt[j] += G.Vt[j]; graph.Rt[j] += G.Rt[j]  # if we don't add it here, graph.Vt and Rt will be empty before sub+, and we always get false for sub+ 
     # add derLay:
     graph.aggH += [[eH,valt,rdnt,dect]]
 
@@ -425,9 +429,11 @@ def feedback(root, fd):  # called from form_graph_, append new der layers to roo
     while root.fback_t[fd]:
         aggH, valt, rdnt, dect = root.fback_t[fd].pop(0)
         sum_aggHv(AggH, aggH, base_rdn=0)
-        sum_ts(Valt, Rdnt, Dect, valt, rdnt,rdnt)
+        for j in 0,1:
+            Valt[j] += valt[j]; Rdnt[j] += rdnt[j]; Dect[j] += dect[j]
     sum_aggHv(root.aggH,AggH, base_rdn=0)
-    sum_ts(root.valt,root.rdnt,root.dect, Valt,Rdnt,Dect)  # both forks sum in same root
+    for j in 0,1:
+        root.valt[j] += Valt[j]; root.rdnt[j] += Rdnt[j]; root.dect[j] += Dect[j]  # both forks sum in same root
 
     if isinstance(root, Cgraph):  # root is not CEdge, which has no roots
 
