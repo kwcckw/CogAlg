@@ -65,13 +65,15 @@ def agg_recursion(rroot, root, G_, fd, nrng=1):  # + fpar for agg_parP_? composi
         for i, _G in enumerate(G_):  # form new link_ from original node_
             for G in G_[i+1:]:
                 dy = _G.box.cy - G.box.cy; dx = _G.box.cx - G.box.cx
-                if np.hypot(dy,dx) < 2 * nrng:  # max distance between node centers, init=2
+                # max distance should becomes smaller and smaller? Because if it's getting larger and larger, it will be always true
+                if np.hypot(dy,dx) < 2 / nrng:  # max distance between node centers, init=2
                     comp_G(_G, G, CderG(_G=_G,G=G), link_, Et)
 
     GG_t = form_graph_t(root, G_, Et, fd, nrng)  # root_fd, eval sub+, feedback per graph
     # agg+ xcomp-> form_graph_t loop sub)agg+, vs. comp_slice sub+ loop-> eval-> xcomp
     for GG_ in GG_t:
-        if root.valt[0] * (len(GG_)-1)*root.rng > G_aves[fd] * root.rdnt[0]:  # xcomp G_ val
+        # getting overflow with int32 here, due to large value of root.rdnt, probably is due to all GG_ sum into a same root in all depth
+        if root.valt[0] * (len(GG_)-1)*root.rng > G_aves[fd] *root.rdnt[0]:  # xcomp G_ val
             agg_recursion(rroot, root, GG_, fd=0)  # 1st xcomp in GG_, root update in form_t, max rng=2
 
     if isinstance(root, Cgraph): root.node_tH += [GG_t]  # Cgraph
@@ -128,7 +130,12 @@ def comp_G(_G, G, link, link_, Et):
                     if typ: continue  # once per link
                     node.rim_tH[-1][fd] += [link]
                     node.Rim_tH[-1][fd] += [link]
-                    sum_subHv([node.esubH, node.evalt,node.erdnt,node.edect], [link.subH, link.valt,link.rdnt,link.dect],link.rdnt[fd])
+                    # sum_subHv([node.esubH, node.evalt,node.erdnt,node.edect], [link.subH, link.valt,link.rdnt,link.dect],link.rdnt[fd])
+                    # I think we should add it as new layer instead? sum_subv will always get single layer and causing endless loop with der+ too
+                    node.esubH += link.subH
+                    for i in 0,1:
+                        node.evalt[i] += link.valt[i]; node.erdnt[i] += link.rdnt[i]; node.edect[i] += link.dect[i]
+        
         link_ += [link]  # in some graph
 
 
