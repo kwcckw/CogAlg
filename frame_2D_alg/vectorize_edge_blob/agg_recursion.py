@@ -115,12 +115,12 @@ def node_connect(_G_):  # node connectivity = sum surround link vals, incr.media
             if not G.esubH: continue  # G was never compared
             uprimt = [[],[]]  # >ave updates of direct links
             for i in 0,1:
-                valt,rdnt,dect = G.esubH[-1][1:]; val,rdn,dec = valt[i],rdnt[i],dect[i]  # connect by last esubH layer
+                valt,rdnt,dect = G.esubH[-1][3:]; val,rdn,dec = valt[i],rdnt[i],dect[i]  # connect by last esubH layer
                 ave = G_aves[i]
                 for link in G.Rim_tH[-1][i]:
                     lval,lrdn,ldec = link.valt[i], link.rdnt[i], link.dect[i]
                     _G = link._G if link.G is G else link.G
-                    _valt,_rdnt,_dect = G.esubH[-1][1:]; _val,_rdn,_dec = valt[i],rdnt[i],dect[i]
+                    _valt,_rdnt,_dect = G.esubH[-1][3:]; _val,_rdn,_dec = valt[i],rdnt[i],dect[i]
                     # Vt.. for segment_node_:
                     linkV = ldec * (val+_val); dv = linkV-link.Vt[i]; link.Vt[i] = linkV
                     linkR = ldec * (rdn+_rdn); dr = linkR-link.Rt[i]; link.Rt[i] = linkR
@@ -194,22 +194,23 @@ def sum2graph(root, grapht, fd):  # sum node and link params into graph, aggH in
     eH, valt,rdnt,dect = [],[0,0],[0,0],[0,0]  # grapht int = node int+ext
     A0,A1,S = 0,0,0
     for G in G_:
-        for link in G.rim_Ht[fd]:
-            sum_subHv([G.esubH,G.evalt,G.erdnt,G.edect], [link.subH,link.valt,link.rdnt,link.dect], base_rdn=link.rdnt[fd])
+        for link in G.rim_tH[-1][fd]:
+            G.esubH += link.subH  # each element is [1, ext, derHv, valt, rdnt, dect]
             for j in 0,1:
+                G.evalt[j]+=link.valt[j]; G.erdnt[j]+=link.rdnt[j]; G.edect[j]+=link.dect[j]
                 G.valt[j]+=link.valt[j]; G.rdnt[j]+=link.rdnt[j]; G.dect[j]+=link.dect[j]
         graph.box += G.box
         graph.ptuple += G.ptuple
         sum_derH([graph.derH,[0,0],[1,1]], [G.derH,[0,0],[1,1]], base_rdn=1)
-        sum_subHv([eH,valt,rdnt,dect], [G.esubH,G.valt,G.rdnt,G.dect], base_rdn=1)
+        sum_subHv([2, eH,valt,rdnt,dect], [2, G.esubH,G.valt,G.rdnt,G.dect], base_rdn=1)
         sum_aggHv(graph.aggH, G.aggH, base_rdn=1)
         A0+=G.A[0]; A1+=G.A[1]; S+=G.S
         for j in 0,1:
             valt[j] += G.valt[j]; graph.rdnt[j] += G.rdnt[j]; graph.dect[j] += G.dect[j]
     # add derLay:
-    graph.aggH += [[eH,valt,rdnt,dect]]
+    graph.aggH += [[2, eH,valt,rdnt,dect]]
     graph.valt,graph.rdnt,graph.dect = valt,rdnt,dect
-
+    graph.A = [A0,A1]; graph.S = S  # this is missed out?
     return graph
 
 
@@ -227,7 +228,7 @@ def comp_G(_G, G, link, Et):
             # compute link decay coef: par/ max(self/same)
             if fd: dect[fd] += par/max if max else 1
             else:  dect[fd] += (par+ave)/ max if max else 1
-    derLay0 = [[mtuple,dtuple],[mval,dval],[mrdn,drdn],[dect[0]/6, dect[1]/6]]  # ave of 6 params
+    derLay0 = [0, [mtuple,dtuple],[mval,dval],[mrdn,drdn],[dect[0]/6, dect[1]/6]]  # ave of 6 params
     Mval+=mval; Dval+=dval; Mrdn+=mrdn; Drdn+=drdn; Mdec+=dect[0]/6; Ddec+=dect[1]/6
     # / PP:
     _derH,derH = _G.derH,G.derH
@@ -236,9 +237,9 @@ def comp_G(_G, G, link, Et):
         Mval+=dval; Dval+=mval; Mdec=(Mdec+mdec)/2; Ddec=(Ddec+ddec)/2
         Mrdn+= mrdn+ dval>mval; Drdn+= drdn+ dval<=mval
     else: dderH = []
-    derH = [[derLay0]+dderH, [Mval,Dval],[Mrdn,Drdn],[Mdec,Ddec]]  # appendleft derLay0 from comp_ptuple
     der_ext = comp_ext([_G.L,_G.S,_G.A],[G.L,G.S,G.A], [Mval,Dval],[Mrdn,Drdn],[Mdec,Ddec])
-    SubH = [der_ext, derH]  # two init layers of SubH, higher layers added by comp_aggH:
+    derHv = [1, [der_ext], [derLay0]+dderH, [Mval,Dval],[Mrdn,Drdn],[Mdec,Ddec]]  # appendleft derLay0 from comp_ptuple
+    SubH = [derHv]  # init layers of SubH, higher layers added by comp_aggH:
     # / G:
     fadd = 0
     if link.subH:  # old link: not empty aggH
@@ -253,15 +254,14 @@ def comp_G(_G, G, link, Et):
         link.subH = SubH
         fadd = 1
     if fadd:
-        for i in 0,1:
-            if [Mval,Dval][i] > G_aves[i] * [Mrdn,Drdn][i]:  # exclude neg links
-                for typ, part in enumerate([[Mval,Dval][i],[Mrdn,Drdn][i],[Mdec,Ddec][i]]):
-                    par=part[i]  # Et Vt,Rt,Dt-> eval form_graph_t, G Vt,Rt,Dt-> init node_connect:
-                    Et[typ][i] += par
+        for fd, (Val, Rdn, Dec) in enumerate(zip([Mval,Dval],[Mrdn,Drdn],[Mdec,Ddec])):
+            if Val > G_aves[fd] * Rdn:  # exclude neg links
+                for typ,par in enumerate((Val, Rdn, Dec)):
+                    Et[typ][fd] += par  # Et Vt,Rt,Dt-> eval form_graph_t, G Vt,Rt,Dt-> init node_connect:
                     for G in link._G, link.G:
-                        [G.Vt,G.Rt,G.Dt][typ][i] += par
-                        G.rim_tH[-1][i] += [link]
-                        G.Rim_tH[-1][i] += [link]
+                        [G.Vt,G.Rt,G.Dt][typ][fd] += par
+                        G.rim_tH[-1][fd] += [link]
+                        G.Rim_tH[-1][fd] += [link]
 
 def comp_aggHv(_aggH, aggH, rn):  # no separate ext
 
@@ -270,7 +270,7 @@ def comp_aggHv(_aggH, aggH, rn):  # no separate ext
 
     for _lev, lev in zip(_aggH, aggH):  # compare common subHs, if lower-der match?
         if _lev and lev:
-            dsubH, valt,rdnt,dect = comp_subHv(_lev[0], lev[0], rn)  # skip valt,rdnt,dect
+            dsubH, valt,rdnt,dect = comp_subHv(_lev[1], lev[1], rn)  # skip decode number,valt,rdnt,dect
             SubH += dsubH  # flatten to keep as subH
             Mdec += dect[0]; Ddec += dect[1]
             mval,dval = valt; Mval += mval; Dval += dval
@@ -285,14 +285,13 @@ def comp_subHv(_subH, subH, rn):
 
     for _lay, lay in zip(_subH, subH):  # compare common lower layer|sublayer derHs
         # if lower-layers match: Mval > ave * Mrdn?
-        if _lay[0] and isinstance(_lay[0][0],list):
-            dderH, valt,rdnt,dect = comp_derHv(_lay[0], lay[0], rn)
-            dsubH += [[dderH, valt,rdnt,dect]]  # flat
-            Mdec += dect[0]; Ddec += dect[1]
-            mval,dval = valt; Mval += mval; Dval += dval
-            Mrdn += rdnt[0] + dval > mval; Drdn += rdnt[1] + dval <= mval
-        else:  # _lay[0][0] is L, comp dext:
-            dsubH += [comp_ext(_lay[1],lay[1],[Mval,Dval],[Mrdn,Drdn],[Mdec,Ddec])]
+        dext_ = comp_extt_(_lay[1],lay[1],[Mval,Dval],[Mrdn,Drdn],[Mdec,Ddec])  # lay[1] is extt_
+        dderH, valt,rdnt,dect = comp_derHv(_lay[2], lay[2], rn)  # lay[2] is derH
+        dsubH += [[1, dext_, dderH, valt,rdnt,dect]]  # flat
+        Mdec += dect[0]; Ddec += dect[1]
+        mval,dval = valt; Mval += mval; Dval += dval
+        Mrdn += rdnt[0] + dval > mval; Drdn += rdnt[1] + dval <= mval
+      
     if S: Mdec/= S; Ddec /= S  # normalize
     return dsubH, [Mval,Dval],[Mrdn,Drdn],[Mdec,Ddec]  # new layer,= 1/2 combined derH
 
@@ -304,8 +303,8 @@ def comp_derHv(_derH, derH, rn):  # derH is a list of der layers or sub-layers, 
 
     for _lay, lay in zip(_derH, derH):  # compare common lower der layers | sublayers in derHs, if lower-layers match?
         # comp dtuples, eval mtuples
-        if isinstance(lay[0][0], list):  _dlay = _lay[0][1]; dlay = lay[0][1]
-        else:                            _dlay = _lay[1]; dlay = lay[1]  # converted derlay with no valt and rdnt
+        if lay[0] == 0 :  _dlay = _lay[1][1]; dlay = lay[1][1]  # check decode number
+        else:             _dlay = _lay[1]; dlay = lay[1]  # converted derlay with no valt and rdnt
         mtuple, dtuple, Mtuple, Dtuple = comp_dtuple(_dlay, dlay, rn, fagg=1)
         # sum params:
         mval = sum(mtuple); dval = sum(abs(d) for d in dtuple)
@@ -316,7 +315,7 @@ def comp_derHv(_derH, derH, rn):  # derH is a list of der layers or sub-layers, 
                 if fd: dect[fd] += par/max if max else 1
                 else:  dect[fd] += (par+ave)/(max) if max else 1
 
-        dderH += [[[mtuple,dtuple],[mval,dval],[mrdn,drdn],[dect[0]/6,dect[1]/6]]]
+        dderH += [[0,[mtuple,dtuple],[mval,dval],[mrdn,drdn],[dect[0]/6,dect[1]/6]]]
         Mval+=mval; Dval+=dval; Mrdn+=mrdn; Drdn+=drdn; Mdec+=dect[0]/6; Ddec+=dect[1]/6
     if S: Mdec /= S; Ddec /= S  # normalize when non zero layer
     return dderH, [Mval,Dval],[Mrdn,Drdn],[Mdec,Ddec]  # new derLayer,= 1/2 combined derH
@@ -337,16 +336,14 @@ def sum_aggHv(AggH, aggH, base_rdn):
 
 def sum_subHv(T, t, base_rdn, fneg=0):
 
-    SubH,Valt,Rdnt,Dect = T; subH,valt,rdnt,dect = t
+    _,SubH,Valt,Rdnt,Dect = T; _,subH,valt,rdnt,dect = t
     for i in 0,1:
         Valt[i] += valt[i]; Rdnt[i] += rdnt[i]+base_rdn; Dect[i] = (Dect[i]+dect[i])/2
     if SubH:
         for Layer, layer in zip_longest(SubH,subH, fillvalue=[]):
             if layer:
                 if Layer:
-                    if layer[0] and isinstance(Layer[0][0], list):  # _lay[0][0] is derH
-                        sum_derHv(Layer, layer, base_rdn, fneg)
-                    else: sum_ext(Layer, layer)  # pack in derHv?
+                    sum_derHv(Layer, layer, base_rdn, fneg)
                 else:
                     SubH += [deepcopy(layer)]  # _lay[0][0] is mL
     else:
@@ -354,17 +351,16 @@ def sum_subHv(T, t, base_rdn, fneg=0):
 
 def sum_derHv(T,t, base_rdn, fneg=0):  # derH is a list of layers or sub-layers, each = [mtuple,dtuple, mval,dval, mrdn,drdn]
 
-    DerH,Valt,Rdnt,Dect = T; derH,valt,rdnt,dect = t
-    # or DerH,Valt,Rdnt,Dect,Extt = T; derH,valt,rdnt,dect.extt = t,
-    # sum_ext(Extt, extt)?
+    _,Extt_, DerH,Valt,Rdnt,Dect = T; _, extt_, derH,valt,rdnt,dect = t
+    for Extt, extt in zip(Extt_, extt_): sum_ext(Extt, extt)
     for i in 0,1:
         Valt[i] += valt[i]; Rdnt[i] += rdnt[i]+base_rdn; Dect[i] = (Dect[i] + dect[i])/2
     DerH[:] = [
-        [ [sum_dertuple(Dertuple,dertuple, fneg*i) for i,(Dertuple,dertuple) in enumerate(zip(Tuplet,tuplet))],
+        [1, [sum_dertuple(Dertuple,dertuple, fneg*i) for i,(Dertuple,dertuple) in enumerate(zip(Tuplet,tuplet))],
           [V+v for V,v in zip(Valt,valt)], [R+r+base_rdn for R,r in zip(Rdnt,rdnt)], [(D+d)/2 for D,d in zip(Dect,dect)]
         ]
-        for [Tuplet,Valt,Rdnt,Dect], [tuplet,valt,rdnt,dect]  # ptuple_tv
-        in zip_longest(DerH, derH, fillvalue=[([0,0,0,0,0,0],[0,0,0,0,0,0]), (0,0),(0,0),(0,0)])
+        for [_,Tuplet,Valt,Rdnt,Dect], [_,tuplet,valt,rdnt,dect]  # ptuple_tv
+        in zip_longest(DerH, derH, fillvalue=[0,([0,0,0,0,0,0],[0,0,0,0,0,0]), (0,0),(0,0),(0,0)])
     ]
 
 def sum_ext(Extt, extt):
@@ -378,6 +374,15 @@ def sum_ext(Extt, extt):
         for j in 0,1: Extt[2][j]+=extt[2][j]  # sum dy,dx in angle
 
 
+
+def comp_extt_(_extt_, extt_, Valt, Rdnt, Dect):  
+
+    dext_ = []
+    for _extt, extt in zip(_extt_, extt_):
+        for _ext, ext in zip(_extt, extt):      
+            dext_ += [comp_ext(_ext, ext, Valt, Rdnt, Dect)]  # pack them flat? 
+        
+    return  dext_
 
 def comp_ext(_ext, ext, Valt, Rdnt, Dect):  # comp ds:
 
@@ -403,6 +408,8 @@ def comp_ext(_ext, ext, Valt, Rdnt, Dect):  # comp ds:
     Rdnt[0] += d>m; Rdnt[1] += d<=m
     _aL = abs(_L); aL = abs(L)
     _aS = abs(_S); aS = abs(S)
+    
+    # what if aL is 0 too?
     Dect[0] += (mL/ max(aL,_aL) + mS/ max(aS,_aS) if aS or _aS else 1 + (mA / max_mA) if max_mA else 1) /3  # ave dec of 3 vals
     Dect[1] += (dL/ (_aL+aL) + dS / max(_aS+aS) if aS or _aS else 1 + (dA / max_dA) if max_mA else 1) /3
 
