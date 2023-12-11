@@ -45,7 +45,6 @@ def vectorize_root(blob, verbose):  # vectorization pipeline is 3 composition le
         for PP in node_:  # convert select CPPs to Cgraphs:
             if PP.valt[fd] * (len(node_)-1) * (PP.rng+1) <= G_aves[fd] * PP.rdnt[fd]: continue
             derH,valt,rdnt = PP.derH,PP.valt,PP.rdnt
-            derH[:] = [[derLay,[0,0], [1,1], [0,0], 0] for derLay in derH]  # looks like this is needed if we want to sum G.derH with sum_derHv, sum_derH won't work if depth is added
             G_ += [Cgraph(ptuple=PP.ptuple, derH=derH, valt=copy(valt), rdnt=copy(rdnt), L=PP.ptuple[-1],
                           box=PP.box, link_=PP.link_, node_tH=[PP.node_t])]
             i += 1  # G index in node_
@@ -97,9 +96,9 @@ def form_graph_t(root, G_, Et, fd, nrng):  # root_fd, form mgraphs and dgraphs o
                     G.rim_tH += [[[],[]]]; G.Rim_tH += [[[],[]]]
                 agg_recursion(root, graph, graph.node_tH[-1], fd, nrng+1*(1-fd))  # rng++ if not fd
             else:
-                # should be using root.fd here?
                 root.fback_t[root.fd] += [[graph.aggH, graph.valt, graph.rdnt, graph.dect]]
                 feedback(root, root.fd)  # recursive update root.root.. aggH, valHt,rdnHt
+
 
     return graph_t  # root.node_t'node_ -> node_t: incr nested with each agg+?
 
@@ -122,7 +121,7 @@ def node_connect(_G_):  # node connectivity = sum surround link vals, incr.media
                 for link in G.Rim_tH[-1][i]:
                     lval,lrdn,ldec = link.valt[i], link.rdnt[i], link.dect[i]
                     _G = link._G if link.G is G else link.G
-                    _valt,_rdnt,_dect = G.esubH[-1][1:4]; _val,_rdn,_dec = valt[i],rdnt[i],dect[i]
+                    _valt,_rdnt,_dect = _G.esubH[-1][1:4]; _val,_rdn,_dec = valt[i],rdnt[i],dect[i]
                     # Vt.. for segment_node_:
                     linkV = ldec * (val+_val); dv = linkV-link.Vt[i]; link.Vt[i] = linkV
                     linkR = ldec * (rdn+_rdn); dr = linkR-link.Rt[i]; link.Rt[i] = linkR
@@ -204,8 +203,7 @@ def sum2graph(root, grapht, fd):  # sum node and link params into graph, aggH in
                 G.valt[j]+=link.valt[j]; G.rdnt[j]+=link.rdnt[j]; G.dect[j]+=link.dect[j]
         graph.box += G.box
         graph.ptuple += G.ptuple
-        # sum_derH won't work here, and we need to have additioanl params for sum_derHv
-        sum_derHv([graph.derH,[0,0],[1,1],[0,0],[], 1], [G.derH,[0,0],[1,1],[0,0],[], 1],base_rdn=1)
+        sum_derH([graph.derH,[0,0],[1,1]], [G.derH,[0,0],[1,1]], base_rdn=1)
         sum_subHv([eH,valt,rdnt,dect,2], [G.esubH,G.valt,G.rdnt,G.dect,2], base_rdn=1)
         sum_aggHv(graph.aggH, G.aggH, base_rdn=1)
         A0+=G.A[0]; A1+=G.A[1]; S+=G.S
@@ -242,8 +240,7 @@ def comp_G(_G, G, link, Et):
         Mrdn+= mrdn+ dval>mval; Drdn+= drdn+ dval<=mval
     else: dderH = []
     der_ext = comp_ext([_G.L,_G.S,_G.A],[G.L,G.S,G.A], [Mval,Dval],[Mrdn,Drdn],[Mdec,Ddec])
-    # we need an additional bracket on derlay0 to concatenate it with dderH
-    derHv = [[derLay0]+dderH, [Mval,Dval],[Mrdn,Drdn],[Mdec,Ddec], der_ext, 1]  # appendleft derLay0 from comp_ptuple
+    derHv = [derLay0+dderH, [Mval,Dval],[Mrdn,Drdn],[Mdec,Ddec], der_ext, 1]  # appendleft derLay0 from comp_ptuple
     SubH = [derHv]  # init layers of SubH, higher layers added by comp_aggH:
     # / G:
     fadd = 0
@@ -290,8 +287,8 @@ def comp_subHv(_subH, subH, rn):
     dsubH =[]; S = min(len(_subH),len(subH))
 
     for _lay, lay in zip(_subH, subH):  # compare common lower layer|sublayer derHs, if prior match?
-        # index [0] for derH only, exclude those vals
-        dderH, valt,rdnt,dect = comp_derHv(_lay[0],lay[0], rn)   # derHv: [derH, valt, rdnt, dect, extt, 1]:
+
+        dderH, valt,rdnt,dect = comp_derHv(_lay[0],lay[0], rn)  # derHv: [derH, valt, rdnt, dect, extt, 1]:
         dextt = [[comp_ext(_ext,ext,[Mval,Dval],[Mrdn,Drdn],[Mdec,Ddec])] for _ext,ext in zip(_lay[-2],lay[-2])]
 
         dsubH += [[dderH, valt,rdnt,dect,dextt, 1]]  # flat
@@ -319,13 +316,12 @@ def comp_derHv(_derH, derH, rn):  # derH is a list of der layers or sub-layers, 
                 if fd: dect[fd] += par/max if max else 1
                 else:  dect[fd] += (par+ave)/(max) if max else 1
 
-        dderH += [[[mtuple,dtuple], [mval,dval],[mrdn,drdn],[dect[0]/6,dect[1]/6], 0]]  # depth should be packed within the list
+        dderH += [[[mtuple,dtuple], [mval,dval],[mrdn,drdn],[dect[0]/6,dect[1]/6], 0]]
         Mval+=mval; Dval+=dval; Mrdn+=mrdn; Drdn+=drdn; Mdec+=dect[0]/6; Ddec+=dect[1]/6
 
     if S: Mdec /= S; Ddec /= S  # normalize when non zero layer
     return dderH, [Mval,Dval],[Mrdn,Drdn],[Mdec,Ddec]  # new derLayer,= 1/2 combined derH
 
-# below is not revised:
 
 def sum_aggHv(AggH, aggH, base_rdn):
 
@@ -358,17 +354,17 @@ def sum_subHv(T, t, base_rdn, fneg=0):
 
 def sum_derHv(T,t, base_rdn, fneg=0):  # derH is a list of layers or sub-layers, each = [mtuple,dtuple, mval,dval, mrdn,drdn]
 
-    DerH, Valt, Rdnt, Dect, Extt_, _ = T; derH,valt,rdnt,dect,extt_,_ = t
+    DerH, Valt, Rdnt, Dect, Extt_,_ = T; derH,valt,rdnt,dect,extt_,_ = t
     for Extt, extt in zip(Extt_, extt_):
         sum_ext(Extt, extt)
     for i in 0,1:
         Valt[i] += valt[i]; Rdnt[i] += rdnt[i]+base_rdn; Dect[i] = (Dect[i] + dect[i])/2
     DerH[:] = [
         [[sum_dertuple(Dertuple,dertuple, fneg*i) for i,(Dertuple,dertuple) in enumerate(zip(Tuplet,tuplet))],
-          [V+v for V,v in zip(Valt,valt)], [R+r+base_rdn for R,r in zip(Rdnt,rdnt)], [(D+d)/2 for D,d in zip(Dect,dect)],0,
+          [V+v for V,v in zip(Valt,valt)], [R+r+base_rdn for R,r in zip(Rdnt,rdnt)], [(D+d)/2 for D,d in zip(Dect,dect)], 0
         ]
-        for [Tuplet,Valt,Rdnt,Dect,_], [tuplet,valt,rdnt,dect,_]  # ptuple_tv
-        in zip_longest(DerH, derH, fillvalue=[([0,0,0,0,0,0],[0,0,0,0,0,0]), (0,0),(0,0),(0,0),0])  # extt shouldn't be packed here, here is depth 0
+        for [Tuplet,Valt,Rdnt,Dect,_,_], [tuplet,valt,rdnt,dect,_,_]  # ptuple_tv
+        in zip_longest(DerH, derH, fillvalue=[([0,0,0,0,0,0],[0,0,0,0,0,0]), (0,0),(0,0),(0,0),0])
     ]
 
 def sum_ext(Extt, extt):
@@ -378,9 +374,7 @@ def sum_ext(Extt, extt):
             for i,(Par,par) in enumerate(zip(Ext,ext)):
                 Ext[i] = Par+par
     else:  # single ext
-        for i in range(3): Extt[i]+=extt[i]  # sum L,S, A
-        # all angle are scalar if we sum them? Because we only pack der_ext
-        # for j in 0,1: Extt[2][j]+=extt[2][j]  # sum dy,dx in angle
+        for i in range(3): Extt[i]+=extt[i]  # sum L,S,A
 
 
 def comp_ext(_ext, ext, Valt, Rdnt, Dect):  # comp ds:
@@ -414,7 +408,6 @@ def comp_ext(_ext, ext, Valt, Rdnt, Dect):  # comp ds:
     return [[mL,mS,mA], [dL,dS,dA]]
 
 
-# not updated:
 def feedback(root, fd):  # called from form_graph_, append new der layers to root
 
     AggH, Valt, Rdnt, Dect = deepcopy(root.fback_t[fd].pop(0))  # init with 1st tuple
@@ -427,19 +420,15 @@ def feedback(root, fd):  # called from form_graph_, append new der layers to roo
     for j in 0,1:
         root.valt[j] += Valt[j]; root.rdnt[j] += Rdnt[j]; root.dect[j] += Dect[j]  # both forks sum in same root
 
-    if isinstance(root, Cgraph):  # root is not CEdge, which has no roots
-
-        rroot = root.roott[fd]  # nodec_H is a flat list of nodec
+    if isinstance(root, Cgraph):  # CEdge has no roots
+        rroot = root.roott[fd]
         if rroot:
-            fd = root.fd  # node_ fd
-            fback_ = rroot.fback_t[fd]
-            fback_ += [[AggH, Valt, Rdnt, Dect]]
-            if isinstance(rroot, Cgraph):  # Cgraph
-                if isinstance(rroot.node_tH[-1][0], list):
-                    len_node_ = len(rroot.node_tH[-1][fd])  # # node_tH[-1] is updated with node_t
-                else:
-                    len_node_ = len(rroot.node_tH[-1])  # node_tH[-1] is still flat
-            else:                         len_node_ = len(rroot.node_t[fd])   # Cedge
-            if fback_ and (len(fback_) == len_node_):  # flat, all rroot nodes terminated and fed back
+            fd = root.fd
+            fback_ = rroot.fback_t[fd] + [[AggH,Valt,Rdnt,Dect]]
+            if isinstance(rroot, Cgraph):
+                L = len(rroot.node_tH[-1][fd]) if isinstance(rroot.node_tH[-1][0],list) else len(rroot.node_tH[-1])  # flat
+            else: L = len(rroot.node_t[fd])  # Cedge
+
+            if fback_ and (len(fback_) == L):  # flat, all rroot nodes terminated and fed back
                 # getting cyclic rroot here not sure why it can happen, need to check further
                 feedback(rroot, fd)  # sum2graph adds aggH per rng, feedback adds deeper sub+ layers
