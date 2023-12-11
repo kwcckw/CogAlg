@@ -84,17 +84,22 @@ def form_graph_t(root, G_, Et, fd, nrng):  # root_fd, form mgraphs and dgraphs o
     graph_t = [[],[]]
     for i in 0,1:
         if Et[0][i] > ave * Et[1][i]:  # eValt > ave * eRdnt, else no clustering
-            graph_t[i] = segment_node_(root, G_, fd)  # if fd: node-mediated Correlation Clustering
+            graph_t[i] = segment_node_(root, G_, fd, nrng)  # if fd: node-mediated Correlation Clustering
             # add alt_graphs?
     for fd, graph_ in enumerate(graph_t):  # breadth-first for in-layer-only roots
         for graph in graph_:
+            if fd:
+                sub_node_ = graph.node_tH[-1]
+            else:
+                # retrieve all prior layers nodes in rng+ to search for greater range
+                sub_node_ = list(set([link.G for link in graph.link_]+[link._G for link in graph.link_]))
             # sub+ if last layer val deviation, external to agg+ vs internal in comp_slice sub+
-            if graph.Vt[fd] * (len(graph.node_tH[-1])-1)*root.rng > G_aves[fd] * graph.Rt[fd]:
+            if graph.Vt[fd] * (len(sub_node_)-1) > G_aves[fd] * graph.Rt[fd] * root.rng :  # rng should be on right side? Because larger redundancy with greater range?
                 # add empty layer:
                 for G in graph.node_tH[-1]:  # node_
                     G.Vt, G.Rt, G.Dt = [0,0],[0,0],[0,0]
                     G.rim_tH += [[[],[]]]; G.Rim_tH += [[[],[]]]
-                agg_recursion(root, graph, graph.node_tH[-1], fd, nrng+1*(1-fd))  # rng++ if not fd
+                agg_recursion(root, graph, sub_node_, fd, nrng+1*(1-fd))  # rng++ if not fd
             else:
                 root.fback_t[root.fd] += [[graph.aggH, graph.valt, graph.rdnt, graph.dect]]
                 feedback(root, root.fd)  # recursive update root.root.. aggH, valHt,rdnHt
@@ -138,7 +143,7 @@ def node_connect(_G_):  # node connectivity = sum surround link vals, incr.media
         else:  break
 
 
-def segment_node_(root, root_G_, fd):  # eval rim links with summed surround vals for density-based clustering
+def segment_node_(root, root_G_, fd, nrng):  # eval rim links with summed surround vals for density-based clustering
 
     # graph += [node] if >ave (surround connectivity * relative value of link to any internal node)
     igraph_ = []; ave = G_aves[fd]
@@ -165,8 +170,10 @@ def segment_node_(root, root_G_, fd):  # eval rim links with summed surround val
                 comb_rdn = link.rdnt[fd] + (G.Rt[fd] + _G.Rt[fd]) / 2
                 if comb_val > ave * comb_rdn:  # _G and its root are effectively connected
                     # merge _root:
-                    _G_,_Link_,_Valt,_Rdnt,_Dect,_Rim = _G.roott[fd]
+                    _grapht = _G.roott[fd]
+                    _G_,_Link_,_Valt,_Rdnt,_Dect,_Rim = _grapht
                     Link_[:] = list(set(Link_+_Link_)) + [link]
+                    if _grapht in igraph_: igraph_.remove(_grapht)  # we should remove _grapht after it is merged into grapht, else we might forming graph with _grapht too
                     for g in _G_:
                         g.roott[fd] = grapht
                         if g not in G_: G_+=[g]
@@ -181,15 +188,15 @@ def segment_node_(root, root_G_, fd):  # eval rim links with summed surround val
         if graph_: _graph_ = graph_
         else: break
     # -> Cgraphs if Val > ave * Rdn:
-    return [sum2graph(root, graph, fd) for graph in igraph_ if graph[2][fd] > ave * (graph[3][fd])]
+    return [sum2graph(root, graph, fd, nrng) for graph in igraph_ if graph[2][fd] > ave * (graph[3][fd])]
 
 
-def sum2graph(root, grapht, fd):  # sum node and link params into graph, aggH in agg+ or player in sub+
+def sum2graph(root, grapht, fd, nrng):  # sum node and link params into graph, aggH in agg+ or player in sub+
 
     G_,Link_, Vt,Rt,Dt = grapht[:-1]  # last-layer vals only
     # depth 0:derLay, 1:derHv, 2:subHv
 
-    graph = Cgraph(fd=fd, node_tH=[G_], L=len(G_),link_=Link_,Vt=Vt, Rt=Rt, Dt=Dt)
+    graph = Cgraph(fd=fd, node_tH=[G_], L=len(G_),link_=Link_,Vt=Vt, Rt=Rt, Dt=Dt, rng=nrng)  # we missed out the rng assignment?
     graph.roott[fd] = root
     for link in Link_:
         link.roott[fd]=graph
@@ -197,7 +204,8 @@ def sum2graph(root, grapht, fd):  # sum node and link params into graph, aggH in
     A0,A1,S = 0,0,0
     for G in G_:
         for link in G.rim_tH[-1][fd]:
-            G.esubH += link.subH  # flat list of [derH, valt, rdnt, dect, extt, 1]s
+            # i think we need deepcopy here because link.subH will be reused in der+
+            G.esubH += deepcopy(link.subH)  # flat list of [derH, valt, rdnt, dect, extt, 1]s
             for j in 0,1:
                 G.evalt[j]+=link.valt[j]; G.erdnt[j]+=link.rdnt[j]; G.edect[j]+=link.dect[j]
                 G.valt[j]+=link.valt[j]; G.rdnt[j]+=link.rdnt[j]; G.dect[j]+=link.dect[j]
@@ -240,7 +248,8 @@ def comp_G(_G, G, link, Et):
         Mrdn+= mrdn+ dval>mval; Drdn+= drdn+ dval<=mval
     else: dderH = []
     der_ext = comp_ext([_G.L,_G.S,_G.A],[G.L,G.S,G.A], [Mval,Dval],[Mrdn,Drdn],[Mdec,Ddec])
-    derHv = [derLay0+dderH, [Mval,Dval],[Mrdn,Drdn],[Mdec,Ddec], der_ext, 1]  # appendleft derLay0 from comp_ptuple
+    # we need additional bracket on derLay0 to pack them into dderH
+    derHv = [[derLay0]+dderH, [Mval,Dval],[Mrdn,Drdn],[Mdec,Ddec], der_ext, 1]  # appendleft derLay0 from comp_ptuple
     SubH = [derHv]  # init layers of SubH, higher layers added by comp_aggH:
     # / G:
     fadd = 0
@@ -307,7 +316,10 @@ def comp_derHv(_derH, derH, rn):  # derH is a list of der layers or sub-layers, 
 
     for _lay, lay in zip(_derH,derH):
         # comp dtuples, eval mtuples:
-        mtuple,dtuple, Mtuple,Dtuple = comp_dtuple(_lay[0][1], lay[0][1], rn, fagg=1)
+        if isinstance(lay[0][0], list):  # derH within aggH
+            mtuple,dtuple, Mtuple,Dtuple = comp_dtuple(_lay[0][1], lay[0][1], rn, fagg=1)
+        else:  # G.derH
+            mtuple,dtuple, Mtuple,Dtuple = comp_dtuple(_lay[1], lay[1], rn, fagg=1)
         mval = sum(mtuple); dval = sum(abs(d) for d in dtuple)
         mrdn = dval > mval; drdn = dval < mval
         dect = [0,0]
@@ -363,7 +375,7 @@ def sum_derHv(T,t, base_rdn, fneg=0):  # derH is a list of layers or sub-layers,
         [[sum_dertuple(Dertuple,dertuple, fneg*i) for i,(Dertuple,dertuple) in enumerate(zip(Tuplet,tuplet))],
           [V+v for V,v in zip(Valt,valt)], [R+r+base_rdn for R,r in zip(Rdnt,rdnt)], [(D+d)/2 for D,d in zip(Dect,dect)], 0
         ]
-        for [Tuplet,Valt,Rdnt,Dect,_,_], [tuplet,valt,rdnt,dect,_,_]  # ptuple_tv
+        for [Tuplet,Valt,Rdnt,Dect,_], [tuplet,valt,rdnt,dect,_]  # ptuple_tv (only 5 elements here -> ders, valt, rdnt, dect, depth)
         in zip_longest(DerH, derH, fillvalue=[([0,0,0,0,0,0],[0,0,0,0,0,0]), (0,0),(0,0),(0,0),0])
     ]
 
