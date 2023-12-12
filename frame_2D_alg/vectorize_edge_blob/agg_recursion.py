@@ -113,7 +113,7 @@ def node_connect(_G_):  # node connectivity = sum surround link vals, incr.media
         G_ = []  # for selective connectivity expansion, more selective eval by DVt, Lent = [0,0],[0,0]?
 
         for G in _G_:
-            if not G.esubH: continue  # G was never compared
+            if not G.esubH[-1]: continue  # G was never compared
             uprimt = [[],[]]  # >ave updates of direct links
             for i in 0,1:
                 valt,rdnt,dect = G.esubH[-1][1:4]; val,rdn,dec = valt[i],rdnt[i],dect[i]  # connect by last esubH layer
@@ -121,7 +121,7 @@ def node_connect(_G_):  # node connectivity = sum surround link vals, incr.media
                 for link in G.Rim_tH[-1][i]:
                     lval,lrdn,ldec = link.valt[i], link.rdnt[i], link.dect[i]
                     _G = link._G if link.G is G else link.G
-                    _valt,_rdnt,_dect = _G.esubH[-1][1:4]; _val,_rdn,_dec = valt[i],rdnt[i],dect[i]
+                    _valt,_rdnt,_dect = _G.esubH[-1][1:4]; _val,_rdn,_dec = _valt[i],_rdnt[i],_dect[i]  # this should be a typo? We need _valt, _rdnt and _dect here
                     # Vt.. for segment_node_:
                     linkV = ldec * (val+_val); dv = linkV-link.Vt[i]; link.Vt[i] = linkV
                     linkR = ldec * (rdn+_rdn); dr = linkR-link.Rt[i]; link.Rt[i] = linkR
@@ -144,7 +144,8 @@ def segment_node_(root, root_G_, fd, nrng):  # eval rim links with summed surrou
     igraph_ = []; ave = G_aves[fd]
 
     for G in root_G_:   # init per node, last-layer Vt,Vt,Dt:
-        grapht = [[G], [], G.Vt, G.Rt, G.Dt, copy(G.rim_tH[-1][fd])]
+        # use copy so that accumulation in grapht won't add to G
+        grapht = [[G], [], copy(G.Vt), copy(G.Rt), copy(G.Dt), copy(G.rim_tH[-1][fd])]
         G.roott[fd] = grapht  # for feedback
         igraph_ += [grapht]
     _graph_ = igraph_
@@ -198,8 +199,8 @@ def sum2graph(root, grapht, fd, nrng):  # sum node and link params into graph, a
     A0, A1, S = 0,0,0
     for G in G_:
         for i, link in enumerate(G.rim_tH[-1][fd]):
-            if i: sum_derHv(G.esubH[-1],link.subH[-1], base_rdn=link.Rt[fd])
-            else: G.esubH += link.subH[-1]  # [derH, valt,rdnt,dect,extt, 1]
+            if not G.esubH[-1]: G.esubH[-1] = deepcopy(link.subH[-1])  # we can't use i because G.esubH might not empty in der+
+            else:               sum_derHv(G.esubH[-1],link.subH[-1], base_rdn=link.Rt[fd])
             for j in 0,1:
                 G.evalt[j]+=link.Vt[j]; G.erdnt[j]+=link.Rt[j]; G.edect[j]+=link.Dt[j]
         graph.box += G.box
@@ -240,9 +241,19 @@ def comp_G(_G, G, link, Et):
     # / PP:
     _derH,derH = _G.derH,G.derH
     if _derH and derH:  # empty in single-node Gs
-        dderH, [mval,dval],[mrdn,drdn],[mdec,ddec] = comp_derHv(_derH, derH, rn=1)
-        Mval+=dval; Dval+=mval; Mdec=(Mdec+mdec)/2; Ddec=(Ddec+ddec)/2
-        Mrdn+= mrdn+ dval>mval; Drdn+= drdn+ dval<=mval
+        dderH = []
+        for _lay, lay in zip(_derH,derH):
+            # comp dtuples, eval mtuples:
+            mtuple,dtuple, Mtuple,Dtuple = comp_dtuple(_lay[1], lay[1], rn=1, fagg=1)
+            mval = sum(mtuple); dval = sum(abs(d) for d in dtuple)
+            mrdn = dval > mval; drdn = dval < mval
+            mdec, ddec = 0, 0
+            for fd, (ptuple,Ptuple) in enumerate(zip((mtuple,dtuple),(Mtuple,Dtuple))):
+                for (par, max, ave) in zip(ptuple, Ptuple, aves):  # different ave for comp_dtuple
+                    if fd: ddec += par/max if max else 1
+                    else:  mdec += (par+ave)/(max) if max else 1
+            Mval+=dval; Dval+=mval; Mdec=(Mdec+mdec)/2; Ddec=(Ddec+ddec)/2
+            dderH += [[[mtuple,dtuple], [mval,dval],[mrdn,drdn],[mdec/6,ddec/6], 0]]
     else: dderH = []
     der_ext = comp_ext([_G.L,_G.S,_G.A],[G.L,G.S,G.A], [Mval,Dval],[Mrdn,Drdn],[Mdec,Ddec])
     # we need additional bracket on derLay0 to pack them into dderH
@@ -270,6 +281,12 @@ def comp_G(_G, G, link, Et):
                         [G.Vt,G.Rt,G.Dt][typ][fd] += par
                         G.rim_tH[-1][fd] += [link]
                         G.Rim_tH[-1][fd] += [link]
+
+    # we miss out this section? Right now i can see link's valt, rdnt and dect is 0 in node_connect
+    for i in 0,1:
+        link.valt[i] += [Mval, Dval][i]
+        link.rdnt[i] += [Mrdn, Drdn][i]
+        link.dect[i] += [Mdec, Ddec][i]
 
 def comp_aggHv(_aggH, aggH, rn):  # no separate ext
 
