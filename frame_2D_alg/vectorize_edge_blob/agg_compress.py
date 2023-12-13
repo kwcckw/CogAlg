@@ -3,10 +3,10 @@ from copy import deepcopy, copy
 from itertools import zip_longest
 from collections import deque, defaultdict
 from .classes import Cgraph, CderG, CPP
-from .filters import ave_L, ave_dangle, ave, ave_distance, G_aves, ave_Gm, ave_Gd, ave_dI, ave_G, ave_M, ave_Ma
+from .filters import ave_dangle, ave, ave_distance, G_aves, ave_Gm, ave_Gd, ave_dI
 from .slice_edge import slice_edge, comp_angle
-from .comp_slice import comp_P_, comp_ptuple, sum_ptuple, comp_derH, sum_derH, sum_dertuple, get_match
-from .agg_recursion import comp_G, comp_aggHv, comp_derHv, vectorize_root, form_graph_t, sum_Hts, sum_derHv, sum_ext
+from .comp_slice import comp_P_, comp_ptuple, comp_derH, sum_derH, sum_dertuple, get_match
+from .agg_recursion import comp_G, comp_aggHv, comp_derHv, vectorize_root, form_graph_t, sum_derHv, sum_ext
 
 '''
 Implement sparse param tree in aggH: new graphs represent only high m|d params + their root params.
@@ -28,14 +28,17 @@ Then combine graph with alt_graphs?
 '''
 
 def root(blob, verbose):  # vectorization pipeline is 3 composition levels of cross-comp,clustering
-    vectorize_root(blob, verbose)
+    edge = vectorize_root(blob, verbose)
+    # temporary
+    for fd, G_ in enumerate(edge.node_tH[-1]):
+        agg_recursion(None, edge, G_, fd)  
 
 def agg_recursion(rroot, root, G_, fd):  # compositional agg+|sub+ recursion in root graph, clustering G_
 
-    form_parP_(parHv = [root.aggH,sum(root.valHt[fd]),sum(root.rdnHt[fd]),sum(root.maxHt[fd])], fd=fd)
+    form_parP_fixed(parHv = [root.aggH,root.valt[fd],root.rdnt[fd],root.dect[fd]], fd=fd)
     # compress aggH-> pP_,V,R,M: select G V,R,M?
-    ...
 
+# not fully updated
 def form_parP_fixed(parHv, fd):  # last v: value tuple valt,rdnt,maxt
     '''
     p_sets with nesting depth, +HH / max lower H len:
@@ -56,22 +59,30 @@ def form_parP_fixed(parHv, fd):  # last v: value tuple valt,rdnt,maxt
         L = 1
         while len(parH) > L:  # get next p_layer: len = sum(len lower lays): 1,1,2,4.: for subH | derH, not aggH?
             hL = 2 * L
-            _play = parH[L:hL]  # [par_sH, valt, rdnt, dect]
-            # fixed-nesting version:
-            if play[-1]:  # derH | subH
-                if play[-1]>1:  # subH
-                    subH,val,rdn,dec = play[0], play[1][fd], play[2][fd], play[3][fd]
-                    if val > ave:  # recursive eval,unpack
-                        Val+=val; Rdn+=rdn; Dec+=dec  # sum with sub-vals:
-                        sub_part_P_t = form_parP_([subH,val,rdn,dec], fd)
-                        part_ += [[subH, sub_part_P_t]]
-                    else:
-                        if Val:  # empty sub_pP_ terminates root pP
-                            part_P_ += [[part_,Val,Rdn,Dec]]; rVal+=Val; rRdn+=Rdn; rDec+=Dec  # root params
-                            part_= [], Val,Rdn,Dec = 0,0,0  # pP params
-                            # reset
-                form_tuplet_pP_(play[-2], [part_P_, rVal, rRdn, rDec], [part_, Val, Rdn, Dec], v=0)  # extt
-            else: form_tuplet_pP_(play, [part_P_,rVal,rRdn,rDec], [part_,Val,Rdn,Dec], v=1)  # derLay
+            play_ = parH[L:hL]  # [par_sH, valt, rdnt, dect] (should be an array of layer elements here?)
+            for play in play_:
+                # fixed-nesting version:
+                if play[-1]:  # derH | subH
+                    if play[-1]>1:  # subH
+                        subH,val,rdn,dec = play[0], play[1][fd], play[2][fd], play[3][fd]
+                        if val > ave:  # recursive eval,unpack
+                            Val+=val; Rdn+=rdn; Dec+=dec  # sum with sub-vals:
+                            sub_part_P_t = form_parP_fixed([subH,val,rdn,dec], fd)
+                            part_ += [[subH, sub_part_P_t]]
+                        else:
+                            if Val:  # empty sub_pP_ terminates root pP
+                                part_P_ += [[part_,Val,Rdn,Dec]]; rVal+=Val; rRdn+=Rdn; rDec+=Dec  # root params
+                                part_= [], Val,Rdn,Dec = 0,0,0  # pP params
+                                # reset
+                    else:  # derH
+                        derH,val,rdn,dec,extt = play[0], play[1][fd], play[2][fd], play[3][fd], play[4]
+                        form_tuplet_pP_(extt, [part_P_, rVal, rRdn, rDec], [part_, Val, Rdn, Dec], v=0)  # extt (ext is per derHv now)
+                        sub_part_P_t = form_parP_fixed([derH,val,rdn,dec], fd)  # derH
+                else: form_tuplet_pP_(play, [part_P_,rVal,rRdn,rDec], [part_,Val,Rdn,Dec], v=1)  # derLay
+            L += (2 * L)  # we need increase the value so that it matches the next layer L?
+        else:
+            break  # break from while loop if len(parH) < L
+    
     if part_:
         part_P_ += [[part_,Val,Rdn,Dec]]; rVal+=Val; rRdn+=Rdn; rDec+Dec
 

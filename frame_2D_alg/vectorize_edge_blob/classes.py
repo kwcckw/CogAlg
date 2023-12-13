@@ -119,6 +119,12 @@ class CPP(CderP):
 
 class Cgraph(ClusterStructure):  # params of single-fork node_ cluster per pplayers
 
+    # edge
+    P_: list = z([])
+    blob : object = None
+    # PP
+    mask__ : object = None
+    # graph and common edge, PP:
     ptuple : ptupleT = ptupleT(0,0,0,0,angleT(0,0),0)  # default P
     derH : list = z([])  # from PP, not converted to [[tuplet,valt,rdnt,dect]]
     # graph-internal, generic:
