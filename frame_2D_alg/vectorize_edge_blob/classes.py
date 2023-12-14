@@ -120,7 +120,6 @@ class CPP(CderP):
 class Cgraph(ClusterStructure):  # params of single-fork node_ cluster per pplayers
 
     # edge
-    P_: list = z([])
     blob : object = None
     # PP
     mask__ : object = None
@@ -159,7 +158,7 @@ class Cgraph(ClusterStructure):  # params of single-fork node_ cluster per pplay
     Rt : list = z([0,0])
     Dt : list = z([0,0])
     it : list = z([None,None])  # graph indices in root node_s, implicitly nested
-    roott : list = z([None, None])  # for feedback
+    root : list = z([None, None])  # for feedback
     fback_t : list = z([[],[]])  # maps to node_t: feedback [[aggH,valt,rdnt,dect]] per node fork
     compared_ : list = z([])
     Rdn : int = 0  # for accumulation or separate recursion count?

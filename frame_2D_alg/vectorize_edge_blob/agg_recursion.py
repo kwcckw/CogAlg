@@ -47,7 +47,11 @@ def vectorize_root(blob, verbose):  # vectorization pipeline is 3 composition le
         G_ = []
         for PP in node_:  # eval PP for agg+
             if PP.valt[fd] * (len(node_)-1) * (PP.rng+1) <= G_aves[fd] * PP.rdnt[fd]: continue
-            PP.roott = [None, None]  # reset for agg+:
+            PP.node_ = [PP.node_]  # we still need this to convert node_ to node_tH? This will preserve the base node_ too
+            # reset for agg+:
+            PP.root = [None, None]  # G.root is roott
+            PP.link_ = []  # reset link_ to remove derPs
+            PP.fback_t = [[],[]]  # reset fback_t from the values added in comp_slice, this may not always popped if the evaluation of length fback_t == node_ is false
             G_ += [PP]
         if G_:
             agg_recursion(None, edge, G_, fd=0)  # edge.node_ = graph_t, micro and macro recursive
@@ -89,9 +93,9 @@ def form_graph_t(root, G_, Et, fd, nrng):  # root_fd, form mgraphs and dgraphs o
     for fd, graph_ in enumerate(graph_t):  # breadth-first for in-layer-only roots
         for graph in graph_:
             # sub+ if last layer val deviation, external to agg+ vs internal in comp_slice sub+
-            if graph.Vt[fd] * (len(graph.node_tH[-1])-1)*root.rng > G_aves[fd] * graph.Rt[fd]:
+            if graph.Vt[fd] * (len(graph.node_[-1])-1)*root.rng > G_aves[fd] * graph.Rt[fd]:
                 # add empty layer:
-                for G in graph.node_tH[-1]:  # node_
+                for G in graph.node_[-1]:  # [-1] last added new layer is still node_
                     G.Vt, G.Rt, G.Dt = [0,0],[0,0],[0,0]
                     G.rim_tH += [[[],[]]]; G.Rim_tH += [[[],[]]]
                 agg_recursion(root, graph, graph.node_[-1], fd, nrng+1*(1-fd))  # node_ is node_tH, rng++ if not fd
@@ -113,15 +117,25 @@ def node_connect(_G_, old_len):  # node connectivity = sum surround link vals, i
         G_ = []  # for selective connectivity expansion, more selective eval by DVt, Lent = [0,0],[0,0]?
 
         for G in _G_:
-            if len(G.esubH)== old_len: continue  # G was never compared
+            # right now G.esubH is always empty in base fork before we pack them in sum2graph
+            if old_len == 0:
+                valt, rdnt, dect = G.valt, G.rdnt, G.dect  # base fork, where G.esubH is empty 
+            else:
+                if len(G.esubH)== old_len: continue  # G was never compared
+                valt,rdnt,dect = G.esubH[-1][1:4]; 
+
             uprimt = [[],[]]  # >ave updates of direct links
             for i in 0,1:
-                valt,rdnt,dect = G.esubH[-1][1:4]; val,rdn,dec = valt[i],rdnt[i],dect[i]  # connect by last esubH layer
+                val,rdn,dec = valt[i],rdnt[i],dect[i]  # connect by last esubH layer
                 ave = G_aves[i]
                 for link in G.Rim_tH[-1][i]:
                     lval,lrdn,ldec = link.valt[i], link.rdnt[i], link.dect[i]
                     _G = link._G if link.G is G else link.G
-                    _valt,_rdnt,_dect = _G.esubH[-1][1:4]; _val,_rdn,_dec = _valt[i],_rdnt[i],_dect[i]
+                    if old_len == 0:
+                        _valt, _rdnt, _dect = _G.valt, _G.rdnt, _G.dect  # base fork, where G.esubH is empty 
+                    else:
+                        _valt,_rdnt,_dect = _G.esubH[-1][1:4]
+                    _val,_rdn,_dec = _valt[i],_rdnt[i],_dect[i]
                     # Vt.. for segment_node_:
                     linkV = ldec * (val+_val); dv = linkV-link.Vt[i]; link.Vt[i] = linkV
                     linkR = ldec * (rdn+_rdn); dr = linkR-link.Rt[i]; link.Rt[i] = linkR
@@ -145,7 +159,7 @@ def segment_node_(root, root_G_, fd, nrng):  # eval rim links with summed surrou
 
     for G in root_G_:   # init per node, last-layer Vt,Vt,Dt:
         grapht = [[G],[], G.Vt,G.Rt,G.Dt, copy(G.rim_tH[-1][fd])]
-        G.roott[fd] = grapht  # for feedback
+        G.root[fd] = grapht  # for feedback (root is roott)
         igraph_ += [grapht]
     _graph_ = igraph_
     while True:
@@ -165,11 +179,11 @@ def segment_node_(root, root_G_, fd, nrng):  # eval rim links with summed surrou
                 comb_rdn = link.rdnt[fd] + (G.Rt[fd] + _G.Rt[fd]) / 2
                 if comb_val > ave * comb_rdn:  # _G and its root are effectively connected
                     # merge _root:
-                    _grapht = _G.roott[fd]
+                    _grapht = _G.root[fd]  # root is roott
                     _G_,_Link_,_Valt,_Rdnt,_Dect,_Rim = _grapht
                     Link_[:] = list(set(Link_+_Link_)) + [link]
                     for g in _G_:
-                        g.roott[fd] = grapht
+                        g.root[fd] = grapht  # root is roott
                         if g not in G_: G_+=[g]
                     for i in 0,1:
                         Valt[i]+=_Valt[i]; Rdnt[i]+=_Rdnt[i]; Dect[i]+=_Dect[i]
@@ -190,8 +204,8 @@ def sum2graph(root, grapht, fd, nrng):  # sum node and link params into graph, a
 
     G_,Link_,Vt,Rt,Dt,_ = grapht  # last-layer vals only; depth 0:derLay, 1:derHv, 2:subHv
 
-    graph = Cgraph(fd=fd, node_tH=[G_], L=len(G_),link_=Link_,Vt=Vt, Rt=Rt, Dt=Dt, rng=nrng)
-    graph.roott[fd] = root
+    graph = Cgraph(fd=fd, node_=[G_], L=len(G_),link_=Link_,Vt=Vt, Rt=Rt, Dt=Dt, rng=nrng)
+    graph.root[fd] = root  # G.root is roott 
     for link in Link_:
         link.roott[fd]=graph
     eH, valt,rdnt,dect, evalt,erdnt,edect = [],[0,0],[0,0],[0,0], [0,0],[0,0],[0,0]  # grapht int = node int+ext
@@ -448,13 +462,13 @@ def feedback(root, fd):  # called from form_graph_, append new der layers to roo
     for j in 0,1:
         root.valt[j] += Valt[j]; root.rdnt[j] += Rdnt[j]; root.dect[j] += Dect[j]  # both forks sum in same root
 
-    if root.roott:  # Edge has no roots
-        rroot = root.roott[fd]
+    if root.root:  # Edge has no roots
+        rroot = root.root[fd]  # root is roott
         if rroot:
             fd = root.fd
             fback_ = rroot.fback_t[fd] + [[AggH,Valt,Rdnt,Dect]]
             if isinstance(rroot, Cgraph):
-                L = len(rroot.node_tH[-1][fd]) if isinstance(rroot.node_tH[-1][0],list) else len(rroot.node_tH[-1])  # flat
+                L = len(rroot.node_[-1][fd]) if isinstance(rroot.node_[-1][0],list) else len(rroot.node_[-1])  # flat
             else: L = len(rroot.node_t[fd])  # Cedge
 
             if fback_ and (len(fback_) == L):  # flat, all rroot nodes terminated and fed back

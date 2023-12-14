@@ -68,14 +68,13 @@ def max_selection(blob):
 
 def trace_edge(blob, mask__, verbose=False):
 
-    edge = Cgraph(blob=blob,node_tH=[[], []],roott=None)
+    edge = Cgraph(blob=blob,root=None)
     blob.dlayers = [[edge]]
     max_ = {*zip(*mask__.nonzero())}  # convert mask__ into a set of (y,x)
 
     if verbose:
         step = 100 / len(max_)  # progress % percent per pixel
         progress = 0.0; print(f"\rTracing max... {round(progress)} %", end="");  sys.stdout.flush()
-    edge.P_ = []
     Pt_ = []
     while max_:  # queue of (y,x,P)s
         y,x = max_.pop()
@@ -88,7 +87,7 @@ def trace_edge(blob, mask__, verbose=False):
             ma = ave_dangle  # max value because P direction is the same as dert gradient direction
             assert g > 0, "g must be positive"
             P = form_P(blob, CP(yx=(y,x), axis=(dy/g, dx/g), cells={(y,x)}, dert_=[(y,x,i,dy,dx,g,ma)]))
-            edge.P_ += [P]
+            edge.node_ += [P]
             if _P is not None:
                 Pt_ += [(_P, P)]  # add up links only
             # search in max_ path
