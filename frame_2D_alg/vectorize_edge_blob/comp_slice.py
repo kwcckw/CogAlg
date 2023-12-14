@@ -32,6 +32,7 @@ def comp_P_(edge, adj_Pt_):  # cross-comp P_ in edge: high-gradient blob, sliced
 
     form_PP_t(edge, edge.link_, base_rdn=2)
 
+
 def comp_P(link_, _P, P, rn, fd=1, derP=None):  #  derP if der+, reused as S if rng+
     aveP = P_aves[fd]
 
@@ -112,12 +113,12 @@ def form_PP_t(root, root_link_, base_rdn):  # form PPs of derP.valt[fd] + connec
         if root.fback_t and root.fback_t[fd]:
             feedback(root, fd)  # after sub+ in all nodes, no single node feedback up multiple layers
 
-    root.node_tH = PP_t  # nested in sub+, add_alt_PPs_?
+    root.node_ = PP_t  # nested in sub+, add_alt_PPs_?
 
 
 def sum2PP(root, P_, derP_, base_rdn, fd):  # sum links in Ps and Ps in PP
 
-    PP = Cgraph(fd=fd, roott=root, P_=P_, rng=root.rng +(1-fd), node_tH=P_)  # initial PP.box = (inf,inf,-inf,-inf), node_tH is actually node_ now, will be replaced with node_t in sub+, roott is actually root
+    PP = Cgraph(fd=fd, root=root, P_=P_, rng=root.rng +(1-fd), node_=P_)  # initial PP.box = (inf,inf,-inf,-inf)
     # accum derP:
     for derP in derP_:
         if derP.P not in P_ or derP._P not in P_: continue
@@ -156,7 +157,7 @@ def sub_recursion(root, PP, fd):  # called in form_PP_, evaluate PP for rng+ and
     link_ = comp_der(PP.link_) if fd else comp_rng(PP.link_, rng)
 
     PP.rdnt[fd] += (PP.valt[fd] - PP_aves[fd] * PP.rdnt[fd]) > (PP.valt[1-fd] - PP_aves[1-fd] * PP.rdnt[1-fd])
-    for P in PP.P_: P.roott = [None,None]  # fill with sub_PPm_,sub_PPd_ between nodes and PP:
+    for P in PP.P_: P.root = [None,None]  # fill with sub_PPm_,sub_PPd_ between nodes and PP:
 
     form_PP_t(PP, link_, base_rdn=PP.rdnt[fd])
     root.fback_t[fd] += [[PP.derH, PP.valt, PP.rdnt]]  # merge in root.fback_t fork, else need fback_tree
@@ -169,12 +170,11 @@ def feedback(root, fd):  # in form_PP_, append new der layers to root PP, single
         sum_derH(Fback, root.fback_t[fd].pop(0), base_rdn=0)
     sum_derH([root.derH, root.valt, root.rdnt], Fback, base_rdn=0)  # both fder forks sum into a same root
 
-    if root.roott:  # skip if root is Edge, which has no roots
-        rroot = root.roott  # single PP.root, can't be P
+    if root.root:  # skip if root is Edge, which has no roots
+        rroot = root.root  # single PP.root, can't be P
         fd = root.fd  # node_t fd
         fback_ = rroot.fback_t[fd]
-        if isinstance(rroot.node_tH[0], list): node_t = rroot.node_tH[fd]  # node_ is updated to node_t in sub+
-        else:                                  node_t = rroot.node_tH      # node_ remained as a flat list
+        node_t = rroot.node_[fd] if isinstance(rroot.node_[0],list) else node_t = rroot.node_  # node_ is updated to node_t in sub+
         fback_ += [Fback]
         if fback_ and (len(fback_)==len(node_t)):  # all nodes terminated and fed back
             feedback(rroot, fd)  # sum2PP adds derH per rng, feedback adds deeper sub+ layers

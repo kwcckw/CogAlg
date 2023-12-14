@@ -37,19 +37,17 @@ Weak value vars are combined into higher var, so derivation fork can be selected
 def vectorize_root(blob, verbose):  # vectorization pipeline is 3 composition levels of cross-comp,clustering:
 
     edge, adj_Pt_ = slice_edge(blob, verbose)  # lateral kernel cross-comp -> P clustering
+
     comp_P_(edge, adj_Pt_)  # vertical, lateral-overlap P cross-comp -> PP clustering
-    # PP cross-comp -> discontinuous graph clustering:
-    edge.node_tH = [edge.node_tH]  # add first layer
-    for fd, node_ in enumerate(edge.node_tH[-1]):
-        if edge.valt[fd] * (len(node_)-1) * (edge.rng+1) <= G_aves[fd] * edge.rdnt[fd]: continue
+    edge.node_ = [edge.node_]  # convert node_t to node_tH
+
+    for fd, node_ in enumerate(edge.node_[-1]):  # node_ is generic for any nesting depth
+        if edge.valt[fd] * (len(node_)-1) * (edge.rng+1) <= G_aves[fd] * edge.rdnt[fd]:
+            continue  # else PP cross-comp -> discontinuous graph clustering:
         G_ = []
         for PP in node_:  # eval PP for agg+
             if PP.valt[fd] * (len(node_)-1) * (PP.rng+1) <= G_aves[fd] * PP.rdnt[fd]: continue
-            PP.node_tH = [PP.node_tH]  # add nesting
-            # reset for agg+:
-            PP.roott = [None, None]  
-            PP.link_ = [] 
-            PP.fback_t = [[],[]]
+            PP.roott = [None, None]  # reset for agg+:
             G_ += [PP]
         if G_:
             agg_recursion(None, edge, G_, fd=0)  # edge.node_ = graph_t, micro and macro recursive
@@ -77,7 +75,7 @@ def agg_recursion(rroot, root, G_, fd, nrng=1):  # + fpar for agg_parP_? composi
         if root.valt[0] * (len(GG_)-1)*root.rng > G_aves[fd] * root.rdnt[0]:  # xcomp G_ val
             agg_recursion(rroot, root, GG_, fd=0)  # 1st xcomp in GG_, root update in form_t, max rng=2
 
-    root.node_tH += [GG_t]  # Cgraph
+    root.node_ += [GG_t]  # node_tH, Cgraph
 
 
 def form_graph_t(root, G_, Et, fd, nrng):  # root_fd, form mgraphs and dgraphs of same-root nodes
@@ -96,7 +94,7 @@ def form_graph_t(root, G_, Et, fd, nrng):  # root_fd, form mgraphs and dgraphs o
                 for G in graph.node_tH[-1]:  # node_
                     G.Vt, G.Rt, G.Dt = [0,0],[0,0],[0,0]
                     G.rim_tH += [[[],[]]]; G.Rim_tH += [[[],[]]]
-                agg_recursion(root, graph, graph.node_tH[-1], fd, nrng+1*(1-fd))  # rng++ if not fd
+                agg_recursion(root, graph, graph.node_[-1], fd, nrng+1*(1-fd))  # node_ is node_tH, rng++ if not fd
             else:
                 root.fback_t[root.fd] += [[graph.aggH, graph.valt, graph.rdnt, graph.dect]]
                 feedback(root, root.fd)  # recursive update root.root.. aggH, valHt,rdnHt
@@ -201,9 +199,8 @@ def sum2graph(root, grapht, fd, nrng):  # sum node and link params into graph, a
     for G in G_:
         if not G.esubH: G.esubH=[[]]
         for i, link in enumerate(G.rim_tH[-1][fd]):
-            # why there's an additional -1? using [-1] will be selecting the last derHv in esubH
             if i: sum_derHv(G.esubH[-1], link.subH[-1], base_rdn=link.Rt[fd])  # [derH,valt,rdnt,dect,extt,1]
-            else: G.esubH += [deepcopy(link.subH[-1])]  # link.subH: cross-der+ ) same rng, G.esubH: cross-rng?
+            else: G.esubH += [deepcopy(link.subH[-1])]  # link.subH: cross-der+) same rng, G.esubH: cross-rng?
             for j in 0,1:
                 G.evalt[j]+=link.Vt[j]; G.erdnt[j]+=link.Rt[j]; G.edect[j]+=link.Dt[j]
         graph.box += G.box
