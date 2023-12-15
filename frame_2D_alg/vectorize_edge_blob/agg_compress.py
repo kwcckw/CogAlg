@@ -30,13 +30,13 @@ Then combine graph with alt_graphs?
 def root(blob, verbose):  # vectorization pipeline is 3 composition levels of cross-comp,clustering
     edge = vectorize_root(blob, verbose)
     # temporary
-    for fd, G_ in enumerate(edge.node_tH[-1]):
+    for fd, G_ in enumerate(edge.node_[-1]):
         agg_recursion(None, edge, G_, fd)
 
 
 def agg_recursion(rroot, root, G_, fd):  # compositional agg+|sub+ recursion in root graph, clustering G_
 
-    form_pP_fixed(parHv = [root.aggH,sum(root.valt[fd]),sum(root.rdnt[fd]),sum(root.dect[fd])], fd=fd)
+    form_pP_fixed(parHv = [root.aggH,root.valt[fd],root.rdnt[fd],root.dect[fd]], fd=fd)  # sum is not needed here
     # compress aggH-> pP_,V,R,Y: select G V,R,Y?
     ...
 
@@ -54,13 +54,14 @@ def form_pP_fixed(parHv, fd):  # last v: value tuple valt,rdnt,maxt
     V,R,Y = 0,0,0
     parH = copy(parH)
     part_ = []
-    while parH:  # aggHv( subHv( derHv( partv_, top-down
-        _play = parH[0]
-        parP = [_play]  # node_ + combined pars
-        L = 1
-        while len(parH) > L:  # get next player: len = sum(len lower lays): 1,1,2,4.: for subH | derH, not aggH?
-            hL = 2 * L
-            play = parH[L:hL]  # [par_sH, valt, rdnt, dect]
+    # while parH:  # aggHv( subHv( derHv( partv_, top-down (this line is not needed?)
+    _play = parH[0]
+    parP = [_play]  # node_ + combined pars
+    L = 1
+    while len(parH) > L:  # get next player: len = sum(len lower lays): 1,1,2,4.: for subH | derH, not aggH?
+        hL = 2 * L
+        play_ = parH[L:hL]  # each element is [par_sH, valt, rdnt, dect]
+        for play in play_:
             # fixed H nesting version:
             if play[-1]:  # derH | subH
                 if play[-1]>1:  # subH
@@ -74,11 +75,16 @@ def form_pP_fixed(parHv, fd):  # last v: value tuple valt,rdnt,maxt
                             pP_ += [[part_,V,R,Y]]; rV+=V; rR+=R; rY+=Y  # root params
                             part_= [], Val,Rdn,Dec = 0,0,0  # pP params
                             # reset
+                else:  # derH (this is miss out?)
+                    derH,val,rdn,dec,extt = play[0], play[1][fd], play[2][fd], play[3][fd], play[4]
+                    form_tuplet_pP_(extt, [pP_, rV, rR, rY], [part_, V, R, Y], v=0)  # extt (ext is per derHv now)
+                    sub_pP_t = form_pP_fixed([derH,val,rdn,dec], fd)  # derH          
             else:
                 form_tuplet_pP_(play, [pP_,rV,rR,rY], [part_,V,R,Y], v=1)  # derLay
             # add form_pP(parH, last_play, play)
-            last_play = play
-            L = hL
+            # form_pP(parH, _play, play)
+            _play = play
+        L = hL
     if part_:
         pP_ += [[part_,V,R,Y]]; rV+=V; rR+=R; rY+=Y
     return [pP_,rV,rR,rY]  # root values
@@ -122,7 +128,7 @@ def form_tuplet_pP_(ptuplet, part_P_v, part_v, v):  # ext or ptuple, params=vals
 
     part_P_,rVal,rRdn,rDec = part_P_v  # root params
     part_,Val,Rdn,Dec = part_v  # pP params
-    if v: ptuplet, valt,rdnt,dect = ptuplet
+    if v: ptuplet, valt,rdnt,dect,_ = ptuplet
 
     valP_t = [[form_val_pP_(ptuple) for ptuple in ptuplet if sum(ptuple) > ave]]
     if valP_t:

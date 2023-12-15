@@ -122,6 +122,7 @@ class Cgraph(ClusterStructure):  # params of single-fork node_ cluster per pplay
 
     # edge
     blob : object = None
+    P_ : list = z([])
     # PP
     mask__ : object = None
     # graph and common edge, PP:
@@ -181,9 +182,9 @@ class CderG(ClusterStructure):  # params of single-fork node_ cluster per pplaye
     # rdnt : list = z([1,1])
     # dect : list = z([0,0])  # mdecay, ddecay
     # combined vals: link.dect[fd] * (_G.valt[fd] + G.valt[fd]), accum in node_connect:
-    Vt : list = z([])  # last layer, set in comp_G
-    Rt : list = z([])
-    Dt : list = z([])
+    Vt : list = z([0,0])  # last layer, set in comp_G
+    Rt : list = z([1,1])
+    Dt : list = z([0,0])
     _G : object = None  # comparand + connec params
     G : object = None
     S : float = 0.0  # sparsity: average distance to link centers
