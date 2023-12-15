@@ -93,7 +93,7 @@ def form_PP_t(root, root_link_, base_rdn):  # form PPs of derP.valt[fd] + connec
                 P_Ps[derP._P] += [derP.P]
                 derP_ += [derP]  # filtered derP
         inP_ = []  # clustered Ps and their val,rdn s for all Ps
-        for P in root.node_:
+        for P in root.P_:
             if P in inP_: continue  # already packed in some PP
             cP_ = [P]  # clustered Ps and their val,rdn s
             perimeter = deque(P_Ps[P])  # recycle with breadth-first search, up and down:
@@ -118,7 +118,7 @@ def form_PP_t(root, root_link_, base_rdn):  # form PPs of derP.valt[fd] + connec
 
 def sum2PP(root, P_, derP_, base_rdn, fd):  # sum links in Ps and Ps in PP
 
-    PP = Cgraph(fd=fd, root=root, rng=root.rng +(1-fd), node_=P_)  # initial PP.box = (inf,inf,-inf,-inf)
+    PP = Cgraph(fd=fd, root=root, P_=P_, rng=root.rng +(1-fd), node_=P_)  # initial PP.box = (inf,inf,-inf,-inf)
     # accum derP:
     for derP in derP_:
         if derP.P not in P_ or derP._P not in P_: continue
@@ -157,7 +157,7 @@ def sub_recursion(root, PP, fd):  # called in form_PP_, evaluate PP for rng+ and
     link_ = comp_der(PP.link_) if fd else comp_rng(PP.link_, rng)
 
     PP.rdnt[fd] += (PP.valt[fd] - PP_aves[fd] * PP.rdnt[fd]) > (PP.valt[1-fd] - PP_aves[1-fd] * PP.rdnt[1-fd])
-    for P in PP.node_: P.root = [None,None]  # fill with sub_PPm_,sub_PPd_ between nodes and PP:
+    for P in PP.P_: P.root = [None,None]  # fill with sub_PPm_,sub_PPd_ between nodes and PP:
 
     form_PP_t(PP, link_, base_rdn=PP.rdnt[fd])
     root.fback_t[fd] += [[PP.derH, PP.valt, PP.rdnt]]  # merge in root.fback_t fork, else need fback_tree
@@ -174,7 +174,7 @@ def feedback(root, fd):  # in form_PP_, append new der layers to root PP, single
         rroot = root.root  # single PP.root, can't be P
         fd = root.fd  # node_t fd
         fback_ = rroot.fback_t[fd]
-        node_ = rroot.node_[fd] if isinstance(rroot.node_[0],list) else rroot.node_  # rroot.node_ may updated to node_t in sub+
+        node_ = rroot.node_[fd] if isinstance(rroot.node_[0],list) else node_ = rroot.node_  # node_ is updated to node_t in sub+
         fback_ += [Fback]
         if fback_ and (len(fback_)==len(node_)):  # all nodes terminated and fed back
             feedback(rroot, fd)  # sum2PP adds derH per rng, feedback adds deeper sub+ layers
