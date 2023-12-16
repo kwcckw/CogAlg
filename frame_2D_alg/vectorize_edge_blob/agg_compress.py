@@ -51,33 +51,39 @@ def form_pP_fixed(parHv, fd):  # fixed H nesting: aggH( subH( derH( parttv_ )))
     parH, rV,rR,rY = parHv  # uncompressed summed G vals
     pP_ = []  # pPs: >ave param clusters, nested
     V,R,Y = 0,0,0  # compressed param sets:
-    parH = copy(parH); part_ = []; _play = parH[0]; pP = [_play]  # node_ + combined pars
+    parH = copy(parH); part_ = []
+    _play_ = [parH[0]]  # always init with single element because layer start with 1, then 1,2,4,...
+    pP = [parH[0]]  # node_ + combined pars
     L = 1
     while len(parH) > L:  # get next player: len = sum(len lower lays): 1,1,2,4.: for subH | derH, not aggH?
         hL = 2 * L
-        play_ = parH[L:hL]  # each player is [sub_pH, valt, rdnt, dect]
-        for play in play_:  # 3-H unpack:
-            if play[-1]:  # derH | subH
-                if play[-1]>1:   # subH
-                    sspH,val,rdn,dec = play[0], play[1][fd], play[2][fd], play[3][fd]
-                    if val > ave:  # recursive eval,unpack
-                        V+=val; R+=rdn; Y+=dec  # sum with sub-vals:
-                        sub_pP_t = form_pP_fixed([sspH,val,rdn,dec], fd)
-                        part_ += [[sspH, sub_pP_t]]
-                    else:
-                        if V:  # empty sub_pP_ terminates root pP
-                            pP_ += [[part_,V,R,Y]]; rV+=V; rR+=R; rY+=Y  # root params
-                            part_= [],Val,Rdn,Dec = 0,0,0  # pP params
-                            # reset
+        play_ = parH[L:hL]  # each player is [sub_pH, valt, rdnt, dect]  
+        for _play in _play_:  # we may get multiple _plays too
+            # no form_pP_fixed with _play?
+            for play in play_:  # 3-H unpack:
+                if play[-1]:  # derH | subH
+                    if play[-1]>1:   # subH
+                        sspH,val,rdn,dec = play[0], play[1][fd], play[2][fd], play[3][fd]
+                        if val > ave:  # recursive eval,unpack
+                            V+=val; R+=rdn; Y+=dec  # sum with sub-vals:
+                            sub_pP_t = form_pP_fixed([sspH,val,rdn,dec], fd)
+                            part_ += [[sspH, sub_pP_t]]
+                        else:
+                            if V:  # empty sub_pP_ terminates root pP
+                                pP_ += [[part_,V,R,Y]]; rV+=V; rR+=R; rY+=Y  # root params
+                                part_= [],Val,Rdn,Dec = 0,0,0  # pP params
+                                # reset
+                    else: 
+                        derH, val,rdn,dec,extt = play[0], play[1][fd], play[2][fd], play[3][fd], play[4]
+                        form_tuplet_pP_(extt, [pP_,rV,rR,rY], [part_,V,R,Y], v=0)
+                        sub_pP_t = form_pP_fixed([derH,val,rdn,dec], fd)  # derH
+                        # spH = []; form_pP_(spH, _play, play)  # not sure here
+                        # part_ += [[spH, sub_pP_t]]
                 else:
-                    derH, val,rdn,dec,extt = play[0], play[1][fd], play[2][fd], play[3][fd], play[4]
-                    form_tuplet_pP_(extt, [pP_,rV,rR,rY], [part_,V,R,Y], v=0)
-                    sub_pP_t = form_pP_fixed([derH,val,rdn,dec], fd)  # derH
-                    # form_pP_(spH, _play, play
-            else:
-                form_tuplet_pP_(play, [pP_,rV,rR,rY], [part_,V,R,Y], v=1)  # derLay
-                # form_pP_(pH, _play, play)
-            _play = play
+                    form_tuplet_pP_(play, [pP_,rV,rR,rY], [part_,V,R,Y], v=1)  # derLay
+                    # pH = []; form_pP_(pH, _play, play)
+                    # part_ += [[pH, []]]  # empty sub_Pp in tuplet   
+        _play_ = play_  
         L = hL
     if part_:
         pP_ += [[part_,V,R,Y]]; rV+=V; rR+=R; rY+=Y

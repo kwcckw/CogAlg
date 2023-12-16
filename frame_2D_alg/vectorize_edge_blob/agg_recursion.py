@@ -115,9 +115,10 @@ def node_connect(_G_):  # node connectivity = sum surround link vals, incr.media
         for G in _G_:
             uprimt = [[],[]]  # >ave updates of direct links
             for i in 0,1:
+                if not G.Vt: continue  # G has negative link, and hence Vt remained empty
                 val,rdn,dec = G.Vt[i],G.Rt[i],G.Dt[i]  # connect by last layer
                 ave = G_aves[i]
-                for link in G.Rim_tH[-1][i]:
+                for link in G.Rimt[i]:
                     lval,lrdn,ldec = link.Vt[i],link.Rt[i],link.Dt[i]
                     _G = link._G if link.G is G else link.G
                     _val,_rdn,_dec = _G.Vt[i],_G.Rt[i],_G.Dt[i]
@@ -131,7 +132,7 @@ def node_connect(_G_):  # node connectivity = sum surround link vals, incr.media
                     if V > ave * R:
                         G.evalt[i] += dv; G.erdnt[i] += dr; G.edect[i] += dd
             if any(uprimt):  # pruned for next loop
-                G.Rim_tH[-1] = uprimt
+                G.Rimt = uprimt
 
         if G_: _G_ = G_  # exclude weakly incremented Gs from next connectivity expansion loop
         else:  break
@@ -143,6 +144,7 @@ def segment_node_(root, root_G_, fd, nrng):  # eval rim links with summed surrou
     igraph_ = []; ave = G_aves[fd]
 
     for G in root_G_:   # init per node, last-layer Vt,Vt,Dt:
+        if not G.Vt: continue  # skip graph with negative links (or prune them?)
         grapht = [[G],[], G.Vt,G.Rt,G.Dt, copy(G.rim_tH[-1][fd])]
         G.root[fd] = grapht  # roott for feedback
         igraph_ += [grapht]
@@ -197,7 +199,7 @@ def sum2graph(root, grapht, fd, nrng):  # sum node and link params into graph, a
     eH, valt,rdnt,dect, evalt,erdnt,edect = [],[0,0],[0,0],[0,0], [0,0],[0,0],[0,0]  # grapht int = node int+ext
     A0, A1, S = 0,0,0
     for G in G_:
-        if not G.esubH: G.esubH=[[]]
+        # if not G.esubH: G.esubH=[[]]  this should be not needed now, they will be added with link.subH below
         for i, link in enumerate(G.rim_tH[-1][fd]):
             if i: sum_derHv(G.esubH[-1], link.subH[-1], base_rdn=link.Rt[fd])  # [derH, valt,rdnt,dect,extt,1]
             else: G.esubH += [deepcopy(link.subH[-1])]  # link.subH: cross-der+) same rng, G.esubH: cross-rng?
@@ -284,13 +286,14 @@ def comp_G(_G, G, link, Et, lenRoot):
                 for G in link._G, link.G:
                     if len(G.rim_tH)==lenRoot:
                         # init rim layer with link:
-                        G.Vt[fd], G.Rt[fd], G.Dt[fd] = Val,Rdn,Dec
+                        if fd: G.Vt= [0, Val]; G.Rt = [1, Rdn]; G.Dt = [1, Dec]  # or init Vt, Rt and Dt with tuple? Right now they are init with []
+                        else:  G.Vt= [Val, 0]; G.Rt = [Rdn, 1]; G.Dt = [Dec, 1]
                         rimt = [[],[link]] if fd else [[link],[]]
-                        G.rim_tH += [rimt]; G.Rim_tH += [copy(rimt[0]),copy(rimt[1])]
+                        G.rim_tH += [rimt]; G.Rimt = [copy(rimt[0]),copy(rimt[1])]  # actually it should be G.Rimt? Because Rimt is per layer
                     else:
                         # accum rim layer with link:
                         G.Vt[fd] += Val; G.Rt[fd] += Rdn; G.Dt[fd] += Dec
-                        G.rim_tH[-1][fd] += [link]; G.Rim_tH[-1][fd] += [link]
+                        G.rim_tH[-1][fd] += [link]; G.Rimt[fd] += [link]
 
     link.Vt = Valt; link.Rt = Rdnt; link.Dt = Dect  # reset per comp_G
 
