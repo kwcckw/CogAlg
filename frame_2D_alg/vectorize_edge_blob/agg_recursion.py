@@ -115,6 +115,7 @@ def node_connect(_G_):  # node connectivity = sum surround link vals, incr.media
         for G in _G_:
             uprimt = [[],[]]  # >ave updates of direct links
             for i in 0,1:
+                if not G.Vt: continue
                 val,rdn,dec = G.Vt[i],G.Rt[i],G.Dt[i]  # connect by last layer
                 ave = G_aves[i]
                 for link in G.Rim_tH[-1][i]:
@@ -143,6 +144,7 @@ def segment_node_(root, root_G_, fd, nrng):  # eval rim links with summed surrou
     igraph_ = []; ave = G_aves[fd]
 
     for G in root_G_:   # init per node, last-layer Vt,Vt,Dt:
+        if not G.Vt: continue
         grapht = [[G],[], G.Vt,G.Rt,G.Dt, copy(G.rim_tH[-1][fd])]
         G.root[fd] = grapht  # roott for feedback
         igraph_ += [grapht]
@@ -283,13 +285,20 @@ def comp_G(_G, G, link, Et, lenRoot):
                 for G in link._G, link.G:
                     if len(G.rim_tH)==lenRoot:
                         # init rim layer with link:
-                        G.Vt[fd], G.Rt[fd], G.Dt[fd] = Val,Rdn,Dec
+                        if fd: G.Vt= [0, Val]; G.Rt = [1, Rdn]; G.Dt = [1, Dec]  # or init Vt, Rt and Dt with tuple? Right now they are init with []
+                        else:  G.Vt= [Val, 0]; G.Rt = [Rdn, 1]; G.Dt = [Dec, 1]
                         rimt = [[],[link]] if fd else [[link],[]]
-                        G.rim_tH += [[rimt]]; G.Rim_tH += [[copy(rimt[0]),copy(rimt[1])]]
+                        G.rim_tH += [rimt]; G.Rim_tH += [[copy(rimt[0]),copy(rimt[1])]]  # (single bracket is needed only for rimt)
                     else:
                         # accum rim layer with link:
                         G.Vt[fd] += Val; G.Rt[fd] += Rdn; G.Dt[fd] += Dec
                         G.rim_tH[-1][fd] += [link]; G.Rim_tH[-1][fd] += [link]
+            else:
+                # reset
+                for G in link._G, link.G:
+                    if len(G.rim_tH)==lenRoot:
+                        G.Vt = []; G.Rt = []; G.Dt = []
+
 
     link.Vt = Valt; link.Rt = Rdnt; link.Dt = Dect  # reset per comp_G
 
