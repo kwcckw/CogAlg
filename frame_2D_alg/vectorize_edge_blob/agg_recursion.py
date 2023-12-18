@@ -89,7 +89,8 @@ def form_graph_t(root, G_, Et, fd, nrng):  # root_fd, form mgraphs and dgraphs o
     graph_t = [[],[]]
     for i in 0,1:
         if Et[0][i] > ave * Et[1][i]:  # eValt > ave * eRdnt, else no clustering
-            graph_t[i] = segment_node_(root, G_, fd, nrng)  # if fd: node-mediated Correlation Clustering
+            # here should be using pruned _G_ too
+            graph_t[i] = segment_node_(root, _G_, fd, nrng)  # if fd: node-mediated Correlation Clustering
             # add alt_graphs?
     for fd, graph_ in enumerate(graph_t):  # breadth-first for in-layer-only roots
         for graph in graph_:
@@ -455,9 +456,11 @@ def feedback(root, fd):  # called from form_graph_, append new der layers to roo
         sum_aggHv(AggH, aggH, base_rdn=0)
         for j in 0,1:
             Valt[j] += valt[j]; Rdnt[j] += rdnt[j]; Dect[j] += dect[j]
-    sum_aggHv(root.aggH,AggH, base_rdn=0)
-    for j in 0,1:
-        root.valt[j] += Valt[j]; root.rdnt[j] += Rdnt[j]; root.dect[j] += Dect[j]  # both forks sum in same root
+
+    if Valt[fd] > G_aves[fd] * Rdnt[fd]:  # skip weak aggH
+        sum_aggHv(root.aggH,AggH, base_rdn=0)
+        for j in 0,1:
+            root.valt[j] += Valt[j]; root.rdnt[j] += Rdnt[j]; root.dect[j] += Dect[j]  # both forks sum in same root
 
     if root.root:  # Edge has no roots
         rroot = root.root[fd]  # roott
