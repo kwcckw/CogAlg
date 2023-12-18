@@ -84,7 +84,8 @@ def agg_recursion(rroot, root, G_, fd, nrng=1):  # + fpar for agg_parP_? composi
 
 def form_graph_t(root, G_, Et, fd, nrng):  # root_fd, form mgraphs and dgraphs of same-root nodes
 
-    node_connect(G_)  # Graph Convolution of Correlations over init _G_
+    _G_ = [G for G in G_ if len(G.rim_tH)>len(root.rim_tH)]
+    node_connect(_G_)  # Graph Convolution of Correlations over init _G_
     graph_t = [[],[]]
     for i in 0,1:
         if Et[0][i] > ave * Et[1][i]:  # eValt > ave * eRdnt, else no clustering
@@ -115,7 +116,6 @@ def node_connect(_G_):  # node connectivity = sum surround link vals, incr.media
         for G in _G_:
             uprimt = [[],[]]  # >ave updates of direct links
             for i in 0,1:
-                if not G.Vt: continue
                 val,rdn,dec = G.Vt[i],G.Rt[i],G.Dt[i]  # connect by last layer
                 ave = G_aves[i]
                 for link in G.Rim_tH[-1][i]:
@@ -144,7 +144,6 @@ def segment_node_(root, root_G_, fd, nrng):  # eval rim links with summed surrou
     igraph_ = []; ave = G_aves[fd]
 
     for G in root_G_:   # init per node, last-layer Vt,Vt,Dt:
-        if not G.Vt: continue
         grapht = [[G],[], G.Vt,G.Rt,G.Dt, copy(G.rim_tH[-1][fd])]
         G.root[fd] = grapht  # roott for feedback
         igraph_ += [grapht]
@@ -283,22 +282,17 @@ def comp_G(_G, G, link, Et, lenRoot):
             if Val > G_aves[fd] * Rdn:  # exclude neg links
                 Et[0][fd]+=Val; Et[1][fd]+=Rdn; Et[2][fd]+=Dec  # to eval grapht in form_graph_t
                 for G in link._G, link.G:
-                    if len(G.rim_tH)==lenRoot:
-                        # init rim layer with link:
-                        if fd: G.Vt= [0, Val]; G.Rt = [1, Rdn]; G.Dt = [1, Dec]  # or init Vt, Rt and Dt with tuple? Right now they are init with []
-                        else:  G.Vt= [Val, 0]; G.Rt = [Rdn, 1]; G.Dt = [Dec, 1]
-                        rimt = [[],[link]] if fd else [[link],[]]
-                        G.rim_tH += [rimt]; G.Rim_tH += [[copy(rimt[0]),copy(rimt[1])]]  # (single bracket is needed only for rimt)
+                    if len(G.rim_tH)==lenRoot:  # init rim layer with link:
+                        if fd:
+                            G.Vt=[0,Val]; G.Rt=[0,Rdn]; G.Dt=[0,Dec]
+                            G.rim_tH += [[[],[link]]]; G.Rim_tH += [[[],[link]]]
+                        else:
+                            G.Vt=[Val,0]; G.Rt=[Rdn,0]; G.Dt=[Dec,0]
+                            G.rim_tH += [[[link],[]]]; G.Rim_tH += [[[link],[]]]
                     else:
                         # accum rim layer with link:
                         G.Vt[fd] += Val; G.Rt[fd] += Rdn; G.Dt[fd] += Dec
                         G.rim_tH[-1][fd] += [link]; G.Rim_tH[-1][fd] += [link]
-            else:
-                # reset
-                for G in link._G, link.G:
-                    if len(G.rim_tH)==lenRoot:
-                        G.Vt = []; G.Rt = []; G.Dt = []
-
 
     link.Vt = Valt; link.Rt = Rdnt; link.Dt = Dect  # reset per comp_G
 

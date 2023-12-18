@@ -41,11 +41,12 @@ def agg_recursion(rroot, root, G_, fd):  # compositional agg+|sub+ recursion in 
     pP_ = [[pP, pV, pR, pY]]
     parHv = [root.aggH[1:],root.valt[fd]-pV,root.rdnt[fd]-pR,root.dect[fd]-pY]
 
-    if parHv[0]: 
+    if parHv[0]:
         form_pP_(pP_=pP_, parHv=parHv, fd=fd)  # sum is not needed here
     # compress aggH -> pP_,V,R,Y: select G' V,R,Y?
     ...
 
+# not updated:
 def form_pP_(pP_, parHv, fd):  # fixed H nesting: aggH( subH( derH( parttv_ ))), pPs: >ave param clusters, nested
     '''
     p_sets with nesting depth, Hv is H, valt,rdnt,dect:
@@ -62,9 +63,8 @@ def form_pP_(pP_, parHv, fd):  # fixed H nesting: aggH( subH( derH( parttv_ ))),
     while len(parH) > L:  # get next player: len = sum(len lower lays): 1,1,2,4.: for subH | derH, not aggH?
         hL = 2 * L
         play_ = parH[L:hL]  # each player is [sub_pH, valt, rdnt, dect]
-        pP_ += [form_pP_(pP_, [play_,V,R,Y], fd)] if L > 2 else [play_]  # replace uncompressed layers
-
-        # not quite sure on all below:
+        # add conditionally compressed layers:
+        pP_ += [form_pP_(pP_, [play_,V,R,Y], fd)] if L > 2 else [play_]
         for play in pP_:  # 3-H unpack:
             if play[-1]:  # derH | subH
                 if play[-1]>1:   # subH
