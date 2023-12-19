@@ -37,7 +37,7 @@ def root(blob, verbose):  # vectorization pipeline is 3 composition levels of cr
 
 def agg_recursion(rroot, root, G_, fd):  # compositional agg+|sub+ recursion in root graph, clustering G_
 
-    parHv = [root.aggH,root.valt[fd],root.rdnt[fd],root.dect[fd]]  
+    parHv = [root.aggH,root.valt[fd],root.rdnt[fd],root.dect[fd]]
     form_pP_(pP_=[], parHv=parHv, fd=fd)  # sum is not needed here
     # compress aggH -> pP_,V,R,Y: select G' V,R,Y?
 
@@ -47,7 +47,7 @@ def init_parHv(parH, V, R, Y, fd):
     # 1st layer
     pP, pV,pR, pY = parH[0], parH[0][1][fd], parH[0][2][fd], parH[0][3][fd]
     pP_, part_ = [], []
-    
+
     # compress 1st layer - always single element
     _,_,_, rV, rR, rY = compress_play_(pP_, [pP], part_, (0, 0, 0), (pV, pR, pY), fd)
     pP_ = [[part_,rV,rR,rY]]
@@ -66,7 +66,7 @@ def form_pP_(pP_, parHv, fd):  # fixed H nesting: aggH( subH( derH( parttv_ ))),
     derHv: [derH=parttv_, valt, rdnt, dect, extt, 1]
     parttv: [[mtuple, dtuple],  valt, rdnt, dect, 0]
     '''
-    
+
     # 1st layer initialization where pP_ is empty
     if not pP_:
         pP_, (parH, rV, rR, rY) = init_parHv(parHv[0], parHv[1], parHv[2], parHv[3], fd)
@@ -91,7 +91,7 @@ def form_pP_(pP_, parHv, fd):  # fixed H nesting: aggH( subH( derH( parttv_ ))),
             for play in play_:
                 comp_pP(_play, play)
         L = hL
-    
+
     if part_:
         pP_ += [[part_,V,R,Y]]; rV+=V; rR+=R; rY+=Y
 
@@ -99,10 +99,10 @@ def form_pP_(pP_, parHv, fd):  # fixed H nesting: aggH( subH( derH( parttv_ ))),
 
 
 def compress_play_(pP_, play_, part_, rVals, Vals,  fd):
-    
+
     V, R, Y = Vals
     rV, rR, rY = rVals
-    
+
     for play in play_:  # 3-H unpack:
         if play[-1]:  # derH | subH
             if play[-1]>1:   # subH
