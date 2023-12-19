@@ -155,7 +155,8 @@ class Cgraph(ClusterStructure):  # params of single-fork node_ cluster per pplay
     Dt : list = z([])
     it : list = z([None,None])  # graph indices in root node_s, implicitly nested
     roott : list = z([None,None])  # for feedback
-    fback_t : list = z([[],[]])  # maps to node_t: feedback [[aggH,valt,rdnt,dect]] per node fork
+    fback_t : list = z([[],[]])  # maps to node_t: feedback [[aggH,valt,rdnt,dect]] per node fork (for sub+)
+    faback_t : list = z([[],[]])  # for agg+
     compared_ : list = z([])
     Rdn : int = 0  # for accumulation or separate recursion count?
 
