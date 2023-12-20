@@ -41,9 +41,9 @@ def vectorize_root(blob, verbose):  # vectorization pipeline is 3 composition le
     edge, adj_Pt_ = slice_edge(blob, verbose)  # lateral kernel cross-comp -> P clustering
 
     comp_P_(edge, adj_Pt_)  # vertical, lateral-overlap P cross-comp -> PP clustering
-    edge.node_ = [edge.node_]  # convert to node_tH
+    edge.node_H = [edge.node_H]  # convert to node_
 
-    for fd, node_ in enumerate(edge.node_[-1]):  # node_ is generic for any nesting depth
+    for fd, node_ in enumerate(edge.node_H[-1]):  # node_ is generic for any nesting depth
         if edge.valt[fd] * (len(node_)-1) * (edge.rng+1) <= G_aves[fd] * edge.rdnt[fd]:
             continue  # else PP cross-comp -> discontinuous graph clustering:
         G_ = []
@@ -56,7 +56,7 @@ def vectorize_root(blob, verbose):  # vectorization pipeline is 3 composition le
 
     return edge
 
-def agg_recursion(rroot, root, G_, fd, nrng=1):  # + fpar for agg_parP_? compositional agg|sub recursion in root graph, cluster G_
+def agg_recursion(rroot, root, G_, fd, nrng=1, fsub=1):  # + fpar for agg_parP_? compositional agg|sub recursion in root graph, cluster G_
 
     Et = [[0,0],[0,0],[0,0]]  # eValt, eRdnt, eDect(currently not used)
     lenRoot = len(root.rim_tH)  # to init G.rim_tH
@@ -77,9 +77,14 @@ def agg_recursion(rroot, root, G_, fd, nrng=1):  # + fpar for agg_parP_? composi
     # agg+ xcomp-> form_graph_t loop sub)agg+, vs. comp_slice sub+ loop-> eval-> xcomp
     for GG_ in GG_t:
         if root.valt[0] * (len(GG_)-1)*root.rng > G_aves[fd] * root.rdnt[0]:  # xcomp G_ val
-            agg_recursion(rroot, root, GG_, fd=0)  # 1st xcomp in GG_, root update in form_t, max rng=2
+            agg_recursion(rroot, root, GG_, fd=0, fsub=0)  # 1st xcomp in GG_, root update in form_t, max rng=2
 
-    root.node_ += [GG_t]  # append node_tH
+    # this maybe added in both sub+ and agg+, so we need to separate them? We need to know if node_ is from sub+ or agg+ later in feedback
+    if fsub:
+        root.node_H += [GG_t]  # append node_tH 
+    else:
+        root.anode_H += [GG_t]
+
     if rroot:  # base fork
         rroot.fback_t[2] += [[root.aggH, root.valt,root.rdnt,root.dect]]
         feedback(rroot,2)  # recursive update root.root.. aggHv, fd=2 for agg+
@@ -96,12 +101,12 @@ def form_graph_t(root, G_, Et, fd, nrng):  # root_fd, form mgraphs and dgraphs o
             # add alt_graphs?
     for fd, graph_ in enumerate(graph_t):  # breadth-first for in-layer-only roots
         for graph in graph_:
-            if graph.Vt[fd] * (len(graph.node_[-1])-1)*root.rng > G_aves[fd] * graph.Rt[fd]:
+            if graph.Vt[fd] * (len(graph.node_H[-1])-1)*root.rng > G_aves[fd] * graph.Rt[fd]:
                 # sub+, external to agg+, vs internal in comp_slice sub+:
-                agg_recursion(root, graph, graph.node_[-1], fd, nrng+1*(1-fd))  # node_tH, rng++ if not fd
+                agg_recursion(root, graph, graph.node_H[-1], fd, nrng+1*(1-fd), fsub=1)  # node_tH, rng++ if not fd
             else:
                 root.fback_t[root.fd] += [[graph.aggH, graph.valt, graph.rdnt, graph.dect]]
-                feedback(root, root.fd, 0)  # recursive update root.root.. aggH, valHt,rdnHt
+                feedback(root, root.fd)  # recursive update root.root.. aggH, valHt,rdnHt
 
     return graph_t  # root.node_t'node_ -> node_t: incr nested with each agg+?
 
@@ -483,9 +488,13 @@ def feedback(root, ifd):  # called from form_graph_, append new der layers to ro
     if root.roott:  # Edge has no roots
         rroot = root.roott[fd]
         if rroot:
-            rfd = rroot.fd
-            fback_ = rroot.fback_t[fd]  # map to node_:
-            rnode_ = rroot.node_[-1] if rfd==2 else rroot.node_[-1][rfd]  # in node_tH
+            rfd = rroot.fd 
+            # we should use ifd n below?
+            fback_ = rroot.fback_t[ifd]  # map to node_:
+            if ifd == 2 and rroot.anode_H:
+                rnode_ = rroot.anode_H[-1][0]
+            else:
+                rnode_ = rroot.node_H[-1][rfd]
             if fback_ and (len(fback_) == len(rnode_)):
                 # after all rroot nodes terminate and feed back:
-                feedback(rroot, rfd)  # sum2graph adds aggH per rng, feedback adds deeper sub+ layers
+                feedback(rroot, ifd)  # sum2graph adds aggH per rng, feedback adds deeper sub+ layers
