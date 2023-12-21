@@ -41,9 +41,9 @@ def vectorize_root(blob, verbose):  # vectorization pipeline is 3 composition le
     edge, adj_Pt_ = slice_edge(blob, verbose)  # lateral kernel cross-comp -> P clustering
 
     comp_P_(edge, adj_Pt_)  # vertical, lateral-overlap P cross-comp -> PP clustering
-    edge.node_H = [edge.node_H]  # convert to node_
+    edge.node_H = [[[], [edge.node_H]]]  # convert to node_
 
-    for fd, node_ in enumerate(edge.node_H[-1]):  # node_ is generic for any nesting depth
+    for fd, node_ in enumerate(edge.node_H[-1][1][-1]):  # node_ is generic for any nesting depth
         if edge.valt[fd] * (len(node_)-1) * (edge.rng+1) <= G_aves[fd] * edge.rdnt[fd]:
             continue  # else PP cross-comp -> discontinuous graph clustering:
         G_ = []
@@ -52,7 +52,7 @@ def vectorize_root(blob, verbose):  # vectorization pipeline is 3 composition le
             PP.roott = [None, None]  # roott
             G_ += [PP]
         if G_:
-            agg_recursion(None, edge, G_, fd=0)  # edge.node_ = graph_t, micro and macro recursive
+            agg_recursion(None, edge, G_, fd=0, fsub=0)  # edge.node_ = graph_t, micro and macro recursive
 
     return edge
 
@@ -79,11 +79,8 @@ def agg_recursion(rroot, root, G_, fd, nrng=1, fsub=1):  # + fpar for agg_parP_?
         if root.valt[0] * (len(GG_)-1)*root.rng > G_aves[fd] * root.rdnt[0]:  # xcomp G_ val
             agg_recursion(rroot, root, GG_, fd=0, fsub=0)  # 1st xcomp in GG_, root update in form_t, max rng=2
 
-    # this maybe added in both sub+ and agg+, so we need to separate them? We need to know if node_ is from sub+ or agg+ later in feedback
-    if fsub:
-        root.node_H += [GG_t]  # append node_tH 
-    else:
-        root.anode_H += [GG_t]
+    if fsub: root.node_H[-1][1] += [GG_t]  # append node_t from sub+
+    else:    root.node_H += [[GG_t,[]]]  # append new layer with GG_t and empty subGGt_ in agg+
 
     if rroot:  # base fork
         rroot.fback_t[2] += [[root.aggH, root.valt,root.rdnt,root.dect]]
@@ -101,9 +98,9 @@ def form_graph_t(root, G_, Et, fd, nrng):  # root_fd, form mgraphs and dgraphs o
             # add alt_graphs?
     for fd, graph_ in enumerate(graph_t):  # breadth-first for in-layer-only roots
         for graph in graph_:
-            if graph.Vt[fd] * (len(graph.node_H[-1])-1)*root.rng > G_aves[fd] * graph.Rt[fd]:
+            if graph.Vt[fd] * (len(graph.node_H[-1][1][-1])-1)*root.rng > G_aves[fd] * graph.Rt[fd]:
                 # sub+, external to agg+, vs internal in comp_slice sub+:
-                agg_recursion(root, graph, graph.node_H[-1], fd, nrng+1*(1-fd), fsub=1)  # node_tH, rng++ if not fd
+                agg_recursion(root, graph, graph.node_H[-1][1][-1], fd, nrng+1*(1-fd), fsub=1)  # node_tH, rng++ if not fd
             else:
                 root.fback_t[root.fd] += [[graph.aggH, graph.valt, graph.rdnt, graph.dect]]
                 feedback(root, root.fd)  # recursive update root.root.. aggH, valHt,rdnHt
@@ -198,7 +195,7 @@ def sum2graph(root, grapht, fd, nrng):  # sum node and link params into graph, a
 
     G_,Link_,Vt,Rt,Dt,_ = grapht  # last-layer vals only; depth 0:derLay, 1:derHv, 2:subHv
 
-    graph = Cgraph(fd=fd, node_H=[G_], L=len(G_),link_=Link_,Vt=Vt, Rt=Rt, Dt=Dt, rng=nrng)
+    graph = Cgraph(fd=fd, node_H=[[[],[G_]]], L=len(G_),link_=Link_,Vt=Vt, Rt=Rt, Dt=Dt, rng=nrng)
     graph.roott[fd] = root
     for link in Link_:
         link.roott[fd]=graph
@@ -479,7 +476,7 @@ def feedback(root, ifd):  # called from form_graph_, append new der layers to ro
         for j in 0,1:
             Valt[j] += valt[j]; Rdnt[j] += rdnt[j]; Dect[j] += dect[j]  # -> root.fback_t
 
-    fd = 0 if ifd == 2 else 0  # if ifd == 2: base fork, rng+
+    fd = 1 if ifd == 1 else 0  # if ifd == 2: base fork, rng+, or ifd == 0, rng+, else ifd == 1, der+
     if Valt[fd] > G_aves[fd] * Rdnt[fd]:  # or compress each level?
         root.aggH += AggH  # higher levels are not affected
         for j in 0,1:
@@ -488,11 +485,14 @@ def feedback(root, ifd):  # called from form_graph_, append new der layers to ro
     if root.roott:  # Edge has no roots
         rroot = root.roott[fd]
         if rroot:
-            rfd = rroot.fd 
-            # we should use ifd n below?
-            fback_ = rroot.fback_t[ifd]  # map to node_:
-            if ifd == 2 and rroot.anode_H:
-                rnode_ = rroot.anode_H[-1][0]
+            # we should use ifd below if ifd == 2
+            rfd = ifd if ifd == 2 else fd
+            fback_ = rroot.fback_t[rfd]  # map to node_:
+            if rfd == 2:
+                if rroot.node_H[-1][0]:  # agg+ GGt may empty
+                    rnode_ = rroot.node_H[-1][0][0]  # select mnode_ from aggGGt[0] from [aggGGt, subGGt_]
+                else:
+                    rnode_ = []
             else:
                 rnode_ = rroot.node_H[-1][rfd]
             if fback_ and (len(fback_) == len(rnode_)):
