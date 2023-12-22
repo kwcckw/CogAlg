@@ -41,9 +41,8 @@ def vectorize_root(blob, verbose):  # vectorization pipeline is 3 composition le
     edge, adj_Pt_ = slice_edge(blob, verbose)  # lateral kernel cross-comp -> P clustering
 
     comp_P_(edge, adj_Pt_)  # vertical, lateral-overlap P cross-comp -> PP clustering
-    edge.node_ = [edge.node_]  # convert to node_tH
 
-    for fd, node_ in enumerate(edge.node_[-1]):  # node_ is generic for any nesting depth
+    for fd, node_ in enumerate(edge.node_):  # node_ is generic for any nesting depth
         if edge.valt[fd] * (len(node_)-1) * (edge.rng+1) <= G_aves[fd] * edge.rdnt[fd]:
             continue  # else PP cross-comp -> discontinuous graph clustering:
         G_ = []
@@ -52,6 +51,7 @@ def vectorize_root(blob, verbose):  # vectorization pipeline is 3 composition le
             PP.roott = [None,None]
             G_ += [PP]
         if G_:
+            node_[:] = G_  # to enable node_ replaced with GG_t later
             agg_recursion(None, edge, G_, fd=0)  # edge.node_ = graph_t, micro and macro recursive
 
     return edge
@@ -81,7 +81,10 @@ def agg_recursion(rroot, root, G_, fd, nrng=1):  # + fpar for agg_parP_? composi
             agg_recursion(rroot, root, GG_, fd=0)
 
     if GG_t[0] or GG_t[1]:  # node_->node_t if no agg+, else sub+ is local to sub_G formed in agg+
-        root.node_[:] = [GG_t]
+        if root.blob:  # edge (special case because it is called twice with a same edge root from vectorize_root)
+            G_[:] = GG_t
+        else:  # graphs
+            root.node_[:] = GG_t
     if rroot:  # base node_ agg+, fd=2
         rroot.fback_t[2] += [[root.aggH,root.valt,root.rdnt,root.dect]]
         feedback(rroot,2)  # update root.root..
@@ -89,6 +92,15 @@ def agg_recursion(rroot, root, G_, fd, nrng=1):  # + fpar for agg_parP_? composi
 def form_graph_t(root, G_, Et, fd, nrng):  # form Gm_,Gd_ of same-root nodes
 
     _G_ = [G for G in G_ if len(G.rim_tH)>len(root.rim_tH)]  # prune unconnected Gs
+    # after pruning G_, we need to prune link too, because link contains those pruned Gs
+    if fd:
+        for G in _G_:
+            rim_tH = [[],[]]
+            for i, link_ in enumerate(G.rim_tH[-1]):
+                for link in link_:
+                    if link.G in _G_ and link._G in _G_:
+                        rim_tH[i] += [link]
+            G.rim_tH[-1] = rim_tH
 
     node_connect(_G_)  # Graph Convolution of Correlations over init _G_
     graph_t = [[],[]]
@@ -98,10 +110,10 @@ def form_graph_t(root, G_, Et, fd, nrng):  # form Gm_,Gd_ of same-root nodes
 
     for fd, graph_ in enumerate(graph_t):  # breadth-first for in-layer-only roots
         for graph in graph_:
-            if isinstance(graph.node_[0], Cgraph): continue  # sub+ only for node_t:
-            if graph.Vt[fd] * (len(graph.node_[fd])-1)*root.rng > G_aves[fd] * graph.Rt[fd]:
+            # if isinstance(graph.node_[0], Cgraph): continue  # sub+ only for node_t: (we can't put this here because before sub+, it's always a flat node_)
+            if graph.Vt[fd] * (len(graph.node_)-1)*root.rng > G_aves[fd] * graph.Rt[fd]:
                 # sub+, external to agg+, vs internal in comp_slice sub+:
-                agg_recursion(root, graph, graph.node_[fd], fd, nrng+1*(1-fd))  # rng++ if not fd
+                agg_recursion(root, graph, graph.node_, fd, nrng+1*(1-fd))  # rng++ if not fd
             else:
                 root.fback_t[root.fd] += [[graph.aggH, graph.valt, graph.rdnt, graph.dect]]
                 feedback(root,root.fd)  # update root.root..
@@ -196,7 +208,7 @@ def sum2graph(root, grapht, fd, nrng):  # sum node and link params into graph, a
 
     G_,Link_,Vt,Rt,Dt,_ = grapht  # last-layer vals only; depth 0:derLay, 1:derHv, 2:subHv
 
-    graph = Cgraph(fd=fd, node_H=[G_], L=len(G_),link_=Link_,Vt=Vt, Rt=Rt, Dt=Dt, rng=nrng)
+    graph = Cgraph(fd=fd, node_=G_, L=len(G_),link_=Link_,Vt=Vt, Rt=Rt, Dt=Dt, rng=nrng)
     graph.roott[fd] = root
     for link in Link_:
         link.roott[fd]=graph
@@ -489,8 +501,8 @@ def feedback(root, ifd):  # called from form_graph_, append new der layers to ro
         if rroot:
             rfd = ifd if ifd==2 else fd  # not sure
             fback_ = rroot.fback_t[rfd]  # map to node_:
-            rnode_ = rroot.node_ if rfd==2 else rroot.node_[rfd]  # node_t
-
+            # rroot.node_ could be a flat node_ if they didn't have sub+ 
+            rnode_ = rroot.node_ if rfd==2 or not isinstance(rroot.node_[0], list) else rroot.node_[rfd]  # node_t
             if fback_ and (len(fback_) == len(rnode_)):
                 # after all rroot nodes terminate and feed back:
                 feedback(rroot, ifd)  # sum2graph adds aggH per rng, feedback adds deeper sub+ layers
