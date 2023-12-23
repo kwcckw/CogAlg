@@ -68,13 +68,14 @@ def max_selection(blob):
 
 def trace_edge(blob, mask__, verbose=False):
 
-    edge = Cgraph(blob=blob, roott=None, node_=[[],[]])
+    edge = Cgraph(roott=blob, node_=[[],[]])
     blob.dlayers = [[edge]]
     max_ = {*zip(*mask__.nonzero())}  # convert mask__ into a set of (y,x)
 
     if verbose:
         step = 100 / len(max_)  # progress % percent per pixel
         progress = 0.0; print(f"\rTracing max... {round(progress)} %", end="");  sys.stdout.flush()
+    edge.P_ = []
     Pt_ = []
     while max_:  # queue of (y,x,P)s
         y,x = max_.pop()
