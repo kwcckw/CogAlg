@@ -45,14 +45,14 @@ def vectorize_root(blob, verbose):  # vectorization pipeline is 3 composition le
     for fd, node_ in enumerate(edge.node_):  # node_t
         if edge.valt[fd] * (len(node_)-1) * (edge.rng+1) > G_aves[fd] * edge.rdnt[fd]:
             for PP in node_: PP.roott = [None,None]
-            agg_recursion(None, edge, node_, fd=0)  # PP cross-comp -> discontinuous clustering
+            agg_recursion(None, edge, node_, lenRoot=1, fd=0)  # PP cross-comp -> discontinuous clustering
 
     return edge
 
-def agg_recursion(rroot, root, G_, fd, nrng=1):  # + fpar for agg_parP_? compositional agg|sub recursion in root graph, cluster G_
+def agg_recursion(rroot, root, G_, lenRoot, fd, nrng=1):  # + fpar for agg_parP_? compositional agg|sub recursion in root graph, cluster G_
 
     Et = [[0,0],[0,0],[0,0]]  # eValt, eRdnt, eDect(currently not used)
-    lenRoot = len(root.rim_tH)  # to init G.rim_tH
+    # lenRoot = len(root.rim_tH)  # to init G.rim_tH
 
     if fd:  # der+
         for link in root.link_:  # reform links
@@ -66,16 +66,17 @@ def agg_recursion(rroot, root, G_, fd, nrng=1):  # + fpar for agg_parP_? composi
                     link = CderG(_G=_G, G=G)
                     comp_G(_G, G, link, Et, lenRoot)
 
-    form_graph_t(root, G_, Et, nrng)  # root_fd, eval sub+, feedback per graph
-    node_t = [root.node_] if isinstance(root.node_[0],Cgraph) else root.node_
+    node_t = form_graph_t(root, G_, Et, nrng)  # root_fd, eval sub+, feedback per graph
 
     for i, node_ in enumerate(node_t):
         if root.valt[i] * (len(node_)-1)*root.rng > G_aves[i] * root.rdnt[i]:
             # agg+ in base node_, rng=2, loop sub)agg+ per node, vs comp_slice sub+ loop-> eval-> xcomp
-            agg_recursion(rroot, root, node_, fd=0)
-            if rroot:
-                rroot.fback_t[i] += [[root.aggH,root.valt,root.rdnt,root.dect]]
-                feedback(rroot,i)  # update root.root..
+            agg_recursion(rroot, root, node_, lenRoot=1, fd=0)  # lenRoot always 1 for newly init GG
+    
+    # this shouldn't be per node_ in node_t, else it will be added twice
+    if rroot:
+        rroot.fback_t[i] += [[root.aggH,root.valt,root.rdnt,root.dect]]
+        feedback(rroot,i)  # update root.root..
 
 
 def form_graph_t(root, G_, Et, nrng):  # form Gm_,Gd_ from same-root nodes
@@ -83,22 +84,23 @@ def form_graph_t(root, G_, Et, nrng):  # form Gm_,Gd_ from same-root nodes
     _G_ = [G for G in G_ if len(G.rim_tH)>len(root.rim_tH)]  # prune unconnected Gs
 
     node_connect(_G_)  # Graph Convolution of Correlations over init _G_
+    node_t = [[],[]]
     for fd in 0,1:
         if Et[0][fd] > ave * Et[1][fd]:  # eValt > ave * eRdnt, else no clustering
             graph_ = segment_node_(root, _G_, fd, nrng)  # fd: node-mediated Correlation Clustering
             if not graph_: continue
-            for graph in graph_:
+            for graph in graph_: 
                 if graph.Vt[fd] * (len(graph.node_)-1)*root.rng > G_aves[fd] * graph.Rt[fd]:
                     # sub+, external to agg+, vs internal in comp_slice sub+:
-                    agg_recursion(root, graph, graph.node_, fd, nrng+1*(1-fd))  # rng++ if not fd
+                    lenRoot = len(graph.node_[0].rim_tH)
+                    agg_recursion(root, graph, graph.node_, lenRoot, fd, nrng+1*(1-fd))  # rng++ if not fd
                 else:
                     root.fback_t[root.fd] += [[graph.aggH, graph.valt, graph.rdnt, graph.dect]]
                     feedback(root,root.fd)  # update root.root..
-            if isinstance(root.node_[0],Cgraph):
-                root.node_ = [[],graph_] if fd else [graph_,[]]
-            else:
-                root.node_[fd][:] = graph_
+            node_t[fd][:] = graph_
+    G_[:] = node_t  # this will replace into root
 
+    return node_t
 
 def node_connect(_G_):  # node connectivity = sum surround link vals, incr.mediated: Graph Convolution of Correlations
     '''
@@ -474,7 +476,7 @@ def feedback(root, fd):  # called from form_graph_, append new der layers to roo
         for j in 0,1:  # sum both in same root fork
             root.valt[fd] += Valt[j]; root.rdnt[fd] += Rdnt[j]; root.dect[fd] += Dect[j]
 
-    if isinstance(root.roott, Cgraph):  # not Edge
+    if isinstance(root.roott, list):  # not Edge, Edge.roott is blob instead of tuple of roots
         rroot = root.roott[fd]
         if rroot:
             fback_ = rroot.fback_t[fd]  # always node_t for feedback
