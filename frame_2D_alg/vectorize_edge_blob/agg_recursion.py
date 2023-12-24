@@ -46,7 +46,6 @@ def vectorize_root(blob, verbose):  # vectorization in 3 composition levels of x
             for PP in node_: PP.roott = [None, None]
             agg_recursion(None, edge, node_, lenH=1, fd=0)
             # PP cross-comp -> discontinuous clustering, agg+ only, no Cgraph nodes
-
     return edge
 
 
@@ -67,10 +66,10 @@ def agg_recursion(rroot, root, G_, lenH, fd, nrng=1):  # compositional agg|sub r
                     link = CderG(_G=_G, G=G)
                     comp_G(_G, G, link, Et, lenH)
 
-    form_graph_t(root, G_, Et, nrng)  # root_fd, eval sub+, feedback per graph
-    if isinstance(root.node_[0],list):  # else no node_t was formed above, skip
+    form_graph_t(root, G_, Et, fd, nrng)  # root_fd, eval sub+, feedback per graph
+    if isinstance(G_[0],list):  # else no node_t was formed above, skip
 
-        for i, node_ in enumerate(root.node_):
+        for i, node_ in enumerate(G_):
             if root.valt[i] * (len(node_)-1)*root.rng > G_aves[i] * root.rdnt[i]:
                 # agg+ in base node_, rng=2, loop sub)agg+ per node, vs comp_slice sub+ loop-> eval-> xcomp
                 agg_recursion(rroot, root, node_, lenH=1, fd=0)
@@ -79,26 +78,27 @@ def agg_recursion(rroot, root, G_, lenH, fd, nrng=1):  # compositional agg|sub r
                     feedback(rroot,i)  # update root.root..
 
 
-def form_graph_t(root, G_, Et, nrng):  # form Gm_,Gd_ from same-root nodes
+def form_graph_t(root, G_, Et,  ifd, nrng):  # form Gm_,Gd_ from same-root nodes
 
     _G_ = [G for G in G_ if len(G.rim_tH)>len(root.rim_tH)]  # prune Gs unconnected in current layer
 
     node_connect(_G_)  # Graph Convolution of Correlations over init _G_
+    node_t = [[],[]]
     for fd in 0,1:
         if Et[0][fd] > ave * Et[1][fd]:  # eValt > ave * eRdnt, else no clustering, keep root.node_
             graph_ = segment_node_(root, _G_, fd, nrng)  # fd: node-mediated Correlation Clustering
             if not graph_: continue
             for graph in graph_:
                 if graph.Vt[fd] * (len(graph.node_)-1)*root.rng > G_aves[fd] * graph.Rt[fd]:
-                    # eval sub+ per node, external to agg+, vs. internal in comp_slice sub+:
-                    agg_recursion(root, graph, graph.node_, len(graph.esubH), fd, nrng+1*(1-fd))  # nrng+ if not fd
+                    # eval sub+ per node, external to agg+, vs. internal in comp_slice sub+: 
+                    # should be using graph' node's esubH
+                    agg_recursion(root, graph, graph.node_, len(graph.node_[0].esubH), fd, nrng+1*(1-fd))  # nrng+ if not fd
                 else:
                     root.fback_t[root.fd] += [[graph.aggH, graph.valt, graph.rdnt, graph.dect]]
                     feedback(root,root.fd)  # update root.root..
-            if isinstance(root.node_[0],Cgraph):
-                root.node_ = [[],graph_] if fd else [graph_,[]]
-            else:
-                root.node_[fd][:] = graph_
+            node_t[fd] = graph_
+
+    if any(node_t): G_[:] = node_t  # update G_ to node_t if there's single trye in loop above
 
 
 def node_connect(_G_):  # node connectivity = sum surround link vals, incr.mediated: Graph Convolution of Correlations
@@ -220,12 +220,12 @@ def sum2graph(root, grapht, fd, nrng):  # sum node and link params into graph, a
     if fd:
         for link in graph.link_:  # assign alt graphs from d graph, after both linked m and d graphs are formed
             mgraph = link.roott[0]
-
-            for fd, (G, alt_G) in enumerate((mgraph,graph), (graph,mgraph)):  # bilateral assign:
-                if G not in alt_G.alt_graph_:
-                    G.alt_graph_ += [alt_G]
-                    for i in 0,1:
-                        G.avalt[i] += alt_G.valt[i]; G.ardnt[i] += alt_G.rdnt[i]; G.adect[i] += alt_G.dect[i]
+            if mgraph:  # mgraph may empty if mval eval is false in comp_G, but dval is true
+                for fd, (G, alt_G) in enumerate(((mgraph,graph), (graph,mgraph))):  # bilateral assign:
+                    if G not in alt_G.alt_graph_:
+                        G.alt_graph_ += [alt_G]
+                        for i in 0,1:
+                            G.avalt[i] += alt_G.valt[i]; G.ardnt[i] += alt_G.rdnt[i]; G.adect[i] += alt_G.dect[i]
 
     return graph
 
