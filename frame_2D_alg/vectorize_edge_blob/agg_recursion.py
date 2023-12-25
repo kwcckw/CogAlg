@@ -40,8 +40,9 @@ def vectorize_root(blob, verbose):  # vectorization in 3 composition levels of x
     edge, adj_Pt_ = slice_edge(blob, verbose)  # lateral kernel cross-comp -> P clustering
 
     comp_P_(edge, adj_Pt_)  # vertical, lateral-overlap P cross-comp -> PP clustering
+    edge.node_ = [edge.node_]
 
-    for fd, node_ in enumerate(edge.node_):  # always node_t
+    for fd, node_ in enumerate(edge.node_[-1]):  # always node_t
         if edge.valt[fd] * (len(node_)-1)*(edge.rng+1) > G_aves[fd] * edge.rdnt[fd]:
             for PP in node_: PP.roott = [None, None]
             agg_recursion(None, edge, node_, lenH=1, fd=0)
@@ -88,8 +89,30 @@ def form_graph_t(root, G_, Et, nrng):  # form Gm_,Gd_ from same-root nodes
             graph_ = segment_node_(root, _G_, fd, nrng)  # fd: node-mediated Correlation Clustering
             if not graph_: continue
             for graph in graph_:  # eval sub+ per node
-                if graph.Vt[fd] * (len(graph.node_)-1)*root.rng > G_aves[fd] * graph.Rt[fd]:
-                    agg_recursion(root, graph, graph.node_, len(graph.aggH[-1][0]), fd, nrng+1*(1-fd))  # nrng+ if not fd
+                if graph.Vt[fd] * (len(graph.node_[-1])-1)*root.rng > G_aves[fd] * graph.Rt[fd]:
+                       
+                    # current depth sub+
+                    agg_recursion(root, graph, graph.node_[-1], len(graph.aggH[-1][0]), fd, nrng+1*(1-fd))  # nrng+ if not fd
+                    
+                    # higher layer's sub+
+                    rroot = graph
+                    rfd = rroot.fd
+                    while isinstance(rroot.roott, list) and rroot.roott[rfd]:  # not blob
+                        rroot = rroot.roott[rfd]
+                        Val, Rdn = 0, 0
+                        if isinstance(rroot.node_[-1][0], list):  # node_ is node_t
+                            node_ = rroot.node_[-1][rfd]
+                        else:
+                            node_ = rroot.node_[-1]
+                        
+                        for node in node_:  # sum vals and rdns from all higher nodes
+                            Rdn += node.rdnt[rfd]
+                            Val += node.valt[rfd]
+                        # include rroot.Vt and Rt?
+                        if Val * (len(rroot.node_[-1])-1)*rroot.rng > G_aves[fd] * Rdn:
+                            # not sure about nrg here
+                            agg_recursion(root, graph, rroot.node_[-1], len(rroot.aggH[-1][0]), rfd, nrng+1*(1-rfd))  # nrng+ if not fd
+ 
                 else:
                     root.fback_t[root.fd] += [[graph.aggH, graph.valt, graph.rdnt, graph.dect]]
                     feedback(root,root.fd)  # update root.root..
@@ -186,7 +209,7 @@ def sum2graph(root, grapht, fd, nrng):  # sum node and link params into graph, a
 
     G_,Link_,Vt,Rt,Dt,_ = grapht  # last-layer vals only; depth 0:derLay, 1:derHv, 2:subHv
 
-    graph = Cgraph(fd=fd, node_=G_, L=len(G_),link_=Link_,Vt=Vt, Rt=Rt, Dt=Dt, rng=nrng)
+    graph = Cgraph(fd=fd, node_=[G_], L=len(G_),link_=Link_,Vt=Vt, Rt=Rt, Dt=Dt, rng=nrng)
     graph.roott[fd] = root
     for link in Link_:
         link.roott[fd]=graph
@@ -271,11 +294,13 @@ def comp_G(_G, G, link, Et, len_root_H):
     # / G:
     fadd = 0
     if link.subH:  # old link: not empty aggH
-        subH, valt,rdnt,dect = comp_aggHv(_G.aggH, G.aggH, rn=1)
+        aggH, valt,rdnt,dect = comp_aggHv(_G.aggH, G.aggH, rn=1)  # actually this is daggH, we get daggH by comparing aggH
         mval,dval = valt; Mval+=dval; Dval+=mval
         Mrdn += rdnt[0]+dval>mval; Drdn += rdnt[1]+dval<=mval
         Mdec = (Mdec+dect[0])/2; Ddec = (Ddec+dect[1])/2
-        link.subH = SubH+subH  # append higher subLayers: list of der_ext | derH s
+        link.subH = SubH
+        for subHv in aggH:
+            link.subH += subHv[0]  # append higher subLayers: list of der_ext | derH s
         if Mval > ave_Gm or Dval > ave_Gd:
             fadd = 1
     elif Mval > ave_Gm or Dval > ave_Gd:  # new link
@@ -310,7 +335,7 @@ def comp_aggHv(_aggH, aggH, rn):  # no separate ext
     for _lev, lev in zip(_aggH, aggH):  # compare common subHs, if lower-der match?
         if _lev and lev:
             dsubH, valt,rdnt,dect = comp_subHv(_lev[0],lev[0], rn)
-            SubH += [dsubH, valt,rdnt,dect, 2] # flat
+            SubH += [[dsubH, valt,rdnt,dect, 2]] # flat (we need extra bracket to pack them as an element)
             Mdec += dect[0]; Ddec += dect[1]
             mval,dval = valt; Mval += mval; Dval += dval
             Mrdn += rdnt[0] + dval > mval; Drdn += rdnt[1] + mval <= dval
@@ -327,7 +352,8 @@ def comp_subHv(_subH, subH, rn):
     for _lay, lay in zip(_subH, subH):  # compare common lower layer|sublayer derHs, if prior match?
 
         dderH, valt,rdnt,dect = comp_derHv(_lay[0],lay[0], rn)  # derHv: [derH, valt, rdnt, dect, extt, 1]:
-        dextt = [[comp_ext(_ext,ext,[Mval,Dval],[Mrdn,Drdn],[Mdec,Ddec])] for _ext,ext in zip(_lay[-2],lay[-2])]
+        # the additional bracket is not needed because comp_ext returns  [[mL,mS,mA], [dL,dS,dA]], which already in bracket
+        dextt = [comp_ext(_ext,ext,[Mval,Dval],[Mrdn,Drdn],[Mdec,Ddec]) for _ext,ext in zip(_lay[-2],lay[-2])]
 
         dsubH += [[dderH, valt,rdnt,dect,dextt, 1]]  # flat
         Mdec += dect[0]; Ddec += dect[1]
@@ -446,7 +472,8 @@ def comp_ext(_ext, ext, Valt, Rdnt, Dect):  # comp ds:
     _aS = abs(_S); aS = abs(S)
 
     Dect[0] += (mL/ max(aL,_aL) + mS/ max(aS,_aS) if aS or _aS else 1 + (mA / max_mA) if max_mA else 1) /3  # ave dec of 3 vals
-    Dect[1] += (dL/ (_aL+aL) + dS / max(_aS+aS) if aS or _aS else 1 + (dA / max_dA) if max_mA else 1) /3
+    # typo? We need at least 2 elements for max
+    Dect[1] += (dL/ (_aL+aL) + dS / max(_aS,aS) if aS or _aS else 1 + (dA / max_dA) if max_mA else 1) /3
 
     return [[mL,mS,mA], [dL,dS,dA]]
 
