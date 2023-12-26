@@ -44,7 +44,7 @@ def vectorize_root(blob, verbose):  # vectorization in 3 composition levels of x
     for fd, node_ in enumerate(edge.node_):  # always node_t
         if edge.valt[fd] * (len(node_)-1)*(edge.rng+1) > G_aves[fd] * edge.rdnt[fd]:
             for PP in node_: PP.roott = [None, None]
-            agg_recursion(None, edge, node_, lenH=1, fd=0)
+            agg_recursion(None, edge, node_, lenH=0, fd=0)  # should be init with 0 length, rim_tH initialized empty
             # PP cross-comp -> discontinuous clustering, agg+ only, no Cgraph nodes
     return edge
 
@@ -71,7 +71,7 @@ def agg_recursion(rroot, root, G_, lenH, fd, nrng=1):  # compositional agg|sub r
         for i, node_ in enumerate(G_):
             if root.valt[i] * (len(node_)-1)*root.rng > G_aves[i] * root.rdnt[i]:
                 # agg+/ node_( sub)agg+/ node, vs sub+ only in comp_slice
-                agg_recursion(rroot, root, node_, lenH=1, fd=0)  # der+ if fd, else rng+ =2
+                agg_recursion(rroot, root, node_, lenH=0, fd=0)  # der+ if fd, else rng+ =2
                 if rroot:
                     rroot.fback_t[i] += [[root.aggH,root.valt,root.rdnt,root.dect]]
                     feedback(rroot,i)  # update root.root..
@@ -412,7 +412,7 @@ def sum_derHv(T,t, base_rdn, fneg=0):  # derH is a list of layers or sub-layers,
 
 def sum_ext(Extt, extt):
 
-    if isinstance(Extt[0], list):
+    if isinstance(Extt[0], list):  # what if Extt is dextt, while extt is extt?
         for Ext,ext in zip(Extt,extt):  # ext: m,d tuple
             for i,(Par,par) in enumerate(zip(Ext,ext)):
                 Ext[i] = Par+par
