@@ -423,7 +423,7 @@ def sum_ext(Extt, extt):
 def comp_ext(_ext, ext, Valt, Rdnt, Dect):  # comp ds:
 
     (_L,_S,_A),(L,S,A) = _ext,ext
-    dL = _L-L
+    dL = max(1, _L-L )  # if dL is 0 here, we will get zero division later 
 
     if isinstance(A,list):
         if any(A) and any(_A):
@@ -436,7 +436,9 @@ def comp_ext(_ext, ext, Valt, Rdnt, Dect):  # comp ds:
         mA = get_match(_A,A)- ave_dangle; dA = _A-A; adA = abs(dA); _aA=abs(_A); aA=abs(A)
         max_dA = _aA + aA; max_mA = max(_aA, aA)
         dS = _S - S
-    mL = get_match(_L,L) - ave_mL
+    mL = get_match(_L,L)
+    # if match is the same with ave_mL, then mL =0, and we will get zero division later , same with mS below
+    mL = mL - ave_mL -1 if mL == ave_mL else mL - ave_mL
     mS = get_match(_S,S) - ave_mL
 
     m = mL+mS+mA; d = abs(dL)+ abs(dS)+ adA

@@ -33,7 +33,7 @@ def root(blob, verbose):  # vectorization pipeline is 3 composition levels of cr
     # temporary
     for fd, G_ in enumerate(edge.node_[-1]):
         if edge.aggH:
-            agg_recursion(None, edge, G_, lenH=0, fd=0, nrng=1)
+            agg_recursion_cpr(None, edge, G_, lenH=0, fd=0, nrng=1)
 
 
 def vectorize_root(blob, verbose):  # vectorization in 3 composition levels of xcomp, cluster:
@@ -87,31 +87,39 @@ def sub_recursion(rroot, root, G_, lenH, fd, nrng=1):  # interlaced fd recursion
 
     # rng+|der+ over same-root nodes, forming multiple Gm_,Gd_ per sub+ layer:
 
-    _G_t = [[G_,0]]  # next layer of the fork tree, 0 is rng+
+    _G_t = [[G_,0]]  # next layer of the fork tree, 0 is rng+ (if we start with fd ==0 ,it's always rng+ fork here)
     G_tree = [[G_,0]]  # root of fork tree, keep for form_graph_tree
 
     while _G_t:  # fork layer, recursive unpack lower forks
         G_t = []
-        for fd, G_ in _G_t:
+        for _G_, fd in _G_t:
             Et = [[0,0],[0,0],[0,0]]  # grapht link_' eValt, eRdnt, eDect(currently not used)
-            link_ = []
+            G_ = []  # this should be G_?  
             if fd:  # der+
                 for link in root.link_:  # reform links
                     if link.Vt[1] < G_aves[1] * link.Rt[1]: continue  # maybe weak after rdn incr?
                     comp_G(link._G, link.G, link, Et, lenH)
-                    link_ += [link_]
+                    G_  = list(set(G_ + [link.G, link._G]))
             else:  # rng+
-                for i, _G in enumerate(G_):  # form new link_ from original node_
-                    for G in G_[i + 1:]:
+                for i, _G in enumerate(_G_):  # form new link_ from original node_
+                    for G in _G_[i + 1:]:
                         dy = _G.box.cy - G.box.cy; dx = _G.box.cx - G.box.cx
                         if np.hypot(dy, dx) < 2 * nrng:  # max distance between node centers, init=2
                             link = CderG(_G=_G, G=G)
                             comp_G(_G, G, link, Et, lenH)
-                            link_ += [link_]
-            G_t += [[link_,fd]]  # not sure
+                            G_  = list(set(G_ + [link.G, link._G]))
+            # we can evaluate redundancy here? There's no need to do it outside the loop?
+            if G_: 
+                val, rdn = 0, 0
+                for G in G_:
+                    val += G.valt[fd]; rdn += G.rdnt[fd]
+                if val > G_aves[fd] * rdn:
+                    G_t += [[G_,fd]]  # not empty G_
         _G_t = G_t  # new layer of G_tree
-        G_tree += [[G_t]]
+        if G_t: G_tree += G_t  # merge (no bracket is needed)
+        if not fd: nrng -= 1  # this one is missed out?
 
+    # this section below is not needed now?
     GG_t = []
     GG_tH = [GG_t]
     val_t, rdn_t = [],[]
@@ -128,7 +136,7 @@ def sub_recursion(rroot, root, G_, lenH, fd, nrng=1):  # interlaced fd recursion
             val_tH += GG_t[fd][i]
         else:
             break
-    GG_tree, valt,rdnt = form_graph_tree(root, val_tH, nrng)  # root_fd, eval sub+, feedback per graph
+    GG_tree, valt,rdnt = form_graph_tree(root, G_tree, nrng)  # root_fd, eval sub+, feedback per graph
 
     return GG_tree
 
