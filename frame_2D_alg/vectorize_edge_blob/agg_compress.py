@@ -33,7 +33,7 @@ def root(blob, verbose):  # vectorization pipeline is 3 composition levels of cr
     # temporary
     for fd, G_ in enumerate(edge.node_[-1]):
         if edge.aggH:
-            agg_recursion(None, edge, G_, lenH=0, fd=0, nrng=1)
+            agg_recursion_cpr(None, edge, G_, lenH=0, fd=0, nrng=1)
 
 
 def vectorize_root(blob, verbose):  # vectorization in 3 composition levels of xcomp, cluster:
@@ -41,20 +41,21 @@ def vectorize_root(blob, verbose):  # vectorization in 3 composition levels of x
     edge, adj_Pt_ = slice_edge(blob, verbose)  # lateral kernel cross-comp -> P clustering
 
     comp_P_(edge, adj_Pt_)  # vertical, lateral-overlap P cross-comp -> PP clustering
-
     edge.node_ = [edge.node_]
-
+    edge.Vt = [0,0]  # init for sub+ later
+    edge.Rt = [1,1]
+    edge.Dt = [0,0]
+      
     for fd, node_ in enumerate(edge.node_[-1]):  # always node_t
         if edge.valt[fd] * (len(node_) - 1) * (edge.rng + 1) > G_aves[fd] * edge.rdnt[fd]:
             for PP in node_: PP.roott = [None, None]
             agg_recursion(None, edge, node_, lenH=0, fd=0)
             # PP cross-comp -> discontinuous clustering, agg+ only, no Cgraph nodes
-    return edge
 
 # draft:
-def agg_recursion(rroot, root, G_, lenH, fd, nrng=1):  # compositional agg|sub recursion in root graph, cluster G_
+def agg_recursion(rroot, root, G_, lenH, fd, nrng=0):  # compositional agg|sub recursion in root graph, cluster G_
 
-    _GG_t, Vt, Rt = sub_recursion(rroot, root, G_, lenH, fd, nrng=1)
+    _GG_t, Vt, Rt = sub_recursion(rroot, root, G_, lenH, fd, nrng=0 if fd else nrng+1)  # increase nrng here?
     # = GG_tree, with deeper layers packed in forks, unpack width-first
     GGG_t = []  # replacement fork tree from agg+
     rng=2
@@ -83,38 +84,52 @@ def agg_recursion(rroot, root, G_, lenH, fd, nrng=1):  # compositional agg|sub r
     return GGG_t  # should be tree nesting lower forks
 
 # draft
-def sub_recursion(rroot, root, G_, lenH, fd, nrng=1):  # interlaced fd recursion?
+def sub_recursion(rroot, root, G_, lenH, ifd, nrng=1):  # interlaced fd recursion?
 
     # rng+,der+ over same-root nodes, forming multiple Gm_,Gd_ per sub+ layer:
     Vt,Rt,Dt = root.Vt,root.Rt,root.Dt
 
     _G_t = [[G_,0,Vt,Rt]]  # next layer of the fork tree, 0 is rng+
-    _G_tree = [[G_,0,Vt,Rt]]  # root of fork tree, keep for form_graph_tree
+    _G_tree = [[G_,0,Vt,Rt]]  # root of fork tree, keep for form_graph_tree (G_tree will have a same structure with G_t?)
 
-    while _G_t:  # fork layer, recursive unpack lower forks
+    while True:  # fork layer, recursive unpack lower forks
         G_t = []
         for _G_,fork, Vt,Rt in _G_t:
             for fd in 0,1:
+                if fd and rroot == None:  # no der+ fork for base fork, because there's no link too? So der+ starts in deeper fork
+                    continue
                 if Vt[fd] < ave_Gm * Rt[fd]:  # nrng if rng+
-                    G_t += [cross_comp(root.link_ if fd else _G_, lenH, [Vt,Rt,Dt], nrng*[1-fd])]
-        _G_t = G_t  # new layer of G_tree
-        _G_tree += [[G_t]]
+                    # we need to copy Vt, Rt, else all G_t in the tree are referencing a same Vt and Rt
+                    link_, Vt, Rt = cross_comp(root.link_ if fd else _G_, lenH, [copy(Vt),copy(Rt),copy(Dt)], nrng*(1-fd))  # use bracket in 1-fd will causing it become a list
+                    if link_:  # not empty links
+                        G_ = list(set([link.G for link in link_] + [link._G for link in link_]))
+                        G_t += [[G_, fd, Vt, Rt]]  
 
-    val_t, rdn_t = [],[]
-    for i in 0,1:
-        val_t[i] += [Vt[i]]; rdn_t[i] += [Rt[i]+1]  # 1 is process redundancy to lower sub+
-        if Vt[fd] < G_aves[fd] * Rt[fd]:
-            break
-    # pseudo:
-    val_,rdn_, G_tree = sorted((val_t[fd],rdn_t[fd],_G_tree))
-    # sort by val only, max val in val_[0]?
-
-    for i, val in enumerate(val_):
-        if val < G_aves[fd] * (rdn_t[fd]+i):  # also remove init rdn?
-            G_tree = G_tree[:i]
+        if G_t:  # prevent tree packing empty G_t
+            _G_t = G_t  # new layer of G_tree
+            _G_tree += G_t
+        else:
             break
 
-    GG_tree = form_graph_tree(root, G_tree, nrng)  # root_fd, eval sub+, feedback per graph
+    GG_tree, Vt, Rt = [], [0, 0], [1, 1]
+    val_t, rdn_t = [[],[]],[[],[]]
+    for G_,fork, vt,rt in _G_tree:
+        v, r = vt[fork], rt[fork]
+        val_t[fork] += [v]; rdn_t[fork] += [r+1]  # 1 is process redundancy to lower sub+
+        Vt[fork] += v; Rt[fork] += r
+    
+    if Vt[ifd] > G_aves[ifd] * Rt[ifd]:  # this should be evaluated based on sum of V and R across all G_ts? 
+        # sort by val only, max val in val_[0]?
+        sort_indices = np.argsort(val_t[ifd])[::-1]  # [::-1] to reverse it
+        val_ = [val_t[ifd][index] for index in sort_indices]
+        rdn_ = [rdn_t[ifd][index] for index in sort_indices]
+        G_tree = [_G_tree[index] for index in sort_indices]
+        
+        for i, (val, rdn) in enumerate(zip(val_, rdn_)):
+            if val < G_aves[fd] * (rdn+i):  # also remove init rdn?
+                G_tree = G_tree[:i]
+                break
+        GG_tree = form_graph_tree(root, G_tree, nrng)  # root_fd, eval sub+, feedback per graph
     return GG_tree, Vt, Rt
 
 def cross_comp(inp_, lenH, Et, nrng):
@@ -127,14 +142,14 @@ def cross_comp(inp_, lenH, Et, nrng):
                 if np.hypot(dy, dx) < 2 * nrng:  # max distance between node centers, init=2
                     link = CderG(_G=_G, G=G)
                     comp_G(_G, G, link, Et, lenH)
-                    link_ += [link_]
+                    link_ += [link]  # should be link here?
     else:  # der+
         for link in inp_:  # inp_= root.link_, reform links
             if link.Vt[1] < G_aves[1] * link.Rt[1]: continue  # maybe weak after rdn incr?
             comp_G(link._G, link.G, link, Et, lenH)
-            link_ += [link_]
+            link_ += [link]
 
-    return [[link_, 0, Et[0][0], Et[0][1]]]
+    return link_,  Et[0], Et[1]  # extra bracket is not needed
 
 # stub:
 def form_graph_tree(root, G_tree, nrng):  # root_fd, eval sub+, feedback per graph
