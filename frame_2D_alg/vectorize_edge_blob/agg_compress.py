@@ -42,10 +42,7 @@ def vectorize_root(blob, verbose):  # vectorization in 3 composition levels of x
 
     comp_P_(edge, adj_Pt_)  # vertical, lateral-overlap P cross-comp -> PP clustering
     edge.node_ = [edge.node_]
-    edge.Vt = [0,0]  # init for sub+ later
-    edge.Rt = [1,1]
-    edge.Dt = [0,0]
-      
+
     for fd, node_ in enumerate(edge.node_[-1]):  # always node_t
         if edge.valt[fd] * (len(node_) - 1) * (edge.rng + 1) > G_aves[fd] * edge.rdnt[fd]:
             for PP in node_: PP.roott = [None, None]
@@ -55,8 +52,8 @@ def vectorize_root(blob, verbose):  # vectorization in 3 composition levels of x
 # draft:
 def agg_recursion(rroot, root, G_, lenH, fd, nrng=0):  # compositional agg|sub recursion in root graph, cluster G_
 
-    _GG_t, Vt, Rt = sub_recursion(rroot, root, G_, lenH, fd, nrng=0 if fd else nrng+1)  # increase nrng here?
-    # = GG_tree, with deeper layers packed in forks, unpack width-first
+    G_t, Vt, Rt = rng_der_recursion(rroot, root, G_, lenH, fd=0, nrng=1)  # G_tree, unpack in forks
+    GG_t, Vt, Rt = prune_n_cluster(G_t, Vt, Rt)
     GGG_t = []  # replacement fork tree from agg+
     rng=2
 
@@ -83,54 +80,58 @@ def agg_recursion(rroot, root, G_, lenH, fd, nrng=0):  # compositional agg|sub r
 
     return GGG_t  # should be tree nesting lower forks
 
-# draft
-def sub_recursion(rroot, root, G_, lenH, ifd, nrng=1):  # interlaced fd recursion?
 
-    # rng+,der+ over same-root nodes, forming multiple Gm_,Gd_ per sub+ layer:
-    Vt,Rt,Dt = root.Vt,root.Rt,root.Dt
+def rng_der_recursion(rroot, root, _G_t, lenH, nrng=1):  # rng,der incr over same-root nodes -> Gm_,Gd_ tree
 
-    _G_t = [[G_,0,Vt,Rt]]  # next layer of the fork tree, 0 is rng+
-    _G_tree = [[G_,0,Vt,Rt]]  # root of fork tree, keep for form_graph_tree (G_tree will have a same structure with G_t?)
+    for _G_,fork,_Vt,_Rt,_Dt in _G_t:  # fork layer, recursive unpack lower forks
 
-    while True:  # fork layer, recursive unpack lower forks
+        Vt, Rt, Dt = [0,0],[0,0],[0,0]
         G_t = []
-        for _G_,fork, Vt,Rt in _G_t:
-            for fd in 0,1:
-                if fd and rroot == None:  # no der+ fork for base fork, because there's no link too? So der+ starts in deeper fork
-                    continue
-                if Vt[fd] < ave_Gm * Rt[fd]:  # nrng if rng+
-                    # we need to copy Vt, Rt, else all G_t in the tree are referencing a same Vt and Rt
-                    link_, Vt, Rt = cross_comp(root.link_ if fd else _G_, lenH, [copy(Vt),copy(Rt),copy(Dt)], nrng*(1-fd))  # use bracket in 1-fd will causing it become a list
-                    if link_:  # not empty links
-                        G_ = list(set([link.G for link in link_] + [link._G for link in link_]))
-                        G_t += [[G_, fd, Vt, Rt]]  
+        for fd in 0,1:
+            if fd and rroot == None:  # no link_ and der+ in base fork
+                continue
+            if _Vt[fd] < ave_Gm * _Rt[fd]:  # nrng if rng+, else 0:
+                link_,(vt,rt,dt) = cross_comp(root.link_ if fd else _G_, lenH, [_Vt,_Rt,_Dt], nrng*(1-fd))
+                if link_:  # not empty links
+                    G_ = list(set([link.G for link in link_] + [link._G for link in link_]))
+                    for i in 0,1:
+                        Vt[i]+=vt[i]; Rt[i]+=rt[i]; Dt[i]+=dt[i]
+                    G_t += [[G_,fd,Vt,Rt,Dt,[]]]
+        if G_t:
+            _G_t[-1][:] = G_t
+            if sum(Vt) < ave_Gm * sum(Rt):
+                rng_der_recursion(rroot, root, G_t, lenH, nrng=1)
 
-        if G_t:  # prevent tree packing empty G_t
-            _G_t = G_t  # new layer of G_tree
-            _G_tree += G_t
-        else:
-            break
+    return G_t, Vt, Rt
 
-    GG_tree, Vt, Rt = [], [0, 0], [1, 1]
+def prune_n_cluster(_G_t,_Vt,_Rt):
+
+    # trace and assign fork redundancy through unique root->fork sequence, sorted?
+    # or pairwise rdn only, else width-first to get whole-layer rdn?
+
+    # old:
     val_t, rdn_t = [[],[]],[[],[]]
-    for G_,fork, vt,rt in _G_tree:
+    for G_,fork, vt,rt,dt in _G_t:
         v, r = vt[fork], rt[fork]
         val_t[fork] += [v]; rdn_t[fork] += [r+1]  # 1 is process redundancy to lower sub+
         Vt[fork] += v; Rt[fork] += r
-    
-    if Vt[ifd] > G_aves[ifd] * Rt[ifd]:  # this should be evaluated based on sum of V and R across all G_ts? 
+
+    if Vt[ifd] > G_aves[ifd] * Rt[ifd]:  # this should be evaluated based on sum of V and R across all G_ts?
         # sort by val only, max val in val_[0]?
         sort_indices = np.argsort(val_t[ifd])[::-1]  # [::-1] to reverse it
         val_ = [val_t[ifd][index] for index in sort_indices]
         rdn_ = [rdn_t[ifd][index] for index in sort_indices]
         G_tree = [_G_tree[index] for index in sort_indices]
-        
+
+        # prune weak G_s before clustering:
         for i, (val, rdn) in enumerate(zip(val_, rdn_)):
             if val < G_aves[fd] * (rdn+i):  # also remove init rdn?
                 G_tree = G_tree[:i]
                 break
+
         GG_tree = form_graph_tree(root, G_tree, nrng)  # root_fd, eval sub+, feedback per graph
     return GG_tree, Vt, Rt
+
 
 def cross_comp(inp_, lenH, Et, nrng):
 
@@ -142,14 +143,14 @@ def cross_comp(inp_, lenH, Et, nrng):
                 if np.hypot(dy, dx) < 2 * nrng:  # max distance between node centers, init=2
                     link = CderG(_G=_G, G=G)
                     comp_G(_G, G, link, Et, lenH)
-                    link_ += [link]  # should be link here?
+                    link_ += [link]
     else:  # der+
         for link in inp_:  # inp_= root.link_, reform links
             if link.Vt[1] < G_aves[1] * link.Rt[1]: continue  # maybe weak after rdn incr?
             comp_G(link._G, link.G, link, Et, lenH)
             link_ += [link]
 
-    return link_,  Et[0], Et[1]  # extra bracket is not needed
+    return link_, Et
 
 # stub:
 def form_graph_tree(root, G_tree, nrng):  # root_fd, eval sub+, feedback per graph
