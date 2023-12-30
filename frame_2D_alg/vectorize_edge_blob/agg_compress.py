@@ -46,14 +46,15 @@ def vectorize_root(blob, verbose):  # vectorization in 3 composition levels of x
     for fd, node_ in enumerate(edge.node_[-1]):  # always node_t
         if edge.valt[fd] * (len(node_) - 1) * (edge.rng + 1) > G_aves[fd] * edge.rdnt[fd]:
             for PP in node_: PP.roott = [None, None]
-            agg_recursion(None, edge, node_, lenH=0, fd=0)
+            agg_recursion(None, edge, lenH=0, fd=0)
             # PP cross-comp -> discontinuous clustering, agg+ only, no Cgraph nodes
 
 # draft:
 def agg_recursion(rroot, root, lenH, fd, nrng=0):  # compositional agg|sub recursion in root graph, cluster G_
 
-    rd_recursion(rroot, root, lenH, nrng=1)  # G_tree, unpack in forks
-    _GG_t = form_graph_tree(root, nrng)
+    G_tree = [[root.node_[-1][fd], root.link_,root.Vt, root.Rt,root.Dt]]  # each element is [node_, link_, Vt, Rt, Dt]
+    rd_recursion(rroot, G_tree, G_tree[-1], lenH, nrng=1)  # G_tree, unpack in forks
+    _GG_t = form_graph_tree(root, G_tree, nrng)
     GGG_t = []  # replacement fork tree from agg+
     rng=2
 
@@ -81,23 +82,28 @@ def agg_recursion(rroot, root, lenH, fd, nrng=0):  # compositional agg|sub recur
     return GGG_t  # should be tree nesting lower forks
 
 
-def rd_recursion(rroot, root, lenH, nrng=1):  # rng,der incr over same G_,link_ -> fork tree
+def rd_recursion(rroot, G_tree, t, lenH, nrng=1):  # rng,der incr over same G_,link_ -> fork tree
 
-    for fd, Q, V,R,D in zip((0,1),(root.node_,root.link_), root.Vt,root.Rt,root.Dt):  # recursive rng+,der+
-
-        Vt, Rt, Dt = root.Vt, root.Rt, root.Dt
-        ave = G_aves[fd]
+    _G_, _link_, Vt, Rt, Dt  = t
+    tt = []
+    for fd in 0,1:  # recursive rng+,der+
         if fd and rroot == None: continue # no link_ and der+ in base fork
-
-        if V < ave * R:  # nrng if rng+, else 0:
+        # use Dt too?
+        if Vt[fd] < G_aves[fd] * Rt[fd]:  # nrng if rng+, else 0:
             if not fd: nrng += 1
-            link_,(vt,rt,dt) = cross_comp(Q, lenH, [Vt,Rt,Dt], nrng*(1-fd))
+            # we should init new Et? Else it's summing back itself
+            G_, link_, (vt, rt, dt) = cross_comp([_G_, _link_], lenH, [[0,0], [1,1], [0,0]], nrng*(1-fd)) 
+            
+            tt += [[G_, link_, (vt, rt, dt)]]
             for i in 0,1:
                 Vt[i]+=vt[i]; Rt[i]+=rt[i]; Dt[i]+=dt[i]
-            # or eval per fd?
-            if sum(Vt) < (ave_Gm+ave_Gd) * sum(Rt):
+            # or eval per fd?  (i think this should be per fd (after summation of vt and etc) because we have a loop for both forks here)
+            if Vt[fd] < G_aves[fd] * Rt[fd]:
                 # adds to root Et + rim_tH, evals per G:
-                rd_recursion(rroot, root, lenH, nrng)
+                rd_recursion(rroot, G_tree, [G_, link_, vt, rt, dt], lenH, nrng)
+                       
+    G_tree += [tt]  # pack it flat
+    # t[:] = tt (or replace t with tt?)
 
 
 def prune_n_cluster(_G_t,_Vt,_Rt):
@@ -129,24 +135,28 @@ def prune_n_cluster(_G_t,_Vt,_Rt):
     return GG_tree, Vt, Rt
 
 
-def cross_comp(inp_, lenH, Et, nrng):
+def cross_comp(inp_, lenH, Et, nrng):  # inp_ is a tuple of (G_, link_)
 
-    link_ = []
+    G_, link_ = [], []
     if nrng:  # rng+
-        for i, _G in enumerate(inp_):  # inp_= G_, form new link_ from original node_
-            for G in inp_[i+1:]:
+        for i, _G in enumerate(inp_[0]):  # inp_= G_, form new link_ from original node_
+            for G in inp_[0][i+1:]:
                 dy = _G.box.cy - G.box.cy; dx = _G.box.cx - G.box.cx
                 if np.hypot(dy, dx) < 2 * nrng:  # max distance between node centers, init=2
                     link = CderG(_G=_G, G=G)
                     comp_G(_G, G, link, Et, lenH)
                     link_ += [link]
+                    if link.G not in G_: G_ += [link.G]  # pack Gs
+                    if link._G not in G_: G_ += [link._G]
     else:  # der+
-        for link in inp_:  # inp_= root.link_, reform links
+        for link in inp_[1]:  # inp_= root.link_, reform links
             if link.Vt[1] < G_aves[1] * link.Rt[1]: continue  # maybe weak after rdn incr?
             comp_G(link._G, link.G, link, Et, lenH)
             link_ += [link]
+            if link.G not in G_: G_ += [link.G]
+            if link._G not in G_: G_ += [link._G]
 
-    return link_, Et
+    return G_, link_, Et
 
 # stub:
 def form_graph_tree(root, G_tree, nrng):  # root_fd, eval sub+, feedback per graph

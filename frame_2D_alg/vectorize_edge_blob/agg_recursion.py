@@ -44,7 +44,7 @@ def vectorize_root(blob, verbose):  # vectorization in 3 composition levels of x
     for fd, node_ in enumerate(edge.node_):  # always node_t
         if edge.valt[fd] * (len(node_)-1)*(edge.rng+1) > G_aves[fd] * edge.rdnt[fd]:
             for PP in node_: PP.roott = [None, None]
-            agg_recursion(None, edge, node_, lenH=1, fd=0)
+            agg_recursion(None, edge, node_, lenH=0, fd=0)  # lenH starts with 0 in agg+
             # PP cross-comp -> discontinuous clustering, agg+ only, no Cgraph nodes
     return edge
 
