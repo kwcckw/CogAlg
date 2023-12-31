@@ -44,7 +44,7 @@ def vectorize_root(blob, verbose):  # vectorization in 3 composition levels of x
     for fd, node_ in enumerate(edge.node_):  # always node_t
         if edge.valt[fd] * (len(node_)-1)*(edge.rng+1) > G_aves[fd] * edge.rdnt[fd]:
             for PP in node_: PP.roott = [None, None]
-            agg_recursion(None, edge, node_, lenH=0, fd=0)  # lenH starts with 0 in agg+
+            agg_recursion(None, edge, node_, lenH=0, fd=0)
             # PP cross-comp -> discontinuous clustering, agg+ only, no Cgraph nodes
     return edge
 
@@ -84,9 +84,8 @@ def form_graph_t(root, G_, Et, nrng):  # form Gm_,Gd_ from same-root nodes
     node_connect(_G_)  # Graph Convolution of Correlations over init _G_
     node_t = []
     for fd in 0,1:
-        if Et[0][fd] > ave * Et[1][fd]:  # eValt > ave * eRdnt, else no clustering, keep root.node_
+        if Et[0][fd] > ave * Et[1][fd]:  # eValt > ave * eRdnt: cluster
             graph_ = segment_node_(root, _G_, fd, nrng)  # fd: node-mediated Correlation Clustering
-            if not graph_: continue
             for graph in graph_:  # eval sub+ per node
                 if graph.Vt[fd] * (len(graph.node_)-1)*root.rng > G_aves[fd] * graph.Rt[fd]:
                     agg_recursion(root, graph, graph.node_, len(graph.aggH[-1][0]), fd, nrng+1*(1-fd))  # nrng+ if not fd
@@ -94,8 +93,10 @@ def form_graph_t(root, G_, Et, nrng):  # form Gm_,Gd_ from same-root nodes
                     root.fback_t[root.fd] += [[graph.aggH, graph.valt, graph.rdnt, graph.dect]]
                     feedback(root,root.fd)  # update root.root..
             node_t += [graph_]  # may be empty
-        else: node_t += []
-    if any(node_t): G_[:] = node_t
+        else:
+            node_t += [[]]
+    if any(node_t):
+        G_[:] = node_t  # else keep root.node_
 
 
 def node_connect(_G_):  # node connectivity = sum surround link vals, incr.mediated: Graph Convolution of Correlations
@@ -423,7 +424,7 @@ def sum_ext(Extt, extt):
 def comp_ext(_ext, ext, Valt, Rdnt, Dect):  # comp ds:
 
     (_L,_S,_A),(L,S,A) = _ext,ext
-    dL = max(1, _L-L )  # if dL is 0 here, we will get zero division later 
+    dL = _L-L
 
     if isinstance(A,list):
         if any(A) and any(_A):
@@ -436,9 +437,7 @@ def comp_ext(_ext, ext, Valt, Rdnt, Dect):  # comp ds:
         mA = get_match(_A,A)- ave_dangle; dA = _A-A; adA = abs(dA); _aA=abs(_A); aA=abs(A)
         max_dA = _aA + aA; max_mA = max(_aA, aA)
         dS = _S - S
-    mL = get_match(_L,L)
-    # if match is the same with ave_mL, then mL =0, and we will get zero division later , same with mS below
-    mL = mL - ave_mL -1 if mL == ave_mL else mL - ave_mL
+    mL = get_match(_L,L) - ave_mL
     mS = get_match(_S,S) - ave_mL
 
     m = mL+mS+mA; d = abs(dL)+ abs(dS)+ adA
