@@ -133,7 +133,7 @@ def node_connect(_G_):  # node connectivity = sum surround link vals, incr.media
         else:  break
 
 
-def segment_node_(root, root_G_, fd, nrng):  # eval rim links with summed surround vals for density-based clustering
+def segment_node_(root, root_G_, fd, nrng, fcompress):  # eval rim links with summed surround vals for density-based clustering
 
     # graph += [node] if >ave (surround connectivity * relative value of link to any internal node)
     igraph_ = []; ave = G_aves[fd]
@@ -180,14 +180,15 @@ def segment_node_(root, root_G_, fd, nrng):  # eval rim links with summed surrou
         if graph_: _graph_ = graph_  # selected graph expansion
         else: break
     # -> Cgraphs if Val > ave * Rdn:
-    return [sum2graph(root, graph, fd, nrng) for graph in igraph_ if graph[2][fd] > ave * (graph[3][fd])]
+    return [sum2graph(root, graph, fd, nrng, fcompress) for graph in igraph_ if graph[2][fd] > ave * (graph[3][fd])]
 
 
-def sum2graph(root, grapht, fd, nrng):  # sum node and link params into graph, aggH in agg+ or player in sub+
+def sum2graph(root, grapht, fd, nrng, fcompress):  # sum node and link params into graph, aggH in agg+ or player in sub+
 
     G_,Link_,Vt,Rt,Dt,_ = grapht  # last-layer vals only; depth 0:derLay, 1:derHv, 2:subHv
 
     graph = Cgraph(fd=fd, node_=G_, L=len(G_),link_=Link_,Vt=Vt, Rt=Rt, Dt=Dt, rng=nrng)
+    if fcompress: graph.node_ = [G_]  # change node_ to node_H
     graph.roott[fd] = root
     for link in Link_:
         link.roott[fd]=graph
@@ -299,6 +300,7 @@ def comp_G(_G, G, link, Et, len_root_H):
                         # accum rim layer with link:
                         G.Vt[fd] += Val; G.Rt[fd] += Rdn; G.Dt[fd] += Dec
                         G.rim_tH[-1][fd] += [link]; G.Rim_tH[-1][fd] += [link]
+
 
     link.Vt = Valt; link.Rt = Rdnt; link.Dt = Dect  # reset per comp_G
 
