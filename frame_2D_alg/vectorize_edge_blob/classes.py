@@ -133,6 +133,7 @@ class Cgraph(ClusterStructure):  # params of single-fork node_ cluster per pplay
     # graph-external, +level per root sub+:
     rim_t : list = z([])  # directly connected nodes, per fork ) layer (this should be init empty, new layer will be added in comp_G)
     Rim_t : list = z([])  # the most mediated evaluated nodes
+    rim_fork : int = 0  # 0 = rim_t, 1 = rim_tH, 2 = rim_tHH
     esubH : list = z([])  # external subH: [[daggH,valt,rdnt,dect]] of all der)rng rim links
     evalt : list = z([0,0])  # sum from esubH
     erdnt : list = z([1,1])

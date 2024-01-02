@@ -99,6 +99,7 @@ def form_graph_t(root, G_, Et, nrng):  # form Gm_,Gd_ from same-root nodes
         G_[:] = node_t  # else keep root.node_
 
 
+# we need to update this function too if we have rim_t, rim_tH or rim_tHH in G
 def node_connect(_G_):  # node connectivity = sum surround link vals, incr.mediated: Graph Convolution of Correlations
     '''
     Aggregate direct * indirect connectivity per node from indirect links via associated nodes, in multiple cycles.
@@ -134,7 +135,7 @@ def node_connect(_G_):  # node connectivity = sum surround link vals, incr.media
         else:  break
 
 
-def segment_node_(root, root_G_, fd, nrng):  # eval rim links with summed surround vals for density-based clustering
+def segment_node_(root, root_G_, fd, nrng, flayers=0):  # eval rim links with summed surround vals for density-based clustering
 
     # graph += [node] if >ave (surround connectivity * relative value of link to any internal node)
     igraph_ = []; ave = G_aves[fd]
@@ -183,14 +184,15 @@ def segment_node_(root, root_G_, fd, nrng):  # eval rim links with summed surrou
         else: break
 
     # -> Cgraphs if Val > ave * Rdn:
-    return [sum2graph(root, graph, fd, nrng) for graph in igraph_ if graph[2][fd] > ave * (graph[3][fd])]
+    return [sum2graph(root, graph, fd, nrng, flayers=flayers) for graph in igraph_ if graph[2][fd] > ave * (graph[3][fd])]
 
 
-def sum2graph(root, grapht, fd, nrng):  # sum node and link params into graph, aggH in agg+ or player in sub+
+def sum2graph(root, grapht, fd, nrng, flayers):  # sum node and link params into graph, aggH in agg+ or player in sub+
 
     G_,Link_,Vt,Rt,Dt,_ = grapht  # last-layer vals only; depth 0:derLay, 1:derHv, 2:subHv
 
     graph = Cgraph(fd=fd, node_=G_, L=len(G_),link_=Link_,Vt=Vt, Rt=Rt, Dt=Dt, rng=nrng)
+    if flayers: graph.node_ = [G_]  # layered node_ which is node_H
     graph.roott[fd] = root
     for link in Link_:
         link.roott[fd]=graph
@@ -299,7 +301,7 @@ def comp_G(link, Et, len_root_H, len_root_HH=-1):  # len_root_HH used in agg_com
                     if len_root_HH > -1:  # for agg_compress only, use increased nesting:
                         if len(G.rim_t)==len_root_HH:  # empty rim layer, init with link:
                             if fd:
-                                G.Vt=[0,Val]; G.Rt=[0,Rdn]; G.Dt=[0,Dec]; G.rim_t += [[[[],[link]]]]; G.rim_t += [[[[],[link]]]]
+                                G.Vt=[0,Val]; G.Rt=[0,Rdn]; G.Dt=[0,Dec]; G.rim_t += [[[[],[link]]]]; G.rim_t += [[[[],[link]]]]  # add new rim_tH
                             else:
                                 G.Vt=[Val,0]; G.Rt=[Rdn,0]; G.Dt=[Dec,0]; G.rim_t += [[[[link],[]]]]; G.rim_t += [[[[link],[]]]]
                         else:
@@ -309,16 +311,18 @@ def comp_G(link, Et, len_root_H, len_root_HH=-1):  # len_root_HH used in agg_com
                     else:
                         if len(G.rim_t)==len_root_H:  # empty rim layer, init with link:
                             if fd:
-                                G.Vt=[0,Val]; G.Rt=[0,Rdn]; G.Dt=[0,Dec]; G.rim_t += [[[],[link]]]; G.rim_t += [[[],[link]]]
+                                G.Vt=[0,Val]; G.Rt=[0,Rdn]; G.Dt=[0,Dec]; G.rim_t += [[[],[link]]]; G.rim_t += [[[],[link]]]  # add new rim_t
                             else:
                                 G.Vt=[Val,0]; G.Rt=[Rdn,0]; G.Dt=[Dec,0]; G.rim_t += [[[link],[]]]; G.rim_t += [[[link],[]]]
                         else:
                             # accum rim layer with link:
                             G.Vt[fd] += Val; G.Rt[fd] += Rdn; G.Dt[fd] += Dec
                             G.rim_t[-1][fd] += [link]; G.rim_t[-1][fd] += [link]
+            else:
+                fadd = 0  # to determine if link is added to last layer of rim_t
 
     link.Vt = Valt; link.Rt = Rdnt; link.Dt = Dect  # reset per comp_G
-    return link
+    return fadd  # we can skip the code to return link, it's the same with input link, but we need to return fadd to know if link is added to last layer of G.rim_tH
 
 
 def comp_aggHv(_aggH, aggH, rn):  # no separate ext
