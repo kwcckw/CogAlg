@@ -46,26 +46,21 @@ def vectorize_root(blob, verbose):  # vectorization in 3 composition levels of x
     for fd, node_ in enumerate(edge.node_[-1]):  # always node_t
         if edge.valt[fd] * (len(node_) - 1) * (edge.rng + 1) > G_aves[fd] * edge.rdnt[fd]:
             for PP in node_: PP.roott = [None,None]
-            agg_recursion(None, edge, lenH=0, fd=0)
+            agg_recursion(None, edge, lenH=0, lenHH=0, fd=0)
             # PP cross-comp -> discontinuous clustering, agg+ only, no Cgraph nodes
 
 # draft:
-def agg_recursion(rroot, root, lenH, fd, nrng=0):  # compositional agg|sub recursion in root graph, cluster G_
+def agg_recursion(rroot, root, lenH, lenHH, fd, nrng=0):  # compositional agg|sub recursion in root graph, cluster G_
 
     Et = [[0,0],[0,0],[0,0]]
-    if isinstance(root.node_[-1][0], list): node_ = root.node_[-1][fd]  # edge has node_t
-    else:                                   node_ = root.node_[-1]      # node_ is not node_t when call from sub+, haven't check on agg+ yet
-        
-    for G in node_:  # root.aggH is appended later, implicitly nested as rim_tH?
-        if G.rim_tH:
-            G.rim_tH = [G.rim_tH]  # convert to ftree HH, conditional append in rd_recursion
-            G.Rim_tH = [G.Rim_tH]  # should be for both rim_tH and Rim_tH
-
+    if isinstance(root.node_[-1][0], list):
+        node_ = root.node_[-1][fd]  # agg+ / GG_ from sub+
+    else:
+        node_ = root.node_[-1]  # sub+ / G_ from sum2graph
     # init lenH = lenHH[-1] = 0:
-    # we need to use input lenH ? Because lenH is not 0 when call from sub+
-    rd_recursion(rroot, root, lenH, Et, fd, nrng=1)
+    rd_recursion(rroot, root, 0, Et, fd, nrng=1)
     # may convert root.node_[-1] to node_t:
-    _GG_t = form_graph_t(root, node_, lenH, Et, nrng)
+    _GG_t = form_graph_t(root, node_, Et, nrng)
     GGG_t = []  # agg+ fork tree
     rng = 2
 
@@ -93,38 +88,27 @@ def agg_recursion(rroot, root, lenH, fd, nrng=0):  # compositional agg|sub recur
     return GGG_t  # should be tree nesting lower forks
 
 
-def rd_recursion(rroot, root, lenH, Et, fd, nrng=1):  # rng,der incr over same G_,link_ -> fork tree, represented in rim_tH
+def rd_recursion(rroot, root, lenH, Et, fd, nrng=1):  # rng,der incr over same G_,link_ -> fork tree, represented in rim_t
 
     Vt, Rt, Dt = Et
-    for fd, Q, V,R,D in zip((0,1),(root.node_[-1],root.link_), Vt,Rt,Dt):  # recursive rng+,der+
+    for fd, Q, V,R,D in zip((0,1),(root.node_,root.link_), Vt,Rt,Dt):  # recursive rng+,der+
 
         ave = G_aves[fd]
         if fd and rroot == None: continue  # no link_ and der+ in base fork
 
         if V >= ave * R:  # true for init 0 V,R; nrng if rng+, else 0:
-            if not fd: 
-                nrng += 1
-                if isinstance(Q[0], list):
-                    Q = Q[fd]  # select from node_t
-            
+            if not fd: nrng += 1
             link_,(vt,rt,dt) = cross_comp(Q, lenH, nrng*(1-fd))
 
             for i, v,r,d in zip((0,1), vt,rt,dt):
-                if abs(Vt[i] - v) >= ave * (r + Rt[i]):  # should be eval based on difference with prior recursion?
-                    Vt[i]+=v; Rt[i]+=rt[i]; Dt[i]+=d
+                Vt[i]+=v; Rt[i]+=rt[i]; Dt[i]+=d
+                if v >= ave * r:
+                    # draft, not sure:
+                    if len(Q[0].rim_t)==lenH:  # init fork tree if empty:
+                        for G in Q: G.rim_t += [[link_]]
 
-                    if i: 
-                        root.link_+= link_  # rng+ links
-                    else:
-                        # below should be for G only, thus rng+ only? Q in der+ is link
-                        # draft, not sure: (why we need this? It's normal for some G to not have added rim_tH if their eval is false)
-                        # if len(Q[0].rim_tH)==lenH:  # init fork tree if empty:
-                        for G in Q:  # this can ensure all G have at least single layer of rim_tH, but why?
-                            if len(G.rim_tH)==lenH:
-                                G.rim_tH += [[[], link_]] if i else [[link_, []]]
-                                G.Rim_tH += [[[], link_]] if i else [[link_, []]]
- 
-                    # adds to root Et + rim_tH, and Et per G:
+                    if i: root.link_+= link_  # rng+ links
+                    # adds to root Et + rim_t, and Et per G:
                     rd_recursion(rroot, root, lenH, [vt,rt,dt], nrng)
 
 def cross_comp(Q, lenH, nrng):
@@ -137,32 +121,32 @@ def cross_comp(Q, lenH, nrng):
                 dy = _G.box.cy - G.box.cy; dx = _G.box.cx - G.box.cx
                 if np.hypot(dy, dx) < 2 * nrng:  # max distance between node centers, init=2
                     link = CderG(_G=_G, G=G)
-                    comp_G(_G, G, link, et, lenH)
+                    comp_G(link, et, lenH)
                     link_ += [link]
     else:  # der+
         for link in Q:  # inp_= root.link_, reform links
             if link.Vt[1] < G_aves[1] * link.Rt[1]: continue  # maybe weak after rdn incr?
-            comp_G(link._G, link.G, link, et, lenH)
+            comp_G(link, et, lenH)
             link_ += [link]
 
     return link_, et
 
 
 # not revised:
-def form_graph_t(root, G_, lenH, Et, nrng):
+def form_graph_t(root, G_, Et, nrng):
 
-    _G_ = [G for G in G_ if len(G.rim_tH)>lenH]  # prune Gs unconnected in current layer
+    _G_ = [G for G in G_ if len(G.rim_t)>len(root.rim_t)]  # prune Gs unconnected in current layer
 
     node_connect(_G_)  # Graph Convolution of Correlations over init _G_
     node_t = []
     for fd in 0,1:
         if Et[0][fd] > ave * Et[1][fd]:  # eValt > ave * eRdnt, else no clustering, keep root.node_
-            graph_ = segment_node_(root, _G_, fd, nrng, fcompress=1)  # fd: node-mediated Correlation Clustering
+            graph_ = segment_node_(root, _G_, fd, nrng)  # fd: node-mediated Correlation Clustering
             if not graph_: continue
             for graph in graph_:  # eval sub+ per node
-                if graph.Vt[fd] * (len(graph.node_[-1])-1)*root.rng > G_aves[fd] * graph.Rt[fd]:  # is it normal to get negative Rt (it become true even len node_ is 0)? Right now getting negative Rt
+                if graph.Vt[fd] * (len(graph.node_[-1])-1)*root.rng > G_aves[fd] * graph.Rt[fd]:
                     # last sub+ val -> sub+:
-                    agg_recursion(root, graph, len(graph.aggH[-1][0]), nrng+1*(1-fd))  # nrng+ if not fd
+                    agg_recursion(root, graph, graph.node_[-1], len(graph.aggH[-1][0]), nrng+1*(1-fd))  # nrng+ if not fd
                     rroot = graph
                     rfd = rroot.fd
                     while isinstance(rroot.roott, list) and rroot.roott[rfd]:  # not blob
