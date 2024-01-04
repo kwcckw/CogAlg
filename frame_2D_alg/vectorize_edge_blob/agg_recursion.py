@@ -116,7 +116,9 @@ def node_connect(_G_):  # node connectivity = sum surround link vals, incr.media
             for i in 0,1:
                 val,rdn,dec = G.Vt[i],G.Rt[i],G.Dt[i]  # connect by last layer
                 ave = G_aves[i]
-                for link in G.rim_t[0][-1][i]:
+                rim_t = G.rim_t
+                for _ in range(G.rim_t[-1]+1): rim_t = rim_t[0][-1]  # unpack from depth recursively   
+                for link in rim_t[i]:
 
                     lval,lrdn,ldec = link.Vt[i],link.Rt[i],link.Dt[i]
                     _G = link._G if link.G is G else link.G
@@ -132,7 +134,7 @@ def node_connect(_G_):  # node connectivity = sum surround link vals, incr.media
                     if V > ave * R:
                         G.evalt[i] += dv; G.erdnt[i] += dr; G.edect[i] += dd
             if any(uprimt):  # pruned for next loop
-                G.rim_t[-1] = uprimt  # rim_tH here
+                rim_t[:] = uprimt  # rim_tH here
                 G_ += [G]
 
         if G_: _G_ = G_  # exclude weakly incremented Gs from next connectivity expansion loop
@@ -145,7 +147,9 @@ def segment_node_(root, root_G_, fd, nrng):  # eval rim links with summed surrou
     igraph_ = []; ave = G_aves[fd]
 
     for G in root_G_:   # init per node,  last-layer Vt,Vt,Dt:
-        grapht = [[G],[], G.Vt,G.Rt,G.Dt, copy(G.rim_t[0][-1][fd])]  # init link_ with rim
+        rim_t = G.rim_t
+        for _ in range(G.rim_t[-1]+1): rim_t = rim_t[0][-1]  # unpack from depth recursively   
+        grapht = [[G],[], G.Vt,G.Rt,G.Dt, copy(rim_t[fd])]  # init link_ with rim
         G.roott[fd] = grapht  # roott for feedback
         igraph_ += [grapht]
     _graph_ = igraph_
@@ -202,7 +206,9 @@ def sum2graph(root, grapht, fd, nrng):  # sum node and link params into graph, a
     eH, valt,rdnt,dect, evalt,erdnt,edect = [], [0,0],[0,0],[0,0], [0,0],[0,0],[0,0]  # grapht int = node int+ext
     A0, A1, S = 0,0,0
     for G in G_:
-        for i, link in enumerate(G.rim_t[0][-1][fd]):
+        rim_t = G.rim_t
+        for _ in range(G.rim_t[-1]+1): rim_t = rim_t[0][-1]  # unpack from depth recursively 
+        for i, link in enumerate(rim_t[fd]):
             if i: sum_derHv(G.esubH[-1], link.subH[-1], base_rdn=link.Rt[fd])  # [derH, valt,rdnt,dect,extt,1]
             else: G.esubH += [deepcopy(link.subH[-1])]  # link.subH: cross-der+) same rng, G.esubH: cross-rng?
             for j in 0,1:
@@ -303,22 +309,16 @@ def comp_G(link, Et, lenH=None, lenHH=None):  # lenH in sub+|rd+, lenHH in agg_c
                 # draft:
                 for G in link._G, link.G:
                     rim_t = G.rim_t  # init [[],0]
-                    root_depth = lenHH != None + lenH != None
+                    root_depth = (lenHH != None) + (lenH != None)  # we need bracket to specify the order
                     # rim_tHH: depth=2, rim_tH: depth=1, rim_t: depth=0
 
-                    if rim_t[-1]:
-                        if rim_t[-1]>1:
-                            if rim_t[0]==lenHH:
-                                init(G,link, fd, root_depth)
-                            else: accum(G,link, fd, root_depth)
-                        else:
-                            if rim_t[0]==lenH:
-                                init(G,link, fd, root_depth)
-                            else: accum(G,link, fd, root_depth)
+                    # add new layer
+                    if rim_t[-1] == root_depth:
+                        init(G,link, fd, root_depth) 
+                    # accumulation in existing last layer
                     else:
-                        if rim_t[0]:
-                            accum(G,link, fd, root_depth)
-                        else: init(G,link, fd, root_depth)
+                        accum(G,link, fd, rim_t[-1])  # depth follows new depth instead of root depth because new depth is incremented
+                    
                     ''' 
                     or
                     ddepth = lenH - G.rim_t[-1]  # nest rim_t to lenH:
@@ -336,12 +336,14 @@ def init(G, link, fd, depth):
     else:
         G.Vt=[Val,0]; G.Rt=[Rdn,0]; G.Dt=[Dec,0]
         rim_t = [[link],[]]
-
-    nest = depth
-    while nest:
-        rim_t = [rim_t]
-        nest -= 1
-    G.rim_t = [[rim_t], depth]
+    
+    # +1 because ending number is not inclusive
+    for current_depth in range(depth+1): rim_t = [[rim_t], current_depth]  # add depth
+        
+    G.rim_t = [G.rim_t[0] + rim_t[0], rim_t[1]]  # merge any existing elements in prior layer
+    
+    if depth != 2: G.rim_t = [[G.rim_t], depth + 1]  # create new layer, except when depth =2
+    
 
 
 def accum(G, link, fd, depth):  # accum rim layer with link
@@ -349,12 +351,13 @@ def accum(G, link, fd, depth):  # accum rim layer with link
     Val, Rdn, Dec = link.Vt[fd], link.Rt[fd], link.Dt[fd]
 
     G.Vt[fd] += Val; G.Rt[fd] += Rdn; G.Dt[fd] += Dec
-    rim = G.rim_t
-    nest = depth
-    while nest:
-        rim = rim[0][fd]
-        nest -= 1
-    rim += [link]
+    rim_t = G.rim_t
+
+    # +1 because ending number is not inclusive
+    for current_depth in range(depth+1):  rim_t = rim_t[0][-1]  # unpack with depth, [0] to skip depth, [-1] to get last element
+    rim_t[fd] += [link]  # pack link into last layer
+    
+    
 
 
 def comp_aggHv(_aggH, aggH, rn):  # no separate ext
