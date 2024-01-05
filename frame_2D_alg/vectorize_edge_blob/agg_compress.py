@@ -56,10 +56,10 @@ def agg_recursion(rroot, root, fd, nrng=0, lenHH=None):  # compositional agg|sub
         node_ = root.node_[fd]  # agg+ / GG_ from sub+
     else:
         node_ = root.node_  # sub+ / G_ from sum2graph
-    lenH = 0  # init lenHH[-1] = 0
-    rd_recursion(rroot, root, lenH, lenHH, Et, fd, nrng=1)
+    lenH = None  # init lenHH[-1] = 0
+    rd_recursion(rroot, root, lenH, lenHH, Et,fd, nrng=1)
     # may convert root.node_[-1] to node_t:
-    _GG_t = form_graph_t(root, node_, lenH, Et, nrng)
+    _GG_t = form_graph_t(root, node_, lenH, lenHH, Et, nrng)
     GGG_t = []  # agg+ fork tree
     rng = 2
 
@@ -87,10 +87,10 @@ def agg_recursion(rroot, root, fd, nrng=0, lenHH=None):  # compositional agg|sub
     return GGG_t  # should be tree nesting lower forks
 
 
-def rd_recursion(rroot, root, lenH, lenHH, Et, nrng=1):  # rng,der incr over same G_,link_ -> fork tree, represented in rim_t
+def rd_recursion(rroot, root, lenH, lenHH, Et, ifd,  nrng=1):  # rng,der incr over same G_,link_ -> fork tree, represented in rim_t
 
     Vt, Rt, Dt = Et
-    for fd, Q, V,R,D in zip((0,1),(root.node_,root.link_), Vt,Rt,Dt):  # recursive rng+,der+
+    for fd, Q, V,R,D in zip((0,1),(root.node_[ifd],root.link_), Vt,Rt,Dt):  # recursive rng+,der+
 
         ave = G_aves[fd]
         if fd and rroot == None: continue  # no link_ and der+ in base fork
@@ -112,7 +112,7 @@ def rd_recursion(rroot, root, lenH, lenHH, Et, nrng=1):  # rng,der incr over sam
                 if v >= ave * r:
                     if i: root.link_+= link_  # rng+ links
                     # adds to root Et + rim_t, and Et per G:
-                    rd_recursion(rroot, root, lenH, [vt,rt,dt], nrng)
+                    rd_recursion(rroot, root, lenH, lenHH, [vt,rt,dt], fd, nrng)
 
 
 def cross_comp(Q, lenH, lenHH, nrng):
@@ -137,9 +137,21 @@ def cross_comp(Q, lenH, lenHH, nrng):
 
 
 # not revised:
-def form_graph_t(root, G_, lenH, Et, nrng):
+def form_graph_t(root, G_, lenH, lenHH, Et, nrng):
 
-    _G_ = [G for G in G_ if G.rim_t[0][-1][-1] > root.rim_t[0][-1][-1]]  # prune Gs unconnected in current layer
+    rdepth = (lenH != None) + (lenHH != None)
+
+    _G_ = []
+    for G in G_:  # prune Gs unconnected in current layer
+        if G.rim_t[-1] > rdepth:  # if G is updated in comp_G, their depth should > rdepth
+          _G_ += [G]
+        else:
+            if lenHH:  # check if lenHH is incremented
+                if (G.rim_t[0] > lenHH):
+                    _G_ += [G]
+            else:  # check if lenH is incremented 
+                if (G.rim_t[0] > lenH):
+                    _G_ += [G]
 
     node_connect(_G_)  # Graph Convolution of Correlations over init _G_
     node_t = []
