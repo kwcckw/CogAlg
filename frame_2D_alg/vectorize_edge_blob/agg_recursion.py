@@ -83,7 +83,8 @@ def agg_recursion(rroot, root, G_, fd, nrng=1, lenH=None, lenHH=None):  # lenH =
 
 def form_graph_t(root, G_, Et, nrng):  # form Gm_,Gd_ from same-root nodes
 
-    _G_ = [G for G in G_ if len(G.rim_t)>len(root.rim_t)]  # prune Gs unconnected in current layer
+    # select Gs connected in current layer:
+    _G_ = [G for G in G_ if len(G.rim_t[0])>len(root.rim_t[0])]
 
     node_connect(_G_)  # Graph Convolution of Correlations over init _G_
     node_t = []
@@ -288,53 +289,47 @@ def comp_G(link, Et, lenH=None, lenHH=None):  # lenH in sub+|rd+, lenHH in agg_c
     SubH = [derHv]  # init layers of SubH, higher layers added by comp_aggH:
 
     # / G:
-    fadd = 0
     if link.subH:  # old link: not empty aggH
         subH, valt,rdnt,dect = comp_aggHv(_G.aggH, G.aggH, rn=1)
         mval,dval = valt; Mval+=dval; Dval+=mval
         Mrdn += rdnt[0]+dval>mval; Drdn += rdnt[1]+dval<=mval
         Mdec = (Mdec+dect[0])/2; Ddec = (Ddec+dect[1])/2
         link.subH = SubH+subH  # concat higher derHvs
-        if Mval > ave_Gm or Dval > ave_Gd:
-            fadd = 1
-    elif Mval > ave_Gm or Dval > ave_Gd:  # new link
+    else:  # new link
         link.subH = SubH
-        fadd = 1
 
     link.Vt,link.Rt,link.Dt = Valt,Rdnt,Dect = [Mval,Dval],[Mrdn,Drdn],[Mdec,Ddec]  # reset per comp_G
-    if fadd:  # add link to new rim
-        fadd = 0  # reset to enable the checking for Val later , because Val eval below may false
-        for fd, (Val,Rdn,Dec) in enumerate(zip(Valt,Rdnt,Dect)):
-            # exclude -ve links:
-            if Val > G_aves[fd] * Rdn:
-                fadd = 1
-                # to eval grapht in form_graph_t:
-                Et[0][fd]+=Val; Et[1][fd]+=Rdn; Et[2][fd]+=Dec
+    faddt = [0,0]
 
-                for G in link._G, link.G:
-                    rdepth = (lenHH != None) + (lenH != None)  # rim_tHH: depth=2, rim_tH: depth=1, rim_t: depth=0
-                    # rim_t: [rims,depth], init [[],0]:
-                    rim_t = G.rim_t
-                    depth = rim_t[1]
-                    if len(rim_t[0]) == ((lenHH if lenHH else lenH) if lenH else 0):  # rim_t was not incremented yet
-                        # add nested link layer:
-                        if fd:
-                            rim_t = [[],[link]]; G.Vt=[0,Val]; G.Rt=[0,Rdn]; G.Dt=[0,Dec]
-                        else:
-                            rim_t = [[link],[]]; G.Vt=[Val,0]; G.Rt=[Rdn,0]; G.Dt=[Dec,0]
-                        for dd in range(rdepth - depth + 1):  # +1 to loop depth == 0
-                            rim_t = [rim_t, depth+dd]  # incr nesting
-                        # new layer:
-                        G.rim_t[0] += [rim_t]
-                        G.rim_t[1] = rdepth + 1  # new depth should +1 from root depth?
-                    else:
-                        # unpack, append last link layer:
-                        for _ in range(depth):  # should be just depth?
-                            rim_t = rim_t[0][-1]  # decr nesting
-                        rim_t[0][fd] += [link]  # we need 0 because rim_t is [[mlink_, dlink_], depth]
+    for fd, (Val,Rdn,Dec) in enumerate(zip(Valt,Rdnt,Dect)):
+        if Val > G_aves[fd] * Rdn:
+            # eval grapht in form_graph_t:
+            Et[0][fd] += Val; Et[1][fd] += Rdn; Et[2][fd] += Dec
+            faddt[fd] = 1  # new rim += [+ve link]
+        else: continue
+        for G in link._G, link.G:
+            rdepth = (lenHH != None) + (lenH != None)  # rim_tHH: depth=2, rim_tH: depth=1, rim_t: depth=0
+            # rim_t: [rims,depth], init [[],0]:
+            rim_t = G.rim_t
+            depth = rim_t[1]
+            if len(rim_t[0]) == ((lenHH if lenHH else lenH) if lenH else 0):  # rim_t was not incremented yet
+                # add nested link layer:
+                if fd:
+                    rim_t = [[],[link]]; G.Vt=[0,Val]; G.Rt=[0,Rdn]; G.Dt=[0,Dec]
+                else:
+                    rim_t = [[link],[]]; G.Vt=[Val,0]; G.Rt=[Rdn,0]; G.Dt=[Dec,0]
+                for dd in range(rdepth - depth + 1):
+                    rim_t = [rim_t, depth+dd]  # incr rim_t nesting to root depth
+                # new layer:
+                G.rim_t[0] += [rim_t]
+                G.rim_t[1] = rdepth + 1  # root depth will increase in sum2graph
+            else:
+                # unpack, append last link layer:
+                for _ in range(depth): rim_t = rim_t[0][-1]
+                rim_t[0][fd] += [link]
+                G.Vt[fd] += Val; G.Rt[fd] += Rdn; G.Dt[fd] += Dec
 
-                        G.Vt[fd] += Val; G.Rt[fd] += Rdn; G.Dt[fd] += Dec
-    return fadd
+    return faddt  # may not be needed
 
 
 def comp_aggHv(_aggH, aggH, rn):  # no separate ext
