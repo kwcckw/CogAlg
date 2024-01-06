@@ -299,13 +299,12 @@ def comp_G(link, Et, lenH=None, lenHH=None):  # lenH in sub+|rd+, lenHH in agg_c
         link.subH = SubH
 
     link.Vt,link.Rt,link.Dt = Valt,Rdnt,Dect = [Mval,Dval],[Mrdn,Drdn],[Mdec,Ddec]  # reset per comp_G
-    faddt = [0,0]
 
     for fd, (Val,Rdn,Dec) in enumerate(zip(Valt,Rdnt,Dect)):
         if Val > G_aves[fd] * Rdn:
             # eval grapht in form_graph_t:
             Et[0][fd] += Val; Et[1][fd] += Rdn; Et[2][fd] += Dec
-            faddt[fd] = 1  # new rim += [+ve link]
+
         else: continue
         for G in link._G, link.G:
             rdepth = (lenHH != None) + (lenH != None)  # rim_tHH: depth=2, rim_tH: depth=1, rim_t: depth=0
@@ -328,8 +327,6 @@ def comp_G(link, Et, lenH=None, lenHH=None):  # lenH in sub+|rd+, lenHH in agg_c
                 for _ in range(depth): rim_t = rim_t[0][-1]
                 rim_t[0][fd] += [link]
                 G.Vt[fd] += Val; G.Rt[fd] += Rdn; G.Dt[fd] += Dec
-
-    return faddt  # may not be needed
 
 
 def comp_aggHv(_aggH, aggH, rn):  # no separate ext
