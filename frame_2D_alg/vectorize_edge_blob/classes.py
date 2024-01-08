@@ -192,7 +192,7 @@ class Cgraph(CBase):  # params of single-fork node_ cluster per pplayers
 
 class CderG(CBase):  # params of single-fork node_ cluster per pplayers
 
-    subH : list = z([])  # [[derH_t, valt, rdnt]]: top aggLev derived in comp_G, per rng, all der+
+    subH : list = z([[[]],[[]]])  # [[derH_t, valt, rdnt]]: top aggLev derived in comp_G, per rng, all der+
     Vt : list = z([0,0])  # last layer vals from comp_G
     Rt : list = z([1,1])
     Dt : list = z([0,0] )
