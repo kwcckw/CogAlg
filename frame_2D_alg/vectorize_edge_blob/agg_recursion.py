@@ -343,23 +343,28 @@ def append_rim(link, lenH, lenHH, Val,Rdn,Dec, fd, fmin=1):  # fmin: call from b
             # partly revised, probably messed-up:
             # call from agg_compress, get last rim_:
             for _ in range(depth): rim_t = rim_t[0][-1]
-            if rim_t[0]: rim__ = rim_t[0][fd]
-            else:        rim__ = []
-            if rim_t[-1] == 0:  # base rimt_t : [[mlink_s,dlink_s],0]
+            if depth == 0:  # base rimt_t : [[mlink_s,dlink_s],0]
                 init = not rim_t[0]
-            elif rim_t[-1] == 1:  # deeper depth  : [[rim_tH1, rim_tH2,...],1]
-                init = (len(rim_t[0]) == lenH)
-            elif rim_t[-1] == 2:  # deeper depth  : [[rim_tHH1, rim_tHH2,...],2]
-                init = len(rim_t[0]) == lenHH
+            elif depth == 1:  # deeper depth  : [[rim_tH1, rim_tH2,...],1]
+                init = (len(G.rim_t[0]) == lenH)
+            elif depth == 2:  # deeper depth  : [[rim_tHH1, rim_tHH2,...],2]  # this will never be called unless it's call from agg+?
+                init = len(G.rim_t[0]) == lenHH
 
             if init:  # rim_t was not incremented yet
                 # add nested link layer:
                 if fd:
-                    G.rim_t = [[[]],[[link]]]; G.Vt=[0,Val]; G.Rt=[0,Rdn]; G.Dt=[0,Dec]  # extra bracket to add rim_s
+                    # we can't init with G.rim_t here, it overwrites existing G.rim_t
+                    new_rim_t = [[[]],[[link]]]; G.Vt=[0,Val]; G.Rt=[0,Rdn]; G.Dt=[0,Dec]  # extra bracket to add rim_s
                 else:
-                    G.rim_t = [[[link]],[[]]]; G.Vt=[Val,0]; G.Rt=[Rdn,0]; G.Dt=[Dec,0]
-                    G.rim_t[0] += [rim_t]
-                    G.rim_t[1] = rdepth + 1  # root depth will increase in sum2graph
+                    # new var of new_rim_t, prevent overwrite of unpacked rim_t from depth above
+                    new_rim_t = [[[link]],[[]]]; G.Vt=[Val,0]; G.Rt=[Rdn,0]; G.Dt=[Dec,0]
+                
+                if depth == 0:  
+                    G.rim_t[0] = new_rim_t  # special case for depth == 0 because we have link_s
+                    for dd in range(rdepth - depth + 1):
+                        G.rim_t = [[G.rim_t], depth+dd+1]  # incr rim_t nesting to root depth   (+1 because dd loops from 0)
+                else:
+                    rim_t[0][fd] += new_rim_t[fd]
             else:
                 # unpack, append last link layer:
                 rim_t[0][fd][-1] += [link]  # -1 to select last rim_ from rim_s
