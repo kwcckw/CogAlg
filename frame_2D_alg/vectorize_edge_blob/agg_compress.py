@@ -120,6 +120,7 @@ def rd_recursion(rroot, root, Q, Et, nrng=1, lenH=None, lenHH=None):  # rng,der 
                 for link in rim_t[0][fd][-1]:  # sum last rd+ esubH layer
                     if len(link.subH[fd][-1]) == (lenH or 0) + 1:  # increment for current layer
                         if init:  # 1st [-1]: rdH, 2nd [-1]: last subH from sub+, 3rd [-1]: last derHv
+                            # we need esubH_t now? there's 2 forks per subH now
                             G.esubH += [deepcopy(link.subH[fd][-1][-1][-1])]  # link.subH: cross-der+) same rng, G.esubH: cross-rng?
                             init = 0
                         else:
