@@ -95,7 +95,7 @@ def rd_recursion(rroot, root, Q, Et, nrng=1, lenH=None, lenHH=None):  # rng,der 
         for link in Q:  # inp_= root.link_, reform links
             if link.Vt[1] > G_aves[1]*link.Rt[1]:  # >rdn incr
                 comp_G(link, Et, lenH, lenHH,  fdcpr=1)
-                if link.G not in G_: G_ += [link.G];
+                if link.G not in G_: G_ += [link.G]
                 if link._G not in G_: G_ += [link._G]
     else:  # rng+
         G_ = Q
@@ -112,23 +112,13 @@ def rd_recursion(rroot, root, Q, Et, nrng=1, lenH=None, lenHH=None):  # rng,der 
             for i, par in enumerate(part):
                 # Vt[i]+=v; Rt[i]+=rt[i]; Dt[i]+=d:
                 Part[i] += par
-        for G in G_:
-            rim_t = G.rim_t
-            for _ in range(G.rim_t[1]): rim_t = rim_t[0][-1]  # unpack last link layer?
-            if rim_t[0]:
-                init = 1  # not revised:
-                for link in rim_t[fd][-1]:  # sum last rd+ esubH layer
-                    if len(link.subH[fd][-1]) == (lenH or 0) + 1:  # increment for current layer
-                        derHv = deepcopy(link.subH[fd][-1][-1][-1])  # 1st [-1]: rdH, 2nd [-1]: last subH from sub+, 3rd [-1]: last derHv
-                        if init:  
-                            # G.esubH is actually G.esubH_t 
-                            G.esubH[fd] += [derHv]  # link.subH: cross-der+) same rng, G.esubH: cross-rng?
-                            init = 0
-                        else:
-                            sum_derHv(G.esubH[fd][-1], derHv, base_rdn=link.Rt[fd])  # [derH, valt,rdnt,dect,extt,1]
-                        link_ += [link]  # add link for the next root's der+ rd_recursion
+        if fd:  # else link_ is not needed
+            for G in G_:
+                for link in G.rim_t[fd][-1]:
+                    if len(link.subH[-1][0]) > lenH:  # link.subH was appended in this rd cycle
+                        link_ += [link]  # for next rd cycle
 
-        rd_recursion(rroot, root, Q, Et, 0 if fd else nrng+1, (lenH or 0)+1, lenHH)
+        rd_recursion(rroot, root, link_ if fd else G_, Et, 0 if fd else nrng+1, (lenH or 0)+1, lenHH)
 
     return link_, nrng
 
