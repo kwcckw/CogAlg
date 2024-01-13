@@ -81,7 +81,7 @@ def agg_recursion(rroot, root, node_, nrng=1, lenH=None, lenHH=None):  # lenH = 
                     feedback(rroot,i)  # update root.root..
 
 
-def form_graph_t(root, G_, Et, nrng, frd = 0, lenH=None, lenHH=None):  # form Gm_,Gd_ from same-root nodes
+def form_graph_t(root, G_, Et, nrng, frd=0, lenH=None, lenHH=None):  # form Gm_,Gd_ from same-root nodes
 
     # select Gs connected in current layer:
     _G_ = [G for G in G_ if len(G.rim_t[0])>len(root.rim_t[0])]
@@ -125,13 +125,12 @@ def node_connect(_G_, frd):  # node connectivity = sum surround link vals, incr.
                 val,rdn,dec = G.Vt[i],G.Rt[i],G.Dt[i]  # connect by last layer
                 ave = G_aves[i]
                 rim_t = G.rim_t
-                if frd:
-                    rim_t = G.rim_t
-                    for _ in range(G.rim_t[-1]):  # depth
-                        rim_t = rim_t[0][-1]  # unpack last layer of rim_tH| rim_tHH
-                    rim = rim_t[i][-1]  # rim_t is [mlink__, dlink__]
-                else:
-                    rim_t = G.rim_t; rim = rim_t[i]
+                if rim_t[1]==2: rim_t = rim_t[1]
+                if rim_t[1]==1:
+                    rim_ = rim_t[i]
+                    if isinstance(rim_[0],CderG): rim = rim_  # agg+
+                    else:                     rim = rim_[-1]  # agg_cpr
+                else: continue  # empty rim_t
                 for link in rim:
                     # >ave fd links
                     lval,lrdn,ldec = link.Vt[i],link.Rt[i],link.Dt[i]
@@ -164,10 +163,13 @@ def segment_node_(root, root_G_, fd, nrng, frd, lenH=None):  # eval rim links wi
 
     for G in root_G_:   # init per node,  last-layer Vt,Vt,Dt:
         rim_t = G.rim_t
-        if frd:
-            for _ in range(G.rim_t[-1]): rim_t = rim_t[0][-1]  # unpack from rim_tH
-            rim = rim_t[fd][-1]
-        else: rim = rim_t[fd]
+        if rim_t[1] == 2: rim_t = rim_t[0]  # unpack
+        if rim_t[1] == 1:
+            rim_ = rim_t[fd]
+            if isinstance(rim_[0],CderG): rim = rim_  # agg+
+            else:                     rim = rim_[-1]  # agg_cpr
+        else:
+            continue  # empty rim_t
         grapht = [[G],[], G.Vt,G.Rt,G.Dt, copy(rim)]  # init link_ with rim
         G.roott[fd] = grapht  # roott for feedback
         igraph_ += [grapht]
@@ -211,7 +213,7 @@ def segment_node_(root, root_G_, fd, nrng, frd, lenH=None):  # eval rim links wi
         else: break
 
     # -> Cgraphs if Val > ave * Rdn:
-    return [sum2graph(root, graph, fd, nrng, frd, lenH) for graph in igraph_ if graph[2][fd] > ave * (graph[3][fd] + (frd * (lenH or 0)))]  # for frd and lenH, something like this?
+    return [sum2graph(root, graph, fd, nrng, frd, lenH) for graph in igraph_ if graph[2][fd] > ave * graph[3][fd]]
 
 
 def sum2graph(root, grapht, fd, nrng, frd, lenH=None):  # sum node and link params into graph, aggH in agg+ or player in sub+
@@ -235,12 +237,12 @@ def sum2graph(root, grapht, fd, nrng, frd, lenH=None):  # sum node and link para
                     for lfd, subH in enumerate(link_rdHt):
                         for derHv in subH:  # [[derH,valt,rdnt,dect,extt,1]] per rd+
                             if rdHt[0][lfd]:  # accumulate
-                                sum_derHv(rdHt[0][lfd][-1], derHv, base_rdn=link.Rt[fd]) 
+                                sum_derHv(rdHt[0][lfd][-1], derHv, base_rdn=link.Rt[fd])
                             else:  # init
                                 rdHt[0][lfd] += [deepcopy(derHv)]
                         G.evalt[lfd]+=link.Vt[lfd]; G.erdnt[lfd]+=link.Rt[lfd]; G.edect[lfd]+=link.Dt[lfd]
             for i in 0,1: G.esubH[i] += rdHt[0][i]
-            
+
         else:
             derH = [[],1]  # G.esubH
             for link in G.rim_t[fd][-1]:  # sum last rd+ esubH layer
@@ -328,9 +330,8 @@ def comp_G(link, Et, lenH=None, lenHH=None, fdcpr=0):  # lenH in sub+|rd+, lenHH
         Mdec = (Mdec+dect[0])/2; Ddec = (Ddec+dect[1])/2
         if lenHH == None:
             link.subH = SubH+subH  # concat higher derHvs
-        # packing subH into subH_ (subH__[-1])            
-        else: link.subH[fdcpr][-1] += [SubH+subH]  # call from rd+: rim_ and corresponding ssubH are fd-specific
-
+        else:  # tentative: subH[rdHt][fd] + subH:
+            link.subH[0][-1][fdcpr] += [SubH + subH]  # call from rd+: rim_ and corresponding ssubH are fd-specific
     else:  # new link
         if lenHH == None:
             link.subH = SubH

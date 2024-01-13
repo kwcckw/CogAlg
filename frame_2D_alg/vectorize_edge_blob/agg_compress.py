@@ -54,8 +54,9 @@ def agg_compress(rroot, root, node_, nrng=0, lenHH=0):  # compositional agg|sub 
     Et = [[0,0],[0,0],[0,0]]
     lenH = None  # no empty append lenHH[-1] = 0?
 
-    link_, nrng = rd_recursion(rroot, root, node_, Et, nrng, lenH, lenHH)  # rng+, adds rim_ as rim_t[-1][0]
-    rd_recursion(rroot, root, link_, Et, 0, lenH, lenHH)  # rng+, adds rim_ as rim_t[-1][1]
+    nrng = rd_recursion(rroot, root, node_, Et, nrng, lenH, lenHH)  # rng+, adds rim_ as rim_t[-1][0]
+    if root.link_:  # empty in edge before agg+
+        rd_recursion(rroot, root, root.link_, Et, 0, lenH, lenHH)  # der+, adds link_, rim_ as rim_t[-1][1]
 
     _GG_t = form_graph_t(root, node_, Et, nrng, 1, lenH, lenHH)  # may convert root.node_[-1] to node_t
     GGG_t = []  # add agg+ fork tree:
@@ -112,14 +113,11 @@ def rd_recursion(rroot, root, Q, Et, nrng=1, lenH=None, lenHH=None):  # rng,der 
             for i, par in enumerate(part):
                 # Vt[i]+=v; Rt[i]+=rt[i]; Dt[i]+=d:
                 Part[i] += par
-        # if fd:  # else link_ is not needed (we get link_ in fd==0, so link_ can be used in the next fd==1, so here is fd==0? )
-        if not fd:
+        if fd:
             for G in G_:
-                rim_t = G.rim_t
-                for _ in range(G.rim_t[1]): rim_t = rim_t[0][-1]  # unpack with depth
-                for link in rim_t[fd][-1]:
-                    # link.subH is [msubH__, dsubH__]
-                    # subH[0][-1] is msubH__[-1] which is msubH_
+                if lenHH: rim = G.rim_t[0][-1][0][-1][fd][-1]  # if sub+
+                else:     rim = G.rim_t[0][-1][fd][-1]  # only rd+
+                for link in rim:
                     if len(link.subH[0][-1]) > (lenH or 0):  # link.subH was appended in this rd cycle
                         link_ += [link]  # for next rd cycle
 
