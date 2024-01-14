@@ -123,7 +123,7 @@ def rd_recursion(rroot, root, Q, Et, nrng=1, lenH=None, lenHH=None):  # rng,der 
 
         rd_recursion(rroot, root, link_ if fd else G_, Et, 0 if fd else nrng+1, (lenH or 0)+1, lenHH)
 
-    return link_, nrng
+    return nrng
 
 
 def feedback(root, fd):  # called from form_graph_, append new der layers to root

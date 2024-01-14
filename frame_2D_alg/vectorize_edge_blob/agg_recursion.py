@@ -1,7 +1,7 @@
 import numpy as np
 from copy import deepcopy, copy
 from itertools import combinations, zip_longest
-from .classes import Cgraph, CderG
+from .classes import Cgraph, CderG, Cmd
 from .filters import aves, ave_mL, ave_dangle, ave, ave_distance, G_aves, ave_Gm, ave_Gd
 from .slice_edge import slice_edge, comp_angle
 from .comp_slice import comp_P_, comp_derH, sum_derH, comp_ptuple, sum_dertuple, comp_dtuple, get_match
@@ -84,13 +84,15 @@ def agg_recursion(rroot, root, node_, nrng=1, lenH=None, lenHH=None):  # lenH = 
 def form_graph_t(root, G_, Et, nrng, lenH=None, lenHH=None):  # form Gm_,Gd_ from same-root nodes
 
     # select Gs connected in current layer:
-    _G_ = [G for G in G_ if len(G.rim_t[0])>len(root.rim_t[0])]
+    lenH_root = 0 if root.rim_t[1] == 0 else len(root.rim_t[0])  # if rim_t[1] (depth) is 0 , the lenH of root should stay 0?
+    _G_ = [G for G in G_ if G.rim_t[1] > 0 and len(G.rim_t[0])> lenH_root]  # skip Gs with rim_t's depth of 0 too?? 
+
 
     node_connect(_G_, lenHH!=None)  # Graph Convolution of Correlations over init _G_
     node_t = []
     for fd in 0,1:
         if Et[0][fd] > ave * Et[1][fd]:  # eValt > ave * eRdnt: cluster
-            graph_ = segment_node_(root, _G_, fd, nrng,lenH=None)  # fd: node-mediated Correlation Clustering
+            graph_ = segment_node_(root, _G_, fd, nrng, lenH, lenHH)  # fd: node-mediated Correlation Clustering
             for graph in graph_:
                 # eval sub+ per node
                 if graph.Vt[fd] * (len(graph.node_)-1)*root.rng > G_aves[fd] * graph.Rt[fd]:
@@ -98,11 +100,12 @@ def form_graph_t(root, G_, Et, nrng, lenH=None, lenHH=None):  # form Gm_,Gd_ fro
                     if lenH: lenH = len(node_[0].esubH[-lenH:])  # in agg_compress
                     else:    lenH = len(graph.aggH[-1][0])  # in agg_recursion
                     nrng = 0 if fd else nrng+1
-                    # actually if frd, here should be calling agg_compress, but we can't import agg_compress here due to the problem of cyclic import
+                    # section below pending update, if frd, it should call agg_compress instead
                     # agg_recursion(root, graph, node_, nrng, lenH, lenHH)
                 else:
                     root.fback_t[root.fd] += [[graph.aggH, graph.valt, graph.rdnt, graph.dect]]
-                    feedback(root,root.fd)  # update root.root..
+                    # feedback pending update
+                    # feedback(root,root.fd)  # update root.root..
             node_t += [graph_]  # may be empty
         else:
             node_t += [[]]
@@ -142,8 +145,10 @@ def node_connect(_G_, frd):  # node connectivity = sum surround link vals, incr.
             if any(uprimt):  # pruned for next loop
                 if frd:
                     # revise depending on lenHH: different nesting?
-                    for i in 0,1: G.rim_t[i][-1][:] = uprimt[i]
-                    else:         G.rim_t[:] = uprimt
+                    for i in 0,1: 
+                        rim = unpack_rim(G.rim_t, i)
+                        rim[:] = uprimt[i]
+                    else: G.rim_t[:] = uprimt
                 G_ += [G]
 
         if G_: _G_ = G_  # exclude weakly incremented Gs from next connectivity expansion loop
@@ -154,8 +159,8 @@ def unpack_rim(rim_t, fd):  # if init rim_t is [[[],[]],0]
     if rim_t[1] == 2:  # depth=2 is rim_tH in agg++(agg_cpr)
         rim_t = rim_t[0][-1]  # last rim_t
     if rim_t[1] == 1:
-        if isinstance(rim_t[0][0],list):
-              rim = rim_t[0][fd][-1]  # rim_t in agg++
+        if isinstance(rim_t[0][-1],list):  # rim_t[0] is [rim_t2, rim_t2, ...], so we still need [-1] to select the last rim_t
+              rim = rim_t[0][-1][fd][-1]  # rim_t in agg++
         else: rim = rim_t[0][-1][fd]  # rimtH in agg+
     else:
         rim = rim_t[fd]  # base rimt
@@ -163,7 +168,7 @@ def unpack_rim(rim_t, fd):  # if init rim_t is [[[],[]],0]
     return rim
 
 
-def segment_node_(root, root_G_, fd, nrng, lenH=None):  # eval rim links with summed surround vals for density-based clustering
+def segment_node_(root, root_G_, fd, nrng, lenH=None, lenHH=None):  # eval rim links with summed surround vals for density-based clustering
 
     # graph += [node] if >ave (surround connectivity * relative value of link to any internal node)
     igraph_ = []; ave = G_aves[fd]
@@ -212,10 +217,10 @@ def segment_node_(root, root_G_, fd, nrng, lenH=None):  # eval rim links with su
         else: break
 
     # -> Cgraphs if Val > ave * Rdn:
-    return [sum2graph(root, graph, fd, nrng, lenH) for graph in igraph_ if graph[2][fd] > ave * graph[3][fd]]
+    return [sum2graph(root, graph, fd, nrng, lenH, lenHH) for graph in igraph_ if graph[2][fd] > ave * graph[3][fd]]
 
 
-def sum2graph(root, grapht, fd, nrng, lenH=None):  # sum node and link params into graph, aggH in agg+ or player in sub+
+def sum2graph(root, grapht, fd, nrng, lenH=None, lenHH=None):  # sum node and link params into graph, aggH in agg+ or player in sub+
 
     G_,Link_,Vt,Rt,Dt,_ = grapht  # last-layer vals only; depth 0:derLay, 1:derHv, 2:subHv
 
@@ -226,6 +231,7 @@ def sum2graph(root, grapht, fd, nrng, lenH=None):  # sum node and link params in
     eH, valt,rdnt,dect, evalt,erdnt,edect = [], [0,0],[0,0],[0,0], [0,0],[0,0],[0,0]  # grapht int = node int+ext
     A0, A1, S = 0,0,0
     for G in G_:
+        unpack_subLay(G, fd, lenH, lenHH, i=0)
         ''' use unfinished unpack_derLay
         if frd:  # from agg_cpr, call unpack_derLay recursively per lenH if lenHH, to sum all links of rim_
         old:
@@ -251,11 +257,12 @@ def sum2graph(root, grapht, fd, nrng, lenH=None):  # sum node and link params in
             valt[j] += G.valt[j]; rdnt[j] += G.rdnt[j]; dect[j] += G.dect[j]
 
     graph.aggH += [[eH,evalt,erdnt,edect,2]]  # new derLay
-    for i in 0,1:
-        # getting the error : 'Cmd' object does not support item assignment
-        graph.valt[i] = valt[i]+evalt[i]  # graph internals = G Internals + Externals
-        graph.rdnt[i] = rdnt[i]+erdnt[i]
-        graph.dect[i] = dect[i]+edect[i]
+    
+    # graph internals = G Internals + Externals
+    graph.valt = Cmd(*valt) + evalt  
+    graph.rdnt = Cmd(*rdnt) + erdnt
+    graph.dect = Cmd(*dect) + edect
+
     graph.A = [A0,A1]; graph.S = S
 
     if fd:
@@ -274,14 +281,20 @@ def sum2graph(root, grapht, fd, nrng, lenH=None):  # sum node and link params in
 def unpack_subLay(G, fd, lenH, lenHH, i):  # i to recursively call deeper layers of rdH if lenHH, to sum all links of rim_
 
     for link in unpack_rim(G.rim_t, fd):  # sum last rd+ esubH layer
-
-        if lenHH: subH = link.subH[0][0][-1]  # from sub+'agg++
+        if lenHH != None:  # agg_cpr's lenHH is 0             
+            # link.subH is [ rdHt1, rdHt2, ...] 
+            # each rdnHt is [rdt, depth]
+            # each rdt is [msubH_, dsubH_]
+            # [-1] select last rdHt, [0] to skip depth, [fd] to select fork, [-1] to select last subH
+            subH = link.subH[-1][0][fd][-1]  # from sub+'agg++ (this should be select from i too？)
         else:     subH = link.subH[0]  # from agg+ or no-sub+'agg++
 
         if len(subH) > (lenH or 0):  # was appended in last xcomp, deeper nesting in agg++ link.subH
             sum_derHv(G.esubH[-1], subH[i], base_rdn=link.Rt[fd])
             G.evalt[fd] += link.Vt[fd]; G.erdnt[fd] += link.Rt[fd]; G.edect[fd] += link.Dt[fd]
 
+        if lenHH>0:
+            unpack_subLay(G, fd, lenH, lenHH, i+1)
 
 def comp_G(link, Et, lenH=None, lenHH=None, fdcpr=0):  # lenH in sub+|rd+, lenHH in agg_compress sub+ only
 
@@ -340,7 +353,7 @@ def comp_G(link, Et, lenH=None, lenHH=None, fdcpr=0):  # lenH in sub+|rd+, lenHH
         else:
             # rdt = [[[msubH1 msubH2,..],[dsubH1, dsubH2,...]], 1]
             # rdHt = [[[[msubH1 msubH2,..],[dsubH1, dsubH2,...]], 1]]  (added bracket)
-            link.subH =  [[[[[]],[SubH]], 1]] if fdcpr else [[[[SubH],[SubH]], 1]]
+            link.subH =  [[[[[]],[SubH]], 1]] if fdcpr else [[[[SubH],[[]]], 1]]
 
 
 
