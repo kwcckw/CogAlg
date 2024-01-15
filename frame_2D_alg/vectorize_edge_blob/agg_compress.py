@@ -131,15 +131,16 @@ def form_graph_t_cpr(root, G_, Et, nrng, lenH=None, lenHH=None):  # form Gm_,Gd_
     fd = not nrng
     _G_ = []
     for G in G_:  # select Gs connected in current layer:
-        if lenHH: rim_tH = G.rim_t[-1][fd]  # sub+'H
-        else:     rim_tH = G.rim_t[fd]  # rim_
-        if len(rim_tH) > lenH: _G_ += [G]
+        if G.rim_t:  # without depth, rim_t is init as an empty list
+            if lenHH: rim_tH = G.rim_t[-1][fd]  # sub+'H
+            else:     rim_tH = G.rim_t[fd]  # rim_
+            if len(rim_tH) > (lenH or 0): _G_ += [G]
 
     node_connect(_G_, lenHH!=None)  # Graph Convolution of Correlations over init _G_
     node_t = []
     for fd in 0,1:
         if Et[0][fd] > ave * Et[1][fd]:  # eValt > ave * eRdnt: cluster
-            graph_ = segment_node_(root, _G_, fd, nrng, lenH, lenHH)  # fd: node-mediated Correlation Clustering
+            graph_ = segment_node_(root, _G_, fd, nrng, lenH)  # fd: node-mediated Correlation Clustering
             for graph in graph_:
                 # eval sub+ per node
                 if graph.Vt[fd] * (len(graph.node_)-1)*root.rng > G_aves[fd] * graph.Rt[fd]:
