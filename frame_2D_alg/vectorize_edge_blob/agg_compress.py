@@ -55,7 +55,7 @@ def agg_compress(rroot, root, node_, nrng=0, lenHH=0):  # compositional agg|sub 
     lenH = None  # no empty append lenHH[-1] = 0?
 
     nrng = rd_recursion(rroot, root, node_, Et, nrng, lenH, lenHH)  # rng+, adds rim_ as rim_t[-1][0]
-    if root.link_ and isinstance(root.link_[0], CderG) :  # CderP in edge before agg+
+    if root.link_ and isinstance(root.link_[0], CderG):  # else CderP in edge before agg+
         rd_recursion(rroot, root, root.link_, Et, 0, lenH, lenHH)  # der+, adds link_, rim_ as rim_t[-1][1]
 
     _GG_t = form_graph_t_cpr(root, node_, Et, nrng, lenH, lenHH)  # may convert root.node_[-1] to node_t
