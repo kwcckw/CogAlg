@@ -6,7 +6,7 @@ from .classes import Cgraph, CderG
 from .filters import ave_dangle, ave, ave_distance, G_aves, ave_Gm, ave_Gd, ave_dI
 from .slice_edge import slice_edge, comp_angle
 from .comp_slice import comp_P_, comp_ptuple, comp_derH, sum_derH, sum_dertuple, get_match
-from .agg_recursion import node_connect, segment_node_, comp_G, comp_aggHv, comp_derHv, sum_derHv, sum_ext, sum_subHv, sum_aggHv
+from .agg_recursion import unpack_rim, node_connect, segment_node_, comp_G, comp_aggHv, comp_derHv, sum_derHv, sum_ext, sum_subHv, sum_aggHv
 
 '''
 Implement sparse param tree in aggH: new graphs represent only high m|d params + their root params.
@@ -54,7 +54,8 @@ def agg_compress(rroot, root, node_, nrng=0, lenHH=0):  # compositional agg|sub 
     Et = [[0,0],[0,0],[0,0]]
     lenH = None  # no empty append lenHH[-1] = 0?
 
-    nrng = rd_recursion(rroot, root, node_, Et, nrng, lenH, lenHH)  # rng+, adds rim_ as rim_t[-1][0]
+    # nrng in this call must be > 1? In recursive call of agg_compress, nrng maybe 0 here
+    nrng = rd_recursion(rroot, root, node_, Et, (nrng or 1), lenH, lenHH)  # rng+, adds rim_ as rim_t[-1][0]
     if root.link_ and isinstance(root.link_[0], CderG):  # else CderP in edge before agg+
         rd_recursion(rroot, root, root.link_, Et, 0, lenH, lenHH)  # der+, adds link_, rim_ as rim_t[-1][1]
 
@@ -115,9 +116,7 @@ def rd_recursion(rroot, root, Q, Et, nrng=1, lenH=None, lenHH=None):  # rng,der 
                 Part[i] += par
         if fd:
             for G in G_:
-                if lenHH: rim = G.rim_t[0][-1][0][-1][fd][-1]  # if sub+
-                else:     rim = G.rim_t[0][-1][fd][-1]  # only rd+
-                for link in rim:
+                for link in unpack_rim(G.rim_t, fd):
                     if len(link.subH[0][-1]) > (lenH or 0):  # link.subH was appended in this rd cycle
                         link_ += [link]  # for next rd cycle
 
@@ -148,10 +147,12 @@ def form_graph_t_cpr(root, G_, Et, nrng, lenH=None, lenHH=None):  # form Gm_,Gd_
                     if lenH: lenH = len(node_[0].esubH[-lenH:])  # in agg_compress
                     else:    lenH = len(graph.aggH[-1][0])  # in agg_recursion
                     nrng = 0 if fd else nrng+1
-                    agg_compress(root, graph, node_, nrng, lenH, lenHH)
+                    # lenH above is not needed but we need lenHH + 1 instead?
+                    agg_compress(root, graph, node_, nrng, lenHH=(lenHH or 0) + 1) 
                 else:
                     root.fback_t[root.fd] += [[graph.aggH, graph.valt, graph.rdnt, graph.dect]]
-                    feedback(root,root.fd)  # update root.root..
+                    # feedback is pending update
+                    # feedback(root,root.fd)  # update root.root..
             node_t += [graph_]  # may be empty
         else:
             node_t += [[]]
