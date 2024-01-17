@@ -1,7 +1,7 @@
 import numpy as np
 from copy import deepcopy, copy
 from itertools import combinations, zip_longest
-from .classes import Cgraph, CderG, Cmd
+from .classes import Cgraph, CderG, Cmd, CderH
 from .filters import aves, ave_mL, ave_dangle, ave, ave_distance, G_aves, ave_Gm, ave_Gd
 from .slice_edge import slice_edge, comp_angle
 from .comp_slice import comp_P_, comp_derH, sum_derH, comp_ptuple, sum_dertuple, comp_dtuple, get_match
@@ -97,7 +97,6 @@ def form_graph_t(root, G_, Et, nrng, lenH=None, lenHH=None):  # form Gm_,Gd_ fro
                     node_ = graph.node_  # flat in sub+
                     if lenH: lenH = len(node_[0].esubH[-lenH:])  # in agg_compress
                     else:    lenH = len(graph.aggH[-1][0])  # in agg_recursion
-                    nrng = 0 if fd else nrng+1
                     agg_recursion(root, graph, node_, nrng, lenH, lenHH)
                 else:
                     root.fback_t[root.fd] += [[graph.aggH, graph.valt, graph.rdnt, graph.dect]]
@@ -153,13 +152,11 @@ def unpack_rim(rim_t, fd):
 
     rim = []  # default return
     if rim_t:
-        if isinstance(rim_t,list):  # rim_tH
-            rim = rim_t[-1][fd]  # Cmd rimt | rim_t
+        if isinstance(rim_t,list):  # rim is agg+| agg++ rim_tH
+            rim = rim_t[-1][fd]  # rim is Cmd rimt | rim_t
         else:  # Cmd rimt | rim_t
             rim = rim_t[fd]
-
-        # we need to check [0] instead, rim must be a list here
-        if rim and isinstance(rim[0],list):  # agg++'rim_ or # agg++' rim_
+        if rim and isinstance(rim[0],list):  # rim is agg++ rim_
             rim = rim[-1]
     return rim
 
@@ -227,7 +224,7 @@ def sum2graph(root, grapht, fd, nrng, lenH=None):  # sum node and link params in
     eH, valt,rdnt,dect, evalt,erdnt,edect = [], [0,0],[0,0],[0,0], [0,0],[0,0],[0,0]  # grapht int = node int+ext
     A0, A1, S = 0,0,0
     for G in G_:
-        sum_link_lastLay(G, fd, lenH)
+        sum_link_subHe(G, fd, lenH)
         graph.box += G.box
         graph.ptuple += G.ptuple
         sum_derH([graph.derH,[0,0],[1,1]], [G.derH,[0,0],[1,1]], base_rdn=1)
@@ -245,8 +242,8 @@ def sum2graph(root, grapht, fd, nrng, lenH=None):  # sum node and link params in
     graph.dect = Cmd(*dect) + edect
     graph.A = [A0,A1]; graph.S = S
 
-    if fd:
-        for link in graph.link_:  # assign alt graphs from d graph, after both linked m and d graphs are formed
+    if fd:  # assign alt graphs from d graph, after both linked m and d graphs are formed
+        for link in graph.link_:
             mgraph = link.roott[0]
             if mgraph:
                 for fd, (G, alt_G) in enumerate(((mgraph,graph), (graph,mgraph))):  # bilateral assign:
@@ -257,32 +254,28 @@ def sum2graph(root, grapht, fd, nrng, lenH=None):  # sum node and link params in
     return graph
 
 # draft:
-def sum_link_lastLay(G, fd, lenH):  # lenH corresponds to len link subH in agg+ or link.subH[-1] in agg++
+def sum_link_subHe(G, fd, lenH):  # lenH corresponds to len link subH in agg+ or link.subH[-1] in agg++
 
     for link in unpack_rim(G.rim_t, fd):
-        '''
         subH = link.subH
         lenHH = G.lenHH
         if lenHH:  # not None | 0
             if len(subH) > lenHH:  # was appended in last sub+ of agg++
-                subH = subH[-1]  # last rd+/agg++
+                subH = subH[-1][fd][-1]  # last rd+/ agg++'sub+
             else:
                 continue
-        '''
-        # why we need the above? We can always get the last rdHt by using [-1]?
-        
-        rdHt = link.subH[-1]
-        if isinstance(rdHt, Cmd):  # with Cmd, it can be simpler as below:
-            if rdHt[fd]:  # non empty
-                for i, derHv in enumerate(rdHt[fd][-1]):  # sum all layers of rd+ in last layer of esubH
-                    if i:  sum_derHv(G.esubH[-1], derHv,  base_rdn=link.Rt[fd])
-                    else:  G.esubH += [deepcopy(derHv)]       
-        else:
-            for i, derHv in enumerate(link.subH):
-                if i: sum_derHv(G.esubH[-1], derHv, base_rdn=link.Rt[fd])
-                else: G.esubH += [deepcopy(derHv)]
+        if len(subH) > (lenH or 0):  # was appended in last xcomp, rd+ | base sub+
+            if not isinstance(subH[0], CderH):
+                if not isinstance(subH[0][0], CderH):  # not CderH: subH must be rdH?
+                    for ssubH in subH[-1]:
+                        # extend to handle ext in sum_subHe?:
+                        sum_subHv(G.esubH[-1], ssubH, base_rdn=link.Rt[fd])  # sum all layers of rdH in esubH[-1]
+                else:
+                    sum_subHv(G.esubH[-1], subH[-1], base_rdn=link.Rt[fd])  # single layer of agg+'sub+, no rd+
+            else:
+                sum_subHv(G.esubH[-1], subH, base_rdn=link.Rt[fd])  # single layer of agg+'sub+, no rd+
 
-        G.evalt[fd] += link.Vt[fd]; G.erdnt[fd] += link.Rt[fd]; G.edect[fd] += link.Dt[fd]
+            G.evalt[fd] += link.Vt[fd]; G.erdnt[fd] += link.Rt[fd]; G.edect[fd] += link.Dt[fd]
     '''
     link subH is appended per xcomp of either fork, with fd represented in root, nesting:
     agg+:  None | subH | subHH/ sub+, same for G.esubH, Cmd dertuples
@@ -338,17 +331,21 @@ def comp_G(link, Et, lenH=None, lenHH=None, fdcpr=0):  # lenH in sub+|rd+, lenHH
         Mdec = (Mdec+dect[0])/2; Ddec = (Ddec+dect[1])/2
         if lenHH == None:
             link.subH = SubH+subH  # concat higher derHvs
-        else:  # tentative: subH[rdHt][fd] + subH:
-            if link.subH[-1][fdcpr]: link.subH[-1][fdcpr][:] += [SubH + subH]  # call from rd+: rim_ and corresponding ssubH are fd-specific
-            else:                    link.subH[-1][fdcpr][:] = [SubH + subH]  # we need init here because one of the fork may empty
-                
+        # agg++:
+        elif lenHH:  # sub+
+            if link.subH[-1][fdcpr]: link.subH[-1][fdcpr][:] += [SubH + subH]
+            else:                    link.subH[-1][fdcpr][:] = [SubH + subH]  # each fb may be empty
+        else:  # base rd+
+            if link.subH[fdcpr]: link.subH[fdcpr][:] += [SubH + subH]
+            else:                link.subH[fdcpr][:] = [SubH + subH]  # each fb may be empty
+
     else:  # new link
         if lenHH == None:
             link.subH = SubH
-        else:  # unpacked:
+        else:  # agg++'sub+:
             if fdcpr: msubH_,dsubH_ = [], [SubH]
             else:     msubH_,dsubH_ = [SubH], []
-            link.subH = [Cmd(m=msubH_, d=dsubH_)] # rdHt
+            link.subH = [Cmd(m=msubH_,d=dsubH_)]  # summed rdHt
 
     link.Vt,link.Rt,link.Dt = Valt,Rdnt,Dect = [Mval,Dval],[Mrdn,Drdn],[Mdec,Ddec]  # reset per comp_G
 
@@ -357,6 +354,7 @@ def comp_G(link, Et, lenH=None, lenHH=None, fdcpr=0):  # lenH in sub+|rd+, lenHH
             # eval fork grapht in form_graph_t:
             Et[0][fd] += Val; Et[1][fd] += Rdn; Et[2][fd] += Dec
             append_rim(link, lenH, lenHH, Val,Rdn,Dec, fd)
+
 
 # draft
 def append_rim(link, lenH, lenHH, Val,Rdn,Dec, fd):  # fmin: call from base agg+
@@ -372,7 +370,6 @@ def append_rim(link, lenH, lenHH, Val,Rdn,Dec, fd):  # fmin: call from base agg+
                 # add link layer:
                 G.rim_t[1] = 2  # max depth in base agg+
                 if fd:
-                    # we need extra bracket here on top of [],[link] t pack each layer rimt
                     G.rim_t[0] = [[[],[link]]]; G.Vt=[0,Val]; G.Rt=[0,Rdn]; G.Dt=[0,Dec]
                 else:
                     G.rim_t[0] = [[[link],[]]]; G.Vt=[Val,0]; G.Rt=[Rdn,0]; G.Dt=[Dec,0]
@@ -391,8 +388,7 @@ def append_rim(link, lenH, lenHH, Val,Rdn,Dec, fd):  # fmin: call from base agg+
                     G.rim_t[-1][fd][-1] += [link]
             elif lenH:  # depth = 1
                 if len(G.rim_t[fd]) == lenH:  # init new link_ in rim_t[fd]
-                    # 'Cmd' object does not support item assignment (m or d is immutable, so we need extra [:] as below)
-                    G.rim_t[fd][:] += rim_t[fd]   
+                    G.rim_t[fd][:] += rim_t[fd]
                 else:  # accumulate link
                     G.rim_t[fd][-1] += [link]
             else:  # depth = 0, init rim_t

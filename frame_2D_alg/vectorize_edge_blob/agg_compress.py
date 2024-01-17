@@ -54,8 +54,7 @@ def agg_compress(rroot, root, node_, nrng=0, lenHH=0):  # compositional agg|sub 
     Et = [[0,0],[0,0],[0,0]]
     lenH = None  # no empty append lenHH[-1] = 0?
 
-    # nrng in this call must be > 1? In recursive call of agg_compress, nrng maybe 0 here
-    nrng = rd_recursion(rroot, root, node_, Et, (nrng or 1), lenH, lenHH)  # rng+, adds rim_ as rim_t[-1][0]
+    nrng = rd_recursion(rroot, root, node_, Et, nrng, lenH, lenHH)  # rng+, adds rim_ as rim_t[-1][0]
     if root.link_ and isinstance(root.link_[0], CderG):  # else CderP in edge before agg+
         rd_recursion(rroot, root, root.link_, Et, 0, lenH, lenHH)  # der+, adds link_, rim_ as rim_t[-1][1]
 
@@ -146,13 +145,10 @@ def form_graph_t_cpr(root, G_, Et, nrng, lenH=None, lenHH=None):  # form Gm_,Gd_
                     node_ = graph.node_  # flat in sub+
                     if lenH: lenH = len(node_[0].esubH[-lenH:])  # in agg_compress
                     else:    lenH = len(graph.aggH[-1][0])  # in agg_recursion
-                    nrng = 0 if fd else nrng+1
-                    # lenH above is not needed but we need lenHH + 1 instead?
-                    agg_compress(root, graph, node_, nrng, lenHH=(lenHH or 0) + 1) 
+                    agg_compress(root, graph, node_, nrng, lenH, lenHH)
                 else:
                     root.fback_t[root.fd] += [[graph.aggH, graph.valt, graph.rdnt, graph.dect]]
-                    # feedback is pending update
-                    # feedback(root,root.fd)  # update root.root..
+                    feedback(root,root.fd)  # update root.root..
             node_t += [graph_]  # may be empty
         else:
             node_t += [[]]
