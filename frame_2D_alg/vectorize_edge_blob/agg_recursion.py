@@ -224,7 +224,7 @@ def sum2graph(root, grapht, fd, nrng, lenH=None):  # sum node and link params in
     eH, valt,rdnt,dect, evalt,erdnt,edect = [], [0,0],[0,0],[0,0], [0,0],[0,0],[0,0]  # grapht int = node int+ext
     A0, A1, S = 0,0,0
     for G in G_:
-        sum_link_subHe(G, fd, lenH)
+        sum_link_subHe(G, fd, (lenH or 0 )+1)  # +1 to differentiate between rd+ and base agg
         graph.box += G.box
         graph.ptuple += G.ptuple
         sum_derH([graph.derH,[0,0],[1,1]], [G.derH,[0,0],[1,1]], base_rdn=1)
@@ -261,20 +261,36 @@ def sum_link_subHe(G, fd, lenH):  # lenH corresponds to len link subH in agg+ or
         lenHH = G.lenHH
         if lenHH:  # not None | 0
             if len(subH) > lenHH:  # was appended in last sub+ of agg++
-                subH = subH[-1][fd][-1]  # last rd+/ agg++'sub+
+                subH_ = subH[-1][fd]  # last rd+/ agg++'sub+
             else:
                 continue
-        if len(subH) > (lenH or 0):  # was appended in last xcomp, rd+ | base sub+
+        elif lenH: 
+            subH_ = subH[fd]  # base rd+
+        else:
+            subH_ = [subH]  # base agg
+
+        # we should check subH_ with lenH
+        if len(subH_) == (lenH or 0):  # was appended in last xcomp, rd+ | base sub+
+            subH = subH_[-1]  # last subH
+            
+            for subHev in subH:
+                if len(G.esubH) == len(subH_)-1:  # init new layer
+                    G.esubH += [deepcopy(subHev)]
+                else:  # accumulate
+                    sum_subHev(G.esubH[-1], subHev, base_rdn=link.Rt[fd]) 
+            
+            # below is not needed when we get a fixed subH structure from 3 different conditions above? 
+            '''
             if not isinstance(subH[0], CderH):
                 if not isinstance(subH[0][0], CderH):  # not CderH: subH must be rdH?
                     for ssubH in subH[-1]:
                         # extend to handle ext in sum_subHe?:
-                        sum_subHv(G.esubH[-1], ssubH, base_rdn=link.Rt[fd])  # sum all layers of rdH in esubH[-1]
+                        sum_subHev(G.esubH[-1], ssubH, base_rdn=link.Rt[fd])  # sum all layers of rdH in esubH[-1]
                 else:
-                    sum_subHv(G.esubH[-1], subH[-1], base_rdn=link.Rt[fd])  # single layer of agg+'sub+, no rd+
+                    sum_subHev(G.esubH[-1], subH[-1], base_rdn=link.Rt[fd])  # single layer of agg+'sub+, no rd+
             else:
-                sum_subHv(G.esubH[-1], subH, base_rdn=link.Rt[fd])  # single layer of agg+'sub+, no rd+
-
+                sum_subHev(G.esubH[-1], subH, base_rdn=link.Rt[fd])  # single layer of agg+'sub+, no rd+
+            '''
             G.evalt[fd] += link.Vt[fd]; G.erdnt[fd] += link.Rt[fd]; G.edect[fd] += link.Dt[fd]
     '''
     link subH is appended per xcomp of either fork, with fd represented in root, nesting:
@@ -345,7 +361,10 @@ def comp_G(link, Et, lenH=None, lenHH=None, fdcpr=0):  # lenH in sub+|rd+, lenHH
         else:  # agg++'sub+:
             if fdcpr: msubH_,dsubH_ = [], [SubH]
             else:     msubH_,dsubH_ = [SubH], []
-            link.subH = [Cmd(m=msubH_,d=dsubH_)]  # summed rdHt
+            if lenHH:  # sub+
+                link.subH = [Cmd(m=msubH_,d=dsubH_)]  # summed rdHt
+            else:  # base rd+
+                link.subH = Cmd(m=msubH_,d=dsubH_)  # summed rdHt
 
     link.Vt,link.Rt,link.Dt = Valt,Rdnt,Dect = [Mval,Dval],[Mrdn,Drdn],[Mdec,Ddec]  # reset per comp_G
 
@@ -382,7 +401,8 @@ def append_rim(link, lenH, lenHH, Val,Rdn,Dec, fd):  # fmin: call from base agg+
             else:
                  rim_t = Cmd(m=[[link]], d=[[]]); G.Vt=[Val,0]; G.Rt=[Rdn,0]; G.Dt=[Dec,0]
             if lenHH:  # depth = 2
-                if len(G.rim_t[-1][fd]) == lenH:  # # init new link_ in rim_t[fd]
+                # may empty across fork - when fdcpr is not the same with fd
+                if (not G.rim_t[-1][fd]) or len(G.rim_t[-1][fd]) == (lenH or 0):  # # init new link_ in rim_t[fd]
                     G.rim_t[-1][fd][:] += rim_t[fd]
                 else:  # accumulate link
                     G.rim_t[-1][fd][-1] += [link]
@@ -422,10 +442,10 @@ def comp_subHv(_subH, subH, rn):
 
     for _lay, lay in zip(_subH, subH):  # compare common lower layer|sublayer derHs, if prior match?
 
-        dderH, valt,rdnt,dect = comp_derHv(_lay[0],lay[0], rn)  # derHv: [derH, valt, rdnt, dect, extt, 1]:
+        dsubHe, valt,rdnt,dect = comp_subHev(_lay[0],lay[0], rn)  # derHv: [derH, valt, rdnt, dect, extt, 1]:
         dextt = [comp_ext(_ext,ext,[Mval,Dval],[Mrdn,Drdn],[Mdec,Ddec]) for _ext,ext in zip(_lay[-2],lay[-2])]
 
-        dsubH += [[dderH, valt,rdnt,dect,dextt, 1]]  # flat
+        dsubH += [[dsubHe, valt,rdnt,dect,dextt, 1]]  # flat
         Mdec += dect[0]; Ddec += dect[1]
         mval,dval = valt; Mval += mval; Dval += dval
         Mrdn += rdnt[0] + dval > mval; Drdn += rdnt[1] + dval <= mval
@@ -435,10 +455,10 @@ def comp_subHv(_subH, subH, rn):
     return dsubH, [Mval,Dval],[Mrdn,Drdn],[Mdec,Ddec]  # new layer,= 1/2 combined derH
 
 
-def comp_derHv(_derH, derH, rn):  # derH is a list of der layers or sub-layers, each is ptuple_tv
+def comp_subHev(_derH, derH, rn):  # derH is a list of der layers or sub-layers, each is ptuple_tv
 
     Mval,Dval, Mrdn,Drdn, Mdec,Ddec = 0,0,1,1,0,0
-    dderH =[]
+    dsubHe =[]
 
     for _lay, lay in zip(_derH,derH):
         # comp dtuples, eval mtuples:
@@ -451,14 +471,14 @@ def comp_derHv(_derH, derH, rn):  # derH is a list of der layers or sub-layers, 
                 if fd: dect[fd] += par/max if max else 1
                 else:  dect[fd] += (par+ave)/(max) if max else 1
         dect[0]/=6; dect[1]/=6
-        dderH += [[[mtuple,dtuple], [mval,dval],[mrdn,drdn],dect, 0]]
+        dsubHe += [[[mtuple,dtuple], [mval,dval],[mrdn,drdn],dect, 0]]
         Mval+=mval; Dval+=dval; Mrdn+=mrdn; Drdn+=drdn
         Mdec+=dect[0]; Ddec+=dect[1]
 
-    if dderH:
+    if dsubHe:
         S = min(len(_derH),len(derH)); Mdec /= S; Ddec /= S  # normalize
 
-    return dderH, [Mval,Dval],[Mrdn,Drdn],[Mdec,Ddec]  # new derLayer,= 1/2 combined derH
+    return dsubHe, [Mval,Dval],[Mrdn,Drdn],[Mdec,Ddec]  # new derLayer,= 1/2 combined derH
 
 
 def sum_aggHv(AggH, aggH, base_rdn):
@@ -480,29 +500,29 @@ def sum_subHv(T, t, base_rdn, fneg=0):
                 Valt[i] += valt[i]; Rdnt[i] += rdnt[i]+base_rdn; Dect[i] = (Dect[i]+dect[i])/2
             if SubH:
                 for Layer, layer in zip_longest(SubH,subH, fillvalue=[]):
-                    sum_derHv(Layer, layer, base_rdn, fneg)  # _lay[0][0] is mL
+                    sum_subHev(Layer, layer, base_rdn, fneg)  # _lay[0][0] is mL
             else:
                 SubH[:] = deepcopy(subH)
         else:
             T[:] = deepcopy(t)
 
 
-def sum_derHv(T,t, base_rdn, fneg=0):  # derH is a list of layers or sub-layers, each = [mtuple,dtuple, mval,dval, mrdn,drdn]
+def sum_subHev(T,t, base_rdn, fneg=0):  # derH is a list of layers or sub-layers, each = [mtuple,dtuple, mval,dval, mrdn,drdn]
 
     if t:
         if T:
-            DerH, Valt, Rdnt, Dect, Extt_,_ = T
-            derH, valt, rdnt, dect, extt_,_ = t
+            SubHe, Valt, Rdnt, Dect, Extt_,_ = T
+            subHe, valt, rdnt, dect, extt_,_ = t
             for Extt, extt in zip(Extt_,extt_):
                 sum_ext(Extt, extt)
             for i in 0,1:
                 Valt[i] += valt[i]; Rdnt[i] += rdnt[i]+base_rdn; Dect[i] = (Dect[i] + dect[i])/2
-            DerH[:] = [
+            SubHe[:] = [
                 [[sum_dertuple(Dertuple,dertuple, fneg*i) for i,(Dertuple,dertuple) in enumerate(zip(Tuplet,tuplet))],
                   [V+v for V,v in zip(Valt,valt)], [R+r+base_rdn for R,r in zip(Rdnt,rdnt)], [(D+d)/2 for D,d in zip(Dect,dect)], 0
                 ]
                 for [Tuplet,Valt,Rdnt,Dect,_], [tuplet,valt,rdnt,dect,_]  # ptuple_tv
-                in zip_longest(DerH, derH, fillvalue=[([0,0,0,0,0,0],[0,0,0,0,0,0]), (0,0),(0,0),(0,0),0])
+                in zip_longest(SubHe, subHe, fillvalue=[([0,0,0,0,0,0],[0,0,0,0,0,0]), (0,0),(0,0),(0,0),0])
             ]
 
         else:

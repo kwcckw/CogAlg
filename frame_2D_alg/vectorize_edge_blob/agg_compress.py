@@ -2,11 +2,11 @@ import numpy as np
 from copy import deepcopy, copy
 from itertools import zip_longest, combinations
 from collections import deque, defaultdict
-from .classes import Cgraph, CderG
+from .classes import Cgraph, CderG, Cmd
 from .filters import ave_dangle, ave, ave_distance, G_aves, ave_Gm, ave_Gd, ave_dI
 from .slice_edge import slice_edge, comp_angle
 from .comp_slice import comp_P_, comp_ptuple, comp_derH, sum_derH, sum_dertuple, get_match
-from .agg_recursion import unpack_rim, node_connect, segment_node_, comp_G, comp_aggHv, comp_derHv, sum_derHv, sum_ext, sum_subHv, sum_aggHv
+from .agg_recursion import unpack_rim, node_connect, segment_node_, comp_G, comp_aggHv, comp_subHev, sum_subHev, sum_ext, sum_subHv, sum_aggHv
 
 '''
 Implement sparse param tree in aggH: new graphs represent only high m|d params + their root params.
@@ -95,6 +95,7 @@ def rd_recursion(rroot, root, Q, Et, nrng=1, lenH=None, lenHH=None):  # rng,der 
         G_ = []
         for link in Q:  # inp_= root.link_, reform links
             if link.Vt[1] > G_aves[1]*link.Rt[1]:  # >rdn incr
+                if isinstance(link.subH, Cmd): link.subH = [link.subH]  # add first lenHH nesting   
                 comp_G(link, Et, lenH, lenHH,  fdcpr=1)
                 if link.G not in G_: G_ += [link.G]
                 if link._G not in G_: G_ += [link._G]
@@ -119,7 +120,18 @@ def rd_recursion(rroot, root, Q, Et, nrng=1, lenH=None, lenHH=None):  # rng,der 
                     if len(link.subH[0][-1]) > (lenH or 0):  # link.subH was appended in this rd cycle
                         link_ += [link]  # for next rd cycle
 
-        rd_recursion(rroot, root, link_ if fd else G_, Et, 0 if fd else nrng+1, (lenH or 0)+1, lenHH)
+        else:  
+            # pruned G_ so that G_ without any new rim_t will be removed, otherwise their rim_t and lenH will not be matched either
+            pruned_G_ = []
+            for G in G_:
+                if G.rim_t:
+                    rim_t = G.rim_t
+                    if lenHH: 
+                        rim_t = rim_t[-1]  # agg++
+                    if len(rim_t[fd]) > (lenH or 0):
+                        pruned_G_ += [G]
+
+        rd_recursion(rroot, root, link_ if fd else pruned_G_, Et, 0 if fd else nrng+1, (lenH or 0)+1, lenHH)
 
     return nrng
 
@@ -143,12 +155,14 @@ def form_graph_t_cpr(root, G_, Et, nrng, lenH=None, lenHH=None):  # form Gm_,Gd_
                 # eval sub+ per node
                 if graph.Vt[fd] * (len(graph.node_)-1)*root.rng > G_aves[fd] * graph.Rt[fd]:
                     node_ = graph.node_  # flat in sub+
-                    if lenH: lenH = len(node_[0].esubH[-lenH:])  # in agg_compress
-                    else:    lenH = len(graph.aggH[-1][0])  # in agg_recursion
-                    agg_compress(root, graph, node_, nrng, lenH, lenHH)
+                    for node in node_: 
+                        if (node.lenHH == None):  node.rim_t = [node.rim_t]  # we need this 1st conversion for lenHH >0
+                        node.rim_t += [Cmd(m=[], d=[])]  # init for next depth 
+                        node.lenHH = (node.lenHH or 0)+1  # increase lenHH here?
+                    agg_compress(root, graph, node_, nrng, node.lenHH)
                 else:
                     root.fback_t[root.fd] += [[graph.aggH, graph.valt, graph.rdnt, graph.dect]]
-                    feedback(root,root.fd)  # update root.root..
+                    # feedback(root,root.fd)  # update root.root..
             node_t += [graph_]  # may be empty
         else:
             node_t += [[]]
