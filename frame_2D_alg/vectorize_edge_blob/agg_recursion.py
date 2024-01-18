@@ -302,7 +302,7 @@ def comp_G(link, Et, lenH=None, lenHH=None, fdcpr=0):  # lenH in sub+|rd+, lenHH
             # compute link decay coef: par/ max(self/same)
             if fd: dect[fd] += par/max if max else 1
             else:  dect[fd] += (par+ave)/ max if max else 1
-    derLay0 = [[mtuple,dtuple],[mval,dval],[mrdn,drdn],[dect[0]/6,dect[1]/6], 0]  # ave of 6 params
+    derLay0 = [CderH([Cmd(m=mtuple,d=dtuple)]),[mval,dval],[mrdn,drdn],[dect[0]/6,dect[1]/6], 0]  # ave of 6 params
     Mval+=mval; Dval+=dval; Mrdn+=mrdn; Drdn+=drdn; Mdec+=dect[0]/6; Ddec+=dect[1]/6
 
     # / PP:
@@ -320,16 +320,26 @@ def comp_G(link, Et, lenH=None, lenHH=None, fdcpr=0):  # lenH in sub+|rd+, lenHH
                     else:  mdec += (par+ave)/(max) if max else 1
             mdec /= 6; ddec /= 6
             Mval+=dval; Dval+=mval; Mdec=(Mdec+mdec)/2; Ddec=(Ddec+ddec)/2
-            dderH += [[[mtuple,dtuple], [mval,dval],[mrdn,drdn],[mdec,ddec], 0]]
+            dderH += [[CderH([Cmd(m=mtuple,d=dtuple)]), [mval,dval],[mrdn,drdn],[mdec,ddec], 0]]
+
+        der_ext = comp_ext([_G.L,_G.S,_G.A],[G.L,G.S,G.A], [Mval,Dval],[Mrdn,Drdn],[Mdec,Ddec])
+        derHv = [[derLay0]+dderH, [Mval,Dval],[Mrdn,Drdn],[Mdec,Ddec], der_ext, 1]  # appendleft derLay0 from comp_ptuple
+        SubH = [derHv]  # init layers of SubH, higher layers added by comp_aggH:
     else:
-        dderH = []
-    der_ext = comp_ext([_G.L,_G.S,_G.A],[G.L,G.S,G.A], [Mval,Dval],[Mrdn,Drdn],[Mdec,Ddec])
-    derHv = [[derLay0]+dderH, [Mval,Dval],[Mrdn,Drdn],[Mdec,Ddec], der_ext, 1]  # appendleft derLay0 from comp_ptuple
-    SubH = [derHv]  # init layers of SubH, higher layers added by comp_aggH:
+        der_ext = comp_ext([_G.L,_G.S,_G.A],[G.L,G.S,G.A], [Mval,Dval],[Mrdn,Drdn],[Mdec,Ddec])
+        derLay0.insert(4, der_ext)  # pack der_ext into derLay0
+        SubH = [derLay0]
+
+    if lenHH == None:
+        link.subH = SubH
+    else:  # agg++'sub+:
+        if fdcpr: msubH_,dsubH_ = [], [SubH]
+        else:     msubH_,dsubH_ = [SubH], []
+        link.subH = [Cmd(m=msubH_,d=dsubH_)]  # summed rdHt
 
     # / G:
     if link.subH:  # old link: not empty aggH
-        subH, valt,rdnt,dect = comp_aggHv(_G.aggH, G.aggH, rn=1)
+        subH, valt,rdnt,dect = comp_aggHv(_G.aggH, G.aggH, rn=1, fdcpr=fdcpr)
         mval,dval = valt; Mval+=dval; Dval+=mval
         Mrdn += rdnt[0]+dval>mval; Drdn += rdnt[1]+dval<=mval
         Mdec = (Mdec+dect[0])/2; Ddec = (Ddec+dect[1])/2
@@ -401,14 +411,14 @@ def append_rim(link, lenH, lenHH, Val,Rdn,Dec, fd):  # fmin: call from base agg+
             G.Vt[fd] += Val; G.Rt[fd] += Rdn; G.Dt[fd] += Dec
 
 
-def comp_aggHv(_aggH, aggH, rn):  # no separate ext
+def comp_aggHv(_aggH, aggH, rn, fdcpr):  # no separate ext
 
     Mval,Dval, Mrdn,Drdn, Mdec,Ddec = 0,0,1,1,0,0
     SubH = []
 
     for _lev, lev in zip(_aggH, aggH):  # compare common subHs, if lower-der match?
         if _lev and lev:
-            dsubH, valt,rdnt,dect = comp_subHv(_lev[0],lev[0], rn)
+            dsubH, valt,rdnt,dect = comp_subHv(_lev[0],lev[0], rn, fdcpr)
             SubH += dsubH  # concat
             Mdec += dect[0]; Ddec += dect[1]
             mval,dval = valt; Mval += mval; Dval += dval
@@ -418,18 +428,30 @@ def comp_aggHv(_aggH, aggH, rn):  # no separate ext
 
     return SubH, [Mval,Dval],[Mrdn,Drdn],[Mdec,Ddec]
 
-# pending update on subHv_t
-def comp_subHv(_subH, subH, rn):
+
+def comp_subHv(_subH, subH, rn, fdcpr):
 
     Mval,Dval, Mrdn,Drdn, Mdec,Ddec = 0,0,1,1,0,0
     dsubH =[]
 
+    if isinstance(_subH,Cmd):  # base rd+
+        _subH, subH = _subH[fdcpr][-1], subH[fdcpr][-1]  # last subH from subH_?
+    elif _subH and isinstance(_subH[-1],Cmd):  # sub+
+        _subH, subH = _subH[-1][fdcpr][-1], subH[-1][fdcpr][-1]  # last subH from subH_?
+
     for _lay, lay in zip(_subH, subH):  # compare common lower layer|sublayer derHs, if prior match?
 
-        dderH, valt,rdnt,dect = comp_derHv(_lay[0],lay[0], rn)  # derHv: [derH, valt, rdnt, dect, extt, 1]:
-        dextt = [comp_ext(_ext,ext,[Mval,Dval],[Mrdn,Drdn],[Mdec,Ddec]) for _ext,ext in zip(_lay[-2],lay[-2])]
-
-        dsubH += [[dderH, valt,rdnt,dect,dextt, 1]]  # flat
+        if _lay[0] and lay[0]:
+            if isinstance(_lay[0][0], CderH):  # when G.derH is empty, lay[0] is CderH      
+                mtuple, dtuple, valt, rdnt, dect = comp_dtuplev(_lay[0][0].d, lay[0][0].d, rn)
+                dextt = [comp_ext(_ext,ext,[Mval,Dval],[Mrdn,Drdn],[Mdec,Ddec]) for _ext,ext in zip(_lay[-2],lay[-2])]
+                dsubH += [[CderH([Cmd(m=mtuple,d=dtuple)]),valt,rdnt,dect,dextt,0]]  # flat
+    
+            else:  # base agg, lay is derHv
+                dderH, valt,rdnt,dect = comp_derHv(_lay[0],lay[0], rn)  # derHv: [derH, valt, rdnt, dect, extt, 1]:
+                dextt = [comp_ext(_ext,ext,[Mval,Dval],[Mrdn,Drdn],[Mdec,Ddec]) for _ext,ext in zip(_lay[-2],lay[-2])]
+                dsubH += [[dderH, valt,rdnt,dect,dextt, 1]]  # flat
+                
         Mdec += dect[0]; Ddec += dect[1]
         mval,dval = valt; Mval += mval; Dval += dval
         Mrdn += rdnt[0] + dval > mval; Drdn += rdnt[1] + dval <= mval
@@ -446,17 +468,9 @@ def comp_derHv(_derH, derH, rn):  # derH is a list of der layers or sub-layers, 
 
     for _lay, lay in zip(_derH,derH):
         # comp dtuples, eval mtuples:
-        mtuple,dtuple, Mtuple,Dtuple = comp_dtuple(_lay[0][1], lay[0][1], rn, fagg=1)
-        mval = sum(mtuple); dval = sum(abs(d) for d in dtuple)
-        mrdn = dval > mval; drdn = dval < mval
-        dect = [0,0]
-        for fd, (ptuple,Ptuple) in enumerate(zip((mtuple,dtuple),(Mtuple,Dtuple))):
-            for (par, max, ave) in zip(ptuple, Ptuple, aves):  # different ave for comp_dtuple
-                if fd: dect[fd] += par/max if max else 1
-                else:  dect[fd] += (par+ave)/(max) if max else 1
-        dect[0]/=6; dect[1]/=6
-        dderH += [[[mtuple,dtuple], [mval,dval],[mrdn,drdn],dect, 0]]
-        Mval+=mval; Dval+=dval; Mrdn+=mrdn; Drdn+=drdn
+        [mtuple, dtuple], valt, rdnt, dect = comp_dtuplev(_lay[0][-1][1], lay[0][-1][1], rn)  # derH is a list contains cmd, added [-1] to select last cmd
+        dderH += [[CderH([Cmd(m=mtuple,d=dtuple)]), valt,rdnt,dect, 0]]
+        Mval+=valt[0]; Dval+=valt[1]; Mrdn+=rdnt[0]; Drdn+=rdnt[1]
         Mdec+=dect[0]; Ddec+=dect[1]
 
     if dderH:
@@ -464,6 +478,19 @@ def comp_derHv(_derH, derH, rn):  # derH is a list of der layers or sub-layers, 
 
     return dderH, [Mval,Dval],[Mrdn,Drdn],[Mdec,Ddec]  # new derLayer,= 1/2 combined derH
 
+def comp_dtuplev(_dtuple, dtuple, rn):
+
+    mtuple,dtuple, Mtuple,Dtuple = comp_dtuple(_dtuple, dtuple, rn, fagg=1)
+    mval = sum(mtuple); dval = sum(abs(d) for d in dtuple)
+    mrdn = dval > mval; drdn = dval < mval
+    dect = [0,0]
+    for fd, (ptuple,Ptuple) in enumerate(zip((mtuple,dtuple),(Mtuple,Dtuple))):
+        for (par, max, ave) in zip(ptuple, Ptuple, aves):  # different ave for comp_dtuple
+            if fd: dect[fd] += par/max if max else 1
+            else:  dect[fd] += (par+ave)/(max) if max else 1
+    dect[0]/=6; dect[1]/=6
+
+    return [mtuple, dtuple], [mval, dval], [mrdn, drdn], dect
 
 def sum_aggHv(AggH, aggH, base_rdn):
 

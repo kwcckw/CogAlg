@@ -6,7 +6,7 @@ from .classes import Cgraph, CderG, Cmd
 from .filters import ave_dangle, ave, ave_distance, G_aves, ave_Gm, ave_Gd, ave_dI
 from .slice_edge import slice_edge, comp_angle
 from .comp_slice import comp_P_, comp_ptuple, comp_derH, sum_derH, sum_dertuple, get_match
-from .agg_recursion import unpack_rim, node_connect, segment_node_, comp_G, comp_aggHv, comp_subHev, sum_subHev, sum_ext, sum_subHv, sum_aggHv
+from .agg_recursion import unpack_rim, node_connect, segment_node_, comp_G, comp_aggHv, comp_derHv, sum_derHv, sum_ext, sum_subHv, sum_aggHv
 
 '''
 Implement sparse param tree in aggH: new graphs represent only high m|d params + their root params.
