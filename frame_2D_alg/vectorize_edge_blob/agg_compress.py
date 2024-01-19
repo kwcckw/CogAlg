@@ -102,6 +102,7 @@ def rd_recursion(rroot, root, Q, Et, nrng=1, lenH=None, lenHH=None):  # rng,der 
     else:  # rng+
         G_ = Q
         for _G, G in combinations(G_, r=2):  # form new link_ from original node_
+            _G.lenHH = lenHH; G.lenHH = lenHH  # update their lenHH here? 
             dy = _G.box.cy - G.box.cy; dx = _G.box.cx - G.box.cx
             dist = np.hypot(dy, dx)
             # max distance between node centers, init=2
