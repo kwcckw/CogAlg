@@ -158,7 +158,7 @@ def form_graph_t_cpr(root, G_, Et, nrng, lenH=None, lenHH=None):  # form Gm_,Gd_
                     node_ = graph.node_  # flat in sub+
                     for node in node_: 
                         if (node.lenHH == None):  node.rim_t = [node.rim_t]  # we need this 1st conversion for lenHH >0
-                        node.rim_t += [Cmd(m=[], d=[])]  # init for next depth 
+                        node.rim_t += [[[[]],[[]]]]  # init for next depth 
                         node.lenHH = (node.lenHH or 0)+1  # increase lenHH here?
                     agg_compress(root, graph, node_, nrng, node.lenHH)
                 else:

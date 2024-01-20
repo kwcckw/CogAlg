@@ -196,7 +196,7 @@ lay4: [[m,d], [md,dd], [[md1,dd1],[mdd,ddd]]]: 3 sLays, <=2 ssLays
 
 
 class Cgraph(CBase):  # params of single-fork node_ cluster per pplayers
-
+    # change back valt, rdnt and dect to list?
     fd: int = 0  # fork if flat layers?
     ptuple: Cptuple = z(Cptuple())  # default P
     derH: CderH = z(CderH())  # from PP, not derHv

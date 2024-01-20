@@ -86,7 +86,7 @@ def form_graph_t(root, G_, Et, nrng, lenH=0, lenHH=None):  # form Gm_,Gd_ from s
     # select Gs connected in current layer:
     _G_ = [G for G in G_ if len(G.rim_t[0])>len(root.rim_t[0])]
 
-    node_connect(_G_, lenHH!=None)  # Graph Convolution of Correlations over init _G_
+    node_connect(_G_, lenHH)  # Graph Convolution of Correlations over init _G_
     node_t = []
     for fd in 0,1:
         if Et[0][fd] > ave * Et[1][fd]:  # eValt > ave * eRdnt: cluster
@@ -108,12 +108,13 @@ def form_graph_t(root, G_, Et, nrng, lenH=0, lenHH=None):  # form Gm_,Gd_ from s
         G_[:] = node_t  # else keep root.node_
 
 
-def node_connect(_G_, frd):  # node connectivity = sum surround link vals, incr.mediated: Graph Convolution of Correlations
+def node_connect(_G_, lenHH):  # node connectivity = sum surround link vals, incr.mediated: Graph Convolution of Correlations
     '''
     Aggregate direct * indirect connectivity per node from indirect links via associated nodes, in multiple cycles.
     Each cycle adds contributions of previous cycles to linked-nodes connectivity, propagated through the network.
     Math: https://github.com/boris-kz/CogAlg/blob/master/frame_2D_alg/Illustrations/node_connect.png
     '''
+    frd = lenHH != None
     while True:
         # eval accumulated G connectivity vals, indirectly extending their range
         G_ = []  # next connectivity expansion, more selective by DVt,Lent = [0,0],[0,0]?
@@ -122,7 +123,7 @@ def node_connect(_G_, frd):  # node connectivity = sum surround link vals, incr.
             for i in 0,1:
                 val,rdn,dec = G.Vt[i],G.Rt[i],G.Dt[i]  # connect by last layer
                 ave = G_aves[i]
-                for link in unpack_rim(G.rim_t, i):
+                for link in unpack_rim(G.rim_t, i, lenHH):
                     # >ave derG in fd rim
                     lval,lrdn,ldec = link.Vt[i],link.Rt[i],link.Dt[i]
                     _G = link._G if link.G is G else link.G
@@ -139,7 +140,7 @@ def node_connect(_G_, frd):  # node connectivity = sum surround link vals, incr.
                         G.evalt[i] += dv; G.erdnt[i] += dr; G.edect[i] += dd
             if any(uprimt):  # prune rim for next loop
                 if frd:
-                    for i in 0, 1: unpack_rim(G.rim_t,i)[:] = uprimt[i]
+                    for i in 0, 1: unpack_rim(G.rim_t,i,lenHH)[:] = uprimt[i]
                 else: G.rim_t[:] = uprimt
                 G_ += [G]
         if G_: _G_ = G_  # exclude weakly incremented Gs from next connectivity expansion loop
@@ -156,8 +157,8 @@ def unpack_rim(rim_t, fd, lenHH):
     if rim_depth == 4:
         rim = rim_t[-1][fd][-1]  # in rim_tH
     elif rim_depth == 3:
-        if lenHH==0: rim = rim_t[-1][fd]  # in rim_t
-        else:        rim = rim_t[fd][-1]  # in rimtH, lenHH==None
+        if lenHH!=None: rim = rim_t[fd][-1]  # in rimtH, lenHH!=None  (these 2 are inverted?)
+        else:           rim = rim_t[-1][fd]  # in rim_t
     elif rim_depth == 2:
         rim = rim_t[fd]  # in rimt
     else:
@@ -167,7 +168,7 @@ def unpack_rim(rim_t, fd, lenHH):
 
 def get_depth(rim_t):  # https://stackoverflow.com/questions/6039103/counting-depth-or-the-deepest-level-a-nested-list-goes-to
 
-    return (max(map(get_depth, rim_t))+1 if rim_t else 0) if isinstance(rim_t, list) else -1
+    return (max(map(get_depth, rim_t))+1 if rim_t else 1) if isinstance(rim_t, list) else 0
 
 
 def segment_node_(root, root_G_, fd, nrng, lenH=0, lenHH=None):  # eval rim links with summed surround vals for density-based clustering
@@ -270,22 +271,30 @@ def sum_links_llay(G, fd, lenH):  # esubLay += last_lay/ link, lenH corresponds 
 
     for link in unpack_rim(G.rim_t, fd, lenHH):  # rim
         subH = link.subH
-        derH_depth = get_depth(subH) - 3  # -3: dertvH ( dertv ( dert?
+        # derH_depth = get_depth(subH) # - 3  # -3: dertvH ( dertv ( dert? 
+        
+        # depth 1: derH, 2: subH | fdH, 3: rdHt, 4: subH(rdHt):
+        # derH_depth is much more larger (with subHv, subH, derHv, derH, ptupletn ptuple..), why not just use G.rim_t's depth?
+        G_depth = get_depth(G.rim_t)
+        # we need unpack subH first before the eval of (len(subH) <= L below) ?
+        if lenHH != None or G_depth > 2:  # sum rdH
+            if G_depth == 4:
+                subH = subH[-1][fd][-1]
+            elif G_depth == 3:
+                subH = subH[fd][-1]
+            elif G_depth == 2:
+                subH = subH[fd]
+
         L = lenHH if lenHH != None else lenH
         if len(subH) <= L:
             continue  # was not appended in last sub+ of agg++
 
-        # depth 1: derH, 2: subH | fdH, 3: rdHt, 4: subH(rdHt):
-        if derH_depth == 2 and lenHH != None or derH_depth > 2:  # sum rdH
-            if   derH_depth == 2: subH = subH[fd]
-            elif derH_depth == 3: subH = subH[fd][-1]
-            elif derH_depth == 4: subH = subH[-1][fd][-1]
-
-            for derH in subH[len(subH) / 2:]:  # derH_/ last xcomp: len subH *= 2
-                sum_derHv(esubLay, derH, base_rdn=link.Rt[fd])  # sum all derHs of link layer=rdH into esubH[-1]
-
-        elif derH_depth == 2: sum_derHv(esubLay, subH[-1], base_rdn=link.Rt[fd])  # single layer of agg+'sub+, no rd+
-        elif derH_depth == 1: sum_derHv(esubLay, subH, base_rdn=link.Rt[fd])  # single layer of agg+'sub+, no rd+
+        if lenHH != None or G_depth > 2:
+            for derH in subH[int(len(subH) / 2):]:  # derH_/ last xcomp: len subH *= 2
+                sum_derHv(esubLay, derH, base_rdn=link.Rt[fd])  # sum all derHs of link layer=rdH into esubH[-1]  
+        else:
+            # G_depth of 2 and 1 should be the same? SubH should be a list of derHvs, why they are seprated?
+            sum_derHv(esubLay, subH[-1], base_rdn=link.Rt[fd])  # single layer of agg+'sub+, no rd+
 
         G.evalt[fd] += link.Vt[fd]; G.erdnt[fd] += link.Rt[fd]; G.edect[fd] += link.Dt[fd]
     G.esubH += [esubLay]
@@ -333,7 +342,7 @@ def comp_G(link, Et, lenH=0, lenHH=None, fdcpr=0):  # lenH in sub+|rd+, lenHH in
             dderH += [[[mtuple,dtuple], [mval,dval],[mrdn,drdn],[mdec,ddec]]]
 
     der_ext = comp_ext([_G.L,_G.S,_G.A],[G.L,G.S,G.A], [Mval,Dval],[Mrdn,Drdn],[Mdec,Ddec])
-    SubH = [[dertv] + dderH + [der_ext]]
+    SubH = [[dertv] + dderH + [der_ext]]  # why this der_ext is added twice? here and SubH below
 
     # / G:
 
