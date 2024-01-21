@@ -86,7 +86,7 @@ def agg_compress(rroot, root, node_, nrng=0, lenHH=0):  # compositional agg|sub 
     return GGG_t  # should be tree nesting lower forks
 
 # draft:
-def rd_recursion(rroot, root, Q, Et, nrng=1, lenH=None, lenHH=None):  # rng,der incr over same G_,link_ -> fork tree, represented in rim_t
+def rd_recursion(rroot, root, Q, Et, nrng=1, lenH=0, lenHH=0):  # rng,der incr over same G_,link_ -> fork tree, represented in rim_t
 
     fd = not nrng; link_ = []; ave = G_aves[fd]  # this ave can be rmeoved now?
     et = [[0,0],[0,0],[0,0]]  # grapht link_' eValt, eRdnt, eDect(currently not used)
@@ -95,14 +95,14 @@ def rd_recursion(rroot, root, Q, Et, nrng=1, lenH=None, lenHH=None):  # rng,der 
         G_ = []
         for link in Q:  # inp_= root.link_, reform links
             if link.Vt[1] > G_aves[1]*link.Rt[1]:  # >rdn incr
-                if isinstance(link.subH, Cmd): link.subH = [link.subH]  # add first lenHH nesting   
+                if isinstance(link.subH, Cmd): link.subH = [link.subH]  # add first lenHH nesting
                 comp_G(link, Et, lenH, lenHH,  fdcpr=1)
                 if link.G not in G_: G_ += [link.G]
                 if link._G not in G_: G_ += [link._G]
     else:  # rng+
         G_ = Q
         for _G, G in combinations(G_, r=2):  # form new link_ from original node_
-            _G.lenHH = lenHH; G.lenHH = lenHH  # update their lenHH here? 
+            _G.lenHH = lenHH; G.lenHH = lenHH  # update their lenHH here?
             dy = _G.box.cy - G.box.cy; dx = _G.box.cx - G.box.cx
             dist = np.hypot(dy, dx)
             # max distance between node centers, init=2
@@ -117,20 +117,17 @@ def rd_recursion(rroot, root, Q, Et, nrng=1, lenH=None, lenHH=None):  # rng,der 
                 Part[i] += par
         if fd:
             for G in G_:
-                for link in unpack_rim(G.rim_t, fd):
+                for link in unpack_rim(G.rim_t, fd, lenHH):
                     if len(link.subH[0][-1]) > (lenH or 0):  # link.subH was appended in this rd cycle
                         link_ += [link]  # for next rd cycle
-
-        else:  
-            # pruned G_ so that G_ without any new rim_t will be removed, otherwise their rim_t and lenH will not be matched either
+        else:
             pruned_G_ = []
             for G in G_:
                 if G.rim_t:
                     rim_t = G.rim_t
-                    if lenHH: 
-                        rim_t = rim_t[-1]  # agg++
-                    if len(rim_t[fd]) > (lenH or 0):
-                        pruned_G_ += [G]
+                    if lenHH: rim_t = rim_t[-1]  # agg++
+                    if len(rim_t[fd]) > lenH:
+                        pruned_G_ += [G]  # remove if empty rim_t
 
         rd_recursion(rroot, root, link_ if fd else pruned_G_, Et, 0 if fd else nrng+1, (lenH or 0)+1, lenHH)
 
@@ -156,9 +153,9 @@ def form_graph_t_cpr(root, G_, Et, nrng, lenH=None, lenHH=None):  # form Gm_,Gd_
                 # eval sub+ per node
                 if graph.Vt[fd] * (len(graph.node_)-1)*root.rng > G_aves[fd] * graph.Rt[fd]:
                     node_ = graph.node_  # flat in sub+
-                    for node in node_: 
+                    for node in node_:
                         if (node.lenHH == None):  node.rim_t = [node.rim_t]  # we need this 1st conversion for lenHH >0
-                        node.rim_t += [[[[]],[[]]]]  # init for next depth 
+                        node.rim_t += [[[[]],[[]]]]  # init for next depth
                         node.lenHH = (node.lenHH or 0)+1  # increase lenHH here?
                     agg_compress(root, graph, node_, nrng, node.lenHH)
                 else:
