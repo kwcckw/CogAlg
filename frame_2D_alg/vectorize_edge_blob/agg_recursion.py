@@ -273,7 +273,7 @@ def sum_links_last_lay(G, fd, lenH):  # esubLay += last_lay/ link, lenH correspo
         subH = link.subH
         subH_depth = get_depth(G.rim_t)  # same nesting in link.subH
         frdH = 0
-        if lenHH != None or subH_depth > 2:
+        if subH_depth > 2:
             frdH = 1 # sum rdH
             if   subH_depth==4: subH = subH[-1][fd][-1]
             elif subH_depth==3: subH = subH[fd][-1]
@@ -282,8 +282,11 @@ def sum_links_last_lay(G, fd, lenH):  # esubLay += last_lay/ link, lenH correspo
         if len(subH) <= L:
             continue  # was not appended in last sub+ of agg++
         if frdH:
-            for derH in subH[int(len(subH) / 2):]:  # derH_/ last xcomp: len subH *= 2
-                sum_derHv(esubLay, derH, base_rdn=link.Rt[fd])  # sum all derHs of link layer=rdH into esubH[-1]
+            if len(subH) == 5:  # subH[0] is derHs, when G.aggH is empty
+            sum_derHv(esubLay, subH, base_rdn=link.Rt[fd])
+            else:
+                for derH in subH[0][int(len(subH) / 2):]:  # derH_/ last xcomp: len subH *= 2
+                    sum_derHv(esubLay, derH, base_rdn=link.Rt[fd])  # sum all derHs of link layer=rdH into esubH[-1]
 
         elif subH_depth == 2: sum_derHv(esubLay, subH[-1], base_rdn=link.Rt[fd])  # single layer of agg+'sub+, no rd+
         elif subH_depth == 1: sum_derHv(esubLay, subH, base_rdn=link.Rt[fd])  # single derH
@@ -318,8 +321,8 @@ def comp_G(link, Et, lenH=0, lenHH=None, fdcpr=0):  # lenH in sub+|rd+, lenHH in
 
     # / PP:
     dderH = []
-    if _G._derH and _G.derH:  # empty in single-node Gs
-        for _lay, lay in zip(_G._derH,_G.derH):
+    if _G.derH and _G.derH:  # empty in single-node Gs
+        for _lay, lay in zip(_G.derH,_G.derH):
             mtuple,dtuple, Mtuple,Dtuple = comp_dtuple(_lay[1], lay[1], rn=1, fagg=1)
             mval = sum(mtuple); dval = sum(abs(d) for d in dtuple)
             mrdn = dval > mval; drdn = dval < mval
@@ -334,7 +337,8 @@ def comp_G(link, Et, lenH=0, lenHH=None, fdcpr=0):  # lenH in sub+|rd+, lenHH in
 
     # / G:
     der_ext = comp_ext([_G.L,_G.S,_G.A],[G.L,G.S,G.A], [Mval,Dval],[Mrdn,Drdn],[Mdec,Ddec])
-    derH = [[[dertv]+dderH], [Mval,Dval],[Mrdn,Drdn],[Mdec,Ddec], der_ext]
+    # the additional bracket is not needed, it's adding a wrong nesting
+    derH = [[dertv]+dderH, [Mval,Dval],[Mrdn,Drdn],[Mdec,Ddec], der_ext]
 
     if _G.aggH and G.aggH:
         subH, valt,rdnt,dect = comp_aggHv(_G.aggH, G.aggH, rn=1)
@@ -368,22 +372,26 @@ def comp_G(link, Et, lenH=0, lenHH=None, fdcpr=0):  # lenH in sub+|rd+, lenHH in
 def append_rim(link, Val,Rdn,Dec, lenH, lenHH, fd):
 
     for G in link._G, link.G:
+        if G.rim_t:
+            link_depth = get_depth(G.rim_t)
+        else:  # empty rim_t: init rim_t
+            link_depth = 3
+            G.rim_t = [[],[]]
         rim_t = G.rim_t
-        link_depth = get_depth(rim_t)
 
         if link_depth == 4:  # rim_tH
-            if len(rim_t) == lenHH:  # rim_tH not incremented yet
-                rim_t += [[[],[link]]] if fd else [[[link],[]]]  # add base rimt, no rd+ yet
+            if len(rim_t) == lenHH - 1:  # rim_tH not incremented yet
+                rim_t += [[[[]],[[link]]]] if fd else [[[[link]],[[]]]]  # add base rimt, no rd+ yet
             else:
                 rim_ = rim_t[-1][fd]
-                if len(rim_) == lenH: rim_ += []  # add rim layer
-                rim_ += [link]  # append rim layer
+                if len(rim_) == lenH: rim_ += [[]]  # add rim layer
+                rim_[-1] += [link]  # append rim layer
 
         elif link_depth == 3:  # rim_t
-            if len(rim_t[fd]) == lenH: rim_t[fd] += []  # add rim layer
-            rim_t[fd] += [link]
+            if len(rim_t[fd]) == lenH: rim_t[fd] += [[]]  # add rim layer (additional bracket to pack new layer)
+            rim_t[fd][-1] += [link]
 
-        elif link_depth == 2:  # rimt
+        elif link_depth == 2:  # rimt (this probably not needed now)
             rim_t[fd] = link  # if init as None,None?
 
         G.Vt[fd] += Val; G.Rt[fd] += Rdn; G.Dt[fd] += Dec
@@ -495,7 +503,7 @@ def sum_subHv(T, t, base_rdn, fneg=0):
 
     if t:
         if T:
-            SubH,Valt,Rdnt,Dect,_ = T; subH,valt,rdnt,dect,_ = t
+            SubH,Valt,Rdnt,Dect = T; subH,valt,rdnt,dect = t
             for i in 0,1:
                 Valt[i] += valt[i]; Rdnt[i] += rdnt[i]+base_rdn; Dect[i] = (Dect[i]+dect[i])/2
             if SubH:
@@ -511,18 +519,18 @@ def sum_derHv(T,t, base_rdn, fneg=0):  # derH is a list of layers or sub-layers,
 
     if t:
         if T:
-            DerH, Valt, Rdnt, Dect, Extt_,_ = T
-            derH, valt, rdnt, dect, extt_,_ = t
+            DerH, Valt, Rdnt, Dect, Extt_ = T
+            derH, valt, rdnt, dect, extt_ = t
             for Extt, extt in zip(Extt_,extt_):
                 sum_ext(Extt, extt)
             for i in 0,1:
                 Valt[i] += valt[i]; Rdnt[i] += rdnt[i]+base_rdn; Dect[i] = (Dect[i] + dect[i])/2
             DerH[:] = [
                 [[sum_dertuple(Dertuple,dertuple, fneg*i) for i,(Dertuple,dertuple) in enumerate(zip(Tuplet,tuplet))],
-                  [V+v for V,v in zip(Valt,valt)], [R+r+base_rdn for R,r in zip(Rdnt,rdnt)], [(D+d)/2 for D,d in zip(Dect,dect)], 0
+                  [V+v for V,v in zip(Valt,valt)], [R+r+base_rdn for R,r in zip(Rdnt,rdnt)], [(D+d)/2 for D,d in zip(Dect,dect)],
                 ]
-                for [Tuplet,Valt,Rdnt,Dect,_], [tuplet,valt,rdnt,dect,_]  # ptuple_tv
-                in zip_longest(DerH, derH, fillvalue=[([0,0,0,0,0,0],[0,0,0,0,0,0]), (0,0),(0,0),(0,0),0])
+                for [Tuplet,Valt,Rdnt,Dect], [tuplet,valt,rdnt,dect]  # ptuple_tv
+                in zip_longest(DerH, derH, fillvalue=[([0,0,0,0,0,0],[0,0,0,0,0,0]), (0,0),(0,0),(0,0)])
             ]
 
         else:
