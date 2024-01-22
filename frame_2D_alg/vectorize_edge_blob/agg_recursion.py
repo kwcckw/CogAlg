@@ -53,54 +53,71 @@ def vectorize_root(blob, verbose):  # vectorization in 3 composition levels of x
     return edge
 
 
-def agg_recursion(rroot, root, node_, nrng=1, lenH=0, lenHH=None):  # lenH = len(root.aggH[-1][0]), lenHH: same in agg_compress
+def agg_recursion(rroot, root, node_, nrng=0, lenHH=0):  # compositional agg|sub recursion in root graph, cluster G_
 
-    Et = [[0,0],[0,0],[0,0]]  # grapht link_' eValt, eRdnt, eDect(currently not used)
-    fd = not nrng  # compositional agg|sub recursion in root graph:
+    Et = [[0,0],[0,0],[0,0]]
+    lenH = 0  # no empty append lenHH[-1] = 0?
 
-    if fd:  # der+
-        for link in root.link_:  # reform links
-            if link.Vt[1] > G_aves[1]*link.Rt[1]:  # maybe weak after rdn incr?
-                comp_G(link, Et, lenH, lenHH)
-    else:   # rng+
-        for _G, G in combinations(node_, r=2):  # form new link_ from original node_
-            dy = _G.box.cy - G.box.cy; dx = _G.box.cx - G.box.cx
-            if np.hypot(dy,dx) < 2 * nrng:  # max distance between node centers, init=2
-                link = CderG(_G=_G, G=G)
-                comp_G(link, Et, lenH, lenHH)
+    nrng = rd_recursion(rroot, root, node_, Et, nrng, lenH, lenHH)  # rng+, adds rim_ as rim_t[-1][0]
+    if root.link_ and isinstance(root.link_[0], CderG):  # else CderP in edge before agg+
+        rd_recursion(rroot, root, root.link_, Et, 0, lenH, lenHH)  # der+, adds link_, rim_ as rim_t[-1][1]
 
-    form_graph_t(root, node_, Et, nrng)  # root_fd, eval sub+, feedback per graph
-    if isinstance(node_[0],list):  # node_t was formed above
+    _GG_t = form_graph_t(root, node_, Et, nrng, lenH, lenHH)  # may convert root.node_[-1] to node_t
+    GGG_t = []  # add agg+ fork tree:
 
-        for i, G_ in enumerate(node_):
-            if root.valt[i] * (len(G_)-1)*root.rng > G_aves[i] * root.rdnt[i]:
-                # agg+/ node_( sub)agg+/ node, vs sub+ only in comp_slice
-                agg_recursion(rroot, root, G_, nrng=1)  # der+ if fd, else rng+ =2
+    while _GG_t:  # unpack fork layers?
+        GG_t, GGG_t = [],[]
+        for fd, GG_ in enumerate(_GG_t):
+
+            if not fd: nrng+=1  # also nrng+ in rd+
+            if root.Vt[fd] * (len(GG_)-1)*nrng*2 > G_aves[fd] * root.Rt[fd]:
+                # agg+/ node_t, vs. sub+/ node_:
+                GGG_t, Vt, Rt  = agg_recursion(rroot, root, root.node[fd], nrng=1)
                 if rroot:
-                    rroot.fback_t[i] += [[root.aggH,root.valt,root.rdnt,root.dect]]
-                    feedback(rroot,i)  # update root.root..
+                    rroot.fback_t[fd] += [[root.aggH, root.valt, root.rdnt, root.dect]]
+                    feedback(rroot,fd)  # update root.root..
+                for i in 0,1:
+                    if Vt[i] > G_aves[i] * Rt[i]:
+                        GGG_t += [[i, GGG_t[fd][i]]]
+                        # sparse agglomerated current layer of forks across GG_tree
+                        GG_t += [[i, GG_t[fd][i],1]]  # i:fork, 1:packed sub_GG_t?
+                        # sparse lower layer of forks across GG_tree
+                    else:
+                        GGG_t += [[i, GG_t[fd][i]]]  # keep lower-composition GGs
+
+        _GG_t = GG_t  # for next loop
+
+    return GGG_t  # should be tree nesting lower forks
 
 
-def form_graph_t(root, G_, Et, nrng, lenH=0, lenHH=None):  # form Gm_,Gd_ from same-root nodes
 
-    # select Gs connected in current layer:
-    _G_ = [G for G in G_ if len(G.rim_t[0])>len(root.rim_t[0])]
+
+def form_graph_t(root, G_, Et, nrng, lenH=0, lenHH=0):  # form Gm_,Gd_ from same-root nodes
+
+    fd = not nrng
+    _G_ = []
+    for G in G_:  # select Gs connected in current layer:
+        if G.rim_t:  # without depth, rim_t is init as an empty list
+            if lenHH: rim_tH = G.rim_t[-1][fd]  # sub+'H
+            else:     rim_tH = G.rim_t[fd]  # rim_
+            if len(rim_tH) > lenH: _G_ += [G]
 
     node_connect(_G_, lenHH)  # Graph Convolution of Correlations over init _G_
     node_t = []
     for fd in 0,1:
         if Et[0][fd] > ave * Et[1][fd]:  # eValt > ave * eRdnt: cluster
-            graph_ = segment_node_(root, _G_, fd, nrng,lenH=0)  # fd: node-mediated Correlation Clustering
+            graph_ = segment_node_(root, _G_, fd, nrng, lenH)  # fd: node-mediated Correlation Clustering
             for graph in graph_:
                 # eval sub+ per node
                 if graph.Vt[fd] * (len(graph.node_)-1)*root.rng > G_aves[fd] * graph.Rt[fd]:
                     node_ = graph.node_  # flat in sub+
-                    if lenH: lenH = len(node_[0].esubH[-lenH:])  # in agg_compress
-                    else:    lenH = len(graph.aggH[-1][0])  # in agg_recursion
-                    agg_recursion(root, graph, node_, nrng, lenH, lenHH)
+                    for node in node_:
+                        if (node.lenHH == 0):  node.rim_t = [node.rim_t]  # we need this 1st conversion for lenHH >0
+                        node.lenHH += 1  # increase lenHH here?
+                    agg_recursion(root, graph, node_, nrng, node.lenHH)
                 else:
                     root.fback_t[root.fd] += [[graph.aggH, graph.valt, graph.rdnt, graph.dect]]
-                    feedback(root,root.fd)  # update root.root..
+                    # feedback(root,root.fd)  # update root.root..
             node_t += [graph_]  # may be empty
         else:
             node_t += [[]]
@@ -338,6 +355,7 @@ def comp_G(link, Et, lenH=0, lenHH=None):  # lenH in sub+|rd+, lenHH in agg_comp
     der_ext = comp_ext([_G.L,_G.S,_G.A],[G.L,G.S,G.A], [Mval,Dval],[Mrdn,Drdn],[Mdec,Ddec])
     derH = [[dertv]+dderH, [Mval,Dval],[Mrdn,Drdn],[Mdec,Ddec], der_ext]
 
+
     if _G.aggH and G.aggH:
         subH, valt,rdnt,dect = comp_aggHv(_G.aggH, G.aggH, rn=1)
         mval,dval = valt; Mval+=dval; Dval+=mval
@@ -350,8 +368,9 @@ def comp_G(link, Et, lenH=0, lenHH=None):  # lenH in sub+|rd+, lenHH in agg_comp
 
     link.Vt,link.Rt,link.Dt = Valt,Rdnt,Dect = [Mval,Dval],[Mrdn,Drdn],[Mdec,Ddec]  # reset per comp_G
     # draft:
-    fd = 1 if link.subH else 0  # test nesting top-down:
+    fd = 1 if link.daggH else 0  # test nesting top-down:
 
+    '''
     if lenHH:  # root agg+
         if len(link.daggH) > lenHH:
             HHadd = 1  # append link rim_tH
@@ -380,70 +399,59 @@ def comp_G(link, Et, lenH=0, lenHH=None):  # lenH in sub+|rd+, lenHH in agg_comp
                 if fd: link.daggH[-1] += [[SubH]]
         else:
             rim_depth = 1; Hadd = None  # G.rim_t = rimt
+    '''
 
     for fd, (Val,Rdn,Dec) in enumerate(zip(Valt,Rdnt,Dect)):
         if Val > G_aves[fd] * Rdn:
             # eval fork grapht in form_graph_t:
             Et[0][fd] += Val; Et[1][fd] += Rdn; Et[2][fd] += Dec
-            append_rim(link, Val,Rdn,Dec, rim_depth, Hadd, HHadd, fd)
+            append_rim(link, SubH, Val,Rdn,Dec, lenH, lenHH, fd)
 
-# not updated:
 
-def append_rim(link, Val,Rdn,Dec, lenH, lenHH, fd):
+def append_rim(link, SubH, Val,Rdn,Dec, lenH, lenHH, fd):
 
     for G in link._G, link.G:
         if G.rim_t:
             link_depth = get_depth(G.rim_t)
-        else:  # empty rim_t: init rim_t
-            link_depth = 3
-            G.rim_t = [[],[]]
+            if link_depth == 2 and lenH == 1:
+                G.rim_t[0] = [G.rim_t[0]]; G.rim_t[1] = [G.rim_t[1]]  # convert rimt into rim_t
+                if fd: link.daggH = [link.daggH]  # convert dderH into dsubH 
+                link_depth = 3  # increase depth after conversion
+            elif link_depth == 3 and lenHH == 1:
+                G.rim_t = [G.rim_t]  # convert rim_t into rim_tH
+                if fd: link.daggH = [link.daggH]  # convert into dsubH into daggH
+                link_depth = 4  # increase depth after conversion
+        else:  # empty rim_t: init rimt
+            link_depth = 2
+            G.rim_t = [[],[]]  # rimt: [mlink_, dlink_]
         rim_t = G.rim_t
 
         if link_depth == 4:  # rim_tH
-            if len(rim_t) > lenHH:  # rim_tH not incremented yet
-                rim_t += [[[[]],[[link]]]] if fd else [[[[link]],[[]]]]  # add base rimt, no rd+ yet
+            if len(rim_t) == lenHH:  # rim_tH not incremented yet (should be == here? Because we increment lenHH before sub+)  
+                # add base rimt, no rd+ yet
+                if fd:
+                    rim_t += [[[[]],[[link]]]]
+                    link.daggH += [[[SubH]]]  # add new layer of daggH   
+                else: rim_t += [[[[link]],[[]]]]
             else:
                 rim_ = rim_t[-1][fd]
                 if len(rim_) == lenH: rim_ += [[]]  # add rim layer
                 rim_[-1] += [link]  # append rim layer
+                if fd: link.daggH[-1][-1] += [SubH]  # append subH into last dsubH of last daggH layer
 
         elif link_depth == 3:  # rim_t
-            if len(rim_t[fd]) == lenH: rim_t[fd] += [[]]  # add rim layer (additional bracket to pack new layer)
+            if len(rim_t[fd]) == lenH: 
+                rim_t[fd] += [[]]  # add rim layer (additional bracket to pack new layer)
+                if fd: link.daggH += [[]]  # add new layer of empty dsubH
             rim_t[fd][-1] += [link]
+            if fd: link.daggH[-1] += [SubH]  # append subH into last dsubH layer
 
         elif link_depth == 2:  # rimt
-            rim_t[fd] = link  # if init as None,None?
+            rim_t[fd] += [link]  # if init as None,None?
+            if fd: link.daggH += [SubH]
 
         G.Vt[fd] += Val; G.Rt[fd] += Rdn; G.Dt[fd] += Dec
-
-
-        ''' old:
-        root_depth = (lenH != 0) + (lenHH != 0)
-        if lenHH == None:
-            if len(rim_t) == root_depth:  # root_depth and rim_t not incremented yet
-                # add link layer:
-                if fd: G.rim_t = [[[],[link]]]; G.Vt=[0,Val]; G.Rt=[0,Rdn]; G.Dt=[0,Dec]
-                else:  G.rim_t = [[[link],[]]]; G.Vt=[Val,0]; G.Rt=[Rdn,0]; G.Dt=[Dec,0]
-            else:
-                # append last link layer:
-                rim_t[0][-1][fd] += [link];  G.Vt[fd] += Val; G.Rt[fd] += Rdn; G.Dt[fd] += Dec
-
-        else:  # agg_compress rd+
-            if fd: rim_t = [[[]],[[link]]]; G.Vt=[0,Val]; G.Rt=[0,Rdn]; G.Dt=[0,Dec]
-            else:  rim_t = [[[link]],[[]]]; G.Vt=[Val,0]; G.Rt=[Rdn,0]; G.Dt=[Dec,0]
-            if lenHH:  # depth = 2
-                if len(G.rim_t[-1][fd]) == lenH:  # # init new link_ in rim_t[fd]
-                    G.rim_t[-1][fd] += rim_t[fd]
-                else:  # accumulate link
-                    G.rim_t[-1][fd][-1] += [link]
-            elif lenH:  # depth = 1
-                if len(G.rim_t[fd]) == lenH:  # init new link_ in rim_t[fd]
-                    G.rim_t[fd] += rim_t[fd]
-                else:  # accumulate link
-                    G.rim_t[fd][-1] += [link]
-            else:  # depth = 0, init rim_t
-                G.rim_t = rim_t
-            '''
+    
 
 def comp_aggHv(_aggH, aggH, rn):  # no separate ext
 
@@ -641,7 +649,7 @@ def rd_recursion(rroot, root, Q, Et, nrng=1, lenH=0, lenHH=0):  # rng,der incr o
         for link in Q:  # inp_= root.link_, reform links
             if link.Vt[1] > G_aves[1]*link.Rt[1]:  # >rdn incr
                 if isinstance(link.subH, Cmd): link.subH = [link.subH]  # add first lenHH nesting
-                comp_G(link, Et, lenH, lenHH,  fdcpr=1)
+                comp_G(link, Et, lenH, lenHH)
                 if link.G not in G_: G_ += [link.G]
                 if link._G not in G_: G_ += [link._G]
     else:  # rng+
@@ -653,7 +661,7 @@ def rd_recursion(rroot, root, Q, Et, nrng=1, lenH=0, lenHH=0):  # rng,der incr o
             # max distance between node centers, init=2
             if 2*nrng > dist > 2*(nrng-1):  # G,_G are within rng and were not compared in prior rd+
                 link = CderG(_G=_G, G=G)
-                comp_G(link, et, lenH, lenHH, fdcpr=0)
+                comp_G(link, et, lenH, lenHH)
 
     if et[0][fd] > ave_Gm * et[1][fd]:  # single layer accum
         for Part, part in zip(Et, et):
@@ -670,8 +678,13 @@ def rd_recursion(rroot, root, Q, Et, nrng=1, lenH=0, lenHH=0):  # rng,der incr o
             for G in G_:
                 if G.rim_t:
                     rim_t = G.rim_t
-                    if lenHH: rim_t = rim_t[-1]  # agg++
-                    if len(rim_t[fd]) > lenH:
+                    if lenHH: 
+                        G_lenH = len(rim_t[-1][fd])  # agg++ : G.rim_t is rim_tH
+                    if lenH:  # G.rim_t is rim_t
+                        G_lenH = len(rim_t[fd])
+                    else:  # lenH == 0: G.rim_t is rimt
+                        G_lenH = len(rim_t[fd]) 
+                    if G_lenH > lenH:
                         pruned_G_ += [G]  # remove if empty rim_t
 
         rd_recursion(rroot, root, link_ if fd else pruned_G_, Et, 0 if fd else nrng+1, lenH+1, lenHH)
