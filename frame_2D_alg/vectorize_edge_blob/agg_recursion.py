@@ -90,8 +90,6 @@ def agg_recursion(rroot, root, node_, nrng=0, lenHH=0):  # compositional agg|sub
     return GGG_t  # should be tree nesting lower forks
 
 
-
-
 def form_graph_t(root, G_, Et, nrng, lenH=0, lenHH=0):  # form Gm_,Gd_ from same-root nodes
 
     fd = not nrng
@@ -184,7 +182,7 @@ def unpack_rim(rim_t, fd, lenHH):
 
 def get_depth(rim_t):  # https://stackoverflow.com/questions/6039103/counting-depth-or-the-deepest-level-a-nested-list-goes-to
 
-    return (max(map(get_depth, rim_t))+1 if rim_t else 1) if isinstance(rim_t, list) else 0
+    return (max(map(get_depth, rim_t)) if rim_t else 0)
 
 
 def segment_node_(root, root_G_, fd, nrng, lenH=0, lenHH=None):  # eval rim links with summed surround vals for density-based clustering
@@ -280,40 +278,32 @@ def sum2graph(root, grapht, fd, nrng, lenH=0):  # sum node and link params into 
     return graph
 
 # draft:
-def sum_links_last_lay(G, fd, lenH):  # esubLay += last_lay/ link, lenH corresponds to len link subH in agg+ or link.subH[-1] in agg++
+def sum_links_last_lay(G, fd, lenH, lenHH):  # eLay += last_lay/ link, lenHH: daggH, lenH: dsubH
 
-    esubLay = []  # accum from links
-    lenHH = G.lenHH
+    eLay = []  # accum from links; rim_t,link.daggH nesting per depth:
 
     for link in unpack_rim(G.rim_t, fd, lenHH):  # links in rim
-        subH = link.subH
-        subH_depth = get_depth(G.rim_t)  # same nesting in link.subH
-        frdH = 0
-        if subH_depth > 2:
-            frdH = 1 # sum rdH
-            if   subH_depth==4: subH = subH[-1][fd][-1]
-            elif subH_depth==3: subH = subH[fd][-1]
-            elif subH_depth==2: subH = subH[fd]
-        L = lenHH if lenHH != None else lenH
-        if len(subH) <= L:
-            continue  # was not appended in last sub+ of agg++
-        if frdH:
-            if len(subH) == 5:  # subH[0] is derHs, when G.aggH is empty
-                sum_derHv(esubLay, subH, base_rdn=link.Rt[fd])
+        if link.daggH:
+            dsubH = []  # default
+            eH_depth = get_depth(G.rim_t)  # = link.daggH depth:
+            daggH = link.daggH
+            if eH_depth==3 and len(daggH) > lenHH:
+                dsubH = daggH[-1]      # 3: daggH, rim_tH'rim_t
+            elif eH_depth==2:
+                if lenHH and len(daggH) > lenHH:
+                    dderH = daggH[-1]  # 2: dderH, rim_tH[-1]'rimt
+                elif len(daggH) > lenH:
+                    dsubH = daggH      # 2: dsubH, rim_t
+            else:   dderH = daggH      # 1: dderH, rimt, no lenH|lenHH
+            if dsubH:
+                if len(dsubH) > lenH:
+                    for dderH in dsubH[int(len(dsubH) / 2):]:  # derH_/ last xcomp: len subH *= 2
+                        sum_derHv(eLay, dderH, base_rdn=link.Rt[fd])  # sum all derHs of link layer=rdH into esubH[-1]
             else:
-                for derH in subH[0][int(len(subH) / 2):]:  # derH_/ last xcomp: len subH *= 2
-                    sum_derHv(esubLay, derH, base_rdn=link.Rt[fd])  # sum all derHs of link layer=rdH into esubH[-1]
-
-        elif subH_depth == 2: sum_derHv(esubLay, subH[-1], base_rdn=link.Rt[fd])  # single layer of agg+'sub+, no rd+
-        elif subH_depth == 1: sum_derHv(esubLay, subH, base_rdn=link.Rt[fd])  # single derH
+                sum_derHv(eLay, dderH, base_rdn=link.Rt[fd])
 
         G.evalt[fd] += link.Vt[fd]; G.erdnt[fd] += link.Rt[fd]; G.edect[fd] += link.Dt[fd]
-    G.esubH += [esubLay]
-    '''
-    link subH is appended per xcomp of either fork, with fd represented in root, nesting:
-    agg+:  None | subH | subHH/ sub+, same for G.esubH, Cmd dertuples
-    agg++: None | subH | subHH/ rd+, subHHH/ sub+
-    '''
+    G.eH += [eLay]
 
 
 def comp_G(link, Et, lenH=0, lenHH=None):  # lenH in sub+|rd+, lenHH in agg_compress sub+ only
@@ -353,69 +343,47 @@ def comp_G(link, Et, lenH=0, lenHH=None):  # lenH in sub+|rd+, lenHH in agg_comp
 
     # / G:
     der_ext = comp_ext([_G.L,_G.S,_G.A],[G.L,G.S,G.A], [Mval,Dval],[Mrdn,Drdn],[Mdec,Ddec])
-    derH = [[dertv]+dderH, [Mval,Dval],[Mrdn,Drdn],[Mdec,Ddec], der_ext]
-
+    dderH = [[dertv]+dderH, [Mval,Dval],[Mrdn,Drdn],[Mdec,Ddec], der_ext]
 
     if _G.aggH and G.aggH:
-        subH, valt,rdnt,dect = comp_aggHv(_G.aggH, G.aggH, rn=1)
+        daggH, valt,rdnt,dect = comp_aggHv(_G.aggH, G.aggH, rn=1)
         mval,dval = valt; Mval+=dval; Dval+=mval
         Mrdn += rdnt[0]+dval>mval; Drdn += rdnt[1]+dval<=mval
         Mdec = (Mdec+dect[0])/2; Ddec = (Ddec+dect[1])/2
         # flat, appendleft:
-        SubH = [[derH]+subH, [Mval,Dval],[Mrdn,Drdn],[Mdec,Ddec]]
+        dsubH = [[dderH]+daggH, [Mval,Dval],[Mrdn,Drdn],[Mdec,Ddec]]
     else:
-        SubH = derH
-
+        dsubH =  dderH
     link.Vt,link.Rt,link.Dt = Valt,Rdnt,Dect = [Mval,Dval],[Mrdn,Drdn],[Mdec,Ddec]  # reset per comp_G
-    # draft:
-    fd = 1 if link.daggH else 0  # test nesting top-down:
-
-    '''
-    if lenHH:  # root agg+
-        if len(link.daggH) > lenHH:
-            HHadd = 1  # append link rim_tH
-            if lenH:  # root sub+
-                rim_depth = 3  # 1: rimt, 2: rim_tH'rimt if lenHH else rim_t, 3: rim_tH'rim_t
-                if len(link.daggH[-1]) > lenH:  # dsubH
-                    Hadd = 1    # append rim_tH[-1][fd]
-                    if fd: link.daggH[-1] += [[[SubH]]]  # link.subH is der+, new link in rng+
-                else:
-                    Hadd = 0
-                    if fd: link.daggH[-1] += [[SubH]]
-            else:
-                rim_depth = 2; Hadd = None  # rim_tH[-1] = rimt
-        else:
-            HHadd = 0  # full daggH
-            if fd: link.daggH[-1] += [[SubH]]
-    else:
-        HHadd = None  # use to distinguish between rim_tH[-1]'rimt and rim_t if depth=2
-        if lenH:  # root sub+
-            rim_depth = 2  # rim_t
-            if len(link.daggH[-1]) > lenH:  # dsubH
-                Hadd = 1
-                if fd: link.daggH[-1][-1] += [[[SubH]]]  # link.subH is der+, new link in rng+
-            else:
-                Hadd = 0
-                if fd: link.daggH[-1] += [[SubH]]
-        else:
-            rim_depth = 1; Hadd = None  # G.rim_t = rimt
-    '''
 
     for fd, (Val,Rdn,Dec) in enumerate(zip(Valt,Rdnt,Dect)):
         if Val > G_aves[fd] * Rdn:
             # eval fork grapht in form_graph_t:
             Et[0][fd] += Val; Et[1][fd] += Rdn; Et[2][fd] += Dec
-            append_rim(link, SubH, Val,Rdn,Dec, lenH, lenHH, fd)
+            append_rim(link, dsubH, Val,Rdn,Dec, lenH, lenHH, fd)
 
 
-def append_rim(link, SubH, Val,Rdn,Dec, lenH, lenHH, fd):
+def append_rim(link, dsubH, Val,Rdn,Dec, lenH, lenHH, fd):
 
     for G in link._G, link.G:
         if G.rim_t:
-            link_depth = get_depth(G.rim_t)
+            rim_t = G.rim_t
+            link_depth = get_depth(rim_t)
+
+            # probably wrong, still trying to figure it:
+            if link_depth == 3:
+                if fd: link.daggH += [[dsubH]]
+                if len(rim_t) > lenHH:  # append rim_tH:
+                    if fd: rim_t += [[],[link]]  # add rimt, not rim_t, der+ is optional
+                    else:  rim_t += [[link],[]]
+                else:
+                    if len(rim_t[-1][fd]) > lenH: link = [link]  # init rim
+                    rim_t[-1][fd] += [link]  # append link or init rim
+
+            # below is not updated
             if link_depth == 2 and lenH == 1:
                 G.rim_t[0] = [G.rim_t[0]]; G.rim_t[1] = [G.rim_t[1]]  # convert rimt into rim_t
-                if fd: link.daggH = [link.daggH]  # convert dderH into dsubH 
+                if fd: link.daggH = [link.daggH]  # convert dderH into dsubH
                 link_depth = 3  # increase depth after conversion
             elif link_depth == 3 and lenHH == 1:
                 G.rim_t = [G.rim_t]  # convert rim_t into rim_tH
@@ -427,11 +395,11 @@ def append_rim(link, SubH, Val,Rdn,Dec, lenH, lenHH, fd):
         rim_t = G.rim_t
 
         if link_depth == 4:  # rim_tH
-            if len(rim_t) == lenHH:  # rim_tH not incremented yet (should be == here? Because we increment lenHH before sub+)  
+            if len(rim_t) == lenHH:  # rim_tH not incremented yet (should be == here? Because we increment lenHH before sub+)
                 # add base rimt, no rd+ yet
                 if fd:
                     rim_t += [[[[]],[[link]]]]
-                    link.daggH += [[[SubH]]]  # add new layer of daggH   
+                    link.daggH += [[[SubH]]]  # add new layer of daggH
                 else: rim_t += [[[[link]],[[]]]]
             else:
                 rim_ = rim_t[-1][fd]
@@ -440,7 +408,7 @@ def append_rim(link, SubH, Val,Rdn,Dec, lenH, lenHH, fd):
                 if fd: link.daggH[-1][-1] += [SubH]  # append subH into last dsubH of last daggH layer
 
         elif link_depth == 3:  # rim_t
-            if len(rim_t[fd]) == lenH: 
+            if len(rim_t[fd]) == lenH:
                 rim_t[fd] += [[]]  # add rim layer (additional bracket to pack new layer)
                 if fd: link.daggH += [[]]  # add new layer of empty dsubH
             rim_t[fd][-1] += [link]
@@ -451,7 +419,7 @@ def append_rim(link, SubH, Val,Rdn,Dec, lenH, lenHH, fd):
             if fd: link.daggH += [SubH]
 
         G.Vt[fd] += Val; G.Rt[fd] += Rdn; G.Dt[fd] += Dec
-    
+
 
 def comp_aggHv(_aggH, aggH, rn):  # no separate ext
 
@@ -678,16 +646,15 @@ def rd_recursion(rroot, root, Q, Et, nrng=1, lenH=0, lenHH=0):  # rng,der incr o
             for G in G_:
                 if G.rim_t:
                     rim_t = G.rim_t
-                    if lenHH: 
+                    if lenHH:
                         G_lenH = len(rim_t[-1][fd])  # agg++ : G.rim_t is rim_tH
                     if lenH:  # G.rim_t is rim_t
                         G_lenH = len(rim_t[fd])
                     else:  # lenH == 0: G.rim_t is rimt
-                        G_lenH = len(rim_t[fd]) 
+                        G_lenH = len(rim_t[fd])
                     if G_lenH > lenH:
                         pruned_G_ += [G]  # remove if empty rim_t
 
         rd_recursion(rroot, root, link_ if fd else pruned_G_, Et, 0 if fd else nrng+1, lenH+1, lenHH)
 
     return nrng
-
