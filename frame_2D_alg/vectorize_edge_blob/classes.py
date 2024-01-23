@@ -211,7 +211,7 @@ class Cgraph(CBase):  # params of single-fork node_ cluster per pplayers
     rim_t: object = None  # direct links, depth, init rim_t, link_tH in base sub+ | cpr rd+, link_tHH in cpr sub+
     Rim_t: object = None  # links to furthest mediated evaluated nodes
     # use None for checking?
-    esubH: list = z([])  # external subH: [[daggH,valt,rdnt,dect]] of all der)rng rim links
+    eH: list = z([])  # external subH: [[daggH,valt,rdnt,dect]] of all der)rng rim links
     evalt: list = z([0,0])  # sum from esubH
     erdnt: list = z([1,1])
     edect: list = z([0,0])
