@@ -107,7 +107,7 @@ def form_graph_t(root, G_, Et, nrng, lenH=-1, lenHH=-1):  # form Gm_,Gd_ from sa
             graph_ = segment_node_(root, _G_, fd, nrng, lenH)  # fd: node-mediated Correlation Clustering
             for graph in graph_:
                 if graph.Vt[fd] * (len(graph.node_)-1)*root.rng > G_aves[fd] * graph.Rt[fd]:
-                    graph.fsub = 1
+                    root.fHH = 1
                     agg_recursion(root, graph, graph.node_, nrng)
                 else:
                     root.fback_t[root.fd] += [[graph.aggH, graph.valt, graph.rdnt, graph.dect]]
@@ -301,7 +301,7 @@ def sum_links_last_lay(G, fd, lenH, lenHH):  # eLay += last_lay/ link, lenHH: da
     G.extH += [eLay]
 
 
-def comp_G(link, Et, lenH=0, lenHH=None):  # lenH in sub+|rd+, lenHH in agg_compress sub+ only
+def comp_G(link, Et, lenH=0, lenHH=None, fHH=0):  # lenH in sub+|rd+, lenHH in agg_compress sub+ only
 
     _G, G = link._G, link.G
     Mval,Dval, Mrdn,Drdn, Mdec,Ddec = 0,0, 1,1, 0,0
@@ -355,42 +355,46 @@ def comp_G(link, Et, lenH=0, lenHH=None):  # lenH in sub+|rd+, lenHH in agg_comp
         if Val > G_aves[fd] * Rdn:
             # eval fork grapht in form_graph_t:
             Et[0][fd] += Val; Et[1][fd] += Rdn; Et[2][fd] += Dec
-            append_rim(link, dsubH, Val,Rdn,Dec, fd, lenH, lenHH)
+            append_rim(link, dsubH, Val,Rdn,Dec, fd, lenH, lenHH, fHH)
 
 # draft
-def append_rim(link, dsubH, Val,Rdn,Dec, fd, lenH, lenHH):
+def append_rim(link, dsubH, Val,Rdn,Dec, fd, lenH, lenHH, fHH):
 
     for G in link._G, link.G:
+        if not G.rim_t: G.rim_t = [[],[]]  # init rimt
         rim_t = G.rim_t
-        if rim_t:
-            if G.fHH:  # rim_t= rim_tH
-                if len(rim_t) < lenHH:  # rim_tH += rim_t
-                    if fd:
-                        dsubH = [dsubH]  # convert dsubH to daggH?
-                        rim_t += [[[],[link]]]  # add rimt ! rim_t: no der+ yet
-                    else:
-                        rim_t += [[[link],[]]]
-                else:  # append last rim_t[fd]
-                    if len(rim_t[-1][fd]) < lenH:  # append rim_ vs. rim
-                        if lenH==2:  # 1st der+,
-                            # this is done in rd_recursion?:
-                            if fd: dsubH = [dsubH]  # convert dderH to dsubH?
-                            rim_t[:] = [[rim_t[0]],[rim_t[1]]]  # convert rimt to rim_t
-                        rim_t[fd][-1] += [link]  # init empty
-                    else:
-                        rim_t[fd] += [link]  # rimt
-            else:  # rimt | rim_t
-                # same as above, make function:
-                if len(rim_t[-1][fd]) < lenH:  # append rim_ vs. rim
-                    if lenH == 2:  # 1st der+,
-                        dsubH = [dsubH]  # convert dsubH to daggH?
-                        rim_t[:] = [[rim_t[0]], [rim_t[1]]]  # convert rimt to rim_t
-                    rim_t[fd][-1] += [link]  # init empty
-                else:
-                    rim_t[fd] += [link]  # rimt
+
+        if fHH:  # rim_t= rim_tH or rimtH
+            if lenH == -1:  # 1st fHH call, convert existing rimt or rim_t into rimtH or rim_tH
+                if fd: dsubH = [dsubH]  # convert dsubH to daggH  
+                rim_t[:] = [rim_t]
+            elif lenH == 0:  # 2nd call, convert last rimt into rim_t         
+                rim_t[-1][:] = [[rim_t[-1][0]], [rim_t[-1][1]]] 
+            if fd: link.daggH += [dsubH]  # new layer with added nesting
+
+            if len(rim_t)-1 == lenHH:  # append rim_ vs. rim
+                if lenH == -1:  rim_t += [[[],[]]]  # add new rimt
+                else:           rim_t += [[[[]], [[]]]]  # add new rim_t
+
+            if lenH == -1:  # rimtH
+                rim_t[-1][fd] += [link]
+            else:  # rim_tH
+                rim_t[-1][fd][-1] += [link]
+
+        else:  # rimt | rim_t
+            # same as above, make function:
+            if lenH == -1:  # rimt
+                rim_t[fd] += [link]  
+            else:
+                if lenH == 0:  # 2nd der+, convert from rimt into rim_t
+                    rim_t[:] = [[rim_t[0]], [rim_t[1]]]  # convert rimt to rim_t
+                    if fd: dsubH = [dsubH]  # convert dsubH to daggH
+                if len(rim_t[fd])-1 == lenH:  # append rim_ vs. rim
+                    rim_t[fd] += [[]]  # new rd+ layer
+                rim_t[fd][-1] += [link]  # init empty 
 
             if fd: link.daggH += [dsubH]  # new layer with added nesting
-            G.Vt[fd] += Val; G.Rt[fd] += Rdn; G.Dt[fd] += Dec
+        G.Vt[fd] += Val; G.Rt[fd] += Rdn; G.Dt[fd] += Dec
 
 
 def comp_aggHv(_aggH, aggH, rn):  # no separate ext
@@ -590,7 +594,7 @@ def rd_recursion(rroot, root, Q, Et, nrng=1, lenH=0, lenHH=0):  # rng,der incr o
             if link.Vt[1] > G_aves[1] * link.Rt[1]:  # >rdn incr
                 if lenH==1:  # 1st der+: dderH-> dsubH
                     link.subH = [link.subH]
-                comp_G(link, Et, lenH+1, lenHH)
+                comp_G(link, Et, lenH+1, lenHH, root.fHH)
                 if link.G not in G_: G_ += [link.G]
                 if link._G not in G_: G_ += [link._G]
     else:  # rng+
@@ -601,7 +605,7 @@ def rd_recursion(rroot, root, Q, Et, nrng=1, lenH=0, lenHH=0):  # rng,der incr o
             # max distance between node centers, init=2
             if 2*nrng > dist > 2*(nrng-1):  # G,_G are within rng and were not compared in prior rd+
                 link = CderG(_G=_G, G=G)
-                comp_G(link, et, lenH, lenHH)
+                comp_G(link, et, lenH, lenHH, root.fHH)
 
     if et[0][fd] > ave_Gm * et[1][fd]:  # single layer accum
         for Part, part in zip(Et, et):
