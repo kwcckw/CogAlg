@@ -245,14 +245,14 @@ def sum2graph(root, grapht, fd, nrng, lenH=-1, lenHH=-1):  # sum node and link p
         graph.box += G.box
         graph.ptuple += G.ptuple
         sum_derH([graph.derH,[0,0],[1,1]], [G.derH,[0,0],[1,1]], base_rdn=1)
-        sum_subHv([eH,evalt,erdnt,edect,2], [G.extH,G.evalt,G.erdnt,G.edect,2], base_rdn=G.erdnt[fd])
+        sum_subHv([eH,evalt,erdnt,edect], [G.extH,G.evalt,G.erdnt,G.edect], base_rdn=G.erdnt[fd])
         sum_aggHv(graph.aggH, G.aggH, base_rdn=1)
         A0 += G.A[0]; A1 += G.A[1]; S += G.S
         for j in 0,1:
             evalt[j] += G.evalt[j]; erdnt[j] += G.erdnt[j]; edect[j] += G.edect[j]
             valt[j] += G.valt[j]; rdnt[j] += G.rdnt[j]; dect[j] += G.dect[j]
 
-    graph.aggH += [[eH,evalt,erdnt,edect,2]]  # new derLay
+    graph.aggH += [[eH,evalt,erdnt,edect]]  # new derLay
     # graph internals = G Internals + Externals:
     graph.valt = Cmd(*valt) + evalt
     graph.rdnt = Cmd(*rdnt) + erdnt
@@ -283,14 +283,15 @@ def sum_links_last_lay(G, fd, lenH, lenHH):  # eLay += last_lay/ link, lenHH: da
                 if len(daggH) > lenHH:
                     if lenH: dsubH = daggH[-1]
                     else: dderH = daggH[-1]
-            elif lenH: dsubH = daggH
-            else: dderH = daggH
+            elif lenH >= 0: dsubH = daggH  # we need >= 0, else -1 returns true too
+            else: dderH_ = daggH
             if dsubH:
                 if len(dsubH) > lenH:
                     for dderH in dsubH[ int(len(dsubH)/2): ]:  # derH_/ last xcomp: len subH *= 2
                         sum_derHv(eLay, dderH, base_rdn=link.Rt[fd])  # sum all derHs of link layer=rdH into esubH[-1]
             else:
-                sum_derHv(eLay, dderH, base_rdn=link.Rt[fd])
+                for dderH in dderH_:  # it's a list of dderHs because we pack them into list of link.daggH
+                    sum_derHv(eLay, dderH, base_rdn=link.Rt[fd])
 
         G.evalt[fd] += link.Vt[fd]; G.erdnt[fd] += link.Rt[fd]; G.edect[fd] += link.Dt[fd]
     G.extH += [eLay]
@@ -347,6 +348,7 @@ def comp_G(link, Et, lenH=0, lenHH=None):  # lenH in sub+|rd+, lenHH in agg_comp
     link.Vt,link.Rt,link.Dt = Valt,Rdnt,Dect = [Mval,Dval],[Mrdn,Drdn],[Mdec,Ddec]  # reset per comp_G
 
     for fd, (Val,Rdn,Dec) in enumerate(zip(Valt,Rdnt,Dect)):
+        # there's a problem here
         if Val > G_aves[fd] * Rdn:
             # eval fork grapht in form_graph_t:
             Et[0][fd] += Val; Et[1][fd] += Rdn; Et[2][fd] += Dec
@@ -356,8 +358,8 @@ def comp_G(link, Et, lenH=0, lenHH=None):  # lenH in sub+|rd+, lenHH in agg_comp
 def append_rim(link, dsubH, Val,Rdn,Dec, fd, lenH, lenHH):
 
     for G in link._G, link.G:
+        if not G.rim_t: G.rim_t = [[],[]]  # must include link
         rim_t = G.rim_t
-        if not rim_t: rim_t = [[],[]]  # must include link
 
         if G.fHH:  # append existing G.rim_tH[-1] rimtH | rim_tH:
             if lenHH==-1:  # 1st sub+
@@ -382,14 +384,14 @@ def append_rim(link, dsubH, Val,Rdn,Dec, fd, lenH, lenHH):
                 rim_t[fd][-1] += [link]
 
         if fd: # empty link.daggH in rng+
-            if lenH == 0: dsubH = [dsubH]  # convert dderH to dsubH
-            if lenHH==-1: dsubH = [dsubH]  # convert dsubH to daggH
+            if lenH == 0:  dsubH = [dsubH]  # convert dderH to dsubH
+            if lenHH ==0: dsubH = [dsubH]  # convert dsubH to daggH (-1 is default, so we need 0 here)
             link.daggH += [dsubH]
 
         G.Vt[fd] += Val; G.Rt[fd] += Rdn; G.Dt[fd] += Dec
 
 # not revised:
-def rd_recursion(rroot, root, Q, Et, nrng=1, lenH=0, lenHH=0):  # rng,der incr over same G_,link_ -> fork tree, represented in rim_t
+def rd_recursion(rroot, root, Q, Et, nrng=1, lenH=-1, lenHH=-1):  # rng,der incr over same G_,link_ -> fork tree, represented in rim_t
 
     fd = not nrng; link_ = []
     et = [[0,0],[0,0],[0,0]]  # grapht link_' eValt, eRdnt, eDect(currently not used)
@@ -401,7 +403,7 @@ def rd_recursion(rroot, root, Q, Et, nrng=1, lenH=0, lenHH=0):  # rng,der incr o
         G_ = []
         for link in Q:  # inp_= root.link_, reform links
             if link.Vt[1] > G_aves[1] * link.Rt[1]:  # >rdn incr
-                comp_G(link, Et, lenH+1, lenHH)
+                comp_G(link, Et, lenH, lenHH)  # why +1 here? It should be incremneted per rd+ call?
                 if link.G not in G_: G_ += [link.G]
                 if link._G not in G_: G_ += [link._G]
     else:  # rng+
@@ -421,7 +423,7 @@ def rd_recursion(rroot, root, Q, Et, nrng=1, lenH=0, lenHH=0):  # rng,der incr o
         if fd:
             for G in G_:
                 for link in unpack_rim(G.rim_t, fd, lenHH):
-                    if len(link.subH[0][-1]) > lenH:  # link.subH was appended in this rd cycle
+                    if len(link.daggH[0]) - 1 > lenH:  # link.subH was appended in this rd cycle
                         link_ += [link]  # for next rd cycle
         else:
             pruned_G_ = []
@@ -437,7 +439,7 @@ def rd_recursion(rroot, root, Q, Et, nrng=1, lenH=0, lenHH=0):  # rng,der incr o
                     if G_lenH > lenH:
                         pruned_G_ += [G]  # remove if empty rim_t
 
-        rd_recursion(rroot, root, link_ if fd else pruned_G_, Et, 0 if fd else nrng+1, lenH+1, lenHH)
+        rd_recursion(rroot, root, link_ if fd else pruned_G_, Et, 0 if fd else nrng+1, lenH+1 if fd else lenH, lenHH)
 
     return nrng
 
