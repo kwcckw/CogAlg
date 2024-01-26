@@ -210,7 +210,8 @@ class Cgraph(CBase):  # params of single-fork node_ cluster per pplayers
     # graph-external, +level per root sub+:
     rim_t: object = None  # direct links, depth, init rim_t, link_tH in base sub+ | cpr rd+, link_tHH in cpr sub+
     Rim_t: object = None  # links to furthest mediated evaluated nodes
-    fHH: int = 0  # true if extH is daggH, also add for aggH?
+    lenH: int = -1 # >=0 if rimt or rim_t is rimtH or rim_tH
+    lenHH: int = -1  # >=0 if extH is daggH, also add for aggH?
     extH: list = z([])  # G-external daggH( dsubH( dderH, summed from rim links
     evalt: list = z([0,0])  # sum from esubH
     erdnt: list = z([1,1])
@@ -230,7 +231,6 @@ class Cgraph(CBase):  # params of single-fork node_ cluster per pplayers
     P_: list = z([])
     mask__: object = None
     # temporary:
-    lenHH: object = None  # added in agg_compress
     Vt: Cmd = z(Cmd(0, 0))  # last layer | last fork tree vals for node_connect and clustering
     Rt: Cmd = z(Cmd(1, 1))
     Dt: Cmd = z(Cmd(0, 0))
