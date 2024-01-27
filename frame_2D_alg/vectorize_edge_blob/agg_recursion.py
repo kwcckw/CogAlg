@@ -57,11 +57,21 @@ def agg_recursion(rroot, root, node_, nrng=0):  # compositional agg|sub recursio
 
     Et = [[0,0],[0,0],[0,0]]
 
+    # lenH and lenHH before rd+, to be compared in form_graph_t later
+    if node_[0].fHH: 
+        lenHt = len(node_[0].rim_t[-1][0]), len(node_[0].rim_t[-1][1])
+        lenHH = len(node_[0].rim_t)
+    else:
+        if not node_[0].rim_t:  # base fork where rim_t is init as None
+            lenHt = 0,0
+        else:
+            lenHt = len(node_[0].rim_t[0]), len(node_[0].rim_t[1])
+        lenHH = 0
     nrng = rd_recursion(rroot, root, node_, Et, nrng)  # rng+, adds rim_ as rim_t[-1][0]
     if root.link_ and isinstance(root.link_[0], CderG):  # else CderP in edge before agg+
         rd_recursion(rroot, root, root.link_, Et, 0)  # der+, adds link_, rim_ as rim_t[-1][1]
 
-    _GG_t = form_graph_t(root, node_, Et, nrng)  # may convert root.node_[-1] to node_t
+    _GG_t = form_graph_t(root, node_, Et, nrng, lenHt, lenHH)  # may convert root.node_[-1] to node_t
     GGG_t = []  # add agg+ fork tree:
 
     while _GG_t:  # unpack fork layers?
@@ -100,22 +110,38 @@ def rd_recursion(rroot, root, Q, Et, nrng=1):  # rng+|der+ in G_,link_ -> fork t
     '''
     if fd:  # der+
         G_ = []
+        # by right all links' Gs should have a same nesting?
+        # so we need to get their lenH and lenHH before comp_g (before added with new links), same with rng+ below
+        rim_t = Q[0].G.rim_t
+        if Q[0].G.fHH: 
+            lenHH = len(rim_t)
+            rim_t = rim_t[-1]
+        else:
+            lenHH = 0
+        if (rim_t[0] and isinstance(rim_t[0][0], list)) or (rim_t[1] and isinstance(rim_t[1][0], list)):
+            lenH = len(rim_t[-1][fd])  # rim_t
+        else:
+            lenH = 1  # rimt  (for 1st conversion)
+
         for link in Q:  # inp_= root.link_, reform links
             if link.Vt[1] > G_aves[1] * link.Rt[1]:  # >rdn incr
-                nest_rim(link)  # add nesting for append in comp_G
-                comp_G(link, Et)
+                nest_rim(link, fd, lenH, lenHH)  # add nesting for append in comp_G
+                comp_G(link, Et, lenH, lenHH)
                 if link.G not in G_: G_ += [link.G]
                 if link._G not in G_: G_ += [link._G]
     else:  # rng+
         G_ = Q
+        if Q[0].fHH:  lenHH = len(Q[0].rim_t)
+        else:         lenHH = 0
+        lenH = 0  # always 0 for rng+
         for _G, G in combinations(G_, r=2):  # form new link_ from original node_
             dy = _G.box.cy - G.box.cy; dx = _G.box.cx - G.box.cx
             dist = np.hypot(dy, dx)
             # max distance between node centers, init=2
             if 2*nrng > dist > 2*(nrng-1):  # G,_G are within rng and were not compared in prior rd+
                 link = CderG(_G=_G, G=G)
-                nest_rim(link)  # add nesting for append in comp_G
-                comp_G(link, et)
+                nest_rim(link, fd, lenH, lenHH)  # add nesting for append in comp_G
+                comp_G(link, et, lenH, lenHH)
 
     if et[0][fd] > ave_Gm * et[1][fd]:  # single layer accum
         for Part, part in zip(Et, et):
@@ -123,46 +149,57 @@ def rd_recursion(rroot, root, Q, Et, nrng=1):  # rng+|der+ in G_,link_ -> fork t
                 Part[i] += par
         if fd:
             for G in G_:
+                rim_t = G.rim_t
+                if G.fHH:  rim_t = rim_t[-1]
+                if (rim_t[0] and isinstance(rim_t[0][0], list)) or (rim_t[1] and isinstance(rim_t[1][0], list)):
+                    lenH = len(rim_t[-1][fd])  # rim_t
+                else:
+                    lenH = 0
+                
                 for link in unpack_rim(G, fd):
-                    if len(link.daggH) - 1 > G.lenH:  # link.subH was appended in this rd cycle
+                    if len(link.daggH) > lenH:  # link.subH was appended in this rd cycle
                         link_ += [link]  # for next rd cycle
-
+      
         rd_recursion(rroot, root, link_ if fd else G_, Et, 0 if fd else nrng+1)
 
     return nrng
 
 # draft
-def nest_rim(link):
+def nest_rim(link, fd, lenH, lenHH):
 
     for G in link._G, link.G:
         if not G.rim_t: G.rim_t = [[],[]]  # must include link
-        lenH, lenHH = G.lenH, G.lenHH
-        rim_t = G.rim_t
-        if  lenHH > -1:
-            if lenHH==0:  # 1st sub+
-                if len(G.rim_t)==2 and (G.rim_t[0] and isinstance(G.rim_t[0][0],CderG)) or (G.rim_t[1] and isinstance(G.rim_t[1][0],CderG)):
-                    G.rim_t = [G.rim_t]  # convert rimt|rim_t to rimtH|rim_tH
-            rim_t = G.rim_t[-1]  # for next der+ checking (if there's any)
 
-        if lenH == 0:  # 1st der+
-            if len(rim_t)==2 and (rim_t[0] and isinstance(rim_t[0][0],CderG)) or (rim_t[1] and isinstance(rim_t[1][0],CderG)):
+        rim_t = G.rim_t
+        if G.fHH:   
+            if len(G.rim_t)==2:
+                # 1st sub+ for rimt
+                if (G.rim_t[0] and isinstance(G.rim_t[0][0],CderG)) or (G.rim_t[1] and isinstance(G.rim_t[1][0],CderG)):
+                    G.rim_t = [G.rim_t]  # convert rimt to rimtH
+                # 1st sub+ for rim_t
+                elif (G.rim_t[0] and G.rim_t[0][0] and isinstance(G.rim_t[0][0][0],CderG)) or (G.rim_t[1] and G.rim_t[1][0] and isinstance(G.rim_t[1][0][0],CderG)):
+                    G.rim_t = [G.rim_t]  # convert rim_t to rim_tH   
+            rim_t = G.rim_t[-1]
+
+        if lenH == 1:  # 1st der+
+            if (rim_t[0] and isinstance(rim_t[0][0],CderG)) or (rim_t[1] and isinstance(rim_t[1][0],CderG)):
                 rim_t[:] = [[rim_t[0]],[rim_t[1]]]  # convert last rimt to rim_t
 
 
-def form_graph_t(root, G_, Et, nrng):  # form Gm_,Gd_ from same-root nodes
+def form_graph_t(root, G_, Et, nrng, lenHt, lenHH):  # form Gm_,Gd_ from same-root nodes
 
     fd = not nrng
     _G_ = []
     for G in G_:  # select Gs connected in current layer:
         if G.rim_t:  # without depth, rim_t is init as an empty list
-            lenH, lenHH = G.lenH, G.lenHH
-            if lenHH > -1:
-                if isinstance(G.rim_t[-1][fd], list):
-                    rim_tH = G.rim_t[-1][fd]  # sub+'H
-                else: continue  # not added nesting in prior comp
-            else:
-                rim_tH = G.rim_t[fd]  # rim_
-            if len(rim_tH) > lenH: _G_ += [G]
+            rim_t = G.rim_t
+            if G.fHH:  # rimtH|rim_tH
+                glenHH = len(G.rim_t)
+                rim_t = G.rim_t[-1]
+            else:  # rimt|rim_t
+                glenHH = 0 
+            glenHt = len(rim_t[0]), len(rim_t[1])  # check number of rim in der+, and number of links in rng+
+            if (glenHt[0] != lenHt[0]) or (glenHt[1] != lenHt[1]) or (glenHH != lenHH): _G_ += [G]
 
     node_connect(_G_)  # Graph Convolution of Correlations over init _G_
     node_t = []
@@ -171,7 +208,10 @@ def form_graph_t(root, G_, Et, nrng):  # form Gm_,Gd_ from same-root nodes
             graph_ = segment_node_(root, _G_, fd, nrng)  # fd: node-mediated Correlation Clustering
             for graph in graph_:
                 if graph.Vt[fd] * (len(graph.node_)-1)*root.rng > G_aves[fd] * graph.Rt[fd]:
-                    for node in graph.node_: node.lenHH += 1  # sub+:
+                    for node in graph.node_: 
+                        if node.fHH == 0:
+                            node.rim_t = [node.rim_t]  # add first nesting
+                            node.fHH += 1  # sub+:
                     agg_recursion(root, graph, graph.node_, nrng)
                 else:
                     root.fback_t[root.fd] += [[graph.aggH, graph.valt, graph.rdnt, graph.dect]]
@@ -341,7 +381,7 @@ def sum_links_last_lay(G, fd):  # eLay += last_lay/ link, lenHH: daggH, lenH: ds
     G.ext_H += [eLay]
 
 
-def comp_G(link, Et, lenH=0, lenHH=None):  # lenH in sub+|rd+, lenHH in agg_compress sub+ only
+def comp_G(link, Et, lenH=0, lenHH=0):  # lenH in sub+|rd+, lenHH in agg_compress sub+ only
 
     _G, G = link._G, link.G
     Mval,Dval, Mrdn,Drdn, Mdec,Ddec = 0,0, 1,1, 0,0
@@ -389,9 +429,8 @@ def comp_G(link, Et, lenH=0, lenHH=None):  # lenH in sub+|rd+, lenHH in agg_comp
         daggH = [[dderH]+daggH, [Mval,Dval],[Mrdn,Drdn],[Mdec,Ddec]]
     else:
         daggH = dderH
-    lenH, lenHH = G.lenH, G.lenHH  # should be from _G or G?
-    if lenH==0: daggH = [daggH]  # dderH -> dsubH
-    if lenHH==0: daggH = [daggH]  # dsubH -> daggH
+    if lenH==1: daggH = [daggH]  # dderH -> dsubH
+    if lenHH==1: daggH = [daggH]  # dsubH -> daggH
     link.daggH += [daggH]  # concat
 
     link.Vt,link.Rt,link.Dt = Valt,Rdnt,Dect = [Mval,Dval],[Mrdn,Drdn],[Mdec,Ddec]  # reset per comp_G
@@ -402,11 +441,10 @@ def comp_G(link, Et, lenH=0, lenHH=None):  # lenH in sub+|rd+, lenHH in agg_comp
             Et[0][fd] += Val; Et[1][fd] += Rdn; Et[2][fd] += Dec
             G.Vt[fd] += Val;  G.Rt[fd] += Rdn;  G.Dt[fd] += Dec
             for G in link.G, link._G:
-                lenH, lenHH = G.lenH, G.lenHH
                 rim_t = G.rim_t
-                if lenHH>-1: rim_t = rim_t[-1]  # get rimt or rim_t from rimtH or rim_tH
-                if lenH >-1: # der+
-                    if len(rim_t[fd]) -1 == lenH:
+                if lenHH>0: rim_t = rim_t[-1]  # get rimt|rim_t from rimtH|rim_tH
+                if lenH >0: # der+
+                    if len(rim_t[fd]) == lenH:
                         rim_t[fd] += [[link]]   # add new rim
                     else:
                         rim_t[fd][-1] += [link]  # rim_t
