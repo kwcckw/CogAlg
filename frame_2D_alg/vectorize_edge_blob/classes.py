@@ -211,7 +211,7 @@ class Cgraph(CBase):  # params of single-fork node_ cluster per pplayers
     # graph-external, +level per root sub+:
     fHH: int = 0  # aggH + [daggH]: add nesting per agg+?
     rimH: list = z([])  # direct links, depth, init rim_t, link_tH in base sub+ | cpr rd+, link_tHH in cpr sub+
-    RimH: list = z([])  # links to furthest mediated evaluated nodes
+    RimH: list = z([])  # links to the most mediated nodes
     extH: list = z([])  # G-external daggH( dsubH( dderH, summed from rim links
     evalt: list = z([0,0])  # sum from esubH
     erdnt: list = z([1,1])
