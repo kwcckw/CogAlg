@@ -60,13 +60,13 @@ def agg_recursion(rroot, root, node_, nrng=1, fagg=0):  # lenH = len(root.aggH[-
     # agg+ der=1 xcomp of new Gs if fagg, else sub+: der+ xcomp of old Gs:
     nrng = rng_recursion(rroot, root, node_ if fagg else root.link_, Et, nrng)  # rng+ appends rim, link.derH
 
-    form_graph_t(root, node_, Et, nrng)  # root_fd, eval sub+, feedback per graph
-    if isinstance(node_[0],list):  # node_t was formed above
+    GG_t = form_graph_t(root, node_, Et, nrng)  # root_fd, eval sub+, feedback per graph
+    if isinstance(node_[0],list) or GG_t:  # node_t was formed above
 
         for i, G_ in enumerate(node_):
             if root.valt[i] * (len(G_)-1)*root.rng > G_aves[i] * root.rdnt[i]:
                 # agg+ / node_t, vs. sub+ / node_:
-                agg_recursion(rroot, root, G_, nrng=1, fagg=1)  # der+ if fd, else rng+ =2
+                agg_recursion(rroot, root, G_, nrng=nrng+1, fagg=1)  # der+ if fd, else rng+ =2  (suppose nrng should be incremented from input nrng?)
                 if rroot:
                     rroot.fback_t[i] += [[root.aggH,root.valt,root.rdnt,root.dect]]
                     feedback(rroot,i)  # update root.root..
@@ -112,7 +112,7 @@ def rng_recursion(rroot, root, Q, Et, nrng=1):  # rng++/ G_, der+/ link_ if call
 
     et = [[0,0],[0,0],[0,0]]  # grapht link_' eValt, eRdnt, eDect(currently not used)
     _G_, _link_ = set(), set()  # for next rng+|sub+
-    fd = isinstance(Q[0],CderG)
+    fd = isinstance(Q[0] if isinstance(Q, list) else next(iter(Q))[0], CderG)
 
     if fd:  # der+, but recursion is still rng+
         for link in Q:  # inp_= root.link_, reform links
@@ -165,7 +165,8 @@ def form_graph_t(root, G_, Et, nrng, fagg=0):  # form Gm_,Gd_ from same-root nod
         if Et[0][fd] > ave * Et[1][fd]:  # eValt > ave * eRdnt: cluster
             graph_ = segment_node_(root, G_, fd, nrng)  # fd: node-mediated Correlation Clustering
             for graph in graph_:
-                if graph.Vt[fd] * (len(graph.node_)-1)*root.rng > G_aves[fd] * graph.Rt[fd]:
+                # add graph link_ in the evaluation instead of node? Because we need link in der+ sub later
+                if graph.Vt[fd] * (len(graph.node_)-1)*root.rng * len(graph.link_) > G_aves[fd] * graph.Rt[fd]:
                     for node in graph.node_:
                         if node.rimH and isinstance(node.rimH[0],CderG):  # 1st sub+: convert rim to rimH
                             node.rimH = [node.rimH]
@@ -180,7 +181,7 @@ def form_graph_t(root, G_, Et, nrng, fagg=0):  # form Gm_,Gd_ from same-root nod
     if fagg:
         return node_t
     elif any(node_t):
-        G_[:] = node_t  # else keep root.node_
+        G_[:] = node_t  # else keep root.node_  (replacement only in sub+?)
 
 
 def node_connect(_G_):  # node connectivity = sum surround link vals, incr.mediated: Graph Convolution of Correlations
@@ -320,7 +321,7 @@ def sum_links_last_lay(G, fd):  # eLay += last_lay/ link, lenHH: daggH, lenH: ds
     for link in G.rimH[-1] if G.rimH and isinstance(G.rimH[0],list) else G.rimH:  # always rimH?
         if link.daggH:
             daggH = link.daggH
-            if G.fHH:  # if agg+ adds nesting to node aggH, formed in sub+
+            if G.aggH:  # we just need check G.aggH here? Because if there's G.aggH, there will be additional nesting in daggH
                 if len(daggH) > len(G.extH):
                     dsubH = daggH[-1][0]  # last subHv's subH
                 else:
@@ -348,6 +349,7 @@ def comp_G(link, Et, ifd):
     for fd, (ptuple,Ptuple) in enumerate(zip((mtuple,dtuple),(Mtuple,Dtuple))):
         for i, (par, max, ave) in enumerate(zip(ptuple, Ptuple, aves)):
             # compute link decay coef: par/ max(self/same)
+            # use abs here? par or max could be negative and hence causing negative Rt later
             if fd: dect[fd] += par/max if max else 1
             else:  dect[fd] += (par+ave)/ max if max else 1
     dertv = [[mtuple,dtuple], [mval,dval],[mrdn,drdn],[dect[0]/6,dect[1]/6]]
@@ -424,16 +426,7 @@ def comp_subHv(_subH, subH, rn):
 
     for _lay, lay in zip(_subH, subH):  # compare common lower layer|sublayer derHs, if prior match?
 
-        dderH, valt,rdnt,dect = comp_derHv(_lay[0],lay[0], rn)  # derHv: [derH, valt, rdnt, dect, extt, 1]:
-
-        dextt = []
-        for _ext,ext in zip(_lay[-1],lay[-1]):
-            if isinstance(_ext[0], list):  # der_extt: [[L,S,A], [L,S,A]]
-                for _der_ext, der_ext in zip(_ext, ext):
-                    dextt += [comp_ext(_der_ext,der_ext,[Mval,Dval],[Mrdn,Drdn],[Mdec,Ddec]) ]  # pack them flat?
-            else:  # ext: [L,S,A]
-                dextt += [comp_ext(_ext,ext,[Mval,Dval],[Mrdn,Drdn],[Mdec,Ddec]) ]
-
+        dderH, valt,rdnt,dect, dextt = comp_derHv(_lay,lay, rn)  # derHv: [derH, valt, rdnt, dect, extt]:
         dsubH += [[dderH, valt,rdnt,dect,dextt]]  # flat
         Mdec += dect[0]; Ddec += dect[1]
         mval,dval = valt; Mval += mval; Dval += dval
@@ -444,8 +437,9 @@ def comp_subHv(_subH, subH, rn):
     return dsubH, [Mval,Dval],[Mrdn,Drdn],[Mdec,Ddec]  # new layer,= 1/2 combined derH
 
 
-def comp_derHv(_derH, derH, rn):  # derH is a list of der layers or sub-layers, each is ptuple_tv
+def comp_derHv(_derHv, derHv, rn):  # derH is a list of der layers or sub-layers, each is ptuple_tv
 
+    _derH, derH = _derHv[0], derHv[0]
     Mval,Dval, Mrdn,Drdn, Mdec,Ddec = 0,0,1,1,0,0
     dderH =[]
 
@@ -467,7 +461,16 @@ def comp_derHv(_derH, derH, rn):  # derH is a list of der layers or sub-layers, 
     if dderH:
         S = min(len(_derH),len(derH)); Mdec /= S; Ddec /= S  # normalize
 
-    return dderH, [Mval,Dval],[Mrdn,Drdn],[Mdec,Ddec]  # new derLayer,= 1/2 combined derH
+
+    dextt = []
+    for _ext,ext in zip(_derHv[-1],derHv[-1]):
+        if isinstance(_ext[0], list):  # der_extt: [[L,S,A], [L,S,A]]
+            for _der_ext, der_ext in zip(_ext, ext):
+                dextt += [comp_ext(_der_ext,der_ext,[Mval,Dval],[Mrdn,Drdn],[Mdec,Ddec]) ]  # pack them flat?
+        else:  # ext: [L,S,A]
+            dextt += [comp_ext(_ext,ext,[Mval,Dval],[Mrdn,Drdn],[Mdec,Ddec]) ]
+
+    return dderH, [Mval,Dval],[Mrdn,Drdn],[Mdec,Ddec], dextt  # new derLayer,= 1/2 combined derH
 
 
 def sum_aggHv(AggH, aggH, base_rdn):
