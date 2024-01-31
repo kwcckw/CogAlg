@@ -58,10 +58,11 @@ def agg_recursion(rroot, root, node_, nrng=1, fagg=0):  # lenH = len(root.aggH[-
     Et = [[0,0],[0,0],[0,0]]  # grapht link_' eValt, eRdnt, eDect(currently not used)
 
     # agg+ der=1 xcomp of new Gs if fagg, else sub+: der+ xcomp of old Gs:
-    nrng = rng_recursion(rroot, root, node_ if fagg else root.link_, Et, nrng)  # rng+ appends rim, link.derH
+    nrng = rng_recursion(rroot, root, combinations(node_, r=2)  if fagg else root.link_, Et, nrng)  # rng+ appends rim, link.derH
 
-    GG_t = form_graph_t(root, node_, Et, nrng)  # root_fd, eval sub+, feedback per graph
-    if GG_t:
+    form_graph_t(root, node_, Et, nrng, fagg)  # root_fd, eval sub+, feedback per graph
+
+    if node_ and isinstance(node_[0], list):
         for i, G_ in enumerate(node_):
             if root.valt[i] * (len(G_)-1)*root.rng > G_aves[i] * root.rdnt[i]:
                 # agg+ / node_t, vs. sub+ / node_:
@@ -83,7 +84,7 @@ def rng_recursion(rroot, root, Q, Et, nrng=1):  # rng++/ G_, der+/ link_ if call
                 comp_G(link, Et, fd)
                 comp_rim(_link_, link, nrng)  # add matching-direction rim links for next rng+
     else:  # rng+
-        Gt_ = combinations(Q, r=2) if isinstance(Q, list) else Q  # list or set
+        Gt_ = Q  # always list of G tuple pair
         for (_G, G) in Gt_:  # form new link_ from original node_
             dy = _G.box.cy - G.box.cy; dx = _G.box.cx - G.box.cx
             dist = np.hypot(dy, dx)
@@ -106,7 +107,7 @@ def rng_recursion(rroot, root, Q, Et, nrng=1):  # rng++/ G_, der+/ link_ if call
 def comp_rim(_link_, link, nrng):  # for next rng+:
 
     for G in link._G, link.G:
-        for _link in G.rimH[1]:
+        for _link in G.rimH[-1]:  #should be [-1] here? Because it must be a rimH instead of rim here 
             _G = _link.G if _link.G in [link._G,link.G] else _link.G  # new to link
 
             dy = _G.box.cy - G.box.cy; dx = _G.box.cx - G.box.cx
@@ -128,7 +129,8 @@ def form_graph_t(root, G_, Et, nrng, fagg=0):  # form Gm_,Gd_ from same-root nod
             graph_ = segment_node_(root, G_, fd, nrng, fagg)  # fd: node-mediated Correlation Clustering
             if fd:  # der+ only, rng+ exhausted before sub+
                 for graph in graph_:
-                    if graph.Vt[1] > G_aves[1] * graph.Rt[1]:  # no * (len(graph.node_)-1) * root.rng
+                    # for converted graph (single graph), their Vt may inherited from comp_slice and hence > ave here, so we reset them before agg+ or add evaluation of links?
+                    if graph.Vt[1]  > G_aves[1] * graph.Rt[1]:  # no * (len(graph.node_)-1) * root.rng
                         node_ = graph.node_
                         if isinstance(node_[0].rimH[0],CderG):  # 1st sub+, same rim nesting for all nodes,
                             for node in node_: node.rimH = [node.rimH]  # rim -> rimH, no += [[]]: may stay empty
@@ -237,7 +239,7 @@ def sum2graph(root, grapht, fd, nrng, fagg):  # sum node and link params into gr
 
     G_,Link_,Vt,Rt,Dt,_ = grapht  # last-layer vals only; depth 0:derLay, 1:derHv, 2:subHv
 
-    graph = Cgraph(fd=fd, node_=G_, L=len(G_),link_=Link_, Vt=Vt, Rt=Rt, Dt=Dt, rng=nrng)
+    graph = Cgraph(fd=fd, node_=G_, L=len(G_),link_=set(Link_), Vt=Vt, Rt=Rt, Dt=Dt, rng=nrng, fHH=G_[0].fHH)  # fHH follows node?
     graph.roott[fd] = root
     for link in Link_:
         link.roott[fd]=graph
@@ -260,9 +262,10 @@ def sum2graph(root, grapht, fd, nrng, fagg):  # sum node and link params into gr
     valt = Cmd(*valt) + evalt; graph.valt = valt
     rdnt = Cmd(*rdnt) + erdnt; graph.rdnt = rdnt
     dect = Cmd(*dect) + edect; graph.dect = dect
-    if fagg and not G_[0].fHH:
+    if fagg and not G_[0].fHH: 
         # 1st agg+, init aggH = [subHv]:
         graph.aggH = [[graph.aggH,valt,rdnt,dect]]
+        graph.fHH = 1  # set fHH here?
 
     graph.A = [A0,A1]; graph.S = S
 
@@ -286,7 +289,7 @@ def sum_links_last_lay(G, fd):  # eLay += last_lay/ link, lenHH: daggH, lenH: ds
     for link in G.rimH[-1] if G.rimH and isinstance(G.rimH[0],list) else G.rimH:  # always rimH?
         if link.daggH:
             daggH = link.daggH
-            if G.aggH:  # we just need check G.aggH here? Because if there's G.aggH, there will be additional nesting in daggH
+            if G.fHH: 
                 if len(daggH) > len(G.extH):
                     dsubH = daggH[-1][0]  # last subHv's subH
                 else:
@@ -330,7 +333,12 @@ def comp_G(link, Et, ifd):
             for fd, (ptuple,Ptuple) in enumerate(zip((mtuple,dtuple),(Mtuple,Dtuple))):
                 for (par, max, ave) in zip(ptuple, Ptuple, aves):  # different ave for comp_dtuple
                     if fd: ddec += abs(par)/ abs(max) if max else 1
-                    else:  mdec += (par+ave)/ (max+ave) if max else 1
+                    else:  
+                        # looks like we need abs(max) here or in comp_dtuple
+                        # par may negative only if both of the comparands are negative or positive
+                        # so when both of them are negative, max will be negative and hence we need abs it
+                        mdec += (par+ave)/ (abs(max)+ave) if max else 1
+   
             mdec /= 6; ddec /= 6
             Mval+=dval; Dval+=mval; Mdec=(Mdec+mdec)/2; Ddec=(Ddec+ddec)/2
             dderH += [[[mtuple,dtuple], [mval,dval],[mrdn,drdn],[mdec,ddec]]]
@@ -373,8 +381,13 @@ def comp_aggHv(_aggH, aggH, rn):  # no separate ext
 
     for _lev, lev in zip(_aggH, aggH):  # compare common subHs, if lower-der match?
         if _lev and lev:
-            dsubH, valt,rdnt,dect = comp_subHv(_lev[0],lev[0], rn)
-            SubH += dsubH  # concat
+            
+            if len(lev) == 5:  # derHv with additional ext
+                dderH, valt,rdnt,dect, dextt = comp_derHv(_lev,lev, rn)
+                SubH += [[dderH, valt,rdnt,dect,dextt]] 
+            else:
+                dsubH, valt,rdnt,dect = comp_subHv(_lev[0],lev[0], rn)
+                SubH += dsubH  # concat
             Mdec += dect[0]; Ddec += dect[1]
             mval,dval = valt; Mval += mval; Dval += dval
             Mrdn += rdnt[0] + dval > mval; Drdn += rdnt[1] + mval <= dval
@@ -416,8 +429,8 @@ def comp_derHv(_derHv, derHv, rn):  # derH is a list of der layers or sub-layers
         dect = [0,0]
         for fd, (ptuple,Ptuple) in enumerate(zip((mtuple,dtuple),(Mtuple,Dtuple))):
             for (par, max, ave) in zip(ptuple, Ptuple, aves):  # different ave for comp_dtuple
-                if fd: dect[fd] += par/max if max else 1
-                else:  dect[fd] += (par+ave)/(max) if max else 1
+                if fd: dect[fd] += abs(par)/abs(max) if max else 1
+                else:  dect[fd] += (par+ave)/abs(max)+ave if max else 1
         dect[0]/=6; dect[1]/=6
         dderH += [[[mtuple,dtuple], [mval,dval],[mrdn,drdn],dect]]
         Mval+=mval; Dval+=dval; Mrdn+=mrdn; Drdn+=drdn
@@ -443,7 +456,10 @@ def sum_aggHv(AggH, aggH, base_rdn):
     if aggH:
         if AggH:
             for Layer, layer in zip_longest(AggH,aggH, fillvalue=[]):
-                sum_subHv(Layer, layer, base_rdn)
+                if len(layer) == 5:  # derHv has additional ext
+                    sum_derHv(Layer, layer, base_rdn)
+                else:
+                    sum_subHv(Layer, layer, base_rdn)
         else:
             AggH[:] = deepcopy(aggH)
 
