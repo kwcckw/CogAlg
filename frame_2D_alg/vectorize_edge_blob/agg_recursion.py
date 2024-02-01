@@ -3,7 +3,7 @@ from copy import deepcopy, copy
 from itertools import combinations, zip_longest
 from .classes import Cgraph, CderG, Cmd, CderH
 from .filters import aves, ave_mL, ave_dangle, ave, ave_distance, G_aves, ave_Gm, ave_Gd
-from .slice_edge import slice_edge, comp_angle
+from .slice_edge import slice_edge, comp_angle,sum_angle
 from .comp_slice import comp_P_, comp_derH, sum_derH, comp_ptuple, sum_dertuple, comp_dtuple, get_match
 
 '''
@@ -116,7 +116,7 @@ def comp_rim(_link_, link, nrng):  # for next rng+:
                 # potentially connected G,_G: within rng and not compared in prior rng
                 mangle = comp_angle(link.A,_link.A)
                 # comp direction of link to all links in link.G.rimH[-1] and link._G.rimH[-1]
-                if mangle > ave:
+                if mangle[1] > ave:  # use only dang;e? And it should be < ave?
                     _link_.add(CderG(G=G,_G=_G))  # to compare in rng+
 
 
@@ -236,6 +236,7 @@ def segment_node_(root, root_G_, fd, nrng, fagg):  # eval rim links with summed 
 
 def sum2graph(root, G_, Link_, fd, nrng, fagg):  # sum node and link params into graph, aggH in agg+ or player in sub+
 
+    # if node_[0].fHH =1, but fagg = 0 here, graph.aggH will be still aggH instead of subH, so fHH should follow node_[0]? Else we can't differentiate G.aggH is subH or aggH later
     graph = Cgraph(fd=fd, node_=G_, L=len(G_),link_=set(Link_), rng=nrng, fHH=fagg)
     graph.roott[fd] = root
     for link in Link_:
@@ -249,7 +250,7 @@ def sum2graph(root, G_, Link_, fd, nrng, fagg):  # sum node and link params into
         sum_derH([graph.derH,[0,0],[1,1]], [G.derH,[0,0],[1,1]], base_rdn=1)
         sum_subHv([extH,evalt,erdnt,edect], [G.extH,G.evalt,G.erdnt,G.edect], base_rdn=G.erdnt[fd])
         sum_aggHv(graph.aggH, G.aggH, base_rdn=1)
-        A0 += G.A[0]; A1 += G.A[1]; S += G.S
+        A0 += G.A[0]; A1 += G.A[1]; S += G.S  # if G.A and G.S are empty, S,and A always are empty
         for j in 0,1:
             evalt[j] += G.evalt[j]; erdnt[j] += G.erdnt[j]; edect[j] += G.edect[j]
             valt[j] += G.valt[j]; rdnt[j] += G.rdnt[j]; dect[j] += G.dect[j]
@@ -335,6 +336,9 @@ def comp_G(link, Et, ifd):
     # / G:
     der_ext = comp_ext([_G.L,_G.S,_G.A],[G.L,G.S,G.A], [Mval,Dval],[Mrdn,Drdn],[Mdec,Ddec])
     dderH = [[dertv]+dderH, [Mval,Dval],[Mrdn,Drdn],[Mdec,Ddec], der_ext]
+
+    # we miss out this? We need to get angle for link, so that we can use it for comp_rim later
+    link.A = sum_angle(_G.A, G.A, average=1)  # average angle from both _G and G?
 
     if _G.aggH and G.aggH:
         daggH, valt,rdnt,dect = comp_aggHv(_G.aggH, G.aggH, rn=1) if G.fHH else comp_subHv(_G.aggH, G.aggH, rn=1)

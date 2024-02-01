@@ -186,6 +186,20 @@ def comp_angle(_angle, angle):  # rn doesn't matter for angles
 
     return [mangle, dangle]
 
+
+def sum_angle(_angle, angle, average=0):
+
+
+    angle0 = (_angle[0] * angle[1]) + (angle[0] * _angle[1])  # sin(a + b) = sin a cos b + sin b cos a
+    angle1 = (_angle[1] * angle[1]) - (_angle[0] * angle[0])  # cos(a + b) = cos(a)cos(b) – sin(a)sin(b).
+
+    if average:
+        angle0 /= 2
+        angle1 /= 2
+        
+    return [angle0, angle1]
+
+
 def comp_aangle(_aangle, aangle):  # currently not used, just in case we need it later
 
     _sin_da0, _cos_da0, _sin_da1, _cos_da1 = _aangle

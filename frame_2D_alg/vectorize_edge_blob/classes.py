@@ -170,7 +170,7 @@ class CP(CBase):  # horizontal blob slice P, with vertical derivatives per param
         if valt.m > ave_Pm * rdnt.m or valt.d > ave_Pm * rdnt.d:
             derH = CderH([dertuplet])
             link_ += [CderP(derH=derH, valt=valt, rdnt=rdnt, _P=self, P=other, S=S)]
-
+            # link_[-1].A=sum_angle(self.ptuple,angle, other.ptuple.angle, average=1)  # not sure, get angle from both Ps here?
 
 class CderP(CBase):  # tuple of derivatives in P link: binary tree with latuple root and vertuple forks
 

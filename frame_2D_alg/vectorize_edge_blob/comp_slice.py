@@ -5,7 +5,7 @@ from itertools import zip_longest, combinations
 from typing import List, Tuple
 from .classes import get_match, CderH, CderP, Cgraph, Cmd, CP
 from .filters import ave, ave_dI, aves, P_aves, PP_aves
-from .slice_edge import comp_angle
+from .slice_edge import comp_angle, sum_angle
 '''
 Vectorize is a terminal fork of intra_blob.
 
@@ -102,7 +102,7 @@ def form_PP_t(root, root_link_, base_rdn):  # form PPs of derP.valt[fd] + connec
 
 def sum2PP(root, P_, derP_, base_rdn, fd):  # sum links in Ps and Ps in PP
 
-    PP = Cgraph(fd=fd, roott=root, P_=P_, rng=root.rng +(1-fd))  # initial PP.box = (inf,inf,-inf,-inf)
+    PP = Cgraph(fd=fd, roott=root, P_=P_, rng=root.rng +(1-fd), A=[0,0])  # initial PP.box = (inf,inf,-inf,-inf)
 
     for derP in derP_:
         # accum links:
@@ -126,6 +126,8 @@ def sum2PP(root, P_, derP_, base_rdn, fd):  # sum links in Ps and Ps in PP
         PP.derH += P.derH
         PP.valt += P.valt
         PP.rdnt += P.rdnt + (base_rdn, base_rdn)
+        PP.A = sum_angle(PP.A, P.ptuple.angle, average=1)  # we need to add angle into PP, so that we can use it in agg+ later?
+
 
     y0, x0, yn, xn = PP.box
     PP.mask__ = np.zeros((yn-y0, xn-x0), bool)
@@ -172,7 +174,7 @@ def feedback(root, fd):  # in form_PP_, append new der layers to root PP, single
         if fback_ and (len(fback_)==len(node_)):  # all nodes terminated and fed back
             feedback(rroot, fd)  # sum2PP adds derH per rng, feedback adds deeper sub+ layers
 
-
+# we are not using this now
 def comp_P(link_, _P, P, rn, fd=1, derP=None):  #  derP if der+, reused as S if rng+
     aveP = P_aves[fd]
 
@@ -181,7 +183,7 @@ def comp_P(link_, _P, P, rn, fd=1, derP=None):  #  derP if der+, reused as S if 
         derH = derP.derH | dderH; S = derP.S  # dderH valt,rdnt for new link
     else:  # rng+: add derH
         dertuplet, valt, rdnt = _P.ptuple.comp(P.ptuple, rn=rn)
-        derH = CderH([dertuplet]); S = derP
+        derH = CderH([dertuplet]); S = derP  # why S = derP? if S == None, using S = None should be clearer
     derP = CderP(derH=derH, valt=valt, rdnt=rdnt, P=P,_P=_P, S=S)
 
     if valt.m > aveP*rdnt.m or valt.d > aveP*rdnt.d:
