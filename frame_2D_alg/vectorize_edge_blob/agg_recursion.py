@@ -88,12 +88,16 @@ def rng_recursion(rroot, root, Q, Et, nrng=1):  # rng++/ G_, der+/ link_ if call
             dy = _G.box.cy - G.box.cy; dx = _G.box.cx - G.box.cx
             dist = np.hypot(dy, dx)
             if 2*nrng >= dist > 2*(nrng-1):  # G,_G are within rng and were not compared at prior rng
-                link = CderG(_G=_G, G=G, A=Cangle(dy,dx), S=dist)
-                comp_G(link, et)
-            else:
-                _G_.add((_G, G))  # for next rng+
-
-    if et[0][fd] > ave_Gm * et[1][fd]:  # single layer accum
+                if G.Vt[0]+_G.Vt[0] > ave * (G.Rt[0]+_G.Rt[0]):  # add pairwise eval
+                    link = CderG(_G=_G, G=G, A=Cangle(dy,dx), S=dist)
+                    comp_G(link, et)
+                else:
+                    _G_.add((_G, G))  # for next rng+
+    '''
+    comparison is bilateral: nodes with higher prior match should keep searching over all surrounding nodes, even those with low prior match.
+    so rng_recursion eval is per original cluster, more selective rng+ sub-clusters we had before didn't reflect this bilateral logic.
+    '''
+    if et[0][0] > ave_Gm * et[1][0]:  # eval single layer accum, for rng++ only
         for Part, part in zip(Et, et):
             for i, par in enumerate(part):  # Vt[i]+=v; Rt[i]+=rt[i]; Dt[i]+=d:
                 Part[i] += par
@@ -312,7 +316,7 @@ def comp_G(link, Et):
             else:  dect[fd] += (par+ave)/ (max+ave) if max else 1
     dertv = CderH([[mtuple,dtuple], [mval,dval],[mrdn,drdn],[dect[0]/6,dect[1]/6],0])  # only dertv doesn't have ext here?
     Mval+=mval; Dval+=dval; Mrdn+=mrdn; Drdn+=drdn; Mdec+=dect[0]/6; Ddec+=dect[1]/6  # ave of 6 params
-
+    # not updated:
     # / PP:
     dderH = []
     if _G.derH and _G.derH:  # empty in single-P Gs?
@@ -332,7 +336,7 @@ def comp_G(link, Et):
     # / G:
     der_ext = comp_ext(_G.ext,G.ext,[Mval,Dval],[Mrdn,Drdn],[Mdec,Ddec])
     dderH = [[dertv]+dderH, [Mval,Dval],[Mrdn,Drdn],[Mdec,Ddec], der_ext, 1]
-    sum_ext(Ext, der_ext) 
+    sum_ext(Ext, der_ext)
 
     if _G.aggH and G.aggH:
         if G.fHH:
@@ -388,7 +392,7 @@ def comp_aggHv(_aggHv, aggHv, rn):  # no separate ext
 
     if SubH:
         S = min(len(_aggH),len(aggH)); Mdec/= S; Ddec /= S  # normalize
-        
+
     dextt, Valt, Rdnt, Dect = comp_ext_(_aggHv[-2],aggHv[-2], [Mval,Dval],[Mrdn,Drdn],[Mdec,Ddec])
     sum_ext(Ext, dextt)
 
@@ -458,10 +462,10 @@ def sum_aggHv(T, t, base_rdn):
                     if layer[-1] == 1:  # derHv with depth == 1
                         sum_derHv(Layer, layer, base_rdn)
                     else:  # subHv
-                        sum_subHv(Layer, layer, base_rdn)   
+                        sum_subHv(Layer, layer, base_rdn)
             else:
                 AggH[:] = deepcopy(aggH)
-            sum_ext(Ext,ext)    
+            sum_ext(Ext,ext)
         else:
            T[:] = deepcopy(t)
 
@@ -501,7 +505,7 @@ def sum_derHv(T,t, base_rdn, fneg=0):  # derH is a list of layers or sub-layers,
                 in zip_longest(DerH, derH, fillvalue=[([0,0,0,0,0,0],[0,0,0,0,0,0]), (0,0),(0,0),(0,0),0])
             ]
             sum_ext(Extt_, extt_)
-            
+
         else:
             T[:] = deepcopy(t)
 
@@ -518,7 +522,7 @@ def sum_ext(Extt, extt):
     else:
         Extt[:] = deepcopy(extt)
 
-
+# not reviewed:
 def comp_ext_(_ext_, ext_, valt, rdnt, dect):
 
     dextt = []

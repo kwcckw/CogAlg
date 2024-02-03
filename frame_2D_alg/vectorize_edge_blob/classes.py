@@ -222,10 +222,7 @@ class Cgraph(CBase):  # params of single-fork node_ cluster
     evalt: list = z([0,0])  # sum from esubH
     erdnt: list = z([1,1])
     edect: list = z([0,0])
-    ext: list = z([0,0,Cangle(0,1)])  # replacing the below: (should be L,S,A?)
-    L: int = 0 # len base node_; from internal links:
-    S: float = 0.0  # sparsity: average distance to link centers
-    A: list = z([0,0])  # angle: average dy,dx to link centers
+    ext: list = z([0,0,Cangle(0,0)])  # L,S,A: L len base node_, S sparsity: average link len, A angle: average link dy,dx
     rng: int = 1
     box: Cbox = Cbox(inf,inf,-inf,-inf)  # y0,x0,yn,,xn
     # tentative:
@@ -245,6 +242,7 @@ class Cgraph(CBase):  # params of single-fork node_ cluster
     fback_t: list = z([[],[],[]])  # feedback [[aggH,valt,rdnt,dect]] per node fork, maps to node_H
     compared_: list = z([])
     Rdn: int = 0  # for accumulation or separate recursion count?
+
     # depth: int = 0  # n sub_G levels over base node_, max across forks
     # nval: int = 0  # of open links: base alt rep
     # id_H: list = z([[]])  # indices in the list of all possible layers | forks, not used with fback merging
