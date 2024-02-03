@@ -35,6 +35,12 @@ def comp_P_(edge: Cgraph, adj_Pt_: List[Tuple[CP, CP]]):  # cross-comp P_ in edg
 
     form_PP_t(edge, edge.link_, base_rdn=2)
 
+    # something like this on PPs' rng+?
+    for fd, PP_ in enumerate(edge.node_):  #  node_t
+        if edge.valt[fd] * (len(PP_)-1)*(edge.rng+1) > G_aves[fd] * edge.rdnt[fd]:
+            # update PP into adj_PPt here
+            comp_P_(edge, adj_PPt)
+
 # rng+ and der+ are called from sub_recursion:
 
 def comp_rng(ilink_, rng):  # form new Ps and links
