@@ -88,8 +88,8 @@ def rng_recursion(rroot, root, Q, Et, nrng=1):  # rng++/ G_, der+/ link_ if call
             dy = _G.box.cy - G.box.cy; dx = _G.box.cx - G.box.cx
             dist = np.hypot(dy, dx)
             if 2*nrng >= dist > 2*(nrng-1):  # G,_G are within rng and were not compared at prior rng
-                # G.Vt is always empy here from the base fork, so actually we need G.valt + G.Vt?
-                if (G.Vt[0]+_G.Vt[0]+G.valt[0]+_G.valt[0]) > ave * (G.Rt[0]+_G.Rt[0]+G.rdnt[0]+_G.rdnt[0]):  # add pairwise eval
+                # pairwise eval in rng++, or directional?
+                if nrng==1 or (G.Vt[0]+_G.Vt[0]) > ave * (G.Rt[0]+_G.Rt[0]):
                     link = CderG(_G=_G, G=G, A=Cangle(dy,dx), S=dist)
                     comp_G(link, et)
                 else:
@@ -132,8 +132,8 @@ def form_graph_t(root, G_, Et, nrng, fagg=0):  # form Gm_,Gd_ from same-root nod
             graph_ = segment_node_(root, G_, fd, nrng, fagg)  # fd: node-mediated Correlation Clustering
             if fd:  # der+ only, rng+ exhausted before sub+, can't be effectively extended in sub Gs?
                 for graph in graph_:
-                    # Et is always empty for graph , unless we accumulate it in sum2graph, but actually we should use valt and rdnt here?
-                    if graph.link_ and graph.valt[1] > G_aves[1] * graph.rdnt[1]:
+                    if graph.link_ and graph.Vt[1] > G_aves[1] * graph.Rt[1]:
+                        graph.Vt = [0,0]; graph.Rt = [0,0]; graph.Dt = [0,0]  # reset
                         node_ = graph.node_
                         if isinstance(node_[0].rimH[0],CderG):  # 1st sub+, same rim nesting?
                             for node in node_: node.rimH = [node.rimH]  # rim -> rimH
@@ -234,13 +234,19 @@ def segment_node_(root, root_G_, fd, nrng, fagg):  # eval rim links with summed 
         if graph_: _graph_ = graph_  # selected graph expansion
         else: break
 
-    # form Cgraphs if Val > ave* Rdn, no use for Vt,Rt,Dt,link_:
-    return [sum2graph(root, graph[0], graph[1], fd, nrng, fagg) for graph in igraph_ if graph[2][fd] > ave * graph[3][fd]]
+    graph_ = []
+    for grapht in igraph_:
+        if grapht[2][fd] > ave * grapht[3][fd]:  # form Cgraphs if Val > ave* Rdn
+            graph_ += [sum2graph(root, grapht[:4], fd, nrng, fagg)]
+
+    return graph_
 
 
-def sum2graph(root, G_, Link_, fd, nrng, fagg):  # sum node and link params into graph, aggH in agg+ or player in sub+
+def sum2graph(root, grapht, fd, nrng, fagg):  # sum node and link params into graph, aggH in agg+ or player in sub+
 
-    graph = Cgraph(fd=fd, node_=G_,link_=set(Link_), rng=nrng, fHH = G_[0].fHH or fagg)
+    G_,Link_,Vt,Rt,Dt = grapht
+
+    graph = Cgraph(fd=fd, node_=G_,link_=set(Link_), Vt=Vt,Rt=Rt,Dt=Dt, rng=nrng, fHH = G_[0].fHH or fagg)
     graph.roott[fd] = root
     for link in Link_:
         link.roott[fd]=graph
@@ -299,6 +305,8 @@ def sum_last_lay(G, fd):  # eLay += last layer of link.daggH (dsubH|ddaggH)
 
     if eLay: G.extH += [eLay]
 
+
+# below is not revised:
 
 def comp_G(link, Et):
 
@@ -382,7 +390,7 @@ def comp_Hv(_Hv, Hv, rn):
                 dH, valt,rdnt,dect, dextt = comp_derHv(_lev,lev, rn)
                 DH += [[dH, valt,rdnt,dect,dextt,1]]
             else:  # subHv with depth == 2
-                dH, valt,rdnt,dect, dextt = comp_Hv(_lev,lev, rn)        
+                dH, valt,rdnt,dect, dextt = comp_Hv(_lev,lev, rn)
                 DH += dH  # concat
 
             Mdec += dect[0]; Ddec += dect[1]
@@ -479,7 +487,7 @@ def comp_derHv(_derHv, derHv, rn):  # derH is a list of der layers or sub-layers
     return dderH, Valt,Rdnt,Dect, dextt  # new derLayer,= 1/2 combined derH
 
 
-# looks like we only need sum_aggH instead of sum_aggHv 
+# looks like we only need sum_aggH instead of sum_aggHv
 def sum_aggH(AggH, aggH, base_rdn):
 
     if aggH:
