@@ -232,7 +232,7 @@ class Cgraph(CBase):  # params of single-fork node_ cluster
     Vt: Cmd = z(Cmd(0, 0))  # last layer | last fork tree vals for node_connect and clustering
     Rt: Cmd = z(Cmd(1, 1))
     Dt: Cmd = z(Cmd(0, 0))
-    root: list = z([None])  # for feedback
+    root: list = z([None, None])  # for feedback
     fback_: list = z([[],[],[]])  # feedback [[aggH,valt,rdnt,dect]] per node layer, maps to node_H
     compared_: list = z([])
     Rdn: int = 0  # for accumulation or separate recursion count?

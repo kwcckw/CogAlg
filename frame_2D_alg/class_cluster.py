@@ -62,6 +62,8 @@ class CBaseLite:
 
     def __sub__(self, other):
         return self.__class__(*((_value - value) for _value, value in zip(self, other)))
+    
+    # add div and mult here?
 
     def __iter__(self):
         return (getattr(self, key) for key in self.__dataclass_fields__)
