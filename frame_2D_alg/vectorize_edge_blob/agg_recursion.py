@@ -95,8 +95,7 @@ def rng_recursion(rroot, root, Q, Et, nrng=1):  # rng++/ G_, der+/ link_ if call
                 else:
                     _G_.add((_G, G))  # for next rng+
     '''
-    comparison is bilateral: nodes with higher prior match should keep searching over all surrounding nodes, even those with low prior match.
-    so rng_recursion eval is per original cluster, more selective rng+ sub-clusters we had before didn't reflect this bilateral logic.
+    recursion eval per original cluster because comp eval is bilateral, we need to test all pairs?
     '''
     if et[0][0] > ave_Gm * et[1][0]:  # eval single layer accum, for rng++ only
         for Part, part in zip(Et, et):
@@ -140,8 +139,7 @@ def form_graph_t(root, G_, Et, nrng, fagg=0):  # form Gm_,Gd_ from same-root nod
                         agg_recursion(root, graph, graph.node_, nrng, fagg=0)
                     else:
                         root.fback_t[root.fd] += [[graph.aggH, graph.valt, graph.rdnt, graph.dect]]
-                        # feedback(root,root.fd)  # update root.root..
-            # no feedback without sub+?
+                        feedback(root,root.fd)  # update root.root.. per sub+
             node_t += [graph_]  # may be empty
         else:
             node_t += [[]]
@@ -324,8 +322,8 @@ def comp_G(link, Et):
             # compute link decay coef: par/ max(self/same)
             if fd: dect[fd] += abs(par)/ abs(max) if max else 1
             else:  dect[fd] += (par+ave)/ (max+ave) if max else 1
-    dertv = CderH([[mtuple,dtuple], [mval,dval],[mrdn,drdn],[dect[0]/6,dect[1]/6],0])  # only dertv doesn't have ext here?
-    Mval+=mval; Dval+=dval; Mrdn+=mrdn; Drdn+=drdn; Mdec+=dect[0]/6; Ddec+=dect[1]/6  # ave of 6 params
+    dertv = CderH([[mtuple,dtuple], [mval,dval],[mrdn,drdn],[dect[0]/6,dect[1]/6],0])  # no ext in dertv
+    Mval+=mval; Dval+=dval; Mrdn+=mrdn; Drdn+=drdn;  Mdec+=dect[0]/6; Ddec+=dect[1]/6  # ave of 6 params
     # not updated:
     # / PP:
     dderH = []
@@ -350,7 +348,7 @@ def comp_G(link, Et):
     sum_ext(Ext, der_ext)
 
     if _G.aggH and G.aggH:
-        daggH, valt,rdnt,dect = comp_Hv([_G.aggH,_G.valt,_G.rdnt,_G.dect,2], [G.aggH,G.valt,G.rdnt,G.dect,2], rn=1)  # input depth is not relevant, it will not be used in the comp
+        daggH, valt,rdnt,dect = comp_Hv([_G.aggH,_G.valt,_G.rdnt,_G.dect,2], [G.aggH,G.valt,G.rdnt,G.dect,2], rn=1)
         # aggH is subH before agg+
         mval,dval = valt; Mval+=dval; Dval+=mval
         Mrdn += rdnt[0] + dval>mval; Drdn += rdnt[1] + dval<=mval
@@ -499,7 +497,7 @@ def comp_derHv(_derHv, derHv, rn):  # derH is a list of der layers or sub-layers
 
 # tentative
 def sum_Hv(Hv, hv, base_rdn, fneg=0):
-    
+
     if hv:
         if Hv:
             H,Valt,Rdnt,Dect,depth = Hv; h,valt,rdnt,dect,depth = hv
@@ -511,7 +509,7 @@ def sum_Hv(Hv, hv, base_rdn, fneg=0):
 
 
 def sum_H(H, h, depth, base_rdn, fneg=0):
-    
+
     if h:
         if H:
             for Layer, layer in zip_longest(H,h, fillvalue=None):
@@ -519,12 +517,12 @@ def sum_H(H, h, depth, base_rdn, fneg=0):
                     if Layer:
                         if isinstance(layer[-1], list):  # ext
                             sum_ext(Layer, layer)
-                        
+
                         elif layer[-1] == 0:  # derHv with depth == 1
                             Tuplet,Valt,Rdnt,Dect,_ = Layer
                             tuplet,valt,rdnt,dect,_ = layer
                             for i in 0,1:
-                                sum_dertuple(Tuplet[i],tuplet[i], fneg*i) 
+                                sum_dertuple(Tuplet[i],tuplet[i], fneg*i)
                                 Valt[i] += valt[i]
                                 Rdnt[i] += rdnt[i]
                                 Dect[i] += dect[i]
@@ -603,7 +601,7 @@ def sum_derHv(T,t, base_rdn, fneg=0):  # derH is a list of layers or sub-layers,
                 Valt[i] += valt[i]; Rdnt[i] += rdnt[i]+base_rdn; Dect[i] = (Dect[i] + dect[i])/2
             DerH[:] = [
                 [[sum_dertuple(Dertuple,dertuple, fneg*i) for i,(Dertuple,dertuple) in enumerate(zip(Tuplet,tuplet))],
-                  [V+v for V,v in zip(Valt,valt)], [R+r+base_rdn for R,r in zip(Rdnt,rdnt)], [(D+d)/2 for D,d in zip(Dect,dect)], 0,  # sorry, should be 0 for ptuplet here
+                  [V+v for V,v in zip(Valt,valt)], [R+r+base_rdn for R,r in zip(Rdnt,rdnt)], [(D+d)/2 for D,d in zip(Dect,dect)], 0
                 ]
                 for [Tuplet,Valt,Rdnt,Dect,_], [tuplet,valt,rdnt,dect,_]  # ptuple_tv
                 in zip_longest(DerH, derH, fillvalue=[([0,0,0,0,0,0],[0,0,0,0,0,0]), (0,0),(0,0),(0,0),0])
