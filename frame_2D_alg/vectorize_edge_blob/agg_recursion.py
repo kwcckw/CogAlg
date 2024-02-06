@@ -92,12 +92,12 @@ def rng_recursion(rroot, root, Q, Et, nrng=1):  # rng++/ G_, der+/ link_ if call
                 if nrng==1 or (G.Vt[0]+_G.Vt[0]) > ave * (G.Rt[0]+_G.Rt[0]):
                     link = CderG(_G=_G, G=G, A=Cangle(dy,dx), S=dist)
                     comp_G(link, et)
-                else:
-                    _G_.add((_G, G))  # for next rng+
+            else:
+                _G_.add((_G, G))  # for next rng+
     '''
     recursion eval per original cluster because comp eval is bilateral, we need to test all pairs?
     '''
-    if et[0][0] > ave_Gm * et[1][0]:  # eval single layer accum, for rng++ only
+    if et[0][0] > ave_Gm * et[1][0] or _G_:  # eval single layer accum, for rng++ only (add if _G_ so that all Gs are search through rng+?)
         for Part, part in zip(Et, et):
             for i, par in enumerate(part):  # Vt[i]+=v; Rt[i]+=rt[i]; Dt[i]+=d:
                 Part[i] += par
@@ -183,7 +183,6 @@ def node_connect(_G_):  # node connectivity = sum surround link vals, incr.media
         if G_: _G_ = G_  # exclude weakly incremented Gs from next connectivity expansion loop
         else:  break
 
-
 def segment_node_(root, root_G_, fd, nrng, fagg):  # eval rim links with summed surround vals for density-based clustering
 
     # graph += [node] if >ave (surround connectivity * relative value of link to any internal node)
@@ -191,7 +190,7 @@ def segment_node_(root, root_G_, fd, nrng, fagg):  # eval rim links with summed 
 
     for G in root_G_:   # init per node,  last-layer Vt,Vt,Dt:
         grapht = [[G],[], G.Vt,G.Rt,G.Dt, copy(G.rimH[-1] if G.rimH and isinstance(G.rimH[0],list) else G.rimH)]  # link_ = last rim
-        if fd: G.root = grapht  # for feedback
+        G.root = grapht  # for feedback  (we need root for graph_ in the section below too)
         igraph_ += [grapht]
     _graph_ = igraph_
 
@@ -213,11 +212,11 @@ def segment_node_(root, root_G_, fd, nrng, fagg):  # eval rim links with summed 
                 crdn = link.Rt[fd] + (G.Rt[fd] + _G.Rt[fd]) / 2
                 if cval > ave * crdn:  # _G and its root are effectively connected
                     # merge _root:
-                    _grapht = _G.root[fd]
+                    _grapht = _G.root
                     _G_,_Link_,_Vt,_Rt,_Dt,_Rim = _grapht
                     Link_[:] = list(set(Link_+_Link_)) + [link]
                     for g in _G_:
-                        g.root[fd] = grapht
+                        g.root = grapht
                         if g not in G_: G_+=[g]
                     for i in 0,1:
                         Vt[i]+=_Vt[i]; Rt[i]+=_Rt[i]; Dt[i]+=_Dt[i]
@@ -258,7 +257,7 @@ def sum2graph(root, grapht, fd, nrng, fagg):  # sum node and link params into gr
         graph.box += G.box
         graph.ptuple += G.ptuple
         sum_derH([graph.derH,[0,0],[1,1]], [G.derH,[0,0],[1,1]], base_rdn=1)
-        sum_Hv([extH,evalt,erdnt,edect,2], [G.extH,G.evalt,G.erdnt,G.edect,2], base_rdn=G.erdnt[fd])
+        sum_Hv([extH,evalt,erdnt,edect,2], [G.extH,G.evalt,G.erdnt,G.edect,2], base_rdn=G.erdnt[fd])  # G.extH may get different order of H here, especailly in derH
         sum_H(graph.aggH, G.aggH, depth=2, base_rdn=1)
         for j in 0,1:
             evalt[j] += G.evalt[j]; erdnt[j] += G.erdnt[j]; edect[j] += G.edect[j]
@@ -342,7 +341,7 @@ def comp_G(link, Et):
 
     # / G:
     der_ext,valt,rdnt,dect = comp_ext(_G.ext,G.ext)
-    Valt += valt; Rdnt += rdnt; Dect += dect
+    Valt += valt; Rdnt += rdnt;  (Dect[0] + dect[0]) /2; Dect[1] = (Dect[1] + dect[1]) /2  # sorry, this is missed out earlier
     dderH.append(der_ext)
     dderH = CderH([dderH,copy(Valt),copy(Rdnt),copy(Dect), 1])
     sum_ext(Ext, der_ext)

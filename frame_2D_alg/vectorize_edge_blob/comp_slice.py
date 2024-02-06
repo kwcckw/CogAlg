@@ -33,16 +33,16 @@ def der_recursion(root, PP):  # node-mediated correlation clustering: keep same 
     # n_uplinks = defaultdict(int)  # number of uplinks per P
     # for derP in PP.link_: n_uplinks[derP.P] += 1
 
-    rng_recursion(PP.link_, PP.rng)  # extend PP.link_ and derHs with same-der rng+ comps
+    rng_recursion(PP, PP.rng)  # extend PP.link_ and derHs with same-der rng+ comps
     form_PP_t(PP, PP.link_, base_rdn=PP.rdnt[1])  # der+ is mediated through form_PP_t
-    root.fback += [[PP.derH, PP.valt, PP.rdnt]]  # feedback from PPds, no forking?
+    if root: root.fback_ += [[PP.derH, PP.valt, PP.rdnt]]  # feedback from PPds, no forking?
 
 
 def rng_recursion(PP, rng=1):  # similar to agg+ rng_recursion, but contiguously link mediated
 
     _link_ = PP.link_
     while True:  # form new links with recursive rng+ in edge|PP, secondary pair comp eval
-        link_ = []
+        link_, rlink_ = [], []
         V = 0
         for _derP, derP in combinations(_link_, 2):  # scan last-layer link pairs
             _P = _derP.P; P = derP.P
@@ -57,12 +57,22 @@ def rng_recursion(PP, rng=1):  # similar to agg+ rng_recursion, but contiguously
                     # pairwise eval in PP
                     link = CderP(_P=__P, P=P, S=distance, A=Cangle(*(_P.yx-P.yx)))
                     V = comp_P(link_, link, rn=len(__P.dert_)/len(P.dert_), V=V)
-
-        if V < ave * len(link_) * 6:  # 6: len mtuple?
+            else:  # recycle for next rng? Else the while loop won't break and mostly we are get empty link_
+                rlink_ += [_derP, derP]
+                
+        PP.link_ += link_
+        if rlink_:  # we should search all rngs as long there's recycle links?
+            rng+=1; _link_=rlink_  # link here is empty if 
+        else:
+            break
+        
+        '''
+        if V <= ave * len(link_) * 6:  # 6: len mtuple?
             break
         else:
-            rng+=1; _link_=link_
-        PP.link_ += link_
+            rng+=1; _link_+=link_ 
+        '''
+        
     PP.rng=rng
 
 
@@ -97,7 +107,7 @@ def form_PP_t(root, root_link_, base_rdn):  # form PPs of derP.valt[fd] + connec
         P_Ps = defaultdict(list)
         derP_ = []
         for derP in root_link_:
-            if derP.valt[fd] > P_aves[fd] * derP.rdnt[fd]:
+            if (derP.valt[fd] > P_aves[fd] * derP.rdnt[fd]) or ( not isinstance(root.root, Cgraph)):  # derP from base fork didn't have valt, rdnt, so we can skip this on the first pass?
                 P_Ps[derP.P] += [derP._P]  # key:P, vals:linked _Ps, up and down
                 P_Ps[derP._P] += [derP.P]
                 derP_ += [derP]  # filtered derP
@@ -120,7 +130,7 @@ def form_PP_t(root, root_link_, base_rdn):  # form PPs of derP.valt[fd] + connec
             der_recursion(root, PP)  # node-mediated correlation clustering
 
         if root.fback_:
-            feedback(root, fd)  # after der+ in all nodes, no single node feedback up multiple layers
+            feedback(root)  # after der+ in all nodes, no single node feedback up multiple layers
 
     root.node_ = PP_t  # nested in der+, add_alt_PPs_?
 
