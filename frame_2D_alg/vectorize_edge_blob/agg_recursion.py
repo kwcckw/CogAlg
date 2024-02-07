@@ -320,16 +320,16 @@ def comp_G(link, Et):
             else:  dect[0] += (par+ave)/ (max+ave) if max else 1
     dect[0] = dect[0]/6; dect[1] = dect[1]/6  # ave of 6 params
     Valt += valt; Rdnt += rdnt; Dect += dect
-    dertv = CderH([[mtuple,dtuple], valt,rdnt,dect,0])  # no ext in dertvs
+    dertv = CderH(H=[mtuple,dtuple], valt=valt,rdnt=rdnt,dect=dect,depth=0)  # no ext in dertvs
 
     # / PP:
     extt,valt,rdnt,dect = comp_ext(_G.ext,G.ext)
     Valt += valt; Rdnt += rdnt; (Dect[0] + dect[0]) /2; Dect[1] = (Dect[1] + dect[1]) /2
     for Ext,ext in zip(Extt,extt): sum_ext(Ext,ext)
 
-    dderH = CderH([dertv, extt])
+    dderH = [dertv, extt]
     if _G.derH and _G.derH:  # empty in single-P Gs?
-        for _lay, lay in zip(_G.derH,_G.derH):
+        for _lay, lay in zip(_G.derH.H,_G.derH.H):
             mtuple,dtuple, Mtuple,Dtuple = comp_dtuple(_lay[1], lay[1], rn=1, fagg=1)
             valt = Ct(sum(mtuple),sum(abs(d) for d in dtuple))
             rdnt = Ct(valt[1] > valt[0], valt[1] <= valt[0])
@@ -340,20 +340,21 @@ def comp_G(link, Et):
                     else:  dect[0] += (par+ave)/ (max+ave) if max else 1
             dect[0] = dect[0]/6; dect[1] = dect[1]/6  # ave of 6 params
             Valt += valt; Rdnt += rdnt; Dect[0] = (Dect[0] + dect[0]) /2; Dect[1] = (Dect[1] + dect[1]) /2
-            dderH.append(CderH([[mtuple,dtuple], valt,rdnt,dect,0]))  # new dderH layer
-    dderH = CderH([dderH,copy(Valt),copy(Rdnt),copy(Dect), 1])
+            dderH += [CderH(H=[mtuple,dtuple], valt=valt,rdnt=rdnt,dect=dect,depth=0)]  # new dderH layer
+    dderH = CderH(H=dderH,valt=copy(Valt),rdnt=copy(Rdnt),dect=copy(Dect), depth=1)
     # / G:
 
     if _G.aggH and G.aggH:
-        daggH = CderH([dderH])
-        dH, valt,rdnt,dect = comp_Hv([_G.aggH,_G.valt,_G.rdnt,_G.dect,2], [G.aggH,G.valt,G.rdnt,G.dect,2], rn=1)
+        H = [dderH]
+        dHv = comp_Hv(CderH(_G.aggH,_G.valt,_G.rdnt,_G.dect,2), CderH(G.aggH,G.valt,G.rdnt,G.dect,2), rn=1, depth=2)
+        dH = dHv.H; valt=dHv.valt; rdnt = dHv.rdnt; ext = dHv.ext
+
         # aggH is subH before agg+
         Valt += valt
         Rdnt[0] += rdnt[0] + (valt[1]>valt[0]); Rdnt[1] += rdnt[1] + (valt[1]<=valt[0])
         Dect[0] = (Dect[0] + dect[0]) /2; Dect[1] = (Dect[1] + dect[1]) /2
         # flat, appendleft:
-        daggH.append(dH); daggH.append(Extt)
-        daggH = CderH([daggH,copy(Valt),copy(Rdnt),copy(Dect),2])
+        daggH = CderH(H+dH+[Extt], copy(Valt),copy(Rdnt),copy(Dect),2)
     else:
         daggH = dderH
     link.daggH += [daggH]
@@ -375,13 +376,11 @@ def comp_G(link, Et):
                         rimH += [link]  # rim
 
 
-def comp_Hv(_Hv, Hv, rn):  # for derH, subH, or aggH
+def comp_Hv(_Hv, Hv, rn,depth):  # for derH, subH, or aggH
 
-    _H, H = _Hv[0], Hv[0]
-    Valt, Rdnt, Dect = Ct(0,0), Ct(1,1), Ct(0,0)
-    DH = CderH([])
+    DHv = CderH(depth=depth)
 
-    for _lev, lev in zip_longest(_H, H, fillvalue=0):  # compare common subHs, if lower-der match?
+    for _lev, lev in zip_longest(_Hv.H, Hv.H, fillvalue=0):  # compare common subHs, if lower-der match?
         if _lev and lev:
             if lev[-1] == 0:  # ptuplet
                 mtuple,dtuple, Mtuple,Dtuple = comp_dtuple(_lev[0][1], lev[0][1], rn, fagg=1)
@@ -394,21 +393,27 @@ def comp_Hv(_Hv, Hv, rn):  # for derH, subH, or aggH
                         else:  dect[0] += (par+ave)/abs(max)+ave if max else 1
                 dect[0]/=6; dect[1]/=6
                 valt = Ct(mval, dval); rdnt = Ct(mrdn, drdn)
-                DH.append(CderH([[mtuple,dtuple],valt,rdnt,dect,0]))
+                dhv = CderH([mtuple,dtuple],valt,rdnt,dect,0)
+                DHv.H += [dhv]
+                DHv.valt += dhv.valt; DHv.rdnt += dhv.rdnt; DHv.dect += dhv.dect
             elif lev[-1] == 1:  # derHv
-                dH,valt,rdnt,dect = comp_Hv(_lev,lev, rn)
-                DH.append(CderH([dH, valt,rdnt,dect,1]))
+                dHv = comp_Hv(_lev,lev, rn, 1)
+                DHv += [dHv]
+                DHv.valt += dhv.valt;DHv.rdnt += dhv.rdnt;DHv.dect += dhv.dect
             elif lev[-1] == 2:  # subHv
-                dH,valt,rdnt,dect = comp_Hv(_lev,lev, rn)
-                DH.extend(dH)  # concat
+                dHv = comp_Hv(_lev,lev, rn, 2)
+                DHv.H += dHv.H  # concat
+                DHv.valt += dhv.valt;DHv.rdnt += dhv.rdnt;DHv.dect += dhv.dect
             else:  # ext
                 dext,valt,rdnt,dect = comp_ext(_lev[1],lev[1])  # comp dext only
-                DH.append(dext)
-                Valt += valt; Rdnt += rdnt; Rdnt[0] += valt[1] > valt[0]; Rdnt[1] += valt[0] > valt[1]; Dect += dect
-    if DH:
-        S = min(len(_H),len(H)); Dect[0]/= S; Dect[1]/= S   # normalize
+                DHv.H += [dext]
+                DHv.valt += valt
+                DHv.rdnt += rdnt; DHv.rdnt[0] += valt[1] > valt[0]; DHv.rdnt[1] += valt[0] > valt[1]
+                DHv.dect += dect
+    if DHv.H:
+        S = min(len(_Hv.H),len(Hv.H)); DHv.dect[0]/= S; DHv.dect[1]/= S   # normalize
 
-    return DH, Valt,Rdnt,Dect
+    return DHv
 
 
 def comp_ext(_ext, ext):  # comp ds:
