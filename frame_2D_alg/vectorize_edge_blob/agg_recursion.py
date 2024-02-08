@@ -94,12 +94,9 @@ def rng_recursion(rroot, root, Q, Et, nrng=1):  # rng++/ G_, der+/ link_ if call
                     comp_G(link, et)
             else:
                 _G_.add((_G, G))  # for next rng+
-    '''
-    recursion eval per arg cluster because comp eval is bilateral, test all pairs?
-    '''
-    if et[0][0] > ave_Gm * et[1][0]:
-        for Part, part in zip(Et,et):
-            add_(Part,part)  # Vt[i]+=v; Rt[i]+=rt[i]; Dt[i]+=d
+
+    if et[0][0] > ave_Gm * et[1][0]:  # rng+ eval per arg cluster because comp is bilateral, 2nd test per new pair
+        for Part, part in zip(Et,et): add_(Part,part)  # Vt[i]+=v; Rt[i]+=rt[i]; Dt[i]+=d
         _Q = _link_ if fd else list(_G_)
         if _Q:
             nrng = rng_recursion(rroot, root, _Q, Et, nrng+1)  # eval rng+ for der+ too
@@ -187,9 +184,9 @@ def segment_node_(root, root_G_, fd, nrng, fagg):  # eval rim links with summed 
     # graph += [node] if >ave (surround connectivity * relative value of link to any internal node)
     igraph_ = []; ave = G_aves[fd]
 
-    for G in root_G_:   # init per node,  last-layer Vt,Vt,Dt:
-        grapht = [[G],[], G.Vt,G.Rt,G.Dt, copy(G.rimH[-1] if G.rimH and isinstance(G.rimH[0],list) else G.rimH)]  # link_ = last rim
-        G.root = grapht  # for merging
+    for G in root_G_:   # init per node, last-layer Vt,Vt,Dt:
+        grapht = [[G],[],G.Vt,G.Rt,G.Dt, copy(G.rimH[-1] if G.rimH and isinstance(G.rimH[0],list) else G.rimH)]  # link_ = last rim
+        G.root = grapht  # for G merge
         igraph_ += [grapht]
     _graph_ = igraph_
 
@@ -363,8 +360,7 @@ def comp_G(link, Et):
 
     for fd, (Val,Rdn,Dec) in enumerate(zip(Valt,Rdnt,Dect)):
         if Val > G_aves[fd] * Rdn:
-            # to eval fork grapht in form_graph_t:
-            Et[0][fd] += Val; Et[1][fd] += Rdn; Et[2][fd] += Dec
+            Et[0][fd] += Val; Et[1][fd] += Rdn; Et[2][fd] += Dec  # to eval grapht in form_graph_t
             G.Vt[fd] += Val;  G.Rt[fd] += Rdn;  G.Dt[fd] += Dec
             if not fd:
                 for G in link.G, link._G:
@@ -505,7 +501,7 @@ def feedback(root):  # called from form_graph_, append new der layers to root
     AggH, Valt, Rdnt, Dect = deepcopy(root.fback_.pop(0))  # init
     while root.fback_:
         aggH, valt, rdnt, dect = root.fback_.pop(0)
-        sum_aggH(AggH, aggH, base_rdn=0); Valt += valt; Rdnt += rdnt; Dect += dect
+        sum_Hv(AggH, aggH, base_rdn=0); Valt += valt; Rdnt += rdnt; Dect += dect
 
     if Valt[1] > G_aves[1] * Rdnt[1]:  # compress levels?
         root.aggH += AggH; root.valt += Valt; root.rdnt += Rdnt; root.dect += Dect
