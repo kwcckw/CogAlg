@@ -45,6 +45,19 @@ class Ct(CBaseLite):     # tuple
     def normalize(self):
         dist = abs(self)
         return self.__class__(self.m / dist, self.d / dist)
+    
+    def comp(self, other):  # rn doesn't matter for angles
+
+        # angle = [dy,dx]
+        _sin, sin = self.normalize()
+        _cos, cos = other.normalize()
+
+        dangle = (cos * _sin) - (sin * _cos)  # sin(α - β) = sin α cos β - cos α sin β
+        # cos_da = (cos * _cos) + (sin * _sin)  # cos(α - β) = cos α cos β + sin α sin β
+        mangle = ave_dangle - abs(dangle)  # inverse match, not redundant if sum cross sign
+
+        return Ct(mangle, dangle)
+
 
 
 class Cangle(Cvec2d):
@@ -67,7 +80,7 @@ class Cptuple(CBaseLite):
     G: Real = 0
     M: Real = 0
     Ma: Real = 0
-    angle: Cangle = Cangle(0, 0)
+    angle: Ct = z(Ct(0,0))
     L: Real = 0
 
     # operators:
@@ -239,7 +252,7 @@ class Cgraph(CBase):  # params of single-fork node_ cluster
     evalt: list = z([0,0])  # sum from esubH
     erdnt: list = z([1,1])
     edect: list = z([0,0])
-    ext: list = z([0,0,Cangle(0,0)])  # L,S,A: L len base node_, S sparsity: average link len, A angle: average link dy,dx
+    ext: list = z([0,0,Ct(0,0)])  # L,S,A: L len base node_, S sparsity: average link len, A angle: average link dy,dx
     rng: int = 1
     box: Cbox = Cbox(inf,inf,-inf,-inf)  # y0,x0,yn,,xn
     # tentative:
