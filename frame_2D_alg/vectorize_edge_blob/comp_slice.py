@@ -30,56 +30,54 @@ len prior root_ sorted by G is rdn of each root, to evaluate it for inclusion in
   # root function:
 def der_recursion(root, PP):  # node-mediated correlation clustering: keep same Ps and links, increment link derH, then P derH in sum2PP
 
-    # n_uplinks = defaultdict(int)  # number of uplinks per P
+    # n_uplinks = defaultdict(int)  # number of uplinks per P, not used?
     # for derP in PP.link_: n_uplinks[derP.P] += 1
 
-    rng_recursion(PP, PP.rng)  # extend PP.link_, derHs by same-der rng+ comp
-    # form_PP_t(PP, PP.link_, base_rdn=PP.rdnt[1])  # der+ is mediated by form_PP_t
+    if PP.derH.H:
+        for P in PP.P_:
+            link_ = P.link_
+            if link_:
+                if len(PP.derH.H) == 1:
+                    link_[:] = [link_]  # link_H -> link_HH
+                if PP.rng > 1: last_link_ = link_[-1][-1]  # last link_ in link_H in link_HH
+                else:          last_link_ = link_[-1]  # last link_ = link_HH[-1], no rng++
+                P.link_ += [last_link_]  # prelink_ for rng++, always called?
+
+    rng_recursion(PP, rng=1)  # extend PP.link_, derHs by same-der rng+ comp
+    form_PP_t(PP, PP.link_, base_rdn=PP.rdnt[1])  # der+ is mediated by form_PP_t
     if root: root.fback_ += [[PP.derH, PP.valt, PP.rdnt]]  # feedback from PPds only
 
 
-def rng_recursion(PP, rng=1, der=1):  # similar to agg+ rng_recursion, but contiguously link mediated
+def rng_recursion(PP, rng=1):  # similar to agg+ rng_recursion, but contiguously link mediated
     _P_ = PP.P_
 
     while True:
         P_ = []; V = 0
         for P in _P_:
-            link___ = P.link_  # recursive unpack:
-            if der>1: link__ = link___.pop()
-            else:     link__ = link___
-            if rng>1: link_  = link__.pop()
-            else:     link_  = link__
- 
-            rlink_ = [] 
-            for link in link_:
-                mlink = comp_P(link)
-                if mlink:  # return confirmed links only
+            prelink_ = []  # temporary new prelinks
+            _prelink_ = P.link_.pop  # P.link_ nesting doesn't matter for prelink_, it's always P.link_[-1]
+            for prelink in _prelink_:
+                mlink = comp_P(prelink)  # return link if match
+                if mlink:
                     V += mlink.vt[0]
-                    # new_link_ += [link]  this shouldn't be needed? We added a same prelink below
-                    _P = link[0]  # uplinks, can't be cyclic (prelink is [_P,P, np.hypot(dY,dX), Cangle(dY,dX)])
+                    link_ = P.link_[-1] if PP.derH.H else P.link_  # before der++
+                    if rng > 1:
+                        if rng == 2: link_[:] = [link_]  # link_ -> link_H
+                        link_ = link_[-1]  # rng layer
+                    if len(link_)<rng: link_ += [[mlink]]  # new link_
+                    else:              link_ += [mlink]
+                    _P = mlink._P  # uplinks can't be cyclic
                     if len(_P.derH.H) < len(P.derH.H):  # if der+: compare same der layers only
                         continue
                     dy,dx = _P.yx-P.yx; distance = np.hypot(dy,dx)  # distance between P midpoints, /= L for eval?
                     if rng-1 > distance >= rng:
                         continue
-                    if P.valt[0]+_P.valt[0] < ave * (P.rdnt[0]+_P.rdnt[0]):  # we didn't increment valt in comp_P, so this is always 0 now, but why this is needed?
-                        continue
-                    rlink_ += [[_P,P, distance, [dy,dx]]]  # add prelink for next cycle 
-                    # recursive nesting, len link_H should increase with rng, add this for der+ too:
-                    # if len(P.link_) < rng: link_ = [link_]  # this should be at the end of the loop?
-                    # P.link_ += [link_]
-
-            # recycle P to get higher __Ps:
-            if rlink_: P_ += [P]  # this should be per P loop instead of link loop?
-            if rng>1: link__  += [rlink_]
-            if der>1: link___ += [link__]
-
-        rng += 1  # this should be at the end? If wee increase it before unpack link_, we will not unpack in a correct sequence
-        if rng == 2:  # add nesting for the 1st time when rng > 1
-            for P in P_: P.link_ = [P.link_]
-
-        # extended Ps val:
-        if V > ave * len(P_) * 6:  # len mtuple
+                    prelink_ += [[_P,P, distance, [dy,dx]]]  # for next cycle
+            if prelink_:
+                P.link_ += [prelink_]  # temporary, appended and popped regardless of nesting
+                P_ += [P]  # next loop
+        rng += 1
+        if V > ave * len(P_) * 6:  #  extended Ps val, 6: len mtuple
             _P_ = P_
         else:
             break
@@ -110,7 +108,7 @@ def comp_P(link):
             link.derH += dderH; link.valt+=valt; link.Vt+=valt; link.rdnt+=rdnt; link.Rt=rdnt
         else:
             derH = CderH(H=[[mtuple, dtuple]], valt=valt, rdnt=rdnt)
-            link = CderP(P=P, _P=_P, derH=derH, vt=copy(valt), rt=copy(rdnt), S=S, A=A)  # we don't have Vt here?
+            link = CderP(P=P, _P=_P, derH=derH, vt=copy(valt), rt=copy(rdnt), S=S, A=A)
 
         return link
 
@@ -152,8 +150,8 @@ def form_PP_t(root, root_link_, base_rdn):  # form PPs of derP.valt[fd] + connec
 
 def sum2PP(root, P_, derP_, base_rdn, fd):  # sum links in Ps and Ps in PP
 
-    PP = Cgraph(fd=fd, root=root, P_=P_, rng=root.rng +(1-fd))  # initial PP.box = (inf,inf,-inf,-inf)
-
+    PP = Cgraph(fd=fd, root=root, P_=P_, rng=root.rng+1, der=root.der+fd)  # or der = len(root.derH.H) no need for added arg?
+    # initial PP.box = (inf,inf,-inf,-inf)
     for derP in derP_:
         # accum links:
         if derP.P not in P_ or derP._P not in P_: continue
