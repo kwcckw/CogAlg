@@ -49,9 +49,9 @@ def slice_edge(blob, verbose=False):
             edge.P_ += [P]
             if _P is not None:
                 dY,dX = _P.yx - P.yx
-                if not P.link_: P.link_ = [[],[]]  # add prelink_ (why not init it in the class?)
-                P.link_[-1] += [[_P,P, np.hypot(dY,dX), Ct(dY,dX)]]  # prelink with S,A
-                Pt_ += [(_P, P)]  # add up links only
+                if not P.link_: P.link_ = [[],[]]  # to add prelinks:
+                P.link_[-1] += [_P]
+                # Pt_ += [(_P, P)]  # if using combinations
             # search in max_ path
             adjacents = max_ & {*product(range(y-1,y+2), range(x-1,x+2))}   # search neighbors
             maxQue.extend(((_y, _x, P) for _y, _x in adjacents))
@@ -199,7 +199,7 @@ def sum_angle(_angle, angle, average=0):
     if average:
         angle0 /= 2
         angle1 /= 2
-        
+
     return [angle0, angle1]
 
 

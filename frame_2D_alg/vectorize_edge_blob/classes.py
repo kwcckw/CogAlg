@@ -34,9 +34,7 @@ class Cvec2d(NamedTuple):
         return self.__class__(self.dy / dist, self.dx / dist)
 
 
-class Ct(CBaseLite):     # tuple
-    m: Any
-    d: Any
+class Ct(CBaseLite):     # tuple operations
 
     def __abs__(self): return hypot(self.m, self.d)
     def __pos__(self): return self
@@ -59,11 +57,8 @@ class Ct(CBaseLite):     # tuple
         return Ct(mangle, dangle)
 
 
+    def comp_angle(self, other):  # angle = [dy,dx], rn doesn't matter
 
-class Cangle(Cvec2d):
-    def comp(self, other):  # rn doesn't matter for angles
-
-        # angle = [dy,dx]
         _sin, sin = self.normalize()
         _cos, cos = other.normalize()
 
@@ -187,7 +182,7 @@ class CP(CBase):  # horizontal blob slice P, with vertical derivatives per param
     dert_: list = z([])  # array of pixel-level derts, ~ node_
     cells: set = z(set())  # pixel-level kernels adjacent to P axis, combined into corresponding derts projected on P axis.
     roott: list = z([None,None])  # PPrm,PPrd that contain this P, single-layer
-    axis: Cangle = Cangle(0,0)  # prior slice angle, init sin=0,cos=1
+    axis: Ct = Ct(0,0)  # prior slice angle, init sin=0,cos=1
     yx: Ct = z(Ct(0,0))
     link_: list = z([])  # uplinks per comp layer, nest in rng+)der+
     ''' 
@@ -215,7 +210,7 @@ class CderP(CBase):  # tuple of derivatives in P link: binary tree with latuple 
     rt: Ct = z(Ct(1, 1))  # mrdn + uprdn if branch overlap?
     roott: list = z([None, None])  # PPdm,PPdd that contain this derP
     S: float = 0.0  # sparsity: distance between centers
-    A: Cangle = Cangle(0,0)  # angle: dy,dx between centers
+    A: Ct = Ct(0,0)  # angle: dy,dx between centers
     # roott: list = z([None, None])  # for der++, if clustering is per link
 
     def comp(self, link_, rn):
