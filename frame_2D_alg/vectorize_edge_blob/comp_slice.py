@@ -59,10 +59,12 @@ def rng_recursion(PP, rng=1):  # similar to agg+ rng_recursion, but contiguously
         for P in iP_:
             if not P.link_: continue
             __P_ = []  # temporary prelinks per P
-            _P_ = P.link_.pop()  # P.link_ nesting doesn't matter
+            _P_ = P.link_.pop()  # P.link_ nesting doesn't matter (how about prelinks for deeper der+?)
             for _P in _P_:
                 dy,dx = _P.yx-P.yx; distance = np.hypot(dy,dx)  # distance between P midpoints, /= L for eval?
                 if not (rng > distance >= rng-1):  # always false?
+                    if  len(_P.derH.H)==len(P.derH.H):  # if der+: compare same der layers only （this should be valid only if rng eval is false?)
+                        __P_ += [_P]  # for next cycle
                     continue
                 mlink = comp_P([_P,P, distance,[dy,dx]])  # return link if match
                 if mlink:
@@ -75,8 +77,6 @@ def rng_recursion(PP, rng=1):  # similar to agg+ rng_recursion, but contiguously
                     else:
                         link_ += [mlink]
                     __P = mlink._P  # uplinks can't be cyclic
-                    if len(__P.derH.H)==len(P.derH.H):  # if der+: compare same der layers only
-                        __P_ += [__P]  # for next cycle
             if __P_:
                 P.link_ += [__P_]  # temporary, appended and popped regardless of nesting
                 P_ += [P]  # for next loop
@@ -84,6 +84,7 @@ def rng_recursion(PP, rng=1):  # similar to agg+ rng_recursion, but contiguously
         if V > ave * len(P_) * 6:  #  implied val of all __P_s, 6: len mtuple
             iP_ = P_
         else:
+            for P in P_: P.link_.pop()  # remove temporary prelinks (we need remove this, else the nesting will not be correct if rng>1 or der+)
             break
     PP.rng=rng
 
@@ -104,7 +105,7 @@ def comp_P(link):
         # rng+: add link derH
         mtuple, dtuple = comp_ptuple(_P.ptuple, P.ptuple, rn, fagg=0)
         valt = Ct(sum(mtuple), sum(abs(d) for d in dtuple))
-        rdnt = Ct(1+(valt.d>valt[0]), 1+(1-(valt[1]>valt[1])))  # or rdn = Dval/Mval?
+        rdnt = Ct(1+(valt[1]>valt[0]), 1+(1-(valt[1]>valt[0])))  # or rdn = Dval/Mval?
         aveP = P_aves[0]
         fd=0
     if valt[0] > aveP*rdnt[0]:  # always rng+
@@ -127,8 +128,8 @@ def form_PP_t(root, P_, base_rdn):  # form PPs of derP.valt[fd] + connected Ps v
             link_ = P.link_
             if link_:  # unpack last layer:
                 if root.derH.depth==2: link_ = P.link_[-1]  # last der layer
-                if root.rng > 1: link_ = link_[-1]  # last rng layer
-                for derP in link_:
+                if link_ and link_[0] and not isinstance(link_[0][0], CderP): link_ = link_[-1]  # last rng layer (looks like we can't check with root.rng because only the recycled P has higher rng's nesting, root.rng has highest rng only) 
+                for derP in link_[0]:  # link_[0] is link_, link_[1] is prelinks
                     P_Ps[P] += [derP._P]; Link_ += [derP]  # not needed for PPs?
         inP_ = []  # clustered Ps and their val,rdn s for all Ps
         for P in root.P_:
@@ -166,12 +167,17 @@ def sum2PP(root, P_, derP_, base_rdn, fd):  # sum links in Ps and Ps in PP
         derP._P.derH -= derP.derH  # reverse d signs downlink
         PP.link_ += [derP]; derP.roott[fd] = PP
         S += derP.S; A += derP.A
+        PP.Vt += derP.derH.valt  # We need accumulate vt, rt, dt? Because derH contains valt, rdnt and dect, which we will not reset it
+        PP.Rt += derP.derH.rdnt
+        PP.Dt += derP.derH.dect
+
     PP.ext = Ct(len(P_), S, A)  # all from links
     # += Ps:
     celly_,cellx_ = [],[]
     for P in P_:
         PP.ptuple += P.ptuple
         PP.derH += P.derH
+        # to sum cbox into Ct, we need additional process, not sure how to do it yet
         for y,x in P.cells:
             PP.box += Ct(y,x); celly_+=[y]; cellx_+=[x]
     # pixmap:

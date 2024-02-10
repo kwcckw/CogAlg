@@ -66,7 +66,8 @@ class CBaseLite:
     # add div and mult here?
 
     def __iter__(self):
-        return (getattr(self, key) for key in self.__dataclass_fields__)
+        # temporary
+        return (getattr(self, key) for key in self.__dataclass_fields__ if getattr(self, key) != None)
 
     def __len__(self):
         return len(fields(self))
