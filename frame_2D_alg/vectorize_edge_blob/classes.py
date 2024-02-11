@@ -1,7 +1,7 @@
 from itertools import count, zip_longest
 from math import inf, hypot
 from numbers import Real
-from typing import Any, NamedTuple
+from typing import Any, NamedTuple, Tuple
 from copy import copy
 from class_cluster import CBase, CBaseLite, init_param as z
 from frame_blobs import Cbox
@@ -34,24 +34,19 @@ class Cvec2d(NamedTuple):
         return self.__class__(self.dy / dist, self.dx / dist)
 
 
-class Ct(CBaseLite):     # tuple operations
+class Ct(list):     # tuple operations
 
-    # temporary, __slot__ method is not working for CBaseLite
-    def __init__(self, p1=None, p2=None, p3=None):
-        self.p1 = p1
-        self.p2 = p2
-        self.p3 = p3
 
-    p1: any  # parameter1
-    p2: any  # parameter2
-    p3: any  # parameter3
+    def __init__(self, *args, **kwargs):       
+        super().__init__(*args)        
+        self.extend(kwargs.values())
 
     def __abs__(self): return hypot(self.p1, self.p1)
     def __pos__(self): return self
     def __neg__(self): return self.__class__(-self.p1, -self.p2, -self.p3)
 
-    def __add__(self, other): return [a+b for a,b in zip(self.param, other.param)] if self.param else copy(other.param)
-    def __sub__(self, other): return [a-b for a,b in zip(self.param, other.param)] if self.param else copy(other.param)
+    def __add__(self, other): return [a+b for a,b in zip(self, other)] if self else copy(other)
+    def __sub__(self, other): return [a-b for a,b in zip(self, other)] if self else copy(other)
 
     def normalize(self):
         dist = abs(self)
@@ -81,17 +76,42 @@ class Ct(CBaseLite):     # tuple operations
 
         return Ct(mangle, dangle)
 
+    # below still buggy, unfinished
+    # properties
+    @property
+    def cy(self) -> Real: return (self[2] + self[4]) / 2
+    @property
+    def cx(self) -> Real: return (self[3] + self[5]) / 2
+    @property
+    def slice(self) -> Tuple[slice, slice]: return slice(self[2], self[4]), slice(self[3], self[5])
+    # operators:
+    # renamed to extend_box, extend is a internal function name for list
+    def extend_box(self, other):  # why Ct is not recognized here?
+        """Add 2 boxes."""
+        # y,x,x0,y0,xn,yn?
+        return Ct(self[0], self[1], min(self[2], other[2]), min(self[3], other[3]), max(self[4], other[4]), max(self.e[5], other.e[5]))
+    # methods
+    def accumulate(self, y: Real, x: Real):
+        """Box coordinate accumulation."""
+        return Ct(min(self[2], y), min(self[3], x), max(self[4], y + 1), max(self[5], x + 1))
 
-    def __call__(self):
-        # return only not None from parameter1, parameter2, parameter3
-        out = []
-        if self.p1 != None:
-            out += [self.p1]
-        if self.p2 != None:
-            out += [self.p2]
-        if self.p2 != None:
-            out += [self.p3]
-        return out
+    def expand(self, r: int, h: Real, w: Real):
+        """Box expansion by margin r."""
+        return Ct(max(0, self[2] - r), max(0, self[3] - r), min(h, self[4] + r), min(w, self[5] + r))
+
+    def shrink(self, r: int):
+        """Box shrink by margin r."""
+        return Ct(self[2] + r, self[3] + r, self[4] - r, self[5] - r)
+
+    def sub_box2box(self, sb):
+        """sub_box to box transform."""
+        return Ct(self[2] + sb[2], self[3] + sb[3], sb[4] + self[2], sb[5] + self[3])
+
+    def box2sub_box(self, b):
+        """box to sub_box transform."""
+        return Ct(b[2] - self[2], b[3] - self[3], b[4] - self[2], b[5] - self[3])
+
+
 
 class Cptuple(CBaseLite):
 
@@ -99,7 +119,7 @@ class Cptuple(CBaseLite):
     G: Real = 0
     M: Real = 0
     Ma: Real = 0
-    angle: Ct = z(Ct(0,0))
+    angle: Ct = z(Ct([0,0]))
     L: Real = 0
 
     # operators:
@@ -145,14 +165,14 @@ class Cdertuple(Cptuple):
 class CderH(CBase):  # derH is a list of der layers or sub-layers, each = ptuple_tv
 
     H: list = z([])
-    valt: Ct = z(Ct(0,0))
-    rdnt: Ct = z(Ct(1,1))
-    dect: Ct = z(Ct(0,0))
+    valt: Ct = z(Ct([0,0]))
+    rdnt: Ct = z(Ct([1,1]))
+    dect: Ct = z(Ct([0,0]))
     depth: int = 0
 
     @classmethod
     def empty_layer(cls):
-        return Ct(Cdertuple(), Cdertuple())
+        return Ct([Cdertuple(), Cdertuple()])
 
     def __or__(self, other):    # |: concatenate operator
         return CderH([*self, *other])
@@ -211,13 +231,13 @@ class CP(CBase):  # horizontal blob slice P, with vertical derivatives per param
     ptuple: Cptuple = z(Cptuple())  # latuple: I,G,M,Ma, angle(Dy,Dx), L
     rnpar_H: list = z([])
     derH: CderH = z(CderH())  # [(mtuple, ptuple)...] vertical derivatives summed from P links
-    vt: Ct = z(Ct(0,0))  # current rng, not used?
-    rt: Ct = z(Ct(1,1))
+    vt: Ct = z(Ct([0,0]))  # current rng, not used?
+    rt: Ct = z(Ct([1,1]))
     dert_: list = z([])  # array of pixel-level derts, ~ node_
     cells: set = z(set())  # pixel-level kernels adjacent to P axis, combined into corresponding derts projected on P axis.
     roott: list = z([None,None])  # PPrm,PPrd that contain this P, single-layer
-    axis: Ct = z(Ct(0,0))  # prior slice angle, init sin=0,cos=1
-    yx: Ct = z(Ct(0,0))
+    axis: Ct = z(Ct([0,0]))  # prior slice angle, init sin=0,cos=1
+    yx: Ct = z(Ct([0,0]))
     link_: list = z([])  # uplinks per comp layer, nest in rng+)der+
     ''' 
     dxdert_: list = z([])  # only in Pd
@@ -240,11 +260,11 @@ class CderP(CBase):  # tuple of derivatives in P link: binary tree with latuple 
     _P: CP  # higher comparand
     P: CP  # lower comparand
     derH: CderH = z(CderH())  # [[[mtuple,dtuple],[mval,dval],[mrdn,drdn]]], single ptuplet in rng+
-    vt: Ct = z(Ct(0,0))
-    rt: Ct = z(Ct(1,1))  # mrdn + uprdn if branch overlap?
+    vt: Ct = z(Ct([0,0]))
+    rt: Ct = z(Ct([1,1]))  # mrdn + uprdn if branch overlap?
     roott: list = z([None, None])  # PPdm,PPdd that contain this derP
     S: float = 0.0  # sparsity: distance between centers
-    A: Ct = z(Ct(0,0))  # angle: dy,dx between centers
+    A: Ct = z(Ct([0,0]))  # angle: dy,dx between centers
     # roott: list = z([None, None])  # for der++, if clustering is per link
 
     def comp(self, link_, rn):
@@ -269,9 +289,9 @@ class Cgraph(CBase):  # params of single-fork node_ cluster
     derH: CderH = z(CderH())  # from PP, not derHv
     # graph-internal, generic:
     aggH: list = z([])  # [[subH,valt,rdnt,dect]], subH: [[derH,valt,rdnt,dect]]: 2-fork composition layers
-    valt: Ct = z(Ct(0,0))  # sum ptuple, derH, aggH
-    rdnt: Ct = z(Ct(1,1))
-    dect: Ct = z(Ct(0,0))
+    valt: Ct = z(Ct([0,0]))  # sum ptuple, derH, aggH
+    rdnt: Ct = z(Ct([1,1]))
+    dect: Ct = z(Ct([0,0]))
     link_: list = z([])  # internal, single-fork, incrementally nested
     node_: list = z([])  # base node_ replaced by node_t in both agg+ and sub+, deeper node-mediated unpacking in agg+
     # graph-external, +level per root sub+:
@@ -281,21 +301,21 @@ class Cgraph(CBase):  # params of single-fork node_ cluster
     evalt: list = z([0,0])  # sum from esubH
     erdnt: list = z([1,1])
     edect: list = z([0,0])
-    ext: list = z([0,0,Ct(0,0)])  # L,S,A: L len base node_, S sparsity: average link len, A angle: average link dy,dx
+    ext: list = z([0,0,Ct([0,0])])  # L,S,A: L len base node_, S sparsity: average link len, A angle: average link dy,dx
     rng: int = 1
-    box: Cbox = Cbox(0,0,inf,inf,-inf,-inf)  # y,x,y0,x0,yn,xn
+    box: Ct = z(Ct([0,0,inf,inf,-inf,-inf]))  # y,x,y0,x0,yn,xn
     # tentative:
     alt_graph_: list = z([])  # adjacent gap+overlap graphs, vs. contour in frame_graphs
-    avalt: Ct = z(Ct(0, 0))  # sum from alt graphs to complement G aves?
-    ardnt: Ct = z(Ct(1, 1))
-    adect: Ct = z(Ct(0, 0))
+    avalt: Ct = z(Ct([0,0]))  # sum from alt graphs to complement G aves?
+    ardnt: Ct = z(Ct([1,1]))
+    adect: Ct = z(Ct([0,0]))
     # PP:
     P_: list = z([])
     mask__: object = None
     # temporary, replace with Et:
-    Vt: Ct = z(Ct(0, 0))  # last layer | last fork tree vals for node_connect and clustering
-    Rt: Ct = z(Ct(1, 1))
-    Dt: Ct = z(Ct(0, 0))
+    Vt: Ct = z(Ct([0,0]))  # last layer | last fork tree vals for node_connect and clustering
+    Rt: Ct = z(Ct([1,1]))
+    Dt: Ct = z(Ct([0,0]))
     root: list = z([None])  # for feedback
     fback_: list = z([])  # feedback [[aggH,valt,rdnt,dect]] per node layer, maps to node_H
     compared_: list = z([])
@@ -314,11 +334,11 @@ class CderG(CBase):  # params of single-fork node_ cluster per pplayers
     _G: Cgraph  # comparand + connec params
     G: Cgraph
     daggH: list = z([])  # optionally nested dderH ) dsubH ) daggH: top aggLev derived in comp_G
-    Vt: Ct = z(Ct(0,0))  # last layer vals from comp_G
-    Rt: Ct = z(Ct(1,1))
-    Dt: Ct = z(Ct(0,0))
+    Vt: Ct = z(Ct([0,0]))  # last layer vals from comp_G
+    Rt: Ct = z(Ct([1,1]))
+    Dt: Ct = z(Ct([0,0]))
     S: float = 0.0  # sparsity: average distance to link centers
-    A: Ct = z(Ct(0,0))  # angle: average dy,dx to link centers
+    A: Ct = z(Ct([0,0]))  # angle: average dy,dx to link centers
     roott: list = z([None,None])
     # dir: bool  # direction of comparison if not G0,G1, only needed for comp link?
 
