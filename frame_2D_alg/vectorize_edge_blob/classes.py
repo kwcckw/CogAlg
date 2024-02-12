@@ -45,8 +45,8 @@ class Ct(list):     # tuple operations
     def __pos__(self): return self
     def __neg__(self): return self.__class__(-self.p1, -self.p2, -self.p3)
 
-    def __add__(self, other): return [a+b for a,b in zip(self, other)] if self else copy(other)
-    def __sub__(self, other): return [a-b for a,b in zip(self, other)] if self else copy(other)
+    def __add__(self, other): return Ct([a+b for a,b in zip(self, other)]) if self else copy(other)
+    def __sub__(self, other): return Ct([a-b for a,b in zip(self, other)]) if self else copy(other)
 
     def normalize(self):
         dist = abs(self)
@@ -76,40 +76,6 @@ class Ct(list):     # tuple operations
 
         return Ct(mangle, dangle)
 
-    # below still buggy, unfinished
-    # properties
-    @property
-    def cy(self) -> Real: return (self[2] + self[4]) / 2
-    @property
-    def cx(self) -> Real: return (self[3] + self[5]) / 2
-    @property
-    def slice(self) -> Tuple[slice, slice]: return slice(self[2], self[4]), slice(self[3], self[5])
-    # operators:
-    # renamed to extend_box, extend is a internal function name for list
-    def extend_box(self, other):  # why Ct is not recognized here?
-        """Add 2 boxes."""
-        # y,x,x0,y0,xn,yn?
-        return Ct(self[0], self[1], min(self[2], other[2]), min(self[3], other[3]), max(self[4], other[4]), max(self.e[5], other.e[5]))
-    # methods
-    def accumulate(self, y: Real, x: Real):
-        """Box coordinate accumulation."""
-        return Ct(min(self[2], y), min(self[3], x), max(self[4], y + 1), max(self[5], x + 1))
-
-    def expand(self, r: int, h: Real, w: Real):
-        """Box expansion by margin r."""
-        return Ct(max(0, self[2] - r), max(0, self[3] - r), min(h, self[4] + r), min(w, self[5] + r))
-
-    def shrink(self, r: int):
-        """Box shrink by margin r."""
-        return Ct(self[2] + r, self[3] + r, self[4] - r, self[5] - r)
-
-    def sub_box2box(self, sb):
-        """sub_box to box transform."""
-        return Ct(self[2] + sb[2], self[3] + sb[3], sb[4] + self[2], sb[5] + self[3])
-
-    def box2sub_box(self, b):
-        """box to sub_box transform."""
-        return Ct(b[2] - self[2], b[3] - self[3], b[4] - self[2], b[5] - self[3])
 
 
 
@@ -144,9 +110,15 @@ class Cptuple(CBaseLite):
 
         return dertuplet, valt, rdnt
 
-class Cdertuple(Cptuple):
+class Cdertuple(Ct):
 
-    angle: Real = 0
+
+    def __add__(self, other):
+        return Cdertuple([P+p for P,p in zip(self, other)])
+        
+    def __sub__(self, other):
+        return Cdertuple([P-p for P,p in zip(self, other)])
+    
 
     def comp(self, other, rn):    # comp_dertuple
 
@@ -172,15 +144,18 @@ class CderH(CBase):  # derH is a list of der layers or sub-layers, each = ptuple
 
     @classmethod
     def empty_layer(cls):
-        return Ct([Cdertuple(), Cdertuple()])
+        return Ct([Cdertuple([0,0,0,0,0,0]), Cdertuple([0,0,0,0,0,0])])
 
     def __or__(self, other):    # |: concatenate operator
         return CderH([*self, *other])
 
     def __add__(self, other):
         # sum der layers, dertuple is mtuple | dtuple
-        # this may not work for ext, make an exception?
-        H = [Dertuplet + dertuplet for Dertuplet, dertuplet in zip_longest(self.H, other.H, fillvalue=self.empty_layer())]  # mtuple,dtuple
+        
+        if other.H and other.H[0] and isinstance(other.H[0][0], list):  # nested derH.H = [ dertuplet ]
+            H = [[ Dertuple + dertuple for Dertuple, dertuple in zip(Dertuplet, dertuplet)] for Dertuplet, dertuplet in zip_longest(self.H, other.H, fillvalue=self.empty_layer())]  # mtuple,dtuple
+        else:  # not nested derH.H = dertuplet               
+            H = [Dertuple+dertuple for Dertuple, dertuple in zip_longest(self.H, other.H, fillvalue=Cdertuple([0,0,0,0,0,0]))]  # mtuple,dtuple
 
         valt = self.valt + other.valt
         rdnt = self.rdnt + other.rdnt
@@ -201,7 +176,10 @@ class CderH(CBase):  # derH is a list of der layers or sub-layers, each = ptuple
     def __sub__(self, other):
         
         # subtract der layers, dertuple is mtuple | dtuple
-        H = [Dertuplet - dertuplet for Dertuplet, dertuplet in zip_longest(self.H, other.H, fillvalue=self.empty_layer())]  # mtuple,dtuple
+        if other.H and other.H[0] and isinstance(other.H[0][0], list):
+            H = [[ Dertuple - dertuple for Dertuple, dertuple in zip(Dertuplet, dertuplet)] for Dertuplet, dertuplet in zip_longest(self.H, other.H, fillvalue=self.empty_layer())]  # mtuple,dtuple
+        else:
+            H = [Dertuple-dertuple for Dertuple, dertuple in zip_longest(self.H, other.H, fillvalue=Cdertuple([0,0,0,0,0,0]))]  # mtuple,dtuple
 
         valt = self.valt - other.valt
         rdnt = self.rdnt - other.rdnt
@@ -303,7 +281,7 @@ class Cgraph(CBase):  # params of single-fork node_ cluster
     edect: list = z([0,0])
     ext: list = z([0,0,Ct([0,0])])  # L,S,A: L len base node_, S sparsity: average link len, A angle: average link dy,dx
     rng: int = 1
-    box: Ct = z(Ct([0,0,inf,inf,-inf,-inf]))  # y,x,y0,x0,yn,xn
+    box: Cbox = z(Cbox(inf,inf,-inf,-inf))  # y,x,y0,x0,yn,xn
     # tentative:
     alt_graph_: list = z([])  # adjacent gap+overlap graphs, vs. contour in frame_graphs
     avalt: Ct = z(Ct([0,0]))  # sum from alt graphs to complement G aves?
