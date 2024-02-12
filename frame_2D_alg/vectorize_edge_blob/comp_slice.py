@@ -19,6 +19,8 @@ This process is a reduced-dimensionality (2D->1D) version of cross-comp and clus
 
 PP clustering in vertical (along axis) dimension is contiguous and exclusive because 
 Ps are relatively lateral (cross-axis), their internal match doesn't project vertically. 
+Primary clustering by match between Ps over incremental distance (rng++), followed by forming
+secondary overlapping clusters of match of incremental-derivation (der++) difference between Ps. 
 
 As we add higher dimensions (3D and time), this dimensionality reduction is done in salient high-aspect blobs
 (likely edges in 2D or surfaces in 3D) to form more compressed "skeletal" representations of full-dimensional patterns.
@@ -172,7 +174,6 @@ def sum2PP(root, P_, derP_, base_rdn, fd):  # sum links in Ps and Ps in PP
         PP.ptuple += P.ptuple
         PP.derH += P.derH
         for y,x in P.cells:
-            # extend is for box, i guess we need something like a extend cell here?
             PP.box.extend_box(y,x); celly_+=[y]; cellx_+=[x]
     # pixmap:
     y0,x0,yn,xn = PP.box
