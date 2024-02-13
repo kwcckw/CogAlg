@@ -58,10 +58,11 @@ class CBaseLite:
         dataclass()(cls)
 
     def __add__(self, other):
-        return self.__class__(*((_value + value) for _value, value in zip(self, other)))
+        # add angle summation
+        return self.__class__(*( [P+p for P,p in zip(_value ,value)] if isinstance(_value, list) else (_value + value) for _value, value in zip(self, other)))
 
     def __sub__(self, other):
-        return self.__class__(*((_value - value) for _value, value in zip(self, other)))
+        return self.__class__(*( [P-p for P,p in zip(_value ,value)] if isinstance(_value, list) else (_value - value) for _value, value in zip(self, other)))
     
     # add div and mult here?
 

@@ -37,7 +37,7 @@ class Cptuple(CBaseLite):
     G: Real = 0
     M: Real = 0
     Ma: Real = 0
-    angle: list = z([0,0])
+    angle: list = z([0,0])  # or this should be Cangle?
     L: Real = 0
 
     # operators:
@@ -77,14 +77,14 @@ class CderH(CBase):  # derH is a list of der layers or sub-layers, each = ptuple
     def __add__(self, other):  # sum der layers, dertuple is mtuple | dtuple
 
         if other.H and other.H[0] and isinstance(other.H[0][0], list):
-            H = [[ Dertuple + dertuple for Dertuple, dertuple in zip(Dertuplet, dertuplet)]
+            H = [[ [P+p for P,p in zip(Dertuple,dertuple)]  for Dertuple, dertuple in zip(Dertuplet, dertuplet)]
                  for Dertuplet, dertuplet in zip_longest(self.H, other.H, fillvalue=self.empty_layer())]  # mtuple,dtuple
         else:
-            H = [Dertuple+dertuple for Dertuple, dertuple in zip_longest(self.H, other.H, fillvalue=[0,0,0,0,0,0])]  # mtuple,dtuple
+            H = [[P+p for P,p in zip(Dertuple,dertuple)] for Dertuple, dertuple in zip_longest(self.H, other.H, fillvalue=[0,0,0,0,0,0])]  # mtuple,dtuple
 
-        valt = self.valt + other.valt
-        rdnt = self.rdnt + other.rdnt; rdnt[0] += valt[1] > valt[0]; rdnt[1] += valt[0] > valt[1]
-        dect = self.dect + other.dect; dect[0] /= 2; dect[1] /= 2
+        valt = add_(self.valt, other.valt)
+        rdnt = add_(self.rdnt, other.rdnt); rdnt[0] += valt[1] > valt[0]; rdnt[1] += valt[0] > valt[1]
+        dect = add_(self.dect, other.dect,1)
 
         return CderH(H=H, valt=valt, rdnt=rdnt, dect=dect)
 
@@ -95,15 +95,15 @@ class CderH(CBase):  # derH is a list of der layers or sub-layers, each = ptuple
 
         # subtract der layers, dertuple is mtuple | dtuple
         if other.H and other.H[0] and isinstance(other.H[0][0], list):
-            H = [[ Dertuple - dertuple for Dertuple, dertuple in zip(Dertuplet, dertuplet)]
+            H = [[ [P-p for P,p in zip(Dertuple,dertuple)]  for Dertuple, dertuple in zip(Dertuplet, dertuplet)]
                  for Dertuplet, dertuplet in zip_longest(self.H, other.H, fillvalue=self.empty_layer())]  # mtuple,dtuple
         else:
-            H = [Dertuple-dertuple for Dertuple, dertuple in zip_longest(self.H, other.H, fillvalue=[0,0,0,0,0,0])]  # mtuple,dtuple
+            H = [[P-p for P,p in zip(Dertuple,dertuple)] for Dertuple, dertuple in zip_longest(self.H, other.H, fillvalue=[0,0,0,0,0,0])]  # mtuple,dtuple
 
-        valt = self.valt - other.valt
-        rdnt = self.rdnt - other.rdnt
+        valt = subtract_(self.valt, other.valt)
+        rdnt = subtract_(self.rdnt, other.rdnt)
         rdnt[0] -= valt[1] > valt[0]; rdnt[1] -= valt[0] > valt[1]; dect = self.dect
-        dect[0] *= 2; dect[1] *= 2; dect -= other.dect
+        dect[0] *= 2; dect[1] *= 2; dect = subtract_(self.dect, other.dect)
 
         return CderH(H=H, valt=valt, rdnt=rdnt, dect=dect)
 
@@ -242,9 +242,11 @@ def get_match(_par, par):
     match = min(abs(_par),abs(par))
     return -match if (_par<0) != (par<0) else match    # match = neg min if opposite-sign comparands
 
-def add_(a_,b_):  # sum iterables
-    return [a + b for a, b in zip(a_, b_)] if a_ else copy(b_)
+def add_(a_,b_, normalize=0):  # sum iterables
+    return [(a + b) /2 if normalize else a+b  for a, b in zip(a_, b_)] if a_ else copy(b_)
 
+def subtract_(a_,b_):  # subtract iterables
+    return [a - b for a, b in zip(a_, b_)] 
 
 def comp_(self, other, rn):  # compare tuples, include comp_ext and comp_ptuple?
 

@@ -3,7 +3,7 @@ from collections import deque, defaultdict
 from copy import deepcopy, copy
 from itertools import zip_longest, combinations
 from typing import List, Tuple
-from .classes import add_, get_match, CderH, CderP, Cgraph, Ct, CP
+from .classes import add_, subtract_, get_match, CderH, CderP, Cgraph, CP
 from .filters import ave, ave_dI, aves, P_aves, PP_aves
 from .slice_edge import comp_angle
 
@@ -66,8 +66,9 @@ def rng_recursion(PP, rng=1):  # similar to agg+ rng_recursion, but contiguously
             _P_ = P.link_.pop()  # P.link_ nesting doesn't matter
             for _P in _P_:
                 if len(_P.derH.H)!= len(P.derH.H): continue  # compare same der layers only
-                dy,dx = _P.yx-P.yx
+                dy,dx = _P.yx[0]-P.yx[0], _P.yx[1]-P.yx[1]
                 distance = np.hypot(dy,dx)  # distance between P midpoints, /= L for eval?
+                # this is causing endless loop now because if distance <= rng in current rng, distance always <= rng +1 in the next while loop too
                 if distance > rng: continue  # | rng * ((P.val+_P.val) / ave_rval)?
                 __P_ += [_P]  # for next rng+
                 mlink = comp_P([_P,P, distance,[dy,dx]])  # return link if match
@@ -166,7 +167,7 @@ def sum2PP(root, P_, derP_, base_rdn, fd):  # sum links in Ps and Ps in PP
     for derP in derP_:
         if derP.P not in P_ or derP._P not in P_: continue
         derP.P.derH += derP.derH  # +base_rdn?
-        derP._P.derH -= derP.derH  # reverse d signs downlink
+        derP._P.derH -= derP.derH  # reverse d signs downlink (_P.derH.H may empty here, is that a bug?)
         add_(PP.Vt,derP.vt); add_(PP.Rt,derP.rt)
         PP.link_ += [derP]; derP.roott[fd] = PP
         S += derP.S; add_(A,derP.A)
