@@ -57,6 +57,7 @@ def der_recursion(root, PP):  # node-mediated correlation clustering: keep same 
 def rng_recursion(PP, rng=1):  # similar to agg+ rng_recursion, but contiguously link mediated, because
 
     iP_ = PP.P_
+    fbreak = 1
     while True:
         P_ = []; V = 0
         for P in iP_:
@@ -67,7 +68,10 @@ def rng_recursion(PP, rng=1):  # similar to agg+ rng_recursion, but contiguously
                 if len(_P.derH.H)!= len(P.derH.H): continue  # compare same der layers only
                 dy,dx = np.subtract(_P.yx, P.yx)
                 distance = np.hypot(dy,dx)  # distance between P midpoints, /= L for eval?
-                if distance > rng: continue  # | rng * ((P.val+_P.val) / ave_rval)?
+                if distance > rng: 
+                    fbreak = 0  # break from loop if all links are within rng
+                    continue  # | rng * ((P.val+_P.val) / ave_rval)?
+                
                 __P_ += [_P]  # for next rng+
                 mlink = comp_P([_P,P, distance,[dy,dx]])  # return link if match
                 if mlink:
@@ -83,9 +87,9 @@ def rng_recursion(PP, rng=1):  # similar to agg+ rng_recursion, but contiguously
                 P.link_ += [__P_]  # temporary, appended and popped regardless of nesting
                 P_ += [P]  # for next loop
         rng += 1
-        if V > ave * len(P_) * 6:  #  implied val of all __P_s, 6: len mtuple
+        if V > ave * len(P_) * 6 and not fbreak:  #  implied val of all __P_s, 6: len mtuple
             iP_ = P_
-        else:
+        if fbreak :
             for P in P_: P.link_.pop()
             break
     PP.rng=rng
@@ -186,6 +190,7 @@ def sum2PP(root, P_, derP_, base_rdn, fd):  # sum links in Ps and Ps in PP
     PP.mask__ = np.zeros((yn-y0, xn-x0), bool)
     celly_ = np.array(celly_); cellx_ = np.array(cellx_)
     PP.mask__[(celly_-y0, cellx_-x0)] = True
+    PP.valt = copy(PP.derH.valt); PP.rdnt = copy(PP.derH.rdnt); PP.dect = copy(PP.derH.dect)  # to be used in agg+ later?
 
     return PP
 
@@ -287,20 +292,27 @@ def comp_ptuple_gen(_ptuple, ptuple, rn):  # 0der
     return [mtuple, dtuple, Mtuple]
 
 
-def comp_derH(_derH, derH, rn):  # derH is a list of der layers or sub-layers, each = ptuple_tv
+def comp_derH(_derH, derH, rn=1):  # derH is a list of der layers or sub-layers, each = ptuple_tv
 
-    dderH = []  # or not-missing comparand: xor?
-    Mval, Dval, Mrdn, Drdn = 0,0,1,1
+    
+    if derH.H and derH.H[0] and isinstance(derH.H[0][0], list):  # derH.H has multuple dertuplets
+        _H = derH.H; H = derH.H
+    else:  # derH.H has single dertuplet (without additional bracket)
+        _H = [_derH.H]; H = [derH.H]
 
-    for _lay, lay in zip(_derH.H, derH.H):  # compare common lower der layers | sublayers in derHs
-        # if lower-layers match: Mval > ave * Mrdn?
-        mtuple, dtuple = comp_dtuple(_lay[1], lay[1], rn, fagg=0)  # compare dtuples only
-        mval = sum(mtuple); dval = sum(abs(d) for d in dtuple)
-        mrdn = dval > mval; drdn = dval < mval
-        Mval+=mval; Dval+=dval; Mrdn+=mrdn; Drdn+=drdn
-        dderH += [[mtuple, dtuple]]
-
-    return CderH(H=dderH, valt=[Mval,Dval], rdnt=[Mrdn,Drdn], depth=0)  # new derLayer,= 1/2 combined derH
+    for _lay, lay in zip(_H,H):  # typo here? both are _G here
+        mtuple,dtuple, Mtuple,Dtuple = comp_dtuple(_lay[1], lay[1], rn=rn, fagg=1)
+        valt = [sum(mtuple),sum(abs(d) for d in dtuple)]
+        rdnt = [valt[1] > valt[0], valt[1] <= valt[0]]
+        dect = [0,0]
+        for fd, (ptuple,Ptuple) in enumerate(zip((mtuple,dtuple),(Mtuple,Dtuple))):
+            for (par, max, ave) in zip(ptuple, Ptuple, aves):  # different ave for comp_dtuple
+                if fd: dect[1] += abs(par)/ abs(max) if max else 1
+                else:  dect[0] += (par+ave)/ (max+ave) if max else 1
+        dect[0] = dect[0]/6; dect[1] = dect[1]/6  # ave of 6 params
+        
+        
+    return CderH(H=[mtuple,dtuple], valt=valt, rdnt=rdnt, dect=dect, depth=0)  # new derLayer,= 1/2 combined derH
 
 
 def sum_derH_gen(T, t, base_rdn, fneg=0):  # derH is a list of layers or sub-layers, each = [mtuple,dtuple, mval,dval, mrdn,drdn]
