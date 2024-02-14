@@ -1,3 +1,4 @@
+import numpy as np
 from itertools import count, zip_longest
 from math import inf, hypot
 from numbers import Real
@@ -19,25 +20,13 @@ from .filters import ave_dangle, ave_dI, ave_Pd, ave_Pm, aves
     longer names are normally classes
 '''
 
-class Cangle(NamedTuple):  # not sure it's needed
-
-    dy: Real
-    dx: Real
-    # operators:
-    def __abs__(self): return hypot(self.dy, self.dx)
-    def __pos__(self): return self
-    def __neg__(self): return self.__class__(-self.dy, -self.dx)
-    def __add__(self, other): return self + other  # .__class__(self.dy + other.dy, self.dx + other.dx) ?
-    def __sub__(self, other): return self + (-other)
-
-
 class Cptuple(CBaseLite):
 
     I: Real = 0
     G: Real = 0
     M: Real = 0
     Ma: Real = 0
-    angle: list = z([0,0])  # or this should be Cangle?
+    angle: list = z([0,0])
     L: Real = 0
 
     # operators:
@@ -84,7 +73,7 @@ class CderH(CBase):  # derH is a list of der layers or sub-layers, each = ptuple
 
         valt = add_(self.valt, other.valt)
         rdnt = add_(self.rdnt, other.rdnt); rdnt[0] += valt[1] > valt[0]; rdnt[1] += valt[0] > valt[1]
-        dect = add_(self.dect, other.dect,1)
+        dect = add_(self.dect, other.dect, rn=2)
 
         return CderH(H=H, valt=valt, rdnt=rdnt, dect=dect)
 
@@ -100,10 +89,9 @@ class CderH(CBase):  # derH is a list of der layers or sub-layers, each = ptuple
         else:
             H = [[P-p for P,p in zip(Dertuple,dertuple)] for Dertuple, dertuple in zip_longest(self.H, other.H, fillvalue=[0,0,0,0,0,0])]  # mtuple,dtuple
 
-        valt = subtract_(self.valt, other.valt)
-        rdnt = subtract_(self.rdnt, other.rdnt)
-        rdnt[0] -= valt[1] > valt[0]; rdnt[1] -= valt[0] > valt[1]; dect = self.dect
-        dect[0] *= 2; dect[1] *= 2; dect = subtract_(self.dect, other.dect)
+        valt = sub_(self.valt, other.valt)
+        rdnt = sub_(self.rdnt, other.rdnt); rdnt[0] -= valt[1] > valt[0]; rdnt[1] -= valt[0] > valt[1]
+        dect = self.dect; dect[0] *= 2; dect[1] *= 2; dect = sub_(self.dect, other.dect)
 
         return CderH(H=H, valt=valt, rdnt=rdnt, dect=dect)
 
@@ -116,7 +104,7 @@ class CderH(CBase):  # derH is a list of der layers or sub-layers, each = ptuple
             if i >= n: break
             # if lower-layers match: Mval > ave * Mrdn?
             dertuplet, _valt, _rdnt = _lay.d.comp(lay.d, rn)  # compare dtuples only
-            dderH |= [dertuplet]; valt += _valt; rdnt += _rdnt
+            dderH += [dertuplet]; valt += _valt; rdnt += _rdnt
 
         return dderH, valt, rdnt  # new derLayer,= 1/2 combined derH
 
@@ -242,11 +230,16 @@ def get_match(_par, par):
     match = min(abs(_par),abs(par))
     return -match if (_par<0) != (par<0) else match    # match = neg min if opposite-sign comparands
 
-def add_(a_,b_, normalize=0):  # sum iterables
-    return [(a + b) /2 if normalize else a+b  for a, b in zip(a_, b_)] if a_ else copy(b_)
+def acc_(a_,b_, n=1): # accum iterables
 
-def subtract_(a_,b_):  # subtract iterables
-    return [a - b for a, b in zip(a_, b_)] 
+    a_[:] = np.add(a_,b_) if a_ else copy(b_)
+    np.divide(a_,n)
+
+def add_(a_,b_, n=1):  # sum iterables
+    return np.divide( np.add(a_,b_) if a_ else [b for b in b_], n)
+
+def sub_(a_,b_):  # subtract iterables
+    return [a - b for a, b in zip(a_, b_)]
 
 def comp_(self, other, rn):  # compare tuples, include comp_ext and comp_ptuple?
 
@@ -276,4 +269,3 @@ def comp_angle(self, other):  # angle = [dy,dx], rn doesn't matter
 def normalize(self):
     dist = abs(self)
     return self.__class__(self.dy / dist, self.dx / dist)
-
