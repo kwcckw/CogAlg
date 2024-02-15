@@ -45,9 +45,9 @@ def der_recursion(root, PP):  # node-mediated correlation clustering: keep same 
             link_ = P.link_
             if link_:
                 if len(PP.derH.H) == 1: link_[:] = [link_]  # init link_H -> link_HH
-                if PP.rng > 1: last_link_ = link_[-1][-1]  # link_) link_H) link_HH
-                else:          last_link_ = link_[-1]  # link_) link_HH, no rng++
-                P.link_ += [last_link_]   # use as prelink_ for rng++:
+                if PP.rng > 1: last_link_ = link_[-1]  # link_) link_H) link_HH
+                else:          last_link_ = link_  # link_) link_HH, no rng++
+                P.link_ += [[link._P for link in last_link_]]   # use as prelink_ for rng++: (prelinks should be CP?)
 
     rng_recursion(PP, rng=1)  # extend PP.link_, derHs by same-der rng+ comp
     form_PP_t(PP, PP.P_, base_rdn=PP.rdnt[1])  # der+ is mediated by form_PP_t
@@ -78,8 +78,15 @@ def rng_recursion(PP, rng=1):  # similar to agg+ rng_recursion, but contiguously
                             if len(link_) < rng: link_ += [[]]  # new link_
                             link_ = link_[-1]  # last rng layer
                         link_ += [mlink]
-                        _link_ = _P.link_
-                        __P_ += [link._P for link in unpack_last_link_(_P.link_)]  # uplinks can't be cyclic
+                        # so we need to unpack the 2nd last element because the last element is prelinks, which is CP
+                        if _P.link_:
+                            if isinstance(_P.link_[-1], list):
+                                link_ = _P.link_[:-1]  # skip prelinks (which is CP)
+                            else:
+                                link_ = _P.link_
+                            if isinstance(link_[-1], list):  # rng+, where link_ has more nesting
+                                link_ = link_[-1]
+                            __P_ += [link._P for link in link_ ]  # uplinks can't be cyclic
             if __P_:
                 P.link_ += [__P_]  # temporary, appended and popped regardless of nesting
                 P_ += [P]  # for next loop
@@ -167,14 +174,15 @@ def sum2PP(root, P_, derP_, base_rdn, fd):  # sum links in Ps and Ps in PP
         derP.P.derH += derP.derH  # +base_rdn?
         derP._P.derH -= derP.derH  # reverse d signs downlink
         PP.link_ += [derP]; derP.roott[fd] = PP
-        np.add(PP.Vt,derP.vt)
-        np.add(PP.Rt,derP.rt)
-        np.add(A,derP.A)
+        PP.Vt = np.add(PP.Vt,derP.vt)  # we need assignment with np.add
+        PP.Rt = np.add(PP.Rt,derP.rt)
+        derP.A = np.add(A,derP.A)
         S += derP.S
     PP.ext = [len(P_), S, A]  # all from links
     # += Ps:
     celly_,cellx_ = [],[]
     for P in P_:
+        P.derH.depth += 1  # increase depth here?
         PP.ptuple += P.ptuple
         PP.derH += P.derH
         for y,x in P.cells:
@@ -184,6 +192,7 @@ def sum2PP(root, P_, derP_, base_rdn, fd):  # sum links in Ps and Ps in PP
     PP.mask__ = np.zeros((yn-y0, xn-x0), bool)
     celly_ = np.array(celly_); cellx_ = np.array(cellx_)
     PP.mask__[(celly_-y0, cellx_-x0)] = True
+    PP.derH.depth = P.derH.depth  # we need update PP.depth too?
 
     return PP
 
@@ -272,7 +281,7 @@ def comp_derH(_derH, derH, rn=1, fagg=0):  # derH is a list of der layers or sub
     derLay = []; Vt,Rt,Dt = [0,0],[0,0],[0,0]
 
     for _lay, lay in zip(_derH.H, derH.H):
-        mtuple,dtuple, Mtuple,Dtuple = comp_dtuple(_lay[1], lay[1], rn=rn, fagg=1)
+        mtuple,dtuple, Mtuple,Dtuple = comp_dtuple(_lay.H[1], lay.H[1], rn=rn, fagg=1)
         valt = [sum(mtuple),sum(abs(d) for d in dtuple)]
         rdnt = [valt[1] > valt[0], valt[1] <= valt[0]]
         dect = [0,0]
@@ -284,11 +293,10 @@ def comp_derH(_derH, derH, rn=1, fagg=0):  # derH is a list of der layers or sub
         if fagg:
             dect[0] = dect[0]/6; dect[1] = dect[1]/6  # ave of 6 params
 
-        Vt = np.add(Vt,valt); Rt = np.add(Rt,rdnt); if fagg: Dt = np.divide(np.add(Dt,dect), 2)
+        Vt = np.add(Vt,valt); Rt = np.add(Rt,rdnt)
+        if fagg: Dt = np.divide(np.add(Dt,dect), 2)  # if statement cannot in a same line
         derLay += [CderH(H=[mtuple,dtuple], valt=valt,rdnt=rdnt,dect=dect, depth=0)]  # dertvs
 
-    for derH in [_derH, derH]:
-        derH.H = [derLay]  # new derLayer = 1/2 of combined derH
 
     return derLay, Vt,Rt,Dt  # to sum in each G Et
 

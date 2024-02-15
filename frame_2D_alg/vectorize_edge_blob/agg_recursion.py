@@ -91,7 +91,8 @@ def rng_recursion(rroot, root, Q, Et, nrng=1):  # rng++/ G_, der+/ link_ if call
             if _G in G.compared_: continue
             dy = _G.box.cy - G.box.cy; dx = _G.box.cx - G.box.cx  # compute distance between node centers:
             dist = np.hypot(dy, dx)
-            if (G.Vt[0]+_G.Vt[0])/ (dist/ave_distance) > ave*(G.Rt[0]+_G.Rt[0]):  # combined val and distance eval
+            # both eval are almost the same? This eval and line 97 below
+            if nrng==1 or ((G.Vt[0]+_G.Vt[0])/ (dist/ave_distance) > ave*(G.Rt[0]+_G.Rt[0])):  # combined val and distance eval
                 # pairwise eval in rng++, or directional?
                 if nrng==1 or (G.Vt[0]+_G.Vt[0]) > ave * (G.Rt[0]+_G.Rt[0]):
                     link = CderG(_G=_G, G=G, A=[dy,dx], S=dist)
@@ -101,7 +102,7 @@ def rng_recursion(rroot, root, Q, Et, nrng=1):  # rng++/ G_, der+/ link_ if call
                 _G_.add((_G, G))  # for next rng+
 
     if et[0][0] > ave_Gm * et[1][0]:  # rng+ eval per arg cluster because comp is bilateral, 2nd test per new pair
-        for Part, part in zip(Et,et): np.add(Part,part)  # Vt[i]+=v; Rt[i]+=rt[i]; Dt[i]+=d
+        for Part, part in zip(Et,et): Part[:] = np.add(Part,part)  # Vt[i]+=v; Rt[i]+=rt[i]; Dt[i]+=d
         _Q = _link_ if fd else list(_G_)
         if _Q:
             nrng = rng_recursion(rroot, root, _Q, Et, nrng+1)  # eval rng+ for der+ too
@@ -330,9 +331,9 @@ def comp_G(link, Et):
 
     dderH = [dertv, extt]
     if _G.derH.H and G.derH.H:  # empty in single-P Gs?
-        ddertv = comp_derH(_G.derH, G.derH)
-        Valt = np.add(Valt,ddertv.valt); Rdnt = np.add(Rdnt,ddertv.rdnt); Dect = np.divide(np.add(Dect,ddertv.dect), 2)
-        dderH += [ddertv]  # new dderH layer
+        ddertv_, valt, rdnt, dect = comp_derH(_G.derH, G.derH)
+        Valt = np.add(Valt,valt); Rdnt = np.add(Rdnt,rdnt); Dect = np.divide(np.add(Dect,dect), 2)
+        dderH += ddertv_  # new dderH layer (the current sequence: dertv, extt, derlay1, derlay2,...) Or extt should be last?
     dderH = CderH(H=dderH,valt=copy(Valt),rdnt=copy(Rdnt),dect=copy(Dect), depth=1)
     # / G:
 
@@ -486,7 +487,7 @@ def sum_ext(Ext, ext):  # ext: m|d L,S,A
 
     for i,(Par,par) in enumerate(zip(Ext,ext)):
 
-        if isinstance(Par,list): np.add(Par,par)  # sum angle
+        if isinstance(Par,list): Par[:] = np.add(Par,par)  # sum angle
         else: Ext[i] = Par+par
 
 

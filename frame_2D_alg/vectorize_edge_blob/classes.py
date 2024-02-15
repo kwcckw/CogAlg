@@ -65,12 +65,21 @@ class CderH(CBase):  # derH is a list of der layers or sub-layers, each = ptuple
 
     def __add__(self, other):  # sum der layers, dertuple is mtuple | dtuple
 
-        if other.H and other.H[0] and isinstance(other.H[0][0], list):
-            # added list, prevent np converting them into array, instead of list
-            H = [[ list(np.add(Dertuple,dertuple))  for Dertuple, dertuple in zip(Dertuplet, dertuplet)]
-                 for Dertuplet, dertuplet in zip_longest(self.H, other.H, fillvalue=self.empty_layer())]  # mtuple,dtuple
-        else:
+        # self may converted, while other is not converted, or vice-versa
+        if self.H and other.H:
+            if (isinstance(self.H[0], list) and not isinstance(other.H[0], list)) or \
+               (not isinstance(self.H[0], list) and isinstance(other.H[0], list)):  
+                
+                for derH in [self, other]:
+                    if derH.H and isinstance(derH.H[0],list):  # convert here too? 
+                        derH.H = [CderH(H=derH.H, valt=copy(derH.valt), rdnt=copy(derH.rdnt), dect=copy(derH.dect), depth=0)]
+
+        if (self.H and isinstance(self.H[0], list)) or \
+           (other.H and isinstance(other.H[0], list)):  # dertuplet
+            # mtuple,dtuple
             H = [ list(np.add(Dertuple,dertuple)) for Dertuple, dertuple in zip_longest(self.H, other.H, fillvalue=[0,0,0,0,0,0])]  # mtuple,dtuple
+        else:  # multiple dertuplet, in CderH
+            H = [ DerH + derH for DerH, derH in zip_longest(self.H, other.H, fillvalue=CderH())]
 
         valt = np.add(self.valt, other.valt)
         rdnt = np.add(self.rdnt, other.rdnt); rdnt[0] += valt[1] > valt[0]; rdnt[1] += valt[0] > valt[1]
@@ -83,6 +92,7 @@ class CderH(CBase):  # derH is a list of der layers or sub-layers, each = ptuple
 
     def __sub__(self, other):
 
+        # pending update, same with __add__ above
         # subtract der layers, dertuple is mtuple | dtuple
         if other.H and other.H[0] and isinstance(other.H[0][0], list):
             H = [[ list(np.subtract(Dertuple,dertuple))  for Dertuple, dertuple in zip(Dertuplet, dertuplet)]
