@@ -91,7 +91,7 @@ def rng_recursion(rroot, root, Q, Et, nrng=1):  # rng++/ G_, der+/ link_ if call
             if _G in G.compared_: continue
             dy = _G.box.cy - G.box.cy; dx = _G.box.cx - G.box.cx  # compute distance between node centers:
             dist = np.hypot(dy, dx)
-            if (np.sum(G.valt)+np.sum(_G.valt))/ (dist/ave_distance) > ave*(np.sum(G.rdnt)+np.sum(_G.rdnt)):  # combined val and distance eval
+            if (G.Vt[0]+_G.Vt[0])/ (dist/ave_distance) > ave*(G.Rt[0]+_G.Rt[0]):  # combined val and distance eval
                 # pairwise eval in rng++, or directional?
                 if nrng==1 or (G.Vt[0]+_G.Vt[0]) > ave * (G.Rt[0]+_G.Rt[0]):
                     link = CderG(_G=_G, G=G, A=[dy,dx], S=dist)
@@ -302,7 +302,7 @@ def sum_last_lay(G, fd):  # eLay += last layer of link.daggH (dsubH|ddaggH)
 
     if eLay: G.extH += [eLay]
 
-
+# not updated
 def comp_G(link, Et):
 
     _G, G = link._G, link.G
@@ -320,7 +320,7 @@ def comp_G(link, Et):
             if fd: dect[1] += abs(par)/ abs(max) if max else 1
             else:  dect[0] += (par+ave)/ (max+ave) if max else 1
     dect[0] = dect[0]/6; dect[1] = dect[1]/6  # ave of 6 params
-    Valt = np.add(Valt, valt); Rdnt = np.add(Rdnt, rdnt); Dect = np.divide(np.add(Dect,dect), 2)
+    Valt = np.add(Valt,valt); Rdnt = np.add(Rdnt,rdnt); Dect = np.divide(np.add(Dect,dect), 2)
     dertv = CderH(H=[mtuple,dtuple], valt=valt,rdnt=rdnt,dect=dect,depth=0)  # no ext in dertvs
 
     # / PP:
