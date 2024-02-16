@@ -91,13 +91,11 @@ def rng_recursion(rroot, root, Q, Et, nrng=1):  # rng++/ G_, der+/ link_ if call
             if _G in G.compared_: continue
             dy = _G.box.cy - G.box.cy; dx = _G.box.cx - G.box.cx  # compute distance between node centers:
             dist = np.hypot(dy, dx)
-            # both eval are almost the same? This eval and line 97 below
-            if nrng==1 or ((G.Vt[0]+_G.Vt[0])/ (dist/ave_distance) > ave*(G.Rt[0]+_G.Rt[0])):  # combined val and distance eval
-                # pairwise eval in rng++, or directional?
-                if nrng==1 or (G.Vt[0]+_G.Vt[0]) > ave * (G.Rt[0]+_G.Rt[0]):
-                    link = CderG(_G=_G, G=G, A=[dy,dx], S=dist)
-                    G.compared_+=[_G]; _G.compared_+=[G]
-                    comp_G(link, et)
+            # combined pairwise eval (directional val?) per rng+:
+            if nrng==1 or ((G.Vt[0]+_G.Vt[0])/ (dist/ave_distance) > ave*(G.Rt[0]+_G.Rt[0])):
+                link = CderG(_G=_G, G=G, A=[dy,dx], S=dist)
+                G.compared_+=[_G]; _G.compared_+=[G]
+                comp_G(link, et)
             else:
                 _G_.add((_G, G))  # for next rng+
 
@@ -303,7 +301,7 @@ def sum_last_lay(G, fd):  # eLay += last layer of link.daggH (dsubH|ddaggH)
 
     if eLay: G.extH += [eLay]
 
-# not updated
+  # draft
 def comp_G(link, Et):
 
     _G, G = link._G, link.G
@@ -311,6 +309,7 @@ def comp_G(link, Et):
     # keep separate P ptuple and PP derH, empty derH in single-P G, + empty aggH in single-PP G:
 
     # / P:
+    # we can replace it with comp_derH too?
     mtuple, dtuple, Mtuple, Dtuple = comp_ptuple(_G.ptuple, G.ptuple, rn=1, fagg=1)
     valt = [sum(mtuple), sum(abs(d) for d in dtuple)]  # mval is signed, m=-min in comp x sign
     rdnt = [valt[1]>valt[0], valt[1]<=valt[0]]
@@ -329,12 +328,13 @@ def comp_G(link, Et):
     Valt = np.add(Valt, valt); Rdnt = np.add(Rdnt, rdnt); Dect = np.divide(np.add(Dect,dect), 2)
     for Ext,ext in zip(Extt,extt): sum_ext(Ext,ext)
 
-    dderH = [dertv, extt]
+    dderH = [dertv]
     if _G.derH.H and G.derH.H:  # empty in single-P Gs?
         ddertv_, valt, rdnt, dect = comp_derH(_G.derH, G.derH)
         Valt = np.add(Valt,valt); Rdnt = np.add(Rdnt,rdnt); Dect = np.divide(np.add(Dect,dect), 2)
-        dderH += ddertv_  # new dderH layer (the current sequence: dertv, extt, derlay1, derlay2,...) Or extt should be last?
-    dderH = CderH(H=dderH,valt=copy(Valt),rdnt=copy(Rdnt),dect=copy(Dect), depth=1)
+        dderH += ddertv_
+        # add ext per layer?
+    dderH = CderH(H=dderH,valt=copy(Valt),rdnt=copy(Rdnt),dect=copy(Dect), ext = extt, depth=1)
     # / G:
 
     if _G.aggH and G.aggH:
@@ -445,7 +445,7 @@ def comp_ext(_ext, ext):  # comp ds:
     return [[mL,mS,mA], [dL,dS,dA]],[Mval, Dval],[Mrdn, Drdn],[Mdec, Ddec]
 
 
-# tentative
+# replaced by += overload for CderH in classes
 def sum_Hv(Hv, hv, base_rdn, fneg=0):
 
     if hv:
