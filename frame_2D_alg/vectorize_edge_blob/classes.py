@@ -3,7 +3,7 @@ from itertools import count, zip_longest
 from math import inf, hypot
 from numbers import Real
 from typing import Any, NamedTuple, Tuple
-from copy import copy
+from copy import copy, deepcopy
 from class_cluster import CBase, CBaseLite, init_param as z
 from frame_blobs import Cbox
 
@@ -214,35 +214,42 @@ def normalize(self):
     return self.__class__(self.dy / dist, self.dx / dist)
 
 
-# draft
+# draft (so we need it before CP, else CderH won't be recognized in the init of classes above)
 class CderH(CBase):  # derH is a list of der layers or sub-layers, each = ptuple_tv
 
     H: list = z([])
     valt: list = z([0,0])
     rdnt: list = z([1,1])
     dect: list = z([0,0])
+    ext : list = z([])
     depth: int = 0
+
+    irdn: int = 0
+    # flags
+    fneg: int = 0
+    fagg: int = 0
 
     @classmethod
     def empty_layer(cls): return list([[0,0,0,0,0,0], [0,0,0,0,0,0]])
 
-    def __add__(Hv, hv, irdn, fneg=0, fagg=0):
-        if hv:
-            if Hv:
-                H, Valt, Rdnt, Dect, Extt, Depth = Hv
-                h, valt, rdnt, dect, extt, depth = hv
+    # i don't see any alternative except parse those arguments with CderH params, i guess using sum_derH is better instead of using +=
+    def __add__(Hv, hv):
+        if hv.H:
+            if Hv.H:
+                H, Valt, Rdnt, Dect, Extt, Depth = Hv.H, Hv.valt, Hv.rdnt, Hv.dect, Hv.ext, Hv.depth
+                h, valt, rdnt, dect, extt, depth = hv.H, hv.valt, hv.rdnt, Hv.dect, Hv.ext, Hv.depth
                 Valt[:] = np.add(Valt,valt)
-                Rdnt[:] = np.add( np.add(Rdnt,rdnt), [irdn,irdn])
+                Rdnt[:] = np.add( np.add(Rdnt,rdnt), [Hv.irdn,Hv.irdn])
                 Rdnt[0] += Valt[1] > Valt[0]
                 Rdnt[1] += Valt[0] > Valt[1]
-                if fagg:
+                if Hv.fagg:
                     Dect[:] = np.divide( np.add(Dect,dect), 2)
                 fC=0
-                if isinstance(H, CderH):
+                if isinstance(H[0], CderH):  # H should be a list packing derHs (for multiple dertuplets)?
                     fC=1
-                    if isinstance(h, list):  # convert dertv to derH:
+                    if isinstance(h[0], list):  # convert dertv to derH:
                         h = [CderH(H=h, valt=copy(hv.valt), rdnt=copy(hv.rdnt), dect=copy(hv.dect), ext=copy(hv.ext), depth=0)]
-                elif isinstance(h, CderH):
+                elif isinstance(h[0], CderH):
                     fC=1; H = [CderH(H=H, valt=copy(Hv.valt), rdnt=copy(Hv.rdnt), dect=copy(Hv.dect), ext=copy(Hv.ext), depth=0)]
 
                 if fC:  # both derH_:
@@ -250,7 +257,7 @@ class CderH(CBase):  # derH is a list of der layers or sub-layers, each = ptuple
                 else:  # both dertuplets:
                     H = [list(np.add(Dertuple,dertuple)) for Dertuple, dertuple in zip(H,h)]  # mtuple,dtuple
             else:
-                Hv[:] = deepcopy(hv)
+                Hv.H[:] = deepcopy(hv.H)
         return Hv
 
     def __iadd__(self, other): return self + other
