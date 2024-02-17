@@ -2,10 +2,12 @@ import numpy as np
 from collections import deque, defaultdict
 from copy import deepcopy, copy
 from itertools import zip_longest, combinations
+from types import SimpleNamespace
 from typing import List, Tuple
-from .classes import add_, sub_, acc_, get_match, CderH, CderP, Cgraph
+from .classes import add_, sub_, acc_, get_match, CderH, Cptuple
 from .filters import ave, ave_dI, aves, P_aves, PP_aves
 from .slice_edge import comp_angle
+from utils import  box2slice, accum_box, sub_box2box
 
 '''
 Vectorize is a terminal fork of intra_blob.
@@ -42,12 +44,13 @@ def der_recursion(root, PP, fd=0):  # node-mediated correlation clustering: keep
 
     if PP.derH.depth == 1:  # not initial call, form prelinks per P
         for P in PP.P_:  # add prelink_ for rng++:
-            P.link_ += [[link._P for link in unpack_last_link_(P.link_)]]
+            P.link_ += [[link if fd else link._P for link in unpack_last_link_(P.link_)]]
 
     rng_recursion(PP, rng=1, fd=fd)  # extend PP.link_, derHs by same-der rng+ comp
-    form_PP_t(PP, PP.P_, irdn=PP.rdnt[1])  # der+ is mediated by form_PP_t
-    if root: root.fback_ += [[PP.derH, PP.valt, PP.rdnt]]  # feedback from PPds
-
+    form_PP_t(PP, PP.P_, irdn=PP.rdnt[1] if hasattr(PP, "rdnt") else 0)  # der+ is mediated by form_PP_t
+    if root: 
+        if hasattr(root, "fback_"): root.fback_ += [[PP.derH, PP.valt, PP.rdnt]]  # feedback from PPds
+        else:                       root.fback_ = []
 
 def rng_recursion(PP, rng=1, fd=0):  # similar to agg+ rng_recursion, but contiguously link mediated, because
 
@@ -55,7 +58,7 @@ def rng_recursion(PP, rng=1, fd=0):  # similar to agg+ rng_recursion, but contig
     while True:
         P_ = []; V = 0
         for P in iP_:
-            if not P.link_: continue
+            if not hasattr(P, 'link_') or not P.link_: continue
             prelink_ = []  # new prelinks per P
             _prelink_ = P.link_.pop()  # old prelinks, P.link_ nesting doesn't matter
             for _link in _prelink_:
@@ -64,7 +67,7 @@ def rng_recursion(PP, rng=1, fd=0):  # similar to agg+ rng_recursion, but contig
                 dy,dx = np.subtract(_P.yx, P.yx)
                 distance = np.hypot(dy,dx)  # distance between P midpoints, /= L for eval?
                 if distance < rng:  # | rng * ((P.val+_P.val) / ave_rval)?
-                    mlink = comp_P([_P,P, distance,[dy,dx]])  # return link if match
+                    mlink = comp_P(_link if fd else [_P,P, distance,[dy,dx]])  # return link if match
                     if mlink:
                         V += mlink.vt[0]  # unpack last link layer:
                         link_ = P.link_[-1] if PP.derH.depth else P.link_  # der++ if derH.depth==1
@@ -91,8 +94,8 @@ def rng_recursion(PP, rng=1, fd=0):  # similar to agg+ rng_recursion, but contig
 
 def comp_P(link):
 
-    if isinstance(link,CderP): _P, P = link._P, link.P  # in der+
-    else:                      _P, P, S, A = link  # list in rng+
+    if isinstance(link,SimpleNamespace): _P, P = link._P, link.P  # in der+
+    else:                                _P, P, S, A = link  # list in rng+
     rn = len(_P.dert_) / len(P.dert_)
 
     if _P.derH.H and P.derH.H:
@@ -114,7 +117,7 @@ def comp_P(link):
             link.derH.H += derLay; link.vt=np.add(link.vt,vt); link.rt=np.add(link.rt,rt)
         else:
             derH = CderH(H=[mtuple, dtuple], valt=vt, rdnt=rt, depth=0)  # dertv
-            link = CderP(P=P,_P=_P, derH=derH, vt=copy(vt), rt=copy(rt), S=S, A=A)
+            link = SimpleNamespace(P=P,_P=_P, derH=derH, vt=copy(vt), rt=copy(rt), S=S, A=A, roott=[[],[]])
 
         return link
 
@@ -123,21 +126,27 @@ def form_PP_t(root, P_, irdn):  # form PPs of derP.valt[fd] + connected Ps val
 
     PP_t = [[],[]]
     for fd in 0,1:
-        P_Ps = defaultdict(list)  # key: P, val: _Ps
-        Link_ = []
+        # P_Ps = defaultdict(list)  # key: P, val: _Ps
+        P_Ps = []; Link_ = []
         for P in P_:  # not PP.link_: P uplinks are unique, only G links overlap
-            for derP in unpack_last_link_(P.link_):
-                P_Ps[P] += [derP._P]; Link_ += [derP]  # not needed for PPs?
+            Ps = []
+            if hasattr(P, "link_"):
+                for derP in unpack_last_link_(P.link_):
+                    Ps += [derP._P]; Link_ += [derP]  # not needed for PPs?
+            P_Ps += [Ps]  # same alignment with P_
         inP_ = []  # clustered Ps and their val,rdn s for all Ps
+        n = 0
         for P in root.P_:
             if P in inP_: continue  # already packed in some PP
             cP_ = [P]  # clustered Ps and their val,rdn s
-            perimeter = deque(P_Ps[P])  # recycle with breadth-first search, up and down:
-            while perimeter:
-                _P = perimeter.popleft()
-                if _P in cP_: continue
-                cP_ += [_P]
-                perimeter += P_Ps[_P]  # append linked __Ps to extended perimeter of P
+            if P in P_:
+                perimeter = deque(P_Ps[P_.index(P)])  # recycle with breadth-first search, up and down:
+                while perimeter:
+                    _P = perimeter.popleft()
+                    if _P in cP_: continue
+                    cP_ += [_P]
+                    if _P in P_:
+                        perimeter += P_Ps[P_.index(_P)] # append linked __Ps to extended perimeter of P
             PP = sum2PP(root, cP_, Link_, irdn, fd)
             PP_t[fd] += [PP]  # no if Val > PP_aves[fd] * Rdn:
             inP_ += cP_  # update clustered Ps
@@ -154,13 +163,14 @@ def form_PP_t(root, P_, irdn):  # form PPs of derP.valt[fd] + connected Ps val
 
 def sum2PP(root, P_, derP_, irdn, fd):  # sum links in Ps and Ps in PP
 
-    PP = Cgraph(fd=fd, root=root, P_=P_, rng=root.rng+1)  # initial PP.box = (inf,inf,-inf,-inf)
+    PP = SimpleNamespace(fd=fd, root=root, P_=P_, rng=root.rng+1, Vt=[0,0], Rt=[1,1], Dt=[0,0],\
+                         link_=[], box=[0,0,0,0], ptuple=Cptuple(), derH = CderH())  # initial PP.box = (inf,inf,-inf,-inf)
     # += uplinks:
     S,A = 0, [0,0]
     for derP in derP_:
         if derP.P not in P_ or derP._P not in P_: continue
-        derP.P.derH.rdn[fd] += irdn; derP.P.derH += derP.derH
-        derP._P.derH.rdn[fd]+= irdn; derP._P.derH -= derP.derH  # reverse d signs downlink
+        derP.P.derH.rdnt[fd] += irdn; derP.P.derH += derP.derH
+        derP._P.derH.rdnt[fd]+= irdn; derP._P.derH -= derP.derH  # reverse d signs downlink
         PP.link_ += [derP]; derP.roott[fd] = PP
         PP.Vt = np.add(PP.Vt,derP.vt)
         PP.Rt = np.add(np.add(PP.Rt,derP.rt), [irdn,irdn])
@@ -175,7 +185,7 @@ def sum2PP(root, P_, derP_, irdn, fd):  # sum links in Ps and Ps in PP
         PP.ptuple += P.ptuple
         PP.derH += P.derH
         for y,x in P.cells:
-            PP.box = PP.box.accumulate(y,x); celly_+=[y]; cellx_+=[x]
+            PP.box = accum_box(PP.box, y, x); celly_+=[y]; cellx_+=[x]
     # pixmap:
     y0,x0,yn,xn = PP.box
     PP.mask__ = np.zeros((yn-y0, xn-x0), bool)
@@ -184,7 +194,7 @@ def sum2PP(root, P_, derP_, irdn, fd):  # sum links in Ps and Ps in PP
 
     return PP
 
-
+# not updated
 def feedback(root):  # in form_PP_, append new der layers to root PP, single vs. root_ per fork in agg+
 
     derH, valt, rdnt = CderH(),[0,0],[0,0]
@@ -273,9 +283,9 @@ def comp_derH(_derH, derH, rn=1, fagg=0):  # derH is a list of der layers or sub
 
     for _lay, lay in zip(Ht[0], Ht[1]):
         if fptuple:  # comp_ptuple
-            mtuple, dtuple, Mtuple,Dtuple = comp_ptuple(_lay, lay, rn=rn, fagg=fagg)
+            mtuple, dtuple, Mtuple,Dtuple = comp_ptuple(_lay, lay, rn=rn, fagg=1)  # fagg =1 to return Mtuple, Dtuple
         else:  # comp_derH
-            mtuple,dtuple, Mtuple,Dtuple = comp_dtuple(_lay.H[1], lay.H[1], rn=rn, fagg=fagg)
+            mtuple,dtuple, Mtuple,Dtuple = comp_dtuple(_lay.H[1], lay.H[1], rn=rn, fagg=1)
         valt = [sum(mtuple),sum(abs(d) for d in dtuple)]
         rdnt = [valt[1] > valt[0], valt[1] <= valt[0]]
         dect = [0,0]

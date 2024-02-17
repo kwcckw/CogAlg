@@ -3,9 +3,10 @@ from itertools import count, zip_longest
 from math import inf, hypot
 from numbers import Real
 from typing import Any, NamedTuple, Tuple
+from types import SimpleNamespace
 from copy import copy, deepcopy
 from class_cluster import CBase, CBaseLite, init_param as z
-from frame_blobs import Cbox
+# from frame_blobs import Cbox
 
 from .filters import ave_dangle, ave_dI, ave_Pd, ave_Pm, aves
 '''
@@ -51,7 +52,72 @@ class Cptuple(CBaseLite):
 
         return tuplet, valt, rdnt
 
+# draft
+class CderH(CBase):  # derH is a list of der layers or sub-layers, each = ptuple_tv
 
+    H: list = z([])
+    valt: list = z([0,0])
+    rdnt: list = z([1,1])
+    dect: list = z([0,0])
+    ext : list = z([])
+    depth: int = 0
+
+    irdn: int = 0
+    # flags
+    fneg: int = 0
+    fagg: int = 0
+
+    @classmethod
+    def empty_layer(cls): return list([[0,0,0,0,0,0], [0,0,0,0,0,0]])
+
+    def __add__(Hv, hv):
+        if hv.H:
+            if Hv.H:
+                H, Valt, Rdnt, Dect, Extt, Depth = Hv.H, Hv.valt, Hv.rdnt, Hv.dect, Hv.ext, Hv.depth
+                h, valt, rdnt, dect, extt, depth = hv.H, hv.valt, hv.rdnt, Hv.dect, Hv.ext, Hv.depth
+                Valt[:] = np.add(Valt,valt)
+                Rdnt[:] = np.add( np.add(Rdnt,rdnt), [Hv.irdn,Hv.irdn])
+                Rdnt[0] += Valt[1] > Valt[0]
+                Rdnt[1] += Valt[0] > Valt[1]
+                if Hv.fagg:
+                    Dect[:] = np.divide( np.add(Dect,dect), 2)
+                fC=0
+                if isinstance(H[0], CderH):
+                    fC=1
+                    if isinstance(h[0], list):  # convert dertv to derH:
+                        h = [CderH(H=h, valt=copy(hv.valt), rdnt=copy(hv.rdnt), dect=copy(hv.dect), ext=copy(hv.ext), depth=0)]
+                elif isinstance(h[0], CderH):
+                    fC=1; H = [CderH(H=H, valt=copy(Hv.valt), rdnt=copy(Hv.rdnt), dect=copy(Hv.dect), ext=copy(Hv.ext), depth=0)]
+
+                if fC:  # both derH_:
+                    H[:(len(h))] = [DerH + derH for DerH, derH in zip_longest(H,h)]  # if different length or always same?
+                else:  # both dertuplets:
+                    H[:] = [list(np.add(Dertuple,dertuple)) for Dertuple, dertuple in zip(H,h)]  # mtuple,dtuple
+            else:
+                Hv.H[:] = deepcopy(hv.H)
+
+        return Hv
+
+    def __iadd__(self, other): return self + other
+    def __isub__(self, other): return self - other
+
+    def __sub__(self, other):
+
+        # pending update, same with __add__ above
+        # subtract der layers, dertuple is mtuple | dtuple
+        if other.H and other.H[0] and isinstance(other.H[0][0], list):
+            H = [[ list(np.subtract(Dertuple,dertuple))  for Dertuple, dertuple in zip(Dertuplet, dertuplet)]
+                 for Dertuplet, dertuplet in zip_longest(self.H, other.H, fillvalue=self.empty_layer())]  # mtuple,dtuple
+        else:
+            H = [list(np.subtract(Dertuple,dertuple)) for Dertuple, dertuple in zip_longest(self.H, other.H, fillvalue=[0,0,0,0,0,0])]  # mtuple,dtuple
+
+        valt = np.subtract(self.valt, other.valt)
+        rdnt = np.subtract(self.rdnt, other.rdnt); rdnt[0] -= valt[1] > valt[0]; rdnt[1] -= valt[0] > valt[1]
+        dect = np.subtract(np.multiply(self.dect,2), other.dect)
+
+        return CderH(H=H, valt=valt, rdnt=rdnt, dect=dect)
+    
+'''
 class CP(CBase):  # horizontal blob slice P, with vertical derivatives per param if derP, always positive
 
     ptuple: Cptuple = z(Cptuple())  # latuple: I,G,M,Ma, angle(Dy,Dx), L
@@ -65,12 +131,12 @@ class CP(CBase):  # horizontal blob slice P, with vertical derivatives per param
     axis: list = z([0,0])  # prior slice angle, init sin=0,cos=1
     yx: list = z([0,0])
     link_: list = z([])  # uplinks per comp layer, nest in rng+)der+
-    ''' 
-    dxdert_: list = z([])  # only in Pd
-    Pd_: list = z([])  # only in Pm
-    Mdx: int = 0  # if comp_dx
-    Ddx: int = 0
-    '''
+    
+    #dxdert_: list = z([])  # only in Pd
+    #Pd_: list = z([])  # only in Pm
+    #Mdx: int = 0  # if comp_dx
+    #Ddx: int = 0
+    
 
     def comp(self, other, link_, rn, A, S):
 
@@ -100,6 +166,7 @@ class CderP(CBase):  # tuple of derivatives in P link: binary tree with latuple 
             self.derH |= dderH; self.valt = valt; self.rdmt = rdnt  # update derP not form new one
             link_ += [self]
 '''
+'''
 len layers with ext: 2, 3, 6, 12, 24... 
 max n of tuples per der layer = summed n of tuples in all lower layers: 1, 1, 2, 4, 8..:
 lay1: par     # derH per param in vertuple, layer is derivatives of all lower layers:
@@ -107,7 +174,7 @@ lay2: [m,d]   # implicit nesting, brackets for clarity:
 lay3: [[m,d], [md,dd]]: 2 sLays,
 lay4: [[m,d], [md,dd], [[md1,dd1],[mdd,ddd]]]: 3 sLays, <=2 ssLays
 '''
-
+'''
 class Cgraph(CBase):  # params of single-fork node_ cluster
 
     fd: int = 0  # fork if flat layers?
@@ -147,12 +214,12 @@ class Cgraph(CBase):  # params of single-fork node_ cluster
     compared_: list = z([])
     Rdn: int = 0  # for accumulation or separate recursion count?
 
-    # it: list = z([None,None])  # graph indices in root node_s, implicitly nested
-    # depth: int = 0  # n sub_G levels over base node_, max across forks
-    # nval: int = 0  # of open links: base alt rep
-    # id_H: list = z([[]])  # indices in the list of all possible layers | forks, not used with fback merging
-    # top aggLay: derH from links, lower aggH from nodes, only top Lay in derG:
-    # top Lay from links, lower Lays from nodes, hence nested tuple?
+    it: list = z([None,None])  # graph indices in root node_s, implicitly nested
+    depth: int = 0  # n sub_G levels over base node_, max across forks
+    nval: int = 0  # of open links: base alt rep
+    id_H: list = z([[]])  # indices in the list of all possible layers | forks, not used with fback merging
+    top aggLay: derH from links, lower aggH from nodes, only top Lay in derG:
+    top Lay from links, lower Lays from nodes, hence nested tuple?
 
 
 class CderG(CBase):  # params of single-fork node_ cluster per pplayers
@@ -166,8 +233,8 @@ class CderG(CBase):  # params of single-fork node_ cluster per pplayers
     S: float = 0.0  # sparsity: average distance to link centers
     A: list = z([0,0])  # angle: average dy,dx to link centers
     roott: list = z([None,None])
-    # dir: bool  # direction of comparison if not G0,G1, only needed for comp link?
-
+    dir: bool  # direction of comparison if not G0,G1, only needed for comp link?
+'''
 
 def get_match(_par, par):
     match = min(abs(_par),abs(par))
@@ -214,69 +281,6 @@ def normalize(self):
     return self.__class__(self.dy / dist, self.dx / dist)
 
 
-# draft
-class CderH(CBase):  # derH is a list of der layers or sub-layers, each = ptuple_tv
 
-    H: list = z([])
-    valt: list = z([0,0])
-    rdnt: list = z([1,1])
-    dect: list = z([0,0])
-    ext : list = z([])
-    depth: int = 0
-
-    irdn: int = 0
-    # flags
-    fneg: int = 0
-    fagg: int = 0
-
-    @classmethod
-    def empty_layer(cls): return list([[0,0,0,0,0,0], [0,0,0,0,0,0]])
-
-    def __add__(Hv, hv):
-        if hv.H:
-            if Hv.H:
-                H, Valt, Rdnt, Dect, Extt, Depth = Hv.H, Hv.valt, Hv.rdnt, Hv.dect, Hv.ext, Hv.depth
-                h, valt, rdnt, dect, extt, depth = hv.H, hv.valt, hv.rdnt, Hv.dect, Hv.ext, Hv.depth
-                Valt[:] = np.add(Valt,valt)
-                Rdnt[:] = np.add( np.add(Rdnt,rdnt), [Hv.irdn,Hv.irdn])
-                Rdnt[0] += Valt[1] > Valt[0]
-                Rdnt[1] += Valt[0] > Valt[1]
-                if Hv.fagg:
-                    Dect[:] = np.divide( np.add(Dect,dect), 2)
-                fC=0
-                if isinstance(H[0], CderH):
-                    fC=1
-                    if isinstance(h[0], list):  # convert dertv to derH:
-                        h = [CderH(H=h, valt=copy(hv.valt), rdnt=copy(hv.rdnt), dect=copy(hv.dect), ext=copy(hv.ext), depth=0)]
-                elif isinstance(h[0], CderH):
-                    fC=1; H = [CderH(H=H, valt=copy(Hv.valt), rdnt=copy(Hv.rdnt), dect=copy(Hv.dect), ext=copy(Hv.ext), depth=0)]
-
-                if fC:  # both derH_:
-                    H[:(len(h))] = [DerH + derH for DerH, derH in zip_longest(H,h)]  # if different length or always same?
-                else:  # both dertuplets:
-                    H[:] = [list(np.add(Dertuple,dertuple)) for Dertuple, dertuple in zip(H,h)]  # mtuple,dtuple
-            else:
-                Hv.H[:] = deepcopy(hv.H)
-
-        # return Hv
-
-    def __iadd__(self, other): return self + other
-    def __isub__(self, other): return self - other
-
-    def __sub__(self, other):
-
-        # pending update, same with __add__ above
-        # subtract der layers, dertuple is mtuple | dtuple
-        if other.H and other.H[0] and isinstance(other.H[0][0], list):
-            H = [[ list(np.subtract(Dertuple,dertuple))  for Dertuple, dertuple in zip(Dertuplet, dertuplet)]
-                 for Dertuplet, dertuplet in zip_longest(self.H, other.H, fillvalue=self.empty_layer())]  # mtuple,dtuple
-        else:
-            H = [list(np.subtract(Dertuple,dertuple)) for Dertuple, dertuple in zip_longest(self.H, other.H, fillvalue=[0,0,0,0,0,0])]  # mtuple,dtuple
-
-        valt = np.subtract(self.valt, other.valt)
-        rdnt = np.subtract(self.rdnt, other.rdnt); rdnt[0] -= valt[1] > valt[0]; rdnt[1] -= valt[0] > valt[1]
-        dect = np.subtract(np.multiply(self.dect,2), other.dect)
-
-        return CderH(H=H, valt=valt, rdnt=rdnt, dect=dect)
 
 

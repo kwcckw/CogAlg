@@ -5,6 +5,7 @@ from collections import deque
 from itertools import product
 from types import SimpleNamespace
 from .filters import ave_g, ave_dangle, ave_daangle
+from .classes import CderH
 
 from utils import box2slice
 
@@ -32,7 +33,7 @@ def slice_edge(blob, verbose=False):
 
     edge = SimpleNamespace(
         root=blob, node_=[[],[]], box=blob.box, mask__=blob.mask__,
-        derH=new_derH())
+        derH=CderH())
     blob.dlayers = [[edge]]
     max_ = {*zip(*mask__.nonzero())}  # convert mask__ into a set of (y,x)
 
@@ -51,8 +52,8 @@ def slice_edge(blob, verbose=False):
             ma = ave_dangle  # max value because P direction is the same as dert gradient direction
             assert g > 0, "g must be positive"
             P = form_P(blob, SimpleNamespace(
-                yx=[y,x], axis=[dy/g, dx/g], cells={(y,x)}, dert_=[(y,x,i,dy,dx,g,ma)],
-                derH=new_derH()))
+                yx=[y,x], axis=[dy/g, dx/g], cells={(y,x)}, dert_=[(y,x,i,dy,dx,g,ma)],derH=CderH(),
+                ))
             edge.P_ += [P]
             if _P is not None:
                 if not hasattr(P, 'link_'): P.link_ = [[]]  # to add prelinks:
