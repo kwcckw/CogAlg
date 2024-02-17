@@ -214,7 +214,7 @@ def normalize(self):
     return self.__class__(self.dy / dist, self.dx / dist)
 
 
-# draft (so we need it before CP, else CderH won't be recognized in the init of classes above)
+# draft
 class CderH(CBase):  # derH is a list of der layers or sub-layers, each = ptuple_tv
 
     H: list = z([])
@@ -232,7 +232,6 @@ class CderH(CBase):  # derH is a list of der layers or sub-layers, each = ptuple
     @classmethod
     def empty_layer(cls): return list([[0,0,0,0,0,0], [0,0,0,0,0,0]])
 
-    # i don't see any alternative except parse those arguments with CderH params, i guess using sum_derH is better instead of using +=
     def __add__(Hv, hv):
         if hv.H:
             if Hv.H:
@@ -245,7 +244,7 @@ class CderH(CBase):  # derH is a list of der layers or sub-layers, each = ptuple
                 if Hv.fagg:
                     Dect[:] = np.divide( np.add(Dect,dect), 2)
                 fC=0
-                if isinstance(H[0], CderH):  # H should be a list packing derHs (for multiple dertuplets)?
+                if isinstance(H[0], CderH):
                     fC=1
                     if isinstance(h[0], list):  # convert dertv to derH:
                         h = [CderH(H=h, valt=copy(hv.valt), rdnt=copy(hv.rdnt), dect=copy(hv.dect), ext=copy(hv.ext), depth=0)]
@@ -253,12 +252,13 @@ class CderH(CBase):  # derH is a list of der layers or sub-layers, each = ptuple
                     fC=1; H = [CderH(H=H, valt=copy(Hv.valt), rdnt=copy(Hv.rdnt), dect=copy(Hv.dect), ext=copy(Hv.ext), depth=0)]
 
                 if fC:  # both derH_:
-                    H = [DerH + derH for DerH, derH in zip_longest(H,h)]
+                    H[:(len(h))] = [DerH + derH for DerH, derH in zip_longest(H,h)]  # if different length or always same?
                 else:  # both dertuplets:
-                    H = [list(np.add(Dertuple,dertuple)) for Dertuple, dertuple in zip(H,h)]  # mtuple,dtuple
+                    H[:] = [list(np.add(Dertuple,dertuple)) for Dertuple, dertuple in zip(H,h)]  # mtuple,dtuple
             else:
                 Hv.H[:] = deepcopy(hv.H)
-        return Hv
+
+        # return Hv
 
     def __iadd__(self, other): return self + other
     def __isub__(self, other): return self - other
@@ -278,6 +278,5 @@ class CderH(CBase):  # derH is a list of der layers or sub-layers, each = ptuple
         dect = np.subtract(np.multiply(self.dect,2), other.dect)
 
         return CderH(H=H, valt=valt, rdnt=rdnt, dect=dect)
-
 
 

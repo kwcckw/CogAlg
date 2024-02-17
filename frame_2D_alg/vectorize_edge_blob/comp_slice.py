@@ -3,7 +3,7 @@ from collections import deque, defaultdict
 from copy import deepcopy, copy
 from itertools import zip_longest, combinations
 from typing import List, Tuple
-from .classes import add_, sub_, acc_, get_match, CderH, CderP, Cgraph, Cptuple
+from .classes import add_, sub_, acc_, get_match, CderH, CderP, Cgraph
 from .filters import ave, ave_dI, aves, P_aves, PP_aves
 from .slice_edge import comp_angle
 
@@ -35,7 +35,7 @@ len prior root_ sorted by G is root.rdn, to eval for inclusion in PP or start ne
 '''
 
   # root function:
-def der_recursion(root, PP):  # node-mediated correlation clustering: keep same Ps and links, increment link derH, then P derH in sum2PP
+def der_recursion(root, PP, fd=0):  # node-mediated correlation clustering: keep same Ps and links, increment link derH, then P derH in sum2PP
 
     # n_uplinks = defaultdict(int)  # number of uplinks per P, not used?
     # for derP in PP.link_: n_uplinks[derP.P] += 1
@@ -44,34 +44,27 @@ def der_recursion(root, PP):  # node-mediated correlation clustering: keep same 
         for P in PP.P_:  # add prelink_ for rng++:
             P.link_ += [[link._P for link in unpack_last_link_(P.link_)]]
 
-    rng_recursion(PP, rng=1)  # extend PP.link_, derHs by same-der rng+ comp
+    rng_recursion(PP, rng=1, fd=fd)  # extend PP.link_, derHs by same-der rng+ comp
     form_PP_t(PP, PP.P_, irdn=PP.rdnt[1])  # der+ is mediated by form_PP_t
     if root: root.fback_ += [[PP.derH, PP.valt, PP.rdnt]]  # feedback from PPds
 
 
-def rng_recursion(PP, rng=1):  # similar to agg+ rng_recursion, but contiguously link mediated, because
+def rng_recursion(PP, rng=1, fd=0):  # similar to agg+ rng_recursion, but contiguously link mediated, because
 
     iP_ = PP.P_
     while True:
         P_ = []; V = 0
         for P in iP_:
             if not P.link_: continue
-            __P_ = []  # temporary prelinks per P
-            _P_ = P.link_.pop()  # P.link_ nesting doesn't matter
-            for _P in _P_:
+            prelink_ = []  # new prelinks per P
+            _prelink_ = P.link_.pop()  # old prelinks, P.link_ nesting doesn't matter
+            for _link in _prelink_:
+                _P = _link._P if fd else _link
                 if len(_P.derH.H)!= len(P.derH.H): continue  # compare same der layers only
                 dy,dx = np.subtract(_P.yx, P.yx)
                 distance = np.hypot(dy,dx)  # distance between P midpoints, /= L for eval?
                 if distance < rng:  # | rng * ((P.val+_P.val) / ave_rval)?
-                    __P_ += [_P]  # for next rng+
-                    # we need parse last layer mediated link in der+ instead?
-                    if _P.derH.H and P.derH.H:
-                        for link in unpack_last_link_(P.link_):
-                            if link.P == P and link._P == _P:
-                                break
-                        mlink = comp_P(link)  
-                    else:    
-                        mlink = comp_P([_P,P, distance,[dy,dx]])  # return link if match
+                    mlink = comp_P([_P,P, distance,[dy,dx]])  # return link if match
                     if mlink:
                         V += mlink.vt[0]  # unpack last link layer:
                         link_ = P.link_[-1] if PP.derH.depth else P.link_  # der++ if derH.depth==1
@@ -80,9 +73,10 @@ def rng_recursion(PP, rng=1):  # similar to agg+ rng_recursion, but contiguously
                             if len(link_) < rng: link_ += [[]]  # new link_
                             link_ = link_[-1]  # last rng layer
                         link_ += [mlink]
-                        __P_ += [link._P for link in unpack_last_link_(_P.link_[:-1])]  # get last link layer, skip prelinks
-            if __P_:
-                P.link_ += [__P_]  # temporary, appended and popped regardless of nesting
+                        prelink_ += unpack_last_link_(_P.link_[:-1])  # get last link layer, skip old prelinks
+            if prelink_:
+                if not fd: prelink_ = [link._P for link in prelink_]  # prelinks are __Ps, else __links
+                P.link_ += [prelink_]  # temporary prelinks
                 P_ += [P]  # for next loop
         rng += 1
         if V > ave * len(P_) * 6:  #  implied val of all __P_s, 6: len mtuple
@@ -151,7 +145,7 @@ def form_PP_t(root, P_, irdn):  # form PPs of derP.valt[fd] + connected Ps val
     for PP in PP_t[1]:  # eval der+ / PPd only, after form_PP_t -> P.root
         if PP.Vt[1] * len(PP.link_) > PP_aves[1] * PP.Rt[1]:
             # node-mediated correlation clustering:
-            der_recursion(root, PP)
+            der_recursion(root, PP, fd=1)
         if root.fback_:
             feedback(root)  # after der+ in all nodes, no single node feedback
 
@@ -165,9 +159,8 @@ def sum2PP(root, P_, derP_, irdn, fd):  # sum links in Ps and Ps in PP
     S,A = 0, [0,0]
     for derP in derP_:
         if derP.P not in P_ or derP._P not in P_: continue
-        derP.P.derH.irdn = irdn
-        derP.P.derH += derP.derH  # +base_rdn?
-        derP._P.derH -= derP.derH  # reverse d signs downlink
+        derP.P.derH.rdn[fd] += irdn; derP.P.derH += derP.derH
+        derP._P.derH.rdn[fd]+= irdn; derP._P.derH -= derP.derH  # reverse d signs downlink
         PP.link_ += [derP]; derP.roott[fd] = PP
         PP.Vt = np.add(PP.Vt,derP.vt)
         PP.Rt = np.add(np.add(PP.Rt,derP.rt), [irdn,irdn])
@@ -266,23 +259,22 @@ def comp_ptuple_generic(_ptuple, ptuple, rn):  # 0der
         Mtuple+=[maxv]
     return [mtuple, dtuple, Mtuple]
 
-
-# merged with comp_ptuple, so rename this comp_derH too?
+# not revised
 def comp_derH(_derH, derH, rn=1, fagg=0):  # derH is a list of der layers or sub-layers, each = ptuple_tv
 
-
-    Ht = []; fptuple = 0
+    Ht = []
+    fptuple = 0
     if isinstance(_derH, Cptuple):
         Ht = [[_derH], [derH]]; fptuple = 1
     else:
-        for derH in [_derH, derH]:  # init H is dertuplet, local convert to dertv_ (permanent conversion in sum2PP):
+        for derH in [_derH, derH]:  # init H is dertuplet, convert to dertv_ (permanent conversion in sum2PP):
             Ht += [derH.H] if isinstance(derH.H[0],CderH) else [[CderH(H=derH.H, valt=copy(derH.valt), rdnt=copy(derH.rdnt), dect=copy(derH.dect), depth=0)]]
     derLay = []; Vt,Rt,Dt = [0,0],[0,0],[0,0]
 
     for _lay, lay in zip(Ht[0], Ht[1]):
         if fptuple:  # comp_ptuple
             mtuple, dtuple, Mtuple,Dtuple = comp_ptuple(_lay, lay, rn=rn, fagg=fagg)
-        else:  # comp_derH 
+        else:  # comp_derH
             mtuple,dtuple, Mtuple,Dtuple = comp_dtuple(_lay.H[1], lay.H[1], rn=rn, fagg=fagg)
         valt = [sum(mtuple),sum(abs(d) for d in dtuple)]
         rdnt = [valt[1] > valt[0], valt[1] <= valt[0]]
@@ -343,7 +335,7 @@ def sum_derH_generic(T, t, base_rdn, fneg=0):  # derH is a list of layers or sub
 
 
 def unpack_last_link_(link_):  # unpack last link layer
-    # link_ = [] (this link should be not needed)
+
     while link_ and isinstance(link_[-1], list): link_ = link_[-1]
     return link_
 
