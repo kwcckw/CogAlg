@@ -5,7 +5,7 @@ from numbers import Real
 from typing import Any, NamedTuple, Tuple
 from types import SimpleNamespace
 from copy import copy, deepcopy
-from class_cluster import CBase, CBaseLite, init_param as z
+from class_cluster import CBase, CBaseLite, init_param
 # from frame_blobs import Cbox
 
 from .filters import ave_dangle, ave_dI, ave_Pd, ave_Pm, aves
@@ -21,13 +21,124 @@ from .filters import ave_dangle, ave_dI, ave_Pd, ave_Pm, aves
     longer names are normally classes
 '''
 
+
+
+class z(SimpleNamespace):
+    
+    def __init__(self, **kwargs):  # this is not working here, their default value is still referencing a same id
+        super().__init__(**kwargs)
+        
+    def __iadd__(T, t): return T + t
+    def __isub__(T, t): return T - t
+    
+    def __add__(T, t):
+        
+        # sum ptuple
+        if T.typ == "ptuple":
+            # this can be done in a loop, but i think it's clearer to list them out?
+            T.I += t.I
+            T.G += t.G
+            T.M += t.M
+            T.Ma += t.Ma
+            T.angle[0] += t.angle[0]; T.angle[1] += t.angle[1]          
+            T.L += t.L
+    
+        if T.typ == "derH":
+            if t.H:
+                if T.H:
+                    H, Valt, Rdnt, Dect, Extt, Depth = T.H, T.valt, T.rdnt, T.dect, T.ext, t.depth
+                    h, valt, rdnt, dect, extt, depth = t.H, t.valt, t.rdnt, t.dect, t.ext, t.depth
+                    Valt[:] = np.add(Valt,valt)
+                    Rdnt[:] = np.add( np.add(Rdnt,rdnt), [T.irdn,t.irdn])
+                    Rdnt[0] += Valt[1] > Valt[0]
+                    Rdnt[1] += Valt[0] > Valt[1]
+                    if T.fagg:
+                        Dect[:] = np.divide( np.add(Dect,dect), 2)
+                    fC=0
+                    if isinstance(H[0], z):
+                        fC=1
+                        if isinstance(h[0], list):  # convert dertv to derH:
+                            h = [CderH(H=h, valt=copy(t.valt), rdnt=copy(t.rdnt), dect=copy(t.dect), ext=copy(t.ext), depth=0)]
+                    elif isinstance(h[0], z):
+                        fC=1; H = [CderH(H=H, valt=copy(T.valt), rdnt=copy(T.rdnt), dect=copy(T.dect), ext=copy(T.ext), depth=0)]
+
+                    if fC:  # both derH_:
+                        H[:(len(h))] = [DerH + derH for DerH, derH in zip_longest(H,h)]  # if different length or always same?
+                    else:  # both dertuplets:
+                        H[:] = [list(np.add(Dertuple,dertuple)) for Dertuple, dertuple in zip(H,h)]  # mtuple,dtuple
+                else:
+                    T.H[:] = deepcopy(t.H)
+
+        return T  # looks like we must always return here although we are summing the elements within
+
+    def __sub__(T, t):
+        
+        # sum ptuple
+        if T.typ == "ptuple":
+            
+            T.I -= t.I
+            T.G -= t.G
+            T.M -= t.M
+            T.Ma -= t.Ma
+            T.angle[0] -= t.angle[0]; T.angle[1] -= t.angle[1]          
+            T.L -= t.L
+        
+        if T.typ == "derH":
+            if t.H:
+                if T.H:
+                    H, Valt, Rdnt, Dect, Extt, Depth = T.H, T.valt, T.rdnt, T.dect, T.ext, t.depth
+                    h, valt, rdnt, dect, extt, depth = t.H, t.valt, t.rdnt, t.dect, t.ext, t.depth
+                    Valt[:] = np.subtract(Valt,valt)
+                    Rdnt[:] = np.subtract(Rdnt,rdnt)
+                    Rdnt[0] -= Valt[1] > Valt[0]
+                    Rdnt[1] -= Valt[0] > Valt[1]
+                    if T.fagg:
+                        Dect[:] = np.subtract(np.multiply(Dect,2),np.multiply(dect,2))
+                    fC=0
+                    
+                    # below pending update
+                    if isinstance(H[0], z):
+                        fC=1
+                        if isinstance(h[0], list):  # convert dertv to derH:
+                            h = [z(H=h, valt=copy(t.valt), rdnt=copy(t.rdnt), dect=copy(t.dect), ext=copy(t.ext), depth=0)]
+                    elif isinstance(h[0], z):
+                        fC=1; H = [CderH(H=H, valt=copy(T.valt), rdnt=copy(T.rdnt), dect=copy(T.dect), ext=copy(T.ext), depth=0)]
+
+                    if fC:  # both derH_:
+                        H[:(len(h))] = [DerH - derH for DerH, derH in zip_longest(H,h)]  # if different length or always same?
+                    else:  # both dertuplets:
+                        H[:] = [list(np.subtract(Dertuple,dertuple)) for Dertuple, dertuple in zip(H,h)]  # mtuple,dtuple
+
+    
+        return T
+
+# predefined set of params for each instances
+def Cptuple(typ="ptuple",I=0, G=0, M=0, Ma=0, angle=[0, 0], L=0):
+    return z(typ=typ,I=I, G=G, M=M, Ma=Ma, angle=angle, L=L)
+
+def CderH(typ="derH", H=[], valt=[0,0], rdnt=[1,1], dect=[0,0], ext=[], depth=0,irdn=0, fagg=0):
+    return z(typ=typ, H=H, valt=valt, rdnt=rdnt, dect=dect, ext=ext, depth=depth, irdn=irdn, fagg=fagg)
+
+def Cedge(typ="edge",root=None, node_=[[],[]], box=[0,0,0,0], mask__=None, Rt=[1,1], derH=CderH(),fback_=[]):
+    return z(typ=typ, root=root, node_=node_, box=box, mask__=mask__, Rt=Rt, derH=derH,fback_=fback_)
+    
+def CP(typ="P", yx=[0,0], axis=[0, 0], cells={}, dert_=[],derH=CderH(),link_=[[]]):
+    return z(typ=typ, yx=yx,axis=axis,cells=cells,dert_=dert_, derH=derH, link_=link_)
+
+def CderP(typ="derP", P=None,_P=None, derH=CderH(), vt=[0,0], rt=[1,1], S=0, A=[0,0], roott=[[],[]]):
+    return z(typ=typ, P=P, _P=_P, derH=derH, vt=vt, rt=rt, S=S, A=A, roott=roott)
+
+
+
+
+'''
 class Cptuple(CBaseLite):
 
     I: Real = 0
     G: Real = 0
     M: Real = 0
     Ma: Real = 0
-    angle: list = z([0,0])
+    angle: list = init_param([0,0])
     L: Real = 0
 
     # operators:
@@ -55,11 +166,11 @@ class Cptuple(CBaseLite):
 # draft
 class CderH(CBase):  # derH is a list of der layers or sub-layers, each = ptuple_tv
 
-    H: list = z([])
-    valt: list = z([0,0])
-    rdnt: list = z([1,1])
-    dect: list = z([0,0])
-    ext : list = z([])
+    H: list = init_param([])
+    valt: list = init_param([0,0])
+    rdnt: list = init_param([1,1])
+    dect: list = init_param([0,0])
+    ext : list = init_param([])
     depth: int = 0
 
     irdn: int = 0
@@ -116,7 +227,7 @@ class CderH(CBase):  # derH is a list of der layers or sub-layers, each = ptuple
         dect = np.subtract(np.multiply(self.dect,2), other.dect)
 
         return CderH(H=H, valt=valt, rdnt=rdnt, dect=dect)
-    
+'''
 '''
 class CP(CBase):  # horizontal blob slice P, with vertical derivatives per param if derP, always positive
 
