@@ -2,12 +2,12 @@ import numpy as np
 from collections import deque, defaultdict
 from copy import deepcopy, copy
 from itertools import zip_longest, combinations
-from types import SimpleNamespace
 from typing import List, Tuple
-from .classes import add_, sub_, acc_, get_match, CderH, Cptuple
+from types import SimpleNamespace as z
+from .classes import add_, sub_, acc_, get_match, CderH, CderP, Cgraph
 from .filters import ave, ave_dI, aves, P_aves, PP_aves
 from .slice_edge import comp_angle
-from utils import  box2slice, accum_box, sub_box2box
+from utils import box2slice, accum_box, sub_box2box
 
 '''
 Vectorize is a terminal fork of intra_blob.
@@ -42,15 +42,13 @@ def der_recursion(root, PP, fd=0):  # node-mediated correlation clustering: keep
     # n_uplinks = defaultdict(int)  # number of uplinks per P, not used?
     # for derP in PP.link_: n_uplinks[derP.P] += 1
 
-    if PP.derH.depth == 1:  # not initial call, form prelinks per P
-        for P in PP.P_:  # add prelink_ for rng++:
-            P.link_ += [[link if fd else link._P for link in unpack_last_link_(P.link_)]]
+    if fd:  # add prelinks per P if not initial call:
+        for P in PP.P_: P.link_ += [unpack_last_link_(P.link_)]
 
     rng_recursion(PP, rng=1, fd=fd)  # extend PP.link_, derHs by same-der rng+ comp
-    form_PP_t(PP, PP.P_, irdn=PP.rdnt[1] if hasattr(PP, "rdnt") else 0)  # der+ is mediated by form_PP_t
-    if root: 
-        if hasattr(root, "fback_"): root.fback_ += [[PP.derH, PP.valt, PP.rdnt]]  # feedback from PPds
-        else:                       root.fback_ = []
+    form_PP_t(PP, PP.P_, irdn=PP.rdnt[1])  # der+ is mediated by form_PP_t
+    if root: root.fback_ += [[PP.derH, PP.valt, PP.rdnt]]  # feedback from PPds
+
 
 def rng_recursion(PP, rng=1, fd=0):  # similar to agg+ rng_recursion, but contiguously link mediated, because
 
@@ -58,9 +56,9 @@ def rng_recursion(PP, rng=1, fd=0):  # similar to agg+ rng_recursion, but contig
     while True:
         P_ = []; V = 0
         for P in iP_:
-            if not hasattr(P, 'link_') or not P.link_: continue
+            if not P.link_: continue
             prelink_ = []  # new prelinks per P
-            _prelink_ = P.link_.pop()  # old prelinks, P.link_ nesting doesn't matter
+            _prelink_ = P.link_.pop()  # old prelinks per P
             for _link in _prelink_:
                 _P = _link._P if fd else _link
                 if len(_P.derH.H)!= len(P.derH.H): continue  # compare same der layers only
@@ -94,8 +92,8 @@ def rng_recursion(PP, rng=1, fd=0):  # similar to agg+ rng_recursion, but contig
 
 def comp_P(link):
 
-    if isinstance(link,SimpleNamespace): _P, P = link._P, link.P  # in der+
-    else:                                _P, P, S, A = link  # list in rng+
+    if isinstance(link,z): _P, P = link._P, link.P  # in der+
+    else:                  _P, P, S, A = link  # list in rng+
     rn = len(_P.dert_) / len(P.dert_)
 
     if _P.derH.H and P.derH.H:
@@ -113,11 +111,11 @@ def comp_P(link):
     if vt[0] > aveP*rt[0]:  # always rng+
         if fd:
             if link.derH.depth==0:  # add nesting dertv-> derH:
-                link.derH.H = [CderH(H=link.derH,valt=copy(link.derH.valt),rdnt=copy(link.derH.rdnt),dect=copy(link.derH.dect))]; link.derH.depth==1
+                link.derH.H = [z(typ="derH", H=link.derH,valt=copy(link.derH.valt),rdnt=copy(link.derH.rdnt),dect=copy(link.derH.dect))]
             link.derH.H += derLay; link.vt=np.add(link.vt,vt); link.rt=np.add(link.rt,rt)
         else:
-            derH = CderH(H=[mtuple, dtuple], valt=vt, rdnt=rt, depth=0)  # dertv
-            link = SimpleNamespace(P=P,_P=_P, derH=derH, vt=copy(vt), rt=copy(rt), S=S, A=A, roott=[[],[]])
+            derH = z(typ="derH", H=[mtuple, dtuple], valt=vt, rdnt=rt, depth=0)  # dertv
+            link = z(typ="derP", P=P,_P=_P, derH=derH, vt=copy(vt), rt=copy(rt), S=S, A=A, roott=[[],[]])
 
         return link
 
@@ -126,16 +124,13 @@ def form_PP_t(root, P_, irdn):  # form PPs of derP.valt[fd] + connected Ps val
 
     PP_t = [[],[]]
     for fd in 0,1:
-        # P_Ps = defaultdict(list)  # key: P, val: _Ps
         P_Ps = []; Link_ = []
         for P in P_:  # not PP.link_: P uplinks are unique, only G links overlap
             Ps = []
-            if hasattr(P, "link_"):
-                for derP in unpack_last_link_(P.link_):
-                    Ps += [derP._P]; Link_ += [derP]  # not needed for PPs?
-            P_Ps += [Ps]  # same alignment with P_
+            for derP in unpack_last_link_(P.link_):
+                Ps += [derP._P]; Link_ += [derP]  # not needed for PPs?
+            P_Ps += [Ps]  # aligned with P_
         inP_ = []  # clustered Ps and their val,rdn s for all Ps
-        n = 0
         for P in root.P_:
             if P in inP_: continue  # already packed in some PP
             cP_ = [P]  # clustered Ps and their val,rdn s
@@ -163,8 +158,8 @@ def form_PP_t(root, P_, irdn):  # form PPs of derP.valt[fd] + connected Ps val
 
 def sum2PP(root, P_, derP_, irdn, fd):  # sum links in Ps and Ps in PP
 
-    PP = SimpleNamespace(fd=fd, root=root, P_=P_, rng=root.rng+1, Vt=[0,0], Rt=[1,1], Dt=[0,0],\
-                         link_=[], box=[0,0,0,0], ptuple=Cptuple(), derH = CderH())  # initial PP.box = (inf,inf,-inf,-inf)
+    PP = z(typ="PP", fd=fd, root=root, P_=P_, rng=root.rng+1, Vt=[0,0], Rt=[1,1], Dt=[0,0], link_=[],
+           box=[0,0,0,0], ptuple=z(typ="ptuple"), derH = CderH()) # not initial PP.box = (inf,inf,-inf,-inf)?
     # += uplinks:
     S,A = 0, [0,0]
     for derP in derP_:
@@ -194,7 +189,7 @@ def sum2PP(root, P_, derP_, irdn, fd):  # sum links in Ps and Ps in PP
 
     return PP
 
-# not updated
+
 def feedback(root):  # in form_PP_, append new der layers to root PP, single vs. root_ per fork in agg+
 
     derH, valt, rdnt = CderH(),[0,0],[0,0]
@@ -283,9 +278,9 @@ def comp_derH(_derH, derH, rn=1, fagg=0):  # derH is a list of der layers or sub
 
     for _lay, lay in zip(Ht[0], Ht[1]):
         if fptuple:  # comp_ptuple
-            mtuple, dtuple, Mtuple,Dtuple = comp_ptuple(_lay, lay, rn=rn, fagg=1)  # fagg =1 to return Mtuple, Dtuple
+            mtuple, dtuple, Mtuple,Dtuple = comp_ptuple(_lay, lay, rn=rn, fagg=fagg)
         else:  # comp_derH
-            mtuple,dtuple, Mtuple,Dtuple = comp_dtuple(_lay.H[1], lay.H[1], rn=rn, fagg=1)
+            mtuple,dtuple, Mtuple,Dtuple = comp_dtuple(_lay.H[1], lay.H[1], rn=rn, fagg=fagg)
         valt = [sum(mtuple),sum(abs(d) for d in dtuple)]
         rdnt = [valt[1] > valt[0], valt[1] <= valt[0]]
         dect = [0,0]
