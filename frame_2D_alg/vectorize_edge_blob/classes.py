@@ -22,6 +22,28 @@ from .filters import ave_dangle, ave_dI, ave_Pd, ave_Pm, aves
 '''
 
 
+# unpack list recursively until getting numeric value or z to sum them, inputs must be list
+def sum_(L, l, fneg=0):
+    if l:
+        if L:
+            for i, (P, p) in enumerate(zip_longest(L, l, fillvalue=None)):
+                if p:
+                    if P != None:
+                        if isinstance(P, list):
+                            sum_(P, p)
+                        elif isinstance(p, z):
+                            if fneg: P -= p
+                            else:    P += p
+                        else:
+                            if fneg: L[i] = P-p
+                            else:    L[i] = P+p
+                            
+                    else:
+                        L += [deepcopy(p)]
+        elif not fneg:
+            L = deepcopy(l)
+    
+    
 
 class z(SimpleNamespace):
     
@@ -35,13 +57,10 @@ class z(SimpleNamespace):
         
         # sum ptuple
         if T.typ == "ptuple":
-            # this can be done in a loop, but i think it's clearer to list them out?
-            T.I += t.I
-            T.G += t.G
-            T.M += t.M
-            T.Ma += t.Ma
-            T.angle[0] += t.angle[0]; T.angle[1] += t.angle[1]          
-            T.L += t.L
+            for param in list(T.__dict__):
+                V = getattr(T, param); v = getattr(t, param)
+                if isinstance(V, list): sum_(V, v)
+                else:                   setattr(T, param, V+v)
     
         if T.typ == "derH":
             if t.H:
@@ -63,7 +82,8 @@ class z(SimpleNamespace):
                         fC=1; H = [CderH(H=H, valt=copy(T.valt), rdnt=copy(T.rdnt), dect=copy(T.dect), ext=copy(T.ext), depth=0)]
 
                     if fC:  # both derH_:
-                        H[:(len(h))] = [DerH + derH for DerH, derH in zip_longest(H,h)]  # if different length or always same?
+                        sum_(H, h)
+                        # H[:(len(h))] = [DerH + derH for DerH, derH in zip_longest(H,h)]  # if different length or always same? (could be different length)
                     else:  # both dertuplets:
                         H[:] = [list(np.add(Dertuple,dertuple)) for Dertuple, dertuple in zip(H,h)]  # mtuple,dtuple
                 else:
@@ -105,28 +125,127 @@ class z(SimpleNamespace):
                         fC=1; H = [CderH(H=H, valt=copy(T.valt), rdnt=copy(T.rdnt), dect=copy(T.dect), ext=copy(T.ext), depth=0)]
 
                     if fC:  # both derH_:
-                        H[:(len(h))] = [DerH - derH for DerH, derH in zip_longest(H,h)]  # if different length or always same?
+                        sum_(H, h, fneg=1)
                     else:  # both dertuplets:
                         H[:] = [list(np.subtract(Dertuple,dertuple)) for Dertuple, dertuple in zip(H,h)]  # mtuple,dtuple
 
     
         return T
 
+# check and update new default value
+def init_default(instance, params_set, default_value):
+    for param, value in zip(params_set, default_value):
+        if getattr(instance, param) is None: setattr(instance, param, deepcopy(value))  # deepcopy prevent list has a same reference
+            
+            
+
 # predefined set of params for each instances
-def Cptuple(typ="ptuple",I=0, G=0, M=0, Ma=0, angle=[0, 0], L=0):
-    return z(typ=typ,I=I, G=G, M=M, Ma=Ma, angle=angle, L=L)
+def Cptuple(typ="ptuple",I=None, G=None, M=None, Ma=None, angle=None, L=None):
+    params_set = ("I", "G", "M", "Ma", "angle", "L")
+    default_value = (0,0,0,0,[0,0], 0)
+    instance = z(typ=typ,I=I, G=G, M=M, Ma=Ma, angle=angle, L=L)
+    init_default(instance, params_set, default_value)
+    return  instance
 
-def CderH(typ="derH", H=[], valt=[0,0], rdnt=[1,1], dect=[0,0], ext=[], depth=0,irdn=0, fagg=0):
-    return z(typ=typ, H=H, valt=valt, rdnt=rdnt, dect=dect, ext=ext, depth=depth, irdn=irdn, fagg=fagg)
+def CderH(typ="derH", H=None, valt=None, rdnt=None, dect=None, ext=None, depth=None,irdn=None, fagg=None):
+    params_set = ("H", "valt", "rdnt", "dect", "ext", "depth", "irdn", "fagg")
+    default_value = ([],[0,0],[1,1],[0,0],[], 0, 0, 0)
+    instance = z(typ=typ, H=H, valt=valt, rdnt=rdnt, dect=dect, ext=ext, depth=depth, irdn=irdn, fagg=fagg)
+    init_default(instance, params_set, default_value)
+    return instance
 
-def Cedge(typ="edge",root=None, node_=[[],[]], box=[0,0,0,0], mask__=None, Rt=[1,1], derH=CderH(),fback_=[]):
-    return z(typ=typ, root=root, node_=node_, box=box, mask__=mask__, Rt=Rt, derH=derH,fback_=fback_)
-    
-def CP(typ="P", yx=[0,0], axis=[0, 0], cells={}, dert_=[],derH=CderH(),link_=[[]]):
-    return z(typ=typ, yx=yx,axis=axis,cells=cells,dert_=dert_, derH=derH, link_=link_)
+def Cedge(typ="edge",root=None, node_=None, box=None, mask__=None, Rt=None, valt=None, rdnt=None, derH=None,fback_=None):
+    params_set = ("root", "node_", "box", "mask__", "Rt", "valt", "rdnt", "derH", "fback_")
+    default_value = (None,[[],[]],[inf,inf,-inf,-inf],None,[1,1],[0,0],[1,1], CderH(), [])
+    instance = z(typ=typ, root=root, node_=node_, box=box, mask__=mask__, Rt=Rt, valt=valt, rdnt=rdnt, derH=derH,fback_=fback_)
+    init_default(instance, params_set, default_value)
+    return instance
+
+def CP(typ="P", yx=None, axis=None, cells=None, dert_=None,derH=None,link_=None): 
+    params_set = ("yx", "axis", "cells", "dert_", "derH", "link_")
+    default_value = ([0,0],[0,0],{},[],CderH(), [[]])
+    instance = z(typ=typ, yx=yx,axis=axis,cells=cells,dert_=dert_, derH=derH, link_=link_)
+    init_default(instance, params_set, default_value)
+    return instance
 
 def CderP(typ="derP", P=None,_P=None, derH=CderH(), vt=[0,0], rt=[1,1], S=0, A=[0,0], roott=[[],[]]):
-    return z(typ=typ, P=P, _P=_P, derH=derH, vt=vt, rt=rt, S=S, A=A, roott=roott)
+    params_set = ("P", "_P", "derH", "vt", "rt", "S", "A", "roott")
+    default_value = (None,None,CderH(),[0,0],[1,1], 0, 0, [[],[]])
+    instance = z(typ=typ, P=P, _P=_P, derH=derH, vt=vt, rt=rt, S=S, A=A, roott=roott)
+    init_default(instance, params_set, default_value)
+    return instance
+
+
+# define graph, so that there's no conversion needed later?
+def Cgraph(typ="graph",
+           fd = None,  # fork if flat layers?
+           ptuple = None,  # default P
+           derH = None,  # from PP, not derHv
+           # graph-internal, generic:
+           aggH = None,  # [[subH,valt,rdnt,dect]], subH: [[derH,valt,rdnt,dect]]: 2-fork composition layers
+           valt = None,  # sum ptuple, derH, aggH
+           rdnt = None,
+           dect = None,
+           link_ = None,  # internal, single-fork, incrementally nested
+           node_ = None,  # base node_ replaced by node_t in both agg+ and sub+, deeper node-mediated unpacking in agg+
+            # graph-external, +level per root sub+:
+           rimH = None,  # direct links, depth, init rim_t, link_tH in base sub+ | cpr rd+, link_tHH in cpr sub+
+           RimH = None,  # links to the most mediated nodes
+           extH = None, # G-external daggH( dsubH( dderH, summed from rim links
+           evalt = None,  # sum from esubH
+           erdnt = None,
+           edect = None,
+           ext = None,  # L,S,A: L len base node_, S sparsity: average link len, A angle: average link dy,dx
+           rng = None,
+           box = None,  # y,x,y0,x0,yn,xn
+           # tentative:
+           alt_graph_ = None,  # adjacent gap+overlap graphs, vs. contour in frame_graphs
+           avalt = None,  # sum from alt graphs to complement G aves?
+           ardnt = None,
+           adect = None,
+           # PP:
+           P_ = None,
+           mask__ = None,
+           # temporary, replace with Et:
+           Vt = None, # last layer | last fork tree vals for node_connect and clustering
+           Rt = None,
+           Dt = None,
+           root = None,  # for feedback
+           fback_ = None, # feedback [[aggH,valt,rdnt,dect]] per node layer, maps to node_H
+           compared_ = None,
+           Rdn = None, # for accumulation or separate recursion count?
+        
+           it = None,  # graph indices in root node_s, implicitly nested
+           depth = None,  # n sub_G levels over base node_, max across forks
+           nval = None, # of open links: base alt rep
+           id_H = None):  # indices in the list of all possible layers | forks, not used with fback merging
+ 
+    params_set = ("fd","ptuple", "derH", 
+                  "aggH", "valt", "rdnt", "dect", "link_", "node_",
+                  "rimH", "RimH", "extH", "evalt", "erdnt", "edect", "ext", "rng", "box",
+                  "alt_graph_","avalt","ardnt","adect",
+                  "P_","mask__",
+                  "Vt","Rt","Dt","root","fback_","compared_","Rdn",
+                  "it","depth","nval","id_H")
+    
+    default_value = (0,Cptuple(), CderH(), 
+                     [], [0,0], [1,1], [0,0], [], [],
+                     [], [], [], [0,0], [1,1], [0,0], [0,0, [0,0]], 1, [inf,inf,-inf,-inf],
+                     [],[0,0],[1,1],[0,0],
+                     [],None,
+                     [0,0],[1,1],[0,0],[None],[],[],0,
+                     [None, None],0,0,[[]])
+    
+    instance = z(typ=typ, fd=fd,ptuple=ptuple, derH=derH, 
+                 aggH=aggH, valt=valt, rdnt=rdnt, dect=dect, link_=link_, node_=node_,
+                 rimH=rimH, RimH=RimH, extH=extH, evalt=evalt, erdnt=erdnt, edect=edect, ext=ext, rng=rng, box=box,
+                 alt_graph_=alt_graph_,avalt=avalt,ardnt=ardnt,adect=adect,
+                 P_=P_,mask__=mask__,
+                 Vt=Vt,Rt=Rt,Dt=Dt,root=root,fback_=fback_,compared_=compared_,Rdn=Rdn,
+                 it=it,depth=depth,nval=nval,id_H=id_H)
+    init_default(instance, params_set, default_value)
+    
+    return instance
 
 
 

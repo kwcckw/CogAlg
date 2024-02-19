@@ -3,7 +3,7 @@ from collections import deque, defaultdict
 from copy import deepcopy, copy
 from itertools import zip_longest, combinations
 from typing import List, Tuple
-from .classes import add_, sub_, acc_, get_match, CderH, Cptuple, CderP, z
+from .classes import add_, sub_, acc_, get_match, CderH, Cptuple, CderP, Cgraph, z
 from .filters import ave, ave_dI, aves, P_aves, PP_aves
 from .slice_edge import comp_angle
 from utils import box2slice, accum_box, sub_box2box
@@ -107,7 +107,7 @@ def comp_P(link):
     if vt[0] > aveP*rt[0]:  # always rng+
         if fd:
             if link.derH.depth==0:  # add nesting dertv-> derH:
-                link.derH.H = [CderH(typ="derH", H=link.derH,valt=copy(link.derH.valt),rdnt=copy(link.derH.rdnt),dect=copy(link.derH.dect))]
+                link.derH.H = [CderH(typ="derH", H=deepcopy(link.derH.H),valt=copy(link.derH.valt),rdnt=copy(link.derH.rdnt),dect=copy(link.derH.dect))]
             link.derH.H += derLay; link.vt=np.add(link.vt,vt); link.rt=np.add(link.rt,rt)
         else:
             derH = CderH(H=[mtuple, dtuple], valt=vt, rdnt=rt, depth=0)  # dertv
@@ -154,18 +154,18 @@ def form_PP_t(root, P_, irdn):  # form PPs of derP.valt[fd] + connected Ps val
 
 def sum2PP(root, P_, derP_, irdn, fd):  # sum links in Ps and Ps in PP
 
-    PP = z(typ="PP",
-           fd=fd,
-           root=root,
-           P_=P_,
-           rng=root.rng+1,
-           Vt=[0,0],
-           Rt=[1,1],
-           Dt=[0,0],
-           link_=[],
-           box=[0,0,0,0],
-           ptuple=z(typ="ptuple",I=0, G=0, M=0, Ma=0, angle=[0, 0], L=0),
-           derH = CderH()) # not initial PP.box = (inf,inf,-inf,-inf)?
+    # use Cgraph so that there's no need for conversion later?
+    PP = Cgraph(fd=fd,
+                root=root,
+                P_=P_,
+                rng=root.rng+1,
+                Vt=[0,0],
+                Rt=[1,1],
+                Dt=[0,0],
+                link_=[],
+                box=[0,0,0,0],
+                ptuple=Cptuple(),
+                derH = CderH()) # not initial PP.box = (inf,inf,-inf,-inf)?
     # += uplinks:
     S,A = 0, [0,0]
     for derP in derP_:
@@ -205,9 +205,11 @@ def feedback(root):  # in form_PP_, append new der layers to root PP, single vs.
 
     root.derH += derH; add_(root.valt,_valt); add_(root.rdnt,_rdnt)
 
-    if isinstance(root.root, Cgraph):  # skip if root is Edge
+    if isinstance(root.root, z):  # skip if root is Edge
         rroot = root.root  # single PP.root, can't be P
         fback_ = rroot.fback_
+        # rroot.node_ may get empty list when root is PP because node_ is packed in P_
+        # it wil be updated to node_t at the endof form_PP_t only, which is after feedback
         node_ = rroot.node_[1] if isinstance(rroot.node_[0],list) else rroot.node_  # node_ is updated to node_t in sub+
         fback_ += [(derH, valt, rdnt)]
         if fback_ and (len(fback_)==len(node_)):  # all nodes terminated and fed back
