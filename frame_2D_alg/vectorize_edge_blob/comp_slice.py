@@ -38,14 +38,10 @@ len prior root_ sorted by G is root.rdn, to eval for inclusion in PP or start ne
   # root function:
 def der_recursion(root, PP, fd=0):  # node-mediated correlation clustering: keep same Ps and links, increment link derH, then P derH in sum2PP
 
-    # n_uplinks = defaultdict(int)  # number of uplinks per P, not used?
-    # for derP in PP.link_: n_uplinks[derP.P] += 1
-
     if fd:  # add prelinks per P if not initial call:
         for P in PP.P_: P.link_ += [unpack_last_link_(P.link_)]
 
     rng_recursion(PP, rng=1, fd=fd)  # extend PP.link_, derHs by same-der rng+ comp
-    # should be Rt here?
     form_PP_t(PP, PP.P_, irdn=PP.Rt[1])  # der+ is mediated by form_PP_t
     if root: root.fback_ += [[PP.derH, PP.valt, PP.rdnt]]  # feedback from PPds
 
@@ -158,16 +154,16 @@ def form_PP_t(root, P_, irdn):  # form PPs of derP.valt[fd] + connected Ps val
 
 def sum2PP(root, P_, derP_, irdn, fd):  # sum links in Ps and Ps in PP
 
-    PP = z(typ="PP", 
-           fd=fd, 
-           root=root, 
-           P_=P_, 
-           rng=root.rng+1, 
-           Vt=[0,0], 
-           Rt=[1,1], 
-           Dt=[0,0], 
+    PP = z(typ="PP",
+           fd=fd,
+           root=root,
+           P_=P_,
+           rng=root.rng+1,
+           Vt=[0,0],
+           Rt=[1,1],
+           Dt=[0,0],
            link_=[],
-           box=[0,0,0,0], 
+           box=[0,0,0,0],
            ptuple=z(typ="ptuple",I=0, G=0, M=0, Ma=0, angle=[0, 0], L=0),
            derH = CderH()) # not initial PP.box = (inf,inf,-inf,-inf)?
     # += uplinks:
@@ -175,8 +171,7 @@ def sum2PP(root, P_, derP_, irdn, fd):  # sum links in Ps and Ps in PP
     for derP in derP_:
         if derP.P not in P_ or derP._P not in P_: continue
         derP.P.derH.rdnt[fd] += irdn; derP.P.derH += derP.derH
-        # -= irdn here?
-        derP._P.derH.rdnt[fd]-= irdn; derP._P.derH -= derP.derH  # reverse d signs downlink 
+        derP._P.derH.rdnt[fd]+= irdn; derP._P.derH -= derP.derH  # reverse d signs downlink
         PP.link_ += [derP]; derP.roott[fd] = PP
         PP.Vt = np.add(PP.Vt,derP.vt)
         PP.Rt = np.add(np.add(PP.Rt,derP.rt), [irdn,irdn])
@@ -292,10 +287,10 @@ def comp_derH(_derH, derH, rn=1, fagg=0):  # derH is a list of der layers or sub
             der = comp_ptuple(_lay, lay, rn=rn, fagg=fagg)
         else:  # comp_derH
             der = comp_dtuple(_lay.H[1], lay.H[1], rn=rn, fagg=fagg)
-            
+
         if fagg: mtuple, dtuple, Mtuple,Dtuple = der
         else:    mtuple, dtuple = der
-        
+
         valt = [sum(mtuple),sum(abs(d) for d in dtuple)]
         rdnt = [valt[1] > valt[0], valt[1] <= valt[0]]
         dect = [0,0]
@@ -315,7 +310,8 @@ def comp_derH(_derH, derH, rn=1, fagg=0):  # derH is a list of der layers or sub
     return derLay[0] if fptuple else derLay, Vt,Rt,Dt  # to sum in each G Et
 
 
-# replaced by += overload for CderH in classes:
+# replace by += overload:
+
 def sum_derH(T, t, base_rdn, fneg=0):  # derH is a list of layers or sub-layers, each = [mtuple,dtuple, mval,dval, mrdn,drdn]
 
     DerH, Valt, Rdnt = T; derH, valt, rdnt = t
@@ -359,4 +355,3 @@ def unpack_last_link_(link_):  # unpack last link layer
 
     while link_ and isinstance(link_[-1], list): link_ = link_[-1]
     return link_
-
