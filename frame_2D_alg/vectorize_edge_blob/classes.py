@@ -5,7 +5,7 @@ from numbers import Real
 from typing import Any, NamedTuple, Tuple
 from copy import copy, deepcopy
 from class_cluster import CBase, CBaseLite, init_param as z
-from frame_blobs import Cbox
+
 
 from .filters import ave_dangle, ave_dI, ave_Pd, ave_Pm, aves
 '''
@@ -63,6 +63,16 @@ def comp_(dertv, T, t, typ=0):  # unpack tuples (formally lists) down to numeric
 
     return dertv
 
+'''
+class Cptuple():
+
+    I: Real = 0
+    G: Real = 0
+    M: Real = 0
+    Ma: Real = 0
+    angle: list = z([0,0])
+    L: Real = 0
+
 
 class Cptuple(CBaseLite):
 
@@ -109,12 +119,13 @@ class CP(CBase):  # horizontal blob slice P, with vertical derivatives per param
     axis: list = z([0,0])  # prior slice angle, init sin=0,cos=1
     yx: list = z([0,0])
     link_: list = z([])  # uplinks per comp layer, nest in rng+)der+
-    ''' 
-    dxdert_: list = z([])  # only in Pd
-    Pd_: list = z([])  # only in Pm
-    Mdx: int = 0  # if comp_dx
-    Ddx: int = 0
-    '''
+    
+
+    # dxdert_: list = z([])  # only in Pd
+    # Pd_: list = z([])  # only in Pm
+    # Mdx: int = 0  # if comp_dx
+    # Ddx: int = 0
+ 
 
     def comp(self, other, link_, rn, A, S):
 
@@ -143,6 +154,8 @@ class CderP(CBase):  # tuple of derivatives in P link: binary tree with latuple 
         if valt.m > ave_Pd * rdnt.m or valt.d > ave_Pd * rdnt.d:
             self.derH |= dderH; self.valt = valt; self.rdmt = rdnt  # update derP not form new one
             link_ += [self]
+            
+'''
 '''
 len layers with ext: 2, 3, 6, 12, 24... 
 max n of tuples per der layer = summed n of tuples in all lower layers: 1, 1, 2, 4, 8..:
@@ -151,7 +164,7 @@ lay2: [m,d]   # implicit nesting, brackets for clarity:
 lay3: [[m,d], [md,dd]]: 2 sLays,
 lay4: [[m,d], [md,dd], [[md1,dd1],[mdd,ddd]]]: 3 sLays, <=2 ssLays
 '''
-
+'''
 class Cgraph(CBase):  # params of single-fork node_ cluster
 
     fd: int = 0  # fork if flat layers?
@@ -212,7 +225,7 @@ class CderG(CBase):  # params of single-fork node_ cluster per pplayers
     roott: list = z([None,None])
     # dir: bool  # direction of comparison if not G0,G1, only needed for comp link?
 
-
+'''
 def get_match(_par, par):
     match = min(abs(_par),abs(par))
     return -match if (_par<0) != (par<0) else match    # match = neg min if opposite-sign comparands
@@ -222,8 +235,10 @@ def acc_(a_,b_, n=1): # accum iterables
     a_[:] = np.add(a_,b_) if a_ else copy(b_)
     np.divide(a_,n)
 
+'''
 def add_(a_,b_, n=1):  # sum iterables
     return np.divide( np.add(a_,b_) if a_ else [b for b in b_], n)
+'''
 
 def sub_(a_,b_):  # subtract iterables
     return [a - b for a, b in zip(a_, b_)]
@@ -257,7 +272,7 @@ def normalize(self):
     dist = abs(self)
     return self.__class__(self.dy / dist, self.dx / dist)
 
-
+'''
 # draft
 class CderH(CBase):  # derH is a list of der layers or sub-layers, each = ptuple_tv
 
@@ -439,3 +454,4 @@ def Cgraph(typ="graph",
 
     return instance
 
+'''
