@@ -3,7 +3,7 @@ from collections import deque, defaultdict
 from copy import deepcopy, copy
 from itertools import zip_longest, combinations
 from typing import List, Tuple
-from .classes import add_, sub_, acc_, get_match, CderH, Cptuple, CderP, z
+from .classes import add_, comp_, negate, sub_, acc_, get_match, CH, CPP, Cptuple, CderP, z
 from .filters import ave, ave_dI, aves, P_aves, PP_aves
 from .slice_edge import comp_angle
 from utils import box2slice, accum_box, sub_box2box
@@ -57,14 +57,15 @@ def rng_recursion(PP, rng=1, fd=0):  # similar to agg+ rng_recursion, but contig
             _prelink_ = P.link_.pop()  # old prelinks per P
             for _link in _prelink_:
                 _P = _link._P if fd else _link
-                if len(_P.derH.H)!= len(P.derH.H): continue  # compare same der layers only
+                # derH[1] is derH.H
+                if len(_P.derH[1])!= len(P.derH[1]): continue  # compare same der layers only
                 dy,dx = np.subtract(_P.yx, P.yx)
                 distance = np.hypot(dy,dx)  # distance between P midpoints, /= L for eval?
                 if distance < rng:  # | rng * ((P.val+_P.val) / ave_rval)?
-                    mlink = comp_P(_link if fd else [_P,P, distance,[dy,dx]])  # return link if match
+                    mlink = comp_P(_link if fd else [_P,P, distance,[dy,dx]], fd)  # return link if match
                     if mlink:
                         V += mlink.vt[0]  # unpack last link layer:
-                        link_ = P.link_[-1] if PP.derH.depth else P.link_  # der++ if derH.depth==1
+                        link_ = P.link_[-1] if PP.derH[0] == "derH" else P.link_  # der++ if derH.depth==1
                         if rng > 1:
                             if rng == 2: link_[:] = [link_[:]]  # link_ -> link_H
                             if len(link_) < rng: link_ += [[]]  # new link_
@@ -86,32 +87,31 @@ def rng_recursion(PP, rng=1, fd=0):  # similar to agg+ rng_recursion, but contig
     der++ is tested in PPds formed by rng++, no der++ inside rng++: high diff @ rng++ termination only?
     '''
 
-def comp_P(link):
+# der+ not updated yet
+def comp_P(link, fd):
 
     if isinstance(link,z): _P, P = link._P, link.P  # in der+
     else:                  _P, P, S, A = link  # list in rng+
     rn = len(_P.dert_) / len(P.dert_)
 
-    if _P.derH.H and P.derH.H:
+    # P.derH[1] is H
+    if _P.derH[1] and P.derH[1]:
         # der+: append link derH, init in rng++ from form_PP_t
         derLay, vt,rt,_ = comp_derH(_P.derH, P.derH, rn=rn)  # += fork rdn
         aveP = P_aves[1]
-        fd=1
     else:
         # rng+: add link derH
-        mtuple, dtuple = comp_ptuple(_P.ptuple, P.ptuple, rn)
-        vt = [sum(mtuple), sum(abs(d) for d in dtuple)]
-        rt = [1+(vt[1]>vt[0]), 1+(1-(vt[1]>vt[0]))]  # or rdn = Dval/Mval?
+        dertv = comp_(_P.ptuple, P.ptuple, rn)
+        vt = dertv[2]; rt = dertv[3]
         aveP = P_aves[0]
-        fd=0
     if vt[0] > aveP*rt[0]:  # always rng+
         if fd:
-            if link.derH.depth==0:  # add nesting dertv-> derH:
-                link.derH.H = [CderH(typ="derH", H=link.derH,valt=copy(link.derH.valt),rdnt=copy(link.derH.rdnt),dect=copy(link.derH.dect))]
+            if link.derH[0] == "dertv":  # add nesting dertv-> derH:
+                link.derH[0] = "derH"  # change from dertv to derH 
+                link.derH[1] = [CH(typ="derH", H=link.derH,valt=copy(link.derH.valt),rdnt=copy(link.derH.rdnt),dect=copy(link.derH.dect))]
             link.derH.H += derLay; link.vt=np.add(link.vt,vt); link.rt=np.add(link.rt,rt)
         else:
-            derH = CderH(H=[mtuple, dtuple], valt=vt, rdnt=rt, depth=0)  # dertv
-            link = CderP(typ="derP", P=P,_P=_P, derH=derH, vt=copy(vt), rt=copy(rt), S=S, A=A, roott=[[],[]])
+            link = CderP(typ="derP", P=P,_P=_P, derH=dertv, vt=copy(vt), rt=copy(rt), S=S, A=A, roott=[[],[]])
 
         return link
 
@@ -154,7 +154,7 @@ def form_PP_t(root, P_, irdn):  # form PPs of derP.valt[fd] + connected Ps val
 
 def sum2PP(root, P_, derP_, irdn, fd):  # sum links in Ps and Ps in PP
 
-    PP = z(typ="PP",
+    PP = CPP(typ="PP",
            fd=fd,
            root=root,
            P_=P_,
@@ -165,26 +165,23 @@ def sum2PP(root, P_, derP_, irdn, fd):  # sum links in Ps and Ps in PP
            link_=[],
            box=[0,0,0,0],
            ptuple=z(typ="ptuple",I=0, G=0, M=0, Ma=0, angle=[0, 0], L=0),
-           derH = CderH()) # not initial PP.box = (inf,inf,-inf,-inf)?
+           derH = CH(typ="dertv")) # not initial PP.box = (inf,inf,-inf,-inf)?
     # += uplinks:
     S,A = 0, [0,0]
     for derP in derP_:
         if derP.P not in P_ or derP._P not in P_: continue
-        derP.P.derH.rdnt[fd] += irdn; derP.P.derH += derP.derH
-        derP._P.derH.rdnt[fd]+= irdn; derP._P.derH -= derP.derH  # reverse d signs downlink
+        derP.P.derH[3][fd] += irdn; add_(derP.P.derH,derP.derH)  # derH[3] is rdnt
+        derP._P.derH[3][fd]+= irdn; add_(derP._P.derH, negate(derP.derH))  # reverse d signs downlink
         PP.link_ += [derP]; derP.roott[fd] = PP
         PP.Vt = np.add(PP.Vt,derP.vt)
         PP.Rt = np.add(np.add(PP.Rt,derP.rt), [irdn,irdn])
         derP.A = np.add(A,derP.A); S += derP.S
     PP.ext = [len(P_), S, A]  # all from links
-    depth = root.derH.depth or fd  # =1 at 1st der+
-    PP.derH.depth = depth
     # += Ps:
     celly_,cellx_ = [],[]
     for P in P_:
-        P.derH.depth = depth  # or copy from links
         PP.ptuple += P.ptuple
-        PP.derH += P.derH
+        add_(PP.derH, P.derH)
         for y,x in P.cells:
             PP.box = accum_box(PP.box, y, x); celly_+=[y]; cellx_+=[x]
     # pixmap:
@@ -198,14 +195,14 @@ def sum2PP(root, P_, derP_, irdn, fd):  # sum links in Ps and Ps in PP
 
 def feedback(root):  # in form_PP_, append new der layers to root PP, single vs. root_ per fork in agg+
 
-    derH, valt, rdnt = CderH(),[0,0],[0,0]
+    derH, valt, rdnt = CH(typ="dertv"),[0,0],[0,0]
     while root.fback_:
         _derH, _valt, _rdnt = root.fback_.pop(0)
         derH += _derH; acc_(valt,_valt); acc_(rdnt,_rdnt)
 
     root.derH += derH; add_(root.valt,_valt); add_(root.rdnt,_rdnt)
 
-    if isinstance(root.root, Cgraph):  # skip if root is Edge
+    if root.root.type == "PP":  # skip if root is Edge
         rroot = root.root  # single PP.root, can't be P
         fback_ = rroot.fback_
         node_ = rroot.node_[1] if isinstance(rroot.node_[0],list) else rroot.node_  # node_ is updated to node_t in sub+

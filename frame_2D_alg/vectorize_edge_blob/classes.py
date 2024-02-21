@@ -4,11 +4,10 @@ from math import inf, hypot
 from numbers import Real
 from typing import Any, NamedTuple, Tuple
 from copy import copy, deepcopy
-from class_cluster import CBase, CBaseLite
+from class_cluster import CBase, CBaseLite, init_param
 from types import SimpleNamespace
-from frame_blobs import Cbox
 
-from .filters import ave_dangle, ave_dI, ave_Pd, ave_Pm, aves
+from .filters import ave_dangle, ave_dI, ave_Pd, ave_Pm, aves, ave_mL
 '''
     Conventions:
     prefix 'C'  denotes class
@@ -28,43 +27,135 @@ def add_(T, t):  # unpack tuples (formally lists) down to numericals and sum the
     if t:
         if T:
             for i, (Par,par) in enumerate(zip_longest(T,t, fillvalue=None)):  # always lists, maybe ext,Et in the end?
-                if par:
-                    if Par:
+                if par is not None and not isinstance(par, str):  # skip string, which is typ
+                    if Par is not None:
                         if isinstance(Par,list) and isinstance(par,list):
                             # and par[0]==Par[0]: if same typ, or always aligned unless compressed: cpr version?
-                            T[i] = add_(Par[2:], par[2:])  # unpack and sum params
+                            add_(Par, par)  # unpack and sum params
                         else:
                             T[i] = Par+par  # both numerical
                     else:
                         T += [deepcopy(par)]  # skip deepcopy if numerical?
-            return T
         else:
-            return deepcopy(t)
-'''
-add negate(t)
-'''
+            T[:] = deepcopy(t)
 
-def comp_(dertv, T, t, typ=0):  # unpack tuples (formally lists) down to numericals and compare them
+def negate(T):
+    
+    T = deepcopy(T)  # copy to prevent the referencing of negative value. Will be used once only.
+    if T:
+        # H
+        if isinstance(T[0], str):
+            for i, t in enumerate(T[1]): T[1][i] = negate(t)      # H
+            T[2] = np.multiply(T[2], -1)  # valt
+            T[3] = np.multiply(T[3], -1)  # rdnt
+            T[4] = np.multiply(T[4], -1)  # dect
+        
+        # ext
+        else:
+            if isinstance(T[0], list):
+                for i, t in enumerate(T): T[i] = negate(t)
+            else:
+                T[:] = np.multiply(T, -1)
+
+    return T
+               
+def comp_ext(_ext, ext):  # comp ds:
+
+    (_L,_S,_A),(L,S,A) = _ext,ext
+    dL = _L-L
+    Mval, Dval, Mrdn, Drdn = 0,0,1,1
+
+    if isinstance(A,list):
+        if any(A) and any(_A):
+            mA,dA = comp_angle(_A,A); adA=dA
+        else:
+            mA,dA,adA = 0,0,0
+        max_mA = max_dA = .5  # = ave_dangle
+        dS = _S/_L - S/L  # S is summed over L, dS is not summed over dL
+    else:
+        mA = get_match(_A,A)- ave_dangle; dA = _A-A; adA = abs(dA); _aA=abs(_A); aA=abs(A)
+        max_dA = _aA + aA; max_mA = max(_aA, aA)
+        dS = _S - S
+    mL = get_match(_L,L) - ave_mL
+    mS = get_match(_S,S) - ave_mL
+
+    m = mL+mS+mA; d = abs(dL)+ abs(dS)+ adA
+    Mval += m; Dval += d
+    Mrdn += d>m; Drdn += d<=m
+    _aL = abs(_L); aL = abs(L)
+    _aS = abs(_S); aS = abs(S)
+
+    # ave dec = ave (ave dec, ave L,S,A dec):
+    Mdec = (mL / max(aL,_aL) if aL or _aL else 1 +
+                mS / max(aS,_aS) if aS or _aS else 1 +
+                mA / max_mA if max_mA else 1) /3
+
+    Ddec = (dL / (_aL+aL) if aL+_aL else 1 +
+                dS / (_aS+aS) if aS+_aS else 1 +
+                dA / max_dA if max_mA else 1) /3
+
+    return [[mL,mS,mA], [dL,dS,dA]],[Mval, Dval],[Mrdn, Drdn],[Mdec, Ddec]     
+                
+             
+# why we need input dertv? We will return it anyway
+def comp_(T, t, rn):  # unpack tuples (formally lists) down to numericals and compare them
 
     # dertv,T,t can be ext | dertv | derH | subH | aggH, compare only ds in shared levels
+    typ = None
+    if hasattr(T, "typ"):  # ptuple    
+        typ = T.typ  
+        H = [T.I, T.G, T.M, T.Ma, T.angle, T.L]
+        h = [t.I, t.G, t.M, t.Ma, t.angle, t.L]
+    elif isinstance(T[0], str):  # dertv, derH, subH and etc
+        typ = T[0]   
+        if typ == "dertv":
+            H = [tup[1] for tup in T[1]]  # dparam only   
+            h = [tup[1] for tup in t[1]]   
+        else: 
+            H = T[1]
+            h = t[1] 
 
-    for Par, par in zip_longest(T, t, fillvalue=None):
+    dH = []
+    dertv = [typ, dH, [0,0], [1,1], [0,0], []]  # type, H, valt, rdnt, dect, ext    
+        
+    for Par, par in zip(H, h):  # there's no need zip longest in comp?
 
-        if Par and par and Par[0] == par[0]:  # maybe None to align, else check same type?
-            if isinstance(Par,list) and isinstance(par,list):
-
-                if typ =='angle':  # also separate comp -> distance for box?
-                    dertv += [comp_angle(Par, par)]
-                else:  # compare ds, same for ext, exclude Et in par[1]:
-                    Par_ = [P for i,P in enumerate(Par[3:]) if i%2]  # [3:] to skip 1st m
-                    par_ = [p for i,p in enumerate(par[3:]) if i%2]
-                    dertv += [comp_(Par_, par_, par[0])]  # unpack and comp params, not sure about nesting
-            else:  # numerical
-                diff = Par-par
-                match = min(abs(Par),abs(par))
-                if (Par<0) != (par<0): match *= -1  # if only one comparand is negative
-                dertv[1][0] += match; dertv[1][1] += diff
-                dertv += [match,diff]  # flat list
+        if isinstance(Par,list) and isinstance(par,list):
+            if isinstance(Par[0], str):  # deeper H such as derH, subH, aggH
+                dv = comp_(Par, par, rn)    
+                dH += [dv]  # unpack and comp params, not sure about nesting
+                for i in 0,1:    
+                    dertv[2][0] += dv[2][0]; dertv[2][1] += dv[2][1]
+                    dertv[3][0] += dv[3][0]; dertv[3][1] += dv[3][1] 
+                    dertv[4][0] += dv[4][0]; dertv[4][1] += dv[4][1] 
+                
+            elif isinstance(Par[0], list):  # der_ext
+                der_ext, valt, rdnt, dect = comp_ext(Par, par)
+                dH += [der_ext]  # ext will be the same, using comp_ext?
+                for i in 0,1:    
+                    dertv[2][0] += valt[0]; dertv[2][1] += valt[1]
+                    dertv[3][0] += rdnt[0]; dertv[3][1] += rdnt[1] 
+                    dertv[4][0] += dect[0]; dertv[4][1] += dect[1] 
+                
+            else:  # m|dtuple, angle, ext
+                if typ == "ptuple":  # (angle is in list for ptuple) also separate comp -> distance for box?
+                    dH += [comp_angle(Par, par)]
+                else:  # ext (3 elements)
+                    der_ext, valt, rdnt, dect = comp_ext(Par, par)
+                    dH += [der_ext]  # ext will be the same, using comp_ext?
+                    for i in 0,1:    
+                        dertv[2][0] += valt[0]; dertv[2][1] += valt[1]
+                        dertv[3][0] += rdnt[0]; dertv[3][1] += rdnt[1] 
+                        dertv[4][0] += dect[0]; dertv[4][1] += dect[1] 
+                
+        else:  # numerical
+            par *= rn
+            diff = Par-par
+            match = min(abs(Par),abs(par))
+            if (Par<0) != (par<0): match *= -1  # if only one comparand is negative
+            dertv[2][0] += match; dertv[2][1] += diff             # valt is dertv[2]
+            dertv[3][0] += diff>match; dertv[3][1] += match>diff  # rdnt is dertv[3]
+            dH += [[match,diff]]  # flat list
 
     return dertv
 
@@ -97,7 +188,9 @@ class z(SimpleNamespace):
                 V = getattr(T, param); v = getattr(t, param)
                 if isinstance(V, list): add_(V, v)
                 else:                   setattr(T, param, V+v)
-
+        
+        # only putple is valid now, derH is list
+        '''
         if T.typ == "derH":
             if t.H:
                 if T.H:
@@ -113,9 +206,9 @@ class z(SimpleNamespace):
                     if isinstance(H[0], z):
                         fC=1
                         if isinstance(h[0], list):  # convert dertv to derH:
-                            h = [CderH(H=h, valt=copy(t.valt), rdnt=copy(t.rdnt), dect=copy(t.dect), ext=copy(t.ext), depth=0)]
+                            h = [CH(typ="derH", H=h, valt=copy(t.valt), rdnt=copy(t.rdnt), dect=copy(t.dect), ext=copy(t.ext), depth=0)]
                     elif isinstance(h[0], z):
-                        fC=1; H = [CderH(H=H, valt=copy(T.valt), rdnt=copy(T.rdnt), dect=copy(T.dect), ext=copy(T.ext), depth=0)]
+                        fC=1; H = [CH(typ="dertv", H=H, valt=copy(T.valt), rdnt=copy(T.rdnt), dect=copy(T.dect), ext=copy(T.ext), depth=0)]
 
                     if fC:  # both derH_:
                         add_(H, h)
@@ -124,6 +217,7 @@ class z(SimpleNamespace):
                         H[:] = [list(np.add(Dertuple,dertuple)) for Dertuple, dertuple in zip(H,h)]  # mtuple,dtuple
                 else:
                     T.H[:] = deepcopy(t.H)
+        '''
 
         return T
 
@@ -140,32 +234,80 @@ def Cptuple(typ="ptuple",I=None, G=None, M=None, Ma=None, angle=None, L=None):
     init_default(instance, params_set, default_value)
     return  instance
 
-def CderH(typ="derH", H=None, valt=None, rdnt=None, dect=None, ext=None, depth=None,irdn=None, fagg=None):
-    params_set = ("H", "valt", "rdnt", "dect", "ext", "depth", "irdn", "fagg")
-    default_value = ([],[0,0],[1,1],[0,0],[], 0, 0, 0)
-    instance = z(typ=typ, H=H, valt=valt, rdnt=rdnt, dect=dect, ext=ext, depth=depth, irdn=irdn, fagg=fagg)
-    init_default(instance, params_set, default_value)
+# per dertv, derH, subH, and aggH
+def CH(typ, H=None, valt=None, rdnt=None, dect=None, ext=None):
+    default_value = ("",[],[0,0],[1,1],[0,0])
+    instance = [typ, H, valt, rdnt, dect]  # ext will be in H
+    for i, par in enumerate(instance):
+        if par is None: instance[i] = default_value[i]
     return instance
 
 def Cedge(typ="edge",root=None, node_=None, box=None, mask__=None, Rt=None, valt=None, rdnt=None, derH=None,fback_=None):
     params_set = ("root", "node_", "box", "mask__", "Rt", "valt", "rdnt", "derH", "fback_")
-    default_value = (None,[[],[]],[inf,inf,-inf,-inf],None,[1,1],[0,0],[1,1], CderH(), [])
+    default_value = (None,[[],[]],[inf,inf,-inf,-inf],None,[1,1],[0,0],[1,1], CH(typ="dertv"), [])
     instance = z(typ=typ, root=root, node_=node_, box=box, mask__=mask__, Rt=Rt, valt=valt, rdnt=rdnt, derH=derH,fback_=fback_)
     init_default(instance, params_set, default_value)
     return instance
 
 def CP(typ="P", yx=None, axis=None, cells=None, dert_=None,derH=None,link_=None):
     params_set = ("yx", "axis", "cells", "dert_", "derH", "link_")
-    default_value = ([0,0],[0,0],{},[],CderH(), [[]])
+    default_value = ([0,0],[0,0],{},[],CH(typ="dertv"), [[]])
     instance = z(typ=typ, yx=yx,axis=axis,cells=cells,dert_=dert_, derH=derH, link_=link_)
     init_default(instance, params_set, default_value)
     return instance
 
-def CderP(typ="derP", P=None,_P=None, derH=CderH(), vt=[0,0], rt=[1,1], S=0, A=[0,0], roott=[[],[]]):
+def CderP(typ="derP", P=None,_P=None, derH=None, vt=None, rt=None, S=None, A=None, roott=None):
     params_set = ("P", "_P", "derH", "vt", "rt", "S", "A", "roott")
-    default_value = (None,None,CderH(),[0,0],[1,1], 0, 0, [[],[]])
+    default_value = (None,None,CH(typ="dertv"),[0,0],[1,1], 0, 0, [[],[]])
     instance = z(typ=typ, P=P, _P=_P, derH=derH, vt=vt, rt=rt, S=S, A=A, roott=roott)
     init_default(instance, params_set, default_value)
+    return instance
+
+def CPP(typ="PP",
+        fd = None,  # fork if flat layers?
+        ptuple = None,  # default P
+        derH = None,  # from PP, not derHv
+        # graph-internal, generic:
+        valt = None,  # sum ptuple, derH, aggH
+        rdnt = None,
+        dect = None,
+        link_ = None,  # internal, single-fork, incrementally nested
+        node_ = None,  # base node_ replaced by node_t in both agg+ and sub+, deeper node-mediated unpacking in agg+
+         # graph-external, +level per root sub+:
+        ext = None,  # L,S,A: L len base node_, S sparsity: average link len, A angle: average link dy,dx
+        rng = None,
+        box = None,  # y,x,y0,x0,yn,xn
+        # PP:
+        P_ = None,
+        mask__ = None,
+        # temporary, replace with Et:
+        Vt = None, # last layer | last fork tree vals for node_connect and clustering
+        Rt = None,
+        Dt = None,
+        root = None,  # for feedback
+        fback_ = None): # feedback [[aggH,valt,rdnt,dect]] per node layer, maps to node_H
+
+
+    params_set = ("fd","ptuple", "derH",
+                  "valt", "rdnt", "dect", "link_", "node_",
+                  "ext", "rng", "box",
+                  "P_","mask__",
+                  "Vt","Rt","Dt","root","fback_")
+
+    default_value = (0,Cptuple(), CH(typ="dertv"),
+                     [0,0], [1,1], [0,0], [], [],
+                     [0,0, [0,0]], 1, [inf,inf,-inf,-inf],
+                     [],None,
+                     [0,0],[1,1],[0,0],[None],[])
+
+    instance = z(typ=typ, fd=fd,ptuple=ptuple, derH=derH,
+                 valt=valt, rdnt=rdnt, dect=dect, link_=link_, node_=node_,
+                 ext=ext, rng=rng, box=box,
+                 P_=P_,mask__=mask__,
+                 Vt=Vt,Rt=Rt,Dt=Dt,root=root,fback_=fback_)
+    
+    init_default(instance, params_set, default_value)
+
     return instance
 
 def Cgraph(typ="graph",
@@ -219,8 +361,8 @@ def Cgraph(typ="graph",
                   "Vt","Rt","Dt","root","fback_","compared_","Rdn",
                   "it","depth","nval","id_H")
 
-    default_value = (0,Cptuple(), CderH(),
-                     [], [0,0], [1,1], [0,0], [], [],
+    default_value = (0,Cptuple(), CH(typ="dertv"),
+                     CH(typ="aggH"), [0,0], [1,1], [0,0], [], [],
                      [], [], [], [0,0], [1,1], [0,0], [0,0, [0,0]], 1, [inf,inf,-inf,-inf],
                      [],[0,0],[1,1],[0,0],
                      [],None,
@@ -240,13 +382,13 @@ def Cgraph(typ="graph",
 
 # old, only to check for consistency:
 
-class Cptuple(CBaseLite):
+class Cptuple_old(CBaseLite):
 
     I: Real = 0
     G: Real = 0
     M: Real = 0
     Ma: Real = 0
-    angle: list = z([0,0])
+    angle: list = init_param ([0,0])
     L: Real = 0
 
     # operators:
@@ -272,25 +414,25 @@ class Cptuple(CBaseLite):
         return tuplet, valt, rdnt
 
 
-class CP(CBase):  # horizontal blob slice P, with vertical derivatives per param if derP, always positive
+class CP_old(CBase):  # horizontal blob slice P, with vertical derivatives per param if derP, always positive
 
-    ptuple: Cptuple = z(Cptuple())  # latuple: I,G,M,Ma, angle(Dy,Dx), L
-    rnpar_H: list = z([])
-    derH: CderH = z(CderH())  # [(mtuple, ptuple)...] vertical derivatives summed from P links
-    vt: list = z([0,0])  # current rng, not used?
-    rt: list = z([1,1])
-    dert_: list = z([])  # array of pixel-level derts, ~ node_
-    cells: set = z(set())  # pixel-level kernels adjacent to P axis, combined into corresponding derts projected on P axis.
-    roott: list = z([None,None])  # PPrm,PPrd that contain this P, single-layer
-    axis: list = z([0,0])  # prior slice angle, init sin=0,cos=1
-    yx: list = z([0,0])
-    link_: list = z([])  # uplinks per comp layer, nest in rng+)der+
+    ptuple: Cptuple = init_param (Cptuple())  # latuple: I,G,M,Ma, angle(Dy,Dx), L
+    rnpar_H: list = init_param ([])
+    # derH: CderH = init_param (CderH())  # [(mtuple, ptuple)...] vertical derivatives summed from P links
+    vt: list = init_param ([0,0])  # current rng, not used?
+    rt: list = init_param ([1,1])
+    dert_: list = init_param ([])  # array of pixel-level derts, ~ node_
+    cells: set = init_param (set())  # pixel-level kernels adjacent to P axis, combined into corresponding derts projected on P axis.
+    roott: list = init_param ([None,None])  # PPrm,PPrd that contain this P, single-layer
+    axis: list = init_param ([0,0])  # prior slice angle, init sin=0,cos=1
+    yx: list = init_param ([0,0])
+    link_: list = init_param ([])  # uplinks per comp layer, nest in rng+)der+
     ''' 
     dxdert_: list = z([])  # only in Pd
     Pd_: list = z([])  # only in Pm
     Mdx: int = 0  # if comp_dx
     Ddx: int = 0
-    '''
+    
 
     def comp(self, other, link_, rn, A, S):
 
@@ -299,18 +441,18 @@ class CP(CBase):  # horizontal blob slice P, with vertical derivatives per param
         if valt.m > ave_Pm * rdnt.m or valt.d > ave_Pm * rdnt.d:
             derH = CderH([dertuplet])
             link_ += [CderP(derH=derH, valt=valt, rdnt=rdnt, _P=self, P=other, A=A, S=S)]
+    '''
 
-
-class CderP(CBase):  # tuple of derivatives in P link: binary tree with latuple root and vertuple forks
+class CderP_old(CBase):  # tuple of derivatives in P link: binary tree with latuple root and vertuple forks
 
     _P: CP  # higher comparand
     P: CP  # lower comparand
-    derH: CderH = z(CderH())  # [[[mtuple,dtuple],[mval,dval],[mrdn,drdn]]], single ptuplet in rng+
-    vt: list = z([0,0])
-    rt: list = z([1,1])  # mrdn + uprdn if branch overlap?
-    roott: list = z([None, None])  # PPdm,PPdd that contain this derP
+    # derH: CderH = init_param (CderH())  # [[[mtuple,dtuple],[mval,dval],[mrdn,drdn]]], single ptuplet in rng+
+    vt: list = init_param ([0,0])
+    rt: list = init_param ([1,1])  # mrdn + uprdn if branch overlap?
+    roott: list = init_param ([None, None])  # PPdm,PPdd that contain this derP
     S: float = 0.0  # sparsity: distance between centers
-    A: list = z([0,0])  # angle: dy,dx between centers
+    A: list = init_param ([0,0])  # angle: dy,dx between centers
     # roott: list = z([None, None])  # for der++, if clustering is per link
 
     def comp(self, link_, rn):
@@ -328,43 +470,43 @@ lay3: [[m,d], [md,dd]]: 2 sLays,
 lay4: [[m,d], [md,dd], [[md1,dd1],[mdd,ddd]]]: 3 sLays, <=2 ssLays
 '''
 
-class Cgraph(CBase):  # params of single-fork node_ cluster
+class Cgraph_old(CBase):  # params of single-fork node_ cluster
 
     fd: int = 0  # fork if flat layers?
-    ptuple: Cptuple = z(Cptuple())  # default P
-    derH: CderH = z(CderH())  # from PP, not derHv
+    ptuple: Cptuple = init_param (Cptuple())  # default P
+    # derH: CderH = init_param (CderH())  # from PP, not derHv
     # graph-internal, generic:
-    aggH: list = z([])  # [[subH,valt,rdnt,dect]], subH: [[derH,valt,rdnt,dect]]: 2-fork composition layers
-    valt: list = z([0,0])  # sum ptuple, derH, aggH
-    rdnt: list = z([1,1])
-    dect: list = z([0,0])
-    link_: list = z([])  # internal, single-fork, incrementally nested
-    node_: list = z([])  # base node_ replaced by node_t in both agg+ and sub+, deeper node-mediated unpacking in agg+
+    aggH: list = init_param ([])  # [[subH,valt,rdnt,dect]], subH: [[derH,valt,rdnt,dect]]: 2-fork composition layers
+    valt: list = init_param ([0,0])  # sum ptuple, derH, aggH
+    rdnt: list = init_param ([1,1])
+    dect: list = init_param ([0,0])
+    link_: list = init_param ([])  # internal, single-fork, incrementally nested
+    node_: list = init_param ([])  # base node_ replaced by node_t in both agg+ and sub+, deeper node-mediated unpacking in agg+
     # graph-external, +level per root sub+:
-    rimH: list = z([])  # direct links, depth, init rim_t, link_tH in base sub+ | cpr rd+, link_tHH in cpr sub+
-    RimH: list = z([])  # links to the most mediated nodes
-    extH: list = z([])  # G-external daggH( dsubH( dderH, summed from rim links
-    evalt: list = z([0,0])  # sum from esubH
-    erdnt: list = z([1,1])
-    edect: list = z([0,0])
-    ext: list = z([0,0,[0,0]])  # L,S,A: L len base node_, S sparsity: average link len, A angle: average link dy,dx
+    rimH: list = init_param ([])  # direct links, depth, init rim_t, link_tH in base sub+ | cpr rd+, link_tHH in cpr sub+
+    RimH: list = init_param ([])  # links to the most mediated nodes
+    extH: list = init_param ([])  # G-external daggH( dsubH( dderH, summed from rim links
+    evalt: list = init_param ([0,0])  # sum from esubH
+    erdnt: list = init_param ([1,1])
+    edect: list = init_param ([0,0])
+    ext: list = init_param ([0,0,[0,0]])  # L,S,A: L len base node_, S sparsity: average link len, A angle: average link dy,dx
     rng: int = 1
-    box: Cbox = z(Cbox(inf,inf,-inf,-inf))  # y,x,y0,x0,yn,xn
+    box: list = init_param([inf,inf,-inf,-inf])  # y,x,y0,x0,yn,xn
     # tentative:
-    alt_graph_: list = z([])  # adjacent gap+overlap graphs, vs. contour in frame_graphs
-    avalt: list = z([0,0])  # sum from alt graphs to complement G aves?
-    ardnt: list = z([1,1])
-    adect: list = z([0,0])
+    alt_graph_: list = init_param ([])  # adjacent gap+overlap graphs, vs. contour in frame_graphs
+    avalt: list = init_param ([0,0])  # sum from alt graphs to complement G aves?
+    ardnt: list = init_param ([1,1])
+    adect: list = init_param ([0,0])
     # PP:
-    P_: list = z([])
+    P_: list = init_param ([])
     mask__: object = None
     # temporary, replace with Et:
-    Vt: list = z([0,0])  # last layer | last fork tree vals for node_connect and clustering
-    Rt: list = z([1,1])
-    Dt: list = z([0,0])
-    root: list = z([None])  # for feedback
-    fback_: list = z([])  # feedback [[aggH,valt,rdnt,dect]] per node layer, maps to node_H
-    compared_: list = z([])
+    Vt: list = init_param ([0,0])  # last layer | last fork tree vals for node_connect and clustering
+    Rt: list = init_param ([1,1])
+    Dt: list = init_param ([0,0])
+    root: list = init_param ([None])  # for feedback
+    fback_: list = init_param ([])  # feedback [[aggH,valt,rdnt,dect]] per node layer, maps to node_H
+    compared_: list = init_param ([])
     Rdn: int = 0  # for accumulation or separate recursion count?
 
     # it: list = z([None,None])  # graph indices in root node_s, implicitly nested
@@ -375,17 +517,17 @@ class Cgraph(CBase):  # params of single-fork node_ cluster
     # top Lay from links, lower Lays from nodes, hence nested tuple?
 
 
-class CderG(CBase):  # params of single-fork node_ cluster per pplayers
+class CderG_old(CBase):  # params of single-fork node_ cluster per pplayers
 
     _G: Cgraph  # comparand + connec params
     G: Cgraph
-    daggH: list = z([])  # optionally nested dderH ) dsubH ) daggH: top aggLev derived in comp_G
-    Vt: list = z([0,0])  # last layer vals from comp_G
-    Rt: list = z([1,1])
-    Dt: list = z([0,0])
+    daggH: list = init_param ([])  # optionally nested dderH ) dsubH ) daggH: top aggLev derived in comp_G
+    Vt: list = init_param ([0,0])  # last layer vals from comp_G
+    Rt: list = init_param ([1,1])
+    Dt: list = init_param ([0,0])
     S: float = 0.0  # sparsity: average distance to link centers
-    A: list = z([0,0])  # angle: average dy,dx to link centers
-    roott: list = z([None,None])
+    A: list = init_param ([0,0])  # angle: average dy,dx to link centers
+    roott: list = init_param ([None,None])
     # dir: bool  # direction of comparison if not G0,G1, only needed for comp link?
 
 
@@ -398,7 +540,7 @@ def acc_(a_,b_, n=1): # accum iterables
     a_[:] = np.add(a_,b_) if a_ else copy(b_)
     np.divide(a_,n)
 
-def add_(a_,b_, n=1):  # sum iterables
+def add__old(a_,b_, n=1):  # sum iterables
     return np.divide( np.add(a_,b_) if a_ else [b for b in b_], n)
 
 def sub_(a_,b_):  # subtract iterables
@@ -423,13 +565,13 @@ def normalize(self):
     return self.__class__(self.dy / dist, self.dx / dist)
 
 
-class CderH(CBase):  # derH is a list of der layers or sub-layers, each = ptuple_tv
+class CderH_old(CBase):  # derH is a list of der layers or sub-layers, each = ptuple_tv
 
-    H: list = z([])
-    valt: list = z([0,0])
-    rdnt: list = z([1,1])
-    dect: list = z([0,0])
-    ext : list = z([])
+    H: list = init_param ([])
+    valt: list = init_param ([0,0])
+    rdnt: list = init_param ([1,1])
+    dect: list = init_param ([0,0])
+    ext : list = init_param ([])
     depth: int = 0
 
     irdn: int = 0
@@ -452,6 +594,7 @@ class CderH(CBase):  # derH is a list of der layers or sub-layers, each = ptuple
                 if Hv.fagg:
                     Dect[:] = np.divide( np.add(Dect,dect), 2)
                 fC=0
+                '''
                 if isinstance(H[0], CderH):
                     fC=1
                     if isinstance(h[0], list):  # convert dertv to derH:
@@ -459,6 +602,7 @@ class CderH(CBase):  # derH is a list of der layers or sub-layers, each = ptuple
                 elif isinstance(h[0], CderH):
                     fC=1; H = [CderH(H=H, valt=copy(Hv.valt), rdnt=copy(Hv.rdnt), dect=copy(Hv.dect), ext=copy(Hv.ext), depth=0)]
 
+                '''
                 if fC:  # both derH_:
                     H[:(len(h))] = [DerH + derH for DerH, derH in zip_longest(H,h)]  # if different length or always same?
                 else:  # both dertuplets:
