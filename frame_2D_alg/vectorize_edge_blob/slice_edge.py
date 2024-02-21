@@ -4,6 +4,7 @@ from math import floor
 from collections import deque
 from itertools import product
 from .filters import ave_g, ave_dangle, ave_daangle
+from .classes import CP, Cedge, CderH, Cptuple
 
 from utils import box2slice
 
@@ -29,17 +30,15 @@ def slice_edge(blob, verbose=False):
     i__ = blob.i__[box2slice(blob.ibox)]
     dy__, dx__, g__ = blob.der__t
 
-
-    # type,root,P_,node_,link_,box,mask__,Rt,valt,rdnt,derH,fback_, rng
-    edge = ["edge",blob, [], [[],[]], [], blob.box, blob.mask__, [1,1], [0,0], [1,1], [], [], 0]
-    
+    edge = Cedge(root=blob, node_=[[],[]], box=blob.box, mask__=blob.mask__, derH=CderH())
     blob.dlayers = [[edge]]
     max_ = {*zip(*mask__.nonzero())}  # convert mask__ into a set of (y,x)
 
     if verbose:
         step = 100 / len(max_)  # progress % percent per pixel
         progress = 0.0; print(f"\rTracing max... {round(progress)} %", end="");  sys.stdout.flush()
-    edge [2]= []
+    edge.P_ = []
+    Pt_ = []  # not used?
     while max_:  # queue of (y,x,P)s
         y,x = max_.pop()
         maxQue = deque([(y,x,None)])
@@ -49,22 +48,21 @@ def slice_edge(blob, verbose=False):
             i, dy, dx, g = i__[y,x], dy__[y,x], dx__[y,x], g__[y,x]
             ma = ave_dangle  # max value because P direction is the same as dert gradient direction
             assert g > 0, "g must be positive"
-            # type, ptuple, rnpar_H, derH, vt, rt, dert_, cells, roott,axis, yx, link_
-            derH = ["derH", [], [0,0], [1,1], [0,0]]  # type, H, valt, rdnt, dect
-            P = ["P",[],[],derH,[0,0],[1,1],[(y,x,i,dy,dx,g,ma)],{(y,x)},[[],[]],[dy/g,dx/g],[y,x],[[]]]
-            P = form_P(blob, P)
-            edge[2] += [P]  # P_
+            P = form_P(blob, CP(yx=[y,x], axis=[dy/g, dx/g], cells={(y,x)}, dert_=[(y,x,i,dy,dx,g,ma)], derH=CderH(), link_=[[]]))
+            edge.P_ += [P]
             if _P is not None:
-                P[-1][0] += [_P]  #P.link_
+                P.link_[0] += [_P]
+                # Pt_ += [(_P, P)]  # if using combinations
             # search in max_ path
             adjacents = max_ & {*product(range(y-1,y+2), range(x-1,x+2))}   # search neighbors
             maxQue.extend(((_y, _x, P) for _y, _x in adjacents))
             max_ -= adjacents   # set difference = first set AND not both sets: https://www.scaler.com/topics/python-set-difference/
-            max_ -= P[7]     # remove all maxes in the way (P[7] = P.cells)
+            max_ -= P.cells     # remove all maxes in the way
 
             if verbose:
                 progress += step; print(f"\rTracing max... {round(progress)} %", end=""); sys.stdout.flush()
 
+    edge.link_ = Pt_  # init links with adjacent P pairs
     if verbose: print("\r" + " " * 79, end=""); sys.stdout.flush(); print("\r", end="")
 
     return edge
@@ -115,21 +113,19 @@ def form_P(blob, P):
     scan_direction(blob, P, fleft=1)  # scan left
     scan_direction(blob, P, fleft=0)  # scan right
     # init:
-    _, _, I, Dy, Dx, G, Ma = map(sum, zip(*P[6]))  # P[6] = P.dert_
-    L = len(P[6])  # P[6] = P.dert_
+    _, _, I, Dy, Dx, G, Ma = map(sum, zip(*P.dert_))
+    L = len(P.dert_)
     M = ave_g*L - G
     G = np.hypot(Dy, Dx)  # recompute G
-    P[1] = [I, G, M, Ma, [Dy, Dx], L]    # P[1] = P.ptuple
-    # P[10] = P.yx, P[6] =P.dert_
-    P[10] = P[6][L // 2][:2]  # new center  
+    P.ptuple = Cptuple(I=I, G=G, M=M, Ma=Ma, angle=[Dy, Dx], L=L)
+    P.yx = P.dert_[L // 2][:2]  # new center
 
     return P
 
 def scan_direction(blob, P, fleft):  # leftward or rightward from y,x
 
-    dert_, cells, axis, yx = P[6], P[7], P[9], P[10]
-    sin,cos = _dy,_dx = axis  # axis
-    _y, _x = yx  # yx  # pivot
+    sin,cos = _dy,_dx = P.axis
+    _y, _x = P.yx  # pivot
     r = cos*_y - sin*_x  # P axial line: cos*y - sin*x = r = constant
     _cy,_cx = round(_y), round(_x)  # keep initial cell
     y, x = (_y-sin,_x-cos) if fleft else (_y+sin, _x+cos)  # first dert in the direction of axis
@@ -152,18 +148,18 @@ def scan_direction(blob, P, fleft):  # leftward or rightward from y,x
                     ((_cy, cx) if _cy < cy else (cy, _cx)) if _my_cos < my_cos else
                     ((_cy, cx) if _cy > cy else (cy, _cx)))
                 if not blob.mask__[adj_y, adj_x]: break    # if the cell is masked, stop
-                cells |= {(adj_y, adj_x)}
+                P.cells |= {(adj_y, adj_x)}
 
         mangle,dangle = comp_angle((_dy,_dx), (dy, dx))
         if mangle < 0:  # terminate P if angle miss
             break
-        cells |= {(cy, cx)}  # add current cell to overlap
+        P.cells |= {(cy, cx)}  # add current cell to overlap
         _cy, _cx, _dy, _dx = cy, cx, dy, dx
         if fleft:
-            dert_[:] = [(y,x,i,dy,dx,g,mangle)] + dert_  # append left
+            P.dert_ = [(y,x,i,dy,dx,g,mangle)] + P.dert_  # append left
             y -= sin; x -= cos  # next y,x
         else:
-            dert_[:] = dert_ + [(y,x,i,dy,dx,g,mangle)]  # append right
+            P.dert_ = P.dert_ + [(y,x,i,dy,dx,g,mangle)]  # append right
             y += sin; x += cos  # next y,x
 
 def interpolate2dert(blob, y, x):
