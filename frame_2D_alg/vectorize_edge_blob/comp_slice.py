@@ -3,7 +3,7 @@ from collections import deque, defaultdict
 from copy import deepcopy, copy
 from itertools import zip_longest, combinations
 from typing import List, Tuple
-from .classes import add_, comp_, negate, sub_, acc_, get_match, CPP, Cptuple, CderP, z
+from .classes import add_, comp_, negate, get_match, CPP, Cptuple, CderP, z
 from .filters import ave, ave_dI, aves, P_aves, PP_aves
 from .slice_edge import comp_angle
 from utils import box2slice, accum_box, sub_box2box
@@ -58,14 +58,14 @@ def rng_recursion(PP, rng=1, fd=0):  # similar to agg+ rng_recursion, but contig
             for _link in _prelink_:
                 _P = _link._P if fd else _link
                 # derH[1] is derH.H
-                if len(_P.derH[1])!= len(P.derH[1]): continue  # compare same der layers only
+                if _P.He and P.He and len(_P.He[2])!= len(P.He[2]): continue  # compare same der layers only (He may empty now)
                 dy,dx = np.subtract(_P.yx, P.yx)
                 distance = np.hypot(dy,dx)  # distance between P midpoints, /= L for eval?
                 if distance < rng:  # | rng * ((P.val+_P.val) / ave_rval)?
                     mlink = comp_P(_link if fd else [_P,P, distance,[dy,dx]], fd)  # return link if match
                     if mlink:
                         V += mlink.vt[0]  # unpack last link layer:
-                        link_ = P.link_[-1] if PP.derH[0] == 'derH' else P.link_  # der++ if derH.depth==1
+                        link_ = P.link_[-1] if PP.He and PP.He[0] == 'derH' else P.link_  # der++ if derH.depth==1
                         if rng > 1:
                             if rng == 2: link_[:] = [link_[:]]  # link_ -> link_H
                             if len(link_) < rng: link_ += [[]]  # new link_
@@ -96,7 +96,7 @@ def comp_P(link, fd):
 
     if _P.He and P.He:
         # der+: append link derH, init in rng++ from form_PP_t
-        (vm,vd,rm,rd),H = comp_(_P.He, P.He, rn=rn)
+        (vm,vd,rm,rd,dm,dd),H = comp_(_P.He, P.He, rn=rn)  # we still getting dm, dd from comp_ although it's not relevant
         vt= [vm, vd]; rt = [rm, rd]
         rt[0] += vd > vm; rt[1] += vm > vd
         aveP = P_aves[1]
@@ -112,11 +112,11 @@ def comp_P(link, fd):
             He = link.He
             if He[0] == 'md_':  # add nesting md_-> derH:
                 He = link.He = ['derH',copy(He[1]),[He]]
-            He[1][:] = np.add(He[1],[vm,vd,rm,rd])
-            He[2] += [H]
+            He[1] = np.add(He[1],[*vt,*rt,0,0])
+            He[2] += [['md',[*vt,*rt,0,0], H]]  # so we need add md_ here for a new md_ layer, instead of just their H
             link.vt=np.add(link.vt,vt); link.rt=np.add(link.rt,rt)
         else:
-            md_ = ['md_',[*vt,*rt], H]
+            md_ = ['md_',[*vt,*rt,0,0], H]
             link = CderP(typ='derP', P=P,_P=_P, He=md_, vt=copy(vt), rt=copy(rt), S=S, A=A, roott=[[],[]])
 
         return link
@@ -167,7 +167,8 @@ def sum2PP(root, P_, derP_, iRt, fd):  # sum links in Ps and Ps in PP
     for derP in derP_:
         if derP.P not in P_ or derP._P not in P_: continue
         add_(derP.P.He, derP.He, iRt)
-        add_(derP._P.He, deepcopy(negate(derP._P.He)), iRt)  # reverse d signs downlink
+        # should be deepcopy He first, else it will be negated before copy
+        if derP._P.He: add_(derP._P.He,negate(deepcopy(derP._P.He)), iRt)  # reverse d signs downlink (derP._P.He could be empty)
         PP.link_ += [derP]; derP.roott[fd] = PP
         PP.Vt = np.add(PP.Vt,derP.vt)
         PP.Rt = np.add( np.add(PP.Rt,derP.rt), iRt)
@@ -177,7 +178,7 @@ def sum2PP(root, P_, derP_, iRt, fd):  # sum links in Ps and Ps in PP
     celly_,cellx_ = [],[]
     for P in P_:
         PP.ptuple += P.ptuple
-        PP.derH[1:] = add_(PP.He, P.He)
+        add_(PP.He, P.He)
         for y,x in P.cells:
             PP.box = accum_box(PP.box, y, x); celly_+=[y]; cellx_+=[x]
     # pixmap:
@@ -265,4 +266,4 @@ def comp_ptuple_generic(_ptuple, ptuple, rn):  # 0der
 def unpack_last_link_(link_):  # unpack last link layer
 
     while link_ and isinstance(link_[-1], list): link_ = link_[-1]
-    return link_
+    return copy(link_)  # use copy because when fd == 1, this can prevent prelink_ is link_. Else we are packing P.link_ into P.link_[-1], which can cause endless recursion later (adding into a same link_)

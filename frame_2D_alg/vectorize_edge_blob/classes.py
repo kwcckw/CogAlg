@@ -6,7 +6,6 @@ from typing import Any, NamedTuple, Tuple
 from copy import copy, deepcopy
 from class_cluster import CBase, CBaseLite
 from types import SimpleNamespace
-from frame_blobs import Cbox
 
 from .filters import ave_dangle, ave_dI, ave_Pd, ave_Pm, aves
 '''
@@ -26,52 +25,82 @@ def add_(HE, He, irdnt=None):  # unpack tuples (formally lists) down to numerica
 
     if He:
         if HE:
-            for Lay,lay in zip_longest(HE, He, fillvalue=[]):  # always list He
-                if lay:
-                    if Lay:
-                        if isinstance(Lay[2][0],list):  # and isinstance(lay[2][0],list), and par[0]==Par[0]: same typ, in cpr version?
-                            add_(Lay, lay, irdnt)  # unpack and sum Ets and Hs
+            if isinstance(He[2][0], list):
+                if not isinstance(HE[2][0], list):  # HE is md_, He is derH
+                    HE[:] = ['derH',HE[1],[['md_', copy(HE[1]), HE[2]]]]  # convert md_ into derH       
+                for Lay,lay in zip_longest(HE[2], He[2], fillvalue=[]):  # always list He
+                    if lay:
+                        if Lay:
+                            if isinstance(Lay[2][0],list):  # and isinstance(lay[2][0],list), and par[0]==Par[0]: same typ, in cpr version?
+                                add_(Lay, lay, irdnt)  # unpack and sum Ets and Hs
+                            else:
+                                Lay[2] = np.add(Lay[2],lay[2])  # both have numericals in Hs
+                            np.add(Lay[1],lay[1])  # sum Et, always numerical
+                            if irdnt is not None: 
+                                Lay[1][2:4] = np.add(Lay[1][2:4], irdnt)
                         else:
-                            Lay[2] = np.add(Lay[2],lay[2])  # both have numericals in Hs
-                        np.add(Lay[1],lay[1])  # sum Et, always numerical
-                        if irdnt: np.add(Lay[1][2,3], irdnt)
-                    else:
-                        HE += [deepcopy(lay)]  # skip deepcopy if numerical?
+                            HE += [deepcopy(lay)]  # skip deepcopy if numerical?
+        
+            else:
+                HE[2] = np.add(HE[2], He[2])  # sum flat list of [m,d,m,d,m,d...]  
+        else:
+            HE[:] = deepcopy(He)  # copy the 1st He into empty HE
 
+        # add irdnt if it's not None
+        if irdnt is not None:
+            HE[1][2:4] = np.add(HE[1][2:4], irdnt)
 
-def comp_(_H,H, rn=1):  # unpack tuples (formally lists) down to numericals and compare them, always same typ?
+def comp_(_He,He, rn=1):  # unpack tuples (formally lists) down to numericals and compare them, always same typ?
 
     Et = 0,0,0,0,0,0  # Vm,Vd, Rm,Rd, Dm,Dd
     dH = []
-    for _lay,lay in zip(_H,H):  # md_| ext | derH | subH | aggH, compare shared layers
-
-        if isinstance(_lay[0],list):  # _lay is He_, must be same for lay
-            et, dlay = comp_(_lay,lay, rn)  # unpack and comp params
-        else:
-            # lay Hs are md_s, numerical comp:
-            vm,vd,rm,rd,dm,dd = 0,0,0,0,0,0
-            dlay = []
-            for _d,d in zip(_lay[1::2], lay[1::2]):  # compare ds in md_ or ext
-                d*=rn  # normalize by accum span
-                diff = _d-d
-                match = min(abs(_d),abs(d))
-                if (_d<0) != (d<0): match *= -1  # if only one comparand is negative
-                vm += match; vd += diff
-                dlay += [match,diff]  # flat
-            et = [vm,vd,rm,rd,dm,dd]
-
-        Et = [E+e for E,e in zip(Et, et)]
-        dH += [dlay]
+    
+    if isinstance(_He[2], list):
+        for _lay,lay in zip(_He,He):  # md_| ext | derH | subH | aggH, compare shared layers
+    
+            if isinstance(_lay[0],list):  # _lay is He_, must be same for lay
+                et, dlay = comp_(_lay,lay, rn)  # unpack and comp params
+            else:
+                # lay Hs are md_s, numerical comp:
+                vm,vd,rm,rd,dm,dd = 0,0,0,0,0,0
+                dlay = []
+                for _d,d in zip(_lay[1::2], lay[1::2]):  # compare ds in md_ or ext
+                    d*=rn  # normalize by accum span
+                    diff = _d-d
+                    match = min(abs(_d),abs(d))
+                    if (_d<0) != (d<0): match *= -1  # if only one comparand is negative
+                    vm += match; vd += diff
+                    dlay += [match,diff]  # flat
+                et = [vm,vd,rm,rd,dm,dd]
+    
+            Et = [E+e for E,e in zip(Et, et)]
+            dH += [dlay]
+    else:  # md_
+        # Hs are md_s, numerical comp:
+        vm,vd,rm,rd,dm,dd = 0,0,0,0,0,0
+        dlay = []
+        for _d,d in zip(_He[2][1::2], He[2][1::2]):  # compare ds in md_ or ext
+            d*=rn  # normalize by accum span
+            diff = _d-d
+            match = min(abs(_d),abs(d))
+            if (_d<0) != (d<0): match *= -1  # if only one comparand is negative
+            vm += match; vd += diff
+            dH += [match,diff]  # flat
+        Et = [vm,vd,rm,rd,dm,dd]
+        
+    
     return Et, dH
 
 
 def negate(He):
 
-    for lay in He[2]:
-        if isinstance(lay[2][0], list): negate(lay)
-        else:
-            for i,d in enumerate(lay[2][1::2]):
-                lay[2][1] = -d
+    if isinstance(He[2], list):
+        for lay in He[2]:
+            if isinstance(lay[2][0], list): negate(lay)
+            else:
+                lay[2][1::2] = [-d for d in lay[2][1::2]] 
+    else:  # md_
+        He[2][1::2] = [-d for d in He[2][1::2]] 
 
 
 def comp_angle(_A, A):  # angle = [dy,dx], rn doesn't matter
@@ -94,7 +123,16 @@ class z(SimpleNamespace):
     def __isub__(T, t): return T - t
 
     def __add__(T, t):
-        add_(T,t)
+        
+        # add_ won't work because ptuple is not a list
+        # sum ptuple
+        if T.typ == 'ptuple':
+            for param in list(T.__dict__)[1:]:  # [1:] to skip typ   
+                V = getattr(T, param); v = getattr(t, param)
+                if isinstance(V, list): setattr(T, param, np.add(V,v))
+                else:                   setattr(T, param, V+v)
+
+        return T
 
 # check and update new default value
 
@@ -113,23 +151,23 @@ def Cptuple(typ='ptuple',I=None, G=None, M=None, Ma=None, angle=None, L=None):
 
 
 def Cedge(typ='edge',root=None, node_=None, box=None, mask__=None, Rt=None, valt=None, rdnt=None, He=None, fback_=None):
-    params_set = ('root', 'node_', 'box', 'mask__', 'Rt', 'valt', 'rdnt', 'derH', 'fback_')
-    default_value = (None,[[],[]],[inf,inf,-inf,-inf],None,[1,1],[0,0],[1,1], ['md_', [0,0,1,1,0,0], []], [])
+    params_set = ('root', 'node_', 'box', 'mask__', 'Rt', 'valt', 'rdnt', 'He', 'fback_')
+    default_value = (None,[[],[]],[inf,inf,-inf,-inf],None,[1,1],[0,0],[1,1], [], [])
     instance = z(typ=typ, root=root, node_=node_, box=box, mask__=mask__, Rt=Rt, valt=valt, rdnt=rdnt, He=He, fback_=fback_)
     init_default(instance, params_set, default_value)
     return instance
 
 def CP(typ='P', yx=None, axis=None, cells=None, dert_=None, He=None, link_=None):
-    params_set = ('yx', 'axis', 'cells', 'dert_', 'derH', 'link_')
-    default_value = ([0,0],[0,0],{},[],['md_', [0,0,1,1,0,0], []], [[]])
+    params_set = ('yx', 'axis', 'cells', 'dert_', 'He', 'link_')
+    default_value = ([0,0],[0,0],{},[],[], [[]])
     instance = z(typ=typ, yx=yx,axis=axis,cells=cells,dert_=dert_, He=He, link_=link_)
     init_default(instance, params_set, default_value)
     return instance
 
-def CderP(typ='derP', P=None,_P=None, derH=None, vt=None, rt=None, S=None, A=None, roott=None):
-    params_set = ('P', '_P', 'derH', 'vt', 'rt', 'S', 'A', 'roott')
-    default_value = (None,None,['md_', [0,0,1,1,0,0], []],[0,0],[1,1], 0, 0, [[],[]])
-    instance = z(typ=typ, P=P, _P=_P, derH=derH, vt=vt, rt=rt, S=S, A=A, roott=roott)
+def CderP(typ='derP', P=None,_P=None, He=None, vt=None, rt=None, S=None, A=None, roott=None):
+    params_set = ('P', '_P', 'He', 'vt', 'rt', 'S', 'A', 'roott')
+    default_value = (None,None,[],[0,0],[1,1], 0, 0, [[],[]])
+    instance = z(typ=typ, P=P, _P=_P, He=He, vt=vt, rt=rt, S=S, A=A, roott=roott)
     init_default(instance, params_set, default_value)
     return instance
 
@@ -158,19 +196,19 @@ def CPP(typ='PP',
         fback_ = None): # feedback [[aggH,valt,rdnt,dect]] per node layer, maps to node_H
 
 
-    params_set = ('fd','ptuple', 'derH',
+    params_set = ('fd','ptuple', 'He',
                   'valt', 'rdnt', 'dect', 'link_', 'node_',
                   'ext', 'rng', 'box',
                   'P_','mask__',
                   'Vt','Rt','Dt','root','fback_')
 
-    default_value = (0,Cptuple(), ['md_', [0,0,1,1,0,0], []],
+    default_value = (0,Cptuple(), [],
                      [0,0], [1,1], [0,0], [], [],
                      [0,0, [0,0]], 1, [inf,inf,-inf,-inf],
                      [],None,
                      [0,0],[1,1],[0,0],[None],[])
 
-    instance = z(typ=typ, fd=fd,ptuple=ptuple, He=[],
+    instance = z(typ=typ, fd=fd,ptuple=ptuple, He=He,
                  valt=valt, rdnt=rdnt, dect=dect, link_=link_, node_=node_,
                  ext=ext, rng=rng, box=box,
                  P_=P_,mask__=mask__,
@@ -184,7 +222,7 @@ def CPP(typ='PP',
 def Cgraph(typ='graph',
            fd = None,  # fork if flat layers?
            ptuple = None,  # default P
-           derH = None,  # from PP, not derHv
+           He = None,  # from PP, not derHv
            # graph-internal, generic:
            aggH = None,  # [[subH,valt,rdnt,dect]], subH: [[derH,valt,rdnt,dect]]: 2-fork composition layers
            valt = None,  # sum ptuple, derH, aggH
@@ -224,7 +262,7 @@ def Cgraph(typ='graph',
            nval = None, # of open links: base alt rep
            id_H = None):  # indices in the list of all possible layers | forks, not used with fback merging
 
-    params_set = ('fd','ptuple', 'derH',
+    params_set = ('fd','ptuple', 'He',
                   'aggH', 'valt', 'rdnt', 'dect', 'link_', 'node_',
                   'rimH', 'RimH', 'extH', 'evalt', 'erdnt', 'edect', 'ext', 'rng', 'box',
                   'alt_graph_','avalt','ardnt','adect',
@@ -232,7 +270,7 @@ def Cgraph(typ='graph',
                   'Vt','Rt','Dt','root','fback_','compared_','Rdn',
                   'it','depth','nval','id_H')
 
-    default_value = (0,Cptuple(), ['md_', [0,0,1,1,0,0], []],
+    default_value = (0,Cptuple(), [],
                      [], [0,0], [1,1], [0,0], [], [],
                      [], [], [], [0,0], [1,1], [0,0], [0,0, [0,0]], 1, [inf,inf,-inf,-inf],
                      [],[0,0],[1,1],[0,0],
@@ -240,7 +278,7 @@ def Cgraph(typ='graph',
                      [0,0],[1,1],[0,0],[None],[],[],0,
                      [None, None],0,0,[[]])
 
-    instance = z(typ=typ, fd=fd,ptuple=ptuple, derH=derH,
+    instance = z(typ=typ, fd=fd,ptuple=ptuple, He=He,
                  aggH=aggH, valt=valt, rdnt=rdnt, dect=dect, link_=link_, node_=node_,
                  rimH=rimH, RimH=RimH, extH=extH, evalt=evalt, erdnt=erdnt, edect=edect, ext=ext, rng=rng, box=box,
                  alt_graph_=alt_graph_,avalt=avalt,ardnt=ardnt,adect=adect,
