@@ -4,7 +4,7 @@ from math import floor
 from collections import deque
 from itertools import product
 from .filters import ave_g, ave_dangle, ave_daangle
-from .classes import CP, Cedge, CH, Cptuple
+from .classes import CP, Cedge, Cptuple
 
 from utils import box2slice
 
