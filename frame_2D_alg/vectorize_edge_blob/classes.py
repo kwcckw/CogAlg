@@ -20,87 +20,85 @@ from .filters import ave_dangle, ave_dI, ave_Pd, ave_Pm, aves
     longer names are normally classes
 '''
 
-
-def add_(HE, He, irdnt=None):  # unpack tuples (formally lists) down to numericals and sum them
+def add_(HE, He, irdnt=[]):  # unpack tuples (formally lists) down to numericals and sum them
 
     if He:
         if HE:
+            ddepth = He[0] - HE[0]  # HE[0] is nesting depth, nest to He depth: md_-> derH-> subH-> aggH:
+            while ddepth > 0:
+                He = [He[0]+1, *He[1], [He]]
+                ddepth -= 1
+
             if isinstance(He[2][0], list):
-                if not isinstance(HE[2][0], list):  # HE is md_, He is derH
-                    HE[:] = ['derH',HE[1],[['md_', copy(HE[1]), HE[2]]]]  # convert md_ into derH       
                 for Lay,lay in zip_longest(HE[2], He[2], fillvalue=[]):  # always list He
                     if lay:
                         if Lay:
                             if isinstance(Lay[2][0],list):  # and isinstance(lay[2][0],list), and par[0]==Par[0]: same typ, in cpr version?
                                 add_(Lay, lay, irdnt)  # unpack and sum Ets and Hs
                             else:
-                                Lay[2] = np.add(Lay[2],lay[2])  # both have numericals in Hs
+                                Lay[2] = np.add(Lay[2],lay[2])  # both have numericals in H
                             np.add(Lay[1],lay[1])  # sum Et, always numerical
-                            if irdnt is not None: 
-                                Lay[1][2:4] = np.add(Lay[1][2:4], irdnt)
+                            if irdnt:
+                                Lay[1][2] += irdnt[0]; Lay[1][3] += irdnt[1]
                         else:
                             HE += [deepcopy(lay)]  # skip deepcopy if numerical?
-        
             else:
-                HE[2] = np.add(HE[2], He[2])  # sum flat list of [m,d,m,d,m,d...]  
+                HE[2] = np.add(HE[2], He[2])  # sum flat lists: [m,d,m,d,m,d...]
         else:
             HE[:] = deepcopy(He)  # copy the 1st He into empty HE
+        if irdnt:
+            HE[1][2] += irdnt[0]; HE[1][3] += irdnt[1]
 
-        # add irdnt if it's not None
-        if irdnt is not None:
-            HE[1][2:4] = np.add(HE[1][2:4], irdnt)
 
-def comp_(_He,He, rn=1):  # unpack tuples (formally lists) down to numericals and compare them, always same typ?
+def comp_(_He,He, rn=1, fagg=0):  # unpack tuples (formally lists) down to numericals and compare them
 
-    Et = 0,0,0,0,0,0  # Vm,Vd, Rm,Rd, Dm,Dd
-    dH = []
-    
-    if isinstance(_He[2], list):
-        for _lay,lay in zip(_He,He):  # md_| ext | derH | subH | aggH, compare shared layers
-    
-            if isinstance(_lay[0],list):  # _lay is He_, must be same for lay
-                et, dlay = comp_(_lay,lay, rn)  # unpack and comp params
-            else:
-                # lay Hs are md_s, numerical comp:
-                vm,vd,rm,rd,dm,dd = 0,0,0,0,0,0
-                dlay = []
-                for _d,d in zip(_lay[1::2], lay[1::2]):  # compare ds in md_ or ext
-                    d*=rn  # normalize by accum span
-                    diff = _d-d
-                    match = min(abs(_d),abs(d))
-                    if (_d<0) != (d<0): match *= -1  # if only one comparand is negative
-                    vm += match; vd += diff
-                    dlay += [match,diff]  # flat
-                et = [vm,vd,rm,rd,dm,dd]
-    
-            Et = [E+e for E,e in zip(Et, et)]
+    ddepth = abs(_He[0] - He[0])
+    if ddepth:  # unpack the deeper He: md_<-derH <-subH <-aggH:
+        uHe = [_He,He][He >_He]
+        while ddepth > 0:
+            uHe = uHe[2][0]  # unpack 1st layer of deeper He to compare
+            ddepth -= 1
+        [_He,He][He >_He] = uHe
+
+    if isinstance(_He[2][0], list):  # _lay is He_, must be same for lay?
+        Et = 0,0,0,0,0,0  # Vm,Vd, Rm,Rd, Dm,Dd
+        dH = []
+        for _lay,lay in zip(_He[2],He[2]):  # md_| ext | derH | subH | aggH, compare shared layers
+            et, dlay = comp_(_lay,lay, rn)  # unpack and comp bottom ds,
+            # assuming all layers have the same nesting?
+            Et = [E+e for E,e in zip(Et,et)]
             dH += [dlay]
-    else:  # md_
-        # Hs are md_s, numerical comp:
+    else:  # H is md_, numerical comp:
         vm,vd,rm,rd,dm,dd = 0,0,0,0,0,0
-        dlay = []
+        dH = []
         for _d,d in zip(_He[2][1::2], He[2][1::2]):  # compare ds in md_ or ext
-            d*=rn  # normalize by accum span
+            d *= rn  # normalize by accum span
             diff = _d-d
             match = min(abs(_d),abs(d))
             if (_d<0) != (d<0): match *= -1  # if only one comparand is negative
             vm += match; vd += diff
             dH += [match,diff]  # flat
-        Et = [vm,vd,rm,rd,dm,dd]
-        
-    
+            ''' old version:
+            if fagg:
+                dect = [0,0]
+                for fd, (ptuple,Ptuple) in enumerate(zip((mtuple,dtuple),(Mtuple,Dtuple))):
+                    for (par, max, ave) in zip(ptuple, Ptuple, aves):  # different ave for comp_dtuple
+                        if fd: dect[1] += abs(par)/ abs(max) if max else 1
+                        else:  dect[0] += (par+ave)/ (max+ave) if max else 1
+            dect[0] = dect[0]/6; dect[1] = dect[1]/6  # ave of 6 params
+            '''
+        Et = [vm,vd,rm,rd]
+        if fagg: Et = [dm,dd]
+
     return Et, dH
 
 
 def negate(He):
 
-    if isinstance(He[2], list):
-        for lay in He[2]:
-            if isinstance(lay[2][0], list): negate(lay)
-            else:
-                lay[2][1::2] = [-d for d in lay[2][1::2]] 
+    if isinstance(He[2][0], list):
+        for lay in He[2]: negate(lay)
     else:  # md_
-        He[2][1::2] = [-d for d in He[2][1::2]] 
+        He[2][1::2] = [-d for d in He[2][1::2]]
 
 
 def comp_angle(_A, A):  # angle = [dy,dx], rn doesn't matter
@@ -123,18 +121,13 @@ class z(SimpleNamespace):
     def __isub__(T, t): return T - t
 
     def __add__(T, t):
-        
-        # add_ won't work because ptuple is not a list
-        # sum ptuple
         if T.typ == 'ptuple':
-            for param in list(T.__dict__)[1:]:  # [1:] to skip typ   
+            for param in list(T.__dict__)[1:]:  # [1:] to skip typ
                 V = getattr(T, param); v = getattr(t, param)
                 if isinstance(V, list): setattr(T, param, np.add(V,v))
                 else:                   setattr(T, param, V+v)
-
         return T
 
-# check and update new default value
 
 def init_default(instance, params_set, default_value):
     for param, value in zip(params_set, default_value):

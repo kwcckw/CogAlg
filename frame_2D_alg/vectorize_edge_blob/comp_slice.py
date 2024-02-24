@@ -39,7 +39,7 @@ len prior root_ sorted by G is root.rdn, to eval for inclusion in PP or start ne
 def der_recursion(root, PP, fd=0):  # node-mediated correlation clustering: keep same Ps and links, increment link derH, then P derH in sum2PP
 
     if fd:  # add prelinks per P if not initial call:
-        for P in PP.P_: P.link_ += [unpack_last_link_(P.link_)]
+        for P in PP.P_: P.link_ += copy([unpack_last_link_(P.link_)])
 
     rng_recursion(PP, rng=1, fd=fd)  # extend PP.link_, derHs by same-der rng+ comp
     form_PP_t(PP, PP.P_, iRt = PP.Rt)  # der+ is mediated by form_PP_t
@@ -57,15 +57,13 @@ def rng_recursion(PP, rng=1, fd=0):  # similar to agg+ rng_recursion, but contig
             _prelink_ = P.link_.pop()  # old prelinks per P
             for _link in _prelink_:
                 _P = _link._P if fd else _link
-                # derH[1] is derH.H
-                if _P.He and P.He and len(_P.He[2])!= len(P.He[2]): continue  # compare same der layers only (He may empty now)
                 dy,dx = np.subtract(_P.yx, P.yx)
                 distance = np.hypot(dy,dx)  # distance between P midpoints, /= L for eval?
                 if distance < rng:  # | rng * ((P.val+_P.val) / ave_rval)?
                     mlink = comp_P(_link if fd else [_P,P, distance,[dy,dx]], fd)  # return link if match
                     if mlink:
                         V += mlink.vt[0]  # unpack last link layer:
-                        link_ = P.link_[-1] if PP.He and PP.He[0] == 'derH' else P.link_  # der++ if derH.depth==1
+                        link_ = P.link_[-1] if PP.He and PP.He[0] else P.link_  # der++ if PP.He[0] depth==1
                         if rng > 1:
                             if rng == 2: link_[:] = [link_[:]]  # link_ -> link_H
                             if len(link_) < rng: link_ += [[]]  # new link_
@@ -87,7 +85,6 @@ def rng_recursion(PP, rng=1, fd=0):  # similar to agg+ rng_recursion, but contig
     der++ is tested in PPds formed by rng++, no der++ inside rng++: high diff @ rng++ termination only?
     '''
 
-# der+ not updated yet
 def comp_P(link, fd):
 
     if isinstance(link,z): _P, P = link._P, link.P  # in der+
@@ -96,28 +93,25 @@ def comp_P(link, fd):
 
     if _P.He and P.He:
         # der+: append link derH, init in rng++ from form_PP_t
-        (vm,vd,rm,rd,dm,dd),H = comp_(_P.He, P.He, rn=rn)  # we still getting dm, dd from comp_ although it's not relevant
-        vt= [vm, vd]; rt = [rm, rd]
-        rt[0] += vd > vm; rt[1] += vm > vd
+        (vm,vd,rm,rd),H = comp_(_P.He, P.He, rn=rn)
+        rm += vd > vm; rd += vm > vd
         aveP = P_aves[1]
     else:
         # rng+: add link derH
         H = comp_ptuple(_P.ptuple, P.ptuple, rn)
-        vt = [sum(H[::2]), sum(abs(d) for d in H[1::2])]
-        rt = [1+(vt[1]>vt[0]), 1+(1-(vt[1]>vt[0]))]
+        vm = sum(H[::2]); vd = sum(abs(d) for d in H[1::2])
+        rm = 1 + vd > vm; rd = 1 + vm > vd
         aveP = P_aves[0]
 
-    if vt[0] > aveP*rt[0]:  # always rng+
+    if vm > aveP*rm:  # always rng+
         if fd:
             He = link.He
-            if He[0] == 'md_':  # add nesting md_-> derH:
-                He = link.He = ['derH',copy(He[1]),[He]]
-            He[1] = np.add(He[1],[*vt,*rt,0,0])
-            He[2] += [['md',[*vt,*rt,0,0], H]]  # so we need add md_ here for a new md_ layer, instead of just their H
-            link.vt=np.add(link.vt,vt); link.rt=np.add(link.rt,rt)
+            if not He[0]: He = link.He = [1,*He[1],[He]]  # nest md_ to derH
+            He[1] = np.add(He[1], [vm,vd,rm,rd])
+            He[2] += [[0, [vm,vd,rm,rd], H]]
+            link.vt = np.add(link.vt,[vm,vd]); link.rt = np.add(link.rt,[rm,rd])
         else:
-            md_ = ['md_',[*vt,*rt,0,0], H]
-            link = CderP(typ='derP', P=P,_P=_P, He=md_, vt=copy(vt), rt=copy(rt), S=S, A=A, roott=[[],[]])
+            link = CderP(typ='derP', P=P,_P=_P, He=[0,[vm,vd,rm,rd],H], vt=[vm,vd], rt=[rm,rd], S=S, A=A, roott=[[],[]])
 
         return link
 
@@ -166,9 +160,9 @@ def sum2PP(root, P_, derP_, iRt, fd):  # sum links in Ps and Ps in PP
     S,A = 0, [0,0]
     for derP in derP_:
         if derP.P not in P_ or derP._P not in P_: continue
-        add_(derP.P.He, derP.He, iRt)
-        # should be deepcopy He first, else it will be negated before copy
-        if derP._P.He: add_(derP._P.He,negate(deepcopy(derP._P.He)), iRt)  # reverse d signs downlink (derP._P.He could be empty)
+        if derP.He:
+            add_(derP.P.He, derP.He, iRt)
+            add_(derP._P.He, negate(deepcopy(derP.He)), iRt)
         PP.link_ += [derP]; derP.roott[fd] = PP
         PP.Vt = np.add(PP.Vt,derP.vt)
         PP.Rt = np.add( np.add(PP.Rt,derP.rt), iRt)
@@ -266,4 +260,4 @@ def comp_ptuple_generic(_ptuple, ptuple, rn):  # 0der
 def unpack_last_link_(link_):  # unpack last link layer
 
     while link_ and isinstance(link_[-1], list): link_ = link_[-1]
-    return copy(link_)  # use copy because when fd == 1, this can prevent prelink_ is link_. Else we are packing P.link_ into P.link_[-1], which can cause endless recursion later (adding into a same link_)
+    return link_
