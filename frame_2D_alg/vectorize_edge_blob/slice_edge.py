@@ -56,8 +56,8 @@ def slice_edge(blob, verbose=False):
             # search in max_ path
             adjacents = max_ & {*product(range(y-1,y+2), range(x-1,x+2))}   # search neighbors
             maxQue.extend(((_y, _x, P) for _y, _x in adjacents))
-            max_ -= adjacents   # set difference = first set AND not both sets: https://www.scaler.com/topics/python-set-difference/
-            max_ -= P.cells     # remove all maxes in the way
+            max_ -= adjacents  # set difference = first set AND not both sets: https://www.scaler.com/topics/python-set-difference/
+            max_ -= P.cells  # remove prior maxes
 
             if verbose:
                 progress += step; print(f"\rTracing max... {round(progress)} %", end=""); sys.stdout.flush()

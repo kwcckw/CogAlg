@@ -106,9 +106,9 @@ def comp_P(link, fd):
     if vm > aveP*rm:  # always rng+
         if fd:
             He = link.He
-            if not He[0]: He = link.He = [1,[*He[1]],[He]]  # nest md_ to derH (we need extra bracket for *, else it becomes [type, vm, vd, rm, rd, H])
-            He[1] = np.add(He[1], [vm,vd,rm,rd])
-            He[2] += [[0, [vm,vd,rm,rd], H]]
+            if not He[0]: He = link.He = [1,[*He[1]],[He]]  # nest md_ as derH
+            He[1] = np.add(He[1],[vm,vd,rm,rd])
+            He[2] += [[0, [vm,vd,rm,rd], H]]  # nesting, Et, H
             link.vt = np.add(link.vt,[vm,vd]); link.rt = np.add(link.rt,[rm,rd])
         else:
             link = CderP(typ='derP', P=P,_P=_P, He=[0,[vm,vd,rm,rd],H], vt=[vm,vd], rt=[rm,rd], S=S, A=A, roott=[[],[]])
@@ -164,8 +164,8 @@ def sum2PP(root, P_, derP_, iRt, fd):  # sum links in Ps and Ps in PP
             add_(derP.P.He, derP.He, iRt)
             add_(derP._P.He, negate(deepcopy(derP.He)), iRt)
         PP.link_ += [derP]; derP.roott[fd] = PP
-        PP.Vt = [V+v for V, v in zip(PP.Vt, derP.vt)]
-        PP.Rt = [R+r+ir for R,r,ir in zip(PP.Rt,derP.rt,iRt)]
+        PP.Vt = [V+v for V,v in zip(PP.Vt, derP.vt)]
+        PP.Rt = [R+r+ir for R,r,ir in zip(PP.Rt, derP.rt, iRt)]
         derP.A = np.add(A,derP.A); S += derP.S
     PP.ext = [len(P_), S, A]  # all from links
     # += Ps:
@@ -186,14 +186,13 @@ def sum2PP(root, P_, derP_, iRt, fd):  # sum links in Ps and Ps in PP
 
 def feedback(root):  # in form_PP_, append new der layers to root PP, single vs. root_ per fork in agg+
 
-    HE, Valt, Rdnt = [],[],[]
+    HE, Valt, Rdnt = [],[],[]  # root update
     while root.fback_:
         He, valt, rdnt = root.fback_.pop(0)
-        add_(HE, He); Valt = [V+v for V,v in zip(Valt, valt)]; Rdnt = [R+r for R,r in zip(Rdnt, rdnt)]
-
-    add_(root.He, HE if HE[0] == 1 else HE[2][-1])  # sum md_ or last md_ in H
+        Valt = [V+v for V,v in zip(Valt, valt)]; Rdnt = [R+r for R,r in zip(Rdnt, rdnt)]
+        add_(HE, He)
+    add_(root.He, HE if HE[0] else HE[2][-1])  # sum md_ or last md_ in H
     root.valt = [V+v for V,v in zip(root.valt, Valt)]; root.rdnt = [R+r for R,r in zip(root.rdnt, Rdnt)]
-
 
     if root.typ != "edge":  # skip if root is Edge
         rroot = root.root  # single PP.root, can't be P
