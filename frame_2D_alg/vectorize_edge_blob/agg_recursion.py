@@ -1,10 +1,11 @@
 import numpy as np
 from copy import deepcopy, copy
 from itertools import combinations, zip_longest
-from .classes import CderP, Cgraph, CderG, CderH
+from .classes import CderP, Cgraph, CderG, add_, comp_
 from .filters import aves, ave_mL, ave_dangle, ave, ave_distance, G_aves, ave_Gm, ave_Gd
 from .slice_edge import slice_edge, comp_angle
-from .comp_slice import der_recursion, comp_derH, sum_derH, comp_ptuple, sum_dertuple, comp_dtuple, get_match
+from .comp_slice import der_recursion, comp_ptuple
+from utils import box2center
 
 '''
 Blob edges may be represented by higher-composition patterns, etc., if top param-layer match,
@@ -45,7 +46,9 @@ def vectorize_root(blob):  # vectorization in 3 composition levels of xcomp, clu
     for fd, node_ in enumerate(edge.node_):  # always node_t
         if edge.valt[fd] * (len(node_)-1)*(edge.rng+1) > G_aves[fd] * edge.rdnt[fd]:
 
-            for PP in node_: PP.root = None
+            for i, PP in enumerate(node_): 
+                node_[i] = Cgraph(PP=PP) 
+                PP.root = None
             # discontinuous PP rng+ cross-comp, cluster -> G_t
             agg_recursion(None, edge, node_, nrng=1, fagg=1)  # agg+, no Cgraph nodes
 
@@ -89,7 +92,7 @@ def rng_recursion(rroot, root, Q, Et, nrng=1):  # rng++/ G_, der+/ link_ if call
         Gt_ = Q  # prelinks for init or recursive rng+, form new link_, or make it general?
         for (_G, G) in Gt_:
             if _G in G.compared_: continue
-            dy = _G.box.cy - G.box.cy; dx = _G.box.cx - G.box.cx  # compute distance between node centers:
+            dy, dx = box2center(G.box)  # compute distance between node centers:
             dist = np.hypot(dy, dx)
             # combined pairwise eval (directional val?) per rng+:
             if nrng==1 or ((G.Vt[0]+_G.Vt[0])/ (dist/ave_distance) > ave*(G.Rt[0]+_G.Rt[0])):
@@ -305,21 +308,26 @@ def sum_last_lay(G, fd):  # eLay += last layer of link.daggH (dsubH|ddaggH)
 def comp_G(link, Et):
 
     _G, G = link._G, link.G
-    Valt, Rdnt, Dect, Extt = [0,0], [1,1], [0,0], []
+    Et = [0,0,1,1,0,0]
     # separate P ptuple and PP derH, empty derH in single-P G, + empty aggH in single-PP G:
     # / P:
-    dertv, valt, rdnt, dect = comp_derH(_G.ptuple, G.ptuple, rn=1, fagg=1)
-    Valt = np.add(Valt,valt); Rdnt = np.add(Rdnt,rdnt); Dect = np.divide(np.add(Dect,dect), 2)
+    et, H = comp_ptuple(_G.ptuple, G.ptuple, rn=1, fagg=1)
+    Et = [E + e for E, e in zip(Et, et)]; Et[4]/= 2; Et[5] /= 2
     # / PP:
-    extt,valt,rdnt,dect = comp_ext(_G.ext,G.ext)
-    Valt = np.add(Valt, valt); Rdnt = np.add(Rdnt, rdnt); Dect = np.divide(np.add(Dect,dect), 2)
-    for Ext,ext in zip(Extt,extt): sum_ext(Ext,ext)
-    dderH = [dertv]
-    if _G.derH.H and G.derH.H:  # empty in single-P Gs?
-        ddertv_, valt, rdnt, dect = comp_derH(_G.derH, G.derH, rn=1, fagg=1)
-        Valt = np.add(Valt,valt); Rdnt = np.add(Rdnt,rdnt); Dect = np.divide(np.add(Dect,dect), 2)
-        dderH += ddertv_
-    dderH = CderH(H=dderH,valt=copy(Valt),rdnt=copy(Rdnt),dect=copy(Dect), ext = extt, depth=1)
+    # ext:
+    etx, Hx = comp_(_G.ext,G.ext,fagg=1)
+    Et = [E + e for E, e in zip(Et, etx)]; Et[4]/= 2; Et[5] /= 2
+    Extt = [0, copy(et), deepcopy(Hx)]  # init 1st Extt
+    # He:
+    dderH = [[0, et, H]]  # 1st md_
+    if (_G.He and G.He) or True:  # empty in single-P Gs?
+        ddderH = [1, copy(Et), dderH]
+        et, H= comp_(ddderH, ddderH, rn=1, fagg=1)
+        Et = [E + e for E, e in zip(Et, et)]; Et[4]/= 2; Et[5] /= 2
+        dderH += [[0, et, H]]
+    dderH = [1, copy(Et), dderH]
+    
+    # below not updated
     # / G:
     if _G.aggH and G.aggH:
         H = [dderH]
