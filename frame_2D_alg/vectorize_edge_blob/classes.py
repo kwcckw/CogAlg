@@ -20,7 +20,7 @@ from .filters import ave_dangle, ave_dI, ave_Pd, ave_Pm, aves
     longer names are normally classes
 '''
 
-def add_(HE, He, irdnt=[]):  # unpack tuples (formally lists) down to numericals and sum them
+def add_(HE, He, irdnt=[], fagg=0):  # unpack tuples (formally lists) down to numericals and sum them
 
     if He:  # to be summed
         if HE:  # to sum in
@@ -36,9 +36,12 @@ def add_(HE, He, irdnt=[]):  # unpack tuples (formally lists) down to numericals
                                 add_(Lay, lay, irdnt)  # unpack and sum Ets and Hs
                             else:
                                 Lay[2] = np.add(Lay[2],lay[2])  # both have numericals in H
-                            Lay[1] = np.add(Lay[1],lay[1])  # sum Et, always numerical
-                            if irdnt:
-                                Lay[1][2] += irdnt[0]; Lay[1][3] += irdnt[1]
+                            # sum lay[1], always numerical:
+                            Et, et = Lay[1], lay[1]
+                            cEt = [E+e for E,e in zip(Et[:4],et[:4])]
+                            if irdnt: cEt[2:] = [E+e for E,e in zip(cEt[2:],irdnt)]
+                            if fagg:  cEt += [(E+e)/2 for E,e in zip(Et[4:],et[4:])]  # norm dect
+                            Lay[1][:] = cEt
                         else:
                             HE += [deepcopy(lay)]  # skip deepcopy if numerical?
             else:
@@ -55,7 +58,7 @@ def comp_(_He,He, rn=1, fagg=0):  # unpack tuples (formally lists) down to numer
     ddepth = abs(_depth - depth)
 
     if ddepth:  # unpack the deeper He: md_<-derH <-subH <-aggH:
-        uHe = [He, _He][_depth>depth]  # position of He should be inverted because if true, index is 1 (2nd element)
+        uHe = [He,_He][_depth>depth]
         while ddepth > 0:
             uHe = uHe[2][0]; ddepth -= 1  # comp 1st layer of deeper He:
         _cHe,cHe = [uHe,He] if _depth>depth else [_He,uHe]
@@ -65,21 +68,18 @@ def comp_(_He,He, rn=1, fagg=0):  # unpack tuples (formally lists) down to numer
         Et = 0,0,0,0,0,0  # Vm,Vd, Rm,Rd, Dm,Dd
         dH = []
         for _lay,lay in zip(_cHe[2],cHe[2]):  # md_| ext | derH | subH | aggH, compare shared layers
-            et, dlay = comp_(_lay,lay, rn, fagg)  # unpack and comp bottom ds, eval nesting per layer
-            Et = [E+e for E,e in zip(Et,et)]
-            dH += [dlay]
+            dpth, et, dlay = comp_(_lay,lay, rn, fagg)  # unpack and comp bottom ds, eval nesting per layer
+            Et = [E+e for E,e in zip(Et[:4],et[:4])]
+            if fagg: Et += [(E+e)/2 for E,e in zip(Et[4:],et[4:])]  # dect
+            dH += [[dpth, et, dlay]]
     else:  # H is md_, numerical comp:
         vm,vd,rm,rd, decm,decd = 0,0,0,0, 0,0
         dH = []
-        for i, (_d,d) in enumerate(zip(_cHe[2][1::2], cHe[2][1::2])):  # compare ds in md_ or ext
-            if isinstance(_d, list):  # angle in ext
-                match, didd = comp_angle((_d[0], _d[1]), (d[0] * rn,d[1] * rn))
-                d, _d = 2, 2  # for max compuation
-            else:    
-                d *= rn  # normalize by accum span
-                diff = _d-d
-                match = min(abs(_d),abs(d))
-                if (_d<0) != (d<0): match = -match  # if only one comparand is negative
+        for _d,d in zip(_cHe[2][1::2], cHe[2][1::2]):  # compare ds in md_ or ext
+            d *= rn  # normalize by accum span
+            diff = _d-d
+            match = min(abs(_d),abs(d))
+            if (_d<0) != (d<0): match = -match  # if only one comparand is negative
             if fagg:
                 maxm = max(abs(_d), abs(d))
                 decm += abs(match) / maxm if maxm else 1  # match / max possible match
@@ -92,7 +92,7 @@ def comp_(_He,He, rn=1, fagg=0):  # unpack tuples (formally lists) down to numer
         if fagg:
             L = len(dH); Et += [decm/L, decd/L]  # ave of compared dtuple
 
-    return Et, dH
+    return min(_depth,depth), Et, dH
 
 
 def negate(He):
@@ -213,7 +213,6 @@ def CPP(typ='PP',
 
     return instance
 
-
 def Cgraph(typ='graph',
            PP = None,  # for conversion
            fd = None,  # fork if flat layers?
@@ -281,10 +280,10 @@ def Cgraph(typ='graph',
                  P_=P_,mask__=mask__,
                  Vt=Vt,Rt=Rt,Dt=Dt,root=root,fback_=fback_,compared_=compared_,Rdn=Rdn,
                  it=it,depth=depth,nval=nval,id_H=id_H)
-    
+
     init_default(instance, params_set, default_value)
-    
-    # convert PP into graph
+
+    # convert PP to graph
     if PP is not None:
         for param_name in list(PP.__dict__)[1:-1]:  # [1:] to skip type, [:-1] to skip fback
             if param_name in params_set:
@@ -294,7 +293,7 @@ def Cgraph(typ='graph',
 
 
 def CderG(typ='derG', _G=None, G=None, daggH=None, Vt=None, Rt=None, Dt=None, S=None, A=None, roott=None):
-    
+
     params_set = ('_G','G','daggH','Vt','Rt','Dt','S', 'A', 'roott')
     default_value = (None,None,[],[0,0],[1,1],[0,0],0, [0,0], [None, None])
     instance = z(typ=typ, _G=_G, G=G, daggH=daggH, Vt=Vt, Rt=Rt, Dt=Dt, S=S, A=A, roott=roott)

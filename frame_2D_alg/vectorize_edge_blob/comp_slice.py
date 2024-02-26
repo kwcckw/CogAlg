@@ -94,13 +94,13 @@ def comp_P(link, fd):
     if _P.He and P.He:
         # der+: append link derH, init in rng++ from form_PP_t
         (vm,vd,rm,rd),H = comp_(_P.He, P.He, rn=rn)
-        rm += vd > vm; rd += vm > vd
+        rm += vd > vm; rd += vm >= vd
         aveP = P_aves[1]
     else:
         # rng+: add link derH
         H = comp_ptuple(_P.ptuple, P.ptuple, rn)
         vm = sum(H[::2]); vd = sum(abs(d) for d in H[1::2])
-        rm = 1 + vd > vm; rd = 1 + vm > vd
+        rm = 1 + vd > vm; rd = 1 + vm >= vd
         aveP = P_aves[0]
 
     if vm > aveP*rm:  # always rng+
@@ -157,7 +157,7 @@ def sum2PP(root, P_, derP_, iRt, fd):  # sum links in Ps and Ps in PP
     PP = CPP(typ='PP',fd=fd,root=root,P_=P_,rng=root.rng+1, Vt=[0,0],Rt=[1,1],Dt=[0,0], link_=[], box=[0,0,0,0],  # not inf,inf,-inf,-inf?
            ptuple = z(typ='ptuple',I=0, G=0, M=0, Ma=0, angle=[0,0], L=0), He=[])
     # += uplinks:
-    S,A,eVt,eRt = 0, [0,0], [0,0],[1,1]
+    S,A = 0, [0,0]
     for derP in derP_:
         if derP.P not in P_ or derP._P not in P_: continue
         if derP.He:
@@ -165,11 +165,9 @@ def sum2PP(root, P_, derP_, iRt, fd):  # sum links in Ps and Ps in PP
             add_(derP._P.He, negate(deepcopy(derP.He)), iRt)
         PP.link_ += [derP]; derP.roott[fd] = PP
         PP.Vt = [V+v for V,v in zip(PP.Vt, derP.vt)]
-        eVt = [V+v for V,v in zip(eVt, derP.vt)]  # et of ext from derP's et?
         PP.Rt = [R+r+ir for R,r,ir in zip(PP.Rt, derP.rt, iRt)]
-        eRt = [R+r for R,r in zip(eRt, derP.rt)]
         derP.A = np.add(A,derP.A); S += derP.S
-    PP.ext = [0, [*eVt, *eRt], [0,len(P_), 0,S, 0,A]]  # all from links (depth 0 for ext too? and added 0 for m value)
+    PP.ext = [len(P_), S, A]  # all from links
     # += Ps:
     celly_,cellx_ = [],[]
     for P in P_:
@@ -188,7 +186,7 @@ def sum2PP(root, P_, derP_, iRt, fd):  # sum links in Ps and Ps in PP
 
 def feedback(root):  # in form_PP_, append new der layers to root PP, single vs. root_ per fork in agg+
 
-    HE, Valt, Rdnt = [],[0,0],[0,0]  # root update (we need values in valt and rdnt to sum with zip)
+    HE, Valt, Rdnt = deepcopy(root.fback_.pop(0))  # root update
     while root.fback_:
         He, valt, rdnt = root.fback_.pop(0)
         Valt = [V+v for V,v in zip(Valt, valt)]; Rdnt = [R+r for R,r in zip(Rdnt, rdnt)]
@@ -204,22 +202,23 @@ def feedback(root):  # in form_PP_, append new der layers to root PP, single vs.
         if fback_ and (len(fback_)==len(node_)):  # all nodes terminated and fed back
             feedback(rroot)  # sum2PP adds derH per rng, feedback adds deeper sub+ layers
 
-
+# this is replaced by comp_?
 def comp_dtuple(_ptuple, ptuple, rn, fagg=0):
 
     mtuple, dtuple = [],[]
     if fagg: Mtuple, Dtuple = [],[]
 
     for _par, par, ave in zip(_ptuple, ptuple, aves):  # compare ds only
-        npar = par * rn
-        mtuple += [get_match(_par, npar) - ave]
-        dtuple += [_par - npar]
+        par *= rn
+        mtuple += [get_match(_par, par) - ave]
+        dtuple += [_par - par]
         if fagg:
-            Mtuple += [max(abs(par),abs(npar))]
-            Dtuple += [abs(_par)+abs(npar)]
+            Mtuple += [max(abs(par),abs(par))]
+            Dtuple += [abs(_par)+abs(par)]
     ret = [mtuple, dtuple]
     if fagg: ret += [Mtuple, Dtuple]
     return ret
+
 
 def comp_ptuple(_ptuple, ptuple, rn, fagg=0):  # 0der params
 
@@ -237,6 +236,8 @@ def comp_ptuple(_ptuple, ptuple, rn, fagg=0):  # 0der params
 
     if fagg:
         Ret = [max(_I,I), abs(_I)+abs(I),max(_G,G),abs(_G)+abs(G), max(_M,M), abs(_M)+abs(M), max(_Ma,Ma), abs(_Ma)+abs(Ma), 2, 2, max(_L,L),abs(_L)+abs(L)]
+        # ret = [ret, Ret]
+        # ?
         mval, dval = sum(ret[::2]),sum(ret[1::2])
         mrdn, drdn = dval>mval, mval>dval
         mdec, ddec = 0, 0
