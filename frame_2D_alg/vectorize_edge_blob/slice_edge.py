@@ -30,7 +30,7 @@ def slice_edge(blob, verbose=False):
     i__ = blob.i__[box2slice(blob.ibox)]
     dy__, dx__, g__ = blob.der__t
 
-    edge = Cedge(root=blob, node_=[[],[]], box=blob.box, mask__=blob.mask__, He=[])
+    edge = Cedge(root=blob, node_=[[],[]], Et=[0,0,1,1], box=blob.box, mask__=blob.mask__, He=[])
     blob.dlayers = [[edge]]
     max_ = {*zip(*mask__.nonzero())}  # convert mask__ into a set of (y,x)
 
