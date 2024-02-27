@@ -67,10 +67,11 @@ def comp_(_He,He, rn=1, fagg=0):  # unpack tuples (formally lists) down to numer
     if isinstance(_cHe[2][0], list):  # _lay is He_, same for lay: they are aligned above
         Et = [0,0,0,0,0,0]  # Vm,Vd, Rm,Rd, Dm,Dd
         dH = []
-        for _lay,lay in zip(_cHe[2],cHe[2]):  # md_| ext | derH | subH | aggH, compare shared layers
-            dpth, et, dlay = comp_(_lay,lay, rn, fagg)  # unpack and comp bottom ds, eval nesting per layer
-            Et[:] = [E+e for E,e in zip(Et[:4],et[:4])] + Et[4:]
-            if fagg: Et[4:] = [(E+e)/2 for E,e in zip(Et[4:],et[4:])]  # dect
+        for _lay,lay in zip(_cHe[2],cHe[2]):
+            # md_| ext| derH| subH| aggH, eval layer nesting, unpack,comp ds in shared lower layers:
+            dpth, et, dlay = comp_(_lay,lay, rn, fagg)
+            Et[:4] = [E+e for E,e in zip(Et[:4],et[:4])]
+            if fagg: Et[4:] += [(E+e)/2 for E,e in zip(Et[4:],et[4:])]  # dect
             dH += [[dpth, et, dlay]]
     else:  # H is md_, numerical comp:
         vm,vd,rm,rd, decm,decd = 0,0,0,0, 0,0
@@ -85,7 +86,7 @@ def comp_(_He,He, rn=1, fagg=0):  # unpack tuples (formally lists) down to numer
                 decm += abs(match) / maxm if maxm else 1  # match / max possible match
                 maxd = abs(_d) + abs(d)
                 decd += abs(diff) / maxd if maxd else 1  # diff / max possible diff
-            vm += match - aves[i]
+            vm += match - aves[i]  # fixed param set?
             vd += diff
             dH += [match,diff]  # flat
         Et = [vm,vd,rm,rd]
@@ -278,7 +279,7 @@ def Cgraph(typ='graph',
         for param_name in list(PP.__dict__)[1:-1]:  # [1:] to skip type, [:-1] to skip fback
             if param_name in params_set:
                 setattr(instance, param_name, getattr(PP, param_name))
-                
+
         # add Decay?
         if instance.et: instance.et += [0,0]
         if instance.Et: instance.Et += [0,0]

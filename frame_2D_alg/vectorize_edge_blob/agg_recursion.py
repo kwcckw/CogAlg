@@ -44,8 +44,8 @@ def vectorize_root(blob):  # vectorization in 3 composition levels of xcomp, clu
     der_recursion(None, edge)  # vertical, lateral-overlap P cross-comp -> PP clustering
 
     for fd, node_ in enumerate(edge.node_):  # always node_t
-        # edge.et could be empty if there's no feedback
-        if edge.et and edge.et[fd] * (len(node_)-1)*(edge.rng+1) > G_aves[fd] * edge.et[fd]:
+        val,rdn = edge.et[fd], edge.et[2+fd]
+        if  val * (len(node_)-1)*(edge.rng+1) > G_aves[fd] * rdn:
             for i, PP in enumerate(node_):  # CPP -> CG:
                 node_[i] = Cgraph(PP=PP); PP.root = None
             # discontinuous PP rng+ cross-comp, cluster -> G_t
@@ -136,7 +136,7 @@ def form_graph_t(root, G_, Et, nrng, fagg=0):  # form Gm_,Gd_ from same-root nod
                     if graph.link_ and graph.Et[1] > G_aves[1] * graph.Et[3]:
                         graph.Et = [0,0,0,0,0,0]  # reset
                         node_ = graph.node_
-                        if isinstance(node_[0].rimH[0],CderG):  # 1st sub+, same rim nesting?
+                        if isinstance(node_[0].rimH[0], CderG):  # 1st sub+, same rim nesting?
                             for node in node_: node.rimH = [node.rimH]  # rim -> rimH
                         agg_recursion(root, graph, graph.node_, nrng, fagg=0)
                     else:
@@ -179,7 +179,7 @@ def node_connect(_G_):  # node connectivity = sum surround link vals, incr.media
                         if link not in uprim: uprim += [link]
                         # more selective eval: dVt[i] += dv; L=len(uprim); Lent[i] += L
                     if V > ave * R:
-                        G.eet[i::2] = [V+v for V, v in zip(G.eet[i::2], [dv, dr, dd])] 
+                        G.eet[i::2] = [V+v for V, v in zip(G.eet[i::2], [dv, dr, dd])]
             if uprim:  # prune rim for next loop
                 rim[:] = uprim
                 G_ += [G]
@@ -257,6 +257,7 @@ def sum2graph(root, grapht, fd, nrng, fagg):  # sum node and link params into gr
     # below not updated
     for G in G_:
         graph.ext[0] += 1
+        graph.area += G.area
         sum_last_lay(G, fd)
         graph.box.extend(G.box)
         graph.ptuple += G.ptuple
@@ -349,10 +350,10 @@ def comp_G(link, iEt):
 
 
 def comp_ext(_ext, ext, rn):  # primary ext only
-    _L,_S,_A = _ext
-    L,S,A = [ p/rn if not isinstance(p, list) else p for p in ext ]  # normalize (skip angle for now)
 
-    mA, dA = comp_angle(_A, A)  # when both As are [0,0] (from comp_slic额） they return NaN, i guess we need to skip it when both are [0,0]?
+    _L,_S,_A = _ext; L,S,A = ext; L/=rn; S/=rn  # angle is not normalized
+
+    mA, dA = comp_angle(_A, A)
     mS, dS = min(_S,S)-ave_mL, _S/_L - S/L  # S is summed over L, dS is not summed over dL
     mL, dL = min(_L,L)-ave_mL, _L -L
     M = mL + mS + mA
@@ -360,9 +361,9 @@ def comp_ext(_ext, ext, rn):  # primary ext only
     mrdn = M > D
     drdn = D<= M
     # all comparands are positive: maxm = maxd
-    Lmax = max(L,_L); Smax = max(1, max(S,_S)); Amax = .5  # max_mA = max_dA = ave_dangle  (S could be zero)
-    mdec = ((mL / Lmax) + (mS / Smax) + (mA / Amax)) /3  # add brackets for clarity
-    ddec = ((dL / Lmax) + (dS / Smax) + (dA / Amax)) /3
+    Lmax = max(L,_L); Smax = max(S,_S); Amax = .5  # max_mA = max_dA = ave_dangle
+    mdec = (mL/Lmax + mS/Smax + mA/Amax) /3
+    ddec = (dL/Lmax + dS/Smax + dA/Amax) /3
 
     return [M,D,mrdn,drdn,mdec,ddec], [mL,dL,mS,dS,mA,dA]
 
@@ -380,7 +381,7 @@ def feedback(root):  # called from form_graph_, append new der layers to root
     AggH, Valt, Rdnt, Dect = deepcopy(root.fback_.pop(0))  # init
     while root.fback_:
         aggH, valt, rdnt, dect = root.fback_.pop(0)
-        sum_Hv(AggH, aggH, base_rdn=0); Valt += valt; Rdnt += rdnt; Dect += dect
+        add_(AggH, aggH, irdnt=0); Valt += valt; Rdnt += rdnt; Dect += dect
 
     if Valt[1] > G_aves[1] * Rdnt[1]:  # compress levels?
         root.aggH += AggH; root.valt += Valt; root.rdnt += Rdnt; root.dect += Dect
