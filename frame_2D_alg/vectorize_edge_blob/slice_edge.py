@@ -30,7 +30,7 @@ def slice_edge(blob, verbose=False):
     i__ = blob.i__[box2slice(blob.ibox)]
     dy__, dx__, g__ = blob.der__t
 
-    edge = Cedge(root=blob, node_=[[],[]], Et=[0,0,1,1], box=blob.box, mask__=blob.mask__, He=[])
+    edge = Cedge(root=blob, node_=[[],[]], box=blob.box, mask__=blob.mask__, He=[])
     blob.dlayers = [[edge]]
     max_ = {*zip(*mask__.nonzero())}  # convert mask__ into a set of (y,x)
 
@@ -182,7 +182,7 @@ def interpolate2dert(blob, y, x):
 def comp_angle(_angle, angle):  # rn doesn't matter for angles
 
     # angle = [dy,dx]
-    (_sin, sin), (_cos, cos) = [*zip(_angle, angle)] / np.hypot(*zip(_angle, angle))
+    (_sin, sin), (_cos, cos) = [*zip(_angle, angle)] / np.hypot(*zip(_angle, angle))  # division by 0 here is causing NaN。 Possible when angle is [0,0]
 
     dangle = (cos * _sin) - (sin * _cos)  # sin(α - β) = sin α cos β - cos α sin β
     # cos_da = (cos * _cos) + (sin * _sin)  # cos(α - β) = cos α cos β + sin α sin β
