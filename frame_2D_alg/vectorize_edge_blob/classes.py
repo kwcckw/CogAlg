@@ -45,8 +45,7 @@ def add_(HE, He, irdnt=[], fagg=0):  # unpack tuples (formally lists) down to nu
                             if fagg:  cEt += [(E+e)/2 for E,e in zip(Et[4:],et[4:])]  # norm dect
                             Lay[1][:] = cEt
                         else:
-                            # should be He[2] here
-                            HE[2] += [deepcopy(lay)]  # skip deepcopy if numerical? (if numericalm they should always have a same number of elements)
+                            HE[2] += [deepcopy(lay)]
             else:
                 HE[2] = np.add(HE[2], He[2])  # sum flat lists: [m,d,m,d,m,d...]
         else:

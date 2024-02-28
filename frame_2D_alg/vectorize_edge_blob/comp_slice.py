@@ -42,7 +42,7 @@ def der_recursion(root, PP, fd=0):  # node-mediated correlation clustering: keep
         for P in PP.P_: P.link_ += [copy(unpack_last_link_(P.link_))]
 
     rng_recursion(PP, rng=1, fd=fd)  # extend PP.link_, derHs by same-der rng+ comp
-    # edge Et may empty, so we need to parse value
+
     form_PP_t(PP, PP.P_, iRt = PP.Et[2:4] if PP.Et[2:4] else [0,0])  # der+ is mediated by form_PP_t
     if root: root.fback_ += [[PP.He, PP.et]]  # feedback from PPds
 
