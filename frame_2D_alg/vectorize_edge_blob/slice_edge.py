@@ -184,7 +184,7 @@ def comp_angle(_A, A):  # rn doesn't matter for angles
     # normalize vectors to (sin,cos):
     _A_A = [np.array(Dy_Dx)/np.hypot(*Dy_Dx) if np.any(Dy_Dx) else np.array([0,0]) for Dy_Dx in[_A,A]]
     # convert to angles in radians:
-    _angle, angle = [math.atan2(sin,cos / np.hypot(sin,cos)) for sin,cos in _A_A]
+    _angle, angle = [math.atan2(sin,cos / np.hypot(sin,cos) if np.any((sin,cos)) else 0 ) for sin,cos in _A_A]
 
     dangle = _angle - angle  # difference between angles
     dangle = (dangle + math.pi) % (2 * math.pi) - math.pi  # normalize to within [-π, π]

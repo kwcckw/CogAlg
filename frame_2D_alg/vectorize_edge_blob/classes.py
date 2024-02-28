@@ -53,11 +53,13 @@ def add_(HE, He, irdnt=[], fagg=0):  # unpack tuples (formally lists) down to nu
         if irdnt:
             HE[1][2] += irdnt[0]; HE[1][3] += irdnt[1]
 
+    return HE  # for sum H purpose
 
 def comp_(_He,He, rn=1, fagg=0):  # unpack tuples (formally lists) down to numericals and compare them
 
     _depth,depth = _He[0], He[0]
     ddepth = abs(_depth - depth)
+    n = 0
 
     if ddepth:  # unpack the deeper He: md_<-derH <-subH <-aggH:
         uHe = [He,_He][_depth>depth]
@@ -71,10 +73,10 @@ def comp_(_He,He, rn=1, fagg=0):  # unpack tuples (formally lists) down to numer
         dH = []
         for _lay,lay in zip(_cHe[2],cHe[2]):
             # md_| ext| derH| subH| aggH, eval layer nesting, unpack,comp ds in shared lower layers:
-            dpth, et, dlay = comp_(_lay,lay, rn, fagg)
+            dpth, et, dlay, dn = comp_(_lay,lay, rn, fagg)
             Et[:4] = [E+e for E,e in zip(Et[:4],et[:4])]
             if fagg: Et[4:] += [(E+e)/2 for E,e in zip(Et[4:],et[4:])]  # dect
-            dH += [[dpth, et, dlay]]
+            dH += [[dpth, et, dlay]]; n += dn
     else:  # H is md_, numerical comp:
         vm,vd,rm,rd, decm,decd = 0,0,0,0, 0,0
         dH = []
@@ -94,8 +96,9 @@ def comp_(_He,He, rn=1, fagg=0):  # unpack tuples (formally lists) down to numer
         Et = [vm,vd,rm,rd]
         if fagg:
             L = len(dH); Et += [decm/L, decd/L]  # ave of compared dtuple
+        n += 1
 
-    return min(_depth,depth), Et, dH
+    return min(_depth,depth), Et, dH, n
 
 
 def negate(He):
@@ -149,10 +152,10 @@ def Cptuple(typ='ptuple',I=None, G=None, M=None, Ma=None, angle=None, L=None):
     return  instance
 
 
-def Cedge(typ='edge',root=None, node_=None, box=None, mask__=None, Et=None, et=None, He=None, fback_=None):
-    params_set = ('root', 'node_', 'box', 'mask__', 'Et', 'et', 'He', 'fback_')
-    default_value = (None,[[],[]],[inf,inf,-inf,-inf],None,[], [], [], [])
-    instance = z(typ=typ, root=root, node_=node_, box=box, mask__=mask__, Et=Et, et=et, He=He, fback_=fback_)
+def Cedge(typ='edge',root=None, node_=None, aggH=None, box=None, mask__=None, Et=None, et=None, He=None, fback_=None):
+    params_set = ('root', 'node_', 'aggH', 'box', 'mask__', 'Et', 'et', 'He', 'fback_')
+    default_value = (None,[[],[]],[],[inf,inf,-inf,-inf],None,[], [], [], [])
+    instance = z(typ=typ, root=root, node_=node_, aggH=aggH, box=box, mask__=mask__, Et=Et, et=et, He=He, fback_=fback_)
     init_default(instance, params_set, default_value)
     return instance
 
@@ -163,10 +166,10 @@ def CP(typ='P', yx=None, axis=None, cells=None, dert_=None, He=None, link_=None)
     init_default(instance, params_set, default_value)
     return instance
 
-def CderP(typ='derP', P=None,_P=None, He=None, et=None, S=None, A=None, roott=None):
-    params_set = ('P', '_P', 'He', 'et', 'S', 'A', 'roott')
-    default_value = (None,None,[],[], 0, 0, [[],[]])
-    instance = z(typ=typ, P=P, _P=_P, He=He, et=et, S=S, A=A, roott=roott)
+def CderP(typ='derP', P=None,_P=None, He=None, et=None, S=None, A=None, n=None, roott=None):
+    params_set = ('P', '_P', 'He', 'et', 'S', 'A', 'n', 'roott')
+    default_value = (None,None,[],[], 0, 0, 0, [[],[]])
+    instance = z(typ=typ, P=P, _P=_P, He=He, et=et, S=S, A=A, n=n,  roott=roott)
     init_default(instance, params_set, default_value)
     return instance
 
@@ -289,11 +292,11 @@ def Cgraph(typ='graph',
     return instance
 
 
-def CderG(typ='derG', _G=None, G=None, daggH=None, Et=None, S=None, A=None, roott=None):
+def CderG(typ='derG', _G=None, G=None, daggH=None, et=None, S=None, A=None, n=None, roott=None):
 
-    params_set = ('_G','G','daggH','Et','S', 'A', 'roott')
-    default_value = (None,None,[],[],0, [0,0], [None, None])
-    instance = z(typ=typ, _G=_G, G=G, daggH=daggH, Et=Et, S=S, A=A, roott=roott)
+    params_set = ('_G','G','daggH','et','S', 'A', 'n', 'roott')
+    default_value = (None,None,[],[],0, [0,0], 0, [None, None])
+    instance = z(typ=typ, _G=_G, G=G, daggH=daggH, et=et, S=S, A=A, n=n, roott=roott)
     init_default(instance, params_set, default_value)
     return instance
 
