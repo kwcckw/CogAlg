@@ -43,7 +43,7 @@ def der_recursion(root, PP, fd=0):  # node-mediated correlation clustering: keep
 
     rng_recursion(PP, rng=1, fd=fd)  # extend PP.link_, derHs by same-der rng+ comp
 
-    form_PP_t(PP, PP.P_, iRt = PP.Et[2:4] if PP.Et[2:4] else [0,0])  # der+ is mediated by form_PP_t
+    form_PP_t(PP, PP.P_, iRt = PP.Et[2:4] if PP.Et else [0,0])  # der+ is mediated by form_PP_t
     if root: root.fback_ += [[PP.He, PP.et]]  # feedback from PPds
 
 
@@ -103,7 +103,7 @@ def comp_P(link, fd):
         vm = sum(H[::2]); vd = sum(abs(d) for d in H[1::2])
         rm = 1 + vd > vm; rd = 1 + vm >= vd
         aveP = P_aves[0]
-        n = 1; depth = 0
+        n = 1  # 6 compared params is a unit of n
 
     if vm > aveP*rm:  # always rng+
         if fd:
@@ -113,8 +113,7 @@ def comp_P(link, fd):
             He[2] += [[0, [vm,vd,rm,rd], H]]  # nesting, Et, H
             link.et = [V+v for V, v in zip(link.et,[vm,vd, rm,rd])]
         else:
-            # not sure on the n in comp_slice since there's no decay, i put it here in case we need it later
-            link = CderP(typ='derH' if depth else 'md_', P=P,_P=_P, He=[0,[vm,vd,rm,rd],H], et=[vm,vd,rm,rd], S=S, A=A, n=n, roott=[[],[]])
+            link = CderP(P=P,_P=_P, He=[0,[vm,vd,rm,rd],H], et=[vm,vd,rm,rd], S=S, A=A, n=n, roott=[[],[]])
 
         return link
 
@@ -224,10 +223,9 @@ def comp_ptuple(_ptuple, ptuple, rn, fagg=0):  # 0der params
 
     ret = [mI,dI,mG,dG,mM,dM,mMa,dMa,mAngle-aves[5],dAngle,mL,dL]
 
-    if fagg:
-        Ret = [max(_I,I), abs(_I)+abs(I),max(_G,G),abs(_G)+abs(G), max(_M,M), abs(_M)+abs(M), max(_Ma,Ma), abs(_Ma)+abs(Ma), 2, 2, max(_L,L),abs(_L)+abs(L)]
-        # ret = [ret, Ret]
-        # ?
+    if fagg:  # add norm m,d: ret = [ret, Ret]
+        # max possible m,d per compared param
+        Ret = [max(_I,I), abs(_I)+abs(I), max(_G,G),abs(_G)+abs(G), max(_M,M),abs(_M)+abs(M), max(_Ma,Ma),abs(_Ma)+abs(Ma), 1,.5, max(_L,L),abs(_L)+abs(L)]
         mval, dval = sum(ret[::2]),sum(ret[1::2])
         mrdn, drdn = dval>mval, mval>dval
         mdec, ddec = 0, 0
