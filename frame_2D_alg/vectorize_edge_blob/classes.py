@@ -90,7 +90,8 @@ def comp_(_He,He, rn=1, fagg=0):  # unpack tuples (formally lists) down to numer
             vd += diff
             dH += [match,diff]  # flat
         Et = [vm,vd,rm,rd]
-        n += 1
+        if fagg: Et += [decm, decd]
+        n += 1 if len(_cHe[2]) == 12 else 0.5  # md_ += 1, ext += 0.5
 
     return min(_depth,depth), Et, dH, n
 
@@ -203,7 +204,7 @@ def Cgraph(typ='graph',
             # graph-external, +level per root sub+:
            rimH = None,  # direct links, depth, init rim_t, link_tH in base sub+ | cpr rd+, link_tHH in cpr sub+
            RimH = None,  # links to the most mediated nodes
-           extH = None, # G-external daggH( dsubH( dderH, summed from rim links
+           ext_He = None, # G-external He: daggH( dsubH( dderH, summed from rim links
            eet = None,  # sum from esubH
            ext = None,  # L,S,A: L len base node_, S sparsity: average link len, A angle: average link dy,dx
            rng = None,
@@ -229,7 +230,7 @@ def Cgraph(typ='graph',
 
     params_set = ('fd','ptuple', 'He',
                   'aggH', 'et', 'link_', 'node_',
-                  'rimH', 'RimH', 'extH', 'eet', 'ext', 'rng', 'box',
+                  'rimH', 'RimH', 'ext_He', 'eet', 'ext', 'rng', 'box',
                   'alt_graph_','aet',
                   'P_','mask__','area',
                   'Et','root','fback_','compared_','Rdn',
@@ -245,7 +246,7 @@ def Cgraph(typ='graph',
 
     instance = z(typ=typ, fd=fd,ptuple=ptuple, He=He,
                  aggH=aggH, et=et, link_=link_, node_=node_,
-                 rimH=rimH, RimH=RimH, extH=extH, eet=eet, ext=ext, rng=rng, box=box,
+                 rimH=rimH, RimH=RimH, ext_He=ext_He, eet=eet, ext=ext, rng=rng, box=box,
                  alt_graph_=alt_graph_,aet=aet,
                  P_=P_,mask__=mask__,area=area,
                  Et=Et,root=root,fback_=fback_,compared_=compared_,Rdn=Rdn,
@@ -266,11 +267,11 @@ def Cgraph(typ='graph',
     return instance
 
 
-def CderG(typ='derG', _G=None, G=None, daggH=None, et=None, S=None, A=None, n=None, roott=None):
+def CderG(typ='derG', _G=None, G=None, He=None, et=None, S=None, A=None, n=None, roott=None):
 
-    params_set = ('_G','G','daggH','et','S', 'A', 'n', 'roott')
+    params_set = ('_G','G','He','et','S', 'A', 'n', 'roott')
     default_value = (None,None,[],[],0, [0,0], 0, [None, None])
-    instance = z(typ=typ, _G=_G, G=G, daggH=daggH, et=et, S=S, A=A, n=n, roott=roott)
+    instance = z(typ=typ, _G=_G, G=G, He=He, et=et, S=S, A=A, n=n, roott=roott)
     init_default(instance, params_set, default_value)
     return instance
 

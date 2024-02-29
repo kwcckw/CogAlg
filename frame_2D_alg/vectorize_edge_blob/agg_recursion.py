@@ -78,7 +78,7 @@ def rng_recursion(rroot, root, Q, Et, nrng=1):  # rng++/ G_, der+/ link_ if call
 
     et = [0,0,0,0,0,0]
     _G_,_link_ = set(),set()  # for next rng+, der+
-    fd = isinstance(Q,set)  # link_ is a set
+    fd = isinstance(Q,list)  # link_ is list, node_ is combinations
 
     if fd:
         for link in Q:  # init rng+ from der+, extend root links
@@ -255,7 +255,7 @@ def sum2graph(root, grapht, fd, nrng, fagg):  # sum node and link params into gr
         graph.ext[1] += link.S
         graph.ext[2] += link.A
     if graph.ext[1] == 0: graph.ext[1] = 1   # prevent zero division for single node's graph
-    extH, et, eet = [], [0,0,0,0,0,0], [0,0,0,0,0,0]
+    ext_He, et, eet = [], [0,0,0,0,0,0], [0,0,0,0,0,0]
     # grapht int = node int+ext
     for G in G_:
         graph.ext[0] += 1
@@ -264,19 +264,18 @@ def sum2graph(root, grapht, fd, nrng, fagg):  # sum node and link params into gr
         graph.box = extend_box(graph.box, G.box)
         graph.ptuple += G.ptuple
         add_(graph.He, G.He,irdnt=[1,1])
-        # use add_?
-        extH = [add_(ext, Gext, irdnt=G.et[2:4]) for ext, Gext in zip_longest(extH, G.extH, fillvalue=[])]
+        ext_He = add_(ext_He, G.ext_He, irdnt=G.et[2:4])
         graph.aggH = [add_(aggH, GaggH, irdnt=[1,1]) for aggH, GaggH in zip_longest(graph.aggH, G.aggH, fillvalue=[])]
         eet = [V+v for V, v in zip(eet, G.eet)]
         et = [V+v for V, v in zip(et, G.et)]
 
-    if extH: graph.aggH += extH  # dsubH| daggH
+    if ext_He: graph.aggH += [ext_He]  # dsubH| daggH
     # graph internals = G Internals + Externals:
     et = [V+v for V, v in zip(et, eet)]
     graph.et = [V+v for V, v in zip(graph.et, et)]
 
     if fagg:
-        if not G.aggH or (G_[0].aggH and G_[0].aggH[-1] == 1):
+        if graph.aggH and graph.aggH[0][0] == 1:  # if depth == 1 (derH), convert to subH (depth =2)
             # 1st agg+, init aggH = [subHv]:
             graph.aggH =  [[2, [*graph.et], graph.aggH]]
 
@@ -292,22 +291,24 @@ def sum2graph(root, grapht, fd, nrng, fagg):  # sum node and link params into gr
 
 
 def sum_last_lay(G, fd):  # eLay += last layer of link.daggH (dsubH|ddaggH)
-    eLay = []
-
+    
+    ext_He = [1, [0,0,0,0,0,0], []]
     for link in G.rimH[-1] if G.rimH and isinstance(G.rimH[0],list) else G.rimH:
-        if link.daggH:
-            daggH = link.daggH
+        if link.He:
+            H = link.He[2]
             if G.aggH:
-                if (G.aggH[-1] == 2) and (len(daggH) > len(G.extH)):
-                    dsubH = daggH[-1][0]  # last subH
+                G_depth = G.aggH[0][0]
+                if G_depth == 2 and G.ext_He and G.ext_He[0] == 2:
+                    H = H[2][-1][2]  # last subH
                 else:
-                    dsubH = []
-            else:  # from sub+
-                dsubH = daggH
-            for dderH in dsubH[ int(len(dsubH)/2): ]:  # derH_/ last xcomp: len subH *= 2, maybe single dderH
-                add_(eLay, dderH, irdnt=link.et[2:4])  # sum all derHs of link layer=rdH into esubH[-1]
+                    H = []
+            # derH_/ last xcomp: len subH *= 2, maybe single dderH
+            # with ext interlaced with H, this int(len(H)/2) is no longer correct?
+            ext_He[2] = [add_(eHE, eHe, irdnt=link.et[2:4]) for eHE, eHe in zip_longest(H[int(len(H)/2): ], ext_He[2], fillvalue=[])]
+            # sum all derHs of link layer=rdH into esubH[-1]   
+    
+    if ext_He[2]: add_(G.ext_He, ext_He)
 
-    if eLay: G.extH += [eLay]
 
   # draft
 def comp_G(link, iEt):
@@ -318,21 +319,31 @@ def comp_G(link, iEt):
     # / PP:
     eEt, extt = comp_ext(_G.ext, G.ext, rn=1)
     Et = [E+e for E,e in zip(pEt,eEt)]  # evaluation tuple: valt, rdnt, dect
-    dH = [1,Et, [[0,pEt,md_],[-1,eEt,extt]]]  # default 1-layer dH
+    dHe = [1,Et, [[0,pEt,md_],[-1,eEt,extt]]]  # default 1-layer dH
     link.n += 1.5
     # if >1 Ps:
     if _G.He and G.He:
-        depth, et, dHe, n = comp_(_G.He, G.He, rn=1, fagg=1)
+        depth, et, dH, n = comp_(_G.He, G.He, rn=1, fagg=1)
+        ddHe = [depth, et, dH]
         Et = [E+e for E,e in zip(Et,et)]
-        dH = [depth, *Et, dH[2]+dHe]  # append flat derH
+        # depth + 1 ? Because if same depth, depth will never be increased, it stays at 0
+        dHe = [depth+1, [*Et], dHe[2]+[ddHe]]  # append flat derH (merge H only) 
         link.n += n
-    link.dHe = dH
     # / G, if >1 PPs:
     if _G.aggH and G.aggH:  # as above, not sure about ext yet
-        depth, et, daggH, n = comp_(_G.aggH, G.aggH, rn=1, fagg=1)
-        link.dHHe = [2, et, daggH]  # else stays empty
-        Et = [E+e for E,e in zip(Et,et)]
+        # G。aggH is H instead of He, so compare each element within? Or we convert G.aggH into aggHe too?
+        daggHe = [0, [0,0,0,0,0,0], []]
+        for _He, He in zip(_G.aggH, G.aggH):
+            depth, et, daggH, n = comp_(_He, He, rn=1, fagg=1)
+            daggHe[0] = max(daggHe[0],depth+1)
+            add_(daggHe,[depth, et, daggH])
+        Et = [E+e for E,e in zip(Et,daggHe[1])]
+        dHe = [depth+1, Et, [dHe]+daggHe[2]]  # else stays empty
+
         link.n += n
+
+    if link.He:  add_(link.He, dHe)  # existing He in der+
+    else:        link.He = dHe
 
     link.et = [*Et]  # reset per comp_G
     for fd in 0, 1:
