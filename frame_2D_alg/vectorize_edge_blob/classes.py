@@ -135,6 +135,48 @@ def init_default(instance, params_set, default_value):
     for param, value in zip(params_set, default_value):
         if getattr(instance, param) is None: setattr(instance, param, deepcopy(value))  # deepcopy prevent list has a same reference
 
+
+# params set in list:
+
+# Cptuple: type = -1
+# 'typ','I', 'G', 'M', 'Ma', 'angle', 'L', 'id'
+
+# Cedge: type = 3
+# 'type','Et','et','He','aggH','P_', 'node_','box', 'mask__','rng','root','fback_','id'
+
+# CP : type = 0
+# 'type','ptuple', 'He','yx', 'axis', 'cells', 'dert_','link_','id'
+
+# CderP : type = -2
+# 'type', 'et', 'He', 'P', '_P', 'S', 'A', 'n', 'roott','id'
+
+# CPP : type = 1
+# 'type','Et','et',
+# 'ptuple', 'He', 
+# 'P_', 'node_','link_',
+# 'fd','ext',
+# 'box','mask__', 'area', 'rng', 
+# 'root','fback_', 'id'
+
+# Cgraph : type = 2
+# 'type', 'Et','et', 
+# 'ptuple','He','aggH',
+# 'node_','link_',
+# 'fd','ext','ext_He', 'eet',
+# 'rimH', 'RimH', 'rng', 'box',
+# 'alt_graph_','aet',
+# 'area',
+# 'compared_','Rdn',
+# 'it','depth','nval'
+# 'root','fback_','id'
+
+# CderG : type = -3
+# 'type', 'et', 
+# 'He',
+# '_G','G','S', 'A', 'n', 'roott','id'
+    
+
+
 # C inits SimpleNamespace instance with typ-specific param set:
 
 def Cptuple(typ='ptuple',I=None, G=None, M=None, Ma=None, angle=None, L=None):
