@@ -1,7 +1,7 @@
 import numpy as np
 from copy import deepcopy, copy
 from itertools import combinations, zip_longest
-from .classes import z, CderP, Cgraph, CderG, add_, comp_, get_match
+from .classes import z, CderP, Cgraph, CderG, add_, comp_, get_match, nest
 from .filters import aves, ave_mL, ave_dangle, ave, ave_distance, G_aves, ave_Gm, ave_Gd
 from .slice_edge import slice_edge, comp_angle
 from .comp_slice import der_recursion, comp_ptuple
@@ -117,7 +117,8 @@ def comp_rim(_link_, link, nrng):  # for next rng+:
             _G = _link.G if _link.G in [link._G,link.G] else _link.G  # new to link
             dy = _G.box.cy - G.box.cy; dx = _G.box.cx - G.box.cx
             dist = np.hypot(dy, dx)  # distance between node centers
-            if 2*nrng > dist > 2*(nrng-1):  # init max comp distance = 2
+            # or use compared?
+            if 2*nrng > dist > 2*(nrng-1):  # init max comparison distance = 2
                 # potentially connected G,_G: within rng, no comp in prior rng
                 if comp_angle(link.A,_link.A)[0] > ave:  # link direction matches in G|_G rimH[-1]
                     _link_.add(CderG(G=G, _G=_G, A=[dy,dx], S=dist))  # to compare in rng+
@@ -266,13 +267,10 @@ def sum2graph(root, grapht, fd, nrng, fagg):  # sum node and link params into gr
         add_(graph.He, G.He,irdnt=[1,1])
         ext_He = add_(ext_He, G.ext_He, irdnt=G.et[2:4])
         graph.aggH = [add_(aggH, GaggH, irdnt=[1,1]) for aggH, GaggH in zip_longest(graph.aggH, G.aggH, fillvalue=[])]
-        eet = [V+v for V, v in zip(eet, G.eet)]
-        et = [V+v for V, v in zip(et, G.et)]
-
-    if ext_He: graph.aggH += [ext_He]  # dsubH| daggH
-    # graph internals = G Internals + Externals:
-    et = [V+v for V, v in zip(et, eet)]
-    graph.et = [V+v for V, v in zip(graph.et, et)]
+        eet = [V+v for V,v in zip(eet, G.eet)]
+        et = [V+v for V,v in zip(et, G.et)]
+    graph.aggH += [ext_He]  # dsubH|daggH
+    graph.et = [V+v+ev for V,v,ev in zip(graph.et, et, eet)]  # graph internals = G Internals + Externals
 
     if fagg:
         if graph.aggH and graph.aggH[0][0] == 1:  # if depth == 1 (derH), convert to subH (depth =2)
@@ -291,7 +289,7 @@ def sum2graph(root, grapht, fd, nrng, fagg):  # sum node and link params into gr
 
 
 def sum_last_lay(G, fd):  # eLay += last layer of link.daggH (dsubH|ddaggH)
-    
+
     ext_He = [1, [0,0,0,0,0,0], []]
     for link in G.rimH[-1] if G.rimH and isinstance(G.rimH[0],list) else G.rimH:
         if link.He:
@@ -305,8 +303,8 @@ def sum_last_lay(G, fd):  # eLay += last layer of link.daggH (dsubH|ddaggH)
             # derH_/ last xcomp: len subH *= 2, maybe single dderH
             # with ext interlaced with H, this int(len(H)/2) is no longer correct?
             ext_He[2] = [add_(eHE, eHe, irdnt=link.et[2:4]) for eHE, eHe in zip_longest(H[int(len(H)/2): ], ext_He[2], fillvalue=[])]
-            # sum all derHs of link layer=rdH into esubH[-1]   
-    
+            # sum all derHs of link layer=rdH into esubH[-1]
+
     if ext_He[2]: add_(G.ext_He, ext_He)
 
 
@@ -319,32 +317,23 @@ def comp_G(link, iEt):
     # / PP:
     eEt, extt = comp_ext(_G.ext, G.ext, rn=1)
     Et = [E+e for E,e in zip(pEt,eEt)]  # evaluation tuple: valt, rdnt, dect
-    dHe = [1,Et, [[0,pEt,md_],[-1,eEt,extt]]]  # default 1-layer dH
+    dHe = [1,Et, [[0,pEt,md_],[-1,eEt,extt]]]  # default 1-layer dderH
     link.n += 1.5
     # if >1 Ps:
     if _G.He and G.He:
         depth, et, dH, n = comp_(_G.He, G.He, rn=1, fagg=1)
-        ddHe = [depth, et, dH]
-        Et = [E+e for E,e in zip(Et,et)]
-        # depth + 1 ? Because if same depth, depth will never be increased, it stays at 0
-        dHe = [depth+1, [*Et], dHe[2]+[ddHe]]  # append flat derH (merge H only) 
-        link.n += n
+        dHe[2] += dH  # add flat to dderH
+        Et = [E+e for E,e in zip(Et,et)]; link.n += n
     # / G, if >1 PPs:
     if _G.aggH and G.aggH:  # as above, not sure about ext yet
-        # G。aggH is H instead of He, so compare each element within? Or we convert G.aggH into aggHe too?
-        daggHe = [0, [0,0,0,0,0,0], []]
-        for _He, He in zip(_G.aggH, G.aggH):
-            depth, et, daggH, n = comp_(_He, He, rn=1, fagg=1)
-            daggHe[0] = max(daggHe[0],depth+1)
-            add_(daggHe,[depth, et, daggH])
-        Et = [E+e for E,e in zip(Et,daggHe[1])]
-        dHe = [depth+1, Et, [dHe]+daggHe[2]]  # else stays empty
-
+        depth, et, daggH, n = comp_(_G.aggH, G.aggH, rn=1, fagg=1)
+        Et = [E+e for E,e in zip(Et,et)]
+        dHe = [depth+1, Et, [dHe]+daggH[2]]  # not sure about nesting
         link.n += n
-
-    if link.He:  add_(link.He, dHe)  # existing He in der+
-    else:        link.He = dHe
-
+    if link.He:
+        add_(link.He, dHe)  # existing He in der+
+    else:
+        link.He = dHe
     link.et = [*Et]  # reset per comp_G
     for fd in 0, 1:
         Val, Rdn, Dec = Et[fd::2]
@@ -382,7 +371,6 @@ def comp_ext(_ext, ext, rn):  # primary ext only
 
 def feedback(root):  # called from form_graph_, append new der layers to root
 
-    # convert to Et:
     AggH, eT = deepcopy(root.fback_.pop(0))  # init
     while root.fback_:
         aggH, et = root.fback_.pop(0)
