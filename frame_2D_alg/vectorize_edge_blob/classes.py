@@ -30,13 +30,18 @@ ders: He, optional angle, named params,
 so
 node, link pairs, common core: (depth, Et, n, id):
    
-    P:     core, (ptuple, He), dert_,link_, yx, axis, cells
-    derP:  core, He, (_P,P), (S,A), roott
-    PP:    core, et, (ptuple, He), (P_,node_),link_, (ext,box,mask__,area), root,fback_, fd,rng
-    derPP: = derP
-    graph: core, et, (ptuple,He,aggH), node_,link_, (ext, box, area), root,fback_, fd,rng
-           (rimH, RimH, eet, ext_He), (alt_graph_, alt_et), compared_
-    derG: = derP
+   core: (depth,Et,n,id)
+
+   edge  : core, et, (ptuple, He, aggH), (P_, node_), root, fback_, rng
+   P     : core, (ptuple, He), dert_,link_, yx, axis, cells
+   derP  : core, He, (_P,P), (S,A), roott
+   PP    : core, et, (ptuple, He), (P_,node_),link_, (ext,box,mask__,area), root, fd, fback_ ,rng  (switch fd with fback, so that [-2] is consistent fback for edge, PP and graph)
+   derPP : = derP
+   graph : core, et, (ptuple,He,aggH), node_,link_, (ext, box, area), 
+          (rimH, RimH, eet, ext_He), (alt_graph_, alt_et), compared_,
+          root, fd, fback_, ,rng
+   derG  : = derP
+
 '''
 
 def add_(HE, He, irdnt=[]):  # unpack tuples (formally lists) down to numericals and sum them

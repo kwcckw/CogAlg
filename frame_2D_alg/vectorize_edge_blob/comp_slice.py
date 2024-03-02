@@ -39,9 +39,9 @@ len prior root_ sorted by G is root.rdn, to eval for inclusion in PP or start ne
   # root function:
 def der_recursion(root, PP, fd=0):  # node-mediated correlation clustering: keep same Ps and links, increment link derH, then P derH in sum2PP
 
-    P_, Et, et, He = PP[5], PP[1], PP[2], PP[3] if PP[0] == 3 else PP[4]
+    (depth, Et, n, pp_id), et, (ptuple, He), (P_, node_) = PP[:4]
     if fd:  # add prelinks per P if not initial call:
-        for P in P_: P[6] += [copy(unpack_last_link_(P[6]))]
+        for P in P_: P[3] += [copy(unpack_last_link_(P[3]))]
 
     rng_recursion(PP, rng=1, fd=fd)  # extend PP.link_, derHs by same-der rng+ comp
 
@@ -51,24 +51,23 @@ def der_recursion(root, PP, fd=0):  # node-mediated correlation clustering: keep
 
 def rng_recursion(PP, rng=1, fd=0):  # similar to agg+ rng_recursion, but contiguously link mediated, because
 
-    iP_ = PP[5]
+    iP_ = PP[3][0]  # PP[3] is (P_, node_)
     while True:
         P_ = []; V = 0
         for P in iP_:
-            typ,ptuple,He,yx,axis,cells,dert_,link_,Pi =  P
+            (depth, Et, n, p_id), (ptuple, He), dert_,link_, yx, axis, cells =  P
             if not link_: continue
             prelink_ = []  # new prelinks per P
             _prelink_ = link_.pop()  # old prelinks per P
             for _link in _prelink_:
                 _P = _link[4] if fd else _link
-                _typ,_ptuple,_He,_yx,_axis,_cells,_dert_,_link_,_Pid = _P
-                
+                (_depth, _Et, _n, _p_id), (_ptuple, _He), _dert_,_link_, _yx, _axis, _cells =  P = _P
                 dy,dx = np.subtract(_yx, yx)
                 distance = np.hypot(dy,dx)  # distance between P midpoints, /= L for eval?
                 if distance < rng:  # | rng * ((P.val+_P.val) / ave_rval)?
                     mlink = comp_P(_link if fd else [_P,P, distance,[dy,dx]], fd)  # return link if match
                     if mlink:
-                        V += mlink[1][0]  # unpack last link layer:
+                        V += mlink[0][1][0]  # unpack last link layer: ([0][1] = core's Et)
                         link_ = link_[-1] if link_ and isinstance(link_[-1], list) else link_  # der++ if PP.He[0] depth==1
                         if rng > 1:
                             if rng == 2: link_[:] = [link_[:]]  # link_ -> link_H
@@ -84,19 +83,19 @@ def rng_recursion(PP, rng=1, fd=0):  # similar to agg+ rng_recursion, but contig
         if V > ave * len(P_) * 6:  #  implied val of all __P_s, 6: len mtuple
             iP_ = P_
         else:
-            for P in P_: P[6].pop()
+            for P in P_: P[3].pop()  # pop prelinks fromn link_
             break
-    PP[-4]=rng  # both PP and edge[-4] should be rng
+    PP[-1]=rng  # both PP and edge['s last element is rng
     '''
     der++ is tested in PPds formed by rng++, no der++ inside rng++: high diff @ rng++ termination only?
     '''
 
 def comp_P(link, fd):
 
-    if fd: _P, P = link[3:5]  # in der+
+    if fd: _P, P = link[2]  # in der+
     else:  _P, P, S, A = link  # list in rng+
-    typ,  ptuple, He, yx, axis, cells, dert_, link_, p_id =  P
-    _typ,_ptuple,_He,_yx,_axis,_cells,_dert_,_link_,_p_id = _P
+    (depth,   Et,  n,  p_id), (ptuple,   He),  dert_, link_,  yx,  axis,  cells =  P
+    (_depth, _Et, _n, _p_id), (_ptuple, _He), _dert_,_link_, _yx, _axis, _cells = _P
     rn = len(_dert_) / len(dert_)
 
     if _He and He:
@@ -118,26 +117,29 @@ def comp_P(link, fd):
             if not He[0]: He = link[2] = [1,[*He[1]],[He]]  # nest md_ as derH
             He[1] = np.add(He[1],[vm,vd,rm,rd])
             He[2] += [[0, [vm,vd,rm,rd], H]]  # nesting, Et, H
-            link[1] = [V+v for V, v in zip(link.et,[vm,vd, rm,rd])]
+            link[1] = [V+v for V, v in zip(link[0][1],[vm,vd, rm,rd])]
         else:
-            # link='type', 'et', 'He', 'P', '_P', 'S', 'A', 'n', 'roott'],'id'
-            link = [-1, [vm,vd,rm,rd], [0,[vm,vd,rm,rd],H], P, _P, S, A, n, [[],[]], -1]  # id is placeholder of -1 now
+            # core = depth, Et, n, id
+            core = [0, [vm,vd,rm,rd], n, 0]; He =[0,[vm,vd,rm,rd],H]; roott = [[],[]]
+            link = [core,He,(_P,P),[S,A],roott]  # core, He, (_P,P), (S,A), roott
+
         return link
 
 
 def form_PP_t(root, P_, iRt):  # form PPs of derP.valt[fd] + connected Ps val
 
+    root_P_, root_fback_ = root[3][0], root[-2]
     PP_t = [[],[]]
     for fd in 0,1:
         P_Ps = []; Link_ = []
         for P in P_:  # not PP.link_: P uplinks are unique, only G links overlap
-            typ,  ptuple, He, yx, axis, cells, dert_, link_, p_id = P
+            (depth,Et,n,p_id), (ptuple,He), dert_, link_, yx, axis, cells = P
             Ps = []
             for derP in unpack_last_link_(link_):
-                Ps += [derP[4]]; Link_ += [derP]  # not needed for PPs?
+                _P = derP[2][0]; Ps += [_P]; Link_ += [derP]  # not needed for PPs?
             P_Ps += [Ps]  # aligned with P_
         inP_ = []  # clustered Ps and their val,rdn s for all Ps
-        for P in root[5]:
+        for P in root_P_:
             if P in inP_: continue  # already packed in some PP
             cP_ = [P]  # clustered Ps and their val,rdn s
             if P in P_:
@@ -157,53 +159,55 @@ def form_PP_t(root, P_, iRt):  # form PPs of derP.valt[fd] + connected Ps val
         if PP.Et[1] * len(PP.link_) > PP_aves[1] * PP.Et[3]:
             # node-mediated correlation clustering:
             der_recursion(root, PP, fd=1)
-        if root.fback_:
+        if root_fback_:
             feedback(root)  # after der+ in all nodes, no single node feedback
 
-    root[6] = PP_t  # nested in der+, add_alt_PPs_?
+    root[3][1] = PP_t  # nested in der+, add_alt_PPs_?
 
 
 def sum2PP(root, P_, derP_, iRt, fd):  # sum links in Ps and Ps in PP
 
-    # 'type','Et','et','ptuple','He','P_','node_','link_','fd','ext','box','mask__','area', 'rng','root','fback_','id'
-    pp_type=1;pp_Et=[0,0,1,1];pp_et=[0,0,1,1];pp_ptuple=[-1,0,0,0,0, [0,0],0,0];pp_He=[];pp_P_=P_;pp_node_=[];pp_link_=[];pp_fd=fd;pp_ext=[];pp_box=[inf,inf,-inf,-inf];pp_mask__=None;pp_area=0;pp_rng=root[-4]+1;pp_root=[];pp_fback_=[];pp_id=0
+    # core, et, (ptuple, He), (P_,node_),link_, (ext,box,mask__,area), root, fd, fback_, ,rng
+    pp_depth=1; pp_Et = [0,0,1,1]; pp_n =0; pp_id=0;  # core
+    pp_et=[0,0,1,1];pp_ptuple = [0,0,0,0, [0,0],0];pp_He = [];pp_P_ = P_;pp_node_=[];pp_link_=[];pp_ext=[];pp_area=0;pp_root=[];pp_fd=fd;pp_fback_=[];pp_rng = root[-1] + 1
 
     # += uplinks:
     S,A = 0, [0,0]
     for derP in derP_:
-        derP_type,derP_et,derP_He,P,_P,derP_S,derP_A, derP_n, derP_roott,derP_id = derP
-        
+        (derP_depth, derP_et, derP_n, derP_id), derP_He, (_P,P), (derP_S,derP_A), derP_roott = derP
         if P not in P_ or _P not in P_: continue
         if derP_He:
-            P_He, _P_He = P[2], _P[2]
+            P_He, _P_He = P[1][1], _P[1][1]
             add_(P_He, derP_He, iRt)
             add_(_P_He, negate(deepcopy(derP_He)), iRt)
         pp_link_ += [derP]
         pp_Et = [V+v for V,v in zip(pp_Et, derP_et)]
         pp_Et[2:4] = [R+ir for R,ir in zip(pp_Et[2:4], iRt)]
+        pp_n += derP_n
         A = np.add(A,derP_A); S += derP_S
     if S: pp_ext = [len(P_), S , A]  # all from links (skip 0 S when PP is single P's PP)
 
     # += Ps:
-    celly_,cellx_ = [],[]
     for P in P_:
-        p_typ,  p_ptuple, p_He, p_yx, p_axis, p_cells, p_dert_, p_link_, p_id = P
-        pp_area += p_ptuple[6]   
-        pp_ptuple = [pp_ptuple[0]]+[ppar + par if not isinstance(ppar, list) else [ppar[0]+par[0], ppar[1]+par[1]]  for ppar, par in zip(pp_ptuple[1:-1],p_ptuple[1:-1])]+[pp_ptuple[-1]]
-        if p_He:
-            add_(pp_He, p_He)
-            pp_et = [V+v for V, v in zip(pp_et, p_He[1])]  # we need to sum et from P too? Else they are always empty
-        for y,x in p_cells:
-            pp_box = accum_box(pp_box, y, x); celly_+=[y]; cellx_+=[x]
+        (depth,Et,n,p_id), (ptuple,He), dert_, link_, yx, axis, cells = P
+        pp_area += len(dert_) 
+        pp_ptuple = [ppar + par if not isinstance(ppar, list) else [ppar[0]+par[0], ppar[1]+par[1]]  for ppar, par in zip(pp_ptuple,ptuple)]
+        if He:
+            add_(pp_He, He)
+            pp_et = [V+v for V, v in zip(pp_et, He[1])]  # we need to sum et from P too? Else they are always empty
+
+    # below should be not needed, but we probably need yx_ now?
+    '''
     # pixmap:
     y0,x0,yn,xn = pp_box
     pp_mask__ = np.zeros((yn-y0, xn-x0), bool)
     celly_ = np.array(celly_); cellx_ = np.array(cellx_)
     pp_mask__[(celly_-y0, cellx_-x0)] = True
-
-    # 'type','Et','et','ptuple','He','P_','node_','link_','fd','ext','box','mask__','area', 'rng','root','fback_','id'
-    PP = [pp_type,pp_Et,pp_et,pp_ptuple,pp_He,pp_P_,pp_node_,pp_link_,pp_fd,pp_ext,pp_box,pp_mask__,pp_area,pp_rng,pp_root,pp_fback_,pp_id]  
-    for derP in derP_: derP[-2][fd] = PP  # update root  
+    '''
+    
+    # core, et, (ptuple, He), (P_,node_),link_, (ext,box,mask__,area), root, fd, fback_ ,rng
+    PP = [[pp_depth,pp_Et,pp_n,pp_id], pp_et, [pp_ptuple, pp_He], [pp_P_,pp_node_],pp_link_,[pp_ext,pp_area], pp_root, pp_fd, pp_fback_ ,pp_rng]
+    for derP in derP_: derP[-1][fd] = PP  # update root  
 
     return PP
 
@@ -229,8 +233,8 @@ def feedback(root):  # in form_PP_, append new der layers to root PP, single vs.
 
 def comp_ptuple(_ptuple, ptuple, rn, fagg=0):  # 0der params
 
-    _I, _G, _M, _Ma, (_Dy, _Dx), _L = _ptuple.I, _ptuple.G, _ptuple.M,_ptuple.Ma,_ptuple.angle,_ptuple.L
-    I, G, M, Ma, (Dy, Dx), L = ptuple.I, ptuple.G, ptuple.M,ptuple.Ma,ptuple.angle,ptuple.L
+    _I, _G, _M, _Ma, (_Dy, _Dx), _L = _ptuple
+    I, G, M, Ma, (Dy, Dx), L = ptuple
 
     dI = _I - I*rn;  mI = ave_dI - dI
     dG = _G - G*rn;  mG = min(_G, G*rn) - aves[1]
@@ -278,5 +282,5 @@ def comp_ptuple_generic(_ptuple, ptuple, rn):  # 0der
 
 def unpack_last_link_(link_):  # unpack last link layer
 
-    while link_ and link_[-1] and link_[-1][0] != -1:  link_ = link_[-1]
+    while link_ and link_[-1] and link_[-1][0][0] != 0:  link_ = link_[-1]  # check 0, which is the depth of link
     return link_

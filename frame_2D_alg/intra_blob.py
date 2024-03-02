@@ -30,7 +30,9 @@ def intra_blob(root_blob, i__, rdn, rng):  # recursive evaluation of cross-comp 
     # unpack root_blob
     root, sign, I, Dy, Dx, G, yx_, dert_, link_ = root_blob
 
-    if not sign: return  # only for below-average G
+    if not sign: 
+        # vectorize_root here?
+        return  # only for below-average G
     A = len(dert_)
     if G >= ave*A + aveR*rdn: return  # eval for comp_r
 
