@@ -4,7 +4,7 @@ from math import inf, hypot
 from numbers import Real
 from typing import Any, NamedTuple, Tuple
 from copy import copy, deepcopy
-from class_cluster import CBase, CBaseLite
+from class_cluster import CBase, CBaseLite, init_param as z
 from types import SimpleNamespace
 
 from .filters import ave_dangle, ave_dI, ave_Pd, ave_Pm, aves
@@ -129,19 +129,19 @@ def comp_(_He,He, rn=1, fagg=0):  # unpack tuples (formally lists) down to numer
     return min(_depth,depth), Et, dH, n
 
 
-def __init__(self): self.my_list = []
-z = __init__
+# def __init__(self): self.my_list = []
 
-class Clink:  # the product of comparison between two nodes
 
-    _node: None  # prior comparand
-    node: None  # current comparand
+class Clink(CBase):  # the product of comparison between two nodes
+
+    _node: object = None  # prior comparand
+    node: object = None
     Et: list = z([])
     dderH: list = z([])  # derivatives produced by comp, from single ptuplet in rng+ to He
-    roott = [None, None]  # clusters that contain this link
+    roott: list = z([None, None])  # clusters that contain this link
     S: float = 0.0  # sparsity: distance between node centers
-    A: list = [0,0]  # angle: dy,dx between centers
-    n = 0
+    A: list = z([0, 0])   # angle: dy,dx between centers
+    n : int = 0
 
 #  dir: bool  # direction of comparison if not G0,G1, only needed for comp link?
 
@@ -155,14 +155,16 @@ class Clink:  # the product of comparison between two nodes
 
 class CP(CBase):  # horizontal blob slice P, with vertical derivatives per param if derP, always positive
 
-    latuple = []  # I,G,M,Ma,L, (Dy,Dx)
-    derH = []  # He, [(mtuple, ptuple)...] vertical derivatives summed from P links
-    Et = []    # Vt,Rt, rng is not used?
-    dert_ = []  # array of pixel-level derts, ~ node_
-    link_ = []  # uplinks per comp layer, nest in rng+)der+
-    cells = set  # pixel-level kernels adjacent to P axis, combined into corresponding derts projected on P axis.
-    roott = []  # PPrm,PPrd that contain this P, single-layer
-    yx = []
+    latuple : list = z([])  # I,G,M,Ma,L, (Dy,Dx)
+    derH : list = z([])  # He, [(mtuple, ptuple)...] vertical derivatives summed from P links
+    Et : list = z([])    # Vt,Rt, rng is not used?
+    dert_ : list = z([])  # array of pixel-level derts, ~ node_
+    link_ : list = z([[]])  # uplinks per comp layer, nest in rng+)der+
+    cells : dict = z({})  # pixel-level kernels adjacent to P axis, combined into corresponding derts projected on P axis.
+    roott : list = z([])  # PPrm,PPrd that contain this P, single-layer
+    yx : list = z([])
+    yx_ : list = z([])
+    axis: list = z([0, 0])  # this is not dynamic? Because we init their axis during P initialization
     # dynamic attrs:
     # axis: dynamic, list = z([0, 0])  # prior slice angle, init sin=0,cos=1
     # dxdert_: list = z([])  # only in Pd
@@ -171,36 +173,38 @@ class CP(CBase):  # horizontal blob slice P, with vertical derivatives per param
     # Ddx: int = 0
 
 
-class CG:  # PP | graph | blob: params of single-fork node_ cluster
+class CG(CBase):  # PP | graph | blob: params of single-fork node_ cluster
 
-    latuple = []  # I,G,M,Ma,L, (Dy,Dx)
-    derH = []  # He, [(mtuple, ptuple)...] vertical derivatives summed from P links
-    aggH = []  # G only: [[subH,valt,rdnt,dect]], subH: [[derH,valt,rdnt,dect]]: 2-fork composition layers
-    Et = []  # Vt,Rt,Nt
-    node_ = []  # can be node_H?
-    link_ = []  # links per comp layer, nest in rng+)der+
-    roott = []  # Gm,Gd that contain this G, single-layer
-    box: Cbox = z(Cbox(inf, inf, -inf, -inf))  # y,x,y0,x0,yn,xn
-    rng = 1
-    fd = 0  # fork if flat layers?
-    n = 0
+    latuple : list = z([])  # I,G,M,Ma,L, (Dy,Dx)
+    derH : list = z([])  # He, [(mtuple, ptuple)...] vertical derivatives summed from P links
+    aggH : list = z([])  # G only: [[subH,valt,rdnt,dect]], subH: [[derH,valt,rdnt,dect]]: 2-fork composition layers
+    et: list = z([])  # we need et, which is internal params?
+    Et : list = z([])  # Vt,Rt,Nt
+    node_ : list = z([])  # can be node_H?
+    link_ : list = z([])  # links per comp layer, nest in rng+)der+
+    roott : list = z([])  # Gm,Gd that contain this G, single-layer
+    box: list = z([inf, inf, -inf, -inf])  # y,x,y0,x0,yn,xn
+    rng : int = 1
+    fd : int = 0 # fork if flat layers?
+    n : int = 0
+    area: int = 0
     # graph-external, +level per root sub+:
     rim_H: list = z([])  # direct links, depth, init rim_t, link_tH in base sub+ | cpr rd+, link_tHH in cpr sub+
     ederH: list = z([])  # G-external daggH( dsubH( dderH, summed from rim links
-    eaggH = []
-    eEt = []  # from external links
-    extt: list = z([0,0,[0,0]])  # L,S,A: L len base node_, S sparsity: average link len, A angle: average link dy,dx
+    eaggH : list = z([])
+    eEt : list = z([])  # from external links
+    ext: list = z([])  # L,S,A: L len base node_, S sparsity: average link len, A angle: average link dy,dx
     # tentative:
     alt_graph_: list = z([])  # adjacent gap+overlap graphs, vs. contour in frame_graphs
-    alt_Et = [0,0]  # sum from alt graphs to complement G aves?
+    alt_Et : list = z([0,0])  # sum from alt graphs to complement G aves?
     # PP:
     P_: list = z([])
     mask__: object = None
 
     # dynamic attrs:
-    root = [] # for feedback
-    fback_ = []  # feedback [[aggH,valt,rdnt,dect]] per node layer, maps to node_H
-    compared_ = []
+    root : list = z([]) # for feedback
+    fback_ : list = z([])  # feedback [[aggH,valt,rdnt,dect]] per node layer, maps to node_H
+    compared_ : list = z([])
     Rim_H: list = z([])  # links to the most mediated nodes
     Rdn: int = 0  # for accumulation or separate recursion count?
     # it: list = z([None,None])  # graph indices in root node_s, implicitly nested
@@ -210,7 +214,7 @@ class CG:  # PP | graph | blob: params of single-fork node_ cluster
     # top aggLay: derH from links, lower aggH from nodes, only top Lay in derG:
     # top Lay from links, lower Lays from nodes, hence nested tuple?
 
-
+'''
 class z(SimpleNamespace):
 
     def __init__(self, **kwargs):  # this is not working here, their default value is still referencing a same id
@@ -231,7 +235,7 @@ def init_default(instance, params_set, default_value):
     for param, value in zip(params_set, default_value):
         if getattr(instance, param) is None: setattr(instance, param, deepcopy(value))
 
-'''
+
 # C inits SimpleNamespace instance with typ-specific param set:
 
 def Cptuple(typ='ptuple',I=None, G=None, M=None, Ma=None, angle=None, L=None):
