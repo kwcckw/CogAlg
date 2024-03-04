@@ -165,7 +165,7 @@ class CG(CBase):  # PP | graph | blob: params of single-fork node_ cluster
     derH : list = z([])  # stand-alone, summed from PP only
     aggH : list = z([])  # G only: [[subH,valt,rdnt,dect]], subH: [[derH,valt,rdnt,dect]]: 2-fork composition layers
     Et : list = z([])  # Vt,Rt,Nt across link layers
-    eEt: list = z([])  # from external links per node or internal links per new graph
+    et: list = z([])  # from external links per node or internal links per new graph
     node_: list = z([])  # can be node_H?
     link_: list = z([])  # links per comp layer, nest in rng+)der+
     roott: list = z([])  # Gm,Gd that contain this G, single-layer
