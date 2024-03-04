@@ -1,3 +1,31 @@
+'''
+Vectorize is a terminal fork of intra_blob.
+
+comp_slice traces edge axis by cross-comparing vertically adjacent Ps: horizontal slices across an edge blob.
+These are low-M high-Ma blobs, vectorized into outlines of adjacent flat (high internal match) blobs.
+(high match or match of angle: M | Ma, roughly corresponds to low gradient: G | Ga)
+-
+Vectorization is clustering of parameterized Ps + their derivatives (derPs) into PPs: patterns of Ps that describe edge blob.
+This process is a reduced-dimensionality (2D->1D) version of cross-comp and clustering cycle, common across this project.
+
+PP clustering in vertical (along axis) dimension is contiguous and exclusive because 
+Ps are relatively lateral (cross-axis), their internal match doesn't project vertically. 
+
+Primary clustering by match between Ps over incremental distance (rng++), followed by forming overlapping
+Secondary clusters of match of incremental-derivation (der++) difference between Ps. 
+
+As we add higher dimensions (3D and time), this dimensionality reduction is done in salient high-aspect blobs
+(likely edges in 2D or surfaces in 3D) to form more compressed 'skeletal' representations of full-dimensional patterns.
+
+comp_slice traces edge blob axis by cross-comparing vertically adjacent Ps: slices across edge blob, along P.G angle.
+These low-M high-Ma blobs are vectorized into outlines of adjacent flat (high internal match) blobs.
+(high match or match of angle: M | Ma, roughly corresponds to low gradient: G | Ga)
+
+Connectivity in P_ is traced through root_s of derts adjacent to P.dert_, possibly forking. 
+len prior root_ sorted by G is root.rdn, to eval for inclusion in PP or start new P by ave*rdn
+'''
+
+  # root function:
 import numpy as np
 from collections import deque, defaultdict
 from copy import deepcopy, copy
@@ -157,8 +185,7 @@ def form_PP_t(root, P_, iRt):  # form PPs of derP.valt[fd] + connected Ps val
 
 def sum2PP(root, P_, derP_, iRt, fd):  # sum links in Ps and Ps in PP
 
-    PP = CG(fd=fd,root=root,P_=P_,rng=root.rng+1, Et=[0,0,1,1], et=[0,0,1,1], link_=[], box=[inf,inf,-inf,-inf],
-           latuple=[0,0,0,0,[0,0],0], derH=[])
+    PP = CG(fd=fd,root=root,P_=P_,rng=root.rng+1, Et=[0,0,1,1], eEt=[0,0,1,1], link_=[], box=[inf,inf,-inf,-inf], latuple=[0,0,0,0,0,[0,0]], derH=[])
     # += uplinks:
     S,A = 0, [0,0]
     for derP in derP_:
@@ -169,18 +196,16 @@ def sum2PP(root, P_, derP_, iRt, fd):  # sum links in Ps and Ps in PP
         PP.link_ += [derP]; derP.roott[fd] = PP
         PP.Et = [V+v for V,v in zip(PP.Et, derP.Et)]
         PP.Et[2:4] = [R+ir for R,ir in zip(PP.Et[2:4], iRt)]
-        derP.A = np.add(A,derP.A); S += derP.S
+        PP.A = np.add(PP.A,derP.A); PP.S += derP.S
         PP.n += derP.n
-    if S: PP.ext = [len(P_), S, A]  # all from links  (not 0 value S, prevent single P's PP)
-
     # += Ps:
     celly_,cellx_ = [],[]
     for P in P_:
-        PP.area += P.latuple[-1]
-        PP.latuple = [[Par[0]+par[0],Par[1]+par[1]] if isinstance(Par, list) else Par + par for Par, par in zip(PP.latuple,P.latuple)]
+        PP.area += P.latuple[-2]
+        PP.latuple = [[P+p for P,p in zip(PP.latuple[:-1],P.latuple[:-1])], [A+a for A,a in zip(PP.latuple[-1],P.latuple[-1])]]
         if P.derH:
             add_(PP.derH, P.derH)
-            PP.et = [V+v for V, v in zip(PP.et, P.derH[1])]  # we need to sum et from P too? Else they are always empty
+            PP.eEt = [V+v for V,v in zip(PP.eEt, P.derH[1])]
         for y,x in P.cells:
             PP.box = accum_box(PP.box, y, x); celly_+=[y]; cellx_+=[x]
     # pixmap:
@@ -200,7 +225,7 @@ def feedback(root):  # in form_PP_, append new der layers to root PP, single vs.
         eT = [V+v for V,v in zip(eT, et)]
         add_(HE, He)
     add_(root.derH, HE if HE[0] else HE[2][-1])  # sum md_ or last md_ in H
-    root.et = [V+v for V,v in zip_longest(root.et, eT, fillvalue=0)]  # fillvalue to init from empty list
+    root.eEt = [V+v for V,v in zip_longest(root.eEt, eT, fillvalue=0)]  # fillvalue to init from empty list
 
     if root.root and isinstance(root.root, CG):  # skip if root is Edge
         rroot = root.root  # single PP.root, can't be P
@@ -213,8 +238,8 @@ def feedback(root):  # in form_PP_, append new der layers to root PP, single vs.
 
 def comp_latuple(_latuple, latuple, rn, fagg=0):  # 0der params
 
-    _I, _G, _M, _Ma, (_Dy, _Dx), _L = _latuple
-    I, G, M, Ma, (Dy, Dx), L = latuple
+    _I, _G, _M, _Ma, _L, (_Dy, _Dx) = _latuple
+    I, G, M, Ma, L, (Dy, Dx) = latuple
 
     dI = _I - I*rn;  mI = ave_dI - dI
     dG = _G - G*rn;  mG = min(_G, G*rn) - aves[1]
@@ -232,11 +257,9 @@ def comp_latuple(_latuple, latuple, rn, fagg=0):  # 0der params
         mrdn, drdn = dval>mval, mval>dval
         mdec, ddec = 0, 0
         for fd, (ptuple,Ptuple) in enumerate(zip((ret[::2],ret[1::2]),(Ret[::2],Ret[1::2]))):
-            for i, (par, maxv, ave) in enumerate(zip(ptuple, Ptuple, aves)):
-                # compute link decay coef: par/ max(self/same)
+            for i, (par, maxv, ave) in enumerate(zip(ptuple, Ptuple, aves)):  # compute link decay coef: par/ max(self/same)
                 if fd: ddec += abs(par)/ abs(maxv) if maxv else 1
                 else:  mdec += (par+ave)/ (maxv+ave) if maxv else 1
-        mdec /= 6; ddec /= 6  # ave of 6 params
         ret = [mval, dval, mrdn, drdn, mdec, ddec], ret
     return ret
 

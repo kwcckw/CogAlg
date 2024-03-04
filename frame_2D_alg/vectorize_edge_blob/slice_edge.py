@@ -117,7 +117,7 @@ def form_P(blob, P):
     L = len(P.dert_)
     M = ave_g*L - G
     G = np.hypot(Dy, Dx)  # recompute G
-    P.latuple = [I, G, M, Ma, [Dy, Dx], L]
+    P.latuple = [I, G, M, Ma, L, [Dy, Dx]]
     P.yx = P.dert_[L // 2][:2]  # new center
 
     return P
