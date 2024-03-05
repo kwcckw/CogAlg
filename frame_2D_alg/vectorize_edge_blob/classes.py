@@ -94,9 +94,12 @@ def comp_(_He,He, rn=1, fagg=0):  # unpack tuples (formally lists) down to numer
         Et = [0,0,0,0,0,0]  # Vm,Vd, Rm,Rd, Dm,Dd
         dH = []
         for _lay,lay in zip(_cHe[2],cHe[2]):  # md_| ext| derH| subH| aggH, eval nesting, unpack,comp ds in shared lower layers:
-            dpth, et, dlay, dn = comp_(_lay,lay, rn, fagg)
-            Et[:] = [E+e for E,e in zip(Et,et)]
-            dH += [[dpth, et, dlay]]; n += dn
+            if _lay  and lay:
+                dpth, et, dlay, dn = comp_(_lay,lay, rn, fagg)
+                Et[:] = [E+e for E,e in zip(Et,et)]
+                dH += [[dpth, et, dlay]]; n += dn
+            else:
+                dH += [[]]
     else:  # H is md_, numerical comp:
         vm,vd,rm,rd, decm,decd = 0,0,0,0, 0,0
         dH = []
@@ -124,7 +127,6 @@ class Clink(CBase):  # the product of comparison between two nodes
 
     _node: object = None  # prior comparand
     node: object = None
-    Et: list = z([])
     dderH: list = z([])  # derivatives produced by comp, from dertv to daggH
     roott: list = z([None, None])  # clusters that contain this link
     S: float = 0.0  # sparsity: distance between node centers
@@ -144,7 +146,6 @@ class CP(CBase):  # horizontal blob slice P, with vertical derivatives per param
 
     latuple: list = z([])  # I,G,M,Ma,L, (Dy,Dx)
     derH: list = z([])  # He, [(mtuple, ptuple)...] vertical derivatives summed from P links
-    Et: list = z([])  # from links
     dert_: list = z([])  # array of pixel-level derts, ~ node_
     link_: list = z([[]])  # uplinks per comp layer, nest in rng+)der+
     cells: dict = z({})  # pixel-level kernels adjacent to P axis, combined into corresponding derts projected on P axis.
@@ -164,8 +165,6 @@ class CG(CBase):  # PP | graph | blob: params of single-fork node_ cluster
     latuple: list = z([])  # summed from Ps: I,G,M,Ma,L,[Dy,Dx]
     derH: list = z([])  # summed from PPs
     aggH: list = z([])  # in G only: [[subH,valt,rdnt,dect]], subH: [[derH,valt,rdnt,dect]]: 2-fork composition layers
-    Et: list = z([])  # evaluation tuple: Vt,Rt,Nt across link layers
-    et: list = z([])  # from external links per node or internal links per new graph
     node_: list = z([])  # can be node_H?
     link_: list = z([])  # links per comp layer, nest in rng+)der+
     roott: list = z([])  # Gm,Gd that contain this G, single-layer
@@ -182,7 +181,6 @@ class CG(CBase):  # PP | graph | blob: params of single-fork node_ cluster
     A: list = z([0,0])  # angle: summed dy,dx in links
     # tentative:
     alt_graph_: list = z([])  # adjacent gap+overlap graphs, vs. contour in frame_graphs
-    alt_Et: list = z([0,0])  # sum from alt graphs to complement G aves?
     # dynamic attrs:
     P_: list = z([])  # in PPs
     mask__: object = None
