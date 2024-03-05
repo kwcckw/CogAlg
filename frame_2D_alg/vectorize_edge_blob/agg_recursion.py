@@ -49,7 +49,7 @@ def vectorize_root(blob):  # vectorization in 3 composition levels of xcomp, clu
             if  val * (len(node_)-1)*(edge.rng+1) > G_aves[fd] * rdn:
                 for i, PP in enumerate(node_):  # CPP -> CG:
                     PP.root = None; PP.et = [0,0,0,0,0,0]; PP.Et += [0,0]  # decay
-                    PP.node_ = PP.P_  # convert node_t into flat node_, to be used in comp_G's L computation later
+                    PP.node_ = PP.P_  # convert node_t into flat node_, L
                 # discontinuous PP rng+ cross-comp, cluster -> G_t
                 agg_recursion(None, edge, node_, nrng=1, fagg=1)  # agg+, no Cgraph nodes
 
@@ -219,7 +219,6 @@ def segment_node_(root, root_G_, fd, nrng, fagg):  # eval rim links with summed 
                     # merge _root:
                     _grapht = _G.root
                     _G_,_Link_,_Et,_Rim = _grapht
-                    # we can replace this section with set again, changing Link_ into set
                     if link not in Link_: Link_ += [link]
                     Link_[:] += [_link for _link in _Link_ if _link not in Link_]
                     for g in _G_:
@@ -250,9 +249,10 @@ def sum2graph(root, grapht, fd, nrng, fagg):  # sum node and link params into gr
 
     G_,Link_, Et = grapht
 
-    graph = CG(fd=fd, node_=G_,link_=Link_, Et=Et, rng=nrng, latuple=[0,0,0,0,0, [0,0]], n=1)  # n=1 default for latuple
+    graph = CG(fd=fd, node_=G_,link_=Link_, et=Et, rng=nrng)
+    # Et and et are not needed, same for latuple=[0,0,0,0,0, [0,0]], n=1?
     if fd: graph.root = root
-    et = [0,0,0,0,0,0]  # current layer et
+    et = [0,0,0,0,0,0]  # current vals
     for link in Link_:  # unique current-layer links
         link.root = graph; graph.S += link.S; np.add(graph.A,link.A)
         et = [V+v for V,v in zip(et, link.Et)]
@@ -269,8 +269,8 @@ def sum2graph(root, grapht, fd, nrng, fagg):  # sum node and link params into gr
         graph.aggH = add_(graph.aggH, G.aggH)
         Et = [V+v for V,v in zip(Et, G.Et)]  # combined across node layers
     # dsubH| daggH:
-    if graph.aggH: graph.aggH[2] += [eDerH]
-    else:          graph.aggH = eDerH       # init if aggH is empty
+    if graph.aggH: graph.aggH[2] += [eDerH]  # init []
+    else: graph.aggH = eDerH
     graph.Et = [V+v+ev for V,v,ev in zip(graph.Et, Et, et)]  # graph internals = G Internals + Externals, combined across link layers
     if fagg:
         if graph.aggH and graph.aggH[0] == 1:  # if depth == 1 (derH), convert to subH (depth =2)
@@ -284,7 +284,7 @@ def sum2graph(root, grapht, fd, nrng, fagg):  # sum node and link params into gr
                 for fd, (G, alt_G) in enumerate(((mgraph,graph), (graph,mgraph))):  # bilateral assign:
                     if G not in alt_G.alt_graph_:
                         G.alt_graph_ += [alt_G]
-                        G.alt_Et = [V+v for V, v in zip_longest(G.alt_Et, alt_G.et, fillvalue=0)]
+                        G.alt_Et = [V+v for V,v in zip_longest(G.alt_Et, alt_G.et, fillvalue=0)]
     return graph
 
 
@@ -310,37 +310,34 @@ def sum_last_lay(G, fd):  # eLay += last layer of link.daggH (dsubH|ddaggH)
   # draft
 def comp_G(link, iEt):  # add flat dderH to link and link to the rims of comparands
 
-    _G, G = link._node, link.node  # comp: default P.ptuple and G.ext, PP.He if>1 P, G.HHe if>1 PP:
-    rn = _G.n / G.n; Depth = 0; N = 1  # default per latuple
-    # / P:
+    _G, G = link._node, link.node
+    rn = len(_G.node_)/ len(G.node_)  # or unpack nested node_?
+    Depth = 0
+    # / P, default
     Et, md_ = comp_latuple(_G.latuple, G.latuple, rn, fagg=1)
-    dderH = [[0, [*Et], md_]]  # dderH.H
+    dderH_H = [[0,[*Et], md_]]  # dderH.H
+    N = 1
     # / PP, if >1 Ps:
     if _G.derH and G.derH:
         depth, et, dH, n = comp_(_G.derH, G.derH, rn, fagg=1)  # generic dderH
-        # comp_ return H instead of He, we need to create new dHe
-        dHe = [depth, et, dH]
-        dderH += [dHe]  # add flat, each element is He
+        dderH_H += [[depth, et, dH]]  # add flat
         Et = [E+e for E,e in zip(Et,et)]  # evaluation tuple: valt, rdnt, dect
-        N += n; Depth = max(1, depth)  # at least depth == 1 here, right now G.derH's depth == 0
+        N += n; Depth = max(1,depth)
     # / G, if >1 PPs:
     if _G.aggH and G.aggH:  # exactly as above?
         depth, et, daggH, n = comp_(_G.aggH, G.aggH, rn, fagg=1)
-        dderH += daggH  # still flat
+        dderH_H += daggH  # still flat
         Et = [E+e for E,e in zip(Et,et)]
         N += n; Depth = depth
-
-    if _G.S and G.S:  # not single-node
+    # if not single-node:
+    if _G.S and G.S:
         et, extt = comp_ext((len(_G.node_),_G.S,_G.A),(len(G.node_),G.S,G.A), rn)  # or unpack?
         Et = [E+e for E,e in zip(Et,et)]; N += .5
-        dexttHe = [0, et, extt]  # we need this in He structure too
-        dderH += [dexttHe]  # extt must be last
-    # below is not needed, it's causing problem on empty He later because He won't be empty
-    '''
+        dderH_H += [[0, et, extt]]  # must be last
     else:
-        dderH += [[]]  # not sure this is needed
-    '''
-    dderH = [max(1, Depth), Et, dderH]  # min depth of dderH is 1? Because Depth might = 0 if derH , aggH are empty
+        dderH_H += [[]]
+        # for fixed len layer to decode nesting, else use Cext as a terminator?
+    dderH = [Depth, Et, dderH_H]
     link.Et = Et; link.n = N  # reset per comp_G
     if link.dderH:
         add_(link.dderH, dderH)  # existing dderH in der+
@@ -373,7 +370,7 @@ def comp_ext(_ext, ext, rn):  # primary ext only
     mrdn = M > D
     drdn = D<= M
     # all comparands are positive: maxm = maxd
-    Lmax = max(L,_L); Smax = max(S,_S); Amax = .5  # max_mA = max_dA = ave_dangle
+    Lmax = max(L,_L); Smax = max(S,_S); Amax = 1
     mdec = mL/Lmax + mS/Smax + mA/Amax
     ddec = dL/Lmax + dS/Smax + dA/Amax
 

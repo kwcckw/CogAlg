@@ -174,9 +174,9 @@ def form_PP_t(root, P_, iRt):  # form PPs of derP.valt[fd] + connected Ps val
             inP_ += cP_  # update clustered Ps
 
     for PP in PP_t[1]:  # eval der+ / PPd only, after form_PP_t -> P.root
-        # if PP.Et[1] * len(PP.link_) > PP_aves[1] * PP.Et[3]:
-        #     # node-mediated correlation clustering:
-        #     der_recursion(root, PP, fd=1)
+        if PP.Et[1] * len(PP.link_) > PP_aves[1] * PP.Et[3]:
+            # node-mediated correlation clustering:
+            der_recursion(root, PP, fd=1)
         if root.fback_:
             feedback(root)  # after der+ in all nodes, no single node feedback
 
@@ -191,7 +191,7 @@ def sum2PP(root, P_, derP_, iRt, fd):  # sum links in Ps and Ps in PP
         if derP.node not in P_ or derP._node not in P_: continue
         if derP.dderH:
             add_(derP.node.derH, derP.dderH, iRt)
-            add_(derP._node.derH, negate(deepcopy(derP.dderH)), iRt)
+            add_(derP._node.derH, negate(deepcopy(derP.dderH)), iRt)  # to reverse uplink direction
         PP.link_ += [derP]; derP.roott[fd] = PP
         PP.Et = [V+v for V,v in zip(PP.Et, derP.Et)]
         PP.Et[2:4] = [R+ir for R,ir in zip(PP.Et[2:4], iRt)]
@@ -204,7 +204,7 @@ def sum2PP(root, P_, derP_, iRt, fd):  # sum links in Ps and Ps in PP
         PP.latuple = [P+p for P,p in zip(PP.latuple[:-1],P.latuple[:-1])] + [[A+a for A,a in zip(PP.latuple[-1],P.latuple[-1])]]
         if P.derH:
             add_(PP.derH, P.derH)
-            # PP.et = [V+v for V,v in zip(PP.et, P.derH[1])]  # this is not needed now? We are already summing PP.Et with derP's Et 
+            # PP.et = [V+v for V,v in zip(PP.et, P.derH[1])]  # this is not needed now? We are already summing PP.Et with derP's Et
         for y,x in P.cells:
             PP.box = accum_box(PP.box, y, x); celly_+=[y]; cellx_+=[x]
     # pixmap:
@@ -259,28 +259,9 @@ def comp_latuple(_latuple, latuple, rn, fagg=0):  # 0der params
             for i, (par, maxv, ave) in enumerate(zip(ptuple, Ptuple, aves)):  # compute link decay coef: par/ max(self/same)
                 if fd: ddec += abs(par)/ abs(maxv) if maxv else 1
                 else:  mdec += (par+ave)/ (maxv+ave) if maxv else 1
+
         ret = [mval, dval, mrdn, drdn, mdec, ddec], ret
     return ret
-
-
-def comp_ptuple_generic(_ptuple, ptuple, rn):  # 0der
-
-    mtuple, dtuple, Mtuple = [],[],[]
-    # _n, n = _ptuple, ptuple: add to rn?
-    for i, (_par, par, ave) in enumerate(zip(_ptuple, ptuple, aves)):
-        if isinstance(_par, list) or isinstance(_par, tuple):
-             m,d = comp_angle(_par, par)
-             maxv = 2
-        else:  # I | M | G L
-            npar= par*rn  # accum-normalized param
-            d = _par - npar
-            if i: m = min(_par,npar)-ave
-            else: m = ave-abs(d)  # inverse match for I, no mag/value correlation
-            maxv = max(_par, par)
-        mtuple+=[m]
-        dtuple+=[d]
-        Mtuple+=[maxv]
-    return [mtuple, dtuple, Mtuple]
 
 def unpack_last_link_(link_):  # unpack last link layer
 
