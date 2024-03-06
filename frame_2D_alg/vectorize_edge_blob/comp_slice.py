@@ -72,7 +72,7 @@ def der_recursion(root, PP, fd=0):  # node-mediated correlation clustering: keep
 
     rng_recursion(PP, rng=1, fd=fd)  # extend PP.link_, derHs by same-der rng+ comp
 
-    form_PP_t(PP, PP.P_, iRt = PP.derH[1][2:4] if PP.derH else [0,0])  # der+ is mediated by form_PP_t
+    form_PP_t(PP, PP.P_, iRt = PP.derH.Et[2:4] if PP.derH.n else [0,0])  # der+ is mediated by form_PP_t
     if root: root.fback_ += [PP.derH]  # feedback from PPds
 
 
@@ -121,10 +121,11 @@ def comp_P(link, fd):
     else:                      _P, P, S, A = link  # list in rng+
     rn = len(_P.dert_) / len(P.dert_)
 
-    if _P.derH and P.derH:
+    if _P.derH.n and P.derH.n:
         # der+: append link derH, init in rng++ from form_PP_t
-        depth,(vm,vd,rm,rd),H, n = comp_(_P.derH, P.derH, rn=rn)
-        rm += vd > vm; rd += vm >= vd
+        dHe = comp_(_P.derH, P.derH, rn=rn)
+        vm, vd, rm, rd = dHe.Et[:4]
+        rm += vd > vm; rd += vm >= vd 
         aveP = P_aves[1]
     else:
         # rng+: add link derH
@@ -139,9 +140,10 @@ def comp_P(link, fd):
             He = link.dderH
             if not He.nest: He = link.He = CH(nest=1, Et=[*He.Et],H=[He])  # nest md_ as derH
             He.Et = np.add(He.Et,[vm,vd,rm,rd])
-            He.H += [CH(nest=0, Et=[vm,vd,rm,rd], H=H)]
+            He.H += [dHe]
         else:
-            link = Clink(node=P,_node=_P, dderH = CH(nest=0, Et=[vm,vd,rm,rd], H=H), S=S, A=A, n=n, roott=[[],[]])
+            # include n = 1 into CH?
+            link = Clink(node=P,_node=_P, dderH = CH(nest=0, Et=[vm,vd,rm,rd], H=H, n=n), S=S, A=A, n=n, roott=[[],[]])
 
         return link
 
@@ -173,7 +175,7 @@ def form_PP_t(root, P_, iRt):  # form PPs of derP.valt[fd] + connected Ps val
             inP_ += cP_  # update clustered Ps
 
     for PP in PP_t[1]:  # eval der+ / PPd only, after form_PP_t -> P.root
-        if PP.derH and PP.derH[1][0] * len(PP.link_) > PP_aves[1] * PP.derH[1][2]:
+        if PP.derH.n and PP.derH.Et[0] * len(PP.link_) > PP_aves[1] * PP.derH.Et[2]:
             # node-mediated correlation clustering:
             der_recursion(root, PP, fd=1)
         if root.fback_:
@@ -184,11 +186,11 @@ def form_PP_t(root, P_, iRt):  # form PPs of derP.valt[fd] + connected Ps val
 
 def sum2PP(root, P_, derP_, iRt, fd):  # sum links in Ps and Ps in PP
 
-    PP = CG(fd=fd,root=root,P_=P_,rng=root.rng+1, link_=[], box=[inf,inf,-inf,-inf], latuple=[0,0,0,0,0,[0,0]], derH=[])
+    PP = CG(fd=fd,root=root,P_=P_,rng=root.rng+1, link_=[], box=[inf,inf,-inf,-inf], latuple=[0,0,0,0,0,[0,0]])
     # += uplinks:
     for derP in derP_:
         if derP.node not in P_ or derP._node not in P_: continue
-        if derP.dderH:
+        if derP.dderH.n:
             add_(derP.node.derH, derP.dderH, iRt)
             add_(derP._node.derH, negate(deepcopy(derP.dderH)), iRt)  # to reverse uplink direction
         PP.link_ += [derP]; derP.roott[fd] = PP
@@ -200,7 +202,7 @@ def sum2PP(root, P_, derP_, iRt, fd):  # sum links in Ps and Ps in PP
         PP.n += P.n
         PP.area += P.latuple[-2]  # L
         PP.latuple = [P+p for P,p in zip(PP.latuple[:-1],P.latuple[:-1])] + [[A+a for A,a in zip(PP.latuple[-1],P.latuple[-1])]]
-        if P.derH:
+        if P.derH.n:
             add_(PP.derH, P.derH)
         for y,x in P.cells:
             PP.box = accum_box(PP.box, y, x); celly_+=[y]; cellx_+=[x]
