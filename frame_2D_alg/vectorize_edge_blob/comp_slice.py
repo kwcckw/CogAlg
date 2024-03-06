@@ -32,7 +32,7 @@ from copy import deepcopy, copy
 from itertools import zip_longest, combinations
 from math import inf
 from typing import List, Tuple
-from .classes import add_, comp_, negate, get_match, Clink, CG
+from .classes import add_, comp_, negate, get_match, Clink, CG, CH
 from .filters import ave, ave_dI, aves, P_aves, PP_aves
 from .slice_edge import comp_angle
 from utils import box2slice, accum_box, sub_box2box
@@ -92,7 +92,7 @@ def rng_recursion(PP, rng=1, fd=0):  # similar to agg+ rng_recursion, but contig
                 if distance < rng:  # | rng * ((P.val+_P.val) / ave_rval)?
                     mlink = comp_P(_link if fd else [_P,P, distance,[dy,dx]], fd)  # return link if match
                     if mlink:
-                        V += mlink.dderH[1][0]  # unpack last link layer:
+                        V += mlink.dderH.Et[0]  # unpack last link layer:
                         link_ = P.link_[-1] if P.link_ and isinstance(P.link_[-1], list) else P.link_  # der++ if PP.He[0] depth==1
                         if rng > 1:
                             if rng == 2: link_[:] = [link_[:]]  # link_ -> link_H
@@ -137,11 +137,11 @@ def comp_P(link, fd):
     if vm > aveP*rm:  # always rng+
         if fd:
             He = link.dderH
-            if not He[0]: He = link.He = [1,[*He[1]],[He]]  # nest md_ as derH
-            He[1] = np.add(He[1],[vm,vd,rm,rd])
-            He[2] += [[0, [vm,vd,rm,rd], H]]  # nesting, Et, H
+            if not He.nest: He = link.He = CH(nest=1, Et=[*He.Et],H=[He])  # nest md_ as derH
+            He.Et = np.add(He.Et,[vm,vd,rm,rd])
+            He.H += [CH(nest=0, Et=[vm,vd,rm,rd], H=H)]
         else:
-            link = Clink(node=P,_node=_P, dderH=[0,[vm,vd,rm,rd],H], S=S, A=A, n=n, roott=[[],[]])
+            link = Clink(node=P,_node=_P, dderH = CH(nest=0, Et=[vm,vd,rm,rd], H=H), S=S, A=A, n=n, roott=[[],[]])
 
         return link
 
@@ -184,7 +184,7 @@ def form_PP_t(root, P_, iRt):  # form PPs of derP.valt[fd] + connected Ps val
 
 def sum2PP(root, P_, derP_, iRt, fd):  # sum links in Ps and Ps in PP
 
-    PP = CG(fd=fd,root=root,P_=P_,rng=root.rng+1, link_=[], box=[inf,inf,-inf,-inf], latuple=[0,0,0,0,0,[0,0]], derH=[], n=1)
+    PP = CG(fd=fd,root=root,P_=P_,rng=root.rng+1, link_=[], box=[inf,inf,-inf,-inf], latuple=[0,0,0,0,0,[0,0]], derH=[])
     # += uplinks:
     for derP in derP_:
         if derP.node not in P_ or derP._node not in P_: continue
@@ -197,15 +197,15 @@ def sum2PP(root, P_, derP_, iRt, fd):  # sum links in Ps and Ps in PP
     # += Ps:
     celly_,cellx_ = [],[]
     for P in P_:
-        PP.area += P.latuple[-2]
+        PP.n += P.n
+        PP.area += P.latuple[-2]  # L
         PP.latuple = [P+p for P,p in zip(PP.latuple[:-1],P.latuple[:-1])] + [[A+a for A,a in zip(PP.latuple[-1],P.latuple[-1])]]
         if P.derH:
             add_(PP.derH, P.derH)
-            # PP.et = [V+v for V,v in zip(PP.et, P.derH[1])]  # this is not needed now? We are already summing PP.Et with derP's Et
         for y,x in P.cells:
             PP.box = accum_box(PP.box, y, x); celly_+=[y]; cellx_+=[x]
-    if PP.derH: 
-        PP.derH[1][2:4] = [R+r for R,r in zip(PP.derH[1][2:4], iRt)]
+    if PP.derH:
+        PP.derH.Et[2:4] = [R+r for R,r in zip(PP.derH.Et[2:4], iRt)]
     # pixmap:
     y0,x0,yn,xn = PP.box
     PP.mask__ = np.zeros((yn-y0, xn-x0), bool)
@@ -221,7 +221,7 @@ def feedback(root):  # in form_PP_, append new der layers to root PP, single vs.
     while root.fback_:
         He  = root.fback_.pop(0)
         add_(HE, He)
-    add_(root.derH, HE[2][-1] if HE[0] else HE)  # sum md_ or last md_ in H (Sorry this should be the other way around)
+    add_(root.derH, HE.H[-1] if HE.nest else HE)  # last md_ in H or sum md_
 
     if root.root and isinstance(root.root, CG):  # skip if root is Edge
         rroot = root.root  # single PP.root, can't be P
