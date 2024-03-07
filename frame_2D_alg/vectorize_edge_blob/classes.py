@@ -46,9 +46,11 @@ def add_(HE, He, irdnt=[]):  # unpack tuples (formally lists) down to numericals
                             HE.H += [deepcopy(lay)]
             else:
                 HE.H = np.add(HE.H, He.H)  # sum flat lists: [m,d,m,d,m,d...]
-        else:
-            HE[:] = deepcopy(He)  # copy the 1st He to empty HE
-        if irdnt:
+                HE.n += He.n  # we need to add their n here too?    
+            HE.nest = max(HE.nest, He.nest)
+        elif not isinstance(HE, list):
+            HE.copy(He)  # copy the 1st He to empty HE
+        if irdnt and not isinstance(HE, list):  # HE here might be the empty list packed in comp_G, so we skip it if it's a list?
             HE.Et[2] += irdnt[0]; HE.Et[3] += irdnt[1]
 
     return HE  # for summing
@@ -107,9 +109,6 @@ class CH(CBase):  # generic derivation hierarchy of variable nesting
     H: list = z([])  # hierarchy of der layers or md_
     n: int = 0  # total number of params compared to form derH, summed in comp_G and then from nodes in sum2graph
 
-    def __bool__(self):  # to test empty
-        if self.n: return True
-        else: return False
     '''
     len layer +extt: 2, 3, 6, 12, 24,
     or without extt: 1, 1, 2, 4, 8..: max n of tuples per der layer = summed n of tuples in all lower layers:
@@ -137,9 +136,6 @@ class CP(CBase):  # horizontal blob slice P, with vertical derivatives per param
     # Mdx: int = 0  # if comp_dx
     # Ddx: int = 0
 
-    def __bool__(self):  # to test empty
-        if self.dert_: return True
-        else: return False
 
 
 class CG(CBase):  # PP | graph | blob: params of single-fork node_ cluster
@@ -179,15 +175,12 @@ class CG(CBase):  # PP | graph | blob: params of single-fork node_ cluster
     # top aggLay: derH from links, lower aggH from nodes, only top Lay in derG:
     # top Lay from links, lower Lays from nodes, hence nested tuple?
 
-    def __bool__(self):  # to test empty
-        if self.n: return True
-        else: return False
 
 class Clink(CBase):  # the product of comparison between two nodes
 
     _node: object = None  # prior comparand
     node:  object = None
-    dderH: object = CH  # derivatives produced by comp, from dertv to DerH
+    dderH: object = z(CH())  # derivatives produced by comp, from dertv to DerH
     roott: list = z([None, None])  # clusters that contain this link
     S: float = 0.0  # sparsity: distance between node centers
     A: list = z([0,0])  # angle: dy,dx between centers

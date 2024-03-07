@@ -51,6 +51,7 @@ def vectorize_root(blob):  # vectorization in 3 composition levels of xcomp, clu
                 for i, PP in enumerate(node_):
                     PP.root = None  # still no decay in internal links
                     PP.node_ = PP.P_  # revert to base node_?
+                    if PP.derH: PP.derH.Et += [0,0]  # add decays
                 # discontinuous PP rng+ cross-comp, cluster -> G_t
                 agg_recursion(None, edge, node_, nrng=1, fagg=1)  # agg+, no Cgraph nodes
 
@@ -59,7 +60,7 @@ def vectorize_root(blob):  # vectorization in 3 composition levels of xcomp, clu
 
 def agg_recursion(rroot, root, node_, nrng=1, fagg=0):  # lenH = len(root.aggH[-1][0]), lenHH: same in agg_compress
 
-    Et = [0,0,0,0,0,0]  # need real init too: G-external vals summed from grapht link_ Et
+    Et = [0,0,0,0]  # need real init too: G-external vals summed from grapht link_ Et
 
     # agg+ der=1 xcomp of new Gs if fagg, else sub+: der+ xcomp of old Gs:
     nrng = rng_recursion(rroot, root, combinations(node_,r=2) if fagg else root.link_, Et, nrng=nrng)  # rng+ appends rim, link.derH
@@ -67,7 +68,7 @@ def agg_recursion(rroot, root, node_, nrng=1, fagg=0):  # lenH = len(root.aggH[-
     form_graph_t(root, node_, Et, nrng, fagg)  # root_fd, eval der++ and feedback per Gd, not sub-recursion in Gms
 
     if node_ and isinstance(node_[0], list):
-        rEt = root.aggH.Et if root.aggH else (root.derH.Et if root.derH else [0,0,0,0,0,0])
+        rEt = root.aggH.Et if root.aggH else (root.derH.Et if root.derH else [0,0,0,0])
         for fd, G_ in enumerate(node_):
             if rEt[fd] * (len(G_)-1)*root.rng > G_aves[fd] * rEt[2+fd]:
                 # agg+ / node_t, vs. sub+ / node_:
@@ -98,8 +99,10 @@ def rng_recursion(rroot, root, Q, Et, nrng=1):  # rng++/ G_, der+/ link_ if call
             dy, dx = box2center(G.box)  # compute distance between node centers:
             dist = np.hypot(dy, dx)
             # combined pairwise eval (directional val?) per rng+:
-            _M,_R = [_G.aggH.Et[0],_G.aggH.Et[2]] if _G.aggH else [0,0]
-            M, R = [G.aggH.Et[0],G.aggH.Et[2]] if G.aggH else [0,0]
+            if G.aggH: _He, He = _G.aggH, G.aggH
+            else:      _He, He = _G.derH, G.derH
+            _M,_R = [_He.Et[0],_He.Et[2]] if _He else [0,0]
+            M, R = [He.Et[0],He.Et[2]] if He else [0,0]
             if nrng==1 or ((M+_M)/ (dist/ave_distance) > ave*(R+_R)):
                 link = Clink(_node=_G, node=G, A=[dy,dx], S=dist)  # prelink
                 G.compared_+=[_G]; _G.compared_+=[G]
@@ -168,14 +171,18 @@ def node_connect(_G_):  # node connectivity = sum surround link vals, incr.media
             uprim = []  # >ave updates of direct links
             rim = G.rim_H[-1] if G.rim_H and isinstance(G.rim_H[0], list) else G.rim_H
             for i in 0,1:
-                et = G.aggH.H[-1].Et if G.aggH.nest else G.aggH.Et
+                if G.aggH:   et = G.aggH.H[-1].Et if G.aggH.nest else G.aggH.Et
+                elif G.derH: et = G.derH.Et
+                else:        et  = G.derH.Et = [0,0,0,0,0,0]  # init G.derH if it's empty? or skip?
                 val,rdn,dec = et[i::2]  # connect by last layer
                 ave = G_aves[i]
                 for link in rim:
                     # >ave derG in fd rim
                     lval,lrdn,ldec = link.dderH.Et[i::2]; ldec /= link.n
                     _G = link._node if link.node is G else link.node
-                    _et = _G.aggH.H[-1].Et if _G.aggH.nest else _G.aggH.Et
+                    if _G.aggH:   _et = _G.aggH.H[-1].Et if _G.aggH.nest else _G.aggH.Et
+                    elif _G.derH: _et = _G.derH.Et
+                    else:         _et  = _G.derH.Et = [0,0,0,0,0,0]  # init G.derH if it's empty? or skip?
                     _val,_rdn,_dec = _et[i::2]
                     # Vt.. for segment_node_:
                     V = ldec * (val+_val); dv = V-lval
@@ -202,7 +209,9 @@ def segment_node_(root, root_G_, fd, nrng, fagg):  # eval rim links with summed 
     igraph_ = []; ave = G_aves[fd]
 
     for G in root_G_:   # init per node
-        Et = copy(G.aggH.H[-1].Et) if G.aggH.nest else copy(G.aggH.Et)  # last-layer Vt,Rt,Dt, can't be empty
+        if G.aggH:    Et = copy(G.aggH.H[-1].Et) if G.aggH.nest else copy(G.aggH.Et)  # last-layer Vt,Rt,Dt, can't be empty
+        elif G.derH:  Et = G.derH.Et  # 1st call
+        else:         G.derH.Et = Et = [0,0,0,0,0,0]  # 1st call + init
         link_ = copy(G.rim_H[-1] if G.rim_H and isinstance(G.rim_H[0],list) else G.rim_H)
         grapht = [[G],[], Et, link_]  # link_ = last rim
         G.root = grapht  # for G merge
@@ -223,8 +232,11 @@ def segment_node_(root, root_G_, fd, nrng, fagg):  # eval rim links with summed 
                 if _G in G_: continue
                 # connect by rel match of nodes * match of node Vs: surround M|Ds,
                 # cval suggests how deeply inside the graph is G:
-                cval = link.dderH.Et[fd] + get_match(_G.aggH.Et[fd], G.aggH.Et[fd])  # same coef for int and ext match?
-                crdn = link.dderH.Et[2+fd] + (_G.aggH.Et[2+fd] + G.aggH.Et[2+fd]) / 2
+                cval = link.dderH.Et[fd]   # same coef for int and ext match?
+                crdn = link.dderH.Et[2+fd] 
+                if _G.aggH and G.aggH:
+                    cval += get_match(_G.aggH.Et[fd], G.aggH.Et[fd])
+                    crdn += (_G.aggH.Et[2+fd] + G.aggH.Et[2+fd]) / 2
                 if cval > ave * crdn:  # _G and its root are effectively connected
                     # merge _root:
                     _grapht = _G.root
@@ -266,7 +278,7 @@ def sum2graph(root, grapht, fd, nrng, fagg):  # sum node and link params into gr
     for link in Link_:  # unique current-layer links
         link.root = graph; graph.S += link.S; np.add(graph.A,link.A)
         N += link.dderH.n
-    eaggH = []
+    eaggH = CH(nest=0, Et=[0,0,0,0,0,0], H=0)
     # grapht int = node int+ext
     for G in G_:
         N += G.n
@@ -297,24 +309,23 @@ def sum2graph(root, grapht, fd, nrng, fagg):  # sum node and link params into gr
     return graph
 
 # not updated below
-
 def sum_last_lay(G, fd):  # eLay += last layer of link.daggH (dsubH|ddaggH)
 
-    eDerH = [1, [0,0,0,0,0,0], []]
+    eDerH = CH(nest=1, Et=[0,0,0,0,0,0], H=[])
     for link in G.rim_H[-1] if G.rim_H and isinstance(G.rim_H[0],list) else G.rim_H:
         if link.dderH:
-            H = link.dderH[2]
+            H = link.dderH.H
             if G.aggH:
-                G_depth = G.aggH[0][0]
-                if G_depth == 2 and G.ederH and G.ederH[0] == 2:
-                    H = H[2][-1][2]  # last subH
+                G_depth = G.aggH.nest
+                if G_depth == 2 and G.ederH and G.ederH.nest == 2:
+                    H = H[-1].H  # last subH
                 else:
                     H = []
             # derH_/ last xcomp: len subH *= 2, maybe single dderH
-            eDerH[2] = [add_(eHE, eHe, irdnt=link.Et[2:4]) for eHE, eHe in zip_longest(H[int(len(H)/2): ], eDerH[2], fillvalue=[])]
+            eDerH.H = [add_(eHE, eHe, irdnt=link.Et[2:4]) for eHE, eHe in zip_longest(H[int(len(H)/2): ], eDerH.H, fillvalue=CH(nest=0, Et=[0,0,0,0,0,0],H=[]))]
             # sum all derHs of link layer=rdH into esubH[-1]
 
-    if eDerH[2]: add_(G.ederH, eDerH)
+    if eDerH.H: add_(G.ederH, eDerH)
 
 
   # draft
@@ -325,29 +336,29 @@ def comp_G(link, iEt):  # add flat dderH to link and link to the rims of compara
     Depth = 0
     # / P, default
     Et, md_ = comp_latuple(_G.latuple, G.latuple, rn, fagg=1)
-    dderH_H = [[0,[*Et], md_]]  # dderH.H
+    dderH_H = [CH(nest=0,Et=[*Et], H=md_)]  # dderH.H
     N = 1
     # / PP, if >1 Ps:
     if _G.derH and G.derH:
-        depth, et, dH, n = comp_(_G.derH, G.derH, rn, fagg=1)  # generic dderH
-        dderH_H += [[depth, et, dH]]  # add flat
-        Et = [E+e for E,e in zip(Et,et)]  # evaluation tuple: valt, rdnt, dect
-        N += n; Depth = max(1,depth)
+        dHe = comp_(_G.derH, G.derH, rn, fagg=1)  # generic dderH
+        dderH_H += [dHe]  # add flat
+        Et = [E+e for E,e in zip(Et,dHe.Et)]  # evaluation tuple: valt, rdnt, dect
+        N += dHe.n; Depth = max(1,dHe.nest)
     # / G, if >1 PPs:
     if _G.aggH and G.aggH:  # exactly as above?
-        depth, et, daggH, n = comp_(_G.aggH, G.aggH, rn, fagg=1)
-        dderH_H += daggH  # still flat
-        Et = [E+e for E,e in zip(Et,et)]
-        N += n; Depth = depth
+        dHe = comp_(_G.aggH, G.aggH, rn, fagg=1)
+        dderH_H += dHe.H  # still flat
+        Et = [E+e for E,e in zip(Et,dHe.Et)]
+        N += dHe.n; Depth = dHe.depth
     # if not single-node:
     if _G.S and G.S:
         et, extt = comp_ext((len(_G.node_),_G.S,_G.A),(len(G.node_),G.S,G.A), rn)  # or unpack?
         Et = [E+e for E,e in zip(Et,et)]; N += .5
-        dderH_H += [[0, et, extt]]  # must be last
+        dderH_H += [CH(nest=0, Et=et, H=extt)]  # must be last
     else:
         dderH_H += [[]]
         # for fixed len layer to decode nesting, else use Cext as a terminator?
-    dderH = [Depth, Et, dderH_H]
+    dderH = CH(nest=Depth, Et=Et, H=dderH_H, n=N)
     link.Et = Et; link.n = N  # reset per comp_G
     if link.dderH:
         add_(link.dderH, dderH)  # existing dderH in der+
@@ -389,13 +400,14 @@ def comp_ext(_ext, ext, rn):  # primary ext only
 def feedback(root):  # called from form_graph_, append new der layers to root
 
     AggH = deepcopy(root.fback_.pop(0))  # init
+    fnest = AggH.nest - 1
     while root.fback_:
         aggH = root.fback_.pop(0)
         add_(AggH, aggH)
-        AggH = [add_(HE,He) for HE,He in zip_longest(AggH, aggH, fillvalue=[])]
+        AggH = [add_(HE,He) for HE,He in zip_longest(AggH, aggH, fillvalue=CH(nest=fnest, Et=[0,0,0,0,0,0],H=[]))]
 
-    if AggH[1][1] > G_aves[1] * AggH[1][3]:  # compress levels?
-        root.aggH = [add_(rHe,He) for rHe,He in zip_longest(root.aggH, AggH, fillvalue=[])]
+    if AggH.Et[1] > G_aves[1] * AggH.Et[3]:  # compress levels?
+        root.aggH = [add_(rHe,He) for rHe,He in zip_longest(root.aggH, AggH, fillvalue=CH(nest=fnest, Et=[0,0,0,0,0,0],H=[]))]
         # root.Et = [V+v for V,v in zip_longest(root.Et, ET, fillvalue=0)]
 
     if root.root and isinstance(root.root, CG):  # not Edge

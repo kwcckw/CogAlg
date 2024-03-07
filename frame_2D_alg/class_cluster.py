@@ -47,6 +47,23 @@ class CBase:
     def unpack(self):
         return astuple(self)
 
+    def copy(self, other):
+        for attr, value in other.__dict__.items():
+            if attr != '_id' and attr in self.__dict__.keys():  # copy only the available attributes and skip id
+                setattr(self, attr, deepcopy(value))
+
+    def __bool__(self):  # to test empty
+        if hasattr(self, 'n'):  # CG, CH
+            if self.n: return True
+            else: return False
+        elif hasattr(self, 'dert_'):  # CP
+            if self.dert_: return True
+            else: return False
+        elif hasattr(self, 'node'):  # Clink
+            if self.node: return True
+            else: return False  
+
+
 
 # ----------------------------------------------------------------------------
 # CbaseLite class

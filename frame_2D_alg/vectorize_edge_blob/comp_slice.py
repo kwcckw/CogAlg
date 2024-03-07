@@ -124,7 +124,7 @@ def comp_P(link, fd):
     if _P.derH and P.derH:
         # der+: append link derH, init in rng++ from form_PP_t
         dHe = comp_(_P.derH, P.derH, rn=rn)
-        vm,vd,rm,rd = dHe.Et[:4]  # for call from comp_G
+        nest, H, (vm,vd,rm,rd), n = dHe.nest, dHe.H, dHe.Et, dHe.n
         rm += vd > vm; rd += vm >= vd
         aveP = P_aves[1]
     else:
@@ -134,15 +134,16 @@ def comp_P(link, fd):
         rm = 1 + vd > vm; rd = 1 + vm >= vd
         n = (len(_P.dert_)+len(P.dert_)) /2  # ave compared n
         aveP = P_aves[0]
+        nest = 0
 
     if vm > aveP*rm:  # always rng+
         if fd:
             He = link.dderH
             if not He.nest: He = link.He = CH(nest=1, Et=[*He.Et],H=[He])  # nest md_ as derH
             He.Et = np.add(He.Et,[vm,vd,rm,rd])
-            He.H += [dHe]
+            He.H += [CH(nest=nest,Et=[vm,vd,rm,rd],H=H,n=n)]  # Sorry, we reinit He because when fd=1, sometimes _P.derH and P.derH are empty (top row)
         else:
-            link = Clink(node=P,_node=_P, dderH = CH(nest=0,Et=[vm,vd,rm,rd],H=H,n=n), S=S, A=A, roott=[[],[]])
+            link = Clink(node=P,_node=_P, dderH = CH(nest=nest,Et=[vm,vd,rm,rd],H=H,n=n), S=S, A=A, roott=[[],[]])
 
         return link
 
@@ -194,7 +195,7 @@ def sum2PP(root, P_, derP_, iRt, fd):  # sum links in Ps and Ps in PP
             add_(derP._node.derH, negate(deepcopy(derP.dderH)), iRt)  # to reverse uplink direction
         PP.link_ += [derP]; derP.roott[fd] = PP
         PP.A = np.add(PP.A,derP.A); PP.S += derP.S
-        PP.n += derP.n
+        PP.n += derP.dderH.n
     # += Ps:
     celly_,cellx_ = [],[]
     for P in P_:

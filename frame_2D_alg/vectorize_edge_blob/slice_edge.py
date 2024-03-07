@@ -30,7 +30,7 @@ def slice_edge(blob, verbose=False):
     i__ = blob.i__[box2slice(blob.ibox)]
     dy__, dx__, g__ = blob.der__t
 
-    edge = CG(root=blob, node_=[[],[]], box=blob.box, mask__=blob.mask__)
+    edge = CG(root=blob, node_=[[],[]], box=blob.box, mask__=blob.mask__, n=1)  # set n == 1 to indicate not empty in CG
     blob.dlayers = [[edge]]
     max_ = {*zip(*mask__.nonzero())}  # convert mask__ to a set of (y,x)
 
