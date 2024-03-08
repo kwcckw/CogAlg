@@ -24,7 +24,13 @@ def slice_edge_root(frame):
     blob_ = frame[-1]  # init frame blob_
     while blob_:
         flatten_blob_(flat_blob_, blob_)
-    edge_ = [slice_edge(blob) for blob in flat_blob_]
+        
+    print("starting to slice blob... ")  # not relevant, for debug purpose
+    edge_= []
+    
+    for i, blob in enumerate(flat_blob_):
+        print("slicing blob "+str(i))  # not relevant, for debug purpose
+        edge_ += [slice_edge(blob)] 
 
     return edge_
 
@@ -48,6 +54,15 @@ def slice_edge(edge):   # edge-blob
     for yx, axis in select_max(yx_, dert_):  # max = (yx, axis)
         P = CP(edge, yx, axis, root__)
         P_ += [P]
+
+    # scan for neighbor Ps, update link_:
+    for P in P_:
+        y,x = P.yx
+        P.yx = P.yx_[P.latuple[-2] // 2]  # center
+        min_x = x-1; max_x = x+1; min_y = y-1; max_y = y+1  # y,x is not whole number, it's unlikely to get exactly x-1, x+1, y_1 or y+1 here, so it's better to get a range
+        for (_y, _x) in root__:
+            if _y != y and _x != x and (_y < max_y) and (y>= min_y) and (_x < max_x) and (x>= min_x):
+                P.link_[0]+= [root__[_y, _x]]  # additional nesting for prelinks
 
     edge[:] = root, sign, I, Dy, Dx, G, yx_, dert_, link_, P_  # extended with P (no He or node_ yet)
 
@@ -84,7 +99,7 @@ class CP:
 
         I, G, M, Ma, L, Dy, Dx = 0, 0, 0, 0, 0, 0, 0
         self.axis = ay, ax = axis
-        self.yx_, self.dert_, self.link_ = [yx], [pivot], []
+        self.yx_, self.dert_, self.link_ = [yx], [pivot], [[]]
 
         for dy, dx in [(-ay, -ax), (ay, ax)]: # scan in 2 opposite directions to add derts to P
             self.yx_.reverse(); self.dert_.reverse()
@@ -105,13 +120,8 @@ class CP:
                 y += dy; x += dx
                 _y, _x, _gy, _gx = y, x, gy, gx
 
-        # scan for neighbor Ps, update link_:
-        for _y, _x in [(y-1,x-1), (y-1,x), (y-1,x+1), (y,x-1), (y,x+1), (y+1,x-1), (y+1,x), (y+1,x+1)]:
-            if (_y, _x) in root__:  # neighbor has P
-                self.link_ += [root__[_y, _x]]
         root__[y, x] = self    # update root__
-
-        self.yx = self.yx_[L // 2]  # center
+        self.yx = (y,x)        # temporary
         self.latuple = I, G, M, Ma, L, (Dy, Dx)
 
     def __repr__(self):
