@@ -52,19 +52,6 @@ class CBase:
             if attr != '_id' and attr in self.__dict__.keys():  # copy only the available attributes and skip id
                 setattr(self, attr, deepcopy(value))
 
-    def __bool__(self):  # to test empty
-        if hasattr(self, 'n'):  # CG, CH
-            if self.n: return True
-            else: return False
-        elif hasattr(self, 'dert_'):  # CP
-            if self.dert_: return True
-            else: return False
-        elif hasattr(self, 'node'):  # Clink
-            if self.node: return True
-            else: return False  
-
-
-
 # ----------------------------------------------------------------------------
 # CbaseLite class
 @dataclass
@@ -75,17 +62,13 @@ class CBaseLite:
         dataclass()(cls)
 
     def __add__(self, other):
-        # add angle summation
-        return self.__class__(*( [P+p for P,p in zip(_value ,value)] if isinstance(_value, list) else (_value + value) for _value, value in zip(self, other)))
+        return self.__class__(*((_value + value) for _value, value in zip(self, other)))
 
     def __sub__(self, other):
-        return self.__class__(*( [P-p for P,p in zip(_value ,value)] if isinstance(_value, list) else (_value - value) for _value, value in zip(self, other)))
-    
-    # add div and mult here?
+        return self.__class__(*((_value - value) for _value, value in zip(self, other)))
 
     def __iter__(self):
-        # temporary
-        return (getattr(self, key) for key in self.__dataclass_fields__ if getattr(self, key) != None)
+        return (getattr(self, key) for key in self.__dataclass_fields__)
 
     def __len__(self):
         return len(fields(self))
