@@ -99,7 +99,7 @@ def rng_recursion(PP, rng=1, fd=0):  # similar to agg+ rng_recursion, but contig
                             if len(link_) < rng: link_ += [[]]  # new link_
                             link_ = link_[-1]  # last rng layer
                         link_ += [mlink]
-                        if _P.link_ and isinstance(_P.link_[-1], list): 
+                        if _P.link_ and isinstance(_P.link_[-1], list):
                             prelink_ += [preP for preP in unpack_last_link_(_P.link_) if preP is not P]  # get last link layer, skip old prelinks  (but why skip -1? [-1] is the prelinks)
             if prelink_:
                 # should be if fd?
@@ -273,7 +273,7 @@ def append_(HE,He, fmerge=0):
 
 # redraft:
 
-def add_(HE, He, irdnt=[]):  # unpack tuples (formally lists) down to numericals and sum them
+def add_(HE_root, HE, He, irdnt=[]):  # unpack tuples (formally lists) down to numericals and sum them
 
     if He:  # to be summed
         if HE:  # to sum in
@@ -285,7 +285,7 @@ def add_(HE, He, irdnt=[]):  # unpack tuples (formally lists) down to numericals
 
             if isinstance(HE.H[0],CH):  # no and isinstance(lay.H[0],list): same nesting unless cpr?
                 for Lay,lay in zip_longest(HE.H, He.H, fillvalue=[]):
-                    add_(Lay,lay, irdnt)  # recursive unpack
+                    add_(HE, Lay,lay, irdnt)  # recursive unpack
             else:
                 HE.H = np.add(HE.H, He.H)  # both have numericals in H
                 Et, et = HE.Et, He.Et  # always numerical
@@ -293,7 +293,8 @@ def add_(HE, He, irdnt=[]):  # unpack tuples (formally lists) down to numericals
                 if irdnt: Et[2:4] = [E+e for E,e in zip(Et[2:4], irdnt)]
                 HE.n += He.n  # combined param accumulation span
         else:
-            HE.copy(He)
+            append_(HE_root, He)
+
     return HE  # for summing
 
 
@@ -435,10 +436,8 @@ class Clink(CBase):  # the product of comparison between two nodes
     roott: list = z([None, None])  # clusters that contain this link
     S: float = 0.0  # sparsity: distance between node centers
     A: list = z([0,0])  # angle: dy,dx between centers
-    # dir: bool  # direction of comparison if not G0,G1, only needed for comp link? (yes, we need this to determine if link is empty, inside the comp function)
-    def __bool__(self):  # to test empty
-        if self.node: return True
-        else: return False
+    # dir: bool  # direction of comparison if not G0,G1, only needed for comp link?
+
 
 def get_match(_par, par):
     match = min(abs(_par),abs(par))
