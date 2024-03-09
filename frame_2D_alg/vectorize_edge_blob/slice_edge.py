@@ -1,4 +1,5 @@
 from math import atan2, cos, floor, pi
+from itertools import count
 
 '''
 In natural images, objects look very fuzzy and frequently interrupted, only vaguely suggested by initial blobs and contours.
@@ -76,7 +77,12 @@ def select_max(yx_, dert_):
     return max_
 
 class CP:
+    
+    id_iter = count()  # for debug purpose, to get id
+    
     def __init__(self, edge, yx, axis, root__):  # form_P:
+
+        self.id = next(CP.id_iter)
 
         y, x = yx
         pivot = i, gy, gx, g = interpolate2dert(edge, y, x)  # pivot dert
@@ -86,7 +92,7 @@ class CP:
 
         I, G, M, Ma, L, Dy, Dx = i, g, m, ma, 1, gy, gx
         self.axis = ay, ax = axis
-        self.yx_, self.dert_, self.link_ = [yx], [pivot], []
+        self.yx_, self.dert_, self.link_ = [yx], [pivot], [[]]
 
         for dy, dx in [(-ay, -ax), (ay, ax)]: # scan in 2 opposite directions to add derts to P
             self.yx_.reverse(); self.dert_.reverse()
@@ -111,7 +117,12 @@ class CP:
         y, x = yx   # get pivot
         for _y, _x in [(y-1,x-1), (y-1,x), (y-1,x+1), (y,x-1), (y,x+1), (y+1,x-1), (y+1,x), (y+1,x+1)]:
             if (_y, _x) in root__:  # neighbor has P
-                self.link_ += [root__[_y, _x]]
+                if root__[_y, _x] not in self.link_[0]:
+                    self.link_[0] += [root__[_y, _x]]
+                if self not in root__[_y, _x].link_[0]:  # bidirectional? Because there isn't any 2 step process here, some Ps not formed yet
+                    root__[_y, _x].link_[0] += [self]
+                
+                
         root__[y, x] = self    # update root__
 
         self.yx = self.yx_[L // 2]  # center
