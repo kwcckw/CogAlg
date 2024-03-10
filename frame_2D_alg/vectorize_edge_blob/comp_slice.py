@@ -92,11 +92,10 @@ def rng_recursion(PP, rng=1, fd=0):  # similar to agg+ rng_recursion, but contig
                 if distance < rng:  # | rng * ((P.val+_P.val) / ave_rval)?
                     mlink = comp_P(_link if fd else [_P,P, distance,[dy,dx]])  # return link if match
                     if mlink:
-                        if rng > 1:
-                            # line below will be run multiple times for each _link, so we need to check and make sure they only run once
+                        if rng > 1:  # not revised:
                             if rng == 2 and not isinstance(P.link_[0], list): P.link_[:] = [P.link_[:]]  # link_ -> link_H
                             if len(P.link_) < rng: P.link_ += [[]]  # new link_
-                        link_ = P.link_[-1] if P.link_ and isinstance(P.link_[-1], list) else P.link_  # der++ if PP.He[0] depth==1
+                        link_ = P.link_[-1] if P.link_ and isinstance(P.link_[-1], list) else P.link_
                         V += mlink.dderH.Et[0]  # unpack last link layer:
                         link_ += [mlink]
                         if _P.link_:
@@ -106,12 +105,13 @@ def rng_recursion(PP, rng=1, fd=0):  # similar to agg+ rng_recursion, but contig
                             # 2. list - packing Clinks
                             # 3. list - packing prelinks (CP)
                             if isinstance(_P.link_[-1], list) and not isinstance(_P.link_[-1][0], Clink) :
-                                prelink_ += [preP for preP in _P.link_[-1] if preP is not P and preP not in prelink_]  # get last link layer, skip old prelinks  (but why skip -1? [-1] is the prelinks)
+                                prelink_ += [preP for preP in _P.link_[-1] if preP is not P and preP not in prelink_]
             if prelink_:
-                # should be if fd?
                 if fd: prelink_ = [link._node for link in prelink_]  # prelinks are __Ps, else __links
                 P.link_ += [prelink_]  # temporary prelinks
                 P_ += [P]  # for next loop
+            else:
+                P.link_ += [[]]  # for _P last link_ unpack
         rng += 1
         if V > ave * len(P_) * 6:  #  implied val of all __P_s, 6: len mtuple
             iP_ = P_
@@ -158,7 +158,7 @@ def form_PP_t(root, P_, iRt):  # form PPs of derP.valt[fd] + connected Ps val
         for P in P_:  # not PP.link_: P uplinks are unique, only G links overlap
             Ps = []
             for derP in unpack_last_link_(P.link_):
-                Ps += [derP._node]; Link_ += [derP]  # not needed for PPs? 
+                Ps += [derP._node]; Link_ += [derP]  # not needed for PPs?
             P_Ps += [Ps]  # aligned with P_
         inP_ = []  # clustered Ps and their val,rdn s for all Ps
         for P in root.P_:
