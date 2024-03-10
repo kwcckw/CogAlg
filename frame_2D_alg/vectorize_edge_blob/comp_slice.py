@@ -72,8 +72,8 @@ def der_recursion(root, PP, fd=0):  # node-mediated correlation clustering: keep
 
     rng_recursion(PP, rng=1, fd=fd)  # extend PP.link_, derHs by same-der rng+ comp
 
-    form_PP_t(PP, PP.P_, iRt = PP.derH.Et[2:4] if PP.derH else [0,0])  # der+ is mediated by form_PP_t
-    if root is not None: root.fback_ += [PP.derH]  # feedback from PPds
+    form_PP_t(PP, PP.P_, iRt = PP.iderH.Et[2:4] if PP.iderH else [0,0])  # der+ is mediated by form_PP_t
+    if root is not None: root.fback_ += [PP.iderH]  # feedback from PPds  (should be iderH here)
 
 
 def rng_recursion(PP, rng=1, fd=0):  # similar to agg+ rng_recursion, but contiguously link mediated, because
@@ -104,7 +104,7 @@ def rng_recursion(PP, rng=1, fd=0):  # similar to agg+ rng_recursion, but contig
                             # 1. Clink - flat list of link_
                             # 2. list - packing Clinks
                             # 3. list - packing prelinks (CP)
-                            if isinstance(_P.link_[-1], list) and not isinstance(_P.link_[-1][0], Clink) :
+                            if _P.link_[-1] and not isinstance(_P.link_[-1][0], Clink) :
                                 prelink_ += [preP for preP in _P.link_[-1] if preP is not P and preP not in prelink_]
             if prelink_:
                 if fd: prelink_ = [link._node for link in prelink_]  # prelinks are __Ps, else __links
@@ -116,7 +116,7 @@ def rng_recursion(PP, rng=1, fd=0):  # similar to agg+ rng_recursion, but contig
         if V > ave * len(P_) * 6:  #  implied val of all __P_s, 6: len mtuple
             iP_ = P_
         else:
-            for P in P_: P.link_.pop()
+            for P in PP.P_: P.link_.pop()  # pop from all Ps
             break
     PP.rng=rng
     '''
@@ -179,7 +179,7 @@ def form_PP_t(root, P_, iRt):  # form PPs of derP.valt[fd] + connected Ps val
     for PP in PP_t[1]:  # eval der+ / PPd only, after form_PP_t -> P.root
         if PP.iderH and PP.iderH.Et[0] * len(PP.link_) > PP_aves[1] * PP.iderH.Et[2]:
             # node-mediated correlation clustering:
-            der_recursion(root, PP, fd=1)
+            der_recursion(root, PP, fd=1)  # PP.P_'s derH may not empty here, but it's fd==1 here, so rng+ won't compare any derH
         if root.fback_:
             feedback(root)  # after der+ in all nodes, no single node feedback
 
@@ -207,7 +207,7 @@ def sum2PP(root, P_, derP_, iRt, fd):  # sum links in Ps and Ps in PP
         if P.derH:
             add_([], PP.iderH, P.derH)
         for y,x in P.yx_:
-            y = int(round(y)); x = int(round(x))  # yx_ may contain floats due to each yx in yx_ are added with dy and dx (floats) in slice_edge
+            y = int(round(y)); x = int(round(x))  # yx_ may contain floats due to each yx in yx_ are added with dy and dx (floats) in slice_edge (using round for estimation, or is there a better way?)
             PP.box = accum_box(PP.box, y, x); celly_+=[y]; cellx_+=[x]
     if PP.iderH:
         PP.iderH.Et[2:4] = [R+r for R,r in zip(PP.iderH.Et[2:4], iRt)]
@@ -227,7 +227,7 @@ def feedback(root):  # in form_PP_, append new der layers to root PP, single vs.
     while root.fback_:
         He  = root.fback_.pop(0)
         add_([], HE, He)
-    add_([], root.derH, HE.H[-1] if HE.nest else HE)  # last md_ in H or sum md_
+    add_([], root.iderH, HE.H[-1] if HE.nest else HE)  # last md_ in H or sum md_
 
     if root.root and isinstance(root.root, CG):  # skip if root is Edge
         rroot = root.root  # single PP.root, can't be P

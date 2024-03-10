@@ -62,9 +62,10 @@ def agg_recursion(rroot, root, node_, nrng=1, fagg=0):  # lenH = len(root.aggH[-
 
     Et = [0,0,0,0,0,0]  # need real init too: G-external vals summed from grapht link_ Et
     # agg+ der=1 xcomp of new Gs if fagg, else sub+: der+ xcomp of old Gs:
-    nrng = rng_recursion(rroot, root, combinations(root.node_,r=2) if fagg else root.link_, Et, nrng=nrng)  # rng+ appends rim, link.derH
+    # should be node_, root.node_ maybe a node_t here
+    nrng, node_, Et_ = rng_recursion(rroot, root, list(combinations(node_,r=2))  if fagg else root.link_, Et, nrng=nrng)  # rng+ appends rim, link.derH
 
-    form_graph_t(root, node_, Et, nrng, fagg)  # root_fd, eval der++ and feedback per Gd, not sub-recursion in Gms
+    form_graph_t(root, node_, Et_, Et, nrng, fagg)  # root_fd, eval der++ and feedback per Gd, not sub-recursion in Gms
 
     if node_ and isinstance(node_[0], list):
         rEt = root.aggH.Et if root.aggH else (root.derH.Et if root.derH else [0,0,0,0,0,0])
@@ -81,11 +82,12 @@ def rng_recursion(rroot, root, iQ, Et, iEt_=[], nrng=1):  # rng++/ G_, der+/ lin
 
     fd = isinstance(iQ[0],Clink)
     node_ = []  # root | pruned
+    updated_node_ = []  # nodes with added rims
     for link in iQ: node_ += [link.node,link._node] if fd else link  # list Gt
-    node_ = set(node_)
+    node_ = list(set(node_))
     et = [0,0,0,0,0,0]
     Q = []  # for rng+
-    Et_ = [[0,0] for _ in iEt_]  # sum per compared G
+    Et_ = [[0,0,0,0,0,0] for _ in node_]  # sum per compared G
 
     if fd:  # only in 1st rng+ from der+, extend root links
         for link in iQ:
@@ -93,35 +95,46 @@ def rng_recursion(rroot, root, iQ, Et, iEt_=[], nrng=1):  # rng++/ G_, der+/ lin
             if _G in G.compared_: continue
             if link.dderH.Et[1] > G_aves[1] * link.dderH.Et[3]:  # eval der+
                 G.compared_+=[_G]; _G.compared_+=[G]
-                Q += [[_G,G]]  # for rng+
-                link = comp_G(link, et)
-                comp_rim(Q,link,nrng)  # add matching-direction rim links for next rng+?
-                _idx,idx = node_.index(_G), node_.index(G)
-                for i,v in zip([0,1],(link.dderH.Et[0],link.dderH.Et[2])):
-                    Et_[_idx][i]+=v; Et_[idx][i]+=v  # sum M and Rm for both Gs
+                link, G_ = comp_G(link, et)
+                if G_:
+                    Q += [(_G,G)]  # for rng+
+                    updated_node_ += G_
+                    comp_rim(Q,link,nrng)  # add matching-direction rim links for next rng+?
+                    _idx,idx = node_.index(_G), node_.index(G)
+                    for G_Et,link_Et in zip((Et_[_idx],Et_[idx]),(link.dderH.Et,link.dderH.Et)):  # add both M and D because it will be needed in node_connect later?
+                        G_Et[:] = [V+v for V, v in zip(G_Et, link_Et)]
+                    # for i,v in zip([0,1],(link.dderH.Et[0],link.dderH.Et[2])):
+                    #   Et_[_idx][i]+=v; Et_[idx][i]+=v  # sum M and Rm for both Gs
     else:
-        Gt_ = Q  # prelinks for init or recursive rng+, form new link_, or make it general?
-        for _G,G in Gt_:
+        Gt_ = list(combinations(node_,r=2))  # prelinks for init or recursive rng+, form new link_, or make it general?
+        for _G,G in Gt_:  # with combinations, number of Gt_ pair is very large here, over several hundreds thosuands
             if _G in G.compared_: continue
             dy, dx = box2center(G.box)  # compute distance between node centers:
             dist = np.hypot(dy, dx)
-            if nrng>1:
-                _idx,idx = node_.index(_G), node_.index(G)
-                _iM,_iR, iM,iR = iEt_[_idx][0],iEt_[_idx][2], Et_[idx][0],Et_[idx][2]
+            # below is needed to accumulate Et_
+            _idx,idx = node_.index(_G), node_.index(G)
+            if nrng>1: _iM,_iR, iM,iR = iEt_[_idx][0],iEt_[_idx][2], Et_[idx][0],Et_[idx][2]
             # rng+ pair eval:
             if nrng==1 or ((iM+_iM)/ (dist/ave_distance) > ave*(iR+_iR)):  # or directional?
                 G.compared_+=[_G]; _G.compared_+=[G]
-                Q += [[_G,G]]  # for rng+
-                link = comp_G([_G,G, [dy,dx], dist], et)  # A,S
-                for i,v in zip([0,1],(link.dderH.Et[0],link.dderH.Et[2])):
-                    Et_[_idx][i]+=v; Et_[idx][i]+=v  # sum M and Rm for both Gs
+                link, G_ = comp_G([_G,G, [dy,dx], dist], et)  # A,S
+                if G_:  # only when Gs have added rims?
+                    Q += [(_G,G)]  # for rng+  (use tuple for set purpose)
+                    updated_node_ += G_
+                    for G_Et,link_Et in zip((Et_[_idx],Et_[idx]),(link.dderH.Et,link.dderH.Et)):
+                        G_Et[:] = [V+v for V, v in zip(G_Et, link_Et)]
+                    # for i,v in zip([0,1],(link.dderH.Et[0],link.dderH.Et[2])):
+                    #    Et_[_idx][i]+=v; Et_[idx][i]+=v  # sum M and Rm for both Gs
 
     if et[0] > ave_Gm * et[2]:  # rng+ eval per arg cluster because comp is bilateral, 2nd test per new pair
         Et[:] = [V+v for V,v in zip(Et, et)]  # Vt[i]+=v; Rt[i]+=rt[i]; Dt[i]+=d
         if Q:
-            nrng = rng_recursion(rroot, root, Q, Et, Et_, nrng+1)  # eval rng+ for der+ too
+            nrng, _, _ = rng_recursion(rroot, root, Q, Et, Et_, nrng+1)  # eval rng+ for der+ too
 
-    return nrng
+    # Et of new rims per G
+    updated_Et_ = [Et_[node_.index(node)] for node in updated_node_]
+        
+    return nrng, updated_node_, updated_Et_
 
 
 # draft, partly revised
@@ -156,6 +169,7 @@ def comp_G(link, iEt):  # add flat dderH to link and link to the rims of compara
         dderH.H += [CH(nest=0, Et=[], H=[], n=0)]
         # for fixed len layer to decode nesting, else use Cext as a terminator?
 
+    updated_G_ = []
     for fd in 0, 1:
         Val, Rdn, Dec = Et[fd::2]
         if Val > G_aves[fd] * Rdn:
@@ -167,8 +181,10 @@ def comp_G(link, iEt):  # add flat dderH to link and link to the rims of compara
                         if len(rim_H) == len(G.Rim_H): rim_H += [[]]  # no new rim layer yet
                         rim_H[-1] += [link]  # rim_H
                     else:
-                        rim_H += [link]  # rim
-    return link
+                        rim_H += [link]  # rim   
+                updated_G_ = (link._node, link.node)  # pack G with new rim
+                
+    return link, updated_G_
 
 # below not updated
 
@@ -186,9 +202,9 @@ def comp_rim(_link_, link, nrng):  # for next rng+:
                     _link_+= [Clink(node=G, _node=_G, A=[dy,dx], S=dist)]  # to compare in rng+
 
 
-def form_graph_t(root, G_, Et, nrng, fagg=0):  # form Gm_,Gd_ from same-root nodes
+def form_graph_t(root, G_, Et_, Et, nrng, fagg=0):  # form Gm_,Gd_ from same-root nodes
 
-    node_connect(G_)  # Graph Convolution of Correlations over init _G_
+    node_connect(G_, Et_)  # Graph Convolution of Correlations over init _G_
     node_t = []
     for fd in 0, 1:
         if Et[fd] > ave * Et[2+fd]:  # eVal > ave * eRdn
@@ -212,27 +228,27 @@ def form_graph_t(root, G_, Et, nrng, fagg=0):  # form Gm_,Gd_ from same-root nod
         G_[:] = node_t  # else keep root.node_
 
 
-def node_connect(_G_):  # node connectivity = sum surround link vals, incr.mediated: Graph Convolution of Correlations
+def node_connect(iG_, iEt_):  # node connectivity = sum surround link vals, incr.mediated: Graph Convolution of Correlations
     '''
     Aggregate direct * indirect connectivity per node from indirect links via associated nodes, in multiple cycles.
     Each cycle adds contributions of previous cycles to linked-nodes connectivity, propagated through the network.
     Math: https://github.com/boris-kz/CogAlg/blob/master/frame_2D_alg/Illustrations/node_connect.png
     '''
+    _G_, _Et_ = iG_, iEt_
     while True:
         # eval accumulated G connectivity, indirect range extension
-        G_ = []  # next connectivity expansion, more selective by DVt,Lent = [0,0],[0,0]?
-        for G in _G_:
+        G_, Et_ = [], []  # next connectivity expansion, more selective by DVt,Lent = [0,0],[0,0]?
+        for G, et in zip(_G_, _Et_):
             uprim = []  # >ave updates of direct links
             rim = G.rim_H[-1] if G.rim_H and isinstance(G.rim_H[0], list) else G.rim_H
             for i in 0,1:
-                et = G.derH.H[-1].Et if G.derH.nest else G.derH.Et
                 val,rdn,dec = et[i::2]  # connect by last layer
                 ave = G_aves[i]
                 for link in rim:
                     # >ave derG in fd rim
-                    lval,lrdn,ldec = link.dderH.Et[i::2]; ldec /= link.n
+                    lval,lrdn,ldec = link.dderH.Et[i::2]; ldec /= link.dderH.n
                     _G = link._node if link.node is G else link.node
-                    _et = _G.derH.H[-1].Et if _G.derH.nest else _G.DerH.Et
+                    _et = iEt_[iG_.index(_G)]
                     _val,_rdn,_dec = _et[i::2]
                     # Vt.. for segment_node_:
                     V = ldec * (val+_val); dv = V-lval
@@ -240,7 +256,7 @@ def node_connect(_G_):  # node connectivity = sum surround link vals, incr.media
                     D = ldec * (dec+_dec); dd = D-ldec
                     link.dderH.Et[i::2] = [V, R, D]
                     if dv > ave * dr:
-                        if not G.aggH: G.aggH.Et = [0,0,0,0,0,0]
+                        if not G.derH: G.derH.Et = [0,0,0,0,0,0]
                         G.derH.Et[i::2] = [V+v for V,v in zip(G.derH.Et[i::2], [V, R, D])]  # add link last layer vals
                         if link not in uprim: uprim += [link]
                         # more selective eval: dVt[i] += dv; L=len(uprim); Lent[i] += L
@@ -248,8 +264,8 @@ def node_connect(_G_):  # node connectivity = sum surround link vals, incr.media
                         et[i::2] = [V+v for V, v in zip(et[i::2], [dv, dr, dd])]
             if uprim:  # prune rim for next loop
                 rim[:] = uprim
-                G_ += [G]
-        if G_: _G_ = G_  # exclude weakly incremented Gs from next connectivity expansion loop
+                G_ += [G]; Et_ += [et]
+        if G_: _G_ = G_; _Et_ = Et_  # exclude weakly incremented Gs from next connectivity expansion loop
         else:  break
 
 
