@@ -96,11 +96,12 @@ def rng_recursion(PP, rng=1, fd=0):  # similar to agg+ rng_recursion, but contig
                         if rng > 1:  # test to add nesting to P.link_:
                             if rng == 2 and not isinstance(P.link_[0], list): P.link_[:] = [P.link_[:]]  # link_ -> link_H
                             if len(P.link_) < rng: P.link_ += [[]]  # add new link_
-                        link_ = unpack_last_link_(_P.link_)
+                        link_ = unpack_last_link_(P.link_)  # should be P.link_ here
                         link_ += [mlink]
                         _link_ = unpack_last_link_(_P.link_[:-1])  # skip prelink_
                         prelink_ += [link._node if link.node is _P else link.node for link in _link_]  # connected __Ps
             P.link_ += [prelink_]  # temporary pre-links, maybe empty
+            if prelink_: P_ += [P]  # we need to add this? Else P_ in the next loop is empty
         rng += 1
         if V > ave * len(P_) * 6:  #  implied val of all __P_s, 6: len mtuple
             iP_ = P_
@@ -117,6 +118,8 @@ def comp_P(link):
     if isinstance(link, Clink):  # der+ only
         _P,P = link._node, link.node
         rn = (_P.derH.n if P.derH else len(_P.dert_)) / P.derH.n  # lower P must have derH
+        vm, rm = link.dderH.Et[0], link.dderH.Et[2]  # in case P has derH, another P doesn't have derH
+        aveP = P_aves[1]
     else:  # rng+
         _P,P, S,A = link
         rn = len(_P.dert_) / len(P.dert_)
@@ -126,7 +129,7 @@ def comp_P(link):
         n = (len(_P.dert_)+len(P.dert_)) / 2  # der value = ave compared n?
         aveP = P_aves[0]
         link = Clink(node=P,_node=_P, dderH = CH(nest=0,Et=[vm,vd,rm,rd],H=H,n=n), S=S, A=A, roott=[[],[]])
-    # both:
+    # both: (This is very rare)
     if _P.derH and P.derH:  # append link dderH, init in form_PP_t rng++, comp_latuple was already done
         # der+:
         dderH = comp_(_P.derH, P.derH, rn)
