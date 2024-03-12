@@ -97,7 +97,7 @@ def rng_recursion(PP, rng=1, fd=0):  # similar to agg+ rng_recursion, but contig
                             if rng == 2 and not isinstance(P.link_[0], list): P.link_[:] = [P.link_[:]]  # link_ -> link_H
                             if len(P.link_) < rng: P.link_ += [[]]  # add new link_
                         link_ = unpack_last_link_(P.link_)
-                        link_ += [mlink]
+                        if mlink not in link_: link_ += [mlink]  # we may pack a same link when fd == 1 because prelink is last layer links
                         _link_ = unpack_last_link_(_P.link_[:-1])  # skip prelink_
                         prelink_ += [link._node if link.node is _P else link.node for link in _link_]  # connected __Ps
             P.link_ += [prelink_]  # temporary pre-links, maybe empty
@@ -118,7 +118,7 @@ def comp_P(link):
     if isinstance(link, Clink):  # der+ only
         _P,P = link._node, link.node
         rn = (_P.derH.n if P.derH else len(_P.dert_)) / P.derH.n  # lower P must have derH
-        aveP = P_aves[1]
+        vm, rm, aveP = link.dderH.Et[0], link.dderH.Et[2], P_aves[1]
     else:  # rng+
         _P,P, S,A = link
         rn = len(_P.dert_) / len(P.dert_)
