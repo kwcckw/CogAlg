@@ -51,6 +51,7 @@ def vectorize_root(edge):  # vectorization in 3 composition levels of xcomp, clu
                 for i, PP in enumerate(node_):
                     PP.root = None  # still no decay in internal links
                     PP.node_ = PP.P_  # revert to base node_
+                    PP.Et = [0,0,0,0,0,0]  # init for agg+, we didn't pack any PP.Et in comp_slice
                 # discontinuous PP rng+ cross-comp, cluster -> G_t
                 agg_recursion(None, edge, node_, nrng=1, fagg=1)  # agg+, no Cgraph nodes
 
@@ -85,9 +86,9 @@ def rng_recursion(rroot, root, _node_, Q, iEt, nrng=1):  # rng++/G_, der+/link_ 
     if fd:  # only in 1st rng+ from der+, extend root links
         for link in Q:
             G = link.node; _G = link._node
-            if _G in G.compared_: continue
+            # if _G in G.compared_: continue  # this is always true here because they are compared in prior rng+, so this is not needed in fd == 1?
             if link.dderH.Et[1] > G_aves[1] * link.dderH.Et[3]:  # eval der+
-                G.compared_+=[_G]; _G.compared_+=[G]
+                # G.compared_+=[_G]; _G.compared_+=[G]
                 comp_G(link, node_, Et)
     else:
         for _G,G in Q:  # prelinks in rng+
@@ -133,24 +134,26 @@ def comp_G(link, node_, iEt, nrng=None):  # add flat dderH to link and link to t
     else:
         dderH.H += [CH(nest=0, Et=[], H=[], n=0)]
         # for fixed-len layer to decode nesting, else Cext as layer terminator?
-    for i in 0,1:
-        Val, Rdn, Dec = dderH.Et[i::2]
-        if Val > G_aves[i] * Rdn:
-            if not i: node_ += [_G,G]  # for rng+
-            # if fd: comp_rim(node_,link, nrng)  # rng+/ matching-direction rim _Gs only?
-            _G.Et[i]  += Val; G.Et[i]  += Val  # for both Gs
-            _G.Et[2+i]+= Rdn; G.Et[2+i]+= Rdn
-            _G.Et[4+i]+= Dec; G.Et[4+i]+= Dec
-            # eval rng+ and grapht in form_graph_t:
-            iEt[i::2] = [V+v for V,v in zip(iEt[i::2], Et[i::2])]  # or sum all for form_graph_t?
-            if not i:
-                for G in link.node, link._node:
-                    rim_H = G.rim_H
-                    if rim_H and isinstance(rim_H[0],list):  # rim is converted to rim_H in 1st sub+
-                        if len(rim_H) == len(G.Rim_H): rim_H += [[]]  # no new rim layer yet
-                        rim_H[-1] += [link]  # rim_H
-                    else:
-                        rim_H += [link]  # rim
+
+    if dderH:
+        for i in 0,1:
+            Val, Rdn, Dec = dderH.Et[i::2]
+            if Val > G_aves[i] * Rdn:
+                if not i: node_ += [_G,G]  # for rng+
+                # if fd: comp_rim(node_,link, nrng)  # rng+/ matching-direction rim _Gs only?
+                _G.Et[i]  += Val; G.Et[i]  += Val  # for both Gs
+                _G.Et[2+i]+= Rdn; G.Et[2+i]+= Rdn
+                _G.Et[4+i]+= Dec; G.Et[4+i]+= Dec
+                # eval rng+ and grapht in form_graph_t:
+                iEt[i::2] = [V+v for V,v in zip(iEt[i::2], Et[i::2])]  # or sum all for form_graph_t?
+                if not i:
+                    for G in link.node, link._node:
+                        rim_H = G.rim_H
+                        if rim_H and isinstance(rim_H[0],list):  # rim is converted to rim_H in 1st sub+
+                            if len(rim_H) == len(G.Rim_H): rim_H += [[]]  # no new rim layer yet
+                            rim_H[-1] += [link]  # rim_H
+                        else:
+                            rim_H += [link]  # rim
 
 
 def form_graph_t(root, G_, Et, nrng, fagg=0):  # form Gm_,Gd_ from same-root nodes
@@ -229,7 +232,7 @@ def segment_node_(root, root_G_, fd, nrng, fagg):  # eval rim links with summed 
 
     for G in root_G_:  # init per node
         link_ = copy(G.rim_H[-1] if G.rim_H and isinstance(G.rim_H[0],list) else G.rim_H)
-        grapht = [[G],[], *G.Et, link_]  # link_ = last rim
+        grapht = [[G],[], [*G.Et], link_]  # link_ = last rim
         G.root = grapht  # for G merge
         igraph_ += [grapht]
     _graph_ = igraph_
@@ -299,13 +302,14 @@ def sum2graph(root, grapht, fd, nrng):  # sum node and link params into graph, a
         sum_last_lay(G, fd)
         graph.box = extend_box(graph.box, G.box)
         graph.latuple = [P+p for P,p in zip(graph.latuple[:-1],graph.latuple[:-1])] + [[A+a for A,a in zip(graph.latuple[-1],graph.latuple[-1])]]
-        add_([],graph.iderH, G.iderH, irdnt=[1,1])
-
-        if G.derH.nest == graph.derH.nest: add_([],graph.derH, G.derH)
-        else:                              append_(graph.derH, G.derH)  # add nesting
+        add_([],graph.iderH, G.iderH, irdnt=[1,1]) 
+        if G.derH: add_([], graph.derH, G.derH)  # G.derH is empty when it's converted from PP
+        else:  # if G.derH is empty, add last layer Et from Gs?
+            G.derH.Et = [V+v for V,v in zip_longest(G.derH.Et, G.Et, fillvalue=0)]   
         G.Et = [0,0,0,0,0,0]  # reset
-    if extH.nest == graph.derH.nest: add_([],graph.derH, extH)  # daggH
-    else:                            append_(graph.derH, extH)  # dsubH
+    if extH.nest == graph.derH.nest:
+        graph.derH = CH(nest=3, Et=[*graph.derH], H=[graph.derH])  # subH to aggH (graph.derH's nest needs > extH.nest to pack extH as new He)
+    append_(graph.derH, extH)
 
     if fd:  # assign alt graphs from d graph, after both linked m and d graphs are formed
         for link in graph.link_:
@@ -325,8 +329,7 @@ def sum_last_lay(G, fd):  # eLay += last layer of link.daggH (dsubH|ddaggH)
         if link.dderH:
             H = link.dderH.H
             if G.derH:
-                G_depth = G.derH.nest
-                if G_depth == 2 and G.ederH and G.ederH.nest == 2:
+                if  link.dderH.nest ==2 and G.ederH and G.ederH.nest == 2:
                     H = H[-1].H  # last subH
                 else:
                     H = []

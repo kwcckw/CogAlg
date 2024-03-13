@@ -148,25 +148,29 @@ def form_PP_t(root, P_, iRt):  # form PPs of derP.valt[fd] + connected Ps val
 
     PP_t = [[],[]]
     for fd in 0,1:
-        P_Ps = []; Link_ = []
+        P_Ps = []; Link__ = []
         for P in P_:  # not PP.link_: P uplinks are unique, only G links overlap
-            Ps = []
+            Ps, link_ = [], []
             for derP in unpack_last_link_(P.link_):
-                Ps += [derP._node]; Link_ += [derP]  # not needed for PPs?
+                Ps += [derP._node]; link_ += [derP]  # not needed for PPs?
             P_Ps += [Ps]  # aligned with P_
+            Link__ += [link_]
         inP_ = []  # clustered Ps and their val,rdn s for all Ps
-        for P in root.P_:
+        for P, Ps, link_ in zip(P_, P_Ps, Link__):
             if P in inP_: continue  # already packed in some PP
-            cP_ = [P]  # clustered Ps and their val,rdn s
-            if P in P_:
-                perimeter = deque(P_Ps[P_.index(P)])  # recycle with breadth-first search, up and down:
-                while perimeter:
-                    _P = perimeter.popleft()
-                    if _P in cP_: continue
-                    cP_ += [_P]
-                    if _P in P_:
-                        perimeter += P_Ps[P_.index(_P)] # append linked __Ps to extended perimeter of P
-            PP = sum2PP(root, cP_, Link_, iRt, fd)
+            cP_ = [P]  # clustered Ps and their val,rdn 
+            clink_ = link_[:]  # copy
+            perimeter = deque(Ps)  # recycle with breadth-first search, up and down:
+            while perimeter:
+                _P = perimeter.popleft()
+                if _P in cP_: continue
+                cP_ += [_P]
+                if _P in P_:
+                    _P_index = P_.index(_P)
+                    perimeter += P_Ps[_P_index] # append linked __Ps to extended perimeter of P
+                    clink_ += [link for link in Link__[_P_index] if link not in clink_]
+
+            PP = sum2PP(root, cP_, clink_, iRt, fd)
             PP_t[fd] += [PP]  # no if Val > PP_aves[fd] * Rdn:
             inP_ += cP_  # update clustered Ps
 
@@ -246,7 +250,7 @@ def comp_latuple(_latuple, latuple, rn, fagg=0):  # 0der params
 
     if fagg:  # add norm m,d: ret = [ret, Ret]
         # max possible m,d per compared param
-        Ret = [max(_I,I),abs(_I)+abs(I), max(_G,G),abs(_G)+abs(G), max(_M,M),abs(_M)+abs(M), max(_Ma,Ma),abs(_Ma)+abs(Ma), max(_L,L),abs(_L)+abs(L), 1,.5]
+        Ret = [max(_I,I),abs(_I)+abs(I), max(_G,G),abs(_G)+abs(G), max(_M,M),abs(_M)+abs(M), max(_Ma,Ma),abs(_Ma)+abs(Ma), 1, .5, max(_L,L),abs(_L)+abs(L)]  # sequence of L should be at last
         mval, dval = sum(ret[::2]),sum(ret[1::2])
         mrdn, drdn = dval>mval, mval>dval
         mdec, ddec = 0, 0
@@ -255,7 +259,7 @@ def comp_latuple(_latuple, latuple, rn, fagg=0):  # 0der params
                 if fd: ddec += abs(par)/ abs(maxv) if maxv else 1
                 else:  mdec += (par+ave)/ (maxv+ave) if maxv else 1
 
-        ret = [mval, dval, mrdn, drdn, mdec, ddec], ret
+        ret = [mval, dval, mrdn, drdn, mdec/6, ddec/6], ret  # we need mdec and ddec by 6? After we sum them across 6 params?
     return ret
 
 #draft
@@ -267,6 +271,7 @@ def append_(HE,He, fmerge=0):
         HE.H += [He]; HE.nest = max(1, He.nest)
 
     HE.Et[:] = [V+v for V,v in zip(HE.Et, He.Et)]
+    if len(He.Et) == 6: HE.Et[4] /= 2; HE.Et[5] /= 2;   # normalize decay so that it won't > 1
     HE.n += He.n
 
 
@@ -334,7 +339,7 @@ def comp_(_He,He, rn=1, fagg=0):  # unpack tuples (formally lists) down to numer
             vd += diff
             dH += [match,diff]  # flat
         Et = [vm,vd,rm,rd]
-        if fagg: Et += [decm, decd]
+        if fagg: Et += [decm/6, decd/6]
 
         n = (_He.n+He.n) /2 * (len(_cHe.H)/12)  # ave compared n, /2 if ext: 6 params vs 12 in md_
 
