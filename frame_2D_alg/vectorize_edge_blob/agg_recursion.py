@@ -40,6 +40,8 @@ https://github.com/boris-kz/CogAlg/blob/master/frame_2D_alg/Illustrations/agg_re
 
 def vectorize_root(edge):  # vectorization in 3 composition levels of xcomp, cluster:
 
+    draw_P_(edge)
+
     for P in edge.P_: P.derH = CH()  # dynamic attr
     der_recursion(None, edge)  # vertical, lateral-overlap P cross-comp -> PP clustering
 
@@ -53,9 +55,74 @@ def vectorize_root(edge):  # vectorization in 3 composition levels of xcomp, clu
                     PP.node_ = PP.P_  # revert to base node_
                     PP.Et = [0,0,0,0,0,0]  # no PP.Et in comp_slice
                 # discontinuous PP rng+ cross-comp, cluster -> G_t
-                agg_recursion(None, edge, node_, nrng=1, fagg=1)  # agg+, no Cgraph nodes
+                agg_recursion(None, edge, node_[:30], nrng=1, fagg=1)  # agg+, no Cgraph nodes
 
     return edge
+
+# temporary, for debug
+def draw_P_(edge):
+    
+    import cv2
+    
+    x0, x1, y0, y1 = 9999, 0, 9999, 0
+    for P in edge.P_:
+        x_ = [yx[0] for yx in P.yx_]
+        y_ = [yx[1] for yx in P.yx_]
+        xmin = min(x_); xmax = max(x_);  ymin = min(y_); ymax = max(y_)
+        x0 = min(x0, xmin); x1 = max(x1, xmax);  y0 = min(y0, ymin); y1 = max(y1, ymax)
+        
+    # size of image
+    y0 = int(round(y0))
+    x0 = int(round(x0))
+    y1 = int(round(y1))
+    x1 = int(round(x1))
+    
+    image_blank = np.full((y1-y0+1, x1-x0+1,3), fill_value=255,dtype="uint8")    
+    image_full = image_blank.copy()
+    
+    # number of draw Ps
+    P_number = 10
+    P_counter = 0
+    
+    for i, P in enumerate(edge.P_):
+        if P.link_[-1]:
+
+            image = image_blank.copy()
+
+            # draw current P        
+            x0, x1, y0, y1 = 9999, 0, 9999, 0
+            for yx in P.yx_:   
+                dx = int(round(yx[0])); dy = int(round(yx[1]))  # estimation with round
+                x0 = min(x0, dx); x1 = max(x1, dx);  y0 = min(y0, dy); y1 = max(y1, dy)
+                image[dy,dx] = (255,0,0)  # blue color
+                image_full[dy,dx] = (255,0,0) 
+            
+            # draw upper row's _P
+            for _P in P.link_[-1]:
+                for yx in _P.yx_:  
+                    dx = int(round(yx[0])); dy = int(round(yx[1]))
+                    x0 = min(x0, dx); x1 = max(x1, dx);  y0 = min(y0, dy); y1 = max(y1, dy)
+                    image[dy,dx] = (0,0,255)  # red color
+                    image_full[dy,dx] = (0,0,255) 
+                    
+
+            # save image per P
+            if P_counter <=  P_number:
+                image = image[y0:y1, x0:x1]  # crop P area only
+                cv2.imwrite("./img_Ps/image_P"+str(i)+".png", image)
+            
+            
+            # save every 20 Ps
+            if P_counter % 100:
+                cv2.imwrite("./img_Ps/image_full_"+str(i)+".png", image_full)
+                
+            P_counter += 1
+            
+            
+    cv2.imwrite("./img_Ps/image_full_final.png", image_full)
+    # save image with all Ps
+
+
 
 def agg_recursion(rroot, root, node_, nrng=1, fagg=0):  # lenH = len(root.aggH[-1][0]), lenHH: same in agg_compress
 
@@ -121,10 +188,33 @@ def comp_G(link, node_, iEt, nrng=None):  # add flat dderH to link and link to t
         # append_(dderH, CH(nest=0, Et=et, H=extt, n=0.5))
         # / P
         Et, md_ = comp_latuple(_G.latuple, G.latuple, rn, fagg=1)
-        dderH.Et = Et; dderH.H = [CH(nest=0, Et=[*Et], H=md_)]
-        # / PP, if >1 Ps:
+        dderH.nest=1   # dderH.nest must be 1 to pack CH with nest =0
+        dderH.n = 1; dderH.Et = Et; dderH.H = [CH(nest=0, Et=[*Et], H=md_)] 
+        
+        # ext
+        _L = len(_G.node_); L = len(G.node_)
+        _S = np.hypot(*box2center(_G.box)); S = dist
+        _A = box2center(_G.box); A = [dy,dx] 
+        L/=rn; S/=rn  # angle is not normalized
+        mA, dA = comp_angle(_A, A)
+        mS, dS = min(_S,S)-ave_mL, _S/_L - S/L  # S is summed over L, dS is not summed over dL
+        mL, dL = min(_L,L)-ave_mL, _L -L
+        M = mL + mS + mA
+        D = abs(dL) + abs(dS) + dA
+        mrdn = M > D
+        drdn = D<= M
+        # all comparands are positive: maxm = maxd
+        Lmax = max(L,_L); Smax = max(S,_S); Amax = 1
+        mdec = mL/Lmax + mS/Smax + mA/Amax
+        ddec = dL/Lmax + dS/Smax + dA/Amax
+        dextHe = CH(Et=[M,D,mrdn,drdn,mdec,ddec], H=[mL,dL,mS,dS,mA,dA],n=0.5)
+        append_(dderH, dextHe, 0)
+            
+        # / PP, if >1 Ps: (this is optional, so this is last?)
         if _G.iderH and G.iderH:
-            dHe = comp_(_G.iderH, G.iderH, rn, fagg=1); append_(dderH, dHe, fmerge=1)
+            dHe = comp_(_G.iderH, G.iderH, rn, fagg=1); 
+            append_(dderH, dHe, fmerge=dderH.nest == dHe.nest)
+
         link = Clink(_node=_G, node=G, S=dist, A=[dy,dx], dderH=dderH)
     # / G, if >1 PPs | Gs:
     if _G.extH and G.extH:  # always true in der+
@@ -200,7 +290,7 @@ def node_connect(iG_):  # node connectivity = sum surround link vals, incr.media
                 ave = G_aves[i]
                 for link in rim:
                     # >ave derG in fd rim
-                    lval,lrdn,ldec = link.dderH.Et[i::2]; ldec /= link.dderH.n
+                    lval,lrdn,ldec = link.dderH.Et[i::2]; ldec /= (link.dderH.n * 6)  # each n represents 6 params
                     _G = link._node if link.node is G else link.node
                     _val,_rdn,_dec = _G.Et[i::2]
                     # Vt.. for segment_node_:
@@ -260,9 +350,8 @@ def segment_node_(root, root_G_, fd, nrng, fagg):  # eval rim links with summed 
                     for g in _G_:
                         g.root = grapht
                         if g not in G_: G_+=[g]
-                    for i in 0,1:
-                        Et[:] = [V+v for V,v in zip(Et, _Et)]
-                        inVal += _Et[fd]; inRdn += _Et[2+fd]
+                    Et[:] = [V+v for V,v in zip(Et, _Et)]  # shouldn't be summed twice
+                    for i in 0,1: inVal += _Et[fd]; inRdn += _Et[2+fd]
                     if _grapht in igraph_:
                         igraph_.remove(_grapht)
                     new_Rim += [link for link in _Rim if link not in new_Rim+Rim+Link_]
@@ -320,20 +409,24 @@ def sum2graph(root, grapht, fd, nrng):  # sum node and link params into graph, a
 
 def sum_last_lay(G, fd):  # eLay += last layer of link.daggH (dsubH|ddaggH)
 
-    eDerH = CH()
+    extH = CH()
     for link in G.rim_H[-1] if G.rim_H and isinstance(G.rim_H[0],list) else G.rim_H:
         if link.dderH:
+            dderH = link.dderH
             H = link.dderH.H
             if G.derH:
-                if  link.dderH.nest ==2 and G.ederH and G.ederH.nest == 2:
+                if  link.dderH.nest ==2 and G.extH and G.extH.nest == 2:
+                    dderH = H[-1]
                     H = H[-1].H  # last subH
                 else:
                     H = []
             # derH_/ last xcomp: len subH *= 2, maybe single dderH
-            eDerH.H = [add_([], eHE, eHe, irdnt=link.dderH.Et[2:4]) for eHE, eHe in zip_longest(H[int(len(H)/2):], eDerH.H, fillvalue=CH())]
+            eDerH.H = [add_([], eHE, eHe, irdnt=link.dderH.Et[2:4]) for eHE, eHe in zip_longest(H[int(len(H)/2):], extH.H, fillvalue=CH())]
+            extH.n += dderH.n
             # sum all derHs of link layer=rdH into esubH[-1]
 
-    if eDerH.H: add_([],G.ederH, eDerH)
+    if extH: add_([],G.extH, extH)
+
 
 def comp_ext(_ext, ext, rn):  # primary ext only
 

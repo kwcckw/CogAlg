@@ -150,23 +150,25 @@ def form_PP_t(root, P_, iRt):  # form PPs of derP.valt[fd] + connected Ps val
     for fd in 0,1:
         P_Ps = []; Link_ = []
         for P in P_:  # not PP.link_: P uplinks are unique, only G links overlap
-            Ps = []
+            Ps, link_ = [], []
             for derP in unpack_last_link_(P.link_):
-                Ps += [derP._node]; Link_ += [derP]  # not needed for PPs?
-            P_Ps += [Ps]  # aligned with P_
+                Ps += [derP._node]; link_ += [derP]  # not needed for PPs?
+            P_Ps += [Ps]; Link_ += [link_]  # aligned with P_
         inP_ = []  # clustered Ps and their val,rdn s for all Ps
         for P in root.P_:
             if P in inP_: continue  # already packed in some PP
-            cP_ = [P]  # clustered Ps and their val,rdn s
+            cP_, clink_ = [P], []  # clustered Ps and their val,rdn s
             if P in P_:
-                perimeter = deque(P_Ps[P_.index(P)])  # recycle with breadth-first search, up and down:
+                P_index = P_.index(P)
+                clink_ += Link_[P_index]
+                perimeter = deque(P_Ps[P_index])  # recycle with breadth-first search, up and down:
                 while perimeter:
                     _P = perimeter.popleft()
-                    if _P in cP_: continue
+                    if _P in cP_ or _P not in P_: continue  # _P in P_ should be checked here? If _P not in P_, there's no need to add it into CP too
                     cP_ += [_P]
-                    if _P in P_:
-                        perimeter += P_Ps[P_.index(_P)] # append linked __Ps to extended perimeter of P
-            PP = sum2PP(root, cP_, Link_, iRt, fd)
+                    clink_ += Link_[P_.index(_P)]
+                    perimeter += P_Ps[P_.index(_P)] # append linked __Ps to extended perimeter of P
+            PP = sum2PP(root, cP_, clink_, iRt, fd)
             PP_t[fd] += [PP]  # no if Val > PP_aves[fd] * Rdn:
             inP_ += cP_  # update clustered Ps
 
@@ -399,7 +401,7 @@ class CG(CBase):  # PP | graph | blob: params of single-fork node_ cluster
     n: int = 0
     # graph-external, +level per root sub+:
     rim_H: list = z([])  # direct links, depth, init rim_t, link_tH in base sub+ | cpr rd+, link_tHH in cpr sub+
-    ederH: object = z(CH())
+    extH: object = z(CH())  # replaces ederH now?
     eaggH: object = z(CH())   # G-external daggH( dsubH( dderH, summed from rim links
     S: float = 0.0  # sparsity: distance between node centers
     A: list = z([0,0])  # angle: summed dy,dx in links
