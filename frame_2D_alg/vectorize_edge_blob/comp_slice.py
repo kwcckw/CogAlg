@@ -99,7 +99,8 @@ def rng_recursion(PP, rng=1, fd=0):  # similar to agg+ rng_recursion, but contig
                         link_ = unpack_last_link_(P.link_)
                         if not fd: link_ += [mlink]
                         _link_ = unpack_last_link_(_P.link_[:-1])  # skip prelink_
-                        prelink_ += [link._node if link.node is _P else link.node for link in _link_]  # connected __Ps
+                        if fd: prelink_ += [link for link in _link_ if link is not _link]  # add links when fd? Because we unpack links if fd
+                        else:  prelink_ += [link._node if link.node is _P else link.node for link in _link_]  # connected __Ps
             P.link_ += [prelink_]  # temporary pre-links, maybe empty
             if prelink_: P_ += [P]
         rng += 1
@@ -423,7 +424,8 @@ class CP(CBase):  # horizontal blob slice P, with vertical derivatives per param
 class CG(CBase):  # PP | graph | blob: params of single-fork node_ cluster
 
     Et: list = z([])  # external eval tuple, summed from rng++ before forming new graph and appending G.extH
-
+    n: int = 0  # external n (last layer n)
+    
     latuple: list = z([])   # summed from Ps: lateral I,G,M,Ma,L,[Dy,Dx]
     iderH: object = z(CH())  # summed from PPs
     derH: object = z(CH())  # nested derH in Gs: [[subH,valt,rdnt,dect]], subH: [[derH,valt,rdnt,dect]]: 2-fork composition layers
