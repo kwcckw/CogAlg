@@ -41,27 +41,52 @@ https://github.com/boris-kz/CogAlg/blob/master/frame_2D_alg/Illustrations/agg_re
 
 def vectorize_root(image):  # vectorization in 3 composition levels of xcomp, cluster:
 
-    edge = slice_edge_root( intra_blob_root( frame_blobs_root( image)))
-    #  edge = [root, sign, I, Dy, Dx, G, yx_, dert_, link_, P_]
-    if edge[5] * (len(edge[-1])-1) > G_aves[0]:  # rdn=1
+    edge_ = slice_edge_root(intra_blob_root( frame_blobs_root(image)))
+    
+    for edge in edge_:
+        #  edge = [root, sign, I, Dy, Dx, G, yx_, dert_, link_, P_]
+        if edge[5] * (len(edge[-1])-1) > G_aves[0]:  # rdn=1
+    
+            edge = init_CG(edge)  # convert to CG
+            ider_recursion(None, edge)  # vertical, lateral-overlap P cross-comp -> PP clustering
+    
+            for fd, node_ in enumerate(edge.node_):  # always node_t
+                if edge.iderH and edge.iderH.Et:
+                    if edge.iderH.Et[fd] * (len(node_)-1)*(edge.rng+1) > G_aves[fd] * edge.iderH.Et[2+fd]:
+                        pruned_node_ = []
+                        for PP in node_:  # PP -> G
+                            if PP.iderH.Et and PP.iderH.Et[fd] > G_aves[fd] * PP.iderH.Et[2+fd]:  # PP.iderH is empty if there's no derPs
+                                PP.root = None  # no decay in PP.link_
+                                PP.node_ = PP.P_  # revert to base node_
+                                PP.Et = [0,0,0,0,0,0]  # [] in comp_slice
+                                pruned_node_ += [PP]
+                        if len(pruned_node_) > 10:  # discontinuous PP rng+ cross-comp, cluster -> G_t:  # why 10?
+                            agg_recursion(None, edge, pruned_node_, nrng=1, fagg=1)  # agg+, no Cgraph nodes
 
-        init_CG(edge)  # convert to CG
-        ider_recursion(None, edge)  # vertical, lateral-overlap P cross-comp -> PP clustering
+def init_CG(edge):
 
-        for fd, node_ in enumerate(edge.node_):  # always node_t
-            if edge.iderH and edge.iderH.Et:
-                if  edge.iderH.Et[fd] * (len(node_)-1)*(edge.rng+1) > G_aves[fd] * edge.iderH.Et[2+fd]:
-                    pruned_node_ = []
-                    for PP in node_:  # PP -> G
-                        if PP.iderH.Et[fd] > G_aves[fd] * PP.iderH.Et[2+fd]:
-                            PP.root = None  # no decay in PP.link_
-                            PP.node_ = PP.P_  # revert to base node_
-                            PP.Et = [0,0,0,0,0,0]  # [] in comp_slice
-                            pruned_node_ += [PP]
-                    if len(pruned_node_) > 10:  # discontinuous PP rng+ cross-comp, cluster -> G_t:
-                        agg_recursion(None, edge, pruned_node_, nrng=1, fagg=1)  # agg+, no Cgraph nodes
+    root, sign, I, Dy, Dx, G, yx_, dert_, link_, P_ = edge
+    
+    # P_:
+    for P in P_: P.derH = CH()
+
+    # edge:
+    y_ = [yx[0] for yx in yx_]
+    x_ = [yx[1] for yx in yx_]
+    
+    x0 = int(round(min(x_)))
+    x1 = int(round(max(x_) + 1))  # using round because 2nd index is not exclusive
+    y0 = int(round(min(y_)))
+    y1 = int(round(max(y_) + 1))
+
+    box = [y0, y1, x0, x1]
+    mask__ = np.ones((y1-y0, x1-x0),dtype="bool")
+    
+    for y,x in yx_: mask__[y-y0,x-x0] = False
+
+    edge = CG(root=root, node_=[[],[]], P_=P_, link_=link_, box=box, mask__=mask__) 
+
     return edge
-
 
 def agg_recursion(rroot, root, node_, nrng=1, fagg=0):  # lenH = len(root.aggH[-1][0]), lenHH: same in agg_compress
 
@@ -109,7 +134,8 @@ def rng_recursion(rroot, root, _node_, Q, iEt, nrng=1):  # rng++/G_, der+/link_ 
         # rng+ eval per arg cluster because comp is bilateral, 2nd test per new pair
         iEt[:] = [V+v for V,v in zip(iEt, Et)]  # Vt[i]+=v; Rt[i]+=rt[i]; Dt[i]+=d
         if node_:  # eval rng+
-            nrng, _, _ = rng_recursion(rroot, root, node_, list(combinations(list(set(node_)),r=2)), iEt, nrng+1)
+            node_ = list(set(node_))  # remove duplicated nodes
+            nrng, _, _ = rng_recursion(rroot, root, node_, list(combinations(node_,r=2)), iEt, nrng+1)
 
     return nrng, node_, Et
 
@@ -149,7 +175,7 @@ def comp_G(link, node_, iEt, nrng=None):  # add flat dderH to link and link to t
             _G.Et[4+i]+= Dec; G.Et[4+i]+= Dec
             _G.n += 1; G.n += 1
             # eval rng+ and grapht in form_graph_t:
-            iEt[i::2] = [V+v for V,v in zip(iEt[i::2], Et[i::2])]  # or sum all for form_graph_t?
+            iEt[i::2] = [V+v for V,v in zip(iEt[i::2], dderH.Et[i::2])]  # or sum all for form_graph_t?
             if not i:
                 for G in link.node, link._node:
                     rim_H = G.rim_H
@@ -176,7 +202,14 @@ def form_graph_t(root, G_, Et, nrng, fagg=0):  # form Gm_,Gd_ from same-root nod
                         node_ = graph.node_
                         if isinstance(node_[0].rim_H[0], CG):  # 1st sub+, same rim nesting?
                             for node in node_: node.rim_H = [node.rim_H]  # rim -> rim_H
-                        agg_recursion(root, graph, graph.node_, nrng, fagg=0)
+                            
+                        # prune nodes for der+ too?
+                        pruned_node_ = []
+                        for node in graph.node_:
+                            if node.derH.Et and node.derH.Et[fd] > G_aves[fd] * node.derH.Et[2+fd]:
+                                pruned_node_ += [node]
+                        if len(pruned_node_)>10:
+                            agg_recursion(root, graph, graph.node_, nrng, fagg=0)
                     elif graph.derH:
                         root.fback_ += [graph.derH]
                         feedback(root)  # update root.root.. per sub+
@@ -198,6 +231,7 @@ def node_connect(iG_):  # node connectivity = sum surround link vals, incr.media
         # eval accumulated G connectivity, indirect range extension
         G_ = []  # next connectivity expansion, more selective by DVt,Lent = [0,0],[0,0]?
         for G in _G_:
+            
             uprim = []  # >ave updates of direct links
             rim = G.rim_H[-1] if G.rim_H and isinstance(G.rim_H[0], list) else G.rim_H
             for i in 0,1:
@@ -220,8 +254,10 @@ def node_connect(iG_):  # node connectivity = sum surround link vals, incr.media
                         G.derH.Et[i::2] = [V+v for V,v in zip(G.derH.Et[i::2], [V, R, D])]  # add link last layer vals
                         if link not in uprim: uprim += [link]
                         # more selective eval: dVt[i] += dv; L=len(uprim); Lent[i] += L
-                    if V > ave * R:
-                        G.Et[i::2] = [V+v for V, v in zip(G.Et[i::2], [dv, dr, dd])]
+
+                        # i think this should be when dv > ave * dr?
+                        if V > ave * R:
+                            G.Et[i::2] = [V+v for V, v in zip(G.Et[i::2], [dv, dr, dd])]
             if uprim:  # prune rim for next loop
                 rim[:] = uprim
                 G_ += [G]
@@ -302,11 +338,13 @@ def sum2graph(root, grapht, fd, nrng):  # sum node and link params into graph, a
         if G.derH:  # empty in single-PP Gs
             add_([],graph.derH, G.derH)
         G.Et = [0,0,0,0,0,0]  # reset
+        graph.n += G.n  # we need sum n too?
     extH = CH()
     for link in Link_:  # unique current-layer links
         graph.extH = add_([],extH, link.dderH)  # irdnt from link.dderH.Et?
-        graph.S += link.S; np.add(graph.A,link.A)
+        graph.Dist += link.S; np.add(graph.A,link.A)
         link.root = graph
+    graph.S = len(G_) * np.hypot(*graph.A)
     append_(graph.derH, extH)  # graph derH = node derHs + Link_ dderHs
 
     if fd:  # assign alt graphs from d graph, after both linked m and d graphs are formed

@@ -22,7 +22,7 @@ ave_dangle = .2  # vertical difference between angles: -1->1, abs dangle: 0->1, 
 def slice_edge_root(frame):
 
     flat_blob_ = []  # unpacked sub-blobs
-    blob_ = frame[-1]  # init frame blob_
+    blob_ = frame  # init frame blob_
 
     while blob_: flatten_blob_(flat_blob_, blob_)  # get all sub_blobs as a flat list
 

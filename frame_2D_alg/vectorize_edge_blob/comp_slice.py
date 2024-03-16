@@ -99,12 +99,15 @@ def rng_recursion(PP, rng=1, fd=0):  # similar to agg+ rng_recursion, but contig
                         link_ = unpack_last_link_(P.link_)
                         if not fd: link_ += [mlink]
                         _link_ = unpack_last_link_(_P.link_[:-1])  # skip prelink_
-                        if fd: prelink_ += [link for link in _link_ if link is not _link]  # add links when fd? Because we unpack links if fd
-                        else:  prelink_ += [link._node if link.node is _P else link.node for link in _link_]  # connected __Ps
+                        for link in _link_:  # i checked and this _P's link maybe the link between P and _P, so we need to skip that
+                            _node = link._node if link.node is _P else link.node
+                            if _node not in prelink_:
+                                prelink_ += [_node]
+                        # prelink_ += [link._node if link.node is _P else link.node for link in _link_]  # connected __Ps
             P.link_ += [prelink_]  # temporary pre-links, maybe empty
             if prelink_: P_ += [P]
         rng += 1
-        if V > ave * len(P_) * 6:  #  implied val of all __P_s, 6: len mtuple
+        if V > ave * len(P_) * 6 and rng<3:  #  implied val of all __P_s, 6: len mtuple
             iP_ = P_; fd = 0
         else:
             for P in PP.P_: P.link_.pop()
@@ -229,8 +232,9 @@ def sum2PP(root, P_, derP_, iRt, fd):  # sum links in Ps and Ps in PP
             add_([], derP.node.derH, derP.dderH, iRt)
             add_([], derP._node.derH, negate(deepcopy(derP.dderH)), iRt)  # to reverse uplink direction
         PP.link_ += [derP]; derP.roott[fd] = PP
-        PP.A = np.add(PP.A,derP.A); PP.S += derP.S
+        PP.A = np.add(PP.A,derP.A); PP.Dist += derP.S
         PP.n += derP.dderH.n  # *= ave compared P.L?
+    PP.S = len(P_) * np.hypot(*PP.A)  # S = L * hypot(A)?
     # += Ps:
     celly_,cellx_ = [],[]
     for P in P_:
@@ -305,7 +309,7 @@ def append_(HE,He, fmerge=0):
     else:
         HE.H += [He]; HE.nest = max(1, He.nest)
 
-    HE.Et[:] = [V+v for V,v in zip(HE.Et, He.Et)]
+    HE.Et[:] = [V+v for V,v in zip_longest(HE.Et, He.Et, fillvalue=0)]
     HE.n += He.n
 
 
@@ -443,6 +447,7 @@ class CG(CBase):  # PP | graph | blob: params of single-fork node_ cluster
     extH: object = z(CH())  # G-external daggH( dsubH( dderH, summed from rim links
     S: float = 0.0  # sparsity: distance between node centers
     A: list = z([0,0])  # angle: summed dy,dx in links
+    Dist: float = 0.0 
     # tentative:
     alt_graph_: list = z([])  # adjacent gap+overlap graphs, vs. contour in frame_graphs
     # dynamic attrs:
