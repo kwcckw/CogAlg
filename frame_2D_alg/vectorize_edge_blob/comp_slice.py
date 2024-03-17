@@ -99,15 +99,11 @@ def rng_recursion(PP, rng=1, fd=0):  # similar to agg+ rng_recursion, but contig
                         link_ = unpack_last_link_(P.link_)
                         if not fd: link_ += [mlink]
                         _link_ = unpack_last_link_(_P.link_[:-1])  # skip prelink_
-                        for link in _link_:  # i checked and this _P's link maybe the link between P and _P, so we need to skip that
-                            _node = link._node if link.node is _P else link.node
-                            if _node not in prelink_:
-                                prelink_ += [_node]
-                        # prelink_ += [link._node if link.node is _P else link.node for link in _link_]  # connected __Ps
+                        prelink_ += [link._node if link.node is _P else link.node for link in _link_]  # connected __Ps
             P.link_ += [prelink_]  # temporary pre-links, maybe empty
             if prelink_: P_ += [P]
         rng += 1
-        if V > ave * len(P_) * 6 and rng<3:  #  implied val of all __P_s, 6: len mtuple
+        if V > ave * len(P_) * 6:  #  implied val of all __P_s, 6: len mtuple
             iP_ = P_; fd = 0
         else:
             for P in PP.P_: P.link_.pop()
@@ -232,7 +228,8 @@ def sum2PP(root, P_, derP_, iRt, fd):  # sum links in Ps and Ps in PP
             add_([], derP.node.derH, derP.dderH, iRt)
             add_([], derP._node.derH, negate(deepcopy(derP.dderH)), iRt)  # to reverse uplink direction
         PP.link_ += [derP]; derP.roott[fd] = PP
-        PP.A = np.add(PP.A,derP.A); PP.Dist += derP.S
+        PP.A = np.add(PP.A,derP.A)
+        PP.S += np.hypot(*derP.A)  # links are contiguous but slanted
         PP.n += derP.dderH.n  # *= ave compared P.L?
     PP.S = len(P_) * np.hypot(*PP.A)  # S = L * hypot(A)?
     # += Ps:
@@ -338,7 +335,7 @@ def add_(HE_root, HE, He, irdnt=[]):  # unpack tuples (formally lists) down to n
 
     return HE  # to sum
 
-def comp_(_He,He, rn=1, fagg=0):  # unpack tuples (formally lists) down to numericals and compare them
+def comp_(_He,He, rn=1, dderH=[], fagg=0, fmerge=1):  # unpack tuples (formally lists) down to numericals and compare them
 
     ddepth = abs(_He.nest - He.nest)
     n = 0
@@ -381,7 +378,8 @@ def comp_(_He,He, rn=1, fagg=0):  # unpack tuples (formally lists) down to numer
 
         n = (_He.n+He.n) /2 * (len(_cHe.H)/12)  # ave compared n, /2 if ext: 6 params vs 12 in md_
 
-    return CH(nest=min(_He.nest,He.nest), Et=Et, H=dH, n=n)
+    if dderH:
+        append_(dderH, CH(nest=min(_He.nest,He.nest), Et=Et, H=dH, n=n), fmerge)
 
 
 class CH(CBase):  # generic derivation hierarchy of variable nesting
@@ -429,7 +427,7 @@ class CG(CBase):  # PP | graph | blob: params of single-fork node_ cluster
 
     Et: list = z([])  # external eval tuple, summed from rng++ before forming new graph and appending G.extH
     n: int = 0  # external n (last layer n)
-    
+
     latuple: list = z([])   # summed from Ps: lateral I,G,M,Ma,L,[Dy,Dx]
     iderH: object = z(CH())  # summed from PPs
     derH: object = z(CH())  # nested derH in Gs: [[subH,valt,rdnt,dect]], subH: [[derH,valt,rdnt,dect]]: 2-fork composition layers
@@ -440,14 +438,13 @@ class CG(CBase):  # PP | graph | blob: params of single-fork node_ cluster
     box: list = z([inf, inf, -inf, -inf])  # y,x,y0,x0,yn,xn
     rng: int = 1
     fd: int = 0  # fork if flat layers?
-    # n: int = 0
+    n: int = 0  # non-derH accumulation?
     # graph-external, +level per root sub+:
     rim_H: list = z([])  # direct links, depth, init rim_t, link_tH in base sub+ | cpr rd+, link_tHH in cpr sub+
     # iextH: object = z(CH())  # not needed?
     extH: object = z(CH())  # G-external daggH( dsubH( dderH, summed from rim links
     S: float = 0.0  # sparsity: distance between node centers
     A: list = z([0,0])  # angle: summed dy,dx in links
-    Dist: float = 0.0 
     # tentative:
     alt_graph_: list = z([])  # adjacent gap+overlap graphs, vs. contour in frame_graphs
     # dynamic attrs:
@@ -476,8 +473,8 @@ class Clink(CBase):  # the product of comparison between two nodes
     node:  object = None
     dderH: object = z(CH())  # derivatives produced by comp, nesting dertv -> aggH
     roott: list = z([None, None])  # clusters that contain this link
-    S: float = 0.0  # sparsity: distance between node centers
-    A: list = z([0,0])  # angle: dy,dx between centers
+    distance: float = 0.0  # distance between node centers
+    angle: list = z([0,0])  # dy,dx between node centers
     # dir: bool  # direction of comparison if not G0,G1, only needed for comp link?
 
 def get_match(_par, par):
