@@ -121,26 +121,28 @@ def comp_G(link, node_, iEt, nrng=None):  # add flat dderH to link and link to t
     dderH = CH(nest=1)  # new link dderH layer, nest=1 to pack dext
 
     if isinstance(link, Clink):  # der+ only
+        fd = 1
         _G,G = link._node,link.node; rn = _G.n/G.n  # fd=1
     else:  # rng+
+        fd = 0    
         _G,G, dist, [dy,dx] = link; rn = _G.n/G.n  # fd=0
-        link = Clink(_node=_G, node=G, distance=dist, angle=[dy,dx])
+        link = Clink(_node=_G, node=G, distance=dist, angle=[dy,dx], dderH=CH(nest=1))  # link's depth at least =1, it shouldn't having a same depth with md_ or ext
         # / P
         Et, md_ = comp_latuple(_G.latuple, G.latuple, rn, fagg=1)
         dderH.n = 1; dderH.Et = Et
         dderH.H = [CH(nest=0, Et=[*Et], H=md_)]
         comp_ext(_G,G, dist, rn, dderH)
         # / PP, if >1 Ps:
-        if _G.iderH and G.iderH: comp_(_G.iderH, G.iderH, rn, dderH, fagg=1)
+        if _G.iderH and G.iderH: comp_(_G.iderH, G.iderH, rn, dderH, fagg=1, fmerge=0)  # fmerge should be 0 here because der from iderH has nest == 0
     # / G, if >1 PPs | Gs:
     if _G.extH and G.extH: comp_(_G.extH, G.extH, rn, dderH, fagg=1)  # always true in der+
     if _G.derH and G.derH: comp_(_G.derH, G.derH, rn, dderH, fagg=1)
     else: dderH.H+= [CH()] # empty for fixed-len layer decoding, or use Cext as layer terminator?
 
     # append for higher-res lower-der summation in sub-G extH:
-    append_(link.dderH, dderH)
+    append_(link.dderH, dderH, fmerge=1-fd)  # if not fd, link.dderH should be == the new dderH? We only need to append dderH in der+
     for i in 0,1:
-        Val, Rdn = dderH.Et[i::2, :-2]  # exclude dect
+        Val, Rdn = dderH.Et[i:4:2]  # exclude dect
         if Val > G_aves[i] * Rdn:
             if not i: node_ += [_G,G]  # for rng+;  if fd: comp_rim(node_,link, nrng)  # rng+/ matching-direction rim _Gs only?
             _G.Et[i]  += Val; G.Et[i]  += Val  # in both Gs
@@ -222,7 +224,8 @@ def node_connect(iG_):  # node connectivity = sum surround link vals, incr.media
             uprim = []  # >ave updates of direct links
             rim = G.rim_H[-1] if G.rim_H and isinstance(G.rim_H[0], list) else G.rim_H
             for i in 0,1:
-                val,rdn = G.Et[i::2]  # rng+ for both segment forks
+                # i = start index, 4 = end index, 2 = skip interval
+                val,rdn = G.Et[i:4:2]  # rng+ for both segment forks
                 ave = G_aves[i]
                 for link in rim:
                     # > ave derGs in fd rim
@@ -230,19 +233,19 @@ def node_connect(iG_):  # node connectivity = sum surround link vals, incr.media
                     # current mediation decay:
                     decay = mediation * (ldec / (link.dderH.n * 6))  # normalized, 6-param n unit
                     _G = link._node if link.node is G else link.node
-                    _val,_rdn = _G.Et[i::2]
+                    _val,_rdn = _G.Et[i:4:2]
                     # current-loop vals and their difference from last-loop vals, before updating:
                     V = (val+_val) * decay; dv = V-lval
                     R = (rdn+_rdn) * decay; dr = R-lrdn
-                    link.dderH.Et[i::2, :-2] = [V,R]  # last-loop vals for next loop | segment_node_
+                    link.dderH.Et[i:4:2] = [V,R]  # last-loop vals for next loop | segment_node_
                     if dv > ave * dr:  # extend mediation if last-update val, may be negative
                         mediation += 1
                         if not G.derH: G.derH.Et = [0,0,0,0]
-                        G.derH.Et[i::2] = [V+v for V,v in zip(G.derH.Et[i::2],[V,R])]  # last layer link vals
+                        G.derH.Et[i:4:2] = [V+v for V,v in zip(G.derH.Et[i:4:2],[V,R])]  # last layer link vals
                         if link not in uprim: uprim += [link]
                         # more selective eval: dVt[i] += dv; L=len(uprim); Lent[i] += L
                     if V > ave * R:  # updated even if terminated
-                        G.Et[i::2] = [V+v for V, v in zip(G.Et[i::2], [dv,dr])]
+                        G.Et[i:4:2] = [V+v for V, v in zip(G.Et[i::2], [dv,dr])]
             if uprim:  # prune rim for next loop
                 rim[:] = uprim
                 G_ += [G]
@@ -295,7 +298,9 @@ def segment_node_(root, root_G_, fd, nrng, fagg):  # eval rim links with summed 
                     new_Rim += [link for link in _Rim if link not in new_Rim+Rim+Link_]
             # for next loop:
             if len(new_Rim) * inVal > ave * inRdn:
-                graph_ += [[G_,Link_, Et, new_Rim]]
+                grapht = [G_,Link_, Et, new_Rim]
+                igraph_ += [grapht]  # so we need pack this new graph back into igraph_ too, else igraph_ will becomes empty after we remove _grapht in the merging section above
+                graph_ += [grapht]
 
         if graph_: _graph_ = graph_  # selected graph expansion
         else: break
@@ -322,13 +327,13 @@ def sum2graph(root, grapht, fd, nrng):  # sum node and link params into graph, a
             add_([],graph.iderH, G.iderH)
         if G.derH:  # empty in single-PP Gs
             add_([],graph.derH, G.derH)
-        G.Et = [0,0,0,0]  # reset
+        if fd: G.Et = [0,0,0,0]  # reset (reset only in fd fork？ Because Gs are shared across both forks, we still need this Et for segment_node of d fork later)
         graph.n += G.n  # non-derH accumulation?
     extH = CH()
     for link in Link_:  # unique current-layer links
         graph.extH = add_([],extH, link.dderH)  # irdnt from link.dderH.Et?
         graph.S += link.distance
-        np.add(graph.A,link.A)
+        np.add(graph.A,link.angle)
         link.root = graph
     append_(graph.derH, extH)  # graph derH = node derHs + Link_ dderHs
 
@@ -358,6 +363,7 @@ def sum_last_lay(G, fd):  # eLay += last layer of link.daggH (dsubH|ddaggH)
             # derH_/ last xcomp: len subH *= 2, maybe single dderH
             extH.H = [add_([], EH, eH, irdnt=link.dderH.Et[2:4]) for EH, eH in zip_longest(H[int(len(H)/2):], extH.H, fillvalue=CH())]
             extH.n += dderH.n
+            extH.nest = dderH.nest
     if extH:
         add_([],G.extH, extH)
 

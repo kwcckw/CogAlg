@@ -102,7 +102,7 @@ class CP(CBase):
 
         I, G, M, Ma, L, Dy, Dx = i, g, m, ma, 1, gy, gx
         self.axis = ay, ax = axis
-        self.yx_, self.dert_, self.link_ = [yx], [pivot], []
+        self.yx_, self.dert_, self.link_ = [yx], [pivot], [[]]  # for prelink_?
 
         for dy, dx in [(-ay, -ax), (ay, ax)]: # scan in 2 opposite directions to add derts to P
             self.yx_.reverse(); self.dert_.reverse()
@@ -127,7 +127,7 @@ class CP(CBase):
         y, x = yx   # pivot
         for _y, _x in [(y-1,x-1), (y-1,x), (y-1,x+1), (y,x-1), (y,x+1), (y+1,x-1), (y+1,x), (y+1,x+1)]:
             if (_y, _x) in root__:  # neighbor has P
-                self.link_ += [root__[_y, _x]]
+                self.link_[0] += [root__[_y, _x]]
         root__[y, x] = self    # update root__
 
         self.yx = self.yx_[L // 2]  # center

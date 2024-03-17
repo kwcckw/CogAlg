@@ -120,14 +120,14 @@ def comp_P(link):
         rn = (_P.derH.n if P.derH else len(_P.dert_)) / P.derH.n  # lower P must have derH
         aveP = P_aves[1]
     else:  # rng+
-        _P,P, S,A = link
+        _P,P, distance,A = link
         rn = len(_P.dert_) / len(P.dert_)
         H = comp_latuple(_P.latuple, P.latuple, rn)
         vm = sum(H[::2]); vd = sum(abs(d) for d in H[1::2])
         rm = 1 + vd > vm; rd = 1 + vm >= vd
         n = (len(_P.dert_)+len(P.dert_)) / 2  # der value = ave compared n?
         aveP = P_aves[0]
-        link = Clink(node=P,_node=_P, dderH = CH(nest=0,Et=[vm,vd,rm,rd],H=H,n=n), S=S, A=A, roott=[[],[]])
+        link = Clink(node=P,_node=_P, dderH = CH(nest=0,Et=[vm,vd,rm,rd],H=H,n=n), distance=distance, angle=A, roott=[[],[]])
     # both:
     if _P.derH and P.derH:  # append link dderH, init in form_PP_t rng++, comp_latuple was already done
         # der+:
@@ -228,10 +228,10 @@ def sum2PP(root, P_, derP_, iRt, fd):  # sum links in Ps and Ps in PP
             add_([], derP.node.derH, derP.dderH, iRt)
             add_([], derP._node.derH, negate(deepcopy(derP.dderH)), iRt)  # to reverse uplink direction
         PP.link_ += [derP]; derP.roott[fd] = PP
-        PP.A = np.add(PP.A,derP.A)
-        PP.S += np.hypot(*derP.A)  # links are contiguous but slanted
+        PP.A = np.add(PP.A,derP.angle)
+        PP.S += np.hypot(*derP.angle)  # links are contiguous but slanted
         PP.n += derP.dderH.n  # *= ave compared P.L?
-    PP.S = len(P_) * np.hypot(*PP.A)  # S = L * hypot(A)?
+    PP.S *= len(P_)  # S = L * hypot(A)? (A is alrready summed above?)
     # += Ps:
     celly_,cellx_ = [],[]
     for P in P_:
@@ -335,7 +335,7 @@ def add_(HE_root, HE, He, irdnt=[]):  # unpack tuples (formally lists) down to n
 
     return HE  # to sum
 
-def comp_(_He,He, rn=1, dderH=[], fagg=0, fmerge=1):  # unpack tuples (formally lists) down to numericals and compare them
+def comp_(_He,He, rn=1, dderH=None, fagg=0, fmerge=1):  # unpack tuples (formally lists) down to numericals and compare them
 
     ddepth = abs(_He.nest - He.nest)
     n = 0
@@ -351,12 +351,12 @@ def comp_(_He,He, rn=1, dderH=[], fagg=0, fmerge=1):  # unpack tuples (formally 
         dH = []
         for _lay,lay in zip(_cHe.H,cHe.H):  # md_| ext| derH| subH| aggH, eval nesting, unpack,comp ds in shared lower layers:
             if _lay and lay:  # ext is empty in single-node Gs
-                dlay = comp_(_lay,lay, rn, fagg)
+                dlay = comp_(_lay,lay, rn, fagg=fagg)
                 Et[:] = [E+e for E,e in zip(Et,dlay.Et)]
                 n += dlay.n
                 dH += [dlay]  # CH
             else:
-                dH += [[]]
+                dH += [CH()]  # empty
     else:  # H is md_, numerical comp:
         vm,vd,rm,rd, decm,decd = 0,0,0,0, 0,0
         dH = []
@@ -378,9 +378,11 @@ def comp_(_He,He, rn=1, dderH=[], fagg=0, fmerge=1):  # unpack tuples (formally 
 
         n = (_He.n+He.n) /2 * (len(_cHe.H)/12)  # ave compared n, /2 if ext: 6 params vs 12 in md_
 
-    if dderH:
-        append_(dderH, CH(nest=min(_He.nest,He.nest), Et=Et, H=dH, n=n), fmerge)
+    dHe = CH(nest=min(_He.nest,He.nest), Et=Et, H=dH, n=n)
+    if dderH is not None:  # we need to check if is not None because empty dderH gets false too
+        append_(dderH, dHe , fmerge)
 
+    return dHe
 
 class CH(CBase):  # generic derivation hierarchy of variable nesting
 
