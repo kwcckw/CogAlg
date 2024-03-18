@@ -54,9 +54,9 @@ def vectorize_root(image):  # vectorization in 3 composition levels of xcomp, cl
                     if edge.iderH.Et[fd] * (len(node_)-1)*(edge.rng+1) > G_aves[fd] * edge.iderH.Et[2+fd]:
                         pruned_node_ = []
                         for PP in node_:  # PP -> G
-                            if PP.iderH.Et and PP.iderH.Et[fd] > G_aves[fd] * PP.iderH.Et[2+fd]:  # PP.iderH is empty if there's no derPs
+                            if PP.iderH and PP.iderH.Et[fd] > G_aves[fd] * PP.iderH.Et[2+fd]:
                                 PP.root = None  # no feedback to edge?
-                                PP.node_ = PP.P_  # revert to base node_
+                                PP.node_ = PP.P_  # revert base node_
                                 PP.Et = [0,0,0,0]  # [] in comp_slice
                                 pruned_node_ += [PP]
                         if len(pruned_node_) > 10:  # discontinuous PP rng+ cross-comp, cluster -> G_t:
@@ -118,29 +118,26 @@ def rng_recursion(rroot, root, _node_, Q, iEt, nrng=1):  # rng++/G_, der+/link_ 
 
 def comp_G(link, node_, iEt, nrng=None):  # add flat dderH to link and link to the rims of comparands
 
-    dderH = CH(nest=1)  # new link dderH layer, nest=1 to pack dext
-
-    if isinstance(link, Clink):  # der+ only
-        fd = 1
+    dderH = CH()  # new layer of link.dderH
+    if isinstance(link, Clink):
+        # der+
         _G,G = link._node,link.node; rn = _G.n/G.n  # fd=1
     else:  # rng+
-        fd = 0    
         _G,G, dist, [dy,dx] = link; rn = _G.n/G.n  # fd=0
-        link = Clink(_node=_G, node=G, distance=dist, angle=[dy,dx], dderH=CH(nest=1))  # link's depth at least =1, it shouldn't having a same depth with md_ or ext
+        link = Clink(_node=_G, node=G, distance=dist, angle=[dy,dx])
         # / P
         Et, md_ = comp_latuple(_G.latuple, G.latuple, rn, fagg=1)
         dderH.n = 1; dderH.Et = Et
         dderH.H = [CH(nest=0, Et=[*Et], H=md_)]
         comp_ext(_G,G, dist, rn, dderH)
         # / PP, if >1 Ps:
-        if _G.iderH and G.iderH: comp_(_G.iderH, G.iderH, rn, dderH, fagg=1, fmerge=0)  # fmerge should be 0 here because der from iderH has nest == 0
+        if _G.iderH and G.iderH: comp_(_G.iderH, G.iderH, rn, dderH, fagg=1)  # ? fmerge should be 0 here because der from iderH has nest == 0
     # / G, if >1 PPs | Gs:
     if _G.extH and G.extH: comp_(_G.extH, G.extH, rn, dderH, fagg=1)  # always true in der+
     if _G.derH and G.derH: comp_(_G.derH, G.derH, rn, dderH, fagg=1)
-    else: dderH.H+= [CH()] # empty for fixed-len layer decoding, or use Cext as layer terminator?
+    else: dderH.H+= [CH()]  # empty for fixed-len layer decoding, or use Cext as layer terminator?
 
-    # append for higher-res lower-der summation in sub-G extH:
-    append_(link.dderH, dderH, fmerge=1-fd)  # if not fd, link.dderH should be == the new dderH? We only need to append dderH in der+
+    add_(link.dderH, dderH)  # append for higher-res lower-der summation in sub-G extH
     for i in 0,1:
         Val, Rdn = dderH.Et[i:4:2]  # exclude dect
         if Val > G_aves[i] * Rdn:
@@ -175,8 +172,7 @@ def comp_ext(_G,G, dist, rn, dderH):  # compare non-derivatives: dist, node_' L,
     mdec = prox / max_dist + mL/ max(L,_L) + mS/ max(S,_S) + mA  # Amax = 1
     ddec = dist / max_dist + mL/ (L+_L) + dS/ (S+_S) + dA
 
-    append_(dderH, CH(Et=[M,D,mrdn,drdn,mdec,ddec], H=[prox,dist, mL,dL, mS,dS, mA,dA], n=0.66), 0)  # 2/3 of 6-param unit
-
+    add_(dderH, CH(Et=[M,D,mrdn,drdn,mdec,ddec], H=[prox,dist, mL,dL, mS,dS, mA,dA], n=0.66), 0)  # 2/3 of 6-param unit
 
 
 def form_graph_t(root, G_, Et, nrng, fagg=0):  # form Gm_,Gd_ from same-root nodes
@@ -224,28 +220,27 @@ def node_connect(iG_):  # node connectivity = sum surround link vals, incr.media
             uprim = []  # >ave updates of direct links
             rim = G.rim_H[-1] if G.rim_H and isinstance(G.rim_H[0], list) else G.rim_H
             for i in 0,1:
-                # i = start index, 4 = end index, 2 = skip interval
-                val,rdn = G.Et[i:4:2]  # rng+ for both segment forks
+                val,rdn = G.Et[i::2]  # rng+ for both segment forks
                 ave = G_aves[i]
                 for link in rim:
                     # > ave derGs in fd rim
-                    lval,lrdn,ldec = link.dderH.Et[i::2]
-                    # current mediation decay:
+                    lval,lrdn,ldec = link.dderH.Et[i::2] # i: start, 4: end, 2: step
+                    # current-mediation decay:
                     decay = mediation * (ldec / (link.dderH.n * 6))  # normalized, 6-param n unit
                     _G = link._node if link.node is G else link.node
-                    _val,_rdn = _G.Et[i:4:2]
+                    _val,_rdn = _G.Et[i::2]
                     # current-loop vals and their difference from last-loop vals, before updating:
                     V = (val+_val) * decay; dv = V-lval
                     R = (rdn+_rdn) * decay; dr = R-lrdn
-                    link.dderH.Et[i:4:2] = [V,R]  # last-loop vals for next loop | segment_node_
+                    link.dderH.Et[i:4:2] = [V,R]  # last-loop vals for next loop | segment_node_, dect is not updated
                     if dv > ave * dr:  # extend mediation if last-update val, may be negative
                         mediation += 1
                         if not G.derH: G.derH.Et = [0,0,0,0]
-                        G.derH.Et[i:4:2] = [V+v for V,v in zip(G.derH.Et[i:4:2],[V,R])]  # last layer link vals
+                        G.derH.Et[i::2] = [V+v for V,v in zip(G.derH.Et[i::2],[V,R])]  # last layer link vals
                         if link not in uprim: uprim += [link]
                         # more selective eval: dVt[i] += dv; L=len(uprim); Lent[i] += L
                     if V > ave * R:  # updated even if terminated
-                        G.Et[i:4:2] = [V+v for V, v in zip(G.Et[i::2], [dv,dr])]
+                        G.Et[i::2] = [V+v for V,v in zip(G.Et[i::2], [dv,dr])]
             if uprim:  # prune rim for next loop
                 rim[:] = uprim
                 G_ += [G]
@@ -264,7 +259,7 @@ def segment_node_(root, root_G_, fd, nrng, fagg):  # eval rim links with summed 
         grapht = [[G],[], [*G.Et], link_]  # link_ = last rim
         G.root = grapht  # for G merge
         igraph_ += [grapht]
-    _graph_ = igraph_
+    _graph_ = copy(igraph_)
 
     while True:
         graph_ = []
@@ -299,7 +294,6 @@ def segment_node_(root, root_G_, fd, nrng, fagg):  # eval rim links with summed 
             # for next loop:
             if len(new_Rim) * inVal > ave * inRdn:
                 grapht = [G_,Link_, Et, new_Rim]
-                igraph_ += [grapht]  # so we need pack this new graph back into igraph_ too, else igraph_ will becomes empty after we remove _grapht in the merging section above
                 graph_ += [grapht]
 
         if graph_: _graph_ = graph_  # selected graph expansion
@@ -327,7 +321,7 @@ def sum2graph(root, grapht, fd, nrng):  # sum node and link params into graph, a
             add_([],graph.iderH, G.iderH)
         if G.derH:  # empty in single-PP Gs
             add_([],graph.derH, G.derH)
-        if fd: G.Et = [0,0,0,0]  # reset (reset only in fd fork？ Because Gs are shared across both forks, we still need this Et for segment_node of d fork later)
+        if fd: G.Et = [0,0,0,0]  # reset in fd: last fork, Gs are shared across both forks
         graph.n += G.n  # non-derH accumulation?
     extH = CH()
     for link in Link_:  # unique current-layer links
