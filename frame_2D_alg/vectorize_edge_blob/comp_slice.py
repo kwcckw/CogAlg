@@ -67,16 +67,11 @@ len prior root_ sorted by G is root.rdn, to eval for inclusion in PP or start ne
   # root function:
 def ider_recursion(root, PP):  # node-mediated correlation clustering: keep same Ps and links, increment link derH, then P derH in sum2PP
 
-    for P in PP.P_:
-        if P.link_ and isinstance(P.link_[0], CP):  # 1st call, where links are CPs instead of Clinks
-            P.link_ = [P.link_]
-        else: 
-            P.link_ += [copy(unpack_last_link_(P.link_))]  # add prelinks per P
+    for P in PP.P_: P.link_ += [copy(unpack_last_link_(P.link_))]  # add prelinks per P
     rng_recursion(PP, rng=1)  # extend PP.link_, derHs by same-der rng+ comp
 
-    form_PP_t(PP, PP.P_, iRt = PP.iderH.Et[2:4] if PP.iderH else [0,0])  # der+ is mediated by form_PP_t
+    form_PP_t(PP, PP.P_, iRt=PP.iderH.Et[2:4] if PP.iderH else [0, 0])  # der+ is mediated by form_PP_t
     if root is not None: root.fback_ += [PP.iderH]  # feedback from PPds
-
 
 def rng_recursion(PP, rng=1):  # similar to agg+ rng_recursion, but contiguously link mediated, because
 
@@ -90,7 +85,7 @@ def rng_recursion(PP, rng=1):  # similar to agg+ rng_recursion, but contiguously
             for _link in _prelink_:
                 if isinstance(_link, Clink):
                     fd = 1; _P = _link._node
-                else: 
+                else:
                     fd=0; _P = _link
                 # _P = _link._node if isinstance(_link, Clink) else _link
                 dy,dx = np.subtract(_P.yx,P.yx)
@@ -115,10 +110,8 @@ def rng_recursion(PP, rng=1):  # similar to agg+ rng_recursion, but contiguously
         else:
             for P in PP.P_: P.link_.pop()
             break
+    # der++ in PPds from rng++, no der++ inside rng++: high diff @ rng++ termination only?
     PP.rng=rng
-    '''
-    der++ is tested in PPds formed by rng++, no der++ inside rng++: high diff @ rng++ termination only?
-    '''
 
 def comp_P(link):
 
@@ -137,7 +130,6 @@ def comp_P(link):
         link = Clink(node=P,_node=_P, dderH = CH(nest=0,Et=[vm,vd,rm,rd],H=H,n=n), distance=distance, angle=angle, roott=[[],[]])
     # both:
     if _P.derH and P.derH:  # append link dderH, init in form_PP_t rng++, comp_latuple was already done
-        raise ValueError('a')    
         # der+:
         dderH = comp_(_P.derH, P.derH, rn)
         vm,vd,rm,rd = dderH.Et[:4]  # also works if called from comp_G
@@ -312,7 +304,7 @@ class CH(CBase):  # generic derivation hierarchy of variable nesting
     Et: list = z([])  # evaluation tuple: valt, rdnt, normt
     H: list = z([])  # hierarchy of der layers or md_
     n: int = 0  # total number of params compared to form derH, summed in comp_G and then from nodes in sum2graph
-    root: object = None
+    root: object = None  # higher-order CH
 
     def __bool__(self):  # to test empty
         if self.n: return True
@@ -326,41 +318,35 @@ class CH(CBase):  # generic derivation hierarchy of variable nesting
     lay4: [[m,d], [md,dd], [[md1,dd1],[mdd,ddd]]]: 3 sLays, <=2 ssLays
     '''
 
-# to be clearer, change fmerge into fappend?
 def add_(HE, He, irdnt=[], fmerge=0):  # unpack tuples (formally lists) down to numericals and sum them
 
+    # per layer of each CH
     if He:  # to be summed
-        if fmerge:  # accumulate 
-            if HE:  # to sum in
-                ddepth = abs(HE.nest - He.nest)  # compare nesting depth, nest lesser He: md_-> derH-> subH-> aggH:
-                if ddepth:
-                    nHe = [HE,He][HE.nest>He.nest]  # He to be nested
-                    while ddepth > 0:
-                       nHe.nest += 1; nHe.H = [nHe.H]; ddepth -= 1
-                       # use HE as root if deeper than He and fmerge=0
-    
-                if isinstance(HE.H[0],CH):  # no and isinstance(lay.H[0],list): same nesting unless cpr?
-                    for Lay,lay in zip_longest(HE.H, He.H, fillvalue=[]):
-                        add_(Lay,lay, irdnt, fmerge=1)  # recursive unpack
-                else:
-                    HE.H = np.add(HE.H, He.H)  # both have numericals in H
-                    Et, et = HE.Et, He.Et  # always numerical
-                    Et[:] = [E+e for E,e in zip(Et, et)]
-                    if irdnt: Et[2:4] = [E+e for E,e in zip(Et[2:4], irdnt)]
-                    
-                    HE.n += He.n  # combined param accumulation span
-            else: 
-                HE.copy(He)
-    
-        else:  # append
-            HE.H += [He] 
-            He.root = HE 
-            HE.Et[:] = [E+e for E,e in zip_longest(HE.Et, He.Et, fillvalue=0)]
-            HE.n += He.n
-            HE.nest = max(HE.nest, He.nest)
+        if HE:  # to sum in
+            ddepth = abs(HE.nest - He.nest)  # compare nesting depth, nest lesser He: md_-> derH-> subH-> aggH:
+            if ddepth:
+                nHe = [HE,He][HE.nest>He.nest]  # He to be nested
+                while ddepth > 0:
+                   nHe.nest += 1; nHe.H = [nHe.H]; ddepth -= 1
+            # same nesting:
+            if isinstance(HE.H[0],CH):  # no and isinstance(lay.H[0],list): same nesting unless cpr?
+                for Lay,lay in zip_longest(HE.H, He.H, fillvalue=CH()):
+                    add_(Lay,lay, irdnt,fmerge)  # recursive unpack to sum md_s
+            else:
+                HE.H = np.add(HE.H, He.H)  # both Hs are md_s
+        else:
+            # He is deeper than HE, add as new layer to HE.root:
+            if fmerge: HE.root.H += copy(He)  # append flat
+            else:      HE.root.H += [copy(He)]  # append nested
+        # default:
+        He.root = HE
+        Et,et = HE.Et,He.Et
+        HE.Et[:] = [E+e for E,e in zip_longest(Et, et, fillvalue=0)]
+        if irdnt: Et[2:4] = [E+e for E,e in zip(Et[2:4], irdnt)]
+        HE.n += He.n  # combined param accumulation span
+        HE.nest = max(HE.nest, He.nest)
 
-    return HE  # to sum
-
+    return HE  # not used?
 
 def comp_(_He,He, rn=1, dderH=CH(), fagg=0, fmerge=1):  # unpack tuples (formally lists) down to numericals and compare them
 
@@ -402,19 +388,13 @@ def comp_(_He,He, rn=1, dderH=CH(), fagg=0, fmerge=1):  # unpack tuples (formall
             dH += [match,diff]  # flat
         Et = [vm,vd,rm,rd]
         if fagg: Et += [decm, decd]
+        n = len(_cHe.H)/12  # unit n = 6 params, = 12 in md_
 
-        n = (_He.n+He.n) /2 * (len(_cHe.H)/12)  # ave compared n, /2 if ext: 6 params vs 12 in md_
-
-    dHe =  CH(nest=min(_He.nest,He.nest), Et=Et, H=dH, n=n)
-    add_(dderH, dHe, fmerge=fmerge)
-        
+    add_(dderH, CH(nest=min(_He.nest,He.nest), Et=Et, H=dH, n=n), fmerge=fmerge)
     return dderH
 
-
-
-
-# for reference, redundant to slice_edge
 '''
+for reference, redundant to slice_edge:
 class CP(CBase):  # horizontal blob slice P, with vertical derivatives per param if derP, always positive
 
     latuple: list = z([])  # lateral params to compare vertically: I,G,M,Ma,L, (Dy,Dx)

@@ -278,8 +278,8 @@ def segment_node_(root, root_G_, fd, nrng, fagg):  # eval rim links with summed 
                 cval = link.dderH.Et[fd] + get_match(_G.Et[fd], G.Et[fd])  # same coef for int and ext match?
                 crdn = link.dderH.Et[2+fd] + (_G.Et[2+fd] + G.Et[2+fd]) / 2
                 if cval > ave * crdn:  # _G and its root are effectively connected
-                    # merge _root:
-                    _grapht = _G.root
+                    # merge _G.root in grapht:
+                    _grapht = _G.root  # local and for feedback?
                     _G_,_Link_,_Et,_Rim = _grapht
                     if link not in Link_: Link_ += [link]
                     Link_[:] += [_link for _link in _Link_ if _link not in Link_]
@@ -288,14 +288,11 @@ def segment_node_(root, root_G_, fd, nrng, fagg):  # eval rim links with summed 
                         if g not in G_: G_+=[g]
                     Et[:] = [V+v for V,v in zip(Et,_Et)]
                     inVal += _Et[fd]; inRdn += _Et[2+fd]
-                    if _grapht in igraph_:
-                        igraph_.remove(_grapht)
-                        if grapht not in igraph_: igraph_ += [grapht]  # after _grapht is merged and remove, repack the merged grapht into igraph if it's not in igraph_
+                    igraph_.remove(_grapht)
                     new_Rim += [link for link in _Rim if link not in new_Rim+Rim+Link_]
             # for next loop:
             if len(new_Rim) * inVal > ave * inRdn:
-                grapht = [G_,Link_, Et, new_Rim]
-                graph_ += [grapht]
+                graph_ += [grapht[:-1]+ [new_Rim]]  # replace Rim
 
         if graph_: _graph_ = graph_  # selected graph expansion
         else: break
@@ -366,7 +363,10 @@ def sum_last_lay(G, fd):  # eLay += last layer of link.daggH (dsubH|ddaggH)
 def CG_edge(edge):
     root, sign, I, Dy, Dx, G, yx_, dert_, link_, P_ = edge
 
-    for P in P_: P.derH = CH()
+    for P in P_:
+        P.derH = CH()
+        P.link_ = [Clink(node=P,_node=_P, distance=np.hypot(*P.yx,*_P.yx),angle=np.subtract(*P.yx,*_P.yx))
+                   for _P in P.link_]
     # edge:
     y_ = [yx[0] for yx in yx_]
     x_ = [yx[1] for yx in yx_]
