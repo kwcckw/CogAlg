@@ -67,9 +67,7 @@ len prior root_ sorted by G is root.rdn, to eval for inclusion in PP or start ne
   # root function:
 def ider_recursion(root, PP):  # node-mediated correlation clustering: keep same Ps and links, increment link derH, then P derH in sum2PP
 
-    for P in PP.P_: P.link_ += [copy(unpack_last_link_(P.link_))]  # add prelinks per P
     rng_recursion(PP, rng=1)  # extend PP.link_, derHs by same-der rng+ comp
-
     form_PP_t(PP, PP.P_, iRt=PP.iderH.Et[2:4] if PP.iderH else [0, 0])  # der+ is mediated by form_PP_t
     if root is not None: root.fback_ += [PP.iderH]  # feedback from PPds
 
@@ -86,7 +84,7 @@ def rng_recursion(PP, rng=1):  # similar to agg+ rng_recursion, but contiguously
                 if isinstance(_link, Clink):
                     fd = 1; _P = _link._node
                 else:
-                    fd=0; _P = _link
+                    fd = 0; _P = _link
                 # _P = _link._node if isinstance(_link, Clink) else _link
                 dy,dx = np.subtract(_P.yx,P.yx)
                 distance = np.hypot(dy,dx)  # distance between P midpoints, /= L for eval?
@@ -173,7 +171,9 @@ def form_PP_t(root, P_, iRt):  # form PPs of derP.valt[fd] + connected Ps val
             inP_ += cP_  # update clustered Ps
 
     for PP in PP_t[1]:  # eval der+ / PPd only, after form_PP_t -> P.root
-        if PP.iderH and PP.iderH.Et[0] * len(PP.link_) > PP_aves[1] * PP.iderH.Et[2]:
+        if PP.iderH and PP.iderH.Et[0] * len(PP.link_) > PP_aves[1] * PP.iderH.Et[2]:   
+            # move this here because this is not needed in the 1st call of ider_recursion from slice_edge
+            for P in PP.P_: P.link_ += [copy(unpack_last_link_(P.link_))]  # add prelinks per P
             # node-mediated correlation clustering:
             ider_recursion(root, PP)
         if root.fback_:
@@ -210,6 +210,7 @@ def form_PP_t_old(root, P_, iRt):  # form PPs of derP.valt[fd] + connected Ps va
 
     for PP in PP_t[1]:  # eval der+ / PPd only, after form_PP_t -> P.root
         if PP.iderH and PP.iderH.Et[0] * len(PP.link_) > PP_aves[1] * PP.iderH.Et[2]:
+            
             # node-mediated correlation clustering:
             ider_recursion(root, PP, fd=1)
         if root.fback_:
@@ -322,24 +323,33 @@ def add_(HE, He, irdnt=[], fmerge=0):  # unpack tuples (formally lists) down to 
 
     # per layer of each CH
     if He:  # to be summed
-        if HE:  # to sum in
-            ddepth = abs(HE.nest - He.nest)  # compare nesting depth, nest lesser He: md_-> derH-> subH-> aggH:
-            if ddepth:
-                nHe = [HE,He][HE.nest>He.nest]  # He to be nested
-                while ddepth > 0:
-                   nHe.nest += 1; nHe.H = [nHe.H]; ddepth -= 1
-            # same nesting:
-            if isinstance(HE.H[0],CH):  # no and isinstance(lay.H[0],list): same nesting unless cpr?
-                for Lay,lay in zip_longest(HE.H, He.H, fillvalue=CH()):
-                    add_(Lay,lay, irdnt,fmerge)  # recursive unpack to sum md_s
+        if fmerge:
+            if HE:  # to sum in 
+                ddepth = abs(HE.nest - He.nest)  # compare nesting depth, nest lesser He: md_-> derH-> subH-> aggH:
+                if ddepth:
+                    nHe = [HE,He][HE.nest>He.nest]  # He to be nested
+                    while ddepth > 0:
+                       nHe.nest += 1; nHe.H = [nHe.H]; ddepth -= 1
+                # same nesting:
+                if isinstance(HE.H[0],CH):  # no and isinstance(lay.H[0],list): same nesting unless cpr?
+                    # recursive unpack to sum md_s
+                    HE.H = [add_(CH() if Lay is None else Lay,lay, irdnt,fmerge)  for Lay,lay in zip_longest(HE.H, He.H, fillvalue=None)]
+                else:
+                    HE.H = np.add(HE.H, He.H)  # both Hs are md_s
             else:
-                HE.H = np.add(HE.H, He.H)  # both Hs are md_s
+                HE.copy(He)  # append flat
         else:
+            HE.H += [copy(He)]  # append nested
+            
+            '''
             # He is deeper than HE, add as new layer to HE.root:
             if fmerge: HE.root.H += copy(He)  # append flat
             else:      HE.root.H += [copy(He)]  # append nested
+            '''
+    
+        # this should for fmerge == 0 only, because we still use add_ for same nesting addition (when fmerge = 0)
+        if not fmerge: He.root = HE
         # default:
-        He.root = HE
         Et,et = HE.Et,He.Et
         HE.Et[:] = [E+e for E,e in zip_longest(Et, et, fillvalue=0)]
         if irdnt: Et[2:4] = [E+e for E,e in zip(Et[2:4], irdnt)]
@@ -348,7 +358,7 @@ def add_(HE, He, irdnt=[], fmerge=0):  # unpack tuples (formally lists) down to 
 
     return HE  # not used?
 
-def comp_(_He,He, rn=1, dderH=CH(), fagg=0, fmerge=1):  # unpack tuples (formally lists) down to numericals and compare them
+def comp_(_He,He, dderH, rn=1, fagg=0, fmerge=1):  # unpack tuples (formally lists) down to numericals and compare them
 
     ddepth = abs(_He.nest - He.nest)
     n = 0
@@ -364,7 +374,7 @@ def comp_(_He,He, rn=1, dderH=CH(), fagg=0, fmerge=1):  # unpack tuples (formall
         dH = []
         for _lay,lay in zip(_cHe.H,cHe.H):  # md_| ext| derH| subH| aggH, eval nesting, unpack,comp ds in shared lower layers:
             if _lay and lay:  # ext is empty in single-node Gs
-                dlay = comp_(_lay,lay, rn, fagg=fagg, fmerge=1)  # dlay is dderH
+                dlay = comp_(_lay,lay, CH(), rn, fagg=fagg, fmerge=1)  # dlay is dderH
                 Et[:] = [E+e for E,e in zip(Et,dlay.Et)]
                 n += dlay.n
                 dH += [dlay]  # CH
