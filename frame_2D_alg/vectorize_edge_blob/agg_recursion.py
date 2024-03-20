@@ -41,7 +41,7 @@ https://github.com/boris-kz/CogAlg/blob/master/frame_2D_alg/Illustrations/agg_re
 
 def vectorize_root(image):  # vectorization in 3 composition levels of xcomp, cluster:
 
-    edge_ = slice_edge_root(intra_blob_root( frame_blobs_root(image)))
+    edge_ = slice_edge_root( intra_blob_root( frame_blobs_root(image)))
 
     for edge in edge_:  #  edge = [root, sign, I, Dy, Dx, G, yx_, dert_, link_, P_]
         if edge[5] * (len(edge[-1])-1) > G_aves[0]:  # rdn=1
@@ -224,14 +224,13 @@ def node_connect(iG_):  # node connectivity = sum surround link vals, incr.media
                 ave = G_aves[i]
                 for link in rim:
                     # > ave derGs in fd rim
-                    lval,lrdn,ldec = link.dderH.Et[i::2] # i: start, 4: end, 2: step
-                    # current-mediation decay:
-                    decay = mediation * (ldec / (link.dderH.n * 6))  # normalized, 6-param n unit
+                    lval,lrdn,ldec = link.dderH.Et[i::2]  # step=2
+                    decay = mediation * (ldec/ (link.dderH.n * 6))  # normalized, current-mediation decay
                     _G = link._node if link.node is G else link.node
                     _val,_rdn = _G.Et[i::2]
                     # current-loop vals and their difference from last-loop vals, before updating:
                     V = (val+_val) * decay; dv = V-lval
-                    R = (rdn+_rdn) * decay; dr = R-lrdn
+                    R = (rdn+_rdn); dr = R-lrdn  # rdn cost doesn't decay
                     link.dderH.Et[i:4:2] = [V,R]  # last-loop vals for next loop | segment_node_, dect is not updated
                     if dv > ave * dr:  # extend mediation if last-update val, may be negative
                         mediation += 1
@@ -289,11 +288,11 @@ def segment_node_(root, root_G_, fd, nrng, fagg):  # eval rim links with summed 
                         if g not in G_: G_+=[g]
                     Et[:] = [V+v for V,v in zip(Et,_Et)]
                     inVal += _Et[fd]; inRdn += _Et[2+fd]
-                    if _grapht in igraph_: igraph_.remove(_grapht)
+                    igraph_.remove(_grapht)
                     new_Rim += [link for link in _Rim if link not in new_Rim+Rim+Link_]
             # for next loop:
             if len(new_Rim) * inVal > ave * inRdn:
-                grapht.pop(-1); grapht += [new_Rim]  # looks like we need to pop and append, using grapht[:-1] create a new list reference now
+                grapht.pop(-1); grapht += [new_Rim]
                 graph_ += [grapht]  # replace Rim
 
         if graph_: _graph_ = graph_  # selected graph expansion
@@ -366,10 +365,11 @@ def CG_edge(edge):
     root, sign, I, Dy, Dx, G, yx_, dert_, link_, P_ = edge
     for P in P_:
         P.derH = CH()
-        P.link_ = [P.link_]  # we should just add nesting here? We don't have _P too
-        # P.link_ = [Clink(node=P,_node=_P, distance=np.hypot(*P.yx,*_P.yx),angle=np.subtract(*P.yx,*_P.yx))
-        #           for _P in P.link_]
-
+        Clink_ = []
+        for _P in P.link_:
+            angle = np.subtract(P.yx, _P.yx)
+            Clink_ += [Clink(node=P, _node=_P, distance=np.hypot(*angle), angle=angle)]
+        P.link_ = Clink_
     # edge:
     y_ = [yx[0] for yx in yx_]
     x_ = [yx[1] for yx in yx_]
