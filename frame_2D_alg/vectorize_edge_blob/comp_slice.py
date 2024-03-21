@@ -54,6 +54,8 @@ def rng_recursion(PP, rng=1, fd=0):  # similar to agg+ rng_recursion, but contig
             prelink_ = []  # new prelinks per P
             _prelink_ = P.link_.pop()  # old prelinks per P
             for link in _prelink_:
+                # link._node should be always the upper P, but link.node may not be always the P
+                # link.node maybe the _P in prior rng recursion
                 if link.distance < rng:  # | rng * ((P.val+_P.val)/ ave_rval)?
                     if fd and not (link.node.derH and link._node.derH): continue  # nothing to compare
                     mlink = comp_P(link, fd)
@@ -64,7 +66,7 @@ def rng_recursion(PP, rng=1, fd=0):  # similar to agg+ rng_recursion, but contig
                             if len(P.link_) < rng: P.link_ += [[]]  # add new link_
                         link_ = unpack_last_link_(P.link_)
                         if not fd: link_ += [mlink]
-                        _link_ = unpack_last_link_(_P.link_[:-1])  # skip prelink_
+                        _link_ = unpack_last_link_(link._node.link_[:-1])  # skip prelink_
                         prelink_ += _link_  # connected __Ps' links
 
             P.link_ += [prelink_]  # temporary pre-links, maybe empty
@@ -258,10 +260,8 @@ def add_(HE, He, irdnt=[], fmerge=0):  # unpack tuples (formally lists) down to 
                    nHe.nest += 1; nHe.H = [nHe.H]; ddepth -= 1
             # sum layers of same nesting, elevation:
             if isinstance(HE.H[0],CH):
-                H = []
-                for Lay,lay in zip_longest(HE.H, He.H, fillvalue=CH()):
-                    H+= [add_(Lay,lay, irdnt, fmerge)] # recursive unpack to sum md_s
-                HE.H = H
+                # we can't use fillvalue = CH() because it's always pointing to a same object
+                HE.H = [add_(CH() if Lay is None else Lay, CH() if lay is None else lay, irdnt, fmerge) for Lay,lay in zip_longest(HE.H, He.H, fillvalue=None)]
             else:
                 HE.H = np.add(HE.H, He.H)  # both Hs are md_s
         else:  # He is higher than HE, add as new layer | sub-layer to HE.root:
@@ -271,6 +271,12 @@ def add_(HE, He, irdnt=[], fmerge=0):  # unpack tuples (formally lists) down to 
             else:
                 He.root = HE
                 HE.root.H += [He]  # append nested
+                # for the case of append, we need to sum values into root too?
+                HE.root.Et[:] = [E+e for E,e in zip_longest(HE.root.Et, He.Et, fillvalue=0)]
+                if irdnt: HE.root.Et[2:4] = [E+e for E,e in zip(He.root.Et[2:4], irdnt)]
+                HE.root.n += He.root.n  # combined param accumulation span
+                HE.root.nest = max(HE.root.nest, He.nest)
+                
         # default:
         Et,et = HE.Et,He.Et
         HE.Et[:] = [E+e for E,e in zip_longest(Et, et, fillvalue=0)]
@@ -303,9 +309,14 @@ def add_chee(HE, He, irdnt=[], fmerge=0):  # unpack tuples (formally lists) down
             else:
                 HE.H = [V + v for V, v in zip_longest(HE.H, He.H, fillvalue=0)]  # both Hs are md_s
 
-        elif HE.root:  # append He as a
+        elif HE.root is not None:  # append He as a
             He.root = HE
             HE.root.H += [He]
+            HE.root.Et[:] = [E+e for E,e in zip_longest(HE.root.Et, He.Et, fillvalue=0)]
+            if irdnt: HE.root.Et[2:4] = [E+e for E,e in zip(He.root.Et[2:4], irdnt)]
+            HE.root.n += He.root.n  # combined param accumulation span
+            HE.root.nest = max(HE.root.nest, He.nest)
+            
         # default:
         Et,et = HE.Et,He.Et
         HE.Et[:] = [E+e for E,e in zip_longest(Et, et, fillvalue=0)]
@@ -439,8 +450,13 @@ class Clink(CBase):  # the product of comparison between two nodes
     angle: list = z([0,0])  # dy,dx between node centers
     flink = 0  # not used
     def __bool__(self):  # to test empty
+        if self.dderH.H: return True
+        else:            return False
+    
+        '''
         if self.flink: return True
         else: return False
+        '''
     # dir: bool  # direction of comparison if not G0,G1, only needed for comp link?
 
 

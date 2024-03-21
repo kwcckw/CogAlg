@@ -244,6 +244,8 @@ def node_connect(iG_):  # node connectivity = sum surround link vals, incr.media
         if G_:
             mediation += 1  # n intermediated nodes in next loop
             _G_ = G_  # exclude weakly incremented Gs from next connectivity expansion loop
+            for G in iG_:
+                G.derH.Et = [0,0,0,0]  # reset every recursion? Otherwise we are accumulating every recursion's Et, instead of last layer
         else:
             break
 
@@ -327,7 +329,8 @@ def sum2graph(root, grapht, fd, nrng):  # sum node and link params into graph, a
         graph.S += link.distance
         np.add(graph.A,link.angle)
         link.root = graph
-    add_(graph.derH, extH, fmerge=0)  # graph derH = node derHs + Link_ dderHs
+    # looks like we missed out CH() here
+    add_(CH(root=graph.derH), extH, fmerge=0)  # graph derH = node derHs + Link_ dderHs
 
     if fd:  # assign alt graphs from d graph, after both linked m and d graphs are formed
         for link in graph.link_:
@@ -391,11 +394,10 @@ def feedback(root):  # called from form_graph_, append new der layers to root
     DerH = deepcopy(root.fback_.pop(0))  # init
     while root.fback_:
         derH = root.fback_.pop(0)
-        add_(DerH, derH, fmerge=1)
-        DerH = [add_(HE,He, fmerge=1) for HE,He in zip_longest(DerH, derH, fillvalue=CH())]
+        add_(DerH, derH, fmerge=1)  # He should be added in add_ now
 
     if DerH.Et[1] > G_aves[1] * DerH.Et[3]:  # compress levels?
-        root.derH = [add_(rHe,He, fmerge=1) for rHe,He in zip_longest(root.derH, DerH, fillvalue=CH())]
+        add_(root.derH, DerH, fmerge=1) 
 
     if root.root and isinstance(root.root, CG):  # not Edge
         rroot = root.root
