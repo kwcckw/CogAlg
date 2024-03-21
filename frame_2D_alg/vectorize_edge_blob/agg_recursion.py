@@ -212,11 +212,10 @@ def node_connect(iG_):  # node connectivity = sum surround link vals, incr.media
     '''
     _G_ = iG_
     while True:
-        # eval accumulated G connectivity, indirect range extension
+        # eval accumulated G connectivity with node-mediated range extension
         G_ = []  # next connectivity expansion, more selective by DVt,Lent = [0,0],[0,0]
-
+        mediation = 1  # n intermediated nodes, increasing decay
         for G in _G_:
-            mediation = 1  # n intermediated nodes, increasing decay (this should be per G? else the later Gs get more mediation)
             uprim = []  # >ave updates of direct links
             rim = G.rim_H[-1] if G.rim_H and isinstance(G.rim_H[0], list) else G.rim_H
             for i in 0,1:
@@ -225,26 +224,25 @@ def node_connect(iG_):  # node connectivity = sum surround link vals, incr.media
                 for link in rim:
                     # > ave derGs in fd rim
                     lval,lrdn,ldec = link.dderH.Et[i::2]  # step=2
-                    decay =  (ldec/ (link.dderH.n * 6)) / mediation # normalized, current-mediation decay (to increase decay effect, we should divide by mediation? Because the higher decay effect, the lower the value of decay)
+                    decay =  (ldec/ (link.dderH.n * 6)) ** mediation  # normalized decay at current mediation
                     _G = link._node if link.node is G else link.node
                     _val,_rdn = _G.Et[i::2]
                     # current-loop vals and their difference from last-loop vals, before updating:
                     V = (val+_val) * decay; dv = V-lval
-                    # dr should be absolute value? Rdn shouldn't be negative? 
-                    R = (rdn+_rdn) * 0.5; dr = R-lrdn  # rdn cost doesn't decay, but we should get average of rdn and _rdn too?
-                    link.dderH.Et[i:4:2] = [V,R]  # last-loop vals for next loop | segment_node_, dect is not updated 
-                    if dv > ave * dr:  # extend mediation if last-update val, may be negative
-                        mediation += 1
+                    R = (rdn+_rdn) # rdn cost doesn't decay
+                    link.dderH.Et[i:4:2] = [V,R]  # last-loop vals for next loop | segment_node_, dect is not updated
+                    if dv > ave * R:  # extend mediation if last-update val, may be negative
                         if not G.derH: G.derH.Et = [0,0,0,0]
                         G.derH.Et[i::2] = [V+v for V,v in zip(G.derH.Et[i::2],[V,R])]  # last layer link vals
                         if link not in uprim: uprim += [link]
                         # more selective eval: dVt[i] += dv; L=len(uprim); Lent[i] += L
                     if V > ave * R:  # updated even if terminated
-                        G.Et[i::2] = [V+v for V,v in zip(G.Et[i::2], [dv,dr])]
+                        G.Et[i::2] = [V+v for V,v in zip(G.Et[i::2], [dv,R])]  # absolute R?
             if uprim:  # prune rim for next loop
                 rim[:] = uprim
                 G_ += [G]
         if G_:
+            mediation += 1  # n intermediated nodes in next loop
             _G_ = G_  # exclude weakly incremented Gs from next connectivity expansion loop
         else:
             break

@@ -43,6 +43,7 @@ def ider_recursion(root, PP, fd=0):  # node-mediated correlation clustering: kee
     form_PP_t(PP, PP.P_, iRt=PP.iderH.Et[2:4] if PP.iderH else [0, 0])  # der+ is mediated by form_PP_t
     if root is not None: root.fback_ += [PP.iderH]  # feedback from PPds
 
+
 def rng_recursion(PP, rng=1, fd=0):  # similar to agg+ rng_recursion, but contiguously link mediated, because
 
     iP_ = PP.P_
@@ -53,11 +54,9 @@ def rng_recursion(PP, rng=1, fd=0):  # similar to agg+ rng_recursion, but contig
             prelink_ = []  # new prelinks per P
             _prelink_ = P.link_.pop()  # old prelinks per P
             for link in _prelink_:
-                _node, node,distance,angle = link._node,link.node,link.distance,link.angle
-                _P = _node if node is P else node
-                if distance < rng:  # | rng * ((P.val+_P.val)/ ave_rval)?
-                    if fd and not (_P.derH and P.derH): continue  # nothing to compare
-                    mlink = comp_P([_P, P, distance, angle, link], fd)
+                if link.distance < rng:  # | rng * ((P.val+_P.val)/ ave_rval)?
+                    if fd and not (link.node.derH and link._node.derH): continue  # nothing to compare
+                    mlink = comp_P(link, fd)
                     if mlink:  # return if match
                         V += mlink.dderH.Et[0]
                         if rng > 1:  # test to add nesting to P.link_:
@@ -71,7 +70,7 @@ def rng_recursion(PP, rng=1, fd=0):  # similar to agg+ rng_recursion, but contig
             P.link_ += [prelink_]  # temporary pre-links, maybe empty
             if prelink_: P_ += [P]
         rng += 1
-        if V > ave * len(P_) * 6  #  implied val of all __P_s, 6: len mtuple
+        if V > ave * len(P_) * 6:  #  implied val of all __P_s, 6: len mtuple
             iP_ = P_; fd = 0
         else:
             for P in PP.P_: P.link_.pop()
@@ -79,10 +78,11 @@ def rng_recursion(PP, rng=1, fd=0):  # similar to agg+ rng_recursion, but contig
     # der++ in PPds from rng++, no der++ inside rng++: high diff @ rng++ termination only?
     PP.rng=rng
 
-def comp_P(linkt, fd):
 
-    _P, P, distance, angle, link = linkt
-    if fd:  # der+ only 
+def comp_P(link, fd):
+    _P, P, distance, angle = link._node, link.node, link.distance, link.angle
+
+    if fd:  # der+ only
         rn = (_P.derH.n if P.derH else len(_P.dert_)) / P.derH.n  # lower P must have derH
         aveP = P_aves[1]
     else:  # rng+
@@ -100,7 +100,7 @@ def comp_P(linkt, fd):
         vm,vd,rm,rd = dderH.Et[:4]  # also works if called from comp_G
         rm += vd > vm; rd += vm >= vd
         aveP = P_aves[1]
-        He = link.dderH  # append link dderH:  (we still need Clink in prelinks, because we need to parse them here)
+        He = link.dderH  # append link dderH:
         if not He.nest: He = link.dderH = CH(nest=1, Et=[*He.Et], H=[He])  # nest md_ as derH
         He.Et = np.add(He.Et, [vm,vd,rm,rd])
         He.H += [dderH]
@@ -118,7 +118,7 @@ def form_PP_t(root, P_, iRt):  # form PPs of derP.valt[fd] + connected Ps val
             _P_,link_ = [],[]  # per P
             for derP in unpack_last_link_(P.link_):
                 _P_ += [derP._node]; link_ += [derP]
-            _P__ += [_P_]; Link_ += [link_]  # aligned (typo)
+            _P__ += [_P_]; Link_ += [link_]  # aligned
         CP_ = []  # all clustered Ps
         for P in root.P_:
             if P in CP_: continue  # already packed in some sub-PP
@@ -139,7 +139,7 @@ def form_PP_t(root, P_, iRt):  # form PPs of derP.valt[fd] + connected Ps val
     for PP in PP_t[1]:  # eval der+ / PPd only, after form_PP_t -> P.root
         if PP.iderH and PP.iderH.Et[0] * len(PP.link_) > PP_aves[1] * PP.iderH.Et[2]:
             # node-mediated correlation clustering:
-            ider_recursion(root, PP, fd=1)  # we still need this fd, else we can't differentiate between der+ and rng+
+            ider_recursion(root, PP, fd=1)
         if root.fback_:
             feedback(root)  # after der+ in all nodes, no single node feedback
 
@@ -256,38 +256,21 @@ def add_(HE, He, irdnt=[], fmerge=0):  # unpack tuples (formally lists) down to 
                 nHe = [HE,He][HE.nest>He.nest]  # He to be nested
                 while ddepth > 0:
                    nHe.nest += 1; nHe.H = [nHe.H]; ddepth -= 1
-            
-            if fmerge:
-                # sum layers of same nesting, elevation:
-                if isinstance(HE.H[0],CH):
-                    H = []
-                    for Lay,lay in zip_longest(HE.H, He.H, fillvalue=None):
-                        if lay is not None:
-                            if Lay is None:  Lay = CH(root = HE)
-                            H += [add_(Lay,lay, irdnt, fmerge)] # recursive unpack to sum md_s
-                    HE.H = H
-                else:
-                    HE.H = np.add(HE.H, He.H)  # both Hs are md_s
+            # sum layers of same nesting, elevation:
+            if isinstance(HE.H[0],CH):
+                H = []
+                for Lay,lay in zip_longest(HE.H, He.H, fillvalue=CH()):
+                    H+= [add_(Lay,lay, irdnt, fmerge)] # recursive unpack to sum md_s
+                HE.H = H
             else:
-                if HE.root:
-                    He.root = HE
-                    HE.root.H += [He]
-                
+                HE.H = np.add(HE.H, He.H)  # both Hs are md_s
         else:  # He is higher than HE, add as new layer | sub-layer to HE.root:
             if fmerge:
-                if isinstance(He.H[0],CH):
-                    H = []
-                    for Lay, lay in zip_longest(HE.H, He.H, fillvalue=None): 
-                        if lay is not None:
-                            if Lay is None: Lay = CH(root = HE)
-                            H += [add_(Lay,lay, irdnt, fmerge)]
-                    HE.H = H
-                else:
-                    HE.H = copy(He.H)  # md_
+                for lay in He.H: lay.root = HE
+                HE.root.H += He  # append flat
             else:
-                if HE.root:
-                    He.root = HE
-                    HE.root.H += [He]  # append nested
+                He.root = HE
+                HE.root.H += [He]  # append nested
         # default:
         Et,et = HE.Et,He.Et
         HE.Et[:] = [E+e for E,e in zip_longest(Et, et, fillvalue=0)]
@@ -295,9 +278,8 @@ def add_(HE, He, irdnt=[], fmerge=0):  # unpack tuples (formally lists) down to 
         HE.n += He.n  # combined param accumulation span
         HE.nest = max(HE.nest, He.nest)
 
-
-# below is simplified version of add_
-def add_simplified(HE, He, irdnt=[], fmerge=0):  # unpack tuples (formally lists) down to numericals and sum them
+# not revised:
+def add_chee(HE, He, irdnt=[], fmerge=0):  # unpack tuples (formally lists) down to numericals and sum them
 
     # per layer of each CH
     if He:  # to be summed
@@ -307,10 +289,8 @@ def add_simplified(HE, He, irdnt=[], fmerge=0):  # unpack tuples (formally lists
                 nHe = [HE,He][HE.nest>He.nest]  # He to be nested
                 while ddepth > 0:
                    nHe.nest += 1; nHe.H = [nHe.H]; ddepth -= 1
-            
-        if fmerge:
-            # sum layers of same nesting, elevation: or
-            # He is higher than HE, add as new layer | sub-layer to HE.root: (actually both can usin a same section of code)
+
+        if fmerge:  # sum layers of same nesting, elevation
             if isinstance(He.H[0],CH):
                 '''
                 H = []
@@ -318,17 +298,14 @@ def add_simplified(HE, He, irdnt=[], fmerge=0):  # unpack tuples (formally lists
                     if lay is not None:
                         if Lay is None:  Lay = CH(root = HE)
                         H += [add_(Lay,lay, irdnt, fmerge)] # recursive unpack to sum md_s
-                HE.H = H
-                '''
-                # simplified version of above
+                HE.H = H  '''
                 HE.H = [add_(CH() if Lay is None else Lay, CH() if lay is None else lay, irdnt, fmerge) for Lay,lay in zip_longest(HE.H, He.H, fillvalue=None)]
             else:
                 HE.H = [V + v for V, v in zip_longest(HE.H, He.H, fillvalue=0)]  # both Hs are md_s
-    
-        elif HE.root:  # append
+
+        elif HE.root:  # append He as a
             He.root = HE
             HE.root.H += [He]
-                
         # default:
         Et,et = HE.Et,He.Et
         HE.Et[:] = [E+e for E,e in zip_longest(Et, et, fillvalue=0)]
@@ -337,8 +314,6 @@ def add_simplified(HE, He, irdnt=[], fmerge=0):  # unpack tuples (formally lists
         HE.nest = max(HE.nest, He.nest)
 
     return HE
-
-
 
 
 def comp_(_He,He, dderH, rn=1, fagg=0, fmerge=1):  # unpack tuples (formally lists) down to numericals and compare them
@@ -381,10 +356,9 @@ def comp_(_He,He, dderH, rn=1, fagg=0, fmerge=1):  # unpack tuples (formally lis
             dH += [match,diff]  # flat
         Et = [vm,vd,rm,rd]
         if fagg: Et += [decm, decd]
-        n = len(_cHe.H)/6  # unit n = 6 params, = 12 in md_  ( should be /6 here? Because 6 is single unit)
+        n = len(_cHe.H)/12  # unit n = 6 params, = 12 in md_
 
-    _He = dderH if fmerge else CH(root=dderH)
-    add_(_He, CH(nest=min(_He.nest,He.nest), Et=Et, H=dH, n=n), fmerge=fmerge)
+    add_(dderH, CH(nest=min(_He.nest,He.nest), Et=Et, H=dH, n=n), fmerge=fmerge)
     return dderH
 
 '''
@@ -454,6 +428,7 @@ class CG(CBase):  # PP | graph | blob: params of single-fork node_ cluster
         if self.n: return True
         else: return False
 
+
 class Clink(CBase):  # the product of comparison between two nodes
 
     _node: object = None  # prior comparand
@@ -462,7 +437,12 @@ class Clink(CBase):  # the product of comparison between two nodes
     roott: list = z([None, None])  # clusters that contain this link
     distance: float = 0.0  # distance between node centers
     angle: list = z([0,0])  # dy,dx between node centers
+    flink = 0  # not used
+    def __bool__(self):  # to test empty
+        if self.flink: return True
+        else: return False
     # dir: bool  # direction of comparison if not G0,G1, only needed for comp link?
+
 
 def get_match(_par, par):
     match = min(abs(_par),abs(par))
