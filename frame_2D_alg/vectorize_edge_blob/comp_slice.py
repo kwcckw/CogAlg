@@ -64,7 +64,12 @@ def rng_recursion(PP, rng=1, fd=0):  # similar to agg+ rng_recursion, but contig
                             if rng == 2 and not isinstance(P.link_[0], list): P.link_[:] = [P.link_[:]]  # link_ -> link_H
                             if len(P.link_) < rng: P.link_ += [[]]  # add new link_
                         link_ = unpack_last_link_(P.link_)
-                        if not fd: link_ += [mlink]
+                        # if not fd: link_ += [mlink]  # with current scheme, in rng+, new link may have a same .node and ._node with existing link (prelink added in CG_init), we should replace it?
+                        # for example:
+                        for i, link in P.link_:
+                            if link.node is mlink.node and link._node is mlink._node:
+                                P.link_[i] = mlink
+                                break                                 
                         _link_ = unpack_last_link_(_P.link_[:-1])  # skip prelink_
                         prelink_ += _link_  # connected __Ps' links
 
@@ -97,13 +102,13 @@ def comp_P(link, fd):
     # both:
     if _P.derH and P.derH:  # append link dderH, init in form_PP_t rng++, comp_latuple was already done
         # der+:
-        dderH = comp_(_P.derH, P.derH, dderH=CH(), rn=rn)
+        dderH = comp_(_P.derH, P.derH, dderH=CH(), rn=rn, flat=0)
         vm,vd,rm,rd = dderH.Et[:4]  # also works if called from comp_G
         rm += vd > vm; rd += vm >= vd
         aveP = P_aves[1]
         He = link.dderH  # append link dderH:
         if not He.nest: He = link.dderH = CH(nest=1, Et=[*He.Et], H=[He])  # nest md_ as derH
-        He.Et = np.add(He.Et, [vm,vd,rm,rd])
+        He.Et = [V+v for V, v in zip_longest(He.Et, [vm,vd,rm,rd], fillvalue=0)] 
         He.H += [dderH]
 
     if vm > aveP * rm:  # always rng+
@@ -255,33 +260,31 @@ def add_(HE, He, irdnt=[], flat=0):  # HE, He can't be empty, down to numericals
         while ddepth > 0:
             nHe.nest += 1; nHe.H = [nHe.H]; ddepth -= 1
 
-    if isinstance(HE.H[0], CH):
+    if not HE:  # empty, merge He.H into HE.H
+        HE.H = deepcopy(He.H)
+    elif isinstance(HE.H[0], CH):
         for Lay, lay in zip_longest(HE.H, He.H, fillvalue=None):
             if lay:  # to be summed
                 if Lay:  # to sum in
                     add_(Lay,lay, irdnt)  # recursive unpack to sum md_s
                 else:
                     # lay is higher than Lay, add as new layer|sublayer to HE.H:
-                    if flat: HE.H += He.H  # append flat
-                    else:  HE.H += [He.H]  # append nested
-                # default:
-                Et,et = HE.Et,He.Et
-                HE.Et[:] = [E+e for E,e in zip_longest(Et, et, fillvalue=0)]
-                if irdnt: Et[2:4] = [E+e for E,e in zip(Et[2:4], irdnt)]
-                HE.n += He.n  # combined param accumulation span
-                HE.nest = max(HE.nest, He.nest)
+                    if flat: HE.H += lay.H  # append flat  (should be lay here?)
+                    else:    HE.H += [lay]  # append nested            
     else:
         HE.H = np.add(HE.H, He.H)  # both Hs are md_s
-        Et,et = HE.Et,He.Et
-        HE.Et[:] = [E+e for E,e in zip_longest(Et, et, fillvalue=0)]
-        if irdnt: Et[2:4] = [E+e for E,e in zip(Et[2:4], irdnt)]
-        HE.n += He.n  # combined param accumulation span
-        HE.nest = max(HE.nest, He.nest)
+    
+    # default:
+    Et,et = HE.Et,He.Et
+    HE.Et[:] = [E+e for E,e in zip_longest(Et, et, fillvalue=0)]
+    if irdnt: Et[2:4] = [E+e for E,e in zip(Et[2:4], irdnt)]
+    HE.n += He.n  # combined param accumulation span
+    HE.nest = max(HE.nest, He.nest)
 
 def append_(HE,He, irdnt=[], flat=0):
 
     if flat: HE.H += He.H  # append flat
-    else:  HE.H += [He.H]  # append nested
+    else:  HE.H += [He]  # append nested
 
     Et, et = HE.Et, He.Et
     HE.Et[:] = [E+e for E,e in zip_longest(Et,et, fillvalue=0)]
@@ -332,7 +335,7 @@ def comp_(_He,He, dderH, rn=1, fagg=0, flat=1):  # unpack tuples (formally lists
         if fagg: Et += [decm, decd]
         n = len(_cHe.H)/12  # unit n = 6 params, = 12 in md_
 
-    add_(dderH, CH(nest=min(_He.nest,He.nest), Et=Et, H=dH, n=n), flat=flat)
+    append_(dderH, CH(nest=min(_He.nest,He.nest), Et=Et, H=dH, n=n), flat=flat)  # should be append here? add_ is adding ext's He.H instead
     return dderH
 
 '''
@@ -423,9 +426,10 @@ def get_match(_par, par):
 
 def negate(He):
     if isinstance(He.H[0], CH):
-        for lay in He.H: negate(lay)
+        for i, lay in enumerate(He.H): He.H[i] = negate(lay)
     else:  # md_
         He.H[1::2] = [-d for d in He.H[1::2]]
+    return He  # we need return here, because we need it in sum2PP
 
 def unpack_last_link_(link_):  # unpack last link layer
 

@@ -172,7 +172,8 @@ def comp_ext(_G,G, dist, rn, dderH):  # compare non-derivatives: dist, node_' L,
     mdec = prox / max_dist + mL/ max(L,_L) + mS/ max(S,_S) + mA  # Amax = 1
     ddec = dist / max_dist + mL/ (L+_L) + dS/ (S+_S) + dA
 
-    add_(dderH, CH(Et=[M,D,mrdn,drdn,mdec,ddec], H=[prox,dist, mL,dL, mS,dS, mA,dA], n=2/3), flat=0)  # 2/3 of 6-param unit
+    # new CH should be appended into dderH, so append it?
+    append_(dderH, CH(Et=[M,D,mrdn,drdn,mdec,ddec], H=[prox,dist, mL,dL, mS,dS, mA,dA], n=2/3), flat=0)  # 2/3 of 6-param unit
 
 
 def form_graph_t(root, G_, Et, nrng, fagg=0):  # form Gm_,Gd_ from same-root nodes
@@ -310,7 +311,7 @@ def sum2graph(root, grapht, fd, nrng):  # sum node and link params into graph, a
     if fd: graph.root = root
     for G in G_:
         graph.area += G.area
-        sum_last_lay(G,fd) # G.extH += link dderHs
+        sum_last_lay(G) # G.extH += link dderHs
         graph.box = extend_box(graph.box, G.box)
         graph.latuple = [P+p for P,p in zip(graph.latuple[:-1],graph.latuple[:-1])] + [[A+a for A,a in zip(graph.latuple[-1],graph.latuple[-1])]]
         if G.iderH:  # empty in single-P PP|Gs
@@ -350,11 +351,17 @@ def sum_last_lay(G):  # eLay += last layer of link.daggH (dsubH|ddaggH)
                     H = H[-1].H  # last subH
                 else: H = []
             # derH_/ last xcomp: len subH *= 2, maybe single dderH
-            extH.H = [add_(EH, eH, irdnt=link.dderH.Et[2:4], flat=1) for EH, eH in zip_longest(H[int(len(H)/2):], extH.H, fillvalue=CH())]
+            dH = []
+            for EH, eH in zip_longest(H[int(len(H)/2):], extH.H, fillvalue=None):
+                if eH is not None:
+                    if EH is None: EH = CH()
+                    add_(EH, eH, irdnt=link.dderH.Et[2:4], flat=1)
+                dH += [EH]
+            extH.H = dH
             extH.n += dderH.n
             extH.nest = dderH.nest
     if extH:
-        add_([],G.extH, extH)
+        add_(G.extH, extH)
 
 
 def CG_edge(edge):
