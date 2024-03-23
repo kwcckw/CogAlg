@@ -36,12 +36,11 @@ len prior root_ sorted by G is root.rdn, to eval for inclusion in PP or start ne
   # root function:
 def ider_recursion(root, PP, fd=0):  # node-mediated correlation clustering: keep same Ps and links, increment link derH, then P derH in sum2PP
 
-    for P in PP.P_:  # add prelinks per P:
-        P.link_ += [copy(unpack_last_link_(P.link_))]
     rng_recursion(PP, rng=1, fd=fd)  # extend PP.link_, derHs by same-der rng+ comp
-
-    form_PP_t(PP, PP.P_, iRt=PP.iderH.Et[2:4] if PP.iderH else [0, 0])  # der+ is mediated by form_PP_t
-    if root is not None: root.fback_ += [PP.iderH]  # feedback from PPds
+    # calls der+:
+    form_PP_t(PP, PP.P_, iRt=PP.iderH.Et[2:4] if PP.iderH else [0,0])
+    # feedback per PPd:
+    if root is not None: root.fback_ += [PP.iderH]
 
 
 def rng_recursion(PP, rng=1, fd=0):  # similar to agg+ rng_recursion, but contiguously link mediated, because
@@ -52,7 +51,8 @@ def rng_recursion(PP, rng=1, fd=0):  # similar to agg+ rng_recursion, but contig
         for P in iP_:
             if not P.link_: continue
             prelink_ = []  # new prelinks per P
-            _prelink_ = P.link_.pop()  # old prelinks per P
+            if fd: _prelink_ = [unpack_last_link_(P.link_)]  # reuse links in der+
+            else:  _prelink_ = P.link_.pop()  # old rng+ prelinks, including all links added in slice_edge
             for link in _prelink_:
                 if link.distance < rng:  # | rng * ((P.val+_P.val)/ ave_rval)?
                     _P = link._node
@@ -64,13 +64,8 @@ def rng_recursion(PP, rng=1, fd=0):  # similar to agg+ rng_recursion, but contig
                             if rng == 2 and not isinstance(P.link_[0], list): P.link_[:] = [P.link_[:]]  # link_ -> link_H
                             if len(P.link_) < rng: P.link_ += [[]]  # add new link_
                         link_ = unpack_last_link_(P.link_)
-                        # if not fd: link_ += [mlink]  # with current scheme, in rng+, new link may have a same .node and ._node with existing link (prelink added in CG_init), we should replace it?
-                        # for example:
-                        for i, link in P.link_:
-                            if link.node is mlink.node and link._node is mlink._node:
-                                P.link_[i] = mlink
-                                break                                 
-                        _link_ = unpack_last_link_(_P.link_[:-1])  # skip prelink_
+                        if not fd: link_ += [mlink]
+                        _link_ = unpack_last_link_(_P.link_ if fd else _P.link_[:-1])  # skip prelink_ if rng+
                         prelink_ += _link_  # connected __Ps' links
 
             P.link_ += [prelink_]  # temporary pre-links, maybe empty
@@ -108,7 +103,7 @@ def comp_P(link, fd):
         aveP = P_aves[1]
         He = link.dderH  # append link dderH:
         if not He.nest: He = link.dderH = CH(nest=1, Et=[*He.Et], H=[He])  # nest md_ as derH
-        He.Et = [V+v for V, v in zip_longest(He.Et, [vm,vd,rm,rd], fillvalue=0)] 
+        He.Et = [V+v for V, v in zip_longest(He.Et, [vm,vd,rm,rd], fillvalue=0)]
         He.H += [dderH]
 
     if vm > aveP * rm:  # always rng+
@@ -254,32 +249,32 @@ class CH(CBase):  # generic derivation hierarchy of variable nesting
 
 def add_(HE, He, irdnt=[], flat=0):  # HE, He can't be empty, down to numericals and sum them
 
-    ddepth = abs(HE.nest-He.nest)  # compare nesting depth, nest lesser He: md_-> derH-> subH-> aggH:
-    if ddepth:
-        nHe = [HE, He][HE.nest > He.nest]  # He to be nested
-        while ddepth > 0:
-            nHe.nest += 1; nHe.H = [nHe.H]; ddepth -= 1
+    if HE:
+        ddepth = abs(HE.nest-He.nest)  # compare nesting depth, nest lesser He: md_-> derH-> subH-> aggH:
+        if ddepth:
+            nHe = [HE, He][HE.nest > He.nest]  # He to be nested
+            while ddepth > 0:
+                nHe.nest += 1; nHe.H = [nHe.H]; ddepth -= 1
 
-    if not HE:  # empty, merge He.H into HE.H
-        HE.H = deepcopy(He.H)
-    elif isinstance(HE.H[0], CH):
-        for Lay, lay in zip_longest(HE.H, He.H, fillvalue=None):
-            if lay:  # to be summed
-                if Lay:  # to sum in
-                    add_(Lay,lay, irdnt)  # recursive unpack to sum md_s
-                else:
-                    # lay is higher than Lay, add as new layer|sublayer to HE.H:
-                    if flat: HE.H += lay.H  # append flat  (should be lay here?)
-                    else:    HE.H += [lay]  # append nested            
-    else:
-        HE.H = np.add(HE.H, He.H)  # both Hs are md_s
-    
-    # default:
-    Et,et = HE.Et,He.Et
-    HE.Et[:] = [E+e for E,e in zip_longest(Et, et, fillvalue=0)]
-    if irdnt: Et[2:4] = [E+e for E,e in zip(Et[2:4], irdnt)]
-    HE.n += He.n  # combined param accumulation span
-    HE.nest = max(HE.nest, He.nest)
+        if isinstance(HE.H[0], CH):
+            for Lay, lay in zip_longest(HE.H, He.H, fillvalue=None):
+                if lay:  # to be summed
+                    if Lay:  # to sum in
+                        add_(Lay,lay, irdnt)  # recursive unpack to sum md_s
+                    else:
+                        # lay is higher than Lay, add as new layer|sublayer to HE.H:
+                        if flat: HE.H += lay.H  # append flat  (should be lay here?)
+                        else:    HE.H += [lay]  # append nested
+        else:
+            HE.H = np.add(HE.H, He.H)  # both Hs are md_s
+        # default:
+        Et,et = HE.Et,He.Et
+        HE.Et[:] = [E+e for E,e in zip_longest(Et, et, fillvalue=0)]
+        if irdnt: Et[2:4] = [E+e for E,e in zip(Et[2:4], irdnt)]
+        HE.n += He.n  # combined param accumulation span
+        HE.nest = max(HE.nest, He.nest)
+
+    else: HE[:] = He  # initialization
 
 def append_(HE,He, irdnt=[], flat=0):
 
@@ -335,7 +330,7 @@ def comp_(_He,He, dderH, rn=1, fagg=0, flat=1):  # unpack tuples (formally lists
         if fagg: Et += [decm, decd]
         n = len(_cHe.H)/12  # unit n = 6 params, = 12 in md_
 
-    append_(dderH, CH(nest=min(_He.nest,He.nest), Et=Et, H=dH, n=n), flat=flat)  # should be append here? add_ is adding ext's He.H instead
+    append_(dderH, CH(nest=min(_He.nest,He.nest), Et=Et, H=dH, n=n), flat=flat)
     return dderH
 
 '''
@@ -426,10 +421,11 @@ def get_match(_par, par):
 
 def negate(He):
     if isinstance(He.H[0], CH):
-        for i, lay in enumerate(He.H): He.H[i] = negate(lay)
+        for i,lay in enumerate(He.H):
+            He.H[i] = negate(lay)
     else:  # md_
         He.H[1::2] = [-d for d in He.H[1::2]]
-    return He  # we need return here, because we need it in sum2PP
+    return He
 
 def unpack_last_link_(link_):  # unpack last link layer
 
