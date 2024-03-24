@@ -189,8 +189,9 @@ def form_graph_t(root, G_, Et, nrng, fagg=0):  # form Gm_,Gd_ from same-root nod
                         node_ = graph.node_
                         if isinstance(node_[0].rim_H[0], CG):  # 1st sub+, same rim nesting?
                             for node in node_: node.rim_H = [node.rim_H]  # rim -> rim_H
-                        pruned_node_ = [node for node in graph.node_ if node.derH.Et[fd] > G_aves[fd] * node.derH.Et[2+fd]]
-                        if len(pruned_node_)>10:
+                        # we should check for extH? G.derH is not empty only if it's a agg+
+                        pruned_node_ = [node for node in graph.node_ if node.extH.Et[fd] > G_aves[fd] * node.extH.Et[2+fd]]
+                        if len(pruned_node_)>1:
                             agg_recursion(root, graph, pruned_node_, nrng, fagg=0)
                     elif graph.derH:
                         root.fback_ += [graph.derH]
@@ -220,6 +221,8 @@ def node_connect(iG_):  # node connectivity = sum surround link vals, incr.media
                 val,rdn = G.Et[i::2]  # rng+ for both segment forks
                 ave = G_aves[i]
                 for link in rim:
+                    if link.node not in iG_ or link._node not in iG_:
+                        continue
                     # > ave derGs in fd rim
                     lval,lrdn,ldec = link.dderH.Et[i::2]  # step=2
                     decay =  (ldec/ (link.dderH.n * 6)) ** mediation  # normalized decay at current mediation
@@ -312,18 +315,23 @@ def sum2graph(root, grapht, fd, nrng):  # sum node and link params into graph, a
         graph.box = extend_box(graph.box, G.box)
         graph.latuple = [P+p for P,p in zip(graph.latuple[:-1],graph.latuple[:-1])] + [[A+a for A,a in zip(graph.latuple[-1],graph.latuple[-1])]]
         if G.iderH:  # empty in single-P PP|Gs
-            add_(graph.iderH, G.iderH)
+            if graph.iderH:  add_(graph.iderH, G.iderH)
+            else:            append_(graph.iderH, G.iderH, flat=1)
         if G.derH:  # empty in single-PP Gs
-            add_(graph.derH, G.derH)
+            if graph.derH:  add_(graph.derH, G.derH)
+            else:           append_(graph.derH, G.derH, flat=1)
         if fd: G.Et = [0,0,0,0]  # reset in fd: last fork, Gs are shared across both forks
         graph.n += G.n  # non-derH accumulation?
     extH = CH()
     for link in Link_:  # unique current-layer links
-        graph.extH = add_(extH, link.dderH)  # irdnt from link.dderH.Et?
+        if extH: add_(extH, link.dderH, irdnt= link.dderH.Et[2:4])  # irdnt from link.dderH.Et? i think yes
+        else:    append_(extH, link.dderH, link.dderH.Et[2:4], flat=1)
         graph.S += link.distance
         np.add(graph.A,link.angle)
         link.root = graph
-    append_(graph.derH, extH, flat=0)  # graph derH = node derHs + Link_ dderHs
+    graph.extH = extH
+    # flat here should be depend on their nest?
+    append_(graph.derH, extH, flat=graph.derH.nest == extH.nest)  # graph derH = node derHs + Link_ dderHs
 
     if fd:  # assign alt graphs from d graph, after both linked m and d graphs are formed
         for link in graph.link_:
@@ -341,10 +349,10 @@ def sum_last_lay(G):  # G.extH += last layer of link.daggH (dsubH|ddaggH)
     for link in G.rim_H[-1] if G.rim_H and isinstance(G.rim_H[0],list) else G.rim_H:  # last link layer
         if link.dderH:
             if dderH: add_(dderH, link.dderH)
-            else:  append_(dderH, link.dderH, flat=1)
+            else:     append_(dderH, link.dderH, flat=1)
     if dderH:
         if G.extH: add_(G.extH, dderH)
-        else:   append_(G.extH, dderH, flat=1)  # | replace last layer of extH: add_(G.extH[int(len(extH.H)/2):], dderH)
+        else:      append_(G.extH, dderH, flat=1)  # | replace last layer of extH: add_(G.extH[int(len(extH.H)/2):], dderH)
 
 
 def CG_edge(edge):
@@ -380,7 +388,9 @@ def feedback(root):  # called from form_graph_, append new der layers to root
         derH = root.fback_.pop(0)
         add_(DerH, derH)
     if DerH.Et[1] > G_aves[1] * DerH.Et[3]:
-        add_(root.derH, DerH)
+        if root.derH: add_(root.derH, DerH)
+        else:         append_(root.derH, DerH, flat=1)
+        
 
     if root.root and isinstance(root.root, CG):  # not Edge
         rroot = root.root

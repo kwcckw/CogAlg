@@ -74,9 +74,9 @@ def rng_recursion(PP, rng=1, fd=0):  # similar to agg+ rng_recursion, but contig
         if V > ave * len(P_) * 6:  #  implied val of all __P_s, 6: len mtuple
             iP_ = P_; fd = 0
         else:
-            if not fd:
-                for P in PP.P_:
-                    if P.link_: P.link_.pop()  # remove prelinks in rng+
+            # looks like if not fd is not needed because we add prelinks on all forks above: P.link_ += [prelink_] (line 71 above)
+            for P in PP.P_:
+                if P.link_: P.link_.pop()  # remove prelinks in rng+
             break
     # der++ in PPds from rng++, no der++ inside rng++: high diff @ rng++ termination only?
     PP.rng=rng
@@ -98,6 +98,7 @@ def comp_P(link, fd):
         link = Clink(node=P,_node=_P, dderH = CH(nest=0,Et=[vm,vd,rm,rd],H=H,n=n), distance=distance, angle=angle, roott=[[],[]])
     # both:
     if _P.derH and P.derH:  # append link dderH, init in form_PP_t rng++, comp_latuple was already done
+        raise ValueError('a')
         # der+:
         dderH = comp_(_P.derH, P.derH, dderH=CH(), rn=rn, flat=0)
         vm,vd,rm,rd = dderH.Et[:4]  # also works if called from comp_G
@@ -120,7 +121,11 @@ def form_PP_t(root, P_, iRt):  # form PPs of derP.valt[fd] + connected Ps val
         mlink_,_mP_, dlink_,_dP_ = [],[],[],[]  # per P
         # eval all links in possibly nested P.link_:
         for link in [l for l_ in P.link_ for l in (l_ if isinstance(l_,list) else [l_])]:
-            m,d,mr,dr = link.dderH.H[-1].Et  # last der+ layer vals
+            if link.dderH.nest:
+                m,d,mr,dr = link.dderH.H[-1].Et  # last der+ layer vals
+            else:
+                m,d,mr,dr = link.dderH.Et  # H is md_
+           
             if m >= ave * mr:
                 mlink_+= [link]; _mP_+= [link._node]
             if d > ave * dr:  # ?link in both forks?
@@ -163,8 +168,11 @@ def sum2PP(root, P_, derP_, iRt, fd):  # sum links in Ps and Ps in PP
     for derP in derP_:
         if derP.node not in P_ or derP._node not in P_: continue
         if derP.dderH:
-            add_(derP.node.derH, derP.dderH, iRt)
-            add_(derP._node.derH, negate(deepcopy(derP.dderH)), iRt)  # to reverse uplink direction
+            if derP.node.derH: add_(derP.node.derH, derP.dderH, iRt)
+            else:              append_(derP.node.derH, derP.dderH, iRt, flat=1)
+            # if derP._node.derH is empty, there's no need to subtract?
+            if derP._node.derH: add_(derP._node.derH, negate(deepcopy(derP.dderH)), iRt)  # to reverse uplink direction
+        
         PP.link_ += [derP]; derP.roott[fd] = PP
         PP.A = np.add(PP.A,derP.angle)
         PP.S += np.hypot(*derP.angle)  # links are contiguous but slanted
@@ -176,7 +184,8 @@ def sum2PP(root, P_, derP_, iRt, fd):  # sum links in Ps and Ps in PP
         PP.area += L; PP.n += L  # no + P.derH.n: current links only?
         PP.latuple = [P+p for P,p in zip(PP.latuple[:-1],P.latuple[:-1])] + [[A+a for A,a in zip(PP.latuple[-1],P.latuple[-1])]]
         if P.derH:
-            add_(PP.iderH, P.derH)
+            if PP.iderH: add_(PP.iderH, P.derH)
+            else:        append_(PP.iderH, P.derH, flat=1)
         for y,x in P.yx_:
             y = int(round(y)); x = int(round(x))  # summed with float dy,dx in slice_edge?
             PP.box = accum_box(PP.box, y, x); celly_+=[y]; cellx_+=[x]
@@ -196,8 +205,9 @@ def feedback(root):  # in form_PP_, append new der layers to root PP, single vs.
     HE = deepcopy(root.fback_.pop(0))
     while root.fback_:
         He  = root.fback_.pop(0)
-        add_(HE, He)
-    add_(root.iderH, HE.H[-1] if HE.nest else HE)  # last md_ in H or sum md_
+        add_(HE, He)  # HE shouldn't be empty?
+    if root.iderH: add_(root.iderH, HE.H[-1] if HE.nest else HE)  # last md_ in H or sum md_
+    else:          append_(root.iderH, HE.H[-1] if HE.nest else HE, flat=1)
 
     if root.root and isinstance(root.root, CG):  # skip if root is Edge
         rroot = root.root  # single PP.root, can't be P
