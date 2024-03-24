@@ -51,7 +51,7 @@ def rng_recursion(PP, rng=1, fd=0):  # similar to agg+ rng_recursion, but contig
         for P in iP_:
             if not P.link_: continue
             prelink_ = []  # new prelinks per P
-            if fd: _prelink_ = unpack_last_link_(P.link_)  # reuse links in der+ (additional bracket is not needed, it returns list anyway)
+            if fd: _prelink_ = unpack_last_link_(P.link_)  # reuse links in der+
             else:  _prelink_ = P.link_.pop()  # old rng+ prelinks, including all links added in slice_edge
             for link in _prelink_:
                 if link.distance < rng:  # | rng * ((P.val+_P.val)/ ave_rval)?
@@ -74,8 +74,9 @@ def rng_recursion(PP, rng=1, fd=0):  # similar to agg+ rng_recursion, but contig
         if V > ave * len(P_) * 6:  #  implied val of all __P_s, 6: len mtuple
             iP_ = P_; fd = 0
         else:
-            for P in PP.P_: 
-                if P.link_: P.link_.pop()
+            if not fd:
+                for P in PP.P_:
+                    if P.link_: P.link_.pop()  # remove prelinks in rng+
             break
     # der++ in PPds from rng++, no der++ inside rng++: high diff @ rng++ termination only?
     PP.rng=rng
@@ -114,18 +115,20 @@ def comp_P(link, fd):
 def form_PP_t(root, P_, iRt):  # form PPs of derP.valt[fd] + connected Ps val
 
     PP_t = [[],[]]
-    for fd in 0,1:
-        _P__, Link_ = [],[]  # per PP, ! PP.link_?
-        for P in P_:
-            _P_,link_ = [],[]  # per P 
-            if P.link_ and isinstance(P.link_[0], list):
-                flat_link_ = [link for plink_ in P.link_ for link in plink_]
-            else:
-                flat_link_ = P.link_
-            # for derP in unpack_last_link_(P.link_):
-            for derP in flat_link_:  
-                _P_ += [derP._node]; link_ += [derP]
-            _P__ += [_P_]; Link_ += [link_]  # aligned
+    mLink_,_mP__, dLink_,_dP__ = [],[],[],[]  # per PP, !PP.link_?
+    for P in P_:
+        mlink_,_mP_, dlink_,_dP_ = [],[],[],[]  # per P
+        # eval all links in possibly nested P.link_:
+        for link in [l for l_ in P.link_ for l in (l_ if isinstance(l_,list) else [l_])]:
+            m,d,mr,dr = link.dderH.H[-1].Et  # last der+ layer vals
+            if m >= ave * mr:
+                mlink_+= [link]; _mP_+= [link._node]
+            if d > ave * dr:  # ?link in both forks?
+                dlink_+= [link]; _dP_+= [link._node]
+        mLink_+=[mlink_]; _mP__+=[_mP_]
+        dLink_+=[dlink_]; _dP__+=[_dP_]
+        # aligned
+    for fd, (Link_,_P__) in zip((0,1),((mLink_,_mP__),(dLink_,_dP__))):
         CP_ = []  # all clustered Ps
         for P in root.P_:
             if P in CP_: continue  # already packed in some sub-PP
@@ -218,8 +221,7 @@ def comp_latuple(_latuple, latuple, rn, fagg=0):  # 0der params
     mAngle, dAngle = comp_angle((_Dy,_Dx), (Dy,Dx))
 
     ret = [mL,dL,mI,dI,mG,dG,mM,dM,mMa,dMa,mAngle-aves[5],dAngle]
-
-    if fagg:  # add norm m,d: ret = [ret, Ret]
+    if fagg:  # add norm m,d, ret= [ret,Ret]:
         # max possible m,d per compared param
         Ret = [max(_L,L),abs(_L)+abs(L), max(_I,I),abs(_I)+abs(I), max(_G,G),abs(_G)+abs(G), max(_M,M),abs(_M)+abs(M), max(_Ma,Ma),abs(_Ma)+abs(Ma), 1,.5]
         mval, dval = sum(ret[::2]),sum(ret[1::2])
@@ -255,31 +257,27 @@ class CH(CBase):  # generic derivation hierarchy of variable nesting
 
 def add_(HE, He, irdnt=[]):  # HE, He can't be empty, down to numericals and sum them
 
-    if HE:
-        ddepth = abs(HE.nest-He.nest)  # compare nesting depth, nest lesser He: md_-> derH-> subH-> aggH:
-        if ddepth:
-            nHe = [HE, He][HE.nest > He.nest]  # He to be nested
-            while ddepth > 0:
-                nHe.nest += 1; nHe.H = [nHe.H]; ddepth -= 1
+    ddepth = abs(HE.nest-He.nest)  # compare nesting depth, nest lesser He: md_-> derH-> subH-> aggH:
+    if ddepth:
+        nHe = [HE,He][HE.nest > He.nest]  # He to be nested
+        while ddepth > 0:
+            nHe.nest += 1; nHe.H = [nHe.H]; ddepth -= 1
 
-        if isinstance(HE.H[0], CH):
-            for Lay, lay in zip_longest(HE.H, He.H, fillvalue=None):
-                if lay:  # to be summed
-                    if Lay is not None:  # to sum in
-                        add_(Lay,lay, irdnt)  # recursive unpack to sum md_s
-                    else:
-                        HE.H += [lay]  # append nested
-        else:
-            HE.H = [V+v for V,v in zip_longest(HE.H, He.H, fillvalue=0)] # both Hs are md_s (remove numpy.add, because the resulting numpy array won't work with list + list)
-        # default:
-        Et,et = HE.Et,He.Et
-        HE.Et[:] = [E+e for E,e in zip_longest(Et, et, fillvalue=0)]
-        if irdnt: Et[2:4] = [E+e for E,e in zip(Et[2:4], irdnt)]
-        HE.n += He.n  # combined param accumulation span
-        HE.nest = max(HE.nest, He.nest)
-
+    if isinstance(HE.H[0], CH):
+        for Lay, lay in zip_longest(HE.H, He.H, fillvalue=None):
+            if lay:  # to be summed
+                if Lay is not None:  # to sum in
+                    add_(Lay,lay, irdnt)  # recursive unpack to sum md_s
+                else:
+                    HE.H += [lay]  # append nested
     else:
-        append_(HE, He, irdnt, flat=1)  # HE is empty, append He.H into HE.H?
+        HE.H = [V+v for V,v in zip_longest(HE.H, He.H, fillvalue=0)]  # both Hs are md_s
+    # default:
+    Et,et = HE.Et,He.Et
+    HE.Et[:] = [E+e for E,e in zip_longest(Et, et, fillvalue=0)]
+    if irdnt: Et[2:4] = [E+e for E,e in zip(Et[2:4], irdnt)]
+    HE.n += He.n  # combined param accumulation span
+    HE.nest = max(HE.nest, He.nest)
 
 def append_(HE,He, irdnt=[], flat=0):
 
@@ -339,7 +337,7 @@ def comp_(_He,He, dderH, rn=1, fagg=0, flat=1):  # unpack tuples (formally lists
     return dderH
 
 '''
-for reference, redundant to slice_edge:
+for reference:
 class CP(CBase):  # horizontal blob slice P, with vertical derivatives per param if derP, always positive
 
     latuple: list = z([])  # lateral params to compare vertically: I,G,M,Ma,L, (Dy,Dx)

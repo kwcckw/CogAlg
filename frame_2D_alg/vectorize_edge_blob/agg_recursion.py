@@ -92,7 +92,6 @@ def rng_recursion(rroot, root, _node_, Q, iEt, nrng=1):  # rng++/G_, der+/link_ 
 
     if fd:  # only in 1st rng+ from der+, extend root links
         for link in Q:
-            G = link.node; _G = link._node
             if link.dderH.Et[1] > G_aves[1] * link.dderH.Et[3]:  # eval der+
                 comp_G(link, node_, Et)
     else:
@@ -135,9 +134,7 @@ def comp_G(link, node_, iEt, nrng=None):  # add flat dderH to link and link to t
     # / G, if >1 PPs | Gs:
     if _G.extH and G.extH: comp_(_G.extH, G.extH, dderH, rn, fagg=1, flat=0)  # always true in der+
     if _G.derH and G.derH: comp_(_G.derH, G.derH, dderH, rn, fagg=1, flat=0)
-    else: dderH.H+= [CH()]  # empty for fixed-len layer decoding, or use Cext as layer terminator?
 
-    # should be append_ here too, we should merge(flat=1) if link.dderH is empty, while append new dderH into link.dderH.H if link.dderH.H is not empty
     append_(link.dderH, dderH, flat=len(link.dderH.H)>0)  # append for higher-res lower-der summation in sub-G extH
     for i in 0,1:
         Val, Rdn = dderH.Et[i:4:2]  # exclude dect
@@ -343,9 +340,11 @@ def sum_last_lay(G):  # G.extH += last layer of link.daggH (dsubH|ddaggH)
     dderH = CH()
     for link in G.rim_H[-1] if G.rim_H and isinstance(G.rim_H[0],list) else G.rim_H:  # last link layer
         if link.dderH:
-            add_(dderH, link.dderH)
+            if dderH: add_(dderH, link.dderH)
+            else:  append_(dderH, link.dderH, flat=1)
     if dderH:
-        add_(G.extH, dderH)  # | replace last layer of extH: add_(G.extH[int(len(extH.H)/2):], dderH)
+        if G.extH: add_(G.extH, dderH)
+        else:   append_(G.extH, dderH, flat=1)  # | replace last layer of extH: add_(G.extH[int(len(extH.H)/2):], dderH)
 
 
 def CG_edge(edge):
