@@ -113,35 +113,45 @@ def comp_P(link, fd):
 def form_PP_t(root, P_, iRt):  # form PPs of derP.valt[fd] + connected Ps val
 
     PP_t = [[],[]]
-    mLink_,_mP__, dLink_,_dP__ = [],[],[],[]  # per PP, !PP.link_?
+    mLink_,_mP__, _m_, dLink_,_dP__, _d_ = [],[],[],[],[],[]  # per PP, !PP.link_?
     for P in P_:
-        mlink_,_mP_, dlink_,_dP_ = [],[],[],[]  # per P
+        mlink_,_mP_, _m, dlink_,_dP_, _d = [],[],0,[],[],0  # per P
         # eval all links in possibly nested P.link_:
         for link in [l for l_ in P.link_ for l in (l_ if isinstance(l_,list) else [l_])]:
             if link.dderH.nest: m,d,mr,dr = link.dderH.H[-1].Et  # last der+ layer vals
             else:               m,d,mr,dr = link.dderH.Et  # H is md_
             if m >= ave * mr:
-                mlink_+= [link]; _mP_+= [link._node]
+                mlink_+= [link]; _mP_+= [link._node]; _m += m
             if d > ave * dr:  # ?link in both forks?
-                dlink_+= [link]; _dP_+= [link._node]
+                dlink_+= [link]; _dP_+= [link._node]; _d += d
         mLink_+=[mlink_]; _mP__+=[_mP_]
         dLink_+=[dlink_]; _dP__+=[_dP_]
-        # aligned
-    for fd, (Link_,_P__) in zip((0,1),((mLink_,_mP__),(dLink_,_dP__))):
+        _m_ += [_m]; _d_ += [_d]
+
+    # sort based on highest val
+    m_index = np.argsort(_m_)[::-1]  # reverse sort, get indices with highest val
+    d_index = np.argsort(_d_)[::-1]  # reverse sort, get indices with highest val
+    if any(m_index): 
+        mLink_ = [mLink_[index] for index in m_index]; _mP__ = [_mP__[index] for index in m_index]
+    if any(d_index):
+        dLink_ = [dLink_[index] for index in d_index]; _dP__ = [_dP__[index] for index in d_index]
+    mPs = [ P_[index] for index in m_index]; dPs = [ P_[index] for index in d_index]
+    
+    # aligned
+    for fd, (Link_,_P__, Ps) in zip((0,1),((mLink_,_mP__, mPs),(dLink_,_dP__, dPs))):
         CP_ = []  # all clustered Ps
-        for P in root.P_:
+        for P in Ps:  # this clustering is sequential, so it should be sorted and start with a stronger P?
             if P in CP_: continue  # already packed in some sub-PP
             cP_, clink_ = [P], []  # cluster per P
-            if P in P_:
-                P_index = P_.index(P)
-                clink_ += Link_[P_index]
-                perimeter = deque(_P__[P_index])  # recycle with breadth-first search, up and down:
-                while perimeter:
-                    _P = perimeter.popleft()
-                    if _P in cP_ or _P not in P_: continue
-                    cP_ += [_P]
-                    clink_ += Link_[P_.index(_P)]
-                    perimeter += _P__[P_.index(_P)]  # extend P perimeter with linked __Ps
+            P_index = Ps.index(P)
+            clink_ += Link_[P_index]
+            perimeter = deque(_P__[P_index])  # recycle with breadth-first search, up and down:
+            while perimeter:
+                _P = perimeter.popleft()
+                if _P in CP_  or _P in cP_ or _P not in P_: continue  #( we need check for CP_ too? Because _P may clustered into other PP too)
+                cP_ += [_P]
+                clink_ += Link_[Ps.index(_P)]
+                perimeter += _P__[Ps.index(_P)]  # extend P perimeter with linked __Ps
             PP = sum2PP(root, cP_, clink_, iRt, fd)
             PP_t[fd] += [PP]
             CP_ += cP_
@@ -176,9 +186,10 @@ def sum2PP(root, P_, derP_, iRt, fd):  # sum links in Ps and Ps in PP
         PP.latuple = [P+p for P,p in zip(PP.latuple[:-1],P.latuple[:-1])] + [[A+a for A,a in zip(PP.latuple[-1],P.latuple[-1])]]
         if P.derH:
             add_(PP.iderH, P.derH)  # no separate extH, the links are unique here
-            for y,x in P.yx_:
-                y = int(round(y)); x = int(round(x))  # summed with float dy,dx in slice_edge?
-            PP.box = accum_box(PP.box, y, x); celly_+=[y]; cellx_+=[x]
+        # the prior indentation is wrong
+        for y,x in P.yx_:
+            y = int(round(y)); x = int(round(x))  # summed with float dy,dx in slice_edge?
+        PP.box = accum_box(PP.box, y, x); celly_+=[y]; cellx_+=[x]
     if PP.iderH:
         PP.iderH.Et[2:4] = [R+r for R,r in zip(PP.iderH.Et[2:4], iRt)]
     # pixmap:
@@ -270,7 +281,7 @@ def add_(HE, He, irdnt=[]):  # HE, He can't be empty, down to numericals and sum
         else:
             HE.H = [V+v for V,v in zip_longest(HE.H, He.H, fillvalue=0)]  # both Hs are md_s
     else:
-        HE.H = He.H; HE.nest = He.nest+1  # initialization
+        HE.H = He.H; HE.nest = max(HE.nest, He.nest)  # initialization
     # default:
     Et,et = HE.Et,He.Et
     HE.Et[:] = [E+e for E,e in zip_longest(Et, et, fillvalue=0)]
