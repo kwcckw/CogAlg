@@ -32,6 +32,8 @@ from copy import deepcopy, copy
 from itertools import zip_longest, combinations
 import weakref
 import numpy as np
+from matplotlib import pyplot as plt
+
 # hyper-parameters, set as a guess, latter adjusted by feedback:
 ave = 30  # base filter, directly used for comp_r fork
 ave_inv = 20  # ave inverse m, change to Ave from the root intra_blob?
@@ -76,8 +78,12 @@ class CBase:
             return inst
 
 class CG(CBase):  # PP | graph | blob: params of single-fork node_ cluster
-    def __init__(G, root=None, rng=1, fd=0):
+    def __init__(G, root=None, rng=1, fd=0, P_=None, node_=None, link_=None):
         super().__init__()
+
+        # PP:
+        G.P_ = [] if P_ is None else P_
+        
         G.root = root
         G.rng = rng
         G.fd = fd  # fork if flat layers?
@@ -85,13 +91,13 @@ class CG(CBase):  # PP | graph | blob: params of single-fork node_ cluster
         G.area = 0
         G.S = 0  # sparsity: distance between node centers
         G.A = 0, 0  # angle: summed dy,dx in links
-
+        
         G.Et = []  # external eval tuple, summed from rng++ before forming new graph and appending G.extH
-        G.latuple = []  # lateral I,G,M,Ma,L,[Dy,Dx]
+        G.latuple = [0,0,0,0,0,[0,0]]  # lateral I,G,M,Ma,L,[Dy,Dx]
         G.iderH = CH()  # summed from PPs
         G.derH = CH()  # nested derH in Gs: [[subH,valt,rdnt,dect]], subH: [[derH,valt,rdnt,dect]]: 2-fork composition layers
-        G.node_ = []  # convert to node_t in sub_recursion
-        G.link_ = []  # links per comp layer, nest in rng+)der+
+        G.node_ = [] if node_ is None else node_  # convert to node_t in sub_recursion
+        G.link_ = [] if link_ is None else link_  # links per comp layer, nest in rng+)der+
         G.roott = []  # Gm,Gd that contain this G, single-layer
         G.box = [np.inf, np.inf, -np.inf, -np.inf]  # y,x,y0,x0,yn,xn
         # graph-external, +level per root sub+:
@@ -120,7 +126,7 @@ class CFrame(CBase):
         frame.i__, frame.latuple, frame.blob_ = i__, [0, 0, 0, 0], []
 
     def evaluate(frame):
-        dert__ = frame.comp()
+        dert__ = frame.comp_pixel()
         frame.flood_fill(dert__)
         return frame
 
@@ -207,12 +213,13 @@ class CFrame(CBase):
         def yx(blob): return map(np.mean, zip(*blob.yx_))
         def __repr__(blob): return f"blob(id={blob.id})"
 
-class CH:  # generic derivation hierarchy of variable nesting
-    def __init__(H):
-        H.nest = 0  # nesting depth: -1/ ext, 0/ md_, 1/ derH, 2/ subH, 3/ aggH
-        H.n = 0  # total number of params compared to form derH, summed in comp_G and then from nodes in sum2graph
-        H.Et = []  # evaluation tuple: valt, rdnt, normt
-        H.H = []  # hierarchy of der layers or md_
+# inherit CBase because id will be helpful for debug here
+class CH(CBase):  # generic derivation hierarchy of variable nesting
+    def __init__(He, nest=0, n=0, Et=None, H=None):
+        He.nest = nest  # nesting depth: -1/ ext, 0/ md_, 1/ derH, 2/ subH, 3/ aggH
+        He.n = n  # total number of params compared to form derH, summed in comp_G and then from nodes in sum2graph
+        He.Et = [] if Et is None else Et  # evaluation tuple: valt, rdnt, normt
+        He.H = [] if H is None else H  # hierarchy of der layers or md_
 
     def __bool__(self): return self.n != 0
     '''
@@ -224,8 +231,9 @@ class CH:  # generic derivation hierarchy of variable nesting
     lay4: [[m,d], [md,dd], [[md1,dd1],[mdd,ddd]]]: 3 sLays, <=2 ssLays
     '''
 
-    def add_(self, HE, He, irdnt=[]):  # HE, He can't be empty, down to numericals and sum them
+    def add_(self, He, irdnt=[]):  # HE, He can't be empty, down to numericals and sum them
 
+        HE = self  # reassign for clarity
         if HE:
             ddepth = abs(HE.nest-He.nest)  # compare nesting depth, nest lesser He: md_-> derH-> subH-> aggH:
             if ddepth:
@@ -233,10 +241,13 @@ class CH:  # generic derivation hierarchy of variable nesting
                 while ddepth > 0:
                     nHe.nest += 1; nHe.H = [nHe.H]; ddepth -= 1
             if isinstance(HE.H[0], CH):
+                H = []
                 for Lay, lay in zip_longest(HE.H, He.H, fillvalue=None):
                     if lay:  # to be summed
-                        if Lay is None: HE.H += [lay]  # append nested
-                        else:           self.add_(Lay,lay, irdnt)  # recursive unpack to sum md_s
+                        if Lay is None: Lay = CH() 
+                        self.add_(Lay,lay, irdnt)  # recursive unpack to sum md_s
+                    H += [Lay]
+                HE.H = H
             else:
                 HE.H = [V+v for V,v in zip_longest(HE.H, He.H, fillvalue=0)]  # both Hs are md_s
             # default:
@@ -246,10 +257,11 @@ class CH:  # generic derivation hierarchy of variable nesting
             HE.n += He.n  # combined param accumulation span
             HE.nest = max(HE.nest, He.nest)
         else:
-            HE = CH(H=copy(He.H), Et=copy(He.Et), nest=He.nest)  # initialization
+            HE.copy(He)  # initialization
 
-    def append_(self, HE,He, irdnt=[], flat=0):
-
+    def append_(self ,He, irdnt=[], flat=0):
+        
+        HE = self
         if flat: HE.H += He.H  # append flat
         else:  HE.H += [He]  # append nested
 
@@ -259,8 +271,9 @@ class CH:  # generic derivation hierarchy of variable nesting
         HE.n += He.n  # combined param accumulation span
         HE.nest = max(HE.nest, He.nest)
 
-    def comp_(self, _He,He, dderH, rn=1, fagg=0, flat=1):  # unpack tuples (formally lists) down to numericals and compare them
+    def comp_(self, He, dderH, rn=1, fagg=0, flat=1):  # unpack tuples (formally lists) down to numericals and compare them
 
+        _He = self
         ddepth = abs(_He.nest - He.nest)
         n = 0
         if ddepth:  # unpack the deeper He: md_<-derH <-subH <-aggH:
@@ -275,7 +288,7 @@ class CH:  # generic derivation hierarchy of variable nesting
             dH = []
             for _lay,lay in zip(_cHe.H,cHe.H):  # md_| ext| derH| subH| aggH, eval nesting, unpack,comp ds in shared lower layers:
                 if _lay and lay:  # ext is empty in single-node Gs
-                    dlay = self.comp_(_lay,lay, CH(), rn, fagg=fagg, flat=1)  # dlay is dderH
+                    dlay = _lay.comp_(lay, CH(), rn, fagg=fagg, flat=1)  # dlay is dderH
                     Et[:] = [E+e for E,e in zip(Et,dlay.Et)]
                     dH += [dlay]; n += dlay.n
                 else:
@@ -300,8 +313,15 @@ class CH:  # generic derivation hierarchy of variable nesting
             if fagg: Et += [decm, decd]
             n = len(_cHe.H)/12  # unit n = 6 params, = 12 in md_
 
-        self.append_(dderH, CH(nest=min(_He.nest,He.nest), Et=Et, H=dH, n=n), flat=flat)  # currently flat=1
+        dderH.append_(CH(nest=min(_He.nest,He.nest), Et=Et, H=dH, n=n), flat=flat)  # currently flat=1
         return dderH
+    
+
+    def copy(self, other):
+        for attr, value in other.__dict__.items():
+            if attr != '_id' and attr in self.__dict__.keys():  # copy only the available attributes and skip id
+                setattr(self, attr, deepcopy(value))
+        
 
 def imread(filename, raise_if_not_read=True):
     "Read an image in grayscale, return array."
