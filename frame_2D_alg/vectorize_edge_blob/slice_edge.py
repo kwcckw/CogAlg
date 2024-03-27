@@ -24,8 +24,8 @@ ave_dangle = .2  # vertical difference between angles: -1->1, abs dangle: 0->1, 
 
 class CSliceEdgeFrame(CIntraBlobFrame):
 
-    def evaluate(frame):
-        super().evaluate()
+    def slice(frame):  # slice is better?
+        super().segment()
         frame.edge_ = []
         edgeQue = list(frame.blob_)
         while edgeQue:

@@ -44,10 +44,26 @@ https://github.com/boris-kz/CogAlg/blob/master/frame_2D_alg/Illustrations/agg_re
 
 def vectorize_root(image):  # vectorization in 3 composition levels of xcomp, cluster:
 
-    edge_ = slice_edge_root( intra_blob_root( frame_blobs_root(image)))
+    frame = CSliceEdgeFrame(image).slice()
 
-    for edge in edge_:
+    for edge in frame.edge_:
         if edge.latuple[-1] * (len(edge.P_)-1) > G_aves[0]:
+                
+            # add prelinks per P, one time process
+            # P_:
+            for P in edge.P_:
+                P.derH = CH()
+                Clink_ = []
+                for _P in P.link_:
+                    angle = np.subtract(P.yx, _P.yx)
+                    Clink_ += [Clink(node=P, _node=_P, distance=np.hypot(*angle), angle=angle)]
+                P.link_ = [Clink_]
+
+            # temporary to sort y index bottom up
+            y_ = [P.yx[0] for P in edge.P_]
+            indices = np.argsort(y_)[::-1]
+            edge.P_ = [edge.P_[index] for index in indices]
+            
             # if G in latuple, rdn=1
             ider_recursion(None, edge)  # vertical, lateral-overlap P cross-comp -> PP clustering
 
@@ -71,7 +87,7 @@ def agg_recursion(rroot, root, node_, nrng=1, fagg=0):  # lenH = len(root.aggH[-
     Et = [0,0,0,0]  # eval tuple, sum from Link_
     # agg+ der=1 xcomp of new Gs if fagg, else sub+: der+ xcomp of old Gs,
     # rng+ appends prelink_ -> rim, link.dderH:
-    nrng, node_, Et = rng_recursion(rroot, root, node_, list(combinations(node_,r=2)) if fagg else root.link_, Et, nrng=nrng)
+    nrng, node_, Et = rng_recursion(rroot, root, list(combinations(node_,r=2)) if fagg else root.link_, Et, nrng=nrng)
 
     form_graph_t(root, node_, Et, nrng, fagg)  # root_fd, eval der++ and feedback per Gd, not sub-recursion in Gms
 
@@ -85,8 +101,8 @@ def agg_recursion(rroot, root, node_, nrng=1, fagg=0):  # lenH = len(root.aggH[-
                     rroot.fback_ += [root.derH]
                     feedback(rroot)  # update root.root..
 
-
-def rng_recursion(rroot, root, _node_, Q, iEt, nrng=1):  # rng++/G_, der+/link_ in sub+, -> rim_H
+# _node_ should be not needed now
+def rng_recursion(rroot, root, Q, iEt, nrng=1):  # rng++/G_, der+/link_ in sub+, -> rim_H
 
     fd = isinstance(Q[0],Clink)
     Et = [0,0,0,0]  # for rng+
@@ -112,7 +128,7 @@ def rng_recursion(rroot, root, _node_, Q, iEt, nrng=1):  # rng++/G_, der+/link_ 
         iEt[:] = [V+v for V,v in zip(iEt, Et)]  # Vt[i]+=v; Rt[i]+=rt[i]; Dt[i]+=d
         if node_:  # eval rng+
             node_ = list(set(node_))
-            nrng,_,_ = rng_recursion(rroot, root, node_, list(combinations(node_,r=2)), iEt, nrng+1)
+            nrng,_,_ = rng_recursion(rroot, root, list(combinations(node_,r=2)), iEt, nrng+1)
 
     return nrng, node_, Et
 
@@ -142,6 +158,9 @@ def comp_G(link, node_, iEt, nrng=None):  # add flat dderH to link and link to t
         Val, Rdn = dderH.Et[i:4:2]  # exclude dect
         if Val > G_aves[i] * Rdn:
             if not i: node_ += [_G,G]  # for rng+;  if fd: comp_rim(node_,link, nrng)  # rng+/ matching-direction rim _Gs only?
+            if not _G.Et: _G.Et = [0,0,0,0]  # init for the 1st time, this G maybe the graph from prior sum2graph, and their Et is empty list
+            if not G.Et: G.Et = [0,0,0,0]
+
             _G.Et[i]  += Val; G.Et[i]  += Val  # in both Gs
             _G.Et[2+i]+= Rdn; G.Et[2+i]+= Rdn
             # to eval rng+ and grapht in form_graph_t:
@@ -192,6 +211,7 @@ def form_graph_t(root, G_, Et, nrng, fagg=0):  # form Gm_,Gd_ from same-root nod
                         if isinstance(node_[0].rim_H[0], CG):  # 1st sub+, same rim nesting?
                             for node in node_: node.rim_H = [node.rim_H]  # rim -> rim_H
                         pruned_node_ = [node for node in graph.node_ if node.extH.Et[fd] > G_aves[fd] * node.extH.Et[2+fd]]
+                        graph.link_ = [link for link in graph.link_ if link.node in pruned_node_ and link._node in pruned_node_]
                         if len(pruned_node_)>10:
                             agg_recursion(root, graph, pruned_node_, nrng, fagg=0)
                     elif graph.derH:
@@ -324,7 +344,7 @@ def sum2graph(root, grapht, fd, nrng):  # sum node and link params into graph, a
         last_lay = link.dderH.H[int(len(link.dderH.H)/2):]  # add last layer only, packed flat
         Et = copy(last_lay[0].Et)
         for He in last_lay[1:]: Et = [V+v for V,v in zip(Et, He.Et)]
-        last_lay = CH(Et=Et, H=last_lay, nest=last_lay[0].nest)
+        last_lay = CH(Et=Et, H=last_lay, nest=last_lay[0].nest, n= sum(lay.n for lay in last_lay))  # looks like we missed out the n
         extH.add_( last_lay, irdnt=link.dderH.Et[2:4])
         graph.S += link.distance
         np.add(graph.A,link.angle)
@@ -349,7 +369,7 @@ def sum_last_lay(G):  # G.extH += last layer of link.daggH (dsubH|ddaggH)
             last_lay = link.dderH.H[int(len(link.dderH.H)/2):]  # dderH layers are packed flat
             Et = copy(last_lay[0].Et)
             for He in last_lay[1:]: Et = [V+v for V,v in zip(Et, He.Et)]
-            last_lay = CH(Et=Et, H=last_lay, nest=last_lay[0].nest)
+            last_lay = CH(Et=Et, H=last_lay, nest=last_lay[0].nest, n= sum(lay.n for lay in last_lay))
             dderH.add_(last_lay, irdnt=link.dderH.Et[2:4])
     if dderH:
         G.extH.add_(dderH)
