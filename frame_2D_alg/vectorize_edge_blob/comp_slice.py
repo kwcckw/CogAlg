@@ -4,10 +4,10 @@ from copy import deepcopy, copy
 from itertools import zip_longest, combinations
 from math import inf
 from .filters import ave, ave_dI, ave_Gm, aves, P_aves, PP_aves
-from .slice_edge import comp_angle, CP, CSliceEdgeFrame
+from .slice_edge import comp_angle, CP
 import sys
 sys.path.append("..")
-from frame_blobs import CH, CBase, CG
+from frame_blobs import CH, CBase, CG, Clink
 
 '''
 Vectorize is a terminal fork of intra_blob.
@@ -237,6 +237,7 @@ def comp_latuple(_latuple, latuple, rn, fagg=0):  # 0der params
     return ret
 
 
+'''
 class Clink(CBase):  # the product of comparison between two nodes
 
     def __init__(link,_node=None, node=None, dderH = None, roott=None, distance=0.0, angle=None):
@@ -254,9 +255,6 @@ class Clink(CBase):  # the product of comparison between two nodes
         if self.dderH.H: return True
         else: return False
 
-
-
-'''
 class CH(CBase):  # generic derivation hierarchy of variable nesting
 
     nest: int = 0  # nesting depth: -1 ext, 0 md_, 1 derH, 2 subH, 3 aggH; root.nest = sub.nest+1, max|same: no skipping?
@@ -356,7 +354,6 @@ class CH(CBase):  # generic derivation hierarchy of variable nesting
         CH.append_(dderH, CH(nest=min(_He.nest,He.nest), Et=Et, H=dH, n=n), flat=flat)  # currently flat=1
         return dderH
 
-for reference:
 class CP(CBase):  # horizontal blob slice P, with vertical derivatives per param if derP, always positive
 
     latuple: list = z([])  # lateral params to compare vertically: I,G,M,Ma,L, (Dy,Dx)
@@ -420,7 +417,6 @@ class CG(CBase):  # PP | graph | blob: params of single-fork node_ cluster
     def __bool__(self):  # to test empty
         if self.n: return True
         else: return False
-
 '''
 
 def get_match(_par, par):

@@ -78,12 +78,11 @@ class CBase:
             return inst
 
 class CG(CBase):  # PP | graph | blob: params of single-fork node_ cluster
+
     def __init__(G, root=None, rng=1, fd=0, P_=None, node_=None, link_=None):
         super().__init__()
-
         # PP:
         G.P_ = [] if P_ is None else P_
-        
         G.root = root
         G.rng = rng
         G.fd = fd  # fork if flat layers?
@@ -91,7 +90,6 @@ class CG(CBase):  # PP | graph | blob: params of single-fork node_ cluster
         G.area = 0
         G.S = 0  # sparsity: distance between node centers
         G.A = 0, 0  # angle: summed dy,dx in links
-        
         G.Et = []  # external eval tuple, summed from rng++ before forming new graph and appending G.extH
         G.latuple = [0,0,0,0,0,[0,0]]  # lateral I,G,M,Ma,L,[Dy,Dx]
         G.iderH = CH()  # summed from PPs
@@ -120,12 +118,13 @@ class CG(CBase):  # PP | graph | blob: params of single-fork node_ cluster
     def __bool__(G): return G.n != 0  # to test empty
     def __repr__(G): return f"G(id={G.id})"
 
+
 class CFrame(CBase):
     def __init__(frame, i__):
         super().__init__()
         frame.i__, frame.latuple, frame.blob_ = i__, [0, 0, 0, 0], []
 
-    def evaluate(frame):
+    def segment(frame):
         dert__ = frame.comp_pixel()
         frame.flood_fill(dert__)
         return frame
@@ -153,7 +152,6 @@ class CFrame(CBase):
         ))
         return dert__
 
-
     def flood_fill(frame, dert__):
         # Flood-fill 1 pixel at a time
         fill_yx_ = list(dert__.keys())  # set of pixel coordinates to be filled (fill_yx_)
@@ -168,6 +166,7 @@ class CFrame(CBase):
     def __repr__(frame): return f"frame(id={frame.id})"
 
     class CBlob(CG):
+
         def __init__(blob, root):
             super().__init__(root)
             blob.sign = None
@@ -213,15 +212,8 @@ class CFrame(CBase):
         def yx(blob): return map(np.mean, zip(*blob.yx_))
         def __repr__(blob): return f"blob(id={blob.id})"
 
-# inherit CBase because id will be helpful for debug here
-class CH(CBase):  # generic derivation hierarchy of variable nesting
-    def __init__(He, nest=0, n=0, Et=None, H=None):
-        He.nest = nest  # nesting depth: -1/ ext, 0/ md_, 1/ derH, 2/ subH, 3/ aggH
-        He.n = n  # total number of params compared to form derH, summed in comp_G and then from nodes in sum2graph
-        He.Et = [] if Et is None else Et  # evaluation tuple: valt, rdnt, normt
-        He.H = [] if H is None else H  # hierarchy of der layers or md_
 
-    def __bool__(self): return self.n != 0
+class CH(CBase):  # generic derivation hierarchy with variable nesting
     '''
     len layer +extt: 2, 3, 6, 12, 24,
     or without extt: 1, 1, 2, 4, 8..: max n of tuples per der layer = summed n of tuples in all lower layers:
@@ -230,8 +222,15 @@ class CH(CBase):  # generic derivation hierarchy of variable nesting
     lay3: [[m,d], [md,dd]]: 2 sLays,
     lay4: [[m,d], [md,dd], [[md1,dd1],[mdd,ddd]]]: 3 sLays, <=2 ssLays
     '''
+    def __init__(He, nest=0, n=0, Et=None, H=None):
+        He.nest = nest  # nesting depth: -1/ ext, 0/ md_, 1/ derH, 2/ subH, 3/ aggH
+        He.n = n  # total number of params compared to form derH, summed in comp_G and then from nodes in sum2graph
+        He.Et = [] if Et is None else Et  # evaluation tuple: valt, rdnt, normt
+        He.H = [] if H is None else H  # hierarchy of der layers or md_
 
-    def add_(self, He, irdnt=[]):  # HE, He can't be empty, down to numericals and sum them
+    def __bool__(self): return self.n != 0
+
+    def add_(self, He, irdnt=[]):  # unpack down to numericals and sum them
 
         HE = self  # reassign for clarity
         if HE:
@@ -244,8 +243,8 @@ class CH(CBase):  # generic derivation hierarchy of variable nesting
                 H = []
                 for Lay, lay in zip_longest(HE.H, He.H, fillvalue=None):
                     if lay:  # to be summed
-                        if Lay is None: Lay = CH() 
-                        self.add_(Lay,lay, irdnt)  # recursive unpack to sum md_s
+                        if Lay is None: Lay = CH()
+                        Lay.add_(lay, irdnt)  # recursive unpack to sum md_s
                     H += [Lay]
                 HE.H = H
             else:
@@ -260,7 +259,7 @@ class CH(CBase):  # generic derivation hierarchy of variable nesting
             HE.copy(He)  # initialization
 
     def append_(self ,He, irdnt=[], flat=0):
-        
+
         HE = self
         if flat: HE.H += He.H  # append flat
         else:  HE.H += [He]  # append nested
@@ -270,6 +269,7 @@ class CH(CBase):  # generic derivation hierarchy of variable nesting
         if irdnt: Et[2:4] = [E+e for E,e in zip(Et[2:4], irdnt)]
         HE.n += He.n  # combined param accumulation span
         HE.nest = max(HE.nest, He.nest)
+
 
     def comp_(self, He, dderH, rn=1, fagg=0, flat=1):  # unpack tuples (formally lists) down to numericals and compare them
 
@@ -315,13 +315,30 @@ class CH(CBase):  # generic derivation hierarchy of variable nesting
 
         dderH.append_(CH(nest=min(_He.nest,He.nest), Et=Et, H=dH, n=n), flat=flat)  # currently flat=1
         return dderH
-    
 
     def copy(self, other):
         for attr, value in other.__dict__.items():
             if attr != '_id' and attr in self.__dict__.keys():  # copy only the available attributes and skip id
                 setattr(self, attr, deepcopy(value))
-        
+
+
+class Clink(CBase):  # the product of comparison between two nodes
+
+    def __init__(l,_node=None, node=None, dderH = None, roott=None, distance=0.0, angle=None):
+        super().__init__()
+
+        l._node = _node  # prior comparand
+        l.node = node
+        l.dderH = CH() if dderH is None else dderH  # derivatives produced by comp, nesting dertv -> aggH
+        l.roott = [None, None] if roott is None else roott  # clusters that contain this link
+        l.distance = distance  # distance between node centers
+        l.angle = [0,0] if angle is None else angle  # dy,dx between node centers
+        # dir: bool  # direction of comparison if not G0,G1, only needed for comp link?
+
+    def __bool__(self):  # to test empty
+        if self.dderH.H: return True
+        else: return False
+
 
 def imread(filename, raise_if_not_read=True):
     "Read an image in grayscale, return array."
@@ -338,7 +355,7 @@ if __name__ == "__main__":
 
     image_file = './images//raccoon_eye.jpeg'
     image = imread(image_file)
-    frame = CFrame(image).evaluate()
+    frame = CFrame(image).segment()
 
     # verification/visualization:
     import matplotlib.pyplot as plt

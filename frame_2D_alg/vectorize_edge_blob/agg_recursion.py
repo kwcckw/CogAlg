@@ -2,12 +2,12 @@ import numpy as np
 from copy import deepcopy, copy
 from itertools import combinations, zip_longest
 from .slice_edge import comp_angle, CSliceEdgeFrame
-from .comp_slice import ider_recursion, comp_latuple, Clink, CP, get_match
+from .comp_slice import ider_recursion, comp_latuple, get_match
 from .filters import aves, ave_mL, ave_dangle, ave, G_aves, ave_Gm, ave_Gd, ave_dist, max_dist
 from utils import box2center, extend_box
 import sys
 sys.path.append("..")
-from frame_blobs import CH, CG
+from frame_blobs import CH, CG, Clink
 
 
 '''
@@ -42,41 +42,13 @@ https://github.com/boris-kz/CogAlg/blob/master/frame_2D_alg/Illustrations/agg_re
 '''
 
 
-# temporary, to run the code
-class CCompSliceFrame(CSliceEdgeFrame):
-    def evaluate(frame):
-        super().evaluate()
-        for edge in frame.edge_:
-            if edge.G * (len(edge.P_) - 1) > ave_Gm:  # rdn=1
-                ider_recursion(None, edge)  # vertical, lateral-overlap P cross-comp -> PP clustering
-        return frame
-
-
 def vectorize_root(image):  # vectorization in 3 composition levels of xcomp, cluster:
 
-    frame = CSliceEdgeFrame(image).evaluate()
+    edge_ = slice_edge_root( intra_blob_root( frame_blobs_root(image)))
 
-    for edge in frame.edge_:  #  edge = [root, sign, I, Dy, Dx, G, yx_, dert_, link_, P_]
-        if edge.G * (len(edge.P_)-1) > G_aves[0]:  # rdn=1
-
-            # add new attr for der_recursion
-            # P_:
-            for P in edge.P_:
-                P.derH = CH()
-                Clink_ = []
-                for _P in P.link_:
-                    angle = np.subtract(P.yx, _P.yx)
-                    Clink_ += [Clink(node=P, _node=_P, distance=np.hypot(*angle), angle=angle)]
-                P.link_ = [Clink_]
-
-            # edge:
-            edge.Et = [0,edge.G,1,1]  # for feedback purpose
-
-            # temporary to sort y index bottom up
-            y_ = [P.yx[0] for P in edge.P_]
-            indices = np.argsort(y_)[::-1]
-            edge.P_ = [edge.P_[index] for index in indices]
-
+    for edge in edge_:
+        if edge.latuple[-1] * (len(edge.P_)-1) > G_aves[0]:
+            # if G in latuple, rdn=1
             ider_recursion(None, edge)  # vertical, lateral-overlap P cross-comp -> PP clustering
 
             for fd, node_ in enumerate(edge.node_):  # always node_t
@@ -350,12 +322,9 @@ def sum2graph(root, grapht, fd, nrng):  # sum node and link params into graph, a
     extH = CH()
     for link in Link_:  # unique current-layer links
         last_lay = link.dderH.H[int(len(link.dderH.H)/2):]  # add last layer only, packed flat
-        for i, He in enumerate(last_lay):
-            if i == 0:
-                Et = deepcopy(He.Et)
-            else:
-                Et = [V+v for V, v in zip_longest(Et, He.Et, fillvalue=0)]
-        last_lay = CH(Et =Et, H=last_lay, nest=last_lay[0].nest)
+        Et = copy(last_lay[0].Et)
+        for He in last_lay[1:]: Et = [V+v for V,v in zip(Et, He.Et)]
+        last_lay = CH(Et=Et, H=last_lay, nest=last_lay[0].nest)
         extH.add_( last_lay, irdnt=link.dderH.Et[2:4])
         graph.S += link.distance
         np.add(graph.A,link.angle)
@@ -378,12 +347,9 @@ def sum_last_lay(G):  # G.extH += last layer of link.daggH (dsubH|ddaggH)
     for link in G.rim_H[-1] if G.rim_H and isinstance(G.rim_H[0],list) else G.rim_H:  # last link layer
         if link.dderH:
             last_lay = link.dderH.H[int(len(link.dderH.H)/2):]  # dderH layers are packed flat
-            for i, He in enumerate(last_lay):
-                if i == 0:
-                    Et = deepcopy(He.Et)
-                else:
-                    Et = [V+v for V, v in zip_longest(Et, He.Et, fillvalue=0)]
-            last_lay = CH(Et = Et, H=last_lay, nest=last_lay[0].nest)
+            Et = copy(last_lay[0].Et)
+            for He in last_lay[1:]: Et = [V+v for V,v in zip(Et, He.Et)]
+            last_lay = CH(Et=Et, H=last_lay, nest=last_lay[0].nest)
             dderH.add_(last_lay, irdnt=link.dderH.Et[2:4])
     if dderH:
         G.extH.add_(dderH)
