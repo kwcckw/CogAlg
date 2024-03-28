@@ -1,14 +1,13 @@
 import numpy as np
 from copy import deepcopy, copy
 from itertools import combinations, zip_longest
-from .slice_edge import comp_angle, CsliceEdge
+from .slice_edge import comp_angle, CsliceEdge, Clink
 from .comp_slice import ider_recursion, comp_latuple, get_match
 from .filters import aves, ave_mL, ave_dangle, ave, G_aves, ave_Gm, ave_Gd, ave_dist, max_dist
 from utils import box2center, extend_box
 import sys
 sys.path.append("..")
-from frame_blobs import CH, CG, Clink
-
+from frame_blobs import CH, CG
 
 '''
 Blob edges may be represented by higher-composition patterns, etc., if top param-layer match,
@@ -44,9 +43,9 @@ https://github.com/boris-kz/CogAlg/blob/master/frame_2D_alg/Illustrations/agg_re
 
 def vectorize_root(image):  # vectorization in 3 composition levels of xcomp, cluster:
 
-    frame = CsliceEdge(image).slice()
+    frame = CsliceEdge(image).segment()
 
-    for edge in frame.edge_:
+    for edge in frame.blob_:
         if edge.latuple[-1] * (len(edge.P_)-1) > G_aves[0]:
             # if G in latuple, rdn=1
             ider_recursion(None, edge)  # vertical, lateral-overlap P cross-comp -> PP clustering
@@ -77,7 +76,7 @@ def agg_recursion(rroot, root, Q, nrng=1, fagg=0):  # lenH = len(root.aggH[-1][0
         for fd, node_ in enumerate(node_t):
             if root.Et[0] * (len(node_)-1)*root.rng > G_aves[1] * root.Et[2]:
                 # agg+ / node_t, vs. sub+ / node_, always rng+:
-                pruned_node_ = [node for node in node_ if node.Et[0] > G_aves[fd] * node.Et[2]]
+                pruned_node_ = [node for node in node_ if node.link_ and node.Et[0] > G_aves[fd] * node.Et[2]]  # prune by their length link_ too? If link_ is empty, Et may not be empty, but S may empty (single node's graph) (empty S causing zero division later)
                 if len(pruned_node_)>10:
                     agg_recursion(rroot, root, Q=list(combinations(pruned_node_,r=2)), nrng=1, fagg=1)
                     if rroot and fd and root.derH:  # der+ only (check not empty root.derH)
@@ -90,11 +89,23 @@ def rng_recursion(rroot, root, Q, iEt, nrng=1):  # rng++/G_, der+/link_ in sub+,
     fd = isinstance(Q[0],Clink)  # else [G,_G]
     Et = [0,0,0,0]  # for rng+
     node_ = []  # for rng+, append inside comp_G
+    
+    # should be a better way, get initial length of rim per input node, to be compared later in comp_G so that we know when to add new rim_layer
+    _node_ = []
+    if fd:
+        for link in Q:
+            if link.node not in node_: _node_ += [link.node]
+            if link._node not in node_: _node_ += [link._node]
+    else:
+        for nodet in Q:
+            if nodet[0] not in node_: _node_ += [nodet[0]]
+            if nodet[1] not in node_: _node_ += [nodet[1]] 
+    len_rim_ = [len(node.rim_H) for node in _node_]  # initial length of rim per node
 
     if fd:  # only in 1st rng+ from der+, extend root links
         for link in Q:
             if link.dderH.Et[1] > G_aves[1] * link.dderH.Et[3]:  # eval der+
-                comp_G(link, node_, Et)
+                comp_G(link, node_, _node_, len_rim_, Et)
     else:
         for _G,G in Q:  # prelinks in rng+
             if _G in G.compared_: continue
@@ -104,7 +115,7 @@ def rng_recursion(rroot, root, Q, iEt, nrng=1):  # rng++/G_, der+/link_ in sub+,
                 _M,_R, M,R = _G.Et[0],_G.Et[2], G.Et[0],G.Et[2]
             if nrng==1 or ((M+_M)/ (dist/ave_dist) > ave*(R+_R)):  # or directional?
                 G.compared_+=[_G]; _G.compared_+=[G]
-                comp_G([_G,G, dist, [dy,dx]], node_, Et)
+                comp_G([_G,G, dist, [dy,dx]], node_, _node_, len_rim_, Et)
 
     if Et[0] > ave_Gm * Et[2]:
         # rng+ eval per arg cluster because comp is bilateral, 2nd test per new pair
@@ -116,7 +127,7 @@ def rng_recursion(rroot, root, Q, iEt, nrng=1):  # rng++/G_, der+/link_ in sub+,
     return nrng, node_, Et
 
 
-def comp_G(link, node_, iEt, nrng=None):  # add flat dderH to link and link to the rims of comparands
+def comp_G(link, node_, _node_, len_rim_, iEt, nrng=None):  # add flat dderH to link and link to the rims of comparands
 
     dderH = CH()  # new layer of link.dderH
     if isinstance(link, Clink):
@@ -149,7 +160,7 @@ def comp_G(link, node_, iEt, nrng=None):  # add flat dderH to link and link to t
                 for G in link.node, link._node:
                     rim_H = G.rim_H
                     if rim_H and isinstance(rim_H[0],list):  # rim is converted to rim_H in 1st sub+
-                        if len(rim_H) == len(G.Rim_H): rim_H += [[]]  # no new rim layer yet
+                        if len(rim_H) == len_rim_[_node_.index(G)]: rim_H += [[]]  # no new rim layer yet (this is wrong, why we are checking G.Rim_H?)
                         rim_H[-1] += [link]  # rim_H
                     else:
                         rim_H += [link]  # rim
@@ -183,11 +194,12 @@ def form_graph_t(root, G_, Et, nrng, fagg=0):  # form Gm_,Gd_ from same-root nod
             graph_ = segment_node_(root, G_, fd, nrng, fagg)  # fd: node-mediated Correlation Clustering
             if fd:  # der+ only, rng++ term by high diffs, can't be extended much in sub Gs
                 for graph in graph_:
-                    if graph.Et[1] > G_aves[1] * graph.Et[3]:
+                    # we need to check if empty link_ too, their Et may not empty even link_ is empty because it's init from G.Et
+                    if graph.link_ and graph.Et[1] > G_aves[1] * graph.Et[3]:
                         node_ = graph.node_  # not needed?
-                        if isinstance(node_[0].rim_H[0], CG):  # 1st sub+, same rim nesting?
+                        if isinstance(node_[0].rim_H[0], Clink):  # 1st sub+, same rim nesting? (should be check for Clink here)
                             for node in node_: node.rim_H = [node.rim_H]  # rim -> rim_H
-                            agg_recursion(root, graph, graph.link_, nrng, fagg=0)
+                        agg_recursion(root, graph, graph.link_, nrng, fagg=0)  # wrong indentation
                     elif graph.derH:
                         root.fback_ += [graph.derH]
                         feedback(root)  # update root.root.. per sub+

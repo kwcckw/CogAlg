@@ -1,3 +1,4 @@
+import numpy as np
 from math import atan2, cos, floor, pi
 import sys
 sys.path.append("..")
@@ -36,7 +37,29 @@ class CsliceEdge(CsubFrame):
 
         def slice_edge(edge):
             root__ = {}  # map max yx to P, like in frame_blobs
-            edge.P_ = [CP(edge, yx, axis, root__) for yx, axis in edge.select_max()]  # P_ is added dynamically, only edge-blobs have P_
+            edge.P_ = [CP(edge, yx, axis, root__) for yx, axis in edge.select_max()]  # P_ is added dynamically, only edge-blobs have P_ 
+            edge.P_ = sorted(edge.P_, key=lambda P: P.yx_[P.latuple[4]// 2][0], reverse=True)   # sort Ps in descending order (top down)
+
+            # scan for upper row pivots, update link_:   
+            for P in edge.P_:
+                y, x = P.yx   # pivot, change to P center
+                x_ = [yx[1] for yx in P.yx_]
+                left_x = min(x_); right_x = max(x_)  # left and right for overlapping checking?
+                
+                for (_y, _x) in ((y-1, x-1), (y-1, x), (y-1, x+1)):
+                    if (_y, _x) in root__:  # neighbor has P
+                        _P = root__[_y, _x]  
+                        _x_ = [yx[1] for yx in _P.yx_]
+                        _left_x = min(_x_); _right_x = max(_x_)   # left and right for overlapping checking
+                        # check for overlapping between 2 Ps
+                        if right_x >= _left_x and _right_x >= left_x:
+                            angle = np.subtract((y,x),(_y,_x))
+                            # most of the distance are 1 or 1.4142135623730951 (top and top left/top right)
+                            P.link_[0] += [Clink(node=P, _node=root__[_y, _x], distance=np.hypot(*angle), angle=angle)]  # prelinks
+                P.yx = P.yx_[P.latuple[4] // 2] 
+
+            
+            edge.P_ = sorted(edge.P_, key=lambda x: x.yx[0])  # sort Ps in ascending order (bottom up)
 
         def select_max(edge):
             max_ = []
@@ -109,16 +132,10 @@ class CP(CBase):
                 y += dy; x += dx
                 _y, _x, _gy, _gx = y, x, gy, gx
 
-        # scan for neighbor P pivots, update link_:
-        y, x = yx   # pivot, change to P center
-        for _y, _x in [(y-1,x-1), (y-1,x), (y-1,x+1), (y,x-1), (y,x+1), (y+1,x-1), (y+1,x), (y+1,x+1)]:
-            if (_y, _x) in root__:  # neighbor has P
-                angle = np.subtract((y,x),(_y,_x))
-                P.link_[0] += [Clink(node=P, _node=_P, distance=np.hypot(*angle), angle=angle)]  # prelinks
-        root__[y, x] = P    # update root__
-
-        P.yx = P.yx_[L // 2]  # center
+        P.yx = yx
+        root__[yx[0], yx[1]] = P    # update root__
         P.latuple = I, G, M, Ma, L, (Dy, Dx)
+        P.derH = CH()
 
     def __repr__(P): return f"P({', '.join(map(str, P.latuple))})"  # or return f"P(id={P.id})" ?
 
