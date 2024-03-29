@@ -141,7 +141,7 @@ def form_PP_t(root, P_, iRt):  # form PPs of derP.valt[fd] + connected Ps val
                 perimeter = deque(_P__[P_index])  # recycle with breadth-first search, up and down:
                 while perimeter:
                     _P = perimeter.popleft()
-                    if _P in cP_ or _P in CP_ or _P not in P_: continue  # we need to check CP_ too, else we will get overlapping Ps
+                    if _P in cP_ or _P in CP_ or _P not in P_: continue  # clustering is exclusive
                     cP_ += [_P]
                     clink_ += Link_[P_.index(_P)]
                     perimeter += _P__[P_.index(_P)]  # extend P perimeter with linked __Ps
@@ -235,7 +235,6 @@ def comp_latuple(_latuple, latuple, rn, fagg=0):  # 0der params
 
         ret = [mval, dval, mrdn, drdn, mdec, ddec], ret
     return ret
-
 
 def get_match(_par, par):
     match = min(abs(_par),abs(par))
