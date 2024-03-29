@@ -38,28 +38,29 @@ class CsliceEdge(CsubFrame):
         def slice_edge(edge):
             root__ = {}  # map max yx to P, like in frame_blobs
             edge.P_ = [CP(edge, yx, axis, root__) for yx, axis in edge.select_max()]  # P_ is added dynamically, only edge-blobs have P_ 
-            edge.P_ = sorted(edge.P_, key=lambda P: P.yx_[P.latuple[4]// 2][0], reverse=True)   # sort Ps in descending order (top down)
+            edge.P_ = sorted(edge.P_, key=lambda P: P.yx[0])   # sort Ps in descending order (top down) (sorry, looks like i confused again, should be ascending here, index starts with 0 in image)
 
-            # scan for upper row pivots, update link_:   
+            # scan to update link_:   
             for P in edge.P_:
                 y, x = P.yx   # pivot, change to P center
-                x_ = [yx[1] for yx in P.yx_]
-                left_x = min(x_); right_x = max(x_)  # left and right for overlapping checking?
-                
-                for (_y, _x) in ((y-1, x-1), (y-1, x), (y-1, x+1)):
-                    if (_y, _x) in root__:  # neighbor has P
-                        _P = root__[_y, _x]  
-                        _x_ = [yx[1] for yx in _P.yx_]
-                        _left_x = min(_x_); _right_x = max(_x_)   # left and right for overlapping checking
-                        # check for overlapping between 2 Ps
-                        if right_x >= _left_x and _right_x >= left_x:
+
+                # scan all the other Ps
+                for _P in edge.P_:
+                    _y, _x = _P.yx
+                    if _y < y:  # uplinks only
+        
+                        Dy = abs(P.yx_[0][0] - P.yx_[-1][0]); _Dy = abs(_P.yx_[0][0] - _P.yx_[-1][0]); 
+                        Dx = abs(P.yx_[0][1] - P.yx_[-1][1]); _Dx = abs(_P.yx_[0][1] - _P.yx_[-1][1]); 
+                        # gap -= P extension from P center, overlap = negative gap:
+                        ygap = abs(_P.yx[0] - P.yx[0]) - (Dy+_Dy)/2
+                        xgap = abs(_P.yx[1]-P.yx[1]) - (Dx+_Dx)/2
+                        
+                        if ygap < 0 and xgap < 0:  # overlap
                             angle = np.subtract((y,x),(_y,_x))
-                            # most of the distance are 1 or 1.4142135623730951 (top and top left/top right)
-                            P.link_[0] += [Clink(node=P, _node=root__[_y, _x], distance=np.hypot(*angle), angle=angle)]  # prelinks
-                P.yx = P.yx_[P.latuple[4] // 2] 
+                            P.link_[0] += [Clink(node=P, _node=_P, distance=np.hypot(*angle), angle=angle)]  # prelinks
 
             
-            edge.P_ = sorted(edge.P_, key=lambda x: x.yx[0])  # sort Ps in ascending order (bottom up)
+            edge.P_ = sorted(edge.P_, key=lambda P: P.yx[0], reverse=True)  # sort Ps in ascending order (bottom up)
 
         def select_max(edge):
             max_ = []
@@ -142,7 +143,7 @@ class CP(CBase):
                 y += dy; x += dx
                 _y, _x, _gy, _gx = y, x, gy, gx
 
-        P.yx = yx
+        P.yx = P.yx_[L // 2] 
         root__[yx[0], yx[1]] = P    # update root__
         P.latuple = I, G, M, Ma, L, (Dy, Dx)
         P.derH = CH()

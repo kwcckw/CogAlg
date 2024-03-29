@@ -102,7 +102,6 @@ def rng_recursion(rroot, root, Q, iEt, nrng=1):  # rng++/G_, der+/link_ in sub+,
             if nrng > 1:  # pair eval, add M,R of intermediate matching nodes, directionally?
                 _M,_R, M,R = _G.Et[0],_G.Et[2], G.Et[0],G.Et[2]
             if nrng==1 or ((M+_M)/ (dist/ave_dist) > ave*(R+_R)):  # or directional?
-                G.compared_+=[_G]; _G.compared_+=[G]
                 comp_G([_G,G, dist, [dy,dx]], node_, Et)
 
     if Et[0] > ave_Gm * Et[2]:
@@ -136,13 +135,17 @@ def comp_G(link, node_, iEt, nrng=None):  # add flat dderH to link and link to t
     if _G.derH and G.derH: _G.derH.comp_(G.derH, dderH, rn, fagg=1, flat=0)
 
     link.dderH.append_(dderH, flat=len(link.dderH.H)>0)  # append for higher-res lower-der summation in sub-G extH
-    iEt[:] = np.add(iEt,dderH.Et)  # init eval rng+ and form_graph_t by total m|d?
+    iEt[:] = np.add(iEt,dderH.Et[:4])  # init eval rng+ and form_graph_t by total m|d? (skip decays for iEt)
     for i in 0,1:
         Val, Rdn = dderH.Et[i:4:2]  # exclude dect
         if Val > G_aves[i] * Rdn:
             if not i:
                 node_ += [_G,G]  # for rng+;  if fd: comp_rim(node_,link, nrng)  # rng+/ matching-direction rim _Gs only?
-                link.node.rim += link; link._node.rim += link  # bilateral assign, rng+ only
+                G.compared_+=[_G]; _G.compared_+=[G]  # this should be added here? If we added it above, it's always true because nrng == 1 is true for all Gs
+                if link not in link.node.rim:  # in der+, we are adding back a same link
+                    link.node.rim += [link]
+                if link not in link._node.rim:
+                    link._node.rim += [link]  # bilateral assign, rng+ only
             _G.Et[i] += Val; G.Et[i] += Val  # from fork links in both Gs?
             _G.Et[2+i]+= Rdn; G.Et[2+i]+= Rdn
             # if select fork links: iEt[i::2] = [V+v for V,v in zip(iEt[i::2], dderH.Et[i::2])]
@@ -235,8 +238,9 @@ def segment_node_(root, root_G_, fd, nrng, fagg):  # eval rim links with summed 
     igraph_ = []; ave = G_aves[fd]
 
     for G in root_G_:  # init per node
-        link_ = copy(G.rim_H[-1] if G.rim_H and isinstance(G.rim_H[0],list) else G.rim_H)
-        grapht = [[G],[], [*G.Et], link_]  # link_ = last rim
+        # We need to select last layer rim and pack it into grapht below, but not sure how to do that now. 
+        # Else G.rim contains prior layer rim, and some rims' nodes doesn't exist in current root_G_
+        grapht = [[G],[], [*G.Et], G.rim]  # link_ = last rim
         G.root = grapht  # for G merge
         igraph_ += [grapht]
     _graph_ = copy(igraph_)
@@ -327,8 +331,9 @@ def sum2graph(root, grapht, fd, nrng):  # sum node and link params into graph, a
 def sum_last_lay(G):  # G.extH += last layer of link.daggH (dsubH|ddaggH)
 
     dderH = CH()
-    for link in G.rim_H[-1] if G.rim_H and isinstance(G.rim_H[0],list) else G.rim_H:  # last link layer
+    for link in G.rim:
         if link.dderH:
+            # int(len(link.dderH.H)/2): should auto select only the last layer H?
             last_lay = link.dderH.H[int(len(link.dderH.H)/2):]  # dderH layers are packed flat
             last_lay = CH(Et=np.sum([He.Et for He in last_lay],axis=0), H=last_lay, nest=last_lay[0].nest, n=sum([He.n for He in last_lay]))
             dderH.add_(last_lay, irdnt=link.dderH.Et[2:4])
