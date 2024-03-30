@@ -37,29 +37,25 @@ class CsliceEdge(CsubFrame):
 
         def slice_edge(edge):
             root__ = {}  # map max yx to P, like in frame_blobs
-            edge.P_ = [CP(edge, yx, axis, root__) for yx, axis in edge.select_max()]  # P_ is added dynamically, only edge-blobs have P_ 
-            edge.P_ = sorted(edge.P_, key=lambda P: P.yx[0])   # sort Ps in descending order (top down) (sorry, looks like i confused again, should be ascending here, index starts with 0 in image)
-
-            # scan to update link_:   
+            edge.P_ = [CP(edge, yx, axis, root__) for yx, axis in edge.select_max()]  # P_ is added dynamically, only edge-blobs have P_
+            edge.P_ = sorted(edge.P_, key=lambda P: P.yx[0])   # sort Ps in descending order (top down)
+            # scan to update link_:
             for P in edge.P_:
-                y, x = P.yx   # pivot, change to P center
-
-                # scan all the other Ps
+                y, x = P.yx  # pivot, change to P center
+                # scan all other Ps
                 for _P in edge.P_:
                     _y, _x = _P.yx
                     if _y < y:  # uplinks only
-        
-                        Dy = abs(P.yx_[0][0] - P.yx_[-1][0]); _Dy = abs(_P.yx_[0][0] - _P.yx_[-1][0]); 
-                        Dx = abs(P.yx_[0][1] - P.yx_[-1][1]); _Dx = abs(_P.yx_[0][1] - _P.yx_[-1][1]); 
+                        Dy = abs(P.yx_[0][0] - P.yx_[-1][0]); _Dy = abs(_P.yx_[0][0] - _P.yx_[-1][0])
+                        Dx = abs(P.yx_[0][1] - P.yx_[-1][1]); _Dx = abs(_P.yx_[0][1] - _P.yx_[-1][1])
                         # gap -= P extension from P center, overlap = negative gap:
                         ygap = abs(_P.yx[0] - P.yx[0]) - (Dy+_Dy)/2
                         xgap = abs(_P.yx[1]-P.yx[1]) - (Dx+_Dx)/2
-                        
-                        if ygap < 0 and xgap < 0:  # overlap
+
+                        if ygap <= 0 or xgap <= 0:  # overlapping or adjacent Ps
                             angle = np.subtract((y,x),(_y,_x))
                             P.link_[0] += [Clink(node=P, _node=_P, distance=np.hypot(*angle), angle=angle)]  # prelinks
 
-            
             edge.P_ = sorted(edge.P_, key=lambda P: P.yx[0], reverse=True)  # sort Ps in ascending order (bottom up)
 
         def select_max(edge):
@@ -100,7 +96,7 @@ class Clink(CBase):  # the product of comparison between two nodes
 
         l._node = _node  # prior comparand
         l.node = node
-        l.med_node_ = []  # intermediate nodes, as in hypergraph edges
+        l.med_node_ = []  # intermediate nodes and links in roughly the same direction, as in hypergraph edges
         l.dderH = CH() if dderH is None else dderH  # derivatives produced by comp, nesting dertv -> aggH
         l.roott = [None, None] if roott is None else roott  # clusters that contain this link
         l.distance = distance  # distance between node centers
@@ -143,7 +139,7 @@ class CP(CBase):
                 y += dy; x += dx
                 _y, _x, _gy, _gx = y, x, gy, gx
 
-        P.yx = P.yx_[L // 2] 
+        P.yx = P.yx_[L // 2]
         root__[yx[0], yx[1]] = P    # update root__
         P.latuple = I, G, M, Ma, L, (Dy, Dx)
         P.derH = CH()
