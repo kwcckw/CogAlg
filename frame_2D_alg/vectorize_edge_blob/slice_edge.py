@@ -92,7 +92,7 @@ class Clink(CBase):  # the product of comparison between two nodes
         l.angle = [0,0] if angle is None else angle  # dy,dx between node centers
         # dir: bool  # direction of comparison if not G0,G1, only needed for comp link?
 
-    def __bool__(l):  return bool(l.dderH_[-1].H) if l.dderH is None else bool(l.dderH.H)
+    def __bool__(l): bool(l.dderH.H)
 
 
 class CP(CBase):
