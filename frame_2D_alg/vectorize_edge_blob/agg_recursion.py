@@ -82,7 +82,7 @@ def agg_recursion(rroot, root, Q, nrng=1, fagg=0):  # lenH = len(root.aggH[-1][0
             if root.Et[0] * (len(node_)-1)*root.rng > G_aves[1] * root.Et[2]:
                 # agg+ / node_t, vs. sub+ / node_, always rng+:
                 pruned_node_ = [node for node in node_ if node.Et[0] > G_aves[fd] * node.Et[2]]  # not be needed?
-                if len(pruned_node_) > 10:
+                if len(pruned_node_) > 1:
                     agg_recursion(rroot, root, Q=list(combinations(pruned_node_,r=2)), nrng=1, fagg=1)
                     if rroot and fd and root.derH:  # der+ only (check not empty root.derH)
                         rroot.fback_ += [root.derH]
@@ -98,24 +98,24 @@ def rng_recursion(rroot, root, prelinks, Et, nrng=1):  # rng++/G_, der+/link_ in
         # der+'rng+ is directional
         if nrng > 1:  # pair eval:
             M = (G.Et[0]+_G.Et[0])/2; R = (G.Et[2]+_G.Et[2])/2  # local
-            med_Gl_ = []  # [G,link]_, tentative mediation eval:
-            for link in G.rim:
-                for (med_G, med_link) in link.med_node_:
-                    mA = comp_angle((dy,dx),med_link.angle)[0]
-                    if mA > ave_mA:
+            for link in _G.rim:
+                if comp_angle((dy,dx), link.angle)[0] > ave_mA:
+                    for (_, med_link) in link.med_Gl_:  # link is hyperlink
                         M += med_link.dderH.H[-1].Et[0]; R += med_link.dderH.H[-1].Et[2]
-                        med_Gl_ += [[med_G, med_link]]
+
         if (nrng==1 and dist<=ave_dist) or (nrng>1 and M / (dist/ave_dist) > ave * R):
             G.compared_ += [_G]; _G.compared_ += [G]
-            comp_G([_G,G, dist, [dy,dx]], Et, node_, med_Gl_)
+            comp_G([_G,G, dist, [dy,dx]], Et, node_)
 
     if Et[0] > ave_Gm * Et[2]:  # rng+ eval per arg cluster because comp is bilateral, 2nd test per new pair
-        nrng,_,_ = rng_recursion(rroot, root, list(combinations(list(set(node_)),r=2)), Et, nrng+1)
-
+        # nrng,_,_ = rng_recursion(rroot, root, list(combinations(list(set(node_)),r=2)), Et, nrng+1)
+        nrng,new_node_,_ = rng_recursion(rroot, root, prelinks, Et, nrng+1)
+        node_ += [node for node in new_node_ if node not in node_]  # merge new nodes (if there's any new added node with new added rng)
+    
     return nrng, node_, Et
 
 
-def comp_G(link, iEt, node_=[], med_Gl_=[], nrng=None):  # add flat dderH to link and link to the rims of comparands
+def comp_G(link, iEt, node_=[], nrng=None): # add flat dderH to link and link to the rims of comparands
 
     dderH = CH()  # new layer of link.dderH
     if isinstance(link, Clink):
@@ -134,14 +134,24 @@ def comp_G(link, iEt, node_=[], med_Gl_=[], nrng=None):  # add flat dderH to lin
     # / G, if >1 PPs | Gs:
     if _G.extH and G.extH: _G.extH.comp_(dderH, G.extH, rn, fagg=1, flat=0)  # always true in der+
     if _G.derH and G.derH: _G.derH.comp_(dderH, G.derH, rn, fagg=1, flat=0)  # append and sum new dderH to base dderH
-
+    
     link.dderH.append_(dderH, flat=0)  # append nested, higher-res lower-der summation in sub-G extH
     iEt[:] = np.add(iEt,dderH.Et[:4])  # init eval rng+ and form_graph_t by total m|d?
     for i in 0,1:
         Val, Rdn = dderH.Et[i:4:2]  # exclude dect
         if Val > G_aves[i] * Rdn:
             if not fd:
-                link.med_Gl_ += [G,link]  # extend link as hyperlink, or this should be done for new prelinks only?
+                for _link in _G.rim:
+                    for __link in _link._node.rim:  # med links per _link
+                        mA = comp_angle(link.angle, __link.angle)[0]
+                        if mA > ave_mA and (_link._node, __link) not in link.med_Gl_: 
+                            link.med_Gl_ += [(_link._node, __link)]  # link is hyperlink
+
+                    for (med_G, med_link) in _link.med_Gl_:  # med links of _link
+                        mA = comp_angle(link.angle, med_link.angle)[0]
+                        if mA > ave_mA and (med_G, med_link) not in link.med_Gl_: 
+                            link.med_Gl_ += [(med_G, med_link)]  # link is hyperlink
+                        
                 link.node.rim += [link]; link._node.rim += [link]  # or matching-direction rim only?
             node_ += [_G,G]
             _G.Et[i] += Val; G.Et[i] += Val

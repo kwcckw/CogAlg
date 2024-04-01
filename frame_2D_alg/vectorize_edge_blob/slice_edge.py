@@ -37,7 +37,11 @@ class CsliceEdge(CsubFrame):
 
         def slice_edge(edge):
             root__ = {}  # map max yx to P, like in frame_blobs
-            edge.P_ = [CP(edge, yx, axis, root__) for yx, axis in edge.select_max()]  # P_ is added dynamically, only edge-blobs have P_
+            dert__ = {}
+            for yx, axis in edge.select_max():
+                P = CP(edge, yx, axis, root__, dert__)
+                if P.yx_: 
+                    edge.P_ += [P]  # P_ is added dynamically, only edge-blobs have P_
             edge.P_ = sorted(edge.P_, key=lambda P: P.yx[0], reverse=True)  # sort Ps in descending order (bottom up)
             # scan to update link_:
             for i, P in enumerate(edge.P_):
@@ -96,7 +100,7 @@ class Clink(CBase):  # the product of comparison between two nodes
 
 
 class CP(CBase):
-    def __init__(P, edge, yx, axis, root__):  # form_P:
+    def __init__(P, edge, yx, axis, root__, dert__):  # form_P:
 
         super().__init__()
         y, x = yx
@@ -108,6 +112,7 @@ class CP(CBase):
         I, G, M, Ma, L, Dy, Dx = i, g, m, ma, 1, gy, gx
         P.axis = ay, ax = axis
         P.yx_, P.dert_, P.link_ = [yx], [pivot], [[]]
+        f_overlap = 0  # to determine if there's overlap
 
         for dy, dx in [(-ay, -ax), (ay, ax)]: # scan in 2 opposite directions to add derts to P
             P.yx_.reverse(); P.dert_.reverse()
@@ -123,15 +128,28 @@ class CP(CBase):
                 # update P:
                 m = ave_g - g
                 I += i; Dy += dy; Dx += dx; G += g; Ma += ma; M += m; L += 1
+                
+                round_y, round_x = round(y), round(x)  # use round for approximation, not sure
+                if (round_y, round_x) in dert__:   # stop forming P if there's overlapping derts
+                    f_overlap = 1
+                    P.yx_= []
+                    break
+
                 P.yx_ += [(y, x)]; P.dert_ += [(i, gy, gx, g, ma, m)]
                 # for next loop:
                 y += dy; x += dx
                 _y, _x, _gy, _gx = y, x, gy, gx
+            if f_overlap: break
 
-        P.yx = P.yx_[L // 2]
-        root__[yx[0], yx[1]] = P    # update root__
-        P.latuple = I, G, M, Ma, L, (Dy, Dx)
-        P.derH = CH()
+        if not f_overlap:
+            for yx in P.yx_:
+                round_y, round_x = round(yx[0]), round(yx[1])  # use round for approximation, not sure
+                dert__[round_y, round_x] = P  # update dert__
+            
+            P.yx = P.yx_[L // 2]
+            root__[yx[0], yx[1]] = P    # update root__
+            P.latuple = I, G, M, Ma, L, (Dy, Dx)
+            P.derH = CH()
 
     def __repr__(P): return f"P({', '.join(map(str, P.latuple))})"  # or return f"P(id={P.id})" ?
 
