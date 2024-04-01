@@ -81,7 +81,7 @@ def agg_recursion(rroot, root, Q, nrng=1, fagg=0):  # lenH = len(root.aggH[-1][0
         for fd, node_ in enumerate(node_t):
             if root.Et[0] * (len(node_)-1)*root.rng > G_aves[1] * root.Et[2]:
                 # agg+ / node_t, vs. sub+ / node_, always rng+:
-                pruned_node_ = [node for node in node_ if node.Et[0] > G_aves[fd] * node.Et[2]]
+                pruned_node_ = [node for node in node_ if node.Et[0] > G_aves[fd] * node.Et[2]]  # not be needed?
                 if len(pruned_node_) > 10:
                     agg_recursion(rroot, root, Q=list(combinations(pruned_node_,r=2)), nrng=1, fagg=1)
                     if rroot and fd and root.derH:  # der+ only (check not empty root.derH)
@@ -95,28 +95,19 @@ def rng_recursion(rroot, root, prelinks, Et, nrng=1):  # rng++/G_, der+/link_ in
         if _G in G.compared_: continue
         cy, cx = box2center(G.box); _cy, _cx = box2center(_G.box); dy = cy - _cy; dx = cx - _cx
         dist = np.hypot(dy, dx)  # distance between node centers
-        # directional der+'rng+?
-        if nrng > 1:  # pair eval
-            _M,_R, M,R = _G.Et[0],_G.Et[2], G.Et[0],G.Et[2]
-            M = (M+_M)/2; R = (R+_R)/2  # local
-            # very tentative mediation eval:
+        # der+'rng+ is directional
+        if nrng > 1:  # pair eval:
+            M = (G.Et[0]+_G.Et[0])/2; R = (G.Et[2]+_G.Et[2])/2  # local
+            med_Gl_ = []  # [G,link]_, tentative mediation eval:
             for link in G.rim:
-                for (med_G, med_link) in link.med_node_:  # this is only possible in higher rng (nrng>1)
+                for (med_G, med_link) in link.med_node_:
                     mA = comp_angle((dy,dx),med_link.angle)[0]
                     if mA > ave_mA:
-                          M += med_link.dderH.H[-1].Et[0]
-                          R += med_link.dderH.H[-1].Et[2]
-                          node_ += [med_G]  # this med_G should be added to node_, so that we can eval it with higher rng in the next rng_recursion?
-
-        if (nrng==1 and dist<=ave_dist) or (nrng>1 and M / (dist/ave_dist) > ave*R):
-            # i think med node and their link should be retrieved here, and add to link in comp_G?
-            med_node_ = []
-            for link in G.rim:
-                _G = link._node
-                if [_G, link] not in med_node_: med_node_ += [[_G, link]]  # add med node and links
-
+                        M += med_link.dderH.H[-1].Et[0]; R += med_link.dderH.H[-1].Et[2]
+                        med_Gl_ += [[med_G, med_link]]
+        if (nrng==1 and dist<=ave_dist) or (nrng>1 and M / (dist/ave_dist) > ave * R):
             G.compared_ += [_G]; _G.compared_ += [G]
-            comp_G([_G,G, dist, [dy,dx]], Et, node_, med_node_)
+            comp_G([_G,G, dist, [dy,dx]], Et, node_, med_Gl_)
 
     if Et[0] > ave_Gm * Et[2]:  # rng+ eval per arg cluster because comp is bilateral, 2nd test per new pair
         nrng,_,_ = rng_recursion(rroot, root, list(combinations(list(set(node_)),r=2)), Et, nrng+1)
@@ -124,7 +115,7 @@ def rng_recursion(rroot, root, prelinks, Et, nrng=1):  # rng++/G_, der+/link_ in
     return nrng, node_, Et
 
 
-def comp_G(link, iEt, node_=[], med_node_=[], nrng=None):  # add flat dderH to link and link to the rims of comparands
+def comp_G(link, iEt, node_=[], med_Gl_=[], nrng=None):  # add flat dderH to link and link to the rims of comparands
 
     dderH = CH()  # new layer of link.dderH
     if isinstance(link, Clink):
@@ -141,24 +132,21 @@ def comp_G(link, iEt, node_=[], med_node_=[], nrng=None):  # add flat dderH to l
         # / PP, if >1 Ps:
         if _G.iderH and G.iderH: _G.iderH.comp_(G.iderH, dderH, rn, fagg=1, flat=0)
     # / G, if >1 PPs | Gs:
-    if _G.extH and G.extH: _G.extH.comp_(dderH, G.extH, rn, fagg=1, flat=0) # always true in der+
-    if _G.derH and G.derH: _G.derH.comp_(dderH, G.derH, rn, fagg=1, flat=0) # append and sum new dderH to base dderH
+    if _G.extH and G.extH: _G.extH.comp_(dderH, G.extH, rn, fagg=1, flat=0)  # always true in der+
+    if _G.derH and G.derH: _G.derH.comp_(dderH, G.derH, rn, fagg=1, flat=0)  # append and sum new dderH to base dderH
 
     link.dderH.append_(dderH, flat=0)  # append nested, higher-res lower-der summation in sub-G extH
     iEt[:] = np.add(iEt,dderH.Et[:4])  # init eval rng+ and form_graph_t by total m|d?
     for i in 0,1:
         Val, Rdn = dderH.Et[i:4:2]  # exclude dect
         if Val > G_aves[i] * Rdn:
-            if not fd: 
+            if not fd:
+                link.med_Gl_ += [G,link]  # extend link as hyperlink, or this should be done for new prelinks only?
                 link.node.rim += [link]; link._node.rim += [link]  # or matching-direction rim only?
-                for med_node in med_node_:
-                    if med_node not in link.med_node_:  # prevent adding a same pair from prior recursion
-                        link.med_node_ += [med_node]  # add med_node_ here?
             node_ += [_G,G]
             _G.Et[i] += Val; G.Et[i] += Val
             _G.Et[2+i] += Rdn; G.Et[2+i] += Rdn  # per fork link in both Gs
             # if select fork links: iEt[i::2] = [V+v for V,v in zip(iEt[i::2], dderH.Et[i::2])]
-
     return node_
 
 
@@ -184,6 +172,7 @@ def comp_ext(_G,G, dist, rn, dderH):  # compare non-derivatives: dist, node_' L,
 
 def form_graph_t(root, G_, Et, nrng, fagg=0):  # form Gm_,Gd_ from same-root nodes
 
+    for link in root.link_: link.Et = copy(link.dderH.Et)  # init for accumulation from surrounding nodes in node_connect
     node_connect(G_)  # Graph Convolution of Correlations over init _G_
     node_t = []
     for fd in 0,1:
@@ -222,14 +211,14 @@ def node_connect(iG_):  # node connectivity = sum surround link vals, incr.media
                 ave = G_aves[i]
                 for link in G.rim:
                     # > ave derGs in fd rim
-                    lval,lrdn,ldec = link.dderH.Et[i::2]  # step=2
+                    lval,lrdn,ldec = link.Et[i::2]  # step=2, graph-specific vals accumulated from surrounding nodes
                     decay =  (ldec/ (link.dderH.n * 6)) ** mediation  # normalized decay at current mediation
                     _G = link._node if link.node is G else link.node
                     _val,_rdn = _G.Et[i::2]
                     # current-loop vals and their difference from last-loop vals, before updating:
                     V = (val+_val) * decay; dv = V-lval
                     R = (rdn+_rdn)  # rdn doesn't decay
-                    link.dderH.Et[i:4:2] = [V,R]  # last-loop vals for next loop | segment_node_, dect is not updated
+                    link.Et[i:4:2] = [V,R]  # last-loop vals for next loop | segment_node_, dect is not updated
                     if dv > ave * R:  # extend mediation if last-update val, may be negative
                         G.Et[i::2] = [V+v for V,v in zip(G.Et[i::2],[V,R])]  # last layer link vals
                         if link not in uprim: uprim += [link]
@@ -269,9 +258,8 @@ def segment_node_(root, root_G_, fd, nrng, fagg):  # eval rim links with summed 
                 if _G in G_: continue
                 # connect by rel match of nodes * match of node Vs: surround M|Ds,
                 # cval suggests how deeply inside the graph is G:
-                # we are not using link last layer Et here?
-                cval = link.dderH.Et[fd] + get_match(_G.Et[fd], G.Et[fd])  # same coef for int and ext match?
-                crdn = link.dderH.Et[2+fd] + (_G.Et[2+fd] + G.Et[2+fd]) / 2
+                cval = link.Et[fd] + get_match(_G.Et[fd], G.Et[fd])  # same coef for int and ext match?
+                crdn = link.Et[2+fd] + (_G.Et[2+fd] + G.Et[2+fd]) / 2
                 if cval > ave * crdn:  # _G and its root are effectively connected
                     # merge _G.root in grapht:
                     _grapht = _G.root  # local and for feedback?

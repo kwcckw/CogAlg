@@ -82,10 +82,10 @@ class Clink(CBase):  # the product of comparison between two nodes
 
     def __init__(l,_node=None, node=None, dderH= None, roott=None, distance=0.0, angle=None):
         super().__init__()
-
+        l.Et = [0,0,0,0,0,0]  # graph-specific, accumulated from surrounding nodes in node_connect
         l._node = _node  # prior comparand
         l.node = node
-        l.med_node_ = []  # intermediate nodes and links in roughly the same direction, as in hypergraph edges
+        l.med_Gl_ = []  # intermediate nodes and links in roughly the same direction, as in hypergraph edges
         l.dderH = CH() if dderH is None else dderH
         l.roott = [None, None] if roott is None else roott  # clusters that contain this link
         l.distance = distance  # distance between node centers
