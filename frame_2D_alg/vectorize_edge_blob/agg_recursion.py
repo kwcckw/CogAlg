@@ -48,7 +48,7 @@ def vectorize_root(image):  # vectorization in 3 composition levels of xcomp, cl
         if edge.latuple[-1] * (len(edge.P_)-1) > G_aves[0]:  # eval G, rdn=1
             ider_recursion(None, edge)  # vertical, lateral-overlap P cross-comp -> PP clustering
 
-            for fd, node_ in enumerate(edge.node_):  # always node_t
+            for fd, node_ in enumerate(copy(edge.node_)):  # always node_t (temporary use copy, because edge.node_ will be replaced in agg+ below)
                 if edge.iderH and edge.iderH.Et:
                     if edge.iderH.Et[fd] * (len(node_)-1)*(edge.rng+1) > G_aves[fd] * edge.iderH.Et[2+fd]:
                         pruned_node_ = []
@@ -186,6 +186,7 @@ def form_graph_t(root, node_, Et, nrng, fagg=0):  # form Gm_,Gd_ from same-root 
         else:
             node_t += [[]]
     if any(node_t):
+        # edge's node is node_t, we need replace with root.node_[fd]?
         root.node_[:] = node_t  # else keep root.node_
         return node_t
 
@@ -237,10 +238,15 @@ def segment_node_(root, node_, fd, nrng, fagg):  # eval rim links with summed su
     igraph_ = []; ave = G_aves[fd]
 
     for G in node_:  # init per node
-        uprim = [link for link in G.rim if len(link.dderH.H) > (G.extH.H if G.extH else 0)]
-        grapht = [[G],[],[*G.Et], uprim]  # link_ = updated rim
-        G.root = grapht  # for G merge
-        igraph_ += [grapht]
+        # a same G may have added extH.H in both forks, we need to -fd of their length of extH.H here
+        uprim = [link for link in G.rim if len(link.dderH.H) > (len(G.extH.H)-fd if G.extH else 0)]
+        if uprim:  # skip nodes without add new added rim
+            grapht = [[G],[],[*G.Et], uprim]  # link_ = updated rim
+            G.root = grapht  # for G merge
+            igraph_ += [grapht]
+        else:
+            G.root = None
+    
     _graph_ = copy(igraph_)
 
     while True:
@@ -262,17 +268,22 @@ def segment_node_(root, node_, fd, nrng, fagg):  # eval rim links with summed su
                 crdn = link.Et[2+fd] + (_G.Et[2+fd] + G.Et[2+fd]) / 2
                 if cval > ave * crdn:  # _G and its root are effectively connected
                     # merge _G.root in grapht:
-                    _grapht = _G.root  # local and for feedback?
-                    _G_,_Link_,_Et,_Rim = _grapht
-                    if link not in Link_: Link_ += [link]
-                    Link_[:] += [_link for _link in _Link_ if _link not in Link_]
-                    for g in _G_:
-                        g.root = grapht
-                        if g not in G_: G_+=[g]
-                    Et[:] = np.add(Et,_Et)
-                    inVal += _Et[fd]; inRdn += _Et[2+fd]
-                    igraph_.remove(_grapht)
-                    new_Rim += [link for link in _Rim if link not in new_Rim+Rim+Link_]
+                    if _G.root:
+                        _grapht = _G.root  # local and for feedback?
+                        _G_,_Link_,_Et,_Rim = _grapht
+                        if link not in Link_: Link_ += [link]
+                        Link_[:] += [_link for _link in _Link_ if _link not in Link_]
+                        for g in _G_:
+                            g.root = grapht
+                            if g not in G_: G_+=[g]
+                        Et[:] = np.add(Et,_Et)
+                        inVal += _Et[fd]; inRdn += _Et[2+fd]
+                        igraph_.remove(_grapht)
+                        new_Rim += [link for link in _Rim if link not in new_Rim+Rim+Link_]
+                    else:  # _G doesn't have uprim and doesn't form any grapht 
+                        _G.root = grapht
+                        G_ += [_G]
+                    
             # for next loop:
             if len(new_Rim) * inVal > ave * inRdn:
                 grapht.pop(-1); grapht += [new_Rim]
@@ -297,7 +308,13 @@ def sum2graph(root, grapht, fd, nrng):  # sum node and link params into graph, a
     for G in G_:
         graph.area += G.area
         for link in G.rim:
-            G.extH.add_(link.dderH.H[-1], irdnt=link.dderH.H[-1].Et[2:4])  # sum last layer
+            if G.extH:
+                if len(G.extH.H)-fd < len(link.dderH.H):
+                    G.extH.append_(link.dderH.H[-1],flat=0)  # pack last layer 
+                else:
+                    G.extH.H[-1].add_(link.dderH.H[-1], irdnt=link.dderH.H[-1].Et[2:4])  # sum last layer
+            else:  # init G.extH 
+                G.extH.append_(link.dderH,flat=1)   
         graph.box = extend_box(graph.box, G.box)
         graph.latuple = [P+p for P,p in zip(graph.latuple[:-1],graph.latuple[:-1])] + [[A+a for A,a in zip(graph.latuple[-1],graph.latuple[-1])]]
         if G.iderH:  # empty in single-P PP|Gs
@@ -308,7 +325,13 @@ def sum2graph(root, grapht, fd, nrng):  # sum node and link params into graph, a
         graph.n += G.n  # non-derH accumulation?
     extH = CH()
     for link in Link_:  # sum last layer of unique current-layer links
-        extH.add_(link.dderH.H[-1], irdnt=link.dderH.H[-1].Et[2:4])
+        if extH:
+            if len(extH.H) < len(link.dderH.H):
+                extH.append_(link.dderH.H[-1],flat=0)  # pack last layer 
+            else:
+                extH.H[-1].add_(link.dderH.H[-1], irdnt=link.dderH.H[-1].Et[2:4])  # sum last layer
+        else:  # init extH     
+            extH.append_(link.dderH,flat=1)    
         graph.S += link.distance
         np.add(graph.A,link.angle)
         link.root = graph
