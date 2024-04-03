@@ -40,7 +40,6 @@ https://github.com/boris-kz/CogAlg/blob/master/frame_2D_alg/Illustrations/generi
 https://github.com/boris-kz/CogAlg/blob/master/frame_2D_alg/Illustrations/agg_recursion_unfolded.drawio.png
 '''
 
-
 def vectorize_root(image):  # vectorization in 3 composition levels of xcomp, cluster:
 
     frame = CsliceEdge(image).segment()
@@ -61,29 +60,29 @@ def vectorize_root(image):  # vectorization in 3 composition levels of xcomp, cl
                                 pruned_node_ += [PP]
                         if len(pruned_node_) > 10:  # discontinuous PP rng+ cross-comp, cluster -> G_t:
                             # agg+ of PP nodes:
-                            agg_recursion(None, edge, iQ = pruned_node_, Q=list(combinations(pruned_node_,r=2)), nrng=1, fagg=1)
+                            agg_recursion(None, edge, node_ = pruned_node_, Q=list(combinations(pruned_node_,r=2)), nrng=1, fagg=1)
 
 
-def agg_recursion(rroot, root, iQ, Q, nrng=1, fagg=0):  # lenH = len(root.aggH[-1][0]), lenHH: same in agg_compress
+def agg_recursion(rroot, root, node_, Q, nrng=1, fagg=0):  # lenH = len(root.aggH[-1][0]), lenHH: same in agg_compress
 
     Et = [0,0,0,0]  # eval tuple, sum from Link_
 
     if fagg:  # rng+ higher Gs
-        nrng, Et = rng_recursion(rroot, root, iQ, Q, Et, nrng=nrng)  # rng+ appends prelink_ -> rim, link.dderH
+        nrng, Et = rng_recursion(rroot, root, node_, Q, Et, nrng=nrng)  # rng+ appends prelink_ -> rim, link.dderH
     else:
         for link in Q:  # der+ node Gs, dderH append, not directly recursive, all >der+ ave?
             comp_G(link, Et)
             # der+'rng+: cluster by dir angle in node-mediated hyper-links,
-            # comp beyond root graph? (if comp beyond root graph, it's not sub+ anymore?)
-    # check node.Et to prune nodes without any added rims
-    node_t = form_graph_t(root, [node for node in iQ if sum(node.Et[:2])!=0], Et, nrng, fagg)  # root_fd, eval der++ and feedback per Gd only
+            # comp beyond root graph?
+    upnode_ = [node for node in node_ if sum(node.Et[:2])!=0]  # if updated node.rim
+    node_t = form_graph_t(root, upnode_, Et, nrng, fagg)  # root_fd, eval der++ and feedback per Gd only
     if node_t:
         for fd, node_ in enumerate(node_t):
             if root.Et[0] * (len(node_)-1)*root.rng > G_aves[1] * root.Et[2]:
                 # agg+ / node_t, vs. sub+ / node_, always rng+:
                 pruned_node_ = [node for node in node_ if node.Et[0] > G_aves[fd] * node.Et[2]]  # not be needed?
                 if len(pruned_node_) > 10:
-                    agg_recursion(rroot, root, iQ=pruned_node_, Q=list(combinations(pruned_node_,r=2)), nrng=1, fagg=1)
+                    agg_recursion(rroot, root, node_=pruned_node_, Q=list(combinations(pruned_node_,r=2)), nrng=1, fagg=1)
                     if rroot and fd and root.derH:  # der+ only (check not empty root.derH)
                         rroot.fback_ += [root.derH]
                         feedback(rroot)  # update root.root..
@@ -124,15 +123,13 @@ def comp_G(link, iEt, nrng=None): # add flat dderH to link and link to the rims 
         # / P
         Et, md_ = comp_latuple(_G.latuple, G.latuple, rn, fagg=1)
         dderH.n = 1; dderH.Et = Et
-        dderH.H = [CH(nest=0, Et=[*Et], H=md_, n=1)]  # we need init n in this CH too
+        dderH.H = [CH(nest=0, Et=[*Et], H=md_, n=1)]
         comp_ext(_G,G, dist, rn, dderH)
         # / PP, if >1 Ps:
         if _G.iderH and G.iderH: _G.iderH.comp_(G.iderH, dderH, rn, fagg=1, flat=0)
     # / G, if >1 PPs | Gs:
-    if _G.extH and G.extH:  # G.extH.H contains multiple He(md_) here, so flat should be true, else we are increasing their nesting here
-        _G.extH.comp_(G.extH, dderH, rn, fagg=1, flat=1)  # always true in der+ (extH and dderH are inverted here)
-    if _G.derH and G.derH: 
-        _G.derH.comp_(G.derH, dderH, rn, fagg=1, flat=0)  # append and sum new dderH to base dderH (derH and dderH are inverted here)
+    if _G.extH and G.extH: _G.extH.comp_(G.extH, dderH, rn, fagg=1, flat=1)  # always true in der+
+    if _G.derH and G.derH: _G.derH.comp_(G.derH, dderH, rn, fagg=1, flat=0)  # append and sum new dderH to base dderH
 
     link.dderH.append_(dderH, flat=0)  # append nested, higher-res lower-der summation in sub-G extH
     iEt[:] = np.add(iEt,dderH.Et[:4])  # init eval rng+ and form_graph_t by total m|d?
@@ -143,7 +140,6 @@ def comp_G(link, iEt, nrng=None): # add flat dderH to link and link to the rims 
                 for node in _G,G:
                     for _link in node.rim:
                         if comp_angle(link.angle, _link.angle)[0] > ave_mA:
-                            # i checked and so far i didn't get any same link in _link.med_Gl with link
                             link.med_Gl_ += _link.med_Gl_ # _med_Gl_ angle should match too, unless empty
                             link.med_Gl_ += [(_link._node if _link.node is _G else _link.node, _link)]  # default new med_Gl
                     link.node.rim += [link]
@@ -212,9 +208,7 @@ def node_connect(iG_):  # node connectivity = sum surround link vals, incr.media
                 if not val: continue  # G has no new links
                 ave = G_aves[i]
                 for link in G.rim:
-                    # we should use last layer link.dderH.H[-1].H
-                    if len(link.dderH.H[-1].H) <= (len(G.extH.H) if G.extH else 0): continue
-                    # also in der+, length of link.dderH.H[-1].H == G.extH.H, so this is valid for rng+ only?
+                    if len(link.dderH.H) <= (G.extH.H if G.extH else 0): continue  # old links, else dderH is appended in comp_G
                     # > ave derGs in new fd rim:
                     lval,lrdn,ldec = link.Et[i::2]  # step=2, graph-specific vals accumulated from surrounding nodes
                     decay =  (ldec/ (link.dderH.n * 6)) ** mediation  # normalized decay at current mediation
@@ -243,9 +237,8 @@ def segment_node_(root, node_, fd, nrng, fagg):  # eval rim links with summed su
     igraph_ = []; ave = G_aves[fd]
 
     for G in node_:  # init per node
-        # G.rim may contain prior layer rims, i think we can check that with node_?
-        rim = [link for link in G.rim if link.node in node_ and link._node in node_]
-        grapht = [[G],[],[*G.Et], rim]  # link_ = rim
+        uprim = [link for link in G.rim if len(link.dderH.H) > (G.extH.H if G.extH else 0)]
+        grapht = [[G],[],[*G.Et], uprim]  # link_ = updated rim
         G.root = grapht  # for G merge
         igraph_ += [grapht]
     _graph_ = copy(igraph_)
@@ -284,10 +277,9 @@ def segment_node_(root, node_, fd, nrng, fagg):  # eval rim links with summed su
             if len(new_Rim) * inVal > ave * inRdn:
                 grapht.pop(-1); grapht += [new_Rim]
                 graph_ += [grapht]  # replace Rim
-
-        if graph_: _graph_ = graph_  # selected graph expansion
+        # select graph expansion:
+        if graph_: _graph_ = graph_
         else: break
-
     graph_ = []
     for grapht in igraph_:
         if grapht[2][fd] > ave * grapht[2][2+fd]:  # form Cgraphs if Val > ave* Rdn
