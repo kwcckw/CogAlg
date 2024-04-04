@@ -207,41 +207,75 @@ def node_convolve(iG_):  # node connectivity = sum surround link vals, incr.medi
     Replace mnode_, dnode_ with node_G_, link_G_: composed of links. Angle match | difference match in clustering links?
     Add backprop to revise G assignment: if M > (ave * len Rim) * (Rm / len Rim)?
     '''
-    _G_ = iG_
-    while True:
-        # eval accumulated G connectivity with node-mediated range extension
-        G_ = []  # next connectivity expansion, more selective by DV,Lent
-        mediation = 1  # n intermediated nodes, increasing decay
-        for G in _G_:
-            uprim = []  # >ave updates of direct links
+
+    # initial partial grapht
+    _pGt_ = []
+    for G in iG_:
+        _pGt_ += [[[G], [*G.Et], copy(G.rim)]]
+    
+    iterations = 0
+    step_size = 0.1
+    while iterations < 10:  # 10 is just a random number
+        pGt_ = []  
+        mediation = 1  # not sure if we need this now
+
+        for _pGt in _pGt_:  
+            # feedforward process (per pGt)
+            _G_, _Et, _rim = _pGt  # Et probably not needed
+            
+            while True:  # search and check to include adjacent mnodes or dlinks
+                G_, Et, rim = [], [0,0,0,0,0,0], [] 
+                losst = [0,0]
+                for i in 0,1:
+                    n_included, n_total = 0, 0
+                    # kernel starts from each node or link
+                    for G in _rim if i else _G_:
+                        ave = G_aves[i]
+                        if i:   # G is dlink: get dlink._G.rim dlinks
+                            link_ = []
+                            dlink = G  # reassign for clarity
+                            if dlink.Et[1] > ave * dlink.Et[3]:
+                                link_ += [_link for _link in dlink._node.rim if _link.Et[1] > ave * _link.Et[3]]  
+                        else:
+                            val,rdn = G.Et[i::2]  # rng+ for both segment forks
+                            if not val: continue  # G has no new links
+                            link_ = G.rim
+                        
+                        for link in link_:
+                            if iterations > 1 and (link in _pGt[2] or link._node in _pGt[0]): continue  # check for included
+ 
+                            # Based on:  M > (ave * len Rim) * (Rm / len Rim)
+                            # Not sure on M and Rm
+                            M = link.Et[0] if i else link._node.Et[0]
+                            Rm = link.Et[2] if i else link._node.Et[2]
+                            if M >  (ave * len(link_)) * (Rm / len(link_)):  # eval for inclusion
+                                # add G and their link to partial grapht
+                                _pGt[0] += [link._node]
+                                _pGt[1][:] = [V + v for V, v in zip(_pGt[1], link.Et)]  # Et
+                                _pGt[2] += [link]
+                                # for next feedforward
+                                G_ += [link._node]
+                                rim += [link]
+                                # add to mnode or dlink's Et
+                                G.Et[:] = [V + v for V, v in zip(G.Et, link.Et)]  # Et
+                                n_included += 1
+
+                        n_total += len(link_)
+                    losst[i] = 1- (n_included/n_total) if n_total > 0 else 1  # loss, range from 0 -1 (0 is the best (all nodes included), 1 is the worst)
+                        
+                if G_ or rim:
+                    _G_, _rim = G_, rim
+                    mediation += 1
+                else:
+                    break
+                
+            # feedback process after single iteration is done (per pGt)
             for i in 0,1:
-                val,rdn = G.Et[i::2]  # rng+ for both segment forks
-                if not val: continue  # G has no new links
-                ave = G_aves[i]
-                for link in G.rim:
-                    if len(link.dderH.H)<=len(G.extH.H): continue  # old links, else dderH+= in comp_G
-                    # > ave derGs in new fd rim:
-                    lval,lrdn,ldec = link.Et[i::2]  # step=2, graph-specific vals accumulated from surrounding nodes
-                    # not sure this is relevant now:
-                    decay =  (ldec/ (link.dderH.n * 6)) ** mediation  # normalized decay at current mediation
-                    _G = link._node if link.node is G else link.node
-                    _val,_rdn = _G.Et[i::2]
-                    # current-loop vals and their difference from last-loop vals, before updating:
-                    V = (val+_val) * decay; dv = V-lval
-                    R = (rdn+_rdn)  # rdn doesn't decay
-                    link.Et[i:4:2] = [V,R]  # last-loop vals for next loop | segment_node_, dect is not updated
-                    if dv > ave * R:  # extend mediation if last-update val, may be negative
-                        G.Et[i::2] = [V+v for V,v in zip(G.Et[i::2],[V,R])]  # last layer link vals
-                        if link not in uprim: uprim += [link]
-                    if V > ave * R:  # updated even if terminated
-                        G.Et[i::2] = [V+v for V,v in zip(G.Et[i::2], [dv,R])]  # use absolute R?
-            if uprim:
-                G_ += [G]  # list of nodes to check in next loop
-        if G_:
-            mediation += 1  # n intermediated nodes in next loop
-            _G_ = G_  # exclude weakly incremented Gs from next connectivity expansion loop
-        else:
-            break
+                for G in _rim if i else _G_:
+                    G.Et[0] *=  1 + (losst[i] * step_size)  # adjust Et based on step size and loss in each iteration
+                    
+        iterations += 1
+        
 
 def segment_node_(root, node_, fd, nrng, fagg):  # eval rim links with summed surround vals for density-based clustering
 
