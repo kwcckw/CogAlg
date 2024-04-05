@@ -212,36 +212,54 @@ def node_convolve(node_, link_):  # node connectivity = sum surround link vals, 
             kernel_ += [[[element], element.Et[0], 1]]  # 1: n of nested elements, for normalization
             kV += element.Et[0]  #| pass root.Et[0]
         kernel__, HV = [], 0  # convo hierarchy, V
-        # feedforward:
+
         while iterations < 10:
+            # feedforward:
             Kernel_, KV = [], 0  # form larger next-layer kernels from adjacent nodes or dlinks
-            E_, V, N = [], 0, 0  # N of nested elements, probably only per kernel, not layer
             for e_, v, n in kernel_:
+                # E_ should be init with e_?
+                E_, V, N = copy(e_), 0, 0  # N of nested elements, probably only per kernel, not layer (should be moved here if per kernel)
                 for e in e_:
                     if fd:  # get dlink._node.rim dlinks,
-                        for G in e._node, e.node:  # only use node|_node that wasn't used to get e_?
+                        for G in e._node, e.node:  # only use node|_node that wasn't used to get e_? (i think we can use both, but we need to check if they are alrady in E_)
                             for link in G.rim:
-                                if link.Et[1] > ave * link.Et[3]:
-                                    E_ += [link]; V += link.Et[1]
+                                if link not in E_ and link.Et[1] + (v/len(kernel_)) > ave * link.Et[3]:  # should include average of v here? Else this eval is same in every iteration
+                                    E_ += [link]; V += link.Et[1]; N += 1
                     else:  # get alt nodes
                         for link in e.rim:
                             node = link._node if link.node is e else link.node
-                            if node.Et[0] > ave * node.Et[2]:
-                                E_ += [node]; V += node.Et[0]
+                            if node not in E_ and node.Et[0] +  (v/len(kernel_)) > ave * node.Et[2]:  # we need to check if node not in E_ because E_ is per kernel_, we may add back a same node)
+                                E_ += [node]; V += node.Et[0]; N += 1
                 # next layer:
                 Kernel_ += [[E_,V, N]]; KV += V
             # convo hierarchy:
             kernel__ += [[Kernel_,KV]]; HV += KV
 
-        # backprop per kernel__ layer Kernels to their sub-kernels in the lower layer:
-        while kernel__:
-            Kernel_, _, _ = kernel__.pop()  # unpack lower layer
-            for Kernel, V, N in Kernel_:
-                rV = V / (ave * N)  # relative inclusion value
-                for i, (kernel, v, n) in enumerate(Kernel):  # sub-kernels
-                    Kernel[i][1] = v * (rV * rim_effect)  # adjust based on higher-kernel relative inclusion value
-                    # kernels should be in lower layer, i in Kernel is just a reference?
-        iterations += 1
+            # backprop per kernel__ layer Kernels to their sub-kernels in the lower layer:
+            total_N = 0
+            for Kernel_, KV in kernel__:
+                for i, (Kernel, V, N) in enumerate(Kernel_):
+                    total_N += N
+                    if N == 0:  # if there's no prior inclusion, increase V?
+                        rV = 2
+                    else:
+                        rV = V / (ave * N)  # relative inclusion value
+                    Kernel_[i][1] = V * (rV * rim_effect)
+                    
+                    # sub-kernels
+                    for e in Kernel[1:]:  # skip the 1st element because 1st element's  Kernel is the Kernel in the loop
+                        e_ = [k[0][0] for k in Kernel_]
+                        _Kernel = Kernel_[e_.index(e)]  # find Kernel of e
+                        _Kernel[1] = _Kernel[1] * (rV * rim_effect)  # adjust based on higher-kernel relative inclusion value
+                        # kernels should be in lower layer, i in Kernel is just a reference? (we should use index to retreive Kernel of each e instead)
+                      
+            # terminate if there's no new inclusion         
+            if total_N == 0:
+                break
+            else:
+                kernel_ = kernel__[-1][0]  # for next iteration
+                      
+            iterations += 1
 
 # not updated:
 def segment_node_(root, node_, fd, nrng, fagg):  # eval rim links with summed surround vals for density-based clustering
