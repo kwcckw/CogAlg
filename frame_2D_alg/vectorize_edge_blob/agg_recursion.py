@@ -192,8 +192,10 @@ def convolve_graph(node_, link_):  # revalue nodes and links by the value of the
                 V = e.Et[fd]; R = e.Et[2+fd]
                 kernels += [[[e], V, R]]  # init kernel / node|link, no neighborhood yet
                 lV += V; lR += R
-            layers = [[kernels], lV, lR]  # init convo layers
+            layers = [[kernels, lV, lR]]  # init convo layers
             _hV = lV; _hR = lR
+
+            len_root_e_ = len(kernels)
             while True:  # bottom-up feedforward, break if kernel == root E_
                 # add higher layer of larger kernels: += adjacent nodes or dlinks:
                 Kernels, lV,lR = [],0,0
@@ -213,23 +215,37 @@ def convolve_graph(node_, link_):  # revalue nodes and links by the value of the
                                     E_+=[node]; V+=node.Et[0]; R+=link.Et[3]
                     Kernels += [[E_,V,R]]; lV+=V; lR+=R
                 layers += [[Kernels,lV,lR]]; hV=lV; hR=lR
-                if len(Kernels[0]) == 1:
+
+                cover_full_graph = [1 for K in Kernels if len(K[0]) == len_root_e_]
+                if cover_full_graph:  # what if they never cover full graph? We need to set a minimum number of feedforward iterations?
                     break  # stop if one Kernel covers the whole root node_|link_
                 else:
                     kernels = Kernels
             # backprop per layer of Kernels to their sub-kernels in lower layer:
-            elev = len(layers)
             while layers:
-                Kernels,_,_,_ = layers.pop()  # unpack top-down
-                elev -= 1  # elevation of the lower layer, to be adjusted
+                Kernels,_,_ = layers.pop()  # unpack top-down
                 for Kernel,V,R in Kernels:
-                    rV = V / (ave * len(Kernel[0]))  # relative inclusion value, no use for R?
-                    for i, (kernel,v,r) in enumerate(Kernel):
-                        # adjust element val by wider Kernel relative val, rdn is not affected?
-                        if elev:  # adjust lower kernel V:
-                            Kernel[0][i][1] = v * (rV * rim_effect)  # this is wrong, should be lower-layer kernel that contains Kernel[0][i]
-                        else:  # bottom layer, adjust node|link V:
-                            Kernel[0][i].Et[fd] = v * (rV * rim_effect)
+                    rV = V / (ave * len(Kernel))  # relative inclusion value, no use for R?   
+                    G_ = [K[0][0] for K in Kernels]
+                    # for i, (kernel,v,r) in enumerate(Kernel):  (Kernel is flat list of Gs or links, we need retrieve their Kernel from Kernels)       
+                    for G in Kernel:
+                        G_index = G_.index(G)
+                        _Kernel, _V, _R = Kernels[G_index]  # retrieve each G or link's Kernel
+
+                        if _Kernel is not Kernel:  # prevent reassignment to self?
+                            # adjust element val by wider Kernel relative val, rdn is not affected?
+                            # elev can be checked with len(layers) because assignment should be done when len(layers) == 0
+                            if len(layers):  # adjust lower kernel V:
+                                # retrieve index of lower layer kernels
+                                _Kernels,_,_ = layers[-1]
+                                _G_ = [K[0][0] for K in _Kernels]
+                                _G_index = _G_.index(G)
+                                # adjust lower layer Kernel (adjust all lower or just single lower layer?)
+                                __Kernel, __V, __R = _Kernels[_G_index]
+                                _Kernels[_G_index][1] = __V * (rV * rim_effect)
+                            else:  # bottom layer, adjust node|link V:
+                                # adjust only the first added node|link
+                                _Kernel[0].Et[fd] = _V * (rV * rim_effect)
 
             iterations += 1
             if abs(_hV - hV) < ave or hV < ave*hR:  # low adjustment or net value?
