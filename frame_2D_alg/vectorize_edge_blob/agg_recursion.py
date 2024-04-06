@@ -71,10 +71,10 @@ def agg_recursion(rroot, root, node_, Q, nrng=1, fagg=0):  # lenH = len(root.agg
         nrng, Et = rng_recursion(rroot, root, node_, Q, Et, nrng=nrng)  # rng+ appends prelink_ -> rim, link.dderH
     else:
         for link in Q:  # der+ node Gs, dderH append, not directly recursive, all >der+ ave?
-            comp_G(link,Et)  # der+'rng+: cluster by angle in hyperlinks, comp beyond root graph?
+            comp_G(link,Et)  # der+'rng+ per hyperlink: cluster by angle, comp beyond root graph?
     for link in root.link_: link.Et = copy(link.dderH.Et)  # for accumulation from surrounding nodes:
 
-    node_convolve(node_, root.link_)  # graph convolution over G_, Link_
+    convolve_graph(node_, root.link_)  # graph convolution over G_, Link_
     upnode_ = []
     for G in node_:
         if sum(G.Et[:2]):  # G.rim was extended, sum in G.extH:
@@ -174,13 +174,76 @@ def comp_ext(_G,G, dist, rn, dderH):  # compare non-derivatives: dist, node_' L,
 
     dderH.append_(CH(Et=[M,D,mrdn,drdn,mdec,ddec], H=[prox,dist, mL,dL, mS,dS, mA,dA], n=2/3), flat=0)  # 2/3 of 6-param unit
 
+def convolve_graph(node_, link_):  # revalue nodes and links by the value of their increasingly wide neighborhood:
+    '''
+    Sum connectivity per node|link from their links|nodes, extended in feedforward through the network, bottom-up.
+    Then backprop adjusts node|link connect value by relative value of its higher-layer neighborhood, top-down.
+    Math: https://github.com/boris-kz/CogAlg/blob/master/frame_2D_alg/Illustrations/node_connect.png
+    '''
+    rim_effect = 0.5  # impact of neighborhood inclusion on node|link inclusion
+
+    for fd, e_ in zip((0,1), (node_,link_)):
+        ave = G_aves[fd]
+        iterations = 0
+        # ff,fb through all layers, break if abs(_hV-hV) < ave or hV < ave:
+        while True:
+            kernels, lV, lR = [], 0, 0  # form/reform base layer of kernels per node|link:
+            for e in e_:  # root node_|link_
+                V = e.Et[fd]; R = e.Et[2+fd]
+                kernels += [[[e], V, R]]  # init kernel / node|link, no neighborhood yet
+                lV += V; lR += R
+            layers = [[kernels], lV, lR]  # init convo layers
+            _hV = lV; _hR = lR
+            while True:  # bottom-up feedforward, break if kernel == root E_
+                # add higher layer of larger kernels: += adjacent nodes or dlinks:
+                Kernels, lV,lR = [],0,0
+                for e_,v,r in kernels:  # v,r for feedback only, overlap between kernels
+                    E_,V,R = e_,v,r  # init with lower kernel
+                    for e in e_:
+                        if fd:  # += dlinks in link._node.rim:
+                            for G in e._node, e.node:
+                                for link in G.rim:
+                                    if link not in E_ and link.Et[1] > ave * link.Et[3]:
+                                        E_+=[link]; V+=link.Et[1]; R+=link.Et[3]
+                        else:  # += linked nodes
+                            V,R = e.Et[0],e.Et[2]
+                            for link in e.rim:
+                                node = link._node if link.node is e else link.node
+                                if node not in E_ and node.Et[0] > ave * node.Et[2]:
+                                    E_+=[node]; V+=node.Et[0]; R+=link.Et[3]
+                    Kernels += [[E_,V,R]]; lV+=V; lR+=R
+                layers += [[Kernels,lV,lR]]; hV=lV; hR=lR
+                if len(Kernels[0]) == 1:
+                    break  # stop if one Kernel covers the whole root node_|link_
+                else:
+                    kernels = Kernels
+            # backprop per layer of Kernels to their sub-kernels in lower layer:
+            elev = len(layers)
+            while layers:
+                Kernels,_,_,_ = layers.pop()  # unpack top-down
+                elev -= 1  # elevation of the lower layer, to be adjusted
+                for Kernel,V,R in Kernels:
+                    rV = V / (ave * len(Kernel[0]))  # relative inclusion value, no use for R?
+                    for i, (kernel,v,r) in enumerate(Kernel):
+                        # adjust element val by wider Kernel relative val, rdn is not affected?
+                        if elev:  # adjust lower kernel V:
+                            Kernel[0][i][1] = v * (rV * rim_effect)  # this is wrong, should be lower-layer kernel that contains Kernel[0][i]
+                        else:  # bottom layer, adjust node|link V:
+                            Kernel[0][i].Et[fd] = v * (rV * rim_effect)
+
+            iterations += 1
+            if abs(_hV - hV) < ave or hV < ave*hR:  # low adjustment or net value?
+                break
+            else: _hV=hV; _hR=hR
+
 
 def form_graph_t(root, node_, Et, nrng, fagg=0):  # form Gm_,Gd_ from same-root nodes
 
     node_t = []
     for fd in 0,1:
         if Et[fd] > ave * Et[2+fd]:  # eVal > ave * eRdn
-            graph_ = segment_node_(root, node_, fd, nrng, fagg)
+            # Replace mnode_,dnode_ with node_G_,link_G_. Angle match | difference match in clustering links?
+            graph_ = segment_graph(root, root.link_ if fd else node_, fd, nrng, fagg)
             if fd:  # der+ after rng++ term by high ds
                 for graph in graph_:
                     if graph.link_ and graph.Et[1] > G_aves[1] * graph.Et[3]:  # Et is summed from all links
@@ -195,86 +258,21 @@ def form_graph_t(root, node_, Et, nrng, fagg=0):  # form Gm_,Gd_ from same-root 
         root.node_[:] = node_t  # else keep root.node_
         return node_t
 
-# not draft:
-def node_convolve(node_, link_):  # node connectivity = sum surround link vals, incr.mediated: Graph Convolution of Correlations
-    '''
-    Aggregate direct * indirect connectivity per node from indirect links via associated nodes, in multiple cycles.
-    Each cycle adds contributions of previous cycles to linked-nodes connectivity, propagated through the network.
-    Math: https://github.com/boris-kz/CogAlg/blob/master/frame_2D_alg/Illustrations/node_connect.png
-    Replace mnode_, dnode_ with node_G_, link_G_: composed of links. Angle match | difference match in clustering links?
-    '''
-    iterations = 0; rim_effect = 0.1
-
-    for fd, element_ in zip((0, 1), (node_, link_)):
-        ave = G_aves[fd]
-        kernel_, kV = [], 0  # init kernel per element:
-        for element in element_:
-            kernel_ += [[[element], element.Et[0], 1]]  # 1: n of nested elements, for normalization
-            kV += element.Et[0]  #| pass root.Et[0]
-        kernel__, HV = [], 0  # convo hierarchy, V
-
-        while iterations < 10:
-            # feedforward:
-            Kernel_, KV = [], 0  # form larger next-layer kernels from adjacent nodes or dlinks
-            for e_, v, n in kernel_:
-                # E_ should be init with e_?
-                E_, V, N = copy(e_), 0, 0  # N of nested elements, probably only per kernel, not layer (should be moved here if per kernel)
-                for e in e_:
-                    if fd:  # get dlink._node.rim dlinks,
-                        for G in e._node, e.node:  # only use node|_node that wasn't used to get e_? (i think we can use both, but we need to check if they are alrady in E_)
-                            for link in G.rim:
-                                if link not in E_ and link.Et[1] + (v/len(kernel_)) > ave * link.Et[3]:  # should include average of v here? Else this eval is same in every iteration
-                                    E_ += [link]; V += link.Et[1]; N += 1
-                    else:  # get alt nodes
-                        for link in e.rim:
-                            node = link._node if link.node is e else link.node
-                            if node not in E_ and node.Et[0] +  (v/len(kernel_)) > ave * node.Et[2]:  # we need to check if node not in E_ because E_ is per kernel_, we may add back a same node)
-                                E_ += [node]; V += node.Et[0]; N += 1
-                # next layer:
-                Kernel_ += [[E_,V, N]]; KV += V
-            # convo hierarchy:
-            kernel__ += [[Kernel_,KV]]; HV += KV
-
-            # backprop per kernel__ layer Kernels to their sub-kernels in the lower layer:
-            total_N = 0
-            for Kernel_, KV in kernel__:
-                for i, (Kernel, V, N) in enumerate(Kernel_):
-                    total_N += N
-                    if N == 0:  # if there's no prior inclusion, increase V?
-                        rV = 2
-                    else:
-                        rV = V / (ave * N)  # relative inclusion value
-                    Kernel_[i][1] = V * (rV * rim_effect)
-                    
-                    # sub-kernels
-                    for e in Kernel[1:]:  # skip the 1st element because 1st element's  Kernel is the Kernel in the loop
-                        e_ = [k[0][0] for k in Kernel_]
-                        _Kernel = Kernel_[e_.index(e)]  # find Kernel of e
-                        _Kernel[1] = _Kernel[1] * (rV * rim_effect)  # adjust based on higher-kernel relative inclusion value
-                        # kernels should be in lower layer, i in Kernel is just a reference? (we should use index to retreive Kernel of each e instead)
-                      
-            # terminate if there's no new inclusion         
-            if total_N == 0:
-                break
-            else:
-                kernel_ = kernel__[-1][0]  # for next iteration
-                      
-            iterations += 1
 
 # not updated:
-def segment_node_(root, node_, fd, nrng, fagg):  # eval rim links with summed surround vals for density-based clustering
+def segment_graph(root, Q, fd, nrng, fagg):  # eval rim links with summed surround vals for density-based clustering
 
     # graph+= [node] if >ave (surround connectivity * relative value of link to any internal node)
     igraph_ = []; ave = G_aves[fd]
 
-    for G in node_:  # init per node
-        uprim = [link for link in G.rim if len(link.dderH.H)==len(G.extH.H)]
+    for e in Q:  # init per node or link
+        uprim = [link for link in e.rim if len(link.dderH.H)==len(e.extH.H)]
         if uprim:  # skip nodes without add new added rim
-            grapht = [[G],[],[*G.Et], uprim]  # link_ = updated rim
-            G.root = grapht  # for merging
+            grapht = [[e],[],[*e.Et], uprim]  # link_ = updated rim
+            e.root = grapht  # for merging
             igraph_ += [grapht]
         else:
-            G.root = None
+            e.root = None
     _graph_ = copy(igraph_)
 
     while True:
