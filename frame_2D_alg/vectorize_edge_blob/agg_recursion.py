@@ -1,7 +1,7 @@
 import numpy as np
 from copy import deepcopy, copy
 from itertools import combinations, zip_longest
-from .slice_edge import comp_angle, CsliceEdge, Clink
+from .slice_edge import comp_angle, CsliceEdge, Clink, comp_ext
 from .comp_slice import ider_recursion, comp_latuple, get_match
 from .filters import aves, ave_mL, ave_dangle, ave, G_aves, ave_Gm, ave_Gd, ave_dist, ave_mA, max_dist
 from utils import box2center, extend_box
@@ -119,7 +119,7 @@ def rng_recursion(rroot, root, node_, prelinks, Et, nrng=1):  # rng++/G_, der+/l
     return nrng, Et
 
 
-def comp_G(link, iEt, nrng=None): # add flat dderH to link and link to the rims of comparands
+def comp_G(link, iEt, nrng=None, fkernel=0): # add flat dderH to link and link to the rims of comparands
 
     dderH = CH()  # new layer of link.dderH
     if isinstance(link, Clink):
@@ -144,35 +144,19 @@ def comp_G(link, iEt, nrng=None): # add flat dderH to link and link to the rims 
     for i in 0,1:
         Val, Rdn = dderH.Et[i:4:2]  # exclude dect
         if Val > G_aves[i] * Rdn:
-            if not fd:
+            if not i:  # should be i here? else we are adding a same link into node.rim twice
                 for node in _G,G:
                     for _link in node.rim:
                         if comp_angle(link.angle, _link.angle)[0] > ave_mA:
                             link.med_Gl_ += _link.med_Gl_  # med_links angle should also match
                             link.med_Gl_ += [(_link._node if _link.node is _G else _link.node, _link)]  # default new med_Gl
-                    link.node.rim += [link]
+                    node.rim += [link]  #should be node.rim instead of link.node.rim here
             _G.Et[i] += Val; G.Et[i] += Val
             _G.Et[2+i] += Rdn; G.Et[2+i] += Rdn  # per fork link in both Gs
             # if select fork links: iEt[i::2] = [V+v for V,v in zip(iEt[i::2], dderH.Et[i::2])]
 
-def comp_ext(_G,G, dist, rn, dderH):  # compare non-derivatives: dist, node_' L,S,A:
+    if fkernel: return dderH
 
-    prox = ave_dist - dist  # proximity = inverted distance (position difference), no prior accum to n
-    _L = len(_G.node_); L = len(G.node_); L/=rn
-    _S, S = _G.S, G.S; S/=rn
-
-    dL = _L - L;      mL = min(_L,L) - ave_mL  # direct match
-    dS = _S/_L - S/L; mS = min(_S,S) - ave_mL  # sparsity is accumulated over L
-    mA, dA = comp_angle(_G.A, G.A)  # angle is not normalized
-
-    M = prox + mL + mS + mA
-    D = dist + abs(dL) + abs(dS) + abs(dA)  # signed dA?
-    mrdn = M > D; drdn = D<= M
-
-    mdec = prox / max_dist + mL/ max(L,_L) + mS/ max(S,_S) if S or _S else 1 + mA  # Amax = 1
-    ddec = dist / max_dist + mL/ (L+_L) + dS/ (S+_S) if S or _S else 1 + dA
-
-    dderH.append_(CH(Et=[M,D,mrdn,drdn,mdec,ddec], H=[prox,dist, mL,dL, mS,dS, mA,dA], n=2/3), flat=0)  # 2/3 of 6-param unit
 
 
 def convolve_graph(node_, link_):  # revalue nodes and links by the value of their increasingly wide neighborhood:
@@ -186,7 +170,7 @@ def convolve_graph(node_, link_):  # revalue nodes and links by the value of the
 
     for fd, e_ in zip((0,1), (node_,link_)):
         ave = G_aves[fd]
-        Ce = [CG,Clink][fd]; comp = [comp_G, Clink.comp_link][fd]
+        Ce = [CG,Clink][fd]
         iterations = 0
         # ff,fb through all layers, break if abs(_hV-hV) < ave or hV < ave:
         while True:
@@ -203,7 +187,8 @@ def convolve_graph(node_, link_):  # revalue nodes and links by the value of the
                     for link in e.rim:
                         node = link._node if link.node is e else link.node
                         if node.Et[0] > ave * node.Et[2]:
-                            E_+=[node]; np.add(Et,link.Et); n += 1
+                            # node doesn't have decay, sum only 4 params in Et
+                            E_+=[node]; Et = [V+v for V,v in zip(Et, link.Et)]; n += 1
                 kernel = Ce(node_=E_,Et=Et,n=n); e.root = kernel  # replace in sum2graph
                 kernels += [kernel]
                 lV+=Et[fd]; lR+=Et[2+fd]
@@ -212,7 +197,8 @@ def convolve_graph(node_, link_):  # revalue nodes and links by the value of the
             while True:  # add higher layer Kernels: node_= new center + extended rim, break if kernel == root E_: no higher kernels
                 Kernels, lV,lR = [],0,0
                 for kernel in kernels:  # CG | Clink
-                    Kernel = Ce(node_=[kernel]); kernel.root=Kernel  # init with each lower kernel (central), add new rim from current rim roots:
+                    # init n = 1, for existing [kernel]
+                    Kernel = Ce(node_=[kernel],n=1); kernel.root=Kernel  # init with each lower kernel (central), add new rim from current rim roots:
                     '''
                     next layer wider Kernels: get root _Kernel of each _kernel in current rim, add _Kernel rim __kernels if not in current rim. 
                     Those rim _Kernels are a bridge between current rim and extended rim, they include both:
@@ -222,7 +208,7 @@ def convolve_graph(node_, link_):  # revalue nodes and links by the value of the
                         for _e in _kernel.node_[1:]:
                             __kernel = _e.root
                             if __kernel not in Kernel.node_ and __kernel not in kernel.node_:  # not in current rim, add to new rim:
-                                Kernel.node_ += [__kernel]; np.add(Kernel.Et, __kernel.Et); Kernel.n+=__kernel.n
+                                Kernel.node_ += [__kernel]; Kernel.Et=[V+v for V,v in zip(Kernel.Et, __kernel.Et)]; Kernel.n+=1  # this n could be incremented by 1? Because each __kernel.n is > 1 (based on their E_), this will never true: Kernels[0].n == len([node_,link_][fd]):
                                 # add summing kernel params for centroid comparison,
                                 # as in sum2graph?
                     Kernels += [Kernel]; lV+=Kernel.Et[fd]; lR+=Kernel.Et[2+fd]
@@ -233,23 +219,50 @@ def convolve_graph(node_, link_):  # revalue nodes and links by the value of the
                     kernels = Kernels
             # backprop per layer of centroid Kernels to their sub-kernels in lower layer, draft:
             while layers:
-                Kernels,_,_ = layers.pop()  # unpack top-down
+                if len(layers) == 1: break  # skip if it's the bottom layer (nothing to compare?, their Et will be adjusted below, when len(layers) == 1)
+                Kernels,_,_ = layers.pop()  # unpack top-down  
                 for Kernel in Kernels:
                     for kernel in Kernel.node_:
-                        dderH = comp(Kernel, kernel)
-                        rV = dderH.Et[fd] / (ave * dderH.n) * rim_effect
+                        DderH = comp_kernel(Kernel, kernel, fd)
+                        if fd: Kernel.dderH.append_(DderH,flat=0)  # sum dderH into Kernel using append?
+                        else:  Kernel.derH.append_(DderH,flat=0)
+                        rV = DderH.Et[fd] / (ave * DderH.n) * rim_effect
                         kernel.Et[fd] *= rV  # adjust element inclusion value by relative value of Kernel, rdn is not affected?
-                        if not len(layers):  # bottom layer
-                            for e in kernel.node_:  # adjust base node|link V:
-                                dderh = comp(kernel, e)
-                                rv = dderh.Et[fd] / (ave * dderh.n) * rim_effect
-                                e.Et[fd] *= rv
+                        # for bottom layer, their len(layers is 1)
+                        if len(layers) == 1:  # bottom layer
+                            for e in kernel.node_:  # adjust base node|link V:          
+                                dderH = comp_kernel(kernel, e, fd) 
+                                if fd: kernel.dderH.append_(dderH,flat=0) 
+                                else:  kernel.derH.append_(dderH,flat=0)
+                                rv = dderH.Et[fd] / (ave * dderH.n) * rim_effect
+                                e.Et[fd] *= rv                      
+                    
             iterations += 1
             if abs(_hV - hV) < ave or hV < ave*hR:  # low adjustment or net value?
                 break
             else:
-                _hV=hV; _hR=hR
+                _hV=hV; _hR=hR  # hR is not used?
 
+
+def comp_kernel(_kernel, kernel, fd):
+    
+    if fd:
+        dderH = CH()
+        _kernel.comp_link(kernel, dderH)
+    else:
+        # use the first base node box to compute dist and dy,dx?
+        # unpack recursively because both _kernel and kernel has different depth
+        _kernel0 = _kernel; kernel0 = _kernel; 
+        while isinstance(_kernel0.node_[0], CG):
+            _kernel0 = _kernel0.node_[0]
+        while isinstance(kernel0.node_[0], CG):
+            kernel0 = kernel0.node_[0]
+        
+        cy, cx = box2center(_kernel0.box); _cy, _cx = box2center(kernel0.box); dy = cy - _cy; dx = cx - _cx
+        dist = np.hypot(dy, dx)  # distance between node centers
+        dderH = comp_G([_kernel,kernel, dist, [dy,dx]],iEt=[0,0,0,0], fkernel=1)
+
+    return dderH
 
 def form_graph_t(root, node_, Et, nrng, fagg=0):  # form Gm_,Gd_ from same-root nodes
 
