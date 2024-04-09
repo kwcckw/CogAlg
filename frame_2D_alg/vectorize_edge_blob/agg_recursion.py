@@ -1,7 +1,7 @@
 import numpy as np
 from copy import deepcopy, copy
 from itertools import combinations, zip_longest
-from .slice_edge import comp_angle, CsliceEdge, Clink, comp_ext
+from .slice_edge import comp_angle, CsliceEdge, Clink, comp_ext, CP
 from .comp_slice import ider_recursion, comp_latuple, get_match
 from .filters import aves, ave_mL, ave_dangle, ave, G_aves, ave_Gm, ave_Gd, ave_dist, ave_mA, max_dist
 from utils import box2center, extend_box
@@ -208,10 +208,18 @@ def convolve_graph(node_, link_):  # revalue nodes and links by the value of the
                         for _e in _kernel.node_[1:]:
                             __kernel = _e.root
                             if __kernel not in Kernel.node_ and __kernel not in kernel.node_:  # not in current rim, add to new rim:
-                                Kernel.node_ += [__kernel]; Kernel.Et=[V+v for V,v in zip(Kernel.Et, __kernel.Et)]; Kernel.n+=1  # this n could be incremented by 1? Because each __kernel.n is > 1 (based on their E_), this will never true: Kernels[0].n == len([node_,link_][fd]):
+                                Kernel.node_ += [__kernel]; Kernel.Et=[V+v for V,v in zip(Kernel.Et, __kernel.Et)]
                                 # add summing kernel params for centroid comparison,
                                 # as in sum2graph?
+                    
+                    # sum kernel params into Kernel's derH?
+                    for node in unpack_kernel(Kernel.node_):
+                        if Kernel.derH: Kernel.derH.add_(node)
+                        else:           Kernel.derH.append(node, flat=1)
+      
                     Kernels += [Kernel]; lV+=Kernel.Et[fd]; lR+=Kernel.Et[2+fd]
+                    Kernel.n = len(unpack_kernel(Kernel))
+                    
                 layers += [[Kernels,lV,lR]]; hV=lV; hR=lR
                 if Kernels[0].n == len([node_,link_][fd]):
                     break  # each Kernel covers the whole root node_|link_
@@ -224,7 +232,7 @@ def convolve_graph(node_, link_):  # revalue nodes and links by the value of the
                 for Kernel in Kernels:
                     for kernel in Kernel.node_:
                         DderH = comp_kernel(Kernel, kernel, fd)
-                        if fd: Kernel.dderH.append_(DderH,flat=0)  # sum dderH into Kernel using append?
+                        if fd: Kernel.dderH.append_(DderH,flat=0)  # add dderH as new element in Kernel.DderH?
                         else:  Kernel.derH.append_(DderH,flat=0)
                         rV = DderH.Et[fd] / (ave * DderH.n) * rim_effect
                         kernel.Et[fd] *= rV  # adjust element inclusion value by relative value of Kernel, rdn is not affected?
@@ -244,6 +252,19 @@ def convolve_graph(node_, link_):  # revalue nodes and links by the value of the
                 _hV=hV; _hR=hR  # hR is not used?
 
 
+# unpack kernel.node_ recursively and get all deepest unique links or nodes
+def unpack_kernel(kernel):
+    kernel_ = []
+    if not kernel.node_:  # deepst link has empty node_
+        kernel_ += [kernel]
+    elif isinstance(kernel.node_[0], CP):  # deepest node has CP as their nodes
+        kernel_ += [kernel]
+    else:
+        for node in kernel.node_:
+            kernel_ += unpack_kernel(node)  
+    return list(set(kernel_))  # remove duplication
+
+
 def comp_kernel(_kernel, kernel, fd):
     
     if fd:
@@ -252,13 +273,10 @@ def comp_kernel(_kernel, kernel, fd):
     else:
         # use the first base node box to compute dist and dy,dx?
         # unpack recursively because both _kernel and kernel has different depth
-        _kernel0 = _kernel; kernel0 = _kernel; 
-        while isinstance(_kernel0.node_[0], CG):
-            _kernel0 = _kernel0.node_[0]
-        while isinstance(kernel0.node_[0], CG):
-            kernel0 = kernel0.node_[0]
-        
-        cy, cx = box2center(_kernel0.box); _cy, _cx = box2center(kernel0.box); dy = cy - _cy; dx = cx - _cx
+        _node = unpack_kernel(_kernel)[0]
+        node = unpack_kernel(kernel)[0]
+
+        cy, cx = box2center(_node.box); _cy, _cx = box2center(node.box); dy = cy - _cy; dx = cx - _cx
         dist = np.hypot(dy, dx)  # distance between node centers
         dderH = comp_G([_kernel,kernel, dist, [dy,dx]],iEt=[0,0,0,0], fkernel=1)
 
