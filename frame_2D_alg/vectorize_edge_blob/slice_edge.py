@@ -82,11 +82,13 @@ class CsliceEdge(CsubFrame):
 
 class Clink(CBase):  # the product of comparison between two nodes
 
-    def __init__(l,_node=None, node=None, dderH= None, roott=None):
+    def __init__(l,_node=None, node=None, dderH= None, roott=None, distance=0, angle=None ):
         super().__init__()
-        l.angle = np.subtract(node.yx, _node.yx)  # dy,dx between node centers
-        l.distance = np.hypot(*l.angle)  # distance between node centers
-        l.Et = [0,0,0,0,0,0]  # graph-specific, accumulated from surrounding nodes in node_connect
+        # this yx method is valid for P only
+        l.angle = np.subtract(node.yx, _node.yx) if angle is None else angle  # dy,dx between node centers
+        l.distance = np.hypot(*l.angle) if distance is None else distance  # distance between node centers
+        l.Et = [0,0,0,0]  # graph-specific, accumulated from surrounding nodes in node_connect
+        l.Relt = [0,0] 
         l.node_ = []  # e_ in kernels, else replaces _node,node: not used in kernels?
         l.link_ = []  # list of mediating Clinks in hyperlink
         l.dderH = CH() if dderH is None else dderH
@@ -97,7 +99,7 @@ class Clink(CBase):  # the product of comparison between two nodes
         l.node = node
         l.med_Gl_ = []  # replace by link_, intermediate nodes and links in roughly the same direction, as in hypergraph edges
 
-    def __bool__(l): bool(l.dderH.H)
+    def __bool__(l): return len(l.dderH.H)>0
     # draft:
     def comp_link(_link, link, dderH, rn=1, fagg=0, flat=1):  # use in der+ and comp_kernel
 

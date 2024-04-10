@@ -49,7 +49,7 @@ def vectorize_root(image):  # vectorization in 3 composition levels of xcomp, cl
             ider_recursion(None, edge)  # vertical, lateral-overlap P cross-comp -> PP clustering
 
             for fd, node_ in enumerate(edge.node_):  # always node_t
-                if edge.iderH and edge.iderH.Et:
+                if edge.iderH and any(edge.iderH.Et):  # any for np array
                     if edge.iderH.Et[fd] * (len(node_)-1)*(edge.rng+1) > G_aves[fd] * edge.iderH.Et[2+fd]:
                         pruned_node_ = []
                         for PP in node_:  # PP -> G
@@ -72,9 +72,11 @@ def agg_recursion(rroot, root, node_, Q, nrng=1, fagg=0):  # lenH = len(root.agg
     else:
         for link in Q:  # der+ node Gs, dderH append, not directly recursive, all >der+ ave?
             comp_G(link,Et)  # der+'rng+ per hyperlink: cluster by angle, comp beyond root graph?
-    for link in root.link_: link.Et = copy(link.dderH.Et)  # for accumulation from surrounding nodes:
+    for link in root.link_: 
+        link.Et = copy(link.dderH.Et)  # for accumulation from surrounding nodes:
+        link.Relt = copy(link.dderH.Relt)  # or we can move this 2 line in comp_G?
 
-    convolve_graph(node_, root.link_)  # convolution over graph node_,link_
+    connect_graph(node_)  # convolution over graph node_,link_
     upnode_ = []
     for G in node_:
         if sum(G.Et[:2]):  # G.rim was extended, sum in G.extH:
@@ -129,9 +131,9 @@ def comp_G(link, iEt, nrng=None): # add flat dderH to link and link to the rims 
         _G,G, dist, [dy,dx] = link; rn = _G.n/G.n; fd=0
         link = Clink(_node=_G, node=G, distance=dist, angle=[dy,dx])
         # / P
-        Et, md_ = comp_latuple(_G.latuple, G.latuple, rn, fagg=1)
-        dderH.n = 1; dderH.Et = Et
-        dderH.H = [CH(nest=0, Et=[*Et], H=md_, n=1)]
+        Et, relt, md_ = comp_latuple(_G.latuple, G.latuple, rn, fagg=1)
+        dderH.n = 1; dderH.Et = Et; dderH.Relt=relt
+        dderH.H = [CH(nest=0, Et=copy(Et), Relt=copy(relt), H=md_, n=1)]
         comp_ext(_G,G, dist, rn, dderH)
         # / PP, if >1 Ps:
         if _G.iderH and G.iderH: _G.iderH.comp_(G.iderH, dderH, rn, fagg=1, flat=0)
@@ -147,8 +149,8 @@ def comp_G(link, iEt, nrng=None): # add flat dderH to link and link to the rims 
             if not fd:  # else old links
                 for node in _G,G:
                     for _link in node.rim:
-                      if comp_angle(link.angle, _link.angle)[0] > ave_mA:
-                        _link.link_ += link  # med_links angle should also match
+                        if comp_angle(link.angle, _link.angle)[0] > ave_mA:
+                            _link.link_ += [link]  # med_links angle should also match
                     node.rim += [link]
                 fd = 1  # to not add the same link twice
             _G.Et[i] += Val; G.Et[i] += Val
@@ -172,8 +174,50 @@ def comp_ext(_G,G, dist, rn, dderH):  # compare non-derivatives: dist, node_' L,
     mdec = prox / max_dist + mL/ max(L,_L) + mS/ max(S,_S) if S or _S else 1 + mA  # Amax = 1
     ddec = dist / max_dist + mL/ (L+_L) + dS/ (S+_S) if S or _S else 1 + dA
 
-    dderH.append_(CH(Et=[M,D,mrdn,drdn,mdec,ddec], H=[prox,dist, mL,dL, mS,dS, mA,dA], n=2/3), flat=0)  # 2/3 of 6-param unit
+    dderH.append_(CH(Et=[M,D,mrdn,drdn], Relt=[mdec,ddec], H=[prox,dist, mL,dL, mS,dS, mA,dA], n=2/3), flat=0)  # 2/3 of 6-param unit
 
+
+# prior scheme's node_connect
+def connect_graph(iG_):  # node connectivity = sum surround link vals, incr.mediated: Graph Convolution of Correlations
+    '''
+    Aggregate direct * indirect connectivity per node from indirect links via associated nodes, in multiple cycles.
+    Each cycle adds contributions of previous cycles to linked-nodes connectivity, propagated through the network.
+    Math: https://github.com/boris-kz/CogAlg/blob/master/frame_2D_alg/Illustrations/node_connect.png
+    '''
+    _G_ = iG_
+    while True:
+        # eval accumulated G connectivity with node-mediated range extension
+        G_ = []  # next connectivity expansion, more selective by DV,Lent
+        mediation = 1  # n intermediated nodes, increasing decay
+        for G in _G_:
+            uprim = []  # >ave updates of direct links
+            for i in 0,1:
+                val,rdn = G.Et[i::2]  # rng+ for both segment forks
+                if not val: continue  # G has no new links
+                ave = G_aves[i]
+                for link in G.rim:
+                    if len(link.dderH.H) <= (G.extH.H if G.extH else 0): continue  # old links, else dderH is appended in comp_G
+                    # > ave derGs in new fd rim:
+                    lval,lrdn = link.Et[i::2]  # step=2, graph-specific vals accumulated from surrounding nodes
+                    decay =  (link.Relt[i]/ (link.dderH.n * 6)) ** mediation  # normalized decay at current mediation
+                    _G = link._node if link.node is G else link.node
+                    _val,_rdn = _G.Et[i::2]
+                    # current-loop vals and their difference from last-loop vals, before updating:
+                    V = (val+_val) * decay; dv = V-lval
+                    R = (rdn+_rdn)  # rdn doesn't decay
+                    link.Et[i::2] = [V,R]  # last-loop vals for next loop | segment_node_, dect is not updated
+                    if dv > ave * R:  # extend mediation if last-update val, may be negative
+                        G.Et[i::2] = [V+v for V,v in zip(G.Et[i::2],[V,R])]  # last layer link vals
+                        if link not in uprim: uprim += [link]
+                    if V > ave * R:  # updated even if terminated
+                        G.Et[i::2] = [V+v for V,v in zip(G.Et[i::2], [dv,R])]  # use absolute R?
+            if uprim:
+                G_ += [G]  # list of nodes to check in next loop
+        if G_:
+            mediation += 1  # n intermediated nodes in next loop
+            _G_ = G_  # exclude weakly incremented Gs from next connectivity expansion loop
+        else:
+            break
 
 def convolve_graph(node_, link_):  # revalue nodes and links by the value of their increasingly wide neighborhood:
     '''
