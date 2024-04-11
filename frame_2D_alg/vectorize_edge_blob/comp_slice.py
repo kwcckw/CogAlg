@@ -110,7 +110,7 @@ def comp_P(link, fd):
     if _P.derH and P.derH:  # append link dderH, init in form_PP_t rng++, comp_latuple was already done
         # der+:
         dderH = _P.derH.comp_(P.derH, CH(), rn=rn, flat=0)
-        vm,vd,rm,rd = dderH.Et[:4]  # also works if called from comp_G
+        vm,vd,rm,rd = dderH.Et
         rm += vd > vm; rd += vm >= vd
         aveP = P_aves[1]
         He = link.dderH  # append link dderH:
