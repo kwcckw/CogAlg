@@ -85,7 +85,9 @@ class Clink(CBase):  # the product of comparison between two nodes
     def __init__(l,_node=None, node=None, dderH= None, roott=None, distance=0, angle=None ):
         super().__init__()
         # for P only, use box for Gs?:
-        l.angle = np.subtract(node.yx, _node.yx) if angle is None else angle  # dy,dx between node centers
+        if hasattr(node, 'yx'): y,x = node.yx; _y, _x = _node.yx
+        else:                   y,x = box2center(node.box); _y,_x = box2center(_node.box) 
+        l.angle = np.subtract([y,x], [_y, _x]) if angle is None else angle  # dy,dx between node centers
         l.distance = np.hypot(*l.angle) if distance is None else distance  # distance between node centers
         l.Et = [0,0,0,0]  # graph-specific, accumulated from surrounding nodes in node_connect
         l.relt = [0,0]
@@ -101,7 +103,7 @@ class Clink(CBase):  # the product of comparison between two nodes
 
         if isinstance(Link,list):  # if der+'rng+: form new Clink
             _link,link = Link
-            Link = Clink(node_=[_link,link])
+            Link = Clink(node_=[_link,link])  # i think this is not needed? We can use _link.comp_link(link) instead? Same for packing links in Link.node_ too.
         else: _link,link = Link.node_  # higher-der link
 
         _y1,_x1 = box2center(_link.node_[0].box)

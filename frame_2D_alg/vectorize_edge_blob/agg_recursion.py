@@ -75,7 +75,7 @@ def agg_recursion(rroot, root, node_, Q, nrng=1, fagg=0):  # lenH = len(root.agg
     for link in root.link_:
         link.Et = copy(link.dderH.Et); link.relt = copy(link.dderH.relt)  # for accumulation from surrounding nodes in convolve_graph
 
-    convolve_graph(node_,root.link_)  # convolution over graph node_,link_
+    link_ = convolve_graph(node_,copy(root.link_))  # convolution over graph node_,link_
     upnode_ = []
     for G in node_:
         if sum(G.Et[:2]):  # G.rim was extended, sum in G.extH:
@@ -84,7 +84,7 @@ def agg_recursion(rroot, root, node_, Q, nrng=1, fagg=0):  # lenH = len(root.agg
                 else:                                G.extH.append_(link.dderH.H[-1],flat=0)  # pack last layer
             upnode_ += [G]
     # add uplink_, pass to form_graph_t?
-    node_t = form_graph_t(root, upnode_, Et, nrng, fagg)  # root_fd, eval der++ and feedback per Gd only
+    node_t = form_graph_t(root, upnode_, link_, Et, nrng, fagg)  # root_fd, eval der++ and feedback per Gd only
     if node_t:
         for fd, node_ in enumerate(node_t):
             if root.Et[0] * (len(node_)-1)*root.rng > G_aves[1] * root.Et[2]:
@@ -112,7 +112,7 @@ def rng_recursion(rroot, root, node_, prelinks, Et, nrng=1):  # rng++/G_, der+/l
                         R += med_link.dderH.H[-1].Et[2]
         if (nrng==1 and dist<=ave_dist) or (nrng>1 and M / (dist/ave_dist) > ave * R):
             G.compared_ += [_G]; _G.compared_ += [G]
-            comp_G([_G,G, dist, [dy,dx]], Et)
+            comp_G([_G,G], Et)
 
     if Et[0] > ave_Gm * Et[2]:  # rng+ eval per arg cluster because comp is bilateral, 2nd test per new pair
         nrng,_ = rng_recursion(rroot, root, node_, list(combinations(node_,r=2)), Et, nrng+1)
@@ -127,13 +127,13 @@ def comp_G(link, iEt, nrng=None): # add flat dderH to link and link to the rims 
         # der+
         _G,G = link._node,link.node; rn = _G.n/G.n; fd=1
     else:  # rng+
-        _G,G, dist, [dy,dx] = link; rn = _G.n/G.n; fd=0
-        link = Clink(_node=_G, node=G, distance=dist, angle=[dy,dx])
+        _G,G = link; rn = _G.n/G.n; fd=0
+        link = Clink(_node=_G, node=G)
         # / P
         Et, relt, md_ = comp_latuple(_G.latuple, G.latuple, rn, fagg=1)
         dderH.n = 1; dderH.Et = Et; dderH.relt=relt
         dderH.H = [CH(nest=0, Et=copy(Et), relt=copy(relt), H=md_, n=1)]
-        comp_ext(_G,G, dist, rn, dderH)
+        comp_ext(_G,G, link.distance, rn, dderH)
         # / PP, if >1 Ps:
         if _G.iderH and G.iderH: _G.iderH.comp_(G.iderH, dderH, rn, fagg=1, flat=0)
     # / G, if >1 PPs | Gs:
@@ -185,7 +185,7 @@ def convolve_graph(iG_, ilink_):  # node connectivity = sum surround link vals, 
     Add der+: cross-comp root.link_, update link Et.
     Not sure: sum and compare kernel params: reduced-resolution rng+, lateral link-mediated vs. vertical in agg_kernels?
     '''
-    for fd, _e_, ave in zip((0,1), G_aves, (iG_, ilink_)):
+    for fd, ave, _e_ in zip((0,1), G_aves, (iG_, ilink_)):  # this ilink_ is empty from base fork, and due to this we never form any links in der fork
         while True:
             # eval accumulated connectivity with node|link- mediated range extension
             # if fd: add hyper-Links between links: link.link_, ~ G.rim, then add in dgraph.link_?
@@ -193,12 +193,21 @@ def convolve_graph(iG_, ilink_):  # node connectivity = sum surround link vals, 
             e_ = []  # next connectivity expansion, more selective by DV,Lent
             mediation = 1  # n intermediated nodes|links, increasing decay
             for e in _e_:
-                uprim = []  # >ave updates of direct links
-                val,rdn = e.Et[fd::2]  # rng+ for both segment forks
+                link_ = []  # >ave updates of direct links
+                val,rdn = e.Et[0], e.Et[2]  # rng+ for both segment forks (M and mrdn)
                 if not val: continue  # e has no new links
-                # not updated:
-                for link in e.rim:
-                    if len(link.dderH.H) <= (e.extH.H if e.extH else 0): continue  # old links, else dderH is appended in comp_G
+                for link in e._node.link_ if fd else e.rim:  # if fd, use e._node so that we can add new hyper links?
+                    if fd: 
+                        if link._node not in e.node.compared_ :  # and comp_angle(e.angle, link.angle)[0] > ave_mA: 
+                            hlink = Clink(node=e.node, _node=link._node)  # create hyperlink
+                            e.node.compared_ += [link._node]
+                            e.comp_link(link, hlink.dderH)
+                            for _link in link.link_:  # compare med links too?
+                                e.comp_link(_link, hlink.dderH)
+                            link_ += [hlink]  # add additional hyperlink here?
+                    else:
+                        if len(link.dderH.H) <= (e.extH.H if e.extH else 0): continue  # old links, else dderH is appended in comp_G
+                    
                     # > ave derGs in new fd rim:
                     lval,lrdn = link.Et[fd::2]  # step=2, graph-specific vals accumulated from surrounding nodes
                     decay =  (link.relt[fd]/ (link.dderH.n * 6)) ** mediation  # normalized decay at current mediation
@@ -210,25 +219,27 @@ def convolve_graph(iG_, ilink_):  # node connectivity = sum surround link vals, 
                     link.Et[fd::2] = [V,R]  # last-loop vals for next loop | segment_node_, dect is not updated
                     if dv > ave * R:  # extend mediation if last-update val, may be negative
                         e.Et[fd::2] = [V+v for V,v in zip(e.Et[fd::2],[V,R])]  # last layer link vals
-                        if link not in uprim: uprim += [link]
+                        if link not in link_: link_ += [link]
                     if V > ave * R:  # updated even if terminated
                         e.Et[fd::2] = [V+v for V,v in zip(e.Et[fd::2], [dv,R])]  # use absolute R?
-                if uprim:
+                if link_:
                     e_ += [e]  # list of nodes to check in next loop
+                    ilink_+=link_
             if e_:
                 mediation += 1  # n intermediated nodes in next loop
                 _e_ = e_  # exclude weakly incremented Gs from next connectivity expansion loop
             else:
                 break
 
+    return ilink_
 
-def form_graph_t(root, node_, Et, nrng, fagg=0):  # form Gm_,Gd_ from same-root nodes
+def form_graph_t(root, node_, link_, Et, nrng, fagg=0):  # form Gm_,Gd_ from same-root nodes
 
     node_t = []
     for fd in 0,1:
         if Et[fd] > ave * Et[2+fd]:  # eVal > ave * eRdn
             # Replace mnode_,dnode_ with Node_,Link_. Angle match | difference match in clustering links?
-            graph_ = segment_graph(root, root.link_ if fd else node_, fd, nrng, fagg)
+            graph_ = segment_graph(root, link_ if fd else node_, fd, nrng, fagg)
             if fd:  # der+ after rng++ term by high ds
                 for graph in graph_:
                     if graph.link_ and graph.Et[1] > G_aves[1] * graph.Et[3]:  # Et is summed from all links
