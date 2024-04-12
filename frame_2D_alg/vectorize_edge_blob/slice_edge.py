@@ -66,7 +66,7 @@ class CsliceEdge(CsubFrame):
                 P.form(edge, fill_yx_, vadjacent_, hdert_, hyx_)
                 if not vadjacent_:  # scan P
                     P.term(edge)
-                    edge.P_ += [P]
+                    if P.yx: edge.P_ += [P]
     CBlob = CEdge
 
 class CP(CBase):
@@ -90,10 +90,15 @@ class CP(CBase):
                         P.link_[0] += [_P]
 
     def term(P, edge):
-        y, x = P.yx = map(sum, zip(*P.dert_.keys()))
-        ay,ax = P.axis = map(sum, zip(*((gy/g, gx/g) for i,gy,gx,g in P.dert_.values())))
+        y, x  = map(sum, zip(*P.dert_.keys())); P.yx = y, x  # looks like we can unpack map once only
+        ay,ax = map(sum, zip(*((gy/g, gx/g) for i,gy,gx,g in P.dert_.values()))); P.axis = ay, ax
 
-        pivot = i,gy,gx,g = interpolate2dert(edge, y,x)
+        dert = interpolate2dert(edge, y,x)  # dert could be None here too, when `if (_y, _x) not in edge.dert_: return` in `interpolate2dert` 
+        if dert:
+            pivot = i,gy,gx,g = dert
+        else:
+            P.yx = None  # temporary, to identify if there's no pivot
+            return
         ma = ave_dangle  # max value because P direction is the same as dert gradient direction
         m = ave_g - g
         pivot += ma,m
@@ -149,7 +154,7 @@ class Clink(CBase):  # the product of comparison between two nodes
 
     def __bool__(l): return bool(l.dderH.H)
 
-class CP(CBase):
+class CP2(CBase):
     def __init__(P, edge, yx, axis):  # form_P:
 
         super().__init__()
@@ -200,7 +205,7 @@ def interpolate2dert(edge, y, x):
     I, Dy, Dx, G = 0, 0, 0, 0
     for _y in y_:
         for _x in x_:
-            if (_y, _x) not in edge.dert_: return
+            if (_y, _x) not in edge.dert_: return  # must all y_ and x_ in edge.dert_?
             i, dy, dx, g = edge.dert_[_y, _x]
             k = (1 - abs(_y-y)) * (1 - abs(_x-x))
             I += i*k; Dy += dy*k; Dx += dx*k; G += g*k
