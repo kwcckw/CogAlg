@@ -138,7 +138,6 @@ class Clink(CBase):  # the product of comparison between two nodes
     def __init__(l, node_=None,rim=None, derH=None, extH=None, roott=None, distance=0, angle=None ):
         super().__init__()
         if hasattr(node_[0],'yx'): _y,_x = node_[0].yx; y,x = node_[1].yx  # CP
-        else:                      _y,_x = box2center(node_[0].box); y,x = box2center(node_[1].box)  # CG
         l.angle = np.subtract([y,x], [_y,_x]) if angle is None else angle  # dy,dx between node centers
         l.distance = np.hypot(*l.angle) if distance is None else distance  # distance between node centers
         l.Et = [0,0,0,0]  # graph-specific, accumulated from surrounding nodes in node_connect
@@ -148,10 +147,11 @@ class Clink(CBase):  # the product of comparison between two nodes
         l.derH = CH() if derH is None else derH
         l.extH = CH() if extH is None else extH  # for der+
         l.roott = [None, None] if roott is None else roott  # clusters that contain this link
+        l.compared_ = []
         # dir: bool  # direction of comparison if not G0,G1, only needed for comp link?
         # n: always min(node_.n)?
 
-    def __bool__(l): return bool(l.dderH.H)
+    def __bool__(l): return bool(l.derH.H)
 
 class CP2(CBase):
     def __init__(P, edge, yx, axis):  # form_P:
