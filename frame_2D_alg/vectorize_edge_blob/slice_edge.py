@@ -143,11 +143,9 @@ class Clink(CBase):  # the product of comparison between two nodes
 
     def __init__(l, node_=None,rim=None, derH=None, extH=None, roott=None, distance=0, angle=None ):
         super().__init__()
-        if hasattr(node_[0],'yx'): _y,_x = node_[0].yx; y,x = node_[1].yx  # CP
-        else:                      _y,_x = box2center(node_[0].box); y,x = box2center(node_[1].box)  # CG
         l.node_ = [] if node_ is None else node_  # e_ in kernels, else replaces _node,node: not used in kernels?
-        l.angle = np.subtract([y,x], [_y,_x]) if angle is None else angle  # dy,dx between node centers
-        l.distance = np.hypot(*l.angle) if distance is None else distance  # distance between node centers
+        l.angle = [0,0] if angle is None else angle  # dy,dx between node centers
+        l.distance = distance  # distance between node centers
         l.Et = [0,0,0,0]  # graph-specific, accumulated from surrounding nodes in node_connect
         l.relt = [0,0]
         l.rim = []  # for der+, list of mediating Clinks in hyperlink in roughly the same direction, as in hypergraph
@@ -155,6 +153,10 @@ class Clink(CBase):  # the product of comparison between two nodes
         l.extH = CH() if extH is None else extH  # for der+
         l.roott = [None, None] if roott is None else roott  # clusters that contain this link
         l.compared_ = []
+        # for rng+
+        l.nest = 0
+        l.n = 1  # default n
+        l.area = 0
         # dir: bool  # direction of comparison if not G0,G1, only needed for comp link?
         # n: always min(node_.n)?
 

@@ -28,7 +28,7 @@
     https://github.com/boris-kz/CogAlg/blob/master/frame_2D_alg/Illustrations/frame_blobs.png
     https://github.com/boris-kz/CogAlg/blob/master/frame_2D_alg/Illustrations/frame_blobs_intra_blob.drawio
 '''
-from copy import deepcopy
+from copy import copy, deepcopy
 from itertools import zip_longest
 import weakref
 import numpy as np
@@ -240,7 +240,8 @@ class CH(CBase):  # generic derivation hierarchy with variable nesting
             if ddepth:
                 nHe = [HE,He][HE.nest > He.nest]  # He to be nested
                 while ddepth > 0:
-                    nHe.nest += 1; nHe.H = [nHe.H]; ddepth -= 1
+                    # we need create new CH for new depth instead
+                    nHe.H = [CH(H=nHe.H, Et=copy(nHe.Et), nest=nHe.nest)]; ddepth -= 1; nHe.nest += 1
             if isinstance(HE.H[0], CH):
                 H = []
                 for Lay, lay in zip_longest(HE.H, He.H, fillvalue=None):
@@ -270,7 +271,7 @@ class CH(CBase):  # generic derivation hierarchy with variable nesting
         HE.Et = np.add(HE.Et, He.Et); HE.relt = np.add(HE.relt, He.relt)
         if irdnt: Et[2:4] = [E+e for E,e in zip(Et[2:4], irdnt)]
         HE.n += He.n  # combined param accumulation span
-        HE.nest = max(HE.nest, He.nest)
+        HE.nest = max(HE.nest, He.nest + (1-flat))  # if not flat, the nesting is actually increased by 1 because we append it
 
     def comp_(_He, He, dderH, rn=1, fagg=0, flat=1):  # unpack tuples (formally lists) down to numericals and compare them
 
