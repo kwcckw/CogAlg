@@ -121,6 +121,8 @@ def rng_recursion(root, Et, fagg):  # comp Gs in agg+, links in sub+
             for link in _links:
                 for G in link.node_:  # search in both directions, G can be link?
                     for _link in G.rim:
+                        # i think we need layered rim
+                        if len(link.derH.H) != len(_link.derH.H) or _link is link: continue  # different layer link (or use parameter to specify this?)
                         mA,dA = comp_angle(_link.angle, link.angle)
                         if mA > ave_mA:
                             (_y,_x), (y,x) = box2center(_link.box), box2center(link.box)
@@ -193,7 +195,8 @@ def comp_ext(_L,L,_S,S,_A,A, dist, dderH):  # compare non-derivatives: dist, nod
     prox = ave_dist - dist  # proximity = inverted distance (position difference), no prior accum to n
 
     dL = _L - L;      mL = min(_L,L) - ave_mL  # direct match
-    dS = _S/_L - S/L; mS = min(_S,S) - ave_mL  # sparsity is accumulated over L
+    # we may get L =0 when dy is 0 (same y in box
+    dS = _S/max(1, _L) - S/max(1, L); mS = min(_S,S) - ave_mL  # sparsity is accumulated over L
     mA, dA = comp_angle(_A,A)  # angle is not normalized
 
     M = prox + mL + mS + mA
@@ -231,8 +234,7 @@ def convolve_graph(iG_):  # node connectivity = sum surround link vals, incr.med
                     # > ave derGs in new fd rim:
                     lval,lrdn = link.Et[i::2]  # step=2, graph-specific vals accumulated from surrounding nodes, or use link.node_.Et instead?
                     decay =  (link.relt[i] / (link.derH.n * 6)) ** mediation  # normalized decay at current mediation
-                    for _G in link.node_:
-                        if _G is not G: break
+                    _G = link.node_[0] if link.node_[1] is G else link.node_[1]
                     # add G.derH.comp_(_G.extH.H[-1]): temporary derH summed from surrounding G.derHs,
                     # for lower-res rng+, if no direct rng+ and high _G.V? or replace mediated rng+?
                     _val,_rdn = _G.Et[i::2] # current-loop vals and their difference from last-loop vals, before updating:
@@ -264,7 +266,7 @@ def form_graph_t(root, node_, Et, nrng, fagg=0):  # form Gm_,Gd_ from same-root 
             if fd:  # der+ after rng++ term by high ds
                 for graph in graph_:
                     if graph.link_ and graph.Et[1] > G_aves[1] * graph.Et[3]:  # Et is summed from all links
-                        agg_recursion(root, graph, nrng=1, fagg=0)  # graph.node_ is not node_t yet
+                        agg_recursion(root, graph, fagg=0)  # graph.node_ is not node_t yet
                     elif graph.derH:
                         root.fback_ += [graph.derH]
                         feedback(root)  # update root.root.. per sub+
