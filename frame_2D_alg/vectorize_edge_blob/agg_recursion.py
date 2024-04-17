@@ -74,9 +74,11 @@ def agg_recursion(rroot, root, fagg=0):
     upnode_ = []  # uplink_ in der+
     for G in Q:
         if sum(G.Et[:2]):  # G.rim was extended, sum in G.extH:
-            for link in G.rim:
-                if len(G.extH.H)==len(link.derH.H): G.extH.H[-1].add_(link.derH.H[-1],irdnt=link.derH.H[-1].Et[2:])  # sum last layer
-                else:                               G.extH.append_(link.derH.H[-1],flat=0)  # pack last layer
+            for link in G.rim: 
+                # we need to use <? Because link.derH.H might be < G.extH.H too
+                # so append only occur when G.extH.H has lesser H
+                if len(G.extH.H)<len(link.derH.H): G.extH.append_(link.derH.H[-1],flat=0)  # pack last layer
+                else:                              G.extH.H[-1].add_(link.derH.H[-1],irdnt=link.derH.H[-1].Et[2:])  # sum last layer
             upnode_ += [G]
     node_t = form_graph_t(root, upnode_, Et, nrng, fagg)  # root_fd, eval der++ and feedback per Gd only
     if node_t:
@@ -120,11 +122,25 @@ def rng_recursion(root, Et, fagg):  # comp Gs in agg+, links in sub+
             else: break
     else:
         _links = root.link_  # der+'rng+: directional and node-mediated comp link
-        links = []
         while True:
-            for link in _links:
+            links = []  # this should be reset in every while loop
+            for link in _links: 
                 for G in link.node_:  # search in both directions, G can be link?
-                    for _link in G.rim:
+                    for _link in G.rim:                     
+                        if _link is link or _link in link.compared_: continue  # this is possible since we add link into both _G and G.rim
+                        # we may get a same extended box from different pair of links
+                        # if box is the same, their dist will be zero (this dist will be L for the next rng+)
+                        # for L in link, we can use area instead of dist?
+                        # example:
+                        '''
+                        box1 =         (4, 49, 18, 59)
+                        box2 =         (5, 38, 18, 56)
+                        extended_box = (4, 38, 18, 59)
+
+                        box1         = (4, 49, 18, 59)
+                        box2         = (5, 38, 18, 52)
+                        extended_box = (4, 38, 18, 59)
+                        '''
                         (_y,_x), (y,x) = box2center(_link.box), box2center(link.box)
                         dy = _y - y; dx = _x - x
                         dist = np.hypot(dy, dx)  # distance between node centers
@@ -133,6 +149,7 @@ def rng_recursion(root, Et, fagg):  # comp Gs in agg+, links in sub+
                         et[0]+= eH[-2]  # add weight of mA if fd
                         if  et[0] > ave*et[2]:
                             Link = Clink(node_=[_link,link], distance=dist, angle=(dy,dx), box=extend_box(link.box, _link.box))
+                            _link.compared_ += [link]; link.compared_ += [_link]  #  looks like we missed out this
                             comp_G(Link, Et, fd=1, rn = min(_link.node_[0].n,_link.node_[1].n) / min(link.node_[0].n,link.node_[1].n))
                             Link.derH.append_(CH(Et=et, relt=rt, H=eH, n=2/3), flat=0)  # += extt
                             for med_link in link.rim:  # if link is hyperlink
@@ -161,7 +178,7 @@ def comp_G(link, iEt, fd, rn):  # add dderH to link and link to the rims of comp
         if _G.iderH and G.iderH: _G.iderH.comp_(G.iderH, dderH, rn, fagg=1, flat=0)
         dderH.nest = 1  # packs md_
     # / G, if >1 PPs | Gs:
-    if _G.extH and G.extH: _G.extH.comp_(G.extH, dderH, rn, fagg=1, flat=1)  # always true in der+
+    if _G.extH and G.extH: _G.extH.comp_(G.extH, dderH, rn, fagg=1, flat=1)  # always true in der+ (not now? link.extH is empty when nrng == 1)
     if _G.derH and G.derH: _G.derH.comp_(G.derH, dderH, rn, fagg=1, flat=0)  # append and sum new dderH to base dderH
 
     link.derH = dderH  # new link / comp
