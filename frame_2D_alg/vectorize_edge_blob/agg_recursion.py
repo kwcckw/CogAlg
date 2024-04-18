@@ -117,14 +117,16 @@ def rng_recursion(root, Et, fagg):  # comp Gs in agg+, links in sub+
         _links = root.link_  # der+'rng+: directional and node-mediated comp link
         while True:
             links = []
+            if nrng == 1: len_rims = [len(link.rim) for link in _links]  # pack number of rims added from fagg=1, to be removed later
             for link in _links:
                 for G in link.node_:  # search in both directions, G can be link
-                    for _link in G.rim:
+                    for _link in G.rim: # if G is a link formed in rng+, their rims may packing fagg=1's link, and we will compare links with different nesting
+                        if nrng == 1 and _link not in root.link_:  continue  # when nrng == 1, skip when this _link is not in root.link_? This _link probably should be already removed during form graph
                         if _link in link.compared_: continue
                         (_y,_x), (y,x) = box2center(_link.box), box2center(link.box)
                         dy = _y - y; dx = _x - x
                         dist = np.hypot(dy, dx)  # distance between node centers
-                        if comp_angle((dy,dx),G.angle)[0] > ave:  # node-mediated, distance eval in agg+ only?
+                        if comp_angle((dy,dx),G.angle if isinstance(G, Clink) else G.A)[0] > ave:  # node-mediated, distance eval in agg+ only?
                             _link.compared_ += [link]; link.compared_ += [_link]
                             Link = Clink(node_=[_link,link],distance=dist,angle=(dy,dx),box=extend_box(link.box,_link.box))
                             comp_G(Link, Et, fd=1)
@@ -137,6 +139,12 @@ def rng_recursion(root, Et, fagg):  # comp Gs in agg+, links in sub+
                                 # should be checking if rim node_s are in compared instead?
 
             if Et[0] > ave_Gm * Et[2] * nrng:  # rng+ eval per arg cluster because comp is bilateral, 2nd test per new pair
+                if nrng == 1:
+                    for n, link in zip(len_rims,_links):
+                        while n > 0: 
+                            link.rim.pop(0)  # remove rim added in fagg=1
+                            n -= 1
+                
                 nrng += 1; _links = links
             else: break
 
@@ -157,15 +165,17 @@ def comp_G(link, iEt, fd):  # add dderH to link and link to the rims of comparan
         rn = _G.n / G.n  # comp ext params prior: _L,L,_S,S,_A,A, dist, no comp_G unless match:
         et, rt, md_ = comp_ext(len(_G.node_), len(G.node_), _G.S, G.S / rn, _G.A,G.A)
         Et, Rt, Md_ = comp_latuple(_G.latuple, G.latuple, rn, fagg=1)
-        Et = np.add(Et,et); Rt = np.add(Rt,rt)
-        dderH.n = 1; dderH.Et = Et; dderH.relt = Rt
-        dderH.H = [CH(nest=0, Et=copy(Et), relt=copy(Rt), H=[md_]+[Md_], n=1)]
+        dderH.n = 1; dderH.Et = np.add(Et,et); dderH.relt = np.add(Rt,rt)
+        dderH.H =  [CH(nest=0, Et=copy(et), relt=copy(rt), H=md_, n=0.5)]  # ext (n = 0.5 for ext?)
+        dderH.H += [CH(nest=0, Et=copy(Et), relt=copy(Rt), H=Md_, n=1)]    # md_
+
         # / PP, if >1 Ps:
         if _G.iderH and G.iderH: _G.iderH.comp_(G.iderH, dderH, rn, fagg=1, flat=0)
         dderH.nest = 1  # packs md_
     # / G, if >1 PPs | Gs:
-    if _G.extH and G.extH: _G.extH.comp_(G.extH, dderH, rn, fagg=1, flat=1)
+    # comp derH first? Because G.derH is default in der+ while G.extH is empty when der's nrng == 1
     if _G.derH and G.derH: _G.derH.comp_(G.derH, dderH, rn, fagg=1, flat=0)  # append and sum new dderH to base dderH
+    if _G.extH and G.extH: _G.extH.comp_(G.extH, dderH, rn, fagg=1, flat=1)
 
     link.derH = dderH  # new link / comp
     iEt[:] = np.add(iEt,dderH.Et)  # init eval rng+ and form_graph_t by total m|d?
