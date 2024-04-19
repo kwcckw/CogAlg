@@ -99,7 +99,7 @@ class CG(CBase):  # PP | graph | blob: params of single-fork node_ cluster
         G.roott = []  # Gm,Gd that contain this G, single-layer
         G.box = [np.inf, np.inf, -np.inf, -np.inf]  # y,x,y0,x0,yn,xn
         # graph-external, +level per root sub+:
-        G.rim = []  # direct links, depth, init rim_t, link_tH in base sub+ | cpr rd+, link_tHH in cpr sub+
+        G.rim = [[]]  # direct links, depth, init rim_t, link_tH in base sub+ | cpr rd+, link_tHH in cpr sub+
         G.extH = CH()  # G-external daggH( dsubH( dderH, summed from rim links
         G.alt_graph_ = []  # adjacent gap+overlap graphs, vs. contour in frame_graphs
         # dynamic attrs:
@@ -241,7 +241,7 @@ class CH(CBase):  # generic derivation hierarchy with variable nesting
                 nHe = [HE,He][HE.nest > He.nest]  # He to be nested
                 while ddepth > 0:
                     # we need create new CH for new depth instead
-                    nHe.H = [CH(H=nHe.H, Et=copy(nHe.Et), nest=nHe.nest)]; ddepth -= 1; nHe.nest += 1
+                    nHe.H = [CH(H=nHe.H, Et=copy(nHe.Et), nest=nHe.nest)]; ddepth -= 1
             if isinstance(HE.H[0], CH):
                 H = []
                 for Lay, lay in zip_longest(HE.H, He.H, fillvalue=None):
@@ -271,7 +271,7 @@ class CH(CBase):  # generic derivation hierarchy with variable nesting
         HE.Et = np.add(HE.Et, He.Et); HE.relt = np.add(HE.relt, He.relt)
         if irdnt: Et[2:4] = [E+e for E,e in zip(Et[2:4], irdnt)]
         HE.n += He.n  # combined param accumulation span
-        HE.nest = max(HE.nest, He.nest + (1-flat))  # if not flat, the nesting is actually increased by 1 because we append it
+        HE.nest = max(HE.nest, He.nest)  # if not flat, the nesting is actually increased by 1 because we append it
 
     def comp_(_He, He, dderH, rn=1, fagg=0, flat=1):  # unpack tuples (formally lists) down to numericals and compare them
 

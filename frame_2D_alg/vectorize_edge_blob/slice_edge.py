@@ -135,10 +135,11 @@ class Clink(CBase):  # the product of comparison between two nodes
         l.distance = distance  # distance between node centers
         l.Et = [0,0,0,0]  # graph-specific, accumulated from surrounding nodes in node_connect
         l.relt = [0,0]
-        l.rim = []  # for der+, list of mediating Clinks in hyperlink in roughly the same direction, as in hypergraph
+        l.rim = [[]]  # for der+, list of mediating Clinks in hyperlink in roughly the same direction, as in hypergraph
         l.derH = CH() if derH is None else derH
         l.extH = CH() if extH is None else extH  # for der+
         l.roott = [None, None] if roott is None else roott  # clusters that contain this link
+        l.root = None  # for segment_graph
         l.compared_ = []
         # for rng+
         l.nest = 0
