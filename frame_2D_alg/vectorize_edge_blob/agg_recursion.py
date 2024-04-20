@@ -151,18 +151,17 @@ def comp_G(link, iEt, fd):  # add dderH to link and link to the rims of comparan
 
     if fd:  # Clinks
         rn= min(_G.node_[0].n,_G.node_[1].n)/ min(G.node_[0].n,G.node_[1].n)
-        et, rt, md_ = comp_ext(_G.distance,G.distance,len(_G.rim[-1]),len(G.rim[-1]),_G.angle,G.angle)
+        et, rt, md_ = comp_ext(_G.distance,G.distance,len(_G.rim),len(G.rim),_G.angle,G.angle)
         dderH.n = 1; dderH.Et = et; dderH.relt = rt
-        dderH.H = [CH(nest=0, Et=copy(et), relt=copy(rt), H=md_, n=1)]
+        dderH.H = [CH(Et=copy(et), relt=copy(rt), H=md_, n=1)]
     else:  # CGs
         rn= _G.n/G.n  # comp ext params prior: _L,L,_S,S,_A,A, dist, no comp_G unless match:
         et, rt, md_ = comp_ext(len(_G.node_),len(G.node_),_G.S,G.S/rn,_G.A,G.A)
         Et, Rt, Md_ = comp_latuple(_G.latuple, G.latuple, rn,fagg=1)
         dderH.n = 1; dderH.Et = np.add(Et,et); dderH.relt = np.add(Rt,rt)
-        dderH.H = [CH(nest=0,Et=et,relt=rt,H=md_,n=.5),CH(nest=0,Et=Et,relt=Rt,H=Md_,n=1)]
+        dderH.H = [CH(Et=et,relt=rt,H=md_,n=.5),CH(Et=Et,relt=Rt,H=Md_,n=1)]
         # / PP:
         _G.iderH.comp_(G.iderH, dderH, rn, fagg=1, flat=0)  # always >1P in compared PPs?
-        dderH.nest = 1  # packs md_
     # / G, if >1 PPs | Gs:
     if _G.derH and G.derH: _G.derH.comp_(G.derH, dderH, rn, fagg=1, flat=0)  # append and sum new dderH to base dderH
     if _G.extH and G.extH: _G.extH.comp_(G.extH, dderH, rn, fagg=1, flat=1)
@@ -177,16 +176,25 @@ def comp_G(link, iEt, fd):  # add dderH to link and link to the rims of comparan
             if not fin:  # include link once
                 fin = 1
                 for node in _G,G:  # draft:
-                    llink = node.rim[-1]  # last mediating link, doesn't matter for CG.rim
-                    _node = llink.node_[1] if llink.node_[0] is node else llink.node_[0]
-                    rim = []  # all mA links mediated by last-link _node
-                    for _link in reversed.node.rim:  # +med_links for der+
-                        if _node in _link.node_:
-                            if comp_angle(link.angle, _link.angle)[0] > ave_mA:
-                                rim += [link]
+                    if fd:
+                        if not node.rim: continue  # empty link.rim
+                        llink = node.rim[-1]  # last mediating link, doesn't matter for CG.rim
+                        _node = llink.node_[1] if llink.node_[0] is node else llink.node_[0]
+                    else:
+                        _node = None; node.rim += [link]  # node.rim += [link] is default in rng+?
+                        rim = []  # all mA links mediated by last-link _node
+                    
+                    for _link in reversed(node.rim):  # +med_links for der+
+                        if _node in _link.node_ or (_node is None):
+                            if _link is link: continue
+                            __node = _link.node_[0] if _link.node_[1] is _node else _link.node_[1]
+                            for __link in __node.rim: 
+                                if __link not in node.rim and comp_angle(link.angle, __link.angle)[0] > ave_mA:
+                                    rim += [__link]
                         else:  # different mediating _node, different rim layer
-                            node.rim += rim  # no op if empty
-                            break  # for both fd?
+                            break  # for both fd?  
+                    node.rim += rim  # no op if empty
+                        
         _G.Et[i] += Val; G.Et[i] += Val
         _G.Et[2+i] += Rdn; G.Et[2+i] += Rdn  # per fork link in both Gs
         # if select fork links: iEt[i::2] = [V+v for V,v in zip(iEt[i::2], dderH.Et[i::2])]
@@ -364,7 +372,7 @@ def sum2graph(root, grapht, fd, nrng):  # sum node and link params into graph, a
     if fd:
         # assign alt graphs from d graph, after both linked m and d graphs are formed
         for link in graph.link_:
-            mgraph = link.roott[0]
+            mgraph = link.root
             if mgraph:
                 for fd, (G, alt_G) in enumerate(((mgraph,graph), (graph,mgraph))):  # bilateral assign:
                     if G not in alt_G.alt_graph_:
