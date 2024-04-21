@@ -120,19 +120,27 @@ def rng_recursion(root, Et, fagg):  # comp Gs in agg+, links in sub+
             for link in _links:
                 _G,G = link.node_  # compare equi-mediated nodes in Clink G rims:
                 if len(_G.rim)>nrng and len(G.rim)>nrng:
-                    fst_link, lst_link = _G.rim[-nrng], G.rim[nrng]
-                    fst_G, lst_G = fst_link.node_[0], lst_link.node_[1]  # comp G | link?
-                    # if position corresponds to mediation order, the Gs were not compared yet?
-                    if fst_G in lst_G.compared_: continue
+                    if isinstance(_G, CG):  # if _G is CG, we get first link and last link from G.rim? Because nrng is 1 anyway, and we should skip the compared too
+                        for fst_G in reversed(_G.rim):  # get the first rim (descending order) that is in root.link_
+                            if fst_G in root.link_: break
+                        for lst_G in G.rim:  # get the first rim that is in root.link_
+                            if lst_G in root.link_: break
+                        fst_angle, lst_angle = fst_G.angle, lst_G.angle
+                    else:
+                        fst_link, lst_link = _G.rim[-nrng], G.rim[nrng]
+                        fst_angle, lst_angle = fst_link.angle, lst_link.angle
+                        fst_G, lst_G = fst_link.node_[0], lst_link.node_[1]  # comp G | link?
+                        # if position corresponds to mediation order, the Gs were not compared yet?
+                        if fst_G in lst_G.compared_:  continue  
                     (_y,_x),(y,x) = box2center(fst_G.box),box2center(lst_G.box)
                     dy=_y-y; dx=_x-x; dist = np.hypot(dy,dx)  # distance between node centers
-                    mA,dA = comp_angle(fst_link.angle, lst_link.angle)  # node-mediated, distance eval in agg+ only
+                    mA,dA = comp_angle(fst_angle, lst_angle)  # node-mediated, distance eval in agg+ only
                     if mA > ave_mA:
                         fst_G.compared_ += [lst_G]; lst_G.compared_ += [fst_G]
                         _derH = fst_G.derH; et = _derH.Et
                         Link = Clink(node_=[fst_G,lst_G],distance=dist,angle=(dy,dx),box=extend_box(fst_G.box,lst_G.box),
                                      derH=CH(H=deepcopy(_derH.H), Et=[et[0]+mA, et[1]+dA, et[2]+mA<dA, et[3]+dA<=mA]))
-                        comp_G(Link, Et, fd=1)  # + comp med_links
+                        comp_G(Link, Et, fd=1, node_=[fst_G, lst_G])  # + comp med_links
                         if Link.derH.Et[0] > ave_Gm * Link.derH.Et[2] * nrng:
                             links += [Link]
 
@@ -143,7 +151,7 @@ def rng_recursion(root, Et, fagg):  # comp Gs in agg+, links in sub+
     return nrng, Et
 
 
-def comp_G(link, iEt, fd):  # add dderH to link and link to the rims of comparands, which may be Gs or links
+def comp_G(link, iEt, fd, node_=None):  # add dderH to link and link to the rims of comparands, which may be Gs or links
 
     dderH = CH()  # new layer of link.dderH
     _G, G = link.node_
@@ -164,9 +172,12 @@ def comp_G(link, iEt, fd):  # add dderH to link and link to the rims of comparan
                 mLink = Clink(node_=[_mlink,mlink],distance=dist,angle=(dy,dx),box=extend_box(mlink.box,_mlink.box),
                               derH=CH(H=deepcopy(_derH.H), Et=[et[0]+mA, et[1]+dA, et[2]+mA<dA, et[3]+dA<=mA]))
                 # compare mediating links between hyperlink nodes
-                comp_G(mLink, Et, fd=1)
-                if et[0] < ave * et[2]:
-                    break  # comp next mediated link if mediating links match
+                comp_G(mLink, Et, fd=1, node_=node_+[_mlink, mlink])
+                if et[0] > ave * et[2]:
+                    for node in node_:
+                        if node is not _G and node is not G:
+                            node.rim += [mLink]  # we need to add mediated hyperlink per higher G too? 
+                else: break  # comp next mediated link if mediating links match
     else:  # CGs
         rn= _G.n/G.n  # comp ext params prior: _L,L,_S,S,_A,A, dist, no comp_G unless match:
         et, rt, md_ = comp_ext(len(_G.node_),len(G.node_),_G.S,G.S/rn,_G.A,G.A)
