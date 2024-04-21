@@ -108,7 +108,7 @@ def comp_P(link, fd):
         _y,_x = _P.yx; y,x = P.yx
         angle = np.subtract([y,x], [_y,_x]) # dy,dx between node centers
         distance = np.hypot(*angle)       # distance between node centers
-        link = Clink(node_=[_P, P], derH = CH(Et=[vm,vd,rm,rd],H=H,n=n), root=[[],[]], angle=angle, distance=distance)
+        link = Clink(node_=[_P, P], derH = CH(Et=[vm,vd,rm,rd],H=H,n=n),angle=angle,distance=distance)
     # both:
     if _P.derH and P.derH:  # append link derH, init in form_PP_t rng++, comp_latuple was already done
         # der+:
@@ -179,7 +179,8 @@ def sum2PP(root, P_, derP_, iRt, fd):  # sum links in Ps and Ps in PP
         if derP.derH:
             derP.node_[1].derH.add_(derP.derH, iRt)
             derP.node_[0].derH.add_(negate(deepcopy(derP.derH)), iRt)  # negate reverses uplink ds direction
-        PP.link_ += [derP]; derP.root[fd] = PP
+        PP.link_ += [derP]
+        if fd: derP.root = PP
         PP.A = np.add(PP.A,derP.angle)
         PP.S += np.hypot(*derP.angle)  # links are contiguous but slanted
         PP.n += derP.derH.n  # *= ave compared P.L?
@@ -194,6 +195,7 @@ def sum2PP(root, P_, derP_, iRt, fd):  # sum links in Ps and Ps in PP
         for y,x in P.yx_:
             y = int(round(y)); x = int(round(x))  # summed with float dy,dx in slice_edge?
         PP.box = accum_box(PP.box, y, x); celly_+=[y]; cellx_+=[x]
+        if not fd: P.root = PP
     if PP.iderH:
         PP.iderH.Et[2:4] = [R+r for R,r in zip(PP.iderH.Et[2:4], iRt)]
     # pixmap:
