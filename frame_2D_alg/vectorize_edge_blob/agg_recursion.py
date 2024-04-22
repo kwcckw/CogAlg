@@ -75,8 +75,9 @@ def agg_recursion(rroot, root, fagg=0):
     for G in Q:
         if sum(G.Et[:2]):  # G.rim was extended, sum in G.extH:
             for link in G.rim:
-                if len(G.extH.H)<len(link.derH.H): G.extH.append_(link.derH.H[-1],flat=0)  # pack last layer
-                else:  G.extH.H[-1].add_(link.derH.H[-1],irdnt=link.derH.H[-1].Et[2:])  # sum last layer
+                # the first condition should be checking for empty extH now? sub+ always parse links instead of nodes, so extH is always empty now
+                if not G.extH.H: G.extH.append_(link.derH.H[-1],flat=0)  # pack last layer
+                else:            G.extH.H[-1].add_(link.derH.H[-1],irdnt=link.derH.H[-1].Et[2:])  # sum last layer
             upQ += [G]
     node_t = form_graph_t(root, upQ, Et, nrng)  # root_fd, eval der++ and feedback per Gd only
     if node_t:
@@ -97,9 +98,9 @@ def rng_recursion(root, Et, fagg):  # comp Gs in agg+, links in sub+
         _links = list(combinations(root.node_,r=2))
     elif isinstance(root.link_[0].node_[0], CG):
         # concat rim link combinations from all Clink node_ CGs:
-        _links = [list(product(link.node_[0].rim, link.node_[1].rim)) for link in root.link_]
+        _links = [linkt for link in root.link_  for linkt in product(link.node_[0].rim, link.node_[1].rim) ]
 
-    if _links in locals:  # unmediated rng+ over node combinations or link.node.rim combinations
+    if "_links" in locals():  # unmediated rng+ over node combinations or link.node.rim combinations
         while True:
             for link in _links:
                 _G, G = link
@@ -117,7 +118,7 @@ def rng_recursion(root, Et, fagg):  # comp Gs in agg+, links in sub+
                 if fcomp:
                     G.compared_ += [_G]; _G.compared_ += [G]
                     Link = Clink(node_=[_G, G], distance=dist, angle=[dy, dx], box=extend_box(G.box, _G.box))
-                    comp_G(Link, Et, fd=0)
+                    comp_G(Link, Et, fd=1-fagg)
             # reuse combinations
             if Et[0] > ave_Gm * Et[2] * nrng: nrng += 1
             else: break
@@ -174,7 +175,7 @@ def comp_G(link, iEt, fd):  # add dderH to link and link to the rims of comparan
                               derH=CH(H=deepcopy(_derH.H), Et=[et[0]+mA, et[1]+dA, et[2]+mA<dA, et[3]+dA<=mA]))
                 comp_G(mLink, Et, fd=1)
                 if et[0] > ave * et[2]:
-                    link.rim += mLink  # combined hyperlink
+                    link.rim += [mLink]  # combined hyperlink
                 else: break  # comp next mediated link if mediating links match
     else:  # CGs
         rn= _G.n/G.n  # comp ext params prior: _L,L,_S,S,_A,A, dist, no comp_G unless match:
@@ -240,7 +241,8 @@ def convolve_graph(iG_):  # node connectivity = sum surround link vals, incr.med
                 if not val: continue  # G has no new links
                 ave = G_aves[i]
                 for link in G.rim:  # if fd: use hyper-Links between links: link.link_, ~ G.rim, then add in dgraph.link_?
-                    if len(link.derH.H)<=len(G.extH.H): continue  # old links, else derH+= in comp_G, same for link Gs?
+                    # should be no old rims now    
+                    # if len(link.derH.H)<=len(G.extH.H): continue  # old links, else derH+= in comp_G, same for link Gs?
                     # > ave derGs in new fd rim:
                     lval,lrdn = link.Et[i::2]  # step=2, graph-specific vals accumulated from surrounding nodes, or use link.node_.Et instead?
                     decay =  (link.relt[i] / (link.derH.n * 6)) ** mediation  # normalized decay at current mediation
@@ -293,7 +295,8 @@ def segment_graph(root, Q, fd, nrng):  # eval rim links with summed surround val
     igraph_ = []; ave = G_aves[fd]
 
     for e in Q:  # init per updated node or link
-        uprim = [link for link in e.rim if len(link.derH.H)==len(e.extH.H)]
+        # uprim = [link for link in e.rim if len(link.derH.H)==len(e.extH.H)]
+        uprim = e.rim
         if uprim:  # skip nodes without add new added rim
             grapht = [[e],[],[*e.Et], uprim]  # link_ = updated rim
             e.root = grapht  # for merging

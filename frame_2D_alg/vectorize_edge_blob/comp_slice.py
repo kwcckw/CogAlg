@@ -77,8 +77,10 @@ def rng_recursion(PP, rng=1, fd=0):  # similar to agg+ rng_recursion, but loopin
                             if len(P.link_) < rng: P.link_ += [[]]  # add new link_
                         link_ = unpack_last_link_(P.link_)
                         if not fd: link_ += [mlink]
-                        _link_ = unpack_last_link_(_P.link_ if fd else _P.link_[:-1])  # skip prelink_ if rng+
-                        prelink_ += _link_  # connected __Ps links
+                        _link_ = unpack_last_link_(_P.link_ if fd else _P.link_[:-1])  # skip prelink_ if rng+        
+                        # with the new slice_edge, looks like we are getting circular links here, so link assignment in slice_edge is bidirectional now?
+                        prelink_ += [ _link for _link in _link_ if _link not in prelink_]
+                        # prelink_ += _link_  # connected __Ps links
             P.link_ += [prelink_]  # temporary pre-links, may be empty
             if prelink_: P_ += [P]
         rng += 1
@@ -172,7 +174,7 @@ def form_PP_t(root, P_, iRt):  # form PPs of derP.valt[fd] + connected Ps val
 
 def sum2PP(root, P_, derP_, iRt, fd):  # sum links in Ps and Ps in PP
 
-    PP = CG(fd=fd,root=root,P_=P_,rng=root.rng+1)
+    PP = CG(fd=fd,root=root,rng=root.rng+1); PP.P_ = P_  # init P_
     # += uplinks:
     for derP in derP_:
         if derP.node_[0] not in P_ or derP.node_[1] not in P_: continue
