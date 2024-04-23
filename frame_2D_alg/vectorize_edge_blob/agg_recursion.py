@@ -109,9 +109,8 @@ def rng_recursion(root, Et, fagg):  # comp Gs in agg+, links in sub+
                 if fcomp:
                     G.compared_ += [_G]; _G.compared_ += [G]
                     Link = Clink(node_=[_G, G], distance=dist, angle=[dy, dx], box=extend_box(G.box, _G.box))
-                    Link = comp_G(Link, Et, fd=0)
-                if Link in locals and Link:
-                    for G in link: G.rim += [Link]
+                    if comp_G(Link, Et, fd=0):
+                        for G in link: G.rim += [Link]
             # reuse combinations
             if Et[0] > ave_Gm * Et[2] * nrng: nrng += 1
             else: break
@@ -123,10 +122,14 @@ def rng_recursion(root, Et, fagg):  # comp Gs in agg+, links in sub+
                 for G in link.node_:  # compare equimediated Clink nodes in hyperlink rims, if mediating links angle match?
                     if isinstance(G,Clink):
                         if len(G.rim) > nrng-1:  # Clink rim is a hyperlink, +mediation / nrng
-                            rim = G.rim[nrng-1]  # link.rim should be nested now
-                            new_layer = []  # mA links in rim layer
+                            if not isinstance(G.rim[-1], list):  # not converted to list yet 
+                                G.rim = [G.rim[:]]  # add nesting
+                                rim = G.rim[-1]
+                            else:
+                                rim = G.rim[nrng-1]  # link.rim should be nested now
+                            G.rim += [[]]  # mA links in rim layer (nested)
                         else: break  # med rng exhausted
-                    else: rim = G.rim  # flat in CGs, single-node mediated
+                    else: rim = copy(G.rim)  # flat in CGs, single-node mediated (use copy to prevent adding rim while looping it)
                     for _link in rim:
                         if _link in link.compared_: continue
                         (_y,_x),(y,x) = box2center(link.box),box2center(_link.box)
@@ -137,14 +140,12 @@ def rng_recursion(root, Et, fagg):  # comp Gs in agg+, links in sub+
                             _derH = _link.derH; et = _derH.Et
                             Link = Clink(node_=[_link,link],distance=dist,angle=(dy,dx),box=extend_box(_link.box,link.box),
                                          derH=CH(H=deepcopy(_derH.H), Et=[et[0]+mA, et[1]+dA, et[2]+mA<dA, et[3]+dA<=mA]))
-                            Link = comp_G(Link, Et, fd=1)
-                            if Link.derH.Et[0] > ave_Gm * Link.derH.Et[2] * nrng:
-                                if new_layer in locals: new_layer += [Link]
-                                links += [Link]
 
-                for G in link.node_:  # move here from comp_G:
-                    if new_layer in locals:        G.rim += [new_layer]  # incremental link.rim else link.node mediation in next rng+
-                    elif Link in locals and Link:  G.rim += [Link]
+                            if comp_G(Link, Et, fd=1) and Link.derH.Et[0] > ave_Gm * Link.derH.Et[2] * nrng:
+                                _link.rim += [Link]; link.rim += [Link]  # we need to add new Link to link to _link too? 
+                                if G.rim and isinstance(G.rim[-1], list): G.rim[-1] += [Link]  # incremental link.rim else link.node mediation in next rng+
+                                else:                                     G.rim += [Link]  # this Link is per _link, we need to add it here?
+                                links += [Link]  # for next layer
 
             if Et[0] > ave_Gm * Et[2] * nrng:  # rng+ eval per arg cluster because comp is bilateral, 2nd test per new pair
                 nrng += 1; _links = links
@@ -176,7 +177,9 @@ def comp_G(link, iEt, fd):  # add dderH to link and link to the rims of comparan
                               derH=CH(H=deepcopy(_derH.H), Et=[et[0]+mA, et[1]+dA, et[2]+mA<dA, et[3]+dA<=mA]))
                 comp_G(mLink, Et, fd=1)
                 if et[0] > ave * et[2]:
-                    link.rim += [mLink]  # combined hyperlink
+                    _mlink.rim += [mLink]; mlink.rim += [mLink]
+                    if link.rim and isinstance(link.rim[-1], list): link.rim[-1] += [mLink] 
+                    else:                                           link.rim += [mLink]  # combined hyperlink
                 else: break  # comp next mediated link if mediating links match
     else:  # CGs
         rn= _G.n/G.n  # comp ext params prior: _L,L,_S,S,_A,A, dist, no comp_G unless match:
@@ -238,7 +241,7 @@ def convolve_graph(iG_):  # node connectivity = sum surround link vals, incr.med
                 val,rdn = G.Et[i::2]  # rng+ for both segment forks
                 if not val: continue  # G has no new links
                 ave = G_aves[i]
-                for link in G.rim:  # if fd: use hyper-Links between links: link.link_, ~ G.rim, then add in dgraph.link_?
+                for link in G.rim[-1] if isinstance(G.rim[-1], list) else G.rim:  # if fd: use hyper-Links between links: link.link_, ~ G.rim, then add in dgraph.link_?
                     # should be no old rims now
                     # if len(link.derH.H)<=len(G.extH.H): continue  # old links, else derH+= in comp_G, same for link Gs?
                     # > ave derGs in new fd rim:
