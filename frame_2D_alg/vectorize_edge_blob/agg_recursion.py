@@ -74,7 +74,7 @@ def agg_recursion(rroot, root, fagg=0):
     upQ = []  # upnode_/ agg+, uplink_/ der+
     for G in Q:
         if sum(G.Et[:2]):  # G.rim was extended, sum in G.extH:
-            for link in G.rim if fagg else G.rim_t[0][-1] + G.rim_t[1][-1]:
+            for link in G.rim if fagg else G.rim_t[0][-1][-1] + G.rim_t[1][-1][-1]:
                 if G.extH: G.extH.H[-1].add_(link.derH.H[-1],irdnt=link.derH.H[-1].Et[2:])  # sum last layer
                 else:      G.extH.append_(link.derH.H[-1],flat=0)  # pack last layer
             upQ += [G]
@@ -137,6 +137,7 @@ def rng_recursion(root, Et, fagg):  # comp Gs in agg+, links in sub+
                             Link = Clink(node_=[_link,link],distance=dist,angle=(dy,dx),box=extend_box(_link.box,link.box),
                                          derH=CH(H=deepcopy(_derH.H), Et=[et[0]+mA, et[1]+dA, et[2]+mA<dA, et[3]+dA<=mA]))
                             if comp_G(Link, Et, fd=1):
+                                add_rim_t(Link)  # this new Link.rim_t is empty, looks like we need to add their rim_t here so that it has rim_t for the next rng
                                 _link_ += [Link]  # append link.rim
                                 links += [Link]  # for next layer
                     rim__[-1] += [_link_]
@@ -217,7 +218,7 @@ def convolve_graph(iG_):  # node connectivity = sum surround link vals, incr.med
                 if not val: continue  # G has no new links
                 ave = G_aves[i]
                 # not sure, use both directions' rims?
-                for link in G.rim if isinstance(G,CG) else G.rim_t[0][-1] + G.rim_t[1][-1] :  # not updated
+                for link in G.rim if isinstance(G,CG) else G.rim_t[0][-1][-1] + G.rim_t[1][-1][-1] :  # not updated
                     # > ave derGs in new fd rim:
                     lval,lrdn = link.Et[i::2]  # step=2, graph-specific vals accumulated from surrounding nodes, or use link.node_.Et instead?
                     decay =  (link.relt[i] / (link.derH.n * 6)) ** mediation  # normalized decay at current mediation
@@ -252,19 +253,8 @@ def form_graph_t(root, upQ, Et, nrng):  # form Gm_,Gd_ from same-root nodes
             if fd:  # der+ after rng++ term by high ds
                 for graph in graph_:
                     if graph.link_ and graph.Et[1] > G_aves[1] * graph.Et[3]:  # Et is summed from all links
-                        for link in graph.link_:
-                            for i in 0,1:  # sub+: bidirectional rim_t += mA links from last-layer nodes:
-                                rim = link.rim_t[i][-1] if any(link.rim_t) else link.node_[i].rim
-                                if isinstance(rim[0],list):  # der+ rim_t[i][-1] nested by node-mediated rng+
-                                    rim = [[link for link in link_] for link_ in rim]   # flatten nested rim
-                                rim_layer = []
-                                for _link in rim:
-                                    if _link is link or link in rim_layer: continue
-                                    angle = link.angle if i else [-d for d in link.angle]  # reverse angle direction for left link comp
-                                    if comp_angle(angle, _link.angle)[0] > ave_mA:
-                                        rim_layer += [_link]  # from rng++/ last der+?
-                                link.rim_t[i] += [[rim_layer]]
-                                # double nesting for rng+
+                        for link in graph.link_: 
+                            add_rim_t(link, fagg=isinstance(upQ[0], CG))
                         agg_recursion(root, graph, fagg=0)  # graph.node_ is not node_t yet
                     elif graph.derH:
                         root.fback_ += [graph.derH]
@@ -276,6 +266,26 @@ def form_graph_t(root, upQ, Et, nrng):  # form Gm_,Gd_ from same-root nodes
         root.node_[:] = node_t  # else keep root.node_
         return node_t
 
+
+def add_rim_t(link, fagg=0):
+    
+    for i in 0,1:  # sub+: bidirectional rim_t += mA links from last-layer nodes:
+        # in the old code below, looks like we need any(link.rim_t[i]) instead of any(link.rim_t) because link.rim_t[0] will be added first. any(link.rim_t) may get true when i == 1
+        # rim = link.rim_t[i][-1] if any(link.rim_t[i]) else link.node_[i].rim
+        if fagg: rim = link.node_[i].rim
+        else:    rim = link.rim_t[i][-1] if link.rim_t[i] else []
+
+        if rim and isinstance(rim[0],list):  # der+ rim_t[i][-1] nested by node-mediated rng+
+            rim = [rlink for link_ in rim for rlink in link_]   # flatten nested rim (additioanl bracket is not needed to make them flat)
+        rim_layer = []
+        for _link in rim:
+            if _link is link or link in rim_layer: continue
+            angle = link.angle if i else [-d for d in link.angle]  # reverse angle direction for left link comp
+            if comp_angle(angle, _link.angle)[0] > ave_mA:
+                rim_layer += [_link]  # from rng++/ last der+?
+        link.rim_t[i] += [[rim_layer]]
+        # double nesting for rng+
+
 # not updated:
 def segment_graph(root, Q, fd, nrng):  # eval rim links with summed surround vals for density-based clustering
 
@@ -283,7 +293,7 @@ def segment_graph(root, Q, fd, nrng):  # eval rim links with summed surround val
     igraph_ = []; ave = G_aves[fd]
 
     for e in Q:  # init per updated node or link
-        uprim = e.rim if isinstance(e, CG) else e.rim_t[0][-1] + e.rim_t[1][-1]
+        uprim = e.rim if isinstance(e, CG) else e.rim_t[0][-1][-1] + e.rim_t[1][-1][-1]
         if uprim:  # skip nodes without add new added rim
             grapht = [[e],[],[*e.Et], uprim]  # link_ = updated rim
             e.root = grapht  # for merging
