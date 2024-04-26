@@ -91,6 +91,7 @@ def agg_recursion(rroot, root, fagg=0):
                         feedback(rroot)  # update root.root..
 
 
+# revise to compare prior-rng exemplars instead original nodes | links:
 def rng_recursion(root, Et, fagg):  # comp Gs in agg+, links in sub+
     nrng = 1
 
@@ -119,8 +120,10 @@ def rng_recursion(root, Et, fagg):  # comp Gs in agg+, links in sub+
         while True:
             links = []
             for link in _links:
-                # link.rim_t is a link-centered graph, that would overlap other connected-link - centered graphs.
-                # link is an exemplar of its graph, select max|K of connected exemplars to reduce overlap, ~maxes in slice_edge.
+                # revise:
+                # link.rimt__ is a link-centered graph, that would overlap other connected-link - centered graphs.
+                # Where link is an exemplar, select max connected exemplars per rng to reduce resolution of rng+
+
                 for rim__ in link.rim_t:  # compare equimediated Clink nodes in hyperlink rims, if mediating links angle match?
                     if len(rim__[-1]) > nrng-1:  # rim is a hyperlink, nested by mediation / nrng
                         rim = rim__[-1][-1]  # link.rim is nested per der+( rng+
@@ -137,7 +140,6 @@ def rng_recursion(root, Et, fagg):  # comp Gs in agg+, links in sub+
                             Link = Clink(node_=[_link,link],distance=dist,angle=(dy,dx),box=extend_box(_link.box,link.box),
                                          derH=CH(H=deepcopy(_derH.H), Et=[et[0]+mA, et[1]+dA, et[2]+mA<dA, et[3]+dA<=mA]))
                             if comp_G(Link, Et, fd=1):
-                                add_rim_t(Link)  # this new Link.rim_t is empty, looks like we need to add their rim_t here so that it has rim_t for the next rng
                                 _link_ += [Link]  # append link.rim
                                 links += [Link]  # for next layer
                     rim__[-1] += [_link_]
@@ -253,8 +255,7 @@ def form_graph_t(root, upQ, Et, nrng):  # form Gm_,Gd_ from same-root nodes
             if fd:  # der+ after rng++ term by high ds
                 for graph in graph_:
                     if graph.link_ and graph.Et[1] > G_aves[1] * graph.Et[3]:  # Et is summed from all links
-                        for link in graph.link_: 
-                            add_rim_t(link, fagg=isinstance(upQ[0], CG))
+                        add_rim_(graph.link_)
                         agg_recursion(root, graph, fagg=0)  # graph.node_ is not node_t yet
                     elif graph.derH:
                         root.fback_ += [graph.derH]
@@ -266,25 +267,23 @@ def form_graph_t(root, upQ, Et, nrng):  # form Gm_,Gd_ from same-root nodes
         root.node_[:] = node_t  # else keep root.node_
         return node_t
 
+def add_rim_(link_):  # sub+: bidirectional rim_t += _links from last-layer node.rims, if they match link:
 
-def add_rim_t(link, fagg=0):
-    
-    for i in 0,1:  # sub+: bidirectional rim_t += mA links from last-layer nodes:
-        # in the old code below, looks like we need any(link.rim_t[i]) instead of any(link.rim_t) because link.rim_t[0] will be added first. any(link.rim_t) may get true when i == 1
-        # rim = link.rim_t[i][-1] if any(link.rim_t[i]) else link.node_[i].rim
-        if fagg: rim = link.node_[i].rim
-        else:    rim = link.rim_t[i][-1] if link.rim_t[i] else []
-
-        if rim and isinstance(rim[0],list):  # der+ rim_t[i][-1] nested by node-mediated rng+
-            rim = [rlink for link_ in rim for rlink in link_]   # flatten nested rim (additioanl bracket is not needed to make them flat)
-        rim_layer = []
-        for _link in rim:
-            if _link is link or link in rim_layer: continue
-            angle = link.angle if i else [-d for d in link.angle]  # reverse angle direction for left link comp
-            if comp_angle(angle, _link.angle)[0] > ave_mA:
-                rim_layer += [_link]  # from rng++/ last der+?
-        link.rim_t[i] += [[rim_layer]]
-        # double nesting for rng+
+    for link in link_:
+        new_rimt = [[],[]]
+        if link.rimt__:
+            rimt = [[],[]]
+            for _rimt in link.rimt__[-1]:
+                rimt[0] += _rimt[0]; rimt[1] += _rimt[1]  # flatten nested rimt_
+        else:  rimt = [link.node_[0].rim,link.node_[1].rim]  # 1st sub+/ link
+        for i, rim, new_rim in zip((0,1), rimt, new_rimt):
+            for _link in rim:
+                if _link is link or link in new_rim: continue
+                angle = link.angle if i else [-d for d in link.angle]  # reverse angle direction for left link comp
+                # or compare the whole links, which is the actual der+?
+                if comp_angle(angle, _link.angle)[0] > ave_mA:
+                    new_rim += [_link]  # from rng++/ last der+?
+            if any(new_rimt): link.rimt__ += [[new_rimt]]  # double nesting for next rng+
 
 # not updated:
 def segment_graph(root, Q, fd, nrng):  # eval rim links with summed surround vals for density-based clustering
