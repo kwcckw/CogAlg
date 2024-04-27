@@ -126,7 +126,7 @@ def rng_recursion(root, Et, fagg):  # comp Gs in agg+, links in sub+
                     if len(rimt_) > nrng-1:  # rim is a hyperlink, nested by mediation / nrng
                         rimt = rimt_[-1]  # link.rim is nested per der+( rng+
                     else: break  # med rng exhausted
-                    
+
                     new_rimt = [[],[]]
                     for i, rim in enumerate(rimt):
                         for _link in rim:
@@ -140,7 +140,7 @@ def rng_recursion(root, Et, fagg):  # comp Gs in agg+, links in sub+
                                 Link = Clink(node_=[_link,link],distance=dist,angle=(dy,dx),box=extend_box(_link.box,link.box),
                                              derH=CH(H=deepcopy(_derH.H), Et=[et[0]+mA, et[1]+dA, et[2]+mA<dA, et[3]+dA<=mA]))
                                 if comp_G(Link, Et, fd=1):
-                                    new_rimt[i] += [Link]  # append link.rim   
+                                    new_rimt[i] += [Link]  # append link.rim
                     rimt_ += [new_rimt]  # new rng's rimt
             if Et[0] > ave_Gm * Et[2] * nrng:  # rng+ eval per arg cluster because comp is bilateral, 2nd test per new pair
                 nrng += 1
@@ -155,6 +155,7 @@ def comp_G(link, iEt, fd):  # add dderH to link and link to the rims of comparan
     _G, G = link.node_
     if fd:  # Clink Gs
         rn= min(_G.node_[0].n,_G.node_[1].n)/ min(G.node_[0].n,G.node_[1].n)
+        # not revised:
         Et, rt, md_ = comp_ext(_G.distance,G.distance, len(_G.rimt__[-1][-1][0])+len(_G.rimt__[-1][-1][1]), len(G.rimt__[-1][-1][0])+len(G.rimt__[-1][-1][1]), _G.angle,G.angle)
         dderH.n = 1; dderH.Et = Et; dderH.relt = rt
         dderH.H = [CH(Et=copy(Et), relt=copy(rt), H=md_, n=1)]
@@ -255,7 +256,6 @@ def form_graph_t(root, upQ, Et, nrng):  # form Gm_,Gd_ from same-root nodes
                 for graph in graph_:
                     if graph.link_ and graph.Et[1] > G_aves[1] * graph.Et[3]:  # Et is summed from all links
                         add_rim_(graph.link_)
-                        add_exemplar(graph, nrng)  
                         agg_recursion(root, graph, fagg=0)  # graph.node_ is not node_t yet
                     elif graph.derH:
                         root.fback_ += [graph.derH]
@@ -267,55 +267,40 @@ def form_graph_t(root, upQ, Et, nrng):  # form Gm_,Gd_ from same-root nodes
         root.node_[:] = node_t  # else keep root.node_
         return node_t
 
-# very initial draft, reduce resolution by creating exemplars from node's links
-def add_exemplar(graph, nrng):
-    
-    # reverse sort to get max nodes first (non parallel method)
-    node_ = sorted(graph.node_, key=lambda node: node.derH.Et[0], reverse=True)
-    
-    exemplar_, added_node_ = [], []
-    for i, node in enumerate(node_):
-        if node in added_node_: continue
-        added_node_ += [node]
 
-        exemplar = deepcopy(node)  # init with copy
-        exemplar.node_ = [node]    # first node
-        exemplar_ += [exemplar]
-       
-        _link_, link_, checked_link_  = node.link_, [], []
-        while True:
-            for link in _link_:  # search link recursively
-                
-                if link in checked_link_ : continue
-                checked_link_ += [link]
-                _node = link.node_[0] if link.node_[1] is node else link.node_[1]
-                if _node in added_node_ : continue
-                
-                _y,_x = box2center(exemplar.box)  # new box after each addition
-                y, x = box2center(node.box)
-                dy=_y-y; dx=_x-x; dist = np.hypot(dy,dx)  # distance between link centers
-            
-                # add node into exemplar
-                if dist < nrng:  # add eval based on M too?
-                    
-                    added_node_ += [_node]
-                    # accumulate params
-                    exemplar.n += node.n
-                    exemplar.area += node.area
-                    exemplar.box = extend_box(exemplar.box, node.box)
-                    exemplar.link_ += node.link_ 
-                    exemplar.latuple = [P+p for P,p in zip(exemplar.latuple[:-1],node.latuple[:-1])] + [[A+a for A,a in zip(exemplar.latuple[-1],node.latuple[-1])]]
-                    if node.iderH:  # empty in single-P PP|Gs
-                        exemplar.iderH.add_(node.iderH)
-                    exemplar.derH.add_(node.derH)
-                    
-                    link_ += [_link for _link in node.link_ if _link not in checked_link_ + link_ + _link_]
-    
-            if link_: _link_ = link_
-            else:     break
+def get_max_kernels(graph):
 
-    return exemplar_
-      
+    G_ = copy(graph.node_)
+    kernel_ = []
+    for G in G_:
+        _G_ = []; fmax = 1
+        for link in G.rim:
+            _G = link.node_[0] if link.node_[1] is G else link.node_[1]
+            if _G.Et[0] > G.Et[0]:
+                fmax = 0; break
+            _G_ += _G
+        if fmax:
+            kernel = [[G]+_G_]  # immediate kernel
+            for k in kernel:
+                k.root = kernel
+                if k in G_: G_.remove(k)
+            kernel_ += [kernel]
+    for G in G_:  # remaining Gs are not in any kernels
+        _G_ = [link.node_[0] if link.node_[1] is G else link.node_[1] for link in G.rim]  # directly connected Gs, already checked
+        __G_ = []
+        while _G_:
+            for _G in _G_:
+                for link in _G.rim:
+                    __G = link.node_[0] if link.node_[1] is _G else link.node_[1]
+                    if __G not in G_:  # in some kernel;
+                        __G.root += G  # append to the nearest kernel
+                        G_.remove(G)
+                        break
+                    else:
+                        __G_ += __G
+            _G_ = __G_
+    return kernel_
+
 
 def add_rim_(link_):  # sub+: bidirectional rim_t += _links from last-layer node.rims, if they match link:
 
@@ -326,16 +311,15 @@ def add_rim_(link_):  # sub+: bidirectional rim_t += _links from last-layer node
             for _rimt in link.rimt__[-1]:
                 rimt[0] += _rimt[0]; rimt[1] += _rimt[1]  # flatten nested rimt_
         else:  rimt = [link.node_[0].rim,link.node_[1].rim]  # 1st sub+/ link
-        for i, rim in enumerate(rimt):
+        for i, rim, new_rim in zip((0,1), rimt, new_rimt):
             for _link in rim:
-                if _link is link or link in new_rimt[i]: continue
+                if _link is link or link in new_rim: continue
                 angle = link.angle if i else [-d for d in link.angle]  # reverse angle direction for left link comp
                 # or compare the whole links, which is the actual der+?
                 if comp_angle(angle, _link.angle)[0] > ave_mA:
-                    new_rimt[i] += [_link]  # from rng++/ last der+?
-
+                    new_rim += [_link]  # from rng++/ last der+?
+        if any(new_rimt): link.rimt__ += [[new_rimt]]  # double nesting for next rng+
         # this can be default? Else we will need a lot of checking for empty rimt__ later
-        link.rimt__ += [[new_rimt]]  # double nesting for next rng+ (previous indentation is wrong, should be added per link)
 
 # not updated:
 def segment_graph(root, Q, fd, nrng):  # eval rim links with summed surround vals for density-based clustering
@@ -355,6 +339,9 @@ def segment_graph(root, Q, fd, nrng):  # eval rim links with summed surround val
     while True:
         graph_ = []
         for grapht in _graph_:  # extend grapht Rim with +ve in-root links
+            # this is just a start:
+            get_max_kernels(grapht)
+            # not revised:
             if grapht not in igraph_: continue  # skip merged graphs
             G_, Link_, Et, Rim = grapht
             inVal, inRdn = 0,0  # new in-graph +ve
