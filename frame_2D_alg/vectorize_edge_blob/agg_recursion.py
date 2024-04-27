@@ -272,20 +272,21 @@ def get_max_kernels(graph):
 
     G_ = copy(graph.node_)
     kernel_ = []
-    for G in G_:
+    for G in copy(G_):  # use copy here so that we don't remove element within while looping it
         _G_ = []; fmax = 1
         for link in G.rim:
             _G = link.node_[0] if link.node_[1] is G else link.node_[1]
             if _G.Et[0] > G.Et[0]:
                 fmax = 0; break
-            _G_ += _G
+            _G_ += [_G]
         if fmax:
-            kernel = [[G]+_G_]  # immediate kernel
+            kernel = [G]+_G_  # immediate kernel
             for k in kernel:
                 k.root = kernel
                 if k in G_: G_.remove(k)
             kernel_ += [kernel]
-    for G in G_:  # remaining Gs are not in any kernels
+    for G in copy(G_):  # remaining Gs are not in any kernels
+        fbreak = 0  # per G to break from all loops    
         _G_ = [link.node_[0] if link.node_[1] is G else link.node_[1] for link in G.rim]  # directly connected Gs, already checked
         __G_ = []
         while _G_:
@@ -293,11 +294,15 @@ def get_max_kernels(graph):
                 for link in _G.rim:
                     __G = link.node_[0] if link.node_[1] is _G else link.node_[1]
                     if __G not in G_:  # in some kernel;
-                        __G.root += G  # append to the nearest kernel
+                        G.root = __G.root  # update root
+                        __G.root += [G]  # append to the nearest kernel
                         G_.remove(G)
+                        fbreak = 1  # to break and loop next G from G_
                         break
                     else:
-                        __G_ += __G
+                        __G_ += [__G]
+                if fbreak: break
+            if fbreak: break
             _G_ = __G_
     return kernel_
 
@@ -340,7 +345,7 @@ def segment_graph(root, Q, fd, nrng):  # eval rim links with summed surround val
         graph_ = []
         for grapht in _graph_:  # extend grapht Rim with +ve in-root links
             # this is just a start:
-            get_max_kernels(grapht)
+            get_max_kernels(grapht)  # per grapht? grapht is a list
             # not revised:
             if grapht not in igraph_: continue  # skip merged graphs
             G_, Link_, Et, Rim = grapht
