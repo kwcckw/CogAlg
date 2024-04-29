@@ -111,9 +111,14 @@ def rng_convolve(root, Et, fagg):  # comp Gs in agg+, links in sub+
                 Link = comp_G(Link, Et, fd=0)
                 if Link.Et[0] > ave:
                     for node in _G,G:
-                        if node in G_: continue
-                        node.kernel = [link.node_[0] if link.node_[1] is node else link.node_[1] for _link in node.rim]  # initialization
-                        G_ += [node]
+                        node.rim += [Link]  # We need to add Link into rim here? Else their rim is always empty
+                        if node not in G_: G_ += [node]
+        
+        # this should be at the end of the comparison because a single G may be paired with multiple _Gs           
+        for node in root.node_:
+            # should include self - node into kernel?
+            node.kernel = [node] + [link.node_[0] if link.node_[1] is node else link.node_[1] for link in node.rim]  # initialization
+
         while len(G_) > 2:  # rng+ with kernel rims formed per loop
             _G_ = []
             for G in G_:
@@ -122,13 +127,18 @@ def rng_convolve(root, Et, fagg):  # comp Gs in agg+, links in sub+
                         _G = link.node_[1] if link.node_[0] is G else link.node_[0]
                         derH = comp_kernel(G.kernel,_G.kernel)
                         if derH.Et[0] > ave:
+                            # this link.ExtH will be summed across all nrngs?
                             link.ExtH.add_(derH,irdnt=derH.H[-1].Et[2:]) if link.ExtH else link.ExtH.append_(derH,flat=1)
+                            # or check with nrng, as below?
+                            # if len(link.ExtH.H) == nrng:  link.ExtH.H[-1].add_(derH,irdnt=derH.H[-1].Et[2:])  # sum last layer
+                            # else:                         link.ExtH.append_(derH,flat=0)                      # pack new layer
+                            
                             for node in _G,G:
                                 if node in _G_: continue
                                 kernel = []
                                 for _link in node.rim:
                                     _node = link.node_[0] if link.node_[1] is node else link.node_[1]
-                                    kernel += _node.kernel
+                                    kernel += [ _G for _G in _node.kernel if _G not in kernel]
                                     node.kernel = kernel  # last kernel rim only
                                     _G_ += [node]
             G_ = _G_; nrng += 1
@@ -138,13 +148,21 @@ def rng_convolve(root, Et, fagg):  # comp Gs in agg+, links in sub+
         _link_ = []
         while link_:
             for link in link_:  # der+'rng+: directional and node-mediated comp link
-                for rim__ in link.rim__t:  # two directions of layers, each nested by mediating links
-                    for _L in [L for L in rim for rim in rim__[-1]]:  # last nested layer
+                for i, rim__ in enumerate(link.rim__t):  # two directions of layers, each nested by mediating links
+                    for _L in [L for rim in rim__[-1] for L in rim]:  # last nested layer
                         _G = _L.node_[0] if _L.node_[1] in link.node_ else _L.node_[1]
                         for _link in _G.rim:
                             Link = Clink(node_=[link,_link])
                             if comp_G(Link):
                                 _link_ += Link
+                                # add _link into link' rim, for next rng
+                                if len(link.rim__t[i]) == nrng: link.rim__t[i][-1] += [_link]  # pack to last layer
+                                else:                           link.rim__t[i] += [[_link]]    # add new layer
+                                # add link into _link's rim, for next rng
+                                if len(_link.rim__t[i]) == nrng: _link.rim__t[i][-1] += [link]  # pack to last layer
+                                else:                            _link.rim__t[i] += [[link]]    # add new layer
+                                                        
+                                
             link_ = _link_; nrng += 1
             '''  probably not relevant:
                 new_rimt = [[],[]]
@@ -168,6 +186,49 @@ def rng_convolve(root, Et, fagg):  # comp Gs in agg+, links in sub+
             '''
     return nrng, Et
 
+def comp_kernel(_kernel, kernel):
+    
+    dderH = CH()  # new derivative from comparing kernels
+    
+    # get kernel params
+    _n, _L, _S, _A, _latuple, _iderH, _derH, _extH = get_kernel_params(_kernel)
+    n ,  L,  S,  A,  latuple,  iderH,  derH,  extH = get_kernel_params(_kernel)
+    
+    # comparison below, similar with comp_G
+    rn= _n/n
+
+    # ext & latuple :
+    et, rt, md_ = comp_ext(_L,L,_S,S/rn,_A,A)
+    Et, Rt, Md_ = comp_latuple(_latuple, latuple, rn, fagg=1)
+    dderH.n = 1; dderH.Et = np.add(Et,et); dderH.relt = np.add(Rt,rt)
+    dderH.H = [CH(Et=et,relt=rt,H=md_,n=.5),CH(Et=Et,relt=Rt,H=Md_,n=1)]
+    
+    # / PP:
+    _iderH.comp_(iderH, dderH, rn, fagg=1, flat=0)  
+    
+    # / G, if >1 PPs | Gs:
+    if _derH and derH: _derH.comp_(derH, dderH, rn, fagg=1, flat=0)  # append and sum new dderH to base dderH
+    if _extH and extH: _extH.comp_(extH, dderH, rn, fagg=1, flat=1)
+    
+    return dderH
+    
+
+def get_kernel_params(kernel):
+    
+    # get _kernel params
+    n, L, S, A = kernel[0].n, len(kernel[0].node_), kernel[0].S, kernel[0].A
+    latuple = deepcopy(kernel[0].latuple)
+    iderH = deepcopy(kernel[0].iderH)
+    derH = deepcopy(kernel[0].derH)
+    extH = deepcopy(kernel[0].extH)  # not sure on extH, they will be empty here?
+    for G in kernel[1:]:
+        latuple = [P+p for P,p in zip(latuple[:-1],G.latuple[:-1])] + [[A+a for A,a in zip(latuple[-1],G.latuple[-1])]]
+        n += G.n;  L += len(G.node_); S += G.S;  A =  [ Angle+angle for Angle, angle in zip(A, G.A)] 
+        if G.iderH: iderH.add_(G.iderH)
+        if G.derH:  derH.add_(G.derH)
+        if G.extH:  extH.add_(G.extH)
+
+    return n, L, S, A, latuple, iderH, derH, extH
 
 def comp_G(link, iEt, fd):  # add dderH to link and link to the rims of comparands, which may be Gs or links
 
