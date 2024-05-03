@@ -103,7 +103,13 @@ def rng_convolve(root, Et, fagg):  # comp Gs|kernels in agg+, links | link rim__
                         node.rim += [Link]
                         if node not in G_: G_ += [node]
         for G in G_:
-            G.kH = [[link.node_[0] if link.node_[1] is G else link.node_[1] for link in G.rim]]  # add 1st kernel layer
+            G.kH += [[]]  # add 1st kernel layer
+            for i, link in enumerate(G.rim):
+                if i == 0: G.derH.append_(link.derH,flat=1)  # init with link.derH (here we assume G.derH is empty, but it may not empty from agg++?)
+                else:     G.derH.add_(link.derH)      # accumulate link.derH into last derH.H
+                _G = link.node_[0] if link.node_[1] is G else link.node_[1] 
+                G.kH[0] += [_G] 
+                                                                        
         while len(G_) > 2:  # rng+ with kernel rims formed per loop
             nrng += 1; _G_ = []
             for G in G_:
@@ -136,7 +142,7 @@ def comp_kernel(link, G_, nrng, fd=0):
     ave = G_aves[fd]
     _kernel = list(set(_G.kH[-1])-set(G.kH[-1]))  # skip overlap
     kernel = list(set(G.kH[-1])-set(_G.kH[-1]))
-    # if not _kernel or not kernel: return  # no full overlap?
+    # if not _kernel or not kernel: return  # no full overlap? Yes this is not needed now
     _n,_L,_S,_A,_latuple,_iderH,_derH,_Et = sum_kernel(_kernel)
     n, L, S, A, latuple, iderH, derH, Et  = sum_kernel(kernel)
     rn = _n/n
@@ -159,7 +165,7 @@ def comp_kernel(link, G_, nrng, fd=0):
             for _link in node.rim:
                 _node = _link.node_[0] if _link.node_[1] is node else _link.node_[1]
                 kLayer += [_G for _G in _node.kH[-1] if _G not in kLayer]
-                node.DerH.add_(_node.derH, irdnt=_node.Et[2:]) if node.DerH else node.DerH = deepcopy(_node.derH)  # init
+                node.DerH.add_(_node.derH, irdnt=_node.Et[2:]) if node.DerH else node.DerH.append_(node.derH, flat=1)  # init (we can't have assignment in the right hand side, use append is a same thing)
             node.kH += [kLayer]  # last kernel rim
             G_ += [node]
     # node connectivity eval in segment_graph only via decay = (link.relt[fd] / (link.derH.n * 6)) ** nrng  # normalized decay at current mediation
@@ -284,9 +290,9 @@ def segment_graph(root, Q, fd, nrng):  # eval rim links with summed surround val
             dV, dR = 0,0  # update per clustering loop
             new_Rim = []
             for link in Rim:  # newly external links, or all updated links?
-                if link.node_[0] in G_: G,_G = link.node_  # one of the nodes is already clustered
-                else:                   _G,G = link.node_
-                if _G in G_: continue
+                if link.node_[0].root is grapht: G,_G = link.node_  # we need to check root, since all Gs is in G_ now
+                else:                            _G,G = link.node_
+                if _G.root is grapht: continue  # other _G is clustered
                 # not sure:  eval links by combination direct and node-mediated connectivity, recursive refine by in-graph kernels:
                 _val,_rdn = _G.DerH.Et[fd::2]; val,rdn = G.DerH.Et[fd::2]
                 lval,lrdn = link.Et[fd::2]
@@ -297,54 +303,29 @@ def segment_graph(root, Q, fd, nrng):  # eval rim links with summed surround val
                     link.Et[fd] = V; link.Et[2+fd] = R
 
                 # we need to get overlap between grapht and _G.root: shared links and nodes?
-                # below is not edited
-                # get overlapping nodes via their kernels
-                overlap_node_ = list(set([node for K in G.kH for node in K]).intersection([_node for _K in _G.kH for _node in _K]))
-                overlap_V = sum([node.DerH.Et[fd] for node in overlap_node_])
+                if _G.root:
+                    _grapht = _G.root
+                    _G_,_Link_,_Et,_Rim = _grapht
+                    overlap_node_ = list(set(G_).intersection(_G_))
+                    overlap_link_ = list(set(Link_).intersection(_Link_))
+                    # just sum them?
+                    overlap_V = sum([node.DerH.Et[fd] for node in overlap_node_]) + sum([link.ExtH.Et[fd] for link in overlap_link_])
+                    if overlap_V > ave:  # merge kernel
+                        Link_[:] += [_link for _link in _Link_ if _link not in Link_]
+                        for g in _G_:
+                            g.root = grapht
+                            if g not in G_: G_+=[g]
+                        Et[:] = np.add(Et,_Et)
+                        # dV += _Et[fd]; dR += _Et[2+fd] this is no longer needed?
+                        igraph_.remove(_grapht)
+                        new_Rim += [link for link in _Rim if link not in new_Rim+Rim+Link_]
+                else:  # _G doesn't have uprim and doesn't form any grapht (not sure this is needed now, but we can remain it first)
+                    _G.root = grapht
+                    G_ += [_G]
 
-                if overlap_V > ave:  # merge kernel and root
-                    kernel = [K+k for K, k, in zip_longest(_G.kH, G.kH, fillvalue=[])]  # merge each layer of kernel
-                    G.kH = _G.kH = kernel
-                    if _G.root:
-                        _grapht = _G.root if G.root is grapht else G.root  # local and for feedback?
-                        _G_,_Link_,_Et,_Rim = _grapht
-                        Link_[:] += [_link for _link in _Link_ if _link not in Link_]
-                        for g in _G_:
-                            g.root = grapht
-                            if g not in G_: G_+=[g]
-                        Et[:] = np.add(Et,_Et)
-                        dV += _Et[fd]; dR += _Et[2+fd]
-                        igraph_.remove(_grapht)
-                        new_Rim += [link for link in _Rim if link not in new_Rim+Rim+Link_]
-                    else:  # _G doesn't have uprim and doesn't form any grapht
-                        _G.root = grapht
-                        G_ += [_G]
-                ''' 
-                # below is not updated
-                # cval suggests how deeply inside the graph is G:
-                cval = link.Et[fd] + get_match(_G.Et[fd], G.Et[fd])  # same coef for int and ext match?
-                crdn = link.Et[2+fd] + (_G.Et[2+fd] + G.Et[2+fd]) / 2
-                if cval > ave * crdn:  # _G and its root are effectively connected
-                    # merge _G.root in grapht:
-                    if _G.root:
-                        _grapht = _G.root  # local and for feedback?
-                        _G_,_Link_,_Et,_Rim = _grapht
-                        if link not in Link_: Link_ += [link]
-                        Link_[:] += [_link for _link in _Link_ if _link not in Link_]
-                        for g in _G_:
-                            g.root = grapht
-                            if g not in G_: G_+=[g]
-                        Et[:] = np.add(Et,_Et)
-                        inVal += _Et[fd]; inRdn += _Et[2+fd]
-                        igraph_.remove(_grapht)
-                        new_Rim += [link for link in _Rim if link not in new_Rim+Rim+Link_]
-                    else:  # _G doesn't have uprim and doesn't form any grapht
-                        _G.root = grapht
-                        G_ += [_G]
-                '''
             # for next loop:
             if len(new_Rim) * dV > ave * dR:
-                grapht.pop(-1); grapht += [new_Rim]
+                grapht[-1] = new_Rim
                 graph_ += [grapht]  # replace Rim
         # select graph expansion:
         if graph_: _graph_ = graph_
