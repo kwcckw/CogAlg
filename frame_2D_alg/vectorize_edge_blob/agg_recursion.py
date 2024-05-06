@@ -110,6 +110,7 @@ def rng_convolve(root, Et, fagg):  # comp Gs|kernels in agg+, links | link rim__
                 krim += [link.node_[0] if link.node_[1] is G else link.node_[1]]
             G.kH = [krim]
         # node-mediated rng+: recursive center node extH += linked node derHs for next-loop cross-comp
+        node_ = G_
         while len(G_) > 2:
             nrng += 1; _G_ = []
             for G in G_:
@@ -118,6 +119,12 @@ def rng_convolve(root, Et, fagg):  # comp Gs|kernels in agg+, links | link rim__
                     if link.Et[0] > ave:  # link.Et+ per rng
                         comp_krim(link, _G_, nrng)  # + kernel rim / loop, sum in G.extH, derivatives in link.extH?
             G_ = _G_
+        # sum G.extH from each link.DerH
+        for G in node_:
+            for i, link in enumerate(G.rim):
+                if i:  G.extH.add_(link.DerH)
+                else:  G.extH.append_(link.DerH, flat=1)
+
     else:  # comp Clinks: der+'rng+ in root.link_ rim__t node rims
         link_ = root.link_; _link_ = []
         while link_:
@@ -277,16 +284,15 @@ def segment_graph(root, Q, fd, nrng):  # recursive eval node_|link_ rims for clu
     r = 0
     grapht_ = []
     while True:
+        for node in _node_: node.Et = [0,0,0,0]  # reset in each recursion
         node_ = []
         for node in _node_:  # depth-first eval merge node_|link_ connected via their rims:
-            if node not in G_:
-                continue  # merged?
+            if node not in G_: continue  # merged?
             if not r:  # init in 1st loop
                 grapht = [[node],[],[0,0,0,0]]  # G_, Link_, Et
                 grapht_ += [grapht]
                 node.root = grapht
-            G_.remove(node)
-            upV, remaining_node_ = merge_node(grapht_, node_, node, fd, upV=0)
+            upV, remaining_node_ = merge_node(grapht_, G_, node, fd, upV=0)  # node_ should be G_ here, to remove merged node
             if upV > ave:  # graph update value, accumulate?
                 node_ += [node]
             G_ += remaining_node_  # re-add nodes
@@ -301,37 +307,40 @@ def segment_graph(root, Q, fd, nrng):  # recursive eval node_|link_ rims for clu
     return graph_
 
 # draft
-def merge_node(grapht_, node_, G, fd, upV):
+def merge_node(grapht_, iG_, G, fd, upV):
+    if G in iG_: iG_.remove(G)
     G_, Link_, Et = G.root
     ave = G_aves[fd]
     remaining_node_ = []  # remaining nodes after grapht is removed from grapht_
     for link in G.rim if isinstance(G, CG) else G.rim__t[0][-1][-1]+G.rim__t[1][-1][-1]:
         if link.Et[fd] > ave:  # fork eval
-            if link not in Link_:
-                Link_ += [link]
+            if link not in Link_: Link_ += [link]
             _G = link.node_[0] if link.node_[1] is G else link.node_[1]
-            if _G in G_:
-                continue
+            if _G in G_: continue  # _G is already in graph
+            G.Et = np.add(G.Et, link.derH.Et); _G.Et = np.add(_G.Et, link.derH.Et)  # readd in-graph link' val
             olink_ = list(set(Link_).intersection(_G.rim))  # link overlap between grapht and node.rim
             oV = sum([olink.Et[fd] for olink in olink_])  # link overlap V
-            if oV > ave and oV > _G.Et[fd]:
+            if oV > ave and oV > _G.Et[fd]:  # so this will true only if length of olink_> 1 because we added link.derH.Et to _G.Et in the section above
                 # higher node inclusion value in new vs. current root
                 upV += oV
-                _G.Et[fd] = oV  # graph-specific, rdn?
+                _G.Et[fd] = oV  # graph-specific, rdn?  (why we need this?)
                 G_ += [_G]; Link_ += [link]; Et = np.add(Et,_G.Et)
-                if _G.root:
+                if _G.root:  # remove _G from root
                     _G_, _Link_, _Et = _G.root
-                    _G_.remove(_G); _Link_.remove(link);
+                    _G_.remove(_G)
+                    if link in _Link_: _Link_.remove(link)  # we may have empty Link_ when grapht init in r==0 doesn't have any links get true in link fork eval
                     _Et = np.subtract(_Et, Et)
-                    # no separate eval: ?
-                    upV, up_remaining_node_ = merge_node(grapht_, node_, _G, fd, upV)
-                    remaining_node_ += up_remaining_node_
 
                     if _Et[fd] < ave * _Et[2+fd]:
                         grapht_.remove(_G.root)  # not sure, unpack pruned grapht?
                         remaining_node_ += _G_
+                        for __G in _G_: __G.root = []   # reset root
 
                 _G.root = G.root
+                # no separate eval: ?  (this is already eval by oV?)
+                upV, up_remaining_node_ = merge_node(grapht_, iG_, _G, fd, upV)
+                remaining_node_ += up_remaining_node_
+
     return upV, remaining_node_
 
 
