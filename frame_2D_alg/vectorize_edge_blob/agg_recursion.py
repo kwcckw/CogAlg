@@ -68,7 +68,9 @@ def agg_recursion(rroot, root, fagg=0):
         link.Et = copy(link.derH.Et); link.relt = copy(link.derH.relt)
 
     nrng, Et = rng_convolve(root, [0,0,0,0], fagg)  # += connected nodes in med rng
-    node_t = form_graph_t(root, root.node_ if fagg else root.link_, Et, nrng)  # root_fd, eval der++ and feedback per Gd only
+    if fagg: Q = root.node_         
+    else:    Q = [link for link in root.link_ if len(link.rim__t[0][-1]) == nrng or len(link.rim__t[1][-1]) == nrng]  # links with added rim__t only
+    node_t = form_graph_t(root, Q, Et, nrng)  # root_fd, eval der++ and feedback per Gd only
     if node_t:
         for fd, node_ in enumerate(node_t):
             if root.Et[0] * (len(node_)-1)*root.rng > G_aves[1] * root.Et[2]:
@@ -134,10 +136,13 @@ def rng_convolve(root, Et, fagg):  # comp Gs|kernels in agg+, links | link rim__
                         _L_ = []
                         _G = _L.node_[0] if _L.node_[1] in link.node_ else _L.node_[1]
                         for _link in _G.rim:
-                            Link = Clink(node_=[link,_link])
+                            _link = root.link_[-1]
+                            if _link not in root.link_: continue  # skip if _link not in current root
+                            Link = Clink(node_=[link,_link])  
                             if comp_G(Link, Et, fd=1):
                                 _link_ += [link]  # old link
                                 _L_ += [Link]  # new link
+                        # we add _L_ (new Link) into old link's rim? Where this new Link will become old link in the next rng, and hence this link node's is CLink instead of CG
                         if _L_: link.rim__t[dir][-1] += [_L_]  # += list( matching _L-mediated links)
             nrng += 1
             link_ = _link_
@@ -207,7 +212,7 @@ def comp_G(link, iEt, fd):  # add dderH to link and link to the rims of comparan
     _G, G = link.node_
     if fd:  # Clink Gs
         rn= min(_G.node_[0].n,_G.node_[1].n)/ min(G.node_[0].n,G.node_[1].n)
-        Et, rt, md_ = comp_ext(_G.distance,G.distance, len(_G.rim__t[0][-1])+len(_G.rim__t[1][-1]),len(G.rim__t[0][-1])+len(G.rim__t[1][-1]), _G.angle,G.angle)
+        Et, rt, md_ = comp_ext(_G.distance,G.distance, len(_G.rim__t[0][-1][-1])+len(_G.rim__t[1][-1][-1]),len(G.rim__t[0][-1][-1])+len(G.rim__t[1][-1][-1]), _G.angle,G.angle)
         dderH.n = 1; dderH.Et = Et; dderH.relt = rt
         dderH.H = [CH(Et=copy(Et), relt=copy(rt), H=md_, n=1)]
     else:  # CG Gs
@@ -260,6 +265,24 @@ def form_graph_t(root, upQ, Et, nrng):  # form Gm_,Gd_ from same-root nodes
             if fd:  # der+ after rng++ term by high ds
                 for graph in graph_:
                     if graph.link_ and graph.Et[1] > G_aves[1] * graph.Et[3]:  # Et is summed from all links
+                        # add_rim
+                        for link in graph.link_:
+                            if any(link.rim__t):
+                                rimt = []
+                                for rim__ in link.rim__t:
+                                    rimt += [[link for rim_ in rim__ for rim in rim_ for link in rim]]  # flatten nested rim__t
+                            else:  rimt = [link.node_[0].rim,link.node_[1].rim]  # 1st sub+/ link
+                            for i, rim in enumerate(rimt):
+                                # this should be done once here
+                                angle = link.angle if i else [-d for d in link.angle]  # reverse angle direction for left link comp
+                                new_rim = []
+                                for _link in rim:
+                                    if _link is link or link in new_rim: continue
+                                    # or compare the whole links, which is the actual der+?
+                                    if comp_angle(angle, _link.angle)[0] > ave_mA:
+                                        new_rim += [_link]  # from rng++/ last der+?
+                                link.rim__t[i] += [[new_rim]]  # double nesting for next rng+ 
+  
                         agg_recursion(root, graph, fagg=0)  # graph.node_ is not node_t yet
                     elif graph.derH:
                         root.fback_ += [graph.derH]
@@ -288,7 +311,7 @@ def segment_graph(root, Q, fd, nrng):  # recursive eval node_|link_ rims for clu
         node_ = []
         for node in _node_:  # depth-first eval merge node_|link_ connected via their rims:
             if node not in G_: continue  # merged?
-            if not r:  # init in 1st loop
+            if not node.root:  # init in 1st loop or empty root after root removal
                 grapht = [[node],[],[0,0,0,0]]  # G_, Link_, Et
                 grapht_ += [grapht]
                 node.root = grapht
@@ -340,7 +363,7 @@ def merge_node(grapht_, iG_, G, fd, upV):
                 remaining_node_ += up_remaining_node_
 
 
-    return upV, remaining_node_
+    return upV, [rnode for rnode in remaining_node_ if not rnode.root]  # skip node if they added to grapht during the subsequent merge_node process
 
 
 def sum2graph(root, grapht, fd, nrng):  # sum node and link params into graph, aggH in agg+ or player in sub+
