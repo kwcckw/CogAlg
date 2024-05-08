@@ -131,7 +131,7 @@ def rng_convolve(root, Et, fagg):  # comp Gs|kernels in agg+, links | link rim__
         link_ = root.link_; _link_ = []
         while link_:
             for link in link_:
-                for dir, rim__ in zip((0,1), link.rim__t if link.rim__t else [link.node_[0].rim,link.node_[1].rim]):
+                for dir, rim__ in zip((0,1), link.rim__t if any(link.rim__t) else [[[link.node_[0].rim]],[[link.node_[1].rim]]]):  # add nesting to convert rim into rim__
                     # two directions of last layer, maybe nested by mediating links:
                     for _L in [L for rim in rim__[-1] for L in rim]:
                         _L_ = []
@@ -140,7 +140,12 @@ def rng_convolve(root, Et, fagg):  # comp Gs|kernels in agg+, links | link rim__
                             if comp_G(Clink(node_=[link,_link]), Et, dir):
                                 _link_ += [link]  # old link
                                 _L_ += [_link]  # new _G-mediated link
-                        if _L_: link.rim__t[dir][-1] += [_L_]  # += _L-mediated link layer
+                        if _L_: 
+                            if any(link.rim__t):
+                                link.rim__t[dir][-1] += [_L_]  # += _L-mediated link layer
+                            else:
+                                link.rim__t[dir] = [[_L_]]  # first der+ where link.rim__t is empty
+                                link.rim__t[1-dir] = [[[]]]  # init empty rim
             nrng += 1
             link_ = _link_
     return nrng, Et
@@ -210,9 +215,11 @@ def comp_G(link, iEt, dir=None):  # add dderH to link and link to the rims of co
     _G, G = link.node_
 
     if fd:  # Clink Gs
+        _L = len(_G.rim__t[0][-1][-1]) + len(_G.rim__t[1][-1][-1]) if any(_G.rim__t) else len(_G.node_[0].rim) + len(_G.node_[1].rim)
+        L = len(G.rim__t[0][-1][-1]) + len(G.rim__t[1][-1][-1]) if any(G.rim__t) else len(G.node_[0].rim) + len(G.node_[1].rim)
         rn= min(_G.node_[0].n,_G.node_[1].n)/ min(G.node_[0].n,G.node_[1].n)
         _A, A = _G.angle, G.angle if dir else [-d for d in G.angle]  # reverse angle direction for left link comp
-        Et, rt, md_ = (comp_ext(_G.distance,G.distance, len(_G.rim__t[0][-1][-1])+len(_G.rim__t[1][-1][-1]),len(G.rim__t[0][-1][-1])+len(G.rim__t[1][-1][-1]),_A,A))
+        Et, rt, md_ = (comp_ext(_G.distance,G.distance,_L,L,_A,A))
         dderH.n = 1; dderH.Et = Et; dderH.relt = rt
         dderH.H = [CH(Et=copy(Et), relt=copy(rt), H=md_, n=1)]
     else:  # CG Gs
@@ -317,11 +324,14 @@ def merge_node(grapht_, iG_, G, fd, upV):
     G_, Link_, Et = G.root
     ave = G_aves[fd]
     remaining_node_ = []  # from grapht removed from grapht_
-
-    for link in G.rim if isinstance(G, CG) else G.rim__t[0][-1][-1]+G.rim__t[1][-1][-1]:
+    fagg = isinstance(G, CG)
+    for link in (G.rim if fagg else G.rim__t[0][-1][-1]+G.rim__t[1][-1][-1]):
         if link.Et[fd] > ave:  # fork eval
             if link not in Link_: Link_ += [link]
-            _G = link.node_[0] if link.node_[1] is G else link.node_[1]
+            if fagg:
+                _G = link.node_[0] if link.node_[1] is G else link.node_[1]
+            else:
+                _G = link  # we didn't pack new Link in der+, so _G will be just link?
             if _G in G_:
                 continue  # _G is already in graph
             olink_ = list(set(Link_).intersection(_G.rim))  # link overlap between grapht and node.rim
