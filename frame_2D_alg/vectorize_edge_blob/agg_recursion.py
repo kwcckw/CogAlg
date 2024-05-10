@@ -301,25 +301,25 @@ As distinct from fitting to the whole higher node in conventional backprop, incl
 def segment_parallel(Q, fd):  # recursive eval node_|link_ rims for cluster assignment
 
     node_,root_ = [],[]
-    for N in Q:
-        node_ += [[N,root_,[]]]  # Vs
-        root_ += [[N.rim_t if N.rim_t else N.rim, [N],[]]]  # init link_ = N.rim, node_ = [N], noV_
+    for N in Q: 
+        if hasattr(N, "rim_t"): link_ = (N.rim_t[0][-1] if N.rim_t[0] else []) + (N.rim_t[1][-1] if N.rim_t[1] else [])  # Clink
+        else:                   link_ = N.rim  # CG
+        node_ += [[N,link_,root_,[]]]  # Vs  (pack link_ in node too? Then there's no need to retrieve it again later)
+        root_ += [[link_, [N],[0]]]  # init link_ = N.rim, node_ = [N], noV_  (to align node_ with noV_, we need to pack 1st oV too)
     r = 0  # recursion count
     _OV = 0
     while True:
         OV = 0
-        for N,root_,_V_ in node_:  # update node roots, inclusion vals
+        for N, rim, root_,_V_ in node_:  # update node roots, inclusion vals
             V_ = []
             for link_,N_,_rV_ in root_:  # update root links, nodes
-                if fd: rim = N.rim_t[0][-1] + N.rim_t[1][-1] if N.rim_t else N.node_[0].rim + N.node_[0].rim
-                else:  rim = N.rim
                 olink_ = list(set(link_).intersection(rim))
                 oV = sum([olink.Et[fd] for olink in olink_]) if olink_ else 0
                 OV += oV; V_ += [oV]
                 if oV > ave:  # N in root
                     if N not in N_:
                         N_ += [N]; _rV_ += [oV]; link_[:] = list(set(link_).union(rim))  # not directional
-                elif N in N_:
+                elif N in N_ and len(N_)>1:  # for single node's root, we remain it? Else the node won't get any root
                     N_.remove(N); _rV_.remove(oV); link_[:] = list(set(link_).difference(rim))
             _V_[:] = V_
         r += 1
@@ -327,9 +327,19 @@ def segment_parallel(Q, fd):  # recursive eval node_|link_ rims for cluster assi
             break  # low overlap update
         _OV = OV
     # max:
-    for N,root_,oV_ in node_:
-        N.root = sorted(root_, key=lambda root: root[2][root[1].index(N)])[-1]
+    for N,link_,nroot_,oV_ in node_:
+        Nroot_ = [root for root in nroot_ if N in root[1]]  # N may not present in all roots
+        N.root = sorted(Nroot_, key=lambda root: root[2][root[1].index(N)])[-1]
+        # remove overlapping N in different roots, remain only the max root
+        for root in root_:
+            if root != N.root and N in root[1]:
+                N_index = root[1].index(N)
+                root[0]= [link for link in root[0] if N not in link.node_]  # remove links connecting N
+                root[1].pop(N_index)  # remove N from root's node_
+                root[2].pop(N_index)  # remove N from root's oV_
 
+    # return root with at least 1 node
+    return [root for root in root_ if root[1]]
 
 def segment_graph(root, Q, fd, nrng):  # recursive eval node_|link_ rims for cluster assignment
     '''
