@@ -135,19 +135,25 @@ def rng_convolve(root, Et, fagg):  # comp Gs|kernels in agg+, links | link rim_t
         while link_:
             for link in link_:
                 if link.rim_t: rimt = [link.rim_t[0][-1] if link.rim_t[0] else [], link.rim_t[1][-1] if link.rim_t[1] else []]
-                else:          rimt = [link.node_[0].rim],[link.node_[1].rim]  # convert rim into rim_
-                for dir, rim_ in zip((0,1), rimt):
-                    if not rim_: continue  # two directions of last layer, each may be empty
-                    for _L in [L for L in rim_[-1]]:
+                else:          rimt = [link.node_[0].rim,link.node_[1].rim]  # convert rim into rim_
+                for dir, rim in zip((0,1), rimt):  # two directions of last layer, each may be empty
+                    for _L in rim:  # empty rim will not be looped
                         _L_ = []
                         _G = _L.node_[0] if _L.node_[1] in link.node_ else _L.node_[1]
-                        for _link in _G.rim:
-                            if _link is link: continue  # not sure
-                            Link = Clink(node_=[link,_link])
+                        if  isinstance(_G, CG): _rim = _G.rim
+                        else:                   _rim = _G.rim_t[dir][-1] if _G.rim_t and _G.rim_t[dir] else []
+                        for _link in _rim:
+                            if _link is link: continue  # not sure (We need this because _G.rim may contain a same link since link connects G )
+                            # we need to compute distance too?
+                            cy, cx = box2center(link.box); _cy, _cx = box2center(_link.box)
+                            dy = cy-_cy; dx = cx-_cx;  dist = np.hypot(dy,dx)   
+                            Link = Clink(node_=[link,_link], distance=dist)
                             if comp_G(Link, Et, dir):
                                 _link_ += [Link]  # flat root.link_
                                 _L_ += [Link]  # new _G-mediated link
                         if _L_:
+                            # we need to add to new Link rim_t too, else we won't get rim in next rng
+                            Link.rim_t = [[],[_L_]] if dir else [[_L_],[]]  # first der+ link.rim_t is empty
                             if link.rim_t:
                                 link.rim_t[dir] += [_L_]  # += _L-mediated link layer
                             else:
@@ -250,7 +256,9 @@ def comp_G(link, iEt, dir=None):  # add dderH to link and link to the rims of co
         _G.Et[i] += Val; G.Et[i] += Val  # not selective
         _G.Et[2+i] += Rdn; G.Et[2+i] += Rdn  # per fork link in both Gs
         # if select fork links: iEt[i::2] = [V+v for V,v in zip(iEt[i::2], dderH.Et[i::2])]
-    if fin: return link
+    if fin: 
+        link.S += _G.S; link.S += G.S  # selectively accumulate S?
+        return link
 
 
 def comp_ext(_L,L,_S,S,_A,A):  # compare non-derivatives:
@@ -275,7 +283,7 @@ def form_graph_t(root,Q, Et, nrng):  # form Gm_,Gd_ from same-root nodes
             for G in Q: G.root = []  # reset per fork
 
             graph_ = segment_graph(root, copy(Q), fd, nrng)  # copy to use upQ in both forks
-            # or segment_parallel(Q, fd=fd)
+            # or segment_parallel(root, Q, fd, nrng)
             if fd:  # der+ after rng++ term by high ds
                 for graph in graph_:
                     if graph.link_ and graph.Et[1] > G_aves[1] * graph.Et[3]:  # Et is summed from all links
@@ -297,7 +305,7 @@ while > ave dOV: compute link_ oV for each (node,root); then assign each node to
 So feedback here is fitting nodes to the connected subset in higher nodes: their clusters, 
 that's different from fitting to the whole higher node in conventional backprop, as in GNN 
 '''
-def segment_parallel(Q, fd):  # recursive eval node_|link_ rims for cluster assignment
+def segment_parallel(root, Q, fd, nrng):  # recursive eval node_|link_ rims for cluster assignment
     '''
     kernels = get_max_kernels(Q)  # for selective link tracing?
     grapht_ = select_merge(kernels)  # refine by match to max, or only use it to selectively merge?
@@ -328,16 +336,17 @@ def segment_parallel(Q, fd):  # recursive eval node_|link_ rims for cluster assi
             break
         _OV = OV
 
-    for N,rim, root_,oV_ in node_:  # exclusive N assignment to clusters based on final oV
+    for N,rim, nroot_,oV_ in node_:  # exclusive N assignment to clusters based on final oV
 
-        Nroot_ = [root for root in root_ if N in root[1]]
-        Nroot_ = sorted(Nroot_, key=lambda root: root[2][root[1].index(N)])  # sort by NoV in roots
-        N.root = Nroot_.pop  # last: max root
-        for root in Nroot_:  # remove N from other roots
-            root[0] = list(set(root[0]).difference(rim))  # remove rim
-            i = root[1].index(N); root[1].pop(i); root[2].pop(i)  # remove N and NoV
+        Nroot_ = [root for root in nroot_ if N in root[1]]
+        if Nroot_:  # skip when node has no root
+            Nroot_ = sorted(Nroot_, key=lambda root: root[2][root[1].index(N)])  # sort by NoV in roots
+            N.root = Nroot_.pop()  # last: max root
+            for root in Nroot_:  # remove N from other roots
+                root[0] = list(set(root[0]).difference(rim))  # remove rim
+                i = root[1].index(N); root[1].pop(i); root[2].pop(i)  # remove N and NoV
 
-    return [root for root in root_ if root[1]]  # not-empty clusters
+    return [sum2graph(root, grapht, fd, nrng) for grapht in root_ if grapht[1]]  # not-empty clusters
 
 
 def segment_graph(root, Q, fd, nrng):  # recursive eval node_|link_ rims for cluster assignment
@@ -407,14 +416,18 @@ def merge_node(grapht_, iG_, G, fd, upV):
 
     return upV, [rnode for rnode in remaining_node_ if not rnode.root]  # skip node if they added to grapht during the subsequent merge_node process
 
-
+# for segment_parallel
 def sum2graph(root, grapht, fd, nrng):  # sum node and link params into graph, aggH in agg+ or player in sub+
 
-    G_, Link_, Et = grapht
-    graph = CG(fd=fd, Et=Et, node_=G_,link_=Link_, rng=nrng)
+    Link_, G_, oV = grapht  # oV is not needed here?
+    graph = CG(fd=fd, node_=G_,link_=Link_, rng=nrng)
     if fd:
         graph.root = root
+    extH = CH()
     for G in G_:
+        graph.Et = np.add(graph.Et, G.extH.Et)
+        if graph.extH: extH.append_(G.extH,flat=1)  # since we pack new layer in G.extH now, we can sum it here instead of sum it from link?
+        else:          extH.add_(G.extH)
         graph.area += G.area
         graph.box = extend_box(graph.box, G.box)
         if isinstance(G, CG):
@@ -425,10 +438,10 @@ def sum2graph(root, grapht, fd, nrng):  # sum node and link params into graph, a
         graph.derH.add_(G.derH)
         if fd: G.Et = [0,0,0,0]  # reset in last form_graph_t fork, Gs are shared in both forks
         else:  G.root = graph    # assigned to links if fd else to nodes?
-    extH = CH()
+
     for link in Link_:  # sum last layer of unique current-layer links
-        if len(extH.H)==len(link.derH.H): extH.H[-1].add_(link.derH.H[-1], irdnt=link.derH.H[-1].Et[2:4])  # sum last layer
-        else:                             extH.append_(link.derH.H[-1],flat=0)  # pack last layer
+        # if len(extH.H)==len(link.derH.H): extH.H[-1].add_(link.derH.H[-1], irdnt=link.derH.H[-1].Et[2:4])  # sum last layer
+        # else:                             extH.append_(link.derH.H[-1],flat=0)  # pack last layer
         graph.S += link.distance
         np.add(graph.A,link.angle)
         if fd: link.root = graph
