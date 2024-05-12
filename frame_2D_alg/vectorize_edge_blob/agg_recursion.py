@@ -274,9 +274,8 @@ def form_graph_t(root,Q, Et, nrng):  # form Gm_,Gd_ from same-root nodes
     for fd in 0, 1:
         if Et[fd] > ave * Et[2+fd]:  # eVal > ave * eRdn
             for G in Q: G.root = []  # reset per fork
-
-            graph_ = segment_graph(root, copy(Q), fd, nrng)  # copy to use upQ in both forks
-            # or segment_parallel(root, Q, fd, nrng)
+            # graph_ = segment_graph(root, copy(Q), fd, nrng)  # copy to use upQ in both forks
+            graph_ = segment_parallel(root, Q, fd, nrng)
             if fd:  # der+ after rng++ term by high ds
                 for graph in graph_:
                     if graph.link_ and graph.Et[1] > G_aves[1] * graph.Et[3]:  # Et is summed from all links
@@ -317,13 +316,15 @@ def segment_parallel(root, Q, fd, nrng):  # recursive eval node_|link_ rims for 
             for link_,N_,_roEt_ in root_:  # update root links, nodes
                 olink_ = list(set(link_).intersection(rim))
                 oEt = [0,0,0,0]
-                [np.sum(oEt, olink.Et) for olink in olink_]
-                np.sum(OEt,oEt); oEt_+=[oEt]
+                for olink in olink_: oEt = np.add(oEt, olink.Et)
+                OEt = np.add(OEt,oEt); oEt_+=[oEt]
                 if oEt[fd] > ave * oEt[2+fd]:  # N in root
                     if N not in N_:
                         N_ += [N]; _roEt_ += [oEt]; link_[:] = list(set(link_).union(rim))  # not directional
                 elif N in N_:
-                    N_.remove(N); _roEt_.remove(oEt); link_[:] = list(set(link_).difference(rim))
+                    drim = [link for link in rim if N in link.node_] 
+                    _roEt_.pop(N_.index(N)); N_.remove(N); link_[:] = list(set(link_).difference(drim))
+
             _oEt_[:] = oEt_
         r += 1
         if OEt[fd] - _OEt[fd] < ave:  # low total overlap update
@@ -334,10 +335,12 @@ def segment_parallel(root, Q, fd, nrng):  # recursive eval node_|link_ rims for 
 
         Nroot_ = [root for root in Nroot_ if N in root[1]]
         if Nroot_:  # include isolated N?
-            Nroot_ = sorted(Nroot_, key=lambda root: root[2][root[1].index(N)])  # sort by NoV in roots
+            # sort by M? Or based on fd?
+            Nroot_ = sorted(Nroot_, key=lambda root: root[2][root[1].index(N)][fd])  # sort by NoV in roots
             N.root = Nroot_.pop()  # max root
-            for root in Nroot_:  # remove N from other roots
-                root[0] = list(set(root[0]).difference(rim))  # remove rim
+            for root in Nroot_:  # remove N from other roots  
+                drim = [link for link in rim if N in link.node_]  # we need to remove rim connected to this N only because rim may contain other links  
+                root[0] = list(set(root[0]).difference(drim))  # remove rim
                 i = root[1].index(N); root[1].pop(i); root[2].pop(i)  # remove N and NoV
 
     return [sum2graph(root, grapht, fd, nrng) for grapht in root_ if grapht[1]]  # not-empty clusters
