@@ -130,6 +130,7 @@ class Clink(CBase):  # the product of comparison between two nodes
         l.Et = [0,0,0,0]  # graph-specific, accumulated from surrounding nodes in node_connect
         l.relt = [0,0]
         l.rim_t = []  # dual tree of _links, each may have its own node-mediated links
+        # reciprocal rim_t of connecting links?
         l.derH = CH() if derH is None else derH
         l.DerH = CH()  # ders from G.DerH
         l.extH = CH() if extH is None else extH  # for der+
