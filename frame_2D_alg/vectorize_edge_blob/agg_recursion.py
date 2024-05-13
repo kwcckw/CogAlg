@@ -46,6 +46,7 @@ def vectorize_root(image):  # vectorization in 3 composition levels of xcomp, cl
 
     for edge in frame.blob_:
         if hasattr(edge, 'P_') and edge.latuple[-1] * (len(edge.P_)-1) > G_aves[0]:  # eval G, rdn=1
+            for P in edge.P_: P.link_ += [[]]  # convert P.link_ into P.link__, add new layer of link_
             ider_recursion(None, edge)  # vertical, lateral-overlap P cross-comp -> PP clustering
 
             for fd, node_ in enumerate(edge.node_):  # always node_t
@@ -327,8 +328,15 @@ def segment_parallel(root, Q, fd, nrng):  # recursive eval node_|link_ rims for 
                 if oEt[fd] > ave * oEt[2+fd]:  # N in root
                     if N not in N_:
                         N_ += [N]; _roEt_ += [oEt]; link_[:] = list(set(link_).union(rim))  # not directional
-                elif N in N_:
-                    N_.remove(N); _roEt_.remove(oEt); link_[:] = list(set(link_).difference(rim))
+                elif N in N_:  
+                    _roEt_.pop(N_.index(N))  # remove based on index of N? Because oEt is init here, it should not have a same reference
+                    N_.remove(N);   
+                    for _link in rim:
+                        # _link in link_   : to check rim's _link is in link_
+                        # N in _link.node_ : to check if _link is the link connecting N
+                        # _link not in N_  : to check if _link is not the node (der+ only)
+                        if _link in link_ and N in _link.node_  and _link not in N_:
+                            link_.remove(_link)
             _oEt_[:] = oEt_
         r += 1
         if OEt[fd] - _OEt[fd] < ave:  # low total overlap update
@@ -342,7 +350,9 @@ def segment_parallel(root, Q, fd, nrng):  # recursive eval node_|link_ rims for 
             Nroot_ = sorted(Nroot_, key=lambda root: root[2][root[1].index(N)][fd])  # sort by NoV in roots
             N.root = Nroot_.pop()  # max root
             for root in Nroot_:  # remove N from other roots
-                root[0] = list(set(root[0]).difference(rim))  # remove rim
+                for _link in rim:
+                    if _link in root_[0] and N in _link.node_  and _link not in root[1]:
+                        root[0].remove(_link)  # remove rim
                 i = root[1].index(N); root[1].pop(i); root[2].pop(i)  # remove N and NoV
 
     return [sum2graph(root, grapht, fd, nrng) for grapht in root_ if grapht[1]]  # not-empty clusters
