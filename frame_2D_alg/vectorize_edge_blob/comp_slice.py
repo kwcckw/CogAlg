@@ -72,9 +72,7 @@ def rng_recursion(PP, rng=1, fd=0):  # similar to agg+ rng_recursion, but loopin
         for P in iP_:
             if not P.link_: continue
             prelink_ = []  # new prelinks per P
-
-            # should be _prelink_ = P.link_.pop()  # old rng+ prelinks, including all links added in slice_edge
-            _prelink_ = P.link_[-2]  # old prelinks, link_[-1] is latest link_
+            _prelink_ = P.link_.pop()
             for link in _prelink_:
                 if link.distance <= rng:  # | rng * ((P.val+_P.val)/ ave_rval)?
                     _P = link.node_[0]
@@ -83,9 +81,9 @@ def rng_recursion(PP, rng=1, fd=0):  # similar to agg+ rng_recursion, but loopin
                     if mlink:  # return if match
                         if P not in nP_: nP_ += [P]
                         V += mlink.derH.Et[0]
-                        P.link_[-1] += [mlink]
-                        prelink_ += _P.link_[-2]  # connected __Ps links
-            P.link_ += [prelink_, []]  # [temporary pre-links, new layer of links] both may be empty
+                        P.link_[-1] += [mlink]  # P.link_[-1] is latest rim layer
+                        prelink_ += _P.link_[-1]  # connected __Ps links (_P.link_[-1] is prelinks)
+            P.link_ += [[],prelink_]  # [new layer of links, temporary pre-links] both may be empty
             P.rng = rng  # for decoding link_
             if prelink_: P_ += [P]
         rng += 1
@@ -93,6 +91,7 @@ def rng_recursion(PP, rng=1, fd=0):  # similar to agg+ rng_recursion, but loopin
             iP_ = P_; fd = 0
             rrdn += 1
         else:
+            for P in PP.P_: P.link_.pop()  # remove prelinks
             break
     # der++ in PPds from rng++, no der++ inside rng++: high diff @ rng++ termination only?
     PP.rng=rng  # represents rrdn
@@ -139,10 +138,10 @@ def form_PP_t(root, P_, iRt):  # form PPs of derP.valt[fd] + connected Ps val
     for P in P_:
         mlink_,_mP_, dlink_,_dP_ = [],[],[],[]  # per P
         # eval all links in possibly nested P.link_:
-        # each rng in current reursion adds prelink_ and link_, so P.link_ is a list of [prelink1_,link1_,prelink2_,link2_,prelink3_,link_...]
+        # each rng in current recursion adds  link_, so P.link_ is a list of [link1_,link2_,link3_,...]
         # decode by using P.rng and retrieve all link_ added in current rngs
-        # [1::2] to get link_ and remove prelink_, [-P.rng] to get link_ added in current recursion (from the added rng)
-        link_ = [L for L_ in P.link_[1::2][-P.rng:] for L in (L_ if isinstance(L_, list) else [L_])]
+        # [-P.rng] to get link_ added in current recursion (from the added rng)
+        link_ = [L for L_ in P.link_[-P.rng:] for L in (L_ if isinstance(L_, list) else [L_])]
         for link in link_:
             if isinstance(link.derH.H[0], CH): m,d,mr,dr = link.derH.H[-1].Et  # last der+ layer vals
             else:                              m,d,mr,dr = link.derH.Et  # H is md_
@@ -153,7 +152,7 @@ def form_PP_t(root, P_, iRt):  # form PPs of derP.valt[fd] + connected Ps val
         mLink_+=[mlink_]; _mP__+=[_mP_]
         dLink_+=[dlink_]; _dP__+=[_dP_]
         # aligned
-        P.link_ += [link_, []]  # for next ider_recursion
+        P.link_ += [[],link_]  # [new rim layer, prelinks] for next ider_recursion
     for fd, (Link_,_P__) in zip((0,1),((mLink_,_mP__),(dLink_,_dP__))):
         CP_ = []  # all clustered Ps
         for P in root.P_:
@@ -273,13 +272,6 @@ def negate(He):
     else:  # md_
         He.H[1::2] = [-d for d in He.H[1::2]]
     return He
-
-def unpack_last_link_(link_):  # unpack last link layer
-
-    while link_ and isinstance(link_[-1], list): link_ = link_[-1]
-    return link_
-    # change to use nested link_, or
-    # get higher-P mediated link_s while recursion_count < rng?
 
 
 def accum_box(box, y, x):
