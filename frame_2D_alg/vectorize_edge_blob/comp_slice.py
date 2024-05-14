@@ -72,6 +72,8 @@ def rng_recursion(PP, rng=1, fd=0):  # similar to agg+ rng_recursion, but loopin
         for P in iP_:
             if not P.link_: continue
             prelink_ = []  # new prelinks per P
+
+            # should be _prelink_ = P.link_.pop()  # old rng+ prelinks, including all links added in slice_edge
             _prelink_ = P.link_[-2]  # old prelinks, link_[-1] is latest link_
             for link in _prelink_:
                 if link.distance <= rng:  # | rng * ((P.val+_P.val)/ ave_rval)?
@@ -83,8 +85,8 @@ def rng_recursion(PP, rng=1, fd=0):  # similar to agg+ rng_recursion, but loopin
                         V += mlink.derH.Et[0]
                         P.link_[-1] += [mlink]
                         prelink_ += _P.link_[-2]  # connected __Ps links
-            P.link_ += [prelink_, []]  # [temporary pre-links,  new layer of links] both may be empty and the n
-            P.rng = rng  # for the purpose of decoding link_ later
+            P.link_ += [prelink_, []]  # [temporary pre-links, new layer of links] both may be empty
+            P.rng = rng  # for decoding link_
             if prelink_: P_ += [P]
         rng += 1
         if V > ave * rrdn * len(P_) * 6:  #  implied val of all __P_s, 6: len mtuple
@@ -139,7 +141,7 @@ def form_PP_t(root, P_, iRt):  # form PPs of derP.valt[fd] + connected Ps val
         # eval all links in possibly nested P.link_:
         # each rng in current reursion adds prelink_ and link_, so P.link_ is a list of [prelink1_,link1_,prelink2_,link2_,prelink3_,link_...]
         # decode by using P.rng and retrieve all link_ added in current rngs
-        # [1::2] to get link_ and remove prelink_, [-P.rng] to get link_ added in current recursion (from the added rng)  
+        # [1::2] to get link_ and remove prelink_, [-P.rng] to get link_ added in current recursion (from the added rng)
         link_ = [L for L_ in P.link_[1::2][-P.rng:] for L in (L_ if isinstance(L_, list) else [L_])]
         for link in link_:
             if isinstance(link.derH.H[0], CH): m,d,mr,dr = link.derH.H[-1].Et  # last der+ layer vals
