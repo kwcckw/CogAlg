@@ -48,7 +48,6 @@ def vectorize_root(image):  # vectorization in 3 composition levels of xcomp, cl
 
     for edge in frame.blob_:
         if hasattr(edge, 'P_') and edge.latuple[-1] * (len(edge.P_)-1) > G_aves[0]:  # eval G, rdn=1
-            for P in edge.P_: P.link_.insert(0, [])  # add nesting for rng+
             ider_recursion(None, edge)  # vertical, lateral-overlap P cross-comp -> PP clustering
 
             for fd, node_ in enumerate(edge.node_):  # always node_t
@@ -311,12 +310,7 @@ def segment_parallel(root, Q, fd, nrng):  # recursive eval node_|link_ rims for 
     '''
     node_,root_ = [],[]
     for N in Q:
-        if fd:  # N is Clink
-            if isinstance(N.node_[0],CG):
-                rim = [G.rim for G in N.node_]
-            else:  # link node rim_t dirs opposite from each other, else covered by the other link' rim_t[1-dir]?
-                rim = [(L.rim_t[1-dir][-1] if L.rim_t[dir] else []) for dir, L in zip((0,1), N.node_)]
-        else:   rim = N.rim
+        rim = get_rim(N, fd)
         root_ += [[[], [N], [[0,0,0,0]]]]  # init link_=N.rim, node_=[N], oEt_
         node_ += [[N, rim, root_, []]]
     r = 0  # recursion count
@@ -330,7 +324,11 @@ def segment_parallel(root, Q, fd, nrng):  # recursive eval node_|link_ rims for 
                 for link in rim:
                     _N = link.node_[0] if link.node_[1] is N else link.node_[1]
                     if _N in N_:  # both in root and in N.rim
-                        olink_ += list(set(_N.rim).intersection(rim))  # all N rim overlaps
+                        olink_ += list(set(get_rim(_N, fd)).intersection(rim))  # all N rim overlaps
+                    else:
+                        # we need this section too
+                        pass
+                        
                 oEt = [0,0,0,0]
                 for olink in olink_: oEt = np.add(oEt, olink.Et)
                 OEt = np.add(OEt,oEt); oEt_+=[oEt]
@@ -356,6 +354,19 @@ def segment_parallel(root, Q, fd, nrng):  # recursive eval node_|link_ rims for 
                 i = root[1].index(N); root[1].pop(i); root[2].pop(i)  # remove N and NoV
 
     return [sum2graph(root, grapht, fd, nrng) for grapht in root_ if grapht[1]]  # not-empty clusters
+
+
+def get_rim(N, fd):
+    
+    if fd:  # N is Clink
+        if isinstance(N.node_[0],CG):
+            rim = [G.rim for G in N.node_]
+        else:  # link node rim_t dirs opposite from each other, else covered by the other link' rim_t[1-dir]?
+            rim = [(L.rim_t[1-dir][-1] if L.rim_t[dir] else []) for dir, L in zip((0,1), N.node_)]
+    else:   rim = N.rim
+    
+    return rim
+    
 
 
 def segment_graph(root, Q, fd, nrng):  # recursive eval node_|link_ rims for cluster assignment
