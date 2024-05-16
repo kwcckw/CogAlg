@@ -322,28 +322,31 @@ def segment_parallel(root, Q, fd, nrng):  # recursive eval node_|link_ rims for 
         OEt = [0,0,0,0]
         for N,rim,_N_, nroot_,_oEt_ in node_:  # update node roots
             oEt_ = []
-            for link_, N_, nEt_ in root_:
-                olink_,oEt = [0,0,0,0]
+            for i, (link_, N_, nEt_) in enumerate(root_):
+                olink_,oEt = [], [0,0,0,0]
                 for L,_N in zip(rim,_N_):  # get _N||L overlap between rim and root
                     if _N in N_:  # in both root and rim
                         oEt = np.add(oEt, L.Et)
-                        olink_ += [L]
-                OEt = np.add(OEt,oEt)
-                oEt_ += [oEt]
+                        olink_ += [L]   
+                if olink_:  # skip when no overlap?
+                    OEt = np.add(OEt,oEt)
+                    oEt_ += [oEt]
                 if oEt[fd] > ave * oEt[2+fd]:  # N in root
                     if N not in N_:
                         N_ += [N]; nEt_ += [oEt]; link_[:] = list(set(link_).union(olink_))  # not directional
+                        nroot_ += [i]
                 elif N in N_:
-                    nEt_.pop(N_.index(N)); N_.remove(N); link_[:] = list(set(link_).difference(olink_))
+                    nroot_.pop(N_.index(N))
+                    nEt_.pop(N_.index(N)); N_.remove(N); link_[:] = list(set(link_).difference(olink_))            
             _oEt_[:] = oEt_
         r += 1
         if OEt[fd] - _OEt[fd] < ave:  # low total overlap update
             break
         _OEt = OEt
 
-    for N,rim, Nroot_,oEt_ in node_:  # exclusive N assignment to clusters based on final oV
+    for N,rim, _N_, Nroot_,oEt_ in node_:  # exclusive N assignment to clusters based on final oV
 
-        Nroot_ = [root for root in Nroot_ if N in root[1]]
+        Nroot_ = [root_[ind] for ind in Nroot_]
         if Nroot_:  # include isolated N?
             Nroot_ = sorted(Nroot_, key=lambda root: root[2][root[1].index(N)][fd])  # sort by NoV in roots
             N.root = Nroot_.pop()  # max root

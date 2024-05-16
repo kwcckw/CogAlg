@@ -55,7 +55,7 @@ class CcompSliceFrame(CsliceEdge):
 def ider_recursion(root, PP, fd=0):  # node-mediated correlation clustering: keep same Ps and links, increment link derH, then P derH in sum2PP
 
     # no der+'rng+, or directional, within node-mediated hyper-links only?
-    P_ = rng_recursion(PP, rng=1, fd=fd)  # extend PP.link_, derHs by same-der rng+ comp
+    P_ = rng_recursion(PP, fd=fd)  # extend PP.link_, derHs by same-der rng+ comp
     # calls der+:
     form_PP_t(PP, P_, iRt=PP.iderH.Et[2:4] if PP.iderH else [0,0])
     # feedback per PPd:
@@ -68,8 +68,9 @@ def rng_recursion(PP, fd=0):  # similar to agg+ rng_recursion, but looping and c
     if fd:
         iP_ = PP.link_
         for link in PP.link_:
-            last_rim_layer = copy(link.node_[0].link_[-1])   # only upper node's links? Since comp_slice uses single upward direction?
-            link.link_ = [last_rim_layer]  # add prelinks in Clink
+            if link.node_[0].link_:  # skip top row node, they do not have link
+                last_rim_layer = copy(link.node_[0].link_[-1])   # only upper node's links? Since comp_slice uses single upward direction?
+                link.link_ = [last_rim_layer]  # add prelinks in Clink
     else:
         iP_ = PP.P_
     rng = 0  # cost of links added per rng+
@@ -87,27 +88,28 @@ def rng_recursion(PP, fd=0):  # similar to agg+ rng_recursion, but looping and c
                     if link.node_[0].link_:
                         _P_ = link.node_[0].link_[-1]  # rng uplinks in _P
                     else: continue
-                    # add comp_P(fd) sequence here
+                    # add comp_P(fd) sequence here (it can be at a shared section below?)
 
                 elif link.distance <= rng:  # | rng * ((P.val+_P.val)/ ave_rval)?
                     _P_ = [link.node_[0]]
-                    for _P in _P_:
-                        if fd and not (P.derH and _P.derH): continue  # nothing to compare
-                        mlink = comp_P(Clink(node_=[_P, P]) if fd else link, fd)
-                        if mlink: # return if match
-                            V += mlink.derH.Et[0]
-                            rnglink_ += [mlink]
-                            prelink_ += _P.link_[-1]  # connected __Ps links (can't be prelinks?)
-                    if rnglink_:
-                        P.link_ += [rnglink_]
-                        if prelink_:
-                            P.link_ += [prelink_]  # temporary pre-links
-                            if P not in P_: P_ += [P]
-                            if fd:
-                                if _P.node_[0].link_: prelink_ += _P.node_[0].link_[-1]
-
-        if V < ave * rng * len(P_) * 6:  # implied val of all __P_s, 6: len mtuple
-            for P in iP_: P.link_.pop()  # remove prelinks
+                for _P in _P_:
+                    if len(_P.link_) < rng: continue  # we need this check for _P too
+                    if fd and not (P.derH and _P.derH): continue  # nothing to compare
+                    mlink = comp_P(Clink(node_=[_P, P]) if fd else link, fd)
+                    if mlink: # return if match
+                        V += mlink.derH.Et[0]
+                        rnglink_ += [mlink]
+                        prelink_ += _P.link_[-1]  # connected __Ps links (can't be prelinks?)
+            if rnglink_:
+                P.link_ += [rnglink_]
+                if prelink_:
+                    P.link_ += [prelink_]  # temporary pre-links
+                    P_ += [P]
+                    if fd:
+                        if _P.node_[0].link_: prelink_ += _P.node_[0].link_[-1]
+        # len(P_) could be 0
+        if V <= ave * rng * len(P_) * 6:  # implied val of all __P_s, 6: len mtuple
+            for P in P_: P.link_.pop()  # remove prelinks
             break
     # der++ in PPds from rng++, no der++ inside rng++: high diff @ rng++ termination only?
     PP.rng=rng  # represents rrdn
@@ -131,6 +133,10 @@ def comp_P(link, fd):
         angle = np.subtract([y,x], [_y,_x]) # dy,dx between node centers
         distance = np.hypot(*angle)       # distance between node centers
         link = Clink(node_=[_P, P], derH = CH(Et=[vm,vd,rm,rd],H=H,n=n),angle=angle,distance=distance)
+        # below not sure, but we need it in higher der+, where link is P
+        for cP in _P, P:
+            link.latuple = [P+p for P,p in zip(link.latuple[:-1],cP.latuple[:-1])] + [[A+a for A,a in zip(link.latuple[-1],cP.latuple[-1])]]
+            link.yx_ += cP.yx_
     # both:
     if _P.derH and P.derH:  # append link derH, init in form_PP_t rng++, comp_latuple was already done
         # der+:
@@ -153,6 +159,9 @@ def form_PP_t(root, P_, iRt):  # form PPs of derP.valt[fd] + connected Ps val
     mLink_,_mP__,dLink_,_dP__ = [],[],[],[]  # per PP, !PP.link_?
     for P in P_:
         mlink_,_mP_,dlink_,_dP_ = [],[],[],[]  # per P
+        mLink_+=[mlink_]; _mP__+=[_mP_]
+        dLink_+=[dlink_]; _dP__+=[_dP_]
+        if not P.link_: continue  # skip when P doesn't have form any links in any of the rngs
         for link in [L for L_ in P.link_ for L in L_]:  # flatten P.link_ nested by rng
             if isinstance(link.derH.H[0],CH): m,d,mr,dr = link.derH.H[-1].Et  # last der+ layer vals
             else:                             m,d,mr,dr = link.derH.Et  # H is md_
@@ -160,13 +169,11 @@ def form_PP_t(root, P_, iRt):  # form PPs of derP.valt[fd] + connected Ps val
                 mlink_+= [link]; _mP_+= [link.node_[1] if link.node_[0] is P else link.node_[0]]
             if d > ave * dr:  # ?link in both forks?
                 dlink_+= [link]; _dP_+= [link.node_[1] if link.node_[0] is P else link.node_[0]]
-        mLink_+=[mlink_]; _mP__+=[_mP_]
-        dLink_+=[dlink_]; _dP__+=[_dP_]
         # aligned
     for fd, (Link_,_P__) in zip((0,1),((mLink_,_mP__),(dLink_,_dP__))):
         CP_ = []  # all clustered Ps
-        for P in root.P_:
-            if P in CP_: continue  # already packed in some sub-PP
+        for P in P_:
+            if P in CP_ or not P.link_: continue  # already packed in some sub-PP
             cP_, clink_ = [P], []  # cluster per P
             if P in P_:
                 P_index = P_.index(P)
