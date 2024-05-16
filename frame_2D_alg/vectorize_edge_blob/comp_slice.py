@@ -61,9 +61,10 @@ def ider_recursion(root, PP, fd=0):  # node-mediated correlation clustering: kee
     # feedback per PPd:
     if root is not None and PP.iderH: root.fback_ += [PP.iderH]
 
-# initial draft - added Clink as P_
-def rng_recursion(PP, rng=1, fd=0):  # similar to agg+ rng_recursion, but looping and contiguously link mediated
 
+def rng_recursion(PP, fd=0):  # similar to agg+ rng_recursion, but looping and contiguously link mediated
+
+    # fd sequence is not revised
     if fd:
         iP_ = PP.link_
         for link in PP.link_:
@@ -72,43 +73,46 @@ def rng_recursion(PP, rng=1, fd=0):  # similar to agg+ rng_recursion, but loopin
     else:
         iP_ = PP.P_
     rng = 0  # cost of links added per rng+
-    P_ = []
     while True:
         rng += 1
-        V = 0
+        P_ = []; V = 0
         for P in iP_:
             if P.link_:
-                if len(P.link_)<rng: continue  # no current-rng link_
-            else: continue  # top P_ in PP?
+                if len(P.link_) < rng: continue  # no _rng_link_
+            else: continue  # top P_ in PP
             _prelink_ = P.link_.pop()
-            rng_link_, prelink_ = [],[]  # both per rng+
+            rnglink_, prelink_ = [],[]  # both per rng+
             for link in _prelink_:
-                if link.distance <= rng:  # | rng * ((P.val+_P.val)/ ave_rval)? (this need some changes in fd == 1?)
-                    if fd:
-                        if link.node_[0].link_: _P_ = link.node_[0].link_[-1]    
-                        else:                   continue  # no upper uplinks for current node_[0]  
-                    else:  _P_ = [link.node_[0]]
+                if fd:
+                    if link.node_[0].link_:
+                        _P_ = link.node_[0].link_[-1]  # rng uplinks in _P
+                    else: continue
+                    # add comp_P(fd) sequence here
+
+                elif link.distance <= rng:  # | rng * ((P.val+_P.val)/ ave_rval)?
+                    _P_ = [link.node_[0]]
                     for _P in _P_:
                         if fd and not (P.derH and _P.derH): continue  # nothing to compare
                         mlink = comp_P(Clink(node_=[_P, P]) if fd else link, fd)
                         if mlink: # return if match
                             V += mlink.derH.Et[0]
-                            rng_link_ += [mlink]
+                            rnglink_ += [mlink]
+                            prelink_ += _P.link_[-1]  # connected __Ps links (can't be prelinks?)
+                    if rnglink_:
+                        P.link_ += [rnglink_]
+                        if prelink_:
+                            P.link_ += [prelink_]  # temporary pre-links
+                            if P not in P_: P_ += [P]
                             if fd:
                                 if _P.node_[0].link_: prelink_ += _P.node_[0].link_[-1]
-                            elif _P.link_:
-                                prelink_ += _P.link_[-1]  # connected __Ps links (_P.link_[-1] is prelinks)
-            if rng_link_: 
-                P.link_ += [rng_link_]
-                if P not in P_: P_ += [P]
-            P.link_ += [prelink_]  # temporary pre-links (we still need to pack prelinks regardless, else later we don't know if P has prelink_ to remove them)
-        if V < ave * rng * len(P_) * 6:  #  implied val of all __P_s, 6: len mtuple
+
+        if V < ave * rng * len(P_) * 6:  # implied val of all __P_s, 6: len mtuple
             for P in iP_: P.link_.pop()  # remove prelinks
-            break  # (there no need to change from fd == 1 to fd == 0? We need it to identify if P is Clink or not)
+            break
     # der++ in PPds from rng++, no der++ inside rng++: high diff @ rng++ termination only?
     PP.rng=rng  # represents rrdn
 
-    return P_
+    return iP_
 
 def comp_P(link, fd):
     _P, P, distance, angle = link.node_[0], link.node_[1], link.distance, link.angle
