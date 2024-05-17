@@ -134,12 +134,13 @@ def rng_convolve(root, Et, fagg):  # comp Gs|kernels in agg+, links | link rim_t
         while _L_:
             link_ += _L_; L_ = []
             for link in _L_:
-                if link.rim_t: rimt = [link.rim_t[0][-1] if link.rim_t[0] else [], link.rim_t[1][-1] if link.rim_t[1] else []]
-                else:          rimt = [link.node_[0].rim,link.node_[1].rim]
+                if link.rim_t: rimt = [copy(link.rim_t[0][-1]) if link.rim_t[0] else [], copy(link.rim_t[1][-1]) if link.rim_t[1] else []]
+                else:          rimt = [link.node_[0].rim, link.node_[1].rim]
                 for dir,rim in zip((0,1),rimt):  # two directions per layer
                     for _link in rim:
                         _G = _link.node_[0] if _link.node_[1] in link.node_ else _link.node_[1]  # mediating node
-                        _rim = _G.rim if isinstance(_G,CG) else (_G.rim_t[dir][-1] if _G.rim_t and _G.rim_t[dir] else [])
+                        # this _rim may contain current der+ added links because we added link to rim_t in comp_G
+                        _rim = _G.rim if isinstance(_G,CG) else (copy(_G.rim_t[dir][-1]) if _G.rim_t and _G.rim_t[dir] else [])
                         for _link in _rim:
                             if _link is link: continue
                             Link = Clink(node_=[_link,link])
@@ -229,10 +230,10 @@ def comp_G(link, iEt, link_, dir=None):  # add dderH to link and link to the rim
         # / PP:
         _G.iderH.comp_(G.iderH, dderH, rn, fagg=1, flat=0)  # always >1P in compared PPs?
     # / G, if >1 PPs | Gs:
-    if _G.derH and G.derH: _G.derH.comp_(G.derH, dderH, rn, fagg=1, flat=0)  # append and sum new dderH to base dderH
+    if _G.derH and G.derH: _G.derH.comp_(G.derH, dderH, rn, fagg=1, flat=1)  # append and sum new dderH to base dderH (Sorry, flat should be 1 here for H size consistency)
     if _G.extH and G.extH: _G.extH.comp_(G.extH, dderH, rn, fagg=1, flat=1)
 
-    if fd: link.derH.append_(dderH, flat=0)  # append to derH.H
+    if fd: link.derH.append_(dderH, flat=1)  # append dderH.H into link.derH.H (flat should be 1 for H size consistency)
     else:  link.derH = dderH
     iEt[:] = np.add(iEt,dderH.Et)  # init eval rng+ and form_graph_t by total m|d?
     fin = 0
@@ -311,7 +312,7 @@ def segment_parallel(root, Q, fd, nrng):  # recursive eval node_|link_ rims for 
     node_,root_ = [],[]
     for i, N in enumerate(Q):
         N.root = i  # index in root_,node_
-        rim = get_rim(N, fd)
+        rim = get_rim(N)
         _N_ = [link.node_[0] if link.node_[1] is N else link.node_[1] for link in rim]
         root_ += [[[],[N], [[0,0,0,0]]]]  # init link_=N.rim, node_=[N], oEt_
         node_ += [[N, rim,_N_, [i], []]]  # root_ indices, empty nEt_
@@ -334,7 +335,7 @@ def segment_parallel(root, Q, fd, nrng):  # recursive eval node_|link_ rims for 
                 if oEt[fd] > ave * oEt[2+fd]:  # N in root
                     if N not in N_:
                         nroot_ += [i]; N_ += [N]; nEt_ += [oEt]; link_[:] = list(set(link_).union(olink_))  # not directional
-                elif N in N_:
+                elif N in N_ and len(N_)>1:
                     Ni = N_.index(N); nroot_.pop(Ni); nEt_.pop(Ni); N_.remove(N); link_[:] = list(set(link_).difference(olink_))
             _oEt_[:] = oEt_
         r += 1
@@ -360,12 +361,12 @@ def segment_parallel(root, Q, fd, nrng):  # recursive eval node_|link_ rims for 
     return [sum2graph(root, grapht, fd, nrng) for grapht in root_ if grapht[1]]  # not-empty clusters
 
 
-def get_rim(N, fd):
-    if fd:  # N is Clink
+def get_rim(N):
+    if isinstance(N, Clink):  # N is Clink
         if isinstance(N.node_[0],CG):
-            rim = [G.rim for G in N.node_]
+            rim = [link for G in N.node_ for link in G.rim]
         else:  # get link node rim_t dirs opposite from each other, else covered by the other link rim_t[1-dir]?
-            rim = [(link.rim_t[1-dir][-1] if link.rim_t[dir] else []) for dir, link in zip((0,1), N.node_)]
+            rim = [ L for dir, link in zip((0,1), N.node_) for L in (link.rim_t[1-dir][-1] if link.rim_t[dir] else [])]  # flat
     else:   rim = N.rim
 
     return rim

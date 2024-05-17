@@ -88,7 +88,6 @@ def rng_recursion(PP, fd=0):  # similar to agg+ rng_recursion, but looping and c
                     _P_ = [link.node_[0]]
                 for _P in _P_:
                     if len(_P.link_) < rng: continue
-                    if fd and not (P.derH and _P.derH): continue  # nothing to compare
                     mlink = comp_P(Clink(node_=[_P, P]) if fd else link, fd)
                     if mlink: # return if match
                         V += mlink.derH.Et[0]
