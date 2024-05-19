@@ -110,7 +110,7 @@ class Clink(CBase):  # product of comparison between two nodes or links
         l.S = 0  # initially summed from node_
         l.n = 1  # or min(node_.n)?
         l.area = 0  # sum node area
-        l.latuple = []  # sum node I,G,M,Ma,L,[Dy,Dx], no need to specify here
+        l.latuple = [0,0,0,0,0,[0,0]]  # sum node I,G,M,Ma,L,[Dy,Dx], no need to specify here (init can simplify the process later, else we need to check if it's empty or not)
         l.yx_ = []  # or box
         l.Et = [0,0,0,0]  # graph-specific, accumulated from surrounding nodes in node_connect
         l.relt = [0,0]
@@ -124,8 +124,6 @@ class Clink(CBase):  # product of comparison between two nodes or links
         l.compared_ = []
         l.box = [np.inf, np.inf, -np.inf, -np.inf] if box is None else box  # y,x,y0,x0,yn,xn
         l.dir = bool  # direction of comparison if not G0,G1, for comp link?
-        # add in sum2graph: graph is Clink?
-        l.link_ = []
 
     def __bool__(l): return bool(l.derH.H)
 
@@ -231,7 +229,7 @@ def ider_recursion(root, PP, fd=0):  # node-mediated correlation clustering: kee
     # no der+'rng+, or directional, within node-mediated hyper-links only?
     P_ = rng_recursion(PP, fd=fd)  # extend PP.link_, derHs by same-der rng+ comp
     # calls der+:
-    form_PP_t(PP, P_, iRt=PP.iderH.Et[2:4] if PP.iderH else [0,0])
+    form_PP_t(PP, P_, iRt=PP.iderH.Et[2:4] if isinstance(PP, CG) else [0,0])  # edge doesn't have iderH, Rt is [0,0]? Or compute it from latuple?
     # feedback per PPd:
     if root is not None and PP.iderH: root.fback_ += [PP.iderH]
 
@@ -244,7 +242,7 @@ def rng_recursion(PP, fd=0):  # similar to agg+ rng_recursion, but looping and c
             if link.node_[0].link_: # empty in top row
                 link_ = copy(link.node_[0].link_[-1])
                 assert not hasattr(link, "link_")  # no link_ yet
-                link.link_ = [link_]  # add upper node uplinks as prelinks
+                link.link_ = [link_]  # add upper node uplinks as prelinks (the initial link.link_ will be init here)
     else: iP_ = PP.P_
     rng = 1  # cost of links added per rng+
     while True:
@@ -289,11 +287,8 @@ def comp_P(link, fd):
         rn = (_P.derH.n if P.derH else len(_P.dert_)) / P.derH.n
         derH = _P.derH.comp_(P.derH, CH(), rn=rn, flat=0)
         vm,vd,rm,rd = derH.Et
-        rm += vd > vm; rd += vm >= vd
-        He = link.derH  # append link derH:
-        if He and not isinstance(He.H[0], CH): He = link.derH = CH(Et=[*He.Et], H=[He])  # nest md_ as derH
-        He.Et = np.add(He.Et, (vm,vd,rm,rd))
-        He.H += [derH]
+        # link.derH should be always empty here? We init Clink before parse it into comp_P
+        link.derH = CH(Et=[*derH.Et], H=[derH])  # distance should be 0 here, but angle should be average of _P_link and P_link?
     else:  # rng+, comp Ps
         rn = len(_P.dert_) / len(P.dert_)
         H = comp_latuple(_P.latuple, P.latuple, rn)
