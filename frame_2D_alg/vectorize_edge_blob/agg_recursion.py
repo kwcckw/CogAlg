@@ -139,7 +139,6 @@ def rng_convolve(root, Et, fagg):  # comp Gs|kernels in agg+, links | link rim_t
                 for dir,rim in zip((0,1),rimt):  # two directions per layer
                     for _link in rim:
                         _G = _link.node_[0] if _link.node_[1] in link.node_ else _link.node_[1]  # mediating node
-                        # this _rim may contain current der+ added links because we added link to rim_t in comp_G
                         _rim = _G.rim if isinstance(_G,CG) else (copy(_G.rim_t[dir][-1]) if _G.rim_t and _G.rim_t[dir] else [])
                         for _link in _rim:
                             if _link is link: continue
@@ -204,7 +203,6 @@ def sum_krim(krim):  # sum last kernel layer
         if G.iderH: iderH.add_(G.iderH)
         if G.derH: derH.add_(G.derH)
         np.add(Et,G.Et)
-
     return n, L, S, A, latuple, iderH, derH, Et  # not sure about Et
 
 
@@ -219,6 +217,7 @@ def comp_G(link, iEt, link_, dir=None):  # add dderH to link and link to the rim
         _S, S = _G.node_[0].S + _G.node_[1].S, (G.node_[0].S + G.node_[1].S)  # then sum in link.S
         _A, A = _G.angle, G.angle if dir else [-d for d in G.angle]  # reverse angle direction for left link
         Et, rt, md_ = comp_ext(_G.distance,G.distance, _S,S/rn, _A,A)
+        # Et, Rt, Md_ = comp_latuple(_G.latuple, G.latuple,rn,fagg=1)  # seems like a low-value comp in der+
         dderH.n = 1; dderH.Et = Et; dderH.relt = rt
         dderH.H = [CH(Et=copy(Et), relt=copy(rt), H=md_, n=1)]
     else:  # CG Gs
@@ -230,10 +229,10 @@ def comp_G(link, iEt, link_, dir=None):  # add dderH to link and link to the rim
         # / PP:
         _G.iderH.comp_(G.iderH, dderH, rn, fagg=1, flat=0)  # always >1P in compared PPs?
     # / G, if >1 PPs | Gs:
-    if _G.derH and G.derH: _G.derH.comp_(G.derH, dderH, rn, fagg=1, flat=1)  # append and sum new dderH to base dderH
+    if _G.derH and G.derH: _G.derH.comp_(G.derH, dderH, rn, fagg=1, flat=0)  # append and sum new dderH to base dderH
     if _G.extH and G.extH: _G.extH.comp_(G.extH, dderH, rn, fagg=1, flat=1)
 
-    if fd: link.derH.append_(dderH, flat=1)  # append dderH.H into link.derH.H
+    if fd: link.derH.append_(dderH, flat=0)  # append dderH.H to link.derH.H
     else:  link.derH = dderH
     iEt[:] = np.add(iEt,dderH.Et)  # init eval rng+ and form_graph_t by total m|d?
     fin = 0
@@ -296,7 +295,7 @@ def form_graph_t(root,Q, Et, nrng):  # form Gm_,Gd_ from same-root nodes
 '''
 der+: correlation clustering of links through their nodes, forming dual trees of matching links in rng+?
 add rng+/seg+: direct comp nodes (vs summed in krim) if graph size * M: likely distant match,
-comp individual nodes in node-mediated krims, replacing krims and ExtH layers
+comp individual nodes in node-mediated krims, replacing krims and ExtH layers?
 '''
 def segment_parallel(root, Q, fd, nrng):  # recursive eval node_|link_ rims for cluster assignment
 
@@ -305,8 +304,7 @@ def segment_parallel(root, Q, fd, nrng):  # recursive eval node_|link_ rims for 
     for i, N in enumerate(max_):
         rim = get_rim(N)
         _N_ = [link.node_[0] if link.node_[1] is N else link.node_[1] for link in rim]
-        # N_ should pack N? And i don't see how we need i here
-        Gt = [[[N,rim,_N_,[0,0,0,0],i]],[N],[],rim,[0,0,0,0]]  # nodet_,N_, link_,Rim,Et # N, link_, rim, _N_, Et, i = nodet
+        Gt = [[[N,rim,[0,0,0,0]]], [rim],rim,[_N_],[0,0,0,0]]  # nodet_,link_,Rim,_N_,Et; nodet: N,rim,Et
         N.root = Gt
         iGt_ += [Gt]
     _Gt_ = copy(iGt_)
@@ -316,24 +314,18 @@ def segment_parallel(root, Q, fd, nrng):  # recursive eval node_|link_ rims for 
         for Gt in copy(_Gt_):
             nodet_,_N_,link_,_rim, Et = Gt
             rim = []  # per node
-            for link in _rim:  # floodfill Gt by rim tracing
+            for link in _rim:  # floodfill Gt by rim tracing and _N.root merge
                 link_ += [link]
-                # _N is the new node, N is the existing node in _N_
-                _N,N = link.node_ if link.node_[1] in _N_ else [link.node_[1],link.node_[0]]  # reverse order
-                Et = np.add(Et,link.Et)  # eval link, not node 
-                if Et[fd] > ave * Et[fd+2]:  # eval for merge? Or just link.Et?
-                    if _N.root:
-                        # draft:
-                        et = _N.root[0][0][-2]  # n.root[0][0] is self nodet, actually use i? I think [0][0][-2] is fine because the first nodet is always N's nodet, unless it's a merged N or it's not a max
-                        _N.root[0][0][-2] = np.add(et,link.Et)  # bilateral
-                        if _N.root is not Gt:  # root was not previously merged?
-                            # add eval|comp: keep Gt separate even if connected?
-                            merge_Gt(Gt,_N.root, rim, fd); _Gt_.remove(_N.root)
-                    else:   
-                        _N_ += [_N]
-                    # rim should be appended inside merge_Gt?:  (it should be here, because _N might not have root to run merge_root)
-                    rim += [L for L in get_rim(_N) if L.Et[fd] > ave * L.Et[2+fd]]  # for next breadth-first loop
-
+                Et = np.add(Et,link.Et)  # not evaluated; # N is in, _N is outside _N_:
+                _N,N = link.node_ if link.node_[1] in _N_ else [link.node_[1],link.node_[0]]  # reverse node_
+                # _N.Et = np.add(_N.Et,et); N.Et = np.add(N.Et,et)  # node inclusion value, eval in floodfill?
+                if _N.root:
+                    if _N.root is not Gt:  # root was not merged, + eval|comp to keep connected Gt separate?
+                        merge_Gt(Gt,_N.root, rim, fd); _Gt_.remove(_N.root)
+                else:
+                    _N_ += [_N]
+                    rim += [L for L in get_rim(_N) if L.Et[fd] > ave * L.Et[2+fd]]
+                    # for next breadth-first loop
             if rim: Gt_ += [Gt]
         _Gt_ = Gt_
         r += 1  # recursion depth
@@ -342,21 +334,20 @@ def segment_parallel(root, Q, fd, nrng):  # recursive eval node_|link_ rims for 
 
 
 def merge_Gt(Gt, gt, rim, fd):
-    
-    Nodet_,N_,Link_,Rim, Et = Gt
-    nodet_,n_,link_,rim, et = gt
-    
+
+    Nodet_,N_,Link_,Rim, Et = Gt; nodet_,n_,link_,rim, et = gt
+
     for link in link_:
         if link.Et[fd] > ave * link.Et[2+fd] and link not in Link_:
             N = link.node[1] if link.node_[1] in n_ else link.node[0]  # the node of current link in gt
-            if N not in N_: 
+            if N not in N_:
                 N_ += [N]  # add other node of link into N_
                 for nodet in nodet_:
                     if nodet[0] is N and nodet not in Nodet_:  # find nodet based on N
                         Nodet_ += [nodet]  # merge nodet
                 Link_ += [link]  # merge link
-                
-    Rim += [L for L in rim if L not in Rim]  # not sure if we need eval on rim
+
+    Rim += [L for L in rim if L not in Rim]
 
 
 def get_rim(N):
@@ -369,26 +360,27 @@ def get_rim(N):
     else:   rim = N.rim
     return  rim
 
-# draft:
-# probably can unpack this too
+
+# unpack?
 def get_max_(Q):  # use local-max kernels to init sub-graphs for segmentation
+                  # make recursive to define max range: increase mediation step if no maxes in prior rim?
     max_ = []
     for G in Q:
-        _G_ = [link.node_[0] if link.node_[1] is G else link.node_[1] for link in get_rim(G)]  # all connected G' rim's _Gs 
+        _G_ = [link.node_[0] if link.node_[1] is G else link.node_[1] for link in get_rim(G)]  # all connected G' rim's _Gs
         if not any([_G.DerH.Et[0] > G.DerH.Et[0]  for _G in _G_]):  # check if any _G.DerH.Et > G.DerH.Et
             max_ += [G]
     return max_
 
+
 # not revised
 def sum2graph(root, grapht, fd, nrng):  # sum node and link params into graph, aggH in agg+ or player in sub+
 
-    _, G_, Link_,_, oEt_ = grapht
-    graph = CG(fd=fd, node_=G_,link_=Link_, rng=nrng)
+    _, G_, Link_, _, Et = grapht
+    graph = CG(fd=fd, node_=G_,link_=Link_, rng=nrng, Et=Et)
     if fd:
         graph.root = root
     extH = CH()
-    for G, oEt in zip(G_, oEt_):
-        graph.Et = np.add(graph.Et, oEt)
+    for G in G_:
         extH.append_(G.extH,flat=1)if graph.extH else extH.add_(G.extH)
         graph.area += G.area
         graph.box = extend_box(graph.box, G.box)
