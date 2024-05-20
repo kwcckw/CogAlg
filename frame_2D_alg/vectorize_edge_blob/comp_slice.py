@@ -53,7 +53,7 @@ class CcompSliceFrame(CsliceEdge):
                 edge.fback_ = []
                 for P in edge.P_:
                     P.derH = CH()   # create derH
-                    P.link_ = [[Clink([_P, P]) for _P in P.link_]]  # prelinks for comp_slice
+                    P.link_ = [[CdP([_P, P]) for _P in P.link_]]  # prelinks for comp_slice
                 ider_recursion(None, edge)  # vertical, lateral-overlap P cross-comp -> PP clustering
 
     CBlob = CEdge
@@ -98,7 +98,7 @@ class CG(CBase):  # PP | graph | blob: params of single-fork node_ cluster
     def __bool__(G): return G.n != 0  # to test empty
 
 
-# replace with CdP here?
+# move this to agg_recursion?
 class Clink(CBase):  # product of comparison between two nodes or links
     name = "link"
 
@@ -125,11 +125,24 @@ class Clink(CBase):  # product of comparison between two nodes or links
         l.compared_ = []
         l.box = [np.inf, np.inf, -np.inf, -np.inf] if box is None else box  # y,x,y0,x0,yn,xn
         l.dir = bool  # direction of comparison if not G0,G1, for comp link?
-        # add in sum2graph: graph is Clink?
-        l.link_ = []
 
     def __bool__(l): return bool(l.derH.H)
 
+
+class CdP(CBase):
+    name = "derP"
+    def __init__(l, node_=None, derH=None, root=None, distance=0, angle=None):
+        super().__init__()
+
+        l.node_ = [] if node_ is None else node_  # e_ in kernels, else replaces _node,node: not used in kernels?
+        l.angle = [0,0] if angle is None else angle  # dy,dx between node centers
+        l.distance = distance  # distance between node centers
+        l.latuple = []  # sum node I,G,M,Ma,L,[Dy,Dx], no need to specify here
+        l.yx_ = []  # or box
+        l.derH = CH() if derH is None else derH
+        l.root = None if root is None else root  # dgraphs containing link
+
+    def __bool__(l): return bool(l.derH.H)
 
 class CH(CBase):  # generic derivation hierarchy with variable nesting
     '''
@@ -232,7 +245,7 @@ def ider_recursion(root, PP, fd=0):  # node-mediated correlation clustering: kee
     # no der+'rng+, or directional, within node-mediated hyper-links only?
     P_ = rng_recursion(PP, fd=fd)  # extend PP.link_, derHs by same-der rng+ comp
     # calls der+:
-    form_PP_t(PP, P_, iRt=PP.iderH.Et[2:4] if PP.iderH else [0,0])
+    form_PP_t(PP, P_)
     # feedback per PPd:
     if root is not None and PP.iderH: root.fback_ += [PP.iderH]
 
@@ -263,7 +276,7 @@ def rng_recursion(PP, fd=0):  # similar to agg+ rng_recursion, but looping and c
                 else: continue
                 for _P in _P_:
                     if not hasattr(_P, "link_") or len(_P.link_) < rng: continue
-                    mlink = comp_P(Clink(node_=[_P, P]) if fd else link, fd)
+                    mlink = comp_P(CdP(node_=[_P, P]) if fd else link, fd)
                     if mlink: # return if match
                         V += mlink.derH.Et[0]
                         rnglink_ += [mlink]
@@ -289,12 +302,6 @@ def comp_P(link, fd):
     if fd:  # der+, comp derPs, no comp_latuple?
         rn = (_P.derH.n if P.derH else len(_P.dert_)) / P.derH.n
         derH = _P.derH.comp_(P.derH, CH(), rn=rn, flat=0)
-        vm,vd,rm,rd = derH.Et
-        # rm += vd > vm; rd += vm >= vd
-        # He = link.derH  # append link derH:
-        # if He and not isinstance(He.H[0], CH): He = link.derH = CH(Et=[*He.Et], H=[He])  # nest md_ as derH
-        # He.Et = np.add(He.Et, (vm,vd,rm,rd))
-        # He.H += [derH]
         link.derH = CH(Et=[*derH.Et], H=[derH])  # distance, angle?
     else:  # rng+, comp Ps
         rn = len(_P.dert_) / len(P.dert_)
@@ -305,17 +312,19 @@ def comp_P(link, fd):
         _y,_x = _P.yx; y,x = P.yx
         angle = np.subtract([y,x], [_y,_x]) # dy,dx between node centers
         distance = np.hypot(*angle)      # distance between node centers
-        link = Clink(node_=[_P, P], derH = CH(Et=[vm,vd,rm,rd],H=H,n=n),angle=angle,distance=distance)
+        link = CdP(node_=[_P, P], derH = CH(Et=[vm,vd,rm,rd],H=H,n=n),angle=angle,distance=distance)
 
-    for cP in _P, P:  # to sum in PP
-        link.latuple = [P+p for P,p in zip(link.latuple[:-1],cP.latuple[:-1])] + [[A+a for A,a in zip(link.latuple[-1],cP.latuple[-1])]]
-        link.yx_ += cP.yx_
-    if vm > aveP * rm:  # always rng+?
+    # to sum in PP
+    link.latuple = [P+p for P,p in zip(_P.latuple[:-1],P.latuple[:-1])] + [[A+a for A,a in zip(_P.latuple[-1],P.latuple[-1])]]
+    link.yx_     = _P.yx_ + P.yx_
+
+    if link.derH.Et[0] > aveP * link.derH.Et[2]:  # always rng+? (vm > aveP * rm)
         return link
 
 # not revised:
-def form_PP_t(root, P_, iRt):  # form PPs of derP.valt[fd] + connected Ps val
+def form_PP_t(root, P_):  # form PPs of derP.valt[fd] + connected Ps val
 
+    iRt = root.iderH.Et[2:4] if any(root.iderH.Et) else [0,0]
     PP_t = [[],[]]
     mLink_,_mP__,dLink_,_dP__ = [],[],[],[]  # per PP, !PP.link_?
     for P in P_:

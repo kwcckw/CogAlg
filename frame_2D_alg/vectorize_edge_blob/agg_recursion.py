@@ -2,7 +2,7 @@ import numpy as np
 from copy import deepcopy, copy
 from itertools import combinations, product, zip_longest
 from .slice_edge import comp_angle, CsliceEdge
-from .comp_slice import ider_recursion, comp_latuple, get_match, Clink, CH, CG
+from .comp_slice import ider_recursion, comp_latuple, get_match, Clink, CH, CG, CdP
 from .filters import aves, ave_mL, ave_dangle, ave, G_aves, ave_Gm, ave_Gd, ave_dist, ave_mA, max_dist
 from utils import box2center, extend_box
 
@@ -43,10 +43,10 @@ def vectorize_root(image):  # vectorization in 3 composition levels of xcomp, cl
 
     for edge in frame.blob_:
         if hasattr(edge, 'P_') and edge.latuple[-1] * (len(edge.P_)-1) > G_aves[0]:  # eval G, rdn=1
-            edge.Et = [0,0,0,0]  # for ider_recursion?
+            edge.iderH = CH()  # for ider_recursion (iRt and feedback)
             edge.fback_ = []
             for P in edge.P_:
-                P.link_ = [[Clink(node_=[_P, P]) for _P in P.link_]]
+                P.link_ = [[CdP(node_=[_P, P]) for _P in P.link_]]
                 P.derH = CH()
             ider_recursion(None, edge)  # vertical, lateral-overlap P cross-comp -> PP clustering
 
@@ -61,6 +61,7 @@ def vectorize_root(image):  # vectorization in 3 composition levels of xcomp, cl
                                 PP.Et = [0,0,0,0]  # [] in comp_slice
                                 pruned_node_ += [PP]
                         if len(pruned_node_) > 10:  # discontinuous PP rng+ cross-comp, cluster -> G_t:
+                            edge.Et = [0,0,0,0]  # to eval for deeper agg_recursion
                             edge.node_ = pruned_node_  # agg+ of PP nodes:
                             edge.link_ = []
                             agg_recursion(None, edge, fagg=1)
@@ -342,35 +343,36 @@ def segment_parallel(root, Q, fd, nrng):  # recursive eval node_|link_ rims for 
 # draft
 def rim_link_Et_x_olp(iQ, fd):
     # recursive link.Et += link.relt * (node_ rim overlap - link)
-    _OEt = [0,0,0,0]
-    _oEt_ = [[0,0,0,0] for n in iQ]
+    _OV = 0
+    _oV_ = [ 0 for n in iQ]
     _Q = copy(iQ)
     r = 1
     while True:
-        OEt = [0,0,0,0]
-        oEt_ = []
+        OV = 0
+        oV_ = []
         DOV = 0
         Q = []
-        for N, _oEt in zip(_Q, _oEt_):  # update node rim Ets
-            oEt = [0,0,0,0]  # not sure
+        for i, (N, _oV) in enumerate(zip(_Q, _oV_)):  # update node rim Ets
+            oV = 0  # not sure
             DoV = 0
             rim = get_rim(N)
             for link in rim:
                 _N = link.node_[0] if link.node_[1] is N else link.node_[1]
                 _rim = get_rim(_N)
+                # there's a problem here
                 olink_ = list(set(rim).intersection(set(_rim)))
-                [np.add(oEt, L.Et) for L in olink_ if L is not link]
+                oV += sum([L.Et[fd] for L in olink_ if L is not link])
                 V = link.Et[fd]
-                doV = oEt[fd] - _oEt[fd]  # oV update to adjust V, not sure we need the rest of oEts:
-                link.Et[fd] = V + link.relt[fd] * doV
+                doV = oV - _oV  # oV update to adjust V
+                link.Et[fd] = V + link.derH.relt[fd] * doV  # use link.derH.relt? link.relt is empty before der+
                 DoV += doV
 
-            DOV += DoV; np.add(OEt, oEt); _oEt = oEt
+            DOV += DoV; OV += oV; _oV_[i] = oV
             if DoV > ave:
-                Q += [N]; oEt_ += [oEt]
+                Q += [N]; oV_ += [oV]
 
         if DOV < ave: break  # low update value
-        _Q = Q; _oEt_ = oEt_; _OEt = OEt
+        _Q = Q; _oV_ = oV_; _OV = OV
         r += 1
 
 # not revised
