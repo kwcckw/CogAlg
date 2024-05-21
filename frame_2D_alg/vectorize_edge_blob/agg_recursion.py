@@ -4,6 +4,7 @@ from itertools import combinations, product, zip_longest
 from .slice_edge import comp_angle, CsliceEdge
 from .comp_slice import ider_recursion, comp_latuple, get_match, CH, CG, CdP
 from utils import box2center, extend_box
+from frame_blobs import CBase
 
 '''
 Blob edges may be represented by higher-composition patterns, etc., if top param-layer match,
@@ -58,6 +59,7 @@ class Clink(CBase):  # product of comparison between two nodes or links
         l.Vt = [0,0]  # for node-overlap modulated segmentation, init derH.Et
         l.derH = CH() if derH is None else derH
         l.DerH = CH()  # ders from G.DerH
+        l.Et = [0,0,0,0]  # accumulated from node_ (this will be added in comp_G in both forks too)
         ''' add in der+:
         l.extH = CH() if extH is None else extH  # for der+
         l.ExtH = CH()  # summed from kernels in der+
@@ -66,7 +68,6 @@ class Clink(CBase):  # product of comparison between two nodes or links
         l.compared_ = []
         l.dir = bool  # direction of comparison if not G0,G1, for comp link?
         # add in sum2graph if graph is Clink, or always CG?
-        # l.Et = [0,0,0,0]  # accumulated from node_
         # l.link_ = []
         '''
     def __bool__(l): return bool(l.derH.H)
@@ -85,9 +86,13 @@ def vectorize_root(image):  # vectorization in 3 composition levels of xcomp, cl
                 P.derH = CH()
             ider_recursion(None, edge)  # vertical, lateral-overlap P cross-comp -> PP clustering
 
+            node_t, link_t = [[],[]], [[],[]]
             for fd, node_ in enumerate(edge.node_):  # always node_t
                 if edge.iderH and any(edge.iderH.Et):  # any for np array
-                    if edge.iderH.Et[fd] * (len(node_)-1)*(edge.rng+1) > G_aves[fd] * edge.iderH.Et[2+fd]:
+                    if edge.iderH.Et[fd] * (len(node_)-1)*(edge.rng+1) > G_aves[fd] * edge.iderH.Et[2+fd]:              
+                        if not hasattr(edge, "Et"):  # init for agg+
+                            edge.Et = [0,0,0,0]  # to eval for deeper agg_recursion
+                            edge.link_ = []
                         pruned_node_ = []
                         for PP in node_:  # PP -> G
                             if PP.iderH and PP.iderH.Et[fd] > G_aves[fd] * PP.iderH.Et[2+fd]:
@@ -96,15 +101,24 @@ def vectorize_root(image):  # vectorization in 3 composition levels of xcomp, cl
                                 PP.Et = [0,0,0,0]  # [] in comp_slice
                                 pruned_node_ += [PP]
                         if len(pruned_node_) > 10:  # discontinuous PP rng+ cross-comp, cluster -> G_t:
-                            edge.Et = [0,0,0,0]  # to eval for deeper agg_recursion
-                            edge.node_ = pruned_node_  # agg+ of PP nodes:
-                            edge.link_ = []
+                            node_t[fd] = pruned_node_
+                            edge.node_ = pruned_node_  # agg+ of PP nodes: (temporary)
                             agg_recursion(None, edge, fagg=1)
+                            link_t[fd] = edge.link_
+                   
+            if any(node_t):
+                edge.node_ = node_t
+                edge.link_ = link_t
+
 
 def agg_recursion(rroot, root, fagg=0):
 
     for link in root.link_:
         link.Et = copy(link.derH.Et); link.relt = copy(link.derH.relt)
+        if not fagg:
+            # init for der+
+            link.rim_t = []
+            link.extH = CH()  
 
     nrng, Et = rng_convolve(root, [0,0,0,0], fagg)  # += connected nodes in med rng
 
@@ -171,14 +185,20 @@ def rng_convolve(root, Et, fagg):  # comp Gs|kernels in agg+, links | link rim_t
         while _L_:
             link_ += _L_; L_ = []
             for link in _L_:
-                if link.rim_t: rimt = [copy(link.rim_t[0][-1]) if link.rim_t[0] else [], copy(link.rim_t[1][-1]) if link.rim_t[1] else []]
-                else:          rimt = [link.node_[0].rim, link.node_[1].rim]
+                if link.rim_t:  # der+der+
+                    rimt = [copy(link.rim_t[0][-1]) if link.rim_t[0] else [], copy(link.rim_t[1][-1]) if link.rim_t[1] else []]
+                else:          
+                    if isinstance(link.node_[0], CG):  # link's nodes are CG, base der+ rng
+                        rimt = [link.node_[0].rim, link.node_[1].rim]
+                    else:  # link is new Link from last rng, and it's a rng+der+
+                        rimt = [copy(link.node_[0].rim_t[0][-1]) if link.node_[0].rim_t[0] else [], copy(link.node_[1].rim_t[1][-1]) if link.node_[1].rim_t[1] else []]
+                        
                 for dir,rim in zip((0,1),rimt):  # two directions per layer
                     for _link in rim:
                         _G = _link.node_[0] if _link.node_[1] in link.node_ else _link.node_[1]  # mediating node
                         _rim = _G.rim if isinstance(_G,CG) else (copy(_G.rim_t[dir][-1]) if _G.rim_t and _G.rim_t[dir] else [])
                         for _link in _rim:
-                            if _link is link: continue
+                            if _link is link or _link not in root.link_: continue  # skip if link not in root link_ too?
                             Link = Clink(node_=[_link,link])
                             comp_G(Link, Et, L_, dir=dir)  # update Link.rim_t, L_
             _L_= L_
@@ -291,6 +311,8 @@ def comp_G(link, iEt, link_, dir=None):  # add dderH to link and link to the rim
             link.S += _G.S + G.S
             for node in _G,G: node.rim += [link]
         link_ += [link]
+        if isinstance(_G, Clink): 
+            link.rim_t = []; link.extH=CH()  # init for new link
 
 
 def comp_ext(_L,L,_S,S,_A,A):  # compare non-derivatives:
@@ -320,7 +342,9 @@ def form_graph_t(root,Q, Et, nrng):  # form Gm_,Gd_ from same-root nodes
             graph_ = segment_Q(root, Q, fd, nrng)
             for graph in graph_:
                 q = graph.link_ if fd else graph.node_
-                if len(q) > ave_L and graph.Et[fd] > G_aves[fd] * graph.Et[fd]:  # olp-modulated Et
+                if len(q) > ave_L and graph.Et[fd] > G_aves[fd] * graph.Et[fd]:  # olp-modulated Et 
+                    if not fd:
+                        for G in q: G.compared_ = []  # reset this? Else there will be no comparison later
                     agg_recursion(root, graph, fagg=(1-fd))  # graph.node_ is not node_t yet
                 elif graph.derH:
                     root.fback_ += [graph.derH]
@@ -376,7 +400,7 @@ def segment_Q(root, Q, fd, nrng):  # recursive eval node_|link_ rims for cluster
     return [sum2graph(root, Gt, fd, nrng) for Gt in iGt_ if Gt]  # not-empty clusters
 
 def link_Et_xolp(iQ, fd):  # recursive N.V += link.relv * node'_N_ overlap Et
-    _OV = 0
+    _OV = 0  # this _OV or OV is not used?
     _oV_ = [0 for n in iQ]
     _Q = copy(iQ)
     r = 1
@@ -393,7 +417,8 @@ def link_Et_xolp(iQ, fd):  # recursive N.V += link.relv * node'_N_ overlap Et
                 oN_ = list(set(_N_).intersection(set(__N_)))
                 oV += sum([n.Et[fd]- ave*n.Et[2+fd] for n in oN_])  # sum V deviation of overlapping Ns
                 doV = oV - _oV  # oV update to adjust Et:
-                link.link.Vt[fd] += link.derH.relv[fd] * doV  # update oN_-modulated V only
+                # derH.relt is >1 here, it should be range from 0 -1? So it will be derH.relt[fd]/derH.n?
+                link.Vt[fd] += link.derH.relt[fd]/link.derH.n * doV  # update oN_-modulated V only (why link.link? Typo?)
                 DoV += doV
             DOV += DoV; OV += oV
             if DoV > ave:
@@ -413,7 +438,7 @@ def merge_Gt(Gt, gt, rim, fd):
 
     for link in link_:
         if link.Et[fd] > ave * link.Et[2+fd] and link not in Link_:
-            N = link.node[1] if link.node_[1] in n_ else link.node[0]  # the node of current link in gt
+            N = link.node_[1] if link.node_[1] in n_ else link.node_[0]  # the node of current link in gt
             if N not in N_:
                 N_ += [N]  # add other node of link into N_
                 for nodet in nodet_:
