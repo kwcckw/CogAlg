@@ -106,7 +106,7 @@ class CdP(CBase):
         l.angle = [0,0] if angle is None else angle  # dy,dx between node centers
         l.distance = distance  # distance between node centers
         l.latuple = []  # sum node_
-        l.yx_ = []  # sum node_
+        l.yx = []  # sum node_
         l.derH = CH() if derH is None else derH
         l.root = None if root is None else root  # PPds containing dP
 
@@ -208,26 +208,18 @@ class CH(CBase):  # generic derivation hierarchy with variable nesting
             if attr != '_id' and attr in _H.__dict__.keys():  # copy only the available attributes and skip id
                 setattr(_H, attr, deepcopy(value))
 
+
 def ider_recursion(root, PP, fd=0):  # node-mediated correlation clustering: keep same Ps and links, increment link derH, then P derH in sum2PP
 
-    # no der+'rng+, or directional, within node-mediated hyper-links only?
-    P_ = rng_recursion(PP, fd=fd)  # extend PP.link_, derHs by same-der rng+ comp
-    # calls der+:
-    form_PP_t(PP, P_)
-    # feedback per PPd:
-    if root is not None and PP.iderH: root.fback_ += [PP.iderH]
+    Q = comp_link_(PP) if fd else rng_recursion(PP)  # extend PP.link_, derHs by same-der rng+ comp
+    form_PP_t(PP, Q)  # calls der+
+
+    if root is not None and PP.iderH: root.fback_ += [PP.iderH]  # feedback per PPd?
 
 
 def rng_recursion(PP, fd=0):  # similar to agg+ rng_recursion, but looping and contiguously link mediated
 
-    if fd:
-        iP_ = PP.link_
-        for link in PP.link_:
-            if link.node_[0].rim_: # empty in top row
-                rim_ = copy(link.node_[0].rim_[-1])
-                assert not hasattr(link, "rim_")  # no link_ yet
-                link.rim_ = [rim_]  # add upper node uplinks as prelinks
-    else: iP_ = PP.P_
+    iP_ = PP.P_
     rng = 1  # cost of links added per rng+
     while True:
         P_ = []; V = 0
@@ -263,6 +255,17 @@ def rng_recursion(PP, fd=0):  # similar to agg+ rng_recursion, but looping and c
 
     return iP_
 
+
+# draft
+def comp_link_(PP):
+
+    for link in PP.link_:
+        if link.node_[0].rim_:  # empty in top row
+            rim_ = copy(link.node_[0].rim_[-1])
+            assert not hasattr(link, "rim_")  # no link_ yet
+            link.rim_ = [rim_]  # add upper node uplinks as prelinks
+
+
 def comp_P(link, fd):
     aveP = P_aves[fd]
     _P, P, distance, angle = link.node_[0], link.node_[1], link.distance, link.angle
@@ -293,7 +296,6 @@ def comp_P(link, fd):
 # not revised:
 def form_PP_t(root, P_):  # form PPs of derP.valt[fd] + connected Ps val
 
-    iRt = root.iderH.Et[2:4] if any(root.iderH.Et) else [0,0]
     PP_t = [[],[]]
     mLink_,_mP__,dLink_,_dP__ = [],[],[],[]  # per PP, !PP.link_?
     for P in P_:
@@ -324,7 +326,7 @@ def form_PP_t(root, P_):  # form PPs of derP.valt[fd] + connected Ps val
                     cP_ += [_P]
                     clink_ += Link_[P_.index(_P)]
                     perimeter += _P__[P_.index(_P)]  # extend P perimeter with linked __Ps
-            PP = sum2PP(root, cP_, clink_, iRt, fd)
+            PP = sum2PP(root, cP_, clink_, fd)
             PP_t[fd] += [PP]
             CP_ += cP_
 
@@ -338,9 +340,10 @@ def form_PP_t(root, P_):  # form PPs of derP.valt[fd] + connected Ps val
     root.node_ = PP_t  # nested in der+, add_alt_PPs_?
 
 
-def sum2PP(root, P_, derP_, iRt, fd):  # sum links in Ps and Ps in PP
+def sum2PP(root, P_, derP_, fd):  # sum links in Ps and Ps in PP
 
     PP = CG(fd=fd, root=root, rng=root.rng+1); PP.P_ = P_  # init P_
+    iRt = root.iderH.Et[2:4] if root.iderH else [0,0]  # add to rdnt
     # += uplinks:
     for derP in derP_:
         if derP.node_[0] not in P_ or derP.node_[1] not in P_: continue
