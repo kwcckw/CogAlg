@@ -224,19 +224,14 @@ def rng_recursion(PP, fd=0):  # similar to agg+ rng_recursion, but looping and c
     while True:
         P_ = []; V = 0
         for P in iP_:
-            if not hasattr(P, "rim_") or len(P.rim_) < rng: continue  # no _rnglink_ or top row
+            if len(P.rim_) < rng: continue  # no _rnglink_ or top row
             _prelink_ = P.rim_.pop()
             rnglink_, prelink_ = [],[]  # both per rng+
             for link in _prelink_:
-                if fd:
-                    if link.node_[0].rim_: _P_ = link.node_[0].rim_[-1]  # rng uplinks in _P
-                    else: continue
-                elif link.distance <= rng:  # | rng * ((P.val+_P.val)/ ave_rval)?
-                    _P_ = [link.node_[0]]
-                else: continue
-                for _P in _P_:
-                    if not hasattr(_P, "rim_") or len(_P.rim_) < rng: continue
-                    mlink = comp_P(CdP(node_=[_P, P]) if fd else link, fd)
+                if link.distance <= rng:  # | rng * ((P.val+_P.val)/ ave_rval)?
+                    _P = link.node_[0]
+                    if len(_P.rim_) < rng: continue
+                    mlink = comp_P(link, fd)
                     if mlink: # return if match
                         V += mlink.derH.Et[0]
                         rnglink_ += [mlink]
@@ -259,21 +254,30 @@ def rng_recursion(PP, fd=0):  # similar to agg+ rng_recursion, but looping and c
 # draft
 def comp_link_(PP):
 
+    # init uplinks from link._P's prelinks
+    _link_ = []
     for link in PP.link_:
         if link.node_[0].rim_:  # empty in top row
-            rim_ = copy(link.node_[0].rim_[-1])
-            assert not hasattr(link, "rim_")  # no link_ yet
-            link.rim_ = [rim_]  # add upper node uplinks as prelinks
+            _link_ += link.node_[0].rim_[-1]
 
+    link_ = []
+    for _link,link in zip(_link_, PP.link_):
+        link.rim_ = [[]]  # init (if there's no rng+ in der+, then we actually just need flat link.rim?)
+        dlink = comp_P(CdP(node_=[_link, link]), fd=1)
+        if dlink: # return if match
+            link.rim_[-1] += [dlink]
+            link_ += [link]
+
+    return link_
 
 def comp_P(link, fd):
     aveP = P_aves[fd]
     _P, P, distance, angle = link.node_[0], link.node_[1], link.distance, link.angle
 
     if fd:  # der+, comp derPs, comp_latuple is not significant?
-        rn = (_P.derH.n if P.derH else len(_P.dert_)) / P.derH.n
-        derH = _P.derH.comp_(P.derH, CH(), rn=rn, flat=0)
-        link.derH = CH(Et=[*derH.Et], H=[derH])
+        rn = _P.derH.n / P.derH.n
+        derH = _P.derH.comp_(P.derH, CH(), rn=rn, flat=1)  # flat should be 0 here? Since nesting will be added below
+        link.derH = CH(Et=[*derH.Et], H=[derH], n=derH.n)
         # distance, angle?
     else:  # rng+, comp Ps
         rn = len(_P.dert_) / len(P.dert_)
@@ -348,8 +352,10 @@ def sum2PP(root, P_, derP_, fd):  # sum links in Ps and Ps in PP
     for derP in derP_:
         if derP.node_[0] not in P_ or derP.node_[1] not in P_: continue
         if derP.derH:
-            derP.node_[1].derH.add_(derP.derH, iRt)
-            derP.node_[0].derH.add_(negate(deepcopy(derP.derH)), iRt)  # negate reverses uplink ds direction
+            # for sub der+, derP.node_[1].derH has different nesting compare t derP.derH, append them instead? But how about negate?
+            if not isinstance(P_[0], CdP):
+                derP.node_[1].derH.add_(derP.derH, iRt)
+                derP.node_[0].derH.add_(negate(deepcopy(derP.derH)), iRt)  # negate reverses uplink ds direction
         PP.link_ += [derP]
         if fd: derP.root = PP
         PP.A = np.add(PP.A,derP.angle)
