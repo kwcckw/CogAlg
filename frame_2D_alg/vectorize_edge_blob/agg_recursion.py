@@ -53,7 +53,7 @@ class Clink(CBase):  # product of comparison between two nodes or links
         l.distance = distance  # distance between node centers
         l.n = 1  # or min(node_.n)?
         l.S = 0  # sum node_
-        l.box = []  # sum node_
+        l.box = [] if box is None else box  # sum node_
         l.area = 0  # sum node_
         l.latuple = []  # sum node_
         l.Vt = [0,0]  # for rim-overlap modulated segmentation, init derH.Et[:2]
@@ -106,7 +106,7 @@ def add_attrs(edge):
     edge.Et = [0,0,0,0]
     edge.link_ = []
     for P in edge.P_:  # add comp_slice attrs
-        P.rim_ = [[CdP(node_=[_P,P]) for _P in P.rim_]]; P.derH = CH()
+        P.rim_ = [[_P for _P in P.rim_]]; P.derH = CH()
 
 
 def agg_recursion(rroot, root, fagg=0):
@@ -174,10 +174,11 @@ def rng_convolve(root, Et, fagg):  # comp Gs|kernels in agg+, links | link rim_t
         _L_ = root.link_
         link_ = []
         while _L_:
-            link_ += _L_; L_ = []
+            L_ = []
             for link in _L_:
+                if not hasattr(link, "rim_t"): add_der_attrs(link_=[link])  # new Link added in prior rng needs add_der_attrs too
                 if link.rim_t:
-                    rimt = [copy(link.rim_t[0][-1]) if link.rim_t[0] else [], copy(link.rim_t[1][-1]) if link.rim_t[1] else []]
+                    rimt = [copy(link.rim_t[0][-2]) if link.rim_t[0] else [], copy(link.rim_t[1][-2]) if link.rim_t[1] else []]
                 elif isinstance(link.node_[0],CG):
                     rimt = [link.node_[0].rim, link.node_[1].rim]  # der+ nrng=1
                 else:  # link.node_ Clinks in der+ nrng>1
@@ -189,12 +190,20 @@ def rng_convolve(root, Et, fagg):  # comp Gs|kernels in agg+, links | link rim_t
                         _rim = _G.rim if isinstance(_G,CG) else (copy(_G.rim_t[dir][-1]) if _G.rim_t and _G.rim_t[dir] else [])
                         for _link in _rim:
                             if _link is link: continue
-                            if not hasattr(_link, "rim_t"): add_der_attrs(link_=[_link])
-                            Link = Clink(node_=[_link,link])
+                            if not hasattr(_link, "rim_t"): add_der_attrs(link_=[_link])         
+                            Link = Clink(node_=[_link,link], box=extend_box(_link.box, link.box))
                             comp_G(Link, Et, L_, dir=dir)  # update Link.rim_t, L_
+            if L_: link_ += L_  # pack only new Link?
             _L_= L_
             nrng += 1
         root.link_ = link_
+        
+        # we need to add this for der+ too? Since this link_ will become node_ of graph later
+        # link.extH+ for segmentation
+        for _link in link_:
+            rim = copy(link.node_[0].rim_t[0][-1]) if link.node_[0].rim_t[0] else [] + copy(link.node_[1].rim_t[1][-1]) if link.node_[1].rim_t[1] else []
+            for i, link in enumerate(rim):
+                _link.extH.add_(link.DerH) if i else _link.extH.append_(link.DerH, flat=1)
 
     return nrng, Et
 
@@ -204,8 +213,11 @@ def add_der_attrs(link_):
         link.ExtH = CH()  # sum from kernels in der+
         link.root = None  # dgraphs containing link
         link.rim_t = []   # dual tree of _links, each may have its own node-mediated links, instead of rim
+        link.rim = []     # when link is node in rng+ later
         link.compared_ = []
         link.dir = 0      # direction of comparison if not G0,G1, for comp link?
+        link.Et = [0,0,0,0]  # looks like we need Et in Clink when link becomes nodes in der+ later
+
 '''
 G.DerH sums krim _G.derHs, not from links, so it's empty in the first loop.
 _G.derHs can't be empty in comp_krim: init in loop link.derHs
@@ -305,7 +317,7 @@ def comp_G(link, iEt, link_, dir=None):  # add dderH to link and link to the rim
                 if L.rim_t:  # not sure about dir and nesting
                     if L.rim_t[dir]: L.rim_t[dir][-1] += [link]  # add new link
                     else:            L.rim_t[dir] = [[link]]  # if len(L.rim_t[dir])==nrng?
-                else: L.rim_t = [[],[[link]]] if dir else [[[link]],[]]  # 1st der+ link.rim_t = []
+                else: L.rim_t = [[[],[]],[[],[link]]] if dir else [[[],[link]],[[],[]]]  # 1st der+ link.rim_t = []
         else:
             link.S += _G.S + G.S
             for node in _G,G: node.rim += [link]
@@ -341,8 +353,14 @@ def form_graph_t(root,Q, Et, nrng):  # form Gm_,Gd_ from same-root nodes
                 q = graph.link_ if fd else graph.node_
                 if len(q) > ave_L and graph.Et[fd] > G_aves[fd] * graph.Et[fd]:  # olp-modulated Et
                     if fd:
-                        if not hasattr(Q[0],"rim_t"): add_der_attrs(Q)  # 1st der+
-                    else:
+                        if not hasattr(Q[0],"rim_t"): 
+                            add_der_attrs(q)  # 1st der+
+                        else:
+                            for link in q:  # init new der rim_t layer
+                                if link.rim_t:
+                                    link.rim_t[0] += [[]]; link.rim_t[1] += [[]]; 
+                                else:
+                                    link.rim_t = [[[],[]],[[],[]]]  # empty last layer and current layer
                         for G in q: G.compared_ = []
                     agg_recursion(root, graph, fagg=(1-fd))  # graph.node_ is not node_t yet
                 elif graph.derH:
@@ -468,7 +486,7 @@ def sum2graph(root, grapht, fd, nrng):  # sum node and link params into graph, a
         extH.append_(G.extH,flat=1)if graph.extH else extH.add_(G.extH)
         graph.area += G.area
         graph.box = extend_box(graph.box, G.box)
-        if isinstance(G, CG):
+        if isinstance(G, CG):  # add latuple to Clink too?
             graph.latuple = [P+p for P,p in zip(graph.latuple[:-1],G.latuple[:-1])] + [[A+a for A,a in zip(graph.latuple[-1],G.latuple[-1])]]
             if G.iderH:  # empty in single-P PP|Gs
                 graph.iderH.add_(G.iderH)

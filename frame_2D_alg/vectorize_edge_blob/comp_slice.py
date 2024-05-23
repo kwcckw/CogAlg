@@ -99,17 +99,19 @@ class CG(CBase):  # PP | graph | blob: params of single-fork node_ cluster
 
 class CdP(CBase):  # comp_slice version of Clink
     name = "dP"
-    def __init__(l, node_=None, derH=None, root=None, distance=None, angle=None):
+    def __init__(l, node_=None, derH=None, root=None, distance=None, angle=None, yx=None, yx_=None, latuple=None):
         super().__init__()
 
         l.node_ = [] if node_ is None else node_  # e_ in kernels, else replaces _node,node: not used in kernels?
         l.angle = [0,0] if angle is None else angle  # dy,dx between node centers
         l.distance = distance  # distance between node centers
-        l.latuple = []  # sum node_
-        l.yx = []  # sum node_
+        l.latuple = [] if latuple is None else latuple  # sum node_
+        l.yx = [0,0] if yx is None else yx  # sum node_
+        l.yx_= [] if yx_ is None else yx_
         l.rim = []
         l.derH = CH() if derH is None else derH
         l.root = None if root is None else root  # PPds containing dP
+        l.nmed = 0
 
     def __bool__(l): return bool(l.derH.H)
 
@@ -226,9 +228,9 @@ def rng_recursion(PP, fd=0):  # similar to agg+ rng_recursion, but looping and c
         P_ = []; V = 0
         for P in iP_:
             if len(P.rim_) < rng: continue  # no _rnglink_ or top row
-            _prelink_ = P.rim_.pop()
-            rnglink_, prelink_ = [],[]  # both per rng+
-            for _P in _prelink_:
+            _P_link_ = P.rim_.pop()  # P_link_ is clearer?
+            rnglink_, P_link_  = [],[]  # both per rng+
+            for _P in _P_link_:
                 _y,_x = _P.yx; y,x = P.yx
                 angle = np.subtract([y,x], [_y,_x]) # dy,dx between node centers
                 distance = np.hypot(*angle)  # between node centers
@@ -239,11 +241,11 @@ def rng_recursion(PP, fd=0):  # similar to agg+ rng_recursion, but looping and c
                     if mlink:  # return if match
                         V += mlink.derH.Et[0]
                         rnglink_ += [mlink]
-                        prelink_ += [dP.node_[0] for dP in _P.rim_[-1]]  # connected __Ps
+                        P_link_  += [dP for dP in _P.rim_[-1]]  # connected __Ps
             if rnglink_:
                 P.rim_ += [rnglink_]
-                if prelink_:
-                    P.rim_ += [prelink_]; P_ += [P]  # Ps with prelinks for next rng+
+                if P_link_:
+                    P.rim_ += [P_link_]; P_ += [P]  # Ps with prelinks for next rng+
 
         if V <= ave * rng * len(P_) * 6:  # implied val of all __P_s, 6: len mtuple
             for P in P_: P.rim_.pop()  # remove prelinks
@@ -261,17 +263,15 @@ def comp_link_(PP):  # node_- mediated: comp node.rim dPs
     this dlink_ is flat, but input may be nested rim_: some input info is lost.
     consistent dlink_ may be double-nested, from rim_ and _rim_, too complex? 
     '''
-    for dP in PP.link_:
-        rim = [link for rim in dP.rim_ for link in rim]  # flatten P.rim_ or layer dlink_ by root rng+?
-        for link in rim:
-            _node = link.node_[0]
-            if not _node.rim_: continue # empty in top row
-            _rim = [link for rim in _node.rim_ for link in rim] if isinstance(_node,CP) else _node.rim
-            for _link in _rim:  # comp all rng rims?
+    for link in PP.link_:
+       for nmed, _rim_ in enumerate(link.node_[0].rim_):  # link.node_ is always a CP
+            for _link in _rim_:
                 dlink = comp_P(_link,link)
                 if dlink:  # return if match
-                    dlink.rim += [_link]
+                    link.rim += [dlink]  # should be add to link.rim? Because dlink is mediating the lower link and upper _link
                     dlink_ += [dlink]
+                    dlink.nmed = nmed
+                    
     return dlink_
 
 def comp_P(_P,P, angle=None, distance=None):  # comp dPs if fd else Ps
@@ -297,9 +297,10 @@ def comp_P(_P,P, angle=None, distance=None):  # comp dPs if fd else Ps
         _y,_x = _P.yx; y,x = P.yx
     # get aves:
     yx = [(_c+c)/2 for _c,c in zip((_y,_x),(y,x))]
+    yx_ = _P.yx_ + P.yx_
     latuple = [(P+p)/2 for P,p in zip(_P.latuple[:-1],P.latuple[:-1])] + [[(A+a)/2 for A,a in zip(_P.latuple[-1],P.latuple[-1])]]
 
-    link = CdP(node_=[_P,P],derH=derH,angle=angle,distance=distance,yx=yx,latuple=latuple)
+    link = CdP(node_=[_P,P],derH=derH,angle=angle,distance=distance,yx=yx, yx_=yx_,latuple=latuple)
     if link.derH.Et[0] > aveP * link.derH.Et[2]:  # always rng+? (vm > aveP * rm)
         return link
 
@@ -313,8 +314,9 @@ def form_PP_t(root, P_):  # form PPs of dP.valt[fd] + connected Ps val
         mlink_,_mP_,dlink_,_dP_ = [],[],[],[]  # per P
         mLink_+=[mlink_]; _mP__+=[_mP_]
         dLink_+=[dlink_]; _dP__+=[_dP_]
-        if not (hasattr(P, "rim_") and P.rim_): continue
-        for link in [L for rim in P.rim_ for L in rim]:  # flatten P.link_ nested by rng
+        if hasattr(P, "rim"): link_ = P.node_[0].rim  # CdP (get upper mediating link)
+        else:                 link_ = [link for rim in P.rim_ for link in rim]# flatten P.link_ nested by rng
+        for link in link_:     
             if isinstance(link.derH.H[0],CH): m,d,mr,dr = link.derH.H[-1].Et  # last der+ layer vals
             else:                             m,d,mr,dr = link.derH.Et  # H is md_
             if m >= ave * mr:
@@ -325,7 +327,7 @@ def form_PP_t(root, P_):  # form PPs of dP.valt[fd] + connected Ps val
     for fd, (Link_,_P__) in zip((0,1),((mLink_,_mP__),(dLink_,_dP__))):
         CP_ = []  # all clustered Ps
         for P in P_:
-            if P in CP_ or not (hasattr(P, "rim_") and P.rim_): continue  # already packed in some sub-PP
+            if P in CP_: continue  # already packed in some sub-PP
             cP_, clink_ = [P], []  # cluster per P
             if P in P_:
                 P_index = P_.index(P)
