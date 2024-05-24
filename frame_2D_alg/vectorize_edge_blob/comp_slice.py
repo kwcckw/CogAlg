@@ -53,7 +53,6 @@ class CcompSliceFrame(CsliceEdge):
                 edge.iderH = CH(); edge.fback_ = []
                 for P in edge.P_:
                     P.derH = CH()
-                    P.rim_ = [[CdP([_P, P]) for _P in P.rim_]]  # prelinks for comp_slice
                 ider_recursion(None, edge)  # vertical, lateral-overlap P cross-comp -> PP clustering
 
     CBlob = CEdge
@@ -99,7 +98,7 @@ class CG(CBase):  # PP | graph | blob: params of single-fork node_ cluster
 
 class CdP(CBase):  # comp_slice version of Clink
     name = "dP"
-    def __init__(l, node_=None, derH=None, root=None, distance=None, angle=None, yx=None, yx_=None, latuple=None):
+    def __init__(l, node_=None, derH=None, root=None, distance=None, angle=None, yx=None, latuple=None):
         super().__init__()
 
         l.node_ = [] if node_ is None else node_  # e_ in kernels, else replaces _node,node: not used in kernels?
@@ -107,11 +106,10 @@ class CdP(CBase):  # comp_slice version of Clink
         l.distance = distance  # distance between node centers
         l.latuple = [] if latuple is None else latuple  # sum node_
         l.yx = [0,0] if yx is None else yx  # sum node_
-        l.yx_= [] if yx_ is None else yx_
         l.rim = []
         l.derH = CH() if derH is None else derH
         l.root = None if root is None else root  # PPds containing dP
-        l.nmed = 0
+        l.nmed = 0  # comp rng: n of mediating Ps between node_ Ps
 
     def __bool__(l): return bool(l.derH.H)
 
@@ -215,22 +213,23 @@ class CH(CBase):  # generic derivation hierarchy with variable nesting
 def ider_recursion(root, PP, fd=0):  # node-mediated correlation clustering: keep same Ps and links, increment link derH, then P derH in sum2PP
 
     Q = comp_link_(PP) if fd else rng_recursion(PP)
-    # replace PP node_,link_, append derH by der+ or extend PP.link_ by rng++ cross-comp
+    # replace PP node_,link_, derH+=derLay by der+, or extend PP.link_ by rng++ cross-comp
     form_PP_t(PP, Q)  # calls der+
 
     if root is not None and PP.iderH: root.fback_ += [PP.iderH]  # feedback per PPd?
 
-def rng_recursion(PP, fd=0):  # similar to agg+ rng_recursion, but looping and contiguously link mediated
+def rng_recursion(PP):  # similar to agg+ rng_recursion, but looping and contiguously link mediated
 
     iP_ = PP.P_
     rng = 1  # cost of links added per rng+
     while True:
         P_ = []; V = 0
+        # revise to zip i_P_ with iP_:
         for P in iP_:
             if len(P.rim_) < rng: continue  # no _rnglink_ or top row
-            _P_link_ = P.rim_.pop()  # P_link_ is clearer?
-            rnglink_, P_link_  = [],[]  # both per rng+
-            for _P in _P_link_:
+            i_P_ = P.rim_.pop()  # prelink_
+            rng_link_, _P_  = [],[]  # both per rng+
+            for _P in i_P_:
                 _y,_x = _P.yx; y,x = P.yx
                 angle = np.subtract([y,x], [_y,_x]) # dy,dx between node centers
                 distance = np.hypot(*angle)  # between node centers
@@ -240,12 +239,12 @@ def rng_recursion(PP, fd=0):  # similar to agg+ rng_recursion, but looping and c
                     mlink = comp_P(_P,P, angle,distance)
                     if mlink:  # return if match
                         V += mlink.derH.Et[0]
-                        rnglink_ += [mlink]
-                        P_link_  += [dP for dP in _P.rim_[-1]]  # connected __Ps
-            if rnglink_:
-                P.rim_ += [rnglink_]
-                if P_link_:
-                    P.rim_ += [P_link_]; P_ += [P]  # Ps with prelinks for next rng+
+                        rng_link_ += [mlink]
+                        _P_ += [dP.node_[0] for dP in _P.rim_[-1]]  # connected __Ps
+            if rng_link_:
+                P.rim_ += [rng_link_]
+                if _P_:
+                    P.rim_ += [_P_]; P_ += [P]  # Ps with prelinks for next rng+
 
         if V <= ave * rng * len(P_) * 6:  # implied val of all __P_s, 6: len mtuple
             for P in P_: P.rim_.pop()  # remove prelinks
@@ -259,19 +258,15 @@ def rng_recursion(PP, fd=0):  # similar to agg+ rng_recursion, but looping and c
 def comp_link_(PP):  # node_- mediated: comp node.rim dPs
 
     dlink_ = []
-    ''' 
-    this dlink_ is flat, but input may be nested rim_: some input info is lost.
-    consistent dlink_ may be double-nested, from rim_ and _rim_, too complex? 
-    '''
-    for link in PP.link_:
-       for nmed, _rim_ in enumerate(link.node_[0].rim_):  # link.node_ is always a CP
-            for _link in _rim_:
-                dlink = comp_P(_link,link)
+    for dP in PP.link_:
+       for nmed, _rim_ in enumerate(dP.node_[0].rim_):  # link.node_ is CP in 1st der+
+           # add fork for CdP node_?
+            for _dP in _rim_:
+                dlink = comp_P(_dP,dP)
                 if dlink:  # return if match
-                    link.rim += [dlink]  # should be add to link.rim? Because dlink is mediating the lower link and upper _link
+                    dP.rim += [dlink]
                     dlink_ += [dlink]
                     dlink.nmed = nmed
-                    
     return dlink_
 
 def comp_P(_P,P, angle=None, distance=None):  # comp dPs if fd else Ps
@@ -297,13 +292,11 @@ def comp_P(_P,P, angle=None, distance=None):  # comp dPs if fd else Ps
         _y,_x = _P.yx; y,x = P.yx
     # get aves:
     yx = [(_c+c)/2 for _c,c in zip((_y,_x),(y,x))]
-    yx_ = _P.yx_ + P.yx_
     latuple = [(P+p)/2 for P,p in zip(_P.latuple[:-1],P.latuple[:-1])] + [[(A+a)/2 for A,a in zip(_P.latuple[-1],P.latuple[-1])]]
 
-    link = CdP(node_=[_P,P],derH=derH,angle=angle,distance=distance,yx=yx, yx_=yx_,latuple=latuple)
+    link = CdP(node_=[_P,P],derH=derH, angle=angle,distance=distance,yx=yx,latuple=latuple)
     if link.derH.Et[0] > aveP * link.derH.Et[2]:  # always rng+? (vm > aveP * rm)
         return link
-
 
 # not revised:
 def form_PP_t(root, P_):  # form PPs of dP.valt[fd] + connected Ps val
@@ -316,7 +309,7 @@ def form_PP_t(root, P_):  # form PPs of dP.valt[fd] + connected Ps val
         dLink_+=[dlink_]; _dP__+=[_dP_]
         if hasattr(P, "rim"): link_ = P.node_[0].rim  # CdP (get upper mediating link)
         else:                 link_ = [link for rim in P.rim_ for link in rim]# flatten P.link_ nested by rng
-        for link in link_:     
+        for link in link_:
             if isinstance(link.derH.H[0],CH): m,d,mr,dr = link.derH.H[-1].Et  # last der+ layer vals
             else:                             m,d,mr,dr = link.derH.Et  # H is md_
             if m >= ave * mr:
@@ -346,12 +339,11 @@ def form_PP_t(root, P_):  # form PPs of dP.valt[fd] + connected Ps val
     # eval der+/ PP.link_: correlation clustering, after form_PP_t -> P.root
     for PP in PP_t[1]:
         if PP.iderH.Et[0] * len(PP.link_) > ave_PPd * PP.iderH.Et[2]:
-            ider_recursion(root, PP, fd=1)
+            ider_recursion(root, PP)
         if root.fback_:
             feedback(root)  # after der+ in all nodes, no single node feedback
 
     root.node_ = PP_t  # nested in der+, add_alt_PPs_?
-
 
 # not revised
 def sum2PP(root, P_, dP_, fd):  # sum links in Ps and Ps in PP
@@ -476,8 +468,12 @@ if __name__ == "__main__":
         mask_nonzero = tuple(zip(*(yx_ - yx0)))
         mask = np.zeros(shape, bool)
         mask[mask_nonzero] = True
-        plt.imshow(mask, cmap='gray', alpha=0.5)
-        plt.title(f"area = {edge.area}")
 
-        print(len(edge.node_[0]), len(edge.node_[1]))  # TODO: show PP graph and layer info (der, rng)
-        plt.show()
+        for fd, PP_ in enumerate(edge.node_):
+            plt.imshow(mask, cmap='gray', alpha=0.5)
+            plt.title(f"area={edge.area}, {'der+' if fd else 'rng+'}")
+            for PP in PP_:
+                for dP in PP.link_:
+                    (_y, _x), (y, x) = dP.node_[0].yx - yx0, dP.node_[1].yx - yx0
+                    plt.plot([_x, x], [_y, y], "o-k")
+            plt.show()
