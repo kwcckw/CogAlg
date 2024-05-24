@@ -146,7 +146,7 @@ def rng_convolve(root, Et, fagg):  # comp Gs|kernels in agg+, links | link rim_t
             if fcomp:
                 G.compared_ += [_G]; _G.compared_ += [G]
                 Link = Clink(node_=[_G, G], distance=dist, angle=[dy, dx], box=extend_box(G.box, _G.box))
-                comp_G(Link, Et, L_, nrng)
+                comp_G(Link, Et, L_, nrng=nrng)
         for G in G_:  # init kernel with 1st krim
             krim = []
             for link in G.rim:
@@ -178,7 +178,7 @@ def rng_convolve(root, Et, fagg):  # comp Gs|kernels in agg+, links | link rim_t
             for link in _L_:
                 if not hasattr(link, "rim_t"): add_der_attrs(link_=[link])
                 if link.rim_t:
-                    rimt = [copy(link.rim_t[0][-1]) if link.rim_t[0] else [], copy(link.rim_t[1][-1]) if link.rim_t[1] else []]
+                    rimt = [copy(link.rim_t[0][nrng-1]) if link.rim_t[0] else [], copy(link.rim_t[1][nrng-1]) if link.rim_t[1] else []]
                 elif isinstance(link.node_[0],CG):
                     rimt = [link.node_[0].rim, link.node_[1].rim]  # der+ nrng=1
                 else:  # link.node_ Clinks in der+ nrng>1
@@ -187,7 +187,8 @@ def rng_convolve(root, Et, fagg):  # comp Gs|kernels in agg+, links | link rim_t
                 for dir,rim in zip((0,1),rimt):
                     for _link in rim:
                         _G = _link.node_[0] if _link.node_[1] in link.node_ else _link.node_[1]  # mediating node
-                        _rim = _G.rim if isinstance(_G,CG) else (copy(_G.rim_t[dir][-1]) if _G.rim_t and _G.rim_t[dir] else [])
+                        # we need to prepack all link with rim_t first empty layer? Because_rim may packing the links added from prior loop (from another pair)
+                        _rim = _G.rim if isinstance(_G,CG) else (copy(_G.rim_t[dir][nrng-1]) if _G.rim_t and _G.rim_t[dir] else [])
                         for _link in _rim:
                             if _link is link: continue
                             if not hasattr(_link, "rim_t"): add_der_attrs(link_=[_link])
@@ -353,15 +354,7 @@ def form_graph_t(root,Q, Et, nrng):  # form Gm_,Gd_ from same-root nodes
                 q = graph.link_ if fd else graph.node_
                 if len(q) > ave_L and graph.Et[fd] > G_aves[fd] * graph.Et[fd]:  # olp-modulated Et
                     if fd:
-                        if not hasattr(Q[0], "rim_t"): add_der_attrs(Q)  # 1st der+
-                        '''
-                        else:
-                            for link in q:  # init new der rim_t layer
-                                if link.rim_t:
-                                    link.rim_t[0] += [[]]; link.rim_t[1] += [[]];
-                                else:
-                                    link.rim_t = [[[],[]],[[],[]]]  # empty last layer and current layer
-                        '''
+                        if not hasattr(Q[0], "rim_t"): add_der_attrs(q)  # 1st der+  (should be q instead of Q here)
                     else:
                         for G in q: G.compared_ = []
                     agg_recursion(root, graph, fagg=(1-fd))  # graph.node_ is not node_t yet
