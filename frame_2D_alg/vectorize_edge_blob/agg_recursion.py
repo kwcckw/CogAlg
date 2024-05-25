@@ -103,8 +103,9 @@ def vectorize_root(image):  # vectorization in 3 composition levels of xcomp, cl
 def add_attrs(edge):
 
     edge.iderH = CH(); edge.fback_=[]; edge.Et=[0,0,0,0]; edge.link_=[]
-    for P in edge.P_:  # add comp_slice attrs
-        P.rim_ = [[_P for _P in P.rim_]]; P.derH = CH()
+    for P in edge.P_[0]:  # add comp_slice attrs
+        # P.rim_ = [[_P for _P in P.rim_]];  this should be not needed? P.rim_ is empty too
+        P.derH = CH()
 
 
 def agg_recursion(rroot, root, fagg=0):
@@ -162,6 +163,7 @@ def rng_convolve(root, Et):  # comp Gs|kernels in agg+, links | link rim_t node 
                 if link.derH.Et[0] > ave:  # link.Et+ per rng
                     comp_krim(link, _G_, nrng)  # + kernel rim / loop, sum in G.extH, derivatives in link.extH?
         G_ = _G_
+        
     for G in iG_:
         for i, link in enumerate(G.rim):
             G.extH.add_(link.DerH) if i else G.extH.append_(link.DerH, flat=1)  # for segmentation
@@ -177,7 +179,7 @@ def comp_trace_link(root, Et): # comp Clinks: der+'rng+ in root.link_ rim_t node
         for L in _L_:
             if not hasattr(L, "rim_t"): add_der_attrs(link_=[L])
             if L.rim_t:
-                rimt = [copy(L.rim_t[0][med-1]) if L.rim_t[0] else [], copy(L.rim_t[1][med-1]) if L.rim_t[1] else []]
+                rimt = [copy(L.rim_t[0][med-1]) if len(L.rim_t[0])==med else [], copy(L.rim_t[1][med-1]) if len(L.rim_t[1]) ==med else []]
             elif isinstance(L.node_[0],CG):
                 rimt = [L.node_[0].rim, L.node_[1].rim]  # med=1
             else:  # Clink nodes if med>1
@@ -188,13 +190,13 @@ def comp_trace_link(root, Et): # comp Clinks: der+'rng+ in root.link_ rim_t node
                     _G = _L.node_[0] if _L.node_[1] in L.node_ else _L.node_[1]  # mediating node
                     _rim = _G.rim if isinstance(_G,CG) else flatten(_G.rim_t)  # comp all _L link layers to a unique L
                     for __L in _rim:
-                        if __L is L or __L in L.compared: continue
-                        L.compared += [__L]
+                        if __L is L or __L in L.compared_: continue
+                        L.compared_ += [__L]
                         if not hasattr(__L, "rim_t"):  # __L is outside the root
                             add_der_attrs(link_=[__L])
                         Link = Clink(node_=[__L,L], box=extend_box(__L.box, L.box))
                         comp_G(Link, Et, L_, dir=dir, nrng=med)
-        if L_: link_ += L_  # only new Links?
+        if L_: link_ += L_  # only new Links? (Yes, L should pack only new Link)
         _L_= L_; med += 1
 
     for L in link_:
@@ -307,10 +309,10 @@ def comp_G(link, iEt, link_, dir=None, nrng=1):  # add dderH to link and link to
         # / PP:
         _G.iderH.comp_(G.iderH, dderH, rn, fagg=1, flat=0)  # always >1P in compared PPs?
     # / G, if >1 PPs | Gs:
-    if _G.derH and G.derH: _G.derH.comp_(G.derH, dderH, rn, fagg=1, flat=0)  # append and sum new dderH to base dderH
+    if _G.derH and G.derH: _G.derH.comp_(G.derH, dderH, rn, fagg=1, flat=1) 
     if _G.extH and G.extH: _G.extH.comp_(G.extH, dderH, rn, fagg=1, flat=1)
 
-    if fd: link.derH.append_(dderH, flat=0)  # append dderH.H to link.derH.H
+    if fd: link.derH.append_(dderH, flat=1)  # append dderH.H to link.derH.H
     else:  link.derH = dderH
     iEt[:] = np.add(iEt,dderH.Et)  # init eval rng+ and form_graph_t by total m|d?
     fin = 0

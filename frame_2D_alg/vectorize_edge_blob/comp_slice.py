@@ -220,13 +220,13 @@ def ider_recursion(root, PP, fd=0):  # node-mediated correlation clustering: kee
 
 def rng_recursion(edge):  # similar to agg+ rng_recursion, but looping and contiguously link mediated
 
-    iP_, i_P__ = edge.P_, edge._P__  # rng++ and prelink per edge, not PPs
+    iP_, i_P__ = edge.P_  # rng++ and prelink per edge, not PPs
+    edge.P_ = iP_  # remove _P__
     rng = 1  # cost of links added per rng+
     while True:
-        P_ = []; V = 0
-        _P__ = [[] for _ in edge.P_]
-        for i, (P, i_P_) in enumerate(zip(iP_, i_P__)):
-            if len(P.rim_) < rng: continue  # no _rng_link_ or top row
+        P_ = []; P__ = []; V = 0
+        for i, (P, i_P_) in enumerate(zip(iP_,i_P__)):
+            if len(P.rim_) < rng-1: continue  # no _rng_link_ or top row (should be rng-1, since P.rim_ is empty at rng=1)
             rng_link_, _P_ = [],[]  # both per rng+
             for _P in i_P_:  # prelinks
                 _y,_x = _P.yx; y,x = P.yx
@@ -234,22 +234,30 @@ def rng_recursion(edge):  # similar to agg+ rng_recursion, but looping and conti
                 distance = np.hypot(*angle)  # between node centers
                 # or rng * ((P.val+_P.val)/ ave_rval)?:
                 if distance <= rng:
-                    if len(_P.rim_) < rng: continue
+                    if len(_P.rim_) < rng-1: continue
                     mlink = comp_P(_P,P, angle,distance)
                     if mlink:  # return if match
                         V += mlink.derH.Et[0]
                         rng_link_ += [mlink]
-                        _P__[i] += [dP.node_[0] for dP in _P.rim_[-1]]  # connected __Ps
+                        if _P.rim_:  # higher rng
+                            _P_ += [dP.node_[0] for dP in _P.rim_[-1]]  # connected __Ps
+                        else:  # rng == 1
+                            _P_ += i_P__[iP_.index(_P)]  # or this can be used for all rngs instead of getting it from dP?
             if rng_link_:
                 P.rim_ += [rng_link_]
-                if _P__[i]: P_ += [P]  # Ps with prelinks for next rng+
+                if _P_: 
+                    P_ += [P]  # Ps with prelinks for next rng+
+                    P__ += [_P_]
 
         if V <= ave * rng * len(P_) * 6:  # implied val of all __P_s, 6: len mtuple
             break
-        else: i_P__ = _P__
+        else: 
+            iP_ = P_
+            i_P__ = P__
+            
         rng += 1
     # der++ in PPds from rng++, no der++ inside rng++: high diff @ rng++ termination only?
-    PP.rng=rng  # represents rrdn
+    edge.rng=rng  # represents rrdn
 
     return iP_
 

@@ -80,13 +80,16 @@ class CsliceEdge(CFrame):
                     try:  # if yx has _P, try to form link
                         P = edge.rootd[y,x]
                         if _P is not P and _P not in P.rim_ and P not in _P.rim_:
-                            if _P.yx < P.yx: _P__[edge.P_.index(P)] += [_P]  # edge.P_'s uplinks
-                            else:            _P__[edge.P_.index(_P)] += [P]
+                            if _P.yx < P.yx: 
+                                if _P not in _P__[edge.P_.index(P)]:
+                                    _P__[edge.P_.index(P)] += [_P]  # edge.P_'s uplinks   
+                            elif P not in _P__[edge.P_.index(_P)]:
+                                _P__[edge.P_.index(_P)] += [P]
                     except KeyError:    # if yx empty, keep tracing
                         if (y,x) not in edge.dert_: continue   # stop if yx outside the edge
                         edge.rootd[y,x] = _P
                         adjacent_ += [(_P, y,x)]
-            edge._P__ = _P__
+            edge.P_ = [edge.P_, _P__]  # this will be simpler to unpack P_ and _P__ later, instead of Pt_ with  P and _P_
     CBlob = CEdge
 
 class CP(CBase):
