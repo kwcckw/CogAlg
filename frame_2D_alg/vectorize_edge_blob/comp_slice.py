@@ -218,17 +218,17 @@ def ider_recursion(root, PP, fd=0):  # node-mediated correlation clustering: kee
 
     if root is not None and PP.iderH: root.fback_ += [PP.iderH]  # feedback per PPd?
 
-def rng_recursion(PP):  # similar to agg+ rng_recursion, but looping and contiguously link mediated
+def rng_recursion(edge):  # similar to agg+ rng_recursion, but looping and contiguously link mediated
 
-    iP_, i_P__ = PP.P_, PP._P__ # PP is always edge here, we don't rng+rng+
+    iP_, i_P__ = edge.P_, edge._P__  # rng++ and prelink per edge, not PPs
     rng = 1  # cost of links added per rng+
     while True:
-        P_ = []; V = 0; _P__=[[] for _ in PP.P_]
-        # revise to zip i_P_ with iP_:
+        P_ = []; V = 0
+        _P__ = [[] for _ in edge.P_]
         for i, (P, i_P_) in enumerate(zip(iP_, i_P__)):
-            if len(P.rim_) < rng: continue  # no _rnglink_ or top row
-            rng_link_, _P_  = [],[]  # both per rng+
-            for _P in i_P_:
+            if len(P.rim_) < rng: continue  # no _rng_link_ or top row
+            rng_link_, _P_ = [],[]  # both per rng+
+            for _P in i_P_:  # prelinks
                 _y,_x = _P.yx; y,x = P.yx
                 angle = np.subtract([y,x], [_y,_x]) # dy,dx between node centers
                 distance = np.hypot(*angle)  # between node centers
@@ -337,7 +337,7 @@ def form_PP_t(root, P_):  # form PPs of dP.valt[fd] + connected Ps val
     # eval der+/ PP.link_: correlation clustering, after form_PP_t -> P.root
     for PP in PP_t[1]:
         if PP.iderH.Et[0] * len(PP.link_) > ave_PPd * PP.iderH.Et[2]:
-            ider_recursion(root, PP, fd=1)  # fd should be 1 here
+            ider_recursion(root, PP, fd=1)
         if root.fback_:
             feedback(root)  # after der+ in all nodes, no single node feedback
 
@@ -377,7 +377,7 @@ def sum2PP(root, P_, dP_, fd):  # sum links in Ps and Ps in PP
         if not fd: P.root = PP
     if PP.iderH:
         PP.iderH.Et[2:4] = [R+r for R,r in zip(PP.iderH.Et[2:4], iRt)]
-        
+
     if isinstance(P_[0], CP):  # skip if P is CdP because it doens't have box and yx
         # pixmap:
         y0,x0,yn,xn = PP.box
