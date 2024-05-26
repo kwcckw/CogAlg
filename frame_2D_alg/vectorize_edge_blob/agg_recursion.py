@@ -79,7 +79,7 @@ def vectorize_root(image):  # vectorization in 3 composition levels of xcomp, cl
     for edge in frame.blob_:
         if hasattr(edge, 'P_') and edge.latuple[-1] * (len(edge.P_)-1) > G_aves[0]:  # eval G, rdn=1
             edge.iderH = CH(); edge.fback_=[]; edge.Et=[0,0,0,0]; edge.link_=[]
-            for P in edge.P_[0]:
+            for P, _ in edge.P_:
                 P.derH = CH()
             ider_recursion(None, edge)  # vertical, lateral-overlap P cross-comp -> PP clustering
             node_t, link_t = [[],[]], [[],[]]
@@ -192,6 +192,7 @@ def comp_trace_link(root, Et): # comp Clinks: der+'rng+ in root.link_ rim_t node
         _L_= L_; med += 1
 
     for L in link_:
+        if not hasattr(L, "rim_t"): add_der_attrs(link_=[L])  # L maybe a new Link, where it doesn't have der params added yet
         rim = L.node_[0].rim_t[0][-1] if L.node_[0].rim_t[0] else [] + L.node_[1].rim_t[1][-1] if L.node_[1].rim_t[1] else []
         for i, link in enumerate(rim):
             L.extH.add_(link.DerH) if i else L.extH.append_(link.DerH, flat=1)  # for segmentation
@@ -291,7 +292,7 @@ def comp_G(link, iEt, link_, dir=None, nrng=1, L_=None):  # add dderH to link an
         Et, rt, md_ = comp_ext(_G.distance,G.distance, _S,S/rn, _A,A)
         # Et, Rt, Md_ = comp_latuple(_G.latuple, G.latuple,rn,fagg=1)  # seems like a low-value comp in der+
         dderH.n = 1; dderH.Et = Et; dderH.relt = rt
-        dderH.H = [CH(Et=copy(Et), relt=copy(rt), H=md_, n=1)]
+        dderH.H = [CH(Et=copy(Et), relt=copy(rt), H=md_, n=1), CH(), CH()]  # temporary: dummy CHs to align with der_latuple and der_iderH
     else:  # CG Gs
         rn= _G.n/G.n  # comp ext params prior: _L,L,_S,S,_A,A, dist, no comp_G unless match:
         et, rt, md_ = comp_ext(len(_G.node_),len(G.node_), _G.S,G.S/rn, _G.A,G.A)
@@ -326,7 +327,9 @@ def comp_G(link, iEt, link_, dir=None, nrng=1, L_=None):  # add dderH to link an
             link.S += _G.S + G.S
             for node in _G,G: node.rim += [link]
         link_ += [link]
-        if L_: L_ += [_G, G]  # for der+
+        if fd:  # for der+ (should be checked with fd?)
+            if _G not in L_: L_ += [_G]
+            if G not in L_: L_ += [G]
 
 
 def comp_ext(_L,L,_S,S,_A,A):  # compare non-derivatives:
@@ -468,7 +471,7 @@ def get_rim(N):
             rim = [link for G in N.node_ for link in G.rim]
         else:
             # get link node rim_t dirs opposite from each other, else covered by the other link rim_t[1-dir]?
-            rim = [L for dir,link in zip((0,1), N.node_) for L in (link.rim_t[1-dir][-1] if link.rim_t[dir] else [])]  # flat
+            rim = [L for dir,link in zip((0,1), N.node_) for L in (link.rim_t[1-dir][-1] if link.rim_t[1-dir] else [])]  # flat (we need 1-dir on both)
     else:   rim = N.rim
     return  rim
 
