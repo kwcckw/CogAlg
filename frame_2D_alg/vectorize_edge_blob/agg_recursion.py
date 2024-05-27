@@ -389,38 +389,47 @@ def segment_Q(root, Q, fd, nrng):
         Gt = [[N],[],copy(rim),_N_,[0,0,0,0]]  # node_,link_, Lrim, Grim, Et
         N.root = Gt
         iGt_ += [Gt]
-    for Gt in iGt_: Gt[3] = [_N.root for _N in Gt[3]]  # replace connected Ns with connected Gts
+    # this replaces only N with max, else pack back N?
+    for Gt in iGt_: 
+        Gt[3] = [_N.root if _N.root else _N for _N in Gt[3]]  # replace connected Ns with connected Gts
     Gt_ = copy(iGt_)
     for Gt in copy(Gt_):
         node_, link_, Lrim, Grim, Et = Gt
         # merge Gt with connected _Gts:
         for _Gt in Grim:
-            if _Gt not in Gt_: continue  # was merged
-            _Gt = _node_,_link_,_Lrim,_Grim,_Et = _Gt
-            oL_ = list(set(Lrim).intersection(set(_Lrim)))  # shared external links, if exclusive clustering
-            oV = sum([L.Et[fd] - ave * L.Et[2+fd] for L in oL_])  # sum V deviation of overlapping rim links
-            if oV > ave:
-                merge_Gt(Gt,_Gt, fd)
-                Gt_.remove(_Gt)
+            if isinstance(_Gt, list):  # _Gt
+                if _Gt not in Gt_: continue  # was merged
+                _node_,_link_,_Lrim,_Grim,_Et = _Gt
+                oL_ = list(set(Lrim).intersection(set(_Lrim)))  # shared external links, if exclusive clustering
+                oV = sum([L.derH.Et[fd] - ave * L.derH.Et[2+fd] for L in oL_])  # sum V deviation of overlapping rim links
+                if oV > ave:
+                    merge_Gt(Gt,_Gt, fd)
+                    Gt_.remove(_Gt)
+            elif _Gt not in node_:  # merge _N
+                _N = _Gt  # for clarity
+                for link in Lrim:
+                    if _N in link.node_:
+                        N = link.node_[0] if link.node_[1] is _N else link.node_[1]
+                        if N in node_ and link.derH.Et[fd] > link.derH.Et[2+fd] * ave:  # find the link mediate between N and _N, and then eval for clustering 
+                            node_ += [_N]
 
     return [sum2graph(root, Gt, fd, nrng) for Gt in Gt_]
 
 # not revised
 def merge_Gt(Gt, gt, fd):
 
-    Nodet_,N_,Link_,Rim, Et = Gt; nodet_,n_,link_,rim, et = gt
+    N_,Link_,Rim,Nrim,Et = Gt; n_,link_,rim,nrim,et = gt
 
     for link in link_:
         if link.derH.Et[fd] > ave * link.derH.Et[2+fd] and link not in Link_:
             N = link.node_[1] if link.node_[1] in n_ else link.node_[0]  # the node of current link in gt
             if N not in N_:
                 N_ += [N]  # add other node of link into N_
-                for nodet in nodet_:
-                    if nodet[0] is N and nodet not in Nodet_:  # find nodet based on N
-                        Nodet_ += [nodet]  # merge nodet
                 Link_ += [link]  # merge link
 
     Rim += [L for L in rim if L not in Rim]
+    Nrim += [N for N in nrim if N not in Nrim]
+    Et[:] = [V + v for V, v in zip(Et, et)]  # sum Et too?
 
 def get_rim(N):
 
@@ -436,7 +445,7 @@ def get_rim(N):
 # not revised
 def sum2graph(root, grapht, fd, nrng):  # sum node and link params into graph, aggH in agg+ or player in sub+
 
-    _, Link_, _, G_, Et = grapht
+    G_, Link_, _, _, Et = grapht
     graph = CG(fd=fd, node_=G_,link_=Link_, rng=nrng, Et=Et)
     if fd:
         graph.root = root
