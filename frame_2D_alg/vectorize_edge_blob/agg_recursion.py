@@ -236,6 +236,7 @@ def comp_krim(link, G_, nrng, fd=0):  # sum rim _G.derHs, compare to form link.D
                 else:         node.DerH = deepcopy(__node.derH)  # init
         node.kH += [krim]
         G_ += [node]
+   
     # sum G-specific kernel rim:
     _n,_L,_S,_A,_latuple,_iderH,_derH,_Et = sum_krim(list(set(_G.kH[-1])-set(G.kH[-1])))
     n, L, S, A, latuple, iderH, derH, Et  = sum_krim(list(set(G.kH[-1])-set(_G.kH[-1])))
@@ -395,8 +396,23 @@ def segment_Q(root, iQ, fd, nrng):
         node_, link_, Lrim, Nrim, Et = Gt
         for _Gt,_link in zip(Nrim, Lrim):
             if _Gt not in Q: continue  # was merged
-            oL_ = list(set(Lrim).intersection(set(_Gt[3])))  # shared external links, if exclusive clustering
+            oL_ = list(set(Lrim).intersection(set(_Gt[2])))  # shared external links, if exclusive clustering
             oV = sum([L.derH.Et[fd] - ave * L.derH.Et[2+fd] for L in oL_])  # sum V deviation of overlapping rim links
+            
+            # not sure, a very rough draft
+            if len(node_)/len(Nrim) > ave:
+
+                Grim = [G for Gt in Nrim for G in Gt[0]]
+                _Grim = [_G for _Gt in _Gt[3] for _G in _Gt[0]]
+                _node_ = _Gt[0]
+                dderH_partial = comp_(_node_, node_, fd)
+                
+                _internal_node_ = list(set(_node_) -set(_Grim))
+                internal_node_ = list(set(node_) -set(Grim))
+                
+                if _internal_node_ and internal_node_:
+                    dderH_internal = comp_(_internal_node_,internal_node_, fd)
+                    
             '''            
             oV is node similarity, add partial graph similarity * rel distance and resolution decay coefs,
             exclude Nrim (known): comp_internal sum( set(Gt[0]) - set(Gt[3][0]))? transient in agg+
@@ -407,6 +423,88 @@ def segment_Q(root, iQ, fd, nrng):
 
     return [sum2graph(root, Gt, fd, nrng) for Gt in Q]
 
+def compute_sum(node_, fd):
+
+    out = []
+    if fd:  # N, L, S, A
+        N = node_[0].node_[0].n
+        L = node_[0].distance
+        S = node_[0].node_[0].S  
+        A = copy(node_[0].angle)    
+        out += [N, L, S, A]
+    else:  # N, L, S, A, Latuple, iderH
+        N = node_[0].n
+        L = len(node_[0].node_)
+        S = node_[0].S
+        A = copy(node_[0].A)
+        Latuple = copy(node_[0].latuple)
+        iderH = deepcopy(node_[0].iderH)
+        out += [N, L, S, A, Latuple, iderH]
+    
+    # derH, extH
+    derH = deepcopy(node_[0].derH)
+    extH = deepcopy(node_[0].extH)
+    out += [derH, extH]
+
+    # accumulate from the other nodes
+    for node in node_[1:]:
+        if fd:
+            N += node.node_[0].n
+            L += node.distance
+            S += node.node_[0].S
+            A[0] += node.angle[0]; A[1] += node.angle[1]
+        else:
+            N += node.n
+            L += len(node.node_)
+            S += node.S
+            A[0] += node.A[0]; A[1] += node.A[1]
+            Latuple[:] = [P+p for P,p in zip(Latuple[:-1],node.latuple[:-1])] + [[A+a for A,a in zip(Latuple[-1],node.latuple[-1])]]
+            # iderH
+            if node.iderH:
+                if iderH: iderH.add_(node.iderH)  
+                else:     iderH = deepcopy(node.iderH)
+        # derH
+        if node.derH:
+            if derH: derH.add_(node.derH)  
+            else:    derH = deepcopy(node.derH)      
+        # extH
+        if node.extH:
+            if extH: extH.add_(node.extH)  
+            else:    extH = deepcopy(node.extH)
+           
+    return out     
+
+# almost similar with comp_G
+def comp_(_node_, node_, fd):
+   
+    dderH = CH() 
+   
+    if fd:
+        _n, _L, _S, _A, _derH, _extH = compute_sum(_node_, fd=1)
+        n, L, S, A, derH, extH = compute_sum(node_, fd=1)
+    else:
+        _n, _L, _S, _A, _latuple, _iderH, _derH, _extH = compute_sum(_node_, fd=0)
+        n, L, S, A, latuple, iderH, derH, extH = compute_sum(node_, fd=0)
+
+    rn= _n/n  # comp ext params prior: _L,L,_S,S,_A,A, dist, no comp_G unless match:
+    et, rt, md_ = comp_ext(_L,L, _S,S/rn, _A,A)
+    
+    if fd:
+        dderH.n = 1; dderH.Et = et; dderH.relt = rt
+        dderH.H = [CH(Et=copy(et),relt=copy(rt),H=md_,n=1)] 
+    else:
+        Et, Rt, Md_ = comp_latuple(_latuple, latuple, rn, fagg=1)
+        dderH.n = 1; dderH.Et = np.add(Et,et); dderH.relt = np.add(Rt,rt)
+        dderH.H = [CH(Et=et,relt=rt,H=md_,n=.5),CH(Et=Et,relt=Rt,H=Md_,n=1)]
+        _iderH.comp_(iderH, dderH, rn, fagg=1, flat=0)
+
+    if _derH and derH: _derH.comp_(derH, dderH, rn, fagg=1, flat=0)  # append and sum new dderH to base dderH
+    if _extH and extH: _extH.comp_(extH, dderH, rn, fagg=1, flat=1)
+
+    return dderH
+
+
+
 def merge(Gt, gt):
 
     N_,L_, Lrim, Nrim, Et = Gt
@@ -414,7 +512,7 @@ def merge(Gt, gt):
     N_ += n_
     L_ += l_  # internal, no overlap
     Lrim[:] = list(set(Lrim + lrim))  # exclude shared external links
-    Nrim[:] = list(set(Nrim + grim))  # exclude shared external nodes
+    Nrim += [groot for groot in grim if groot not in Nrim] # exclude shared external nodes (can't use set on list)
     Et[:]   = np.add(Et,et)
 
 def get_rim(N):
