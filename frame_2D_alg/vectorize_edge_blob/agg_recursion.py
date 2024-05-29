@@ -176,6 +176,9 @@ def rng_trace_link(root, Et): # comp Clinks: der+'rng+ in root.link_ rim_t node 
             if L.rim_t:
                 rimt = [copy(L.rim_t[0][med-1]) if len(L.rim_t[0])==med else [], copy(L.rim_t[1][med-1]) if len(L.rim_t[1]) ==med else []]
             elif isinstance(L.node_[0],CG):
+                # there's a problem here where L's node's rim's node_ is CG instead of Clink in med == 1
+                # then we will get _L as CG below
+                # we shouldn't get G here?
                 rimt = [L.node_[0].rim, L.node_[1].rim]  # med=1
             else:  # Clink nodes if med>1
                 rimt = [copy(L.node_[0].rim_t[0][-1]) if L.node_[0].rim_t[0] else [], copy(L.node_[1].rim_t[1][-1]) if L.node_[1].rim_t[1] else []]
@@ -238,7 +241,7 @@ def comp_krim(link, G_, nrng, fd=0):  # sum rim _G.derHs, compare to form link.D
         G_ += [node]
     _xrim = list(set(_G.kH[-1]) - set(G.kH[-1]))  # G-exclusive kernel rim
     xrim = list(set(G.kH[-1]) - set(_G.kH[-1]))
-    dderH = comp_N_(_xrim, xrim, fd=0)
+    dderH = comp_N_(_xrim, xrim)
 
     if dderH.Et[0] > ave * dderH.Et[2]:  # use nested link.derH vs DerH?
         link.DerH.H[-1].add_(dderH, irdnt=dderH.H[-1].Et[2:]) if len(link.DerH.H)==nrng else link.DerH.append_(dderH,flat=1)
@@ -254,22 +257,24 @@ def sum_N_(N_, fd=0):  # to sum kernel layer and partial graph comp
     if not fd: iderH = deepcopy(N.iderH)
     derH = deepcopy(N.derH)
     Et = copy(N.Et)
+    extH = deepcopy(N.extH)
     for N in N_[1:]:
         latuple = [P+p for P,p in zip(latuple[:-1],N.latuple[:-1])] + [[A+a for A,a in zip(latuple[-1],N.latuple[-1])]]
         n += N.n; S += N.S
         L += N.distance if fd else len(N.node_)
-        A = [Angle+angle for Angle,angle in zip(angle,N.angle if fd else A,N.A)]
+        A = [Angle+angle for Angle,angle in zip(A,N.angle if fd else N.A)]  # should be zipping A and N.angle|N.A
         if N.iderH: iderH.add_(N.iderH)
         if N.derH: derH.add_(N.derH)
-        np.add(Et,N.Et)
+        if N.extH: extH.add_(N.extH)  # we need extH too?
+        Et = np.add(Et,N.Et)
 
-    return n, L, S, A, derH, Et, latuple, iderH  # the last two if not fd, not sure about Et
+    return n, L, S, A, derH, extH, Et, latuple, iderH  # the last two if not fd, not sure about Et (i think Et is not needed? We don't need Et in comp later too)
 
-def comp_N_(_node_, node_, fd):  # first part of comp_G to compare partial graphs for merge
+def comp_N_(_node_, node_):  # first part of comp_G to compare partial graphs for merge
     dderH = CH()
-
-    _n, _L, _S, _A, _derH, _extH, _latuple, _iderH = sum_N_(_node_, fd)
-    n, L, S, A, derH, extH, latuple, iderH = sum_N_(node_, fd)
+    fd = isinstance(_node_[0], Clink)  # this should be determined by node is Clink or not
+    _n, _L, _S, _A, _derH, _extH, _nEt, _latuple, _iderH = sum_N_(_node_, fd)
+    n, L, S, A, derH, extH, nEt, latuple, iderH = sum_N_(node_, fd)
     rn = _n/n
     et, rt, md_ = comp_ext(_L,L, _S,S/rn, _A,A)
     if fd:
@@ -392,7 +397,7 @@ def segment_Q(root, iQ, fd, nrng):
         # init graphts:
         rim = get_rim(N)  # init Lrim: set of out-of-cluster links in all nodes of cluster Gt
         _Nt_ = [link.node_ if link.node_[1] is N else reversed(link.node_) for link in rim]
-        _N_t = list(zip(*_Nt_))  # [[extN,intN]] -> [extN_,intN_]
+        _N_t = [list(t) for t in zip(*_Nt_)]  # [[extN,intN]] -> [extN_,intN_]  (convert each of them to list ,else they are tuple, which is immutable for merge later)
         # node_,link_, Lrim, Nrim_t, Et:
         Gt = [[N],[],copy(rim),_N_t,[0,0,0,0]]
         N.root = Gt
@@ -417,8 +422,9 @@ def segment_Q(root, iQ, fd, nrng):
             if len(node_)/len(Nrim) > ave_L and len(_Gt[0])/len(_Gt[3][1]) > ave_L:
                 _int_node_ = list(set(_Gt[0]) - set(_Gt[3][1]))
                 int_node_ = list(set(node_) - set(Nrim_t[1]))
-                dderH = comp_N_(_int_node_, int_node_, fd)
-                oV += dderH.Et.fd - ave * dderH.Et[2+fd]
+                if _int_node_ and int_node_:  # make sure no empty internal nodes
+                    dderH = comp_N_(_int_node_, int_node_)
+                    oV += dderH.Et[fd] - ave * dderH.Et[2+fd]
             if oV > ave:
                 merge(Gt,_Gt); Gt[1] += [_link]
                 Q.remove(_Gt)
