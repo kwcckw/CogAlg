@@ -112,10 +112,11 @@ def agg_recursion(rroot, root, fagg=0):
     node_t = form_graph_t(root, list(set(Q)), Et, rng)  # der++ and feedback per Gd?
     if node_t:
         for fd, node_ in enumerate(node_t):
-            if root.Et[0] * ((len(node_)-1)*root.rng) > G_aves[1] * root.Et[2]:
+            if root.derH.Et[0] * ((len(node_)-1)*root.rng) > G_aves[1] * root.Et[2]:
                 # agg+ / node_t, vs. sub+ / node_, always rng+:
-                pruned_node_ = [node for node in node_ if node.Et[0] > G_aves[fd] * node.Et[2]]  # not be needed?
+                pruned_node_ = [node for node in node_ if node.derH.Et[0] > G_aves[fd] * node.derH.Et[2]]  # not be needed?
                 if len(pruned_node_) > 10:
+                    # root.node_ is node_t here, i guess we need to parse node_ instead? Or we shouldn't update node_ to node_t at the end of 
                     agg_recursion(rroot, root, fagg=1)
                     if rroot and fd and root.derH:  # der+ only (check not empty root.derH)
                         rroot.fback_ += [root.derH]
@@ -182,30 +183,45 @@ def rng_trace_link_(root, Et): # comp Clinks: der+'rng+ in root.link_ rim_t node
                     L.compared_ += [_L]; _L.compared_ += [L]
                     Link = Clink(nodet =[_L,L], box=extend_box(_L.box, L.box))
                     comp_G(Link, Et, link_, dir=dir, nrng=rng)  # link_ += Link
-        _L_= L_
-        rng += 1
+                    if Link in link_: L_ += [_L, L]   # fin is true (this is missed out?)
+        _L_= list(set(L_))
+        rng += 1  
+    # all new Links doesn't have der attrs yet
+    add_der_attrs(link_)
+    for link in link_:
+        # for link, their extH should be same as their DerH?
+        link.extH.append_(link.DerH, flat=1)  # for segmentation
+   
     return rng, Et, link_
 
 def get_med_link_(nodet, rng, med, Rimt=[[],[]]):
 
     fd = isinstance(nodet[0],Clink)
-    rimt = [N.rimt if fd else N.rim for N in nodet]  # node-mediated links in two directions
+    
+    # node-mediated links in two directions
+    if fd:
+        rimt = [[],[]]  
+        for N in nodet: 
+            rimt[0] += N.rimt[0]; rimt[1] += N.rimt[1]  # merge
+    else:  rimt = [nodet[0].rim[:], nodet[1].rim[:]]
     # comp rimt dirs opposite each other, else mostly overlap?:
     # if fd: rimt = [rimt[0][0],rimt[1][1]]
     for rim, Rim in zip(rimt, Rimt):
         for _L in rim:
-            Rim += [_L]  # new links of all mediation ranges
-            if med < rng:
-                get_med_link_(_L.nodet, rng, med+1, Rimt)
+            if _L not in Rim:
+                Rim += [_L]  # new links of all mediation ranges
+                if med < rng:
+                    get_med_link_(_L.nodet, rng, med+1, Rimt)
                 # += _L.nodet rim links
+    return Rimt  # we need to return here
 
 def add_der_attrs(link_):
     for link in link_:
         link.extH = CH()  # for der+
         link.ExtH = CH()  # sum from kernels in der+
         link.root = None  # dgraphs containing link
-        link.rimt = []  # dual tree of new links from comp link, each may mediate rng+ links, instead of G.rim
-        for L in link.node_:
+        link.rimt = [[],[]]  # dual tree of new links from comp link, each may mediate rng+ links, instead of G.rim
+        for L in link.nodet:
             L.rimt = [[],[]]  # compared in rng_trace_link(link)
         # link.rim = [] # for link node in agg+, separate add_attrs?
         link.med = 1  # comp med rng, replaces len rim_
@@ -221,14 +237,14 @@ G.extH sums link.DerHs: '''
 
 def comp_krim(link, G_, nrng, fd=0):  # sum rim _G.derHs, compare to form link.DerH layer
 
-    _G,G = link.node_  # same direction
+    _G,G = link.nodet  # same direction
     ave = G_aves[fd]
     for node in _G, G:
         if node in G_: continue  # new krim is already added
         krim = []  # kernel rim
         for _node in node.kH[-1]:
             for _link in _node.rim:
-                __node = _link.node_[0] if _link.node_[1] is _node else _link.node_[1]
+                __node = _link.nodet[0] if _link.nodet[1] is _node else _link.nodet[1]
                 krim += [_G for _G in __node.kH[-1] if _G not in krim]
                 if node.DerH: node.DerH.add_(__node.derH, irdnt=_node.Et[2:])
                 else:         node.DerH = deepcopy(__node.derH)  # init
@@ -326,13 +342,9 @@ def comp_G(link, iEt, Q, dir=None, nrng=1):  # add dderH to link and link to the
         # if select fork links: iEt[i::2] = [V+v for V,v in zip(iEt[i::2], dderH.Et[i::2])]
     if fin:
         if fd:
-            for dir,(L,_L) in zip([0,1],((G,_G),(_G,G))):  # reciprocal link assign to Clink nodes
-                if L.rimt:
-                    # update with nodet-meditated access:
-                    if L.rim_t[dir] and len(L.rim_t[dir]) == nrng:
-                        L.rim_t[dir][-1] += [link]  # new link
-                    else: L.rim_t[dir] += [[link]]  # new link layer
-                else: L.rim_t = [[],[[link]]] if dir else [[[link]],[]]  # 1st der+ link.rim_t
+            # this section should be simpler now, should be just like this? 
+            # nodet[0] is upper link, so upper _G nodet[1] packs link and lower G nodet[0] packs link
+            G.rimt[0] += [link]; _G.rimt[1] += [link]  
         else:
             link.S += _G.S + G.S
             for node in _G,G: node.rim += [link]
@@ -394,7 +406,7 @@ def segment_Q(root, iQ, fd, nrng):
     for N in iQ:
         # init graphts:
         rim = get_rim(N)  # init Lrim: set of out-of-cluster links in all nodes of cluster Gt
-        _Nt_ = [link.node_ if link.node_[1] is N else reversed(link.node_) for link in rim]
+        _Nt_ = [link.nodet if link.nodet[1] is N else reversed(link.nodet) for link in rim]
         _N_t = [[],[]]
         for ext_N, int_N in _Nt_:
             _N_t[0] += [ext_N]; _N_t[1] += [int_N]
@@ -440,15 +452,12 @@ def merge(Gt, gt):
     Nrim_t[:] = [[G for G in nrim_t[0] if G not in Nrim_t[0]], list(set(Nrim_t[1] + nrim_t[1]))]  # exclude shared external nodes
     Et[:] = np.add(Et,et)
 
-# deprecated?
+# deprecated? We still need it in segment_Q?
 def get_rim(N):
 
     if isinstance(N, Clink):  # N is Clink
-        if isinstance(N.node_[0],CG):
-            rim = [link for G in N.node_ for link in G.rim]
-        else:
-            # get link node rim_t dirs opposite from each other, else covered by the other link rim_t[1-dir]?
-            rim = [L for dir,link in zip((0,1), N.node_) for L in (link.rim_t[1-dir][-1] if link.rim_t[1-dir] else [])]  # flat
+        # get link node rim_t dirs opposite from each other, else covered by the other link rim_t[1-dir]?
+        rim = [L for dir,link in zip((0,1), N.nodet) for L in link.rimt[1-dir]]  # flat
     else:   rim = N.rim
     return  rim
 
