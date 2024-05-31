@@ -68,7 +68,7 @@ def vectorize_root(image):  # vectorization in 3 composition levels of xcomp, cl
     frame = CsliceEdge(image).segment()
     for edge in frame.blob_:
         if hasattr(edge, 'P_') and edge.latuple[-1] * (len(edge.P_)-1) > G_aves[0]:  # eval G, rdn=1
-            edge.iderH = CH(); edge.fback_=[]; edge.Et=[0,0,0,0]; edge.link_=[]
+            edge.derH = CH(); edge.iderH = CH(); edge.fback_=[]; edge.Et=[0,0,0,0]; edge.link_=[]
             for P, _ in edge.P_:
                 P.derH = CH()
             ider_recursion(None, edge)  # vertical, lateral-overlap P cross-comp -> PP clustering
@@ -96,7 +96,7 @@ def agg_recursion(rroot, root, fagg=0):
 
     Et = [0,0,0,0]
     # rng+: comp nodes|links mediated by previously compared N|Ls -> N_|L_:
-    rng, Et, link_ = rng_convolve(root,Et) if fagg else rng_trace_link_(root,Et)
+    rng, Et = rng_convolve(root,Et) if fagg else rng_trace_link_(root,Et)
 
     node_t = form_graph_t(root, Et, rng, fagg)  # der++ and feedback per Gd?
     if node_t:
@@ -109,14 +109,14 @@ def agg_recursion(rroot, root, fagg=0):
                     agg_recursion(rroot, root, fagg=1)
                     if rroot and fd and root.derH:  # der+ only (check not empty root.derH)
                         rroot.fback_ += [root.derH]
-                        feedback(rroot)
-                        # update root.root..
+                        feedback(rroot)  # update root.root..            
+        root.node_[:] = node_t  # else keep root.node_
 
 def rng_convolve(root, Et):  # comp Gs|kernels in agg+, links | link rim_t node rims in sub+
                              # similar to graph convolutional network but without backprop
 
     # comp CGs, summed in krims for rng>1
-    node_, link_ = [], []
+    node_ = []
     _G_ = root.node_
     # init kernels:
     for link in list(combinations(_G_,r=2)):
@@ -127,7 +127,7 @@ def rng_convolve(root, Et):  # comp Gs|kernels in agg+, links | link rim_t node 
         if dist <= ave_dist:  # eval distance between node centers
             G.compared_ += [_G]; _G.compared_ += [G]
             Link = Clink(nodet=[_G,G], distance=dist, angle=[dy,dx], box=extend_box(G.box,_G.box))
-            comp_N(Link, node_,link_, Et)  # add N_: updated node_-> next loop?
+            comp_N(Link, node_, Et)  # add N_: updated node_-> next loop?
     for G in node_:  # init kernel with 1st krim
         krim = []
         for link in G.rim:
@@ -145,21 +145,22 @@ def rng_convolve(root, Et):  # comp Gs|kernels in agg+, links | link rim_t node 
                 if link.derH.Et[0] > ave:  # link.Et+ per rng
                     comp_krim(link, _G_, rng)  # + kernel rim / loop, sum in G.extH, derivatives in link.extH?
         rng += 1
-        _G_ = list(set(G_))
+        _G_ = G_
     for G in _G_:
         for i, link in enumerate(G.rim):
             G.extH.add_(link.DerH) if i else G.extH.append_(link.DerH, flat=1)  # for segmentation
 
-    return rng, Et, link_  # link_ is probably not needed
+    return rng, Et  # link_ is probably not needed (yes, link_ is not needed)
 
 
 def rng_trace_link_(root, Et): # comp Clinks: der+'rng+ in root.link_ rim_t node rims: directional and node-mediated link tracing
 
-    link_ = []; _L_ = root.link_
+    _L_ = root.link_
     rng = 1
     while _L_:
         L_ = []
         for L in _L_:
+            if not hasattr(L,"rimt"): add_der_attrs( link_=[L])  # we need to add der attr to L too. The first links from rng+ doesn't have der attr
             rimt = get_med_link_(L.nodet, rng, med=1)  # flatten all mediated links per direction in nodet
             L.rim_t = rimt  # or append sequentially?
             for dir, rim in zip((0,1), rimt):  # old links, may comp both
@@ -169,11 +170,11 @@ def rng_trace_link_(root, Et): # comp Clinks: der+'rng+ in root.link_ rim_t node
                         add_der_attrs( link_=[_L])  # _L is outside root.link_, still same derivation
                     L.compared_ += [_L]; _L.compared_ += [L]
                     Link = Clink(nodet =[_L,L], box=extend_box(_L.box, L.box))
-                    comp_N(Link, Et, L_,link_, dir)  # L_ += nodet, link_ += Link
-        _L_= list(set(L_))
+                    comp_N(Link, L_, Et, dir)  # L_ += nodet, link_ += Link
+        _L_ = L_
         rng += 1
 
-    return rng, Et. link_  # link_ is probably not needed
+    return rng, Et
 
 
 def get_med_link_(nodet, rng, med, Rimt=[[],[]]):  # get node-mediated links in two directions
@@ -194,7 +195,7 @@ def add_der_attrs(link_):
     for link in link_:
         link.extH = CH()  # for der+
         link.root = None  # dgraphs containing link
-        link.rimt = []    # init empty?
+        link.rimt = []    # init empty?  (we need to init it with nested list first since we pack it in comp_N: N.rimt[i] += [Link])
         link.rim_t = []   # unpacked rimts of all rngs
         for L in link.nodet:
             L.rimt = [[],[]]  # dual tree of new links from comp link, each may mediate rng+ links, instead of G.rim
@@ -223,13 +224,13 @@ def comp_krim(link, G_, nrng, fd=0):  # sum rim _G.derHs, compare to form link.D
                 if node.DerH: node.DerH.add_(__node.derH, irdnt=_node.Et[2:])
                 else:         node.DerH = deepcopy(__node.derH)  # init
         node.kH += [krim]
-        G_ += [node]
+        if node not in G_: G_ += [node]
     _xrim = list(set(_G.kH[-1]) - set(G.kH[-1]))  # exclusive kernel rim
     xrim = list(set(G.kH[-1]) - set(_G.kH[-1]))
     dderH = comp_N_(_xrim, xrim)
 
     if dderH.Et[0] > ave * dderH.Et[2]:
-        G_ += [_G,G]  # use nested link.derH vs DerH?
+        # G_ += [_G,G]  # use nested link.derH vs DerH? (why we add it here again where it's already added above?)
         link.DerH.H[-1].add_(dderH, irdnt=dderH.H[-1].Et[2:]) if len(link.DerH.H)==nrng else link.DerH.append_(dderH,flat=1)
 
     # connectivity eval in segment_graph via decay = (link.relt[fd] / (link.derH.n * 6)) ** nrng  # normalized decay at current mediation
@@ -279,7 +280,7 @@ def comp_N_(_node_, node_):  # first part of comp_G to compare partial graphs fo
     return dderH
 
 
-def comp_N(Link, iEt, node_, link_, dir=None):  # dir,link_ if fd, Link+=dderH, comparand rim+=Link
+def comp_N(Link, node_, iEt, dir=None):  # dir,link_ if fd, Link+=dderH, comparand rim+=Link
 
     fd = dir is not None  # compared links have binary relative direction?
     dderH = CH()  # new layer of link.dderH
@@ -316,9 +317,8 @@ def comp_N(Link, iEt, node_, link_, dir=None):  # dir,link_ if fd, Link+=dderH, 
         # if select fork links: iEt[i::2] = [V+v for V,v in zip(iEt[i::2], dderH.Et[i::2])]
     if fin:
         Link.S += (_N.S + N.S) / 2
-        link_ += [Link]
-        node_ += [_N,N]
         for i, node in zip((1,0),(_N,N)):
+            if node not in node_: node_ += [node]
             if fd: N.rimt[i] += [Link]
             else: node.rim += [Link]
 
@@ -363,9 +363,8 @@ def form_graph_t(root, Et, rng, fagg):  # form Gm_,Gd_ from same-root nodes
             node_t += [graph_]  # may be empty
         else:
             node_t += [[]]
-    if any(node_t):
-        root.node_[:] = node_t  # else keep root.node_
-        return node_t
+
+    return node_t
 '''
 clustering by combined weights of shared links and similarity between partial clusters,
 parallelized https://en.wikipedia.org/wiki/Watershed_(image_processing)
@@ -378,7 +377,7 @@ def segment_Q(root, iQ, fd, rng):
     for N in iQ:
         # init graphts:
         # rim = get_med_link_(N.nodet, rng, med=1) if fd else N.rim  # rimt if fd
-        rim = N.rim_t if fd else N.rim
+        rim = N.rim_t[0]+N.rim_t[1] if isinstance(N, Clink) else N.rim  # we need to check if isinstance clink instead
         _Nt_ = [link.nodet if link.nodet[1] is N else reversed(link.nodet) for link in rim]
         _N_t = [[],[]]
         for ext_N, int_N in _Nt_:
