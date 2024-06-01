@@ -126,7 +126,8 @@ def rng_convolve(root, Et):  # comp Gs|kernels in agg+, links | link rim_t node 
             G.compared_ += [_G]; _G.compared_ += [G]
             Link = Clink(nodet=[_G,G], distance=dist, angle=[dy,dx], box=extend_box(G.box,_G.box))
             comp_N(Link, G_, Et)
-    for G in list(set(G_)):  # init kernel as [krim]
+    _G_ = list(set(G_))  # so G_ is reassigned as _G_, and will be used in the section below again
+    for G in _G_:  # init kernel as [krim]
         krim = []
         for link in G.rim:
             if G.derH: G.derH.add_(link.derH)
@@ -156,9 +157,19 @@ def rng_trace_link_(root, Et):  # comp Clinks: der+'rng+ in root.link_ rim_t nod
     while _L_:
         L_ = []
         for L in _L_:
-            for dir, rim_ in zip((0,1), L.rim_t):  # L-mediating links in rng layers
+            # we missed out this section?
+            if rng == 1:
+                if isinstance(L.nodet[0], CG):  # rng+der+
+                    rim_t = [[L.nodet[0].rim], [L.nodet[1].rim]]
+                else:  # der+der+
+                    rim_t = [[L.nodet[0].rim_t[0][-1]+L.nodet[0].rim_t[1][-1]], [L.nodet[1].rim_t[0][-1]+L.nodet[1].rim_t[1][-1]]]
+            else:  # higher rng in der+
+                rim_t = L.rim_t
+            
+            for dir, rim_ in zip((0,1), rim_t):  # L-mediating links in rng layers
                 for mLink in rim_[-1]:  # last rng_layer mediates next layer:
                     for _L in mLink.nodet:
+                        if isinstance(_L, CG): _L = mLink  # when rng == 1, compare direct links instead? Else there will be no other links
                         if _L is L or _L in L.compared_: continue
                         if not hasattr(_L,"rimt"): add_der_attrs( link_=[_L])  # _L is outside root.link_, still same derivation
                         L.compared_ += [_L]; _L.compared_ += [L]
@@ -249,7 +260,8 @@ def comp_N(Link, node_, iEt, rng=None, dir=None):  # rng,dir if fd, Link+=dderH,
     _N, N = Link.nodet
 
     if fd:  # Clink Ns
-        rn = min(_N.nodet[0].n, _N.nodet[1].n) / min(N.nodet[0].n, N.nodet[1].n)
+        rn = _N.n/N.n  # if N.nodet is CG, they do not have nodet, so should be just _N.n and N.n here? _N.n or N.n shouldn't be empty too
+        # rn = min(_N.nodet[0].n, _N.nodet[1].n) / min(N.nodet[0].n, N.nodet[1].n)
         _A, A = _N.angle, N.angle if dir else [-d for d in N.angle]  # reverse angle direction for left link
         Et, rt, md_ = comp_ext(_N.distance,N.distance, _N.S,N.S/rn, _A,A)
         # Et, Rt, Md_ = comp_latuple(_G.latuple, G.latuple,rn,fagg=1)  # low-value comp in der+
@@ -279,9 +291,9 @@ def comp_N(Link, node_, iEt, rng=None, dir=None):  # rng,dir if fd, Link+=dderH,
         # if select fork links: iEt[i::2] = [V+v for V,v in zip(iEt[i::2], dderH.Et[i::2])]
     if fin:
         Link.S += (_N.S + N.S) / 2
+        node_ += [_N, N]   # for selective der+'rng+ in fd  (this should be default?)
         if fd:
             for i, node in zip((1,0),(_N,N)):
-                node_ += [node]  # for selective der+'rng+
                 node.rimt[i] += [Link]  # in the opposite direction
                 if len(N.rim_t[dir]) == rng:
                     node.rim_t[dir][-1] += [Link]  # arg dir, mediates _L for rng+
@@ -343,7 +355,7 @@ def segment_Q(root, iQ, fd, rng):
     max_ = []
     for N in iQ:
         # init graphts:
-        rim = N.rim if isinstance(N,CG) else N.rim_t[0]+N.rim_t[1]  # flatten each?
+        rim = [L for rim_ in N.rim_t for rim in rim_ for L in rim] if isinstance(N, Clink) else N.rim # flatten each?
         _Nt_ = [link.nodet if link.nodet[1] is N else reversed(link.nodet) for link in rim]
         _N_t = [[],[]]
         for ext_N, int_N in _Nt_:
