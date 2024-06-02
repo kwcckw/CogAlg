@@ -104,9 +104,9 @@ def agg_recursion(rroot, root, rng=1, fagg=0):  # rng for sub+'rng+ only
                 pruned_node_ = [node for node in node_ if node.derH.Et[0] > G_aves[fd] * node.derH.Et[2]]  # not be needed?
                 if len(pruned_node_) > 10:
                     agg_recursion(rroot, root, fagg=1)
-                    if rroot and fd and root.derH:  # der+ only (check not empty root.derH)
+                    if rroot and root.derH:  # der+ only (check not empty root.derH)  (now it should be both forks?)
                         rroot.fback_ += [root.derH]
-                        feedback(rroot)  # update root.root..
+                        feedback(rroot, fd)  # update root.root..
         root.node_[:] = node_t  # else keep root.node_
 
 
@@ -149,7 +149,7 @@ def rng_convolve(root, Et, rng=1):  # comp Gs|kernels in agg+, links | link rim_
 
 def rng_trace_rim(root, Et):  # comp Clinks: der+'rng+ in root.link_ rim_t node rims: directional and node-mediated link tracing
 
-    _L_ = root.link_
+    _L_, rL_ = root.link_, []  # added rL to remove CG from rim
     rng = 1
     while _L_:
         L_ = []
@@ -163,9 +163,16 @@ def rng_trace_rim(root, Et):  # comp Clinks: der+'rng+ in root.link_ rim_t node 
                         if not hasattr(_L,"rimt"): add_der_attrs( link_=[_L])  # _L is outside root.link_, still same derivation
                         L.compared_ += [_L]; _L.compared_ += [L]
                         Link = Clink(nodet =[_L,L], box=extend_box(_L.box, L.box))
-                        comp_N(Link, L_, Et, rng, dir)  # L_+=nodet, L.rim_t+=Link
-        _L_ = L_
-        rng += 1
+                        comp_N(L = L_
+        rng += 1ink, L_, Et, rng, dir)  # L_+=nodet, L.rim_t+=Link
+        rL_ += L_; _L_
+        
+    # remove CG
+    for L in list(set(rL_)):
+        for rim_ in L.rim_t:
+            if rim_ and rim_[0] and isinstance(rim_[0][0], CG):
+                rim_[0].pop(0)
+        
     return rng, Et
 
 '''
@@ -282,7 +289,7 @@ def comp_N(Link, node_, iEt, rng=None, dir=None):  # rng,dir if fd, Link+=dderH,
             for i, node in zip((1,0),(_N,N)):
                 node.rimt[i] += [Link]  # in the opposite direction
                 if len(N.rim_t[dir]) == rng:
-                    node.rim_t[dir][-1] += [Link]  # arg dir,-> med_L in rng+
+                    node.rim_t[dir][-1] += [Link]  # arg dir,-> med_L in rng+  (in the first der+, node.rim_t[dir][-1] has existing CG mediator, so remove them later? )
                 else: node.rim_t[dir] += [[Link]]  # add init rng layer
         else:
             for node in _N,N:
@@ -323,7 +330,7 @@ def form_graph_t(root, Et, rng, fagg):  # form Gm_,Gd_ from same-root nodes
                     agg_recursion(root, graph, rng+1, fagg=1-fd)  # graph.node_ is not node_t yet, rng for rng+ only
                 elif graph.derH:
                     root.fback_ += [graph.derH]
-                    feedback(root)  # update root.root.. per sub+
+                    feedback(root, fd)  # update root.root.. per sub+  (we should parse fd now)
             node_t += [graph_]  # may be empty
         else:
             node_t += [[]]
@@ -438,17 +445,17 @@ def sum2graph(root, grapht, fd, rng):  # sum node and link params into graph, ag
                         G.alt_graph_ += [alt_G]
     return graph
 
-def feedback(root):  # called from form_graph_, append new der layers to root
+def feedback(root, fd):  # called from form_graph_, append new der layers to root
 
     DerH = deepcopy(root.fback_.pop(0))  # init
     while root.fback_:
         derH = root.fback_.pop(0)
         DerH.add_(derH)
-    if DerH.Et[1] > G_aves[1] * DerH.Et[3]:
+    if DerH.Et[fd] > G_aves[fd] * DerH.Et[fd+2]:
         root.derH.add_(DerH)
     if root.root and isinstance(root.root, CG):  # not Edge
         rroot = root.root
         if rroot:
             fback_ = rroot.fback_  # always node_t if feedback
-            if fback_ and len(fback_) == len(rroot.node_[1]):  # after all nodes' sub+
-                feedback(rroot)  # sum2graph adds higher aggH, feedback adds deeper aggH layers
+            if fback_ and len(fback_) == len(rroot.node_):  # after all nodes' sub+ (node_t is assigned only after feedback)
+                feedback(rroot, fd)  # sum2graph adds higher aggH, feedback adds deeper aggH layers
