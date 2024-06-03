@@ -103,6 +103,7 @@ def agg_recursion(rroot, root, rng=1, fagg=0):  # rng for sub+'rng+ only
             # comp val is proportional to n comparands:
             if root.derH.Et[0] * ((len(N_)-1)*root.rng) > G_aves[1]*root.derH.Et[2]:
                 # agg+ / node_t, vs. sub+ / node_, always rng+:
+                root.node_ = N_  # temporary
                 agg_recursion(rroot, root, fagg=1)
                 if rroot and root.derH:
                     rroot.fback_ += [root.derH]
@@ -149,7 +150,7 @@ def rng_convolve(root, Et, rng=1):  # comp Gs|kernels in agg+, links | link rim_
 
 def rng_trace_rim(root, Et):  # comp Clinks: der+'rng+ in root.link_ rim_t node rims: directional and node-mediated link tracing
 
-    _L_ = root.link_, []  # added rL to remove CG from rim
+    _L_ = root.link_
     rng = 1
     while _L_:
         L_ = []
@@ -157,7 +158,13 @@ def rng_trace_rim(root, Et):  # comp Clinks: der+'rng+ in root.link_ rim_t node 
             for dir, rim_ in zip((0,1), L.rim_t):  # Link rng layers
                 for mL in rim_[-1]:  # last rng
                     N = mL.nodet[0] if mL.nodet[1] in L.nodet else mL.nodet[1]  # one N in L.nodet, another mediates new _Ls:
-                    rim = N.rim if isinstance(N,CG) else list(N.nodet)  # N.nodet is base mL rim, get rng+ mL.rim_t layers via med nodets
+                    if isinstance(N,CG):  # N.nodet is base mL rim, get rng+ mL.rim_t layers via med nodets
+                        rim = N.rim
+                    else:
+                        if isinstance(N.nodet[0], CG):  # N is Link formed in rng+, nodet is CG
+                            rim = N.nodet[0].rim + N.nodet[1].rim
+                        else:
+                            rim = N.nodet 
                     for _L in rim:
                         if _L is L or _L in L.compared_: continue
                         if not hasattr(_L,"rimt"): add_der_attrs( link_=[_L])  # _L is outside root.link_, still same derivation
@@ -280,7 +287,7 @@ def comp_N(Link, node_, iEt, rng=None, dir=None):  # rng,dir if fd, Link+=dderH,
             node_ += [node]  # for selective kernel init or der+'rng+
             if fd:
                 if len(N.rim_t[1-dir]) == rng:  # rim_t direction is opposite of _N,N
-                    node.rim_t[1-dir][-1] += [Link]  # add medL in last rng layer
+                    node.rim_t[1-dir][-1] += [Link]  # add medL in last rng layer (so in the first der+, we may add new Links into existing nodet.rim)
                 else:
                     node.rim_t[1-dir] += [[Link]]  # add init rng layer
             else:
@@ -341,6 +348,7 @@ def segment_Q(root, iQ, fd, rng):
     for N in iQ:
         # init graphts:
         rim = N.rim if isinstance(N,CG) else [L for rim_ in N.rim_t for rim in rim_ for L in rim]  # flat rim_t
+        # _N_t may contain CGs , which not in iQ during der+
         _N_t = [[_N for L in rim for _N in L.nodet if _N is not N], [N]]  # [ext_N_, int_N_]
         # node_, link_, Lrim, Nrim_t, Et:
         Gt = [[N],[],copy(rim),_N_t,[0,0,0,0]]
@@ -359,7 +367,7 @@ def segment_Q(root, iQ, fd, rng):
         for _Gt,_link in zip(Nrim, Lrim):
             if _Gt not in Q:
                 continue  # was merged
-            oL_ = set(Lrim).intersection(set(_Gt[2])) + {_link}  # shared external links + potential _link
+            oL_ = set(Lrim).intersection(set(_Gt[2])).union([_link])  # shared external links + potential _link
             oV = sum([L.derH.Et[fd] - ave * L.derH.Et[2+fd] for L in oL_])
             # Nrim similarity = relative V deviation,
             # + partial G similarity:
@@ -391,7 +399,10 @@ def add_der_attrs(link_):
     for link in link_:
         link.extH = CH()  # for der+
         link.root = None  # dgraphs containing link
-        link.rim_t = [[link.nodet[0].rim],[link.nodet[1].rim]]  # dual tree of node-mediated link layers, add per rng+
+        if isinstance(link.nodet[0], CG):
+            link.rim_t = [[copy(link.nodet[0].rim)],[copy(link.nodet[1].rim)]]  # dual tree of node-mediated link layers, add per rng+
+        else:
+            link.rim_t = [[],[]]
         link.compared_ = []
         link.med = 1  # comp med rng, replaces len rim_
         link.dir = 0  # direction of comparison if not G0,G1, for comp link?
