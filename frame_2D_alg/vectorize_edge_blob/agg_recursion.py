@@ -73,7 +73,7 @@ def vectorize_root(image):  # vectorization in 3 composition levels of xcomp, cl
                 P.derH = CH()
             ider_recursion(None, edge)  # vertical, lateral-overlap P cross-comp -> PP clustering
             node_t, link_t = [[],[]], [[],[]]
-            for fd, node_ in enumerate(edge.node_):  # always node_t
+            for fd, node_ in enumerate(copy(edge.node_)):  # always node_t  (copy edge.node_, because it will be replaed in agg_recursion later)
                 if edge.iderH and any(edge.iderH.Et):  # any for np array
                     if edge.iderH.Et[fd] * (len(node_)-1)*(edge.rng+1) > G_aves[fd] * edge.iderH.Et[2+fd]:
                         pruned_node_ = []
@@ -155,20 +155,16 @@ def rng_trace_rim(N_, Et):  # comp Clinks: der+'rng+ in root.link_ rim_t node ri
         L_ = []
         for L in _L_:
             for dir, rim_ in zip((0,1), L.rim_t):  # Link rng layers
-                for mL in rim_[-1]:
-                    for N in mL.nodet:  # N in L.nodet, _N in _L.nodet
-                        if N.root is not L.nodet:  # N.root = nodet
-                            _L = N.root[-1]     # nodet[-1] = L
-                            if _L is L or _L in L.compared_:
-                                continue
-                            if not hasattr(_L,"rimt"):
-                                add_der_attrs( link_=[_L])  # _L is outside root.link_, still same derivation
-                            L.compared_ += [_L]
-                            _L.compared_ += [L]
-                            Link = Clink(nodet =[_L,L], box=extend_box(_L.box, L.box))
-                            comp_N(Link, L_, Et, rng, dir) # L_+=nodet, L.rim_t+=Link
-                            break  # only one N mediates _L
-        _L_=L_; rng+=1
+                for _L in rim_[-1]:
+                    if _L is L or _L in L.compared_:
+                        continue
+                    if not hasattr(_L,"rim_t"):  # should be rim_t now?
+                        add_der_attrs( link_=[_L])  # _L is outside root.link_, still same derivation
+                    L.compared_ += [_L]
+                    _L.compared_ += [L]
+                    Link = Clink(nodet =[_L,L], box=extend_box(_L.box, L.box))
+                    comp_N(Link, L_, Et, rng, dir) # L_+=nodet, L.rim_t+=Link
+    _L_=L_; rng+=1
     return N_, rng, Et
 
 '''
@@ -283,7 +279,8 @@ def comp_N(Link, node_, iEt, rng=None, dir=None):  # rng,dir if fd, Link+=dderH,
         for node in _N,N:
             node_ += [node]  # for selective kernel init or der+'rng+
             if fd:
-                if len(N.rim_t[1-dir]) == rng:  # rim_t direction is opposite of _N,N
+                # should be a typo, it should be node here
+                if len(node.rim_t[1-dir]) == rng:  # rim_t direction is opposite of _N,N
                     node.rim_t[1-dir][-1] += [Link]  # add medL in last rng layer
                 else:
                     node.rim_t[1-dir] += [[Link]]  # add init rng layer
@@ -321,7 +318,7 @@ def form_graph_t(root, N_, Et, rng):  # form Gm_,Gd_ from same-root nodes
                     if fd:  # der+
                         if not hasattr(N_[0],"rimt"): add_der_attrs(q)  # 1st der+
                     # else sub+'rng+: direct comp at distance < max_dist * rng+1:
-                    agg_recursion(root, graph, rng+1, fagg=1-fd)  # graph.node_ is not node_t yet, rng for rng+ only
+                    agg_recursion(root, graph, q, rng+1, fagg=1-fd)  # graph.node_ is not node_t yet, rng for rng+ only
                 elif graph.derH:
                     root.fback_ += [graph.derH]
                     feedback(root, fd)  # update root.root.. per sub+
@@ -353,7 +350,7 @@ def segment_N_(root, iN_, fd, rng):
             if not any([eN.DerH.Et[0] > N.DerH.Et[0] or (eN in max_) for eN in _N_t[0]]):  # _N if _N.V==N.V
                 # V * k * max_rng: + mediation if no max in rrim?
                 max_ += [N]
-            max_ = [N.root for N in max_]
+    max_ = [N.root for N in max_]  # this should be at the end
     for Gt in N_: Gt[3][0] = [_N.root for _N in Gt[3][0]]  # replace extNs with their Gts
     # merge with connected _Gts:
     for Gt in max_ if max_ else N_:
@@ -394,8 +391,24 @@ def add_der_attrs(link_):
     for link in link_:
         link.extH = CH()  # for der+
         link.root = None  # dgraphs containing link
-        if isinstance(link.nodet[0], CG):
-            link.rim_t = [[copy(link.nodet[0].rim)],[copy(link.nodet[1].rim)]]  # dual tree of node-mediated link layers, add per rng+
+
+        if isinstance(link.nodet[0], CG):  # dual tree of node-mediated link layers, add per rng+
+            link.rim_t = []
+            for node in link.nodet:
+                rim = []
+                for _link in node.rim:   
+                    _node=_link.nodet[0] if link.nodet[1] is node else link.nodet[1]  
+                    
+                    '''
+                    cy, cx = box2center(node.box); _cy, _cx = box2center(_node.box)
+                    dy = cy-_cy; dx = cx-_cx;  dist = np.hypot(dy,dx)
+                    Link = Clink(nodet=[_node, node], distance=dist, angle=[dy,dx], box=extend_box(node.box,_node.box))
+                    Link.S =(_node.S + node.S) / 2
+                    rim_[0] += [Link]
+                    '''
+                    # or not creating new links, but add mediating rims instead             
+                    rim += _node.rim
+                link.rim_t += [[rim]]
         else:
             link.rim_t = [[],[]]
         link.compared_ = []
