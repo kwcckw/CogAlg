@@ -155,19 +155,19 @@ def rng_trace_rim(N_, Et):  # comp Clinks: der+'rng+ in root.link_ rim_t node ri
         L_ = []
         for L in _L_:
             for nodet in L.nodet[-1]:  # variable nesting _L-mediating nodes, init Gs
-                for N_ in nodet:
+                for dir, N_ in enumerate(nodet):
                     if not isinstance(N_,list): N_ = [N_]
                     for N in N_:
-                        rim = N.rim if isinstance(N,CG) else list(N.rimt_[0])  # concat dirs
+                        rim = N.rim if isinstance(N,CG) else N.rimt_[-1][0]+N.rimt_[-1][1]  # concat dirs
                         for _L in rim:
                             if _L is L or _L in L.compared_: continue
-                        if not hasattr(_L,"rimt_"):
-                            add_der_attrs( link_=[_L])  # _L is outside root.link_, still same derivation
-                        L.compared_ += [_L]
-                        _L.compared_ += [L]
-                        Link = Clink(nodet =[_L,L], box=extend_box(_L.box, L.box))
-                        comp_N(Link, L_, Et, rng, dir)  # L_+=nodet, L.rim_t+=Link
-    _L_=L_; rng+=1
+                            if not hasattr(_L,"rimt_"):
+                                add_der_attrs( link_=[_L])  # _L is outside root.link_, still same derivation
+                            L.compared_ += [_L]
+                            _L.compared_ += [L]
+                            Link = Clink(nodet =[_L,L], box=extend_box(_L.box, L.box))
+                            comp_N(Link, L_, Et, rng, dir)  # L_+=nodet, L.rim_t+=Link
+        _L_=L_; rng+=1
     return N_, rng, Et
 
 '''
@@ -250,6 +250,7 @@ def comp_N(Link, node_, iEt, rng=None, dir=None):  # rng,dir if fd, Link+=dderH,
     dderH = CH(); _N, N = Link.nodet; rn = _N.n / N.n
 
     if fd:  # Clink Ns
+        Link.nodet = [[[Link.nodet[0]],[Link.nodet[1]]]]  # convert to nested
         _A, A = _N.angle, N.angle if dir else [-d for d in N.angle] # reverse angle direction for left link
         Et, rt, md_ = comp_ext(_N.distance,N.distance, _N.S,N.S/rn, _A,A)
         # Et, Rt, Md_ = comp_latuple(_G.latuple, G.latuple,rn,fagg=1)  # low-value comp in der+
@@ -282,10 +283,19 @@ def comp_N(Link, node_, iEt, rng=None, dir=None):  # rng,dir if fd, Link+=dderH,
         for node in _N,N:
             node_ += [node]  # for selective kernel init or der+'rng+
             if fd:
-                if len(N.rimt_) == rng:
+                if len(node.rimt_) == rng:
                     node.rimt_[-1][1-dir] += [Link]  # add in last rng layer, dir opposite of _N,N
                 else:
-                    node.rimt_ += [[Link],[]] if dir else [[],[Link]]  # add init rng layer
+                    node.rimt_ += [[[Link],[]]] if dir else [[[],[Link]]]  # add init rng layer
+                    
+                # not sure, but something like this? 
+                # we add other N as mediating node, so that we further compare their rim in the next rng
+                _node =_N if N is node else N  # the other node
+                if len(node.nodet[-1]) == rng + 1:  # for nodet, it has rng+1 layers because it has default CG nodet?
+                    node.nodet[-1][1-dir] += [_node] 
+                else:
+                    node.nodet[-1] +=  [[[_node],[]]] if dir else [[[],[_node]]]
+                    
             else:
                 node.rim += [Link]
 
@@ -392,8 +402,9 @@ def add_der_attrs(link_):
     for link in link_:
         link.extH = CH()  # for der+
         link.root = None  # dgraphs containing link
-        link.nodet = [link.nodet]  # nest dual tree of _L-mediating nodes layers, add [[],[]] per rng+
-        link.rimt_ = [link.rimt_]  # same structure as nodet?
+        # init first nodet, this should be only 1 time
+        link.nodet = [[link.nodet]]  # nest dual tree of _L-mediating nodes layers, add [[],[]] per rng+
+        link.rimt_ = [[[],[]]]  # same structure as nodet? this should be 1 time, rimt_ is not even exist yet
         link.compared_ = []
         link.med = 1  # comp med rng, replaces len rim_
         link.dir = 0  # direction of comparison if not G0,G1, for comp link?
