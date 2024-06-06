@@ -153,6 +153,7 @@ def rng_trace_rim(N_, Et):  # comp Clinks: der+'rng+ in root.link_ rim_t node ri
     rng = 1
     while _L_:
         L_ = []
+        prerimt_ = []
         for L in _L_:
             for dir, prerim in zip((0,1), L.prerimt):  # Link direction
                 for _L in prerim:
@@ -161,7 +162,8 @@ def rng_trace_rim(N_, Et):  # comp Clinks: der+'rng+ in root.link_ rim_t node ri
                     L.compared_ += [_L]
                     _L.compared_ += [L]
                     Link = Clink(nodet =[_L,L], box=extend_box(_L.box, L.box))
-                    comp_N(Link, L_, Et, rng, dir)  # L_+=nodet, L.rim_t+=Link
+                    comp_N(Link, L_, Et, rng, dir, prerimt_)  # L_+=nodet, L.rim_t+=Link
+        for L, prerimt in zip(L_, prerimt_): L.prerimt = prerimt
         _L_=L_; rng+=1
     return N_, rng, Et
 
@@ -239,12 +241,15 @@ def comp_N_(_node_, node_):  # first part of comp_G to compare partial graphs fo
 
     return dderH
 
-def comp_N(Link, node_, iEt, rng=None, dir=None):  # rng,dir if fd, Link+=dderH, comparand rim+=Link
+def comp_N(Link, node_, iEt, rng=None, dir=None, prerimt_=None):  # rng,dir if fd, Link+=dderH, comparand rim+=Link
 
     fd = dir is not None  # compared links have binary relative direction?
     dderH = CH(); _N, N = Link.nodet; rn = _N.n / N.n
 
     if fd:  # Clink Ns
+        cy, cx = box2center(N.box); _cy, _cx = box2center(_N.box)
+        dy = cy-_cy; dx = cx-_cx;  dist = np.hypot(dy,dx)
+        Link.distance = dist  # for next rng
         _A, A = _N.angle, N.angle if dir else [-d for d in N.angle] # reverse angle direction for left link
         Et, rt, md_ = comp_ext(_N.distance,N.distance, _N.S,N.S/rn, _A,A)
         # Et, Rt, Md_ = comp_latuple(_G.latuple, G.latuple,rn,fagg=1)  # low-value comp in der+
@@ -256,7 +261,9 @@ def comp_N(Link, node_, iEt, rng=None, dir=None):  # rng,dir if fd, Link+=dderH,
         dderH.n = 1; dderH.Et = np.add(Et,et); dderH.relt = np.add(Rt,rt)
         dderH.H = [CH(Et=et,relt=rt,H=md_,n=.5),CH(Et=Et,relt=Rt,H=Md_,n=1)]
         # / PP:
-        _N.iderH.comp_(N.iderH, dderH, rn, fagg=1, flat=0)  # always >1P in compared PPs?
+        # so looks like we need to check iderH too
+        # in deeper agg+, where nodes are Clink, their graph won't have any iderH accumulated
+        if N.iderH and _N.iderH: _N.iderH.comp_(N.iderH, dderH, rn, fagg=1, flat=0)  # always >1P in compared PPs?
     # / N, if >1 PPs | Gs:
     if _N.derH and N.derH: _N.derH.comp_(N.derH, dderH, rn, fagg=1, flat=0)  # append and sum new dderH to base dderH
     if _N.extH and N.extH: _N.extH.comp_(N.extH, dderH, rn, fagg=1, flat=1)
@@ -275,14 +282,16 @@ def comp_N(Link, node_, iEt, rng=None, dir=None):  # rng,dir if fd, Link+=dderH,
         Link.S += (_N.S + N.S) / 2
         Link.n = min(_N.n,N.n) # comp shared layers
         for node,_node in (_N,N),(N,_N):
-            node_ += [node]  # for selective kernel init or der+'rng+
+            if node not in node_:   
+                node_ += [node]  # for selective kernel init or der+'rng+
+                if fd: prerimt_ += [[[],[]]]  # add prerimt, per node in node_
             if fd:
                 if len(node.rimt_) == rng:
                     node.rimt_[-1][1-dir] += [Link]  # add in last rng layer, opposite _N,N dir
                 else:
                     node.rimt_ += [[[Link],[]]] if dir else [[[],[Link]]]  # add rng layer
                 # add prelinks for next rng+:
-                node.prerimt[1-dir] += _node.rimt[0][0] + _node.rimt[0][1]
+                prerimt_[node_.index(node)][1-dir] += _node.rimt_[-1][0] + _node.rimt_[-1][1]
             else:
                 node.rim += [Link]
 
@@ -338,7 +347,7 @@ def segment_N_(root, iN_, fd, rng):
     max_ = []
     for N in iN_:
         # init graphts:
-        rim = N.rim if isinstance(N,CG) else [L for rim_ in N.rim_t for rim in rim_ for L in rim]  # flatten rim_t
+        rim = N.rim if isinstance(N,CG) else [L for rimt in N.rimt_ for rim in rimt for L in rim]  # flatten rim_t
         _N_t = [[_N for L in rim for _N in L.nodet if _N is not N], [N]]  # [ext_N_, int_N_]
         # node_, link_, Lrim, Nrim_t, Et:
         Gt = [[N],[],copy(rim),_N_t,[0,0,0,0]]
