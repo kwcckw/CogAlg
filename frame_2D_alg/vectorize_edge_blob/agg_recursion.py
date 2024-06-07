@@ -150,33 +150,39 @@ def rng_convolve(N_, Et, rng=1):  # comp Gs|kernels in agg+, links | link rim_t 
     return N_, rng, Et
 
 
-def rng_trace_rim(N_, Et):  # comp Clinks: der+'rng+ in root.link_ rim_t node rims: directional and node-mediated link tracing
+def rng_trace_rim(N_, Et): # comp Clinks: der+'rng+ in root.link_ rim_t node rims: directional and node-mediated link tracing
 
-    Lt_ = [[[N, [[N.nodet[0],i]],[[N.nodet[1],i]]]] for i,N in enumerate(N_)]  # add med nodes with indices
+    # add med nodes with indices
+    L_ = N_[:]
+    _mN_t_ = [[[N.nodet[0]],[N.nodet[1]]] for N in N_]
+    mN_t_ = [[[],[]] for N in N_]
     rng = 1
-    while Lt_:
-        mN_t_ = [[[],[]] for _ in Lt_]
-        # comp and add rng+ mediating nodes /L:
-        for (L,_mN_t), mN_t in zip(Lt_, mN_t_):
+    while L_:
+        # add rng+ mediating nodes /L:
+        for L,_mN_t, mN_t in zip(L_, _mN_t_, mN_t_):
             # loop directions:
             for dir, _mN_, mN_ in zip((0,1), _mN_t, mN_t):
-                _rim = [n.rim if isinstance(n,CG) else n.rimt_[0][0]+n.rimt_[0][1] for n in _mN_]
-                for _L,i in _rim:
-                    if _L is L or _L in L.compared_: continue
-                    if not hasattr(_L,"rimt_"): add_der_attrs( link_=[_L])  # _L is outside root.link_, same derivation
-                    L.compared_ += [_L]
-                    _L.compared_ += [L]
-                    cy, cx = box2center(L.box); _cy,_cx = box2center(_L.box); dy = cy-_cy; dx = cx-_cx
-                    # dist but no gap in 1st fd?
-                    Link = Clink(nodet=[_L,L], distance=np.hypot(dy,dx), box=extend_box(_L.box, L.box))
-                    if comp_N(Link, Et, rng, dir):  # L.rim_t += Link
-                        mN_ += [_L]  # multiple _Ls / L
-                        mN_t_[i][1-dir] += [L]
-        # Ls with mNs:
-        Lt_ = [[Lt[0], mN_t] for Lt, mN_t in zip(Lt_, mN_t_) if any(mN_t)]
-        for i, Lt in enumerate(Lt_):
-            for mN_ in Lt[1]:  # loop dir, add index:
-                mN_[:] = [[mN,i] for i,mN in enumerate(mN_)]
+                _rim_ = [n.rim if isinstance(n,CG) else n.rimt_[0][0]+n.rimt_[0][1] for n in _mN_]
+                for _L_ in _rim_:
+                    for _L in _L_:
+                        if _L is L or _L in L.compared_: continue
+                        if not hasattr(_L,"rimt_"): add_der_attrs( link_=[_L])  # _L is outside root.link_, same derivation
+                        L.compared_ += [_L]
+                        _L.compared_ += [L]
+                        cy, cx = box2center(L.box); _cy,_cx = box2center(_L.box); dy = (ave-cy)-(ave-_cy); dx = (ave-cx)-(ave-_cx)  # not sure but include ave - node center here?
+                        # dist but no gap in 1st fd?
+                        Link = Clink(nodet=[_L,L], distance=np.hypot(dy,dx), box=extend_box(_L.box, L.box))
+                        if comp_N(Link, Et, rng, dir):  # L.rim_t += Link
+                            mN_ += [_L]  # multiple _Ls / L
+                            if _L not in L_:  # _L not in existing L_ (beyond current root)
+                                L_ += [_L]
+                                mN_t_ += [[[],[]]]
+                            mN_t_[L_.index(_L)][1-dir] += [L]
+        # update Ls and Nms
+        L_ = [L for i, L in enumerate(L_) if any(mN_t_[i])]
+        _mN_t_ = [mN_t for mN_t in mN_t_ if any(mN_t)]
+        mN_t_ = [[[],[]] for L in L_] 
+        rng += 1
 
     return N_, rng, Et
 
@@ -215,35 +221,39 @@ def sum_N_(N_, fd=0):  # to sum kernel layer and partial graph comp
     N = N_[0]
     n = N.n; S = N.S
     L, A = (N.distance, N.angle) if fd else (len(N.node_), N.A)
-    latuple = deepcopy(N.latuple)  # ignore if Clink?
-    if not fd: iderH = deepcopy(N.iderH)
+    if not fd: 
+        latuple = deepcopy(N.latuple)  # ignore if Clink?
+        iderH = deepcopy(N.iderH)
     derH = deepcopy(N.derH)
     extH = deepcopy(N.extH)
     # Et = copy(N.Et)
     for N in N_[1:]:
-        latuple = [P+p for P,p in zip(latuple[:-1],N.latuple[:-1])] + [[A+a for A,a in zip(latuple[-1],N.latuple[-1])]]
+        if not fd:
+            latuple = [P+p for P,p in zip(latuple[:-1],N.latuple[:-1])] + [[A+a for A,a in zip(latuple[-1],N.latuple[-1])]]
+            if N.iderH: iderH.add_(N.iderH)
         n += N.n; S += N.S
         L += N.distance if fd else len(N.node_)
-        A = [Angle+angle for Angle,angle in zip(A, N.angle if fd else N.A)]
-        if N.iderH: iderH.add_(N.iderH)
+        A = [Angle+angle for Angle,angle in zip(A, N.angle if fd else N.A)]   
         if N.derH: derH.add_(N.derH)
         if N.extH: extH.add_(N.extH)
-        # Et = np.add(Et,N.Et)
 
-    return n, L, S, A, derH, extH, latuple, iderH  # the last two if not fd, not sure Et is comparable
+    if fd: return n, L, S, A, derH, extH
+    else:  return n, L, S, A, derH, extH, latuple, iderH  # the last two if not fd, not sure Et is comparable
 
 def comp_N_(_node_, node_):  # first part of comp_G to compare partial graphs for merge
 
     dderH = CH()
     fd = isinstance(_node_[0], Clink)
-    _n, _L, _S, _A, _derH, _extH, _latuple, _iderH = sum_N_(_node_, fd)
-    n, L, S, A, derH, extH, latuple, iderH = sum_N_(node_, fd)
+    _Par = sum_N_(_node_, fd); Par = sum_N_(node_, fd)
+    _n, _L, _S, _A, _derH, _extH = _Par[:6]
+    n, L, S, A, derH, extH = Par[:6]
     rn = _n/n
     et, rt, md_ = comp_ext(_L,L, _S,S/rn, _A,A)
     if fd:
         dderH.n = 1; dderH.Et = et; dderH.relt = rt
         dderH.H = [CH(Et=copy(et),relt=copy(rt),H=md_,n=1)]
     else:
+        _latuple, _iderH = _Par[6:]; latuple, iderH = Par[6:]
         Et, Rt, Md_ = comp_latuple(_latuple, latuple, rn, fagg=1)
         dderH.n = 1; dderH.Et = np.add(Et,et); dderH.relt = np.add(Rt,rt)
         dderH.H = [CH(Et=et,relt=rt,H=md_,n=.5),CH(Et=Et,relt=Rt,H=Md_,n=1)]
