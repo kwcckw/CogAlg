@@ -125,7 +125,8 @@ def rng_convolve(N_, Et, rng=1):  # comp Gs|kernels in agg+, links | link rim_t 
         dy,dx = np.subtract(_G.yx, G.yx)
         dist = np.hypot(dy,dx); coverage = (aRad+_aRad)/2
         # eval relative distance between G centers:
-        if dist / coverage <= max_dist *rng:
+        # right now coverage is in y,x, so sum or hypot them is more accurate?
+        if dist / np.hypot(*coverage) <= max_dist *rng: 
             G.compared_ += [_G]; _G.compared_ += [G]
             Link = Clink(nodet=[_G,G], distance=dist, angle=[dy,dx], box=extend_box(G.box,_G.box))
             if comp_N(Link, Et):
@@ -191,6 +192,16 @@ def rng_trace_rim(N_, Et):  # comp Clinks: der+'rng+ in root.link_ rim_t node ri
             L_ = _L_; rng += 1
         else:
             break
+        
+        # or single line method:
+        '''
+        LmN_t_ = [(L, mN_t) for L, mN_t in zip(L_, mN_t_) if any(mN_t)]
+        if LmN_t_:
+            L_, _mN_t_ = map(list, zip(*LmN_t_))  # map list to ensure it is a list, else it's a tuple after zip(*)
+            rng += 1
+        else: break
+        '''
+    
     return N_, rng, Et
 
 '''
@@ -274,6 +285,7 @@ def comp_N(Link, iEt, rng=None, dir=None):  # rng,dir if fd, Link+=dderH, compar
 
     fd = dir is not None  # compared links have binary relative direction?
     dderH = CH(); _N, N = Link.nodet; rn = _N.n / N.n
+    Link.yx = [(_N.yx[0]+N.yx[1])/2,(_N.yx[0]+N.yx[1])/2]  # for link.yx, get average from their nodes?
 
     if fd:  # Clink Ns
         _A, A = _N.angle, N.angle if dir else [-d for d in N.angle] # reverse angle direction for left link
@@ -289,6 +301,7 @@ def comp_N(Link, iEt, rng=None, dir=None):  # rng,dir if fd, Link+=dderH, compar
         if N.iderH:  # not in Clink N
             _N.iderH.comp_(N.iderH, dderH, rn, fagg=1, flat=0)
     # / N, if >1 PPs | Gs:
+    # there's a problem in der+ here
     if _N.derH and N.derH: _N.derH.comp_(N.derH, dderH, rn, fagg=1, flat=0)  # append and sum new dderH to base dderH
     if _N.extH and N.extH: _N.extH.comp_(N.extH, dderH, rn, fagg=1, flat=1)
 
@@ -442,7 +455,7 @@ def sum2graph(root, grapht, fd, rng):  # sum node and link params into graph, ag
         graph.derH.add_(G.derH)
         if fd: G.Et = [0,0,0,0]  # reset in last form_graph_t fork, Gs are shared in both forks
         else:  G.root = graph  # assigned to links if fd else to nodes?
-        np.add(graph.yx, G.yx)
+        graph.yx = np.add(graph.yx, G.yx)
     graph.yx = np.divide(graph.yx,len(G_))
 
     for link in Link_:  # sum last layer of unique current-layer links
