@@ -123,7 +123,7 @@ def rng_convolve(N_, Et, rng=1):  # comp Gs|kernels in agg+, links | link rim_t 
         dy,dx = np.subtract(_G.yx, G.yx)
         dist = np.hypot(dy,dx); aRad = (G.aRad+_G.aRad) /2  # ave radius
         # eval relative distance between G centers:
-        if dist/aRad <= max_dist *rng:
+        if dist/(0 if aRad == 0 else aRad) <= max_dist *rng:
             G.compared_ += [_G]; _G.compared_ += [G]
             Link = Clink(nodet=[_G,G], span=dist, angle=[dy,dx], box=extend_box(G.box,_G.box))
             if comp_N(Link, Et):
@@ -174,18 +174,19 @@ def rng_trace_rim(N_, Et):  # comp Clinks: der+'rng+ in root.link_ rim_t node ri
                         dy,dx = np.subtract(_L.yx,L.yx)
                         dist = np.hypot(dy, dx)
                         if rng > 1:  # draft
-                            coSpan = L.span * np.cos( np.arctan2( np.subtract(L.angle, (dy,dx))))
-                            _coSpan = _L.span * np.cos( np.arctan2( np.subtract(_L.angle, (dy,dx))))
+                            # negative value here means in totally opposite direction?
+                            coSpan = L.span * np.cos( np.arctan2(*np.subtract(L.angle, (dy,dx))))
+                            _coSpan = _L.span * np.cos( np.arctan2(*np.subtract(_L.angle, (dy,dx))))
                             if dist / ((coSpan +_coSpan) / 2) > max_dist * rng:  # Ls are too distant
                                 continue
                         Link = Clink(nodet=[_L,L], span=dist, angle=[dy,dx], box=extend_box(_L.box, L.box))
                         if comp_N(Link, Et, rng, dir):  # L.rim_t += new Link
                             # link order: nodet < L < rim_t, mN.rim order = L
-                            mN_ += [_L.nodet]   # get _Ls in mN.rim
+                            mN_ += _L.nodet   # get _Ls in mN.rim (merge)
                             if _L not in L_:  # not in root
                                 L_ += [_L]
                                 mN_t_ += [[[],[]]]
-                            mN_t_[L_.index(_L)][1-dir] += [L]
+                            mN_t_[L_.index(_L)][1-dir] += _L.nodet
         _L_, _mN_t = [],[]
         for L, mN_t in zip(L_, mN_t_):
             if any(mN_t):
@@ -356,6 +357,7 @@ def form_graph_t(root, N_, Et, rng):  # form Gm_,Gd_ from same-root nodes
                     agg_recursion(root, graph, Q, rng+1, fagg=1-fd)  # graph.node_ is not node_t yet, rng for rng+ only
                 elif graph.derH:
                     root.fback_ += [graph.derH]
+                    # so the next problem is root doesn't share a lower layer with graph, so is there a workaround here?
                     feedback(root, fd)  # update root.root.. per sub+
             node_t += [graph_]  # may be empty
         else:
@@ -437,7 +439,6 @@ def sum2graph(root, grapht, fd, rng):  # sum node and link params into graph, ag
     graph = CG(fd=fd, node_=G_,link_=Link_, rng=rng, Et=Et)
     if fd: graph.root = root
     extH = CH()
-    yx = [0,0]
     for G in G_:
         extH.append_(G.extH,flat=1)if graph.extH else extH.add_(G.extH)
         graph.area += G.area
@@ -450,10 +451,10 @@ def sum2graph(root, grapht, fd, rng):  # sum node and link params into graph, ag
         graph.derH.add_(G.derH)
         if fd: G.Et = [0,0,0,0]  # reset in last form_graph_t fork, Gs are shared in both forks
         else:  G.root = graph  # assigned to links if fd else to nodes?
-        yx = np.add(yx, G.yx)
-    L = len(G_); yx = np.divide(graph.yx,L)
-    graph.yx = yx
-    graph.aRad = np.divide( sum([np.hypot(np.subtract(yx,G.yx)) for G in G_]), L)  # average distance between graph center and node center
+        graph.yx = np.add(graph.yx, G.yx)
+    L = len(G_); G.yx = np.divide(graph.yx,L)
+    # aRad could be zero here when there's a single G in G_
+    graph.aRad = np.divide( sum([np.hypot(*np.subtract(graph.yx,G.yx)) for G in G_]), L)  # average distance between graph center and node center
     for link in Link_:
         # sum last layer of unique current-layer links
         graph.S += link.span

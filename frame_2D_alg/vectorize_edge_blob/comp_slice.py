@@ -387,10 +387,12 @@ def sum2PP(root, P_, dP_, fd):  # sum links in Ps and Ps in PP
             for y,x in P.yx_:
                 y = int(round(y)); x = int(round(x))  # summed with float dy,dx in slice_edge?
                 PP.box = accum_box(PP.box,y,x); celly_+=[y]; cellx_+=[x]
+        PP.yx = np.add(PP.yx, P.yx)
         if not fd: P.root = PP
+    L = len(P_); PP.yx = np.divide(PP.yx,L)  # similar with sum2graph
+    PP.aRad = np.divide( sum([np.hypot(*np.subtract(PP.yx,P.yx)) for P in P_]), L)  # to carry over for agg+
     if PP.iderH:
         PP.iderH.Et[2:4] = [R+r for R,r in zip(PP.iderH.Et[2:4], iRt)]
-
     if isinstance(P_[0], CP):  # skip if P is CdP because it doens't have box and yx
         # pixmap:
         y0,x0,yn,xn = PP.box
