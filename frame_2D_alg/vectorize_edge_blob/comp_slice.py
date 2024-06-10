@@ -85,6 +85,7 @@ class CG(CBase):  # PP | graph | blob: params of single-fork node_ cluster
         # dynamic attrs:
         G.Rim = []  # links to the most mediated nodes
         G.fback_ = []  # feedback [[aggH,valt,rdnt,dect]] per node layer, maps to node_H
+        G.fback_t = [[],[]]
         G.compared_ = []
         # Rdn: int = 0  # for accumulation or separate recursion count?
         # it: list = z([None,None])  # graph indices in root node_s, implicitly nested
