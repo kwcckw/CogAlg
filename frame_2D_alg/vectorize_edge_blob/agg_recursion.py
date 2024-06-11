@@ -2,8 +2,8 @@ import numpy as np
 from copy import deepcopy, copy
 from itertools import combinations, product, zip_longest
 from .slice_edge import comp_angle, CsliceEdge
-from .comp_slice import ider_recursion, comp_latuple, get_match, CH, CG, CdP
-from utils import box2center, extend_box
+from .comp_slice import rng_recursion, form_PP_t, comp_latuple, CH, CG
+from utils import extend_box
 from frame_blobs import CBase
 
 '''
@@ -68,10 +68,13 @@ def vectorize_root(image):  # vectorization in 3 composition levels of xcomp, cl
     frame = CsliceEdge(image).segment()
     for edge in frame.blob_:
         if hasattr(edge, 'P_') and edge.latuple[-1] * (len(edge.P_)-1) > G_aves[0]:  # eval G, rdn=1
-            edge.derH = CH(); edge.iderH = CH(); edge.fback_=[]; edge.fback_t=[[],[]]; edge.Et=[0,0,0,0]; edge.link_=[]  # fback_ for comp_slice, fback_t for agg+
+            edge.derH=CH(); edge.iderH = CH(); edge.Et = [0,0,0,0]; edge.link_= []
+            edge.fback_=[]; edge.fback_t=[[],[]] # fback_/comp_slice, fback_t/agg+
             for P, _ in edge.P_:
                 P.derH = CH()
-            ider_recursion(None, edge)  # vertical, lateral-overlap P cross-comp -> PP clustering
+            # vertical, lateral-overlap P cross-comp -> PP clustering:
+            rng_recursion(edge)
+            form_PP_t(edge, edge.P_)  # calls der+: PP P_,link_'replace, derH+ or rng++: PP.link_+
             node_t, link_t = [[],[]], [[],[]]
             for fd, node_ in enumerate(copy(edge.node_)):  # always node_t
                 if edge.iderH and any(edge.iderH.Et):  # any for np array
@@ -109,10 +112,9 @@ def agg_recursion(rroot, root, N_, rng=1, fagg=0):  # rng for sub+'rng+ only
                 # agg+ / node_t, vs. sub+ / node_, always rng+:
                 agg_recursion(rroot, root, N_, fagg=1)
                 if rroot and root.derH:
-                    # agg+ feedback should have a different fback_t? Else they will be mixed with fback_t in sub+ before calling current agg_recursion
-                    rroot.fback_t[fd] += [root.derH]
-                    if len(root.fback_t[fd]) == len(root.node_):  # all nodes sub+ end  
-                        feedback(rroot, fd)  # update root.root..
+                    rroot.fback_t[fd] += [root.derH]  # each fork of agg+ fback_t sums both forks of sub+ fback_t
+                    if len(root.fback_t[fd]) == len(root.node_):  # all nodes sub+ end
+                        feedback(rroot, fd, fsub=0)  # update root.root..
         root.node_[:] = node_t  # else keep root.node_
 
 
@@ -133,8 +135,7 @@ def rng_node_(N_, Et, rng=1):  # comp Gs|kernels in agg+, links | link rim_t nod
                 G_ += [_G,G]
     _G_ = list(set(G_))
     for G in _G_:  # init kernel as [krim]
-        krim = []
-        DerH = CH()  # should be adding new DerH layer here?
+        krim =[]; DerH =CH() # layer/krim
         for link in G.rim:
             DerH.add_(link.derH)
             krim += [link.nodet[0] if link.nodet[1] is G else link.nodet[1]]
@@ -349,8 +350,8 @@ def form_graph_t(root, N_, Et, rng):  # segment N_ to Nm_, Nd_
                     # else sub+rng+: comp Gs at distance < max_dist * rng+1:
                     agg_recursion(root, graph, Q, rng+1, fagg=1-fd)  # graph.node_ is not node_t yet, rng for rng+ only
                 else:
-                    root.fback_t[fd] += [graph.derH]
-                    if len(root.fback_t[fd]) == len(root.node_):  # all nodes sub+ end
+                    root.fback_t[fd] += [graph.derH]  # sub+ fb-> root formed by intermediate agg+, before the original root?
+                    if len(root.fback_t[fd]) == len(root.node_):  # sub+ ends for all nodes
                         feedback(root,fd)  # update root.root..
             node_t += [graph_]  # may be empty
         else:
@@ -465,17 +466,18 @@ def sum2graph(root, grapht, fd, rng):  # sum node and link params into graph, ag
                         G.alt_graph_ += [alt_G]
     return graph
 
-def feedback(root, fd):  # called from form_graph_, append new der layers to root
+def feedback(root, fd, fsub=1):  # called from form_graph_, append new der layers to root
 
     # need to merge fback_ from both forks in the same higher layers of root.derH
-    DerH = deepcopy(root.fback_t[fd].pop(0))  # init DerH, maybe empty?
+    DerH = deepcopy(root.fback_t[fd].pop(0))  # init DerH, maybe empty
     while root.fback_t[fd]:
         derH = root.fback_t[fd].pop(0)
         DerH.add_(derH)
     if DerH.Et[fd] > G_aves[fd] * DerH.Et[fd+2]:
-        root.derH.append_(DerH, flat=0)  # or append_, higher layers summed from both forks? (should be append here to add new layer of derH)
+        if fsub: root.derH.append_(DerH, flat=1)  # append sum of higher layers from both forks
+        else:    root.derH.add_(DerH)  # sum shared layers, append the rest
 
-    # recursive feedback, initiated and propagated when all nodes sub+ ends:
+    # recursive feedback, initiated and propagated when sub+ ends in all nodes:
     if root.root and isinstance(root.root, CG):  # not Edge
         rroot = root.root
         if rroot:
