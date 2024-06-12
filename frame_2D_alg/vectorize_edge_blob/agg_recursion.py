@@ -71,7 +71,7 @@ def vectorize_root(image):  # vectorization in 3 composition levels of xcomp, cl
             edge.derH=CH(); edge.iderH = CH(); edge.Et = [0,0,0,0]; edge.link_= []
             edge.fback_=[]; edge.fback_t=[[],[]] # fback_/comp_slice, fback_t/agg+
             for P in edge.P_:
-                P.derH = CH()
+                P.derH = CH(); P.rim_ = []
             # vertical, lateral-overlap P cross-comp -> PP clustering:
             rng_recursion(edge)
             form_PP_t(edge, edge.P_)  # calls der+: PP P_,link_'replace, derH+ or rng++: PP.link_+
@@ -113,7 +113,7 @@ def agg_recursion(rroot, root, N_, rng=1, fagg=0):  # rng for sub+'rng+ only
                 agg_recursion(rroot, root, N_, fagg=1)
                 if rroot and root.derH:
                     rroot.fback_t[fd] += [root.derH] # each fork in agg+ fback_t sums both forks of sub+ fback_t
-                    if len(root.fback_t[fd]) == len(root.node_):  # sub+ ends for all nodes
+                    if all(len(f_) == len(node_) for f_ in rroot.fback_t):  # both forks of sub+ end for all nodes
                         feedback(rroot, fd, fsub=0)  # update root.root..
         root.node_[:] = node_t  # else keep root.node_
 
@@ -136,24 +136,31 @@ def rng_node_(N_, Et, rng=1):  # comp Gs|kernels in agg+, links | link rim_t nod
     for G in set(G_):  # set kernel rim per G:
         _G_, M = [],0
         for link in G.rim:
-            _G_ += [[link.nodet[0] if link.nodet[1] is G else link.nodet[1]]]
-            M += link.Et[0]
-        _Gt_ += [[G,_G_,M]]
+            _G_ += [link.nodet[0] if link.nodet[1] is G else link.nodet[1]]  # why there's an extra bracket? It shouldn't be nested?
+            M += link.derH.Et[0]
+        _Gt_ += [[G,_G_,M,[]]]  # added compared_
     rng = 1
     while _Gt_:  # aggregate rng+ cross-comp: recursive center node DerH += linked node derHs for next loop
         Gt_ = []
-        for G,_krim,_M in _Gt_:
+        _G_ = [Gt[0] for Gt in _Gt_]  # current G_ in _Gt_
+        for G,_krim,_M, compared_ in _Gt_:
             krim, M = [], 0
             for _G in _krim:
-                if _G in G.compared_: continue  # we need to add a temporary new compared_ for convolution?
+                if _G in compared_: continue  # we need to add a temporary new compared_ for convolution? Yes, because in the first loop, _G must be in G.compared since they are already compared in comp_N
                 dderH = comp_G(_G,G)
+                compared_ += [_G]
+                # check _G is in _G_, since they might not be appended to Gt_ in higher rng, so bilateral update is not needed
+                if _G in _G_: _Gt_[_G_.index(_G)][3] += [G]  # add _G's compared_
                 if dderH.Et[0] > ave * dderH.Et[2]:
+                    for _link in _G.rim:
+                        __G = _link.nodet[0] if _link.nodet[1] is _G else _link.nodet[1]
+                        if __G is G: continue  # prevent cyclic
+                        krim += [__G]  # we should added _G's rim mediated __G instead? Because _G is already compared
                     krim += [_G]; M += dderH.Et[0]
                     for g in _G,G:  # bilateral dderH assign
-                        # not revised:
-                        g.DerH.H[-1].add_(dderH, irdnt=dderH.H[-1].Et[2:]) if len(g.DerH.H)==rng else g.DerH.append_(dderH,flat=1)
+                        g.DerH.H[-1].add_(dderH, irdnt=dderH.H[-1].Et[2:]) if len(g.DerH.H)==rng else g.DerH.append_(dderH,flat=0)  # it should be flat = 0 here? Because we increase new layer per rng
             if M-_M > ave:
-                Gt_ += [[G,krim,M]]
+                Gt_ += [[G,krim,M, compared_]]
         _Gt_= Gt_
         rng += 1
     for G in G_:
@@ -282,8 +289,8 @@ def comp_N_(_node_, node_):  # first part of comp_G to compare partial graphs fo
 def comp_G(_G, G):  # comp without forming links
 
     dderH = CH()
-    _n,_L,_S,_A,_derH,_extH,_iderH,_latuple = _G.n,_G.L,_G.S,_G.A,_G.derH,_G.extH,_G.iderH,_G.latuple
-    n, L, S, A, derH, extH, iderH, latuple = G.n, G.L, G.S, G.A, G.derH, G.extH, G.iderH, G.latuple
+    _n,_L,_S,_A,_derH,_extH,_iderH,_latuple = _G.n,len(_G.node_),_G.S,_G.A,_G.derH,_G.extH,_G.iderH,_G.latuple
+    n, L, S, A, derH, extH, iderH, latuple = G.n,len(G.node_), G.S, G.A, G.derH, G.extH, G.iderH, G.latuple
     rn = _n/n
     et, rt, md_ = comp_ext(_L,L, _S,S/rn, _A,A)
     Et, Rt, Md_ = comp_latuple(_latuple, latuple, rn, fagg=1)
@@ -374,7 +381,8 @@ def form_graph_t(root, N_, Et, rng):  # segment N_ to Nm_, Nd_
                     agg_recursion(root, graph, Q, rng+1, fagg=1-fd)  # graph.node_ is not node_t yet, rng for rng+ only
                 else:
                     root.fback_t[fd] += [graph.derH]  # sub+ fb -> root formed by intermediate agg+, -> original root
-                    if all(len(f_) == len(root.node_) for f_ in root.fback_t):  # both forks of sub+ end for all nodes
+                    # should be len(graph_) here? Because root might be a Cedge, their node is already a node_t
+                    if all(len(f_) == len(graph_) for f_ in root.fback_t):  # both forks of sub+ end for all nodes
                         feedback(root,fd)
             node_t += [graph_]  # may be empty
         else:
