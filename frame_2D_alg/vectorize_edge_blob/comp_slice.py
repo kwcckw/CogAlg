@@ -378,6 +378,8 @@ def sum2PP(root, P_, dP_, fd):  # sum links in Ps and Ps in PP
         L = P.latuple[-2]
         PP.area += L; PP.n += L  # no + P.derH.n: current links only?
         PP.latuple = [P+p for P,p in zip(PP.latuple[:-1],P.latuple[:-1])] + [[A+a for A,a in zip(PP.latuple[-1],P.latuple[-1])]]
+        
+        # if PP has 2 nodes, one of their link's nodes are negated, and hence resulting PP.iderH's d gets 0s. So PP.iderH should be summed from dP.derH instead? 
         if P.derH:
             PP.iderH.add_(P.derH)  # no separate extH, the links are unique here
         if isinstance(P, CP):

@@ -103,7 +103,7 @@ def agg_recursion(rroot, root, N_, rng=1, fagg=0):  # rng for sub+'rng+ only
     # rng+: comp nodes|links mediated by previously compared N|L -> N_|L_:
     N_,rng, Et = rng_node_(N_,Et,rng) if fagg else rng_link_(N_,Et)
 
-    node_t = form_graph_t(root, N_, Et, rng)  # sub+ and feedback
+    node_t = form_graph_t(root, N_, Et, rng, root_fd=1-fagg)  # sub+ and feedback
     if node_t:
         for fd, node_ in enumerate(node_t):
             N_ = [n for n in node_ if n.derH.Et[0] > G_aves[fd] * n.derH.Et[2]]  # pruned node_
@@ -114,7 +114,8 @@ def agg_recursion(rroot, root, N_, rng=1, fagg=0):  # rng for sub+'rng+ only
                 if rroot and root.derH:
                     rroot.fback_t[fd] += [root.derH]  # each fork in agg+ fback_t sums both forks of sub+ fback_t
                     if all(len(f_) == len(node_) for f_ in rroot.fback_t):  # both sub+ forks end for all nodes
-                        feedback(rroot, fd, fsub=0)  # update root.root..
+                        # root fd should be 1=fagg here?
+                        feedback(rroot, root_fd=1-fagg, fsub=0)  # update root.root..
         root.node_[:] = node_t  # else keep root.node_
 
 
@@ -135,7 +136,7 @@ def rng_node_(N_, Et, rng=1):  # comp Gs|kernels in agg+, links | link rim_t nod
                     if g not in G_: G_ += [g]
     # def kernel rim per G:
     for G in G_:
-        G.krim = [[link.nodet[0] if link.nodet[1] is G else link.nodet[1]] for link in G.rim]
+        G.krim = [link.nodet[0] if link.nodet[1] is G else link.nodet[1] for link in G.rim]
         G.compared_=[] # reset
     rng = 1
     while True:  # rng+/ convolution, cross-comp: recursive center node DerH += linked node derHs for next loop
@@ -145,15 +146,25 @@ def rng_node_(N_, Et, rng=1):  # comp Gs|kernels in agg+, links | link rim_t nod
                 if _G in G.compared_: continue
                 G.compared_ += [_G]
                 _G.compared_ += [G]
-                dderH = _G.derH.comp_(G.derH)
+                if G.derH and _G.derH: derH, _derH = G.derH, _G.derH  # G.derH is empty in the first rng+, use iderH instead?
+                else:                  derH, _derH = G.iderH, _G.iderH         
+                dderH = _derH.comp_(derH, dderH=CH(), rn=1, fagg=1, flat=1)
                 if dderH.Et[0] > ave * dderH.Et[2]:
                     for g in _G,G:   # bilateral assign
-                        g.DerH.H[-1].add_(dderH, irdnt=dderH.H[-1].Et[2:]) if len(g.DerH.H)==rng else g.DerH.append_(dderH,flat=0)
-            if G.DerH.Et[0] - G.Et[0] > ave:
-                _G_ += [G]  # Gs with > ave value update per rng+
+                        # irdnt should be dderH.Et because dderH is corresponding to DerH.H[-1]
+                        g.DerH.H[-1].add_(dderH, irdnt=dderH.Et[2:]) if len(g.DerH.H)==rng else g.DerH.append_(dderH,flat=0)
+
+            # we can use last layer of H's Et - second last layer of H's Et?
+            if G.DerH:
+                if len(G.DerH.H)>1:  # at least 2 layers: rng >1
+                    _M, M = G.DerH.H[-2].Et[0], G.DerH.H[-1].Et[0]
+                else:
+                    _M, M = G.iderH.Et[0], G.DerH.Et[0]
+                if M - _M > ave:
+                    _G_ += [G]  # Gs with > ave value update per rng+
         if _G_:
             for G in _G_:
-                G.compared_=[]; G.Et = G.DerH.Et  # G.Et stores last rng+ results
+                G.compared_=[]  #; G.Et = G.DerH.Et  # G.Et stores last rng+ results (this should be not needed if we use G.DerH.H[-1].Et)
             rng += 1; G_ = _G_
         else:
             break
@@ -262,7 +273,7 @@ def comp_ext(_L,L,_S,S,_A,A):  # compare non-derivatives:
     return [M,D,mrdn,drdn], [mdec,ddec], [mL,dL, mS,dS, mA,dA]
 
 
-def form_graph_t(root, N_, Et, rng):  # segment N_ to Nm_, Nd_
+def form_graph_t(root, N_, Et, rng, root_fd):  # segment N_ to Nm_, Nd_
 
     node_t = []
     for fd in 0,1:
@@ -281,7 +292,7 @@ def form_graph_t(root, N_, Et, rng):  # segment N_ to Nm_, Nd_
                 else:
                     root.fback_t[fd] += [graph.derH]  # sub+ fb -> root formed by intermediate agg+, -> original root
                     if all(len(f_) == len(graph_) for f_ in root.fback_t):  # both forks of sub+ end for all nodes
-                        feedback(root, fd)  # graph_ is new root.node_:
+                        feedback(root, root_fd=root_fd)  # graph_ is new root.node_:
             node_t += [graph_]  # may be empty
         else:
             node_t += [[]]
