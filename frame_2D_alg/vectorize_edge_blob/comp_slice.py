@@ -139,7 +139,7 @@ class CH(CBase):  # generic derivation hierarchy with variable nesting
 
     def __bool__(H): return H.n != 0
 
-    def add_(HE, He, irdnt=None):  # unpack down to numericals and sum them, abs ds if fabs
+    def add_(HE, He, irdnt=None, fabs=0):  # unpack down to numericals and sum them, abs ds if fabs
 
         if irdnt is None: irdnt = []
         if HE:
@@ -152,7 +152,7 @@ class CH(CBase):  # generic derivation hierarchy with variable nesting
                     H += [Lay]
                 HE.H = H
             else:
-                HE.H = [V+v for V,v in zip_longest(HE.H, He.H, fillvalue=0)]  # both Hs are md_s
+                HE.H = [abs(V)+abs(v) if fabs else V+v for V,v in zip_longest(HE.H, He.H, fillvalue=0)]  # both Hs are md_s
             # default:
             HE.Et = np.add(HE.Et, He.Et); HE.relt = np.add(HE.relt, He.relt)
             if any(irdnt): HE.Et[2:] = [E+e for E,e in zip(HE.Et[2:], irdnt)]
@@ -160,10 +160,23 @@ class CH(CBase):  # generic derivation hierarchy with variable nesting
         else:
             HE.copy(He)  # initialization
 
+    
+    def recursive_abs(He):
+        ''' recursively change He's d into absolute value '''
+        
+        for i, H in enumerate(He.H):
+            if isinstance(H, CH):
+                H.recursive_abs()  # recursively check H
+            else:  # numerical
+                if i % 2:  # d
+                    He.H[i] = abs(H)
+
     def append_(HE,He, irdnt=None, flat=0, fabs=0):
 
         if irdnt is None: irdnt = []
-        if flat: HE.H += deepcopy(He.H)  # append flat
+        He = deepcopy(He)
+        if fabs: He.recursive_abs()  # change all ds to absolute value recursively?
+        if flat: HE.H += He.H  # append flat
         else:    HE.H += [He]  # append nested
         Et, et = HE.Et, He.Et
         HE.Et = np.add(HE.Et, He.Et); HE.relt = np.add(HE.relt, He.relt)
@@ -365,7 +378,7 @@ def sum2PP(root, P_, dP_, fd):  # sum links in Ps and Ps in PP
     for dP in dP_:
         if dP.node_[0] not in P_ or dP.node_[1] not in P_: continue
         if dP.derH:
-            if not isinstance(P_[0], CdP):
+            if not isinstance(P_[0], CdP):  # why we need this check? If node is CdP, it should be the same too?
                 dP.node_[1].derH.add_(dP.derH, iRt)  # add in lower node only
         PP.link_ += [dP]
         if fd: dP.root = PP
@@ -377,9 +390,7 @@ def sum2PP(root, P_, dP_, fd):  # sum links in Ps and Ps in PP
     for P in P_:
         L = P.latuple[-2]
         PP.area += L; PP.n += L  # no + P.derH.n: current links only?
-        PP.latuple = [P+p for P,p in zip(PP.latuple[:-1],P.latuple[:-1])] + [[A+a for A,a in zip(PP.latuple[-1],P.latuple[-1])]]
-        
-        # if PP has 2 nodes, one of their link's nodes are negated, and hence resulting PP.iderH's d gets 0s. So PP.iderH should be summed from dP.derH instead? 
+        PP.latuple = [P+p for P,p in zip(PP.latuple[:-1],P.latuple[:-1])] + [[A+a for A,a in zip(PP.latuple[-1],P.latuple[-1])]] 
         if P.derH:
             PP.iderH.add_(P.derH)  # no separate extH, the links are unique here
         if isinstance(P, CP):

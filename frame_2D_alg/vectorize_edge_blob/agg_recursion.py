@@ -134,7 +134,9 @@ def rng_node_(N_, Et, rng=1):  # comp Gs|kernels in agg+, links | link rim_t nod
             if comp_N(Link, Et):
                 for g in _G,G:
                     if g not in G_: G_ += [g]
-                    g.DerH.add_(Link.derH)  # init kernel ders
+                    if g.DerH: g.DerH.H[-1].add_(Link.derH, fabs=1)  # accumulate kernel ders
+                    else:      g.DerH.append_(Link.derH, flat=0, fabs=1)  # init kernel ders: pack Link.derH as new DerH layer
+
     # def kernel rim per G:
     for G in G_:
         G.krim = [link.nodet[0] if link.nodet[1] is G else link.nodet[1] for link in G.rim]
@@ -147,12 +149,13 @@ def rng_node_(N_, Et, rng=1):  # comp Gs|kernels in agg+, links | link rim_t nod
                 if _G in G.compared_: continue
                 G.compared_ += [_G]
                 _G.compared_ += [G]
-                dderH = _G.DerH.H[-1].comp_(G.DerH.H[-1], rn=1, fagg=1, flat=1)
+                dderH = _G.DerH.H[-1].comp_(G.DerH.H[-1], dderH=CH(), rn=1, fagg=1, flat=1)
                 if dderH.Et[0] > ave * dderH.Et[2]:
                     for g in _G,G:  # bilateral assign
-                        g.DerH.H[-1].add_(dderH) if len(g.DerH.H)==rng else g.DerH.append_(dderH,flat=0)
+                        g.DerH.H[-1].add_(dderH) if len(g.DerH.H)==rng+1 else g.DerH.append_(dderH,flat=0)  # should be rng + 1 here because g.DerH is not empty initially
             # eval update to continue rng+/G:
-            if G.DerH.H[-1].Et[0] - G.DerH.H[-2].Et[0] > ave:
+            # we need to check if size of G.derH.H > rng, else it's not added with new DerH layer and se should just skip it
+            if len(G.DerH.H)>rng and G.DerH.H[-1].Et[0] - G.DerH.H[-2].Et[0] > ave:
                 _G_ += [G]
         if _G_:
             for G in _G_: G.compared_ = []
