@@ -111,9 +111,10 @@ def agg_recursion(rroot, root, N_, rng=1, fagg=0):  # rng for sub+'rng+ only
                 # agg+ / node_t, vs. sub+ / node_, always rng+:
                 agg_recursion(rroot, root, N_, fagg=1)
                 if rroot and root.derH:
+                    # in der++, rroot may contain prior der+ added fbacks, i think we need a separated fback_t per both agg+ and sub+
                     rroot.fback_t[fd] += [root.derH]  # each fork in agg+ fback_t sums both forks of sub+ fback_t
-                    if all(len(f_) == len(node_) for f_ in rroot.fback_t):  # both sub+ forks end for all nodes
-                        feedback(rroot, root_fd=1-fagg, fsub=0)  # update root.root..
+                    if fd:  # after both forks are added with fbacks
+                        feedback(rroot, root_fd=1-fagg, fsub=0)  # update root.root.. (sorry, this feedback is per node_ and per fd, so there's no need to check size)
         root.node_[:] = node_t  # else keep root.node_
 
 
@@ -310,8 +311,8 @@ def segment_N_(root, iN_, fd, rng):
     max_ = []
     for N in iN_:
         # init graphts:
-        rim = N.rim if isinstance(N,CG) else [L for rimt in N.rimt_ for rim in rimt for L in rim]  # flatten rim_t
-        _N_t = [[_N for L, rev in rim for _N in L.nodet if _N is not N], [N]]  # [ext_N_, int_N_]
+        rim = [Lt[0] for Lt in N.rim] if isinstance(N,CG) else [Lt[0] for rimt in N.rimt_ for rim in rimt for Lt in rim]  # flatten rim_t
+        _N_t = [[_N for L in rim for _N in L.nodet if _N is not N], [N]]  # [ext_N_, int_N_]
         # node_, link_, Lrim, Nrim_t, Et:
         Gt = [[N],[],copy(rim),_N_t,[0,0,0,0]]
         N.root = Gt
@@ -325,7 +326,7 @@ def segment_N_(root, iN_, fd, rng):
     for Gt in max_ if max_ else N_:
         node_, link_, Lrim, Nrim_t, Et = Gt
         Nrim = Nrim_t[0]
-        for _Gt, (_L,rev) in zip(Nrim, Lrim):
+        for _Gt, _L in zip(Nrim, Lrim):
             if _Gt not in N_:
                 continue  # was merged
             oL_ = set(Lrim).intersection(set(_Gt[2])).union([_L])  # shared external links + potential _L # oL_ = [Lr[0] for Lr in _Gt[2] if Lr in Lrim]
@@ -408,7 +409,7 @@ def comp_N_(_node_, node_):  # compare partial graphs in merge
 def sum2graph(root, grapht, fd, rng):  # sum node and link params into graph, aggH in agg+ or player in sub+
 
     G_, Link_, _, _, Et = grapht
-    graph = CG(fd=fd, node_=G_,link_=[linkt[0] for linkt in Link_], rng=rng, Et=Et)
+    graph = CG(fd=fd, node_=G_,link_=Link_, rng=rng, Et=Et)
     if fd: graph.root = root
     extH = CH()
     yx = [0,0]
