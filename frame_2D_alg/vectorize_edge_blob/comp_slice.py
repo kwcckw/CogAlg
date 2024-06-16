@@ -53,7 +53,6 @@ class CcompSliceFrame(CsliceEdge):
                 for P in edge.P_:
                     P.derH = CH()
                     P.rim_ = []  # higher links for derH accum
-                    P._rim_ = []  # lower, to check if P is linked?
                 rng_recursion(edge)  # vertical, lateral-overlap P cross-comp -> PP clustering:
                 form_PP_t(edge, edge.P_)
                 # calls der+: PP P_,link_'replace, derH+ or rng++: PP.link_+
@@ -88,8 +87,8 @@ class CG(CBase):  # PP | graph | blob: params of single-fork node_ cluster
         G.alt_graph_ = []  # adjacent gap+overlap graphs, vs. contour in frame_graphs
         # dynamic attrs:
         G.Rim = []  # links to the most mediated nodes
-        G.fback_ = []  # feedback [[aggH,valt,rdnt,dect]] per node layer, maps to node_H
-        G.fback_t = [[],[]]
+        G.fback_ = []  # for PPs: no sub+'rng+
+        G.fback_t = [[],[]]  # feedback [[aggH,valt,rdnt,dect]] per fork node layer, maps to node_H
         G.compared_ = []
         # Rdn: int = 0  # for accumulation or separate recursion count?
         # it: list = z([None,None])  # graph indices in root node_s, implicitly nested
@@ -112,7 +111,6 @@ class CdP(CBase):  # produced by comp_P, comp_slice version of Clink
         l.latuple = [] if latuple is None else latuple  # sum node_
         l.yx = [0,0] if yx is None else yx  # sum node_
         l.rim = []  # upper link links in der+
-        l._rim = [] # lower link links
         l.derH = CH() if derH is None else derH
         l.root = None if root is None else root  # PPds containing dP
         l.nmed = 0  # comp rng: n of mediating Ps between node_ Ps
@@ -249,8 +247,8 @@ def rng_recursion(edge):  # similar to agg+ rng_recursion, but looping and conti
                         rng_link_ += [mlink]
                         if _P.rim_: pre_ += [dP.nodet[0] for dP in _P.rim_[-1]]  # connected __Ps
                         else:       pre_ += edge.pre__[_P]  # rng == 1
-                        # _P._rim_ += [mlink]  # not used? I guess so.
-            if pre_: Pt_ += [(P,pre_)]  # next P_ must have prelinks
+            # next P_ has prelinks:
+            if pre_: Pt_ += [(P,pre_)]
             if rng_link_: P.rim_ += [rng_link_]
 
         if not Pt_ or V <= ave * rng * len(Pt_) * 6:  # implied val of all __P_s, 6: len mtuple
@@ -272,7 +270,6 @@ def comp_link_(PP):  # node_- mediated: comp node.rim dPs
                 dlink = comp_P(_dP,dP)
                 if dlink:
                     dP.rim += [dlink]  # in lower node uplinks
-                    _dP._rim += [dlink]  # in upper node, not needed?
                     dlink_ += [dlink]
                     dlink.nmed = nmed  # link mediation order
 
@@ -354,6 +351,7 @@ def form_PP_t(root, P_):  # form PPs of dP.valt[fd] + connected Ps val
 
     root.node_ = PP_t  # nested in der+, add_alt_PPs_?
 
+
 def sum2PP(root, P_, dP_, fd):  # sum links in Ps and Ps in PP
 
     PP = CG(fd=fd, root=root, rng=root.rng+1)
@@ -362,7 +360,7 @@ def sum2PP(root, P_, dP_, fd):  # sum links in Ps and Ps in PP
     # += uplinks:
     for dP in dP_:
         if dP.nodet[0] not in P_ or dP.nodet[1] not in P_: continue
-        dP.nodet[1].derH.add_(dP.derH, iRt)  # add to lower node  (dp.derH shouldn't be empty?)
+        dP.nodet[1].derH.add_(dP.derH, iRt)  # add to lower node
         PP.link_ += [dP]
         if fd: dP.root = PP
         PP.A = np.add(PP.A,dP.angle)
