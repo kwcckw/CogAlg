@@ -121,8 +121,7 @@ def agg_recursion(rroot, root, N_, rng=1, fagg=0):  # rng for sub+'rng+ only
 def rng_node_(N_, Et, rng=1):  # comp Gs|kernels in agg+, links | link rim_t node rims in sub+
                                # ~ graph convolutional network without backprop
     G_ = []  # eval comp_N -> G_:
-    for link in list(combinations(N_,r=2)):
-        _G, G = link
+    for (_G, G) in list(combinations(N_,r=2)):
         if _G in G.compared_: continue
         dy,dx = np.subtract(_G.yx,G.yx)
         dist = np.hypot(dy,dx)
@@ -136,17 +135,20 @@ def rng_node_(N_, Et, rng=1):  # comp Gs|kernels in agg+, links | link rim_t nod
                     if g.DerH: g.DerH.H[-1].add_(Link.derH)  # accum last DerH layer
                     else:      g.DerH.append_(Link.derH, flat=0)  # init DerH layer with Link.derH
     # def kernel rim per G:
+    # krim can be packed inside comp_N
+    '''
     for G in G_:
         G.krim = [link.nodet[0] if link.nodet[1] is G else link.nodet[1] for link, rev in G.rim]
-        G.compared_ = []
+    '''
     rng = 1
     while True:  # rng+ convolution, cross-comp: recursive center node DerH += linked node derHs for next loop
         _G_ = []
-        for G in G_:
+        compared__ = [[] for _ in G_]  # we need local compared_, to prrevent G.compared_ get overwritten since we need it in sub+rng+
+        for G, compared_ in zip(G_, compared__):
             for _G in G.krim:
-                if _G in G.compared_: continue
-                G.compared_ += [_G]
-                _G.compared_ += [G]
+                if _G in compared_: continue
+                compared_ += [_G]
+                if _G in G_: compared__[G_.index(_G)] += [_G]
                 dderH = _G.DerH.H[-1].comp_(G.DerH.H[-1], dderH=CH(), rn=1, fagg=1, flat=1)  # comp last krims
                 if dderH.Et[0] > ave * dderH.Et[2]:
                     for g in _G,G:  # bilateral assign
@@ -155,14 +157,18 @@ def rng_node_(N_, Et, rng=1):  # comp Gs|kernels in agg+, links | link rim_t nod
             if len(G.DerH.H)>rng and G.DerH.H[-1].Et[0] - G.DerH.H[-2].Et[0] > ave:  # G.DerH may not be appended
                 _G_ += [G]
         if _G_:
-            for G in _G_: G.compared_ = []
             rng += 1; G_ = _G_
         else:
             break
+        
+    # since we pack new DerH to G now, we can just pack G.DerH as new layer in G.extH
     for G in G_:
         delattr(G, "krim")
+        G.extH.append_(G.DerH, flat=0)
+        '''
         for i, (link, rev) in enumerate(G.rim):
-            G.extH.add_(link.DerH) if i else G.extH.append_(link.DerH, flat=1)  # for segmentation
+            G.extH.add_(link.derH) if i else G.extH.append_(link.derH, flat=1)  # for segmentation
+        '''
 
     return N_, rng, Et
 
@@ -249,6 +255,7 @@ def comp_N(Link, iEt, rng=None, rev=None):  # rng,dir if fd, Link+=dderH, compar
                     node.rimt_ += [[[[Link,rev]],[]]] if dir else [[[],[[Link,rev]]]]  # add rng layer
             else:
                 node.rim += [[Link,rev]]
+                node.krim += [_N if N is node else N]  # kernel rim per G
         return True
 
 def comp_ext(_L,L,_S,S,_A,A):  # compare non-derivatives:

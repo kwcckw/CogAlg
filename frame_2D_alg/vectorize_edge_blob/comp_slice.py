@@ -90,6 +90,7 @@ class CG(CBase):  # PP | graph | blob: params of single-fork node_ cluster
         G.fback_ = []  # for PPs: no sub+'rng+
         G.fback_t = [[],[]]  # feedback [[aggH,valt,rdnt,dect]] per fork node layer, maps to node_H
         G.compared_ = []
+        G.krim = []  # kernel rim per G, temporary in rng_node_ only
         # Rdn: int = 0  # for accumulation or separate recursion count?
         # it: list = z([None,None])  # graph indices in root node_s, implicitly nested
         # depth: int = 0  # n sub_G levels over base node_, max across forks
