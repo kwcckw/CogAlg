@@ -95,6 +95,7 @@ def vectorize_root(image):  # vectorization in 3 composition levels of xcomp, cl
             if any(node_t):
                 edge.node_ = node_t; edge.link_ = link_t
 
+# need to work out nested feedback and batch cross-comp per rroot:
 
 def agg_recursion(rroot, root, N_, rng=1, fagg=0):  # rng for sub+'rng+ only
 
@@ -111,10 +112,9 @@ def agg_recursion(rroot, root, N_, rng=1, fagg=0):  # rng for sub+'rng+ only
                 # agg+ / node_t, vs. sub+ / node_, always rng+:
                 agg_recursion(rroot, root, N_, fagg=1)
                 if rroot and root.derH:
-                    # in der++, rroot may contain prior der+ added fbacks, i think we need a separated fback_t per both agg+ and sub+
                     rroot.fback_t[fd] += [root.derH]  # each fork in agg+ fback_t sums both forks of sub+ fback_t
-                    if fd:  # after both forks are added with fbacks
-                        feedback(rroot, root_fd=1-fagg, fsub=0)  # update root.root.. (sorry, this feedback is per node_ and per fd, so there's no need to check size)
+                    if all(len(f_) == len(node_) for f_ in rroot.fback_t):  # both sub+ forks end for all nodes
+                        feedback(rroot, root_fd=1-fagg, fsub=0)  # update root.root..
         root.node_[:] = node_t  # else keep root.node_
 
 
@@ -125,7 +125,7 @@ def rng_node_(N_, Et, rng=1):  # comp Gs|kernels in agg+, links | link rim_t nod
         if _G in G.compared_: continue
         dy,dx = np.subtract(_G.yx,G.yx)
         dist = np.hypot(dy,dx)
-        aRad = (G.aRad+_G.aRad) /2  # ave radius to eval relative distance between G centers:
+        aRad = (G.aRad+_G.aRad) / 2  # ave radius to eval relative distance between G centers:
         if dist / max(aRad,1) <= max_dist * rng:
             G.compared_ += [_G]; _G.compared_ += [G]
             Link = Clink(nodet=[_G,G], span=dist, angle=[dy,dx], box=extend_box(G.box,_G.box))
@@ -135,20 +135,15 @@ def rng_node_(N_, Et, rng=1):  # comp Gs|kernels in agg+, links | link rim_t nod
                     if g.DerH: g.DerH.H[-1].add_(Link.derH)  # accum last DerH layer
                     else:      g.DerH.append_(Link.derH, flat=0)  # init DerH layer with Link.derH
     # def kernel rim per G:
-    # krim can be packed inside comp_N
-    '''
     for G in G_:
         G.krim = [link.nodet[0] if link.nodet[1] is G else link.nodet[1] for link, rev in G.rim]
-    '''
     rng = 1
     while True:  # rng+ convolution, cross-comp: recursive center node DerH += linked node derHs for next loop
         _G_ = []
-        compared__ = [[] for _ in G_]  # we need local compared_, to prrevent G.compared_ get overwritten since we need it in sub+rng+
-        for G, compared_ in zip(G_, compared__):
+        for G in G_:
             for _G in G.krim:
-                if _G in compared_: continue
-                compared_ += [_G]
-                if _G in G_: compared__[G_.index(_G)] += [_G]
+                if _G in G.compared_: continue  # need to reset compared per intermediate rng+, nest in sub+'rng+?
+                G.compared_ += [_G]; _G.compared_ += [G]
                 dderH = _G.DerH.H[-1].comp_(G.DerH.H[-1], dderH=CH(), rn=1, fagg=1, flat=1)  # comp last krims
                 if dderH.Et[0] > ave * dderH.Et[2]:
                     for g in _G,G:  # bilateral assign
@@ -160,15 +155,9 @@ def rng_node_(N_, Et, rng=1):  # comp Gs|kernels in agg+, links | link rim_t nod
             rng += 1; G_ = _G_
         else:
             break
-        
-    # since we pack new DerH to G now, we can just pack G.DerH as new layer in G.extH
     for G in G_:
         delattr(G, "krim")
-        G.extH.append_(G.DerH, flat=0)
-        '''
-        for i, (link, rev) in enumerate(G.rim):
-            G.extH.add_(link.derH) if i else G.extH.append_(link.derH, flat=1)  # for segmentation
-        '''
+        G.extH.append_(G.DerH, flat=0)  # for segmentation
 
     return N_, rng, Et
 
@@ -255,7 +244,6 @@ def comp_N(Link, iEt, rng=None, rev=None):  # rng,dir if fd, Link+=dderH, compar
                     node.rimt_ += [[[[Link,rev]],[]]] if dir else [[[],[[Link,rev]]]]  # add rng layer
             else:
                 node.rim += [[Link,rev]]
-                node.krim += [_N if N is node else N]  # kernel rim per G
         return True
 
 def comp_ext(_L,L,_S,S,_A,A):  # compare non-derivatives:
@@ -416,7 +404,7 @@ def comp_N_(_node_, node_):  # compare partial graphs in merge
 def sum2graph(root, grapht, fd, rng):  # sum node and link params into graph, aggH in agg+ or player in sub+
 
     G_, Link_, _, _, Et = grapht
-    graph = CG(fd=fd, node_=G_,link_=Link_, rng=rng, Et=Et)
+    graph = CG(fd=fd, node_=G_,link_=[linkt[0] for linkt in Link_], rng=rng, Et=Et)
     if fd: graph.root = root
     extH = CH()
     yx = [0,0]
