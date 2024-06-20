@@ -73,7 +73,7 @@ def vectorize_root(image):  # vectorization in 3 composition levels of xcomp, cl
             # vertical, lateral-overlap P cross-comp -> PP clustering:
             rng_recursion(edge)
             form_PP_t(edge, edge.P_)  # calls der+: PP P_,link_'replace, derH+ or rng++: PP.link_+
-            node_t, link_t = [[],[]], [[],[]]
+            agg_node_t, link_t = [[],[]], [[],[]]
             for fd, node_ in enumerate(copy(edge.node_)):  # always node_t
                 if edge.iderH and any(edge.iderH.Et):   # any for np array
                     if edge.iderH.Et[fd] * (len(node_)-1)*(edge.rng+1) > G_aves[fd] * edge.iderH.Et[2+fd]:
@@ -88,56 +88,77 @@ def vectorize_root(image):  # vectorization in 3 composition levels of xcomp, cl
                                 PP.Et = [0,0,0,0]  # [] in comp_slice
                                 pruned_node_ += [PP]
                         if len(pruned_node_) > 10:  # discontinuous PP rng+ cross-comp, cluster -> G_t:
-                            node_t[fd] = pruned_node_
-                            agg_recursion(None, edge, N_=pruned_node_, fagg=1)
+                            node_t = form_node_t(edge, pruned_node_, rng=1, fagg=1)
+                            agg_recursion(None, edge, node_t, rng=1, fagg=1)
+                            agg_node_t[fd] = node_t
                             link_t[fd] = edge.link_
-            if any(node_t):
-                edge.node_ = node_t; edge.link_ = link_t
+            if any(agg_node_t):
+                edge.node_ = agg_node_t; edge.link_ = link_t
 
 # need to work out nested feedback and batch cross-comp per rroot:
 
-def agg_recursion(rroot, root, N_, rng=1, fagg=0):  # rng for sub+'rng+ only
+def form_node_t(root, N_, rng=1, fagg=0):  # rng for sub+'rng+ only
 
     Et = [0,0,0,0]
-    N_,Et = rng_node_(N_,Et,rng) if fagg else rng_link_(N_,Et)  # 1st call
+    N_,Et, _ = rng_node_(N_,Et,rng) if fagg else rng_link_(N_,Et)  # 1st call
     rng += fagg  # was incremented above
-    compr = 0
+    
     while True:  # comp recursion of either fork
-        if Et[0] > ave * Et[2]:      # init rng+ via convolution
-            N_,Et = rng_node_(N_,Et,rng) if isinstance(N_[0],CG) else rng_link_(N_,Et)
-            rng += 1; compr = 1
-        if Et[1] > ave*Et[3]:
-            N_ = list(set([linkt[0] for N in N_ for linkt in N.rim_[-1]]))  # links added in initial or recursive xcomp
-            add_der_attrs(link_= N_)
-            N_,Et = rng_link_(N_,Et)
-            compr = 1
-        if not compr: break  # no current comp value
         compr = 0
+        if Et[0] > ave * Et[2]:      # init rng+ via convolution
+            N_,Et, rng_compr = rng_node_(N_,Et,rng) if isinstance(N_[0],CG) else rng_link_(N_,Et)
+            rng += 1; compr += rng_compr
+        if Et[1] > ave*Et[3]:
+            if isinstance(N_[0], CG): N_ = list(set([linkt[0] for N in N_ for linkt in N.rim]))  # links added in initial or recursive xcomp
+            else:                     N_ = list(set([linkt[0] for N in N_ for linkt in N.rimt_[-1][0]+N.rimt_[-1][1]]))
+            add_der_attrs(link_= N_)
+            N_,Et,der_compr = rng_link_(N_,Et)
+            compr += der_compr
+        if not compr: break  # no current comp value  
+        
     node_t = form_graph_t(root, N_, Et, rng)  # sub+ and feedback
-    # for breadth-first agg+, move this out of sub+:
-    if node_t:
-        for fd, node_ in enumerate(node_t):
-            N_ = [n for n in node_ if n.derH.Et[0] > G_aves[fd] * n.derH.Et[2]]  # pruned node_
-            # comp val is proportional to n comparands:
-            if root.derH.Et[0] * ((len(N_)-1)*root.rng) > G_aves[1]*root.derH.Et[2]:
-                # agg+ / node_t, vs. sub+ / node_, always rng+:
-                agg_recursion(rroot, root, N_, fagg=1)
-                if rroot: rroot.fback_t[fd] += [root.derH]  # each fork in agg+ fback_t sums both forks of sub+ fback_t
-        if rroot and rroot.fback_: feedback(rroot, fsub=0)
-        root.node_[:] = node_t  # else keep root.node_
+
+    return node_t
+
+def agg_recursion(rroot, root, node_t, rng, fagg):  # rng for sub+'rng+ only
+
+    agg_node_t_ = []
+    for fd, node_ in enumerate(node_t):
+        N_ = [n for n in node_ if n.derH.Et[0] > G_aves[fd] * n.derH.Et[2]]  # pruned node_
+        # comp val is proportional to n comparands:
+        if root.derH.Et[0] * ((len(N_)-1)*root.rng) > G_aves[1]*root.derH.Et[2]:
+            agg_node_t = form_node_t(root, N_, rng=rng, fagg=fagg)  # breadth-first sub+ per root in form_graph_t
+            agg_node_t_ += [agg_node_t]
+        else:
+            agg_node_t_ += [[]]
+
+    # breadth-first agg+
+    fback_t = [[],[]]
+    for fd, agg_node_t in enumerate(agg_node_t_):  # breadth-first agg+ per rroot and root 
+        # agg+ / node_t, vs. sub+ / node_, always rng+:
+        if agg_node_t:
+            agg_recursion(rroot, root, agg_node_t, rng=1, fagg=1)
+        fback_t[fd] += [root.derH]
+
+    if rroot and any(fback_t):   # after fbacks are added from both forks
+        rroot.fback_t = fback_t  # at this point fback_t from deeper recursion should be already popped and summed into rroot
+        feedback(rroot, fsub=0)  # each fork in agg+ fback_t sums both forks of sub+ fback_t
+    root.node_[:] = agg_node_t_   # else keep root.node_
+
 
 def rng_node_(N_, Et, rng):  # comp Gs|kernels in agg+, links | link rim_t node rims in sub+
                                # ~ graph convolutional network without backprop
-    G_ = []  # eval comp_N -> G_:
+    G_ = []; compr=0  # eval comp_N -> G_:
     for (_G, G) in list(combinations(N_,r=2)):
         if _G in G.compared_: continue
         dy,dx = np.subtract(_G.yx,G.yx)
         dist = np.hypot(dy,dx)
         aRad = (G.aRad+_G.aRad) / 2  # ave radius to eval relative distance between G centers:
         if dist / max(aRad,1) <= max_dist * rng:
+            compr = 1  # we need set compr here because there will be no comparison at all if all distance eval is false
             G.compared_ += [_G]; _G.compared_ += [G]
-            Link = Clink(nodet=[_G,G], span=dist, angle=[dy,dx], box=extend_box(G.box,_G.box), aRad=aRad)
-            if comp_N(Link, Et, rev=1 if isinstance(G, Clink) else None):  # in highder der+ rng++, G maybe a Clink
+            Link = Clink(nodet=[_G,G], span=dist, angle=[dy,dx], box=extend_box(G.box,_G.box))
+            if comp_N(Link, Et):  # in highder der+ rng++, G maybe a Clink
                 for g in _G,G:
                     if g not in G_: G_ += [g]
                     if g.DerH: g.DerH.H[-1].add_(Link.derH)  # accum last DerH layer
@@ -163,16 +184,18 @@ def rng_node_(N_, Et, rng):  # comp Gs|kernels in agg+, links | link rim_t node 
         if _G_:
             G_ = _G_
             for _G in _G_: _G.compared_ = []
+            rng += 1  # this is missed out?
         else:
             break
     for G in G_:
         delattr(G, "krim")
         G.extH.append_(G.DerH, flat=0)  # for segmentation
 
-    return N_, Et
+    return N_, Et, compr
 
 def rng_link_(N_, Et):  # comp Clinks: der+'rng+ in root.link_ rim_t node rims: directional and node-mediated link tracing
 
+    compr = 0
     _mN_t_ = [[[N.nodet[0]],[N.nodet[1]]] for N in N_]  # rim-mediating nodes
     L_ = N_[:]
     rng = 1
@@ -186,9 +209,10 @@ def rng_link_(N_, Et):  # comp Clinks: der+'rng+ in root.link_ rim_t node rims: 
                     for _L,_rev in rim:  # _L is reversed relative to its 2nd node
                         if _L is L or _L in L.compared_: continue
                         if not hasattr(_L,"rimt_"): add_der_attrs(link_=[_L])  # _L not in root.link_, same derivation
+                        compr = 1
                         L.compared_ += [_L]; _L.compared_ += [L]
                         dy,dx = np.subtract(_L.yx,L.yx)
-                        Link = Clink(nodet=[_L,L], span=np.hypot(dy,dx), angle=[dy,dx], box=extend_box(_L.box, L.box), aRad=(_L.aRad+L.aRad)/2)
+                        Link = Clink(nodet=[_L,L], span=np.hypot(dy,dx), angle=[dy,dx], box=extend_box(_L.box, L.box))
                         # L.rim_t += new Link
                         if comp_N(Link, Et, rng, rev^_rev):  # negate ds if only one L is reversed
                             # add rng+ mediating nodes to L, link order: nodet < L < rim_t, mN.rim || L
@@ -207,7 +231,7 @@ def rng_link_(N_, Et):  # comp Clinks: der+'rng+ in root.link_ rim_t node rims: 
         # Lt_ = [(L, mN_t) for L, mN_t in zip(L_, mN_t_) if any(mN_t)]
         # if Lt_: L_,_mN_t_ = map(list, zip(*Lt_))  # map list to convert tuple from zip(*)
 
-    return N_, Et
+    return N_, Et, compr
 
 
 def comp_N(Link, iEt, rng=None, rev=None):  # rng,dir if fd, Link+=dderH, comparand rim+=Link
@@ -273,6 +297,7 @@ def comp_ext(_L,L,_S,S,_A,A):  # compare non-derivatives:
 def form_graph_t(root, N_, Et, rng):  # segment N_ to Nm_, Nd_
 
     node_t = []
+    sub_node_t_t = [[],[]]; sub_root_t = [[],[]]
     for fd in 0,1:
         # der+: comp link via link.node_ -> dual trees of matching links in der+rng+, more likely but complex: higher-order links
         # rng+: distant M / G.M, less likely: term by >d/<m, but less complex
@@ -280,20 +305,32 @@ def form_graph_t(root, N_, Et, rng):  # segment N_ to Nm_, Nd_
             if not fd:
                 for G in N_: G.root = []  # only nodes have roots?
             graph_ = segment_N_(root, N_, fd, rng)
+            node_t += [graph_]  # may be empty
             for graph in graph_:
+                sub_root_t[fd] += [graph]
                 Q = graph.link_ if fd else graph.node_
                 if len(Q) > ave_L and graph.Et[fd] > G_aves[fd] * graph.Et[fd]:
                     if fd: add_der_attrs(Q)
-                    # else sub+rng+: comp Gs at distance < max_dist * rng+1:
-                    agg_recursion(root, graph, Q, rng+1, fagg=1-fd)  # graph.node_ is not node_t yet, rng for rng+ only
-            # all sub+ feedback:
-            for graph in graph_:
-                root.fback_t[fd] += [graph.derH]  # sub+ -> sub root -> init root
-            if fd: feedback(root)  # after fd: last fork
-            node_t += [graph_]  # may be empty
+                    sub_node_t = form_node_t(root=graph, N_=Q, rng=rng+1, fagg=0)
+                    sub_node_t_t[fd] += [sub_node_t]
+                else:
+                    sub_node_t_t[fd] += [[]]
         else:
             node_t += [[]]
+                    
+    # breadth-first sub+
+    fback_t = [[],[]]
+    for fd, (sub_node_t_, sub_root_) in enumerate(zip(sub_node_t_t, sub_root_t)):  
+        for sub_node_t, sub_root in zip(sub_node_t_, sub_root_):
+            if sub_node_t:  # non empty sub_node_t
+                # sub+rng+: comp Gs at distance < max_dist * rng+1:
+                agg_recursion(root, sub_root, sub_node_t, fagg=1-fd)      
+            fback_t[fd] += [sub_root.derH]  # sub+ -> sub root -> init root
 
+    if any(fback_t):  # after fbacks are added from both forks
+        root.fback_t = fback_t 
+        feedback(root)
+        
     return node_t
 
 def add_der_attrs(link_):
@@ -358,7 +395,7 @@ def merge(Gt, gt):
     n_,l_, lrim, nrim_t, et = gt
     N_ += n_
     L_ += l_  # internal, no overlap
-    Lrim += [lt[0] for lt in lrim if lt not in Lrim]  # exclude shared external links, direction doesn't matter?
+    Lrim[:] = list(set(Lrim + lrim)) # exclude shared external links, direction doesn't matter?
     Nrim_t[:] = [[G for G in nrim_t[0] if G not in Nrim_t[0]], list(set(Nrim_t[1] + nrim_t[1]))]  # exclude shared external nodes
     Et[:] = np.add(Et,et)
 
