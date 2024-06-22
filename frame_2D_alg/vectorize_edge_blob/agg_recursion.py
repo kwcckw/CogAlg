@@ -118,12 +118,13 @@ def agg_recursion(rroot, root, N_, rng=1, fagg=0):  # rng for sub+'rng+ only
         fback_t = [[],[]]
         for fd, node_ in zip((0,1), node_t):
             N_ = [n for n in node_ if n.derH.Et[0] > G_aves[fd] * n.derH.Et[2]]  # pruned node_
+            if rroot:  # each fork in agg+ fback_t sums both forks of sub+ fback_t:
+                fback_t[fd] += [deepcopy(root.derH)] if fd else [deepcopy(root.derH.H[-1])]  # from last rng+ only
+
             # comp val is proportional to n comparands:
             if root.derH.Et[0] * ((len(N_)-1)*root.rng) > G_aves[1]*root.derH.Et[2]:
                 # agg+ / node_t, vs. sub+ / node_, always rng+:
                 agg_recursion(rroot, root, N_, fagg=1)
-                if rroot:  # each fork in agg+ fback_t sums both forks of sub+ fback_t:
-                    fback_t[fd] += [root.derH] if fd else [root.derH[-1]]  # from last rng+ only
         if rroot and any(fback_t):
             rroot.fback_t = fback_t
             feedback(rroot, fsub=0)
@@ -152,6 +153,7 @@ def rng_node_(N_, Et, rng):  # comp Gs|kernels in agg+, links | link rim_t node 
         G.compared_ = []
         G.krim = [link.nodet[0] if link.nodet[1] is G else link.nodet[1] for link, rev in G.rim]
     n = 1  # n convolutions = DerH layers
+    iG_ = copy(G_)  # copy a list of G_ with added DerH
     while True:
         _G_ = []  # rng+ convolution, cross-comp: recursive center node DerH += linked node derHs for next loop:
         for G in G_:
@@ -171,8 +173,8 @@ def rng_node_(N_, Et, rng):  # comp Gs|kernels in agg+, links | link rim_t node 
             n += 1
         else:
             break
-    for G in G_:
-        delattr(G, "krim")
+    for G in iG_:  # should be iG_ here, or G_ before the rng+convolution   
+        delattr(G, "krim")  
         G.extH.append_(G.DerH, flat=0)  # for segmentation
 
     return N_, Et, fcomp
@@ -298,7 +300,7 @@ def form_graph_t(root, N_, Et, rng):  # segment N_ to Nm_, Nd_
     # all sub+ feedback, after fd fork because it may pop root.fback_t[0]:
     for fd, graph_ in enumerate(node_t):
         for graph in graph_:
-            root.fback_t[fd] += [graph.derH] if fd else [graph.derH[-1]]  # rng+ adds single new layer
+            root.fback_t[fd] += [graph.derH] if fd else [graph.derH.H[-1]]  # rng+ adds single new layer
             # sub+ -> sub root -> init root
     if any(root.fback_t): feedback(root)
 
