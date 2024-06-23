@@ -88,16 +88,17 @@ def vectorize_root(image):  # vectorization in 3 composition levels of xcomp, cl
                                 PP.Et = [0,0,0,0]  # [] in comp_slice
                                 pruned_node_ += [PP]
                         if len(pruned_node_) > 10:  # discontinuous PP rng+ cross-comp, cluster -> G_t:
-                            node_t[fd] = pruned_node_
                             agg_recursion(edge, N_=pruned_node_, fagg=1)
+                            node_t[fd] = edge.node_  # edge.node_ is current fork's node_t now
                             link_t[fd] = edge.link_
             if any(node_t):
-                edge.node_ = node_t; edge.link_ = link_t
+                edge.node_ = node_t; edge.link_ = link_t  # edge.node_ maybe node_tt here, each fork is a node_t
 
 def agg_recursion(root, N_, rng=1, fagg=0):  # rng for sub+'rng+ only
 
     Et = [0,0,0,0]
-    N_,Et,_ = rng_node_(N_,Et,rng) if fagg else rng_link_(N_,Et)  # 1st call
+    # should be check if N is CG instead? We might get Clink in both fagg=0 and fagg=1
+    N_,Et,_ = rng_node_(N_,Et,rng) if isinstance(N_[0], CG) else rng_link_(N_,Et)  # 1st call
     rng += fagg  # was incremented above
     fcompr,fcompd = 1,1
     while fcompr or fcompd:  # eval comp recursion per fork, while any last-loop comp
@@ -115,16 +116,15 @@ def agg_recursion(root, N_, rng=1, fagg=0):  # rng for sub+'rng+ only
     if node_t:
         fback_t = [[],[]]
         for fd, node_ in zip((0,1), node_t):
+            for node in node_: fback_t[fd] +=  [node.derH if fd else node.derH.H[-1]]  # should be per node_, instead of pruned node_?
             N_ = [n for n in node_ if n.derH.Et[0] > G_aves[fd] * n.derH.Et[2]]  # pruned node_
             # comp val is proportional to n comparands:
             if root.derH.Et[0] * ((len(N_)-1)*root.rng) > G_aves[1]*root.derH.Et[2]:
                 # agg+ / node_t, vs. sub+ / node_, always rng+:
                 agg_recursion(root, N_, fagg=1)
-                # each fork in agg+ fback_t sums both forks of sub+ fback_t:
-                fback_t[fd] += [root.derH] if fd else [root.derH[-1]]  # from last rng+ only
         if any(fback_t):
             root.fback_t = fback_t
-            feedback(root, fsub=0)
+            feedback(root, fsub=0)  # if we have merged fbacks, we might get different lower shared layers in derH, not sure 
         root.node_[:] = node_t  # else keep root.node_
 
 
@@ -132,7 +132,7 @@ def rng_node_(N_, Et, rng):  # comp Gs|kernels in agg+, links | link rim_t node 
                              # ~ graph convolutional network without backprop
     G_ = []
     fcomp=0
-    for (_G, G) in list(combinations(N_,r=2)):  # eval comp_N-> G_
+    for (_G, G) in list(combinations(N_[:10],r=2)):  # eval comp_N-> G_
         if _G in G.compared_: continue
         dy,dx = np.subtract(_G.yx,G.yx)
         dist = np.hypot(dy,dx)
@@ -297,7 +297,7 @@ def form_graph_t(root, N_, Et, rng):  # segment N_ to Nm_, Nd_
     # all sub+ feedback, after fd fork because it may pop root.fback_t[0]:
     for fd, graph_ in enumerate(node_t):
         for graph in graph_:
-            root.fback_t[fd] += [graph.derH] if fd else [graph.derH.H[-1]]  # rng+ adds single new layer
+            root.fback_t[fd] += [graph.derH] if fd else [graph.derH.H[-1]]  # rng+ adds single new layer (fback_t may get different shared layers)
             # sub+ -> sub root -> init root
     if any(root.fback_t): feedback(root)
 
@@ -445,6 +445,8 @@ def sum2graph(root, grapht, fd, rng):  # sum node and link params into graph, ag
         graph.S += link.span
         graph.A = np.add(graph.A,link.angle)  # np.add(graph.A, [-link.angle[0],-link.angle[1]] if rev else link.angle)
         if fd: link.root = graph
+    # if extH is empty here, skip them? Else we are packing extH with empty H
+    # extH may empty if it's a single G's graph
     graph.derH.append_(extH, flat=0)  # graph derH = node derHs + [summed Link_ derHs]
     if fd:
         # assign alt graphs from d graph, after both linked m and d graphs are formed
@@ -466,4 +468,4 @@ def feedback(root, fsub=1):  # called from form_graph_, append new der layers to
             DerH.add_(derH)
         if DerH.Et[fd] > G_aves[fd] * DerH.Et[fd+2]:  # merge combined DerH into root.derH
             if fsub: root.derH.append_(DerH, flat=1)  # append higher layers
-            else:    root.derH.add_(DerH)  # sum shared layers, append the rest
+            else:    root.derH.add_(DerH)  # sum shared layers, append the rest (shared layers may not be compatible here since we have fbacks from both forks?)
