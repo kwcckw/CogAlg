@@ -129,42 +129,63 @@ class CH(CBase):  # generic derivation hierarchy with variable nesting
     lay4: [[m,d], [md,dd], [[md1,dd1],[mdd,ddd]]]: 3 sLays, <=2 ssLays
     '''
     name = "H"
-    def __init__(He, n=0, Et=None, relt=None, H=None):
+    def __init__(He, n=0, Et=None, relt=None, H=None, root=None):
         super().__init__()
         # He.nest = nest  # nesting depth: -1/ ext, 0/ md_, 1/ derH, 2/ subH, 3/ aggH
         He.n = n  # total number of params compared to form derH, summed in comp_G and then from nodes in sum2graph
         He.Et = [0,0,0,0] if Et is None else Et   # evaluation tuple: valt, rdnt
         He.relt = [0,0] if relt is None else relt  # m,d relative to max possible m,d
         He.H = [] if H is None else H  # hierarchy of der layers or md_
+        He.root = None if root is None else root
 
     def __bool__(H): return H.n != 0
 
     def add_(HE, He, irdnt=None):  # unpack down to numericals and sum them
 
         if irdnt is None: irdnt = []
-        if HE:
-            if isinstance(HE.H[0], CH):
-                H = []
-                for Lay, lay in zip_longest(HE.H, He.H, fillvalue=None):
-                    if lay:  # to be summed
-                        if Lay is None: Lay = CH()
-                        Lay.add_(lay, irdnt)  # recursive unpack to sum md_s
-                    H += [Lay]
-                HE.H = H
+        if He:  # skip empty He, may possible in empty extH
+            if HE:
+                if isinstance(HE.H[0], CH):            
+                    if isinstance(He.H[0], CH):
+                        H = []
+                        for Lay, lay in zip_longest(HE.H, He.H, fillvalue=None):
+                            if lay is not None:  # to be summed  (if lay is empty CH, we need to skip or pack it? RIght now it's packing empty CH too)
+                                if Lay is None: Lay = CH()
+                                Lay.add_(lay, irdnt)  # recursive unpack to sum md_s
+                            H += [Lay]  # Lay must not be None too
+                        HE.H = H
+                    else:  # He is der_ext or der_latuple             
+                        for Lay in HE.H:
+                            if len(Lay.H) == len(He.H):
+                                Lay.add_(He, irdnt)
+                else:  # HE is der_ext or der_latuple
+                    if isinstance(He.H[0], CH):  # He.H is CHs
+                        for lay in He.H:
+                            if len(HE.H) == len(He.H):
+                                HE.H = [V+v for V,v in zip_longest(HE.H, He.H, fillvalue=0)]  # both Hs are md_s
+                            elif HE.root:
+                                HE.root.add_(He, irdnt)
+                        
+                    else:
+                        if len(HE.H) == len(He.H):  # same der_ext or der_latuple
+                            HE.H = [V+v for V,v in zip_longest(HE.H, He.H, fillvalue=0)]  # both Hs are md_s
+                        elif HE.root:  # sum with higher HE if 
+                            HE.root.add_(He, irdnt)
+    
+                # default:
+                HE.Et = np.add(HE.Et, He.Et); HE.relt = np.add(HE.relt, He.relt)
+                if any(irdnt): HE.Et[2:] = [E+e for E,e in zip(HE.Et[2:], irdnt)]
+                HE.n += He.n  # combined param accumulation span    
             else:
-                HE.H = [V+v for V,v in zip_longest(HE.H, He.H, fillvalue=0)]  # both Hs are md_s
-            # default:
-            HE.Et = np.add(HE.Et, He.Et); HE.relt = np.add(HE.relt, He.relt)
-            if any(irdnt): HE.Et[2:] = [E+e for E,e in zip(HE.Et[2:], irdnt)]
-            HE.n += He.n  # combined param accumulation span
-        else:
-            HE.copy(He)  # initialization
+                HE.copy(He)  # initialization
 
     def append_(HE,He, irdnt=None, flat=0):
 
         if irdnt is None: irdnt = []
         if flat: HE.H += deepcopy(He.H)  # append flat
         else:    HE.H += [He]  # append nested
+        for H in HE.H: 
+            if isinstance(H, CH): H.root = HE  # added root to access higher layer HE, skip mds
         Et, et = HE.Et, He.Et
         HE.Et = np.add(HE.Et, He.Et); HE.relt = np.add(HE.relt, He.relt)
         if irdnt: Et[2:4] = [E+e for E,e in zip(Et[2:4], irdnt)]

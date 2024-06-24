@@ -116,15 +116,15 @@ def agg_recursion(root, N_, rng=1, fagg=0):  # rng for sub+'rng+ only
     if node_t:
         fback_t = [[],[]]
         for fd, node_ in zip((0,1), node_t):
-            for node in node_: fback_t[fd] +=  [node.derH if fd else node.derH.H[-1]]  # should be per node_, instead of pruned node_?
             N_ = [n for n in node_ if n.derH.Et[0] > G_aves[fd] * n.derH.Et[2]]  # pruned node_
+            for N in N_: fback_t[fd] +=  [N.derH if fd else N.derH.H[-1]] 
             # comp val is proportional to n comparands:
             if root.derH.Et[0] * ((len(N_)-1)*root.rng) > G_aves[1]*root.derH.Et[2]:
                 # agg+ / node_t, vs. sub+ / node_, always rng+:
                 agg_recursion(root, N_, fagg=1)
         if any(fback_t):
             root.fback_t = fback_t
-            feedback(root, fsub=0)  # if we have merged fbacks, we might get different lower shared layers in derH, not sure 
+            feedback(root, fsub=0)
         root.node_[:] = node_t  # else keep root.node_
 
 
