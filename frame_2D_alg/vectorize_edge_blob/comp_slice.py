@@ -90,7 +90,6 @@ class CG(CBase):  # PP | graph | blob: params of single-fork node_ cluster
         G.fback_ = []  # for PPs: no sub+'rng+
         G.fback_t = [[],[]]  # feedback [[aggH,valt,rdnt,dect]] per fork node layer, maps to node_H
         G.compared_ = []
-        G.krim = []  # kernel rim per G, temporary in rng_node_ only
         # Rdn: int = 0  # for accumulation or separate recursion count?
         # it: list = z([None,None])  # graph indices in root node_s, implicitly nested
         # depth: int = 0  # n sub_G levels over base node_, max across forks
@@ -137,55 +136,34 @@ class CH(CBase):  # generic derivation hierarchy with variable nesting
         He.relt = [0,0] if relt is None else relt  # m,d relative to max possible m,d
         He.H = [] if H is None else H  # hierarchy of der layers or md_
         He.root = None if root is None else root
-
     def __bool__(H): return H.n != 0
 
     def add_(HE, He, irdnt=None):  # unpack down to numericals and sum them
 
         if irdnt is None: irdnt = []
-        if He:  # skip empty He, may possible in empty extH
-            if HE:
-                if isinstance(HE.H[0], CH):            
-                    if isinstance(He.H[0], CH):
-                        H = []
-                        for Lay, lay in zip_longest(HE.H, He.H, fillvalue=None):
-                            if lay is not None:  # to be summed  (if lay is empty CH, we need to skip or pack it? RIght now it's packing empty CH too)
-                                if Lay is None: Lay = CH()
-                                Lay.add_(lay, irdnt)  # recursive unpack to sum md_s
-                            H += [Lay]  # Lay must not be None too
-                        HE.H = H
-                    else:  # He is der_ext or der_latuple             
-                        for Lay in HE.H:
-                            if len(Lay.H) == len(He.H):
-                                Lay.add_(He, irdnt)
-                else:  # HE is der_ext or der_latuple
-                    if isinstance(He.H[0], CH):  # He.H is CHs
-                        for lay in He.H:
-                            if len(HE.H) == len(He.H):
-                                HE.H = [V+v for V,v in zip_longest(HE.H, He.H, fillvalue=0)]  # both Hs are md_s
-                            elif HE.root:
-                                HE.root.add_(He, irdnt)
-                        
-                    else:
-                        if len(HE.H) == len(He.H):  # same der_ext or der_latuple
-                            HE.H = [V+v for V,v in zip_longest(HE.H, He.H, fillvalue=0)]  # both Hs are md_s
-                        elif HE.root:  # sum with higher HE if 
-                            HE.root.add_(He, irdnt)
-    
-                # default:
-                HE.Et = np.add(HE.Et, He.Et); HE.relt = np.add(HE.relt, He.relt)
-                if any(irdnt): HE.Et[2:] = [E+e for E,e in zip(HE.Et[2:], irdnt)]
-                HE.n += He.n  # combined param accumulation span    
+        if HE:
+            if isinstance(HE.H[0], CH):
+                H = []
+                for Lay, lay in zip_longest(HE.H, He.H, fillvalue=None):
+                    if lay:  # to be summed
+                        if Lay is None: Lay = deepcopy(lay)
+                        else: Lay.add_(lay, irdnt)  # recursive unpack to sum md_s
+                    H += [Lay]
+                HE.H = H
             else:
-                HE.copy(He)  # initialization
+                HE.H = [V+v for V,v in zip_longest(HE.H, He.H, fillvalue=0)]  # both Hs are md_s
+            # default:
+            HE.Et = np.add(HE.Et, He.Et); HE.relt = np.add(HE.relt, He.relt)
+            if any(irdnt): HE.Et[2:] = [E+e for E,e in zip(HE.Et[2:], irdnt)]
+            HE.n += He.n  # combined param accumulation span
+        else:
+            HE.copy(He)  # initialization
 
     def append_(HE,He, irdnt=None, flat=0):
 
         if irdnt is None: irdnt = []
         if flat: HE.H += deepcopy(He.H)  # append flat
         else:    HE.H += [He]  # append nested
-        for H in HE.H: 
-            if isinstance(H, CH): H.root = HE  # added root to access higher layer HE, skip mds
         Et, et = HE.Et, He.Et
         HE.Et = np.add(HE.Et, He.Et); HE.relt = np.add(HE.relt, He.relt)
         if irdnt: Et[2:4] = [E+e for E,e in zip(Et[2:4], irdnt)]
@@ -258,15 +236,13 @@ def rng_recursion(edge):  # similar to agg+ rng_recursion, but looping and conti
             rng_link_ = []; pre_ = []  # per rng+
             for _P in _pre_:  # prelinks
                 _y,_x = _P.yx; y,x = P.yx
-                angle = np.subtract([y,x],[_y,_x]) # dy,dx between node centers
-                distance = np.hypot(*angle)  # between node centers
-                # or rng * ((P.val+_P.val)/ ave_rval)?:
-                if distance <= rng:
+                dy,dx = np.subtract([y,x],[_y,_x]) # dy,dx between node centers
+                if abs(dy)+abs(dx) <= rng*2:  # <max Manhattan distance
                     if len(_P.rim_) < rng-1: continue
-                    mlink = comp_P(_P,P, angle,distance)
-                    if mlink:  # return if match
-                        V += mlink.derH.Et[0]
-                        rng_link_ += [mlink]
+                    link = comp_P(_P,P, angle=[dy,dx], distance=np.hypot(dy,dx))
+                    if link and link.derH.Et[0] > aves[0]*link.derH.Et[2]:  # mlink
+                        V += link.derH.Et[0]
+                        rng_link_ += [link]
                         if _P.rim_: pre_ += [dP.nodet[0] for dP in _P.rim_[-1]]  # connected __Ps. Misses 2 cases of __P
                         else:       pre_ += edge.pre__[_P]  # rng == 1
             # next P_ has prelinks:
@@ -284,17 +260,14 @@ def rng_recursion(edge):  # similar to agg+ rng_recursion, but looping and conti
 
 def comp_link_(PP):  # node_- mediated: comp node.rim dPs
 
-    dlink_ = []
     for dP in PP.link_:
-       for nmed, _rim_ in enumerate(dP.nodet[0].rim_):  # link.node_ is CP in 1st der+
-           # add fork for CdP node_?
-            for _dP in _rim_:
-                dlink = comp_P(_dP,dP)
-                if dlink:
-                    dP.rim += [dlink]  # in lower node uplinks
-                    dlink_ += [dlink]
-                    dlink.nmed = nmed  # link mediation order
-
+        if dP.derH.Et[1] > aves[1]:
+           for nmed, _rim_ in enumerate(dP.nodet[0].rim_):  # link.nodet is CP in 1st der+
+               for _dP in _rim_:    # add fork for CdP node_?
+                   dlink = comp_P(_dP,dP)
+                   if dlink:
+                       dP.rim += [dlink]  # in lower node uplinks
+                       dlink.nmed = nmed  # link mediation order0
 
 def comp_P(_P,P, angle=None, distance=None):  # comp dPs if fd else Ps
 
@@ -318,14 +291,13 @@ def comp_P(_P,P, angle=None, distance=None):  # comp dPs if fd else Ps
         derH = CH(Et=[vm,vd,rm,rd],H=H,n=n)
         _y,_x = _P.yx; y,x = P.yx
     # get aves:
-    yx = [(_c+c)/2 for _c,c in zip((_y,_x),(y,x))]
+    yx = (_y+y)/2,(_x+x)/2
     latuple = [(P+p)/2 for P,p in zip(_P.latuple[:-1],P.latuple[:-1])] + [[(A+a)/2 for A,a in zip(_P.latuple[-1],P.latuple[-1])]]
 
-    link = CdP(nodet=[_P,P],derH=derH, angle=angle, span=distance, yx=yx, latuple=latuple)
-    if link.derH.Et[0] > aveP * link.derH.Et[2]:  # always rng+? (vm > aveP * rm)
+    link = CdP(nodet=[_P,P], derH=derH, angle=angle, span=distance, yx=yx, latuple=latuple)
+    # if v > ave * r: valuable links only
+    if link.derH.Et[0] > aves[0] * link.derH.Et[2] or link.derH.Et[1] > aves[1] * link.derH.Et[3]:
         return link
-
-# not revised below:
 
 def form_PP_t(root, P_):  # form PPs of dP.valt[fd] + connected Ps val
 
@@ -338,28 +310,26 @@ def form_PP_t(root, P_):  # form PPs of dP.valt[fd] + connected Ps val
         link_ = [link for rim in P.nodet[0].rim_ for link in rim] if hasattr(P,"rim") else [link for rim in P.rim_ for link in rim]
         # get upper links from all rngs of CP.rim_ | CdP.rim
         for link in link_:
-            if isinstance(link.derH.H[0],CH): m,d,mr,dr = link.derH.H[-1].Et  # last der+ layer vals
-            else:                             m,d,mr,dr = link.derH.Et  # H is md_
+            m,d,mr,dr = link.derH.H[-1].Et if isinstance(link.derH.H[0],CH) else link.derH.Et  # H is md_; last der+ layer vals
+            _P = [link.nodet[1] if link.nodet[0] is P else link.nodet[0]]
             if m >= ave * mr:
-                mlink_+= [link]; _mP_+= [link.nodet[1] if link.nodet[0] is P else link.nodet[0]]
+                mlink_+= [link]; _mP_+= [_P]
             if d > ave * dr:  # ?link in both forks?
-                dlink_+= [link]; _dP_+= [link.nodet[1] if link.nodet[0] is P else link.nodet[0]]
+                dlink_+= [link]; _dP_+= [_P]
         # aligned
     for fd, (Link_,_P__) in zip((0,1),((mLink_,_mP__),(dLink_,_dP__))):
         CP_ = []  # all clustered Ps
         for P in P_:
             if P in CP_: continue  # already packed in some sub-PP
-            cP_, clink_ = [P], []  # cluster per P
-            if P in P_:
-                P_index = P_.index(P)
-                clink_ += Link_[P_index]
-                perimeter = deque(_P__[P_index])  # recycle with breadth-first search, up and down:
-                while perimeter:
-                    _P = perimeter.popleft()
-                    if _P in cP_ or _P in CP_ or _P not in P_: continue  # clustering is exclusive
-                    cP_ += [_P]
-                    clink_ += Link_[P_.index(_P)]
-                    perimeter += _P__[P_.index(_P)]  # extend P perimeter with linked __Ps
+            P_index = P_.index(P)
+            cP_, clink_ = [P], [*Link_[P_index]]  # cluster per P
+            perimeter = deque(_P__[P_index])  # recycle with breadth-first search, up and down:
+            while perimeter:
+                _P = perimeter.popleft()
+                if _P in cP_ or _P in CP_ or _P not in P_: continue  # clustering is exclusive
+                cP_ += [_P]
+                clink_ += Link_[P_.index(_P)]
+                perimeter += _P__[P_.index(_P)]  # extend P perimeter with linked __Ps
             PP = sum2PP(root, cP_, clink_, fd)
             PP_t[fd] += [PP]
             CP_ += cP_
