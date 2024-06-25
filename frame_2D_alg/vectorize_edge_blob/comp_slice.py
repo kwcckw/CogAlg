@@ -311,7 +311,7 @@ def form_PP_t(root, P_):  # form PPs of dP.valt[fd] + connected Ps val
         # get upper links from all rngs of CP.rim_ | CdP.rim
         for link in link_:
             m,d,mr,dr = link.derH.H[-1].Et if isinstance(link.derH.H[0],CH) else link.derH.Et  # H is md_; last der+ layer vals
-            _P = [link.nodet[1] if link.nodet[0] is P else link.nodet[0]]
+            _P = link.nodet[1] if link.nodet[0] is P else link.nodet[0]  # additional bracket here is not needed, it's not a list
             if m >= ave * mr:
                 mlink_+= [link]; _mP_+= [_P]
             if d > ave * dr:  # ?link in both forks?
