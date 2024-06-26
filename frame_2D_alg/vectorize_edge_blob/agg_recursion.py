@@ -121,12 +121,12 @@ def agg_recursion(root, N_, rng=1, fagg=0):  # rng for sub+'rng+ only
             if root.derH.Et[0] * (max(0,(len(N_)-1)*root.rng)) > G_aves[1]*root.derH.Et[2]:
                 # agg+ / node_t, vs. sub+ / node_, always rng+:
                 agg_recursion(root, N_, fagg=1)
-                for N in root.node_t[0]+root.node_t[1]: fback_t[fd] += [N.derH if fd else N.derH.H[-1]]
+                # for N in root.node_[0]+root.node_[1]: fback_t[fd] += [N.derH if fd else N.derH.H[-1]]
             else:  # feedback per subroot if any, else pruned node
                 for N in N_: fback_t[fd] += [N.derH if fd else N.derH.H[-1]]
-        if any(fback_t):
-            root.fback_t = fback_t
-            feedback(root, fsub=0)
+                if fd and any(fback_t):
+                    root.fback_t = fback_t
+                    feedback(root, fsub=0)
         root.node_[:] = node_t  # else keep root.node_
 
 def rng_node_(N_, Et, rng):  # comp Gs|kernels in agg+, links | link rim_t node rims in sub+
@@ -140,7 +140,7 @@ def rng_node_(N_, Et, rng):  # comp Gs|kernels in agg+, links | link rim_t node 
         aRad = (G.aRad+_G.aRad) / 2  # ave radius to eval relative distance between G centers:
         if dist / max(aRad,1) <= max_dist * rng:
             fcomp = 1; G.compared_ += [_G]; _G.compared_ += [G]
-            Link = Clink(nodet=[_G,G], span=dist, angle=[dy,dx], box=extend_box(G.box,_G.box))
+            Link = Clink(nodet=[_G,G], span=2, angle=[dy,dx], box=extend_box(G.box,_G.box))
             if comp_N(Link, Et):  # in highder der+ rng++, G maybe a Clink
                 for g in _G,G:
                     if g not in G_: G_ += [g]
@@ -180,7 +180,6 @@ def rng_node_(N_, Et, rng):  # comp Gs|kernels in agg+, links | link rim_t node 
 def rng_link_(N_, Et):  # comp Clinks: der+'rng+ in root.link_ rim_t node rims: directional and node-mediated link tracing
 
     _mN_t_ = [[[N.nodet[0]],[N.nodet[1]]] for N in N_]  # rim-mediating nodes
-    L_ = N_[:]
     fcomp = 0
     rng = 1
     while True:
@@ -195,7 +194,7 @@ def rng_link_(N_, Et):  # comp Clinks: der+'rng+ in root.link_ rim_t node rims: 
                         if not hasattr(_L,"rimt_"): add_der_attrs(link_=[_L])  # _L not in root.link_, same derivation
                         fcomp = 1; L.compared_ += [_L]; _L.compared_ += [L]
                         dy,dx = np.subtract(_L.yx,L.yx)
-                        Link = Clink(nodet=[_L,L], span=np.hypot(dy,dx), angle=[dy,dx], box=extend_box(_L.box, L.box))
+                        Link = Clink(nodet=[_L,L], span=2, angle=[dy,dx], box=extend_box(_L.box, L.box))
                         # L.rim_t += new Link
                         if comp_N(Link, Et, rng, rev^_rev):  # negate ds if only one L is reversed
                             # add rng+ mediating nodes to L, link order: nodet < L < rim_t, mN.rim || L
@@ -409,10 +408,12 @@ def comp_N_(_node_, node_):  # compare partial graphs in merge
     else:
         # skip iderH and latuple if empty in links
         _latuple, _iderH = _pars[6:]; latuple, iderH = pars[6:]
-        Et, Rt, Md_ = comp_latuple(_latuple, latuple, rn, fagg=1)
-        dderH.n = 1; dderH.Et = np.add(Et,et); dderH.relt = np.add(Rt,rt)
-        dderH.H = [CH(Et=et,relt=rt,H=md_,n=.5),CH(Et=Et,relt=Rt,H=Md_,n=1)]
-        _iderH.comp_(iderH, dderH, rn, fagg=1, flat=0)
+        if any(_latuple[:5]) and any(latuple[:5]):  # skip empty latuple
+            Et, Rt, Md_ = comp_latuple(_latuple, latuple, rn, fagg=1)
+            dderH.n = 1; dderH.Et = np.add(Et,et); dderH.relt = np.add(Rt,rt)
+            dderH.H = [CH(Et=et,relt=rt,H=md_,n=.5),CH(Et=Et,relt=Rt,H=Md_,n=1)]
+        if _iderH and iderH:  # skip empty iderH:
+            _iderH.comp_(iderH, dderH, rn, fagg=1, flat=0)
 
     if _derH and derH: _derH.comp_(derH, dderH, rn, fagg=1, flat=0)  # append and sum new dderH to base dderH
     if _extH and extH: _extH.comp_(extH, dderH, rn, fagg=1, flat=1)
