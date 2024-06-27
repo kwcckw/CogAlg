@@ -331,7 +331,8 @@ def form_PP_t(root, P_):  # form PPs of dP.valt[fd] + connected Ps val
             CP_ += cP_
     # eval PP.link_ for der+: correlation clustering, after form_PP_t -> P.root
     for PP in PP_t[1]:
-        if isinstance(PP.link_[0].nodet[0], CdP):
+        # single P's PP doesn't have dP_
+        if PP.link_ and isinstance(PP.link_[0].nodet[0], CdP):
             continue  # no der++ for Ps
         if PP.iderH.Et[0] * len(PP.link_) > ave_PPd * PP.iderH.Et[2]:
             second_der_(root, PP)

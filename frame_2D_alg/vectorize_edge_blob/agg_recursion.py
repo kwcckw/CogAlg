@@ -101,18 +101,26 @@ def agg_recursion(root, N_, rng=1, fagg=0):  # rng for sub+'rng+ only
     N_,Et,_ = rng_node_(N_,Et,rng) if isinstance(N_[0], CG) else rng_link_(N_,Et)  # 1st call
     rng += fagg  # was incremented above
     fcompr,fcompd = 1,1
+    iEt = copy(Et)
     while fcompr or fcompd:  # eval comp recursion per fork, while any last-loop comp
         fcompr,fcompd = 0,0
         if Et[0] > ave*Et[2]:  # init rng+ via convolution
-            N_,Et, fcompr = rng_node_(N_,Et,rng) if isinstance(N_[0],CG) else rng_link_(N_,Et)
+            iEt[0] += Et[0]; iEt[2] += Et[2]  #  accumulate only positive?
+            # i think we need reset here?
+            # If prior rng Et is high and current Et is low or 0, it gets true too
+            Et[0], Et[2] = 0, 0  # reset 
+            N_,Et, fcompr = rng_node_(N_[:10],Et,rng) if isinstance(N_[0],CG) else rng_link_(N_,Et)
             rng += 1
         if Et[1] > ave*Et[3]:  # concat links from initial or recursive xcomp:
+            iEt[1] += Et[1]; iEt[3] += Et[3]  #  accumulate only positive?
+            Et[1], Et[3] = 0, 0  # reset
             if isinstance(N_[0],CG): N_ = list(set([linkt[0] for N in N_ for linkt in N.rim]))
             else:                    N_ = list(set([linkt[0] for N in N_ for linkt in N.rimt_[-1][0]+N.rimt_[-1][1]]))
             add_der_attrs(link_= N_)
-            N_,Et, fcompd = rng_link_(N_,Et)  # N_ is higher-derivation links
+            N_,Et, fcompd = rng_link_(N_[:10],Et)  # N_ is higher-derivation links
     # sub+, fback_ sum in sub_roots, passed to root fback_:
-    node_t = form_graph_t(root, N_, Et, rng)
+    # if we use Et after comp_rng and com_link above, it's always < ave since it breaks only when < ave
+    node_t = form_graph_t(root, N_, iEt, rng)
     if node_t:
         fback_t = [[],[]]
         for fd, node_ in zip((0,1), node_t):
@@ -341,6 +349,7 @@ def segment_N_(root, iN_, fd, rng):
             oV = sum([L.derH.Et[fd] - ave * L.derH.Et[2+fd] for L in oL_])
             # Nrim similarity = relative V deviation,
             # + partial G similarity:
+            # len(node_) is always 1 before merge, and len(Nrim) will be at least 1, so we need to reduce ave_L? Or change eval?
             if len(node_)/len(Nrim) > ave_L and len(_Gt[0])/len(_Gt[3][1]) > ave_L:
                 sN_ = set(node_); _sN_ = set(_Gt[0])
                 oN_ = sN_.intersection(_sN_)  # Nrim overlap
