@@ -121,13 +121,8 @@ def agg_recursion(root, N_, rng=1, fagg=0):  # rng for sub+'rng+ only
             if root.derH.Et[0] * (max(0,(len(N_)-1)*root.rng)) > G_aves[1]*root.derH.Et[2]:
                 # agg+ / node_t, vs. sub+ / node_, always rng+:
                 agg_recursion(root, N_, fagg=1)
-                # for N in root.node_[0]+root.node_[1]: fback_t[fd] += [N.derH if fd else N.derH.H[-1]]
-            else:  # feedback per subroot if any, else pruned node
-                for N in N_: fback_t[fd] += [N.derH if fd else N.derH.H[-1]]
-                if fd and any(fback_t):
-                    root.fback_t = fback_t
-                    feedback(root, fsub=0)
-        root.node_[:] = node_t  # else keep root.node_
+        root.node_[:] = node_t
+    # else keep node_
 
 def rng_node_(N_, Et, rng):  # comp Gs|kernels in agg+, links | link rim_t node rims in sub+
                              # ~ graph convolutional network without backprop
@@ -180,8 +175,8 @@ def rng_node_(N_, Et, rng):  # comp Gs|kernels in agg+, links | link rim_t node 
 def rng_link_(N_, Et):  # comp Clinks: der+'rng+ in root.link_ rim_t node rims: directional and node-mediated link tracing
 
     _mN_t_ = [[[N.nodet[0]],[N.nodet[1]]] for N in N_]  # rim-mediating nodes
-    fcomp = 0
-    rng = 1
+    fcomp = 0; rng = 1
+    L_ = N_[:]
     while True:
         mN_t_ = [[[],[]] for _ in L_]
         for L, _mN_t, mN_t in zip(L_, _mN_t_, mN_t_):
@@ -289,7 +284,7 @@ def form_graph_t(root, N_, Et, rng):  # segment N_ to Nm_, Nd_
                 Q = graph.link_ if fd else graph.node_
                 if len(Q) > ave_L and graph.Et[fd] > G_aves[fd] * graph.Et[fd]:
                     if fd: add_der_attrs(Q)
-                    # else sub+rng+: comp Gs at distance < max_dist * rng+1:
+                    # else sub+'rng+: comp Gs at distance < max_dist * rng+1:
                     agg_recursion(graph, Q, rng+1, fagg=1-fd)  # graph.node_ is not node_t yet, rng for rng+ only
             node_t += [graph_]  # may be empty
         else:
@@ -406,13 +401,12 @@ def comp_N_(_node_, node_):  # compare partial graphs in merge
         dderH.n = 1; dderH.Et = et; dderH.relt = rt
         dderH.H = [CH(Et=copy(et),relt=copy(rt),H=md_,n=1)]
     else:
-        # skip iderH and latuple if empty in links
         _latuple, _iderH = _pars[6:]; latuple, iderH = pars[6:]
-        if any(_latuple[:5]) and any(latuple[:5]):  # skip empty latuple
+        if any(_latuple[:5]) and any(latuple[:5]):  # latuple is empty in Clink
             Et, Rt, Md_ = comp_latuple(_latuple, latuple, rn, fagg=1)
             dderH.n = 1; dderH.Et = np.add(Et,et); dderH.relt = np.add(Rt,rt)
             dderH.H = [CH(Et=et,relt=rt,H=md_,n=.5),CH(Et=Et,relt=Rt,H=Md_,n=1)]
-        if _iderH and iderH:  # skip empty iderH:
+        if _iderH and iderH:  # iderH is empty in Clink
             _iderH.comp_(iderH, dderH, rn, fagg=1, flat=0)
 
     if _derH and derH: _derH.comp_(derH, dderH, rn, fagg=1, flat=0)  # append and sum new dderH to base dderH
