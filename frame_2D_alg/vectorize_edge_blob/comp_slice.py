@@ -195,6 +195,7 @@ class CH(CBase):  # generic derivation hierarchy with variable nesting
                 vm += match - aves[i]  # fixed param set?
                 vd += diff
                 dH += [match,diff]  # flat
+                rm += vd>vm; rd += vm>vd  # rdn is missed out?
             Et = [vm,vd,rm,rd]; relt= [decm,decd]
             n = len(_He.H)/12  # unit n = 6 params, = 12 in md_
 
