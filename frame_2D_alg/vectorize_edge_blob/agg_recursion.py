@@ -68,7 +68,7 @@ def vectorize_root(image):  # vectorization in 3 composition levels of xcomp, cl
         if hasattr(edge, 'P_') and edge.latuple[-1] * (len(edge.P_)-1) > G_aves[0]:  # eval PP, rdn=1  (ave_PPm or G_aves[0]?)
             comp_slice(edge)
             # for agg+:
-            edge.derH=CH(); edge.link_= []; edge.fback_t=[[],[]]
+            edge.derH=CH(); edge.link_= []; edge.fback_=[[],[]]
             node_t, link_t = [[],[]], [[],[]]
             for fd, node_ in enumerate(copy(edge.node_)):  # always node_t
                 if edge.iderH and any(edge.iderH.Et):   # any for np array
@@ -105,12 +105,15 @@ def agg_recursion(root, N_, fL, rng=1):  # fL: compare node-mediated links, else
         root.node_[:] = node_t
     # else keep root.node_
 
-def rng_node_(_N_, rng):  # forms discrete rng+ links, vs indirect rng+ in rng_kern_, still no sub_Gs / rng+
+def rng_node_(_N_, irng):  # forms discrete rng+ links, vs indirect rng+ in rng_kern_, still no sub_Gs / rng+
 
+    rng = irng
     while True:
         N_, Et = rng_kern_(_N_, rng)  # incr rng
+        # we can just assign rN_ here? else if it's in eval below, we might not getting any rN_ if eval below is false
+        # and we need to check irng since it may not start with 1 in sub+
+        if rng == irng: rN_ = N_[:]  # return nodes with any added rim
         if Et[0] > ave*Et[2]:
-            if rng==1: rN_ = N_  # return nodes with any added rim
             rng += 1
             _N_ = N_
         else:
@@ -151,7 +154,8 @@ def rng_kern_(N_, rng):  # comp Gs summed in kernels, ~ graph CNN without backpr
                         g.DerH.H[-1].add_(dderH) if len(g.DerH.H)==n+1 else g.DerH.append_(dderH,flat=0)
                         # these layers are not represented in root?
             # eval update to continue rng+/G:
-            if G.DerH.H[-1].Et[0] > ave * G.DerH.H[-1].Et[2] * n:  # G.DerH may not be appended
+            # we need to add len(G.DerH.H) > n to add Gs with added DerH only
+            if len(G.DerH.H) > n and G.DerH.H[-1].Et[0] > ave * G.DerH.H[-1].Et[2] * n:  # G.DerH may not be appended
                 _G_ += [G]  # else G kernel is not extended
         if _G_:
             G_ = _G_
@@ -330,7 +334,7 @@ def segment_N_(root, iN_, fd, rng):
                 continue  # was merged
             oL_ = set(Lrim).intersection(set(_Gt[2])).union([_L])  # shared external links + potential _L # oL_ = [Lr[0] for Lr in _Gt[2] if Lr in Lrim]
             oV = sum([L.derH.Et[fd] - ave * L.derH.Et[2+fd] for L in oL_])
-            _node_ = _Gt[0]; _Nrim = _Gt[3][1]
+            _node_ = _Gt[0]; _Nrim = _Gt[3][1]  # For _Gt, why it's internal N? While Gt is using external N
             # Nrim similarity = V + (G,_G olp), if potential olp:
             if len(Nrim) / len(node_) > ave_L or len(_Nrim) / len(_node_) > ave_L:
                 sN_ = set(node_); _sN_ = set(_Gt[0])
@@ -340,7 +344,7 @@ def segment_N_(root, iN_, fd, rng):
                 if _xN_ and xN_:
                     dderH = comp_N_(_xN_, xN_)
                     oV += (dderH.Et[fd] - ave * dderH.Et[2+fd])  # norm by R, * dist_coef * agg_coef?
-            if oV > ave:
+            if oV > ave:  # include rdn here? Probably rdn of overlapping?
                 link_ += [_L]
                 merge(Gt,_Gt); N_.remove(_Gt)
 
@@ -446,8 +450,11 @@ def sum2graph(root, grapht, fd, rng):  # sum node and link params into graph, ag
 
 def feedback(root):  # called from form_graph_, always sub+, append new der layers to root
 
+    # by merging derH from both forks into root, we are still getting error here when summing different types of lower shared layer
+    # for example, we may sum a der_latuple (md_) to a der_derH(CH)
     DerH = CH()
-    for derH in root.fback_.pop():  # combined dderH_ from sub_Gs
+    while root.fback_:
+        derH = root.fback_.pop()  # combined dderH_ from sub_Gs
         if DerH: DerH.H[-1].add_(derH)
         else:    DerH.append_(derH, flat=0)
     m,d, mr,dr = DerH.Et
