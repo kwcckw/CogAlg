@@ -68,7 +68,7 @@ def vectorize_root(image):  # vectorization in 3 composition levels of xcomp, cl
         if hasattr(edge, 'P_') and edge.latuple[-1] * (len(edge.P_)-1) > G_aves[0]:  # eval PP, rdn=1  (ave_PPm or G_aves[0]?)
             comp_slice(edge)
             # for agg+:
-            edge.derH = CH(); edge.link_ = []; edge.fback_ = []
+            edge.derH = CH(); edge.link_ = []; edge.fback_t = [[],[]]
             node_t, link_t = [[],[]], [[],[]]
             for fd, node_ in enumerate(copy(edge.node_)):  # always node_t
                 if edge.iderH and any(edge.iderH.Et):   # any for np array
@@ -100,7 +100,7 @@ def agg_recursion(root, N_, fL, rng=1):  # fL: compare node-mediated links, else
             N_ = [n for n in node_ if n.derH.Et[0] > G_aves[fd] * n.derH.Et[2]]  # pruned node_
             # comp val is proportional to n comparands:
             if root.derH.Et[0] * (max(0,(len(N_)-1)*root.rng)) > G_aves[1]*root.derH.Et[2]:
-                agg_recursion(root, N_, fL=fL)
+                agg_recursion(root, N_, fL=0)  # fL must be 0 here? Because N_ is always the newly created CG from form_graph_t above
                 # agg+ / node_
         root.node_[:] = node_t
     # else keep root.node_
@@ -115,7 +115,13 @@ def rng_node_(_N_, irng):  # forms discrete rng+ links, vs indirect rng+ in rng_
             rng += 1
             _N_ = N_
         else:
-             break
+            # this should be moved here, else we are adding it per rng?
+            # for G.DerH, should we reset it per recursion too?
+            # n is always 1 , but DerH may not be 1 if rng >1 in rng_kern_
+            for G in rN_:
+                delattr(G, "krim")
+                G.extH.append_(G.DerH, flat=0)  # for segmentation  
+            break
     return rN_, Et, rng
 
 def rng_kern_(N_, rng):  # comp Gs summed in kernels, ~ graph CNN without backprop, not for Clinks?
@@ -151,7 +157,7 @@ def rng_kern_(N_, rng):  # comp Gs summed in kernels, ~ graph CNN without backpr
                     for g in _G,G:  # bilateral assign
                         g.DerH.H[-1].add_(dderH) if len(g.DerH.H)==n+1 else g.DerH.append_(dderH,flat=0)
             # eval update to continue rng+/G:
-            if len(G.DerH.H > n) and G.DerH.H[-1].Et[0] > ave * G.DerH.H[-1].Et[2] * n:  # G.DerH may not be appended
+            if len(G.DerH.H) > n and G.DerH.H[-1].Et[0] > ave * G.DerH.H[-1].Et[2] * n:  # G.DerH may not be appended
                 _G_ += [G]  # else G kernel is not extended
         if _G_:
             G_ = _G_
@@ -159,9 +165,6 @@ def rng_kern_(N_, rng):  # comp Gs summed in kernels, ~ graph CNN without backpr
             n += 1
         else:
             break
-    for G in iG_:
-        delattr(G, "krim")
-        G.extH.append_(G.DerH, flat=0)  # for segmentation
 
     return iG_, Et  # Gs with added rim
 
@@ -284,7 +287,7 @@ def form_graph_t(root, N_, Et, rng):  # segment N_ to Nm_, Nd_
             node_t += [[]]
     for fd, graph_ in enumerate(node_t):  # mix forks fb
         for graph in graph_:
-            root.fback_t[fd] += [graph.derH] if fd else [graph.derH.H[-1]]  # rng+ adds single new layer
+            root.fback_t[fd] += [graph.derH.H[-1] if fd else  graph.derH]  # rng+ adds single new layer (this is inverted?)
             # sub+-> sub root-> init root
     if any(root.fback_t): feedback(root)
 
@@ -446,17 +449,15 @@ def sum2graph(root, grapht, fd, rng):  # sum node and link params into graph, ag
 
 def feedback(root):  # called from form_graph_, always sub+, append new der layers to root
 
-    for fd, fback_ in zip((0,1), root.fback_t):
-        DerH = CH()
-        while root.fback_:
-            derH = root.fback_.pop()  # dderH_ from sub_Gs
-            if DerH: DerH.H[-1].add_(derH)
-            else:    DerH.append_(derH, flat=0)
-        if fd:
-            if _DerH: DerH = _DerH.append(DerH, flat=1)  # DerHd
-            # or need to represent empty DerHm too?
-        else: _DerH = DerH  # DerHm
+    # i think something like this is clearer and neater?
+    mDerH, dDerH = CH(), CH()
+    # sum mDerH
+    while root.fback_t[0]: mDerH.add_(root.fback_t[0].pop())
+    # sum dDerH
+    while root.fback_t[1]: dDerH.add_(root.fback_t[1].pop())   
+    # add new dDerH.Hs as new derLays
+    mDerH.append_(dDerH, flat=1)  
 
-    m,d, mr,dr = DerH.Et
+    m,d, mr,dr = mDerH.Et
     if m+d > sum(G_aves) * (mr+dr):
-        root.derH.append_(DerH, flat=1)  # append new derLays
+        root.derH.append_(mDerH, flat=1)  # append new derLays
