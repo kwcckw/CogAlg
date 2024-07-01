@@ -161,6 +161,7 @@ class CH(CBase):  # generic derivation hierarchy with variable nesting
         HE.Et = np.add(HE.Et, He.Et); HE.relt = np.add(HE.relt, He.relt)
         if irdnt: Et[2:4] = [E+e for E,e in zip(Et[2:4], irdnt)]
         HE.n += He.n
+        return HE  # for feedback in agg+
 
     def comp_(_He, He, dderH, rn=1, fagg=0, flat=1, frev=0):  # unpack tuples (formally lists) down to numericals and compare them
 

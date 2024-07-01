@@ -152,7 +152,7 @@ def rng_kern_(N_, rng):  # comp Gs summed in kernels, ~ graph CNN without backpr
                 dderH = _G.DerH.H[-1].comp_(G.DerH.H[-1], dderH=CH(), rn=1, fagg=1, flat=1)  # comp last krim
                 if dderH.Et[0] > ave * dderH.Et[2] * n:  # n adds to costs
                     for g in _G,G:  # bilateral assign
-                        g.DerH.H[-1].add_(dderH) if len(g.DerH.H)==n+1 else g.DerH.append_(dderH,flat=0)
+                        g.DerH.H[n].add_(dderH) if len(g.DerH.H)>=n+1 else g.DerH.append_(dderH,flat=0)
             # eval update to continue rng+/G:
             if len(G.DerH.H) > n and G.DerH.H[-1].Et[0] > ave * G.DerH.H[-1].Et[2] * n:  # G.DerH may not be appended
                 _G_ += [G]  # else G kernel is not extended
@@ -284,6 +284,7 @@ def form_graph_t(root, N_, Et, rng):  # segment N_ to Nm_, Nd_
             node_t += [[]]
     for fd, graph_ in enumerate(node_t):  # mix forks fb
         for graph in graph_:
+            # if graph has feedback in agg_recursion above, they will be added with new last layer, so feedbck shouldn't add new layers in derH.H?
             root.fback_t[fd] += [graph.derH] if fd else [graph.derH.H[-1]] # der+ forms new links, rng+ adds new layer
             # sub+-> sub root-> init root
     if any(root.fback_t): feedback(root)
@@ -454,3 +455,5 @@ def feedback(root):  # called from form_graph_, always sub+, append new der laye
     m,d, mr,dr = mDerH.Et
     if m+d > sum(G_aves) * (mr+dr):
         root.derH.append_(mDerH, flat=1)  # append new derLays
+        # if root.derH.H: root.derH.H[-1].append_(mDerH, flat=1)  # append new derLays to last layer?
+        # else:           root.derH.append_(mDerH, flat=0)
