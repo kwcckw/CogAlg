@@ -81,7 +81,7 @@ class CG(CBase):  # PP | graph | blob: params of single-fork node_ cluster
         G.alt_graph_ = []  # adjacent gap+overlap graphs, vs. contour in frame_graphs
         # dynamic attrs:
         G.Rim = []  # links to the most mediated nodes
-        G.fback_t = [[],[]]  # always mixed-fork
+        G.fback_t = [[],[]]  # dderHm_, dderHd_
         G.compared_ = []
         # Rdn: int = 0  # for accumulation or separate recursion count?
         # it: list = z([None,None])  # graph indices in root node_s, implicitly nested
@@ -195,7 +195,6 @@ class CH(CBase):  # generic derivation hierarchy with variable nesting
                 vd += diff
                 rm += vd > vm; rd += vm >= vd
                 dH += [match,diff]  # flat
-                rm += vd>vm; rd += vm>=vd
             Et = [vm,vd,rm,rd]; relt= [decm,decd]
             n = len(_He.H)/12  # unit n = 6 params, = 12 in md_
 

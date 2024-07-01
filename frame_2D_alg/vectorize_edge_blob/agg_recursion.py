@@ -100,7 +100,7 @@ def agg_recursion(root, N_, fL, rng=1):  # fL: compare node-mediated links, else
             N_ = [n for n in node_ if n.derH.Et[0] > G_aves[fd] * n.derH.Et[2]]  # pruned node_
             # comp val is proportional to n comparands:
             if root.derH.Et[0] * (max(0,(len(N_)-1)*root.rng)) > G_aves[1]*root.derH.Et[2]:
-                agg_recursion(root, N_, fL=0)  # fL must be 0 here? Because N_ is always the newly created CG from form_graph_t above
+                agg_recursion(root, N_, fL=0)  # form_graph_t forms CGs
                 # agg+ / node_
         root.node_[:] = node_t
     # else keep root.node_
@@ -115,12 +115,9 @@ def rng_node_(_N_, irng):  # forms discrete rng+ links, vs indirect rng+ in rng_
             rng += 1
             _N_ = N_
         else:
-            # this should be moved here, else we are adding it per rng?
-            # for G.DerH, should we reset it per recursion too?
-            # n is always 1 , but DerH may not be 1 if rng >1 in rng_kern_
             for G in rN_:
                 delattr(G, "krim")
-                G.extH.append_(G.DerH, flat=0)  # for segmentation  
+                G.extH.append_(G.DerH, flat=0)  # for segmentation
             break
     return rN_, Et, rng
 
@@ -287,7 +284,7 @@ def form_graph_t(root, N_, Et, rng):  # segment N_ to Nm_, Nd_
             node_t += [[]]
     for fd, graph_ in enumerate(node_t):  # mix forks fb
         for graph in graph_:
-            root.fback_t[fd] += [graph.derH.H[-1] if fd else  graph.derH]  # rng+ adds single new layer (this is inverted?)
+            root.fback_t[fd] += [graph.derH] if fd else [graph.derH.H[-1]] # der+ forms new links, rng+ adds new layer
             # sub+-> sub root-> init root
     if any(root.fback_t): feedback(root)
 
@@ -449,15 +446,11 @@ def sum2graph(root, grapht, fd, rng):  # sum node and link params into graph, ag
 
 def feedback(root):  # called from form_graph_, always sub+, append new der layers to root
 
-    # i think something like this is clearer and neater?
-    mDerH, dDerH = CH(), CH()
-    # sum mDerH
-    while root.fback_t[0]: mDerH.add_(root.fback_t[0].pop())
-    # sum dDerH
-    while root.fback_t[1]: dDerH.add_(root.fback_t[1].pop())   
-    # add new dDerH.Hs as new derLays
-    mDerH.append_(dDerH, flat=1)  
-
+    mDerLay = CH()  # added per rng+, | kern+, | single kernel?
+    while root.fback_t[0]: mDerLay.add_(root.fback_t[0].pop())
+    dDerH = CH()  # from higher-order links
+    while root.fback_t[1]: dDerH.add_(root.fback_t[1].pop())
+    mDerH = mDerLay.append_(dDerH, flat=1)
     m,d, mr,dr = mDerH.Et
     if m+d > sum(G_aves) * (mr+dr):
         root.derH.append_(mDerH, flat=1)  # append new derLays
