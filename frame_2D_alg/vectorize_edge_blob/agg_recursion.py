@@ -125,7 +125,7 @@ def rng_kern_(N_, rng):  # comp Gs summed in kernels, ~ graph CNN without backpr
     G_ = []
     Et = [0,0,0,0]
     for (_G, G) in list(combinations(N_,r=2)):  # eval comp_N-> G_
-        if _G in G.compared_: continue
+        if _G in G.compared_: continue # in rng++, this compared will be reset below
         dy,dx = np.subtract(_G.yx,G.yx)
         dist = np.hypot(dy,dx)
         aRad = (G.aRad+_G.aRad) / 2  # ave radius to eval relative distance between G centers:
@@ -166,14 +166,14 @@ def rng_kern_(N_, rng):  # comp Gs summed in kernels, ~ graph CNN without backpr
     return iG_, Et  # Gs with added rim
 
 
-def rng_link_(N_):  # comp Clinks: der+'rng+ in root.link_ rim_t node rims: directional and node-mediated link tracing
+def rng_link_(_L_):  # comp Clinks: der+'rng+ in root.link_ rim_t node rims: directional and node-mediated link tracing
 
-    _mN_t_ = [[[N.nodet[0]],[N.nodet[1]]] for N in N_]  # rim-mediating nodes
-    rng = 1; L_ = N_[:]
+    _mN_t_ = [[[L.nodet[0]],[L.nodet[1]]] for L in _L_]  # rim-mediating nodes
+    rng = 1; rL_ = []
     Et = [0,0,0,0]
     while True:
-        mN_t_ = [[[],[]] for _ in L_]
-        for L, _mN_t, mN_t in zip(L_, _mN_t_, mN_t_):
+        mN_t_ = [[[],[]] for _ in _L_]  # for next loop
+        for L, _mN_t, mN_t in zip(_L_, _mN_t_, mN_t_):
             for rev, _mN_, mN_ in zip((0,1), _mN_t, mN_t):
                 # comp L, _Ls: nodet mN 1st rim, -> rng+ _Ls/ rng+ mm..Ns:
                 rim_ = [n.rim if isinstance(n,CG) else n.rimt_[0][0] + n.rimt_[0][1] for n in _mN_]
@@ -188,21 +188,25 @@ def rng_link_(N_):  # comp Clinks: der+'rng+ in root.link_ rim_t node rims: dire
                         if comp_N(Link, Et, rng, rev^_rev):  # negate ds if only one L is reversed
                             # add rng+ mediating nodes to L, link order: nodet < L < rim_t, mN.rim || L
                             mN_ += _L.nodet  # get _Ls in mN.rim
-                            if _L not in L_:  # not in root
-                                L_ += [_L]; mN_t_ += [[[],[]]]
-                            mN_t_[L_.index(_L)][1-rev] += L.nodet
-        _L_, _mN_t = [],[]
-        for L, mN_t in zip(L_, mN_t_):
+                            if _L not in _L_:  # not in root
+                                _L_ += [_L]; mN_t_ += [[[],[]]]
+                            mN_t_[_L_.index(_L)][1-rev] += L.nodet
+                            # similar with rng+, pack only Link with added rim, but for those out of root's links, skip them?
+                            if L not in rL_: rL_ += [L]
+                            if _L not in rL_: rL_ += [_L]
+                            
+        L_, mN_t_ = [],[]
+        for L, mN_t in zip(_L_, mN_t_):
             if any(mN_t):
-                _L_ += [L]; _mN_t_ += [mN_t]
-        if _L_:
-            L_ = _L_; rng += 1
+                L_ += [L]; _mN_t_ += [mN_t]
+        if L_:
+            _L_ = L_; rng += 1
         else:
             break
         # Lt_ = [(L, mN_t) for L, mN_t in zip(L_, mN_t_) if any(mN_t)]
         # if Lt_: L_,_mN_t_ = map(list, zip(*Lt_))  # map list to convert tuple from zip(*)
 
-    return N_, Et, rng
+    return rL_, Et, rng
 
 def comp_N(Link, iEt, rng=None, rev=None):  # rng,dir if fd, Link+=dderH, comparand rim+=Link
 
@@ -284,7 +288,6 @@ def form_graph_t(root, N_, Et, rng):  # segment N_ to Nm_, Nd_
             node_t += [[]]
     for fd, graph_ in enumerate(node_t):  # mix forks fb
         for graph in graph_:
-            # if graph has feedback in agg_recursion above, they will be added with new last layer, so feedbck shouldn't add new layers in derH.H?
             root.fback_t[fd] += [graph.derH] if fd else [graph.derH.H[-1]] # der+ forms new links, rng+ adds new layer
             # sub+-> sub root-> init root
     if any(root.fback_t): feedback(root)
@@ -454,6 +457,5 @@ def feedback(root):  # called from form_graph_, always sub+, append new der laye
     mDerH = mDerLay.append_(dDerH, flat=1)
     m,d, mr,dr = mDerH.Et
     if m+d > sum(G_aves) * (mr+dr):
-        root.derH.append_(mDerH, flat=1)  # append new derLays
-        # if root.derH.H: root.derH.H[-1].append_(mDerH, flat=1)  # append new derLays to last layer?
-        # else:           root.derH.append_(mDerH, flat=0)
+        if root.derH.H: root.derH.H[-1].append_(mDerH, flat=1)  # append new derLays to last layer （need to be reviewed)
+        else:           root.derH.append_(mDerH, flat=0)
