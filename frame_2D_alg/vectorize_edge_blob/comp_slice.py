@@ -82,7 +82,7 @@ class CG(CBase):  # PP | graph | blob: params of single-fork node_ cluster
         # dynamic attrs:
         G.Rim = []  # links to the most mediated nodes
         G.fback_t = [[],[]]  # dderHm_, dderHd_
-        G.compared__ = []  # nested in rng++
+        G.compared__ = [[]]  # nested in rng++
         # Rdn: int = 0  # for accumulation or separate recursion count?
         # it: list = z([None,None])  # graph indices in root node_s, implicitly nested
         # depth: int = 0  # n sub_G levels over base node_, max across forks
