@@ -91,32 +91,31 @@ def vectorize_root(image):  # vectorization in 3 composition levels of xcomp, cl
                 edge.node_ = node_t; edge.link_ = link_t
                 # edge.node_ may be node_tt: node_t per fork?
 
+
 def agg_recursion(root, N_, fL, rng=1):  # fL: compare node-mediated links, else < rng-distant CGs
 
     N_, Et, rng = rng_link_(N_) if fL else rng_node_(N_, rng)  # each is rng-recursive
     node_t = form_graph_t(root, N_, Et, rng)  # rng for sub+, sub_Gs += fback_
     if node_t:
         for fd, node_ in zip((0,1), node_t):
-            N_ = [n for n in node_ if n.derH.Et[0] > G_aves[fd] * n.derH.Et[2]]  # pruned node_
-            # comp val is proportional to n comparands:
+            N_ = [n for n in node_ if n.derH.Et[fd] > G_aves[fd] * n.derH.Et[2+fd]]
+            # prune node_
             if root.derH.Et[0] * (max(0,(len(N_)-1)*root.rng)) > G_aves[1]*root.derH.Et[2]:
-                agg_recursion(root, N_, fL=0)  # form_graph_t forms CGs
-                # agg+ / node_
+                # agg+: rng+ val *= n comparands, forms CGs:
+                agg_recursion(root, N_, fL=0)
         root.node_[:] = node_t
     # else keep root.node_
 
 def rng_node_(_N_, rng):  # forms discrete rng+ links, vs indirect rng+ in rng_kern_, still no sub_Gs / rng+
 
     while True:
-        for N in _N_: N.extH.H += [CH()]  # add empty new DerH
-        N_, Et = rng_kern_(_N_, rng)  # incr rng
+        for G in _N_:
+            G.extH.H += [CH()]; G.compared__ += [[]]
+        N_, Et = rng_kern_(_N_, rng)  # += rng layer
         if Et[0] > ave * Et[2]:
-            for G in _N_:  # use _N_, so that we can pop the empty added DerH in extH
-                if G.extH.H[-1]: G.compared__ += [[]]  # new layer
-                else:            G.extH.H.pop()  # pop empty added DerH in extH          
             rng += 1; _N_ = N_
         else:
-            for N in _N_: N.extH.H.pop()  # pop empty added DerH in extH
+            for G in _N_: G.extH.H.pop()  # low-value extH layer
             break
     return N_, Et, rng
 
@@ -124,9 +123,9 @@ def rng_kern_(N_, rng):  # comp Gs summed in kernels, ~ graph CNN without backpr
 
     G_ = []
     Et = [0,0,0,0]
-    for (_G, G) in list(combinations(N_,r=2)):  # eval comp_N -> G_
-        if _G in [G for compared_ in G.compared__ for G in compared_]:  # the sequence is wrong earlier
-            continue  # in any rng++
+    for (_G, G) in list(combinations(N_,r=2)):
+        if _G in [G for compared_ in G.compared__ for G in compared_]:  # in any rng++
+            continue
         dy,dx = np.subtract(_G.yx,G.yx)
         dist = np.hypot(dy,dx)
         aRad = (G.aRad+_G.aRad) / 2  # ave radius to eval relative distance between G centers:
@@ -134,34 +133,37 @@ def rng_kern_(N_, rng):  # comp Gs summed in kernels, ~ graph CNN without backpr
             G.compared__[-1] += [_G]; _G.compared__[-1] += [G]
             Link = Clink(nodet=[_G,G], span=2, angle=[dy,dx], box=extend_box(G.box,_G.box))
             if comp_N(Link, Et):
+                ''' move to comp_N:
                 for g in _G,G:
                     if g not in G_: G_ += [g]
                     DerH = g.extH.H[-1]
                     if DerH: DerH.H[-1].add_(Link.derH)  # accum last DerH layer
                     else:    DerH.append_(Link.derH, flat=0)  # init DerH layer with Link.derH
+                '''
     # + kernel rim per G:
     for G in G_:
-        G.compared__ += [[]]  # to preserve compared_ added in comp_N above, it's better to add new compared_ here?
+        G.compared__ += [[]]
         G.krim = [link.nodet[0] if link.nodet[1] is G else link.nodet[1] for link, rev in G.rim]
     n = 1  # n convolutions = len DerH
-    iG_ = copy(G_)  # added DerH?
+    iG_ = copy(G_)  # has added DerH
     while True:
         _G_ = []  # rng+ convolution, cross-comp: recursive center node DerH += linked node derHs for next loop:
         for G in G_:
-            DerH = G.extH.H[-1]  # unpack for clarity
+            H = G.derH  # comparand
+            eH = G.extH  # comp ders
             for _G in G.krim:
-                # here it should be checking for last new list of compared_ instead of all compared_s?
-                if _G in G.compared__[-1] or _G not in iG_:
-                    continue  # compared when _G was G
-                _DerH = _G.extH.H[-1]  # unpack for clarity
+                if _G in [G for compared_ in G.compared__ for G in compared_]:  # in any rng++ or when _G was G
+                    continue
                 G.compared__[-1] += [_G]; _G.compared__[-1] += [G]
-                dderH = _DerH.H[-1].comp_(DerH.H[-1], dderH=CH(), rn=1, fagg=1, flat=1)  # comp last krim
+                _H = _G.derH  # comparand
+                _eH = _G.derH  # comp ders
+                dderH = _H.comp_(H, dderH=CH(), rn=1, fagg=1, flat=1)  # comp last krim
                 if dderH.Et[0] > ave * dderH.Et[2] * n:  # n adds to costs
-                    for derH in _DerH,DerH:  # bilateral assign
-                        derH.H[n].add_(dderH) if len(derH.H)>=n+1 else derH.append_(dderH,flat=0)
-            #  continue rng+ / updated G:
-            if len(DerH.H) > n and DerH.H[-1].Et[0] > ave * DerH.H[-1].Et[2] * n:  # G.DerH may not be appended
-                _G_ += [G]  # else G kernel is not extended
+                    for eh in _eH, eH:
+                        eh.H[n].add_(dderH) if len(eh.H)>=n+1 else eh.append_(dderH,flat=0)  # bilateral assign
+            eh  = G.extH
+            if len(eh.H) > n and eh.H[-1].Et[0] > ave * eh.H[-1].Et[2] * n:  # G.extH may not be appended
+                _G_ += [G]   # else G kernel is not extended
         if _G_:
             G_ = _G_
             for _G in _G_: _G.compared__[-1] = []  # reset in intermediate rng+, nest in rng++
@@ -459,7 +461,7 @@ def feedback(root):  # called from form_graph_, always sub+, append new der laye
     while root.fback_t[0]: mDerLay.add_(root.fback_t[0].pop())
     dDerH = CH()  # from higher-order links
     while root.fback_t[1]: dDerH.add_(root.fback_t[1].pop())
-    DerH = mDerLay.append_(dDerH, flat=1)
-    m,d, mr,dr = DerH.Et
+    DderH = mDerLay.append_(dDerH, flat=1)
+    m,d, mr,dr = DderH.Et
     if m+d > sum(G_aves) * (mr+dr):
-        root.derH.H[-1].append_(DerH, flat=0)  # append new derLay, maybe nested
+        root.derH.H[-1].append_(DderH, flat=0)  # append new derLay, maybe nested
