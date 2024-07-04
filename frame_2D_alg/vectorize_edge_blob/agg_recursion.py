@@ -108,16 +108,23 @@ def agg_recursion(root, N_, fL, rng=1):  # fL: compare node-mediated links, else
 
 def rng_node_(_N_, rng):  # forms discrete rng+ links, vs indirect rng+ in rng_kern_, still no sub_Gs / rng+
 
+    # we need rN_ to pack all Ns with added rim?
+    rN_, rEt = [], [0,0,0,0]
     while True:
         for G in _N_:
             G.extH.H += [CH()]; G.compared__ += [[]]
         N_, Et = rng_kern_(_N_, rng)  # += rng layer
+        rEt = [V+v for V, v in zip(rEt, Et)]  # we need accumulate Ets instead? Else the final Et always M < ave * rdn
         if Et[0] > ave * Et[2]:
+            rN_ += [N for N in N_ if N not in rN_]
             rng += 1; _N_ = N_
+            # we still need to pop empty extH layer from those pruned nodes? Or it doesn't matter since they will not be used in next rng loop?
+            for G in _N_:
+                if G not in N_: G.extH.H.pop()
         else:
             for G in _N_: G.extH.H.pop()  # low-value extH layer
             break
-    return N_, Et, rng
+    return rN_, rEt, rng
 
 def rng_kern_(N_, rng):  # comp Gs summed in kernels, ~ graph CNN without backprop, not for Clinks
 
@@ -133,13 +140,9 @@ def rng_kern_(N_, rng):  # comp Gs summed in kernels, ~ graph CNN without backpr
             G.compared__[-1] += [_G]; _G.compared__[-1] += [G]
             Link = Clink(nodet=[_G,G], span=2, angle=[dy,dx], box=extend_box(G.box,_G.box))
             if comp_N(Link, Et):
-                ''' move to comp_N:
                 for g in _G,G:
                     if g not in G_: G_ += [g]
-                    DerH = g.extH.H[-1]
-                    if DerH: DerH.H[-1].add_(Link.derH)  # accum last DerH layer
-                    else:    DerH.append_(Link.derH, flat=0)  # init DerH layer with Link.derH
-                '''
+
     # + kernel rim per G:
     for G in G_:
         G.compared__ += [[]]
@@ -259,6 +262,15 @@ def comp_N(Link, iEt, rng=None, rev=None):  # rng,dir if fd, Link+=dderH, compar
                     node.rimt_ += [[[[Link,rev]],[]]] if dir else [[[],[[Link,rev]]]]  # add rng layer
             else:
                 node.rim += [[Link,rev]]
+                DerH = node.extH.H[-1]
+                if DerH: 
+                    DerH.H[-1].add_(Link.derH)  # accum last DerH layer
+                    # we need to accumulate param from lower layers to higher root?
+                    node.extH.Et = np.add(node.extH.Et, Link.derH.Et)
+                    node.extH.relt = np.add(node.extH.relt, Link.derH.relt)
+                    node.extH.n += Link.derH.n   
+                else:    DerH.append_(Link.derH, flat=0)  # init DerH layer with Link.derH
+        
         return True
 
 def comp_ext(_L,L,_S,S,_A,A):  # compare non-derivatives:
