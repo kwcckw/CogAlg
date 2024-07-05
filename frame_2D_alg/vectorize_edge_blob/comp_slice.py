@@ -142,6 +142,7 @@ class CH(CBase):  # generic derivation hierarchy with variable nesting
                     if lay:  # to be summed
                         if Lay is None: Lay = deepcopy(lay)
                         else: Lay.add_(lay, irdnt)  # recursive unpack to sum md_s
+                    Lay.root = HE  # update root
                     H += [Lay]
                 HE.H = H
             else:
@@ -162,8 +163,13 @@ class CH(CBase):  # generic derivation hierarchy with variable nesting
     def append_(HE,He, irdnt=None, flat=0):
 
         if irdnt is None: irdnt = []
-        if flat: HE.H += deepcopy(He.H)  # append flat
-        else:    HE.H += [He]  # append nested
+        if flat: 
+            HE.H += deepcopy(He.H)  # append flat
+            for H in HE.H: 
+                if isinstance(H, CH): H.root = HE  # update root
+        else:    
+            HE.H += [He]  # append nested
+            He.root = HE  # update root
         Et, et = HE.Et, He.Et
         HE.Et = np.add(HE.Et, He.Et); HE.relt = np.add(HE.relt, He.relt)
         if irdnt: Et[2:4] = [E+e for E,e in zip(Et[2:4], irdnt)]

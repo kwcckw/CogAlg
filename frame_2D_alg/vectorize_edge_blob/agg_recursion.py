@@ -116,9 +116,7 @@ def rng_node_(_N_, rng):  # forms discrete rng+ links, vs indirect rng+ in rng_k
         rEt = [V+v for V, v in zip(rEt, Et)]
         if Et[0] > ave * Et[2]:
             rng += 1; _N_ = N_
-        else:
-            for G in _N_: G.extH.H.pop()  # low-value extH layer
-            break
+        else: break
     return rN_, rEt, rng
 
 def rng_kern_(N_, rng):  # comp Gs summed in kernels, ~ graph CNN without backprop, not for Clinks
@@ -148,12 +146,12 @@ def rng_kern_(N_, rng):  # comp Gs summed in kernels, ~ graph CNN without backpr
     while True:
         _G_ = []  # rng+ convolution, cross-comp: recursive center node DerH += linked node derHs for next loop:
         for G in G_:
-            H,eH = G.derH, G.extH  # comparand, ders
+            H,eH = G.extH.H[-1], G.extH  # comparand, ders
             for _G in G.krim:
-                if _G in [G for compared_ in G.compared__ for G in compared_]:  # in any rng++ or when _G was G
+                if _G in [G for compared_ in G.compared__ for G in compared_[:-3]] + G.compared__[-1]:  # in any rng++ or when _G was G
                     continue
                 G.compared__[-1] += [_G]; _G.compared__[-1] += [G]
-                _H,_eH = _G.derH, _G.extH  # comparand, ders
+                _H,_eH = _G.extH.H[-1], _G.extH  # comparand, ders  (this H should be prior scheme's DerH, or the current extH.H[-1]? their derH is always empty here)
                 dderH = _H.comp_(H, dderH=CH(), rn=1, fagg=1, flat=1)  # comp last krim
                 if dderH.Et[0] > ave * dderH.Et[2] * (n+1):  # n adds to costs
                     for h in _eH, eH:
@@ -259,7 +257,7 @@ def comp_N(Link, iEt, rng, rev=None):  # dir if fd, Link+=dderH, comparand rim+=
                 if len(eH.H)==rng:  # accum last layer
                     eH.H[-1].add_(Link.derH)
                 else:               # init last layer
-                    eH.H.append_(Link.derH, flat=0)
+                    eH.append_(Link.derH, flat=0)
         return True
 
 def comp_ext(_L,L,_S,S,_A,A):  # compare non-derivatives:
