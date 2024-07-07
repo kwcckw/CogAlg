@@ -160,7 +160,8 @@ def rng_kern_(N_, rng):  # comp Gs summed in kernels, ~ graph CNN without backpr
                 dH.append_(deH)
                 if dH.Et[0] > ave * dH.Et[2] * (n+1):  # n adds to costs
                     for h in _eH, eH:
-                        h.H[n].add_(dH) if len(h.H)>=n+1 else h.append_(dH,flat=0)  # bilateral assign
+                        # should be h.H[-1].H in adding and append here? Because number of h.H is per rng, h.H[-1].H is per n?
+                        h.H[-1].H[n].add_(dH) if len(h.H[-1].H)>=n+1 else h.H[-1].append_(dH,flat=0)  # bilateral assign
             h = G.extH
             if len(h.H) > n and h.H[-1].Et[0] > ave * h.H[-1].Et[2] * n:  # G.extH may not be appended
                 _G_ += [G]  # else G kernel is not extended
@@ -221,7 +222,7 @@ def comp_N(Link, iEt, rng, rev=None):  # dir if fd, Link+=dderH, comparand rim+=
     dH = CH(); _N, N = Link.nodet; rn = _N.n / N.n
 
     if fd:  # Clink Ns
-        _N.derH.comp_(N.derH, dH, rn, fagg=1, flat=0, frev=rev)  # append and sum new dH to base dH
+        _N.derH.comp_(N.derH, dH, rn, fagg=1, flat=1, frev=rev)  # append and sum new dH to base dH
         # reverse angle direction for left link:
         _A, A = _N.angle, N.angle if rev else [-d for d in N.angle]
         Et, rt, md_ = comp_ext(2,2, _N.S,N.S/rn, _A,A)  # 2 nodes in nodet
