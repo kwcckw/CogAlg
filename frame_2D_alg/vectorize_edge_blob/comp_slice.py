@@ -65,7 +65,6 @@ class CG(CBase):  # PP | graph | blob: params of single-fork node_ cluster
         G.Et = [0,0,0,0] if Et is None else Et  # external eval tuple, summed from rng++ before forming new graph and appending G.extH
         G.latuple = [0,0,0,0,0,[0,0]]  # lateral I,G,M,Ma,L,[Dy,Dx]
         G.derH = CH() if derH is None else derH  # nested derH in Gs: [[subH,valt,rdnt,dect]], subH: [[derH,valt,rdnt,dect]]: 2-fork composition layers
-        G.DerH = CH()  # summed kernel rims
         G.node_ = [] if node_ is None else node_  # convert to node_t in sub_recursion
         G.link_ = [] if link_ is None else link_  # links per comp layer, nest in rng+)der+
         G.aRad = 0  # average distance between graph center and node center
@@ -76,7 +75,6 @@ class CG(CBase):  # PP | graph | blob: params of single-fork node_ cluster
         G.n = n  # external n (last layer n)
         G.rim = []  # direct links, depth, init rim_t, link_tH in base sub+ | cpr rd+, link_tHH in cpr sub+
         G.extH = CH()  # G-external daggH( dsubH( dderH, summed from rim links
-        G.ExtH = CH()  # summed link.DerH
         G.alt_graph_ = []  # adjacent gap+overlap graphs, vs. contour in frame_graphs
         # dynamic attrs:
         G.Rim = []  # links to the most mediated nodes
@@ -152,7 +150,7 @@ class CH(CBase):  # generic derivation hierarchy with variable nesting
             HE.n += He.n  # combined param accumulation span
         else:
             HE.copy(He)  # initialization
-        if HE.root is not None: HE.root.update_root(He)  # we need to check if root is not None here because root before update_root may empty too
+        if HE.root is not None: HE.root.update_root(He)
 
     def append_(HE,He, irdnt=None, flat=0):
 
@@ -360,7 +358,7 @@ def form_PP_t(root, P_):  # form PPs of dP.valt[fd] + connected Ps val
 
 def sum2PP(root, P_, dP_, fd):  # sum links in Ps and Ps in PP
 
-    PP = CG(fd=fd, root=root, derH=CH(H=[CH()]), rng=root.rng+1)  # init 1st layer if iderH in derH
+    PP = CG(fd=fd, root=root, derH=CH(H=[CH()]), rng=root.rng+1)  # 1st layer of derH is iderH
     PP.derH.H[-1].root = PP.derH  # update root
     PP.P_ = P_  # P_ is CdPs if fd, but summed in CG PP?
     iRt = root.derH.H[-1].Et[2:4] if root.derH else [0,0]  # add to rdnt
@@ -380,7 +378,7 @@ def sum2PP(root, P_, dP_, fd):  # sum links in Ps and Ps in PP
         PP.area += L; PP.n += L  # no + P.derH.n: current links only?
         PP.latuple = [P+p for P,p in zip(PP.latuple[:-1],P.latuple[:-1])] + [[A+a for A,a in zip(PP.latuple[-1],P.latuple[-1])]]
         if P.derH:
-            PP.derH.H[-1].add_(P.derH)  # no separate extH, the links are unique here
+            PP.derH.H[-1].add_(P.derH)  # sum in iderH, no separate extH, the links are unique
         if isinstance(P, CP):
             for y,x in P.yx_:
                 y = int(round(y)); x = int(round(x))  # summed with float dy,dx in slice_edge?
