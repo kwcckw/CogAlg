@@ -146,33 +146,47 @@ def rng_kern_(N_, rng):  # comp Gs summed in kernels, ~ graph CNN without backpr
         G.krim = [link.nodet[0] if link.nodet[1] is G else link.nodet[1] for link, rev in G.rim]
     n = 1  # n convolutions
     iG_ = copy(G_)  # has ext_Lay
+    H_indices_ = [[0, len(G.extH.H[-1].H)] for G in G_]  # current rng last extH's indices: [start_index, end_index] in extH.H[-1].H
     while True:
-        _G_ = []  # rng+ convolution, cross-comp: recursive center node DerH += linked node derHs for next loop:
-        for G in G_:
+        _G_, _H_indices_= [], []  # rng+ convolution, cross-comp: recursive center node DerH += linked node derHs for next loop:
+        for G, (start_H, end_H) in zip(G_, H_indices_):
             G.compared__[-1] = []  # reset per krim
-            H,eH = G.derH, G.extH  # comparand,ders
+            H,neH = G.derH, CH()   # comparand,ders  (neH is last rng's H in extH : extH.H[-1], and it contains only last n added H)
+            for nH in G.extH.H[-1].H[start_H:end_H]: neH.append_(nH, flat=0)  # create neH with current n's extH.H[-1].H only 
             for _G in G.krim:
                 if _G in [G for compared_ in G.compared__ for G in compared_]:  # in any rng++ or when _G was G
                     continue
                 G.compared__[-1] += [_G]; _G.compared__[-1] += [G]
-                _H,_eH = _G.derH, _G.extH  # comparand, ders
+                _H,_neH = _G.derH, CH()  # comparand, ders
+                _start_H, _end_H = H_indices_[G_.index(_G)]
+                for _nH in _G.extH.H[-1].H[_start_H:_end_H]: _neH.append_(_nH, flat=0)
                 dH = _H.comp_(H, DH=CH(),rn=1,fagg=1,flat=1)  # comp last krim
-                deH = _eH.comp_(eH, DH=CH(),rn=1,fagg=1,flat=1)  # skip last rng: incomplete?
+                deH = _neH.comp_(neH, DH=CH(),rn=1,fagg=1,flat=0)  # skip last rng: incomplete?
                 dH.append_(deH)
                 if dH.Et[0] > ave * dH.Et[2] * (n+1):  # n adds to costs
-                    for h in _eH, eH:
-                        h.H[-1].H[n].add_(dH) if len(h.H[-1].H)>=n+1 else h.H[-1].append_(dH,flat=0)  # bilateral assign                                                                                        flat=0)  # bilateral assign
-            h = G.extH
-            if len(h.H) > n and h.H[-1].Et[0] > ave * h.H[-1].Et[2] * n:  # G.extH may not be appended
-                Dlay= CH(); lay = h.H[-1].H[0]; L = len(h.H[-1].H); i=1
-                while L>=i:
-                    _lay = lay; lay = h.H[-1].H[i]
-                    Dlay.add_(_lay.comp_(lay, DH=h.H[-1], rn=1,fagg=1,flat=1))
+                    for h, start_h, end_h in zip((_neH, neH), (_start_H, start_H), (_end_H, end_H)):  
+                        added_len_h = len(h.H) - end_h  # length of current n's added H
+                        if added_len_h > 0:  # added new H, sum those new H side by side
+                            for Hh, hh in zip(h.H[start_h:end_h], dH.H):
+                                Hh.H[-1].add_(hh)
+                        else:
+                            h.append_(dH,flat=1)    
+            # h is neH
+            h = neH
+            if len(h.H) > end_H and h.H[-1].Et[0] > ave * h.H[-1].Et[2] * n:  # G.extH may not be appended
+                Dlay= CH(); lay = h.H[-1].H[0]; L = len(h.H); i=1
+                while L>i:
+                    _lay = lay; lay = h.H[i]
+                    # need further discussion here
+                    Dlay.add_(_lay.comp_(lay, DH=h, rn=1,fagg=1,flat=1))
                     i+=1
-                if Dlay.Et[0] < ave * Dlay.Et[2]: h.H[-1].H = []  # remove krim layers, keep only summed representation: h.H[-1]
-                _G_ += [G]  # else G kernel is not extended
+                if Dlay.Et[0] < ave * Dlay.Et[2]: h.H = []  # remove krim layers, keep only summed representation: h.H[-1]
+                else: 
+                    G.extH.H[-1].H += h.H  # merge new der layers
+                    _H_indices_ += [[end_H, len(G.extH.H[-1].H)]]  # for next n, with new start and end index
+                    _G_ += [G]  # else G kernel is not extended (should not pack in _G_ if not extended?)
         if _G_:
-            G_ = _G_; n += 1
+            G_ = _G_; n += 1; H_indices_ = _H_indices_
         else:
             for G, compared_ in zip (iG_, compared__):
                 G.compared__[-1] = compared_; delattr(G, "krim")
