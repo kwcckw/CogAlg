@@ -54,7 +54,7 @@ class CcompSliceFrame(CsliceEdge):
 
 class CG(CBase):  # PP | graph | blob: params of single-fork node_ cluster
 
-    def __init__(G, root=None, rng=1, fd=0, node_=None, link_=None, Et=None, derH=None, n=0):
+    def __init__(G, root=None, rng=1, fd=0, node_=None, link_=None, Et=None, derH=None, DerH=None, n=0):
         super().__init__()
         # PP:
         G.root = [] if root is None else root  # mgraphs that contain this G, single-layer
@@ -65,6 +65,7 @@ class CG(CBase):  # PP | graph | blob: params of single-fork node_ cluster
         G.Et = [0,0,0,0] if Et is None else Et  # external eval tuple, summed from rng++ before forming new graph and appending G.extH
         G.latuple = [0,0,0,0,0,[0,0]]  # lateral I,G,M,Ma,L,[Dy,Dx]
         G.derH = CH() if derH is None else derH  # nested derH in Gs: [[subH,valt,rdnt,dect]], subH: [[derH,valt,rdnt,dect]]: 2-fork composition layers
+        G.DerH = CH() if DerH is None else DerH
         G.node_ = [] if node_ is None else node_  # convert to node_t in sub_recursion
         G.link_ = [] if link_ is None else link_  # links per comp layer, nest in rng+)der+
         G.aRad = 0  # average distance between graph center and node center
