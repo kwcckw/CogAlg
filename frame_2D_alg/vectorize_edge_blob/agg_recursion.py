@@ -100,7 +100,7 @@ def agg_recursion(root, N_, fL, rng=1):  # fL: compare node-mediated links, else
         for fd, node_ in zip((0,1), node_t):
             N_ = [n for n in node_ if n.derH.Et[fd] > G_aves[fd] * n.derH.Et[2+fd]]  # prune node_
             if root.derH.Et[0] * (max(0,(len(N_)-1)*root.rng)) > G_aves[1]*root.derH.Et[2]:
-                # agg+: rng+ val *= n comparands, forms CGs:
+                # agg+ rng+, val *= n comparands, forms CGs:
                 agg_recursion(root, N_, fL=0)
         root.node_[:] = node_t
     # else keep root.node_
@@ -125,7 +125,7 @@ def rng_kern_(N_, rng):  # comp Gs summed in kernels, ~ graph CNN without backpr
 
     G_ = []
     Et = [0,0,0,0]
-    # init conv kernels per N:
+    # init conv kernels per N
     for (_G, G) in list(combinations(N_,r=2)):
         if _G in [G for compared_ in G.compared__ for G in compared_]:  # compared in any rng++
             continue
@@ -145,56 +145,48 @@ def rng_kern_(N_, rng):  # comp Gs summed in kernels, ~ graph CNN without backpr
         compared__ += [G.compared__[-1]]  # buffer full compared_s
         krim = [link.nodet[0] if link.nodet[1] is G else link.nodet[1] for link, rev in G.rim]
         Lay = CH()
-        # this is clearer?
         for _G in krim: Lay.add_(_G.derH)  # init with DerH of immediate krim, then sum mediated krims
         G.DerH.append_(Lay, flat=0)  # comp -> G.extH
         G.kH = [krim]
-        G.extH.append_(CH(), flat=0)  # we need to init current rng new CH? Else extH.H is empty
+        G.extH.H[-1] += [CH(root=G.extH.H[-1])]  # for summation
     n = 1 # convo rng
     iG_ = copy(G_) # has extLay
     while True:
         _G_ = []  # rng+ convolution, cross-comp: recursive center node DerH += linked node derHs for next loop:
         for G in G_:
-            # pack current convo' n's CH
-            G.extH.H[-1].append_(CH(),flat=0); G.compared__[-1] = []; krim = []  # fill and reset per krim
+            G.extH.H[-1] += [CH(root=G.extH.H[-1])]; G.compared__[-1] = []; krim = []  # fill, reset per krim
             for _G in G.kH[-1]:
                 for link, rev in _G.rim:
                     __G = link.nodet[0] if link.nodet[1] is G else link.nodet[1]
-                    if __G not in krim:
-                        krim += [__G]  # mediated krim
+                    if __G not in krim: krim += [__G]  # mediated nodes
             Lay = CH()
-            for _G in krim: Lay.add_(_G.derH)  # comp -> G.extLay
-            G.DerH.append_(Lay, flat=0)  # comp -> G.extLay
-            G.kH += [krim]  # add new layer of krim?
+            for _G in krim: Lay.add_(_G.derH) # comp -> G.extLay
+            G.DerH.append_(Lay, flat=0)
+            G.kH += [krim]
         for G in G_:
-            for _G in G.kH[-1]:  # last krim?
+            for _G in G.kH[-1]:
                 if _G in [G for compared_ in G.compared__ for G in compared_]:  # in any rng++ or when _G was G
                     continue
-                G.compared__[-1] += [_G]; _G.compared__[-1] += [G]
-                # comp last DerLay, sum of last krim:
+                G.compared__[-1] += [_G]
+                _G.compared__[-1] += [G]  # comp last krim DerH:
                 dH = _G.DerH.H[-1].comp_(G.DerH.H[-1], DH=CH(),rn=1,fagg=1,flat=1)
                 if dH.Et[0] > ave * dH.Et[2] * (n+1):  # n adds to costs
                     for h in _G.extH, G.extH:
-                        h.H[-1].H[n-1].add_(dH)  # bilateral assign (n-1 because extH.H[-1].H is empty initially)
-            # convert all h into G.extH, i think G.extH is clearer
+                        h.H[-1].H[n].add_(dH)  # bilateral assign
             if len(G.extH.H[-1].H) >= n and G.extH.H[-1].Et[0] > ave * G.extH.H[-1].Et[2] * n:  # G.extH may not be appended
                 Dlay= CH(); lay = G.extH.H[-1].H[0]; L = len(G.extH.H[-1].H)
                 i=1
                 while L>i:
                     _lay = lay; lay = G.extH.H[-1].H[i]
-                    Dlay.add_(_lay.comp_(lay, DH=G.extH.H[-1], rn=1,fagg=1,flat=1))  # if we add new derlay into G.extH.H[-1].H, then length of G.extH.H[-1].H is not aligned with n anymore? 
+                    Dlay.add_(_lay.comp_(lay, DH=None, rn=1,fagg=1,flat=1))  # no DH, local Dlay
                     i+=1
-                # when n == 1, G.extH.H[-1].H has single layer, comparison occurs only when n>1
-                if Dlay.Et[0] < ave * Dlay.Et[2] and n>1: 
-                    G.extH.H[-1].H = []  # remove individual layers, keep their sum in h.H[-1]
-                else:
-                    _G_ += [G]  # else G kernel is not extended (this should be in else? If their extH.H[-1].H is reset, there's no need to pack them into _G_ too)
-    
+                if Dlay.Et[0] < ave * Dlay.Et[2]: G.extH.H[-1].H = []  # remove individual layers, keep their sum in h.H[-1]
+                _G_ += [G]
         if _G_:
-            G_ = _G_; n += 1
+            G_ = _G_; n+=1
         else:
             for G, compared_ in zip (iG_, compared__):
-                G.extH.H[-1].H.pop()  # initialized only?
+                G.extH.H[-1].H.pop() # init only
                 G.compared__[-1] = compared_
             break
     return iG_, Et  # Gs with added rim
@@ -285,12 +277,12 @@ def comp_N(Link, iEt, rng, rev=None):  # dir if fd, Link+=dderH, comparand rim+=
                     node.rimt_ += [[[[Link,rev]],[]]] if dir else [[[],[[Link,rev]]]]  # add rng layer
             else:
                 node.rim += [[Link,rev]]
-                # below is no longer needed
-                '''
-                eH = node.extH
-                if len(eH.H)==rng: eH.H[-1].add_(Link.derH)  # accum last layer
-                else:  eH.append_(Link.derH, flat=0)  # init last layer
-                '''
+                if len(node.extH.H)==rng:
+                    node.extH.H[-1].H[-1].add_(Link.derH)  # accum last layer
+                else:
+                    rngLay = CH()
+                    rngLay.append_(Link.derH, flat=0)
+                    node.extH.append_(rngLay, flat=0)  # init last layer
         return True
 
 
