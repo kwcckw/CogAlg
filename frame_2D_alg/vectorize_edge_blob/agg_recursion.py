@@ -151,20 +151,28 @@ def rng_kern_(N_, rng):  # comp Gs summed in kernels, ~ graph CNN without backpr
     n = 1 # convo rng
     iG_ = copy(G_) # has extLay
     while True:
-        _G_ = []  # rng+ convolution, cross-comp: recursive center node DerH += linked node derHs for next loop:
+        _G_, kG_ = [], []  # rng+ convolution, cross-comp: recursive center node DerH += linked node derHs for next loop:
         for G in G_:
             G.extH.H[-1].H += [CH(root=G.extH.H[-1])]; G.compared__[-1] = []; krim = []  # fill, reset per krim
             for _G in G.kH[-1]:
                 for link, rev in _G.rim:
                     __G = link.nodet[0] if link.nodet[1] is G else link.nodet[1]
-                    if __G not in krim: krim += [__G]  # mediated nodes
-            Lay = CH()
-            for _G in krim: Lay.add_(_G.derH) # comp -> G.extLay
-            G.DerH.append_(Lay, flat=0)
-            G.kH += [krim]
-        for G in G_:
+                    if __G not in [kG for krim in G.kH for kG in krim]: krim += [__G]  # mediated nodes (we need to check if __G is already in any of the krim?)1
+            
+            # if G doesn't have added krim, skip it?
+            if krim:
+                Lay = CH()
+                for _G in krim: Lay.add_(_G.derH) # comp -> G.extLay
+                G.DerH.append_(Lay, flat=0)
+                G.kH += [krim]
+                kG_ += [G]  # G with added krim
+            else:
+                G.extH.H[-1].H.pop() # init only
+                
+        for G in kG_:
             for _G in G.kH[-1]:
-                if _G in [G for compared_ in G.compared__ for G in compared_]:  # in any rng++ or when _G was G
+                # check if _G in kG_ too? Else _G doesn't have added krim and DerH
+                if _G in [G for compared_ in G.compared__ for G in compared_] or _G not in kG_:  # in any rng++ or when _G was G
                     continue
                 G.compared__[-1] += [_G]; _G.compared__[-1] += [G]
                 # comp last krim DerH:
@@ -178,18 +186,17 @@ def rng_kern_(N_, rng):  # comp Gs summed in kernels, ~ graph CNN without backpr
             G_ = _G_; n+=1
         else:
             for G, compared_ in zip (iG_, compared__):
-                G.extH.H[-1].H.pop() # init only
                 G.compared__[-1] = compared_
             break
     for G in G_:
-        for rlay in G.extH.H[-1].H:  # rng layers
+        for rlay in G.extH.H:  # rng layers
             Dlay=CH(); klay = rlay.H[0]; L = len(rlay.H); i=1
             # eval kernel layers:
             while L>i:
-                _klay = klay; klay = G.extH.H[-1].H[i]
+                _klay = klay; klay = rlay.H[i]  # similar with rlay.H[i]?
                 Dlay.add_(_klay.comp_(klay, DH=CH(), rn=1,fagg=1,flat=1))  # no DH, local Dlay
                 i+=1
-            if Dlay.Et[0] < ave * Dlay.Et[2]: G.extH.H[-1].H = []  # remove discrete k layers, keep sum in h.H[-1]
+            if Dlay.Et[0] < ave * Dlay.Et[2]: rlay.H = []  # remove discrete k layers, keep sum in h.H[-1]
 
     return iG_, Et  # Gs with added rim
 

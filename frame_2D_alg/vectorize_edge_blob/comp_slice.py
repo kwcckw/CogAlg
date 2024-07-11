@@ -63,7 +63,7 @@ class CG(CBase):  # PP | graph | blob: params of single-fork node_ cluster
         G.A = 0, 0  # angle: summed dy,dx in links
         G.area = 0
         G.Et = [0,0,0,0] if Et is None else Et  # external eval tuple, summed from rng++ before forming new graph and appending G.extH
-        # G.latuple = [0,0,0,0,0,[0,0]]  # lateral I,G,M,Ma,L,[Dy,Dx]
+        G.latuple = [0,0,0,0,0,[0,0]]  # lateral I,G,M,Ma,L,[Dy,Dx]
         G.derH = CH() if derH is None else derH  # nested derH in Gs: [[subH,valt,rdnt,dect]], subH: [[derH,valt,rdnt,dect]]: 2-fork composition layers
         G.DerH = CH() if DerH is None else DerH  # _G.derH summed from krim
         G.node_ = [] if node_ is None else node_  # convert to node_t in sub_recursion
@@ -143,8 +143,6 @@ class CH(CBase):  # generic derivation hierarchy with variable nesting
                     Lay.root = HE
                     H += [Lay]
                 HE.H = H
-            elif isinstance(HE.H[-1], list):
-                HE.H = [P+p for P,p in zip(HE.H[:-1],He.H[:-1])] + [[A+a for A,a in zip(HE.H[-1],He.H[-1])]]
             else:
                 HE.H = [V+v for V,v in zip_longest(HE.H, He.H, fillvalue=0)]  # both Hs are md_s
             # default:
@@ -196,11 +194,6 @@ class CH(CBase):  # generic derivation hierarchy with variable nesting
                     dH += [dlay]; n += dlay.n
                 else:
                     dH += [CH()]  # empty?
-
-        elif isinstance(_He.H[-1], list):  # H is latuple, comp_latuple:
-            Et, relt, dH = comp_latuple(_He.H, He.H, rn=rn, fagg=1)  # fagg is always 1 here
-            n = (_He.H[4]+He.H[4]) / 2  # H[4] is L from: lateral I,G,M,Ma,L,[Dy,Dx]
-
         else:  # H is md_, numerical comp:
             vm,vd,rm,rd, decm,decd = 0,0,0,0,0,0
             dH = []
@@ -363,9 +356,8 @@ def form_PP_t(root, P_):  # form PPs of dP.valt[fd] + connected Ps val
 
 def sum2PP(root, P_, dP_, fd):  # sum links in Ps and Ps in PP
 
-    # for latuple layer, their n is 1 too?
-    PP = CG(fd=fd, root=root, derH=CH(H=[CH(n=1.0, H=[0,0,0,0,0,[0,0]]), CH()]), rng=root.rng+1)  # 1st layer of derH is latuple, 2nd layer is iderH
-    for H in PP.derH.H: H.root = PP.derH  # update root
+    PP = CG(fd=fd, root=root, derH=CH(H=[CH()]), rng=root.rng+1)  # 1st layer of derH is iderH
+    PP.derH.H[-1].root = PP.derH  # update root
     PP.P_ = P_  # P_ is CdPs if fd, but summed in CG PP?
     iRt = root.derH.H[-1].Et[2:4] if root.derH else [0,0]  # add to rdnt
     # += uplinks:
@@ -379,11 +371,10 @@ def sum2PP(root, P_, dP_, fd):  # sum links in Ps and Ps in PP
         PP.n += dP.derH.n  # *= ave compared P.L?
     # += Ps:
     celly_,cellx_ = [],[]
-    Latuple = PP.derH.H[0].H  # reassign for clarity (Latuple params are not added to derH.Et?)
     for P in P_:
         L = P.latuple[-2]
         PP.area += L; PP.n += L  # no + P.derH.n: current links only?
-        Latuple[:] = [P+p for P,p in zip(Latuple[:-1],P.latuple[:-1])] + [[A+a for A,a in zip(Latuple[-1],P.latuple[-1])]]
+        PP.latuple = [P+p for P,p in zip(PP.latuple[:-1],P.latuple[:-1])] + [[A+a for A,a in zip(PP.latuple[-1],P.latuple[-1])]]
         if P.derH:
             PP.derH.H[-1].add_(P.derH)  # sum in iderH, no separate extH, the links are unique
         if isinstance(P, CP):
