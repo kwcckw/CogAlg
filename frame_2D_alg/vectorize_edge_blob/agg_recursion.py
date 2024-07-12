@@ -181,25 +181,35 @@ def rng_kern_(N_, rng):  # comp Gs summed in kernels, ~ graph CNN without backpr
                 dH = _G.DerH.H[-1].comp_(G.DerH.H[-1], DH=CH(),rn=1,fagg=1,flat=1)
                 if dH.Et[0] > ave * dH.Et[2] * (n+1):  # n adds to costs
                     for h in _G.extH, G.extH:
-                        h.H[-1].H[n].add_(dH)  # bilateral assign
-            if len(G.extH.H[-1].H) > n and G.extH.H[-1].Et[0] > ave * G.extH.H[-1].Et[2] * n:
+                        # bilateral assign
+                        if len(h.H[-1].H) > n:
+                            h.H[-1].H[n].add_(dH)  
+                        else:  # _G may not in G_ (from kH[0]), and hence doesn't have the initialized nth's CH, so append it?
+                            h.H[-1].append_(dH, flat=0)
+
+        # this should be after all the comps, because G maybe in other G's kH, and for bilateral assignment, G.extH.H might be assigned again in other G's loop
+        for G in G_:
+            # check if G.extH.H[-1].H[n].H is empty?
+            if G.extH.H[-1].H[n].H and G.extH.H[-1].H[n].Et[0] > ave * G.extH.H[-1].H[n].Et[2] * n:  # should be eval based on extH.H[-1].H[n] instead of extH.H[-1]?
                 _G_ += [G]  # appended G.extH
             else:
-                G.compared__.pop(); G.DerH.H[-1].H.pop(); G.extH.H[-1].H.pop()  # init only
+                G.DerH.H[-1].H.pop(); G.extH.H[-1].H.pop()  # init only
+                G.compared__ = [compared__[iG_.index(G)]]  # reassign full kernel (i think this should be here too? If we pop, their compared__ will be empty)
         if _G_:
             G_ = _G_
             n += 1
         else:
-            for G, compared_ in zip (iG_,compared__): G.compared__[-1] = compared_  # reassign full kernel
             break
     for G in G_:
         for rlay in G.extH.H:  # rng layer
-            Dlay = CH()
-            _klay = rlay.H[0]
-            for klay in rlay.H[1:]:  # comp consecutive kernel layers:
-                Dlay.add_(_klay.comp_(klay, DH=CH(), rn=1,fagg=1,flat=1))  # no DH, local Dlay
-                _klay = klay
-            if Dlay.Et[0] < ave * Dlay.Et[2]: rlay.H = []  # remove discrete k layers, keep sum in extH.H[n]
+            if rlay.H:  # rlay may empty after popping above
+                Dlay = CH()
+                _klay = rlay.H[0]
+                for klay in rlay.H[1:]:  # comp consecutive kernel layers:
+                    # is it possible to have empty klay or _klay here?
+                    Dlay.add_(_klay.comp_(klay, DH=CH(), rn=1,fagg=1,flat=1))  # no DH, local Dlay
+                    _klay = klay
+                if Dlay.Et[0] < ave * Dlay.Et[2]: rlay.H = []  # remove discrete k layers, keep sum in extH.H[n]
 
     return iG_, Et  # Gs with added rim
 

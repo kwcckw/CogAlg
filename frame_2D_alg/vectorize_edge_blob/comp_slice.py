@@ -137,7 +137,7 @@ class CH(CBase):  # generic derivation hierarchy with variable nesting
             if isinstance(HE.H[0], CH):
                 H = []
                 for Lay, lay in zip_longest(HE.H, He.H, fillvalue=None):
-                    if lay:  # to be summed
+                    if lay is not None:  # to be summed (we need to check is not None now since layer may empty after we remove H from rLay)
                         if Lay is None: Lay = deepcopy(lay)
                         else: Lay.add_(lay, irdnt)  # recursive unpack to sum md_s
                     Lay.root = HE
