@@ -139,13 +139,17 @@ def rng_kern_(N_, rng):  # comp Gs summed in kernels, ~ graph CNN without backpr
             Link = Clink(nodet=[_G,G], span=2, angle=[dy,dx], box=extend_box(G.box,_G.box))
             if comp_N(Link, Et, rng):
                 for g in _G,G:
-                    if g not in _G_:
-                        krim = [link.nodet[0] if link.nodet[1] is g else link.nodet[1] for link, rev in g.rim]
+                    krim = [link.nodet[0] if link.nodet[1] is g else link.nodet[1] for link, rev in g.rim]
+                    if g not in _G_:                        
                         Lay = CH()
                         for _g in krim: Lay.add_(_g.derH)  # init with DerH of immediate krim, then sum mediated krims
                         g.DerH.append_(Lay, flat=0)  # comp -> G.extH
                         g.kH = [krim]  # or g.kHH[-1]: += /rng?
                         _G_ += [g]
+                    else:
+                        g.kH[-1] += krim  # merge
+                        for _g in krim: g.DerH.H[-1].add_(_g.derH)  # accumulate Lay in DerH
+
     iG_ = deepcopy(_G_)  # new kH
     n = 1  # n klays, convolution / kernel rim: def, sum, comp in separate loops for bilateral G,_G assign:
     while True:
@@ -153,41 +157,50 @@ def rng_kern_(N_, rng):  # comp Gs summed in kernels, ~ graph CNN without backpr
         for G in _G_:  # += layer
             G.kH += [[]]; G.visited__ += [[]]
             G.extH.H[-1].H += [CH(root=G.extH.H[-1])]  # derivatives
-            G.DerH.H[-1].H += [CH(root=G.extH.H[-1])]  # comparands
-        for G in G_:  # += klay:
-            for _G in G.kH[-1]:
+            G.DerH.H += [CH(root=G.extH.H[-1])]  # comparands (should be G.DerH.H here?)
+        for G in _G_:  # += klay:  (should be _G_ here)
+            for _G in G.kH[-2]:  # should be kH[-2]? Because we are just init new kH above
                 for link, rev in _G.rim:
                     __G = link.nodet[0] if link.nodet[1] is G else link.nodet[1]
                     if __G not in G.kH[-1] + [g for visited_ in G.visited__ for g in visited_]:
                         G.kH[-1] += [__G]; __G.kH[-1] += [G]  # bilateral add layer of unique mediated nodes
                         for g,_g in zip((G,__G),(__G,G)):
-                            G_ += [g]; g.visited__[-1] += [_g]  # in G_ only if in visited__[-1]
+                            # we need to skip if g not in G_ too? Else they are not added with new layer of extH, DerH
+                            if g not in G_ and g in _G_: 
+                                G_ += [g]  # g maybe added multiple times since they maybe in krim of different Gs
+                            g.visited__[-1] += [_g]  # in G_ only if in visited__[-1]
         # local/ += DerH sublay if klay:
         for G in G_: G.visited__ += [[]]
-        for G in G_:
+        
+        dG_ = G_[:]; G_ = []
+        for G in dG_:
             for _G in G.kH[-1]:  # add last krim
-                if _G in G.visited__[-1]: continue  # / _G is G
+                if _G in G.visited__[-1] or _G not in _G_:  # skip if _G not in _G_
+                    continue  # / _G is G (in prior comparison, _G is G)
                 G.visited__[-1] += [_G]; _G.visited__[-1] += [G]
                 G.DerH.H[-1].add_(_G.derH); _G.DerH.H[-1].add_(G.derH)  # bilateral sum layer
+                # pack only Gs with added accumulated DerH? Else there's no point to compare empty DerH
+                if G not in G_ : G_ += [G]
+                if _G not in G_: G_ += [_G]
+
         # reset/ += subH sublay if DerLay:
         for G in G_: G.visited__[-1] = []
         for G in G_:
             for _G in G.kH[0]:  # comp direct kernel
-                if _G in G.visited__[-1]: continue
+                if _G in G.visited__[-1] or _G not in G_: continue
                 G.visited__[-1] += [_G]; _G.visited__[-1] += [G]
                 # comp last DerLay:
                 dH = _G.DerH.H[-1].comp_(G.DerH.H[-1], DH=CH(),rn=1,fagg=1,flat=1)
                 if dH.Et[0] > ave * dH.Et[2] * (n+1):  # n adds to costs
                     for h in _G.extH, G.extH:
                         h.H[-1].H[n].add_(dH)  # bilateral assign
-        for G in G_:
+        for G in reversed(G_):
             G.visited__.pop()  # loop-specific layer, added in 166
-            if G.extH.H[-1].H[n].Et[0] > ave * G.extH.H[-1].H[n].Et[2] * n:
-                _G_ += [G]  # appended G.extH
-            else:
+            if G.extH.H[-1].H[n].Et[0] <= ave * G.extH.H[-1].H[n].Et[2] * n:
+                G_.remove(G)  # remove G
                 G.visited__.pop(); G.DerH.H[-1].H.pop(); G.extH.H[-1].H.pop()  # init only
         if G_:
-            _G_ = _G_; n += 1
+            _G_ = G_; n += 1
         else:
             break
     for G in iG_:
