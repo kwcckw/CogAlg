@@ -68,14 +68,15 @@ def vectorize_root(image):  # vectorization in 3 composition levels of xcomp, cl
         if hasattr(edge, 'P_') and edge.latuple[-1] * (len(edge.P_)-1) > G_aves[0]:  # eval PP, rdn=1  (ave_PPm or G_aves[0]?)
             comp_slice(edge)
             # for agg+:
+            edge.derH = CH(); edge.derH.append_(CH(),flat=0) 
             edge.link_ = []; edge.fback_t = [[],[]]
             node_t, link_t = [[],[]], [[],[]]
             for fd, node_ in enumerate(copy(edge.node_)):  # always node_t
-                if edge.derH and any(edge.derH.Et):   # any for np array
-                    if edge.derH.Et[fd] * (len(node_)-1)*(edge.rng+1) > G_aves[fd] * edge.derH.Et[2+fd]:
+                if edge.iderH and any(edge.iderH.Et):   # any for np array
+                    if edge.iderH.Et[fd] * (len(node_)-1)*(edge.rng+1) > G_aves[fd] * edge.iderH.Et[2+fd]:
                         pruned_node_ = []
                         for PP in node_:  # PP -> G
-                            if PP.derH and PP.derH.Et[fd] > G_aves[fd] * PP.derH.Et[2+fd]:  # v> ave*r
+                            if PP.iderH and PP.iderH.Et[fd] > G_aves[fd] * PP.iderH.Et[2+fd]:  # v> ave*r
                                 PP.root_ = []  # no feedback to edge?
                                 PP.node_ = PP.P_  # revert node_
                                 y0,x0,yn,xn = PP.box
@@ -166,6 +167,11 @@ def rng_kern_(N_, rng):  # comp Gs summed in kernels, ~ graph CNN without backpr
                                 g.visited__[-1] += [_g]
                                 if g not in G_:  # in G_ only if in visited__[-1]
                                     G_ += [g]
+        # if G is not added to G_, we need to remove those added empty params too
+        for G in _G_:
+           if G not in G_: 
+               remove_last_layer(G) 
+            
         # local/ += DerH sublay:
         for G in G_: G.visited__ += [[]]
         for G in G_:
@@ -173,8 +179,15 @@ def rng_kern_(N_, rng):  # comp Gs summed in kernels, ~ graph CNN without backpr
                 if _G in G.visited__[-1] or _G not in _G_:  # skip if _G not in _G_
                     continue  # _G was previously compared as G
                 G.visited__[-1] += [_G]; _G.visited__[-1] += [G]
-                G.DerH.H[-1].H[-1].add_(_G.derH)
-                _G.DerH.H[-1].H[-1].add_(G.derH)
+                G.DerH.H[-1].H[-1].add_(_G.derH if _G.derH else _G.iderH)  # G.derH is empty in the 1st rng, use iderH?
+                _G.DerH.H[-1].H[-1].add_(G.derH if G.derH else G.iderH)
+                
+        # remove G if they do not have added DerH.H[-1].H[-1]
+        for G in reversed(G_):
+           if not G.DerH.H[-1].H[-1]: 
+               G_.remove(G)
+               remove_last_layer(G) 
+
         # reset/ += subH sublay:
         for G in G_: G.visited__[-1] = []
         for G in G_:
@@ -191,7 +204,7 @@ def rng_kern_(N_, rng):  # comp Gs summed in kernels, ~ graph CNN without backpr
             G.visited__.pop()  # loop-specific layer
             if G.extH.H[-1].H[-1].Et[0] <= ave * G.extH.H[-1].H[-1].Et[2] * n:
                 G_.remove(G)
-                G.visited__.pop(); G.DerH.H[-1].H.pop(); G.extH.H[-1].H.pop()  # weak
+                remove_last_layer(G, 0)  # weak
         if G_:
             _G_ = G_; n += 1
         else:
@@ -207,6 +220,11 @@ def rng_kern_(N_, rng):  # comp Gs summed in kernels, ~ graph CNN without backpr
                 if Dlay.Et[0] < ave * Dlay.Et[2]: rlay.H = []  # remove discrete k layers, keep sum in extH.H[n]
 
     return iG_, Et  # Gs with added rim
+
+
+def remove_last_layer(G, pop_visited__=1):
+    if pop_visited__: G.visited__.pop()
+    G.DerH.H[-1].H.pop(); G.extH.H[-1].H.pop()
 
 
 def rng_link_(_L_):  # comp Clinks: der+'rng+ in root.link_ rim_t node rims: directional and node-mediated link tracing
@@ -261,11 +279,12 @@ def comp_N(Link, iEt, rng, rev=None):  # dir if fd, Link+=dderH, comparand rim+=
         _L,L,_S,S,_A,A = len(_N.node_),len(N.node_), _N.S,N.S/rn, _N.A,N.A
         et, rt, md_ = comp_latuple(_N.latuple, N.latuple, rn,fagg=1)
         dH.append_(CH(Et=et,relt=rt,H=md_,n=1,root=dH),flat=0)  # dH.H[0] = [dlatuple]
-        _N.iderH.comp_(N.iderH, dH.H[0], rn, fagg=1, flat=0)    # dH.H[0] += [diderH]
+        _N.iderH.comp_(N.iderH, dH, rn, fagg=1, flat=0)    # dH.H[1] = [diderH]  (should be 2nd index is diderH instead)
 
     Et, Rt, Md_ = comp_ext(_L,L, _S,S, _A,A)
-    dH.H[0].append_(CH(Et=Et,relt=Rt,H=Md_,n=0.5,root=dH),flat=0)  # dH.H[0] += [dext]
-    _N.derH.comp_(N.derH, dH, rn, fagg=1, flat=1, frev=rev)        # dH.H += [*dderH]: higher derLays
+    dH.append_(CH(Et=Et,relt=Rt,H=Md_,n=0.5,root=dH),flat=0)  # dH.H[2] = [dext]   (should be 3rd index is dext instead)
+    if _N.derH and N.derH:
+        _N.derH.comp_(N.derH, dH, rn, fagg=1, flat=1, frev=rev)        # dH.H += [*dderH]: higher derLays
     # derH: ((dlatuple, diderH, dext), (ddlatuple, ddiderH, ddext),...), no comp extH: incomplete
 
     if fd: Link.derH.append_(dH, flat=1)
