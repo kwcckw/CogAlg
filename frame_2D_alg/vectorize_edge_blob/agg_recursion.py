@@ -141,11 +141,14 @@ def rng_kern_(N_, rng):  # comp Gs summed in kernels, ~ graph CNN without backpr
                     krim = [link.nodet[0] if link.nodet[1] is g else link.nodet[1] for link, rev in g.rim]
                     Lay = CH()
                     for _g in krim: Lay.add_(_g.derH)  # also add link derH?
-                    if g in _G_:
-                        g.kH[-1] += krim; g.DerH.H[-1].H[-1].add_(Lay)  # append lay, | g.kHH: [rng][kern]?
-                    else:
-                        g.kH = [krim]; g.DerH.H[-1].append_(Lay,flat=0)  # init lay with direct krim, then sum mediated krims
-                        _G_ += [g]
+                    # in the first rng+, all gs' derH is empty
+                    # but in the 1st rng+, without g.derH, we won't have any Gs to form graph later
+                    if Lay:  
+                        if g in _G_:
+                            g.kH[-1] += krim; g.DerH.H[-1].H[-1].add_(Lay)  # append lay, | g.kHH: [rng][kern]?
+                        else:
+                            g.kH = [krim]; g.DerH.H[-1].append_(Lay,flat=0)  # init lay with direct krim, then sum mediated krims
+                            _G_ += [g]
     iG_ = deepcopy(_G_)  # new kH
     n = 1  # n klays, convolution / kernel rim: def, sum, comp in separate loops for bilateral G,_G assign:
     while True:
@@ -178,7 +181,8 @@ def rng_kern_(N_, rng):  # comp Gs summed in kernels, ~ graph CNN without backpr
         for G in G_: G.visited__[-1] = []
         for G in G_:
             for _G in G.kH[0]:  # comp direct kernel
-                if _G in G.visited__[-1] or _G not in G_: continue
+                # skip Gs without any added DerH
+                if _G in G.visited__[-1] or _G not in G_ or not G.DerH.H[-1].H[-1] or not _G.DerH.H[-1].H[-1]: continue
                 G.visited__[-1] += [_G]; _G.visited__[-1] += [G]
                 # comp last DerLay:
                 dH = _G.DerH.H[-1].H[-1].comp_(G.DerH.H[-1].H[-1], DH=CH(),rn=1,fagg=1,flat=1)
@@ -254,21 +258,24 @@ def rng_link_(_L_):  # comp Clinks: der+'rng+ in root.link_ rim_t node rims: dir
 def comp_N(Link, iEt, rng, rev=None):  # dir if fd, Link+=dderH, comparand rim+=Link
 
     fd = rev is not None  # compared links have binary relative direction?
-    dH = CH(); _N, N = Link.nodet; rn = _N.n / N.n
+    dH = CH()  # for fd fork. dH itself is a derivation layer? So there's no need to init CH ?
+    if not fd:
+        dH.append_(CH(), flat=0) # pack 1st derivation layer
+    _N, N = Link.nodet; rn = _N.n / N.n
     '''
     CG derH layer: [lat_dH, ider_dH, ext_dH],  Clink: dderH, dext
     each dH len = layer elevation in derH + 1st layer len dH: >1 if agg+(sub+)?
     '''
     if fd:  # Clinks, derH = [der_dH, ext_dH]:
-        _N.derH.comp_(N.iderH, dH, rn, fagg=1, flat=0)  # dH.H[0] = [dderH]
+        _N.derH.comp_(N.derH, dH, rn, fagg=1, flat=0)  # dH.H[0] = [dderH]
         Et, Rt, Md_ = comp_ext(2,2, _N.S,N.S/rn, _N.angle, N.angle if rev else [-d for d in N.angle])  # reverse for left link
         dH.append_(CH(Et=Et,relt=Rt,H=Md_,n=0.5,root=dH),flat=0)  # dH.H[1] = [dext]
     else:   # CGs
         et, rt, md_ = comp_latuple(_N.latuple, N.latuple, rn,fagg=1)
-        dH.append_(CH(Et=et,relt=rt,H=md_,n=1,root=dH),flat=0)  # dH.H[0] = [dlatuple]
-        _N.iderH.comp_(N.iderH, dH.H[0], rn, fagg=1, flat=0)    # dH.H[0] += [diderH]
+        dH.H[0].append_(CH(Et=et,relt=rt,H=md_,n=1,root=dH.H[0]),flat=0)  # dH.H[0].H = [dlatuple]
+        _N.iderH.comp_(N.iderH, dH.H[0], rn, fagg=1, flat=0)    # dH.H[0].H += [diderH]
         Et, Rt, Md_ = comp_ext(len(_N.node_),len(N.node_), _N.S,N.S/rn, _N.A,N.A)
-        dH.H[0].append_(CH(Et=Et,relt=Rt,H=Md_,n=0.5,root=dH),flat=0)  # dH.H[0] += [dext]
+        dH.H[0].append_(CH(Et=Et,relt=Rt,H=Md_,n=0.5,root=dH),flat=0)  # dH.H[0].H += [dext]
         if _N.derH and N.derH:
             _N.derH.comp_(N.derH, dH,rn,fagg=1,flat=1,frev=rev)  # dH += higher lays in dderH
         # extH: ders not comp
