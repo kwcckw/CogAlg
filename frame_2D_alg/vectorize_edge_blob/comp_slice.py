@@ -75,7 +75,7 @@ class CG(CBase):  # PP | graph | blob: params of single-fork node_ cluster
         G.kH = []  # kernel: hierarchy of rim layers
         # graph-external, +level per root sub+:
         G.n = n  # external n (last layer n)
-        G.rim = []  # direct links, depth, init rim_t, link_tH in base sub+ | cpr rd+, link_tHH in cpr sub+
+        G.rim_ = []  # direct links, depth, init rim_t, link_tH in base sub+ | cpr rd+, link_tHH in cpr sub+
         G.extH = CH()  # G-external daggH( dsubH( dderH, summed from rim links ) krim nodes
         G.alt_graph_ = []  # adjacent gap+overlap graphs, vs. contour in frame_graphs
         # dynamic attrs:
