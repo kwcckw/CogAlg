@@ -41,26 +41,26 @@ ave_L = 4
 G_aves = [4,6]  # ave_Gm, ave_Gd
 max_dist = 2
 
-class CL(CBase):  # product of comparison between two nodes or links
+class CL(CBase):  # link or edge, a product of comparison between two nodes or links
     name = "link"
 
     def __init__(l, nodet=None,derH=None, span=0, angle=None, box=None):
         super().__init__()
-        # CL = binary tree of Gs, depth+/der+: CL nodet is 2 Gs, CL + CLs in nodet is 4 Gs, etc., unpack sequentially.
+        # CL = binary tree of Gs, depth+/der+: CL nodet is 2 Gs, CL + CLs in nodet is 4 Gs, etc.,
+        # unpack sequentially
         l.nodet = [] if nodet is None else nodet  # e_ in kernels, else replaces _node,node: not used in kernels?
-        l.n = 1  # min(node_.n)
-        l.S = 0  # sum nodet
-        l.angle = [0,0] if angle is None else angle  # dy,dx between node centers
+        l.angle = [0,0] if angle is None else angle  # dy,dx between nodet centers
         l.span = span  # distance between nodet centers
-        l.box = [] if box is None else box  # sum nodet
         l.area = 0  # sum nodet
+        l.box = [] if box is None else box  # sum nodet
         l.latuple = []  # sum nodet
         l.derH = CH() if derH is None else derH
         l.DerH = CH()  # ders from kernels: G.DerH
-        l.der_ext = []  # Et, Rt, Md_
-        l.ft = [0,0]  # fork inclusion tuple,
-        # ft replaces Vt?:
-        l.Vt = [0, 0]  # for rim-overlap modulated segmentation, init derH.Et[:2]
+        l.mdext = []  # Et, Rt, Md_
+        l.ft = [0,0]  # fork inclusion tuple, may replace Vt:
+        l.Vt = [0,0]  # for rim-overlap modulated segmentation, init derH.Et[:2]
+        l.n = 1  # min(node_.n)
+        l.S = 0  # sum nodet
     def __bool__(l): return bool(l.derH.H)
 
 
@@ -123,11 +123,11 @@ def rng_node_(_N_, rng):  # forms discrete rng+ links, vs indirect rng+ in rng_k
             break
     return rN_, rEt, rng
 
-def rng_kern_(N_, rng):  # comp Gs summed in kernels, ~ graph CNN without backprop, not for Clinks
+def rng_kern_(N_, rng):  # comp Gs summed in kernels, ~ graph CNN without backprop, not for CLs
 
     _G_ = []
     Et = [0,0,0,0]
-    # comp_N, init conv kernels
+    # comp_N:
     for (_G, G) in list(combinations(N_,r=2)):
         if _G in [G for visited_ in G.visited__ for G in visited_]:  # compared in any rng++
             continue
@@ -142,6 +142,7 @@ def rng_kern_(N_, rng):  # comp Gs summed in kernels, ~ graph CNN without backpr
             if comp_N(Link, Et, rng):
                 for g in _G,G:
                     if g not in _G_: _G_ += [g]
+    # init conv kernels:
     for g in _G_:
         Lay = CH(); krim = []
         for link, rev in g.rim_[-1]:
@@ -150,8 +151,9 @@ def rng_kern_(N_, rng):  # comp Gs summed in kernels, ~ graph CNN without backpr
                 Lay.add_(link.derH)
         if krim:
             g.kH += [krim]; g.DerH.H[-1].append_(Lay,flat=0)  # append lay, g.kHH[rng][kern]
-    iG_ = copy(_G_)  # new kH  (should be copy here, else it won't reference a same object)
-    n = 1  # n klays, convolution / kernel rim: def, sum, comp in separate loops for bilateral G,_G assign:
+    iG_ = copy(_G_)  # new kH
+    n = 1  # n kernel rims
+    # convolution: kernel rim Def,Sum,Comp, in separate loops for bilateral G,_G assign:
     while True:
         G_ = []
         for G in _G_:  # += krim
@@ -176,15 +178,14 @@ def rng_kern_(N_, rng):  # comp Gs summed in kernels, ~ graph CNN without backpr
                 if _G in G.visited__[-1] or _G not in _G_:  # skip if _G not in _G_
                     continue  # _G was previously compared as G
                 G.visited__[-1] += [_G]; _G.visited__[-1] += [G]
-                # why it is adding the other G.derH here?
-                if _G.derH: G.DerH.H[-1].H[-1].add_(_G.derH)
-                if G.derH: _G.DerH.H[-1].H[-1].add_(G.derH)
+                # sum lower-krim alt DerH.H layer:
+                if _G.DerH.H[-1][-2]: G.DerH.H[-1].H[-1].add_(_G.DerH.H[-1][-2])
+                if G.DerH.H[-1][-2]: _G.DerH.H[-1].H[-1].add_(G.DerH.H[-1][-2])
         # reset/ += subH sublay:
         for G in G_: G.visited__[-1] = []
         for G in G_:
             for _G in G.kH[0]:  # comp direct kernel
-                # G.DerH.H[-1].H[-1] is still empty in the first rng+, and i don't see how link.ft works here?
-                if _G in G.visited__[-1] or _G not in G_ or not G.DerH.H[-1].H[-1] or not _G.DerH.H[-1].H[-1]: continue
+                if _G in G.visited__[-1] or _G not in G_: continue
                 G.visited__[-1] += [_G]; _G.visited__[-1] += [G]
                 # comp last DerLay:
                 dH = _G.DerH.H[-1].H[-1].comp_(G.DerH.H[-1].H[-1], DH=CH(),rn=1,fagg=1,flat=1)
@@ -192,7 +193,7 @@ def rng_kern_(N_, rng):  # comp Gs summed in kernels, ~ graph CNN without backpr
                     for h in _G.extH, G.extH:
                         h.H[-1].H[n].add_(dH)  # bilateral assign
         # eval extH sublay:
-        for G in reversed(G_):  # we need reversed(G_) to remove while looping G_
+        for G in reversed(G_):
             G.visited__.pop()  # loop-specific layer
             if G.extH.H[-1].H[-1].Et[0] <= ave * G.extH.H[-1].H[-1].Et[2] * (rng+n+1):
                 G_.remove(G)
@@ -216,7 +217,7 @@ def rng_kern_(N_, rng):  # comp Gs summed in kernels, ~ graph CNN without backpr
     return iG_, Et  # Gs with added rim
 
 
-def rng_link_(_L_):  # comp Clinks: der+'rng+ in root.link_ rim_t node rims: directional and node-mediated link tracing
+def rng_link_(_L_):  # comp CLs: der+'rng+ in root.link_ rim_t node rims: directional and node-mediated link tracing
 
     _mN_t_ = [[[L.nodet[0]],[L.nodet[1]]] for L in _L_]  # rim-mediating nodes
     rng = 1; rL_ = []
@@ -226,8 +227,7 @@ def rng_link_(_L_):  # comp Clinks: der+'rng+ in root.link_ rim_t node rims: dir
         for L, _mN_t, mN_t in zip(_L_, _mN_t_, mN_t_):
             for rev, _mN_, mN_ in zip((0,1), _mN_t, mN_t):
                 # comp L, _Ls: nodet mN 1st rim, -> rng+ _Ls/ rng+ mm..Ns:
-                # or all rim_ layers if N is CG?
-                rim_ = [n.rim_[-1] if isinstance(n,CG) else n.rimt_[0][0] + n.rimt_[0][1] for n in _mN_]
+                rim_ = [[l for rim in n.rim_ for l in rim] if isinstance(n,CG) else n.rimt_[0][0] + n.rimt_[0][1] for n in _mN_]
                 for rim in rim_:
                     for _L,_rev in rim:  # _L is reversed relative to its 2nd node
                         if _L is L or _L in L.visited_: continue
@@ -263,23 +263,18 @@ def comp_N(Link, iEt, rng, rev=None):  # dir if fd, Link.derH=dH, comparand rim+
     fd = rev is not None  # compared links have binary relative direction?
     dH = CH(); _N, N = Link.nodet; rn = _N.n / N.n
 
-    if fd:  # CLs
-        _N.derH.comp_(N.derH, dH, rn, fagg=1, flat=1)  # new link derH is local dH (flat should be 1 here? Else it has extra nesting compare to CG fork)
-        N.der_ext = comp_ext(2,2, _N.S,N.S/rn, _N.angle, N.angle if rev else [-d for d in N.angle])  # reverse for left link
-        N.Et = np.add(dH.Et, N.der_ext[0])  # der_ext: Et,Rt,Md_ (should be der_ext[0] here for Et, but how about der_ext's Rt? it should be summed to N.Et[2:4] too?)
+    if fd:  # CLs, form single-layer derT:
+        _N.derH.comp_(N.derH, dH, rn, fagg=1, flat=0)  # new link derH = local dH
+        N.mdext = comp_ext(2,2, _N.S,N.S/rn, _N.angle, N.angle if rev else [-d for d in N.angle])  # reverse for left link
+        N.Et = np.add(dH.Et, N.mdext[0])  # mdext: Et,Rt,Md_
     else:   # CGs
-        # new dH.H[0].T = [dlatuple, diderH, dext], higher layers elements = derivatives of corresponding lower-layer elements, compared between Gs
-        # len T[n].H = layer elevation in derH + 1st layer len H: >1 if agg+(sub+)?
-        dH.append_(CH(), flat=0)  # first derivation layer
-        et, rt, md_ = comp_latuple(_N.latuple, N.latuple, rn,fagg=1)
-        # below is not updated with new T structure
-        dH.H[0].append_(CH(Et=et,relt=rt,H=md_,n=1,root=dH.H[0]),flat=0)  # dH.H[0].H = [dlatuple]
-        # looks like iderH is not a default in CG fork because in agg+agg+, graph formed by Clink doesn't have iderH, so skip iderH when it's empty too?
-        _N.iderH.comp_(N.iderH, dH.H[0], rn, fagg=1, flat=0)    # dH.H[0].H += [diderH]
-        Et, Rt, Md_ = comp_ext(len(_N.node_),len(N.node_), _N.S,N.S/rn, _N.A,N.A)
-        dH.H[0].append_(CH(Et=Et,relt=Rt,H=Md_,n=0.5,root=dH),flat=0)  # dH.H[0].H += [dext]
+        mdlat = comp_latuple(_N.latuple, N.latuple, rn,fagg=1)
+        mdext = comp_ext(len(_N.node_), len(N.node_), _N.S, N.S / rn, _N.A, N.A)
+        iderH = _N.iderH.comp_(N.iderH, None, rn, fagg=1, flat=0)
+        dH.Et = np.add(mdlat[0], iderH.Et, mdext[0])  # each mdT: [et,rt,md_]
+        dH.H = [[mdlat, iderH, mdext]]  # dH.H[0], hlay e = llay e ders, len lay[e].H = derH.H[i] + len derH.H[0][e]: >1 if agg+(sub+)?
         if _N.derH and N.derH:
-            _N.derH.comp_(N.derH, dH, rn,fagg=1,flat=1,frev=rev)  # dH += higher lays in dderH
+            _N.derH.comp_(N.derH, dH, rn,fagg=1,flat=1,frev=rev)  # dH.H += higher lays in dderH
         # extH: ders not comp
     if fd: Link.derH.append_(dH, flat=1)
     else:  Link.derH = dH
@@ -372,8 +367,7 @@ def segment_N_(root, iN_, fd, rng):
     max_ = []
     for N in iN_:
         # init graphts:
-        # should be all rng's rim instead of last layer here?
-        rim = [Lt[0] for rim in N.rim_ for Lt in rim] if isinstance(N,CG) else [Lt[0] for rimt in N.rimt_ for rim in rimt for Lt in rim]  # flatten rim_t
+        rim = [Lt[0] for rim in N.rim_ for Lt in rim] if isinstance(N,CG) else [Lt[0] for rimt in N.rimt_ for rim in rimt for Lt in rim]
         _N_t = [[_N for L in rim for _N in L.nodet if _N is not N], [N]]  # [ext_N_, int_N_]
         # node_, link_, Lrim, Nrim_t, Et:
         Gt = [[N],[],copy(rim),_N_t,[0,0,0,0]]
@@ -460,9 +454,8 @@ def comp_N_(_node_, node_):  # compare partial graphs in merge
             Et, Rt, Md_ = comp_latuple(_latuple, latuple, rn, fagg=1)
             dderH.n = 1; dderH.Et = np.add(Et,et); dderH.relt = np.add(Rt,rt)
             dderH.H = [CH(Et=et,relt=rt,H=md_,n=.5),CH(Et=Et,relt=Rt,H=Md_,n=1)]
-        if _iderH and iderH:  # iderH is empty in Clink
+        if _iderH and iderH:
             _iderH.comp_(iderH, dderH, rn, fagg=1, flat=0)
-
     if _derH and derH: _derH.comp_(derH, dderH, rn, fagg=1, flat=0)  # append and sum new dderH to base dderH
     if _extH and extH: _extH.comp_(extH, dderH, rn, fagg=1, flat=1)
 
@@ -494,9 +487,7 @@ def sum2graph(root, grapht, fd, rng):  # sum node and link params into graph, ag
         graph.S += link.span
         graph.A = np.add(graph.A,link.angle)  # np.add(graph.A, [-link.angle[0],-link.angle[1]] if rev else link.angle)
         if fd: link.root = graph
-
-    # extH.H has variable size here because it depends on rng, so how should we pack them in current scheme?
-    if extH: graph.derH.append_(extH, flat=0)  # graph derH = node derHs + [summed Link_ derHs]
+    if extH: graph.derH.append_(extH, flat=0)  # graph derH = node derHs + [summed Link_ derHs], may be nested by rng
     if fd:
         # assign alt graphs from d graph, after both linked m and d graphs are formed
         for link in graph.link_:

@@ -127,9 +127,12 @@ class CH(CBase):  # generic derivation hierarchy with variable nesting
         He.Et = [0,0,0,0] if Et is None else Et   # evaluation tuple: valt, rdnt
         He.relt = [0,0] if relt is None else relt  # m,d relative to max possible m,d
         He.H = [] if H is None else H  # hierarchy of der layers or md_
+        #| HT: [[],..] with same root?
         He.root = None if root is None else root
 
     def __bool__(H): return H.n != 0
+
+    # below is not updated for nested H structure:
 
     def add_(HE, He, irdnt=None):  # unpack down to numericals and sum them
 
