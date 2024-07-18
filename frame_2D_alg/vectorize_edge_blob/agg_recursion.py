@@ -143,14 +143,14 @@ def rng_kern_(N_, rng):  # comp Gs summed in kernels, ~ graph CNN without backpr
                 for g in _G,G:
                     if g not in _G_: _G_ += [g]
     # init conv kernels:
-    for g in _G_:
+    for g in reversed(_G_):
         Lay = CH(); krim = []
         for link, rev in g.rim_[-1]:
             if link.ft[0]:  # must be mlink
                 krim += [link.nodet[0] if link.nodet[1] is g else link.nodet[1]]
                 Lay.add_(link.derH)
-        if krim:
-            g.kH += [krim]; g.DerH.H[-1].append_(Lay,flat=0)  # append lay, g.kHH[rng][kern]
+        if krim: g.kH += [krim]; g.DerH.H[-1].append_(Lay,flat=0)  # append lay, g.kHH[rng][kern]
+        else:    _G_.remove(g)  # remove g if krim is empty (when link.ft is false)
     iG_ = copy(_G_)  # new kH
     n = 1  # n kernel rims
     # convolution: kernel rim Def,Sum,Comp, in separate loops for bilateral G,_G assign:
@@ -179,8 +179,8 @@ def rng_kern_(N_, rng):  # comp Gs summed in kernels, ~ graph CNN without backpr
                     continue  # _G was previously compared as G
                 G.visited__[-1] += [_G]; _G.visited__[-1] += [G]
                 # sum lower-krim alt DerH.H layer:
-                if _G.DerH.H[-1][-2]: G.DerH.H[-1].H[-1].add_(_G.DerH.H[-1][-2])
-                if G.DerH.H[-1][-2]: _G.DerH.H[-1].H[-1].add_(G.DerH.H[-1][-2])
+                if _G.DerH.H[-1].H[-2]: G.DerH.H[-1].H[-1].add_(_G.DerH.H[-1].H[-2])
+                if G.DerH.H[-1].H[-2]:_G.DerH.H[-1].H[-1].add_(G.DerH.H[-1].H[-2])
         # reset/ += subH sublay:
         for G in G_: G.visited__[-1] = []
         for G in G_:
@@ -271,8 +271,9 @@ def comp_N(Link, iEt, rng, rev=None):  # dir if fd, Link.derH=dH, comparand rim+
         mdlat = comp_latuple(_N.latuple, N.latuple, rn,fagg=1)
         mdext = comp_ext(len(_N.node_), len(N.node_), _N.S, N.S / rn, _N.A, N.A)
         iderH = _N.iderH.comp_(N.iderH, None, rn, fagg=1, flat=0)
-        dH.Et = np.add(mdlat[0], iderH.Et, mdext[0])  # each mdT: [et,rt,md_]
+        dH.Et = np.array(mdlat[0]) + iderH.Et + mdext[0]  # each mdT: [et,rt,md_] (we need at least single np array to use + to sum all of them)
         dH.H = [[mdlat, iderH, mdext]]  # dH.H[0], hlay e = llay e ders, len lay[e].H = derH.H[i] + len derH.H[0][e]: >1 if agg+(sub+)?
+        dH.n += 1 + iderH.n + 0.5  # we need to add n too
         if _N.derH and N.derH:
             _N.derH.comp_(N.derH, dH, rn,fagg=1,flat=1,frev=rev)  # dH.H += higher lays in dderH
         # extH: ders not comp

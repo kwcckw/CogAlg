@@ -109,6 +109,21 @@ class CdP(CBase):  # produced by comp_P, comp_slice version of Clink
 
     def __bool__(l): return bool(l.derH.H)
 
+# recursively sum nested list H
+def sum_nested_H(HE, He, irdnt):
+    
+    if isinstance(HE[0], list):  # nested list H
+        for H, h, in zip_longest(HE, He, fillvalue=None):
+            if h is not None:
+                if H is not None:
+                    if isinstance(H, CH):
+                        H.add_(h, irdnt=irdnt)   
+                    elif isinstance(H, list):
+                        sum_nested_H(H, h, irdnt)
+                else:
+                    HE.H.append(deepcopy(h))
+    else:  # Et, Rt, Md_
+        HE[:] = [V+v for V,v in zip_longest(HE, He, fillvalue=0)]
 
 class CH(CBase):  # generic derivation hierarchy with variable nesting
     '''
@@ -132,7 +147,7 @@ class CH(CBase):  # generic derivation hierarchy with variable nesting
 
     def __bool__(H): return H.n != 0
 
-    # below is not updated for nested H structure:
+    # added draft for nested H structure:
 
     def add_(HE, He, irdnt=None):  # unpack down to numericals and sum them
 
@@ -149,6 +164,16 @@ class CH(CBase):  # generic derivation hierarchy with variable nesting
                         Lay.root = HE
                     H += [Lay]
                 HE.H = H
+            elif isinstance(HE.H[0], list):
+                for H, h, in zip_longest(HE.H, He.H, fillvalue=None):
+                    if h is not None:
+                        if H is not None:
+                            if isinstance(H, CH):
+                                H.add_(h, irdnt=irdnt)   
+                            elif isinstance(H, list):
+                                sum_nested_H(H, h, irdnt)
+                        else:
+                            HE.H.append(deepcopy(h))   
             else:
                 HE.H = [V+v for V,v in zip_longest(HE.H, He.H, fillvalue=0)]  # both Hs are md_s
             # default:
@@ -185,8 +210,9 @@ class CH(CBase):  # generic derivation hierarchy with variable nesting
             root.n += He.n
             root = root.root
 
-    def comp_(_He, He, DH, rn=1, fagg=0, flat=1, frev=0):  # unpack tuples (formally lists) down to numericals and compare them
+    def comp_(_He, He, DH=None, rn=1, fagg=0, flat=1, frev=0):  # unpack tuples (formally lists) down to numericals and compare them
 
+        if DH is None: DH = CH()  # init new CH if it's None
         n = 0
         if isinstance(_He.H[0], CH):  # _lay and lay is He_, they are aligned
             Et = [0,0,0,0]  # Vm,Vd, Rm,Rd
@@ -423,7 +449,7 @@ def comp_latuple(_latuple, latuple, rn, fagg=0):  # 0der params
                 if fd: ddec += abs(par)/ abs(maxv) if maxv else 1
                 else:  mdec += (par+ave)/ (maxv+ave) if maxv else 1
 
-        ret = [mval, dval, mrdn, drdn], [mdec, ddec], ret
+        ret = [[mval, dval, mrdn, drdn], [mdec, ddec], ret]  # use list prevent tuple, tuple is immutable and we need to sum them later
     return ret
 
 def get_match(_par, par):
