@@ -150,7 +150,9 @@ def rng_kern_(N_, rng):  # comp Gs summed in kernels, ~ graph CNN without backpr
                 krim += [link.nodet[0] if link.nodet[1] is g else link.nodet[1]]
                 Lay.add_(link.derH)
         if krim:
-            g.kH += [krim]; g.DerH.H[-1].append_(Lay,flat=0)
+            g.kH += [krim]; 
+            g.DerH.H[-1].H += [Lay]; g.DerH.H[-1].Et = np.add(g.DerH.H[-1].Et, Lay.Et); g.DerH.H[-1].relt = np.add(g.DerH.H[-1].relt, Lay.relt); g.DerH.H[-1].n+=Lay.n; Lay.root = g.DerH.H[-1]
+
         else: _G_.remove(g)
     iG_ = copy(_G_)  # new kH
     n = 1  # n kernel rims
@@ -189,7 +191,7 @@ def rng_kern_(N_, rng):  # comp Gs summed in kernels, ~ graph CNN without backpr
                 if _G in G.visited__[-1] or _G not in G_: continue
                 G.visited__[-1] += [_G]; _G.visited__[-1] += [G]
                 # comp last DerLay:
-                dH = _G.DerH.H[-1].H[-1].comp_(G.DerH.H[-1].H[-1],rn=1,fagg=1,flat=1)
+                dH = _G.DerH.H[-1].H[-1].comp_(G.DerH.H[-1].H[-1],rn=1,fagg=1)
                 if dH.Et[0] > ave * dH.Et[2] * (rng+n+1):  # each layer adds cost
                     for h in _G.extH, G.extH:
                         h.H[-1].H[n].add_(dH)  # bilateral assign
@@ -211,7 +213,7 @@ def rng_kern_(N_, rng):  # comp Gs summed in kernels, ~ graph CNN without backpr
                 Dlay = CH()
                 _klay = rlay.H[0]
                 for klay in rlay.H[1:]:  # comp consecutive kernel layers:
-                    Dlay.add_(_klay.comp_(klay, DH=CH(), rn=1,fagg=1,flat=1))  # no DH, local Dlay
+                    Dlay.add_(_klay.comp_(klay, rn=1,fagg=1))  # no DH, local Dlay
                     _klay = klay
                 if Dlay.Et[0] < ave * Dlay.Et[2]: rlay.H = []  # remove discrete k layers, keep sum in extH.H[n]
 
@@ -271,14 +273,17 @@ def comp_N(Link, iEt, rng, rev=None):  # dir if fd, Link.derH=dH, comparand rim+
     else:   # CGs
         Et,Rt,Md_ = comp_latuple(_N.latuple, N.latuple, rn,fagg=1)
         et,rt,md_ = comp_ext(len(_N.node_), len(N.node_), _N.S, N.S / rn, _N.A, N.A)
-        iderH = _N.iderH.comp_(N.iderH, rn, fagg=1)
+        iEt, iRt, iMd_ = _N.iderH.comp_lay(N.iderH, rn, fagg=1)  # single layer, and looks like we are getting all as list now
         # not in CG of links?
-        dH = CH(H=[[[Md_,Rt], iderH, [md_,rt]]], Et=np.array(Et)+iderH.Et+et, n=1+iderH.n+0.5)  # init dH.H[0]
+        dH = CH(H=[[[Md_,Rt], [iMd_, iRt], [md_,rt]]], Et=np.array(Et)+iEt+et, n=1+1+0.5)  # init dH.H[0] (n of iderH should be 1 too? Since it has same number of Md_ with latuple)
         if _N.derH and N.derH:
             dderH = _N.derH.comp_(N.derH, rn, fagg=1, frev=rev)
             dH.H += dderH.H; dH.Et = np.add(dH.Et,dderH.Et); dH.n += dderH.n  # += higher lays
             # no comp extH: current ders
-    if fd: Link.derH.append_(dH, flat=1)
+    if fd: 
+        Link.derH.H += dH.H  # merge
+        for H in Link.derH.H: H.root = Link.derH  # update root
+        Link.derH.Et = np.add(Link.derH.Et, dH.Et); Link.derH.relt = np.add(Link.derH.relt, dH.relt); Link.derH.n += dH.n
     else:  Link.derH = dH
     iEt[:] = np.add(iEt,dH.Et)  # init eval rng+ and form_graph_t by total m|d?
     for i in 0,1:
@@ -302,9 +307,9 @@ def comp_N(Link, iEt, rng, rev=None):  # dir if fd, Link.derH=dH, comparand rim+
                     node.extH.H[-1].H[-1].add_(Link.derH)
                     node.rim_[-1] += [[Link, rev]]
                 else:  # init rng layer
-                    rngLay = CH(); rngLay.append_(Link.derH, flat=0)
+                    rngLay = CH(H=[deepcopy(Link.derH)], Et=Link.derH.Et[:], relt=Link.derH.relt[:], n=Link.derH.n, root=node.extH); rngLay.H[0].root = rngLay
                     node.DerH.H += [CH(root=node.DerH)] # to sum kH
-                    node.extH.append_(rngLay, flat=0)
+                    node.extH.H += [rngLay]; node.extH.Et = np.add(node.extH.Et, rngLay.Et); node.extH.relt = np.add(node.extH.relt, rngLay.relt); node.extH.n += rngLay.n
                     node.rim_ += [[[Link, rev]]]
         return True
 
