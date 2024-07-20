@@ -269,11 +269,11 @@ def comp_N(Link, iEt, rng, rev=None):  # dir if fd, Link.derH=dH, comparand rim+
         N.mdext = comp_ext(2,2, _N.S,N.S/rn, _N.angle, N.angle if rev else [-d for d in N.angle])  # reverse for left link
         N.Et = np.add(dH.Et, N.mdext[0])  # mdext: et,rt,md_
     else:   # CGs
-        Et, Rt, Md_ = comp_latuple(_N.latuple, N.latuple, rn,fagg=1)  # [et,rt,md_]
-        et, rt, md_ = comp_ext(len(_N.node_), len(N.node_), _N.S, N.S / rn, _N.A, N.A)
-        iderH = _N.iderH.comp_(N.iderH, rn, fagg=1)  # not in CG formed from links?
-        mdlat, mdext = [Md_, Rt], [md_, rt]  # reassign for clarity
-        dH = CH(H=[[mdlat,iderH,mdext]], Et=np.array(Et)+iderH.Et+et, n=1+iderH.n+0.5)  # init dH.H[0]
+        Et,Rt,Md_ = comp_latuple(_N.latuple, N.latuple, rn,fagg=1)
+        et,rt,md_ = comp_ext(len(_N.node_), len(N.node_), _N.S, N.S / rn, _N.A, N.A)
+        iderH = _N.iderH.comp_(N.iderH, rn, fagg=1)
+        # not in CG of links?
+        dH = CH(H=[[[Md_,Rt], iderH, [md_,rt]]], Et=np.array(Et)+iderH.Et+et, n=1+iderH.n+0.5)  # init dH.H[0]
         if _N.derH and N.derH:
             dderH = _N.derH.comp_(N.derH, rn, fagg=1, frev=rev)
             dH.H += dderH.H; dH.Et = np.add(dH.Et,dderH.Et); dH.n += dderH.n  # += higher lays
