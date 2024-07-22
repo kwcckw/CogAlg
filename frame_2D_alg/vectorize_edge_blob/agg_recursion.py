@@ -183,7 +183,7 @@ def rng_kern_(N_, rng):  # comp Gs summed in kernels, ~ graph CNN without backpr
                 G.visited__[-1] += [_G]; _G.visited__[-1] += [G]
                 # sum lower-krim alt DerH.H layer:
                 if _G.DerH.H[-1].H[-2]: G.DerH.H[-1].H[-1].add_H(_G.DerH.H[-1].H[-2])
-                if G.DerH.H[-1].H[-2]:_G.DerH.H[-1].H[-1].add_H(G.DerH.H[-1].H[-2])
+                if G.DerH.H[-1].H[-2]: _G.DerH.H[-1].H[-1].add_H(G.DerH.H[-1].H[-2])
         # reset/ += subH sublay:
         for G in G_: G.visited__[-1] = []
         for G in G_:
@@ -275,7 +275,7 @@ def comp_N(Link, iEt, rng, rev=None):  # dir if fd, Link.derH=dH, comparand rim+
         mdLay = _N.mdLay.comp_d_(N.mdLay, rn, fagg=1)  # not in CG of links?
         mdext = comp_ext(len(_N.node_), len(N.node_), _N.S, N.S / rn, _N.A, N.A)
         dH = CH(  # init dH.H[0]:
-            H=[[mdlat,mdLay,mdext]], Et=np.array(mdlat.Et)+mdLay.Et+mdext.Et, Rt=np.array(mdlat.Rt)+mdLay.Rt+mdext.Rt, n=2.5)  # we just need to convert 1 of the Et or Rt to use +
+            H=[[mdlat,mdLay,mdext]], Et=np.array(mdlat.Et)+mdLay.Et+mdext.Et, Rt=np.array(mdlat.Rt)+mdLay.Rt+mdext.Rt, n=2.5)
         if _N.derH and N.derH:
             dderH = _N.derH.comp_(N.derH, rn, fagg=1, frev=rev)  # += higher lays:
             dH.H += dderH.H; dH.Et = np.add(dH.Et,dderH.Et); dH.Rt = np.add(dH.Rt,dderH.Rt); dH.n += dderH.n
@@ -465,12 +465,10 @@ def comp_N_(_node_, node_):  # compare partial graphs in merge
         if _mdLay and mdLay:
             mdlay = _mdLay.comp_d_(mdLay, rn, fagg=1)
             dderH.n+=mdlay.n; dderH.Et+=mdlay.Et; dderH.Rt+=mdlay.Rt
-    if _derH and derH: 
+    if _derH and derH:
         ddderH = _derH.comp_H(derH, rn, fagg=1)  # append and sum new dderH to base dderH
         dderH.H += ddderH.H  # merge derlay
         dderH.n+=ddderH.n; dderH.Et+=ddderH.Et; dderH.Rt+=ddderH.Rt
-    
-    # if _extH and extH: _extH.comp_(extH, dderH, rn, fagg=1, flat=1)  # do we still need to compare extH?
 
     return dderH
 
@@ -480,7 +478,7 @@ def sum2graph(root, grapht, fd, rng):  # sum node and link params into graph, ag
     G_, Link_, _, _, Et = grapht
     graph = CG(fd=fd, node_=G_,link_=Link_, rng=rng, Et=Et)  # it's Link_ only now
     if fd: graph.root = root
-    extH = CH()
+    extH = CH()  # convert to graph derH
     yx = [0,0]
     for G in G_:
         extH.append_(G.extH,flat=1) if graph.extH else extH.add_(G.extH)

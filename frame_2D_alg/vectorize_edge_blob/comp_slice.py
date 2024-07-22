@@ -104,7 +104,7 @@ class CdP(CBase):  # produced by comp_P, comp_slice version of Clink
         l.yx = [0,0] if yx is None else yx  # sum node_
         l.rim = []  # upper 2nd der links
         l.Et = [0,0,0,0] if Et is None else Et
-        l.mdLay = [] if mdLay is None else mdLay  # Changed derLay to mdlay for consistency purpose (when CdP is node)
+        l.mdLay = [] if mdLay is None else mdLay
         l.Rt = [] if Rt is None else Rt
         l.root = None if root is None else root  # PPds containing dP
         l.nmed = 0  # comp rng: n of mediating Ps between node_ Ps
@@ -135,43 +135,63 @@ class CH(CBase):  # generic derivation hierarchy, may have additional nesting pe
         if any(irdnt): HE.Et[2:] = [E + e for E, e in zip(HE.Et[2:], irdnt)]
         HE.Rt = np.add(HE.Rt, He.Rt)
 
-    # looks like we need to additional add_extH since it has different structure
-    def add_extH(HE, He, irdnt=[]):
-        
-        if HE.H:
-            for H, h in zip_longest(HE.H, He.H, fillvalue=None):  # each extH.H
-                for HH, hh in zip(H.H, h.H):  # each rng's extH.H
-                    HH.add_H(hh, irdnt)
-        else:
-            HE.H = deepcopy(He.H)
-
-        HE.Et = np.add(HE.Et, He.Et)
-        HE.Rt = np.add(HE.Rt, He.Rt)
-        HE.n += He.n
-        HE = HE.root
-
-
     def add_H(HE, He, irdnt=[]):  # unpack down to numericals and sum them
 
         if HE:
             for Lay,lay in zip_longest(HE.H, He.H, fillvalue=None):  # cross comp layer
-                if lay is not None:  # to be summed (not None and empty list)
+                if lay is not None:
                     if Lay and lay:
-                        for Le,le in zip_longest(Lay,lay, fillvalue=0):  # [mdlat,mdLay,mdext]
-                            Le.add_lay(le)
+                        # draft:
+                        if isinstance(Lay[0],CH):  # nest if not nested by krims
+                            Lay,lay = [Lay],[lay]
+                        for LL, Ll in zip_longest(Lay, lay, fillvalue=0):  # rng sub-layers
+                            for LE,Le in zip_longest(LL,Ll, fillvalue=0):  # [mdlat,mdLay,mdext]
+                                LE.add_lay(Le)
                     else:
                         He.H += deepcopy(lay) if lay else []  # deleted kernel lays
-            # default:
+            # default
             HE.Et = np.add(HE.Et, He.Et); HE.Rt = np.add(HE.Rt, He.Rt)
             if any(irdnt): HE.Et[2:] = [E+e for E,e in zip(HE.Et[2:], irdnt)]
             HE.n += He.n  # combined param accumulation span
         else:
             HE.copy(He)  # init
         while HE is not None:
-            HE.Et = np.add(HE.Et, He.Et)
-            HE.Rt = np.add(HE.Rt, He.Rt)
-            HE.n += He.n
+            HE.Et = np.add(HE.Et, He.Et); HE.Rt = np.add(HE.Rt, He.Rt); HE.n += He.n
             HE = HE.root
+
+    # not sure:
+    def add_HH(HE, He, irdnt=[]):
+
+        if HE.H:
+            for H,h in zip_longest(HE.H,He.H, fillvalue=None):  # each extH.H
+                for HH, hh in zip(H.H, h.H):  # each rng's extH.H
+                    HH.add_H(hh, irdnt)
+        else:
+            HE.H = deepcopy(He.H)
+        while HE is not None:
+            HE.Et = np.add(HE.Et, He.Et); HE.Rt = np.add(HE.Rt, He.Rt); HE.n += He.n
+            HE = HE.root
+
+    # restore:
+    def append_(HE,He, irdnt=None, flat=0):
+
+        if irdnt is None: irdnt = []
+        if flat:
+            for H in He.H:
+                if isinstance(H,CH): H.root = HE
+            HE.H += He.H  # append flat
+        else:
+            He.root = HE
+            HE.H += [He]  # append nested
+        Et, et = HE.Et, He.Et
+        HE.Et = np.add(HE.Et, He.Et); HE.relt = np.add(HE.relt, He.relt)
+        if irdnt: Et[2:4] = [E+e for E,e in zip(Et[2:4], irdnt)]
+        HE.n += He.n
+        while HE is not None:
+            HE.Et = np.add(HE.Et, He.Et); HE.Rt = np.add(HE.Rt, He.Rt); HE.n += He.n
+            HE = HE.root
+        return HE  # for feedback in agg+
+
 
     def comp_d_(_He, He, rn=1, fagg=0, frev=0):
 
@@ -206,7 +226,7 @@ class CH(CBase):  # generic derivation hierarchy, may have additional nesting pe
                     dH.n += dlay.n
                     dH.Et = np.add(dH.Et, dlay.Et)
                     dH.Rt = np.add(dH.Rt, dlay.Rt)
-                    dLay += [dlay]  # pack each mddlat,mddLay,mddext  
+                    dLay += [dlay]  # pack each mddlat,mddLay,mddext
                 dH.H += [dLay]  # pack der per layer, we may get multiple layers here
         return dH
 
