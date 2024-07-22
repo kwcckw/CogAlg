@@ -441,7 +441,7 @@ def sum_N_(N_, fd=0):  # sum partial grapht in merge
         L += N.span if fd else len(N.node_)
         A = [Angle+angle for Angle,angle in zip(A, N.angle if fd else N.A)]
         if N.derH: derH.add_H(N.derH)
-        if N.extH: extH.add_extH(N.extH)
+        if N.extH: extH.add_H(N.extH)
 
     if fd: return n, L, S, A, derH, extH
     else:  return n, L, S, A, derH, extH, latuple, mdLay  # no comp Et
@@ -481,13 +481,13 @@ def sum2graph(root, grapht, fd, rng):  # sum node and link params into graph, ag
     extH = CH()  # convert to graph derH
     yx = [0,0]
     for G in G_:
-        extH.append_(G.extH,flat=1) if graph.extH else extH.add_(G.extH)
+        extH.add_H(G.extH) if extH else extH.append_(G.extH,flat=1)
         graph.area += G.area
         graph.box = extend_box(graph.box, G.box)
         if isinstance(G, CG):  # add latuple to CL too?
             graph.latuple = [P+p for P,p in zip(graph.latuple[:-1],G.latuple[:-1])] + [[A+a for A,a in zip(graph.latuple[-1],G.latuple[-1])]]
         graph.n += G.n  # non-derH accumulation?
-        graph.derH.add_(G.derH)
+        if G.derH:  graph.derH.add_H(G.derH)  # derH may empty now
         if fd: G.Et = [0,0,0,0]  # reset in last form_graph_t fork, Gs are shared in both forks
         else:  G.root = graph  # assigned to links if fd else to nodes?
         yx = np.add(yx, G.yx)
@@ -513,7 +513,7 @@ def sum2graph(root, grapht, fd, rng):  # sum node and link params into graph, ag
 def feedback(root):  # called from form_graph_, always sub+, append new der layers to root
 
     mDerLay = CH()  # added per rng+, | kern+, | single kernel?
-    while root.fback_t[0]: mDerLay.add_(root.fback_t[0].pop())
+    while root.fback_t[0]: mDerLay.add_H(root.fback_t[0].pop())
     dDerH = CH()  # from higher-order links
     while root.fback_t[1]: dDerH.add_(root.fback_t[1].pop())
     DderH = mDerLay.append_(dDerH, flat=1)

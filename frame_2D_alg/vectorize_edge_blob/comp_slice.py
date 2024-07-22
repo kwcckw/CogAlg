@@ -138,17 +138,18 @@ class CH(CBase):  # generic derivation hierarchy, may have additional nesting pe
     def add_H(HE, He, irdnt=[]):  # unpack down to numericals and sum them
 
         if HE:
-            for Lay,lay in zip_longest(HE.H, He.H, fillvalue=None):  # cross comp layer
+            for Lay,lay in zip_longest(HE.H, He.H, fillvalue=None):  # cross comp layer (rng sub-layers should be here)
                 if lay is not None:
                     if Lay and lay:
                         # draft:
-                        if isinstance(Lay[0],CH):  # nest if not nested by krims
-                            Lay,lay = [Lay],[lay]
-                        for LL, Ll in zip_longest(Lay, lay, fillvalue=0):  # rng sub-layers
-                            for LE,Le in zip_longest(LL,Ll, fillvalue=0):  # [mdlat,mdLay,mdext]
+                        if isinstance(Lay,CH):  # nest if not nested by krims
+                            Lay.add_H(lay)  # still nested and we need to unpack further
+                        else:
+                            for LE, Le in zip_longest(Lay, lay, fillvalue=0):  # [mdlat,mdLay,mdext]
                                 LE.add_lay(Le)
                     else:
-                        He.H += deepcopy(lay) if lay else []  # deleted kernel lays
+                        if Lay is None: Lay = CH(root=HE)  # init for copy, we can't use deepcopy because .root reference                 
+                        HE.H += [Lay.copy(lay) if lay else []]  # deleted kernel lays
             # default
             HE.Et = np.add(HE.Et, He.Et); HE.Rt = np.add(HE.Rt, He.Rt)
             if any(irdnt): HE.Et[2:] = [E+e for E,e in zip(HE.Et[2:], irdnt)]
@@ -159,6 +160,7 @@ class CH(CBase):  # generic derivation hierarchy, may have additional nesting pe
             HE.Et = np.add(HE.Et, He.Et); HE.Rt = np.add(HE.Rt, He.Rt); HE.n += He.n
             HE = HE.root
 
+    # this is the version for full CH?
     # not sure:
     def add_HH(HE, He, irdnt=[]):
 
@@ -184,12 +186,13 @@ class CH(CBase):  # generic derivation hierarchy, may have additional nesting pe
             He.root = HE
             HE.H += [He]  # append nested
         Et, et = HE.Et, He.Et
-        HE.Et = np.add(HE.Et, He.Et); HE.relt = np.add(HE.relt, He.relt)
+        HE.Et = np.add(HE.Et, He.Et); HE.Rt = np.add(HE.Rt, He.Rt)
         if irdnt: Et[2:4] = [E+e for E,e in zip(Et[2:4], irdnt)]
         HE.n += He.n
-        while HE is not None:
-            HE.Et = np.add(HE.Et, He.Et); HE.Rt = np.add(HE.Rt, He.Rt); HE.n += He.n
-            HE = HE.root
+        root = HE.root  # we need to preserve HE, for return purpose
+        while root is not None:
+            root.Et = np.add(root.Et, He.Et); root.Rt = np.add(root.Rt, He.Rt); root.n += He.n
+            root = root.root
         return HE  # for feedback in agg+
 
 
@@ -219,23 +222,51 @@ class CH(CBase):  # generic derivation hierarchy, may have additional nesting pe
 
         dH = CH()
         for _lay,lay in zip(_He.H, He.H):
-            if _lay and lay:
-                dLay = []
-                for E,e in zip_longest(_lay,lay, fillvalue=0):  # [mdlat,mdLay,mdext]
-                    dlay = E.comp_d_(e, rn, fagg, frev)
-                    dH.n += dlay.n
-                    dH.Et = np.add(dH.Et, dlay.Et)
-                    dH.Rt = np.add(dH.Rt, dlay.Rt)
-                    dLay += [dlay]  # pack each mddlat,mddLay,mddext
-                dH.H += [dLay]  # pack der per layer, we may get multiple layers here
+            if _lay and lay:          
+                if isinstance(_lay, CH):
+                    if isinstance(_lay.H[0], CH):  # nested CH
+                        dLay = CH()    
+                        for E,e in zip(_lay.H,lay.H):  
+                            dlay = E.comp_H(e, rn, fagg, frev)
+                            dLay.append_(dlay,flat=0)
+                    else:  # [mdlat,mdLay,mdext]  
+                        dLay = _lay.comp_H(lay, rn, fagg, frev)
+                    dH.append_(dLay, flat=0)
+                else:
+                    dLay = []
+                    for E,e in zip(_lay,lay):  # [mdlat,mdLay,mdext]  (there's no need to zip_longest in comp?)
+                        dlay = E.comp_d_(e, rn, fagg, frev)
+                        dH.n += dlay.n
+                        dH.Et = np.add(dH.Et, dlay.Et)
+                        dH.Rt = np.add(dH.Rt, dlay.Rt)
+                        dLay += [dlay]  # pack each mddlat,mddLay,mddext
+                    dH.H += [dLay]  # pack der per layer, we may get multiple layers here
         return dH
 
     def copy(_H, H):
 
         for attr, value in H.__dict__.items():
             if attr != '_id' and attr != 'root' and attr in _H.__dict__.keys():  # copy only the available attributes and skip id
-                setattr(_H, attr, deepcopy(value))
-
+                # we need additional process for H because we can't deepcopy CH.root reference
+                if attr == 'H':
+                    if H.H and isinstance(H.H[0], list) or isinstance(H.H[0], CH):  # nested list or CH
+                        _H.H = []
+                        for lay in H.H:
+                            if isinstance(lay, CH):
+                                Lay = CH()
+                                Lay.copy(lay)
+                            else:
+                                Lay = []
+                                for layE in lay:
+                                    LayE = CH()
+                                    LayE.copy(layE)
+                                    Lay += [LayE]
+                            _H.H += [Lay]       
+                    else:  # md_
+                        _H.H = deepcopy(H.H)
+                else:    
+                    setattr(_H, attr, deepcopy(value))
+        return _H
 
 def comp_slice(edge):  # root function
 
