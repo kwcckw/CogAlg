@@ -112,8 +112,14 @@ class CdP(CBase):  # produced by comp_P, comp_slice version of Clink
     def __bool__(l): return bool(l.mdLay.H)
 
 
-class CH(CBase):  # generic derivation hierarchy: CH(H= [extH.H[ CH(H= [mdlat,mdLay,mdext]),...]
+class CH(CBase):  # generic derivation hierarchy of variable nesting, depending on effective agg++(sub++ depth
+    '''
+    If nesting in derH.H may be deleted, we need to directly represent and compare deeper derH.H sub-layers,
+    similar to node_) derH: the latter directly represents multiple sub-node layers.
 
+    Such deeper vertical representation is node_) derH) H.H: 1st H is CH and current CH.H is CH.H.H[0].
+    And so on, this nesting is from all prior xcomps, bottom layer of H.H in 2D is [mdlat,mdLay,mdext]
+    '''
     name = "H"
     def __init__(He, n=0, Et=None, Rt=None, H=None, root=None):
         super().__init__()
@@ -138,9 +144,9 @@ class CH(CBase):  # generic derivation hierarchy: CH(H= [extH.H[ CH(H= [mdlat,md
     def add_H(HE, He, irdnt=[]):  # unpack down to numericals and sum them
 
         if HE:
-            for Lay,lay in zip_longest(HE.H, He.H, fillvalue=None):  # cross comp layer (rng sub-layers should be here)
+            for Lay,lay in zip_longest(HE.H, He.H, fillvalue=None):  # cross comp layer
                 if lay is not None:
-                    if Lay and lay.H:  # prevent empty H after removing H from rnglay
+                    if Lay and lay.H:  # empty after removing H from rnglay
                         if isinstance(lay.H[0],CH):
                             Lay.add_H(lay)  # unpack to add
                         else:
@@ -157,6 +163,7 @@ class CH(CBase):  # generic derivation hierarchy: CH(H= [extH.H[ CH(H= [mdlat,md
         while HE is not None:
             HE.Et = np.add(HE.Et, He.Et); HE.Rt = np.add(HE.Rt, He.Rt); HE.n += He.n
             HE = HE.root
+
 
     def append_(HE,He, irdnt=None, flat=0):
 
@@ -200,20 +207,30 @@ class CH(CBase):  # generic derivation hierarchy: CH(H= [extH.H[ CH(H= [mdlat,md
 
         return CH(H=derLay, Et=[vm,vd,rm,rd], Rt=[decm,decd], n=1)
 
-    # unpack tuples (formally lists) down to numericals and compare them:
-    def comp_H(_He, He, rn=1, fagg=0, frev=0):
+
+    def comp_H(_He, He, rn=1, fagg=0, frev=0):  # unpack CHs down to numericals and compare them
         DLay = CH()  # merged dderH
 
         for _Lay,Lay in zip(_He.H, He.H):  # loop extH s or [mdlat, mdLay, mdext] rng tuples
             if _Lay and Lay:
                 if isinstance(_Lay.H[0], CH):
                     dLay = _Lay.comp_H(Lay, rn, fagg, frev)
-                    # merge dLays in Dlay:
-                    DLay.add_H(dLay)  # fix Lays in derH by reducing resolution of derivation    
+                    DLay.add_H(dLay)  # reduce resolution of derivation to fix Lays in derH
                 else:
                     dlay = _Lay.comp_md_(Lay, rn, fagg, frev)  # mdlat | mdLay | mdext
                     DLay.append_(dlay, flat=0)
-
+        ''' 
+        full:
+        for _Lay,Lay in zip(_He.H, He.H):  # loop extH s
+            if _Lay and Lay:
+                dLay = CH()
+                for _lay,lay in zip(_Lay.H,Lay.H):  # loop [mdlat, mdLay, mdext] rng tuples
+                    if _lay and lay:
+                        dlay = CH()
+                        for E, e in zip(_lay.H, lay.H):  # mdlat | mdLay | mdext
+                            dE = E.comp_md_(e, rn, fagg, frev)
+                            dlay.append_(dE,flat=0)
+                        dLay.append_(dlay, flat=0) '''
         return DLay
 
     def copy(_H, H):
@@ -421,7 +438,7 @@ def comp_latuple(_latuple, latuple, rn, fagg=0):  # 0der params
             for i, (par, maxv, ave) in enumerate(zip(ptuple, Ptuple, aves)):  # compute link decay coef: par/ max(self/same)
                 if fd: ddec += abs(par)/ abs(maxv) if maxv else 1
                 else:  mdec += (par+ave)/ (maxv+ave) if maxv else 1
-        ret = CH(H=ret, Et=[mval,dval,mrdn,drdn], Rt=[mdec,ddec], n=1)  # this should be true for fagg = 1 only?
+        ret = CH(H=ret, Et=[mval,dval,mrdn,drdn], Rt=[mdec,ddec], n=1)  # if fagg only
     return ret
 
 def get_match(_par, par):

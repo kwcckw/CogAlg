@@ -151,7 +151,7 @@ def rng_kern_(N_, rng):  # comp Gs summed in kernels, ~ graph CNN without backpr
                 lay.add_H(link.derH)
         if krim:
             g.kH += [krim]
-            g.DerH.H[-1].append_(lay)  # should be H[-1] here? The last DerH layer H[-1] is added in comp_N
+            g.DerH.H[-1].append_(lay)
         else:
             _G_.remove(g)
     iG_ = copy(_G_)  # new kH
@@ -277,11 +277,8 @@ def comp_N(Link, iEt, rng, rev=None):  # dir if fd, Link.derH=dH, comparand rim+
         DLay = CH(  # 1st derLay:
             H=[mdlat,mdLay,mdext], Et=np.array(mdlat.Et)+mdLay.Et+mdext.Et, Rt=np.array(mdlat.Rt)+mdLay.Rt+mdext.Rt, n=2.5)
         if _N.derH and N.derH:
-            dLay = _N.derH.comp_H(N.derH, rn, fagg=1, frev=rev)
-            # dLay.H = [mdlat, mdext, mdext]
-            # dLay.H = [mddlat, mddext, mddext]
-            # so we should concatenate them?
-            DLay.add_H(dLay)  # sum of higher derLays
+            dLay = _N.derH.comp_H(N.derH,rn,fagg=1,frev=rev)
+            DLay.add_H(dLay)  # also append discrete higher subLays in dLay.HH[0], if any?
             # no comp extH: current ders
     if fd:
         Link.derH.append_(DLay)
@@ -309,9 +306,8 @@ def comp_N(Link, iEt, rng, rev=None):  # dir if fd, Link.derH=dH, comparand rim+
                     node.extH.H[-1].H[-1].add_H(Link.derH)
                     node.rim_[-1] += [[Link, rev]]
                 else:  # init rng layer
-                    rngLay = CH().append_(Link.derH, flat=0)
-                    node.extH.append_(rngLay)  # suppose we should pack new rngLay here?
-                    node.DerH.H += [CH(root=node.DerH)]  # to sum kH?
+                    node.extH.append_(CH().append_(Link.derH, flat=0)) # add initialized rngLay
+                    node.DerH.H += [CH(root=node.DerH)]  # to sum kH
                     node.rim_ += [[[Link, rev]]]
         return True
 
