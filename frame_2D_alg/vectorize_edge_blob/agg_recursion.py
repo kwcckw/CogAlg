@@ -280,11 +280,8 @@ def comp_N(Link, iEt, rng, rev=None):  # dir if fd, Link.derH=dH, comparand rim+
             dLay = _N.derH.comp_H(N.derH,rn,fagg=1,frev=rev)
             DLay.add_H(dLay)  # also append discrete higher subLays in dLay.HH[0], if any?
             # no comp extH: current ders
-    if fd:
-        Link.derH.append_(DLay)
-    elif _N.derH and N.derH:
-        Link.derH.H = DLay  # not sure
-    else: Link.derH = DLay
+    if fd: Link.derH.append_(DLay)
+    else:  Link.derH = DLay
 
     iEt[:] = np.add(iEt,DLay.Et)  # init eval rng+ and form_graph_t by total m|d?
     for i in 0,1:
@@ -337,8 +334,13 @@ def form_graph_t(root, N_, Et, rng):  # segment N_ to Nm_, Nd_
             if not fd:
                 for G in N_: G.root = []  # only nodes have roots?
             graph_ = segment_N_(root, N_, fd, rng)
+            # xcomp -> max_dist * rng+1
             for graph in graph_:
-                Q = graph.link_ if fd else graph.node_  # xcomp -> max_dist * rng+1
+                if fd:
+                    Q = graph.link_
+                else:
+                    if isinstance(graph.node_[0], list): Q = graph.node_[-1]
+                    else:                                Q = graph.node_
                 if len(Q) > ave_L and graph.derH.Et[fd] > G_aves[fd] * graph.derH.Et[fd+2]:
                     if fd: add_der_attrs(Q)
                     agg_recursion(graph, Q, fL=isinstance(Q[0],CL), rng=rng)  # fd rng+
@@ -430,8 +432,8 @@ def sum_N_(N_, fd=0):  # sum partial grapht in merge
     if not fd:
         latuple = deepcopy(N.latuple)  # ignore if CL?
         mdLay = deepcopy(N.mdLay)
-    derH = deepcopy(N.derH)
-    extH = deepcopy(N.extH)
+    derH = CH(); derH.copy(N.derH)  # we can't deepcopy CH
+    extH = CH(); extH.copy(N.extH)
     # Et = copy(N.Et)
     for N in N_[1:]:
         if not fd:
@@ -500,7 +502,15 @@ def sum2graph(root, grapht, fd, rng):  # sum node and link params into graph, ag
         graph.S += link.span
         graph.A = np.add(graph.A,link.angle)  # np.add(graph.A, [-link.angle[0],-link.angle[1]] if rev else link.angle)
         if fd: link.root = graph
-    if extH: graph.derH.append_(extH, flat=0)  # graph derH = node derHs + [summed Link_ derHs], may be nested by rng
+    if extH: 
+        graph.derH.append_(extH, flat=0)  # graph derH = node derHs + [summed Link_ derHs], may be nested by rng
+        # add D_, summed derivative per H
+        for H in graph.derH.H:
+            D = CH()
+            for HH in H.H: D.add_H(HH)  # sum H's H into higher D
+            graph.derH.D_ += [D]
+        graph.node_ = [graph.node_]  # convert to node_H (apply this to link_ too?)
+    
     if fd:
         # assign alt graphs from d graph, after both linked m and d graphs are formed
         for link in graph.link_:
