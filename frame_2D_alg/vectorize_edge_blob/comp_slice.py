@@ -114,11 +114,13 @@ class CdP(CBase):  # produced by comp_P, comp_slice version of Clink
 
 class CH(CBase):  # generic derivation hierarchy of variable nesting, depending on effective agg++(sub++ depth
     '''
-    If nesting in derH.H may be deleted, we need to directly represent and compare deeper derH.H sub-layers,
-    similar to node_) derH: the latter directly represents multiple sub-node layers.
+    If nesting in derH.H may be deleted, we need to directly represent and compare deeper derH.H sub-layers:
+    node_H) derH: each layer represents multiple sub-nodes,
+    node_H) derH.H_) derH.D_ (nesting is from all prior xcomps, bottom 2D layer is [mdlat,mdLay,mdext])
 
-    Such deeper vertical representation is node_) derH) H.H: 1st H is CH and current CH.H is CH.H.H[0].
-    And so on, this nesting is from all prior xcomps, bottom layer of H.H in 2D is [mdlat,mdLay,mdext]
+    deleted H_[i] = n if low-variance individual layers, but D_[i] still has their summed Ders
+    for indefinite nesting orders: CH( H = [Q__, Q_, Q...]), len Q__ = len H,
+    where each Q is a list of CHs or len of deleted list
     '''
     name = "H"
     def __init__(He, n=0, Et=None, Rt=None, H=None, root=None):
@@ -215,7 +217,7 @@ class CH(CBase):  # generic derivation hierarchy of variable nesting, depending 
         DLay = CH()  # merged dderH
 
         if isinstance(_He.H, CH):  # tentative (H is CH)
-             dlay = _He.H.comp_H(He.H, rn, fagg, frev)  
+             dlay = _He.H.comp_H(He.H, rn, fagg, frev)
              DLay.H = dlay  # same structure when DLay.H = CH
              DLay.Et = copy(dlay.Et); DLay.Rt = copy(dlay.Rt); DLay.n = dlay.n; dlay.root = DLay
         else:
@@ -249,7 +251,7 @@ class CH(CBase):  # generic derivation hierarchy of variable nesting, depending 
                     if isinstance(H.H, CH):  # H is CH
                         if not isinstance(_H.H, CH): _H.H = CH(root=_H)
                         H = H.H; _H = _H.H
-                    else:      
+                    else:
                         if H.H:
                             _H.H = []
                             if isinstance(H.H[0], CH):
