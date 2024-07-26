@@ -3,6 +3,7 @@ from copy import deepcopy, copy
 from itertools import combinations
 from .slice_edge import comp_angle, CsliceEdge
 from .comp_slice import comp_slice, comp_latuple, CH, CG
+from itertools import zip_longest
 from utils import extend_box
 from frame_blobs import CBase
 
@@ -101,6 +102,7 @@ def agg_recursion(root, N_, fL, rng=1):  # fL: compare node-mediated links, else
     if node_t:
         for fd, node_ in zip((0,1), node_t):
             N_ = [n for n in node_ if n.derH.Et[fd] > G_aves[fd] * n.derH.Et[2+fd]]  # prune node_
+            node_[:] = N_  # prune weak graph?
             if root.derH.Et[0] * (max(0,(len(N_)-1)*root.rng)) > G_aves[1]*root.derH.Et[2]:
                 # agg+ rng+, val *= n comparands, forms CGs:
                 agg_recursion(root, N_, fL=0)
@@ -114,12 +116,20 @@ def rng_node_(_N_, rng):  # forms discrete rng+ links, vs indirect rng+ in rng_k
     while True:
         N_, Et = rng_kern_(_N_, rng)  # += rng layer
         for N in N_:
-            # draft:
+            # draft:  (this section can be moved into rng_kern_ too?) 
             rLay = N.extH.H[n]
+            if not rLay.MD__: rLay.MD__ = [CH(), CH(), CH()]  # init
             for kLay in rLay.H:
                 for MD_, md_ in zip(rLay.MD__, kLay.MD__):  # lat MD_| Lay MD_| ext MD_
                     MD_.add_md_(md_)
-                rLay.O_[0] += [kLay]  # not sure
+            
+            rH = []
+            for KLay, kLay in zip_longest(rLay.O_, rLay.H, fillvalue=None):
+                if KLay is None: KLay = CH()
+                KLay.add_H(kLay) 
+                rH += [KLay]
+            if rH: rLay.O_ = rH
+            
         if not n: rN_ = N_
         n += 1
         rEt = [V+v for V, v in zip(rEt, Et)]
@@ -170,6 +180,7 @@ def rng_kern_(N_, rng):  # comp Gs summed in kernels, ~ graph CNN without backpr
             G.kH += [[]]; G.visited__ += [[]]
             G.DerH.H[-1].H += [CH(root=G.DerH.H[-1])]  # comparands
             G.extH.H[-1].H += [CH(root=G.extH.H[-1])]  # derivatives
+            G.extH.H[-1].H[-1].MD__ = [CH(), CH(), CH()]  # init mdlat, mdLay, mdext
         for G in _G_:
             for _G in G.kH[-2]:  # after += klay
                 for link, rev in _G.rim_[-1]:
@@ -202,6 +213,7 @@ def rng_kern_(N_, rng):  # comp Gs summed in kernels, ~ graph CNN without backpr
                 if DLay.Et[0] > ave * DLay.Et[2] * (rng+n+1):  # each layer adds cost
                     for h in _G.extH, G.extH:
                         h.H[-1].H[n].add_H(DLay)  # bilateral assign
+                        for MD_, md_ in zip(h.H[-1].H[n].MD__, DLay.H): MD_.add_md_(md_)  # accumulate mdlat, mdLay, mdext
         # eval extH sublay:
         for G in reversed(G_):
             G.visited__.pop()  # loop-specific layer
@@ -309,9 +321,13 @@ def comp_N(Link, iEt, rng, rev=None):  # dir if fd, Link.derH=dH, comparand rim+
             else:
                 if len(node.extH.H) == rng:  # accum last rng layer
                     node.extH.H[-1].H[-1].add_H(Link.derH)
+                    for MD_, md_ in zip(node.extH.H[-1].H[-1].MD__, [mdlat, mdLay, mdext]):  # accumulate each [mdlat, mdLay, mdext]
+                        MD_.add_md_(md_)  
                     node.rim_[-1] += [[Link, rev]]
                 else:  # init rng layer
-                    node.extH.append_(CH().append_(Link.derH, flat=0)) # add initialized rngLay
+                    rngLay = CH().append_(Link.derH, flat=0)
+                    rngLay.H[-1].MD__ = [CH().copy(mdlat),CH().copy(mdLay),CH().copy(mdext)]  # init [mdlat, mdLay, mdext]
+                    node.extH.append_(rngLay) # add initialized rngLay
                     node.DerH.H += [CH(root=node.DerH)]  # to sum kH
                     node.rim_ += [[[Link, rev]]]
         return True
