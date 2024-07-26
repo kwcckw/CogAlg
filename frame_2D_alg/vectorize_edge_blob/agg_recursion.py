@@ -113,6 +113,13 @@ def rng_node_(_N_, rng):  # forms discrete rng+ links, vs indirect rng+ in rng_k
     n = 0
     while True:
         N_, Et = rng_kern_(_N_, rng)  # += rng layer
+        for N in N_:
+            # draft:
+            rLay = N.extH.H[n]
+            for kLay in rLay.H:
+                for MD_, md_ in zip(rLay.MD__, kLay.MD__):  # lat MD_| Lay MD_| ext MD_
+                    MD_.add_md_(md_)
+                rLay.O_[0] += [kLay]  # not sure
         if not n: rN_ = N_
         n += 1
         rEt = [V+v for V, v in zip(rEt, Et)]
@@ -282,7 +289,6 @@ def comp_N(Link, iEt, rng, rev=None):  # dir if fd, Link.derH=dH, comparand rim+
             # no comp extH: current ders
     if fd: Link.derH.append_(DLay)
     else:  Link.derH = DLay
-
     iEt[:] = np.add(iEt,DLay.Et)  # init eval rng+ and form_graph_t by total m|d?
     for i in 0,1:
         Val, Rdn = DLay.Et[i::2]
@@ -334,13 +340,8 @@ def form_graph_t(root, N_, Et, rng):  # segment N_ to Nm_, Nd_
             if not fd:
                 for G in N_: G.root = []  # only nodes have roots?
             graph_ = segment_N_(root, N_, fd, rng)
-            # xcomp -> max_dist * rng+1
             for graph in graph_:
-                if fd:
-                    Q = graph.link_
-                else:
-                    if isinstance(graph.node_[0], list): Q = graph.node_[-1]
-                    else:                                Q = graph.node_
+                Q = graph.link_ if fd else graph.node_  # xcomp -> max_dist * rng+1
                 if len(Q) > ave_L and graph.derH.Et[fd] > G_aves[fd] * graph.derH.Et[fd+2]:
                     if fd: add_der_attrs(Q)
                     agg_recursion(graph, Q, fL=isinstance(Q[0],CL), rng=rng)  # fd rng+
@@ -432,7 +433,7 @@ def sum_N_(N_, fd=0):  # sum partial grapht in merge
     if not fd:
         latuple = deepcopy(N.latuple)  # ignore if CL?
         mdLay = deepcopy(N.mdLay)
-    derH = CH(); derH.copy(N.derH)  # we can't deepcopy CH
+    derH = CH(); derH.copy(N.derH)
     extH = CH(); extH.copy(N.extH)
     # Et = copy(N.Et)
     for N in N_[1:]:
@@ -502,15 +503,7 @@ def sum2graph(root, grapht, fd, rng):  # sum node and link params into graph, ag
         graph.S += link.span
         graph.A = np.add(graph.A,link.angle)  # np.add(graph.A, [-link.angle[0],-link.angle[1]] if rev else link.angle)
         if fd: link.root = graph
-    if extH: 
-        graph.derH.append_(extH, flat=0)  # graph derH = node derHs + [summed Link_ derHs], may be nested by rng
-        # add D_, summed derivative per H
-        for H in graph.derH.H:
-            D = CH()
-            for HH in H.H: D.add_H(HH)  # sum H's H into higher D
-            graph.derH.D_ += [D]
-        graph.node_ = [graph.node_]  # convert to node_H (apply this to link_ too?)
-    
+    if extH: graph.derH.append_(extH, flat=0)  # graph derH = node derHs + [summed Link_ derHs], may be nested by rng
     if fd:
         # assign alt graphs from d graph, after both linked m and d graphs are formed
         for link in graph.link_:
