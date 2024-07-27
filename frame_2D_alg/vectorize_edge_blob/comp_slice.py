@@ -148,12 +148,19 @@ class CH(CBase):  # generic derivation hierarchy of variable nesting, depending 
         if any(irdnt): HE.Et[2:] = [E + e for E, e in zip(HE.Et[2:], irdnt)]
         HE.Rt = np.add(HE.Rt, He.Rt)
 
-    def add_md_t(HE, He, irdnt=[]):  # p may be derP, sum derLays
+    def add_md_t(HE, He, irdnt=[], fL=0):  # p may be derP, sum derLays
 
-        for MD_C, md_C in zip(HE.md_t, He.md_t):
+        for MD_C, md_C in zip(HE.md_t, (He.H if fL else He.md_t)):   # if fL, sum from link.derH.H
             # add to whole layer and to MD_C?:
             MD_C.add_md_(md_C)
-            HE.add_md_(md_C)
+            # HE.add_md_(md_C)  # why we need this? Suppose HE.H should be empty for bottom layer?
+
+        # we need to sum the additional params too?
+        HE.n += He.n
+        HE.Et = np.add(HE.Et, He.Et)
+        if any(irdnt): HE.Et[2:] = [E + e for E, e in zip(HE.Et[2:], irdnt)]
+        HE.Rt = np.add(HE.Rt, He.Rt)
+
 
 
     def add_H(HE, He, irdnt=[]):  # unpack down to numericals and sum them
@@ -165,11 +172,12 @@ class CH(CBase):  # generic derivation hierarchy of variable nesting, depending 
                         if Lay.H:  # empty in bottom layer
                             Lay.nestH += [lay]  # for direct access?
                             Lay.add_H(lay, irdnt)  # unpack, add deeper layers
-                        # default sum latMD_,layMD_,extMD_
-                        Lay.md_t.add_md_t(lay.md_t)
                     else:
                         if Lay is None: Lay = CH(root=HE)
                         HE.H += [Lay.copy(lay)]
+                        
+            # default sum latMD_,layMD_,extMD_
+            HE.add_md_t(He)  # this should be here? Because we need to sum He.md_t into HE.md_t too
             # default
             HE.Et = np.add(HE.Et, He.Et); HE.Rt = np.add(HE.Rt, He.Rt)
             if any(irdnt): HE.Et[2:] = [E+e for E,e in zip(HE.Et[2:], irdnt)]
@@ -191,9 +199,14 @@ class CH(CBase):  # generic derivation hierarchy of variable nesting, depending 
         else:
             He.root = HE
             HE.H += [He]  # append nested
-            HE.nestH += [He.nestH]  # or always flat?
+            HE.nestH += He.nestH  # or always flat? (i think flat? Else we might get a mixing of list of CH)
 
-        [MD_.add_md_(md_) for MD_,md_ in zip(HE.md_t,He.md_t)]  # latMD_,layMD_,extMD_
+        if HE.md_t:  # accumulate
+            for MD_,md_ in zip(HE.md_t,He.md_t): 
+                MD_.add_md_(md_)  # latMD_,layMD_,extMD_
+        else:
+            HE.md_t = [CH().copy(md_)for md_ in He.md_t]  # init
+        
         HE.n += He.n
         Et, et = HE.Et, He.Et
         HE.Et = np.add(HE.Et, He.Et); HE.Rt = np.add(HE.Rt, He.Rt)
@@ -244,12 +257,12 @@ class CH(CBase):  # generic derivation hierarchy of variable nesting, depending 
     def comp_H(_He, He, rn=1, fagg=0, frev=0):  # unpack CHs down to numericals and compare them
 
         DLay = CH()  # may be nested
-
+        DLay.add_H(_He.comp_md_t(He))  # this is missed out?
         for _lay, lay in zip(_He.H, He.H):  # loop extH s or [mdlat, mdLay, mdext] rng tuples
             if _lay and lay:
                 # unpack,comp unless bottom layer:
-                dLay = _lay.comp_H(lay, rn, fagg, frev) if lay.H else dLay = CH()
-                dLay.md_t = _lay.md_t.comp_md_t(lay.md_t)
+                dLay = _lay.comp_H(lay, rn, fagg, frev) if lay.H else CH()
+                dLay.add_H(_lay.comp_md_t(lay))
                 DLay.append_(dLay, flat=0)
         return DLay
 

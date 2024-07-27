@@ -129,12 +129,12 @@ def rng_node_(_N_, rng):  # forms discrete rng+ links, vs indirect rng+ in rng_k
                 for MD_, md_ in zip(rLay.md_t, kLay.md_t):  # latMD_,layMD_,extMD_
                     MD_.add_md_(md_)
             rH = []
-            for KLay, kLay in zip_longest(rLay.O_, rLay.H, fillvalue=None):
+            for KLay, kLay in zip_longest(rLay.nestH, rLay.H, fillvalue=None):
                 if KLay is None: KLay = CH()
                 KLay.add_H(kLay)
                 rH += [KLay]
             if rH: rLay.nestH = rH
-            if not n: rN_ = N_
+        if not n: rN_ = N_
         n += 1
         rEt = [V+v for V, v in zip(rEt, Et)]
         if Et[0] > ave * Et[2]:
@@ -165,11 +165,12 @@ def rng_kern_(N_, rng):  # comp Gs summed in kernels, ~ graph CNN without backpr
                     if g not in _G_: _G_ += [g]
     # init conv kernels:
     for g in reversed(_G_):
-        lay = CH(); krim = []
+        lay = CH(md_t=[CH(), CH(), CH()])
+        krim = []
         for link, rev in g.rim_[-1]:
             if link.ft[0]:  # must be mlink
                 krim += [link.nodet[0] if link.nodet[1] is g else link.nodet[1]]
-                lay.add_H(link.derH)
+                lay.add_md_t(link.derH, fL=1)
         if krim:
             g.kH += [krim]
             g.DerH.H[-1].append_(lay)
@@ -182,8 +183,8 @@ def rng_kern_(N_, rng):  # comp Gs summed in kernels, ~ graph CNN without backpr
         G_ = []
         for G in _G_:  # += krim
             G.kH += [[]]; G.visited__ += [[]]
-            G.DerH.H[-1].H += [CH(root=G.DerH.H[-1])]  # comparands
-            G.extH.H[-1].H += [CH(root=G.extH.H[-1])]  # derivatives
+            G.DerH.H[-1].H += [CH(root=G.DerH.H[-1], md_t=[CH(), CH(), CH()])]  # comparands
+            G.extH.H[-1].H += [CH(root=G.extH.H[-1], md_t=[CH(), CH(), CH()])]  # derivatives
         for G in _G_:
             for _G in G.kH[-2]:  # after += klay
                 for link, rev in _G.rim_[-1]:
@@ -312,11 +313,13 @@ def comp_N(Link, iEt, rng, rev=None):  # dir if fd, Link.derH=dH, comparand rim+
                 else:
                     node.rimt_ += [[[[Link,rev]],[]]] if dir else [[[],[[Link,rev]]]]  # add rng layer
             else:
+                Lay = CH(md_t=Link.derH.H)  # empty H, bottom layer
+                rngLay = CH().append_(Lay, flat=0)  # new rng layer
                 if len(node.extH.H) == rng:  # accum last rng layer
-                    node.extH.H[-1].H[-1].add_H(Link.derH)
+                    node.extH.H[-1].H[-1].add_H(rngLay)
                     node.rim_[-1] += [[Link, rev]]
                 else:  # init rng layer
-                    node.extH.append_(CH().append_(Link.derH, flat=0)) # add initialized rngLay
+                    node.extH.append_(rngLay,flat=0) # add initialized rngLay
                     node.DerH.H += [CH(root=node.DerH)]  # to sum kH
                     node.rim_ += [[[Link, rev]]]
         return True
