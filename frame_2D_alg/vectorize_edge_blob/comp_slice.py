@@ -173,7 +173,7 @@ class CH(CBase):  # generic derivation hierarchy of variable nesting, depending 
                         if Lay is None: Lay = CH(root=HE)
                         HE.H += [Lay.copy(lay)]
             # default
-            HE.md_t.add_md_t(He.md_t) # [lat_md_C, lay_md_C, ext_md_C]
+            HE.add_md_t(He) # [lat_md_C, lay_md_C, ext_md_C]
             HE.Et = np.add(HE.Et, He.Et); HE.Rt = np.add(HE.Rt, He.Rt)
             if any(irdnt): HE.Et[2:] = [E+e for E,e in zip(HE.Et[2:], irdnt)]
             HE.n += He.n  # combined param accumulation span
@@ -236,7 +236,7 @@ class CH(CBase):  # generic derivation hierarchy of variable nesting, depending 
         der_md_t = []; Et = [0,0,0,0]; Rt = [0,0]
         for _md_C, md_C in zip(_He.md_t, He.md_t):
 
-            der_md_C = _md_C.H.comp_md_(md_C.H, rn=1, fagg=0, frev=0)
+            der_md_C = _md_C.comp_md_(md_C, rn=1, fagg=0, frev=0)  # H is a list, we should use md_C instead
             der_md_t += [der_md_C]; Et = np.add(Et, der_md_C.Et); Rt = np.add(Rt, der_md_C.Rt)
 
         return CH(md_t=der_md_t, Et=Et, Rt=Rt, n=2.5)
@@ -263,11 +263,14 @@ class CH(CBase):  # generic derivation hierarchy of variable nesting, depending 
                         _H.H = []
                         if isinstance(H.H[0], CH):
                             for lay in H.H:
-                                Lay = CH()
-                                Lay.copy(lay)
-                                _H.H += [Lay]
+                                _H.H += [CH().copy(lay)]
                         else:  # md_
                             _H.H = deepcopy(H.H)
+                elif attr == "md_t":  # can't deepcopy CH.root
+                    _H.md_t = []
+                    for md_ in H.md_t:
+                        _H.md_t += [CH().copy(md_)]
+ 
                 else:
                     setattr(_H, attr, deepcopy(value))
         return _H

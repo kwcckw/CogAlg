@@ -123,14 +123,16 @@ def rng_node_(_N_, rng):  # forms discrete rng+ links, vs indirect rng+ in rng_k
             for kLay in rLay.H:
                 for MD_, md_ in zip(rLay.md_t, kLay.md_t):
                     MD_.add_md_(md_)  # lat|lay|ext md_
-            kH = CH()
+            kH = []  # should be a list here
             maxV = 0  # to select strongest kLay in rLay
             for i, kLay in enumerate(rLay.H):
                 V = kLay.Et[0] - ave * kLay.Et[2]
                 if V > maxV:  # draft
-                    maxV = V; rLay.H = kLay.H; rLay.i = i
-                kH.append_H(kLay)
-            if kH: rLay.subH = kH  # nested sublayers
+                    maxV = V; maxLay = kLay; rLay.i = i
+                kH += [kLay]
+            # maxLay from kLay is bottom layer, where their H is empty, so we need to add another nesting of CH here?
+            rLay.H = [CH(root=rLay).append_(lay, flat=0) for lay in maxLay.H]
+            if kH: rLay.subH += [kH]  # nested sublayers  (add new nested sublayer per rng instead?)
             # nested in extH
         if not n: rN_ = N_  # first popped N_
         n += 1
@@ -168,7 +170,7 @@ def rng_kern_(N_, rng):  # comp Gs summed in kernels, ~ graph CNN without backpr
         for link, rev in g.rim_[-1]:
             if link.ft[0]:  # must be mlink
                 krim += [link.nodet[0] if link.nodet[1] is g else link.nodet[1]]
-                lay.add_md_t(link.derH, fL=1)
+                lay.add_md_t(link.derH)
         if krim:
             g.kH += [krim]
             g.DerH.H[-1].append_(lay)
@@ -285,14 +287,19 @@ def comp_N(Link, iEt, rng, rev=None):  # dir if fd, Link.derH=dH, comparand rim+
         mdlat = comp_latuple(_N.latuple, N.latuple, rn,fagg=1)
         mdLay = _N.mdLay.comp_md_(N.mdLay, rn, fagg=1)  # not in CG of links?
         mdext = comp_ext(len(_N.node_), len(N.node_), _N.S, N.S / rn, _N.A, N.A)
-        DLay = CH(  # 1st derLay:
-            H=[mdlat,mdLay,mdext], Et=np.array(mdlat.Et)+mdLay.Et+mdext.Et, Rt=np.array(mdlat.Rt)+mdLay.Rt+mdext.Rt, n=2.5)
+        DLay = CH(  # 1st derLay: empty H, only md_t is filled
+            md_t=[mdlat,mdLay,mdext], Et=np.array(mdlat.Et)+mdLay.Et+mdext.Et, Rt=np.array(mdlat.Rt)+mdLay.Rt+mdext.Rt, n=2.5)
+        mdlat.root = DLay; mdLay.root = DLay; mdext.root = DLay
         if _N.derH and N.derH:
             dLay = _N.derH.comp_H(N.derH,rn,fagg=1,frev=rev)
             DLay.add_H(dLay)  # also append discrete higher subLays in dLay.HH[0], if any?
             # no comp extH: current ders
-    if fd: Link.derH.append_(DLay)
-    else:  Link.derH = DLay
+    if fd: 
+        Link.derH.append_(DLay)
+        Link.subH[-1] += [DLay]  # add to last layer?
+    else:  
+        Link.derH.add_H(DLay)  # both md_t and H will be summed into Et, H and n, that will be redundant?
+        Link.subH += [[DLay]]  # add extra bracket for new layer? not sure
     iEt[:] = np.add(iEt,DLay.Et)  # init eval rng+ and form_graph_t by total m|d?
     for i in 0,1:
         Val, Rdn = DLay.Et[i::2]
@@ -311,7 +318,7 @@ def comp_N(Link, iEt, rng, rev=None):  # dir if fd, Link.derH=dH, comparand rim+
                 else:
                     node.rimt_ += [[[[Link,rev]],[]]] if dir else [[[],[[Link,rev]]]]  # add rng layer
             else:
-                Lay = CH(md_t=Link.derH.H)  # empty H, bottom layer
+                Lay = CH().copy(Link.derH)  # empty H, bottom layer
                 rngLay = CH().append_(Lay, flat=0)  # new rng layer
                 if len(node.extH.H) == rng:  # accum last rng layer
                     node.extH.H[-1].H[-1].add_H(rngLay)
