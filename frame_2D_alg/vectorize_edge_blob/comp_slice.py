@@ -159,7 +159,8 @@ class CH(CBase):  # generic derivation hierarchy of variable nesting, depending 
                 if lay is not None:
                     if Lay and lay:  # empty after removing H from rnglay
                         if Lay.H:  # empty in bottom layer
-                            Lay.HH[-1] += [lay]  # for direct access?
+                            if Lay.HH: Lay.HH[-1] += [lay]
+                            else:      Lay.HH += [[lay]]
                             Lay.add_H(lay, irdnt)  # unpack, add deeper layers
                     else:
                         if Lay is None: Lay = CH(root=HE)
@@ -169,6 +170,10 @@ class CH(CBase):  # generic derivation hierarchy of variable nesting, depending 
             HE.Et = np.add(HE.Et, He.Et); HE.Rt = np.add(HE.Rt, He.Rt)
             if any(irdnt): HE.Et[2:] = [E+e for E,e in zip(HE.Et[2:], irdnt)]
             HE.n += He.n  # combined param accumulation span
+            for Hh, hh in zip_longest(HE.HH, He.HH, fillvalue=[]):  # we need to merge their HH too?
+                if hh:
+                    if Hh: Hh += hh  # merge layer
+                    else:  HE.HH += [hh]  # add new layer
         else:
             HE.copy(He)  # init
         while HE is not None:
@@ -182,11 +187,18 @@ class CH(CBase):  # generic derivation hierarchy of variable nesting, depending 
         if flat:
             for H in He.H: H.root = HE
             HE.H += He.H  # append flat
-            HE.HH += He.HH  # not sure
+            # HE.HH += He.HH  # not sure
         else:
             He.root = HE
             HE.H += [He]  # append nested
-            HE.HH += [He.HH]  # deeper sublayers of nested derH?
+            # HE.HH += He.HH  # deeper sublayers of nested derH?
+        
+        # for merging of HH, it should be per layer?
+        for Hh, hh in zip_longest(HE.HH, He.HH, fillvalue=[]):
+            if hh:
+                if Hh: Hh += hh  # merge layer
+                else:  HE.HH += [hh]  # add new layer
+            
         if HE.md_t:
             HE.add_md_t(He)  # accumulate [lat_md_C,lay_md_C,ext_md_C]
         else: # init
@@ -236,7 +248,8 @@ class CH(CBase):  # generic derivation hierarchy of variable nesting, depending 
 
     def comp_H(_He, He, rn=1, fagg=0, frev=0):  # unpack CHs down to numericals and compare them
 
-        DLay = CH()  # may be nested
+        # assigned HH with _He.HH?
+        DLay = CH(HH=_He.HH)  # may be nested
         DLay.add_H(_He.comp_md_t(He))
 
         for _lay, lay in zip(_He.H, He.H):  # loop extH s or [mdlat, mdLay, mdext] rng tuples

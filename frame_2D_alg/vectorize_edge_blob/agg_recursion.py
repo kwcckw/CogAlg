@@ -107,6 +107,13 @@ def agg_recursion(root, N_, fL, rng=1):  # fL: compare node-mediated links, else
                 # agg+ rng+, val *= n comparands, forms CGs:
                 agg_recursion(root, N_, fL=0)
         root.node_[:] = node_t
+
+    # not sure, something like this?
+    for N in N_:
+        max_Ht = N.derH.HH[-1][0]
+        max_H, index = max_Ht
+        N.derH.H = max_H.H  # update with max H
+
     # else keep root.node_
     # eval max derH.H[i].node_ as node_,
     # eval max derH.HH[i].H as H?
@@ -132,6 +139,8 @@ def rng_node_(_N_, rng):  # forms discrete rng+ links, vs indirect rng+ in rng_k
                     kH += [kLay]
                 else: break
             if kH: rLay.HH += [[[_Lay,_i]] + kH]  # add exemplar kLay in kH[0]
+            N.extH.HH += rLay.HH  # we need to pack it into extH?
+        
         if not n: rN_ = N_  # first popped N_
         n += 1
         rEt = [V+v for V, v in zip(rEt, Et)]
