@@ -124,7 +124,8 @@ class CH(CBase):  # generic derivation hierarchy of variable nesting, depending 
         '''
         He.node_ = []  # may be redundant to G.node_
         He.H = [] if H is None else H  # lower derLays or md_ in md_C, empty in bottom layer, may be redundant to root H_[0][0]
-        He.H_ = [] if H_ is None else H_  # lower Hs added in agg++|sub++
+        # init He.H_ = CH, but He.H_.H_ is [] to prevent endless recursion, else it will be init endlessly
+        He.H_ = CH(H_=[]) if H_ is None else H_  # lower Hs added in agg++|sub++
         He.n = n  # total number of params compared to form derH, summed in comp_G and then from nodes in sum2graph
         He.Et = [0,0,0,0] if Et is None else Et    # evaluation tuple: valt, rdnt
         He.Rt = [0,0] if Rt is None else Rt  # m,d relative to max possible m,d
@@ -184,11 +185,13 @@ class CH(CBase):  # generic derivation hierarchy of variable nesting, depending 
         if flat:
             for H in He.H_: H.root = HE
             HE.H += He.H  # append flat
-            HE.H_.append_(He.H_, flat=1)  # seems redundant, add nesting instead?
+            if HE.H_:
+                HE.H_.append_(He.H_, flat=1)  # seems redundant, add nesting instead?
         else:
             He.root = HE
             HE.H += [He]  # append nested
-            HE.H_.append_(He.H_, flat=0)  # deeper sublayers of nested derH?
+            if HE.H_:  # not empty list: HE.H_.H_ is empty list, HE.H_.H[n].H_ is not empty
+                HE.H_.append_(He.H_, flat=0)  # deeper sublayers of nested derH?
         if HE.md_t:
             HE.add_md_t(He)  # accumulate [lat_md_C,lay_md_C,ext_md_C]
         else: # init
@@ -265,7 +268,9 @@ class CH(CBase):  # generic derivation hierarchy of variable nesting, depending 
                     _H.md_t = []
                     for md_ in H.md_t:
                         _H.md_t += [CH().copy(md_)]
-
+                elif attr == "H_":
+                    if H.H_:  # copy non empty H_
+                        _H.H_ = CH().copy(H.H_)
                 else:
                     setattr(_H, attr, deepcopy(value))
         return _H
