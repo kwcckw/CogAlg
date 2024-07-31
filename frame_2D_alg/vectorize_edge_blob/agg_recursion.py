@@ -114,7 +114,7 @@ def agg_recursion(root, N_, fL, rng=1):  # fL: compare node-mediated links, else
 def rng_node_(_N_, rng):  # forms discrete rng+ links, vs indirect rng+ in rng_kern_, still no sub_Gs / rng+
 
     rEt = [0,0,0,0]
-    n = 0
+    n = 0; rN_ = []
     while True:
         N_, Et = rng_kern_(_N_, rng)  # += rng layer
         if Et[0] > ave * Et[2]:
@@ -124,8 +124,8 @@ def rng_node_(_N_, rng):  # forms discrete rng+ links, vs indirect rng+ in rng_k
             n += 1; rng += 1
         else:
             break
-    if rN_ in locals and rN_:
-        return rN_, rEt, rng
+
+    return rN_, rEt, rng  # as in agg_recursion, we must always return N_, Et and rng here
 
 def rng_kern_(N_, rng):  # comp Gs summed in kernels, ~ graph CNN without backprop, not for CLs
 
@@ -152,11 +152,11 @@ def rng_kern_(N_, rng):  # comp Gs summed in kernels, ~ graph CNN without backpr
         for link,rev in G.rim_[-1]:
             if link.ft[0]:  # must be mlink
                 krim += [link.nodet[0] if link.nodet[1] is G else link.nodet[1]]
-                if G.kLay: G._kLay.add_H(link.derH)
-                else: G._kLay = deepcopy(link.derH)
+                if hasattr(G, '_kLay'): G._kLay.add_H(link.derH)
+                else:                   G._kLay = CH().copy(link.derH)
         if krim:
-            if rng: G.kHH[-1] += [krim]  # each kH represents nlays (nnodes
-            else:   G.kHH = [[krim]]
+            if rng>1: G.kHH[-1] += [krim]  # each kH represents nlays (nnodes  (should be > 1 here since rng starts with 1)
+            else:     G.kHH = [[krim]]
         else:
             _G_.remove(G)
     iG_ = copy(_G_)  # new kH
@@ -172,11 +172,12 @@ def rng_kern_(N_, rng):  # comp Gs summed in kernels, ~ graph CNN without backpr
                 for link, rev in _G.rim_[-1]:
                     __G = link.nodet[0] if link.nodet[1] is G else link.nodet[1]
                     if __G in _G_:
-                        if __G not in G.kH[-1] + [g for visited_ in G.visited__ for g in visited_]:
+                        if __G not in G.kHH[-1] + [g for visited_ in G.visited__ for g in visited_]:
                             G.kHH[-1][-1] += [__G]; __G.kHH[-1][-1] += [G]  # bilateral add layer of unique mediated nodes
                             for g,_g in zip((G,__G),(__G,G)):
                                 g.visited__[-1] += [_g]
                                 if g not in G_:  # in G_ only if in visited__[-1]
+                                    g.kLay = CH()  # init    
                                     G_ += [g]
         for G in G_: G.visited__ += [[]]
         for G in G_: # sum kLay:
@@ -193,12 +194,12 @@ def rng_kern_(N_, rng):  # comp Gs summed in kernels, ~ graph CNN without backpr
                 # comp direct kernel kLays:
                 dlay = _G.kLay.comp_H(G.kLay,rn=1,fagg=1)
                 if dlay.Et[0] > ave * dlay.Et[2] * (rng+n+1):  # each layer adds cost
-                    _G.dLay.add_H(dlay) if hasattr(_G,'dLay') else _G.dLay = deepcopy(dlay)
-                    G.dLay.add_H(dlay) if hasattr(G,'dLay') else G.dLay = deepcopy(dlay) # bilateral
+                    _G.dLay = _G.dLay.add_H(dlay) if hasattr(_G,'dLay') else CH().copy(dlay)
+                    G.dLay = G.dLay.add_H(dlay) if hasattr(G,'dLay') else CH().copy(dlay) # bilateral
         # eval:
         for G in reversed(G_):
             G.visited__.pop()  # loop-specific layer
-            if G.dLay.Et[0] <= ave * G.dLay.Et[2] * (rng+n+1):
+            if not hasattr(G, 'dLay') or G.dLay.Et[0] <= ave * G.dLay.Et[2] * (rng+n+1):
                 G_.remove(G)
         for G in _G_:
             if G in G_: G._kLay = G.kLay  # comp in next krng
@@ -206,10 +207,13 @@ def rng_kern_(N_, rng):  # comp Gs summed in kernels, ~ graph CNN without backpr
         if G_:
             _G_ = G_; n += 1
         else:
-            for G in G_:
-                if rng: G.extH[-1].append(G.dLay)
-                else:   G.extH.append(CH().append(G.dLay))
-                delattr(G,'dLay'); delattr(G,'kLay'); delattr(G,'_kLay')
+            for G in iG_:  # G_ should be empty here, so use iG_ and check for dLay
+                if hasattr(G, 'dLay'):    
+                    if len(G.extH.H) > 0: G.extH.H[-1].append_(G.dLay)  # looks like we can't use rng here, because some G doesn't have dLay when rng==1, but they will get dLay in rng==2
+                    else:                 G.extH.append_(CH().append_(G.dLay))
+                    delattr(G,'dLay')
+                if hasattr(G, 'kLay'): delattr(G,'kLay');
+                if hasattr(G, '_kLay'): delattr(G,'_kLay')
             break
 
     return iG_, Et  # Gs with added rim
@@ -370,7 +374,7 @@ def segment_N_(root, iN_, fd, rng):
         N.root = Gt
         N_ += [Gt]
         if not fd:  # def Gt seeds as local maxes, | affinity clusters | samples?:
-            if not any([eN.DerH.Et[0] > N.DerH.Et[0] or (eN in max_) for eN in _N_t[0]]):  # _N if _N.V == N.V
+            if not any([(eN.extH.H and N.extH.H and eN.extH.H[-1].Et[0] > N.extH.H[-1].Et[0]) or (eN in max_) for eN in _N_t[0]]):  # _N if _N.V == N.V
                 max_ += [N]  # V * k * max_rng: + mediation if no max in rrim?
     max_ = [N.root for N in max_]
     for Gt in N_: Gt[3][0] = [_N.root for _N in Gt[3][0]]  # replace extNs with their Gts

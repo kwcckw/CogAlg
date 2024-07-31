@@ -166,10 +166,13 @@ class CH(CBase):  # generic derivation hierarchy of variable nesting, depending 
             HE.n += He.n  # combined param accumulation span
         else:
             HE.copy(He)  # init
-        while HE is not None:
-            HE.Et = np.add(HE.Et, He.Et); HE.Rt = np.add(HE.Rt, He.Rt); HE.n += He.n
-            HE = HE.root
 
+        root = HE.root  # same with append_, use root to prevent HE = None since we return it
+        while root is not None:
+            root.Et = np.add(root.Et, He.Et); root.Rt = np.add(root.Rt, He.Rt); root.n += He.n
+            root = root.root
+
+        return HE
 
     def append_(HE,He, irdnt=None, flat=0):
 
