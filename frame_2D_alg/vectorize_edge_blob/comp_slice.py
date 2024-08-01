@@ -169,8 +169,11 @@ class CH(CBase):  # generic derivation hierarchy of variable nesting, depending 
         # feedback, ideally buffered from all elements before summing in root, ultimately G|L:
         root = HE.root
         while root is not None:
-            root.Et = np.add(root.Et, He.Et); root.Rt = np.add(root.Rt, He.Rt); root.n += He.n
-            root = root.root
+            root.Et = np.add(root.Et, He.Et)
+            if isinstance(root, CH):
+                root.Rt = np.add(root.Rt, He.Rt); root.n += He.n
+                root = root.root
+            else: break  # break if root is G or L
         return HE
 
     def append_(HE,He, irdnt=None, flat=0):
@@ -190,8 +193,11 @@ class CH(CBase):  # generic derivation hierarchy of variable nesting, depending 
         if irdnt: Et[2:4] = [E+e for E,e in zip(Et[2:4], irdnt)]
         root = HE.root
         while root is not None:
-            root.Et = np.add(root.Et, He.Et); root.Rt = np.add(root.Rt, He.Rt); root.n += He.n
-            root = root.root
+            root.Et = np.add(root.Et, He.Et); 
+            if isinstance(root, CH):
+                root.Rt = np.add(root.Rt, He.Rt); root.n += He.n
+                root = root.root
+            else: break  # break if root is G or L
         return HE  # for feedback in agg+
 
 
