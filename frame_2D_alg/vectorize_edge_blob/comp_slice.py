@@ -425,7 +425,7 @@ def sum2PP(root, P_, dP_, fd):  # sum links in Ps and Ps in PP
 
     return PP
 
-def add_lat(Lat,lat): 
+def add_lat(Lat,lat):
     Lat[:] = [P+p for P,p in zip(Lat[:-1],lat[:-1])] + [[A+a for A,a in zip(Lat[-1],lat[-1])]]
     return Lat
 
