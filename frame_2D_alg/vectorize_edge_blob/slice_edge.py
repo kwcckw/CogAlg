@@ -54,6 +54,7 @@ class CsliceEdge(CFrame):
             edge.P_.sort(key=lambda P: P.yx, reverse=True)
             edge.trace()
             # del edge.rootd    # still being used for visual verification
+            edge.root = None  # prevent feedback update Et and etc to frame
             return edge
 
         def select_max(edge):
