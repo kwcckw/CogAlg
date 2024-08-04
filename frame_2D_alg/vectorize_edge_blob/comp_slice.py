@@ -236,7 +236,8 @@ class CH(CBase):  # generic derivation hierarchy of variable nesting, depending 
 
     def comp_H(_He, He, rn=1, fagg=0, frev=0):  # unpack CHs down to numericals and compare them
 
-        DLay = CH(H=_He.H)  # each lay may be nested
+        # we need to copy _He.H in order to prevent a same list reference here, else we will be adding or comparing a same list later
+        DLay = CH(H=copy(_He.H))  # each lay may be nested
         DLay.add_H(_He.comp_md_t(He))
 
         for _lay, lay in zip(_He.H, He.H):  # loop extH s or [mdlat, mdLay, mdext] rng tuples

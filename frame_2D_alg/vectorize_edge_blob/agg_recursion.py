@@ -219,9 +219,12 @@ def sum_kLay(G, g):  # sum next-rng kLay from krim of current _kLays, init with 
 
     KLay = (G.kLay if hasattr(G,"kLay")
                    else (G._kLay if hasattr(G,"_kLay")  # init conv kernels, also below:
-                                 else G.n,len(G.node_),G.S,G.A, CH().copy(G.derH) if G.derH else None, deepcopy(G.latuple), CH().copy(G.mdLay)))
+                                 else (G.n,len(G.node_),G.S,G.A,deepcopy(G.latuple), CH().copy(G.mdLay), CH().copy(G.derH) if G.derH else None)))  # derH should be last
+    # looks like we need an additional bracket here, else it becomes      
+    # G._kLay if hasattr(G,"_kLay") else G.n, L, S, A, latuple, mdLay, derH (G._kLay may replace n)
+    
     kLay = (G._kLay if hasattr(G,"_kLay")
-                    else g.n, len(g.node_),g.S,g.A, CH().copy(g.derH) if g.derH else None, deepcopy(g.latuple), CH().copy(g.mdLay))
+                    else (g.n, len(g.node_),g.S,g.A,deepcopy(g.latuple), CH().copy(g.mdLay),CH().copy(g.derH) if g.derH else None))
                     # init conv kernels
     N,L,S,A, Lat,MdLay,DerH = KLay
     n,l,s,a, lat,mdLay,derH = kLay
@@ -288,10 +291,9 @@ def comp_N(Link, iEt, rng, rev=None):  # dir if fd, Link.derH=dH, comparand rim+
         DLay = comp_G([_N.n,len(_N.node_),_N.S,_N.A,_N.latuple,_N.mdLay,_N.derH],
                       [N.n, len(N.node_), N.S, N.A, N.latuple, N.mdLay, N.derH])
         _A,A = _N.A,N.A
-    DLay.root = Link
+        DLay.root = Link  # this should be for CGs only? For CL fork, Dlay.root is Link.derH
     Link.mdext = comp_ext(2,2, _N.S,N.S/rn, _A,A)
-    if fd:
-        Link.derH.append_(DLay)
+    if fd: Link.derH.append_(DLay)
     else:  Link.derH = DLay
     iEt[:] = np.add(iEt,DLay.Et)  # init eval rng+ and form_graph_t by total m|d?
     for i in 0,1:
@@ -332,7 +334,7 @@ def comp_G(_pars, pars):  # compare kLays or partial graphs in merging
     else:  # += CL nodes
         n = mdext.n; md_t = [mdext]; Et = mdext.Et; Rt = mdext.Rt
     # single-layer H:
-    derH = CH( H=[CH(n=n,md_t=md_t,Et=Et,Rt=Rt)], n=n, md_t=CH().copy(md_t), Et=copy(Et), Rt=copy(Rt))
+    derH = CH( H=[CH(n=n,md_t=md_t,Et=Et,Rt=Rt)], n=n, md_t=[CH().copy(md_) for md_ in md_t], Et=copy(Et), Rt=copy(Rt))  # md_t is a list of [mdlat, mdLay, mdext]
     if _derH and derH:
         dderH = _derH.comp_H(derH, rn, fagg=1)  # new link derH = local dH
         derH.append_(dderH, flat=1)
@@ -400,7 +402,8 @@ def segment_N_(root, iN_, fd, rng):
     for N in iN_:
         # init graphts:
         rim = [Lt[0] for rim in N.rim_ for Lt in rim] if isinstance(N,CG) else [Lt[0] for rimt in N.rimt_ for rim in rimt for Lt in rim]
-        _N_t = [[_N for L in rim for _N in L.nodet if _N is not N], [N]]  # [ext_N_, int_N_]
+        # skip rim without any added extH? They will not be in iN_
+        _N_t = [[_N for L in rim for _N in L.nodet if _N is not N and _N in iN_], [N]]  # [ext_N_, int_N_]
         Gt = [[N],[],copy(rim),_N_t,[0,0,0,0]]  # [node_, link_, Lrim, Nrim_t, Et]
         N.root = Gt; N_ += [Gt]
         if not fd:
