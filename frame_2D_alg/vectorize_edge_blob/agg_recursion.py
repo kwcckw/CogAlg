@@ -283,10 +283,12 @@ def comp_N(Link, iEt, rng, rev=None):  # dir if fd, Link.derH=dH, comparand rim+
     if fd:  # CLs
         DLay = _N.derH.comp_H(N.derH, rn, fagg=1)  # new link derH = local dH
         _A,A = _N.angle, N.angle if rev else [-d for d in N.angle] # reverse if left link
+        Link.derH.node_ = _N.nodet + N.nodet  # derH.node_ should be from both Ns' node_?
     else:   # CGs
         DLay = comp_G([_N.n,len(_N.node_),_N.S,_N.A,_N.latuple,_N.mdLay,_N.derH],
                       [N.n, len(N.node_), N.S, N.A, N.latuple, N.mdLay, N.derH])
-        _A,A = _N.A,N.A; DLay.root = Link
+        _A,A = _N.A,N.A; DLay.root = Link; DLay.node_ = [_N, N]
+
     Link.mdext = comp_ext(2,2, _N.S,N.S/rn, _A,A)
     if fd:
         Link.derH.append_(DLay)
@@ -509,6 +511,12 @@ def feedback(root):  # called from form_graph_, always sub+, append new der laye
     DderH = mDerLay.append_(dDerH, flat=1)
     m,d, mr,dr = DderH.Et
     if m+d > sum(G_aves) * (mr+dr):
+        # check if deeper layer from feedback is stronger than the higher ones:
+        for H in root.derH.H:
+            if m+d > sum(H.Et[:2]):
+                DderH.Et[2] += 1; DderH.Et[3] += 1  # add redundancy to deeper layer from feedback when it's stronger than higher layers
+                # remove H.H and H.md_t here?
+                # and then replaces H.node_ with DderH.node_ ?
         root.derH.H[-1].append_(DderH, flat=0)  # append new derLay, maybe nested
     # eval max derH.H[i].node_ as node_,
     # max subH = derH.H[i]
