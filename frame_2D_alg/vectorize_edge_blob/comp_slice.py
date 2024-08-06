@@ -156,13 +156,13 @@ class CH(CBase):  # generic derivation hierarchy of variable nesting, depending 
 
         if HE:
             for Lay,lay in zip_longest(HE.H, He.H, fillvalue=None):  # cross comp layer
-                if lay is not None:
-                    # should be checking md_t here, else it's empty
-                    if Lay and Lay.md_t:  # Lay is subH, add unpack sublays
+                if lay:
+                    if Lay:
                         Lay.add_H(lay, irdnt)
                     else:
-                        if Lay is None: Lay = CH(root=HE)
-                        HE.H += [Lay.copy(lay)]
+                        lay = copy(lay); lay.root=HE
+                        if Lay is None: HE.H += lay
+                        else: Lay[:] = lay  # was []
             # default
             HE.add_md_t(He)  # [lat_md_C, lay_md_C, ext_md_C]
             HE.Et = np.add(HE.Et, He.Et); HE.Rt = np.add(HE.Rt, He.Rt)
@@ -242,15 +242,18 @@ class CH(CBase):  # generic derivation hierarchy of variable nesting, depending 
 
     def comp_H(_He, He, rn=1, fagg=0, frev=0):  # unpack CHs down to numericals and compare them
 
-        DLay = CH().add_H(_He.comp_md_t(He))  # default comp He.md_t per layer
-        # if md_t: may be deleted later, but still in lower lays?
-
+        # this is probably wrong:
+        DLay = CH().add_H(_He.comp_md_t(He))  # default comp He.md_t per He?
+                                              # or redundant to comp_md_t / lay below:
         for _lay, lay in zip(_He.H, He.H):  # loop extH s or [mdlat, mdLay, mdext] rng tuples
-            if _lay.H and lay.H:
-                # subHs, H=[] if deprecated, comp subH layers
-                dLay = _lay.comp_H(lay, rn, fagg, frev)
-                DLay.append_(dLay, flat=0)
-                # new process for subHH (subH?
+            if _lay and lay:  # must have md_t:
+                dlay = CH().add_H(_lay.comp_md_t(lay))  # default comp He.md_t per layer
+                #  may be deleted later, but still in lower lays?
+                if _lay.H and lay.H:
+                    # subHs, H=[] if deprecated, comp subH layers
+                    dLay = _lay.comp_H(lay, rn, fagg, frev)
+                    DLay.append_(dLay, flat=0)
+                    # new process for subHH (subH?
         return DLay
 
     def copy(_He, He):
