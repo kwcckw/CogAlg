@@ -160,13 +160,13 @@ class CH(CBase):  # generic derivation hierarchy of variable nesting, depending 
                     if Lay:
                         Lay.add_H(lay, irdnt)
                     else:
-                        lay = copy(lay); lay.root=HE
-                        if Lay is None: HE.H += lay
-                        else: Lay[:] = lay  # was []
+                        if Lay is None: HE.append_(CH().copy(lay))  # pack a copy of new lay in HE.H
+                        else:           HE.H[HE.H.index(Lay)] = CH(root=HE).copy(lay)  # Lay was []
+
             # default
             HE.add_md_t(He)  # [lat_md_C, lay_md_C, ext_md_C]
             HE.Et = np.add(HE.Et, He.Et); HE.Rt = np.add(HE.Rt, He.Rt)
-            HE.node_ += [node for node in He.node if node not in HE.node_]
+            HE.node_ += [node for node in He.node_ if node not in HE.node_]
             if any(irdnt): HE.Et[2:] = [E+e for E,e in zip(HE.Et[2:], irdnt)]
             HE.n += He.n  # combined param accumulation span
         else:
@@ -176,7 +176,7 @@ class CH(CBase):  # generic derivation hierarchy of variable nesting, depending 
         while root is not None:
             root.Et = np.add(root.Et, He.Et)
             if isinstance(root, CH):
-                root.Rt = np.add(root.Rt, He.Rt); root.n += He.n
+                root.Rt = np.add(root.Rt, He.Rt); root.n += He.n; root.node_ += [node for node in He.node_ if node not in HE.node_]
                 root = root.root
             else: break  # break if root is G or L
         return HE
@@ -195,13 +195,13 @@ class CH(CBase):  # generic derivation hierarchy of variable nesting, depending 
         HE.n += He.n
         Et, et = HE.Et, He.Et
         HE.Et = np.add(HE.Et, He.Et); HE.Rt = np.add(HE.Rt, He.Rt)
-        HE.node_ += [node for node in He.node if node not in HE.node_]
+        HE.node_ += [node for node in He.node_ if node not in HE.node_]
         if irdnt: Et[2:4] = [E+e for E,e in zip(Et[2:4], irdnt)]
         root = HE.root
         while root is not None:
             root.Et = np.add(root.Et,He.Et)
             if isinstance(root, CH):
-                root.Rt = np.add(root.Rt, He.Rt); root.n += He.n
+                root.Rt = np.add(root.Rt, He.Rt); root.n += He.n; root.node_ += [node for node in He.node_ if node not in HE.node_]
                 root = root.root
             else: break  # break if root is G or L
         return HE  # for feedback in agg+
@@ -242,15 +242,14 @@ class CH(CBase):  # generic derivation hierarchy of variable nesting, depending 
 
     def comp_H(_He, He, rn=1, fagg=0, frev=0):  # unpack CHs down to numericals and compare them
 
-        # this is probably wrong:
         DLay = CH().add_H(_He.comp_md_t(He))  # default comp He.md_t per He?
                                               # or redundant to comp_md_t / lay below:
         for _lay, lay in zip(_He.H, He.H):  # loop extH s or [mdlat, mdLay, mdext] rng tuples
             if _lay and lay:  # must have md_t:
-                dlay = CH().add_H(_lay.comp_md_t(lay))  # default comp He.md_t per layer
+                # dlay = CH().add_H(_lay.comp_md_t(lay))  # default comp He.md_t per layer (actually this line is redundant to the comp_md_t above)
                 #  may be deleted later, but still in lower lays?
-                if _lay.H and lay.H:
-                    # subHs, H=[] if deprecated, comp subH layers
+                # subHs, H=[] if deprecated, comp subH layers
+                if _lay.md_t and lay.md_t:  # lay.H is empty in bottom layer, but their md_t may not empty 
                     dLay = _lay.comp_H(lay, rn, fagg, frev)
                     DLay.append_(dLay, flat=0)
                     # new process for subHH (subH?
