@@ -54,9 +54,10 @@ class CcompSliceFrame(CsliceEdge):
 
 class CG(CBase):  # PP | graph | blob: params of single-fork node_ cluster
 
-    def __init__(G, roott=None, rng=1, fd=0, node_=None, link_=None, Et=None, mdLay=None, derH=None, extH=None, n=0):
+    def __init__(G, root = None, roott=None, rng=1, fd=0, node_=None, link_=None, Et=None, mdLay=None, derH=None, extH=None, n=0):
         super().__init__()
 
+        G.root = root
         G.roott = [[],[]] if roott is None else roott  # node may belong to graphs of both forks
         G.node_ = [] if node_ is None else node_  # convert to node_t in sub_recursion
         G.link_ = [] if link_ is None else link_  # internal links per comp layer, nest in rng+)der+
@@ -114,7 +115,7 @@ class CdP(CBase):  # produced by comp_P, comp_slice version of Clink
 class CH(CBase):  # generic derivation hierarchy of variable nesting, depending on effective agg++(sub++ depth
 
     name = "H"
-    def __init__(He, md_t=None, n=0, Et=None, Rt=None, H=None, root=None):
+    def __init__(He, md_t=None, n=0, Et=None, Rt=None, H=None, root=None, i=None):
         super().__init__()
         He.node_ = []  # concat, may be redundant to G.node_, lowest nesting order
         He.md_t = [] if md_t is None else md_t  # compared [mdlat,mdLay,mdext] per layer
@@ -123,7 +124,7 @@ class CH(CBase):  # generic derivation hierarchy of variable nesting, depending 
         He.Et = [0,0,0,0] if Et is None else Et  # evaluation tuple: valt, rdnt
         He.Rt = [0,0] if Rt is None else Rt  # m,d relative to max possible m,d
         He.root = None if root is None else root  # N or higher-composition He
-        He.i = 0  # He index in root.H,
+        He.i = 0 if i is None else i  # He index in root.H,
         # He.ni = 0  # exemplar in node_, trace in both directions?
         # He.Hi = 0  # exemplar in H if unpacked, trace down?
         # He.depth = 0  # nesting in H[0], -=i in H[Hi], added in agg++|sub++
@@ -185,10 +186,11 @@ class CH(CBase):  # generic derivation hierarchy of variable nesting, depending 
 
         if irdnt is None: irdnt = []
         if flat:
-            for lay in He.H: lay.root = HE
-            HE.H += He.H  # append flat
+            for lay in He.H:
+                lay = CH(i=len(HE.H),root=HE).copy(lay)
+                HE.H += [lay]  # append flat (so we need copy now, since each CH.i may different in HE.H and He.H)
         else:
-            He.root = HE
+            He = CH(i=len(HE.H),root=HE).copy(He)
             HE.H += [He]  # append nested
         if HE.md_t: HE.add_md_t(He)  # accumulate [lat_md_C,lay_md_C,ext_md_C]
         else:       HE.md_t = [CH().copy(md_) for md_ in He.md_t]
@@ -247,7 +249,7 @@ class CH(CBase):  # generic derivation hierarchy of variable nesting, depending 
         for _lay, lay in zip(_He.H, He.H):  # loop extHs or [mdlat,mdLay,mdext] rng tuples, flat
             if _lay and lay:
                 dLay = _lay.comp_H(lay, rn, fagg, frev)  # comp He.md_t, comp,unpack lay.H
-                DLay.append(dLay, flat=0)               # subHH( subH?
+                DLay.append_(dLay, flat=0)               # subHH( subH?
         return DLay
 
 
@@ -265,7 +267,7 @@ class CH(CBase):  # generic derivation hierarchy of variable nesting, depending 
                     for md_ in He.md_t:
                         _He.md_t += [CH().copy(md_)]
                 elif attr == "node_":
-                    _He.node_ = [CH().copy(node) for node in He.node_]
+                    _He.node_ = copy(He.node_)  # sorry it should be a list of CG or CL here, we should use shallow copy instead
                 else:
                     setattr(_He, attr, deepcopy(value))
         return _He
