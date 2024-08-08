@@ -114,9 +114,9 @@ class CdP(CBase):  # produced by comp_P, comp_slice version of Clink
 class CH(CBase):  # generic derivation hierarchy of variable nesting, depending on effective agg++(sub++ depth
 
     name = "H"
-    def __init__(He, md_t=None, n=0, Et=None, Rt=None, H=None, root=None, i=None):
+    def __init__(He, node_=None, md_t=None, n=0, Et=None, Rt=None, H=None, root=None, i=None):
         super().__init__()
-        He.node_ = []  # concat, may be redundant to G.node_, lowest nesting order
+        He.node_ = [] if node_ is None else node_  # concat, may be redundant to G.node_, lowest nesting order
         He.md_t = [] if md_t is None else md_t  # compared [mdlat,mdLay,mdext] per layer
         He.H = [] if H is None else H  # lower derLays or md_ in md_C, empty in bottom layer
         He.n = n  # number of params compared to form derH, sum in comp_G, from nodes in sum2graph
@@ -202,8 +202,9 @@ class CH(CBase):  # generic derivation hierarchy of variable nesting, depending 
         while root is not None:
             root.Et = np.add(root.Et,He.Et)
             if isinstance(root, CH):
-                root.Rt = np.add(root.Rt,He.Rt); root.n += He.n; root = root.root
+                root.Rt = np.add(root.Rt,He.Rt); root.n += He.n
                 root.node_ += [node for node in He.node_ if node not in HE.node_]
+                root = root.root  # this should be last
             else:
                break  # root is G|L
         return HE  # for feedback in agg+

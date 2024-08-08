@@ -370,7 +370,13 @@ def form_graph_t(root, N_, Et, rng):  # segment N_ to Nm_, Nd_
         # der+: comp link via link.node_ -> dual trees of matching links in der+rng+, more likely but complex: higher-order links
         # rng+: distant M / G.M, less likely: term by >d/<m, but less complex
         if Et[fd] > ave * Et[2+fd]:
-            if not fd:
+            if fd:
+                # cluster links if fd:
+                if isinstance(N_[0], CG):
+                    N_ = [Lt[0] for node in N_ for rim in node.rim_ for Lt in rim]
+                else:
+                    N_ = [Lt[0] for L in N_ for rimt in L.rimt_ for Lt in rimt[0]+rimt[1]]    
+            if isinstance(N_[0], CG):
                 for G in N_: G.root = []  # link.root is empty anyway?
             graph_ = segment_N_(root, N_, fd, rng)  # N_ is Link_ if fd else G_
             for graph in graph_:
@@ -407,14 +413,25 @@ def segment_N_(root, iN_, fd, rng):  # ~ parallelized https://en.wikipedia.org/w
     N_ = []  # init Gts per node in iN_, merge if Lrim overlap + similarity of exclusive node_s
     max_ = []
     for N in iN_:  # init graphts:
-        if isinstance(N,CG): rim = [Lt[0] for rim in N.rim_ for Lt in rim]
-        else: rim = [Lt[0] for rimt in N.rimt_ for rim in rimt for Lt in rim]
+        if fd:
+            # in fd fork, get rim of Link from Link.nodet's rims?
+            if isinstance(N.nodet[0],CG): rim = [Lt[0] for _N in N.nodet for rim in _N.rim_ for Lt in rim]
+            else:                         rim = [Lt[0] for _L in N.nodet for rimt in _L.rimt_ for rim in rimt for Lt in rim]
+        else:
+            if isinstance(N,CG): rim = [Lt[0] for rim in N.rim_ for Lt in rim]
+            else: rim = [Lt[0] for rimt in N.rimt_ for rim in rimt for Lt in rim]
+            
         # get [ext_N_,int_N_], no extH if not in iN_:
         _N_t = [[_N for L in rim for _N in L.nodet if _N is not N and _N in iN_], [N]]
         Gt = [[N],[],copy(rim),_N_t,[0,0,0,0]]  # [node_, link_, Lrim, Nrim_t, Et]
         N.root = Gt; N_ += [Gt]
         # if use exemplar G|Ls:
-        if not any([(eN.extH.H[-1].Et[fd] > N.extH.H[-1].Et[fd]) or (eN in max_) for eN in _N_t[0]]):  # _N if _N.V==N.V
+        if fd:  # if fd fork, new Link doesn't have added extH, so it's just derH?
+            has_greater_max = any([(eN.derH.Et[fd] > N.derH.Et[fd]) or (eN in max_) for eN in _N_t[0]])
+        else:
+            has_greater_max = any([(eN.extH.H[-1].Et[fd] > N.extH.H[-1].Et[fd]) or (eN in max_) for eN in _N_t[0]])
+        
+        if not has_greater_max:  # _N if _N.V==N.V
             max_ += [N]  # add mediation if no max in rrim: V * k * max_rng?
     max_ = [N.root for N in max_]
     # replace extNs with their Gts:
@@ -480,8 +497,8 @@ def sum2graph(root, grapht, fd, rng):  # sum node and link params into graph, ag
 
     G_, Link_, _, _, Et = grapht
     graph = CG(fd=fd, node_= Link_ if fd else G_, link_=Link_, rng=rng, Et=Et)  # add default G_=G_?
-    graph.roott[fd] = root
-    extH = CH()  # convert to graph derH
+    graph.root = root
+    extH = CH(node_ = Link_ if fd else G_)  # convert to graph derH
     yx = [0,0]
     for G in G_:
         graph.area += G.area
@@ -495,8 +512,7 @@ def sum2graph(root, grapht, fd, rng):  # sum node and link params into graph, ag
         # G.Et[1,3] should be summed from Link_ anyway?
         if not fd:
             G.root = graph  # root is assigned to links if fd else to nodes
-            extH.add_H(G.extH) if extH else extH.append_(G.extH, flat=1)
-            extH.node_ = G_
+            extH.add_H(G.extH) if extH else extH.append_(G.extH, flat=1)  # G.extH.i is not relevant right?
         yx = np.add(yx, G.yx)
     L = len(G_)
     yx = np.divide(yx,L); graph.yx = yx
@@ -506,8 +522,8 @@ def sum2graph(root, grapht, fd, rng):  # sum node and link params into graph, ag
         graph.A = np.add(graph.A,link.angle)  # np.add(graph.A, [-link.angle[0],-link.angle[1]] if rev else link.angle)
         if fd:
             link.root = graph
+            # link.extH is empty here? We pack extH in nodes only, so it should be Link.derH here?
             extH.add_H(link.extH) if extH else extH.append_(link.extH, flat=1)
-            extH.node_ = Link_
     graph.derH.append_(extH, flat=0)  # graph derH = node derHs + [summed Link_ derHs], may be nested by rng
     if fd:
         # assign alt graphs from d graph, after both linked m and d graphs are formed
