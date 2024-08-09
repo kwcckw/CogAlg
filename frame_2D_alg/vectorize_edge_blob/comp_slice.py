@@ -123,9 +123,8 @@ class CH(CBase):  # generic derivation hierarchy of variable nesting, depending 
         He.Et = [0,0,0,0] if Et is None else Et  # evaluation tuple: valt, rdnt
         He.Rt = [0,0] if Rt is None else Rt  # m,d relative to max possible m,d
         He.root = None if root is None else root  # N or higher-composition He
-        He.i = 0 if i is None else i  # He index in root.H,
+        He.i = 0 if i is None else i  # lay index in root.H if lay, else derH.H exemplar, trace in both directions?
         # He.ni = 0  # exemplar in node_, trace in both directions?
-        # He.Hi = 0  # exemplar in H if unpacked, trace down?
         # He.depth = 0  # nesting in H[0], -=i in H[Hi], added in agg++|sub++
         # He.nest = nest  # nesting depth: -1/ ext, 0/ md_, 1/ derH, 2/ subH, 3/ aggH?
         '''
@@ -202,9 +201,9 @@ class CH(CBase):  # generic derivation hierarchy of variable nesting, depending 
         while root is not None:
             root.Et = np.add(root.Et,He.Et)
             if isinstance(root, CH):
-                root.Rt = np.add(root.Rt,He.Rt); root.n += He.n
                 root.node_ += [node for node in He.node_ if node not in HE.node_]
-                root = root.root  # this should be last
+                root.Rt = np.add(root.Rt,He.Rt); root.n += He.n
+                root = root.root
             else:
                break  # root is G|L
         return HE  # for feedback in agg+
