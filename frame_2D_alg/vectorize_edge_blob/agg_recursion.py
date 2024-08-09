@@ -63,6 +63,7 @@ class CL(CBase):  # link or edge, a product of comparison between two nodes or l
         l.n = 1  # min(node_.n)
         l.S = 0  # sum nodet
         l.Et = [0,0,0,0]
+        l.root = None
         # rim_t = [[],[]]  # if der+
     def __bool__(l): return bool(l.derH.H)
 
@@ -115,7 +116,7 @@ def agg_recursion(root, N_, fL, rng=1):  # fL: compare node-mediated links, else
                             di = lay.i-i  # lay.i: index in H, di: der rdn - value rdn
                             lay.Et[2+fd] += di  # update der rdn to val rdn
                             if not i:  # max val lay
-                                N.node_ = lay.node_; derH.i = lay.i  # exemplar, index
+                                N.node_ = lay.node_; derH.ii = lay.i  # exemplar, index
                         N_ += [N]
                 if root.derH.Et[0] * (max(0,(len(N_)-1)*root.rng)) > G_aves[1]*root.derH.Et[2]:
                     # agg+rng+, val *= n comparands, forms CGs:
@@ -137,7 +138,11 @@ def rng_node_(_N_, rng):  # forms discrete rng+ links, vs indirect rng+ in rng_k
             n += 1
         else:
             break
-    return rN_, [], rEt, rng  # return empty L_ for now, probably need to fill it?
+      
+    # we need rL_ in fd==1 fork?
+    rL_ = list(set([Lt[0]for N in rN_ for rim in N.rim_ for Lt in rim]))
+    
+    return rN_, rL_, rEt, rng  # return empty L_ for now, probably need to fill it?
 
 def rng_kern_(N_, rng):  # comp Gs summed in kernels, ~ graph CNN without backprop, not for CLs
 
@@ -377,7 +382,7 @@ def form_graph_t(root, N_, L_, Et, rng):  # segment N_ to Nm_, Nd_
             if isinstance(N_[0],CG):  # link.root is empty?
                  for G in N_: G.root = []  # new root will be intermediate graph
             # G: Ls/ D if fd: directional, else Ns/ M: symmetrical:
-            graph_ = segment_N_(root, L_ if fd else N_, fd, rng)
+            graph_ = segment_N_(root, N_, L_, fd, rng)
             for graph in graph_:
                 Q = graph.link_ if fd else graph.node_  # xcomp -> max_dist * rng+1
                 if len(Q) > ave_L and graph.derH.Et[fd] > G_aves[fd] * graph.derH.Et[fd+2]:
@@ -404,17 +409,29 @@ def add_der_attrs(link_):
         link.Et = [0,0,0,0]
         link.aRad = 0
 
-def segment_N_(root, iN_, fd, rng):  # iN_: Link_ if fd else G_, ~ parallelized https://en.wikipedia.org/wiki/Watershed_(image_processing)
+def segment_N_(root, iN_,iL_, fd, rng):  # iN_: Link_ if fd else G_, ~ parallelized https://en.wikipedia.org/wiki/Watershed_(image_processing)
 
     # cluster by weight of shared links, initially single linkage, + similarity of partial clusters in merge
     N_ = []
     max_ = []
-    for N in iN_:  # init Gt/N, merge / Lrim overlap + similarity of exclusive node_s:
-        if isinstance(N,CG):            rim = [Lt[0] for rim in N.rim_ for Lt in rim]
-        elif isinstance(N.nodet[0],CG): rim = [Lt[0] for _N in N.nodet for rim in _N.rim_ for Lt in rim]
-        else:                           rim = [Lt[0] for rimt in N.rimt_ for rim in rimt for Lt in rim]
+    for N in (iL_ if fd else iN_):  # init Gt/N, merge / Lrim overlap + similarity of exclusive node_s:
+        if isinstance(N,CG):            
+            rim = [Lt[0] for rim in N.rim_ for Lt in rim]
+            ext_N_ = [_N for L in rim for _N in L.nodet if _N is not N and _N in iN_]
+        elif isinstance(N.nodet[0],CG):
+            # not sure below:
+            '''
+            rim = N.nodet  # when we clustering link, suppose Link.nodet is rim, and external nodes are nodet's rims? But then rim is CG instead of CL now
+            ext_N_ = [Lt[0] for _N in rim for rim in _N.rim_ for Lt in rim]
+            '''
+            rim = [Lt[0] for _N in N.nodet for rim in _N.rim_ for Lt in rim]
+            ext_N_ = [Lt[0]  for rim in N.nodet[0].rim_ for Lt in rim]  # for external N_, it will be N.nodet[0]'s rim_?
+            aa = 1
+        else:                      
+            rim = N.nodet
+            ext_N_ = [Lt[0] for _L in rim for rimt in _L.rimt_ for rim in rimt for Lt in rim]
         # get [ext_N_,int_N_], no extH if not in iN_:
-        _N_t = [[_N for L in rim for _N in L.nodet if _N is not N and _N in iN_], [N]]
+        _N_t = [ext_N_, [N]]
         Gt = [[N],[],copy(rim),_N_t,[0,0,0,0]]  # [node_, link_, Lrim, Nrim_t, Et]
         N.root = Gt; N_ += [Gt]
         emax_ = [] # if exemplar G|Ls:
