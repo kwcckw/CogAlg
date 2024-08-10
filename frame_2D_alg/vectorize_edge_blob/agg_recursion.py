@@ -291,7 +291,8 @@ def rng_link_(_L_):  # comp CLs: der+'rng+ in root.link_ rim_t node rims: direct
         # Lt_ = [(L, mN_t) for L, mN_t in zip(L_, mN_t_) if any(mN_t)]
         # if Lt_: L_,_mN_t_ = map(list, zip(*Lt_))  # map list to convert tuple from zip(*)
 
-    return Link_, set(rL_), Et, rng
+    # this is inverted? nodes should rL_ because they are comparands, while Link_ are the new CL contains new der?
+    return list(set(rL_)), Link_, Et, rng
 
 
 def comp_N(Link, iEt, rng, rev=None):  # dir if fd, Link.derH=dH, comparand rim+=Link
@@ -305,8 +306,9 @@ def comp_N(Link, iEt, rng, rev=None):  # dir if fd, Link.derH=dH, comparand rim+
     else:   # CGs
         DLay = comp_G([_N.n,len(_N.node_),_N.S,_N.A,_N.latuple,_N.mdLay,_N.derH],
                       [N.n, len(N.node_), N.S, N.A, N.latuple, N.mdLay, N.derH])
-        DLay.root = Link; DLay.node_ = [_N, N]
+        DLay.root = Link
         _A,A = _N.A,N.A
+    DLay.node_ = [_N, N]  # we need this in both forks now?
     Link.mdext = comp_ext(2,2, _N.S,N.S/rn, _A,A)
     if fd:
         Link.derH.append_(DLay)
@@ -350,6 +352,7 @@ def comp_G(_pars, pars):  # compare kLays or partial graphs in merging
     else:  # += CL nodes
         n = mdext.n; md_t = [mdext]; Et = mdext.Et; Rt = mdext.Rt
     # single-layer H:
+    # this CH in derH.H doesn't have node_, we need to include it? Because this derH maybe accumulated into graph.derH later
     derH = CH( H=[CH(n=n,md_t=md_t,Et=Et,Rt=Rt)], n=n, md_t=[CH().copy(md_) for md_ in md_t], Et=copy(Et), Rt=copy(Rt))
     if _derH and derH:
         dderH = _derH.comp_H(derH, rn, fagg=1)  # new link derH = local dH
@@ -414,8 +417,8 @@ def segment_N_(root, iN_, fd, rng):  # iN_: Link_ if fd else G_, ~ parallelized 
     max_ = []
     for N in iN_:
         # init Gt per N:
-        med_ = N.nodet if fd else [Lt[0] for Lt in N.rim_[-1]]  # mediator is iN if fd else iL
-        if fd: eN_ = [_Lt[0] for _N in med_ for _Lt in _N.rim_[-1]]  # links of nodet
+        med_ = N.nodet if fd else [Lt[0] for Lt in (N.rim_[-1] if isinstance(N, CG) else N.rimt_[-1][0]+N.rimt_[-1][1])]  # mediator is iN if fd else iL
+        if fd: eN_ = [_Lt[0] for _N in med_ for _Lt in (_N.rim_[-1] if isinstance(_N, CG) else _N.rimt_[-1][0]+_N.rimt_[-1][1])]  # links of nodet
         else:  eN_ = [_N for _L in med_ for _N in _L.nodet]  # _nodes of rim
         ext_N_ = [e for e in eN_ if e is not N and e in iN_]
         _N_t = [ext_N_, [N]]
@@ -507,14 +510,21 @@ def sum2graph(root, grapht, fd, rng):  # sum node and link params into graph, ag
     # ave distance from graph center to node centers:
     graph.aRad = sum([np.hypot(*np.subtract(yx,N.yx)) for N in N_]) / L
     extH = CH(node_ = N_)
+    
+    # when rim is CG (fd == 1, and med_ is link.nodet), we need to get their L here?
+    if L_ and isinstance(L_[0], CG): 
+        L_ = list(set([Lt[0] for G in L_ for rim in G.rim_ for Lt in rim]))
+        graph.link_ = L_
     for link in L_:  # unique current-layer links
         graph.S += link.span
         graph.A = np.add(graph.A,link.angle)  # np.add(graph.A, [-link.angle[0],-link.angle[1]] if rev else link.angle)
         extH.add_H(link.derH) if extH else extH.append_(link.derH, flat=1)
-    graph.derH.append_(extH, flat=0)
+
+    # skip empty extH? Single G's graph may have empty extH
+    if extH: graph.derH.append_(extH, flat=0)
     if fd:
         # assign alt graphs from d graph, after both linked m and d graphs are formed
-        for link in graph.link_:
+        for link in graph.node_:  # node_ is CL der in fd fork
             mgraph = link.root
             if mgraph:
                 for fd, (G, alt_G) in enumerate(((mgraph,graph), (graph,mgraph))):  # bilateral assign:
