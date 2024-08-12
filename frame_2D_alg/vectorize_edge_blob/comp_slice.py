@@ -66,7 +66,7 @@ class CG(CBase):  # PP | graph | blob: params of single-fork node_ cluster
         # maps to node_H from agg+|sub+:
         G.derH = CH(root=G) if derH is None else derH  # internal, sum from node_
         G.extH = CH(root=G) if extH is None else extH  # external, sum from rim_) kernel rim
-        G.rim_ = []  # direct links, depth, init rim_t, link_tH in base sub+ | cpr rd+, link_tH_ in cpr sub+
+        G.rim = []  # direct links, depth, init rim_t, link_tH in base sub+ | cpr rd+, link_tH_ in cpr sub+
         G.kHH = []  # kernel: hierarchy of rim layers
         G.rng = rng
         G.n = n  # external n (last layer n)
