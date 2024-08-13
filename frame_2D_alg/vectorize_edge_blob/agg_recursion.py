@@ -119,7 +119,7 @@ def agg_recursion(root, N_, fL, rng=1):  # fL: compare node-mediated links, else
                         N_ += [N]
                 if root.derH.Et[0] * (max(0,(len(N_)-1)*root.rng)) > G_aves[1]*root.derH.Et[2]:
                     # agg+rng+, val *= n comparands, forms CGs:
-                    agg_recursion(root, N_, fL=0)
+                    agg_recursion(root, N_, fL=0)  # so rng always start from 0 here?
             root.node_[:] = node_t
         # else keep root.node_
 
@@ -146,8 +146,9 @@ def rng_kern_(N_, rng):  # comp Gs summed in kernels, ~ graph CNN without backpr
     _G_ = []
     Et = [0,0,0,0]
     for N in N_:
-        if hasattr(N,'crim'): N.rim += N._rim
+        if hasattr(N,'crim'): N.rim += N.crim
         N.crim = []  # current rng links, added in comp_N
+        N.visited__ += [[]]  # init layer for all
     # comp_N:
     for (_G, G) in list(combinations(N_,r=2)):
         if _G in [G for visited_ in G.visited__ for G in visited_]:  # compared in any rng++
@@ -158,8 +159,10 @@ def rng_kern_(N_, rng):  # comp Gs summed in kernels, ~ graph CNN without backpr
         # eval relative distance between G centers:
         if dist / max(aRad,1) <= max_dist * rng:
             for _g,g in (_G,G),(G,_G):
-                if len(g.extH.H)==rng: g.visited__[-1] += [_g]
-                else: g.visited__ += [[_g]]  # init layer
+                # we can't check with len(g.derH.H) here because g.derH.H may have existing CH in agg++
+                # if len(g.derH.H)==rng: g.visited__[-1] += [_g]
+                # else: g.visited__ += [[_g]]  # init layer
+                g.visited__[-1] += [_g]
             Link = CL(nodet=[_G,G], S=2,A=[dy,dx], box=extend_box(G.box,_G.box))
             if comp_N(Link, Et, rng):
                 for g in _G,G:
@@ -171,8 +174,8 @@ def rng_kern_(N_, rng):  # comp Gs summed in kernels, ~ graph CNN without backpr
             if link.ft[0]:  # must be mlink
                 _G = link.nodet[0] if link.nodet[1] is G else link.nodet[1]
                 krim += [_G]
-                if hasattr(G,'dLay'): G.dLay.add_H(link.extH)
-                else:                 G.dLay = CH().copy(link.extH)
+                if hasattr(G,'dLay'): G.dLay.add_H(link.derH)
+                else:                 G.dLay = CH().copy(link.derH)
                 G._kLay = sum_kLay(G,_G); _G._kLay = sum_kLay(_G,G)  # next krim comparands
         if krim:
             if rng>1: G.kHH[-1] += [krim]  # kH = lays(nodes
@@ -228,6 +231,7 @@ def rng_kern_(N_, rng):  # comp Gs summed in kernels, ~ graph CNN without backpr
                 # I think this should be done in sum2graph:
                 if rng==1: G.derH.append_(CH().append_(G.dLay))
                 else:      G.derH.H[-1].append_(G.dLay)
+                G.rim += G.crim  # this is missed out? Pack last added crim
                 delattr(G,'dLay'); delattr(G,'_kLay'); delattr(G,'crim')
                 if hasattr(G,"kLay)"): delattr(G,'kLay')
                 G.visited__.pop()  # kH - specific layer
@@ -262,7 +266,7 @@ def rng_link_(_L_):  # comp CLs: der+'rng+ in root.link_ rim_t node rims: direct
         for L, _mN_t, mN_t in zip(_L_, _mN_t_, mN_t_):
             for rev, _mN_, mN_ in zip((0,1), _mN_t, mN_t):
                 # comp L, _Ls: nodet mN 1st rim, -> rng+ _Ls/ rng+ mm..Ns, flatten rim_s:
-                rim_ = [[n.rim] if isinstance(n,CG) else n.rimt_[0][0] + n.rimt_[0][1] for n in _mN_]
+                rim_ = [n.rim if isinstance(n,CG) else n.rimt_[0][0] + n.rimt_[0][1] for n in _mN_]  # should be just n.rim here, since we are getting all n.rim from _mN_?
                 for rim in rim_:
                     for _L,_rev in rim:  # _L is reversed relative to its 2nd node
                         if _L is L or _L in L.visited_: continue
@@ -345,11 +349,14 @@ def comp_G(_pars, pars):  # compare kLays or partial graphs in merging
         Rt = np.array(mdlat.Rt) + mdLay.Rt + mdext.Rt
     else:  # += CL nodes
         n = mdext.n; md_t = [mdext]; Et = mdext.Et; Rt = mdext.Rt
-    # single-layer H:
-    dlay = CH( H=[CH(n=n,md_t=md_t,Et=Et,Rt=Rt)], n=n, md_t=[CH().copy(md_) for md_ in md_t], Et=copy(Et), Rt=copy(Rt))
+    
+    dlay = CH()
     if _derH and derH:
         dderH = _derH.comp_H(derH, rn, fagg=1)  # new link derH = local dH
         dlay.append_(dderH, flat=1)
+
+    # single-layer H (this new layer should be after the comparison of derH above?)
+    dlay.append_(CH(n=n,md_t=md_t,Et=Et,Rt=Rt), flat=0)
 
     return dlay
 
@@ -396,7 +403,7 @@ def form_graph_t(root, N_, L_, Et, rng):  # segment N_ to Nm_, Nd_
 
 def add_der_attrs(link_):
     for link in link_:
-        link.derH.H += [CH()]  # for der+
+        # link.derH.H += [CH()]  # for der+ （this is not needed? We are adding new derH layer based on rng in rng_link_ later anyway
         link.root = None  # dgraphs containing link
         link.rimt_ = [[[],[]]]  # 2 dirs per rng layer
         link.visited_ = []
