@@ -89,6 +89,7 @@ def vectorize_root(image):  # vectorization in 3 composition levels of xcomp, cl
                             PP.aRad = np.hypot(*np.subtract(PP.yx,(yn,xn)))
                             PP.Et = [0,0,0,0]  # [] in comp_slice
                             pruned_node_ += [PP]
+                            PP.elay = CH()  # init empty per agg+
                     if len(pruned_node_) > 10:  # discontinuous PP rng+ cross-comp, cluster -> G_t:
                         agg_recursion(edge, N_=pruned_node_, fL=0)
                         node_t[fd] = edge.node_  # edge.node_ is current fork node_t
@@ -116,6 +117,7 @@ def agg_recursion(root, N_, fL, rng=1):  # fL: compare node-mediated links, else
                             lay.Et[2+fd] += di  # update der rdn to val rdn
                             if not i:  # max val lay
                                 N.node_ = lay.node_; derH.ii = lay.i  # exemplar lay index
+                        N.elay = CH()  # init empty per agg+
                         N_ += [N]
                 if root.derH.Et[0] * (max(0,(len(N_)-1)*root.rng)) > G_aves[1]*root.derH.Et[2]:
                     # agg+rng+, val *= n comparands, forms CGs:
@@ -148,10 +150,9 @@ def rng_kern_(N_, rng):  # comp Gs summed in kernels, ~ graph CNN without backpr
     for N in N_:
         if hasattr(N,'crim'): N.rim += N.crim
         N.crim = []  # current rng links, add in comp_N
-        N.visited__ += [[]]  # init layer for all
     # comp_N:
     for (_G, G) in list(combinations(N_,r=2)):
-        if _G in [G for visited_ in G.visited__ for G in visited_]:  # compared in any rng++
+        if _G in [__G for visited_ in G.visited__ for __G in visited_]:  # compared in any rng++ (prevent a same G var)
             continue
         dy,dx = np.subtract(_G.yx,G.yx)
         dist = np.hypot(dy,dx)
@@ -173,8 +174,10 @@ def rng_kern_(N_, rng):  # comp Gs summed in kernels, ~ graph CNN without backpr
             if link.ft[0]:  # must be mlink
                 _G = link.nodet[0] if link.nodet[1] is G else link.nodet[1]
                 krim += [_G]
-                if hasattr(G,'elay'): G.elay.add_H(link.derH)
-                else:                 G.elay = CH().copy(link.derH)
+                if len(G.elay.H) == rng:  
+                    G.elay.H[-1].add_H(link.derH)
+                else:  # new layer of elay is added here
+                    G.elay.append_(link.derH)
                 G._kLay = sum_kLay(G,_G); _G._kLay = sum_kLay(_G,G)  # next krim comparands
         if krim:
             if rng>1: G.kHH[-1] += [krim]  # kH = lays(nodes
@@ -216,7 +219,7 @@ def rng_kern_(N_, rng):  # comp Gs summed in kernels, ~ graph CNN without backpr
                 # comp G kLay -> rng derLay:
                 rlay = comp_G(_G._kLay, G._kLay)
                 if rlay.Et[0] > ave * rlay.Et[2] * (rng+n):  # layers add cost
-                    _G.elay.add_H(rlay); G.elay.add_H(rlay)  # bilateral
+                    _G.elay.H[-1].add_H(rlay); G.elay.H[-1].add_H(rlay)  # bilateral
         _G_ = G_; G_ = []
         for G in _G_:  # eval dLay
             G.visited__.pop()  # loop-specific layer
@@ -230,10 +233,10 @@ def rng_kern_(N_, rng):  # comp Gs summed in kernels, ~ graph CNN without backpr
                 # not sure we need to merge elay, it's still external to G:
                 # if rng==1: G.derH.append_(CH().append_(G.elay))
                 # else:      G.derH.H[-1].append_(G.elay)
-                delattr(G,'dLay'); delattr(G,'_kLay'); delattr(G,'crim')
-                if hasattr(G,"kLay)"): delattr(G,'kLay')
-                G.rim += G.crim
+                G.rim += G.crim  # this should be deletion of crim
                 G.visited__.pop()  # kH - specific layer
+                delattr(G,'_kLay'); delattr(G,'crim')
+                if hasattr(G,"kLay)"): delattr(G,'kLay')
             break
     return Gd_, Et  # all Gs with dLay added in 1st krim
 
@@ -350,13 +353,11 @@ def comp_G(_pars, pars):  # compare kLays or partial graphs in merging
     else:  # += CL nodes
         n = mdext.n; md_t = [mdext]; Et = mdext.Et; Rt = mdext.Rt
 
-    dlay = CH()
+    # single-layer H (new layer first):
+    dlay = CH( H=[CH(n=n,md_t=md_t,Et=Et,Rt=Rt)], n=n, md_t=[CH().copy(md_) for md_ in md_t], Et=copy(Et), Rt=copy(Rt))
     if _derH and derH:
         dderH = _derH.comp_H(derH, rn, fagg=1)  # new link derH = local dH
         dlay.append_(dderH, flat=1)
-
-    # single-layer H (this new layer should be after the comparison of derH above?)
-    dlay.append_(CH(n=n,md_t=md_t,Et=Et,Rt=Rt), flat=0)
 
     return dlay
 
@@ -440,7 +441,8 @@ def segment_N_(root, iN_, fd, rng):  # cluster iN_ by weight of shared links, in
             if _Gt not in N_:
                 continue  # was merged
             sL_ = set(Lrim).intersection(set(_Gt[2])).union([_L])  # shared external links + potential _L, or oL_ = [Lr[0] for Lr in _Gt[2] if Lr in Lrim]
-            if sum([L.derH.Et[fd] - ave * L.derH.Et[2+fd] * rng for L in sL_]) > 0:  # value of shared links
+            # elay is external to G and we didn't pack it into G.derH, we need to use elay when L is CG
+            if sum([L.derH.Et[fd] - ave * L.derH.Et[2+fd] * rng if isinstance(L, CL) else L.elay.Et[fd] - ave * L.elay.Et[2+fd] * rng for L in sL_]) > 0:  # value of shared links
                 link_ += [_L]
                 merge(Gt,_Gt)
                 N_.remove(_Gt)
@@ -467,8 +469,11 @@ def sum2graph(root, grapht, fd, rng):  # sum node and link params into graph, ag
     for link in L_:  # unique current-layer mediators: Ns if fd else Ls
         graph.S += link.S
         graph.A = np.add(graph.A,link.A)  # np.add(graph.A, [-link.angle[0],-link.angle[1]] if rev else link.angle)
-        lay0.add_H(link.derH) if lay0 else lay0.append_(link.derH)
-    graph.derH.append_(lay0)  # empty for single-node graph
+        # external layer:
+        if isinstance(link, CG): elay0 = link.elay
+        else:                    elay0 = link.derH
+        lay0.add_H(elay0) if lay0 else lay0.append_(elay0)
+    graph.derH.append_(lay0)  # empty for single-node graph (i thnik we should skip them if empty?)
     lay1 = CH()
     for N in N_:
         graph.area += N.area
@@ -477,11 +482,12 @@ def sum2graph(root, grapht, fd, rng):  # sum node and link params into graph, ag
             graph.mdLay.add_md_(N.mdLay)
             add_lat(graph.latuple, N.latuple)
         graph.n += N.n  # +derH.n
-        if N.derH and len(N.derH.H)>1:
-            lay1.add_H(N.derH)  # layer added from rim in segment_N_ is G.elay
+        # if N.derH and len(N.derH.H)>1:
+        #     lay1.add_H(N.derH)  # layer added from rim in segment_N_ is G.elay
+        if N.derH: lay1.add_H(N.derH)  # since layer added from rim is in G.elay and it's not accumulated in derH, we can just accumulate N.derH here?
         N.root = graph
         yx = np.add(yx, N.yx)
-    graph.derH.append(lay1)  # 2-layer derH, each may be empty to preserve len, higher layers are added by feedback
+    graph.derH.append_(lay1)  # 2-layer derH, each may be empty to preserve len, higher layers are added by feedback
     L = len(N_)
     yx = np.divide(yx,L); graph.yx = yx
     # ave distance from graph center to node centers:
