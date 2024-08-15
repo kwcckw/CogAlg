@@ -236,7 +236,7 @@ def sum_kLay(G, g):  # sum next-rng kLay from krim of current _kLays, init with 
 
     KLay = (G.kLay if hasattr(G,"kLay")
                    else (G._kLay if hasattr(G,"_kLay")  # init conv kernels, also below:
-                                 else (G.n,len(G.node_),G.S,G.A,deepcopy(G.latuple),CH().copy(G.mdLay),CH().copy(G.derH) if G.derH else None)))
+                                 else (G.n,len(G.node_),G.S,G.A,deepcopy(G.latuple),CH().copy(G.mdLay),CH().copy(G.derH) if G.derH else CH())))  # init DerH as CH in case DerH is empty, while derH is not 
     kLay = (G._kLay if hasattr(G,"_kLay")
                     else (g.n,len(g.node_),g.S,g.A,deepcopy(g.latuple),CH().copy(g.mdLay),CH().copy(g.derH) if g.derH else None))
                     # in init conv kernels
@@ -375,7 +375,7 @@ def form_graph_t(root, N_, Et, rng):  # segment N_ to Nm_, Nd_
             # G: Ls/D: directional if fd, else Ns/M: symmetric, sum in node:
             graph_ = segment_N_(root, N_, fd, rng)
             for graph in graph_:
-                Q = graph.node_  # xcomp -> max_dist * rng+1, nodes are links if fd
+                Q = graph.link_ if fd else graph.node_   # xcomp -> max_dist * rng+1, nodes are links if fd
                 if len(Q) > ave_L and graph.derH.Et[fd] > G_aves[fd] * graph.derH.Et[fd+2] * rng:
                     if fd: add_der_attrs(Q)
                     agg_recursion(graph, Q, fL=isinstance(Q[0],CL), rng=rng)  # fd rng+
@@ -407,13 +407,13 @@ def segment_N_(root, iN_, fd, rng):  # cluster iN_ by weight of shared links, in
     '''
     N_ = []; max_ = []
     for N in iN_:  # init Gt per G|L node:
-        Lrim = N.rim if isinstance(N,CG) else [Lt[0] for Lt in N.rimt_[-1][0] + N.rimt_[-1][1]]  # external links
-        Nrim = [_N for L in Lrim for _N in L.nodet if _N is not N and _N in iN_]  # external nodes
-        Gt = [[N],[], *Lrim,*Nrim, [0,0,0,0]]  # node_,link_,Lrim,Nrim, Et
+        Lrim = [Lt[0] for Lt in N.rim] if isinstance(N,CG) else [Lt[0] for Lt in N.rimt_[-1][0] + N.rimt_[-1][1]]  # external links
+        Nrim = [_N for L in Lrim for _N in L.nodet if (_N is not N and _N in iN_)]  # external nodes
+        Gt = [[N],[], copy(Lrim),copy(Nrim), [0,0,0,0]]  # node_,link_,Lrim,Nrim, Et  # why asterisk here?
         N.root = Gt
         N_ += [Gt]  # select exemplar maxes to segment clustering:
         emax_ = [eN for eN in Nrim if eN.Et[fd] >= N.Et[fd] or eN in max_]  # _N if _N == N
-        if not emax_: max_ += [N]  # or N.root? no higher-val neighbors
+        if not emax_: max_ += [Gt]  # or N.root? no higher-val neighbors  (should be Gt, which is N.root here)
         # extended rrim max: V * k * max_rng?
         # cluster beyond iN_ if +ve marginal links in Lrim
     for Gt in N_: Gt[3] = [_N.root for _N in Gt[3]]  # replace eNs with Gts
@@ -452,7 +452,7 @@ def sum2graph(root, grapht, fd, rng):  # sum node and link params into graph, ag
         graph.A = np.add(graph.A,link.A)  # np.add(graph.A, [-link.angle[0],-link.angle[1]] if rev else link.angle)
         lay0.add_H(link.derH) if lay0 else lay0.append_(link.derH)
     graph.derH.append_(lay0)  # empty for single-node graph
-    lay1 = CH()
+    lay1 = CH()  # if N is CL (sub+der+), lay1 doesn't have node_? Since CL.derH are the current derivatives 
     for N in N_:
         graph.area += N.area
         graph.box = extend_box(graph.box, N.box)
