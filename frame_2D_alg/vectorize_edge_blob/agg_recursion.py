@@ -257,6 +257,7 @@ def rng_link_(_L_):  # comp CLs: der+'rng+ in root.link_ rim_t node rims: direct
     rng = 1
     while True:
         mN_t_ = [[[],[]] for _ in _L_]  # for next loop
+        for L in _L_: L.derH.append_(CH())  # new rng der layer
         for L, _mN_t, mN_t in zip(_L_, _mN_t_, mN_t_):
             for rev, _mN_, mN_ in zip((0,1), _mN_t, mN_t):
                 # comp L, _Ls: nodet mN 1st rim, -> rng+ _Ls/ rng+ mm..Ns, flatten rim_s:
@@ -273,18 +274,25 @@ def rng_link_(_L_):  # comp CLs: der+'rng+ in root.link_ rim_t node rims: direct
                             # L += rng+'mediating nodes, link orders: nodet < L < rimt_, mN.rim || L
                             mN_ += _L.nodet  # get _Ls in mN.rim
                             if _L not in _L_:
-                                _L_ += [_L]; mN_t_ += [[[],[]]]  # not in root
+                                _L.derH.append_(CH()); _L_ += [_L]; mN_t_ += [[[],[]]]  # not in root
                             elif _L not in rL_: rL_ += [_L]
                             if L not in rL_:    rL_ += [L]
                             mN_t_[_L_.index(_L)][1 - rev] += L.nodet
                             for node in (L, _L):
+                                # when node is CL, they may have existing derH.H layers, so we need to pre-init all of them?
+                                '''
                                 if len(node.derH.H) < rng:
                                     node.derH.append_(Link.derH)
                                 else: node.derH.H[-1].add_H(Link.derH)
-        L_, mN_t_ = [],[]
+                                '''
+                                node.derH.H[-1].add_H(Link.derH)
+        L_, _mN_t_ = [],[]  # should be _mN_t_ here
         for L, mN_t in zip(_L_, mN_t_):
             if any(mN_t):
                 L_ += [L]; _mN_t_ += [mN_t]
+        for L in _L_:
+            if L not in L_:
+                L.derH.H.pop()  # pop empty layer
         if L_:
             _L_ = L_; rng += 1
         else:

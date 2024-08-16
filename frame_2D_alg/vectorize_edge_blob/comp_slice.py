@@ -262,7 +262,8 @@ class CH(CBase):  # generic derivation hierarchy of variable nesting, depending 
                 elif attr == "md_t":
                     _He.md_t += [CH().copy(md_) for md_ in He.md_t]  # can't deepcopy CH.root
                 elif attr == "node_":
-                    _He.node_ = copy(He.node_)
+                    if He.node_:  # prevent copy empty node_ if _He.node has existing node_
+                        _He.node_ = copy(He.node_)
                 else:
                     setattr(_He, attr, deepcopy(value))
         return _He
