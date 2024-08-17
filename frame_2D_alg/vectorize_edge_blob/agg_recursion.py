@@ -128,6 +128,11 @@ def rng_node_(_N_, rng):  # forms discrete rng+ links, vs indirect rng+ in rng_k
 
     rN_ = []; rEt = [0,0,0,0]
     n = 0
+    for N in _N_:
+        N.elay = CH()  # reset per whole rng_node_
+        N.derH.H += [CH(root=N.derH)]
+        N.visited__ = []  # reset per whole rng_node_
+        
     while True:
         N_, Et = rng_kern_(_N_, rng)  # adds single implicit layer of links to _N pars summed in G.kHH[-1]
         if Et[0] > ave * Et[2]* rng:
@@ -137,6 +142,9 @@ def rng_node_(_N_, rng):  # forms discrete rng+ links, vs indirect rng+ in rng_k
             rng += 1
             n += 1
         else:
+            for N in N_:
+                if not N.derH.H[-1]:
+                    N.derH.H.pop()  # remove last empty added rng layer
             break
     return rN_, rEt, rng
 
@@ -157,7 +165,7 @@ def rng_kern_(N_, rng):  # comp Gs summed in kernels, ~ graph CNN without backpr
         # eval relative distance between G centers:
         if dist / max(aRad,1) <= max_dist * rng:
             for _g,g in (_G,G),(G,_G):
-                if len(g.elay.H) == rng:
+                if len(g.visited__) == rng:
                     g.visited__[-1] += [_g]
                 else: g.visited__ += [[_g]]  # init layer
             Link = CL(nodet=[_G,G], S=2,A=[dy,dx], box=extend_box(G.box,_G.box))
@@ -171,8 +179,7 @@ def rng_kern_(N_, rng):  # comp Gs summed in kernels, ~ graph CNN without backpr
             if link.ft[0]:  # must be mlink
                 _G = link.nodet[0] if link.nodet[1] is G else link.nodet[1]
                 krim += [_G]
-                if len(G.elay.H)==rng: G.elay.H[-1].add_H(link.derH)
-                else:                  G.elay.append_(link.derH)
+                G.elay.add_H(link.derH)
                 G._kLay = sum_kLay(G,_G); _G._kLay = sum_kLay(_G,G)  # next krim comparands
         if krim:
             if rng>1: G.kHH[-1] += [krim]  # kH = lays(nodes
@@ -214,17 +221,19 @@ def rng_kern_(N_, rng):  # comp Gs summed in kernels, ~ graph CNN without backpr
                 # comp G kLay -> rng derLay:
                 rlay = comp_pars(_G._kLay, G._kLay)
                 if rlay.Et[0] > ave * rlay.Et[2] * (rng+n):  # layers add cost
-                    _G.elay.H[-1].add_H(rlay); G.elay.H[-1].add_H(rlay)  # bilateral
+                    _G.elay.add_H(rlay); G.elay.add_H(rlay)  # bilateral
         _G_ = G_; G_ = []
         for G in _G_:  # eval dLay
             G.visited__.pop()  # loop-specific layer
-            if G.elay.H[-1].Et[0] > ave * G.elay.H[-1].Et[2] * (rng+n+1):
+            if G.elay.Et[0] > ave * G.elay.Et[2] * (rng+n+1):
                 G_ += [G]
         if G_:
             for G in G_: G._kLay = G.kLay  # comp in next krng
             _G_ = G_; n += 1
         else:
             for G in Gd_:
+                if G.elay:
+                    G.derH.H[-1].add_H(_G.elay)  # pack to new rng layer  
                 G.rim += G.crim; G.visited__.pop()  # kH - specific layer
                 delattr(G,'_kLay'); delattr(G,'crim')
                 if hasattr(G,"kLay)"): delattr(G,'kLay')
@@ -397,7 +406,7 @@ def add_der_attrs(link_):
         link.med = 1  # comp med rng, replaces len rim_
         link.Et = [0,0,0,0]
         link.aRad = 0
-        link.derH.H += [CH()]  # new derLay
+        link.derH.H += [CH(root=link.derH)]  # new derLay
 
 def segment_N_(root, iN_, fd, rng):  # cluster iN_ by weight of shared links, initially single linkage (L_ if fd else N_)
     '''
