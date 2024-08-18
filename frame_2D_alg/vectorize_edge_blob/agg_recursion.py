@@ -159,7 +159,7 @@ def rng_kern_(N_, rng):  # comp Gs summed in kernels, ~ graph CNN without backpr
         # eval relative distance between G centers:
         if dist / max(aRad,1) <= max_dist * rng:
             for _g,g in (_G,G),(G,_G):
-                if len(g.visited__) == rng:
+                if len(g.visited__) == rng:  # in sub+, this visited__ is not empty when rng==1, so we actually can't check with len(g.visited__) == rng?
                     g.visited__[-1] += [_g]
                 else: g.visited__ += [[_g]]  # init layer
             Link = CL(nodet=[_G,G], S=2,A=[dy,dx], box=extend_box(G.box,_G.box))
@@ -236,14 +236,13 @@ def sum_kLay(G, g):  # sum next-rng kLay from krim of current _kLays, init with 
 
     KLay = (G.kLay if hasattr(G,"kLay")
                    else (G._kLay if hasattr(G,"_kLay")  # init conv kernels, also below:
-                                 else (G.n,len(G.node_),G.S,G.A,deepcopy(G.latuple),CH().copy(G.mdLay),CH().copy(G.derH) if G.derH else CH())))  # init DerH if empty
+                                 else (len(G.node_),G.S,G.A,deepcopy(G.latuple),CH().copy(G.mdLay),CH().copy(G.derH) if G.derH else CH())))  # init DerH if empty
     kLay = (G._kLay if hasattr(G,"_kLay")
-                    else (g.n,len(g.node_),g.S,g.A,deepcopy(g.latuple),CH().copy(g.mdLay),CH().copy(g.derH) if g.derH else None))
+                    else (len(g.node_),g.S,g.A,deepcopy(g.latuple),CH().copy(g.mdLay),CH().copy(g.derH) if g.derH else None))
                     # in init conv kernels
-    N,L,S,A,Lat,MdLay,DerH = KLay
-    n,l,s,a,lat,mdLay,derH = kLay
-    return [
-            N+n, L+l, S+s, [A[0]+a[0],A[1]+a[1]], # n,L,S,A
+    L,S,A,Lat,MdLay,DerH = KLay  # n is removed
+    l,s,a,lat,mdLay,derH = kLay
+    return  [L+l, S+s, [A[0]+a[0],A[1]+a[1]], # n,L,S,A
             add_lat(Lat,lat),                     # latuple
             MdLay.add_md_(mdLay),                 # mdLay
             DerH.add_H(derH) if derH else None ]  # derH
@@ -278,7 +277,7 @@ def rng_link_(_L_):  # comp CLs: der+'rng+ in root.link_ rim_t node rims: direct
                             if L not in rL_:    rL_ += [L]
                             mN_t_[_L_.index(_L)][1 - rev] += L.nodet
                             for node in (L, _L):
-                                node.derH.H[-1].add_H(Link.derH)  # if lay/rng++, elif fagg: derH.H[der][rng]?
+                                node.elay.add_H(Link.derH)  # if lay/rng++, elif fagg: derH.H[der][rng]?
         L_, _mN_t_ = [],[]
         for L, mN_t in zip(_L_, mN_t_):
             if any(mN_t):
@@ -311,7 +310,8 @@ def comp_N(Link, iEt, rng, rev=None):  # dir if fd, Link.derH=dH, comparand rim+
         # if select fork links: iEt[i::2] = [V+v for V,v in zip(iEt[i::2], dH.Et[i::2])]
     if any(Link.ft):
         Link.derH = derH; derH.root = Link; Link.Et = Et; Link.n = min(_N.n,N.n)  # comp shared layers
-        Link.nodet = [_N,N]; Link.node_=_N.node_+N.node_; Link.yx = np.add(_N.yx,N.yx) /2
+        # when we add node_ to link, CL.derH.H's layers' node_ are still empty?
+        Link.nodet = [_N,N]; Link.node_=_N.node_+N.node_; Link.yx = np.add(_N.yx,N.yx) /2  # for first rng layer, N.node_ is CP
         # S,A set before comp_N
         for rev, node in zip((0,1),(_N,N)):  # ?reversed Link direction
             if fd:
@@ -452,7 +452,7 @@ def sum2graph(root, grapht, fd, rng):  # sum node and link params into graph, ag
         graph.A = np.add(graph.A,link.A)  # np.add(graph.A, [-link.angle[0],-link.angle[1]] if rev else link.angle)
         lay0.add_H(link.derH) if lay0 else lay0.append_(link.derH)
     graph.derH.append_(lay0)  # empty for single-node graph
-    derH = CH()
+    derH = CH(); Elay = CH()
     for N in N_:
         graph.area += N.area
         graph.box = extend_box(graph.box, N.box)
@@ -461,8 +461,10 @@ def sum2graph(root, grapht, fd, rng):  # sum node and link params into graph, ag
             add_lat(graph.latuple, N.latuple)
         graph.n += N.n  # +derH.n
         if N.derH: derH.add_H(N.derH)
+        Elay.add_H(N.elay)
         N.root = graph
         yx = np.add(yx, N.yx)
+    derH.append_(Elay)  # so the accumulated elay should be pack as new layer in existing derH? Or just append it to graph.derH with flat=0? But actually both are the same, it's just depend one of them may clearer
     graph.derH.append_(derH, flat=1)  # comp(derH) forms new layer, higher layers are added by feedback
     L = len(N_)
     yx = np.divide(yx,L); graph.yx = yx
