@@ -2,7 +2,7 @@ import numpy as np
 from copy import deepcopy, copy
 from itertools import combinations, zip_longest
 from .slice_edge import comp_angle, CsliceEdge
-from .comp_slice import comp_slice, comp_latuple, add_lat, CH, CG
+from .comp_slice import comp_slice, comp_latuple, add_lat, CH, CG, CP
 from utils import extend_box
 from frame_blobs import CBase
 
@@ -47,11 +47,12 @@ max_dist = 2
 class CL(CBase):  # link or edge, a product of comparison between two nodes or links
     name = "link"
 
-    def __init__(l, nodet=None,derH=None, S=0, A=None, box=None, md_t=None, H_=None):
+    def __init__(l, nodet=None,node_=None, derH=None, S=0, A=None, box=None, md_t=None, H_=None):
         super().__init__()
         # CL = binary tree of Gs, depth+/der+: CL nodet is 2 Gs, CL + CLs in nodet is 4 Gs, etc.,
         # unpack sequentially
         l.nodet = [] if nodet is None else nodet  # e_ in kernels, else replaces _node,node: not used in kernels
+        l.node_ = [] if node_ is None else node_
         l.A = [0,0] if A is None else A  # dy,dx between nodet centers
         l.S = 0 if S is None else S  # span: distance between nodet centers, summed into sparsity in CGs
         l.area = 0  # sum nodet
@@ -235,7 +236,7 @@ def sum_kLay(G, g):  # sum next-rng kLay from krim of current _kLays, init with 
 
     KLay = (G.kLay if hasattr(G,"kLay")
                    else (G._kLay if hasattr(G,"_kLay")  # init conv kernels, also below:
-                              else (len(G.node_),G.S,G.A,deepcopy(G.latuple),CH().copy(G.mdLay),CH().copy(G.derH) if G.derH else CH())))  # init DerH if empty
+                              else (len(G.node_),G.S,G.A,deepcopy(G.latuple),CH().copy(G.mdLay),CH().copy(G.derH) if G.derH else None)))  # init DerH if empty
     kLay = (G._kLay if hasattr(G,"_kLay")
                     else (len(g.node_),g.S,g.A,deepcopy(g.latuple),CH().copy(g.mdLay),CH().copy(g.derH) if g.derH else None))
                     # in init conv kernels
@@ -245,7 +246,7 @@ def sum_kLay(G, g):  # sum next-rng kLay from krim of current _kLays, init with 
             L+l, S+s, [A[0]+a[0],A[1]+a[1]], # L,S,A
             add_lat(Lat,lat),                # latuple
             MdLay.add_md_(mdLay),            # mdLay
-            DerH.add_H(derH) if derH else None ]
+            DerH.add_H(derH) if (DerH and derH) else None ]  # Both of DerH and derH could be None, so we need to check both
 
 
 def rng_link_(_L_):  # comp CLs: der+'rng+ in root.link_ rim_t node rims: directional and node-mediated link tracing
@@ -299,7 +300,8 @@ def comp_N(Link, iEt, rng, rev=None):  # dir if fd, Link.derH=dH, comparand rim+
     else:  # CGs
         _L,L,_lat,lat,_lay,lay = len(_N.node_),len(_N.node_),_N.latuple,N.latuple,_N.mdLay,N.mdLay
     # dlay:
-    derH = comp_pars([_L,_S,_A,_lat,_lay,_N.derH], [L,S,A,lat,lay,N.derH], rn=_N.n/N.n, node_=_N.node_+N.node_)
+    node_ = [node for node in (_N.node_ + N.node_) if not isinstance(node, CP)]  # convert CP to CG here?
+    derH = comp_pars([_L,_S,_A,_lat,_lay,_N.derH], [L,S,A,lat,lay,N.derH], rn=_N.n/N.n, node_=node_)
     Et = derH.Et
     iEt[:] = np.add(iEt,Et)  # init eval rng+ and form_graph_t by total m|d?
     for i in 0,1:
@@ -391,16 +393,17 @@ def form_graph_t(root, N_, Et, rng):  # segment N_ to Nm_, Nd_
 def set_attrs(Q):
     for e in Q:
         if isinstance(e,CL):
-            if hasattr(e,'rimt__'): e.rimt__ += [e.rimt_]
-            else: e.rimt__ = [e.rimt_]  # to trace later?
+            if hasattr(e,'rimt__'):  e.rimt__ += [e.rimt_]
+            elif hasattr(e,'rimt_'): e.rimt__ = [e.rimt_]  # to trace later?
             e.rimt_ = [[[],[]]]  # 2 dirs per rng layer
             e.med = 1  # comp med rng, replaces len rim_
+            e.visited_ = []
         else:
-            e.rim_ = [e.rim]; e.rim = []
-        e.derH.append_(e.elay)
+            e.rim_ = [e.rim]; e.rim = []  # rim_ will be reset in each rng+?
+            e.visited__ = []
+        if hasattr(e, 'elay'): e.derH.append_(e.elay)
         e.elay = CH()  # set in sum2graph
         e.root = None
-        e.visited__ = []
         e.Et = [0,0,0,0]
         e.aRad = 0
 
@@ -448,10 +451,10 @@ def merge(Gt, gt):
 def sum2graph(root, grapht, fd, rng):  # sum node and link params into graph, aggH in agg+ or player in sub+
 
     N_, L_, _,_, Et = grapht  # [node_, link_, Lrim, Nrim_t, Et]
-    graph = CG(fd=fd, node_=N_, link_=L_, rng=rng, Et=Et)
+    graph = CG(fd=fd, node_=N_, link_=L_, rng=rng, Et=Et) 
     graph.root = root
     yx = [0,0]
-    lay0 = CH(node_= N_)  # comparands, vs. L_: summands?
+    lay0 = CH(node_= N_[:])  # comparands, vs. L_: summands? ([:] to copy, prevent a same node_ in lay0 and graph)
     for link in L_:  # unique current-layer mediators: Ns if fd else Ls
         graph.S += link.S
         graph.A = np.add(graph.A,link.A)  # np.add(graph.A, [-link.angle[0],-link.angle[1]] if rev else link.angle)
