@@ -146,7 +146,11 @@ def rng_kern_(N_, rng):  # comp Gs summed in kernels, ~ graph CNN without backpr
     _G_ = []
     Et = [0,0,0,0]
     for N in N_:
-        if hasattr(N,'crim'): N.rim += N.crim
+        if hasattr(N,'crim'):
+            if N.rim and isinstance(N.rim[0][0], list):  # N.rim maybe nested now
+                N.rim[-1] += N.crim  
+            else:
+                N.rim += N.crim
         N.crim = []  # current rng links, add in comp_N
     # comp_N:
     for (_G, G) in list(combinations(N_,r=2)):
@@ -259,7 +263,8 @@ def rng_link_(_L_):  # comp CLs: der+'rng+ in root.link_ rim_t node rims: direct
         for L, _mN_t, mN_t in zip(_L_, _mN_t_, mN_t_):
             for rev, _mN_, mN_ in zip((0,1), _mN_t, mN_t):
                 # comp L, _Ls: nodet mN 1st rim, -> rng+ _Ls/ rng+ mm..Ns, flatten rim_s:
-                rim_ = [n.rim if isinstance(n,CG) else n.rimt_[0][0] + n.rimt_[0][1] for n in _mN_]
+                # when n is CG and N is CL, they must be nested now
+                rim_ = [n.rim[-1] if isinstance(n,CG) else n.rimt_[0][0] + n.rimt_[0][1] for n in _mN_]
                 for rim in rim_:
                     for _L,_rev in rim:  # _L is reversed relative to its 2nd node
                         if _L is L or _L in L.visited_: continue
@@ -393,10 +398,15 @@ def set_attrs(Q):
         if isinstance(e,CL):
             e.rimt_ = [[[],[]]]  # der+'rng+ is not recursive
             e.med = 1  # med rng = len rimt_?
+            for node in e.nodet:
+                if isinstance(node, CG):
+                    if node.rim and not isinstance(node.rim[0][0], list):
+                        node.rim = [node.rim, []]  # convert CG nodes to nested too, we will be accessing them later in rng_ink_
         else:
-            e.rim = [e.rim, []]  # add nesting, rng layer / rng+'rng+
+            if e.rim:
+                e.rim = e.rim + [[]] if isinstance(e.rim[0][0], list) else [e.rim, []]   # add nesting, rng layer / rng+'rng+
             e.visited_ = []
-        e.derH.append_(e.elay)
+        if hasattr(e, 'elay'): e.derH.append_(e.elay)  # elay is not a default param in CL, they won't have elay 
         e.elay = CH()  # set in sum2graph
         e.root = None
         e.Et = [0,0,0,0]
@@ -409,7 +419,11 @@ def segment_N_(root, iN_, fd, rng):  # cluster iN_ by weight of shared links, in
     '''
     N_ = []; max_ = []
     for N in iN_:  # init Gt per G|L node:
-        Lrim = [Lt[0] for Lt in N.rim] if isinstance(N,CG) else [Lt[0] for Lt in N.rimt_[-1][0] + N.rimt_[-1][1]]  # external links
+        # external links
+        if isinstance(N,CG):  # rim maybe nested now, so we need to check if it's nested
+            Lrim = [Lt[0] for Lt in (N.rim[-1] if isinstance(N.rim[0][0], list) else N.rim)] if N.rim else []
+        else:
+            Lrim = [Lt[0] for Lt in N.rimt_[-1][0] + N.rimt_[-1][1]]  
         Nrim = [_N for L in Lrim for _N in L.nodet if (_N is not N and _N in iN_)]  # external nodes
         Gt = [[N],[], Lrim, Nrim, [0,0,0,0]]  # node_,link_,Lrim,Nrim, Et
         N.root = Gt

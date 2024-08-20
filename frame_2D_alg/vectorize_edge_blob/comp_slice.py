@@ -163,7 +163,7 @@ class CH(CBase):  # generic derivation hierarchy of variable nesting, depending 
             # default
             HE.add_md_t(He)  # [lat_md_C, lay_md_C, ext_md_C]
             HE.Et = np.add(HE.Et, He.Et); HE.Rt = np.add(HE.Rt, He.Rt)
-            if isinstance(He.node_[0],CG):  # CL doesn't have node_
+            if He.node_ and isinstance(He.node_[0],CG):  # CL doesn't have node_
                 HE.node_ += [node for node in He.node_ if node not in HE.node_]
             if any(irdnt): HE.Et[2:] = [E+e for E,e in zip(HE.Et[2:], irdnt)]
             HE.n += He.n  # combined param accumulation span
@@ -175,7 +175,8 @@ class CH(CBase):  # generic derivation hierarchy of variable nesting, depending 
             root.Et = np.add(root.Et, He.Et)
             if isinstance(root, CH):
                 root.Rt = np.add(root.Rt, He.Rt); root.n += He.n
-                root.node_ += [node for node in He.node_ if node not in HE.node_]
+                if He.node_ and isinstance(He.node_[0],CG):
+                    root.node_ += [node for node in He.node_ if node not in HE.node_]
                 root = root.root
             else: break  # root is G|L
         return HE
@@ -199,7 +200,6 @@ class CH(CBase):  # generic derivation hierarchy of variable nesting, depending 
         while root is not None:
             root.Et = np.add(root.Et,He.Et)
             if isinstance(root, CH):
-                root.node_ += [node for node in He.node_ if node not in HE.node_]
                 root.Rt = np.add(root.Rt,He.Rt); root.n += He.n
                 root = root.root
             else:
@@ -265,7 +265,7 @@ class CH(CBase):  # generic derivation hierarchy of variable nesting, depending 
                 elif attr == "md_t":
                     _He.md_t += [CH().copy(md_) for md_ in He.md_t]  # can't deepcopy CH.root
                 elif attr == "node_":
-                    if He.node_:  # prevent copy empty node_ if _He.node has existing node_
+                    if He.node_ and isinstance(He.node_[0], CG):  # prevent copy empty node_ if _He.node has existing node_
                         _He.node_ = copy(He.node_)
                 else:
                     setattr(_He, attr, deepcopy(value))
