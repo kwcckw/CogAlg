@@ -103,7 +103,12 @@ def agg_recursion(root, N_, fL, rng=1):  # fL: compare node-mediated links, else
     der+ forms Link_, link.node_ -> dual trees of matching links in der+rng+, complex higher links
     rng+ keeps N_ + distant M / G.M, less likely: term by >d/<m, less complex
     '''
-    N_,Et,rng = rng_link_(N_) if fL else rng_node_(N_, rng)  # N_ = L_ if fL else G_, both rng++
+    
+    # or just use set_attrs here?
+    if not fL: 
+        for N in N_: N.rim_ += [[]]  # add new rim layer per agg+/sub+
+        
+    N_,Et,rng =  rng_link_([Lt[0] for N in N_ for Lt in N.rim_[-1]]) if fL else rng_node_(N_)  # N_ = L_ if fL else G_, both rng++
     if len(N_) > ave_L:
         node_t = form_graph_t(root, N_, Et,rng)  # fork eval, depth-first sub+, sub_Gs += fback_
         if node_t:
@@ -133,7 +138,7 @@ def rng_node_(_N_):  # forms discrete rng+ links, vs indirect rng+ in rng_kern_,
         N_, Et = rng_kern_(_N_, rng)  # adds single implicit layer of links to _N pars summed in G.kHH[-1]
         if Et[0] > ave * Et[2]* rng:
             rngH += [[N_,Et]]
-            np.add(HEt,Et)
+            HEt = np.add(HEt,Et)
             rng += 1
             _N_ = N_
         else:
@@ -146,10 +151,7 @@ def rng_kern_(N_, rng):  # comp Gs summed in kernels, ~ graph CNN without backpr
     Et = [0,0,0,0]
     for N in N_:
         if hasattr(N,'crim'):
-            if N.rim and isinstance(N.rim[0][0], list):  # N.rim maybe nested now
-                N.rim[-1] += N.crim  
-            else:
-                N.rim += N.crim
+            N.rim_[-1] += N.crim  
         N.crim = []  # current rng links, add in comp_N
     # comp_N:
     for _G,G in combinations(N_,r=2):
@@ -228,7 +230,7 @@ def rng_kern_(N_, rng):  # comp Gs summed in kernels, ~ graph CNN without backpr
             _G_ = G_; n += 1
         else:
             for G in Gd_:
-                G.rim += G.crim; G.visited__.pop()  # kH - specific layer
+                G.rim_[-1] += G.crim; G.visited__.pop()  # kH - specific layer
                 delattr(G,'_kLay'); delattr(G,'crim')
                 if hasattr(G,'kLay'): delattr(G,'kLay')
             break
@@ -253,9 +255,9 @@ def sum_kLay(G, g):  # sum next-rng kLay from krim of current _kLays, init with 
 
 def rng_link_(_L_):  # comp CLs: der+'rng+ in root.link_ rim_t node rims: directional and node-mediated link tracing
 
+    rngH = []
     _mN_t_ = [[[L.nodet[0]],[L.nodet[1]]] for L in _L_]  # rim-mediating nodes in both directions
-    Et = [0,0,0,0]
-    rL_ = []
+    HEt, Et = [0,0,0,0], [0,0,0,0]
     rng = 1
     while True:
         mN_t_ = [[[],[]] for _ in _L_]  # new rng lay of mediating nodes, traced from all prior layers?
@@ -263,7 +265,7 @@ def rng_link_(_L_):  # comp CLs: der+'rng+ in root.link_ rim_t node rims: direct
             for rev, _mN_, mN_ in zip((0,1), _mN_t, mN_t):
                 # comp L, _Ls: nodet mN 1st rim, -> rng+ _Ls/ rng+ mm..Ns, flatten rim_s:
                 # when n is CG and N is CL, they must be nested now
-                rim_ = [n.rim[-1] if isinstance(n,CG) else n.rimt_[0][0] + n.rimt_[0][1] for n in _mN_]
+                rim_ = [n.rim_[-1] if isinstance(n,CG) else n.rimt_[0][0] + n.rimt_[0][1] for n in _mN_]
                 for rim in rim_:
                     for _L,_rev in rim:  # _L is reversed relative to its 2nd node
                         if _L is L or _L in L.visited_: continue
@@ -276,10 +278,7 @@ def rng_link_(_L_):  # comp CLs: der+'rng+ in root.link_ rim_t node rims: direct
                             # L += rng+'mediating nodes, link orders: nodet < L < rimt_, mN.rim || L
                             mN_ += _L.nodet  # get _Ls in mN.rim
                             if _L not in _L_:
-                                _L_ += [_L]; mN_t_ += [[[],[]]]  # not in root
-                            elif _L not in rL_: rL_ += [_L]
-                            if L not in rL_:    rL_ += [L]
-                            mN_t_[_L_.index(_L)][1 - rev] += L.nodet
+                                _L_ += [_L]; mN_t_ += [[[],[]]]  # not in root                           mN_t_[_L_.index(_L)][1 - rev] += L.nodet
                             for node in (L, _L):
                                 node.elay.add_H(Link.derH)  # if lay/rng++, elif fagg: derH.H[der][rng]?
         L_, _mN_t_ = [],[]
@@ -287,10 +286,14 @@ def rng_link_(_L_):  # comp CLs: der+'rng+ in root.link_ rim_t node rims: direct
             if any(mN_t):
                 L_ += [L]; _mN_t_ += [mN_t]
         if L_:
+            rngH += [[L_, Et]]
+            HEt = np.add(HEt, Et)
             _L_ = L_; rng += 1
+            Et = [0,0,0,0]  # we need to reset Et in rng_link_
         else:
             break
-    return list(set(rL_)), Et, rng
+        
+    return rngH, HEt, rng
 
 
 def comp_N(Link, iEt, rng, rev=None):  # dir if fd, Link.derH=dH, comparand rim+=Link
@@ -303,7 +306,7 @@ def comp_N(Link, iEt, rng, rev=None):  # dir if fd, Link.derH=dH, comparand rim+
     else:   # CG
         _L,L,_lat,lat,_lay,lay = len(_N.node_),len(_N.node_),_N.latuple,N.latuple,_N.mdLay,N.mdLay
     # dlay:
-    derH = comp_pars([_L,_S,_A,_lat,_lay,_N.derH], [L,S,A,lat,lay,N.derH], rn=_N.n/N.n, node_=_N.node_+N.node_)
+    derH = comp_pars([_L,_S,_A,_lat,_lay,_N.derH], [L,S,A,lat,lay,N.derH], rn=_N.n/N.n, node_=[] if fd else _N.node_+N.node_ )  # if fL, it has no node_
     Et = derH.Et
     iEt[:] = np.add(iEt,Et)  # init eval rng+ and form_graph_t by total m|d?
     for i in 0,1:
@@ -397,14 +400,9 @@ def set_attrs(Q):
         if isinstance(e,CL):
             e.rimt_ = [[[],[]]]  # der+'rng+ is not recursive
             e.med = 1  # med rng = len rimt_?
-            for node in e.nodet:
-                if isinstance(node, CG):
-                    if node.rim and not isinstance(node.rim[0][0], list):
-                        node.rim = [node.rim, []]  # convert CG nodes to nested too, we will be accessing them later in rng_ink_
-        else:
-            if e.rim:
-                e.rim = e.rim + [[]] if isinstance(e.rim[0][0], list) else [e.rim, []]   # add nesting, rng layer / rng+'rng+
-            e.visited_ = []
+    else:
+            e.rim_ += [[]]  # add nesting, rng layer / rng+'rng+
+        e.visited_ = []
         if hasattr(e, 'elay'): e.derH.append_(e.elay)  # elay is not a default param in CL, they won't have elay 
         e.elay = CH()  # set in sum2graph
         e.root = None
@@ -419,10 +417,7 @@ def segment_N_(root, iN_, fd, rng):  # cluster iN_ by weight of shared links, in
     N_ = []; max_ = []
     for N in iN_:  # init Gt per G|L node:
         # external links
-        if isinstance(N,CG):  # rim maybe nested now, so we need to check if it's nested
-            Lrim = [Lt[0] for Lt in (N.rim[-1] if isinstance(N.rim[0][0], list) else N.rim)] if N.rim else []
-        else:
-            Lrim = [Lt[0] for Lt in N.rimt_[-1][0] + N.rimt_[-1][1]]  
+        Lrim =  [Lt[0] for Lt in ( N.rim_[-1] if isinstance(N, CG) else N.rimt_[-1][0] + N.rimt_[-1][1])]
         Nrim = [_N for L in Lrim for _N in L.nodet if (_N is not N and _N in iN_)]  # external nodes
         Gt = [[N],[], Lrim, Nrim, [0,0,0,0]]  # node_,link_,Lrim,Nrim, Et
         N.root = Gt
