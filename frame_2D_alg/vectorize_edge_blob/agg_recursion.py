@@ -2,7 +2,7 @@ import numpy as np
 from copy import deepcopy, copy
 from itertools import combinations, zip_longest
 from .slice_edge import comp_angle, CsliceEdge
-from .comp_slice import comp_slice, comp_latuple, add_lat, CH, CG
+from .comp_slice import comp_slice, comp_latuple, add_lat, CH, CG, CP
 from utils import extend_box
 from frame_blobs import CBase
 
@@ -104,7 +104,7 @@ def agg_recursion(root, N_):  # both cross-comp forks, but rng++ is primary
     mH, Et = rng_node_(root, N_)  # recursive rng+ and layer clustering
     Htt = [[mH, Et]]
     if Et[1] > G_aves[1] * Et[3]:  # cluster links formed in rng_node_:
-        L_ = [Lt[0] for N in N_ for Lt in N.rim_[-1]]
+        L_ = set_attrs([Lt[0] for N in N_ for Lt in N.rim_[-1]])
         dH, dEt = rng_link_(root, L_)
         Et = np.add(Et,dEt)  # total
         Htt += [[dH, dEt]]
@@ -120,7 +120,7 @@ def agg_recursion(root, N_):  # both cross-comp forks, but rng++ is primary
                     N.node_ = lay.node_; N.derH.ii = lay.i  # exemplar lay index
             N.elay = CH()
             # for agg+:
-        for rng, (mG_t, dG_t) in enumerate(Ht):
+        for rng, (mG_t, dG_t) in enumerate(Ht):  # for dH added with CL, they do not have Ht? It will be just H?
             for i, [G_,Et] in zip((0,1), (mG_t, dG_t)):
                 while len(G_)> ave_L and Et[i] > G_aves[i] * Et[2+i] * rng:
                     # agg+/ rng layer, recursive?
@@ -140,10 +140,11 @@ def rng_node_(root,_N_):  # each rng+ forms rim_ layer per N and sub_G_ per N_:
         for fd in 0,1:
             if Et[fd] > ave * Et[2+fd] * rng:
                 if fd:
+                    # links below doesn't have rimt_, or this should be run after rng_link_?
                     Q = list(set([Lt[0] for N in N_ for Lt in N.rim_[-1]]))  # Link_
                 else:
-                    Q = N_; _N_ = N_  # rng+ recursion per mval only
-                graph_t += segment_N_(root, Q, fd, rng)
+                    Q = N_; _N_ = N_  # rng+ recursion per mval only             
+                graph_t += [segment_N_(root, Q, fd, rng)]
         if any(graph_t):
             rngH += [[graph_t,Et]]
             HEt = np.add(HEt, Et)
@@ -158,10 +159,7 @@ def rng_kern_(N_, rng):  # comp Gs summed in kernels, ~ graph CNN without backpr
 
     _G_ = []
     Et = [0,0,0,0]
-    for N in N_:
-        # we probably don't need crim now:
-        if hasattr(N,'crim'): N.rim_[-1] += N.crim
-        N.crim = []  # current rng links, add in comp_N
+
     # comp_N:
     for _G,G in combinations(N_,r=2):
         if _G in [g for visited_ in G.visited__ for g in visited_]:  # compared in any rng++
@@ -182,7 +180,7 @@ def rng_kern_(N_, rng):  # comp Gs summed in kernels, ~ graph CNN without backpr
     G_ = []  # init conv kernels:
     for G in (_G_):
         krim = []
-        for link,rev in G.crim:  # form new krim from current-rng links
+        for link,rev in G.rim_[-1]:  # form new krim from current-rng links
             if link.ft[0]:  # must be mlink
                 _G = link.nodet[0] if link.nodet[1] is G else link.nodet[1]
                 krim += [_G]
@@ -202,7 +200,7 @@ def rng_kern_(N_, rng):  # comp Gs summed in kernels, ~ graph CNN without backpr
         for G in _G_:
             #  append G.kHH[-1][-1]:
             for _G in G.kHH[-1][-2]:
-                for link, rev in _G.crim:
+                for link, rev in _G.rim_[-1]:
                     __G = link.nodet[0] if link.nodet[1] is G else link.nodet[1]
                     if __G in _G_:
                         if __G not in G.kHH[-1][-1] + [g for visited_ in G.visited__ for g in visited_]:
@@ -239,8 +237,8 @@ def rng_kern_(N_, rng):  # comp Gs summed in kernels, ~ graph CNN without backpr
             _G_ = G_; n += 1
         else:
             for G in Gd_:
-                G.rim_[-1] += G.crim; G.visited__.pop()  # kH - specific layer
-                delattr(G,'_kLay'); delattr(G,'crim')
+                G.visited__.pop()  # kH - specific layer
+                delattr(G,'_kLay')
                 if hasattr(G,'kLay'): delattr(G,'kLay')
             break
 
@@ -263,11 +261,11 @@ def sum_kLay(G, g):  # sum next-rng kLay from krim of current _kLays, init with 
             DerH.add_H(derH) if derH else DerH
     ]
 
-def rng_link_(_L_):  # comp CLs: der+'rng+ in root.link_ rim_t node rims: directional and node-mediated link tracing
+def rng_link_(root, _L_):  # comp CLs: der+'rng+ in root.link_ rim_t node rims: directional and node-mediated link tracing
 
     _mN_t_ = [[[L.nodet[0]],[L.nodet[1]]] for L in _L_]  # rim-mediating nodes in both directions
     HEt = [0,0,0,0]
-    rL_ = []
+    rngdH_ = []; graph_ = []  # no graph_t here?
     rng = 1
     while True:
         Et = [0,0,0,0]
@@ -275,8 +273,8 @@ def rng_link_(_L_):  # comp CLs: der+'rng+ in root.link_ rim_t node rims: direct
         for L, _mN_t, mN_t in zip(_L_, _mN_t_, mN_t_):
             for rev, _mN_, mN_ in zip((0,1), _mN_t, mN_t):
                 # comp L, _Ls: nodet mN 1st rim, -> rng+ _Ls/ rng+ mm..Ns, flatten rim_s:
-                rim_ = [n.rim if isinstance(n,CG) else n.rimt_[0][0] + n.rimt_[0][1] for n in _mN_]
-    # not updated below:
+                rim_ = [n.rim_[-1] if isinstance(n,CG) else n.rimt_[0][0] + n.rimt_[0][1] for n in _mN_]  # looks like it's n.rim_[-1] here since it's per _mN_ here
+  
                 for rim in rim_:
                     for _L,_rev in rim:  # _L is reversed relative to its 2nd node
                         if _L is L or _L in L.visited_: continue
@@ -290,8 +288,6 @@ def rng_link_(_L_):  # comp CLs: der+'rng+ in root.link_ rim_t node rims: direct
                             mN_ += _L.nodet  # get _Ls in mN.rim
                             if _L not in _L_:
                                 _L_ += [_L]; mN_t_ += [[[],[]]]  # not in root
-                            elif _L not in rL_: rL_ += [_L]
-                            if L not in rL_:    rL_ += [L]
                             mN_t_[_L_.index(_L)][1 - rev] += L.nodet
                             for node in (L, _L):
                                 node.elay.add_H(Link.derH)  # if lay/rng++, elif fagg: derH.H[der][rng]?
@@ -300,10 +296,15 @@ def rng_link_(_L_):  # comp CLs: der+'rng+ in root.link_ rim_t node rims: direct
             if any(mN_t):
                 L_ += [L]; _mN_t_ += [mN_t]
         if L_:
+            graph_ = [segment_N_(root, L_, fd=1, rng=rng)]  # layers of Lgraph
+            HEt = np.add(HEt, Et)
             _L_ = L_; rng += 1
+            rngdH_ += [[graph_, Et]]
+            Et = [0,0,0,0]  # we need to reset Et in rng_link_      
         else:
             break
-    return list(set(rL_)), Et, rng
+        
+    return rngdH_, HEt
 
 
 def comp_N(Link, iEt, rng, rev=None):  # dir if fd, Link.derH=dH, comparand rim+=Link
@@ -384,13 +385,14 @@ def set_attrs(Q):
         if isinstance(e, CL):
             e.rimt_ = [[[],[]]]  # der+'rng+ is not recursive
             e.med = 1  # med rng = len rimt_?
-        else:
-            e.visited_ = []
-        e.derH.append_(e.elay)
+
+        e.visited_ = []  # we need this in both CG and CL now?
+        if hasattr(e, 'elay'): e.derH.append_(e.elay)  # CL doesn't have elay until added
         e.elay = CH()  # set in sum2graph
         e.root = None
         e.Et = [0,0,0,0]
         e.aRad = 0
+    return Q
 
 def segment_N_(root, iN_, fd, rng):  # cluster iN_ by weight of shared links, initially single linkage (L_ if fd else N_)
     '''
@@ -447,6 +449,7 @@ def sum2graph(root, grapht, fd, rng):  # sum node and link params into graph, ag
     graph.derH.append_(lay0)  # empty for single-node graph
     derH = CH()
     for N in N_:
+        if isinstance(N, CP): continue  # CP nodes will be added in lay0 accumulation above
         graph.area += N.area
         graph.box = extend_box(graph.box, N.box)
         if isinstance(N,CG):
