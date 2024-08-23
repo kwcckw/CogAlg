@@ -105,7 +105,7 @@ def agg_recursion(root, N_):  # calls both cross-comp forks, first rng++
         Et = np.add(Et, dEt)
         Htt += [[dH, dEt]]
     else:
-        Htt += [[]]
+        Htt += [[[], []]]  # empty dH and dEt
         L_ = []
     root.link_ = L_  # not sure
     for fd, Q, Ht in zip((0,1), (N_,L_), Htt):  # 2 rng++ comp forks -> 4 cluster fork hierarchies
@@ -116,9 +116,10 @@ def agg_recursion(root, N_):  # calls both cross-comp forks, first rng++
                 if not i:  # max val lay
                     N.node_ = lay.node_; N.derH.ii = lay.i  # exemplar lay index
             N.elay = CH()
-            # for agg+:
-        for rng, (mG_t, dG_t) in enumerate(Ht):  # two cluster forks per comp fork
-            for i, [G_,Et] in zip((0,1), (mG_t, dG_t)):
+        # for agg+:
+        for rng, H in enumerate(Ht[0]):  # two cluster forks per comp fork  (Ht[1] is Et)
+            (mG_, dG_), et = H  # each layer of [graph_t, Et]
+            for i, G_ in zip((0,1), (mG_, dG_)):  # should be just G_ here?
                 while len(G_)> ave_L and Et[i] > G_aves[i] * Et[2+i] * rng:
                     # agg+/ rng layer, recursive?
                     hHtt, hEt = agg_recursion(root, G_)
@@ -266,7 +267,7 @@ def rng_link_(root, _L_):  # comp CLs: der+'rng+ in root.link_ rim_t node rims: 
         for L, _mN_t, mN_t in zip(_L_, _mN_t_, mN_t_):
             for rev, _mN_, mN_ in zip((0,1), _mN_t, mN_t):
                 # comp L, _Ls: nodet mN 1st rim, -> rng+ _Ls/ rng+ mm..Ns, flatten rim_s:
-                rim_ = [n.rim_ if isinstance(n,CG) else n.rimt_[0][0] + n.rimt_[0][1] for n in _mN_]
+                rim_ = [rim for n in _mN_ for rim in (n.rim_ if isinstance(n, CG) else [n.rimt_[0][0] + n.rimt_[0][1]])]
                 for rim in rim_:
                     for _L,_rev in rim:  # _L is reversed relative to its 2nd node
                         if _L is L or _L in L.visited_: continue
@@ -293,7 +294,7 @@ def rng_link_(root, _L_):  # comp CLs: der+'rng+ in root.link_ rim_t node rims: 
         for L, mN_t in zip(_L_, mN_t_):
             if any(mN_t):
                 L_ += [L]; _mN_t_ += [mN_t]
-                V += L.et[0] - ave * L.et[2] * rng
+                V += L.Et[0] - ave * L.Et[2] * rng  # we doesn't fill CL.Et, so use L.derH.Et?
         if V > 0:  # rng+ if vM of Ls with extended mN_t_
             _L_ = L_; rng += 1
         else:
@@ -327,8 +328,10 @@ def comp_N(Link, iEt, rng, rev=None):  # dir if fd, Link.derH=dH, comparand rim+
         # S,A set before comp_N
         for rev, node in zip((0,1),(_N,N)):  # ?reversed Link direction
             if fd:
-                if len(node.rimt_)==rng: node.rimt_[-1][1-rev] += [[Link,rev]]  # add in last rng layer, opposite to _N,N dir
-                else:                    node.rimt_ += [[[[Link,rev]],[]]] if dir else [[[],[[Link,rev]]]]  # add rng layer
+                if not hasattr(node, 'rimt_') or len(node.rimt_)!=rng:
+                    node.rimt_ = [[[[Link,rev]],[]]] if dir else [[[],[[Link,rev]]]]  # add rng layer
+                else:
+                    node.rimt_[-1][1-rev] += [[Link,rev]]  # add in last rng layer, opposite to _N,N dir
             else:
                 if len(node.rim_)==rng: node.rim_[-1] += [[Link, rev]]
                 else:                   node.rim_ += [[[Link, rev]]]
@@ -391,17 +394,20 @@ def segment_N_(root, iN_, rng):  # cluster iN_(G_|L_) by weight of shared links,
         Lrim = [Lt[0] for Lt in N.rim_[-1]] if isinstance(N,CG) else [Lt[0] for Lt in N.rimt_[-1][0] + N.rimt_[-1][1]]  # external links
         Nrim = [_N for L in Lrim for _N in L.nodet if (_N is not N and _N in iN_)]  # external nodes
         Gt = [[N],[], Lrim, Nrim, [0,0,0,0]]  # node_,link_,Lrim,Nrim, Et
-        N.root = Gt
+        N.roott = [Gt, Gt]  # will be replaced with Gm and Gd later
         for fd in 0,1:
             N_t[fd] += [Gt]  # select exemplar maxes to segment clustering:
             emax_ = [eN for eN in Nrim if eN.Et[fd] >= N.Et[fd] or eN in max_t[fd]]  # _N if _N == N
             if not emax_: max_t[fd] += [Gt]  # N.root, if no higher-val neighbors
             # extended rrim max: V * k * max_rng?
+
+    # they shared a same Gt, so we only need to do this once
+    for Gt in N_t[0]: Gt[3] = [_N.roott[fd] for _N in Gt[3]]  # replace eNs with Gts 
     for fd in 0,1:  # merge Gts with shared +ve links:
         N_ = N_t[fd]
-        for Gt in N_: Gt[3] = [_N.root for _N in Gt[3]]  # replace eNs with Gts
         for Gt in max_t[fd] if max_t[fd] else N_t[fd]:
-            node_,link_,Lrim,Nrim, Et = Gt
+            node_,link_,Lrim,Nrim, Et = Gt 
+            # when fd == 1, Nrim should be CL, Lrim should be CG?
             for _Gt, _L in zip(Nrim,Lrim):  # merge connected _Gts if >ave shared external links (Lrim)
                 if _Gt not in N_:
                     continue  # was merged
@@ -445,7 +451,7 @@ def sum2graph(root, grapht, fd, rng):  # sum node and link params into graph, ag
             add_lat(graph.latuple, N.latuple)
         graph.n += N.n  # +derH.n
         if N.derH: derH.add_H(N.derH)
-        N.root = graph
+        N.roott[fd] = graph  # suppose each N is shared acoss 2 foks, so we need roott here?
         yx = np.add(yx, N.yx)
     graph.derH.append_(derH, flat=1)  # comp(derH) forms new layer, higher layers are added by feedback
     L = len(N_)
@@ -455,7 +461,7 @@ def sum2graph(root, grapht, fd, rng):  # sum node and link params into graph, ag
     if fd:
         # assign alt graphs from d graph, after both linked m and d graphs are formed
         for node in graph.node_:  # CG or CL
-            mgraph = node.root
+            mgraph = node.roott[0]
             if mgraph:
                 for fd, (G, alt_G) in enumerate(((mgraph,graph), (graph,mgraph))):  # bilateral assign:
                     if G not in alt_G.alt_graph_:
