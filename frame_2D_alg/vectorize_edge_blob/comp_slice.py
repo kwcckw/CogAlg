@@ -54,10 +54,10 @@ class CcompSliceFrame(CsliceEdge):
 
 class CG(CBase):  # PP | graph | blob: params of single-fork node_ cluster
 
-    def __init__(G, root = None, rng=1, fd=0, node_=None, link_=None, Et=None, mdLay=None, derH=None, elay=None, n=0):
+    def __init__(G, root_ = None, rng=1, fd=0, node_=None, link_=None, Et=None, mdLay=None, derH=None, elay=None, n=0):
         super().__init__()
 
-        G.root = None if root is None else root  # mgraph (dgraph.node_ is CLs)
+        G.root_ = [] if root_ is None else root_  # mgraph (dgraph.node_ is CLs)
         G.node_ = [] if node_ is None else node_ # convert to node_t in sub_recursion
         G.link_ = [] if link_ is None else link_ # internal links per comp layer in rng+
         G.Et = [0,0,0,0] if Et is None else Et   # extH.Et + derH.Et + mdLay.Et?
@@ -396,7 +396,7 @@ def form_PP_t(root, P_):  # form PPs of dP.valt[fd] + connected Ps val
 
 def sum2PP(root, P_, dP_, fd):  # sum links in Ps and Ps in PP
 
-    PP = CG(fd=fd, root=root, rng=root.rng+1)  # 1st layer of derH is mdLay
+    PP = CG(fd=fd, root_=root, rng=root.rng+1)  # 1st layer of derH is mdLay
     PP.P_ = P_  # P_ is CdPs if fd, but summed in CG PP?
     iRt = root.mdLay.Et[2:4] if root.mdLay else [0,0]  # add to rdnt
     # += uplinks:

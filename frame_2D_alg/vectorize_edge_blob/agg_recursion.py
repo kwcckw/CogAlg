@@ -91,31 +91,34 @@ def vectorize_root(image):  # vectorization in 3 composition levels of xcomp, cl
                             pruned_node_ += [PP]
                             PP.elay = CH()  # init empty per agg+
                     if len(pruned_node_) > 10:  # discontinuous PP rng+ cross-comp, cluster -> G_t:
-                        agg_recursion(edge, N_=pruned_node_)  # updates edge node_,link_
+                        agg_recursion(edge, iH=[pruned_node_, edge.Et])  # updates edge node_,link_
 
 # draft:
 def agg_recursion(root, iH):  # fork rng++, two clustering forks, two recursion forks
 
-    N_, iet = iH[0]  # cross-comp top iLay only, or in two forks?
+    N_, iEt = iH  # cross-comp top iLay only, or in two forks? (but right now agg++ is per rng layer instead of whole H?)
 
     mH, Et = rng_node_(root,N_) if isinstance(N_[0],CG) else rng_link_(root,N_)  # rng++
     Ht = [mH]
     if Et[1] > G_aves[1] * Et[3]:
-        dH = []
+        dH = []; dEt = [0,0,0,0]
         for rng, [lay, et] in enumerate(mH):
-            # eval et[1]?
-            L_ = set_attrs([Lt[0] for N in lay for Lt in N.rim_[rng]])
-            dH += segment_N_(root,L_,1,rng)  # cluster rng links by D
+            # eval et[1]? (i think we just need to either eval Et or et? Et is per all layers, while et is per layer)
+            L_ = set_attrs([link for G in lay for link in G.link_])  # we just need to use the graph.link_? Each G in lay is graph formed from N_
+            dh, det = rng_link_(root,L_, rng=rng, fsingle=1)  # i think we need rng_link_ here first? Else there's nothing to segment since their rim is empty
+            dH += dh; dEt = np.add(dEt, det)
+            # dH += [segment_N_(root,L_,1,rng)]  # cluster rng links by D
     else: dH = [[]]
-    root.link_ = dH[0]  # root.node_ is replaced in-place?
+    root.link_ = list(set([link for Ht in dH for G in Ht[0] for link in G.link_]))  # get all layer's dgraph's links?
+    # root.node_ is replaced in-place? 
     Ht += [dH]  # same Et for both forks?
     hHt = []   # higher-agg layer for iHt
     hEt = [0,0,0,0]
     # eval agg+ per lay:
     for fd, H in zip((0,1), Ht):
         hH = []
-        for Lay in H[0]:
-            for N in Lay:  # update lay derR to valR:
+        for Lay in H:  # each Lay is H, Et
+            for N in Lay[0]:  # update lay derR to valR:  (Lay [1] is Et)
                 for i, lay in enumerate(sorted(N.derH.H, key=lambda lay: lay.Et[fd], reverse=True)):
                     di = lay.i - i  # lay.i: index in H
                     lay.Et[2+fd] += di  # derR-valR
@@ -126,17 +129,18 @@ def agg_recursion(root, iH):  # fork rng++, two clustering forks, two recursion 
             g_, et = lay
             while len(g_) > ave_L and et[fd] > G_aves[fd] * et[2+fd] * rng:
                 # recursive agg+/ rng layer
-                lay_Ht = agg_recursion(root, lay)
-                G_,lEt = lay_Ht[0]  # eval agg++ of new top layer
-                if lEt[0] > G_aves[0] * Et[2]:
-                    et = np.add(et,lEt)
-                    hHt += [[G_,lEt]]
-                    hEt = np.add(hEt,lEt)
-                    g_ = G_  # for next agg+
+                lay_Ht = agg_recursion(root, lay)  # there's a problem here: If lay_ht is not empty, the recursion won't stop, so lay_Ht is always empty if it returns lay_ht
+                if lay_Ht:
+                    G_,lEt = lay_Ht[0]  # eval agg++ of new top layer
+                    if lEt[0] > G_aves[0] * Et[2]:
+                        et = np.add(et,lEt)
+                        hHt += [[G_,lEt]]
+                        hEt = np.add(hEt,lEt)
+                        g_ = G_  # for next agg+
         if hH:
             iH = [hH] + iH   # appendleft newly aggregated H
             hHt += [hH]  # 2 higher agg forks, not sure
-            iEt = np.add(iEt, hEt)
+            iEt[:] = np.add(iEt, hEt)
 
     return hHt
 '''
@@ -267,11 +271,11 @@ def sum_kLay(G, g):  # sum next-rng kLay from krim of current _kLays, init with 
             DerH.add_H(derH) if derH else DerH
     ]
 
-def rng_link_(root, _L_):  # comp CLs: der+'rng+ in root.link_ rim_t node rims: directional and node-mediated link tracing
+# added rng and fsingle to run rng specific single layer rng_link
+def rng_link_(root, _L_, rng=1, fsingle=0):  # comp CLs: der+'rng+ in root.link_ rim_t node rims: directional and node-mediated link tracing
 
     _mN_t_ = [[[L.nodet[0]],[L.nodet[1]]] for L in _L_]  # rim-mediating nodes in both directions
     rH = []; HEt = [0,0,0,0]
-    rng = 1
     while True:
         Et = [0,0,0,0]
         mN_t_ = [[[],[]] for _ in _L_]  # new rng lay of mediating nodes, traced from all prior layers?
@@ -305,7 +309,7 @@ def rng_link_(root, _L_):  # comp CLs: der+'rng+ in root.link_ rim_t node rims: 
             if any(mN_t):
                 L_ += [L]; _mN_t_ += [mN_t]
                 V += L.derH.Et[0] - ave * L.derH.Et[2] * rng
-        if V > 0:  # rng+ if vM of Ls with extended mN_t_
+        if V > 0 and not fsingle:  # rng+ if vM of Ls with extended mN_t_
             _L_ = L_; rng += 1
         else:
             break
@@ -389,6 +393,7 @@ def set_attrs(Q):
         e.visited_ = []
         if isinstance(e, CL):
             e.rimt_ = [[[],[]]]  # der+'rng+ is not recursive
+            e.root_ = []  # or root_ should be default param in CL too?
         if hasattr(e,'elay'): e.derH.append_(e.elay)  # no default CL.elay
         e.elay = CH()  # set in sum2graph
         e.Et = [0,0,0,0]
