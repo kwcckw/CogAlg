@@ -91,12 +91,12 @@ def vectorize_root(image):  # vectorization in 3 composition levels of xcomp, cl
                             pruned_node_ += [PP]
                             PP.elay = CH()  # init empty per agg+
                     if len(pruned_node_) > 10:  # discontinuous PP rng+ cross-comp, cluster -> G_t:
-                        agg_recursion(edge, aggH=[[pruned_node_,[],edge.Et]])
+                        agg_recursion(edge, iaggH=[[pruned_node_,[],edge.Et]])
                         # updates edge node_,link_
 
-def agg_recursion(root, aggH):  # top lay rng++-> two cluster,agg++ forks per rng layer:
+def agg_recursion(root, iaggH):  # top lay rng++-> two cluster,agg++ forks per rng layer:
 
-    iN_,iL_,iEt = aggH[0]  # top input aggLay, same syntax for all lays
+    iN_,iL_,iEt = iaggH[0]  # top input aggLay, same syntax for all lays
     # rng++ cross-comp:
     rngH, L_,Et = rng_node_(root, iN_) if isinstance(iN_[0],CG) else rng_link_(root, iN_)
     # agg++ nesting in L_ is lower than in N_?
@@ -109,17 +109,18 @@ def agg_recursion(root, aggH):  # top lay rng++-> two cluster,agg++ forks per rn
                 if not i:  # max value lay
                     N.node_ = lay.node_; N.derH.it[fd] = lay.i  # assigns exemplar lay index per fd
     hEt = [0,0,0,0]
-    for rng, rLay in enumerate(rngH):  # replace rngLay' N_,L_ with aggHs
-        nG_,lG_,rEt = rLay
+    for rng, rLay in enumerate(rngH, start=1):  # replace rngLay' N_,L_ with aggHs (rng starts with 1 instead of 0)
+        nG_,lG_,rL_,rEt = rLay  # rL_ probably is not needed
         for fd, G_ in zip((0,1),(nG_,lG_)):
-            AEt = rEt  # val agg++/_G_
+            AEt = rEt  # val agg++/_G_ (rename for clarity? Else i don't see why we need reassign a new var with same reference)
+            aggH = [[G_,[],rEt]]
             while len(G_) > ave_L and AEt[fd] > G_aves[fd] * AEt[2+fd] * rng:
-                G_H = agg_recursion(root,[[G_,[],rEt]])  # replaces G_ with G_H, empty L_: always lags behind N_?
+                G_H = agg_recursion(root,aggH)  # replaces G_ with G_H, empty L_: always lags behind N_?
                 if G_H:
                     nH, lH, aEt = G_H[0]  # aggLay added to rngLay
                     if aEt[0] > G_aves[0] * aEt[2]:
                         AEt = np.add(AEt,aEt)
-                        G_[:] = G_H  # replaces nG_|lG_ in rLay,rngH
+                        aggH[:] = G_H  # replaces nG_|lG_ in rLay,rngH
                 else: break
             rEt[:] = AEt  # rng++ + agg++ vals
             hEt = np.add(hEt,AEt)  # from both forks
@@ -128,7 +129,8 @@ def agg_recursion(root, aggH):  # top lay rng++-> two cluster,agg++ forks per rn
     if sum(Et[:1]) > sum(G_aves) * sum(Et[2:]):
         iEt[:] = np.add(iEt,Et)
         # return appendleft aggH:
-        return [[rngH,L_,Et]] + aggH
+        # this rngH is layered, so return only top layer N_?
+        return [[rngH[0][0],L_,Et]] + iaggH
 '''
     feed back new layers
     for fd, graph_ in enumerate(node_t):  # combined-fork fb
@@ -146,8 +148,9 @@ def rng_node_(root,_N_):  # each rng+ forms rim_ layer per N, then nG_,L_,dG_,Et
     while True:
         N_,Et = rng_kern_(_N_,rng)  # adds a layer of links to _Ns with pars summed in G.kHH[-1]
         mG_ = segment_N_(root, N_,0,rng)  # cluster N_ by link M
-        L_  = set_attrs([link for G in mG_ for link in G.link_])
+        L_  = [link for G in mG_ for link in G.link_]
         dG_ = segment_N_(root, L_,1,rng)  # cluster L__ by D (no sum/N: direction is lost and D is redundant to M)
+        set_attrs(L_)  # reset L_ after segment? Else their Et will be reset to zero
         rngH += [[mG_,dG_,L_,Et]]
         L__+= L_
         HEt = np.add(HEt, Et)
@@ -316,6 +319,7 @@ def comp_N(Link, iEt, rng, rev=None):  # dir if fd, Link.derH=dH, comparand rim+
         _L,L,_lat,lat,_lay,lay = len(_N.node_),len(_N.node_),_N.latuple,N.latuple,_N.mdLay,N.mdLay
     # dlay:
     derH = comp_pars([_L,_S,_A,_lat,_lay,_N.derH], [L,S,A,lat,lay,N.derH], rn=_N.n/N.n)
+    derH.root = Link; Link.Et = derH.Et[:]  # looks like this is missed out
     Et = derH.Et
     iEt[:] = np.add(iEt,Et)  # init eval rng+ and form_graph_t by total m|d?
     for i in 0,1:
@@ -397,6 +401,7 @@ def segment_N_(root, iN_, fd, rng):  # cluster iN_(G_|L_) by weight of shared li
                   Nrim = [Lt[0] for n in N.nodet for Lt in n.rim_[-1] if (Lt[0] is not N and Lt[0] in iN_)]  # external nodes
             else: Nrim = [Lt[0] for Lt in N.rimt_[-1][0]+ N.rimt_[-1][1] if (Lt[0] is not N and Lt[0] in iN_)]  # nodet-mediated links, same der order as N
             Lrim = Nrim  # mediated CL connection, no links (maybe simplified)
+            N.root_ = []  # init
         else:
             Lrim = [Lt[0] for Lt in N.rim_[-1]] if isinstance(N,CG) else [Lt[0] for Lt in N.rimt_[-1][0] + N.rimt_[-1][1]]  # external links
             Nrim = [_N for L in Lrim for _N in L.nodet if (_N is not N and _N in iN_)]  # external nodes
@@ -412,9 +417,10 @@ def segment_N_(root, iN_, fd, rng):  # cluster iN_(G_|L_) by weight of shared li
         node_,link_, Lrim, Nrim, Et = Gt
         for _Gt, _L in zip(Nrim,Lrim):  # merge connected _Gts if >ave shared external links (Lrim)
             if _Gt not in N_: continue  # was merged
-            sL_ = set(Nrim if fd else Lrim).intersection(set(_Gt[3] if fd else _Gt[2] )).union([_L])  # or oL_ = [Lr[0] for Lr in _Gt[2] if Lr in Lrim]
+            # for fd == 1, looks like we need to get root[0][0] (first link) since Nrim is replace by root
+            sL_ = set([root[0][0] for root in Nrim] if fd else Lrim).intersection(set([root[0][0] for root in _Gt[3]] if fd else _Gt[2] )).union([_L])  # or oL_ = [Lr[0] for Lr in _Gt[2] if Lr in Lrim]
             # shared external links if fd else nodes, + potential _L|N_
-            Et = np.add([L.Et for L in sL_])
+            Et = np.sum([L.Et for L in sL_],axis=0)
             if Et[fd] > ave * Et[2+fd] * rng > 0:  # value of shared links or nodes
                 if not fd: link_ += [_L]
                 merge(Gt,_Gt)
