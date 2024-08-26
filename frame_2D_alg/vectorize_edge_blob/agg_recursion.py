@@ -91,53 +91,44 @@ def vectorize_root(image):  # vectorization in 3 composition levels of xcomp, cl
                             pruned_node_ += [PP]
                             PP.elay = CH()  # init empty per agg+
                     if len(pruned_node_) > 10:  # discontinuous PP rng+ cross-comp, cluster -> G_t:
-                        agg_recursion(edge, aggH=[[pruned_node_,edge.Et]])
+                        agg_recursion(edge, aggH=[[pruned_node_,[],edge.Et]])
                         # updates edge node_,link_
 
-# draft:
-def agg_recursion(root, aggH):  # fork rng++, two clustering forks per layer: two separate recursion forks?
+def agg_recursion(root, aggH):  # top lay rng++-> two cluster,agg++ forks per rng layer:
 
-    iN_, iEt = aggH[0]  # top input aggLay, fixed syntax
-    mLay, dLay, LL_, LEt = [],[],[],[0,0,0,0]  # new aggLay
-    # or aggLay is rngH: combine lays?
-
-    for fd in 0,1:
-        # rng++ cross-comp in both forks of top agg lay:
-        rngH, L_, Et = rng_node_(root, iN_) if isinstance(iN_[0],CG) else rng_link_(root, iN_)
-        root.link_ = L_
-        for N in iN_:
-            for f in 0,1:  # in rng++ elay: fd derR -> valR:
-                for i, lay in enumerate(sorted(N.elay.H, key=lambda lay: lay.Et[fd], reverse=True)):
-                    di = lay.i - i  # lay.i: index in H
-                    lay.Et[2+f] += di  # derR-valR
-                    if not i:  # max value lay
-                        N.node_ = lay.node_; N.derH.it[f] = lay.i  # assigns exemplar lay index per fd
-        
-        # below not fully revised
-        # aggLay is rngH: combine lays?
-        hrH = []
-        hEt = [0,0,0,0]
-        for rng, rngLay in enumerate(rngH):
-            rnG_,rlG_,rL_,rEt = rngLay
-            for rfd,_G_ in zip((0,1),(rnG_,rlG_)):
-                dEt = rEt  # val / agg++/ rlay fd
-                while dEt[rfd] > G_aves[rfd] * dEt[2+rfd] * rng:  # and (np.add(len(_G_)) > ave_L: sum len elements in _G_, nested below?
-                    layH = agg_recursion(root, [_G_, rEt])  # not sure on rEt, or get it from _G_?
-                    if layH:
-                        dnG_,dlG_,dL_,dEt = layH[0]  # aggLay added to rngLay
-                        if dEt[0] > G_aves[0] * dEt[2]:
-                            rEt = np.add(rEt,dEt)
-                            hEt = np.add(hEt,rEt)
-                            _G_ = [dnG_,dlG_]  # for next agg+, additional nesting?
-            if hrH:
-                iH = [hH] + iH   # appendleft newly aggregated H
-                hHt += [hH]  # returns 2 higher agg forks?
-                iEt[:] = np.add(iEt, hEt)
-        LEt = np.add(LEt, hEt)
-
-    if sum(LEt[:1]) > sum(G_aves) * sum(LEt[2:]):
-        # else aggH is not extended
-        return [[mLay,dLay,LL_,LEt]] + aggH
+    iN_,iL_,iEt = aggH[0]  # top input aggLay, same syntax for all lays
+    # rng++ cross-comp:
+    rngH, L_,Et = rng_node_(root, iN_) if isinstance(iN_[0],CG) else rng_link_(root, iN_)
+    # agg++ nesting in L_ is lower than in N_?
+    root.link_ = L_
+    for N in iN_:
+        for fd in 0,1:  # in rng++ elay: fd derR -> valR:
+            for i, lay in enumerate(sorted(N.elay.H, key=lambda lay: lay.Et[fd], reverse=True)):
+                di = lay.i - i  # lay.i: index in H
+                lay.Et[2+fd] += di  # derR-valR
+                if not i:  # max value lay
+                    N.node_ = lay.node_; N.derH.it[fd] = lay.i  # assigns exemplar lay index per fd
+    hEt = [0,0,0,0]
+    for rng, rLay in enumerate(rngH):  # replace rngLay' N_,L_ with aggHs
+        nG_,lG_,rEt = rLay
+        for fd, G_ in zip((0,1),(nG_,lG_)):
+            AEt = rEt  # val agg++/_G_
+            while len(G_) > ave_L and AEt[fd] > G_aves[fd] * AEt[2+fd] * rng:
+                G_H = agg_recursion(root,[[G_,[],rEt]])  # replaces G_ with G_H, empty L_: always lags behind N_?
+                if G_H:
+                    nH, lH, aEt = G_H[0]  # aggLay added to rngLay
+                    if aEt[0] > G_aves[0] * aEt[2]:
+                        AEt = np.add(AEt,aEt)
+                        G_[:] = G_H  # replaces nG_|lG_ in rLay,rngH
+                else: break
+            rEt[:] = AEt  # rng++ + agg++ vals
+            hEt = np.add(hEt,AEt)  # from both forks
+    Et = np.add(Et,hEt)
+    # eval rngH, nested by agg++:
+    if sum(Et[:1]) > sum(G_aves) * sum(Et[2:]):
+        iEt[:] = np.add(iEt,Et)
+        # return appendleft aggH:
+        return [[rngH,L_,Et]] + aggH
 '''
     feed back new layers
     for fd, graph_ in enumerate(node_t):  # combined-fork fb
@@ -155,8 +146,8 @@ def rng_node_(root,_N_):  # each rng+ forms rim_ layer per N, then nG_,L_,dG_,Et
     while True:
         N_,Et = rng_kern_(_N_,rng)  # adds a layer of links to _Ns with pars summed in G.kHH[-1]
         mG_ = segment_N_(root, N_,0,rng)  # cluster N_ by link M
-        L_ = set_attrs([link for G in mG_ for link in G.link_])
-        dG_ = segment_N_(root,L_,1,rng)  # cluster L__ by D (no sum/N: direction is lost and D is redundant to M)
+        L_  = set_attrs([link for G in mG_ for link in G.link_])
+        dG_ = segment_N_(root, L_,1,rng)  # cluster L__ by D (no sum/N: direction is lost and D is redundant to M)
         rngH += [[mG_,dG_,L_,Et]]
         L__+= L_
         HEt = np.add(HEt, Et)
@@ -389,7 +380,7 @@ def set_attrs(Q):
     for e in Q:
         e.visited_ = []
         if isinstance(e, CL):
-            e.rimt_ = [[[],[]]]  # der+'rng+ is not recursive
+            e.rimt_ = [[[],[]]]  # nodet-mediated links, same der order as e
             e.root_ = []  # or root_ should be default param in CL too?
         if hasattr(e,'elay'): e.derH.append_(e.elay)  # no default CL.elay
         e.elay = CH()  # set in sum2graph
@@ -397,56 +388,45 @@ def set_attrs(Q):
         e.aRad = 0
     return Q
 
-def segment_N_(root, iN_, ifd, rng):  # cluster iN_(G_|L_) by weight of shared links, initially single linkage
+def segment_N_(root, iN_, fd, rng):  # cluster iN_(G_|L_) by weight of shared links, initially single linkage
 
     max_, N_ = [],[]
     for N in iN_:  # init Gt per G|L node:
-        if ifd:
-            Nrim = [Lt[0] for n in N.nodet for Lt in (n.rim_[-1] if isinstance(n, CG) else n.rimt_[-1][0] + n.rimt_[-1][1]) if Lt[0] in iN_]  # mediated links
-            Lrim = []  # no links from new CL
-            NEt = N.derH.Et
+        if fd:
+            if isinstance(N.nodet[0],CG):
+                  Nrim = [Lt[0] for n in N.nodet for Lt in n.rim_[-1] if (Lt[0] is not N and Lt[0] in iN_)]  # external nodes
+            else: Nrim = [Lt[0] for Lt in N.rimt_[-1][0]+ N.rimt_[-1][1] if (Lt[0] is not N and Lt[0] in iN_)]  # nodet-mediated links, same der order as N
+            Lrim = Nrim  # mediated CL connection, no links (maybe simplified)
         else:
             Lrim = [Lt[0] for Lt in N.rim_[-1]] if isinstance(N,CG) else [Lt[0] for Lt in N.rimt_[-1][0] + N.rimt_[-1][1]]  # external links
             Nrim = [_N for L in Lrim for _N in L.nodet if (_N is not N and _N in iN_)]  # external nodes
-            NEt = N.Et
         Gt = [[N],[], Lrim, Nrim, [0,0,0,0]]  # node_,link_,Lrim,Nrim, Et
         N.root_+= [Gt]
         N_ += [Gt]  # select exemplar maxes to segment clustering:
-        emax_ = [eN for eN in Nrim if (eN.Et[ifd] if isinstance(eN,CG) else eN.derH.Et[ifd]) >= NEt[ifd] or eN in max_]  # _N if _N == N
+        emax_ = [eN for eN in Nrim if eN.Et[fd] >= N.Et[fd] or eN in max_]  # _N if _N == N
         if not emax_: max_ += [Gt]  # N.root, if no higher-val neighbors
         # extended rrim max: V * k * max_rng?
     for Gt in N_: Gt[3] = [_N.root_[-1] for _N in Gt[3]]  # replace eNs with Gts
-    for fd in 0,1:  # merge Gts with shared +ve links: (if we have fd here, both forks Gt are merge and eval with both forks val?)
-        for Gt in max_ if max_ else N_:
-            node_,link_,Lrim,Nrim, Et = Gt
-            if ifd:  # iN_ is newly created CL, they doesn't have rim, cluster by L.D
-                LD, LR  = sum([L.derH.Et[fd] for L in node_]), sum([L.derH.Et[fd+2] for L in node_])
-                for _Gt in Nrim:
-                    _node_,_,_,Nrim, Et = Gt
-                    if _Gt not in N_: continue
-                    _LD, _LR = sum([L.derH.Et[fd] for L in node_]), sum([L.derH.Et[fd+2] for L in node_])                     
-                    if LD + _LD > (LR + _LR) * ave * rng:  # eval with combined val of both Gt's LD, not sure
-                        merge(Gt, _Gt)
-                        N_.remove(_Gt)
-            else:
-                # Gt's Et is always empty? I don't see we accumulate them now
-                for _Gt,_L in zip(Nrim,Lrim):  # merge connected _Gts if >ave shared external links (Lrim)
-                    if _Gt not in N_:
-                        continue  # was merged
-                    sL_ = set(Lrim).intersection(set(_Gt[2])).union([_L])  # shared external links + potential _L, or oL_ = [Lr[0] for Lr in _Gt[2] if Lr in Lrim]
-                    if sum([L.derH.Et[fd] - ave * L.derH.Et[2+fd] * rng for L in sL_]) > 0:  # value of shared links
-                        link_ += [_L]
-                        merge(Gt,_Gt)
-                        N_.remove(_Gt)
-                        
-    return [sum2graph(root, Gt, ifd, rng) for Gt in N_]
+    # merge Gts with shared +ve links:
+    for Gt in max_ if max_ else N_:
+        node_,link_, Lrim, Nrim, Et = Gt
+        for _Gt, _L in zip(Nrim,Lrim):  # merge connected _Gts if >ave shared external links (Lrim)
+            if _Gt not in N_: continue  # was merged
+            sL_ = set(Nrim if fd else Lrim).intersection(set(_Gt[3] if fd else _Gt[2] )).union([_L])  # or oL_ = [Lr[0] for Lr in _Gt[2] if Lr in Lrim]
+            # shared external links if fd else nodes, + potential _L|N_
+            Et = np.add([L.Et for L in sL_])
+            if Et[fd] > ave * Et[2+fd] * rng > 0:  # value of shared links or nodes
+                if not fd: link_ += [_L]
+                merge(Gt,_Gt)
+                N_.remove(_Gt)
+    return [sum2graph(root, Gt, fd, rng) for Gt in N_]
 
 def merge(Gt, gt):
 
     N_,L_, Lrim, Nrim, Et = Gt
     n_,l_, lrim, nrim, et = gt
     N_ += n_
-    for N in N_: N.root_[-1] = Gt  # update root
+    for N in N_: N.root_[-1] = Gt
     L_ += l_  # internal, no overlap
     Lrim[:] = list(set(Lrim + lrim))  # exclude shared external links, direction doesn't matter?
     Nrim[:] += [root for root in nrim if root not in Nrim and root is not Gt]  # Nrim is roots of ext Ns, may also be in other Gts Nrim
@@ -455,9 +435,7 @@ def merge(Gt, gt):
 def sum2graph(root, grapht, fd, rng):  # sum node and link params into graph, aggH in agg+ or player in sub+
 
     N_, L_, _,_, Et = grapht  # [node_, link_, Lrim, Nrim_t, Et]
-    graph = CG(fd=fd, node_=N_, link_=L_, rng=rng, Et=Et)
-    if graph.root_: graph.root_[-1] = root
-    else:           graph.root_ = [root]
+    graph = CG(fd=fd, root_ = [root], node_=N_, link_=L_, rng=rng, Et=Et)
     yx = [0,0]
     lay0 = CH(node_= N_)  # comparands, vs. L_: summands?
     for link in L_:  # unique current-layer mediators: Ns if fd else Ls
