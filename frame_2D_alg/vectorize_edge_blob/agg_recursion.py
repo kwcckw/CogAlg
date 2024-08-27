@@ -48,7 +48,7 @@ max_dist = 2
 class CL(CBase):  # link or edge, a product of comparison between two nodes or links
     name = "link"
 
-    def __init__(l, nodet=None,derH=None, S=0, A=None, box=None, md_t=None, H_=None):
+    def __init__(l, nodet=None,derH=None, S=0, A=None, box=None, md_t=None, H_=None, root_=None):
         super().__init__()
         # CL = binary tree of Gs, depth+/der+: CL nodet is 2 Gs, CL + CLs in nodet is 4 Gs, etc.,
         # unpack sequentially
@@ -63,7 +63,7 @@ class CL(CBase):  # link or edge, a product of comparison between two nodes or l
         l.Vt = [0,0]  # for rim-overlap modulated segmentation, init derH.Et[:2]
         l.n = 1  # min(node_.n)
         l.Et = [0,0,0,0]
-        l.root_ = None
+        l.root_ = [] if root_ is None else root_ 
         # rimt_, elay if der+
     def __bool__(l): return bool(l.derH.H)
 
@@ -105,6 +105,7 @@ def agg_recursion(root, iN_, iEt):  # top lay rng++-> two cluster,agg++ forks pe
                 di = lay.i - i  # lay.i: index in H
                 lay.Et[2+fd] += di  # derR-valR
                 if not i:  # max value lay
+                    # lay.node_ may empty here since elay might not have node_ assigned
                     N.node_ = lay.node_; N.derH.it[fd] = lay.i  # assigns exemplar lay index per fd
     '''
     Composition is increased depth-first, in nested calls for N_,L_ in rLay, replacing these N_,L_, 
@@ -115,16 +116,19 @@ def agg_recursion(root, iN_, iEt):  # top lay rng++-> two cluster,agg++ forks pe
         for fd, G_ in zip((0,1),(nG_,lG_)):
             if len(G_) > ave_L and rEt[fd] > G_aves[fd] * rEt[2+fd] * rng:
                 if fd: set_attrs(G_, root=rLay)
+                # if we parse nG_ and lG_ here, G_ will never be CL, and hence rng_link_ in agg_recursion is not needed?
                 agg_recursion(root, G_,rEt)  # may replace G_ with rngH, recursive
             else:
                 # feedback of G.derH if recursive nesting ends, draft
                 for G in G_:
-                    if G.derH:  # empty in single-node G
-                        root.fback_t[fd] += [G.derH] if fd else [G.derH.H[-1]]
+                    if G.derH: root.fback_t[fd] += [G.derH] if fd else [G.derH.H[-1]]  # empty in single-node G
                         # der+ forms new links, rng+ adds new layer?
-                if any(root.fback_t):
-                    feedback(root)  # propagates to the top root?
         Et = np.add(Et,rEt)  # incremented in agg++ of both forks
+        
+    # we just need to call this once? After all fbacks are added
+    if any(root.fback_t): 
+        feedback(root)  # propagates to the top root? (top root should have their own call of feedback too?)
+        
     # eval rngH, nested by agg++:
     if sum(Et[:1]) > sum(G_aves) * sum(Et[2:]):
         iN_[:] = rngH
@@ -412,9 +416,9 @@ def segment_N_(root, iN_, fd, rng):  # cluster iN_(G_|L_) by weight of shared li
         node_,link_, Lrim, Nrim, Et = Gt
         for _Gt, _L in zip(Nrim,Lrim):  # merge connected _Gts if >ave shared external links (Lrim)
             if _Gt not in N_: continue  # was merged
-            sL_ = set(Lrim.intersection(_Gt[2])).union([_L])  # shared external links if fd else nodes, + potential _L|_N
+            sL_ = set(Lrim).intersection(_Gt[2]).union([_L])  # shared external links if fd else nodes, + potential _L|_N
             Et = np.sum([L.Et for L in sL_], axis=0)
-            if Et[fd] > ave * Et[2+fd] * rng > 0:  # value of shared links or nodes
+            if Et[fd] > ave * Et[2+fd] * rng:  # value of shared links or nodes (why >0? ave * Et[2+fd] * rng  should be always positive?)
                 if not fd: link_ += [_L]
                 merge(Gt,_Gt)
                 N_.remove(_Gt)
