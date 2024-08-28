@@ -107,13 +107,14 @@ def agg_recursion(root, iN_, iEt):  # top lay rng++-> two cluster,agg++ forks pe
     # depth-first composition:
     for rng, rLay in enumerate(rngH, start=1):
         nG_,L_,rEt = rLay  # segmented in rng_node_|link_
+        fG_ = nG_[:]  # a copy of nG_ for feedback purpose since they might be replaced with rngH within the agg_recursion below
         for fd, Q in zip((0,1),(nG_,L_)):
             if len(Q) > ave_L and rEt[fd] > G_aves[fd] * rEt[2+fd] * rng:
                 if fd: set_attrs(Q,root=rLay)
-                agg_recursion(root, Q, rEt)  # may replace Q with rngH, recursive
-            else:
-                for n in Q:  # feedback of G.derH at the end of recursive nesting
-                    if n.derH: root.fback_t[fd] += [n.derH]  # G / rng++?
+                agg_recursion(root, Q, rEt)  # may replace Q with rngH, recursive (we have a same root across all agg_recursion?)
+
+        for nG in fG_:  # feedback of G.derH at the end of recursive nesting (this should be default? Since there's no recurisve feedback now. Also we just need to feedback from nGs?)
+            if nG.derH: root.fback_t[fd] += [nG.derH]  # G / rng++?
         Et = np.add(Et,rEt)  # added from both forks
     if any(root.fback_t): feedback(root)  # appended from rngH
     # val rngH, nested by agg++:
@@ -245,7 +246,7 @@ def sum_kLay(G, g):  # sum next-rng kLay from krim of current _kLays, init with 
 def rng_link_(root, _L_):  # comp CLs: der+'rng+ in root.link_ rim_t node rims: directional and node-mediated link tracing
 
     _mN_t_ = [[[L.nodet[0]],[L.nodet[1]]] for L in _L_]  # rim-mediating nodes in both directions
-    rH = []; HEt = [0,0,0,0]
+    rH = []; HEt = [0,0,0,0]; L__ = []
     rng = 1
     while True:
         Et = [0,0,0,0]
@@ -271,8 +272,11 @@ def rng_link_(root, _L_):  # comp CLs: der+'rng+ in root.link_ rim_t node rims: 
                             for node in (L, _L):
                                 node.elay.add_H(Link.derH)
         graph_ = segment_N_(root, _L_, 0, rng)  # cluster by rim node D
+        L_ = [link for graph in graph_ for link in graph.link_]
+            
         if graph_:
-            rH += [[graph_,Et]]
+            rH += [[graph_,L_,Et]]
+            L__ += L_
             HEt = np.add(HEt,Et)
         V = 0; L_,_mN_t_ = [],[]
         for L, mN_t in zip(_L_,mN_t_):
@@ -283,7 +287,7 @@ def rng_link_(root, _L_):  # comp CLs: der+'rng+ in root.link_ rim_t node rims: 
             _L_ = L_; rng += 1
         else:
             break
-    return rH, HEt
+    return rH, L__, HEt
 
 
 def comp_N(Link, iEt, rng, rev=None):  # dir if fd, Link.derH=dH, comparand rim+=Link
