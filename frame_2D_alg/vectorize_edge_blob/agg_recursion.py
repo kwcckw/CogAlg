@@ -108,17 +108,16 @@ def agg_recursion(root, iQ, iEt):  # breadth-first rng++-> two cluster,agg++ for
                 if not i: N.derH.it[fd] = lay.i  # assigns exemplar lay index to max fdV lay, no N.node_ = lay.node_
     # agg++/ rLay:
     for rng, rLay in enumerate(rngH, start=1):
-        nG_,L_,rEt = rLay  # formed in rng_node_|link_ above
+        (nG_,L_,rEt), rG_ = rLay, rLay[0][:]  # formed in rng_node_|link_ above (copy nG_ because they maybe replaced by rngH)
         for fd, Q in zip((0,1),(nG_,L_)):
             if len(Q) > ave_L and rEt[fd] > G_aves[fd] * rEt[2+fd] * rng:
                 if fd: set_attrs(Q,root=rLay)
                 agg_recursion(root, Q, rEt)  # may replace nG_|L_ with rngH([nrH,lrH].), recursively
-            elif not fd:
-                for n in Q:  # recursive feedback from bottom Gs of both forks, merge in root.derH
-                    if n.derH: root.fback_ += [n.derH]  # rng++ derH
+        for nG in rG_:
+            if nG.derH: root.fback_ += [nG.derH]  # rng++ derH
+        if root.fback_:
+            feedback(root) # from agg++ nested rngH
         Et = np.add(Et,rEt)  # both forks
-    if root.fback_:
-        feedback(root) # from agg++ nested rngH
     if sum(Et[:1]) > sum(G_aves) * sum(Et[2:]):  # val rngH
         iQ[:] = rngH
         iEt[:] = np.add(iEt, Et)
@@ -453,7 +452,7 @@ def feedback(root):  # called from agg_recursion
     if sum(DerH.Et[:1]) > sum(G_aves) * sum(DerH.Et[2:]):
         root.derH.append_(DerH, flat=1)  # append lays from agg++, merge forks
     # recursion after all agg++
-    if root.root_:  # not Edge
+    if hasattr(root, 'root_') and root.root_:  # not Edge, Edge doesn't have root_, they have root instead
         rroot = root.root_[-1]  # last layer from root agg+
         rroot.fback_ += [DerH]
         if all(len(f_) == len(rroot.derH.H[0].node_) for f_ in rroot.fback_):  # derH.H[0].node_ = original root.node_
