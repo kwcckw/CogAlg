@@ -103,50 +103,49 @@ def agg_recursion(root, iQ, iEt):  # breadth-first rng++-> two cluster, agg++ fo
         set_attrs(iQ, root); N_,L_,Et,rng = rng_link_(iQ)
     iEt[:] = np.add(iEt, Et)
     for fd, Q in zip((0,1),(N_,L_)):
-        if len(Q) > ave_L and Et[fd] > G_aves[fd] * Et[2+fd]:
-            # cluster by link M:
-            Q[:] = segment_N_(root, Q, fd, rng)  # replaces Q with sub_graph_ (if we replace Q[:] with sub-graph, Q will never be CL?)
+        if Et[fd] > G_aves[fd] * Et[2+fd]:
+            if not fd and len(Q) > ave_L:  # cluster N_ by link M:
+                Q[:] = segment_N_(root, Q, fd, rng)  # replaces Q with sub_graph_
             for n in Q:
                 if n.derH: root.fback_ += [n.derH]
             root.fback_ += agg_recursion(root, Q, Et)  # merge fback of both forks in root.derH
     if root.fback_:
-        fback_ = copy(root.fback_)
-        DerH = root.fback_.pop()
-        while root.fback_:
-            DerH.add_H(root.fback_.pop())  # from both forks
+        for i, derH in enumerate(root.fback_):
+            if i: DerH.add_H(derH)  # sum from both forks
+            else: DerH = derH
         if sum(DerH.Et[:1]) > sum(G_aves) * sum(DerH.Et[2:]):
             root.derH.append_(DerH, flat=1)  # append lays from all sub-graphs added by agg++
-            return fback_  # to rroot
+            return root.fback_  # recursive append rroot
 
-    return []  # return empty list when root.fback_ is empty or DerH eval is false
+    return []  # default
 
 def rng_node_(_N_):  # each rng+ forms rim_ layer per N, appends N__,L__,Et:
 
     N__, L__ = [],[]; HEt = [0,0,0,0]
     rng = 1
     while True:
-        N_,Et = rng_kern_(_N_,rng)  # adds a layer of links to _Ns with pars summed in G.kHH[-1]
-        L_ = [linkt[0] for N in N_ for linkt in N.rim_[-1]]
+        N_,Et = rng_kern_(_N_,rng)
+        # adds link_ to N.rim_ and _N_H to N.kHH, but elay and Et are summed across rng++
+        L_ = [Lt[0] for N in N_ for Lt in N.rim_[-1]]
         if Et[0] > ave * Et[2] * rng:
             N__+= N_; L__+= L_; HEt = np.add(HEt, Et)
             _N_ = N_; rng += 1
         else:
             break
-    # we may get overlapping N_ from comparand pair
     return list(set(N__)),L__, HEt, rng
 
 def rng_link_(_L_):  # comp CLs: der+'rng+ in root.link_ rim_t node rims: directional and node-mediated link tracing
 
-    _mN_t_ = [[[L.nodet[0]],[L.nodet[1]]] for L in _L_]  # rim-mediating nodes in both directions
-    HEt = [0,0,0,0]; L__= _L_[:], LL__ = []  # all links between Ls in potentially extended L__
+    _N_t_ = [[[L.nodet[0]],[L.nodet[1]]] for L in _L_]  # Ns are rim-mediating nodes, starting from L.nodet
+    HEt = [0,0,0,0]; L__ = _L_[:], LL__ = []  # all links between Ls in potentially extended L__
     rng = 1
     while True:
         Et = [0,0,0,0]
-        mN_t_ = [[[],[]] for _ in _L_]  # new rng lay of mediating nodes, traced from all prior layers?
-        for L, _mN_t, mN_t in zip(_L_, _mN_t_, mN_t_):
-            for rev, _mN_, mN_ in zip((0,1), _mN_t, mN_t):
-                # comp L, _Ls: nodet mN 1st rim, -> rng+ _Ls/ rng+ mm..Ns, flatten rim_s:
-                rim_ = [rim for n in _mN_ for rim in (n.rim_ if isinstance(n, CG) else [n.rimt_[0][0] + n.rimt_[0][1]])]
+        N_t_ = [[[],[]] for _ in _L_]  # new rng lay of mediating nodes, traced from all prior layers?
+        for L, _N_t, N_t in zip(_L_, _N_t_, N_t_):
+            for rev, _N_, N_ in zip((0,1), _N_t, N_t):
+                # comp L, _Ls: nodet medN 1st rim, -> rng+ _Ls/ rng+ mmedNs, flatten rim_s:
+                rim_ = [rim for n in _N_ for rim in (n.rim_ if isinstance(n, CG) else [n.rimt_[0][0] + n.rimt_[0][1]])]
                 for rim in rim_:
                     for _L,_rev in rim:  # _L is reversed relative to its 2nd node
                         if _L is L or _L in L.visited_: continue
@@ -156,17 +155,17 @@ def rng_link_(_L_):  # comp CLs: der+'rng+ in root.link_ rim_t node rims: direct
                         # L.rim_t += new Link
                         if comp_N(Link, Et, rng, rev ^ _rev):  # negate ds if only one L is reversed
                             # L += rng+'mediating nodes, link orders: nodet < L < rimt_, mN.rim || L
-                            mN_ += _L.nodet  # get _Ls in mN.rim
+                            N_ += _L.nodet  # get _Ls in mN.rim
                             if _L not in _L_:
                                 _L_ += [_L];  L__ += [_L]
-                                mN_t_ += [[[],[]]]  # not in root
-                            mN_t_[_L_.index(_L)][1 - rev] += L.nodet
+                                N_t_ += [[[],[]]]  # not in root
+                            N_t_[_L_.index(_L)][1 - rev] += L.nodet
                             for node in (L, _L):
                                 node.elay.add_H(Link.derH)
-        V = 0; L_,_mN_t_ = [],[]
-        for L, mN_t in zip(_L_,mN_t_):
-            if any(mN_t):
-                L_ += [L]; _mN_t_ += [mN_t]
+        V = 0; L_,_N_t_ = [],[]
+        for L, N_t in zip(_L_,N_t_):
+            if any(N_t):
+                L_ += [L]; _N_t_ += [N_t]
                 V += L.derH.Et[0] - ave * L.derH.Et[2] * rng
         if V > 0:  # rng+ if vM of Ls with extended mN_t_
             _L_ = L_; rng += 1
@@ -353,20 +352,8 @@ def segment_N_(root, iN_, fd, rng):  # cluster iN_(G_|L_) by weight of shared li
 
     N_, max_ = [],[]
     for N in iN_:  # init Gt per G|L node:
-        if isinstance(N, CG):
-            Lrim = [Lt[0] for Lt in N.rim_[-1]]
-            Nrim = [_N for L in Lrim for _N in L.nodet if (_N is not N and _N in iN_)]  # external nodes
-        else:
-            if hasattr(N, 'rimt_'):  # CL when N is CL
-                Lrim = [Lt[0] for Lt in N.rimt_[-1][0] + N.rimt_[-1][1]]
-                Nrim = [_N for L in Lrim for _N in L.nodet if (_N is not N and _N in iN_)]  # external nodes
-            else:  # CL when N is CG, where they don't have rimt_ yet
-                Lrim = [Lt[0] for n in N.nodet for Lt in (n.rimt_[-1][0] + n.rimt_[-1][1] if isinstance(n, CL) else n.rim_[-1]) if Lt[0] in iN_]
-                Nrim = Lrim[:]
-        ''' 
         Lrim = [Lt[0] for Lt in N.rim_[-1]] if isinstance(N,CG) else [Lt[0] for Lt in N.rimt_[-1][0] + N.rimt_[-1][1]]  # external links
         Nrim = [_N for L in Lrim for _N in L.nodet if (_N is not N and _N in iN_)]  # external nodes
-        '''
         Gt = [[N],[], Lrim, Nrim, [0,0,0,0]]  # node_,link_,Lrim,Nrim, Et
         N.root_ += [Gt]
         N_ += [Gt]
@@ -376,7 +363,7 @@ def segment_N_(root, iN_, fd, rng):  # cluster iN_(G_|L_) by weight of shared li
         # extended rrim max: V * k * max_rng?
     for Gt in N_: Gt[3] = [_N.root_[-1] for _N in Gt[3]]  # replace eNs with Gts
     for Gt in max_ if max_ else N_:
-        node_,link_,Lrim,Nrim, Et = Gt
+        node_,link_, Lrim, Nrim, Et = Gt
         for _Gt,_L in zip(Nrim,Lrim):  # merge Gts with shared +ve external links (Lrim)
             if _Gt not in N_:
                 continue  # was merged
