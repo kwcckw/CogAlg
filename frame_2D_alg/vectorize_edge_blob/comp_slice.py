@@ -278,13 +278,18 @@ def comp_slice(edge):  # root function
         P.mdLay = CH()  # for accumulation in sum2PP later (in lower P)
         P.rim_ = []
     rng_recursion(edge)  # vertical P cross-comp -> PP clustering, if lateral overlap
-    form_PP_t(edge, edge.P_)
+    PPm_, PPd_ = form_PP_t(edge, edge.P_)
     # der+ / PPd:
-    for PP in edge.node_[1]:
+    for PP in PPd_:
         if PP.mdLay.Et[1] * len(PP.link_) > ave_PPd * PP.mdLay.Et[3]:
             comp_link_(PP)  # node-mediated correlation clustering, increment link derH, then P derH in sum2PP:
-            form_PP_t(PP, PP.link_)
+            sub_PPm_, sub_PPd_ = form_PP_t(PP, PP.link_)  
+            # # we need to feedback this sub_PPm_ and sub_PPd_'s mddLay back to PP before PP.mdLay is feedback into edge?
+            for sub_PP in sub_PPm_ + sub_PPd_:  # merge feedbacks
+                PP.mdLay.add_md_(sub_PP.mdLay) 
             edge.mdLay.add_md_(PP.mdLay)
+            
+    return PPm_, PPd_
 
 def rng_recursion(edge):  # similar to agg+ rng_recursion, but looping and contiguously link mediated
 
@@ -358,7 +363,7 @@ def comp_P(_P,P, angle=None, distance=None):  # comp dPs if fd else Ps
 
 def form_PP_t(root, P_):  # form PPs of dP.valt[fd] + connected Ps val
 
-    PP_t = [[],[]]
+    PPm_, PPd_ = [], []
     mLink_,_mP__,dLink_,_dP__ = [],[],[],[]  # per PP, !PP.link_?
     for P in P_:
         mlink_,_mP_,dlink_,_dP_ = [],[],[],[]  # per P
@@ -388,11 +393,10 @@ def form_PP_t(root, P_):  # form PPs of dP.valt[fd] + connected Ps val
                 clink_ += Link_[P_.index(_P)]
                 perimeter += _P__[P_.index(_P)]  # extend P perimeter with linked __Ps
             PP = sum2PP(root, cP_, clink_, fd)
-            PP_t[fd] += [PP]
+            [PPm_, PPd_][fd] += [PP]
             CP_ += cP_
 
-    root.node_ = PP_t  # nested in der+, add_alt_PPs_?
-
+    return PPm_, PPd_
 
 def sum2PP(root, P_, dP_, fd):  # sum links in Ps and Ps in PP
 

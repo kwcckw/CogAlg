@@ -74,12 +74,12 @@ def vectorize_root(image):  # vectorization in 3 composition levels of xcomp, cl
     for edge in frame.blob_:
         if (hasattr(edge, 'P_') and
             edge.latuple[-1] * (len(edge.P_)-1) > G_aves[0]):
-            comp_slice(edge)
+            PPm_, PPd_ = comp_slice(edge)
             # init for agg+:
             edge.derH = CH(H=[CH()]); edge.derH.H[0].root = edge.derH
-            edge.link_ = []; edge.fback_ = []; edge.Et = [0,0,0,0]
+            edge.fback_ = []; edge.Et = [0,0,0,0]
             # convert select PPs to Gs:
-            for fd, Q in zip((0,1), edge.node_):  # node_=[PPm_,PPd_], but there should be no PPd_ now?
+            for fd, Q in zip((0,1), [PPm_, PPd_]):  # node_=[PPm_,PPd_], but there should be no PPd_ now?
                 if edge.mdLay.Et[fd] * (len(Q)-1)*(edge.rng+1) > G_aves[fd] * edge.mdLay.Et[2+fd]:
                     pruned_Q = []
                     for PP in Q:  # PP -> G
@@ -108,14 +108,18 @@ def agg_recursion(root, iQ, iEt):  # breadth-first rng++-> two cluster, agg++ fo
                 Q[:] = segment_N_(root, Q, fd, rng)  # replaces Q with sub_graph_
             for n in Q:
                 if n.derH: root.fback_ += [n.derH]
+            # we are returning root.fback_ in deeper agg+, but pack it back to a same root.fback_ here?
             root.fback_ += agg_recursion(root, Q, Et)  # merge fback of both forks in root.derH
+
     if root.fback_:
-        for i, derH in enumerate(root.fback_):
+        fback_ = copy(root.fback_)
+        for i, derH in enumerate(fback_):
             if i: DerH.add_H(derH)  # sum from both forks
             else: DerH = derH
+        root.fback_ = []
         if sum(DerH.Et[:1]) > sum(G_aves) * sum(DerH.Et[2:]):
             root.derH.append_(DerH, flat=1)  # append lays from all sub-graphs added by agg++
-            return root.fback_  # recursive append rroot
+            return fback_  # recursive append rroot
 
     return []  # default
 
@@ -137,7 +141,7 @@ def rng_node_(_N_):  # each rng+ forms rim_ layer per N, appends N__,L__,Et:
 def rng_link_(_L_):  # comp CLs: der+'rng+ in root.link_ rim_t node rims: directional and node-mediated link tracing
 
     _N_t_ = [[[L.nodet[0]],[L.nodet[1]]] for L in _L_]  # Ns are rim-mediating nodes, starting from L.nodet
-    HEt = [0,0,0,0]; L__ = _L_[:], LL__ = []  # all links between Ls in potentially extended L__
+    HEt = [0,0,0,0]; L__ = _L_[:]; LL__ = []  # all links between Ls in potentially extended L__
     rng = 1
     while True:
         Et = [0,0,0,0]
