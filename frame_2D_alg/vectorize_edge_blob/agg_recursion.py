@@ -78,9 +78,9 @@ def vectorize_root(image):  # vectorization in 3 composition levels of xcomp, cl
             # init for agg+:
             edge.derH = CH(H=[CH()]); edge.derH.H[0].root = edge.derH; edge.fback_ = []; edge.Et = [0,0,0,0]
             # convert select PPs to Gs:
-            if edge.mdLay.Et[0] * (len(edge.node)-1)*(edge.rng+1) > G_aves[0] * edge.mdLay.Et[2]:
+            if edge.mdLay.Et[0] * (len(edge.node_)-1)*(edge.rng+1) > G_aves[0] * edge.mdLay.Et[2]:
                 pruned_Q = []
-                for PP in edge.node:  # PP -> G
+                for PP in edge.node_:  # PP -> G
                     if PP.mdLay and PP.mdLay.Et[0] > G_aves[0] * PP.mdLay.Et[2]:  # v>ave*r
                         PP.root_ = []  # no feedback to edge?
                         PP.node_ = PP.P_  # revert node_t?
@@ -108,6 +108,7 @@ def agg_recursion(root, iQ):  # breadth-first rng++ -> cluster, sub++, super++:
                 Q[:] = segment(root, Q, fd, rng)  # N_[:] = nG_
                 for G in Q:
                     if len(G.node_) > ave_L and G.Et[fd] > ave * G.Et[2+fd]:
+                        # this G.node_ may still contain a same visited_, as well as kHH and elay
                         agg_recursion(G, G.node_)  # sub++
                         sum_new_ders(root, G, Et)
             if len(Q) > ave_L and Et[fd] > ave * Et[2+fd]:  # Et+= in sub++

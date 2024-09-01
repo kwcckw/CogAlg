@@ -280,12 +280,18 @@ def comp_slice(edge):  # root function
         P.rim_ = []
     rng_recursion(edge)  # vertical P cross-comp -> PP clustering, if lateral overlap
     form_PP_(edge, edge.P_)
+    for PP in edge.node_:  # feedback
+        edge.mdLay.add_md_(PP.mdLay)
+    
+    # below is not needed now? It's already in form_PP_
+    '''
     # der+ / PPd:
     for PP in edge.node_[1]:
         if PP.mdLay.Et[1] * len(PP.link_) > ave_PPd * PP.mdLay.Et[3]:
             comp_link_(PP)  # node-mediated correlation clustering, increment link derH, then P derH in sum2PP:
             form_PP_t(PP, PP.link_)
             edge.mdLay.add_md_(PP.mdLay)
+    '''
 
 def rng_recursion(edge):  # similar to agg+ rng_recursion, but looping and contiguously link mediated
 
@@ -364,30 +370,29 @@ def form_PP_(root, P_, fd=0):  # form PPs of dP.valt[fd] + connected Ps val
     link__, _P__ = [],[]  # per PP
     for P in P_:
         link_, _P_ = [],[]  # per P
-        link_ = [link for rim in P.rim_ for link in rim]  # get upper links from all rngs of CP.rim_
-        for link in link_:
+        _link_ = [link for rim in P.rim_ for link in rim]  # get upper links from all rngs of CP.rim_
+        for link in _link_:
             _P = link.nodet[0]
             Et = link.mdLay.Et
             if Et[fd] >P_aves[fd] * Et[2+fd]:
                 link_+= [link]; _P_+= [_P]
-        if _P_:
-            link__+= [link_]; _P__+= [_P_]
+        link__+= [link_]; _P__+= [_P_]  # keep empty list to preserve index, so that P_, _P__ and link__ is aligned
     # aligned
     for link_,_P_ in zip(link__,_P__):
         CP_ = []  # all clustered Ps
         for P in P_:
             if P in CP_: continue  # already packed in some sub-PP
             P_index = P_.index(P)
-            cP_, clink_ = [P], [*link_[P_index]]  # cluster per P
+            cP_, clink_ = [P], [*link__[P_index]]  # cluster per P
             perimeter = deque(_P__[P_index])  # recycle with breadth-first search, up and down:
             while perimeter:
                 _P = perimeter.popleft()
                 if _P in cP_ or _P in CP_ or _P not in P_: continue  # clustering is exclusive
                 cP_ += [_P]
-                clink_ += link_[P_.index(_P)]
+                clink_ += link__[P_.index(_P)]
                 perimeter += _P__[P_.index(_P)]  # extend P perimeter with linked __Ps
-            PP = sum2PP(root, cP_, clink_, fd)
-            if not fd and len(cP_) > ave_L and PP.Et[fd] >PP_aves[fd] * PP.Et[2+fd]:
+            PP = sum2PP(root, cP_, clink_, fd); PP_ += [PP]  # PP_ packing is missed out?
+            if not fd and len(cP_) > ave_L and PP.mdLay.Et[fd] >PP_aves[fd] * PP.mdLay.Et[2+fd]:  # should be mdLay.Et? PP.Et is not accumulated.
                 # form sub_PPd_ in select PPs, not recursive
                 form_PP_(PP, PP.P_, fd=1)
             CP_ += cP_
