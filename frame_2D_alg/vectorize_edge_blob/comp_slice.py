@@ -40,6 +40,7 @@ ave = 5  # ave direct m, change to Ave_min from the root intra_blob?
 aves = ave_mI, ave_mG, ave_mM, ave_mMa, ave_mA, ave_mL = ave, 10, 2, .1, .2, 2
 PP_aves = ave_PPm, ave_PPd = 50, 50
 P_aves = ave_Pm, ave_Pd = 10, 10
+ave_L = 5
 ave_Gm = 50
 
 class CcompSliceFrame(CsliceEdge):
@@ -278,18 +279,13 @@ def comp_slice(edge):  # root function
         P.mdLay = CH()  # for accumulation in sum2PP later (in lower P)
         P.rim_ = []
     rng_recursion(edge)  # vertical P cross-comp -> PP clustering, if lateral overlap
-    PPm_, PPd_ = form_PP_t(edge, edge.P_)
+    form_PP_(edge, edge.P_)
     # der+ / PPd:
-    for PP in PPd_:
+    for PP in edge.node_[1]:
         if PP.mdLay.Et[1] * len(PP.link_) > ave_PPd * PP.mdLay.Et[3]:
             comp_link_(PP)  # node-mediated correlation clustering, increment link derH, then P derH in sum2PP:
-            sub_PPm_, sub_PPd_ = form_PP_t(PP, PP.link_)  
-            # # we need to feedback this sub_PPm_ and sub_PPd_'s mddLay back to PP before PP.mdLay is feedback into edge?
-            for sub_PP in sub_PPm_ + sub_PPd_:  # merge feedbacks
-                PP.mdLay.add_md_(sub_PP.mdLay) 
+            form_PP_t(PP, PP.link_)
             edge.mdLay.add_md_(PP.mdLay)
-            
-    return PPm_, PPd_
 
 def rng_recursion(edge):  # similar to agg+ rng_recursion, but looping and contiguously link mediated
 
@@ -361,9 +357,47 @@ def comp_P(_P,P, angle=None, distance=None):  # comp dPs if fd else Ps
     if link.mdLay.Et[0] > aves[0] * link.mdLay.Et[2] or link.mdLay.Et[1] > aves[1] * link.mdLay.Et[3]:
         return link
 
+# draft:
+def form_PP_(root, P_, fd=0):  # form PPs of dP.valt[fd] + connected Ps val
+
+    PP_ = []
+    link__, _P__ = [],[]  # per PP
+    for P in P_:
+        link_, _P_ = [],[]  # per P
+        link_ = [link for rim in P.rim_ for link in rim]  # get upper links from all rngs of CP.rim_
+        for link in link_:
+            _P = link.nodet[0]
+            Et = link.mdLay.Et
+            if Et[fd] >P_aves[fd] * Et[2+fd]:
+                link_+= [link]; _P_+= [_P]
+        if _P_:
+            link__+= [link_]; _P__+= [_P_]
+    # aligned
+    for link_,_P_ in zip(link__,_P__):
+        CP_ = []  # all clustered Ps
+        for P in P_:
+            if P in CP_: continue  # already packed in some sub-PP
+            P_index = P_.index(P)
+            cP_, clink_ = [P], [*link_[P_index]]  # cluster per P
+            perimeter = deque(_P__[P_index])  # recycle with breadth-first search, up and down:
+            while perimeter:
+                _P = perimeter.popleft()
+                if _P in cP_ or _P in CP_ or _P not in P_: continue  # clustering is exclusive
+                cP_ += [_P]
+                clink_ += link_[P_.index(_P)]
+                perimeter += _P__[P_.index(_P)]  # extend P perimeter with linked __Ps
+            PP = sum2PP(root, cP_, clink_, fd)
+            if not fd and len(cP_) > ave_L and PP.Et[fd] >PP_aves[fd] * PP.Et[2+fd]:
+                # form sub_PPd_ in select PPs, not recursive
+                form_PP_(PP, PP.P_, fd=1)
+            CP_ += cP_
+
+    root.node_ = PP_
+
+# old
 def form_PP_t(root, P_):  # form PPs of dP.valt[fd] + connected Ps val
 
-    PPm_, PPd_ = [], []
+    PP_t = [[],[]]
     mLink_,_mP__,dLink_,_dP__ = [],[],[],[]  # per PP, !PP.link_?
     for P in P_:
         mlink_,_mP_,dlink_,_dP_ = [],[],[],[]  # per P
@@ -393,11 +427,12 @@ def form_PP_t(root, P_):  # form PPs of dP.valt[fd] + connected Ps val
                 clink_ += Link_[P_.index(_P)]
                 perimeter += _P__[P_.index(_P)]  # extend P perimeter with linked __Ps
             PP = sum2PP(root, cP_, clink_, fd)
-            [PPm_, PPd_][fd] += [PP]
+            PP_t[fd] += [PP]
             CP_ += cP_
 
-    return PPm_, PPd_
+    root.node_ = PP_t  # nested in der+, add_alt_PPs_?
 
+# not revised
 def sum2PP(root, P_, dP_, fd):  # sum links in Ps and Ps in PP
 
     PP = CG(fd=fd, root_=root, rng=root.rng+1)  # 1st layer of derH is mdLay
