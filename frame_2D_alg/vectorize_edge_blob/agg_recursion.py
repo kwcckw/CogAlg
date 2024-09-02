@@ -100,10 +100,12 @@ def agg_recursion(root, Q, fd):  # breadth-first rng++ comp -> eval cluster, for
     m,mr, d,dr = Et
     # if vm:
     if m > ave * mr:
-        if len(Q) > ave_L:  # min cluster L != min comp L?
-            Q[:] = segment(root, Q,0,rng, Et)  # Q=nG_, internal agg++ eval
+        # should be before segment? Else Q is replaced with graph_, where their elay is empty
         for n in Q:  # sum new ders
             root.fback_ += [n.elay]; Et[:] = np.add(Et, n.elay.Et)
+        if len(Q) > ave_L:  # min cluster L != min comp L?
+            # this Q should be selective? Because some of them doesn't have rim added
+            Q[:] = segment(root, Q,0,rng, Et)  # Q=nG_, internal agg++ eval
     root.Et[:] = np.add(root.Et, Et)
     # if vd:
     if d > ave * dr and len(L_) > ave_L:
@@ -123,7 +125,7 @@ def rng_node_(_N_):  # each rng+ forms rim_ layer per N, appends N__,L__,Et:
     rng_node_,rng_link_: buffer elay per rng+-> eH for sub-clustering in graphs:
     shorter-rng graphs represent higher-density areas, meaningful for separate cross-comp?
     '''
-    L__ = [],[]; HEt = [0,0,0,0]
+    L__ = []; HEt = [0,0,0,0]  # typo? Why init tuple of 2 lists?
     rng = 1
     while True:
         N_,Et = rng_kern_(_N_,rng)
@@ -384,6 +386,9 @@ def segment(root, Q, fd, rng, Et):  # cluster iN_(G_|L_) by weight of shared lin
         agg_recursion(root, graph_, Et)
         # add bottom-up sum node.derH here instead of feedback,
         # lower-composition Gts are formed first, so this is similar to rerun of sum2graph?
+        # something like this?
+        for graph in graph_:
+            root.fback_ += [graph.derH]
 
     return graph_
 

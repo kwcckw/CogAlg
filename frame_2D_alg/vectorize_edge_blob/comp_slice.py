@@ -351,11 +351,10 @@ def comp_P(_P,P, angle=None, distance=None):  # comp dPs if fd else Ps
         return link
 
 # The process should be similar to segment: init PP per P, trace P rim_ up, merge mlink-connected PPs:
-
+# draft
 def form_PP_(root, P_, fd=0):  # form PPs of dP.valt[fd] + connected Ps val
 
-    PP_ = []
-    _link__, _P__ = [],[]  # per PP
+    PPt_, max_ = [], []
     for P in P_:
         link_, _P_ = [],[]  # uprim per P
         _link_ = [link for rim in P.rim_ for link in rim]  # get upper links from all rngs of CP.rim_
@@ -363,27 +362,35 @@ def form_PP_(root, P_, fd=0):  # form PPs of dP.valt[fd] + connected Ps val
             _P = link.nodet[0]
             if link.mdLay.Et[fd] >P_aves[fd] * link.mdLay.Et[2+fd]:
                 link_ +=[link]; _P_ +=[_P]
-        _link__ += [link_]; _P__ += [_P_]
-        # per PP
-    for _P_,_link_ in zip(_P__,_link__):
-        CP_ = []  # all clustered Ps
-        for P, link in zip(_P_,_link_):
-            if P in CP_: continue  # already packed in some sub-PP
-            cP_, clink_ = [P],[link]  # [*link__[P_.index(P)]]  # cluster per P
-            perimeter = deque(_P__[P_.index(P)])  # recycle with breadth-first search, up and down:
-            while perimeter:
-                _P = perimeter.popleft()
-                if _P in cP_ or _P in CP_ or _P not in P_: continue  # clustering is exclusive
-                cP_ += [_P]
-                clink_ += link__[P_.index(_P)]
-                perimeter += _P__[P_.index(_P)]  # extend P perimeter with linked __Ps
-            PP = sum2PP(root, cP_, clink_, fd)
-            if not fd and len(cP_) > ave_L and PP.mdLay.Et[fd] >PP_aves[fd] * PP.mdLay.Et[2+fd]:  # or Et
-                # form sub_PPd_ in select PPs, not recursive:
-                form_PP_(PP, PP.P_, fd=1)
-            PP_ += [PP]
-            CP_ += cP_
+        PPt = [[P], link_, _P_]  # P_, link_, Prim
+        P.root = PPt; PPt_ += [PPt]
+        # not sure if we need max too? Right now it's just upper Ps. Else we can skip it
+        # right now it is selected with P.links' mdLay.Et
+        val = sum([link.mdLay.Et[fd] for link in _link_])
+        emax_ = [eP for eP in _P_ if sum([elink.mdLay.Et[fd] for erim in eP.rim_ for elink in erim]) >= val or eP in max_] 
+        if not emax_: max_ += [PPt]
 
+    for PPt in PPt_: 
+        PPt[2] = [_P.root for _P in PPt[2]]  # replace ePs with PPts
+    for PPt in max_ if max_ else PPt_: 
+        P_, link_, Prim = PPt
+        for _PPt in Prim:  # merge PPts with upper Ps (Prim is P's root now)
+            if _PPt not in PPt_: continue  # was merged
+            _P_,_link_, _Prim = _PPt
+            # merge:
+            P_[:] = list(set(P_+_P_)) 
+            for P in P_: P.root = PPt  # update root
+            link_[:] = list(set(link_+_link_))
+            # remove merged _PPt
+            PPt_.remove(_PPt)
+    # form PPs:
+    PP_ = []
+    for PPt in PPt_:
+        PP = sum2PP(root, PPt[0], PPt[1], fd)
+        PP_ += [PP]
+        if not fd and len(PP.P_) > ave_L and PP.mdLay.Et[fd] >PP_aves[fd] * PP.mdLay.Et[2+fd]:  # or Et
+            # form sub_PPd_ in select PPs, not recursive:
+            form_PP_(PP, PP.P_, fd=1)
     root.node_ = PP_
 
 def sum2PP(root, P_, dP_, fd):  # sum links in Ps and Ps in PP
