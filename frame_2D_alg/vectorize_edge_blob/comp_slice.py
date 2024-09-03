@@ -314,17 +314,6 @@ def rng_recursion(edge):  # similar to agg+ rng_recursion, but looping and conti
     edge.rng=rng  # represents rrdn
     del edge.pre__
 
-def comp_link_(PP):  # node_- mediated: comp node.rim dPs, call from form_PP_
-
-    for dP in PP.link_:
-        if dP.mdLay.Et[1] > aves[1]:
-            for nmed, _rim_ in enumerate(dP.nodet[0].rim_):  # link.nodet is CP
-                for _dP in _rim_:
-                    dlink = comp_P(_dP,dP)
-                    if dlink:
-                        dP.rim += [dlink]  # in lower node uplinks
-                        dlink.nmed = nmed  # link mediation order0
-
 def comp_P(_P,P, angle=None, distance=None):  # comp dPs if fd else Ps
 
     fd = isinstance(P,CdP)
@@ -350,48 +339,52 @@ def comp_P(_P,P, angle=None, distance=None):  # comp dPs if fd else Ps
     if link.mdLay.Et[0] > aves[0] * link.mdLay.Et[2] or link.mdLay.Et[1] > aves[1] * link.mdLay.Et[3]:
         return link
 
-# The process should be similar to segment: init PP per P, trace P rim_ up, merge mlink-connected PPs:
-# draft
 def form_PP_(root, P_, fd=0):  # form PPs of dP.valt[fd] + connected Ps val
 
-    PPt_, max_ = [], []
-    for P in P_:
+    PPt_ = []
+    for P in P_:  # init PPt_
         link_, _P_ = [],[]  # uprim per P
-        _link_ = [link for rim in P.rim_ for link in rim]  # get upper links from all rngs of CP.rim_
-        for link in _link_:
-            _P = link.nodet[0]
+        for link in [link for rim in P.rim_ for link in rim]:  # uplinks of all rngs
             if link.mdLay.Et[fd] >P_aves[fd] * link.mdLay.Et[2+fd]:
-                link_ +=[link]; _P_ +=[_P]
-        PPt = [[P], link_, _P_]  # P_, link_, Prim
+                link_ += [link]; _P_ += [link.nodet[0]]
+        PPt = [[P],link_,_P_]
         P.root = PPt; PPt_ += [PPt]
-        # not sure if we need max too? Right now it's just upper Ps. Else we can skip it
-        # right now it is selected with P.links' mdLay.Et
-        val = sum([link.mdLay.Et[fd] for link in _link_])
-        emax_ = [eP for eP in _P_ if sum([elink.mdLay.Et[fd] for erim in eP.rim_ for elink in erim]) >= val or eP in max_] 
-        if not emax_: max_ += [PPt]
-
-    for PPt in PPt_: 
+    for PPt in PPt_:
         PPt[2] = [_P.root for _P in PPt[2]]  # replace ePs with PPts
-    for PPt in max_ if max_ else PPt_: 
+    for PPt in PPt_:
         P_, link_, Prim = PPt
-        for _PPt in Prim:  # merge PPts with upper Ps (Prim is P's root now)
-            if _PPt not in PPt_: continue  # was merged
-            _P_,_link_, _Prim = _PPt
-            # merge:
-            P_[:] = list(set(P_+_P_)) 
-            for P in P_: P.root = PPt  # update root
-            link_[:] = list(set(link_+_link_))
-            # remove merged _PPt
-            PPt_.remove(_PPt)
-    # form PPs:
+        new_Prim = Prim
+        while new_Prim:
+            _new_Prim = []
+            for _PPt in new_Prim:  # recursively merge mlinked PPts upward
+                if _PPt not in PPt_: continue  # was merged
+                _P_,_link_,_Prim = _PPt
+                for P in _P_: P.root = PPt  # update root
+                link_ += _link_
+                P_[:] = list(set(P_+_P_))
+                _new_Prim[:] = list(set(_new_Prim + _Prim))
+                PPt_.remove(_PPt)
+            new_Prim = _new_Prim  # Prim is for clustering only, or Prim = terminated rims as a contour?
     PP_ = []
     for PPt in PPt_:
         PP = sum2PP(root, PPt[0], PPt[1], fd)
+        if not fd and len(PP.P_) > ave_L and PP.mdLay.Et[fd] >PP_aves[fd] * PP.mdLay.Et[2+fd]:
+            comp_link_(PP)
+            # fd fork draft: cluster PP.link_ vs PP.P_?
+            form_PP_(PP, PP.link_, fd=1)  # form sub_PPd_ in select PPs, not recursive
         PP_ += [PP]
-        if not fd and len(PP.P_) > ave_L and PP.mdLay.Et[fd] >PP_aves[fd] * PP.mdLay.Et[2+fd]:  # or Et
-            # form sub_PPd_ in select PPs, not recursive:
-            form_PP_(PP, PP.P_, fd=1)
     root.node_ = PP_
+
+def comp_link_(PP):  # node_- mediated: comp node.rim dPs, call from form_PP_
+
+    for dP in PP.link_:
+        if dP.mdLay.Et[1] > aves[1]:
+            for nmed, _rim_ in enumerate(dP.nodet[0].rim_):  # link.nodet is CP
+                for _dP in _rim_:
+                    dlink = comp_P(_dP,dP)
+                    if dlink:
+                        dP.rim += [dlink]  # in lower node uplinks
+                        dlink.nmed = nmed  # link mediation order0
 
 def sum2PP(root, P_, dP_, fd):  # sum links in Ps and Ps in PP
 
