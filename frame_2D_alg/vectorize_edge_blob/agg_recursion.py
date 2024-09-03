@@ -96,10 +96,11 @@ def vectorize_root(image):  # vectorization in 3 composition levels of xcomp, cl
 
 def agg_recursion(root, Q, fd):  # breadth-first rng++ comp -> eval cluster, fork recursion
 
-    L_,Et,rng = rng_link_(Q) if fd else rng_node_(Q)  # iQ cross-comp in rng increments
+    # return Q with added new rim only
+    Q, L_,Et,rng = rng_link_(Q) if fd else rng_node_(Q)  # iQ cross-comp in rng increments
     # new derH:
-    root.derH.append_(CH.copy(L_[0].derH))  # init
-    for L in L_[1:]: root.derH.H[-1].add_H_(L.derH)  # accum
+    root.derH.append_(CH().copy(L_[0].derH))  # init
+    for L in L_[1:]: root.derH.H[-1].add_H(L.derH)  # accum
     # each agg+ forms L_ with new ders, node elay,derH are redundant
     m,mr, d,dr = Et
     if d > ave * dr and len(L_) > ave_L:
@@ -118,7 +119,7 @@ def rng_node_(_N_):  # each rng+ forms rim_ layer per N, appends N__,L__,Et:
     rng_node_,rng_link_: buffer elay per rng+-> eH for sub-clustering in graphs:
     shorter-rng graphs represent higher-density areas, meaningful for separate cross-comp?
     '''
-    L__ = [],[]; HEt = [0,0,0,0]
+    N__ = []; L__ = []; HEt = [0,0,0,0]
     rng = 1
     while True:
         N_,Et = rng_kern_(_N_,rng)
@@ -126,16 +127,16 @@ def rng_node_(_N_):  # each rng+ forms rim_ layer per N, appends N__,L__,Et:
         L_ = [Lt[0] for N in N_ for Lt in N.rim_[-1]]
         if Et[0] > ave * Et[2] * rng:
             L__+= L_; HEt = np.add(HEt, Et)
-            _N_ = N_; rng += 1
+            N__ += N_; _N_ = N_; rng += 1
         else:
             break
-    return L__, HEt, rng
+    return list(set(N__)), L__, HEt, rng
 
 
 def rng_link_(_L_):  # comp CLs: der+'rng+ in root.link_ rim_t node rims: directional and node-mediated link tracing
 
     _N_t_ = [[[L.nodet[0]],[L.nodet[1]]] for L in _L_]  # Ns are rim-mediating nodes, starting from L.nodet
-    HEt = [0,0,0,0]; LL__ = []  # all links between Ls in potentially extended L__
+    HEt = [0,0,0,0]; L__ = _L_[:]; LL__ = []  # all links between Ls in potentially extended L__
     rng = 1
     while True:
         Et = [0,0,0,0]
@@ -155,7 +156,7 @@ def rng_link_(_L_):  # comp CLs: der+'rng+ in root.link_ rim_t node rims: direct
                             # L += rng+'mediating nodes, link orders: nodet < L < rimt_, mN.rim || L
                             N_ += _L.nodet  # get _Ls in mN.rim
                             if _L not in _L_:
-                                _L_ += [_L]
+                                _L_ += [_L];L__ += [_L]
                                 N_t_ += [[[],[]]]  # not in root
                             N_t_[_L_.index(_L)][1 - rev] += L.nodet
                             for node in (L, _L):
@@ -169,7 +170,7 @@ def rng_link_(_L_):  # comp CLs: der+'rng+ in root.link_ rim_t node rims: direct
             _L_ = L_; rng += 1
         else:
             break
-    return LL__, HEt, rng
+    return list(set(L__)), LL__, HEt, rng
 
 
 def rng_kern_(N_, rng):  # comp Gs summed in kernels, ~ graph CNN without backprop, not for CLs
@@ -375,8 +376,10 @@ def segment(root, Q, fd, rng):  # cluster iN_(G_|L_) by weight of shared links, 
                     link_ += [_L]
                     merge(Gt,_Gt)
                     N_.remove(_Gt)
-                    _new_Nrim[:], _new_Nrim[:] = list(set(_new_Nrim + _Gt[3])), list(set(_new_Nrim + _Gt[2]))
-                new_Nrim, new_Lrim = _new_Nrim, new_Lrim
+                    # no eval of sL_ in _new_Nrim?
+                    _new_Nrim  += [_Nrim for _Nrim in _Gt[3] if _Nrim not in _new_Nrim and _Nrim is not Gt]  # Nrim is list of roots
+                    _new_Lrim[:] = list(set(_new_Lrim + _Gt[2]))
+            new_Nrim, new_Lrim = _new_Nrim, new_Lrim  # the indentation should be reduced?
                 # rims are for clustering only,
                 # contour: terminated rims?
     return [sum2graph(root, Gt, fd, rng) for Gt in N_]

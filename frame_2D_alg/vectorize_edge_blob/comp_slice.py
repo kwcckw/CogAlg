@@ -344,7 +344,7 @@ def form_PP_(root, P_, fd=0):  # form PPs of dP.valt[fd] + connected Ps val
     PPt_ = []
     for P in P_:  # init PPt_
         link_, _P_ = [],[]  # uprim per P
-        for link in [link for rim in P.rim_ for link in rim]:  # uplinks of all rngs
+        for link in ([link for rim in P.rim_ for link in rim] if isinstance(P, CP) else P.rim):  # uplinks of all rngs
             if link.mdLay.Et[fd] >P_aves[fd] * link.mdLay.Et[2+fd]:
                 link_ += [link]; _P_ += [link.nodet[0]]
         PPt = [[P],link_,_P_]
@@ -362,7 +362,7 @@ def form_PP_(root, P_, fd=0):  # form PPs of dP.valt[fd] + connected Ps val
                 for P in _P_: P.root = PPt  # update root
                 link_ += _link_
                 P_[:] = list(set(P_+_P_))
-                _new_Prim[:] = list(set(_new_Prim + _Prim))
+                _new_Prim += [_Proot for _Proot in _Prim if _Proot not in _new_Prim]
                 PPt_.remove(_PPt)
             new_Prim = _new_Prim  # Prim is for clustering only, or Prim = terminated rims as a contour?
     PP_ = []
@@ -412,6 +412,8 @@ def sum2PP(root, P_, dP_, fd):  # sum links in Ps and Ps in PP
                 y = int(round(y)); x = int(round(x))  # summed with float dy,dx in slice_edge?
                 PP.box = accum_box(PP.box,y,x); celly_+=[y]; cellx_+=[x]
         if not fd: P.root = PP
+        # if P is CdP, accumulate their mdLay into graph too?
+
     if PP.mdLay:
         PP.mdLay.Et[2:4] = [R+r for R,r in zip(PP.mdLay.Et[2:4], iRt)]
     if isinstance(P_[0], CP):  # CdP has no box, yx
