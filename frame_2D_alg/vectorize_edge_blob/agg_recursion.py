@@ -104,12 +104,12 @@ def agg_recursion(root, Q, fd):  # breadth-first rng++ comp -> eval cluster, for
         set_attrs(Q, root)
         Q, L_,Et,rng = rng_link_(Q)  # return in Q if new rim
         root.derH.append_(CH().append_(CH().copy(L_[0].derH)))  # init 1st Lay of 1st aggLay
-        for L in L_[1:]: root.derH.H[0].H[0].add_H(L.derH)  # accum Lay
+        for L in L_[1:]: root.derH.H[-1].H[0].add_H(L.derH)  # accum Lay  (root.derH might have existing layers, so we need to use [-1] to get last added agglay?)
     else:
         Q, L_,Et,rng = rng_node_(Q)
-        root.derH.append_(CH().copy(L_[0].derH))  # init 1st Lay of last aggLay, append flat?
-        for L in L_[1:]: root.derH.H[-1].H[0].add_H(L.derH)  # accum Lay
-    m,mr, d,dr = Et
+        root.derH.H[-1].append_(L_[0].derH)  # init 1st Lay of last aggLay, append flat?  (i think flat is not needed if we just append L.derH? And last aggLay might have existing lay?)
+        for L in L_[1:]: root.derH.H[-1].H[-1].add_H(L.derH)  # accum Lay
+    m, d, mr, dr = Et  # the sequence should be m, d, mrdn, drdn
     # rng_link_:
     if d > ave * dr and len(L_) > ave_L:
         agg_recursion(root, L_,fd=1)  # appends 1st aggLay, L_=lG_ if segment
@@ -143,7 +143,7 @@ def rng_link_(_L_):  # comp CLs: der+'rng+ in root.link_ rim_t node rims: direct
 
     _N_t_ = [[[L.nodet[0]],[L.nodet[1]]] for L in _L_]  # Ns are rim-mediating nodes, starting from L.nodet
     HEt = [0,0,0,0]; L__ = _L_[:]; LL__ = []  # all links between Ls in potentially extended L__
-    rng = 1
+    rng = 1; iL_ = _L_[:]
     while True:
         Et = [0,0,0,0]
         N_t_ = [[[],[]] for _ in _L_]  # new rng lay of mediating nodes, traced from all prior layers?
@@ -154,6 +154,7 @@ def rng_link_(_L_):  # comp CLs: der+'rng+ in root.link_ rim_t node rims: direct
                 for rim in rim_:
                     for _L,_rev in rim:  # _L is reversed relative to its 2nd node
                         if _L is L or _L in L.visited_: continue
+                        if _L not in iL_: set_attrs([_L], _L_[0].root_[-1])  # _L not in iL_, skip them?
                         L.visited_ += [_L]; _L.visited_ += [L]
                         dy,dx = np.subtract(_L.yx, L.yx)
                         Link = CL(nodet=[_L,L], S=2, A=[dy,dx], box=extend_box(_L.box, L.box))
@@ -162,8 +163,11 @@ def rng_link_(_L_):  # comp CLs: der+'rng+ in root.link_ rim_t node rims: direct
                             # L += rng+'mediating nodes, link orders: nodet < L < rimt_, mN.rim || L
                             N_ += _L.nodet  # get _Ls in mN.rim
                             if _L not in _L_:
-                                _L_ += [_L];L__ += [_L]
+                                _L_ += [_L]
                                 N_t_ += [[[],[]]]  # not in root
+                            L__ += [_L]  # this should be default when comp_N is true
+                            LL__ += [Link]  # this is missed out?
+                            HEt = np.add(HEt, Et)  # this is missed out too?
                             N_t_[_L_.index(_L)][1 - rev] += L.nodet
                             for node in (L, _L):
                                 node.elay.add_H(Link.derH)
