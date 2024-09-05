@@ -98,12 +98,14 @@ def agg_recursion(root, Q, fd):  # breadth-first rng++ comp -> eval cluster, for
     if fd:
         set_attrs(Q, root)
         Q, L_,Et,rng = rng_link_(Q)  # return Q elements with rim added to L_: new ders, node elay is redundant
-        root.derH.append_(CH().append_(CH().copy(L_[0].derH)))  # init 1st Lay of new aggLay
-        for L in L_[1:]: root.derH.H[-1].H[0].add_H(L.derH)     # accum Lay
+        if L_:  # LL_ may empty too
+            root.derH.append_(CH().append_(CH().copy(L_[0].derH)))  # init 1st Lay of new aggLay
+            for L in L_[1:]: root.derH.H[-1].H[0].add_H(L.derH)     # accum Lay
     else:
         Q, L_,Et,rng = rng_node_(Q)
-        root.derH.H[-1].append_(L_[0].derH)  # append last aggLay, init in fd fork
-        for L in L_[1:]: root.derH.H[-1].H[-1].add_H(L.derH)  # accum Lay
+        if L_:  # L_ may empty
+            root.derH.H[-1].append_(L_[0].derH)  # append last aggLay, init in fd fork
+            for L in L_[1:]: root.derH.H[-1].H[-1].add_H(L.derH)  # accum Lay
     m,d, mr,dr = Et
     # rng_link_:
     if d > ave * dr and len(L_) > ave_L:
@@ -127,6 +129,7 @@ def rng_node_(_N_):  # each rng+ forms rim_ layer per N, appends N__,L__,Et:
         # adds link_ to N.rim_ and _N_H to N.kHH, but elay and Et are summed across rng++
         L_ = [Lt[0] for N in N_ for Lt in N.rim_[-1]]
         if Et[0] > ave * Et[2] * rng:
+            # right now L__ and N__ packing is not default in the 1st iteration, that's mean Q might be empty
             L__+= L_; HEt = np.add(HEt, Et)
             N__ += N_; _N_ = N_; rng += 1
         else:
@@ -151,10 +154,9 @@ def rng_link_(_L_):  # comp CLs: der+'rng+ in root.link_ rim_t node rims: direct
                 rim_ = [rim for n in _N_ for rim in (n.rim_ if isinstance(n, CG) else [n.rimt_[0][0] + n.rimt_[0][1]])]
                 for rim in rim_:
                     for _L,_rev in rim:  # _L is reversed relative to its 2nd node
-                        if _L is L or _L in L.visited_: continue
-                        if _L not in iL_: set_attrs([_L],_L_[0].root_[-1])
+                        if _L is L or _L in L.visited_ or not hasattr(_L, 'root_'): continue
                         L.visited_ += [_L]; _L.visited_ += [L]
-                        Link = CL(nodet=[_L,L], S=2, A=[np.subtract(_L.yx, L.yx)], box=extend_box(_L.box, L.box))
+                        Link = CL(nodet=[_L,L], S=2, A=np.subtract(_L.yx, L.yx), box=extend_box(_L.box, L.box))  # extra bracket is not needed in A
                         if comp_N(Link, Et, rng, rev^_rev):  # L.rim_t +=new Link, d=-d if one L is reversed
                             # L += rng+ -mediating nodes, link orders: nodet < L < rimt_, mN.rim || L
                             N_ += _L.nodet  # get _Ls in mN.rim
@@ -372,17 +374,18 @@ def segment(root, Q, fd, rng):  # cluster iN_(G_|L_) by weight of shared links, 
         # recursively merge Gts with shared +ve external links in Lrim:
         while new_Nrim:
             _new_Nrim,_new_Lrim = [],[]
-            for _Gt,_L in zip(new_Nrim, new_Lrim):
+            # why we are zipping Nrim and Lrim here? Suppose they shouldn't be aligned? Something like this:
+            for _Gt, in new_Nrim:
                 if _Gt not in N_: continue  # was merged
                 # shared external links + potential _L, maps tp new_Nrim:
-                sL_ = set(new_Lrim).intersection(set(_Gt[2])).union([_L])
+                sL_ = set(new_Lrim).intersection(set(_Gt[2])).union(_Gt[1])
                 Et = np.sum([L.Et for L in sL_], axis=0)
                 if Et[fd] > ave * Et[2+fd] * rng:  # value of shared links or nodes
-                    link_ += [_L]
+                    # link_will be merged in merge function later
                     merge(Gt,_Gt); N_.remove(_Gt)
                     _new_Nrim += [_Nrim for _Nrim in _Gt[3] if _Nrim not in _new_Nrim and _Nrim is not Gt]  # Nrim is list of roots
                     _new_Lrim[:] = list(set(_new_Lrim + _Gt[2]))
-            new_Nrim, new_Lrim = _new_Nrim, new_Lrim  # for clustering only, contour = terminated rims?
+            new_Nrim, new_Lrim = _new_Nrim, _new_Lrim  # for clustering only, contour = terminated rims?
 
     return [sum2graph(root, Gt, fd, rng) for Gt in N_]
 
