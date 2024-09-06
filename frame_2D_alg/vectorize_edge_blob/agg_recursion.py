@@ -300,7 +300,7 @@ def comp_N(Link, iEt, rng, rev=None):  # dir if fd, Link.derH=dH, comparand rim+
         _N.Et[i] += Val; N.Et[i] += Val  # not selective
         _N.Et[2+i] += Rdn; N.Et[2+i] += Rdn  # per fork link in both Gs
         # if select fork links: iEt[i::2] = [V+v for V,v in zip(iEt[i::2], dH.Et[i::2])]
-    if any(Link.ft):
+    if Link.ft[fd]:  # should be based on fd here
         Link.derH = derH; derH.root = Link; Link.Et = Et; Link.n = min(_N.n,N.n)  # comp shared layers
         Link.nodet = [_N,N]; Link.yx = np.add(_N.yx,N.yx) /2
         # S,A set before comp_N
@@ -369,7 +369,7 @@ def segment(root, Q, fd, rng):  # cluster iN_(G_|L_) by weight of shared links, 
     for Gt in N_: Gt[3] = [_N.root_[-1] for _N in Gt[3]]  # replace eNs with Gts
     for Gt in max_ if max_ else N_:
         node_,link_, Lrim,Nrim, Et = Gt
-        new_Nrim, new_Lrim = Nrim, Lrim
+        new_Nrim, new_Lrim = Nrim[:], Lrim[:]  # use the copy instead because they might be updated in merge later
         # recursively merge Gts with shared +ve external links in Lrim:
         while new_Nrim:
             _new_Nrim,_new_Lrim = [],[]
@@ -383,11 +383,10 @@ def segment(root, Q, fd, rng):  # cluster iN_(G_|L_) by weight of shared links, 
                 # we need single sequence to get both Et and total Et?
                 if Et[fd] / TEt[fd] > ave * (Et[2+fd] / TEt[2+fd]) * rng:  # val of shared links relative to val of all links in Lrim
                     link_ += [_L]
-                    merge(Gt,_Gt); N_.remove(_Gt)
-                    _new_Nrim += [_Nrim for _Nrim in _Gt[3] if _Nrim not in _new_Nrim and _Nrim is not Gt]  # Nrim is list of roots
-                    _new_Lrim[:] = list(set(_new_Lrim + _Gt[2]))
+                    new_nrim, new_lrim = merge(Gt,_Gt)
+                    N_.remove(_Gt)
+                    _new_Nrim += new_nrim; _new_Lrim += new_lrim  # Nrim is list of roots
             new_Nrim, new_Lrim = _new_Nrim, _new_Lrim  # for clustering only, contour = terminated rims?
-
     return [sum2graph(root, Gt, fd, rng) for Gt in N_]
 
 def merge(Gt, gt):
@@ -397,9 +396,17 @@ def merge(Gt, gt):
     N_ += n_
     for N in N_: N.root_[-1] = Gt
     L_ += l_  # internal, no overlap
+    new_Nrim, new_Lrim = [], []
+    for _Nrim, _Lrim in zip(nrim, lrim):  # should be eval together since they should be aligned
+        if _Nrim not in Nrim and _Nrim is not Gt:
+            new_Nrim += [_Nrim]; new_Lrim += [_Lrim]
+    Nrim += new_Nrim; Lrim += new_Lrim; 
+    '''
     Lrim[:] = list(set(Lrim + lrim))  # exclude shared external links, direction doesn't matter?
     Nrim[:] += [root for root in nrim if root not in Nrim and root is not Gt]  # Nrim is roots of ext Ns, may also be in other Gts Nrim
+    '''
     Et[:] = np.add(Et,et)
+    return new_Nrim, new_Lrim  # for next loop
 
 def set_attrs(Q, root):
 
