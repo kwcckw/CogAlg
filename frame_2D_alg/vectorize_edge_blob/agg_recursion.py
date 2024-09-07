@@ -95,8 +95,8 @@ def vectorize_root(image):  # vectorization in 3 composition levels of xcomp, cl
                     agg_recursion(edge, pruned_Q, fd=0)
 
 def agg_recursion(root, Q, fd):  # breadth-first rng++ comp -> eval cluster, fork recursion
-
-    L_,Et,rng = rng_link_(Q)if fd else rng_node_(Q)  # init PP_ in edge|frame, never segmented
+    # why Q is not returned?
+    Q_,L_,Et,rng = rng_link_(Q)if fd else rng_node_(Q)  # init PP_ in edge|frame, never segmented  (should be returning Q to replace the Q here?)
     m,d,mr,dr = Et
     if m+d > sum(G_aves) * (mr+dr) * (rng+1):
         # += L.derH:
@@ -137,6 +137,49 @@ def rng_node_(_N_):  # each rng+ forms rim_ layer per N, appends N__,L__,Et:
     sub-cluster by inverted link S: form rngH [[L_,Et]] in rng_node_?
     or segment by mS in G.rim_) graph, | L_?
 '''
+
+# Something like this in the scheme where we form rngH in rng_node?
+def rng_node_draft(_N_, root):  # each rng+ forms rim_ layer per N, appends N__,L__,Et:
+
+    
+    N__ = []; L__ = []; HEt = [0,0,0,0]
+    rng = 1
+    while True: 
+        _G_ = []; Et = [0,0,0,0]
+        # comp_N:
+        for _G,G in combinations(_N_,r=2):
+            if _G in [g for visited_ in G.visited__ for g in visited_]:  # compared in any rng++ 
+                continue
+            dy,dx = np.subtract(_G.yx,G.yx)
+            dist = np.hypot(dy,dx)
+            aRad = (G.aRad+_G.aRad) / 2  # ave G radius
+            # eval relative distance between G centers:
+            if dist / max(aRad,1) <= (max_dist * rng):
+                for _g,g in (_G,G),(G,_G):
+                    if len(g.visited__) == rng:
+                        g.visited__[-1] += [_g]
+                    else: g.visited__ += [[_g]]  # init layer
+                Link = CL(nodet=[_G,G], S=2,A=[dy,dx], box=extend_box(G.box,_G.box))
+                comp_N(Link, Et, rng)
+                if Link.Et[0] > G_aves[0] * Link.Et[2] * (rng+1):
+                    for g in _G,G:
+                        if g not in _G_: _G_ += [g]
+        
+        N_ = []
+        for G in _G_:
+            rim_node_ = [Lt[0].nodet[0] if Lt[0].nodet[0] is G else Lt[0].nodet[1] for Lt in G.rim_[-1]] # cluster per rim
+            N_ += segment(root, rim_node_, fd=0, rng=rng)
+        L__ += [L for N in N_ for L in N.link_]
+        if Et[0] > ave * Et[2] * rng:
+            HEt = np.add(HEt, Et)
+            N__ += N_; _N_ = N_; rng += 1
+        else:
+            break
+        
+    return N__, L__, HEt, rng  # right now N__ and L__ is flat, pack them nested in rngH?
+
+
+
 def rng_link_(_L_):  # comp CLs: der+'rng+ in root.link_ rim_t node rims: directional and node-mediated link tracing
 
     _N_t_ = [[[L.nodet[0]],[L.nodet[1]]] for L in _L_]  # Ns are rim-mediating nodes, starting from L.nodet
@@ -203,7 +246,7 @@ def rng_kern_(N_, rng):  # comp Gs summed in kernels, ~ graph CNN without backpr
     for G in (_G_):
         krim = []
         for link,rev in G.rim_[-1]:  # form new krim from current-rng links
-            if link.ft[0]:  # must be mlink
+            if link.Et[0] > link.Et[2] * G_aves[0] * (rng+1):  # must be mlink (so we need to eval here now since eval in comp_N is removed)
                 _G = link.nodet[0] if link.nodet[1] is G else link.nodet[1]
                 krim += [_G]
                 G.elay.add_H(link.derH)
@@ -374,7 +417,9 @@ def segment(root, Q, fd, rng):  # cluster iN_(G_|L_) by weight of shared links, 
                     merge(Gt,_Gt, _Nrim_,_Lrim_)
                     N_.remove(_Gt)
             if _Nrim_:
+                # so this should be default, else it won't break, or we can add else to break
                 Nrim[:],Lrim[:] = _Nrim_,_Lrim_  # for clustering, else break, contour = term rims?
+            else: break
     '''
     add eval mediated links in convolution: rng_kern_, but restricted to recursively redefined Gt?  
     '''
