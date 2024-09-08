@@ -65,6 +65,7 @@ class CL(CBase):  # link or edge, a product of comparison between two nodes or l
         l.n = 1  # min(node_.n)
         l.Et = [0,0,0,0]
         l.root_ = [] if root_ is None else root_
+        l.rng = 0
         # add rimt_, elay if der+
     def __bool__(l): return bool(l.derH.H)
 
@@ -91,15 +92,18 @@ def vectorize_root(image):  # vectorization in 3 composition levels of xcomp, cl
                         PP.Et = [0,0,0,0]  # [] in comp_slice
                         pruned_Q += [PP]
                         PP.elay = CH()  # init empty per agg+
+                        PP.rng= 0  # reset for agg+
                 if len(pruned_Q) > 10:
                     # discontinuous PP_ xcomp,cluster:
                     agg_recursion(edge, pruned_Q, fd=0)
 
 def agg_recursion(root, Q, fd):  # breadth-first rng++ cross-comp -> eval cluster, fd recursion
 
-    Q,L_,Et,rng = rng_link_(Q) if fd else rng_node_(Q)  # init PP_ in edge|frame, not segmented
-    m,d, mr,dr = Et
+    G_,N__,L__,HEt,rng = rngH_link_(Q, root) if fd else rngH_node_(Q, root)
+
+    m,d, mr,dr = HEt
     if m+d > sum(aves) * (mr+dr)*(rng+1):
+        L_ = [L for L_ in L__ for L in L_] 
         # += L.derH:
         if fd: root.derH.append_(CH().append_(CH().copy(L_[0].derH)))  # new lay in new aggLay
         else:  root.derH.H[-1].append_(copy(L_[0].derH))  # append last aggLay
@@ -107,13 +111,12 @@ def agg_recursion(root, Q, fd):  # breadth-first rng++ cross-comp -> eval cluste
             root.derH.H[-1].H[0].add_H(L.derH)  # accum Lay
         # rng_link_:
         if d > ave_d * dr and len(L_) > ave_L:  # comp, sub-cluster /d, Lm is redundant to Nm?
+            # not sure here, when Q is CL, we already form graph with L_?    
             set_attrs(L_,root)
-            agg_recursion(root, L_,fd=1)  # appends last aggLay, L_=lG_ if segment
+            agg_recursion(root,L_,fd=1)  # appends last aggLay, L_=lG_ if segment
         # rng_node_:
-        if m > ave * mr and len(Q) > ave_L:  # cluster ave_L != xcomp ave_L?
-            Q[:] = segment(root, Q, fd,rng)  # Q = nG_
-            if len(Q) > ave_L:
-                agg_recursion(root, Q,fd=0)  # adds higher aggLay / recursive call
+        if m > ave * mr and len(G_) > ave_L:  # cluster ave_L != xcomp ave_L?
+            agg_recursion(root, G_,fd=0)  # adds higher aggLay / recursive call
     '''
     root.derH.append_(CH().copy(L_[0].derH))  # init; if flat derH
     for L in L_[1:]: root.derH.H[-1].add_H(L.derH)  # accum
@@ -140,13 +143,16 @@ def rng_node_(_N_):  # each rng+ forms rim_ layer per N, appends N__,L__,Et:
     or segment by mS in G.rim_) graph, | L_?
 '''
 
-def rng_link_(_L_):  # comp CLs: der+'rng+ in root.link_ rim_t node rims: directional and node-mediated link tracing
+# for "Higher rimt derHs will be summed in the links of that direct rimt, same as in rng_kern_"
+# right now it's done in set_attr where we pack elay into derH?
+
+def rngH_link_(_L_, root):
 
     _N_t_ = [[[L.nodet[0]],[L.nodet[1]]] for L in _L_]  # Ns are rim-mediating nodes, starting from L.nodet
-    HEt = [0,0,0,0]; L__ = _L_[:]; LL__ = []  # all links between Ls in potentially extended L__
+    HEt = [0,0,0,0]; L__ = []; LL__ = []  # all links between Ls in potentially extended L__
     rng = 1; iL_ = _L_[:]
     while True:
-        Et = [0,0,0,0]
+        L_, LL_,Et = [], [], [0,0,0,0]
         N_t_ = [[[],[]] for _ in _L_]  # new rng lay of mediating nodes, traced from all prior layers?
         for L, _N_t, N_t in zip(_L_, _N_t_, N_t_):
             for rev, _N_, N_ in zip((0,1), _N_t, N_t):
@@ -155,7 +161,7 @@ def rng_link_(_L_):  # comp CLs: der+'rng+ in root.link_ rim_t node rims: direct
                 for rim in rim_:
                     for _L,_rev in rim:  # _L is reversed relative to its 2nd node
                         if _L is L or _L in L.visited_: continue
-                        if _L not in iL_: set_attrs([_L],_L_[0].root_[-1])
+                        if _L not in iL_: continue  # i think we need to skip those not in iL_ Ls now, since they might have a much lower rng, with lesser extH.H layers too
                         L.visited_ += [_L]; _L.visited_ += [L]
                         Link = CL(nodet=[_L,L], S=2, A=np.subtract(_L.yx,L.yx), box=extend_box(_L.box, L.box))
                         comp_N(Link, Et, rng, rev^_rev)  # L.rim_t +=new Link, d=-d if one L is reversed
@@ -164,10 +170,12 @@ def rng_link_(_L_):  # comp CLs: der+'rng+ in root.link_ rim_t node rims: direct
                             N_ += _L.nodet  # get _Ls in mN.rim
                             if _L not in _L_:
                                 _L_ += [_L]; N_t_ += [[[],[]]]  # not in root
-                            L__ += [_L]
-                            LL__ += [Link]
+                            L_ += [_L]
+                            LL_ += [Link]
                             N_t_[_L_.index(_L)][1-rev] += L.nodet
-                            for node in (L,_L): node.elay.add_H(Link.derH)
+                            # for node in (L,_L): node.elay.add_H(Link.derH)  (this should be not needed now, elay is added in comp_N)      
+        L__ += [L_]
+        LL__ += [LL_]   
         HEt = np.add(HEt, Et)
         V = 0; L_,_N_t_ = [],[]
         for L, N_t in zip(_L_,N_t_):
@@ -177,8 +185,9 @@ def rng_link_(_L_):  # comp CLs: der+'rng+ in root.link_ rim_t node rims: direct
         if V > 0:  # rng+ if vM of Ls with extended mN_t_
             _L_ = L_; rng += 1
         else:
+            G_ = segment(root, list(set([L for L_ in L__ for L in L_])), fd=1, rng=rng)
             break
-    return list(set(L__)), LL__, HEt, rng
+    return  G_, L__, LL__, HEt, rng 
 
 # draft:
 def rngH_node_(_N_, root):  # each rng+ forms a layer of rim_ and extH per N, appends N__,L__,Et:
@@ -205,13 +214,15 @@ def rngH_node_(_N_, root):  # each rng+ forms a layer of rim_ and extH per N, ap
                 if Link.Et[0] > ave * Link.Et[2] * (rng+1):
                     for g in _G,G:
                         if g not in N_: N_ += [g]
+        
+        # Similar with HEt in rng_link_, this packing should be default on current rng?
+        L__ += [list(set([Lt[0] for N in N_ for Lt in N.rim_[-1]]))]  # different Ns may have a same L in their rim
+        N__ += [N_]
+        HEt = np.add(HEt, Et)
         if Et[0] > ave * Et[2] * rng:
-            HEt = np.add(HEt, Et)
-            L__ += [[L for N in N_ for L in N.link_[-1]]]
-            N__ += [N_]
             _N_ = N_; rng += 1
         else:
-            G_ = segment(root, N__[0], L__, fd=0, rng=rng)
+            G_ = segment(root, N__[0], fd=0, rng=rng)
             break
 
     return G_, N__, L__, HEt, rng  # nested N__ and L__
