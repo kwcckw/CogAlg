@@ -82,6 +82,8 @@ def vectorize_root(image):  # vectorization in 3 composition levels of xcomp, cl
             if edge.mdLay.Et[0] * (len(edge.node_)-1)*(edge.rng+1) > ave * edge.mdLay.Et[2]:
                 pruned_Q = []
                 for PP in edge.node_:  # PP -> G
+                    if not isinstance(PP, CG):  # convert CP to CG
+                        PP = CG(fd=0, root=edge, node_ = PP.dert_, mdLay = PP.mdLay, latuple=PP.latuple, rng=edge.rng+1)  # empty A and S?
                     if PP.mdLay and PP.mdLay.Et[0] > ave * PP.mdLay.Et[2]:  # v>ave*r
                         PP.node_ = PP.P_  # revert node_t?
                         y0,x0,yn,xn = PP.box
@@ -243,7 +245,7 @@ def segment(root, Q, fd, rng):  # cluster Q: G_|L_, by value density of +ve link
         N.lrim = [L for L in lrim if L.Et[fd] > ave * (L.Et[2+fd]) * rng]  # +ve to prune _Ns:
         N.nrim = [_N for L in N.lrim for _N in L.nodet if _N is not N]  # connected _Ns
         N_ += [N]
-    for N in N_:
+    for N in reversed(N_):  # we need to reverse loop so that we can remove N from N_ while looping it
         if not N.lrim: continue
         _nrim_ = N.nrim; _lrim_ = N.lrim
         node_ = {N}; link_ = set(); Et = [0,0,0,0]
@@ -259,9 +261,9 @@ def segment(root, Q, fd, rng):  # cluster Q: G_|L_, by value density of +ve link
                     lrim_.update(set(_N.lrim) - link_)
                     N_.remove(_N)
             _nrim_, _lrim_ = nrim_, lrim_
-        N[:] = [[list(node_), list(link_), Et]]  # selective replace N with Gt
-    for N in N_:
-        if isinstance(N,list): N[:] = sum2graph(root, N, fd, rng)
+        N_[N_.index(N)] = [list(node_), list(link_), Et]  # selective replace N with Gt (we need to replace from N_, N is an object, we can't replace it with [:])
+    for i, N in enumerate(N_):
+        if isinstance(N,list): N_[i] = sum2graph(root, N, fd, rng)
     return N_  # Gs and isolated Ns
 
 
