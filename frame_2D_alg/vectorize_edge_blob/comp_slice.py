@@ -342,14 +342,12 @@ def comp_P(_P,P, angle=None, distance=None):  # comp dPs if fd else Ps
 def form_PP_(root, iP_, fd=0):  # form PPs of dP.valt[fd] + connected Ps val
 
     P_ = []
-    for P in iP_:  # init PPt_
-        link_, _P_ = [],[]  # uprim per P
+    for P in iP_:
         lrim =  [link for rim in P.rim_ for link in rim] if isinstance(P, CP) else P.rim  # uplinks of all rngs
         P.lrim = [L for L in lrim if L.mdLay.Et[fd] >P_aves[fd] * L.mdLay.Et[2+fd]]
         P.prim = [_P for L in P.lrim for _P in L.nodet if _P is not P]
         P_ += [P]
-      
-    for P in reversed(P_):
+    for i,P in enumerate(reversed(P_)):
         if not P.lrim: continue
         _prim_ = P.prim; _lrim_ = P.lrim
         _P_ = {P}; link_ = set(); Et = [0,0,0,0]
@@ -363,8 +361,7 @@ def form_PP_(root, iP_, fd=0):  # form PPs of dP.valt[fd] + connected Ps val
                 lrim_.update(set(_P.lrim) - link_)
                 P_.remove(_P)
             _prim_, _lrim_ = prim_, lrim_
-        P_[P_.index(P)] = [list(_P_), list(link_), Et]  # replace P with PPt 
-
+        P_[P_.index(P)] = [list(_P_), list(link_), Et]  # replace P with PPt
     PP_ = []
     for PP in P_:
         if isinstance(PP, list):  # not CP
