@@ -65,6 +65,8 @@ class CL(CBase):  # link or edge, a product of comparison between two nodes or l
         l.n = 1  # min(node_.n)
         l.Et = [0,0,0,0]
         l.root = root
+        l.lrim = []  # these 2 params should be default now?
+        l.nrim = []
         # add rimt_, elay if der+
     def __bool__(l): return bool(l.derH.H)
 
@@ -131,9 +133,9 @@ def rng_node_(_N_):  # rng+ forms layer of rim_ and extH per N, appends N__,L__,
         N_ = []; Et = [0,0,0,0]
         # full search, no mediation
         for _G,G in combinations(_N_,r=2):  # or set rim_ for all Gs in one loop?
-            for g in G.visited_:
-                if g is _G: continue  # compared in any rng
-                elif _G in g.nrim: continue  # mediated match to G?
+            # the prior code run "continue" from G.visited_ loop instead of for loop
+            if _G in (n for g in G.visited_ for n in g.nrim) or (_G in G.visited_) :
+                continue  # compared in any rng or mediated match to G?
             dy,dx = np.subtract(_G.yx,G.yx); dist = np.hypot(dy,dx)
             aRad = (G.aRad +_G.aRad) / 2  # ave G radius
             # eval relative distance between G centers:
@@ -217,7 +219,7 @@ def comp_N(Link, iEt, rng, rev=None):  # dir if fd, Link.derH=dH, comparand rim+
     for rev, node,_node in zip((0,1),(_N,N),(N,_N)):  # reverse Link direction for N
         if Et[0] > ave:
             # global +ve links, or add per layer for bottom-up segment?
-            node.lrim += Link; node.nrim +=[_node]; _node.nrim +=[node]
+            node.lrim += [Link]; node.nrim +=[_node]; _node.nrim +=[node]
         # add layer if len < rng for sub-clustering, redundant to lrim:
         if (len(node.rimt_) if fd else len(node.rim_)) == rng:
             node.extH.H[-1].add_H(elay)
