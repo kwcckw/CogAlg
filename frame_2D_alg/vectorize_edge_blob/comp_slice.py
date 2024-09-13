@@ -112,8 +112,8 @@ class CdP(CBase):  # produced by comp_P, comp_slice version of Clink
         l.Rt = [] if Rt is None else Rt
         l.root = None if root is None else root  # PPds containing dP
         l.nmed = 0  # comp rng: n of mediating Ps between node_ Ps
-        l.lrim = []
-        l.prim = []
+        l.lrim_ = []
+        l.prim_ = []
         # n = 1?
     def __bool__(l): return bool(l.mdLay.H)
 
@@ -308,7 +308,7 @@ def rng_recursion(edge):  # similar to agg+ rng_recursion, but looping and conti
                         else:       pre_ += edge.pre__[_P]  # rng == 1
             # next P_ has prelinks:
             if pre_: Pt_ += [(P,pre_)]
-            if rng_link_: P.rim_ += [rng_link_]  # with lrim this is no longer needed?
+            if rng_link_: P.rim_ += [rng_link_]
 
         if not Pt_ or V <= ave * rng * len(Pt_) * 6:  # implied val of all __P_s, 6: len mtuple
             break
@@ -349,7 +349,7 @@ def form_PP_(root, iP_, fd=0):  # form PPs of dP.valt[fd] + connected Ps val
     for P in iP_: P.merged = 0
     PP_ = []
     for P in iP_:
-        if not P.lrim: 
+        if not P.lrim:
             PP_ += [P]; continue
         _prim_ = P.prim; _lrim_ = P.lrim
         _P_ = {P}; link_ = set(); Et = [0,0,0,0]
@@ -364,10 +364,8 @@ def form_PP_(root, iP_, fd=0):  # form PPs of dP.valt[fd] + connected Ps val
             _prim_, _lrim_ = prim_, lrim_
         PP = sum2PP(root, list(_P_), list(link_), fd)
         PP_ += [PP]
-
         if not fd and len(PP.P_) > ave_L and PP.mdLay.Et[fd] >PP_aves[fd] * PP.mdLay.Et[2+fd]:
             comp_link_(PP)
-            # fd fork draft: cluster PP.link_ vs PP.P_?
             form_PP_(PP, PP.link_, fd=1)  # form sub_PPd_ in select PPs, not recursive
     root.node_ = PP_
 
