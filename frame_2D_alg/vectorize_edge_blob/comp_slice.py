@@ -55,9 +55,10 @@ class CcompSliceFrame(CsliceEdge):
 
 class CG(CBase):  # PP | graph | blob: params of single-fork node_ cluster
 
-    def __init__(G, root = None, rng=1, fd=0, node_=None, link_=None, Et=None, latuple=None, mdLay=None, derH=None, extH=None, box=None, yx=None, n=0):
+    def __init__(G, root_ = None, root = None, rng=1, fd=0, node_=None, link_=None, Et=None, latuple=None, mdLay=None, derH=None, extH=None, box=None, yx=None, n=0):
         super().__init__()
 
+        G.root_ = [] if root_ is None else root_
         G.root = root # mgraph agg+ layers (dgraph.node_ is CLs)
         G.node_ = [] if node_ is None else node_ # convert to GG_ in agg++
         G.link_ = [] if link_ is None else link_ # internal links per comp layer in rng+, convert to LG_ in agg++
@@ -81,8 +82,8 @@ class CG(CBase):  # PP | graph | blob: params of single-fork node_ cluster
         # dynamic:
         G.visited_ = []
         G.Nrim = []  # nodes on artificial frame | exemplar margin
-        G.lrim = []
-        G.nrim = []
+        G.lrim_ = []
+        G.nrim_ = []
         G.it = ([None,None])  # graph indices in root node_s, implicitly nested
         # old:
         # G.fback_ = []  # always from CGs with fork merging, no dderHm_, dderHd_
@@ -112,8 +113,9 @@ class CdP(CBase):  # produced by comp_P, comp_slice version of Clink
         l.Rt = [] if Rt is None else Rt
         l.root = None if root is None else root  # PPds containing dP
         l.nmed = 0  # comp rng: n of mediating Ps between node_ Ps
-        l.lrim_ = []
-        l.prim_ = []
+        # we don't need layered lrim_ and prim_ here?
+        l.lrim = []
+        l.prim = []
         # n = 1?
     def __bool__(l): return bool(l.mdLay.H)
 
@@ -340,7 +342,7 @@ def comp_P(_P,P, angle=None, distance=None, fder=0):  # comp dPs if fd else Ps
     latuple = [(P+p)/2 for P,p in zip(_P.latuple[:-1],P.latuple[:-1])] + [[(A+a)/2 for A,a in zip(_P.latuple[-1],P.latuple[-1])]]
     link = CdP(nodet=[_P,P], mdLay=derLay, angle=angle, span=distance, yx=[(_y+y)/2,(_x+x)/2], latuple=latuple)
     # if v > ave * r:
-    if link.mdLay.Et[fder] > aves[fder] * link.mdLay.Et[fder]:
+    if link.mdLay.Et[fder] > aves[fder] * link.mdLay.Et[fder+2]:  # sorry, index of rdn is missed out
         P.lrim += [link]; P.prim +=[_P]; _P.prim +=[P]  # add Link as uplink in P.lrim only? Or bidirectional lrim?
         return link
 
@@ -373,8 +375,9 @@ def comp_link_(PP):  # node_- mediated: comp node.rim dPs, call from form_PP_
 
     for dP in PP.link_:
         if dP.mdLay.Et[1] > aves[1]:
-            for nmed, _rim_ in enumerate(dP.nodet[1].rim_):  # link.nodet is CP
+            for nmed, _rim_ in enumerate(dP.nodet[0].rim_):  # link.nodet is CP
                 for _dP in _rim_:
+                    if _dP not in PP.link_: continue  # skip those removed node's links
                     dlink = comp_P(_dP,dP,fder=1)
                     if dlink:
                         dP.rim += [dlink]  # in lower node uplinks

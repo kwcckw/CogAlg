@@ -49,7 +49,7 @@ max_dist = 2
 class CL(CBase):  # link or edge, a product of comparison between two nodes or links
     name = "link"
 
-    def __init__(l, nodet=None,derH=None, S=0, A=None, box=None, md_t=None, H_=None, root=None):
+    def __init__(l, nodet=None,derH=None, S=0, A=None, box=None, md_t=None, H_=None, root_=None):
         super().__init__()
         # CL = binary tree of Gs, depth+/der+: CL nodet is 2 Gs, CL + CLs in nodet is 4 Gs, etc.,
         # unpack sequentially
@@ -64,7 +64,7 @@ class CL(CBase):  # link or edge, a product of comparison between two nodes or l
         l.Vt = [0,0]  # for rim-overlap modulated segmentation, init derH.Et[:2]
         l.n = 1  # min(node_.n)
         l.Et = [0,0,0,0]
-        l.root = root
+        l.root_ =  [] if root_ is None else root_ 
         l.lrim_ = []
         l.nrim_ = []
         # add rimt_, elay if der+
@@ -119,7 +119,7 @@ def agg_recursion(root, Q, fd):  # breadth-first rng++ cross-comp -> eval cluste
             segment(root, N__, fd,rng)  # cluster rngLays in root.node_?
             for N_ in N__:
                 if len(N_) > ave_L:
-                    agg_recursion(root, N__,fd=0)  # adds higher aggLay / recursive call
+                    agg_recursion(root, N_,fd=0)  # adds higher aggLay / recursive call
 '''
     if flat derH:
     root.derH.append_(CH().copy(L_[0].derH))  # init
@@ -138,7 +138,7 @@ def rng_node_(_N_):  # rng+ forms layer of rim_ and extH per N, appends N__,L__,
             for g in G.visited_:
                 if g is _G:
                     fcont = 1; break  # compared in any rng
-                elif G in g.nrim_[-1] and _G in g.nrim_[1]:  # shorter match-mediated match
+                elif G in g.nrim_[-1] and _G in g.nrim_[-1]:  # shorter match-mediated match
                     fcont = 1; break  # or longer direct match priority?
             if fcont: continue
             dy,dx = np.subtract(_G.yx,G.yx); dist = np.hypot(dy,dx)
@@ -176,7 +176,7 @@ def rng_link_(iL_):  # comp CLs: der+'rng+ in root.link_ rim_t node rims: direct
                 for rim in rim_:
                     for _L,_rev in rim:  # _L is reversed relative to its 2nd node
                         if _L is L or _L in L.visited_: continue
-                        if _L not in iL_: set_attrs([_L],_L_[0].root)
+                        if _L not in iL_: set_attrs([_L],_L_[0].root_[-1])
                         L.visited_ += [_L]; _L.visited_ += [L]
                         Link = CL(nodet=[_L,L], S=2, A=np.subtract(_L.yx,L.yx), box=extend_box(_L.box, L.box))
                         comp_N(Link, Et, rng, rev^_rev)  # L.rim_t +=new Link, d = -d if one L is reversed
@@ -222,19 +222,34 @@ def comp_N(Link, iEt, rng, rev=None):  # dir if fd, Link.derH=dH, comparand rim+
     Link.nodet = [_N,N]; Link.yx = np.add(_N.yx,N.yx) /2
     # preset S,A
     for rev, node,_node in zip((0,1),(_N,N),(N,_N)):  # reverse Link direction for N
-        fv = Et[0] > ave; rim_rng = len(node.rimt_) if fd else len(node.rim_)
+        fv = Et[0] > ave
+        rim_rng = len(node.rimt_) if fd else len(node.rim_)
+        _rim_rng = len(_node.rimt_) if fd else len(_node.rim_)
         if rim_rng < rng:
             if fv:  # add +ve layers for bottom-up segment
-                node.extH.append_(elay); node.lrim_ += [[Link]]; node.nrim_ +=[[_node]]; _node.nrim_ +=[[node]]
+                node.lrim_ += [[Link]];node.nrim_ +=[[_node]]; 
+            else:
+                node.lrim_ += [[]];node.nrim_ +=[[]]  # node maybe accessed as _node from other pair
             #> L_, includes negative links:
             if fd: node.rimt_ = [[[[Link,rev]],[]]] if dir else [[[],[[Link,rev]]]]  # add rng layer
             else:  node.rim_ += [[[Link, rev]]]
         else:
             if fv:  # append +ve layers for bottom-up segment
-                node.extH.H[-1].add_H(elay); node.lrim_[-1] += [Link]; node.nrim_[-1] +=[_node]; _node.nrim_[-1] +=[node]
+                node.lrim_[-1] += [Link]; node.nrim_[-1] +=[_node]
             #> L_, includes negative links:
             if fd: node.rimt_[-1][1-rev] += [[Link,rev]]  # add in last rng layer, opposite to _N,N dir
             else:  node.rim_[-1] += [[Link, rev]]
+
+        if fv:
+            # we need a different extH eval sinc rim_rng is based on rim size, which is added by default, while extH is depends on fv
+            if len(node.extH.H)<rng:
+                node.extH.append_(elay); 
+            else:
+                node.extH.H[-1].add_H(elay);
+            # we need a different _rim_rng since _node may or may not added with new rim in prior loop
+            if _rim_rng < rng: _node.nrim_ +=[[node]]
+            else:              _node.nrim_[-1] +=[node]
+
 
 def comp_ext(_L,L,_S,S,_A,A):  # compare non-derivatives:
 
@@ -285,7 +300,7 @@ def merge(Gt, gt):
     N_, L_, Et, Lrim, Nrim = Gt
     n_, l_, et, lrim, nrim = gt
     for N in n_:
-        N.root = Gt
+        N.root_[-1] = Gt
         N.merged = 1
     Et[:] = np.add(Et, et)
     N_ += n_; Nrim -= set(n_)
@@ -332,7 +347,7 @@ def set_attrs(Q, root):
         e.visited_ = []
         if isinstance(e, CL):
             e.rimt_ = []  # nodet-mediated links, same der order as e
-            e.root = root
+            e.root_ = [root]
         if hasattr(e,'extH'): e.derH.append_(e.extH)  # no default CL.extH
         else: e.extH = CH()  # set in sum2graph
         e.Et = [0,0,0,0]
@@ -361,7 +376,7 @@ def sum2graph(root, grapht, fd, rng):  # sum node and link params into graph, ag
         if isinstance(N,CG):
             graph.mdLay.add_md_(N.mdLay)
             add_lat(graph.latuple, N.latuple)
-        N.root = graph
+        N.root_[-1] = graph
     graph.derH.append_(derH, flat=1)  # comp(derH) forms new layer, higher layers are added by feedback
     L = len(N_)
     yx = np.divide(yx,L); graph.yx = yx
@@ -370,7 +385,7 @@ def sum2graph(root, grapht, fd, rng):  # sum node and link params into graph, ag
     if fd:
         # assign alt graphs from d graph, after both linked m and d graphs are formed
         for node in graph.node_:  # CG or CL
-            mgraph = node.root
+            mgraph = node.root_[-1]
             if mgraph:
                 for fd, (G, alt_G) in enumerate(((mgraph,graph), (graph,mgraph))):  # bilateral assign:
                     if G not in alt_G.alt_graph_:
