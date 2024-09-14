@@ -236,8 +236,10 @@ def comp_slice(edge):  # root function
         P.rim_ = []; P.lrim = []; P.prim = []
     rng_recursion(edge)  # vertical P cross-comp -> PP clustering, if lateral overlap
     form_PP_(edge, edge.P_)
-    for PP in edge.node_:  # feedback
-        edge.mdLay.add_md_(PP.mdLay)
+    for PPt in edge.node_:  # 
+        if isinstance(PPt, list): mdLay = PPt[4]  # PPt
+        else:                     mdLay = PPt.mdLay  # CP
+        edge.mdLay.add_md_(mdLay)
 
 def rng_recursion(edge):  # similar to agg+ rng_recursion, but looping and contiguously link mediated
 
@@ -302,10 +304,10 @@ def comp_P(_P,P, angle=None, distance=None, fder=0):  # comp dPs if fd else Ps
 def form_PP_(root, iP_, fd=0):  # form PPs of dP.valt[fd] + connected Ps val
 
     for P in iP_: P.merged = 0
-    PP_ = []
+    PPt_ = []
     for P in iP_:
         if not P.lrim:
-            PP_ += [P]; continue
+            PPt_ += [P]; continue
         _prim_ = P.prim; _lrim_ = P.lrim
         _P_ = {P}; link_ = set(); Et = [0,0,0,0]
         while _prim_:
@@ -317,62 +319,74 @@ def form_PP_(root, iP_, fd=0):  # form PPs of dP.valt[fd] + connected Ps val
                 lrim_.update(set(_P.lrim) - link_)
                 _P.merged = 1
             _prim_, _lrim_ = prim_, lrim_
-        PP = sum2PP(root, list(_P_), list(link_), fd)
-        PP_ += [PP]
-        if not fd and len(PP.P_) > ave_L and PP.mdLay.Et[fd] >PP_aves[fd] * PP.mdLay.Et[2+fd]:
-            comp_link_(PP)
-            form_PP_(PP, PP.link_, fd=1)  # form sub_PPd_ in select PPs, not recursive
-    root.node_ = PP_
+        PPt = sum2PP(root, list(_P_), list(link_), fd)
+        PPt_ += [PPt]
+        P_, link_, mdLay = PPt[2:5]
+        if not fd and len(P_) > ave_L and mdLay.Et[fd] >PP_aves[fd] * mdLay.Et[2+fd]:
+            comp_link_(PPt)
+            form_PP_(PPt, link_, fd=1)  # form sub_PPd_ in select PPs, not recursive
+    
+    if isinstance(root, list): root[2] = PPt_  # PPt 
+    else:                      root.node_ = PPt_  # Cedge
+        
 
 def comp_link_(PP):  # node_- mediated: comp node.rim dPs, call from form_PP_
 
-    for dP in PP.link_:
+    link_ = PP[3]
+    for dP in link_:
         if dP.mdLay.Et[1] > aves[1]:
             for nmed, _rim_ in enumerate(dP.nodet[0].rim_):  # link.nodet is CP
                 for _dP in _rim_:
-                    if _dP not in PP.link_: continue  # skip those removed node's links
+                    if _dP not in link_: continue  # skip those removed node's links
                     dlink = comp_P(_dP,dP,fder=1)
                     if dlink:
                         dP.rim += [dlink]  # in lower node uplinks
                         dlink.nmed = nmed  # link mediation order0
 
-# replace with PPt version:
+# PPt version (draft):
 def sum2PP(root, P_, dP_, fd):  # sum links in Ps and Ps in PP
 
-    PP = [fd, root, P_, root[-1]]  # rng+1  # 1st layer of derH is mdLay
+    mdLay, latuple, link_, A, S, area, n, box = CH(), [0,0,0,0, 0, [0,0]], [], [0,0], 0, 0, 0, [0,0,0,0]
+    # init
+    PP = []  # rng+1  
     # P_ is CdPs if fd]
-    iRt = root.mdLay.Et[2:4] if root.mdLay else [0,0]  # add to rdnt
+    iRt = root[4].Et if isinstance(root,list) else root.mdLay.Et[2:4]   # add to rdnt
     # += uplinks:
     for dP in dP_:
         if dP.nodet[0] not in P_ or dP.nodet[1] not in P_: continue
         dP.nodet[1].mdLay.add_md_(dP.mdLay, iRt)  # add to lower P
-        PP.link_ += [dP]
-        if fd: dP.root = PP
-        PP.A = np.add(PP.A,dP.angle)
-        PP.S += np.hypot(*dP.angle)  # links are contiguous but slanted
+        link_ += [dP]  # link_
+        A = np.add(A,dP.angle)
+        S += np.hypot(*dP.angle)  # links are contiguous but slanted
     # += Ps:
     celly_,cellx_ = [],[]
     for P in P_:
         L = P.latuple[-2]
-        PP.area += L; PP.n += L  # no + P.mdLay.n: current links only?
-        add_lat(PP.latuple, P.latuple)
+        area += L; n += L  # no + P.mdLay.n: current links only?
+        add_lat(latuple, P.latuple)
         if P.mdLay:  # CdP or lower P has mdLay
-            PP.mdLay.add_md_(P.mdLay)  # no separate extH, the links are unique here
+            mdLay.add_md_(P.mdLay)  # no separate extH, the links are unique here
         if isinstance(P, CP):
             for y,x in P.yx_:
                 y = int(round(y)); x = int(round(x))  # summed with float dy,dx in slice_edge?
-                PP.box = accum_box(PP.box,y,x); celly_+=[y]; cellx_+=[x]
-        if not fd: P.root = PP
-    if PP.mdLay:
-        PP.mdLay.Et[2:4] = [R+r for R,r in zip(PP.mdLay.Et[2:4], iRt)]
+                box = accum_box(box,y,x); celly_+=[y]; cellx_+=[x]
+    if mdLay:
+        mdLay.Et[2:4] = [R+r for R,r in zip(mdLay.Et[2:4], iRt)]
     if isinstance(P_[0], CP):  # CdP has no box, yx
         # pixmap:
-        y0,x0,yn,xn = PP.box
-        PP.mask__ = np.zeros((yn-y0, xn-x0), bool)
+        y0,x0,yn,xn = box
+        mask__ = np.zeros((yn-y0, xn-x0), bool)
         celly_ = np.array(celly_); cellx_ = np.array(cellx_)
-        PP.mask__[(celly_-y0, cellx_-x0)] = True
+        mask__[(celly_-y0, cellx_-x0)] = True
 
-    return PP
+    PPt = [fd, root, P_, link_, mdLay, latuple, A, S, area, box, n]   # 1st layer of derH is mdLay
+    # update root
+    if fd:
+        for link in link_: link.root = PPt
+    else:
+        for P in P_: P.root = PPt
+
+    return PPt
 
 def add_lat(Lat,lat):
     Lat[:] = [P+p for P,p in zip(Lat[:-1],lat[:-1])] + [[A+a for A,a in zip(Lat[-1],lat[-1])]]

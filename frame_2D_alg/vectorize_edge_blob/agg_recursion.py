@@ -48,7 +48,7 @@ max_dist = 2
 
 class CG(CBase):  # PP | graph | blob: params of single-fork node_ cluster
 
-    def __init__(G, root_ = None, root = None, rng=1, fd=0, node_=None, link_=None, Et=None, latuple=None, mdLay=None, derH=None, extH=None, box=None, yx=None, n=0):
+    def __init__(G, root_ = None, root = None, rng=1, fd=0, node_=None, link_=None, Et=None, latuple=None, mdLay=None, derH=None, extH=None, box=None, yx=None, S=0, A=(0, 0), n=0, area=0):
         super().__init__()
 
         G.root_ = [] if root_ is None else root_
@@ -64,10 +64,10 @@ class CG(CBase):  # PP | graph | blob: params of single-fork node_ cluster
         G.rim_ = []  # direct external links, nested per rng
         G.kHH = []  # kernel: hierarchy of rng layer _Ns
         G.rng = rng
-        G.n = n  # external n (last layer n)
-        G.S = 0  # sparsity: distance between node centers
-        G.A = 0, 0  # angle: summed dy,dx in links
-        G.area = 0
+        G.n = n   # external n (last layer n)
+        G.S = S  # sparsity: distance between node centers
+        G.A = A  # angle: summed dy,dx in links
+        G.area = area
         G.aRad = 0  # average distance between graph center and node center
         G.box = [np.inf, np.inf, -np.inf, -np.inf] if box is None else box  # y0,x0,yn,xn
         G.yx = [0,0] if yx is None else yx  # init PP.yx = [(y0+yn)/2,(x0,xn)/2], then ave node yx
@@ -127,11 +127,14 @@ def vectorize_root(image):  # vectorization in 3 composition levels of xcomp, cl
             if edge.mdLay.Et[0] * (len(edge.node_)-1)*(edge.rng+1) > ave * edge.mdLay.Et[2]:
                 pruned_Q = []
                 for PP in edge.node_:  # PP -> G
-                    if not isinstance(PP, list):  # convert CP to CG, empty rng, A, S
+                    if isinstance(PP, list):   # convert PPt to CG
+                        fd, root, P_, link_, mdLay, latuple, A, S, area, box, n = PP  # root and fd is not needed?
+                        PP = CG(fd=0,root=edge, node_=P_,mdLay=mdLay,latuple=latuple, box=box, A=A, S=S, link_=link_, area=area, n=n)
+                    else:  # convert CP to CG, empty rng, A, S
                         y,x = PP.yx; PP = CG(fd=0,root=edge, node_=[PP],mdLay=PP.mdLay,latuple=PP.latuple, yx=[y,x], box=[y,x-len(PP.dert_),y,x])
                     # replace with sum2graph:
                     if PP.mdLay and PP.mdLay.Et[0] > ave * PP.mdLay.Et[2]:  # v>ave*r
-                        PP.node_ = PP.P_  # revert node_t?
+                        # PP.node_ = PP.P_  # revert node_t? Why?
                         y0,x0,yn,xn = PP.box
                         PP.yx = [(y0+yn)/2, (x0+xn)/2]
                         PP.aRad = np.hypot(*np.subtract(PP.yx,(yn,xn)))
@@ -186,7 +189,7 @@ def rng_node_(_N_):  # rng+ forms layer of rim_ and extH per N, appends N__,L__,
         for i, Nt in enumerate(_Nt_):
             #  skip match-mediated match: if G in g.nrim_[-1] and _G in g.nrim_[-1], or longer direct match priority?
             rel_dist, _G, G, dy, dx, M = Nt
-            if rel_dist < max_dist:
+            if rel_dist < max_dist:  # rng is not used in eval relative distance?
                 Link = CL(nodet=[_G,G], S=2, A=[dy,dx], box=extend_box(G.box,_G.box))
                 comp_N(Link, Et, rng)
                 L_ += [Link]  # with -ve links
@@ -206,16 +209,16 @@ def rng_node_(_N_):  # rng+ forms layer of rim_ and extH per N, appends N__,L__,
         rev_Nt_ = []; rM = 0; n = 0
         for rel_dist, _G,G, dy,dx, M in Nt_:  # reval if extended N Ets
             for g in [_G,G]:
-                if len(g.lrim_) > rng:  # matched in this loop
-                    for L in g.link_[-1]:
-                        rM += L.Et[0] / ave; n+=1
+                if len(g.lrim_) >= rng-1:  # matched in this loop  (should be >= rng-1? Because we added rng in Et eval above)
+                    for Lt in g.rimt_[-1][0] + g.rimt_[-1][1] if isinstance(g, CL) else g.rim_[-1] :
+                        rM += Lt[0].Et[0] / ave; n+=1
             if n:
                 rM /= n; rel_dist *= rM  # adjust by combined relative match
                 if rel_dist > max_dist:
-                    rev_Nt_ += [rel_dist, _G,G, dy,dx, M * rM]  # adjust pair value
+                    rev_Nt_ += [[rel_dist, _G,G, dy,dx, M * rM]]  # adjust pair value
         if rev_Nt_:
             _Nt_ = sorted(rev_Nt_, key=lambda x: x[0])  # only strong with current matches
-            rng += 1
+            rng += 1  # why we add rng twice? We added above?
     return N__,L__,ET,rng
 
 
@@ -281,7 +284,7 @@ def comp_N(Link, iEt, rng, rev=None):  # dir if fd, Link.derH=dH, comparand rim+
     # preset S,A
     for rev, node in zip((0,1),(N,_N)):  # reverse Link direction for N
         if Et[0] > ave:  # for bottom-up segment:
-            if node.lrim_ < rng:  # add +ve layer
+            if len(node.lrim_) < rng:  # add +ve layer
                 node.extH.append_(elay); node.lrim_ += [[Link]]; node.nrim_ +=[[(_N,N)[rev]]] # _node
             else:  # append last layer
                 node.extH.H[-1].add_H(elay); node.lrim_[-1] += [Link]; node.nrim_[-1] +=[(_N,N)[rev]]
