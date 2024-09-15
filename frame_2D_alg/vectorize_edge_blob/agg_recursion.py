@@ -48,9 +48,10 @@ max_dist = 2
 
 class CG(CBase):  # PP | graph | blob: params of single-fork node_ cluster
 
-    def __init__(G, root_ = None, root = None, rng=1, fd=0, node_=None, link_=None, Et=None, latuple=None, mdLay=None, derH=None, extH=None, box=None, yx=None, S=0, A=(0, 0), n=0, area=0):
+    def __init__(G, root_= None, root = None, rng=1, fd=0, node_=None, link_=None, Et=None, latuple=None, mdLay=None, derH=None, extH=None,
+                 box=None, yx=None, S=0, A=(0,0), n=0, area=0):
         super().__init__()
-
+        G.fd = 0 if fd else fd  # 1 if cluster of Ls | lGs?
         G.root_ = [] if root_ is None else root_
         G.root = root # mgraph agg+ layers (dgraph.node_ is CLs)
         G.node_ = [] if node_ is None else node_ # convert to GG_ in agg++
@@ -103,7 +104,6 @@ class CL(CBase):  # link or edge, a product of comparison between two nodes or l
         l.box = [] if box is None else box  # sum nodet
         l.derH = CH(root=l) if derH is None else derH
         l.H_ = [] if H_ is None else H_  # if agg++| sub++?
-        l.ft = [0,0]  # fork inclusion tuple, may replace Vt:
         l.Vt = [0,0]  # for rim-overlap modulated segmentation, init derH.Et[:2]
         l.n = 1  # min(node_.n)
         l.Et = [0,0,0,0]
@@ -126,19 +126,18 @@ def vectorize_root(image):  # vectorization in 3 composition levels of xcomp, cl
             # convert select Ps | PPts to CGs:
             if edge.mdLay.Et[0] * (len(edge.node_)-1)*(edge.rng+1) > ave * edge.mdLay.Et[2]:
                 pruned_Q = []
-                for PP in edge.node_:  # PP -> G
-                    if isinstance(PP, list):   # convert PPt to CG
-                        fd, root, P_, link_, mdLay, latuple, A, S, area, box, n = PP  # root and fd is not needed?
-                        PP = CG(fd=0,root=edge, node_=P_,mdLay=mdLay,latuple=latuple, box=box, A=A, S=S, link_=link_, area=area, n=n)
-                    else:  # convert CP to CG, empty rng, A, S
-                        y,x = PP.yx; PP = CG(fd=0,root=edge, node_=[PP],mdLay=PP.mdLay,latuple=PP.latuple, yx=[y,x], box=[y,x-len(PP.dert_),y,x])
-                    # replace with sum2graph:
-                    if PP.mdLay and PP.mdLay.Et[0] > ave * PP.mdLay.Et[2]:  # v>ave*r
-                        # PP.node_ = PP.P_  # revert node_t? Why?
-                        y0,x0,yn,xn = PP.box
-                        PP.yx = [(y0+yn)/2, (x0+xn)/2]
+                for N in edge.node_:  # PP -> G
+                    mdLay = N[4] if isinstance(N,list) else N.mdLay  # N is CP
+                    if mdLay and mdLay.Et[0] > ave * mdLay.Et[2]:
+                        # convert to CG:
+                        if isinstance(N,list): fd, root, P_, link_, Lay, lat, A,S, area, box, [y,x], n = N
+                        else:  # single CP
+                            fd=0; root=edge; P_=[N]; link_=[]; Lay = N.mdLay; lat=N.latuple; [y,x]=N.yx; n=N.n
+                            box = [y,x-len(N.dert_), y,x]; area = 1; A,S = None,None
+                        PP = CG(fd=fd, root=root, node_=P_, link_=link_, mdLay=Lay, latuple=lat, A=A,S=S, area=area, box=box, yx=[y,x], n=n)
+                        y0,x0,yn,xn = box
                         PP.aRad = np.hypot(*np.subtract(PP.yx,(yn,xn)))
-                        PP.Et = [0,0,0,0]  # [] in comp_slice
+                        PP.Et = [0,0,0,0]
                         pruned_Q += [PP]
                 if len(pruned_Q) > 10:
                     # discontinuous PP_ xcomp, cluster:
@@ -151,7 +150,7 @@ def agg_recursion(root, Q, fd):  # breadth-first rng++ cross-comp -> eval cluste
     fvd = d > ave_d * dr*(rng+1); fvm = m > ave * mr*(rng+1) # operation/ V-rdn, result/ V alone?
     if fvd or fvm:
         root.Et = np.add(root.Et,Et); L_ = [L for L_ in L__ for L in L_]
-        # root.derH += L.derH:
+        # root += L.derH:
         if fd: root.derH.append_(CH().append_(CH().copy(L_[0].derH)))  # new rngLay, aggLay
         else:  root.derH.H[-1].append_(L_[0].derH)  # append last aggLay
         for L in L_[1:]:
@@ -161,10 +160,9 @@ def agg_recursion(root, Q, fd):  # breadth-first rng++ cross-comp -> eval cluste
             set_attrs(L_,root)
             agg_recursion(root, L_,fd=1)  # appends last aggLay, L_=lG_ if segment
         # rng_node_:
-        # tentative: form a nested H of new graphs replacing root.node_?
         if fvm and len(N__[0]) > ave_L:  # cluster ave_L != xcomp ave_L?
             segment(root, N__, fd,rng)  # cluster rngLays in root.node_?
-            for N_ in N__:
+            for N_ in N__:  # replace root.node_ with nested H of graphs
                 if len(N_) > ave_L:
                     agg_recursion(root, N_,fd=0)  # adds higher aggLay / recursive call
 '''
@@ -183,7 +181,7 @@ def rng_node_(_N_):  # rng+ forms layer of rim_ and extH per N, appends N__,L__,
         Nt_ += [[rel_dist, _G,G, dy,dx, _G.Et[0]+ G.Et[0]]]
     _Nt_ = sorted(Nt_, key=lambda x: x[0])
     N__ = []; L__ = []; ET = [0,0,0,0]
-    rng = 1
+    rng = 1  # loop counter
     while _Nt_:
         Nt_, N_, L_ = [],[],[]; Et = [0,0,0,0]
         for i, Nt in enumerate(_Nt_):
@@ -193,7 +191,7 @@ def rng_node_(_N_):  # rng+ forms layer of rim_ and extH per N, appends N__,L__,
                 Link = CL(nodet=[_G,G], S=2, A=[dy,dx], box=extend_box(G.box,_G.box))
                 comp_N(Link, Et, rng)
                 L_ += [Link]  # with -ve links
-                if Link.Et[0] > ave * Link.Et[2] * (rng+1):
+                if Link.Et[0] > ave * Link.Et[2]:
                     for g in _G,G:
                         if g not in N_: N_ += [g]
                     Et = np.add(Et,Link.Et)
@@ -202,15 +200,13 @@ def rng_node_(_N_):  # rng+ forms layer of rim_ and extH per N, appends N__,L__,
                     break
             else: Nt_ += [Nt]  # re-eval N Ets
         if Et[0] > ave * Et[2] * rng:
-            ET = np.add(ET, Et)
-            L__ += [L_]  # [list(set([Lt[0] for N in N_ for Lt in N.rim_[-1]]))]
-            N__ += [N_]  # nest to sub-cluster?
-            _N_ = N_; rng += 1
+            ET = np.add(ET, Et); L__ += [L_]; N__ += [N_]  # nest to sub-cluster?
+            _N_ = N_
         rev_Nt_ = []; rM = 0; n = 0
         for rel_dist, _G,G, dy,dx, M in Nt_:  # reval if extended N Ets
             for g in [_G,G]:
-                if len(g.lrim_) >= rng-1:  # matched in this loop  (should be >= rng-1? Because we added rng in Et eval above)
-                    for Lt in g.rimt_[-1][0] + g.rimt_[-1][1] if isinstance(g, CL) else g.rim_[-1] :
+                if len(g.lrim_) > rng-1:  # matched in this loop
+                    for Lt in g.rim_[-1]:
                         rM += Lt[0].Et[0] / ave; n+=1
             if n:
                 rM /= n; rel_dist *= rM  # adjust by combined relative match
@@ -218,7 +214,7 @@ def rng_node_(_N_):  # rng+ forms layer of rim_ and extH per N, appends N__,L__,
                     rev_Nt_ += [[rel_dist, _G,G, dy,dx, M * rM]]  # adjust pair value
         if rev_Nt_:
             _Nt_ = sorted(rev_Nt_, key=lambda x: x[0])  # only strong with current matches
-            rng += 1  # why we add rng twice? We added above?
+            rng += 1
     return N__,L__,ET,rng
 
 
@@ -281,7 +277,7 @@ def comp_N(Link, iEt, rng, rev=None):  # dir if fd, Link.derH=dH, comparand rim+
     iEt[:] = np.add(iEt,Et); N.Et[:] = np.add(N.Et,Et); _N.Et[:] = np.add(_N.Et,Et)
     Link.derH = elay; elay.root = Link; Link.Et = Et; Link.n = min(_N.n,N.n)
     Link.nodet = [_N,N]; Link.yx = np.add(_N.yx,N.yx) /2
-    # preset S,A
+    # prior S,A
     for rev, node in zip((0,1),(N,_N)):  # reverse Link direction for N
         if Et[0] > ave:  # for bottom-up segment:
             if len(node.lrim_) < rng:  # add +ve layer
