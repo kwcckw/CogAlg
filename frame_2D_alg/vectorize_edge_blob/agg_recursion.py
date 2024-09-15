@@ -127,14 +127,15 @@ def vectorize_root(image):  # vectorization in 3 composition levels of xcomp, cl
             if edge.mdLay.Et[0] * (len(edge.node_)-1)*(edge.rng+1) > ave * edge.mdLay.Et[2]:
                 pruned_Q = []
                 for N in edge.node_:  # PP -> G
-                    mdLay = N[4] if isinstance(N,list) else N.mdLay  # N is CP
+                    mdLay = N[3] if isinstance(N,list) else N.mdLay  # N is CP
                     if mdLay and mdLay.Et[0] > ave * mdLay.Et[2]:
                         # convert to CG:
-                        if isinstance(N,list): fd, root, P_, link_, Lay, lat, A,S, area, box, [y,x], n = N
+                        if isinstance(N,list): root, P_, link_, Lay, lat, A,S, area, box, [y,x], n = N
                         else:  # single CP
                             fd=0; root=edge; P_=[N]; link_=[]; Lay = N.mdLay; lat=N.latuple; [y,x]=N.yx; n=N.n
                             box = [y,x-len(N.dert_), y,x]; area = 1; A,S = None,None
-                        PP = CG(fd=fd, root=root, node_=P_, link_=link_, mdLay=Lay, latuple=lat, A=A,S=S, area=area, box=box, yx=[y,x], n=n)
+                        # fd = 0 here?
+                        PP = CG(fd=0, root=root, node_=P_, link_=link_, mdLay=Lay, latuple=lat, A=A,S=S, area=area, box=box, yx=[y,x], n=n)
                         y0,x0,yn,xn = box
                         PP.aRad = np.hypot(*np.subtract(PP.yx,(yn,xn)))
                         PP.Et = [0,0,0,0]
@@ -196,7 +197,8 @@ def rng_node_(_N_):  # rng+ forms layer of rim_ and extH per N, appends N__,L__,
                         if g not in N_: N_ += [g]
                     Et = np.add(Et,Link.Et)
                 else:  # matching pairs are not re-compared,
-                    Nt_ += _Nt_[i:]  # other pairs are weaker but their Ns may be strengthened by comp in prior pairs
+                    # not quite sure here, why need to add _Nt_[i:]
+                    Nt_ += [Nt for Nt in _Nt_[i:] if Nt not in Nt_]  # other pairs are weaker but their Ns may be strengthened by comp in prior pairs
                     break
             else: Nt_ += [Nt]  # re-eval N Ets
         if Et[0] > ave * Et[2] * rng:
@@ -215,6 +217,9 @@ def rng_node_(_N_):  # rng+ forms layer of rim_ and extH per N, appends N__,L__,
         if rev_Nt_:
             _Nt_ = sorted(rev_Nt_, key=lambda x: x[0])  # only strong with current matches
             rng += 1
+        else:
+            break  # we need break here?  Else it will be using existing _Nt_ in the ext loop
+            
     return N__,L__,ET,rng
 
 
@@ -255,6 +260,9 @@ def rng_link_(iL_):  # comp CLs: der+'rng+ in root.link_ rim_t node rims: direct
                 _L_ = L_; rng += 1
             else:
                 break
+        else:
+            break  # we need break here else it won't break if L_ is empty
+
     return L__, LL__, ET, rng
 
 def comp_N(Link, iEt, rng, rev=None):  # dir if fd, Link.derH=dH, comparand rim+=Link
@@ -285,7 +293,7 @@ def comp_N(Link, iEt, rng, rev=None):  # dir if fd, Link.derH=dH, comparand rim+
             else:  # append last layer
                 node.extH.H[-1].add_H(elay); node.lrim_[-1] += [Link]; node.nrim_[-1] +=[(_N,N)[rev]]
         # include negative links to form L_:
-        if len(node.rimt_) if fd else len(node.rim_) < rng:
+        if (len(node.rimt_) if fd else len(node.rim_)) < rng:
             if fd: node.rimt_ = [[[[Link,rev]],[]]] if dir else [[[],[[Link,rev]]]]  # add rng layer
             else:  node.rim_ += [[[Link, rev]]]
         else:
