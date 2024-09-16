@@ -226,8 +226,8 @@ def comp_slice(edge):  # root function
         P.rim_ = []; P.lrim = []; P.prim = []
     rng_recursion(edge)  # vertical P cross-comp -> PP clustering, if lateral overlap
     form_PP_(edge, edge.P_)
-    for PPt in edge.node_:
-        mdLay = PPt[3] if isinstance(PPt, list) else PPt.mdLay  # CP
+    for N in edge.node_:
+        mdLay = N[3] if isinstance(N, list) else N.mdLay  # CP
         edge.mdLay.add_md_(mdLay)
 
 def rng_recursion(edge):  # similar to agg+ rng_recursion, but looping and contiguously link mediated
