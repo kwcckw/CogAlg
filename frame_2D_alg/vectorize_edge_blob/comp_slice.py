@@ -142,8 +142,11 @@ class CH(CBase):  # generic derivation hierarchy of variable nesting, depending 
         I = len(HE.H)  # min index
         if flat:
             for i, lay in enumerate(He.H):
+                lay = CH().copy(lay)  # so we need to copy here, else L.derH will be having a same reference with root.derH.H in agg_recursion later. root.derH.H maybe accumulated multiple times.
                 lay.i = I+i; lay.root = HE; HE.H += [lay]
-        else: He.i = I; He.root = HE; HE.H += [He]
+        else: 
+            He = CH().copy(He)
+            He.i = I; He.root = HE; HE.H += [He]
 
         if HE.md_t: HE.add_md_t(He)  # accumulate [lat_md_C,lay_md_C,ext_md_C]
         else:       HE.md_t = [CH().copy(md_) for md_ in He.md_t]

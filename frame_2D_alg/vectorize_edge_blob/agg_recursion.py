@@ -179,16 +179,22 @@ def rng_node_(_N_):  # rng+ forms layer of rim_ and extH per N, appends N__,L__,
         dy,dx = np.subtract(_G.yx,G.yx)
         dist = np.hypot(dy,dx)
         _Nt_ += [[_G,G, dy,dx, radii,dist]]
-    icoef = .5
+    icoef = .0005  # i think this should be very small since M could be very large
     rng = 1  # redundant to len N__
-    while _Nt_:
+    while True:  # use true since eval is based on Et
         Nt_,N_,L_ = [],set(),[]; Et = [0,0,0,0]
         for Nt in _Nt_:
             _G,G, dy,dx, radii,dist = Nt
-            if set(_G.nrim_[-1]).intersection(G.nrim_[-1]):  # skip indirectly connected Gs, no direct match priority?
+            # check only G.nrim_ with added nrim
+            if _G.nrim_ and G.nrim_ and set(_G.nrim_[-1]).intersection(G.nrim_[-1]):  # skip indirectly connected Gs, no direct match priority?
                 continue
-            M = _G.extH.Et[0] + G.extH.Et[0] if rng > 1 else (_G.derH.Et[0] + G.derH.Et[0]) * icoef  # internal vals coef: < external
-            if dist < max_dist * (radii*icoef) * M:  # max distance of likely matches *= prior G match * radius
+            if rng>1:
+                M = _G.extH.Et[0] + G.extH.Et[0] 
+            elif G.derH and _G.derH:
+                M = (_G.derH.Et[0] + G.derH.Et[0]) * icoef  # internal vals coef: < external
+            else:  # converted G from PP
+                M = (_G.mdLay.Et[0] + G.mdLay.Et[0]) * icoef 
+            if dist < max_dist * (radii*icoef) * M * rng:  # max distance of likely matches *= prior G match * radius (scale with rng? Because M is incremented with incremented rng too)
                 Link = CL(nodet=[_G,G], S=2, A=[dy,dx], box=extend_box(G.box,_G.box))
                 comp_N(Link, Et, rng)
                 L_ += [Link]  # with -ve links
@@ -201,6 +207,8 @@ def rng_node_(_N_):  # rng+ forms layer of rim_ and extH per N, appends N__,L__,
             rng += 1  # sub-cluster / rng N_
             _Nt_ = [Nt for Nt in Nt_ if Nt[0] in N_ or Nt[1] in N_]
             # re-eval not-compared pairs with one incremented N.M
+        else: break  # Et eval may false even _Nt_ is not empty? So we still need break here
+
     return N__,L__,ET,rng
 
 
@@ -296,12 +304,13 @@ def segment(root, _N__, fd, irng):  # cluster Q: G__|L__, by value density of +v
     for rng, _N_ in enumerate(_N__, start=1):
         for N in _N_: N.merged = 0
         N_ = []
-        for N in N_:  # always CG?
-            if not N.lrim:  # then also not in Gt
+        for N in _N_:  # always CG? (should be _N_ here)
+            if not N.lrim_[rng-1]:  # then also not in Gt
                 N_ += [N]; continue
-            if N.root_: node_,link_,Et,_nrim_,_lrim_ = N.root_[-1]  # extend Gt formed in lower rng
+            if N.root_ and isinstance(N.root_[-1], list):  # N may present in prior layer N_, and hence added with CG root
+                node_,link_,Et,_nrim_,_lrim_ = N.root_[-1]  # extend Gt formed in lower rng
             else:
-                node_ = {N}; link_ = set(); Et = [0,0,0,0]; _nrim_ = N.nrim; _lrim_ = N.lrim
+                node_ = {N}; link_ = set(); Et = [0,0,0,0]; _nrim_ = N.nrim_[rng-1]; _lrim_ = N.lrim_[rng-1]  # should be selecting current rng nrim and lrim? Index is rng - 1 because rng starts with 1
             Gt = [node_,link_,Et,_nrim_,_lrim_]
             N.root_ += [Gt]
             while _nrim_:
@@ -311,12 +320,12 @@ def segment(root, _N__, fd, irng):  # cluster Q: G__|L__, by value density of +v
                     int_N = _L.nodet[0] if _L.nodet[1] is _N else _L.nodet[1]
                     # cluster by sum N_rim_Ms * L_rM, neg if neg link
                     if (int_N.Et[0]+_N.Et[0]) * (_L.Et[0]/ave) > ave:
-                        if _N.root_:
+                        if _N.root_ and isinstance(_N.root_[-1], list):
                             merge(Gt, _N.root_[-1])  # _nrim_,_lrim_ are in Gt now
                         else:
-                            node_ += [_N]; link_ += [_L]; Et = np.add(Et, _L.Et)
-                            nrim_.update(set(_N.nrim) - node_)
-                            lrim_.update(set(_N.lrim) - link_)
+                            node_.add(_N); link_.add(_L); Et = np.add(Et, _L.Et); _N.root_ += [Gt]  # we need to add new root too
+                            nrim_.update(set(_N.nrim_[rng-1]) - node_)
+                            lrim_.update(set(_N.lrim_[rng-1]) - link_)
                             _N.merged = 1
                 _nrim_, _lrim_ = nrim_, lrim_
             N_ += [sum2graph(root, [list(node_), list(link_), Et], fd, rng)]
@@ -331,11 +340,11 @@ def merge(Gt, gt):
         N.root_ += [Gt]
         N.merged = 1
     Et[:] = np.add(Et, et)
-    N_ += n_; Nrim -= set(n_)
-    L_ += l_; Lrim -= set(l_)
+    N_.update(n_); Nrim = set(Nrim) - set(nrim)  # Nrim could be a list, init them default as set?
+    L_.update(l_); Lrim = set(Lrim) - set(lrim)
 
-    Nrim.update(nrim - set(N_))
-    Lrim.update(lrim - set(L_))
+    Nrim.update(set(nrim) - set(N_))
+    Lrim.update(set(lrim) - set(L_))
 
 def par_segment(root, Q, fd, rng):  # parallelizable by merging Gts initialized with each N
     # mostly old
