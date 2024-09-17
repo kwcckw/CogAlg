@@ -155,7 +155,7 @@ def agg_recursion(root, Q, fd):  # breadth-first rng++ cross-comp -> eval cluste
             agg_recursion(root, L_,fd=1)  # appends last aggLay, L_=lG_ if segment
         # rng_node_:
         if fvm and len(N__[0]) > ave_L:  # cluster ave_L != xcomp ave_L?
-            segment(root, N__, fd,rng)  # cluster rngLays in root.node_?
+            N__ = segment(root, N__, fd,rng)  # cluster rngLays in root.node_?  (we need return here, so that it replaces the input Ns with graphs)
             for N_ in N__:  # replace root.node_ with nested H of graphs
                 if len(N_) > ave_L:
                     agg_recursion(root, N_,fd=0)  # adds higher aggLay / recursive call
@@ -195,7 +195,7 @@ def rng_node_(_N_):  # rng+ forms layer of rim_ and extH per N, appends N__,L__,
         if Et[0] > ave * Et[2]:
             N__ += [N_]; L__ += [L_]; ET = np.add(ET, Et)
             rng += 1  # sub-cluster / rng N_
-            _Nt_ = [Nt for Nt in Nt_ if Nt[0] in N_ or Nt[1] in N_]
+            _Nt_ = [Nt for Nt in Nt_ if (Nt[0] in N_ or Nt[1] in N_)]
             # re-eval not-compared pairs with one incremented N.M
         else:
             break
@@ -292,16 +292,21 @@ def segment(root, _N__, fd, irng):  # cluster Q: G__|L__, by value density of +v
 
     N__ = []
     for rng, _N_ in enumerate(_N__, start=1):
-        for N in _N_: N.merged = 0
         N_ = []
         for N in _N_:  # always CG?
+            N.merged = 0
             if not N.lrim_[rng-1]:  # then also not in Gt
                 N_ += [N]; continue
-            if N.root_: node_,link_,Et,_nrim_,_lrim_ = N.root_[-1]  # extend Gt formed in all lower rngs
+            if N.root_ and len(N.root_) > rng:  # N has default root of edge, so their len(root_) should be > rng
+                node_,link_,Et,_nrim_,_lrim_ = N.root_[-1]  # extend Gt formed in all lower rngs
             else:
                 node_ = {N}; link_ = set(); Et = [0,0,0,0]; _nrim_ = N.nrim_[rng-1]; _lrim_ = N.lrim_[rng-1]
             Gt = [node_,link_,Et,_nrim_,_lrim_]
-            N.root_ += [Gt]
+            N.root_ += [Gt]  # assign current rng's root in the 1st step
+
+        # 2nd step: merge rim
+        for N in _N_:
+            node_,link_,Et,_nrim_,_lrim_ = N.root_[-1]
             while _nrim_:
                 nrim_,lrim_ = set(),set()  # eval,merge _nrim_, replace with extended nrim_
                 for _N,_L in zip(_nrim_,_lrim_):
@@ -309,20 +314,15 @@ def segment(root, _N__, fd, irng):  # cluster Q: G__|L__, by value density of +v
                     int_N = _L.nodet[0] if _L.nodet[1] is _N else _L.nodet[1]
                     # cluster by sum N_rim_Ms * L_rM, neg if neg link
                     if (int_N.Et[0]+_N.Et[0]) * (_L.Et[0]/ave) > ave:
-                        if _N.root_ and isinstance(_N.root_[-1], list):
-                            merge(Gt, _N.root_[-1])
-                        else:
-                            node_.add(_N); link_.add(_L); Et = np.add(Et, _L.Et); _N.root_ += [Gt]
-                            nrim_.update(set(_N.nrim_[rng-1]) - node_)
-                            lrim_.update(set(_N.lrim_[rng-1]) - link_)
-                            _N.merged = 1
+                        merge(Gt, _N.root_[-1])  # always merge now, all N has new root assigned per rng. I guess we can unpack merge now?
                 _nrim_, _lrim_ = nrim_, lrim_
             N_ += [Gt]
         N__ += [N_]
     for i, N_ in enumerate(N__):  # batch conversion of Gts to CGs
         for ii, N in enumerate(N_):
-            if isinstance(N, list):
-                N_[ii] = sum2graph(root, [list(N[0]), list(N[1]), N[2]], fd, rng=i)  # [node_,link_,Et], higher-rng Gs are supersets
+            # if isinstance(N, list):  # should be always a list here? Since it packs only Gt
+            N_[ii] = sum2graph(root, [list(N[0]), list(N[1]), N[2]], fd, rng=i)  # [node_,link_,Et], higher-rng Gs are supersets
+
     return N__  # Gs and isolated Ns
 
 def merge(Gt, gt):
@@ -333,8 +333,8 @@ def merge(Gt, gt):
         N.root_ += [Gt]
         N.merged = 1
     Et[:] = np.add(Et, et)
-    N_ += n_; Nrim = set(Nrim) - set(nrim)
-    L_ += l_; Lrim = set(Lrim) - set(lrim)
+    N_.update(n_); Nrim = set(Nrim) - set(nrim)  # we need .update to concatenate set
+    L_.update(l_); Lrim = set(Lrim) - set(lrim)
 
     Nrim.update(set(nrim) - set(N_))
     Lrim.update(set(lrim) - set(L_))
@@ -387,7 +387,7 @@ def sum2graph(root, grapht, fd, rng):  # sum node and link params into graph, ag
 
     N_, L_, Et = grapht  # [node_, link_, Et]
     # flattened N__, L__ if segment / rng++
-    graph = CG(fd=fd, root = root, node_=N_, link_=L_, rng=rng, Et=Et)
+    graph = CG(fd=fd, root_ = [root], node_=N_, link_=L_, rng=rng, Et=Et)
     yx = [0,0]
     lay0 = CH(node_= N_)  # comparands, vs. L_: summands?
     for link in L_:  # unique current-layer mediators: Ns if fd else Ls
