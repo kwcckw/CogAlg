@@ -290,16 +290,23 @@ def comp_ext(_L,L,_S,S,_A,A):  # compare non-derivatives:
 
 def segment(root, iN__, fd, irng):  # cluster Q: G__|L__, by value density of +ve links per node
 
+   
+    for N_ in iN__:
+        for N in N_:
+            N.merged = 0  # init, or include it in G's attrs?
+            N.root_ = []  # reset edge
+            
     _re_N_, N_ = [],[]
     for N in iN__[0]:  # 1st loop for CG Ns
+        if N.merged: continue  # N was merged when N is _N in prior Ns
         if not N.lrim_[0]:
             N_ += [N]; continue
-        node_ = {N}; link_ = set(); Et = np.array([0,0,0,0]); N.merged=0
+        node_ = {N}; link_ = set(); Et = np.array([.0,.0,.0,.0]); N.merged=0  # init Et as float because _L.Et is float too
         nrim,lrim = set(),set()  # eval,merge _nrim_, replace with extended nrim_
         Gt = [node_,link_,Et,0,nrim,lrim]
         N.root_ = [Gt]
         for _N,_L in zip(N.nrim_[0],N.lrim_[0]):
-            if _N.merged: continue
+            if _N.merged: continue  # root merging will be in while loop only?
             if (N.Et[0]+_N.Et[0]) * (_L.Et[0]/ave) > ave:  # cluster by sum N_rim_Ms * L_rM, neg if neg link
                 node_.add(_N); link_.add(_L); Et += _L.Et
                 nrim.update(set(_N.nrim_[0])-node_)
@@ -309,12 +316,17 @@ def segment(root, iN__, fd, irng):  # cluster Q: G__|L__, by value density of +v
         N_ += [Gt]
     N__ = [N_]
     rng = 1
+    
+    # update nrim to their root?
+    for Gt in _re_N_:
+        Gt[4] = [n.root_[-1] for n in Gt[4]]
+        
     while _re_N_:  # extend Gts with nrim formed in lower rng, not need for iN__[1:]?
         # ET = np.array([0,0,0,0])
         re_N_, N_ = [],[]
         for Gt in _re_N_:
             n_,l_,Et, mrg, nrim, lrim = Gt
-            n__,l__,Et_,mrg_,nrim_,lrim_ = n_[:],l_[:],Et[:],0,set(),set()
+            n__,l__,Et_,mrg_,nrim_,lrim_ = n_.copy(),l_.copy(),Et.copy(),0,[],set()  # nrim is list, can't use set with list
             GT = [n__,l__,Et_,mrg_,nrim_,lrim_]  # rng Gt
             for n in n_: n.root_ += [GT]
             for _N,_L in zip(nrim,lrim):
@@ -323,14 +335,16 @@ def segment(root, iN__, fd, irng):  # cluster Q: G__|L__, by value density of +v
                 # merge Gts: connected if nrims intersect, no new eval:
                 Et_ += Et; _N[3] = 1  # merged
                 for n in _n_: n.root_ += [GT]  # has no rng root yet
-                n__.update(_n_); nrim_.update(_nrim)
+                n__.update(_n_); nrim_ += _nrim
                 l__.update(_l_); lrim_.update(_lrim)
             if nrim_:
+                # reset GT[3] here?
                 re_N_ += [GT]  # has extended nrim
             N_ += [GT]  # ET += Et_
         N__ += [N_]
         # if ET[0] > ave * ET[2]:
         _re_N_ = re_N_
+        for GT in _re_N_: GT[3] = 0  # reset this? Else they all will be ksipped 
         rng += 1
     for i, N_ in enumerate(N__):  # batch conversion of Gts to CGs
         for ii, N in enumerate(N_):
