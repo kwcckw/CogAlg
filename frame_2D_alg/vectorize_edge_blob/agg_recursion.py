@@ -128,7 +128,7 @@ def vectorize_root(image):  # vectorization in 3 composition levels of xcomp, cl
                         else:  # single CP
                             root=edge; P_=[N]; link_=[]; Lay=N.mdLay; lat=N.latuple; [y,x]=N.yx; n=N.n
                             box = [y,x-len(N.dert_), y,x]; area = 1; A,S = None,None
-                        PP = CG(fd=0, root_=[root], node_=P_, link_=link_, mdLay=Lay, latuple=lat, A=A,S=S, area=area, box=box, yx=[y,x], n=n)
+                        PP = CG(fd=0, root_=root, node_=P_, link_=link_, mdLay=Lay, latuple=lat, A=A,S=S, area=area, box=box, yx=[y,x], n=n)
                         y0,x0,yn,xn = box
                         PP.aRad = np.hypot(*np.subtract(PP.yx,(yn,xn)))
                         PP.Et = [0,0,0,0]
@@ -155,7 +155,7 @@ def agg_recursion(root, Q, fd):  # breadth-first rng++ cross-comp -> eval cluste
             agg_recursion(root, L_,fd=1)  # appends last aggLay, L_=lG_ if segment
         # rng_node_:
         if fvm and len(N__[0]) > ave_L:  # cluster ave_L != xcomp ave_L?
-            N__ = segment(root, N__, fd,rng)  # cluster rngLays in root.node_?  (we need return here, so that it replaces the input Ns with graphs)
+            segment(root, N__, fd,rng)  # cluster rngLays in root.node_?
             for N_ in N__:  # replace root.node_ with nested H of graphs
                 if len(N_) > ave_L:
                     agg_recursion(root, N_,fd=0)  # adds higher aggLay / recursive call
@@ -196,7 +196,7 @@ def rng_node_(_N_):  # rng+ forms layer of rim_ and extH per N, appends N__,L__,
             N__ += [N_]; L__ += [L_]; ET = np.add(ET, Et)
             rng += 1  # sub-cluster / rng N_
             _Nt_ = [Nt for Nt in Nt_ if (Nt[0] in N_ or Nt[1] in N_)]
-            # re-eval not-compared pairs with one incremented N.M
+            # re-evaluate not-compared pairs with one incremented N.M
         else:
             break
     return N__,L__,ET,rng
@@ -251,9 +251,9 @@ def comp_N(Link, iEt, rng, rev=None):  # dir if fd, Link.derH=dH, comparand rim+
     rn = _N.n / N.n
     mdext = comp_ext(_L,L, _S,S/rn, _A,A); md_t = [mdext]; Et = mdext.Et; n = mdext.n
     if not fd:  # CG
-        mdlat = comp_latuple(_N.latuple, N.latuple, rn,fagg=1); md_t += [mdlat]; Et = np.add(Et,mdlat.Et); n += mdlat.n
-        mdLay = _N.mdLay.comp_md_(N.mdLay, rn,fagg=1);          md_t += [mdLay]; Et = np.add(Et,mdLay.Et); n += mdLay.n
-    # | n = (_n+n) / 2?
+        mdlat = comp_latuple(_N.latuple,N.latuple,rn,fagg=1); md_t += [mdlat]; Et = np.add(Et,mdlat.Et); n += mdlat.n
+        mdLay = _N.mdLay.comp_md_(N.mdLay, rn, fagg=1);       md_t += [mdLay]; Et = np.add(Et,mdLay.Et); n += mdLay.n
+    # or n = (_n+n)/2?
     elay = CH( H=[CH(n=n, md_t=md_t, Et=Et)], n=n, md_t=[CH().copy(md_) for md_ in md_t], Et=copy(Et))
     if _N.derH and N.derH:
         dderH = _N.derH.comp_H(N.derH, rn, fagg=1)  # comp shared layers
@@ -288,56 +288,56 @@ def comp_ext(_L,L,_S,S,_A,A):  # compare non-derivatives:
     return CH(H=[mL,dL, mS,dS, mA,dA], Et=[M,D,M>D,D<=M], n=0.5)
 
 
-def segment(root, _N__, fd, irng):  # cluster Q: G__|L__, by value density of +ve links per node
+def segment(root, iN__, fd, irng):  # cluster Q: G__|L__, by value density of +ve links per node
 
-    N__ = []
-    for rng, _N_ in enumerate(_N__, start=1):
-        N_ = []
-        for N in _N_:  # always CG?
-            N.merged = 0
-            if not N.lrim_[rng-1]:  # then also not in Gt
-                N_ += [N]; continue
-            if N.root_ and len(N.root_) > rng:  # N has default root of edge, so their len(root_) should be > rng
-                node_,link_,Et,_nrim_,_lrim_ = N.root_[-1]  # extend Gt formed in all lower rngs
-            else:
-                node_ = {N}; link_ = set(); Et = [0,0,0,0]; _nrim_ = N.nrim_[rng-1]; _lrim_ = N.lrim_[rng-1]
-            Gt = [node_,link_,Et,_nrim_,_lrim_]
-            N.root_ += [Gt]  # assign current rng's root in the 1st step
-
-        # 2nd step: merge rim
-        for N in _N_:
-            node_,link_,Et,_nrim_,_lrim_ = N.root_[-1]
-            while _nrim_:
-                nrim_,lrim_ = set(),set()  # eval,merge _nrim_, replace with extended nrim_
-                for _N,_L in zip(_nrim_,_lrim_):
-                    if _N.merged: continue
-                    int_N = _L.nodet[0] if _L.nodet[1] is _N else _L.nodet[1]
-                    # cluster by sum N_rim_Ms * L_rM, neg if neg link
-                    if (int_N.Et[0]+_N.Et[0]) * (_L.Et[0]/ave) > ave:
-                        merge(Gt, _N.root_[-1])  # always merge now, all N has new root assigned per rng. I guess we can unpack merge now?
-                _nrim_, _lrim_ = nrim_, lrim_
-            N_ += [Gt]
+    _re_N_, N_ = [],[]
+    for N in iN__[0]:  # 1st loop for CG Ns
+        if not N.lrim_[0]:
+            N_ += [N]; continue
+        node_ = {N}; link_ = set(); Et = np.array([0,0,0,0]); N.merged=0
+        nrim,lrim = set(),set()  # eval,merge _nrim_, replace with extended nrim_
+        Gt = [node_,link_,Et,0,nrim,lrim]
+        N.root_ = [Gt]
+        for _N,_L in zip(N.nrim_[0],N.lrim_[0]):
+            if _N.merged: continue
+            if (N.Et[0]+_N.Et[0]) * (_L.Et[0]/ave) > ave:  # cluster by sum N_rim_Ms * L_rM, neg if neg link
+                node_.add(_N); link_.add(_L); Et += _L.Et
+                nrim.update(set(_N.nrim_[0])-node_)
+                lrim.update(set(_N.lrim_[0])-link_)
+                _N.root_ += [Gt]; _N.merged = 1
+        _re_N_ += [Gt]
+        N_ += [Gt]
+    N__ = [N_]
+    rng = 1
+    while _re_N_:  # extend Gts with nrim formed in lower rng, not need for iN__[1:]?
+        # ET = np.array([0,0,0,0])
+        re_N_, N_ = [],[]
+        for Gt in _re_N_:
+            n_,l_,Et, mrg, nrim, lrim = Gt
+            n__,l__,Et_,mrg_,nrim_,lrim_ = n_[:],l_[:],Et[:],0,set(),set()
+            GT = [n__,l__,Et_,mrg_,nrim_,lrim_]  # rng Gt
+            for n in n_: n.root_ += [GT]
+            for _N,_L in zip(nrim,lrim):
+                _n_,_l_,_Et,_mrg,_nrim,_lrim = _N
+                if _mrg: continue  # was merged
+                # merge Gts: connected if nrims intersect, no new eval:
+                Et_ += Et; _N[3] = 1  # merged
+                for n in _n_: n.root_ += [GT]  # has no rng root yet
+                n__.update(_n_); nrim_.update(_nrim)
+                l__.update(_l_); lrim_.update(_lrim)
+            if nrim_:
+                re_N_ += [GT]  # has extended nrim
+            N_ += [GT]  # ET += Et_
         N__ += [N_]
+        # if ET[0] > ave * ET[2]:
+        _re_N_ = re_N_
+        rng += 1
     for i, N_ in enumerate(N__):  # batch conversion of Gts to CGs
         for ii, N in enumerate(N_):
-            # if isinstance(N, list):  # should be always a list here? Since it packs only Gt
-            N_[ii] = sum2graph(root, [list(N[0]), list(N[1]), N[2]], fd, rng=i)  # [node_,link_,Et], higher-rng Gs are supersets
+            if isinstance(N, list):  # not single N
+                N_[ii] = sum2graph(root, [list(N[0]), list(N[1]), N[2]], fd, rng=i)  # [node_,link_,Et], higher-rng Gs are supersets
+    iN__[:] = N__  # Gs and isolated Ns
 
-    return N__  # Gs and isolated Ns
-
-def merge(Gt, gt):
-
-    N_, L_, Et, Lrim, Nrim = Gt
-    n_, l_, et, lrim, nrim = gt
-    for N in n_:
-        N.root_ += [Gt]
-        N.merged = 1
-    Et[:] = np.add(Et, et)
-    N_.update(n_); Nrim = set(Nrim) - set(nrim)  # we need .update to concatenate set
-    L_.update(l_); Lrim = set(Lrim) - set(lrim)
-
-    Nrim.update(set(nrim) - set(N_))
-    Lrim.update(set(lrim) - set(L_))
 
 def par_segment(root, Q, fd, rng):  # parallelizable by merging Gts initialized with each N
     # mostly old
