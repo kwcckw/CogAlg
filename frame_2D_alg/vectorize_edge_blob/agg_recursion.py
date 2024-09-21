@@ -180,7 +180,7 @@ def rng_node_(_N_):  # rng+ forms layer of rim_ and extH per N, appends N__,L__,
         Nt_,N_,L_ = [],set(),[]; Et = [0,0,0,0]
         for Nt in _Nt_:
             _G,G, dy,dx, radii,dist = Nt
-            if _G.nrim_ and G.nrim_ and set(_G.nrim_[-1]).intersection(G.nrim_[-1]):  # skip indirectly connected Gs, no direct match priority?
+            if _G.nrim_ and G.nrim_ and (_G.nrim_[-1] & G.nrim_[-1]):  # skip indirectly connected Gs, no direct match priority?
                 continue
             M = (_G.mdLay.Et[0]+G.mdLay.Et[0])*icoef**2 + (_G.derH.Et[0]+G.derH.Et[0])*icoef + (_G.extH.Et[0]+G.extH.Et[0])
             # nested icoef: internal M is less predictive than external M
@@ -267,7 +267,7 @@ def comp_N(Link, iEt, rng, rev=None):  # dir if fd, Link.derH=dH, comparand rim+
             if len(node.lrim_) < rng:  # add +ve layer
                 node.extH.append_(elay); node.lrim_ += [{Link}]; node.nrim_ += [{(_N,N)[rev]}]  # _node
             else:  # append last layer
-                node.extH.H[-1].add_H(elay); node.lrim_[-1].update(Link); node.nrim_[-1].update((_N,N)[rev])
+                node.extH.H[-1].add_H(elay); node.lrim_[-1].add(Link); node.nrim_[-1].add((_N,N)[rev])  # use add to append, update is for extend
         # include negative links to form L_:
         if (len(node.rimt_) if fd else len(node.rim_)) < rng:
             if fd: node.rimt_ = [[[[Link,rev]],[]]] if dir else [[[],[[Link,rev]]]]  # add rng layer
@@ -298,7 +298,8 @@ def cluster_from_G(G, _nrim, _lrim, rng=0):
                 L_ = g.lrim_[rng] & _G.lrim_[rng]  # intersect
                 if L_:
                     L = L_.pop()  # the only element
-                    if (g.Et[0] + _G.Et[0]) * (L.Et[0]/ave) > ave:  # cluster by sum G_rim_Ms * L_rM, neg if neg link
+                    # scale ave with rdn? Right now ave is too low and it's true all the time
+                    if (g.Et[0] + _G.Et[0]) * (L.Et[0]/ave) > ave * (g.Et[2] + _G.Et[2]) * L.Et[2] * 1000:  # cluster by sum G_rim_Ms * L_rM, neg if neg link
                         if isinstance(_G.root_,list) and len(_G.root_)>rng:
                             Gt = _G.root_[rng]
                             node_.update(Gt[0])
@@ -322,6 +323,7 @@ def cluster_N__(root, iN__, fd):  # cluster G__|L__ by value density of +ve link
         G.merged = 0
     N_, _re_N_ = [],[]
     for G in iN__[0]:
+        if G.merged: continue  # G was merged as nrim in prior loop
         if not G.nrim_:
             N_.append(G); continue
         node_, link_, Et = cluster_from_G(G, G.nrim_[0], G.lrim_[0])
@@ -340,7 +342,9 @@ def cluster_N__(root, iN__, fd):  # cluster G__|L__ by value density of +ve link
             Node_, Link_, ET = _node_.copy(),_link_.copy(),_Et.copy()
             for G in _node_:
                 if not G.merged and len(G.nrim_) > rng:
-                    node_,link_,Et = cluster_from_G(G, G.nrim_[rng]-Node_, G.lrim_[rng]-Link_, rng)
+                    node_ = G.nrim_[rng]-Node_
+                    if not node_: continue  # skip when there's no new rim nodes
+                    node_,link_,Et = cluster_from_G(G, node_, G.lrim_[rng]-Link_, rng)
                     Node_.update(node_)
                     Link_.update(link_)
                     ET += Et
