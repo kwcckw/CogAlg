@@ -296,19 +296,19 @@ def cluster_from_G(G, _nrim, _lrim, rng=0):
         for _G,_L in zip(_nrim, _lrim):
             if _G.merged or len(_G.lrim_) < rng: continue
             for g in node_:  # compare external _G to all internal nodes, include if any of them match
-                L_ = g.lrim_[rng] & _G.lrim_[rng]  # intersect
-                if L_:
-                    L = L_.pop()  # the only element
-                    if ((g.Et[0]- ave*g.Et[2]) + (_G.Et[0]- ave*_G.Et[2])) * (L.Et[0] / ave) > ave * ccoef:
+                L = next(iter(g.lrim_[rng] & _G.lrim_[rng]), None)  # intersect (get first element if not empty else L == None)
+                if L:  # has single element
+                    if ((g.Et[0]- ave*g.Et[2]) + (_G.Et[0]- ave*_G.Et[2])) * (L.derH.Et[0] / ave) > ave * ccoef:  # L.Et may empty after the set_attrs of fd fork, so we use derH.Et here?
                         # cluster by sum G_rim_V * L_rM, neg if neg link
+                        # this `if` section is not possible? The rim is birectional, so _G will never form other Gt first
                         if isinstance(_G.root_,list) and len(_G.root_)>rng:
                             Gt = _G.root_[rng]
                             node_.update(Gt[0])
-                            link_.update(Gt[1]); link_.add(_L)  # _L was external
-                            Et += _L.Et + Gt[2]
+                            link_.update(Gt[1], [L]) # _L was external
+                            Et += _L.derH.Et + Gt[2]
                             Gt[3] = 1
                         else:
-                            node_.add(_G); link_.add(_L); Et += _L.Et
+                            node_.add(_G); link_.add(_L); Et += _L.derH.Et
                         nrim.update(set(_G.nrim_[rng]) - node_)
                         lrim.update(set(_G.lrim_[rng]) - link_)
                         _G.merged = 1
@@ -349,7 +349,7 @@ def cluster_N__(root, iN__, fd):  # cluster G__|L__ by value density of +ve link
                     Node_.update(node_)
                     Link_.update(link_)
                     ET += Et
-            if ET[0] > _Et[2] * ave:
+            if (ET[0] - _Et[0]) > _Et[2] * ave:  # we need to have ET[0] - _Et[0]? else ET[0] is still > _Et[2] if there's no clustering at all
                 Gt = [Node_, Link_, ET, 0]
                 for n in Node_: n.root_.append(Gt)
                 re_N_.append(Gt)
