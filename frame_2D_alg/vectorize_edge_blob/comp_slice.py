@@ -75,20 +75,15 @@ class CdP(CBase):  # produced by comp_P, comp_slice version of Clink
 def add_md_(HE, He,  irdnt=[]):  # p may be derP, sum derLays
 
     if HE:
-        # sum md_s:
-        # H:
-        HE[0] = [V + v for V, v in zip_longest(HE[0], He[0], fillvalue=0)]
-        # Et:
-        HE[1] = np.add(HE[1], He[1])
-        # n:
-        HE[2] += He[2]  # combined param accumulation span
+        HE[0] = [V + v for V, v in zip_longest(HE[0], He[0], fillvalue=0)]  # H
+        HE[1] = np.add(HE[1], He[1])  # Et
+        HE[2] += He[2]  # n: combined param accumulation span
         if any(irdnt): HE[1][2:] = [E + e for E, e in zip(HE[1][2:], irdnt)]
     else:
-        HE = deepcopy(He)
-
+        HE[:] = deepcopy(He)
 
 def comp_md_(_H, H, rn=1, frev=0):
-    
+
     vm, vd, rm, rd = 0,0,0,0
     derLay = []
     for i, (_d, d) in enumerate(zip(_H[1::2], H[1::2])):  # compare ds in md_ or ext
@@ -157,13 +152,13 @@ def comp_P(_P,P, angle=None, distance=None, fder=0):  # comp dPs if fd else Ps
     if fd:
         # der+: comp dPs
         rn = _P.mdLay[2] / P.mdLay[2]  # mdLay.n
-        derLay = comp_md_(_P.mdLay[0], P.mdLay[0], rn=rn)  # compare mdLay.H      
-        angle = np.subtract([y,x],[_y,_x]) # dy,dx between node centers
-        distance = np.hypot(*angle) # between node centers
+        derLay = comp_md_(_P.mdLay[0], P.mdLay[0], rn=rn)  # compare H
+        angle = np.subtract([y,x],[_y,_x])  # dy,dx of node centers
+        distance = np.hypot(*angle)  # between node centers
     else:
         # rng+: comp Ps
         rn = len(_P.dert_) / len(P.dert_)
-        H = comp_latuple(_P.latuple, P.latuple, rn)  # or remove fagg and output CH as default?
+        H = comp_latuple(_P.latuple, P.latuple, rn)
         vm = sum(H[::2]); vd = sum(abs(d) for d in H[1::2])
         rm = 1 + vd > vm; rd = 1 + vm >= vd
         n = (len(_P.dert_)+len(P.dert_)) / 2  # der value = ave compared n?
@@ -228,7 +223,7 @@ def form_PP_(root, iP_, fd=0):  # form PPs of dP.valt[fd] + connected Ps val
 def sum2PP(root, P_, dP_, fd):  # sum links in Ps and Ps in PP
 
     mdLay, latuple, link_, A, S, area, n, box = [[],[0,0,0,0],0], [0,0,0,0,0,[0,0]], [], [0,0], 0, 0, 0, [0,0,0,0]
-    iRt = root[3][1] if isinstance(root,list) else root.mdLay[1][2:4]   # add to rdnt (root.mdLay[1] = root.mdLay.Et, root[3][1] is root.Et)
+    iRt = root[3][1] if isinstance(root,list) else root.mdLay[1][2:4]   # add to rdnt in root.mdLay.Et or root Et
     # add uplinks:
     for dP in dP_:
         if dP.nodet[0] not in P_ or dP.nodet[1] not in P_: continue
@@ -284,14 +279,6 @@ def comp_latuple(_latuple, latuple, rn, fagg=0):  # 0der params
 def get_match(_par, par):
     match = min(abs(_par),abs(par))
     return -match if (_par<0) != (par<0) else match    # match = neg min if opposite-sign comparands
-
-def negate(He):  # negate is no longer useful?
-    if isinstance(He.H[0], CH):
-        for i,lay in enumerate(He.H):
-            He.H[i] = negate(lay)
-    else:  # md_
-        He.H[1::2] = [-d for d in He.H[1::2]]
-    return He
 
 def accum_box(box, y, x):
     """Box coordinate accumulation."""
