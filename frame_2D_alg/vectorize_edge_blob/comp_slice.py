@@ -76,7 +76,7 @@ def add_md_(HE, He,  irdnt=[]):  # p may be derP, sum derLays
 
     if HE:
         HE[0] = [V + v for V, v in zip_longest(HE[0], He[0], fillvalue=0)]  # H
-        HE[1] = np.add(HE[1], He[1])  # Et
+        HE[1] += He[1]  # Et
         HE[2] += He[2]  # n: combined param accumulation span
         if any(irdnt): HE[1][2:] = [E + e for E, e in zip(HE[1][2:], irdnt)]
     else:
@@ -97,14 +97,14 @@ def comp_md_(_H, H, rn=1, frev=0):
         rm += vd > vm; rd += vm >= vd
         derLay += [match, diff]  # flat
 
-    return [derLay, [vm,vd,rm,rd], 1]  # [H, Et, n]
+    return [derLay, np.array([vm,vd,rm,rd]), 1]  # [H, Et, n]
 
 
 def comp_slice(edge):  # root function
 
-    edge.mdLay = [[],[0,0,0,0],0]  # H, Et, n
+    edge.mdLay = [[],np.array([.0,.0,.0,.0]),0]  # H, Et, n
     for P in edge.P_:  # add higher links
-        P.mdLay = [[],[0,0,0,0],0]  # for accumulation in sum2PP later (in lower P)
+        P.mdLay = [[],np.array([.0,.0,.0,.0]),0]  # for accumulation in sum2PP later (in lower P)
         P.rim_ = []; P.lrim = []; P.prim = []
     rng_recursion(edge)  # vertical P cross-comp -> PP clustering, if lateral overlap
     form_PP_(edge, edge.P_)
@@ -194,7 +194,7 @@ def form_PP_(root, iP_, fd=0):  # form PPs of dP.valt[fd] + connected Ps val
         if not P.lrim:
             PPt_ += [P]; continue
         _prim_ = P.prim; _lrim_ = P.lrim
-        _P_ = {P}; link_ = set(); Et = np.array([0.0,0.0,0.0,0.0])
+        _P_ = {P}; link_ = set(); Et = np.array([.0,.0,.0,.0])
         while _prim_:
             prim_,lrim_ = set(),set()
             for _P,_L in zip(_prim_,_lrim_):
@@ -222,7 +222,7 @@ def form_PP_(root, iP_, fd=0):  # form PPs of dP.valt[fd] + connected Ps val
 
 def sum2PP(root, P_, dP_, fd):  # sum links in Ps and Ps in PP
 
-    mdLay, latuple, link_, A, S, area, n, box = [[],[0,0,0,0],0], [0,0,0,0,0,[0,0]], [], [0,0], 0, 0, 0, [0,0,0,0]
+    mdLay, latuple, link_, A, S, area, n, box = [[],np.array([.0,.0,.0,.0]),0], [0,0,0,0,0,[0,0]], [], [0,0], 0, 0, 0, [0,0,0,0]
     iRt = root[3][1] if isinstance(root,list) else root.mdLay[1][2:4]   # add to rdnt in root.mdLay.Et or root Et
     # add uplinks:
     for dP in dP_:
@@ -273,7 +273,7 @@ def comp_latuple(_latuple, latuple, rn, fagg=0):  # 0der params
     if fagg:  # add norm m,d, ret=[ret,Ret]:
         mval, dval = sum(ret[::2]),sum(ret[1::2])
         mrdn, drdn = dval>mval, mval>dval
-        ret = [ret, [mval,dval,mrdn,drdn], 1]  # if fagg only
+        ret = [ret, np.array([mval,dval,mrdn,drdn]), 1]  # if fagg only
     return ret
 
 def get_match(_par, par):

@@ -2,7 +2,7 @@ import numpy as np
 from copy import deepcopy, copy
 from itertools import combinations, zip_longest
 from .slice_edge import comp_angle, CsliceEdge
-from .comp_slice import comp_slice, comp_latuple, add_lat
+from .comp_slice import comp_slice, comp_latuple, add_lat, aves
 from utils import extend_box
 from frame_blobs import CBase
 
@@ -43,7 +43,7 @@ https://github.com/boris-kz/CogAlg/blob/master/frame_2D_alg/Illustrations/agg_re
 ave = 3
 ave_d = 4
 ave_L = 4
-aves = [3,4]  # ave_Gm, ave_Gd
+# aves = [3,4]  # ave_Gm, ave_Gd (this is not needed?)
 max_dist = 2
 ccoef  = 10  # scaling match ave to clustering ave
 
@@ -102,8 +102,8 @@ class CH(CBase):  # generic derivation hierarchy of variable nesting, depending 
         # feedback, ideally buffered from all elements before summing in root, ultimately G|L:
         root = HE.root
         while root is not None:
-            root.Et += He.Et
             if isinstance(root, CH):
+                root.Et += He.Et
                 root.n += He.n
                 root.node_ += [node for node in He.node_ if node not in HE.node_]
                 root = root.root
@@ -127,8 +127,8 @@ class CH(CBase):  # generic derivation hierarchy of variable nesting, depending 
         if irdnt: Et[2:4] = [E+e for E,e in zip(Et[2:4], irdnt)]
         root = HE
         while root is not None:
-            root.Et += et
             if isinstance(root, CH):
+                root.Et += et
                 root.node_ += [node for node in He.node_ if node not in HE.node_]
                 root.n += He.n
                 root = root.root
@@ -136,12 +136,30 @@ class CH(CBase):  # generic derivation hierarchy of variable nesting, depending 
                break  # root is G|L
         return HE  # for feedback in agg+
 
+    # this is missed out?
+    def comp_md_C(_He, He, rn=1, fagg=0, frev=0):
+
+        vm, vd, rm, rd = 0,0,0,0
+        derLay = []
+        for i, (_d, d) in enumerate(zip(_He.H[1::2], He.H[1::2])):  # compare ds in md_ or ext
+            d *= rn  # normalize by compared accum span
+            diff = _d - d
+            if frev: diff = -diff  # from link with reversed dir
+            match = min(abs(_d), abs(d))
+            if (_d < 0) != (d < 0): match = -match  # negate if only one compared is negative
+            vm += match - aves[i]  # fixed param set?
+            vd += diff
+            rm += vd > vm; rd += vm >= vd
+            derLay += [match, diff]  # flat
+
+        return CH(H=derLay, Et=np.array([vm,vd,rm,rd]), n=1)
+
     def comp_md_t(_He, He):
 
         der_md_t = []; Et = [0,0,0,0]; Rt = [0,0]
         for _md_C, md_C in zip(_He.md_t, He.md_t):
 
-            der_md_C = _md_C.comp_md_(md_C, rn=1, fagg=0,frev=0)  # H is a list, use md_C
+            der_md_C = _md_C.comp_md_C(md_C, rn=1, fagg=0,frev=0)  # H is a list, use md_C
             der_md_t += [der_md_C]; Et = np.add(Et, der_md_C.Et)
 
         return CH(md_t=der_md_t, Et=Et, n=2.5)
@@ -246,6 +264,7 @@ def vectorize_root(image):  # vectorization in 3 composition levels of xcomp, cl
             edge.mdLay = CH(H=edge.mdLay[0], Et=edge.mdLay[1], n=edge.mdLay[2])
             edge.derH = CH(H=[CH()]); edge.derH.H[0].root = edge.derH; edge.fback_ = []
             if edge.mdLay.Et[0] * (len(edge.node_)-1)*(edge.rng+1) > ave * edge.mdLay.Et[2]:
+                edge.extH = CH()  # do we really need this>
                 G_ = []
                 for N in edge.node_:
                     H,Et,n = N[3] if isinstance(N,list) else N.mdLay  # N is CP
@@ -269,7 +288,7 @@ def agg_recursion(root, Q, fd):  # breadth-first rng++ cross-comp -> eval cluste
     m,d,mr,dr = Et
     fvd = d > ave_d * dr*(rng+1); fvm = m > ave * mr*(rng+1)  # op eval/ V-rdn, result eval/ V
     if fvd or fvm:
-        root.extH.Et += Et; L_ = [L for L_ in L__ for L in L_]
+        root.extH.Et += Et; L_ = [L for L_ in L__ for L in L_]  # root is always Cedge, why we want add Et to Cedge.extH?
         # root += L.derH:
         if fd: root.derH.append_(CH().append_(CH().copy(L_[0].derH)))  # new rngLay, aggLay
         else:  root.derH.H[-1].append_(L_[0].derH)  # append last aggLay
@@ -321,7 +340,14 @@ def rng_node_(_N_):  # rng+ forms layer of rim_ and extH per N, appends N__,L__,
         if Et[0] > ave * Et[2]:
             N__ += [N_]; L__ += [L_]; ET += Et
             rng += 1  # sub-cluster / rng N_
-            _Nt_ = [Nt for Nt in Nt_ if (Nt[0] in N_ or Nt[1] in N_)]
+            _Nt_ = [Nt for Nt in Nt_ if (Nt[0] in N_ or Nt[1] in N_)]  # the other node in Nt may not in N_, so not all higher layers's Ns are present in lower layers
+            for Nt in _Nt_:  # add to lower layers 
+                if Nt[0] not in N_:  
+                    for N_ in N__:
+                        N_.add(Nt[0])    # the other node in Nt may not in N_, add it to all lower layers?
+                elif Nt[1] not in N_: 
+                    for N_ in N__:
+                        N_.add(Nt[1])
             # re-evaluate not-compared pairs with one incremented N.M
         else:
             break
@@ -376,11 +402,11 @@ def comp_N(Link, iEt, rng, rev=None):  # dir if fd, Link.derH=dH, comparand rim+
     if rev: A = [-d for d in A]  # reverse angle direction if N is left link
     rn = _N.n / N.n
     mdext = comp_ext(_L,L, _S,S/rn, _A,A)
-    md_t = [mdext]; Et = mdext.Et; n = mdext.n
+    md_t = [mdext]; Et = mdext.Et.copy(); n = mdext.n
     if not fd:  # CG
         H,lEt,ln = comp_latuple(_N.latuple,N.latuple,rn,fagg=1)
         mdlat = CH(H=H, Et=lEt, n=ln)
-        mdLay = _N.mdLay.comp_md_(N.mdLay, rn)
+        mdLay = _N.mdLay.comp_md_C(N.mdLay, rn)
         md_t += [mdlat,mdLay]; Et += lEt + mdLay.Et; n += ln + mdLay.n
     # | n = (_n+n)/2?
     elay = CH( H=[CH(n=n, md_t=md_t, Et=Et)], n=n, md_t=[CH().copy(md_) for md_ in md_t], Et=copy(Et))
@@ -412,7 +438,7 @@ def comp_ext(_L,L,_S,S,_A,A):  # compare non-derivatives:
     M = mL + mS + mA
     D = abs(dL) + abs(dS) + abs(dA)  # normalize relative to M, signed dA?
 
-    return CH(H=[mL,dL, mS,dS, mA,dA], Et=[M,D,M>D,D<=M], n=0.5)
+    return CH(H=[mL,dL, mS,dS, mA,dA], Et=np.array([M,D,M>D,D<=M]), n=0.5)
 
 
 def cluster_from_G(G, _nrim, _lrim, rng=0):
@@ -426,8 +452,9 @@ def cluster_from_G(G, _nrim, _lrim, rng=0):
             for g in node_:  # compare external _G to all internal nodes, include if any of them match
                 L = next(iter(g.lrim_[rng] & _G.lrim_[rng]), None)  # intersect = [+link] | None
                 if L:
-                    if ((g.ext.Et[0]-ave*g.extH.Et[2]) + (_G.ext.Et[0]-ave*_G.extH.Et[2])) * (L.derH.Et[0]/ave) > ave * ccoef:
-                        if isinstance(_G.root_, list):
+                    if ((g.extH.Et[0]-ave*g.extH.Et[2]) + (_G.extH.Et[0]-ave*_G.extH.Et[2])) * (L.derH.Et[0]/ave) > ave * ccoef:
+                        # I checked and we need len(_G.root_ == rng-1) since _G is retrieved from G.nrim_[rng], and _G might not have lower rng's root added 
+                        if isinstance(_G.root_, list) and len(_G.root_ == rng-1):   
                             Gt = _G.root_[-1]  # rng+: merge roots
                             node_.update(Gt[0])
                             link_.update(Gt[1],[_L])  # L was external
