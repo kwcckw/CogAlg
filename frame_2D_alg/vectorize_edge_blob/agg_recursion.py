@@ -151,11 +151,11 @@ class CH(CBase):  # generic derivation hierarchy of variable nesting, depending 
 
         return CH(H=derLay, Et=np.array([vm,vd,rm,rd]), n=1)
 
-    def comp_md_t(_He, He):
+    def comp_md_t(_He, He, frev):  # rev is missed out?
         der_md_t = []; Et = np.array([.0,.0,.0,.0])
 
         for _md_C, md_C in zip(_He.md_t, He.md_t):
-            der_md_C = _md_C.comp_md_C(md_C, rn=1, fagg=0,frev=0)
+            der_md_C = _md_C.comp_md_C(md_C, rn=1, fagg=0,frev=frev)
             der_md_t += [der_md_C]
             Et += der_md_C.Et
 
@@ -163,7 +163,7 @@ class CH(CBase):  # generic derivation hierarchy of variable nesting, depending 
 
     def comp_H(_He, He, rn=1, frev=0):  # unpack CHs down to numericals and compare them
 
-        DLay = CH(node_=_He.node_+He.node_).add_H(_He.comp_md_t(He))
+        DLay = CH(node_=_He.node_+He.node_).add_H(_He.comp_md_t(He,frev))  
         # node_ is mediated comparands, default comp He.md_t per He, H=[] in bottom or deprecated layer
 
         for _lay, lay in zip(_He.H, He.H):  # loop extHs or [mdlat,mdLay,mdext] rng tuples, flat
@@ -401,7 +401,7 @@ def comp_N(Link, iEt, rng, rev=None):  # dir if fd, Link.derH=dH, comparand rim+
     # | n = (_n+n)/2?
     elay = CH( H=[CH(n=n, md_t=md_t, Et=Et)], n=n, md_t=[CH().copy(md_) for md_ in md_t], Et=copy(Et))
     if _N.derH and N.derH:
-        dderH = _N.derH.comp_H(N.derH, rn, fagg=1)  # comp shared layers
+        dderH = _N.derH.comp_H(N.derH, rn, frev=rev)  # comp shared layers
         elay.append_(dderH, flat=1)
     # if M: deeper comp node_,link_ by rng_node_?
     iEt += elay.Et
@@ -451,6 +451,7 @@ def cluster_from_G(G, _nrim, _lrim, rng=0):
                             Et += _L.derH.Et + Gt[2]
                             Gt[3] = 1
                         else:  # rng=1: add Ns
+                            if not isinstance(_G.root_, list): _G.root_ = []  # reset root=edge into empty list (will be added with new root later)
                             node_.add(_G); link_.add(_L); Et += _L.derH.Et
                         nrim.update(set(_G.nrim_[rng]) - node_)
                         lrim.update(set(_G.lrim_[rng]) - link_)
@@ -513,7 +514,9 @@ def reset_merged(Gt_,rng):
         for G in Gt[0]:
             G.merged = 0
             if len(G.nrim_) > rng:
-                for n in G.nrim_[rng]: n.merged = 0
+                for n in G.nrim_[rng]:
+                    if len(n.nrim_) > rng:  # we need to check their nrim too? 
+                        n.merged = 0
 
 def set_attrs(Q, root):
 
