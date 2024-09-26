@@ -387,9 +387,10 @@ def rng_link_(iL_):  # comp CLs: der+'rng+ in root.link_ rim_t node rims: direct
 def comp_N(Link, iEt, rng, dir=None):  # dir if fd, Link.derH=dH, comparand rim+=Link
 
     fd = dir is not None  # compared links have binary relative direction?
+    dir = 1 if dir is None else dir  # convert from None into numeric
     _N, N = Link.nodet
     _L,L = (2,2) if fd else (len(_N.node_),len(N.node_)); _S,S = _N.S,N.S; _A,A = _N.A,N.A
-    if dir: A = [-d for d in A]  # reverse angle direction if N is left link
+    A = [d * dir for d in A]  # reverse angle direction if N is left link
     rn = _N.n / N.n
     mdext = comp_ext(_L,L, _S,S/rn, _A,A)
     md_t = [mdext]; Et = mdext.Et.copy(); n = mdext.n
@@ -441,12 +442,15 @@ def cluster_from_G(G, _nrim, _lrim, rng=0):
             if _G.merged or len(_G.lrim_) < rng+1:
                 continue
             for g in node_:  # compare external _G to all internal nodes, include if any of them match
+                if len(g.lrim_) < rng+1: continue  # we need to skip if g.lrim is < rng, because not all nodes added from Gt[0] below are having new lrim layers
                 L = next(iter(g.lrim_[rng] & _G.lrim_[rng]), None)  # intersect = [+link] | None
                 if L:
                     if ((g.extH.Et[0]-ave*g.extH.Et[2]) + (_G.extH.Et[0]-ave*_G.extH.Et[2])) * (L.derH.Et[0]/ave) > ave * ccoef:
                         if isinstance(_G.root_, list):
                             Gt = _G.root_[-1]  # rng+: merge roots
                             node_.update(Gt[0])
+                            for n in Gt[0]: n.merged = 1  # we need to update G.merged of those merged nodes too
+                            # node_.update([G for G in Gt[0] if len( G.lrim_)>rng])  # add only nodes with lrim_ > rng? Because we are gonna loop internal to check too
                             link_.update(Gt[1],[_L])  # L was external
                             Et += _L.derH.Et + Gt[2]
                             Gt[3] = 1
@@ -462,6 +466,7 @@ def cluster_from_G(G, _nrim, _lrim, rng=0):
 
 def cluster_N__(root, iN__, fd):  # cluster G__|L__ by value density of +ve links per node
 
+    '''
     # rng=1: cluster connected Gs into Gts
     for G in iN__[0]: G.merged = 0
     N_, _re_N_ = [], []
@@ -480,7 +485,7 @@ def cluster_N__(root, iN__, fd):  # cluster G__|L__ by value density of +ve link
     # rng+: merge Gts connected via G.lrim_[rng] in their node_s into higher Gts
     while True:
         re_N_ = []
-        for G in iN__[0]: G.merged = 0  # reset all just in case
+        for G in set.union(*iN__): G.merged = 0  # reset all just in case (resets all layers because some higher layer Gs not present in lower layer)
         for _node_,_link_,_Et, mrg in _re_N_:
             if mrg: continue
             Node_, Link_, ET = set(),set(), np.array([.0,.0,.0,.0])  # m,r only?
@@ -505,6 +510,47 @@ def cluster_N__(root, iN__, fd):  # cluster G__|L__ by value density of +ve link
             rng += 1
         else:
             break
+        
+    for i, N_ in enumerate(N__):  # convert Gts to CGs
+        for ii, N in enumerate(N_):
+            if isinstance(N, list):
+                N_[ii] = sum2graph(root, [list(N[0]), list(N[1]), N[2]], fd, rng=i)
+    iN__[:] = N__
+    '''
+
+    # merged version (i think we can use a merged version since both rng == 0 and rng>1 shared a same workflow)
+    N__ = []
+    rng = 0
+    _re_N_ = [ [[N],[],[0,0,0,0],0] for N in iN__[0]]
+    
+    while True:
+        re_N_ = []
+        for G in set.union(*iN__): G.merged = 0  # Reset all merged flags
+        for  _node_,_link_,_Et, mrg in (_re_N_):
+            if mrg: continue  # Skip if merged
+            Node_, Link_, ET = set(),set(), np.array([.0,.0,.0,.0])  # m,r only?
+            for G in _node_:
+                if not G.merged and len(G.nrim_) > rng:
+                    node_ = G.nrim_[rng]- Node_
+                    if not node_: continue  # no new rim nodes
+                    node_,link_,Et = cluster_from_G(G, node_, G.lrim_[rng]-Link_, rng)
+                    Node_.update(node_)
+                    Link_.update(link_)
+                    ET += Et
+            if ET[0] > ET[2] * ave:  # additive current-layer V: form higher Gt
+                Node_.update(_node_); Link_.update(_link_)
+                Gt = [Node_, Link_, ET+_Et, 0]
+                for n in Node_:
+                    if isinstance(n.root_,list): n.root_.append(Gt)
+                    else: n.root_ = [Gt]
+                re_N_.append(Gt)
+        if re_N_:
+            N__.append(re_N_)
+            _re_N_ = re_N_
+            rng += 1
+        else:
+            break
+
     for i, N_ in enumerate(N__):  # convert Gts to CGs
         for ii, N in enumerate(N_):
             if isinstance(N, list):
