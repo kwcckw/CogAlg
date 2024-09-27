@@ -57,8 +57,9 @@ class CH(CBase):  # generic derivation hierarchy of variable nesting: extH | der
         He.n = n  # total number of params compared to form derH, to normalize comparands
         He.Et = np.array([.0,.0,.0,.0]) if Et is None else Et  # evaluation tuple: valt, rdnt
         He.root = None if root is None else root  # N or higher-composition He
-        He.i = 0 if i is None else i   # lay index in root.H, to revise rdn
-        He.it = [0,0] if it is None else it  # max fd lay in He.H: init add,comp if deleted higher layers H,md_t
+        # both i and it are not usable now?
+        # He.i = 0 if i is None else i   # lay index in root.H, to revise rdn
+        # He.it = [0,0] if it is None else it  # max fd lay in He.H: init add,comp if deleted higher layers H,md_t
         # He.ni = 0  # exemplar in node_, trace in both directions?
         # He.depth = 0  # nesting in H[0], -=i in H[Hi], in agg++? same as:
         # He.nest = nest  # nesting depth: -1/ ext, 0/ md_, 1/ derH, 2/ subH, 3/ aggH?
@@ -72,42 +73,25 @@ class CH(CBase):  # generic derivation hierarchy of variable nesting: extH | der
         if any(irdnt): HE.Et[2:] = [E + e for E, e in zip(HE.Et[2:], irdnt)]
         return HE
 
-    def add_md_t(HE, He, irdnt=[]):  # sum derLays
-
-        for MD_C, md_C in zip(HE.md_t, He.md_t):  # dextt, dlatt, dlayt
-            MD_C.add_md_C(md_C)
-        HE.n += He.n
-        HE.Et += He.Et
-        if any(irdnt): HE.Et[2:] = [E+e for E,e in zip(HE.Et[2:], irdnt)]
 
     def add_H(HE, He, irdnt=[]):  # unpack derHs down to numericals and sum them
 
         if HE:
-            for Lay,lay in zip_longest(HE.H, He.H, fillvalue=None):  # cross comp layer
+            for i, (Lay,lay) in enumerate(zip_longest(HE.H, He.H, fillvalue=None)):  # cross comp layer
                 if lay:
                     if Lay: Lay.add_H(lay, irdnt)
                     else:
                         if Lay is None:
                             HE.append_(CH().copy(lay))  # pack a copy of new lay in HE.H
                         else:
-                            HE.H[HE.H.index(Lay)] = CH(root=HE).copy(lay)  # Lay was []
-            HE.add_md_t(He) # [ext_md_C, lat_md_C, lay_md_C]
-            HE.n += He.n  # combined param accumulation span
-            HE.Et += He.Et
+                            HE.H[i] = CH(root=HE).copy(lay)  # Lay was []
+            HE.accum_pars(He, irdnt)
             HE.node_ += [node for node in He.node_ if node not in HE.node_]  # node_ is empty in CL derH?
-            if any(irdnt): HE.Et[2:] = [E+e for E,e in zip(HE.Et[2:], irdnt)]
+            
         else:
             HE.copy(He)  # init
         # feedback, ideally buffered from all elements before summing in root, ultimately G|L:
-        root = HE.root
-        while root is not None:
-            if isinstance(root, CH):
-                root.n += He.n
-                root.Et += He.Et
-                root.node_ += [node for node in He.node_ if node not in HE.node_]
-                root = root.root
-            else: break  # root is G|L
-        return HE
+        return HE.update_root(He)
 
     def append_(HE,He, irdnt=None, flat=0):
 
@@ -115,15 +99,30 @@ class CH(CBase):  # generic derivation hierarchy of variable nesting: extH | der
         I = len(HE.H)  # min index
         if flat:
             for i, lay in enumerate(He.H):  # different refs for L.derH and root.derH.H:
-                lay = CH().copy(lay); lay.i = I+i; lay.root = HE; HE.H += [lay]
+                lay = CH().copy(lay); lay.root = HE; HE.H += [lay]
         else:
-            He = CH().copy(He); He.i = I; He.root = HE; HE.H += [He]
-        if HE.md_t: HE.add_md_t(He)  # accumulate [lat_md_C,lay_md_C,ext_md_C]
-        else:       HE.md_t = [CH().copy(md_) for md_ in He.md_t]
-        HE.n += He.n
+            He = CH().copy(He); He.root = HE; HE.H += [He]
+        HE.accum_pars(He, irdnt) 
+        return HE.update_root(He)
+        
+    def accum_pars(HE, He, irdnt):
+        # unpacked add_md_t ?
+        if HE.md_t: # accumulate [lat_md_C,lay_md_C,ext_md_C]
+            for MD_C, md_C in zip(HE.md_t, He.md_t):  # dextt, dlatt, dlayt
+                MD_C.add_md_C(md_C)
+            HE.n += He.n
+            HE.Et += He.Et
+            if any(irdnt): HE.Et[2:] = [E+e for E,e in zip(HE.Et[2:], irdnt)]
+        else:       
+            HE.md_t = [CH().copy(md_) for md_ in He.md_t]
+        HE.n += He.n  # combined param accumulation span
         HE.Et += He.Et
-        if irdnt: HE.Et[2:4] = [E+e for E,e in zip(HE.Et[2:4], irdnt)]
-        root = HE
+        if any(irdnt): HE.Et[2:] = [E+e for E,e in zip(HE.Et[2:], irdnt)]
+
+
+    def update_root(HE, He):
+        
+        root = HE.root
         while root is not None:
             if isinstance(root, CH):
                 root.Et += He.Et
@@ -132,7 +131,7 @@ class CH(CBase):  # generic derivation hierarchy of variable nesting: extH | der
                 root = root.root
             else:
                break  # root is G|L
-        return HE  # for feedback in agg+
+        return HE
 
     def comp_md_C(_He, He, rn=1, dir=1):
 
@@ -150,20 +149,16 @@ class CH(CBase):  # generic derivation hierarchy of variable nesting: extH | der
 
         return CH(H=derLay, Et=np.array([vm,vd,rm,rd]), n=1)
 
-    def comp_md_t(_He, He, dir=1):  # comp derLays
-        der_md_t = []; Et = np.array([.0,.0,.0,.0])
-
-        for _md_C, md_C in zip(_He.md_t, He.md_t):
-            der_md_C = _md_C.comp_md_C(md_C, rn=1, dir=dir)
-            der_md_t += [der_md_C]
-            Et += der_md_C.Et
-
-        return CH(md_t=der_md_t, Et=Et, n=2.5)
 
     def comp_H(_He, He, rn=1, dir=1):  # unpack each layer of CH down to numericals and compare each pair
 
-        # comp md_t per layer, H=[] if bottom or deprecated layer, node_: mediated comparands
-        DLay = CH( node_=_He.node_+He.node_ ).add_H( _He.comp_md_t(He, dir))
+        # unpacked comp_md_t? Since we just need it here
+        # comp md_t per layer, H=[] if bottom or deprecated layer, node_: mediated comparands   
+        der_md_t = []; Et = np.array([.0,.0,.0,.0])
+        for _md_C, md_C in zip(_He.md_t, He.md_t):
+            der_md_C = _md_C.comp_md_C(md_C, rn=1, dir=dir)
+            der_md_t += [der_md_C]
+        DLay = CH( node_=_He.node_+He.node_, md_t = der_md_t, Et=Et, n=2.5 )
 
         for _lay, lay in zip(_He.H, He.H):  # loop extHs or [mdlat,mdLay,mdext] rng tuples, flat
             if _lay and lay:
@@ -324,6 +319,7 @@ def rng_node_(_N_):  # rng+ forms layer of rim_ and extH per N, appends N__,L__,
             _G,G, dy,dx, radii, dist = Nt
             if _G.nrim_ and G.nrim_ and (_G.nrim_[-1] & G.nrim_[-1]):  # skip indirectly connected Gs, no direct match priority?
                 continue
+            # M will never be negative since we cluster only positive Gs?
             M = (_G.mdLay.Et[0]+G.mdLay.Et[0]) *icoef**2 + (_G.derH.Et[0]+G.derH.Et[0])*icoef + (_G.extH.Et[0]+G.extH.Et[0])
             # comp if < max distance of likely matches *= prior G match * radius:
             if dist < max_dist * (radii*icoef**3) * M:
@@ -331,7 +327,7 @@ def rng_node_(_N_):  # rng+ forms layer of rim_ and extH per N, appends N__,L__,
                 comp_N(Link, Et, rng)
                 L_ += [Link]  # include -ve links
                 if Link.derH.Et[0] > ave: # rdn eval / cluster only
-                    Et += Link.derH.Et
+                    # Et += Link.derH.Et  # this line is redundant? We already have `iEt += elay.Et` in comp_N? Or make `iEt += elay.Et` conditional in comp_N?
                     N_.update({_G,G})
             else: Nt_ += [Nt]
         if Et[0] > ave * Et[2]:  # current loop vM
@@ -391,7 +387,7 @@ def comp_N(Link, iEt, rng, dir=None):  # dir if fd, Link.derH=dH, comparand rim+
     _N, N = Link.nodet
     _L,L = (2,2) if fd else (len(_N.node_),len(N.node_)); _S,S = _N.S,N.S; _A,A = _N.A,N.A
     A = [d * dir for d in A]  # reverse angle direction if N is left link
-    rn = _N.n / N.n
+    rn = _N.n / N.n  # is there any specific range for rn? Something like 0 to 1? Right now it can > 1
     mdext = comp_ext(_L,L, _S,S/rn, _A,A)
     md_t = [mdext]; Et = mdext.Et.copy(); n = mdext.n
     if not fd:  # CG
