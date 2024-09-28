@@ -356,7 +356,7 @@ def rng_link_(iL_):  # comp CLs: der+'rng+ in root.link_ rim_t node rims: direct
     L__,LL__, ET = [],[], np.array([.0,.0,.0,.0])  # all links between Ls in potentially extended L__
     rng = 1; _L_ = iL_[:]
     while True:
-        L_,LL_,Et = [],[],np.array([.0,.0,.0,.0])
+        L_,LL_,Et = set(),[],np.array([.0,.0,.0,.0])  # each N_ in N__ is a set now
         N_t_ = [[[],[]] for _ in _L_]  # new rng lay of mediating nodes, traced from all prior layers?
         for L, _N_t, N_t in zip(_L_, _N_t_, N_t_):
             for rev, _N_, N_ in zip((0,1), _N_t, N_t):
@@ -376,7 +376,7 @@ def rng_link_(iL_):  # comp CLs: der+'rng+ in root.link_ rim_t node rims: direct
                             N_ += _L.nodet  # get _Ls in N_ rims
                             if _L not in _L_:
                                 _L_ += [_L]; N_t_ += [[[],[]]]  # not in root
-                            L_ += [_L]
+                            L_.add(_L)
                             N_t_[_L_.index(_L)][1-rev] += L.nodet  # rng+ -mediating nodes
         if L_:
             L__ += [L_]; LL__ += [LL_]; ET += Et
@@ -445,7 +445,7 @@ def cluster_from_G(G, _nrim, _lrim, rng=0):
     while _lrim:
         nrim, lrim = set(), set()
         for _G,_L in zip(_nrim, _lrim):
-            if _G.merged or len(_G.lrim_) < rng+1:
+            if not hasattr(_G, 'merged') or (_G.merged or len(_G.lrim_) < rng+1):  # _G's nrim might not added to N__[0] since they are eval separately now
                 continue
             for g in node_:  # compare external _G to all internal nodes, include if any of them match
                 if len(g.lrim_) < rng + 1: continue
@@ -527,7 +527,8 @@ def set_attrs(Q, root):
         e.visited_ = []
         if isinstance(e, CL):
             e.rimt_ = []  # nodet-mediated links, same der order as e
-            e.root_ = [root]
+            # e.root_ = [root]   # CL shouldn't have edge in nested root_? because their root_ might be updated with Gt. Else we need additional check to check if N.root_[-1] is list or edge
+            e.root_ = root
         if hasattr(e,'extH'): e.derH.append_(e.extH)  # no default CL.extH
         else: e.extH = CH()  # set in sum2graph
         e.aRad = 0
