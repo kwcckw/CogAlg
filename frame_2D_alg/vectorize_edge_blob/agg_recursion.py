@@ -288,7 +288,9 @@ def vectorize_root(image):  # vectorization in 3 composition levels of xcomp, cl
 def agg_recursion(root, Q, fd):  # breadth-first rng++ cross-comp -> eval cluster, fd recursion
 
     for e in Q:
-        if fd: e.rimt_ = []  # e = CL
+        if fd: 
+            e.rimt_ = []  # e = CL
+            e.extH = CH()  # extH is not a default param in CL, so we need to add it here, or make it default in CL?
         e.root_, e.visited_, e.aRad, e.merged = [],[], 0,0
 
     N__,L__,Et,rng = rng_link_(Q) if fd else rng_node_(Q)  # init cross-comp edge|frame PP_) node_
@@ -368,8 +370,8 @@ def rng_link_(iL_):  # comp CLs: der+'rng+ in root.link_ rim_t node rims: direct
                 for rim in rim_:
                     for _L,_rev in rim:  # _L is reversed relative to its 2nd node
                         if _L is L or _L in L.visited_: continue
-                        if _L not in iL_:
-                            L.rimt_, L.root_, L.visited_, L.aRad, L.merged = [],[],[], 0,0  # set_attrs(_L)
+                        if _L not in iL_ and not hasattr(_L, 'extH'):  # added not hasattr(_L, 'extH') to prevent reset twice, or add them to iL_?
+                            _L.rimt_, _L.root_, _L.visited_, _L.aRad, _L.merged, _L.extH = [],[],[], 0,0, CH()  # set_attrs(_L)  (should be _L here)
                         L.visited_ += [_L]; _L.visited_ += [L]
                         Link = CL(nodet=[_L,L], S=2, A=np.subtract(_L.yx,L.yx), box=extend_box(_L.box, L.box))
                         comp_N(Link, rng, dir = 1 if (rev^_rev) else -1)  # d = -d if one L is reversed
@@ -452,24 +454,27 @@ def cluster_from_G(G, _nrim, _lrim):
         for _G,_L in zip(_nrim, _lrim):
             if _G.merged: continue
             for g in node_:  # compare external _G to all internal nodes, include if any of them match
-                L = next(iter(g.lrim_[-1] & _G.lrim_[-1]), None)  # intersect = [+link] | None
-                if L:
-                    if ((g.extH.Et[0]-ave*g.extH.Et[2]) + (_G.extH.Et[0]-ave*_G.extH.Et[2])) * (L.derH.Et[0]/ave) > ave * ccoef:
-                        # rng+: merge roots:
-                        if isinstance(_G.root_,list):
-                            _node_,_link_,_Et,_merged = _G.root_[-1]
-                            if _merged: continue
-                            node_.update(_node_)
-                            link_.update(_link_| {_L})  # add external L
-                            Et += _L.derH.Et + _Et
-                            for n in _node_: n.merged = 1
-                            _G.root_[-1][3] = 1
-                        else:  # rng=1: add Ns
-                            node_.add(_G); link_.add(_L); Et += _L.derH.Et
-                        nrim.update(set(_G.nrim_[-1]) - node_)
-                        lrim.update(set(_G.lrim_[-1]) - link_)
-                        _G.merged = 1
-                        break
+                # if we need to check intersect across all layers in external G, then we need to loop their lrim?
+                for _lrim in _G.lrim_:
+                    L = next(iter(g.lrim_[-1] & _lrim), None)  # intersect = [+link] | None 
+                    if L:
+                        if ((g.extH.Et[0]-ave*g.extH.Et[2]) + (_G.extH.Et[0]-ave*_G.extH.Et[2])) * (L.derH.Et[0]/ave) > ave * ccoef:
+                            # rng+: merge roots:
+                            if _G.root_:  # root_ is an empty list until added with new Gt
+                                _node_,_link_,_Et,_merged = _G.root_[-1]
+                                if _merged: continue
+                                node_.update(_node_)
+                                link_.update(_link_| {_L})  # add external L
+                                Et += _L.derH.Et + _Et
+                                for n in _node_: n.merged = 1
+                                _G.root_[-1][3] = 1
+                            else:  # rng=1: add Ns
+                                node_.add(_G); link_.add(_L); Et += _L.derH.Et
+                            nrim.update(set(_G.nrim_[-1]) - node_)
+                            lrim.update(set(_G.lrim_[-1]) - link_)
+                            _G.merged = 1
+                            break
+                if _G.merged: break
         _nrim,_lrim = nrim, lrim
     return node_, link_, Et
 
@@ -546,6 +551,7 @@ def sum2graph(root, grapht, fd, rng):  # sum node and link params into graph, ag
         if isinstance(N,CG):
             graph.mdLay.add_md_C(N.mdLay)
             add_lat(graph.latuple, N.latuple)
+        if N.extH: N.derH.append_(N.extH, flat=0)  # so we need to add this now to pack extH into derH?
         N.root_[-1] = graph
     graph.derH.append_(derH, flat=1)  # comp(derH) forms new layer, higher layers are added by feedback
     L = len(N_)
