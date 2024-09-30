@@ -288,7 +288,10 @@ def agg_recursion(root, Q, fd):  # breadth-first rng++ cross-comp -> eval cluste
 
     for e in Q:  # reset | init only?
         if fd: e.rimt_ = []  # e = CL
-        e.root_, e.visited_, e.aRad, e.merged, e.extH = [],[], 0,0, CH()
+        e.root_, e.visited_, e.aRad, e.merged = [],[], 0,0
+        if hasattr(e, 'extH'):  # recycled nodes, pack extH into derH?
+            e.derH.append_(e.extH); e.lrim_ = []; e.nrim_ = []
+        e.extH = CH()
 
     N__,L__, Et,rng = rng_link_(Q) if fd else rng_node_(Q)  # init cross-comp edge|frame PP_) node_
     m,d,mr,dr = Et
@@ -357,17 +360,22 @@ def rng_link_(iL_):  # comp CLs: der+'rng+ in root.link_ rim_t node rims: direct
     fd = isinstance(iL_[0].nodet[0], CL)
     _mL_t_ = [[n.rimt_[0][0] + n.rimt_[0][1] if fd else n.rim_[0] for n in iL.nodet] for iL in iL_]
     # for iL in iL_: _mL_t_ += [n.rimt_[0][0]+n.rimt_[0][1] if fd else n.rim_[0] for n in iL.nodet]
-    _L_ = L__[0]
+    _L_ = iL_[:]  # should be iL_
     rng = 1
     while True:
         L_,LL_,Et = set(),[],np.array([.0,.0,.0,.0])
         mL_t_ = []  # rng lay of mediated links
         for L, _mL_t in zip(_L_,_mL_t_):
-            mL_t = [set(),set()]
+            mL_t = [[],[]]
             for rev, rim in zip((0,1), _mL_t):
                 # comp L,_L mediated by nodet rim_[rng], in iL_
                 for _L,_rev in rim:  # _L is reversed relative to its 2nd node
-                    if _L is L or _L in L.visited__L: continue
+                    if _L is L or _L in L.visited_: continue
+                    if _L not in iL_:  # some of iL's nodet's rim may not in iL_, skip them? Or reset them? 
+                       _L.rimt_, _L.root_, _L.visited_, _L.aRad, _L.merged = [],[],[], 0,0
+                       if hasattr(_L, 'extH'):  # recycled nodes, pack extH into derH?
+                           _L.derH.append_(_L.extH); _L.lrim_ = []; _L.nrim_ = []
+                       _L.extH = CH()
                     L.visited_ += [_L]; _L.visited_ += [L]
                     Link = CL(nodet=[_L,L], S=2, A=np.subtract(_L.yx,L.yx), box=extend_box(_L.box, L.box))
                     comp_N(Link, rng, dir = 1 if (rev^_rev) else -1)  # d = -d if one L is reversed
@@ -379,19 +387,18 @@ def rng_link_(iL_):  # comp CLs: der+'rng+ in root.link_ rim_t node rims: direct
                             rim_ = n.rimt_ if fd else n.rim_
                             if len(rim_) > rng:
                                 rim = rim_[rng][0]+rim_[rng][0] if fd else rim_[rng]
-                                mL_t[i].update(rim)  # next rng med_L_, if rng+ rim
-                        L_.add(_L)
-            if any(mL_t): mL_t_ += [mL_t]
+                                mL_t[i] += rim  # next rng med_L_, if rng+ rim (set cannot pack list)
+                                if L not in L_:  # we just need to add it once here? 
+                                    L_.add(_L)
+                                    mL_t_ += [mL_t]
         if L_:
             L__ += [L_]; LL__ += [LL_]; ET += Et
-            _L_, _mL_t_ = [],[]
             V = 0
-            for L, mL_t in zip(_L_,mL_t_):
-                if any(mL_t):
-                    _L_ += [L]; _mL_t_ += [mL_t]
-                    for mL_ in mL_t:
-                        for mL in mL_: V += mL.derH.Et[0] - ave * mL.derH.Et[2] * rng
-            if V > 0: rng += 1  # rng+ rim vM
+            for mL_ in mL_t:
+                for (mL, rev) in mL_: V += mL.derH.Et[0] - ave * mL.derH.Et[2] * rng
+            if V > 0: 
+                rng += 1  # rng+ rim vM
+                _L_ = L_; _mL_t = mL_t
             else: break
         else:
             break
@@ -451,7 +458,7 @@ def cluster_from_G(G, _nrim, _lrim, rng):
     while _lrim:
         nrim, lrim = set(), set()
         for _G,_L in zip(_nrim, _lrim):
-            if _G.merged: continue
+            if _G.merged or not _G.root_ or len(_G.lrim_) <= rng: continue  # _G.root_ may empty if they are not in N__, but in those N's nrim instead
             for g in node_:  # compare external _G to all internal nodes, include if any of them match
                 L = next(iter(g.lrim_[rng] & _G.lrim_[rng]), None)  # intersect = [+link] | None
                 if L:
@@ -511,7 +518,7 @@ def cluster_N__(root, N__, fd):  # cluster G__|L__ by value density of +ve links
             if Gt[2][0] > Gt[2][2] * ave:  # additive Et
                 n_ += [sum2graph(root, [list(Gt[0]), list(Gt[1]), Gt[2]], fd, rng=i)]
             else:
-                n_ += Gt[0][:]  # unpack weak Gt
+                n_ += Gt[0]  # unpack weak Gt ([:] is not needed, they will be copied anyway)
         n__ += [n_]
     N__[:] = n__
 
