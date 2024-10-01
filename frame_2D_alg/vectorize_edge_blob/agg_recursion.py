@@ -366,7 +366,7 @@ def rng_link_(iL_):  # comp CLs: der+'rng+ in root.link_ rim_t node rims: direct
     _L_ = iL_
     med = 1  # mediation degree
     while True:
-        L_,LL_, all_, Et = [],[],[],np.array([.0,.0,.0,.0])
+        L_,LL_, all_, Et = set(),[],[],np.array([.0,.0,.0,.0])
         mL_t_ = []  # rng lay L_ - mediated links
         for L, _mL_t in zip(_L_,_mL_t_):
             mL_t = [set(),set()]  # extend nodet-mediated links
@@ -381,20 +381,19 @@ def rng_link_(iL_):  # comp CLs: der+'rng+ in root.link_ rim_t node rims: direct
                     # L.rim_t += Link, order: nodet < L < rimt_, mN.rim || L
                     et = Link.derH.Et
                     Et += et; LL_ += [Link]  # include -ve links
-                    Med = med+1
-                    if et[0] > ave * et[2] * (Med):  # eval to extend search
+                    if et[0] > ave * et[2] * (med):  # eval to extend search (med+1 will never be true? We haven't reach that rng yet)
                         for i, n in enumerate(_L.nodet):
                             rim_ = n.rimt_ if fd else n.rim_
                             if len(rim_) > med:
-                                rim = rim_[Med][0]+rim_[Med][1] if fd else rim_[Med]
+                                rim = rim_[med][0]+rim_[med][1] if fd else rim_[med]
                                 for link, rev in rim:
-                                    if link in all_: continue
-                                    all_ += [link]
-                                    if link.derH.Et[0] - ave * link[0].derH.Et[2] * Med > 0:
+                                    if link in n.visited_: continue
+                                    else:                  n.visited_ += [link]
+                                    if link.derH.Et[0] - ave * link.derH.Et[2] * med > 0:
                                         # med+ links value, sum in mL_t_V?
-                                        mL_t[i].add(link)  # incrementally mediated direction L_
+                                        mL_t[i].add((link, i))  # incrementally mediated direction L_  (convert all Lt to tuple, so that set can be used on them)
             if any(mL_t):
-                L_+= [L]; mL_t_ += [mL_t]
+                L_.add(L); mL_t_ += [mL_t]
         if L_:  # add eval mL_t_V?
             L__ += [L_]; LL__ += [LL_]; ET += Et
             med += 1; _L_ = L_; _mL_t_ = mL_t_
@@ -433,11 +432,11 @@ def comp_N(Link, rng, dir=None):  # dir if fd, Link.derH=dH, comparand rim+=Link
                 node.extH.H[-1].add_H(elay); node.lrim_[-1].add(Link); node.nrim_[-1].add((_N,N)[rev])
         # include negative links to form L_:
         if (len(node.rimt_) if fd else len(node.rim_)) < rng:
-            if fd: node.rimt_ = [[[[Link,rev]],[]]] if dir else [[[],[[Link,rev]]]]  # add rng layer
-            else:  node.rim_ += [[[Link, rev]]]
+            if fd: node.rimt_ = [[[(Link,rev)],[]]] if dir else [[[],[(Link,rev)]]]  # add rng layer
+            else:  node.rim_ += [[(Link, rev)]]
         else:
-            if fd: node.rimt_[-1][1-rev] += [[Link,rev]]  # add in last rng layer, opposite to _N,N dir
-            else:  node.rim_[-1] += [[Link, rev]]
+            if fd: node.rimt_[-1][1-rev] += [(Link,rev)]  # add in last rng layer, opposite to _N,N dir
+            else:  node.rim_[-1] += [(Link, rev)]
 
 def comp_ext(_L,L,_S,S,_A,A):  # compare non-derivatives:
 
@@ -455,7 +454,7 @@ def cluster_from_G(G, _nrim, _lrim, rng):
     while _lrim:
         nrim, lrim = set(), set()
         for _G,_L in zip(_nrim, _lrim):
-            if _G.merged or not _G.root_ or len(G.nrim_) <= rng:
+            if _G.merged or not _G.root_ or len(_G.lrim_) <= rng:   # should be _G here?
                 continue  # root_ is empty if _G not in N__
             for g in node_:  # compare external _G to all internal nodes, add if any match
                 L = next(iter(g.lrim_[rng] & _G.lrim_[rng]), None)  # intersect = [+link] | None
