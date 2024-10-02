@@ -183,7 +183,8 @@ class CH(CBase):  # generic derivation hierarchy of variable nesting: extH | der
             i_ += [lay.i]
         He.i_ = i_  # comp_H priority indices: node/m | link/d
         if not fd:
-            He.root.node_ = He.H[i_[0]].node_  # no He.node_ in CL?
+            # i_ may empty if He.H is empty, so sort_H should be called only if He.H is not empty
+            He.root.node_ = He.H[i_[0]].node_  # no He.node_ in CL? CL has nodet instead
 
     def copy(_He, He):
         for attr, value in He.__dict__.items():
@@ -362,7 +363,19 @@ def rng_link_(iL_):  # comp CLs: der+'rng+ in root.link_ rim_t node rims: direct
 
     L__,LL__,ET = [],[], np.array([.0,.0,.0,.0])  # all links between Ls in potentially extended L__
     fd = isinstance(iL_[0].nodet[0], CL)
-    _mL_t_ = [[n.rimt_[0][0] + n.rimt_[0][1] if fd else n.rim_[0] for n in iL.nodet] for iL in iL_]
+    
+    # right now we add both visited_ and mL_t at a same time, and we need to add first rim into visited_ too
+    _mL_t_ = []
+    for iL in iL_:
+        mL_t = []
+        for n in iL.nodet:
+            L_ = []
+            for Lt in (n.rimt_[0][0] + n.rimt_[0][1] if fd else n.rim_[0]):
+                if Lt[0] is not iL and Lt[0] not in iL.visited_:
+                    L_ += [Lt]; iL.visited_ += [Lt[0]]      
+            mL_t += [L_] 
+        _mL_t_ += [mL_t]
+        
     _L_ = iL_
     med = 1  # rng = n intermediate nodes
     while True:
@@ -370,11 +383,12 @@ def rng_link_(iL_):  # comp CLs: der+'rng+ in root.link_ rim_t node rims: direct
         for L, mL_t in zip(_L_,_mL_t_):  # packed comparands
             for rev, rim in zip((0,1), mL_t):
                 for _L,_rev in rim:  # reverse _L med by nodet[1]
+                    if _L not in iL_: continue  # skip out of root Ls, or skip it during the addition of mL_t?
                     Link = CL(nodet=[_L,L], S=2, A=np.subtract(_L.yx,L.yx), box=extend_box(_L.box, L.box))
                     # comp L,_L:
                     et = comp_N(Link, rng=med, dir = 1 if (rev^_rev) else -1)  # d = -d if one L is reversed
                     LL_ += [Link]  # include -ve, L.rim_t += Link, order: nodet < L < rimt_, mN.rim || L
-                    if et: Et += et
+                    if any(et): Et += et  # we need any() to check if any of the array is not 0
         Med = med + 1  # rng+ pre-eval loop:
         if Et[0] > ave * Et[2] * Med:
             L_, mL_t_, rEt = set(),[], np.array([.0,.0,.0,.0])
@@ -445,7 +459,7 @@ def comp_N(Link, rng, dir=None):  # dir if fd, Link.derH=dH, comparand rim+=Link
             else:  # append last layer
                 node.extH.H[-1].add_H(elay); node.lrim_[-1].add(Link); node.nrim_[-1].add((_N,N)[rev])
 
-            return elay.Et
+    return elay.Et  # prior indentation is wrong
 
 def comp_ext(_L,L,_S,S,_A,A):  # compare non-derivatives:
 
