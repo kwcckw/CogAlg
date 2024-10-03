@@ -287,14 +287,15 @@ def vectorize_root(image):  # vectorization in 3 composition levels of xcomp, cl
                         PP.aRad = np.hypot(*np.subtract(PP.yx,(yn,xn)))
                         G_ += [PP]
                 if len(G_) > 10:
-                    agg_recursion(edge, G_, fd=0)  # discontinuous PP_ xcomp, cluster
+                    agg_recursion(edge, G_, [0,0,0,0], fd=0)  # discontinuous PP_ xcomp, cluster
 
-def agg_recursion(root, iQ, fd):  # breadth-first rng++ cross-comp -> eval cluster, fd recursion
+def agg_recursion(root, iQ, iEt, fd):  # breadth-first rng++ cross-comp -> eval cluster, fd recursion
 
     Q = []
     for e in iQ:  # reset | init only?
         if fd: e.rimt_ = []  # e = CL
         e.root_, e.visited_, e.aRad, e.merged, e.extH = [],[], 0,0, CH()
+        e.lrim_, e.nrim_ = [], []  # reset for recycled weak Gs
         Q += [e]
     # cross-comp root link_|node_, initially edge PP_:
     N__,L__, Et,rng = rng_link_(Q) if fd else rng_node_(Q)
@@ -308,17 +309,32 @@ def agg_recursion(root, iQ, fd):  # breadth-first rng++ cross-comp -> eval clust
             root.derH.H[-1].H[-1].add_H(L.derH)  # accum Lay
         # rng_link_
         if fvd and len(L_) > ave_L:  # comp L, sub-cluster by dL: mL is redundant to mN?
-            agg_recursion(root, L_, fd=1)  # appends last aggLay, L_=lG_ if segment
+            agg_recursion(root, L_, Et, fd=1)  # appends last aggLay, L_=lG_ if segment
         if fvm:
             cluster_N__(root, N__, fd)  # cluster rngLays in root.node_,
             for N_ in N__:  # replace root.node_ with nested H of graphs
-                if len(N_) > ave_L:  # rng_node_
-                    agg_recursion(root, N_, fd=0)  # adds higher aggLay / recursive call
+                if len(N_) > ave_L and Et[0] - iEt[0] > ave * (Et[2] + iEt[2]):  # rng_node_  (we need to eval based on their val here? Because a same set of weak Gs might be recycled over and over endlessly)
+                    agg_recursion(root, N_, Et, fd=0)  # adds higher aggLay / recursive call
 '''
      if flat derH:
         root.derH.append_(CH().copy(L_[0].derH))  # init
         for L in L_[1:]: root.derH.H[-1].add_H(L.derH)  # accum
 '''
+
+def full_intersect(_N_, N_):
+        
+    for _N in _N_:
+        _rim =  (_N_.rimt_[-1][0]+_N_.rimt_[-1][1]) if isinstance(_N, CL) else (_N.rim_[-1])  # last layer rim only or all layers?
+        _eN_ = [Lt[0][1] if Lt[0][0] is _N else Lt[0][0] for Lt in _rim]  # external Ns per _N
+        
+        for N in N_:  
+            if N is not _N:  # not sure if we need this
+                rim =  (N_.rimt_[-1][0]+N_.rimt_[-1][1]) if isinstance(N, CL) else (N.rim_[-1])  # last layer rim only or all layers?
+                eN_ = [Lt[0][1] if Lt[0][0] is N else Lt[0][0] for Lt in rim]  # external Ns per N
+                
+                # intersected Ns between _N and N from their rim
+                iN_ = [_eN for _eN in _eN_ if _eN in eN_]
+
 
 def rng_node_(_N_):  # rng+ forms layer of rim_ and extH per N, appends N__,L__,Et, ~ graph CNN without backprop
 
@@ -331,7 +347,7 @@ def rng_node_(_N_):  # rng+ forms layer of rim_ and extH per N, appends N__,L__,
         radii = G.aRad + _G.aRad
         dy,dx = np.subtract(_G.yx,G.yx)
         dist = np.hypot(dy,dx)
-        _Gt_ += [[_G,G, rn, dy,dx, radii,dist]]
+        _Gt_ += [(_G,G, rn, dy,dx, radii,dist)]
 
     icoef = .5  # internal M proj_val / external M proj_val
     rng = 1  # for clarity, redundant to len N__
@@ -347,14 +363,14 @@ def rng_node_(_N_):  # rng+ forms layer of rim_ and extH per N, appends N__,L__,
                 Link = CL(nodet=[_G,G], S=2, A=[dy,dx], box=extend_box(G.box,_G.box))
                 et = comp_N(Link, rn, rng)
                 if et is not None:
-                    Et += et; L_ += [Link]  # include -ve links
+                    Et += et; L_.add(Link)  # include -ve links
                     if et[0] > ave * et[2] * (rng+1):  # eval to extend search
                         Gt_.update({_G,G})
-            else: Gt_ += [Gt]
+            else: Gt_.add(Gt)
         if Et[0] > ave * Et[2]:  # current loop vM
-            N__ += [Gt_]; L__ += [L_]; ET += Et
+            N__ += [set(G for G in Gt_ if isinstance(G, CG))]; L__ += [L_]; ET += Et  # skip Gt? 
             rng += 1  # sub-cluster / rng N_
-            _Gt_ = [Gt for Gt in Gt_ if (Gt[0] in _Gt_ or Gt[1] in _Gt_)]
+            _Gt_ = [Gt for Gt in Gt_ if (isinstance(Gt, tuple) and (Gt[0] in Gt_ or Gt[1] in Gt_))]  # Gt_ now is a mixing of recycled Gt and G pair
             # re-evaluate not-compared pairs with one incremented N.M
         else:
             break
@@ -456,7 +472,7 @@ def comp_N(Link, rn, rng, dir=None):  # dir if fd, Link.derH=dH, comparand rim+=
             else:  # append last layer
                 node.extH.H[-1].add_H(elay); node.lrim_[-1].add(Link); node.nrim_[-1].add((_N,N)[rev])
 
-            return elay.Et  # conditional
+    return elay.Et  # conditional  (actually this should be default? Else we might be adding rim to one of the node in nodet only, where it should be bilateral)
 
 def comp_ext(_L,L,_S,S,_A,A):  # compare non-derivatives:
 
