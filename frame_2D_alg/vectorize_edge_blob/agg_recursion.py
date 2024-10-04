@@ -217,8 +217,6 @@ class CG(CBase):  # PP | graph | blob: params of single-fork node_ cluster
         # maps to node_H / agg+|sub+:
         G.derH = CH(root=G) if derH is None else derH  # sum from nodes, then append from feedback
         G.extH = CH(root=G) if extH is None else extH  # sum from rim_ elays, H maybe deleted
-        G.lrim_ = []  # +ve only
-        G.nrim_ = []
         G.rim_ = []  # direct external links, nested per rng
         G.rng = rng
         G.n = n   # external n (last layer n)
@@ -344,13 +342,16 @@ def rng_node_(_N_):  # rng+ forms layer of rim_ and extH per N, appends N__,L__,
             # comp if < max distance of likely matches *= prior G match * radius:
             if dist < max_dist * (radii*icoef**3) * M:
                 Link = CL(nodet=[_G,G], S=2, A=[dy,dx], box=extend_box(G.box,_G.box))
-                et = comp_N(Link, rn, rng)
+                comp_N(Link, rn, rng)
                 L_ += [Link]  # include -ve links
-                if et is not None:
-                    Et += et; N_.add(_G); N_.add(G)
+                if Link.derH.Et[0] > ave * Link.derH.Et[2] * rng+1:
+                    Et += Link.derH.Et; N_.add(_G); N_.add(G)
                     pL_ += [Link]  # for clustering
+                    for N in (_G, G):
+                        if len(N.extH.H) < rng: N.extH.append_(Link.derH, flat=0)
+                        else:                   N.extH.H[-1].add_H(Link.derH)
             else:
-                Gp_ += [Gp]  # re-evaluate not-compared pairs with one incremented N.M:
+                Gp_.add(Gp)  # re-evaluate not-compared pairs with one incremented N.M:
         if Et[0] > ave * Et[2]:  # current-rng vM
             rng += 1
             N__+= [N_]; L__+= [L_]; pL__+=[pL_]; ET += Et  # sub-cluster N_ or pL_
@@ -450,14 +451,6 @@ def comp_N(Link, rn, rng, dir=None):  # dir if fd, Link.derH=dH, comparand rim+=
         else:
             if fd: node.rimt_[-1][1-rev] += [(Link,rev)]  # add in last rng layer, opposite to _N,N dir
             else:  node.rim_[-1] += [(Link, rev)]
-        # cluster +ves:
-        if elay.Et[0] > ave * elay.Et[2] * rng+1:  # select for next rng
-            if len(node.lrim_) < rng:  # init rng layer
-                node.extH.append_(elay); node.lrim_ += [{Link}]; node.nrim_ += [{(_N,N)[rev]}]  # _node
-            else:  # append last layer
-                node.extH.H[-1].add_H(elay); node.lrim_[-1].add(Link); node.nrim_[-1].add((_N,N)[rev])
-            # conditional:
-            return elay.Et
 
 def comp_ext(_L,L,_S,S,_A,A):  # compare non-derivatives:
 
@@ -521,12 +514,40 @@ def cluster_N__(root, N__,L__, fd):  # cluster G__|L__ by value density of +ve l
             for N in L.nodet:
                 _node_, _link_, _Et, mrg = N.root_[-1]  # <= rng in all L-connected Gs
                 if mrg: continue  # 1 in current-rng overlap, 0 in only one G of nodet
-                Node_, Link_, Et = _node_[:], _link_[:], _Et[:]  # current-rng Gt init
+                Node_, Link_, Et = _node_.copy(), _link_.copy(), _Et.copy()  # current-rng Gt init
                 for G in _node_:
-                    if not G.merged and len(G.nrim_) > rng:
-                        node_ = G.nrim_[rng] - Node_
-                        if not node_: continue  # no new rim nodes
-                        node_, link_, et = cluster_from_G(G, node_, G.lrim_[rng] - Link_, rng)
+                    if not G.merged and len(G.rim_) > rng:
+                        _lrim = set([Lt[0] for Lt in G.rim_[rng] if Lt[0].derH.Et[0] >  ave * Lt[0].derH.Et[2] * rng ]) - Link_  # positive rim only
+                        _nrim = set([_L.nodet[1] if _L.nodet[0] is G else _L.nodet[0] for _L in _lrim]) - Node_
+                        if not _nrim: continue  # no new rim nodes
+                        node_, link_, et = {G}, set(), np.array([.0,.0,.0,.0])  # m,r only?
+                        while _lrim:
+                            nrim, lrim = set(), set()
+                            for _G,_L in zip(_nrim, _lrim):
+                                if _G.merged or not _G.root_ or len(_G.rim_) <= rng:
+                                    continue  # root_ is empty if _G not in N__
+                                elrim = [Lt[0] for Lt in _G.rim_[rng]]  # lrim of external G
+                                for g in node_:  # compare external _G to all internal nodes, add if any match
+                                    ilrim = [Lt[0] for Lt in g.rim_[rng]]  # lrim of internal G
+                                    iL = next((eL for eL in elrim if eL in ilrim), None)  # intersect = [+link] | None
+                                    if iL and iL.derH.Et[0] >  ave * iL.derH.Et[2] * rng:  # positive intersected L
+                                        if ((g.extH.Et[0]-ave*g.extH.Et[2]) + (_G.extH.Et[0]-ave*_G.extH.Et[2])) * (iL.derH.Et[0]/ave) > ave * ccoef:
+                                            # merge roots,
+                                            # else: node_.add(_G); link_.add(_L); Et += _L.derH.Et
+                                            _node_,_link_,_et,_merged = _G.root_[-1]
+                                            if _merged: continue
+                                            node_.update(_node_)
+                                            link_.update(_link_| {_L})  # add external L
+                                            et += _L.derH.Et + _et
+                                            for n in _node_: n.merged = 1
+                                            _G.root_[-1][3] = 1
+                                            __lrim = set([Lt[0] for Lt in _G.rim_[rng] if Lt[0].derH.Et[0] >  ave * Lt[0].derH.Et[2] * rng ]) - link_
+                                            __nrim = set([__L.nodet[0] if __L.nodet[0] is _G else __L.nodet[1] for __L in __lrim]) - node_
+                                            nrim.update(__nrim)
+                                            lrim.update(__lrim)
+                                            _G.merged = 1
+                                            break
+                            _nrim,_lrim = nrim, lrim 
                         Node_.update(node_)
                         Link_.update(link_)
                         Et += et
