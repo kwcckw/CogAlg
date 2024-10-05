@@ -335,9 +335,10 @@ def rng_node_(_N_):  # rng+ forms layer of rim_ and extH per N, appends N__,L__,
         Gp_,N_,L_, pL_, Et = [],set(),[],[], np.array([.0,.0,.0,.0])
         for Gp in _Gp_:
             _G,G, rn, dy,dx, radii, dist = Gp
-            if _G.nrim_ and G.nrim_ and any([_nrim & nrim for _nrim,nrim in zip(_G.nrim_,G.nrim_)]):
-                # skip indirectly connected Gs, no direct match priority?
-                continue
+            # skip indirectly connected Gs, no direct match priority?
+            _nrim = set([(Lt[0].nodet[1] if Lt[0].nodet[0] is _G else Lt[0].nodet[0]) for rim in _G.rim_ for Lt in rim])
+            nrim = set([(Lt[0].nodet[1] if Lt[0].nodet[0] is G else Lt[0].nodet[0]) for rim in G.rim_ for Lt in rim])
+            if _nrim & nrim: continue
             M = (_G.mdLay.Et[0]+G.mdLay.Et[0]) *icoef**2 + (_G.derH.Et[0]+G.derH.Et[0])*icoef + (_G.extH.Et[0]+G.extH.Et[0])
             # comp if < max distance of likely matches *= prior G match * radius:
             if dist < max_dist * (radii*icoef**3) * M:
@@ -345,7 +346,7 @@ def rng_node_(_N_):  # rng+ forms layer of rim_ and extH per N, appends N__,L__,
                 et = comp_N(Link, rn, rng)
                 L_ += [Link]  # include -ve links
                 if et is not None:
-                    pL_ += [Link]; Et += et  # for clustering
+                    pL_ += [Link]; N_.update({_G, G}); Et += et  # for clustering  (the packing of Gs is missed out?)
             else:
                 Gp_ += [Gp]  # re-evaluate not-compared pairs with one incremented N.M:
         if Et[0] > ave * Et[2]:  # current-rng vM
@@ -449,12 +450,12 @@ def comp_N(Link, rn, rng, dir=None):  # dir if fd, Link.derH=dH, comparand rim+=
             else:  node.rim_[-1] += [(Link, rev)]
         # select for next rng:
         if elay.Et[0] > ave * elay.Et[2] * rng+1:
-            if len(node.lrim_) < rng:  # init rng layer
+            if len(node.extH.H) < rng:  # init rng layer
                 node.extH.append_(elay)  # node.lrim_ += [{Link}]; node.nrim_ += [{(_N,N)[rev]}]  # _node
             else:  # append last layer
                 node.extH.H[-1].add_H(elay)  # node.lrim_[-1].add(Link); node.nrim_[-1].add((_N,N)[rev])
 
-            return elay.Et
+            return elay.Et  # if we return it here, looks like the other N won't have any rim_, but they still will be added to N_, and we may need to access their rim in fd==1 fork later
 
 def comp_ext(_L,L,_S,S,_A,A):  # compare non-derivatives:
 
@@ -478,8 +479,9 @@ def cluster_N__(root, N__,L__, fd):  # cluster G__|L__ by value density of +ve l
     for rng, N_ in enumerate(N__):  # init Gt for each N, may be unpacked and present multiple layers
         for N in N_:
             if N.root_: continue  # Gt was initialized in lower N__[i]
-            Gt = [{N}, set(), np.array([.0,.0,.0,.0]), 0]
-            N.root_ = [Gt,rng]  # rng of the lowest root?
+            # rng of the lowest root?
+            Gt = [{N}, set(), np.array([.0,.0,.0,.0]), 0, rng]  # pack rng into Gt too? But why we need this rng?
+            N.root_ = [Gt]  
     # cluster from L_:
     Gt__ = []
     for rng, L_ in enumerate(L__, start=1):  # all Ls and current-rng Gts are unique
@@ -487,42 +489,45 @@ def cluster_N__(root, N__,L__, fd):  # cluster G__|L__ by value density of +ve l
         if len(L_) < ave_L: continue
         for L in L_:
             for G in L.nodet:
-                node_, link_, et, mrg = G.root_[-1]  # <= rng in all L-connected Gs
+                node_, link_, et, mrg, rng = G.root_[-1]  # <= rng in all L-connected Gs
                 if mrg: continue  # 1 in current-rng overlap, 0 in one G of the nodet
-                Node_, Link_, Et = _node_.copy(), _link_.copy(), et.copy()  # init Gt
-                for g in Node_:
-                    if not g.merged and len(g.rim_) > rng:
-                        _lrim = set([Lt[0] for Lt in g.rim_[rng] if Lt[0].derH.Et[0] >  ave * Lt[0].derH.Et[2] * rng ]) - Link_
-                        while _lrim:
-                            lrim = set()
-                            for _L in _lrim:
-                                _G = _L.nodet[1] if _L.nodet[0] is G else _L.nodet[0]
-                                if _G.merged or not _G.root_ or len(_G.rim_) <= rng:  # root_=[] if _G not in N__
-                                    continue
-                                _node_,_link_,_Et,_mrg = _G.root_[-1]  # <= rng in all L-connected Gs
-                                if _mrg: continue
-                                cV = 0  # intersect V
-                                xlrim = set()  # add to lrim
-                                for _g in _node_:
-                                    __lrim = [Lt[0] for Lt in _g.rim_[rng]]  # lrim of external G
-                                    clrim = {_lrim} & {__lrim}  # intersect
-                                    xlrim.update({__lrim} - clrim)
-                                    for __L in clrim:  # eval common rng Ls
-                                        v = ((g.extH.Et[0]-ave*g.extH.Et[2]) + (_g.extH.Et[0]-ave*_G.extH.Et[2])) * (__L.derH.Et[0]/ave)
-                                        if v > 0: cV += v
-                                if cV > ave * ccoef:  # additional eval to merge roots:
-                                    lrim.update(xlrim)
-                                    Node_.update(_node_)
-                                    Link_.update(_link_| {_L})  # add external L
-                                    Et += _L.derH.Et + _Et
-                                    for n in _node_: n.merged = 1
-                                    _G.root_[-1][3] = 1
-                            _lrim = lrim
+                Node_, Link_, Et = node_.copy(), link_.copy(), et.copy()  # init Gt
+                checked_Node_ = set()
+                while (Node_ - checked_Node_):  # added this while loop to add element into set (Node_) while looping it
+                    for g in (Node_ - checked_Node_):
+                        checked_Node_.add(g) 
+                        if len(g.rim_) > rng:  # with checked_Node_, not G.merged is no longer needed
+                            _lrim = set([Lt[0] for Lt in g.rim_[rng] if Lt[0].derH.Et[0] >  ave * Lt[0].derH.Et[2] * rng ]) - Link_
+                            while _lrim:
+                                lrim = set()
+                                for _L in _lrim:
+                                    _G = _L.nodet[1] if _L.nodet[0] is g else _L.nodet[0]  # we are unpacking lrim of g, so we should be checking g here?
+                                    if _G.merged or not _G.root_ or len(_G.rim_) <= rng or _G is G:  # root_=[] if _G not in N__
+                                        continue
+                                    _node_,_link_,_Et,_mrg, _rng = _G.root_[-1]  # <= rng in all L-connected Gs
+                                    if _mrg: continue
+                                    cV = 0  # intersect V
+                                    xlrim = set()  # add to lrim
+                                    for _g in _node_:
+                                        __lrim = set([Lt[0] for Lt in _g.rim_[rng] if Lt[0].derH.Et[0] >  ave * Lt[0].derH.Et[2] * rng ])  # lrim of external G  (added eval for positive rim only)
+                                        clrim = _lrim & __lrim  # intersect
+                                        xlrim.update(__lrim - clrim)
+                                        for __L in clrim:  # eval common rng Ls
+                                            v = ((g.extH.Et[0]-ave*g.extH.Et[2]) + (_g.extH.Et[0]-ave*_G.extH.Et[2])) * (__L.derH.Et[0]/ave)
+                                            if v > 0: cV += v
+                                    if cV > ave * ccoef:  # additional eval to merge roots:
+                                        lrim.update(xlrim)
+                                        Node_.update(_node_)  # _node_ here must have merged == 1, but we still need to check their lrim right in the next loop?
+                                        Link_.update(_link_| {_L})  # add external L
+                                        Et += _L.derH.Et + _Et
+                                        for n in _node_: n.merged = 1
+                                        _G.root_[-1][3] = 1
+                                _lrim = lrim
                 if Et[0] > Et[2] * ave:  # additive current-layer V: form higher Gt
-                    Node_.update(_node_); Link_.update(_link_)
-                    Gt = [Node_, Link_, Et + _Et, 0]
+                    # Node_.update(_node_); Link_.update(_link_)  this line is no longer needed
+                    Gt = [Node_, Link_, Et + _Et, 0, rng]
                     for n in Node_: n.root_+= [Gt]
-                    N.root_ += [Gt]
+                    # N.root_ += [Gt]  this line is no longer needed too, since we just need to update root from Node_
                     L.root = [rng, Gt]  # rng-specific
                     Gt_ += [Gt]
         for G in set.union(*N__[:rng+1]):  # in all lower Gs
