@@ -255,8 +255,6 @@ class CL(CBase):  # link or edge, a product of comparison between two nodes or l
         l.H_ = [] if H_ is None else H_  # if agg++| sub++?
         l.Vt = [0,0]  # for rim-overlap modulated segmentation, init derH.Et[:2]
         l.n = 1  # min(node_.n)
-        l.lrim_ = []
-        l.nrim_ = []
         # add rimt_, elay | extH if der+
     def __bool__(l): return bool(l.derH.H)
 
@@ -369,7 +367,10 @@ def rng_link_(iL_):  # comp CLs via directional node-mediated link tracing: der+
             L_ = []
             for (_L,rev) in (n.rimt_[0][0] + n.rimt_[0][1] if fd else n.rim_[0]):  # all rims are inside root node_
                 if _L is not L:
-                    L_ += [[L,rev]]; L.visited_ += [L]
+                    if fd:  # looks like we need to init CL here too  (when nodet is CL, their rimt is new Link and didn't have parameter initialized)
+                        _L.rimt_ = []
+                        _L.root_, _L.visited_, _L.aRad, _L.merged, _L.extH = [],[], 0,0, CH()
+                    L_ += [[_L,rev]]; L.visited_ += [L]  # should be packing _L into L_ here
             mL_t += [L_]
         _mL_t_ += [mL_t]
     _L_ = iL_; med = 1  # rng = n intermediate nodes
@@ -389,7 +390,7 @@ def rng_link_(iL_):  # comp CLs via directional node-mediated link tracing: der+
         # rng+ eval:
         Med = med + 1
         if Et[0] > ave * Et[2] * Med:
-            L_, mL_t_, rEt = set(),[], np.array([.0,.0,.0,.0])
+            L_, mL_t_, rEt = set(),[], np.array([.0,.0,.0,.0])  # this overwrites the L_ and pLL_ above?
             for L, _mL_t in zip(_L_,_mL_t_):  # mediators
                 mL_t, lEt = [set(),set()], np.array([.0,.0,.0,.0])  # __Ls per L
                 for rev, rim in zip((0,1),_mL_t):
@@ -409,7 +410,7 @@ def rng_link_(iL_):  # comp CLs via directional node-mediated link tracing: der+
                     L_.add(L); mL_t_ += [mL_t]; rEt += lEt  # rng+/ L is different from comp/ L above
             # refine eval:
             if rEt[0] > ave * rEt[2] * Med:
-                L__ += [L_]; LL__ += [LL_]; pLL__+= pLL_; ET += rEt
+                L__ += [L_]; LL__ += [LL_]; pLL__+= [pLL_]; ET += rEt  # we need bracket to pack them as nested
                 _L_ = L_; _mL_t_ = mL_t_
                 med = Med
             else:
@@ -483,28 +484,30 @@ def cluster_N__(root, N__,L__, fd):  # cluster G__|L__ by value density of +ve l
         if len(L_) < ave_L: continue
         for N in N_:
             if not N.root_:  # init root graph
-                Gt = [{N}, set(), np.array([.0,.0,.0,.0]), 0]; N.root_ = [Gt]  # add rng?
+                Gt = [{N}, set(), np.array([.0,.0,.0,.0]), 0, rng]; N.root_ = [Gt]  # add rng?
         # cluster from L_:
         for L in L_:
             for G in L.nodet:
-                node_, link_, et, mrg = G.root_[-1]  # lower-rng graph
+                node_, link_, et, mrg, lrng = G.root_[-1]  # lower-rng graph
                 if mrg: continue  # 1 in current-rng overlap, 0 in one G of the nodet
                 Node_, Link_, Et = node_.copy(), link_.copy(), et.copy()  # init current-rng Gt
                 # extend Node_:
                 for g in node_:
-                    if len(g.rim_) <= rng: continue  # always CG
-                    _lrim = set([Lt[0] for Lt in g.rim_[rng] if Lt[0].derH.Et[0] > ave * Lt[0].derH.Et[2] * rng]) - Link_
+                    rim_ = g.rimt_ if fd else g.rim_
+                    if len(rim_) <= rng: continue  # always CG
+                    _lrim = set([Lt[0] for Lt in (rim_[rng][0]+rim_[rng][1] if fd else rim_[rng]) if Lt[0].derH.Et[0] > ave * Lt[0].derH.Et[2] * rng]) - Link_
                     while _lrim:
                         lrim = set()
                         for _L in _lrim:
                             _G = _L.nodet[1] if _L.nodet[0] is g else _L.nodet[0]
                             if _G.merged or not _G.root_ or len(_G.rim_) <= rng or _G is G:  # root_=[] if _G not in N__
                                 continue
-                            _node_,_link_,_Et,_mrg = _G.root_[-1]  # lower-rng _graph
+                            _node_,_link_,_Et,_mrg, lrng = _G.root_[-1]  # lower-rng _graph
                             if _mrg: continue
                             cV = 0  # intersect V
                             xlrim = set()  # add to lrim
                             for _g in _node_:  # no node_ overlap
+                                if len(_g.rim_) <= rng: continue  # skip if external _g doesn't have current rng's rim
                                 __lrim = set([Lt[0] for Lt in _g.rim_[rng] if Lt[0].derH.Et[0] >  ave * Lt[0].derH.Et[2] * rng])
                                 clrim = _lrim & __lrim  # intersect
                                 xlrim.update(__lrim - clrim)
