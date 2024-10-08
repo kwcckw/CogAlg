@@ -152,7 +152,7 @@ class CH(CBase):  # generic derivation hierarchy of variable nesting: extH | der
             rm += vd > vm; rd += vm >= vd
             derLay += [match, diff]  # flat
 
-        return CH(H=derLay, Et=np.array([vm,vd,rm,rd]), n=1)
+        return CH(H=derLay, Et=np.array([vm,vd,rm,rd],dtype=('float')), n=1)  # Et is float now, to prevent summing ints to float later
 
     def comp_H(_He, He, rn=1, dir=1):  # unpack each layer of CH down to numericals and compare each pair
 
@@ -285,7 +285,13 @@ def vectorize_root(image):  # vectorization in 3 composition levels of xcomp, cl
                 if len(G_) > 10:
                     agg_recursion(edge, G_, fd=0)  # discontinuous PP_ xcomp, cluster
 
-def agg_recursion(root, Q, fd):  # breadth-first rng++ cross-comp -> eval cluster, fd recursion
+def agg_recursion(root, iQ, fd):  # breadth-first rng++ cross-comp -> eval cluster, fd recursion
+
+    Q = []
+    for e in iQ:  # reset | init only?
+        if fd: e.rimt_ = []  # e = CL
+        e.root_, e.visited_,e.merged, e.extH = [],[], 0, CH()  # we shouldn't reset aRad, it will be used to eval comp in rng_node_
+        Q += [e]
 
     # cross-comp root link_|node_, initially edge PP_:
     N__,L__,pL__,Et,rng = rng_link_(Q) if fd else rng_node_(Q)
@@ -353,8 +359,8 @@ def rng_node_(_N_):  # rng+ forms layer of rim_ and extH per N, appends N__,L__,
 
 def rng_link_(iL_):  # comp CLs via directional node-mediated link tracing: der+'rng+ in root.link_ rim_t node rims
 
-    fd = isinstance(iL_[0][0].nodet[0], CL)
-    for L,_ in iL_:
+    fd = isinstance(iL_[0].nodet[0], CL)
+    for L in iL_:
         L.visited_ = [L]; L.mL_t = [[],[]]
         if fd:
             L.rimt_, L.root_, L.aRad, L.merged, L.extH = [], [], 0, 0, CH()
@@ -481,27 +487,29 @@ def cluster_N__(root, N__,L__, fd):  # cluster G__|L__ by value density of +ve l
         # cluster from L_:
         for L in L_:
             for G in L.nodet:
+                if G.merged: continue  # we should skip if G is merged in prior Gt?
                 node_, link_, et, mrg = G.root_[-1]  # lower-rng graph
                 if mrg: continue  # 1 in current-rng overlap, 0 in one G of the nodet
                 Node_, Link_, Et = node_.copy(), link_.copy(), et.copy()  # init current-rng Gt
                 # extend Node_:
                 for g in node_:
                     rim_ = g.rimt_ if fd else g.rim_
-                    if len(rim_) <= rng: continue
-                    _lrim = set([Lt[0] for Lt in (rim_[rng][0]+rim_[rng][1] if fd else rim_[rng]) if Lt[0].derH.Et[0] > ave * Lt[0].derH.Et[2] * rng]) - Link_
+                    if len(rim_) < rng: continue  # should be < now since rng starts with 1
+                    _lrim = set([Lt[0] for Lt in (rim_[rng-1][0]+rim_[rng-1][1] if fd else rim_[rng-1]) if Lt[0].derH.Et[0] > ave * Lt[0].derH.Et[2] * rng]) - Link_  # rng-1 for indexing since index starts with 0
                     while _lrim:
                         lrim = set()
                         for _L in _lrim:
                             _G = _L.nodet[1] if _L.nodet[0] is g else _L.nodet[0]
-                            if _G.merged or len(_G.rim_) <= rng or _G is G:
+                            if _G.merged or _G not in N_ or _G is G:  # _G not in N_ should be more precise
                                 continue
                             _node_,_link_,_Et,_mrg = _G.root_[-1]  # lower-rng _graph
                             if _mrg: continue
                             cV = 0  # intersect V
                             xlrim = set()  # add to lrim
                             for _g in _node_:  # no node_ overlap
-                                if len(_g.rim_) <= rng: continue
-                                __lrim = set([Lt[0] for Lt in _g.rim_[rng] if Lt[0].derH.Et[0] >  ave * Lt[0].derH.Et[2] * rng])
+                                _rim_ = _g.rimt_ if fd else _g.rim_
+                                if len(_rim_) < rng: continue
+                                __lrim = set([Lt[0] for Lt in (_rim_[rng-1][0]+_rim_[rng-1][1] if fd else _rim_[rng-1]) if Lt[0].derH.Et[0] >  ave * Lt[0].derH.Et[2] * rng])
                                 clrim = _lrim & __lrim  # intersect
                                 xlrim.update(__lrim - clrim)
                                 for __L in clrim:  # eval common rng Ls
@@ -520,7 +528,7 @@ def cluster_N__(root, N__,L__, fd):  # cluster G__|L__ by value density of +ve l
                     for n in Node_: n.root_+= [Gt]
                     L.root_ = Gt  # rng-specific
                     Gt_ += [Gt]
-        for G in set.union( *N__[:rng+1]): G.merged = 0  # in all lower Gs
+        for G in set.union( *N__[:rng]): G.merged = 0  # in all lower Gs
         Gt__ += [Gt_]
     n__ = []
     for rng, Gt_ in enumerate(Gt__, start=1):  # selective convert Gts to CGs
