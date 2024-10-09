@@ -367,7 +367,7 @@ def rng_link_(iL_):  # comp CLs via directional node-mediated link tracing: der+
     med = 1
     while True:
         # xcomp _L_:
-        L_,LL_,pLL_,Et = set(),[],[], np.array([.0,.0,.0,.0])
+        L_,LL_,pLL_,Et,V,Rdn = set(),[],[], np.array([.0,.0,.0,.0]), 0, 0
         for L in _L_:
             for mL_ in L.mL_t:
                 for _L, rev in mL_:  # rev is relative to L
@@ -377,12 +377,14 @@ def rng_link_(iL_):  # comp CLs via directional node-mediated link tracing: der+
                     # comp L,_L:
                     et = comp_N(Link, rn, rng=med, dir = -1 if rev else 1)  # d = -d if L is reversed relative to _L
                     LL_ += [Link]  # include -ves, L.rim_t += Link, order: nodet < L < rimt_, mN.rim || L
+                    V += Link.derH.Et[0]; Rdn += Link.derH.Et[2]
                     if et is not None:
                         L_.update({_L,L}); pLL_+=[Link]; Et += et
         L__+=[L_]; LL__+=[LL_]; pLL__+=[pLL_]; ET += Et
         # rng+ eval:
         Med = med + 1
-        if Et[0] < ave * Et[2] * Med:  # project prior-loop value - new cost
+        # this hardly true because we sum only positive et, so we need a V to sum both positive and negative Et here?
+        if V < ave * Rdn * Med:  # project prior-loop value - new cost
             nxt_L_, nxt_Et = set(), np.array([.0,.0,.0,.0])
             for L in L_:
                 mL_t, lEt = [set(),set()], np.array([.0,.0,.0,.0])  # __Ls per L
@@ -486,10 +488,7 @@ def cluster_N__(root, N__,L__, fd):  # cluster G__|L__ by value density of +ve l
                 Node_, Link_, Et = node_.copy(), link_.copy(), et.copy()  # init current-rng Gt
                 # extend Node_:
                 for g in node_:
-                    rim_ = g.rimt_ if fd else g.rim_
-                    if len(rim_) < rng: continue
-                    _lrim = set([Lt[0] for Lt in (rim_[rng-1][0]+rim_[rng-1][1] if fd else rim_[rng-1])
-                                 if Lt[0].derH.Et[0] > ave * Lt[0].derH.Et[2] * rng]) - Link_
+                    _lrim = get_rim(g, Link_, fd, rng)
                     while _lrim:
                         lrim = set()
                         for _L in _lrim:
@@ -499,10 +498,7 @@ def cluster_N__(root, N__,L__, fd):  # cluster G__|L__ by value density of +ve l
                             cV = 0  # intersect V
                             xlrim = set()  # add to lrim
                             for _g in _node_:  # no node_ overlap
-                                _rim_ = _g.rimt_ if fd else _g.rim_
-                                if len(_rim_) < rng: continue
-                                __lrim = set([Lt[0] for Lt in (_rim_[rng-1][0]+_rim_[rng-1][1] if fd else _rim_[rng-1])
-                                              if Lt[0].derH.Et[0] > ave * Lt[0].derH.Et[2] * rng])
+                                __lrim = get_rim(_g, [], fd, rng)
                                 clrim = _lrim & __lrim  # rim intersect
                                 xlrim.update(__lrim - clrim)  # new rim
                                 for __L in clrim:  # eval common rng Ls
@@ -533,6 +529,20 @@ def cluster_N__(root, N__,L__, fd):  # cluster G__|L__ by value density of +ve l
                     if n.ET[0] > n.Et[2] * ave * rng: n_ += [n]  # eval / added rng
         n__ += [n_]
     N__[:] = n__  # replace some Ns with Gts
+
+
+# to simplify the code and makes the code clearer
+def get_rim(N, Link_, fd, rng):
+
+    rim_ = N.rimt_ if fd else N.rim_
+    if len(rim_) < rng: 
+        return set()  # empty lrim
+    else:   
+        lrim = set([Lt[0] for Lt in (rim_[rng-1][0]+rim_[rng-1][1] if fd else rim_[rng-1]) if Lt[0].derH.Et[0] > ave * Lt[0].derH.Et[2] * rng])       
+        if Link_: lrim -= Link_
+        return lrim
+    
+
 
 def sum2graph(root, grapht, fd, rng):  # sum node and link params into graph, aggH in agg+ or player in sub+
 
