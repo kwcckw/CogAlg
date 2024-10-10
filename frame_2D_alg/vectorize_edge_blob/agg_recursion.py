@@ -288,7 +288,7 @@ def vectorize_root(image):  # vectorization in 3 composition levels of xcomp, cl
 def agg_recursion(root, Q, fd):  # breadth-first rng++ cross-comp -> eval cluster, fd recursion
 
     for e in Q:
-        e.root_,e.visited_,e.merged,e.extH = [],[],0,CH()
+        e.root_,e.visited_,e.extH = [],[],CH()
     # cross-comp link_|node_:
     N__,L__,pL__,Et,rng = rng_link_(Q) if fd else rng_node_(Q)
 
@@ -300,7 +300,7 @@ def agg_recursion(root, Q, fd):  # breadth-first rng++ cross-comp -> eval cluste
         for L in L_[1:]:
             root.derH.H[-1].H[-1].add_H(L.derH)  # accum Lay
         # rng_link_
-        if fvd and len(L_) > ave_L: # comp L, subcluster/ dL: mL is redundant to mN?
+        if fvd and len(L_) > ave_L: # comp L, sub-cluster /dL: mL is redundant to mN?
             agg_recursion(root, L_, fd=1)  # appends last aggLay, L_=lG_ if segment
         if fvm:
             cluster_N__(root, N__, pL__, fd)  # cluster rngLays in root.node_,
@@ -367,7 +367,7 @@ def rng_link_(iL_):  # comp CLs via directional node-mediated link tracing: der+
     med = 1
     while True:
         # xcomp _L_:
-        L_,LL_,pLL_,Et,V,Rdn = set(),[],[], np.array([.0,.0,.0,.0]), 0, 0
+        L_,LL_,pLL_,Et = set(),[],[], np.array([.0,.0,.0,.0])
         for L in _L_:
             for mL_ in L.mL_t:
                 for _L, rev in mL_:  # rev is relative to L
@@ -377,14 +377,12 @@ def rng_link_(iL_):  # comp CLs via directional node-mediated link tracing: der+
                     # comp L,_L:
                     et = comp_N(Link, rn, rng=med, dir = -1 if rev else 1)  # d = -d if L is reversed relative to _L
                     LL_ += [Link]  # include -ves, L.rim_t += Link, order: nodet < L < rimt_, mN.rim || L
-                    V += Link.derH.Et[0]; Rdn += Link.derH.Et[2]
                     if et is not None:
                         L_.update({_L,L}); pLL_+=[Link]; Et += et
         L__+=[L_]; LL__+=[LL_]; pLL__+=[pLL_]; ET += Et
         # rng+ eval:
         Med = med + 1
-        # this hardly true because we sum only positive et, so we need a V to sum both positive and negative Et here?
-        if V < ave * Rdn * Med:  # project prior-loop value - new cost
+        if Et[0] > ave * Et[2] * Med:  # project prior-loop value - new cost
             nxt_L_, nxt_Et = set(), np.array([.0,.0,.0,.0])
             for L in L_:
                 mL_t, lEt = [set(),set()], np.array([.0,.0,.0,.0])  # __Ls per L
@@ -477,45 +475,44 @@ def cluster_N__(root, N__,L__, fd):  # cluster G__|L__ by value density of +ve l
         Gt_ = []
         if len(L_) < ave_L: continue
         for N in N_:
-            N.merged = 0
-            if not N.root_:  # always init root graph for generic merging process
-                Gt = [{N}, set(), np.array([.0,.0,.0,.0])]; N.root_ = [Gt]
-        # cluster from L_:
-        for L in L_:
-            for G in L.nodet:
-                if G.merged: continue
-                node_, link_, et = G.root_[-1]  # lower-rng graph, mrg = 0
-                Node_, Link_, Et = node_.copy(), link_.copy(), et.copy()  # init current-rng Gt
-                # extend Node_:
-                for g in node_:
-                    _lrim = get_rim(g, Link_, fd, rng)
-                    while _lrim:
-                        lrim = set()
-                        for _L in _lrim:
-                            _G = _L.nodet[1] if _L.nodet[0] is g else _L.nodet[0]
-                            if _G.merged or _G not in N_ or _G is G: continue
-                            _node_,_link_,_Et = _G.root_[-1]  # lower-rng _graph
-                            cV = 0  # intersect V
-                            xlrim = set()  # add to lrim
-                            for _g in _node_:  # no node_ overlap
-                                __lrim = get_rim(_g, [], fd, rng)
-                                clrim = _lrim & __lrim  # rim intersect
-                                xlrim.update(__lrim - clrim)  # new rim
-                                for __L in clrim:  # eval common rng Ls
-                                    v = ((g.extH.Et[0]-ave*g.extH.Et[2]) + (_g.extH.Et[0]-ave*_G.extH.Et[2])) * (__L.derH.Et[0]/ave)
-                                    if v > 0: cV += v
-                            if cV > ave * ccoef:  # additional eval to merge roots:
-                                lrim.update(xlrim)  # add new rim links
-                                Node_.update(_node_)
-                                Link_.update(_link_|{_L})  # add external L
-                                Et += _L.derH.Et + _Et
-                                for n in _node_: n.merged = 1
-                        _lrim = lrim
-                if Et[0] > Et[2] * ave:  # additive current-layer V: form higher Gt
-                    Gt = [Node_, Link_, Et + _Et]
-                    for n in Node_: n.root_+= [Gt]
-                    L.root_ = Gt  # rng-specific
-                    Gt_ += [Gt]
+            N.merged = 0  # not needed now?
+            if not N.root_:  # add new root for generic merging process
+                N.root_ = [[{N}, set(), {get_rim(N,[],fd,rng)}, np.array([.0,.0,.0,.0]), 0]]
+            else:
+                node_,link_, rim, et, mrg = N.root_[-1]
+                N.root_ += [node_.copy(), link_.copy(), {[get_rim(n,[],fd,rng) for n in node_]}, np.array([.0,.0,.0,.0]), 0]
+        # cluster Gts:
+        for N in N_:
+            Gt = N.root_[-1]
+            node_, link_, rim, et, mrg = Gt  # lower-rng graph
+            if mrg: continue
+            Gt_ = []
+            Et = np.array([.0,.0,.0,.0])
+            cV = 0  # intersect V
+            xlrim = set()  # add to Rim
+            _lrim = rim  # replace in the loop
+            while _lrim:  # extend Node_, Rim
+                lrim = set()
+                for _L in _lrim:
+                    G,_G = _L.nodet if _L.nodet[0] in node_ else reversed(_L.nodet)  # one must be outside Node_?
+                    _node_,_link_,_rim,_et,_mrg = _G.root_[-1]  # lower-rng _graph
+                    clrim = rim & _rim  # rim intersect
+                    xlrim.update(_rim - clrim)  # new rim
+                    for __L in clrim:  # eval common rng Ls
+                        v = ((G.extH.Et[0]-ave*G.extH.Et[2]) + (_G.extH.Et[0]-ave*_G.extH.Et[2])) * (__L.derH.Et[0]/ave)
+                        if v > 0: cV += v
+                        if cV > ave * ccoef:  # additional eval to merge roots:
+                            lrim.update(xlrim)  # add new rim links
+                            node_.update(_node_)
+                            link_.update(_link_|{_L})  # add external L
+                            et += _L.derH.Et + _et
+                            for n in _node_: n.merged = 1
+                _lrim = lrim
+            if Et[0] > Et[2] * ave:  # additive current-layer V: form higher Gt
+                Gt = [node_, link_, rim, et, 0]
+                for n in node_: n.root_+= [Gt]
+                N.root_ = Gt  # rng-specific
+                Gt_ += [Gt]
         for G in set.union( *N__[:rng]): G.merged = 0  # in all lower Gs
         Gt__ += [Gt_]
     n__ = []
@@ -530,18 +527,16 @@ def cluster_N__(root, N__,L__, fd):  # cluster G__|L__ by value density of +ve l
         n__ += [n_]
     N__[:] = n__  # replace some Ns with Gts
 
-
-# to simplify the code and makes the code clearer
 def get_rim(N, Link_, fd, rng):
 
     rim_ = N.rimt_ if fd else N.rim_
-    if len(rim_) < rng: 
+    if len(rim_) < rng:
         return set()  # empty lrim
-    else:   
-        lrim = set([Lt[0] for Lt in (rim_[rng-1][0]+rim_[rng-1][1] if fd else rim_[rng-1]) if Lt[0].derH.Et[0] > ave * Lt[0].derH.Et[2] * rng])       
+    else:
+        lrim = set([Lt[0] for Lt in (rim_[rng-1][0]+rim_[rng-1][1] if fd else rim_[rng-1])
+                    if Lt[0].derH.Et[0] > ave * Lt[0].derH.Et[2] * rng])
         if Link_: lrim -= Link_
         return lrim
-    
 
 
 def sum2graph(root, grapht, fd, rng):  # sum node and link params into graph, aggH in agg+ or player in sub+
