@@ -392,7 +392,7 @@ def rng_link_(iL_):  # comp CLs via directional node-mediated link tracing: der+
                             rim_ = n.rimt_ if fd else n.rim_
                             if len(rim_) == med:  # append in comp loop
                                 for __L,__rev in rim_[-1][0]+rim_[-1][1] if fd else rim_[-1]:
-                                    if __L in L.visited_ or __L not in iL_:
+                                    if __L in L.visited_ or __L not in iL_ or __L is L:  # prevent cyclic
                                         continue
                                     L.visited_ += [__L]; __L.visited_ += [L]
                                     et = __L.derH.Et
@@ -475,12 +475,11 @@ def cluster_N__(root, N__,L__, fd):  # cluster G__|L__ by value density of +ve l
         Gt_ = []
         if len(L_) < ave_L: continue
         for N in N_:
-            N.merged = 0  # not needed now?
             if not N.root_:  # add new root for generic merging process
-                N.root_ = [[{N}, set(), {get_rim(N,[],fd,rng)}, np.array([.0,.0,.0,.0]), 0]]
+                N.root_ = [[{N}, set(), get_rim(N,fd,rng), np.array([.0,.0,.0,.0]), 0]]
             else:
                 node_,link_, rim, et, mrg = N.root_[-1]
-                N.root_ += [node_.copy(), link_.copy(), {[get_rim(n,[],fd,rng) for n in node_]}, np.array([.0,.0,.0,.0]), 0]
+                N.root_ += [[node_.copy(), link_.copy(), set().union(*[get_rim(n,fd,rng) for n in node_]), np.array([.0,.0,.0,.0]), 0]]
         # cluster Gts:
         for N in N_:
             Gt = N.root_[-1]
@@ -489,37 +488,36 @@ def cluster_N__(root, N__,L__, fd):  # cluster G__|L__ by value density of +ve l
             Gt_ = []
             Et = np.array([.0,.0,.0,.0])
             cV = 0  # intersect V
-            xlrim = set()  # add to Rim
             _lrim = rim  # replace in the loop
             while _lrim:  # extend Node_, Rim
                 lrim = set()
                 for _L in _lrim:
-                    G,_G = _L.nodet if _L.nodet[0] in node_ else reversed(_L.nodet)  # one must be outside Node_?
+                    G,_G = _L.nodet if _L.nodet[0] in node_ else reversed(_L.nodet)  # one must be outside Node_? Both maybe in node_ if we didn't include checking when we update lrim
                     _node_,_link_,_rim,_et,_mrg = _G.root_[-1]  # lower-rng _graph
                     clrim = rim & _rim  # rim intersect
-                    xlrim.update(_rim - clrim)  # new rim
+                    xlrim = [l for l in (_rim - clrim) if (l.nodet[0] not in (_node_+node_) and l.nodet[1] not in (_node_+node_))]   # new rim  (this is per _L? And both of them might be in node_ and _node_)
                     for __L in clrim:  # eval common rng Ls
                         v = ((G.extH.Et[0]-ave*G.extH.Et[2]) + (_G.extH.Et[0]-ave*_G.extH.Et[2])) * (__L.derH.Et[0]/ave)
                         if v > 0: cV += v
                         if cV > ave * ccoef:  # additional eval to merge roots:
-                            lrim.update(xlrim)  # add new rim links
                             node_.update(_node_)
+                            lrim.update(xlrim)  # add new rim links
                             link_.update(_link_|{_L})  # add external L
                             et += _L.derH.Et + _et
-                            for n in _node_: n.merged = 1
+                            Et += _L.derH.Et  # accumulate et?
                 _lrim = lrim
             if Et[0] > Et[2] * ave:  # additive current-layer V: form higher Gt
-                Gt = [node_, link_, rim, et, 0]
-                for n in node_: n.root_+= [Gt]
-                N.root_ = Gt  # rng-specific
+                # Gt = [node_, link_, rim, et, 0]
+                # for n in node_: n.root_+= [Gt]
+                # N.root_ = Gt  # rng-specific
+                # section above are no longer needed and we just need to eval to pack Gt now?
                 Gt_ += [Gt]
-        for G in set.union( *N__[:rng]): G.merged = 0  # in all lower Gs
         Gt__ += [Gt_]
     n__ = []
     for rng, Gt_ in enumerate(Gt__, start=1):  # selective convert Gts to CGs
         n_ = []
         for Gt in Gt_:
-            if Gt[2][0] > Gt[2][2] * ave:  # eval additive Et
+            if Gt[3][0] > Gt[3][2] * ave:  # eval additive Et
                 n_ += [sum2graph(root, [list(Gt[0]), list(Gt[1]), Gt[2]], fd, rng)]
             else:
                 for n in Gt[0]:  # unpack weak Gt
@@ -527,7 +525,7 @@ def cluster_N__(root, N__,L__, fd):  # cluster G__|L__ by value density of +ve l
         n__ += [n_]
     N__[:] = n__  # replace some Ns with Gts
 
-def get_rim(N, Link_, fd, rng):
+def get_rim(N, fd, rng):
 
     rim_ = N.rimt_ if fd else N.rim_
     if len(rim_) < rng:
@@ -535,7 +533,6 @@ def get_rim(N, Link_, fd, rng):
     else:
         lrim = set([Lt[0] for Lt in (rim_[rng-1][0]+rim_[rng-1][1] if fd else rim_[rng-1])
                     if Lt[0].derH.Et[0] > ave * Lt[0].derH.Et[2] * rng])
-        if Link_: lrim -= Link_
         return lrim
 
 
