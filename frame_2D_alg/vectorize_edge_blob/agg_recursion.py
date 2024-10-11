@@ -476,19 +476,25 @@ def cluster_N__(root, N__, fd):  # cluster G__|L__ by value density of +ve links
             if not N.root_:
                 N.root_ = [[{N}, set(), get_rim(N,fd,rng), np.array([.0,.0,.0,.0]), 0]]
             else:
-                node_, link_, et, rim, mrg = N.root_[-1]
-                rng_rim = set().union(*[get_rim(n, fd, rng) for n in node_])
-                N.root_ += [[node_.copy(), link_.copy(), rng_rim, np.array([.0,.0,.0,.0]), 0]]
+                node_, link_, rim, et, mrg = N.root_[-1]
+                rng_rim = list(set().union(*[get_rim(n, fd, rng) for n in node_]))
+                rng_link_ = link_.copy()
+                for L in reversed(rng_rim):
+                    if (L.nodet[0] in node_) and (L.nodet[1] in node_) and (L not in link_):
+                        rng_link_.add(L)  # link with both existing nodes
+                        rng_rim.remove(L)  # remove rng_rim, their rim is already checked     
+                N.root_ += [[node_.copy(), link_.copy(), set(rng_rim), np.array([.0,.0,.0,.0]), 0]]
         Gt_ = []
         for N in N_:  # merge Gts
             Gt = N.root_[-1]
-            node_, link_, et, rim, mrg = Gt
+            node_, link_, rim, et, mrg = Gt
             if mrg: continue
-            while rim:  # extend node_,link_, replace rim
+            while any(rim):  # extend node_,link_, replace rim
                 ext_rim = set()
                 for _L in rim:
-                    G,_G = _L.nodet if _L.nodet[0] in node_ else list(reversed(_L.nodet))  # one must be outside node_
-                    _node_,_link_,_et,_rim,_mrg = _G.root_[-1]
+                    G,_G = _L.nodet if _L.nodet[0] in node_ else list(reversed(_L.nodet))
+                    if G in node_ and _G in node_: continue  # one must be outside node_ (one of the node in _L.nodet is outside, but it maybe added during prior _L loop )
+                    _node_,_link_,_rim,_et,_mrg = _G.root_[-1]
                     Rim = rim | ext_rim  # combine without replacing rim in-place
                     crim = Rim & _rim    # Rim intersect
                     xrim = _rim - crim   # exclusive _rim
@@ -513,7 +519,8 @@ def cluster_N__(root, N__, fd):  # cluster G__|L__ by value density of +ve links
                 n_ += [sum2graph(root, [list(node_),list(link_),et], fd, rng)]
             else:
                 for n in node_:  # unpack weak Gt
-                    if n.Et[0] > n.Et[2] * ave * rng: n_ += [n]  # eval / added rng
+                    # node of weak Gt could be a CL here, so we may get CL in fd == 0 fork later?
+                    if n.derH.Et[0] > n.derH.Et[2] * ave * rng: n_ += [n]  # eval / added rng
         n__ += [n_]
     N__[:] = n__  # replace some Ns with Gts
 
