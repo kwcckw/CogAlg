@@ -475,23 +475,33 @@ def comp_ext(_L,L,_S,S,_A,A):  # compare non-derivatives:
 def cluster_N__(root, N__, fd):  # cluster G__|L__ by value density of +ve links per node
 
     Gt__ = []
-    for rng, N_ in enumerate(N__, start=1):  # all Ls and current-rng Gts are unique
+    for rng, iN_ in enumerate(N__, start=1):  # all Ls and current-rng Gts are unique
         # add new root for generic merging:
-        for N in N_:
+        _Gt_ = []; N_ = copy(iN_)
+        while N_:
+            N = N_.pop()
             if not N.root_:
-                N.root_ = [[{N}, set(), np.array([.0,.0,.0,.0]), get_rim(N,fd,rng), 0]]
+                Gt = [{N}, set(), np.array([.0,.0,.0,.0]), get_rim(N,fd,rng), 0]
+                N.root_ = [Gt]
             else:
                 node_, link_, et, rim, mrg = N.root_[-1]
-                Link_ = list(link_); rng_rim = []
-                for n in node_:
-                    for L in get_rim(n, fd, rng):
-                        if all([n in node_ for n in L.nodet]):
-                            Link_ += [L]
-                        else: rng_rim += [L]  # one external node
-                N.root_ += [[node_.copy(), set(Link_), np.array([.0,.0,.0,.0]), set(rng_rim), 0]]
+                if not mrg:
+                    N.root_[-1][-1] = 1  # set mrg if current N init new rng root
+                    Link_ = list(link_); rng_rim = []
+                    for n in node_:
+                        for L in get_rim(n, fd, rng):
+                            if all([n in node_ for n in L.nodet]):
+                                Link_ += [L]
+                            else: rng_rim += [L]  # one external node
+                    Gt = [node_.copy(), set(Link_), np.array([.0,.0,.0,.0]), set(rng_rim), 0] 
+                    for node in node_: 
+                        node.root_ += [Gt]  # update root across all nodes
+                        if node in N_: N_.remove(node)  # remove Ns with updated root
+            _Gt_ += [Gt]
+            
+        if len(_Gt_)<2: break  # break when there's only single Gt and no Gts for merging purpose
         Gt_ = []
-        for N in N_:  # merge Gts
-            Gt = N.root_[-1]
+        for Gt in _Gt_:  # merge Gts (replaces N since multiple Ns in higher rng might be referencing a same Gt)
             node_, link_, et, rim, mrg = Gt
             if mrg: continue
             while any(rim):  # extend node_,link_, replace rim
@@ -499,7 +509,7 @@ def cluster_N__(root, N__, fd):  # cluster G__|L__ by value density of +ve links
                 for _L in rim:
                     G,_G = _L.nodet if _L.nodet[0] in node_ else list(reversed(_L.nodet)) # one is outside node_
                     _node_,_link_,_et,_rim,_mrg = _G.root_[-1]
-                    if _mrg: continue
+                    if _mrg or _G.root_[-1] is Gt: continue  # _G maybe merged in prior loop
                     crim = (rim | ext_rim) & _rim  # intersect with old+new rim
                     xrim = _rim - crim   # exclusive _rim
                     cV = 0  # common val
@@ -509,7 +519,10 @@ def cluster_N__(root, N__, fd):  # cluster G__|L__ by value density of +ve links
                     if cV > ave * ccoef:  # cost of merging Gts
                         _G.root_[-1][-1] = 1  # set mrg
                         ext_rim.update(xrim)  # add new links
-                        node_.update(_node_)
+                        for _node in _node_: 
+                            if _node not in node_: 
+                                _node.root_ += [Gt]  # for those new nodes, we need to update their root_ too? Else they will be still pointing old Gt
+                                node_.add(_node)
                         link_.update(_link_|{_L}) # external L
                         et += _L.derH.Et + _et
                 rim = ext_rim
