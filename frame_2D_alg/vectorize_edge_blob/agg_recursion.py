@@ -472,26 +472,29 @@ def cluster_N__(root, N__, fd):  # cluster G__|L__ by value density of +ve links
 
     Gt__ = []
     for rng, N_ in enumerate(N__, start=1):  # all Ls and current-rng Gts are unique
-        if len(N_) < ave_L:
-            Gt__ += [N_]; continue
         Gt_ = []
         for N in N_:  N.merged = 0
         for N in N_:  # add new root for generic merging:
             if N.merged: continue
             if not N.root_:
-                Gt = [[[N], set(), np.array([.0,.0,.0,.0]), get_rim(N,fd,rng), 0]]
+                Gt = [[N], set(), np.array([.0,.0,.0,.0]), get_rim(N,fd,rng), 0]
                 N.root_ = [Gt]
             else:
                 node_, link_, et, rim, mrg = N.root_[-1]
-                Link_ = list(link_); rng_rim = []
+                Link_ = link_.copy(); rng_rim = set()
                 for n in node_:
                     n.merged = 1
                     for L in get_rim(n, fd, rng):
-                        if all([n in node_ for n in L.nodet]): Link_ += [L]
-                        else: rng_rim += [L]  # one external node
-                Gt = [[node_[:], set(Link_), np.array([.0,.0,.0,.0]), set(rng_rim), 0]]
+                        if all([n in node_ for n in L.nodet]): Link_.add(L)
+                        else: rng_rim.add(L)  # one external node
+                Gt = [node_[:], Link_, np.array([.0,.0,.0,.0]), rng_rim, 0]
                 for n in node_: n.root_ += [Gt]  # includes N
             Gt_ += [Gt]
+            
+        # this should be here? Because it's pointless to merge Gt_ if there's just single Gt
+        if len(Gt_) < ave_L:
+            Gt__ += [N_]; break
+        
         GT_ = []
         for Gt in Gt_:  # merge Gts
             node_, link_, et, rim, mrg = Gt
@@ -511,14 +514,14 @@ def cluster_N__(root, N__, fd):  # cluster G__|L__ by value density of +ve links
                         Et = np.sum([lay.Et for lay in G.extH.H[:rng]]); _Et = np.sum([lay.Et for lay in _G.extH.H[:rng]])  # lower-rng surround density / node
                         v = (((Et[0]-ave*Et[2]) + (_Et[0]-ave*_Et[2])) * (__L.derH.Et[0]/ave))  # multiply by link strength? or just eval links:
                         '''
-                        v = __L.derH.Et[0] - ave * __L.derH.Et[2]
+                        v = __L.derH.Et[0] - ave * __L.derH.Et[2]  # it's always positive here since we pack only positive rim?
                         if v > 0: cV += v
                     if cV > ave * ccoef:  # cost of merging Gts
                         _G.root_[-1][-1] = 1  # set mrg
                         ext_rim.update(xrim)  # add new links
                         for _node in _node_:
                             if _node not in node_:
-                                _node.root_[-1] = [Gt]; node_.add(_node)
+                                _node.root_[-1] = Gt; node_ += [_node]
                         link_.update(_link_|{_L}) # external L
                         et += _L.derH.Et + _et
                 rim = ext_rim
@@ -526,7 +529,7 @@ def cluster_N__(root, N__, fd):  # cluster G__|L__ by value density of +ve links
         Gt__ += [GT_]
     n__ = []
     for rng, Gt_ in enumerate(Gt__, start=1):  # selective convert Gts to CGs
-        if not isinstance(Gt_[0], list): continue  # not clustered
+        if not isinstance(Gt_, list): continue  # not clustered
         n_ = []
         for node_,link_,et,_,_ in Gt_:
             if et[0] > et[2] * ave * rng:  # additive rng Et
