@@ -340,7 +340,7 @@ def rng_node_(_N_):  # rng+ forms layer of rim_ and extH per N, appends N__,L__,
                     N_.update({_G, G}); Et += et  # for clustering
             else:
                 Gp_ += [Gp]  # re-evaluate not-compared pairs with one incremented N.M:
-        if Et[0] > ave * Et[2]:  # current-rng vM
+        if Et[0] > ave * Et[2] and len(N_)> ave_L:  # current-rng vM (pointless to add N_ if < ave_L since later we won't process them too) 
             rng += 1
             N__+= [N_]; L__+= [L_]; ET += Et  # sub-cluster pL_,N_
             _Gp_ = [Gp for Gp in Gp_ if (Gp[0] in N_ or Gp[1] in N_)]  # one incremented N.M
@@ -472,18 +472,18 @@ def comp_ext(_L,L,_S,S,_A,A):  # compare non-derivatives:
 # draft:
 def cluster_N__(root, N__, fd):  # cluster G__|L__ by +ve rng links per node per Gt
 
-    for rng, N_ in enumerate(N__):  # init Gts
+    Gt__ = []
+    for rng, N_ in enumerate(N__):  # merge Gts
+        # we can actually init here?
+        # init Gt:
         for N in N_:
             if not N.root_:  # always true in N__[0]
                 rim_ = N.rimt_ if fd else N.rim_
+                # some Ns doesn't exist in lower rng and hence rim_[rng] may not work, so use back [-1]?
                 rim = set([Lt[0] for Lt in (rim_[rng][0]+rim_[rng][1] if fd else rim_[rng]) if Lt[0].derH.Et[0] > ave * Lt[0].derH.Et[2] * (rng+1)])
-                N.root_ = [[[N], set(), np.array([.0,.0,.0,.0]), rim, 0]]
-    Gt__ = []
-    for rng, N_ in enumerate(N__):  # merge Gts
-        _Gt_ = set((N.root[-1] for N in N_))
-        if len(_Gt_) < ave_L:
-            Gt__ += [N_]
-            break
+                _Gt = [[N], set(), np.array([.0,.0,.0,.0]), rim, 0]
+                N.root_ = [_Gt]
+
         if rng: # reuse lower-rng _Gts
             Gt_ = []  # new Gts
             for _Gt in _Gt_:
@@ -498,8 +498,14 @@ def cluster_N__(root, N__, fd):  # cluster G__|L__ by +ve rng links per node per
                     Gt = [node_.copy(), link_.copy(), et.copy(), Rim, 0]  # empty link_ and et filled by merging?
                     for n in node_: n.root_ += [Gt]
                     Gt += [Gt]
-        else: Gt_ = _Gt_  # already initialized
-        GT_ = []
+        else:
+            Gt_ = [N.root_[-1]for N in N_]  # already initialized
+            
+        if len(Gt_) < ave_L:
+            Gt__ += [N_]
+            break
+
+        GT_, _Gt_ = [], []
         for Gt in Gt_:
             node_,link_,et,rim,mrg = Gt
             if mrg: continue
@@ -515,7 +521,8 @@ def cluster_N__(root, N__, fd):  # cluster G__|L__ by +ve rng links per node per
                     for __L in crim:  # common Ls
                         v = __L.derH.Et[0] - ave * __L.derH.Et[2]
                         if v > 0: cV += __L.derH.Et[0]  # cluster by +ve links only
-                    if cV / _et[0] > ave * ccoef:  # normalized by _M: behavioural independence of _G?
+                    # _et[0] could be zero when _G.root_[-1] is a newly initialized Gt
+                    if cV / max(1, _et[0]) > ave * ccoef:  # normalized by _M: behavioural independence of _G?
                         _G.root_[-1][-1] = 1  # set mrg
                         ext_rim.update(xrim)  # add new links
                         for _node in _node_:
@@ -525,7 +532,8 @@ def cluster_N__(root, N__, fd):  # cluster G__|L__ by +ve rng links per node per
                         et += _L.derH.Et + _et
                 rim = ext_rim
             GT_ += [Gt]
-        Gt__ += [GT_]
+        Gt__ += [GT_]; _Gt_ = GT_  # for next rng
+
     n__ = []
     for rng, Gt_ in enumerate(Gt__, start=1):  # selective convert Gts to CGs
         if isinstance(Gt_, set): continue  # recycled N_
