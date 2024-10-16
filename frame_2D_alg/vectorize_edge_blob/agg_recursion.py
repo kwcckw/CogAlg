@@ -333,9 +333,16 @@ def comp_node_(_N_):  # rng+ forms layer of rim_ and extH per N, appends N__,L__
             M = (_G.mdLay.Et[0]+G.mdLay.Et[0]) *icoef**2 + (_G.derH.Et[0]+G.derH.Et[0])*icoef + (_G.extH.Et[0]+G.extH.Et[0])
             # comp if < max distance of likely matches *= prior G match * radius:
             if dist < max_dist * (radii*icoef**3) * M:
+                while len(_G.rim_) < rng -1: _G.rim_ += [[]]  # should be rng -1 here since they may add new rng rim in comp_N
+                while len(G.rim_)  < rng -1:  G.rim_ += [[]]
+                # we can't use drng because G may have added new rng rim from prior pair and _G didn't have their rng rim added yet
+                '''
                 drng = len(_G.rim_) - len(G.rim_)
-                if drng > 0:    G.rim_ += [[None] * drng]
-                elif drng < 0: _G.rim_ += [[None] * drng]
+                if drng > 0:    
+                    G.rim_ += [[] * drng]
+                elif drng < 0: 
+                    _G.rim_ += [[] * drng]
+                '''
                 Link = CL(nodet=[_G,G], S=2, A=[dy,dx], box=extend_box(G.box,_G.box))
                 et = comp_N(Link, rn, rng)
                 L_ += [Link]  # include -ve links
@@ -361,7 +368,7 @@ def comp_link_(iL_):  # comp CLs via directional node-mediated link tracing: der
         for rev, n, mL_ in zip((0,1), L.nodet, L.mL_t):
             rim_ = n.rimt_ if fd else n.rim_
             for _L,_rev in rim_[0][0] + rim_[0][1] if fd else rim_[0]:
-                if _L.derH.Et[0] > ave * _L.derH.Et[2]:
+                if _L is not L and _L.derH.Et[0] > ave * _L.derH.Et[2]:  # _L could be L because L'nodet's rim may pointing back to L
                     mL_ += [(_L, rev^_rev)]  # direction of L relative to _L
     _L_, L__, LL__,ET = iL_,[],[], np.array([.0,.0,.0,.0])
     med = 1
@@ -379,6 +386,7 @@ def comp_link_(iL_):  # comp CLs via directional node-mediated link tracing: der
                     LL_ += [Link]  # include -ves, L.rim_t += Link, order: nodet < L < rimt_, mN.rim || L
                     if et is not None:
                         L_.update({_L,L}); Et += et
+        if not L_: break  # break when there's no new L since there's no need to pack empty L_ too
         L__+=[L_]; LL__+=[LL_]; ET += Et
         # rng+ eval:
         Med = med + 1
