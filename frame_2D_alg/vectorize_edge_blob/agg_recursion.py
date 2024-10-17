@@ -296,6 +296,7 @@ def agg_recursion(root, iQ, fd):  # breadth-first rng+ cross-comp -> eval cluste
         for L in L_[1:]:
             root.derH.H[-1].H[-1].add_H(L.derH)  # accum Lay
         # comp_link_
+        # we can have sort_by_dist here? Since right now we unpack them again above
         if fvd and len(L_) > ave_L:  # comp L if DL, sub-cluster LLs by mL:
             agg_recursion(root, L_, fd=1)  # appends last aggLay, L_ = lG_
         if fvm:
@@ -355,13 +356,18 @@ def sort_by_dist(_L_, fd):  # sort Ls -> rngH, if cluster within rng, same for N
     _L_ = sorted(_L_, key=lambda x: x.S)  # short links first
     N__, L_ = [], []; Max_dist = max_dist
     for L in _L_:
-        if L.S < Max_dist: L_ += [L]  # Ls within Max_dist
+        if L.S < Max_dist: L_ += [L]  # Ls within Max_dist (Right now L.S is always == 2, so they all will be have a same rng?)
         else:
-            if fd: N__ += [L_]  # actually L__, may be empty
-            else:  N__.extend(list(set([node for L in L_ for node in L.nodet])))  # dist span for N clustering, may be empty
-            L_ = []  # init rng Lay
-            Max_dist += max_dist
+            if fd: N__ += [L_]  # actually L__, may be empty (so we need to pack empty L_ to preserve their max_dist?)
+            else:  N__ += [list(set([node for L in L_ for node in L.nodet]))] # dist span for N clustering, may be empty
+            while L.S >= Max_dist: Max_dist += max_dist  # we should increse until > Max_dist? Else we may skip Ls if they have a same S
+            L_ = [L]  # init rng Lay
 
+    # last L_
+    if L_:
+        if fd: N__ += [L_] 
+        else:  N__ += [list(set([node for L in L_ for node in L.nodet]))]
+        
     return  N__  # L__ if fd
 
 def comp_link_(iL_):  # comp CLs via directional node-mediated link tracing: der+'rng+ in root.link_ rim_t node rims
