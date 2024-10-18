@@ -79,13 +79,13 @@ def add_md_(HE, He,  irdnt=[]):  # p may be derP, sum derLays
     else:
         HE[:] = deepcopy(He)
 
-def comp_md_(_H, H, rn=1):
+def comp_md_(_H, H, rn=1, dir=1):
 
     vm, vd, rm, rd = 0,0,0,0
     derLay = []
     for i, (_d, d) in enumerate(zip(_H[1::2], H[1::2])):  # compare ds in md_ or ext
         d *= rn  # normalize by compared accum span
-        diff = _d - d
+        diff = (_d - d) * dir
         match = min(abs(_d), abs(d))
         if (_d < 0) != (d < 0): match = -match  # negate if only one compared is negative
         vm += match - aves[i]  # fixed param set?
@@ -93,7 +93,7 @@ def comp_md_(_H, H, rn=1):
         rm += vd > vm; rd += vm >= vd
         derLay += [match, diff]  # flat
 
-    return [derLay, np.array([vm,vd,rm,rd]), 1]  # [H, Et, n]
+    return [derLay, np.array([vm,vd,rm,rd],dtype='float'), 1]  # [H, Et, n]
 
 
 def comp_slice(edge):  # root function
