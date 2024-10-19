@@ -351,7 +351,7 @@ def comp_link_(iL_):  # comp CLs via directional node-mediated link tracing: der
                     if et is not None:
                         L_.update({_L,L}); Et += et
         if not L_: break
-        L__+=[L_]; LL__+=[LL_]; ET += Et
+        L__+=[[list(L_), Et]]; LL__+=[LL_]; ET += Et
         # rng+ eval:
         Med = med + 1
         if Et[0] > ave * Et[2] * Med:  # project prior-loop value - new cost
@@ -422,7 +422,7 @@ def comp_N(Link, rn, rng, dir=None):  # dir if fd, Link.derH=dH, comparand rim+=
     for rev, node in zip((0,1),(N,_N)):  # reverse Link direction for N
         # L_ includes negative Ls
         if (len(node.rimt_) if fd else len(node.rim_)) < rng:
-            if fd: node.rimt_ = [[[(Link,rev)],[]]] if dir else [[[],[(Link,rev)]]]  # add rng layer
+            if fd: node.rimt_ += [[[(Link,rev)],[]]] if dir else [[[],[(Link,rev)]]]  # add rng layer (should be += here)
             else:  node.rim_ += [[(Link, rev)]]
         else:
             if fd: node.rimt_[-1][1-rev] += [(Link,rev)]  # add in last rng layer, opposite to _N,N dir
@@ -438,13 +438,27 @@ def comp_N(Link, rn, rng, dir=None):  # dir if fd, Link.derH=dH, comparand rim+=
 def cluster_N__(root, iN__, fd):  # form rng graphs by merging lower-rng graphs if >ave rim: cross-graph rng links
 
     N__ = []
-    _N_,_et = iN__[0]
-    for N_,et in iN__[1:]:
+    _N_,_et = iN__.pop(-1)
+    rng = len(iN__)-1  # merge from higheest rng to lowest
+    for N_,et in reversed(iN__):
         if _et[0] < ave and et[0] < ave:
-            _N_ = [_N_ + [n] for n in N_ if n not in _N_]
-            _et += et  # merge weak rngs
+            for n in _N_:
+                if n not in N_: N_ += [n]  # merge to prior rng
+                # we still need to merge rim and extH when N exists in both layers
+                if isinstance(n, CL):
+                    n.rimt_[rng-1][0] += n.rimt_[rng][0]; n.rimt_[rng-1][1] += n.rimt_[rng][1];  
+                    n.rimt_.pop(rng)  # remove merged rimt
+                else:
+                    n.rim_[rng-1] += n.rim_[rng] 
+                    n.rim_.pop(rng)  # remove merged rim
+                n.extH.H[rng-1].add_H(n.extH.H[rng])
+                n.extH.H.pop(rng)  # remove merged extH 
+            et += _et  # merge weak rngs
+            if rng == 0: N__.insert(0, [N_,et])  # last N_ in the loop
         else:
-            N__ += [[_N_,_et]]; _N_ = N_; _et = et
+            N__.insert(0, [_N_,_et]); _N_ = N_; _et = et        
+        rng -= 1
+    
     Gt__ = []
     for rng, (N_,et) in enumerate(N__):
         if et[0] > ave:  # init Gt_ from N.root_[-1]
@@ -466,7 +480,8 @@ def cluster_N__(root, iN__, fd):  # form rng graphs by merging lower-rng graphs 
             else:  # weak Gt
                 n_ += [[node_,link_,et]]  # skip in current-agg xcomp, unpack if extended lower-agg xcomp
         n__ += [n_]
-    N__[:] = n__  # replace Ns with Gts, if any
+    iN__[:] = n__  # replace Ns with Gts, if any (replaces iN__ instead)
+
 
 def init_Gt_(N_, fd, rng):  # init higher root Gt_ from N.root_[-1]
 
