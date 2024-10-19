@@ -93,12 +93,12 @@ def comp_md_(_H, H, rn=1, dir=1):
         rm += vd > vm; rd += vm >= vd
         derLay += [match, diff]  # flat
 
-    return [derLay, np.array([vm,vd,rm,rd],dtype='float'), 1]  # [H, Et, n]
+    return [derLay, np.array([vm,vd,rm,rd], dtype='float'), 1]  # [H, Et, n]
 
 
 def comp_slice(edge):  # root function
 
-    edge.mdLay = [[],np.array([.0,.0,.0,.0]),0]  # H, Et, n
+    edge.mdLay = [[], np.array([.0,.0,.0,.0]),0]  # H, Et, n
     for P in edge.P_:  # add higher links
         P.mdLay = [[],np.array([.0,.0,.0,.0]),0]  # for accumulation in sum2PP later (in lower P)
         P.rim_ = []; P.lrim = []; P.prim = []
@@ -158,7 +158,7 @@ def comp_P(_P,P, angle=None, distance=None, fder=0):  # comp dPs if fd else Ps
     if fd:
         # der+: comp dPs
         rn = _P.mdLay[2] / P.mdLay[2]  # mdLay.n
-        derLay = comp_md_(_P.mdLay[0], P.mdLay[0], rn=rn)  # compare H
+        derLay = comp_md_(_P.mdLay[0], P.mdLay[0], rn=rn)  # comp md_latuple: H
         angle = np.subtract([y,x],[_y,_x])  # dy,dx of node centers
         distance = np.hypot(*angle)  # between node centers
     else:
@@ -217,7 +217,7 @@ def form_PP_(root, iP_):  # form PPs of dP.valt[fd] + connected Ps val
 
 def sum2PP(root, P_, dP_):  # sum links in Ps and Ps in PP
 
-    mdLay, latuple, link_, A, S, area, n, box = [[],np.array([.0,.0,.0,.0]),0], [0,0,0,0,0,[0,0]], [],[0,0],0,0,0, [np.inf,np.inf,0,0]
+    mdLay, latuple, link_, A, S, area, n, box = [[], np.array([.0,.0,.0,.0]),0], [0,0,0,0,0,[0,0]], [],[0,0],0,0,0, [np.inf,np.inf,0,0]
     iRt = root[3][1] if isinstance(root,list) else root.mdLay[1][2:4]   # add to rdnt in root.mdLay.Et or root Et
     # add uplinks:
     for dP in dP_:
