@@ -301,7 +301,9 @@ def comp_node_(_N_):  # rng+ forms layer of rim and extH per N, appends N_,L_,Et
             # comp if < max distance of likely matches *= prior G match * radius:
             if dist < max_dist * (radii * icoef**3) * M:
                 while len(_G.rim_) < rng-1: _G.rim_ += [[]]  # add empty rng rim to align in cluster_N__
-                while len(G.rim_) < rng-1: G.rim_ += [[]]
+                while len(G.rim_)  < rng-1: G.rim_ += [[]]
+                while len(_G.extH.H) < rng-1: _G.extH.append_(CH())
+                while len(G.extH.H)  < rng-1: G.extH.append_(CH())
                 # rng-1: new rim added in comp_N:
                 Link = CL(nodet=[_G,G], angle=[dy,dx], dist=dist, box=extend_box(G.box,_G.box))
                 et = comp_N(Link, rn, rng)
@@ -311,8 +313,8 @@ def comp_node_(_N_):  # rng+ forms layer of rim and extH per N, appends N_,L_,Et
             else:
                 Gp_ += [Gp]  # re-evaluate not-compared pairs with one incremented N.M:
         # cluster or merge N_,L_ in cluster_N__:
-        N__ += [[N_,Et]]; L__ += [L_]; ET += Et
         if Et[0] > ave * Et[2]:  # current-rng vM
+            N__ += [[N_,Et]]; L__ += [L_]; ET += Et  # this should be here to prevent empty N_?    
             rng += 1
             _Gp_ = [Gp for Gp in Gp_ if Gp[0].add or Gp[1].add]  # one incremented N.M
         else:  # low projected rng+ vM
@@ -350,7 +352,7 @@ def comp_link_(iL_):  # comp CLs via directional node-mediated link tracing: der
                     if et is not None:
                         L_.update({_L,L}); Et += et
         if not L_: break
-        L__+=[[list(L_), Et]]; LL__+=[LL_]; ET += Et
+        L__+=[[L_, Et]]; LL__+=[LL_]; ET += Et  # sorry it should be set for N_
         # rng+ eval:
         Med = med + 1
         if Et[0] > ave * Et[2] * Med:  # project prior-loop value - new cost
@@ -441,9 +443,9 @@ def cluster_N__(root, iN__, fd):  # form rng graphs by merging lower-rng graphs 
     rng = len(iN__)
     while iN__:
         _N_,_et = iN__.pop()  # top-down
-        if _et[0] < ave and et[0] < ave:  # merge weak rngs, higher into lower
+        if _et[0] < ave and et[0] < ave:  # merge weak rngs, higher into lower (or we can merge weak N_ to either strong or weak _N_ too?)
             for n in N_:
-                if n not in _N_: _N_ += [n]  # lower rng
+                if n not in _N_: _N_.add(n)  # lower rng
                 if isinstance(n, CL):
                     n.rimt_[rng-1][0] += n.rimt_[rng][0]; n.rimt_[rng-1][1] += n.rimt_[rng][1]; n.rimt_.pop(rng)  # merged rimt
                 else:
@@ -453,7 +455,7 @@ def cluster_N__(root, iN__, fd):  # form rng graphs by merging lower-rng graphs 
         else:
             N__ += [[_N_,_et]]; N_ = _N_; _et = et
         rng -= 1
-    N__ += [[_N_,_et] if _N_ in locals else [N_,et]]  # 1st N_, [N_,et] if no while: single N_ in iN__
+    N__ += [[_N_,_et] if '_N_' in locals() else [N_,et]]  # 1st N_, [N_,et] if no while: single N_ in iN__
     Gt__ = []
     for rng, (N_,et) in enumerate(reversed(N__)):  # bottom-up
         if et[0] > ave:  # init Gt_ from N.root_[-1]
