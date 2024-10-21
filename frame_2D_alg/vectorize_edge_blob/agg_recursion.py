@@ -252,12 +252,11 @@ def agg_recursion(root, iQ, fd):  # breadth-first rng+ cross-comp -> eval cluste
         e.root_, e.extH = [], CH()
         Q += [e]
     # cross-comp link_ or node_:
-    N__,L__, Et, rng = comp_link_(Q) if fd else comp_node_(Q)
+    (N__, M),L_, Et, rng = comp_link_(Q) if fd else comp_node_(Q)
 
     m,d,mr,dr = Et; fvd = d > ave_d * dr*(rng+1); fvm = m > ave * mr*(rng+1)
     if fvd or fvm:
-        L_ = [L for L_ in L__ for L in L_]  # comp flat or nested?
-        L = L_[0]  # root += L.derH
+        L = L_[0]  # root += L.derH (L__ is flat now)
         if fd: root.derH.append_(CH().append_(CH().copy(L.derH)))  # new rngLay, aggLay
         else:  root.derH.H[-1].append_(L.derH)  # append last aggLay
         for L in L_[1:]:
@@ -315,40 +314,49 @@ def comp_node_(_N_):  # rng+ forms layer of rim and extH per N, appends N_,L_,Et
         else:  # low projected rng+ vM
             break
 
-    return cluster_rng_(pL_), L_, ET, rng
+    return cluster_rng_(pL_) if pL_ else ([],0), L_, ET, rng  # positive L_ may empty, so skip cluster_rng
 
 def cluster_rng_(_L_):  # cluster while <ave ddist regardless of M, proximity is a separate criterion?
 
     _L_ = sorted(_L_, key=lambda x: x.dist)  # short links first
-    N__, N_ = [], []; M, m = 0,0
     _L = _L_[0]
+    N__, N_, _N_ = [], [], _L.nodet; M, m, _m = 0,0, _L.derH.Et[0]  # _N_ should be init with first L's nodet
     rng = 1
     for L in _L_[1:]:
         ddist = L.dist - _L.dist  # always positive
         if ddist < ave_L:  # pre-cluster ~= dist Ns
             m += L.derH.Et[0]
             for rev, N in zip((0,1), (L.nodet)):  # reverse Link direction for N
-                drng = rng - len(N.rim_)
-                if drng > 0:
-                    while drng - 1 > 0:
-                        N.rim_ += [[]]; N.extH.H += [[]]; drng -= 1  # empty rngLay
-                    N.rim_+= [[L,rev]]; N.extH.append(CH().add_H(L.derH))  # add rngLay
-                else:  # append rngLay
-                    N.rim_[rng-1] += [L,rev]; N.extH.H[rng-1].add_H(L.derH)  # always N.rim_[-1], N.extH.H[-1]?
+                while (rng - len(N.rim_)) > 0:  # we just need this line to fill the gap and at a same time pack new layer?
+                    N.rim_ += [[]]; N.extH.append_(CH(), flat=0)  # add rngLay     
+                # append rngLay
+                N.rim_[rng-1] += [[L,rev]]; N.extH.H[rng-1].add_H(L.derH)  # always N.rim_[-1], N.extH.H[-1]? (yes, given we filled the gap of rng)
                 if N not in N_: N_ += [N]
         # merge weak N_ in lower N_, if any:
         elif m < ave and rng > 1:
-            _N_ += [n for n in N_ if n not in _N_]
+            for n in N_:
+                if n not in _N_:
+                    _N_ += [n]
+                # we need to merge their rim_ and extH too?
+                N.rim_[-2] += [Lt for Lt in N.rim_[-1] if Lt not in N.rim_[-2]]
+                N.rim_.pop()  # remove merged weak layer
+                N.extH.H[-2].add_H(N.extH.H[-1])
+                N.extH.H.pop()  # remove merged weak CH
             _m += m
+            # how about L? init with L?
+            m = L.derH.Et[0]
+            N_ = L.nodet[:]
         else:  # pack and replace N_
             N__ += [[N_,m]]; M += m
             _N_,_m = N_,m
-            N_,m = [],0
+            # init with L?
+            N_,m = L.nodet[:],L.derH.Et[0]
             rng += 1
+        _L = L  # this is missed out?
     if N_:
         N__ += [[N_,m]]  # last rngLay
 
-    return N__, M
+    return N__, M  # why we need this M?
 
 def comp_link_(iL_):  # comp CLs via directional node-mediated link tracing: der+'rng+ in root.link_ rim_t node rims
 
@@ -362,7 +370,7 @@ def comp_link_(iL_):  # comp CLs via directional node-mediated link tracing: der
                 if _L is not L and _L.derH.Et[0] > ave * _L.derH.Et[2]:
                     mL_ += [(_L, rev ^_rev)]  # direction of L relative to _L
     _L_, L__, LL__, ET = iL_,[],[], np.array([.0,.0,.0,.0])
-    med = 1
+    med = 1; M= 0
     while True:  # xcomp _L_
         L_, LL_, Et = [],[], np.array([.0,.0,.0,.0])
         for L in _L_:
@@ -386,7 +394,7 @@ def comp_link_(iL_):  # comp CLs via directional node-mediated link tracing: der
                                 node.extH.H[-1].add_H(Link.derH)
                             if node not in L_: L_ += [node]
         if not L_: break
-        L__ += [[L_,Et]]; LL__ += [LL_]; ET += Et
+        L__ += [[L_,Et]]; LL__ += LL_; ET += Et; M += Et[0]
         # rng+ eval:
         Med = med + 1
         if Et[0] > ave * Et[2] * Med:  # project prior-loop value - new cost
@@ -414,7 +422,7 @@ def comp_link_(iL_):  # comp CLs via directional node-mediated link tracing: der
                 break
         else:
             break
-    return L__, LL__, ET, med  # =rng
+    return (L__, M), LL__, ET, med  # =rng
 
 def extend_box(_box, box):  # add 2 boxes
     y0, x0, yn, xn = box; _y0, _x0, _yn, _xn = _box
