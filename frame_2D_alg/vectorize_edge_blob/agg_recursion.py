@@ -316,7 +316,38 @@ def comp_node_(_N_):  # rng+ forms layer of rim and extH per N, appends N_,L_,Et
         else:  # low projected rng+ vM
             break
 
-    return cluster_rng_(pL_) if pL_ else [], L_, ET, rng
+    if L_: N__, L__ = cluster_rng_(L_)
+    else:  N__, L__ = [], []
+
+    return  N__, L__, ET, rng
+
+
+# pack L.derH into their nodet's rim and extH
+def update_nodet(_L, rng):
+    for rev,N in zip((0,1), (_L.nodet)):  # reverse Link direction for 2nd N
+        while rng - len(N.rim_) > 0:
+            N.rim_ += [[]]; N.extH.append_(CH())  # add rngLay
+        N.rim_[-1] += [[_L,rev]]; N.extH.H[-1].add_H(_L.derH)  # append rngLay in [rng-1]
+
+# init positive L and N_
+def init_pNL(_L, rng):
+    if _L.derH.Et[0] > ave * _L.derH.Et[2] * (rng+1):  # positive L
+        update_nodet(_L, rng)
+        pL_ = [_L]; N_ = set(_L.nodet)
+    else:
+        pL_ = []; N_ = set()
+        
+    return N_, pL_
+
+# merge weaker N_ into lower rng _N_
+def merge_rng(_N_, N_, N__, m):
+    
+    for n in N_:
+        _N_.add(n)
+        n.extH.H[-2].add_H(n.extH.H[-1]); n.extH.H.pop()
+        n.rim_[-2] += [Lt for Lt in n.rim_[-1]]; n.rim_.pop()
+    N__[-1][1] += m  # we need to increase _m from the list of [N_, m]
+
 
 def cluster_rng_(_L_):  # cluster while <ave ddist regardless of M, proximity is a separate criterion?
     '''
@@ -324,34 +355,37 @@ def cluster_rng_(_L_):  # cluster while <ave ddist regardless of M, proximity is
     '''
     _L_ = sorted(_L_, key=lambda x: x.dist)  # short links first
     _L = _L_[0]
-    N__,N_,_N_ = [],[],_L.nodet; m,_m = 0,_L.derH.Et[0]
-    rng = 1
+    rng = 1  
+    N_, pL_ = init_pNL(_L, rng)
+    N__,_N_,L__,L_,m = [],set(),[],[_L],0  # L__ packs both positive and negative links
+
     for L in _L_[1:]:
         ddist = L.dist - _L.dist  # always positive
         if ddist < ave_L:  # pre-cluster ~= dist Ns
-            m += L.derH.Et[0]
-            for rev,N in zip((0,1), (L.nodet)):  # reverse Link direction for 2nd N
-                while rng - len(N.rim_) > 0:
-                    N.rim_ += [[]]; N.extH.append_(CH())  # add rngLay
-                N.rim_[-1] += [[L,rev]]; N.extH.H[-1].add_H(L.derH)  # append rngLay in [rng-1]
-                if N not in N_: N_ += [N]
-        elif m < ave and rng > 1:  # merge weak N_ in lower N_, if any
-            for n in N_:
-                if n not in _N_: _N_ += [n]
-                n.extH.H[-2].add_H(n.extH.H[-1]); n.extH.H.pop()
-                n.rim_[-2] += [Lt for Lt in n.rim_[-1]]; n.rim_.pop()
-            _m += m
-            N_,m = L.nodet[:], L.derH.Et[0]
+            L_ += [L]  # includes negative links
+            if L.derH.Et[0] > ave * L.derH.Et[2] * (rng+1):  # positive link only
+                m += L.derH.Et[0]; pL_ += [L]
+                update_nodet(L, rng)
+                N_.update({*L.nodet})
+        elif (m < ave or len(pL_) < ave_L) and rng > 1:  # merge weak N_ in lower N_, if any
+            merge_rng(_N_, N_, N__, m)
+            m, L_  = L.derH.Et[0], [L]
+            N_,pL_ = init_pNL(L, rng)
         else:  # pack, replace N_
-            N__ += [[N_,m]]
-            _N_,_m = N_,m
-            N_,m = L.nodet[:], L.derH.Et[0]
+            N__ += [[N_,m]]; L__ += [L_]
+            _N_ = N_
+            m,L_   = L.derH.Et[0], [L]
+            N_,pL_ = init_pNL(L, rng)
             rng += 1
         _L = L
     if N_:
-        N__ += [[N_,m]]  # last rngLay
+        # merge last N_ to prior _N_ 
+        if (m < ave or len(pL_) < ave_L) and len(list(N_)[0].extH.H)>1:  # check with `len(N.extH.H)>1` instead of rng since rng may not incremented when _L_ loop ends
+            merge_rng(_N_, N_, N__, m)
+        else:
+            N__ += [[N_,m]]; L__ += [L_]  # pack last rngLay
 
-    return N__
+    return N__, L__  # L__ contains both positive and negative links
 
 def comp_link_(iL_):  # comp CLs via directional node-mediated link tracing: der+'rng+ in root.link_ rim_t node rims
 
@@ -475,7 +509,9 @@ def cluster_N__(root, N__, fd):  # form rng graphs by merging lower-rng graphs i
     n__ = []
     # Gts -> CGs:
     for rng, Gt_ in enumerate(Gt__, start=1):
-        if isinstance(Gt_, set): continue  # recycled N_
+        if isinstance(Gt_, set): 
+            n__ += [Gt_]  # Gt_ is a set where it is a recycled N_
+            continue  # recycled N_
         n_ = []
         for Gt in Gt_:
             if isinstance(Gt, CG): continue  # recycled N
