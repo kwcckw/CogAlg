@@ -289,13 +289,13 @@ def comp_node_(_N_):  # rng+ forms layer of rim and extH per N, appends N_,L_,Et
         _Gp_ += [(_G,G, rn, dy,dx, radii, dist)]
     icoef = .5  # internal M proj_val / external M proj_val
     rng = 1  # len N__
-    N_, L_, ET = [],[], np.array([.0,.0,.0,.0])
+    N_, L_, ET = set(),[], np.array([.0,.0,.0,.0])  # temporary use set for N_ to remove duplicated Ns
     while True:  # prior vM
         Gp_,Et = [], np.array([.0,.0,.0,.0])
         for Gp in _Gp_:
             _G,G, rn, dy,dx, radii, dist = Gp
-            _nrim = set([(Lt[0].nodet[1] if Lt[0].nodet[0] is _G else Lt[0].nodet[0]) for rim in _G.rim_ for Lt in rim])
-            nrim = set([(Lt[0].nodet[1] if Lt[0].nodet[0] is G else Lt[0].nodet[0]) for rim in G.rim_ for Lt in rim])
+            _nrim = set([(Lt[0].nodet[1] if Lt[0].nodet[0] is _G else Lt[0].nodet[0]) for Lt in _G.rim])
+            nrim = set([(Lt[0].nodet[1] if Lt[0].nodet[0] is G else Lt[0].nodet[0]) for Lt in G.rim])
             if _nrim & nrim:  # indirectly connected Gs,
                 continue     # no direct match priority?
             M = (_G.mdLay[1][0]+G.mdLay[1][0]) *icoef**2 + (_G.derH.Et[0]+G.derH.Et[0])*icoef + (_G.extH.Et[0]+G.extH.Et[0])
@@ -305,7 +305,7 @@ def comp_node_(_N_):  # rng+ forms layer of rim and extH per N, appends N_,L_,Et
                 et = comp_N(Link, rn, rng)
                 L_ += [Link]  # include -ve links
                 if et is not None:
-                    N_ += [_G, G]
+                    N_.update({_G, G})
                     Et += et; _G.add,G.add = 1,1
             else:
                 Gp_ += [Gp]  # re-evaluate not-compared pairs with one incremented N.M
@@ -316,7 +316,7 @@ def comp_node_(_N_):  # rng+ forms layer of rim and extH per N, appends N_,L_,Et
         else:  # low projected rng+ vM
             break
 
-    return  N_,L_, ET, rng  # flat N__ and L__
+    return  list(N_),L_, ET, rng  # flat N__ and L__
 
 
 def comp_link_(iL_):  # comp CLs via directional node-mediated link tracing: der+'rng+ in root.link_ rim_t node rims
@@ -356,7 +356,7 @@ def comp_link_(iL_):  # comp CLs via directional node-mediated link tracing: der
                 for mL_,_mL_ in zip(mL_t, L.mL_t):
                     for _L, rev in _mL_:
                         for _rev, n in zip((0,1), _L.nodet):
-                            rim_ = n.rimt_ if fd else n.rim_
+                            rim_ = n.rimt if fd else n.rim
                             if len(rim_) == med:  # append in comp loop
                                 for __L,__rev in rim_[-1][0]+rim_[-1][1] if fd else rim_[-1]:
                                     if __L in L.visited_ or __L not in iL_: continue
@@ -425,7 +425,7 @@ def comp_N(Link, rn, rng, dir=None):  # dir if fd, Link.derH=dH, comparand rim+=
 def cluster_N_(root, N_, fd, nest=1, max_dist=np.inf):
 
     def nest_rim(L):
-        # not quite right, this append is redundant to 1st layer in rim and extH.H:
+        # not quite right, this append is redundant to 1st layer in rim and extH.H: (Yes, so we just need to accumulate it here using [-1])
         for rev, N in zip((0,1), L.nodet):  # reverse Link direction for 2nd N
             if fd: N.rimt[-1][1-rev] += [(L,rev)]  # append rngLay
             else:  N.rim[-1] += [(L,rev)]
@@ -435,18 +435,20 @@ def cluster_N_(root, N_, fd, nest=1, max_dist=np.inf):
     Gt_ = []
     for N in N_:
         N.merged = 0
-        N.extH = CH().append_(N.extH)
-        rim = N.rimt if fd else N.rim; rim[:] = [rim]  # convert to rim_
+        N.extH.append_(CH())  # we just need to append new CH for new layer here?
+        rim = N.rimt if fd else N.rim
+        if nest == 1: rim[:] = [rim[:]]  # convert to rim_ (only for 1st layer, and we need another [:] here, else it's reassigning back itself)
+        rim += [[[],[]]] if fd else [[]]  # add new rim layer
     for N in N_:
         if N.merged: continue
         node_, link_, et = {N}, set(), np.array([.0,.0,.0,.0])  # init Gt
-        L_ = [L for L,rev in (N.rimt[0]+N.rimt[1] if fd else N.rim) if L.dist < max_dist]
+        L_ = [L for L,rev in (N.rimt[-2][0]+N.rimt[-2][1] if fd else N.rim[-2]) if L.dist < max_dist]  # using [-2] because [-1] is the last added empty rim?
         _eN_ = {n for L in L_ for n in L.nodet if n not in node_ and not n.merged}  # init ext_N_
         while _eN_:
             eN_ = set()
             for eN in _eN_:  # known +ve link
                 node_.add(eN)
-                for L,rev in (eN.rimt[0]+eN.rimt[1] if fd else eN.rim):
+                for L,rev in (eN.rimt[-2][0]+eN.rimt[-2][1] if fd else eN.rim[-2]):
                     if L not in link_:
                         link_.add(L); et += L.derH.Et
                         for G in L.nodet:
@@ -466,12 +468,20 @@ def cluster_N_(root, N_, fd, nest=1, max_dist=np.inf):
             for ii, L in enumerate(link_[1:], start=1):  # long links first
                 ddist = _L.dist - L.dist  # positive
                 if ddist < ave_L or et[0] < ave:  # ~= dist Ns or weak
-                    nest_rim(L.nodet)
+                    nest_rim(L)
                     et += L.derH.Et
                 elif et[0] > ave  * et[2] * nest+1:  # inverted rng
-                    sub_N_ = {N for L in link_[ii:] for N in L.nodet}  # shorter links are not yet clustered
-                    sub_Gt_ = cluster_N_(Gt, sub_N_, fd, nest+1, L.dist)
-                    Gt_[i] += [sub_Gt_]
+                    # those shorter links may or may not added with new links in their last new rim, so in the next cluster_N_, which nesting should they use?
+                    sub_N_ = {N for L in link_[ii:] for N in L.nodet}  # shorter links are not yet clustered 
+                    # temporary remove last added empty rim
+                    for N in sub_N_:
+                        if fd:
+                            if not N.rimt[-1][0] and not N.rimt[-1][1]: 
+                                N.rimt.pop()
+                        else:
+                            if not N.rim[-1]: N.rim.pop()
+                    sub_G_ = cluster_N_(Gt, sub_N_, fd, nest+1, L.dist)
+                    Gt_[i] += [sub_G_]
                     break
     G_ = []
     for Gt in Gt_:
@@ -482,10 +492,13 @@ def cluster_N_(root, N_, fd, nest=1, max_dist=np.inf):
 
 def sum2graph(root, grapht, fd, nest):  # sum node and link params into graph, aggH in agg+ or player in sub+
 
-    node_, link_, Et, Gt_ = grapht
+    node_, link_, Et = grapht[:3]
     node_ = list(node_)  # convert from set
     graph = CG(fd=fd, root_=[root], node_=node_, link_=link_, rng=nest)
-    graph.sub_G_ = [ sum2graph(graph, Gt, fd, nest+1) for Gt in Gt_]  # depth-first
+    if len(grapht)>3:
+        sub_G_ = grapht[3]    
+        graph.sub_G_ = sub_G_
+        # graph.sub_G_ = [ sum2graph(graph, Gt, fd, nest+1) for Gt in Gt_]  # depth-first
     yx = [0,0]
     lay0 = CH(node_=node_)  # comparands, vs. L_: summands?
     for link in link_:  # unique current-layer mediators: Ns if fd else Ls
