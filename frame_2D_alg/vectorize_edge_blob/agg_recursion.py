@@ -271,11 +271,16 @@ def agg_recursion(root, iQ, fd):  # breadth-first rng+ cross-comp -> eval cluste
         if fvd and len(L_) > ave_L:  # comp L if DL, sub-cluster LLs by mL:
             agg_recursion(root, L_, fd=1)  # appends last aggLay, L_ = lG_
         if fvm:
+            pL_ = []
             for N in N_:  # nest exceptional rims, flat by default
                 rim = N.rimt if fd else N.rim; rim[:] = [rim[:]]
-                elay = CH(); for L,_ in rim: elay.add_H(L.derH)
+                elay = CH()
+                for L,_ in (rim[-1][0] + rim[-1][1] if fd else rim[-1]): 
+                    elay.add_H(L.derH)
+                    if L not in pL_: pL_ += [L]
                 N.extH.append_(elay)
-            G_ = cluster_N_(root, L_, fd)  # divisive connectivity clustering
+            # cluster pL_ here?
+            G_ = cluster_N_(root, pL_, fd)  # divisive connectivity clustering
             if len(G_) > ave_L:  # root.node_[:] = nested G_, if any:
                 agg_recursion(root, G_, fd=0)  # comp_G_-> GG_
 '''
@@ -438,7 +443,7 @@ def cluster_N_(root, L_, fd, nest=2):  # nest=1 is global, top-down segment iL_ 
         ddist = _L.dist - L.dist  # positive
         if ddist < ave_L or et[0] < ave or len(L_[i:]) < ave_L:  # ~=dist Ns or either side of L is weak
             et += L.derH.Et
-            for n, rev in zip((0,1), L.nodet):  # reverse Link direction for 2nd N
+            for rev, n in zip((0,1), L.nodet):  # reverse Link direction for 2nd N  (n and rev is reversed)
                 if n not in N_:
                     # accum dist segment, redundant to prior layers in rim,extH.H?
                     rim = n.rimt if fd else n.rim
@@ -450,28 +455,36 @@ def cluster_N_(root, L_, fd, nest=2):  # nest=1 is global, top-down segment iL_ 
                     N_.add(n); n.merged = 0
         else:
             min_dist = L.dist; break
+        _L = L  # this is missed out?
+    if not 'min_dist' in locals(): min_dist = _L.dist  # last L
+        
     Gt_ = []
     for N in N_:  # cluster Ns with rim in terminated dist segment:
         if N.merged: continue
+        N.merged = 1  # we need to set N merged too?
         node_, link_, et = {N},set(),np.array([.0,.0,.0,.0])  # Gt
+        # this is missed out? _eN_ should be init from N, else it's empty
+        _rim = N.rimt[-1][0] + N.rimt[-1][1] if fd else N.rim[-1]
         _eN_ = set()
+        for _L, _ in _rim:
+            _eN_.add(_L.nodet[1] if _L.nodet[0] is N else _L.nodet[0])
         while True:  # cluster rim-connected ext Ns
             eN_ = set()
             for eN in _eN_:  # known +ve link
-                node_.add(eN)
+                if eN.merged: continue  # skip if eN forms Gt in prior since current scheme doesn't merge right?
+                node_.add(eN); eN.merged = 1
                 for L,rev in (eN.rimt[-1][0] + eN.rimt[-1][1] if fd else eN.rim[-1]):
-                    if L.dist > min_dist and L not in link_:
+                    if L.dist > min_dist and L not in link_:  # this only add longer link?
                         link_.add(L); et += L.derH.Et
                         for G in L.nodet:
-                            if G not in node_ and not G.merged:
-                                eN_.add(G)
+                            if not G.merged: eN_.add(G)  # if G in node_, their merged should be set too, so we just need to check merged
             if any(eN_): _eN_ = eN_
             else: break
         Gt = [node_, link_, et]
         for n in node_:
             n.root_ = [Gt]; n.merged = 1
         # add shorter-linked sub_G_, depth-first:
-        sub_link_ = [l for l in link_ if l.dist <= min_dist]
+        sub_link_ = [l for l in link_ if l.dist <= min_dist]  # this is always empty because link_ are added when L.dist > min_dist, and here we are looking for <= min_dist?
         Gt += [cluster_N_(Gt, sub_link_, fd, nest+1)] if len(sub_link_) > ave_L else [[]]
         # add sub_G_, recursively nested
         Gt_ += [Gt]
