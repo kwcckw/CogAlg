@@ -262,7 +262,7 @@ def agg_recursion(root, iQ, fd):  # breadth-first rng+ cross-comp -> eval cluste
     fvm = m > ave * mr*(rng+1)
     if fvd or fvm:
         L = L_[0]  # init root.derH, before clustering:
-        # not revised:
+        # not revised: (should be the same unless we want to move it into sum2graph?)
         if fd: root.derH.append_(CH().append_(CH().copy(L.derH)))  # always new Lay
         else: root.derH.H[-1].append_(L.derH)  # append last Lay
         for L in L_[1:]:  # accum Lay
@@ -271,7 +271,7 @@ def agg_recursion(root, iQ, fd):  # breadth-first rng+ cross-comp -> eval cluste
         if fvd and len(L_) > ave_L:  # comp L if DL, sub-cluster LLs by mL:
             agg_recursion(root, L_, fd=1)  # appends last aggLay, L_ = lG_
         if fvm:
-            pL_ = {[l for n in N_ for l,_ in get_rim(n,fd)]}
+            pL_ = {l for n in N_ for l,_ in get_rim(n,fd)}
             G_ = cluster_N_(root, pL_, fd)  # divisive connectivity clustering
             if len(G_) > ave_L:  # root.node_[:] = nested G_ if any
                 agg_recursion(root, G_, fd=0)  # comp_G_
@@ -422,7 +422,8 @@ def comp_N(Link, rn, rng, dir=None):  # dir if fd, Link.derH=dH, comparand rim+=
             # reverse Link direction for _N
             if fd: node.rimt[1-rev] += [(Link,rev)]  # opposite to _N,N dir
             else:  node.rim += [(Link, rev)]
-            node.extH.add_H(L.derH)
+            while len(node.extH.H)<rng: node.extH.append_(CH(), flat=0)  # we can add extH layer based on rng?
+            node.extH.H[-1].add_H(Link.derH)  
             # flat
         return Et
 
@@ -438,11 +439,11 @@ def cluster_N_(root, L_, fd, nest=1):  # top-down segment iL_ by L distance and 
     # init dist segment:
     for i, L in enumerate(L_[1:], start=1):  # long links first
         ddist = _L.dist - L.dist  # positive
-        if ddist < ave_L or et[0] < ave or len(L_[i:]) < ave_L:  # ~=dist Ns or either side of L is weak
+        if ddist < ave_L or et[0] < ave or len(L_[i:]) < ave_L:  # ~=dist Ns or either side of L is weak (eval is based on difference of dist, but min_dist is using L.dist? )
             et += L.derH.Et
             for n in L.nodet:
-                if n not in N_:
-                    N_.add(n); n.merged = 0
+                if n not in N_ and not n.merged:  # we should skip merged n here? Else there will be overlapping between graphs from long links and short links
+                    N_.add(n)
         else:
             min_dist = L.dist; break
         _L = L
@@ -472,7 +473,7 @@ def cluster_N_(root, L_, fd, nest=1):  # top-down segment iL_ by L distance and 
         # form subG_ via shorter Ls, depth-first:
         sub_link_ = set()
         for n in node_:
-            [sub_link_.add(l) for l,_ in get_rim(n,fd) if l.dist <= min_dist]
+            sub_link_.update({l for l,_ in get_rim(n,fd) if l.dist <= min_dist})  # call update once instead of call add multiple times in the loop?
             n.root_ = [Gt]
         Gt += [cluster_N_(Gt, sub_link_, fd, nest+1)] if len(sub_link_) > ave_L else [[]]  # add subG_, recursively nested
         Gt_ += [Gt]
