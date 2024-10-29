@@ -173,7 +173,7 @@ class CH(CBase):  # generic derivation hierarchy of variable nesting: extH | der
 
 class CG(CBase):  # PP | graph | blob: params of single-fork node_ cluster
 
-    def __init__(G, root_= None, node_=None, link_=None, subG_=None, latuple=None, mdLay=None, derH=None, extH=None, rng=1, fd=0, n=0, box=None, yx=None):
+    def __init__(G, root_= None, node_=None, link_=None, subG_=None, latuple=None, mdLay=None, derH=None, extH=None, rng=1, fd=0, n=0, box=None, yx=None, minL=None):
         super().__init__()
         G.n = n  # last layer?
         G.fd = 0 if fd else fd  # 1 if cluster of Ls | lGs?
@@ -184,6 +184,7 @@ class CG(CBase):  # PP | graph | blob: params of single-fork node_ cluster
         G.subG_ = [] if subG_ is None else subG_ # lower-rng Gs
         G.latuple = [0,0,0,0,0,[0,0]] if latuple is None else latuple  # lateral I,G,M,Ma,L,[Dy,Dx]
         G.mdLay = [[.0,.0,.0,.0,.0,.0,.0,.0,.0,.0,.0,.0], [.0,.0,.0,.0], 0] if mdLay is None else mdLay  # H here is md_latuple
+        G.minL = 0 if minL is None else minL
         # maps to node_H / agg+|sub+:
         G.derH = CH(root=G) if derH is None else derH  # sum from nodes, then append from feedback
         G.extH = CH(root=G) if extH is None else extH  # sum from rim_ elays, H maybe deleted
@@ -246,9 +247,9 @@ def vectorize_root(frame):
                             PP.aRad = np.hypot(*np.subtract(PP.yx,(yn,xn)))
                             G_ += [PP]
                     if len(G_) > ave_L:
-                        agg_recursion(edge, G_, fd=0)  # discontinuous PP_ xcomp, cluster
+                        agg_recursion(edge, edge.derH, G_, fd=0)  # discontinuous PP_ xcomp, cluster
 
-def agg_recursion(root, iQ, fd):  # breadth-first rng+ cross-comp -> eval clustering, recursion per fd fork: rng+ | der+
+def agg_recursion(root, root_derH, iQ, fd):  # breadth-first rng+ cross-comp -> eval clustering, recursion per fd fork: rng+ | der+
 
     Q = []
     for e in iQ:
@@ -262,18 +263,22 @@ def agg_recursion(root, iQ, fd):  # breadth-first rng+ cross-comp -> eval cluste
     fvm = m > ave * mr*(rng+1)
     if fvd or fvm:
         L = L_[0]  # double-nested root derH(aggH, init der|agg Lay with 1st L:
-        if fd: root.derH.append_(CH().append_(CH().copy(L.derH)))  # new derLay
-        else: root.derH.H[-1].append_(L.derH)  # append last derLay with aggLay
+        if fd:
+            derlay = CH()  # new derlay in d fork
+            root_derH.append_(derlay,flat=0)
+        else:
+            derlay = root_derH.H[-1]  # last derLay
+        derlay.append_(L.derH, flat=0)  # new agglay in derlay in both forks
         for L in L_[1:]:
-            root.derH.H[-1].H[-1].add_H(L.derH)  # always accum last aggLay
+            derlay.H[-1].add_H(L.derH)  # always accum last aggLay
         # comp_link_
         if fvd and len(L_) > ave_L:  # comp L if DL, sub-cluster LLs by mL:
-            agg_recursion(root, L_,fd=1)  # der+, adds nested derLay above
+            agg_recursion(root, derlay, L_,fd=1)  # der+, adds nested derLay above
         if fvm:
             pL_ = {l for n in N_ for l,_ in get_rim(n,fd)}
             G_ = cluster_N_(root, pL_, fd)  # divisive connectivity clustering
             if len(G_) > ave_L:  # root.node_[:] = nested G_ if any
-                agg_recursion(root, G_,fd=0)  # rng+, adds nested aggLay above
+                agg_recursion(root, derlay, G_,fd=0)  # rng+, adds nested aggLay above
 '''
     derH has variable nesting, but it always alternates between derH and aggH?
     if flat derH:
@@ -422,7 +427,7 @@ def comp_N(Link, rn, rng, dir=None):  # dir if fd, Link.derH=dH, comparand rim+=
             # reverse Link direction for _N
             if fd: node.rimt[1-rev] += [(Link,rev)]  # opposite to _N,N dir
             else:  node.rim += [(Link, rev)]
-            node.extH.add_H(L.derH)
+            node.extH.add_H(Link.derH)  # should be Link here
             # flat
         return Et
 
@@ -469,13 +474,16 @@ def cluster_N_(root, L_, fd, nest=1):  # top-down segment L_ by >ave diff in L.d
             if any(eN_): _eN_ = eN_
             else: break
         Gt = [node_, link_, et, min_dist]  # nest can be local?
-        # form subG_ via shorter Ls, depth-first:
+        Gt_ += [Gt]
+        
+    # form subG_ via shorter Ls:
+    for Gt in Gt_:
         sub_link_ = set()
-        for n in node_:
+        for n in Gt[0]:
             sub_link_.update({l for l,_ in get_rim(n,fd) if l.dist <= min_dist})
             n.root_ = [Gt]
-        Gt += [cluster_N_(Gt, sub_link_, fd, nest+1)] if len(sub_link_) > ave_L else [[]]  # add subG_, recursively nested
-        Gt_ += [Gt]
+        Gt += [cluster_N_(Gt, sub_link_, fd, nest+1)] if len(sub_link_) > 1 else [[]]  # add subG_, recursively nested
+
     G_ = []
     for Gt in Gt_:
         M, R = Gt[2][0::2]  # Gt: node_, link_, et, subG_
