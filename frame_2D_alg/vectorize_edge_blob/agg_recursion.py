@@ -49,7 +49,7 @@ ccoef  = 10  # scaling match ave to clustering ave
 class CH(CBase):  # generic derivation hierarchy of variable nesting: extH | derH, their layers and sub-layers
 
     name = "H"
-    def __init__(He, node_=None, md_t=None, n=0, Et=None, H=None, root=None, i=None, i_=None):
+    def __init__(He, node_=None, md_t=None, n=0, Et=None, H=None, root=None, i=None, i_=None, depth=None):
         super().__init__()
         He.node_ = [] if node_ is None else node_  # concat bottom nesting order if CG, may be redundant to G.node_
         He.md_t = [] if md_t is None else md_t  # derivation layer in H: [mdlat,mdLay,mdext]
@@ -60,7 +60,7 @@ class CH(CBase):  # generic derivation hierarchy of variable nesting: extH | der
         He.i = 0 if i is None else i  # lay index in root.H, to revise rdn
         He.i_ = [] if i_ is None else i_  # priority indices to compare node H by m | link H by d
         # He.ni = 0  # exemplar in node_, trace in both directions?
-        # He.depth = 0  # nesting in H[0], -=i in H[Hi], in agg++? same as:
+        He.depth = 0 if depth is None else depth  # nesting in H[0], -=i in H[Hi], in agg++? same as:
         # He.nest = nest  # nesting depth: -1/ ext, 0/ md_, 1/ derH, 2/ subH, 3/ aggH?
 
     def __bool__(H): return H.n != 0
@@ -81,23 +81,27 @@ class CH(CBase):  # generic derivation hierarchy of variable nesting: extH | der
         if any(irdnt):
             HE.Et[2:] = [E+e for E,e in zip(HE.Et[2:], irdnt)]
 
-    def add_H(HE, He, irdnt=[]):  # unpack derHs down to numericals and sum them
+    def add_H(HE, He_, irdnt=[]):  # unpack derHs down to numericals and sum them
 
-        if HE:
-            for i, (Lay,lay) in enumerate(zip_longest(HE.H, He.H, fillvalue=None)):  # cross comp layer
-                if lay:
-                    if Lay: Lay.add_H(lay, irdnt)
-                    else:
-                        if Lay is None:
-                            HE.append_(CH().copy(lay))  # pack a copy of new lay in HE.H
+        if not isinstance(He_, list): He_ = [He_]  # convert to list when He_ is single
+            
+        for He in He_:
+            if HE:
+                for i, (Lay,lay) in enumerate(zip_longest(HE.H, He.H, fillvalue=None)):  # cross comp layer
+                    if lay:
+                        if Lay: Lay.add_H(lay, irdnt)
                         else:
-                            HE.H[i] = CH(root=HE).copy(lay)  # Lay was []
-            HE.accum_lay(He, irdnt)
-            HE.node_ += [node for node in He.node_ if node not in HE.node_]  # node_ is empty in CL derH?
-        else:
-            HE.copy(He)  # init
-
-        return HE.update_root(He)  # feedback, ideally buffered from all elements before summing in root, ultimately G|L
+                            if Lay is None:
+                                HE.append_(CH().copy(lay))  # pack a copy of new lay in HE.H
+                            else:
+                                HE.H[i] = CH(root=HE).copy(lay)  # Lay was []
+                HE.accum_lay(He, irdnt)
+                HE.node_ += [node for node in He.node_ if node not in HE.node_]  # node_ is empty in CL derH?
+            else:
+                HE.copy(He)  # init
+            HE.update_root(He)  # feedback, ideally buffered from all elements before summing in root, ultimately G|L
+        
+        return HE
 
     def append_(HE,He, irdnt=None, flat=0):
 
@@ -247,9 +251,10 @@ def vectorize_root(frame):
                             PP.aRad = np.hypot(*np.subtract(PP.yx,(yn,xn)))
                             G_ += [PP]
                     if len(G_) > ave_L:
-                        agg_recursion(edge, edge.derH[-1], G_, fd=0)  # discontinuous PP_ xcomp, cluster
+                        derlay = CH(); edge.derH.append_(derlay,flat=0)
+                        agg_recursion(edge, derlay, G_, fd=0)  # discontinuous PP_ xcomp, cluster
 
-def agg_recursion(root, derLay, iQ, fd):  # parse the deepest derLay of root derH,
+def agg_recursion(root, rderLay, iQ, fd):  # parse the deepest derLay of root derH,
     # breadth-first cross-comp, clustering, recursive rng+|der+ ->
     # variable-nesting derH( aggH( aggLay.:
     Q = []
@@ -263,11 +268,12 @@ def agg_recursion(root, derLay, iQ, fd):  # parse the deepest derLay of root der
     fvd = d > ave_d * dr*(rng+1)
     fvm = m > ave * mr * (rng+1)
     if fvd or fvm:
-        rngLay = CH().copy(L_[0].derH)
-        [ rngLay.add_H(L.derH) for L in L_[1:] ]
-        derLay.append_(rngLay)
-        if fd:
-            derLay[:] = CH().append(derLay)  # nest appended derLay
+        if fd: 
+            derLay = CH(depth=rderLay.depth+1); rderLay.append_(derLay,flat=0)  # pack new derlay with incremented depth in d fork, increase nesting of rderLay
+        else: derLay = rderLay  # derLay remained the same in rng fork
+        rngLay = CH().add_H([L.derH for L in L_])  # rngLay, default for both forks
+        derLay.append_(rngLay)  # pack new rngLay in derLay
+
         # comp_link_
         if fvd and len(L_) > ave_L:
             agg_recursion(root, derLay, L_, fd=1)  # der+: append,nest derLay
@@ -275,7 +281,7 @@ def agg_recursion(root, derLay, iQ, fd):  # parse the deepest derLay of root der
             pL_ = {l for n in N_ for l,_ in get_rim(n,fd)}
             G_ = cluster_N_(root, pL_, fd)  # optionally divisive clustering
             if len(G_) > ave_L:  # comp clustered node_
-                agg_recursion(root, derLay, G_, fd=0)  # rng+: append derLay
+                agg_recursion(root, derLay, G_, fd=0)  # rng+: append rngLay (append rnglay only in rng+?)
 
 
 def comp_node_(_N_):  # rng+ forms layer of rim and extH per N, appends N_,L_,Et, ~ graph CNN without backprop
@@ -451,7 +457,7 @@ def cluster_N_(root, L_, fd, nest=1):  # top-down segment L_ by >ave diff in L.d
         _eN_ = set()  # init ext Ns
         for l,_ in get_rim(N, fd):
             _eN_.add(l.nodet[1] if l.nodet[0] is N else l.nodet[0])
-        while any(_eN_):
+        while _eN_:
             eN_ = set()
             for eN in _eN_:  # cluster rim-connected ext Ns
                 if eN.merged: continue
@@ -462,15 +468,14 @@ def cluster_N_(root, L_, fd, nest=1):  # top-down segment L_ by >ave diff in L.d
                         et += L.derH.Et
                         for G in L.nodet:
                             if not G.merged:
-                                eN_.add(G); G.merged=1
-            if any(eN_): _eN_ = eN_
-            else: break
+                                eN_.add(G)  # G.merged=1  (we shouldn't set G.merged here since it should be checked again in the next loop and merged will be set in the next loop)
+            _eN_ = eN_  # this should be default, so that it breaks when empty
         Gt_ += [[node_, link_, et, min_dist]]  # nest can be local?
     # form subG_ via shorter Ls:
     for Gt in Gt_:
         sub_link_ = set()
         for N in Gt[0]:
-            sub_link_.update({l for l,_ in get_rim(N,fd) if l.dist <= min_dist})
+            sub_link_.update({l for l,_ in get_rim(N,fd) if l.dist <= min_dist})  # this min_dist should be the same for all Ns in current call of cluster_N_
             N.root_ = [Gt]  # add subG_:
         Gt += [cluster_N_(Gt, sub_link_, fd, nest+1)] if len(sub_link_) > ave_L else [[]]
     G_ = []
@@ -486,8 +491,7 @@ def sum2graph(root, grapht, fd, nest):  # sum node and link params into graph, a
     graph = CG(fd=fd, root_=[root], node_=node_,link_=link_, subG_=subG_, minL=minL, rng=nest)
     yx = [0,0]
     lay0 = CH(node_=node_)  # comparands, vs. L_: summands?
-    for link in link_:  # unique current-layer mediators: Ns if fd else Ls
-        lay0.add_H(link.derH) if lay0 else lay0.append_(link.derH)
+    lay0.add_H([link.derH for link in link_])  # unique current-layer mediators: Ns if fd else Ls
     graph.derH.append_(lay0)  # empty for single-node graph
     derH = CH()
     for N in node_:
