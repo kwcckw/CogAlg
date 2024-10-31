@@ -110,7 +110,7 @@ class CH(CBase):  # generic derivation hierarchy of variable nesting: extH | der
                 lay = CH().copy(lay)
                 lay.i = len(HE.H)+i; lay.root = HE; HE.H += [lay]
         else:
-            He = CH().copy(He); He.i = len(HE.H); He.root = HE; HE.H += [He]
+            He.i = len(HE.H); He.root = HE; HE.H += [He]  # for append_ with flat=0, i think we shouldn't copy? Else it's packing another instance  
 
         HE.accum_lay(He, irdnt)
         return HE.update_root(He)
@@ -173,6 +173,28 @@ class CH(CBase):  # generic derivation hierarchy of variable nesting: extH | der
                 else:
                     setattr(_He, attr, deepcopy(value))
         return _He
+    
+    # please suggest a better name, CH.nest is already in used
+    def add_nest(HE):
+        
+        He = CH().copy(HE)  # a copy of self
+        # reset:
+        HE.node_, HE.md_t, HE.H, HE.n, HE.Et = [], [], [], 0, np.array([.0,.0,.0,.0]) 
+        HE.deep = HE.nest
+        # pack layer to increase nesting
+        HE.nest += 1
+        HE.append_(He, flat=0)
+        
+        # increase deep across all existing CHs
+        for he in He.H:  
+            he.deep += 1  # bottom-up deep = top-down nest: += Lay.nest, if any
+        
+        # add nesting across all roots
+        root = HE.root
+        while isinstance(root, CH):
+            root.nest += 1
+            root = root.root 
+        
 
 class CG(CBase):  # PP | graph | blob: params of single-fork node_ cluster
 
@@ -255,10 +277,6 @@ def vectorize_root(frame):
 
 def agg_recursion(root, iLay, iQ, fd):  # parse the deepest Lay of root derH, breadth-first cross-comp, clustering, recursion
 
-    def nest(iLay, Lay):
-        Lay.deep+=1; root.derH.nest+=1; nest = iLay.nest  # bottom-up deep = top-down nest: += Lay.nest, if any
-        iLay[:] = CH(nest=nest+1, deep=nest).append( iLay.append_(Lay))
-        # first append converts iLay to derH, the 2nd adds Lay to derH
     Q = []
     for e in iQ:
         if isinstance(e, list): continue  # skip Gts: weak
@@ -271,10 +289,10 @@ def agg_recursion(root, iLay, iQ, fd):  # parse the deepest Lay of root derH, br
     fvm = m > ave * mr * (rng+1)
     if fvd or fvm:
         # form derLay, nest in rngH in cluster_N_, derH in der+:
-        Lay = CH(deep=nest).add_H([L.derH for L in L_])
+        Lay = CH(deep=iLay.nest).add_H([L.derH for L in L_])
         # extend root derH:
-        if fd: iLay.append_(Lay)  # extend derH from prior comp_link_
-        else: nest(iLay, Lay)  # iLay+Lay -> derH if prior comp_node_
+        iLay.append_(Lay)  # extend derH from prior comp_link_
+        if not fd: iLay.add_nest()  # iLay+Lay -> derH if prior comp_node_
         # recursion:
         if fvd and len(L_) > ave_L:
             agg_recursion(root, iLay, L_,fd=1)  # der+ comp_link_
