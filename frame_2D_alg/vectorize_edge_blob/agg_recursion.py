@@ -233,7 +233,8 @@ def vectorize_root(frame):
                 comp_slice(edge)
                 # init for agg+:
                 edge.mdLay = CH(H=edge.mdLay[0], Et=edge.mdLay[1], n=edge.mdLay[2])
-                edge.derH = CH(H=[CH()]); edge.derH.H[0].root = edge.derH; edge.fback_ = []
+                # why there's an empty CH in edge.derH.H?
+                edge.derH = CH(); edge.fback_ = []
                 if edge.mdLay.Et[0] * (len(edge.node_)-1)*(edge.rng+1) > ave * edge.mdLay.Et[2]:
                     G_ = []
                     for N in edge.node_:  # no comp node_, link_ | PPd_ for now
@@ -255,6 +256,7 @@ def vectorize_root(frame):
 def agg_recursion(root, iLay, iQ, fd):  # parse the deepest Lay of root derH, breadth-first cross-comp, clustering, recursion
 
     Q = []
+    nest = not fd
     for e in iQ:
         if isinstance(e, list): continue  # skip Gts: weak
         e.root_, e.extH, e.merged = [], CH(), 0
@@ -265,23 +267,31 @@ def agg_recursion(root, iLay, iQ, fd):  # parse the deepest Lay of root derH, br
     fvd = d > ave_d * dr*(rng+1)
     fvm = m > ave * mr * (rng+1)
     if fvd or fvm:
-        # form derLay, nest-> rngH in cluster_N_, derH in der+:
-        Lay = CH(deep=iLay.nest).add_H([L.derH for L in L_])
         # extend root derH:
         if not fd:  # prior comp_node_ adds iLay, nest it to derH:
-            for he in Lay.H: he.deep += 1
-            iLay.H = [CH(deep=iLay.deep+1, root=iLay).copy(iLay)]
-            iLay.nest += 1
-            root.derH.nest += 1  # also add in agg_recursion?
-        iLay.append_(Lay)  # extend derH, formed prior comp_link_
+            Lay0 = CH(root=iLay).copy(iLay); Lay0.deep = iLay.nest + 1  # assign deep after the copy to prevent iLay's deep is overwritten by the copy process
+            iLay.H = [Lay0]; iLay.nest += 1
+            # root.derH.nest += 1  # also add in agg_recursion? (this should be not needed, iLay is already the root.derH in the first call)
+            
+        # form derLay, nest-> rngH in cluster_N_, derH in der+:
+        # for Lay summed from L.derH, their default nest is 1?
+        Lay1 = CH().add_H([L.derH for L in L_]); Lay1.deep=iLay.nest; Lay1.nest = 1  # this should be here? Because their deep should be the same with the updated iLay.nest
+        if not fd:  # both Lay0 and Lay1's H should have a same deep
+            for he in Lay0.H: he.deep += 1   
+            for he in Lay1.H: he.deep += 1   
+        iLay.append_(Lay1)  # extend derH, formed prior comp_link_
         # recursion:
         if fvd and len(L_) > ave_L:
-            agg_recursion(root, iLay, L_,fd=1)  # der+ comp_link_
+            nest = agg_recursion(root, iLay, L_,fd=1)  # der+ comp_link_    
         if fvm:
             pL_ = {l for n in N_ for l,_ in get_rim(n,fd)}
             G_ = cluster_N_(root, pL_, fd)  # optionally divisive clustering
             if len(G_) > ave_L:
-                agg_recursion(root, Lay, G_,fd=0)  # rng+ comp clustered node_, no passing iLay?
+                nest_lay = agg_recursion(root, Lay1, G_,fd=0)  # rng+ comp clustered node_, no passing iLay?
+                Lay1.nest += nest_lay - 1  # -1 because their (iLay) nest is added by default in rng fork
+                nest += nest_lay
+        iLay.nest += nest
+    return nest
 
 
 def comp_node_(_N_):  # rng+ forms layer of rim and extH per N, appends N_,L_,Et, ~ graph CNN without backprop
