@@ -250,6 +250,17 @@ def vectorize_root(frame):
                     if len(G_) > ave_L:
                         agg_recursion(edge, edge.derH, G_, fd=0)
                         # discontinuous PP_ cross-comp, cluster
+                        forks = []
+                        get_forks(edge.derH.H, forks)
+
+# draft
+def get_forks(H, forks):
+    for He in H:
+        if He.H and He.H[0].H:
+            get_forks(He.H, forks)
+            forks += ['d']  
+        else:
+            forks += ['m']
 
 def agg_recursion(root, iLay, iQ, fd):  # parse the deepest Lay of root derH, breadth-first cross-comp, clustering, recursion
 
@@ -301,9 +312,10 @@ def comp_node_(_N_):  # rng+ forms layer of rim and extH per N, appends N_,L_,Et
             nrim = set([(L.nodet[1] if L.nodet[0] is G else L.nodet[0]) for L,_ in G.rim])
             if _nrim & nrim:  # indirectly connected Gs,
                 continue     # no direct match priority?
-            M = (_G.mdLay[1][0]+G.mdLay[1][0]) *icoef**2 + (_G.derH.Et[0]+G.derH.Et[0])*icoef + (_G.extH.Et[0]+G.extH.Et[0])
+            cfactor = 10  # icoef's factor
+            M = (_G.mdLay[1][0]+G.mdLay[1][0]) *icoef**cfactor + (_G.derH.Et[0]+G.derH.Et[0])*icoef + (_G.extH.Et[0]+G.extH.Et[0])
             # comp if < max distance of likely matches *= prior G match * radius:
-            if dist < max_dist * (radii * icoef**3) * M:
+            if dist < max_dist * (radii * icoef**cfactor) * M:    # we need a larger power factor since it's always true now
                 Link = CL(nodet=[_G,G], angle=[dy,dx], dist=dist, box=extend_box(G.box,_G.box))
                 et = comp_N(Link, rn, rng)
                 L_ += [Link]  # include -ve links
