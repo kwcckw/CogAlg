@@ -97,11 +97,15 @@ class CH(CBase):  # generic derivation hierarchy of variable nesting: extH | der
                 HE.node_ += [node for node in He.node_ if node not in HE.node_]  # node_ is empty in CL derH?
             else:
                 HE.copy(He)  # init
-            root = HE.root  # feedback, should batch all same-layer nodes?
-            if not isinstance(root,CH): root = root.derH  # root is G|L, add Et?
-            if root:
-                while depth > len(root.H): root.H += [CH(root=HE).copy()]
-                root.H[-depth].add_H(He, depth+1)  # merge in root lay, both forks
+
+        # this should be per He_ instead of He? Because all HE has a same root
+        root = HE.root  # feedback, should batch all same-layer nodes?
+        if root is not None and root.root is not None:  # allow empty CH to be true
+            root = root.root
+            if not isinstance(root,CH): root = root.derH  # root is G|L, add Et? (this is still causing endless recursion)
+            while depth > len(root.H): root.H += [CH(root=HE)]  # there's no need to copy here?
+            # root.H[-depth] is actually pointing back to HE, and HE is already summed with He_, so it should be root.root?
+            root.H[-depth].add_H(He_, depth=depth+1)  # merge in root lay, both forks
 
         return HE
 
@@ -117,8 +121,8 @@ class CH(CBase):  # generic derivation hierarchy of variable nesting: extH | der
         HE.accum_lay(He, irdnt)
         # feedback, should batch all same-layer nodes?
         root = HE.root
-        if not isinstance(root,CH): root = root.derH  # root is G|L, add Et?
-        if root:
+        if root is not None:
+            if not isinstance(root,CH): root = root.derH  # root is G|L, add Et?
             root.H[-1].add_H(He, depth=1)  # merge in root lay, both forks
 
         return HE
@@ -251,26 +255,38 @@ def agg_recursion(root, iQ, fd):  # parse the deepest Lay of root derH, breadth-
         if isinstance(e, list): continue  # skip Gts: weak
         e.root_, e.extH, e.merged = [], CH(), 0
         Q += [e]
-    # cross-comp link_ or node_:
-    N_, L_, Et, rng = comp_link_(Q) if fd else comp_node_(Q)
-    m, d, mr, dr = Et
-    fvd = d > ave_d * dr*(rng+1)
+    # cross-comp node_:
+    N_, L_, Et, rng = comp_node_(Q)
+    m, _, mr, _ = Et
     fvm = m > ave * mr * (rng+1)
-    if fvd or fvm:
-        Lay = CH().add_H([L.derH for L in L_])  # top Lay, nest-> rngH/cluster_N_, derH/der+
-        if fd:
-            derH = root.derH  # comp_link_, nest single-lay derH formed in prior comp_node_:
-            derH.H = [CH(root=derH).copy(derH)]
-            derH.append_(Lay)
-        else: root.derH = Lay
-        # neither fork is directly recursive, only after clustering?:
-        if not fd and fvd and len(L_) > ave_L:
-            agg_recursion(root, L_,fd=1)  # der+ comp_link_
-        if fvm:
-            pL_ = {l for n in N_ for l,_ in get_rim(n,fd)}
-            G_ = cluster_N_(root, pL_, fd)  # optionally divisive clustering
-            if len(G_) > ave_L:
-                agg_recursion(root, G_,fd=0)  # rng+ comp clustered node_
+
+    # feedback (feedback should be after der+ below now?):
+    Lay = CH().add_H([L.derH for L in L_])  # top Lay, nest-> rngH/cluster_N_, derH/der+
+    if fd:
+        derH = root.derH  # comp_link_, nest single-lay derH formed in prior comp_node_:
+        derH.H = [CH(root=derH).copy(derH)]
+        derH.append_(Lay)
+    else: root.derH = Lay
+    # neither fork is directly recursive, only after clustering?:
+
+    # der+
+    for L in L_:
+        L.root_, L.extH, L.merged = [], CH(), 0     
+    if len(L_) > ave_L:
+        dN_, dL_, dEt, drng  = comp_link_(L_)
+        _, d, _, dr = dEt
+        fvd = d > ave_d * dr*(drng+1)
+        if fvd:
+            dpL_ = {l for n in dN_ for l,_ in get_rim(n,fd=1)}
+            dG_ = cluster_N_(root, dpL_, fd=1)
+            if len(dG_) > ave_L:
+                agg_recursion(root, dG_,fd=1)  # der+ comp_link_
+    
+    if fvm:
+        pL_ = {l for n in N_ for l,_ in get_rim(n,fd)}
+        G_ = cluster_N_(root, pL_, fd)  # optionally divisive clustering
+        if len(G_) > ave_L:
+            agg_recursion(root, G_,fd=0)  # rng+ comp clustered node_
 
 
 def comp_node_(_N_):  # rng+ forms layer of rim and extH per N, appends N_,L_,Et, ~ graph CNN without backprop
