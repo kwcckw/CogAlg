@@ -80,7 +80,7 @@ class CH(CBase):  # generic derivation hierarchy of variable nesting: extH | der
         if any(irdnt):
             HE.Et[2:] = [E+e for E,e in zip(HE.Et[2:], irdnt)]
 
-    def add_H(HE, He_, irdnt=[], depth=1):  # unpack derHs down to numericals and sum them
+    def add_H(HE, He_, irdnt=[], depth=0):  # unpack derHs down to numericals and sum them
 
         if not isinstance(He_,list): He_ = [He_]
         for He in He_:
@@ -101,12 +101,13 @@ class CH(CBase):  # generic derivation hierarchy of variable nesting: extH | der
             root = HE.root
             if root is not None:  # not edge
                 if not isinstance(root, CH): root = root.derH  # root is G|L?
-                while depth > len(root.H): root.H += [CH(root=HE)]
-                root.H[-depth].add_H(He, depth+1)  # merge in root lay, both forks
+                if depth:  # skip depth == 0 for same depth CH summation
+                    while depth > len(root.H):root.H += [CH(root=HE)]
+                    root.H[-depth].add_H(He, depth=depth+1)  # merge in root lay, both forks (we need to explicitly specify depth here because the 2nd argument is irdnt)
 
         return HE
 
-    def append_(HE,He, irdnt=None, flat=0):
+    def append_(HE,He, irdnt=None, flat=0, depth=0):
 
         if irdnt is None: irdnt = []
         if flat:
@@ -120,7 +121,9 @@ class CH(CBase):  # generic derivation hierarchy of variable nesting: extH | der
         root = HE.root
         if root is not None:  # not edge
             if not isinstance(root, CH): root = root.derH  # root is G|L?
-            root.H[-1].add_H(He, depth=1)  # merge in root lay, both forks
+            if depth:  
+                while depth > len(root.H):root.H += [CH(root=HE)]
+                root.H[-1].add_H(He, depth=depth)  # merge in root lay, both forks
 
         return HE
 
@@ -229,6 +232,7 @@ def vectorize_root(frame):
             if edge.G * (len(edge.P_) - 1) > ave:  # eval PP, rdn=1
                 comp_slice(edge)
                 if edge.mdLay[1][0] * (len(edge.node_)-1)*(edge.rng+1) > ave * edge.mdLay[1][2]:
+                    edge.root = None  # reset from frame to None
                     G_ = []  # init for agg+:
                     for N in edge.node_:  # no comp node_, link_ | PPd_ for now
                         H,Et,n = N[3] if isinstance(N,list) else N.mdLay  # N is CP
@@ -238,30 +242,32 @@ def vectorize_root(frame):
                             else:  # single CP
                                 root=edge; P_=[N]; link_=[]; (H,Et,n)=N.mdLay; lat=N.latuple; [y,x]=N.yx; n=N.n
                                 box = [y, x-len(N.dert_), y,x]
-                            PP = CG(fd=0, root_=root, node_=P_,link_=link_,mdLay=[H, Et, n],latuple=lat, box=box,yx=[y,x],n=n)
+                            PP = CG(fd=0, root=root, node_=P_,link_=link_,mdLay=[H, Et, n],latuple=lat, box=box,yx=[y,x],n=n)
                             y0,x0,yn,xn = box
                             PP.aRad = np.hypot(*np.subtract(PP.yx,(yn,xn)))
                             G_ += [PP]
                     if len(G_) > ave_L:
-                        agg_recursion(edge, G_, fd=0)  # discontinuous PP_ cross-comp, cluster
+                        agg_recursion(edge, G_, fd=0, depth=1)  # discontinuous PP_ cross-comp, cluster
 
 # draft
-def agg_recursion(root, iQ, fd):  # breadth-first rng+ and der+ cross-comp, clustering, recursion
+def agg_recursion(root, iQ, fd, depth):  # breadth-first rng+ and der+ cross-comp, clustering, recursion
 
-    N_, L_, fvm, fvd, rng = comp_Q(iQ, fd=0)
-    if fvm:
-        cluster_eval(N_, root, fd=fd)
+    N_, L_, fvm, fvd, rng = comp_Q(iQ, root, fd=0, depth=depth)
     if fvd:
-        dN_, dL_, dfvm, dfvd, drng = comp_Q(L_, fd=1)
-        cluster_eval(dN_, root, fd=1)
+        depth += 1  # increase nesting in der+
+        dN_, dL_, dfvm, dfvd, drng = comp_Q(L_, root, fd=1, depth=depth)
+        cluster_eval(dN_, root, fd=1,depth=depth)  # we should run fvd first?
+    if fvm:
+        cluster_eval(N_, root, fd=fd, depth=1)  # reset depth in rng+? Because we init root.derH too
+    
 
-def comp_Q(N_, root, fd):  # cross-comp node_ or link_
-    Q = []
-    for e in N_:
-        if isinstance(e, list): continue  # skip Gts: weak
-        e.root_, e.extH, e.merged = [], CH(), 0; Q += [e]
+def comp_Q(iN_, root, fd, depth):  # cross-comp node_ or link_
+    
+    for e in iN_:
+        # if isinstance(e, list): continue  # skip Gts: weak (this is not needed now? We no longer pack weak Gts)
+        e.root, e.extH, e.merged = [], CH(), 0
 
-    N_, L_, Et, rng = comp_node_(Q)
+    N_, L_, Et, rng = comp_link_(iN_) if fd else comp_node_(iN_)   # we still need comp_link_ here when fd == 1?
     m, d, mr, dr = Et
     fvm = m > ave * mr * (rng + 1); fvd = d > ave_d * dr * (rng + 1)
 
@@ -269,18 +275,18 @@ def comp_Q(N_, root, fd):  # cross-comp node_ or link_
     if fd:
         derH = root.derH  # comp_link_, nest single-lay derH formed in prior comp_node_:
         derH.H = [CH(root=derH).copy(derH)]
-        derH.append_(Lay)
+        derH.append_(Lay, depth=depth)
     else: root.derH = Lay  # initialization
 
     return N_, L_, fvm, fvd, rng
 
-def cluster_eval(N_, root, fd):
+def cluster_eval(N_, root, fd, depth):
 
     pL_ = {l for n in N_ for l, _ in get_rim(n, fd)}
     if len(pL_) > ave_L:
         G_ = cluster_N_(root, pL_, fd)  # optionally divisive clustering
-    if len(G_) > ave_L:
-        agg_recursion(root, G_, fd=0)  # rng+ comp clustered node_
+        if len(G_) > ave_L:  # this should be within the section, after G_ is formed?
+            agg_recursion(root, G_, fd=0, depth=depth)  # rng+ comp clustered node_
 
 
 def comp_node_(_N_):  # rng+ forms layer of rim and extH per N, appends N_,L_,Et, ~ graph CNN without backprop
@@ -294,7 +300,7 @@ def comp_node_(_N_):  # rng+ forms layer of rim and extH per N, appends N_,L_,Et
         dist = np.hypot(dy,dx)
         _G.add, G.add = 0, 0
         _Gp_ += [(_G,G, rn, dy,dx, radii, dist)]
-    icoef = .3  # internal M proj_val / external M proj_val
+    icoef = .03  # internal M proj_val / external M proj_val
     rng = 1  # len N__
     N_,L_,ET = set(),[], np.array([.0,.0,.0,.0])
     while True:  # prior vM
@@ -473,7 +479,7 @@ def cluster_N_(root, L_, fd, nest=1):  # top-down segment L_ by >ave diff in L.d
         sub_link_ = set()
         for N in Gt[0]:
             sub_link_.update({l for l,_ in get_rim(N,fd) if l.dist <= min_dist})
-            N.root_ = [Gt]  # add subG_:
+            N.root = [Gt]  # add subG_:
         Gt += [cluster_N_(Gt, sub_link_, fd, nest+1)] if len(sub_link_) > ave_L else [[]]
     G_ = []
     for Gt in Gt_:
@@ -485,7 +491,7 @@ def cluster_N_(root, L_, fd, nest=1):  # top-down segment L_ by >ave diff in L.d
 def sum2graph(root, grapht, fd, nest):  # sum node and link params into graph, aggH in agg+ or player in sub+
 
     node_, link_, Et, minL, subG_ = grapht; node_ = list(node_)
-    graph = CG(fd=fd, root_=[root], node_=node_,link_=link_, subG_=subG_, minL=minL, rng=nest)
+    graph = CG(fd=fd, root=[root], node_=node_,link_=link_, subG_=subG_, minL=minL, rng=nest)
     yx = [0,0]
     lay0 = CH(node_=node_)  # comparands, vs. L_: summands?
     lay0.add_H([link.derH for link in link_])  # unique current-layer mediators: Ns if fd else Ls
@@ -499,7 +505,7 @@ def sum2graph(root, grapht, fd, nest):  # sum node and link params into graph, a
         if isinstance(N,CG):
             add_md_(graph.mdLay, N.mdLay)
             add_lat(graph.latuple, N.latuple)
-        N.root_[-1] = graph
+        N.root[-1] = graph
     graph.derH.append_(derH, flat=1)  # comp(derH) forms new layer, higher layers are added by feedback
     L = len(node_)
     yx = np.divide(yx,L); graph.yx = yx
@@ -508,7 +514,7 @@ def sum2graph(root, grapht, fd, nest):  # sum node and link params into graph, a
     if fd:
         # assign alt graphs from d graph, after both linked m and d graphs are formed
         for node in node_:  # CG or CL
-            mgraph = node.root_[-1]
+            mgraph = node.root[-1]
             if mgraph:
                 for fd, (G, alt_G) in enumerate(((mgraph,graph), (graph,mgraph))):  # bilateral assign:
                     if G not in alt_G.alt_graph_:
