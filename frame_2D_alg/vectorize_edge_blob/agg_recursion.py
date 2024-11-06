@@ -49,7 +49,7 @@ ccoef  = 10  # scaling match ave to clustering ave
 class CH(CBase):  # generic derivation hierarchy of variable nesting: extH | derH, their layers and sub-layers
 
     name = "H"
-    def __init__(He, node_=None, md_t=None, n=0, Et=None, H=None, root=None, i=None, i_=None, fd=None, depth=None):
+    def __init__(He, node_=None, md_t=None, n=0, Et=None, H=None, root=None, i=None, i_=None, fd=None):
         super().__init__()
         He.fd = 0 if fd is None else fd  # 0: sum CGs, 1: sum CLs
         He.node_ = [] if node_ is None else node_  # concat bottom nesting order if CG, may be redundant to G.node_
@@ -60,13 +60,12 @@ class CH(CBase):  # generic derivation hierarchy of variable nesting: extH | der
         He.root = None if root is None else root  # N or higher-composition He
         He.i = 0 if i is None else i  # lay index in root.H, to revise rdn
         He.i_ = [] if i_ is None else i_  # priority indices to compare node H by m | link H by d
-        He.depth = 1 if depth is None else depth 
         # He.ni = 0  # exemplar in node_, trace in both directions?
         # He.deep = 0 if deep is None else deep  # nesting in root H
         # He.nest = 0 if nest is None else nest  # nesting in H
     def __bool__(H): return H.n != 0
 
-    def accum_lay(HE, He, irdnt):
+    def accum_lay(HE, He, irdnt=[]):
 
         if HE.md_t:
             for MD_, md_ in zip(HE.md_t, He.md_t):  # dext_, dlat_, dlay_
@@ -220,8 +219,8 @@ def vectorize_root(frame):
             if edge.G * (len(edge.P_) - 1) > ave:  # eval PP, rdn=1
                 comp_slice(edge)
                 if edge.mdLay[1][0] * (len(edge.node_)-1)*(edge.rng+1) > ave * edge.mdLay[1][2]:
-                    edge.derH = CH()  # init derH of edge, 
-                    if not hasattr(frame, 'derH'):  # init derH and root of frame, all blobs shared a same frame, init after unpack_blob_?
+                    edge.derH = CH()
+                    if not hasattr(frame, 'derH'):
                         frame.derH = CH(); frame.root = None
                     G_ = []  # init for agg+:
                     for N in edge.node_:  # no comp node_, link_ | PPd_ for now
@@ -240,45 +239,37 @@ def vectorize_root(frame):
                         edge.node_ = G_
                         agg_recursion(edge)  # discontinuous PP_ cross-comp, cluster
 
+def agg_recursion(root):  # breadth-first node_-> L_ cross-comp, clustering, recursion
 
-def agg_recursion(root, depth=1):  # breadth-first node_,link_ cross-comp, clustering, recursion
-
-    def comp_Q(Q, fd, depth):  # cross-comp node_ or L_
-        for e in Q:  # why we need a separated iQ?
+    def comp_Q(Q, fd):  # cross-comp node_ or L_
+        for e in Q:
             e.root, e.extH, e.merged = [],CH(),0
 
-        N_,L_,Et, rng = comp_link_(Q) if fd else comp_node_(Q)  # we still need comp_link_?
-        Lay = CH(fd=fd, depth=depth).add_H([L.derH for L in L_])
+        N_,L_,Et, rng = comp_link_(Q) if fd else comp_node_(Q)
+        Lay = CH(fd=fd).add_H([L.derH for L in L_])
         m,d,mr,dr = Et
         fvm = m > ave * mr*(rng+1); fvd = d > ave_d * dr*(rng+1)
         return N_,L_, Lay, fvm,fvd
 
-    def cluster_eval(root, N_, fd, depth):
+    def cluster_eval(root, N_, fd):
 
         pL_ = {l for n in N_ for l,_ in get_rim(n, fd)}
         if len(pL_) > ave_L:
             G_ = cluster_N_(root, pL_, fd)  # optionally divisive clustering
             if len(G_) > ave_L:
-                agg_recursion(root, depth)  # cross-comp clustered nodes
+                agg_recursion(root)  # cross-comp clustered nodes
 
-    def add_lay(root,lay):  # (_fd=0 & fd=1) or (_fd=fd) starts new layt
-
-        root.derH.append_(lay)
-        '''
-        if root.derH: root.derH.H.append_(lay)  # derH.H: lower-composition lays
-        else: root.derH = CH(H=[lay]).copy(lay)
-        '''
-
-    depth += 1
-    N_,L_,lay, fvm,fvd = comp_Q(root.node_, fd=0, depth=depth)
+    N_,L_,lay, fvm,fvd = comp_Q(root.node_, fd=0)
+    He = root.derH; l = len(He.H); layt = []  # nesting incr/ derivation: composition of compared Gs,longer derH from comp_link_?
     if fvm:
-        add_lay(root,lay)
-        cluster_eval(root, N_, fd=0, depth=depth)
+        layt += [lay]; He.accum_lay(lay); lay.i=l; lay.root=He
+        cluster_eval(root, N_, fd=0)
     if fvd:
-        dN_,dL_,dlay, _,_ = comp_Q(L_, fd=1, depth=depth)  # root.link_ was compared in root-forming for alt clustering
-        add_lay(root,dlay)
-        cluster_eval(root, dN_, fd=1, depth=depth)
-
+        dN_,dL_,dlay,_,_ = comp_Q(L_,fd=1)  # comp new L_, root.link_ was compared in root-forming for alt clustering
+        layt += [dlay]; He.accum_lay(dlay); dlay.i=l; dlay.root=He
+        cluster_eval(root, dN_, fd=1)
+    if layt:
+        root.derH.H += [layt]
 
 def comp_node_(_N_):  # rng+ forms layer of rim and extH per N, appends N_,L_,Et, ~ graph CNN without backprop
 
@@ -446,7 +437,7 @@ def cluster_N_(root, L_, fd, nest=1):  # top-down segment L_ by >ave diff in L.d
             min_dist = L.dist; break  # terminate contiguous-dist segment
         _L = L
     Gt_ = []
-    for N in N_:  # cluster Ns that have rim within terminated dist segment
+    for N in N_:  # cluster Ns that have rim in terminated dist segment
         if N.merged: continue
         N.merged = 1
         node_, link_, et = {N}, set(), np.array([.0,.0,.0,.0])  # Gt
