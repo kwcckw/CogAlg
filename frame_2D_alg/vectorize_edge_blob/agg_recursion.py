@@ -257,7 +257,8 @@ def agg_recursion(root):  # breadth-first node_-> L_ cross-comp, clustering, rec
         if len(pL_) > ave_L:
             G_ = cluster_N_(root, pL_, fd)  # optionally divisive clustering
             if len(G_) > ave_L:
-                agg_recursion(root)  # cross-comp clustered nodes
+                root.node_ = G_  # this is missed out?
+                agg_recursion(root)  # cross-comp clustered nodes  (reset to m fork here regardless of fd?)
 
     N_,L_,lay, fvm,fvd = comp_Q(root.node_, fd=0)
     He = root.derH; l = len(He.H); layt = []  # nesting incr/ derivation: composition of compared Gs,longer derH from comp_link_?
@@ -488,7 +489,7 @@ def sum2graph(root, grapht, fd, nest):  # sum node and link params into graph, a
         if isinstance(N,CG):
             add_md_(graph.mdLay, N.mdLay)
             add_lat(graph.latuple, N.latuple)
-        N.root = graph
+        N.root = [graph]  # should be root_ here as well? Because this N may present in both long and short link
     graph.derH.append_(derH, flat=1)  # comp(derH) forms new layer, higher layers are added by feedback
     L = len(node_)
     yx = np.divide(yx,L); graph.yx = yx
@@ -497,7 +498,7 @@ def sum2graph(root, grapht, fd, nest):  # sum node and link params into graph, a
     if fd:
         # assign alt graphs from d graph, after both linked m and d graphs are formed
         for node in node_:  # CG or CL
-            mgraph = node.root
+            mgraph = node.root[-1]
             if mgraph:
                 for fd, (G, alt_G) in enumerate(((mgraph,graph), (graph,mgraph))):  # bilateral assign:
                     if G not in alt_G.alt_graph_:
