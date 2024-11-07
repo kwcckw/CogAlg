@@ -132,8 +132,9 @@ class CH(CBase):  # generic derivation hierarchy of variable nesting: extH | der
         for _lay, lay in zip(_He.H, He.H):  # sublay CH per rng | der, flat
             if _lay and lay:
                 dLay = _lay.comp_H(lay, rn, dir)  # comp He.md_t, comp,unpack lay.H
-                DLay.append_(dLay, flat=0)  # DLay.H += subLay
-            else: DLay.H += [[]]
+                DLay.append_(dLay, flat=0)  # DLay.H += subLay  
+            else:  # when one of the lay is empty (from single node G), we still need to pack empty list?
+                DLay.H += [[]]
             # nested subHH ( subH?
         return DLay
 
@@ -156,7 +157,9 @@ class CH(CBase):  # generic derivation hierarchy of variable nesting: extH | der
                     if He.H:
                         _He.H = []
                         if isinstance(He.H[0], CH):
-                            for lay in He.H: _He.H += [CH().copy(lay)]  # can't deepcopy CH.root
+                            for lay in He.H: 
+                                if isinstance(lay, list): _He.H += [[]]              # empty list layer   
+                                else:                     _He.H += [CH().copy(lay)]  # can't deepcopy CH.root
                         else: _He.H = deepcopy(He.H)  # md_
                 elif attr == "node_":
                     _He.node_ = copy(He.node_)
@@ -265,16 +268,15 @@ def agg_recursion(root):  # breadth-first node_-> L_ cross-comp, clustering, rec
                 agg_recursion(root)  # cross-comp clustered nodes
 
     N_,L_,fvm,fvd = comp_Q(root.node_ if isinstance(root.node_[0],CG) else root.node_[-1], fd=0)
-    if fvm or fvd:
-        if fvm:
-            root.derH.append_(CH().add_H([L.derH for L in L_]))  # lay0
-            cluster_eval(root, N_, fd=0)
-        else: root.derH.H += [[]]
-        if fvd:
-            lN_,lL_,_,_ = comp_Q(L_,fd=1)  # comp new L_, root.link_ was compared in root-forming for alt clustering
-            root.derH.append_(CH().add_H([L.derH for L in lL_]))  # lay1
-            cluster_eval(root, lN_, fd=1)
-        else: root.derH.H += [[]]
+    if fvm:
+        root.derH.append_(CH().add_H([L.derH for L in L_]))  # lay0
+    else: root.derH.H += [[]]
+    if fvd:
+        lN_,lL_,_,_ = comp_Q(L_,fd=1)  # comp new L_, root.link_ was compared in root-forming for alt clustering
+        root.derH.append_(CH().add_H([L.derH for L in lL_]))  # lay1
+    else: root.derH.H += [[]]
+    if fvm: cluster_eval(root, lN_, fd=1)
+    if fvd: cluster_eval(root, N_, fd=0)
 
 
 def comp_node_(_N_):  # rng+ forms layer of rim and extH per N, appends N_,L_,Et, ~ graph CNN without backprop
@@ -409,6 +411,8 @@ def comp_N(Link, rn, rng, dir=None):  # dir if fd, Link.derH=dH, comparand rim+=
     if _N.derH and N.derH:
         dderH = _N.derH.comp_H(N.derH, rn, dir=dir)  # comp shared layers
         elay.append_(dderH, flat=1)
+    elif _N.derH or N.derH:  # i think pack empty layer only when 1 of them is empty, while another is not?
+        elay.H += [[]]  # empty layer
     # spec: comp_node_(node_|link_), with multiple agg|sub lays, combinatorial?
     Link.derH = elay; elay.root = Link; Link.n = min(_N.n,N.n); Link.nodet = [_N,N]; Link.yx = np.add(_N.yx,N.yx) /2
     # preset angle, dist
