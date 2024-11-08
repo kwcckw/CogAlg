@@ -133,10 +133,27 @@ class CH(CBase):  # generic derivation hierarchy of variable nesting: extH | der
                 DLay.append_(dLay)  # DLay.H += subLay
             else:
                 l = _lay if _lay else lay
-                if l: DLay.append_(negate(l) if rev else l)  # single lay = difference between lays
+                if l: DLay.append_(l.negate() if rev else l)  # single lay = difference between lays
                 else: DLay.H += [[]]  # keep empty lay to trace forks
             # nested subHH ( subH?
         return DLay
+
+    # convert all numerical values into the opposite sign
+    def negate(He):
+        nHe = CH().copy(He)
+        # negate Hs recursively
+        for i, he in enumerate(nHe.H):
+            if he:  # not empty list
+                nHe.H[i] = he.negate()
+        
+        # negate Et
+        nHe.Et = -nHe.Et
+        # negate md_t
+        for md_ in nHe.md_t:  # each md_ is [H, Et, n]
+            for md in md_[:2]:  # skip n
+                md[:] = [-v for v in md]
+            
+        return nHe
 
     # not implemented:
     def sort_H(He, fd):  # re-assign rdn and form priority indices for comp_H, if selective and aligned
@@ -255,7 +272,12 @@ def agg_recursion(root):  # breadth-first node_-> L_ cross-comp, clustering, rec
         N_,L_,Et, rng = comp_link_(Q) if fd else comp_node_(Q)
         m,d,mr,dr = Et
         fvm = m > ave * mr*(rng+1); fvd = d > ave_d * dr*(rng+1)
-        return N_,L_, fvm,fvd
+        
+        lN_,lL_ = [], []
+        if (fd == 0) and fvd:
+            lN_,lL_,_,_,_,_ = comp_Q(L_,fd=1)  # comp new L_, root.link_ was compared in root-forming for alt clustering
+        
+        return N_,L_,lN_,lL_,fvm,fvd
 
     def cluster_eval(root, N_, fd):
 
@@ -267,15 +289,18 @@ def agg_recursion(root):  # breadth-first node_-> L_ cross-comp, clustering, rec
                 else: root.node_ += [G_]
                 agg_recursion(root)  # cross-comp clustered nodes
 
-    N_,L_,fvm,fvd = comp_Q(root.node_ if isinstance(root.node_[0],CG) else root.node_[-1], fd=0)
+    N_,L_,lN_,lL_,fvm,fvd = comp_Q(root.node_ if isinstance(root.node_[0],CG) else root.node_[-1], fd=0)
     if fvm or fvd:
+        '''
         if fvm: root.derH.append_(CH().add_H([L.derH for L in L_]))  # lay0
         else:   root.derH.H += [[]]
-        if fvd:
-            lN_,lL_,_,_ = comp_Q(L_,fd=1)  # comp new L_, root.link_ was compared in root-forming for alt clustering
-            root.derH.append_(CH().add_H([L.derH for L in lL_]))  # lay1
-        else:
-            root.derH.H += [[]]
+        if fvd: root.derH.append_(CH().add_H([L.derH for L in lL_]))  # lay1
+        else:    root.derH.H += [[]]
+        '''
+        # same as above
+        for fv, link_ in zip((fvm, fvd), (L_, lL_)):
+            if fv: root.derH.append_(CH().add_H([L.derH for L in link_]))
+            else:  root.derH.H += [[]]
         if fvm: cluster_eval(root, N_, fd=0)
         if fvd: cluster_eval(root, lN_, fd=1)
 
