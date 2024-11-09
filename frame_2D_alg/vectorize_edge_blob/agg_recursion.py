@@ -91,13 +91,13 @@ class CH(CBase):  # generic derivation hierarchy of variable nesting: extH | der
                         if Lay: Lay.add_H(lay, irdnt)
                         else:
                             if Lay is None:
-                                HE.append_(CH().copy(lay))  # pack a copy of new lay in HE.H
+                                HE.append_(lay.copy(root=HE))  # pack a copy of new lay in HE.H
                             else:
-                                HE.H[i] = CH(root=HE).copy(lay)  # Lay was []
+                                HE.H[i] = lay.copy(root=HE)  # Lay was []
                 HE.accum_lay(He, irdnt)
                 HE.node_ += [node for node in He.node_ if node not in HE.node_]  # node_ is empty in CL derH?
             else:
-                HE.copy(He)  # init
+                HE.copy(He)  # init (It's actually wrong here now, we need to copy He into HE, and i guess we need an option to using a same He in copy instead of creating a new one?)
 
         return HE
 
@@ -107,7 +107,7 @@ class CH(CBase):  # generic derivation hierarchy of variable nesting: extH | der
         if flat:
             for i, lay in enumerate(He.H):  # different refs for L.derH and root.derH.H:
                 if lay:
-                    lay = CH().copy(lay); lay.i = len(HE.H)+i; lay.root = HE
+                    lay = lay.copy(root=HE); lay.i = len(HE.H)+i; lay.root = HE
                 HE.H += [lay]  # may be empty to trace forks
         else:
             He.i = len(HE.H); He.root = HE; HE.H += [He]  # He can't be empty
@@ -119,9 +119,10 @@ class CH(CBase):  # generic derivation hierarchy of variable nesting: extH | der
         He = CH(root=root, node_=copy(_He.node_), Et=copy(_He.Et), n=_He.n, i=_He.i, i_=copy(_He.i_))
 
         for H,Et,n in _He.md_t:  # mdLat, mdLay, mdExt
-            He.md_t += [[[[m,d*dir] for m,d in H], copy(Et), n]]  # may negate ds
+            # H is flat , so we need to unpack them
+            He.md_t += [[[ v for (m,d) in zip(H[::2], H[1::2]) for v in [m,d*dir]], copy(Et), n]]  # may negate ds
         for he in _He.H:
-            He.H += [he.copy(dir=dir)] if he else [[]]
+            He.H += [he.copy(He, dir=dir)] if he else [[]]
         return He
 
     def comp_H(_He, He, rn=1, dir=1):  # unpack each layer of CH down to numericals and compare each pair
@@ -402,12 +403,12 @@ def comp_N(Link, rn, rng, dir=None):  # dir if fd, Link.derH=dH, comparand rim+=
         md_t += [mdlat,mdLay]; Et += mdlat[1] + mdLay[1]; n += mdlat[2] + mdLay[2]
     # | n = (_n+n)/2?
     # Et[0] += ave_rn - rn?
-    elay = CH(fd=fd, H=[CH(n=n, md_t=md_t, Et=Et)], n=n, md_t=deepcopy(md_t), Et=copy(Et))
+    elay = CH(H=[CH(n=n, md_t=md_t, Et=Et)], n=n, md_t=deepcopy(md_t), Et=copy(Et))
     if _N.derH and N.derH:
         dderH = _N.derH.comp_H(N.derH, rn, dir=dir)  # comp shared layers
         elay.append_(dderH, flat=1)
-    elif _N.derH: elay.H += [_N.derH.copy(dir=1)]  # one empty derH
-    elif N.derH: elay.H += [N.derH.copy(dir=-1)]
+    elif _N.derH: elay.H += [_N.derH.copy(root=elay, dir=1)]  # one empty derH
+    elif N.derH: elay.H += [N.derH.copy(root=elay, dir=-1)]
     # spec: comp_node_(node_|link_), combinatorial, node_ maybe nested with rng-) agg+
     # new lay in root G.derH:
     Link.derH = elay; elay.root = Link; Link.n = min(_N.n,N.n); Link.nodet = [_N,N]; Link.yx = np.add(_N.yx,N.yx) /2
@@ -425,7 +426,7 @@ def comp_N(Link, rn, rng, dir=None):  # dir if fd, Link.derH=dH, comparand rim+=
 def get_rim(N,fd): return N.rimt[0] + N.rimt[1] if fd else N.rim  # add nesting in cluster_N_?
 
 def cluster_N_(root, L_, fd, nest=1):  # top-down segment L_ by >ave diff in L.dist, then cluster L.nodets within segment
-    # use min-cut algorithm?
+    # use min-cut algorithm? (right now it's not? We segment it with min_dist?)
 
     L_ = sorted(L_, key=lambda x: x.dist, reverse=True)
     min_dist = root[3] if isinstance(root,list) else 0  # 0 if init or single dist segment
@@ -449,7 +450,8 @@ def cluster_N_(root, L_, fd, nest=1):  # top-down segment L_ by >ave diff in L.d
         node_, link_, et = {N}, set(), np.array([.0,.0,.0,.0])  # Gt
         _eN_ = set()  # init ext Ns
         for l,_ in get_rim(N, fd):
-            _eN_.add(l.nodet[1] if l.nodet[0] is N else l.nodet[0])
+            if l.dist > min_dist:  # should we eval here on the 1st set of L? Else their other nodes will be added regardless of dist
+                _eN_.add(l.nodet[1] if l.nodet[0] is N else l.nodet[0])
         while _eN_:
             eN_ = set()
             for eN in _eN_:  # cluster rim-connected ext Ns
@@ -469,7 +471,7 @@ def cluster_N_(root, L_, fd, nest=1):  # top-down segment L_ by >ave diff in L.d
             sub_link_.update({l for l,_ in get_rim(N,fd) if l.dist <= min_dist})
             if isinstance(N.root,list): N.root += [Gt]  # N.root is rng-nested
             else: N.root = [N.root,Gt]  # nest if >1 root
-        Gt += [cluster_N_(Gt, sub_link_, fd, nest+1)] if len(sub_link_) > ave_L else [[]]  # add subG_
+        Gt += [cluster_N_(Gt, sub_link_, fd, nest+1)] if len(sub_link_) > ave_L else [[]]  # add subG_  (endless recursion when min_dist is 0 because all L.nodet are added to N_, and N's rim are added as sub_link_ again, so scale ave_L with nest here?)
     G_ = []
     for Gt in Gt_:
         M, R = Gt[2][0::2]  # Gt: node_, link_, et, subG_
