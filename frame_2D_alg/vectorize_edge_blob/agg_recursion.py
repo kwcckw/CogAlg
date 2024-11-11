@@ -79,9 +79,8 @@ class CH(CBase):  # generic derivation hierarchy of variable nesting: extH | der
         if any(irdnt):
             HE.Et[2:] = [E+e for E,e in zip(HE.Et[2:], irdnt)]
 
-    def add_H(HE, He_, root=None, irdnt=[], ri=None):  # unpack derHs down to numericals and sum them  (the first argument is always the instance itself)
+    def add_H(HE, He_, irdnt=[], root=None, ri=None):  # unpack derHs down to numericals and sum them
 
-        # HE = root.derH if ri is None else root.H[ri] (this is actually not needed since HE is always the instance itself)
         if not isinstance(He_,list): He_ = [He_]
         for He in He_:
             if HE:
@@ -93,7 +92,8 @@ class CH(CBase):  # generic derivation hierarchy of variable nesting: extH | der
                             else:           HE.H[i] = lay.copy_(root=HE)  # Lay was []
                 HE.accum_lay(He, irdnt)
                 HE.node_ += [node for node in He.node_ if node not in HE.node_]  # node_ is empty in CL derH?
-            elif root is not None:  # only if root is provided
+            # not sure:
+            elif root:
                 if ri is None: root.derH = He.copy_(root=root)
                 else:          root.H[ri]= He.copy_(root=root)
         return HE
@@ -251,7 +251,8 @@ def agg_recursion(root):  # breadth-first node_-> L_ cross-comp, clustering, rec
 
         pL_ = {l for n in N_ for l,_ in get_rim(n, fd)}
         if len(pL_) > ave_L:
-            G_ = cluster_N_(root, pL_, fd)  # optionally divisive clustering
+            for n in N_: n.merged = 0
+            G_ = cluster_N_(root, N_, pL_, fd)  # optionally divisive clustering
             if len(G_) > ave_L:
                 if isinstance(root.node_[0],CG): root.node_ = [root.node_, G_]  # init node_ nesting
                 else: root.node_ += [G_]
@@ -406,7 +407,7 @@ def comp_N(Link, rn, rng, dir=None):  # dir if fd, Link.derH=dH, comparand rim+=
         elay.append_(dderH, flat=1)
     elif _N.derH: elay.H += [_N.derH.copy_(root=elay)]  # one empty derH
     elif N.derH: elay.H += [N.derH.copy_(root=elay, rev=1)]
-    # spec: comp_node_(node_|link_), combinatorial, node_ may be nested with rng-)agg+
+    # spec: comp_node_(node_|link_), combinatorial, node_ may be nested with rng-)agg+, use graph similarity search?
     # new lay in root G.derH:
     Link.derH = elay; elay.root = Link; Link.n = min(_N.n,N.n); Link.nodet = [_N,N]; Link.yx = np.add(_N.yx,N.yx) /2
     # preset angle, dist
@@ -422,72 +423,66 @@ def comp_N(Link, rn, rng, dir=None):  # dir if fd, Link.derH=dH, comparand rim+=
 
 def get_rim(N,fd): return N.rimt[0] + N.rimt[1] if fd else N.rim  # add nesting in cluster_N_?
 
-# draft (should be cluster L now?)
 def cluster_N_(root, _L_, fd, nest=1):  # top-down segment L_ by >ave ratio of L.dists
     ave_rL = 1.2  # define segment and sub-cluster
 
     _L_ = sorted(_L_, key=lambda x: x.dist, reverse=True)  # lower-dist links
     max_dist = root[3] if isinstance(root,list) else np.inf  # init or single dist segment
-
-    L__ = []
-    _L = _L_[0]; _L.merged = 0; start=1
-    L_, et = [_L], _L.derH.Et
-    # init dist segment:
-    for i, L in enumerate(_L_[start:], start=start):  # long links first
+    _L = _L_[0]
+    L_, N_, et = [_L], {*_L.nodet}, _L.derH.Et
+    # current dist segment:
+    for i, L in enumerate(_L_[1:], start=1):  # long links first
         rel_dist = _L.dist / L.dist  # >1
         if rel_dist < ave_rL or et[0] < ave or len(_L_[i:]) < ave_L:  # ~=dist Ns or either side of L is weak
             _L = L
-            L_ += [L]; et += L.derH.Et; L.merged = 0; L.nodet[0].merged = 0; L.nodet[1].merged = 0 
+            L_ += [L]; et += L.derH.Et
+            for n in L.nodet:
+                if n not in N_:
+                    n.merged = 0; N_.add(n)
         else:
-            _L_ = _L_[i:]; max_dist = _L.dist; break  # terminate contiguous-dist segment (init new segment too?)
-            L__ += [L_]; _L = L; L_=[L]; start=i+1
-    L__ += [L_]  # last segment
-
+            L_ =_L_[i:]; max_dist = _L.dist
+            break  # terminate contiguous-dist segment
     Gt_ = []
-    for iL_ in L__:  # cluster each segment
-        max_dist = L_[-1].dist ; L_ = iL_
-        for L in L_:  # cluster through Ls within dist segment, not Ns
-            if not L.merged:
-                L.merged = 1
-                node_, link_, et = {*L.nodet}, {L}, copy(L.derH.Et)  # init Gt
-                _eL_ = {eL for N in L.nodet for eL,_ in get_rim(N, fd) if eL in iL_}  # init ext Ls
-                
-                while _eL_:
-                    eL_ = set()
-                    for _eL in _eL_:  # cluster node-connected ext Ls
-                        if _eL.merged: continue
-                        _eL.merged = 1
-                        # accumulate Gt
-                        node_.update({*_eL.nodet})
-                        link_.add(_eL)
-                        et += _eL.derH.Et
-                        for eL in {eL for N in _eL.nodet for eL,_ in get_rim(N, fd)}:
-                            if eL.dist < max_dist and eL not in link_ and eL in iL_:  # add eval of (eL in iL_) to make sure eL is in the segment?
-                                eL_.add(eL)
-                    _eL_ = eL_
-                Gt = [node_, link_, et, max_dist]
-                Gt_ += [Gt]
-
-    # form subG_ via longer Ls: (if we use > max_dist below, it's longer now? But those longer links should be already clustered too?)
+    for N in N_:  # cluster current dist segment
+        if N.merged: continue
+        N.merged = 1
+        node_, link_, et = {N}, set(), np.array([.0,.0,.0,.0])  # init Gt
+        _eN_ = {l.nodet[1] if l.nodet[0] is N else l.nodet[0] for l,_ in get_rim(N, fd) if l in L_}  # init ext Ns
+        while _eN_:
+            eN_ = set()
+            for eN in _eN_:  # cluster rim-connected ext Ns
+                if eN.merged: continue
+                node_.add(eN); eN.merged = 1
+                for L,_ in get_rim(eN, fd):
+                    if L.dist < max_dist and L not in link_:
+                        link_.add(L)
+                        et += L.derH.Et
+                        [eN_.add(G) for G in L.nodet if not G.merged]
+            _eN_ = eN_
+        Gt_ += [[node_, link_, et, max_dist]]
+    # form subG_ via shorter Ls:
     for Gt in Gt_:
-        sub_link_ = set(); max_dist = Gt[3]
-        for N in Gt[0]:
+        sub_link_ = set(); node_ = Gt[0]; root[0].update(node_)  # include all lower nodes
+        for N in node_:
             sub_link_.update({l for l,_ in get_rim(N,fd) if l.dist > max_dist})
             if isinstance(N.root,list): N.root += [Gt]  # N.root is rng-nested
-            else: N.root = [N.root,Gt]  # nest if >1 root
-        Gt += [cluster_N_(Gt, sub_link_, fd, nest+1)] if len(sub_link_) > ave_L*nest else [[]]  # add subG_
+            else: N.root = [N.root,Gt]
+            # nest if >1 root
+        subG_ = cluster_N_(Gt, sub_link_, fd, nest+1) if len(sub_link_) > ave_L*nest else []
+        Gt += [subG_]
     G_ = []
     for Gt in Gt_:
         M, R = Gt[2][0::2]  # Gt: node_, link_, et, subG_
         if M > R * ave * nest:  # rdn incr / lower rng
             G_ += [sum2graph(root, Gt, fd, nest)]
+
     return G_
 
 def sum2graph(root, grapht, fd, nest):  # sum node and link params into graph, aggH in agg+ or player in sub+
 
-    node_, link_, Et, maxL, subG_ = grapht; node_ = list(node_)
-    graph = CG(fd=fd, root=[root], node_=node_,link_=link_, subG_=subG_, maxL=maxL, rng=nest)  # minL is maxL now?
-    # or node_ += subG_?
+    node_, link_, Et, maxL, subG_ = grapht
+    graph = CG(fd=fd, root=[root], node_= [list(node_),[subG_]], link_=link_, maxL=maxL, rng=nest)
+    # add deeper node_ nesting, not just 2 layers as above?
     yx = [0,0]
     graph.derH.append_(CH(node_=node_).add_H([link.derH for link in link_]))  # new der layer
     derH = CH()
