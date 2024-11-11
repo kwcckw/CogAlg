@@ -96,6 +96,8 @@ class CH(CBase):  # generic derivation hierarchy of variable nesting: extH | der
             elif root:
                 if ri is None: root.derH = He.copy_(root=root)
                 else:          root.H[ri]= He.copy_(root=root)
+            else:
+                HE = He.copy_(root=root)  # looks like this is missed out to output HE as the copied He
         return HE
 
     def append_(HE,He, irdnt=None, flat=0):
@@ -116,7 +118,8 @@ class CH(CBase):  # generic derivation hierarchy of variable nesting: extH | der
         He = CH(root=root, node_=copy(_He.node_), Et=copy(_He.Et), n=_He.n, i=_He.i, i_=copy(_He.i_))
 
         for H,Et,n in _He.md_t:  # mdLat, mdLay, mdExt
-            H = copy(H); if rev: H[1::2] *= -1  # negate ds
+            H = copy(H)  # we need new line here
+            if rev: H[1::2] *= -1  # negate ds
             He.md_t += [[H, copy(Et), n]]
         for he in _He.H:
             He.H += [he.copy_(root=He, rev=rev)] if he else [[]]
@@ -252,7 +255,7 @@ def agg_recursion(root):  # breadth-first node_-> L_ cross-comp, clustering, rec
         pL_ = {l for n in N_ for l,_ in get_rim(n, fd)}
         if len(pL_) > ave_L:
             for n in N_: n.merged = 0
-            G_ = cluster_N_(root, N_, pL_, fd)  # optionally divisive clustering
+            G_ = cluster_N_(root, pL_, fd)  # optionally divisive clustering
             if len(G_) > ave_L:
                 if isinstance(root.node_[0],CG): root.node_ = [root.node_, G_]  # init node_ nesting
                 else: root.node_ += [G_]
@@ -280,7 +283,7 @@ def comp_node_(_N_):  # rng+ forms layer of rim and extH per N, appends N_,L_,Et
         rn = _G.n / G.n
         if rn > ave_rn: continue  # scope disparity
         radii = G.aRad + _G.aRad
-        dy,dx = np.subtract(_G.yx,G.yx)
+        dy,dx = np.subtract(_G.yx,G.yx)  # i'm getting a same yx from different Gs, but each of the G has different node_
         dist = np.hypot(dy,dx)
         _G.add, G.add = 0, 0
         _Gp_ += [(_G,G, rn, dy,dx, radii, dist)]
@@ -424,7 +427,7 @@ def comp_N(Link, rn, rng, dir=None):  # dir if fd, Link.derH=dH, comparand rim+=
 def get_rim(N,fd): return N.rimt[0] + N.rimt[1] if fd else N.rim  # add nesting in cluster_N_?
 
 def cluster_N_(root, _L_, fd, nest=1):  # top-down segment L_ by >ave ratio of L.dists
-    ave_rL = 1.2  # define segment and sub-cluster
+    ave_rL = 1.2 # define segment and sub-cluster
 
     _L_ = sorted(_L_, key=lambda x: x.dist, reverse=True)  # lower-dist links
     max_dist = root[3] if isinstance(root,list) else np.inf  # init or single dist segment
@@ -444,14 +447,14 @@ def cluster_N_(root, _L_, fd, nest=1):  # top-down segment L_ by >ave ratio of L
             break  # terminate contiguous-dist segment
     Gt_ = []
     for N in N_:  # cluster current dist segment
-        if N.merged: continue
+        if N.merged or N.root: continue  # check root now in case it's already in another Gt
         N.merged = 1
         node_, link_, et = {N}, set(), np.array([.0,.0,.0,.0])  # init Gt
         _eN_ = {l.nodet[1] if l.nodet[0] is N else l.nodet[0] for l,_ in get_rim(N, fd) if l in L_}  # init ext Ns
         while _eN_:
             eN_ = set()
             for eN in _eN_:  # cluster rim-connected ext Ns
-                if eN.merged: continue
+                if eN.merged or eN.root: continue
                 node_.add(eN); eN.merged = 1
                 for L,_ in get_rim(eN, fd):
                     if L.dist < max_dist and L not in link_:
@@ -459,10 +462,11 @@ def cluster_N_(root, _L_, fd, nest=1):  # top-down segment L_ by >ave ratio of L
                         et += L.derH.Et
                         [eN_.add(G) for G in L.nodet if not G.merged]
             _eN_ = eN_
-        Gt_ += [[node_, link_, et, max_dist]]
-    # form subG_ via shorter Ls:
-    for Gt in Gt_:
-        sub_link_ = set(); node_ = Gt[0]; root[0].update(node_)  # include all lower nodes
+
+        Gt = [node_, link_, et, max_dist]
+        # form subG_ via shorter Ls:
+        sub_link_ = set()
+        if isinstance(root, list): root[0].update(node_)  # include all lower nodes  (skip top layer where root is edge)
         for N in node_:
             sub_link_.update({l for l,_ in get_rim(N,fd) if l.dist > max_dist})
             if isinstance(N.root,list): N.root += [Gt]  # N.root is rng-nested
@@ -470,6 +474,8 @@ def cluster_N_(root, _L_, fd, nest=1):  # top-down segment L_ by >ave ratio of L
             # nest if >1 root
         subG_ = cluster_N_(Gt, sub_link_, fd, nest+1) if len(sub_link_) > ave_L*nest else []
         Gt += [subG_]
+        Gt_ += [Gt]
+    
     G_ = []
     for Gt in Gt_:
         M, R = Gt[2][0::2]  # Gt: node_, link_, et, subG_
