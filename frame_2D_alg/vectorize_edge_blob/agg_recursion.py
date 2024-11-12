@@ -241,7 +241,10 @@ def vectorize_root(frame):
 def agg_recursion(root):  # breadth-first node_-> L_ cross-comp, clustering, recursion
 
     def comp_Q(Q, fd):  # cross-comp node_ or L_
-        for e in Q: e.extH = CH()
+        for e in Q: 
+            e.extH = CH()
+            e.root_ = []  # reset for cluster_N_? We need reset CG.root_ from edge and init CL.root_
+            e.merged = 0
 
         N_,L_,Et,rng = comp_link_(Q) if fd else comp_node_(Q)
         m, d, mr, dr = Et
@@ -436,12 +439,14 @@ def cluster_N_(root, L_, fd, nest=1):  # top-down segment L_ by >ave ratio of L.
         rel_dist = _L.dist / L.dist  # >1
         if rel_dist < ave_rL or et[0] < ave or len(L_[i:]) < ave_L:  # ~=dist Ns or either side of L is weak
             _L = L; et += L.derH.Et
-            for n in L.nodet: N_.add(n)
+            for n in L.nodet: 
+                if not n.merged: N_.add(n)
         else:
-            min_dist = _L.dist; break  # terminate contiguous-dist segment
+             break  # terminate contiguous-dist segment
+    min_dist = _L.dist  # this should be default and based on the last _L?
     Gt_ = []
     for N in N_:  # cluster current dist segment
-        if len(N.root_) >= nest: continue  # N is already merged
+        if N.merged: continue  # N is already merged
         node_, link_, et = {N}, set(), np.array([.0,.0,.0,.0])
         Gt = [node_, link_, et, min_dist]
         N.root_ += [Gt]
@@ -449,7 +454,7 @@ def cluster_N_(root, L_, fd, nest=1):  # top-down segment L_ by >ave ratio of L.
         while _eN_:
             eN_ = set()
             for eN in _eN_:  # cluster rim-connected ext Ns
-                if len(eN.root_) >= nest: continue  # N is already merged
+                if eN.merged or (eN.root_ and eN.root_[-1] == Gt): continue  # N is already merged in prior Gt or current Gt
                 eN.root_ += [Gt]
                 node_.add(eN)
                 for L,_ in get_rim(eN, fd):
@@ -465,6 +470,7 @@ def cluster_N_(root, L_, fd, nest=1):  # top-down segment L_ by >ave ratio of L.
         if len(sub_L_) > ave_L * nest:  # this eval looks wrong?
             subG_ = cluster_N_(Gt, sub_L_, fd, nest+1)
         else: subG_ = []
+        for N in node_: N.merged = 1 # set N.merged to prevent it merges into other Gt again
         Gt += [subG_]; Gt_ += [Gt]
     G_ = []
     for Gt in Gt_:
@@ -491,7 +497,7 @@ def sum2graph(root, grapht, fd, nest):  # sum node and link params into graph, a
         if isinstance(N,CG):
             add_md_(graph.mdLay, N.mdLay)
             add_lat(graph.latuple, N.latuple)
-        N.root_[-1] = graph  # replace Gt
+        if N.root_ and N.root_[-1] == grapht: N.root_[-1] = graph  # replace Gt (lower nodes might not have root assigned)
     graph.derH.append_(derH, flat=1)  # comp(derH) forms new layer, higher layers are added by feedback
     L = len(node_)
     yx = np.divide(yx,L); graph.yx = yx
