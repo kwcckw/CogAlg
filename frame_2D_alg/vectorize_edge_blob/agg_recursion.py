@@ -270,9 +270,9 @@ def agg_recursion(root):  # breadth-first node_-> L_ cross-comp, clustering, rec
         else:
             root.derH.H += [[]]  # empty to decode rng+|der+, n forks per layer = 2^depth
         # after feedback because clustering adds deeper derH lays, unless fork-specific?:
-        if fvm:
-            cluster_eval(root, N_, fd=0)
-            if fvd: cluster_eval(root, lN_, fd=1)
+        # if fvm:  (why we need this? fvm must be true here)
+        cluster_eval(root, N_, fd=0)
+        if fvd: cluster_eval(root, lN_, fd=1)
 
 def comp_node_(_N_):  # rng+ forms layer of rim and extH per N, appends N_,L_,Et, ~ graph CNN without backprop
 
@@ -440,20 +440,22 @@ def cluster_N_(root, L_, fd, nest=1):  # top-down segment L_ by >ave ratio of L.
     min_dist = _L.dist
     Gt_ = []
     for N in N_:  # cluster current dist segment
-        if len(N.root_)+1 == nest: continue  # N was merged, root_ includes edge
+        if len(N.root_) > nest: continue  # N was merged, root_ includes edge (> nest should be sufficient?)
         node_, link_, et = {N}, set(), np.array([.0,.0,.0,.0])
         Gt = [node_, link_, et, min_dist]
         N.root_ += [Gt]
         _eN_ = {l.nodet[1] if l.nodet[0] is N else l.nodet[0] for l,_ in get_rim(N, fd)}  # init ext Ns
+        cL_ = []  # checked links
         while _eN_:
             eN_ = set()
             for eN in _eN_:  # cluster rim-connected ext Ns, all in root Gt
-                if len(eN.root_)+1 == nest: continue  # N was merged
+                if len(eN.root_) > nest: continue  # N was merged
                 eN.root_ += [Gt]
                 node_.add(eN)  # of all rim
                 for L,_ in get_rim(eN, fd):
-                    if L not in link_:
+                    if L not in link_ and L not in cL_:  # added CL because we might check L again and again since `eN_.update(L.nodet)` is default
                         eN_.update(L.nodet)  # of all rim
+                        cL_ += [L]
                         if L.dist >= min_dist:
                             link_.add(L); et += L.derH.Et
             _eN_ = eN_
@@ -462,6 +464,9 @@ def cluster_N_(root, L_, fd, nest=1):  # top-down segment L_ by >ave ratio of L.
             sub_L_.update({l for l,_ in get_rim(N,fd) if l.dist < min_dist})
         if len(sub_L_) > ave_L:
             subG_ = cluster_N_(Gt, sub_L_, fd, nest+1)
+            if isinstance(root, list):  # we need to pack lower nodes into root? Top layer only add longer links' nodes, while in deeper layer, we are getting shorter links' nodes
+                for subG in subG_:
+                    root[1].update(subG.node_)
         else: subG_ = []
         Gt += [subG_]; Gt_ += [Gt]
     G_ = []
@@ -476,7 +481,7 @@ def cluster_N_(root, L_, fd, nest=1):  # top-down segment L_ by >ave ratio of L.
 def sum2graph(root, grapht, fd, nest):  # sum node and link params into graph, aggH in agg+ or player in sub+
 
     node_, link_, Et, minL, subG_ = grapht
-    graph = CG(fd=fd, root_ = [root]+node_[0].root_, subG_=subG_, node_=list(node_), link_=link_, minL=minL, rng=nest)
+    graph = CG(fd=fd, root_ = [root]+list(node_)[0].root_, subG_=subG_, node_=list(node_), link_=link_, minL=minL, rng=nest)
     yx = [0,0]
     graph.derH.append_(CH(node_=node_).add_H([link.derH for link in link_]))  # new der layer
     derH = CH()
