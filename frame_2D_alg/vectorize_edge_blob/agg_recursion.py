@@ -236,6 +236,64 @@ def vectorize_root(frame):
                     if len(G_) > ave_L:
                         edge.node_ = G_
                         agg_recursion(edge)  # discontinuous PP_ cross-comp, cluster
+                        '''
+                        intra_edge(edge)
+                        frame.derH.add_H(edge.derH)  # feedback to frame
+                        '''
+
+def intra_edge(root):
+    
+    def cluster_(root, N_, fd):
+        Gt_ = []
+        while N_: # cluster N recursively with their mediated links
+            N = N_.pop()
+            node_,link_, et = [],[], np.array([.0,.0,.0,.0])
+            _eN_ = [N]
+            while _eN_:
+                eN_ = []
+                for eN in _eN_:  # cluster rim-connected ext Ns
+                    node_ += [eN]
+                    for L,_ in get_rim(eN, fd):
+                        if L not in link_:
+                            for eN in L.nodet:
+                                if eN in N_: 
+                                    eN_ += [eN]
+                                    N_.remove(eN)  # remove merged node
+                            link_+= [L]; et += L.derH.Et
+                _eN_ = eN_
+            Gt = [node_,link_,et]; Gt_ += [Gt]
+        G_ = []
+        for Gt in Gt_:
+            node_, link_, et = Gt
+            if et[0] > et[2] *ave:  # rdn incr/ dist decr
+                for node in node_: node.root_ += [Gt]  # Gt will be replaced in sum2graph
+                G_ += [sum2graph(root, Gt+[0, []], fd, nest=1)]
+        return G_
+
+    # comp_PP: forming dPP (CL) and cluster forms PPP
+    for N in root.node_: N.extH = CH()
+    N_,L_,Et,rng = comp_node_(root.node_)
+    m, d, mr, dr = Et  # abs d
+    vm = m - ave * mr *(rng+1)
+    vd = d * (m/ave) - ave_d * dr *(rng+1)  # proportional because vd is borrowed from vm, maybe > d?
+    # more crudely: min(m,d)?
+
+    # prediction = proj_m - proj_d, so vd is borrowed from falsely projected vm, if any:
+    if vm>0: 
+        root.derH.append_(CH().add_H([L.derH for L in L_]))  # mfork, else no new layer
+        if len(N_)> ave_L: 
+            PPP_ = cluster_(root, N_, fd=0)  # cluster PP forming PPP
+         
+        # comp_dPP: forming dPPP(CL) and cluster forms PdPP
+        if vd>0: 
+            for L in L_:  
+                L.extH = CH(); L.root_ = []
+            lN_,lL_,_,_ = comp_link_(L_)  # comp new L_, root.link_ was compared in root-forming for alt clustering
+            root.derH.append_(CH().add_H([L.derH for L in lL_]))  # dfork 
+            if len(lN_)> ave_L: 
+                PdPP_ = cluster_(root, lN_, fd=1)  # cluster dPP forming PdPP
+
+
 
 def agg_recursion(root):  # breadth-first node_-> L_ cross-comp, clustering, recursion
 
@@ -279,7 +337,7 @@ def comp_node_(_N_):  # rng+ forms layer of rim and extH per N, appends N_,L_,Et
         rn = _G.n / G.n
         if rn > ave_rn: continue  # scope disparity
         radii = G.aRad + _G.aRad
-        dy,dx = np.subtract(_G.yx,G.yx)  # i'm getting a same yx from different Gs, but each of the G has different node_
+        dy,dx = np.subtract(_G.yx,G.yx)
         dist = np.hypot(dy,dx)
         _G.add, G.add = 0, 0
         _Gp_ += [(_G,G, rn, dy,dx, radii, dist)]
@@ -462,7 +520,7 @@ def cluster_N_(root, L_, fd, nest=1):  # top-down segment L_ by >ave ratio of L.
         Gt += [subG_]; Gt_ += [Gt]
     G_ = []
     for Gt in Gt_:
-        node_, link_, et, minL, subG_ = Gt; node_[:] = list(node_)
+        node_, link_, et, minL, subG_ = Gt; Gt[0] = list(node_)  # convert from set to list
         if et[0] > et[2] *ave *nest:  # rdn incr/ dist decr
             G_ += [sum2graph(root, Gt, fd, nest)]
         else:
