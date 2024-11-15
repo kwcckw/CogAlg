@@ -26,9 +26,9 @@ def agg_recursion(root):  # breadth-first node_-> L_ cross-comp, clustering, rec
         if d * (m/ave) > ave_d * dr:  # prediction = proj_m - proj_d: vd is borrowed from falsely projected m
             vd = 1
             for L in L_:
-                L.root_ = [root]; L.extH = CH()
+                L.root_ = [root]; L.extH = CH(); L.rimt = [[],[]]
             lN_,lL_,_ = comp_link_(L_)  # comp new L_, root.link_ was compared in root-forming for alt clustering
-            # no need to return et?
+            # no need to return et? (et here can be added to vd eval below?)
             root.derH.append_(CH().add_H([L.derH for L in lL_]))  # dfork
             # recursive der+ eval_: cost > ave_match, add by feedback if < _match?
         else:

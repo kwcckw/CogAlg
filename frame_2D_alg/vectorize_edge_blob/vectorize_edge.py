@@ -117,7 +117,7 @@ class CH(CBase):  # generic derivation hierarchy of variable nesting: extH | der
         He = CH(root=root, node_=copy(_He.node_), Et=copy(_He.Et), n=_He.n, i=_He.i, i_=copy(_He.i_))
 
         for H,Et,n in _He.md_t:  # mdLat, mdLay, mdExt
-            H = copy(H)
+            H = np.array(H)  # convert to numpy array (*= -1 below works for numpy array only)
             if rev: H[1::2] *= -1  # negate ds
             He.md_t += [[H, copy(Et), n]]
         for he in _He.H:
@@ -218,10 +218,10 @@ def vectorize_root(frame):
             edge = slice_edge(blob)
             if edge.G * (len(edge.P_) - 1) > ave:  # eval PP, rdn=1
                 comp_slice(edge)
+                if not hasattr(frame, 'derH'):
+                    frame.derH = CH(); frame.root = None; frame.subG_ = []
                 if edge.mdLay[1][0] * (len(edge.node_)-1)*(edge.rng+1) > ave * edge.mdLay[1][2]:
                     edge.derH = CH()
-                    if not hasattr(frame, 'derH'):
-                        frame.derH = CH(); frame.root = None
                     G_ = []  # init for agg+:
                     for N in edge.node_:  # no comp node_, link_ | PPd_ for now
                         H,Et,n = N[3] if isinstance(N,list) else N.mdLay  # N is CP
@@ -236,16 +236,16 @@ def vectorize_root(frame):
                             PP.aRad = np.hypot(*np.subtract(PP.yx,(yn,xn)))
                             G_ += [PP]
                     if len(G_) > ave_L:
-                        edge.node_ = G_
+                        edge.node_ = G_; edge.subL = []; edge.subG_ = []
                         intra_edge(edge)
                         # if len(edge.node_) > ave_L: agg_recursion(edge)  # discontinuous PP_ cross-comp, cluster
-                frame.subG_ += edge
-
+                        # no direct feedback from edge to frame?
+                        frame.subG_ += edge.subG_  # should be subG_ here?
 def intra_edge(edge):
 
     def connect_PP_(edge, fd):
         Gt_ = []
-        N_ = edge.link_ if fd else edge.node_
+        N_ = copy(edge.link_ if fd else edge.node_)
         while N_:  # recursive floodfill
             N = N_.pop()
             node_,link_, et = [],[], np.array([.0,.0,.0,.0])
@@ -265,8 +265,8 @@ def intra_edge(edge):
         # convert select Gts to CGs:
         subG_ = [sum2graph(edge, Gt+[0,[]], fd, nest=1) for Gt in Gt_ if Gt[2][0] > Gt[2][2] *ave]
         if subG_:  # nest link_| node_
-            if fd: edge.subL_ = edge.subG_
-            else:  edge.subG_ = edge.subG_
+            if fd: edge.subL_ = subG_  # should be assigned to subG_ instead of edge.subG_?
+            else:  edge.subG_ = subG_
 
     # cross-comp PP_:
     N_, L_, (m,d,mr,dr) = comp_node_(edge.node_)
@@ -278,7 +278,7 @@ def intra_edge(edge):
             connect_PP_(edge,fd=0)
         if d * (m/ave) > ave_d * dr:  # vd is proportional to m it's borrowed from
             for L in L_:
-                L.extH = CH(); L.root_ = []
+                L.extH = CH(); L.root_ = [edge]  # edge may replaced by graph later
             # cross-comp dPP_:
             lN_,lL_,_ = comp_link_(L_)  # no need to return et?
             edge.derH.append_(CH().add_H([L.derH for L in lL_]))  # dfork
