@@ -2,7 +2,7 @@ import sys
 sys.path.append("..")
 import numpy as np
 from frame_blobs import CBase, frame_blobs_root, intra_blob_root, imread, unpack_blob_
-from vectorize_edge import comp_node_, comp_link_, sum2graph, get_rim, CH, ave, ave_d, ave_L, vectorize_root
+from vectorize_edge import CG, comp_node_, comp_link_, sum2graph, get_rim, CH, ave, ave_d, ave_L, vectorize_root
 '''
 Cross-compare and cluster edge blobs within a frame,
 potentially unpacking their node_s first,
@@ -23,7 +23,10 @@ def agg_recursion(frame):  # breadth-first (node_,L_) cross-comp, clustering, re
     # cross-comp converted edges, then GGs, etc.:
     iN_ = []
     for N in frame.subG_:  # eval to unpack highest N.subG_:
-        iN_ += [N] if (not N.derH or N.derH.Et[0] < ave * N.derH.Et[2]) else N.subG_
+        if not isinstance(N, CG):  # edge
+            iN_ += N.node_ if (not N.derH or N.derH.Et[0] < ave * N.derH.Et[2]) else N.subG_
+        else:    
+            iN_ += [N] if (not N.derH or N.derH.Et[0] < ave * N.derH.Et[2]) else N.subG_
 
     N_,L_,(m,d,mr,dr) = comp_node_(iN_)
     if m > ave * mr:

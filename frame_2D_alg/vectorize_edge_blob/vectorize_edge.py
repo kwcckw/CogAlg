@@ -2,7 +2,7 @@ import sys
 sys.path.append("..")
 from frame_blobs import CBase, frame_blobs_root, intra_blob_root, imread, unpack_blob_
 from slice_edge import slice_edge, comp_angle, aveG
-from comp_slice import comp_slice, comp_latuple, add_lat, aves, comp_md_, add_md_
+from comp_slice import comp_slice, comp_latuple, aves, comp_md_, add_md_
 from itertools import combinations, zip_longest
 from copy import deepcopy, copy
 import numpy as np
@@ -118,7 +118,7 @@ class CH(CBase):  # generic derivation hierarchy of variable nesting: extH | der
 
         for H,Et,n in _He.md_t:  # mdLat, mdLay, mdExt
             H = copy(H)
-            if rev: H[1::2]  = [-v for v in H[1::2]]   # negate ds
+            if rev: H[1::2] *= -1   # negate ds
             He.md_t += [[H, copy(Et), n]]
         for he in _He.H:
             He.H += [he.copy_(root=He, rev=rev)] if he else [[]]
@@ -172,8 +172,8 @@ class CG(CBase):  # PP | graph | blob: params of single-fork node_ cluster
         G.subG_ = [] if subG_ is None else subG_  # selectively clustered node_
         G.subL_ = [] if subL_ is None else subL_  # selectively clustered link_
         G.minL = 0 if minL is None else minL  # min link.dist in subG
-        G.latuple = [0,0,0,0,0,[0,0]] if latuple is None else latuple  # lateral I,G,M,Ma,L,[Dy,Dx]
-        G.mdLay = [[.0,.0,.0,.0,.0,.0,.0,.0,.0,.0,.0,.0], np.array([.0,.0,.0,.0]), 0] if mdLay is None else mdLay  # mdLat, et, n
+        G.latuple = np.array([0,0,0,0,0,np.array([0,0])],dtype='object') if latuple is None else latuple  # lateral I,G,M,Ma,L,[Dy,Dx]
+        G.mdLay = [np.zeros(12), np.zeros(4), 0] if mdLay is None else mdLay  # mdLat, et, n
         # maps to node_H / agg+|sub+:
         G.derH = CH(root=G) if derH is None else derH  # sum from nodes, then append from feedback
         G.extH = CH(root=G) if extH is None else extH  # sum from rim_ elays, H maybe deleted
@@ -225,7 +225,7 @@ def vectorize_root(frame):
                     G_ = []  # init for agg+:
                     for N in edge.node_:  # no comp node_, link_ | PPd_ for now
                         H,Et,n = N[3] if isinstance(N,list) else N.mdLay  # N is CP
-                        if H and Et[0] > ave * Et[2]:  # convert PP|P to G:
+                        if any(H) and Et[0] > ave * Et[2]:  # convert PP|P to G:
                             if isinstance(N,list):
                                 root_,P_,link_,(H,Et,n), lat, A, S, area, box, [y,x], n = N  # PPt
                             else:  # single CP
@@ -451,7 +451,7 @@ def sum2graph(root, grapht, fd, nest):  # sum node and link params into graph, a
         if N.derH: derH.add_H(N.derH)  # derH.Et=Et?
         if isinstance(N,CG):
             add_md_(graph.mdLay, N.mdLay)
-            add_lat(graph.latuple, N.latuple)
+            graph.latuple += N.latuple
         N.root_[-1] = graph  # replace Gt
     graph.derH.append_(derH, flat=1)  # comp(derH) forms new layer, higher layers are added by feedback
     L = len(node_)
