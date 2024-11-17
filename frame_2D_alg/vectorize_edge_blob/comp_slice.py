@@ -46,7 +46,7 @@ class CdP(CBase):  # produced by comp_P, comp_slice version of Clink
 
         l.nodet = [] if nodet is None else nodet  # e_ in kernels, else replaces _node,node: not used in kernels?
         l.latuple = [] if latuple is None else latuple  # sum node_
-        l.mdLay = [] if mdLay is None else mdLay  # same as md_C
+        l.mdLay = np.array([np.zeros(12), np.zeros(4), 0],dtype=object) if mdLay is None else mdLay
         l.angle = [0,0] if angle is None else angle  # dy,dx between node centers
         l.span = span  # distance between node centers
         l.yx = [0,0] if yx is None else yx  # sum node_
@@ -56,27 +56,15 @@ class CdP(CBase):  # produced by comp_P, comp_slice version of Clink
         l.lrim = []
         l.prim = []
         # n = 1?
-    def __bool__(l): 
+    def __bool__(l):
         return any(l.mdLay[0])  # l.mdLay.H
 
-def add_md_(HE, He,  irdnt=[0,0]):  # p may be derP, sum derLays
-
-    if HE:
-        '''
-        HE[0] += He[0]  # H, np.array?
-        HE[1] += He[1]  # Et
-        HE[2] += He[2]  # n: combined param accumulation span
-        '''
-        for i in 0,1,2: HE[i] += He[i]  # same as above
-        HE[1][2:4] += irdnt
-    else:
-        HE[:] = deepcopy(He)
-
-def comp_md_(_H, H, rn=1, dir=1):  # replace dir with rev?
+# reframe for np.array?
+def comp_md_(_md_, md_, rn=1, dir=1):  # replace dir with rev?
 
     vm, vd, rm, rd = 0,0,0,0
     derLay = []
-    for i, (_d, d) in enumerate(zip(_H[1::2], H[1::2])):  # compare ds in md_ or ext
+    for i, (_d, d) in enumerate(zip(_md_[1::2], md_[1::2])):  # compare ds in md_ or ext
         d *= rn  # normalize by compared accum span
         diff = (_d - d) * dir
         match = min(abs(_d), abs(d))
@@ -86,7 +74,7 @@ def comp_md_(_H, H, rn=1, dir=1):  # replace dir with rev?
         rm += vd > vm; rd += vm >= vd
         derLay += [match, diff]  # flat
 
-    return [np.array(derLay, dtype='float'), np.array([vm,vd,rm,rd], dtype='float'), 1]  # [H, Et, n]
+    return [np.array(derLay, dtype='float'), np.array([vm,vd,rm,rd], dtype='float'), 1]  # [md_, Et, n]
 
 def vectorize_root(frame):
 
@@ -117,7 +105,7 @@ def comp_slice(edge):  # root function
             mdLay = PPm[3]
         else:
             mdLay = PPm.mdLay  # PPm is actually CP
-        add_md_(edge.mdLay, mdLay)
+        edge.mdLay += mdLay
 
 def comp_P_(edge):  # form links from prelinks
 
@@ -144,13 +132,13 @@ def comp_P(_P,P, angle=None, distance=None, fder=0):  # comp dPs if fd else Ps
     else:
         # rng+: comp Ps
         rn = len(_P.dert_) / len(P.dert_)
-        H = comp_latuple(_P.latuple, P.latuple, rn)
-        vm = sum(H[::2]); vd = sum(np.abs(H[1::2]))
+        md_ = comp_latuple(_P.latuple, P.latuple, rn)
+        vm = sum(md_[::2]); vd = sum(np.abs(md_[1::2]))
         rm = 1 + vd > vm; rd = 1 + vm >= vd
         n = (len(_P.dert_)+len(P.dert_)) / 2  # der value = ave compared n?
-        derLay = [H, [vm,vd,rm,rd], n]  # [H, Et, n]
+        derLay = np.array([md_, np.array([vm,vd,rm,rd]), n], dtype=object)
     # get aves:
-    latuple = (_P.latuple+P.latuple) /2
+    latuple = (_P.latuple + P.latuple) /2
     link = CdP(nodet=[_P,P], mdLay=derLay, angle=angle, span=distance, yx=[(_y+y)/2,(_x+x)/2], latuple=latuple)
     # if v > ave * r:
     Et = link.mdLay[1]
@@ -196,13 +184,14 @@ def form_PP_(root, iP_):  # form PPs of dP.valt[fd] + connected Ps val
 
 def sum2PP(root, P_, dP_):  # sum links in Ps and Ps in PP
 
-    mdLay = [np.zeros(12), np.zeros(4), 0]
-    latuple, link_, A, S, area, n, box = np.array([0,0,0,0,0,np.array([0,0])],dtype='object'), [],[0,0],0,0,0, [np.inf,np.inf,0,0]
-    iRt = root[3][1][2:4] if isinstance(root,list) else root.mdLay[1][2:4]   # add to rdnt in root.mdLay.Et or root Et
+    mdLay = np.array([np.zeros(12),np.zeros(4),0], dtype=object)
+    latuple, link_, A, S, area, n, box = np.array([0,0,0,0,0, np.zeros(2)], dtype=object), [],[0,0],0,0,0, [np.inf,np.inf,0,0]
+    iRt = root[3][1][2:4] if isinstance(root,list) else root.mdLay[1][2:4]  # rdnt in mdLay Et
     # add uplinks:
     for dP in dP_:
         if dP.nodet[0] not in P_ or dP.nodet[1] not in P_: continue
-        add_md_(dP.nodet[1].mdLay, dP.mdLay, iRt)  # add to lower P
+        dP.nodet[1].mdLay += dP.mdLay
+        dP.nodet[1].mdLay[1][2:4] += iRt  # add to lower P
         link_ += [dP]  # link_
         A = np.add(A,dP.angle)
         S += np.hypot(*dP.angle)  # links are contiguous but slanted
@@ -212,7 +201,7 @@ def sum2PP(root, P_, dP_):  # sum links in Ps and Ps in PP
         area += L; n += L  # no + P.mdLay.n: current links only?
         latuple += P.latuple
         if P.mdLay:  # CdP or lower P has mdLay
-            add_md_(mdLay, P.mdLay)
+            mdLay += P.mdLay
         for y,x in P.yx_ if isinstance(P, CP) else [P.nodet[0].yx, P.nodet[1].yx]:  # CdP
             box = accum_box(box,y,x)
     if mdLay:
