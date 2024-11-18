@@ -2,11 +2,11 @@ import sys
 sys.path.append("..")
 import numpy as np
 from frame_blobs import CBase, frame_blobs_root, intra_blob_root, imread, unpack_blob_
-from vectorize_edge import CG, comp_node_, comp_link_, sum2graph, get_rim, CH, ave, ave_d, ave_L, vectorize_root
+from vectorize_edge import comp_node_, comp_link_, sum2graph, get_rim, CH, ave, ave_d, ave_L, vectorize_root
 '''
 Cross-compare and cluster edge blobs within a frame,
 potentially unpacking their node_s first,
-with recursive agglomeration  
+with recursive agglomeration
 '''
 
 def agg_recursion(frame):  # breadth-first (node_,L_) cross-comp, clustering, recursion
@@ -20,18 +20,15 @@ def agg_recursion(frame):  # breadth-first (node_,L_) cross-comp, clustering, re
             if len(G_) > ave_L:
                 agg_recursion(frame)  # cross-comp higher subGs
 
-    # cross-comp converted edges, then GGs, etc.:
-    iN_ = []
-    for N in frame.subG_:  # eval to unpack highest N.subG_:
-        if not isinstance(N, CG):  # edge
-            iN_ += N.node_ if (not N.derH or N.derH.Et[0] < ave * N.derH.Et[2]) else N.subG_
-        else:    
-            iN_ += [N] if (not N.derH or N.derH.Et[0] < ave * N.derH.Et[2]) else N.subG_
+    # cross-comp converted edges, then GGs, GGGs.:
+    iN_ = []  # eval to unpack top N:
+    for N in frame.subG_: iN_ += [N] if N.derH.Et[0] < ave * N.derH.Et[2] else N.subG_
 
     N_,L_,(m,d,mr,dr) = comp_node_(iN_)
     if m > ave * mr:
         frame.derH.append_(CH().add_H([L.derH for L in L_]))  # mfork, else no new layer
-        vd = d * (m/ave) > ave_d * dr  # borrow from mis-projected m: proj_m -= proj_d, reduce vm in agg+?
+        vd = d * (m/ave) - ave_d * dr  # proportional borrow from mis-projected m:
+        # proj_m = m - vd/2: bidir, +ve, no symmetric rdn: d is secondary?
         if vd > 0:
             for L in L_:
                 L.root_ = [frame]; L.extH = CH(); L.rimt = [[],[]]
@@ -47,7 +44,10 @@ def agg_recursion(frame):  # breadth-first (node_,L_) cross-comp, clustering, re
 
 
 def cluster_N_(root, L_, fd, nest=1):  # top-down segment L_ by >ave ratio of L.dists
+
     ave_rL = 1.2  # defines segment and cluster
+    # graph tracing, sum directionally decomposed links to project md?
+    # for extended comp, bidir for clustering?
 
     L_ = sorted(L_, key=lambda x: x.dist, reverse=True)  # lower-dist links
     _L = L_[0]
@@ -63,7 +63,7 @@ def cluster_N_(root, L_, fd, nest=1):  # top-down segment L_ by >ave ratio of L.
     Gt_ = []
     for N in N_:  # cluster current distance segment
         if len(N.root_) > nest: continue  # merged, root_[0] = edge
-        node_,link_, et = set(),set(), np.array([.0,.0,.0,.0])
+        node_,link_, et = set(),set(), np.zeros(4)
         Gt = [node_,link_,et, min_dist]; N.root_ += [Gt]
         _eN_ = {N}
         while _eN_:
