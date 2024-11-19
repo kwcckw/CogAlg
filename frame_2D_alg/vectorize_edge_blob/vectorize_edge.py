@@ -68,7 +68,7 @@ class CH(CBase):  # generic derivation hierarchy of variable nesting: extH | der
     def add_lay(HE, He, irdnt=[0,0]):
 
         for Md_, md_ in zip(HE.md_t, He.md_t):  # [mdExt, possibly mdLat, mdLay]
-            Md_[1][2:] = [E+e for E,e in zip(HE.Et[2:], irdnt)]
+            Md_[1][2:4] += irdnt
             Md_ += md_
         HE.Et+= He.Et; HE.n += He.n  # combined n params
         HE.Et[2:] = [E+e for E,e in zip(HE.Et[2:], irdnt)]
@@ -90,7 +90,7 @@ class CH(CBase):  # generic derivation hierarchy of variable nesting: extH | der
                 if ri is None: root.derH = He.copy_(root=root)
                 else:          root.H[ri]= He.copy_(root=root)
             else:
-                HE = He.copy_(root=root)
+                HE = He.copy_(root=HE.root)  # should be HE.root?
         return HE
 
     def append_(HE,He, irdnt=[0,0], flat=0):
@@ -211,7 +211,7 @@ def vectorize_root(frame):
                 if blob.mdLay[1][0] * (len(blob.node_)-1)*(blob.rng+1) > ave * blob.mdLay[1][2]:
                     # init for agg+:
                     if not hasattr(frame, 'derH'):
-                        frame.derH = CH(); frame.root = None; frame.subG_ = []
+                        frame.derH = CH(root=frame); frame.root = None; frame.subG_ = []
                     Y,X,_,_,_,_ = blob.latuple; P_ = blob.P_; lat = np.sum([P.latuple for P in P_])
                     edge = CG(root_=[frame], node_=blob.node_, latuple=lat, box=[np.inf,np.inf,0,0], yx=[Y,X], n=0)
                     G_ = []
@@ -260,7 +260,8 @@ def intra_edge(edge):
     N_,L_,(m,d,mr,dr) = comp_node_(edge.subG_)
     edge.subG_ = N_; edge.link_ = L_
     if m > ave * mr:
-        edge.derH.append_(CH().add_H([L.derH for L in L_]))  # mfork, else no new layer
+        mlay = CH().add_H([L.derH for L in L_])  # mfork, else no new layer
+        edge.derH = CH(H=[mlay], md_t = deepcopy(mlay.md_t), Et=copy(mlay.Et), n=mlay.n, root=edge); mlay.root=edge.derH  # init
         if len(N_) > ave_L:
             connect_PP_(edge,fd=0)
         if d * (m/ave) > ave_d * dr:  # borrow from mis-projected m: proj_m -= proj_d
@@ -429,7 +430,7 @@ def sum2graph(root, grapht, fd, nest):  # sum node and link params into graph, a
     if fd: graph.subL_ = subG_
     else:  graph.subG_ = subG_
     yx = [0,0]
-    derH = CH()
+    derH = CH(root=graph)
     for N in node_:
         graph.n += N.n  # +derH.n, total nested comparable vars
         graph.box = extend_box(graph.box, N.box)  # pre-compute graph.area += N.area?
@@ -441,7 +442,7 @@ def sum2graph(root, grapht, fd, nest):  # sum node and link params into graph, a
         N.root_[-1] = graph  # replace Gt
     if derH:
         graph.derH = derH  # lower layers
-    derLay = CH(root=graph.derH, node_=node_)._add_H([link.derH for link in link_])
+    derLay = CH().add_H([link.derH for link in link_]); derLay.root=graph.derH; derLay.node_=node_  # their root and node_ will be replaced with copy within the add_H, so we need to reassign
     if derH: graph.derH.append_(derLay)  # new layer
     else:    graph.derH.add_H(derLay)
     graph.derH.root = graph  # higher layers are added by feedback
