@@ -90,7 +90,7 @@ class CH(CBase):  # generic derivation hierarchy of variable nesting: extH | der
                 if ri is None: root.derH = He.copy_(root=root)
                 else:          root.H[ri]= He.copy_(root=root)
             else:
-                HE = He.copy_(root=HE.root)  # should be HE.root?
+                HE = He.copy_(root=root)
         return HE
 
     def append_(HE,He, irdnt=[0,0], flat=0):
@@ -99,7 +99,7 @@ class CH(CBase):  # generic derivation hierarchy of variable nesting: extH | der
             for i, lay in enumerate(He.H):  # different refs for L.derH and root.derH.H:
                 if lay:
                     lay = lay.copy_(root=HE); lay.i = len(HE.H)+i
-                HE.H += [lay]  # may be empty to trace forks
+                HE.H += [lay]  # lay may be empty to trace forks
         else:
             He.i = len(HE.H); He.root = HE; HE.H += [He]  # He can't be empty
         HE.add_lay(He, irdnt)
@@ -167,20 +167,17 @@ class CG(CBase):  # PP | graph | blob: params of single-fork node_ cluster
         G.latuple = np.array([.0,.0,.0,.0,.0,np.zeros(2)],dtype=object) if latuple is None else latuple  # lateral I,G,M,Ma,L,[Dy,Dx]
         G.mdLay = np.array([np.zeros(12), np.zeros(4), 0],dtype=object) if mdLay is None else mdLay  # mdLat, et, n
         # maps to node_H / agg+|sub+:
-        G.derH = CH(root=G) if derH is None else derH  # sum from nodes, then append from feedback
-        G.extH = CH(root=G) if extH is None else extH  # sum from rim_ elays, H maybe deleted
+        G.derH = CH() if derH is None else derH  # sum from nodes, then append from feedback
+        G.extH = CH() if extH is None else extH  # sum from rim_ elays, H maybe deleted
         G.rim = []  # flat links of any rng, may be nested in clustering
         G.aRad = 0  # average distance between graph center and node center
         G.box = [np.inf, np.inf, -np.inf, -np.inf] if box is None else box  # y0,x0,yn,xn
         G.yx = [0,0] if yx is None else yx  # init PP.yx = [(y0+yn)/2,(x0,xn)/2], then ave node yx
         G.alt_graph_ = []  # adjacent gap+overlap graphs, vs. contour in frame_graphs
         # G.fback_ = []  # always from CGs with fork merging, no dderHm_, dderHd_
-        # G.Rim = []  # links to the most mediated nodes
+        # id_H: list = z([[]])  # indices in all layers(forks, if no fback merge
         # depth: int = 0  # n sub_G levels over base node_, max across forks
         # nval: int = 0  # of open links: base alt rep
-        # id_H: list = z([[]])  # indices in the list of all possible layers | forks, not used with fback merging
-        # top aggLay: derH from links, lower aggH from nodes, only top Lay in derG:
-        # top Lay from links, lower Lays from nodes, hence nested tuple?
     def __bool__(G): return bool(G.n != 0)  # to test empty
 
 class CL(CBase):  # link or edge, a product of comparison between two nodes or links
@@ -245,7 +242,7 @@ def intra_edge(edge):
                     node_ += [eN]
                     for L,_ in get_rim(eN, fd):
                         if L not in link_:
-                            for eN in L.nodet:
+                            for eN in L.nodet:  # eval by link.derH.Et + extH.Et * ccoef > ave?
                                 if eN in N_:
                                     eN_ += [eN]; N_.remove(eN)  # merged
                             link_+= [L]; et += L.derH.Et
@@ -442,7 +439,7 @@ def sum2graph(root, grapht, fd, nest):  # sum node and link params into graph, a
         N.root_[-1] = graph  # replace Gt
     if derH:
         graph.derH = derH  # lower layers
-    derLay = CH().add_H([link.derH for link in link_]); derLay.root=graph.derH; derLay.node_=node_  # their root and node_ will be replaced with copy within the add_H, so we need to reassign
+    derLay = CH().add_H([link.derH for link in link_]); derLay.root=graph.derH; derLay.node_=node_
     if derH: graph.derH.append_(derLay)  # new layer
     else:    graph.derH.add_H(derLay)
     graph.derH.root = graph  # higher layers are added by feedback
