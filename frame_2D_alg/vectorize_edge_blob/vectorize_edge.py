@@ -138,6 +138,15 @@ class CH(CBase):  # generic derivation hierarchy of variable nesting: extH | der
             # nested subHH ( subH?
         return DLay
 
+    # divide params recursively with n
+    def divide_(He, n):
+        
+        for md_ in He.md_t: md_ /= n
+        for lay in He.H:
+            lay.divide_(n)
+        He.n /= n
+        He.Et /= n
+
     # not implemented yet:
     def sort_H(He, fd):  # re-assign rdn and form priority indices for comp_H, if selective and aligned
 
@@ -189,10 +198,10 @@ class CL(CBase):  # link or edge, a product of comparison between two nodes or l
         l.n = 1  # min(node_.n)
         l.derH = CH(root=l) if derH is None else derH
         l.nodet = [] if nodet is None else nodet  # e_ in kernels, else replaces _node,node: not used in kernels
-        l.angle = [0,0] if angle is None else angle  # dy,dx between nodet centers
+        l.angle = np.zeros(2) if angle is None else angle  # dy,dx between nodet centers
         l.dist = 0 if dist is None else dist  # distance between nodet centers
         l.box = [] if box is None else box  # sum nodet, not needed?
-        l.Vt = [0,0]  # for rim-overlap modulated segmentation, init derH.Et[:2]
+        l.Vt = np.zeros(2)  # for rim-overlap modulated segmentation, init derH.Et[:2]
         l.H_ = [] if H_ is None else H_  # if agg++| sub++?
         # add med, rimt, elay | extH in der+
     def __bool__(l): return bool(l.derH.H)
@@ -226,8 +235,124 @@ def vectorize_root(frame):
                             G_ += [PP]
                     if len(G_) > ave_L:
                         edge.subG_ = G_
-                        intra_edge(edge); frame.subG_ += [edge]; frame.derH.add_H(edge.derH)
+                        intra_edge_global(edge); frame.subG_ += [edge]; frame.derH.add_H(edge.derH)
                         # if len(edge.subG_) > ave_L: agg_recursion(edge)  # unlikely
+                        
+                        
+def intra_edge_global(edge):
+    
+    def comp_(_N_):
+        
+        N_,L_,M, MR = set(),[],0,0
+        for _G, G in combinations(_N_, r=2):
+            rn = _G.n / G.n
+            # if rn > ave_rn: continue  # scope disparity (this is not needed in global version?)
+            dy,dx = np.subtract(_G.yx,G.yx)
+            dist = np.hypot(dy,dx)
+            Link = CL(nodet=[_G,G], angle=[dy,dx], dist=dist, box=extend_box(G.box,_G.box))
+            et = comp_N(Link, rn, rng=1)
+            L_ += [Link]  # include -ve links
+            if et is not None:
+                N_.update({_G, G})  # positive N only
+                M += et[0]; MR += et[2]
+        return  list(N_), L_, M, MR  # flat N__ and L__
+    
+    
+    def get_cN_(N_, fd=0):  # sum nodes to get their centroid
+
+        N = CL() if fd else CG()
+        N.extH = CH(); N.box = [np.inf, np.inf, 0, 0]
+        # sum params
+        for n in N_: 
+            N.n += n.n
+            N.derH.add_H(n.derH)
+            N.extH.add_H(n.extH)  
+            N.box = extend_box(N.box, n.box) 
+            if fd:  # CL params
+                N.angle += n.angle
+                N.dist += n.dist   
+            else:  # CG params
+                N.rng = n.rng
+                N.latuple += n.latuple
+                N.mdLay   += n.mdLay
+                N.derH.add_H(n.derH)  
+                N.aRad += n.aRad       
+        
+        # get average (centroid)
+        k = len(N_)
+        N.n /= k
+        if fd:
+            N.angle /= k
+            N.dist /= k
+        else:
+            N.latuple /= k
+            N.mdLay /= k
+            N.aRad /= k
+            N.derH.divide_(k)  # derH/= k
+                
+        return N
+    
+    def ccomp_(Gt_):  # comp to centroid
+        
+        def comp_cN(_N, N, dir=None):
+
+            fd = dir is not None  # compared links have binary relative direction
+            dir = 1 if dir is None else dir  # convert to numeric
+            rn = _N.n / N.n
+            if fd:
+                _L, L = _N.dist, N.dist;  dL = _L-L; mL = min(_L,L) - ave_L  # direct match
+                mA,dA = comp_angle(_N.angle, [d*dir for d in N.angle])  # rev 2nd link in llink
+                # comp med if LL: isinstance(>nodet[0],CL), higher-order version of comp dist?
+            else:
+                _L, L = len(_N.node_),len(N.node_); dL = _L-L; mL = min(_L,L) - ave_L
+                mA,dA = comp_area(_N.box, N.box)  # compare area in CG vs angle in CL
+            n = .3
+            M = mL+mA; D = abs(dL)+abs(dA); Et = np.array([M,D, M>D,D<=M], dtype=float)
+            md_t = [np.array([np.array([mL,dL, mA,dA],dtype=float), Et,n],dtype=object)]  # init as [mdExt]
+            if not fd:  # CG
+                mdlat = comp_latuple(_N.latuple,N.latuple,rn,fagg=1)
+                mdLay = comp_md_(_N.mdLay[0], N.mdLay[0], rn, dir)
+                md_t += [mdlat,mdLay]; Et += mdlat[1] + mdLay[1]
+
+            if _N.derH and N.derH:
+                dderH = _N.derH.comp_H(N.derH, rn, dir=dir)  # comp shared layers
+                Et += dderH.et
+
+            return Et[0], Et[2]  # M, MR
+        
+        for Gt in Gt_:
+            node_,link_,et = Gt
+            cN = get_cN_(node_)  # compute centroid
+            for n in node_:
+                m, mr = comp_cN(n, cN)  # comp all nodes to centroid
+
+    
+    def cluster_(N_, fd):
+
+        Gt_ = []
+        while N_:  # flood fill
+            node_,link_, et = [],[], np.zeros(4)
+            N = N_.pop(); _eN_ = [N]
+            while _eN_:
+                eN_ = []
+                for eN in _eN_:  # rim-connected ext Ns
+                    node_ += [eN]
+                    for L,_ in get_rim(eN, fd):
+                        if L not in link_:
+                            for eN in L.nodet:
+                                if eN in N_:
+                                    eN_ += [eN]; N_.remove(eN)  # merged
+                            link_+= [L]; et += L.derH.Et
+                _eN_ = eN_
+            Gt = [node_,link_,et]; Gt_ += [Gt] 
+        return Gt_
+        
+
+    # global comp PP_:
+    N_,L_,m, mr = comp_(edge.subG_)
+    Gt_ = cluster_(N_, fd=0)
+    ccomp_(Gt_)
+                        
 def intra_edge(edge):
 
     def connect_PP_(edge, fd):
@@ -281,7 +406,7 @@ def comp_node_(_N_):  # rng+ forms layer of rim and extH per N, appends N_,L_,Et
         dist = np.hypot(dy,dx)
         _G.add, G.add = 0, 0
         _Gp_ += [(_G,G, rn, dy,dx, radii, dist)]
-    icoef = .1  # internal M proj_val / external M proj_val
+    icoef = .15  # internal M proj_val / external M proj_val  (i tried and using .15 is better at getting more true at dist eval below, else dist eval mostly is false)
     rng = 1  # len N__
     N_,L_,ET = set(),[], np.zeros(4)
     _Gp_ = sorted(_Gp_, key=lambda x: x[-1])  # sort by dist, shortest pairs first
