@@ -112,14 +112,14 @@ def MCluster_(frame):
         mL = min(len(_N.node_),len(N.node_)) - ave_L
         mA = comp_area(_N.box, N.box)[0]
         mLat = comp_latuple(_N.latuple,N.latuple,rn,fagg=1)[1][0]
-        mLay = comp_md_(_N.mdLay[0], N.mdLay[0], rn, dir)[1][0]
-        mH = _N.derH.comp_H(N.derH, rn, dir=dir).Et[0] if _N.derH and N.derH else 0
+        mLay = comp_md_(_N.mdLay[0], N.mdLay[0], rn)[1][0]  # no dir here?
+        mH = _N.derH.comp_H(N.derH, rn).Et[0] if _N.derH and N.derH else 0
 
         return mL + mA + mLat + mLay + mH
 
     def medoid(N_):  # sum and average nodes
 
-        N = CG()
+        N = CG(root_=[None])
         for n in N_:
             N.n += n.n; N.rng = n.rng; N.aRad += n.aRad
             N.box = extend_box(N.box, n.box)
@@ -127,7 +127,7 @@ def MCluster_(frame):
             N.derH.add_H(n.derH); N.extH.add_H(n.extH)
         # get averages:
         k = len(N_)
-        N.n /= k; N.latuple /= k; N.mdLay /= k; N.aRad /= k; N.derH.norm(k)  # derH/= k
+        N.n /= k; N.latuple /= k; N.mdLay /= k; N.aRad /= k; N.derH.norm_(k)  # derH/= k
         return N
 
     def xcomp_(N_):  # initial global cross-comp
@@ -135,23 +135,23 @@ def MCluster_(frame):
         for _G, G in combinations(N_, r=2):
             rn = _G.n/G.n
             if rn > ave_rn: continue  # scope disparity
-            M = comp_cN(_G, G, rn)  # to be modified
+            M = comp_cN(_G, G)  # to be modified
             vM = M - ave
             for _g,g in (_G,G),(G,_G):
                 if vM > 0:
-                    g.perim.add(g)  # loose match, new param for now
-                    if vM > ave: g.crim.add([G,M])  # strict match
+                    g.perim.add(_g)  # loose match, new param for now  (should be _g instead of g?)
+                    if vM > ave: g.crim.add((_g,M))  # strict match  (should be _g instead of G?)
 
     def cluster_(N_):  # initial flood fill via N.crim
         clust_ = []
         while N_:
             node_, peri_, M = set(), set(), 0
-            N = N_.pop(); _ref_ = [[N, 0]]
+            N = N_.pop(); _ref_ = [(N, 0)]  # we need immutable tuple to pack them into set, same with crim
             while _ref_:
                 ref_ = set()
                 for _ref in _ref_:
                     _eN = _ref[0]
-                    node_.add(_ref)
+                    node_.add(_eN)
                     peri_.update(_eN.perim)  # for comp to medoid in refine_
                     for ref in _eN.crim:
                         eN, eM = ref
@@ -168,28 +168,33 @@ def MCluster_(frame):
         dM = ave + 1
         while dM > ave:
             node_, peri_, M = set(), set(), 0
-            _N = medoid(node_)
-            for N in peri_:
+            _N = medoid(_node_)  # should be _node_ here, same with below it should be _peri_
+            for N in _peri_:
                 M = comp_cN(_N, N)
                 vM = M - ave
                 for _n, n in (_N,N),(N,_N):
                     if vM > 0:
-                        peri_.add(n)  # _n.perim.add(n)  # not needed?
+                        peri_.add(n)  # _n.perim.add(n)  # not needed? (this should be per current Gt's peri_?)
                         if vM > ave:
-                            node_.add(n)  # _n.crim.add([n, M])
+                            node_.add(n)  # _n.crim.add([n, M])  # why we add medoid?
             dM = M-_M
             _node_,_peri_,_M = node_,peri_,M
 
-        clust[:] = [node_,peri_,M]  # final cluster
+        clust[:] = [list(node_),list(peri_),M]  # final cluster
 
     # this is simplified, frame.subG_ should contain complemented graphs: m-type core + d-type contour
+    agg_recursion(frame)
     N_ = frame.subG_
+    for N in N_:
+        N.perim = set(); N.crim = set(); N.root_ += [frame]  # init
     xcomp_(N_)
     clust_ = cluster_(N_)
     for clust in clust_: refine_(clust)
         # re-cluster by node_ medoid
     frame.clust_ = clust_  # new param for now
-
+    frame.subG_ = [sum2graph(frame, clust+[0,[]],fd=0, nest=1) for clust in clust_ if clust[2] > ave]
+    if len(frame.subG_) > ave_L:
+        MCluster_(frame)
 
 if __name__ == "__main__":
     image_file = '../images/raccoon_eye.jpeg'
@@ -198,4 +203,4 @@ if __name__ == "__main__":
     intra_blob_root(frame)
     vectorize_root(frame)
     if frame.subG_:  # converted edges
-        agg_recursion(frame)
+        MCluster_(frame)
