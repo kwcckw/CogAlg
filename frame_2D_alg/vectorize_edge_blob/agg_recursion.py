@@ -171,14 +171,20 @@ def get_exemplar_(frame):
             for ref in _peri_:
                 _N,_m = ref
                 m = comp_cN(mN,_N)
-                M += m
                 if m > ave:
                     peri_.add((_N,_m))
                     if m > ave * 20:
-                        node_.add((_N,_m))
                         for _ref in _N.crim:  # crims are exclusive
-                            if _ref is ref:
-                                _N.crim.remove(ref); _N.M -= _m; break
+                            oN, _ = _ref  # other N
+                            # copy to enable ___ref removal while looping it 
+                            for __ref in copy(oN.crim):  # should be removing the other crim where their crim is pointing to the _N?
+                                __N, __m = __ref
+                                if __N is _N:
+                                    if __m < _m:  # remove ref with lower match    
+                                        node_.add((_N,_m)); M += m  # this should be here? Else if their match is lower, it shouldn't be in exemplar's crim
+                                        oN.crim.remove(__ref)
+                                        oN.M -= __m  # M may < 0 here since we -m in prune_overlap too
+                                        break
             dM = M - _M
             _node_,_peri_,_M = node_,peri_,M
 
