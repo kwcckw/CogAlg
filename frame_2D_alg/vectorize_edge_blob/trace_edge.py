@@ -216,20 +216,14 @@ def vectorize_root(frame):
                     # init for agg+:
                     if not hasattr(frame, 'derH'):
                         frame.derH = CH(root=frame); frame.root = None; frame.subG_ = []
-                    Y,X,_,_,_,_ = blob.latuple; P_ = blob.P_; lat = np.sum([P.latuple for P in P_],axis=0)
+                    Y,X,_,_,_,_ = blob.latuple; P_ = blob.P_; lat = np.sum([P.latuple for P in P_])
                     edge = CG(root_=[frame], node_=blob.node_, latuple=lat, box=[np.inf,np.inf,0,0], yx=[Y,X], n=0)
                     G_ = []
                     for N in edge.node_:  # no comp node_, link_ | PPd_ for now
                         md_,Et,n = N[3] if isinstance(N,list) else N.mdLay  # N is CP
                         if any(md_) and Et[0] > ave * Et[2]:  # convert PP|P to G:
-                            if isinstance(N,list):
-                                root_,P_,link_,(md_,Et,n), lat, A, S, area, box, [y,x], n = N  # PPt
-                            # this section is not needed now? We always assign edge.node_ as PPt_: edge.node_ = form_PP_(edge, edge.P_)
-                            # else:  # single CP
-                            #     root_=edge; P_=[N]; link_=[]; md_,Et,n = N.mdLay; lat=N.latuple; [y,x]=N.yx; n=N.n
-                            #     box = [y, x-len(N.dert_), y,x]
+                            root_,P_,link_,(md_,Et,n), lat, A, S, area, box, [y,x], n = N  # PPt
                             PP = CG(fd=0, root_=[root_], node_=P_,link_=link_,mdLay=np.array([md_,Et,n],dtype=object),latuple=lat, box=box,yx=[y,x],n=n)
-                            edge.n += PP.n; edge.box = extend_box(edge.box, PP.box)  # we need n and box in edge (for agg_cluster later)
                             y0,x0,yn,xn = box
                             PP.aRad = np.hypot(*np.subtract(PP.yx,(yn,xn)))
                             G_ += [PP]

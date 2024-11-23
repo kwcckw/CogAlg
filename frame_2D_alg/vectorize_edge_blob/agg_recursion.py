@@ -18,11 +18,10 @@ def agg_cluster_(frame):  # breadth-first (node_,L_) cross-comp, clustering, rec
 
         pL_ = {l for n in N_ for l,_ in get_rim(n, fd)}
         if len(pL_) > ave_L:
-            for N in N_: N.root_ = []  # reset for cluster_N_
             G_ = cluster_N_(frame, pL_, fd)  # optionally divisive clustering
             frame.subG_ = G_
             if len(G_) > ave_L:
-                med_cluster_(frame)  # alternating medoid clustering
+                get_exemplar_(frame)  # may call medoid clustering
     '''
     cross-comp converted edges, then GGs, GGGs., interlaced connectivity clustering and exemplar selection
     '''
@@ -109,7 +108,7 @@ def cluster_N_(root, L_, fd, nest=1):  # top-down segment L_ by >ave ratio of L.
  Med_cluster may be extended, but only its exemplar node (with max m to medoid) will be a sample for next cross-comp.
  Other nodes interactions can be predicted from the exemplar, they are supposed to be the same type of objects. 
 '''
-def med_cluster_(frame):
+def get_exemplar_(frame):
 
     def comp_cN(_N, N):  # compute match without new derivatives: relation to the medoid is not directional
 
@@ -124,19 +123,21 @@ def med_cluster_(frame):
 
     def medoid(N_):  # sum and average nodes
 
-        N = CG(); N.M = 0  # we may need medoid M too?
+        N = CG()
         for n, m in N_:
-            N.n += n.n; N.rng = n.rng; N.aRad += n.aRad; N.M += n.M
+            N.n += n.n; N.rng = n.rng; N.aRad += n.aRad
             N.box = extend_box(N.box, n.box)
             N.latuple += n.latuple; N.mdLay += n.mdLay
             N.derH.add_H(n.derH); N.extH.add_H(n.extH)
         # get averages:
         k = len(N_)
-        N.n /= k; N.latuple /= k; N.mdLay /= k; N.aRad /= k; N.M/=k; N.derH.norm_(k)  # derH/= k
+        N.n /= k; N.latuple /= k; N.mdLay /= k; N.aRad /= k; N.derH.norm_(k)  # derH/= k
         return N
 
     def xcomp_(N_):  # initial global cross-comp
 
+        for g in N_:  # setattr
+            g.M = 0
         for _G, G in combinations(N_, r=2):
             rn = _G.n/G.n
             if rn > ave_rn: continue  # scope disparity
@@ -149,17 +150,13 @@ def med_cluster_(frame):
                         g.crim.add((_g,M))  # strict match
                         g.M += M
 
-    def get_exemplar_(N_):  # select Ns with M > ave * Mr
+    def prune_overlap(N_):  # select Ns with M > ave * Mr
 
         exemplar_ = []
         for N in N_:
-            for _N, M in N.crim:
-                '''
-                if N.M >_N.M: _N.M -= M
-                else:          N.M -= M
-                '''
-                if N.M <= _N.M: N.M -= M  # this shouldn't be bidirectional? Because in _N loop later, they will be eval the smae too
-                # exclusive representation, or incr N.Mr?
+            for _N,m in N.crim:
+                if N.M < _N.M:
+                    N.M -= m  # exclusive representation, vs. N.Mr+=1?
             if N.M > ave:
                 exemplar_ += [N]
 
@@ -167,18 +164,21 @@ def med_cluster_(frame):
 
     def refine_(exemplar):
         _node_, _peri_, _M = exemplar.crim, exemplar.perim, exemplar.M
-
         dM = ave + 1
         while dM > ave:
             node_, peri_, M = set(), set(), 0
             mN = medoid(_node_)
-            for _N,_m in _peri_:
+            for ref in _peri_:
+                _N,_m = ref
                 m = comp_cN(mN,_N)
                 M += m
-                if m > ave:  # should be m here? Because M should be accumulating m>
-                    peri_.add((_N,_m))  # should be _m here?
-                    if m > ave*20: # m value is too large if we use ave to eval here, so it's just evaluating positive and negative m now, is there a better eval method?
+                if m > ave:
+                    peri_.add((_N,_m))
+                    if m > ave * 20:
                         node_.add((_N,_m))
+                        for _ref in _N.crim:  # crims are exclusive
+                            if _ref is ref:
+                                _N.crim.remove(ref); _N.M -= _m; break
             dM = M - _M
             _node_,_peri_,_M = node_,peri_,M
 
@@ -188,13 +188,15 @@ def med_cluster_(frame):
     for N in N_:
         N.perim = set(); N.crim = set(); N.root_ += [frame]; N.M = 0
     xcomp_(N_)
-    exemplar_ = get_exemplar_(N_)  # select strong Ns (some strong Ns might be in some exemplar's crim too, so there will be overlapping?)
+    exemplar_ = prune_overlap(N_)  # select strong Ns
+    subG_ = set()
     for N in exemplar_:
-        if N.M > ave * 10:  # tentative, else keep N.crim
-            refine_(N)  # N.crim = N.perim clustered by N.crim medoid
-    frame.exemplar_ = exemplar_
-    if len(frame.exemplar_) > ave_L:
-        frame.subG_ = frame.exemplar_  # for next recursion
+        if N.M > ave * 10:  # else keep N.crim
+            refine_(N)  # N.crim = N.perim exclusively clustered by N.crim medoid
+        if N.M:  # has crim, pruned in refine_
+            subG_.add(N)
+    frame.subG_ = list(subG_)
+    if len(frame.subG_) > ave_L:
         agg_cluster_(frame)  # alternating connectivity clustering per exemplar, more selective
 
 
@@ -205,5 +207,4 @@ if __name__ == "__main__":
     intra_blob_root(frame)
     vectorize_root(frame)
     if frame.subG_:  # converted edges
-        # start from medoid clustering because edges are connectivity-clustered
-        med_cluster_(frame)  # starts alternating agg_recursion
+        get_exemplar_(frame)  # selects connectivity-clustered edges for agg_cluster_
