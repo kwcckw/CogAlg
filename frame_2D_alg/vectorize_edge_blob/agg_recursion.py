@@ -26,7 +26,7 @@ def agg_cluster_(frame):  # breadth-first (node_,L_) cross-comp, clustering, rec
     cross-comp converted edges, then GGs, GGGs, etc, interlaced with exemplar selection: '''
     iN_ = []
     for N in frame.subG_:
-        iN_ += [N] if N.derH.Et[0] < ave * N.derH.Et[2] else N.subG_  # eval to unpack top N
+        iN_ += [N] if N.derH.Et[0] < ave * N.derH.Et[2] else N.subG_  # eval to unpack top N (if we unpack N.subG_, their rim may not empty and will be used again in der+ fork later )
 
     N_,L_,(m,d,mr,dr) = comp_node_(iN_)  # cross-comp exemplars, extrapolate to exemplar.Rim?
     if m > ave * mr:
@@ -156,15 +156,16 @@ def get_exemplar_(frame):
                     N.M -= _m  # Rim is exclusive, vs N.Mr+=1?
                     for _ref in copy(_N.Rim):
                         if _ref[0] is N:  # reciprocal to ref
-                            _N.Rim.remove(ref); N.M-=_m; break
+                            _N.Rim.remove(_ref); _N.M-=_m; break  # should be removing _ref here because ref is in N.rim instead of _N.rim
             if N.M > ave:
                 if N.M > ave*10:
-                    centroid_cluster(N)  # refine N.Rim
-                exemplar_ += [N]
+                    centroid_cluster(N, N_)  # refine N.Rim
+                if N.Rim:  # N.Rim might be empty after the pruning
+                    exemplar_ += [N]
 
         return exemplar_
 
-    def centroid_cluster(N):
+    def centroid_cluster(N, N_):
         _Rim,_perim,_M = N.Rim, N.perim, N.M
 
         dM = ave + 1  # refine Rim to convergence:
@@ -186,9 +187,16 @@ def get_exemplar_(frame):
                                     fRim = 1; break
                         if fRim:  # not in exclusive stronger _N.Rim
                             Rim.add(ref); M += m
-            dM = M - _M
-            _node_,_peri_,_M = Rim, perim, M
+                            # remove ref with _N in all other Ns
+                            for __N in N_:
+                                if __N not in [N, _N]:
+                                    for __ref in copy(__N.Rim):
+                                        if __ref[0] is _N:
+                                            __N.Rim.remove(__ref)
+                                            __N.M -= __ref[1]
 
+            dM = M - _M
+            _node_,_perim,_M = Rim, perim, M
         N.Rim, N.perim, N.M = list(Rim),list(perim), M  # final cluster
 
     N_ = frame.subG_  # should be complemented graphs: m-type core + d-type contour

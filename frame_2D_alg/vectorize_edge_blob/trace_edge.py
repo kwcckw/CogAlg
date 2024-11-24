@@ -217,7 +217,7 @@ def vectorize_root(frame):
                     # init for agg+:
                     if not hasattr(frame, 'derH'):
                         frame.derH = CH(root=frame); frame.root = None; frame.subG_ = []
-                    Y,X,_,_,_,_ = blob.latuple; P_ = blob.P_; lat = np.sum([P.latuple for P in P_])
+                    Y,X,_,_,_,_ = blob.latuple; P_ = blob.P_; lat = np.sum([P.latuple for P in P_],axis=0)  # prevent merging of summed value
                     edge = CG(root_=[frame], node_=blob.node_, latuple=lat, box=[np.inf,np.inf,0,0], yx=[Y,X], n=0)
                     G_ = []
                     for N in edge.node_:  # no comp node_, link_ | PPd_ for now
@@ -227,6 +227,7 @@ def vectorize_root(frame):
                             PP = CG(fd=0, root_=[root_], node_=P_,link_=link_,mdLay=np.array([md_,Et,n],dtype=object),latuple=lat, box=box,yx=[y,x],n=n)
                             y0,x0,yn,xn = box
                             PP.aRad = np.hypot(*np.subtract(PP.yx,(yn,xn)))
+                            edge.n += PP.n; edge.box = extend_box(edge.box, PP.box)  # we need n and box in edge (for agg_cluster later)
                             G_ += [PP]
                     if len(G_) > ave_L:
                         edge.subG_ = G_
