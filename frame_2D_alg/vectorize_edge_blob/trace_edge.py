@@ -384,11 +384,12 @@ def comp_area(_box, box):
     y0, x0, yn, xn = box;   A = (yn - y0) * (xn - x0)
     return _A-A, min(_A,A) - ave_L**2  # mA, dA
 
-def comp_N(Link, rn, dir=None):  # dir if fd, Link.derH=dH, comparand rim+=Link
+def comp_N(Link, rn, dir=None, alt=1):  # dir if fd, Link.derH=dH, comparand rim+=Link
 
     fd = dir is not None  # compared links have binary relative direction
     dir = 1 if dir is None else dir  # convert to numeric
     _N,N = Link.nodet  # comp externals:
+    Et = np.zeros(4)
     if fd:
         _L, L = _N.dist, N.dist;  dL = _L-L; mL = min(_L,L) - ave_L  # direct match
         mA,dA = comp_angle(_N.angle, [d*dir for d in N.angle])  # rev 2nd link in llink
@@ -396,8 +397,22 @@ def comp_N(Link, rn, dir=None):  # dir if fd, Link.derH=dH, comparand rim+=Link
     else:
         _L, L = len(_N.node_),len(N.node_); dL = _L-L; mL = min(_L,L) - ave_L
         mA,dA = comp_area(_N.box, N.box)  # compare area in CG vs angle in CL
+        
+        # not sure if we need selective here?
+        if alt:
+            for alt_graph, g in zip([_N.alt_graph_, N.alt_graph_], [N, _N]):  # comp N.alts to _N, and vice-versa
+                for alt_g in g.alt_graph_:
+                    arn = alt_g.n / g.n
+                    if rn > ave_rn: continue  # scope disparity
+                    radii = g.aRad + alt_g.aRad
+                    dy,dx = np.subtract(alt_g.yx,g.yx)
+                    dist = np.hypot(dy,dx)
+                    aLink = CL(nodet=[alt_g,g], angle=[dy,dx], dist=dist, box=extend_box(g.box,alt_g.box))
+                    et = comp_N(aLink, arn, dir=None, alt=0)  # no alt comparison in deeper comp_N
+                    if et: Et += et
+        
     n = .3
-    M = mL+mA; D = abs(dL)+abs(dA); Et = np.array([M,D, M>D,D<=M], dtype=float)
+    M = mL+mA; D = abs(dL)+abs(dA); Et += np.array([M,D, M>D,D<=M], dtype=float)
     md_t = [np.array([np.array([mL,dL, mA,dA],dtype=float), Et,n],dtype=object)]  # init as [mdExt]
     if not fd:  # CG
         mdlat = comp_latuple(_N.latuple,N.latuple,rn,fagg=1)
