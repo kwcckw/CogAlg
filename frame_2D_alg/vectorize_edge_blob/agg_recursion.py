@@ -65,7 +65,7 @@ def cluster_N_(root, L_, fd, nest=1):  # top-down segment L_ by >ave ratio of L.
     Gt_ = []
     for N in N_:  # cluster current distance segment
         if len(N.root_) > nest: continue  # merged, root_[0] = edge
-        node_,link_, et = set(),set(), np.zeros(4)
+        node_,link_, et = set(),set(), np.zeros(3)
         Gt = [node_,link_,et, min_dist]; N.root_ += [Gt]
         _eN_ = {N}
         while _eN_:
@@ -139,7 +139,7 @@ def get_exemplar_(frame):
 
         C = CG()
         for n,_ in node_:
-            C.n += n.n; C.rng = n.rng; C.aRad += n.aRad; C.box = extend_box(N.box, n.box)
+            C.n += n.n; C.rng = n.rng; C.aRad += n.aRad; C.box = extend_box(C.box, n.box)  # typo?
             C.latuple += n.latuple; C.mdLay += n.mdLay; C.derH.add_H(n.derH); C.extH.add_H(n.extH)
         # get averages:
         k = len(node_); C.n /= k; C.latuple /= k; C.mdLay /= k; C.aRad /= k; C.derH.norm_(k)  # derH/= k
@@ -150,18 +150,18 @@ def get_exemplar_(frame):
         for ref in copy(N.Rim):
             _N, _m = ref
             if _N in N.compared_: continue  # also skip in next agg+
-            N.compared_ += [_N]
+            N.compared_ += [_N]; _N.compared_ += [N]  # should be bilateral
             for _ref in copy(_N.Rim):
                 if _ref[0] is N:  # reciprocal to ref
                     dy,dx = np.subtract(_N.yx,N.yx)  # no dist eval
                     Link = comp_N(_N,N, _N.n/N.n, angle=[dy,dx], dist=np.hypot(dy,dx))
-                    m,d,r = Link.et
+                    m,d,r = Link.derH.Et
                     if d < ave_d * r:  # exemplars are similar, remove min
                         minN,r,v = (_N,_ref,_m) if N.M > _N.M else (N,ref,m)
                         minN.Rim.remove(r); minN.M -= v
                         if N is minN: fadd = 0
                     else:  # exemplars are different, keep both
-                        _N.extH.add_H(Link), N.extH.add_H(Link)
+                        _N.extH.add_H(Link.derH), N.extH.add_H(Link.derH)  # link.derH here?
                     break
         return fadd
 
@@ -197,7 +197,7 @@ def get_exemplar_(frame):
 
     N_ = frame.subG_  # complemented Gs: m-type core + d-type contour
     for N in N_:
-        N.perim = set(); N.Rim = set(); N.root_ += [frame]; N.M = 0
+        N.perim = set(); N.Rim = set(); N.root_ += [frame]; N.M = 0; N.compared_ = []  # init compared_
     xcomp_(N_)
     frame.subG_ = prune_overlap(N_)  # select strong Ns as exemplars of their Rim
     if len(frame.subG_) > ave_L:
