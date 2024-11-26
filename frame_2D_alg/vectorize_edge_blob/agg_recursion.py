@@ -5,7 +5,7 @@ from copy import copy, deepcopy
 from itertools import combinations
 from frame_blobs import CBase, frame_blobs_root, intra_blob_root, imread, unpack_blob_
 from comp_slice import comp_latuple, comp_md_
-from trace_edge import comp_N, comp_node_, comp_link_, sum2graph, get_rim, CH, CG, CL, ave, ave_d, ave_L, vectorize_root, comp_area, extend_box, ave_rn
+from trace_edge import comp_N, comp_node_, comp_link_, sum2graph, get_rim, CH, CG, ave, ave_d, ave_L, vectorize_root, comp_area, extend_box, ave_rn
 '''
 Cross-compare and cluster edge blobs within a frame,
 potentially unpacking their node_s first,
@@ -23,14 +23,16 @@ def agg_cluster_(frame):  # breadth-first (node_,L_) cross-comp, clustering, rec
             if len(G_) > ave_L:
                 get_exemplar_(frame)  # may call centroid clustering
     '''
-    cross-comp converted edges, then GGs, GGGs, etc, interlaced with exemplar selection: 
+    cross-comp converted edges, then GGs, GGGs, etc, interlaced with exemplar selection 
+    Et = [proj_m, proj_d, rdn]:
+    proj_d = abs d * (m/ave): must be <m, proportional borrow from co-projected m
+    proj_m = m - proj_d / 2: bidir, and rdn is external
     '''
-    N_,L_,(m,d,mr,dr) = comp_node_(frame.subG_)  # exemplars, extrapolate to their Rims?
-    if m > ave * mr:
+    N_,L_,(m,d,r) = comp_node_(frame.subG_)  # exemplars, extrapolate to their Rims?
+    if m > ave * r:
         mlay = CH().add_H([L.derH for L in L_])  # mfork, else no new layer
         frame.derH = CH(H=[mlay], md_t=deepcopy(mlay.md_t), Et=copy(mlay.Et), n=mlay.n, root=frame); mlay.root=frame.derH  # init
-        vd = d * (m/ave) - ave_d * dr  # vd = proportional borrow from co-projected m
-        # proj_m = m - vd, no generic rdn~ave_d?
+        vd = d - ave_d * r
         if vd > 0:
             for L in L_:
                 L.root_ = [frame]; L.extH = CH(); L.rimt = [[],[]]
@@ -128,7 +130,7 @@ def get_exemplar_(frame):
             vM = M - ave
             for _g,g in (_G,G),(G,_G):
                 if vM > 0:
-                    g.perim.add((_g,M))  # loose match ref: unilateral link
+                    g.perim.add((_g,M))  # loose match ref (unilateral link)
                     if vM > ave:
                         g.Rim.add((_g,M))  # strict match ref
                         g.M += M
@@ -144,46 +146,30 @@ def get_exemplar_(frame):
         return C
 
     def eval_overlap(N):
-
-        for ref in copy(N.Rim):  # N.Rim might be removed in minN below
+        fadd = 1
+        for ref in copy(N.Rim):
             _N, _m = ref
-            if _N in N.compared_: continue
+            if _N in N.compared_: continue  # also skip in next agg+
             N.compared_ += [_N]
             for _ref in copy(_N.Rim):
                 if _ref[0] is N:  # reciprocal to ref
-                    dy, dx = np.subtract(_N.yx, N.yx); dist = np.hypot(dy, dx)
-                    Link = CL(nodet=[_N,N], angle=[dy,dx], dist=dist, box=extend_box(N.box,_N.box))
-                    et = comp_N(Link, _N.n/N.n)
-                    if et is not None:
-                        m,d,mr,dr  = et
-                        if d < ave_d * dr:  # probably wrong eval (why it's d eval here but not m?)
-                            # exemplars are similar, remove min
-                            minN,r,v = (_N,_ref,_m) if N.M > _N.M else (N,ref,m)
-                            minN.Rim.remove(r); minN.M -= v; minN.rim.pop()  # remove link from weaker N too?
-                        else:  # exemplars are different, keep both
-                            _N.extH.add_H(Link.derH), N.extH.add_H(Link.derH)
+                    dy,dx = np.subtract(_N.yx,N.yx)  # no dist eval
+                    Link = comp_N(_N,N, _N.n/N.n, angle=[dy,dx], dist=np.hypot(dy,dx))
+                    m,d,r = Link.et
+                    if d < ave_d * r:  # exemplars are similar, remove min
+                        minN,r,v = (_N,_ref,_m) if N.M > _N.M else (N,ref,m)
+                        minN.Rim.remove(r); minN.M -= v
+                        if N is minN: fadd = 0
+                    else:  # exemplars are different, keep both
+                        _N.extH.add_H(Link), N.extH.add_H(Link)
                     break
+        return fadd
 
-    def prune_overlap(N_):  # select Ns with M > ave * Mr
-        exemplar_ = []
-
-        for N in N_:
-            if N.M > ave:
-                if N.M > ave*10:
-                    centroid_cluster(N)  # refine N.Rim
-                exemplar_ += [N]
-
-        return exemplar_
-
-    # not updated with eval overlap:
     def centroid_cluster(N):
         _Rim,_perim,_M = N.Rim, N.perim, N.M
 
-        N.compared_ = []
         dM = ave + 1  # refine Rim to convergence:
         while dM > ave:
-            eval_overlap(N)  # i think this should be at every refinement loop? Because N might get new Rim in each refinement
-            sN_ = [n for L,_ in N.rim for n in L.nodet if n is not N]  # sN_ = similar exemplars, added in eval_overlap
             Rim, perim, M = set(), set(), 0
             C = centroid(_Rim)
             for ref in _perim:
@@ -191,25 +177,25 @@ def get_exemplar_(frame):
                 mm = comp_cN(C,_N)
                 if mm > ave:
                     perim.add((_N,m))
-                    if mm > ave * 20:  # copy ref from perim to Rim, if not in stronger _N.Rim
-                        fRim = 1
-                        for _ref in copy(_N.Rim):
-                            if _ref[0] is N:  # reciprocal to ref
-                                if _ref[0] in sN_: 
-                                    frim = 1 
-                                    continue  # similar exemplars are evaluated before, skip them
-                                fRim = 0
-                                if N.M > _N.M:  # move ref from _N.Rim to N.Rim
-                                    _N.Rim.remove(_ref); _N.M -= m
-                                    fRim = 1; break
-                        if fRim:  # not in stronger _N.Rim: strict link is represented in only one of its Ns
-                            Rim.add(ref); M += m
+                    if mm > ave * 10:  # copy ref from perim to Rim
+                        Rim.add(ref); M += m
             dM = M - _M
             _node_,_peri_,_M = Rim, perim, M
-            N.Rim, N.perim, N.M = list(Rim),list(perim), M  # new cluster after the refinement
 
+        N.Rim, N.perim, N.M = list(Rim),list(perim), M
 
-    N_ = frame.subG_  # should be complemented graphs: m-type core + d-type contour
+    def prune_overlap(N_):  # select Ns with M > ave * Mr
+
+        for N in N_:  # connectivity cluster N.Rim may be represented by multiple sufficiently different exemplars
+            if N.M > ave * 10:  # or if len(N.perim) / len(N.Rim) > ave_L?
+                centroid_cluster(N)  # refine N.Rim
+        exemplar_ = []
+        for N in N_:
+            if eval_overlap(N) and N.M > ave * 10:
+                exemplar_ += [N]
+        return exemplar_
+
+    N_ = frame.subG_  # complemented Gs: m-type core + d-type contour
     for N in N_:
         N.perim = set(); N.Rim = set(); N.root_ += [frame]; N.M = 0
     xcomp_(N_)
