@@ -28,7 +28,7 @@ def agg_cluster_(frame):  # breadth-first (node_,L_) cross-comp, clustering, rec
     N_,L_,(m,d,r) = comp_node_(frame.subG_)  # exemplars, extrapolate to their Rims?
     if m > ave * r:
         mlay = CH().add_H([L.derH for L in L_])  # mfork, else no new layer
-        frame.derH = CH(H=[mlay], md_t=deepcopy(mlay.md_t), Et=copy(mlay.Et), n=mlay.n, root=frame); mlay.root=frame.derH  # init
+        frame.derH = CH(H=[mlay], md_t=deepcopy(mlay.md_t), pm=mlay.pm, pd=mlay.pd, rdn=mlay.rdn, n=mlay.n, root=frame); mlay.root=frame.derH  # init
         vd = d - ave_d * r
         if vd > 0:
             for L in L_:
@@ -50,12 +50,12 @@ def cluster_N_(root, L_, fd, nest=1):  # top-down segment L_ by >ave ratio of L.
 
     L_ = sorted(L_, key=lambda x: x.dist, reverse=True)  # lower-dist links
     _L = L_[0]
-    N_, et = {*_L.nodet}, _L.derH.Et
+    N_, pm = {*_L.nodet}, _L.pm
     # current dist segment:
     for i, L in enumerate(L_[1:], start=1):  # long links first
         rel_dist = _L.dist / L.dist  # >1
-        if rel_dist < ave_rL or et[0] < ave or len(L_[i:]) < ave_L:  # ~=dist Ns or either side of L is weak
-            _L = L; et += L.derH.Et
+        if rel_dist < ave_rL or pm < ave or len(L_[i:]) < ave_L:  # ~=dist Ns or either side of L is weak
+            _L = L; pm += L.pm
             for n in L.nodet: N_.add(n)  # in current dist span
         else: break  # terminate contiguous-distance segment
     min_dist = _L.dist
@@ -75,7 +75,7 @@ def cluster_N_(root, L_, fd, nest=1):  # top-down segment L_ by >ave ratio of L.
                         # if L.derH.Et[0]/ave * n.extH m/ave or L.derH.Et[0] + n.extH m*.1: density?
                         eN_.update([n for n in L.nodet if len(n.root_) <= nest])
                         if L.dist >= min_dist:
-                            link_.add(L); et += L.derH.Et
+                            link_.add(L); et[0] += L.pm; et[1] += L.pd; et[2] += L.rdn
             _eN_ = eN_
         sub_L_ = set()  # form subG_ from shorter-L seg per Gt, depth-first:
         for N in node_:  # cluster in N_
@@ -112,7 +112,7 @@ def get_exemplar_(frame):
         mA = comp_area(_N.box, N.box)[0]
         mLat = comp_latuple(_N.latuple, N.latuple, rn,fagg=1)[1][0]
         mLay = comp_md_(_N.mdLay[0], N.mdLay[0], rn)[1][0]
-        mderH = _N.derH.comp_H(N.derH, rn).Et[0] if _N.derH and N.derH else 0
+        mderH = _N.derH.comp_H(N.derH, rn).pm if _N.derH and N.derH else 0
         # comp node_?
         # comp alt_graph_, from converted adjacent flat blobs?
         return mL + mA + mLat + mLay + mderH
@@ -137,10 +137,11 @@ def get_exemplar_(frame):
 
         C = CG()
         for n,_ in node_:
-            C.n += n.n; C.rng = n.rng; C.aRad += n.aRad; C.box = extend_box(C.box, n.box)  # typo?
+            C.n += n.n; C.rng = n.rng; C.aRad += n.aRad; C.box = extend_box(C.box, n.box)
             C.latuple += n.latuple; C.mdLay += n.mdLay; C.derH.add_H(n.derH); C.extH.add_H(n.extH)
+            C.pm += n.pm; C.pd += n.pd; C.rdn += n.rdn
         # get averages:
-        k = len(node_); C.n /= k; C.latuple /= k; C.mdLay /= k; C.aRad /= k; C.derH.norm_(k)  # derH/= k
+        k = len(node_); C.n /= k; C.latuple /= k; C.mdLay /= k; C.aRad /= k; C.pm /= k; C.pd /= k; C.rdn /= k; C.derH.norm_(k)  # derH/= k
         return C
 
     def eval_overlap(N):
@@ -154,7 +155,7 @@ def get_exemplar_(frame):
                     dy,dx = np.subtract(_N.yx,N.yx)  # no dist eval
                     Link = comp_N(_N,N, _N.n/N.n, angle=[dy,dx], dist=np.hypot(dy,dx))
                     minN, r = (_N,_ref) if N.M > _N.M else (N,ref)
-                    if Link.derH.pd < ave_d:  # exemplars are similar, remove min
+                    if Link.pd < ave_d:  # exemplars are similar, remove min
                         minN.Rim.remove(r); minN.M -= Link.derH.pm
                         if N is minN: fadd = 0
                     else:  # exemplars are different, keep both
@@ -189,13 +190,13 @@ def get_exemplar_(frame):
                 centroid_cluster(N)  # refine N.Rim
         exemplar_ = []
         for N in N_:
-            if eval_overlap(N) and N.M > ave * 10:
+            if eval_overlap(N) and N.M > ave * N.Mr:
                 exemplar_ += [N]
         return exemplar_
 
     N_ = frame.subG_  # complemented Gs: m-type core + d-type contour
     for N in N_:
-        N.perim = set(); N.Rim = set(); N.root_ += [frame]; N.M = 0; N.compared_ = []  # init compared_
+        N.perim = set(); N.Rim = set(); N.root_ += [frame]; N.M = 0; N.compared_ = []; N.Mr = 0  # init compared_
     xcomp_(N_)
     frame.subG_ = prune_overlap(N_)  # select strong Ns as exemplars of their Rim
     if len(frame.subG_) > ave_L:

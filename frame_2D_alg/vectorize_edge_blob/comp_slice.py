@@ -208,7 +208,9 @@ def sum2PP(root, P_, dP_):  # sum links in Ps and Ps in PP
             box = accum_box(box,y,x)
     y0,x0,yn,xn = box
     # derH = [mdLay]
-    PPt = [root, P_, link_, mdLay, latuple, A, S, area, box, [(y0+yn)/2,(x0+xn)/2], n]
+    if isinstance(root, list):  rrdn = root[-2]  # root rdn from PPm
+    else:                       rrdn = 1         # default rrdn from blob
+    PPt = [root, P_, link_, mdLay, latuple, A, S, area, box, [(y0+yn)/2,(x0+xn)/2], rrdn+1, n]  # increase rdn per subdivision
     for P in P_: P.root = PPt
 
     return PPt
