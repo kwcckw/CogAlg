@@ -24,9 +24,6 @@ def agg_cluster_(frame):  # breadth-first (node_,L_) cross-comp, clustering, rec
                 get_exemplar_(frame)  # may call centroid clustering
     '''
     cross-comp converted edges, then GGs, GGGs, etc, interlaced with exemplar selection 
-    Et = [proj_m, proj_d, rdn]:
-    proj_d = abs d * (m/ave): must be <m, proportional borrow from co-projected m
-    proj_m = m - proj_d / 2: bidir, and rdn is external
     '''
     N_,L_,(m,d,r) = comp_node_(frame.subG_)  # exemplars, extrapolate to their Rims?
     if m > ave * r:
@@ -121,7 +118,8 @@ def get_exemplar_(frame):
         return mL + mA + mLat + mLay + mderH
 
     def xcomp_(N_):  # initial global cross-comp
-        for g in N_: g.M = 0  # setattr
+        for g in N_: # setattr
+            g.M = 0; g.Mr = 1
 
         for _G, G in combinations(N_, r=2):
             rn = _G.n/G.n
@@ -150,18 +148,18 @@ def get_exemplar_(frame):
         for ref in copy(N.Rim):
             _N, _m = ref
             if _N in N.compared_: continue  # also skip in next agg+
-            N.compared_ += [_N]; _N.compared_ += [N]  # should be bilateral
+            N.compared_ += [_N]; _N.compared_ += [N]
             for _ref in copy(_N.Rim):
                 if _ref[0] is N:  # reciprocal to ref
                     dy,dx = np.subtract(_N.yx,N.yx)  # no dist eval
                     Link = comp_N(_N,N, _N.n/N.n, angle=[dy,dx], dist=np.hypot(dy,dx))
-                    m,d,r = Link.derH.Et
-                    if d < ave_d * r:  # exemplars are similar, remove min
-                        minN,r,v = (_N,_ref,_m) if N.M > _N.M else (N,ref,m)
-                        minN.Rim.remove(r); minN.M -= v
+                    minN, r = (_N,_ref) if N.M > _N.M else (N,ref)
+                    if Link.derH.pd < ave_d:  # exemplars are similar, remove min
+                        minN.Rim.remove(r); minN.M -= Link.derH.pm
                         if N is minN: fadd = 0
                     else:  # exemplars are different, keep both
-                        _N.extH.add_H(Link.derH), N.extH.add_H(Link.derH)  # link.derH here?
+                        if N is minN: N.Mr += 1
+                        _N.extH.add_H(Link.derH), N.extH.add_H(Link.derH)
                     break
         return fadd
 
