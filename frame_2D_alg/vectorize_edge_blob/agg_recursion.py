@@ -124,19 +124,17 @@ def get_exemplar_(frame):
             rn = _G.n/G.n
             if rn > ave_rn: continue  # scope disparity
             # use regular comp_N and compute Links, we don't need to compare again in eval_overlap?
-            M,R = comp_cN(_G, G)
-            vM = M - ave * R
-            for _g,g in (_G,G),(G,_G):
-                if vM > 0:
-                    g.perim.add((_g,M))  # loose match ref (unilateral link)
-                    if vM > ave * R:
-                        g.Rim.add((_g,M))  # strict match ref
-                        g.M += M
-
+            dy,dx = np.subtract(_G.yx,G.yx)  # no dist eval
+            Link = comp_N(_G,G, _G.n/G.n, angle=[dy,dx], dist=np.hypot(dy,dx))
+            # non selective, will be prune in centrtoid_cluster later
+            for N in (_G, G):
+                N.Rim.add(Link)
+                N.M += Link.derH.Et[0]
+ 
     def centroid(node_):  # sum and average Rim nodes
 
         C = CG()
-        for n,_ in node_:
+        for n in node_:
             C.n += n.n; C.Et += n.Et; C.rng = n.rng; C.aRad += n.aRad; C.box = extend_box(C.box,n.box)
             C.latuple += n.latuple; C.mdLay += n.mdLay; C.derH.add_H(n.derH); C.extH.add_H(n.extH)
         # get averages:
@@ -144,40 +142,41 @@ def get_exemplar_(frame):
         return C
 
     def centroid_cluster(N):  # refine Rim to convergence
-        _Rim,_perim,_M = N.Rim, N.perim, N.M  # no need for Mr here?
+        _Rim, _peRim,_M = N.Rim, N.Rim, N.M  # no need for Mr here? I think we need it in the dM eval below?
 
         dM = ave + 1
-        while dM > ave:
-            Rim, perim, M = set(), set(), 0
-            C = centroid(_Rim)
-            for ref in _perim:
-                _N,m = ref
+        while dM > ave * max(1, N.Mr):
+            Rim, peRim, M = set(), set(),  0
+            C = centroid({n for L in _Rim for n in L.nodet})
+            for L in _peRim:
+                _N, m = L.nodet[0] if L.nodet[1] is N else L.nodet[1], L.derH.Et[0]
                 mm,rr = comp_cN(C,_N)
                 if mm > ave * rr:
-                    perim.add((_N,m))
+                    peRim.add(L)
                     if mm > ave * rr * 10:  # copy ref from perim to Rim
-                        Rim.add(ref); M += m
+                        Rim.add(L); M += m
             dM = M - _M
-            _node_,_peri_,_M = Rim, perim, M
+            _Rim,_peRim,_M = Rim, peRim, M
 
-        N.Rim, N.perim, N.M = list(Rim),list(perim), M
+        N.Rim, _peRim, N.M = list(Rim),list(peRim), M
 
     def eval_overlap(N):  # check for reciprocal refs in _Ns, compare to diffs, remove the weaker ref if <ave diff
 
         fadd = 1
-        for ref in copy(N.Rim):
-            _N, _m = ref
+        for L in copy(N.Rim):
+            _N, _m = L.nodet[0] if L.nodet[1] is N else L.nodet[1], L.derH.Et[0]
             if _N in N.compared_: continue  # also skip in next agg+
             N.compared_ += [_N]; _N.compared_ += [N]
-            for _ref in copy(_N.Rim):
-                if _ref[0] is N:  # reciprocal to ref
+            for _L in copy(_N.Rim):
+                __N, __m = _L.nodet[0] if _L.nodet[1] is _N else _L.nodet[1], _L.derH.Et[0]
+                if __N is N:  # reciprocal to ref
                     dy,dx = np.subtract(_N.yx,N.yx)  # no dist eval
                     # replace Rim refs with links in xcomp_, instead of comp_N here?
                     Link = comp_N(_N,N, _N.n/N.n, angle=[dy,dx], dist=np.hypot(dy,dx))
-                    minN, r = (_N,_ref) if N.M > _N.M else (N,ref)
+                    minN, minL = (_N,_L) if N.M > _N.M else (N,L)
                     if Link.derH.Et[1] < ave_d:
                         # exemplars are similar, remove min
-                        minN.Rim.remove(r); minN.M -= Link.derH.pm
+                        minN.Rim.remove(minL); minN.M -= Link.derH.Et[0]
                         if N is minN: fadd = 0
                     else:  # exemplars are different, keep both
                         if N is minN: N.Mr += 1

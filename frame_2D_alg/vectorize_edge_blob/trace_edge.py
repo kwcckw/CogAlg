@@ -105,8 +105,8 @@ class CH(CBase):  # generic derivation hierarchy of variable nesting: extH | der
         return HE
 
     def copy_(_He, root, rev=0):  # comp direction may be reversed
-        He = CH(root=root, node_=copy(_He.node_), Et=copy(_He.Et), n=_He.n, i=_He.i, i_=copy(_He.i_))
-
+        He = CH(root=root, node_=copy(_He.node_), n=_He.n, i=_He.i, i_=copy(_He.i_))
+        if hasattr(_He, 'Et'): He.Et = copy(_He.Et)
         He.md_t = deepcopy(_He.md_t)
         if rev:
             for md_,_,_ in He.md_t:  # mdExt, possibly mdLat, mdLay
@@ -142,7 +142,7 @@ class CH(CBase):  # generic derivation hierarchy of variable nesting: extH | der
         for md_ in He.md_t: md_ /= n
         for lay in He.H: lay.norm_(n)
         He.n /= n
-        He.Et /= n
+        if hasattr(He, 'Et'): He.Et /= n
 
     # not implemented yet:
     def sort_H(He, fd):  # re-assign rdn and form priority indices for comp_H, if selective and aligned
@@ -242,7 +242,7 @@ def intra_edge(edge):
         Gt_ = []
         N_ = copy(edge.link_ if fd else edge.subG_)
         while N_:  # flood fill
-            node_,link_, et = [],[], np.zeros(2)
+            node_,link_, et = [],[], np.zeros(3)
             N = N_.pop(); _eN_ = [N]
             while _eN_:
                 eN_ = []
@@ -275,9 +275,10 @@ def intra_edge(edge):
                 L.extH = CH(); L.root_= [edge]
             # comp dPP_:
             lN_,lL_,_ = comp_link_(L_)
-            edge.derH.append_(CH().add_H([L.derH for L in lL_]))  # dfork
-            if len(lN_) > ave_L:  # if vd?
-                connect_PP_(edge, fd=1)
+            if lL_:  # lL_ and lN_ may empty
+                edge.derH.append_(CH().add_H([L.derH for L in lL_]))  # dfork
+                if len(lN_) > ave_L:  # if vd?
+                    connect_PP_(edge, fd=1)
 
 def comp_node_(_N_):  # rng+ forms layer of rim and extH per N, appends N_,L_,Et, ~ graph CNN without backprop
 
@@ -302,7 +303,9 @@ def comp_node_(_N_):  # rng+ forms layer of rim and extH per N, appends N_,L_,Et
             nrim = {L.nodet[1] if L.nodet[0] is G else L.nodet[0] for L,_ in G.rim}
             if _nrim & nrim:  # indirectly connected Gs,
                 continue     # no direct match priority?
-            M = (_G.mdLay[1][0]+G.mdLay[1][0]) *icoef**2 + (_G.derH.Et[0]+G.derH.Et[0])*icoef + (_G.extH.Et[0]+G.extH.Et[0])
+            M = (_G.mdLay[1][0]+G.mdLay[1][0]) *icoef**2 
+            if hasattr(G.extH, 'Et'): M += _G.extH.Et[0]+G.extH.Et[0]
+            if hasattr(G.derH, 'Et'): M += (_G.derH.Et[0]+G.derH.Et[0])*icoef 
             M += (_G.M + G.M) * icoef  # if centroids
             if dist < max_dist * (radii * icoef**3) * M:
                 Link = comp_N(_G,G, rn,angle=[dy,dx],dist=dist)
@@ -328,7 +331,7 @@ def comp_link_(iL_):  # comp CLs via directional node-mediated link tracing: der
         # init mL_t (mediated Ls) per L:
         for rev, n, mL_ in zip((0,1), L.nodet, L.mL_t):
             for _L,_rev in n.rimt[0]+n.rimt[1] if fd else n.rim:
-                if _L is not L and _L.derH.Et[0] > ave * _L.rdn:
+                if _L is not L and _L.derH.Et[0] > ave * _L.derH.Et[2]:
                     mL_ += [(_L, rev ^_rev)]  # the direction of L relative to _L
     _L_, out_L_, LL_, ET = iL_,set(),[], np.array([.0,.0,1.0])  # out_L_: positive subset of iL_
     med = 1
@@ -405,7 +408,7 @@ def comp_N(_N,N, rn, angle=None, dist=None, dir=None):  # dir if fd, Link.derH=d
         mdLay = comp_md_(_N.mdLay[0], N.mdLay[0], rn, dir)
         md_t += [mdlat,mdLay]; Et += mdlat[1] + mdLay[1]; n += mdlat[2] + mdLay[2]
     # | n = (_n+n)/2?
-    np.append(Et, (_N.Et[2]+N.Et[2])/2 )  # Et[0] += ave_rn - rn?
+    Et = np.append(Et, (_N.Et[2]+N.Et[2])/2 )  # Et[0] += ave_rn - rn?
     subLay = CH(n=n, md_t=md_t); subLay.Et=Et
     elay = CH(H=[subLay], n=n, md_t=deepcopy(md_t)); elay.Et=copy(Et)
     if _N.derH and N.derH:
