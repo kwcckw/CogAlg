@@ -118,77 +118,81 @@ def get_exemplar_(frame):
         return mL+mA+mLat+mLay+HEt[0], HEt[2]
 
     def xcomp_(N_):  # initial global cross-comp
-        for g in N_: g.M, g.Mr = 0,0  # setattr
+        for g in N_: g.M, g.Mr, g.sign = 0,0,1  # setattr
 
         for _G, G in combinations(N_, r=2):
             rn = _G.n/G.n
             if rn > ave_rn: continue  # scope disparity
-            # use regular comp_N and compute Links, we don't need to compare again in eval_overlap?
-            dy,dx = np.subtract(_G.yx,G.yx)  # no dist eval
-            Link = comp_N(_G,G, _G.n/G.n, angle=[dy,dx], dist=np.hypot(dy,dx))
-            # non selective, will be prune in centrtoid_cluster later
-            for N in (_G, G):
-                N.Rim.add(Link)
-                N.M += Link.derH.Et[0]
- 
-    def centroid(node_):  # sum and average Rim nodes
+            link = comp_N(_G, G, rn)
+            m,d,r = link.Et
+            vM = m - ave * r
+            for _g,g in (_G,G),(G,_G):
+                if vM > 0:
+                    g.perim.add(link)  # loose match
+                    if vM > ave * r:  # strict match
+                        g.Rim.add((link)); g.M+=m; g.Mr+=r
 
-        C = CG()
+    def centroid(node_, C=CG()):  # sum|subtract and average Rim nodes
+
         for n in node_:
-            C.n += n.n; C.Et += n.Et; C.rng = n.rng; C.aRad += n.aRad; C.box = extend_box(C.box,n.box)
-            C.latuple += n.latuple; C.mdLay += n.mdLay; C.derH.add_H(n.derH); C.extH.add_H(n.extH)
+            s = n.sign
+            C.n += n.n * s; C.Et += n.Et * s; C.rng = n.rng * s; C.aRad += n.aRad * s
+            C.latuple += n.latuple * s; C.mdLay += n.mdLay * s
+            C.derH.add_H(n.derH); C.extH.add_H(n.extH); C.box = extend_box(C.box,n.box)
+            # need to add sign in add_H and extend_box to remove instead adding?
         # get averages:
         k = len(node_); C.n/=k; C.Et/=k; C.latuple/=k; C.mdLay/=k; C.aRad/=k; C.derH.norm_(k) # derH/=k
         return C
 
-    def centroid_cluster(N):  # refine Rim to convergence
-        _Rim, _peRim,_M = N.Rim, N.Rim, N.M  # no need for Mr here? I think we need it in the dM eval below?
+    def refine_by_centroid(N):  # refine Rim to convergence
 
-        dM = ave + 1
-        while dM > ave * max(1, N.Mr):
-            Rim, peRim, M = set(), set(),  0
-            C = centroid({n for L in _Rim for n in L.nodet})
-            for L in _peRim:
-                _N, m = L.nodet[0] if L.nodet[1] is N else L.nodet[1], L.derH.Et[0]
+        _perim,_M = N.perim, N.M  # no use for Mr
+        node_ = {n for L in N.Rim for n in L.nodet } | {N}
+        C = centroid(node_)
+        while True:
+            dnode_, Rim, perim, M = set(), set(), set(), 0
+            for link in _perim:
+                _N, m = link.nodet[0] if link.nodet[1] is N else link.nodet[1], link.derH.Et[0]
                 mm,rr = comp_cN(C,_N)
                 if mm > ave * rr:
-                    peRim.add(L)
-                    if mm > ave * rr * 10:  # copy ref from perim to Rim
-                        Rim.add(L); M += m
-            dM = M - _M
-            _Rim,_peRim,_M = Rim, peRim, M
+                    perim.add(link)
+                    if mm > ave * rr * 2:
+                        Rim.add(link); M += m  # copy link from perim to Rim
+                        if _N not in node_:
+                            node_.add(_N); _N.sign=1; dnode_.add(_N)
+                    elif _N in node_:
+                        Rim.remove(link); M -= m
+                        node_.remove(_N); _N.sign=-1; dnode_.add(_N)  # sign=-1 to remove in centroid()
+            if M / _M < 1.2:
+                break  # convergence
+            C = centroid(dnode_, C)
+            _Rim,_perim,_M = Rim, perim, M
 
-        N.Rim, _peRim, N.M = list(Rim),list(peRim), M
+        N.Rim, N.perim, N.M = list(Rim),list(perim), M
 
-    def eval_overlap(N):  # check for reciprocal refs in _Ns, compare to diffs, remove the weaker ref if <ave diff
+    def eval_overlap(N):  # check for shared links in _N.Rims, compare to diffs, remove link from the weaker N if <ave diff
 
         fadd = 1
-        for L in copy(N.Rim):
-            _N, _m = L.nodet[0] if L.nodet[1] is N else L.nodet[1], L.derH.Et[0]
-            if _N in N.compared_: continue  # also skip in next agg+
-            N.compared_ += [_N]; _N.compared_ += [N]
-            for _L in copy(_N.Rim):
-                __N, __m = _L.nodet[0] if _L.nodet[1] is _N else _L.nodet[1], _L.derH.Et[0]
-                if __N is N:  # reciprocal to ref
-                    dy,dx = np.subtract(_N.yx,N.yx)  # no dist eval
-                    # replace Rim refs with links in xcomp_, instead of comp_N here?
-                    Link = comp_N(_N,N, _N.n/N.n, angle=[dy,dx], dist=np.hypot(dy,dx))
-                    minN, minL = (_N,_L) if N.M > _N.M else (N,L)
-                    if Link.derH.Et[1] < ave_d:
-                        # exemplars are similar, remove min
-                        minN.Rim.remove(minL); minN.M -= Link.derH.Et[0]
-                        if N is minN: fadd = 0
-                    else:  # exemplars are different, keep both
-                        if N is minN: N.Mr += 1
-                        _N.extH.add_H(Link.derH), N.extH.add_H(Link.derH)
-                    break
+        for link in copy(N.Rim):
+            _N, _m = link.nodet[0] if link.nodet[1] is N else link.nodet[1], link.derH.Et[0]
+            if link in _N.Rim:
+                minN,maxN = (_N,N) if (N.M - ave*N.Mr) > (_N.M - ave*_N.Mr) else (N,_N)
+                if link.derH.Et[1] < ave_d * link.derH.Et[2]:
+                    # exemplars are similar, remove min
+                    minN.Rim.remove(link); minN.M -= link.derH.Et[0]; minN.M -= link.derH.Et[0]
+                    if N is minN: fadd = 0
+                else:  # exemplars are different, keep both
+                    if N is minN: N.Mr += 1
+                    minN.extH.add_H(link.derH)
+                maxN.extH.add_H(link.derH)
+                break
         return fadd
 
     def prune_overlap(N_):  # select Ns with M > ave * Mr
 
         for N in N_:  # connectivity cluster N.Rim may be represented by multiple sufficiently different exemplars
             if N.M > ave * 10:  # or if len(N.perim) / len(N.Rim) > ave_L?
-                centroid_cluster(N)  # refine N.Rim
+                refine_by_centroid(N)  # refine N.Rim
         exemplar_ = []
         for N in N_:
             if eval_overlap(N) and N.M + N.Et[0] > ave * (N.Et[2] + N.Mr/len(N.Rim)):  # normalize Mr
