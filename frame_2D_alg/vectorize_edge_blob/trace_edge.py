@@ -159,13 +159,13 @@ class CH(CBase):  # generic derivation hierarchy of variable nesting: extH | der
 
 class CG(CBase):  # PP | graph | blob: params of single-fork node_ cluster
 
-    def __init__(G, rng=1, fd=0, n=0, Et=np.array([.0,.0,1.0]), root_=[], node_=[], link_=[], box=None, yx=None,
+    def __init__(G, rng=1, fd=0, n=0, Et=None, root_=[], node_=[], link_=[], box=None, yx=None,
                  latuple=None, mdLay=None, derH=None, extH=None, subG_=None, altG=None, subL_=None, minL=None):
         super().__init__()
         G.n = n  # last layer?
         G.M = 0  # Rim val for centroid Gs
         G.fd = 0 if fd else fd  # 1 if cluster of Ls | lGs?
-        G.Et = Et  # sum all param Ets
+        G.Et = np.array([.0,.0,1.0]) if Et is None else Et  # sum all param Ets
         G.rng = rng
         G.root_ = [] if root_ is None else root_  # in cluster_N_, same nodes may be in multiple dist layers
         G.node_ = [] if node_ is None else node_  # convert to GG_ or node_H in agg++
@@ -174,7 +174,7 @@ class CG(CBase):  # PP | graph | blob: params of single-fork node_ cluster
         G.subL_ = [] if subL_ is None else subL_  # selectively clustered link_
         G.minL = 0 if minL is None else minL  # min link.dist in subG
         G.latuple = np.array([.0,.0,.0,.0,.0,np.zeros(2)],dtype=object) if latuple is None else latuple  # lateral I,G,M,Ma,L,[Dy,Dx]
-        G.mdLay = np.array([np.zeros(12), np.zeros(2), 0],dtype=object) if mdLay is None else mdLay  # mdLat, et, n
+        G.mdLay = np.array([np.zeros(12), np.zeros(3), 0],dtype=object) if mdLay is None else mdLay  # mdLat, et, n
         # maps to node_H / agg+|sub+:
         G.derH = CH() if derH is None else derH  # sum from nodes, then append from feedback
         G.extH = CH() if extH is None else extH  # sum from rim_ elays, H maybe deleted
@@ -192,7 +192,7 @@ class CG(CBase):  # PP | graph | blob: params of single-fork node_ cluster
 class CL(CBase):  # link or edge, a product of comparison between two nodes or links
     name = "link"
 
-    def __init__(l, nodet=None, dist=None, derH=None, angle=None, box=None, H_=None, n=None, yx=None):
+    def __init__(l, nodet=None, Et=None, dist=None, derH=None, angle=None, box=None, H_=None, n=None, yx=None):
         super().__init__()
         # CL = binary tree of Gs, depth+/der+: CL nodet is 2 Gs, CL + CLs in nodet is 4 Gs, etc., unpack sequentially
         l.n = 1 if n is None else n  # min(node_.n)
@@ -202,7 +202,7 @@ class CL(CBase):  # link or edge, a product of comparison between two nodes or l
         l.dist = 0 if dist is None else dist  # distance between nodet centers
         l.box = [] if box is None else box  # sum nodet, not needed?
         l.yx = [0,0] if yx is None else yx
-        l.Et = np.array([.0,.0,1.0])  # for rim-overlap modulated segmentation
+        l.Et = np.array([.0,.0,1.0]) if Et is None else Et  # for rim-overlap modulated segmentation
         l.H_ = [] if H_ is None else H_  # if agg++| sub++?
         # add med, rimt, elay | extH in der+
     def __bool__(l): return bool(l.derH.H)
@@ -378,9 +378,12 @@ def comp_link_(iL_):  # comp CLs via directional node-mediated link tracing: der
             break
     return out_L_, LL_, ET[0]
 
-def extend_box(_box, box):  # extend box with another box
+def extend_box(_box, box, sign=1):  # extend box with another box
     y0, x0, yn, xn = box; _y0, _x0, _yn, _xn = _box
-    return min(y0, _y0), min(x0, _x0), max(yn, _yn), max(xn, _xn)
+    if sign:
+        return min(y0, _y0), min(x0, _x0), max(yn, _yn), max(xn, _xn)
+    else:  # not sure, for negative sign, select the other way around? Meeaning it's selecting a box with lower coverage area
+        return max(y0, _y0), max(x0, _x0), min(yn, _yn), min(xn, _xn)
 
 def comp_area(_box, box):
     _y0,_x0,_yn,_xn =_box; _A = (_yn - _y0) * (_xn - _x0)
@@ -417,12 +420,12 @@ def comp_N(_N,N, rn, angle=None, dist=None, dir=None):  # dir if fd, Link.derH=d
     elif _N.derH: elay.H += [_N.derH.copy_(root=elay)]  # one empty derH
     elif N.derH: elay.H += [N.derH.copy_(root=elay,rev=1)]
     # spec: comp_node_(node_|link_), combinatorial, node_ may be nested with rng-)agg+, graph similarity search?
-    Et = elay.Et
+    Et = copy(elay.Et)
     if not fd and _N.altG and N.altG:  # not for CL, eval M?
         altLink = comp_N(_N.altG, N.altG, _N.altG.n/N.altG.n)  # no angle,dist, init alternating PPds | dPs?
         elay.altH = altLink.derH
         Et += elay.altH.Et
-    Link = CL(nodet=[_N,N],derH=elay, n=min(_N.n,N.n),yx=np.add(_N.yx,N.yx)/2, angle=angle,dist=dist,box=extend_box(N.box,_N.box))
+    Link = CL(nodet=[_N,N],derH=elay, n=min(_N.n,N.n),yx=np.add(_N.yx,N.yx)/2, angle=angle,dist=dist,box=extend_box(N.box,_N.box),Et=Et)  # we need to add Et into Link too
     if Et[0] > ave * Et[2]:
         elay.root = Link
         for rev, node in zip((0,1), (N,_N)):  # reverse Link direction for _N
@@ -475,7 +478,9 @@ def sum_G_(node_):
     G = CG()
     for n in node_:
         G.n += n.n; G.rng = n.rng; G.aRad += n.aRad; G.box = extend_box(G.box, n.box)
-        G.latuple += n.latuple; G.mdLay += n.mdLay; G.derH.add_H(n.derH); G.extH.add_H(n.extH)
+        G.latuple += n.latuple; G.mdLay += n.mdLay; 
+        if n.derH: G.derH.add_H(n.derH)
+        if n.extH: G.extH.add_H(n.extH)
     return G
 
 if __name__ == "__main__":

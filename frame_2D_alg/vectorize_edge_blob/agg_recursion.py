@@ -112,7 +112,7 @@ def get_exemplar_(frame):
         mA = comp_area(_N.box, N.box)[0]
         mLat = comp_latuple(_N.latuple, N.latuple, rn,fagg=1)[1][0]
         mLay = comp_md_(_N.mdLay[0], N.mdLay[0], rn)[1][0]
-        HEt = _N.derH.comp_H(N.derH, rn).Et if _N.derH and N.derH else np.zeros(3)
+        HEt = _N.derH.comp_H(N.derH, rn).Et if _N.derH and N.derH else np.array([0,0,1.])  # r can't be zero? Else ave becomes zero after ave*rr
         # comp node_, comp altG from converted adjacent flat blobs?
 
         return mL+mA+mLat+mLay+HEt[0], HEt[2]
@@ -137,11 +137,14 @@ def get_exemplar_(frame):
         for n in node_:
             s = n.sign
             C.n += n.n * s; C.Et += n.Et * s; C.rng = n.rng * s; C.aRad += n.aRad * s
-            C.latuple += n.latuple * s; C.mdLay += n.mdLay * s
-            C.derH.add_H(n.derH); C.extH.add_H(n.extH); C.box = extend_box(C.box,n.box)
+            C.latuple += n.latuple * s; C.mdLay += n.mdLay * s; 
+            C.box = extend_box(C.box,n.box,s)
+            if n.derH: C.derH.add_H(n.derH.copy_(root=n, rev=-s))  # else it's empty and nothing to add
+            if n.extH: C.extH.add_H(n.extH.copy_(root=n, rev=-s))  # use rev is sufficient for different sign?
             # need to add sign in add_H and extend_box to remove instead adding?
         # get averages:
-        k = len(node_); C.n/=k; C.Et/=k; C.latuple/=k; C.mdLay/=k; C.aRad/=k; C.derH.norm_(k) # derH/=k
+        k = len(node_); C.n/=k; C.Et/=k; C.latuple/=k; C.mdLay/=k; C.aRad/=k
+        if C.derH: C.derH.norm_(k) # derH/=k
         return C
 
     def refine_by_centroid(N):  # refine Rim to convergence
@@ -159,10 +162,12 @@ def get_exemplar_(frame):
                     if mm > ave * rr * 2:
                         Rim.add(link); M += m  # copy link from perim to Rim
                         if _N not in node_:
-                            node_.add(_N); _N.sign=1; dnode_.add(_N)
+                            node_.add(_N); _N.sign=1
                     elif _N in node_:
-                        Rim.remove(link); M -= m
-                        node_.remove(_N); _N.sign=-1; dnode_.add(_N)  # sign=-1 to remove in centroid()
+                        # Rim.remove(link)  (This should not possible? Rim is init empty above, and we only loop link once here)
+                        M -= m
+                        node_.remove(_N); _N.sign=-1  # sign=-1 to remove in centroid()                        
+                    dnode_.add(_N)  # this should be default for mm eval above?
             if M / _M < 1.2:
                 break  # convergence
             C = centroid(dnode_, C)
@@ -195,7 +200,9 @@ def get_exemplar_(frame):
                 refine_by_centroid(N)  # refine N.Rim
         exemplar_ = []
         for N in N_:
-            if eval_overlap(N) and N.M + N.Et[0] > ave * (N.Et[2] + N.Mr/len(N.Rim)):  # normalize Mr
+            # N.Rim maybe removed in eval_overlap, so the normalize is not accurate anymore?
+            # also N.Rim may become empty when N is `_N` and minN  in eval_overlap. Without Rim, they can't be exemplar?
+            if eval_overlap(N) and N.Rim and N.M + N.Et[0] > ave * (N.Et[2] + N.Mr/len(N.Rim)):  # normalize Mr
                 exemplar_ += [N]
         return exemplar_
 
