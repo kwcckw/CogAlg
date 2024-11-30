@@ -113,16 +113,17 @@ def get_exemplar_(frame):
             rn = _G.n/G.n
             if rn > ave_rn: continue  # scope disparity
             link = comp_N(_G, G, rn)
-            m,d,r = link.Et
+            m,d,r = link.derH.Et  # link doesn't have Et until they become node
             vM = m - ave * r
             for _g,g in (_G,G),(G,_G):
                 if vM > 0:
                     g.perim.add(link)  # loose match
                     if vM > ave * r:  # strict match
-                        g.Rim.add(link); g.M+=m; g.Mr+=r
+                        g.Rim.add(link); g.M+=m; g.Mr+=r  # why Mr is added here too? It should be incremented for redundancy in overlapped Gs only?
 
-    def centroid(node_, C=CG()):  # sum|subtract and average Rim nodes
+    def centroid(node_, bnode_, C=None):  # sum|subtract and average Rim nodes
 
+        if C is None: C = CG()  # we need to init here, else all C init in the function will be having a same reference
         for n in node_:
             s = n.sign
             C.n += n.n * s; C.Et += n.Et * s; C.rng = n.rng * s; C.aRad += n.aRad * s
@@ -132,6 +133,7 @@ def get_exemplar_(frame):
         # get averages:
         k = len(node_); C.n/=k; C.Et/=k; C.latuple/=k; C.mdLay/=k; C.aRad/=k
         if C.derH: C.derH.norm_(k)  # derH/=k
+        C.box = reduce(extend_box, (n.box for n in bnode_))
         return C
 
     def comp_C(_N, N):  # compute match without new derivatives: global cross-comp is not directional
@@ -150,7 +152,7 @@ def get_exemplar_(frame):
 
         _perim,_M = N.perim, N.M  # no use for Mr
         node_ = {n for L in N.Rim for n in L.nodet} | {N}
-        C = centroid(node_); C.box = reduce(extend_box, (n.box for n in node_))
+        C = centroid(node_, node_)
         while True:
             dnode_, Rim, perim, M = set(), set(), set(), 0
             for link in _perim:
@@ -163,11 +165,11 @@ def get_exemplar_(frame):
                         if _N not in node_:
                             node_.add(_N); _N.sign=1; dnode_.add(_N)
                     elif _N in node_:
-                        Rim.remove(link); M -= m
-                        node_.remove(_N); _N.sign=-1; dnode_.add(_N)  # sign=-1 to remove in centroid()
+                        if link in Rim: Rim.remove(link)  # this link may not always in Rim since it maybe packed in perim only
+                        M -= m; node_.remove(_N); _N.sign=-1; dnode_.add(_N)  # sign=-1 to remove in centroid() 
             if M / _M < 1.2:
                 break  # convergence
-            C = centroid(dnode_,C); C.box = reduce(extend_box, (n.box for n in node_))
+            C = centroid(dnode_,node_,C)
             _Rim,_perim,_M = Rim, perim, M
 
         N.Rim, N.perim, N.M = list(Rim),list(perim), M
@@ -185,8 +187,8 @@ def get_exemplar_(frame):
                     if N is minN: fadd = 0
                 else:  # exemplars are different, keep both
                     if N is minN: N.Mr += 1
-                    minN.extH.add_H(link.derH)
-                maxN.extH.add_H(link.derH)
+                    minN.extH.add_H(link.derH); minN.Et += link.derH.Et  # pack Et with extH.Et too?
+                maxN.extH.add_H(link.derH); maxN.Et += link.derH.Et
                 break
         return fadd
 

@@ -64,7 +64,7 @@ class CH(CBase):  # generic derivation hierarchy of variable nesting: extH | der
         # He.nest = 0 if nest is None else nest  # nesting in H
     def __bool__(H): return H.n != 0
 
-    def add_lay(HE, He, sign):
+    def add_lay(HE, He, sign=1):
 
         for Md_, md_ in zip(HE.md_t, He.md_t):  # [mdExt, possibly mdLat, mdLay]
             Md_ += md_ * sign
@@ -77,17 +77,17 @@ class CH(CBase):  # generic derivation hierarchy of variable nesting: extH | der
             if HE:
                 for i, (Lay,lay) in enumerate(zip_longest(HE.H, He.H, fillvalue=None)):  # cross comp layer
                     if lay:
-                        if Lay: Lay.add_H(lay)
+                        if Lay: Lay.add_H(lay,sign=sign)
                         else:
-                            if Lay is None: HE.append_(lay.copy_(root=HE))  # pack a copy of new lay in HE.H
-                            else:           HE.H[i] = lay.copy_(root=HE)  # Lay was []
+                            if Lay is None: HE.append_(lay.copy_(root=HE, sign=sign))  # pack a copy of new lay in HE.H
+                            else:           HE.H[i] = lay.copy_(root=HE, sign=sign)  # Lay was []
                 HE.add_lay(He, sign)
                 HE.node_ += [node for node in He.node_ if node not in HE.node_]  # node_ is empty in CL derH?
             elif root:
-                if ri is None: root.derH = He.copy_(root=root)
-                else:          root.H[ri]= He.copy_(root=root)
+                if ri is None: root.derH = He.copy_(root=root, sign=sign)
+                else:          root.H[ri]= He.copy_(root=root, sign=sign)
             else:
-                HE = He.copy_(root=root)
+                HE = He.copy_(root=root, sign=sign)
         return HE
 
     def append_(HE,He, flat=0):
@@ -103,7 +103,7 @@ class CH(CBase):  # generic derivation hierarchy of variable nesting: extH | der
 
         return HE
 
-    def copy_(_He, root, rev=0):
+    def copy_(_He, root, rev=0, sign=1):
         # comp direction may be reversed
         He = CH(root=root, node_=copy(_He.node_), n=_He.n, i=_He.i, i_=copy(_He.i_))
         He.Et = copy(_He.Et)
@@ -111,8 +111,12 @@ class CH(CBase):  # generic derivation hierarchy of variable nesting: extH | der
         if rev:
             for md_,_,_ in He.md_t:  # mdExt, possibly mdLat, mdLay
                 md_[1::2] *= -1   # negate ds
+        elif sign == -1:
+            He.md_t *= -1
+            He.Et *= -1
+        
         for he in _He.H:
-            He.H += [he.copy_(root=He, rev=rev)] if he else [[]]
+            He.H += [he.copy_(root=He, rev=rev,sign=sign)] if he else [[]]
         return He
 
     def comp_H(_He, He, rn=1, dir=1):  # unpack each layer of CH down to numericals and compare each pair
@@ -210,6 +214,7 @@ def vectorize_root(frame):
         if not blob.sign and blob.G > aveG * blob.root.rdn:
             blob = slice_edge(blob)
             if blob.G * (len(blob.P_) - 1) > ave:  # eval PP, rdn=1
+            if len(blob.P_)>1:    
                 comp_slice(blob)
                 if blob.mdLay[1][0] * (len(blob.node_)-1)*(blob.rng+1) > ave:
                     # init for agg+:
@@ -324,7 +329,7 @@ def comp_link_(iL_):  # comp CLs via directional node-mediated link tracing: der
 
     fd = isinstance(iL_[0].nodet[0], CL)
     for L in iL_:
-        L.mL_t, L.rimt, L.aRad, L.visited_ = [[],[]], [[],[]], 0, [L]
+        L.mL_t, L.rimt, L.aRad, L.visited_, L.Et = [[],[]], [[],[]], 0, [L], copy(L.derH.Et)  # init Et in L
         # init mL_t (mediated Ls) per L:
         for rev, n, mL_ in zip((0,1), L.nodet, L.mL_t):
             for _L,_rev in n.rimt[0]+n.rimt[1] if fd else n.rim:
@@ -434,7 +439,7 @@ def get_rim(N,fd): return N.rimt[0] + N.rimt[1] if fd else N.rim  # add nesting 
 def sum2graph(root, grapht, fd, nest):  # sum node and link params into graph, aggH in agg+ or player in sub+
 
     node_, link_, Et, minL, subG_ = grapht
-    graph = CG(fd=fd, Et=Et, root_ = [root]+node_[0].root_, node_=node_, link_=link_, minL=minL, rng=nest)
+    graph = CG(fd=fd, Et=Et, root_ = [root]+node_[0].root_, node_=node_, link_=link_, rng=nest)
     if fd: graph.subL_ = subG_
     else:  graph.subG_ = subG_
     yx = [0,0]
