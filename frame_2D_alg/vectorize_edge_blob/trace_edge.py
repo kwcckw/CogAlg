@@ -77,18 +77,22 @@ class CH(CBase):  # generic derivation hierarchy of variable nesting: extH | der
             if HE:
                 for i, (Lay,lay) in enumerate(zip_longest(HE.H, He.H, fillvalue=None)):  # cross comp layer
                     if lay:
-                        if Lay: Lay.add_H(lay,sign=sign)
+                        if Lay: Lay.add_H(lay)
                         else:
-                            if Lay is None: HE.append_(lay.copy_(root=HE, sign=sign))  # pack a copy of new lay in HE.H
-                            else:           HE.H[i] = lay.copy_(root=HE, sign=sign)  # Lay was []
+                            if Lay is None: HE.append_(lay.copy_(root=HE))  # pack a copy of new lay in HE.H
+                            else:           HE.H[i] = lay.copy_(root=HE)  # Lay was []
                 HE.add_lay(He, sign)
                 HE.node_ += [node for node in He.node_ if node not in HE.node_]  # node_ is empty in CL derH?
             elif root:
-                if ri is None: root.derH = He.copy_(root=root, sign=sign)
-                else:          root.H[ri]= He.copy_(root=root, sign=sign)
+                if ri is None:  # root is node
+                    root.derH = He.copy_(root=root)
+                else:
+                    root.H[ri]= He.copy_(root=root)
+                root.Et += He.Et
             else:
-                HE = He.copy_(root=root, sign=sign)
-        return HE
+                HE = He.copy_(root=root)
+
+        return HE  # higher root would be updated by returned HE?
 
     def append_(HE,He, flat=0):
 
@@ -103,7 +107,7 @@ class CH(CBase):  # generic derivation hierarchy of variable nesting: extH | der
 
         return HE
 
-    def copy_(_He, root, rev=0, sign=1):
+    def copy_(_He, root, rev=0):
         # comp direction may be reversed
         He = CH(root=root, node_=copy(_He.node_), n=_He.n, i=_He.i, i_=copy(_He.i_))
         He.Et = copy(_He.Et)
@@ -111,12 +115,8 @@ class CH(CBase):  # generic derivation hierarchy of variable nesting: extH | der
         if rev:
             for md_,_,_ in He.md_t:  # mdExt, possibly mdLat, mdLay
                 md_[1::2] *= -1   # negate ds
-        elif sign == -1:
-            He.md_t *= -1
-            He.Et *= -1
-        
         for he in _He.H:
-            He.H += [he.copy_(root=He, rev=rev,sign=sign)] if he else [[]]
+            He.H += [he.copy_(root=He, rev=rev)] if he else [[]]
         return He
 
     def comp_H(_He, He, rn=1, dir=1):  # unpack each layer of CH down to numericals and compare each pair
@@ -213,8 +213,7 @@ def vectorize_root(frame):
     for blob in blob_:
         if not blob.sign and blob.G > aveG * blob.root.rdn:
             blob = slice_edge(blob)
-            if blob.G * (len(blob.P_) - 1) > ave:  # eval PP, rdn=1
-            if len(blob.P_)>1:    
+            if blob.G * (len(blob.P_)-1) > ave:  # eval PP
                 comp_slice(blob)
                 if blob.mdLay[1][0] * (len(blob.node_)-1)*(blob.rng+1) > ave:
                     # init for agg+:
@@ -236,10 +235,10 @@ def vectorize_root(frame):
                             G_ += [PP]
                     if len(G_) > ave_L:
                         edge.subG_ = G_
-                        intra_edge(edge); frame.subG_ += [edge]; frame.derH.add_H(edge.derH)
+                        cluster_edge(edge); frame.subG_ += [edge]; frame.derH.add_H(edge.derH)
                         # add altG: summed converted adj_blobs of converted edge blob
                         # if len(edge.subG_) > ave_L: agg_recursion(edge)  # unlikely
-def intra_edge(edge):
+def cluster_edge(edge):
 
     def connect_PP_(edge, fd):
         Gt_ = []
@@ -260,10 +259,10 @@ def intra_edge(edge):
                 _eN_ = eN_
             Gt = [node_,link_,et]; Gt_ += [Gt]
         # convert select Gt+minL+subG_ to CGs:
-        subG_ = [sum2graph(edge, [node_,link_,et,0,[]], fd, nest=1) for node_,link_,et in Gt_ if et[0] > ave * et[2]]
+        subG_ = [sum2graph(edge, [node_,link_,et], fd, nest=1) for node_,link_,et in Gt_ if et[0] > ave * et[2]]
         if subG_:
             if fd: edge.subL_ = subG_
-            else: edge.subG_ = subG_  # higher aggr, mediated access to init edge.subG_
+            else:  edge.subG_ = subG_  # higher aggr, mediated access to init edge.subG_
     # comp PP_:
     N_,L_,(m,d,r) = comp_node_(edge.subG_)
     edge.subG_ = N_; edge.link_ = L_
@@ -329,7 +328,7 @@ def comp_link_(iL_):  # comp CLs via directional node-mediated link tracing: der
 
     fd = isinstance(iL_[0].nodet[0], CL)
     for L in iL_:
-        L.mL_t, L.rimt, L.aRad, L.visited_, L.Et = [[],[]], [[],[]], 0, [L], copy(L.derH.Et)  # init Et in L
+        L.mL_t, L.rimt, L.aRad, L.visited_, L.Et = [[],[]], [[],[]], 0, [L], copy(L.derH.Et)
         # init mL_t (mediated Ls) per L:
         for rev, n, mL_ in zip((0,1), L.nodet, L.mL_t):
             for _L,_rev in n.rimt[0]+n.rimt[1] if fd else n.rim:
@@ -438,10 +437,13 @@ def get_rim(N,fd): return N.rimt[0] + N.rimt[1] if fd else N.rim  # add nesting 
 
 def sum2graph(root, grapht, fd, nest):  # sum node and link params into graph, aggH in agg+ or player in sub+
 
-    node_, link_, Et, minL, subG_ = grapht
+    node_, link_, Et = grapht[:3]
     graph = CG(fd=fd, Et=Et, root_ = [root]+node_[0].root_, node_=node_, link_=link_, rng=nest)
-    if fd: graph.subL_ = subG_
-    else:  graph.subG_ = subG_
+    if len(grapht==5):  # called from cluster_N
+        minL, subG_ = grapht[3:]
+        if fd: graph.subL_ = subG_
+        else:  graph.subG_ = subG_
+        graph.minL = minL
     yx = [0,0]
     derH = CH(root=graph)
     for N in node_:
