@@ -125,14 +125,16 @@ def get_exemplar_(frame):
 
         if C is None: C = CG()
         for n in dnode_:
-            s = n.sign; n.sign=1  # single-use sign
+            s = n.sign; n.sign=1  # single-use sign  (we still need to init n.sign first else we can't assign s)
             C.n += n.n * s; C.Et += n.Et * s; C.rng = n.rng * s; C.aRad += n.aRad * s
             C.latuple += n.latuple * s; C.mdLay += n.mdLay * s
             if n.derH: C.derH.add_H(n.derH, sign=s)
             if n.extH: C.extH.add_H(n.extH, sign=s)
         # get averages:
-        k = len(dnode_); C.n/=k; C.Et/=k; C.latuple/=k; C.mdLay/=k; C.aRad/=k
-        if C.derH: C.derH.norm_(k)  # derH/=k
+        k = len(dnode_)
+        if k: 
+            C.n/=k; C.Et/=k; C.latuple/=k; C.mdLay/=k; C.aRad/=k
+            if C.derH: C.derH.norm_(k)  # derH/=k
         C.box = reduce(extend_box, (n.box for n in node_))
         return C
 
@@ -164,14 +166,18 @@ def get_exemplar_(frame):
                         M += m; Rim += [link]  # copy perim link to Rim
                         node_+=[_N]
                         if _N not in _node_: dnode_+=[_N]  # sum into C
-                    elif _N in node_:
-                        M -= m; node_.remove(_N); _N.sign=-1; dnode_+=[_N]  # subtract from C
-            if M / _M > 1.2:
-                C = centroid({dnode_},{node_},C)
-                _node_,_dnode_,_Rim,_perim,_M = node_,dnode_,Rim, perim, M
-            else:  # convergence
+                    # _N in node_ is not possible because we shouldn't get a same _N in perim's other node, so we should check if it's in _node_ because C is computed with _node_ in the prior loop
+                    elif _N in _node_:
+                        _N.sign=-1; dnode_+=[_N]  # subtract from C
+
+            # if M / _M > 1.2:
+            if M == 0 or abs(M - _M) < ave:  # convergence   
+                N.Rim, N.perim, N.M = list({*Rim}), list({*perim}), M
                 break
-        N.Rim, N.perim, N.M = list({Rim}), list({perim}), M
+            else:
+                C = centroid({*dnode_},{*node_},C)
+                _node_,_dnode_,_Rim,_perim,_M = node_,dnode_,Rim, perim, M
+
 
     def select_exemplars(N_):
 
@@ -191,7 +197,7 @@ def get_exemplar_(frame):
 
     N_ = frame.subG_  # complemented Gs: m-type core + d-type contour
     for N in N_:
-        N.perim = set(); N.Rim = set(); N.root_ += [frame]; N.M = 0; N.Mr = 0; N.compared_ = []
+        N.perim = set(); N.Rim = set(); N.root_ += [frame]; N.M = 0; N.Mr = 0; N.compared_ = []; N.sign = 1
     xcomp_(N_)
     frame.subG_ = select_exemplars(N_)  # select strong Ns as exemplars of their Rim
     # current exemplars are not representative of their Rim for separate cross-comp?
