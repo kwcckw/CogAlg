@@ -106,6 +106,20 @@ def cluster_N_(root, L_, fd, nest=1):  # top-down segment L_ by >ave ratio of L.
 '''
 def get_exemplar_(frame):
 
+    def xcomp_(N_):  # initial global cross-comp
+        for g in N_: 
+            g.Rim = set(); g.sign = 1
+
+        for _G, G in combinations(N_, r=2):
+            rn = _G.n/G.n
+            if rn > ave_rn: continue  # scope disparity
+            link = comp_N(_G, G, rn)
+            m,d,r = link.derH.Et
+            vM = m - ave * r
+            for _g,g in (_G,G),(G,_G):
+                if vM > ave * r * 10:  # strict match
+                    g.Rim.add(link)
+
     def centroid(dnode_, node_, C=None):  # sum|subtract and average Rim nodes
 
         if C is None: C = CG()
@@ -138,36 +152,38 @@ def get_exemplar_(frame):
         _N_ = {n for L in N.Rim for n in L.nodet}
         n_ = _N_|{N}
         C = centroid(n_,n_)
-        _extN_ = _N_
+        _extN_ = []  # should be empty, else dM is always 0 in the first loop. By assigning it as empty list, first while loop is always true 
         while True:
             N_, negN_, extN_, M,dM = [],[],[], 0,0  # included, removed, extended nodes
             for _N in _N_:
                 m = comp_C(C,_N)
                 if m > ave:
-                    extN_ += [link.nodet[0] if link.nodet[1] is _N else link.nodet[1] for link in _N.rim]  # next comp to C
+                    extN_ += [link.nodet[0] if link.nodet[1] is _N else link.nodet[1] for link in _N.Rim]  # next comp to C
                     N_ += [_N]; M += m  # sum into C
-                    if _N not in _extN_: dM += m  # only new nodes
+                    if _N not in _extN_ and _N not in clustered_: dM += m  # only new nodes
                     clustered_ += [_N]
                 elif _N in _N_:
                     _N.sign=-1; negN_+=[_N]  # subtract from C, M += abs m?
 
-            if dM > ave:  # new match, terminate extension if low
-                _extN = {eN for eN in extN_ if eN not in clustered_}
-                C = centroid(_extN | {negN_}, N_, C)
-                _N_ = {N_} | _extN_  # both old and new nodes will be compared to new C
+            if dM > ave:  # new match, terminate extension if low (1st call is always true)
+                _extN_ = set([eN for eN in extN_ if eN not in clustered_])
+                C = centroid( _extN_ | {*negN_}, N_, C)
+                _N_ = {*N_} | _extN_  # both old and new nodes will be compared to new C
+                C.M = M; C.node_ = N_  # update last M and node_
             else:
                 break
-        return [C,M,N_]  # centroid cluster
+        return C  # centroid cluster
 
     N_ = frame.subG_  # complemented Gs: m-type core + d-type contour
+    xcomp_(N_)
     exemplar_, clustered_ = [], []
     for N in N_:
         N.root_ += [frame]; N.sign = 1
         N_ = sorted(N_, key=lambda n: n.Et[0], reverse=True)
         for N in N_:  # connectivity cluster may have multiple exemplar centroids
             if N not in clustered_:
-                if N.Et[0] > ave * 10:
-                    exemplar_ += centroid_cluster(N, clustered_)  # extend from N.rim
+                if N.Et[0] > ave * 10:  # N is edge and their Et is empty, so sum PP's Et to edge.Et during PP conversion to graph?
+                    exemplar_ += [centroid_cluster(N, clustered_)]  # extend from N.rim
                 else:  # the rest of N_ M is lower
                     break
     frame.subG_ = exemplar_  # select strong Ns as exemplars of their network

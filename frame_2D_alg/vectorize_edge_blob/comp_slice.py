@@ -115,7 +115,7 @@ def comp_P_(edge):  # form links from prelinks
             dy,dx = np.subtract(P.yx,_P.yx) # dy,dx between node centers
             if abs(dy)+abs(dx) <= edge.rng * 2:
                 # <max Manhattan distance
-                angle=[dy,dx], distance=np.hypot(dy,dx)
+                angle=[dy,dx]; distance=np.hypot(dy,dx)
                 rn = len(_P.dert_) / len(P.dert_)
                 md_ = comp_latuple(_P.latuple, P.latuple, rn)
                 vm = sum(md_[::2]); vd = sum(np.abs(md_[1::2]))
