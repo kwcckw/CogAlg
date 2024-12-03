@@ -48,11 +48,12 @@ ccoef  = 10  # scaling match ave to clustering ave
 class CH(CBase):  # generic derivation hierarchy of variable nesting: extH | derH, their layers and sub-layers
 
     name = "H"
-    def __init__(He, node_=None, md_t=None, n=0, H=None, root=None, i=None, i_=None, altH=None):
+    def __init__(He, node_=None, md_t=None, n=0, H=None, root=None, i=None, i_=None, altH=None, Et=None):
         super().__init__()
         He.altH = CH(altH=object) if altH is None else altH   # summed altLays, prevent cyclic
         He.node_ = [] if node_ is None else node_  # concat bottom nesting order if CG, may be redundant to G.node_
         He.md_t = [] if md_t is None else md_t  # derivation layer in H
+        He.Et = np.array([.0,.0,1.]) if Et is None else Et
         He.H = [] if H is None else H  # nested derLays | md_ in md_C, empty in bottom layer
         He.n = n  # total number of params compared to form derH, to normalize comparands
         He.root = None if root is None else root  # N or higher-composition He
@@ -268,7 +269,7 @@ def cluster_edge(edge):
     edge.subG_ = N_; edge.link_ = L_
     if m > ave * r:
         mlay = CH().add_H([L.derH for L in L_])  # mfork, else no new layer
-        edge.derH = CH(H=[mlay], md_t = deepcopy(mlay.md_t), n=mlay.n, root=edge); edge.derH.Et=copy(mlay.Et)
+        edge.derH = CH(H=[mlay], md_t = deepcopy(mlay.md_t), n=mlay.n, root=edge, Et=copy(mlay.Et))
         mlay.root=edge.derH  # init
         if len(N_) > ave_L:
             connect_PP_(edge,fd=0)
@@ -306,12 +307,12 @@ def comp_node_(_N_):  # rng+ forms layer of rim and extH per N, appends N_,L_,Et
             if _nrim & nrim:  # indirectly connected Gs,
                 continue     # no direct match priority?
             M = ( (_G.mdLay[1][0] + G.mdLay[1][0]) * icoef**2  # internal vals are less predictive in external comp
-                 + (_G.derH.Et[0] if _G.derH else 0 + G.derH.Et[0] if G.derH else 0) * icoef
-                 + (_G.extH.Et[0] if _G.extH else 0 + G.extH.Et[0] if G.extH else 0) )
+                 + (_G.derH.Et[0]  + G.derH.Et[0] ) * icoef
+                 + (_G.extH.Et[0]  + G.extH.Et[0] ) )
             if dist < max_dist * (radii * icoef**3) * M:
                 Link = comp_N(_G,G, rn,angle=[dy,dx],dist=dist)
-                L_ += [Link]; m,d,r = Link.derH.Et  # include -ve links
-                if m > ave * r:
+                L_ += [Link]  # include -ve links
+                if Link.derH.Et[0] > ave * Link.derH.Et[2]:
                     N_.update({_G,G}); Et += Link.derH.Et; _G.add,G.add = 1,1
             else:
                 Gp_ += [Gp]  # re-evaluate not-compared pairs with one incremented N.M
@@ -346,8 +347,8 @@ def comp_link_(iL_):  # comp CLs via directional node-mediated link tracing: der
                     dy,dx = np.subtract(_L.yx,L.yx)
                     Link = comp_N(_L,L, rn,angle=[dy,dx],dist=np.hypot(dy,dx), dir = -1 if rev else 1)  # d = -d if L is reversed relative to _L
                     Link.med = med
-                    LL_ += [Link]; m,d,r = Link.derH.Et  # include -ves, link order: nodet < L < rimt, mN.rim || L
-                    if m > ave * r:
+                    LL_ += [Link]  # include -ves, link order: nodet < L < rimt, mN.rim || L
+                    if Link.derH.Et[0] > ave * Link.derH.Et[2]:
                         out_L_.update({_L,L}); L_.update({_L,L}); Et += Link.derH.Et
         if not any(L_): break
         # extend mL_t per last med_L
@@ -410,8 +411,8 @@ def comp_N(_N,N, rn, angle=None, dist=None, dir=None):  # dir if fd, Link.derH=d
         md_t += [mdlat,mdLay]; Et += mdlat[1] + mdLay[1]; n += mdlat[2] + mdLay[2]
     # | n = (_n+n)/2?
     Et = np.append(Et, (_N.Et[2]+N.Et[2])/2 )  # Et[0] += ave_rn - rn?
-    subLay = CH(n=n, md_t=md_t); subLay.Et=Et
-    eLay = CH(H=[subLay], n=n, md_t=deepcopy(md_t)); eLay.Et=copy(Et)
+    subLay = CH(n=n, md_t=md_t, Et=Et)
+    eLay = CH(H=[subLay], n=n, md_t=deepcopy(md_t), Et=copy(Et))
     if _N.derH and N.derH:
         dderH = _N.derH.comp_H(N.derH, rn, dir=dir)  # comp shared layers
         eLay.append_(dderH, flat=1)
@@ -439,7 +440,7 @@ def sum2graph(root, grapht, fd, nest):  # sum node and link params into graph, a
 
     node_, link_, Et = grapht[:3]
     graph = CG(fd=fd, Et=Et, root_ = [root]+node_[0].root_, node_=node_, link_=link_, rng=nest)
-    if len(grapht==5):  # called from cluster_N
+    if len(grapht)==5:  # called from cluster_N
         minL, subG_ = grapht[3:]
         if fd: graph.subL_ = subG_
         else:  graph.subG_ = subG_

@@ -33,8 +33,7 @@ def agg_cluster_(frame):  # breadth-first (node_,L_) cross-comp, clustering, rec
     N_,L_,(m,d,r) = comp_node_(frame.subG_)  # exemplars, extrapolate to their Rims?
     if m > ave * r:
         mlay = CH().add_H([L.derH for L in L_])  # mfork, else no new layer
-        frame.derH = CH(H=[mlay], md_t=deepcopy(mlay.md_t), n=mlay.n, root=frame); mlay.root=frame.derH
-        frame.derH.Et = copy(mlay.Et)  # or make it default param again?
+        frame.derH = CH(H=[mlay], md_t=deepcopy(mlay.md_t), n=mlay.n, root=frame, Et=copy(mlay.Et)); mlay.root=frame.derH
         vd = d - ave_d * r
         if vd > 0:
             for L in L_:
@@ -138,12 +137,12 @@ def get_exemplar_(graph):
         mH = C.derH.comp_H(N.derH, rn).Et[0] if C.derH and N.derH else 0
         # comp node_, comp altG from converted adjacent flat blobs?
         m = mL+mA+mLat+mLay+mH
-        C.M += m
+        # C.M += m this should be updated in the end of the eval (C.M = M), else we will get true for C.M > ave * 10, but their node_ is empty
         return m
 
-    def centroid_cluster(N, clustered_):  # refine and extend cluster with extN_
+    def centroid_cluster(N, N_, clustered_):  # refine and extend cluster with extN_
 
-        _N_ = {n for L in N.Rim for n in L.nodet}
+        _N_ = {n for L,_ in N.rim for n in L.nodet}
         n_ = _N_| {N}  # include seed node
         C = centroid(n_,n_)
         while True:
@@ -153,15 +152,17 @@ def get_exemplar_(graph):
                 m = comp_C(C,_N)
                 dm = m - ave
                 if dm > 0:
-                    extN_ += [link.nodet[0] if link.nodet[1] is _N else link.nodet[1] for link in _N.rim]  # next comp to C
+                    extN_ += [link.nodet[0] if link.nodet[1] is _N else link.nodet[1] for link,_ in _N.rim]  # next comp to C
                     N_ += [_N]; M += m; _N.M = m  # to sum in C
                     if _N not in C.node_:
-                        dM += dm; clustered_ += [_N]  # only new nodes
+                        dM += dm; clustered_.add(_N)  # only new nodes
                 elif _N in C.node_:
                     _N.sign=-1; negN_+=[_N]; dM += -dm  # to subtract from C, dM += abs dm
                     clustered_.remove(_N)  # if exclusive
-            if dM > ave:  # new match, terminate (refine,extend) if low
-                extN_ = set([eN for eN in extN_ if eN not in clustered_])
+            extN_ = set([eN for eN in extN_ if eN not in clustered_])  # after all Ns are added to clustered_
+
+            # some _Ns might not be in C.node_ in prior loop but added to clustered_ in the later loop, so dM may >0, but _N will be in clustered_
+            if dM > ave and extN_:  # new match, terminate (refine,extend) if low
                 C = centroid( extN_|set(negN_), N_, C)
                 _N_ = set(N_)|extN_  # both old and new nodes will be compared to new C
                 C.M = M; C.node_ = N_
@@ -173,19 +174,25 @@ def get_exemplar_(graph):
                 else:  # unpack C.node_
                     for n in C.node_:
                         clustered_.remove(n); n.M = 0
+                        if n.Et[0] > ave * 10: N_ += [n]
                     return N  # keep seed node
 
     N_ = graph.subG_  # complemented Gs: m-type core + d-type contour, initially edge
     N_ = sorted(N_, key=lambda n: n.Et[0], reverse=True)
     subG_, clustered_ = [], set()
     for N in N_: N.sign = 1
-    for i, N in enumerate(N_):  # connectivity cluster may have exemplar centroids
+    while N_: # connectivity cluster may have exemplar centroids
+        N = N_.pop()
         if N not in clustered_:
             if N.Et[0] > ave * 10:
-                subG_ += [centroid_cluster(N, clustered_)]  # extend from N.rim, return C if packed else N
+                C = centroid_cluster(N, N_, clustered_)
+                if C is not None: subG_ += [C]  # extend from N.rim, return C if packed else N
+            # no recycle
+            '''
             else:  # the rest of N_ M is lower
-                subG_ += N_[i:]
+                subG_ += [N for N in N_[i:] if N not in clustered_]  # only non clustered N?
                 break
+            '''
     graph.subG_ = subG_  # mix of Ns and Cs: exemplars of their network?
     if len(graph.subG_) > ave_L:
         agg_cluster_(graph)  # selective connectivity clustering between exemplars, extrapolated to their node_
@@ -198,4 +205,5 @@ if __name__ == "__main__":
     intra_blob_root(frame)
     vectorize_root(frame)
     if frame.subG_:  # converted edges
-        get_exemplar_(frame)  # selects connectivity-clustered edges for agg_cluster_
+        for edge in frame.subG_:
+            get_exemplar_(edge)  # selects connectivity-clustered edges for agg_cluster_
