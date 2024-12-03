@@ -99,7 +99,7 @@ def comp_slice(edge):  # root function
         if isinstance(PPm, list):  # PPt, not CP
             P_, link_, mdLay = PPm[1:4]
             Et = mdLay[1]
-            if len(link_) > ave_L and Et[0] > ave_PPm:
+            if len(link_) > ave_L and Et[1] > ave_PPd:
                 comp_dP_(PPm)
                 PPm[2] = form_PP_(PPm, link_)  # add PPds within PPm link_
             mdLay = PPm[3]
