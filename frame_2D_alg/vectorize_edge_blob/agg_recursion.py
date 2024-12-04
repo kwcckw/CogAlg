@@ -108,7 +108,8 @@ def find_centroids(graph):
 
     def centroid(dnode_, node_, C=None):  # sum|subtract and average Rim nodes
 
-        if C is None: C = CG()
+        if C is None: 
+            C = CG(); C.L = 0; C.M = 0  # summed match to nodes  (This M should be reset only in the C init?)
         for n in dnode_:
             s = n.sign; n.sign=1  # single-use sign
             C.n += n.n * s; C.Et += n.Et * s; C.rng = n.rng * s; C.aRad += n.aRad * s
@@ -120,7 +121,6 @@ def find_centroids(graph):
         k = len(dnode_); C.n/=k; C.Et/=k; C.latuple/=k; C.mdLay/=k; C.aRad/=k
         if C.derH: C.derH.norm_(k)  # derH/=k
         C.box = reduce(extend_box, (n.box for n in node_))
-        C.M = 0  # summed match to nodes
         return C
 
     def comp_C(C, N):  # compute match without new derivatives: global cross-comp is not directional
@@ -136,16 +136,16 @@ def find_centroids(graph):
 
     def centroid_cluster(N, clustered_):  # refine and extend cluster with extN_
 
-        _N_ = {n for L,_ in N.rim for n in L.nodet}
+        _N_ = {n for L,_ in N.rim for n in L.nodet if n not in clustered_}  # n might be added in prior centroid_cluster too, so we need to check in clustered_
         n_ = _N_| {N}  # include seed node
         C = centroid(n_,n_)
         while True:
             N_, negN_, extN_, M, vM = [],[],[],0,0  # included, removed, extended nodes
             for _N in _N_:
-                if _N in clustered_: continue
+                # if _N is N: continue  (not sure, but we may get this in higher recursion, should we skip it?)
                 m = comp_C(C,_N)
                 vm = m - ave  # deviation
-                if vm > 0:
+                if vm > 0 and _N not in clustered_:  # this in clustered_ should be here, otherwise the else section here will never be true since we are already skipping it
                     extN_ += [link.nodet[0] if link.nodet[1] is _N else link.nodet[1] for link,_ in _N.rim]  # next comp to C
                     N_ += [_N]; M += m; _N.M = m  # to sum in C
                     if _N not in C.node_:
@@ -153,6 +153,8 @@ def find_centroids(graph):
                 elif _N in C.node_:
                     _N.sign=-1; negN_+=[_N]; vM += -vm  # to subtract from C, vM += abs m deviation
                     clustered_.remove(_N)  # if exclusive
+                    C.node_.remove(_N)  # we should remove from C.node_ too? Since it's removed from clustered_, and they will be clustered again in another C
+                    if not C.node_: return N  # tentative, not sure
             if vM > ave:  # new match, terminate (refine,extend) if low
                 extN_ = set(extN_) - clustered_  # exclude clustered Ns
                 dN_ = extN_ | set(negN_)
@@ -195,7 +197,8 @@ if __name__ == "__main__":
     if frame.subG_:  # converted edges
         subG_ = []
         for edge in frame.subG_:
-            find_centroids(edge)  # here because trace_edge doesn't have find_centroids
+            if not edge.subG_: continue  
+            find_centroids(edge)  # here because trace_edge doesn't have find_centroids  
             subG_ += edge.subG_
         frame.subG_ = subG_  # edge is not a connectivity cluster, unpack by default
         agg_cluster_(frame)  # connectivity clustering
