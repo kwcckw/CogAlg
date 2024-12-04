@@ -48,17 +48,17 @@ ccoef  = 10  # scaling match ave to clustering ave
 class CH(CBase):  # generic derivation hierarchy of variable nesting: extH | derH, their layers and sub-layers
 
     name = "H"
-    def __init__(He, node_=None, md_t=None, n=0, H=None, root=None, i=None, i_=None, altH=None, Et=None):
+    def __init__(He, n=0, H=None, Et=None, node_=None, md_t=None, root=None, i=None, i_=None, altH=None):
         super().__init__()
-        He.altH = CH(altH=object) if altH is None else altH   # summed altLays, prevent cyclic
-        He.node_ = [] if node_ is None else node_  # concat bottom nesting order if CG, may be redundant to G.node_
-        He.md_t = [] if md_t is None else md_t  # derivation layer in H
-        He.Et = np.array([.0,.0,1.]) if Et is None else Et
         He.H = [] if H is None else H  # nested derLays | md_ in md_C, empty in bottom layer
         He.n = n  # total number of params compared to form derH, to normalize comparands
+        He.Et = np.zeros(3) if Et is None else Et  # summed from links
+        He.node_ = [] if node_ is None else node_  # concat bottom nesting order if CG, may be redundant to G.node_
+        He.md_t = [] if md_t is None else md_t  # derivation layer in H
         He.root = None if root is None else root  # N or higher-composition He
         He.i = 0 if i is None else i  # lay index in root.H, to revise rdn
         He.i_ = [] if i_ is None else i_  # priority indices to compare node H by m | link H by d
+        He.altH = CH(altH=object) if altH is None else altH   # summed altLays, prevent cyclic
         # He.fd = 0 if fd is None else fd  # 0: sum CGs, 1: sum CLs
         # He.ni = 0  # exemplar in node_, trace in both directions?
         # He.deep = 0 if deep is None else deep  # nesting in root H
@@ -128,8 +128,7 @@ class CH(CBase):  # generic derivation hierarchy of variable nesting: extH | der
             der_md_t += [der_md_]
             Et += der_md_[1]
 
-        DLay = CH(md_t = der_md_t, n =.3 if len(der_md_t)==1 else 2.3)  # .3 in default comp ext
-        DLay.Et = np.append(Et, (_He.Et[2]+He.Et[2]) / 2)  # add rdn
+        DLay = CH(md_t=der_md_t, Et=np.append(Et,(_He.Et[2]+He.Et[2])/2), n=.3 if len(der_md_t)==1 else 2.3)  # .3 in default comp ext
         # empty H in bottom | deprecated layer:
         for rev, _lay, lay in zip((0,1), _He.H, He.H):  #  fork & layer CH / rng+|der+, flat
             if _lay and lay:
@@ -168,13 +167,13 @@ class CG(CBase):  # PP | graph | blob: params of single-fork node_ cluster
         super().__init__()
         G.n = n  # last layer?
         G.fd = fd  # 1 if cluster of Ls | lGs?
+        G.Et = np.zeros(3) if Et is None else Et  # sum all param Ets
         G.rng = rng
         G.root_ = root_  # in cluster_N_, same nodes may be in multiple dist layers
         G.node_ = node_  # convert to GG_ or node_H in agg++
         G.link_ = link_  # internal links per comp layer in rng+, convert to LG_ in agg++
         G.subG_ = subG_  # selectively clustered node_
         G.subL_ = subL_  # selectively clustered link_
-        G.Et = np.array([.0,.0,1.]) if Et is None else Et  # sum all param Ets
         G.latuple = np.array([.0,.0,.0,.0,.0,np.zeros(2)],dtype=object) if latuple is None else latuple  # lateral I,G,M,Ma,L,[Dy,Dx]
         G.mdLay = np.array([np.zeros(12), np.zeros(2), 0],dtype=object) if mdLay is None else mdLay  # mdLat, et, n
         # maps to node_H / agg+|sub+:
@@ -239,9 +238,10 @@ def vectorize_root(frame):
                         cluster_edge(edge); frame.subG_ += [edge]; frame.derH.add_H(edge.derH)
                         # add altG: summed converted adj_blobs of converted edge blob
                         # if len(edge.subG_) > ave_L: agg_recursion(edge)  # unlikely
-def cluster_edge(edge):
 
-    def connect_PP_(edge, fd):
+def cluster_edge(edge):  # edge is CG but not a connectivity cluster, just a set of clusters in >ave G blob, unpack by default?
+
+    def cluster_PP_(edge, fd):
         Gt_ = []
         N_ = copy(edge.link_ if fd else edge.subG_)
         while N_:  # flood fill
@@ -272,7 +272,7 @@ def cluster_edge(edge):
         edge.derH = CH(H=[mlay], md_t = deepcopy(mlay.md_t), n=mlay.n, root=edge, Et=copy(mlay.Et))
         mlay.root=edge.derH  # init
         if len(N_) > ave_L:
-            connect_PP_(edge,fd=0)
+            cluster_PP_(edge,fd=0)
         if d * (m/ave) > ave_d * r:  # borrow from mis-projected m: proj_m -= proj_d
             for L in L_:
                 L.extH = CH(); L.root_= [edge]
@@ -281,7 +281,7 @@ def cluster_edge(edge):
             if lL_:  # lL_ and lN_ may empty
                 edge.derH.append_(CH().add_H([L.derH for L in lL_]))  # dfork
                 if len(lN_) > ave_L:  # if vd?
-                    connect_PP_(edge, fd=1)
+                    cluster_PP_(edge, fd=1)
 
 def comp_node_(_N_):  # rng+ forms layer of rim and extH per N, appends N_,L_,Et, ~ graph CNN without backprop
 
