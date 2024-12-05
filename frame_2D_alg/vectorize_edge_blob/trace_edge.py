@@ -175,7 +175,7 @@ class CG(CBase):  # PP | graph | blob: params of single-fork node_ cluster
         G.subG_ = subG_  # selectively clustered node_
         G.subL_ = subL_  # selectively clustered link_
         G.latuple = np.array([.0,.0,.0,.0,.0,np.zeros(2)],dtype=object) if latuple is None else latuple  # lateral I,G,M,Ma,L,[Dy,Dx]
-        G.mdLay = np.array([np.zeros(12), np.zeros(2), 0],dtype=object) if mdLay is None else mdLay  # mdLat, et, n
+        G.mdLay = np.array([np.zeros(6), np.zeros(2), 0],dtype=object) if mdLay is None else mdLay  # mdLat, et, n
         # maps to node_H / agg+|sub+:
         G.derH = CH() if derH is None else derH  # sum from nodes, then append from feedback
         G.extH = CH() if extH is None else extH  # sum from rim_ elays, H maybe deleted

@@ -134,34 +134,37 @@ def find_centroids(graph):
         # comp node_, comp altG from converted adjacent flat blobs?
         return mL + mA + mLat + mLay + mH
 
-    def centroid_cluster(N):  # refine and extend cluster with extN_
+    def centroid_cluster(N, subG_):  # refine and extend cluster with extN_
 
         _N_ = {n for L,_ in N.rim for n in L.nodet if not n.fin}
         n_ = _N_| {N}  # include seed node
         C = centroid(n_,n_)
         while True:
-            N_,negN_,extN_, M, dM, extM = [],[],[], 0,0,0  # included, removed, extended nodes and values
+            N_,dN_,extN_, M, dM, extM = [],[],[], 0,0,0  # included, removed, extended nodes and values
             for _N in _N_:
                 m = comp_C(C,_N)
                 vm = m - ave  # deviation
                 if vm > 0:
+                    if _N in subG_: 
+                        subG_.remove(_N)  # remove N from subG_ if it's kept as seed node in prior loop
                     N_ += [_N]; M += m
                     if _N.m: dM += m - _N.m  # was in C.node_
-                    else:    dM += vm  # new node
+                    else:    
+                        dN_ += [_N]  # add new node to C computation
+                        dM += vm  # new node
                     _N.m = m  # to sum in C
                     for link, _ in _N.rim:
                         n = link.nodet[0] if link.nodet[1] is _N else link.nodet[1]
                         if n.fin or n.m: continue  # in other C or in C.node_
-                        extN_ += [n]; extM += n.derH.Et[0]  # add external Ns for next loop
+                        extN_ += [n]; extM += n.Et[0]  # add external Ns for next loop  (Use n.Et? Their derH.Et may empty)
                 elif _N.m:  # was in C.node_
-                    _N.sign=-1; _N.m = 0; negN_+=[_N]; dM += -vm  # dM += abs m deviation
+                    _N.sign=-1; _N.m = 0; dN_+=[_N]; dM += -vm  # dM += abs m deviation
                     # subtract from C
             if dM > ave and M + extM > ave:  # update val and reform val, terminate reforming if low
-                extN_ = set(extN_)
-                dN_ = extN_ | set(negN_)
+                # dN_ = extN_ | set(cN_)  # dN_ shouldn't be including extN_?
                 if dN_: # recompute if any changes in node_
-                    C = centroid(dN_,N_,C)
-                _N_ = set(N_)|extN_  # both old and new nodes will be compared to new C
+                    C = centroid(set(dN_),N_,C)
+                _N_ = set(N_)|set(extN_)  # both old and new nodes will be compared to new C
                 C.M = M; C.node_ = N_
             else:
                 if C.M > ave * 10:
@@ -180,7 +183,7 @@ def find_centroids(graph):
     for i, N in enumerate(N_):  # replace some of connectivity cluster by exemplar centroids
         if not N.fin:  # not in prior C
             if N.Et[0] > ave * 10:
-                subG_ += [centroid_cluster(N)]  # extend from N.rim, return C if packed else N
+                subG_ += [centroid_cluster(N, subG_)]  # extend from N.rim, return C if packed else N
             else:  # the rest of N_ M is lower
                 subG_ += [N for N in N_[i:] if not N.fin]
                 break

@@ -47,7 +47,7 @@ class CdP(CBase):  # produced by comp_P, comp_slice version of Clink
 
         l.nodet = nodet  # e_ in kernels, else replaces _node,node: not used in kernels?
         l.latuple = np.array([.0,.0,.0,.0,.0, np.zeros(2)], dtype=object) if latuple is None else latuple  # sum node_
-        l.mdLay = np.array([np.zeros(12), np.zeros(2), 0], dtype=object) if mdLay is None else mdLay
+        l.mdLay = np.array([np.zeros(6), np.zeros(2), 0], dtype=object) if mdLay is None else mdLay
         l.angle = angle  # dy,dx between node centers
         l.span = span  # distance between node centers
         l.yx = yx  # sum node_
@@ -64,14 +64,14 @@ def comp_md_(_md_, md_, rn=1, dir=1):  # replace dir with rev?
 
     M, D = 0, 0
     derLay = []
-    for i, (_d, d) in enumerate(zip(_md_[1::2], md_[1::2])):  # compare ds in md_ or ext
+    for i, (_d, d) in enumerate(zip(_md_, md_)):  # compare ds in md_ or ext
         d *= rn  # normalize by compared accum span
         diff = (_d - d) * dir
         match = min(abs(_d), abs(d))
         if (_d < 0) != (d < 0): match = -match  # negate if only one compared is negative
         M += match  # maybe negative
         D += abs(diff)  # potential compression
-        derLay += [match, diff]  # flat
+        derLay += [diff]  # flat
     vD = D * (M / ave)  # project by borrow from rel M
     vM = M - vD / 2  # cancel by lend to D
 
@@ -88,9 +88,9 @@ def vectorize_root(frame):
 
 def comp_slice(edge):  # root function
 
-    edge.mdLay = np.array([np.zeros(12), np.zeros(2),0],dtype=object)  # md_, Et, n
+    edge.mdLay = np.array([np.zeros(6), np.zeros(2),0],dtype=object)  # md_, Et, n
     for P in edge.P_:  # add higher links
-        P.mdLay = np.array([np.zeros(12), np.zeros(2),0],dtype=object)  # to accumulate in sum2PP
+        P.mdLay = np.array([np.zeros(6), np.zeros(2),0],dtype=object)  # to accumulate in sum2PP
         P.rim = []; P.lrim = []; P.prim = []
 
     comp_P_(edge)  # vertical P cross-comp -> PP clustering, if lateral overlap
@@ -118,10 +118,7 @@ def comp_P_(edge):  # form links from prelinks
                 # <max Manhattan distance
                 angle=[dy,dx]; distance=np.hypot(dy,dx)
                 rn = len(_P.dert_) / len(P.dert_)
-                md_ = comp_latuple(_P.latuple, P.latuple, rn)
-                M, D = md_[-2:]
-                vD = D * (M / sum(aves))  # borrow from projected M
-                vM = M - vD / 2 - sum(aves)  # cancel by lend to D
+                md_, (vM, vD) = comp_latuple(_P.latuple, P.latuple, rn)
                 n = (len(_P.dert_) + len(P.dert_)) / 2  # norm by ave compared n?
                 derLay = np.array([md_, np.array([vM, vD]), n], dtype=object)
                 link = convert_to_dP(_P,P, derLay, angle, distance, fd=0)
@@ -183,7 +180,7 @@ def form_PP_(root, iP_):  # form PPs of dP.valt[fd] + connected Ps val
 
 def sum2PP(root, P_, dP_):  # sum links in Ps and Ps in PP
 
-    mdLay = np.array([np.zeros(12),np.zeros(2),0], dtype=object)
+    mdLay = np.array([np.zeros(6),np.zeros(2),0], dtype=object)
     latuple = np.array([.0,.0,.0,.0,.0,np.zeros(2)], dtype=object)
     link_, A, S, area, n, box = [],[0,0], 0,0,0, [np.inf,np.inf,0,0]
     # add uplinks:
@@ -214,20 +211,21 @@ def comp_latuple(_latuple, latuple, rn, fagg=0):  # 0der params
     _I, _G, _M, _Ma, _L, (_Dy, _Dx) = _latuple
     I, G, M, Ma, L, (Dy, Dx) = latuple
 
-    dI = _I - I*rn;  mI = ave_dI - dI;             vI = mI - ave
-    dG = _G - G*rn;  mG = min(_G, G*rn);           vG = mG - ave_mG
-    dM = _M - M*rn;  mM = get_match(_M, M*rn);     vM = mM - ave_mM  # M, Ma may be negative
-    dMa= _Ma- Ma*rn; mMa = get_match(_Ma, Ma*rn);  vMa = mMa - ave_mMa
-    dL = _L - L*rn;  mL = min(_L, L*rn);           vL = mL - ave_mL
-    mAngle,dAngle = comp_angle((_Dy,_Dx),(Dy,Dx)); vA = mAngle - ave_mA
+    dI = _I - I*rn;  mI = ave_dI - dI;             #vI = mI - ave
+    dG = _G - G*rn;  mG = min(_G, G*rn);           #vG = mG - ave_mG
+    dM = _M - M*rn;  mM = get_match(_M, M*rn);     #vM = mM - ave_mM  # M, Ma may be negative
+    dMa= _Ma- Ma*rn; mMa = get_match(_Ma, Ma*rn);  #vMa = mMa - ave_mMa
+    dL = _L - L*rn;  mL = min(_L, L*rn);           #vL = mL - ave_mL
+    mAngle,dAngle = comp_angle((_Dy,_Dx),(Dy,Dx)); #vA = mAngle - ave_mA
     # abs totals
     tM = mI + mG + mM + mMa + mL + mAngle
     tD = abs(dI) + abs(dG) + abs(dM) + abs(dMa) + abs(dL) + abs(dAngle)
 
-    ret = np.array([vL,dL, vI,dI, vG,dG, vM,dM, vMa,dMa, vA,dAngle, tM,tD])
+    prj_d = tD * (tM / sum(aves))
+    prj_m = tM - prj_d / 2 - sum(aves)
+    ret = np.array([dL, dI, dG, dM, dMa, dAngle]), (prj_m, prj_d)
+
     if fagg:  # add norm m,d, ret=[ret,Ret]:
-        prj_d = tD * (tM / sum(aves))
-        prj_m = tM - prj_d / 2 - sum(aves)
         ret = np.array([ret, np.array([prj_m, prj_d]), 1], dtype=object)  # if fagg only
     return ret
 
