@@ -10,7 +10,12 @@ from trace_edge import comp_node_, comp_link_, sum2graph, get_rim, CH, CG, ave, 
 '''
 Cross-compare and cluster Gs within a frame, potentially unpacking their node_s first,
 alternating agglomeration and centroid clustering.
-'''
+notation:
+prefix  f denotes flag
+postfix t denotes tuple, multiple ts is a nested tuple
+prefix  _ denotes prior of two same-name variables, multiple _s for relative precedence
+postfix _ denotes array of same-name elements, multiple _s is nested array
+capitalized vars are summed small-case vars '''
 
 def agg_cluster_(frame):  # breadth-first (node_,L_) cross-comp, clustering, recursion
 
@@ -109,7 +114,7 @@ def find_centroids(graph):
     def centroid(dnode_, node_, C=None):  # sum|subtract and average Rim nodes
 
         if C is None:
-            C = CG(); C.L = 0; C.M = 0  # setattr ave len node_ and summed match to nodes
+            C = CG(); C.L = 0; C.M = 0  # setattr summed len node_ and match to nodes
         for n in dnode_:
             s = n.sign; n.sign=1  # single-use sign
             C.n += n.n * s; C.Et += n.Et * s; C.rng = n.rng * s; C.aRad += n.aRad * s
@@ -134,37 +139,34 @@ def find_centroids(graph):
         # comp node_, comp altG from converted adjacent flat blobs?
         return mL + mA + mLat + mLay + mH
 
-    def centroid_cluster(N, subG_):  # refine and extend cluster with extN_
+    def centroid_cluster(N):  # refine and extend cluster with extN_
 
         _N_ = {n for L,_ in N.rim for n in L.nodet if not n.fin}
-        n_ = _N_| {N}  # include seed node
+        N.fin = 1; n_ = _N_| {N}  # include seed node
         C = centroid(n_,n_)
         while True:
-            N_,dN_,extN_, M, dM, extM = [],[],[], 0,0,0  # included, removed, extended nodes and values
+            N_,dN_,extN_, M, dM, extM = [],[],[], 0,0,0  # included, changed, queued nodes and values
             for _N in _N_:
                 m = comp_C(C,_N)
                 vm = m - ave  # deviation
                 if vm > 0:
-                    if _N in subG_: 
-                        subG_.remove(_N)  # remove N from subG_ if it's kept as seed node in prior loop
                     N_ += [_N]; M += m
-                    if _N.m: dM += m - _N.m  # was in C.node_
-                    else:    
-                        dN_ += [_N]  # add new node to C computation
-                        dM += vm  # new node
+                    if _N.m:
+                        dM += m - _N.m  # was in C.node_, add adjustment
+                    else:
+                        dN_ += [_N]; dM += vm  # new node
                     _N.m = m  # to sum in C
                     for link, _ in _N.rim:
                         n = link.nodet[0] if link.nodet[1] is _N else link.nodet[1]
                         if n.fin or n.m: continue  # in other C or in C.node_
-                        extN_ += [n]; extM += n.Et[0]  # add external Ns for next loop  (Use n.Et? Their derH.Et may empty)
-                elif _N.m:  # was in C.node_
+                        extN_ += [n]; extM += n.extH.Et[0]  # add external Ns for next loop
+                elif _N.m:  # was in C.node_, subtract from C
                     _N.sign=-1; _N.m = 0; dN_+=[_N]; dM += -vm  # dM += abs m deviation
-                    # subtract from C
+
             if dM > ave and M + extM > ave:  # update val and reform val, terminate reforming if low
-                # dN_ = extN_ | set(cN_)  # dN_ shouldn't be including extN_?
-                if dN_: # recompute if any changes in node_
+                if dM: # recompute if any changes in node_
                     C = centroid(set(dN_),N_,C)
-                _N_ = set(N_)|set(extN_)  # both old and new nodes will be compared to new C
+                _N_ = set(N_)|set(extN_)  # compare both old and new nodes to new C in next loop
                 C.M = M; C.node_ = N_
             else:
                 if C.M > ave * 10:
@@ -175,15 +177,15 @@ def find_centroids(graph):
                     for n in C.node_: n.m = 0
                     return N  # keep seed node
 
-    # find representative centroids for complemented Gs: m-core + d-contour, initially within an edge
-    N_ = sorted(graph.subG_, key=lambda n: n.Et[0], reverse=True)
+    # find representative centroids for complemented Gs: m-core + d-contour, initially from unpacked edge
+    N_ = sorted([N for N in graph.subG_], key=lambda n: n.Et[0], reverse=True)
     subG_, clustered_ = [], set()
     for N in N_:
         N.sign, N.m, N.fin = 1, 0, 0  # setattr: C update sign, inclusion val, prior C inclusion flag
     for i, N in enumerate(N_):  # replace some of connectivity cluster by exemplar centroids
         if not N.fin:  # not in prior C
             if N.Et[0] > ave * 10:
-                subG_ += [centroid_cluster(N, subG_)]  # extend from N.rim, return C if packed else N
+                subG_ += [centroid_cluster(N)]  # extend from N.rim, return C if packed else N
             else:  # the rest of N_ M is lower
                 subG_ += [N for N in N_[i:] if not N.fin]
                 break
