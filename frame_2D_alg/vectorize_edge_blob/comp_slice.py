@@ -1,6 +1,4 @@
 import numpy as np
-from copy import deepcopy, copy
-from itertools import zip_longest
 import sys
 sys.path.append("..")
 from frame_blobs import CBase, frame_blobs_root, intra_blob_root, imread, unpack_blob_
@@ -131,7 +129,7 @@ def comp_dP_(PP):  # node_- mediated: comp node.rim dPs, call from form_PP_
                 if _dP not in link_:
                     continue  # skip removed node links
                 rn = _dP.mdLay[3] / dP.mdLay[3]  # mdLay.n
-                derLay = comp_md_(_dP.mdLay[1], dP.mdLay[1], rn=rn)  # comp md_latuple: H
+                derLay = comp_md_(_dP.mdLay, dP.mdLay, rn=rn)  # comp md_latuple: H  (we need to parse the whole mdLay to compute n)
                 angle = np.subtract(dP.yx,_dP.yx)  # dy,dx of node centers
                 distance = np.hypot(*angle)  # between node centers
                 llink_ += [ convert_to_dP(_dP, dP, derLay, angle, distance, fd=1)]
@@ -162,7 +160,7 @@ def form_PP_(root, iP_):  # form PPs of dP.valt[fd] + connected Ps val
             prim_,lrim_ = set(),set()
             for _P,_L in zip(_prim_,_lrim_):
                 if _P.merged: continue  # was merged
-                _P_.add(_P); link_.add(_L); Et += _L.mdLay[1]
+                _P_.add(_P); link_.add(_L); Et += _L.mdLay[2]
                 prim_.update(set(_P.prim) - _P_)
                 lrim_.update(set(_P.lrim) - link_)
                 _P.merged = 1
@@ -217,7 +215,7 @@ def comp_latuple(_latuple, latuple, _n,n):  # 0der params
     m_ = np.array([mL, mI, mG, mM, mMa, mA])
     et = np.array([np.sum(m_), np.sum(np.abs(d_))])
 
-    return np.array([m_,d_, et, (_n+n)/1], dtype=object)
+    return np.array([m_,d_, et, (_n+n)/2], dtype=object)  # (why /1 here?)
 
 def get_match(_par, par):
     match = min(abs(_par),abs(par))

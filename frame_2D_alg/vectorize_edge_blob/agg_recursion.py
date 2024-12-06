@@ -3,8 +3,7 @@ sys.path.append("..")
 import numpy as np
 from copy import copy, deepcopy
 from functools import reduce
-from itertools import combinations
-from frame_blobs import CBase, frame_blobs_root, intra_blob_root, imread, unpack_blob_
+from frame_blobs import frame_blobs_root, intra_blob_root, imread
 from comp_slice import comp_latuple, comp_md_
 from trace_edge import comp_node_, comp_link_, sum2graph, get_rim, CH, CG, ave, ave_d, ave_L, vectorize_root, comp_area, extend_box
 '''
@@ -41,7 +40,8 @@ def agg_cluster_(frame):  # breadth-first (node_,L_) cross-comp, clustering, rec
                 L.root_ = [frame]; L.extH = CH(); L.rimt = [[],[]]
             lN_,lL_,md = comp_link_(L_)  # comp new L_, root.link_ was compared in root-forming for alt clustering
             vd *= md / ave
-            frame.derH.append_(CH().add_H([L.derH for L in lL_]))  # dfork
+            if lL_:  # lL_ may empty, so skip the feedback if they are empty? We might not getting any lN_ and lL_ when their Et eval is false in comp_link_
+                frame.derH.append_(CH().add_H([L.derH for L in lL_]))  # dfork
             # recursive der+ eval_: cost > ave_match, add by feedback if < _match?
         else:
             frame.derH.H += [[]]  # empty to decode rng+|der+, n forks per layer = 2^depth
@@ -120,8 +120,8 @@ def find_centroids(graph):
             C.n += n.n * s; C.Et += n.Et * s; C.rng = n.rng * s; C.aRad += n.aRad * s
             C.L += len(n.node_) * s
             C.latuple += n.latuple * s; C.mdLay += n.mdLay * s
-            if n.derH: C.derH.add_H(n.derH, sign=s)
-            if n.extH: C.extH.add_H(n.extH, sign=s)
+            if n.derH: C.derH = C.derH.add_H(n.derH, sign=s)
+            if n.extH: C.extH = C.extH.add_H(n.extH, sign=s)
         # get averages:
         k = len(dnode_); C.n/=k; C.Et/=k; C.latuple/=k; C.mdLay/=k; C.aRad/=k
         if C.derH: C.derH.norm_(k)  # derH/=k
@@ -133,8 +133,8 @@ def find_centroids(graph):
         rn = C.n / N.n
         mL = min(C.L,len(N.node_)) - ave_L
         mA = comp_area(C.box, N.box)[0]
-        mLat = comp_latuple(C.latuple, N.latuple, rn,fagg=1)[1][0]
-        mLay = comp_md_(C.mdLay[0], N.mdLay[0], rn)[1][0]
+        mLat = comp_latuple(C.latuple, N.latuple, C.n, N.n)[1][0]
+        mLay = comp_md_(C.mdLay, N.mdLay, rn)[2][0]
         mH = C.derH.comp_H(N.derH, rn).Et[0] if C.derH and N.derH else 0
         # comp node_, comp altG from converted adjacent flat blobs?
         return mL + mA + mLat + mLay + mH
@@ -159,12 +159,12 @@ def find_centroids(graph):
                     for link, _ in _N.rim:
                         n = link.nodet[0] if link.nodet[1] is _N else link.nodet[1]
                         if n.fin or n.m: continue  # in other C or in C.node_
-                        extN_ += [n]; extM += n.extH.Et[0]  # add external Ns for next loop
+                        extN_ += [n]; extM += n.Et[0]  # add external Ns for next loop
                 elif _N.m:  # was in C.node_, subtract from C
                     _N.sign=-1; _N.m = 0; dN_+=[_N]; dM += -vm  # dM += abs m deviation
 
             if dM > ave and M + extM > ave:  # update val and reform val, terminate reforming if low
-                if dM: # recompute if any changes in node_
+                if dN_: # recompute if any changes in node_  (We still need to check dN_ because dM is incremented when _N is in C, so there might be no new node)
                     C = centroid(set(dN_),N_,C)
                 _N_ = set(N_)|set(extN_)  # compare both old and new nodes to new C in next loop
                 C.M = M; C.node_ = N_
@@ -175,11 +175,12 @@ def find_centroids(graph):
                     return C  # centroid cluster
                 else:  # unpack C.node_
                     for n in C.node_: n.m = 0
+                    N.fin = 1  # prevent N being clustered by other C again
                     return N  # keep seed node
 
     # find representative centroids for complemented Gs: m-core + d-contour, initially from unpacked edge
-    N_ = sorted([N for N in graph.subG_], key=lambda n: n.Et[0], reverse=True)
-    subG_, clustered_ = [], set()
+    N_ = sorted([N for N in graph.subG_ if any(N.Et)], key=lambda n: n.Et[0], reverse=True)
+    subG_ = []
     for N in N_:
         N.sign, N.m, N.fin = 1, 0, 0  # setattr: C update sign, inclusion val, prior C inclusion flag
     for i, N in enumerate(N_):  # replace some of connectivity cluster by exemplar centroids
