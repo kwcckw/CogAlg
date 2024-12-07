@@ -79,10 +79,12 @@ class CH(CBase):  # generic derivation hierarchy of variable nesting: extH | der
             if HE:
                 for i, (Lay,lay) in enumerate(zip_longest(HE.H, He.H, fillvalue=None)):  # cross comp layer
                     if lay:
-                        if Lay: Lay.add_H(lay)
+                        if Lay: 
+                            Lay = Lay.add_H(lay); Lay.root = HE
                         else:
-                            if Lay is None: HE.append_(lay.copy_(root=HE))  # pack a copy of new lay in HE.H
-                            else:           HE.H[i] = lay.copy_(root=HE)  # Lay was []
+                            lay = lay.copy_(); lay.root = HE
+                            if Lay is None: HE.append_(lay)  # pack a copy of new lay in HE.H
+                            else:           HE.H[i] = lay  # Lay was []
                 HE.add_lay(He, sign)
                 HE.node_ += [node for node in He.node_ if node not in HE.node_]  # node_ is empty in CL derH?
             else:
@@ -95,7 +97,7 @@ class CH(CBase):  # generic derivation hierarchy of variable nesting: extH | der
         if flat:
             for i, lay in enumerate(He.H):  # different refs for L.derH and root.derH.H:
                 if lay:
-                    lay = lay.copy_(root=HE); lay.i = len(HE.H)+i
+                    lay = lay.copy_(); lay.root = HE; lay.i = len(HE.H)+i
                 HE.H += [lay]  # lay may be empty to trace forks
         else:
             He.i = len(HE.H); He.root = HE; HE.H += [He]  # He can't be empty
@@ -103,17 +105,38 @@ class CH(CBase):  # generic derivation hierarchy of variable nesting: extH | der
 
         return HE
 
-    def copy_(_He, root, rev=0):
+    def copy_(_He,rev=0):
         # comp direction may be reversed
-        He = CH(root=root, node_=copy(_He.node_), n=_He.n, i=_He.i, i_=copy(_He.i_))
+        He = CH(node_=copy(_He.node_), n=_He.n, i=_He.i, i_=copy(_He.i_))
         He.Et = copy(_He.Et)
         He.md_t = deepcopy(_He.md_t)
         if rev:
             for _,d_,_,_ in He.md_t:  # mdExt, possibly mdLat, mdLay
                d_ *= -1   # negate ds
         for he in _He.H:
-            He.H += [he.copy_(root=He, rev=rev)] if he else [[]]
+            if he:
+                he = he.copy_(rev=rev)
+                he.root = He
+            else:
+                he = []
+            He.H += [he]
         return He
+
+    def copy_2(_He,rev=0,fnew=1):
+        # comp direction may be reversed
+        if fnew: He = CH(node_=copy(_He.node_), n=_He.n, i=_He.i, i_=copy(_He.i_))
+        else:    He.node_, He.n, He.i, He.i_ = copy(_He.node_), _He.n, _He.i, _He.i_ 
+        He.Et = copy(_He.Et)
+        He.md_t = deepcopy(_He.md_t)
+        if rev:
+            for _,d_,_,_ in He.md_t:  # mdExt, possibly mdLat, mdLay
+               d_ *= -1   # negate ds
+        for he in _He.H:
+            if he: he = he.copy_(rev=rev,fnew=fnew)
+            else:  he = []
+            He.H += [he]
+        return He
+
 
     def comp_H(_He, He, dir=1):  # unpack each layer of CH down to numericals and compare each pair
 
@@ -131,7 +154,7 @@ class CH(CBase):  # generic derivation hierarchy of variable nesting: extH | der
                 DLay.append_(dLay)  # DLay.H += subLay
             else:
                 l = _lay if _lay else lay  # only one not empty lay = difference between lays:
-                if l: DLay.append_(l.copy_(root=DLay, rev=rev))
+                if l: DLay.append_(l.copy_(rev=rev))
                 else: DLay.H += [[]]  # to trace fork types
             # nested subHH ( subH?
         return DLay
@@ -230,7 +253,8 @@ def vectorize_root(frame):
                             G_ += [PP]
                     if len(G_) > ave_L:
                         edge.subG_ = G_
-                        cluster_edge(edge); frame.subG_ += [edge]; frame.derH=frame.derH.add_H(edge.derH)
+                        cluster_edge(edge); frame.subG_ += [edge]
+                        derH=frame.derH.add_H(edge.derH); derH.root = frame; frame.derH = derH
                         # add altG: summed converted adj_blobs of converted edge blob
                         # if len(edge.subG_) > ave_L: agg_recursion(edge)  # unlikely
 
@@ -413,8 +437,8 @@ def comp_N(_N,N, rn, angle=None, dist=None, dir=None):  # dir if fd, Link.derH=d
     if _N.derH and N.derH:
         dderH = _N.derH.comp_H(N.derH, dir=dir)  # comp shared layers
         eLay.append_(dderH, flat=1)
-    elif _N.derH: eLay.append_(_N.derH.copy_(root=eLay))  # one empty derH
-    elif  N.derH: eLay.append_(N.derH.copy_(root=eLay,rev=1))
+    elif _N.derH: eLay.append_(_N.derH.copy_())  # one empty derH
+    elif  N.derH: eLay.append_(N.derH.copy_(rev=1))
     # spec: comp_node_(node_|link_), combinatorial, node_ may be nested with rng-)agg+, graph similarity search?
     Et = copy(eLay.Et)
     if not fd and _N.altG and N.altG:  # not for CL, eval M?
@@ -427,7 +451,7 @@ def comp_N(_N,N, rn, angle=None, dist=None, dir=None):  # dir if fd, Link.derH=d
         for rev, node in zip((0,1), (N,_N)):  # reverse Link direction for _N
             if fd: node.rimt[1-rev] += [(Link,rev)]  # opposite to _N,N dir
             else:  node.rim += [(Link, rev)]
-            node.extH = node.extH.add_H(Link.derH)
+            node.extH = node.extH.add_H(Link.derH); node.extH.root = node
             node.Et += Et
             # flat
     return Link
@@ -444,7 +468,7 @@ def sum2graph(root, grapht, fd, nest):  # sum node and link params into graph, a
         else:  graph.subG_ = subG_
         graph.minL = minL
     yx = [0,0]
-    derH = CH(root=graph)
+    derH = CH()
     for N in node_:
         graph.n += N.n  # +derH.n, total nested comparable vars
         graph.box = extend_box(graph.box, N.box)  # pre-compute graph.area += N.area?
@@ -477,8 +501,10 @@ def sum_G_(node_):
     G = CG()
     for n in node_:
         G.n += n.n; G.rng = n.rng; G.aRad += n.aRad; G.box = extend_box(G.box, n.box); G.latuple += n.latuple; G.mdLay += n.mdLay
-        if n.derH: G.derH.add_H(n.derH)
-        if n.extH: G.extH.add_H(n.extH)
+        if n.derH: 
+            G.derH = G.derH.add_H(n.derH); G.derH.root = G
+        if n.extH:
+            G.extH = G.extH.add_H(n.extH); G.extH.root = G
     return G
 
 if __name__ == "__main__":

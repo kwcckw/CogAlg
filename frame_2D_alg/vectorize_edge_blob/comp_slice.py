@@ -61,7 +61,7 @@ class CdP(CBase):  # produced by comp_P, comp_slice version of Clink
 def comp_md_(_lay,lay, dir=1):  # replace dir with rev?
 
     M, D = 0,0; md_, dd_ = [],[]
-    (_d_,_,_n), (d_,_,n) = _lay,lay
+    (_,_d_,_,_n), (_,d_,_,n) = _lay,lay  # [m_,d_, et, n ]
     rn = _n / n
     for i, (_d, d) in enumerate(zip(_d_, d_)):  # compare ds in md_ or ext
         d *= rn  # normalize by compared accum span
