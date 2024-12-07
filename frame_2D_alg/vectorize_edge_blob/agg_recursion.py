@@ -35,14 +35,13 @@ def agg_cluster_(frame):  # breadth-first (node_,L_) cross-comp, clustering, rec
         mlay = CH().add_H([L.derH for L in L_])  # mfork, else no new layer
         frame.derH = CH(H=[mlay], md_t=deepcopy(mlay.md_t), n=mlay.n, root=frame, Et=copy(mlay.Et)); mlay.root=frame.derH
         vd = d - ave_d * r
-        if vd > 0:
+        if vd > 0:  # no cross-projection
             for L in L_:
                 L.root_ = [frame]; L.extH = CH(); L.rimt = [[],[]]
-            lN_,lL_,md = comp_link_(L_)  # comp new L_, root.link_ was compared in root-forming for alt clustering
+            lN_,lL_, md = comp_link_(L_)  # comp new L_, root.link_ was compared in root-forming for alt clustering
             vd *= md / ave
-            if lL_:  # lL_ may empty, so skip the feedback if they are empty? We might not getting any lN_ and lL_ when their Et eval is false in comp_link_
+            if lL_:  # recursive der+ eval_: cost > ave_match, add by feedback if < _match?
                 frame.derH.append_(CH().add_H([L.derH for L in lL_]))  # dfork
-            # recursive der+ eval_: cost > ave_match, add by feedback if < _match?
         else:
             frame.derH.H += [[]]  # empty to decode rng+|der+, n forks per layer = 2^depth
         # + aggLays, derLays, exemplars:
@@ -130,12 +129,12 @@ def find_centroids(graph):
 
     def comp_C(C, N):  # compute match without new derivatives: global cross-comp is not directional
 
-        rn = C.n / N.n
+        # rn = C.n / N.n
         mL = min(C.L,len(N.node_)) - ave_L
         mA = comp_area(C.box, N.box)[0]
-        mLat = comp_latuple(C.latuple, N.latuple, C.n, N.n)[1][0]
-        mLay = comp_md_(C.mdLay, N.mdLay, rn)[2][0]
-        mH = C.derH.comp_H(N.derH, rn).Et[0] if C.derH and N.derH else 0
+        mLat = comp_latuple(C.latuple, N.latuple, C.n, N.n)[2][0]
+        mLay = comp_md_(C.mdLay, N.mdLay)[2][0]
+        mH = C.derH.comp_H(N.derH).Et[0] if C.derH and N.derH else 0
         # comp node_, comp altG from converted adjacent flat blobs?
         return mL + mA + mLat + mLay + mH
 
@@ -159,14 +158,14 @@ def find_centroids(graph):
                     for link, _ in _N.rim:
                         n = link.nodet[0] if link.nodet[1] is _N else link.nodet[1]
                         if n.fin or n.m: continue  # in other C or in C.node_
-                        extN_ += [n]; extM += n.Et[0]  # add external Ns for next loop
+                        extN_ += [n]; extM += n.Et[0]  # external N for next loop
                 elif _N.m:  # was in C.node_, subtract from C
-                    _N.sign=-1; _N.m = 0; dN_+=[_N]; dM += -vm  # dM += abs m deviation
+                    _N.sign=-1; _N.m=0; dN_+=[_N]; dM += -vm  # dM += abs m deviation
 
-            if dM > ave and M + extM > ave:  # update val and reform val, terminate reforming if low
-                if dN_: # recompute if any changes in node_  (We still need to check dN_ because dM is incremented when _N is in C, so there might be no new node)
+            if dM > ave and M + extM > ave:  # update for next loop, terminate if low reform val
+                if dN_: # recompute C if any changes in node_
                     C = centroid(set(dN_),N_,C)
-                _N_ = set(N_)|set(extN_)  # compare both old and new nodes to new C in next loop
+                _N_ = set(N_) | set(extN_)  # next loop compares both old and new nodes to new C
                 C.M = M; C.node_ = N_
             else:
                 if C.M > ave * 10:
@@ -175,7 +174,6 @@ def find_centroids(graph):
                     return C  # centroid cluster
                 else:  # unpack C.node_
                     for n in C.node_: n.m = 0
-                    N.fin = 1  # prevent N being clustered by other C again
                     return N  # keep seed node
 
     # find representative centroids for complemented Gs: m-core + d-contour, initially from unpacked edge
