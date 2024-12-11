@@ -135,7 +135,7 @@ def comp_md_(_d_,d_, rn=.1, dir=1):  # replace dir with rev?
 
 def convert_to_dP(_P,P, derLay, angle, distance, Et, fd):
 
-    link = CdP(nodet=[_P,P], Et=Et, mdLat=derLay, angle=angle, span=distance, yx=np.add(_node.yx, node.yx)/2)
+    link = CdP(nodet=[_P,P], Et=Et, mdLat=derLay, angle=angle, span=distance, yx=np.add(_P.yx, P.yx)/2)
     if Et[fd] > aves[fd]:
         _P.mdLat += link.mdLat; P.mdLat += link.mdLat  # regardless of clustering?
         _P.lrim += [link]; P.lrim += [link]
@@ -157,7 +157,7 @@ def form_PP_(root, iP_):  # form PPs of dP.valt[fd] + connected Ps val
             prim_,lrim_ = set(),set()
             for _P,_L in zip(_prim_,_lrim_):
                 if _P.merged: continue  # was merged
-                _P_.add(_P); link_.add(_L); Et += link.Et
+                _P_.add(_P); link_.add(_L); Et += _L.Et
                 prim_.update(set(_P.prim) - _P_)
                 lrim_.update(set(_P.lrim) - link_)
                 _P.merged = 1
@@ -171,9 +171,8 @@ def sum2PP(root, P_, dP_):  # sum links in Ps and Ps in PP
 
     fd = isinstance(P_[0],CdP)
     if fd:
-        latuple_ = (n.lat for n in set(*dP.nodet for dP in P_))
-        latuple = reduce(np.sum, latuple_)
-        area = reduce(sum, (lat[4] for lat in latuple_))
+        latuple = np.sum([n.latuple for n in set([n for dP in P_ for n in  dP.nodet])],axis=0)  # the prior code facing error
+        area = latuple[4]
     else:
         latuple = np.array([.0,.0,.0,.0,.0, np.zeros(2)], dtype=object)
         area = 0
