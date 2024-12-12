@@ -65,13 +65,14 @@ def vectorize_root(frame):
         if not blob.sign and blob.G > aveG * blob.root.rdn:
             edge = slice_edge(blob)
             if edge.G*(len(edge.P_) - 1) > ave_PPm:  # eval PP, rdn=1
+                for P in edge.P_: P.mdLay = np.array([np.zeros(6), np.zeros(6)])
                 comp_slice(edge)
 
 def comp_slice(edge):  # root function
 
     edge.mdLat = np.array([np.zeros(6), np.zeros(6)])  # m_,d_
     for P in edge.P_:  # add higher links
-        P.mdLat = np.array([np.zeros(6), np.zeros(6)])  # to accumulate in sum2PP
+        P.mdLat = np.array([np.zeros(6), np.zeros(6)])
         P.rim = []; P.lrim = []; P.prim = []
 
     comp_P_(edge)  # vertical P cross-comp -> PP clustering, if lateral overlap
@@ -120,7 +121,7 @@ def comp_dP_(PP):  # node_- mediated: comp node.rim dPs, call from form_PP_
                 llink_ += [convert_to_dP(_dP, dP, derLat, angle, distance, et, fd=1)]
     return llink_
 
-def comp_md_(_d_,d_, rn=.1, dir=1):  # replace dir with rev?
+def comp_md_(_d_,d_, rn=.1, dir=1):  # dir may be -1
 
     M, D = 0,0; md_, dd_ = [],[]
     for i, (_d, d) in enumerate(zip(_d_, d_)):  # compare ds in md_ or ext
@@ -147,7 +148,7 @@ def form_PP_(root, iP_):  # form PPs of dP.valt[fd] + connected Ps val
 
     PPt_ = []
     for P in iP_: P.merged = 0
-    for P in iP_: # dP from link_ if fd
+    for P in iP_:  # dP from link_ if fd
         if P.merged: continue
         if not P.lrim:
             PPt_ += [P]; continue
@@ -171,7 +172,7 @@ def sum2PP(root, P_, dP_):  # sum links in Ps and Ps in PP
 
     fd = isinstance(P_[0],CdP)
     if fd:
-        latuple = np.sum([n.latuple for n in set([n for dP in P_ for n in  dP.nodet])],axis=0)  # the prior code facing error
+        latuple = np.sum([n.latuple for n in set([n for dP in P_ for n in  dP.nodet])], axis=0)
         area = latuple[4]
     else:
         latuple = np.array([.0,.0,.0,.0,.0, np.zeros(2)], dtype=object)
