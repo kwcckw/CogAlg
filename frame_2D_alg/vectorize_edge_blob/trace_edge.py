@@ -67,20 +67,21 @@ class CH(CBase):  # generic derivation hierarchy of variable nesting: extH | der
 
     def __bool__(H): return H.n != 0
 
-    def add_H(HE, He_, sign=1):  # unpack derHs down to numericals and sum them
+    def add_H(HE, He_, sign=1):  # unpack derHs down to numericals and sum them (when do we need this sign?)
         if not isinstance(He_,list): He_ = [He_]
 
         for He in He_:
             for Lay, lay in zip_longest(HE.H, He.H, fillvalue=None):
-                if lay:
-                    if not Lay:  # None or empty
-                        HE.append_(lay.copy_(root=HE))  # copy new lay to HE.H
-                    elif isinstance(lay.H[0], CH):  # same for Lay
-                        Lay.add_H(lay, sign)  # unpack
-                    else:  # Lay is md_C
-                        for Md_, md_ in zip(Lay.H, lay.H):  # [mdExt, ?mdLat,mdLay]
-                            Md_ += md_ * sign
-                    Lay.Et += lay.Et * sign; Lay.n += lay.n * sign  # combined n params
+                if lay is not None:
+                    if Lay is None:  # None or empty
+                        HE.append_(lay.copy_(root=HE))  # copy new lay to HE.H (He.H maybe = md_t here)
+                    else:
+                        if isinstance(lay.H[0], CH):  # same for Lay
+                            Lay.add_H(lay, sign)  # unpack
+                        else:  # Lay is md_C
+                            for Md_, md_ in zip(Lay.H, lay.H):  # [mdExt, ?mdLat,mdLay]
+                                Md_ += md_ * sign
+                        Lay.Et += lay.Et * sign; Lay.n += lay.n * sign  # combined n params
 
             HE.node_ += [node for node in He.node_ if node not in HE.node_]  # empty in CL derH?
             HE.Et += He.Et * sign
@@ -92,7 +93,7 @@ class CH(CBase):  # generic derivation hierarchy of variable nesting: extH | der
 
         if flat:
             for i, lay in enumerate(He.H):  # different refs for L.derH and root.derH.H:
-                if lay:
+                if np.any(lay):
                     lay = lay.copy_(root=HE); lay.i = len(HE.H)+i
                 HE.H += [lay]  # lay may be empty to trace forks
         else:
@@ -105,12 +106,16 @@ class CH(CBase):  # generic derivation hierarchy of variable nesting: extH | der
     def copy_(He, root, rev=0):  # comp direction may be reversed
 
         C = CH(root=root, node_=copy(He.node_), Et=copy(He.Et), n=He.n, i=He.i, i_=He.i_)
-        for he in He.H:
-            if isinstance(he.H[0], CH):
-                C.H += [he.copy_(root=C,rev=rev)]
-            else:  # top lay, md_C
-                md_t = [np.array([copy(m_), d_ * -1 if rev else 1]) for d_,m_ in he.H]
-                C.H += [CH(root=root, H = md_t, node_=copy(he.node_), Et=copy(he.Et), n=he.n, i=he.i, i_=he.i_)]
+        if isinstance(He.H[0], CH):
+            for he in He.H:
+                if isinstance(he.H[0], CH):
+                    C.H += [he.copy_(root=C,rev=rev)]
+                else:  # top lay, md_C
+                    md_t = [np.array([copy(m_), d_ * (-1 if rev else 1)]) for d_,m_ in he.H]
+                    C.H += [CH(root=root, H = md_t, node_=copy(he.node_), Et=copy(he.Et), n=he.n, i=he.i, i_=he.i_)]
+        else:
+            C.H = deepcopy(He.H)  # deepcopy md_t
+        
         return C
 
     def comp_md_t(_md_C, md_C, rn, root, rdn=1., dir=1):
@@ -123,7 +128,9 @@ class CH(CBase):  # generic derivation hierarchy of variable nesting: extH | der
             der_md_t += [der_md_]
             Et += et
 
-        return CH(root=root, H=np.array(der_md_t), Et=np.append(Et,rdn), n=.3 if len(der_md_t)==1 else 2.3)  # .3 in default comp ext)
+        # i'm not sure why but there's some dimension error if we convert der_md_t from list into array below, but actually it can be remained as list?
+        # the error: *** ValueError: could not broadcast input array from shape (2,2) into shape (2,)
+        return CH(root=root, H=der_md_t, Et=np.append(Et,rdn), n=.3 if len(der_md_t)==1 else 2.3)  # .3 in default comp ext)
 
     def comp_H(_He, He, rn, root):
 
@@ -137,7 +144,7 @@ class CH(CBase):  # generic derivation hierarchy of variable nesting: extH | der
                         dLay = _lay.comp_H(lay, rn, root=derH)  # deeper unpack -> comp_md_t
                     else:
                         dLay = _lay.comp_md_t(lay, rn=rn, root=derH, rdn=(_He.Et[2]+He.Et[2]) /2)  # comp shared layers
-                    derH.append_(dLay, flat=1)
+                    derH.append_(dLay)  # if flat in sum2graph is 1, flattening is not needed here
                 else:
                     derH.append_(_lay.copy_(root=derH, rev=0))  # diff = _he
             elif lay:
@@ -223,7 +230,7 @@ def vectorize_root(frame):
             blob = slice_edge(blob)
             if blob.G * (len(blob.P_)-1) > ave:  # eval PP
                 comp_slice(blob)
-                if blob.Et[0] * (len(blob.node_)-1)*(blob.rng+1) > ave * blob.Et[2]:
+                if blob.Et[0] * (len(blob.node_)-1)*(blob.rng+1) > ave :  # no rdn in blob.Et?
                     # init for agg+:
                     if not hasattr(frame, 'derH'):
                         frame.derH = CH(root=frame); frame.root = None; frame.subG_ = []
@@ -279,7 +286,7 @@ def cluster_edge(edge):  # edge is CG but not a connectivity cluster, just a set
     # cancel by borrowing d?
     if m > ave * r:
         mlay = CH().add_H([L.derH for L in L_])  # mfork, else no new layer
-        edge.derH = CH(H=[mlay], md_t = deepcopy(mlay.md_t), n=mlay.n, root=edge, Et=copy(mlay.Et))
+        edge.derH = CH(H=[mlay], n=mlay.n, root=edge, Et=copy(mlay.Et))
         mlay.root = edge.derH  # init
         if len(N_) > ave_L:
             cluster_PP_(edge,fd=0)
@@ -421,10 +428,11 @@ def comp_N(_N,N, rn, angle=None, dist=None, dir=None):  # dir if fd, Link.derH=d
     Et = np.append(Et, (_N.Et[2] + N.Et[2]) / 2)
     # add rdn
     md_C = CH(H=md_t, Et=Et, n=n)
-    derH = CH(H=[md_C], Et=copy(Et), n=n)
+    lay = CH(H=[md_C], Et=copy(Et), n=n)
+    derH = CH(H=[lay], Et=copy(Et), n=n)  # we need additional nesting here so that CL and CG has a same nesting level
     if N.derH:
         if _N.derH:
-            dderH = _N.derH.comp_H(N.derH, dir=dir)  # comp shared layers
+            dderH = _N.derH.comp_H(N.derH, rn=_N.n/N.n, root = derH)  # comp shared layers
             derH.append_(dderH, flat=1)
         else:
             derH.append_(N.derH.copy_(root=derH,rev=1))  # diff= -N.derH
@@ -476,7 +484,7 @@ def sum2graph(root, grapht, fd, nest):  # sum node and link params into graph, a
     if derH:  # skip sum derH.Et, already in arg Et?
         graph.derH = derH  # lower layers
     derLay = CH().add_H([link.derH for link in link_]); derLay.root=graph.derH; derLay.node_=node_
-    if derH: graph.derH.append_(derLay)  # new layer
+    if derH: graph.derH.append_(derLay,flat=1)  # new layer
     else:    graph.derH.add_H(derLay)
     graph.derH.root = graph  # higher layers are added by feedback
     L = len(node_)
