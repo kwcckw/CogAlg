@@ -69,7 +69,7 @@ class CH(CBase):  # generic derivation hierarchy of variable nesting: extH | der
 
     def copy_md_C(he, root, dir=1, fc=0):  # dir is sign if called from centroid, which doesn't use dir
 
-        md_t = [np.array([m_ * dir if fc else copy(m_), d_ * dir]) for d_, m_ in he.H]
+        md_t = [np.array([m_ * dir if fc else copy(m_), d_ * dir]) for m_, d_ in he.H]  # m_, d_ is inverted
         Et = he.Et; n = he.n
         if fc:
             Et *= dir; n *= dir
@@ -79,7 +79,7 @@ class CH(CBase):  # generic derivation hierarchy of variable nesting: extH | der
 
         C = CH(root=root, node_=copy(He.node_), Et=copy(He.Et), n=He.n, i=He.i, i_=He.i_)
         for he in He.H:
-            C.H += [he.copy_(dir=dir, s=s, root=C) if isinstance(he.H[0],CH) else he.copy_md_C(dir=dir, s=s, root=C)]
+            C.H += [he.copy_(dir=dir, s=s, root=C) if isinstance(he.H[0],CH) else he.copy_md_C(dir=dir if s==1 else s, fc=s==1, root=C)]  # if s is -1, dir should follow s?
         return C
 
     def add_md_C(Lay, lay, s=1):
@@ -97,7 +97,7 @@ class CH(CBase):  # generic derivation hierarchy of variable nesting: extH | der
                     if Lay:  # unpack|add, same nesting in both lays
                         Lay.add_H(lay, dir,s) if isinstance(lay.H[0],CH) else Lay.add_md_C(lay, s)
                     elif Lay is None:
-                        HE.append_( lay.copy_(root=HE, dir=dir,s=s) if isinstance(HE.H[0],CH) else lay.copy_md_C(root=HE, dir=dir,s=s))
+                        HE.append_( lay.copy_(root=HE, dir=dir,s=s) if isinstance(lay.H[0],CH) else lay.copy_md_C(root=HE, dir=dir if s==1 else s,fc=s==1))
                 elif lay is not None and Lay is None:
                     HE.H += [CH()]
 
@@ -111,7 +111,9 @@ class CH(CBase):  # generic derivation hierarchy of variable nesting: extH | der
         if flat:
             for i, lay in enumerate(He.H):  # different refs for L.derH and root.derH.H:
                 if lay:
-                    lay = lay.copy_(root=HE); lay.i = len(HE.H) + i
+                    if isinstance(lay.H[0], CH):  lay = lay.copy_(root=HE);
+                    else:                         lay = lay.copy_md_C(root=HE, fc=1)   # lay could be mdC too
+                    lay.i = len(HE.H) + i
                 HE.H += [lay]  # lay may be empty to trace forks
         else:
             He.i = len(HE.H); He.root = HE; HE.H += [He]  # He can't be empty
@@ -261,7 +263,7 @@ def cluster_edge(edge):  # edge is CG but not a connectivity cluster, just a set
         Gt_ = []
         N_ = copy(edge.link_ if fd else edge.subG_)
         while N_:  # flood fill
-            node_,link_, et, n = [],[], np.zeros(3)
+            node_,link_, et, n = [],[], np.zeros(3), 0  # why n is removed?
             N = N_.pop(); _eN_ = [N]
             while _eN_:
                 eN_ = []
@@ -276,7 +278,7 @@ def cluster_edge(edge):  # edge is CG but not a connectivity cluster, just a set
                 _eN_ = eN_
             Gt = [node_,link_,et,n]; Gt_ += [Gt]
         # convert select Gt+minL+subG_ to CGs:
-        subG_ = [sum2graph(edge, [node_,link_,et.n], fd, nest=1) for node_,link_,et in Gt_ if et[0] > ave * et[2]]
+        subG_ = [sum2graph(edge, [node_,link_,et,n], fd, nest=1) for node_,link_,et,n in Gt_ if et[0] > ave * et[2]]
         if subG_:
             if fd: edge.subL_ = subG_
             else:  edge.subG_ = subG_  # higher aggr, mediated access to init edge.subG_
@@ -435,9 +437,9 @@ def comp_N(_N,N, rn, angle=None, dist=None, dir=None):  # dir if fd, Link.derH=d
             dderH = _N.derH.comp_H(N.derH, rn, root=derH)  # comp shared layers
             derH.append_(dderH, flat=1)
         else:
-            derH.append_(N.derH.copy_(root=derH, dir=-1))  # diff= -N.derH
+            derH.append_(N.derH.copy_(root=derH, dir=-1), flat=1)  # diff= -N.derH  (here we need flat == 1 too, else their layer won't be aligned, same with below)
     elif _N.derH:
-        derH.append_(_N.derH.copy_(root=derH, dir=1))  # diff= _N.derH
+        derH.append_(_N.derH.copy_(root=derH, dir=1),flat=1)  # diff= _N.derH
     # spec: comp_node_(node_|link_), combinatorial, node_ may be nested with rng-)agg+, graph similarity search?
     Et = copy(derH.Et)
     if not fd and _N.altG and N.altG:  # not for CL, eval M?
@@ -486,7 +488,7 @@ def sum2graph(root, grapht, fd, nest):  # sum node and link params into graph, a
         graph.derH = derH  # lower layers
     derLay = CH().add_H([link.derH for link in link_])
     for lay in derLay.H:
-        lay.root = graph; graph.H += [lay]  # concat new layer, higher layers are added by feedback
+        lay.root = graph; graph.derH.H += [lay]  # concat new layer, higher layers are added by feedback
     graph.derH.Et += Et; graph.derH.n += n  # arg Et,n
     L = len(node_)
     yx = np.divide(yx,L); graph.yx = yx
@@ -496,6 +498,7 @@ def sum2graph(root, grapht, fd, nest):  # sum node and link params into graph, a
         # assign alt graphs from d graph, after both linked m and d graphs are formed
         for node in node_:  # CG or CL
             mgraph = node.root_[-1]
+            # altG summation below is still buggy with current add_H
             if mgraph:
                 mgraph.altG = sum_G_([mgraph.altG, graph])  # bilateral sum?
                 graph.altG = sum_G_([graph.altG, mgraph])
