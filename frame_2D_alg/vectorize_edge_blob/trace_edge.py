@@ -242,9 +242,15 @@ def vectorize_root(frame):
                     for N in edge.node_:
                         # no comp node_, link_ | PPd_ for now
                         P_, link_, vert, lat, A, S, box, [y,x], Et, n = N[1:] if isinstance(N,list) else (  # PPt else P:
-                        N.dert_, [], N.vertuple, N.latuple, N.latuple[-1], N.latuple[-4], [], N.yx, 0, [np.sum(N.vertuple[0]),np.sum(N.vertuple[1])], N.latuple[-4])
+                        N.dert_, [], N.vertuple, N.latuple, N.latuple[4], 0, [], N.yx, [np.sum(N.vertuple[0]),np.sum(N.vertuple[1])], N.latuple[-4])
+                        # latuple is I, G, M, Ma, L, (Dy, Dx)
+                        # when N is P: 
+                        # for A, it's L? which is N.latuple[4]?
+                        # for S, it is 0?
+                        # for n, why it's P.latuple[-4]? Which is M?
+
                         if Et[0] > ave:
-                            PP = CG(fd=0, Et=np.array([Et[:],1.]), root_=[edge], node_=P_, link_=link_, vert=vert,
+                            PP = CG(fd=0, Et=np.append(Et, 1.), root_=[edge], node_=P_, link_=link_, vert=vert,
                                     latuple=lat, box=box, yx=[y,x], n=n)  # no altG until cross-comp
                             y0,x0,yn,xn = box
                             PP.aRad = np.hypot(*np.subtract(PP.yx,(yn,xn)))
