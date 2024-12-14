@@ -118,11 +118,12 @@ def find_centroids(graph):
             s = n.sign; n.sign=1  # single-use sign
             C.n += n.n * s; C.Et += n.Et * s; C.rng = n.rng * s; C.aRad += n.aRad * s
             C.L += len(n.node_) * s
-            C.latuple += n.latuple * s; C.mdLat += n.mdLat * s
-            if n.derH: C.derH.add_H(n.derH, s=s)
-            if n.extH: C.extH.add_H(n.extH, s=s)
+            C.latuple += n.latuple * s
+            C.vertuple += n.vertuple * s
+            if n.derH: C.derH.add_H(n.derH, dir=s, fc=1)
+            if n.extH: C.extH.add_H(n.extH, dir=s, fc=1)
         # get averages:
-        k = len(dnode_); C.n/=k; C.Et/=k; C.latuple/=k; C.mdLat/=k; C.aRad/=k
+        k = len(dnode_); C.n/=k; C.Et/=k; C.latuple/=k; C.vertuple/=k; C.aRad/=k
         if C.derH: C.derH.norm_(k)  # derH/=k
         C.box = reduce(extend_box, (n.box for n in node_))
         return C
@@ -133,10 +134,10 @@ def find_centroids(graph):
         mL = min(C.L,len(N.node_)) - ave_L
         mA = comp_area(C.box, N.box)[0]
         mLat = comp_latuple(C.latuple, N.latuple, C.n, N.n)[1][0]
-        mLay = comp_md_(C.mdLat[1], N.mdLat[1])[1][0]
+        mVer = comp_md_(C.vertuple[1], N.vertuple[1])[1][0]
         mH = C.derH.comp_H(N.derH).Et[0] if C.derH and N.derH else 0
         # comp node_, comp altG from converted adjacent flat blobs?
-        return mL + mA + mLat + mLay + mH
+        return mL + mA + mLat + mVer + mH
 
     def centroid_cluster(N):  # refine and extend cluster with extN_
 
