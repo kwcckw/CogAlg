@@ -327,7 +327,8 @@ def comp_node_(_N_):  # rng+ forms layer of rim and extH per N, appends N_,L_,Et
             nrim = {L.nodet[1] if L.nodet[0] is G else L.nodet[0] for L,_ in G.rim}
             if _nrim & nrim:  # indirectly connected Gs,
                 continue     # no direct match priority?
-            if dist < max_dist * (radii * icoef**3) * (_G.Et[0] + G.Et[0]) * (_G.extH.Et[0] + G.extH.Et[0]):
+            # G.extH is empty before the comp_N below, so we shouldn't use * with G.extH? Else this is always False
+            if dist < max_dist * (radii * icoef**3) * ((_G.Et[0] + G.Et[0]) + (_G.extH.Et[0] + G.extH.Et[0])):
                 Link = comp_N(_G,G, rn, angle=[dy,dx],dist=dist)
                 L_ += [Link]  # include -ve links
                 if Link.derH.Et[0] > ave * Link.derH.Et[2]:
@@ -384,7 +385,7 @@ def comp_link_(iL_):  # comp CLs via directional node-mediated link tracing: der
                                     if __L in L.visited_ or __L not in iL_: continue
                                     L.visited_ += [__L]; __L.visited_ += [L]
                                     et = __L.derH.Et
-                                    if et[1] > ave * et[2] * Med:  # /__L
+                                    if et[1] > ave * et[2] * Med:  # /__L  (do we need to change the eval method here too? scale by borrow M and n here?)
                                         mL_.add((__L, rev ^_rev ^__rev))  # combine reversals: 2 * 2 mLs, but 1st 2 are pre-combined
                                         lEt += et
                 if lEt[0] > ave * lEt[2] * Med:  # rng+/ L is different from comp/ L above
@@ -496,12 +497,14 @@ def sum2graph(root, grapht, fd, nest):  # sum node and link params into graph, a
     graph.aRad = sum([np.hypot( *np.subtract(yx, N.yx)) for N in node_]) / L
     if fd:
         # assign alt graphs from d graph, after both linked m and d graphs are formed
-        for node in node_:  # CG or CL
-            mgraph = node.root_[-1]
-            # altG summation below is still buggy with current add_H
-            if mgraph:
-                mgraph.altG = sum_G_([mgraph.altG, graph])  # bilateral sum?
-                graph.altG = sum_G_([graph.altG, mgraph])
+        added_alts = []
+        for link in node_:  # CG or CL
+            for node in link.nodet:  # right now mfork's graph should be from their nodet? But each link has 2 nodet, there will be some redundancy due to the overlapping roots
+                mgraph = node.root_[-1]  
+                if mgraph and mgraph not in added_alts:  # added added_alts since multiple links' nodet may have a same root           
+                    added_alts += [mgraph]    
+                    mgraph.altG = sum_G_([mgraph.altG, graph])  # bilateral sum?
+                    graph.altG = sum_G_([graph.altG, mgraph])
     return graph
 
 def sum_G_(node_):

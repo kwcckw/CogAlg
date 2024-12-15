@@ -67,8 +67,8 @@ def vectorize_root(frame):
                 comp_slice(edge)
 
 def comp_slice(edge):  # root function
-
-    edge.Et, edge.vertuple = np.zeros(2), np.array([np.zeros(6), np.zeros(6)])  # m_,d_
+    # we need n in blob too
+    edge.Et, edge.vertuple, edge.n = np.zeros(2), np.array([np.zeros(6), np.zeros(6)]), 0  # m_,d_
     for P in edge.P_:  # add higher links
         P.vertuple = np.array([np.zeros(6), np.zeros(6)])
         P.rim = []; P.lrim = []; P.prim = []
@@ -150,10 +150,13 @@ def form_PP_(root, iP_, fd):  # form PPs of dP.valt[fd] + connected Ps val
                 lrim_.update(set(_P.lrim) - link_)
                 _P.merged = 1
             _prim_, _lrim_ = prim_, lrim_
+        # this is not needed now? We have single P's PP
+        """
         if not link_:
             PPt_ += [P]; continue
+        """
         PPt = sum2PP(root, list(_P_), list(link_), Et, n)
-        PPt_ += [PPt]
+        PPt_ += [PPt]; root.n += n
 
     return PPt_
 
@@ -170,8 +173,9 @@ def sum2PP(root, P_, dP_, Et, n):  # sum links in Ps and Ps in PP
             if dP.nodet[0] not in P_ or dP.nodet[1] not in P_: continue  # peripheral link
             link_ += [dP]
             a = dP.angle; A = np.add(A,a); S += np.hypot(*a)  # span, links are contiguous but slanted
-    else:  # single P PP
-        S,A = P_[0].latuple[4:]  # latuple is I, G, M, Ma, L, (Dy, Dx)
+    else:  # single P PP  (their Et is always 0, where they will be filtered later anyway)
+        S,A = P_[0].latuple[4:]  # latuple is I, G, M, Ma, L, (Dy, Dx)   
+        n = 1   # n should be = L, where it's always 1 here?
     box = [np.inf,np.inf,0,0]
     for P in P_:
         if not fd:  # else summed from P_ nodets on top

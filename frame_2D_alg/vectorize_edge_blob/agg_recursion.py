@@ -35,7 +35,7 @@ def agg_cluster_(frame):  # breadth-first (node_,L_) cross-comp, clustering, rec
         mlay = CH().add_H([L.derH for L in L_])  # mfork, else no new layer
         frame.derH = CH(H=[mlay],  n=mlay.n, root=frame, Et=copy(mlay.Et)); mlay.root=frame.derH
         vd = d - ave_d * r
-        if vd > 0:  # no cross-projection
+        if vd > 0:  # no cross-projection (why no cross projection here? The process is similar with cluster_edge?)
             for L in L_:
                 L.root_ = [frame]; L.extH = CH(); L.rimt = [[],[]]
             lN_,lL_, md = comp_link_(L_)  # comp new L_, root.link_ was compared in root-forming for alt clustering
