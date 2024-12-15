@@ -65,8 +65,8 @@ def cluster_N_(root, L_, fd, nest=1):  # top-down segment L_ by >ave ratio of L.
     Gt_ = []
     for N in N_:  # cluster current distance segment
         if len(N.root_) > nest: continue  # merged, root_[0] = edge
-        node_,link_, et = set(),set(), np.zeros(3)  
-        Gt = [node_,link_,et, 0, min_dist]; N.root_ += [Gt]  # n is missed out here?
+        node_,link_, et, n = set(),set(), np.zeros(3), 0
+        Gt = [node_,link_,et,n,min_dist]; N.root_ += [Gt]
         _eN_ = {N}
         while _eN_:
             eN_ = set()
@@ -78,7 +78,7 @@ def cluster_N_(root, L_, fd, nest=1):  # top-down segment L_ by >ave ratio of L.
                         # if L.derH.Et[0]/ave * n.extH m/ave or L.derH.Et[0] + n.extH m*.1: density?
                         eN_.update([n for n in L.nodet if len(n.root_) <= nest])
                         if L.dist >= min_dist:
-                            link_.add(L); et += L.derH.Et; Gt[-2] += L.derH.n
+                            link_.add(L); et += L.derH.Et; n += L.derH.n
             _eN_ = eN_
         sub_L_ = set()  # form subG_ from shorter-L seg per Gt, depth-first:
         for N in node_:  # cluster in N_
