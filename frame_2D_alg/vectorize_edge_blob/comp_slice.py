@@ -142,17 +142,18 @@ def form_PP_(root, iP_, fd):  # form PPs of dP.valt[fd] + connected Ps val
         _P_ = {P}; link_ = set(); Et = np.array([I+M, G+D])
         while _prim_:
             prim_,lrim_ = set(),set()
-            for _P,_L in zip(_prim_,_lrim_):
-                if _L.Et[fd] < aves[fd] or _P.merged:
+            for _P,_link in zip(_prim_,_lrim_):
+                if _link.Et[fd] < aves[fd] or _P.merged:
                     continue
-                _P_.add(_P); link_.add(_L); _I,_G,_M,_D,_L,_ = _P.latuple
-                Et += _L.Et + np.array([_I+_M,_G+_D])  # intra-P similarity and variance
+                _P_.add(_P); link_.add(_link); _I,_G,_M,_D,_L,_ = _P.latuple
+                Et += _link.Et + np.array([_I+_M,_G+_D])  # intra-P similarity and variance
                 L += _L  # latuple summation span
                 prim_.update(set(_P.prim) - _P_)
                 lrim_.update(set(_P.lrim) - link_)
                 _P.merged = 1
             _prim_, _lrim_ = prim_, lrim_
-        PPt = sum2PP(root, list(_P_), list(link_), np.array([*Et,L,1]))  # Et + n,o
+        Et = np.append(Et,[L,1])
+        PPt = sum2PP(root, list(_P_), list(link_),Et)  # Et + n,o
         PPt_ += [PPt]; root.Et += Et
 
     return PPt_

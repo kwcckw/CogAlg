@@ -30,15 +30,15 @@ def agg_cluster_(frame):  # breadth-first (node_,L_) cross-comp, clustering, rec
     '''
     cross-comp G_) GG_) GGG_., interlaced with exemplar centroid selection 
     '''
-    N_,L_, (m,d,r,n) = comp_node_(frame.subG_)  # cross-comp exemplars, extrapolate to their node_s?
-    if m > ave * r:
+    N_,L_, (m,d,n,o) = comp_node_(frame.subG_)  # cross-comp exemplars, extrapolate to their node_s?
+    if m > ave * n * o:
         mlay = CH().add_H([L.derH for L in L_])  # mfork, else no new layer
         frame.derH = CH(H=[mlay], root=frame, Et=copy(mlay.Et)); mlay.root=frame.derH
-        vd = d * (m/ave) - ave_d * r
+        vd = d * (m/(ave*n)) > ave_d * n * o 
         if vd > 0:
             for L in L_:
-                L.extH, L.root, L.mL_t, L.rimt, L.aRad, L.visited_, L.Et = CH(), frame, [[],[]], [[],[]], 0, [L], copy(L.derH.Et)
-            lN_,lL_, md = comp_link_(L_, [m,d,r,n])  # comp new L_, root.link_ was compared in root-forming for alt clustering
+                L.extH, L.root, L.mL_t, L.rimt, L.aRad, L.visited_, L.Et = CH(), [frame], [[],[]], [[],[]], 0, [L], copy(L.derH.Et)
+            lN_,lL_, md = comp_link_(L_, [m,d,o,n])  # comp new L_, root.link_ was compared in root-forming for alt clustering
             vd *= md / ave
             if lL_:  # recursive der+ eval_: cost > ave_match, add by feedback if < _match?
                 frame.derH.append_(CH().add_H([L.derH for L in lL_]))  # dfork
@@ -64,19 +64,19 @@ def cluster_N_(root, L_, fd, nest=1):  # top-down segment L_ by >ave ratio of L.
     min_dist = _L.dist
     Gt_ = []
     for N in N_:  # cluster current distance segment
-        if len(N.root_) > nest: continue  # merged, root_[0] = edge
+        if len(N.root) > nest: continue  # merged, root[0] = edge
         node_,link_, et = set(),set(), np.zeros(4)
-        Gt = [node_,link_,et,min_dist]; N.root_ += [Gt]
+        Gt = [node_,link_,et,min_dist]; N.root += [Gt]
         _eN_ = {N}
         while _eN_:
             eN_ = set()
             for eN in _eN_:  # cluster rim-connected ext Ns, all in root Gt
                 node_.add(eN)  # of all rim
-                eN.root_ += [Gt]
+                eN.root += [Gt]
                 for L,_ in get_rim(eN, fd):
                     if L not in link_:
                         # if L.derH.Et[0]/ave * n.extH m/ave or L.derH.Et[0] + n.extH m*.1: density?
-                        eN_.update([n for n in L.nodet if len(n.root_) <= nest])
+                        eN_.update([n for n in L.nodet if len(n.root) <= nest])
                         if L.dist >= min_dist:
                             link_.add(L); et += L.derH.Et
             _eN_ = eN_
@@ -90,11 +90,11 @@ def cluster_N_(root, L_, fd, nest=1):  # top-down segment L_ by >ave ratio of L.
     G_ = []
     for Gt in Gt_:
         node_, link_, et, minL, subG_ = Gt; Gt[0] = list(node_)
-        if et[0] > et[2] * ave * nest:  # rdn incr/ dist decr
+        if et[0] > et[2] * et[3] * ave * nest:  # rdn incr/ dist decr (use val_ here? But we need to parse nest to the function?)
             G_ += [sum2graph(root, Gt, fd, nest)]
         else:
             # unpack Gt
-            for n in node_: n.root_.pop()
+            for n in node_: n.root.pop()
     return G_
 
 ''' Hierarchical clustering should alternate between two phases: generative via connectivity and compressive via centroid.
@@ -132,7 +132,7 @@ def find_centroids(graph):
 
         mL = min(C.L,len(N.node_)) - ave_L
         mA = comp_area(C.box, N.box)[0]
-        mLat = comp_latuple(C.latuple, N.latuple, C.Et[3], N.Et[3])[1][0]
+        mLat = comp_latuple(C.latuple, N.latuple, C.Et[2], N.Et[2])[1][0]
         mVer = comp_md_(C.vertuple[1], N.vertuple[1])[1][0]
         mH = C.derH.comp_H(N.derH).Et[0] if C.derH and N.derH else 0
         # comp node_, comp altG from converted adjacent flat blobs?
@@ -170,7 +170,7 @@ def find_centroids(graph):
             else:
                 if C.M > ave * 10:
                     for n in C.node_:
-                        n.fin = 1; n.root_ += [C]; delattr(n,"sign")
+                        n.fin = 1; n.root += [C]; delattr(n,"sign")
                     return C  # centroid cluster
                 else:  # unpack C.node_
                     for n in C.node_: n.m = 0

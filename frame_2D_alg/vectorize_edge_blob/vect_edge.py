@@ -244,7 +244,7 @@ def vectorize_root(frame):
                     for N in edge.node_:  # no comp node_, link_ | PPd_ for now
                         P_, link_, vert, lat, A, S, box, [y,x], Et = N[1:]  # PPt
                         if Et[0] > ave:   # no altG until cross-comp
-                            PP = CG(fd=0, Et=Et,root=edge,node_=P_,link_=link_,vert=vert,latuple=lat,box=box,yx=[y,x])
+                            PP = CG(fd=0, Et=Et,root=[edge],node_=P_,link_=link_,vert=vert,latuple=lat,box=box,yx=[y,x])
                             y0,x0,yn,xn = box
                             PP.aRad = np.hypot(*np.subtract(PP.yx,(yn,xn)))
                             G_ += [PP]
@@ -283,7 +283,7 @@ def cluster_edge(edge):  # edge is CG but not a connectivity cluster, just a set
     N_,L_,Et = comp_node_(edge.subG_)
     m,d, n,o = Et
     edge.subG_ = N_; edge.link_ = L_
-    if m > ave * n * o:
+    if m > ave * n * o:  # not using val_ here?
         # cancel by borrowing d?
         mlay = CH().add_H([L.derH for L in L_])  # mfork, else no new layer
         edge.derH = CH(H=[mlay], root=edge, Et=copy(mlay.Et))
@@ -291,9 +291,9 @@ def cluster_edge(edge):  # edge is CG but not a connectivity cluster, just a set
         if len(N_) > ave_L:
             cluster_PP_(edge,fd=0)
         # borrow from misprojected m: proj_m -= proj_d, no eval per link: comp instead
-        if d * (m/(ave*n)) > ave_d * n * o:  # likely not from the same links
+        if d * (m/(ave*n)) > ave_d * n * o:  # likely not from the same links  (not using val_ here?)
             for L in L_:
-                L.extH, L.root_, L.mL_t, L.rimt, L.aRad, L.visited_, L.Et = CH(), [edge], [[], []], [[], []], 0, [L], copy(L.derH.Et)
+                L.extH, L.root, L.mL_t, L.rimt, L.aRad, L.visited_, L.Et = CH(), [edge], [[], []], [[], []], 0, [L], copy(L.derH.Et)
             # comp dPP_:
             lN_,lL_,_ = comp_link_(L_, Et)
             if lL_:  # lL_ and lN_ may empty
@@ -306,11 +306,25 @@ def val_(Et, mEt=0, fo=0, frel=0):
     m, d, n, o = Et
     fd = isinstance(mEt, np.ndarray)
     if frel:
-        val = (d if fd else m) / (ave_d if fd else ave * n * o if fo else 1)
+        val = (d if fd else m) / (ave_d if fd else ave * n * o if fo else 1)  # fd is never true here since it's called from fd == 1 but with fd == 0 in the call, same with fo too
     elif fd:  # no rel diff for now
-        val = d * val_(mEt, frel=1) - ave_d * n * o if fo else 1
+        val = d * val_(mEt, fd=fd, fo=fo, frel=1) - (ave_d * n * o if fo else 1)
     else:
         val = (d if fd else m) - (ave_d if fd else ave * n * o if fo else 1)
+    return val
+
+# simplified version
+def val2_(Et, mEt=0, fo=0, frel=0):
+
+    m, d, n, o = Et
+    if isinstance(mEt, np.ndarray):
+        mm, md, mn, mo = mEt
+        dval =  md  / ave_d  # when fd ==1, same with:  (d if fd else m)  / (ave_d if fd else ave * n * o if fo else 1) 
+        val = d * dval - (ave_d * n * o if fo else 1)
+    else:
+        ave_norm = ave * n * o if fo else 1
+        val = m - ave_norm
+    
     return val
 
 def comp_node_(_N_):  # rng+ forms layer of rim and extH per N, appends N_,L_,Et, ~ graph CNN without backprop
@@ -344,7 +358,7 @@ def comp_node_(_N_):  # rng+ forms layer of rim and extH per N, appends N_,L_,Et
             else:
                 Gp_ += [Gp]  # re-evaluate not-compared pairs with one incremented N.M
         ET += Et
-        if val_(Et):  # current-rng vM, cancel by borrowing d?
+        if val_(Et) > 0:  # current-rng vM, cancel by borrowing d? (negative value gets true, so we need >0)        
             rng += 1
             _Gp_ = [Gp for Gp in Gp_ if Gp[0].add or Gp[1].add]  # one incremented N.M
         else:  # low projected rng+ vM
@@ -360,7 +374,7 @@ def comp_link_(iL_, iEt):  # comp CLs via directional node-mediated link tracing
         for rev, N, mL_ in zip((0,1), L.nodet, L.mL_t):
             for _L,_rev in N.rimt[0]+N.rimt[1] if fd else N.rim:
                 if _L is not L:
-                    if val_(_L.derH.Et, mEt=iEt):  # proj val = compared d * rel root M
+                    if val_(_L.derH.Et, mEt=iEt)>0:  # proj val = compared d * rel root M
                         mL_ += [(_L, rev ^_rev)]  # the direction of L relative to _L
     _L_, out_L_, LL_, ET = iL_,set(),[],np.zeros(4)  # out_L_: positive subset of iL_, Et = np.zeros(4)?
     med = 1
@@ -375,12 +389,12 @@ def comp_link_(iL_, iEt):  # comp CLs via directional node-mediated link tracing
                     Link = comp_N(_L,L, rn,angle=[dy,dx],dist=np.hypot(dy,dx), dir = -1 if rev else 1)  # d = -d if L is reversed relative to _L
                     Link.med = med
                     LL_ += [Link]  # include -ves, link order: nodet < L < rimt, mN.rim || L
-                    if val_(Link.derH.Et):  # induction
+                    if val_(Link.derH.Et)>0:  # induction
                         out_L_.update({_L,L}); L_.update({_L,L}); Et += Link.derH.Et
         if not any(L_): break
         # extend mL_t per last med_L
         ET += Et; Med = med + 1  # med increases process costs
-        if val_(Et):  # project prior-loop value
+        if val_(Et)>0:  # project prior-loop value
             _L_, ext_Et = set(), np.zeros(4)
             for L in L_:
                 mL_t, lEt = [set(),set()], np.zeros(4)  # __Ls per L
@@ -394,13 +408,13 @@ def comp_link_(iL_, iEt):  # comp CLs via directional node-mediated link tracing
                                     L.visited_ += [__L]; __L.visited_ += [L]
                                     et = __L.derH.Et
                                     # if compared mag * normalized loop induction?:
-                                    if val_(et, mEt=Et):  # /__L
+                                    if val_(et, mEt=Et)>0:  # /__L
                                         mL_.add((__L, rev ^_rev ^__rev))  # combine reversals: 2 * 2 mLs, but 1st 2 are pre-combined
                                         lEt += et
                 if val_(lEt):  # rng+/ L is different from comp/ L above
                     L.mL_t = mL_t; _L_.add(L); ext_Et += lEt
             # refine eval:
-            if val_(ext_Et, mEt=Et):  # eval ext D
+            if val_(ext_Et, mEt=Et)>0:  # eval ext D
                 med = Med
             else:
                 break
@@ -457,7 +471,7 @@ def comp_N(_N,N, rn, angle=None, dist=None, dir=1):  # dir if fd, Link.derH=dH, 
         derH.altH = alt_Link.derH
         Et += derH.altH.Et
     Link = CL(nodet=[_N,N],derH=derH, yx=np.add(_N.yx,N.yx)/2, angle=angle,dist=dist,box=extend_box(N.box,_N.box))
-    if val_(Et):
+    if val_(Et)>0:
         derH.root = Link
         for rev, node in zip((0,1), (N,_N)):  # reverse Link direction for _N
             if fd: node.rimt[1-rev] += [(Link,rev)]  # opposite to _N,N dir
@@ -489,7 +503,7 @@ def sum2graph(root, grapht, fd, nest):  # sum node and link params into graph, a
         if fg:
             ver = N.vertuple; M += np.sum(ver[0]); D += np.sum(ver[1]); graph.vertuple += ver
             graph.latuple += N.latuple
-        N.root_[-1] = graph  # replace Gt
+        N.root[-1] = graph  # replace Gt
     if fg:
         graph.Et[:2] += np.array([M,D]) * icoef**2
     if derH:
