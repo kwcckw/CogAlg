@@ -37,7 +37,7 @@ def agg_cluster_(frame):  # breadth-first (node_,L_) cross-comp, clustering, rec
         vd = d * (m/ave) - ave_d * r
         if vd > 0:
             for L in L_:
-                L.extH, L.root_, L.mL_t, L.rimt, L.aRad, L.visited_, L.Et = CH(), [frame], [[],[]], [[],[]], 0, [L], copy(L.derH.Et)
+                L.extH, L.root, L.mL_t, L.rimt, L.aRad, L.visited_, L.Et = CH(), frame, [[],[]], [[],[]], 0, [L], copy(L.derH.Et)
             lN_,lL_, md = comp_link_(L_, [m,d,r,n])  # comp new L_, root.link_ was compared in root-forming for alt clustering
             vd *= md / ave
             if lL_:  # recursive der+ eval_: cost > ave_match, add by feedback if < _match?
