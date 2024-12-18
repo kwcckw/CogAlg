@@ -5,7 +5,7 @@ from copy import copy, deepcopy
 from functools import reduce
 from frame_blobs import frame_blobs_root, intra_blob_root, imread
 from comp_slice import comp_latuple, comp_md_
-from vect_edge import comp_node_, comp_link_, sum2graph, get_rim, CH, CG, ave, ave_d, ave_L, vectorize_root, comp_area, extend_box, val_
+from vect_edge import comp_node_, comp_link_, sum2graph, get_rim, CH, CG, CL, ave, ave_d, ave_L, vectorize_root, comp_area, extend_box, val_
 '''
 Cross-compare and cluster Gs within a frame, potentially unpacking their node_s first,
 alternating agglomeration and centroid clustering.
@@ -34,9 +34,9 @@ def agg_cluster_(frame):  # breadth-first (node_,L_) cross-comp, clustering, rec
         frame.derH = CH(H=[mlay], root=frame, Et=copy(mlay.Et)); mlay.root=frame.derH
         pL_ = {l for n in N_ for l,_ in get_rim(n, fd=0)}
         if len(pL_) > ave_L:
-            cluster_N_(frame, pL_, fd=0)
+            cluster_N_(frame, pL_, fd=0)  # this should be after the eval of dfork below? Else frame.derH will be feedback with deeper derH first
             # optional divisive clustering, may call alternating centroid clustering and cross-comp
-        if val_(Et, mEt=Et) > 0:  # same root
+        if val_(Et, mEt=Et,fo=1) > 0:  # same root  # we need fo = 1 in this eval too?
             # dfork /L_, root.link_ was compared in root-forming for alt clustering
             for L in L_:
                 L.extH, L.root, L.mL_t, L.rimt, L.aRad, L.visited_, L.Et = CH(), frame, [[],[]], [[],[]], 0, [L], copy(L.derH.Et)
@@ -44,7 +44,7 @@ def agg_cluster_(frame):  # breadth-first (node_,L_) cross-comp, clustering, rec
             if val_(dEt, mEt=Et, fo=1) > 0:
                 # recursive der+ eval_: cost > ave_match, add by feedback if < _match
                 frame.derH.append_(CH().add_H([L.derH for L in lL_]))  # dfork
-                plL_ = {l for n in lN_ for l,_ in get_rim(n, fd=0)}
+                plL_ = {l for n in lN_ for l,_ in get_rim(n, fd=isinstance(n, CL))}
                 if len(plL_) > ave_L:
                     cluster_N_(frame, plL_, fd=1)
         else:
@@ -85,10 +85,12 @@ def cluster_N_(root, L_, fd, nest=0):  # top-down segment L_ by >ave ratio of L.
                             link_.add(L); et += L.derH.Et
             _eN_ = eN_
         sub_L_ = set()  # form subG_ from shorter-L seg per Gt, depth-first:
+        Et = np.array([.0,.0,.0,nest])  # we need to init Et so that it is per all nodes?
         for n in node_:  # sub-cluster in N_
             sub_L_.update({l for l,_ in get_rim(n,fd) if l.dist < min_dist})
-            Et = reduce(np.add, (sL.Et for sL in sub_L_))
-            Et[3] += nest  # overlap/nest+
+            if sub_L_:  # may empty
+                Et += np.sum([sL.derH.Et for sL in sub_L_],axis=1)  # cL doesn't have Et until they become node
+          # overlap/nest+
         if len(sub_L_) > ave_L and val_(Et, fo=1) > 0:
             cluster_N_(Gt, sub_L_, fd, nest+1)
 
@@ -114,17 +116,18 @@ def find_centroids(graph):
     def centroid(dnode_, node_, C=None):  # sum|subtract and average Rim nodes
 
         if C is None:
-            C = CG(); C.L = 0; C.M = 0  # setattr summed len node_ and match to nodes
+            C = CG(); C.L = 0; C.M = 0  # setattr summed len node_ and match to nodes      
         for n in dnode_:
             s = n.sign; n.sign=1  # single-use sign
             C.Et += n.Et * s; C.rng = n.rng * s; C.aRad += n.aRad * s
             C.L += len(n.node_) * s
             C.latuple += n.latuple * s
             C.vertuple += n.vertuple * s
+            C.yx[0] += n.yx[0]; C.yx[1] += n.yx[1]  # we need yx to compute dist later (convert it into np.array too?)
             if n.derH: C.derH.add_H(n.derH, dir=s, fc=1)
             if n.extH: C.extH.add_H(n.extH, dir=s, fc=1)
         # get averages:
-        k = len(dnode_); C.Et/=k; C.latuple/=k; C.vertuple/=k; C.aRad/=k
+        k = len(dnode_); C.Et/=k; C.latuple/=k; C.vertuple/=k; C.aRad/=k; C.yx[0] /= k; C.yx[1] /= k
         if C.derH: C.derH.norm_(k)  # derH/=k
         C.box = reduce(extend_box, (n.box for n in node_))
         return C
@@ -171,7 +174,9 @@ def find_centroids(graph):
             else:
                 if C.M > ave * 10:
                     for n in C.node_:
-                        n.fin = 1; n.root += [C]; delattr(n,"sign")
+                        try:    n.root += [C];
+                        except: n.root = [n.root, C]
+                        n.fin = 1; delattr(n,"sign")
                     return C  # centroid cluster
                 else:  # unpack C.node_
                     for n in C.node_: n.m = 0

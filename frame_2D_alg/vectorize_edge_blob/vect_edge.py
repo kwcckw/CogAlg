@@ -178,7 +178,7 @@ class CH(CBase):  # generic derivation hierarchy of variable nesting: extH | der
 class CG(CBase):  # PP | graph | blob: params of single-fork node_ cluster
 
     def __init__(G, fd=0, rng=1, root=[], node_=[], link_=[], subG_=[], subL_=[],
-                 Et=None, latuple=None, vert=None, derH=None, extH=None, altG=None, box=None, yx=None):
+                 Et=None, latuple=None, vertuple=None, derH=None, extH=None, altG=None, box=None, yx=None):
         super().__init__()
         G.fd = fd  # 1 if cluster of Ls | lGs?
         G.Et = np.zeros(4) if Et is None else Et  # sum all param Ets
@@ -189,7 +189,7 @@ class CG(CBase):  # PP | graph | blob: params of single-fork node_ cluster
         G.subG_ = subG_  # selectively clustered node_
         G.subL_ = subL_  # selectively clustered link_
         G.latuple = np.array([.0,.0,.0,.0,.0,np.zeros(2)],dtype=object) if latuple is None else latuple  # lateral I,G,M,D,L,[Dy,Dx]
-        G.vert = np.array([np.zeros(6), np.zeros(6)]) if vert is None else vert  # vertical md_of latuple
+        G.vertuple = np.array([np.zeros(6), np.zeros(6)]) if vertuple is None else vertuple  # vertical md_of latuple
         # maps to node_H / agg+|sub+:
         G.derH = CH() if derH is None else derH  # sum from nodes, then append from feedback
         G.extH = CH() if extH is None else extH  # sum from rim_ elays, H maybe deleted
@@ -233,15 +233,15 @@ def vectorize_root(frame):
                     if not hasattr(frame, 'derH'):
                         frame.derH = CH(root=frame); frame.root = None; frame.subG_ = []
                     Y,X,_,_,_,_ = blob.latuple
-                    lat = np.array([.0,.0,.0,.0,.0,np.zeros(2)],dtype=object); vert = np.array([np.zeros(6), np.zeros(6)])
+                    lat = np.array([.0,.0,.0,.0,.0,np.zeros(2)],dtype=object); vertuple = np.array([np.zeros(6), np.zeros(6)])
                     for PP in blob.node_:
-                        vert += PP[3]; lat += PP[4]
-                    edge = CG(root=frame, node_=blob.node_, vert=vert,latuple=lat, box=[Y,X,0,0],yx=[Y/2,X/2], Et=blob.Et)
+                        vertuple += PP[3]; lat += PP[4]
+                    edge = CG(root=frame, node_=blob.node_, vertuple=vertuple,latuple=lat, box=[Y,X,0,0],yx=[Y/2,X/2], Et=blob.Et)
                     G_ = []
                     for N in edge.node_:  # no comp node_, link_ | PPd_ for now
                         P_, link_, vert, lat, A, S, box, [y,x], Et = N[1:]  # PPt
                         if Et[0] > ave:   # no altG until cross-comp
-                            PP = CG(fd=0, Et=Et,root=edge, node_=P_,link_=link_, vert=vert,latuple=lat, box=box,yx=[y,x])
+                            PP = CG(fd=0, Et=Et,root=edge, node_=P_,link_=link_, vertuple=vert,latuple=lat, box=box,yx=[y,x])
                             y0,x0,yn,xn = box
                             PP.aRad = np.hypot(*np.subtract(PP.yx,(yn,xn)))
                             G_ += [PP]
@@ -280,7 +280,7 @@ def cluster_edge(edge):  # edge is CG but not a connectivity cluster, just a set
     N_,L_,Et = comp_node_(edge.subG_)
     m,d, n,o = Et
     edge.subG_ = N_; edge.link_ = L_
-    if m > ave * n * o:  # not using val_ here?
+    if val_(Et,fo=1)>0 and False:
         # cancel by borrowing d?
         mlay = CH().add_H([L.derH for L in L_])  # mfork, else no new layer
         edge.derH = CH(H=[mlay], root=edge, Et=copy(mlay.Et))
@@ -288,7 +288,7 @@ def cluster_edge(edge):  # edge is CG but not a connectivity cluster, just a set
         if len(N_) > ave_L:
             cluster_PP_(edge,fd=0)
         # borrow from misprojected m: proj_m -= proj_d, no eval per link: comp instead
-        if d * (m/(ave*n)) > ave_d * n * o:  # likely not from the same links  (not using val_ here?)
+        if val_(Et,mEt=Et,fo=1)>0:  # likely not from the same links  (not using val_ here?)
             for L in L_:
                 L.extH, L.root, L.mL_t, L.rimt, L.aRad, L.visited_, L.Et = CH(), [edge], [[], []], [[], []], 0, [L], copy(L.derH.Et)
             # comp dPP_:
@@ -298,14 +298,14 @@ def cluster_edge(edge):  # edge is CG but not a connectivity cluster, just a set
                 if len(lN_) > ave_L:  # if vd?
                     cluster_PP_(edge, fd=1)
 
-def val_(Et, mEt=0, fo=0):
+def val_(Et, mEt=[], fo=0):
 
     m, d, n, o = Et
-    if mEt:
+    if any(mEt):
         mm,_,mn,_ = mEt  # cross-induction from root G, not affected by overlap
-        val = d * (mm / (ave*mn)) - (ave_d * n * o if fo else 1)
+        val = d * (mm / (ave*mn)) - (ave_d * n * o if fo else 0)
     else:
-        val = m - ave * n * o if fo else 1  # * overlap in cluster eval, not comp eval
+        val = m - (ave * n * o if fo else 0)  # * overlap in cluster eval, not comp eval  (should be else 0 here? Else we aregetting negative value when Et is [0,0,0,0])
     return val
 
 def comp_node_(_N_):  # rng+ forms layer of rim and extH per N, appends N_,L_,Et, ~ graph CNN without backprop
@@ -427,9 +427,9 @@ def comp_N(_N,N, rn, angle=None, dist=None, dir=1):  # dir if fd, Link.derH=dH, 
         md_t = np.array([mdext])
         Et = np.array([mL+mA, abs(dL)+abs(dA), .3, olp])  # n = compared vars / 6
     else:  # CG
-        vert, et1 = comp_latuple(_N.latuple, N.latuple, _o,o)
-        md_vert, et2 = comp_md_(_N.vert[1], N.vert[1], dir)
-        md_t = [mdext, vert, md_vert]
+        vertuple, et1 = comp_latuple(_N.latuple, N.latuple, _o,o)
+        md_vert, et2 = comp_md_(_N.vertuple[1], N.vertuple[1], dir)
+        md_t = [mdext, vertuple, md_vert]
         Et = np.array([mL+mA +et1[0]+et2[0], abs(dL)+abs(dA) +et1[1]+et2[1], 2.3, olp])
     # 1st lay:
     md_C = CH(H = md_t, Et=Et)
@@ -474,9 +474,10 @@ def sum2graph(root, grapht, fd, nest):  # sum node and link params into graph, a
         yx = np.add(yx, N.yx)
         if N.derH: derH.add_H(N.derH)
         if fg:
-            vert = N.vert; M += np.sum(vert[0]); D += np.sum(vert[1]); graph.vert += vert
+            vertuple = N.vertuple; M += np.sum(vertuple[0]); D += np.sum(vertuple[1]); graph.vertuple += vertuple
             graph.latuple += N.latuple
-        N.root[-1] = graph  # replace Gt
+        try:    N.root[-1] = graph  # replace Gt
+        except: N.root = [N.root] + [graph]  # N.root is CG
     if fg:
         graph.Et[:2] += np.array([M,D]) * icoef**2
     if derH:
@@ -503,7 +504,7 @@ def sum2graph(root, grapht, fd, nest):  # sum node and link params into graph, a
 def sum_G_(node_):
     G = CG()
     for n in node_:
-        G.rng = n.rng; G.latuple += n.latuple; G.vert += n.vert; G.aRad += n.aRad; G.box = extend_box(G.box, n.box)
+        G.rng = n.rng; G.latuple += n.latuple; G.vertuple += n.vertuple; G.aRad += n.aRad; G.box = extend_box(G.box, n.box)
         if n.derH: G.derH.add_H(n.derH)
         if n.extH: G.extH.add_H(n.extH)
     return G
