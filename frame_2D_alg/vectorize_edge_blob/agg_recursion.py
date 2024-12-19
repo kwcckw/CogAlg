@@ -16,16 +16,18 @@ prefix  _ denotes prior of two same-name variables, multiple _s for relative pre
 postfix _ denotes array of same-name elements, multiple _s is nested array
 capitalized vars are summed small-case vars '''
 
-def cross_comp(frame):  # breadth-first (node_,L_) cross-comp, clustering, recursion
+def cross_comp(frame, layt):  # breadth-first (node_,L_) cross-comp, clustering, recursion
 
     N_,L_,Et = comp_node_(frame.subG_)  # cross-comp exemplars, extrapolate to their node_s?
     # mfork
     if val_(Et, fo=1) > 0:
         mlay = CH().add_H([L.derH for L in L_])
-        frame.derH.append_(mlay)  # redo with append to He.layt and recursive feedback
+        layt.append_(mlay); frame.Et += mlay.Et  # append to root He.layt and recursive feedback
         pL_ = {l for n in N_ for l,_ in get_rim(n, fd=0)}
         if len(pL_) > ave_L:
-            cluster_N_(frame, pL_, fd=0)  # optional divisive clustering, may call alternating centroid clustering and agg_cluster
+            cluster_N_([frame, mlay], pL_, fd=0)  # optional divisive clustering, may call alternating centroid clustering and agg_cluster
+            layt.depth = mlay.depth+1  # feedback depth in m fork
+            
         # dfork, derH.layt has 1|2 forks
         if val_(Et, mEt=Et,fo=1) > 0:  # same root for L_, root.link_ was compared in root-forming for alt clustering
             for L in L_:
@@ -33,12 +35,12 @@ def cross_comp(frame):  # breadth-first (node_,L_) cross-comp, clustering, recur
             lN_,lL_,dEt = comp_link_(L_,Et)
             if val_(dEt, mEt=Et, fo=1) > 0:
                 dlay = CH().add_H([L.derH for L in lL_])
-                frame.derH.append_(dlay)
+                layt.append_(dlay); frame.Et += dlay.Et   # pack 2nd lay in layt
                 plL_ = {l for n in lN_ for l,_ in get_rim(n, fd=1)}
                 if len(plL_) > ave_L:
-                    cluster_N_(frame, plL_, fd=1)
+                    cluster_N_([frame, dlay], plL_, fd=1)
 
-def cluster_N_(root, L_, fd, nest=0):  # top-down segment L_ by >ave ratio of L.dists
+def cluster_N_(roott, L_, fd, nest=0):  # top-down segment L_ by >ave ratio of L.dists
 
     L_ = sorted(L_, key=lambda x: x.dist, reverse=True)  # lower-dist links
     _L = L_[0]
@@ -54,7 +56,9 @@ def cluster_N_(root, L_, fd, nest=0):  # top-down segment L_ by >ave ratio of L.
     min_dist = _L.dist
     Gt_ = []
     for N in N_:  # cluster current distance segment
-        if len(N.root) > nest: continue  # merged, root[0] = edge
+        # root may not be converted yet
+        if not isinstance(N.root, list): N.root = [N.root]
+        if len(N.root) > nest: continue  # merged, root[0] = edge 
         node_,link_, et = set(), set(), np.zeros(4)
         Gt = [node_,link_,et,min_dist]; N.root += [Gt]
         _eN_ = {N}
@@ -81,8 +85,8 @@ def cluster_N_(root, L_, fd, nest=0):  # top-down segment L_ by >ave ratio of L.
         Gt[0] = list(node_)
         Gt_ += [Gt]
     # per dist segment:
-    root.subG_ = [sum2graph(root, Gt, fd, nest) for Gt in Gt_]
-    find_centroids(root)
+    roott[0].subG_ = [sum2graph(roott[0], Gt, fd, nest) for Gt in Gt_]
+    find_centroids(roott)
 
 ''' Hierarchical clustering should alternate between two phases: generative via connectivity and compressive via centroid.
 
@@ -95,7 +99,7 @@ def cluster_N_(root, L_, fd, nest=0):  # top-down segment L_ by >ave ratio of L.
  So connectivity clustering is a generative learning phase, forming new derivatives and structured composition levels, 
  while centroid clustering is a compressive phase, reducing multiple similar comparands to a single exemplar. '''
 
-def find_centroids(graph):
+def find_centroids(grapht):
 
     def centroid(dnode_, node_, C=None):  # sum|subtract and average Rim nodes
 
@@ -111,7 +115,7 @@ def find_centroids(graph):
             if n.derH: C.derH.add_H(n.derH, dir=s, fc=1)
             if n.extH: C.extH.add_H(n.extH, dir=s, fc=1)
         # get averages:
-        k = len(dnode_); C.Et/=k; C.latuple/=k; C.vertuple/=k; C.aRad/=k; C.yx /= k
+        k = len(dnode_); C.Et/=k; C.latuple/=k; C.vert/=k; C.aRad/=k; C.yx /= k
         if C.derH: C.derH.norm_(k)  # derH/=k
         C.box = reduce(extend_box, (n.box for n in node_))
         return C
@@ -165,7 +169,7 @@ def find_centroids(graph):
                     return N  # keep seed node
 
     # find representative centroids for complemented Gs: m-core + d-contour, initially from unpacked edge
-    N_ = sorted([N for N in graph.subG_ if any(N.Et)], key=lambda n: n.Et[0], reverse=True)
+    N_ = sorted([N for N in grapht[0].subG_ if any(N.Et)], key=lambda n: n.Et[0], reverse=True)
     subG_ = []
     for N in N_:
         N.sign, N.m, N.fin = 1, 0, 0  # setattr: C update sign, inclusion val, prior C inclusion flag
@@ -176,9 +180,9 @@ def find_centroids(graph):
             else:  # the rest of N_ M is lower
                 subG_ += [N for N in N_[i:] if not N.fin]
                 break
-    graph.subG_ = subG_  # mix of Ns and Cs: exemplars of their network?
-    if len(graph.subG_) > ave_L:
-        cross_comp(graph)  # selective connectivity clustering between exemplars, extrapolated to their node_
+    grapht[0].subG_ = subG_  # mix of Ns and Cs: exemplars of their network?
+    if len(grapht[0].subG_) > ave_L:
+        cross_comp(*grapht)  # selective connectivity clustering between exemplars, extrapolated to their node_
 
 
 if __name__ == "__main__":
@@ -191,7 +195,7 @@ if __name__ == "__main__":
         subG_ = []
         for edge in frame.subG_:
             if edge.subG_:  # or / and edge Et?
-                find_centroids(edge)  # no find_centroids in trace_edge
+                find_centroids([edge, edge.derH])  # no find_centroids in trace_edge
                 subG_ += edge.subG_  # unpack edge, or keep if connectivity cluster, or in flat blob altG_?
         frame.subG_ = subG_
-        cross_comp(frame)  # calls connectivity clustering
+        cross_comp(frame, frame.derH)  # calls connectivity clustering
