@@ -51,16 +51,17 @@ med_cost = 10
 class CH(CBase):  # generic derivation hierarchy of variable nesting: extH | derH, their layers and sub-layers
 
     name = "H"
-    def __init__(He, n=0, H=None, Et=None, node_=None, root=None, i=None, i_=None, altH=None):
+    def __init__(He, layt=None, Et=None, node_=None, root=None, i=None, i_=None, altH=None):
         super().__init__()
         # He.n = n  # total number of params compared to form derH, to normalize in next comp
-        He.H = [] if H is None else H  # nested CH lays, or md_tC in top layer
+        He.layt = [] if layt is None else layt  # nested CH forks, each mediates its own layt, or md_tC in top layer
         He.Et = np.zeros(4) if Et is None else Et  # += links (n is added to et now)
         He.node_ = [] if node_ is None else node_  # concat bottom nesting order if CG, may be redundant to G.node_
         He.root = None if root is None else root  # N or higher-composition He
         He.i = 0 if i is None else i  # lay index in root.H, to revise olp
         He.i_ = [] if i_ is None else i_  # priority indices to compare node H by m | link H by d
         He.altH = CH(altH=object) if altH is None else altH   # summed altLays, prevent cyclic
+        He.depth = 0  # max depth of fork tree?
         # He.fd = 0 if fd is None else fd  # 0: sum CGs, 1: sum CLs
         # He.ni = 0  # exemplar in node_, trace in both directions?
         # He.deep = 0 if deep is None else deep  # nesting in root H
@@ -178,7 +179,7 @@ class CH(CBase):  # generic derivation hierarchy of variable nesting: extH | der
 class CG(CBase):  # PP | graph | blob: params of single-fork node_ cluster
 
     def __init__(G, fd=0, rng=1, root=[], node_=[], link_=[], subG_=[], subL_=[],
-                 Et=None, latuple=None, vertuple=None, derH=None, extH=None, altG=None, box=None, yx=None):
+                 Et=None, latuple=None, vert=None, derH=None, extH=None, altG=None, box=None, yx=None):
         super().__init__()
         G.fd = fd  # 1 if cluster of Ls | lGs?
         G.Et = np.zeros(4) if Et is None else Et  # sum all param Ets
@@ -189,14 +190,14 @@ class CG(CBase):  # PP | graph | blob: params of single-fork node_ cluster
         G.subG_ = subG_  # selectively clustered node_
         G.subL_ = subL_  # selectively clustered link_
         G.latuple = np.array([.0,.0,.0,.0,.0,np.zeros(2)],dtype=object) if latuple is None else latuple  # lateral I,G,M,D,L,[Dy,Dx]
-        G.vertuple = np.array([np.zeros(6), np.zeros(6)]) if vertuple is None else vertuple  # vertical md_of latuple
+        G.vert = np.array([np.zeros(6), np.zeros(6)]) if vert is None else vert  # vertical md_ of latuple
         # maps to node_H / agg+|sub+:
         G.derH = CH() if derH is None else derH  # sum from nodes, then append from feedback
         G.extH = CH() if extH is None else extH  # sum from rim_ elays, H maybe deleted
         G.rim = []  # flat links of any rng, may be nested in clustering
         G.aRad = 0  # average distance between graph center and node center
         G.box = [np.inf, np.inf, -np.inf, -np.inf] if box is None else box  # y0,x0,yn,xn
-        G.yx = [0,0] if yx is None else yx  # init PP.yx = [(y0+yn)/2,(x0,xn)/2], then ave node yx
+        G.yx = np.array([0,0]) if yx is None else yx  # init PP.yx = [(y0+yn)/2,(x0,xn)/2], then ave node yx
         G.altG = CG(altG=G) if altG is None else altG  # adjacent gap+overlap graphs, vs. contour in frame_graphs (prevent cyclic)
         # G.fback_ = []  # always from CGs with fork merging, no dderHm_, dderHd_
         # id_H: list = z([[]])  # indices in all layers(forks, if no fback merge
@@ -233,15 +234,15 @@ def vectorize_root(frame):
                     if not hasattr(frame, 'derH'):
                         frame.derH = CH(root=frame); frame.root = None; frame.subG_ = []
                     Y,X,_,_,_,_ = blob.latuple
-                    lat = np.array([.0,.0,.0,.0,.0,np.zeros(2)],dtype=object); vertuple = np.array([np.zeros(6), np.zeros(6)])
+                    lat = np.array([.0,.0,.0,.0,.0,np.zeros(2)],dtype=object); vert = np.array([np.zeros(6), np.zeros(6)])
                     for PP in blob.node_:
-                        vertuple += PP[3]; lat += PP[4]
-                    edge = CG(root=frame, node_=blob.node_, vertuple=vertuple,latuple=lat, box=[Y,X,0,0],yx=[Y/2,X/2], Et=blob.Et)
+                        vert += PP[3]; lat += PP[4]
+                    edge = CG(root=frame, node_=blob.node_, vert=vert,latuple=lat, box=[Y,X,0,0],yx=[Y/2,X/2], Et=blob.Et)
                     G_ = []
                     for N in edge.node_:  # no comp node_, link_ | PPd_ for now
                         P_, link_, vert, lat, A, S, box, [y,x], Et = N[1:]  # PPt
                         if Et[0] > ave:   # no altG until cross-comp
-                            PP = CG(fd=0, Et=Et,root=edge, node_=P_,link_=link_, vertuple=vert,latuple=lat, box=box,yx=[y,x])
+                            PP = CG(fd=0, Et=Et,root=edge, node_=P_,link_=link_, vert=vert,latuple=lat, box=box,yx=[y,x])
                             y0,x0,yn,xn = box
                             PP.aRad = np.hypot(*np.subtract(PP.yx,(yn,xn)))
                             G_ += [PP]
@@ -278,34 +279,33 @@ def cluster_edge(edge):  # edge is CG but not a connectivity cluster, just a set
             else:  edge.subG_ = subG_  # higher aggr, mediated access to init edge.subG_
     # comp PP_:
     N_,L_,Et = comp_node_(edge.subG_)
-    m,d, n,o = Et
-    edge.subG_ = N_; edge.link_ = L_
-    if val_(Et,fo=1)>0 and False:
-        # cancel by borrowing d?
-        mlay = CH().add_H([L.derH for L in L_])  # mfork, else no new layer
-        edge.derH = CH(H=[mlay], root=edge, Et=copy(mlay.Et))
+    edge.subG_ = N_
+    edge.link_ = L_
+    if val_(Et, fo=1) > 0:  # cancel by borrowing d?
+        mlay = CH().add_H([L.derH for L in L_])
+        edge.derH = CH(layt=[mlay], root=edge, Et=copy(mlay.Et))
         mlay.root = edge.derH  # init
         if len(N_) > ave_L:
-            cluster_PP_(edge,fd=0)
-        # borrow from misprojected m: proj_m -= proj_d, no eval per link: comp instead
-        if val_(Et,mEt=Et,fo=1)>0:  # likely not from the same links  (not using val_ here?)
+            cluster_PP_(edge, fd=0)
+        # borrow from misprojected m: proj_m -= proj_d, comp instead of link eval:
+        if val_(Et, mEt=Et, fo=1) > 0:  # likely not from the same links  (not using val_ here?)
             for L in L_:
                 L.extH, L.root, L.mL_t, L.rimt, L.aRad, L.visited_, L.Et = CH(), [edge], [[], []], [[], []], 0, [L], copy(L.derH.Et)
             # comp dPP_:
             lN_,lL_,_ = comp_link_(L_, Et)
-            if lL_:  # lL_ and lN_ may empty
-                edge.derH.append_(CH().add_H([L.derH for L in lL_]))  # dfork
-                if len(lN_) > ave_L:  # if vd?
-                    cluster_PP_(edge, fd=1)
+            dlay = CH().add_H([L.derH for L in lL_])
+            edge.derH.append_(dlay)
+            if len(lN_) > ave_L:
+                cluster_PP_(edge, fd=1)
 
 def val_(Et, mEt=[], fo=0):
 
     m, d, n, o = Et
     if any(mEt):
         mm,_,mn,_ = mEt  # cross-induction from root G, not affected by overlap
-        val = d * (mm / (ave*mn)) - (ave_d * n * o if fo else 0)
+        val = d * (mm / (ave * mn)) - ave_d * n * (o if fo else 0)
     else:
-        val = m - (ave * n * o if fo else 0)  # * overlap in cluster eval, not comp eval  (should be else 0 here? Else we aregetting negative value when Et is [0,0,0,0])
+        val = m - ave * n * (o if fo else 1)  # * overlap in cluster eval, not comp eval
     return val
 
 def comp_node_(_N_):  # rng+ forms layer of rim and extH per N, appends N_,L_,Et, ~ graph CNN without backprop
@@ -427,9 +427,9 @@ def comp_N(_N,N, rn, angle=None, dist=None, dir=1):  # dir if fd, Link.derH=dH, 
         md_t = np.array([mdext])
         Et = np.array([mL+mA, abs(dL)+abs(dA), .3, olp])  # n = compared vars / 6
     else:  # CG
-        vertuple, et1 = comp_latuple(_N.latuple, N.latuple, _o,o)
-        md_vert, et2 = comp_md_(_N.vertuple[1], N.vertuple[1], dir)
-        md_t = [mdext, vertuple, md_vert]
+        vert, et1 = comp_latuple(_N.latuple, N.latuple, _o,o)
+        md_vert, et2 = comp_md_(_N.vert[1], N.vert[1], dir)
+        md_t = [mdext, vert, md_vert]
         Et = np.array([mL+mA +et1[0]+et2[0], abs(dL)+abs(dA) +et1[1]+et2[1], 2.3, olp])
     # 1st lay:
     md_C = CH(H = md_t, Et=Et)
@@ -465,7 +465,7 @@ def sum2graph(root, grapht, fd, nest):  # sum node and link params into graph, a
         if fd: graph.subL_ = subG_
         else:  graph.subG_ = subG_
         graph.minL = minL
-    yx = [0,0]
+    yx = np.array([0,0])
     fg = isinstance(node_[0],CG)
     if fg: M,D = 0,0
     derH = CH(root=graph)
@@ -474,10 +474,9 @@ def sum2graph(root, grapht, fd, nest):  # sum node and link params into graph, a
         yx = np.add(yx, N.yx)
         if N.derH: derH.add_H(N.derH)
         if fg:
-            vertuple = N.vertuple; M += np.sum(vertuple[0]); D += np.sum(vertuple[1]); graph.vertuple += vertuple
+            vert = N.vert; M += np.sum(vert[0]); D += np.sum(vert[1]); graph.vert += vert
             graph.latuple += N.latuple
-        try:    N.root[-1] = graph  # replace Gt
-        except: N.root = [N.root] + [graph]  # N.root is CG
+        N.root[-1] = graph  # replace Gt, if single root, else N.root[-1][-1] = graph
     if fg:
         graph.Et[:2] += np.array([M,D]) * icoef**2
     if derH:
@@ -504,7 +503,7 @@ def sum2graph(root, grapht, fd, nest):  # sum node and link params into graph, a
 def sum_G_(node_):
     G = CG()
     for n in node_:
-        G.rng = n.rng; G.latuple += n.latuple; G.vertuple += n.vertuple; G.aRad += n.aRad; G.box = extend_box(G.box, n.box)
+        G.rng = n.rng; G.latuple += n.latuple; G.vert += n.vert; G.aRad += n.aRad; G.box = extend_box(G.box, n.box)
         if n.derH: G.derH.add_H(n.derH)
         if n.extH: G.extH.add_H(n.extH)
     return G
