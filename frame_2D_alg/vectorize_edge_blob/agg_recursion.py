@@ -17,12 +17,12 @@ postfix _ denotes array of same-name elements, multiple _s is nested array
 capitalized vars are summed small-case vars '''
 
 
-def cross_comp(root):  # breadth-first node_,link_ cross-comp, connect.clustering, recursion
+def cross_comp(root, init=0):  # breadth-first node_,link_ cross-comp, connect.clustering, recursion
 
     N_,L_,Et = comp_node_(root.subG_)  # cross-comp exemplars, extrapolate to their node_s
     # mfork
     if val_(Et, fo=1) > 0:
-        append_fork(root, L_)  # root.derH.tft += mlay
+        if init: append_fork(root, L_)  # root.derH.tft += mlay (or init out side cross_comp?)
         pL_ = {l for n in N_ for l,_ in get_rim(n, fd=0)}
         if len(pL_) > ave_L:
             cluster_N_(root, pL_, fd=0)  # optional divisive clustering, calls centroid and higher connect.clustering
@@ -32,23 +32,23 @@ def cross_comp(root):  # breadth-first node_,link_ cross-comp, connect.clusterin
                 L.extH, L.root, L.mL_t, L.rimt, L.aRad, L.visited_, L.Et = CH(), root, [[],[]], [[],[]], 0, [L], copy(L.derH.Et)
             lN_,lL_,dEt = comp_link_(L_,Et)
             if val_(dEt, mEt=Et, fo=1) > 0:
-                append_fork(root, lL_)  # root.derH.tft += dlay
+                if init: append_fork(root, lL_)  # root.derH.tft += dlay
                 plL_ = {l for n in lN_ for l,_ in get_rim(n, fd=1)}
                 if len(plL_) > ave_L:
                     cluster_N_(root, plL_, fd=1)
         # feed back derH fork tree recursively:
-        feedback(root)
+        # feedback(root)  # the root here is always edge or frame, it will never be another CG
 
 def append_fork(root, link_):
 
-    fork = (CH().add_H([L.derH for L in link_]))
-    root.derH.tft += [fork]
-    root.derH.Et += fork.Et
+    fork = (CH().add_tree([L.derH for L in link_]))
+    root.derH.append_(fork)
+
 
 def feedback(node):
 
     while node.root:  # propagate upward
-        root = node.root
+        root = node.root[-1] if isinstance(node.root, list) else node.root  # root maybe a list
         # root tree is one layer deeper than node tree,
         root.derH.tft[node.fd].add_tree(node.derH)  # root fork maps to node fork tuple
         node = root
@@ -88,16 +88,18 @@ def cluster_N_(root, L_, fd, nest=0):  # top-down segment L_ by >ave ratio of L.
             _eN_ = eN_
         # cluster shorter links, depth-first:
         sub_L_ = {l for n in node_ for l,_ in get_rim(n,fd) if l.dist < min_dist}
-        Et = np.sum([sL.derH.Et for sL in sub_L_], axis=1)
-        Et[3] += nest  # overlap
-        if len(sub_L_) > ave_L and val_(Et, fo=1) > 0:
-            cluster_N_(Gt, sub_L_, fd, nest+1)
-            # sub-clusters are nested in Gt
+        if len(sub_L_) > ave_L :  # nothing to sum if sub_L_ is empty
+            Et = np.sum([sL.derH.Et for sL in sub_L_], axis=1)
+            Et[3] += nest  # overlap
+            if val_(Et, fo=1) > 0:
+                cluster_N_(Gt, sub_L_, fd, nest+1)
+                # sub-clusters are nested in Gt
         Gt[0] = list(node_)
         Gt_ += [Gt]
     # per dist segment:
     root.subG_ = [sum2graph(root, Gt, fd, nest) for Gt in Gt_]
     cluster_C_(root)
+    for subG in subG_: feedback(subG)  # should be feedback here?
 
 ''' Hierarchical clustering should alternate between two phases: generative via connectivity and compressive via centroid.
 
@@ -123,8 +125,8 @@ def cluster_C_(graph):
             C.latuple += n.latuple * s
             C.vert += n.vert * s
             C.yx += n.yx
-            if n.derH: C.derH.add_H(n.derH, dir=s, fc=1)
-            if n.extH: C.extH.add_H(n.extH, dir=s, fc=1)
+            if n.derH: C.derH.add_tree(n.derH, dir=s, fc=1)
+            if n.extH: C.extH.add_tree(n.extH, dir=s, fc=1)
         # get averages:
         k = len(dnode_); C.Et/=k; C.latuple/=k; C.vert/=k; C.aRad/=k; C.yx /= k
         if C.derH: C.derH.norm_(k)  # derH/=k
@@ -209,4 +211,4 @@ if __name__ == "__main__":
                 cluster_C_(edge)  # no cluster_C_ in trace_edge
                 subG_ += edge.subG_  # unpack edge, or keep if connectivity cluster, or in flat blob altG_?
         frame.subG_ = subG_
-        cross_comp(frame)  # calls connectivity clustering
+        cross_comp(frame, init=1)  # calls connectivity clustering
