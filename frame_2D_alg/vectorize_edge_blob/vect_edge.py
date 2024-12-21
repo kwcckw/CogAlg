@@ -69,44 +69,31 @@ class CH(CBase):  # generic derivation hierarchy of variable nesting: extH | der
         # He.deep = 0 if deep is None else deep  # nesting in root H
         # He.nest = 0 if nest is None else nest  # nesting in H
 
-    def __bool__(H): return bool(H.der_)  # never empty?
+    def __bool__(H):return bool(len(H.der_)>0)  # never empty? extH is empty before we sum them, so they may empty
 
-    def copy_md_C(he, root, dir=1, fc=0):  # dir is sign if called from centroid, which doesn't use dir
 
-        md_t = [np.array([m_ * dir if fc else copy(m_), d_ * dir]) for m_, d_ in he.tft]
-        # m_ * dir only if called from centroid()
-        Et = he.Et * dir if fc else copy(he.Et)
+    def copy_(He, root, dir=1, fc=0, fd=0):  # comp direction may be reversed to -1
 
-        return CH(root=root, H=md_t, node_=copy(he.node_), Et=Et, i=he.i, i_=he.i_)
+        C = CH(root=root, node_=copy(He.node_), Et=He.Et * dir if fc else copy(He.Et))      
+        C.der_ = np.array([np.array([(v * dir if (fd or not fc) else v) for v in v_]) for v_ in He.der_], dtype=object)
+        for fd, he in enumerate(He.tft):  # mfork, dfork
+            C.tft += [he.copy_(root=C, dir=dir, fc=fc, fd=fd)]
 
-    def copy_(He, root, dir=1, fc=0):  # comp direction may be reversed to -1
-
-        C = CH(root=root, node_=copy(He.node_), Et=copy(He.Et), i=He.i, i_=He.i_)
-        for he in He.tft:
-            C.tft += [he.copy_(root=C, dir=dir, fc=fc) if isinstance(he.tft[0],CH) else
-                    he.copy_md_C(root=C, dir=dir, fc=fc)]
         return C
-
-    def add_md_C(Fork, fork, dir=1, fc=0):
-
-        # use der_?
-        for Md_, md_ in zip(Fork.tft, fork.tft):  # [mdext, ?vert, mdVer]
-            Md_ += np.array([md_[0]*dir if fc else md_[0].copy(), md_[1]*dir])
-
-        Fork.Et += fork.Et * dir if fc else copy(fork.Et)
 
 
     def add_tree(HE, He_, dir=1, fc=0):  # unpack derH trees down to numericals and sum them, may subtract from centroid
         if not isinstance(He_,list): He_ = [He_]
 
         for He in He_:
-            for Fork, fork in zip_longest(HE.tft, He.tft, fillvalue=None):  # top fork tuple at each node of fork trees
+            He.der_ += He.der_  # add der_ (in higher layers' der_ or bottom mfork|dfork's der)
+            for fd, (Fork, fork) in enumerate(zip_longest(HE.tft, He.tft, fillvalue=None)):  # top fork tuple at each node of fork trees
                 if fork:
                     if Fork:  # unpack|add, same nesting in both forks
-                        Fork.add_tree(fork,dir,fc) if isinstance(fork.tft[0],CH) else Fork.add_md_C(fork,dir,fc)
+                        Fork.add_tree(fork,dir,fc)
                     else:
-                        HE.tft += [fork.copy_(root=HE, dir=dir, fc=fc) if isinstance(fork.tft[0],CH) else fork.copy_md_C(root=HE, dir=dir, fc=fc)]
-                        # for dfork only
+                        HE.tft += [fork.copy_(root=HE, dir=dir, fc=fc, fd=fd)]
+
             HE.node_ += [node for node in He.node_ if node not in HE.node_]  # empty in CL derH?
             HE.Et += He.Et * dir
 
@@ -116,27 +103,28 @@ class CH(CBase):  # generic derivation hierarchy of variable nesting: extH | der
 
         m_t, d_t = [],[]
         Et = np.zeros(2)
-        for _d_, d_ in zip(_md_C.tft[1], md_C.tft[1]):  # [dext, ?dlat, dvert]
-            m_, d_, et = comp_md_(_d_, d_, rn, dir=dir)
+        # md_C is always dfork here
+        for _d_, d_ in zip(_md_C.der_, md_C.der_):  # [dext, ?dlat, dvert]
+            (m_, d_), et = comp_md_(_d_, d_, rn, dir=dir)
             m_t += [m_]
             d_t += [d_]
             Et += et
-        mfork = CH(der_=np.array(m_t))  # mainly empty
-        dfork = CH(der_=np.array(d_t))
+        mfork = CH(der_=np.array(m_t,dtype=object))  # mainly empty
+        dfork = CH(der_=np.array(d_t,dtype=object))
         # der_ is summed from deeper forks?
         return CH(root=root, tft=[mfork,dfork], der_=m_t+d_t, Et=np.append(Et,[olp, .3 if len(m_t)==1 else 2.3]))  # .3 in default comp ext)
 
     def comp_tree(_He, He, rn, root):
         derH = CH(root=root)
 
-        for _fork, fork in zip(_He.tft[1], He.tft[1]):  # comp dforks only?
+        for _fork, fork in zip(_He.tft[1::2], He.tft[1::2]):  # comp dforks only? (if comp dforks only, it's always comparing single fork, so there's no need to loop too)
             if _fork and fork:  # same depth
                 if fork.tft:  # empty in top lay
                     dLay = _fork.comp_tree(fork, rn, root=derH) # deeper unpack -> comp_md_t
                 else:
                     dLay = _fork.comp_md_C(fork, rn=rn, root=derH, olp=(_He.Et[3]+He.Et[3]) /2)
                     # comp shared layers, add n to olp?
-                derH.append_(dLay); derH.Et += dLay.Et
+                derH.tft += [dLay]; derH.Et += dLay.Et
         return derH
 
     # not updated:
@@ -283,7 +271,7 @@ def cluster_edge(edge):  # edge is CG but not a connectivity cluster, just a set
             # comp dPP_:
             lN_,lL_,_ = comp_link_(L_, Et)
             dlay = CH().add_tree([L.derH for L in lL_])
-            edge.derH.append_(dlay)
+            edge.derH.tft += [dlay]; edge.derH.Et += dlay.Et
             if len(lN_) > ave_L:
                 cluster_PP_(edge, fd=1)
 
@@ -416,16 +404,16 @@ def comp_N(_N,N, rn, angle=None, dist=None, dir=1):  # dir if fd, Link.derH=dH, 
     Et = np.array([mL+mA, abs(dL)+abs(dA), .3, olp])  # n = compared vars / 6
     if not fd:  # CG
         mdLat, et1 = comp_latuple(_N.latuple, N.latuple, _o,o)
-        mVert, dVert, et2 = comp_md_(_N.vert[1], N.vert[1], dir)
-        np.append(m_t, np.array([mdLat[0], mVert]))
-        np.append(d_t, np.array([mdLat[1], dVert]))
+        (mVert, dVert), et2 = comp_md_(_N.vert[1], N.vert[1], dir)
+        m_t = np.array([m_t[0],mdLat[0], mVert], dtype=object)  # using numpy appenbd is merging them, so we need to use np.array hjere
+        d_t = np.array([d_t[0],mdLat[1], dVert], dtype=object)
         Et += np.array([et1[0]+et2[0], et1[1]+et2[1], 2, 0])
         # no added olp?
     mfork = CH(der_ = m_t); dfork = CH(der_ = d_t)  # der_ is summed in deeper forks too?:
     derH = CH(tft = [mfork, dfork], Et=Et, der_ = m_t + d_t)  # fork der_s and Ets are summed upward
     if _N.derH and N.derH:
         dderH = _N.derH.comp_tree(N.derH, rn, root=derH)  # comp shared tree layers
-    derH.tft[fd].add_tree(dderH)
+        derH.tft[fd].add_tree(dderH)
     # spec: comp_node_(node_|link_), combinatorial, node_ nested / rng-)agg+?
     # not revised:
     Et = copy(derH.Et)
@@ -472,8 +460,10 @@ def sum2graph(root, grapht, fd, nest, fsub=0):  # sum node and link params into 
     if derH:
         graph.derH = derH  # lower layers
     derLay = CH().add_tree([link.derH for link in link_])
-    for i, fork in enumerate(derLay.tft):
-        fork.root = graph; graph.derH.tft[i].add_tree += [fork]  # deeper tfts are added by feedback
+    for i, (Fork, fork) in enumerate(zip(graph.derH.tft, derLay.tft)):
+        fork.root = graph; 
+        Fork.add_tree(fork)  # something like this instead?
+        # graph.derH.tft[i].add_tree += [fork]  # deeper tfts are added by feedback
     graph.derH.Et += Et # arg Et
     L = len(node_)
     yx = np.divide(yx,L); graph.yx = yx
