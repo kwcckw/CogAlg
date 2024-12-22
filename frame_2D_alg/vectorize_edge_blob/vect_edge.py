@@ -51,12 +51,12 @@ med_cost = 10
 class CH(CBase):  # generic derivation hierarchy of variable nesting: extH | derH, their layers and sub-layers
 
     name = "H"
-    def __init__(He, root, Et, tft, lft=None, node_=None, fd=None, altH=None):
+    def __init__(He, root=None, Et=None, tft=None, lft=None, node_=None, fd=None, altH=None):
         super().__init__()
         He.Et = np.zeros(4) if Et is None else Et  # += links (n is added to et now)
-        He.tft = tft  # top fork tuple: arrays m_t, d_t
+        He.tft = [] if tft is None else tft   # top fork tuple: arrays m_t, d_t
         He.lft = [] if lft is None else lft  # lower fork tuple: CHs, each mediates its own tft and lft
-        He.root = root  # N or higher-composition He
+        He.root = None if root is None else root  # N or higher-composition He
         He.node_ = [] if node_ is None else node_  # concat bottom nesting order if CG, may be redundant to G.node_
         He.altH = CH(altH=object) if altH is None else altH   # summed altLays, prevent cyclic
         He.depth = 0  # max depth of fork tree?
@@ -69,7 +69,7 @@ class CH(CBase):  # generic derivation hierarchy of variable nesting: extH | der
         # He.deep = 0 if deep is None else deep  # nesting in root H
         # He.nest = 0 if nest is None else nest  # nesting in H
 
-    def __bool__(H):return bool(H.lft)  # empty only in empty CH
+    def __bool__(H):return bool(len(H.tft)>0)  # empty only in empty CH (should be tft now? lft is empty in bottom layer)
 
 
     def copy_(He, root, rev=0, fc=0):  # comp direction may be reversed to -1
@@ -88,8 +88,7 @@ class CH(CBase):  # generic derivation hierarchy of variable nesting: extH | der
 
         for He in He_:
             # top fork tuple per node of fork tree:
-            for fd, (TT,tt) in enumerate(zip_longest(HE.tft, He.tft, fillvalue=None)):
-                np.add(TT, tt * -1 if rev and (fd or fc) else tt)
+            HE.sum_tft(He,rev=rev,fc=fc)
 
             for Fork, fork in zip_longest(HE.lft, He.lft, fillvalue=None):
                 if fork:  # empty in bottom layer
@@ -103,11 +102,23 @@ class CH(CBase):  # generic derivation hierarchy of variable nesting: extH | der
 
         return HE  # root should be updated by returned HE
 
+
+    def sum_tft(HE, He, rev=0, fc=0):  # sum He.tft into HE.tft
+
+        if HE.tft:
+            for fd, (T_t, t_t) in enumerate(zip(HE.tft, He.tft)):  # loop eacmd_t and dd_t
+                for T_, t_ in zip_longest(T_t, t_t, fillvalue=None):  # loop each m_ and d_
+                    t_ = t_ * -1 if rev and (fd or fc) else t_
+                    if T_ is None: HE.tft[fd] = T_t = np.array([*T_t, t_],dtype=object)
+                    else:          T_ += t_
+        else:
+            HE.tft = deepcopy(He.tft)  # empty HE.tft (it may empty in new init He)
+
     def comp_tree(_He, He, rn, root, dir=1):  # unpack derH trees down to numericals and compare them
 
-        (mver, dver), et = comp_md_(_He.tft[1], He.tft[1], rn, dir=dir)
+        (mver, dver), et = comp_md_t(_He.tft[1], He.tft[1], rn, dir=dir)
         # comp d_t only
-        derH = CH(root=root, tft = [mver,dver], Et = np.array([*et,_He.Et[3]+He.Et[3] /2]))
+        derH = CH(root=root, tft = [mver,dver], Et = np.array([*et,(He.Et[2]+He.Et[2])/2, (_He.Et[3]+He.Et[3])/2]))
 
         for _fork, fork in zip(_He.lft, He.lft):  # comp shared layers
             if _fork and fork:  # same depth
@@ -270,6 +281,17 @@ def val_(Et, mEt=[], fo=0):
         val = m - ave * n * (o if fo else 1)  # * overlap in cluster eval, not comp eval
     return val
 
+# we need a separate version of comp_md_t for md_t and dd_t, i think it's clearer to have another version here?
+def comp_md_t(_d_t,d_t, rn=.1, dir=1):  # dir may be -1
+
+    d_t = d_t * rn  # normalize by compared accum span
+    dd_t = (_d_t - d_t * dir)  # np.arrays
+    md_t = np.array([np.minimum(_d_, d_) for _d_, d_ in zip(_d_t, d_t)], dtype=object)
+    for i, (_d_, d_) in enumerate(zip(_d_t, d_t)): md_t[i][(_d_ < 0) != (d_ < 0)] *= -1  # Negate where only one of _d_ or d_ is negative
+
+    M = sum([sum(md_) for md_ in md_t]); D = sum([sum(dd_) for dd_ in dd_t])
+    return np.array([md_t,dd_t]), np.array([M,D])  # [m_,d_], Et
+
 def comp_node_(_N_):  # rng+ forms layer of rim and extH per N, appends N_,L_,Et, ~ graph CNN without backprop
 
     _Gp_ = []  # [G pair + co-positionals]
@@ -382,7 +404,7 @@ def comp_N(_N,N, rn, angle=None, dist=None, dir=1):  # dir if fd, Link.derH=dH, 
         _L, L = len(_N.node_),len(N.node_); dL = _L- L*rn; mL = min(_L, L*rn) - ave_L
         mA,dA = comp_area(_N.box, N.box)  # compare area in CG vs angle in CL
     # der ext
-    m_t = np.array([mL,mA]); d_t = np.array([dL,dA])
+    m_t = np.array([mL,mA],dtype=float); d_t = np.array([dL,dA],dtype=float)
     _o,o = _N.Et[3],N.Et[3]; olp = (_o+o) / 2  # inherit from comparands?
     Et = np.array([mL+mA, abs(dL)+abs(dA), .3, olp])  # n = compared vars / 6
     if fd:  # CH
@@ -397,7 +419,7 @@ def comp_N(_N,N, rn, angle=None, dist=None, dir=1):  # dir if fd, Link.derH=dH, 
     derH = CH(tft=[m_t,d_t], Et=Et)
     if _N.derH and N.derH:
         dderH = _N.derH.comp_tree(N.derH, rn, root=derH)  # comp shared layers
-        derH.lft += dderH; derH.Et += dderH.Et
+        derH.sum_tft(dderH, rev=0, fc=0); derH.lft += [dderH]; derH.Et += dderH.Et
     # not revised:
     # spec: comp_node_(node_|link_), combinatorial, node_ nested / rng-)agg+?
     Et = copy(derH.Et)
@@ -430,7 +452,7 @@ def sum2graph(root, grapht, fd, nest, fsub=0):  # sum node and link params into 
     yx = np.array([0,0])
     fg = isinstance(node_[0],CG)
     if fg: M,D = 0,0
-    derH = CH(root=graph)
+    graph.derH = derH = CH(root=graph)
     for N in node_:
         graph.box = extend_box(graph.box, N.box)  # pre-compute graph.area += N.area?
         yx = np.add(yx, N.yx)
@@ -443,7 +465,7 @@ def sum2graph(root, grapht, fd, nest, fsub=0):  # sum node and link params into 
         graph.Et[:2] += np.array([M,D]) * icoef**2
     # sum link.derHs:
     derLay =  CH().add_tree([link.derH for link in link_])
-    graph.derH = derH.lft + [derLay]
+    derH.sum_tft(derLay); derH.lft += [derLay]; derH.Et += derLay.Et  # append derlay (when N.derH is empty in base fork, we have derlay in their lft only)
     # derLay Et = arg Et:
     graph.Et += Et; graph.derH.Et += Et
     L = len(node_)
