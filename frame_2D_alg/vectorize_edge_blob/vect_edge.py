@@ -70,12 +70,12 @@ class CH(CBase):  # generic derivation hierarchy of variable nesting: extH | der
         # He.deep = 0 if deep is None else deep  # nesting in root H
         # He.nest = 0 if nest is None else nest  # nesting in H
 
-    def __bool__(H):return bool(H.Et[0]>0)  # empty only in empty CH
+    def __bool__(H):return bool(H.Et[0]!=0)  # empty only in empty CH  (M may negative and it has non empty tft or lft too)
 
 
     def copy_(He, root, rev=0, fc=0):  # comp direction may be reversed to -1
 
-        C = CH(root=root, node_=copy(He.node_), Et=He.Et * -1 if (fc and rev) else copy(He.Et))
+        C = CH(fd_=copy(He.fd_), root=root, node_=copy(He.node_), Et=He.Et * -1 if (fc and rev) else copy(He.Et))
 
         for fd, tt in enumerate(He.tft):  # nested array tuples
             C.tft += [tt * -1 if rev and (fd or fc) else deepcopy(tt)]
@@ -89,9 +89,11 @@ class CH(CBase):  # generic derivation hierarchy of variable nesting: extH | der
 
         for He in He_:
             # sum tft:
-            for fd, (F_t, f_t) in enumerate(zip(HE.tft, He.tft)):  # m_t and d_t
-                for F_,f_ in zip(F_t, f_t):
-                    F_ += f_ * -1 if rev and (fd or fc) else f_  # m_|d_ in [dext,dlat,dver]
+            if HE.tft:  
+                for fd, (F_t, f_t) in enumerate(zip(HE.tft, He.tft)):  # m_t and d_t
+                    for F_,f_ in zip(F_t, f_t):
+                        F_ += f_ * -1 if rev and (fd or fc) else f_  # m_|d_ in [dext,dlat,dver]
+            else: HE.tft = deepcopy(He.tft)  # HE.tft is init empty, copy the first tft when it's empty
 
             for F, f in zip_longest(HE.lft, He.lft, fillvalue=None):  # CH forks
                 if f:  # empty in bottom layer
@@ -100,13 +102,14 @@ class CH(CBase):  # generic derivation hierarchy of variable nesting: extH | der
 
             HE.node_ += [node for node in He.node_ if node not in HE.node_]  # empty in CL derH?
             HE.Et += He.Et * -1 if rev and fc else He.Et
+            if not HE.fd_: HE.fd_ = copy(He.fd_)  # init fd_
 
         return HE  # root should be updated by returned HE
 
     def append_(HE, He):  # unpack HE lft tree down to He.fd_ and append He there
 
-        fd_ = He.fd_; root = HE
-        while fd_:
+        root = HE; fd_ = copy(He.fd_)  # use copy prevent popping fd in the He
+        while fd_ and root.lft:  # skip empty root (in the base fork)
             fd = fd_.pop(0)
             root = root.lft[fd]
         root.lft += [He]
@@ -115,7 +118,7 @@ class CH(CBase):  # generic derivation hierarchy of variable nesting: extH | der
 
     def comp_tree(_He, He, rn, root, dir=1, fd=0):  # unpack derH trees down to numericals and compare them
 
-        _d_t, d_t = He.tft[1], He.tft[1]  # comp_tft:
+        _d_t, d_t = _He.tft[1], He.tft[1]  # comp_tft:  (should be _He here)
         d_t = d_t * rn  # norm by accum span
         dd_t = (_d_t - d_t * dir)  # np.arrays
         md_t = np.array([np.minimum(_d_,d_) for _d_,d_ in zip(_d_t, d_t)], dtype=object)
@@ -123,7 +126,7 @@ class CH(CBase):  # generic derivation hierarchy of variable nesting: extH | der
             md_t[i][(_d_<0) != (d_<0)] *= -1  # negate if only one of _d_ or d_ is negative
         M = sum([sum(md_) for md_ in md_t])
         D = sum([sum(dd_) for dd_ in dd_t])
-        n = .3 if len(d_t)==1 else 2.3  # n comp params / 6
+        n = .3 if len(d_t)==1 else 2.3  # n comp params / 6  : m fork: [ext(2), Lat(6), Ver(6)], d fork: [ext(2)]
 
         derH = CH(fd_=_He.fd_+[fd], root=root, tft = [np.array(md_t),np.array(dd_t)], Et=np.array([M,D,n, (_He.Et[3]+He.Et[3])/2]))
 
@@ -138,7 +141,7 @@ class CH(CBase):  # generic derivation hierarchy of variable nesting: extH | der
         for f in He.tft:  # arrays
             f *= n
         for fork in He.lft:  # CHs
-            fork.norm_C(n)
+            # fork.norm_C(n)  # pending update with new structure of tft and lft
             fork.Et *= n
         He.Et *= n
 
@@ -457,9 +460,10 @@ def sum2graph(root, grapht, fd, nest, fsub=0):  # sum node and link params into 
             derH.add_tree(N.derH)  # exclude Et, already in N.Et?:
         graph.Et += N.Et * icoef ** 2  # deeper, lower weight
         N.root[-1] = graph  # replace Gt, if single root, else N.root[-1][-1] = graph
-    # sum link.derHs
-    derH.append_(CH().add_tree([link.derH for link in link_]))  # derH lft @ derLay.fd_ += [derLay]
-    graph.derH = derH; graph.Et += derH.Et
+    # sum link.
+    derLay = CH().add_tree([link.derH for link in link_])
+    derH.append_(derLay)  # derH lft @ derLay.fd_ += [derLay]  (in the base m and d fork, derH.lft is empty)
+    graph.Et += derH.Et  # graph.derH is already assigned during derH initialization
     # add feedback to higher roots?
     L = len(node_)
     yx = np.divide(yx,L); graph.yx = yx
