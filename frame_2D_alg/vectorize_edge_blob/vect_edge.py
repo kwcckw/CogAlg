@@ -59,7 +59,7 @@ class CH(CBase):  # generic derivation hierarchy of variable nesting: extH | der
         He.fd_ = [] if fd_ is None else fd_  # 0: sum CGs, 1: sum CLs, + concat from comparands
         He.root = None if root is None else root  # N or higher-composition He
         He.node_ = [] if node_ is None else node_  # concat bottom nesting order if CG, may be redundant to G.node_
-        He.altH = CH(altH=object) if altH is None else altH   # summed altLays, prevent cyclic
+        He.altH = CH(altH=object, Et=np.zeros(4), tft=[]) if altH is None else altH   # summed altLays, prevent cyclic
         He.depth = 0  # max depth of fork tree?
         # if combined-layer H:
         # He.i = 0 if i is None else i  # lay index in root.lft, to revise olp
@@ -73,7 +73,7 @@ class CH(CBase):  # generic derivation hierarchy of variable nesting: extH | der
 
     def copy_(He, root, rev=0, fc=0):  # comp direction may be reversed to -1
 
-        C = CH(fd_=copy(He.fd_), root=root, node_=copy(He.node_), Et=He.Et * -1 if (fc and rev) else copy(He.Et))
+        C = CH(fd_=copy(He.fd_), root=root, node_=copy(He.node_), Et=He.Et * -1 if (fc and rev) else copy(He.Et), tft=[])
 
         for fd, tt in enumerate(He.tft):  # nested array tuples
             C.tft += [tt * -1 if rev and (fd or fc) else deepcopy(tt)]
@@ -111,7 +111,7 @@ class CH(CBase):  # generic derivation hierarchy of variable nesting: extH | der
         root.Et += He.Et
         if not root.tft: root.tft = He.tft  # if init from sum mlink_
         if fb:
-            root.add_tree(He)  # sum|init if called from feedback
+            root.lft[-1].add_tree(He)  # sum|init if called from feedback
         else:
             root.lft += [He]
 
@@ -173,8 +173,8 @@ class CG(CBase):  # PP | graph | blob: params of single-fork node_ cluster
         G.latuple = np.array([.0,.0,.0,.0,.0,np.zeros(2)],dtype=object) if latuple is None else latuple  # lateral I,G,M,D,L,[Dy,Dx]
         G.vert = np.array([np.zeros(6), np.zeros(6)]) if vert is None else vert  # vertical m_d_ of latuple
         # maps to node_tree / agg+|sub+:
-        G.derH = CH() if derH is None else derH  # sum from nodes, then append from feedback
-        G.extH = CH() if extH is None else extH  # sum from rim_ elays, H maybe deleted
+        G.derH = CH(Et=np.zeros(4),tft=[]) if derH is None else derH  # sum from nodes, then append from feedback
+        G.extH = CH(Et=np.zeros(4),tft=[]) if extH is None else extH  # sum from rim_ elays, H maybe deleted
         G.rim = []  # flat links of any rng, may be nested in clustering
         G.aRad = 0  # average distance between graph center and node center
         G.box = [np.inf, np.inf, -np.inf, -np.inf] if box is None else box  # y0,x0,yn,xn
@@ -214,7 +214,7 @@ def vectorize_root(frame):
                 if blob.Et[0] * (len(blob.node_)-1)*(blob.rng+1) > ave:
                     # init for agg+:
                     if not hasattr(frame, 'derH'):
-                        frame.derH = CH(root=frame); frame.root = None; frame.subG_ = []
+                        frame.derH = CH(root=frame, Et=np.zeros(4), tft=[]); frame.root = None; frame.subG_ = []
                     Y,X,_,_,_,_ = blob.latuple
                     lat = np.array([.0,.0,.0,.0,.0,np.zeros(2)],dtype=object); vert = np.array([np.zeros(6), np.zeros(6)])
                     for PP in blob.node_:
@@ -230,7 +230,9 @@ def vectorize_root(frame):
                             G_ += [PP]
                     edge.subG_ = G_
                     if len(G_) > ave_L:
-                        cluster_edge(edge); frame.subG_ += [edge]; frame.derH.add_tree(edge.derH)
+                        cluster_edge(edge); frame.subG_ += [edge]
+                        if frame.derH: frame.derH.add_tree(edge.derH)
+                        else:          frame.derH = edge.derH.copy_(root=frame)  # init
                         # add altG: summed converted adj_blobs of converted edge blob
                         # if len(edge.subG_) > ave_L: agg_recursion(edge)  # unlikely
 
@@ -274,18 +276,19 @@ def cluster_edge(edge):  # edge is CG but not a connectivity cluster, just a set
     edge.subG_ = N_
     edge.link_ = L_
     if val_(Et, fo=1) > 0:  # cancel by borrowing d?
-        mlay = L_[0].derH.copy_.add_tree([L.derH for L in L_[1:]])
+        mlay = L_[0].derH.copy_(root=edge.derH).add_tree([L.derH for L in L_[1:]])
         mlay.fd_=[]; edge.derH.append_(mlay)
         if len(N_) > ave_L:
             cluster_PP_(edge, fd=0)
         if val_(Et, mEt=Et, fo=1) > 0:  # likely not from the same links
             for L in L_:
-                L.extH, L.root, L.mL_t, L.rimt, L.aRad, L.visited_, L.Et = CH(), [edge], [[],[]], [[],[]], 0, [L], copy(L.derH.Et)
+                L.extH, L.root, L.mL_t, L.rimt, L.aRad, L.visited_, L.Et = CH(Et=np.zeros(4), tft=[]), [edge], [[],[]], [[],[]], 0, [L], copy(L.derH.Et)
             # comp dPP_:
             lN_,lL_,_ = comp_link_(L_, Et)
-            dlay = lL_[0].derH.copy_.add_tree([L.derH for L in lL_[1:]])
-            dlay.fd_= []; edge.derH.append_(dlay)
             if len(lN_) > ave_L:
+                # this should be moved here? lL_ may empty and we won't get any dlay, and hence nothing to feedback too
+                dlay = lL_[0].derH.copy_(root=edge.derH).add_tree([L.derH for L in lL_[1:]])
+                dlay.fd_= []; edge.derH.append_(dlay)
                 cluster_PP_(edge, fd=1)
 
 def comp_node_(_N_):  # rng+ forms layer of rim and extH per N, appends N_,L_,Et, ~ graph CNN without backprop
@@ -438,28 +441,28 @@ def sum2graph(root, grapht, fd, nest, fsub=0):  # sum node and link params into 
 
     node_, link_, Et = grapht[:3]
     Et *= icoef  # is internal now
-    graph = CG(fd=fd, Et=Et, root = [root]+[node_[0].root], node_=node_, link_=link_, rng=nest)
+    graph = CG(fd=fd, Et=Et, root = [root]+ (node_[0].root if isinstance(node_[0].root, list) else [node_[0].root]), node_=node_, link_=link_, rng=nest)
     if len(grapht) == 5:  # called from cluster_N
         minL, subG_ = grapht[3:]
         if fd: graph.subL_ = subG_
         else:  graph.subG_ = subG_
         graph.minL = minL
     yx = np.array([0,0])
-    graph.derH = derH = CH(root=graph)
     for N in node_:
         graph.box = extend_box(graph.box, N.box)  # pre-compute graph.area += N.area?
         yx = np.add(yx, N.yx)
         if isinstance(node_[0],CG):
             graph.latuple += N.latuple; graph.vert += N.vert
-        if N.derH:
-            derH.add_tree(N.derH)
         graph.Et += N.Et * icoef ** 2  # deeper, lower weight
+        # root[-1] doesn't exist in vect_edge, we need N.root = [graph] instead
         N.root[-1] = graph  # replace Gt, if single root, else N.root[-1][-1] = graph
+    # sum node_ derH: (N.derH accumulation is moved here)
+    graph.derH = node_[0].derH.copy_(root=graph).add_tree([n.derH for n in node_[1:]])  
     # sum link_ derH:
-    derLay = link_[0].derH.copy_.add_tree([link.derH for link in link_[1:]])
+    derLay = link_[0].derH.copy_(root=graph.derH).add_tree([link.derH for link in link_[1:]])
     derLay.fd_ = []  # reset
-    if derH:
-        derH.fd_=[]; derLay.append_(derH)
+    if graph.derH:
+        graph.derH.fd_=[]; derLay.append_(graph.derH)
     graph.derH = derLay
     L = len(node_)
     yx = np.divide(yx,L); graph.yx = yx
@@ -481,9 +484,11 @@ def sum2graph(root, grapht, fd, nest, fsub=0):  # sum node and link params into 
 def feedback(node):  # propagate derH to higher roots
 
     while node.root:
+        if isinstance(node.root, list): root = node.root[-1]  # in agg+
+        else:                           root = node.root
         # root tree is one layer deeper than node tree, so root fork maps to node fork tuple:
-        node.root.derH.append_(node.derH, fb=0)  # root.lft[fd].add_tree( node.derH)
-        node = node.root
+        root.derH.append_(node.derH, fb=1 if root.derH else 0)  # root.lft[fd].add_tree( node.derH)  (fb = 1 if root.derH is not empty)
+        node = root
 
 def sum_G_(node_):
     G = CG()
