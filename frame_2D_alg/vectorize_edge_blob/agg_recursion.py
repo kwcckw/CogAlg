@@ -46,6 +46,7 @@ def cluster_N_(root_, L_, fd, nest=0):  # top-down segment L_ by >ave ratio of L
     _L = L_[0]
     N_, et = _L.nodet, _L.derH.Et
     # current dist segment:
+    for N in [N for L in L_ for N in L.nodet]:  N.fin = 0  # this should be here? we need to init all because we need fin in all Ns instead of current segment only
     for i, L in enumerate(L_[1:], start=1):  # long links first
         rel_dist = _L.dist / L.dist  # >1
         if rel_dist < 1.2 or val_(et)>0 or len(L_[i:]) < ave_L:  # ~=dist Ns or either side of L is weak
@@ -53,8 +54,7 @@ def cluster_N_(root_, L_, fd, nest=0):  # top-down segment L_ by >ave ratio of L
         else:
             break  # terminate contiguous-distance segment
     G_ = []
-    min_dist = _L.dist; N_ = {N_}
-    for N in N_:  N.fin = 0
+    min_dist = _L.dist; N_ = {*N_}
     for N in N_:  # cluster current distance segment
         if N.fin: continue
         _eN_, node_,link_, et, = [N], [],[], np.zeros(4)
@@ -68,16 +68,19 @@ def cluster_N_(root_, L_, fd, nest=0):  # top-down segment L_ by >ave ratio of L
                         if L.dist >= min_dist:
                             link_+=[L]; et+=L.derH.Et
             _eN_ = []
-            for n in {eN_}:
+            for n in {*eN_}:
                 n.fin = 0; _eN_ += [n]
-        G = sum2graph(root_, [list({node_}),list({link_}), et, min_dist], fd, nest)
+        G = sum2graph(root_, [list({*node_}),list({*link_}), et, min_dist], fd, nest)  # some node may not present in prior nest, so their root may not aligned with nest
         # higher root_ assign to all sub_G nodes
-        sub_L_ = {l for n in node_ for l,_ in get_rim(n,fd) if l.dist < min_dist}
+        G_ += [G]
+
+    # breadth-first to form G
+    for G in G_:
+        sub_L_ = {l for n in G.node_ for l,_ in get_rim(n,fd) if l.dist < min_dist}
         if len(sub_L_) > ave_L:
             Et = np.sum([sL.derH.Et for sL in sub_L_],axis=0); Et[3]+=nest
             if val_(Et, fo=1) > 0:
                 cluster_N_(root_+[G], sub_L_, fd, nest+1)  # sub-cluster shorter links, nest in G.subG_
-        G_ += [G]
     root_[-1].subG_ = G_
     cluster_C_(root_[-1])  # root per higher dist segment
 
