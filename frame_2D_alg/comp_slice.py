@@ -1,6 +1,4 @@
 import numpy as np
-import sys
-sys.path.append("..")
 from frame_blobs import CBase, frame_blobs_root, intra_blob_root, imread, unpack_blob_
 from slice_edge import CP, slice_edge, comp_angle, ave_G, ave_I
 '''
@@ -225,8 +223,8 @@ def min_dist(a, b, pad=0.5):
 
 if __name__ == "__main__":
 
-    # image_file = '../images//raccoon_eye.jpeg'
-    image_file = '../images//toucan_small.jpg'
+    # image_file = './images//raccoon_eye.jpeg'
+    image_file = './images//toucan_small.jpg'
     image = imread(image_file)
 
     frame = frame_blobs_root(image)

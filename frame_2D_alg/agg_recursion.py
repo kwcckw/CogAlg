@@ -1,5 +1,4 @@
-import sys
-sys.path.append("..")
+
 import numpy as np
 from copy import copy, deepcopy
 from functools import reduce
@@ -42,7 +41,7 @@ def cross_comp(root):  # breadth-first node_,link_ cross-comp, connect.clusterin
 def convert_L_(L_, root):
     for L in L_:
         L.extH, L.mL_t, L.rimt, L.aRad, L.visited_ = CH(), [[],[]], [[],[]], 0, [L]
-        L.root = [L.root,root]; L.Et = copy(L.derH.Et)  # convert to root_
+        L.root = [root]; L.Et = copy(L.derH.Et)  # convert to root_  (L.root should be empty here? Because all new L doesn't have root assigned before they become node)
 
 
 def cluster_N_(root_, L_, fd, nest=0):  # top-down segment L_ by >ave ratio of L.dists
@@ -184,7 +183,7 @@ def cluster_C_(graph):
 
 
 if __name__ == "__main__":
-    image_file = '../images/raccoon_eye.jpeg'
+    image_file = './images/raccoon_eye.jpeg'
     image = imread(image_file)
     frame = frame_blobs_root(image)
     intra_blob_root(frame)

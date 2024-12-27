@@ -1,5 +1,3 @@
-import sys
-sys.path.append("..")
 from frame_blobs import CBase, frame_blobs_root, intra_blob_root, imread, unpack_blob_
 from slice_edge import slice_edge, comp_angle, ave_G
 from comp_slice import comp_slice, comp_latuple, comp_md_
@@ -258,7 +256,7 @@ def cluster_edge(edge):  # edge is CG but not a connectivity cluster, just a set
                 _eN_ = eN_
             Gt = [node_,link_,et]; Gt_ += [Gt]
         # convert select Gt+minL+subG_ to CGs:
-        subG_ = [sum2graph(edge, [node_,link_,et], fd, nest=1) for node_,link_,et in Gt_ if val_(et) > 0]
+        subG_ = [sum2graph(edge, [node_,link_,et], fd, nest=0) for node_,link_,et in Gt_ if val_(et) > 0]  # nest should be 0 here?
         if subG_:
             if fd: edge.subL_ = subG_
             else:  edge.subG_ = subG_  # higher aggr, mediated access to init edge.subG_
@@ -273,12 +271,12 @@ def cluster_edge(edge):  # edge is CG but not a connectivity cluster, just a set
             cluster_PP_(edge, fd=0)
         if val_(Et, mEt=Et, fo=1) > 0:  # likely not from the same links
             for L in L_:
-                L.extH, L.root, L.mL_t, L.rimt, L.aRad, L.visited_, L.Et = CH(), [edge], [[],[]], [[],[]], 0, [L], copy(L.derH.Et)
+                L.extH, L.root, L.mL_t, L.rimt, L.aRad, L.visited_, L.Et = CH(), None, [[],[]], [[],[]], 0, [L], copy(L.derH.Et)
             # comp dPP_:
             lN_,lL_,dEt = comp_link_(L_, Et)
             if val_(dEt, fo=1) > 0:
                 dlay = CH().add_tree([L.derH for L in lL_])
-                H = edge.derH; dlay.root=H; H.Et += dlay.Et; H.lft += [dlay]
+                dlay.root=H; H.Et += dlay.Et; H.lft += [dlay]
                 if len(lN_) > ave_L:
                     cluster_PP_(edge, fd=1)
 
@@ -451,7 +449,7 @@ def sum2graph(root, grapht, fd, nest):  # sum node and link params into graph, a
         graph.Et += N.Et * icoef ** 2  # deeper, lower weight
         if nest:
             if nest==1: N.root = [N.root]  # initial conversion
-            N.root += root + [graph]  # root is root_ in distance-layered cluster_N_
+            N.root = root + [graph]  # root is root_ in distance-layered cluster_N_  (should be = root + [graph] here? Because root will be incremented with each new nesting)
         else: N.root = graph  # single root
     # sum link_ derH:
     derLay = CH().add_tree([link.derH for link in link_],root=graph)  # root added in copy_ within add_tree
@@ -462,15 +460,17 @@ def sum2graph(root, grapht, fd, nest):  # sum node and link params into graph, a
     yx = np.divide(yx,L); graph.yx = yx
     # ave distance from graph center to node centers:
     graph.aRad = sum([np.hypot( *np.subtract(yx, N.yx)) for N in node_]) / L
-    # for CG nodes only:
-    if isinstance(N,CG) and fd:
+    # for CG nodes only: (we still need to assign this in d fork? Because in d fork, N is always a CL)
+    if fd:
         # assign alt graphs from d graph, after both m and d graphs are formed
-        for node in node_:
-            mgraph = node.root_[-1]
-            # altG summation below is still buggy with current add_tree
-            if mgraph:
-                mgraph.altG = sum_G_([mgraph.altG, graph])  # bilateral sum?
-                graph.altG = sum_G_([graph.altG, mgraph])
+        for L in node_:
+            summed = []  # multiple nodets may have a same root, so we need this to check and sum them only once
+            for node in L.nodet:
+                # in agg+, nodes has multiple nesting layers' root
+                for mgraph in node.root[1:] if isinstance(node.root, list) else [node.root]:  # skip the first root: frame or edge          
+                    if mgraph not in summed:
+                        summed += [mgraph]
+                        mgraph.altG = sum_G_([mgraph.altG, graph])
 
     feedback(graph)  # recursive root.derH.add_fork(graph.derH)
     return graph
@@ -501,7 +501,7 @@ def sum_G_(node_):
     return G
 
 if __name__ == "__main__":
-    image_file = '../images/raccoon_eye.jpeg'
+    image_file = './images/raccoon_eye.jpeg'
     image = imread(image_file)
     frame = frame_blobs_root(image)
     intra_blob_root(frame)
