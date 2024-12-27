@@ -5,7 +5,7 @@ from copy import copy, deepcopy
 from functools import reduce
 from frame_blobs import frame_blobs_root, intra_blob_root, imread
 from comp_slice import comp_latuple, comp_md_
-from vect_edge import feedback, comp_node_, comp_link_, sum2graph, get_rim, CH, CG, ave, ave_d, ave_L, vectorize_root, comp_area, extend_box, val_
+from vect_edge import feedback, comp_node_, comp_link_, sum2graph, get_rim, CH, CG, ave, ave_L, vectorize_root, comp_area, extend_box, val_
 '''
 Cross-compare and cluster Gs within a frame, potentially unpacking their node_s first,
 alternating agglomeration and centroid clustering.
@@ -22,31 +22,35 @@ def cross_comp(root):  # breadth-first node_,link_ cross-comp, connect.clusterin
     N_,L_,Et = comp_node_(root.subG_)  # cross-comp exemplars, extrapolate to their node_s
     # mfork
     if val_(Et, fo=1) > 0:
-        mlay = CH().add_tree([L.derH for L in L_]); mlay.fd_=[]; root.derH.append_(mlay)
+        H = root.derH  # for both forks
+        mlay = CH().add_tree([L.derH for L in L_]); mlay.root = H; H.Et += mlay.Et; H.lft = [mlay]; H.tft = mlay.tft
         pL_ = {l for n in N_ for l,_ in get_rim(n, fd=0)}
         if len(pL_) > ave_L:
             cluster_N_([root], pL_, fd=0)  # optional divisive clustering, calls centroid and higher connect.clustering
         # dfork
         if val_(Et, mEt=Et,fo=1) > 0:  # same root for L_, root.link_ was compared in root-forming for alt clustering
-            for L in L_:
-                L.extH, L.root, L.mL_t, L.rimt, L.aRad, L.visited_, L.Et = CH(), root, [[],[]], [[],[]], 0, [L], copy(L.derH.Et)
+            convert_L_(L_,root)
             lN_,lL_,dEt = comp_link_(L_,Et)
             if val_(dEt, mEt=Et, fo=1) > 0:
-                dlay = CH().add_tree([L.derH for L in lL_]); dlay.fd_= []; root.derH.append_(dlay)
+                dlay = CH().add_tree([L.derH for L in lL_]); dlay.root = H; H.Et += dlay.Et; H.lft += [dlay]
                 plL_ = {l for n in lN_ for l,_ in get_rim(n, fd=1)}
                 if len(plL_) > ave_L:
                     cluster_N_([root], plL_, fd=1)
 
         feedback(root)  # add root derH to higher roots derH
 
+def convert_L_(L_, root):
+    for L in L_:
+        L.extH, L.mL_t, L.rimt, L.aRad, L.visited_ = CH(), [[],[]], [[],[]], 0, [L]
+        L.root = [L.root,root]; L.Et = copy(L.derH.Et)  # convert to root_
+
 
 def cluster_N_(root_, L_, fd, nest=0):  # top-down segment L_ by >ave ratio of L.dists
 
-    L_ = sorted(L_, key=lambda x: x.dist, reverse=True)  # shorter links
-    _L = L_[0]
-    N_, et = _L.nodet, _L.derH.Et
+    L_ = sorted(L_, key=lambda x: x.dist, reverse=True)  # current and shorter links
+    for n in [n for l in L_ for n in l.nodet]: n.fin = 0
+    _L = L_[0]; N_, et = _L.nodet, _L.derH.Et
     # current dist segment:
-    for N in [N for L in L_ for N in L.nodet]:  N.fin = 0  # this should be here? we need to init all because we need fin in all Ns instead of current segment only
     for i, L in enumerate(L_[1:], start=1):  # long links first
         rel_dist = _L.dist / L.dist  # >1
         if rel_dist < 1.2 or val_(et)>0 or len(L_[i:]) < ave_L:  # ~=dist Ns or either side of L is weak
@@ -70,19 +74,17 @@ def cluster_N_(root_, L_, fd, nest=0):  # top-down segment L_ by >ave ratio of L
             _eN_ = []
             for n in {*eN_}:
                 n.fin = 0; _eN_ += [n]
-        G = sum2graph(root_, [list({*node_}),list({*link_}), et, min_dist], fd, nest)  # some node may not present in prior nest, so their root may not aligned with nest
+        G_ += [sum2graph(root_, [list({*node_}),list({*link_}), et, min_dist], fd, nest)]
         # higher root_ assign to all sub_G nodes
-        G_ += [G]
-
-    # breadth-first to form G
-    for G in G_:
+    for G in G_:  # breadth-first
         sub_L_ = {l for n in G.node_ for l,_ in get_rim(n,fd) if l.dist < min_dist}
         if len(sub_L_) > ave_L:
             Et = np.sum([sL.derH.Et for sL in sub_L_],axis=0); Et[3]+=nest
             if val_(Et, fo=1) > 0:
                 cluster_N_(root_+[G], sub_L_, fd, nest+1)  # sub-cluster shorter links, nest in G.subG_
+    # root_ += [root] / dist segment
     root_[-1].subG_ = G_
-    cluster_C_(root_[-1])  # root per higher dist segment
+    cluster_C_(root_[-1])
 
 ''' Hierarchical clustering should alternate between two phases: generative via connectivity and compressive via centroid.
 
