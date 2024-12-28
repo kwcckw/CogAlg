@@ -425,14 +425,9 @@ def get_rim(N,fd): return N.rimt[0] + N.rimt[1] if fd else N.rim  # add nesting 
 def sum2graph(root, grapht, fd, nest):  # sum node and link params into graph, aggH in agg+ or player in sub+
 
     node_, link_, Et = grapht[:3]
-    fsub = len(grapht) == 5  # called from divisive cluster_N
-    graph = CG(fd=fd, Et=Et*icoef, root=root[-1] if fsub else root, node_=node_, link_=link_, rng=nest)
+    graph = CG(fd=fd, Et=Et*icoef, root=root[-1] if isinstance(root,list) else root, node_=node_, link_=link_, rng=nest)  # in cluster_N_, root is not a list when nest == 0
     # arg Et is internalized; only direct root assign before clustering
-    if fsub:  # called from cluster_N
-        minL, subG_ = grapht[3:]
-        if fd: graph.subL_ = subG_
-        else:  graph.subG_ = subG_
-        graph.minL = minL
+    if len(grapht)==4: graph.minL = grapht[3]  # called from cluster_N
     yx = np.array([0,0])
     derH = CH(root=graph)
     for N in node_:
@@ -456,18 +451,20 @@ def sum2graph(root, grapht, fd, nest):  # sum node and link params into graph, a
     yx = np.divide(yx,L); graph.yx = yx
     # ave distance from graph center to node centers:
     graph.aRad = sum([np.hypot( *np.subtract(yx, N.yx)) for N in node_]) / L
-    if fd and val_(Et, mEt=root.Et) > 0:  # strong dgraph
-        altG_ = []  # mGs overlapping dG
-        for L in node_:
-            for n in L.nodet:  # map root mG
-                if isinstance(n.root,list):
-                    for G in n.root[1:]:  # skip the first root: frame or edge
-                        if L.dist >= G.minL:  # same dist segment root
-                            mG = G; break
-                else: mG = n.root
-                if mG not in altG_:
-                    mG.altG = sum_G_([mG.altG, graph])
-                    altG_ += [mG]
+    if fd:  # strong dgraph
+        mEt = np.sum([r.Et for r in root[1:]],axis=1) if isinstance(root, list) else (root.Et if isinstance(root, CG) else [.0,.0,.0,.0])
+        if val_(Et, mEt=mEt):
+            altG_ = []  # mGs overlapping dG
+            for L in node_:
+                for n in L.nodet:  # map root mG
+                    if isinstance(n.root,list):
+                        for G in n.root[1:]:  # skip the first root: frame or edge
+                            if L.dist >= G.minL:  # same dist segment root
+                                mG = G; break
+                    else: mG = n.root
+                    if mG not in altG_:
+                        mG.altG = sum_G_([mG.altG, graph])
+                        altG_ += [mG]
     feedback(graph)  # recursive root.derH.add_fork(graph.derH)
     return graph
 

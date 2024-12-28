@@ -24,17 +24,18 @@ def cross_comp(root):  # breadth-first node_,link_ cross-comp, connect.clusterin
         mlay = CH().add_tree([L.derH for L in L_]); H=root.derH; mlay.root=H; H.Et += mlay.Et; H.lft = [mlay]
         pL_ = {l for n in N_ for l,_ in get_rim(n, fd=0)}
         if len(pL_) > ave_L:
-            cluster_N_([root], pL_, fd=0)  # optional divisive clustering, calls centroid and higher connect.clustering
+            # initial root is not a list
+            cluster_N_(root, pL_, fd=0)  # optional divisive clustering, calls centroid and higher connect.clustering
         # dfork
         if val_(Et, mEt=Et,fo=1) > 0:  # same root for L_, root.link_ was compared in root-forming for alt clustering
             for L in L_:
-                L.extH, L.root, L.Et, L.mL_t, L.rimt, L.aRad, L.visited_ = CH(),[root],copy(L.derH.Et),[[],[]], [[],[]], 0,[L]
+                L.extH, L.root, L.Et, L.mL_t, L.rimt, L.aRad, L.visited_ = CH(),root,copy(L.derH.Et),[[],[]], [[],[]], 0,[L]
             lN_,lL_,dEt = comp_link_(L_,Et)
             if val_(dEt, mEt=Et, fo=1) > 0:
                 dlay = CH().add_tree([L.derH for L in lL_]); dlay.root=H; H.Et += dlay.Et; H.lft += [dlay]
                 plL_ = {l for n in lN_ for l,_ in get_rim(n, fd=1)}
                 if len(plL_) > ave_L:
-                    cluster_N_([root], plL_, fd=1)
+                    cluster_N_(root, plL_, fd=1)
 
         feedback(root)  # add root derH to higher roots derH
 
@@ -69,15 +70,21 @@ def cluster_N_(root_, L_, fd, nest=0):  # top-down segment L_ by >ave ratio of L
                 n.fin = 0; _eN_ += [n]
         G_ += [sum2graph(root_, [list({*node_}),list({*link_}), et, min_dist], fd, nest)]
         # higher root_ assign to all sub_G nodes
+    
+    # this is moved here now since deeper subs are formed later
+    hroot = root_[-1] if isinstance(root_,list) else root_  # higher root
+    if fd: hroot.subL_ = G_
+    else:  hroot.subG_ = G_
+    
     for G in G_:  # breadth-first
         sub_L_ = {l for n in G.node_ for l,_ in get_rim(n,fd) if l.dist < min_dist}
         if len(sub_L_) > ave_L:
             Et = np.sum([sL.derH.Et for sL in sub_L_],axis=0); Et[3]+=nest
             if val_(Et, fo=1) > 0:
+                if not isinstance(root_,list): root_ = [root_]  # first conversion when nest == 1
                 cluster_N_(root_+[G], sub_L_, fd, nest+1)  # sub-cluster shorter links, nest in G.subG_
     # root_ += [root] / dist segment
-    root_[-1].subG_ = G_
-    cluster_C_(root_[-1])
+    cluster_C_(hroot)
 
 ''' Hierarchical clustering should alternate between two phases: generative via connectivity and compressive via centroid.
 
