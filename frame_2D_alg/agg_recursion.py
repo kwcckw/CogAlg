@@ -17,7 +17,7 @@ capitalized vars are summed small-case vars '''
 
 
 def cross_comp(root):  # breadth-first node_,link_ cross-comp, connect.clustering, recursion
-
+    # each N_ is exemplar from cluster_C_ and their root is expected to be empty before cluster_N_?
     N_,L_,Et = comp_node_(root.subG_)  # cross-comp exemplars, extrapolate to their node_s
     # mfork
     if val_(Et, fo=1) > 0:
@@ -42,19 +42,20 @@ def cluster_N_(root, L_, fd, nest=0):  # top-down segment L_ by >ave ratio of L.
 
     L_ = sorted(L_, key=lambda x: x.dist)  # shorter links first
     for n in [n for l in L_ for n in l.nodet]: n.fin = 0
-    _L = L_[0]; N_, et = _L.nodet, _L.derH.Et
+    _L = L_[0]; N_, et = copy(_L.nodet), _L.derH.Et
     L_ = L_[1:]
     while L_:  # get longer links
         for i, L in enumerate(L_):  # shorter links first
             rel_dist = L.dist / _L.dist  # >= 1
             if rel_dist < 1.2 or val_(et)>0 or len(L_[i:]) < ave_L:  # ~=dist Ns or either side of L is weak
                 _L = L; N_ += L.nodet; et += L.derH.Et
+                if i == len(L_) - 1: i += 1  # last L, we need to increment it since L_ = L_[i:] gets back a same last L if we didn't increment it
             else:
                 break  # terminate contiguous-distance segment
         G_ = []
-        max_dist = _L.dist; N_ = {*N_}
-        for N in N_:  # cluster current distance segment
-            if N.fin: continue  # no longer relevant?
+        max_dist = _L.dist
+        for N in {*N_}:  # cluster current distance segment
+            # if N.fin: continue  # no longer relevant? Yes
             _eN_, node_,link_, et, = [N], [],[], np.zeros(4)
             while _eN_:
                 eN_ = []
@@ -66,17 +67,16 @@ def cluster_N_(root, L_, fd, nest=0):  # top-down segment L_ by >ave ratio of L.
                             if L.dist < max_dist:
                                 link_+=[L]; et+=L.derH.Et
                 _eN_ = []
-                for n in {*eN_}:
-                    n.fin = 0; _eN_ += [n]
+                for n in {*eN_}: _eN_ += [n]
             # cluster node roots if max_dist else nodes:
-            G_ += [sum2graph(root, [list({*node_}),list({*link_}), et], fd, max_dist)]
+            G_ += [sum2graph(root, [list({*node_}),list({*link_}), et], fd, max_dist, nest)]
 
         # replace root node_|link_ with incrementally longer-link connected clusters:
         if fd: root.link_ = G_
         else:  root.node_ = G_
         nest += 1  # not sure we need it?
         L_ = L_[i:]  # cluster shorter-connected clusters via longer links, if any
-
+        N_ = []  # we need to reset N_ too?
     cluster_C_(root)
 
 ''' Hierarchical clustering should alternate between two phases: generative via connectivity and compressive via centroid.
@@ -179,7 +179,7 @@ def cluster_C_(graph):
 if __name__ == "__main__":
     image_file = './images/raccoon_eye.jpeg'
     image = imread(image_file)
-    frame = frame_blobs_root(image)
+    frame = frame_blobs_root(image)  # if frame should be init with CG, then we need to move CG into frame_blobs?
     intra_blob_root(frame)
     vectorize_root(frame)
     if frame.subG_:  # converted edges

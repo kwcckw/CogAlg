@@ -160,13 +160,14 @@ class CG(CBase):  # PP | graph | blob: params of single-fork node_ cluster
         G.vert = kwargs.get('vert', np.array([np.zeros(6), np.zeros(6)]))  # vertical m_d_ of latuple
         G.box = kwargs.get('box', np.array([np.inf,np.inf,-np.inf,-np.inf]))  # y0,x0,yn,xn
         G.yx = kwargs.get('yx', np.zeros(2))  # init PP.yx = [(y0+yn)/2,(x0,xn)/2], then ave node yx
-        G.altG = kwargs.get('altG', CG(altG=G))  # adjacent gap+overlap graphs, vs. contour in frame_graphs (prevent cyclic)
+        G.altG = CG(altG=G) if kwargs.get('altG', None) is None else kwargs.get('altG') # adjacent gap+overlap graphs, vs. contour in frame_graphs (prevent cyclic)
         G.rng = 1
         G.aRad = 0  # average distance between graph center and node center
         G.rim = []  # flat links of any rng, may be nested in clustering
         # maps to node_tree / agg+|sub+:
         G.derH = CH()  # sum from nodes, then append from feedback
         G.extH = CH()  # sum from rim_ elays, H maybe deleted
+        G.deep = kwargs.get('deep', -1)  # -1 to skip higher roots such as edge or frame because roots added in cluster_N_ starts with 0
         # G.fback_ = []  # if fb buffering
         # id_tree: list = z([[]])  # indices in all layers(forks, if no fback merge
         # depth: int = 0  # n sub_G levels over base node_, max across forks
@@ -415,19 +416,21 @@ def comp_N(_N,N, rn, angle=None, dist=None, dir=1):  # dir if fd, Link.derH=dH, 
 
 def get_rim(N,fd): return N.rimt[0] + N.rimt[1] if fd else N.rim  # add nesting in cluster_N_?
 
-def sum2graph(root, grapht, fd, maxL=None):  # sum node and link params into graph, aggH in agg+ or player in sub+
+def sum2graph(root, grapht, fd, maxL=None, nest=0):  # sum node and link params into graph, aggH in agg+ or player in sub+
 
     node_, link_, Et = grapht
-    graph = CG(fd=fd, Et=Et*icoef, root=root, link_=link_, maxL=maxL)
+    graph = CG(fd=fd, Et=Et*icoef, root=root, link_=link_, maxL=maxL, deep=nest)
     # arg Et is weaker if internal
     yx = np.array([0,0]); yx_ = []
     derH = CH(root=graph)
     root_ = []
     for N in node_:
-        if maxL:  # G is dist-nested, called from cluster_N_, cluster roots instead of nodes
-            N = N.root  # or highest, get root.root while root.nest?
-            if N in root_: continue  # roots overlap
-            else: root_ += [N]
+        if maxL and N.root:  # G is dist-nested, called from cluster_N_, cluster roots instead of nodes
+            while N.root and N.root.deep == nest:  # we need to check and get a same deep higher root?
+                N = N.root  # or highest, get root.root while root.nest?
+                if N in root_: break  # break from while loop    
+            if N in root_: continue  # roots overlap, skip current N
+            root_ += [N]  # this should be after while loop? Else we will be adding all root.roots
         graph.box = extend_box(graph.box, N.box)  # pre-compute graph.area += N.area?
         yx = np.add(yx, N.yx)
         yx_ += [N.yx]
