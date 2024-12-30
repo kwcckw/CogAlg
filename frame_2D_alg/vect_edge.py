@@ -215,7 +215,7 @@ def vectorize_root(frame):
                     if len(G_) > ave_L:
                         cluster_edge(edge); frame.node_ += [edge]; frame.derH.add_tree(edge.derH)
                         # add altG: summed converted adj_blobs of converted edge blob
-                        # if len(edge.subG_) > ave_L: agg_recursion(edge)  # unlikely
+                        # if len(edge.node_) > ave_L: agg_recursion(edge)  # unlikely
 
 def val_(Et, mEt=[], fo=0):
     m, d, n, o = Et
@@ -230,7 +230,7 @@ def cluster_edge(edge):  # edge is CG but not a connectivity cluster, just a set
 
     def cluster_PP_(edge, fd):
         G_ = []
-        N_ = copy(edge.link_ if fd else edge.subG_)
+        N_ = copy(edge.link_ if fd else edge.node_)
         while N_:  # flood fill
             node_,link_, et = [],[], np.zeros(4)
             N = N_.pop(); _eN_ = [N]
@@ -252,7 +252,7 @@ def cluster_edge(edge):  # edge is CG but not a connectivity cluster, just a set
         if fd: edge.link_ = G_
         else:  edge.node_ = G_  # vs init PP_
     # comp PP_:
-    N_,L_,Et = comp_node_(edge.subG_)
+    N_,L_,Et = comp_node_(edge.node_)
     if val_(Et, fo=1) > 0:  # cancel by borrowing d?
         mlay = CH().add_tree([L.derH for L in L_]); H=edge.derH; mlay.root=H; H.Et += mlay.Et; H.lft = [mlay]  # init with mfork
         if len(N_) > ave_L:
@@ -323,6 +323,7 @@ def comp_link_(iL_, iEt):  # comp CLs via directional node-mediated link tracing
         for L in _L_:
             for mL_ in L.mL_t:
                 for _L, rev in mL_:  # rev is relative to L
+                    # if _L not in iL_, skip it? Or it shouldn't happen?
                     rn = _L.Et[2] / L.Et[2]
                     if rn > ave_rn: continue  # scope disparity
                     dy,dx = np.subtract(_L.yx,L.yx)
@@ -397,8 +398,10 @@ def comp_N(_N,N, rn, angle=None, dist=None, dir=1):  # dir if fd, Link.derH=dH, 
         lay.Et += derH.Et; lay.lft = [derH]
     # spec: comp_node_(node_|link_), combinatorial, node_ nested / rng-)agg+?
     Et = copy(lay.Et)
-    if not fd and _N.altG and N.altG:  # not for CL, eval M?
-        alt_Link = comp_N(_N.altG, N.altG, _N.altG.Et[2]/N.altG.Et[2])  # init alternating PPds | dPs?
+    if not fd and _N.altG_ and N.altG_:  # not for CL, eval M?
+        # not sure
+        _altG, altG = sum_G_(_N.altG_), sum_G_(N.altG_)
+        alt_Link = comp_N(_altG, altG, _altG.Et[2]/altG.Et[2])  # init alternating PPds | dPs?
         lay.altH = alt_Link.derH
         Et += lay.altH.Et
     Link = CL(nodet=[_N,N], derH=lay, yx=np.add(_N.yx,N.yx)/2, angle=angle,dist=dist,box=extend_box(N.box,_N.box))
@@ -413,6 +416,15 @@ def comp_N(_N,N, rn, angle=None, dist=None, dir=1):  # dir if fd, Link.derH=dH, 
 
 def get_rim(N,fd): return N.rimt[0] + N.rimt[1] if fd else N.rim  # add nesting in cluster_N_?
 
+def sum_G_(node_):
+    G = CG()
+    for n in node_:
+        G.latuple += n.latuple; G.vert += n.vert; G.aRad += n.aRad; G.box = extend_box(G.box, n.box)
+        if n.derH: G.derH.add_tree(n.derH, root=G)
+        if n.extH: G.extH.add_tree(n.extH)
+    return G
+
+
 def sum2graph(root, grapht, fd, maxL=None, nest=0):  # sum node and link params into graph, aggH in agg+ or player in sub+
 
     node_, link_, Et = grapht
@@ -423,7 +435,7 @@ def sum2graph(root, grapht, fd, maxL=None, nest=0):  # sum node and link params 
     root_ = []
     for N in node_:
         if nest:  # G is dist-nested in cluster_N_, cluster roots instead of nodes
-            while N.root.nest < nest: N = N.root  # incr/elevation, term if ==nest
+            while N.root and N.root.nest < nest: N = N.root  # incr/elevation, term if ==nest  (how to skip frame or edge here? If frame.nest is init as 0, their nest is < nest too)
             if N in root_: continue  # roots overlap
             root_ += [N]
         graph.box = extend_box(graph.box, N.box)  # pre-compute graph.area += N.area?
