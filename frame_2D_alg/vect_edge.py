@@ -434,7 +434,7 @@ def sum2graph(root, grapht, fd, maxL=None, nest=0):  # sum node and link params 
     root_ = []
     for N in node_:
         if nest:  # G is dist-nested in cluster_N_, cluster roots instead of nodes
-            while N.root.nest < nest: N = N.root  # incr/elevation, term if ==nest
+            while N.root.nest < nest: N = N.root  # incr/elevation, term if ==nest (it doesn't break before reach edge or frame)
             if N in root_: continue  # roots overlap
             root_ += [N]
         graph.box = extend_box(graph.box, N.box)  # pre-compute graph.area += N.area?

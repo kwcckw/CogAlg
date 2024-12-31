@@ -90,18 +90,19 @@ def cluster_C_(graph):
     def centroid(dnode_, node_, C=None):  # sum|subtract and average Rim nodes
 
         if C is None:
-            C = CG(); C.L = 0; C.M = 0; fC=0  # setattr summed len node_ and match to nodes
+            C = CG(); C.L = 0; C.M = 0  # setattr summed len node_ and match to nodes (we need sign in C since it will be summed too)
+            A = CG(); A.L = 0; C.altG_ = A
         else:
-            fC = 1
-        C = sum_G_([C, *dnode_], fc=1)  # exclude extend_box and sum extH?
-        A = sum_G_([C.altG_] + [n.altG_ for n in dnode_], fc=1)
-        k = len(dnode_) + fC
+            A = C.altG_
+        sum_G_(C, dnode_, fc=1)  # exclude extend_box and sum extH?  (We need extH to eval the next comp when C becomes node? Same with box too.)
+        sum_G_(A, [n.altG_ for n in dnode_ if n.altG_], fc=1)  # skip empty altG
+        k = len(dnode_) 
         for n in C, A:  # get averages
             n.Et/=k; n.latuple/=k; n.vert/=k; n.aRad/=k; n.yx /= k
             if n.derH:
-                C.derH.norm_(k)
+                n.derH.norm_(k)  # should be n here
         C.box = reduce(extend_box, (n.box for n in node_))
-        C.altG_ = A
+
         return C
 
     def comp_C(C, N):  # compute match without new derivatives: global cross-comp is not directional
@@ -171,28 +172,29 @@ def cluster_C_(graph):
     if len(G_) > ave_L:
         cross_comp(graph)  # selective connectivity clustering between exemplars, extrapolated to their node_
 
-def sum_G_(node_, fc=0):
-    G = CG()
+def sum_G_(G, node_, fc=0):
+    # G = CG()  # if we init new G per sum_G_, their additional params such as M and L will be erased
     for n in node_:
         s = n.sign; n.sign = 1  # single-use
         G.latuple += n.latuple * s; G.vert += n.vert * s
         G.Et += n.Et * s; G.aRad += n.aRad * s
         G.yx += n.yx * s
+        G.L += 1  # we need to add L here?
         if n.derH: G.derH.add_tree(n.derH, root=G, rev = s==-1, fc=fc)
         if not fc:
             if n.extH: G.extH.add_tree(n.extH, root=G, rev = s==-1)
             G.box = extend_box( G.box, n.box)
-    return G
 
 def combine_altG__(root):  # combine contour G.altG_ into altG (node_ defined by root=G), for agg+ cross-comp
 
     for G in root.node_:  # eval altG * borrow from G:
-
-        if val_(np.sum([alt.Et for alt in G.altG_]), mEt=G.Et):
-            G.altG_ = CG(node_=G.altG_, root=G)
-            cross_comp(G.altG_)
-        else:
-            G.altG_ = reduce(sum_G_, [alt for alt in G.altG_])
+        if G.altG_:  # skip if G doesn't have alts
+            if val_(np.sum([alt.Et for alt in G.altG_],axis=0), mEt=G.Et):
+                G.altG_ = CG(node_=G.altG_, root=G); G.altG_.L = len(G.altG_.node_)
+                cross_comp(G.altG_)
+            else:
+                G.altG_ = CG()
+                sum_G_(G.altG_, [alt for alt in G.altG_])
             # or keep altG.node_=altG_?
 
 if __name__ == "__main__":
