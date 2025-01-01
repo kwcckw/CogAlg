@@ -182,7 +182,7 @@ def sum_G_(G, node_, fc=0):
         G.yx += n.yx * s
         if n.derH: G.derH.add_tree(n.derH, root=G, rev = s==-1, fc=fc)
         if fc:
-            G.M += n.M; G.L += n.L
+            G.L += 1  # nodes doesn't have M and L? We just need to accumulate M and L into C
         else:
             if n.extH: G.extH.add_tree(n.extH, root=G, rev = s==-1)
             G.box = extend_box( G.box, n.box)
@@ -190,12 +190,12 @@ def sum_G_(G, node_, fc=0):
 def combine_altG__(root):  # combine contour G.altG_ into altG (node_ defined by root=G), for agg+ cross-comp
 
     for G in root.node_:  # eval altG * borrow from G:
-        if G.altG_:
-            if val_(np.sum([alt.Et for alt in G.altG_],axis=0), mEt=G.Et):
-                G.altG_ = CG(node_=G.altG_, root=G); G.altG_.L = len(G.altG_.node_)
+        if isinstance(G.altG_, list) and G.altG_:  # skip converted alt or empty altG_ 
+            altG_ = G.altG_; G.altG_ = CG(node_=altG_, root=G); G.altG_.sign = 1
+            if val_(np.sum([alt.Et for alt in altG_],axis=0), mEt=G.Et):
+                G.altG_.L = len(G.altG_.node_)
                 cross_comp(G.altG_)
             else:
-                G.altG_ = CG()
                 sum_G_(G.altG_, [alt for alt in G.altG_])
                 # or keep altG_ in altG.node_?
 
