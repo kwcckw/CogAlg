@@ -117,15 +117,11 @@ class CBlob(CBase):
     def G(blob): return blob.latuple[-1]
     @property
     def yx_(blob): return list(blob.dert_.keys())
-    # @property
-    # def yx(blob): return map(np.mean, zip(*blob.yx_))
 
 def frame_blobs_root(image):
     dert__ = comp_pixel(image)
     frame = CFrame(image)
-
-    # Flood-fill 1 pixel at a time
-    flood_fill(frame, dert__)
+    flood_fill(frame, dert__)  # flood-fill 1 pixel at a time
 
     return frame
 
