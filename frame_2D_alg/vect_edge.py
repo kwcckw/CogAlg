@@ -267,7 +267,7 @@ def cluster_edge(edge):  # edge is CG but not a connectivity cluster, just a set
                 if len(lN_) > ave_L:
                     cluster_PP_(edge, fd=1)
 
-def comp_node_(_N_):  # rng+ forms layer of rim and extH per N, appends N_,L_,Et, ~ graph CNN without backprop
+def comp_node_(_N_, nest=0):  # rng+ forms layer of rim and extH per N, appends N_,L_,Et, ~ graph CNN without backprop
 
     _Gp_ = []  # [G pair + co-positionals]
     for _G, G in combinations(_N_, r=2):
@@ -291,7 +291,7 @@ def comp_node_(_N_):  # rng+ forms layer of rim and extH per N, appends N_,L_,Et
                 continue     # no direct match priority?
             # dist vs. radii * induction:
             if dist < max_dist * ((radii * icoef**3) * (val_(_G.Et)+val_(G.Et) + val_(_G.extH.Et)+val_(G.extH.Et))):
-                Link = comp_N(_G,G, rn, angle=[dy,dx],dist=dist)
+                Link = comp_N(_G,G, rn, angle=[dy,dx],dist=dist,nest=nest)
                 L_ += [Link]  # include -ve links
                 if val_(Link.derH.Et) > 0:
                     N_.update({_G,G}); Et += Link.derH.Et; _G.add,G.add = 1,1
@@ -306,7 +306,7 @@ def comp_node_(_N_):  # rng+ forms layer of rim and extH per N, appends N_,L_,Et
 
     return  list(N_), L_, ET  # flat N__ and L__
 
-def comp_link_(iL_, iEt):  # comp CLs via directional node-mediated link tracing: der+'rng+ in root.link_ rim_t node rims
+def comp_link_(iL_, iEt, nest=0):  # comp CLs via directional node-mediated link tracing: der+'rng+ in root.link_ rim_t node rims
 
     fd = isinstance(iL_[0].nodet[0], CL)
     for L in iL_:
@@ -327,7 +327,7 @@ def comp_link_(iL_, iEt):  # comp CLs via directional node-mediated link tracing
                     rn = _L.Et[2] / L.Et[2]
                     if rn > ave_rn: continue  # scope disparity
                     dy,dx = np.subtract(_L.yx,L.yx)
-                    Link = comp_N(_L,L, rn,angle=[dy,dx],dist=np.hypot(dy,dx), dir = -1 if rev else 1)  # d = -d if L is reversed relative to _L
+                    Link = comp_N(_L,L, rn,angle=[dy,dx],dist=np.hypot(dy,dx), dir = -1 if rev else 1,nest=nest)  # d = -d if L is reversed relative to _L
                     Link.med = med
                     LL_ += [Link]  # include -ves, link order: nodet < L < rimt, mN.rim || L
                     if val_(Link.derH.Et) > 0:  # link induction
@@ -368,7 +368,7 @@ def comp_area(_box, box):
     y0, x0, yn, xn = box;   A = (yn - y0) * (xn - x0)
     return _A-A, min(_A,A) - ave_L**2  # mA, dA
 
-def comp_N(_N,N, rn, angle=None, dist=None, dir=1):  # dir if fd, Link.derH=dH, comparand rim+=Link
+def comp_N(_N,N, rn, angle=None, dist=None, dir=1, nest=0):  # dir if fd, Link.derH=dH, comparand rim+=Link
 
     fd = isinstance(N,CL)  # compare links, relative N direction = 1|-1
     # comp externals:

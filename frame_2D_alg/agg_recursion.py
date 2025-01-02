@@ -18,33 +18,36 @@ Each agg+ cycle forms higher-composition complemented graphs G.altG_ in cluster_
 cross_comp -> cluster_N_ -> cluster_C -> cross_comp...
 '''
 
-def cross_comp(root, nest=0):  # breadth-first node_,link_ cross-comp, connect.clustering, recursion
+def cross_comp(root, inest=0):  # breadth-first node_,link_ cross-comp, connect.clustering, recursion
 
     N_,L_,Et = comp_node_(root.node_)  # cross-comp exemplars, extrapolate to their node_s
     # mfork
     if val_(Et, fo=1) > 0:
         mlay = CH().add_tree([L.derH for L in L_]); H=root.derH; mlay.root=H; H.Et += mlay.Et; H.lft = [mlay]
         pL_ = {l for n in N_ for l,_ in get_rim(n, fd=0)}
+        nest = inest
         if len(pL_) > ave_L:
-            cluster_N_(root, pL_, nest, fd=0)  # nested distance clustering, calls centroid and higher connect.clustering
+            # we only need to return nest from mfork since deeper form is using mfork's node_?
+            nest = cluster_N_(root, pL_, nest, fd=0)  # nested distance clustering, calls centroid and higher connect.clustering
         # dfork
-        if val_(Et, mEt=Et, fo=1) > 0:  # same root for L_, root.link_ was compared in root-forming for alt clustering
+        if val_(Et, mEt=Et, fo=1) > 0:  # same root for L_, root.link_ was compared in root-forming for alt clustering 
             for L in L_:
-                L.extH, L.root, L.Et, L.mL_t, L.rimt, L.aRad, L.visited_ = CH(),root,copy(L.derH.Et), [[],[]], [[],[]], 0,[L]
-            lN_,lL_,dEt = comp_link_(L_,Et)
+                L.extH, L.root, L.Et, L.mL_t, L.rimt, L.aRad, L.visited_, L.nest = CH(),root,copy(L.derH.Et), [[],[]], [[],[]], 0,[L], 0
+            lN_,lL_,dEt = comp_link_(L_,Et, nest)
             if val_(dEt, mEt=Et, fo=1) > 0:
                 dlay = CH().add_tree([L.derH for L in lL_]); dlay.root=H; H.Et += dlay.Et; H.lft += [dlay]
                 plL_ = {l for n in lN_ for l,_ in get_rim(n, fd=1)}
                 if len(plL_) > ave_L:
-                    cluster_N_(root, plL_, nest, fd=1)
+                    cluster_N_(root, plL_, inest, fd=1)
 
-        comb_altG_(root)  # combine node altG_(contour) by sum,cross-comp -> CG altG
-        cluster_C_(root)  # get (G,altG) exemplars, altG_ may reinforce G by borrowing from extended surround?
+        if len(pL_) > ave_L:  # below should be relevant only if there's cluster_N_ where we get new node_ in root
+            comb_altG_(root, nest)  # combine node altG_(contour) by sum,cross-comp -> CG altG
+            cluster_C_(root, nest)  # get (G,altG) exemplars, altG_ may reinforce G by borrowing from extended surround?
 
 def cluster_N_(root, L_, nest, fd):  # top-down segment L_ by >ave ratio of L.dists
 
     L_ = sorted(L_, key=lambda x: x.dist)  # shorter links first
-    while L_:
+    while True:
         # each loop forms G_ of contiguous-distance L_ segment
         _L = L_[0]; N_, et = copy(_L.nodet), _L.derH.Et
         for n in [n for l in L_ for n in l.nodet]:
@@ -71,12 +74,15 @@ def cluster_N_(root, L_, nest, fd):  # top-down segment L_ by >ave ratio of L.di
                 _eN_ = {*eN_}
             G_ += [sum2graph(root, [list({*node_}),list({*link_}), et], fd, max_dist, nest)]
             # cluster node roots if nest else nodes
-        nest += 1
+
         if fd: root.link_ = G_  # replace with current-dist clusters
         else:  root.node_ = G_
         L_ = L_[i+1:]
+        if L_: nest += 1  # nest is returned below, so it should be incremented only if it's not break
+        else:  break
         # get longer links if any for next loop, to connect current-dist clusters
 
+    return nest
 ''' Hierarchical clustering should alternate between two phases: generative via connectivity and compressive via centroid.
 
  Connectivity clustering terminates at effective contours: alt_Gs, beyond which cross-similarity is not likely to continue. 
@@ -88,7 +94,7 @@ def cluster_N_(root, L_, nest, fd):  # top-down segment L_ by >ave ratio of L.di
  So connectivity clustering is a generative learning phase, forming new derivatives and structured composition levels, 
  while centroid clustering is a compressive phase, reducing multiple similar comparands to a single exemplar. '''
 
-def cluster_C_(graph):
+def cluster_C_(graph, nest=0):
 
     def centroid(dnode_, node_, C=None):  # sum|subtract and average Rim nodes
 
@@ -172,10 +178,11 @@ def cluster_C_(graph):
                 break
     graph.node_ = G_  # mix of Ns and Cs: exemplars of their network?
     if len(G_) > ave_L:
-        cross_comp(graph)
+        cross_comp(graph, nest)
         # selective connectivity clustering between exemplars, extrapolated to their node_
 
 def sum_G_(G, node_, fc=0):
+    s = 1  # we still need a default s = 1
     for n in node_:
         if fc:
             s = n.sign; n.sign = 1  # single-use
@@ -189,10 +196,10 @@ def sum_G_(G, node_, fc=0):
             if n.extH: G.extH.add_tree(n.extH, root=G, rev = s==-1)  # empty in centroid
             G.box = extend_box( G.box, n.box)  # extended per separate node_ in centroid
 
-def comb_altG_(root):  # combine contour G.altG_ into altG (node_ defined by root=G), for agg+ cross-comp
+def comb_altG_(root, nest=0):  # combine contour G.altG_ into altG (node_ defined by root=G), for agg+ cross-comp
 
     for G in root.node_:
-        if G.nest+1 == root.nest and G.altG_:
+        if G.nest == nest+1 and G.altG_:  # should be compare to global nest? Because root nest is consistent and we might get a same root in deeper agg++
             alt_ = G.altG_
             sum_G_(alt_[0], [alt for alt in alt_[1:]])
             G.altG_ = CG(root=G, node_=alt_); G.altG_.sign = 1; G.altG_.m = 0
