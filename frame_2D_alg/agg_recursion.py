@@ -180,6 +180,7 @@ def cluster_C_(graph):
         # selective connectivity clustering between exemplars, extrapolated to their node_
 
 def sum_G_(G, node_, fc=0):
+    s = 1  # we need this 1st init, else s is not exist when f= 0
     for n in node_:
         if fc:
             s = n.sign; n.sign = 1  # single-use
