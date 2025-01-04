@@ -48,7 +48,7 @@ med_cost = 10
 class CH(CBase):  # generic derivation hierarchy of variable nesting: extH | derH, their layers and sub-layers
 
     name = "H"
-    def __init__(He, Et=None, tft=None, lft=None, H=None, fd_=None, root=None, node_=None, altH=None):
+    def __init__(He, Et=None, tft=None, lft=None, H=None, fd_=None, root=None, node_=None, altH=None, i=None):
         super().__init__()
         He.H = [] if H is None else H  # list of layers: Ets summed across fork tree
         He.Et = np.zeros(4) if Et is None else Et
@@ -58,7 +58,7 @@ class CH(CBase):  # generic derivation hierarchy of variable nesting: extH | der
         He.root = None if root is None else root  # N or higher-composition He
         He.node_ = [] if node_ is None else node_  # concat bottom nesting order if CG, may be redundant to G.node_
         He.altH = CH(altH=object) if altH is None else altH   # summed altLays, prevent cyclic
-        # He.i = 0 if i is None else i  # lay index in root.lft, to revise olp
+        He.i = 0 if i is None else i  # lay index in root.lft, to revise olp
         # He.i_ = [] if i_ is None else i_  # priority indices to compare node H by m | link H by d
         # He.fd = 0 if fd is None else fd  # 0: sum CGs, 1: sum CLs
         # He.ni = 0  # exemplar in node_, trace in both directions?
@@ -256,7 +256,7 @@ def cluster_edge(edge):  # edge is CG but not a connectivity cluster, just a set
         if fd: edge.link_ = G_
         else:  edge.node_ = G_  # vs init PP_
     # comp PP_:
-    N_,L_,Et = comp_node_(edge.node_)
+    N_,L_,Et = comp_node_(edge.node_); edge.node_ = N_  # we need to assign edge.node_ or link_ here, else we will need to parse it in cluster_PP_
     if val_(Et, fo=1) > 0:  # cancel by borrowing d?
         mlay = CH().add_tree([L.derH for L in L_]); H=edge.derH; mlay.root=H; H.Et += mlay.Et; H.lft = [mlay]  # init with mfork
         if len(N_) > ave_L:
@@ -265,7 +265,7 @@ def cluster_edge(edge):  # edge is CG but not a connectivity cluster, just a set
             for L in L_:
                 L.extH, L.root, L.mL_t, L.rimt, L.aRad, L.visited_, L.Et = CH(), edge, [[],[]], [[],[]], 0, [L], copy(L.derH.Et)
             # comp dPP_:
-            lN_,lL_,dEt = comp_link_(L_, Et)
+            lN_,lL_,dEt = comp_link_(L_, Et); edge.link_ = lN_
             if val_(dEt, fo=1) > 0:
                 dlay = CH().add_tree([L.derH for L in lL_]); dlay.root=H; H.Et += dlay.Et; H.lft += [dlay]  # append dfork
                 if len(lN_) > ave_L:
@@ -398,9 +398,12 @@ def comp_N(_N,N, rn, angle=None, dist=None, dir=1):  # dir if fd, Link.derH=dH, 
         # same olp?
     Lay = CH(fd_=[fd], tft=[m_t,d_t], Et=Et)
     if _N.derH and N.derH:
-         derH = _N.derH.comp_tree(N.derH, rn, root=Lay)  # comp shared layers
-         Lay.i = max(_N.derH.i, N.derH.i)  # nesting of Lay: first not-empty layer in derH?
-         Lay.Et += derH.Et; Lay.lft = [derH]
+        derH = _N.derH.comp_tree(N.derH, rn, root=Lay)  # comp shared layers
+        Lay.i = max(_N.derH.i, N.derH.i)  # nesting of Lay: first not-empty layer in derH?
+        Lay.Et += derH.Et; Lay.lft = [derH]
+    elif _N.derH: Lay.i = _N.derH.i 
+    elif N.derH:  Lay.i = N.derH.i
+
     # spec: comp_node_(node_|link_), combinatorial, node_ nested / rng-)agg+?
     Et = copy(Lay.Et)
     if not fd and _N.altG_ and N.altG_:  # not for CL, eval M?
@@ -419,6 +422,15 @@ def comp_N(_N,N, rn, angle=None, dist=None, dir=1):  # dir if fd, Link.derH=dH, 
             node.Et += Et
     return Link
 
+def get_i(He, i=0):
+    
+    for he in He.lft:
+        deep_i = get_i(he, i+1)
+        i = max(deep_i, i)
+        
+    return i
+       
+        
 def get_rim(N,fd): return N.rimt[0] + N.rimt[1] if fd else N.rim  # add nesting in cluster_N_?
 
 def sum2graph(root, grapht, fd, minL=0, maxL=None, nest=0):  # sum node and link params into graph, aggH in agg+ or player in sub+
@@ -446,8 +458,9 @@ def sum2graph(root, grapht, fd, minL=0, maxL=None, nest=0):  # sum node and link
     graph.node_ = N_  # nodes or roots, link_ is still current-dist links only?
     # sum link_ derH:
     derLay = CH().add_tree([link.derH for link in link_],root=graph)  # root added in copy_ within add_tree
+    derLay.i = get_i(derLay)
     if derH:
-        derLay.lft += [derH]; derLay.Et += derH.Et; derLay.H += [derH.Et]  # unless H starts below lft?
+        derLay.lft += [derH]; derLay.Et += derH.Et; derLay.H += [derH.Et]; derLay.i = max(get_i(derH).i, derLay.i)  # unless H starts below lft?
     graph.derH = derLay
     L = len(node_)
     yx = np.divide(yx,L)
