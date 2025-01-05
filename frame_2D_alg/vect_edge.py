@@ -210,7 +210,7 @@ def vectorize_root(frame):
                     for N in edge.node_:  # no comp node_, link_ | PPd_ for now
                         P_, link_, vert, lat, A, S, box, [y,x], Et = N[1:]  # PPt
                         if Et[0] > ave:   # no altG until cross-comp
-                            PP = CG(fd=0, Et=Et,root=edge, node_=P_,link_=link_, vert=vert, latuple=lat, box=box, yx=[y,x])
+                            PP = CG(fd=0, Et=Et,root=edge, node_=P_,link_=link_, vert=vert, latuple=lat, box=box, yx=np.array([y,x]))  # yx is numpy array
                             y0,x0,yn,xn = box; PP.aRad = np.hypot((yn-y0)/2,(xn-x0)/2)  # approx
                             G_ += [PP]
                     edge.node_ = G_
@@ -429,7 +429,8 @@ def sum2graph(root, grapht, fd, minL=0, maxL=None, nest=0):  # sum node and link
     N_ = []
     for N in node_:
         if minL:  # >0, inclusive, = lower-layer exclusive maxL if G is distance-nested in cluster_N_
-            while N.root.maxL and (minL != N.root.maxL):  # root maxL=0 in edge|frame
+            # if both _N and N are having a same .root, _N.root.root may updated to graph in prior node_ loop, so in N turn, N.root.root is already pointing to current graph so we should skip it
+            while N.root.maxL and N.root != graph and (minL != N.root.maxL):  # root maxL=0 in edge|frame
                 N = N.root  # cluster prior-dist graphs instead of nodes
         if N not in N_: N_ += [N]
         graph.box = extend_box(graph.box, N.box)  # pre-compute graph.area += N.area?

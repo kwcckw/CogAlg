@@ -60,6 +60,7 @@ def cluster_N_(root, L_, nest, fd):  # top-down segment L_ by >ave ratio of L.di
         G_ = []
         max_dist = _L.dist
         for N in {*N_}:  # cluster current distance segment
+            if N.fin: continue  # we need to skip if N is clustered from the prior loops, else there will be overlapping in a same nest layer
             _eN_, node_,link_, et, = [N], [],[], np.zeros(4)
             while _eN_:
                 eN_ = []
@@ -72,7 +73,7 @@ def cluster_N_(root, L_, nest, fd):  # top-down segment L_ by >ave ratio of L.di
                                 link_+=[L]; et+=L.derH.Et
                 _eN_ = {*eN_}
             if val_(et) > 0:
-                G_ += [sum2graph(root, [list({*node_}),list({*link_}), et], fd, max_dist, nest)]
+                G_ += [sum2graph(root, [list({*node_}),list({*link_}), et], fd, min_dist, max_dist, nest)]  # we still need this min_dist here, it's just minL will not be packed into graph
             else:  # unpack
                 for n in {*node_}:
                     n.nest += 1; G_ += [n]
