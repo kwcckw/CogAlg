@@ -57,7 +57,7 @@ class CH(CBase):  # generic derivation hierarchy of variable nesting: extH | der
         He.lft = kwargs.get('lft', [])    # lower fork tuple: CH /comp N_,L_, each has tft and lft
         He.root = kwargs.get('root')    # N or higher-composition He
         He.node_ = kwargs.get('node_', [])    # concat bottom nesting order if CG, may be redundant to G.node_
-        He.altH = kwargs.get('altH', CH(altH=object))    # summed altLays, prevent cyclic
+        He.altH = CH(altH=object) if kwargs.get('altH', None) is None else kwargs.get('altH')   # summed altLays (check None to prevent cyclic)
         # He.i = kwargs.get('i', 0)    # lay index in root.lft, to revise olp
         # He.i_ = kwargs.get('i_', [])    # priority indices to compare node H by m | link H by d
         # He.fd = kwargs.get('fd', 0)    # 0: sum CGs, 1: sum CLs
@@ -263,7 +263,7 @@ def cluster_edge(edge):  # edge is CG but not a connectivity cluster, just a set
         mlay = CH().add_tree([L.derH for L in L_]); H=edge.derH; mlay.root=H; H.Et += mlay.Et; H.lft = [mlay]  # init with mfork
         if len(N_) > ave_L:
             cluster_PP_(N_, fd=0)
-        if val_(Et, mEt=Et, fo=1) > 0:  # likely not from the same links
+        if val_(Et, _Et=Et, fo=1) > 0:  # likely not from the same links
             for L in L_:
                 L.extH, L.root, L.mL_t, L.rimt, L.aRad, L.visited_, L.Et = CH(), edge, [[],[]], [[],[]], 0, [L], copy(L.derH.Et)
             # comp dPP_:
@@ -320,7 +320,7 @@ def comp_link_(iL_, iEt):  # comp CLs via directional node-mediated link tracing
         for rev, N, mL_ in zip((0,1), L.nodet, L.mL_t):
             for _L,_rev in N.rimt[0]+N.rimt[1] if fd else N.rim:
                 if _L is not L:
-                    if val_(_L.derH.Et, mEt=iEt) > 0: # proj val = compared d * rel root M
+                    if val_(_L.derH.Et, _Et=iEt) > 0: # proj val = compared d * rel root M
                         mL_ += [(_L, rev ^_rev)]  # direction of L relative to _L
     _L_, out_L_, LL_, ET = iL_,set(),[],np.zeros(4)  # out_L_: positive subset of iL_, Et = np.zeros(4)?
     med = 1
@@ -353,13 +353,13 @@ def comp_link_(iL_, iEt):  # comp CLs via directional node-mediated link tracing
                                 for __L,__rev in rim[0]+rim[1] if fd else rim:
                                     if __L in L.visited_ or __L not in iL_: continue
                                     L.visited_ += [__L]; __L.visited_ += [L]
-                                    if val_(__L.derH.Et, mEt=Et) > 0:  # compared __L.derH mag * loop induction
+                                    if val_(__L.derH.Et, _Et=Et) > 0:  # compared __L.derH mag * loop induction
                                         mL_.add((__L, rev ^_rev ^__rev))  # combine reversals: 2 * 2 mLs, but 1st 2 are pre-combined
                                         lEt += __L.derH.Et
                 if val_(lEt) > 0: # L'rng+, vs L'comp above
                     L.mL_t = mL_t; _L_.add(L); ext_Et += lEt
             # refine eval by extension D:
-            if val_(ext_Et, mEt=Et) - med * med_cost > 0:
+            if val_(ext_Et, _Et=Et) - med * med_cost > 0:
                 med +=1
             else: break
         else: break
@@ -432,8 +432,8 @@ def sum2graph(root, grapht, fd, minL=0, maxL=None, nest=0):  # sum node and link
     N_ = []
     for N in node_:
         if minL:  # >0, inclusive, = lower-layer exclusive maxL if G is distance-nested in cluster_N_
-            if N.root is graph: break  # assigned in prior loop
-            while N.root.maxL and (minL != N.root.maxL):  # root maxL=0 in edge|frame
+            # if N.root is graph: break  # assigned in prior loop (should be in while loop below because it could be N.root.root...)
+            while N.root.maxL and N.root is not graph and (minL != N.root.maxL):  # root maxL=0 in edge|frame
                 N = N.root  # cluster prior-dist graphs instead of nodes
         N_ += [N]  # roots if minL
         graph.box = extend_box(graph.box, N.box)  # pre-compute graph.area += N.area?
@@ -442,12 +442,13 @@ def sum2graph(root, grapht, fd, minL=0, maxL=None, nest=0):  # sum node and link
         if isinstance(node_[0],CG):
             graph.latuple += N.latuple; graph.vert += N.vert
         if N.derH:
+            derH.fd_ = copy(N.derH.fd_)  # all Ns should have a same derH.fd_
             derH.add_tree(N.derH, graph)
         graph.Et += N.Et * icoef ** 2  # deeper, lower weight
         N.root = graph
     graph.node_ = N_  # nodes or roots, link_ is still current-dist links only?
     # sum link_ derH:
-    derLay = CH().add_tree([link.derH for link in link_],root=graph)  # root added in copy_ within add_tree
+    derLay = CH(fd_=[*link_[0].derH.fd_]).add_tree([link.derH for link in link_],root=graph)  # root added in copy_ within add_tree
     if derH:
         derLay.lft += [derH]; derLay.Et += derH.Et
     graph.derH = derLay
@@ -456,7 +457,7 @@ def sum2graph(root, grapht, fd, minL=0, maxL=None, nest=0):  # sum node and link
     dy,dx = np.divide( np.sum([ np.abs(yx-_yx) for _yx in yx_], axis=0), L)
     graph.aRad = np.hypot(dy,dx)  # ave distance from graph center to node centers
     graph.yx = yx
-    if fd:  # dgraph, no mGs / dG for now  # and val_(Et, mEt=root.Et) > 0:
+    if fd:  # dgraph, no mGs / dG for now  # and val_(Et, _Et=root.Et) > 0:
         altG_ = []  # mGs overlapping dG
         for L in node_:
             for n in L.nodet:  # map root mG
@@ -471,10 +472,10 @@ def feedback(node):  # propagate node.derH to higher roots
 
     while node.root:
         root = node.root
-        priH = addH = root.derH
+        priH = root.derH; addH = node.derH
         add = 1
         for fd in addH.fd_:  # unpack top-down, each fd was assigned by corresponding level of roots
-            if len(addH.lft) > fd:
+            if len(priH.lft) > fd:
                 # add to higher-nested priH:
                 if len(addH.fd_) > len(priH.H):  # ddepth = 0|1, up fd_ maps to down H
                     priH.H += [copy(addH.Et)]
