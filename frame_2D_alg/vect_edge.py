@@ -52,7 +52,7 @@ class CH(CBase):  # generic derivation hierarchy of variable nesting: extH | der
         super().__init__()
         # move to CG:
         # He.H = kwargs.get('H', [])  # list of layers below n_l_t, each is Et summed across fork tree
-        # He.Et = kwargs.get('Et', np.zeros(4))
+        He.Et = kwargs.get('Et', np.zeros(4))  # we still need Et?
         He.m_d_t = kwargs.get('m_d_t',[])  # derivative arrays m_t, d_t
         He.n_l_t = kwargs.get('n_l_t',[])  # element arrays, each element has derT with m_d_t and n_l_t
         He.root = kwargs.get('root')   # N or higher-composition He
@@ -172,6 +172,9 @@ class CG(CBase):  # PP | graph | blob: params of single-fork node_ cluster
         G.altG_ = []  # or altG? adjacent (contour) gap+overlap alt-fork graphs, converted to CG
         # fd_ | fork_tree: list = z([[]])  # indices in all layers(forks, if no fback merge
         # G.fback_ = []  # fb buffer
+        G.m_d_t = []
+        G.n_l_t = []
+        
     def __bool__(G): return bool(G.node_)  # never empty
 
 class CL(CBase):  # link or edge, a product of comparison between two nodes or links
@@ -258,21 +261,25 @@ def cluster_edge(edge):  # edge is CG but not a connectivity cluster, just a set
                     n.nest +=1; G_ += [n]  # unpack weak Gts
         if fd: edge.link_ = G_
         else:  edge.node_ = G_  # vs init PP_
+        return G_
+
     # comp PP_:
     N_,L_,Et = comp_node_(edge.node_)
     if val_(Et, fo=1) > 0:  # cancel by borrowing d?
+        n_l_t = []
         mlay = CH().add_tree([L.derH for L in L_]); H=edge.derH; mlay.root=H; H.Et += mlay.Et; H.n_l_t = [mlay]  # init with mfork
         if len(N_) > ave_L:
-            cluster_PP_(N_, fd=0)
+            n_l_t += [cluster_PP_(N_, fd=0)]
         if val_(Et, _Et=Et, fo=1) > 0:  # likely not from the same links
             for L in L_:
-                L.extH, L.root, L.mL_t, L.rimt, L.aRad, L.visited_, L.Et = CH(), edge, [[],[]], [[],[]], 0, [L], copy(L.derH.Et)
+                L.extH, L.root, L.mL_t, L.rimt, L.aRad, L.visited_, L.Et, L.fd_ = CH(), edge, [[],[]], [[],[]], 0, [L], copy(L.derH.Et), copy(L.nodet[0].fd_)  # L's fd_ should copy from their nodet?
             # comp dPP_:
             lN_,lL_,dEt = comp_link_(L_, Et)
             if val_(dEt, fo=1) > 0:
                 dlay = CH().add_tree([L.derH for L in lL_]); dlay.root=H; H.Et += dlay.Et; H.n_l_t += [dlay]  # append dfork
                 if len(lN_) > ave_L:
-                    cluster_PP_(lN_, fd=1)
+                    n_l_t += [cluster_PP_(lN_, fd=1)]
+        edge.n_l_t += [n_l_t]
 
 def comp_node_(_N_):  # rng+ forms layer of rim and extH per N, appends N_,L_,Et, ~ graph CNN without backprop
 
@@ -461,13 +468,12 @@ def sum2graph(root, grapht, fd, minL=0, maxL=None, nest=0):  # sum node and link
     graph.aRad = np.hypot(dy,dx)  # ave distance from graph center to node centers
     graph.yx = yx
     if fd:  # dgraph, no mGs / dG for now  # and val_(Et, _Et=root.Et) > 0:
-        altG_ = []  # mGs overlapping dG
         for L in node_:
             for n in L.nodet:  # map root mG
                 mG = n.root
-                if mG not in altG_:
+                if mG not in graph.altG_:  # bidirectional now with cluster_C_ in both forks?
                     mG.altG_ += [graph]  # cross-comp|sum complete altG_ before next agg+ cross-comp
-                    altG_ += [mG]
+                    graph.altG_ += [mG]
     feedback(graph)  # recursive root.derH.add_fork(graph.derH)
     return graph
 
@@ -476,20 +482,21 @@ def feedback(node):  # propagate node.derH to higher roots
     fd_ = node.fd_; L = len(fd_) - 1
     while node.root:
         root = node.root
-        rH = root.derH; iH = node.derH
+        rderH = root.derH; iderH = node.derH
+        rH = root.m_d_t; iH = node.m_d_t; 
         add = 1
         for i, fd in enumerate(fd_):  # unpack root H top-down, each fd was assigned by corresponding level of roots
             if len(rH.n_l_t) > fd:  # each fd maps to higher fork n_l_t: 0|1
                 # iH is below rH: fd_ maps to rH.H, below n_l_t
-                if L-i > len(rH.H): rH.H += [copy(iH.Et)]
-                else: rH.H[i] += iH.Et  # fork layer+= fb
-                iH = rH; rH = rH.n_l_t[fd]  # root layer is higher than feedback, keep unpacking
+                if L-i > len(rH): rH += [copy(iderH.Et)]
+                else: rH[i] += iderH.Et  # fork layer+= fb  (if rH moved to CG, )
+                iderH = rderH; rderH = rH.n_l_t[fd]  # root layer is higher than feedback, keep unpacking
             else:
-                rH.n_l_t += [iH.copy_()]  # fork was empty, init with He
+                rH.n_l_t += [iderH.copy_()]  # fork was empty, init with He
                 add = 0; break
 
         if add:  # add feedback to fork formed by prior feedback, else append above
-            rH.add_tree(iH, root)
+            rderH.add_tree(iderH, root)
         node = root
 
 def frame2CG(G, **kwargs):
