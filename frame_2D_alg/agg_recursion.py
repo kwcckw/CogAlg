@@ -3,7 +3,7 @@ from copy import copy, deepcopy
 from functools import reduce
 from frame_blobs import frame_blobs_root, intra_blob_root, imread
 from comp_slice import comp_latuple, comp_md_
-from vect_edge import icoef, add_H, sum_H, comp_N, comp_node_, comp_link_, sum2graph, zrim, zlast, CLay, CG, ave, ave_L, vectorize_root, comp_area, extend_box, val_
+from vect_edge import icoef, norm_H, add_H, sum_H, comp_N, comp_node_, comp_link_, sum2graph, zrim, zlast, CLay, CG, ave, ave_L, vectorize_root, comp_area, extend_box, val_
 '''
 Cross-compare and cluster Gs within a frame, potentially unpacking their node_s first,
 alternating agglomeration and centroid clustering.
@@ -106,15 +106,15 @@ def cluster_C_(graph):
             C,A, fC = CG(),CG(), 0
             C.M,C.L, A.M,A.L = 0,0,0,0  # centroid setattr
         else:
-            A, fC = C.altG_, 1
+            A, fC = C.altG, 1
         sum_G_(C, dnode_, fc=1)  # exclude extend_box and sum extH
-        sum_G_(A, [n.altG_ for n in dnode_ if n.altG_], fc=1)
+        sum_G_(A, [n.altG for n in dnode_ if n.altG], fc=1)
         k = len(dnode_) + fC
         for n in C, A:  # get averages
             n.Et/=k; n.latuple/=k; n.vert/=k; n.aRad/=k; n.yx /= k
-            if n.derH: n.derH.norm_(k)
+            norm_H(n.derH, k)
         C.box = reduce(extend_box, (n.box for n in node_))
-        C.altG_ = A
+        C.altG = A
         return C
 
     def comp_C(C, N):  # compute match without new derivatives: global cross-comp is not directional
@@ -125,8 +125,8 @@ def cluster_C_(graph):
         mVert = comp_md_(C.vert[1], N.vert[1])[1][0]
         M = mL + mA + mLat + mVert
         M += sum([_lay.comp_lay(lay, rn=1,root=None).Et[0] for _lay,lay in zip(C.derH, N.derH)])
-        if C.altG_ and N.altG_:  # converted to altG
-            M += comp_N(C.altG_, N.altG_, C.altG_.Et[2] / N.altG_.Et[2]).Et[0]
+        if C.altG and N.altG:  # converted to altG
+            M += comp_N(C.altG, N.altG, C.altG.Et[2] / N.altG.Et[2]).Et[0]
         # if fuzzy C:
         # Et = np.zeros(4)  # m,_,n,o: lateral proximity-weighted overlap, for sparse centroids
         # M /= np.hypot(*C.yx, *N.yx)
@@ -198,11 +198,11 @@ def sum_G_(G, node_, fc=0):
         G.vert = G.vert + n.vert*s if np.any(G.vert) else deepcopy(n.vert) * s
         G.Et += n.Et * s; G.aRad += n.aRad * s
         G.yx += n.yx * s
-        if n.derH: G.derH.add_tree(n.derH, root=G, rev = s==-1, fc=fc)
+        if n.derH: add_H(G.derH, n.derH, root=G)
         if fc:
             G.M += n.m * s; G.L += s
         else:
-            if n.extH: G.extH.add_tree(n.extH, root=G, rev = s==-1)  # empty in centroid
+            if n.extH: add_H(G.extH, n.extH, root=G)  # empty in centroid
             G.box = extend_box( G.box, n.box)  # extended per separate node_ in centroid
 
 def comb_altG_(G):  # combine contour G.altG_ into altG (node_ defined by root=G), for agg+ cross-comp
@@ -211,16 +211,16 @@ def comb_altG_(G):  # combine contour G.altG_ into altG (node_ defined by root=G
     if alt:
         if isinstance(alt, list):
             sum_G_(alt[0], [a for a in alt[1:]])
-            G.altG_ = CG(root=G, node_=alt); G.altG_.sign = 1; G.altG_.m = 0
+            G.altG = CG(root=G, node_=alt); G.altG.sign = 1; G.altG.m = 0
             # alt D * G rM:
-            if val_(G.altG_.Et, _Et=G.Et):
-                cross_comp(G.altG_)
+            if val_(G.altG.Et, _Et=G.Et):
+                cross_comp(G.altG)
     else:
         # sum neg links into CG
         altG = CG(root=G, node_=[],link_=[]); altG.sign = 1; altG.m = 0
         derH = []
         for link in zlast(G).link_:
-            if val_(link.Et, _Et=G.Et) > 0:  # neg link
+            if val_(link.Et, _Et=G.Et) < 0:  # neg link (neg link should be <0?)
                 altG.link_ += [link]
                 for n in link.nodet:
                     if n not in altG.node_:
@@ -229,7 +229,8 @@ def comb_altG_(G):  # combine contour G.altG_ into altG (node_ defined by root=G
                         if n.derH:
                             add_H(derH, n.derH, root=altG)
                         altG.Et += n.Et * icoef ** 2
-        altG.derH += [sum_H(altG.link_,altG)]  # sum link derHs
+        if altG.link_: altG.derH += [sum_H(altG.link_,altG)]  # sum link derHs (may empty)
+        G.altG = altG
 
 if __name__ == "__main__":
     image_file = './images/raccoon_eye.jpeg'
