@@ -180,9 +180,11 @@ def vectorize_root(frame):
                         P_,link_,vert,lat, A,S,box,[y,x],Et = N[1:]  # PPt
                         if Et[0] > ave:  # no altG until cross-comp
                             PP = CG(root=edge, fd_=[0], Et=Et, node_=P_, link_=[], vert=vert, latuple=lat, box=box, yx=np.array([y,x]))
+                            m_t, d_t = np.array([np.zeros(2), vert[0], np.zeros(6)],dtype=object),np.array([np.zeros(2), vert[1], np.zeros(6)],dtype=object) 
+                            lay0 = CLay(root=PP, m_d_t = [m_t, d_t], Et=copy(Et), node_=P_, link_=[]); PP.derH = [lay0]
                             y0,x0,yn,xn = box; PP.aRad = np.hypot((yn-y0)/2,(xn-x0)/2)  # approx
                             G_ += [PP]
-                    edge.node_ = G_  # replace PP with CG?
+                    add_H(edge.derH, PP.derH, edge); edge.derH[0].node_ = G_  # this is a special case where 1st layer derH.node_ is converted PP since we use edge.derH[-1].node_ to get last layer node_
                     if len(G_) > ave_L:
                         cluster_edge(edge); frame.node_ += [edge]  # frame.node_, link_=[blob_,[]], derH[0] += edge.node_, link_ s
                         # add altG: summed converted adj_blobs of converted edge blob
@@ -289,7 +291,7 @@ def comp_link_(iL_, iEt):  # comp CLs via directional node-mediated link tracing
         # init mL_t: bilateral mediated Ls per L:
         for rev, N, mL_ in zip((0,1), L.nodet, L.mL_t):
             for _L,_rev in N.rimt[0]+N.rimt[1] if fd else N.rim:
-                if _L is not L:
+                if _L is not L and _L in iL_:  # Not all L.nodet.rim is in iL 
                     if val_(_L.Et, _Et=iEt) > 0:  # proj val = compared d * rel root M
                         mL_ += [(_L, rev ^_rev)]  # direction of L relative to _L
     _L_, out_L_, LL_, ET = iL_,set(),[],np.zeros(4)  # out_L_: positive subset of iL_, Et = np.zeros(4)?
@@ -369,7 +371,8 @@ def comp_N(_N,N, rn, angle=None, dist=None, dir=1):  # dir if fd, Link.derH=dH, 
         # same olp?
     Link = CL(fd=fd, Et=Et, nodet=[_N,N], derH=[], yx=np.add(_N.yx,N.yx)/2,angle=angle,dist=dist,box=extend_box(N.box,_N.box),nest=max(_N.nest,N.nest))
     lay0 = CLay(root=Link, Et=Et, m_d_t=[m_t,d_t], node_=[_N,N], link_=[Link])
-    derH = [_lay.comp_lay(lay,rn,root=Link) for _lay,lay in zip(_N.derH, N.derH)]  # comp shared layers, if any
+    # skip base layer here? Else we have 2 derlay0 here? And the node_ in derlay0 is CP too
+    derH = [_lay.comp_lay(lay,rn,root=Link) for _lay,lay in zip(_N.derH, N.derH) if not fd and isinstance(lay.node_[0], CG)]  # comp shared layers, if any
     Link.derH = [lay0, *derH]
     # spec: comp_node_(node_|link_), combinatorial, node_ nested / rng-)agg+?
     if not fd and _N.altG and N.altG:  # if CG, alt M?
@@ -440,8 +443,8 @@ def feedback(node):  # propagate node.derH to higher roots
                     for fork in node.derH[-1].m_d_t: lay.m_d_t[fd] += fork
                     for fork in node.node_,node.link_: [lay.node_,lay.link_][fd] += fork  # mix CG,CL
                 else:  # iH is deeper, bottom layer feedback
-                    m_d_t = [[], node.derH[-1].m_d_t] if fd else [node.derH[-1].m_d_t, []]  # fill current fork only
-                    root.derH += [CLay(Et=copy(node.Et), root=root, m_d_t=[m_d_t], node_=[] if fd else [node], link_=[node] if fd else [])]
+                    m_d_t = [np.array([np.zeros(2), np.zeros(6), np.zeros(6)],dtype=object), np.sum(node.derH[-1].m_d_t,axis=0)] if fd else [np.sum(node.derH[-1].m_d_t, axis=0), np.array([np.zeros(2), np.zeros(6), np.zeros(6)],dtype=object)]  # fill current fork only
+                    root.derH += [CLay(Et=copy(node.Et), root=root, m_d_t=m_d_t, node_=[] if fd else [node], link_=[node] if fd else [])]
             else:
                 break  # root may be deeper from prior feedback
         node = root
