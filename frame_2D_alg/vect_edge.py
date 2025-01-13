@@ -137,8 +137,8 @@ class CG(CBase):  # PP | graph | blob: params of single-fork node_ cluster
         G.altG = []  # adjacent (contour) gap+overlap alt-fork graphs, converted to CG
         # G.fork_tree: list = z([[]])  # indices in all layers(forks, if no fback merge
         # G.fback_ = []  # fb buffer
-        G.node_ = []
-        G.link_ = []  # internal links
+        G.node_ = kwargs.get('node_',[])
+        G.link_ = kwargs.get('link_',[])  # internal links
         G.rim = kwargs.get('rim',[])  # external links
     def __bool__(G): return bool(G.node_)  # never empty
 
@@ -162,13 +162,13 @@ class CL(CBase):  # link or edge, a product of comparison between two nodes or l
 
 def vectorize_root(frame):
     # init for agg+:
-    frame2CG(frame, derH=[CLay(root=frame, Et=np.zeros(4), m_d_t=[], node_=[], link_=[])], root=None)  # distinct from base blob_
-    blob_ = unpack_blob_(frame)
+    blob_ = unpack_blob_(frame)   
+    frame2CG(frame, derH=[CLay(root=frame, Et=np.zeros(4), m_d_t=[], node_=[], link_=[])], node_=[], root=None)  # distinct from base blob_
     for blob in blob_:
         if not blob.sign and blob.G > ave_G * blob.root.olp:
             edge = slice_edge(blob)
             if edge.G * (len(edge.P_)-1) > ave:  # eval PP
-                comp_slice(edge)
+                frame.node_+= [edge]; comp_slice(edge)  # pack only edge with comp_slice as frame.node_?
                 if edge.Et[0] * (len(edge.node_)-1)*(edge.rng+1) > ave:
                     lat = np.array([.0,.0,.0,.0,.0,np.zeros(2)],dtype=object); vert = np.array([np.zeros(6), np.zeros(6)])
                     for PP in edge.node_:
@@ -182,6 +182,7 @@ def vectorize_root(frame):
                             PP = CG(root=edge, fd_=[0], Et=Et, node_=P_, link_=[], vert=vert, latuple=lat, box=box, yx=np.array([y,x]))
                             y0,x0,yn,xn = box; PP.aRad = np.hypot((yn-y0)/2,(xn-x0)/2)  # approx
                             G_ += [PP]
+                    edge.node_ = G_
                     if len(G_) > ave_L:
                         cluster_edge(edge)  # add altG: summed converted adj_blobs of converted edge blob?
 
@@ -222,6 +223,9 @@ def cluster_edge(edge):  # edge is CG but not a connectivity cluster, just a set
             else:
                 for n in node_:
                     n.nest +=1; G_ += [n]  # unpack weak Gts
+        if fd: edge.node_ = G_  # we need to update node_ now
+        else:  edge.link_ = G_
+                    
     # comp PP_:
     N_,L_,Et = comp_node_(edge.node_)
     edge.link_ += L_
@@ -231,7 +235,7 @@ def cluster_edge(edge):  # edge is CG but not a connectivity cluster, just a set
             cluster_PP_(N_, fd=0)
         if val_(Et, _Et=Et, fo=1) > 0:  # likely not from the same links
             for L in L_:
-                L.extH, L.root, L.mL_t, L.rimt, L.aRad, L.visited_ = [], edge, [[],[]], [[],[]], 0, [L]
+                L.extH, L.root, L.mL_t, L.rimt, L.aRad, L.visited_, L.node_, L.link_ = [], edge, [[],[]], [[],[]], 0, [L], L.nodet, [L]  # L.node_ is nodet, while their internal link_ is L itself?
             # comp dPP_:
             lN_,lL_,dEt = comp_link_(L_,Et)
             if val_(dEt, fo=1) > 0:
@@ -436,7 +440,7 @@ def feedback(node):  # propagate node.derH to higher roots
                 if lay:
                     # merge both forks of node last lay into root lay fd fork: fixed Clay, prior lays should already be in:
                     for fork in node.derH[-1].m_d_t: lay.m_d_t[fd] += fork
-                    for fork in node.node_,node.link_: [lay.node_,lay.link_][fd] += fork  # mix CG,CL
+                    for fork in node.node_,node.link_: [lay.node_,lay.link_][fd] += fork  # mix CG,CL (we really need to mix CG and CL here?)
                 else: # iH is deeper, comb link_ derH:
                     fork = np.sum(node.derH[-1].m_d_t, axis=0); altf = np.array([np.zeros(2),np.zeros(6),np.zeros(6)], dtype=object)  # [fext,flat,fver]
                     root.derH += [CLay(Et=copy(node.Et),root=root, m_d_t=[altf,fork] if fd else [fork,altf], node_=[] if fd else [node], link_=[node] if fd else [])]
@@ -473,6 +477,7 @@ def norm_H(H, n):
 
 def frame2CG(G, **kwargs):
     blob2CG(G, **kwargs)
+    G.node_ = kwargs.get('node_', [])
     G.derH = kwargs.get('derH', [CLay(root=G, Et=np.zeros(4), m_d_t=[], node_=[],link_ =[])])
     G.Et = kwargs.get('Et', np.zeros(4))
 
@@ -494,7 +499,7 @@ def blob2CG(G, **kwargs):
     return G
 
 if __name__ == "__main__":
-   # image_file = './images/raccoon_eye.jpeg'
+    # image_file = './images/raccoon_eye.jpeg'
     image_file = './images/toucan_small.jpg'
     image = imread(image_file)
     frame = frame_blobs_root(image)

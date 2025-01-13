@@ -20,7 +20,8 @@ cross_comp -> cluster_N_ -> cluster_C -> cross_comp...
 
 def cross_comp(root, nest=0):  # breadth-first node_,link_ cross-comp, connect.clustering, recursion
 
-    N_,L_,Et = comp_node_(root.derH[-1].node_)  # cross-comp exemplars, extrapolate to their node_s
+    # edge.derH may empty
+    N_,L_,Et = comp_node_(root.derH[-1].node_ if root.derH else root.node_)  # cross-comp exemplars, extrapolate to their node_s
     # mixed-fork root.derH[-1].node_?
     # mfork
     if val_(Et, fo=1) > 0:
@@ -29,7 +30,7 @@ def cross_comp(root, nest=0):  # breadth-first node_,link_ cross-comp, connect.c
         # dfork/ all dist layers:
         if val_(Et, _Et=Et, fo=1) > 0:  # same root for L_, root.link_ was compared in root-forming for alt clustering
             for L in L_:
-                L.extH, L.root, L.mL_t, L.rimt, L.aRad, L.visited_ = [],root, [[],[]], [[],[]], 0,[L]
+                L.extH, L.root, L.mL_t, L.rimt, L.aRad, L.visited_, L.node_, L.link_ = [],root, [[],[]], [[],[]], 0,[L], L.nodet, [L]
             lN_,lL_,dEt = comp_link_(L_,Et)
             if val_(dEt, _Et=Et, fo=1) > 0:
                 root.derH[-1].add_lay( sum_H(lL_,root))  # mlay += dlay
@@ -117,7 +118,7 @@ def cluster_C_(graph):
 
     def comp_C(C, N):  # compute match without new derivatives: global cross-comp is not directional
 
-        mL = min(C.L, len(N.derH[-1].node_)) - ave_L
+        mL = min(C.L, len(N.derH[-1].node_ if N.derH else N.node_)) - ave_L
         mA = comp_area(C.box, N.box)[0]
         mLat = comp_latuple(C.latuple, N.latuple, C.Et[2], N.Et[2])[1][0]
         mVert = comp_md_(C.vert[1], N.vert[1])[1][0]
@@ -141,7 +142,9 @@ def cluster_C_(graph):
             N_,dN_,extN_, M, dM, extM = [],[],[], 0,0,0  # included, changed, queued nodes and values
             med = 0  # extN_ is mediated by <=3 _Ns, loop all / refine cycle:
             while med < 3:
+                medN_ = []
                 for _N in _N_:
+                    if _N in N_ or _N in extN_: continue  # skip meidated Ns
                     m = comp_C(C,_N)  # Et if proximity-weighted overlap?
                     vm = m - ave  # deviation
                     if vm > 0:
@@ -153,9 +156,10 @@ def cluster_C_(graph):
                             n = link.nodet[0] if link.nodet[1] is _N else link.nodet[1]
                             if n.fin or n.m: continue  # in other C or in C.node_
                             extN_ += [n]; extM += n.Et[0]  # external N for next loop
+                            medN_ += [n]  # for mediation loop
                     elif _N.m:  # was in C.node_, subtract from C
                         _N.sign=-1; _N.m=0; dN_+=[_N]; dM += -vm  # dM += abs m deviation
-                med += 1
+                med += 1; _N_ = medN_
             if dM > ave and M + extM > ave:  # update for next loop, terminate if low reform val
                 if dN_:  # recompute C if any changes in node_
                     C = centroid(set(dN_), N_, C)
@@ -219,6 +223,7 @@ def comb_altG_(G_):  # combine contour G.altG_ into altG (node_ defined by root=
             # sum neg links into CG
             altG = CG(root=G, node_=[],link_=[]); altG.sign = 1; altG.m = 0
             derH = []
+            if not G.derH: continue  # edge's converted PP doesn't have derH
             for link in G.derH[-1].link_:
                 if val_(link.Et, _Et=G.Et) > 0:  # neg link
                     altG.link_ += [link]
