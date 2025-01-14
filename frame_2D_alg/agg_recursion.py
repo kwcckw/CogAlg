@@ -20,9 +20,7 @@ cross_comp -> cluster_N_ -> cluster_C -> cross_comp...
 
 def cross_comp(root, nest=0):  # breadth-first node_,link_ cross-comp, connect.clustering, recursion
 
-    # edge.derH may empty
-    N_,L_,Et = comp_node_(root.derH[-1].node_ if root.derH else root.node_)  # cross-comp exemplars, extrapolate to their node_s
-    # mixed-fork root.derH[-1].node_?
+    N_,L_,Et = comp_node_(root.node_)  # cross-comp exemplars, extrapolate to their node_s
     # mfork
     if val_(Et, fo=1) > 0:
         root.derH += [sum_H(L_,root)]  # += [mlay]
@@ -30,7 +28,7 @@ def cross_comp(root, nest=0):  # breadth-first node_,link_ cross-comp, connect.c
         # dfork/ all dist layers:
         if val_(Et, _Et=Et, fo=1) > 0:  # same root for L_, root.link_ was compared in root-forming for alt clustering
             for L in L_:
-                L.extH, L.root, L.mL_t, L.rimt, L.aRad, L.visited_, L.node_, L.link_ = [],root, [[],[]], [[],[]], 0,[L], L.nodet, [L]
+                L.extH, L.root, L.mL_t, L.rimt, L.aRad, L.visited_ = [],root, [[],[]], [[],[]], 0,[L]
             lN_,lL_,dEt = comp_link_(L_,Et)
             if val_(dEt, _Et=Et, fo=1) > 0:
                 root.derH[-1].add_lay( sum_H(lL_,root))  # mlay += dlay
@@ -114,11 +112,12 @@ def cluster_C_(graph):
             norm_H(n.derH, k)
         C.box = reduce(extend_box, (n.box for n in node_))
         C.altG = A
+        # add / remove from node_, reset fin?
         return C
 
     def comp_C(C, N):  # compute match without new derivatives: global cross-comp is not directional
 
-        mL = min(C.L, len(N.derH[-1].node_ if N.derH else N.node_)) - ave_L
+        mL = min(C.L, len(N.node_)) - ave_L
         mA = comp_area(C.box, N.box)[0]
         mLat = comp_latuple(C.latuple, N.latuple, C.Et[2], N.Et[2])[1][0]
         mVert = comp_md_(C.vert[1], N.vert[1])[1][0]
@@ -133,40 +132,35 @@ def cluster_C_(graph):
         return M
 
     def centroid_cluster(N):  # refine and extend cluster with extN_
-
         # add proximity bias, for both match and overlap?
-        _N_ = {n for L,_ in N.rim for n in L.nodet if not n.fin}
-        N.fin = 1; n_ = _N_| {N}  # include seed node
-        C = centroid(n_, n_)
+
+        N.fin = 1; C = centroid([N],[N])
+        _N_ = [N]; med = 0
+        while med < 3:  # fill init C.node_, mediated by <=3 _Ns
+            N_ = []
+            for _N in _N_:
+                for link, _ in _N.rim:
+                    n = link.nodet[0] if link.nodet[1] is _N else link.nodet[1]
+                    if n.fin or n.m: continue  # in other C or in C.node_
+                    n.m = .001; N_ += [n]  # no eval
+            C.node_ += _N_
+            _N_ = N_; med += 1
         while True:
-            N_,dN_,extN_, M, dM, extM = [],[],[], 0,0,0  # included, changed, queued nodes and values
-            med = 0  # extN_ is mediated by <=3 _Ns, loop all / refine cycle:
-            while med < 3:
-                medN_ = []
-                for _N in _N_:
-                    if _N in N_ or _N in extN_: continue  # skip meidated Ns
-                    m = comp_C(C,_N)  # Et if proximity-weighted overlap?
-                    vm = m - ave  # deviation
-                    if vm > 0:
-                        N_ += [_N]; M += m
-                        if _N.m: dM += m - _N.m  # was in C.node_, add adjustment
-                        else:  dN_ += [_N]; dM += vm  # new node
-                        _N.m = m  # to sum in C
-                        for link, _ in _N.rim:
-                            n = link.nodet[0] if link.nodet[1] is _N else link.nodet[1]
-                            if n.fin or n.m: continue  # in other C or in C.node_
-                            extN_ += [n]; extM += n.Et[0]  # external N for next loop
-                            medN_ += [n]  # for mediation loop
-                    elif _N.m:  # was in C.node_, subtract from C
-                        _N.sign=-1; _N.m=0; dN_+=[_N]; dM += -vm  # dM += abs m deviation
-                med += 1; _N_ = medN_
-            if dM > ave and M + extM > ave:  # update for next loop, terminate if low reform val
+            dN_,M,dM = [], 0,0  # queued and changed nodes and values
+            # reset fin in C.node?
+            for _N in C.node_:
+                m = comp_C(C,_N)  # Et if proximity-weighted overlap?
+                vm = m - ave  # deviation
+                if vm > 0:
+                    M += m; dM += m - _N.m  # add adjustment
+                else:  # subtract from C
+                    _N.sign=-1; _N.m=0; dN_+=[_N]; dM += -vm  # dM += abs m deviation
+            if dM > ave and M > ave:  # update for next loop, terminate if low reform val
                 if dN_:  # recompute C if any changes in node_
-                    C = centroid(set(dN_), N_, C)
-                _N_ = set(N_) | set(extN_)  # next loop compares both old and new nodes to new C
-                C.M = M; C.node_ = N_
+                    C = centroid(set(dN_), C)
+                C.M = M
             else:
-                if C.M > ave * 10:  # add proximity-weighted overlap
+                if C.M > ave * 10:  # add proximity-weighted overlap?
                     C.root = N.root  # C.nest = N.nest+1
                     for n in C.node_:
                         n.root = C; n.fin = 1; delattr(n,"sign")
@@ -223,8 +217,7 @@ def comb_altG_(G_):  # combine contour G.altG_ into altG (node_ defined by root=
             # sum neg links into CG
             altG = CG(root=G, node_=[],link_=[]); altG.sign = 1; altG.m = 0
             derH = []
-            if not G.derH: continue  # edge's converted PP doesn't have derH
-            for link in G.derH[-1].link_:
+            for link in G.link_:
                 if val_(link.Et, _Et=G.Et) > 0:  # neg link
                     altG.link_ += [link]
                     for n in link.nodet:
