@@ -28,7 +28,7 @@ def cross_comp(root, nest=0):  # breadth-first node_,link_ cross-comp, connect.c
         # dfork/ all dist layers:
         if val_(Et, _Et=Et, fo=1) > 0:  # same root for L_, root.link_ was compared in root-forming for alt clustering
             for L in L_:
-                L.extH, L.root, L.mL_t, L.rimt, L.aRad, L.visited_ = [],root, [[],[]], [[],[]], 0,[L]
+                L.extH, L.root, L.mL_t, L.rimt, L.aRad, L.visited_, L.node_, L.link_ = [],root, [[],[]], [[],[]], 0,[L],L.nodet,[]
             lN_,lL_,dEt = comp_link_(L_,Et)
             if val_(dEt, _Et=Et, fo=1) > 0:
                 root.derH[-1].add_lay( sum_H(lL_,root))  # mlay += dlay
@@ -39,7 +39,7 @@ def cross_comp(root, nest=0):  # breadth-first node_,link_ cross-comp, connect.c
             cluster_N_(root, plL_,nest, fd=1)  # form altGs for cluster_C_, no new links between dist-seg Gs
 
         comb_altG_(G_)  # combine node contour: altG_ or neg links, by sum, cross-comp -> CG altG
-        cluster_C_(root)  # -> (G,altG) exemplars, reinforced by altG surround borrow?
+        cluster_C_(root, nest)  # -> (G,altG) exemplars, reinforced by altG surround borrow?
         # mfork only, dfork is possible but secondary, no ddfork
 
 def cluster_N_(root, L_, nest, fd):  # top-down segment L_ by >ave ratio of L.dists
@@ -95,9 +95,9 @@ Hierarchical clustering should alternate between two phases: generative via conn
  So connectivity clustering is a generative learning phase, forming new derivatives and structured composition levels, 
  while centroid clustering is a compressive phase, reducing multiple similar comparands to a single exemplar. '''
 
-def cluster_C_(graph):
+def cluster_C_(graph, nest):
 
-    def centroid(dnode_, node_, C=None):  # sum|subtract and average Rim nodes
+    def centroid(dnode_, C=None):  # sum|subtract and average Rim nodes
 
         if C is None:
             C,A, fC = CG(),CG(), 0
@@ -110,7 +110,7 @@ def cluster_C_(graph):
         for n in C, A:  # get averages
             n.Et/=k; n.latuple/=k; n.vert/=k; n.aRad/=k; n.yx /= k
             norm_H(n.derH, k)
-        C.box = reduce(extend_box, (n.box for n in node_))
+        C.box = reduce(extend_box, (n.box for n in dnode_+C.node_ if n.sign))  # skip removed nodes with negative sign
         C.altG = A
         # add / remove from node_, reset fin?
         return C
@@ -134,17 +134,18 @@ def cluster_C_(graph):
     def centroid_cluster(N):  # refine and extend cluster with extN_
         # add proximity bias, for both match and overlap?
 
-        N.fin = 1; C = centroid([N],[N])
+        N.fin = 1; CN_ = [N]
         _N_ = [N]; med = 0
-        while med < 3:  # fill init C.node_, mediated by <=3 _Ns
+        while med < 3 and _N_:  # fill init C.node_, mediated by <=3 _Ns
             N_ = []
             for _N in _N_:
                 for link, _ in _N.rim:
                     n = link.nodet[0] if link.nodet[1] is _N else link.nodet[1]
                     if n.fin or n.m: continue  # in other C or in C.node_
-                    n.m = .001; N_ += [n]  # no eval
-            C.node_ += _N_
+                    n.m = .001; N_ += [n]; CN_ += [n]  # no eval
             _N_ = N_; med += 1
+        # we can actually init C after all Ns are found
+        CN_ = list(set(CN_)); C = centroid(CN_); C.node_ = CN_  # we need to update C with latest _N_ before the refinement below?
         while True:
             dN_,M,dM = [], 0,0  # queued and changed nodes and values
             # reset fin in C.node?
@@ -157,7 +158,8 @@ def cluster_C_(graph):
                     _N.sign=-1; _N.m=0; dN_+=[_N]; dM += -vm  # dM += abs m deviation
             if dM > ave and M > ave:  # update for next loop, terminate if low reform val
                 if dN_:  # recompute C if any changes in node_
-                    C = centroid(set(dN_), C)
+                    C = centroid(list(set(dN_)), C)
+                if C.M == M: return C  # return C if there's no adjustment？ Else it can run indefinitely
                 C.M = M
             else:
                 if C.M > ave * 10:  # add proximity-weighted overlap?
@@ -184,7 +186,7 @@ def cluster_C_(graph):
                 break
     graph.node_ = G_  # mix of Ns and Cs: exemplars of their network?
     if len(G_) > ave_L:
-        cross_comp(graph)
+        cross_comp(graph, nest+1)  # we need to increase nest here?
         # selective connectivity clustering between exemplars, extrapolated to their node_
 
 def sum_G_(G, node_, fc=0):
@@ -241,7 +243,7 @@ if __name__ == "__main__":
         G_ = []
         for edge in frame.node_:
             comb_altG_(edge.node_)
-            cluster_C_(edge)  # no cluster_C_ in vect_edge
+            cluster_C_(edge, nest=0)  # no cluster_C_ in vect_edge
             G_ += edge.node_  # unpack edge, or keep if connectivity cluster, or in flat blob altG_?
         frame.node_ = G_
         cross_comp(frame)  # calls connectivity clustering

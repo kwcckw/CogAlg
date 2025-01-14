@@ -47,7 +47,7 @@ med_cost = 10
 
 class CLay(CBase):  # flat layer if derivation hierarchy
     name = "lay"
-    def __init__(l, root, Et, node_, link_, m_d_t, derH):
+    def __init__(l, root, Et, node_, link_, m_d_t):
         super().__init__()
         l.root = root   # higher node or link
         l.Et = Et
@@ -107,7 +107,7 @@ class CLay(CBase):  # flat layer if derivation hierarchy
         Et = np.array([M, D, n, (_lay.Et[3] + lay.Et[3]) / 2])
         if root: root.Et += Et
 
-        return CLay(Et=Et, root=root, node_=node_, link_=link_, m_d_t=m_d_t, derH=[])  # no comp_derH yet
+        return CLay(Et=Et, root=root, node_=node_, link_=link_, m_d_t=m_d_t)  # no comp_derH yet
 
     # not used:
     def sort_H(He, fd):  # re-assign olp and form priority indices for comp_tree, if selective and aligned
@@ -172,7 +172,6 @@ def vectorize_root(frame):
         if not blob.sign and blob.G > ave_G * blob.root.olp:
             edge = slice_edge(blob)
             if edge.G * (len(edge.P_)-1) > ave:  # eval PP
-                frame.node_+= [edge]  # separate blob_
                 comp_slice(edge)
                 if edge.Et[0] * (len(edge.node_)-1)*(edge.rng+1) > ave:
                     lat = np.array([.0,.0,.0,.0,.0,np.zeros(2)],dtype=object); vert = np.array([np.zeros(6), np.zeros(6)])
@@ -185,10 +184,10 @@ def vectorize_root(frame):
                         P_,link_,vert,lat, A,S,box,[y,x],Et = PP[1:]  # PPt
                         if Et[0] > ave:  # no altG until cross-comp
                             G = CG(root=edge, fd_=[0], Et=Et, node_=P_, link_=[], vert=vert, latuple=lat, box=box, yx=np.array([y,x]))
-                            y0,x0,yn,xn = box; PP.aRad = np.hypot((yn-y0)/2,(xn-x0)/2)  # approx
+                            y0,x0,yn,xn = box; G.aRad = np.hypot((yn-y0)/2,(xn-x0)/2)  # approx
                             G_ += [G]
                     if len(G_) > ave_L:
-                        edge.node_ = G_
+                        frame.node_+= [edge]; edge.node_ = G_  # separate blob_  (prevent edge with node_ = PP)
                         cluster_edge(edge)  # add altG: summed converted adj_blobs of converted edge blob?
 
 def val_(Et, _Et=[], fo=0, coef=1, fd=1):  # compute projected match in mfork or borrowed match in dfork
@@ -239,7 +238,7 @@ def cluster_edge(edge):  # edge is CG but not a connectivity cluster, just a set
             cluster_PP_(N_, fd=0)
         if val_(Et, _Et=Et, fo=1) > 0:  # likely not from the same links
             for L in L_:
-                L.extH, L.root, L.mL_t, L.rimt, L.aRad, L.visited_ = [], edge, [[],[]], [[],[]], 0, [L]
+                L.extH, L.root, L.mL_t, L.rimt, L.aRad, L.visited_, L.node_, L.link_ = [], edge, [[],[]], [[],[]], 0, [L], L.nodet, []  # assign L.node_ and link_ for simplicity, else we need to check CG or CL later
             # comp dPP_:
             lN_,lL_,dEt = comp_link_(L_,Et)
             if val_(dEt, fo=1) > 0:
@@ -438,14 +437,18 @@ def sum2graph(root, grapht, fd, minL=0, maxL=None, nest=0):  # sum node and link
         for fork in graph.m_d_t: root.m_d_t[fd] += fork
     else:
         Q[:] = [graph]; altQ[:] = []  # reset both forks
-        root.m_d_t = np.sum(graph.derH[-1].m_d_t, axis=0)
+        v_t = np.array([np.zeros(2), np.zeros(6), np.zeros(6)],dtype=object)  # m_t or d_t
+        f_t = np.sum(graph.derH[-1].m_d_t, axis=0)  # current fork's m_t or d_t
+        root.m_d_t = [v_t,f_t] if fd else [f_t,v_t]
+        # how about root.derH? If we didn't add root.derH here, it's always goes into reset section here
 
     feedback(root)  # recursive root.root.derH.add_fork(graph.derH)
     return graph
 
 def feedback(node):  # propagate node.derH to higher roots
-    fd_ = node.fd_
+ 
     while node.root:
+        fd_ = node.fd_  # this fd_ should be per node?
         root = node.root
         for i, (fd, lay) in enumerate(zip_longest(fd_, root.derH, fillvalue=None)):  # top-down, fds are assigned by root levels
             if fd is not None:  # fd_ maps to derH
@@ -481,7 +484,7 @@ def add_H(H, h, root, rev=0, fc=0):
         if lay:
             if Lay: Lay.add_lay(lay,rev=rev,fc=fc)
             else:   H += [lay.copy_(root=root,rev=rev,fc=fc)]
-        root.Et += lay.Et
+            root.Et += lay.Et  # if lay is empty, we should skip Et accumulation
 
 def norm_H(H, n):
     for lay in H:
@@ -496,6 +499,7 @@ def frame2CG(G, **kwargs):
 
 def blob2CG(G, **kwargs):
     # node_, Et stays the same:
+    G.fd_ = []
     G.fd = kwargs.get('fd', 0)  # 1 if cluster of Ls | lGs?
     G.root = kwargs.get('root')  # may extend to list in cluster_N_, same nodes may be in multiple dist layers
     G.link_ = []
