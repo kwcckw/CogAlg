@@ -28,7 +28,7 @@ def cross_comp(root):  # breadth-first node_,link_ cross-comp, connect.clusterin
         # dfork/ all dist layers:
         if val_(Et, _Et=Et, fo=1) > 0:  # same root for L_, root.link_ was compared in root-forming for alt clustering
             for L in L_:
-                L.extH, L.root, L.mL_t, L.rimt, L.aRad, L.visited_, L.node_, L.link_ = [],root, [[],[]], [[],[]], 0,[L],[],[]
+                L.extH, L.root, L.mL_t, L.rimt, L.aRad, L.visited_, L.node_, L.link_, L.depth, L.fd_ = [],root, [[],[]], [[],[]], 0,[L],[],[],0, copy(L.nodet[0].fd_)  # we need depth in L when it becomes node
             lN_,lL_,dEt = comp_link_(L_,Et)
             if val_(dEt, _Et=Et, fo=1) > 0:
                 root.derH[-1].add_lay( sum_H(lL_,root))  # mlay += dlay
@@ -100,7 +100,7 @@ def cluster_C_(graph):
     def sum_centroid(dnode_, C=None):  # sum|subtract and average Rim nodes
 
         if C is None:
-            C,A = CG(),CG(); sign=1  # add if new, else subtract
+            C,A = CG(node_ = dnode_),CG(); sign=1  # add if new, else subtract  (dnode_ is node_ when C is None)
             C.M,C.L, A.M,A.L = 0,0,0,0  # centroid setattr
         else:
             A = C.altG, sign=0
@@ -152,6 +152,7 @@ def cluster_C_(graph):
             dN_,M,dM = [], 0,0  # changed nodes and values
             for _N in C.node_:
                 m = comp_C(C,_N)  # Et if proximity-weighted overlap?
+                if _N.m == 0: _N.m = m  # we miss out this assignment
                 vm = m - ave  # deviation
                 if vm > 0:
                     M += m; dM += m - _N.m  # kept _N.m adjustment
@@ -189,7 +190,7 @@ def cluster_C_(graph):
         cross_comp(graph)
         # selective connectivity clustering between exemplars, extrapolated to their node_
 
-def sum_G_(G, node_, s, fc=0):
+def sum_G_(G, node_, s=1, fc=0):
     for n in node_:
         G.latuple += n.latuple * s
         G.vert = G.vert + n.vert*s if np.any(G.vert) else deepcopy(n.vert) * s
