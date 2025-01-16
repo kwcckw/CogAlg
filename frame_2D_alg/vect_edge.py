@@ -219,7 +219,7 @@ def cluster_edge(edge):  # edge is CG but not a connectivity cluster, just a set
                 G_ += [sum2graph(edge, [node_,link_,et], fd)]
             else:
                 for n in node_:
-                    n.depth +=1; G_ += [n]  # unpack weak Gts
+                    G_ += [n]  # unpack weak Gts
         if fd: edge.node_ = G_
         else:  edge.link_ = G_
     # comp PP_:
@@ -422,6 +422,8 @@ def sum2graph(root, grapht, fd, minL=0, maxL=None):  # sum node and link params 
                 if mG not in altG:
                     mG.altG += [graph]  # cross-comp|sum complete altG before next agg+ cross-comp
                     altG += [mG]
+    # we need propagate feedback to higher roots because we form higher derH first, we can skip the propagation if we form higher derH later? 
+    # Which mean root.derH will be added with deepest derH, and followed by higher derH after each higher derH are added with deeper feedback?
     # direct fb:
     Q, altQ = (root.link_, root.node_) if fd else (root.node_, root.link_)
     if len(root.derH)==2 or fd:  # derH was added by prior direct fb
@@ -478,7 +480,7 @@ def norm_H(H, n):
 
 def L2N(link_,root):
     for L in link_:
-        L.root=root; L.fd_=copy(L.nodet[0].fd_); L.mL_t,L.rimt = [[],[]],[[],[]]; L.aRad,L.depth = 0,0; L.visited_,L.node_,L.link_,L.extH = [],[],[],[]
+        L.root=root; L.fd_=copy(L.nodet[0].fd_); L.mL_t,L.rimt = [[],[]],[[],[]]; L.aRad  = 0; L.visited_,L.node_,L.link_,L.extH = [],[],[],[]
 
 def frame2CG(G, **kwargs):
     blob2CG(G, **kwargs)

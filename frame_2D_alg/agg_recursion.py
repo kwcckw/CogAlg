@@ -18,7 +18,7 @@ Each agg+ cycle forms higher-composition complemented graphs G.altG_ in cluster_
 cross_comp -> cluster_N_ -> cluster_C -> cross_comp...
 '''
 
-def cross_comp(root, deep):  # breadth-first node_,link_ cross-comp, connect.clustering, recursion
+def cross_comp(root, deep=[]):  # breadth-first node_,link_ cross-comp, connect.clustering, recursion
 
     N_,L_,Et = comp_node_(root.node_[:-1] if deep else root.node_)  # cross-comp exemplars, extrapolate to their node_s
     # mfork
@@ -37,8 +37,8 @@ def cross_comp(root, deep):  # breadth-first node_,link_ cross-comp, connect.clu
         # else feedback of mlay?
         if len(plL_) > ave_L:
             cluster_N_(root, plL_,fd=1)  # form altGs for cluster_C_, no new links between dist-seg Gs
-
-        comb_altG_(G_)  # combine node contour: altG_ or neg links, by sum, cross-comp -> CG altG
+        # should be root.node_ here, G_ doesn't exist?
+        comb_altG_(root.node_, deep)  # combine node contour: altG_ or neg links, by sum, cross-comp -> CG altG
         cluster_C_(root,deep)  # -> (G,altG) exemplars, reinforced by altG surround borrow?
         # mfork only, dfork is possible but secondary, no ddfork
 
@@ -95,7 +95,7 @@ Hierarchical clustering should alternate between two phases: generative via conn
  So connectivity clustering is a generative learning phase, forming new derivatives and structured composition levels, 
  while centroid clustering is a compressive phase, reducing multiple similar comparands to a single exemplar. '''
 
-def cluster_C_(graph, deep=0):  # length of top-nested part of G.node_
+def cluster_C_(graph, deep=[]):  # length of top-nested part of G.node_
 
     def sum_C(dnode_, C=None):  # sum|subtract and average Rim nodes
 
@@ -152,7 +152,7 @@ def cluster_C_(graph, deep=0):  # length of top-nested part of G.node_
                 m = comp_C(C,_N)  # Et if proximity-weighted overlap?
                 vm = m - ave
                 if vm > 0:
-                    M += m; dM += m - _N.m; N.m = m  # kept _N.m adjustment
+                    M += m; dM += m - _N.m; _N.m = m  # kept _N.m adjustment (typo?)
                 else:  # remove _N from C
                     _N.fin=0; _N.m=0; dN_+=[_N]; dM += -vm  # dM += abs m deviation
             if dM > ave and M > ave:  # loop update, break if low reform val
@@ -178,7 +178,7 @@ def cluster_C_(graph, deep=0):  # length of top-nested part of G.node_
                 centroid_cluster(N, G_, graph)  # extend from N.rim, G_ += C unless unpacked
             else:
                 break  # the rest of N_ M is lower
-    deep = [n for n in N_ if not n.fin] + [deep]  # deep node_ if any
+    deep = [n for n in N_ if not n.fin] + deep  # deep node_ if any
     graph.node_ = G_ + [deep]  # G_[-1] may be unlcustered Ns, nested if multiple agg+ / node_
     if len(G_) > ave_L:
         cross_comp(graph, deep)
@@ -198,9 +198,9 @@ def sum_G_(G, node_, s=1, fc=0):
             if n.extH: add_H(G.extH, n.extH, root=G, rev = s==-1)  # empty in centroid
             G.box = extend_box( G.box, n.box)  # extended per separate node_ in centroid
 
-def comb_altG_(G_):  # combine contour G.altG_ into altG (node_ defined by root=G), for agg+ cross-comp
+def comb_altG_(G_, deep=[]):  # combine contour G.altG_ into altG (node_ defined by root=G), for agg+ cross-comp
 
-    for G in G_:
+    for G in (G_[:-1] if deep else G_):
         if G.altG:
             if isinstance(G.altG, list):
                 sum_G_(G.altG[0], [a for a in G.altG[1:]])
@@ -232,10 +232,14 @@ if __name__ == "__main__":
     intra_blob_root(frame)
     vectorize_root(frame)
     if frame.node_:  # converted edges
-        G_ = []
+        G_ = []; deep = []
         for edge in frame.node_:
             comb_altG_(edge.node_)
             cluster_C_(edge)  # no cluster_C_ in vect_edge
-            G_ += edge.node_  # unpack edge, or keep if connectivity cluster, or in flat blob altG_?
-        frame.node_ = G_
-        cross_comp(frame)  # calls connectivity clustering
+            if isinstance(edge.node_[-1], list):
+                deep += edge.node_[-1]
+                G_ += edge.node_[:-1]  # unpack edge, or keep if connectivity cluster, or in flat blob altG_?
+            else:
+                G_ += edge.node_
+        frame.node_ = G_ + deep
+        cross_comp(frame, deep)  # calls connectivity clustering
