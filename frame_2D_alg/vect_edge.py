@@ -199,7 +199,7 @@ def val_(Et, _Et=[], fo=0, coef=1, fd=1):  # compute projected match in mfork or
 
 def cluster_edge(edge):  # edge is CG but not a connectivity cluster, just a set of clusters in >ave G blob, unpack by default?
 
-    def cluster_PP_(N_, fd):
+    def cluster_PP_(N_, fb_t, fd):
         G_ = []
         while N_:  # flood fill
             node_,link_, et = [],[], np.zeros(4)
@@ -216,7 +216,8 @@ def cluster_edge(edge):  # edge is CG but not a connectivity cluster, just a set
                             link_ += [L]; et += L.derH[0].Et
                 _eN_ = {*eN_}
             if val_(et) > 0:
-                G_ += [sum2graph(edge, [node_,link_,et], fd)]
+                G = [sum2graph(edge, [node_,link_,et], fd)]
+                fb_t[fd] += G; G_ += [G]
             else:
                 for n in node_: G_ += [n]  # unpack weak Gts
         if fd: edge.node_ = G_
@@ -225,16 +226,26 @@ def cluster_edge(edge):  # edge is CG but not a connectivity cluster, just a set
     N_,L_,Et = comp_node_(edge.node_)
     edge.link_ += L_
     if val_(Et, fo=1) > 0:  # cancel by borrowing d?
+        fb_t = [[],[]]
         edge.derH += [sum_H(L_,edge)]  # += mlay
         if len(N_) > ave_L:
-            cluster_PP_(N_, fd=0)
+            cluster_PP_(N_, fb_t, fd=0)
         if val_(Et, _Et=Et, fo=1) > 0:  # likely not from the same links
             L2N(L_,edge)  # comp dPP_:
             lN_,lL_,dEt = comp_link_(L_,Et)
             if val_(dEt, fo=1) > 0:
-                edge.derH[-1].add_lay( sum_H(lL_,edge))  # mlay += dlay
+                edge.derH[-1].add_lay(sum_H(lL_,edge))  # mlay += dlay
                 if len(lN_) > ave_L:
-                    cluster_PP_(lN_, fd=1)
+                    cluster_PP_(lN_, fb_t, fd=1)
+                    
+        DerH = []
+        for fd, fb_ in enumerate(fb_t):
+            if not fb_: continue
+            derH = sum_H(fb_, root=edge, fmerge=0)
+            if fd: add_H(DerH, derH, edge)  # add aligned dlayers to mlayers
+            else:  DerH += derH             # append flat mlayers    
+        edge.derH += DerH  # no deeper layers in cluster_Edge
+
 
 def comp_node_(_N_):  # rng+ forms layer of rim and extH per N, appends N_,L_,Et, ~ graph CNN without backprop
 
@@ -421,10 +432,6 @@ def sum2graph(root, grapht, fd, minL=0, maxL=None):  # sum node and link params 
                 if mG not in altG:
                     mG.altG += [graph]  # cross-comp|sum complete altG before next agg+ cross-comp
                     altG += [mG]
-
-    root.fback_t[fd] += [graph]
-    if len(root.link_ if fd else root.node_) == sum([len(g.node_) for g in root.fback_t[fd]]):
-        feedback(root, fd)  # recursive root.root.derH.add_fork(graph.derH)
 
     return graph
 

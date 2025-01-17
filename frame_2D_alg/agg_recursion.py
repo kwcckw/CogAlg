@@ -30,18 +30,28 @@ def cross_comp(root, deep=[]):  # breadth-first node_,link_ cross-comp, connect 
             L2N(L_,root)
             lN_,lL_,dEt = comp_link_(L_,Et)
             if val_(dEt, _Et=Et, fo=1) > 0:
-                lay.add_lay( sum_H(L_, root))  # mlay += dlay
+                lay.add_lay(sum_H(lL_, root))  # mlay += dlay
                 plL_ = {l for n in lN_ for l,_ in zrim(n, fd=1)}
-        root.derH += [lay]
         # buffered feedback per new G, not current node:
-        if len(pL_) > ave_L: cluster_N_(root, pL_, fd=0)  # cluster distance segments # else feedback of mlay?
-        if len(plL_)> ave_L: cluster_N_(root, plL_,fd=1)  # form altGs for cluster_C_, no new links between dist-seg Gs
+        fb_t = [[], []]
+        if len(pL_) > ave_L: cluster_N_(root, pL_, fb_t, fd=0)  # cluster distance segments # else feedback of mlay?
+        if len(plL_)> ave_L: cluster_N_(root, plL_,fb_t, fd=1)  # form altGs for cluster_C_, no new links between dist-seg Gs
 
         comb_altG_(root.node_)  # combine node contour: altG_ or neg links, by sum, cross-comp -> CG altG
         cluster_C_(root,deep)  # -> (G,altG) exemplars, reinforced by altG surround borrow?
         # mfork only, dfork is possible but secondary, no ddfork
-
-def cluster_N_(root, L_, fd):  # top-down segment L_ by >ave ratio of L.dists
+        
+        # after cluster_C_, where graph.derH is already added with deeper feedback
+        DerH = []
+        for fd, fb_ in enumerate(fb_t):
+            if not fb_: continue
+            derH = sum_H(fb_, root=root, fmerge=0)
+            if fd: add_H(DerH, derH, root)  # add aligned dlayers to mlayers
+            else:  DerH += derH             # append flat mlayers    
+        root.derH = [lay] + DerH + root.derH
+    
+    
+def cluster_N_(root, L_, fb_t, fd):  # top-down segment L_ by >ave ratio of L.dists
 
     L_ = sorted(L_, key=lambda x: x.dist)  # shorter links first
     min_dist = 0
@@ -72,7 +82,8 @@ def cluster_N_(root, L_, fd):  # top-down segment L_ by >ave ratio of L.dists
                                 link_+=[L]; et+=L.Et
                 _eN_ = {*eN_}
             if val_(et) > 0:  # cluster node roots:
-                G_ += [sum2graph(root, [list({*node_}),list({*link_}), et], fd, min_dist, max_dist)]
+                G = sum2graph(root, [list({*node_}),list({*link_}), et], fd, min_dist, max_dist)
+                fb_t[fd] += [G]; G_ += [G]  # graphs across different dist segment will be packed into a same fb_
             else:  # unpack
                 for n in {*node_}:
                     n.depth += 1; G_ += [n]
@@ -81,6 +92,8 @@ def cluster_N_(root, L_, fd):  # top-down segment L_ by >ave ratio of L.dists
         if L_:
             min_dist = max_dist  # next loop connects current-dist clusters via longer links
         else:
+            if fd: root.link_ = G_
+            else:  root.node_ = G_   
             break
 ''' 
 Hierarchical clustering should alternate between two phases: generative via connectivity and compressive via centroid.
@@ -102,7 +115,7 @@ def cluster_C_(graph, deep=[]):  # length of top-nested part of G.node_
             C,A = CG(node_=dnode_),CG(); sign=1  # add if new, else subtract
             C.M,C.L, A.M,A.L = 0,0,0,0  # centroid setattr
         else:
-            A = C.altG, sign=0
+            A = C.altG; sign=0
             C.node_ = [n for n in C.node_ if n.fin]  # not in -ve dnode_, may add +ve later
 
         sum_G_(C, dnode_, sign, fc=1)  # no extend_box, sum extH
@@ -177,8 +190,10 @@ def cluster_C_(graph, deep=[]):  # length of top-nested part of G.node_
                 centroid_cluster(N, G_, graph)  # extend from N.rim, G_ += C unless unpacked
             else:
                 break  # the rest of N_ M is lower
-    deep = [n for n in N_ if not n.fin] + deep  # deep node_ if any
-    graph.node_ = G_ + [deep]  # G_[-1] may be unlcustered Ns, nested if multiple agg+ / node_
+    rdeep = deep
+    while rdeep and isinstance(rdeep[-1], list): rdeep = rdeep[-1]
+    else:                                        rdeep += [[n for n in N_ if not n.fin]]  # # deep node_ if any (with additional nesting in deep[-1], deeper nesting is in deep[-1][-1][-1]...)
+    graph.node_ = G_ + deep  # G_[-1] may be unlcustered Ns, nested if multiple agg+ / node_
     if len(G_) > ave_L:
         cross_comp(graph, deep)
         # selective connectivity clustering in G_, exclude unpacked nodes in node_[-1] if deep
