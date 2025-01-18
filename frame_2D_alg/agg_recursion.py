@@ -38,10 +38,12 @@ def cross_comp(root, deep=[]):  # breadth-first node_,link_ cross-comp, connect 
 
         comb_altG_(root.node_)  # combine node contour: altG_ or neg links, by sum, cross-comp -> CG altG
         cluster_C_(root,deep)  # -> (G,altG) exemplars, reinforced by altG surround borrow, mfork only, dfork is secondary, no ddfork
-        if fn_:
-            H = sum_H(root.node_, root=root, fmerge=0)  # sum mlays, may be added by agg++ in cluster_C_
-            if fl_: add_H(H, sum_H(root.link_,root=root,fmerge=0), root)  # mlays += dlays
-            root.derH += H
+        if fn_:  # for base m fork, root.node_'s derH is always empty, so there will be no feedback?
+            node_ = root.node_[:-1] if isinstance(root.node_[-1], list) else root.node_
+            if node_:  # skip if there's no C_ after cluster_C_
+                H = sum_H(node_, root=root, fmerge=0)  # sum mlays, may be added by agg++ in cluster_C_
+                if fl_:  add_H(H, sum_H(root.link_,root=root,fmerge=0), root)  # mlays += dlays
+                root.derH += H
 
 def cluster_N_(root, L_, fd):  # top-down segment L_ by >ave ratio of L.dists
 
@@ -85,6 +87,7 @@ def cluster_N_(root, L_, fd):  # top-down segment L_ by >ave ratio of L.dists
         else:
             if fd: root.node_ = G_ + [deep_]  # nodes may have different nesting, check len derH instead?
             else:  root.link_ = G_ + [deep_]
+            break  # we need to break here
 ''' 
 Hierarchical clustering should alternate between two phases: generative via connectivity and compressive via centroid.
 
@@ -109,7 +112,7 @@ def cluster_C_(graph, deep=[]):  # length of top-nested part of G.node_
             C.node_ = [n for n in C.node_ if n.fin]  # not in -ve dnode_, may add +ve later
 
         sum_G_(C, dnode_, sign, fc=1)  # no extend_box, sum extH
-        sum_G_(A, [n.altG for n in dnode_ if n.altG], sign, fc=1)
+        sum_G_(A, [n.altG for n in dnode_ if n.altG], sign, fc=0)  # fc should be zero here? Their alt doesn't have L and m
         k = len(dnode_) + 1-sign
         for n in C, A:  # get averages
             n.Et/=k; n.latuple/=k; n.vert/=k; n.aRad/=k; n.yx /= k
@@ -227,6 +230,23 @@ def comb_altG_(G_):  # combine contour G.altG_ into altG (node_ defined by root=
                 altG.derH = sum_H(altG.link_, altG, fmerge=0)   # sum link derHs
                 G.altG = altG
 
+# merge same depth's deep recursively
+def merge_deep(Deep, deep):
+    
+    Ddeep = []
+    if Deep and isinstance(Deep[-1], list):
+        Ddeep = Deep[-1]; Deep[:] = Deep[:-1]
+        
+    ddeep = []
+    if deep and isinstance(deep[-1], list):
+        ddeep = deep[-1]; deep[:] = deep[:-1]
+        
+    Deep += deep
+    if Ddeep and ddeep:
+        merge_deep(Ddeep, ddeep) 
+        Deep += [Ddeep]
+
+
 if __name__ == "__main__":
     image_file = './images/raccoon_eye.jpeg'
     image = imread(image_file)
@@ -239,7 +259,7 @@ if __name__ == "__main__":
             comb_altG_(edge.node_)
             cluster_C_(edge)  # no cluster_C_ in vect_edge
             if isinstance(edge.node_[-1], list):
-                G_ += edge.node_[:-1]; deep += edge.node_[-1]  # unpack edge
+                G_ += edge.node_[:-1]; merge_deep(deep, edge.node_[-1]) # unpack edge
             else: G_ += edge.node_
         if deep: G_ += [deep]
         frame.node_ = G_
