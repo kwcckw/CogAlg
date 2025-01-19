@@ -40,6 +40,7 @@ def cross_comp(root):  # breadth-first node_,link_ cross-comp, connect clusterin
         if fl_: cluster_N_(root, plL_,fd=1)  # form altGs for cluster_C_, no new links between dist-seg Gs
 
         comb_altG_(root.node_)  # combine node contour: altG_ or neg links, by sum, cross-comp -> CG altG
+        # if fn and fl are false, there's no need to call cluster_C_? Since existing nodes' derH number won't be the same with graph.derH
         cluster_C_(root)  #-> mfork G,altG exemplars, + altG surround borrow? dfork is secondary, no ddfork
         if fn_:
             H = sum_H(root.node_, root=root, fmerge=0)  # sum mlays added by agg+ in cluster_C_, same root
@@ -210,7 +211,7 @@ def comb_altG_(G_):  # combine contour G.altG_ into altG (node_ defined by root=
         if G.altG:
             if isinstance(G.altG, list):
                 sum_G_(G.altG[0], [a for a in G.altG[1:]])
-                G.altG = CG(root=G, node_= G.altG)  # was G.altG_
+                G.altG = CG(root=G, node_= G.altG); G.altG.m=0; G.altG.L = len(G.altG.node_)  # was G.altG_
                 if val_(G.altG.Et, _Et=G.Et):  # alt D * G rM
                     cross_comp(G.altG)
         else:  # sum neg links
@@ -221,7 +222,7 @@ def comb_altG_(G_):  # combine contour G.altG_ into altG (node_ defined by root=
                     node_ += [n for n in link.nodet if n not in node_]
                     Et += link.Et
             if val_(Et, _Et=G.Et, coef=10) > 0:  # min sum neg links
-                altG = CG(root=G, Et=Et, node_=node_, link_=link_)  # other attrs are not significant
+                altG = CG(root=G, Et=Et, node_=node_, link_=link_); altG.m=0; altG.L = len(node_)  # other attrs are not significant
                 altG.derH = sum_H(altG.link_, altG, fmerge=0)   # sum link derHs
                 G.altG = altG
 
@@ -238,4 +239,6 @@ if __name__ == "__main__":
             cluster_C_(edge)  # no cluster_C_ in vect_edge
             G_ += edge.node_  # unpack edges
         frame.node_ = G_
+        # feedback from edge derH to frame derH here ? Because edge may have added derH from cluster_C_ above
+        add_H(frame.derH, sum_H(frame.node_, frame, fmerge=0), frame)     
         cross_comp(frame)  # calls connectivity clustering

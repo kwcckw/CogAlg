@@ -182,6 +182,7 @@ def vectorize_root(frame):
                     if len(G_) > ave_L:
                         frame.node_ += [edge]; edge.node_ = G_
                         cluster_edge(edge)  # add altG: summed converted adj_blobs of converted edge blob?
+    if frame.node_: frame.derH = [sum_H(frame.node_,frame)]  # we need to add derH from edge to frame.derH too
 
 def val_(Et, _Et=[], fo=0, coef=1, fd=1):
 
@@ -408,7 +409,7 @@ def sum2graph(root, grapht, fd, minL=0, maxL=None):  # sum node and link params 
         graph.Et += N.Et * icoef ** 2  # deeper, lower weight
         N.root = graph
     graph.node_= N_  # nodes or roots, link_ is still current-dist links only?
-    graph.derH = [sum_H(link_,graph)]  # sum, comb link derHs
+    graph.derH = sum_H(link_,graph, fmerge=0)  # sum, comb link derHs  (here we need fmerge == 0 now? Else graph.derH always have single layer only, while deeper layer should get more layers here)
     L = len(node_)
     yx = np.divide(yx,L)
     dy,dx = np.divide( np.sum([ np.abs(yx-_yx) for _yx in yx_], axis=0), L)
