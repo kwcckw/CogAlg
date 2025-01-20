@@ -43,7 +43,7 @@ def cross_comp(root):  # breadth-first node_,link_ cross-comp, connect clusterin
                 if len(plL_) > ave_L:
                     cluster_N_(root, plL_, fd=1)
                     # form altGs for cluster_C_, no new links between dist-seg Gs
-        root.derH = [lay]+root.derH
+        root.derH += [lay]  # deeper lay should be appended later (in cluster_C_ below), so we just need to append here?
         comb_altG_(root.node_)  # combine node contour: altG_ or neg links, by sum, cross-comp -> CG altG
         # root.derH +=lay / agg+:
         cluster_C_(root)  # -> mfork G,altG exemplars, + altG surround borrow?
@@ -108,14 +108,14 @@ def cluster_C_(graph):
     def sum_C(dnode_, C=None):  # sum|subtract and average Rim nodes
 
         if C is None:
-            C,A = CG(node_=dnode_),CG(); sign=1  # add if new, else subtract
+            C,A = CG(node_=dnode_),CG(); C.fin = 1; sign=1  # add if new, else subtract (init C.fin here)
             C.M,C.L, A.M,A.L = 0,0,0,0  # centroid setattr
         else:
             A = C.altG; sign=0
             C.node_ = [n for n in C.node_ if n.fin]  # not in -ve dnode_, may add +ve later
 
         sum_G_(C, dnode_, sign, fc=1)  # no extend_box, sum extH
-        sum_G_(A, [n.altG for n in dnode_ if n.altG], sign, fc=1)
+        sum_G_(A, [n.altG for n in dnode_ if n.altG], sign, fc=0)
         k = len(dnode_) + 1-sign
         for n in C, A:  # get averages
             n.Et/=k; n.latuple/=k; n.vert/=k; n.aRad/=k; n.yx /= k
@@ -176,8 +176,8 @@ def cluster_C_(graph):
                         n.m = 0; n.fin = 0
                 break
     # get representative centroids of complemented Gs: mCore + dContour, initially in unpacked edges
-    lH = len(graph.node_[0].derH)  # same in all clustered Ns
-    N_ = sorted([N for N in graph.node_ if len(N.derH)==lH], key=lambda n: n.Et[0], reverse=True)
+    # higher graph from cluster_N shouldn't have fin since only recycled C has fin
+    N_ = sorted([N for N in graph.node_ if not hasattr(N, 'fin')], key=lambda n: n.Et[0], reverse=True)
     C_ = []
     for N in N_:
         N.sign, N.m, N.fin = 1,0,0  # setattr C update sign, inclusion val, C inclusion flag
@@ -224,7 +224,7 @@ def comb_altG_(G_):  # combine contour G.altG_ into altG (node_ defined by root=
                     node_ += [n for n in link.nodet if n not in node_]
                     Et += link.Et
             if val_(Et, _Et=G.Et, coef=10) > 0:  # min sum neg links
-                altG = CG(root=G, Et=Et, node_=node_, link_=link_); G.altG.m=0  # other attrs are not significant
+                altG = CG(root=G, Et=Et, node_=node_, link_=link_); altG.m=0  # other attrs are not significant
                 altG.derH = sum_H(altG.link_, altG, fmerge=0)   # sum link derHs
                 G.altG = altG
 
