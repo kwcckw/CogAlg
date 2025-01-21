@@ -44,7 +44,7 @@ def cross_comp(root):  # breadth-first node_,link_ cross-comp, connect clusterin
                     cluster_N_(root, plL_, fd=1)
                     # form altGs for cluster_C_, no new links between dist-seg Gs
         root.derH += [lay]
-        root.depth += L_[0].nodet[0].depth * 2  # lay = ders of all lower lays
+        # root.depth = L_[0].nodet[0].depth * 2  # lay = ders of all lower lays  (should be = instead of +=?)  (we don't know if L's nodet forms higher graph? So we need to assign this in sum2graph?)
         comb_altG_(root.node_)  # combine node contour: altG_ or neg links, by sum, cross-comp -> CG altG
         cluster_C_(root)  # -> mfork G,altG exemplars, + altG surround borrow, root.derH +=lay / agg+?
         # no dfork cluster_C_, no ddfork
@@ -80,7 +80,7 @@ def cluster_N_(root, L_, fd):  # top-down segment L_ by >ave ratio of L.dists
                                 link_+=[L]; et+=L.Et
                 _eN_ = {*eN_}
             if val_(et) > 0:  # cluster node roots:
-                G_ = [sum2graph(root, [list({*node_}),list({*link_}), et], fd, min_dist, max_dist)]
+                G_ += [sum2graph(root, [list({*node_}),list({*link_}), et], fd, min_dist, max_dist)]  # should be += here
             else:
                 G_ += node_  # unpack
         # longer links:
@@ -176,8 +176,8 @@ def cluster_C_(graph):
                         n.m = 0; n.fin = 0
                 break
     # get exemplar centroids of the deepest complemented Gs: mCore + dContour, initially unpacked edges
-    max_depth = graph.node_[0].depth  # len derH summed across node_ H
-    N_ = sorted([N for N in graph.node_ if N.depth==max_depth], key=lambda n: n.Et[0], reverse=True)
+    # max_depth = max([n.depth for n in graph.node_])  # len derH summed across node_ H
+    N_ = sorted([N for N in graph.node_ if N.depth==graph.depth], key=lambda n: n.Et[0], reverse=True)
     C_ = []
     for N in N_:
         N.sign, N.m, N.fin = 1,0,0  # setattr C update sign, inclusion val, C inclusion flag

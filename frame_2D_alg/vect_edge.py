@@ -412,7 +412,7 @@ def sum2graph(root, grapht, fd, minL=0, maxL=None):  # sum node and link params 
         N.root = graph
     graph.node_= N_  # nodes or roots, link_ is still current-dist links only?
     graph.derH = [sum_H(link_,graph)]  # sum, comb link derHs
-    graph.depth = link_[0].nodet[0].depth *2  # len unpacked derH: lay = ders of all lower lays
+    root.depth = graph.depth = link_[0].nodet[0].depth *2  # len unpacked derH: lay = ders of all lower lays
     L = len(node_)
     yx = np.divide(yx,L)
     dy,dx = np.divide( np.sum([ np.abs(yx-_yx) for _yx in yx_], axis=0), L)
@@ -457,7 +457,7 @@ def norm_H(H, n):
 
 def L2N(link_,root):
     for L in link_:
-        L.root=root; L.fd_=copy(L.nodet[0].fd_); L.mL_t,L.rimt = [[],[]],[[],[]]; L.aRad=0; L.visited_,L.node_,L.link_,L.extH = [],[],[],[]
+        L.root=root; L.fd_=copy(L.nodet[0].fd_); L.mL_t,L.rimt = [[],[]],[[],[]]; L.aRad=0; L.visited_,L.node_,L.link_,L.extH = [],[],[],[]; L.depth = L.nodet[0].depth*2
 
 def frame2G(G, **kwargs):
     blob2G(G, **kwargs)
@@ -480,6 +480,7 @@ def blob2G(G, **kwargs):
     G.maxL = 0  # nesting in nodes
     G.aRad = 0  # average distance between graph center and node center
     G.altG = []  # or altG? adjacent (contour) gap+overlap alt-fork graphs, converted to CG
+    G.depth = 1
     return G
 
 if __name__ == "__main__":
