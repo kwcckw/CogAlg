@@ -182,7 +182,7 @@ def vectorize_root(frame):
                             G_ += [G]
                     if len(G_) > ave_L:
                         frame.node_ += [edge]; edge.node_ = G_
-                        cluster_edge(edge)
+                        cluster_edge(edge); frame.depth = max(frame.depth, edge.depth)
                         # add altG: converted adj_blobs of converted edge blob?
     frame.derH = [sum_H(frame.node_,frame, fmerge=0)]  # should be single layer
 
@@ -223,13 +223,17 @@ def cluster_edge(edge):  # edge is CG but not a connectivity cluster, just a set
             else:            G_ += node_  # unpack weak Gts
         if fd: edge.link_ = G_
         else:  edge.node_ = G_
+        return G_
+
     # comp PP_:
     N_,L_,Et = comp_node_(edge.node_)
     edge.link_ += L_
     if val_(Et, fo=1) > 0:  # cancel by borrowing d?
+        edge.depth = 1
         lay = sum_H(L_,edge)  # mlay
         if len(N_) > ave_L:
-            cluster_PP_(N_, fd=0)
+            if cluster_PP_(N_, fd=0):
+                edge.depth += 1  # we need to increase depth for edge? Their depth will be eval in cluster_C_ later too
         if val_(Et, _Et=Et, fo=1) > 0:  # likely not from the same links
             L2N(L_,edge)  # comp dPP_:
             lN_,lL_,dEt = comp_link_(L_,Et)
@@ -238,7 +242,7 @@ def cluster_edge(edge):  # edge is CG but not a connectivity cluster, just a set
                 if len(lN_) > ave_L:
                     cluster_PP_(lN_, fd=1)
         # one layer / cluster_edge:
-        edge.derH += [lay]; edge.depth = 1
+        edge.derH += [lay]
 
 def comp_node_(_N_, L=0):  # rng+ forms layer of rim and extH per N, appends N_,L_,Et, ~ graph CNN without backprop
 
