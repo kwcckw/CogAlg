@@ -410,7 +410,7 @@ def sum2graph(root, grapht, fd, minL=0, maxL=None):  # sum node and link params 
         graph.Et += N.Et * icoef ** 2  # deeper, lower weight
         N.root = graph
     graph.node_= N_  # nodes or roots, link_ is still current-dist links only?
-    graph.derH = [sum_H(link_,graph)]  # sum link derH
+    graph.derH = sum_H(link_,graph)  # sum link derH  (bracket is not needed, sum_H returns derH now)
     L = len(node_)
     yx = np.divide(yx,L)
     dy,dx = np.divide( np.sum([ np.abs(yx-_yx) for _yx in yx_], axis=0), L)

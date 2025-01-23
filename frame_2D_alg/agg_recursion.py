@@ -177,18 +177,19 @@ def cluster_C_(root):
                         n.m = 0; n.fin = 0; n_ += [n]
                 break
 
+    # there's a problem with len(root.derH)-1 here
     C_, n_ = [], []; maxH = len(root.derH) - 1   # concat exemplar centroids across top Gs:
     for G in root.node_:  # cluster_C_/ G.node_
-        if len(G.derH) < maxH: continue
-        N_ = [N for N in sorted([N for N in G.node_], key=lambda n: n.Et[0], reverse=True)]
-        for N in N_:
-            N.sign, N.m, N.fin = 1,0,0  # C update sign, inclusion m, inclusion flag
-        for i, N in enumerate(N_):  # replace some nodes by their centroid clusters
-            if not N.fin:  # not in prior C
-                if val_(N.Et, coef=10) > 0:
-                    centroid_cluster(N, C_, n_, root)  # extend from N.rim, C_ += C unless unpacked
-                else:  # the rest of N_ M is lower
-                    break
+        if G.derH and len(G.derH) >= maxH:  # we need if G.derH because if derH is empty, it's a converted PP, and both root and their derH are empty
+            N_ = [N for N in sorted([N for N in G.node_], key=lambda n: n.Et[0], reverse=True)]
+            for N in N_:
+                N.sign, N.m, N.fin = 1,0,0  # C update sign, inclusion m, inclusion flag
+            for i, N in enumerate(N_):  # replace some nodes by their centroid clusters
+                if not N.fin:  # not in prior C
+                    if val_(N.Et, coef=10) > 0:
+                        centroid_cluster(N, C_, n_, root)  # extend from N.rim, C_ += C unless unpacked
+                    else:  # the rest of N_ M is lower
+                        break
     root.node_ = C_ + n_  # or [n_]?
     if len(C_) > ave_L and not root.root:  # frame
         cross_comp(root, C_)  # append derH, cluster_N_ if fin
