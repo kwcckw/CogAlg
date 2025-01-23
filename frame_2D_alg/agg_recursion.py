@@ -106,10 +106,10 @@ Hierarchical clustering should alternate between two phases: generative via conn
 
 def cluster_C_(root):
 
-    def sum_C(dnode_, C=None, depth=0):  # sum|subtract and average Rim nodes
+    def sum_C(dnode_, C=None):  # sum|subtract and average Rim nodes
 
         if C is None:
-            C,A = CG(node_=dnode_, depth=depth),CG(); C.fin = 1; sign=1  # add if new, else subtract (init C.fin here)
+            C,A = CG(node_=dnode_),CG(); C.fin = 1; sign=1  # add if new, else subtract (init C.fin here)
             C.M,C.L, A.M,A.L = 0,0,0,0  # centroid setattr
         else:
             A = C.altG; sign=0
@@ -148,13 +148,13 @@ def cluster_C_(root):
         while med < 3 and _N_:  # fill init C.node_: _Ns connected to N by <=3 mediation degrees
             N_ = []
             for _N in _N_:
-                for link, _ in _N.rim:  # highest composition graph doesn't have rim
+                for link, _ in _N.rim:
                     n = link.nodet[0] if link.nodet[1] is _N else link.nodet[1]
                     if n.fin: continue  # in other C or in C.node_
                     n.fin = 1; N_ += [n]; CN_ += [n]  # no eval
             _N_ = N_  # mediated __Ns
             med += 1
-        C = sum_C(list(set(CN_)),depth=N.depth) # C.node_
+        C = sum_C(list(set(CN_))) # C.node_
         while True:
             dN_, M, dM = [], 0, 0  # pruned nodes and values, or comp all nodes again?
             for _N in C.node_:
@@ -166,7 +166,7 @@ def cluster_C_(root):
                     _N.fin=0; _N.m=0; dN_+=[_N]; dM += -vm  # dM += abs m deviation
             if dM > ave and M > ave:  # loop update, break if low C reforming value
                 if dN_:
-                    C = sum_C(list(set(dN_)),C,depth=N.depth)  # subtract dN_ from C
+                    C = sum_C(list(set(dN_)),C)  # subtract dN_ from C
                 C.M = M  # with changes in kept nodes
             else:  # break
                 if C.M > ave * 10:  # add proximity-weighted overlap?
