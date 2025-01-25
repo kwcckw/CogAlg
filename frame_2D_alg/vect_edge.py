@@ -264,7 +264,7 @@ def comp_node_(_N_, L=0):  # rng+ forms layer of rim and extH per N, appends N_,
             if _nrim & nrim:  # indirectly connected Gs,
                 continue     # no direct match priority?
             # dist vs. radii * induction:
-            GV = val_(_G.Et) + val_(G.Et) + sum([val_(l.Et) for l in _G.extH]) + sum([val_(l.Et) for l in _G.extH])
+            GV = val_(_G.Et) + val_(G.Et) + sum([val_(f.Et) for l in _G.extH for f in l if f]) + sum([val_(f.Et) for l in _G.extH for f in l if f])
             if dist < max_dist * ((radii * icoef**3) * GV):
                 Link = comp_N(_G,G, rn, angle=[dy,dx], dist=dist)
                 L_ += [Link]  # include -ve links
@@ -369,7 +369,7 @@ def comp_N(_N,N, rn, angle=None, dist=None, dir=1):  # dir if fd, Link.derH=dH, 
         # same olp?
     Link = CL(fd=fd, nodet=[_N,N], yx=np.add(_N.yx,N.yx)/2, angle=angle, dist=dist, box=extend_box(N.box,_N.box))
     fork = CLay(root=Link, Et=Et, m_d_t=[m_t,d_t], node_=[_N,N], link_=[Link])
-    lay0 = [[],fork] if fd else fork,[]
+    lay0 = [[],fork] if fd else [fork,[]]  # we need additional bracket in m fork, else it becomes a tuple of [[],fork] if fd else fork and [] 
     derH = comp_H(_N.derH, N.derH, rn, Link, Et)  # comp shared layers, if any
     Link.derH = [lay0, *derH]
     # spec: comp_node_(node_|link_), combinatorial, node_ nested / rng-)agg+?
@@ -411,7 +411,7 @@ def sum2graph(root, grapht, fd, minL=0, maxL=None):  # sum node and link params 
         N.root = graph
     graph.node_= N_  # nodes or roots, link_ is still current-dist links only?
     graph.derH = sum_H(link_, graph, fd=1)  # sum link derH
-    yx = np.mean(yx_)
+    yx = np.mean(yx_,axis=0)  # without axis we get mean of the whole yx instead
     distances = np.hypot(*(yx - yx_).T)
     graph.aRad = distances.mean()  # ave distance from graph center to node centers
     graph.yx = yx
@@ -427,7 +427,8 @@ def sum2graph(root, grapht, fd, minL=0, maxL=None):  # sum node and link params 
 
 def sum_H(Q, root, rev=0, fc=0, fd=0):  # sum derH in link_|node_
     DerH = []
-    return [add_H(DerH, e.derH, root, rev, fc, fd) for e in Q]  # list DerH
+    for e in Q: add_H(DerH, e.derH, root, rev, fc, fd) 
+    return DerH  # list DerH  (add_H doesn't return anything, so we need to return DerH here)
 
 
 def add_H(H, h, root, rev=0, fc=0, fd=0):
@@ -435,13 +436,21 @@ def add_H(H, h, root, rev=0, fc=0, fd=0):
     for Lay, lay in zip_longest(H, h, fillvalue=[]):  # different len if lay-selective comp
         if lay:
             if Lay:
-                for fork in lay: Lay[fork].add_lay(fork,rev=rev,fc=fc)  # combine input forks
+                # for fork in lay: Lay[fork].add_lay(fork,rev=rev,fc=fc)  # combine input forks    (why we need to combine? We just need to sum them fork by fork?)
+                for i, (Fork, fork) in enumerate(zip(Lay, lay)):
+                    if fork:
+                        if Fork:  Fork.add_lay(fork,rev=rev,fc=fc) 
+                        else:     Lay[i] = fork.copy_(root=root,rev=rev,fc=fc)  # replaces empty Fork with fork
             else:
-                L = CLay(root=root)
                 for fork in lay:
                     if fork:
-                        root.Et += fork.Et; L.add_lay(fork.copy_(root=root,rev=rev,fc=fc))
-                H += [[[],L] if fd else [L,[]]]
+                        root.Et += fork.Et
+                        Fork = fork.copy_(root=root,rev=rev,fc=fc)
+                        Lay += [fork]   
+                    else:
+                        Lay += [[]]
+                H += [Lay]
+                # H += [[[],L] if fd else [L,[]]]  Why this is fork specific here?
 
 def comp_H(H, h, rn, root, Et):
 
@@ -459,8 +468,10 @@ def comp_H(H, h, rn, root, Et):
 
 def norm_H(H, n):
     for lay in H:
-       for fork in lay.m_d_t: fork *= n  # arrays
-       lay.Et *= n  # same node_, link_
+       for fork in lay:
+           if fork:
+               for m_d_ in fork.m_d_t: m_d_ *= n  # arrays
+               fork.Et *= n  # same node_, link_
 
 def L2N(link_,root):
     for L in link_:
