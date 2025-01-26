@@ -236,7 +236,7 @@ def cluster_edge(edge):  # edge is CG but not a connectivity cluster, just a set
             L2N(L_,edge)  # comp dPP_:
             lN_,lL_,dEt = comp_link_(L_,Et)
             if val_(dEt, fo=1) > 0:
-                comb_H(derH, sum_H(L_,edge,fd=0))  # + dfork
+                comb_H(derH, sum_H(lL_,edge,fd=0))  # + dfork  (should be lL_ here)
                 if len(lN_) > ave_L:
                     cluster_PP_(lN_, fd=1)
         edge.derH = derH
@@ -381,7 +381,7 @@ def comp_N(_N,N, rn, angle=None, dist=None, dir=1):  # dir if fd, Link.derH=dH, 
         for rev, node in zip((0,1), (N,_N)):  # reverse Link direction for _N
             if fd: node.rimt[1-rev] += [(Link,rev)]  # opposite to _N,N dir
             else:  node.rim += [(Link,dir)]
-            add_H(node.extH, Link.derH, root=node, rev=rev)
+            add_LH(node.extH, Link.derH, root=node, rev=rev)  # should be add_lH here?
             node.Et += Et
     return Link
 
@@ -436,24 +436,43 @@ def add_LH(H, h, root, rev=0, fc=0):  # add single-fork L.derHs
     for Lay, lay in zip_longest(H, h, fillvalue=[]):  # different len if lay-selective comp
         if lay:
             if Lay: Lay.add_lay(lay,rev=rev,fc=fc)
-            else: H += lay.copy_(root=root,rev=rev,fc=fc)
+            else: H += [lay.copy_(root=root,rev=rev,fc=fc)]  # H is a list
             root.Et += lay.Et
 
 def add_H(H, h, root, rev=0, fc=0, fd=0):  # add two-fork G derHs
 
+    def add_fork(L, lay, root):
+        for fork in lay:
+            if fork:
+                root.Et += fork.Et
+                L.add_lay(fork.copy_(root=root,rev=rev,fc=fc))
+
+
     for Lay, lay in zip_longest(H, h, fillvalue=[]):  # different len if lay-selective comp
         if lay:
-            if Lay:
-                for fork in lay: Lay[fork].add_lay(fork,rev=rev,fc=fc)  # combine input forks
+            if Lay and Lay[fd]:
+                '''
+                for fork in lay: 
+                    if fork: 
+                        root.Et += fork.Et
+                        Lay[fd].add_lay(fork,rev=rev,fc=fc)  # combine input forks (to combine forks, should be Lay[fd] instead of Lay[fork]?)
+                '''
+                add_fork(Lay[fd], lay, root)  # same as above
             else:
-                L = CLay(root=root)
+                L = CLay(root=root, Et=np.zeros(4), node_=[], link_=[], m_d_t=[[],[]])
+                '''
                 for fork in lay:
                     if fork:
                         root.Et += fork.Et
                         L.add_lay(fork.copy_(root=root,rev=rev,fc=fc))
-                H += [[[],L] if fd else [L,[]]]
+                '''
+                add_fork(L, lay, root)  # same as above
+                if Lay: Lay[fd] = L  # replaces [] with fork    
+                else:   H += [[[],L] if fd else [L,[]]]
+
 
 def comb_H(DerH, derH):  # append link.derH lays to root.derH.lays
+
 
     for Lay, lay in zip_longest(DerH,derH, fillvalue=[]):  # two forks in G Lay, one in L lay
         if Lay: Lay += [lay]
@@ -488,6 +507,10 @@ def norm_H(H, n, fd=1):
 def L2N(link_,root):
     for L in link_:
         L.root = root; L.fd_=copy(L.nodet[0].fd_); L.mL_t,L.rimt = [[],[]],[[],[]]; L.aRad=0; L.visited_,L.extH = [],[]
+        lay0 = L.derH[0]
+        for lay in L.derH[1:]: lay0.add_lay(lay)
+        L.derH = [[lay0]]  # merge forks from existing lays
+
 
 def frame2G(G, **kwargs):
     blob2G(G, **kwargs)
