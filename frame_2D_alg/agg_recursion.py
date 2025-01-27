@@ -235,7 +235,7 @@ def comb_altG_(G_):  # combine contour G.altG_ into altG (node_ defined by root=
                     Et += link.Et
             if val_(Et, _Et=G.Et, coef=10) > 0:  # min sum neg links
                 altG = CG(root=G, Et=Et, node_=node_, link_=link_); altG.m=0  # other attrs are not significant
-                altG.derH = sum_H(altG.link_, altG)   # sum link derHs
+                altG.derH = sum_H(altG.link_, altG, fd=1)   # sum link derHs
                 G.altG = altG
 
 def norm_H(H, n, fd=1):

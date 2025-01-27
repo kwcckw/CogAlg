@@ -225,7 +225,8 @@ def cluster_edge(edge):  # edge is CG but not a connectivity cluster, just a set
             lN_,lL_,dEt = comp_link_(L_,Et)
             if val_(dEt, fo=1) > 0:
                 dderH = sum_H(lL_, edge, fd=1)  # optional dlays
-                for lay, dlay in zip(derH, dderH): lay += [dlay]
+                # shared layer + new dlays in base fork
+                derH = [lay + [dlay] for lay, dlay in zip(derH, dderH)] + [dderH[len(derH):]]
                 if len(lN_) > ave_L:
                     cluster_PP_(lN_, fd=1)
         edge.derH = derH
@@ -370,7 +371,7 @@ def comp_N(_N,N, rn, angle=None, dist=None, dir=1):  # dir if fd, Link.derH=dH, 
         for rev, node in zip((0,1), (N,_N)):  # reverse Link direction for _N
             if fd: node.rimt[1-rev] += [(Link,rev)]  # opposite to _N,N dir
             else:  node.rim += [(Link,dir)]
-            add_H(node.extH, Link.derH, root=node, rev=rev)  # should be add_H here?
+            add_H(node.extH, Link.derH, root=node, rev=rev, fd=1)  # should be add_H here?
             node.Et += Et
     return Link
 
@@ -439,7 +440,7 @@ def add_H(H, h, root, rev=0, fc=0, fd=0):  # add fork L.derHs
                         else: Lay += [[]]
                     H += [Lay]
 
-def comp_H(H, h, rn, root, Et, fd):  # one-fork derH if fd, else two-fork derH
+def comp_H(H, h, rn, root, Et, fd=0):  # one-fork derH if fd, else two-fork derH
 
     derH = []
     for _lay, lay in zip_longest(H, h, fillvalue=[]):  # different len if lay-selective comp
