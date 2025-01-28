@@ -54,7 +54,7 @@ def cross_comp(root, C_):  # breadth-first node_,link_ cross-comp, connect clust
             if val_(dEt, _Et=Et, fo=1) > 0:
                 dderH = sum_H(lL_, root, fd=1); addH = 2
                 for lay, dlay in zip(derH, dderH): lay += [dlay]
-                derH += [[CLay(), dderH[-1]]]  # dderH is longer
+                derH += [[CLay(root=root), dderH[-1]]]  # dderH is longer
                 plL_ = {l for n in lN_ for l,_ in get_rim(n,fd=1)}
                 if len(plL_) > ave_L:
                     cluster_N_(root, plL_, fd=1)  # form altGs for cluster_C_, no new links between dist-seg Gs
@@ -144,7 +144,7 @@ def cluster_C_(root, addH=0):  # 0 from cluster_edge: same derH depth in root an
         mLat = comp_latuple(C.latuple, N.latuple, C.Et[2], N.Et[2])[1][0]
         mVert = comp_md_(C.vert[1], N.vert[1])[1][0]
         M = mL + mA + mLat + mVert
-        M += sum([fork.Et[0] for lay in comp_H(C.derH, N.derH, rn=1, root=None, Et=np.zeros(4)) for fork in lay if fork])
+        M += sum([fork.Et[0] for lay in comp_H(C.derH, N.derH, rn=1, root=None, Et=np.zeros(4),fd=0) for fork in lay if fork])
         if C.altG and N.altG:  # converted to altG
             M += comp_N(C.altG, N.altG, C.altG.Et[2] / N.altG.Et[2]).Et[0]
         # if fuzzy C:

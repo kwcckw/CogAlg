@@ -47,13 +47,13 @@ med_cost = 10
 
 class CLay(CBase):  # flat layer if derivation hierarchy
     name = "lay"
-    def __init__(l, root, Et, node_, link_, m_d_t):
+    def __init__(l,  **kwargs):  # more convenient to init them here? Else we need to define all params when init empty CLay
         super().__init__()
-        l.Et = Et
-        l.root = root  # higher node or link
-        l.node_ = node_  # concat across fork tree
-        l.link_ = link_
-        l.m_d_t = m_d_t  # [[mext,mlat,mver],[dext,dlat,dver]], sum across fork tree
+        l.Et = kwargs.get('Et', np.zeros(4))
+        l.root = kwargs.get('root', None)  # higher node or link
+        l.node_ = kwargs.get('node_', [])  # concat across fork tree
+        l.link_ = kwargs.get('link_', [])
+        l.m_d_t = kwargs.get('m_d_t', [])  # [[mext,mlat,mver],[dext,dlat,dver]], sum across fork tree
         # altL = CLay from comp altG
         # i = kwargs.get('i', 0)  # lay index in root.node_, link_, to revise olp
         # i_ = kwargs.get('i_',[])  # priority indices to compare node H by m | link H by d
@@ -65,7 +65,7 @@ class CLay(CBase):  # flat layer if derivation hierarchy
         if i:  # reuse self
             C = lay; lay = i; C.node_=copy(i.node_); C.link_ = copy(i.link_); C.m_d_t=[]; C.root=root
         else:  # init new C
-            C = CLay(root=root, Et=np.zeros(4), node_=copy(lay.node_), link_=copy(lay.link_), m_d_t=[])
+            C = CLay(root=root, node_=copy(lay.node_), link_=copy(lay.link_))
         C.Et = lay.Et * -1 if (fc and rev) else copy(lay.Et)
 
         for fd, tt in enumerate(lay.m_d_t):  # nested array tuples
@@ -226,6 +226,7 @@ def cluster_edge(edge):  # edge is CG but not a connectivity cluster, just a set
             if val_(dEt, fo=1) > 0:
                 dderH = sum_H(lL_, edge, fd=1)  # optional dlays
                 for lay, dlay in zip(derH, dderH): lay += [dlay]
+                derH += [[CLay(root=edge), dderH[-1]]]  # dderH is longer (similar with agg+)
                 if len(lN_) > ave_L:
                     cluster_PP_(lN_, fd=1)
         edge.derH = derH
@@ -398,7 +399,7 @@ def sum2graph(root, grapht, fd, minL=0, maxL=None):  # sum node and link params 
         graph.Et += N.Et * icoef ** 2  # deeper, lower weight
         N.root = graph
     graph.node_= N_  # nodes or roots, link_ is still current-dist links only?
-    graph.derH = sum_H(link_, graph, fd=1)  # sum link derH
+    graph.derH = [[CLay(root=graph), lay] for lay in sum_H(link_, graph, fd=1)]  # sum link derH  # we need to convert them into nested here?
     yx = np.mean(yx_,axis=0)
     dy_,dx_ = (graph.yx - yx_).T; dist_ = np.hypot(dy_,dx_)
     graph.aRad = dist_.mean()  # ave distance from graph center to node centers
@@ -429,8 +430,9 @@ def add_H(H, h, root, rev=0, fc=0, fd=0):  # add fork L.derHs
             else:  # two-fork lays
                 if Lay:
                     for Fork,fork in zip_longest(Lay,lay):
-                        if Fork: Fork.add_lay(fork, rev=rev,fc=fc)
-                        else: Lay += [fork.copy_(root=root)]
+                        if fork:  # we need if fork since Lay may have more forks
+                            if Fork: Fork.add_lay(fork, rev=rev,fc=fc)
+                            else: Lay += [fork.copy_(root=root)]
                 else:
                     Lay = []
                     for fork in lay:
