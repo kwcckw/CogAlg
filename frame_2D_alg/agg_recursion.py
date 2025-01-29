@@ -258,12 +258,9 @@ def sort_H(H, fd):  # re-assign olp and form priority indices for comp_tree, if 
     if not fd:
         H.root.node_ = H.node_
 
-if __name__ == "__main__":
-    image_file = './images/raccoon_eye.jpeg'
-    image = imread(image_file)
-    frame = frame_blobs_root(image)
-    intra_blob_root(frame)
-    vectorize_root(frame)
+
+def cross_comp_root(frame):
+    
     if frame.node_:  # converted edges
         G_ = []
         for edge in frame.node_:
@@ -272,3 +269,27 @@ if __name__ == "__main__":
             G_ += edge.node_  # unpack edges
         frame.node_ = G_
         cross_comp(frame, G_)  # append frame derH, cluster_N_
+
+
+def pipeline_multi_stages(image):
+    
+    # How do we parallize each stage here? Each stage needs input from prior stage?
+    # also to update the filter, it will be done within each stage?
+    frame = frame_blobs_root(image)
+    intra_blob_root(frame)
+    vectorize_root(frame)
+    cross_comp_root(frame)
+    
+
+if __name__ == "__main__":
+    # image_file = './images/raccoon_eye.jpeg'
+    image_file = './images/toucan.jpg'
+    image = imread(image_file)
+    
+    image_size_y = image_size_x = 64  # same size with raccoon_eye, can be any number
+    for y in range(0, image.shape[0], image_size_y):  # start, stop, interval
+        for x in range(0, image.shape[1], image_size_x):
+            sub_image = image[y:y+image_size_y, x:x+image_size_x]
+            pipeline_multi_stages(sub_image)
+            
+            

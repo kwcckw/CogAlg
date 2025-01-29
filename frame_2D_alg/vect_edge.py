@@ -217,7 +217,8 @@ def cluster_edge(edge):  # edge is CG but not a connectivity cluster, just a set
     N_,L_,Et = comp_node_(edge.node_)
     edge.link_ += L_
     if val_(Et, fo=1) > 0:  # cancel by borrowing d?
-        mlay = L_[0].derH[0]; for link in L_[1:]: mlay.add_lay(link.derH[0])
+        mlay = L_[0].derH[0]  # new for loop needs a new line
+        for link in L_[1:]: mlay.add_lay(link.derH[0])
         derH = [[mlay]]  # single nested mlay
         if len(N_) > ave_L:
             cluster_PP_(N_, fd=0)
@@ -439,7 +440,7 @@ def add_H(H, h, root, rev=0, fc=0, fd=0):  # add fork L.derHs
                     for fork in lay:
                         if fork:
                             Lay += [fork.copy_(root=root,rev=rev,fc=fc)]; root.Et += fork.Et
-                        else: Lay += [[]]
+                        else: Lay += [CLay(root=root)]  # we should add empty CLay?
                     H += [Lay]
 
 def comp_H(H,h, rn, root, Et, fd):  # one-fork derH if fd, else two-fork derH
