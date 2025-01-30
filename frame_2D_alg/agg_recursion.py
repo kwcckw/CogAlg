@@ -4,6 +4,8 @@ from functools import reduce  # from itertools import zip_longest
 from frame_blobs import frame_blobs_root, intra_blob_root, imread
 from comp_slice import comp_latuple, comp_md_
 from vect_edge import L2N, sum_H, add_H, comp_H, comp_N, comp_node_, comp_link_, sum2graph, get_rim, CG, ave, ave_L, vectorize_root, comp_area, extend_box, val_
+from multiprocessing import Pool
+
 '''
 notation:
 prefix f: flag
@@ -62,7 +64,7 @@ def cross_comp(root, C_):  # breadth-first node_,link_ cross-comp, connect clust
         cluster_C_(root, addH)  # -> mfork G,altG exemplars, +altG surround borrow, root.derH + 1|2 lays
         # no dfork cluster_C_, no ddfork
 
-        return sum_G_(root.node_[0], root.node_[1:])  # lev_G
+    return sum_G_(root.node_[0], root.node_[1:])  # lev_G  (this should be default? outside of main mfork?)
 
 def cluster_N_(root, L_, fd):  # top-down segment L_ by >ave ratio of L.dists
 
@@ -218,6 +220,9 @@ def sum_G_(G, node_, s=1, fc=0):
         else:
             if n.extH: add_H(G.extH, n.extH, root=G, rev = s==-1, fd=1)  # empty in centroid
             G.box = extend_box( G.box, n.box)  # extended per separate node_ in centroid
+            
+    G.aves = [G.Et[0], G.Et[1]]  # we need to init initial aves here?
+    return G
 
 def comb_altG_(G_):  # combine contour G.altG_ into altG (node_ defined by root=G), for agg+ cross-comp
     # internal and external alts: different decay / distance?
@@ -280,9 +285,10 @@ def agg_H_pipe(focus):  # currently sequential but easily parallelizable level-u
         while True:  # feedforward
             lev_G = cross_comp(frame, G_)  # return combined top composition level, append frame.derH
             GH += [lev_G]  # indefinite graph hierarchy
-            if val_(lev_G.Et, ave) < 0: break
+            if val_(lev_G.Et, coef=ave) < 0: break
         frame.node_ = GH
         agg_H = GH[:-1]  # no feedback to local top graph
+        # what are some other filters here?
         m,d,n,o = lev_G.Et; k = n*o; m = m/k; d = d/k  # very tentative, need to add all other filters
         # feedback
         while agg_H and m + d > sum(lev_G.aves):  # add min and max coordinate filters
@@ -291,13 +297,26 @@ def agg_H_pipe(focus):  # currently sequential but easily parallelizable level-u
             m,d,n,o = lev_G.Et; k = n*o
             m = m/k; d = d/k
 
+    # pipeline doesn't return anything? We need to return frame?
+
 if __name__ == "__main__":
-    # image_file = './images/raccoon_eye.jpeg'
     image_file = './images/toucan.jpg'
     image = imread(image_file)
 
     # min and max coordinate filters, updated by feedback to shift the focus within a frame:
+    focus_ = []
     yn = xn = 64  # focal sub-frame size, = raccoon_eye, can be any number
-    y0 = x0 = 400  # focal sub-frame start
-    focus = image[y0:y0+yn, x0:x0+xn]
-    agg_H_pipe(focus)
+    for y0 in range(0, image.shape[0], yn):  # y0,  x0: focal sub-frame start
+        for x0 in range(0, image.shape[1], xn):
+            focus = image[y0:y0+yn, x0:x0+xn]
+            focus_ += [focus]
+            # sequential:
+            agg_H_pipe(focus)
+            
+    # parallel:
+    with Pool() as pool:
+        pool.map(agg_H_pipe, focus_)
+    
+
+    
+    
