@@ -1,7 +1,7 @@
 import numpy as np
 from copy import copy, deepcopy
 from functools import reduce  # from itertools import zip_longest
-from multiprocessing import Pool
+from multiprocessing import Pool, Manager
 from frame_blobs import frame_blobs_root, intra_blob_root, imread
 from comp_slice import comp_latuple, comp_md_
 from vect_edge import L2N, sum_H, add_H, comp_H, comp_N, comp_node_, comp_link_, sum2graph, get_rim, CG, ave, ave_L, vectorize_root, comp_area, extend_box, Val_
@@ -218,6 +218,8 @@ def sum_G_(G, node_, s=1, fc=0):
         else:
             if n.extH: add_H(G.extH, n.extH, root=G, rev = s==-1, fd=1)  # empty in centroid
             G.box = extend_box( G.box, n.box)  # extended per separate node_ in centroid
+            
+    return G  # we return sum_G in cross_comp, so we need to return here
 
 def comb_altG_(G_):  # combine contour G.altG_ into altG (node_ defined by root=G), for agg+ cross-comp
     # internal and external alts: different decay / distance?
@@ -264,6 +266,26 @@ def sort_H(H, fd):  # re-assign olp and form priority indices for comp_tree, if 
     if not fd:
         H.root.node_ = H.node_
 
+def parallel_level(inputs):
+    
+    frame, H, elevation = inputs
+    if len(H)>elevation:
+        lev_G = H[elevation]
+        # feedforward
+        lev_G = cross_comp(frame, lev_G.node_)  # return combined top composition level, append frame.derH (should be levG.node_?)
+        
+        if lev_G:  # has mfork
+            if Val_(lev_G.Et, lev_G.Et, ave) >= 0: 
+                H += [lev_G]  # indefinite graph hierarchy
+                
+            # feedback to prior elevation
+            if elevation>0:
+                m, d, n, o = lev_G.Et
+                k = n * o
+                m, d = m/k, d/k   
+                H[elevation-1].aves = [m, d]
+
+
 def agg_H_pipe(focus):  # currently sequential but easily parallelizable level-updating pipeline
 
     frame = frame_blobs_root(focus)
@@ -276,6 +298,19 @@ def agg_H_pipe(focus):  # currently sequential but easily parallelizable level-u
             cluster_C_(edge)  # no cluster_C_ in vect_edge
             G_ += edge.node_  # unpack edges
         frame.node_ = G_
+        
+        # Use a shared memory manager to pack shared H
+        manager = Manager()
+        H = manager.list([CG(node_=G_)])  
+
+        # 20 levels
+        elevations = 20
+        with Pool(processes=4) as pool:  # 4 parallel processes
+            pool.map(parallel_level, [(frame, H, e) for e in range(elevations)])
+
+        frame.aggH = list(H)  # convert back to list
+
+        '''
         agg_H = []
         while True:  # feedforward
             lev_G = cross_comp(frame, G_)  # return combined top composition level, append frame.derH
@@ -290,6 +325,8 @@ def agg_H_pipe(focus):  # currently sequential but easily parallelizable level-u
             lev_G.aves = [m,d]  # update lower-level filters with current level aves
             m,d,n,o = lev_G.Et; k = n*o
             m = m/k; d = d/k
+        '''
+            
     return frame
 
 if __name__ == "__main__":
@@ -301,9 +338,12 @@ if __name__ == "__main__":
     y0 = x0 = 400  # focal sub-frame start
     focus = image[y0:y0+yn, x0:x0+xn]
     frame = agg_H_pipe(focus)
-    # if level-parallel:
+    
+    '''
+    if level-parallel:
     with Pool() as pool:
         pool.map( agg_Lev(lambda: frame.agg_H))
-        # all levels in agg_H will be processed in parallel: process,output,feedback
-        # 1st level gets focus@image, initialized or set by feedback
-        # message-passing upward feedforward and downward feedback
+        all levels in agg_H will be processed in parallel: process,output,feedback
+        1st level gets focus@image, initialized or set by feedback
+        message-passing upward feedforward and downward feedback
+    '''
