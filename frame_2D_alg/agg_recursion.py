@@ -95,15 +95,16 @@ def cluster_N_(root, L_, fd):  # top-down segment L_ by >ave ratio of L.dists
                                 link_+=[L]; et+=L.Et
                 _eN_ = {*eN_}
             if Val_(et, _Et=Et) > 0:  # cluster node roots:
-                G_ += [sum2graph(root, [list({*node_}),list({*link_}), et], fd, min_dist, max_dist)]
+                G_ += [sum2graph(root, [list({*node_}),list({*link_}), et], fd, min_dist, max_dist, depth=root.nestt)]
         # longer links:
         L_ = L_[i+1:]
         if L_: min_dist = max_dist  # next loop connects current-dist clusters via longer links
         else:
             nest,Q = (root.nestt[1], root.link_) if fd else (root.nestt[0], root.node_)
-            if nest: Q += [G_]
-            else:    Q[:] = [Q, G_]  # initial nesting in node_|link_
-            nest += 1
+            Q = [root.link_,root.node_][fd]
+            if root.nestt[fd]: Q += [G_]
+            else:              Q[:] = [Q, G_]  # initial nesting in node_|link_
+            root.nestt[fd] += 1  # increase nest
             break
 
 ''' 
@@ -191,9 +192,10 @@ def cluster_C_(root):  # 0 from cluster_edge: same derH depth in root and top Gs
                         n.m = 0; n.fin = 0; n_ += [n]
                 break
 
-    C_, n_ = [], []; maxH = root.nestt[0] - 1  # concat exemplar/centroid nodes across top Gs, for higher cross_comp
+    # how about edge.nestt? edge.nestt[0] is 0 and their maxH is -1
+    C_, n_ = [], []; maxH = root.nestt[0]-1  # concat exemplar/centroid nodes across top Gs, for higher cross_comp
     for G in Q(root):  # node_
-        if not G.nestt[0] < maxH: continue  # not current graph
+        if not G.derH or G.nestt[0] < maxH: continue  # not current graph (skip converted PP)
         N_ = [N for N in sorted([N for N in Q(G)], key=lambda n: n.Et[0], reverse=True)]
         for N in N_:
             N.sign, N.m, N.fin = 1,0,0  # C update sign, inclusion m, inclusion flag
@@ -202,6 +204,7 @@ def cluster_C_(root):  # 0 from cluster_edge: same derH depth in root and top Gs
                 if Val_(sum([l.Et for l in N.extH]), _Et=root.Et, coef=10) > 0:  # cross-similar in G
                     centroid_cluster(N, C_, n_, root)  # search via N.rim, C_+=[C]| unpack
                 else:  # M is lower in the rest of N_
+                    n_ += N_[i:]  # we need to pack n_ with the rest of N_?
                     break
     root.node_ = C_ + n_  # or [n_]?
     if len(C_) > ave_L and not root.root:  # frame
@@ -233,7 +236,7 @@ def comb_altG_(G_):  # combine contour G.altG_ into altG (node_ defined by root=
         if isinstance(G,list): continue
         if G.altG:
             if isinstance(G.altG, list):
-                sum_G_(G.altG[0], [a for a in G.altG[1:]])
+                sum_G_(G.altG)
                 G.altG = CG(root=G, node_= G.altG); G.altG.m=0  # was G.altG_
                 if Val_(G.altG.Et, _Et=G.Et):  # alt D * G rM
                     cross_comp(G.altG, G.node_)
@@ -324,25 +327,30 @@ def agg_H_seq(focus):  # sequential level-updating pipeline
         agg_H = []
         while True:  # feedforward
             lev_G = cross_comp(frame, G_)  # return combined top composition level, append frame.derH
-            agg_H += [lev_G]  # indefinite graph hierarchy
-            if Val_(lev_G.Et, lev_G.Et, ave) < 0: break
-        frame.agg_H = agg_H
-        agg_H = agg_H[:-1]  # no feedback to local top graph
-        m,d,n,o = lev_G.Et; k = n*o; m = m/k; d = d/k  # very tentative, need to add all other filters
-        # feedback
-        while agg_H and m + d > sum(lev_G.aves):  # add min and max coordinate filters
-            lev_G = agg_H.pop()
-            lev_G.aves = [m,d]  # update lower-level filters with current level aves
-            m,d,n,o = lev_G.Et; k = n*o
-            m = m/k; d = d/k
+            if lev_G:
+                agg_H += [lev_G]  # indefinite graph hierarchy
+                if Val_(lev_G.Et, lev_G.Et, ave) < 0: break
+            else:
+                break  # we need to break when no lev_G too (when mfork eval is false)
+        
+        if agg_H:
+            frame.agg_H = agg_H
+            agg_H = agg_H[:-1]  # no feedback to local top graph
+            m,d,n,o = lev_G.Et; k = n*o; m = m/k; d = d/k  # very tentative, need to add all other filters
+            # feedback
+            while agg_H and m + d > sum(lev_G.aves):  # add min and max coordinate filters
+                lev_G = agg_H.pop()
+                lev_G.aves = [m,d]  # update lower-level filters with current level aves
+                m,d,n,o = lev_G.Et; k = n*o
+                m = m/k; d = d/k
     return frame
 
 if __name__ == "__main__":
-    # image_file = './images/raccoon_eye.jpeg'
-    image_file = './images/toucan.jpg'
+    image_file = './images/raccoon_eye.jpeg'
+    # image_file = './images/toucan.jpg'
     image = imread(image_file)
     # set min,max coordinate filters, updated by feedback to shift the focus within a frame:
     yn = xn = 64  # focal sub-frame size, = raccoon_eye, can be any number
-    y0 = x0 = 400  # focal sub-frame start
+    y0 = x0 = 0  # focal sub-frame start
     focus = image[y0:y0+yn, x0:x0+xn]
     frame = agg_H_seq(focus)
