@@ -215,14 +215,18 @@ def cluster_edge(edge):  # edge is CG but not a connectivity cluster, just a set
                 G_ = [sum2graph(edge, [node_,link_,et], fd)]
         if G_:
             nest,Q = (edge.lnest,edge.link_) if fd else (edge.nnest,edge.node_)
-            if nest: Q += [G_]
-            else:  Q[:] = [Q,G_]  # init nesting in node_|link_
-            [edge.lnest,edge.nnest][fd] += 1
+            if nest: Q += [G_]  # this shouldn't be possible here?
+            else:  Q[:] = [Q[:],G_]  # init nesting in node_|link_
+            # looks like using  [edge.nnest,edge.lnest][fd] += 1  doesn't reference the nnest and lnest too
+            if fd: edge.lnest += 1  # nnest and lnest are inverted here?
+            else:  edge.nnest += 1
+            
     # comp PP_:
     N_,L_,Et = comp_node_(edge.node_)
     edge.link_ += L_
     if Val_(Et, _Et=Et, fd=0) > 0:  # cluster eval
-        mlay = sum_lay_(L_, edge); derH = [[mlay]]  # single nested mlay
+        mlay = CLay(root=edge);  [mlay.add_lay(L.derH) for L in L_]  # unpack sum_lay? We only need it here
+        derH = [[mlay]]  # single nested mlay
         if len(N_) > ave_L:
             cluster_PP_(N_, fd=0)
         if Val_(Et, _Et=Et, fd=0) > 0:  # likely not from the same links

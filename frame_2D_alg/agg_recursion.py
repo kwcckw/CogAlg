@@ -102,8 +102,9 @@ def cluster_N_(root, L_, fd):  # top-down segment L_ by >ave ratio of L.dists
         else:
             nest,Q = (root.lnest, root.link_) if fd else (root.nnest, root.node_)
             if nest: Q += [G_]
-            else:  Q[:] = [Q,G_]  # init nesting in link_, node_ is already nested
-            [root.lnest,root.nnest][fd] += 1
+            else:  Q[:] = [Q[:],G_]  # init nesting in link_, node_ is already nested
+            if fd: root.lnest += 1  
+            else:  root.nnest += 1
             break
 ''' 
 Hierarchical clustering should alternate between two phases: generative via connectivity and compressive via centroid.
@@ -193,7 +194,7 @@ def cluster_C_(root):  # 0 from cluster_edge: same derH depth in root and top Gs
     C_, n_ = [], []  # concat exemplar/centroid nodes across top Gs, for higher cross_comp
     for G in root.node_[-1]:
         if G.nnest == root.nnest-1:  # top-nested
-            N_ = [N for N in sorted([N for N in G.node_[-1]], key=lambda n: n.Et[0], reverse=True)]
+            N_ = [N for N in sorted([N for N in (G.node_[-1] if G.nnest else G.node_)], key=lambda n: n.Et[0], reverse=True)]
             for N in N_:
                 N.sign, N.m, N.fin = 1,0,0  # C update sign, inclusion m, inclusion flag
             for i, N in enumerate(N_):  # replace some nodes by their centroid clusters
@@ -314,29 +315,34 @@ def agg_H_seq(focus):  # sequential level-updating pipeline
     intra_blob_root(frame)
     vectorize_root(frame)
     if frame.node_:  # converted edges
-        G_ = []
+        G_, max_nnest, max_lnest = [], 0, 0
         for edge in frame.node_:
-            comb_altG_(edge.node_)
-            cluster_C_(edge)  # no cluster_C_ in vect_edge
-            G_ += edge.node_  # unpack edges
-        frame.node_ = G_
-        agg_H = []
-        while True:  # feedforward
-            lev_G = cross_comp(frame, G_)  # return combined top composition level, append frame.derH
-            if lev_G:
-                agg_H += [lev_G]  # indefinite graph hierarchy
-                if Val_(lev_G.Et, lev_G.Et, ave) < 0: break
-            else: break
-        if agg_H:   # feedback
-            agg_H = agg_H[:-1]  # no feedback to local top graph
-            while agg_H:
-                llev_G = agg_H.pop()  # higher-lev aves are lower-lev filters, pack in Et[-1]?
-                if np.sum(np.abs(lev_G.aves - llev_G.aves)) > ave:  # filter update value
-                    # update lower filters with current aves, add min,max coordinate filters?:
-                    llev_G.aves = lev_G.aves
-                    lev_G = llev_G
+            if edge.nnest:  # skip edge without new graph
+                comb_altG_(edge.node_)
+                cluster_C_(edge)  # no cluster_C_ in vect_edge
+                G_ += edge.node_  # unpack edges
+                max_nnest = max(max_nnest, edge.nnest)
+                max_lnest = max(max_lnest, edge.lnest)  # update frame.link_ with edge.link_ too?
+                
+        if max_nnest:  # skip if all edges doesn't have deeper graphs
+            frame.node_ = G_; frame.nnest = max_nnest; frame.lnest = max_lnest
+            agg_H = []
+            while True:  # feedforward
+                lev_G = cross_comp(frame)  # return combined top composition level, append frame.derH
+                if lev_G:
+                    agg_H += [lev_G]  # indefinite graph hierarchy
+                    if Val_(lev_G.Et, lev_G.Et, ave) < 0: break
                 else: break
-        frame.node_ = agg_H
+            if agg_H:   # feedback
+                agg_H = agg_H[:-1]  # no feedback to local top graph
+                while agg_H:
+                    llev_G = agg_H.pop()  # higher-lev aves are lower-lev filters, pack in Et[-1]?
+                    if np.sum(np.abs(lev_G.aves - llev_G.aves)) > ave:  # filter update value
+                        # update lower filters with current aves, add min,max coordinate filters?:
+                        llev_G.aves = lev_G.aves
+                        lev_G = llev_G
+                    else: break
+            frame.node_ = agg_H
     return frame
 
 if __name__ == "__main__":
