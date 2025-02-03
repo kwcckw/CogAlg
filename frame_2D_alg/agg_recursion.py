@@ -313,30 +313,32 @@ def agg_H_seq(focus):  # sequential level-updating pipeline
     vectorize_root(frame)
     if frame.node_[0]:  # converted edges, no frame.link_, edge.link_
         G_, Nnest = [], 0
-        for edge in frame.node_:
+        for edge in frame.node_[-1]:
             if edge.nnest:  # has higher graphs
                 comb_altG_(edge.node_)
                 cluster_C_(edge)  # recursive
-                G_ += edge.node_  # unpack edges
+                G_ += edge.node_[-1]  # unpack edges  (should be the last added exemplar here?)
                 Nnest = max(Nnest, edge.nnest)
-            frame.node_ += [G_]; frame.nnest = Nnest
-            agg_H = []
-            while True:  # feedforward
-                lev_G = cross_comp(frame)  # return combined top composition level, append frame.derH
-                if lev_G:
-                    agg_H += [lev_G]  # indefinite graph hierarchy, sum main params?
-                    if Val_(lev_G.Et, lev_G.Et, ave) < 0: break
+        frame.nnest = Nnest
+        frame.node_ += [G_]  # we only need to add this once here? 
+        # indentation below is wrong and we need to reduce it?
+        agg_H = []
+        while len(frame.node_[-1])>1:  # feedforward  (skip if less than 2 comparands)
+            lev_G = cross_comp(frame)  # return combined top composition level, append frame.derH
+            if lev_G:
+                agg_H += [lev_G]  # indefinite graph hierarchy, sum main params?
+                if Val_(lev_G.Et, lev_G.Et, ave) < 0: break
+            else: break
+        if agg_H:   # feedback
+            agg_H = agg_H[:-1]  # no feedback to local top graph
+            while agg_H:
+                llev_G = agg_H.pop()  # lower-lev filters are higher-lev aves, if derived, projected?
+                if np.sum(np.abs(lev_G.aves - llev_G.aves)) > ave:  # filter update value
+                    # update lower filters with current aves, add min,max coordinate filters?:
+                    llev_G.aves = lev_G.aves
+                    lev_G = llev_G
                 else: break
-            if agg_H:   # feedback
-                agg_H = agg_H[:-1]  # no feedback to local top graph
-                while agg_H:
-                    llev_G = agg_H.pop()  # lower-lev filters are higher-lev aves, if derived, projected?
-                    if np.sum(np.abs(lev_G.aves - llev_G.aves)) > ave:  # filter update value
-                        # update lower filters with current aves, add min,max coordinate filters?:
-                        llev_G.aves = lev_G.aves
-                        lev_G = llev_G
-                    else: break
-            frame.node_ = agg_H
+        frame.node_ = agg_H
     return frame
 
 if __name__ == "__main__":

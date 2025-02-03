@@ -173,7 +173,7 @@ def vectorize_root(frame):
                         edge.node_ = G_; frame.node_[-1] += [edge]
                         cluster_edge(edge)
                         # alt: converted adj_blobs of edge blob?
-    frame.derH = sum_H(frame.node_,frame)  # single layer
+    frame.derH = sum_H(frame.node_[-1],frame)  # single layer
 
 
 def val_(Et, coef=1):  # comparison / inclusion eval by m only, no contextual projection
@@ -214,7 +214,7 @@ def cluster_edge(edge):  # edge is CG but not a connectivity cluster, just a set
             if Val_(et, _Et=et, fd=fd) > 0:  # cluster eval
                 G_ = [sum2graph(edge, [node_,link_,et], fd)]
         if G_:
-            edge.node_[:] = [edge.node_, G_]  # init nesting in node_|link_
+            edge.node_[:] = [edge.node_[:], G_]  # init nesting in node_|link_  (we need the additional [:] to copy the existing node_, else it's referencing back itself)
             edge.nnest += 1
     # comp PP_:
     N_,L_,Et = comp_node_(edge.node_)
