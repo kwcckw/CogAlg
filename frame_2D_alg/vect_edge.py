@@ -186,9 +186,9 @@ def Val_(Et, _Et, coef=1, fd=0):  # m|d cluster|batch eval, + cross|root project
     m, d, n, o = Et; _m,_d,_n,_o = _Et  # cross-fork induction of root Et alt, same overlap?
 
     d_loc = d * (_m / (ave * coef * _n))  # diff * co-projected m deviation, no bilateral deviation?
-    d_ave = (d / ave_d) * ave  # scaled rational d deviation?
+    d_ave = (d/ ave_d) * ave  # scale rational deviation of d?
 
-    if fd: val = d_ave + d_loc  # proj diff
+    if fd: val = d_ave + d_loc  # diff borrow val, generic + specific
     else:  val = m + d_ave - d_loc  # proj match: += surround val - blocking val, * decay?
 
     return val - ave * coef * n * o
@@ -214,7 +214,7 @@ def cluster_edge(edge):  # edge is CG but not a connectivity cluster, just a set
             if Val_(et, _Et=et, fd=fd) > 0:  # cluster eval
                 G_ = [sum2graph(edge, [node_,link_,et], fd)]
         if G_:
-            edge.node_[:] = [edge.node_[:], G_]  # init nesting in node_|link_  (we need the additional [:] to copy the existing node_, else it's referencing back itself)
+            edge.node_[:] = [edge.node_[:], G_]  # init nesting in node_|link_
             edge.nnest += 1
     # comp PP_:
     N_,L_,Et = comp_node_(edge.node_)
