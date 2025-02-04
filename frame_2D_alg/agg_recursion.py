@@ -4,8 +4,9 @@ from functools import reduce
 from itertools import zip_longest
 from multiprocessing import Pool, Manager
 from frame_blobs import frame_blobs_root, intra_blob_root, imread
+from slice_edge import Caves
 from comp_slice import comp_latuple, comp_md_
-from vect_edge import L2N, sum_H, add_H, comp_H, comp_N, comp_node_, comp_link_, sum2graph, get_rim, CG, ave, ave_L, vectorize_root, comp_area, extend_box, Val_
+from vect_edge import L2N, sum_H, add_H, comp_H, comp_N, comp_node_, comp_link_, sum2graph, get_rim, CG, vectorize_root, comp_area, extend_box, Val_
 '''
 notation:
 prefix f: flag
@@ -40,26 +41,26 @@ def cross_comp(root):  # form agg_Level by breadth-first node_,link_ cross-comp,
 
     N_,L_,Et = comp_node_(root.node_[-1])  # cross-comp top-composition exemplars in root.node_
     # mfork
-    if Val_(Et, _Et=Et, fd=0) > 0:  # cluster eval
+    if Val_(Et, _Et=Et, ave=root.ave, fd=0) > 0:  # cluster eval
         derH = [[mlay] for mlay in sum_H(L_,root, fd=1)]  # nested mlay per layer
         pL_ = {l for n in N_ for l,_ in get_rim(n,fd=0)}
-        if len(pL_) > ave_L:
+        if len(pL_) > root.ave.L:
             cluster_N_(root, pL_, fd=0)  # form multiple distance segments, same depth
         # dfork, one for all distance segments, adds altGs, no higher Gs:
         L2N(L_,root)
         lN_,lL_,dEt = comp_link_(L_,Et)  # same root for L_, root.link_ was compared in root-forming for alt clustering
-        if Val_(dEt, _Et=Et, fd=1) > 0:
+        if Val_(dEt, _Et=Et, ave=root.ave, fd=1) > 0:
             dderH = sum_H(lL_, root, fd=1)
             for lay, dlay in zip(derH, dderH): lay += [dlay]
             derH += [[[], dderH[-1]]]  # dderH is longer
             plL_ = {l for n in lN_ for l,_ in get_rim(n,fd=1)}
-            if len(plL_) > ave_L:
+            if len(plL_) > root.ave.L:
                 cluster_N_(root, plL_, fd=1)  # form altGs for cluster_C_, no new links between dist-seg Gs
         else:
             for lay in derH:
                 lay += [[]]  # empty dlay
         root.derH = derH  # replace lower derH, may not align to node_,link_H append in cluster_N_
-        comb_altG_(top_(root))  # comb node contour: altG_ | neg links sum, cross-comp -> CG altG
+        comb_altG_(top_(root), root.ave)  # comb node contour: altG_ | neg links sum, cross-comp -> CG altG
         cluster_C_(root)  # -> mfork G,altG exemplars, +altG surround borrow, root.derH + 1|2 lays
         # no dfork cluster_C_, no ddfork
         # if val_: lev_G -> agg_H_pipe
@@ -76,7 +77,7 @@ def cluster_N_(root, L_, fd):  # top-down segment L_ by >ave ratio of L.dists
             n.fin = 0
         for i, L in enumerate(L_[1:], start=1):
             rel_dist = L.dist/_L.dist  # >= 1
-            if rel_dist < 1.2 or Val_(et, _Et=Et) > 0 or len(L_[i:]) < ave_L:  # ~=dist Ns or either side of L is weak
+            if rel_dist < 1.2 or Val_(et, _Et=Et, ave=root.ave) > 0 or len(L_[i:]) < root.ave.L:  # ~=dist Ns or either side of L is weak
                 _L = L; N_ += L.nodet; et += L.Et
             else:
                 i -= 1; break  # terminate contiguous-distance segment
@@ -95,7 +96,7 @@ def cluster_N_(root, L_, fd):  # top-down segment L_ by >ave ratio of L.dists
                             if L.dist < max_dist:
                                 link_+=[L]; et+=L.Et
                 _eN_ = {*eN_}
-            if Val_(et, _Et=Et) > 0:  # cluster node roots:
+            if Val_(et, _Et=Et, ave=root.ave) > 0:  # cluster node roots:
                 G_ += [sum2graph(root, [list({*node_}),list({*link_}), et], fd, min_dist, max_dist)]
         # longer links:
         L_ = L_[i+1:]
@@ -142,7 +143,7 @@ def cluster_C_(root):  # 0 from cluster_edge: same derH depth in root and top Gs
 
     def comp_C(C, N):  # compute match without new derivatives: global cross-comp is not directional
 
-        mL = min(C.L, len(N.node_)) - ave_L
+        mL = min(C.L, len(N.node_)) - root.ave.L
         mA = comp_area(C.box, N.box)[0]
         mLat = comp_latuple(C.latuple, N.latuple, C.Et[2], N.Et[2])[1][0]
         mVert = comp_md_(C.vert[1], N.vert[1])[1][0]
@@ -174,17 +175,17 @@ def cluster_C_(root):  # 0 from cluster_edge: same derH depth in root and top Gs
             dN_, M, dM = [], 0, 0  # pruned nodes and values, or comp all nodes again?
             for _N in C.node_:
                 m = comp_C(C,_N)  # Et if proximity-weighted overlap?
-                vm = m - ave
+                vm = m - root.ave.m
                 if vm > 0:
                     M += m; dM += m - _N.m; _N.m = m  # adjust kept _N.m
                 else:  # remove _N from C
                     _N.fin=0; _N.m=0; dN_+=[_N]; dM += -vm  # dM += abs m deviation
-            if dM > ave and M > ave:  # loop update, break if low C reforming value
+            if dM > root.ave.m and M > root.ave.m:  # loop update, break if low C reforming value
                 if dN_:
                     C = sum_C(list(set(dN_)),C)  # subtract dN_ from C
                 C.M = M  # with changes in kept nodes
             else:  # break
-                if C.M > ave * 10:  # add proximity-weighted overlap?
+                if C.M > root.ave.m * 10:  # add proximity-weighted overlap?
                     for n in C.node_: n.root = C
                     C_ += [C]; C.root = root  # centroid cluster
                 else:
@@ -198,19 +199,21 @@ def cluster_C_(root):  # 0 from cluster_edge: same derH depth in root and top Gs
             N.sign, N.m, N.fin = 1, 0, 0  # C update sign, inclusion m, inclusion flag
         for i, N in enumerate(N_):  # replace some nodes by their centroid clusters
             if not N.fin:  # not in prior C
-                if Val_(sum([l.Et for l in N.extH]), _Et=root.Et, coef=10) > 0:  # cross-similar in G
+                if Val_(sum([l.Et for l in N.extH]), _Et=root.Et, ave=root.ave) > 0:  # cross-similar in G
                     centroid_cluster(N, C_, root)  # search via N.rim, C_ +=[C]
                 else:  # M is lower in the rest of N_
                     break
     root.node_ += [C_]; root.nnest += 1
-    if len(C_) > ave_L and not root.root:  # frame
+    if len(C_) > root.ave.L and not root.root:  # frame
         cross_comp(root)  # append derH, cluster_N_(root.node_[-1])
 
 def top_(G, fd=0):
     return (G.link_[-1] if G.lnest else G.link_) if fd else (G.node_[-1] if G.nnest else G.node_)
 
-def sum_G_(node_, s=1, fc=0, G=CG()):
-
+def sum_G_(node_, s=1, fc=0, G=None):
+    if G is None:  # we need to create new G here, else all new G referencing a same CG
+        G = CG(); G.ave = Caves()
+    
     for n in node_:
         G.latuple += n.latuple * s
         G.vert = G.vert + n.vert*s if np.any(G.vert) else deepcopy(n.vert) * s
@@ -224,7 +227,7 @@ def sum_G_(node_, s=1, fc=0, G=CG()):
             G.box = extend_box( G.box, n.box)  # extended per separate node_ in centroid
     return G
 
-def comb_altG_(G_):  # combine contour G.altG_ into altG (node_ defined by root=G), for agg+ cross-comp
+def comb_altG_(G_, ave):  # combine contour G.altG_ into altG (node_ defined by root=G), for agg+ cross-comp
     # internal and external alts: different decay / distance?
     # background vs contour?
     for G in G_:
@@ -233,16 +236,16 @@ def comb_altG_(G_):  # combine contour G.altG_ into altG (node_ defined by root=
             if isinstance(G.altG, list):
                 sum_G_(G.altG)
                 G.altG = CG(root=G, node_= G.altG); G.altG.m=0  # was G.altG_
-                if Val_(G.altG.Et, _Et=G.Et):  # alt D * G rM
+                if Val_(G.altG.Et, _Et=G.Et, ave=ave):  # alt D * G rM
                     cross_comp(G.altG, G.node_)
         else:  # sum neg links
             link_,node_,derH, Et = [],[],[], np.zeros(4)
             for link in G.link_:
-                if Val_(link.Et, _Et=G.Et) > 0:  # neg link
+                if Val_(link.Et, _Et=G.Et, ave=ave) > 0:  # neg link
                     link_ += [link]  # alts are links | lGs
                     node_ += [n for n in link.nodet if n not in node_]
                     Et += link.Et
-            if Val_(Et, _Et=G.Et, coef=10) > 0:  # min sum neg links
+            if Val_(Et, _Et=G.Et, coef=10, ave=ave) > 0:  # min sum neg links
                 altG = CG(root=G, Et=Et, node_=node_, link_=link_); altG.m=0  # other attrs are not significant
                 altG.derH = sum_H(altG.link_, altG, fd=1)   # sum link derHs
                 G.altG = altG
@@ -280,7 +283,7 @@ def agg_level(inputs):  # draft parallel
         else: H[elevation+1] = Lev_G
         # feedback
         if elevation > 0:
-            if np.sum( np.abs(Lev_G.aves - Lev_G._aves)) > ave:  # filter update value, very rough
+            if np.sum( np.abs(Lev_G.aves - Lev_G._aves)) > frame.ave.m:  # filter update value, very rough
                 m, d, n, o = Lev_G.Et
                 k = n * o
                 m, d = m/k, d/k
@@ -295,7 +298,7 @@ def agg_H_par(focus):  # draft parallel level-updating pipeline
     if frame.node_:  # converted edges
         G_ = []
         for edge in frame.node_:
-            comb_altG_(edge.node_)
+            comb_altG_(edge.node_, edge.ave)
             cluster_C_(edge)  # no cluster_C_ in vect_edge
             G_ += edge.node_  # unpack edges
         frame.node_ = G_
@@ -316,7 +319,7 @@ def agg_H_seq(focus):  # sequential level-updating pipeline
         G_, Nnest = [], 0
         for edge in frame.node_[-1]:
             if edge.nnest:  # has higher graphs
-                comb_altG_(edge.node_)
+                comb_altG_(edge.node_, edge.ave)
                 cluster_C_(edge)  # recursive, within edge?
                 G_ = [Lev + lev for Lev, lev in zip_longest(G_, edge.node_, fillvalue = [])]  # concat levels
                 Nnest = max(Nnest, edge.nnest)
@@ -328,16 +331,22 @@ def agg_H_seq(focus):  # sequential level-updating pipeline
             lev_G = cross_comp(frame)  # return combined top composition level, append frame.derH
             if lev_G:
                 agg_H += [lev_G]  # indefinite graph hierarchy, sum main params?
-                if Val_(lev_G.Et, lev_G.Et, ave) < 0: break
+                if Val_(lev_G.Et, lev_G.Et, ave=lev_G.ave) < 0: break
             else: break
         if agg_H: # feedback
             G = lev_G; agg_H = agg_H[:-1]  # local top graph, gets no feedback
             while agg_H:
                 lev_G = agg_H.pop(); _n,n = G.Et[2],lev_G[2]
                 L = comp_N(G, lev_G, rn = _n/n if _n>n else n/_n)
-                if Val_(L.Et, _Et=L.Et) > 0:  # filter update value
+                if Val_(L.Et, _Et=L.Et, ave=lev_G.ave) > 0:  # filter update value
                     # lower-lev aves = higher-lev attrs, add selection and projection:
-                    lev_G.aves = [*G.Et, G.box, len(G.node_[-1])]  # min,max coord filters = box, L=len node_
+                    
+                    # map current level ave before feedback to prior lev_G?
+                    # ave = map_aves(G.ave)    
+                    # lev_G.ave = ave
+                    
+                    lev_G.ave = G.ave
+                    # lev_G.ave = [*G.Et, G.box, len(G.node_[-1])]  # min,max coord filters = box, L=len node_
                     # init ave/compared attr, then attr coefs: ave / ave_attr_m.
                     G = lev_G
                 else: break
