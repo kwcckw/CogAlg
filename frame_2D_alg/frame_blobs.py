@@ -56,14 +56,14 @@ class CBase:
     def __repr__(obj): return f"{obj.__class__.__name__}(id={obj.id})"
 
 # hyper-parameters, set as a guess, latter adjusted by feedback:
-class Caves(CBase):
+class Caves(object):
     name = "Filters"
-    def __init__(ave, **kwargs):
-        super().__init__()
+    def __init__(ave):
+        
         ave.m = 5
         # vectorize_edge
         ave.d = 10  # ave change to Ave_min from the root intra_blob?
-        ave.md = [ave.ma,ave.d]  # use instead of aves[fd]
+
         ave.L = 4
         ave.rn = 1000  # max scope disparity
         ave.max_dist = 2
@@ -75,7 +75,6 @@ class Caves(CBase):
         ave.cs = 5  # ave of comp_slice
         ave.dI = 20  # ave inverse m, change to Ave from the root intra_blob?
         ave.inv = 20
-        ave_cs_d = 5  # ave_d of comp_slice
         ave.mG = 10
         ave.mM = 2
         ave.mMa = .1
@@ -93,16 +92,63 @@ class Caves(CBase):
         ave.g = 30  # change to Ave from the root intra_blob?
         ave.mL = 2
         ave.dist = 3
-        ave.se_max_dist = 15  # max distance of slice_edge
         ave.dangle = .95  # vertical difference between angles: -1->1, abs dangle: 0->1, ave_dangle = (min abs(dangle) + max abs(dangle))/2,
         ave.olp = 5
         ave.B = 30
         ave.R = 10
+
+        ave.coefs = {  "m": 1, 
+                       # vectorize_edge
+                       "d": 1,
+                       "L": 1, 
+                       "rn": 1,
+                       "max_dist": 1, 
+                       "coef": 1, 
+                       "ccoef": 1,
+                       "icoef": 1, 
+                       "med_cost": 1, 
+                       # comp_slice
+                       "dI": 1, 
+                       "inv": 1, 
+                       "ave_cs_d": 1,
+                       "mG": 1, 
+                       "mM": 1, 
+                       "mMa": 1,
+                       "mA": 1, 
+                       "mL": 1, 
+                       "PPm": 1, 
+                       "PPd": 1,
+                       "Pm": 1, 
+                       "Pd": 1, 
+                       "Gm": 1,
+                       "Lslice": 1,
+                       # slice_edge
+                       "I": 1,
+                       "G": 1,
+                       "g": 1,
+                       "dist": 1,
+                       "dangle": 1,
+                       "olp": 1, 
+                       "B": 1,
+                       "R": 1
+        }
+
+        
     def sum_aves(ave):
         return sum(value for value in vars(ave).values())
+        
+        
+    def __getattribute__(ave,name):
+        coefs =   object.__getattribute__(ave, "coefs")    
+        if name == "md":
+            return [ave.m * coefs["m"], ave.d *  coefs["d"]]  # get updated md
+        else: 
+            return object.__getattribute__(ave, name)  * coefs[name]  # always return ave * coef
 
-ave = Caves.B  # base filter, directly used for comp_r fork
-aveR = Caves.R  # for range+, fixed overhead per blob
+        
+aves = Caves()
+ave = aves.B  # base filter, directly used for comp_r fork
+aveR = aves.R  # for range+, fixed overhead per blob
 
 class CFrame(CBase):
 

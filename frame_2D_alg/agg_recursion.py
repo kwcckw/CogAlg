@@ -3,7 +3,7 @@ from copy import copy, deepcopy
 from functools import reduce
 from itertools import zip_longest
 from multiprocessing import Pool, Manager
-from frame_blobs import frame_blobs_root, intra_blob_root, imread, Caves
+from frame_blobs import frame_blobs_root, intra_blob_root, imread, aves, Caves
 from comp_slice import comp_latuple, comp_md_
 from vect_edge import L2N, sum_H, add_H, comp_H, comp_N, comp_node_, comp_link_, sum2graph, get_rim, CG, vectorize_root, comp_area, extend_box, Val_
 '''
@@ -35,7 +35,7 @@ Code-coordinate filters may extend base code by cross-projecting and combining p
 (which may include extending eval function with new match-projecting derivatives) 
 Similar to cross-projection by data-coordinate filters, described in "imagination, planning, action" section of part 3 in Readme.
 '''
-ave, ave_L = Caves.m, Caves.L
+ave, ave_L = aves.m, aves.L
 
 def cross_comp(root):  # form agg_Level by breadth-first node_,link_ cross-comp, connect clustering, recursion
 
@@ -326,11 +326,11 @@ def agg_H_seq(focus):  # sequential level-updating pipeline
         frame.node_ = [frame.node_[0], *G_]  # replace edge_ with new node levels
         agg_H = []
         # feedforward:
-        while len(frame.node_[-1]) > frame.ave.L:  # draft
+        while len(frame.node_[-1]) > ave_L:  # draft
             lev_G = cross_comp(frame)  # return combined top composition level, append frame.derH
             if lev_G:
                 agg_H += [lev_G]  # indefinite graph hierarchy, sum main params?
-                if Val_(lev_G.Et, lev_G.Et, ave) < 0: break
+                if Val_(lev_G.Et, lev_G.Et) < 0: break
             else: break
         if agg_H: # feedback
             G = lev_G; agg_H = agg_H[:-1]  # local top graph, gets no feedback
@@ -339,7 +339,8 @@ def agg_H_seq(focus):  # sequential level-updating pipeline
                 L = comp_N(G, lev_G, rn = _n/n if _n>n else n/_n)
                 if Val_(L.Et, _Et=L.Et) > 0:  # filter update value
                     # lower-lev aves = higher-lev attrs, add selection and projection:
-                    lev_G.aves = [*G.Et, G.box, len(G.node_[-1])]  # min,max coord filters = box, L=len node_
+                    # lev_G.aves = [*G.Et, G.box, len(G.node_[-1])]  # min,max coord filters = box, L=len node_
+                    lev_G.aves = Caves()
                     # init ave/compared attr, then attr coefs: ave / ave_attr_m.
                     G = lev_G
                 else: break
