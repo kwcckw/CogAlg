@@ -2,7 +2,7 @@ import numpy as np
 from collections import defaultdict
 from itertools import combinations
 from math import atan2, cos, floor, pi
-from frame_blobs import frame_blobs_root, intra_blob_root, CBase, imread, unpack_blob_
+from frame_blobs import frame_blobs_root, intra_blob_root, CBase, imread, unpack_blob_, Caves
 '''
 In natural images, objects look very fuzzy and frequently interrupted, only vaguely suggested by initial blobs and contours.
 Potential object is proximate low-gradient (flat) blobs, with rough / thick boundary of adjacent high-gradient (edge) blobs.
@@ -17,58 +17,6 @@ and inverse gradient deviation of flat blobs. But the latter is implicit here: h
 A stable combination of a core flat blob with adjacent edge blobs is a potential object.
 '''
 
-class Caves(CBase):  
-    name = "Filters"
-    def __init__(ave, **kwargs):
-        super().__init__()
-
-        ave.m = 5
-
-        # vectorize_edge
-        ave.ve = 3  # ave of vect_edge  (or a shared ave for all vectorize_edge, comp_slice and slice_edge?)
-        ave.d = 10  # ave change to Ave_min from the root intra_blob?
-        ave.L = 4
-        ave.rn = 1000  # max scope disparity
-        ave.max_dist = 2
-        ave.coef = 10
-        ave.ccoef = 10   # scaling match ave to clustering ave
-        ave.icoef = .15  # internal M proj_val / external M proj_val
-        ave.med_cost = 10
-        
-        # comp_slice
-        ave.cs = 5  # ave of comp_slice
-        ave.dI = 20  # ave inverse m, change to Ave from the root intra_blob?
-        ave.inv = 20
-        ave_cs_d = 5  # ave_d of comp_slice
-        ave.mG = 10
-        ave.mM = 2
-        ave.mMa = .1
-        ave.mA = .2
-        ave.mL = 2
-        ave.PPm = 50
-        ave.PPd = 50
-        ave.Pm = 10
-        ave.Pd = 10
-        ave.Gm = 50
-        ave.Lslice = 5
-        
-        # slice_edge
-        ave.I = 100
-        ave.G = 100
-        ave.g = 30  # change to Ave from the root intra_blob?
-        ave.mL = 2
-        ave.dist = 3
-        ave.se_max_dist = 15  # max distance of slice_edge
-        ave.dangle = .95  # vertical difference between angles: -1->1, abs dangle: 0->1, ave_dangle = (min abs(dangle) + max abs(dangle))/2,
-        ave.olp = 5
-
-    # sum of aves
-    def sum_aves(ave):
-        return sum(value for value in vars(ave).values())
-
-        
-
-
 class CP(CBase):
     def __init__(P, yx, axis):
         super().__init__()
@@ -80,12 +28,11 @@ class CP(CBase):
 def vectorize_root(frame):
 
     blob_ = unpack_blob_(frame)
-    frame.ave = Caves()
     for blob in blob_:
         if not blob.sign and blob.G > frame.ave.G:
-            slice_edge(blob)
+            slice_edge(blob, frame.ave)
 
-def slice_edge(edge):
+def slice_edge(edge, aves):
 
     axisd = select_max(edge)
     yx_ = sorted(axisd.keys(), key=lambda yx: edge.dert_[yx][-1])  # sort by g
@@ -93,7 +40,7 @@ def slice_edge(edge):
     # form P/ local max yx:
     while yx_:
         yx = yx_.pop(); axis = axisd[yx]  # get max of g maxes
-        P = form_P(CP(yx, axis), edge)
+        P = form_P(CP(yx, axis), edge, ave_I = aves.I, ave_G = aves.G, ave_dangle = aves.dangle)
         edge.P_ += [P]
         yx_ = [yx for yx in yx_ if yx not in edge.rootd]    # remove merged maxes if any
     edge.P_.sort(key=lambda P: P.yx, reverse=True)
@@ -116,7 +63,7 @@ def select_max(edge):
         if new_max: axisd[y, x] = sa, ca
     return axisd
 
-def form_P(P, edge):
+def form_P(P, edge, ave_I,ave_G,ave_dangle):
     y, x = P.yx
     ay, ax = P.axis
     center_dert = i,gy,gx,g = edge.dert_[y,x]  # dert is None if _y,_x not in edge.dert_: return` in `interpolate2dert`
@@ -138,10 +85,10 @@ def form_P(P, edge):
             if edge.rootd.get((ky,kx)) is not None:
                 break  # skip overlapping P
             mangle, dangle = comp_angle((_gy,_gx),(gy,gx))
-            if mangle < edge.ave.dangle: break  # terminate P if angle miss
+            if mangle < ave_dangle: break  # terminate P if angle miss
             m = min(_i,i) + min(_g,g) + mangle
             d = abs(-i-i) + abs(_g-g) + dangle
-            if m < edge.ave.I + edge.ave.G + edge.ave.dangle: break  # need separate weights?  terminate P if total miss, blob should be more permissive than P
+            if m < ave_I + ave_G + ave_dangle: break  # need separate weights?  terminate P if total miss, blob should be more permissive than P
             # update P:
             edge.rootd[ky, kx] = P
             I+=i; Dy+=dy; Dx+=dx; G+=g; M+=m; D+=d; L+=1

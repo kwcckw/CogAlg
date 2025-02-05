@@ -1,6 +1,6 @@
 import numpy as np
-from frame_blobs import CBase, frame_blobs_root, intra_blob_root, imread, unpack_blob_
-from slice_edge import CP, slice_edge, comp_angle, Caves
+from frame_blobs import CBase, frame_blobs_root, intra_blob_root, imread, unpack_blob_, Caves
+from slice_edge import CP, slice_edge, comp_angle
 
 '''
 comp_slice traces edge axis by cross-comparing vertically adjacent Ps: horizontal slices across an edge blob.
@@ -51,7 +51,7 @@ def vectorize_root(frame):
     blob_ = unpack_blob_(frame)
     for blob in blob_:
         if not blob.sign and blob.G > frame.ave.G * blob.root.olp:
-            edge = slice_edge(blob)
+            edge = slice_edge(blob, frame.aves)
             if edge.G * (len(edge.P_) - 1) > frame.ave.PPm:  # eval PP, olp=1
                 edge.ave = Caves()
                 comp_slice(edge)
@@ -142,10 +142,7 @@ def form_PP_(root, iP_, fd):  # form PPs of dP.valt[fd] + connected Ps val
         while _prim_:
             prim_,lrim_ = set(),set()
             for _P,_link in zip(_prim_,_lrim_):
-                if isinstance(root, list): ave_md = [root[-2].m, root[-2].d]
-                else:                      ave_md = [root.ave.m, root.ave.d]
-                
-                if _link.Et[fd] < ave_md[fd] or _P.merged:  # not sure
+                if _link.Et[fd] < Caves.md[fd] or _P.merged:
                     continue
                 _P_.add(_P); link_.add(_link)
                 _I,_G,_M,_D,_L,_ = _P.latuple
