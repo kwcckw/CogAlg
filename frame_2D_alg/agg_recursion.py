@@ -141,6 +141,83 @@ def cluster_C_(root):  # 0 from cluster_edge: same derH depth in root and top Gs
         C.altG = A
         return C
 
+    # from gpt, not fully verify
+    def pca(X, num_components=None):
+        """
+        Perform Principal Component Analysis (PCA) on dataset X.
+        
+        Parameters:
+            X (numpy.ndarray): Input data matrix of shape (n_samples, n_features)
+            num_components (int, optional): Number of principal components to keep
+        
+        Returns:
+            tuple: (projected data, principal components, explained variance)
+        """
+        # Center the data
+        X_meaned = X - np.mean(X, axis=0)
+        
+        # Compute covariance matrix
+        covariance_matrix = np.cov(X_meaned, rowvar=False)
+        
+        # Compute eigenvalues and eigenvectors
+        eigenvalues, eigenvectors = np.linalg.eigh(covariance_matrix)
+        
+        # Sort eigenvalues and eigenvectors in descending order
+        sorted_indices = np.argsort(eigenvalues)[::-1]
+        eigenvalues = eigenvalues[sorted_indices]
+        eigenvectors = eigenvectors[:, sorted_indices]
+        
+        # Select the top 'num_components' eigenvectors
+        if num_components is not None:
+            eigenvectors = eigenvectors[:, :num_components]
+        
+        # Project the data onto the principal components
+        projected_data = np.dot(X_meaned, eigenvectors)
+        
+        return projected_data, eigenvectors, eigenvalues
+
+
+    # very initial draft
+    def comp_C_project(C, N):  # compute match without new derivatives: global cross-comp is not directional
+
+        mL = min(C.L, len(N.node_)) - ave_L
+        mA = comp_area(C.box, N.box)[0]
+        mI_lat, mG_lat, mM_lat, mD_lat, mL_lat, mA_lat = comp_latuple(C.latuple, N.latuple, C.Et[2], N.Et[2])[0][0]
+        mI_ver, mG_ver, mM_ver, mD_ver, mL_ver, mA_ver  = comp_md_(C.vert[1], N.vert[1])[0][0]
+
+        mI_mmd, mG_mmd, mM_mmd, mD_mmd, mL_mmd, mA_mmd = 0, 0, 0, 0, 0, 0
+        mI_dmd, mG_dmd, mM_dmd, mD_dmd, mL_dmd, mA_dmd = 0, 0, 0, 0, 0, 0
+        for lay in comp_H(C.derH, N.derH, rn=1, root=None, Et=np.zeros(4),fd=0):
+            for i, (fork) in enumerate(lay):
+                if fork:
+                    if i:  # dfork
+                        mI_dmd += fork.m_d_t[0][0]
+                        mG_dmd += fork.m_d_t[0][1]
+                        mM_dmd += fork.m_d_t[0][2]
+                        mD_dmd += fork.m_d_t[0][3]
+                        mL_dmd += fork.m_d_t[0][4]
+                        mA_dmd += fork.m_d_t[0][5]
+                    else:  # mfork 
+                        mI_mmd += fork.m_d_t[0][0]
+                        mG_mmd += fork.m_d_t[0][1]
+                        mM_mmd += fork.m_d_t[0][2]
+                        mD_mmd += fork.m_d_t[0][3]
+                        mL_mmd += fork.m_d_t[0][4]
+                        mA_mmd += fork.m_d_t[0][5]
+       
+        # or separate each I, G, M, D, L and A as independent features without summing them?
+        m__ = np.array([
+                        [mI_lat + mI_ver + mI_mmd + mI_dmd, aves.coefs["dI"]],  # I
+                        [mG_lat + mG_ver + mG_mmd + mG_dmd, aves.coefs["mG"]],  # G
+                        [mM_lat + mM_ver + mM_mmd + mM_dmd, aves.coefs["mM"]],  # M
+                        [mD_lat + mD_ver + mD_mmd + mD_dmd, aves.coefs["mD"]],  # D
+                        [mL_lat + mL_ver + mL_mmd + mL_dmd + mL, aves.coefs["mL"]],  # L
+                        [mA_lat + mA_ver + mA_mmd + mA_dmd + mA, aves.coefs["mA"]]   # A
+                    ])
+        projected_m_ = pca(m__, 1)
+
+        return projected_m_
+
     def comp_C(C, N):  # compute match without new derivatives: global cross-comp is not directional
 
         mL = min(C.L, len(N.node_)) - ave_L
@@ -200,6 +277,7 @@ def cluster_C_(root):  # 0 from cluster_edge: same derH depth in root and top Gs
         for i, N in enumerate(N_):  # replace some nodes by their centroid clusters
             if not N.fin:  # not in prior C
                 if Val_(sum([l.Et for l in N.extH]), _Et=root.Et, coef=10) > 0:  # cross-similar in G
+
                     centroid_cluster(N, C_, root)  # search via N.rim, C_ +=[C]
                 else:  # M is lower in the rest of N_
                     break
@@ -323,7 +401,7 @@ def agg_H_seq(focus):  # sequential level-updating pipeline
                 G_ = [Lev + lev for Lev, lev in zip_longest(G_, edge.node_, fillvalue=[])]  # concat levels
                 Nnest = max(Nnest, edge.nnest)
         frame.nnest = Nnest
-        frame.node_ = [frame.node_[0], *G_]  # replace edge_ with new node levels
+        frame.node_ = [frame.node_[0]] + (G_ if G_ else [[]])  # replace edge_ with new node levels  (we need additional bracket with G_, else it's packed flat)
         agg_H = []
         # feedforward:
         while len(frame.node_[-1]) > ave_L:  # draft

@@ -194,7 +194,7 @@ def comp_latuple(_latuple, latuple, _n,n):  # 0der params
     rn = _n / n
 
     dI = _I - I*rn;  mI = ave_dI - dI    # vI = mI - ave
-    dG = _G - G*rn;  mG = min(_G, G*rn)  # vG = mG - ave_mG
+    dG = _G - G*rn;  mG = min(_G, G*rn)  # vG = mG - ave_mG  (we need to change this back to use ave?)
     dM = _M - M*rn;  mM = min(_M, M*rn)  # vM = mM - ave_mM
     dD = _D - D*rn;  mD = min(_D, D*rn)  # vD = mD - ave_mD
     dL = _L - L*rn;  mL = min(_L, L*rn)  # vL = mL - ave_mL
