@@ -341,7 +341,7 @@ def agg_H_seq(focus):  # sequential level-updating pipeline
                 L = comp_N(hG,lev_G, rn = _n/n if _n>n else n/_n)
                 if Val_(L.Et, _Et=L.Et) > 0:  # dLev = filter update value? or specific to Dm_attr?
                     # pass attr matches instead of hG:
-                    lev_G.aves = weigh_m_(hG)
+                    lev_G.aves = weigh_m_(unpack_m_attrs(hG))
                     # centroid M += m/attr (mags are not commensurable), mC=min: +ve
                     # cost attrs mC is always -ve, no independent normalization?
                     # project/d: shift to higher or lower m?
@@ -351,23 +351,44 @@ def agg_H_seq(focus):  # sequential level-updating pipeline
             frame.node_ = agg_H
     return frame
 
-def weigh_m_(m_, _M, ave=1e-7):  # adjust weights on attr matches, also add cost attrs
+
+def unpack_m_attrs(hG):
+    
+    m_attrs = []
+    # (mI_ver, mG_ver, mM_ver, mD_ver, mL_ver, mA_ver) + (m, mrdn)
+    m_attrs += hG.vert[0] +  hG.Et[0::2]
+    for lay in hG.derH:
+        for fork in lay:
+            m_attrs += [fork[0]]  # each mfork of m_d_
+
+    return m_attrs
+
+def weigh_m_(m_, ave=1e-7):  # adjust weights on attr matches, also add cost attrs
 
     L = len(m_)
+    c_ = [0 for _ in m_]  # cost of m
+    _W = 0; M = 1
     while True:
         w_ = []  # weight = inverted abs rational deviation from mean
-        for m in m_:
-            w_ += [m/_M if _M > m else _M/m]  # min m = 1e-7
+        for m, c in zip(m_, c_):
+            am = m - c  # adjusted m with cost
+            w_ += [am/M if M > am else M/am]  # min m = 1e-7
+            
         rw = 1 / (sum(w_) / L)
         w_ = [w * rw for w in w_]  # normalize to average weight = 1
+         
         # should be W: abs w update, M is stable anyway?
-        M = sum((m if m else 1e-7) * w for m, w in zip(m_, w_))  / L
-        if abs(M - _M) > ave:
-            _M = M
+        M = sum(((m-c) if m else 1e-7) * w for m, w, c in zip(m_, w_, c_))  / L
+        # update c based on new M * w
+        c_ = [(m - M * w) for m, w in zip(m_, w_)]    
+        W = sum(w_)
+             
+        if abs(W - _W) > ave:
+            _W = W
         else:
             break
 
-    return w_, M
+    return w_, c_, M
 
 if __name__ == "__main__":
     # image_file = './images/raccoon_eye.jpeg'
