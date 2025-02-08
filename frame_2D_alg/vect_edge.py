@@ -110,7 +110,8 @@ class CG(CBase):  # PP | graph | blob: params of single-fork node_ cluster
         G.root = kwargs.get('root')  # may extend to list in cluster_N_, same nodes may be in multiple dist layers
         G.derH = kwargs.get('derH',[])  # lay is [m,d]: Clay(Et,node_,link_,m_d_t), sum|concat links across fork tree
         G.extH = kwargs.get('extH',[])  # sum from rims, single-fork
-        G.vert = kwargs.get('vert', np.array([np.zeros(6), np.zeros(6)])) # vertical m_d_ of latuple
+        G.vert = kwargs.get('vert', np.array([np.array([np.zeros(2), np.zeros(6), np.zeros(6)], dtype=object),
+                                              np.array([np.zeros(2), np.zeros(6), np.zeros(6)], dtype=object)],dtype=object)) # vertical m_d_ of latuple
         G.latuple = kwargs.get('latuple', np.array([.0,.0,.0,.0,.0, np.zeros(2)], dtype=object))  # lateral I,G,M,D,L,[Dy,Dx]
         G.box = kwargs.get('box', np.array([np.inf,np.inf,-np.inf,-np.inf]))  # y0,x0,yn,xn
         G.yx = kwargs.get('yx', np.zeros(2))  # init PP.yx = [(y0+yn)/2,(x0,xn)/2], then ave node yx
@@ -151,15 +152,22 @@ def vectorize_root(frame):
             if edge.G * (len(edge.P_)-1) > ave:  # eval PP
                 comp_slice(edge)
                 if edge.Et[0] * (len(edge.node_)-1)*(edge.rng+1) > ave:
-                    lat = np.array([.0,.0,.0,.0,.0,np.zeros(2)],dtype=object); vert = np.array([np.zeros(6), np.zeros(6)])
+                    lat = np.array([.0,.0,.0,.0,.0,np.zeros(2)],dtype=object)
+                    # m_t, d_t
+                    vert = np.array([np.array([np.zeros(2), np.zeros(6), np.zeros(6)], dtype=object),
+                            np.array([np.zeros(2), np.zeros(6), np.zeros(6)], dtype=object)],dtype=object)
                     for PP in edge.node_:
-                        vert += PP[3]; lat += PP[4]
+                        vert[0][2] += PP[3][0]; vert[1][2] += PP[3][1]   
+                        lat += PP[4]
                     y_,x_ = zip(*edge.dert_.keys()); box = [min(y_),min(x_),max(y_),max(x_)]
                     blob2G(edge, root=frame, vert=vert,latuple=lat, box=box, yx=np.divide([edge.latuple[:2]], edge.area))  # node_, Et stay the same
                     G_ = []
                     for PP in edge.node_:  # no comp node_, link_ | PPd_ for now
-                        P_,link_,vert,lat, A,S,box,[y,x],Et = PP[1:]  # PPt
-                        if Et[0] > ave:  # no altG until cross-comp
+                        P_,link_,PPvert,lat, A,S,box,[y,x],Et = PP[1:]  # PPt
+                        vert = np.array([np.array([np.zeros(2), np.zeros(6), np.zeros(6)], dtype=object),
+                                np.array([np.zeros(2), np.zeros(6), np.zeros(6)], dtype=object)],dtype=object)
+                        vert[0][2] += PPvert[0]; vert[1][2] += PPvert[1]  
+                        if Et[0] > ave:  # no altG until cross-comp  
                             G = CG(root=edge, fd_=[0], Et=Et, node_=P_, link_=[], vert=vert, latuple=lat, box=box, yx=np.array([y,x]))
                             y0,x0,yn,xn = box; G.aRad = np.hypot((yn-y0)/2,(xn-x0)/2)  # approx
                             G_ += [G]
@@ -351,10 +359,10 @@ def comp_N(_N,N, rn, angle=None, dist=None, dir=1):  # dir if fd, Link.derH=dH, 
         m_t = np.array([m_t, np.zeros(6), np.zeros(6)], dtype=object)  # empty lat, ver
         d_t = np.array([d_t, np.zeros(6), np.zeros(6)], dtype=object)
     else:   # CG
-        (mLat, dLat), L_et = comp_latuple(_N.latuple, N.latuple, _o,o)
-        (mVer, dVer), V_et = comp_md_(_N.vert[1], N.vert[1], dir)
-        m_t = np.array([m_t, mLat, mVer], dtype=object)
-        d_t = np.array([d_t, dLat, dVer], dtype=object)
+        (mLat, dLat), L_et = comp_latuple(_N.latuple, N.latuple, _o,o)  # with lat as magnitude, this is no longer needed?
+        ((mext, mLatv, mVer), (dext, dLatv, dVer)), V_et = comp_md_t(_N.vert[1], N.vert[1], dir)
+        m_t = np.array([m_t+mext, mLat+mLatv, mVer], dtype=object)
+        d_t = np.array([d_t+dext, dLat+dLatv, dVer], dtype=object)
         Et += np.array([L_et[0]+V_et[0], L_et[1]+V_et[1], 2, 0])
         # same olp?
     Link = CL(fd=fd, nodet=[_N,N], yx=np.add(_N.yx,N.yx)/2, angle=angle, dist=dist, box=extend_box(N.box,_N.box))
@@ -373,6 +381,21 @@ def comp_N(_N,N, rn, angle=None, dist=None, dir=1):  # dir if fd, Link.derH=dH, 
             add_H(node.extH, Link.derH, root=node, rev=rev, fd=1)
             node.Et += Et
     return Link
+
+def comp_md_t(_d_t,d_t, rn=.1, dir=1):  # dir may be -1
+    
+    m_t_, d_t_ = [], []
+    M, D = 0,0 
+    for _d_, d_ in zip(_d_t, d_t):
+        
+        d_ = d_ * rn  # normalize by compared accum span
+        dd_ = (_d_ - d_ * dir)  # np.arrays
+        md_ = np.minimum(np.abs(_d_), np.abs(d_))
+        md_[(_d_<0) != (d_<0)] *= -1  # negate if only one compared is negative        
+        m_t_ += [md_]; d_t_ += [dd_]   
+        M += md_.sum(); D += dd_.sum()
+   
+    return np.array([m_t_,d_t_],dtype=object), np.array([M,D])  # [m_,d_], Et
 
 def get_rim(N,fd): return N.rimt[0] + N.rimt[1] if fd else N.rim  # add nesting in cluster_N_?
 
@@ -399,6 +422,13 @@ def sum2graph(root, grapht, fd, minL=0, maxL=None):  # sum node and link params 
         N.root = graph
     graph.node_= N_  # nodes or roots, link_ is still current-dist links only?
     graph.derH = [[CLay(root=graph), lay] for lay in sum_H(link_, graph, fd=1)]  # sum and nest link derH
+    
+    # sum vert from derH layers
+    for lay in graph.derH:
+        for fork in lay:
+            if fork.m_d_t:
+                graph.vert += fork.m_d_t
+    
     yx = np.mean(yx_,axis=0)
     dy_,dx_ = (graph.yx - yx_).T; dist_ = np.hypot(dy_,dx_)
     graph.aRad = dist_.mean()  # ave distance from graph center to node centers
