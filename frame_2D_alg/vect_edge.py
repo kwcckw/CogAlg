@@ -84,8 +84,8 @@ class CLay(CBase):  # flat layer if derivation hierarchy
 
     def comp_lay(_lay, lay, rn, root, dir=1):  # unpack derH trees down to numericals and compare them
 
-        _d_t, d_t = _lay.m_d_t[1], lay.m_d_t[1]  # norm,comp np.array d_t:
-        dd_t = _d_t - d_t * rn * dir
+        _d_t, d_t = _lay.m_d_t[1], lay.m_d_t[1]  # norm,comp np.array d_t: 
+        dd_t = np.array([_d_ - d_ * rn * dir for _d_,d_ in zip(_d_t, d_t)], dtype=object)
         # match = min/max comparands:
         md_t = np.array([np.divide( np.minimum(_d_,d_),np.maximum(_d_,d_)) for _d_,d_ in zip(_d_t, d_t)], dtype=object)
         for i, (_d_,d_) in enumerate(zip(_d_t, d_t)):  # in [dext,vert]
@@ -342,12 +342,12 @@ def comp_ext(_ext, ext, rn, dir=1):
     ddA = _dA - dA * rn * dir; mdA = min(_dA, dA*rn) / max(_dA, dA*rn) - 2
     if _dA < 0 != dA < 0: ddA = -ddA
 
-    return np.array( np.array([mdL, mdA], dtype=float), np.array([ddL, ddA], dtype=float))
+    return np.array([np.array([mdL, mdA], dtype=float), np.array([ddL, ddA], dtype=float)])
 
 
 def comp_N(_N,N, rn, angle=None, dist=None, dir=1):  # dir if fd, Link.derH=dH, comparand rim+=Link
 
-    fd = isinstance(N,CL)  # compare links, relative N direction = 1|-1
+    fd = isinstance(N,CL); derH=[]  # compare links, relative N direction = 1|-1
     # comp externals:
     if fd:
         _L, L = _N.dist, N.dist; L*=rn; dL = _L - L; mL = min(_L,L) / max(_L,L) - ave_L  # rm
@@ -365,18 +365,19 @@ def comp_N(_N,N, rn, angle=None, dist=None, dir=1):  # dir if fd, Link.derH=dH, 
         vert = np.array([[],[]])
     else:  # default:
         vert, (Mv,Dv) = comp_vert(_N.vert[1], N.vert[1])
-        if N.ext:
-            ddext = comp_ext(_N.ext[1], N.ext[1], rn)  # combine der_ext across all layers
+        if np.any(N.dext):
+            ddext = comp_ext(_N.dext[1], N.dext[1], rn)  # combine der_ext across all layers
             dext += ddext; M += np.sum(ddext[0]); D += np.sum(ddext[1])
         M+= Mv; D+= Dv; Et[:2] = M,D
         if M > ave:  # specification
-            derH = comp_H(_N.derH, N.derH, rn, Link, Et, fd)  # comp shared layers, if any
             #? comp_node_(node_| link_), combinatorial, nest / agg+
             dLat, lEt = comp_latuple(_N.latuple, N.latuple, _o,o)
             Et += np.array([lEt[0], lEt[1], 2, 0])  # same olp?
             vert += dLat
-    Link.derH = [CLay(root=Link, Et=Et, m_d_t=[[dext[0],vert[0]],[dext[1],vert[1]]], node_=[_N,N], link_=[Link])]  # lay0
-    if 'derH' in locals(): Link.derH += derH  # flat
+            if _N.derH and N.derH:
+                derH = comp_H(_N.derH, N.derH, rn, Link, Et, fd)  # comp shared layers, if any
+                
+    Link.derH = [CLay(root=Link, Et=Et, m_d_t=[[dext[0],vert[0]],[dext[1],vert[1]]], node_=[_N,N], link_=[Link])] + derH  # lay0 + higherl ayers (flat)
     # spec:
     if not fd and _N.altG and N.altG:  # if alt M?
         Link.altL = comp_N(_N.altG, N.altG, _N.altG.Et[2] / N.altG.Et[2])
@@ -417,7 +418,11 @@ def sum2graph(root, grapht, fd, minL=0, maxL=None):  # sum node and link params 
     for lay in graph.derH:
         for fork in lay:
             if fork.m_d_t:
-                graph.dext += fork.m_d_t[0]; graph.vert += fork.m_d_t[1]
+                # or init graph.dext and vert with np.zeros?
+                if graph.dext: graph.dext += fork.m_d_t[0]; 
+                else:          graph.dext = deepcopy(fork.m_d_t[0]); 
+                if graph.vert: graph.vert += fork.m_d_t[1]
+                else:          graph.vert= deepcopy(fork.m_d_t[1])
     yx = np.mean(yx_,axis=0)
     dy_,dx_ = (graph.yx - yx_).T; dist_ = np.hypot(dy_,dx_)
     graph.aRad = dist_.mean()  # ave distance from graph center to node centers

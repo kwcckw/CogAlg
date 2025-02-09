@@ -177,8 +177,8 @@ def comp_latuple(_latuple, latuple, _n,n):  # 0der params, add dir?
 
     I*=rn; dI = _I - I;  mI = ave_dI -dI; MI = max(_I,I)  # vI = mI - ave
     G*=rn; dG = _G - G;  mG = min(_G, G); MG = max(_G,G)  # vG = mG - ave_mG
-    M*=rn; dM = _M - M;  mM = min(_M, M); MM = max(_M,M)  # vM = mM - ave_mM
-    D*=rn; dD = _D - D;  mD = min(_D, D); MD = max(_D,D)  # vD = mD - ave_mD
+    M*=rn; dM = _M - M;  mM = min(_M, M); MM = max(1, max(_M,M))  # vM = mM - ave_mM (when P has single dert, their M and D is 0, skip single dert's P in slice_edge?)
+    D*=rn; dD = _D - D;  mD = min(_D, D); MD = max(1, max(_D,D))  # vD = mD - ave_mD
     L*=rn; dL = _L - L;  mL = min(_L, L); ML = max(_L,L)  # vL = mL - ave_mL
     mA, dA = comp_angle((_Dy,_Dx),(Dy,Dx))  # vA = mA - ave_mA
 
