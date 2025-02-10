@@ -177,8 +177,8 @@ def comp_latuple(_latuple, latuple, _n,n):  # 0der params, add dir?
 
     I*=rn; dI = _I - I;  mI = ave_dI -dI; MI = max(_I,I)  # vI = mI - ave
     G*=rn; dG = _G - G;  mG = min(_G, G); MG = max(_G,G)  # vG = mG - ave_mG
-    M*=rn; dM = _M - M;  mM = min(_M, M); MM = max(1, max(_M,M))  # vM = mM - ave_mM (when P has single dert, their M and D is 0, skip single dert's P in slice_edge?)
-    D*=rn; dD = _D - D;  mD = min(_D, D); MD = max(1, max(_D,D))  # vD = mD - ave_mD
+    M*=rn; dM = _M - M;  mM = min(_M, M); MM = max(_M,M)  # vM = mM - ave_mM (when P has single dert, their M and D is 0, skip single dert's P in slice_edge?)
+    D*=rn; dD = _D - D;  mD = min(_D, D); MD = max(_D,D)  # vD = mD - ave_mD
     L*=rn; dL = _L - L;  mL = min(_L, L); ML = max(_L,L)  # vL = mL - ave_mL
     mA, dA = comp_angle((_Dy,_Dx),(Dy,Dx))  # vA = mA - ave_mA
 
@@ -194,7 +194,7 @@ def comp_vert(_d_,d_, rn=.1, dir=1):  # dir may be -1
     d_ = d_ * rn  # normalize by compared accum span
     dd_ = (_d_ - d_ * dir)  # np.arrays
     _d_,d_ = np.abs(_d_), np.abs(d_)
-    md_ = np.divide( np.minimum(_d_,d_), np.maximum(_d_,d_))  # rms
+    md_ = np.divide( np.minimum(_d_,d_), [1 if d == 0 else d for d in np.maximum(_d_,d_) ])  # rms (d could be 0, for example, same L length gets 0 d)
     md_[(_d_<0) != (d_<0)] *= -1  # m is negative if comparands have opposite sign
     M = np.sqrt(sum([m**2 for m in md_]))  # m/M- weighted sum, 6 pars = 1
     D = np.sqrt(sum([d**2 for d in dd_]))  # same weighting?

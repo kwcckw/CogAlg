@@ -87,14 +87,15 @@ class CLay(CBase):  # flat layer if derivation hierarchy
         _d_t = _lay.m_d_t[1]; d_t = lay.m_d_t[1] * rn * dir
 
         dd_t = _d_t - d_t  # comp np.array([dext,dver])
-        md_t = np.divide( np.minimum(_d_t,d_t),np.maximum(_d_t,d_t))  # match = min/max comparands, exclude angle?
+        # np.minimum won't work if they are object, same with sum below
+        md_t = np.array([np.minimum(_d_,d_)/np.maximum(1, np.maximum(_d_,d_)) for _d_, d_ in zip(_d_t,d_t)],dtype=object)  # match = min/max comparands, exclude angle?
         for i, (_d_,d_) in enumerate(zip(_d_t, d_t)):  # [dext,vert]
             md_t[i][(_d_<0) != (d_<0)] *= -1
             # m is negative if comparands have opposite sign
         m_d_t = [md_t,dd_t]  # [np.array([mext,mvert]),np.array([dext,dvert])]
         node_ = list(set(_lay.node_+ lay.node_))  # concat
         link_ = _lay.link_ + lay.link_
-        M = np.sum(md_t); D = np.sum(dd_t)
+        M = sum([np.sum(md_) for md_ in md_t]); D = sum([np.sum(dd_) for dd_ in dd_t])
         # weigh M,D by m/ M(dext+vert): np.sqrt(sum([m**2 for m in md_t])/ 1.3): 8 params?
         Et = np.array([M, D, .3 if len(d_t)==1 else 1.3, (_lay.Et[3]+lay.Et[3])/2])  # n comp params / 6 (2/dext, 6/vert)
         if root: root.Et += Et
@@ -161,9 +162,10 @@ def vectorize_root(frame):
                     for PP in edge.node_:  # no comp node_, link_ | PPd_ for now
                         P_,link_,vert,lat, A,S,box,[y,x],Et = PP[1:]  # PPt
                         if Et[0] > ave:  # no altG until cross-comp
+                            # init 1st layer with PP vert, empty dfork and dext in mfork
+                            m_d_t = np.array([np.array([np.zeros(2),vert[0]],dtype=object),np.array([np.zeros(2),vert[1]],dtype=object)])
                             G = CG(root=edge,fd_=[0],Et=Et, node_=P_,link_=[], vert=copy(vert), latuple=lat, box=box, yx=np.array([y,x]),
-                                   derH=[[CLay(), CLay(m_d_t = np.array([np.zeros(2),vert[0],np.zeros(2),vert[1]]))]]
-                                   )  # init 1st layer with PP vert, empty dfork and dext in mfork
+                                   derH=[[CLay(), CLay(m_d_t = m_d_t)]]) 
                             y0,x0,yn,xn = box; G.aRad = np.hypot((yn-y0)/2,(xn-x0)/2)  # approx
                             G_ += [G]
                     if len(G_) > ave_L:
@@ -371,13 +373,16 @@ def comp_N(_N,N, rn, angle=None, dist=None, dir=1):  # dir if fd, Link.derH=dH, 
             dext += ddext; M += np.sum(ddext[0]); D += np.sum(ddext[1])
         M+= Mv; D+= Dv; Et[:2] = M,D
         if M > ave:  # specification
-            if len(derH) > 2:  # else derH is redundant to dext,vert
-                derH = comp_H(_N.derH, N.derH, rn, Link, Et, fd)  # comp shared layers, if any
                 #? comp_node_(node_| link_), combinatorial, nest / agg+
             dLat,lEt = comp_latuple(_N.latuple, N.latuple, _o,o) # lower value
             Et += np.array([lEt[0], lEt[1], 2, 0])  # same olp?
             vert += dLat
-    Link.derH = [CLay(root=Link,Et=Et,node_=[_N,N],link_=[Link], m_d_t=[np.array([dext[0],vert[0]]), np.array([dext[1],vert[1]])]), *derH]
+            
+    # we need to compare derH when N is CL too?
+    if len(N.derH) > 2 or isinstance(N, CL):  # else derH is redundant to dext,vert
+        derH = comp_H(_N.derH, N.derH, rn, Link, Et, fd)  # comp shared layers, if any
+
+    Link.derH = [CLay(root=Link,Et=Et,node_=[_N,N],link_=[Link], m_d_t=[np.array(np.array([dext[0],vert[0]],dtype=object)), np.array([dext[1],vert[1]],dtype=object)]), *derH]
     # spec:
     if not fd and _N.altG and N.altG:  # if alt M?
         Link.altL = comp_N(_N.altG, N.altG, _N.altG.Et[2] / N.altG.Et[2])
@@ -418,7 +423,8 @@ def sum2graph(root, grapht, fd, minL=0, maxL=None):  # sum node and link params 
     for lay in graph.derH:
         for fork in lay:
             if fork.m_d_t:
-                graph.dext += fork.m_d_t[0]; graph.vert += fork.m_d_t[1]
+                # add dfork's ext, which is [1][0], dfork's vert, which is [1][1]
+                graph.dext += fork.m_d_t[1][0]; graph.vert += fork.m_d_t[1][1]
     yx = np.mean(yx_, axis=0)
     dy_,dx_ = (graph.yx - yx_).T; dist_ = np.hypot(dy_,dx_)
     graph.aRad = dist_.mean()  # ave distance from graph center to node centers
