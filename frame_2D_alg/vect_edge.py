@@ -48,7 +48,8 @@ class CLay(CBase):  # flat layer if derivation hierarchy
         l.root = kwargs.get('root', None)  # higher node or link
         l.node_ = kwargs.get('node_', [])  # concat across fork tree
         l.link_ = kwargs.get('link_', [])
-        l.m_d_t = kwargs.get('m_d_t', [[np.zeros(2),np.zeros(2)],[np.zeros(6),np.zeros(6)]])  # [[mext,mver],[dext,dver]], sum across fork tree
+        # should be [ext, vert], so [np.zeros(2), np.zeros(6)]
+        l.m_d_t = kwargs.get('m_d_t', [[np.zeros(2),np.zeros(6)],[np.zeros(2),np.zeros(6)]])  # [[mext,mver],[dext,dver]], sum across fork tree
         # altL = CLay from comp altG
         # i = kwargs.get('i', 0)  # lay index in root.node_, link_, to revise olp
         # i_ = kwargs.get('i_',[])  # priority indices to compare node H by m | link H by d
@@ -89,7 +90,7 @@ class CLay(CBase):  # flat layer if derivation hierarchy
         i_t = [i_ * rn * dir for i_ in lay.m_d_t[1]]  # i_ is ds, scale- and direction- normalized
         d_t = [_i_ - i_ for _i_,i_ in zip(_i_t,i_t)]  # [dext,dver])
 
-        _a_t, a_t = [(np.abs(_i_), np.abs(i_)) for _i_,i_ in zip(_i_t,i_t)]
+        _a_t = [np.abs(a_t) for a_t in _i_t]; a_t = [np.abs(a_t) for a_t in i_t]  # we just need to abs them?
         m_t = [np.minimum(_a_,a_)/ reduce(np.maximum,[_a_,a_,1e-7]) for _a_,a_ in zip(_a_t,a_t)]  # match = min/max comparands
         for fv, (_i_,i_) in enumerate(zip(_i_t, i_t)):  # [dext,vert]
             m_t[fv][(_i_<0) != (i_<0)] *= -1  # m is negative if comparands have opposite sign
@@ -228,7 +229,8 @@ def cluster_edge(edge):  # edge is CG but not a connectivity cluster, just a set
             lN_,lL_,dEt = comp_link_(L_,Et)
             if Val_(dEt, _Et=Et, fd=1) > 0:
                 lay_t = sum_H(lL_, edge, fd=1)  # two-layer dfork
-                derH = [[mlay,lay_t[0]], [[],lay_t[1]]]  # two-layer derH
+                derH = [[mlay,lay_t[0]]]  # we added M > ave in for comp_H in comp_N, so not all d fork has 2 forks now if this eval is false
+                if len(lay_t)>1:  derH += [[[],lay_t[1]]]  # two-layer derH
                 if len(lN_) > ave_L:
                     cluster_PP_(lN_, fd=1)
             else:
@@ -379,7 +381,7 @@ def comp_N(_N,N, rn, angle=None, dist=None, dir=1):  # dir if fd, Link.derH=dH, 
     if M > ave and (len(N.derH) > 2 or isinstance(N,CL)):  # else derH is redundant to dext,vert
         derH = comp_H(_N.derH, N.derH, rn, Link, Et, fd)  # comp shared layers, if any
         # comp_node_(node_|link_)
-    Link.derH = [CLay(root=Link,Et=Et,node_=[_N,N],link_=[Link], m_d_t=[[dext[0],vert[0]],[[dext[1],vert[1]]]]), *derH]
+    Link.derH = [CLay(root=Link,Et=Et,node_=[_N,N],link_=[Link], m_d_t=[[dext[0],vert[0]],[dext[1],vert[1]]]), *derH]  # why additional bracket?
     # spec:
     if not fd and _N.altG and N.altG:  # if alt M?
         Link.altL = comp_N(_N.altG, N.altG, _N.altG.Et[2] / N.altG.Et[2])
