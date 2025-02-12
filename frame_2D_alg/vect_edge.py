@@ -164,7 +164,7 @@ def vectorize_root(frame):
                         P_,link_,vert,lat, A,S,box,[y,x],Et = PP[1:]  # PPt
                         if Et[0] > ave:  # no altG until cross-comp
                             G = CG(root=edge,fd_=[0],Et=Et, node_=P_,link_=[], vert=copy(vert), latuple=lat, box=box, yx=np.array([y,x]),
-                                   derH=[[CLay(), CLay(m_d_t = [[np.zeros(2),vert[0]],[np.zeros(2),vert[1]]])]]
+                                   derH=[[CLay(node_=P_), CLay(node_=P_,m_d_t = [[np.zeros(2),vert[0]],[np.zeros(2),vert[1]]])]]  # add node_ in lay so that if (lay) returns true
                                    )  # 1st layer = [empty dfork, mfork = [empty dext, PP vert]
                             y0,x0,yn,xn = box; G.aRad = np.hypot((yn-y0)/2,(xn-x0)/2)  # approx
                             G_ += [G]
@@ -212,7 +212,7 @@ def cluster_edge(edge):  # edge is CG but not a connectivity cluster, just a set
                 _eN_ = {*eN_}
             if Val_(et, _Et=et, fd=fd) > 0:  # cluster eval
                 G_ = [sum2graph(edge, [node_,link_,et], fd)]
-        if G_:
+        if G_ and not fd:  # below should be for non fd only?
             edge.node_[:] = [edge.node_[:], G_]  # init nesting in node_|link_
             edge.nnest += 1
     # comp PP_:
@@ -486,7 +486,7 @@ def comp_H(H,h, rn, root, Et, fd):  # one-fork derH if fd, else two-fork derH
                 for _fork,fork in zip_longest(_lay,lay):
                     if _fork and fork:
                         dlay = _fork.comp_lay(fork, rn,root=root)
-                        if dLay: dLay.add_lay(dlay, root=root)  # sum ds between input forks
+                        if dLay: dLay.add_lay(dlay)  # sum ds between input forks
                         else:    dLay = dlay
             Et += dLay.Et
             derH += [dLay]
