@@ -150,11 +150,18 @@ def vectorize_root(frame):
             if edge.G * (len(edge.P_)-1) > ave:  # eval PP
                 comp_slice(edge)
                 if edge.Et[0] * (len(edge.node_)-1)*(edge.rng+1) > ave:
-                    lat = np.array([.0,.0,.0,.0,.0,np.zeros(2)],dtype=object); vert = np.array([np.zeros(6), np.zeros(6)])
+                    baseT = np.array([.0,.0,np.zeros(2)],dtype=object);
+                    derTT = np.array([np.zeros(7), np.zeros(7)])   # I,G,M,D,Area,Angle,n
+                    
+                    # temporary for conversion, else we need to add baseT from slice_edge?
                     for PP in edge.node_:
-                        vert += PP[3]; lat += PP[4]
+                        baseT[:2] += PP[4][:2]; baseT[-1] += PP[4][-1]  # add I, G, (dy, dx) 
+                        derTT[0][:-1] += PP[3][0];  # dI, dG, dM, dD, dL, dA (skip n)
+                        derTT[1][:-1] += PP[3][1];  # mI, nG, dM, dD, dL, dA
+                        
+
                     y_,x_ = zip(*edge.dert_.keys()); box = [min(y_),min(x_),max(y_),max(x_)]
-                    blob2G(edge, root=frame, vert=vert,latuple=lat, box=box, yx=np.divide([edge.latuple[:2]], edge.area))  # node_, Et stay the same
+                    blob2G(edge, root=frame, baseT=baseT, derTT=derTT, box=box, yx=np.divide([edge.latuple[:2]], edge.area))  # node_, Et stay the same
                     G_ = []
                     for PP in edge.node_:  # no comp node_, link_ | PPd_ for now
                         P_,link_,vert,lat, A,S,box,[y,x],Et = PP[1:]  # PPt
@@ -329,10 +336,10 @@ def extend_box(_box, box):  # extend box with another box
     y0, x0, yn, xn = box; _y0, _x0, _yn, _xn = _box
     return min(y0, _y0), min(x0, _x0), max(yn, _yn), max(xn, _xn)
 
-def comp_area(_box, box):
+def comp_area(_box, box, rn):
     _y0,_x0,_yn,_xn =_box; _A = (_yn - _y0) * (_xn - _x0)
     y0, x0, yn, xn = box;   A = (yn - y0) * (xn - x0)
-    return _A-A, min(_A,A) - ave_L**2  # mA, dA
+    return _A-A*rn, min(_A,A) - ave_L**2  # mA, dA
 
 # unpack:
 def comp_dext(_dext, dext, rn, dir=1):
@@ -347,38 +354,19 @@ def comp_dext(_dext, dext, rn, dir=1):
 
 def comp_N(_N,N, rn, angle=None, dist=None, dir=1):  # dir if fd, Link.derH=dH, comparand rim+=Link
 
-    fd = isinstance(N,CL)  # compare links, relative N direction = 1|-1
-    # replace with comp box to get dArea|dDist and dAngle, no d(node_len)
-    if fd:
-        _L, L = _N.dist, N.dist; L*=rn; dL = _L - L; mL = min(_L,L) / max(_L,L) - ave_L  # rm
-        mA,dA = comp_angle(_N.angle, [d*dir *rn for d in N.angle])  # rev 2nd link in llink
-        # comp med if LL: isinstance(>nodet[0],CL), higher-order version of comp dist?
-    else:
-        _L, L = len(_N.node_),len(N.node_); dL = _L- L*rn; mL = min(_L, L*rn) - ave_L
-        mA,dA = comp_area(_N.box, N.box)  # compare area in CG vs angle in CL
-        # or base externals in latuple
+    fd = isinstance(N,CL); dderTT = []  # compare links, relative N direction = 1|-1
+    derTT0 = comp_baseT(_N, N, rn, dir, fd)
     # init
-    dext = np.array( [np.array([mL,mA]), np.array([dL,dA])])
-    M = mL+mA; D = abs(dL)+abs(dA); _o,o = _N.Et[3],N.Et[3]; olp=(_o+o)/2  # inherited
-    Et = np.array([M,D, 2 if fd else 8, olp])  # n comp vars
+    M = sum(derTT0[0]); D = sum(np.abs(derTT0[1])); _o,o = _N.Et[3],N.Et[3]; olp=(_o+o)/2  # inherited
+    Et = np.array([M,D, 7 if fd else 7, olp])  # n comp vars
     Link = CL(fd=fd, nodet=[_N,N], yx=np.add(_N.yx,N.yx)/2, angle=angle, dist=dist, box=extend_box(N.box,_N.box))
-    if fd:
-        vert = np.array([np.zeros(6),np.zeros(6)])  # sum from dderH
-    else:  # default vert:
-        vert, (Mv,Dv) = comp_vert(_N.vert[1], N.vert[1])
-        if np.any(N.dext):
-            ddext = comp_dext(_N.dext[1], N.dext[1], rn)  # combine der_ext across all layers, same as vert
-            dext += ddext; M += np.sum(ddext[0]); D += np.sum(ddext[1])
-        M+= Mv; D+= Dv; Et[:2] = M,D
-        if M > ave:  # specification
-            dLat,lEt = comp_latuple(_N.latuple, N.latuple, _o,o) # lower value
-            Et += np.array([lEt[0], lEt[1], 2, 0])  # same olp?
-            vert += dLat
+    derTT1, (Mv,Dv) = comp_derTT(_N.derTT[1], N.derTT[1])
+
     if M > ave and (len(N.derH) > 2 or isinstance(N,CL)):  # else derH is redundant to dext,vert
-        dderH = comp_H(_N.derH, N.derH, rn, Link, Et, fd)  # comp shared layers, if any
+        dderTT = comp_H(_N.derH, N.derH, rn, Link, Et, fd)  # comp shared layers, if any
         # sum in dext and vert
         # comp_node_(node_|link_)
-    Link.derH = [CLay(root=Link,Et=Et,node_=[_N,N],link_=[Link], m_d_t=[[dext[0],vert[0]],[dext[1],vert[1]]]), *dderH]
+    Link.derH = [CLay(root=Link,Et=Et,node_=[_N,N],link_=[Link], m_d_t=[derTT0, derTT1]), *dderTT]
     # spec:
     if not fd and _N.altG and N.altG:  # if alt M?
         Link.altL = comp_N(_N.altG, N.altG, _N.altG.Et[2] / N.altG.Et[2])
@@ -391,6 +379,44 @@ def comp_N(_N,N, rn, angle=None, dist=None, dir=1):  # dir if fd, Link.derH=dH, 
             add_H(node.extH, Link.derH, root=node, rev=rev, fd=1)
             node.Et += Et
     return Link
+
+
+def comp_baseT(_N, N, rn, dir, fd):
+    
+    _M, _D, _n = _N.Et[:-1]; M, D, n = N.Et[:-1];   # M,D,n
+    if fd:
+        dI, mI = 0,0  # not sure
+        dG, mG = 0,0
+        _L, L = _N.dist, N.dist; L*=rn; dArea = _L - L; mArea = min(_L,L) / max(_L,L) - ave_L  # r
+        mAngle,dAngle = comp_angle(_N.angle, [d*dir *rn for d in N.angle])  # rev 2nd link in llink
+    else:
+        _I, _G, (_Dy, _Dx) = _N.baseT; I, G, (Dy, Dx) = N.baseT   # I,G,Angle
+        dI = _I - I*rn; mI = ave_dI -dI;
+        dG = _G - G*rn; mG = min(_G, G*rn)
+        mAngle, dAngle = comp_angle((_Dy,_Dx),(Dy*rn,Dx*rn))
+        dArea, mArea = comp_area(_N.box, N.box, rn)
+
+    
+    dM = _M - M*rn; mM = min(_M, M*rn)
+    dD = _D - D*rn; mD = min(_D, D*rn)
+    dn = _n = n*rn; mn = min(_n, n*rn)
+    
+    # I,G,M,D,Area,Angle,n
+    m_, d_ = np.array([mI, mG, mM, mD, mArea, mAngle, mn]), np.array([dI, dG, dM, dD, dArea, dAngle, dn])
+    
+    return np.array([m_,d_])
+
+
+# same as comp_vert for now, rename for clarity
+def comp_derTT(_i_,i_, rn=.1, dir=1):  # i_ is ds, dir may be -1
+
+    i_ = i_ * rn  # normalize by compared accum span
+    d_ = (_i_ - i_ * dir)  # np.arrays
+    _a_,a_ = np.abs(_i_), np.abs(i_)
+    m_ = np.divide( np.minimum(_a_,a_), reduce(np.maximum, [_a_, a_, 1e-7]))  # rms (this should be changed now? no more square root?)
+    m_[(_i_<0) != (d_<0)] *= -1  # m is negative if comparands have opposite sign
+
+    return np.array([m_,d_]), np.array([sum(m_),sum(d_)])  # Et
 
 def get_rim(N,fd): return N.rimt[0] + N.rimt[1] if fd else N.rim  # add nesting in cluster_N_?
 
@@ -512,8 +538,8 @@ def blob2G(G, **kwargs):
     G.lnest = kwargs.get('lnest',0)  # link_H if > 0, link_[-1] is top L_
     G.derH = []  # sum from nodes, then append from feedback, maps to node_tree
     G.extH = []  # sum from rims
-    G.latuple = kwargs.get('latuple', np.array([.0,.0,.0,.0,.0,np.zeros(2)],dtype=object))  # lateral I,G,M,D,L,[Dy,Dx]
-    G.vert = kwargs.get('vert', np.array([np.zeros(6), np.zeros(6)]))  # vertical m_d_ of latuple
+    G.latuple = kwargs.get('latuple', np.array([.0,.0,np.zeros(2)],dtype=object))  # lateral I,G,M,D,L,[Dy,Dx]
+    G.vert = kwargs.get('vert', np.array([np.zeros(7), np.zeros(7)]))  # vertical m_d_ of latuple
     G.dext = kwargs.get('dext', np.array([np.zeros(2), np.zeros(2)]))
     G.box = kwargs.get('box', np.array([np.inf,np.inf,-np.inf,-np.inf]))  # y0,x0,yn,xn
     G.yx = kwargs.get('yx', np.zeros(2))  # init PP.yx = [(y0+yn)/2,(x0,xn)/2], then ave node yx
