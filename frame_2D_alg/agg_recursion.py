@@ -47,8 +47,7 @@ def cross_comp(root):  # form agg_Level by breadth-first node_,link_ cross-comp,
         if len(pL_) > ave_L:
             cluster_N_(root, pL_,fd=0)  # form multiple distance segments, same depth
         if Val_(Et, _Et=Et, fd=0) > 0:
-            # dfork, one for all distance segments, adds altGs, no higher Gs:
-            L2N(L_,root)
+            L2N(L_,root)  # dfork, for all distance segments, adds altGs only
             lN_,lL_,dEt = comp_link_(L_,Et)  # same root for L_, root.link_ was compared in root-forming for alt clustering
             if Val_(dEt, _Et=Et, fd=1) > 0:
                 derH[0] += [comb_H_(lL_, root, fd=1)]  # += dlay
@@ -57,9 +56,8 @@ def cross_comp(root):  # form agg_Level by breadth-first node_,link_ cross-comp,
                     cluster_N_(root, plL_, fd=1)  # form altGs for cluster_C_, no new links between dist-seg Gs
             else:
                 derH[0] += [[]]  # empty dlay
-        else: derH[0] += [[]]  # empty dlay
-        # should be += now? Since we always have single layer with 1|2 forks in derH now
-        root.derH += derH  # replace lower derH, may not align to node_,link_H append in cluster_N_
+        else: derH[0] += [[]]
+        root.derH += derH  # feedback
         comb_altG_(top_(root))  # comb node contour: altG_ | neg links sum, cross-comp -> CG altG
         # agg eval +=derH,node_H:
         cluster_C_(root)  # -> mfork G,altG exemplars, +altG surround borrow, root.derH + 1|2 lays
@@ -144,12 +142,13 @@ def cluster_C_(root):  # 0 from cluster_edge: same derH depth in root and top Gs
 
     def comp_C(C, N):  # compute match without new derivatives: global cross-comp is not directional
 
+        # comp_dext, comp_vert should be default, other comps are conditional
         mL = min(C.L, len(N.node_))/ max(C.L, len(N.node_))- ave_L
         mA = comp_area(C.box, N.box)[0]
         mLat = comp_latuple(C.latuple, N.latuple, C.Et[2], N.Et[2])[1][0]
         mVert = comp_vert(C.vert[1], N.vert[1])[1][0]
         M = mL + mA + mLat + mVert
-        M += sum([lay.Et[0] if lay else 0 for lay in comp_H(C.derH, N.derH, rn=1, root=None, Et=np.zeros(4),fd=0) ])  # no fork from comp_H since we merge them
+        M += sum([lay.Et[0] if lay else 0 for lay in comp_H(C.derH, N.derH, rn=1, root=None, Et=np.zeros(4),fd=0)])
         if C.altG and N.altG:  # converted to altG
             M += comp_N(C.altG, N.altG, C.altG.Et[2] / N.altG.Et[2]).Et[0]
         # if fuzzy C:
@@ -167,7 +166,7 @@ def cluster_C_(root):  # 0 from cluster_edge: same derH depth in root and top Gs
             for _N in _N_:
                 for link, _ in _N.rim:
                     n = link.nodet[0] if link.nodet[1] is _N else link.nodet[1]
-                    if not hasattr(n, 'fin') or n.fin: continue  # in other C or in C.node_ (skip if rim's nodes doesn't in current root)
+                    if not hasattr(n,'fin') or n.fin: continue  # in other C or in C.node_, or not in root
                     n.fin = 1; N_ += [n]; CN_ += [n]  # no eval
             _N_ = N_  # mediated __Ns
             med += 1
@@ -270,12 +269,11 @@ def sort_H(H, fd):  # re-assign olp and form priority indices for comp_tree, if 
     if not fd:
         H.root.node_ = H.node_
 
-def weigh_m_(m_, M, ave):  # adjust weights on attr matches, also add cost attrs
+def centroid_M_(m_, M, ave):  # adjust weights on attr matches, also add cost attrs
     _w_ = [1 for _ in m_]
-
     while True:
         w_ = [min(m/M, M/m) for m in m_]  # rational deviations from mean,
-        # or balanced: min(m/M, M/m) + (m+M)/2?
+        # or balanced on 1: w = min(m/M, M/m) + mean(min(m/M, M/m))
         Dw = sum([abs(w-_w) for w,_w in zip(w_,_w_)])  # weight update
         M = sum(m*w for m, w in zip(m_,w_)) / sum(w_)  # M update
         if Dw > ave:
@@ -335,10 +333,10 @@ def agg_H_seq(focus):  # sequential level-updating pipeline
                 cluster_C_(edge)  # recursive, within edge?
                 G_ = [Lev + lev for Lev, lev in zip_longest(G_, edge.node_, fillvalue=[])]  # concat levels
                 Nnest = max(Nnest, edge.nnest)
-        if Nnest<2:  # no added levs (should be <2 here since edge fin is init 0, and incremented to 1 when there's new graph)
+        if Nnest < 2:  # no added levs
             return frame
         frame.nnest = Nnest  # n node_ levels
-        frame.node_ = [frame.node_[0], *G_]  # replace edge_ with new node levels
+        frame.node_ = [frame.node_[0], *G_]  # replace edge_ with new node levels, parallel nested link_?
         agg_H = []
         # feedforward:
         while len(frame.node_[-1]) > ave_L:  # draft
@@ -352,7 +350,7 @@ def agg_H_seq(focus):  # sequential level-updating pipeline
             while agg_H:
                 lev_G = agg_H.pop()
                 hm_ = hG.vert[0]  # need to add other aves?
-                hm_ = weigh_m_(hm_, sum(hm_), ave)
+                hm_ = centroid_M_(hm_, sum(hm_), ave)
                 dm_ = hm_ - lev_G.aves
                 if sum(dm_) > 0:  # update
                     lev_G.aves = hm_  # proj agg+'m = m + dm?
