@@ -66,6 +66,7 @@ def cross_comp(root):  # form agg_Level by breadth-first node_,link_ cross-comp,
 
 def cluster_N_(root, L_, fd):  # top-down segment L_ by >ave ratio of L.dists
 
+    # we do not have L.dist now, so we need to add it back?
     L_ = sorted(L_, key=lambda x: x.dist)  # shorter links first
     min_dist = 0; Et = root.Et
     while True:
@@ -133,7 +134,7 @@ def cluster_C_(root):  # 0 from cluster_edge: same derH depth in root and top Gs
         sum_G_([n.altG for n in dnode_ if n.altG], sign, fc=0, G=A)  # no m, M, L in altGs
         k = len(dnode_) + 1-sign
         for n in C, A:  # get averages
-            n.Et/=k; n.latuple/=k; n.vert/=k; n.aRad/=k; n.yx /= k
+            n.Et/=k; n.baseT/=k; n.derTT/=k; n.aRad/=k; n.yx /= k
             norm_H(n.derH, k)
         C.box = reduce(extend_box, (n.box for n in C.node_))
         C.altG = A

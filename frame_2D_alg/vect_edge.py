@@ -84,7 +84,7 @@ class CLay(CBase):  # flat layer if derivation hierarchy
 
     def comp_lay(_lay, lay, rn, root, dir=1):  # unpack derH trees down to numericals and compare them
 
-        i_ = [i_ * rn * dir for i_ in lay.derTT[1]]; _i_ = _lay.derTT[1]
+        i_ = lay.derTT[1] * rn * dir; _i_ = _lay.derTT[1]
         # i_ is ds, scale and direction- normalized
         d_ = _i_ - i_
         a_ = np.abs(i_); _a_ = np.abs(_i_)
@@ -151,20 +151,17 @@ def vectorize_root(frame):
             if edge.G * (len(edge.P_)-1) > ave:  # eval PP
                 comp_slice(edge)
                 if edge.Et[0] * (len(edge.node_)-1)*(edge.rng+1) > ave:
-                    baseT = np.array([.0,.0,np.zeros(2)],dtype=object)
-                    derTT = np.array([np.zeros(8), np.zeros(8)])   # M,D,n, I,G,Ga, L,La
-                    for PP in edge.node_:
-                        baseT[:2] += PP[4][:2]; baseT[-1] += PP[4][-1]  # add I, G, (dy, dx)
-                        derTT[0][:-1] += PP[3][0]  # fill-in M,D,n, I,G,Ga, L,La
-                        derTT[1][:-1] += PP[3][1]
+                    
+                    baseT, derTT = convert_PP(edge.node_)
                     y_,x_ = zip(*edge.dert_.keys()); box = [min(y_),min(x_),max(y_),max(x_)]
                     blob2G(edge, root=frame, baseT=baseT, derTT=derTT, box=box, yx=np.divide([edge.latuple[:2]], edge.area))  # node_, Et stay the same
                     G_ = []
                     for PP in edge.node_:  # no comp node_, link_ | PPd_ for now
                         P_,link_,vert,lat, A,S,box,[y,x],Et = PP[1:]  # PPt
                         if Et[0] > ave:  # no altG until cross-comp
-                            G = CG(root=edge,fd_=[0],Et=Et, node_=P_,link_=[], vert=copy(vert), latuple=lat, box=box, yx=np.array([y,x]),
-                                   derH=[[CLay(node_=P_,link_=link_, derTT= vert), CLay()]])  # extend vert, empty dfork
+                            baseT, derTT = convert_PP([PP])
+                            G = CG(root=edge,fd_=[0],Et=Et, node_=P_,link_=[], baseT=baseT, derTT=derTT, box=box, yx=np.array([y,x]),
+                                   derH=[[CLay(node_=P_,link_=link_, derTT= deepcopy(derTT)), CLay()]])  # extend vert, empty dfork
                             y0,x0,yn,xn = box; G.aRad = np.hypot((yn-y0)/2,(xn-x0)/2)  # approx
                             G_ += [G]
                     if len(G_) > ave_L:
@@ -172,6 +169,28 @@ def vectorize_root(frame):
                         cluster_edge(edge)
                         # alt: converted adj_blobs of edge blob?
     frame.derH = sum_H(frame.node_[-1],frame)  # single layer
+
+
+def convert_PP(PP_):
+    
+    baseT = np.array([.0,.0,np.zeros(2)],dtype=object)
+    derTT = np.array([np.zeros(8), np.zeros(8)])   # M,D,n, I,G,Ga, L,La
+    
+    # fill-in M,D,n, I,G,Ga, L,La
+    for PP in PP_:
+        baseT[:2] += PP[4][:2]; baseT[-1] += PP[4][-1]  # add I, G, (dy, dx)        
+        for derT,vert in zip(derTT, PP[3]):
+            derT[0] += vert[2]  # M
+            derT[1] += vert[3]  # D
+            derT[2] += PP[-1][-2]  # n  (same n from Et for both forks?)
+            derT[3] += vert[0]  # I
+            derT[4] += vert[1]  # G
+            derT[5] += vert[5]  # Ga
+            derT[6] += vert[4]  # L
+            derT[7] += np.hypot(*PP[5])  # LA  (same angle from np.hypot(PP.A) for both forks?)
+    
+    return baseT, derTT
+
 
 def val_(Et, coef=1):  # comparison / inclusion eval by m only, no contextual projection
 
@@ -349,7 +368,7 @@ def base_comp(_N, N, dir=1, fd=0):  # comp Et, Box, baseT, derTT
         G*=rn; dG = _G - G; mG = min(_G,G) / max(_G,G)
         mgA, dgA = comp_angle((_Dy,_Dx),(Dy*rn,Dx*rn))
 
-    _y,_x,_Y,_X = _N.box; y,x,Y,X = N.box * rn
+    _y,_x,_Y,_X = _N.box; y,x,Y,X = np.array(N.box) * rn
     _dy,_dx, dy, dx = _Y-_y, _X-_x, Y-y, X-x
     # comp ext:
     mA, dA = comp_angle((_dy,_dx),(dy,dx))
@@ -362,14 +381,14 @@ def base_comp(_N, N, dir=1, fd=0):  # comp Et, Box, baseT, derTT
     # comp derTT:
     dd_ = (_i_ - i_ * dir)  # np.arrays
     _a_,a_ = np.abs(_i_),np.abs(i_)
-    dm_ = np.divide( np.minimum(_a_,a_),reduce(np.maximum, [_a_, a_, 1e-7]))  # rms
-    dm_[(_i_<0) != (d_<0)] *= -1  # m is negative if comparands have opposite sign
+    dm_ = np.minimum(_a_,a_)  # only min now? same for dI?
+    dm_[(_i_<0) != (i_<0)] *= -1  # m is negative if comparands have opposite sign  (why d_ here? comparands are _i_ and i_?)
 
     # each [M,D,n, I,G,gA, L,A]:  L is area
     return [m_+dm_, d_+dd_], rn
 
 def comp_N(_N,N, angle=None, dist=None, dir=1):  # compare links, relative N direction = 1|-1, no need for angle, dist?
-    fd = isinstance(N, CL)
+    fd = isinstance(N, CL); dderH = []
 
     [m_,d_], rn = base_comp(_N, N, dir, fd)
     M = sum(m_); D = sum(np.abs(d_))
@@ -415,13 +434,13 @@ def sum2graph(root, grapht, fd, minL=0, maxL=None):  # sum node and link params 
         yx_ += [N.yx]
         graph.box = extend_box(graph.box, N.box)  # pre-compute graph.area += N.area?
         graph.Et += N.Et * icoef ** 2  # deeper, lower weight
-        graph.baseT += N.baseT
+        if not fd: graph.baseT += N.baseT  # skip CL
         N.root = graph
     graph.node_= N_  # nodes or roots, link_ is still current-dist links only?
     graph.derH = [[CLay(root=graph), lay] for lay in sum_H(link_, graph, fd=1)]  # sum and nest link derH
     for lay in graph.derH:
         for fork in lay:
-            if fork.derTT: graph.derTT += fork.derTT
+            if np.any(fork.derTT): graph.derTT += fork.derTT
     yx = np.mean(yx_, axis=0)
     dy_,dx_ = (graph.yx - yx_).T; dist_ = np.hypot(dy_,dx_)
     graph.aRad = dist_.mean()  # ave distance from graph center to node centers
@@ -469,10 +488,8 @@ def add_H(H, h, root, rev=0, fc=0, fd=0):  # add fork L.derHs
                             else: Lay[i] = fork.copy_(root=root)
                 else:
                     Lay = []
-                    for fork in lay:
-                        if fork:
-                            Lay += [fork.copy_(root=root,rev=rev,fc=fc)]; root.Et += fork.Et
-                        else: Lay += [[]]
+                    for fork in lay:  # no more empty list fork now?
+                        Lay += [fork.copy_(root=root,rev=rev,fc=fc)]; root.Et += fork.Et
                     H += [Lay]
 
 def comp_H(H,h, rn, root, Et, fd):  # one-fork derH if fd, else two-fork derH
