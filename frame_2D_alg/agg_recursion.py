@@ -66,7 +66,6 @@ def cross_comp(root, fn):  # form agg_Level by breadth-first node_,link_ cross-c
 
 def cluster_N_(root, L_, fd):  # top-down segment L_ by >ave ratio of L.dists
 
-    # we do not have L.dist now, so we need to add it back?
     L_ = sorted(L_, key=lambda x: x.dist)  # shorter links first
     min_dist = 0; Et = root.Et
     while True:
@@ -184,19 +183,23 @@ def cluster_C_(root):  # 0 from cluster_edge: same derH depth in root and top Gs
         for fn, C_,nest, N_ in zip((0,1), C_t, [G.nnest,G.lnest], [G.node_,G.link_]):  # ?L CGs
             if not nest: continue  # init centroid clustering in edge, may not be nested
             N_ = [N for N in sorted([N for N in N_[-1]], key=lambda n: n.Et[fn], reverse=True)]
+            comb_altG_(N_)
             for N in N_:
                 N.sign, N.m, N.fin = 1, 0, 0  # C update sign, inclusion m, inclusion flag
             for N in N_:
                 if not N.fin:  # not in prior C
-                    if Val_(sum([l.Et for l in N.extH]), _Et=root.Et, coef=10) > 0:  # cross-similar in G
+                    # when G is edge, their node_[-1] is newly formed graph and hence extH is empty, so use Et?
+                    if Val_(N.Et, _Et=root.Et, coef=10) > 0:  # cross-similar in G
+                        # when fn == 1 here, N is a new graph with emtpy baseT, so skip the comp_baseT with them?
                         centroid_cluster(N, C_, root)  # search via N.rim, C_ +=[C]
                     else: break  # the rest of N_ is lower-M
-            if fn:
-                root.node_ += [C_]; root.nnest += 1
-            else:
-                root.link_ += [C_]; root.lnest += 1
-            if len(C_) > ave_L and not root.root:  # frame
-                cross_comp(root, fn)  # append derH, cluster_N_([root.node_,root.link_][fn][-1])
+            if len(C_) > ave_L:
+                if fn:
+                    root.node_ += [C_]; root.nnest += 1
+                else:
+                    root.link_ += [C_]; root.lnest += 1    
+                if not root.root:  # frame
+                    cross_comp(root, fn)  # append derH, cluster_N_([root.node_,root.link_][fn][-1])
 
 def top_(G, fd=0):
     return (G.link_[-1] if G.lnest else G.link_) if fd else (G.node_[-1] if G.nnest else G.node_)
@@ -237,7 +240,7 @@ def comb_altG_(G_):  # combine contour G.altG_ into altG (node_ defined by root=
                     Et += link.Et
             if Val_(Et, _Et=G.Et, coef=10) > 0:  # min sum neg links
                 altG = CG(root=G, Et=Et, node_=node_, link_=link_); altG.m=0  # other attrs are not significant
-                altG.derH = sum_H(altG.link_, altG, fd=1)   # sum link derHs
+                altG.derH = [sum_H(altG.link_, altG, fd=1)]   # sum link derHs  (only single fork here for altG.derH?)
                 G.altG = altG
 
 def norm_H(H, n, fd=0):
@@ -315,25 +318,16 @@ def agg_H_seq(focus):  # sequential level-updating pipeline
     intra_blob_root(frame)
     vectorize_root(frame)
     if frame.node_[1]:  # any converted edges, no frame.link_, edge.link_
-        G_, Nnest = [], 0
-        for edge in frame.node_[-1]:
-            if edge.nnest:  # has higher graphs
-                comb_altG_(edge.node_)
-                cluster_C_(frame)  # recursive within edge, higher cross-comp in frame, also in link_?
-                G_ = [Lev + lev for Lev, lev in zip_longest(G_, edge.node_, fillvalue=[])]  # concat levels
-                Nnest = max(Nnest, edge.nnest)
-        if Nnest < 2:  # no added levs
-            return frame
-        frame.nnest = Nnest  # n node_ levels
-        frame.node_ = [frame.node_[0], *G_]  # replace edge_ with new node levels, parallel nested link_?
+        cluster_C_(frame)  # recursive within edge, higher cross-comp in frame, also in link_?
         agg_H = []
         # feedforward:
-        while len(frame.node_[-1]) > ave_L:  # draft
-            lev_G = cross_comp(frame)  # return combined top composition level, append frame.derH
-            if lev_G:
-                agg_H += [lev_G]  # indefinite graph hierarchy, sum main params?
-                if Val_(lev_G.Et, lev_G.Et) < 0: break
-            else: break
+        if frame.nnest > 1 or frame.lnest>1:  # nnest is 1 before cluster_C_, so we need >1 if there's added nodes from cluster_C_ above
+            while len(frame.node_[-1]) > ave_L:  # draft
+                lev_G = cross_comp(frame, 0)  # return combined top composition level, append frame.derH (fn here is 0?)
+                if lev_G:
+                    agg_H += [lev_G]  # indefinite graph hierarchy, sum main params?
+                    if Val_(lev_G.Et, lev_G.Et) < 0: break
+                else: break
         if agg_H:  # feedback
             hG = lev_G; agg_H = agg_H[:-1]  # local top graph, gets no feedback
             while agg_H:

@@ -151,9 +151,10 @@ def vectorize_root(frame):
             if edge.G * (len(edge.P_)-1) > ave:  # eval PP
                 comp_slice(edge)
                 if edge.Et[0] * (len(edge.node_)-1)*(edge.rng+1) > ave:
+                    edge = blob2G(edge)  # we need to convert edge too?
                     y_,x_ = zip(*edge.dert_.keys())
                     edge.box = [min(y_),min(x_),max(y_),max(x_)]
-                    G_, baseT, derTT = [], np.array([.0,.0,np.zeros(2)]), np.zeros((2,8))
+                    G_, baseT, derTT = [], np.array([.0,.0,np.zeros(2)],dtype=object), np.zeros((2,8))  # unpack dy and dx flat? Then dtype=object is no longer needed
                     for PP in edge.node_:  # no comp node_, link_ | PPd_ for now
                         if PP[-1][0] > ave:  # Et, no altG till cross-comp
                             G, baset, dertt = PP2G(PP)
@@ -333,7 +334,8 @@ def base_comp(_N, N, dir=1, fd=0):  # comp Et, Box, baseT, derTT
     nM = M*rn; dM = _M - nM; mM = min(_M,nM) / max(_M,nM)
     nD = D*rn; dD = _D - nD; mD = min(_D,nD) / max(_D,nD)
 
-    if fd: dI,mI, dG,mG, dgA,mgA = .0,.0,.0,.0,.0,.0
+    if fd or (not fd and (sum(N.baseT[:2])+sum(N.baseT[-1])) ==0 ):  # skip when baseT is all 0s
+        dI,mI, dG,mG, dgA,mgA = .0,.0,.0,.0,.0,.0
     else:
         _I, _G, (_Dy, _Dx) = _N.baseT; I, G, (Dy, Dx) = N.baseT   # I,G,Angle
         # comp baseT:
@@ -516,8 +518,8 @@ def blob2G(G, **kwargs):
 def PP2G(PP):
     root, P_, link_, vert, latuple, A, S, box, yx, Et = PP
 
-    baseT = np.array(latuple[:2] + [latuple[-1]])  # I, G, (Dy,Dx)
-    derTT = np.array(vert+np.zeros(2), vert+np.zeros(2))  # [I,G,A, M,D,L] -> [I,G,gA, M,D,n, empty L,A]
+    baseT = np.array([*latuple[:2], latuple[-1]], dtype=object)  # I, G, (Dy,Dx)
+    derTT = np.hstack((vert, np.zeros((2, 2))))  # [I,G,A, M,D,L] -> [I,G,gA, M,D,n, empty L,A]
     y0,x0, yn,xn = box; dy,dx = yn-y0, xn-x0  # A = (dy,dx); L = np.hypot(dy,dx)
 
     G = CG(root=root, fd_=[0], Et=Et, node_=P_, link_=[], baseT=baseT, derTT=derTT, box=box, yx=yx, aRad=np.hypot(dy/2, dx/2),
