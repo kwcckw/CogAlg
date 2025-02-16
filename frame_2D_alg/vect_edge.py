@@ -150,6 +150,7 @@ def vectorize_root(frame):
             if edge.G * (len(edge.P_)-1) > ave:  # eval PP
                 comp_slice(edge)
                 if edge.Et[0] * (len(edge.node_)-1)*(edge.rng+1) > ave:
+                    blob2G(edge)  # we need to convert edge too? Why this is removed?
                     y_,x_ = zip(*edge.dert_.keys())
                     edge.box = [min(y_),min(x_),max(y_),max(x_)]
                     G_, baseT, derTT = [], np.zeros(4), np.zeros((2,8))
@@ -221,8 +222,8 @@ def cluster_edge(edge):  # edge is CG but not a connectivity cluster, just a set
                 if len(lN_) > ave_L:
                     cluster_PP_(lN_, fd=1)
             else:
-                derH[0] += [[]]  # empty dlay
-        else: derH[0] += [[]]
+                derH[0] += [CLay()]  # empty dlay
+        else: derH[0] += [CLay()]
         edge.derH = derH
 
 def comp_node_(_N_, L=0):  # rng+ forms layer of rim and extH per N, appends N_,L_,Et, ~ graph CNN without backprop
@@ -332,7 +333,7 @@ def base_comp(_N, N, dir=1, fd=0):  # comp Et, Box, baseT, derTT
     nM = M*rn; dM = _M - nM; mM = min(_M,nM) / max(_M,nM)
     nD = D*rn; dD = _D - nD; mD = min(_D,nD) / max(_D,nD)
 
-    if N.baseT:  # empty in CL
+    if hasattr(N, 'baseT') and np.any(N.baseT):  # empty in CL (baseT doesn't exist in CL, and it's empty in CL formed graph)
         _I,_G,_Dy,_Dx = _N.baseT; I,G,Dy,Dx = N.baseT   # I,G,Angle
         I*=rn; dI = _I - I; mI = abs(dI) / ave_dI
         G*=rn; dG = _G - G; mG = min(_G,G) / max(_G,G)
@@ -405,7 +406,10 @@ def sum2graph(root, grapht, fd, minL=0, maxL=None):  # sum node and link params 
         yx_ += [N.yx]
         graph.box = extend_box(graph.box, N.box)  # pre-compute graph.area += N.area?
         graph.Et += N.Et * icoef ** 2  # deeper, lower weight
-        if not fd: graph.baseT += N.baseT  # skip CL
+        if not fd:  # skip CL
+            if np.any(graph.baseT): graph.baseT += N.baseT  
+            else:                   graph.baseT = copy(N.baseT)
+            
         N.root = graph
     graph.node_= N_  # nodes or roots, link_ is still current-dist links only?
     graph.derH = [[CLay(root=graph), lay] for lay in sum_H(link_, graph, fd=1)]  # sum and nest link derH
@@ -501,7 +505,7 @@ def blob2G(G, **kwargs):
     G.lnest = kwargs.get('lnest',0)  # link_H if > 0, link_[-1] is top L_
     G.derH = []  # sum from nodes, then append from feedback, maps to node_tree
     G.extH = []  # sum from rims
-    G.baseT = kwargs.get('baseT', np.zeros(4))  # I,G,Dy,Dx
+    G.baseT = []  # I,G,Dy,Dx
     G.derTT = kwargs.get('derTT', np.zeros((2,8)))  # m_,d_ base params
     G.box = kwargs.get('box', np.array([np.inf,np.inf,-np.inf,-np.inf]))  # y0,x0,yn,xn
     G.yx = kwargs.get('yx', np.zeros(2))  # init PP.yx = (y+Y)/2,(x+X)/2, then ave node yx
@@ -509,12 +513,13 @@ def blob2G(G, **kwargs):
     G.maxL = 0  # nesting in nodes
     G.aRad = 0  # average distance between graph center and node center
     G.altG = []  # or altG? adjacent (contour) gap+overlap alt-fork graphs, converted to CG
+    G.link_ = []
     return G
 
 def PP2G(PP):
     root, P_, link_, vert, latuple, A, S, box, yx, Et = PP
 
-    baseT = np.array([*latuple[:2], latuple[-1]], dtype=object)  # I, G, (Dy,Dx)
+    baseT = np.array((*latuple[:2], *latuple[-1]))  # I, G, Dy,Dx  (flat)
     derTT = np.hstack((vert, np.zeros((2,2))))  # [I,G,A, M,D,L] -> [I,G,gA, M,D,n, empty L,A]
     y0,x0, yn,xn = box; dy,dx = yn-y0, xn-x0  # A = (dy,dx); L = np.hypot(dy,dx)
 
