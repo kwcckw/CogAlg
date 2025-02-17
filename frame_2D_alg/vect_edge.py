@@ -150,7 +150,7 @@ def vectorize_root(frame):
             if edge.G * (len(edge.P_)-1) > ave:  # eval PP
                 comp_slice(edge)
                 if edge.Et[0] * (len(edge.node_)-1)*(edge.rng+1) > ave:
-                    blob2G(edge)  # we need to convert edge too? Why this is removed?
+                    blob2G(edge)
                     y_,x_ = zip(*edge.dert_.keys())
                     edge.box = [min(y_),min(x_),max(y_),max(x_)]
                     G_, baseT, derTT = [], np.zeros(4), np.zeros((2,8))
@@ -204,7 +204,7 @@ def cluster_edge(edge):  # edge is CG but not a connectivity cluster, just a set
                 G_ = [sum2graph(edge, [node_,link_,et], fd)]
         if G_:
             Q = edge.link_ if fd else edge.node_
-            Q[:] = [Q[:],G_]  # init nesting, then cluster_C_ / fork
+            Q[:] = [sum_G_(Q), sum_G_(G_)]  # init nesting, then cluster_C_ / fork
             if fd: edge.lnest += 1
             else:  edge.nnest += 1
     # comp PP_:
@@ -230,6 +230,7 @@ def comp_node_(_N_, L=0):  # rng+ forms layer of rim and extH per N, appends N_,
 
     _Gp_ = []  # [G pair + co-positionals], for top-nested Ns, unless cross-nesting comp:
     if L: _N_ = filter(lambda N: len(N.derH)==L, _N_)
+    # form derTTe per N.extH, for eval or comp?
     for _G, G in combinations(_N_, r=2):  # if max len derH in agg+
         _n, n = _G.Et[2], G.Et[2]; rn = _n/n if _n>n else n/_n
         if rn > ave_rn:  # scope disparity or _G.depth != G.depth, not needed?
@@ -251,7 +252,8 @@ def comp_node_(_N_, L=0):  # rng+ forms layer of rim and extH per N, appends N_,
             if _nrim & nrim:  # indirectly connected Gs,
                 continue     # no direct match priority?
             # dist vs. radii * induction, mainly / extH?
-            GV = val_(_G.Et) + val_(G.Et) + sum([val_(l.Et) for l in _G.extH]) + sum([val_(l.Et) for l in G.extH])
+            en = len(G.extH) * G.Et[2:]; _en = len(_G.extH) * _G.Et[2:]  # same n*o?
+            GV = val_(_G.Et) + val_(G.Et) + (sum(_G.derTTe[0])-ave*en) + (sum(G.derTTe[0])-ave*_en)
             if dist < max_dist * ((radii * icoef**3) * GV):
                 Link = comp_N(_G,G, angle=[dy,dx], dist=dist)
                 L_ += [Link]  # include -ve links
@@ -333,7 +335,7 @@ def base_comp(_N, N, dir=1, fd=0):  # comp Et, Box, baseT, derTT
     nM = M*rn; dM = _M - nM; mM = min(_M,nM) / max(_M,nM)
     nD = D*rn; dD = _D - nD; mD = min(_D,nD) / max(_D,nD)
 
-    if hasattr(N, 'baseT') and np.any(N.baseT):  # empty in CL (baseT doesn't exist in CL, and it's empty in CL formed graph)
+    if N.baseT:  # empty in CL
         _I,_G,_Dy,_Dx = _N.baseT; I,G,Dy,Dx = N.baseT   # I,G,Angle
         I*=rn; dI = _I - I; mI = abs(dI) / ave_dI
         G*=rn; dG = _G - G; mG = min(_G,G) / max(_G,G)
@@ -348,12 +350,11 @@ def base_comp(_N, N, dir=1, fd=0):  # comp Et, Box, baseT, derTT
     dL = _L - L; mL = min(_L,L) / max(_L,L)
 
     _m_, _d_ = np.array([mM,mD,mn, mI,mG,mgA, mL,mA]), np.array([dM,dD,rn, dI,dG,dgA, dL,dA])
-    _i_ = _N.derTT[1]
-    i_ = N.derTT[1] * rn  # 8 params, normalize by compared accum span
     # comp derTT:
+    _i_ = _N.derTT[1]; i_ = N.derTT[1] * rn  # 8 params, normalize by compared accum span
     d_ = (_i_ - i_ * dir)  # np.arrays
     _a_,a_ = np.abs(_i_),np.abs(i_)
-    m_ = np.divide( np.minimum(_a_,a_), reduce(np.maximum, [_a_, a_, 1e-7]))  # rms
+    m_ = np.divide( np.minimum(_a_,a_), reduce(np.maximum, [_a_,a_,1e-7]))  # rms
     m_[(_i_<0) != (i_<0)] *= -1  # m is negative if comparands have opposite sign
 
     # each [M,D,n, I,G,gA, L,A]: L is area
@@ -400,16 +401,15 @@ def sum2graph(root, grapht, fd, minL=0, maxL=None):  # sum node and link params 
             while N.root.maxL and N.root is not graph and (minL != N.root.maxL):  # maxL=0 in edge|frame
                 if N.root is graph:
                     fc=1; break  # graph was assigned as root via prior N
-                else: N = N.root  # cluster prior-dist graphs vs. nodes
+                else: N = N.root  # cluster prior-dist graphs vs nodes
         if fc: continue  # N.root was clustered in prior loop
         else: N_ += [N]  # roots if minL
         yx_ += [N.yx]
         graph.box = extend_box(graph.box, N.box)  # pre-compute graph.area += N.area?
         graph.Et += N.Et * icoef ** 2  # deeper, lower weight
         if not fd:  # skip CL
-            if np.any(graph.baseT): graph.baseT += N.baseT  
-            else:                   graph.baseT = copy(N.baseT)
-            
+            if graph.baseT: graph.baseT += N.baseT
+            else: graph.baseT = copy(N.baseT)
         N.root = graph
     graph.node_= N_  # nodes or roots, link_ is still current-dist links only?
     graph.derH = [[CLay(root=graph), lay] for lay in sum_H(link_, graph, fd=1)]  # sum and nest link derH
@@ -485,9 +485,26 @@ def comp_H(H,h, rn, root, Et, fd):  # one-fork derH if fd, else two-fork derH
             derH += [dLay]
     return derH
 
+def sum_G_(node_, s=1, fc=0, G=None):
+
+    fn = node_[0].baseT
+    if G is None:
+        G = CG(); G.aves = Caves()
+    for n in node_:
+        if fn: G.baseT += n.baseT * s
+        G.derTT += n.derTT * s; G.Et += n.Et * s; G.aRad += n.aRad * s; G.yx += n.yx * s
+        if n.derH:
+            add_H(G.derH, n.derH, root=G, rev = s==-1, fc=fc, fd=not fn)  # alt is single layer
+        if fc:
+            G.M += n.m * s; G.L += s
+        else:
+            if n.extH: add_H(G.extH, n.extH, root=G, rev = s==-1, fd=not fn)  # empty in centroid
+            G.box = extend_box( G.box, n.box)  # extended per separate node_ in centroid
+    return G
+
 def L2N(link_,root):
     for L in link_:
-        L.root = root; L.fd_=copy(L.nodet[0].fd_); L.mL_t,L.rimt = [[],[]],[[],[]]; L.aRad=0; L.visited_,L.extH = [],[]
+        L.root = root; L.fd_=copy(L.nodet[0].fd_); L.mL_t,L.rimt = [[],[]],[[],[]]; L.aRad=0; L.visited_,L.extH = [],[]; L.baseT = []
 
 def frame2G(G, **kwargs):
     blob2G(G, **kwargs)
@@ -513,13 +530,12 @@ def blob2G(G, **kwargs):
     G.maxL = 0  # nesting in nodes
     G.aRad = 0  # average distance between graph center and node center
     G.altG = []  # or altG? adjacent (contour) gap+overlap alt-fork graphs, converted to CG
-    G.link_ = []
     return G
 
 def PP2G(PP):
     root, P_, link_, vert, latuple, A, S, box, yx, Et = PP
 
-    baseT = np.array((*latuple[:2], *latuple[-1]))  # I, G, Dy,Dx  (flat)
+    baseT = np.array((*latuple[:2], *latuple[-1]))  # I,G,Dy,Dx
     derTT = np.hstack((vert, np.zeros((2,2))))  # [I,G,A, M,D,L] -> [I,G,gA, M,D,n, empty L,A]
     y0,x0, yn,xn = box; dy,dx = yn-y0, xn-x0  # A = (dy,dx); L = np.hypot(dy,dx)
 

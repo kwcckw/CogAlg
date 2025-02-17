@@ -4,7 +4,7 @@ from functools import reduce
 from itertools import zip_longest
 from multiprocessing import Pool, Manager
 from frame_blobs import frame_blobs_root, intra_blob_root, imread, aves, Caves
-from vect_edge import L2N, base_comp, comb_H_, sum_H, add_H, comp_node_, comp_link_, sum2graph, get_rim, CG, CLay, vectorize_root, extend_box, Val_, val_
+from vect_edge import L2N, base_comp, sum_G_, comb_H_, sum_H, add_H, comp_node_, comp_link_, sum2graph, get_rim, CG, CLay, vectorize_root, extend_box, Val_, val_
 '''
 notation:
 prefix f: flag
@@ -140,9 +140,9 @@ def cluster_C_(root):  # 0 nest gap from cluster_edge: same derH depth in root a
         C.altG = A
         return C
 
-    def centroid_cluster(N, C_, N_, root, fn):  # form and refine C cluster around N, in root node_|link_?
+    def centroid_cluster(N, C_, root):  # form and refine C cluster around N, in root node_|link_?
         # proximity bias for both match and overlap?
-
+        # draft:
         N.fin = 1; CN_ = [N]
         for n in N_:
             if not hasattr(n,'fin') or n.fin or n is N: continue  # in other C or in C.node_, or not in root
@@ -150,7 +150,8 @@ def cluster_C_(root):  # 0 nest gap from cluster_edge: same derH depth in root a
             dy, dx = np.subtract(N.yx, n.yx)
             dist = np.hypot(dy, dx)
             # probably too complex:
-            GV = val_(N.Et) + val_(n.Et) + sum([val_(l.Et) for l in N.extH]) + sum([val_(l.Et) for l in n.extH])
+            en = len(N.extH) * N.Et[2:]; _en = len(n.extH) * n.Et[2:]  # same n*o?
+            GV = val_(N.Et) + val_(n.Et) + (sum(N.derTTe[0])-ave*en) + (sum(n.derTTe[0])-ave*_en)
             if dist > max_dist * ((radii * icoef**3) * GV): continue
             n.fin = 1; CN_ += [n]
         # same:
@@ -177,51 +178,29 @@ def cluster_C_(root):  # 0 nest gap from cluster_edge: same derH depth in root a
                     for n in C.node_:  # unpack C.node_, including N
                         n.m = 0; n.fin = 0
                 break
-
-    C_t = [[],[]]  # root=frame, concat exemplar/centroid nodes across top Gs, global cross_comp
-    for G in root.node_[-1]:
-        # C-cluster G node_|link_ if top-nested:
-        for fn, C_,nest, N_ in zip((1,0), C_t, [G.nnest,G.lnest], [G.node_,G.link_]):  # ?L CGs  (fn should be (1,0)?)
-            if not nest: continue  # init centroid clustering in edge, may not be nested
-            N_ = [N for N in sorted([N for N in N_[-1]], key=lambda n: n.Et[fn], reverse=True)]
-            comb_altG_(N_)  # we need to combine their alt here? Becuase their alt will be summed in the next sum_C
-            for N in N_:
-                N.sign, N.m, N.fin = 1, 0, 0  # C update sign, inclusion m, inclusion flag
-            for N in N_:
-                if not N.fin:  # not in prior C
-                    if Val_(N.Et, _Et=root.Et, coef=10) > 0:  # cross-similar in G
-                        centroid_cluster(N, C_, N_, root, fn)  # form centroid around N, C_ +=[C] (we need to parse N_? Because root.node_[-1] is in different level)
-                    else: break  # the rest of N_ is lower-M
-            
-            # below should be apply only when len(C_)>ave_L? Else there's no point to pck them too
-            if len(C_) > ave_L:
-                if fn:
-                    root.node_ += [sum_G_(C_)]; root.nnest += 1
+    # C-cluster top node_|link_:
+    C_t = [[],[]]  # concat exemplar/centroid nodes across top Gs for global frame cross_comp
+    for fn, C_,nest,_N_ in zip((1,0), C_t, [root.nnest,root.lnest], [root.node_,root.link_]):
+        if not nest: continue
+        N_ = [N for N in sorted([N for N in _N_[-1].node_], key=lambda n: n.Et[fn], reverse=True)]
+        for N in N_:
+            N.sign, N.m, N.fin = 1, 0, 0  # C update sign, inclusion m, inclusion flag
+        for N in N_:
+            if not N.fin:  # not in prior C
+                if Val_(N.Et, _Et=root.Et, coef=10) > 0:  # cross-similar in G
+                    centroid_cluster(N, C_, root)  # form centroid around N, C_ +=[C]
                 else:
-                    root.link_ += [sum_G_(C_)]; root.lnest += 1
-                if not root.root:  # frame
-                    cross_comp(root, fn)  # append derH, cluster_N_([root.node_,root.link_][fn][-1])
+                    break  # the rest of N_ is lower-M
+        if len(C_) > ave_L:
+            if fn:
+                root.node_ += [sum_G_(C_)]; root.nnest += 1
+            else:
+                root.link_ += [sum_G_(C_)]; root.lnest += 1
+            if not root.root:  # frame
+                cross_comp(root, fn)  # append derH, cluster_N_([root.node_,root.link_][fn][-1])
 
 def top_(G, fd=0):
     return (G.link_[-1] if G.lnest else G.link_) if fd else (G.node_[-1] if G.nnest else G.node_)
-
-def sum_G_(node_, s=1, fc=0, falt=0, G=None):
-    if G is None:
-        G = CG(); G.aves = Caves()
-    for n in node_:
-        if np.any(n.baseT):  # not empty list
-            G.baseT = (G.baseT + n.baseT * s) if np.any(G.baseT) else n.baseT * s
-        G.baseT += n.baseT * s
-        G.derTT += n.derTT * s
-        G.Et += n.Et * s; G.aRad += n.aRad * s; G.yx += n.yx * s
-        if n.derH:
-            add_H(G.derH, n.derH, root=G, rev = s==-1, fc=fc, fd=(1 if falt else 0))  # alt is single layer
-        if fc:
-            G.M += n.m * s; G.L += s
-        else:
-            if n.extH: add_H(G.extH, n.extH, root=G, rev = s==-1, fd=1)  # empty in centroid
-            G.box = extend_box( G.box, n.box)  # extended per separate node_ in centroid
-    return G
 
 def comb_altG_(G_):  # combine contour G.altG_ into altG (node_ defined by root=G), for agg+ cross-comp
     # internal and external alts: different decay / distance?
@@ -316,35 +295,32 @@ def agg_H_par(focus):  # draft parallel level-updating pipeline
 
         frame.aggH = list(H)  # convert back to list
 
-def agg_H_seq(focus):  # sequential level-updating pipeline
+def agg_H_seq(focus,_nestt=(1,0)):  # recursive level-forming pipeline, called from cluster_C_
 
-    cluster_C_(frame)  # feedforward: recursive agg+ in edge)frame, both forks replace levs with lev_Gs
+    cluster_C_(frame)  # feedforward: recursive agg+ in edge)frame, both fork levs are lev_Gs
     dm_t = [[],[]]
     bottom_t = []
-    for fn, Q, nest in zip((0,1), (frame.node_,frame.link_), (frame.nnest,frame.lnest)):
-        if fn:
-            if nest<2: continue  # no new nesting
-        elif nest==0: continue
+    for nest,_nest,Q in zip((frame.nnest,frame.lnest),_nestt, (frame.node_,frame.link_)):
+        if nest==_nest: continue  # no new nesting
          # feedback, both Qs are lev_G_s:
         hG = Q[-1]  # init
         bottom = 1
         for lev_G in reversed(Q[:-1]):  # top level gets no feedback
-            hm_ = hG.derTT[0]  # add other ms?
+            hm_ = hG.derTT[0] # + ave m-associated pars: len, dist, dcoords?
             hm_ = centroid_M_(hm_, sum(hm_)/8, ave)
-            dm_ = hm_ - lev_G.aves  # right now hm_ is array while G.aves is an object, we need to map them with function
+            dm_ = hm_ - lev_G.aves
             if sum(dm_) > ave:  # update
                 lev_G.aves = hm_  # proj agg+'m = m + dm?
-                # project focus by val_* dy,dx: mean value shift within focus
-                # frame derTT dgA / baseT gA:
-                # bottom focus only, internal search per G
-                hG = lev_G  # add cost params: distance, len, dcoord filters
+                # project focus by val_* dy,dx: frame derTT dgA / baseT gA?
+                # mean value shift within focus, bottom only, internal search per G
+                hG = lev_G
             else:
                 bottom = 0; break  # feedback did not reach the bottom level
         dm_t += [dm_]
         bottom_t += [bottom]
     if any(bottom_t) and sum(dm_t[0]) +sum(dm_t[1]) > ave:
         # bottom level is refocused, new aves, rerun agg+:
-        agg_H_seq(focus)
+        agg_H_seq(focus,(frame.nnest,frame.lnest))
 
     return frame
 
@@ -359,5 +335,7 @@ if __name__ == "__main__":
     frame = frame_blobs_root(focus)
     intra_blob_root(frame)
     vectorize_root(frame)
-    if frame.node_[1]:  # any converted edges
-        frame = agg_H_seq(focus)  # focus will be shifted by feedback
+    if frame.node_[1]:  # unpack converted edges
+        frame.node_[-1] = [[G for G in edge.node_[1]] for edge in frame.node_[1]]
+        [comb_altG_(G.altG) for G in frame.node_[-1]]
+        frame = agg_H_seq(focus)  # focus will be shifted by internal feedback
