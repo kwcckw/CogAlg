@@ -3,7 +3,7 @@ from copy import copy, deepcopy
 from functools import reduce
 from itertools import zip_longest
 from multiprocessing import Pool, Manager
-from frame_blobs import frame_blobs_root, intra_blob_root, imread, aves, Caves
+from frame_blobs import frame_blobs_root, intra_blob_root, imread, aves, coefs
 from vect_edge import L2N, base_comp, sum_G_, comb_H_, sum_H, add_H, comp_node_, comp_link_, sum2graph, get_rim, CG, CLay, vectorize_root, extend_box, Val_, val_
 '''
 notation:
@@ -34,7 +34,11 @@ Code-coordinate filters may extend base code by cross-projecting and combining p
 (which may include extending eval function with new match-projecting derivatives) 
 Similar to cross-projection by data-coordinate filters, described in "imagination, planning, action" section of part 3 in Readme.
 '''
-ave, ave_L, icoef, max_dist = aves.m, aves.L, aves.icoef, aves.max_dist
+
+ave      = aves[-2] * coefs[-2]
+ave_L    = aves[6] * coefs[6]
+icoef    = aves[12] * coefs[12]
+max_dist = aves[9] * coefs[9]
 
 def cross_comp(root, fn):  # form agg_Level by breadth-first node_,link_ cross-comp, connect clustering, recursion
 
@@ -130,7 +134,7 @@ def cluster_C_(root):  # 0 nest gap from cluster_edge: same derH depth in root a
             C.node_ = [n for n in C.node_ if n.fin]  # not in -ve dnode_, may add +ve later
 
         sum_G_(dnode_, sign, fc=1, G=C)  # no extH, extend_box
-        sum_G_([n.altG for n in dnode_ if n.altG], sign, fc=0, falt=1, G=A)  # no m, M, L in altGs
+        sum_G_([n.altG for n in dnode_ if n.altG], sign, fc=0, G=A)  # no m, M, L in altGs
         k = len(dnode_) + 1-sign
         for falt, n in zip((0,1), (C, A)):  # get averages
             n.Et/=k; n.derTT/=k; n.aRad/=k; n.yx /= k
@@ -150,7 +154,7 @@ def cluster_C_(root):  # 0 nest gap from cluster_edge: same derH depth in root a
             dy, dx = np.subtract(N.yx, n.yx)
             dist = np.hypot(dy, dx)
             # probably too complex:
-            en = len(N.extH) * N.Et[2:]; _en = len(n.extH) * n.Et[2:]  # same n*o?
+            en = len(N.extH) * N.Et[2] * N.Et[3]; _en = len(n.extH) * n.Et[2] * n.Et[3]  # same n*o?
             GV = val_(N.Et) + val_(n.Et) + (sum(N.derTTe[0])-ave*en) + (sum(n.derTTe[0])-ave*_en)
             if dist > max_dist * ((radii * icoef**3) * GV): continue
             n.fin = 1; CN_ += [n]
@@ -180,9 +184,9 @@ def cluster_C_(root):  # 0 nest gap from cluster_edge: same derH depth in root a
                 break
     # C-cluster top node_|link_:
     C_t = [[],[]]  # concat exemplar/centroid nodes across top Gs for global frame cross_comp
-    for fn, C_,nest,_N_ in zip((1,0), C_t, [root.nnest,root.lnest], [root.node_,root.link_]):
+    for fn, C_,nest,_N_ in zip((1,0), C_t, [root.nnest,root.lnest], [root.node_[-1],root.link_[-1]]):
         if not nest: continue
-        N_ = [N for N in sorted([N for N in _N_[-1].node_], key=lambda n: n.Et[fn], reverse=True)]
+        N_ = [N for N in sorted([N for N in _N_], key=lambda n: n.Et[fn], reverse=True)]
         for N in N_:
             N.sign, N.m, N.fin = 1, 0, 0  # C update sign, inclusion m, inclusion flag
         for N in N_:
@@ -336,6 +340,16 @@ if __name__ == "__main__":
     intra_blob_root(frame)
     vectorize_root(frame)
     if frame.node_[1]:  # unpack converted edges
-        frame.node_[-1] = [[G for G in edge.node_[1]] for edge in frame.node_[1]]
-        [comb_altG_(G.altG) for G in frame.node_[-1]]
-        frame = agg_H_seq(focus)  # focus will be shifted by internal feedback
+        max_nnest, max_lnest, node_, link_ = 0, 0, [], []
+        for edge in frame.node_[1]:
+            if edge.nnest:
+                max_nnest = max(max_nnest, edge.nnest)
+                node_ += [G for G in edge.node_[-1].node_]  # each edge.node_[-1] is a G from sum_G_
+            if edge.lnest:
+                max_lnest = max(max_lnest, edge.lnest)
+                link_ += [L for L in edge.link_[-1].node_]  
+
+        frame.nnest, frame.lnest, frame.node_[1], frame.link_ = max_nnest, max_lnest, node_, [[], link_]  # empty 1st layer link, to be aligned with node_
+        if frame.node_[-1]:  # has at least 1 higher graph from any of the edges
+            [comb_altG_(G.altG) for G in frame.node_[-1]]
+            frame = agg_H_seq(focus)  # focus will be shifted by internal feedback

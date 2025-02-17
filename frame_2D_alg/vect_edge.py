@@ -1,4 +1,4 @@
-from frame_blobs import CBase, frame_blobs_root, intra_blob_root, imread, unpack_blob_, aves, Caves
+from frame_blobs import CBase, frame_blobs_root, intra_blob_root, imread, unpack_blob_, aves, coefs
 from slice_edge import slice_edge, comp_angle
 from comp_slice import comp_slice
 from itertools import combinations, zip_longest
@@ -37,8 +37,17 @@ prefix  _ denotes prior of two same-name variables, multiple _s for relative pre
 postfix _ denotes array of same-name elements, multiple _s is nested array
 capitalized variables are usually summed small-case variables
 '''
-ave, ave_d, ave_L, ave_G, max_dist, ave_rn, ccoef, icoef, med_cost, ave_dI = \
-aves.B, aves.d, aves.L, aves.G, aves.max_dist, aves.rn, aves.ccoef, aves.icoef, aves.med_cost, aves.dI
+
+ave      = aves[-2] * coefs[-2]
+ave_d    = aves[1] * coefs[1]
+ave_L    = aves[6] * coefs[6]
+ave_G    = aves[4] * coefs[4]
+max_dist = aves[9] * coefs[9]
+ave_rn   = aves[8] * coefs[8]
+icoef    = aves[12] * coefs[12]
+med_cost = aves[13] * coefs[13]
+ave_dI   = aves[14] * coefs[14]
+
 
 class CLay(CBase):  # flat layer if derivation hierarchy
     name = "lay"
@@ -110,6 +119,7 @@ class CG(CBase):  # PP | graph | blob: params of single-fork node_ cluster
         G.box = kwargs.get('box', np.array([np.inf,-np.inf,np.inf,-np.inf]))  # y,Y,x,X, area: (Y-y)*(X-x),
         G.baseT = kwargs.get('baseT',[])  # I,G,Dy,Dx
         G.derTT = kwargs.get('derTT',np.zeros((2,8)))  # m,d / baseT,Et,box, summed across derH lay forks
+        G.derTTe = kwargs.get('derTTe',np.zeros((2,8)))
         G.derH = kwargs.get('derH',[])  # each lay is [m,d]: Clay(Et,node_,link_,derTT), sum|concat links across fork tree
         G.extH = kwargs.get('extH',[])  # sum from rims, single-fork
         G.maxL = kwargs.get('maxL', 0)  # if dist-nested in cluster_N_
@@ -146,7 +156,7 @@ def vectorize_root(frame):
     frame2G(frame, derH=[CLay(root=frame, Et=np.zeros(4), derTT=[], node_=[],link_=[])], node_=[frame.blob_,[]], root=None)  # distinct from base blob_
     for blob in blob_:
         if not blob.sign and blob.G > ave_G * blob.root.olp:
-            edge = slice_edge(blob, frame.aves)
+            edge = slice_edge(blob)
             if edge.G * (len(edge.P_)-1) > ave:  # eval PP
                 comp_slice(edge)
                 if edge.Et[0] * (len(edge.node_)-1)*(edge.rng+1) > ave:
@@ -252,7 +262,7 @@ def comp_node_(_N_, L=0):  # rng+ forms layer of rim and extH per N, appends N_,
             if _nrim & nrim:  # indirectly connected Gs,
                 continue     # no direct match priority?
             # dist vs. radii * induction, mainly / extH?
-            en = len(G.extH) * G.Et[2:]; _en = len(_G.extH) * _G.Et[2:]  # same n*o?
+            en = len(G.extH) * G.Et[2] * G.Et[3]; _en = len(_G.extH) * _G.Et[2] * _G.Et[3]  # same n*o? (n * o is G.Et[2] * G.Et[3]?)
             GV = val_(_G.Et) + val_(G.Et) + (sum(_G.derTTe[0])-ave*en) + (sum(G.derTTe[0])-ave*_en)
             if dist < max_dist * ((radii * icoef**3) * GV):
                 Link = comp_N(_G,G, angle=[dy,dx], dist=dist)
@@ -335,7 +345,7 @@ def base_comp(_N, N, dir=1, fd=0):  # comp Et, Box, baseT, derTT
     nM = M*rn; dM = _M - nM; mM = min(_M,nM) / max(_M,nM)
     nD = D*rn; dD = _D - nD; mD = min(_D,nD) / max(_D,nD)
 
-    if N.baseT:  # empty in CL
+    if np.any(N.baseT):  # empty in CL (we need np.any when baseT is np.array)
         _I,_G,_Dy,_Dx = _N.baseT; I,G,Dy,Dx = N.baseT   # I,G,Angle
         I*=rn; dI = _I - I; mI = abs(dI) / ave_dI
         G*=rn; dG = _G - G; mG = min(_G,G) / max(_G,G)
@@ -384,6 +394,7 @@ def comp_N(_N,N, angle=None, dist=None, dir=1):  # compare links, relative N dir
             if fd: node.rimt[1-rev] += [(Link,rev)]  # opposite to _N,N dir
             else:  node.rim += [(Link,dir)]
             add_H(node.extH, Link.derH, root=node, rev=rev, fd=1)
+            for lay in Link.derH: node.derTTe += lay.derTT  # we can just add it here? Then derTte will be summed in every comp
             node.Et += Et
     return Link
 
@@ -408,8 +419,8 @@ def sum2graph(root, grapht, fd, minL=0, maxL=None):  # sum node and link params 
         graph.box = extend_box(graph.box, N.box)  # pre-compute graph.area += N.area?
         graph.Et += N.Et * icoef ** 2  # deeper, lower weight
         if not fd:  # skip CL
-            if graph.baseT: graph.baseT += N.baseT
-            else: graph.baseT = copy(N.baseT)
+            if np.any(graph.baseT): graph.baseT += N.baseT  # np array needs np.any
+            else:                   graph.baseT = copy(N.baseT)
         N.root = graph
     graph.node_= N_  # nodes or roots, link_ is still current-dist links only?
     graph.derH = [[CLay(root=graph), lay] for lay in sum_H(link_, graph, fd=1)]  # sum and nest link derH
@@ -487,31 +498,35 @@ def comp_H(H,h, rn, root, Et, fd):  # one-fork derH if fd, else two-fork derH
 
 def sum_G_(node_, s=1, fc=0, G=None):
 
-    fn = node_[0].baseT
-    if G is None:
-        G = CG(); G.aves = Caves()
-    for n in node_:
-        if fn: G.baseT += n.baseT * s
-        G.derTT += n.derTT * s; G.Et += n.Et * s; G.aRad += n.aRad * s; G.yx += n.yx * s
-        if n.derH:
-            add_H(G.derH, n.derH, root=G, rev = s==-1, fc=fc, fd=not fn)  # alt is single layer
-        if fc:
-            G.M += n.m * s; G.L += s
-        else:
-            if n.extH: add_H(G.extH, n.extH, root=G, rev = s==-1, fd=not fn)  # empty in centroid
-            G.box = extend_box( G.box, n.box)  # extended per separate node_ in centroid
+    if G is None: G = CG()
+    if node_:  # node_ may empty for alt
+        fn = np.any(node_[0].baseT)
+        
+        for n in node_:
+            if fn: 
+                if np.any(G.baseT): G.baseT += n.baseT * s
+                else:               G.baseT = n.baseT * s
+            G.derTT += n.derTT * s; G.Et += n.Et * s; G.aRad += n.aRad * s; G.yx += n.yx * s
+            if n.derH:
+                add_H(G.derH, n.derH, root=G, rev = s==-1, fc=fc, fd=not fn)  # alt is single layer
+            if fc:
+                G.M += n.m * s; G.L += s
+            else:
+                if fn: extH = [n.extH]  # extH is not nested but G may nested, so we need to nest extH first?
+                else:  extH = n.extH
+                if n.extH: add_H(G.extH, extH, root=G, rev = s==-1, fd=not fn)  # empty in centroid
+                G.box = extend_box( G.box, n.box)  # extended per separate node_ in centroid
     return G
 
 def L2N(link_,root):
     for L in link_:
-        L.root = root; L.fd_=copy(L.nodet[0].fd_); L.mL_t,L.rimt = [[],[]],[[],[]]; L.aRad=0; L.visited_,L.extH = [],[]; L.baseT = []
+        L.root = root; L.fd_=copy(L.nodet[0].fd_); L.mL_t,L.rimt = [[],[]],[[],[]]; L.aRad=0; L.visited_,L.extH = [],[]; L.baseT = []; L.derTTe = np.zeros((2,8))
 
 def frame2G(G, **kwargs):
     blob2G(G, **kwargs)
     G.derH = kwargs.get('derH', [CLay(root=G, Et=np.zeros(4), derTT=[], node_=[],link_ =[])])
     G.Et = kwargs.get('Et', np.zeros(4))
     G.node_ = kwargs.get('node_', [])
-    G.aves = Caves()  # per frame's aves
 
 def blob2G(G, **kwargs):
     # node_, Et stays the same:

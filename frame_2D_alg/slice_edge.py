@@ -2,7 +2,7 @@ import numpy as np
 from collections import defaultdict
 from itertools import combinations
 from math import atan2, cos, floor, pi
-from frame_blobs import frame_blobs_root, intra_blob_root, CBase, imread, unpack_blob_
+from frame_blobs import frame_blobs_root, intra_blob_root, CBase, imread, unpack_blob_, aves, coefs
 '''
 In natural images, objects look very fuzzy and frequently interrupted, only vaguely suggested by initial blobs and contours.
 Potential object is proximate low-gradient (flat) blobs, with rough / thick boundary of adjacent high-gradient (edge) blobs.
@@ -16,6 +16,10 @@ This process is very complex, so it must be selective. Selection should be by co
 and inverse gradient deviation of flat blobs. But the latter is implicit here: high-gradient areas are usually quite sparse.
 A stable combination of a core flat blob with adjacent edge blobs is a potential object.
 '''
+ave_I   = aves[3] * coefs[3]
+ave_G   = aves[4] * coefs[4]
+ave_dangle = aves[-4] * coefs[-4]
+
 
 class CP(CBase):
     def __init__(P, yx, axis):
@@ -32,7 +36,7 @@ def vectorize_root(frame):
         if not blob.sign and blob.G > frame.ave.G:
             slice_edge(blob, frame.ave)
 
-def slice_edge(edge, aves):
+def slice_edge(edge):
 
     axisd = select_max(edge)
     yx_ = sorted(axisd.keys(), key=lambda yx: edge.dert_[yx][-1])  # sort by g
@@ -40,7 +44,7 @@ def slice_edge(edge, aves):
     # form P/ local max yx:
     while yx_:
         yx = yx_.pop(); axis = axisd[yx]  # get max of g maxes
-        P = form_P(CP(yx, axis), edge, ave_I = aves.I, ave_G = aves.G, ave_dangle = aves.dangle)
+        P = form_P(CP(yx, axis), edge)
         if P: edge.P_ += [P]
         yx_ = [yx for yx in yx_ if yx not in edge.rootd]    # remove merged maxes if any
     edge.P_.sort(key=lambda P: P.yx, reverse=True)
@@ -63,7 +67,7 @@ def select_max(edge):
         if new_max: axisd[y, x] = sa, ca
     return axisd
 
-def form_P(P, edge, ave_I,ave_G,ave_dangle):
+def form_P(P, edge):
     y, x = ix, iy = P.yx
     ay, ax = P.axis
     center_dert = i,gy,gx,g = edge.dert_[y,x]  # dert is None if _y,_x not in edge.dert_: return` in `interpolate2dert`
