@@ -131,6 +131,38 @@ class CG(CBase):  # PP | graph | blob: params of single-fork node_ cluster
         G.link_ = kwargs.get('link_',[])  # internal links
         G.rim = kwargs.get('rim',[])  # external links
     def __bool__(G): return bool(G.node_)  # never empty
+    
+
+def copy_(G):
+    
+    C = CG()  # a copy of input G
+    fd = isinstance(G, CL)  # G could be CG or CL
+    
+    for name, value in G.__dict__.items(): 
+        cvalue = getattr(G, name)
+        if name == 'derH':
+            derH = []
+            for fork in G.derH:
+                if fd:
+                    derH  += [fork.copy_(root=C)]  # each fork is CLay
+                else:
+                    Fork = []
+                    for lay in fork:
+                        Fork += [lay.copy_(root=C)]
+                    derH += [Fork]    
+            C.derH = derH
+            
+        elif name == 'extH':
+            extH = []
+            for lay in G.extH:
+                extH += [lay.copy_(root=C)]
+            C.extH = extH 
+        elif isinstance(value, list) or isinstance(value, np.ndarray):  # list or numpy array: Et, yx, box, node_, link_, rim_, altG
+            setattr(C, name, copy(cvalue))
+        else:  # numeric or object: fd, root, maxL, aRad, nnest, lnest
+            setattr(C, name, cvalue)
+        
+    return C
 
 class CL(CBase):  # link or edge, a product of comparison between two nodes or links
     name = "link"
@@ -147,14 +179,16 @@ class CL(CBase):  # link or edge, a product of comparison between two nodes or l
         l.angle = kwargs.get('angle',[])  # dy,dx between nodet centers, redundant to box
         # add med, rimt, extH in der+
     def __bool__(l): return bool(l.nodet)
+    
 
 def vectorize_root(frame):
     # init for agg+:
     blob_ = unpack_blob_(frame)
-    frame2G(frame, derH=[CLay(root=frame, Et=np.zeros(4), derTT=[], node_=[],link_=[])], node_=[frame.blob_,[]], root=None)  # distinct from base blob_
+    # same link_ level to be aligned with node_?
+    frame2G(frame, derH=[CLay(root=frame, Et=np.zeros(4), derTT=[], node_=[],link_=[])], node_=[frame.blob_,[]], link_ = [[],[]], root=None)  # distinct from base blob_
     for blob in blob_:
         if not blob.sign and blob.G > ave_G * blob.root.olp:
-            edge = slice_edge(blob, frame.aves)
+            edge = slice_edge(blob)
             if edge.G * (len(edge.P_)-1) > ave:  # eval PP
                 comp_slice(edge)
                 if edge.Et[0] * (len(edge.node_)-1)*(edge.rng+1) > ave:
@@ -168,10 +202,11 @@ def vectorize_root(frame):
                             G_ += [G]; baseT += baset; derTT += dertt
                     if len(G_) > ave_L:
                         edge.node_ = G_; edge.baseT = baseT; edge.derTT = derTT
-                        frame.node_[-1] += [edge]
+                        frame.node_[1] += [edge]
                         cluster_edge(edge)
+                        frame.nnest = max(frame.nnest, edge.nnest); frame.lnest = max(frame.lnest, edge.lnest)  # add max nnest and lnest
     # 1layer derH, alt: converted adj_blobs of edge blob, or alt_P_?
-    frame.derH = sum_H(frame.node_[-1],frame)
+    frame.derH = sum_H(frame.node_[1],frame)
 
 def val_(Et, coef=1):  # comparison / inclusion eval by m only, no contextual projection
 
@@ -219,7 +254,7 @@ def cluster_edge(edge):  # edge is CG but not a connectivity cluster, just a set
     N_,L_,Et = comp_node_(edge.node_)
     edge.link_ += L_
     if Val_(Et, _Et=Et, fd=0) > 0:  # cluster eval
-        derH = [[sum_lay_(L_,edge,)]]  # single nested mlay
+        derH = [[sum_lay_(L_,edge)]]  # single nested mlay
         if len(N_) > ave_L:
             cluster_PP_(N_, fd=0)
         if Val_(Et, _Et=Et, fd=0) > 0:  # likely not from the same links
@@ -435,13 +470,17 @@ def sum2graph(root, grapht, fd, minL=0, maxL=None):  # sum node and link params 
 
 def sum_lay_(link_, root):
     lay0 = CLay(root=root)
-    for link in link_: lay0.add_lay(link.derH[0])
+    for link in link_: 
+        lay0.add_lay(link.derH[0])
+        root.derTTe += link.derH[0].derTT
     return lay0
 
 def comb_H_(L_, root, fd):
     derH = sum_H(L_,root,fd=fd)
     Lay = CLay(root=root)
-    for lay in derH: Lay.add_lay(lay)
+    for lay in derH: 
+        Lay.add_lay(lay)
+        root.derTTe += lay.derTT
     return Lay
 
 def sum_H(Q, root, rev=0, fc=0, fd=0):  # sum derH in link_|node_
@@ -495,8 +534,11 @@ def comp_H(H,h, rn, root, Et, fd):  # one-fork derH if fd, else two-fork derH
 def sum_G_(node_, s=1, fc=0, G=None):
 
     if G is None:
-        G = copy_(node_[0]); node_=node_[:-1]
+        # we need to replace node_ and reset link_?
+        G = copy_(node_[0]); G.node_ = [node_[0]]; G.link_ = []; node_=node_[1:]  # should be 1:?
+    
     for n in node_:
+        G.node_ += [n]
         if not G.fd:
             G.baseT += n.baseT * s; G.derTTe += n.derTTe
         G.derTT += n.derTT * s; G.Et += n.Et * s; G.aRad += n.aRad * s; G.yx += n.yx * s
@@ -505,13 +547,14 @@ def sum_G_(node_, s=1, fc=0, G=None):
         if fc:
             G.M += n.m * s; G.L += s
         else:
-            if n.extH: add_H(G.extH, n.extH, root=G, rev = s==-1, fd=G.fd)  # empty in centroid
+            if n.extH: add_H(G.extH, n.extH, root=G, rev = s==-1, fd=1)  # empty in centroid  (always flat in extH)
             G.box = extend_box( G.box, n.box)  # extended per separate node_ in centroid
     return G
 
 def L2N(link_,root):
     for L in link_:
-        L.root=root; L.fd_=copy(L.nodet[0].fd_); L.mL_t,L.rimt=[[],[]],[[],[]]; L.aRad=0; L.visited_,L.extH=[],[]; L.baseT=[]; L.derTTe=np.zeros((2,8))
+        # all link should have fd = 1?
+        L.root=root; L.fd=1; L.mL_t,L.rimt=[[],[]],[[],[]]; L.aRad=0; L.visited_,L.extH=[],[]; L.baseT=[]; L.derTTe=np.zeros((2,8))
 
 def frame2G(G, **kwargs):
     blob2G(G, **kwargs)
@@ -546,8 +589,7 @@ def PP2G(PP):
     baseT = np.array((*latuple[:2], *latuple[-1]))  # I,G,Dy,Dx
     derTT = np.hstack((vert, np.zeros((2,2))))  # [I,G,A, M,D,L] -> [I,G,gA, M,D,n, empty L,A]
     y0,x0, yn,xn = box; dy,dx = yn-y0, xn-x0  # A = (dy,dx); L = np.hypot(dy,dx)
-
-    G = CG(root=root, fd_=[0], Et=Et, node_=P_, link_=[], baseT=baseT, derTT=derTT, box=box, yx=yx, aRad=np.hypot(dy/2, dx/2),
+    G = CG(root=root, fd=0, fd_=[0], Et=Et, node_=P_, link_=[], baseT=baseT, derTT=derTT, box=box, yx=yx, aRad=np.hypot(dy/2, dx/2),
            derH=[[CLay(node_=P_, link_=link_, derTT=deepcopy(derTT)), CLay()]])  # empty dfork
     return G, baseT, derTT
 

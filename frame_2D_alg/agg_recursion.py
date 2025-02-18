@@ -126,17 +126,22 @@ def cluster_C_(root):  # 0 nest gap from cluster_edge: same derH depth in root a
 
     def sum_C(dnode_, C=None):  # sum|subtract and average C-connected nodes
 
+        alt_ = [n.altG for n in dnode_ if n.altG]
         if C is None:
-            C,A = CG(node_=dnode_),CG(); C.fin = 1; sign=1  # add if new, else subtract (init C.fin here)
+            C,A = CG(node_=[dnode_[0]], baseT=copy(dnode_[0].baseT)),CG(); C.fin = 1; sign=1  # add if new, else subtract (init C.fin here)
+            dnode_ = dnode_[1:]; 
+            if alt_: 
+               A.node_=[alt_[0]]; A.baseT=copy(alt_[0].baseT)
+               alt_ = alt_[1:]
             C.M,C.L, A.M,A.L = 0,0,0,0  # centroid setattr
+            k = len(dnode_) -1
         else:
             A = C.altG; sign=0
             C.node_ = [n for n in C.node_ if n.fin]  # not in -ve dnode_, may add +ve later
-
+            k = len(dnode_) + 1
         sum_G_(dnode_, sign, fc=1, G=C)  # no extH, extend_box
-        alt_ = [n.altG for n in dnode_ if n.altG]
         if alt_: sum_G_(alt_, sign, fc=0, G=A)  # no m, M, L in altGs
-        k = len(dnode_) + 1-sign
+
         for falt, n in zip((0,1), (C, A)):  # get averages
             n.Et/=k; n.derTT/=k; n.aRad/=k; n.yx /= k
             if np.any(n.baseT): n.baseT/=k
@@ -147,7 +152,7 @@ def cluster_C_(root):  # 0 nest gap from cluster_edge: same derH depth in root a
 
     def centroid_cluster(N, C_, root):  # form and refine C cluster around N, in root node_|link_?
         # init:
-        N.fin = 1; CN_ = [N]
+        N.fin = 1; CN_ = [N]; N_ = root.node_[-1]  # N_ should be root.node_[-1] 
         for n in N_:
             if not hasattr(n,'fin') or n.fin or n is N: continue  # in other C or in C.node_, or not in root
             radii = N.aRad + n.aRad
@@ -181,9 +186,9 @@ def cluster_C_(root):  # 0 nest gap from cluster_edge: same derH depth in root a
                 break
     # C-cluster top node_|link_:
     C_t = [[],[]]  # concat exemplar/centroid nodes across top Gs for global frame cross_comp
-    for fn, C_,nest,_N_ in zip((1,0), C_t, [root.nnest,root.lnest], [root.node_,root.link_]):
+    for fn, C_,nest,_N_ in zip((1,0), C_t, [root.nnest,root.lnest], [root.node_[-1],root.link_[-1]]):
         if not nest: continue
-        N_ = [N for N in sorted([N for N in _N_[-1].node_], key=lambda n: n.Et[fn], reverse=True)]
+        N_ = [N for N in sorted([N for N in _N_], key=lambda n: n.Et[fn], reverse=True)]
         for N in N_:
             N.sign, N.m, N.fin = 1, 0, 0  # C update sign, inclusion m, inclusion flag
         for N in N_:
@@ -308,8 +313,8 @@ def agg_H_seq(focus,_nestt=(1,0)):  # recursive level-forming pipeline, called f
         bottom = 1
         for lev_G in reversed(Q[:-1]):  # top level gets no feedback
             hm_ = hG.derTT[0]  # + m-associated coefs: len, dist, dcoords?
-            hm_ = centroid_M_(hm_, sum(hm_)/8, ave)
-            dm_ = hm_ - lev_G.aves
+            hm_, M = centroid_M_(hm_, sum(hm_)/8, ave)
+            dm_ = hm_ - aves[:8]  # minus global aves here?
             if sum(dm_) > ave:  # update
                 lev_G.aves = hm_  # proj agg+'m = m + dm?
                 hG = lev_G
@@ -323,7 +328,7 @@ def agg_H_seq(focus,_nestt=(1,0)):  # recursive level-forming pipeline, called f
             # include temporal Dm_+ Ddm_?
             dy,dx = lev_G.baseT[-2:]  # gA from summed Gs
             y,x,Y,X = lev_G.box  # current focus?
-            proj_focus = image[y+dy, x+dx, Y+dy, X+dx]
+            proj_focus = image[y+dy, x+dx, Y+dy, X+dx]  # we need to limit it to image size?
             # refocus bottom level with new aves, rerun agg+
             agg_H_seq(proj_focus, (frame.nnest,frame.lnest))
 
@@ -341,6 +346,7 @@ if __name__ == "__main__":
     intra_blob_root(frame)
     vectorize_root(frame)
     if frame.node_[1]:  # unpack converted edges
-        frame.node_[-1] = [[G for G in edge.node_[1]] for edge in frame.node_[1]]
-        [comb_altG_(G.altG) for G in frame.node_[-1]]
+        # each G in edge.node_ is a G from sum_G_, so get higher graph from last G.node_
+        frame.node_[-1] = [G for edge in frame.node_[1] if edge.nnest for G in edge.node_[-1].node_]  # skip edge without added nnest (higher graphs)
+        comb_altG_(frame.node_[-1])  # node[-1] is the highest graphs
         frame = agg_H_seq(focus)  # focus will be shifted by internal feedback
