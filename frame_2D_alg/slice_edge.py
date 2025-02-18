@@ -2,7 +2,7 @@ import numpy as np
 from collections import defaultdict
 from itertools import combinations
 from math import atan2, cos, floor, pi
-from frame_blobs import frame_blobs_root, intra_blob_root, CBase, imread, unpack_blob_, aves, coefs
+from frame_blobs import frame_blobs_root, intra_blob_root, CBase, imread, unpack_blob_, aves
 '''
 In natural images, objects look very fuzzy and frequently interrupted, only vaguely suggested by initial blobs and contours.
 Potential object is proximate low-gradient (flat) blobs, with rough / thick boundary of adjacent high-gradient (edge) blobs.
@@ -16,10 +16,9 @@ This process is very complex, so it must be selective. Selection should be by co
 and inverse gradient deviation of flat blobs. But the latter is implicit here: high-gradient areas are usually quite sparse.
 A stable combination of a core flat blob with adjacent edge blobs is a potential object.
 '''
-ave_I   = aves[3] * coefs[3]
-ave_G   = aves[4] * coefs[4]
-ave_dangle = aves[-4] * coefs[-4]
-
+ave_I = aves[3]
+ave_G = aves[4]
+ave_dangle = aves[-4]
 
 class CP(CBase):
     def __init__(P, yx, axis):

@@ -1,5 +1,5 @@
 import numpy as np
-from frame_blobs import CBase, frame_blobs_root, intra_blob_root, imread, unpack_blob_, aves,coefs
+from frame_blobs import CBase, frame_blobs_root, intra_blob_root, imread, unpack_blob_, aves
 from slice_edge import CP, slice_edge, comp_angle
 from functools import reduce
 '''
@@ -26,15 +26,14 @@ These low-M high-Ma blobs are vectorized into outlines of adjacent flat (high in
 Connectivity in P_ is traced through root_s of derts adjacent to P.dert_, possibly forking. 
 len prior root_ sorted by G is root.olp, to eval for inclusion in PP or start new P by ave*olp
 '''
-
-ave     = aves[-2] * coefs[-2]
-ave_d   = aves[1] * coefs[1]
-ave_G   = aves[4] * coefs[4]
-ave_PPm = aves[22] * coefs[22]
-ave_PPd = aves[23] * coefs[23]
-ave_L   = aves[6] * coefs[6]
-ave_dI  = aves[14] * coefs[14]
-ave_md = [ave, ave_d]
+ave     = aves[-2]
+ave_d   = aves[1]
+ave_G   = aves[4]
+ave_PPm = aves[22]
+ave_PPd = aves[23]
+ave_L   = aves[6]
+ave_dI  = aves[14]
+ave_md  = [ave,ave_d]
 
 class CdP(CBase):  # produced by comp_P, comp_slice version of Clink
     name = "dP"

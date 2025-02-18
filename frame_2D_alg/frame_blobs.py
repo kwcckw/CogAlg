@@ -55,6 +55,16 @@ class CBase:
             return inst
     def __repr__(obj): return f"{obj.__class__.__name__}(id={obj.id})"
 
+
+    def __getattribute__(ave,name):
+        coefs =   object.__getattribute__(ave, "coefs")
+        if name == "coefs":
+            return object.__getattribute__(ave, name)
+        elif name == "md":
+            return [ave.m * coefs["m"], ave.d *  coefs["d"]]  # get updated md
+        else:
+            return object.__getattribute__(ave, name)  * coefs[name]  # always return ave * coef
+
  # hyper-parameters, init a guess, adjusted by feedback
 aves = np.array([
         5,    # ave.m
@@ -73,8 +83,8 @@ aves = np.array([
         10,   # ave.med_cost
         # comp_slice
         20,   # ave.dI = ave inverse m, change to Ave from the root intra_blob?
-        20,   # ave.inv 
-        10,   # ave.mG 
+        20,   # ave.inv
+        10,   # ave.mG
         2,    # ave.mM
         2,    # ave.mD
         .1,   # ave.mMa
@@ -95,51 +105,8 @@ aves = np.array([
         30,   # ave.B
         10    # ave.R
     ])
-
-coefs = np.array([
-        1,    # ave.m
-        1,    # ave.d
-        1,    # ave.n
-        1,    # ave.I
-        1,    # ave.G
-        1,    # ave.Ga
-        1,    # ave.L
-        1,    # ave.LA
-        1,    # ave.rn 
-        1,    # ave.max_dist
-        1,    # ave.coef
-        1,    # ave.ccoef
-        1,    # ave.icoef
-        1,    # ave.med_cost
-        # comp_slice
-        1,    # ave.dI
-        1,    # ave.inv 
-        1,    # ave.mG 
-        1,    # ave.mM
-        1,    # ave.mD
-        1,    # ave.mMa
-        1,    # ave.mA
-        1,    # ave.mL
-        1,    # ave.PPm
-        1,    # ave.PPd
-        1,    # ave.Pm
-        1,    # ave.Pd
-        1,    # ave.Gm
-        1,    # ave.Lslice
-        # slice_edge
-
-        1,    # ave.g
-        1,    # ave.mL
-        1,    # ave.dist
-        1,    # ave.dangle
-        1,    # ave.olp
-        1,    # ave.B
-        1     # ave.R
-    ])
-
-
-ave  = aves[-2] * coefs[-2]  # base filter, directly used for comp_r fork
-aveR = aves[-1] * coefs[-1]  # for range+, fixed overhead per blob
+ave  = aves[-2]  # base filter, directly used for comp_r fork
+aveR = aves[-1]  # for range+, fixed overhead per blob
 
 class CFrame(CBase):
 
