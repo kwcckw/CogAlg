@@ -4,7 +4,7 @@ from functools import reduce
 from itertools import zip_longest
 from multiprocessing import Pool, Manager
 from frame_blobs import frame_blobs_root, intra_blob_root, imread, aves
-from vect_edge import L2N, base_comp, sum_G_, comb_H_, sum_H, add_H, comp_node_, comp_link_, sum2graph, get_rim, CG, CLay, vectorize_root, extend_box, Val_, val_
+from vect_edge import L2N, base_comp, sum_G_, comb_H_, sum_H, copy_, comp_node_, comp_link_, sum2graph, get_rim, CG, CLay, vectorize_root, extend_box, Val_, val_
 '''
 notation:
 prefix f: flag
@@ -77,6 +77,7 @@ def cluster_N_(root, L_, fd):  # top-down segment L_ by >ave ratio of L.dists
             rel_dist = L.dist/_L.dist  # >= 1
             if rel_dist < 1.2 or Val_(et, _Et=Et) > 0 or len(L_[i:]) < ave_L:  # ~=dist Ns or either side of L is weak
                 # * density: L.nodet (sum(_G.derTTe[0])- ave*(_G.Et[2]*_G.Et[3])) + (sum(G.derTTe[0])- ave*(G.Et[2]*G.Et[3]))) * ccoef / ave?
+                # or add G.Ete?
                 _L = L; N_ += L.nodet; et += L.Et
             else:
                 i -= 1; break  # terminate contiguous-distance segment
@@ -126,33 +127,30 @@ def cluster_C_(root):  # 0 nest gap from cluster_edge: same derH depth in root a
 
     def sum_C(dnode_, C=None):  # sum|subtract and average C-connected nodes
 
-        alt_ = [n.altG for n in dnode_ if n.altG]
         if C is None:
-            C,A = CG(node_=[dnode_[0]], baseT=copy(dnode_[0].baseT)),CG(); C.fin = 1; sign=1  # add if new, else subtract (init C.fin here)
-            dnode_ = dnode_[1:]; 
-            if alt_: 
-               A.node_=[alt_[0]]; A.baseT=copy(alt_[0].baseT)
-               alt_ = alt_[1:]
-            C.M,C.L, A.M,A.L = 0,0,0,0  # centroid setattr
-            k = len(dnode_) -1
+            C = copy_(dnode_.pop(0)); C.node_=dnode_; C.fin = 1
+            sign = 1  # add if new, else subtract
+            C.M,C.L = 0,0  # centroid setattr
         else:
-            A = C.altG; sign=0
-            C.node_ = [n for n in C.node_ if n.fin]  # not in -ve dnode_, may add +ve later
-            k = len(dnode_) + 1
-        sum_G_(dnode_, sign, fc=1, G=C)  # no extH, extend_box
-        if alt_: sum_G_(alt_, sign, fc=0, G=A)  # no m, M, L in altGs
+            sign = 0; C.node_ = [n for n in C.node_ if n.fin]  # not in -ve dnode_, may add +ve later
 
-        for falt, n in zip((0,1), (C, A)):  # get averages
+        sum_G_(dnode_, sign, fc=1, G=C)  # no extH, extend_box
+        alt_ = [n.altG for n in dnode_ if n.altG]
+        if alt_: sum_G_(alt_, sign, fc=0, G=C.altG)  # no m, M, L in altGs
+        k = len(dnode_) + 1
+        # get averages:
+        for falt, n in zip((0,1), (C, C.altG)):
             n.Et/=k; n.derTT/=k; n.aRad/=k; n.yx /= k
             if np.any(n.baseT): n.baseT/=k
-            norm_H(n.derH, k, fd=falt)  # alt has single layer
+            norm_H(n.derH, k, fd=falt)
+            # alt has single layer
         C.box = reduce(extend_box, (n.box for n in C.node_))
-        C.altG = A
+
         return C
 
-    def centroid_cluster(N, C_, root):  # form and refine C cluster around N, in root node_|link_?
+    def centroid_cluster(N, N_, C_, root):  # form and refine C cluster around N, in root node_|link_?
         # init:
-        N.fin = 1; CN_ = [N]; N_ = root.node_[-1]  # N_ should be root.node_[-1] 
+        N.fin = 1; CN_ = [N]
         for n in N_:
             if not hasattr(n,'fin') or n.fin or n is N: continue  # in other C or in C.node_, or not in root
             radii = N.aRad + n.aRad
@@ -194,7 +192,7 @@ def cluster_C_(root):  # 0 nest gap from cluster_edge: same derH depth in root a
         for N in N_:
             if not N.fin:  # not in prior C
                 if Val_(N.Et, _Et=root.Et, coef=10) > 0:  # cross-similar in G
-                    centroid_cluster(N, C_, root)  # form centroid cluster around N, C_ +=[C]
+                    centroid_cluster(N, N_, C_, root)  # form centroid cluster around N, C_ +=[C]
                 else:
                     break  # the rest of N_ is lower-M
         if len(C_) > ave_L:
@@ -301,9 +299,16 @@ def agg_H_par(focus):  # draft parallel level-updating pipeline
 
         frame.aggH = list(H)  # convert back to list
 
-def agg_H_seq(focus,_nestt=(1,0)):  # recursive level-forming pipeline, called from cluster_C_
+def agg_H_seq(focus, image, _nestt=(1,0)):  # recursive level-forming pipeline, called from cluster_C_
 
-    cluster_C_(frame)  # feedforward: recursive agg+ in edge)frame, both fork levs are lev_Gs
+    frame_blobs_root(focus)
+    intra_blob_root(frame)
+    vectorize_root(frame)
+    if not frame.nnest:
+        return frame
+    comb_altG_(frame.node_[-1])  # PP graphs in frame.node_[2]
+    # feedforward agg+ in edge)frame, each lev fork is lev_G:
+    cluster_C_(frame)
     dm_t = [[],[]]
     bottom_t = []
     for nest,_nest,Q in zip((frame.nnest,frame.lnest),_nestt, (frame.node_,frame.link_)):
@@ -314,7 +319,8 @@ def agg_H_seq(focus,_nestt=(1,0)):  # recursive level-forming pipeline, called f
         for lev_G in reversed(Q[:-1]):  # top level gets no feedback
             hm_ = hG.derTT[0]  # + m-associated coefs: len, dist, dcoords?
             hm_, M = centroid_M_(hm_, sum(hm_)/8, ave)
-            dm_ = hm_ - aves[:8]  # minus global aves here?
+            # hG.Et[0] = M?
+            dm_ = hm_ - lev_G.aves
             if sum(dm_) > ave:  # update
                 lev_G.aves = hm_  # proj agg+'m = m + dm?
                 hG = lev_G
@@ -327,9 +333,10 @@ def agg_H_seq(focus,_nestt=(1,0)):  # recursive level-forming pipeline, called f
         if Val_(lev_G.Et, _Et=lev_G.Et, coef=20) > 0:  # mean value shift within focus, bottom only, internal search per G
             # include temporal Dm_+ Ddm_?
             dy,dx = lev_G.baseT[-2:]  # gA from summed Gs
-            y,x,Y,X = lev_G.box  # current focus?
-            proj_focus = image[y+dy, x+dx, Y+dy, X+dx]  # we need to limit it to image size?
-            # refocus bottom level with new aves, rerun agg+
+            y,x,Y,X = lev_G.box  # if that's current focus?
+            proj_focus = image[max(0,y+dy), max(0, x+dx), min(image.shape[0], Y+dy), min(image.shape[1], X+dx)]
+            # or break if focus is outside the image?
+            # rerun agg+ with new bottom-lev focus and aves:
             agg_H_seq(proj_focus, (frame.nnest,frame.lnest))
 
     return frame
@@ -342,11 +349,4 @@ if __name__ == "__main__":
     yn = xn = 64  # focal sub-frame size, = raccoon_eye, can be any number
     y0 = x0 = 300  # focal sub-frame start @ image center
     focus = image[y0:y0+yn, x0:x0+xn]
-    frame = frame_blobs_root(focus)
-    intra_blob_root(frame)
-    vectorize_root(frame)
-    if frame.node_[1]:  # unpack converted edges
-        # each G in edge.node_ is a G from sum_G_, so get higher graph from last G.node_
-        frame.node_[-1] = [G for edge in frame.node_[1] if edge.nnest for G in edge.node_[-1].node_]  # skip edge without added nnest (higher graphs)
-        comb_altG_(frame.node_[-1])  # node[-1] is the highest graphs
-        frame = agg_H_seq(focus)  # focus will be shifted by internal feedback
+    frame = agg_H_seq(focus, image)  # focus will be shifted by internal feedback
