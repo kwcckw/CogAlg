@@ -128,7 +128,7 @@ def cluster_C_(root):  # 0 nest gap from cluster_edge: same derH depth in root a
     def sum_C(dnode_, C=None):  # sum|subtract and average C-connected nodes
 
         if C is None:
-            C = copy_(dnode_.pop(0)); C.node_=dnode_; C.fin = 1
+            C = copy_(dnode_[0]); C.node_= copy(dnode_); dnode_.pop(0); C.fin = 1
             sign = 1  # add if new, else subtract
             C.M,C.L = 0,0  # centroid setattr
         else:
@@ -164,7 +164,7 @@ def cluster_C_(root):  # 0 nest gap from cluster_edge: same derH depth in root a
             dN_, M, dM = [], 0, 0  # pruned nodes and values, or comp all nodes again?
             for _N in C.node_:
                 m = sum( base_comp(C,_N)[0][0])
-                if C.altG and _N.altG: m += sum( base_comp(C.altG,_N.altG)[0][0])  # Et if proximity-weighted overlap?
+                if C.altG and np.any(C.altG.baseT) and _N.altG and np.any(_N.altG.baseT): m += sum( base_comp(C.altG,_N.altG)[0][0])  # Et if proximity-weighted overlap?
                 vm = m - ave
                 if vm > 0:
                     M += m; dM += m - _N.m; _N.m = m  # adjust kept _N.m
@@ -184,7 +184,7 @@ def cluster_C_(root):  # 0 nest gap from cluster_edge: same derH depth in root a
                 break
     # C-cluster top node_|link_:
     C_t = [[],[]]  # concat exemplar/centroid nodes across top Gs for global frame cross_comp
-    for fn, C_,nest,_N_ in zip((1,0), C_t, [root.nnest,root.lnest], [root.node_[-1],root.link_[-1]]):
+    for fn, C_,nest,_N_ in zip((1,0), C_t, [root.nnest,root.lnest], [root.node_[-1].node_,root.link_[-1].node_]):  # last node is G from sum_G_
         if not nest: continue
         N_ = [N for N in sorted([N for N in _N_], key=lambda n: n.Et[fn], reverse=True)]
         for N in N_:
@@ -301,12 +301,12 @@ def agg_H_par(focus):  # draft parallel level-updating pipeline
 
 def agg_H_seq(focus, image, _nestt=(1,0)):  # recursive level-forming pipeline, called from cluster_C_
 
-    frame_blobs_root(focus)
+    frame = frame_blobs_root(focus)
     intra_blob_root(frame)
     vectorize_root(frame)
     if not frame.nnest:
         return frame
-    comb_altG_(frame.node_[-1])  # PP graphs in frame.node_[2]
+    comb_altG_(frame.node_[-1].node_)  # PP graphs in frame.node_[2]  (frame.node_[-1] is a G from sum_G_ now)
     # feedforward agg+ in edge)frame, each lev fork is lev_G:
     cluster_C_(frame)
     dm_t = [[],[]]
@@ -320,7 +320,7 @@ def agg_H_seq(focus, image, _nestt=(1,0)):  # recursive level-forming pipeline, 
             hm_ = hG.derTT[0]  # + m-associated coefs: len, dist, dcoords?
             hm_, M = centroid_M_(hm_, sum(hm_)/8, ave)
             # hG.Et[0] = M?
-            dm_ = hm_ - lev_G.aves
+            dm_ = hm_ - lev_G.aves  # do we still need aves per pev_G?
             if sum(dm_) > ave:  # update
                 lev_G.aves = hm_  # proj agg+'m = m + dm?
                 hG = lev_G
