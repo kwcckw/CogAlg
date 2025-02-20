@@ -122,8 +122,7 @@ class CG(CBase):  # PP | graph | blob: params of single-fork node_ cluster
         G.extH = kwargs.get('extH',[])  # sum from rims, single-fork
         G.maxL = kwargs.get('maxL', 0)  # if dist-nested in cluster_N_
         G.aRad = 0  # average distance between graph center and node center
-        # prevent endless cyclic assignment
-        G.altG = CG(altG=G) if kwargs.get('altG') is None else kwargs.get('altG')  # adjacent (contour) gap+overlap alt-fork graphs, converted to CG
+        G.altG = CG(altG=G,fd=1) if kwargs.get('altG') is None else kwargs.get('altG')  # adjacent (contour) gap+overlap alt-fork graphs, converted to CG
         # G.fork_tree: list = z([[]])  # indices in all layers(forks, if no fback merge
         # G.fback_ = []  # node fb buffer, n in fb[-1]
         G.nnest = kwargs.get('nnest',0)  # node_H if > 0, node_[-1] is top G_
@@ -195,12 +194,12 @@ def vectorize_root(frame):  # init for agg+:
         if edge.nnest:
             for G in edge.node_[1]:
                 add_H(frame.derH, G.derH, frame); frame.node_[2] += [G]
-        frame.link_[0] += [L for L in edge.link_[0]]  # may be empty (always empty? We didn't fill it anywherre)
+        frame.link_[0] += [L for L in edge.link_[0]]  # may be empty
         if edge.lnest:
             frame.link_[1] += [L for L in edge.link_[1]]
             # no add_H
     if frame.node_[2]:
-        frame.node_[2] = sum_G_(frame.node_[2]); frame.nnest = 1  # if we have sum_G here, then sum_G in cluster_PP_ is no longer needed
+        frame.node_[2] = sum_G_(frame.node_[2]); frame.nnest = 1
     if frame.link_[1]:
         frame.link_[1] = sum_G_(frame.link_[1]); frame.lnest = 1
     return frame
@@ -244,9 +243,9 @@ def cluster_edge(edge):  # edge is CG but not a connectivity cluster, just a set
                 G_ = [sum2graph(edge, [node_,link_,et], fd)]
         if G_:
             if fd:
-                edge.link_ = [edge.link_[0], G_]; edge.lnest += 1
+                edge.link_ = [edge.link_, G_]; edge.lnest += 1
             else:
-                edge.node_ = [edge.node_[0], G_]; edge.nnest += 1
+                edge.node_ = [edge.node_, G_]; edge.nnest += 1
                 # init nesting for cluster_C_(fork)
     # comp PP_:
     N_,L_,Et = comp_node_(edge.node_[0])
@@ -410,9 +409,8 @@ def comp_N(_N,N, angle=None, dist=None, dir=1):  # compare links, relative N dir
     if M > ave and (len(N.derH) > 2 or isinstance(N,CL)):  # else derH is redundant to dext,vert
         dderH = comp_H(_N.derH, N.derH, rn, Link, Et, fd)  # comp shared layers, if any
         # spec/ comp_node_(node_|link_)
-    Link.derH = [[CLay(root=Link,Et=Et,node_=[_N,N],link_=[Link], derTT=copy(derTT))]] + dderH  # first nested layer is always single fork
-    for lay in dderH: 
-        for fork in lay: derTT += fork.derTT
+    Link.derH = [[CLay(root=Link,Et=Et,node_=[_N,N],link_=[Link], derTT=copy(derTT))]] + dderH
+    for lay in dderH: derTT += lay.derTT
     # spec / alt:
     if not fd and _N.altG and N.altG:  # if alt M?
         Link.altL = comp_N(_N.altG, N.altG, _N.altG.Et[2] / N.altG.Et[2])
@@ -449,10 +447,19 @@ def sum2graph(root, grapht, fd, minL=0, maxL=None):  # sum node and link params 
         if i and not fd: graph.baseT += N.baseT  # skip CL
         N.root = graph
     graph.node_= N_  # nodes or roots, link_ is still current-dist links only?
-    graph.derH = [[CLay(root=graph), lay[0]] for lay in sum_H(link_, graph, fd=1)]  # sum and nest link derH  (but mfork is always empty?)
-    for lay in graph.derH:
-        for fork in lay:
-            if np.any(fork.derTT): graph.derTT += fork.derTT
+    mfork = [CLay(root=graph).add_lay(lay) for lay in sum_H(link_, graph, fd=1)]
+    graph.derTT += mfork.derTT
+    graph.derH = [[mfork]]  # higher layers are added by feedback, dfork added from comp_link_:
+    if fd:
+        for L in link_:  # # current mfork is link root dfork, feedback must be per link?
+            LR = L.root; dlay = [CLay().add_lay(lay) for lay in L.derH]
+            if len(LR.derH[0])==2: LR.derH[0][1].add_lay(dlay)
+            else:  root.derH[0] += [dlay.copy_(root=LR)]  # init
+            LR.derTT += dlay.derTT
+    ''' 
+    this feedback should be from node Gs (not links), which are CLs if fd? then we need to get llinks from their rim_ts?
+    also concat before summing into their prior root, before new root assign?  
+    '''
     yx = np.mean(yx_, axis=0)
     dy_,dx_ = (graph.yx - yx_).T; dist_ = np.hypot(dy_,dx_)
     graph.aRad = dist_.mean()  # ave distance from graph center to node centers
@@ -464,24 +471,20 @@ def sum2graph(root, grapht, fd, minL=0, maxL=None):  # sum node and link params 
                 mG = n.root
                 if mG not in altG:
                     mG.altG.node_ += [graph]  # cross-comp|sum complete altG before next agg+ cross-comp
-                    altG += [mG]
+                    altG.node_ += [mG]
     return graph
 
 def sum_lay_(link_, root):
     lay0 = CLay(root=root)
     for link in link_:
-        for lay in link.derH:
-            for fork in lay:
-                lay0.add_lay(fork); 
-                root.derTTe += fork.derTT
+        lay0.add_lay(link.derH[0]); root.derTTe += link.derH[0].derTT
     return lay0
 
 def comb_H_(L_, root, fd):
     derH = sum_H(L_,root,fd=fd)
     Lay = CLay(root=root)
     for lay in derH:
-        for fork in lay:
-            Lay.add_lay(fork); root.derTTe += fork.derTT
+        Lay.add_lay(lay); root.derTTe += lay.derTT
     return Lay
 
 def sum_H(Q, root, rev=0, fc=0, fd=0):  # sum derH in link_|node_
@@ -493,30 +496,39 @@ def add_H(H, h, root, rev=0, fc=0, fd=0):  # add fork L.derHs
 
     for Lay,lay in zip_longest(H,h):  # different len if lay-selective comp
         if lay:
-            if Lay:
-                for i, (Fork,fork) in enumerate(zip_longest(Lay,lay)):
-                    if fork:
-                        if Fork:
-                            if fork: Fork.add_lay(fork, rev=rev,fc=fc)
-                        else: Lay[i] = fork.copy_(root=root)
-            else:
-                Lay = []
-                for fork in lay:
-                    Lay += [fork.copy_(root=root,rev=rev,fc=fc)]
-                    root.derTT += fork.derTT; root.Et += fork.Et
-                H += [Lay]
+            if fd: # one-fork lays
+                if Lay: Lay.add_lay(lay,rev=rev,fc=fc)
+                else: H += [lay.copy_(root=root,rev=rev,fc=fc)]
+                root.derTTe += lay.derTT; root.Et += lay.Et
+            else:  # two-fork lays
+                if Lay:
+                    for i, (Fork,fork) in enumerate(zip_longest(Lay,lay)):
+                        if fork:
+                            if Fork:
+                                if fork: Fork.add_lay(fork, rev=rev,fc=fc)
+                            else: Lay[i] = fork.copy_(root=root)
+                else:
+                    Lay = []
+                    for fork in lay:
+                        Lay += [fork.copy_(root=root,rev=rev,fc=fc)]
+                        root.derTT += fork.derTT; root.Et += fork.Et
+                    H += [Lay]
 
 def comp_H(H,h, rn, root, Et, fd):  # one-fork derH if fd, else two-fork derH
 
     derH = []
     for _lay,lay in zip_longest(H,h):  # different len if lay-selective comp
         if _lay and lay:
-            dLay = []
-            for _fork,fork in zip_longest(_lay,lay):
-                if _fork and fork:
-                    dLay += [_fork.comp_lay(fork, rn,root=root)]  # no flatten now
-                    # assuming prior base_comp, only deviations are summed in Et (of dderTT only?):
-                    Et[:2] += fork.Et[:2] / fork.Et[2] - Et[:2] / fork.Et[2]
+            if fd:  # one-fork lays
+                dLay = _lay.comp_lay(lay, rn, root=root)
+            else:  # two-fork lays
+                dLay = []
+                for _fork,fork in zip_longest(_lay,lay):
+                    if _fork and fork:
+                        dlay = _fork.comp_lay(fork, rn,root=root)
+                        if dLay: dLay.add_lay(dlay)  # sum ds between input forks
+                        else:    dLay = dlay
+            Et += dLay.Et
             derH += [dLay]
     return derH
 
@@ -546,14 +558,14 @@ def frame2G(G, **kwargs):
     blob2G(G, **kwargs)
     G.derH = kwargs.get('derH', [CLay(root=G, Et=np.zeros(4), derTT=[], node_=[],link_ =[])])
     G.Et = kwargs.get('Et', np.zeros(4))
-    G.node_ = kwargs.get('node_', [[]])  # init first layer node_
+    G.node_ = kwargs.get('node_', [])
     G.aves = aves
 
 def blob2G(G, **kwargs):
     # node_, Et stays the same:
     G.fd_ = []  # fd=1 if cluster of Ls|lGs?
     G.root = kwargs.get('root')  # may extend to list in cluster_N_, same nodes may be in multiple dist layers
-    G.link_ = kwargs.get('link_',[[]])
+    G.link_ = kwargs.get('link_',[])
     G.nnest = kwargs.get('nnest',0)  # node_H if > 0, node_[-1] is top G_
     G.lnest = kwargs.get('lnest',0)  # link_H if > 0, link_[-1] is top L_
     G.derH = []  # sum from nodes, then append from feedback, maps to node_tree
