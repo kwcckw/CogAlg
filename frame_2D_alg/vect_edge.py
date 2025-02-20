@@ -185,16 +185,16 @@ def vectorize_root(frame):  # init for agg+:
                             G, baset, dertt = PP2G(PP)
                             G_ += [G]; baseT += baset; derTT += dertt
                     if len(G_) > ave_L:
-                        edge.node_ = [G_]; edge.baseT = baseT; edge.derTT = derTT
+                        edge.node_ = G_; edge.baseT = baseT; edge.derTT = derTT
                         cluster_edge(edge)  # 1layer derH, alt: converted adj_blobs of edge blob | alt_P_?
                         edge_ += [edge]
     for edge in edge_:
         # unpack edges for agg+:
-        frame.node_[1] += [PP for PP in edge.node_[0]]
+        frame.node_[1] += [PP for PP in (edge.node_[0] if edge.nnest else edge.node_)]  # nested only if nnest >0
         if edge.nnest:
             for G in edge.node_[1]:
                 add_H(frame.derH, G.derH, frame); frame.node_[2] += [G]
-        frame.link_[0] += [L for L in edge.link_[0]]  # may be empty
+        frame.link_[0] += [L for L in  (edge.link_[0] if edge.lnest else edge.link_)]  # may be empty
         if edge.lnest:
             frame.link_[1] += [L for L in edge.link_[1]]
             # no add_H
@@ -248,7 +248,7 @@ def cluster_edge(edge):  # edge is CG but not a connectivity cluster, just a set
                 edge.node_ = [edge.node_, G_]; edge.nnest += 1
                 # init nesting for cluster_C_(fork)
     # comp PP_:
-    N_,L_,Et = comp_node_(edge.node_[0])
+    N_,L_,Et = comp_node_(edge.node_)
     edge.link_ += L_
     if Val_(Et, _Et=Et, fd=0) > 0:  # cluster eval
         derH = [[sum_lay_(L_,edge)]]  # single nested mlay
@@ -409,7 +409,7 @@ def comp_N(_N,N, angle=None, dist=None, dir=1):  # compare links, relative N dir
     if M > ave and (len(N.derH) > 2 or isinstance(N,CL)):  # else derH is redundant to dext,vert
         dderH = comp_H(_N.derH, N.derH, rn, Link, Et, fd)  # comp shared layers, if any
         # spec/ comp_node_(node_|link_)
-    Link.derH = [[CLay(root=Link,Et=Et,node_=[_N,N],link_=[Link], derTT=copy(derTT))]] + dderH
+    Link.derH = [CLay(root=Link,Et=Et,node_=[_N,N],link_=[Link], derTT=copy(derTT)), *dderH]
     for lay in dderH: derTT += lay.derTT
     # spec / alt:
     if not fd and _N.altG and N.altG:  # if alt M?
@@ -447,15 +447,21 @@ def sum2graph(root, grapht, fd, minL=0, maxL=None):  # sum node and link params 
         if i and not fd: graph.baseT += N.baseT  # skip CL
         N.root = graph
     graph.node_= N_  # nodes or roots, link_ is still current-dist links only?
-    mfork = [CLay(root=graph).add_lay(lay) for lay in sum_H(link_, graph, fd=1)]
+    for L in link_: L.root = graph
+    mfork = CLay(root=graph); [mfork.add_lay(lay) for lay in sum_H(link_, graph, fd=1)]
     graph.derTT += mfork.derTT
     graph.derH = [[mfork]]  # higher layers are added by feedback, dfork added from comp_link_:
     if fd:
-        for L in link_:  # # current mfork is link root dfork, feedback must be per link?
-            LR = L.root; dlay = [CLay().add_lay(lay) for lay in L.derH]
-            if len(LR.derH[0])==2: LR.derH[0][1].add_lay(dlay)
-            else:  root.derH[0] += [dlay.copy_(root=LR)]  # init
-            LR.derTT += dlay.derTT
+        for lL in link_:  # # current mfork is link root dfork, feedback must be per link?
+            dlay = CLay(); [dlay.add_lay(lay) for lay in lL.derH]
+            sLR = []  # summed LR
+            for L in lL.nodet:  # CL node
+                LR = L.root
+                if LR in sLR: continue  # skip if LR is summed in prior nodet
+                sLR += [LR]
+                if len(LR.derH[0])==2: LR.derH[0][1].add_lay(dlay)
+                else:                  LR.derH[0] += [dlay.copy_(root=LR)]  # init (here should be LR too)
+                LR.derTT += dlay.derTT
     ''' 
     this feedback should be from node Gs (not links), which are CLs if fd? then we need to get llinks from their rim_ts?
     also concat before summing into their prior root, before new root assign?  
@@ -471,7 +477,7 @@ def sum2graph(root, grapht, fd, minL=0, maxL=None):  # sum node and link params 
                 mG = n.root
                 if mG not in altG:
                     mG.altG.node_ += [graph]  # cross-comp|sum complete altG before next agg+ cross-comp
-                    altG.node_ += [mG]
+                    altG += [mG]  # altG is a local list to check if mG added alt or not
     return graph
 
 def sum_lay_(link_, root):
@@ -535,14 +541,14 @@ def comp_H(H,h, rn, root, Et, fd):  # one-fork derH if fd, else two-fork derH
 def sum_G_(node_, s=1, fc=0, G=None):
 
     if G is None:
-        G = copy_(node_[0]); G.node_ = [node_[0]]; G.link_ = []; node_=node_[1:]
+        G = copy_(node_[0]); G.node_ = [node_[0]]; G.link_ = []; node_=node_[1:]; G.aves = copy(aves)  # copy existing aves? Or init with default value?
     for n in node_:
         G.node_ += [n]
         if not G.fd:
             G.baseT += n.baseT * s; G.derTTe += n.derTTe * s
         G.derTT += n.derTT * s; G.Et += n.Et * s; G.aRad += n.aRad * s; G.yx += n.yx * s
         if n.derH:
-            add_H(G.derH, n.derH, root=G, rev = s==-1, fc=fc, fd=G.fd)  # alt is single layer
+            add_H(G.derH, n.derH, root=G, rev = s==-1, fc=fc, fd= 0 if isinstance(G.derH[0], list) else 1)  # alt is single layer  (G.derH is init with [[mfork]] when fd == 1 too)
         if fc:
             G.M += n.m * s; G.L += s
         else:

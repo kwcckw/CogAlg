@@ -184,7 +184,7 @@ def cluster_C_(root):  # 0 nest gap from cluster_edge: same derH depth in root a
                 break
     # C-cluster top node_|link_:
     C_t = [[],[]]  # concat exemplar/centroid nodes across top Gs for global frame cross_comp
-    for fn, C_,nest,_N_ in zip((1,0), C_t, [root.nnest,root.lnest], [root.node_.node_,root.link_]):
+    for fn, C_,nest,_N_ in zip((1,0), C_t, [root.nnest,root.lnest], [root.node_,root.link_]):
         if not nest: continue
         N_ = [N for N in sorted([N for N in _N_[-1].node_], key=lambda n: n.Et[fn], reverse=True)]
         for N in N_:
@@ -311,7 +311,7 @@ def agg_H_seq(focus, image, _nestt=(1,0)):  # recursive level-forming pipeline, 
     cluster_C_(frame)
     dm_t = [[],[]]
     bottom_t = []
-    for nest,_nest,Q in zip((frame.nnest,frame.lnest),_nestt, (frame.node_,frame.link_)):
+    for fd, nest,_nest,Q in zip((0,1), (frame.nnest,frame.lnest),_nestt, (frame.node_[2:],frame.link_[1:])):
         if nest==_nest: continue  # no new nesting
          # feedback, both Qs are lev_G_s:
         hG = Q[-1]  # init
@@ -320,16 +320,16 @@ def agg_H_seq(focus, image, _nestt=(1,0)):  # recursive level-forming pipeline, 
             hm_ = hG.derTT[0]  # + m-associated coefs: len, dist, dcoords?
             hm_, M = centroid_M_(hm_, sum(hm_)/8, ave)
             # hG.Et[0] = M?
-            dm_ = hm_ - lev_G.aves
+            dm_ = hm_ - lev_G.aves[:8]  # [:8] is temporary until hm_ returns all aves?
             # replace with cost coef/lev?
             if sum(dm_) > ave:    # update:
-                lev_G.aves = hm_  # proj agg+'m = m + dm?
+                lev_G.aves[:8] = hm_  # proj agg+'m = m + dm?
                 hG = lev_G
             else:
                 bottom = 0; break  # feedback did not reach the bottom level
-        dm_t += [dm_]
+            dm_t[fd] += [dm_]
         bottom_t += [bottom]
-    if any(bottom_t) and sum(dm_t[0]) + sum(dm_t[1]) > ave:
+    if any(bottom_t) and np.sum(dm_t[0]) + np.sum(dm_t[1]) > ave:
         # project focus by frame bottom-level D_val:
         if Val_(lev_G.Et, _Et=lev_G.Et, coef=20) > 0:  # mean value shift within focus, bottom only, internal search per G
             # include temporal Dm_+ Ddm_?
