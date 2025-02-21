@@ -47,7 +47,7 @@ def cross_comp(root, fn):  # form agg_Level by breadth-first node_,link_ cross-c
             cluster_N_(root, pL_,fd=0)  # form multiple distance segments, same depth
         # d eval
         if Val_(Et, _Et=Et, fd=1) > 0:  # for all distance segments, adds altGs only
-            L2N(L_,root)
+            L2N(L_)
             lN_,lL_,dEt = comp_link_(L_,Et)  # same root for L_, root.link_ was compared in root-forming for alt clustering
             if Val_(dEt, _Et=Et, fd=1) > 0:
                 derH[0] += [comb_H_(lL_, root, fd=1)]  # += dlay
@@ -236,9 +236,13 @@ def norm_H(H, n, fd=0):
     if fd: H = [H]  # L.derH is not nested
     for lay in H:
         if lay:
-            for fork in lay:
-                for v_ in fork.derTT: v_ *= n  # array
-                fork.Et *= n  # same node_, link_
+            if fd:
+                for v_ in lay.derTT: v_ *= n  # array
+                lay.Et *= n    
+            else:
+                for fork in lay:
+                    for v_ in fork.derTT: v_ *= n  # array
+                    fork.Et *= n  # same node_, link_
 # not used:
 def sort_H(H, fd):  # re-assign olp and form priority indices for comp_tree, if selective and aligned
 

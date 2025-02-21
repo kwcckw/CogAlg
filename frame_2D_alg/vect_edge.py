@@ -133,7 +133,7 @@ class CG(CBase):  # PP | graph | blob: params of single-fork node_ cluster
     def __bool__(G): return bool(G.node_)  # never empty
 
 def copy_(N):
-    fd = isinstance(N,CL)
+    fd = N.fd  # we need to check N.fd in dfork's graph
     C = CG()
     for name, value in N.__dict__.items():
         val = getattr(N, name)
@@ -178,23 +178,24 @@ def vectorize_root(frame):  # init for agg+:
                 if edge.Et[0] * (len(edge.node_)-1)*(edge.rng+1) > ave:
                     G_ = [PP2G(PP)for PP in edge.node_ if PP[-1][0] > ave]  # Et, no altGs
                     if len(G_) > ave_L:  # no comp node_,link_,PPd_
-                        edge_ += [cluster_edge(G_)]  # 1layer derH, alt: converted adj_blobs of edge blob | alt_P_?
+                        edge_ += [cluster_edge(G_, frame)]  # 1layer derH, alt: converted adj_blobs of edge blob | alt_P_?
     # unpack edges:
-    PP_, G_, L_, lG_, Lay = [],[],[],[], CLay(root=frame)
+    PP_, G_, L_, lG_, Lay = [],[],[],[], []  # Lay should be a list? Because it may contain mfork and dfork
     for edget in edge_:
         if edget:
             pp_,g_,l_,lg_,lay = edget
-            PP_+=pp_; G_+=g_; L_+=l_; lG_+=lg_; Lay.add_lay(lay)
+            PP_+=pp_; G_+=g_; L_+=l_; lG_+=lg_; add_H(Lay, lay, root=frame, fd=1)  # lay is a flat list of [mfork, dfork] 
     frame.derH = [Lay]
-    frame.link_ = [L_,lG_]
-    frame.node_ += [PP_,G_]
+    frame.link_ = [L_,sum_G_(lG_)]
+    frame.node_ += [PP_,sum_G_(G_)]
     frame.baseT = np.sum([G.baseT for G in PP_+ G_], axis=0)
     frame.derTT = np.sum([L.derTT for L in L_+ lG_], axis=0)
     if G_: frame.nnest = 1
     if lG_: frame.lnest = 1
     return frame
 
-def cluster_edge(iG_):  # edge is CG but not a connectivity cluster, just a set of clusters in >ave G blob, unpack by default?
+# frame is not global if we call this in agg_recursion
+def cluster_edge(iG_, frame):  # edge is CG but not a connectivity cluster, just a set of clusters in >ave G blob, unpack by default?
 
     def cluster_PP_(N_, fd):
         G_ = []
@@ -212,17 +213,19 @@ def cluster_edge(iG_):  # edge is CG but not a connectivity cluster, just a set 
                                     eN_ += [eN]; N_.remove(eN)  # merged
                             link_ += [L]; et += L.Et
                 _eN_ = {*eN_}
-            if Val_(et, _Et=et, fd=fd) > 0:  # cluster eval
-                return G_
+            if Val_(et, _Et=et, fd=fd) > 0:
+                G_ = [sum2graph(None, [node_,link_,et], fd)]  # we still need sum2graph here?
+                
+        return G_
 
     N_,L_,Et = comp_node_(iG_)  # comp PP_
     # mval:
     if Val_(Et, _Et=Et, fd=0) > 0:
-        lay = [[sum_lay_(L_, frame)]]  # [mfork]
-        G_ = cluster_PP_(N_, fd=0) if len(N_) > ave_L else []
+        lay = [sum_lay_(L_, frame)]  # [mfork]  (extra nesting here is a typo? Why it's nested here?)
+        G_ = cluster_PP_(copy(N_), fd=0) if len(N_) > ave_L else []  # we need to copy N_ here since N_ will be popped in cluster_PP_
         # dval:
         if Val_(Et, _Et=Et, fd=1) > 0:  # likely not from the same links
-            L2N(L_,frame)  # comp dPP_:
+            L2N(L_)  # comp dPP_:
             lN_,lL_,dEt = comp_link_(L_,Et)
             if Val_(dEt, _Et=Et, fd=1) > 0:
                 lay += [sum_lay_(lL_, frame)]  # dfork
@@ -413,8 +416,23 @@ def get_rim(N,fd): return N.rimt[0] + N.rimt[1] if fd else N.rim  # add nesting 
 def sum2graph(root, grapht, fd, minL=0, maxL=None):  # sum node and link params into graph, aggH in agg+ or player in sub+
 
     node_, link_, Et = grapht
-    graph = CG(fd=fd, Et=Et*icoef, root=root, node_=[],link_=link_, maxL=maxL, nnest=root.nnest, lnest=root.lnest, baseT=copy(node_[0].baseT))
+    graph = CG(fd=fd, Et=Et*icoef, root=root, node_=[],link_=link_, maxL=maxL, nnest=root.nnest if root else 0, lnest=root.lnest if root else 0, baseT=copy(node_[0].baseT))
     # arg Et is weaker if internal, maxL,minL: max and min L.dist in graph.link_
+    
+    # this section should be before N.root = graph below
+    for L in link_: L.root = graph
+    mfork = CLay(root=graph)
+    [mfork.add_lay(lay) for lay in sum_H(link_, graph, fd=1)]
+    graph.derTT += mfork.derTT
+    graph.derH = [mfork] if fd else [[mfork]]  # higher layers are added by feedback, dfork added from comp_link_:
+    if fd:
+        for L in link_:  # # current mfork is link.nodet.root dfork, sum from link_ to skip overlaps?
+            dlay = reduce(lambda Lay, lay: Lay.add_lay(lay), L.derH, CLay())
+            for LR in set([n.root for n in L.nodet if n.root]):
+                if len(LR.derH[0])==2: LR.derH[0][1].add_lay(dlay)
+                else:                  LR.derH[0] += [dlay.copy_(root=LR)]  # init
+                LR.derTT += dlay.derTT
+    
     N_, yx_ = [],[]
     for i, N in enumerate(node_):
         fc = 0
@@ -431,18 +449,7 @@ def sum2graph(root, grapht, fd, minL=0, maxL=None):  # sum node and link params 
         if i and not fd: graph.baseT += N.baseT  # skip CL
         N.root = graph
     graph.node_= N_  # nodes or roots, link_ is still current-dist links only?
-    for L in link_: L.root = graph
-    mfork = CLay(root=graph)
-    [mfork.add_lay(lay) for lay in sum_H(link_, graph, fd=1)]
-    graph.derTT += mfork.derTT
-    graph.derH = [mfork] if fd else [[mfork]]  # higher layers are added by feedback, dfork added from comp_link_:
-    if fd:
-        for L in link_:  # # current mfork is link.nodet.root dfork, sum from link_ to skip overlaps?
-            dlay = reduce(lambda Lay, lay: Lay.add_lay(lay), L.derH, CLay())
-            for LR in set([n.root for n in L.nodet]):
-                if len(LR.derH[0])==2: LR.derH[0][1].add_lay(dlay)
-                else:                  LR.derH[0] += [dlay.copy_(root=LR)]  # init
-                LR.derTT += dlay.derTT
+    
     yx = np.mean(yx_, axis=0)
     dy_,dx_ = (graph.yx - yx_).T; dist_ = np.hypot(dy_,dx_)
     graph.aRad = dist_.mean()  # ave distance from graph center to node centers
@@ -452,7 +459,7 @@ def sum2graph(root, grapht, fd, minL=0, maxL=None):  # sum node and link params 
         for L in node_:
             for n in L.nodet:  # map root mG
                 mG = n.root
-                if mG not in altG:
+                if isinstance(mG, CG) and mG not in altG:  # if n doesn't form graph, n.root is still pointing to frame
                     mG.altG.node_ += [graph]  # cross-comp|sum complete altG before next agg+ cross-comp
                     altG += [mG]
     return graph
@@ -533,9 +540,10 @@ def sum_G_(node_, s=1, fc=0, G=None):
             G.box = extend_box( G.box, n.box)  # extended per separate node_ in centroid
     return G
 
-def L2N(link_,root):
+def L2N(link_):  # root is no longer needed since L.root should be assigned to graph now
     for L in link_:
-        L.root=root; L.fd=1; L.mL_t,L.rimt=[[],[]],[[],[]]; L.aRad=0; L.visited_,L.extH=[],[]; L.baseT=[]; L.derTTe=np.zeros((2,8))
+         if not hasattr(L, 'root'): L.root = None  # if L.nodet is not forming any graph
+         L.fd=1; L.mL_t,L.rimt=[[],[]],[[],[]]; L.aRad=0; L.visited_,L.extH=[],[]; L.baseT=[]; L.derTTe=np.zeros((2,8))
 
 def frame2G(G, **kwargs):
     blob2G(G, **kwargs)
@@ -572,7 +580,7 @@ def PP2G(PP):
     y,x,Y,X = box; dy,dx = Y-y,X-x              # A = (dy,dx); L = np.hypot(dy,dx)
     G = CG(root=root, fd=0, Et=Et, node_=P_, link_=[], baseT=baseT, derTT=derTT, box=box, yx=yx, aRad=np.hypot(dy/2, dx/2),
            derH=[[CLay(node_=P_,link_=link_, derTT=deepcopy(derTT)), CLay()]])  # empty dfork
-    return G, baseT, derTT
+    return G  # baseT, derTT  (why we need to return the additional baseT and derTT?)
 
 if __name__ == "__main__":
    # image_file = './images/raccoon_eye.jpeg'
