@@ -122,7 +122,8 @@ class CG(CBase):  # PP | graph | blob: params of single-fork node_ cluster
         G.extH = kwargs.get('extH',[])  # sum from rims, single-fork
         G.maxL = kwargs.get('maxL', 0)  # if dist-nested in cluster_N_
         G.aRad = 0  # average distance between graph center and node center
-        G.altG = CG(altG=G,fd=1) if kwargs.get('altG') is None else kwargs.get('altG')  # adjacent (contour) gap+overlap alt-fork graphs, converted to CG
+        # alt's altG should be empty right?
+        G.altG = CG(altG=[], fd=1) if kwargs.get('altG') is None else kwargs.get('altG')  # adjacent (contour) gap+overlap alt-fork graphs, converted to CG
         # G.fork_tree: list = z([[]])  # indices in all layers(forks, if no fback merge
         # G.fback_ = []  # node fb buffer, n in fb[-1]
         G.nnest = kwargs.get('nnest',0)  # node_H if > 0, node_[-1] is top G_
@@ -187,12 +188,13 @@ def vectorize_root(frame):  # init for agg+:
             [F.add_lay(f) for F,f in zip(Lay,lay)]  # [mfork, dfork]
             PP_+= pp_; G_+= g_; L_+= l_; lG_+= lg_
     frame.derH = [Lay]
-    frame.link_ = [L_,sum_G_(lG_)]
-    frame.node_ += [PP_,sum_G_(G_)]
+    frame.link_ = [L_]; frame.node_= [PP_]
+    if lG_:  # with this indentation, we may not form any G_ or lG_, so reduce the indentation and pack frame.node_ and link_ only if there's converted PP_?
+        frame.link_ += [sum_G_(lG_)]; frame.lnest = 1
+    if G_:  
+        frame.node_ += [sum_G_(G_)]; frame.nnest = 1
     frame.baseT = np.sum([G.baseT for G in PP_+ G_], axis=0)
     frame.derTT = np.sum([L.derTT for L in L_+ lG_], axis=0)
-    if G_: frame.nnest = 1
-    if lG_: frame.lnest = 1
     return frame
 
 def cluster_edge(iG_, frame):  # edge is CG but not a connectivity cluster, just a set of clusters in >ave G blob, unpack by default?
@@ -215,18 +217,18 @@ def cluster_edge(iG_, frame):  # edge is CG but not a connectivity cluster, just
                 _eN_ = {*eN_}
             if Val_(et, et, ave*2, fd=fd) > 0:
                 Lay = CLay()
-                [[Lay.add_lay(lay) for lay in link.derH[0]] for link in link_]
+                [Lay.add_lay(lay) for link in link_ for lay in link.derH]  # link.derH's list is flat?
                 G_ = [sum2graph(frame, [node_,link_,et, Lay], fd)]
         return G_
 
-    N_,L_,Et = comp_node_(iG_)  # comp PP_
+    N_,L_,Et = comp_node_(iG_, ave)  # comp PP_
     # mval -> lay:
     if Val_(Et, Et, ave, fd=0) > 0:
         lay = [sum_lay_(L_, frame)]  # [mfork]
         G_ = cluster_PP_(copy(N_), fd=0) if len(N_) > ave_L else []
         # dval -> comp dPP_:
         if Val_(Et, Et, ave*2, fd=1) > 0:  # likely not from the same links
-            lN_,lL_,dEt = comp_link_(L2N(L_),Et)
+            lN_,lL_,dEt = comp_link_(L2N(L_),ave*2)  # iEt should be ave now?
             if Val_(dEt, Et, ave*2, fd=1) > 0:
                 lay += [sum_lay_(lL_, frame)]  # dfork
                 lG_ = cluster_PP_(lN_, fd=1) if len(lN_) > ave_L else []
@@ -420,11 +422,12 @@ def sum2graph(root, grapht, fd, minL=0, maxL=None):  # sum node and link params 
         fd=fd, Et=Et, root=root, node_=[],link_=link_, maxL=maxL, nnest=root.nnest, lnest=root.lnest, baseT=copy(node_[0].baseT),
         derTT=Lay.derTT, derH = [Lay] if fd else [[Lay]])  # higher layers are added by feedback, dfork added from comp_link_
     if fd:
-        for L in link_:  # fd mfork = link.nodet.root dfork
-            for LR in set([n.root for n in L.nodet if n.root]):
-                if len(LR.derH[0])==2: LR.derH[0][1].add_lay(Lay)
-                else:                  LR.derH[0] += [L.copy_(root=LR)]
-                LR.derTT += Lay.derTT
+        for lL in link_:  # fd mfork = link.nodet.root dfork
+            lay = reduce(lambda Lay, lay: Lay.add_lay(lay), lL.derH, CLay())  # this should be per link? Because different link lay sum to different nodes' root?
+            for LR in set([n.root for L in lL.nodet for n in L.nodet if n.root]):
+                if len(LR.derH[0])==2: LR.derH[0][1].add_lay(lay)
+                else:                  LR.derH[0] += [lay.copy_(root=LR)]
+                LR.derTT += lay.derTT
     N_, yx_ = [],[]
     for i, N in enumerate(node_):
         fc = 0
@@ -486,9 +489,10 @@ def add_H(H, h, root, rev=0, fc=0, fd=0):  # add fork L.derHs
                 if Lay:
                     for i, (Fork,fork) in enumerate(zip_longest(Lay,lay)):
                         if fork:
-                            if Fork:
-                                if fork: Fork.add_lay(fork, rev=rev,fc=fc)
-                            else: Lay[i] = fork.copy_(root=root)
+                            if isinstance(Fork, CLay):  # Fork is CLay
+                                Fork.add_lay(fork, rev=rev,fc=fc)
+                            else:  # Fork is None from zip_longest
+                                Lay += [fork.copy_(root=root)]
                 else:
                     Lay = []
                     for fork in lay:

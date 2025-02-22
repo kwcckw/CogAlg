@@ -57,7 +57,7 @@ def cross_comp(root, fn, ave):  # form agg_Level by breadth-first node_,link_ cr
                 derH[0] += [CLay()]  # empty dlay
         else: derH[0] += [CLay()]
         root.derH += derH  # feedback
-        comb_altG_(root.node_[-1], ave*2)  # comb node contour: altG_ | neg links sum, cross-comp -> CG altG
+        comb_altG_(root.node_[-1].node_, ave*2)  # comb node contour: altG_ | neg links sum, cross-comp -> CG altG
         # agg eval +=derH,node_H:
         cluster_C_(root, ave*2)  # -> mfork G,altG exemplars, +altG surround borrow, root.derH + 1|2 lays
         # no dfork cluster_C_, no ddfork
@@ -109,7 +109,7 @@ def cluster_N_(root, L_, ave, fd):  # top-down segment L_ by >ave ratio of L.dis
         # longer links:
         L_ = L_[i + 1:]
         if L_: min_dist = max_dist  # next loop connects current-distance clusters via longer links
-        else:
+        elif G_:  # we may not form any graph
             [comb_altG_(G.altG) for G in G_]
             if fd:
                 if root.lnest: root.link_ += [sum_G_(G_)]
@@ -147,10 +147,10 @@ def cluster_C_(root, ave, elev=1):  # 0 nest gap from cluster_edge: same derH de
         if alt_: sum_G_(alt_, sign, fc=0, G=C.altG)  # no m, M, L in altGs
         k = len(dnode_) + 1
         # get averages:
-        for falt, n in zip((0,1), (C, C.altG)):
+        for n in (C, C.altG):
             n.Et/=k; n.derTT/=k; n.aRad/=k; n.yx /= k
             if np.any(n.baseT): n.baseT/=k
-            norm_H(n.derH, k, fd=falt)
+            norm_H(n.derH, k)
             # alt has single layer
         C.box = reduce(extend_box, (n.box for n in C.node_))
 
@@ -235,11 +235,11 @@ def comb_altG_(G_, ave):  # combine contour G.altG_ into altG (node_ defined by 
                 altG.derH = sum_H(altG.link_, altG, fd=1)   # sum link derHs
                 G.altG = altG
 
-def norm_H(H, n, fd=0):
-    if fd: H = [H]  # L.derH is not nested
+def norm_H(H, n):
+
     for lay in H:
         if lay:
-            if fd:
+            if isinstance(lay, CLay):
                 for v_ in lay.derTT: v_ *= n  # array
                 lay.Et *= n
             else:
