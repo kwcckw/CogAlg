@@ -343,12 +343,42 @@ def agg_H_seq(focus, image, _nestt=(1,0)):  # recursive level-forming pipeline, 
 
     return frame
 
+def max_g_window(i__, wsize=64):
+    
+    dy__ = (
+            (i__[2:, :-2] - i__[:-2, 2:]) * 0.25 +
+            (i__[2:, 1:-1] - i__[:-2, 1:-1]) * 0.50 +
+            (i__[2:, 2:] - i__[:-2, 2:]) * 0.25
+    )
+    dx__ = (
+            (i__[:-2, 2:] - i__[2:, :-2]) * 0.25 +
+            (i__[1:-1, 2:] - i__[1:-1, :-2]) * 0.50 +
+            (i__[2:, 2:] - i__[:-2, 2:]) * 0.25
+    )
+    g__ = np.hypot(dy__, dx__)
+    
+    ysize, xsize = image.shape[:2]
+    
+    x_ = (xsize + wsize - 1) // wsize  # total number of x window, the remainder will be counted as new window
+    y_ = (ysize + wsize - 1) // wsize
+    
+    max_window = g__[0:wsize, 0:wsize]; max_g = 0
+    for x in range(x_):
+        for y in range(y_):
+            x0 = x * wsize; xn = x0 + wsize
+            y0 = y * wsize; yn = y0 + wsize
+            g = np.sum(np.abs(g__[y0:yn, x0:xn]))  # just gradient magnitude? So that we can use abs here
+            if g > max_g:
+                max_window = g__[y0:yn, x0:xn]
+                max_g = g
+
+    return max_window
+
+
 if __name__ == "__main__":
     # image_file = './images/raccoon_eye.jpeg'
     image_file = './images/toucan.jpg'
     image = imread(image_file)
+    focus = max_g_window(image)
     # set min,max coordinate filters, updated by feedback to shift the focus within a frame:
-    yn = xn = 64  # focal sub-frame size, = raccoon_eye, can be any number
-    y0 = x0 = 300  # focal sub-frame start @ image center
-    focus = image[y0:y0+yn, x0:x0+xn]
     frame = agg_H_seq(focus, image)  # recursion count, focus will be shifted by internal feedback

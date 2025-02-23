@@ -424,7 +424,7 @@ def sum2graph(root, grapht, fd, minL=0, maxL=None):  # sum node and link params 
     if fd:
         for lL in link_:  # fd mfork is link.nodet.root dfork
             lay = reduce(lambda Lay, lay: Lay.add_lay(lay), lL.derH, CLay())
-            for LR in set([n.root for L in lL.nodet for n in L.nodet if n.root]):
+            for LR in set([n.root for L in lL.nodet for n in L.nodet if isinstance(n.root, CG)]):  # skip frame o
                 if len(LR.derH[0])==2: LR.derH[0][1].add_lay(lay)
                 else:                  LR.derH[0] += [lay.copy_(root=LR)]
                 LR.derTT += lay.derTT
