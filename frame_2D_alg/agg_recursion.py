@@ -108,16 +108,17 @@ def cluster_N_(root, L_, ave, fd):  # top-down segment L_ by >ave ratio of L.dis
         # longer links:
         L_ = L_[i + 1:]
         if L_: min_dist = max_dist  # next loop connects current-distance clusters via longer links
-        elif G_:
-            [comb_altG_(G.altG, ave) for G in G_]
-            if fd:
-                if root.lnest: root.link_ += [sum_G_(G_)]
-                else: root.link_ = [sum_G_(root.link_), sum_G_(G_)]  # init nesting
-                root.lnest += 1
-            else:
-                root.node_ += [sum_G_(G_)]  # node_ is already nested
-                root.nnest += 1
-            break
+        else:
+            if G_:
+                [comb_altG_(G.altG, ave) for G in G_]
+                if fd:
+                    if root.lnest: root.link_ += [sum_G_(G_)]
+                    else: root.link_ = [sum_G_(root.link_), sum_G_(G_)]  # init nesting
+                    root.lnest += 1
+                else:
+                    root.node_ += [sum_G_(G_)]  # node_ is already nested
+                    root.nnest += 1
+            break  # we need to break regardless of G_ here
 ''' 
 Hierarchical clustering should alternate between two phases: generative via connectivity and compressive via centroid.
 
@@ -170,7 +171,8 @@ def cluster_C_(root, rc):  # 0 nest gap from cluster_edge: same derH depth in ro
             dN_, M, dM = [], 0, 0  # pruned nodes and values, or comp all nodes again?
             for _N in C.node_:
                 m = sum( base_comp(C,_N)[0][0])
-                if C.altG and _N.altG: m += sum( base_comp(C.altG,_N.altG)[0][0])  # Et if proximity-weighted overlap?
+                # altG always have empty baseT now? So this is not needed.
+                # if C.altG and _N.altG: m += sum( base_comp(C.altG,_N.altG)[0][0])  # Et if proximity-weighted overlap?
                 vm = m - ave
                 if vm > 0:
                     M += m; dM += m - _N.m; _N.m = m  # adjust kept _N.m
@@ -312,6 +314,8 @@ def agg_H_par(focus):  # draft parallel level-updating pipeline
 
 def agg_H_seq(focus, image, _nestt=(1,0)):  # recursive level-forming pipeline, called from cluster_C_
 
+    global aves
+
     frame = frame_blobs_root(focus)
     intra_blob_root(frame)
     vectorize_root(frame)
@@ -329,7 +333,7 @@ def agg_H_seq(focus, image, _nestt=(1,0)):  # recursive level-forming pipeline, 
         for lev_G in reversed(Q[:-1]):
             _m,_,_n,_ = hG.Et; m,_,n,_ = lev_G.Et
             rM += (_m/_n) / (m/n)  # no d,o eval?
-            rM_ += (hG.derTT/_n) / (lev_G.derTT/n)
+            rM_ += (hG.derTT[0]/_n) / (lev_G.derTT[0]/n)  # for M, it should be just derTT[0]?
             hG = lev_G
     if rM > ave:  # base-level
         base = frame.node_[2]; Et,box,baseT = base.Et, base.box, base.baseT
@@ -339,10 +343,12 @@ def agg_H_seq(focus, image, _nestt=(1,0)):  # recursive level-forming pipeline, 
             dy,dx = baseT[-2:]  # gA from summed Gs
             y,x,Y,X = box  # current focus?
             y = y+dy; x = x+dx; Y = Y+dy; X = X+dx  # alter focus shape, also focus size: +/m-, res decay?
-            if y > 0 and x > 0 and Y < image.shape[0] and X < image.shape[1]:  # focus is inside the image
+            if y > 0 and x > 0 and y < image.shape[0] and x < image.shape[1] and \
+                Y > y and X > x and Y < image.shape[0] and X < image.shape[1]:  # focus is inside the image  (check both directions)
                 frame.aves[:8] *= rM_  # adjust other aves too?
+                aves[:8] *= rM_  # update to global aves too, so that other modules get updated aves
                 # rerun agg+ with new bottom-level focus, aves:
-                agg_H_seq([y,x,Y,X], (frame.nnest,frame.lnest))
+                agg_H_seq(image[y:Y,x:X], image, (frame.nnest,frame.lnest))
 
     return frame
 
@@ -367,7 +373,7 @@ def max_g_window(i__, wsize=64):
             x0 = ix * wsize; xn = x0 + wsize
             g = np.sum(g__[y0:yn, x0:xn])
             if g > max_g:
-                max_window = g__[y0:yn, x0:xn]
+                max_window = i__[y0:yn, x0:xn]  # sorry, it should be i__ here, else we are using gradient map as image
                 max_g = g
     return max_window
 
