@@ -41,11 +41,14 @@ ave      = aves[-2]
 ave_d    = aves[1]
 ave_L    = aves[6]
 ave_G    = aves[4]
-max_dist = aves[9]
-ave_rn   = aves[8]
-icoef    = aves[12]
-med_cost = aves[13]
-ave_dI   = aves[14]
+max_dist = aves[17]
+ave_rn   = aves[16]
+icoef    = aves[20]
+med_cost = aves[21]
+ave_dI   = aves[22]
+mweights = aves[:8]
+dweights = aves[8:16]
+
 
 class CLay(CBase):  # flat layer if derivation hierarchy
     name = "lay"
@@ -100,7 +103,8 @@ class CLay(CBase):  # flat layer if derivation hierarchy
         derTT = np.array([m_,d_])
         node_ = list(set(_lay.node_+ lay.node_))  # concat
         link_ = _lay.link_ + lay.link_
-        Et = np.array([sum(m_),sum(d_), 8, (_lay.Et[3]+lay.Et[3])/2])  # n compared params = 8
+        M = sum(m_ * mweights); D = sum(d_ * dweights)
+        Et = np.array([M, D, 8, (_lay.Et[3]+lay.Et[3])/2])  # n compared params = 8
         if root: root.Et += Et
 
         return CLay(Et=Et, root=root, node_=node_, link_=link_, derTT=derTT)
@@ -388,8 +392,8 @@ def comp_N(_N,N, ave, fd, angle=None, dist=None, dir=1):  # compare links, relat
     dderH = []
 
     [m_,d_], rn = base_comp(_N, N, dir, fd)
-    M = np.sum(m_); D = np.sum(np.abs(d_))
-    # or M = np.sum(derTT[0] * mweights); D = np.sum(derTT[1] * dweights)
+    # M = np.sum(m_); D = np.sum(np.abs(d_))
+    M = np.sum(m_ * mweights); D = np.sum(np.abs(d_ * dweights))  # for d, apply abs on d_ first or after multiple it with coefs?
     Et = np.array([M,D, 8, (_N.Et[3]+ N.Et[3]) /2])  # n comp vars, inherited olp
     derTT = np.array([m_,d_])
     Link = CL(fd=fd,nodet=[_N,N], derTT=derTT, yx=np.add(_N.yx,N.yx)/2, angle=angle, dist=dist, box=extend_box(N.box,_N.box))

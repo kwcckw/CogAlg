@@ -55,7 +55,7 @@ class CBase:
             return inst
     def __repr__(obj): return f"{obj.__class__.__name__}(id={obj.id})"
 
-
+    '''
     def __getattribute__(ave,name):
         coefs =   object.__getattribute__(ave, "coefs")
         if name == "coefs":
@@ -64,6 +64,7 @@ class CBase:
             return [ave.m * coefs["m"], ave.d *  coefs["d"]]  # get updated md
         else:
             return object.__getattribute__(ave, name)  * coefs[name]  # always return ave * coef
+    '''
 
  # hyper-parameters, init a guess, adjusted by feedback
 aves = np.array([
@@ -75,6 +76,16 @@ aves = np.array([
         5,    # ave.Ga
         1,    # ave.L
         5,    # ave.LA
+        
+        5,    # ave.dm
+        10,   # ave.dd
+        2,    # ave.dn
+        100,  # ave.dI
+        100,  # ave.dG
+        5,    # ave.dGa
+        1,    # ave.dL
+        5,    # ave.dLA  
+        
         1000, # ave.rn = max scope disparity
         2,    # ave.max_dist
         10,   # ave.coef

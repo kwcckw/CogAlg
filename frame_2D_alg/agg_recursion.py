@@ -34,7 +34,7 @@ Code-coordinate filters may extend base code by cross-projecting and combining p
 (which may include extending eval function with new match-projecting derivatives) 
 Similar to cross-projection by data-coordinate filters, described in "imagination, planning, action" section of part 3 in Readme.
 '''
-ave, ave_L, icoef, max_dist = aves[-2], aves[6], aves[12], aves[9]
+ave, ave_L, icoef, max_dist = aves[-2], aves[6], aves[20], aves[17]
 
 def cross_comp(root, fn, rc):  # form agg_Level by breadth-first node_,link_ cross-comp, connect clustering, recursion
     # rc: recursion count coef to ave
@@ -220,7 +220,8 @@ def comb_altG_(G_, ave):  # combine contour G.altG_ into altG (node_ defined by 
         if G.altG:
             if isinstance(G.altG, list):
                 sum_G_(G.altG)
-                G.altG = CG(root=G, node_= G.altG); G.altG.m=0  # was G.altG_
+                # we need fd == 1 in alt
+                G.altG = CG(root=G, node_= G.altG, fd=1); G.altG.m=0  # was G.altG_
                 if Val_(G.altG.Et, G.Et, ave):  # alt D * G rM
                     cross_comp(G.altG, G.node_, ave)  # need rc?
         else:  # sum neg links
@@ -231,7 +232,7 @@ def comb_altG_(G_, ave):  # combine contour G.altG_ into altG (node_ defined by 
                     node_ += [n for n in link.nodet if n not in node_]
                     Et += link.Et
             if Val_(Et, G.Et, ave, coef=10) > 0:  # altG-specific coef for sum neg links
-                altG = CG(root=G, Et=Et, node_=node_, link_=link_); altG.m=0  # other attrs are not significant
+                altG = CG(root=G, Et=Et, node_=node_, link_=link_, fd=1); altG.m=0  # other attrs are not significant
                 altG.derH = sum_H(altG.link_, altG, fd=1)   # sum link derHs
                 G.altG = altG
 
@@ -344,7 +345,7 @@ def agg_H_seq(focus, image, _nestt=(1,0)):  # recursive level-forming pipeline, 
             y,x,Y,X = box  # current focus?
             y = y+dy; x = x+dx; Y = Y+dy; X = X+dx  # alter focus shape, also focus size: +/m-, res decay?
             if y > 0 and x > 0 and Y < image.shape[0] and X < image.shape[1]:  # focus is inside the image
-                aves[:16] *= rV_t[:]
+                aves[:16] *= rV_t.flatten()
                 frame.aves = aves  # adjust other aves too?
                 # rerun agg+ with new bottom-level focus, aves:
                 agg_H_seq(image[y:Y,x:X], image, (frame.nnest,frame.lnest))
