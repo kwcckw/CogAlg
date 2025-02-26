@@ -1,4 +1,4 @@
-from frame_blobs import CBase, frame_blobs_root, intra_blob_root, imread, unpack_blob_, aves
+from frame_blobs import CBase, frame_blobs_root, intra_blob_root, imread, unpack_blob_
 from slice_edge import slice_edge, comp_angle
 from comp_slice import comp_slice
 from itertools import combinations, zip_longest
@@ -37,19 +37,10 @@ prefix  _ denotes prior of two same-name variables, multiple _s for relative pre
 postfix _ denotes array of same-name elements, multiple _s is nested array
 capitalized variables are usually summed small-case variables
 '''
-# should be module-specific:
-ave      = aves[0]
-ave_d    = aves[1]
-ave_rn   = aves[2]
-ave_ro   = aves[3]
-ave_G    = aves[4]
-ave_L    = aves[6]
-max_dist = aves[17]
-icoef    = aves[20]
-med_cost = aves[21]
-ave_dI   = aves[22]
-mw_ = aves[:8]
-dw_ = aves[8:16]
+
+# module-specific:
+ave, ave_d, ave_rn, ave_ro, ave_G, ave_L, max_dist, icoef, med_cost, ave_dI, mw_, dw_ = 5, 10, 2, 2, 100, 1, 2, 0.15, 10, 20, np.ones(8), np.ones(8)
+
 
 class CLay(CBase):  # flat layer if derivation hierarchy
     name = "lay"
@@ -59,6 +50,7 @@ class CLay(CBase):  # flat layer if derivation hierarchy
         l.root = kwargs.get('root', None)  # higher node or link
         l.node_ = kwargs.get('node_', [])  # concat across fork tree
         l.link_ = kwargs.get('link_', [])
+        l.baseT = kwargs.get('baseT', np.zeros(5))
         l.derTT = kwargs.get('derTT', np.zeros((2,8)))  # m_,d_ [M,D,n,o, I,G,A,L], sum across fork tree,
         # add weights for cross-similarity, along with vertical aves, for both m_ and d_?
         # altL = CLay from comp altG
@@ -119,8 +111,8 @@ class CG(CBase):  # PP | graph | blob: params of single-fork node_ cluster
         G.root = kwargs.get('root')  # may extend to list in cluster_N_, same nodes may be in multiple dist layers
         G.Et = kwargs.get('Et', np.zeros(4))  # sum all params M,D,n,o
         G.yx = kwargs.get('yx', np.zeros(2))  # init PP.yx = [(y+Y)/2,(x,X)/2], then ave node yx
-        # G.box = kwargs.get('box', np.array([np.inf,-np.inf,np.inf,-np.inf]))  # y,Y,x,X, area: (Y-y)*(X-x),
-        G.baseT = kwargs.get('baseT',[])  # I,G,Dy,Dx,L  # L=box
+        G.box = kwargs.get('box', np.array([np.inf,-np.inf,np.inf,-np.inf]))  # y,Y,x,X, area: (Y-y)*(X-x)
+        G.baseT = kwargs.get('baseT',np.zeros(5))  # I,G,Dy,Dx,L  # L=box
         G.derTT = kwargs.get('derTT',np.zeros((2,8)))  # m,d / Et,baseT: [M,D,n,o, I,G,A,L], summed across derH lay forks
         G.derTTe = kwargs.get('derTTe',np.zeros((2,8)))  # sum across link.derHs
         G.derH = kwargs.get('derH',[])  # each lay is [m,d]: Clay(Et,node_,link_,derTT), sum|concat links across fork tree
@@ -165,17 +157,34 @@ class CL(CBase):  # link or edge, a product of comparison between two nodes or l
         l.baseT = kwargs.get('baseT', np.zeros(5))
         l.derTT = kwargs.get('derTT', np.zeros((2,8)))  # m_,d_ [M,D,n,o, I,G,A,L], sum across derH
         l.derH  = kwargs.get('derH', [])  # list of single-fork CLays
+        l.box = kwargs.get('box', np.array([np.inf,-np.inf,np.inf,-np.inf]))  # y,Y,x,X, area: (Y-y)*(X-x)
         # add med, rimt, extH in der+
     def __bool__(l): return bool(l.nodet)
 
-def vectorize_root(frame):  # init for agg+:
+def vectorize_root(frame, _fb_={}, fb_={}):  # init for agg+:
 
+    if _fb_:  # update ave based on feedback coefficients
+        global ave, ave_d, ave_rn, ave_ro, ave_G, ave_L, max_dist, icoef, med_cost, ave_dI, mw_, dw_
+        ave *= _fb_['agg_recursion']  # get feedback coefficient from comp_slice
+        ave_d *= _fb_['agg_recursion']
+        ave_rn *= _fb_['agg_recursion']
+        ave_ro *= _fb_['agg_recursion']
+        ave_G *= _fb_['agg_recursion']
+        ave_L *= _fb_['agg_recursion']
+        max_dist *= _fb_['agg_recursion']
+        icoef *= _fb_['agg_recursion']
+        med_cost *= _fb_['agg_recursion']
+        ave_dI *= _fb_['agg_recursion']
+        mw_ *= _fb_['agg_recursion']
+        dw_ *= _fb_['agg_recursion']
+    fb_['comp_slice'] = (ave+ave_d+ave_rn+ave_ro+ave_G+ave_L+max_dist+icoef+med_cost+ave_dI+sum(mw_)+sum(dw_))/26  # feedback coefficient to the next comp_slice
+    
     blob_ = unpack_blob_(frame)
     frame2G(frame, derH=[CLay(root=frame)], node_=[blob_], root=None)
     edge_ = []  # cluster, unpack
     for blob in blob_:
         if not blob.sign and blob.G > ave_G * blob.root.olp:
-            edge = slice_edge(blob)
+            edge = slice_edge(blob, _fb_, fb_)
             if edge.G * (len(edge.P_)-1) > ave:  # eval PP
                 comp_slice(edge)
                 if edge.Et[0] * (len(edge.node_)-1)*(edge.rng+1) > ave:
@@ -371,8 +380,8 @@ def base_comp(_N, N, dir=1):  # comp Et, Box, baseT, derTT
     if N.fd:  # dimension is distance
         mL, dL = min(_L,L)/ max(_L,L), _L - L
     else:  # dimension is box area
-        _y0,_x0,_yn,_xn =_L; _A = (_yn-_y0) * (_xn-_x0)
-        y0, x0, yn, xn = L;   A = (yn - y0) * (xn - x0)
+        _y0,_x0,_yn,_xn =_N.box; _A = (_yn-_y0) * (_xn-_x0)
+        y0, x0, yn, xn = N.box;   A = (yn - y0) * (xn - x0)
         mL, dL = min(_A,A)/ max(_A,A), _A - A
         # mA, dA
     _m_, _d_ = np.array([mM,mD,mn,mo, mI,mG,mA,mL]), np.array([dM,dD,rn,ro, dI,dG,dA,dL])
@@ -390,12 +399,12 @@ def comp_N(_N,N, ave, fd, angle=None, dist=None, dir=1):  # compare links, relat
     dderH = []
 
     [m_,d_], rn = base_comp(_N, N, dir)
-    baseT = np.array([(_N.baseT[0] +N.baseT[0]) /2, np.sum(d_* dw_), angle, dist])
+    baseT = np.array([(_N.baseT[0] +N.baseT[0]) /2, np.sum(d_* dw_), *angle, dist])
     derTT = np.array([m_, d_])
     M = np.sum(m_*mw_); D = np.sum(np.abs(d_*dw_))  # feedback-weighted summation
     Et = np.array([M,D, 8, (_N.Et[3]+N.Et[3]) /2])  # n comp vars, inherited olp
 
-    Link = CL(fd=fd, nodet=[_N,N], baseT=baseT, derTT=derTT, yx=np.add(_N.yx,N.yx)/2)
+    Link = CL(fd=fd, nodet=[_N,N], baseT=baseT, derTT=derTT, yx=np.add(_N.yx,N.yx)/2, box=extend_box(_N.box, N.box))
     # spec / lay:
     if M > ave and (len(N.derH) > 2 or isinstance(N,CL)):  # else derH is redundant to dext,vert
         dderH = comp_H(_N.derH, N.derH, rn, Link, Et, fd)  # comp shared layers, if any
@@ -542,7 +551,7 @@ def sum_G_(node_, s=1, fc=0, G=None):
 
 def L2N(link_):
     for L in link_:
-        L.fd=1; L.mL_t,L.rimt=[[],[]],[[],[]]; L.aRad=0; L.visited_,L.extH=[],[]; L.baseT=[]; L.derTTe=np.zeros((2,8))
+        L.fd=1; L.mL_t,L.rimt=[[],[]],[[],[]]; L.aRad=0; L.visited_,L.extH=[],[]; L.derTTe=np.zeros((2,8))
         if not hasattr(L,'root'): L.root=[]
     return link_
 
@@ -551,7 +560,6 @@ def frame2G(G, **kwargs):
     G.derH = kwargs.get('derH', [CLay(root=G, Et=np.zeros(4), derTT=[], node_=[],link_ =[])])
     G.Et = kwargs.get('Et', np.zeros(4))
     G.node_ = kwargs.get('node_', [])
-    G.aves = aves
 
 def blob2G(G, **kwargs):
     # node_, Et stays the same:
@@ -562,7 +570,7 @@ def blob2G(G, **kwargs):
     G.lnest = kwargs.get('lnest',0)  # link_H if > 0, link_[-1] is top L_
     G.derH = []  # sum from nodes, then append from feedback, maps to node_tree
     G.extH = []  # sum from rims
-    G.baseT = []  # I,G,Dy,Dx
+    G.baseT = np.zeros(5)  # I,G,Dy,Dx
     G.derTT = kwargs.get('derTT', np.zeros((2,8)))  # m_,d_ base params
     G.derTTe = kwargs.get('derTTe', np.zeros((2,8)))
     G.box = kwargs.get('box', np.array([np.inf,np.inf,-np.inf,-np.inf]))  # y0,x0,yn,xn
@@ -576,7 +584,7 @@ def blob2G(G, **kwargs):
 def PP2G(PP):
     root, P_, link_, vert, latuple, A, S, box, yx, Et = PP
 
-    baseT = np.array((*latuple[:2], *latuple[-1]))  # I,G,Dy,Dx
+    baseT = np.array((*latuple[:2], latuple[-2], *latuple[-1]))  # I,G,Dy,Dx,L
     derTT = np.hstack((vert, np.zeros((2,2))))  # [I,G,A, M,D,L] -> [I,G,gA, M,D,n, empty L,A]
     y,x,Y,X = box; dy,dx = Y-y,X-x              # A = (dy,dx); L = np.hypot(dy,dx)
     G = CG(root=root, fd=0, Et=Et, node_=P_, link_=[], baseT=baseT, derTT=derTT, box=box, yx=yx, aRad=np.hypot(dy/2, dx/2),
