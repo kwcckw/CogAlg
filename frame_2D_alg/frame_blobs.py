@@ -128,11 +128,16 @@ class CBlob(CBase):
     @property
     def yx_(blob): return list(blob.dert_.keys())
 
-def frame_blobs_root(image, _fb_={}):
-    if _fb_:  # update ave based on feedback coefficients
-        global ave
-        ave *= _fb_['frame_blobs']   # get feedback coefficient from intra_blob
 
+def rave_2FB(rave_):
+
+    global ave
+    # ave:
+    ave *= rave_[0][0]  # ave *= rmM
+
+def frame_blobs_root(image, rave_=np.ones((2,8))):
+    
+    rave_2FB(rave_)
     dert__ = comp_pixel(image)
     frame = CFrame(image)
     flood_fill(frame, dert__)  # flood-fill 1 pixel at a time
@@ -185,13 +190,16 @@ class CrNode_(CFrame):
         rnode_.olp= blob.root.olp + 1.5
         rnode_.rng = blob.root.rng + 1
 
-def intra_blob_root(frame, _fb_={}, fb_={}):
+def rave_2IB(rave_):
 
-    if _fb_:  # update ave based on feedback coefficients
-        global aveR
-        aveR *= _fb_['intra_blob']  # get feedback coefficient from slice_edge
-    fb_['frame_blobs'] = aveR  # feedback coefficient to the next frame_blobs
+    global ave, aveR
+    # ave, aveR:
+    ave *= rave_[0][0]   # ave *= rmM
+    aveR *= rave_[0][0]  # aveR *= rmM
 
+def intra_blob_root(frame, rave_=np.ones((2,8))):
+
+    rave_2IB(rave_)
     frame.olp = frame.rng = 1
     for blob in frame.blob_:
         rblob(blob)

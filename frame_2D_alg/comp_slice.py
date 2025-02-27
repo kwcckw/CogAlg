@@ -50,21 +50,28 @@ class CdP(CBase):  # produced by comp_P, comp_slice version of Clink
         l.prim = []
     def __bool__(l): return l.nodet
 
-def vectorize_root(frame, _fb_={}, fb_={}):
 
-    if _fb_:  # update ave based on feedback coefficients
-        global ave, ave_d, ave_G, ave_PPm, ave_PPd, ave_L, ave_dI, mw_, dw_, ave_md
-        ave *= _fb_['vect_edge']  # get feedback coefficient from comp_slice
-        ave_d *= _fb_['vect_edge']
-        ave_G *= _fb_['vect_edge']
-        ave_PPm *= _fb_['vect_edge']
-        ave_PPd *= _fb_['vect_edge']
-        ave_L *= _fb_['vect_edge']
-        ave_dI *= _fb_['vect_edge']
-        mw_ *= _fb_['vect_edge']
-        dw_ *= _fb_['vect_edge']
-    fb_['slice_edge'] = (ave+ave_d+ave_G+ave_PPm+ave_PPd+ave_L+ave_dI+sum(mw_)+sum(dw_))/23  # feedback coefficient to the next slice_edge
+def rave_2CS(rave_):
+    
+    global ave, ave_d, ave_G, ave_PPm, ave_PPd, ave_L, ave_dI, mw_, dw_, ave_md
+    rmM,rmD,rmn,rmo, rmI,rmG,rmA,rmL = rave_[0]
+    rdM,rdD,rdn,rdo, rdI,rdG,rdA,rdL = rave_[1]
+    
+    # ave, ave_d, ave_G, ave_PPm, ave_PPd, ave_L, ave_dI:
+    ave *= rmM
+    ave_d *= rdM
+    ave_G *= rmG
+    ave_PPm *= rmM
+    ave_PPd *= rdM
+    ave_L *= rmL
+    ave_dI *= rmI
 
+    # mw_, dw_:
+    rmw_, rdw_ = [rmI, rmG, rmM, rmD, rmL, rmA], [rdI, rdG, rdM, rdD, rdL, rdA]
+    mw_ *= rmw_; dw_ *= rdw_
+
+def vectorize_root(frame):
+    
     blob_ = unpack_blob_(frame)
     for blob in blob_:
         if not blob.sign and blob.G > ave_G * blob.root.olp:
@@ -72,8 +79,9 @@ def vectorize_root(frame, _fb_={}, fb_={}):
             if edge.G * (len(edge.P_) - 1) > ave_PPm:  # eval PP, olp=1
                 comp_slice(edge)
 
-def comp_slice(edge):  # root function
+def comp_slice(edge, rave_=np.ones((2,8))):  # root function
 
+    rave_2CS(rave_)
     edge.Et, edge.vertuple = np.zeros(4), np.array([np.zeros(6), np.zeros(6)])  # (M, D, n, o), (m_,d_)
     for P in edge.P_:  # add higher links
         P.vertuple = np.array([np.zeros(6), np.zeros(6)])

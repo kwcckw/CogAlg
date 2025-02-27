@@ -311,18 +311,26 @@ def agg_H_par(focus):  # draft parallel level-updating pipeline
 
         frame.aggH = list(H)  # convert back to list
 
-def agg_H_seq(focus, image, _nestt=(1,0), rave_=[]):  # recursive level-forming pipeline, called from cluster_C_
+def rave_2AG(rave_):
+    
     # draft:
     global ave, ave_L, icoef, max_dist  # add derTT aves
-    if rave_:
-        ave_ = np.array([ave, ave_L, max_dist, icoef])  # mw_, dw_
-        ave, ave_L, max_dist, icoef = ave_ * rave_
-    else:
-        rave_ = np.append(np.ones(4), np.ones(4), np.ones(4))
-        # weight per ave?
-    frame = frame_blobs_root(focus, rave_2FB(rave_))
-    intra_blob_root(frame, rave_2IB(rave_))  # not sure
-    vectorize_root(frame, rave_2VR(rave_))
+    rmM,rmD,rmn,rmo, rmI,rmG,rmA,rmL = rave_[0]
+    rdM,rdD,rdn,rdo, rdI,rdG,rdA,rdL = rave_[1]
+    
+    # ave, ave_L, icoef, max_dist:
+    ave *= rmM
+    ave_L *= rmL
+    icoef *= rmM
+    max_dist *= rmM
+
+def agg_H_seq(focus, image, _nestt=(1,0), rave_=np.ones((2,8))):  # recursive level-forming pipeline, called from cluster_C_
+   
+    # weight per ave?
+    rave_2AG(rave_)
+    frame = frame_blobs_root(focus, rave_)
+    intra_blob_root(frame, rave_)  # not sure
+    vectorize_root(frame, rave_)
     if not frame.nnest:
         return frame
     comb_altG_(frame.node_[-1].node_, ave*2)  # PP graphs in frame.node_[2]

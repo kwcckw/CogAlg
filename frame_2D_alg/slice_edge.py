@@ -33,15 +33,20 @@ def vectorize_root(frame):
         if not blob.sign and blob.G > frame.ave.G:
             slice_edge(blob, frame.ave)
 
-def slice_edge(edge, _fb_={}, fb_={}):
+def rave_2CS(rave_):
+    
+    global ave_I, ave_G, ave_dangle
+    rmM,rmD,rmn,rmo, rmI,rmG,rmA,rmL = rave_[0]
+    rdM,rdD,rdn,rdo, rdI,rdG,rdA,rdL = rave_[1]
 
-    if _fb_:  # update ave based on feedback coefficients
-        global ave_I, ave_G, ave_dangle
-        ave_I *= _fb_['slice_edge']  # get feedback coefficient from comp_slice
-        ave_G *= _fb_['slice_edge']
-        ave_dangle *= _fb_['slice_edge']
-    fb_['intra_blob'] = (ave_I+ave_G+ave_dangle)/3  # feedback coefficient to the next intra_blob (sum them? or return an array? But we only need 1)
+    # ave_I, ave_G, ave_dangle:
+    ave_I *= rmI
+    ave_G *= rmG
+    ave_dangle *= rdA
 
+def slice_edge(edge, rave_=np.ones((2,8))):
+
+    rave_2CS(rave_)   
     axisd = select_max(edge)
     yx_ = sorted(axisd.keys(), key=lambda yx: edge.dert_[yx][-1])  # sort by g
     edge.P_ = []; edge.rootd = {}
