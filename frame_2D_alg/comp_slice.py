@@ -64,7 +64,7 @@ def vectorize_root(frame, _fb_={}, fb_={}):
         mw_ *= _fb_['vect_edge']
         dw_ *= _fb_['vect_edge']
     fb_['slice_edge'] = (ave+ave_d+ave_G+ave_PPm+ave_PPd+ave_L+ave_dI+sum(mw_)+sum(dw_))/23  # feedback coefficient to the next slice_edge
-    
+
     blob_ = unpack_blob_(frame)
     for blob in blob_:
         if not blob.sign and blob.G > ave_G * blob.root.olp:

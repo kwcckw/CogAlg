@@ -186,12 +186,12 @@ class CrNode_(CFrame):
         rnode_.rng = blob.root.rng + 1
 
 def intra_blob_root(frame, _fb_={}, fb_={}):
-    
+
     if _fb_:  # update ave based on feedback coefficients
         global aveR
         aveR *= _fb_['intra_blob']  # get feedback coefficient from slice_edge
     fb_['frame_blobs'] = aveR  # feedback coefficient to the next frame_blobs
-    
+
     frame.olp = frame.rng = 1
     for blob in frame.blob_:
         rblob(blob)
