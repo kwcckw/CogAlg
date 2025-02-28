@@ -64,6 +64,7 @@ class CBase:
         else:
             return object.__getattribute__(ave, name)  * coefs[name]  # always return ave * coef
     '''
+ave_w, aveR_w = 1, 1  # weights (stable over higher scope) 
 # hyper-parameters, init a guess, adjusted by feedback
 ave  = 30  # base filter, directly used for comp_r fork
 aveR = 10  # for range+, fixed overhead per blob
@@ -129,15 +130,11 @@ class CBlob(CBase):
     def yx_(blob): return list(blob.dert_.keys())
 
 
-def rave_2FB(rave_):
-
-    global ave
-    # ave:
-    ave *= rave_[0][0]  # ave *= rmM
-
-def frame_blobs_root(image, rave_=np.ones((2,8))):
+def frame_blobs_root(image, _rM=0):
     
-    rave_2FB(rave_)
+    if _rM:
+        global ave
+        ave *= ave_w * _rM
     dert__ = comp_pixel(image)
     frame = CFrame(image)
     flood_fill(frame, dert__)  # flood-fill 1 pixel at a time
@@ -190,16 +187,11 @@ class CrNode_(CFrame):
         rnode_.olp= blob.root.olp + 1.5
         rnode_.rng = blob.root.rng + 1
 
-def rave_2IB(rave_):
+def intra_blob_root(frame, _rM=0):
 
-    global ave, aveR
-    # ave, aveR:
-    ave *= rave_[0][0]   # ave *= rmM
-    aveR *= rave_[0][0]  # aveR *= rmM
-
-def intra_blob_root(frame, rave_=np.ones((2,8))):
-
-    rave_2IB(rave_)
+    if _rM:
+        global aveR
+        aveR *= aveR_w * _rM
     frame.olp = frame.rng = 1
     for blob in frame.blob_:
         rblob(blob)

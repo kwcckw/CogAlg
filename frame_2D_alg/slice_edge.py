@@ -16,6 +16,8 @@ This process is very complex, so it must be selective. Selection should be by co
 and inverse gradient deviation of flat blobs. But the latter is implicit here: high-gradient areas are usually quite sparse.
 A stable combination of a core flat blob with adjacent edge blobs is a potential object.
 '''
+
+ave_I_w, ave_G_w, ave_dangle_W = 1, 1, 1  # weights (stable over higher scope) 
 ave_I, ave_G, ave_dangle  = 100, 100, 0.95
 
 class CP(CBase):
@@ -33,20 +35,11 @@ def vectorize_root(frame):
         if not blob.sign and blob.G > frame.ave.G:
             slice_edge(blob, frame.ave)
 
-def rave_2CS(rave_):
-    
-    global ave_I, ave_G, ave_dangle
-    rmM,rmD,rmn,rmo, rmI,rmG,rmA,rmL = rave_[0]
-    rdM,rdD,rdn,rdo, rdI,rdG,rdA,rdL = rave_[1]
+def slice_edge(edge, _rM=0):
 
-    # ave_I, ave_G, ave_dangle:
-    ave_I *= rmI
-    ave_G *= rmG
-    ave_dangle *= rdA
-
-def slice_edge(edge, rave_=np.ones((2,8))):
-
-    rave_2CS(rave_)   
+    if _rM:
+        global ave_I, ave_G, ave_dangle
+        ave_I *= ave_I_w * _rM; ave_G *= ave_G_w * _rM; ave_dangle *= ave_dangle * _rM
     axisd = select_max(edge)
     yx_ = sorted(axisd.keys(), key=lambda yx: edge.dert_[yx][-1])  # sort by g
     edge.P_ = []; edge.rootd = {}

@@ -34,6 +34,7 @@ Code-coordinate filters may extend base code by cross-projecting and combining p
 (which may include extending eval function with new match-projecting derivatives) 
 Similar to cross-projection by data-coordinate filters, described in "imagination, planning, action" section of part 3 in Readme.
 '''
+ave_w, ave_L_w, icoef_w, max_dist_w = 1, 1, 1, 1  #  weights (stable over higher scope) 
 ave, ave_L, icoef, max_dist = 5, 1, 0.15, 2
 
 def cross_comp(root, fn, rc):  # form agg_Level by breadth-first node_,link_ cross-comp, connect clustering, recursion
@@ -63,8 +64,8 @@ def cross_comp(root, fn, rc):  # form agg_Level by breadth-first node_,link_ cro
         return root.node_[-1]
 
 def cluster_N_(root, L_, ave, fd):  # top-down segment L_ by >ave ratio of L.dists
-
-    L_ = sorted(L_, key=lambda x: x.dist)  # short links first
+    # L replaces dist in CL now
+    L_ = sorted(L_, key=lambda x: x.L)  # short links first
     min_dist = 0; Et = root.Et
     while True:
         # each loop forms G_ of contiguous-distance L_ segment
@@ -72,7 +73,7 @@ def cluster_N_(root, L_, ave, fd):  # top-down segment L_ by >ave ratio of L.dis
         for n in [n for l in L_ for n in l.nodet]:
             n.fin = 0
         for i, L in enumerate(L_[1:], start=1):
-            rel_dist = L.dist/_L.dist  # >= 1
+            rel_dist = L.L/_L.L  # >= 1
             if rel_dist < 1.2 or len(L_[i:]) < ave_L:  # ~= dist Ns or either side of L is weak: continue dist segment
                 LV = Val_(et, Et, ave)  # link val
                 _G,G = L.nodet  # * surround density: extH (_Ete[0]/ave + Ete[0]/ave) / 2, after cross_comp:
@@ -82,7 +83,7 @@ def cluster_N_(root, L_, ave, fd):  # top-down segment L_ by >ave ratio of L.dis
             else:
                 i -= 1; break  # terminate contiguous-distance segment
         G_ = []
-        max_dist = _L.dist
+        max_dist = _L.L
         for N in {*N_}:  # cluster current distance segment
             if N.fin: continue  # clustered from prior _N_
             _eN_,node_,link_,et, = [N],[],[], np.zeros(4)
@@ -93,7 +94,7 @@ def cluster_N_(root, L_, ave, fd):  # top-down segment L_ by >ave ratio of L.dis
                     for L,_ in get_rim(eN, fd):  # all +ve
                         if L not in link_:
                             eN_ += [n for n in L.nodet if not n.fin]
-                            if L.dist < max_dist:
+                            if L.L < max_dist:
                                 link_+=[L]; et+=L.Et
                 _eN_ = {*eN_}
             link_ = list({*link_});  Lay = CLay()
@@ -313,7 +314,7 @@ def agg_H_par(focus):  # draft parallel level-updating pipeline
 
 def agg_H_seq(focus, image, _nestt=(1,0), _rM=0, _rV_t=[]):  # recursive level-forming pipeline, called from cluster_C_
 
-    global ave, ave_L, icoef, max_dist, ave_w, ave_L_w, icoef_w, max_dist_w  # add weight per global
+    global ave, ave_L, icoef, max_dist  # add weight per global
     if _rM:
         ave *= ave_w*_rM; ave_L *= ave_L_w*_rM; icoef *= icoef_w*_rM; max_dist *= max_dist_w*_rM
     # fb _rM only
