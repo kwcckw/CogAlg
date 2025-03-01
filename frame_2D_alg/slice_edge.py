@@ -33,7 +33,7 @@ def vectorize_root(frame, W=1, w_=[]):
         if not blob.sign and blob.G > ave_G * blob.n * W:
             slice_edge(blob, w_)
 
-def slice_edge(edge, w_=[]):
+def slice_edge(edge, w_=np.ones(3)):
 
     global ave_I, ave_G, ave_dangle  # +w / ave_L, etc?
     ave_I, ave_G, ave_dangle = np.array([ave_I, ave_G, ave_dangle]) * w_

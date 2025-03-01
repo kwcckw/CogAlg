@@ -156,14 +156,13 @@ class CL(CBase):  # link or edge, a product of comparison between two nodes or l
     def __bool__(l): return bool(l.nodet)
 
 ave, avd, avn, avo, aI, aG, aA, aL, ave_L, max_dist, icoef, med_cost = 5, 10, 1.2, 1.2, 100, 100, 0.5, 2, 5, 10, 2, 2
-w_ = np.ones(4)  # higher-scope ave weights, dw_ = w_/ 2?
-ww_t = []
+ww_t = np.ones((2,8))
 
-def vect_root(frame, W=0, iww_t=[]):  # init for agg+:
+def vect_root(frame, W=0, w_=np.ones(7), iww_t=[]):  # init for agg+:
     if W:
         global ave, avd, avn, avo, aI, aG, aA, aL, ave_L, max_dist, icoef, med_cost, ww_t
-        if iww_t: ww_t = iww_t
-        ave_L, max_dist, icoef, med_cost = np.array([ave_L, max_dist, icoef, med_cost]) * (w_ * W)  # cost params
+        if np.any(iww_t): ww_t = iww_t
+        ave_L, max_dist, icoef, med_cost = np.array([ave_L, max_dist, icoef, med_cost]) * (w_[1:5] * W)  # cost params
         ave, avd, avn, avo, aI, aG, aA, aL = np.array([ave, avd, avn, avo, aI, aG, aA, aL]) * ww_t[0][:8]
         # derTT params
     blob_ = unpack_blob_(frame)
@@ -174,7 +173,7 @@ def vect_root(frame, W=0, iww_t=[]):  # init for agg+:
             # slice_edge globals * weights * _rM:
             edge = slice_edge(blob, ww_t[0][4:7])
             if edge.G * (len(edge.P_)-1) > ave:  # eval PP
-                comp_slice(edge, W, ww_t)
+                comp_slice(edge, W, w_, ww_t)
                 if edge.Et[0] * (len(edge.node_)-1)*(edge.rng+1) > ave:
                     G_ = [PP2G(PP)for PP in edge.node_ if PP[-1][0] > ave]  # Et, no altGs
                     if len(G_) > ave_L:  # no comp node_,link_,PPd_
@@ -367,8 +366,12 @@ def base_comp(_N, N, dir=1):  # comp Et, Box, baseT, derTT
     G *= rn; dG = _G - G; mG = min(_G,G) / max(_G,G)
     mA, dA = comp_angle((_Dy,_Dx),(Dy*rn,Dx*rn))
     if N.fd:  # dimension is distance
-        _L,L = _N.L, N.L
-        mL,dL = min(_L,L)/ max(_L,L), _L - L
+        if isinstance(N, CL):
+            _L,L = _N.L, N.L  # alt CG has fd == 1, is there a better workaround here? Or add L param to alt's CG?
+            mL,dL = min(_L,L)/ max(_L,L), _L - L
+        else:
+            mL, dL = 0, 0  
+            pass            
     else:  # dimension is box area
         _y0,_x0,_yn,_xn =_N.box; _A = (_yn-_y0) * (_xn-_x0)
         y0, x0, yn, xn = N.box;   A = (yn - y0) * (xn - x0)
@@ -389,7 +392,7 @@ def comp_N(_N,N, ave, fd, angle=None, dist=None, dir=1):  # compare links, relat
     dderH = []
 
     [m_,d_], rn = base_comp(_N, N, dir)
-    baseT = np.array([(_N.baseT[0]+ N.baseT[0])/2, np.sum(d_* ww_t[1][3:7]), *angle])
+    baseT = np.array([(_N.baseT[0]+ N.baseT[0])/2, np.sum(d_* ww_t[1]), *angle])  # d_ has 8 params, so unpacking is not needed
     derTT = np.array([m_, d_])
     M = np.sum(m_* ww_t[0][:8]); D = np.sum(np.abs(d_* ww_t[1][:8]))  # feedback-weighted sum
     Et = np.array([M,D, 8, (_N.Et[3]+N.Et[3]) /2])  # n comp vars, inherited olp
@@ -446,9 +449,11 @@ def sum2graph(root, grapht, fd, minL=0, maxL=None):  # sum node and link params 
         else: N_ += [N]  # roots if minL
         N.root = graph
         yx_ += [N.yx]
-        graph.box = extend_box(graph.box, N.box)  # pre-compute graph.area += N.area? or from N.yx?
+        
         graph.Et += N.Et * icoef  # deeper, lower weight
-        if i and not fd: graph.baseT += N.baseT
+        if i and not fd: 
+            graph.baseT += N.baseT
+            graph.box = extend_box(graph.box, N.box)  # pre-compute graph.area += N.area? or from N.yx?  (CL node doesn't have box?)
         # not in CL
     graph.node_= N_  # nodes or roots, link_ is still current-dist links only?
     yx = np.mean(yx_, axis=0)

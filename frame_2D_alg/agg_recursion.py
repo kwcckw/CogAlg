@@ -34,7 +34,7 @@ Code-coordinate filters may extend base code by cross-projecting and combining p
 (which may include extending eval function with new match-projecting derivatives) 
 Similar to cross-projection by data-coordinate filters, described in "imagination, planning, action" section of part 3 in Readme.
 '''
-w_ = np.ones(4)  # higher-scope weights
+w_ = np.ones(7)  # higher-scope weights (ave, ave_L, max_dist, icoef, med_cost, PPm, PPd)
 ave, ave_L, max_dist, icoef = 5, 2, 5, .5
 
 def cross_comp(root, fn, rc):  # form agg_Level by breadth-first node_,link_ cross-comp, connect clustering, recursion
@@ -316,11 +316,11 @@ def agg_H_par(focus):  # draft parallel level-updating pipeline
 def agg_H_seq(focus, image, _nestt=(1,0), _rM=1, _rv_t=[]):  # recursive level-forming pipeline, called from cluster_C_
 
     global ave, ave_L, icoef, max_dist  # adjust cost params
-    ave, ave_L, icoef, max_dist = np.array([ave, ave_L, icoef, max_dist]) * (w_ * _rM)
+    ave, ave_L, icoef, max_dist = np.array([ave, ave_L, icoef, max_dist]) * (w_[:4] * _rM)  # w_ has 7 params, it includes lower modules' weight now
 
     frame = frame_blobs_root(focus, _rM)  # no _rv_t
     intra_blob_root(frame, _rM)  # not sure
-    vect_root(frame, _rM, _rv_t)
+    vect_root(frame, _rM, w_, _rv_t)
     if not frame.nnest:
         return frame
     comb_altG_(frame.node_[-1].node_, ave*2)  # PP graphs in frame.node_[2]
