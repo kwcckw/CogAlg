@@ -16,8 +16,6 @@ This process is very complex, so it must be selective. Selection should be by co
 and inverse gradient deviation of flat blobs. But the latter is implicit here: high-gradient areas are usually quite sparse.
 A stable combination of a core flat blob with adjacent edge blobs is a potential object.
 '''
-
-ave_I_w, ave_G_w, ave_dangle_W = 1, 1, 1  # weights (stable over higher scope) 
 ave_I, ave_G, ave_dangle  = 100, 100, 0.95
 
 class CP(CBase):
@@ -28,18 +26,18 @@ class CP(CBase):
         P.dert_ = []
         P.latuple = None  # I,G, M,D, L, [Dy, Dx]
 
-def vectorize_root(frame):
+def vectorize_root(frame, W=1, w_=[]):
 
     blob_ = unpack_blob_(frame)
     for blob in blob_:
-        if not blob.sign and blob.G > frame.ave.G:
-            slice_edge(blob, frame.ave)
+        if not blob.sign and blob.G > ave_G * blob.n * W:
+            slice_edge(blob, w_)
 
-def slice_edge(edge, _rM=0):
+def slice_edge(edge, w_=[]):
 
-    if _rM:
-        global ave_I, ave_G, ave_dangle
-        ave_I *= ave_I_w * _rM; ave_G *= ave_G_w * _rM; ave_dangle *= ave_dangle * _rM
+    global ave_I, ave_G, ave_dangle  # +w / ave_L, etc?
+    ave_I, ave_G, ave_dangle = np.array([ave_I, ave_G, ave_dangle]) * w_
+
     axisd = select_max(edge)
     yx_ = sorted(axisd.keys(), key=lambda yx: edge.dert_[yx][-1])  # sort by g
     edge.P_ = []; edge.rootd = {}
@@ -93,7 +91,7 @@ def form_P(P, edge):
             if mangle < ave_dangle: break  # terminate P if angle miss
             m = min(_i,i) + min(_g,g) + mangle
             d = abs(-i-i) + abs(_g-g) + dangle
-            if m < ave_I + ave_G + ave_dangle: break  # need separate weights?  terminate P if total miss, blob should be more permissive than P
+            if m < ave_I + ave_G + ave_dangle: break  # terminate P if total miss, blob should be more permissive than P
             # update P:
             edge.rootd[ky, kx] = P
             I+=i; Dy+=dy; Dx+=dx; G+=g; M+=m; D+=d; L+=1

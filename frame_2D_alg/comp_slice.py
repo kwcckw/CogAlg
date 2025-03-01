@@ -27,9 +27,8 @@ Connectivity in P_ is traced through root_s of derts adjacent to P.dert_, possib
 len prior root_ sorted by G is root.olp, to eval for inclusion in PP or start new P by ave*olp
 '''
 
-# module-specific:
-ave_w, ave_d_w, ave_G_w, ave_PPm_w, ave_PPd_w, ave_L_w, ave_dI_w = 1, 1, 1, 1, 1, 1, 1  # weights (stable over higher scope) 
 ave, ave_d, ave_G, ave_PPm, ave_PPd, ave_L, ave_dI, mw_, dw_ =5, 10, 100, 50, 50, 4, 20, np.ones(6), np.ones(6)
+w_ = np.ones(12)  # higher-scope ave weights, dw_ = w_/ 2?
 ave_md  = [ave,ave_d]
 
 class CdP(CBase):  # produced by comp_P, comp_slice version of Clink
@@ -51,27 +50,22 @@ class CdP(CBase):  # produced by comp_P, comp_slice version of Clink
         l.prim = []
     def __bool__(l): return l.nodet
 
-
-def vectorize_root(frame):
+def vectorize_root(frame, W=1, ww_t_=[]):
 
     blob_ = unpack_blob_(frame)
     for blob in blob_:
         if not blob.sign and blob.G > ave_G * blob.root.olp:
             edge = slice_edge(blob)
             if edge.G * (len(edge.P_) - 1) > ave_PPm:  # eval PP, olp=1
-                comp_slice(edge)
+                comp_slice(edge, W, ww_t_)
 
-def comp_slice(edge, _rM=0, _rV_t=[]):  # root function
+def comp_slice(edge, W, ww_t):  # root function
 
-    if _rM:
-        global ave, ave_d, ave_G, ave_PPm, ave_PPd, ave_L, ave_dI, mw_, dw_, ave_md
-        ave, ave_d, ave_G, ave_PPm, ave_PPd, ave_L, ave_dI = (
-            np.array([ave, ave_d, ave_G, ave_PPm, ave_PPd, ave_L, ave_dI]) * 
-            np.array([ave_w, ave_d_w, ave_G_w, ave_PPm_w, ave_PPd_w, ave_L_w, ave_dI_w]) *_rM)
-        ave_md = [ave, ave_d]
-        if np.any(_rV_t):
-            mw_ *= _rM * _rV_t[0][:6]; dw_ *= _rM * _rV_t[1][:6]
-
+    global ave, avd, aI, aG, aA, aL, ave_L, ave_PPm, ave_PPd
+    ave_L, ave_PPm, ave_PPd = np.array([ave_L, ave_PPm, ave_PPd]) * (w_ * W)
+    if ww_t:
+        ave, avd, aI, aG, aA, aL = np.array([ave, avd, aI, aG, aA, aL]) * (ww_t[0][:2]+ww_t[0][4:8])  # match eval only?
+        # ders
     edge.Et, edge.vertuple = np.zeros(4), np.array([np.zeros(6), np.zeros(6)])  # (M, D, n, o), (m_,d_)
     for P in edge.P_:  # add higher links
         P.vertuple = np.array([np.zeros(6), np.zeros(6)])
@@ -191,12 +185,12 @@ def comp_latuple(_latuple, latuple, _n,n):  # 0der params, add dir?
     I*=rn; dI = _I - I;  mI = ave_dI -dI / max(_I,I, 1e-7)  # vI = mI - ave
     G*=rn; dG = _G - G;  mG = min(_G, G) / max(_G,G, 1e-7)  # vG = mG - ave_mG
     M*=rn; dM = _M - M;  mM = min(_M, M) / max(_M,M, 1e-7)  # vM = mM - ave_mM
-    D*=rn; dD = _D - D;  mD = min(_D, D) / max(_D,D, 1e-7)  # vD = mD - ave_mD
-    L*=rn; dL = _L - L;  mL = min(_L, L) / max(_L,L)  # vL = mL - ave_mL
-    mA, dA = comp_angle((_Dy,_Dx),(Dy,Dx))  # vA = mA - ave_mA, normalized
+    D*=rn; dD = _D - D;  mD = min(_D, D) / max(_D,D) if _D or D else 1e-7  # may be negative
+    L*=rn; dL = _L - L;  mL = min(_L, L) / max(_L,L)
+    mA, dA = comp_angle((_Dy,_Dx),(Dy,Dx))  # normalized
 
-    d_ = np.array([dM, dD, dI, dG, dA, dL])  # derTT[:3], Et (rearrange to follow the sequence in r)
-    m_ = np.array([mM, mD, mI, mG, mA, mL])
+    d_ = np.array([dI, dG, dA, dM, dD, dL])  # derTT[:3], Et
+    m_ = np.array([mI, mG, mA, mM, mD, mL])
     M = sum(m_ * mw_); D = sum(d_ * dw_)  # we need to apply this the same for all Et computation?
     return np.array([m_,d_]), np.array([M,D])
 
