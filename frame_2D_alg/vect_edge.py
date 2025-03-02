@@ -91,7 +91,7 @@ class CLay(CBase):  # flat layer if derivation hierarchy
         derTT = np.array([m_,d_])
         node_ = list(set(_lay.node_+ lay.node_))  # concat
         link_ = _lay.link_ + lay.link_
-        M = sum(m_ * ww_t[0]); D = sum(d_ * ww_t[1])
+        M = sum(m_ * w_t[0]); D = sum(d_ * w_t[1])
         Et = np.array([M, D, 8, (_lay.Et[3]+lay.Et[3])/2])  # n compared params = 8
         if root: root.Et += Et
 
@@ -128,7 +128,8 @@ def copy_(N):
     C = CG(); fd = N.fd
     for name, value in N.__dict__.items():
         val = getattr(N, name)
-        if name == 'derH':
+        if name == '_id': continue  # skip id
+        elif name == 'derH':
             for lay in N.derH:
                 if fd: C.derH += [lay.copy_(root=C)]  # CLay
                 else:  C.derH += [[fork.copy_(root=C) for fork in lay]]
@@ -162,7 +163,7 @@ wM, wD, wN, wO, wI, wG, wA, wL = 10, 10, 20, 20, 1, 1, 20, 20  # higher-scope we
 w_t = np.ones((2,8))  # fb weights per derTT, adjust in agg+
 
 def vect_root(frame, w_, rM=1, rD=1, ww_t=[]):  # init for agg+:
-    if any(ww_t):
+    if np.any(ww_t):
         global ave, avd, arn, aro, aveB, wM, wD, wN, wO, wI, wG, wA, wL, ave_L, max_dist, icoef, med_cost, w_t
         ave *= rM; avd *= rD; arn *= rD; aro *= rD; aveB /= rM
         ave_L, max_dist, icoef, med_cost = np.array([ave_L, max_dist, icoef, med_cost]) * (w_ / rM)  # cost params, decr / rM
@@ -174,9 +175,10 @@ def vect_root(frame, w_, rM=1, rD=1, ww_t=[]):  # init for agg+:
     for blob in blob_:
         if not blob.sign and blob.G > aveB * blob.root.olp:
             # slice_edge globals * weights * _rM:
-            edge = slice_edge(blob, np.array(ww_t[0][4:7]))  # wI,wG,wA?
+            edge = slice_edge(blob, np.array(ww_t[0][4:7]))  # wI,wG,wA? (should be w_ here since they are the cost? So it should be [rM, rD, rM] for [I, G, A]?)
             if edge.G * (len(edge.P_)-1) > ave:  # eval PP
-                comp_slice(edge, w_, rM,rD, np.array([ ww_t[0][:2]+ ww_t[0][4:], ww_t[0][:2]+ ww_t[0][4:]+ ww_t[1][4:]]) )  # scale vert
+                # w_ for comp_slice is [rM, rM, rD] for [ave_L,ave_PPm,ave_PPd]
+                comp_slice(edge, np.array([rM, rM, rD]), rM,rD, np.array([ (*ww_t[0][:2],*ww_t[0][4:]), (*ww_t[0][:2],*ww_t[1][4:])]) )  # scale vert (we can't use + here becuase it's not a list, they will be summed instead)
                 if edge.Et[0] * (len(edge.node_)-1)*(edge.rng+1) > ave:
                     G_ = [PP2G(PP)for PP in edge.node_ if PP[-1][0] > ave]  # Et, no altGs
                     if len(G_) > ave_L:  # no comp node_,link_,PPd_
@@ -368,7 +370,7 @@ def base_comp(_N, N, dir=1):  # comp Et, Box, baseT, derTT
     I *= rn; dI = _I - I; mI = abs(dI) / aI
     G *= rn; dG = _G - G; mG = min(_G,G) / max(_G,G)
     mA, dA = comp_angle((_Dy,_Dx),(Dy*rn,Dx*rn))
-    if N.fd:  # dimension is distance
+    if isinstance(N, CL):  # dimension is distance
         _L,L = _N.L, N.L
         mL,dL = min(_L,L)/ max(_L,L), _L - L
     else:  # dimension is box area
@@ -448,9 +450,11 @@ def sum2graph(root, grapht, fd, minL=0, maxL=None):  # sum node and link params 
         else: N_ += [N]  # roots if minL
         N.root = graph
         yx_ += [N.yx]
-        graph.box = extend_box(graph.box, N.box)  # pre-compute graph.area += N.area? or from N.yx?
+        # baseT[-2], baseT[-1] is ay,ax
+        if fd: graph.box = extend_box(graph.box, [N.yx[0]-N.baseT[-2],N.yx[0]+N.baseT[-2],N.yx[1]-N.baseT[-1],N.yx[1]+N.baseT[-1]])  # get box from CL.yx +- angle instead
+        else:  graph.box = extend_box(graph.box, N.box)  # pre-compute graph.area += N.area? or from N.yx?
         graph.Et += N.Et * icoef  # deeper, lower weight
-        if i and not fd: graph.baseT += N.baseT
+        if i: graph.baseT += N.baseT  # both CG and CL has baseT now
         # not in CL
     graph.node_= N_  # nodes or roots, link_ is still current-dist links only?
     yx = np.mean(yx_, axis=0)
@@ -590,4 +594,4 @@ if __name__ == "__main__":
     image = imread(image_file)
     frame = frame_blobs_root(image)
     intra_blob_root(frame)
-    vect_root(frame)
+    vect_root(frame, np.ones(4))

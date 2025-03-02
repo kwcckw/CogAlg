@@ -97,21 +97,22 @@ def cluster_N_(root, L_, ave, fd):  # top-down segment L_ by >ave ratio of L.dis
                             if L.L < max_dist:
                                 link_+=[L]; et+=L.Et
                 _eN_ = {*eN_}
-            link_ = list({*link_});  Lay = CLay()
-            [Lay.add_lay(lay) for lay in sum_H(link_, root, fd=1)]
-            derTT = Lay.derTT
-            # weigh m_|d_ by similarity to mean m|d, replacing derTT:
-            _,M = centroid_M_(derTT[0], np.sum(derTT[0]), ave)
-            _,D = centroid_M_(derTT[1], np.sum(derTT[1]), ave)
-            et[:2] = M,D
-            if Val_(et, Et, ave) > 0:  # cluster node roots:
-                G_ += [sum2graph(root, [list({*node_}),link_, et, Lay], fd, min_dist, max_dist)]
+            if len(link_)> ave_L:  # skip if link_ is empty here? Else there's no Lay and derTT too
+                link_ = list({*link_});  Lay = CLay()
+                [Lay.add_lay(lay) for lay in sum_H(link_, root, fd=1)]
+                derTT = Lay.derTT
+                # weigh m_|d_ by similarity to mean m|d, replacing derTT:
+                _,M = centroid_M_(derTT[0], np.sum(derTT[0]), ave)
+                _,D = centroid_M_(derTT[1], np.sum(derTT[1]), ave)
+                et[:2] = M,D
+                if Val_(et, Et, ave) > 0:  # cluster node roots:
+                    G_ += [sum2graph(root, [list({*node_}),link_, et, Lay], fd, min_dist, max_dist)]
         # longer links:
         L_ = L_[i + 1:]
         if L_: min_dist = max_dist  # next loop connects current-distance clusters via longer links
         else:
             if G_:
-                [comb_altG_(G.altG, ave) for G in G_]
+                [comb_altG_(G.altG.node_, ave) for G in G_]  # G.altG is default to CG now, we should use G.altG.node_
                 if fd:
                     if root.lnest: root.link_ += [sum_G_(G_)]
                     else: root.link_ = [sum_G_(root.link_), sum_G_(G_)]  # init nesting
@@ -263,7 +264,7 @@ def centroid_M_(m_, M, ave):  # adjust weights on attr matches | diffs, recomput
     _w_ = np.ones(len(m_))  # add cost attrs?
     while True:
         M /= np.sum(_w_)  # mean
-        w_ = m_ / min(M, 1/M)  # rational deviations from mean,
+        w_ = m_ / min(M, 1/M)  # rational deviations from mean
         # in range 0:1, or 0:2: w = min(m/M, M/m) + mean(min(m/M, M/m))?
         Dw = np.sum( np.abs(w_-_w_))  # weight update
         m_[:] = m_ * w_  # replace in each cycle?
@@ -313,7 +314,7 @@ def agg_H_par(focus):  # draft parallel level-updating pipeline
         frame.aggH = list(H)  # convert back to list
 
 
-def agg_H_seq(focus, image, _nestt=(1,0), _rM=1, _rD=1, _rv_t=[]):  # recursive level-forming pipeline, called from cluster_C_
+def agg_H_seq(focus, image, _nestt=(1,0), _rM=1, _rD=1, _rv_t=np.ones((2,8))):  # recursive level-forming pipeline, called from cluster_C_
 
     global ave, ave_L, icoef, max_dist  # adjust cost params
     ave, ave_L, icoef, max_dist = np.array([ave, ave_L, icoef, max_dist]) * (w_ * _rM)
