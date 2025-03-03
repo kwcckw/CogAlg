@@ -339,7 +339,7 @@ def agg_H_seq(focus, image, _nestt=(1,0), rV=1, _rv_t=[]):  # recursive level-fo
             hG = lev_G
     rV = (rM + rD) / 2 / (frame.nnest + frame.lnest - 3)  # accum levels in both forks
     if rV > ave:  # normalized
-        base = frame.node_[2]; Et,box,baseT = base.Et, base.box, base.baseT
+        base = frame.node_[2]; Et,box,baseT = base.Et, base.box, base.baseT  # we may get rV > ave if there's no added node_ but link_?
         # project focus by bottom D_val:
         if Val_(Et, Et, ave, coef=20) > 0:  # mean value shift within focus, bottom only, internal search per G
             # include temporal Dm_+ Ddm_?
