@@ -129,9 +129,9 @@ class CBlob(CBase):
     def yx_(blob): return list(blob.dert_.keys())
 
 
-def frame_blobs_root(image, rM=1):
-    global ave
-    ave *= rM
+def frame_blobs_root(image, rV=1):
+    global ave, aveR
+    ave *= rV; aveR *= rV
     dert__ = comp_pixel(image)
     frame = CFrame(image)
     flood_fill(frame, dert__)  # flood-fill 1 pixel at a time
