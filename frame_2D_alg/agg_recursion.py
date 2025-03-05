@@ -133,63 +133,50 @@ Hierarchical clustering should alternate between two phases: generative via conn
 
 def cluster_C_(root, rc):  # 0 nest gap from cluster_edge: same derH depth in root and top Gs
 
-    def sum_C(dnode_, C=None):  # sum|subtract and average C-connected nodes
+    def sum_C(node_):  # sum|subtract and average C-connected nodes
 
-        if C is None:
-            C = copy_(dnode_[0]); C.node_= copy(dnode_); dnode_.pop(0); C.fin = 1
-            sign = 1  # add if new, else subtract
-            C.M,C.L = 0,0  # centroid setattr
-        else:
-            sign = 0; C.node_ = [n for n in C.node_ if n.fin]  # not in -ve dnode_, may add +ve later
-
-        sum_G_(dnode_, sign, fc=1, G=C)  # no extH, extend_box
-        alt_ = [n.altG for n in dnode_ if n.altG]
-        if alt_: sum_G_(alt_, sign, fc=0, G=C.altG)  # no m, M, L in altGs
-        k = len(dnode_) + 1
-        # get averages:
+        C = copy_(node_[0]); C.node_= node_; k = len(node_); node_.pop(0)
+        C.m, C.M, C.n_, C.Ct_ = 0,0,[],[]
+        sum_G_(node_, fc=1, G=C)  # no extH, extend_box
+        alt_ = [n.altG for n in node_ if n.altG]
+        if alt_:
+            sum_G_(alt_, fc=0, G=C.altG)  # no m, M, L in altGs
         for n in (C, C.altG):
             n.Et/=k; n.baseT/=k; n.derTT/=k; n.aRad/=k; n.yx /= k
             norm_H(n.derH, k)
-        if C.node_: C.box = reduce(extend_box, (n.box for n in C.node_))
-
         return C
 
-    # draft
-    def refine_C_(C_, root):  # form and refine fully fuzzy C cluster around N, in root node_|link_
-
-        for C in C_:
-            # delete weaker memberships if corresponding N.m < ave * len(stronger_C_) * proximity?
+    def refine_C_(C_):  # refine weights in fuzzy C cluster around N, in root node_|link_
+        '''
+        - re-compare center-node pairs, weigh match by center-node distance: inverse to likely similarity,
+        - suppress lesser cluster_sum in center-node pairs in proportion to cluster overlap: (dist/max_dist)**2
+        - delete weak clusters and recompute cluster_sums of mean-to-node matches, suppressed by remaining clusters
+        '''
+        for i, C in enumerate(C_):
             while True:
-                dN_, M, dM = [], 0, 0  # pruned nodes and values, or comp all nodes again?
+                M, dM = 0, 0  # pruned nodes and values, or comp all nodes again?
                 for _N in C.node_:
                     m = sum( base_comp(C,_N)[0][0])  # derTT[0][0]
                     if C.altG and _N.altG:
                         m += sum( base_comp(C.altG,_N.altG)[0][0])
-                    for ct in _N.Ct_: 
-                        if ct[0] is C: ct[1] = m  # pseudo for current-C index in Ct_
-                    _N.Ct_ = sorted(_N.Ct_, key=lambda ct: ct[1], reverse=True)
-                    for i, [_C,_m,_dist] in enumerate(copy(_N.Ct_)):  # sort by _m (sort from high to low? But why start with 1?)
-                        if _C is C: continue  # skip same C? BEcause dm will be 0 too
-                        vm = m - ave * i * (ave_dist /_dist)  # tentative proximity weight
+                    _N.Ct_ = sorted(_N.Ct_, key=lambda ct: ct[1], reverse=True)  # _N.M rdn = n stronger root Cts
+                    for ii, [_C,_m,_dist] in enumerate(copy(_N.Ct_)):
+                        if _C is C: continue
+                        vm = m - ave * _dist/(max_dist/2) * (ii+1) * (_dist/max_dist)**2
+                        # ave * distance deviation * redundancy * circle-overlap ratio between cluster
                         if vm > 0:
-                            M += m; dM += m - _m  # same _C?
-                        else:  # remove _N from C
-                            _N.Ct_.pop(i)
-                # not updated below:
-                            dN_+=[_N]; dM += -vm  # dM += abs m deviation
-                if dM > ave and M > ave:  # loop update, break if low C reforming value
-                    if dN_:
-                        C = sum_C(list(set(dN_)),C)  # subtract dN_ from C
-                    C.M = M  # with changes in kept nodes
-                else:  # break (with current scheme, we should remove C from C_ instead?)
-                    if C.M > ave * 10:  # add proximity-weighted overlap?
-                        for n in C.node_: n.root = C
-                        C_ += [C]; C.root = root  # centroid cluster
-                    else:
-                        for n in C.node_:  # unpack C.node_, including N
-                            n.m = 0; n.fin = 0
+                            C.M += m
+                            for ct in _N.Ct_:
+                                if ct[0] is C: ct[1] = m
+                        else: _N.Ct_.pop(ii)
+                        dM += vm
+                if M < ave:
+                    C_.pop(i); N.M = 0; N.Ct_=[]  # delete weak | redundant cluster
                     break
-    
+                if dM > ave:  # or ave * iterations: cost increase?
+                    C.M = 0; C = sum_C(C)  # recompute centroid
+                else:
+                    break
     # get centroid clusters of top Gs for next cross_comp
     C_t = [[],[]]
     ave = globals()['ave'] * rc  # recursion count
@@ -198,24 +185,23 @@ def cluster_C_(root, rc):  # 0 nest gap from cluster_edge: same derH depth in ro
         if not nest: continue
         N_ = [N for N in sorted([N for N in _N_[-1].node_], key=lambda n: n.Et[fn], reverse=True)]
         for N in N_:
-            N.m, N.M, N.L, N.node_, N.Ct_ = 0, 0, 0, [], []  # we need to preinit Ct_ here since Ct_ maybe added for all nodes in the loop
+            N.m, N.M, N.n_, N.Ct_ = 0, 0, [], []
         while N_:
             N = N_.pop(0)
             node_, N.M = [], 0  # C node_, alt C Ms, match
-            for _N in copy(N_):  # we need copy to loop while remove _N
-                if Val_(N.Et, root.Et, ave, coef=10) < 0:
-                    break  # the rest of N_ is lower-M
+            for _N in copy(N_):
+                if Val_(N.Et, root.Et, ave, coef=10) < 0:  # the rest of N_ is lower-M
+                    break
                 dy,dx = np.subtract(_N.yx,N.yx); dist = np.hypot(dy,dx)
                 V = val_(_N.Et, ave) +val_(N.Et, ave)
-                if dist < max_dist * abs(V):  # V may negative but dist is scalar? So use abs?
+                if dist < max_dist * V:
                     node_ += [_N]
-                    _N.Ct_ += [[N,V,dist]]; N.Ct_ += [[_N, V, dist]]  # bilateral assign, close enough to compare (bilateral should add to both Ct_?)
-                    if dist < max_dist/2 * V:  # too close to form separate C
+                    _N.Ct_ += [[N,V,dist]]; N.Ct_ += [[_N,V,dist]]  # bilateral assign, close enough to compare
+                    if dist < max_dist/10 * V:  # too close to form separate C
                         N_.remove(_N)
-            # add initialized fuzzy C cluster:
-            C_ += [sum_C(node_, N)]  # we can actually sum_C here?
-
-        refine_C_(C_, root)  # refine centroid clusters, similar to SOM
+            # init fuzzy C clusters:
+            C_ += [sum_C(node_)]
+        refine_C_(C_)  # refine centroid clusters per N
         if len(C_) > ave_L:
             if fn:
                 root.node_ += [sum_G_(C_)]; root.nnest += 1
@@ -245,7 +231,7 @@ def comb_altG_(G_, ave):  # combine contour G.altG_ into altG (node_ defined by 
             if Val_(Et, G.Et, ave, coef=10) > 0:  # altG-specific coef for sum neg links
                 altG = CG(root=G, Et=Et, node_=node_, link_=link_, fd=1); altG.m=0  # other attrs are not significant
                 altG.derH = sum_H(altG.link_, altG, fd=1)   # sum link derHs
-                altG.derTT = np.sum([link.derTT for link in altG.link_],axis=0)  # we need axis=0, else they will be summed into single number
+                altG.derTT = np.sum([link.derTT for link in altG.link_],axis=0)
                 G.altG = altG
 
 def norm_H(H, n):
@@ -352,7 +338,7 @@ def agg_H_seq(focus, image, _nestt=(1,0), rV=1, _rv_t=[]):  # recursive level-fo
             hG = lev_G
     rV = (rM + rD) / 2 / (frame.nnest + frame.lnest - 3)  # n accum levels in both forks
     if rV > ave:  # normalized
-        base = frame.node_[2]; Et,box,baseT = base.Et, base.box, base.baseT  # we may get rV > ave if there's no added node_ but link_?
+        base = frame.node_[2]; Et,box,baseT = base.Et, base.box, base.baseT
         # project focus by bottom D_val:
         if Val_(Et, Et, ave, coef=20) > 0:  # mean value shift within focus, bottom only, internal search per G
             # include temporal Dm_+ Ddm_?
