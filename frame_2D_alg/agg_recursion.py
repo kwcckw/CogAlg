@@ -135,7 +135,7 @@ def cluster_C_(root, rc):  # 0 nest gap from cluster_edge: same derH depth in ro
 
     def sum_C(node_):  # sum|subtract and average C-connected nodes
 
-        C = copy_(node_[0]); C.node_= node_; k = len(node_); node_.pop(0)
+        C = copy_(node_[0]); C.node_= copy(node_); k = len(node_); node_.pop(0)  # copy node_ to C.node_, else it will be popped
         C.m, C.M, C.n_, C.Ct_ = 0,0,[],[]
         sum_G_(node_, fc=1, G=C)  # no extH, extend_box
         alt_ = [n.altG for n in node_ if n.altG]
@@ -152,7 +152,7 @@ def cluster_C_(root, rc):  # 0 nest gap from cluster_edge: same derH depth in ro
         - suppress lesser cluster_sum in center-node pairs in proportion to cluster overlap: (dist/max_dist)**2
         - delete weak clusters and recompute cluster_sums of mean-to-node matches, suppressed by remaining clusters
         '''
-        for i, C in enumerate(C_):
+        for i, C in enumerate(copy(C_)):  # we need copy here since we remove C below
             while True:
                 M, dM = 0, 0  # pruned nodes and values, or comp all nodes again?
                 for _N in C.node_:
@@ -160,21 +160,24 @@ def cluster_C_(root, rc):  # 0 nest gap from cluster_edge: same derH depth in ro
                     if C.altG and _N.altG:
                         m += sum( base_comp(C.altG,_N.altG)[0][0])
                     _N.Ct_ = sorted(_N.Ct_, key=lambda ct: ct[1], reverse=True)  # _N.M rdn = n stronger root Cts
-                    for ii, [_C,_m,_dist] in enumerate(copy(_N.Ct_)):
+                    for ii, Ct in enumerate((copy(_N.Ct_))):
+                        _C,_m,_dist = Ct   
                         if _C is C: continue
                         vm = m - ave * _dist/(max_dist/2) * (ii+1) * (_dist/max_dist)**2
                         # ave * distance deviation * redundancy * circle-overlap ratio between cluster
                         if vm > 0:
-                            C.M += m
+                            M += m; C.M += m  # we need to increment M with positive m here?
+                            _N.m += m; N.m += m  # same with _N.m and N.m?
                             for ct in _N.Ct_:
-                                if ct[0] is C: ct[1] = m
-                        else: _N.Ct_.pop(ii)
+                                if ct[0].root is C: ct[1] = m
+                        else: _N.Ct_.remove(Ct)  # we can't pop ii because we might remove more than 1 Ct here, and the _N.Ct_ index will be messed up after the 1st removal
                         dM += vm
                 if M < ave:
-                    C_.pop(i); N.M = 0; N.Ct_=[]  # delete weak | redundant cluster
+                    C_.remove(C); N.M = 0; N.Ct_=[]  # delete weak | redundant cluster
                     break
                 if dM > ave:  # or ave * iterations: cost increase?
-                    C.M = 0; C = sum_C(C)  # recompute centroid
+                    C.M = 0; C = sum_C(C.node_)  # recompute centroid  (should be C.node_, nodes should have updated m now)
+                    for node in C.node_: node.m = 0  # reset N.m for the next loop?    
                 else:
                     break
     # get centroid clusters of top Gs for next cross_comp
@@ -185,12 +188,12 @@ def cluster_C_(root, rc):  # 0 nest gap from cluster_edge: same derH depth in ro
         if not nest: continue
         N_ = [N for N in sorted([N for N in _N_[-1].node_], key=lambda n: n.Et[fn], reverse=True)]
         for N in N_:
-            N.m, N.M, N.n_, N.Ct_ = 0, 0, [], []
+            N.m,  N.n_, N.Ct_ = 0,  [], []  # N.M is no longer needed?
         while N_:
             N = N_.pop(0)
-            node_, N.M = [], 0  # C node_, alt C Ms, match
+            node_, N.M = [N], 0  # C node_, alt C Ms, match (we need to pack N in node_ too)
             for _N in copy(N_):
-                if Val_(N.Et, root.Et, ave, coef=10) < 0:  # the rest of N_ is lower-M
+                if Val_(N.Et, root.Et, ave, coef=1) < 0:  # the rest of N_ is lower-M (we need weight or ave to adjust the coef here?)
                     break
                 dy,dx = np.subtract(_N.yx,N.yx); dist = np.hypot(dy,dx)
                 V = val_(_N.Et, ave) +val_(N.Et, ave)

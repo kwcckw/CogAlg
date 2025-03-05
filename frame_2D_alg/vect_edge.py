@@ -393,8 +393,7 @@ def comp_N(_N,N, ave, fd, angle=None, dist=None, dir=1):  # compare links, relat
     derTT = np.array([m_, d_])
     M = np.sum(m_* w_t[0]); D = np.sum(np.abs(d_* w_t[1]))  # feedback-weighted sum
     Et = np.array([M,D, 8, (_N.Et[3]+N.Et[3]) /2])  # n comp vars, inherited olp
-    _y,_x = _N.yx
-    y, x = N.yx
+    _y,_x = _N.yx; y, x = N.yx
     Link = CL(fd=fd, nodet=[_N,N], baseT=baseT, derTT=derTT, yx=np.add(_N.yx,N.yx)/2, L=dist, box=np.array([min(_y,y),min(_x,x),max(_y,y),max(_x,x)]))
     # spec / lay:
     if M > ave and (len(N.derH) > 2 or isinstance(N,CL)):  # else derH is redundant to dext,vert
@@ -462,7 +461,7 @@ def sum2graph(root, grapht, fd, minL=0, maxL=None):  # sum node and link params 
             for n in L.nodet:  # map root mG
                 mG = n.root
                 if isinstance(mG, CG) and mG not in altG:  # root is not frame
-                    mG.altG.node_ += [graph]  # cross-comp|sum complete altG before next agg+ cross-comp, multi-layered?
+                    sum_G_([graph], G=mG.altG)  # cross-comp|sum complete altG before next agg+ cross-comp, multi-layered?
                     altG += [mG]
     return graph
 
@@ -534,7 +533,7 @@ def sum_G_(node_, s=1, fc=0, G=None):
         if n.derH:
             add_H(G.derH, n.derH, root=G, rev=s==-1, fc=fc, fd=G.fd)
         if fc:
-            G.M += n.m * s; G.L += s
+            G.M += n.m * s; n.root = G# ; G.L += s   (G.L += s should be removed?)
         else:
             if n.extH: add_H(G.extH, n.extH, root=G, rev = s==-1, fd=1)  # empty in centroid, flat in extH?
             G.box = extend_box( G.box, n.box)  # extended per separate node_ in centroid
