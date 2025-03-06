@@ -120,12 +120,12 @@ def cluster_N_(root, L_, ave, fd):  # top-down segment L_ by >ave ratio of L.dis
                     root.nnest += 1
             break
 ''' 
-Hierarchical clustering should alternate between two phases: generative via connectivity and compressive via centroid.
+ Hierarchical clustering should alternate between two phases: generative via connectivity and compressive via centroid.
 
  Connectivity clustering terminates at effective contours: alt_Gs, beyond which cross-similarity is not likely to continue. 
  Next cross-comp is discontinuous and should be selective for well-defined (stable and recurring) similarity clusters.
  
- These clusters should be global: formed by centroid clustering. Strong centroid clusters are cross-compared 
+ These clusters should be discontinuous, centroid-based but proximity-biased. Strong centroid clusters are cross-compared 
  in the next-level connectivity clustering, cluster-wise or between exemplars representing cluster nodes?
  
  So connectivity clustering is a generative learning phase, forming new derivatives and structured composition levels, 
@@ -135,50 +135,49 @@ def cluster_C_(root, rc):  # 0 nest gap from cluster_edge: same derH depth in ro
 
     def sum_C(node_):  # sum|subtract and average C-connected nodes
 
-        C = copy_(node_[0]); C.node_= copy(node_); k = len(node_); node_.pop(0)  # copy node_ to C.node_, else it will be popped
-        C.m, C.M, C.n_, C.Ct_ = 0,0,[],[]
-        sum_G_(node_, fc=1, G=C)  # no extH, extend_box
+        C = copy_(node_[0]); C.node_= node_  # add root and medoid / exemplar?
+        C.M = 0
+        sum_G_(node_[1:], G=C)  # no extH, extend_box
         alt_ = [n.altG for n in node_ if n.altG]
         if alt_:
-            sum_G_(alt_, fc=0, G=C.altG)  # no m, M, L in altGs
+            sum_G_(alt_, G=C.altG)  # no m, M, L in altGs
+        k = len(node_)
         for n in (C, C.altG):
             n.Et/=k; n.baseT/=k; n.derTT/=k; n.aRad/=k; n.yx /= k
             norm_H(n.derH, k)
         return C
 
-    def refine_C_(C_):  # refine weights in fuzzy C cluster around N, in root node_|link_
+    def refine_C_(C_):  # refine weights in fuzzy C cluster around N, in root node_| link_
         '''
-        - re-compare center-node pairs, weigh match by center-node distance: inverse to likely similarity,
-        - suppress lesser cluster_sum in center-node pairs in proportion to cluster overlap: (dist/max_dist)**2
-        - delete weak clusters and recompute cluster_sums of mean-to-node matches, suppressed by remaining clusters
+        - compare center-node pairs, weigh match by center-node distance (inverse ave similarity),
+        - suppress non-max cluster_sum in center-node pairs: ave * cluster overlap ((dist/max_dist)**2)
+        - delete weak clusters, recompute cluster_sums of mean-to-node matches / remaining cluster overlap
         '''
-        for i, C in enumerate(copy(C_)):  # we need copy here since we remove C below
+        remove_ = []
+        for C in C_:
             while True:
-                M, dM = 0, 0  # pruned nodes and values, or comp all nodes again?
-                for _N in C.node_:
-                    m = sum( base_comp(C,_N)[0][0])  # derTT[0][0]
-                    if C.altG and _N.altG:
-                        m += sum( base_comp(C.altG,_N.altG)[0][0])
-                    _N.Ct_ = sorted(_N.Ct_, key=lambda ct: ct[1], reverse=True)  # _N.M rdn = n stronger root Cts
-                    for ii, Ct in enumerate((copy(_N.Ct_))):
-                        _C,_m,_dist = Ct   
-                        if _C is C: continue
-                        vm = m - ave * _dist/(max_dist/2) * (ii+1) * (_dist/max_dist)**2
-                        # ave * distance deviation * redundancy * circle-overlap ratio between cluster
-                        if vm > 0:
-                            M += m; C.M += m  # we need to increment M with positive m here?
-                            _N.m += m; N.m += m  # same with _N.m and N.m?
-                            for ct in _N.Ct_:
-                                if ct[0].root is C: ct[1] = m
-                        else: _N.Ct_.remove(Ct)  # we can't pop ii because we might remove more than 1 Ct here, and the _N.Ct_ index will be messed up after the 1st removal
-                        dM += vm
-                if M < ave:
-                    C_.remove(C); N.M = 0; N.Ct_=[]  # delete weak | redundant cluster
+                C.M = 0; dM = 0  # pruned nodes and values, or comp all nodes again?
+                for N in C.node_:
+                    m = sum( base_comp(C,N)[0][0])  # derTT[0][0]
+                    if C.altG and N.altG:
+                        m += sum( base_comp(C.altG,N.altG)[0][0])
+                    N.Ct_ = sorted(N.Ct_, key=lambda ct: ct[1], reverse=True)  # _N.M rdn = n stronger root Cts
+                    for i, [_C,_m,_dist] in enumerate(N.Ct_):
+                        if _C is C:
+                            vm = m - ave * _dist/(max_dist/2) * (i+1) * (_dist/max_dist)**2  # disc overlap
+                            # ave * distance deviation * redundancy * relative overlap between clusters
+                            dm = _m-vm; dM += dm
+                            _C.M += dm
+                            if _C.M > ave: N.Ct_[i][1] = vm
+                            else:          N.Ct_.pop(i)
+                            break  # CCt update only
+                if C.M < ave:
+                    for n in C.node_: n.Ct_.remove(C)
+                    remove_ += [C]  # delete weak | redundant cluster
                     break
-                if dM > ave:  # or ave * iterations: cost increase?
-                    C.M = 0; C = sum_C(C.node_)  # recompute centroid  (should be C.node_, nodes should have updated m now)
-                    for node in C.node_: node.m = 0  # reset N.m for the next loop?    
+                if dM > ave: C = sum_C(C)  # recompute centroid, or ave * iterations: cost increase?
                 else:
+                    C_ = [C for C in C_ if C not in remove_]
                     break
     # get centroid clusters of top Gs for next cross_comp
     C_t = [[],[]]
@@ -187,24 +186,19 @@ def cluster_C_(root, rc):  # 0 nest gap from cluster_edge: same derH depth in ro
     for fn, C_,nest,_N_ in zip((1,0), C_t, [root.nnest,root.lnest], [root.node_,root.link_]):
         if not nest: continue
         N_ = [N for N in sorted([N for N in _N_[-1].node_], key=lambda n: n.Et[fn], reverse=True)]
-        for N in N_:
-            N.m,  N.n_, N.Ct_ = 0,  [], []  # N.M is no longer needed?
+        for N in N_: N.Ct_ = []
         while N_:
-            N = N_.pop(0)
-            node_, N.M = [N], 0  # C node_, alt C Ms, match (we need to pack N in node_ too)
+            N = N_.pop(0); node_ = [N]; dist_ = [0]  # C node_
             for _N in copy(N_):
-                if Val_(N.Et, root.Et, ave, coef=1) < 0:  # the rest of N_ is lower-M (we need weight or ave to adjust the coef here?)
+                if Val_(N.Et, root.Et, ave, coef=10) < 0:  # the rest of N_ is lower-M
                     break
                 dy,dx = np.subtract(_N.yx,N.yx); dist = np.hypot(dy,dx)
-                V = val_(_N.Et, ave) +val_(N.Et, ave)
-                if dist < max_dist * V:
-                    node_ += [_N]
-                    _N.Ct_ += [[N,V,dist]]; N.Ct_ += [[_N,V,dist]]  # bilateral assign, close enough to compare
-                    if dist < max_dist/10 * V:  # too close to form separate C
-                        N_.remove(_N)
-            # init fuzzy C clusters:
-            C_ += [sum_C(node_)]
-        refine_C_(C_)  # refine centroid clusters per N
+                if dist < max_dist:  # close enough to compare
+                    node_ += [_N]; dist += [dist]
+            C = [sum_C(node_)]
+            for n, dist in zip(node_,dist_): n.Ct_ = [[C,0,dist]]  # empty m
+            C_+= [C]
+        refine_C_(C_)  # refine centroid clusters
         if len(C_) > ave_L:
             if fn:
                 root.node_ += [sum_G_(C_)]; root.nnest += 1
@@ -215,11 +209,11 @@ def cluster_C_(root, rc):  # 0 nest gap from cluster_edge: same derH depth in ro
 
 def comb_altG_(G_, ave):  # combine contour G.altG_ into altG (node_ defined by root=G), for agg+ cross-comp
     # internal and external alts: different decay / distance?
-    # background vs contour?
+    # background + contour?
     for G in G_:
         if isinstance(G,list): continue
         if G.altG:
-            if isinstance(G.altG, list):
+            if G.altG.node_:
                 sum_G_(G.altG)
                 G.altG = CG(root=G, node_= G.altG, fd=1); G.altG.m=0  # was G.altG_
                 if Val_(G.altG.Et, G.Et, ave):  # alt D * G rM
@@ -339,6 +333,7 @@ def agg_H_seq(focus, image, _nestt=(1,0), rV=1, _rv_t=[]):  # recursive level-fo
             rD += (_d/_n) / (d/n)
             rv_t += np.abs((hG.derTT/_n) / (lev_G.derTT/n))
             hG = lev_G
+    # comb adjust:
     rV = (rM + rD) / 2 / (frame.nnest + frame.lnest - 3)  # n accum levels in both forks
     if rV > ave:  # normalized
         base = frame.node_[2]; Et,box,baseT = base.Et, base.box, base.baseT
