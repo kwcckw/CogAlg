@@ -53,16 +53,16 @@ def cross_comp(root, fn, rc):  # form agg_Level by breadth-first node_,link_ cro
                 derH[0] += [comb_H_(lL_, root, fd=1)]  # += dlay
                 plL_ = {l for n in lN_ for l,_ in get_rim(n,fd=1)}
                 if len(plL_) > ave_L:
-                    cluster_N_(root, plL_, ave*(rc+4), fd=1)
+                    cluster_N_(root, plL_, ave*(rc+4), fd=1, rc=rc+4)
                     # form altGs for cluster_C_, no new links between dist-seg Gs
         root.derH += derH  # feedback
-        comb_altG_(root.node_[-1].node_, ave*(rc+4))  # comb node contour: altG_ | neg links sum, cross-comp -> CG altG
+        comb_altG_(root.node_[-1].node_, ave*(rc+4), rc=rc+4)  # comb node contour: altG_ | neg links sum, cross-comp -> CG altG
         cluster_C_(root, rc+5)  # -> mfork G,altG exemplars, +altG surround borrow, root.derH + 1|2 lays, agg++
         # no dfork cluster_C_, no ddfork
         # if val_: lev_G -> agg_H_seq
         return root.node_[-1]
 
-def cluster_N_(root, L_, ave, fd):  # top-down segment L_ by >ave ratio of L.dists
+def cluster_N_(root, L_, ave, fd, rc):  # top-down segment L_ by >ave ratio of L.dists
 
     L_ = sorted(L_, key=lambda x: x.L)  # short links first
     min_dist = 0; Et = root.Et
@@ -110,7 +110,7 @@ def cluster_N_(root, L_, ave, fd):  # top-down segment L_ by >ave ratio of L.dis
         if L_: min_dist = max_dist  # next loop connects current-distance clusters via longer links
         else:
             if G_:
-                [comb_altG_(G.altG.node_, ave) for G in G_]
+                [comb_altG_(G.altG.node_, ave, rc) for G in G_]
                 if fd:
                     if root.lnest: root.link_ += [sum_G_(G_)]
                     else: root.link_ = [sum_G_(root.link_), sum_G_(G_)]  # init nesting
@@ -172,13 +172,14 @@ def cluster_C_(root, rc):  # 0 nest gap from cluster_edge: same derH depth in ro
                             else:          N.Ct_.pop(i)
                             break  # CCt update only
                 if C.M < ave:
-                    for n in C.node_: n.Ct_.remove(C)
+                    # for n in C.node_: n.Ct_.remove(C)  # this is not needed? It should be popped in section above
                     remove_ += [C]  # delete weak | redundant cluster
                     break
                 if dM > ave: C = sum_C(C)  # recompute centroid, or ave * iterations: cost increase?
-                else:
-                    C_ = [C for C in C_ if C not in remove_]
-                    break
+                else: break
+
+        C_ = [C for C in C_ if C not in remove_]  # this should be in the end, after we eval all Cs?
+                
     # get centroid clusters of top Gs for next cross_comp
     C_t = [[],[]]
     ave = globals()['ave'] * rc  # recursion count
@@ -187,16 +188,17 @@ def cluster_C_(root, rc):  # 0 nest gap from cluster_edge: same derH depth in ro
         if not nest: continue
         N_ = [N for N in sorted([N for N in _N_[-1].node_], key=lambda n: n.Et[fn], reverse=True)]
         for N in N_: N.Ct_ = []
-        while N_:
-            N = N_.pop(0); node_ = [N]; dist_ = [0]  # C node_
-            for _N in copy(N_):
-                if Val_(N.Et, root.Et, ave, coef=10) < 0:  # the rest of N_ is lower-M
+        for N in N_:
+            node_ = [N]; dist_ = [0]  # C node_
+            for _N in N_:
+                if N is _N: continue
+                if Val_(N.Et, root.Et, ave, coef=1) < 0:  # the rest of N_ is lower-M
                     break
                 dy,dx = np.subtract(_N.yx,N.yx); dist = np.hypot(dy,dx)
                 if dist < max_dist:  # close enough to compare
-                    node_ += [_N]; dist += [dist]
-            C = [sum_C(node_)]
-            for n, dist in zip(node_,dist_): n.Ct_ = [[C,0,dist]]  # empty m
+                    node_ += [_N]; dist_ += [dist]  # should be dist_ here
+            C = sum_C(node_)
+            for n, dist in zip(node_,dist_): n.Ct_ += [[C,0,dist]]  # empty m  (we should use +=? Because a same n maybe accessed from different N)
             C_+= [C]
         refine_C_(C_)  # refine centroid clusters
         if len(C_) > ave_L:
@@ -207,17 +209,18 @@ def cluster_C_(root, rc):  # 0 nest gap from cluster_edge: same derH depth in ro
             if not root.root:  # frame
                 cross_comp(root, fn, rc+1)  # append derH, cluster_N_([root.node_,root.link_][fn][-1])
 
-def comb_altG_(G_, ave):  # combine contour G.altG_ into altG (node_ defined by root=G), for agg+ cross-comp
+def comb_altG_(G_, ave, rc=1):  # combine contour G.altG_ into altG (node_ defined by root=G), for agg+ cross-comp
     # internal and external alts: different decay / distance?
     # background + contour?
     for G in G_:
         if isinstance(G,list): continue
         if G.altG:
             if G.altG.node_:
-                sum_G_(G.altG)
-                G.altG = CG(root=G, node_= G.altG, fd=1); G.altG.m=0  # was G.altG_
+                altG = sum_G_(G.altG.node_)  # we need to pack lev_G of alts in G.altG, similar with existing root.node_?
+                G.altG = sum_G_([altG])
+                G.altG.root=G; G.altG.fd=1; G.altG.m=0  # was G.altG_
                 if Val_(G.altG.Et, G.Et, ave):  # alt D * G rM
-                    cross_comp(G.altG, G.node_, ave)  # need rc?
+                    cross_comp(G.altG, fn=1, rc=rc)  # need rc? Yes, i think we need that for cross_comp for altG
         else:  # sum neg links
             link_,node_,derH, Et = [],[],[], np.zeros(4)
             for link in G.link_:
@@ -334,7 +337,7 @@ def agg_H_seq(focus, image, _nestt=(1,0), rV=1, _rv_t=[]):  # recursive level-fo
             rv_t += np.abs((hG.derTT/_n) / (lev_G.derTT/n))
             hG = lev_G
     # comb adjust:
-    rV = (rM + rD) / 2 / (frame.nnest + frame.lnest - 3)  # n accum levels in both forks
+    rV = (rM + rD) / 2 / (frame.nnest + frame.lnest - 3)  # n accum levels in both forks (we may get frame.nnest + frame.lnest = 3 and get zero division here)
     if rV > ave:  # normalized
         base = frame.node_[2]; Et,box,baseT = base.Et, base.box, base.baseT
         # project focus by bottom D_val:
