@@ -405,7 +405,8 @@ def comp_N(_N,N, ave, fd, angle=None, dist=None, dir=1):  # compare links, relat
     if not fd and _N.altG and N.altG:
         et = _N.altG.Et + N.altG.Et  # comb val
         if Val_(et, et, ave*2, fd=1) > 0:  # eval Ds
-            Link.altL = comp_N(_N.altG, N.altG, ave*2, fd=1)
+            dy,dx = np.subtract(_N.altG.yx, N.altG.yx)
+            Link.altL = comp_N(_N.altG, N.altG, ave*2, fd=fd, angle=[dy,dx], dist = np.hypot(dy,dx))  # fd shouldn't needed now for altG? Since we don't have empty baseT now
             Et += Link.altL.Et
     Link.Et = Et
     if val_(Et, ave) > 0:
