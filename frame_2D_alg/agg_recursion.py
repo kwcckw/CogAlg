@@ -36,8 +36,11 @@ Similar to cross-projection by data-coordinate filters, described in "imaginatio
 '''
 ave, ave_L, max_med, icoef, ave_dist = 5, 2, 3, .5, 2
 
-def cross_comp(root, fn, rc):  # recursion count, form agg_Level by breadth-first node_,link_ cross-comp, connect clustering, recursion
 
+
+def cross_comp(root, fn, rc, fc=0):  # recursion count, form agg_Level by breadth-first node_,link_ cross-comp, connect clustering, recursion
+
+    innest, ilnest = root.nnest, root.lnest  # initial nnest and lnest
     # or single-fork cross-comp?
     N_,L_,Et = comp_node_(root.node_[-1].node_ if fn else root.link_[-1].node_, ave*rc)  # cross-comp top-composition exemplars
     # mval -> lay
@@ -50,18 +53,29 @@ def cross_comp(root, fn, rc):  # recursion count, form agg_Level by breadth-firs
             cluster_N_(root, pL_, ave*(rc+2), fd=0, rc=rc+2)  # form multiple distance segments, same depth
         # if root is LC, not frame
         # not updated:
-        # dval -> comp L_ for all dist segments, adds altGs
-        if Val_(Et, Et, ave*(rc+2), fd=1) > 0:
-            lN_,lL_,dEt = comp_link_(L2N(L_), ave*(rc+2))  # comp root.link_ forms root in alt clustering?
-            if Val_(dEt, Et, ave*(rc+3), fd=1) > 0:
-                derH[0] += [comb_H_(lL_, root, fd=1)]  # += dlay
-                plL_ = {l for n in lN_ for l,_ in get_rim(n,fd=1)}
-                if len(plL_) > ave_L:
-                    cluster_N_(root, plL_, ave*(rc+4), fd=1, rc=rc+4)
-                    # form altGs for cluster_C_, no new links between dist-seg Gs
+        if fc:  # root is LC is possible only if cross_comp is called from cluster_C_?
+            # dval -> comp L_ for all dist segments, adds altGs
+            if Val_(Et, Et, ave*(rc+2), fd=1) > 0:
+                lN_,lL_,dEt = comp_link_(L2N(L_), ave*(rc+2))  # comp root.link_ forms root in alt clustering?
+                if Val_(dEt, Et, ave*(rc+3), fd=1) > 0:
+                    derH[0] += [comb_H_(lL_, root, fd=1)]  # += dlay
+                    plL_ = {l for n in lN_ for l,_ in get_rim(n,fd=1)}
+                    if len(plL_) > ave_L:
+                        cluster_N_(root, plL_, ave*(rc+4), fd=1, rc=rc+4)
+                        # form altGs for cluster_C_, no new links between dist-seg Gs
         root.derH += derH  # feedback
         comb_altG_(root.node_[-1].node_, ave*(rc+4), rc=rc+4)  # comb node contour: altG_ | neg links sum, cross-comp -> CG altG
-        cluster_C_(root, rc+5)  # -> mfork G,altG exemplars, +altG surround borrow, root.derH + 1|2 lays, agg++
+        
+        nL = 0  # number of long negative links from terminal nodes 
+        if root.nnest > innest:
+            nL += len([nL for mG in root.node_[-1].node_ for L in mG.link_ for n in L.nodet for nL,_ in n.nrim if nL.L > ave_dist * icoef])  # using ave_dist * icoef to eval long link
+        if root.lnest > ilnest: 
+            nL += len([nL for dG in root.link_[-1].node_ for L in dG.link_ for n in L.nodet for nL,_ in (n.nrimt[0]+n.nrimt[1]) if nL.L > ave_dist * icoef])
+        if nL > ave_L:  # C clustering:  if > ave long range
+            cluster_C_(root, rc+5)  # -> mfork G,altG exemplars, +altG surround borrow, root.derH + 1|2 lays, agg++
+        else:  # L clustering: short links
+            cross_comp(root, fn, rc+5)   
+            
         # no dfork cluster_C_, no ddfork
         # if val_: lev_G -> agg_H_seq
         return root.node_[-1]
@@ -208,7 +222,8 @@ def cluster_C_(root, rc):  # 0 nest gap from cluster_edge: same derH depth in ro
             else:
                 root.link_ += [sum_G_(C_)]; root.lnest += 1
             if not root.root:  # frame
-                cross_comp(root, fn, rc+1)  # append derH, cluster_N_([root.node_,root.link_][fn][-1])
+                # if fc should be 1 here, root should be C instead?
+                cross_comp(root, fn, rc+1, fc=1)  # append derH, cluster_N_([root.node_,root.link_][fn][-1])
 
 def comb_altG_(G_, ave, rc=1):  # combine contour G.altG_ into altG (node_ defined by root=G), for agg+ cross-comp
     # internal and external alts: different decay / distance?
@@ -324,7 +339,7 @@ def agg_H_seq(focus, image, _nestt=(1,0), rV=1, _rv_t=[]):  # recursive level-fo
         return frame
     comb_altG_(frame.node_[-1].node_, ave*2)  # PP graphs in frame.node_[2]
     # forward agg+:
-    cross_comp(frame, fn=1, rc=1)  # node_+= edge.node_
+    cross_comp(frame, fn=1, rc=1, fc=0)  # node_+= edge.node_
     rM,rD = 1,1  # sum derTT coefs: m_,d_ [M,D,n,o, I,G,A,L] / Et, baseT, dimension
     rv_t = np.ones((2,8))  # d value is borrowed from corresponding ms in proportion to d mag, both scaled by fb
     # feedback to scale m,d aves:
