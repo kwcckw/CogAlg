@@ -218,7 +218,7 @@ def cluster_edge(iG_, frame):  # edge is CG but not a connectivity cluster, just
                 _eN_ = {*eN_}
             if Val_(et, et, ave*2, fd=fd) > 0:
                 Lay = CLay(); [Lay.add_lay(link.derH[0]) for link in link_]  # single-lay derH
-                G_ += [sum2graph(frame, [node_,link_,et, Lay], fd)]  # should be += here
+                G_ += [sum2graph(frame, [node_,link_,et, Lay], fd)]
         return G_
 
     N_,L_,Et = comp_node_(iG_, ave)  # comp PP_
@@ -396,7 +396,7 @@ def comp_N(_N,N, ave, fd, angle=None, dist=None, dir=1):  # compare links, relat
     Et = np.array([M,D, 8, (_N.Et[3]+N.Et[3]) /2])  # n comp vars, inherited olp
     _y,_x = _N.yx
     y, x = N.yx
-    Link = CL(fd=fd, nodet=[_N,N], baseT=baseT, derTT=derTT, yx=np.add(_N.yx,N.yx)/2, L=dist, box=np.array([min(_y,y),min(_x,x),max(_y,y),max(_x,x)]))
+    Link = CL(nodet=[_N,N], baseT=baseT, derTT=derTT, yx=np.add(_N.yx,N.yx)/2, L=dist, box=np.array([min(_y,y),min(_x,x),max(_y,y),max(_x,x)]))
     # spec / lay:
     if M > ave and (len(N.derH) > 2 or isinstance(N,CL)):  # else derH is redundant to dext,vert
         dderH = comp_H(_N.derH, N.derH, rn, Link, Et, fd)  # comp shared layers, if any
@@ -407,12 +407,10 @@ def comp_N(_N,N, ave, fd, angle=None, dist=None, dir=1):  # compare links, relat
     if not fd and _N.altG and N.altG:
         et = _N.altG.Et + N.altG.Et  # comb val
         if Val_(et, et, ave*2, fd=1) > 0:  # eval Ds
-            dy,dx = np.subtract(_N.altG.yx, N.altG.yx)
-            Link.altL = comp_N(_N.altG, N.altG, ave*2, fd=fd, angle=[dy,dx], dist = np.hypot(dy,dx))  # fd shouldn't needed now for altG? Since we don't have empty baseT now
+            Link.altL = comp_N(_N.altG, N.altG, ave*2, fd=1)
             Et += Link.altL.Et
     Link.Et = Et
-    
-    for rev, node in zip((0,1), (N,_N)):  # reverse Link direction for   
+    for rev, node in zip((0,1), (N,_N)):  # reverse Link direction for
         if val_(Et, ave) > 0:
             if fd: node.rimt[1-rev] += [(Link,rev)]  # opposite to _N,N dir
             else:  node.rim += [(Link,dir)]
@@ -421,7 +419,6 @@ def comp_N(_N,N, ave, fd, angle=None, dist=None, dir=1):  # compare links, relat
         else:
             if fd: node.nrimt[1-rev] += [(Link,rev)]  # opposite to _N,N dir
             else:  node.nrim += [(Link,dir)]
-            
     return Link
 
 def get_rim(N,fd): return N.rimt[0] + N.rimt[1] if fd else N.rim  # add nesting in cluster_N_?
@@ -547,7 +544,7 @@ def sum_G_(node_, G=None):
 
 def L2N(link_):
     for L in link_:
-        L.fd=1; L.mL_t,L.rimt,L.nrimt=[[],[]],[[],[]],[[],[]]; L.aRad=0; L.visited_,L.extH=[],[]; L.derTTe=np.zeros((2,8))
+        L.fd=1; L.mL_t,L.rimt=[[],[]],[[],[]]; L.aRad=0; L.visited_,L.extH=[],[]; L.derTTe=np.zeros((2,8))
         if not hasattr(L,'root'): L.root=[]
     return link_
 
