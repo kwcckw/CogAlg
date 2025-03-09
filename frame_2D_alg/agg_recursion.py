@@ -4,7 +4,8 @@ from functools import reduce
 from itertools import zip_longest
 from multiprocessing import Pool, Manager
 from frame_blobs import frame_blobs_root, intra_blob_root, imread
-from vect_edge import L2N, base_comp, sum_G_, comb_H_, sum_H, copy_, comp_node_, comp_link_, sum2graph, get_rim, CG, CLay, vect_root, extend_box, Val_, val_
+from slice_edge import comp_angle
+from vect_edge import L2N, base_comp, sum_G_, comb_H_, sum_H, copy_, comp_node_, comp_link_, sum2graph, get_rim, CG, CL, CLay, vect_root, extend_box, Val_, val_
 '''
 notation:
 prefix f: flag
@@ -36,12 +37,11 @@ Similar to cross-projection by data-coordinate filters, described in "imaginatio
 '''
 ave, ave_L, max_med, icoef, ave_dist = 5, 2, 3, .5, 2
 
-def cross_comp(root, rc):  # recursion count, form agg_Level by breadth-first node_,link_ cross-comp, connect clustering, recursion
+def cross_comp(root, rc, fn=1):  # recursion count, form agg_Level by breadth-first node_,link_ cross-comp, connect clustering, recursion
 
-    fn = root is frame  # L_ cross_comp in L_clusters
+    # fn = not isinstance(root, CG)  # L_ cross_comp in L_clusters
     nest = root.nnest if fn else root.lnest  # not sure
-
-    N_,L_,Et = comp_node_(root.node_[-1].node_ if fn else root.link_, ave*rc)  # cross-comp nested node_ or initial flat link_
+    N_,L_,Et = comp_node_(root.node_[-1].node_, ave*rc) if fn else comp_link_(root.link_[-1].node_, ave*rc)  # cross-comp nested node_ or initial flat link_
 
     if Val_(Et, Et, ave*(rc+1), 1-fn) > 0:
         lay = [comb_H_(L_, root, fd=1)]
@@ -56,11 +56,11 @@ def cross_comp(root, rc):  # recursion count, form agg_Level by breadth-first no
                 if len({l for n in N_ for l,_ in n.nrim}) > ave_L:  # no nrim in CL
                     long_L_ = []; long_V = 0
                     for n in N_:
-                        for l in n.rim:
-                            co_nl_ = [nl for nl in (l.nodet[0].nrim+l.nodet[1].nrim) if comp_angle(l.baseT[2:],nl.baseT[2:])[0] > .3 and nl.L < l.L]
+                        for l, _ in n.rim:
+                            co_nl_ = [nl for nl,_ in (l.nodet[0].nrim+l.nodet[1].nrim) if comp_angle(l.baseT[2:],nl.baseT[2:])[0] > .3 and nl.L < l.L]  # min angle deviation > 0.3 & shorter negL's length?
                             # add plinks that represent actual redundancy to nlinks blocking potential redundancy?
-                            if len(co_nl_) > 3:  # potential overlap with L-clusters
-                                long_L_ += [l]; long_V += val_(n.Et)
+                            if len(co_nl_) > 3:  # potential overlap with L-clusters  (ave_L here?)
+                                long_L_ += [l]; long_V += val_(n.Et, ave)
                     if long_V > ave:
                         cluster_C_(root, rc+3)  # -> mfork G,altG exemplars, +altG surround borrow, root.derH + 1|2 lays, agg++
         # recursion:
@@ -135,11 +135,12 @@ def cluster_N_(root, L_, ave, fd, rc):  # top-down segment L_ by >ave ratio of L
             break
     # draft:
     if (root.lnest if fd else root.nnest) > nest:  # nested above
-        Lev_G = root.link_ if fd else root.nnest
+        Lev_G = root.link_[-1] if fd else root.node_[-1]  # lev_G is link_[-1] or node_[-1]
         for G in Lev_G.node_:
             if Val_(G.Et, G.Et, ave*(rc+4), fd) > 0:
                 # cross_comp link_, not root=frame:
-                cross_comp(G, rc+4)
+                G.node_ = [sum_G_(G.node_)]  # same with alt, we need single lev_G structure for the next cross_comp
+                cross_comp(G, rc+4, fn=not fd)
 ''' 
  Clustering is via connectivity for >ave short links and via centroids for >ave long links (no clear local structure)
  Connectivity clustering terminates at contour alt_Gs, with next-level cross-comp between new core+contour clusters.
@@ -205,7 +206,7 @@ def cluster_C_(root, rc):  # 0 nest gap from cluster_edge: same derH depth in ro
         N_ = [N for N in sorted([N for N in _N_[-1].node_], key=lambda n: n.Et[fn], reverse=True)]
         for N in N_: N.Ct_ = []
         for N in N_:
-            med = 1; med_ = [1]; sN_ = set([N]); node_,_n_ = sN_,sN_
+            med = 1; med_ = [1]; node_,_n_ = set([N]), set([N])  # sN is not needed?
             while med <= max_med and _n_:  # fill init C.node_: _Ns connected to N by <=3 mediation degrees
                 n_ = []
                 for _n in _n_:
@@ -341,7 +342,7 @@ def agg_H_seq(focus, image, _nestt=(1,0), rV=1, _rv_t=[]):  # recursive level-fo
         return frame
     comb_altG_(frame.node_[-1].node_, ave*2)  # PP graphs in frame.node_[2]
     # forward agg+:
-    cross_comp(frame, fn=1, rc=1, fc=0)  # node_+= edge.node_
+    cross_comp(frame, rc=1)  # node_+= edge.node_
     rM,rD = 1,1  # sum derTT coefs: m_,d_ [M,D,n,o, I,G,A,L] / Et, baseT, dimension
     rv_t = np.ones((2,8))  # d value is borrowed from corresponding ms in proportion to d mag, both scaled by fb
     # feedback to scale m,d aves:
