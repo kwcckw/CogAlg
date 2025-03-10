@@ -40,14 +40,14 @@ ave, ave_L, max_med, icoef, ave_dist, med_cost = 5, 2, 3, .5, 2, 2
 def cross_comp(root, rc, fi=1):  # recursion count, form agg_Level by breadth-first node_,link_ cross-comp, connect clustering, recursion
 
     nest = root.nnest if fi else root.lnest  # not sure
-    N_,L_,Et = comp_node_(root.node_[-1].node_, ave*rc) if fi else comp_link_(root.link_, ave*rc)  # nested node_ or flat link_
+    N_,L_,Et = comp_node_(root.node_[-1].node_, ave*rc) if fi else comp_link_(L2N(root.link_), ave*rc)  # nested node_ or flat link_
 
     if Val_(Et, Et, ave*(rc+1), fi) > 0:
-        lay = [comb_H_(L_, root, fi=1)]
+        lay = comb_H_(L_, root, fi=0)  # the additional bracket is not needed, lay should be a CLay
         if fi: root.derH += [[lay]]  # [mfork] feedback
         else: root.derH[-1] +=[lay]  # dfork
         # draft:
-        pL_ = {l for n in N_ for l,_ in get_rim(n, fi=1)}
+        pL_ = {l for n in N_ for l,_ in get_rim(n, fi=fi)}
         if len(pL_) > ave_L:
             if fi:
                 # prior to cluster_C_: use shorter links
@@ -64,24 +64,24 @@ def cross_comp(root, rc, fi=1):  # recursion count, form agg_Level by breadth-fi
                     if long_V > ave:
                         cluster_C_(root, rc+3)  # -> mfork G,altG exemplars, +altG surround borrow, root.derH + 1|2 lays, agg++
             else:
-                cluster_L_(root, pL_, ave*(rc+2), fi=0, rc=rc+2)  # CC links via llinks, no dist-nesting
+                cluster_L_(root, N_, ave*(rc+2), fi=0, rc=rc+2)  # CC links via llinks, no dist-nesting  (we need CL node here instead of lL_ here?)
                 # no cluster_C_ for links, connectivity only
         # recursion:
         if (root.nnest if fi else root.lnest) > nest:
             # nested above
             lev_G = root.node_[-1] if fi else root.link_[-1]  # cross_comp CGs in link_[-1].node_
             if Val_(lev_G.Et, lev_G.Et, ave*(rc+4), fi=1) > 0:  # or global Et?
-                cross_comp(root, rc+4)
+                cross_comp(root, rc+4)  # this call should be valid only if root.nnest > nest? Because we pack new lev_G in root.link_ if fi == 0, but fi of this cross_comp is always 1
 
             return lev_G
 
 def comp_link_(iL_, ave):  # comp CLs via directional node-mediated link tracing: der+'rng+ in root.link_ rim_t node rims
 
-    fd = isinstance(iL_[0].nodet[0], CL)
+    fi = isinstance(iL_[0].nodet[0], CG)
     for L in iL_:
         # init mL_t: bilateral mediated Ls per L:
         for rev, N, mL_ in zip((0,1), L.nodet, L.mL_t):
-            for _L,_rev in N.rimt[0]+N.rimt[1] if fd else N.rim:
+            for _L,_rev in N.rim if fi else N.rimt[0]+N.rimt[1]:
                 if _L is not L and _L in iL_:  # nodet-mediated
                     if val_(_L.Et, ave) > 0:
                         mL_ += [(_L, rev ^_rev)]  # direction of L relative to _L
@@ -94,7 +94,7 @@ def comp_link_(iL_, ave):  # comp CLs via directional node-mediated link tracing
                 for _L, rev in mL_:  # rev is relative to L
                     rn = _L.Et[2] / L.Et[2]
                     dy,dx = np.subtract(_L.yx,L.yx)
-                    Link = comp_N(_L,L, ave, fd=1, angle=[dy,dx],dist=np.hypot(dy,dx), dir = -1 if rev else 1)  # d = -d if L is reversed relative to _L
+                    Link = comp_N(_L,L, ave, fi=0, angle=[dy,dx],dist=np.hypot(dy,dx), dir = -1 if rev else 1)  # d = -d if L is reversed relative to _L
                     Link.med = med
                     LL_ += [Link]  # include -ves, link order: nodet < L < rimt, mN.rim || L
                     if val_(Link.Et, ave) > 0:  # link induction
@@ -109,9 +109,9 @@ def comp_link_(iL_, ave):  # comp CLs via directional node-mediated link tracing
                 for mL_,_mL_ in zip(mL_t, L.mL_t):
                     for _L, rev in _mL_:
                         for _rev, N in zip((0,1), _L.nodet):
-                            rim = N.rimt if fd else N.rim
+                            rim = N.rim if fi else N.rimt
                             if len(rim) == med:  # append in comp loop
-                                for __L,__rev in rim[0]+rim[1] if fd else rim:
+                                for __L,__rev in rim if fi else rim[0]+rim[1]:
                                     if __L in L.visited_ or __L not in iL_: continue
                                     L.visited_ += [__L]; __L.visited_ += [L]
                                     if val_(__L.Et, ave) > 0:  # add coef for loop induction?
@@ -202,7 +202,7 @@ def cluster_N_(root, L_, ave, fi, rc):  # top-down segment L_ by >ave ratio of L
                 # cross_comp new-G' flat link_:
                 cross_comp(n, rc+4, fi=0)
 
-def cluster_L_(root, L_, ave, fd, rc):  # CC links via direct llinks, no dist-nesting
+def cluster_L_(root, L_, ave, fi, rc):  # CC links via direct llinks, no dist-nesting
     # draft
     G_ = []
     for L in L_: L.fin = 0
@@ -210,7 +210,7 @@ def cluster_L_(root, L_, ave, fd, rc):  # CC links via direct llinks, no dist-ne
         if L.fin: continue
         L.fin = 1
         node_, link_, Et, Lay = [L], [], copy(L.Et), CLay()
-        for lL in [L.rimt[0] + L.rimt[1]]:
+        for lL, _ in L.rimt[0] + L.rimt[1]:
             link_ += [lL]; Et += lL.Et
             _L = lL.nodet[0] if lL.nodet[1] is L else lL.nodet[1]
             if not _L.fin:
@@ -314,7 +314,7 @@ def comb_altG_(G_, ave, rc=1):  # combine contour G.altG_ into altG (node_ defin
             if G.altG.node_:
                 G.altG = sum_G_(G.altG.node_)
                 G.altG.node_ = [G.altG]  # formality for single-lev_G
-                G.altG.root=G; G.altG.fd=1; G.altG.m=0
+                G.altG.root=G; G.altG.fi=0; G.altG.m=0
                 if Val_(G.altG.Et, G.Et, ave):  # alt D * G rM
                     cross_comp(G.altG, fi=1, rc=rc)  # adds nesting
         else:  # sum neg links
@@ -325,8 +325,8 @@ def comb_altG_(G_, ave, rc=1):  # combine contour G.altG_ into altG (node_ defin
                     node_ += [n for n in link.nodet if n not in node_]
                     Et += link.Et
             if link_ and Val_(Et, G.Et, ave, coef=10) > 0:  # altG-specific coef for sum neg links (skip empty Et)
-                altG = CG(root=G, Et=Et, node_=node_, link_=link_, fd=1); altG.m=0  # other attrs are not significant
-                altG.derH = sum_H(altG.link_, altG, fd=1)   # sum link derHs
+                altG = CG(root=G, Et=Et, node_=node_, link_=link_, fi=0); altG.m=0  # other attrs are not significant
+                altG.derH = sum_H(altG.link_, altG, fi=0)   # sum link derHs
                 altG.derTT = np.sum([link.derTT for link in altG.link_],axis=0)
                 G.altG = altG
 
