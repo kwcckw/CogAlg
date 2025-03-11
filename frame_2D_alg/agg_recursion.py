@@ -52,16 +52,17 @@ def cross_comp(root, rc, fi=1):  # recursion count, form agg_Level by breadth-fi
                 # prior to cluster_C_: use shorter links
                 cluster_N_(root, pL_, ave*(rc+2), fi, rc=rc+2)  # form multiple distance segments, same depth
                 cpL_ = {l for n in N_ for l,_ in n.nrim}  # no nrim in CL
-                cEt = np.sum([l.Et for l in cpL_])
-                if val_(cEt, ave*rc+3, coef=.5) > 0:  # .5 is redundancy to LC above
-                    cluster_C_(root, rc+3)  # -> mfork G,altG exemplars, +altG surround borrow, root.derH + 1|2 lays, agg++
+                if cpL_:  # nrim may empty?
+                    cEt = np.sum([l.Et for l in cpL_],axis=0)
+                    if val_(cEt, ave*rc+3, coef=.5) > 0:  # .5 is redundancy to LC above
+                        cluster_C_(root, rc+3)  # -> mfork G,altG exemplars, +altG surround borrow, root.derH + 1|2 lays, agg++
             else:
                 cluster_L_(root, N_, ave*(rc+2), rc=rc+2)  # CC links via llinks, no dist-nesting
                 # no cluster_C_ for links, connectivity only
         # recursion:
         lev_Gt = []
         for N_, nest, inest in zip((root.node_,root.link_),(root.nnest,root.lnest),(nnest,lnest)):
-            if nest > nest:  # nested above
+            if nest > inest:  # nested above  (should be > inest here)
                 lev_G = root.node_[-1] if fi else root.link_[-1]  # cross_comp CGs in link_[-1].node_
                 if Val_(lev_G.Et, lev_G.Et, ave*(rc+4), fi=1) > 0:  # or global Et?
                     cross_comp(root, rc+4)
@@ -283,11 +284,10 @@ def cluster_C_(root, rc):  # 0 nest gap from cluster_edge: same derH depth in ro
             while med <= max_med and _n_:  # fill init C.node_: _Ns connected to N by <=3 mediation degrees
                 n_ = []
                 for _n in _n_:
-                    for link in _n.link_:
-                        for node in link.nodet:
-                            if node not in _n.node_:
-                                n = node.root
-                                n_ += [n]; node_.add(n); med_ += [med]  # for med-weighted clustering
+                    root_ = set([node.root for link in _n.link_ for node in link.nodet if node not in node_])  # get unique n via _n.link_' nodet's root
+                    for n in root_:
+                        if n not in N_: continue  # root maybe from prior segment, so we skip them too?
+                        n_ += [n]; node_.add(n); med_ += [med]  # for med-weighted clustering
                 med += 1; _n_ = n_  # mediated __Ns
             C = sum_C(list(node_))
             for n, med in zip(node_,med_): n.Ct_ += [[C,0,med]]  # empty m, same n in multiple Ns
@@ -419,7 +419,7 @@ def agg_H_seq(focus, image, _nestt=(1,0), rV=1, _rv_t=[]):  # recursive level-fo
     rM,rD = 1,1  # sum derTT coefs: m_,d_ [M,D,n,o, I,G,A,L] / Et, baseT, dimension
     rv_t = np.ones((2,8))  # d value is borrowed from corresponding ms in proportion to d mag, both scaled by fb
     # feedback to scale m,d aves:
-    for fd, nest,_nest, Q in zip((0,1), (frame.nnest,frame.lnest), _nestt, (frame.node_[2:],frame.link_[1:])):  # skip blob_,PP_,link_PP_
+    for fd, nest,_nest, Q in zip((0,1), (frame.nnest,frame.lnest), _nestt, (frame.node_[1:],frame.link_)):  # skip blob_,PP_,link_PP_ (should be frame.node_[1:],frame.link_ now)
         if nest==_nest: continue  # no new nesting
         hG = Q[-1]  # top level, no feedback
         for lev_G in reversed(Q[:-1]):
