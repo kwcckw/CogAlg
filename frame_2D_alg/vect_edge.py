@@ -131,8 +131,8 @@ def copy_(N):
         if name == '_id' or name == "Ct_": continue  # skip id and Ct_
         elif name == 'derH':
             for lay in N.derH:
-                if N.fi:  C.derH += [[fork.copy_(root=C) for fork in lay]]
-                else:     C.derH += [lay.copy_(root=C)]  # CLay
+                if N.fi: C.derH +=[[fork.copy_(root=C) for fork in lay]]
+                else:    C.derH +=[lay.copy_(root=C)]  # CLay
         elif name == 'extH':
             C.extH = [lay.copy_(root=C) for lay in N.extH]
         elif isinstance(value,list) or isinstance(value,np.ndarray):

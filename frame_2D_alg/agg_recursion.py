@@ -5,7 +5,7 @@ from itertools import zip_longest
 from multiprocessing import Pool, Manager
 from frame_blobs import frame_blobs_root, intra_blob_root, imread
 from slice_edge import comp_angle
-from vect_edge import L2N, base_comp, comp_N, sum_G_, comb_H_, sum_H, copy_, comp_node_, sum2graph, get_rim, CG, CL, CLay, vect_root, Val_, val_
+from vect_edge import L2N, base_comp, comp_N, sum_G_, comb_H_, sum_H, copy_, comp_node_, sum2graph, get_rim, CG, CLay, vect_root, Val_, val_
 '''
 notation:
 prefix f: flag
@@ -39,41 +39,35 @@ ave, ave_L, max_med, icoef, ave_dist, med_cost = 5, 2, 3, .5, 2, 2
 
 def cross_comp(root, rc, fi=1):  # recursion count, form agg_Level by breadth-first node_,link_ cross-comp, connect clustering, recursion
 
-    nest = root.nnest if fi else root.lnest  # not sure
+    nnest, lnest = root.nnest, root.lnest
     N_,L_,Et = comp_node_(root.node_[-1].node_, ave*rc) if fi else comp_link_(L2N(root.link_), ave*rc)  # nested node_ or flat link_
 
     if Val_(Et, Et, ave*(rc+1), fi) > 0:
-        lay = comb_H_(L_, root, fi=0)  # the additional bracket is not needed, lay should be a CLay
+        lay = comb_H_(L_, root, fi=0)
         if fi: root.derH += [[lay]]  # [mfork] feedback
         else: root.derH[-1] +=[lay]  # dfork
-        # draft:
         pL_ = {l for n in N_ for l,_ in get_rim(n, fi=fi)}
         if len(pL_) > ave_L:
             if fi:
                 # prior to cluster_C_: use shorter links
                 cluster_N_(root, pL_, ave*(rc+2), fi, rc=rc+2)  # form multiple distance segments, same depth
-                if len({l for n in N_ for l,_ in n.nrim}) > ave_L:  # no nrim in CL
-                    long_L_ = []; long_V = 0
-                    for n in N_:
-                        for l, _ in n.rim:
-                            co_nl_ = [nl for nl,_ in (l.nodet[0].nrim+l.nodet[0].rim + l.nodet[1].nrim)+l.nodet[1].rim
-                                      if comp_angle(l.baseT[2:],nl.baseT[2:])[0] > .3 and nl.L < l.L]
-                                      # intermediate p+n links represent likely redundancy to CCs
-                            if len(co_nl_) > 3:  # potential overlap with L-clusters
-                                long_L_ += [l]; long_V += val_(n.Et, ave)
-                    if long_V > ave:
-                        cluster_C_(root, rc+3)  # -> mfork G,altG exemplars, +altG surround borrow, root.derH + 1|2 lays, agg++
+                cpL_ = {l for n in N_ for l,_ in n.nrim}  # no nrim in CL
+                cEt = np.sum([l.Et for l in cpL_])
+                if val_(cEt, ave*rc+3, coef=.5) > 0:  # .5 is redundancy to LC above
+                    cluster_C_(root, rc+3)  # -> mfork G,altG exemplars, +altG surround borrow, root.derH + 1|2 lays, agg++
             else:
-                cluster_L_(root, N_, ave*(rc+2), fi=0, rc=rc+2)  # CC links via llinks, no dist-nesting  (we need CL node here instead of lL_ here?)
+                cluster_L_(root, N_, ave*(rc+2), rc=rc+2)  # CC links via llinks, no dist-nesting
                 # no cluster_C_ for links, connectivity only
         # recursion:
-        if (root.nnest if fi else root.lnest) > nest:
-            # nested above
-            lev_G = root.node_[-1] if fi else root.link_[-1]  # cross_comp CGs in link_[-1].node_
-            if Val_(lev_G.Et, lev_G.Et, ave*(rc+4), fi=1) > 0:  # or global Et?
-                cross_comp(root, rc+4)  # this call should be valid only if root.nnest > nest? Because we pack new lev_G in root.link_ if fi == 0, but fi of this cross_comp is always 1
-
-            return lev_G
+        lev_Gt = []
+        for N_, nest, inest in zip((root.node_,root.link_),(root.nnest,root.lnest),(nnest,lnest)):
+            if nest > nest:  # nested above
+                lev_G = root.node_[-1] if fi else root.link_[-1]  # cross_comp CGs in link_[-1].node_
+                if Val_(lev_G.Et, lev_G.Et, ave*(rc+4), fi=1) > 0:  # or global Et?
+                    cross_comp(root, rc+4)
+                lev_Gt += [lev_G]
+            else: lev_Gt+=[[]]
+        return lev_Gt
 
 def comp_link_(iL_, ave):  # comp CLs via directional node-mediated link tracing: der+'rng+ in root.link_ rim_t node rims
 
@@ -127,13 +121,15 @@ def comp_link_(iL_, ave):  # comp CLs via directional node-mediated link tracing
     return out_L_, LL_, ET
 
 ''' 
- Cluster via connectivity for >ave short links, and via centroids for >ave long links (no clear local structure)
- Connectivity clustering terminates at contour alt_Gs, with next-level cross-comp between new core+contour clusters.
+ Connectivity clustering (LC) is local, by short links: stable due to less interference?)
+ Centroid clustering (CC) by any links, regardless of local structure, val /= n_overlapping_LCs.
+ 
+ LC min distance is more restrictive than in cross-comp, due to density eval and optional use of resulting links in CC.
+ LC terminates at contour alt_Gs, with next-level cross-comp between new core+contour clusters.
 
- Connectivity clustering is partly generative, forming new derivatives and structured composition levels, 
- centroid clustering is strictly compressive, by similarity, without forming new differences. 
- '''
-
+ LC is mainly generative: complexity of new derivatives and structured composition levels is greater than compression by LC 
+ CC is strictly compressive, by similarity, no new diff representation. 
+'''
 def cluster_N_(root, L_, ave, fi, rc):  # top-down segment L_ by >ave ratio of L.dists
 
     nest = root.nnest if fi else root.lnest  # same process for nested link_?
@@ -202,20 +198,21 @@ def cluster_N_(root, L_, ave, fi, rc):  # top-down segment L_ by >ave ratio of L
                 # cross_comp new-G' flat link_:
                 cross_comp(n, rc+4, fi=0)
 
-def cluster_L_(root, L_, ave, fi, rc):  # CC links via direct llinks, no dist-nesting
-    # draft
-    G_ = []
+def cluster_L_(root, L_, ave, rc):  # CC links via direct llinks, no dist-nesting
+
+    G_ = []  # flood-filled link clusters
     for L in L_: L.fin = 0
     for L in L_:
         if L.fin: continue
         L.fin = 1
         node_, link_, Et, Lay = [L], [], copy(L.Et), CLay()
         for lL, _ in L.rimt[0] + L.rimt[1]:
+            # eval by directional density?
             link_ += [lL]; Et += lL.Et
             _L = lL.nodet[0] if lL.nodet[1] is L else lL.nodet[1]
             if not _L.fin:
                 _L.fin = 1; node_ += [_L]
-        if Val_(Et, Et, ave) > 0:  # cluster node roots:
+        if Val_(Et, Et, ave) > 0:
             Lay = CLay()
             [Lay.add_lay(l) for l in sum_H(link_, root, fi=0)]
             G_ += [sum2graph(root, [list({*node_}), link_, Et, Lay], 0)]
@@ -223,7 +220,6 @@ def cluster_L_(root, L_, ave, fi, rc):  # CC links via direct llinks, no dist-ne
         [comb_altG_(G.altG.node_, ave, rc) for G in G_]
         root.link_ += [sum_G_(G_)]
         root.lnest += 1
-
 
 def cluster_C_(root, rc):  # 0 nest gap from cluster_edge: same derH depth in root and top Gs
 
@@ -243,8 +239,8 @@ def cluster_C_(root, rc):  # 0 nest gap from cluster_edge: same derH depth in ro
 
     def refine_C_(C_):  # refine weights in fuzzy C cluster around N, in root node_| link_
         '''
-        - compare center-node pairs, weigh match by center-node distance (inverse ave similarity),
-        - suppress non-max cluster_sum in center-node pairs: ave * cluster overlap ((dist/max_dist)**2)
+        - compare mean-node pairs, weigh match by center-node distance (inverse ave similarity),
+        - suppress non-max cluster_sum in mean-node pairs: ave * cluster overlap | (dist/max_dist)**2
         - delete weak clusters, recompute cluster_sums of mean-to-node matches / remaining cluster overlap
         '''
         remove_ = []
@@ -445,7 +441,7 @@ def agg_H_seq(focus, image, _nestt=(1,0), rV=1, _rv_t=[]):  # recursive level-fo
             if y > 0 and x > 0 and Y < image.shape[0] and X < image.shape[1]:  # focus is inside the image
                 # rerun agg+ with new focus and aves:
                 agg_H_seq(image[y:Y,x:X], image, (frame.nnest,frame.lnest), rV, rv_t)
-                # all aves *= rV, but ultimately differential weight backprop?
+                # all aves *= rV, but ultimately differential backprop per ave?
     return frame
 
 def max_g_window(i__, wsize=64):  # set min,max coordinate filters, updated by feedback to shift the focus
