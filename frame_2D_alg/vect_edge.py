@@ -364,9 +364,6 @@ def comp_N(_N,N, ave, fi, angle=None, dist=None, dir=1):  # compare links, relat
             else:  node.rimt[1-rev] += [(Link,rev)]  # opposite to _N,N dir
             add_H(node.extH, Link.derH, root=node, rev=rev, fi=0)
             node.Et += Et
-        else:
-            if fi: node.nrim += [(Link,dir)]  # opposite to _N,N dir
-            # else:  node.nrimt[1-rev] += [(Link,rev)]   (nrimt is not needed?)
     return Link
 
 def get_rim(N,fi): return N.rim if fi else N.rimt[0] + N.rimt[1]  # add nesting in cluster_N_?
@@ -379,11 +376,11 @@ def sum2graph(root, grapht, fi, minL=0, maxL=None):  # sum node and link params 
         derTT=Lay.derTT, derH = [[Lay]] if fi else [Lay])  # higher layers are added by feedback, dfork added from comp_link_:
     for L in link_:
         L.root = graph  # reassign when L is node
-        if not fi:  # fd mfork is link.nodet(CL).root dfork
+        if not fi:  # add mfork as link.nodet(CL).root dfork
             LR_ = set([n.root for n in L.nodet if isinstance(n.root, CG)])  # skip frame, empty roots
             if LR_:
                 lay = reduce(lambda Lay, lay: Lay.add_lay(lay), L.derH, CLay())  # combine lL.derH
-                for LR in LR_:  # lay0+= dfork (if n is CL, their root is flat ? So we can skip this if n is CL?)
+                for LR in LR_:  # lay0+= dfork
                     if len(LR.derH[0])==2: LR.derH[0][1].add_lay(lay)  # direct root only
                     else:                  LR.derH[0] += [lay.copy_(root=LR)]
                     LR.derTT += lay.derTT
