@@ -42,7 +42,7 @@ def cross_comp(root, rc, fi=1):  # recursion count, form agg_Level by breadth-fi
     nnest, lnest = root.nnest, root.lnest
     N_,L_,Et = comp_node_(root.node_[-1].node_, ave*rc) if fi else comp_link_(L2N(root.link_), ave*rc)  # nested node_ or flat link_
 
-    if Val_(Et, Et, ave*(rc+1), fi) > 0:
+    if Val_(Et, Et, ave*(rc+1), fi=fi) > 0:  # we need to specify fi, else it becomes coef
         lay = comb_H_(L_, root, fi=0)
         if fi: root.derH += [[lay]]  # [mfork] feedback
         else: root.derH[-1] +=[lay]  # dfork
@@ -164,6 +164,8 @@ def cluster_N_(root, L_, ave, fi, rc):  # top-down segment L_ by >ave ratio of L
                             if L.L < max_dist:
                                 link_+=[L]; et+=L.Et
                 _eN_ = {*eN_}
+                
+            if not link_: continue  # when the first _L breaks, all other L.L should have longer L and not link_ will be added
             link_ = list({*link_});  Lay = CLay()
             [Lay.add_lay(lay) for lay in sum_H(link_, root, fi=0)]
             derTT = Lay.derTT
@@ -353,7 +355,7 @@ def centroid_M_(m_, M, ave):  # adjust weights on attr matches | diffs, recomput
         w_ = m_ / min(M, 1/M)  # rational deviations from the mean
         # in range 0:1, or 0:2: w = min(m/M, M/m) + mean(min(m/M, M/m))?
         Dw = np.sum( np.abs(w_-_w_))  # weight update
-        m_[:] = m_ * w_  # replace in each cycle?
+        m_[:] = (m_ * w_) / np.sum(m_)  # replace in each cycle? (normalize m_? Else it grows very large and we get infinity value of M later)
         M = np.sum(m_)  # weighted M update
         if Dw > ave:
             _w_ = w_
