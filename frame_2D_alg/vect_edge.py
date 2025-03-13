@@ -478,15 +478,13 @@ def sum_G_(node_, G=None):
     if G is None:
         G = copy_(node_[0]); G.node_ = [node_[0]]; G.link_ = []; node_=node_[1:]
     for n in node_:
-        if n not in G.node_: G.node_ += [n]  # prevent packing a same n in alts
+        if n not in G.node_: G.node_ += [n]  # prevent packing same n in alts
         G.baseT += n.baseT; G.derTT += n.derTT; G.Et += n.Et;  G.yx += n.yx
-        if G.fi: 
-            G.derTTe += n.derTTe  # G.Ete?
-            G.aRad += n.aRad
-            if n.extH:
-                add_H(G.extH, n.extH, root=G, fi=0)  # empty in centroid, flat in extH?
-        if n.derH:
-            add_H(G.derH, n.derH, root=G, fi=G.fi)
+        if G.fi:
+            G.derTTe += n.derTTe; G.aRad += n.aRad
+            if n.extH: add_H(G.extH, n.extH, root=G, fi=0)
+            # empty in centroid?
+        if n.derH: add_H(G.derH, n.derH, root=G, fi=G.fi)
         G.box = extend_box( G.box, n.box)  # extended per separate node_ in centroid
     return G
 

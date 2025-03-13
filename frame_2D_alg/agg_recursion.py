@@ -243,6 +243,7 @@ def cluster_C_(root, L_, rc, fi):  # 0 nest gap from cluster_edge: same derH dep
         '''
         remove_ = []
         for C in C_:
+            r = 0  # recursion count
             while True:
                 C.M = 0; dM = 0  # pruned nodes and values, or comp all nodes again?
                 for N in C.node_:
@@ -254,7 +255,8 @@ def cluster_C_(root, L_, rc, fi):  # 0 nest gap from cluster_edge: same derH dep
                         if _C is C:
                             vm = m - ave * (max_med/2 /_med) * (i+1) * (len(C.node_ & _C.node_) / (len(C.node_)+len(_C.node_)))
                             # ave * inverse med deviation (lower ave m) * redundancy * relative node_ overlap between clusters
-                            dm = _m-vm; dM += dm  # m is init 0, so dm will be positive only if vm is negative
+                            dm = (_m-vm) if r else vm  # replace init 0
+                            dM += dm
                             _C.M += dm
                             if _C.M > ave: N.Ct_[i][1] = vm
                             else:          N.Ct_.pop(i)
@@ -266,10 +268,11 @@ def cluster_C_(root, L_, rc, fi):  # 0 nest gap from cluster_edge: same derH dep
                     break
                 if dM > ave: C = sum_C(list(C.node_))  # recompute centroid, or ave * iterations: cost increase?
                 else: break
-        C_[:] = [C for C in C_ if C not in remove_]  # we need [:] to reassign back C_
+                r += 1
+        C_[:] = [C for C in C_ if C not in remove_]
 
     ave = globals()['ave'] * rc  # recursion count
-    C_ = []  # centroid clusters for next cross_comp
+    C_ = []  # form centroid clusters for next cross_comp
     N_ = list(set([node for link in L_ for node in link.nodet]))
     for N in N_: N.Ct_ = []
     N_ = sorted(N_, key=lambda n: n.Et[fi], reverse=True)
@@ -277,7 +280,7 @@ def cluster_C_(root, L_, rc, fi):  # 0 nest gap from cluster_edge: same derH dep
         if N.Et[0] < ave: break
         med = 1; med_ = [1]; node_,_n_ = [[N]],[N]  # node_ is nested
         while med <= max_med and _n_:  # fill init C.node_: _Ns connected to N by <=3 mediation degrees
-            n_ = [n for _n in _n_ for link,_ in _n.rim for n in link.nodet if n is not N]  # rim_n_  (skip self)
+            n_ = [n for _n in _n_ for link,_ in _n.rim for n in link.nodet]
             med += 1
             n_ = list(set(n_))
             node_ += [n_]; med_ += [med]
@@ -414,8 +417,8 @@ def agg_H_seq(focus, image, _nestt=(1,0), rV=1, _rv_t=[]):  # recursive level-fo
     rv_t = np.ones((2,8))  # d value is borrowed from corresponding ms in proportion to d mag, both scaled by fb
     # feedback to scale m,d aves:
     # draft:
-    frame_link_ = [[link for n in lev_G.node_ for link in n.link_ if isinstance(link, CG)] for lev_G in frame.node_[1:] ]
-    frame_link_ = [sum_G_(dG_) if dG_ else []  for dG_ in frame_link_]  # convert to lev_G
+    frame_link_ = [[[L for L in n.link_] for n in lev_G.node_] for lev_G in frame.node_[1:]]
+    # L is CL if link_ is flat, else lev_G, in top node_ only?
     for fd, nest,_nest, Q in zip((0,1), (frame.nnest,frame.lnest), _nestt, (frame.node_[1:],frame_link_)):  # skip blob_
         if nest==_nest: continue  # no new nesting
         hG = Q[-1]  # top level, no feedback
