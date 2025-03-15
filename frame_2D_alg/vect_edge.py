@@ -57,13 +57,13 @@ class CLay(CBase):  # layer of derivation hierarchy
     def copy_(lay, root=None, rev=0, i=None):  # comp direction may be reversed to -1
 
         if i:  # reuse self
-            C = lay; lay = i; C.node_=copy(i.node_); C.link_ = copy(i.link_); C.derTT=[]; C.root=root
+            C = lay; lay = i; C.node_=copy(i.node_); C.link_ = copy(i.link_); C.derTT=np.zeros((2,8)); C.root=root
         else:  # init new C
             C = CLay(root=root, node_=copy(lay.node_), link_=copy(lay.link_))
         C.Et = copy(lay.Et)
 
         for fd, tt in enumerate(lay.derTT):  # nested array tuples
-            C.derTT += [tt * -1 if (rev and fd) else deepcopy(tt)]
+            C.derTT[fd] += tt * -1 if (rev and fd) else deepcopy(tt)
 
         if not i: return C
 
@@ -329,6 +329,7 @@ def base_comp(_N, N, dir=1):  # comp Et, Box, baseT, derTT
     d_ = (_i_ - i_ * dir)  # np.arrays
     _a_,a_ = np.abs(_i_),np.abs(i_)
     m_ = np.divide( np.minimum(_a_,a_), reduce(np.maximum, [_a_,a_,1e-7]))  # rms
+    # negative here
     m_ *= np.where((_i_<0) != (i_<0), -1,1)  # match is negative if comparands have opposite sign
 
     # each [M,D,n,o, I,G,A,L]:

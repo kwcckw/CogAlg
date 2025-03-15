@@ -151,34 +151,36 @@ def cluster_N_(root, L_, ave, rc):  # top-down segment L_ by >ave ratio of L.dis
                     _L = L; N_ += L.nodet; et += L.Et  # else skip weak link inside segment
             else:
                 i -= 1; break  # terminate contiguous-distance segment
-        if len(N_) < ave_L or et[0] < ave*ccoef: continue
-        # else cluster N_ of current distance segment:
-        G_ = []
+
+        # the section below should be within the if loop, since we still need the "L_ = L_[i + 1:]"
         max_dist = _L.L
-        for N in {*N_}:
-            if N.fin: continue  # clustered from prior _N_
-            _eN_,node_,link_,et, = [N],[],[], np.zeros(4)
-            while _eN_:
-                eN_ = []
-                for eN in _eN_:  # cluster rim-connected ext Ns, all in root Gt
-                    node_+=[eN]; eN.fin = 1  # all rim
-                    for L,_ in get_rim(eN, fi=1):  # all +ve
-                        if L not in link_:
-                            eN_ += [n for n in L.nodet if not n.fin]
-                            if L.L < max_dist:
-                                link_+=[L]; et+=L.Et
-                _eN_ = {*eN_}
-            # Gt:
-            link_ = list({*link_});  Lay = CLay()
-            [Lay.add_lay(lay) for lay in sum_H(link_, root, fi=0)]
-            derTT = Lay.derTT
-            # weigh m_|d_ by similarity to mean m|d, replace derTT:
-            _,m_,M = centroid_M_(derTT[0], np.sum(derTT[0]), ave)
-            _,d_,D = centroid_M_(derTT[1], np.sum(derTT[1]), ave)
-            et[:2] = M,D; Lay.derTT = np.array([m_,d_])
-            # cluster roots:
-            if Val_(et, Et, ave) > 0:
-                G_ += [sum2graph(root, [list({*node_}),link_, et, Lay], 1, min_dist, max_dist)]
+        G_ = []
+        if len(N_) > ave_L and et[0] > ave*ccoef: 
+            # else cluster N_ of current distance segment:
+            for N in {*N_}:
+                if N.fin: continue  # clustered from prior _N_
+                _eN_,node_,link_,et, = [N],[],[], np.zeros(4)
+                while _eN_:
+                    eN_ = []
+                    for eN in _eN_:  # cluster rim-connected ext Ns, all in root Gt
+                        node_+=[eN]; eN.fin = 1  # all rim
+                        for L,_ in get_rim(eN, fi=1):  # all +ve
+                            if L not in link_:
+                                eN_ += [n for n in L.nodet if not n.fin]
+                                if L.L < max_dist:
+                                    link_+=[L]; et+=L.Et
+                    _eN_ = {*eN_}
+                # Gt:
+                link_ = list({*link_});  Lay = CLay()
+                [Lay.add_lay(lay) for lay in sum_H(link_, root, fi=0)]
+                derTT = Lay.derTT
+                # weigh m_|d_ by similarity to mean m|d, replace derTT:
+                _,m_,M = centroid_M_(derTT[0], np.sum(derTT[0]), L=len(derTT[0]), ave=ave)
+                _,d_,D = centroid_M_(derTT[1], np.sum(derTT[1]), L=len(derTT[1]), ave=ave)
+                et[:2] = M,D; Lay.derTT = np.array([m_,d_])
+                # cluster roots:
+                if Val_(et, Et, ave) > 0:
+                    G_ += [sum2graph(root, [list({*node_}),link_, et, Lay], 1, min_dist, max_dist)]
         # longer links:
         L_ = L_[i + 1:]
         if L_: min_dist = max_dist  # next loop connects current-distance clusters via longer links
