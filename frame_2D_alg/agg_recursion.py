@@ -61,11 +61,11 @@ def cross_comp(root, rc, fi=1):  # recursion count, form agg_Level by breadth-fi
                 # no cluster_C_ for links, connectivity only
         # recursion:
         lev_Gt = []
-        for N_, nest, inest in zip((root.node_,root.link_),(root.nnest,root.lnest),(nnest,lnest)):
+        for fi, N_, nest, inest in zip((1,0), (root.node_,root.link_),(root.nnest,root.lnest),(nnest,lnest)):
             if nest > inest:  # nested above
-                lev_G = root.node_[-1] if fi else root.link_[-1]  # cross_comp CGs in link_[-1].node_
-                if Val_(lev_G.Et, lev_G.Et, ave*(rc+4), fi=1) > 0:  # or global Et?
-                    cross_comp(root, rc+4)
+                lev_G = N_[-1]  # cross_comp CGs in link_[-1].node_
+                if Val_(lev_G.Et, lev_G.Et, ave*(rc+4), fi=fi) > 0:  # or global Et?
+                    cross_comp(root, rc+4, fi=fi)  # this cross_comp is per node_ or link_ so we need to parse different fi here?
                 lev_Gt += [lev_G]
             else: lev_Gt+=[[]]
         return lev_Gt

@@ -382,8 +382,12 @@ def sum2graph(root, grapht, fi, minL=0, maxL=None):  # sum node and link params 
             if LR_:
                 lay = reduce(lambda Lay, lay: Lay.add_lay(lay), L.derH, CLay())  # combine lL.derH
                 for LR in LR_:  # lay0+= dfork
-                    if len(LR.derH[0])==2: LR.derH[0][1].add_lay(lay)  # direct root only
-                    else:                  LR.derH[0] += [lay.copy_(root=LR)]
+                    if LR.fi:
+                        if len(LR.derH[0])==2: LR.derH[0][1].add_lay(lay)  # direct root only
+                        else:                  LR.derH[0] += [lay.copy_(root=LR)]
+                    else:  # L.nodet is CL, LR is dgraph
+                        if len(LR.derH)>1: LR.derH[1].add_lay(lay)  # direct root only
+                        else:              LR.derH += [lay]  # add dlay                                     
                     LR.derTT += lay.derTT
     N_, yx_ = [],[]
     for i, N in enumerate(node_):
