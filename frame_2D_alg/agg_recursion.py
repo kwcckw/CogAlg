@@ -40,7 +40,7 @@ ave, ave_L, max_med, icoef, lcoef, ccoef, ave_dist, med_cost = 5, 2, 3, .5, 3, 1
 def cross_comp(root, rc, iL_=[]):  # recursion count, form agg_Level by breadth-first node_,link_ cross-comp, connect clustering, recursion
 
     nnest, lnest = root.nnest, root.lnest  # default root is frame
-    fi = not iL_
+    fi = not iL_; lev_G = None
     N_,L_,Et = comp_node_(root.node_[-1].node_, ave*rc) if fi else comp_link_(L2N(iL_), ave*rc)   # nested node_ or flat link_
 
     if val_(Et, Et, ave*(rc+1), fi) > 0:
@@ -54,10 +54,10 @@ def cross_comp(root, rc, iL_=[]):  # recursion count, form agg_Level by breadth-
         if val_(lEt, lEt, ave*(rc+2), fi=1, coef=ccoef) > 0:  # or rc += 1?
             if fi:
                 lev_seg_ = cluster_N_(root, pL_, ave*(rc+2), rc=rc+2)  # form multiple distance segments
-                lev_G = sum_G_(lev_seg_)
+                lev_G = sum_G_([lev_seg for lev_seg in lev_seg_ if lev_seg])  # skip empty list
                 if lEt[0] > ave*(rc+3) * lEt[3] * ccoef:  # shorter links are redundant to LC above: rc+ 1 | LC_link_ / pL_?
                     lev_C = cluster_C_(pL_, rc+3)  # mfork G,altG exemplars, +altG surround borrow, root.derH + 1|2 lays, agg++
-                    lev_G = sum_G_([lev_G,lev_C])  # draft, add lev_G.nnest?
+                    if lev_C: lev_G = sum_G_([lev_G,lev_C])  # draft, add lev_G.nnest?
                 # if CC_V > LC_V: delete root.node_[-2]:LC_, [-1] is CC_?
             else:
                 lev_G = cluster_L_(root, N_, ave*(rc+2), rc=rc+2)  # via llinks, no dist-nesting, no cluster_C_
@@ -80,8 +80,8 @@ def cross_comp(root, rc, iL_=[]):  # recursion count, form agg_Level by breadth-
                 lev_Gt[0] = [lev_g]  # replace with deeper nesting
 
         # return combined sub-forks, may be empty:
-        lev_G = sum_G_(lev_Gt) if lev_Gt else []
-        return lev_G, L_
+        lev_G = sum_G_(lev_Gt) if lev_Gt else []  # both lev_G has different derH structure here,so we need to change flat dgraph.derH into nested?
+    return lev_G, L_
 
 def comp_link_(iL_, ave):  # comp CLs via directional node-mediated link tracing: der+'rng+ in root.link_ rim_t node rims
 
@@ -191,15 +191,15 @@ def cluster_N_(root, L_, ave, rc):  # top-down segment L_ by >ave ratio of L.dis
                     G_ += [sum2graph(root, [list({*node_}),link_, et, Lay], 1, min_dist, max_dist)]
             else:
                 G_ += N_  # unclustered nodes
+              
+        # if we need lev_seg in each segment, we should apply sum_G_ with each G_ here
+        [comb_altG_(G.altG.node_, ave, rc) for G in G_]
+        G_ = sum_G_(G_)
+        G_t += [G_]  # may be empty 
         # longer links:
         L_ = L_[i + 1:]
         if L_: min_dist = max_dist  # next loop connects current-distance clusters via longer links
-        else:
-            if G_:
-                [comb_altG_(G.altG.node_, ave, rc) for G in G_]
-                G_ = sum_G_(G_)
-            G_t += [G_]  # may be empty
-            break
+        else:  break
     # lev_G is dist_seg list, may be empty:
     return G_t
 
@@ -426,10 +426,9 @@ def agg_H_seq(focus, image, _nestt=(1,0), rV=1, _rv_t=[]):  # recursive level-fo
     rM,rD = 1,1  # sum derTT coefs: m_,d_ [M,D,n,o, I,G,A,L] / Et, baseT, dimension
     rv_t = np.ones((2,8))
     # d value is borrowed from corresponding ms in proportion to d mag, both scaled by fb
-    frame_lnest = max(n.lnest for n in frame.node_[-1])
-    frame_link_ = [lG for lev_G in frame.node_[-1] for n in lev_G.node_ for lG in n.link_[-1] if n.lnest == frame_lnest]
+    frame_link_ = [lG for n in frame.node_[-1].node_ if n.lnest == frame.lnest for lG in n.link_[-1]]
     # feedback to scale m,d weights:
-    for fd, nest,_nest, Q in zip((0,1), (frame.nnest,frame_lnest), _nestt, (frame.node_[1:],frame_link_)):  # skip blob_
+    for fd, nest,_nest, Q in zip((0,1), (frame.nnest,frame.lnest), _nestt, (frame.node_[1:],frame_link_)):  # skip blob_
         if nest==_nest: continue  # no new nesting
         hG = Q[-1]  # top level, no feedback
         for lev_G in reversed(Q[:-1]):  # CG or CL
