@@ -55,7 +55,8 @@ def cross_comp(root, rc, iL_=[]):  # recursion count, form agg_Level by breadth-
                 lev_N = cluster_N_(root, pL_, ave*(rc+2), rc=rc+2)  # combine distance segments
                 if lEt[0] > ave*(rc+3) * lEt[3] * ccoef:  # shorter links are redundant to LC above: rc+ 1 | LC_link_ / pL_?
                     lev_C = cluster_C_(pL_, rc+3)  # mfork G,altG exemplars, +altG surround borrow, root.derH + 1|2 lays, agg++
-                    lev_N = sum_G_([lev_N,lev_C])  # two nodes?
+                    lev_ = [lev_N] if lev_N else [] + [lev_C] if lev_C else []  # both lev_N and lev_C may empty
+                    if lev_: lev_N = sum_G_(lev_)  # two nodes? 
                 # if CC_V > LC_V: delete root.node_[-2]:LC_, [-1] is CC_?
             else:
                 lev_N = cluster_L_(root, N_, ave*(rc+2), rc=rc+2)  # via llinks, no dist-nesting, no cluster_C_
@@ -63,20 +64,20 @@ def cross_comp(root, rc, iL_=[]):  # recursion count, form agg_Level by breadth-
                 if val_(lev_N.Et, lev_N.Et, ave*(rc+4), fi=1, coef=lcoef) > 0:  # or global _Et?
                     # m_fork recursion:
                     nG = cross_comp(root, rc+4)  # xcomp root.node_[-1]
-                    if nG: lev_N = nG[0]  # incr nesting
+                    if nG: lev_N = nG  # incr nesting  (cross_comp returns single lev_G now)
         # d_fork:
         if val_(lEt, lEt, ave*(rc+2), fi=0, coef=lcoef) > 0:
             # comp L_, d_fork recursion:
             lG = cross_comp(root, rc+4, iL_=L_)
-            if lG: lev_L = lG[0]
+            if lG: lev_L = lG
         lev_G = []
         if lev_L:
             root.link_ += [lev_L]; root.lnest = lev_L.nnest
         if lev_N:
             root.node_ += [lev_N]; root.nnest = lev_N.nnest
             if lev_L: lev_G = sum_G_([lev_N,lev_L], merge=1)  # merge forks
-            else:     lev_G = lev_N.copy_(root=root, node=[lev_N,[]])
-        elif lev_L:   lev_G = lev_L.copy_(root=root, node=[[],lev_L])
+            else:     lev_G = copy_(lev_N); lev_G.root=root; lev_G.node=[lev_N,[]]
+        elif lev_L:   lev_G = copy_(lev_L); lev_G.root=root, lev_G.node=[[],lev_L]
 
         if lev_G:
             return lev_G

@@ -233,6 +233,8 @@ def val_(Et, _Et, ave, coef=1, fi=1):  # m|d cluster|batch eval, + cross|root _E
 
     m, d, n, o = Et; _m,_d,_n,_o = _Et  # cross-fork induction of root Et alt, same overlap?
 
+    if n == 0: return 0  # if Et didn't have any accumulated values, return 0? Else we are getting zero division in the line below too
+
     d_loc = d * (_m - ave * coef * (_n/n))  # diff * co-projected m deviation, no bilateral deviation?
     d_ave = d - avd * ave  # d deviation, ave_d is always relative to ave m
 
@@ -273,7 +275,7 @@ def comp_node_(_N_, ave, L=0):  # rng+ forms layer of rim and extH per N, append
             else:
                 Gp_ += [Gp]  # re-evaluate not-compared pairs with one incremented N.M
         ET += Et
-        if val_(Et, ave) > 0:  # current-rng vM
+        if val_(Et, Et, ave) > 0:  # current-rng vM  (Et is missed out)
             _Gp_ = [Gp for Gp in Gp_ if Gp[0].add or Gp[1].add]  # one incremented N.M
             rng += 1
         else:  # low projected rng+ vM
@@ -446,12 +448,17 @@ def add_H(H, h, root, rev=0, fi=1):  # add fork L.derHs
 
 def add_merge_H(H, h, root, rev=0):  # add derHs between forks
 
-    for Lay,lay in zip_longest(H,h):  # different len if lay-selective comp
+    for i, (Lay,lay) in enumerate(zip_longest(H,h)):  # different len if lay-selective comp
         if lay:
-            if isinstance(lay,list): lay = lay[0].add_lay(lay[1],rev=rev)  # two forks
+            if isinstance(lay,list): 
+                lay_ = lay;  lay = lay[0].copy_(root=lay[0].root, rev=rev)  # create 
+                for llay in lay_[1:]: lay.add_lay(llay, rev=rev)  # run if two forks, else skip
             if Lay:
-                if isinstance(Lay,list): Lay = Lay[0].add_lay(Lay[1], rev=rev)  # two forks
+                if isinstance(Lay,list): 
+                    Lay_ = Lay; Lay = Lay[0].copy_(root=Lay[0].root, rev=rev)
+                    for Llay in Lay_[1:]: Lay.add_lay(Llay, rev=rev)  # run if two forks, else skip
                 Lay.add_lay(lay,rev=rev)
+                H[i] = [[Lay]]  # we need to reassign this back to H?
             else:
                 H += [lay.copy_(root=root,rev=rev)]
             root.derTTe += lay.derTT; root.Et += lay.Et
