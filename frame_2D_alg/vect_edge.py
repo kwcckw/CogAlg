@@ -130,8 +130,8 @@ def copy_(N):
         if name == '_id' or name == "Ct_": continue  # skip id and Ct_
         elif name == 'derH':
             for lay in N.derH:
-                if N.fi: C.derH +=[[fork.copy_(root=C) for fork in lay]]
-                else:    C.derH +=[lay.copy_(root=C)]  # CLay
+                if isinstance(lay, list): C.derH +=[[fork.copy_(root=C) for fork in lay]]  # we need to check if it's a list since we merge forks now
+                else:                     C.derH +=[lay.copy_(root=C)]  # CLay
         elif name == 'extH':
             C.extH = [lay.copy_(root=C) for lay in N.extH]
         elif isinstance(value,list) or isinstance(value,np.ndarray):
@@ -222,7 +222,7 @@ def cluster_edge(iG_, frame):  # edge is CG but not a connectivity cluster, just
 
     N_,L_,Et = comp_node_(iG_, ave)  # comp PP_
     # mval -> lay:
-    if L_ and val_(Et, Et, ave, fi=1) > 0:
+    if N_ and val_(Et, Et, ave, fi=1) > 0:  # We need to check N_ because Et is accumulated along with N_
         lay = [sum_lay_(L_, frame)]  # [mfork]
         G_ = cluster_PP_(copy(N_), fi=1) if len(N_) > ave_L else []
 
@@ -366,8 +366,13 @@ def sum2graph(root, grapht, fi, minL=0, maxL=None):  # sum node and link params 
             if LR_:
                 lay = reduce(lambda Lay, lay: Lay.add_lay(lay), L.derH, CLay())  # combine lL.derH
                 for LR in LR_:  # lay0+= dfork
-                    if len(LR.derH[0])==2: LR.derH[0][1].add_lay(lay)  # direct root only
-                    else:                  LR.derH[0] += [lay.copy_(root=LR)]
+                    if isinstance(LR.derH[0], list):
+                        if len(LR.derH[0])==2: LR.derH[0][1].add_lay(lay)  # direct root only
+                        else:                  LR.derH[0] += [lay.copy_(root=LR)]
+                    else:  # L.nodet is CL
+                        if len(LR.derH) == 2: LR.derH[1].add_lay(lay)  # direct root only
+                        else:                 LR.derH += [lay.copy_(root=LR)]
+                        
                     LR.derTT += lay.derTT
     N_, yx_ = [],[]
     for i, N in enumerate(node_):
@@ -444,14 +449,14 @@ def add_merge_H(H, h, root, rev=0):  # add derHs between level forks
     for i, (Lay,lay) in enumerate(zip_longest(H,h)):  # different len if lay-selective comp
         if lay:
             if isinstance(lay, list):  # merge forks
-                for i, fork in zip((1,0), lay):
-                    if i: layt = fork.copy_(root=fork.root, rev=rev)  # create
+                for j, fork in zip((1,0), lay):  # change to j, prevent a same i with main loop of H
+                    if j: layt = fork.copy_(root=fork.root, rev=rev)  # create
                     else: layt.add_lay(fork,rev=rev)  # merge
                 lay = layt
             if Lay:
                 if isinstance(Lay,list):  # merge forks
-                    for i, fork in zip((1,0), Lay):
-                        if i: layt = fork.copy_(root=fork.root, rev=rev)
+                    for j, fork in zip((1,0), Lay):
+                        if j: layt = fork.copy_(root=fork.root, rev=rev)
                         else: layt.add_lay(fork,rev=rev)
                     Lay = layt
                     H[i] = Lay

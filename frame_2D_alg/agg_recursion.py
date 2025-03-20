@@ -37,12 +37,12 @@ Similar to cross-projection by data-coordinate filters, described in "imaginatio
 '''
 ave, ave_L, max_med, icoef, lcoef, ccoef, ave_dist, med_cost = 5, 2, 3, .5, 3, 10, 2, 2
 
-def cross_comp(root, rc, iL_=[]):  # recursion count, form agg_Level by breadth-first node_,link_ cross-comp, connect clustering, recursion
+def cross_comp(root, rc, ifi=0, iL_=[]):  # recursion count, form agg_Level by breadth-first node_,link_ cross-comp, connect clustering, recursion
 
     fi = not iL_
-    N_,L_,Et = comp_node_(root.node_[-1].node_, ave*rc) if fi else comp_link_(L2N(iL_), ave*rc)   # nested node_ or flat link_
+    N_,L_,Et = comp_node_(root.node_[-1].node_, ave*rc) if (fi or ifi) else comp_link_(L2N(root.link_[-1].node_ if ifi else iL_), ave*rc)   # nested node_ or flat link_
 
-    if L_ and val_(Et, Et, ave*(rc+1), fi) > 0:
+    if N_ and val_(Et, Et, ave*(rc+1), fi) > 0:
         lev_N, lev_L = [],[]
         lay = comb_H_(L_, root, fi=0)
         if fi: root.derH += [[lay]]  # [mfork] feedback
@@ -57,12 +57,14 @@ def cross_comp(root, rc, iL_=[]):  # recursion count, form agg_Level by breadth-
                     lev_C = cluster_C_(pL_, rc+3)  # mfork G,altG exemplars, +altG surround borrow, root.derH + 1|2 lays, agg++
                 else: lev_C = []
                 lev_N = comb_Gt(lev_N,lev_C,root)  # if CC_V > LC_V: delete root.node_[-2]:LC_, [-1] is CC_?
+                root.node_ += [lev_N]
             else:
                 lev_N = cluster_L_(root, N_, ave*(rc+2), rc=rc+2)  # via llinks, no dist-nesting, no cluster_C_
+                root.link_ += [lev_N]
             if lev_N:
                 if val_(lev_N.Et, lev_N.Et, ave*(rc+4), fi=1, coef=lcoef) > 0:  # or global _Et?
                     # m_fork recursion:
-                    nG = cross_comp(root, rc+4)  # xcomp root.node_[-1]
+                    nG = cross_comp(root, rc=rc+4, ifi=fi)  # xcomp root.node_[-1]
                     if nG: lev_N = nG  # incr nesting
         # d_fork:
         if val_(lEt, lEt, ave*(rc+2), fi=0, coef=lcoef) > 0:
