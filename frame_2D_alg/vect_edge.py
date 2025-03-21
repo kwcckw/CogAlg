@@ -130,8 +130,8 @@ def copy_(N):
         if name == '_id' or name == "Ct_": continue  # skip id and Ct_
         elif name == 'derH':
             for lay in N.derH:
-                if isinstance(lay, list): C.derH +=[[fork.copy_(root=C) for fork in lay]]  # we need to check if it's a list since we merge forks now
-                else:                     C.derH +=[lay.copy_(root=C)]  # CLay
+                if N.fi: C.derH +=[[fork.copy_(root=C) for fork in lay]]
+                else:    C.derH +=[lay.copy_(root=C)]  # CLay
         elif name == 'extH':
             C.extH = [lay.copy_(root=C) for lay in N.extH]
         elif isinstance(value,list) or isinstance(value,np.ndarray):
@@ -222,7 +222,7 @@ def cluster_edge(iG_, frame):  # edge is CG but not a connectivity cluster, just
 
     N_,L_,Et = comp_node_(iG_, ave)  # comp PP_
     # mval -> lay:
-    if N_ and val_(Et, Et, ave, fi=1) > 0:  # We need to check N_ because Et is accumulated along with N_
+    if N_ and val_(Et, Et, ave, fi=1) > 0:
         lay = [sum_lay_(L_, frame)]  # [mfork]
         G_ = cluster_PP_(copy(N_), fi=1) if len(N_) > ave_L else []
 
@@ -264,9 +264,9 @@ def comp_node_(_N_, ave, L=0):  # rng+ forms layer of rim and extH per N, append
             if _nrim & nrim:  # indirectly connected Gs,
                 continue     # no direct match priority?
             # dist vs. radii * induction, mainly / extH?
-            if dist < max_dist * ((radii/aveR * icoef**3) * ((_G.Et[0]/_G.Et[0])+(G.Et[0]/G.Et[0])/2) /ave):  # all ratios
-                # no density eval, ext V is not complete
-                Link = comp_N(_G,G, ave, fi=1, angle=[dy,dx], dist=dist)
+            weighted_max = max_dist * ((radii/aveR * icoef**3) * ((_G.Et[0]/_G.Et[0])+(G.Et[0]/G.Et[0])/2) /ave)  # all ratios
+            if dist < weighted_max:   # no density, ext V is not complete
+                Link = comp_N(_G,G, ave, fi=1, angle=[dy,dx], dist=dist, fshort=dist<weighted_max/2)  # draft for cluster_N_?
                 L_ += [Link]  # include -ve links
                 if Link.Et[0] > ave * Link.Et[0] * lcoef:
                     N_.update({_G,G}); Et += Link.Et; _G.add,G.add = 1,1
@@ -366,13 +366,8 @@ def sum2graph(root, grapht, fi, minL=0, maxL=None):  # sum node and link params 
             if LR_:
                 lay = reduce(lambda Lay, lay: Lay.add_lay(lay), L.derH, CLay())  # combine lL.derH
                 for LR in LR_:  # lay0+= dfork
-                    if isinstance(LR.derH[0], list):
-                        if len(LR.derH[0])==2: LR.derH[0][1].add_lay(lay)  # direct root only
-                        else:                  LR.derH[0] += [lay.copy_(root=LR)]
-                    else:  # L.nodet is CL
-                        if len(LR.derH) == 2: LR.derH[1].add_lay(lay)  # direct root only
-                        else:                 LR.derH += [lay.copy_(root=LR)]
-                        
+                    if len(LR.derH[0])==2: LR.derH[0][1].add_lay(lay)  # direct root only
+                    else:                  LR.derH[0] += [lay.copy_(root=LR)]
                     LR.derTT += lay.derTT
     N_, yx_ = [],[]
     for i, N in enumerate(node_):
@@ -449,14 +444,14 @@ def add_merge_H(H, h, root, rev=0):  # add derHs between level forks
     for i, (Lay,lay) in enumerate(zip_longest(H,h)):  # different len if lay-selective comp
         if lay:
             if isinstance(lay, list):  # merge forks
-                for j, fork in zip((1,0), lay):  # change to j, prevent a same i with main loop of H
+                for j, fork in zip((1,0), lay):
                     if j: layt = fork.copy_(root=fork.root, rev=rev)  # create
                     else: layt.add_lay(fork,rev=rev)  # merge
                 lay = layt
             if Lay:
                 if isinstance(Lay,list):  # merge forks
-                    for j, fork in zip((1,0), Lay):
-                        if j: layt = fork.copy_(root=fork.root, rev=rev)
+                    for k, fork in zip((1,0), Lay):
+                        if k: layt = fork.copy_(root=fork.root, rev=rev)
                         else: layt.add_lay(fork,rev=rev)
                     Lay = layt
                     H[i] = Lay
@@ -501,12 +496,6 @@ def sum_G_(node_, G=None, merge=0):
         G.lnest = max(G.lnest, n.lnest)
         G.box = extend_box( G.box, n.box)  # extended per separate node_ in centroid
     return G
-
-def L2N(link_):
-    for L in link_:
-        L.fi=0; L.mL_t,L.rimt=[[],[]],[[],[]]; L.aRad=0; L.visited_,L.extH=[],[]; L.derTTe=np.zeros((2,8))
-        if not hasattr(L,'root'): L.root=[]
-    return link_
 
 def frame2G(G, **kwargs):
     blob2G(G, **kwargs)
