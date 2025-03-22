@@ -42,40 +42,42 @@ def cross_comp(root, rc, iN_, fi=1):  # recursion count, form agg_Level by bread
     N_,L_,Et = comp_node_(iN_, ave*rc) if fi else comp_link_(iN_, ave*rc)   # nested node_ or flat link_
 
     if N_ and val_(Et, Et, ave*(rc+1), fi) > 0:
-        lev_N, lev_L = [],[]
+        nGt, cG, lG = [],[],[]
+
         lay = comb_H_(L_, root, fi=0)
         if fi: root.derH += [[lay]]  # [mfork] feedback
-        else: root.derH[-1] +=[lay]  # dfork
+        else:  root.derH[-1] += [lay]  # dfork feedback
         pL_ = {l for n in N_ for l,_ in get_rim(n, fi)}
         lEt = np.sum([l.Et for l in pL_], axis=0)
         # m_fork:
         if val_(lEt,lEt, ave*(rc+2), 1, ccoef) > 0:  # or rc += 1?
-            lN_ = []
+            node_ = []
             if fi:
                 cG = cluster_C_(pL_,rc+2)  # exemplar CCs, same derH, select to form partly overlapping LCs:
                 if cG:
-                    if val_(cG.Et,cG.Et, ave*(rc+3), 1, ccoef) > 0:  # cluster CC nodes via short rims
-                        nG = cluster_N_(cG, ave*(rc+3), rc+3)  # combined distance segments
-                        if nG: lN_ = nG.node_  # N_ in the next cross comp should be mgraphs from nG.node_ when fi == 1?
+                    if val_(cG.Et,cG.Et, ave*(rc+3), 1, ccoef) > 0:  # link-cluster CC nodes via short rims
+                        nG = cluster_N_(cG, ave*(rc+3), rc+3)  # max distance segment
+                        node_ = nG.node_ if nG else []
                     else: nG = []
-                    lev_N = comb_Gt(cG, nG, root)  # should be within if cG loop? Else there's nothing to combine
+                    nGt = comb_Gt(cG, nG, root)
             else:
-                lev_N = cluster_L_(root, N_, ave*(rc+2), rc=rc+2)  # via llinks, no dist-nesting, no cluster_C_
-                if lev_N: lN_ = lev_N.node_  # N_ in the next cross comp should be dgraphs from lev_N.node_ when fi == 0?
-
-            if  lev_N:
-                if val_(lev_N.Et, lev_N.Et, ave*(rc+4), fi=1, coef=lcoef) > 0:  # or global _Et?
-                    lev_N = cross_comp(lev_N, rc=rc+4, iN_=lN_)  # recursive comp N_
+                nG = cluster_L_(root, N_, ave*(rc+2), rc=rc+2)  # via llinks, no dist-nesting, no cluster_C_
+                node_ = nG.node_ if nG else []
+            if node_:
+                if val_(nG.Et, nG.Et, ave*(rc+4), fi=1, coef=lcoef) > 0:  # or global _Et?
+                    nG = cross_comp(nG, rc=rc+4, iN_=node_)  # recursive cross_comp N_
         # d_fork:
         if val_(lEt,lEt, ave*(rc+2), fi=0, coef=lcoef) > 0:
-            lev_L = cross_comp(root, rc+4, iN_=L2N(L_), fi=0)  # recursive comp L_
+            lG = cross_comp(root, rc+4, iN_ =L2N(L_), fi=0)  # recursive cross_comp L_
         # combine:
-        lev_G = comb_Gt(lev_N, lev_L, root)  # L derH is already in the root?
+        lev_G = comb_Gt(nGt, lG, root)  # L derH is already in the root?
         if lev_G:
-            if lev_L:
-                root.link_ += [lev_L]; root.lnest = lev_L.nnest
-            if lev_N:
-                root.node_ += [lev_N]; root.nnest = lev_N.nnest
+            if lG:
+                root.link_ += [lG]; root.lnest = lG.nnest
+            if nG:
+                root.node_ += [nG]; root.nnest = nG.nnest
+            if cG:
+                root.cent_ += [cG]  # CCs for pref. cluster node.root LCs within CC, aligned and same nesting with node_?
             return lev_G
 
 def comp_link_(iL_, ave):  # comp CLs via directional node-mediated link tracing: der+'rng+ in root.link_ rim_t node rims
@@ -141,11 +143,11 @@ def comp_link_(iL_, ave):  # comp CLs via directional node-mediated link tracing
 def cluster_N_(root, ave, rc):  # top-down segment L_ by >ave ratio of L.dists
 
     # root is cG, get L_ from C_'node_'s short rims:
-    L_ = {L for C in root.node_ for n in C.node_ for L,_ in n.rim if L.L < ave_L}  # we should use another ave_L here? This ave_L is for the number of L or G instead of L length
+    L_ = {L for C in root.node_ for n in C.node_ for L,_ in n.rim if L.L < ave_dist}
     L_ = sorted(L_, key=lambda x: x.L)  # short links first
     min_dist = 0; Et = root.Et
     while True:
-        # each loop forms G_ of contiguous-distance L_ segment
+        # each loop forms G_ of L_ segment with contiguous distance values: L.L
         _L = L_[0]; N_, et = copy(_L.nodet), _L.Et
         for n in [n for l in L_ for n in l.nodet]:
             n.fin = 0
@@ -175,9 +177,9 @@ def cluster_N_(root, ave, rc):  # top-down segment L_ by >ave ratio of L.dists
                                 if L.L < max_dist:
                                     link_+=[L]; et+=L.Et
                     _eN_ = {*eN_}
-                # Gt:
-                link_ = list({*link_});  Lay = CLay()
-                [Lay.add_lay(lay) for lay in sum_H(link_, root, fi=0)]
+                # form Gt:
+                link_ = list({*link_})
+                Lay = CLay(); [Lay.add_lay(lay) for lay in sum_H(link_, root, fi=0)]
                 derTT = Lay.derTT
                 # weigh m_|d_ by similarity to mean m|d, weigh derTT:
                 m_,M = centroid_M(derTT[0], ave=ave); d_,D = centroid_M(derTT[1], ave=ave)
@@ -186,7 +188,7 @@ def cluster_N_(root, ave, rc):  # top-down segment L_ by >ave ratio of L.dists
                 if val_(et, Et, ave) > 0:
                     G_ += [sum2graph(root, [list({*node_}),link_, et, Lay], 1, min_dist, max_dist)]
             else:
-                G_ += N_  # unclustered nodes  (if we recycle nodes here, we might get Gs with different derH list nesting, that's causing problem is sum_G_ later)
+                G_ += N_  # unclustered nodes
         # longer links:
         L_ = L_[i + 1:]
         if G_:
@@ -230,7 +232,7 @@ def cluster_C_(L_, rc):  # 0 nest gap from cluster_edge: same derH depth in root
     def sum_C(node_):  # sum|subtract and average C-connected nodes
 
         C = copy_(node_[0]); C.node_= set(node_)  # add root and medoid / exemplar?
-        C.M = 0; C.rim = []  # reset their rim? C's rim should be empty, we might get it from the copy above
+        C.M = 0
         sum_G_(node_[1:], G=C)  # no extH, extend_box
         alt_ = [n.altG for n in node_ if n.altG]
         if alt_:
@@ -323,7 +325,7 @@ def comb_altG_(G_, ave, rc=1):  # combine contour G.altG_ into altG (node_ defin
                 G.altG.node_ = [G.altG]  # formality for single-lev_G
                 G.altG.root=G; G.altG.fi=0; G.altG.m=0
                 if val_(G.altG.Et, G.Et, ave):  # alt D * G rM
-                    cross_comp(G.altG, fi=1, rc=rc)  # adds nesting
+                    cross_comp(G.altG, rc, G.altG.node_, fi=1)  # adds nesting
         else:  # sum neg links
             link_,node_,derH, Et = [],[],[], np.zeros(4)
             for link in G.link_:
@@ -424,6 +426,8 @@ def agg_H_seq(focus, image, _nestt=(1,0), rV=1, _rv_t=[]):  # recursive level-fo
 
     global ave, ave_L, icoef, ccoef, max_med, ave_dist  # cost params
     ave, ave_L, icoef, ccoef, max_med, ave_dist = np.array([ave, ave_L, icoef, ccoef, max_med, ave_dist]) / rV
+    # sum Cost from params evaluated with the above filters, compute rCost relative to prior loop,
+    # and correlate it with rV to compute individual rCs, similar to rvs?
 
     frame = frame_blobs_root(focus, rV)  # no _rv_t
     intra_blob_root(frame, rV)  # not sure
@@ -434,7 +438,8 @@ def agg_H_seq(focus, image, _nestt=(1,0), rV=1, _rv_t=[]):  # recursive level-fo
     # forward agg+:
     lev_G = cross_comp(frame, iN_ = frame.node_[-1].node_, rc=1)  # node_+= edge.node_
     frame_link_ = [lG for lG in lev_G.node_[1].node_ if lG.nnest==frame.lnest] if lev_G and lev_G.node_[1] else []
-    rM,rD = 1,1  # sum derTT coefs: m_,d_ [M,D,n,o, I,G,A,L] / Et, baseT, dimension
+    rM,rD = 1,1
+    # sum derTT coefs: m_,d_ [M,D,n,o, I,G,A,L] / Et, baseT, dimension
     rv_t = np.ones((2,8))  # d val is borrowed from pair m in proportion to d mag, scaled by fb:
     # feedback weights:
     for fd, nest,_nest, Q in zip((0,1), (frame.nnest,frame.lnest), _nestt, (frame.node_[1:],frame_link_)):  # skip blob_
