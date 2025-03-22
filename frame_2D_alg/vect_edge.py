@@ -131,8 +131,9 @@ def copy_(N):
         if name == '_id' or name == "Ct_": continue  # skip id and Ct_
         elif name == 'derH':
             for lay in N.derH:
-                if N.fi: C.derH +=[[fork.copy_(root=C) for fork in lay]]
-                else:    C.derH +=[lay.copy_(root=C)]  # CLay
+                # CG always have nested derH now
+                if isinstance(N, CG): C.derH +=[[fork.copy_(root=C) for fork in lay]]
+                else:                 C.derH +=[lay.copy_(root=C)]  # CL
         elif name == 'extH':
             C.extH = [lay.copy_(root=C) for lay in N.extH]
         elif isinstance(value,list) or isinstance(value,np.ndarray):
@@ -455,7 +456,7 @@ def add_merge_H(H, h, root, rev=0):  # add derHs between level forks
                         if k: layt = fork.copy_(root=fork.root, rev=rev)
                         else: layt.add_lay(fork,rev=rev)
                     Lay = layt
-                    H[i] = Lay
+                    H[i] = [Lay]  # since G.derH is always nested, then they should be nested from here too
                 Lay.add_lay(lay,rev=rev)
             else:
                 H += [lay.copy_(root=root,rev=rev)]
@@ -492,7 +493,7 @@ def sum_G_(node_, G=None, merge=0):
                 add_H(G.extH, n.extH, root=G, fi=0)
         if n.derH:
             if merge: add_merge_H(G.derH, n.derH, root=G)
-            else: add_H(G.derH, n.derH, root=G, fi=G.fi)
+            else:     add_H(G.derH, n.derH, root=G, fi=isinstance(G, CG))  # fi is determined by CG or CL now? Since only CL has flat derH
         G.nnest = max(G.nnest, n.nnest+1)
         G.lnest = max(G.lnest, n.lnest)
         G.box = extend_box( G.box, n.box)  # extended per separate node_ in centroid
@@ -522,6 +523,7 @@ def blob2G(G, **kwargs):
     G.maxL = 0  # nesting in nodes
     G.aRad = 0  # average distance between graph center and node center
     G.altG = []  # or altG? adjacent (contour) gap+overlap alt-fork graphs, converted to CG
+    G.cent_ = []  # aligned node_ centroids
     return G
 
 def PP2G(PP):

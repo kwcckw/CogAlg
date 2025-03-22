@@ -63,9 +63,8 @@ def cross_comp(root, rc, iN_, fi=1):  # recursion count, form agg_Level by bread
             else:
                 nG = cluster_L_(root, N_, ave*(rc+2), rc=rc+2)  # via llinks, no dist-nesting, no cluster_C_
                 node_ = nG.node_ if nG else []
-            if node_:
-                if val_(nG.Et, nG.Et, ave*(rc+4), fi=1, coef=lcoef) > 0:  # or global _Et?
-                    nG = cross_comp(nG, rc=rc+4, iN_=node_)  # recursive cross_comp N_
+            if node_ and val_(nG.Et, nG.Et, ave*(rc+4), fi=1, coef=lcoef) > 0:  # or global _Et?
+                nG = cross_comp(nG, rc=rc+4, iN_=node_)  # recursive cross_comp N_
         # d_fork:
         if val_(lEt,lEt, ave*(rc+2), fi=0, coef=lcoef) > 0:
             lG = cross_comp(root, rc+4, iN_ =L2N(L_), fi=0)  # recursive cross_comp L_
@@ -77,6 +76,7 @@ def cross_comp(root, rc, iN_, fi=1):  # recursion count, form agg_Level by bread
             if nG:
                 root.node_ += [nG]; root.nnest = nG.nnest
             if cG:
+                # if we didn't pack nG.cG to root, why we need a list cent_ here?
                 root.cent_ += [cG]  # CCs for pref. cluster node.root LCs within CC, aligned and same nesting with node_?
             return lev_G
 
@@ -143,7 +143,7 @@ def comp_link_(iL_, ave):  # comp CLs via directional node-mediated link tracing
 def cluster_N_(root, ave, rc):  # top-down segment L_ by >ave ratio of L.dists
 
     # root is cG, get L_ from C_'node_'s short rims:
-    L_ = {L for C in root.node_ for n in C.node_ for L,_ in n.rim if L.L < ave_dist}
+    L_ = {L for C in root.node_ for n in C.node_ for L,_ in n.rim if L.L < ave_dist}  # If all L.L > ave_dist, then L_ is empty so this needs to be eval before calling cluster_N_?
     L_ = sorted(L_, key=lambda x: x.L)  # short links first
     min_dist = 0; Et = root.Et
     while True:
@@ -153,7 +153,7 @@ def cluster_N_(root, ave, rc):  # top-down segment L_ by >ave ratio of L.dists
             n.fin = 0
         for i, L in enumerate(L_[1:], start=1):
             rel_dist = L.L/_L.L  # >= 1
-            if rel_dist < 1.2 or len(L_[i:]) < ave_L:  # ~= dist Ns or either side of L is weak: continue dist segment
+            if rel_dist < 1.2 or len(L_[i:]) < ave_L:  # ~= dist Ns or either side of L is weak: continue dist segment       
                 LV = val_(et, Et, ave)  # link val
                 # add surround density term for clustering: extH (_Ete[0]/ave +Ete[0]/ave) /2:
                 _G,G = L.nodet; surr_V = (sum(_G.derTTe[0]) +sum(G.derTTe[0])/2) / ave*G.Et[2]
