@@ -58,7 +58,7 @@ def cross_comp(root, rc, iN_, fi=1):  # rc: recursion count, form agg_Level by b
                 cG = cluster_C_(pL_,rc+2)  # exemplar CCs, same derH, select to form partly overlapping LCs:
                 if cG:
                     if val_(cG.Et,cG.Et, ave*(rc+3), 1, clust_w) > 0:  # link-cluster CC nodes via short rim Ls:
-                        short_L_ = {L for C in root.node_ for n in C.node_ for L,_ in n.rim if L.L < ave_dist}
+                        short_L_ = {L for C in cG.node_ for n in C.node_ for L,_ in n.rim if L.L < ave_dist}  # should be cG instead of root
                         nG = cluster_N_(cG, short_L_, ave*(rc+3), rc+3) if short_L_ else []
                         node_ = nG.node_ if nG else []
                     else: nG = []
@@ -71,12 +71,14 @@ def cross_comp(root, rc, iN_, fi=1):  # rc: recursion count, form agg_Level by b
         # d_fork:
         if val_(lEt,lEt, ave*(rc+2), fi=0, coef=loop_w) > 0:
             L2N(L_)
-            lG = sum_G_(L_,fi=0)
+            lG = sum_G_(L_)
             cross_comp(lG, rc+4, iN_=L_, fi=0)  # recursive cross_comp L_
             if lG.nnest:
-                root.link_ += [lG]; root.lnest = lG.nnest
+                root.link_ = [lG, *lG.node_]; root.lnest = lG.nnest
         if nG:
-            root.node_ += [nG]; root.nnest = nG.nnest
+            if isinstance(root, CG): root.node_ = [nG, *nG.node_]
+            else:                    root.node_ += [nG, *nG.node_]  # preserve PPs in frame
+            root.nnest = nG.nnest
             root.cent_ += [cG, *nG.cent_]  # precondition for nG, pref cluster node.root LCs within CC, aligned and same nest as node_?
 
 
@@ -277,7 +279,8 @@ def cluster_C_(L_, rc):  # 0 nest gap from cluster_edge: same derH depth in root
     ave = globals()['ave'] * rc  # recursion count
     C_ = []  # init centroid clusters for next cross_comp
     N_ = list(set([node for link in L_ for node in link.nodet]))
-    for N in N_: N.Ct_ = []
+    for N in N_: 
+        N.Ct_ = []; N.rC_ = []  # we can init rc_ here?
     N_ = sorted(N_, key=lambda n: n.Et[0], reverse=True)
     for N in N_:
         if N.Et[0] < ave * N.Et[3]: break
@@ -425,12 +428,12 @@ def agg_H_seq(focus, image, _nestt=(1,0), rV=1, _rv_t=[]):  # recursive level-fo
     # forward agg+:
     N_ = frame.node_[-1].node_
     cross_comp(frame, iN_=N_, rc=1)  # node_+= edge.node_
-    frame_link_ = [N.link_[-1] for N in N_ if N.link_[-1].nnest==frame.lnest]  # lG_
     rM,rD = 1,1
     # sum derTT coefs: m_,d_ [M,D,n,o, I,G,A,L] / Et, baseT, dimension
     rv_t = np.ones((2,8))  # d val is borrowed from pair m in proportion to d mag, scaled by fb:
     # feedback weights:
-    for fd, nest,_nest, Q in zip((0,1), (frame.nnest,frame.lnest), _nestt, (frame.node_[1:],frame_link_)):  # skip blob_
+    # since we pack links in frame now, lev_lG should be directly accessible in frame.link_ now
+    for fd, nest,_nest, Q in zip((0,1), (frame.nnest,frame.lnest), _nestt, (frame.node_[1:],frame.link_)):  # skip blob_
         if nest==_nest: continue  # no new nesting
         hG = Q[-1]  # top level, no feedback
         for lev_G in reversed(Q[:-1]):  # CG or CL

@@ -156,7 +156,7 @@ class CL(CBase):  # link or edge, a product of comparison between two nodes or l
         # add med, rimt, extH in der+
     def __bool__(l): return bool(l.nodet)
 
-ave, avd, arn, aI, aveB, aveR, Lw, ave_dist, int_w, loop_w = 10, 10, 1.2, 100, 100, 3, 5, 10, 2, 5  # opportunity costs
+ave, avd, arn, aI, aveB, aveR, Lw, ave_dist, int_w, loop_w = 10, 10, 1.2, 100, 100, 3, 5, 10, 2, 5  # opportunity costs  (we need a similar Lw, int_w, loop_w  in other modules?)
 wM, wD, wN, wO, wI, wG, wA, wL = 10, 10, 20, 20, 1, 1, 20, 20  # der params higher-scope weights = reversed relative estimated ave?
 w_t = np.ones((2,8))  # fb weights per derTT, adjust in agg+
 
@@ -456,25 +456,32 @@ def comp_H(H,h, rn, root, Et, fi):  # one-fork derH if not fi, else two-fork der
             derH += [dLay]
     return derH
 
-def sum_G_(node_, G=None, fi=1):
+def sum_G_(node_, G=None):
 
+    fi = isinstance(node_[0], CG)  # this can be internal? Where we check with node_[0] is CL or not
     if G is None:
         G = copy_(node_[0]); G.node_ = [node_[0]]; G.link_ = []; node_=node_[1:]; G.fi = fi
+        if not fi:
+            G.nnest = 0; G.lnest = 0  # when node is CL, they do not have nnest and lnest
+            G.derH = [[ lay]for lay in G.derH]  # add nesting in G since node is CL
     for n in node_:
         if n not in G.node_: G.node_ += [n]  # prevent packing same n in alts
         G.baseT += n.baseT; G.derTT += n.derTT; G.Et += n.Et;  G.yx += n.yx
-        if G.fi:
+        if fi:
             G.derTTe += n.derTTe; G.aRad += n.aRad
             if n.extH:
                 add_H(G.extH, n.extH, root=G, fi=0)
         if n.derH:
-            add_H(G.derH, n.derH, root=G, fi=1)
-        G.nnest = max(G.nnest, n.nnest+1)
+            add_H(G.derH, n.derH if fi else [[lay] for lay in n.derH], root=G, fi=1)
+        G.nnest = max(G.nnest, n.nnest + 1)
         G.lnest = max(G.lnest, n.lnest)
         G.box = extend_box( G.box, n.box)  # extended per separate node_ in centroid
 
+    # nesting is added above now
+    '''
     if not fi:  # node_ is CLs
         for lay in G.derH: lay[:] = [lay]  # add nesting
+    '''
     return G
 
 def frame2G(G, **kwargs):
