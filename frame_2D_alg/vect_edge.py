@@ -173,7 +173,7 @@ def vect_root(frame, rV=1, ww_t=[]):  # init for agg+:
     for blob in blob_:
         if not blob.sign and blob.G > aveB * blob.root.olp:
             edge = slice_edge(blob, rV)
-            if edge.G*((len(edge.P_)-1)*Lw) > ave*edge.n:  # or add edge.Et?
+            if edge.G*((len(edge.P_)-1)*Lw) > ave*len(edge.P_):  # or add edge.Et? (edge.n is len(edge.P_) too?)  
                 comp_slice(edge, rV, np.array([(*ww_t[0][:2],*ww_t[0][4:]),(*ww_t[0][:2],*ww_t[1][4:])]) if ww_t else [])  # to scale vert
                 Et = edge.Et
                 if Et[0] *((len(edge.node_)-1)*(edge.rng+1)*Lw) > ave*Et[2]*clust_w:  # eval PP:
@@ -341,7 +341,7 @@ def comp_N(_N,N, ave, fi, angle=None, dist=None, dir=1, fshort=1):  # compare li
     if fi and _N.altG and N.altG:
         et = _N.altG.Et + N.altG.Et  # comb val
         if val_(et, et, ave*2, fi=0) > 0:  # eval Ds
-            Link.altL = comp_N(_N.altG, N.altG, ave*2, fi=0)
+            Link.altL = comp_N(_N.altG, N.altG, ave*2, fi=1, angle=angle)  # we add nesting in altG.derH now, so here fi should be 1 now?
             Et += Link.altL.Et
     Link.Et = Et
     if Et[0] > ave * Et[2]:  # | both forks: np.add(Et[:2]) > ave * np.multiply(Et[2:])
@@ -464,16 +464,18 @@ def sum_N_(node_, G=None, root=None, fi=1):
         G = copy_(node_[0]); G.node_=node_; G.link_=[]; G.fi=fi; G.root=root
     for n in node_[1:]:
         G.baseT+=n.baseT; G.derTT+=n.derTT; G.Et+=n.Et; G.yx+=n.yx; n.root=G; G.box=extend_box(G.box, n.box)
-        if fi:
+        if hasattr(n, 'derTTe'):  # this section is only valid for CG or when CL become node, so we need to check with hasattr
             G.derTTe += n.derTTe; G.aRad += n.aRad
             if n.extH:
                 add_H(G.extH, n.extH, root=G, fi=0)
+        if isinstance(n, CG):  # CL doesn't have nnest and lnest
+            G.nnest = max(G.nnest, n.nnest+1)
+            G.lnest = max(G.lnest, n.lnest)
         if n.derH:
             add_H(G.derH, n.derH, root=G, fi=fi)
-        G.nnest = max(G.nnest, n.nnest+1)
-        G.lnest = max(G.lnest, n.lnest)
+
     if not fi:
-        for lay in G.derH: lay[:] = [lay]  # nest
+        G.derH = [[lay] for lay in G.derH]  # nest
     return G
 
 def frame2G(G, **kwargs):

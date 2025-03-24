@@ -71,13 +71,13 @@ def cross_comp(root, rc, iN_, fi=1):  # rc: recursion count, form agg_Level by b
         # d_fork:
         if val_(lEt,lEt, ave*(rc+2), fi=0, coef=loop_w) > 0:
             L2N(L_)
-            lG = sum_N_(L_)
+            lG = sum_N_(L_, fi=0)  # fi == 0 for CL here
             cross_comp(lG, rc+4, iN_=L_, fi=0)  # recursive cross_comp L_
-            if lG.nnest:
-                root.link_ = [lG, *lG.node_]; root.lnest = lG.nnest
+            root.link_ = [lG]; root.lnest = lG.nnest  # this should be default here? And lG.node_ will be added only if lG.nnest > root.lnest?
+            if lG.nnest > root.lnest: root.link_ += [*lG.node_]  
         if nG:
-            root.nnest = nG.nnest
-            root.node_ = [nG, *nG.node_] if isinstance(root,CG) else [*root.node_, nG, *nG.node_]  # keep PPs in frame
+            root.nnest = nG.nnest; root.node_ = [nG] if isinstance(root, CG) else [*root.node_, nG]  # keep PPs in frame
+            if nG.nnest > root.nnest: root.node_ += [*nG.node_]  # this should be added only if nG.nnest is deeper than root.nnest?
             root.cent_ = [cG, *nG.cent_]  # precondition for nG, pref cluster node.root LCs within CC, aligned and same nest as node_?
 
 
@@ -232,7 +232,7 @@ def cluster_C_(L_, rc):  # 0 nest gap from cluster_edge: same derH depth in root
         sum_N_(node_[1:], G=C)  # no extH, extend_box
         alt_ = [n.altG for n in node_ if n.altG]
         if alt_:
-            sum_N_(alt_, G=C.altG, fi=0)  # no m, M, L in altGs
+            sum_N_(alt_, G=C.altG, fi=1)  # no m, M, L in altGs (altG.derH is nested now, so fi = 1 here)
         k = len(node_)
         for n in (C, C.altG):
             n.Et/=k; n.baseT/=k; n.derTT/=k; n.aRad/=k; n.yx /= k
@@ -318,9 +318,9 @@ def comb_altG_(G_, ave, rc=1):  # combine contour G.altG_ into altG (node_ defin
                     cross_comp(G.altG, rc, G.altG.node_, fi=1)  # adds nesting
         else:  # sum neg links
             negL_ = [L for L in G.link_ if val_(L.Et, G.Et, ave) < 0]
-            if negL_ and val_(np.sum([l.Et for l in negL_]), G.Et, ave, coef=10, fi=0) > 0:
-                altG = sum_N_(negL_,fi=1)
-                G.altG = copy_(altG); G.altG(node_=[altG]); G.altG.root=G
+            if negL_ and val_(np.sum([l.Et for l in negL_],axis=0), G.Et, ave, coef=10, fi=0) > 0:
+                altG = sum_N_(negL_,fi=0)  # here fi should be 0 too?
+                G.altG = copy_(altG); G.altG.node_=[altG]; G.altG.root=G
 
 def norm_H(H, n):
     for lay in H:
