@@ -248,7 +248,7 @@ def comp_node_(_N_, ave, L=0):  # rng+ forms layer of rim and extH per N, append
     _Gp_ = []  # [G pair + co-positionals], for top-nested Ns, unless cross-nesting comp:
     if L: _N_ = filter(lambda N: len(N.derH)==L, _N_)  # if dist-nested
     for _G, G in combinations(_N_, r=2):  # if max len derH in agg+
-        if _G.nnest != G.nnest:
+        if _G.nnest != G.nnest:  # this is possible only with those recycled nodes?
             continue
         _n, n = _G.Et[2], G.Et[2]; rn = _n/n if _n>n else n/_n
         radii = G.aRad + _G.aRad
@@ -459,10 +459,11 @@ def comp_H(H,h, rn, root, Et, fi):  # one-fork derH if not fi, else two-fork der
             derH += [dLay]
     return derH
 
-def sum_N_(node_, G=None, root=None, fi=1):  # form node_G, cent_G, or link_G
+def sum_N_(node_, G=None, root=None, fi=1, fnest=1):  # form node_G, cent_G, or link_G
 
     if G is None:
-        G = copy_(node_[0]); G.node_=node_; G.link_=[]; G.fi=fi; G.root=root
+        G = copy_(node_[0]); G.node_=node_; G.link_=[]; G.fi=fi; G.root=root; 
+        if isinstance(node_[0], CG): G.nnest = node_[0].nnest+fnest  # we need to increase nnest based on the 1st node_[0] too
     for n in node_[1:]:
         G.baseT+=n.baseT; G.derTT+=n.derTT; G.Et+=n.Et; G.yx+=n.yx; n.root=G; G.box=extend_box(G.box, n.box)
         if hasattr(n,'derTTe'):
@@ -470,7 +471,7 @@ def sum_N_(node_, G=None, root=None, fi=1):  # form node_G, cent_G, or link_G
             if n.extH:
                 add_H(G.extH, n.extH, root=G, fi=0)
         if isinstance(n,CG):
-            G.nnest = max(G.nnest, n.nnest+1)
+            G.nnest = max(G.nnest, n.nnest+fnest)
             G.lnest = max(G.lnest, n.lnest)
         if n.derH:
             add_H(G.derH, n.derH, root=G, fi=fi)

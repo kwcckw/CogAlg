@@ -302,7 +302,7 @@ def cluster_C_(L_, rc):  # 0 nest gap from cluster_edge: same derH depth in root
         C_ += [C]
     refine_C_(C_)  # refine centroid clusters
 
-    if C_: return sum_N_(C_)
+    if C_: return sum_N_(C_, fnest=0)  # added fnest because we shouldn't increase nesting in cluster_C_?
 
 def layer_C_(root, L_, rc):  # node-parallel cluster_C_ in mediation layers, prune Cs in top layer?
 
@@ -421,14 +421,30 @@ def agg_H_seq(focus, image, _nestt=(1,0), rV=1, _rv_t=[]):  # recursive level-fo
     vect_root(frame, rV, _rv_t)
     if not frame.nnest:
         return frame
-    comb_altG_(frame.node_[-1].node_, ave*2)  # PP graphs in frame.node_[2]
+    comb_altG_(frame.node_[-1].node_[0].node_, ave*2)  # PP graphs in frame.node_[2]
     # forward agg+:
-    cross_comp(frame, rc=1, iN_=frame.node_[-1].node_)  # node_+= edge.node_
+    cross_comp(frame, rc=1, iN_=frame.node_[-1].node_[0].node_)  # node_+= edge.node_
+
+    # pack it into function? Their retrieval process should be the same
+    nG = frame.node_[-1]; lev_G_ = [nG]
+    while len(nG.node_) == 2:
+        lev_G_ += [nG.node_[1]]  # pack current level
+        nG = nG.node_[-1]        # get next level
+    else:
+        lev_G_ += [nG.node_[0]]  # pack deepest level
+        
+    lG = frame.link_[-1]; lev_lG_ = [lG]
+    while len(lG.node_) == 2:
+        lev_lG_ += [lG.node_[1]]  # pack current level
+        lG = lG.node_[-1]         # get next level
+    else:
+        lev_lG_ += [lG.node_[0]]  # pack deepest level
+        
     rM,rD = 1,1
     # sum derTT coefs: m_,d_ [M,D,n,o, I,G,A,L] / Et, baseT, dimension
     rv_t = np.ones((2,8))  # d val is borrowed from pair m in proportion to d mag, scaled by fb:
     # feedback weights:
-    for fd, nest,_nest, Q in zip((0,1), (frame.nnest,frame.lnest), _nestt, (frame.node_[1:],frame.link_)):  # skip blob_
+    for fd, nest,_nest, Q in zip((0,1), (frame.nnest,frame.lnest), _nestt, (lev_G_, lev_lG_)):  # skip blob_
         if nest==_nest: continue  # no new nesting
         hG = Q[-1]  # top level, no feedback
         for lev_G in reversed(Q[:-1]):  # CG or CL
