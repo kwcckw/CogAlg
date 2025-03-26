@@ -118,11 +118,10 @@ class CG(CBase):  # PP | graph | blob: params of single-fork node_ cluster
         G.nnest = kwargs.get('nnest',0)  # node_H if > 0, node_[-1] is top G_
         G.lnest = kwargs.get('lnest',0)  # link_H if > 0, link_[-1] is top L_
         G.cG = kwargs.get('cG',[])  # single-lev node_-aligned centroids
-        G.node_ = kwargs.get('node_',[])
-        G.link_ = kwargs.get('link_',[])  # internal links
+        G.H = kwargs.get('H',[])  # [cG, nG, lG] or [cG, node_, link_]
         G.rim = kwargs.get('rim',[])  # external links
         G.nrim = kwargs.get('nrim',[])
-    def __bool__(G): return bool(G.node_)  # never empty
+    def __bool__(G): return bool(G.H)  # never empty
 
 def copy_(N, root=None):
     C = CG(root=root)
@@ -189,11 +188,10 @@ def vect_root(frame, rV=1, ww_t=[]):  # init for agg+:
             [F.add_lay(f) for F,f in zip(Lay,lay)]  # [mfork, dfork]
             PP_+= pp_; G_+= g_
     frame.derH = [Lay]
-    frame.node_= [PP_]
+    frame.node_= PP_  # this can be flat now? Deeper levels are in H now
     if G_:
-        nG = sum_N_(G_); nG.node_ = [copy_(nG)]
-        frame.node_ += [nG]
-        frame.nnest = 1
+        nG = sum_N_(G_)
+        frame.H += [[[], nG]]
     frame.baseT = np.sum([G.baseT for G in PP_ + G_], axis=0)
     frame.derTT = np.sum([G.derTT for G in PP_ + G_], axis=0)
 
@@ -362,7 +360,7 @@ def sum2graph(root, grapht, fi, minL=0, maxL=None):  # sum node and link params 
     node_, link_, Et, mfork = grapht  # Et and mfork are summed from link_
     n0=node_[0]
     graph = CG(
-        fi=fi, Et=Et+n0.Et*int_w, box=n0.box, baseT=copy(n0.baseT), derTT=mfork.derTT, root=root, node_=[],link_=link_, maxL=maxL, nnest=root.nnest,
+        fi=fi, Et=Et+n0.Et*int_w, box=n0.box, baseT=copy(n0.baseT), derTT=mfork.derTT, root=root, H=[[],[],link_], maxL=maxL, nnest=root.nnest,
         derH = [[mfork]])  # higher layers are added by feedback, dfork added from comp_link_:
     for L in link_:
         L.root = graph  # reassign when L is node
@@ -389,7 +387,7 @@ def sum2graph(root, grapht, fi, minL=0, maxL=None):  # sum node and link params 
         if i:
             graph.Et+=N.Et*int_w; graph.baseT+=N.baseT; graph.box=extend_box(graph.box,N.box)
             # not in CL
-    graph.node_= N_  # nodes or roots, link_ is still current-dist links only?
+    graph.H[1] = N_  # nodes or roots, link_ is still current-dist links only?
     yx = np.mean(yx_, axis=0)
     dy_,dx_ = (graph.yx - yx_).T; dist_ = np.hypot(dy_,dx_)
     graph.aRad = dist_.mean()  # ave distance from graph center to node centers
@@ -400,7 +398,8 @@ def sum2graph(root, grapht, fi, minL=0, maxL=None):  # sum node and link params 
             for n in L.nodet:  # map root mG
                 mG = n.root
                 if isinstance(mG, CG) and mG not in altG:  # root is not frame
-                    mG.altG.node_ += [graph]  # cross-comp|sum complete altG before next agg+ cross-comp, multi-layered?
+                    if not mG.altG.H: mG.altG.H = [[],[],[]]  # init 
+                    mG.altG.H[1] += [graph]  # cross-comp|sum complete altG before next agg+ cross-comp, multi-layered?
                     altG += [mG]
     return graph
 
@@ -467,23 +466,23 @@ def sum_N_(node_, root_G=None, root=None):  # form G
     if root_G: G = root_G
     else:
         g = node_.pop(0)
-        G = copy_(g); G.node_=[g]; G.fi=fi; G.root=root  # no link_?
+        G = copy_(g); G.H=[[],[g],[]]; G.fi=fi; G.root=root;  # no link_?
     for n in node_:
-        add_N(G,n)
+        add_N(G,n, fi=fi)  # we need fi input here
     if not fi:
         G.derH = [[lay] for lay in G.derH]  # nest
     return G
 
 def add_N(N,n, fi=1, root=None):
-
-    N.baseT+=n.baseT; N.derTT+=n.derTT; N.Et+=n.Et; N.yx+=n.yx; N.box=extend_box(N.box, n.box)
+    # we need to pack n into H too?
+    N.H[1] += [n]; N.baseT+=n.baseT; N.derTT+=n.derTT; N.Et+=n.Et; N.yx+=n.yx; N.box=extend_box(N.box, n.box)
     if hasattr(n,'derTTe'):
         N.derTTe += n.derTTe; N.aRad += n.aRad
         if n.extH:
             add_H(N.extH, n.extH, root=N, fi=0)
         if fi:  # no H in CL?
-            for i, (Lev,lev) in zip_longest(N.H,n.H):
-                if lev:
+            for Lev,lev in zip_longest(N.H,n.H):  # why we need i here?
+                if not isinstance(lev, list) and lev:  # skip non lev_G
                     if Lev:  # cG,nG,lG
                         for G,g in zip(Lev,lev): add_N(G,g)
                     else: N.H += [lev]
@@ -502,6 +501,7 @@ def blob2G(G, **kwargs):
     # node_, Et stays the same:
     G.fi = 1  # fi=0 if cluster Ls|lGs
     G.root = kwargs.get('root')  # may extend to list in cluster_N_, same nodes may be in multiple dist layers
+    G.H = kwargs.get('H',[])  # [cG, nG, lG]
     G.link_ = kwargs.get('link_',[])
     G.nnest = kwargs.get('nnest',0)  # node_H if > 0, node_[-1] is top G_
     G.lnest = kwargs.get('lnest',0)  # link_H if > 0, link_[-1] is top L_
