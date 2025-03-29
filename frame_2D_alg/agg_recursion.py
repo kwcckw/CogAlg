@@ -209,7 +209,7 @@ def vect_root(frame, rV=1, ww_t=[]):  # init for agg+:
     frame.H = [[PP_,[]]]  # or replace by nG_?
     if G_:
         nG = sum_N_(G_)
-        frame.H += [[nG,[]]]  # no link_
+        frame.H += [[nG,[]]]  # no link_  # last layer is node_, link_?
     frame.baseT = np.sum([G.baseT for G in PP_ + G_], axis=0)
     frame.derTT = np.sum([G.derTT for G in PP_ + G_], axis=0)
 
@@ -713,7 +713,7 @@ def comb_altG_(G_, ave, rc=1):  # combine contour G.altG_ into altG (node_ defin
             dL_ = list(set([L for g in G.H[-1][0] for L,_ in g.rim if val_(L.Et,G.Et, ave, fi=0) > 0]))
             if dL_ and val_(np.sum([l.Et for l in dL_], axis=0), G.Et, ave, coef=10, fi=0) > 0:
                 altG = sum_N_(dL_)
-                G.altG = copy_(altG); G.altG.H = [altG]; G.altG.root=G
+                G.altG = copy_(altG); G.altG.root=G
 
 def get_node_(G): return G.H[-1][0] if isinstance(G.H[-1][0],list) else G.H[-1][0].H  # node_ | nG.node_
 
@@ -773,25 +773,25 @@ def sum_N_(node_, root_G=None, root=None):  # form G
     fi = isinstance(node_[0],CG)
     if root_G: G = root_G
     else:
-        g = node_.pop(0)
-        G = copy_(g); G.H = [copy_(g)]; G.fi=fi  # G is nG|cG|lG, so G.H=[[g,[],[]]] is not needed?
+        G = copy_(node_[0]); G.fi=fi
         G.root=root
     for n in node_:
-        add_N(G,n, fi=fi, flat=1)
+        add_N(G,n, fi=fi)
         if root: n.root=root
+    G.H += [[node_, []]]  # add last layer
     if not fi:
         G.derH = [[lay] for lay in G.derH]  # nest
     return G
 
-def add_N(N,n, fi=1, flat=0):
+def add_N(N,n, fi=1):
 
     N.baseT+=n.baseT; N.derTT+=n.derTT; N.Et+=n.Et; N.yx+=n.yx; N.box=extend_box(N.box, n.box)
     if hasattr(n,'derTTe'):
         N.derTTe += n.derTTe; N.aRad += n.aRad
         if n.extH:
             add_H(N.extH, n.extH, root=N, fi=0)
-        if flat: N.H += [n]  # also if altG
-        elif fi:  # no H in CL
+        # if flat: N.H += [n]  # also if altG  (flat is not needed now since H now has [mfork,dfork] per level?)
+        if fi:  # no H in CL
             add_GH(N.H,n.H, root=N.root)
         if n.derH:
             add_H(N.derH, n.derH, root=N, fi=fi)
@@ -799,9 +799,13 @@ def add_N(N,n, fi=1, flat=0):
 def add_GH(H,h, root):
     # draft
     for Lev, lev in zip(H, h):  # always aligned?
-        for F, f in zip(Lev, lev):
-            if f: add_N(F,f, flat=1)  # cG|lG
-            else: Lev += [f]  # if lG only?
+        for F, f in zip_longest(Lev, lev, fillvalue=None):
+            if f:
+                if F:
+                    if isinstance(F, list): F += f  # we need to check if it's a last level?
+                    else:                   add_N(F,f, flat=1)  # cG|lG
+                else: 
+                    Lev += [f]  # if lG only?
 
 def extend_box(_box, box):  # extend box with another box
     y0, x0, yn, xn = box; _y0, _x0, _yn, _xn = _box
@@ -845,7 +849,7 @@ def PP2G(PP):
     derTT = np.array([[mM,mD,mL,0,mI,mG,mA,mL], [dM,dD,dL,0,dI,dG,dA,dL]])
     y,x,Y,X = box; dy,dx = Y-y,X-x
     # A = (dy,dx); L = np.hypot(dy,dx)
-    G = CG(root=root, fi=1, Et=Et, H=[[[P_], []]], baseT=baseT, derTT=derTT, box=box, yx=yx, aRad=np.hypot(dy/2, dx/2),
+    G = CG(root=root, fi=1, Et=Et, H=[[P_, []]], baseT=baseT, derTT=derTT, box=box, yx=yx, aRad=np.hypot(dy/2, dx/2),
            derH=[[CLay(node_=P_,link_=link_, derTT=deepcopy(derTT)), CLay()]])  # empty dfork
     return G
 
@@ -920,9 +924,10 @@ def agg_H_seq(focus, image, _nestt=(1,0), rV=1, _rv_t=[]):  # recursive level-fo
     vect_root(frame, rV, _rv_t)
     if len(frame.H)<2:  # skip if single-level PP_
         return frame
-    comb_altG_(frame.H[-1][0].H, ave*2)  # PP graphs in frame.node_[2]
+    comb_altG_(frame.H[-1][0].H[-1][0], ave*2)  # PP graphs in frame.node_[2]
     # forward agg+:
-    cross_comp(frame, rc=1, fc=1, iN_=frame.H[-1][0].H)
+    cross_comp(frame, rc=1, fc=1, iN_=frame.H[-1][0].H[-1][0])
+
     # adjust weights:
     rM, rD, rv_t = feedback(frame, ifi=1)
     if (rM + rD) / 2 > ave:  # normalized
