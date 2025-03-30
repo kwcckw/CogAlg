@@ -193,21 +193,26 @@ def vect_root(frame, rV=1, ww_t=[]):  # init for agg+:
                 Et = edge.Et
                 if Et[0] *((len(edge.node_)-1)*(edge.rng+1) *Lw) > ave * Et[2] * clust_w:
                     # convert edge to CG
-                    cross_comp(edge, rc=1, iN_=[PP2G(PP)for PP in edge.node_])  # restricted range and recursion, no comp PPd_ and alts?
+                    cross_comp(blob2G(edge, root=edge.root), rc=1, iN_=edge.node_)  # restricted range and recursion, no comp PPd_ and alts?
                     edge_ += [edge]
+    
+    frame2G(frame)  # we probably can have fraem2G here?
     # unpack edges
-    [nG0,lG0] = edge_[0].H.pop(0)  # lev0 = [PPm_,PPd_], H,derH layered in cross_comp
-    H, derH, baseT, derTT = nG0.H, nG0.derH, nG0.baseT, nG0.derTT
-    if lG0:  derH, baseT, derTT = add_H(derH, lG0.derH, root=frame), np.add(baseT, lG0.baseT), np.add(derTT, lG0.derTT)
-    for edge in edge_:
-        H, derH, baseT, derTT = add_GH(H, edge.H, root=frame), add_H(derH, edge.derH, root=frame), np.add(baseT, edge.baseT), np.add(derTT, edge.derTT)
-    # no frame2G?
-    frame.H, frame.derH, frame.baseT, frame.derTT = H, derH, baseT, derTT
+    if edge_:
+        if edge_[0].H:
+            [nG0,lG0] = edge_[0].H.pop(0)  # lev0 = [PPm_,PPd_], H,derH layered in cross_comp
+            H, derH, baseT, derTT = nG0.H, nG0.derH, nG0.baseT, nG0.derTT
+            if lG0:  derH, baseT, derTT = add_H(derH, lG0.derH, root=frame), np.add(baseT, lG0.baseT), np.add(derTT, lG0.derTT)
+            for edge in edge_:
+                H, derH, baseT, derTT = add_GH(H, edge.H, root=frame), add_H(derH, edge.derH, root=frame), np.add(baseT, edge.baseT), np.add(derTT, edge.derTT)
+            # no frame2G?
+            frame.H, frame.derH, frame.baseT, frame.derTT = H, derH, baseT, derTT
     return frame
 
 def cross_comp(root, rc, iN_, fi=1):  # rc: recursion count, fc: centroid phase, cross-comp, clustering, recursion
 
-    N_,L_,Et = comp_node_(iN_, ave*rc) if fi else comp_link_(iN_, ave*rc)  # flat node_ or link_
+    # PP is list, else comp_node_ or comp_link_
+    N_,L_,Et = comp_PP_(iN_, ave*rc) if isinstance(iN_[0], list) else (comp_node_(iN_, ave*rc) if fi else comp_link_(iN_, ave*rc))  # flat node_ or link_
 
     if N_ and val_(Et, Et, ave*(rc+1), fi) > 0: # or np.add(Et[:2]) > (ave+ave_d) * np.multiply(Et[2:])?
         mL_,dL_ = [],[]
@@ -224,7 +229,8 @@ def cross_comp(root, rc, iN_, fi=1):  # rc: recursion count, fc: centroid phase,
                 C_ = cluster_C_(mL_,rc+2) # form exemplar centroids, same derH
                 if C_:
                     sL_ = {L for C in C_ for n in C.H for L,_ in n.rim if L.L < ave_dist}
-                    m,n = 0,0; for l in sL_: m+=l.Et[0]; n+=l.Et[2]
+                    m,n = 0,0
+                    for l in sL_: m+=l.Et[0]; n+=l.Et[2]
                     if m > ave * n * (rc+3) * clust_w:
                         nG = cluster_N_(root, sL_, ave*(rc+3), rc+3)  # link-cluster CC nodes via short rim Ls
             else:
@@ -258,6 +264,26 @@ def val_(Et, _Et, ave, coef=1, fi=1):  # m+d cluster | cross_comp eval, + cross|
 
     return val - ave * coef * n * o  # simplified: np.add(Et[:2]) > ave * np.multiply(Et[2:])
 
+def comp_PP_(_N_, ave):
+    
+    # convert PP list to CG
+    _G_ = [PP2G(PP) for PP in _N_]
+    
+    N_, L_, Et = set(), [], np.zeros(4)
+    for _G in _G_:
+        P_ = _G.H[-1][0]
+        for P in _G.H[-1][0]:
+            for _P in P.prim:  # get mediated Ps from Prim
+                if _P not in P_:  # not in current _N, negative rim's P
+                    raise ValueError('a')
+                    G = _P.root
+                    dy,dx = np.subtract(_G.yx,G.yx); dist = np.hypot(dy,dx)
+                    Link = comp_N(_G,G, ave, fi=1, angle=[dy,dx], dist=dist)
+                    if Link.Et[0] > ave * Link.Et[0] * loop_w:
+                        N_.update({_G,G}); Et += Link.Et
+
+    return list(N_), L_, Et  # flat N__ and L__
+    
 def comp_node_(_N_, ave, L=0):  # rng+ forms layer of rim and extH per N, appends N_,L_,Et, ~ graph CNN without backprop
 
 
@@ -804,8 +830,9 @@ def PP2G(PP):
     derTT = np.array([[mM,mD,mL,0,mI,mG,mA,mL], [dM,dD,dL,0,dI,dG,dA,dL]])
     y,x,Y,X = box; dy,dx = Y-y,X-x
     # A = (dy,dx); L = np.hypot(dy,dx)
-    G = CG(root=root, fi=1, Et=Et, H=[[P_, []]], baseT=baseT, derTT=derTT, box=box, yx=yx, aRad=np.hypot(dy/2, dx/2),
+    G = CG(root=root, fi=1, Et=Et, H=[[P_, link_]], baseT=baseT, derTT=derTT, box=box, yx=yx, aRad=np.hypot(dy/2, dx/2),
            derH=[[CLay(node_=P_,link_=link_, derTT=deepcopy(derTT)), CLay()]])  # empty dfork
+    for P in P_: P.root = G  # update root from list to CG
     return G
 
 def norm_H(H, n):
