@@ -127,7 +127,7 @@ class CG(CBase):  # PP | graph | blob: params of single-fork node_ cluster
         G.yx = kwargs.get('yx', np.zeros(2))  # init PP.yx = [(y+Y)/2,(x,X)/2], then ave node yx
         G.box = kwargs.get('box', np.array([np.inf,np.inf,-np.inf,-np.inf]))  # y,x,Y,X area: (Y-y)*(X-x)
         G.maxL = kwargs.get('maxL', 0)  # if dist-nested in cluster_N_
-        G.aRad = 0  # average distance between graph center and node center
+        G.aRad = kwargs.get('aRad', 0)  # average distance between graph center and node center  (we need kwargs here, else it becomes 0)
         # alt.altG is empty for now, needs to be more selective
         G.altG = CG(altG=[], fi=0) if kwargs.get('altG') is None else kwargs.get('altG')  # adjacent (contour) gap+overlap alt-fork graphs, converted to CG
         # G.fork_tree: list = z([[]])  # indices in all layers(forks, if no fback merge
@@ -185,6 +185,7 @@ def vect_root(frame, rV=1, ww_t=[]):  # init for agg+:
         # derTT w_
     blob_ = unpack_blob_(frame)
     edge_ = []  # cluster, unpack
+    frame2G(frame)  # add additional params to frame since they will be needed in cluster_edge
     for blob in blob_:
         if not blob.sign and blob.G > aveB * blob.root.olp:
             edge = slice_edge(blob, rV)
@@ -192,19 +193,19 @@ def vect_root(frame, rV=1, ww_t=[]):  # init for agg+:
                 comp_slice(edge, rV, ww_t)  # to scale vert
                 Et = edge.Et
                 if Et[0] *((len(edge.node_)-1)*(edge.rng+1) *Lw) > ave * Et[2] * clust_w:  # also eval edge.link_?
-                    edge.node_ = [PP2G(PP) for PP in edge.node_]
-                    edge.link_ = [PP2G(PP) for PP in edge.link_]
+                    edge.node_ = [PP2G(PP, frame) for PP in edge.node_]
+                    edge.link_ = [PP2G(PP, frame) for PP in edge.link_]
                     edge_ += [cluster_edge(edge, frame)]  # 1layer derH, alt: converted adj_blobs of edge blob | alt_P_?
     # unpack edges:
     Lay = [CLay(root=frame), CLay(root=frame)]
     PPm_,Gm_, PPd_,Gd_ = [],[],[],[]
     for edget in edge_:
-        if edget:
-            ppm_,gm_,ppd_,gd_,lay = edget
+        if edget[0]:  # not empty   
+            (ppm_,gm_),(ppd_,gd_),lay = edget
             PPm_+= ppm_; Gm_+= gm_; PPd_+= ppd_; Gd_+= gd_
             [F.add_lay(f) for F,f in zip(Lay,lay)]
             # [mfork,dfork]
-    frame.H = [[sum_N_(PPm_,root=frame), sum_N_(PPd_,root=frame)]]  # lev0
+    frame.H = [[sum_N_(PPm_,root=frame), sum_N_(PPd_,root=frame)]]  # lev0 (flat should be true for add_N_ within sum_N_ here? Because G.H is CP here)
     if Gm_ or Gd_: frame.H += [[sum_N_(Gm_,root=frame) if Gm_ else [], sum_N_(Gd_,root=frame) if Gd_ else []]]  # lev1
     baseT, derTT = np.zeros(4), np.zeros((2,8))
     for g in PPm_,Gm_,PPd_,Gd_:
@@ -214,7 +215,7 @@ def vect_root(frame, rV=1, ww_t=[]):  # init for agg+:
     frame.derH = [Lay]
     return frame
 
-def cluster_edge(iG_, frame):  # edge is CG but not a connectivity cluster, just a set of clusters in >ave G blob, unpack by default
+def cluster_edge(edge, frame):  # edge is CG but not a connectivity cluster, just a set of clusters in >ave G blob, unpack by default
 
     def sum_lay_(link_, root):  # still relevant?
         lay0 = CLay(root=root)
@@ -243,29 +244,34 @@ def cluster_edge(iG_, frame):  # edge is CG but not a connectivity cluster, just
                 G_ += [sum2graph(frame, [node_,link_,et, Lay], fi)]
         return G_
 
-    def comp_PP_(edge):
+    def comp_PP_(PP_):
         mL_,dL_,mEt,dEt, N_ = [],[], np.zeros(4),np.zeros(4), set()
 
-        for _G, G in combinations(edge.node_, r=2):
+        for _G, G in combinations(PP_, r=2):
             _n, n = _G.Et[2], G.Et[2]; rn = _n/n if _n>n else n/_n
             dy,dx = np.subtract(_G.yx,G.yx); dist = np.hypot(dy,dx)
-            if dist - (G.aRad+_G.aRad) < ave_dist / 10:  # very short here
+            if dist - (G.aRad+_G.aRad) < ave_dist / 10:  # very short here (dist - (G.aRad+_G.aRad) can be negative?)
                 L = comp_N(_G, G, ave, fi=1, angle=[dy, dx], dist=dist, fshort=1)
                 m, d, n, o = L.Et
                 if m > ave * n * loop_w:
                     mL_ += [L]; mEt += L.Et; N_.update({_G, G})
                 if d > avd * n * loop_w:
-                    dL_ += [L]; dEt += L.Et
+                    dL_ += [L]; dEt += L.Et  # dL_ is not needed?
 
-            return list(N_),mL_,mEt  # also need dlinks?
+        return list(N_),mL_,mEt  # also need dlinks?  (the indentation is wrong)
 
-    N_,L_,Et = comp_PP_(iG_)
-    # mval -> lay:
-    if N_ and val_(Et, Et, ave, fi=1) > 0:
-        lay = [sum_lay_(L_, frame)]  # [mfork]
-        G_ = cluster_PP_(copy(N_), fi=1) if Et[0] * (len(N_)-1)*Lw > ave * Et[2] * clust_w else []
-
-        return [N_,G_,lay]
+    N_t, G_t, Lay = [], [], []
+    for fd in 0,1:  # so we need 2 clustering forks here now
+        N_,L_,Et = comp_PP_(edge.link_ if fd else edge.node_)
+        # mval -> lay:
+        if N_ and val_(Et, Et, ave, fi=1) > 0:
+            Lay += [sum_lay_(L_, frame)]  # [mfork, dfork]
+            G_ = cluster_PP_(copy(N_), fi=1) if Et[0] * (len(N_)-1)*Lw > ave * Et[2] * clust_w else []
+            N_t += [N_]; G_t += [G_]
+        else:
+            N_t += [[]]; G_t += [[]]  # preserve empty list for correct forks unpacking later
+    
+    return [N_t,G_t,Lay]
 
 def cross_comp(root, rc, iN_, fi=1):  # rc: recursion count, fc: centroid phase, cross-comp, clustering, recursion
 
@@ -858,7 +864,7 @@ def blob2G(G, **kwargs):
     G.altG = []  # or altG? adjacent (contour) gap+overlap alt-fork graphs, converted to CG
     return G
 
-def PP2G(PP):
+def PP2G(PP, frame):
     P_, link_, vert, latuple, A, S, box, yx, Et = PP
     baseT = np.array((*latuple[:2], *latuple[-1]))  # I,G,Dy,Dx
     [mM,mD,mI,mG,mA,mL], [dM,dD,dI,dG,dA,dL] = vert
