@@ -132,7 +132,7 @@ def comp_dP_(edge):  # node_- mediated: comp node.rim dPs, call from form_PP_
                 angle = np.subtract(dP.yx,_dP.yx)  # dy,dx of node centers
                 distance = np.hypot(*angle)  # between node centers
                 _dP.lrim += [convert_to_dP(_dP, dP, mdVer, angle, distance, et)]  # up only
-                _dP.prim += [dP]; dP.prim += [_dP]  # for dP, we need bidirectional?
+                _dP.prim += [dP]
 
 def convert_to_dP(_P,P, derLay, angle, distance, Et):
 
@@ -171,8 +171,6 @@ def sum2PP(edge, P_, dP_, Et):  # sum links in Ps and Ps in PP
     PPt = [P_, link_, vert, latuple, A, S, box, [(y0+yn)/2,(x0+xn)/2], Et]
     for P in P_: P.root = PPt
     edge.vertuple += vert
-    edge.latuple += latuple  # we need to sum latuple too?
-    
     edge.Et += Et
 
     return PPt
