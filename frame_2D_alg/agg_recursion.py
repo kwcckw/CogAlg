@@ -253,15 +253,16 @@ def cluster_edge(edge, frame):  # non-recursive comp_PPm, comp_PPd, edge is not 
         if edge.Et[1-fi] *((len(edge.node_ if fi else edge.link_)-1)*(edge.rng+1) *Lw) > ave * edge.Et[3-fi] * clust_w:
 
             N_ = [PP2G(PP, frame) for PP in (edge.node_ if fi else edge.link_)]
-            PP_,mL_,mEt,dL_,dEt = comp_PP_(N_, fi)
+            PP_,mL_,mEt,dL_,dEt = comp_PP_(N_, 1)  # fi is always 1 here? We convert edge.link_ into CG too
             for l in mL_: Lay[fi].add_lay(l.derH[0])
             if val_(mEt, mEt, ave, fi=1) > 0:
-                Gm_ = cluster_PP_(copy(PP_),fi) if mEt[0] * (len(PP_)-1)*Lw > ave * mEt[2] * clust_w else []
+                Gm_ = cluster_PP_(copy(PP_),1) if mEt[0] * (len(PP_)-1)*Lw > ave * mEt[2] * clust_w else []
                 fork = [PP_, Gm_]  # (ppm_,gm_) | (ppd_,gd_)
             else: fork = [[],[]]
             if fi:  # der+ is not recursive
                 if val_(dEt, dEt, ave, fi=0) > 0:
-                    Gd_ = cluster_L_(None, dL_, ave, rc=2, fi=1) if dEt[0] * (len(dL_)-1) * Lw > ave * dEt[2] * clust_w else []
+                    # root is None here? Or it can be frame (edge.root)
+                    Gd_ = cluster_L_(None, L2N(dL_), ave, rc=2, fi=1) if dEt[0] * (len(dL_)-1) * Lw > ave * dEt[2] * clust_w else []
                     fork = [fork, Gd_] # ((ppm_,gm_),Lppm_)
                 else: fork = [fork,[]]
             Ft += [fork]
@@ -312,7 +313,12 @@ def cross_comp(root, rc, iN_, fi=1):  # rc: recursion count, fc: centroid phase,
         if val_(dEt,mEt, avd*(rc+3), fi=0, coef=loop_w) > 0:  # eval mEt as alt fork?
             # cluster by dval via nodet:
             lG = cluster_L_(root, N_, ave*(rc+2), rc=rc+2, fi=1)
-            cross_comp(lG, rc+4, iN_=dL_, fi=0)  # recursive cross_comp L_, never CC?
+            
+            if val_(dEt,mEt, avd*(rc+5), fi=0, coef=loop_w) > 0:  # higher rc?
+                cross_comp(lG, rc+4, iN_=dL_, fi=0)  # recursive cross_comp L_, never CC?
+            elif val_(dEt,mEt, avd*(rc+4), fi=0, coef=loop_w) > 0:  # lower rc compare to cross_comp?
+                llG = cluster_L_(root, dL_, ave*(rc+2), rc=rc+2, fi=1)    
+            
         if nG or lG:
             root.H += [[]]
             for g in nG,lG:
@@ -511,7 +517,8 @@ def sum2graph(root, grapht, fi, minL=0, maxL=None):  # sum node and link params 
         yx_ += [N.yx]
         if i:
             graph.Et+=N.Et*int_w; graph.baseT+=N.baseT; graph.box=extend_box(graph.box,N.box)
-            add_node_H(graph.H, N.H, graph)
+            if N.H and isinstance(N.H[0], list):  # add_node_h should be run only if N.H is not flat?
+                add_node_H(graph.H, N.H, graph)
     graph.H += [[N_,link_]]  # last layer is flat, current-dist link_ only?
     yx = np.mean(yx_, axis=0)
     dy_,dx_ = (graph.yx - yx_).T; dist_ = np.hypot(dy_,dx_)
@@ -770,7 +777,7 @@ def add_H(H, h, root, rev=0, fi=1):  # add fork L.derHs
             else:  # one-fork lays
                 if Lay: Lay.add_lay(lay,rev=rev)
                 else:   H += [lay.copy_(root=root,rev=rev)]
-                root.derTTe += lay.derTT; root.Et += lay.Et
+                if root: root.derTTe += lay.derTT; root.Et += lay.Et  # when root is None
 
 def comp_H(H,h, rn, root, Et, fi):  # one-fork derH if not fi, else two-fork derH
 
@@ -807,13 +814,16 @@ def sum_N_(node_, root_G=None, root=None, flat=0):  # form G
 
 def add_N(N,n, fi=1, flat=0):
 
-    N.baseT+=n.baseT; N.derTT+=n.derTT; N.Et+=n.Et; N.yx+=n.yx; N.box=extend_box(N.box, n.box)
+    if not hasattr(N, 'baseT') and not isinstance(N, CG):  # init param for frame
+        N.baseT=copy(n.baseT); N.derTT=copy(n.derTT); N.Et=copy(n.Et); N.yx=np.array(n.yx); N.box=copy(n.box); N.derTTe = np.zeros((2,8)); N.aRad = 0; N.derH = []; N.H = []; N.root = None; N.extH = []
+    else: 
+        N.baseT+=n.baseT; N.derTT+=n.derTT; N.Et+=n.Et; N.yx+=n.yx; N.box=extend_box(N.box, n.box)
     if hasattr(n,'derTTe'):
         N.derTTe += n.derTTe; N.aRad += n.aRad
         if n.extH:
             add_H(N.extH, n.extH, root=N, fi=0)
         if flat: N.H += [n]  # also if altG
-        elif fi:  # no H in CL
+        elif fi and n.H and isinstance(n.H[0], list):  # no H in CL
             add_node_H(N.H,n.H, root=N.root)
         if n.derH:
             add_H(N.derH, n.derH, root=N, fi=fi)
