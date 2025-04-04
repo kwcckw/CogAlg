@@ -299,7 +299,7 @@ def cross_comp(root, rc, iN_, fi=1):  # rc: recursion count, fc: centroid phase,
                 if C_:
                     sL_ = {L for C in C_ for n in C.H for L,_ in n.rim if L.L < ave_dist}; m,n = 0,0
                     for l in sL_: m+=l.Et[0]; n+=l.Et[2]
-                    if m > ave * n * (rc+3) * clust_w:  # form transitive root:
+                    if m > ave * n * (rc+3) * clust_w and len(sL_)>1:  # form transitive root:  (len sL_ must >1 here, else no segment can be formed?)
                         nG = cluster_N_(sum_N_(N_,flat=1), sL_, ave*(rc+3), rc+3)  # link-cluster CC nodes via short rim Ls
             else:  # N_ = dfork L_
                 nG = cluster_L_(sum_N_(N_,flat=1), N_, ave*(rc+2), rc=rc+2, fnodet=0)  # via llinks, no dist-nesting, no cluster_C_
@@ -318,9 +318,10 @@ def cross_comp(root, rc, iN_, fi=1):  # rc: recursion count, fc: centroid phase,
             root.H += [[]]
             for fn, g in ((1,0), (nG,lG)):
                 if g:
-                    add_N(root, g, flat=1)
+                    add_N(root, g, flat=1)  # root.H is not flat but g.H is flat here
                     if fn:
-                        root.H[1] += [g.H[0][0] if isinstance(g.H[0],list) else g]  # g.H is not nested in recursion
+                        # should be root.H[-1][0] for last layer's fi fork?
+                        root.H[-1][1] += [g.H[0][0] if isinstance(g.H[0],list) else g]  # g.H is not nested in recursion
                         if len(nG.H) > 1:
                             root.H += nG.H[1:]  # extend H if recursive mfork
                 else:  # add new lay instead of lG.derH:
@@ -418,7 +419,7 @@ def comp_link_(iL_, ave):  # comp CLs via directional node-mediated link tracing
                 med +=1
             else: break
         else: break
-    return out_L_, LL_, ET
+    return list(out_L_), LL_, ET  # convert set to list
 
 def base_comp(_N, N, dir=1):  # comp Et, Box, baseT, derTT
     # comp Et:
@@ -625,16 +626,16 @@ def cluster_L_(root, L_, ave, rc, fnodet=1):  # CC links via nodet or rimt, no d
             G_ += [sum2graph(root, [list({*node_}), link_, Et, Lay], fi=0)]
     if G_:
         [comb_altG_(G.altG.H, ave, rc) for G in G_]
-        G_ = sum_N_(G_)
+        G_ = sum_N_(G_, flat=1)  # flat should be 1 here
     return G_
 
 def cluster_C_(L_, rc):  # 0 nest gap from cluster_edge: same derH depth in root and top Gs
 
     def sum_C(node_):  # sum|subtract and average C-connected nodes
 
-        C = copy_(node_[0]); C.H = node_  # add root and medoid / exemplar?
+        C = copy_(node_[0]); C.H = [node_[0]]  # add root and medoid / exemplar?
         C.M = 0
-        sum_N_(node_[1:], root_G=C)  # no extH, extend_box
+        sum_N_(node_[1:], root_G=C, flat=1)  # no extH, extend_box  (flat should be 1 here? C.H is flat?)
         alt_ = [n.altG for n in node_ if n.altG]
         if alt_:
             sum_N_(alt_, root_G=C.altG)  # no m, M, L in altG
@@ -736,7 +737,8 @@ def comb_altG_(G_, ave, rc=1):  # combine contour G.altG_ into altG (node_ defin
                 if val_(G.altG.Et, G.Et, ave, fi=0):  # alt D * G rM
                     cross_comp(G.altG, rc, G.altG.H, fi=1)  # adds nesting
         else:  # altG = sum dlinks
-            dL_ = list(set([L for g in G.H[-1][0] for L,_ in g.rim if val_(L.Et,G.Et, ave, fi=0) > 0]))
+            # in deeper forks, G.H[-1][0] could be CLs
+            dL_ = list(set([L for g in G.H[-1][0] for L,_ in (g.rim if isinstance(g, CG) else g.rimt[0]+g.rimt[1]) if val_(L.Et,G.Et, ave, fi=0) > 0]))
             if dL_ and val_(np.sum([l.Et for l in dL_], axis=0), G.Et, ave, coef=10, fi=0) > 0:
                 altG = sum_N_(dL_)
                 G.altG = copy_(altG); G.altG.H = [altG]; G.altG.root=G
@@ -797,7 +799,7 @@ def sum_N_(node_, root_G=None, root=None, flat=0):  # form G
     fi = isinstance(node_[0],CG)
     if root_G: G = root_G
     else:
-        G = copy_(node_[0]); G.fi=fi
+        G = copy_(node_[0]); G.fi=fi; G.H = []  # we need reset H? Because G.H may copy n.H, that is wrong when flat = 1
         G.root=root
     for n in node_:
         add_N(G,n, fi, flat)
@@ -926,7 +928,7 @@ def agg_H_seq(focus, image, _nestt=(1,0), rV=1, _rv_t=[]):  # recursive level-fo
     frame = vect_root(frame, rV, _rv_t)
     if len(frame.H)<2:  # [PP_t]
         return frame
-    comb_altG_(frame.H[-1][0].H[-1][0], ave*2)  # PP graphs in frame.node_[2]
+    comb_altG_(frame.H[-1][0], ave*2)  # PP graphs in frame.node_[2]  (last layer is flat now)
     # forward agg+:
     cross_comp(frame, rc=1, iN_=frame.H[-1][0])  # last layer is not nested
     # adjust weights:
@@ -945,7 +947,7 @@ def agg_H_seq(focus, image, _nestt=(1,0), rV=1, _rv_t=[]):  # recursive level-fo
 def feedback(root, ifi):  # root is frame if ifi else lev_lG
     # draft
     rv_t = np.ones((2,8))  # sum derTT coefs: m_,d_ [M,D,n,o, I,G,A,L] / Et, baseT, dimension
-    rM, rD = 1, 1; hG = root.H[-1][0]  # top level, no feedback
+    rM, rD = 1, 1; hG = sum_N_(root.H[-1][0])  # top level, no feedback (we need sum_N_ here? Since last layer is flat)
 
     for lev in reversed(root.H[:-1]):
         for fi, fork_G in lev[0], lev[2]:  # CG node_ if fi else, CL link_
