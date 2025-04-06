@@ -4,8 +4,8 @@ from functools import reduce
 from itertools import zip_longest, combinations
 from multiprocessing import Pool, Manager
 from frame_blobs import CBase, frame_blobs_root, intra_blob_root, imread, unpack_blob_
-from slice_edge import slice_edge, comp_angle
-from comp_slice import comp_slice
+from slice_edge import CP, slice_edge, comp_angle
+from comp_slice import CdP, comp_slice
 '''
 Current code is starting with primary sensory data, just images here
 Each agg+ cycle refines input nodes in cluster_C_ and connects then in complemented graphs in cluster_N_ 
@@ -209,7 +209,7 @@ def vect_root(frame, rV=1, ww_t=[]):  # init for agg+:
     if Gd_: link_ = Gd_; frame.dH = [PPdg]
     else:   link_ = PPd_ # empty link_ - specific dH
     if Gm_:
-        frame.node_,frame.link_ = Gm_, LPPm_; frame.H = [[PPmg,link_]]  # pack 1st lev
+        frame.node_,frame.link_ = Gm_, LPPm_; frame.H = [[PPmg,sum_N_(link_)]]  # pack 1st lev (link_ here should be summed to G for feedback purpose?)
     else:
         frame.node_,frame.link_ = PPm_,link_  # empty H
     baseT, derTT = np.zeros(4), np.zeros((2,8))
@@ -326,7 +326,7 @@ def cross_comp(root, rc, iN_, fi=1):  # rc: recursion count, fc: centroid phase,
             for g in nG,lG:
                 if g: lev += [g]; add_N(root, g)  # appends root.derH
                 else: lev += [[]]
-            root.H += [lev, *nG.H]  # nG.H from recursion, if any
+            root.H += [lev] + [*nG.H] if nG else []  # nG.H from recursion, if any  (nG may empty)
 
 def comp_node_(_N_, ave, L=0):  # rng+ forms layer of rim and extH per N, appends N_,L_,Et, ~ graph CNN without backprop
 
@@ -517,7 +517,10 @@ def sum2graph(root, grapht, fi, minL=0, maxL=None):  # sum node and link params 
             if i:
                 graph.Et+=N.Et*int_w; graph.baseT+=N.baseT; graph.box=extend_box(graph.box,N.box)
                 if fi: add_node_H(graph.H, N.H)
-    graph.H += [[sum_N_(n_), sum_N_(l_)]]  # pack prior top level, current-dist link_ only?
+
+    # n maybe CP in cluster_edge, so skip them? Multi levels houldn't be applicable in cluster_edge?
+    if (n_ and not isinstance(n_[0], CP) and not isinstance(n_[0], CdP)) or (l_ and not isinstance(l_[0], CdP)):
+        graph.H += [[sum_N_(n_), sum_N_(l_)]]  # pack prior top level, current-dist link_ only?
     graph.node_ = N_
     yx = np.mean(yx_, axis=0)
     dy_,dx_ = (graph.yx - yx_).T; dist_ = np.hypot(dy_,dx_)
@@ -805,7 +808,8 @@ def add_N(N,n, fi=1, fappend=0):
     if isinstance(n,CG) and n.altG:  # not CL
         add_N(N.altG, n.altG)
     if fappend:
-        N.node_ += [n]; N.link_ += [n.link_]  # splice
+        N.node_ += [n];  # splice
+        if fi: N.link_ += [n.link_]  # if n is CL, they do not have link_?
     elif fi:  # empty in altG
         if n.H: add_node_H(N.H, n.H)
         if n.dH: add_node_H(N.dH, n.dH)
