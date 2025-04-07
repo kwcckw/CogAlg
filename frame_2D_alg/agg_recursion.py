@@ -241,7 +241,7 @@ def cluster_edge(edge, frame):  # non-recursive comp_PPm, comp_PPd, edge is not 
                 _eN_ = {*eN_}
             if et[0] * (len(node_)*Lw) > ave*2 * et[2] * clust_w:
                 Lay = CLay(); [Lay.add_lay(link.derH[0]) for link in link_]  # single-lay derH
-                G_ += [sum2graph(frame, [node_,link_,et, Lay], fi=1)]
+                G_ += [sum2graph(frame, [node_,link_,et, Lay], ifi=1)]
         return G_
 
     def comp_PP_(PP_):
@@ -270,7 +270,8 @@ def cluster_edge(edge, frame):  # non-recursive comp_PPm, comp_PPd, edge is not 
             else: fork = [[],[]]
             if fi:  # der+ is not recursive
                 if val_(dEt, dEt, ave, fi=0) > 0:  # Gd_ = lG.H:
-                    Gd_ = cluster_L_(frame, L2N(dL_), ave, rc=2, fnodet=1).H if dEt[0] * (len(dL_)-1) * Lw > ave * dEt[2] * clust_w else []
+                    # should be .node_ instead of .H now
+                    Gd_ = cluster_L_(frame, L2N(dL_), ave, rc=2, fnodet=1).node_ if dEt[0] * (len(dL_)-1) * Lw > ave * dEt[2] * clust_w else []
                     fork = [fork, Gd_] # ((ppm_,gm_),Lppm_)
                 else: fork = [fork,[]]
             Ft += [fork]
@@ -322,6 +323,8 @@ def cross_comp(root, rc, iN_, fi=1):  # rc: recursion count, fc: centroid phase,
             if fi:                                                         # cc_w if fc else lc_w? rc+=1 for all subseq ops?
                 C_ = cluster_C_(mL_,rc+2)  # form exemplar centroids, same derH
                 if C_:
+                    # n doesn't have m, so sum from their Ct_?
+                    # m = sum([Ct[1] for Ct in n.Ct_])
                     exemplars = {n for C in C_ for n in C.node_ if n.m > ave * clust_w}  # typical nodes only
                     short_L_  = {l for n in exemplars for l in n.rim if l.L < ave_dist}; m, n = 0, 1e-7
                     for l in short_L_: m+=l.Et[0]; n+=l.Et[2]
@@ -585,7 +588,7 @@ def cluster_L_(root, L_, ave, rc, fnodet=1):  # CC links via nodet or rimt, no d
         if val_(Et, root.Et, ave*rc, mw=(len(node_)-1)*Lw, aw=clust_w) > 0:
             Lay = CLay()
             [Lay.add_lay(l) for l in sum_H(node_ if fnodet else link_, root=lG, fi=0)]
-            G_ += [sum2graph(lG, [list({*node_}), link_, Et, Lay], fi=0)]
+            G_ += [sum2graph(lG, [list({*node_}), link_, Et, Lay], ifi=0)]
     if G_:
         [comb_altG_(G.altG.H, ave, rc) for G in G_]
         sum_N_(G_, root_G = lG)
@@ -662,17 +665,19 @@ def layer_C_(root, L_, rc):  # node-parallel cluster_C_ in mediation layers, pru
     # same nodes on all layers, hidden layers mediate links up and down, don't sum or comp anything?
     pass
 
-def sum2graph(root, grapht, fi, minL=0, maxL=None):  # sum node and link params into graph, aggH in agg+ or player in sub+
+def sum2graph(root, grapht, ifi, minL=0, maxL=None):  # sum node and link params into graph, aggH in agg+ or player in sub+
 
     node_, link_, Et, mfork = grapht  # Et and mfork are summed from link_
     n0=node_[0]
     graph = CG(
-        fi=fi, H = n0.H, Et=Et+n0.Et*int_w, link_=link_, box=n0.box, baseT=copy(n0.baseT), derTT=mfork.derTT, root=root, maxL=maxL,
+        fi=ifi, H = n0.H, Et=Et+n0.Et*int_w, link_=link_, box=n0.box, baseT=copy(n0.baseT), derTT=mfork.derTT, root=root, maxL=maxL,
         derH = [[mfork]])  # higher layers are added by feedback, dfork added from comp_link_:
-    fi = fi and not isinstance(n0.node_[0],CP) # no PPs
+    
+    # we need different set of fi? Since we need the original fi several sections below
+    fi = ifi and not isinstance(n0.node_[0],CP) # no PPs
     for L in link_:
         L.root = graph  # reassign when L is node
-        if not fi:  # add mfork as link.nodet(CL).root dfork
+        if not ifi:  # add mfork as link.nodet(CL).root dfork
             LR_ = set([n.root for n in L.nodet if isinstance(n.root,CG)]) # skip frame, empty roots
             if LR_:
                 dfork = reduce(lambda F,f: F.add_lay(f), L.derH, CLay())  # combine lL.derH
@@ -701,7 +706,7 @@ def sum2graph(root, grapht, fi, minL=0, maxL=None):  # sum node and link params 
     dy_,dx_ = (graph.yx - yx_).T; dist_ = np.hypot(dy_,dx_)
     graph.aRad = dist_.mean()  # ave distance from graph center to node centers
     graph.yx = yx
-    if not fi:  # dgraph, no mGs / dG for now  # and val_(Et, _Et=root.Et) > 0:
+    if not ifi:  # dgraph, no mGs / dG for now  # and val_(Et, _Et=root.Et) > 0:
         altG = []  # mGs overlapping dG
         for L in node_:
             for n in L.nodet:  # map root mG
@@ -798,7 +803,7 @@ def add_H(H, h, root, rev=0, fi=1):  # add fork L.derHs
 def sum_N_(node_, root_G=None, root=None, fnest=0):  # form G
 
     fi = isinstance(node_[0],CG)
-    if root_G: G = root_G
+    if root_G is not None: G = root_G  # we need to check is not None now since we may parse empty nG and lG
     else:
         G = copy_(node_[0], init=1, root=root); G.fi=fi
     for n in node_:
@@ -854,7 +859,8 @@ def PP2G(PP, frame):
     derTT = np.array([[mM,mD,mL,0,mI,mG,mA,mL], [dM,dD,dL,0,dI,dG,dA,dL]])
     y,x,Y,X = box; dy,dx = Y-y,X-x
     # A = (dy,dx); L = np.hypot(dy,dx)
-    G = CG(root=frame, fi=1, Et=Et, node_=P_,link_=link_, baseT=baseT, derTT=derTT, box=box, yx=yx, aRad=np.hypot(dy/2, dx/2),
+    # PP.yx is not in np.array, change it in comp_slice? Else we will be appending yx instead of summing them
+    G = CG(root=frame, fi=1, Et=Et, node_=P_,link_=link_, baseT=baseT, derTT=derTT, box=box, yx=np.array(yx), aRad=np.hypot(dy/2, dx/2),
            derH=[[CLay(node_=P_,link_=link_, derTT=deepcopy(derTT)), CLay()]])  # empty dfork
     return G
 
@@ -930,16 +936,17 @@ def agg_H_seq(focus, image, rV=1, _rv_t=[]):  # recursive level-forming pipeline
         comb_altG_(frame.node_, ave*2)
         cross_comp(frame, rc=1, iN_=frame.node_)  # top level
         # adjust weights:
-        rM, rD, rv_t = feedback(frame)
-        if (rM+rD) * val_(frame.Et,frame.Et, ave) > ave * clust_w * 20:  # normalized?
-            nG = frame.H[0][0]  # focus shift by dval + temp Dm_+Ddm_?
-            dy,dx = nG.baseT[-2:]  # gA from summed Gs
-            y,x,Y,X = nG.box  # current focus
-            y = y+dy; x = x+dx; Y = Y+dy; X = X+dx  # alter focus shape, also focus size: +/m-, res decay?
-            if y > 0 and x > 0 and Y < image.shape[0] and X < image.shape[1]:  # focus is inside the image
-                # rerun agg+ with new focus and aves:
-                agg_H_seq(image[y:Y,x:X], image, rV, rv_t)
-                # all aves *= rV, but ultimately differential backprop per ave?
+        if frame.link_:  # LPPm_ may empty since they eval differently
+            rM, rD, rv_t = feedback(frame)
+            if (rM+rD) * val_(frame.Et,frame.Et, ave) > ave * clust_w * 20:  # normalized?
+                nG = frame.H[0][0]  # focus shift by dval + temp Dm_+Ddm_?
+                dy,dx = nG.baseT[-2:]  # gA from summed Gs
+                y,x,Y,X = nG.box  # current focus
+                y = y+dy; x = x+dx; Y = Y+dy; X = X+dx  # alter focus shape, also focus size: +/m-, res decay?
+                if y > 0 and x > 0 and Y < image.shape[0] and X < image.shape[1]:  # focus is inside the image
+                    # rerun agg+ with new focus and aves:
+                    agg_H_seq(image[y:Y,x:X], image, rV, rv_t)
+                    # all aves *= rV, but ultimately differential backprop per ave?
     return frame
 
 def feedback(root):  # root is frame or lG
