@@ -203,11 +203,11 @@ def vect_root(frame, rV=1, ww_t=[]):  # init for agg+:
                 if Et[0] > ave * Et[2] * clust_w:
                     cluster_edge(edge, frame, lev0, lev1, dH, lay)  # may be empty
 
-    G_t = [sum_N_(lev0[0]), sum_N_(lev0[1])]
-    for n_ in G_t + lev1 + dH:
+    G_t = [sum_N_(lev) if lev else [] for lev in lev0]  # PP_ in both forks may empty
+    for n_ in lev0 + lev1 + dH:  # should be lev0 instead of G_t since G_t contains tuple of 2 levG
         for n in n_:
             frame.baseT += n.baseT; frame.derTT += n.derTT
-    frame.H = [G_t]  # two forks in nested lev
+    if G_t[0] or G_t[1]: frame.H = [G_t]  # two forks in nested lev  (pack only if non empty? So that we can use it to check new level?)
     frame.node_ = lev1[0]; frame.link_= lev1[1]
     frame.dH = dH  # two levs
     frame.derH = [lay]
@@ -262,7 +262,7 @@ def cluster_edge(edge, frame, lev0, lev1, dH, lay):  # non-recursive comp_PPm, c
                 G_ = cluster_PP_(copy(PP_)) if mEt[0] * (len(PP_)-1)*Lw > ave * mEt[2] * clust_w else []
             if G_:
                 lev1[1-fi] += G_; lev0[1-fi] += PP_  # H[0]
-            else: lev1[1-fi] += PP_  # node_|link_
+            else: lev0[1-fi] += PP_  # node_|link_ (this should be lev0? Or we need to recycle it?)
             if fi:  # der+, not recursive
                 dH[0] += L_ # flat?
                 Gd_ = []
@@ -732,7 +732,8 @@ def comb_altG_(G_, ave, rc=1):  # combine contour G.altG_ into altG (node_ defin
                 if val_(G.altG.Et, G.Et, ave, fi=0):  # alt D * G rM
                     cross_comp(G.altG, rc, G.altG.H, fi=1)  # adds nesting
         else:  # altG = sum dlinks
-            dL_ = list(set([L for g in G.node_ for L,_ in (g.rim if isinstance(g, CG) else g.rimt[0]+g.rimt[1]) if val_(L.Et,G.Et, ave, fi=0) > 0]))
+            g_ = [g for g in G.node_ if isinstance(g, CG)]  # we need to skip PPs if we recycle PPs
+            dL_ = list(set([L for g in g_ for L,_ in (g.rim if isinstance(g, CG) else g.rimt[0]+g.rimt[1]) if val_(L.Et,G.Et, ave, fi=0) > 0]))
             if dL_ and val_(np.sum([l.Et for l in dL_], axis=0), G.Et, ave, aw=10, fi=0) > 0:
                 altG = sum_N_(dL_)
                 G.altG = copy_(altG); G.altG.H = [altG]; G.altG.root=G
@@ -805,7 +806,7 @@ def sum_N_(node_, root_G=None, root=None, fw=0):  # form cluster G
 def add_N(N,n, fi=1, fappend=0, fw=0):
 
     if fw:  # proximity weighting in centroid only, other params not used
-        r = ave_dist / np.hypot(N.yx - n.yx)
+        r = ave_dist / np.hypot(*(N.yx - n.yx))
         n.baseT*=r; n.derTT*=r; n.Et*=r
 
     N.baseT+=n.baseT; N.derTT+=n.derTT; N.Et+=n.Et
