@@ -205,7 +205,7 @@ def vect_root(frame, rV=1, ww_t=[]):  # init for agg+:
     G_t = [sum_N_(lev) if lev else [] for lev in lev0]
     for n_ in [G_t] + lev1 + dH:
         for n in n_:
-            frame.baseT+=n.baseT; frame.derTT+=n.derTT
+            if n: frame.baseT+=n.baseT; frame.derTT+=n.derTT  # skip empty G_t
     if G_t[0] or G_t[1]: frame.H=[G_t]  # nested lev0
     frame.node_ = lev1[0]; frame.link_= lev1[1]
     frame.dH = dH  # two levs
@@ -564,7 +564,7 @@ def cluster_L_(root, L_, ave, rc, fnodet=1):  # CC links via nodet or rimt, no d
         if fnodet:
             for _L in L.nodet[0].rim+L.nodet[1].rim if L.nodet[0].fi else [l for n in L.nodet for l,_ in n.rimt[0]+n.rimt[1]]:
                 if _L in L_ and not _L.fin and _L.Et[1] > avd * _L.Et[2]:  # cluster by d
-                    link_ += [L.nodet]
+                    link_ += L.nodet  # bracket is not needed, it should be flat
                     Et += _L.Et; _L.fin = 1; node_ += [_L]
         else:
             for lL,_ in L.rimt[0] + L.rimt[1]:
@@ -581,7 +581,7 @@ def cluster_L_(root, L_, ave, rc, fnodet=1):  # CC links via nodet or rimt, no d
         sum_N_(G_, root_G = lG)
         return lG
 
-def cluster_C_(L_):  # select >ave medoids
+def cluster_C_(L_, rc):  # select >ave medoids
 
     def cluster_C(N):  # compute C per medoid, compare C-node pairs, recompute C if max match is not medoid
                        # ave * node_ overlap | (dist/max_dist)**2)?
@@ -590,9 +590,12 @@ def cluster_C_(L_):  # select >ave medoids
         while med <= ave_med and _n_:  # node_ is _Ns connected to N by <=3 mediation degrees
             n_ = []
             for n in [n for _n in _n_ for link, _ in _n.rim for n in link.nodet]:
-                if n.fin:
-                    if med == 1: continue  # skip directly connected nodes if in other CC
-                else: n.fin = 1; n_ +=[n]  # add to CC
+                if n.roott_:
+                    overlap = 0
+                    for _C in n.roott_:
+                        overlap += len(set(C.node_)&set(_C.node_))/(len(C.node_)+len(_C.node_))
+                    if med == 1 and overlap > ave: continue  # skip directly connected nodes if in other CC
+                else: n.roott_ += [C]; n_ +=[n]  # add to CC
                 # replace fin with roott_ to compute overlap
             _n_ = n_; node_+=n_; med += 1
         C = sum_N_(list(set(node_)))
@@ -608,11 +611,10 @@ def cluster_C_(L_):  # select >ave medoids
             return max_n, max_m
             # new medoid
     N_ = list(set([node for link in L_ for node in link.nodet]))
-    # or input N_?
-    rc = 1  # recursion count
-    while True:  # per C_: Val of all clusters may be affected by new medoids?
+    # or input N_? (Yes, should ne while N_ here)
+    while N_:  # per C_: Val of all clusters may be affected by new medoids?
         ave = globals()['ave'] * rc
-        for N in N_: N.fin = 0
+        for N in N_: N.roott_ = []  # init (only needed in cluster_C_ and new roots per iteration?)
         M, medoid_ = 0, []
         N_ = sorted(N_, key=lambda n: n.Et[0], reverse=True)  # strong nodes initialize centroids
         for N in N_:
@@ -913,7 +915,7 @@ def feedback(root):  # root is frame or lG
 
     rv_t = np.ones((2,8))  # sum derTT coefs: m_,d_ [M,D,n,o, I,G,A,L] / Et, baseT, dimension
     rM,rD = 1,1
-    hlG = sum_N_(root.link_+ root.dH)  # not sure about root.dH
+    hlG = sum_N_(root.link_+ root.dH[1])  # not sure about root.dH (so dH has dL_ and Gd_, i think we need to select the higher Gd_ only?)
     for lev in reversed(root.H):
         lG = lev[1]  # eval link_: comp results per level?
         _m,_d,_n,_ = hlG.Et; m,d,n,_ = lG.Et
