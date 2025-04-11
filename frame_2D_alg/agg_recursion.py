@@ -587,33 +587,39 @@ def cluster_C_(L_, rc):  # select medoids for LC, next cross_comp
         while med <= ave_med and _n_:  # node_ is _Ns connected to N by <=3 mediation degrees
             n_ = [n for _n in _n_ for link,_ in _n.rim for n in link.nodet  # +ve Ls
                   if med >1 or not n.C]  # skip directly connected medoids
-            node_ += n_; _n_ = n_; med += 1
+            node_ += list(set(n_)); _n_ = n_; med += 1  # we may get duplicated nodes from _n.rim's nodet
         C = sum_N_(list(set(node_)))  # default
         k = len(node_)
         for n in (C, C.altG): n.Et /= k; n.baseT /= k; n.derTT /= k; n.aRad /= k; n.yx /= k; norm_H(n.derH, k)
         maxM, m_ = 0,[]
         for n in node_:
-            m = sum( base_comp(C,N)[0][0])  # derTT[0][0]
+            m = sum( base_comp(C,n)[0][0])  # derTT[0][0]  # should be comparing n and C here
             if C.altG and N.altG: m += sum( base_comp(C.altG,N.altG)[0][0])
             m_ += [m]
-            if m > maxM: maxN = n; maxM = m
+            if m > maxM: maxN = n; maxM = m  # maxN could be N itself?
         if maxN not in medoid_:
-            for _medoid, _m in N.mroott_:
-                rel_olp = len(set(C.node_) & set(maxN.C.node_)) / (len(C.node_) + len(maxN.C.node_))
-                if _m > m:
-                    if m > ave * rel_olp:  # add medoid
-                        for _N, __m in zip(maxN.C.node_, m_): _N.mroott_ += [[maxN, __m]]  # _N match to C
-                        maxN.C = C; medoid_ += [maxN]; M += m
-                # needed?
-                elif _m < ave * rel_olp:
-                    maxN.C = None; medoid_.remove(_medoid); M += _m  # abs change? remove mroots?
+            if N.mroott_ and maxN.C:  # maxN might not have C assigned yet
+                for _medoid, _m in N.mroott_:
+                    rel_olp = len(set(C.node_) & set(maxN.C.node_)) / (len(C.node_) + len(maxN.C.node_))
+                    if _m > m:
+                        if m > ave * rel_olp:  # add medoid
+                            for _N, __m in zip(maxN.C.node_, m_): _N.mroott_ += [[maxN, __m]]  # _N match to C
+                            maxN.C = C; medoid_ += [maxN]; M += m
+                    # needed?
+                    elif _m < ave * rel_olp:
+                        maxN.C = None; medoid_.remove(_medoid); M += _m  # abs change? remove mroots? If medoid is added from prior iteration, we need removeit from medoid__?
+            else:  # when mroott_ is empty, we need to add the first medoid and mroott_
+                N.mroott_ += [[maxN, m]]; maxN.C = C; medoid_ += [maxN]; M += m
 
     N_ = list(set([node for link in L_ for node in link.nodet]))
     ave = globals()['ave'] * rc
     medoid__ = []
+    for N in N_: 
+        N.C = None; N.mroott_ = []  # init
     while N_:
         M, medoid_ = 0, []
-        N_ = sorted(N_, key=lambda n: n.Et[0], reverse=True)  # strong nodes initialize centroids
+        # we should consider the n in Et too?
+        N_ = sorted(N_, key=lambda n: n.Et[0] - ave * n.Et[2], reverse=True)  # strong nodes initialize centroids
         for N in N_:
             if N.Et[0] > ave * N.Et[2]:
                 cluster_C(N, M, medoid_)
