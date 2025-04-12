@@ -560,7 +560,8 @@ def cluster_L_(root, L_, ave, rc, fnodet=1):  # CC links via nodet or rimt, no d
         L.fin = 1
         node_, link_, Et, Lay = [L], [], copy(L.Et), CLay()
         if fnodet:
-            for _L in L.nodet[0].rim+L.nodet[1].rim if L.nodet[0].fi else [l for n in L.nodet for l,_ in n.rimt[0]+n.rimt[1]]:
+            # we should check with isinstance CG because CG in dfork has fi == 0
+            for _L in L.nodet[0].rim+L.nodet[1].rim if isinstance(L.nodet[0], CG) else [l for n in L.nodet for l,_ in n.rimt[0]+n.rimt[1]]:
                 if _L in L_ and not _L.fin and _L.Et[1] > avd * _L.Et[2]:  # direct cluster by dval
                     link_ += L.nodet; Et += _L.Et; _L.fin = 1; node_ += [_L]
         else:
@@ -580,14 +581,15 @@ def cluster_L_(root, L_, ave, rc, fnodet=1):  # CC links via nodet or rimt, no d
 
 def cluster_C_(L_, rc):  # select medoids for LC, next cross_comp
 
-    def cluster_C(N, M, medoid_):  # compute C per new medoid, compare C-node pairs, recompute C if max match is not medoid
+    def cluster_C(N, M, medoid_, medoid__, iN_):  # compute C per new medoid, compare C-node pairs, recompute C if max match is not medoid
 
         node_,_n_, med = [], [N], 1
         while med <= ave_med and _n_:  # node_ is _Ns connected to N by <=3 mediation degrees
             n_ = [n for _n in _n_ for link,_ in _n.rim for n in link.nodet  # +ve Ls
-                  if med >1 or not n.C]  # skip directly connected medoids
-            node_ += list(set(n_)); _n_ = n_; med += 1
-        C = sum_N_(list(set(node_)))  # default
+                  if n in iN_ and (med >1 or not n.C)]  # skip directly connected medoids  (only current mL's nodet? Else we may use dL nodet too)
+            node_ += n_; _n_ = n_; med += 1
+        node_ = list(set(node_))  # we may add a same set of node_ in each mediation degreee so duplicates should be removed in the end of the process
+        C = sum_N_(node_)  # default
         k = len(node_)
         for n in (C, C.altG): n.Et /= k; n.baseT /= k; n.derTT /= k; n.aRad /= k; n.yx /= k; norm_H(n.derH, k)
         maxM, m_ = 0,[]
@@ -606,11 +608,14 @@ def cluster_C_(L_, rc):  # select medoids for LC, next cross_comp
                         for _N, __m in zip(C.node_, m_): _N.mroott_ += [[maxN, __m]]  # _N match to C
                         maxN.C = C; medoid_ += [maxN]; M += m
                     elif _m < ave * rel_olp:
-                        medoid_.C = None; medoid_.remove(_medoid); M += _m  # abs change? remove mroots?
+                        # should be updating _medoid.C to existing C?
+                        _medoid.C = C; medoid_.remove(_medoid); M += _m  # abs change? remove mroots?
+                        if _medoid in medoid__: medoid__.remove(_medoid)
+                        sum_N_([_medoid], root_G=C)  # add _medoid to C
         elif m > ave:
             N.mroott_ = [[maxN, m]]; maxN.C = C; medoid_ += [maxN]; M += m
 
-    N_ = list(set([node for link in L_ for node in link.nodet]))
+    N_ = list(set([node for link in L_ for node in link.nodet])); iN_ = N_
     ave = globals()['ave'] * rc
     medoid__ = []
     for N in N_:
@@ -620,7 +625,7 @@ def cluster_C_(L_, rc):  # select medoids for LC, next cross_comp
         N_ = sorted(N_, key=lambda n: n.Et[0]/n.Et[2], reverse=True)  # strong nodes initialize centroids
         for N in N_:
             if N.Et[0] > ave * N.Et[2]:
-                cluster_C(N, M, medoid_)
+                cluster_C(N, M, medoid_, medoid__, iN_)
             else:
                 break  # rest of N_ is weaker
         medoid__ += medoid_
@@ -666,7 +671,7 @@ def sum2graph(root, grapht, fi, minL=0, maxL=None):  # sum node and link params 
         N_ += [N]; yx_ += [N.yx]; N.root = graph  # roots if minL
         if i:
             graph.Et += N.Et*int_w; graph.baseT+=N.baseT; graph.box=extend_box(graph.box,N.box)
-            if fg and N.H: add_node_H(graph.H, N.H)
+            if fg and N.H: add_node_H(graph.H, N.H, root=graph)
         if fg: n_ += N.node_; l_ += N.link_
     if fg: graph.H += [[sum_N_(n_), sum_N_(l_)]]  # pack prior top level, current-dist link_ only?
     graph.node_ = N_
@@ -792,8 +797,8 @@ def add_N(N,n, fi=1, fappend=0):
         N.node_ += [n]
         if fi: N.link_ += [n.link_]  # splice if CG
     elif fi:  # empty in append and altG
-        if n.H: add_node_H(N.H, n.H)
-        if n.dH: add_node_H(N.dH, n.dH)
+        if n.H: add_node_H(N.H, n.H, root=N)
+        if n.dH: add_node_H(N.dH, n.dH, root=N)
     if n.derH:
         add_H(N.derH, n.derH, root=N, fi=fi)
     if hasattr(n,'extTT'):  # node, = fi?
@@ -802,13 +807,14 @@ def add_N(N,n, fi=1, fappend=0):
             add_H(N.extH, n.extH, root=N, fi=0)
     return N
 
-def add_node_H(H,h):
+def add_node_H(H,h,root):
 
     for Lev, lev in zip(H, h):  # always aligned?
-        for F, f in zip_longest(Lev, lev, fillvalue=None):
+        for i, (F, f) in enumerate(zip_longest(Lev, lev, fillvalue=None)):
             if f:
-                if F: add_N(F,f)  # nG|lG
-                else: Lev += [f]  # if lG
+                if F:           add_N(F,f)  # nG|lG
+                elif F is None: Lev += [f]  # if lG  (we pack empty list layer, this is not possible now?)
+                else:           Lev[i] = copy_(f, root=root) # replaces empty list layer
 
 def extend_box(_box, box):  # extend box with another box
     y0, x0, yn, xn = box; _y0, _x0, _yn, _xn = _box
