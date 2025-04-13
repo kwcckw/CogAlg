@@ -300,18 +300,17 @@ def cross_comp(root, rc, iN_, fi=1):  # rc: recursion count, fc: centroid phase,
 
     N_,L_,Et = comp_node_(iN_, ave*rc) if fi else comp_link_(iN_, ave*rc)  # flat node_ or link_
     if N_:
-        mL_,dL_ = [],[]
         mEt,dEt = np.zeros(4),np.zeros(4)
         for l in L_:
-            if l.Et[0] > ave * l.Et[2]: mL_+= [l]; mEt += l.Et
-            if l.Et[1] > avd * l.Et[2]: dL_+= [l]; dEt += l.Et
+            if l.Et[0] > ave * l.Et[2]: mEt += l.Et  # We still need mEt and dEt for cross fork eval? 
+            if l.Et[1] > avd * l.Et[2]: dEt += l.Et
         nG, lG = [],[]
         # mfork:
-        if val_(mEt,dEt, ave*(rc+2), mw=(len(mL_)-1)*Lw, aw=clust_w) > 0:  # np.add(Et[:2]) > (ave+ave_d) * np.multiply(Et[2:])?
+        if val_(mEt,dEt, ave*(rc+2), mw=(len(L_)-1)*Lw, aw=clust_w) > 0:  # np.add(Et[:2]) > (ave+ave_d) * np.multiply(Et[2:])?
             if fi:                                                         # cc_w if fc else lc_w? rc+=1 for all subseq ops?
-                exemplars = get_exemplars(mL_,ave*(rc+2))  # >ave et nodes
+                exemplars = get_exemplars(L_,ave*(rc+2))  # >ave et nodes
                 if exemplars:
-                    short_L_ = {l for n in exemplars for l in n.rim if l.L < ave_dist}; m,n = 0,1e-7
+                    short_L_ = {l for n in exemplars for l,_ in n.rim if l.L < ave_dist}; m,n = 0,1e-7
                     for l in short_L_: m+=l.Et[0]; n+=l.Et[2]
                     if m * ((len(short_L_)-1) *Lw) > ave * n * (rc+3) * clust_w:
                         nG = cluster_N_(root, short_L_, ave*(rc+3), rc+3)  # cluster exemplars via short rims
@@ -322,11 +321,12 @@ def cross_comp(root, rc, iN_, fi=1):  # rc: recursion count, fc: centroid phase,
                     cross_comp(nG, rc=rc+3, iN_=nG.node_)  # agglomerative recursion
         # dfork:
         dval = val_(dEt, mEt, avd*(rc+3), mw=(len(L_)-1)*Lw, aw=clust_w, fi=0)  # mEt is alt fork
-        if dval > 0:                    # not dL_: separate eval in cross_comp?
+        if dval > 0:
+            dG = sum_N_(L_); L2N(L_)  # both sections need sum_N_ and L2N anyway?
             if dval > ave:  # derivational recursion
-                lG = cross_comp(sum_N_(L_), rc+3, L2N(L_), fi=0)  # comp_link_, no CC, lG.H in the same lev
+                lG = cross_comp(dG, rc+3, L_, fi=0)  # comp_link_, no CC, lG.H in the same lev
             else:  # lower res
-                lG = cluster_L_(sum_N_(dL_), L2N(dL_), ave*(rc+3), rc=rc+3, fnodet=1)
+                lG = cluster_L_(dG, L_, ave*(rc+3), rc=rc+3, fnodet=1)
         if nG or lG:
             lev = []
             for g in nG,lG:
@@ -464,7 +464,6 @@ def base_comp(_N, N, dir=1):  # comp Et, Box, baseT, derTT
 
 def comp_N(_N,N, ave, fi, angle=None, dist=None, dir=1, fshort=0):  # compare links, relative N direction = 1|-1, no need for angle, dist?
     dderH = []
-
     [m_,d_], rn = base_comp(_N, N, dir)
     baseT = np.array([(_N.baseT[0]+N.baseT[0])/2, (_N.baseT[1]+N.baseT[1])/2, *angle])  # link M,D,A
     derTT = np.array([m_, d_])
@@ -591,7 +590,7 @@ def get_exemplars(L_, ave):  # select for next cross_comp
             overlap = N._N_ & _N_
             # intersect of inhibition zones
             on = sum([oN.et[2] for oN in overlap])
-            if N.et[0] > ave * N.et[2] * on * clust_w:
+            if N.et[0] > ave * N.et[2] * on * clust_w:  # the 1st strongest N has empty _N_, so this must be true
                 exemplars += [N]
                 _N_.update(N._N_)
         else:
@@ -782,7 +781,7 @@ def extend_box(_box, box):  # extend box with another box
 
 def L2N(link_):
     for L in link_:
-        L.fi=0; L.mL_t,L.rimt = [[],[]],[[],[]]; L.aRad=0; L.extTT=np.zeros((2,8)); L.visited_,L.extH,L.node_,L.link_,L.H,L.dH = [],[],[],[],[],[]
+        L.fi=0; L.et = np.zeros(4); L._N_=set(); L.mL_t,L.rimt = [[],[]],[[],[]]; L.aRad=0; L.extTT=np.zeros((2,8)); L.visited_,L.extH,L.node_,L.link_,L.H,L.dH = [],[],[],[],[],[]
         if not hasattr(L,'root'): L.root=[]
     return link_
 
@@ -867,7 +866,7 @@ def agg_H_seq(focus, image, rV=1, _rv_t=[]):  # recursive level-forming pipeline
     frame = vect_root(frame, rV, _rv_t)
     if frame.H:  # updated
         comb_altG_(frame.node_, ave*2)
-        frame = cross_comp(frame, rc=1, iN_=frame.node_)  # top level
+        cross_comp(frame, rc=1, iN_=frame.node_)  # top level  (cross_comp returns nG, so we shouldn't return anything here)
         # adjust weights:
         rM, rD, rv_t = feedback(frame)
         if (rM+rD) * val_(frame.Et,frame.Et, ave) > ave * clust_w * 20:  # normalized?
@@ -888,6 +887,7 @@ def feedback(root):  # root is frame or lG
     hlG = sum_N_(root.link_+ root.dH[1])  # not sure about root.dH (so dH has dL_ and Gd_, i think we need to select the higher Gd_ only?)
     for lev in reversed(root.H):
         lG = lev[1]  # eval link_: comp results per level?
+        if not lG: continue  # dfork may empty
         _m,_d,_n,_ = hlG.Et; m,d,n,_ = lG.Et
         rM += (_m/_n) / (m/n)  # no o eval?
         rD += (_d/_n) / (d/n)

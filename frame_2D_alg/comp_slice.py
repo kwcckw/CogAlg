@@ -107,7 +107,8 @@ def form_PP_(iP_, fd):  # form PPs of dP.valt[fd] + connected Ps val
             _prim_, _lrim_ = prim_, lrim_
         Et = np.array([*Et, L, 1])  # Et + n,o
         rEt += Et; rvert += vert
-        if len(_P_)==1 and len(_P_[0].dert_)==1:
+        P0 = list(_P_)[0]
+        if isinstance(P0, CP) and len(_P_)==1 and len(P0.dert_)==1:
             continue  # no single-dert PPs
         PPt_ += [sum2PP(list(_P_), list(link_), Et)]
 
