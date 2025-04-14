@@ -200,7 +200,7 @@ def vect_root(frame, rV=1, ww_t=[]):  # init for agg+:
             edge = slice_edge(blob, rV)
             if edge.G*((len(edge.P_)-1)*Lw) > ave * sum([P.latuple[4] for P in edge.P_]):
                 Et = comp_slice(edge, rV, ww_t)  # to scale vert
-                if Et and Et[0] > ave * Et[2] * clust_w:
+                if np.any(Et) and Et[0] > ave * Et[2] * clust_w:
                     cluster_edge(edge, frame, lev0, lev1, dH, derlay)
                     # may be skipped
     G_t = [sum_N_(lev) if lev else [] for lev in lev0]
@@ -368,12 +368,14 @@ def comp_node_(_N_, ave, L=0):  # rng+ forms layer of rim and extH per N, append
                 _mL,mL =[],[]  # indirectly connected Gs, new Link = addN(_mL,mL):
                 for g in medG_:
                     for ml in g.rim:
-                        if ml in G.rim: mL += [ml]
+                        if ml in G.rim: mL += [ml]  # rev not important here?
                         elif ml in _G.rim: _mL += [ml]
-                Lpt_ = [[_l,l,comp_angle(_l,l)[1]] for _l,l in product(_mL,_mL)]
-                [_l,l,dA] = max(Lpt_, key=lambda x: x[2])  # links closest to the opposite from medG
-                if abs(dA) > .4:  # combine aligned opposite links in new Link
-                    Link = add_N(_l,l, fi=0)
+                # get angle from baseT
+                Lpt_ = [[_l,l,comp_angle(_l.baseT[2:],l.baseT[2:])[1]] for (_l,_),(l,_) in product(_mL,_mL) if _l is not l]  # skip same L since it may pack same L from different g.rim
+                if Lpt_:  # skip empty
+                    [_l,l,dA] = max(Lpt_, key=lambda x: x[2])  # links closest to the opposite from medG
+                    if abs(dA) > .4:  # combine aligned opposite links in new Link (any particular reason for 0.4?)
+                        Link = add_L(_l,l)
             if not Link:
                 # eval new Link, dist vs radii * induction, mainly / extH?
                 (_m,_,_n,_),(m,_,n,_) = _G.Et,G.Et
@@ -600,6 +602,8 @@ def get_exemplars(L_, ave):  # select for next cross_comp
     exemplars, _N_ = [], set()
     for N in sorted(N_, key=lambda n: n.et[0]/n.et[2], reverse=True):
         M,_,n,_ = N.et  # sum from rim
+        
+        # why we need this eval? We can use M > ave * n * clust_w *  len(N._N_ & _N_)? It should be clearer with prior *?
         if eval(M, weights=[ave, n, clust_w, len(N._N_ & _N_)]):  # intersect of inhibition zones
             exemplars += [N]
             _N_.update(N._N_)
@@ -739,7 +743,8 @@ def add_H(H, h, root, rev=0, fi=1):  # add fork L.derHs
             else:  # one-fork lays
                 if Lay: Lay.add_lay(lay,rev=rev)
                 else:   H += [lay.copy_(root=root,rev=rev)]
-                root.extTT += lay.derTT; root.Et += lay.Et
+                if isinstance(root, CG): root.extTT += lay.derTT  # why adding extTT in fi == 0 instead of fi == 1?
+                root.Et += lay.Et
 
 def sum_N_(node_, root_G=None, root=None):  # form cluster G
 
@@ -754,7 +759,7 @@ def sum_N_(node_, root_G=None, root=None):  # form cluster G
         G.derH = [[lay] for lay in G.derH]  # nest
     return G
 
-def add_L(L, l, w_t):  # weight matrix, add direction for sign?
+def add_L(L, l):  # weight matrix, add direction for sign?
 
     # get end nodes and remove mediator:
     L.nodet = list(set(L.nodet) ^ set(l.nodet))
