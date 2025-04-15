@@ -362,7 +362,7 @@ def comp_node_(_N_, ave, L=0):  # rng+ forms layer of rim and extH per N, append
                     for ml in g.rim:
                         if ml in G.rim: mL += [ml]
                         elif ml in _G.rim: _mL += [ml]
-                Lpt_ = [[_l,l,comp_angle(_l.baseT[2:],l.baseT[2:])[1]] for (_l,_),(l,_) in product(_mL,_mL)]
+                Lpt_ = [[_l,l,comp_angle(_l.baseT[2:],l.baseT[2:])[1]] for (_l,_),(l,_) in product(mL,_mL)]
                 [_l,l,dA] = max(Lpt_, key=lambda x: x[2])  # links closest to the opposite from medG
                 Link = add_L(_l, l, merge=1, w_t=w_t)  # combine links in Link, if aligned: if abs(dA) > .4?
             if not Link:
@@ -501,7 +501,7 @@ def comp_N(_N,N, ave, fi, angle=None, dist=None, dir=1, fshort=0):  # compare li
 
 def cluster_N_(root, L_, ave, rc):  # top-down segment L_ by >ave ratio of L.dists
 
-    nG = CG(root=root)
+    nG = CG(root=root); iL_ = copy(L_)
     L_ = sorted(L_, key=lambda x: x.L)  # short links first
     min_dist = 0; Et = root.Et
     while True:
@@ -528,8 +528,8 @@ def cluster_N_(root, L_, ave, rc):  # top-down segment L_ by >ave ratio of L.dis
                     eN_ = []
                     for eN in _eN_:  # cluster rim-connected ext Ns, all in root Gt
                         node_+=[eN]; eN.fin = 1  # all rim
-                        for L,_ in eN.rim:  # all +ve
-                            if L not in link_:
+                        for L,_ in eN.rim:  # all +ve  (this L may not be positive and may not be short link? Only iL_ is positive and is a short link)
+                            if L not in link_ and L in iL_:
                                 eN_ += [n for n in L.nodet if not n.fin]
                                 if L.L < max_dist:
                                     link_+=[L]; et+=L.Et
@@ -771,13 +771,13 @@ def add_L(L, l, merge=0, w_t=None):  # merge for reconstructed Link, else sum
             L.Et[:3] += lay.Et[:3]  # keep iL o
     if merge:
         # compute M: get max comparands from L.nodet, L=A:
-        M,D,n,o = np.max( np.abs(L.nodet[0].Et), np.abs(L.nodet[1].Et))
-        I,G = np.max(L.nodet[0].baseT[:2], L.nodet[1].baseT[:2])
+        M,D,n,o = np.maximum( np.abs(L.nodet[0].Et), np.abs(L.nodet[1].Et))  # np.maximum for element wise max
+        I,G = np.maximum(L.nodet[0].baseT[:2], L.nodet[1].baseT[:2])
         _y0,_x0,_yn,_xn = L.nodet[0].box; y0,x0,yn,xn = L.nodet[1].box
         Len = max((_yn-_y0) * (_xn-_x0), (yn-y0) * (xn-x0))
         A = .5  # max dA
         # recompute match as max comparands - abs diff:
-        L.derTT[0] = np.array([M,D,n,o,I,G,Len,A]) * w_t
+        L.derTT[0] = np.array([M,D,n,o,I,G,Len,A]) * w_t[0]
         L.Et[0] = np.sum(L.derTT[0] - np.abs(L.derTT[1]))
     return L
 

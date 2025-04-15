@@ -107,9 +107,9 @@ def form_PP_(iP_, fd):  # form PPs of dP.valt[fd] + connected Ps val
             _prim_, _lrim_ = prim_, lrim_
         Et = np.array([*Et, L, 1])  # Et + n,o
         rEt += Et; rvert += vert
-        if not fd and len(_P_)==1 and len(next(_P_).dert_)==1:
+        if not fd and len(_P_)==1 and len(next(iter(_P_)).dert_)==1:
             continue  # skip single-dert PPs
-        PPt_ += [sum2PP(list(_P_), list(link_), Et)]
+        PPt_ += [sum2PP(list(_P_), list(link_), Et)]  # do we need to skip single CdP's'dPP too? Their link_ is empty and Et is zeros
 
     return PPt_, rvert, rEt
 
@@ -179,6 +179,10 @@ def sum2PP(P_, dP_, Et):  # sum links in Ps and Ps in PP
             box = accum_box(box,y,x)
     y0,x0,yn,xn = box
     PPt = [P_, link_, vert, lat, A, S, box, np.array([(y0+yn)/2,(x0+xn)/2]), Et]
+    
+    if Et[0] == 0:
+        aa = 1
+    
     for P in P_: P.root = PPt
     return PPt
 
