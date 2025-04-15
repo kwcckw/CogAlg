@@ -93,7 +93,7 @@ class CLay(CBase):  # layer of derivation hierarchy, subset of CG
             # concat node_,link_:
             Lay.node_ += [n for n in lay.node_ if n not in Lay.node_]
             Lay.link_ += lay.link_
-            Lay.Et += lay.Et
+            Lay.Et += lay.Et  # exclude o, no sum M and n in comb_Lt
         return Lay
 
     def comp_lay(_lay, lay, rn, root, dir=1):  # unpack derH trees down to numericals and compare them
@@ -283,14 +283,6 @@ def val_(Et, _Et, ave, mw=1, aw=1, fi=1):  # m+d cluster | cross_comp eval, + cr
 
     return val - ave * aw * n * o  # simplified: np.add(Et[:2]) > ave * np.multiply(Et[2:])
 
-
-def eval(V, weights):  # weights[0] is ave
-    W = 1
-    for w in weights:
-        W *= w
-        if V < W: return 0
-    return 1
-
 ''' core process: 
  
  Cross-comp nodes, then eval cross-comp of resulting > ave difference links, with recursively higher derivation,
@@ -368,14 +360,11 @@ def comp_node_(_N_, ave, L=0):  # rng+ forms layer of rim and extH per N, append
                 _mL,mL =[],[]  # indirectly connected Gs, new Link = addN(_mL,mL):
                 for g in medG_:
                     for ml in g.rim:
-                        if ml in G.rim: mL += [ml]  # rev not important here?
+                        if ml in G.rim: mL += [ml]
                         elif ml in _G.rim: _mL += [ml]
-                # get angle from baseT
-                Lpt_ = [[_l,l,comp_angle(_l.baseT[2:],l.baseT[2:])[1]] for (_l,_),(l,_) in product(_mL,_mL) if _l is not l]  # skip same L since it may pack same L from different g.rim
-                if Lpt_:  # skip empty
-                    [_l,l,dA] = max(Lpt_, key=lambda x: x[2])  # links closest to the opposite from medG
-                    if abs(dA) > .4:  # combine aligned opposite links in new Link (any particular reason for 0.4?)
-                        Link = add_L(_l,l)
+                Lpt_ = [[_l,l,comp_angle(_l.baseT[2:],l.baseT[2:])[1]] for (_l,_),(l,_) in product(_mL,_mL)]
+                [_l,l,dA] = max(Lpt_, key=lambda x: x[2])  # links closest to the opposite from medG
+                Link = add_L(_l, l, merge=1, w_t=w_t)  # combine links in Link, if aligned: if abs(dA) > .4?
             if not Link:
                 # eval new Link, dist vs radii * induction, mainly / extH?
                 (_m,_,_n,_),(m,_,n,_) = _G.Et,G.Et
@@ -602,14 +591,20 @@ def get_exemplars(L_, ave):  # select for next cross_comp
     exemplars, _N_ = [], set()
     for N in sorted(N_, key=lambda n: n.et[0]/n.et[2], reverse=True):
         M,_,n,_ = N.et  # sum from rim
-        
-        # why we need this eval? We can use M > ave * n * clust_w *  len(N._N_ & _N_)? It should be clearer with prior *?
-        if eval(M, weights=[ave, n, clust_w, len(N._N_ & _N_)]):  # intersect of inhibition zones
-            exemplars += [N]
-            _N_.update(N._N_)
+        if eval(M, weights=[ave, n, clust_w, len(N._N_ & _N_)]):
+            # last term is the intersect of inhibition zones,
+            # more accurate to accumulate overlap M instead of len?
+            exemplars += [N]; _N_.update(N._N_)
         else:
             break  # the rest of N_ is weaker
     return exemplars
+
+def eval(V, weights):  # weights[0] is ave
+    W = 1
+    for w in weights:
+        W *= w
+        if V < W: return 0
+    return 1
 
 def sum2graph(root, grapht, fi, minL=0, maxL=None):  # sum node and link params into graph, aggH in agg+ or player in sub+
 
@@ -743,8 +738,7 @@ def add_H(H, h, root, rev=0, fi=1):  # add fork L.derHs
             else:  # one-fork lays
                 if Lay: Lay.add_lay(lay,rev=rev)
                 else:   H += [lay.copy_(root=root,rev=rev)]
-                if isinstance(root, CG): root.extTT += lay.derTT  # why adding extTT in fi == 0 instead of fi == 1?
-                root.Et += lay.Et
+                root.extTT += lay.derTT; root.Et += lay.Et
 
 def sum_N_(node_, root_G=None, root=None):  # form cluster G
 
@@ -759,33 +753,33 @@ def sum_N_(node_, root_G=None, root=None):  # form cluster G
         G.derH = [[lay] for lay in G.derH]  # nest
     return G
 
-def add_L(L, l):  # weight matrix, add direction for sign?
+def add_L(L, l, merge=0, w_t=None):  # merge for reconstructed Link, else sum
 
-    # get end nodes and remove mediator:
-    L.nodet = list(set(L.nodet) ^ set(l.nodet))
+    if merge:
+        L = copy_(L)  # convert to CG or use nodet as node_?
+        L.nodet = list(set(L.nodet) ^ set(l.nodet))  # get end nodes and remove mediator
+    else: L.nodet += l.nodet  # use as node_
     L.box = extend_box(L.box, l.box)
+    L.yx = (L.yx + l.yx) / 2
     L.baseT += l.baseT
-    add_H(L.derH, l.derH, root=L, fi=0)
-    Lay = CLay(root=L)
-    for lay in L.derH: Lay.add_lay(lay)
-    L.derTT = Lay.derTT
-    L.Et = Lay.Et
-    L.yx = (L.yx + l.yx) / 2
-
+    for Lay,lay in zip(L.derH, l.derH):
+        if merge:
+            L.derTT[1] += lay.derTT[1]
+            L.Et[1] += lay.Et[1]  # D only, keep iL n,o?
+        else:
+            L.derTT += lay.derTT
+            L.Et[:3] += lay.Et[:3]  # keep iL o
+    if merge:
+        # compute M: get max comparands from L.nodet, L=A:
+        M,D,n,o = np.max( np.abs(L.nodet[0].Et), np.abs(L.nodet[1].Et))
+        I,G = np.max(L.nodet[0].baseT[:2], L.nodet[1].baseT[:2])
+        _y0,_x0,_yn,_xn = L.nodet[0].box; y0,x0,yn,xn = L.nodet[1].box
+        Len = max((_yn-_y0) * (_xn-_x0), (yn-y0) * (xn-x0))
+        A = .5  # max dA
+        # recompute match as max comparands - abs diff:
+        L.derTT[0] = np.array([M,D,n,o,I,G,Len,A]) * w_t
+        L.Et[0] = np.sum(L.derTT[0] - np.abs(L.derTT[1]))
     return L
-
-
-    # Et from combined derTT:
-    M = np.sum(L.derTT[0] * w_t[0])
-    D = np.sum(np.abs(L.derTT[1] * w_t[1]))
-    n = L.Et[2] # Assume n is constant, e.g., 8
-    o = (L.Et[3] + l.Et[3]) / 2 # Average overlap heuristic
-    L.Et = np.array([M, D, n, o])
-
-    L.yx = (L.yx + l.yx) / 2
-
-    return L
-
 
 # change to add_G?
 def add_N(N,n, fi=1, fappend=0):
