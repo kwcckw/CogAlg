@@ -357,14 +357,18 @@ def comp_node_(_N_, ave, L=0):  # rng+ forms layer of rim and extH per N, append
             _G,G, rn, dy,dx, radii, dist = Gp
             medG_ = _G._N_ & G._N_
             if medG_:
-                _mL_,mL_ =[],[]; fcomp=1; fshort = 0  # compare indirectly connected Gs
+                _mL_,mL_ =[],[]; fcomp=0; fshort = 0  # compare indirectly connected Gs
                 for g in medG_:
                     for mL in g.rim:
                         if mL in G.rim: mL_ += [mL]
                         elif mL in _G.rim: _mL_ += [mL]
                 Lpt_ = [[_l,l,comp_angle(_l.baseT[2:],l.baseT[2:])[1]] for (_l,_),(l,_) in product(mL_,_mL_)]
                 [_l,l,dA] = max(Lpt_, key=lambda x: x[2])  # links closest to the opposite from medG
-                _G,G = set(_l.nodet) ^ set(l.nodet)
+                if dA > 0.4:  # we probably can include dA back?
+                    G_ = set(_l.nodet) ^ set(l.nodet)  # we might get 4 Gs here now, _G, G and the other 2 different nodes from both of their rim
+                    if len(G_) == 2: 
+                        _G,G = list(G_)[:2]  # if there's 4 Gs, that's mean they are not directly mediated by link? So we should skip them?
+                        fcomp=1
                 # end nodes
             else:  # eval new Link, dist vs radii * induction, mainly / extH?
                 (_m,_,_n,_),(m,_,n,_) = _G.Et,G.Et
@@ -454,8 +458,8 @@ def base_comp(_N, N, dir=1):  # comp Et, Box, baseT, derTT
         _L,L = _N.L, N.L   # not cumulative
         mL,dL = min(_L,L)/ max(_L,L), _L - L
     else:  # dimension is box area
-        _y0,_x0,_yn,_xn =_N.box; _A = (_yn-_y0) * (_xn-_x0)
-        y0, x0, yn, xn = N.box;   A = (yn - y0) * (xn - x0)
+        _y0,_x0,_yn,_xn =_N.box; _A = max(1, (_yn-_y0) * (_xn-_x0))  # when we have single P or dP's PP, their A is 0 if we use xn=x0 or yn = y0, so we should set min A == 1?
+        y0, x0, yn, xn = N.box;   A = max(1, (yn - y0) * (xn - x0))
         mL, dL = min(_A,A)/ max(_A,A), _A - A
         # mA, dA
     _m_,_d_ = np.array([[mM,mD,mn,mo,mI,mG,mA,mL], [dM,dD,dn,do,dI,dG,dA,dL]])
@@ -579,6 +583,7 @@ def cluster_L_(root, L_, ave, rc, fnodet=1):  # CC links via nodet or rimt, no d
                 if _L in L_ and not _L.fin:  # +ve only, eval by directional density?
                     link_ += [lL]
                     Et += lL.Et; _L.fin = 1; node_ += [_L]
+        # if root is frame here, their Et is always zeros?
         if val_(Et, root.Et, ave*rc, mw=(len(node_)-1)*Lw, aw=clust_w) > 0:
             Lay = CLay()
             [Lay.add_lay(l) for l in sum_H(node_ if fnodet else link_, root=lG, fi=0)]
@@ -802,7 +807,7 @@ def PP2G(PP, frame):
     P_, link_, vert, latuple, A, S, box, yx, Et = PP
     baseT = np.array((*latuple[:2], *latuple[-1]))  # I,G,Dy,Dx
     [mM,mD,mI,mG,mA,mL], [dM,dD,dI,dG,dA,dL] = vert
-    derTT = np.array([[mM,mD,mL,0,mI,mG,mA,mL], [dM,dD,dL,0,dI,dG,dA,dL]])
+    derTT = np.array([[mM,mD,mL,0,mI,mG,mA,mL], [dM,dD,dL,0,dI,dG,dA,dL]])  # o is empty? we might get lev0 with 0 value in derTT later, and that's causing zero division in rV_t
     y,x,Y,X = box; dy,dx = Y-y,X-x
     # A = (dy,dx); L = np.hypot(dy,dx)
     G = CG(root=frame, fi=1, Et=Et, node_=P_,link_=link_, baseT=baseT, derTT=derTT, box=box, yx=yx, aRad=np.hypot(dy/2, dx/2),
