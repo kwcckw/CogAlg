@@ -257,7 +257,7 @@ def cluster_edge(edge, frame, lev0, lev1, dH, derlay):  # non-recursive comp_PPm
             for l in L_:
                 derlay[fi].add_lay(l.derH[0])
             G_ = []
-            if val_(mEt, mEt, ave, mw=len(PP_)*Lw, aw=clust_w, fi=1) > 0:
+            if PP_ and val_(mEt, mEt, ave, mw=len(PP_)*Lw, aw=clust_w, fi=1) > 0:  # skip if N_ is empty (all m eval is false)
                 G_ = cluster_PP_(copy(PP_)) if mEt[0] * (len(PP_)-1)*Lw > ave * mEt[2] * clust_w else []
             if G_:
                 lev1[1-fi] += G_; lev0[1-fi] += PP_  # H[0]
@@ -265,7 +265,7 @@ def cluster_edge(edge, frame, lev0, lev1, dH, derlay):  # non-recursive comp_PPm
             if fi:  # der+, not recursive
                 dH[0] += L_ # flat?
                 Gd_ = []
-                if val_(dEt, dEt, ave, fi=0) > 0:  # Gd_ = lG.H:
+                if dEt[2] and val_(dEt, dEt, ave, fi=0) > 0:  # Gd_ = lG.H:  (prevent zero division with empty n)
                     Gd_ = cluster_L_(frame, L2N(L_), ave, rc=2, fnodet=1).node_ if dEt[0] * (len(L_)-1) * Lw > ave * dEt[2] * clust_w else []
                 if Gd_:
                     dH[1] += Gd_  # frame.dH
@@ -438,8 +438,8 @@ def base_comp(_N, N, dir=1):  # comp Et, Box, baseT, derTT
         _L,L = _N.L, N.L   # not cumulative
         mL,dL = min(_L,L)/ max(_L,L), _L - L
     else:  # dimension is box area
-        _y0,_x0,_yn,_xn =_N.box; _A = (_yn+1-_y0) * (_xn-_x0)
-        y0, x0, yn, xn = N.box;   A = (yn+1 - y0) * (xn - x0)
+        _y0,_x0,_yn,_xn =_N.box; _A = (_yn+1-_y0) * (_xn+1-_x0)
+        y0, x0, yn, xn = N.box;   A = (yn+1 - y0) * (xn+1 - x0)
         mL, dL = min(_A,A)/ max(_A,A), _A - A
         # mA, dA
     _m_,_d_ = np.array([[mM,mD,mn,mo,mI,mG,mA,mL], [dM,dD,dn,do,dI,dG,dA,dL]])
@@ -666,11 +666,11 @@ def comb_altG_(G_, ave, rc=1):  # combine contour G.altG_ into altG (node_ defin
     # internal vs. external alts: different decay / distance, background + contour?
     for G in G_:
         if G.altG:
-            if G.altG.H:
-                G.altG = sum_N_(G.altG.H)
+            if G.altG.node_:  # should be revert back to .node_ now
+                G.altG = sum_N_(G.altG.node_)
                 G.altG.root=G; G.altG.m=0
                 if val_(G.altG.Et, G.Et, ave, fi=0):  # alt D * G rM
-                    cross_comp(G.altG, rc, G.altG.H, fi=1)  # adds nesting
+                    cross_comp(G.altG, rc, G.altG.node_, fi=1)  # adds nesting
         elif G.H:
             # G is not PP, altG = sum dlinks
             dL_ = list(set([L for g in G.node_ for L,_ in (g.rim if isinstance(g, CG) else g.rimt[0]+g.rimt[1]) if val_(L.Et,G.Et, ave, fi=0) > 0]))
@@ -786,7 +786,7 @@ def PP2G(PP, frame):
     P_, link_, vert, latuple, A, S, box, yx, Et = PP
     baseT = np.array((*latuple[:2], *latuple[-1]))  # I,G,Dy,Dx
     [mM,mD,mI,mG,mA,mL], [dM,dD,dI,dG,dA,dL] = vert
-    derTT = np.array([[mM,mD,mL,0,mI,mG,mA,mL], [dM,dD,dL,0,dI,dG,dA,dL]])
+    derTT = np.array([[mM,mD,mL,1,mI,mG,mA,mL], [dM,dD,dL,1,dI,dG,dA,dL]])
     y,x,Y,X = box; dy,dx = Y-y,X-x
     # A = (dy,dx); L = np.hypot(dy,dx)
     G = CG(root=frame, fi=1, Et=Et, node_=P_,link_=link_, baseT=baseT, derTT=derTT, box=box, yx=yx, aRad=np.hypot(dy/2, dx/2),
@@ -888,7 +888,7 @@ def feedback(root):  # root is frame or lG
         _m,_d,_n,_ = hlG.Et; m,d,n,_ = lG.Et
         rM += (_m/_n) / (m/n)  # no o eval?
         rD += (_d/_n) / (d/n)
-        rv_t += np.abs((hlG.derTT/_n) / (lG.derTT/n))
+        rv_t += np.abs((hlG.derTT/_n) / (lG.derTT/n))  # we may get empty dL here and causing zero division(when both comparands' L have the same size)
         if lG.H:  # ddfork, not recursive?
             rMd, rDd, rv_td = feedback(lG)  # intra-level recursion in lG
             rv_t = rv_t + rv_td; rM += rMd; rD += rDd
