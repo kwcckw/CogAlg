@@ -206,7 +206,7 @@ def vect_root(frame, rV=1, ww_t=[]):  # init for agg+:
     G_t = [sum_N_(lev) if lev else [] for lev in lev0]
     for n_ in [G_t] + lev1 + dH:
         for n in n_:
-            if n: frame.baseT+=n.baseT; frame.derTT+=n.derTT
+            if n: frame.baseT+=n.baseT; frame.derTT+=n.derTT; frame.Et += n.Et  # we need to sum Et too?
     if G_t[0] or G_t[1]: frame.H=[G_t]  # lev0
     frame.node_ = lev1[0]; frame.link_= lev1[1]
     frame.dH = dH  # two levs
@@ -304,6 +304,7 @@ def cross_comp(root, rc, iN_, fi=1):  # rc: recursion count, fc: centroid phase,
         for l in L_:
             if l.Et[0] > ave * l.Et[2]: mL_+= [l]; mEt += l.Et
             if l.Et[1] > avd * l.Et[2]: dL_+= [l]; dEt += l.Et
+        mEt[2] = max(mEt[2], 1e-7); dEt[2] = max(dEt[2], 1e-7)  # prevent zero division of n
         nG, lG = [],[]
         # mfork:
         if val_(mEt,dEt, ave*(rc+2), mw=(len(mL_)-1)*Lw, aw=clust_w) > 0:  # np.add(Et[:2]) > (ave+ave_d) * np.multiply(Et[2:])?
@@ -390,6 +391,7 @@ def comp_link_(iL_, ave):  # comp CLs via directional node-mediated link tracing
         for L in _L_:
             for mL_ in L.mL_t:
                 for _L, rev in mL_:  # rev is relative to L
+                    # we may get pair of (L1, L2) or (L2, L1) here since each of them may present in each other mL_t, so we should skip if the same pair is compared?
                     dy,dx = np.subtract(_L.yx,L.yx)
                     Link = comp_N(_L,L, ave, fi=0, angle=[dy,dx], dist=np.hypot(dy,dx), dir = -1 if rev else 1)  # d = -d if L is reversed relative to _L
                     Link.med = med
@@ -735,7 +737,7 @@ def sum_N_(node_, root_G=None, root=None):  # form cluster G
     fi = isinstance(node_[0],CG)
     if root_G is not None: G = root_G
     else:
-        G = copy_(node_[0], init=1, root=root); G.fi=fi
+        G = copy_(node_[0], init=1, root=root); G.fi=fi; node_ = node_[1:]  # we need to skip the 1st initialized node, else there's duplicated node
     for n in node_:
         add_N(G,n, fi, fappend=1)
         if root: n.root=root
@@ -884,8 +886,9 @@ def feedback(root):  # root is frame or lG
     rM,rD = 1,1
     hlG = sum_N_(root.link_ + root.dH[-1])  # top Gd_?
     for lev in reversed(root.H):
-        lG = np.minimum(lev[1],1e-7)  # eval link_: comp results per level?
+        lG = lev[1]  # eval link_: comp results per level?
         if not lG: continue
+        lG.derTT[lG.derTT == 0] = 1e-7  # replaces 0 
         _m,_d,_n,_ = hlG.Et; m,d,n,_ = lG.Et
         rM += (_m/_n) / (m/n)  # no o eval?
         rD += (_d/_n) / (d/n)
