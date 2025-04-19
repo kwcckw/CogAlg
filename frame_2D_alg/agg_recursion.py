@@ -390,8 +390,8 @@ def comp_link_(iL_, ave):  # comp CLs via directional node-mediated link tracing
         for L in _L_:
             for mL_ in L.mL_t:
                 for _L, rev in mL_:  # rev is relative to L
-                    if _L.compared: continue
-                    else: _L.compared = 1
+                    if _L in L.compared_: continue  # the same pair is compared before (we need to use compared_ since L might be compared multiple times)
+                    _L.compared_ += [L]; L.compared_ += [_L];  # bidirectional update 
                     dy,dx = np.subtract(_L.yx,L.yx)
                     Link = comp_N(_L,L, ave, fi=0, angle=[dy,dx], dist=np.hypot(dy,dx), dir = -1 if rev else 1)  # d = -d if L is reversed relative to _L
                     Link.med = med
@@ -519,7 +519,7 @@ def cluster_N_(root, L_, ave, rc):  # top-down segment L_ by >ave ratio of L.dis
                     for eN in _eN_:  # cluster rim-connected ext Ns, all in root Gt
                         node_+=[eN]; eN.fin = 1  # all rim
                         for L,_ in eN.rim:  # all +ve
-                            if L not in link_:
+                            if L not in link_:  # if L is not short, we should skip them? Or it doesn't matter here?
                                 eN_ += [n for n in L.nodet if not n.fin]
                                 if L.L < max_dist:
                                     link_+=[L]; et+=L.Et
@@ -630,7 +630,8 @@ def sum2graph(root, grapht, fi, minL=0, maxL=None):  # sum node and link params 
         if i:
             graph.Et += N.Et*int_w; graph.baseT+=N.baseT; graph.box=extend_box(graph.box,N.box)
             if fg and N.H: add_node_H(graph.H, N.H, root=graph)
-        if fg: n_ += N.node_; l_ += N.link_
+        if fg and isinstance(N.node_[0], CG):  # some nodes are PP, their n is CP, so we should skip them?
+            n_ += N.node_; l_ += N.link_
     if fg: graph.H += [[sum_N_(n_), sum_N_(l_)]]  # pack prior top level, current-dist link_ only?
     graph.node_ = N_
     yx = np.mean(yx_, axis=0)
@@ -782,7 +783,7 @@ def extend_box(_box, box):  # extend box with another box
 def L2N(link_):
     for L in link_:
         L.fi=0; L.et=np.zeros(4); L._N_=set(); L.mL_t,L.rimt = [[],[]],[[],[]]; L.aRad=0; L.extTT=np.zeros((2,8))
-        L.compared=0; L.visited_,L.extH,L.node_,L.link_,L.H,L.dH = [],[],[],[],[],[]
+        L.compared_=[]; L.visited_,L.extH,L.node_,L.link_,L.H,L.dH = [],[],[],[],[],[]
         if not hasattr(L,'root'): L.root=[]
     return link_
 
@@ -889,8 +890,8 @@ def feedback(root):  # root is frame or lG
     for lev in reversed(root.H):
         lG = lev[1]  # level link_: all comp results?
         if not lG: continue
-        lG = np.where(lG.derTT == 0, 1e-7, lG.derTT)
-        _m,_d,_n,_ = hlG.Et; m,d,n,_ = lG.Et
+        lG.derTT[np.where(lG.derTT == 0)] = 1e-7
+        _m,_d,_n,_ = hlG.Et; m,d,n,_ = lG.Et 
         rM += (_m/_n) / (m/n)  # no o eval?
         rD += (_d/_n) / (d/n)
         rv_t += np.abs((hlG.derTT/_n) / (lG.derTT/n))
