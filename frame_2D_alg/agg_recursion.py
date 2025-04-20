@@ -263,7 +263,7 @@ def cluster_edge(edge, frame, lev0, lev1, dH, derlay):  # non-recursive comp_PPm
             if G_:
                 lev1[1-fi] += G_; lev0[1-fi] += PP_  # H[0]
             else: lev1[1-fi] += PP_  # node_|link_
-            if fi:  # der+, not recursive
+            if fi:  # der+, not recursive (this will be independent on G_? So may get empty lev0 but non empty dH?)
                 dH[0] += L_ # flat?
                 if val_(dEt, mw=len(PP_)*Lw, aw=clust_w, fi=0) > 0:  # Gd_ = lG.H:
                     Gd_ = cluster_L_(frame, L2N(L_), ave,rc=2, fnodet=1).node_
@@ -276,7 +276,7 @@ def val_(Et, _Et=None, mw=1, aw=1, fi=1):  # m+d val per cluster|cross_comp
     m, d, n, o = Et  # m->d lend cancels-out in Et scope, not in higher-scope _Et?
     am = ave * aw
     ad = avd * aw
-    if _Et:  # higher scope values
+    if np.any(_Et):  # higher scope values
         _m,_d,_n,_o = _Et; rn = _n / n
         _m_dev = _m * rn - am
         _d_dev = _d * rn - ad
@@ -519,20 +519,23 @@ def cluster_N_(root, L_, ave, rc):  # top-down segment L_ by >ave ratio of L.dis
                         node_+=[eN]; eN.fin = 1  # all rim
                         for L,_ in eN.rim:  # all +ve
                             if L not in link_:
+                                for n in L.nodet:
+                                    if not hasattr(n, 'fin'): n.fin = 0  # if eN is not exemplar, they do not have an initialized fin, so we need to init it here
                                 eN_ += [n for n in L.nodet if not n.fin]
                                 if L.L < max_dist:
                                     link_+=[L]; et+=L.Et
                     _eN_ = {*eN_}
                 # form Gt:
-                link_ = list({*link_})
-                Lay = CLay(); [Lay.add_lay(lay) for lay in sum_H(link_, nG, fi=0)]
-                derTT = Lay.derTT
-                # weigh m_|d_ by similarity to mean m|d, weigh derTT:
-                m_,M = centroid_M(derTT[0], ave=ave); d_,D = centroid_M(derTT[1], ave=ave)
-                et[:2] = M,D; Lay.derTT = np.array([m_,d_])
-                # cluster roots:
-                if val_(et, Et, ave*clust_w) > 0:
-                    G_ += [sum2graph(nG, [list({*node_}),link_, et, Lay], 1, min_dist, max_dist)]
+                if link_:  # link_ may empty if all of them < max_dist?
+                    link_ = list({*link_})
+                    Lay = CLay(); [Lay.add_lay(lay) for lay in sum_H(link_, nG, fi=0)]
+                    derTT = Lay.derTT
+                    # weigh m_|d_ by similarity to mean m|d, weigh derTT:  
+                    m_,M = centroid_M(derTT[0], ave=ave); d_,D = centroid_M(derTT[1], ave=ave)
+                    et[:2] = M,D; Lay.derTT = np.array([m_,d_])
+                    # cluster roots:
+                    if val_(et, Et, ave*clust_w) > 0:
+                        G_ += [sum2graph(nG, [list({*node_}),link_, et, Lay], 1, min_dist, max_dist)]
             else:
                 G_ += N_  # unclustered nodes
         # longer links:
@@ -580,6 +583,8 @@ def get_exemplars(L_, ave):  # select for next cross_comp
     exemplars, _N_ = [], set()
     for N in sorted(N_, key=lambda n: n.et[0]/n.et[2], reverse=True):
         M,_,n,_ = N.et  # sum from rim
+        # i can see the value of ave * n * clust_w * rolp_M(M, N,_N_) is very large here
+        # Is there a way to scale it down? I'm not getting any exemplars at all. The evaluation value should be relative to current nodes?
         if eval(M, weights=[ave, n, clust_w, rolp_M(M, N,_N_)]):  # 1 + rolp_M to the intersect of inhibition zones
             exemplars += [N]; _N_.update(N._N_)
         else:
@@ -871,7 +876,8 @@ def agg_H_seq(focus, image, rV=1, _rv_t=[]):  # recursive level-forming pipeline
         # adjust weights:
         rM, rD, rv_t = feedback(frame)
         if val_(frame.Et, mw=rM+rD, aw=clust_w*20):
-            nG = frame.H[0][0]  # base PP_ focus shift by dval + temp Dm_+Ddm_?
+            # if PP doesn't have any G_, use PP_ here? Because frame.H[0][0] will be an empty list instead of CG
+            nG = frame.H[0][0] if frame.H[0][0] else sum_N_(frame.node_)  # base PP_ focus shift by dval + temp Dm_+Ddm_?
             dy,dx = nG.baseT[-2:]  # gA from summed Gs
             y,x,Y,X = nG.box  # current focus
             y = y+dy; x = x+dx; Y = Y+dy; X = X+dx  # alter focus shape, also focus size: +/m-, res decay?
