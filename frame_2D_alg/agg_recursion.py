@@ -248,8 +248,8 @@ def cluster_edge(edge, frame, lev0, lev1, lH, derlay):  # non-recursive comp_PPm
                 if d > avd * n * o * loop_w: dEt += L.Et  # dL_ += [L]
                 L_ += [L]
         dEt[2],dEt[3] = dEt[2] or 1e-7, dEt[3] or 1e-7
-        if N_: N_ = list({N_})
-        return N_,L_,mEt,dEt
+
+        return set(N_),L_,mEt,dEt  # using set resolve the empty list problem
 
     for fi in 1,0:
         PP_ = edge.node_ if fi else edge.link_
@@ -545,9 +545,11 @@ def cluster_N_(root, L_, ave, rc):  # top-down segment L_ by >ave ratio of L.dis
                 else: G_ += [N]
         else:
             G_ += N_  # unclustered nodes
+        G_ = list(set(G_))  # remove duplicated Gs since a same N maybe in different Ls
         # longer links:
         L_ = L_[i + 1:]
         if G_:
+            # G.altG.H maybe filled in prior cross_comp because we recycle N in cluster_N_, so if G.altG.H is filled with layers, skip them?
             [comb_altG_(G.altG.H, ave, rc) for G in G_ if G.altG.H]  # not nested in higher-dist Gs, but nodes have all-dist roots
         if L_:
             min_dist = max_dist  # next loop connects current-distance clusters via longer links
