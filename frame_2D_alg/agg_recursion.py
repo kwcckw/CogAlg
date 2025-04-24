@@ -133,7 +133,7 @@ class CG(CBase):  # PP | graph | blob: params of single-fork node_ cluster
         G.maxL = kwargs.get('maxL', 0)  # if dist-nested in cluster_N_
         G.aRad = kwargs.get('aRad', 0)  # average distance between graph center and node center
         # alt.altG is empty, more selective?
-        G.alt_ = CG(alt_=[],fi=0) if kwargs.get('alt_') is None else kwargs.get('alt_')  # adjacent (contour) gap+overlap alt-fork graphs, converted to CG
+        G.alt_ = []  # adjacent (contour) gap+overlap alt-fork graphs, converted to CG
         # G.fork_tree: list = z([[]])  # indices in all layers(forks, if no fback merge
         # G.fback_ = []  # node fb buffer, n in fb[-1]
         G.fi = kwargs.get('fi',0)  # or fd_: list of forks forming G, 1 if cluster of Ls | lGs, for feedback only?
@@ -334,6 +334,8 @@ def cross_comp(root, rc, iN_, fi=1):  # rc: recursion count, fc: centroid phase,
                 lG = cross_comp(sum_N_(L_),rc+3, L2N(L_), fi=0)  # comp_link_, no CC
             else:  # lower res, dL_ eval?
                 lG = cluster_L_(sum_N_(dL_), L2N(L_), ave*(rc+3), rc=rc+3, fnodet=1)
+                # nG.node_'s alt will be added after sum2graph of dfork above, so comb_alt_ of mgraph should be here?
+                if nG: [comb_alt_(G.alt_, ave, rc) for G in nG.node_ if isinstance(G.alt_,list)]
         if nG or lG:
             lev = []
             for g in nG,lG:
@@ -580,7 +582,8 @@ def cluster_L_(root, L_, ave, rc, fnodet=1):  # CC links via nodet or rimt, no d
             [Lay.add_lay(l) for l in sum_H(node_ if fnodet else link_, root=lG, fi=0)]
             G_ += [sum2graph(lG, [node_, link_, Et, Lay], fi=0)]
     if G_:
-        [comb_alt_(G.alt_, ave, rc) for G in G_ if isinstance(G.altG, list)]
+        # dgraph shouldn't have alt_?
+        [comb_alt_(G.alt_, ave, rc) for G in G_ if isinstance(G.alt_, list)]
         sum_N_(G_, root_G = lG)
         return lG
 
@@ -690,7 +693,7 @@ def comb_alt_(G_, ave, rc=1):  # combine contour G.altG_ into altG (node_ define
                 G.alt_.root=G; G.alt_.m=0
                 if val_(G.alt_.Et, G.Et, ave, fi=0):  # alt D * G rM
                     cross_comp(G.alt_, rc, G.alt_.node_, fi=1)  # adds nesting
-        elif G.H:
+        elif isinstance(G.node_[0], CG):  # skip PP
             # altG = sum dlinks, if G is not PP
             dL_ = list(set([L for g in G.node_ for L,_ in (g.rim if isinstance(g, CG) else g.rimt[0]+g.rimt[1]) if val_(L.Et,G.Et, ave, fi=0) > 0]))
             if dL_ and val_(np.sum([l.Et for l in dL_], axis=0), G.Et, ave, aw=10, fi=0) > 0:
@@ -766,7 +769,7 @@ def add_N(N,n, fi=1, fappend=0):
     N.baseT+=n.baseT; N.derTT+=n.derTT; N.Et+=n.Et
     N.yx+=n.yx; N.box=extend_box(N.box, n.box)
     if isinstance(n,CG) and n.alt_:  # not CL
-        add_N(N.alt_, n.alt_)
+        N.alt_ = add_N(N.alt_ if N.alt_ else CG(), n.alt_)  # N.alt_ is empty before add_N here
     if fappend:
         N.node_ += [n]
         if fi: N.link_ += [n.link_]  # splice if CG
