@@ -310,20 +310,22 @@ def cross_comp(root, rc, iN_, fi=1):  # rc: recursion count, fc: centroid phase,
     # N__,L__ if comp_node_
     if N_:
         mL_,dL_ = [],[]
-        for l in L_:  # exemplars in L__[1:] if comp_node_?
-            if l.Et[0] > ave * l.Et[2]: mL_+= [l]
+        for l in [l for l_ in L_[1:] for l in l_] if fi else L_:  # exemplars in L__[1:] if comp_node_?
+            if l.Et[0] > ave * l.Et[2]: 
+                mL_+= [l]
             if l.Et[1] > avd * l.Et[2]: dL_+= [l]
         nG, lG = [],[]
         # mfork:
         if val_(Et, mw=(len(mL_)-1)*Lw, aw=(rc+2)*clust_w) > 0:  # np.add(Et[:2]) > (ave+ave_d) * np.multiply(Et[2:])?
             if fi:                                               # cc_w if fc else lc_w? rc+=1 for all subseq ops?
-                if len(N_) > 1:  # N__ has >ave rim nodes
-                    eN_ = get_exemplars(N_[1], ave*(rc+2))  # same as N__[1:]?
+                N__ = [n for n_ in N_[1:] for n in n_] 
+                if len(N__) > 1:  # N__ has >ave rim nodes
+                    eN_ = get_exemplars(N__, ave*(rc+2))  # same as N__[1:]? (It should be different? Why it is the same?)
                     if eN_:  # exemplars: typical sparse nodes
                         eL_ = {l for n in eN_ for l,_ in n.rim}  # +connectivity: if l.L < ave_dist?
                         if val_(np.sum([l.Et for l in eL_],axis=0), Et, mw=((len(eL_)-1)*Lw), aw=(rc+3)*clust_w) > 0:
                             for n in iN_: n.fin=0
-                            nG = cluster_N_(root, eL_, ave*(rc+3), rc+3)  # cluster exemplars
+                            nG = cluster_exemplar_(root, eL_, ave*(rc+3), rc+3)  # cluster exemplars
             else:  # N_ = dfork L_
                 nG = cluster_L_(root, N_, ave*(rc+2), rc=rc+2, fnodet=0)  # via llinks, no CC, no dist-nesting
             if nG:
@@ -332,10 +334,12 @@ def cross_comp(root, rc, iN_, fi=1):  # rc: recursion count, fc: centroid phase,
         # dfork:
         dval = val_(Et, mw=(len(dL_)-1)*Lw, aw=(rc+3)*clust_w, fi=0)
         if dval > 0:
+            if isinstance(L_[0], list): L__ = [l for l_ in L_[1:] for l in l_] 
+            else:                       L__ = L_
             if dval > ave:  # recursive derivation -> lH within node_H level
-                lG = cross_comp(sum_N_(L_),rc+3, L2N(L_), fi=0)  # comp_link_, no CC
+                lG = cross_comp(sum_N_(L__),rc+3, L2N(L__), fi=0)  # comp_link_, no CC
             else:  # lower res, dL_ eval?
-                lG = cluster_L_(sum_N_(dL_), L2N(L_), ave*(rc+3), rc=rc+3, fnodet=1)
+                lG = cluster_L_(sum_N_(dL_), L2N(L__), ave*(rc+3), rc=rc+3, fnodet=1)
                 if nG: [comb_alt_(G.alt_, ave, rc) for G in nG.node_ if isinstance(G.alt_,list)]  # after mfork
         if nG or lG:
             lev = []
@@ -499,6 +503,54 @@ def comp_N(_N,N, ave, fi, angle=None, dist=None, dir=1, fshort=0):  # compare li
             else:  node.rimt[1-rev] += [(Link,rev)]  # opposite to _N,N dir
             add_H(node.extH, Link.derH, root=node, rev=rev, fi=0)
     return Link
+
+# draft
+def cluster_exemplar_(root, L_, ave, rc):  # top-down segment L_ by >ave ratio of L.dists
+
+    nG = CG(root=root)
+    
+    N_ = set([N for L in L_ for N in L.nodet])
+    N_ = sorted(N_, key=lambda x: x.Et[0]/x.Et[2], reverse=True)  # strong exemplar first
+    for N in N_: N.fin = 0
+
+    G_ = []
+    for N in N_:
+        if N.fin: continue
+        N.fin = 1
+        node_ = [N]; link_ = []; et = np.zeros(4)
+        _rim, rim = [L for L, _ in N.rim],  []
+            
+        # continuous until no more new rim
+        while True:
+            for link in _rim:
+                if val_(link.Et, link.Et, aw=rc*clust_w):  # not sure
+                    _N = link.nodet[0] if link.nodet[1] is N else link.nodet[1]
+                    if _N.fin:  # if _N has existing exemplar, merge current link and node to the exemplar?
+                        pass    
+                    else:
+                        _N.fin = 1
+                        node_ += [_N]; link_ += [link]; et += link.Et; rim += [_L for _L, _ in _N.rim if _L not in rim+link_]
+                        
+            if rim: 
+                _rim = list(set(rim)); rim = []  # remove duplicates
+            else:  # form exemplars
+                # below is the same with cluster_N_
+                link_ = list(set(link_))
+                Lay = CLay(); [Lay.add_lay(lay) for lay in sum_H(link_, nG, fi=0)]
+                derTT = Lay.derTT
+                Lay = CLay(); [Lay.add_lay(lay) for lay in sum_H(link_, nG, fi=0)]
+                derTT = Lay.derTT
+                # weigh m_|d_ by similarity to mean m|d, weigh derTT:
+                m_,M = centroid_M(derTT[0], ave=ave); d_,D = centroid_M(derTT[1], ave=ave)
+                et[:2] = M,D; Lay.derTT = np.array([m_,d_])
+                node_ = list({*node_})  # cluster roots:
+                if val_(et, root.Et, mw=(len(node_)-1)*Lw, aw=rc*clust_w) > 0:
+                    G_ += [sum2graph(nG, [node_,link_, et, Lay], 1)]
+                break  # continue with the next exemplar
+        
+    if G_:
+        return sum_N_(G_, root_G=nG)  # highest dist segment, includes all nodes
+
 
 def cluster_N_(root, L_, ave, rc):  # top-down segment L_ by >ave ratio of L.dists
 
