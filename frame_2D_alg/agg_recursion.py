@@ -366,7 +366,7 @@ def comp_link_(iL_, rc):  # comp CLs via directional node-mediated link tracing:
                     for l,_l in zip((_L,L),(L,_L)):  # potential exemplars and next-rng eval
                         l.compared_ += [_l]
                         if l not in L_ and val_(l.et + l.Et*int_w, aw= rc* med* loop_w) > 0:  # cost+/ rng
-                            L_ += [l]  # for med+ and exemplar eval
+                            L_ += [l]  # for med+ and exemplar eval (I checked and if we add Ls here, their et may be empty, so they can't be exemplar too )
         L__ += [L_]; ET += Et
         # extend mL_t per last medL:
         if Et[0] > ave * Et[2] * (rc + loop_w + med*med_w):  # project prior-loop value, med adds fixed cost
@@ -472,7 +472,6 @@ def cross_comp(root, rc, iN_, fi=1):  # rc: recursion count, fc: centroid phase,
                 nG = []
                 eN_ = get_exemplars(N_, ave*(rc+2), fi)  # typical and sparse nodes or links
                 if eN_ and val_(np.sum([n.et for n in eN_],axis=0), Et, mw=((len(eN_)-1)*Lw), aw=(rc+3)*clust_w, fi=fi) > 0:
-                    for n in iN_: n.fin=0
                     nG = cluster_N_(root, eN_, ave*(rc+3), rc+3, fi)  # cluster exemplars
                 if nG:
                     if val_(nG.Et, Et, mw=(len(nG.node_)-1)*Lw, aw=(rc+3)*loop_w) > 0:
@@ -482,12 +481,14 @@ def cross_comp(root, rc, iN_, fi=1):  # rc: recursion count, fc: centroid phase,
         dval = val_(Et, mw=(len(dL_)-1)*Lw, aw=(rc+3)*clust_w, fi=0)
         if dval > 0:
             if dval > ave:  # recursive derivation -> lH within node_H level, per Len band?
-                lG = cross_comp(sum_N_(L_), rc+3, L2N(L_), fi=0)  # comp_link_, no CC
+                lG_ = cross_comp(sum_N_(L_), rc+3, L2N(L_), fi=0)  # comp_link_, no CC
+                if lG_: lG = lG_[-1]
             else:  # lower res, dL_ eval?
                 lG = cluster_N_(sum_N_(dL_), L2N(L_), ave*(rc+3), rc=rc+3, fi=0, fnodet=1)
                 # not revised:
                 if nG: [comb_alt_(G.alt_, ave, rc) for G in nG.node_ if isinstance(G.alt_,list)]  # after mfork
-        if nG or lG:
+        if nG_ or lG:
+            # we still need to merge nG_ before pack them to riit here?
             lev = []
             for g in nG,lG:
                 if g: lev += [g]; add_N(root, g)  # appends root.derH
@@ -495,7 +496,7 @@ def cross_comp(root, rc, iN_, fi=1):  # rc: recursion count, fc: centroid phase,
             root.H += [lev] + nG.H if nG else []  # nG.H from recursion, if any
             if lG:
                 root.lH += lG.H+[sum_N_(lG.node_,root=lG)]  # lH: H within node_ level
-        return nG
+        return nG_
 
 def cluster_N_(root, N_, ave, rc, fi, fnodet=0):  # CC nodes via rim or links via nodet or rimt
 
@@ -518,7 +519,7 @@ def cluster_N_(root, N_, ave, rc, fi, fnodet=0):  # CC nodes via rim or links vi
         node_ = list({*node_})
         if val_(Et, mw=(len(node_)-1)*Lw, aw=rc*clust_w, fi=fi) > 0:
             Lay = CLay()
-            [Lay.add_lay(l) for l in sum_H(node_ if fnodet else link_, root=nG, fi=fi)]
+            [Lay.add_lay(l) for l in sum_H(node_ if fnodet else link_, root=nG, fi=0 if (fnodet and isinstance(node_[0], CL)) or not fnodet else 1)]  # fi should be based on CL here?
             G_ += [sum2graph(nG, [node_, link_, Et, Lay], fi=fi)]
     if G_:
         if fi: [comb_alt_(G.alt_, ave, rc) for G in G_ if isinstance(G.alt_,list)]  # no alt_ in dgraph?
