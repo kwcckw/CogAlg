@@ -465,7 +465,7 @@ def cross_comp(root, rc, iN_, fi=1):  # rc: recursion count, fc: centroid phase,
         for l in L_:  # not rng-banded
             if l.Et[0] > ave * l.Et[2]: mL_+= [l]
             if l.Et[1] > avd * l.Et[2]: dL_+= [l]
-        nG_ = []  # mfork
+        nG, nG_ = [], []  # mfork
         if val_(Et, mw=(len(mL_)-1)*Lw, aw=(rc+2)*clust_w) > 0:  # np.add(Et[:2]) > (ave+avd) * np.multiply(Et[2:])?
             nG_ = [sum_N_(iN_)]  # default
             for N_ in N__:  # >ave rng|med bands, may be empty
@@ -489,7 +489,15 @@ def cross_comp(root, rc, iN_, fi=1):  # rc: recursion count, fc: centroid phase,
             root.H += [[nG, lG]]  # current lev
             # one fork maybe empty
             if nG: add_N(root,nG); add_node_H(root.H, nG.H, root)  # appends derH, H from recursion, if any
-            if lG: add_N(root,lG); root.lH += lG.H + [sum_N_(lG.node_, root=lG)]  # lH: H within node_ level
+            if lG: add_N(root,lG); sum_N_(lG.node_, root=lG); root.lH += lG.H + [sum_N_(lG.node_, root=lG)]  # lH: H within node_ level
+            if len(nG_)>1:  # rng>1
+                nG.node_ = [nG.node_]  # adds nesting
+                for ng in reversed(nG_[:-1]):
+                    node_ = ng.node_
+                    if isinstance(node_[0], list):  # if nG.node_ is nested, we need to unpack the, flat?
+                        node_ = [n for n_ in ng.node_ for n in n_]
+                nG.node_ += [node_]  
+            
         if nG:
             return nG
 
@@ -513,10 +521,10 @@ def cluster_N_(root, N_, ave, rc, fi, fnodet=0):  # CC exemplar nodes via rim or
         node_ = list(set(node_))
         if val_(Et, mw=(len(node_)-1)*Lw, aw=rc*clust_w, fi=fi) > 0:
             Lay = CLay(); n_ = node_ if fnodet else link_
-            [Lay.add_lay(l) for l in sum_H(n_, nG, fi = isinstance(n_[0], CL))]
+            [Lay.add_lay(l) for l in sum_H(n_, nG, fi = isinstance(n_[0], CG))]  # fi should be checking CG instead
             m_,M = centroid_M(Lay.derTT[0],ave*rc)  # weigh by match to mean m|d
             d_,D = centroid_M(Lay.derTT[1],ave*rc); Lay.derTT = np.array([m_,d_])
-            G_ += [sum2graph(nG, [node_, link_, np.array([M,D,Et[2:]]), Lay], fi)]
+            G_ += [sum2graph(nG, [node_, link_, np.array([M,D,*Et[2:]]), Lay], fi)]
     if G_:
         if fi: [comb_alt_(G.alt_, ave, rc) for G in G_ if isinstance(G.alt_,list)]  # no alt_ in dgraph?
         sum_N_(G_, root_G = nG)
@@ -688,6 +696,9 @@ def add_H(H, h, root, rev=0, fi=1):  # add fork L.derHs
 
 def sum_N_(node_, root_G=None, root=None):  # form cluster G
 
+    # if rng>1, use the last rng's node_?
+    if isinstance(node_[0], list):
+        node_ = node_[-1]
     fi = isinstance(node_[0],CG)
     if root_G is not None: G = root_G
     else:
