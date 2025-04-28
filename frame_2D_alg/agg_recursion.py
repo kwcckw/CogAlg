@@ -6,6 +6,7 @@ from multiprocessing import Pool, Manager
 from frame_blobs import CBase, frame_blobs_root, intra_blob_root, imread, unpack_blob_
 from slice_edge import CP, slice_edge, comp_angle
 from comp_slice import CdP, comp_slice
+from itertools import chain
 '''
 Current code is starting with primary sensory data, just images here
 Each agg+ cycle refines input nodes in cluster_C_ and connects then in complemented graphs in cluster_N_ 
@@ -472,9 +473,11 @@ def cross_comp(root, rc, iN_, fi=1):  # rc: recursion count, fc: centroid phase,
             for N_ in N__:  # >ave rng|med bands, may be empty
                 eN_ = get_exemplars(root, N_, ave*(rc+3), fi)  # typical and sparse nodes or links
                 if eN_ and val_(np.sum([n.et for n in eN_],axis=0), Et, mw=((len(eN_)-1)*Lw), aw=(rc+3)*clust_w, fi=fi) > 0:
-                    eN_ = cross_comp(root, rc+3, eN_, fi).node_  # no use for other params?
+                    # eN_ is CG exemplar, so fi is always 1?
+                    eN = cross_comp(root, rc+3, eN_, fi=1)
+                    if eN: eN_ = eN.node_  # no use for other params? (eN may empty)
                     if eN_ and val_(np.sum([n.et for n in eN_],axis=0), Et, mw=((len(eN_)-1)*Lw), aw=(rc+4)*clust_w, fi=fi) > 0:
-                        nG = cluster_N_(root,eN_, ave*(rc+4),rc+4, fi)  # cluster exemplars
+                        nG = cluster_N_(root,list(chain.from_iterable(eN_)) if isinstance(eN_[0],list) else eN_, ave*(rc+4),rc+4, fi=1)  # cluster exemplars (en_ is always CG, so fi == 1?)
                         if nG:
                             rnG = []  # eval recursive agglomeration forming root node_H:
                             if val_(nG.Et, Et, mw=(len(nG.node_)-1)*Lw, aw=(rc+5)*loop_w) > 0:
@@ -492,7 +495,7 @@ def cross_comp(root, rc, iN_, fi=1):  # rc: recursion count, fc: centroid phase,
             if len(nG_) > 1:
                 node_H = [list(nG.node_)]  # add nesting
                 for ng in reversed(nG_[1:]):  # flatten and splice ng.node_H
-                    node_H += [list(itertools.chain.from_iterable(n_)) for n_ in ng.node_]  # ng.node_: node_H of flat n_s
+                    node_H += [list(chain.from_iterable(ng.node_)) if isinstance(ng.node_[0], list) else ng.node_]  # ng.node_: node_H of flat n_s
                 nG.node_ = list(reversed(node_H))
             root.H += [[nG,lG]]  # current lev, each fork may be empty
             if nG: add_N(root,nG); add_node_H(root.H, nG.H, root)  # appends derH, H from recursion, if any
@@ -503,6 +506,7 @@ def cross_comp(root, rc, iN_, fi=1):  # rc: recursion count, fc: centroid phase,
 def cluster_N_(root, N_, ave, rc, fi, fnodet=0):  # CC exemplar nodes via rim or links via nodet or rimt
 
     nG = CG(root= root); G_ = []  # flood-filled clusters
+    for N in N_: N.fin = 0  # we need to init fin? Why this is removed?
     for N in N_:
         if N.fin: continue
         N.fin = 1; node_, link_, Et, Lay = [N], [], copy(N.Et), CLay()
@@ -532,11 +536,11 @@ def get_exemplars(root, N_, ave, fi):
     exemplars = []  # next cross_comp
     _N_ = set()  # stronger-N inhibition zones
 
-    for rdn, N in enumerate(sorted(N_, key=lambda n: n.et[0]/n.et[2], reverse=True), start=1):
+    or rdn, N in enumerate(sorted(N_, key=lambda n: n.et[0]/n.et[2], reverse=True), start=1):
         M,_,n,_ = N.et  # summed from rim
         if eval(M, weights=[ave, n, clust_w, rolp_M(M, N,_N_, fi) *rdn]):  # roM * rdn: lower rank?
             # 1 + rolp_M to intersection with stronger N inhibition zones
-            NG = sum2graph(root, [[[N]+N._N_], N.rim, N.et, comb_H_(N, root)], fi)
+            NG = sum2graph(root, [[N]+list(N._N_), [L for L, _ in (N.rim if fi else N.rimt[0] + N.rimt[1])], N.et, comb_H_(N, root)], fi)
             exemplars += [NG]; _N_.update(N._N_)
         else:
             break  # the rest of N_ is weaker
@@ -559,8 +563,9 @@ def sum2graph(root, grapht, fi, minL=0, maxL=None):  # sum node and link params 
 
     node_, link_, Et, mfork = grapht  # Et and mfork are summed from link_
     n0=node_[0]
+    # we need to copy n0.H, else both of them referenbce a same H
     graph = CG(
-        fi=fi, H = n0.H, Et=Et+n0.Et*int_w, link_=link_, box=n0.box, baseT=copy(n0.baseT), derTT=mfork.derTT, root=root, maxL=maxL,
+        fi=fi, H = copy(n0.H), Et=Et+n0.Et*int_w, link_=link_, box=n0.box, baseT=copy(n0.baseT), derTT=mfork.derTT, root=root, maxL=maxL,
         derH = [[mfork]])  # higher layers are added by feedback, dfork added from comp_link_:
     for L in link_:
         L.root = graph  # reassign when L is node
@@ -642,11 +647,9 @@ def comb_alt_(G_, ave, rc=1):  # combine contour G.altG_ into altG (node_ define
                 alt_ = sum_N_(dL_)
                 G.alt_ = copy_(alt_); G.altG.H = [alt_]; G.altG.root=G
 
-def comb_H_(L_, root, fi=0):  # fi is always 0?
-    if isinstance(L_,CG):
-        derH = L_.extH  # L_ is an exemplar
-    else:
-        derH = sum_H(L_,root,fi=fi)
+def comb_H_(L_, root, fi=0):  # fi is always 0? Yes, at this point it's always 0 now
+
+    derH = L_.extH  # L_ is an exemplar
     Lay = CLay(root=root)
     for lay in derH:
         Lay.add_lay(lay); root.extTT += lay.derTT
