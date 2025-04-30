@@ -118,6 +118,7 @@ class CG(CBase):  # PP | graph | blob: params of single-fork node_ cluster
         super().__init__()
         G.node_ = kwargs.get('node_',[])  # maybe rng-banded
         G.link_ = kwargs.get('link_',[])  # spliced node link_s
+        G.llink_ = kwargs.get('llink_',[]) 
         G.H = kwargs.get('H',[])  # list of lower levels: [nG,lG]: pack node_,link_ in sum2graph; lG.H: packed-level lH:
         G.lH = kwargs.get('lH',[])  # link_ agg+ levels in top node_H level: node_,link_,lH
         G.Et = kwargs.get('Et',np.zeros(4))  # sum all M,D,n,o from link_
@@ -235,7 +236,7 @@ def cluster_edge(edge, frame, lev0, lev1, lH, derlay):  # non-recursive comp_PPm
                 _eN_ = {*eN_}
             if val_(et, mw=(len(node_)-1)*Lw, aw=2+clust_w) > 0:  # rc=2
                 Lay = CLay(); [Lay.add_lay(link.derH[0]) for link in link_]  # single-lay derH
-                G_ += [sum2graph(frame, [node_,link_,et, Lay], rng=1, fi=1)]
+                G_ += [sum2graph(frame, [node_,link_,[], et, Lay], rng=1, fi=1)]  # include empty llink_
         return G_
 
     def comp_PP_(PP_):
@@ -284,7 +285,7 @@ def val_(Et, _Et=None, mw=1, aw=1, fi=1):  # m+d val per cluster|cross_comp
     m, d, n, o = Et  # m->d lend cancels in Et scope, not higher-scope _Et?
     am, ad = ave * aw, avd * aw
     k = mw / n / o
-    m, d = m*k, d*k
+    m, d = m*k, d*k  # if d is negative, and k is negative, d may get positive in dfork?
     if np.any(_Et):  # higher scope values
         _m,_d,_n,_o = _Et; _k = mw /_n /_o
         m += _m *_k  # local + global
@@ -451,7 +452,10 @@ def comp_N(_N,N, ave, fi, angle=None, dist=None, dir=1, fshort=0, rng=1):  # com
         for rev, node, _node in zip((0,1),(N,_N),(_N,N)):  # reverse Link dir in _N.rimt
             node.et += Et
             node._N_.add(_node)
-            if fi: node.rim += [(Link,dir)]
+            if fi: 
+                node.rim += [(Link,dir)]
+                if rng>1:
+                    node.llink_ += [Link]  # we need to add higher rng llink here? And do we need dir?
             else:  node.rimt[1-rev] += [(Link,rev)]  # opposite to _N,N dir
             add_H(node.extH, Link.derH, root=node, rev=rev, fi=0)
     return Link
@@ -472,7 +476,7 @@ def cross_comp(root, rc, iN_, fi=1):  # rc: recursion count, fc: centroid phase,
                 eN__,_,et = comp_node_(eN_, rc+3, frng=1)
                 if val_(et, mw=(len(eN__[-1])-1)*Lw, aw=rc+4+clust_w) > 0:
                     for rng, eN_ in enumerate(reversed(eN__), start=1):
-                         nG = cluster_N_(root, eN_, ave*(rc+4), rc+4, rng)
+                         nG = cluster_N_(root, eN_, ave*(rc+4), rc+4, 1, rng)  # fi is missed out here
                          if nG and val_(nG.Et, Et, mw=(len(nG.node_)-1)*Lw, aw=rc+4+rng+loop_w) > 0:
                              rnG = cross_comp(nG, rc+4+rng, nG.node_)  # agg+-> root node_H, or over full nG_?
                              if rnG: nG = rnG  # top-composition only
@@ -486,7 +490,7 @@ def cross_comp(root, rc, iN_, fi=1):  # rc: recursion count, fc: centroid phase,
         if nG or lG:
             root.H += [[nG,lG]]  # current lev
             if nG: add_N(root,nG); add_node_H(root.H, nG.H, root)  # appends derH, H from recursion, if any
-            if lG: add_N(root,lG); sum_N_(lG.node_, root=lG); root.lH += lG.H + [sum_N_(lG.node_, root=lG)]  # lH: H within node_ level
+            if lG: add_N(root,lG); sum_N_(lG.node_, root=lG); root.lH += lG.H + [sum_N_(copy(lG.node_), root=lG)]  # lH: H within node_ level (copy to prevent N removed from lG.node_ after the pop process)
         if nG:
             return nG
 
@@ -508,8 +512,9 @@ def cluster_N_(root, N_, ave, rc, fi, rng=1, fnodet=0):  # CC exemplar nodes via
                 if rng > 1:
                     while _N.root.rng > _N.rng: _N = _N.root  # cluster prior top-rng roots
                     lenI = len(list(set(N.llink_) & set(_N.llink_)))
-                    if lenI / len(N.llink_) <.2 and lenI / len(_N.llink_) <.2:  #| oEt?
+                    if N.llink_ and _N.llink_ and lenI / len(N.llink_) <.2 and lenI / len(_N.llink_) <.2:  #| oEt?  (check non empty)
                         _N.fin = 1  # skip low rim_intersect
+                if not hasattr(_N, 'fin'): _N.fin = 0  # if _N is higher rng _N, they are not in N_ and does not have fin init yet?
                 if _N.fin: continue
                 _N.fin = 1; node_ += [_N]
                 for L in [L] if rng==1 else _N.llink_:
