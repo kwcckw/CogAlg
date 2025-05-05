@@ -334,7 +334,7 @@ def comp_node_(_N_, rc):  # rng+ forms layer of rim and extH per N?
             (_m,_,_n),(m,_,n) = _G.Et,G.Et; olp = (_G.olp+G.olp)/2; _m = _m * int_w +_G.et[0]; m = m * int_w + G.et[0]
             # density/ comp_N: et|M, 0/rng=1?
             max_dist = ave_dist * (radii/aveR) * ((_m+m)/(ave*(_n+n+0))/ int_w)  # ave_dist * radii * induction
-            if max_dist > dist or _G._N_ & G._N_:
+            if max_dist > dist or set(_G._N_) & set(G._N_):
                 # comp if close or share matching mediators: add to inhibited?
                 Link = comp_N(_G,G, ave, fi=1, angle=[dy,dx], dist=dist, fdeep = dist < max_dist/2, rng=rng)
                 L_ += [Link]  # include -ve links
@@ -481,14 +481,15 @@ def cross_comp(root, rc, iN_, fi=1):  # rc: recursion count, fc: centroid phase,
         E_, eEt = get_exemplars(n__, rc, fi)  # typical sparse nodes
         if val_(eEt, mw=(len(E_)-1)*Lw, aw=rc+1+clust_w) > 0:
             C_, cEt = cluster_C_(root, E_, rc+1+clust_w)  # refine select _N_ by mutual similarity
+            for N in iN_: N.fin = 0  # the init of fin in the function is limited to exemplar only, and their rim 's N might not have .fin init
             if val_(cEt, mw=(len(C_)-1)*Lw, aw=rc+2+loop_w) > 0:
                 S_, sEt = get_exemplars([n for C in C_ for n in C.node_], rc+2+loop_w, fi, fC=1)  # refine exemplars
                 if val_(sEt, mw=(len(S_)-1)*Lw, aw=rc+3+clust_w) > 0:
-                    cG = cluster_N_(root, S_, rc+3+clust_w,1,1, fi)  # global?
+                    cG = cluster_N_(root, S_, rc+3+clust_w,fi,1)  # global?
             for rng, N_ in enumerate(reversed(N__), start=1):
                 en_ = [n for n in N_ if n in E_]; eet = np.sum([n.et for n in en_])
                 if val_(eet, mw=(len(en_)-1)*Lw, aw=rc+3+clust_w) > 0:
-                    nG = cluster_N_(root, en_, rc+3+rng-1+clust_w, 1, rng, fi)
+                    nG = cluster_N_(root, en_, rc+3+rng-1+clust_w, fi, rng)
                     if nG and val_(nG.Et, Et, mw=(len(nG.node_)-1)*Lw, aw=rc+4+rng-1+loop_w) > 0:
                         rnG = cross_comp(nG, rc+4+rng, nG.node_)  # agg+-> root node_H, | global?
                         if rnG: nG = rnG
@@ -497,13 +498,14 @@ def cross_comp(root, rc, iN_, fi=1):  # rc: recursion count, fc: centroid phase,
         dval = val_(Et, mw=(len(dL_)-1)*Lw, aw=rc+3+clust_w, fi=0)
         if dval > 0:
             if dval > ave:  # recursive derivation -> lH within node_H level, per Len band?
-                lG = cross_comp(sum_N_(L_), rc+3, L2N(L_), fi=0)  # comp_link_, no CC
+                lG = cross_comp(sum_N_(L_), rc+3, L2N(L_), fi=0)  # comp_link_, no CC       
             else:  # lower res, dL_ eval?
                 lG = cluster_N_(sum_N_(dL_),L2N(L_), rc+3, fi=0, fnodet=1)
+            if nG: [comb_alt_(nG.node_, ave, rc+3+rng-1+clust_w)]  # this should be after dfork? Move this out of cluster_N_?
         if nG or lG:
             root.H += [[nG,lG]]  # current lev
             if nG: add_N(root,nG); add_node_H(root.H, nG.H, root)  # appends derH,H if recursion
-            if lG: add_N(root,lG); sum_N_(lG.node_, root=lG); root.lH += lG.H + [sum_N_(copy(lG.node_), root=lG)]  # lH: H within node_ level
+            if lG: add_N(root,lG); root.lH += lG.H + [sum_N_(copy(lG.node_), root=lG)]  # lH: H within node_ level (why there's an additional sum_N_ on lG?)
         if nG:
             return nG
 
@@ -562,8 +564,9 @@ def cluster_C_(root, N_, rc):  # form centroids from exemplar _N_, drifting / co
             N_ = C_
         else:
             break  # converged
-        remove_ = {n for C in C_ for n in C.node_}
-        N_[:] = [n for n in N_ if n not in remove_]
+    # we should reduce indent here so that it will be run when break too?
+    remove_ = {n for C in C_ for n in C.node_}
+    N_[:] = [n for n in N_ if n not in remove_]  
     return C_, ET
 
 def cluster_N_(root, N_, rc, fi, rng=1, fnodet=0):  # CC exemplar nodes via rim or links via nodet or rimt
@@ -576,7 +579,7 @@ def cluster_N_(root, N_, rc, fi, rng=1, fnodet=0):  # CC exemplar nodes via rim 
         if rng > 1:
             R = N.root  # cluster top-rng roots:
             while N.root.rng > N.rng: R = N.root
-            node_ = [R]; link_ = R.link_; llink_ = R.llink_; Et=copy(R.Et); o = R.olp
+            node_ = [R]; link_ = R.link_; llink_ = R.llink_; Et=copy(R.Et); olp = R.olp
         else: node_=[N]; link_=[]; llink_=[]; Et = copy(N.Et); olp = N.olp
         rc += olp
         if fnodet:
@@ -596,7 +599,7 @@ def cluster_N_(root, N_, rc, fi, rng=1, fnodet=0):  # CC exemplar nodes via rim 
                     if lenI and (lenI / len(R.llink_) <.2 and lenI / len(_R.llink_) <.2):  #| oEt?
                         _N.fin = 1  # skip low rim_intersect
                 if _N.fin: continue
-                _N.fin = 1; Et += _N.Et; o += _N.olp; node_ += [_N]
+                _N.fin = 1; Et += _N.Et; olp += _N.olp; node_ += [_N]
                 for L in [L] if rng==1 else _N.llink_:  # rng=1: rim L.rng was set in comp_node_
                     if L.rng == rng and L not in link_: link_ += [L]
                     elif L.rng> rng and L not in llink_: llink_ += [L]  # longer-rng rims
@@ -772,7 +775,7 @@ def add_N(N,n, fi=1, fappend=0):
         if hasattr(n,'extTT'):  # node, = fi?
             N.extTT += n.extTT; N.aRad += n.aRad
             if n.extH: add_H(N.extH, n.extH, root=N, fi=0)
-        if n.alt_: N.alt_ = add_N(N.alt_ if N.alt_ else CG(), n.alt_)
+        if n.alt_: N.alt_ = add_N(N.alt_ if N.alt_ else CG(), n.alt_)  # n.alt_ must be a CG here?
     if fappend:
         N.node_ += [n]
         if fi: N.link_ += n.link_  # splice if CG
