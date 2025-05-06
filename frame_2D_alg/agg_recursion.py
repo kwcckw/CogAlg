@@ -479,7 +479,8 @@ def cross_comp(root, rc, iN_, fi=1):  # rc: recursion count, fc: centroid phase,
         nG, n__ =[],[]
         # mfork
         for n in [N for N_ in N__ for N in N_]:
-            n__ += [n]; n.sel = 0; n.fin = 0  # for cluster_N_
+            n__ += [n]; n.sel = 0
+        for n in iN_: n.fin = 0  # for cluster_N_ (we need iN_ to init fin）
         if val_(Et, mw=(len(n__)-1)*Lw, aw=rc+loop_w) > 0:  # rc += is local
             E_,eEt = get_exemplars(n__, rc+loop_w, fi)  # sel=1 for typical sparse nodes
             if val_(eEt, mw=(len(E_)-1)*Lw, aw=rc+clust_w) > 0:
@@ -572,6 +573,18 @@ def cluster_C_(root, N_, rc):  # form centroids from exemplar _N_, drifting / co
     N_[:] = [n for n in N_ if n not in remove_]
     return C_, ET
 
+
+def get_lower_root(N, rng):
+
+    R = N.root  # cluster top-rng roots:
+    while R.root and R.root.rng > R.rng: 
+        R = R.root
+
+    if R and R.rng == rng:
+        return R
+    else:
+        return None
+
 def cluster_N_(root, N_, rc, fi, rng=1, fnodet=0):  # CC exemplar nodes via rim or links via nodet or rimt
 
     nG = CG(root= root); G_ = []  # flood-filled clusters
@@ -579,11 +592,12 @@ def cluster_N_(root, N_, rc, fi, rng=1, fnodet=0):  # CC exemplar nodes via rim 
     for N in N_:
         if N.fin: continue
         N.fin = 1
-        if rng > 1:
-            R = N.root  # cluster top-rng roots:
-            while N.root.rng > N.rng: R = N.root
+        R = None
+        if rng>1: R = get_lower_root(N, rng)
+        if R:  # higher rng
             node_ = [R]; link_ = R.link_; llink_ = R.llink_; Et=copy(R.Et); olp = R.olp
-        else: node_=[N]; link_=[]; llink_=[]; Et = copy(N.Et); olp = N.olp
+        else:  # link or N doesn't for mgraph at lower rng
+            node_=[N]; link_=[]; llink_=[]; Et = copy(N.Et); olp = N.olp
         rc += olp
         if fnodet:
             # cluster via nodes
@@ -595,12 +609,13 @@ def cluster_N_(root, N_, rc, fi, rng=1, fnodet=0):  # CC exemplar nodes via rim 
         else:  # cluster via links
             for L,_ in N.rim if fi else (N.rimt[0]+N.rimt[1]):  # +ve only
                 _N = L.nodet[0] if L.nodet[1] is N else L.nodet[1]
-                if rng > 1:
-                    _R = _N.root  # cluster top-rng roots:
-                    while _N.root.rng > _N.rng: _R = _N.root
-                    lenI = len(list(set(R.llink_) & set(_R.llink_)))
-                    if lenI and (lenI / len(R.llink_) <.2 and lenI / len(_R.llink_) <.2):  #| oEt?
-                        _N.fin = 1  # skip low rim_intersect
+                if R:
+                    # cluster top-rng roots:
+                    _R = get_lower_root(_N, rng)
+                    if _R:
+                        lenI = len(list(set(R.llink_) & set(_R.llink_)))
+                        if lenI and (lenI / len(R.llink_) <.2 and lenI / len(_R.llink_) <.2):  #| oEt?
+                            _N.fin = 1  # skip low rim_intersect'
                 if _N.fin: continue
                 _N.fin = 1; Et += _N.Et; olp += _N.olp; node_ += [_N]
                 for L in [L] if rng==1 else _N.llink_:  # rng=1: rim L.rng was set in comp_node_
@@ -778,7 +793,10 @@ def add_N(N,n, fi=1, fappend=0):
         if hasattr(n,'extTT'):  # node, = fi?
             N.extTT += n.extTT; N.aRad += n.aRad
             if n.extH: add_H(N.extH, n.extH, root=N, fi=0)
-        if n.alt_: N.alt_ = add_N(N.alt_ if N.alt_ else CG(), n.alt_)  # n.alt_ must be a CG here?
+        if n.alt_:
+            _alt = n.alt_ if isinstance(n.alt_, CG) else sum_N_(n.alt_)  # if _n.alt_ is list
+            alt = (N.alt_ if isinstance(N.alt_, CG) else sum_N_(N.alt_)) if N.alt_ else CG()  # if n.alt_ is list
+            N.alt_ = add_N(alt, _alt)  # n.alt_ must be a CG here?
     if fappend:
         N.node_ += [n]
         if fi: N.link_ += n.link_  # splice if CG

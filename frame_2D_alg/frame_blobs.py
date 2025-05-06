@@ -170,6 +170,9 @@ def flood_fill(frame, dert__):
             blob = CBlob(frame); perimeter_ += [fill_yx_[0]]
         blob.fill_blob(fill_yx_, perimeter_, root__, dert__)  # https://en.wikipedia.org/wiki/Flood_fill
         if not perimeter_: blob.term()
+    else:
+        if 'blob' in locals() and blob not in frame.blob_: 
+            blob.term()  # we need to terminate the last blob too?
 
 '''
 intra_blob recursively segments each blob for two forks of extended internal cross-comp and sub-clustering:
