@@ -125,7 +125,7 @@ class CG(CBase):  # PP | graph | blob: params of single-fork node_ cluster
         G.lH = kwargs.get('lH',[])  # link_ agg+ levels in top node_H level: node_,link_,lH
         G.Et = kwargs.get('Et',np.zeros(3))  # sum all M,D,n from link_
         G.et = kwargs.get('et',np.zeros(3))  # sum from rim
-        G.olp = kwargs.get('olp',1)  # overlap
+        G.olp = kwargs.get('olp',1)  # overlap to other Gs
         G.baseT = kwargs.get('baseT',np.zeros(4))  # I,G,Dy,Dx  # from slice_edge, + baset from rim?
         G.derTT = kwargs.get('derTT',np.zeros((2,8)))  # m,d / Et,baseT: [M,D,n,o, I,G,A,L], summed across derH lay forks
         G.extTT = kwargs.get('extTT',np.zeros((2,8)))  # sum across extH
@@ -342,7 +342,8 @@ def comp_node_(_N_, rc):  # rng+ forms layer of rim and extH per N?
                     Et += Link.Et; olp_ += [olp]  # link.olp is the same with o
                     for n,_n in zip((_G,G),(G,_G)):
                         n.compared_ += [_n]
-                        if n not in N_ and val_(n.et, aw= rc+rng+loop_w+olp) > 0:  # cost+/ rng
+                        if n not in N_ and val_(n.et, aw= rc+rng-1+loop_w+olp) > 0:  # cost+/ rng
+                            n.med = rng;
                             N_ += [n]  # for rng+ and exemplar eval
         N__ += [N_]; ET += Et
         if val_(Et, mw = (len(N_)-1)*Lw, aw = loop_w* sum(olp_)/len(olp_)) > 0:  # current-rng vM
@@ -434,7 +435,7 @@ def base_comp(_N, N, dir=1):  # comp Et, Box, baseT, derTT
     m_ += _m_; d_ += _d_
     DerTT = np.array([m_,d_])  # [M,D,n,o, I,G,A,L]:
     Et = np.array([np.sum(m_* w_t[0]), np.sum(np.abs(d_* w_t[1])), min(_n,n)])  # feedback-weighted sum shared quantity between comparands
-
+    # centroid_M?
     return DerTT, Et, rn
 
 def comp_N(_N,N, ave, fi, angle=None, dist=None, dir=1, fdeep=0, rng=1):  # compare links, relative N direction = 1|-1, no need for angle, dist?
@@ -473,39 +474,41 @@ def cross_comp(root, rc, iN_, fi=1):  # rc: recursion count, fc: centroid phase,
     if N__:  # CLs if not fi
         mL_,dL_ = [],[]
         for l in L_:  # flat
-            if l.Et[0] > ave * l.Et[2]: mL_+= [l]
+            if l.Et[0] > ave * l.Et[2]: mL_+= [l]  # not used?
             if l.Et[1] > avd * l.Et[2]: dL_+= [l]
-        nG, nG = [],[]
+        nG, n__ =[],[]
         # mfork
-        n__ = list(chain.from_iterable(N__))
-        E_, eEt = get_exemplars(n__, rc, fi)  # typical sparse nodes
-        if val_(eEt, mw=(len(E_)-1)*Lw, aw=rc+1+clust_w) > 0:
-            C_, cEt = cluster_C_(root, E_, rc+1+clust_w)  # refine select _N_ by mutual similarity
-            for N in iN_: N.fin = 0  # the init of fin in the function is limited to exemplar only, and their rim 's N might not have .fin init
-            if val_(cEt, mw=(len(C_)-1)*Lw, aw=rc+2+loop_w) > 0:
-                S_, sEt = get_exemplars([n for C in C_ for n in C.node_], rc+2+loop_w, fi, fC=1)  # refine exemplars
-                if val_(sEt, mw=(len(S_)-1)*Lw, aw=rc+3+clust_w) > 0:
-                    cG = cluster_N_(root, S_, rc+3+clust_w,fi,1)  # global?
-            for rng, N_ in enumerate(reversed(N__), start=1):
-                en_ = [n for n in N_ if n in E_]; eet = np.sum([n.et for n in en_])
-                if val_(eet, mw=(len(en_)-1)*Lw, aw=rc+3+clust_w) > 0:
-                    nG = cluster_N_(root, en_, rc+3+rng-1+clust_w, fi, rng)
-                    if nG and val_(nG.Et, Et, mw=(len(nG.node_)-1)*Lw, aw=rc+4+rng-1+loop_w) > 0:
-                        rnG = cross_comp(nG, rc+4+rng, nG.node_)  # agg+-> root node_H, | global?
-                        if rnG: nG = rnG
-        # cG += top-composition nG?
+        for n in [N for N_ in N__ for N in N_]:
+            n__ += [n]; n.sel = 0; n.fin = 0  # for cluster_N_
+        if val_(Et, mw=(len(n__)-1)*Lw, aw=rc+loop_w) > 0:  # rc += is local
+            E_,eEt = get_exemplars(n__, rc+loop_w, fi)  # sel=1 for typical sparse nodes
+            if val_(eEt, mw=(len(E_)-1)*Lw, aw=rc+clust_w) > 0:
+                C_,cEt = cluster_C_(root, E_, rc+clust_w)  # refine _N_+_N__ by mutual similarity
+                # cross_comp C_, hier centroid clustering?
+                if val_(eEt, mw=(len(E_)-1)*Lw, aw=rc+clust_w) > 0:
+                    S_,sEt = get_exemplars([n for C in C_ for n in C.node_], rc+loop_w, fi, fC=1)  # refine exemplars adds val
+                else:
+                    S_,sEt = [], np.zeros(3)
+                if val_(sEt+eEt, mw=(len(S_+E_)-1)*Lw, aw=rc+clust_w) > 0:
+                    for rng, N_ in enumerate(N__, start=1):  # bottom-up, cluster via exemplars, no sorting?
+                        en_ = [n for n in N_ if n.sel]; eet = np.sum([n.et for n in en_])  # et may be increased in cluster_C_
+                        if val_(eet, mw=(len(en_)-1)*Lw, aw=rc+clust_w*rng) > 0:
+                            nG = cluster_N_(root, en_, rc+clust_w*rng, fi, rng)
+                    if nG and val_(nG.Et, Et, mw=(len(nG.node_)-1)*Lw, aw=rc+clust_w*rng+loop_w) > 0:
+                        nG = cross_comp(nG, rc+clust_w*rng+loop_w, nG.node_)
+                        # top-composition, select unpack lower-rng nGs for deeper cross_comp
         lG = []  # dfork
         dval = val_(Et, mw=(len(dL_)-1)*Lw, aw=rc+3+clust_w, fi=0)
         if dval > 0:
-            if dval > ave:  # recursive derivation -> lH within node_H level, per Len band?
-                lG = cross_comp(sum_N_(L_), rc+3, L2N(L_), fi=0)  # comp_link_, no CC       
-            else:  # lower res, dL_ eval?
-                lG = cluster_N_(sum_N_(dL_),L2N(L_), rc+3, fi=0, fnodet=1)
-            if nG: [comb_alt_(nG.node_, ave, rc+3+rng-1+clust_w)]  # this should be after dfork? Move this out of cluster_N_?
+            if dval > ave:  # recursive derivation forms lH in each node_H level, Len banded?
+                lG = cross_comp(sum_N_(L_), rc+loop_w*2, L2N(L_), fi=0)  # comp_link_, no centroids?
+            else:  # lower res, dL_?
+                lG = cluster_N_(sum_N_(dL_),L2N(L_), rc+clust_w*2, fi=0, fnodet=1)  # overlapping mfork
+            if nG: comb_alt_(nG.node_, rc+clust_w*3)
         if nG or lG:
             root.H += [[nG,lG]]  # current lev
             if nG: add_N(root,nG); add_node_H(root.H, nG.H, root)  # appends derH,H if recursion
-            if lG: add_N(root,lG); root.lH += lG.H + [sum_N_(copy(lG.node_), root=lG)]  # lH: H within node_ level (why there's an additional sum_N_ on lG?)
+            if lG: add_N(root,lG); root.lH += lG.H + [sum_N_(copy(lG.node_), root=lG)]  # lH: H within node_ level
         if nG:
             return nG
 
@@ -518,6 +521,7 @@ def get_exemplars(N_, rc, fi, fC=0):  # get sparse representative nodes|links: n
         if eval(M, weights=[ave*rc, n, clust_w, rolp_M(M, N,_N_, fi, fC) *rdn]):  # roM * rdn: lower rank?
             # 1 + relative match to the intersection with stronger N inhibition zones
             Et += N.et; _N_.update(N._N_)  # add as olp in exemplar?
+            N.sel = 1  # select for cluster_N_
             exemplars += [N]
         else:
             break  # the rest of N_ is weaker
@@ -564,9 +568,8 @@ def cluster_C_(root, N_, rc):  # form centroids from exemplar _N_, drifting / co
             N_ = C_
         else:
             break  # converged
-    # we should reduce indent here so that it will be run when break too?
-    remove_ = {n for C in C_ for n in C.node_}
-    N_[:] = [n for n in N_ if n not in remove_]  
+    remove_ = {n for C in C_ for n in C.node_}  # to be clustered in cG, not nG
+    N_[:] = [n for n in N_ if n not in remove_]
     return C_, ET
 
 def cluster_N_(root, N_, rc, fi, rng=1, fnodet=0):  # CC exemplar nodes via rim or links via nodet or rimt
@@ -613,7 +616,7 @@ def cluster_N_(root, N_, rc, fi, rng=1, fnodet=0):  # CC exemplar nodes via rim 
             olp = Lay.olp + olp * int_w
             G_ += [sum2graph(nG, node_, link_, llink_, Et, olp, Lay, rng, fi)]
     if G_:
-        if fi: [comb_alt_(G.alt_, ave, rc) for G in G_ if isinstance(G.alt_,list)]  # no alt_ in dgraph?
+        if fi: [comb_alt_(G.alt_, rc) for G in G_ if isinstance(G.alt_,list)]  # no alt_ in dgraph?
         sum_N_(G_, root_G = nG)
 
         return nG
@@ -688,7 +691,7 @@ def centroid_M(m_, ave):  # adjust weights on attr matches | diffs, recompute wi
         # recursion if weights change
     return m_* w_, M  # no return w_?
 
-def comb_alt_(G_, ave, rc=1):  # combine contour G.altG_ into altG (node_ defined by root=G),
+def comb_alt_(G_, rc=1):  # combine contour G.altG_ into altG (node_ defined by root=G),
 
     # internal vs. external alts: different decay / distance, background + contour?
     for G in G_:
@@ -891,12 +894,11 @@ def agg_H_seq(focus, image, rV=1, _rv_t=[]):  # recursive level-forming pipeline
     intra_blob_root(frame, rV)
     frame = vect_root(frame, rV, _rv_t)
     if frame.H:  # updated
-        o = frame.olp
         comb_alt_(frame.node_, ave*2)
-        cross_comp(frame, rc=o+loop_w, iN_=frame.node_)  # top level
+        cross_comp(frame, rc=frame.olp+loop_w, iN_=frame.node_)  # top level
         # adjust weights:
         rM, rD, rv_t = feedback(frame)
-        if val_(frame.Et, mw=rM+rD, aw=o+clust_w*20):
+        if val_(frame.Et, mw=rM+rD, aw=frame.olp+clust_w*20):
             nG = frame.H[0][0] if frame.H[0][0] else sum_N_(frame.node_)  # base PP_ focus shift by dval + temp Dm_+Ddm_?
             dy,dx = nG.baseT[-2:]  # gA from summed Gs
             y,x,Y,X = nG.box  # current focus
