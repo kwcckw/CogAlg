@@ -574,6 +574,7 @@ def cluster_N_(root, N_, rc, fi, rng=1, fnodet=0):  # CC exemplar nodes via rim 
     for N in N_:
         if N.fin: continue
         node_=[N]; link_=[]; llink_=[]; Et = copy(N.Et); olp=N.olp; R=N.root  # rng=1 default
+        # frame.node_ is Gs from lev1[0] and they have rng of 2, i think we need to use use a flag to skip the rng+1 in sum2graph when it's called from vect_edge?
         while rng > 1 and (R and R.rng > N.rng):       # cluster top-rng roots instead:
             node_=[R]; link_=R.link_; llink_=R.llink_; Et=copy(R.Et); olp=R.olp; R=N.root
         rc += olp; N.fin = 1
@@ -589,6 +590,7 @@ def cluster_N_(root, N_, rc, fi, rng=1, fnodet=0):  # CC exemplar nodes via rim 
                 _N = L.nodet[0] if L.nodet[1] is N else L.nodet[1]
                 if _N.fin: continue
                 _node_=[_N]; _Et=copy(_N.Et); _olp=_N.olp; _R=_N.root  # rng==1 default
+                _link_, _llink_ = [], []
                 while rng > 1 and (_R and _R.rng > _N.rng):
                     # cluster top-rng roots if rim intersect:
                     lenI = len(list(set(llink_) & set(_R.llink_)))
@@ -611,10 +613,13 @@ def cluster_N_(root, N_, rc, fi, rng=1, fnodet=0):  # CC exemplar nodes via rim 
             Et = Lay.Et + np.array([M, D, Et[2]]) * int_w
             olp = (Lay.olp + olp*int_w) / len(node_)
             G_ += [sum2graph(nG, node_, link_, llink_, Et, olp, Lay, rng, fi)]
+            
+    if not fi:
+        for G in G_:
+            for n in G.link_ + G.node_: n.root = G
     if G_:
-        if fi: [comb_alt_(G.alt_, rc) for G in G_ if isinstance(G.alt_,list)]  # no alt_ in dgraph?
+        # if fi: [comb_alt_(G.alt_, rc) for G in G_ if isinstance(G.alt_,list)]  # no alt_ in dgraph?  (This is no longer needed now)
         sum_N_(G_, root_G = nG)
-
         return nG
 
 def rolp_M(M, N, _N_, fi, fC=0):  # rel sum of overlapping links Et, or _N_ Et in cluster_C_?
@@ -667,7 +672,8 @@ def sum2graph(root, node_,link_,llink_,Et,olp, Lay, rng, fi):  # sum node and li
                 if isinstance(mG, CG) and mG not in alt_:  # root is not frame
                     mG.alt_ += [graph]  # cross-comp|sum complete alt before next agg+ cross-comp, multi-layered?
                     alt_ += [mG]
-    for n in node_+ link_: n.root = graph
+    if fi:  # node's nodet maybe in prior graph.link_ if fnodet is true in cluster_N_
+        for n in node_+ link_: n.root = graph  
     return graph
 
 def centroid_M(m_, ave):  # adjust weights on attr matches | diffs, recompute with sum
