@@ -486,6 +486,7 @@ def cross_comp(root, rc, iN_, fi=1):  # rc: redundancy count; (cross-comp, exemp
                 else: S_,sEt = [],np.zeros(3)
                 for n in iN_: n.fin = 0
                 if val_(sEt+eEt, mw=(len(S_+E_)-1)*Lw, aw=rc+clust_w) > 0:
+                    root.fin = 1  # always skip root?
                     for rng, N_ in enumerate(N__, start=1):  # bottom-up, cluster via rng exemplars:
                         en_ = [n for n in N_ if n.sel]; eet = np.sum([n.et for n in en_])
                         if val_(eet, mw=(len(en_)-1)*Lw, aw=rc+clust_w*rng) > 0:
@@ -601,28 +602,29 @@ def cluster_N_(root, N_, rc, fi, rng=1, fnodet=0):  # connectivity cluster exemp
             # cluster via nodes
             for _N in N.nodet[0].rim+N.nodet[1].rim if isinstance(N.nodet[0],CG) else list(set([l for n in N.nodet for l,_ in n.rimt[0]+n.rimt[1]])):
                 if _N in N_ and not _N.fin and _N.Et[1] > avd * _N.Et[2] * nrc:  # d_value
-                    link_ += _N.nodet; Et += _N.Et; olp += _N.olp; _N.fin = 1; node_ += [_N]
-            if link_: link_ = list(set(link_))
+                    Et += _N.Et; olp += _N.olp; _N.fin = 1; node_ += [_N]
+                    link_ += [n for n in _N.nodet if n not in link_]
         else:  # cluster via links
             for L in link_[:]:  # snapshot
-                for _N in L.nodet:
-                    if _N.fin: continue  # connectivity clusters don't overlap
-                    if rng == 1: _Et,_olp = copy(_N.Et),_N.olp
-                    else:  # rng > 1, cluster top-rng roots if rim intersect:
-                        _n =_N; _R=_n.root; _link_,_llink_ = [],[]
-                        while _R and _R.rng >_n.rng: _n=_R; _R=_R.root
-                        if _R.fin: continue
-                        _link_,_llink_,_Et,_olp = _R.link_,_R.llink_,copy(_R.Et),_R.olp
-                        lenI = len(list(set(llink_) & set(_R.llink_)))
-                        if lenI and (lenI / len(llink_) >.2 or lenI / len(_R.llink_) >.2):  # | eval oEt?
-                            _N=_R; _Et=copy(_R.Et); _olp=_R.olp; _link_=_R.link_; _llink_=_R.llink_
-                        else: continue  # skip low rim intersect
-                    _N.fin =1; Et += _Et; olp += _olp; node_ += [_N]
-                if rng==1:
+                if rng == 1:
                     if L.rng == rng and L not in link_: link_ += [L]
                     elif L.rng> rng and L not in llink_: llink_ += [L]  # longer-rng rims
-                else:
-                    link_ = list(set(link_+_link_)); llink_ = list(set(llink_+_llink_))
+                for _N in L.nodet:
+                    if _N.fin: continue  # connectivity clusters don't overlap
+                    if rng == 1:
+                        node_ += [_N]; Et += _N.Et; olp += _N.olp; _N.fin = 1
+                        for l,_ in _N.rim:
+                            # we need to add _N.rim to link to llink here? Because _N.fin is set to 1 here, they will not be checked in the main loop again
+                            if l.rng > rng and l not in llink_: llink_ += [l]
+                            elif l not in link_:                link_ += [l]   
+                    else:  # rng > 1, cluster top-rng roots if rim intersect:
+                        _n =_N; _R=_n.root
+                        while _R and _R.rng > _n.rng: _n=_R; _R=_R.root
+                        if _R.fin: continue
+                        lenI = len(list(set(llink_) & set(_R.llink_)))
+                        if lenI and (lenI / len(llink_) >.2 or lenI / len(_R.llink_) >.2):  # min rim intersect | intersect oEt?
+                            link_ = list(set(link_+_R.link_)); llink_ = list(set(llink_+_R.llink_))
+                            node_+= [_R]; Et +=_R.Et; olp += _R.olp; _R.fin = 1; _N.fin = 1
         node_ = list(set(node_))
         nrc = rc + olp  # updated
         if val_(Et, mw=(len(node_)-1)*Lw, aw=nrc, fi=fi) > 0:
@@ -632,7 +634,8 @@ def cluster_N_(root, N_, rc, fi, rng=1, fnodet=0):  # connectivity cluster exemp
             d_,D = centroid_M(Lay.derTT[1],ave*nrc); Lay.derTT = np.array([m_,d_])
             Et = Lay.Et + np.array([M, D, Et[2]]) * int_w
             olp = (Lay.olp + olp*int_w) / len(node_)
-            G_ += [sum2graph(nG, node_, link_, llink_, Et, olp, Lay, rng, fi)]
+            G = sum2graph(nG, node_, link_, llink_, Et, olp, Lay, rng, fi); G.fin = 0  # for higher rng
+            G_ += [G]
     if G_:
         return sum_N_(G_, root_G = nG)
 
