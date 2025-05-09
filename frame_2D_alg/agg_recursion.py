@@ -469,6 +469,21 @@ def comp_N(_N,N, ave, fi, angle=None, dist=None, dir=1, fdeep=0, rng=1):  # comp
             add_H(node.extH, Link.derH, root=node, rev=rev, fi=0)
     return Link
 
+def sel_EC_recursive(n__, root, rc, loop_w, clust_w, fi):
+
+    E__, EEt = [], np.zeros(3)
+    E_,eEt = sel_exemplars(n__, rc+loop_w, fi)  # sel=1 for typical sparse nodes
+    E__ += E_; EEt += eEt
+    
+    if val_(eEt, mw=(len(E_)-1)*Lw, aw=rc+clust_w) > 0:
+        C_,cEt = cluster_C_(root, E_, rc+clust_w)  # refine _N_+_N__ by mutual similarity
+        # internal cross_comp C_
+        if val_(cEt, mw=(len(C_)-1)*Lw, aw=rc+loop_w) > 0:  # refine exemplars by new et
+            e__, eet = sel_EC_recursive([n for C in C_ for n in C.node_], root, rc, loop_w, clust_w, fi)  # same rc?
+            E__ += e__; EEt += eet  # add deeper E_ and Et
+        
+    return list(set(E__)), EEt   
+        
 # core function
 def cross_comp(root, rc, iN_, fi=1):  # rc: redundancy count; (cross-comp, exemplar selection, clustering), recursion
 
@@ -476,8 +491,9 @@ def cross_comp(root, rc, iN_, fi=1):  # rc: redundancy count; (cross-comp, exemp
     if N__:  # CLs if not fi
         nG, n__ = [],[]  # mfork
         for n in [N for N_ in N__ for N in N_]:
-            n__ += [n]; n.sel = 0  # for cluster_N_
+            if n not in n__: n__ += [n]; n.sel = 0  # for cluster_N_ (same n maybe in multiple level of rngs)
         if val_(Et, mw=(len(n__)-1)*Lw, aw=rc+loop_w) > 0:  # rc += is local
+            '''
             E_,eEt = sel_exemplars(n__, rc+loop_w, fi)  # sel=1 for typical sparse nodes
             # call from sel_exemplars?:
             if val_(eEt, mw=(len(E_)-1)*Lw, aw=rc+clust_w) > 0:
@@ -486,13 +502,17 @@ def cross_comp(root, rc, iN_, fi=1):  # rc: redundancy count; (cross-comp, exemp
                 if val_(cEt, mw=(len(C_)-1)*Lw, aw=rc+loop_w) > 0:  # refine exemplars by new et
                     S_,sEt = sel_exemplars([n for C in C_ for n in C.node_], rc+loop_w, fi, fC=1)
                 else: S_,sEt = [],np.zeros(3)
-                if val_(sEt+eEt, mw=(len(S_+E_)-1)*Lw, aw=rc+clust_w) > 0:
-                    for rng, N_ in enumerate(N__, start=1):  # bottom-up, cluster via rng exemplars:
-                        en_ = [n for n in N_ if n.sel]; eet = np.sum([n.et for n in en_])
-                        if val_(eet, mw=(len(en_)-1)*Lw, aw=rc+clust_w*rng) > 0:
-                            nG = cluster_N_(root, en_, rc+clust_w*rng, fi, rng)
-                    if nG and val_(nG.Et, Et, mw=(len(nG.node_)-1)*Lw, aw=rc+clust_w*rng+loop_w) > 0:
-                        nG = cross_comp(nG, rc+clust_w*rng+loop_w, nG.node_)
+            '''
+            
+            E__, eEt = sel_EC_recursive(n__, root, rc, loop_w, clust_w, fi)
+            if val_(eEt, mw=(len(E__)-1)*Lw, aw=rc+clust_w) > 0:
+                root.fin = 1  # prevent root to be used as R
+                for rng, N_ in enumerate(N__, start=1):  # bottom-up, cluster via rng exemplars:
+                    en_ = [n for n in N_ if n.sel]; eet = np.sum([n.et for n in en_])
+                    if val_(eet, mw=(len(en_)-1)*Lw, aw=rc+clust_w*rng) > 0:
+                        nG = cluster_N_(root, en_, rc+clust_w*rng, fi, rng)
+                if nG and val_(nG.Et, Et, mw=(len(nG.node_)-1)*Lw, aw=rc+clust_w*rng+loop_w) > 0:
+                    nG = cross_comp(nG, rc+clust_w*rng+loop_w, nG.node_)
                         # top-composition, select unpack lower-rng nGs for deeper cross_comp
         lG = []  # dfork
         dval = val_(Et, mw=(len(L_)-1)*Lw, aw=rc+3+clust_w, fi=0)
@@ -758,6 +778,7 @@ def add_H(H, h, root, rev=0, fi=1):  # add fork L.derHs
 def sum_N_(node_, root_G=None, root=None):  # form cluster G
 
     fi = isinstance(node_[0],CG)
+    lnode = len(node_)  # assign length of node_ before the popping below
     if root_G is not None: G = root_G
     else:
         G = copy_(node_.pop(0), init=1, root=root); G.fi=fi
@@ -767,7 +788,7 @@ def sum_N_(node_, root_G=None, root=None):  # form cluster G
     if not fi:
         G.derH = [[lay] for lay in G.derH]  # nest
     G._N_ = list(set(G._N_))
-    G.olp /= len(node_)
+    G.olp /= lnode
     return G
 
 def add_N(N,n, fi=1, fappend=0):
