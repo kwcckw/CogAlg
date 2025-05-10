@@ -238,7 +238,7 @@ def cluster_edge(edge, frame, lev0, lev1, lH, derlay):  # non-recursive comp_PPm
                 _eN_ = {*eN_}
             if val_(et, mw=(len(node_)-1)*Lw, aw=2+clust_w) > 0:  # rc=2
                 Lay = CLay(); [Lay.add_lay(link.derH[0]) for link in link_]  # single-lay derH
-                G_ += [sum2graph(frame, node_,link_,[],et, 1+1-fi, Lay, rng=1, fi=1)]
+                G_ += [sum2graph(frame, node_,link_,[],et, 1+1-fi, Lay, rng=1, fi=1, C_=[])]
 
         return G_
 
@@ -275,7 +275,7 @@ def cluster_edge(edge, frame, lev0, lev1, lH, derlay):  # non-recursive comp_PPm
             for l in L_: derlay[fi].add_lay(l.derH[0])
             if fi:  # mfork der+
                 if val_(dEt, mw= (len(L_)-1)*Lw, aw=2+clust_w, fi=0) > 0:
-                    Gd = cluster_N_(frame, L2N(L_), rc=2, fi=0, fnodet=1)
+                    Gd = cluster_N_([L2N(L_), []], rc=2, fi=0, fnodet=1)
                     Gd_ = Gd.node_ if Gd else []
                 else: Gd_ = []
                 lev1[1] += L_  # default
@@ -485,7 +485,7 @@ def cross_comp(root, rc, fi=1):  # rc: redundancy count; (cross-comp, exemplar s
                     rng_E_ = [n for n in N_ if n.sel]
                     eet = np.sum([n.et for n in rng_E_])
                     if val_(eet, mw=(len(rng_E_)-1)*Lw, aw=rc+clust_w*rng) > 0:  # cluster via rng exemplars
-                        Nt = cluster_N_(root, rng_E_, rc+clust_w*rng, fi, rng)
+                        Nt = cluster_N_([rng_E_, []], rc+clust_w*rng, fi, rng)
                 if Nt and val_(Nt[1], Et, mw=(len(Nt[0])-1)*Lw, aw=rc+clust_w*rng+loop_w) > 0:
                     Nt = cross_comp(Nt, rc+clust_w*rng+loop_w)
                     # top-rng, select comp lower-rng Gs in comp_N, mainly for extended scope in agg_search?
@@ -501,8 +501,12 @@ def cross_comp(root, rc, fi=1):  # rc: redundancy count; (cross-comp, exemplar s
         if Nt or Lt:
             root[2] += [[Nt,Lt]]  # current lev
             # replace add_N and add_node_H for Nt:
-            if Nt: add_N(root,Nt); add_node_H(root[2], Nt[2], root)  # appends derH,H if recursion
-            if Lt: add_N(root,Lt); root[3] += Lt[2] + [sum_N_(copy(Lt[0]), root=Lt)]  # lH: H within node_ level
+            if Nt:
+                root[0] += Nt[0]; root[1] += Nt[1]  # pack nodes and sum Et?
+                add_node_H(root[2], Nt[2], root)  # appends derH,H if recursion
+            if Lt: 
+                root[0] += Lt[0]; root[1] += Lt[1]  # pack nodes and sum Et?
+                root[3] += Lt[2] + [sum_N_(copy(Lt[0]), root=Lt)]  # lH: H within node_ level
         if Nt:
             return Nt  # [node_,Et,H,lH]
 
@@ -599,8 +603,8 @@ def cluster_N_(root, rc, fi, rng=1, fnodet=0):  # connectivity cluster exemplar 
                 elif l.rng>rng: llink_+= [l]  # longer-rng rim
         else:  # rng > 1, cluster top-rng roots instead
             n = N; R = n.root
-            while R and R.rng > n.rng: n=R; R=R.root
-            if R.fin: continue
+            while R and isinstance(R, CG) and R.rng > n.rng: n=R; R=R.root
+            if isinstance(R, list) or R.fin: continue  # skip highest list root
             node_,link_,llink_,Et,olp = [R],R.link_,R.llink_,copy(R.Et),R.olp
             R.fin = 1
         nrc = rc+olp; N.fin = 1
@@ -613,7 +617,8 @@ def cluster_N_(root, rc, fi, rng=1, fnodet=0):  # connectivity cluster exemplar 
         else:  # cluster via links
             for L in link_[:]:  # snapshot
                 for _N in L.nodet:
-                    if _N.fin: continue  # connectivity clusters don't overlap
+                    # not all L.nodet in N_
+                    if _N not in N_ or _N.fin: continue  # connectivity clusters don't overlap
                     if rng == 1:
                         node_ += [_N]; Et += _N.Et; olp += _N.olp; _N.fin = 1
                         for l,_ in _N.rim if fi else (_N.rimt[0]+_N.rimt[1]):  # +ve
@@ -621,8 +626,8 @@ def cluster_N_(root, rc, fi, rng=1, fnodet=0):  # connectivity cluster exemplar 
                             elif l not in llink_ and l.rng>rng: llink_+= [l]  # longer-rng rim
                     else:  # rng > 1, cluster top-rng roots if rim intersect:
                         _n =_N; _R=_n.root
-                        while _R and _R.rng > _n.rng: _n=_R; _R=_R.root
-                        if _R.fin: continue
+                        while _R and isinstance(R, CG) and _R.rng > _n.rng: _n=_R; _R=_R.root
+                        if isinstance(_R, list) or _R.fin: continue
                         lenI = len(list(set(llink_) & set(_R.llink_)))
                         if lenI and (lenI / len(llink_) >.2 or lenI / len(_R.llink_) >.2):  # min rim intersect | intersect oEt?
                             link_ = list(set(link_+_R.link_)); llink_ = list(set(llink_+_R.llink_))
@@ -630,7 +635,7 @@ def cluster_N_(root, rc, fi, rng=1, fnodet=0):  # connectivity cluster exemplar 
         node_ = list(set(node_))
         nrc = rc + olp  # updated
         if val_(Et, mw=(len(node_)-1)*Lw, aw=nrc, fi=fi) > 0:
-            Lay = CLay(root=root)  # sum combined n.derH:
+            Lay = CLay(root=root)  # sum combined n.derH: (if root is list now, how to assign root to Lay?)
             [Lay.add_lay(lay) for n in (node_ if fnodet else link_) for lay in n.derH]  # always CL?
             m_,M = centroid_M(Lay.derTT[0],ave*nrc)  # weigh by match to mean m|d
             d_,D = centroid_M(Lay.derTT[1],ave*nrc); Lay.derTT = np.array([m_,d_])
@@ -644,9 +649,10 @@ def cluster_N_(root, rc, fi, rng=1, fnodet=0):  # connectivity cluster exemplar 
 def sum2graph(root, node_,link_,llink_,Et,olp, Lay, rng, fi, C_):  # sum node and link params into graph, aggH in agg+ or player in sub+
 
     n0 = node_[0]
+    # if root is list, do we still need to assign root here?
     graph = CG(fi=fi,rng=rng, olp=olp, root=root, Et=Et, node_=node_, link_=link_, box=n0.box, baseT=copy(n0.baseT), derTT=Lay.derTT, derH=[[Lay]])
     graph.llink_ = llink_
-    if C_: graph.C_ = C_  # for higher-scope cross_comp in agg_search?
+    if C_: graph.C_ = C_  # for higher-scope cross_comp in agg_search?  (C_ param should be default?)
     n_,l_,lH,yx_ = [],[],[],[]
     fg = fi and isinstance(n0.node_[0],CG)  # no PPs
     for i,N in enumerate(node_):
@@ -706,10 +712,9 @@ def comb_alt_(G_, rc=1):  # combine contour G.altG_ into altG (node_ defined by 
         o = G.olp
         if G.alt_:
             if isinstance(G.alt_, list):
-                G.alt_ = sum_N_(G.alt_)
-                G.alt_.root=G; G.alt_.m=0
+                G.alt_ = sum_N_(G.alt_)  # or remove sum_N_ and sum Et separately?
                 if val_(G.alt_.Et, G.Et, aw=o, fi=0):  # alt D * G rM
-                    cross_comp([G.alt_], rc, fi=1)  # adds nesting
+                    cross_comp([G.alt_.node_, []], rc, fi=1)  # adds nesting
         elif G.H:  # not PP
             # alt_G = sum dlinks:
             dL_ = list(set([L for g in G.node_ for L,_ in (g.rim if isinstance(g, CG) else g.rimt[0]+g.rimt[1]) if val_(L.Et,G.Et, aw=o, fi=0) > 0]))
@@ -789,7 +794,9 @@ def add_N(N,n, fi=1, fappend=0):
         if n.alt_: N.alt_ = add_N(N.alt_ if N.alt_ else CG(), n.alt_)  # n.alt_ must be a CG here?
     if fappend:
         N.node_ += [n]
-        N.C_ += n.C_  # centroids, if any
+        if hasattr(n, 'C_'):  # or make C_ a default param?
+            if hasattr(n, 'C_'): N.C_ += n.C_  # centroids, if any
+            else:                N.C_ = copy(n.C_)
         if fi: N.link_ += n.link_  # splice if CG
     elif fi:  # empty in append and altG
         if n.H: add_node_H(N.H, n.H, root=N)
@@ -921,6 +928,10 @@ def agg_search(image, frame, focus, rV=1, _rv_t=[]):  # recursive level-forming 
         if val_(Fg.Et, mw=rM+rD, aw=frame.olp+clust_w*20):  # focus shift by dval + temp Dm_+Ddm_?
             dy,dx = Fg.baseT[-2:]  # gA from summed Gs
             y,x,Y,X = Fg.box
+            if y == np.inf: y = dy
+            if x == np.inf: x = dx
+            if Y == -np.inf: Y = Y
+            if X == -np.inf: Y = X
             y = y+dy; x = x+dx; Y = Y+dy; X = X+dx  # alter focus shape, also focus size: +/m-, res decay?
             if y>0 and x>0 and Y < frame.box[2] and X < frame.box[3]:  # focus inside the image, frame may be just box?
                 # rerun agg+ with new focus window and aves, need to remove overlap
@@ -930,11 +941,12 @@ def agg_search(image, frame, focus, rV=1, _rv_t=[]):  # recursive level-forming 
         else:
             break  # tentative
     # scope+ node_ -> agg+ H, splice and cross_comp centroids in G.C_ within focus ) frame?
-    if val_(frame.Et, mw=len(node_)/lenn_*Lw, aw=frame.olp+clust_w*20) > 0:  # node_ is combined across foci
-        node_ = cross_comp([node_,frame.Et,[],[]], rc=frame.olp+loop_w)[0]
-        # project higher-scope Gs to eval for new foci?
+    if node_ :
+        if val_(frame.Et, mw=len(node_)/lenn_*Lw, aw=frame.olp+clust_w*20) > 0:  # node_ is combined across foci
+            node_ = cross_comp([node_,frame.Et,[],[]], rc=frame.olp+loop_w)[0]
+            # project higher-scope Gs to eval for new foci?
 
-    return sum_N_(node_)  # frame spliced from foci?
+        return sum_N_(node_)  # frame spliced from foci?
 
 if __name__ == "__main__":
     image = imread('./images/toucan_small.jpg')  # './images/toucan.jpg' './images/raccoon_eye.jpeg'
