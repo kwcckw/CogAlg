@@ -113,14 +113,15 @@ class CLay(CBase):  # layer of derivation hierarchy, subset of CG
         if root: root.Et += Et
         return CLay(Et=Et, olp=(_lay.olp+lay.olp*rn)/2, node_=node_, link_=link_, derTT=derTT)
 
-class CN:
-    def __init__(self, **kwargs):
-        self.N_  = []
-        self.Et  = np.zeros(3)
-        self.H   = []
-        self.Lt  = CN
-        self.C_  = []
-    def __bool__(self): return bool(self.N_)
+class CN(CBase):
+    def __init__(N, **kwargs):
+        super().__init__()
+        N.N_  = kwargs.get('N_', [])
+        N.Et  = kwargs.get('Et', np.zeros(3))
+        N.H   = kwargs.get('H', [])
+        N.Lt  = CN(Lt=[]) if kwargs.get('Lt') is None else kwargs.get('Lt')  # Lt does not have .Lt, Lt.H is lH
+        N.C_  = kwargs.get('C_', [])
+    def __bool__(N): return bool(N.N_)
 
 class CG(CBase):  # PP | graph | blob: params of single-fork node_ cluster
     # graph / node
@@ -154,7 +155,8 @@ class CG(CBase):  # PP | graph | blob: params of single-fork node_ cluster
     def __bool__(G): return bool(G.node_)  # never empty
 
 def copy_(N, root=None, init=0):
-    C = CG(root=root)
+    C = N.__class__()  # enable copy for CN
+    if isinstance(C, CG): C.root = root
 
     for name, value in N.__dict__.items():
         val = getattr(N, name)
@@ -282,9 +284,10 @@ def cluster_edge(edge, frame, lev0, lev1, lH, derlay):  # non-recursive comp_PPm
                 else:    lH[0] += PP_  # PPd_
             for l in L_: derlay[fi].add_lay(l.derH[0])
             if fi:  # mfork der+
+                Gd_ = []
                 if val_(dEt, mw= (len(L_)-1)*Lw, aw=2+clust_w, fi=0) > 0:
-                    Gd_ = cluster_N_([L2N(L_), []], rc=2, fi=0, fnodet=1)[0]
-                else: Gd_ = []
+                    dN = cluster_N_(CN(N_=L2N(L_)), rc=2, fi=0, fnodet=1)
+                    if dN: Gd_ = dN.N_
                 lev1[1] += L_  # default
                 if Gd_: lH[2] += Gd_  # new layer
             else:
@@ -487,9 +490,9 @@ def cross_comp(root, rc, fi=1):  # rc: redundancy count; (cross-comp, exemplar s
         # mfork:
         if val_(Et, mw=(len(n__)-1)*Lw, aw=rc+loop_w) > 0:  # rc += is local
             E_,eEt = select_exemplars(root, n__, rc+loop_w, fi)  # typical sparse nodes, refine by cluster_C_
-            if val_(eEt, mw=(len(E_)-1)*Lw, aw=rc+clust_w) > 0:
+            if not fi or val_(eEt, mw=(len(E_)-1)*Lw, aw=rc+clust_w) > 0: # (skip CL in centroid exemplars selection)
                 for rng, N_ in enumerate(N__, start=1):  # bottom-up
-                    rng_E_ = [n for n in N_ if n.sel]
+                    rng_E_ = [n for n in N_ if (n.sel or not fi)]
                     eet = np.sum([n.Et for n in rng_E_])
                     if val_(eet, mw=(len(rng_E_)-1)*Lw, aw=rc+clust_w*rng) > 0:  # cluster via rng exemplars
                         Nt = cluster_N_(CN(N_=rng_E_), rc+clust_w*rng, fi, rng)
@@ -510,9 +513,9 @@ def cross_comp(root, rc, fi=1):  # rc: redundancy count; (cross-comp, exemplar s
             new_lev = CN(N_=Nt.N_, Et=Nt.Et)  # pack N_ in H
             if Nt.H:  # lower levs: derH,H if recursion
                 root.N_ = Nt.H.pop().N_  # top lev N_
-            add_node_H(root.H, Nt.H +[new_lev], root)
+            add_N_H(root.H, Nt.H +[new_lev], root)
             # same H elevation?
-        root.Lt = Lt  # always new
+        root.Lt = Lt  # always new (maybe None if nothing is returned from cluster_N_ of dfork above)
         root.Et += Lt.Et
         return root  # or replace?
 
@@ -796,11 +799,11 @@ def add_N(N,n, fi=1, fappend=0):
         # if n.alt_: N.alt_ = add_N(N.alt_ if N.alt_ else CG(), n.alt_)  # n.alt_ must be a CG here?
     if fappend:
         N.node_ += [n]
-        N.C_ += n.C_  # centroids, if any
+        if isinstance(n, CG): N.C_ += n.C_  # centroids, if any (skip CL)
         if fi: N.link_ += n.link_  # splice if CG
     elif fi:  # empty in append and altG
-        if n.H: add_node_H(N.H, n.H, root=N)
-        if n.lH: add_node_H(N.lH, n.lH, root=N)
+        if n.H: add_N_H(N.H, n.H, root=N)
+        if n.Lt: add_N_H(N.Lt.H, n.Lt.H, root=N)
     if n.derH:
         add_H(N.derH, n.derH, root=N, fi=fi)
     return N
@@ -817,6 +820,16 @@ def add_node_H(H, h, root):
                         else:  Lev[i] = copy_(f, root=root)  # empty fork
             else:
                 H += [copy_(f, root=root) for f in lev]
+
+
+def add_N_H(H, h, root):
+
+    for Lev, lev in zip_longest(H, h, fillvalue=None):  # always aligned?
+        if lev:
+            if Lev:
+                add_N(Lev,lev)
+            else:
+                H += [copy_(lev, root=root)]
 
 def extend_box(_box, box):  # extend box with another box
     y0, x0, yn, xn = box; _y0, _x0, _yn, _xn = _box
