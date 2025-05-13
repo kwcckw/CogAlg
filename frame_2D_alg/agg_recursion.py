@@ -237,9 +237,16 @@ def vect_root(frame, rV=1, ww_t=[]):  # init for agg+:
     for n_ in [G_t] + lev1 + lH:
         for n in n_:
             if n: frame.baseT+=n.baseT; frame.derTT+=n.derTT; frame.Et += n.Et
-    if G_t[0] or G_t[1]: frame.H=[G_t]  # lev0
+            
+    frame.H = [CN(Lt=CN())]
+    if G_t[0]:
+        Nt = frame.H[0]
+        Nt.nN_= G_t[0].node_; Nt.Et = copy(G_t[0].Et); Nt.H = [G_t[0]]      
+    if G_t[1]:
+        Lt = frame.H[0].Lt
+        Lt.N_ = G_t[1].node_; Lt.Et = copy(G_t[1].Et); Lt.H = [G_t[1]] 
     frame.node_ = lev1[0]; frame.link_= lev1[1]
-    frame.lH = lH  # two levs
+    frame.lH = lH  # two levs  (not sure on this, pack lH into frame.H[0].Lt.H?)
     frame.derH = [derlay]
     return frame
 
@@ -517,8 +524,9 @@ def cross_comp(root, rc, fi=1):  # rc: redundancy count; (cross-comp, exemplar s
         Lt = CN(N_=L_, Et=Et)
         dval = val_(Et, mw=(len(L_)-1)*Lw, aw=rc+3+clust_w, fi=0)
         if dval > 0:
-            if Nt: comb_alt_(Nt.N_, rc + clust_w * 3); Lt.N_ = L2N(L_)
-            if dval > ave:  # recursive derivation ->lH / nLev, rng-banded?
+            if Nt: comb_alt_(Nt.N_, rc + clust_w * 3)
+            Lt.N_ = L2N(L_)  # this should be default and independent of if Nt?
+            if dval > ave:  # recursive derivation ->lH / nLev, rng-banded?     
                 cross_comp(Lt, rc+loop_w*2, fi=0)  # comp_link_, no centroids?
             else:  # lower res
                 cluster_N_(Lt, rc+clust_w*2, fi=0, fnodet=1)  # overlaps the mfork above
@@ -629,7 +637,7 @@ def cluster_N_(root, rc, fi, rng=1, fnodet=0):  # connectivity cluster exemplar 
         nrc = rc+olp; N.fin = 1
         if fnodet:
             # cluster via nodes
-            for _N in N.nodet[0].rim+N.nodet[1].rim if isinstance(N.nodet[0],CG) else list(set([l for n in N.nodet for l,_ in n.rimt[0]+n.rimt[1]])):
+            for _N,_ in N.nodet[0].rim+N.nodet[1].rim if isinstance(N.nodet[0],CG) else list(set([lt for n in N.nodet for lt in n.rimt[0]+n.rimt[1]])):
                 if not _N.fin and _N.Et[1] > avd * _N.Et[2] * nrc:  # d_value
                     Et += _N.Et; olp += _N.olp; _N.fin = 1; node_ += [_N]
                     link_ += [n for n in _N.nodet if n not in link_]
@@ -687,7 +695,10 @@ def sum2graph(root, node_,link_,llink_,Et,olp, Lay, rng, fi, C_):  # sum node an
     graph.yx = yx
     if not fi:  # add mfork as link.nodet(CL).root dfork
         for L in link_:  # higher derH layers are added by feedback, dfork added from comp_link_:
-            LR_ = set([n.root for n in L.nodet if isinstance(n.root,CG)]) # skip frame, empty roots
+            if isinstance(L, CG):  # when link is CG, LR is just node.root?
+                LR_ = [L.root] if isinstance(L.root, CG) and L.root.derH else []
+            else:    
+                LR_ = set([n.root for n in L.nodet if isinstance(n.root,CG)]) # skip frame, empty roots
             if LR_:
                 dfork = reduce(lambda F,f: F.add_lay(f), L.derH, CLay())  # combine lL.derH
                 for LR in LR_:  # lay0 += dfork
@@ -726,14 +737,15 @@ def comb_alt_(G_, rc=1):  # combine contour G.altG_ into altG (node_ defined by 
         o = G.olp
         if G.alt_:
             if isinstance(G.alt_, list):
-                G.alt_ = sum_N_(G.alt_)  # G.alt_.root=G; G.alt_.m=0 or remove sum_N_ and sum Et separately?
+                # use CN for G.alt_?
+                G.alt_ = sum_N_(G.alt_, fN=1)  # G.alt_.root=G; G.alt_.m=0 or remove sum_N_ and sum Et separately?
                 if val_(G.alt_.Et, G.Et, aw=o, fi=0):  # alt D * G rM
-                    cross_comp([G.alt_.node_, []], rc, fi=1)  # adds nesting
+                    cross_comp(G.alt_, rc, fi=1)  # adds nesting
         elif G.H:  # not PP
             # alt_G = sum dlinks:
             dL_ = list(set([L for g in G.node_ for L,_ in (g.rim if isinstance(g, CG) else g.rimt[0]+g.rimt[1]) if val_(L.Et,G.Et, aw=o, fi=0) > 0]))
             if dL_ and val_(np.sum([l.Et for l in dL_],axis=0), G.Et, aw=10+o, fi=0) > 0:
-                alt_ = sum_N_(dL_)
+                alt_ = sum_N_(dL_, fN=1)
                 G.alt_ = copy_(alt_); G.alt_.H = [alt_]; G.alt_.root=G
 
 def comp_H(H,h, rn, root, Et, fi):  # one-fork derH if not fi, else two-fork derH
@@ -780,7 +792,7 @@ def add_H(H, h, root, rev=0, fi=1):  # add fork L.derHs
                 else:   H += [lay.copy_(rev=rev)]
                 root.extTT += lay.derTT; root.Et += lay.Et
 
-def sum_N_(node_, root_G=None, root=None):  # form cluster G
+def sum_N_(node_, root_G=None, root=None, fN = 0):  # form cluster G
 
     fi = isinstance(node_[0],CG); lenn = len(node_)
     if root_G is not None: G = root_G
@@ -793,7 +805,9 @@ def sum_N_(node_, root_G=None, root=None):  # form cluster G
         G.derH = [[lay] for lay in G.derH]  # nest
     G._N_ = list(set(G._N_))
     G.olp /= lenn
-    return G
+    
+    if fN: return CN(N_=G.node_,Et=G.Et,H=G.H)
+    else: return G
 
 def add_N(N,n, fi=1, fappend=0):
 
@@ -940,7 +954,7 @@ def agg_search(image, frame, focus, rV=1, _rv_t=[]):  # recursive level-forming 
     lenn_, depth = len(Fg.node_), 0
     while len(Fg.H) > depth:  # added in cross_comp
         comb_alt_(Fg.node_, ave*2)
-        cross_comp(CN(N_=Fg.node_,Et=Fg.Et,H=Fg.H), rc=frame.olp+loop_w)  # top level, Ft += G.C_ in sum_N_?
+        cross_comp(CN(N_=Fg.node_,Et=Fg.Et,H=copy(Fg.H)), rc=frame.olp+loop_w)  # top level, Ft += G.C_ in sum_N_?
         # adjust weights: all aves *= rV, ultimately differential backprop per ave?
         rM, rD, rv_t = feedback(Fg)
         if val_(Fg.Et, mw=rM+rD, aw=frame.olp+clust_w*20):  # focus shift by dval + temp Dm_+Ddm_?
