@@ -880,7 +880,8 @@ def agg_search(frame, focus,foci, image, rV=1, _rv_t=[]):  # recursive level-for
     ave, Lw, int_w, loop_w, clust_w, ave_dist, ave_med, med_w = np.array([ave, Lw, int_w, loop_w, clust_w, ave_dist, ave_med, med_w]) / rV
     # fb rws: ~rvs
     node_, C_ = [], []  # extend frame.node_ with new foci from search
-    Fg = frame_blobs_root(image[*focus],rV); Fg.box=focus; intra_blob_root(Fg,rV)
+    y,x,Y,X = focus
+    Fg = frame_blobs_root(image[y:Y, x:X],rV); Fg.box=focus; intra_blob_root(Fg,rV)
     Fg = vect_root(Fg, rV,_rv_t)
     lenn_, depth = len(Fg.N_), 0
     while len(Fg.H) > depth:  # added in cross_comp
@@ -897,7 +898,7 @@ def agg_search(frame, focus,foci, image, rV=1, _rv_t=[]):  # recursive level-for
             _y,_x,_Y,_X = focus
             y = _y+ ny*wY; x = _x+ nx*wX; Y = _Y+ ny*wY; X = _X+ nx*wX  # next box
             if y >= 0 and x >= 0 and Y < frame.box[2] and X < frame.box[3]:  # focus inside the image
-                focus = y,x,Y,X; fin = 0
+                focus = int(y),int(x),int(Y),int(X); fin = 0  # coordinates can't be decimals
                 for _y,_x,_,_ in foci:
                     if y==_y and x==_x: fin=1; break
                 if not fin:  # new focus

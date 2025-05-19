@@ -94,10 +94,11 @@ class CBlob(CBase):
         y, x = perimeter_.pop()  # pixel coord
         if (y, x) not in dert__: return  # out of bound
         i,dy,dx,g,s = dert__[y,x]
-        if (y, x) not in fill_yx_:
+        if (y, x) not in fill_yx_:  # there is a bug with last blob here
             if blob.sign != s:  # adjacent blobs have opposite sign
                 _blob = root__[y, x]
                 if _blob not in blob.adj_: blob.adj_ += [_blob]
+                if blob not in _blob.adj_: _blob.adj_ += [blob]
             return
         if blob.sign is None: blob.sign = s  # assign sign to new blob
         if blob.sign != s: return  # different blob.sign, stop
@@ -122,8 +123,9 @@ class CBlob(CBase):
         frame.blob_ += [blob]
         if blob.sign:   # transfer adj_ from +blob to -blobs and remove
             for _blob in blob.adj_:
-                _blob.adj_ += [blob]
-            del blob.adj_
+                if blob not in _blob.adj_: _blob.adj_ += [blob]
+                if _blob not in blob.adj_: blob.adj_ += [_blob]
+            # del blob.adj_  (Why we want to delete adjacent blobs?)
 
     @property
     def G(blob): return blob.latuple[-1]
@@ -156,9 +158,10 @@ def comp_pixel(i__): # compare all in parallel -> i__, dy__, dx__, g__, s__
     s__ = ave - g__ > 0  # sign is positive for below-average g
     # convert to dert__:
     y__, x__ = np.indices(i__.shape)
+    # i checked and looks like we need :-2 index to match the xy coordinates with the sign
     dert__ = dict(zip(
-        zip(y__[1:-1, 1:-1].flatten(), x__[1:-1, 1:-1].flatten()),
-        zip(i__[1:-1, 1:-1].flatten(), dy__.flatten(), dx__.flatten(), g__.flatten(), s__.flatten()),
+        zip(y__[:-2, :-2].flatten(), x__[:-2, :-2].flatten()),
+        zip(i__[:-2, :-2].flatten(), dy__.flatten(), dx__.flatten(), g__.flatten(), s__.flatten()),
     ))
     return dert__
 
