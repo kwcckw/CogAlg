@@ -198,7 +198,7 @@ ave, avd, arn, aI, aveB, aveR, Lw, int_w, loop_w, clust_w = 10, 10, 1.2, 100, 10
 ave_dist, ave_med, dist_w, med_w = 10, 3, 2, 2  # cost filters + weights
 wM, wD, wN, wO, wI, wG, wA, wL = 10, 10, 20, 20, 1, 1, 20, 20  # der params higher-scope weights = reversed relative estimated ave?
 w_t = np.ones((2,8))  # fb weights per derTT, adjust in agg+
-wdim = 64  # dimension of window in each focus
+wY = wX = 64; wYX = np.hypot(wY,wX)  # focus dimensions
 '''
 initial PP_ cross_comp and LC clustering, no recursion:
 '''
@@ -299,10 +299,10 @@ def eval(V, weights):  # conditionally progressive eval, with default ave in wei
         if V < W: return 0
     return 1
 ''' 
- Core process:
+ Core process per agg level, add feedback to lower levels:
  Cross-compare nodes, evaluate incremental-derivation cross-comp of new >ave difference links, recursively.
  
- Select sparse exemplars of strong node types, convert to centroids of their rim to select by mutual match.
+ Select sparse exemplars of strong node types, convert to centroids of their rim, reselect by mutual match.
  This selection is essential due to complexity of subsequent connectivity clustering (CC):
   
  Connectivity cluster exemplar nodes by >ave match links, correlation-cluster links by >ave difference.
@@ -442,8 +442,7 @@ def comp_N(_N,N, ave, fi, angle=None, span=None, dir=1, fdeep=0, rng=1):  # comp
     box=np.array([min(_y,y),min(_x,x),max(_y,y),max(_x,x)])
     Link = CL(rng=rng, olp=o, N_=[_N,N], baseT=baseT, derTT=derTT, yx=np.add(_N.yx,N.yx)/2, span=span, angle=angle, box=box)
     # spec / lay:
-    # we can't check CL now since CG has all CL's params
-    if fdeep and (val_(Et, mw=len(N.derH)-2, aw=o) > 0 or N.name == 'link'):  # else base_comp only, derH is redundant to dext,vert
+    if fdeep and (val_(Et, mw=len(N.derH)-2, aw=o) > 0 or N.name=='link'):  # else derH is dext,vert
         dderH = comp_H(_N.derH, N.derH, rn, Link, Et, fi)  # comp shared layers, if any
         # spec/ comp_node_(node_|link_)
     Link.derH = [CLay(root=Link, Et=Et, node_=[_N,N],link_=[Link], derTT=copy(derTT)), *dderH]
@@ -464,7 +463,7 @@ def comp_N(_N,N, ave, fi, angle=None, span=None, dir=1, fdeep=0, rng=1):  # comp
     return Link
 
 # core function
-def cross_comp(iN_, rc, fi=1, root=None):  # rc: redundancy; (cross-comp, exemplar selection, clustering), recursion
+def cross_comp(iN_, rc, root, fi=1):  # rc: redundancy; (cross-comp, exemplar selection, clustering), recursion
 
     N__,L_,Et = comp_node_(iN_,rc) if fi else comp_link_(iN_,rc)  # rc has root.olp
     # if root[-1]: C_= comp_node_(C_), rng*= C.k, C_ olp N_?
@@ -476,8 +475,8 @@ def cross_comp(iN_, rc, fi=1, root=None):  # rc: redundancy; (cross-comp, exempl
             E_,eEt = select_exemplars(root, n__, rc+loop_w, fi)  # typical sparse nodes, refine by cluster_C_
             if val_(eEt, mw=(len(E_)-1)*Lw, aw=rc+clust_w) > 0:
                 for rng, N_ in enumerate(N__,start=1):  # bottom-up
-                    rng_E_ = [n for n in N_ if n.sel];  eet = np.sum([n.Et for n in rng_E_])
-                    if val_(eet, mw=(len(rng_E_)-1)*Lw, aw=rc+clust_w*rng) > 0:  # cluster via rng exemplars
+                    rng_E_ = [n for n in N_ if n.sel]  # cluster via rng exemplars
+                    if rng_E_ and val_(np.sum([n.Et for n in rng_E_],axis=0), mw=(len(rng_E_)-1)*Lw, aw=rc+clust_w*rng) > 0:
                         hNt = cluster_N_(rng_E_, rc+clust_w*rng, fi,rng)
                         if hNt: Nt = hNt  # else keep lower rng
                 if Nt and val_(Nt.Et, Et, mw=(len(Nt.N_)-1)*Lw, aw=rc+clust_w*rng+loop_w) > 0:
@@ -487,7 +486,7 @@ def cross_comp(iN_, rc, fi=1, root=None):  # rc: redundancy; (cross-comp, exempl
         if dval > 0:
             L_ = L2N(L_)
             if dval > ave:  # recursive derivation -> lH / nLev, rng-banded?
-                cross_comp(L_, rc+loop_w*2, fi=0, root=root)  # comp_link_, no centroids?
+                cross_comp(L_, rc+loop_w*2, root, fi=0)  # comp_link_, no centroids?
             else:  # lower res
                 Lt = cluster_N_(L_, rc+clust_w*2, fi=0, fnode_=1)  # overlaps the mfork above
         if Nt:
@@ -831,7 +830,7 @@ def sort_H(H, fi):  # re-assign olp and form priority indices for comp_tree, if 
     if fi:
         H.root.node_ = H.node_
 
-def init_frame(i__, dim=wdim):  # set frame and focus, updated by feedback to shift the focus
+def init_frame(i__):  # set frame and focus, updated by feedback to shift the focus
     dy__ = (
             (i__[2:, :-2] - i__[:-2, 2:]) * 0.25 +
             (i__[2:, 1:-1] - i__[:-2, 1:-1]) * 0.50 +
@@ -841,29 +840,19 @@ def init_frame(i__, dim=wdim):  # set frame and focus, updated by feedback to sh
             (i__[1:-1, 2:] - i__[1:-1, :-2]) * 0.50 +
             (i__[2:, 2:] - i__[:-2, 2:]) * 0.25
     )
-    Y, X = image.shape[0], image.shape[1]
-    nY = (Y + dim-1) // dim; nX = (X + dim-1) // dim  # image / dimension -> n windows
     g__ = np.hypot(dy__, dx__)
-    max_g = 0
-
-    # right now there's no overlapping between each window, do we need to consider overlapped windows too?
-    focus__ = []; c = (0, 0)
+    Y, X = image.shape[0], image.shape[1]
+    nY = (Y+ wY-1) // wY; nX = (X+ wY-1) // wX  # image / dimension -> n windows
+    win_, max_g = [], 0
     for iy in range(nY):
-        focus_ = []
         for ix in range(nX):
-            y0 = iy * dim; yn = y0 + dim
-            x0 = ix * dim; xn = x0 + dim
+            y0 = iy * wY; yn = y0 + wY; x0 = ix * wX; xn = x0 + wX
             g = np.sum(g__[y0:yn, x0:xn])
-            
-            focus = (image[y0:yn,x0:xn], np.array([y0,x0,yn,xn]))   # (window, box)
-            focus_ += [focus] 
-            if g > max_g: 
-                max_g = g
-                c = (iy, ix)  # index of highest gradient window as starting window
-        focus__ += [focus_]  #  2D nested lsit packing windows
-
-    frame = CG(box = np.array([0,0,Y,X]), yx = np.array([Y/2,X/2]))  # define frame with whole image, or just Y,X?
-    return frame, focus__, c
+            if g > max_g:
+               focus = np.array([y0,x0,yn,xn])
+               max_g = g
+    frame = CG(box = np.array([0,0,Y,X]), yx = np.array([Y/2,X/2]))  # define frame with whole image
+    return frame, focus
 
 def feedback(root):  # root is frame or lG
 
@@ -885,51 +874,52 @@ def feedback(root):  # root is frame or lG
             rM += rMd; rD += rDd
     return rM, rD, rv_t
 
-def agg_search(frame, focus__, c, rV=1, _rv_t=[]):  # recursive level-forming pipeline, called from cluster_C_
+def agg_search(frame, focus,foci, image, rV=1, _rv_t=[]):  # recursive level-forming pipeline
 
     global ave, Lw, int_w, loop_w, clust_w, ave_dist, ave_med, med_w
     ave, Lw, int_w, loop_w, clust_w, ave_dist, ave_med, med_w = np.array([ave, Lw, int_w, loop_w, clust_w, ave_dist, ave_med, med_w]) / rV
-    # fb rws:~rvs?
+    # fb rws: ~rvs
     node_, C_ = [], []  # extend frame.node_ with new foci from search
-
-    fy, fx = c
-    focus, box = focus__[fy][fx]
-    Fg = frame_blobs_root(focus,rV); Fg.box=box; intra_blob_root(Fg,rV)
+    Fg = frame_blobs_root(image[*focus],rV); Fg.box=focus; intra_blob_root(Fg,rV)
     Fg = vect_root(Fg, rV,_rv_t)
     lenn_, depth = len(Fg.N_), 0
     while len(Fg.H) > depth:  # added in cross_comp
         comb_alt_(Fg.N_, ave*2)
-        # why root is not Fg?
-        cross_comp(Fg.N_, root=CN(N_=Fg.N_,Et=Fg.Et,H=copy(Fg.H)), rc=frame.olp+loop_w)  # top level, Ft += G.C_ in sum_N_?
+        cross_comp(Fg.N_, root=Fg, rc=frame.olp+loop_w)  # top level, Ft += G.C_ in sum_N_?
         # adjust weights: all aves *= rV, ultimately differential backprop per ave?
         rM, rD, rv_t = feedback(Fg)
-        if val_(Fg.Et, mw=rM+rD, aw=frame.olp+clust_w*20):  # focus shift by dval + temp Dm_+Ddm_?
-            dy,dx = Fg.baseT[-2:]  # gA from summed Gs
-        
-            ny = fy + (dy // wdim)  # next focus window index
-            nx = fx + (dx // wdim)  
-            Ny = len(focus__)  # total window along y direction
-            Nx = len(focus__[0])  # total window along x direction
-
-            if nx>= 0 and nx < Nx and ny >= 0 and ny < Ny:  # focus inside the image, frame may be just box?
-                # rerun agg+ with new focus window and aves, need to remove overlap
-                # new focus: get window containing Y,X:
-                Fg = agg_search(frame, focus__, (int(ny) ,int(nx)), rV, rv_t)
-                if Fg:
-                    node_ += Fg.N_; depth = len(Fg.H)
+        dy, dx = map(int, Fg.baseT[-2:])  # gA from summed Gs, eval shift:
+        if val_(Fg.Et, mw=(rM+rD) * (np.hypot(dy,dx)/wYX), aw=frame.olp+clust_w*20):  # focus shift by dval + temp Dm_+Ddm_?
+            ny = (abs(dy) + (wY-1)) // wY  # ≥1 if _dy>0, n new windows along axis
+            nx = (abs(dx) + (wX-1)) // wX
+            if dy < 0: ny = -ny  # restore sign
+            if dx < 0: nx = -nx
+            _y,_x,_Y,_X = focus
+            y = _y+ ny*wY; x = _x+ nx*wX; Y = _Y+ ny*wY; X = _X+ nx*wX  # next box
+            if y >= 0 and x >= 0 and Y < frame.box[2] and X < frame.box[3]:  # focus inside the image
+                focus = y,x,Y,X; fin = 0
+                for _y,_x,_,_ in foci:
+                    if y==_y and x==_x: fin=1; break
+                if not fin:  # new focus
+                    foci += [focus]  # rerun agg+ with new focus window and aves:
+                    Fg = agg_search(frame, focus,foci, image, rV, rv_t)
+                    if Fg: node_ += Fg.N_; depth = len(Fg.H)
+                    else: break
                 else: break
+            else: break
         else: break  # tentative
     # scope+ node_-> agg+ H, splice and cross_comp centroids in G.C_ within focus ) frame?
     if node_:
         Fg = sum_N_(node_, root=frame, fCG=1)
         if val_(frame.Et, mw=len(node_)/lenn_*Lw, aw=frame.olp+clust_w*20) > 0:  # node_ is combined across foci
             cross_comp(node_, rc=frame.olp+loop_w, root=Fg)
-            # project higher-scope Gs, eval for new foci, splice foci in frame
+            # project higher-scope Gs, eval for new foci, splice foci into frame
         return Fg
 
 if __name__ == "__main__":
     image = imread('./images/toucan_small.jpg')  # './images/toucan.jpg' './images/raccoon_eye.jpeg'
-    frame = agg_search(*init_frame(image))  # focus is shifted within a frame by internal feedback
+    frame, focus = init_frame(image)
+    frame = agg_search(frame,focus,[], image)  # focus is shifted within a frame by internal feedback
 ''' without agg+:
     frame = frame_blobs_root(image)
     intra_blob_root(frame)
