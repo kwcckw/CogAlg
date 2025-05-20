@@ -266,9 +266,12 @@ def cluster_edge(edge, frame, lev, derlay):  # non-recursive comp_PPm, comp_PPd,
             if val_(mEt, mw=(len(PP_)-1)*Lw, aw=clust_w, fi=1) > 0:
                 G_ = cluster_PP_(copy(PP_))
             else: G_ = []
-            if G_: frame.N_ += G_; lev.N_ += PP_
+            if G_: 
+                frame.N_ += G_; lev.N_ += PP_
+                for PP in PP_: lev.Et += PP.Et  # we need to add Et too? Same with adding L_'s Et
             else:  frame.N_ += PP_ # PPm_
         lev.L_+= L_  # links between PPms
+        for L in L_: lev.Et += L.Et
         for l in L_:
             derlay[0].add_lay(l.derH[0]); frame.baseT+=l.baseT; frame.derTT+=l.derTT; frame.Et += l.Et
         if val_(dEt, mw= (len(L_)-1)*Lw, aw= 2+clust_w, fi=0) > 0:
@@ -482,7 +485,7 @@ def cross_comp(iN_, rc, root, fi=1):  # rc: redundancy; (cross-comp, exemplar se
                 if Nt and val_(Nt.Et, Et, mw=(len(Nt.N_)-1)*Lw, aw=rc+clust_w*rng+loop_w) > 0:
                     cross_comp(Nt.N_, rc+clust_w*rng+loop_w, root=Nt)  # top rng, select lower-rng spec comp_N: scope+?
         Lt = []  # dfork:
-        dval = val_(Et, mw=(len(L_)-1)*Lw, aw=rc+3+clust_w, fi=0)
+        dval = val_(Et, mw=(len(L_)-1)*Lw, aw=rc+3+clust_w, fi=0) if L_ else 0  # prevent zero division when L_ is empty and Et_ is zeros
         if dval > 0:
             L_ = L2N(L_)
             if dval > ave:  # recursive derivation -> lH / nLev, rng-banded?
@@ -858,7 +861,7 @@ def feedback(root):  # root is frame or lG
 
     rv_t = np.ones((2,8))  # sum derTT coefs: m_,d_ [M,D,n,o, I,G,A,L] / Et, baseT, dimension
     rM, rD = 1,1
-    hLt = sum_N_(root.L_)  # links between top nodes
+    hLt = sum_N_(root.L_)  # links between top nodes 
     _derTT = np.sum([l.derTT for l in hLt.N_])  # _derTT[np.where(derTT==0)] = 1e-7: this should be in base_comp
     for lev in reversed(root.H):  # top-down
         if not lev.lH: continue  # lH may empty?
@@ -903,8 +906,8 @@ def agg_search(frame, focus,foci, image, rV=1, _rv_t=[]):  # recursive level-for
                     if y==_y and x==_x: fin=1; break
                 if not fin:  # new focus
                     foci += [focus]  # rerun agg+ with new focus window and aves:
-                    Fg = agg_search(frame, focus,foci, image, rV, rv_t)
-                    if Fg: node_ += Fg.N_; depth = len(Fg.H)
+                    Fg = agg_search(frame, focus,foci, image, rV, rv_t)  # Fg always None here unless we returns a default Fg
+                    if Fg.N_: node_ += Fg.N_; depth = len(Fg.H)
                     else: break
                 else: break
             else: break
@@ -915,7 +918,7 @@ def agg_search(frame, focus,foci, image, rV=1, _rv_t=[]):  # recursive level-for
         if val_(frame.Et, mw=len(node_)/lenn_*Lw, aw=frame.olp+clust_w*20) > 0:  # node_ is combined across foci
             cross_comp(node_, rc=frame.olp+loop_w, root=Fg)
             # project higher-scope Gs, eval for new foci, splice foci into frame
-        return Fg
+    return Fg
 
 if __name__ == "__main__":
     image = imread('./images/toucan_small.jpg')  # './images/toucan.jpg' './images/raccoon_eye.jpeg'
