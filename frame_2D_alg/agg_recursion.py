@@ -486,7 +486,7 @@ def cross_comp(iN_, rc, root, fi=1):  # rc: redundancy; (cross-comp, exemplar se
                 if Nt and val_(Nt.Et, Et, mw=(len(Nt.N_)-1)*Lw, aw=rc+clust_w*rng+loop_w) > 0:
                     cross_comp(Nt.N_, rc+clust_w*rng+loop_w, root=Nt)  # top rng, select lower-rng spec comp_N: scope+?
         Lt = []  # dfork:
-        dval = val_(Et, mw=(len(L_)-1)*Lw, aw=rc+3+clust_w, fi=0)
+        dval = len(L_) and val_(Et, mw=(len(L_)-1)*Lw, aw=rc+3+clust_w, fi=0)  # prevent zero division in val_
         if dval > 0:
             L_ = L2N(L_)
             if dval > ave:  # recursive derivation -> lH / nLev, rng-banded?
@@ -839,7 +839,7 @@ def init_frame(i__):  # set frame and focus, updated by feedback to shift the fo
     dert__ = comp_pixel(i__)
     Y, X = image.shape[0], image.shape[1]
     nY = (Y+ wY-1) // wY; nX = (X+ wY-1) // wX  # image / dimension -> n windows
-    win_, max_g = [], 0
+    win_, max_g = [], 0  # win_ is not needed?
     for iy in range(nY):
         for ix in range(nX):
             y0 = iy * wY; yn = y0 + wY; x0 = ix * wX; xn = x0 + wX
@@ -873,19 +873,22 @@ def feedback(root):  # root is frame or lG
 def agg_focus(frame, focus, image, rV, rv_t, dert__):  # single-focus agg+ level-forming pipeline
 
     y,x, Y,X = focus
-    Fg = frame_blobs_root(image[y:Y,x:X],rV, dert__[y:Y,x:X]); Fg.box=focus; intra_blob_root(Fg,rV)
+    # dert__ is selected from their box before calling the function
+    Fg = frame_blobs_root(image[y:Y,x:X],rV, dert__); Fg.box=focus; intra_blob_root(Fg,rV)
     Fg = vect_root(Fg, rV, rv_t)
     comb_alt_(Fg.N_, ave*2)
     cross_comp(Fg.N_, root=Fg, rc=frame.olp+loop_w)
+    frame.Et += Fg.Et  # increase frame.Et here?
     return Fg
 
-def agg_search(frame, focus,foci, image, rV=1, _rv_t=[], dert__=None):  # recursive frame search
+# dert__ follows the argument sequence in __main__ below
+def agg_search(frame, focus,foci, image, dert__, rV=1, _rv_t=[]):  # recursive frame search
 
     global ave, Lw, int_w, loop_w, clust_w, ave_dist, ave_med, med_w
     ave, Lw, int_w, loop_w, clust_w, ave_dist, ave_med, med_w = np.array([ave, Lw, int_w, loop_w, clust_w, ave_dist, ave_med, med_w]) / rV
     # fb rws: ~rvs
     y,x, Y,X = focus
-    Fg = frame_blobs_root(image[y:Y,x:X],rV, dert__[y:Y,x:X]); Fg.box=focus; intra_blob_root(Fg,rV)
+    Fg = frame_blobs_root(image[y:Y,x:X],rV, [derts[y:Y,x:X] for derts in dert__]); Fg.box=focus; intra_blob_root(Fg,rV)
     Fg = vect_root(Fg, rV,_rv_t)
     lenn_, depth = len(Fg.N_), 0
     node_, C_ = [],[]
@@ -906,7 +909,7 @@ def agg_search(frame, focus,foci, image, rV=1, _rv_t=[], dert__=None):  # recurs
                     if y==_y and x==_x: fin=1; break
                 if not fin:  # new focus
                     foci += [focus]  # rerun agg+ with new focus window and aves:
-                    Fg = agg_focus(frame, focus, image[y:Y,x:X], rV,rv_t, dert__[y:Y,x:X])
+                    Fg = agg_focus(frame, focus, image[y:Y,x:X], rV,rv_t, [derts[y:Y,x:X] for derts in dert__])
                     if Fg: node_ += Fg.N_; depth = max(depth, len(Fg.H))
                     else: break
                 else: break
