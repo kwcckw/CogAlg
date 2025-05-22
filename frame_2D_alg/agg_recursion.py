@@ -472,7 +472,7 @@ def cross_comp(iN_, rc, root, fi=1):  # rc: redundancy; (cross-comp, exemplar se
 
     N__,L_,Et = comp_node_(iN_,rc) if fi else comp_link_(iN_,rc)  # rc has root.olp
     # if root[-1]: C_= comp_node_(C_), rng*= C.k, C_ olp N_?
-    if N__:  # CLs if not fi
+    if N__[0]:  # CLs if not fi  ( we should check N_[0] instead? Since it may pack empty N_)
         Nt, n__ = [],[]
         for n in {N for N_ in N__ for N in N_}: n__ += [n]; n.sel = 0  # for cluster_N_
         # mfork:
@@ -765,7 +765,7 @@ def sum_N_(node_, root_G=None, root=None, fCL=0, fCG=0):  # form cluster G
 
 def add_N(N,n, fi=1, fCL=0, fCG=0, fappend=0):
 
-    rn = n.Et[2]/N.Et[2]
+    rn = n.Et[2]/max(1, N.Et[2])  # frame initial Et[2] is 0, fill it with 1?
     N.olp += n.olp * rn  # olp is normalized later
     N.Et += n.Et * rn; N.et += n.et * rn
     if n.H: add_NH(N.H, n.H, root=N)
@@ -875,31 +875,35 @@ def init_frame(i__):  # set frame and focus, updated by feedback to shift the fo
 def agg_focus(frame, focus, image, rV, rv_t, dert__):  # single-focus agg+ level-forming pipeline
 
     y,x, Y,X = focus
-    Fg = frame_blobs_root(image[y:Y,x:X],rV, dert__[y:Y,x:X]); Fg.box=focus
+    Fg = frame_blobs_root(image,rV, dert__); Fg.box=focus  # both image and dert_ box are already selected via box in agg_search
     Fg = vect_root(Fg, rV, rv_t)
     cross_comp(Fg.N_, root=Fg, rc=frame.olp+loop_w)
     add_N(frame, Fg)
     return Fg
 
-def proj_focus(frame, focus, Fg, iY,iX):  # Project expected focus value along displacement direction
+def proj_focus(frame, foci, Fg, iY,iX):  # Project expected focus value along displacement direction
 
     m,d,n = Fg.Et
     pV = (m-ave*n) + (d-avd*n)  # symmetrical, project in both directions
     dy,dx = Fg.angle
     rd = dy/ max(dx,1e-7)  # aspect ratio
-    _y,_x,_Y,_X = focus
-    cy,cx = _y+ wY/2, _x+ wX/2
-    step = np.hypot(wY*rd, wX/rd)  # scale by the aspect ratio
-    dist = 0.0
-    pfoci = []  # add projected foci+pV along dy,dx while pV > 0
-    while pV > ave:
-        for ny,nx in (cy+step*wY, cx+step*wX), (cy-step*wY, cx-step*wX):  # project in both directions
-            y, x, Y, X = _y + ny * wY, _x + nx * wX, _Y + ny * wY, _X + nx * wX  # next focus
-            if y >= 0 and x >= 0 and Y < iY and X < iX:  # focus inside the image
-                pfocus = frame[ny,nx]  # pseudo for map ny,nx to windows, can be multiple per direction?
-                pfoci += [[pV,pfocus]]
-        dist += step
-        pV *= ave/(Fg.baseT[0]/n) * dist/ave_dist  # decrement by rel dist. ave_dist is not correct here
+    pfoci_ = []
+    for focus in foci:  # map to all windows?
+        _y,_x,_Y,_X = focus
+        cy,cx = _y+ wY/2, _x+ wX/2
+        step = np.hypot(wY*rd, wX/rd)  # scale by the aspect ratio
+        dist = 0.0
+        pfoci = []  # add projected foci+pV along dy,dx while pV > 0
+        while pV > ave:
+            for ny,nx in (cy+step*wY, cx+step*wX), (cy-step*wY, cx-step*wX):  # project in both directions
+                y, x, Y, X = _y + ny * wY, _x + nx * wX, _Y + ny * wY, _X + nx * wX  # next focus
+                if y >= 0 and x >= 0 and Y < iY and X < iX:  # focus inside the image
+                    pfocus = frame[ny,nx]  # pseudo for map ny,nx to windows, can be multiple per direction?
+                    pfoci += [[pV,pfocus]]
+            dist += step
+            # pV is actually grows larger here, suppsoe it should be lower with increasing distance?
+            pV *= ave/(Fg.baseT[0]/n) * dist/ave_dist  # decrement by rel dist. ave_dist is not correct here
+        pfoci_ += [pfoci]  # multiple pfoci per focus (or pack them flat?)
 
     return pfoci
 
@@ -914,21 +918,22 @@ def agg_search(image, rV=1, rv_t=[]):  # recursive frame search
     while True:
         # extend frame.node_ with new foci:
         _y,_x,_Y,_X = focus; fbreak = 1
-        Fg = agg_focus(frame, focus, image[_y:_Y,_x:_X], rV,rv_t, dert__[_y:_Y,_x:_X])
+        Fg = agg_focus(frame, focus, image[_y:_Y,_x:_X], rV,rv_t, dert__[:, _y:_Y,_x:_X])  # use [:, _y:_Y,_x:_X] to slice across all params
         if Fg:
             node_+= Fg.N_; depth = max(depth, len(Fg.H))
             dy,dx = Fg.angle
             # not updated:
             if val_(Fg.Et, mw=np.hypot(dy,dx)/wYX, aw=frame.olp+clust_w*20):
-                pfoci = proj_focus(frame, focus, Fg, iY, iX)
-                for pfocus in pfoci:
-                    _,(y,x,Y,X) = pfocus; fin = 0
-                    for _y,_x,_,_ in foci:
-                        if y==_y and x==_x: fin=1; break
-                    if not fin:  # new focus
-                        focus = [np.int_([y,x,Y,X])]
-                        foci += [focus]
-                        fbreak = 0
+                pfoci_ = proj_focus(frame, foci + [focus], Fg, iY, iX)  # process focus + foci
+                for pfoci in pfoci_:
+                    for pfocus in pfoci:
+                        _,(y,x,Y,X) = pfocus; fin = 0
+                        for _y,_x,_,_ in foci:
+                            if y==_y and x==_x: fin=1; break
+                        if not fin:  # new focus
+                            focus = [np.int_([y,x,Y,X])]
+                            foci += [focus]
+                            fbreak = 0
         if fbreak:
             break  # else rerun agg+ with new focus window and aves
     # scope+ node_-> agg+ H, splice and cross_comp centroids in G.C_ within focus ) frame?
