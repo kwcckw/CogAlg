@@ -765,6 +765,7 @@ def sum_N_(node_, root_G=None, root=None, fCL=0, fCG=0):  # form cluster G
 
 def add_N(N,n, fi=1, fCL=0, fCG=0, fappend=0):
 
+    if not np.any(N.Et): N.Et = copy(n.Et)  # copy et from empty
     rn = n.Et[2]/N.Et[2]
     N.olp += n.olp * rn  # olp is normalized later
     N.Et += n.Et * rn; N.et += n.et * rn
@@ -851,10 +852,14 @@ def proj_focus(PV__, focus, Fg):  # radial accum of projected focus value in PV_
     dy,dx = Fg.angle;  a = dy/ max(dx,1e-7)  # aspect ratio
     y0,x0,_,_ = focus; y, x = y0 + wY/2, x0 + wX/2
     decay = (ave / (Fg.baseT[0]/n)) * (wYX / ave_dist)  # base decay = ave_match / ave_template * rel dist (ave_dist is a placeholder)
+    # PV shape here is the based on window instead of image size?
     H, W = PV__.shape
     n = 1  # radial distance
     # add pV to perimeter of y,x:
-    while y-n>=0 and x-n>=0 and y+n<H and x+n<W:  # perimeter is within frame
+    # x and y is pixels, convert them into window ?
+    wy =  np.floor(y//wY)
+    wx =  np.floor(x//wX)
+    while wy-n>=0 and wx-n>=0 and wy+n<H and wx+n<W:  # perimeter is within frame
         dec = decay * n
         pV__ = np.array([
         V * dec * 1.4, V * dec * a, V * dec * 1.4,  # a = aspect = dy/dx, affects axial directions only
@@ -864,9 +869,9 @@ def proj_focus(PV__, focus, Fg):  # radial accum of projected focus value in PV_
         if np.sum(pV__) < ave * 8:
             break  # < min adjustment
         rim_coords = np.array([
-        (y-n,x-n), (y-n,x), (y-n,x+n),
-        (y, x-n),           (y, x+n),
-        (y+n,x-n), (y+n,x), (y+n,x+n)
+        (wy-n,wx-n), (wy-n,wx), (wy-n,wx+n),
+        (wy, wx-n),           (wy, wx+n),
+        (wy+n,wx-n), (wy+n,wx), (wy+n,wx+n)
         ], dtype=int)
         r,c = rim_coords[:,0], rim_coords[:,1]
         PV__[r,c] += pV__  # in-place accum
@@ -878,26 +883,29 @@ def agg_search(image, rV=1, rv_t=[]):  # recursive frame search
     ave, Lw, int_w, loop_w, clust_w, ave_dist, ave_med, med_w = np.array([ave, Lw, int_w, loop_w, clust_w, ave_dist, ave_med, med_w]) / rV
     # fb rws: ~rvs
     nY, nX = image.shape[0] // wY, image.shape[1] // wX  # n complete blocks
-    i__ = image[:nY*wY, :nX*wX]  # drop partial rows/cols
-    win__ = i__.reshape(nY,wY, nX,wX).swapaxes(1,2)  # potential foci
+    i__ = image[:nY*wY+2, :nX*wX+2]  # drop partial rows/cols (+2 for comp_pixel)
+    win__ = i__[:-2, :-2].reshape(nY,wY, nX,wX).swapaxes(1,2)  # potential foci
     dert__ = comp_pixel(i__)
-    win_dert__ = dert__.reshape(nY, wY, nX, wX, dert__.shape[2]).swapaxes(1, 2)
+    # shape =  (20, 13, 64, 64, 5)
+    win_dert__ = dert__.reshape(nY, wY, nX, wX, dert__.shape[0]).swapaxes(1, 2)  # should be 0 here to reshape into a same size with win__
+    # shape = (20,13) representing each window
     PV__ = win_dert__[..., 3].sum(axis=(2, 3))  # init proj foci vals = sum G in dert[3] in the shape (nY, nX)
     Y, X = i__.shape[0],i__.shape[1]
     frame = CG(box=np.array([0,0,Y,X]), yx=np.array([Y/2,X/2]))
     node_,C_,foci = [],[],[]
     lenn_,depth = 0,0
     while True:
-        if np.maximum(PV__,PV__.shape) < ave * (frame.olp+clust_w*20): break
+        # we are getting max PV from any of the window? So np.max should be sufficient
+        if np.max(PV__) < ave * (frame.olp+clust_w*20): break
         # select new max PV__ per loop, extend frame.N_ with new foci:
         focus = y,x = np.unravel_index(PV__.argmax(), PV__.shape)  # row, col of max G + pV, * coef?
         fbreak = 1; fin = 0
         for _y,_x,_,_ in foci:
             if y==_y and x==_x: fin = 1; break
         if not fin: # new focus
-            focus = [np.int_([y,x,Y,X])]
+            focus = np.int_([y,x,Y,X])
             foci += [focus]
-        Fg = agg_focus(frame, focus, image[y:Y,x:X], rV,rv_t, dert__[y:Y,x:X])  # or use win__, win_dert__?
+        Fg = agg_focus(frame, focus, image[y:Y,x:X], rV,rv_t, dert__[:, y:Y,x:X])  # or use win__, win_dert__?
         if Fg:
             node_+= Fg.N_; depth = max(depth, len(Fg.H))
             if val_(Fg.Et, mw=np.hypot(*Fg.angle)/wYX, aw=frame.olp+clust_w*20):
