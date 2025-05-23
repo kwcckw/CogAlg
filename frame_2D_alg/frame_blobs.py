@@ -162,7 +162,7 @@ def comp_pixel(i__):  # compare all in parallel -> i__, dy__, dx__, g__, s__
     )
     g__ = np.hypot(dy__, dx__)  # compute gradient magnitude, -> separate G because it's not signed, dy,dx cancel out in Dy,Dx
     s__ = ave - g__ > 0  # sign, positive = below-average g
-    dert__ = np.stack([i__[:-2,:-2], dy__,dx__,g__,s__])  # i think using np.stack is better, then we can slicing them in a better way
+    dert__ = np.stack([i__[:-2,:-2], dy__,dx__,g__,s__])
 
     return dert__
 
