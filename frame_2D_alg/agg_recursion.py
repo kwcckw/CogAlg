@@ -845,7 +845,6 @@ def agg_focus(frame, y,x, dert__, rV, rv_t):  # single-focus agg+ level-forming 
 
     Fg = frame_blobs_root(dert__, rV)  # dert__ replaces image
     Fg.box=np.array([y-wY//2, x-wX//2, y+wY//2, x+wX//2])
-
     Fg = vect_root(Fg, rV, rv_t)
     cross_comp(Fg.N_, root=Fg, rc=frame.olp+loop_w)
     add_N(frame, Fg)
@@ -859,7 +858,8 @@ def proj_focus(PV__, y,x, Fg):  # radial accum of projected focus value in PV__
     H, W = PV__.shape  # = win__
     n = 1  # radial distance
     while y-n>=0 and x-n>=0 and y+n<H and x+n<W:  # rim is within frame
-        dec = decay * n
+        # dec = decay * n
+        dec = decay * 1
         pV__ = np.array([
         V * dec * 1.4, V * dec * a, V * dec * 1.4,  # a = aspect = dy/dx, affects axial directions only
         V * dec / a,                V * dec / a,
@@ -885,16 +885,18 @@ def agg_search(image, rV=1, rv_t=[]):  # recursive frame search
     i__ = image[:nY*wY+2, :nX*wX+2]  # drop partial rows/cols
     dert__ = comp_pixel(i__)
     win__= dert__.reshape(dert__.shape[0], wX, wY, nX, nY).swapaxes(1, 2)  # dert=5, wX=64, wY=64, nX=20, nY=13
-    PV__ = win__[..., 3].sum(axis=(2, 3))  # init proj foci vals = sum G in dert[3], shape: nY=20, nX=13
+    # we actually just need to sum across [param, y, x] (0, 1, 2) and get [nY,nX]
+    PV__ = win__.sum(axis=(0, 1, 2))  # init proj foci vals = sum G in dert[3], shape: nY=20, nX=13
     node_ = []
     Y, X = i__.shape[0],i__.shape[1]
     frame = CG(box=np.array([0,0,Y,X]), yx=np.array([Y/2, X/2]))  # do not accum these in add_N?
     # any projV > ave:
-    while np.max(PV__) < ave * (frame.olp+clust_w*20):  # max G + pV,*coef?
+    while np.max(PV__) < ave * (frame.olp+clust_w*20000):  # max G + pV,*coef? (PV__ value is very large when we sum across all params and all coordinates, we need a very high value here)
         # get max window:
         y,x = np.unravel_index(PV__.argmax(), PV__.shape)
-        PV__[y,x] = 0  # to skip in the future
-        Fg = agg_focus(frame, y,x, win__[y,x], rV,rv_t)
+        PV__[y,x] = -np.inf  # to skip in the future  (but we may update it in the projection later?)
+        Fg = agg_focus(frame, y,x, win__[:,:,:,y,x], rV,rv_t)  # since win__ is [dert,wX,wY,nX,nY], we need :,:,: to select from nY and nX
+
         if Fg:
             node_ += Fg.N_
             if val_(Fg.Et, mw=np.hypot(*Fg.angle)/wYX, aw=frame.olp+clust_w*20):

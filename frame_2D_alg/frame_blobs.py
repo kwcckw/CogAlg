@@ -76,6 +76,7 @@ class CFrame(CBase):
         frame.latuple = [0,0,0,0]  # I, Dy, Dx, G
         frame.i__= image
         frame.blob_ = []
+        frame.olp = 1
     def __repr__(frame): return f"frame(id={frame.id})"
 
 class CBlob(CBase):
@@ -136,7 +137,7 @@ def frame_blobs_root(image, rV=1, fintra=0):
     global ave, aveR
     ave *= rV; aveR *= rV
 
-    dert__ =  image if isinstance(image[0], np.array) else comp_pixel(image)
+    dert__ =  image if isinstance(image[0][0], np.ndarray) else comp_pixel(image)  # we need [0][0] to get value from 2D array
     i__, dy__, dx__, g__, s__ = dert__  # convert to dict for flood-fill
     y__, x__ = np.indices(i__.shape)
     dert__ = dict(zip(
