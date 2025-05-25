@@ -203,26 +203,26 @@ wY = wX = 64; wYX = np.hypot(wY,wX)  # focus dimensions
 '''
 initial PP_ cross_comp and LC clustering, no recursion:
 '''
-def vect_root(frame, rV=1, ww_t=[]):  # init for agg+:
+def vect_root(fg, rV=1, ww_t=[]):  # init for agg+:
     if np.any(ww_t):
         global ave, avd, arn, aveB, aveR, Lw, ave_dist, int_w, loop_w, clust_w, wM, wD, wN, wO, wI, wG, wA, wL, w_t
         ave, avd, arn, aveB, aveR, Lw, ave_dist, int_w, loop_w, clust_w = (
             np.array([ave,avd,arn,aveB,aveR, Lw, ave_dist, int_w, loop_w, clust_w]) / rV)  # projected value change
         w_t = [[wM,wD,wN,wO,wI,wG,wA,wL]] * ww_t  # or dw_ ~= w_/ 2?
         ww_t = np.delete(ww_t,(2,3), axis=1)  #-> comp_slice, = np.array([(*ww_t[0][:2],*ww_t[0][4:]),(*ww_t[0][:2],*ww_t[1][4:])])
-    blob_ = unpack_blob_(frame)
-    frame = CG(root=None, box=frame.box, fin=1)
-    lev = CN(); derlay = [CLay(root=frame),CLay(root=frame)]
+    blob_ = unpack_blob_(fg)
+    # frame = CG(root=None, box=frame.box, fin=1)  # input is fg so we can skip this line?
+    lev = CN(); derlay = [CLay(root=fg),CLay(root=fg)]
     for blob in blob_:
-        if not blob.sign and blob.G > aveB * blob.root.olp:
+        if not blob.sign and blob.G > aveB * blob.root.olp:  # do we really need root.olp? We didn't accumulate its value now?
             edge = slice_edge(blob, rV)
             if edge.G*((len(edge.P_)-1)*Lw) > ave * sum([P.latuple[4] for P in edge.P_]):
                 Et = comp_slice(edge, rV, ww_t)  # to scale vert
                 if np.any(Et) and Et[0] > ave * Et[2] * clust_w:
-                    cluster_edge(edge, frame, lev, derlay)  # may be skipped
-    frame.derH = [derlay]
-    if lev: frame.H += [lev]
-    return frame
+                    cluster_edge(edge, fg, lev, derlay)  # may be skipped
+    fg.derH = [derlay]
+    if lev: fg.H += [lev]
+    return fg
 
 def cluster_edge(edge, frame, lev, derlay):  # non-recursive comp_PPm, comp_PPd, edge is not a PP cluster, unpack by default
 
@@ -356,7 +356,8 @@ def cross_comp(iN_, rc, root, fi=1):  # rc: redundancy; (cross-comp, exemplar se
             comb_alt_(Nt.N_, rc + clust_w * 3)  # from dLs
         root.L_ = L_  # N_ links
         if Lt:
-            root.et += Lt.Et; root.lH += [Lt] + Lt.H  # link graphs, flatten H if recursive?
+            # we need to add angle too?
+            root.et += Lt.Et; root.lH += [Lt] + Lt.H; root.angle += Lt.angle  # link graphs, flatten H if recursive?
 
 def comp_node_(_N_, rc):  # rng+ forms layer of rim and extH per N?
 
@@ -865,20 +866,33 @@ def feedback(root):  # adjust weights: all aves *= rV, ultimately differential b
             rM += rMd; rD += rDd
     return rM, rD, rv_t
 
+# not sure is it worth it to implement a new function to add params to CG init from frame_blobs
+def extend_CG(fg):
+    
+    Fg = CG()
+    Fg.box = fg.box
+    Fg.yx  = fg.yx
+    Fg.baseT = fg.baseT  # I, Dy, Dx, G
+    Fg.i__= fg.i__  # image
+    Fg.blob_ = fg.blob_
+    
+    return Fg
+
 def agg_focus(frame, y,x, dert__, rV, rv_t):  # single-focus agg+ level-forming pipeline
 
-    Fg = frame_blobs_root(dert__, rV)  # dert__ replaces image
+    Fg = extend_CG(frame_blobs_root(dert__, rV))  # dert__ replaces image
     Fg = vect_root(Fg, rV, rv_t)
-    cross_comp(Fg.N_, root=Fg, rc=frame.olp+loop_w)
+    cross_comp(Fg.N_, root=Fg, rc=(frame.olp if isinstance(frame, CG) else Fg.olp)+loop_w)
     if isinstance(frame, CG):
         add_N(frame, Fg)
     else:  # init frame
-        Y,X = frame; frame = copy_(Fg); frame.YX=np.array([Y//2,X//2]); frame.Box=np.array([0,0,Y,X])
-    return Fg
+        Y,X = frame; frame = copy_(Fg, fCG=1); frame.YX=np.array([Y//2,X//2]); frame.Box=np.array([0,0,Y,X])
+    return Fg, frame
 
 def proj_focus(PV__, y,x, Fg):  # radial accum of projected focus value in PV__
 
     m,d,n = Fg.Et;    V = (m-ave*n) + (d-avd*n)
+    # Fg.angle should be accumulated from Lt.angle only?
     dy,dx = Fg.angle; a = dy/ max(dx,1e-7)  # average link_ orientation, projection
     decay = (ave / (Fg.baseT[0]/n)) * (wYX / ave_dist)  # base decay = ave_match / ave_template * rel dist (ave_dist is a placeholder)
     H, W = PV__.shape  # = win__
@@ -910,14 +924,15 @@ def agg_search(image, rV=1, rv_t=[]):  # recursive frame search
     i__ = image[:nY*wY+2, :nX*wX+2]  # drop partial rows/cols
     dert__= comp_pixel(i__)
     win__ = dert__.reshape(dert__.shape[0], wX, wY, nX, nY).swapaxes(1, 2)  # dert=5, wX=64, wY=64, nX=20, nY=13
-    PV__  = win__[3].sum( axis=(1,2))  # init proj vals = sum G in dert[3], shape: nY=20, nX=13
+    # axis=(0,1) to sum wX and wY
+    PV__  = win__[3].sum( axis=(0,1))  # init proj vals = sum G in dert[3], shape: nY=20, nX=13
     frame = i__.shape[0],i__.shape[1]
     node_ = []; aw = clust_w * 20
     while np.max(PV__) > ave * aw:
         # max G + pV,* coef?
         y,x = np.unravel_index(PV__.argmax(), PV__.shape)  # max window index
         PV__[y,x] = -np.inf  # skip in the future, or map from separate in__?
-        Fg = agg_focus(frame,y,x, win__[:,:,:,y,x],rV,rv_t) # [dert,wX,wY,nX,nY]
+        Fg, frame = agg_focus(frame,y,x, win__[:,:,:,y,x],rV,rv_t) # [dert,wX,wY,nX,nY]
         if Fg:
             node_ += Fg.N_
             if val_(Fg.Et, mw=np.hypot(*Fg.angle)/ wYX, aw=Fg.olp + clust_w * 20):
