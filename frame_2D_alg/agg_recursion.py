@@ -183,7 +183,9 @@ def copy_(N, root=None, fCL=0, fCG=0, init=0):
         elif name == "N_" and init: C.N_ = [N]
         elif name == "H" and init: C.H = []
         elif name == 'derH':
-            for lay in N.derH: C.derH += [[fork.copy_() for fork in lay]] if isinstance(N, CG) else [lay.copy_()]  # CL
+            for lay in N.derH: 
+                # we may pack empty mlay or dlay now
+                C.derH += [[(fork.copy_() if fork else []) for fork in lay]] if isinstance(N, CG) else [lay.copy_()]  # CL
         elif name == 'extH':   C.extH = [lay.copy_() for lay in N.extH]
         elif isinstance(val,list) or isinstance(val,np.ndarray):
             setattr(C, name, copy(val))  # Et,yx,box, node_,link_,rim_, altG, baseT, derTT
@@ -260,6 +262,7 @@ def cluster_edge(edge, frame, lev, derlay):  # non-recursive comp_PPm, comp_PPd,
     if val_(edge.Et, mw=(len(PP_)- edge.rng) *Lw, aw=loop_w) > 0:
         PP_,L_,mEt,dEt = comp_PP_([PP2N(PP,frame) for PP in PP_])
         if PP_:
+            frame.N_ = []  # reset blobs
             if val_(mEt, mw=(len(PP_)-1)*Lw, aw=clust_w, fi=1) > 0:
                 G_, Et = cluster_PP_(copy(PP_))
             else: G_ = []
@@ -336,7 +339,7 @@ def cross_comp(iN_, rc, root, fi=1):  # rc: redundancy; (cross-comp, exemplar se
         # dfork
         root.L_ = L_  # top N_ links, low L_ in N L_s
         mLay = CLay(); [mLay.add_lay(lay) for L in L_ for lay in L.derH]  # comb, sum L.derHs
-        root.angle = np.sum([L.angle for L in L_])
+        root.angle = np.sum([L.angle for L in L_],axis=0)  # add axis to sum across each dy and dx
         LL_, Lt, dLay = [], [], []
         dval = val_(Et, mw=(len(L_)-1)*Lw, aw=rc+3+clust_w, fi=0)
         if dval > 0:
@@ -387,7 +390,7 @@ def comp_node_(_N_, rc):  # rng+ forms layer of rim and extH per N?
                         if n not in N_ and val_(n.et, aw= rc+rng-1+loop_w+olp) > 0:  # cost+/ rng
                             n.med = rng; N_ += [n]  # for rng+ and exemplar eval
         N__ += [N_]; ET += Et
-        if val_(Et, mw = (len(N_)-1)*Lw, aw = loop_w* sum(olp_)/len(olp_)) > 0:  # current-rng vM
+        if val_(Et, mw = (len(N_)-1)*Lw, aw = loop_w* sum(olp_)/max(1, len(olp_))) > 0:  # current-rng vM
             _N_ = N_; rng += 1; olp_ = []  # reset
         else:  # low projected rng+ vM
             break
@@ -760,7 +763,7 @@ def sum_N_(node_, root_G=None, root=None, fCL=0, fCG=0):  # form cluster G
     fi = isinstance(node_[0],CG); lenn = len(node_)
     if root_G is not None: G = root_G
     else:
-        G = copy_(node_.pop(0), init=1, root=root); G.fi=fi
+        G = copy_(node_.pop(0), init=1, root=root, fCG=fCG, fCL=fCL); G.fi=fi  # we need fCG and fCL here
     for n in node_:
         add_N(G, n, fi, fCL, fCG, fappend=1)
         if root: n.root=root
@@ -848,12 +851,15 @@ def agg_focus(frame, y,x, dert__, rV, rv_t):  # single-focus agg+ level-forming 
     Fg = frame_blobs_root(dert__, rV)  # dert__ replaces image
     Fg = CG(N_=Fg.blob_, box=Fg.box, yx=Fg.yx, baseT=Fg.baseT)
     Fg = vect_root(Fg, rV, rv_t)
-    cross_comp(Fg.N_, root=Fg, rc=(frame.olp if isinstance(frame, CG) else Fg.olp)+loop_w)
-    if isinstance(frame, CG):
-        add_N(frame, Fg)
-    else:  # init frame
-        Y,X = frame; frame = copy_(Fg, fCG=1); frame.YX=np.array([Y//2,X//2]); frame.Box=np.array([0,0,Y,X])
-    return Fg, frame
+    if isinstance(Fg.N_[0], CG):  # forms PP or G_, else N_ is blob
+        cross_comp(Fg.N_, root=Fg, rc=(frame.olp if isinstance(frame, CG) else Fg.olp)+loop_w)
+        if isinstance(frame, CG):
+            add_N(frame, Fg)
+        else:  # init frame
+            Y,X = frame; 
+            frame = copy_(Fg, fCG=1); 
+            frame.YX=np.array([Y//2,X//2]); frame.Box=np.array([0,0,Y,X])
+        return Fg, frame
 
 def proj_focus(PV__, y,x, Fg):  # radial accum of projected focus value in PV__
 
@@ -881,50 +887,70 @@ def proj_focus(PV__, y,x, Fg):  # radial accum of projected focus value in PV__
         PV__[r,c] += pV__  # in-place accum pV to rim
         n += 1
 
-def agg_search(image, rV=1, rv_t=[], iFg=None):  # recursive lateral search, multi-frame if iFg else single frame
+def agg_search(image, rV=1, rv_t=[]):  # recursive lateral search, multi-frame if iFg else single frame
 
-    if iFg:
-        # expanded search frames from pre-processed seed frame, adjust filters
-        global ave, Lw, int_w, loop_w, clust_w, ave_dist, ave_med, med_w
-        ave, Lw, int_w, loop_w, clust_w, ave_dist, ave_med, med_w = np.array([ave, Lw, int_w, loop_w, clust_w, ave_dist, ave_med, med_w]) / rV  # fb rws: ~rvs
-        _,_,y,x = iFg.box
-        _,_,Y,X = iFg.root.box  # pre-assigned?
-        PV__ = np.zeros((x,y,X,Y))
-        y, x = iFg.root.yx; frame = y,x
-        m,d,n = iFg.Et; PV__[y,x] = (m+d) / n  # formed in iFg=None call
-    else:
-        # initial search foci from seed pix-mapped focus, larger image is pix-mapped in both cases
-        nY,nX = image.shape[0] // wY, image.shape[1] // wX  # n complete blocks
-        i__ = image[:nY*wY+2, :nX*wX+2]  # drop partial rows/cols
-        dert__= comp_pixel(i__)
-        win__ = dert__.reshape(dert__.shape[0], wX, wY, nX, nY).swapaxes(1, 2)  # dert=5, wX=64, wY=64, nX=20, nY=13
-        PV__  = win__[3].sum( axis=(0,1))  # init proj vals = sum G in dert[3], shape: nX=20, nY=13
-        frame = i__.shape[0],i__.shape[1]  # init
+    # initial search foci from seed pix-mapped focus, larger image is pix-mapped in both cases
+    nY,nX = image.shape[0] // wY, image.shape[1] // wX  # n complete blocks
+    i__ = image[:nY*wY+2, :nX*wX+2]  # drop partial rows/cols
+    dert__= comp_pixel(i__)
+    win__ = dert__.reshape(dert__.shape[0], wX, wY, nX, nY).swapaxes(1, 2)  # dert=5, wX=64, wY=64, nX=20, nY=13
+    PV__  = win__[3].sum( axis=(0,1))  # init proj vals = sum G in dert[3], shape: nX=20, nY=13
+    frame = i__.shape[0],i__.shape[1]  # init
     node_ = []
     aw = clust_w * 20
     while np.max(PV__) > ave * aw:
         # max G + pV,* coef?
         y,x = np.unravel_index(PV__.argmax(), PV__.shape)  # max window index
         PV__[y,x] = -np.inf  # skip in the future, or map from separate in__?
-        if iFg:
-            Fg = agg_search(image[y,x])  # single-frame foci search called from image search
-            rV, rv_t = feedback(Fg)  # adjust filters
-        else:
-            Fg,frame = agg_focus(frame,y,x, win__[:,:,:,y,x], rV, rv_t) # [dert,wX,wY,nX,nY]
-            if Fg:
-                node_ += Fg.N_
-                if val_(Fg.Et, mw=np.hypot(*Fg.angle)/ wYX, aw=Fg.olp + clust_w * 20):
-                    proj_focus(PV__, y,x, Fg)  # accum projected value in PV__
+        Fgt = agg_focus(frame,y,x, win__[:,:,:,y,x], rV, rv_t) # [dert,wX,wY,nX,nY]
+        if Fgt:
+            Fg,frame = Fgt
+            node_ += Fg.N_
+            if val_(Fg.Et, mw=np.hypot(*Fg.angle)/ wYX, aw=Fg.olp + clust_w * 20):
+                proj_focus(PV__, y,x, Fg)  # accum projected value in PV__
+            aw = clust_w * 20 * frame.Et[2] * frame.olp  # else if Fg is empty, aw is constant?
+  
+    # scope+ node_-> agg+ H, splice and cross_comp centroids in G.C_ within focus ) frame?
+    if node_:
+        Fg = extend_scope(node_, frame, clust_w, loop_w)
+        extend_search(image, rV=rV, rv_t=rv_t, iFg=Fg)
+            
+        return Fg
+# draft, apply after search within a frame and before search between frames:
+
+def extend_search(image, rV=1, rv_t=[], iFg=None):
+
+    # expanded search frames from pre-processed seed frame, adjust filters
+    global ave, Lw, int_w, loop_w, clust_w, ave_dist, ave_med, med_w
+    ave, Lw, int_w, loop_w, clust_w, ave_dist, ave_med, med_w = np.array([ave, Lw, int_w, loop_w, clust_w, ave_dist, ave_med, med_w]) / rV  # fb rws: ~rvs
+    _,_,y,x = iFg.box
+    _,_,Y,X = iFg.root.box  # pre-assigned?
+    PV__ = np.zeros((x,y,X,Y))
+    y, x = iFg.root.yx; frame = y,x
+    m,d,n = iFg.Et; PV__[y,x] = (m+d) / n  # formed in iFg=None call
+
+    node_ = []
+    aw = clust_w * 20
+    while np.max(PV__) > ave * aw:
+        # max G + pV,* coef?
+        y,x = np.unravel_index(PV__.argmax(), PV__.shape)  # max window index
+        PV__[y,x] = -np.inf  # skip in the future, or map from separate in__?
+        Fg = agg_search(image[y,x])  # single-frame foci search called from image search
+        rV, rv_t = feedback(Fg)  # adjust filters
+    
         aw = clust_w * 20 * frame.Et[2] * frame.olp
     # scope+ node_-> agg+ H, splice and cross_comp centroids in G.C_ within focus ) frame?
     if node_:
-        Fg = sum_N_(node_, root=frame, fCG=1)
-        if val_(frame.Et, mw=len(node_)*Lw, aw=frame.olp+clust_w*20) > 0:  # node_ is combined across foci
-            cross_comp(node_, rc=frame.olp+loop_w, root=Fg)
-            # project higher-scope Gs, eval for new foci, splice foci into frame
+        extend_scope(node_, frame, clust_w, loop_w)
         return Fg
 
-# draft, apply after search within a frame and before search between frames:
+def extend_scope(node_, frame, clust_w, loop_w):
+
+    Fg = sum_N_(node_, root=frame, fCG=1)
+    if val_(frame.Et, mw=len(node_)*Lw, aw=frame.olp+clust_w*20) > 0:  # node_ is combined across foci
+        cross_comp(node_, rc=frame.olp+loop_w, root=Fg)
+        # project higher-scope Gs, eval for new foci, splice foci into frame
+    return Fg
 
 def feedback(root):  # adjust weights: all aves *= rV, ultimately differential backprop per ave?
 
