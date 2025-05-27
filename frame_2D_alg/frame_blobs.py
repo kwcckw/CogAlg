@@ -261,7 +261,7 @@ def imread(filename, raise_if_not_read=True):  # Read an image in grayscale, ret
 
 def unpack_blob_(frame):
     blob_ = []
-    q_ = list(frame.N_)
+    q_ = list(frame.blob_)  # revert
     while q_:
         blob = q_.pop(0)
         blob_ += [blob]

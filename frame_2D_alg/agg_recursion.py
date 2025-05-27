@@ -386,7 +386,7 @@ def comp_node_(_N_, rc):  # rng+ forms layer of rim and extH per N?
                         n.compared_ += [_n]
                         if n not in N_ and val_(n.et, aw= rc+rng-1+loop_w+olp) > 0:  # cost+/ rng
                             n.med = rng; N_ += [n]  # for rng+ and exemplar eval
-        N__ += [N_]; ET += Et
+        if N_: N__ += [N_]; ET += Et  # this is missed out?
         if val_(Et, mw = (len(N_)-1)*Lw, aw = loop_w* sum(olp_)/max(1, len(olp_))) > 0:  # current-rng vM
             _N_ = N_; rng += 1; olp_ = []  # reset
         else:  # low projected rng+ vM
@@ -804,7 +804,32 @@ def extend_box(_box, box):  # extend box with another box
     return min(y0,_y0), min(x0,_x0), max(yn,_yn), max(xn,_xn)
 
 def F2G(frame):
-    pass
+    
+    # some may not relevant, please check
+    # add params
+    frame.N_ = [] # top nodes, may include singletons of lower nodes, then links in corresponding H lev only?
+    frame.L_ = []  # links between Ns
+    frame.Et = np.zeros(3)  # sum Ets from N_ and H
+    frame.et = np.zeros(3)  # sum Ets from L_ and lH
+    frame.H  = []  # top-down: nested-node levels, each CN with corresponding L_,et,lH, no H
+    frame.lH = []  # bottom-up: higher link graphs hierarchy, also CN levs
+    frame.C_ = []  # make it CN?
+    frame.olp= 1  # overlap to other Ns, same for links?
+    frame.derH = []
+    frame.fi =  0  # nodet fi, 1 if cluster of Ls | lGs, for feedback only? or fd_: list of forks forming G
+    frame.rng =  1  # or med: loop count in comp_node_|link_
+    frame.baseT= np.zeros(4)  # I,G,Dy,Dx  # from slice_edge
+    frame.derTT= np.zeros((2,8))  # m,d / Et,baseT: [M,D,n,o, I,G,A,L], summed across derH lay forks
+    frame.box =  np.array([np.inf, np.inf, -np.inf, -np.inf])  # y0, x0, yn, xn
+    frame.span = 0 # distance in nodet or aRad, comp with baseT and len(N_) but not additive?
+    frame.angle= np.zeros(2)  # dy,dx        
+    frame.extH = []  # sum derH from rims, single-fork
+    frame.extTT= np.zeros((2,8))  # sum from extH, add baset from rim?
+    frame.rim =  []  # external links
+    frame.nrim = []  # rim-linked nodes
+    frame.alt_ = []  # adjacent (contour) gap+overlap alt-fork graphs, converted to CG, empty alt.alt_: select+?
+    frame.fin = 1
+    
 
 def L2N(link_):
     for L in link_:
@@ -901,7 +926,7 @@ def agg_frame(floc, image, iY, iX, rV=1, rv_t=[]):  # search foci within image, 
         global ave, Lw, int_w, loop_w, clust_w, ave_dist, ave_med, med_w
         ave, Lw, int_w, loop_w, clust_w, ave_dist, ave_med, med_w = np.array([ave, Lw, int_w, loop_w, clust_w, ave_dist, ave_med, med_w]) / rV
         # fb rws: ~rvs
-    nY,nX = dert__.shape[-1] // iX, dert__.shape[-2] // iY  # n complete blocks
+    nY,nX = dert__.shape[-2] // iY, dert__.shape[-1] // iX  # n complete blocks (shape is (dert, y, x)))
     Y, X  = nY * iY, nX * iX  # sub-frame dims
     frame = CG(box=np.array([0,0,Y,X]), yx=np.array([Y//2,X//2]))
     dert__= dert__[:,:Y,:X]  # drop partial rows/cols
@@ -920,7 +945,7 @@ def agg_frame(floc, image, iY, iX, rV=1, rv_t=[]):  # search foci within image, 
             cross_comp(Fg.N_, root=Fg, rc=frame.olp)
         else:
             Fg = agg_frame(1, win__[:,:,:,y,x], wY,wX, rV=1, rv_t=[])  # use global wY,wX in nested call
-            rV, rv_t = feedback(Fg)  # adjust filters
+            if Fg: rV, rv_t = feedback(Fg)  # adjust filters  (Fg may not return here)
         if Fg:
             add_N(frame,Fg)
             node_ += Fg.N_  # keep compared_ to skip in final global cross_comp
