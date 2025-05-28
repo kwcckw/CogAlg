@@ -266,6 +266,8 @@ def cluster_edge(edge, frame, lev, derlay):  # non-recursive comp_PPm, comp_PPd,
                 if lev.lH: lev.lH[0].N_ += Lt.N_; lev.lH[0].Et += Lt.Et
                 else:      lev.lH += [Lt]
                 lev.et += Lt.Et
+                
+                if PP_ and G_: comb_alt_(G_)  # we need to merge their alts here?
 
 def val_(Et, _Et=None, mw=1, aw=1, fi=1):
 
@@ -590,9 +592,9 @@ def cluster_N_(N_, rc, fi, rng=1, fnode_=0, root=None):  # connectivity cluster 
                 if l.rng ==rng: link_ += [l]
                 elif l.rng>rng: llink_+= [l]  # longer-rng rim
         else:  # rng > 1, cluster top-rng roots instead
-            n = N; R = n.root
-            while R and R.rng > n.rng: n = R; R = R.root
-            if R.fin: continue
+            n = N; R = None
+            while n.root and n.root.rng > n.rng: n = n.root; R = n.root
+            if not R or R.fin: continue
             node_,link_,llink_,Et,olp = [R],R.L_,R.hL_,copy(R.Et),R.olp
             R.fin = 1
         nrc = rc+olp; N.fin = 1
@@ -612,9 +614,9 @@ def cluster_N_(N_, rc, fi, rng=1, fnode_=0, root=None):  # connectivity cluster 
                             if l not in link_ and l.rng == rng: link_ += [l]
                             elif l not in llink_ and l.rng>rng: llink_+= [l]  # longer-rng rim
                     else:  # rng > 1, cluster top-rng roots if rim intersect:
-                        _n =_N; _R=_n.root
-                        while _R and isinstance(R, CG) and _R.rng > _n.rng: _n=_R; _R=_R.root
-                        if isinstance(_R, list) or _R.fin: continue
+                        _n =_N; _R = None
+                        while _n.root and isinstance(n.root, CG) and _n.root.rng > _n.rng: _n=_n.root; _R=_n.root
+                        if not _R or isinstance(_R, list) or _R.fin: continue  # (the last _R from while loop above maybe a None and breaks )
                         lenI = len(list(set(llink_) & set(_R.hL_)))
                         if lenI and (lenI / len(llink_) >.2 or lenI / len(_R.hL_) >.2):
                             # min rim intersect | intersect oEt?
@@ -692,14 +694,15 @@ def comb_alt_(G_, rc=1):  # combine contour G.altG_ into altG (node_ defined by 
         o = G.olp
         if G.alt_:
             if isinstance(G.alt_, list):
-                G.alt_ = sum_N_(G.alt_)  # G.alt_.root=G; G.alt_.m=0 or remove sum_N_ and sum Et separately?
+                # we need additional params such as baseT, so we shouldn't use CN
+                G.alt_ = sum_N_(G.alt_, fCG=1)  # G.alt_.root=G; G.alt_.m=0 or remove sum_N_ and sum Et separately?
                 if val_(G.alt_.Et, G.Et, aw=o, fi=0):  # alt D * G rM
                     cross_comp(G.alt_.N_, rc, fi=1, root=G.alt_)  # adds nesting
         elif G.H:  # not PP
             # alt_G = sum dlinks:
             dL_ = list(set([L for g in G.N_ for L,_ in (g.rim if isinstance(g, CG) else g.rimt[0]+g.rimt[1]) if val_(L.Et,G.Et, aw=o, fi=0) > 0]))
             if dL_ and val_(np.sum([l.Et for l in dL_],axis=0), G.Et, aw=10+o, fi=0) > 0:
-                alt_ = sum_N_(dL_)
+                alt_ = sum_N_(dL_, fCG=1)
                 G.alt_ = copy_(alt_); G.alt_.H = [alt_]; G.alt_.root=G
 
 def comp_H(H,h, rn, root, Et, fi):  # one-fork derH if not fi, else two-fork derH

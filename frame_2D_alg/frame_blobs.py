@@ -141,7 +141,7 @@ class CBlob(CBase):
         *_, i, dy, dx, g = blob.latuple
         I += i; Dy += dy; Dx += dx; G += g
         frame.baseT = I, Dy, Dx, G
-        frame.blob_ += [blob]
+        frame.N_ += [blob]
         if blob.sign:   # transfer adj_ from +blob to -blobs and remove
             for _blob in blob.adj_:
                 if blob not in _blob.adj_: _blob.adj_ += [blob]
@@ -166,7 +166,7 @@ def frame_blobs_root(image, rV=1, fintra=0):
     ))
     frame = CL(box = np.array([0,0,image.shape[0],image.shape[1]]),
                yx  = np.array([image.shape[0]//2, image.shape[1]//2]),
-               L_  = image)  # temporary
+               L_  = image)  # temporary  (I think this is not affected, since feedback is applied to Fg only)
     flood_fill(frame, dert__)  # flood-fill 1 pixel at a time
     if fintra and frame.baseT[3] > ave:
         intra_blob_root(frame)  # kernel size extension
@@ -283,7 +283,7 @@ def imread(filename, raise_if_not_read=True):  # Read an image in grayscale, ret
 
 def unpack_blob_(frame):
     blob_ = []
-    q_ = list(frame.blob_)  # revert
+    q_ = list(frame.N_)
     while q_:
         blob = q_.pop(0)
         blob_ += [blob]
