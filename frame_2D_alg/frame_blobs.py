@@ -86,7 +86,8 @@ class CN(CBase):  # light version of CG
         n.derH  = kwargs.get('derH', [])  # [CLay], [m,d] in CG, merged in CL, sum|concat links across fork tree
         n.baseT = kwargs.get('baseT',np.zeros(4))  # I,G,Dy,Dx  # from slice_edge
         n.derTT = kwargs.get('derTT',np.zeros((2,8)))  # m,d / Et,baseT: [M,D,n,o, I,G,A,L], summed across derH lay forks
-    def __bool__(n): return bool(n.N_ or n.L_)
+        n.angle= kwargs.get('angle',np.zeros(2))  # dy,dx (to sum angle from Fg) 
+    def __bool__(n): return bool(n.N_ or np.any(n.L_))  # we need any for array
 
 class CBlob(CBase):
 

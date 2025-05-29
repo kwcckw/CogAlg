@@ -592,18 +592,19 @@ def cluster_N_(N_, rc, fi, rng=1, fnode_=0, root=None):  # connectivity cluster 
     for n in N_: n.fin = 0
     for N in N_:
         if N.fin: continue
-        if rng == 1 or hasattr(N,root) and N.root.rng==1:  # N is not rng-nested
+        if rng == 1 or hasattr(N,'root') and N.root.rng==1:  # N is not rng-nested
             node_, link_, llink_, Et, olp = [N],[],[], copy(N.Et), N.olp
             for l,_ in N.rim if fi else (N.rimt[0]+N.rimt[1]):  # +ve
                 if l.rng ==rng: link_ += [l]
                 elif l.rng>rng: llink_+= [l]  # longer-rng rim
-        else:  # rng > 1, cluster top-rng roots instead
+        elif hasattr(N,'root'):  # rng > 1, cluster top-rng roots instead  (must have root here)
             n = N; R = None
             while n.root and n.root.rng > n.rng: n = n.root; R = n.root
             if not R or R.fin: continue
             node_,link_,llink_,Et,olp = [R],R.L_,R.hL_,copy(R.Et),R.olp
             R.fin = 1
-        nrc = rc+olp; N.fin = 1
+        else: continue  # skip
+        nrc = rc+olp; N.fin = 1  # what would be this olp? We didn't init it or parse it?
         if fnode_:
             # cluster via nodet, which may also be CLs
             for _N,_ in N.N_[0].rim+N.N_[1].rim if isinstance(N.N_[0],CG) else list(set([lt for n in N.N_ for lt in n.rimt[0]+n.rimt[1]])):
@@ -813,7 +814,7 @@ def L2N(link_):
 def PP2N(PP, frame):
 
     P_, link_, vert, latuple, A, S, box, yx, Et = PP
-    baseT = np.array(*latuple[:4])  # I,G,Dy,Dx
+    baseT = np.array(latuple[:4])  # I,G,Dy,Dx  (* is not needed here)
     [mM,mD,mI,mG,mA,mL], [dM,dD,dI,dG,dA,dL] = vert  # re-pack in derTT:
     derTT = np.array([[mM,mD,mL,1,mI,mG,mA,mL], [dM,dD,dL,1,dI,dG,dA,dL]])
     derH = [[CLay(node_=P_, link_=link_, derTT=deepcopy(derTT)), CLay()]]  # empty dfork
