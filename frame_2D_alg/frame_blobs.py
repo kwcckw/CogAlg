@@ -90,7 +90,8 @@ class CN(CBase):  # light version of CG
         n.rng   = kwargs.get('rng',1)  # or med: loop count in comp_node_|link_
         n.olp   = kwargs.get('olp',1)  # overlap to other Ns, same for links?
         n.root  = kwargs.get('root',0)
-    def __bool__(n): return bool(n.N_ or n.L_)
+        n.alt_ = []  # adjacent (contour) gap+overlap alt-fork graphs, converted to CG, empty alt.alt_: select+? (we need alts in CN from centroid clustering?)
+    def __bool__(n): return bool(n.N_)  # for CN, N_ never empty unless its empty?
 
 class CBlob(CBase):
 

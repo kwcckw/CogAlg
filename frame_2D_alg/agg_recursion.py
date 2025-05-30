@@ -61,7 +61,6 @@ class CG(CN):  # PP | graph | blob: params of single-fork node_ cluster
         g.extTT= kwargs.get('extTT',np.zeros((2,8)))  # sum from extH, add baset from rim?
         g.rim =  kwargs.get('rim',[])  # external links
         g.nrim = kwargs.get('nrim',[])  # rim-linked nodes
-        g.alt_ = []  # adjacent (contour) gap+overlap alt-fork graphs, converted to CG, empty alt.alt_: select+?
         g.fin =  kwargs.get('fin', 0)  # in cluster, temporary?
         # g.fork_tree: list = z([[]])  # indices in all layers(forks, if no fback merge, G.fback_=[] # node fb buffer, n in fb[-1]
     def __bool__(g): return bool(g.N_)  # never empty
@@ -502,7 +501,7 @@ def cluster_C_(root, E_,eEt, rc, fi):  # form centroids from exemplar _N_, drift
                 k = len(N.nrim)
                 for n in (C, C.alt_):
                     if n:
-                        n.Et /= k; n.baseT /= k; n.derTT /= k; n.aRad /= k; n.yx /= k
+                        n.Et /= k; n.baseT /= k; n.derTT /= k; n.yx /= k  # n.aRad /= k; (aRad is removed now?)
                         if n.derH: norm_H(n.derH, k)
                 _N_,_N__= [],[]
                 Et, dEt = np.zeros(3), np.zeros(3)
@@ -539,6 +538,7 @@ def cluster_N_(N_, rc, fi, rng=1, fnode_=0, root=None):  # connectivity cluster 
     for n in N_: n.fin = 0
     for N in N_:
         if N.fin: continue
+        # if rng == 1, N.root may still pointing to efault value of 0?
         if rng == 1 or N.root and N.root.rng==1:  # N is not rng-nested
             node_, link_, llink_, Et, olp = [N],[],[], copy(N.Et), N.olp
             for l,_ in N.rim if fi else (N.rim[0]+N.rim[1]):  # +ve
@@ -547,7 +547,7 @@ def cluster_N_(N_, rc, fi, rng=1, fnode_=0, root=None):  # connectivity cluster 
         else:  # rng > 1, cluster top-rng roots instead
             n = N; R = n.root
             while R and R.rng > n.rng: n = R; R = R.root
-            if R.fin: continue
+            if isinstance(R, CN) or R.fin: continue
             node_,link_,llink_,Et,olp = [R],R.L_,R.hL_,copy(R.Et),R.olp
             R.fin = 1
         nrc = rc+olp; N.fin = 1
@@ -568,8 +568,9 @@ def cluster_N_(N_, rc, fi, rng=1, fnode_=0, root=None):  # connectivity cluster 
                             elif l not in llink_ and l.rng>rng: llink_+= [l]  # longer-rng rim
                     else:  # rng > 1, cluster top-rng roots if rim intersect:
                         _n =_N; _R=_n.root
-                        while _R and isinstance(R, CG) and _R.rng > _n.rng: _n=_R; _R=_R.root
-                        if isinstance(_R, list) or _R.fin: continue
+                        while _R and isinstance(_R, CG) and _R.rng > _n.rng: _n=_R; _R=_R.root
+                        # we should check CN and skip Fg?
+                        if isinstance(_R, CN) or isinstance(_R, list) or _R.fin: continue
                         lenI = len(list(set(llink_) & set(_R.hL_)))
                         if lenI and (lenI / len(llink_) >.2 or lenI / len(_R.hL_) >.2):
                             # min rim intersect | intersect oEt?
@@ -648,6 +649,7 @@ def comb_alt_(G_, rc=1):  # combine contour G.altG_ into altG (node_ defined by 
         o = G.olp
         if G.alt_:
             if isinstance(G.alt_, list):
+                # we need to update alt_'s root as the summed N , i guess we need explicit root assignment in sum_N_ now?
                 G.alt_ = sum_N_(G.alt_)  # G.alt_.root=G; G.alt_.m=0 or remove sum_N_ and sum Et separately?
                 if val_(G.alt_.Et, G.Et, aw=o, fi=0):  # alt D * G rM
                     cross_comp(G.alt_.N_, rc, fi=1, root=G.alt_)  # adds nesting
@@ -694,7 +696,7 @@ def add_H(H, h, root, rev=0, fi=1):  # add fork L.derHs
                 else:
                     Lay = []
                     for fork in lay:
-                        Lay += [fork.copy_(root=root,rev=rev)]
+                        Lay += [fork.copy_(rev=rev)]
                         root.derTT += fork.derTT; root.Et += fork.Et
                     H += [Lay]
             else:  # one-fork lays
@@ -725,10 +727,10 @@ def add_N(N,n, fi=1, fCG=0, fappend=0):
     N.olp = (N.olp + n.olp * rn) / 2  # ave
     N.yx = (N.yx + n.yx * rn) / 2
     for Par, par in zip((N.angle, N.baseT, N.derTT), (n.angle, n.baseT, n.derTT)):
-        if par: Par += par * rn
+        if np.any(par): Par += par * rn
     if n.H: add_NH(N.H, n.H, root=N)
     if n.lH: add_NH(N.lH, n.lH, root=N)
-    if n.box: N.box=extend_box(N.box,n.box); N.span = max(N.span,n.span)
+    if np.any(n.box): N.box=extend_box(N.box,n.box); N.span = max(N.span,n.span)
     if n.derH: add_H(N.derH, n.derH, root=N, fi=fi)
     if fCG:
         for Par, par in zip((N.nrim,N.rim),(n.nrim, n.rim)):  # rim should be rimt if not fi
