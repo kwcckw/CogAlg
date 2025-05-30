@@ -24,7 +24,6 @@ class CP(CBase):
         P.yx = yx
         P.axis = axis
         P.dert_ = []
-        # P.latuple = None  # I,G,Dy,Dx,M,D,L (we can actually skip this, since it will be init anyway)
 
 def slice_edge_root(frame, rM=1):
 
