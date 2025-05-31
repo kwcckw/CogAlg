@@ -58,7 +58,6 @@ class CG(CN):  # PP | graph | blob: params of single-fork node_ cluster
     def __init__(g, **kwargs):
         super().__init__(**kwargs)
         g.extH = kwargs.get('extH',[])  # sum derH from rims, single-fork
-        g.extTT= kwargs.get('extTT',np.zeros((2,8)))  # sum from extH, add baset from rim?
         g.rim =  kwargs.get('rim',[])  # external links, or nodet if not fi
         g.nrim = kwargs.get('nrim',[])  # rim-linked nodes
         g.alt_ = []  # adjacent (contour) gap+overlap alt-fork graphs, converted to CG, empty alt.alt_: select+?
@@ -201,7 +200,7 @@ def cluster_edge(edge, frame, lev, derlay):  # non-recursive comp_PPm, comp_PPd,
         for _G, G in combinations(PP_, r=2):
             dy,dx = np.subtract(_G.yx,G.yx); dist = np.hypot(dy,dx)
             if dist - (G.span+_G.span) < ave_dist / 10:  # very short here
-                L = comp_N(_G, G, ave, fi=isinstance(_G, CG), angle=[dy, dx], span=dist, fdeep=1)
+                L = comp_N(_G, G, ave, fi=isinstance(_G, CG), angle=np.array([dy, dx]), span=dist, fdeep=1)
                 m, d, n = L.Et
                 if m > ave * n * _G.olp * loop_w: mEt += L.Et; N_ += [_G,G]  # mL_ += [L]
                 if d > avd * n * _G.olp * loop_w: dEt += L.Et  # dL_ += [L]
@@ -326,7 +325,7 @@ def comp_node_(_N_, rc):  # rng+ forms layer of rim and extH per N?
             max_dist = ave_dist * (radii/aveR) * ((_m+m)/(ave*(_n+n+0))/ int_w)  # ave_dist * radii * induction
             if max_dist > dist or set(_G.nrim) & set(G.nrim):
                 # comp if close or share matching mediators: add to inhibited?
-                Link = comp_N(_G,G, ave, fi=1, angle=[dy,dx], span=dist, fdeep = dist < max_dist/2, rng=rng)
+                Link = comp_N(_G,G, ave, fi=1, angle=np.array([dy,dx]), span=dist, fdeep = dist < max_dist/2, rng=rng)
                 L_ += [Link]  # include -ve links
                 if Link.Et[0] > ave * Link.Et[2] * loop_w * olp:
                     Et += Link.Et; olp_ += [olp]  # link.olp is the same with o
@@ -448,7 +447,9 @@ def comp_N(_N,N, ave, fi, angle=None, span=None, dir=1, fdeep=0, rng=1):  # comp
     if fi and _N.alt_ and N.alt_:
         et = _N.alt_.Et + N.alt_.Et  # comb val
         if val_(et, aw=2+o, fi=0) > 0:  # eval Ds
-            Link.alt_L = comp_N(_N.alt_, N.alt_, ave*2, fi=1, angle=angle); Et += Link.alt_L.Et
+            # right now alt is CN, we need them as CG for comparison below?
+            # Link.alt_L = comp_N(_N.alt_, N.alt_, ave*2, fi=1, angle=angle); Et += Link.alt_L.Et
+            pass
     Link.Et = Et
     if Et[0] > ave * Et[2]:
         for rev, node, _node in zip((0,1),(N,_N),(_N,N)):  # reverse Link dir in _N.rimt
@@ -542,6 +543,7 @@ def cluster_N_(N_, rc, fi, rng=1, fnode_=0, root=None):  # connectivity cluster 
     for n in N_: n.fin = 0
     for N in N_:
         if N.fin: continue
+        # if root graph is formed in rng == 1 (N.root.rng=1), this gets true too when rng == 2?
         if rng == 1 or N.root and N.root.rng==1:  # N is not rng-nested
             node_, link_, llink_, Et, olp = [N],[],[], copy(N.Et), N.olp
             for l,_ in N.rim if fi else (N.rim[0]+N.rim[1]):  # +ve
@@ -571,8 +573,9 @@ def cluster_N_(N_, rc, fi, rng=1, fnode_=0, root=None):  # connectivity cluster 
                             elif l not in llink_ and l.rng>rng: llink_+= [l]  # longer-rng rim
                     else:  # rng > 1, cluster top-rng roots if rim intersect:
                         _n =_N; _R=_n.root
-                        while _R and isinstance(R, CG) and _R.rng > _n.rng: _n=_R; _R=_R.root
-                        if isinstance(_R, list) or _R.fin: continue
+                        # should be  _R here
+                        while _R and isinstance(_R, CG) and _R.rng > _n.rng: _n=_R; _R=_R.root
+                        if isinstance(_R, list) or isinstance(_R, CN) or _R.fin : continue  # skip if _N.root is pointing to frame (it doesn't form graph in lower rng)
                         lenI = len(list(set(llink_) & set(_R.hL_)))
                         if lenI and (lenI / len(llink_) >.2 or lenI / len(_R.hL_) >.2):
                             # min rim intersect | intersect oEt?
@@ -695,13 +698,16 @@ def add_H(H, h, root, rev=0, fi=1):  # add fork L.derHs
                 else:
                     Lay = []
                     for fork in lay:
-                        Lay += [fork.copy_(root=root,rev=rev)]
-                        root.derTT += fork.derTT; root.Et += fork.Et
+                        if isinstance(fork, list):
+                            Lay += [[]]  # preserve the empty dlay?
+                        else:
+                            Lay += [fork.copy_(rev=rev)]  # no root in lay now
+                            root.derTT += fork.derTT; root.Et += fork.Et
                     H += [Lay]
             else:  # one-fork lays
                 if Lay: Lay.add_lay(lay,rev=rev)
                 else:   H += [lay.copy_(rev=rev)]
-                root.extTT += lay.derTT; root.Et += lay.Et
+                root.extTT += lay.derTT; root.Et += lay.Et  # we need to add extrTT to CN
 
 def sum_N_(node_, root_G=None, root=None, fCG=0):  # form cluster G
 
@@ -734,7 +740,7 @@ def add_N(N,n, fi=1, fCG=0, fappend=0):
     if fCG:
         for Par, par in zip((N.nrim,N.rim),(n.nrim, n.rim)):  # rim should be rimt if not fi
             if par: Par += par
-        if n.extTT: N.extTT += n.extTT * rn
+        if np.any(n.extTT): N.extTT += n.extTT * rn
         if n.extH: add_H(N.extH, n.extH, root=N, fi=0)
         if n.alt_: N.alt_ = add_N(N.alt_ if N.alt_ else CG(), n.alt_)
         # N = CG if fCG else CN
@@ -873,7 +879,7 @@ def agg_frame(floc, image, iY, iX, rV=1, rv_t=[]):  # search foci within image, 
             aw = clust_w * 20 * frame.Et[2] * frame.olp
     if node_:
         # global cross_comp
-        Fg = sum_N_(node_, root=frame, fCL=1)
+        Fg = sum_N_(node_, root=frame)  # no fCL now
         if val_(frame.Et, mw=len(node_)*Lw, aw=frame.olp+ clust_w*20) > 0:
             cross_comp(node_, rc=frame.olp+loop_w, root=Fg)
         return Fg

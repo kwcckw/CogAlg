@@ -91,6 +91,7 @@ class CN(CBase):  # light version of CG
         n.olp   = kwargs.get('olp',1)  # overlap to other Ns, same for links?
         n.root  = kwargs.get('root',0)
         n.alt_ = []  # adjacent (contour) gap+overlap alt-fork graphs, converted to CG, empty alt.alt_: select+? (we need alts in CN from centroid clustering?)
+        n.extTT= kwargs.get('extTT',np.zeros((2,8)))  # sum from extH, add baset from rim?
     def __bool__(n): return bool(n.N_)  # for CN, N_ never empty unless its empty?
 
 class CBlob(CBase):
