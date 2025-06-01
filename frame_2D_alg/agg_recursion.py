@@ -548,9 +548,11 @@ def cluster_N_(N_, rc, fi, rng=1, fnode_=0, root=None):  # connectivity cluster 
                 if l.rng==rng: link_ += [l]
                 elif l.rng>rng: llink_ += [l]  # longer-rng rim
         else:  # rng > 1, cluster top-rng roots instead
-            n = N; R = n.root
-            while R and R.rng > n.rng: n = R; R = R.root
-            if R.fin: continue
+            n = N; R = None
+            # we really should update R only if the while loop is true
+            # else if we load R first, we might not know the R is valid and the last valid R is replaced now 
+            while n.root and n.root.rng > n.rng: n = n.root; R = n.root  
+            if not R or R.fin: continue
             node_,link_,llink_,Et,olp = [R],R.L_,R.hL_,copy(R.Et),R.olp
             R.fin = 1
         nrc = rc+olp; N.fin = 1  # extend N cluster:
@@ -558,7 +560,7 @@ def cluster_N_(N_, rc, fi, rng=1, fnode_=0, root=None):  # connectivity cluster 
             for _N in N.N_:
                 if _N.fin: continue
                 _N.fin = 1; link_ += [_N]  # nodet is mediator
-                for L in _N.rim if fi else _N.rim[0]+_N.rim[0]:  # maybe L
+                for L,_ in _N.rim if fi else _N.rim[0]+_N.rim[0]:  # maybe L  # linkt has rev
                     if L not in node_ and _N.Et[1] > avd * _N.Et[2] * nrc:  # direct eval diff
                         node_ += [L]; Et += L.Et; olp += L.olp  # /= len node_
         else:  # cluster nodes via links
@@ -571,9 +573,9 @@ def cluster_N_(N_, rc, fi, rng=1, fnode_=0, root=None):  # connectivity cluster 
                             if l not in link_ and l.rng == rng: link_ += [l]
                             elif l not in llink_ and l.rng>rng: llink_+= [l]  # longer-rng rim
                     else:  # rng > 1, cluster top-rng roots if rim intersect:
-                        _n =_N; _R=_n.root
-                        while _R and isinstance(_R, CG) and _R.rng > _n.rng: _n=_R; _R=_R.root
-                        if _R.fin: continue
+                        _n =_N; _R=None
+                        while _n.root and _n.root.rng > _n.rng: _n=_n.root; _R=_n.root
+                        if not _R or _R.fin: continue
                         lenI = len(list(set(llink_) & set(_R.hL_)))
                         if lenI and (lenI / len(llink_) >.2 or lenI / len(_R.hL_) >.2):
                             # min rim intersect | intersect oEt?
@@ -606,7 +608,7 @@ def sum2graph(root, node_,link_,llink_,Et,olp, Lay, rng, fi):  # sum node and li
     if fg: graph.H = Nt.H + [Nt]  # pack prior top level
     yx = np.mean(yx_,axis=0); dy_,dx_ = (yx_-yx).T; dist_ = np.hypot(dy_,dx_)
     graph.span = dist_.mean()  # ave distance from graph center to node centers
-    graph.angle = np.sum([l.angle for l in link_])
+    graph.angle = np.sum([l.angle for l in link_],axis=0)  # sum along with axis
     graph.yx = yx
     if not fi:  # add mfork as link.node_(CL).root dfork, 1st layer, higher layers are added in cross_comp
         for L in link_:  # LL from comp_link_
@@ -695,7 +697,7 @@ def add_H(H, h, root, rev=0, fi=1):  # add fork L.derHs
                 else:
                     Lay = []
                     for fork in lay:
-                        if fork: Lay += [fork.copy_(root=root,rev=rev)]; root.derTT += fork.derTT; root.Et += fork.Et
+                        if fork: Lay += [fork.copy_(rev=rev)]; root.derTT += fork.derTT; root.Et += fork.Et
                         else:    Lay += [[]]
                     H += [Lay]
             else:  # one-fork lays
