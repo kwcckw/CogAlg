@@ -135,8 +135,8 @@ def copy_(N, root=None, fCL=0, fCG=0, init=0):
         elif name == "N_" and init: C.N_ = [N]
         elif name == "H" and init: C.H = []
         elif name == 'derH':
-            for lay in N.derH:
-                C.derH += [[fork.copy_() if fork else [] for fork in lay]] if isinstance(N,CG) else [lay.copy_()]  # CL
+            for lay in N.derH:  # N.derH is always nested, except when it's a link. So CN may be nested or not nested now
+                C.derH += [[fork.copy_() if fork else [] for fork in lay]] if isinstance(lay,list) else [lay.copy_()]  # CN
         elif name == 'extH': C.extH = [lay.copy_() for lay in N.extH]  # single fork
         elif isinstance(val,list) or isinstance(val,np.ndarray):
             setattr(C, name, copy(val))  # Et,yx,box, node_,link_,rim_, altG, baseT, derTT
@@ -550,7 +550,7 @@ def cluster_N_(N_, rc, fi, rng=1, fnode_=0, root=None):  # connectivity cluster 
                 elif l.rng>rng: llink_ += [l]  # longer-rng rim
         else:  # rng > 1, cluster top-rng roots instead
             n = N; R = n.root
-            while R and R.rng > n.rng: n = R; R = R.root  # must start true
+            while R.root and R.root.rng > n.rng: n = R; R = R.root  # must start true
             if R.fin: continue
             node_,link_,llink_,Et,olp = [R],R.L_,R.hL_,copy(R.Et),R.olp
             R.fin = 1
@@ -573,7 +573,7 @@ def cluster_N_(N_, rc, fi, rng=1, fnode_=0, root=None):  # connectivity cluster 
                             elif l not in llink_ and l.rng>rng: llink_+= [l]  # longer-rng rim
                     else:  # rng > 1, cluster top-rng roots if rim intersect:
                         _n =_N; _R=_n.root
-                        while _R and isinstance(_R, CG) and _R.rng > _n.rng: _n=_R; _R=_R.root
+                        while _R.root and isinstance(_R.root, CG) and _R.root.rng > _n.rng: _n=_R; _R=_R.root
                         if _R.fin: continue
                         lenI = len(list(set(llink_) & set(_R.hL_)))
                         if lenI and (lenI / len(llink_) >.2 or lenI / len(_R.hL_) >.2):
