@@ -826,10 +826,23 @@ def project(Fg, y, x):
     rel_dist = foc_dist / ave_dist
     cos_dang = (dx*_dx + dy*_dy) / foc_dist
     scaling  = rel_dist * cos_dang       # (dx*_dx + dy*_dy)/(ave_dist*norm)
-    # pseudo:
-    N_ = [d * scaling for N in Fg.N_ for d in N]
+    # scale ds
+    for N in Fg.N_:
+        # Ets and derTT, how about baseT?
+        N.et[1] *= scaling
+        N.Et[1] *= scaling
+        N.derTT[1] *= scaling
+        N.extTT[1] *= scaling
 
-    return sum_N_(N_)
+        # derH + extH
+        for lay in N.derH + [N.extH]:
+            for fork in lay:
+                fork.Et[1] *= scaling
+                fork.derTT[1] *= scaling
+        
+        # do we need to scale alt_, H and lH too?
+
+    return Fg.N_  # why we need sum_N_ here?
 
 def proj_focus(PV__, y,x, Fg, fproj=0):  # radial accum of projected focus value in PV__
 
@@ -884,7 +897,9 @@ def agg_frame(floc, image, iY, iX, rV=1, rv_t=[], fproj=0):  # search foci withi
             cross_comp(Fg.N_, root=Fg, rc=frame.olp)
         else:
             Fg = agg_frame(1, win__[:,:,:,y,x], wY,wX, rV=1, rv_t=[])  # use global wY,wX in nested call
-            if Fg: rV, rv_t = feedback(Fg)  # adjust filters
+            # if root.L_ is empty, we skip feedback? We add L_ only in cross_comp, else it's may still poiting CdP
+            if Fg and Fg.L_ and isinstance(Fg.L_[0], CN):
+                rV, rv_t = feedback(Fg)  # adjust filters
         if Fg:
             add_N(frame,Fg)
             node_ += Fg.N_  # keep compared_ to skip in final global cross_comp
