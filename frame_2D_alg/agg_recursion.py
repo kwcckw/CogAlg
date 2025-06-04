@@ -709,7 +709,7 @@ def sum_N_(node_, root_G=None, root=None, fCG=0):  # form cluster G
     fi = isinstance(node_[0],CG); lenn = len(node_)
     if root_G is not None: G = root_G
     else:
-        G = copy_(node_[0], init=1, root=root, fCG=fCG); G.N_=node_; G.fi=fi
+        G = copy_(node_[0], init=1, root=root, fCG=fCG); G.N_=node_; G.fi=fi; G.L_ = []  # prevent copy L_
     for n in node_[1:]:
         add_N(G, n, fi, fCG)
         if root: n.root=root
@@ -799,16 +799,22 @@ def comb_H(H):
         if isinstance(lay, CLay): derTT += lay.derTT; Et += lay.Et
         else:
             for fork in lay:
-                if fork: derTT += fork.derTT; Et += fork.Et
+                if np.any(fork): derTT += fork.derTT; Et += fork.Et
     return derTT, Et
 
 def project(Fg, y, x):
 
-    def proj_TT(TT):
-        return np.array([TT[0],TT[1] * proj])
+    def proj_lay(_lay):  # should be proj_lay instead?
+        lay = _lay.copy_()
+        lay.derTT[0] *= proj_M * 1/rel_dist   # not sure, project + decay
+        lay.derTT[1] = (lay.derTT[1] * proj) - lay.derTT[0]  # not sure, should subtract a portion only?
+        return lay  # new object
+
     def proj_H(_H):
         H = []
-        for lay in _H: H += [proj_TT(lay) if isinstance(lay,CLay) else [lay[0].copy_(), proj_TT(lay[1]) if lay[1] else []]]  # two-fork
+        for lay in _H:
+            # derH may not always have 2 forks? We init them as single layer in sum2graph: derH=[[Lay]]
+            H += [proj_lay(lay) if isinstance(lay,CLay) else ([lay[0].copy_(), proj_lay(lay[1])] if len(lay)>1 else [proj_lay(lay[0])])]  # two-fork
         return H
 
     angle = np.zeros(2); iDist = 0
@@ -819,7 +825,9 @@ def project(Fg, y, x):
     foc_dist = np.hypot(dy,dx)
     rel_dist = foc_dist / (iDist / len(Fg.L_))
     cos_dang = (dx*_dx + dy*_dy) / foc_dist
-    proj = cos_dang * (rel_dist * (Fg.Et[0]/Fg.baseTT[0]))  # d projection cancelled by decay rate = M/I?
+    proj = cos_dang * (rel_dist * (Fg.Et[0]/Fg.baseT[0]))  # d projection cancelled by decay rate = M/I?
+    proj_M = 1  # temporary
+
     N_ = []
     for _N in Fg.N_:
         derH = proj_H(_N.derH); derTT, Et = comb_H(derH)
@@ -903,12 +911,13 @@ def agg_frame(floc, image, iY, iX, rV=1, rv_t=[], fproj=0):  # search foci withi
             Fg = agg_frame(1, win__[:,:,:,y,x], wY,wX, rV=1, rv_t=[])  # use global wY,wX in nested call
             if Fg and Fg.L_:  # only after cross_comp(PP_)
                 rV, rv_t = feedback(Fg)  # adjust filters
-        if Fg:
+        if Fg and Fg.L_:  # L_ can't be empty too
             add_N(frame,Fg)
             node_ += Fg.N_  # keep compared_ to skip in final global cross_comp
             if val_(Fg.Et, mw=np.hypot(*Fg.angle)/wYX, aw=Fg.olp + clust_w*20):
-                if fproj:
-                    cross_comp( project(Fg,y,x), rc=Fg.olp, root=frame)
+                pN = project(Fg,y,x)
+                if pN.Et[0] > ave * pN.Et[2]:  # temporary
+                    cross_comp(pN.N_, rc=Fg.olp, root=frame)
                 proj_focus(PV__, y,x, Fg)  # accum proj val in PV__
             aw = clust_w * 20 * frame.Et[2] * frame.olp
     if node_:
