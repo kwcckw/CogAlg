@@ -68,7 +68,7 @@ class CG(CN):  # PP | graph | blob: params of single-fork node_ cluster
     def __bool__(g): return bool(g.N_)  # never empty
 
 N_pars = ['N_', 'L_', 'Et', 'et', 'H', 'lH', 'C_', 'fi', 'olp', 'derH','rng', 'baseT', 'derTT', 'yx', 'box', 'span', 'angle', 'root']
-G_pars = ['extH', 'extTT', 'rim', 'nrim', 'alt_', 'fin', 'hL_']
+G_pars = ['extH', 'extTT', 'rim', 'nrim', 'alt_', 'fin', 'hL_'] + N_pars  # N_pars should be inclusive to G pars?
 
 class CLay(CBase):  # layer of derivation hierarchy, subset of CG
     name = "lay"
@@ -807,8 +807,12 @@ def comb_H(H):
 
 def project_N_(Fg, y, x):
 
-    def proj_TT(TT):
-        return np.array([TT[0], TT[1] * proj * dec])  # only Et M is projected?
+    def proj_TT(_Lay):  # each input is Lay instead of TT
+        # should we apply projection to M here? As well as the cancelation from pd?
+        Lay = _Lay.copy_()
+        Lay.derTT = np.array([Lay.derTT[0], Lay.derTT[1] * proj * dec])  # only Et M is projected?
+        return Lay
+
     def proj_dH(_H):
         H = []
         for lay in _H: H += [proj_TT(lay) if isinstance(lay,CLay) else [lay[0].copy_(), proj_TT(lay[1]) if lay[1] else []]]  # two-fork
@@ -841,7 +845,9 @@ def project_N_(Fg, y, x):
         Et, et = pEt_
         if val_(Et+et, aw=clust_w):
             ET+=Et; eT+=et; DerTT+=derTT; ExtTT+=extTT
-            N_ += [CG(Et=Et,et=et, derTT=derTT,extTT=extTT, derH=derH,extH=extH)]
+            N = copy_(_N, fCG=1); N.Et=_N.Et; N.et=_N.et;  # it's better to copy? We still need some params such as N_, L_, rim and etc
+            N.derTT=_N.derTT; N.extTT=_N.extTT; N.derH=_N.derH; N.extH=_N.extH
+            N_ += [N]
     # project Fg:
     if val_(ET+eT, mw=len(N_)*Lw, aw=clust_w):
         return CN(N_=N_,L_=Fg.L_,Et=ET+et, derTT=DerTT+extTT)
@@ -922,18 +928,20 @@ def agg_frame(floc, image, iY, iX, rV=1, rv_t=[], fproj=0):  # search foci withi
             Fg = agg_frame(1, win__[:,:,:,y,x], wY,wX, rV=1, rv_t=[])  # use global wY,wX in nested call
             if Fg and Fg.L_:  # only after cross_comp(PP_)
                 rV, rv_t = feedback(Fg)  # adjust filters
-        if Fg:
+        if Fg and Fg.L_:
             add_N(frame,Fg)
             node_ += Fg.N_  # keep compared_ to skip in final global cross_comp
             if fproj and val_(Fg.Et, mw=np.hypot(*Fg.angle)/wYX, aw=Fg.olp + clust_w*20):
                 # proj N_ eval, no comp to focus?
-                Fg = cross_comp( project_N_(Fg,y,x), rc=Fg.olp, root=frame)
-                if Fg:
-                    project_focus(PV__, y,x, Fg)  # accum proj val in PV__
+                pN = project_N_(Fg,y,x)
+                if pN:  
+                    Fg = cross_comp(pN.N_, rc=Fg.olp, root=frame)
+                    if Fg:
+                        project_focus(PV__, y,x, Fg)  # accum proj val in PV__
             aw = clust_w * 20 * frame.Et[2] * frame.olp
     if node_:
         # global cross_comp
-        Fg = sum_N_(node_,root=frame)
+        Fg = sum_N_(node_,root_G = CG(), root=frame)
         if val_(frame.Et, mw=len(node_)*Lw, aw=frame.olp+ clust_w*20) > 0:
             cross_comp(node_, rc=frame.olp+loop_w, root=Fg)
         return Fg
