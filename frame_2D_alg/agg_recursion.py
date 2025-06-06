@@ -351,7 +351,7 @@ def comp_link_(iL_, rc):  # comp CLs via directional node-mediated link tracing:
     fi = iL_[0].N_[0].fi
     for L in iL_:  # init mL_t: nodet-mediated Ls:
         for rev, N, mL_ in zip((0, 1), L.N_, L.mL_t):  # L.mL_t is empty
-            for _L, _rev in N.rim if fi else N.rim[0] + N.rim[1]:
+            for _L, _rev in N.rim if isinstance(N, CG) else N.rim[0] + N.rim[1]:  # fi is for iL, their L.N_ could be CG or CN
                 if _L is not L and _L in iL_:
                     if L.Et[0] > ave * L.Et[2] * loop_w:
                         mL_ += [(_L, rev ^ _rev)]  # direction of L relative to _L
@@ -380,9 +380,9 @@ def comp_link_(iL_, rc):  # comp CLs via directional node-mediated link tracing:
                 for mL_,_mL_ in zip(mL_t, L.mL_t):
                     for _L, rev in _mL_:
                         for _rev, N in zip((0,1), _L.N_):
-                            rim = N.rim
+                            rim = N.rim if isinstance(N, CG) else N.rim[0]+N.rim[1]
                             if len(rim) == med:  # append in comp loop
-                                for __L,__rev in rim if fi else rim[0]+rim[1]:
+                                for __L,__rev in rim:
                                     if __L in L.visited_ or __L not in iL_: continue
                                     L.visited_ += [__L]; __L.visited_ += [L]
                                     if __L.Et[0] > ave * __L.Et[2] * loop_w:
@@ -445,7 +445,7 @@ def comp_N(_N,N, ave, fi, angle=None, span=None, dir=1, fdeep=0, rng=1):  # comp
     if fdeep and (val_(Et, mw=len(N.derH)-2, aw=o) > 0 or N.name=='link'):  # else derH is dext,vert
         dderH = comp_H(_N.derH, N.derH, rn, Link, Et, fi)  # comp shared layers, if any
         # comp int proj x ext ders:
-        # comp_H( proj_dH(_N.derH[1:]), dderH[:-1])
+        # comp_H( proj_dH(_N.derH[1:]), dderH[:-1])  why 1: and :-1?
         # spec/ comp_node_(node_|link_)
     Link.derH = [CLay(root=Link, Et=Et, node_=[_N,N],link_=[Link], derTT=copy(derTT)), *dderH]
     for lay in dderH:
@@ -605,13 +605,15 @@ def sum2graph(root, node_,link_,llink_,Et,olp, Lay, rng, fi):  # sum node and li
 
     n0 = node_[0]
     graph = CG( fi=fi,rng=rng,olp=olp, Et=Et,et=Lay.Et, N_=node_,L_=link_, root=root,
-                box=n0.box, baseT=Lay.baseT+n0.baseT, derTT=Lay.derTT+n0.derTT, derH=copy(n0.derH))
+                box=n0.box, baseT=n0.baseT, derTT=Lay.derTT+n0.derTT, derH=copy(n0.derH))  # Lay does not have BaseT, get it from Lay.node_? But Lay.node_ is in node_ too
     graph.hL_ = llink_
     n0.root = graph; yx_ = [n0.yx]; fg = fi and isinstance(n0.N_[0],CG)  # not PPs
     Nt = copy_(n0)  #->CN, comb forks: add_N(Nt,Nt.Lt)?
     for N in node_[1:]:
-        add_H(graph.derH,N.derH,graph); graph.baseT+=N.baseT; graph.derTT+=N.derTT; graph.box=extend_box(graph.box,N.box); yx_+=[N.yx]
+        # we need fi for link node since their derH is flat
+        add_H(graph.derH,N.derH,graph, fi=fi); graph.baseT+=N.baseT; graph.derTT+=N.derTT; graph.box=extend_box(graph.box,N.box); yx_+=[N.yx]
         if fg: add_N(Nt, N)
+    if not fi: graph.derH = [graph.derH]  # add nesting to link's derH
     if fg: graph.H = Nt.H + [Nt]  # pack prior top level
     graph.derH += [[Lay,[]]]  # append flat
     yx = np.mean(yx_,axis=0); dy_,dx_ = (yx_-yx).T; dist_ = np.hypot(dy_,dx_)
@@ -831,7 +833,7 @@ def project_N_(Fg, y, x):
     cos_dang = (dx*_dx + dy*_dy) / foc_dist
     proj = cos_dang * rel_dist  # dir projection
     ET,eT = np.zeros((2,3)); DerTT,ExtTT = np.zeros(((2,2,8)))
-    N_ = []
+    pFg = CN(); N_ = []  # init pFg first, to allow root assignment
     for _N in Fg.N_:
         # sum _N-specific projections for cross_comp
         (M,D,n),(m,d,en), I,eI = _N.Et,_N.et, _N.baseT[0],_N.baset[0]
@@ -848,10 +850,11 @@ def project_N_(Fg, y, x):
         Et, et = pEt_
         if val_(Et+et, aw=clust_w):
             ET+=Et; eT+=et; DerTT+=derTT; ExtTT+=extTT
-            N_ += [CG(N_=_N.N_, Et=Et,et=et, derTT=derTT,extTT=extTT, derH=derH,extH=extH)]  # same target position?
+            N_ += [CG(N_=_N.N_, Et=Et,et=et, derTT=derTT,extTT=extTT, derH=derH,extH=extH, root=pFg)]  # same target position?
     # proj Fg:
     if val_(ET+eT, mw=len(N_)*Lw, aw=clust_w):
-        return CN(N_=N_,L_=Fg.L_,Et=ET+eT, derTT=DerTT+ExtTT)
+        pFg.N_=N_; pFg.L_=Fg.L_; pFg.Et=ET+eT; pFg.derTT=DerTT+ExtTT
+        return pFg
 
 def feedback(root):  # adjust weights: all aves *= rV, ultimately differential backprop per ave?
 
