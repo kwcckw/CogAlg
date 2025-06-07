@@ -99,6 +99,8 @@ class CLay(CBase):  # layer of derivation hierarchy, subset of CG
 
     def add_lay(Lay, lay_, rev=0):  # merge lays, including mlay + dlay
 
+        # why lay is list now?
+        if isinstance(lay_, CLay): lay_ = [lay_]
         for lay in lay_:
             # rev = dir==-1, to sum/subtract numericals in m_,d_
             for fd, Fork_, fork_ in zip((0,1), Lay.derTT, lay.derTT):
@@ -450,6 +452,7 @@ def comp_N(_N,N, ave, fi, angle=None, span=None, dir=1, fdeep=0, fproj=0, rng=1)
             # or add_H|comp_H( proj_dH(_N.derH[1:]), proj_dH(N.derH[1:]))?
             for lay, dlay in zip(ddH, dddH): lay[1] = dlay
     else: ddH = []
+    # first layer is non nested? The rest is nested.
     Link.derH = [CLay(root=Link, Et=Et, node_=[_N,N],link_=[Link], derTT=copy(derTT))]; Link.derH += ddH
     # spec / comp_node_(node_|link_), alt:
     if fi and _N.alt_ and N.alt_:
@@ -463,7 +466,7 @@ def comp_N(_N,N, ave, fi, angle=None, span=None, dir=1, fdeep=0, fproj=0, rng=1)
             node.nrim += [node]
             if fi: node.rim += [(Link,rev)]
             else: node.rim[1-rev] += [(Link,rev)]  # rimt opposite to _N,N dir
-            add_H(node.extH, Link.derH, root=node, rev=rev, fi=0)
+            add_H(node.extH, Link.derH, root=node, rev=rev)
     return Link
 
 def select_exemplars(root, N_, rc, fi, fC=0):  # get sparse representative nodes|links: non-maximum suppression via stronger-N inhibition zones
@@ -682,9 +685,12 @@ def comp_H(H,h, rn, root):  # one-fork derH if not fi, else two-fork derH
             for _fork, fork in zip_longest(_lay, lay):  # dfork: xproj in link | xlink in node
                 if _fork and fork:
                     dfork = _fork.comp_lay(fork, rn, root=root)
-                    if dlay: dlay.add_lay(dfork)  # sum dforks to keep nesting
-                    else:    dlay = dfork
+                    dlay += [dfork]  # we shouldn't merge it to preserve forks now?
+                    # if dlay: dlay.add_lay(dfork)  # sum dforks to keep nesting
+                    # else:    dlay = dfork
                     derTT = dfork.derTT; Et += dfork.Et
+                else:
+                    dlay += [[]]  # preserve 2 forks?
             derH += [dlay]
     return derH, derTT, Et
 
@@ -695,19 +701,27 @@ def sum_H(Q, root, rev=0):  # sum derH in link_|node_
 
 def merge_dlays(H):
     for lay in H:
-        if lay[1]: lay = [lay[0].add_lay(lay[1]), []]  # merge dlay
+        if isinstance(lay, list):  # nested
+            if lay[1]: lay = [lay[0].add_lay(lay[1]), []]  # merge dlay
 
 def add_H(H, h, root, rev=0):  # add fork L.derHs
 
     for Lay,lay in zip_longest(H,h):  # different len if lay-selective comp
         if lay:
-            if Lay:
-                Lay = [F.add_lay(f) for F,f in zip(Lay,lay) if f]  # default mfork
+            if isinstance(lay, CLay):  # for non nested Lay
+                if Lay:
+                    Lay.add_lay(lay)
+                else:
+                    H += [lay.copy_(rev)]
             else:
-                Lay = [f.copy_(rev) if f else [] for f in lay]
-            for fork in lay:
-                if fork: root.derTT += fork.derTT; root.Et += fork.Et
-        H += [Lay]
+                if Lay:
+                    Lay = [(F.add_lay(f) if F else f.copy_() ) for F,f in zip(Lay,lay) if f]  # default mfork
+                else:
+                    Lay = [f.copy_(rev) if f else [] for f in lay]
+                    H += [Lay]
+                for fork in lay:
+                    if fork: root.derTT += fork.derTT; root.Et += fork.Et
+        # H += [Lay] # why this is default? it should be added only if Lay is empty
     return H
 
 def sum_N_(node_, root_G=None, root=None, fCG=0):  # form cluster G
