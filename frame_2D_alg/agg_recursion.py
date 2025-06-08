@@ -220,7 +220,8 @@ def cluster_edge(edge, frame, lev, derlay):  # non-recursive comp_PPm, comp_PPd,
             else:  frame.N_ += PP_ # PPm_
         lev.L_+= L_; lev.et = mEt+dEt  # links between PPms
         for l in L_:
-            derlay[0].add_lay(l.derH[0]); frame.baseT+=l.baseT; frame.derTT+=l.derTT; frame.Et += l.Et
+            # layer0 is nested now
+            derlay[0].add_lay(l.derH[0][0]); frame.baseT+=l.baseT; frame.derTT+=l.derTT; frame.Et += l.Et
         if val_(dEt, mw = (len(L_)-1)*Lw, aw = 2+clust_w, fi=0) > 0:
             Lt = cluster_N_(N2G(L_), rc=2, fi=0)
             if Lt:  # L_ graphs
@@ -285,7 +286,8 @@ def cross_comp(iN_, rc, root, fi=1):  # rc: redundancy+olp; (cross-comp, exempla
                     cross_comp(Nt.N_, rc+clust_w*rng+loop_w, root=Nt)  # top rng, select lower-rng spec comp_N: scope+?
         # dfork
         root.L_ = L_  # top N_ links
-        mLay = CLay(); [mLay.add_lay(lay) for L in L_ for lay in L.derH]  # comb,sum L.derHs
+        # now we merge all forks' lay into mLay?
+        mLay = CLay(); [mLay.add_lay(f) for L in L_ for lay in L.derH for f in lay if f]  # comb,sum L.derHs
         root.angle = np.sum([L.angle for L in L_],axis=0)
         LL_, Lt, dLay = [], [], []
         dval = val_(Et, mw=(len(L_)-1)*Lw, aw=rc+3+clust_w, fi=0)
@@ -293,7 +295,7 @@ def cross_comp(iN_, rc, root, fi=1):  # rc: redundancy+olp; (cross-comp, exempla
             L_ = N2G(L_)
             if dval > ave:  # recursive derivation -> lH/nLev, rng-banded?
                 LL_ = cross_comp(L_, rc+loop_w*2, root, fi=0)  # comp_link_, no centroids?
-                if LL_: dLay = CLay(); [dLay.add_lay(lay) for LL in LL_ for lay in LL.derH]  # optional dfork
+                if LL_: dLay = CLay(); [dLay.add_lay(f) for LL in LL_ for lay in LL.derH for f in lay if f]  # optional dfork
             else:  # lower res
                 Lt = cluster_N_(L_, rc+clust_w*2, fi=0, fnode_=1)
                 if Lt: root.et += Lt.Et; root.lH += [Lt] + Lt.H  # link graphs, flatten H if recursive?
@@ -438,7 +440,7 @@ def comp_N(_N,N, ave, fi, angle=None, span=None, dir=1, fdeep=0, fproj=0, rng=1)
     _y,_x = _N.yx; y,x = N.yx; box = np.array([min(_y,y),min(_x,x),max(_y,y),max(_x,x)])
     o = (_N.olp+N.olp) / 2
     Link = CN(rng=rng, olp=o, N_=[_N,N], baseT=baseT, derTT=derTT, yx=np.add(_N.yx,N.yx)/2, span=span, angle=angle, box=box)
-    Link.derH = [[CLay(root=Link, Et=Et, node_=[_N, N], link_=[Link], derTT=copy(derTT))], []]  # empty dlay
+    Link.derH = [[CLay(root=Link, Et=Et, node_=[_N, N], link_=[Link], derTT=copy(derTT)), []]]  # empty dlay (the prior bracket is wrong for 2 forks)
     # spec / lay:
     if fdeep and (val_(Et, mw=len(N.derH)-2, aw=o) > 0 or N.name=='link'):
         # else derH is dext,vert
@@ -624,13 +626,17 @@ def sum2graph(root, node_,link_,llink_, Et, olp, rng, fi, fC=0):  # sum node and
         for L in link_:  # LL from comp_link_
             LR_ = set([n.root for n in L.N_ if isinstance(n.root,CG)])  # nodet, skip frame, empty roots
             if LR_:
-                dfork = reduce(lambda F,f: F.add_lay(f), L.derH, CLay())  # combine lL.derH
+                # dfork = reduce(lambda F,f: F.add_lay(f), L.derH, CLay())  # combine lL.derH
+                for LR in LR_:  # for LR, we can use append_dH now?
+                    LR.derH = append_dH(LR.derH,DerH)
+                '''
                 for LR in LR_:
                     LR.Et += dfork.Et; LR.derTT += dfork.derTT  # lay0 += dfork
                     if LR.derH[-1][1]: LR.derH[-1][1].add_lay(dfork)  # direct root only
                     else:              LR.derH[-1][1] =dfork.copy_()  # was init by another node
                     if LR.lH: LR.lH[-1].N_ += [graph]  # last lev
                     else:     LR.lH += [CN(N_=[graph])]  # init
+                '''
         alt_=[]  # add mGs overlapping dG
         for L in node_:
             for n in L.N_:  # map root mG
@@ -646,9 +652,9 @@ def append_dH(H, dH):  # merged mfork += [merged dfork], keep nesting
         if dlay:
             if dlay[1]: dlay[0].add_lay(dlay[1]); dlay[1] = []
         if lay:
-            if lay[1]: lay[0].add_lay(lay[1])
-            if dlay:   lay[1] = dlay[0].copy()
-        elif dlay:     H += dlay
+            if lay[1]: lay[0].add_lay(lay[1])  # if a graph run append_dH twice, dfork will be merged into mfork twice? While it should be merged only once?
+            if dlay:   lay[1] = dlay[0].copy_()
+        elif dlay:     H += [dlay]  # we need bracket to pack dlay as new layer
     return H
 
 def centroid_M(m_, ave):  # adjust weights on attr matches | diffs, recompute with sum
@@ -707,8 +713,9 @@ def add_H(H, h, root, rev=0):  # add fork derHs
         if lay:
             if Lay:
                 for F, f in zip_longest(Lay, lay):
-                    if F: F.add_lay(f)
-                    else: Lay[1] = f.copy_(rev)  # default mfork
+                    if f:  # skip if fork is empty list
+                        if F: F.add_lay(f)
+                        else: Lay[1] = f.copy_(rev)  # default mfork
             else:
                 H += [[f.copy_(rev) if f else [] for f in lay]]
             for fork in lay:
@@ -722,7 +729,8 @@ def sum_N_(node_, root_G=None, root=None, fCG=0):  # form cluster G
     else:
         G = copy_(node_[0], init=1, root=root, fCG=fCG); G.N_=node_; G.fi=fi
     for n in node_[1:]:
-        add_N(G, n, fCG); n.root=root
+        add_N(G, n, fCG) 
+        if root: n.root=root  # assign only if root is not None?
         G.L_ += n.rim if fi else n.N_  # nodet
     G.olp /= len(node_)
     G.L_ = list(set(G.L_))
