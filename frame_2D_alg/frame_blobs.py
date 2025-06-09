@@ -72,8 +72,8 @@ class CN(CBase):
     name = "node"
     def __init__(n, **kwargs):
         super().__init__()
-        n.N_ = kwargs.get('node_',[])  # N_| nrim
-        n.L_ = kwargs.get('link_',[])  # L_| rim
+        n.N_ = kwargs.get('N_',[])  # N_| nrim  (N_ and L_ should be matched with the param name here)
+        n.L_ = kwargs.get('L_',[])  # L_| rim
         n.H  = kwargs.get('H', [])  # top-down: nested-node levels, each CN with corresponding L_,et,lH, no H
         n.lH = kwargs.get('lH',[])  # bottom-up: higher link graphs hierarchy, also CN levs
         n.Et    = kwargs.get('Et', np.zeros(3))  # sum from L_ or rims
@@ -88,7 +88,7 @@ class CN(CBase):
         n.angle = kwargs.get('angle',np.zeros(2))  # dy,dx
         # nested CNs:
         n.root= kwargs.get('root',[])  # not in ext_
-        n.ext = kwargs.get('rim',[])  # nrim, rim and their attrs, replaces CG
+        n.ext = kwargs.get('ext') if 'ext' in kwargs else CN(ext=[])  # nrim, rim and their attrs, replaces CG
         n.alt = kwargs.get('alt',[])  # adjacent (contour) gap+overlap alt-fork graphs, converted to CG, empty alt.alt_: select+?
         n.C_  = kwargs.get('C_', [])  # make it CN?
         n.fin = kwargs.get('fin', 0)  # in cluster, temporary?
