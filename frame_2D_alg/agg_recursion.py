@@ -104,6 +104,9 @@ def copy_(N, root=None, init=0):
         elif name == "N_" and init: C.N_ = [N]
         elif name == "H" and init: C.H = []
         elif name == 'derH': C.derH = [[fork.copy_() if fork else [] for fork in lay] for lay in N.derH]
+        elif name == "rim": 
+            if val: C.rim = copy_(val)  # copy CN rim
+            else:   C.rim = []  # rim of rim
         elif isinstance(val,list) or isinstance(val,np.ndarray):
             setattr(C, name, copy(val))  # Et,yx,box, node_,link_,rim, alt_, baseT, derTT
         else:
@@ -446,6 +449,7 @@ def select_exemplars(root, N_, rc, fi, fC=0):  # get sparse representative nodes
         Ct = cluster_C_(root, exemplars, Et, rc+clust_w, fi)  # refine _N_+_N__ by mutual similarity, add centroids as mediators
         if Ct:
             C_, cEt = Ct
+            # this updates C.N_, but existing C.N_ is not used in the clustering within cross_comp?
             cross_comp(C_, rc+1, root)
             exemplars,Et = C_,cEt  # not sure, may be return both?
 
@@ -591,7 +595,8 @@ def sum2graph(root, node_,link_,llink_, Et, olp, rng, fi, fC=0):  # sum node and
         for L in link_:  # LL from comp_link_
             LR_ = set([n.root for n in L.N_ if isinstance(n.root,CN)])  # nodet, skip frame, empty roots
             if LR_:
-                dfork = reduce(lambda F,f: F.add_lay(f), L.derH, CLay())  # combine lL.derH
+                # sum every layer to dfork?
+                dfork = reduce(lambda F,f: F.add_lay(f), [lay[0] for lay in L.derH], CLay())  # combine lL.derH
                 for LR in LR_:
                     LR.Et += dfork.Et; LR.derTT += dfork.derTT  # lay0 += dfork
                     if LR.derH[-1][1]: LR.derH[-1][1].add_lay(dfork)  # direct root only
@@ -698,7 +703,8 @@ def sum_N_(node_, root_G=None, root=None):  # form cluster G
 def add_N(N,n):
 
     rn = n.Et[2] / N.Et[2]
-    N.Et += n.Et * rn; N.rim.Et += n.rim.Et * rn; N.C_ += n.C_
+    N.Et += n.Et * rn; N.C_ += n.C_
+    if N.rim: N.rim.Et += n.rim.Et * rn  # rim.rim is empty
     N.olp = (N.olp + n.olp * rn) / 2  # ave
     N.yx = (N.yx + n.yx * rn) / 2
     N.span = max(N.span,n.span)
@@ -707,7 +713,8 @@ def add_N(N,n):
     if n.H: add_NH(N.H, n.H, root=N)
     if n.lH: add_NH(N.lH, n.lH, root=N)
     if n.rim: add_N(N.rim, n.rim)
-    if n.alt: add_N(N.alt if N.alt else CN(), n.alt)
+    if n.alt:  # we need to reassign?
+        N.alt = add_N(N.alt if N.alt else CN(), n.alt)
     if n.derH: add_H(N.derH,n.derH, root=N)
     for Par,par in zip((N.angle, N.baseT, N.derTT), (n.angle, n.baseT, n.derTT)):
         Par += par * rn
@@ -742,15 +749,16 @@ def PP2N(PP, frame):
     return CN(root=frame, fi=1, Et=Et+et, N_=P_,L_=link_, baseT=baseT, derTT=derTT, derH=derH, box=box, yx=yx, span=np.hypot(dy/2,dx/2))
 
 def norm_H(H, n):
-    for lay in H:
-        if lay:
-            if isinstance(lay, CLay):
-                for v_ in lay.derTT: v_ *= n  # array
-                lay.Et *= n
-            else:
-                for fork in lay:
-                    for v_ in fork.derTT: v_ *= n  # array
-                    fork.Et *= n  # same node_, link_
+    for layt in H:  # H is nested now
+        for lay in layt:
+            if lay:  # skip empty fork
+                if isinstance(lay, CLay):
+                    for v_ in lay.derTT: v_ *= n  # array
+                    lay.Et *= n
+                else:
+                    for fork in lay:
+                        for v_ in fork.derTT: v_ *= n  # array
+                        fork.Et *= n  # same node_, link_
 # not used:
 def sort_H(H, fi):  # re-assign olp and form priority indices for comp_tree, if selective and aligned
 
