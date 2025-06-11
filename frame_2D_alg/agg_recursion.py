@@ -417,7 +417,7 @@ def comp_N(_N,N, ave, fi, angle=None, span=None, dir=1, fdeep=0, fproj=0, rng=1)
     if Et[0] > ave * Et[2]:
         for rev, node, _node in zip((0,1),(N,_N),(_N,N)):  # reverse Link dir in _N.rimt
             node.rim.Et += Et  # or convert in cluster_N_?
-            node.rim.N_ += [node]
+            node.rim.N_ += [_node]  # should be adding _node instead
             if fi: node.rim.L_ += [(Link,rev)]
             else: node.rim.L_[1-rev] += [(Link,rev)]  # rimt opposite to _N,N dir
             add_H(node.rim.derH, Link.derH, root=node, rev=rev)
@@ -479,6 +479,7 @@ def cluster_C_(root, E_,eEt, rc, fi):  # form centroids from exemplar _N_, drift
                 _N_,_N__= [],[]
                 Et, dEt = np.zeros(3), np.zeros(3)
                 for n in N.rim.N_:
+                    if not hasattr(n, 'et_'): n.et_ = []  # not all N.rim.N_ is in E_ to init et_
                     _,et,_ = base_comp(C,n)  # comp to mean
                     if C.alt and n.alt: _,aet,_ = base_comp(C.alt,n.alt); et += aet
                     if N in n.C_: dEt += et - n.et_[n.C_.index(N)]  # assigned in prior loop
@@ -527,7 +528,7 @@ def cluster_N_(N_, rc, fi, rng=1, fnode_=0, root=None, fc=0):  # connectivity cl
         nrc = rc+olp; N.fin = 1  # extend N cluster:
         if fnode_:  # cluster links via nodet
             for _N in N.N_:
-                if _N.fin: continue
+                if _N.fin or (fc and L_olp(N,_N, link_, frim=1)): continue  # rim olp eval for centroids
                 _N.fin = 1; link_ += [_N]  # nodet is mediator
                 for L,_ in _N.rim.L_ if fi else _N.rim.L_[0]+_N.rim.L_[0]:  # may be L
                     if L not in node_ and _N.Et[1] > avd * _N.Et[2] * nrc:  # direct eval diff
@@ -546,7 +547,7 @@ def cluster_N_(N_, rc, fi, rng=1, fnode_=0, root=None, fc=0):  # connectivity cl
                     else:
                         _n =_N; _R=_n.root  # _N.rng=1, _R.rng > 1, cluster top-rng roots if rim intersect:
                         while _R.root and _R.root.rng > _n.rng: _n=_R; _R=_R.root
-                        if _R.fin: continue
+                        if _R.fin or (fc and L_olp(N,_N, link_, frim=0)): continue
                         lenI = len(list(set(llink_) & set(_R.hL_)))
                         if lenI and (lenI / len(llink_) >.2 or lenI / len(_R.hL_) >.2):
                             # min rim intersect | intersect oEt?
@@ -563,14 +564,21 @@ def cluster_N_(N_, rc, fi, rng=1, fnode_=0, root=None, fc=0):  # connectivity cl
 # need to use in all 3 forks:
 def L_olp(C,_C, link_, frim=0):  # rim, link_ olp eval for centroids
 
+    Et = np.zeros(3); rM = 1
     if link_: # R or C
-        Lo_Et = np.sum([l.Et for l in list(set(link_) & set(_C.L_))]) * int_w
-        LEt = _C.Et * int_w; rM = Lo_Et[0] / LEt[0]; Et = Lo_Et
-    else:
-        rM = 1; Et = np.zeros(3)
+        mutual_L_ = [L for L in link_ if L in _C.L_]
+        if mutual_L_:  # sum empty list gives 0, which gives dimension error later
+            Lo_Et = np.sum([l.Et for l in mutual_L_],axis=0) * int_w
+            LEt = _C.Et * int_w; rM = Lo_Et[0] / LEt[0]; Et = Lo_Et
+        
     if frim:  # N or C
-        ro_Et = np.sum([l.Et for l in list(set(C.rim) & set(_C.rim))])
-        rEt = _C.rim.Et; rM *= ro_Et[0]/rEt[0]; Et += ro_Et
+        # set gets error when input is empty
+        rim = C.rim.L_ if C.fi else C.rim.L_[0] + C.rim.L_[1]  # CN has rimt
+        _rim = _C.rim.L_ if _C.fi else _C.rim.L_[0] + _C.rim.L_[1]
+        mutual_rim_ = [L for L,_ in rim if L in _rim]
+        if mutual_rim_:
+            ro_Et = np.sum([l.Et for l,_ in mutual_rim_],axis=0)
+            rEt = _C.rim.Et; rM *= ro_Et[0]/rEt[0]; Et += ro_Et
 
     if val_(Et*rM, aw=clust_w) < 0:
         return 1  # continue
@@ -908,6 +916,7 @@ def agg_frame(floc, image, iY, iX, rV=1, rv_t=[], fproj=0):  # search foci withi
             aw = clust_w * 20 * frame.Et[2] * frame.olp
     if node_:
         frame = sum_N_(node_)  # merged
+        for n in node_: n.root = frame  # we need to assign them here? Because root is not exist yet when we call sum_N_ above
         if val_(frame.Et, mw=(len(node_)-1)*Lw, aw=frame.olp+loop_w*20) > 0:
             cross_comp(node_, rc=frame.olp+loop_w, root=frame)
 
