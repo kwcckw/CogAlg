@@ -433,7 +433,7 @@ def get_exemplars(root, N_, rc, fi, fC=0):  # get sparse representative nodes|li
         else:
             break  # the rest of N_ is weaker
     if fi and not fC and val_(Et, mw=(len(exemplars)-1)*Lw, aw=rc+clust_w) > 0:  # high global match?
-        for n in N_: n.C_,n.et_ = [],[]
+        for n in N_: n.C_,n.et_ = [],[]  # not all n.rim is is N_ due to we eval them differently
         Ct = cluster_C_(root, exemplars, Et, rc+clust_w, fi)  # refine _N_+_N__ by mutual similarity, add centroids as mediators
         if Ct:
             C_, cEt = Ct; fc = 1
@@ -448,23 +448,24 @@ def rolp_e(N, inhib_, C):  # inhibition zone for centroids & exemplars
     if C: olp_ = [n for n in N.rim.N_ if n in inhib_]
     else: olp_ = [L for L,_ in N.rim.L_ if [n for n in L.N_ if n in inhib_]]  # += in max dist?
 
-    oEt = np.sum([l.Et for l in olp_])
+    oEt = np.sum([l.Et for l in olp_],axis=0)  # to sum across each element
     rM = oEt[0] / N.Et[0]
 
     return val_(N.Et * rM, aw=clust_w)
 
-def rolp(N, link_=[], rim=[]):  # relative rim, link_ olp eval for clustering, replace rolp_M?
+def rolp(N, link_=[], _rim=[]):  # relative rim, link_ olp eval for clustering, replace rolp_M?
 
     LrM, RrM, LEt, REt = 0,0,[],[]
     if link_: # R | C
         oL_ = [L for L in N.L_ if L in link_]
         if oL_:
             oEt = np.sum([l.Et for l in oL_]) *int_w; LEt = N.Et *int_w; LrM = oEt[0]/LEt[0]
-    if rim:  # N | C pairwise
-        oR_ = [L for L,_ in N.rim.L_ if L in rim.L_]
+    if _rim:  # N | C pairwise
+        rim = N.rim.L_ if N.fi else N.rim.L_[0] + N.rim.L_[1]
+        oR_ = [L for L,_ in rim if L in _rim]
         if oR_:
             oEt = np.sum([l.Et for l in oR_]); REt = N.rim.Et; RrM = oEt[0]/REt[0]
-    _rM = 0
+    _rM = 0; _Et = copy(N.Et)  # _Et should be N.Et?
     for rM,Et in zip((LrM,LEt),(RrM,REt)):
         if rM:
             if _rM: _rM*= rM; _Et+= Et
@@ -552,7 +553,8 @@ def cluster_N_(N_, rc, fi, rng=1, fnode_=0, root=None, fc=0, _Nt=[]):  # connect
                 for _N in L.N_:
                     if _N not in N_ or _N.fin: continue  # connectivity clusters don't overlap
                     if rng==1 or _N.root.rng==1:  # _N is not rng-nested
-                        if rolp(N,_N, link_ if fc else [], frim=1):  # link_ in centroids only
+                        # rim is _N.rim?
+                        if rolp(N, link_ if fc else [],  _N.rim.L_ if _N.fi else _N.rim.L_[0] + _N.rim.L_[1]):  # link_ in centroids only
                             node_ +=[_N]; Et += _N.Et+_N.rim.Et; olp+=_N.olp; _N.fin=1
                             for l,_ in _N.rim.L_ if fi else (_N.rim.L_[0]+_N.rim.L_[1]):  # all +ve
                                 if l not in link_ and l.rng == rng: link_ += [l]
@@ -560,7 +562,7 @@ def cluster_N_(N_, rc, fi, rng=1, fnode_=0, root=None, fc=0, _Nt=[]):  # connect
                     else:
                         _n =_N; _R=_n.root  # _N.rng=1, _R.rng > 1, cluster top-rng roots if rim intersect:
                         while _R.root and _R.root.rng > _n.rng: _n=_R; _R=_R.root
-                        if not _R.fin and rolp(N,_N, link_, frim=0):
+                        if not _R.fin and rolp(N, link_, rim=[]):
                             link_ = list(set(link_+_R.link_)); llink_ = list(set(llink_+_R.hL_))
                             node_+= [_R]; Et +=_R.Et; olp += _R.olp; _R.fin = 1; _N.fin = 1
         node_ = list(set(node_))
@@ -716,7 +718,8 @@ def add_N(N,n, fmerge=0):
         for node in n.N_: node.root=N; N.N_ += [node]
     else: n.root=N; N.N_ += [n]
     rn = n.Et[2] / N.Et[2]
-    N.Et += n.Et * rn; N.C_ += n.C_
+    N.Et += n.Et * rn
+    if hasattr(N, 'C_') and hasattr(n, 'C_'): N.C_ += n.C_  # C_ is not default now, when N is rim, it does not have C_
     if N.rim: N.rim.Et += n.rim.Et * rn  # rim.rim is empty
     N.olp = (N.olp + n.olp * rn) / 2  # ave
     N.yx = (N.yx + n.yx * rn) / 2
