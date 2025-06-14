@@ -93,7 +93,7 @@ def copy_(N, root=None, init=0):
         if name == "_id": continue
         elif name == "N_" and init: C.N_ = [N]
         elif name == "H" and init: C.H = []
-        elif name == "rim":  C.rim = copy_(val) if val else []  # rim of rim
+        elif name == "rim":  C.rim = copy_(val) if isinstance(val, CN) else []  # rim of rim (we still need to init CN?)
         elif name == 'derH': C.derH = [[fork.copy_() if fork else [] for fork in lay] for lay in N.derH]
         elif isinstance(val,list) or isinstance(val,np.ndarray):
             setattr(C, name, copy(val))  # Et,yx,box, node_,link_,rim, alt_, baseT, derTT
@@ -496,7 +496,7 @@ def cluster_C_(root, E_,eEt, rc, fi):  # form centroids from exemplar _N_, drift
                 for n in N.rim.N_:
                     _,et,_ = base_comp(C,n)  # comp to mean
                     if C.alt and n.alt: _,aet,_ = base_comp(C.alt,n.alt); et += aet
-                    # need to track removed Ns instead:
+                    # need to track removed Ns instead: 
                     if N in n.C_: dEt += et - n.et_[n.C_.index(N)]
                     else:         dEt += et
                     if val_(et, aw=loop_w+rc) > 0:
@@ -512,10 +512,14 @@ def cluster_C_(root, E_,eEt, rc, fi):  # form centroids from exemplar _N_, drift
                 break  # rest of N_ is weaker
         if val_(DEt, mw=(len(C_)-1)*Lw, aw=(loop_w+clust_w+rc)) <= 0:
             break  # converged
-        cluster_N_(C_, rc + clust_w, fi, fL=1)  # cluster C_ by overlap in C.N_?
-        # draft
+        Ct = cluster_N_(C_, rc + clust_w, fi, fL=1)  # cluster C_ by overlap in C.N_?
+    
+    # feedback from Ct to root here?
+    if 'Ct' in locals() and Ct: add_N(root, Ct)
+    
     if val_(ET, mw=(len(C_)-1)*Lw, aw=rc+loop_w) > 0:
         root.C_ = C_  # higher-scope cross_comp in
+        root.et_ = [C.Et for C in C_]  # do we need their et_ too?
         Ec_, Et = get_exemplars(root, [n for C in C_ for n in C.N_], rc+loop_w, fi=fi, fC=1)
         if Ec_:  # refine exemplars / cEt
             remove_ = {n for C in C_ for n in C.N_}
@@ -718,7 +722,9 @@ def add_N(N,n, fmerge=0):
     else: n.root=N; N.N_ += [n]
     rn = n.Et[2] / N.Et[2]
     N.Et += n.Et * rn
-    if hasattr(n,'C_'): N.C_ += n.C_; N.et_ += n.et_
+    if hasattr(n,'C_'): 
+        if not hasattr(N,'C_'): N.C_ = []; N.et_ = []  # if N is graph, they do not have a default C_?
+        N.C_ += n.C_; N.et_ += n.et_
     if N.rim: N.rim.Et += n.rim.Et * rn  # rim.rim is empty
     N.olp = (N.olp + n.olp * rn) / 2  # ave
     N.yx = (N.yx + n.yx * rn) / 2
@@ -747,7 +753,7 @@ def extend_box(_box, box):  # extend box with another box
     return min(y0,_y0), min(x0,_x0), max(yn,_yn), max(xn,_xn)
 
 def L2N(link_):
-    for L in link_: L.rim.L_,L.mL_t = [[],[]], [[],[]]; L.compared_,L.visited_ = [],[]
+    for L in link_: L.rim.L_,L.mL_t = [[],[]], [[],[]]; L.compared_,L.visited_ = [],[]; L.rim = CN(rim=[], L_=[[],[]])  # init rim.L_ differently in link
     return link_
 
 def PP2N(PP, frame):
