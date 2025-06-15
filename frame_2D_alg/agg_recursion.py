@@ -440,7 +440,7 @@ def get_exemplars(root, N_, rc, fi, fC=0):  # get sparse representative nodes|li
         else:
             break  # the rest of N_ is weaker
     if fi and not fC and val_(Et, mw=(len(exemplars)-1)*Lw, aw=rc+clust_w) > 0:  # high global match?
-        for n in root.N_: n.C_,n.et_ = [],[]
+        for n in root.N_: n.C_,n.et_, n._C_ = [],[],[]
         Ct = cluster_C_(root, exemplars, Et, rc+clust_w, fi)  # refine _N_+_N__ by mutual similarity, add centroids as mediators
         if Ct:
             C_, cEt = Ct; root.N_ = C_; root.Et += cEt
@@ -494,6 +494,7 @@ def cluster_C_(root, E_,eEt, rc, fi):  # form centroids from exemplar _N_, drift
                 for n in N.rim.N_:
                     _,et,_ = base_comp(C,n)  # comp to mean
                     if C.alt and n.alt: _,aet,_ = base_comp(C.alt,n.alt); et += aet
+                    # we need to check if C in n._C_ first? Else we may pack C into n.C- multiple times?
                     if val_(et, aw=loop_w + rc) > 0:
                         n.C_ += [C]; n.et_ += [et]; Et += et
                         _N_ += [n]; _N__ += n.rim.N_
@@ -717,7 +718,7 @@ def add_N(N,n, fmerge=0):
     else: n.root=N; N.N_ += [n]
     rn = n.Et[2] / N.Et[2]
     N.Et += n.Et * rn
-    if hasattr(n,'C_'): N.C_ += n.C_; N.et_ += n.et_
+    if hasattr(n,'C_') and hasattr(N,'C_'): N.C_ += n.C_; N.et_ += n.et_  # check N to skip frame
     if N.rim: N.rim.Et += n.rim.Et * rn  # rim.rim is empty
     N.olp = (N.olp + n.olp * rn) / 2  # ave
     N.yx = (N.yx + n.yx * rn) / 2
