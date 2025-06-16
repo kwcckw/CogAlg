@@ -191,7 +191,7 @@ def val_(Et, _Et=None, mw=1, aw=1, fi=1):  # m,d eval per cluster or cross_comp
     ad = avd * aw  # diff value is borrowed from co-projected or higher-scope match value
     m, d, n = Et
 
-    val = (m-am if fi else d-ad) * mw
+    val = (m-am if fi else d-ad) * mw  # this give positive when mw is negative, so we need abs(m-am if fi else d-ad)?
     if np.any(_Et): # borrow rational deviation of alt contour if fi else root Et, not circular
         _m, _d, _n = _Et
         val *= (_d/ad if fi else _m/am) * (mw*(_n/n))
@@ -438,7 +438,7 @@ def get_exemplars(root, N_, rc, fi):  # get sparse nodes: non-maximum suppressio
             exemplars += [N]
         else:
             break  # the rest of N_ is weaker
-    if fi and val_(Et, (len(exemplars)-1)*Lw, rc+clust_w) > 0:  # high global match?
+    if fi and val_(Et, mw=(len(exemplars)-1)*Lw, aw=rc+clust_w) > 0:  # high global match?
         for n in root.N_: n.C_,n.et_, n._C_ = [],[],[]
         Ct = cluster_C_(root, exemplars, rc+clust_w)  # refine by mutual similarity
         if Ct:
@@ -526,27 +526,30 @@ def cluster_NC_(_C_, rc, _Nt):  # cluster centroids if pairwise Et + overlap Et
             continue
         dy,dx = np.subtract(_C.yx,C.yx)
         link = comp_N(_C, C, ave, angle=np.array([dy,dx]), span=np.hypot(dy,dx))
-        oV = val_(np.sum([n.Et for n in oN_],axis=0), aw)
-        _V = min(val_(C.Et, aw), val_(_C.Et, aw), 1e-7)
+        oV = val_(np.sum([n.Et for n in oN_],axis=0), aw=aw)
+        _V = min(val_(C.Et, aw=aw), val_(_C.Et, aw=aw), 1e-7)
         link.Et[:2] *= int_w  # for oV priority:
         link.Et[0] += oV/_V - arn
-        if val_(link.Et, aw) > 0:
+        if val_(link.Et, aw=aw) > 0:
             C_ += [_C,C]; Et += link.Et
         C_ = list(set(C_))
-    if val_(Et, (len(C_)-1)*Lw, aw) > 0:
+    if val_(Et, mw=(len(C_)-1)*Lw, aw=aw) > 0:
         G_ = []
         for C in C_:
             if C.fin: continue
             C.fin = 1
-            G = CN(N_=[C],L_=C.rim.L_,Et= copy(C.Et)); C.root = G
-            for _C, L in zip(C.rim.N_,C.rim.L_):
+            G = CN(N_=[C],L_=C.rim.L_,Et= copy(C.Et)); C.root = G 
+            for _C, Lt in zip(C.rim.N_,C.rim.L_):
                 if _C.fin:
-                    add_N(G,_C.root, fmerge=1)
-                else: G.N_+=[_C]; G.L_+=[L]; G.Et+=L.Et  # last lev only?
+                    if _C.root is not G:  # not a same root
+                       add_N(G,_C.root, fmerge=1)
+                else: 
+                    G.N_+=[_C]; G.L_+=[Lt]; G.Et+=Lt[0].Et  # last lev only?
+                    add_N(G, _C)  # we need to add _C params to G too?
             G_ += [G]
         Gt = CN(N_=G_,Et=Et)
-        if val_(Et, (len(G_)-1)*Lw, aw) > 0:  # new crit is len G_
-            Gt = cluster_NC_(G_, rc, Gt)
+        if val_(Et, mw=(len(G_)-1)*Lw, aw=aw) > 0 and C_ and rc<20:  # new crit is len G_
+            Gt = cluster_NC_(G_, rc+2, Gt)  # increase rc too?
         return Gt
     else:
         return _Nt
@@ -579,6 +582,7 @@ def cluster_N_(N_, rc, fi, rng=1, fL=0, root=None, _Nt=[]):  # connectivity clus
                         node_ += [L]; Et += L.Et; olp += L.olp  # /= len node_
         else:  # cluster nodes via links
             for L in link_[:]:  # snapshot
+                # some root has rng == 1 and some root has higher rng, not sure how apply cluster_NC here
                 for _N in L.N_:
                     if _N not in N_ or _N.fin: continue  # connectivity clusters don't overlap
                     if rng==1 or _N.root.rng==1:  # not rng-nested
