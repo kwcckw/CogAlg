@@ -92,6 +92,7 @@ def copy_(N, root=None, init=0):
     N.root = C if init else root
     for name, val in N.__dict__.items():
         if name == "_id": continue
+        elif name == 'root' and root: continue  # skip if root is provided, else its getting replaced
         elif name == "N_" and init: C.N_ = [N]
         elif name == "L_" and init: C.L_ = []
         elif name == "H"  and init: C.H = []
@@ -744,10 +745,12 @@ def sum_N_(node_, root_G=None, root=None):  # form cluster G
     G.L_ = list(set(G.L_))
     return G
 
-def add_N(N,n, fmerge=0):
+def add_N(N,n, fmerge=0, frim=0):
 
     if fmerge:
-        for node in n.N_: node.root=N; N.N_ += [node]
+        for node in n.N_: 
+            N.N_ += [node]
+            if not frim: node.root=N
     else: n.root=N; N.N_ += [n]
     rn = n.Et[2] / N.Et[2]
     N.Et += n.Et * rn
@@ -760,7 +763,7 @@ def add_N(N,n, fmerge=0):
     # add norm by rn:
     if n.H: add_NH(N.H, n.H, root=N)
     if n.lH: add_NH(N.lH, n.lH, root=N)
-    if n.rim: add_N(N.rim, n.rim)
+    if n.rim: add_N(N.rim, n.rim, fmerge=1, frim=1)  # merge should be 1 here, butroot shouldn't be updated ?
     if n.alt: N.alt = add_N(N.alt if N.alt else CN(), n.alt)
     if n.derH: add_H(N.derH,n.derH, root=N)
     for Par,par in zip((N.angle, N.baseT, N.derTT), (n.angle, n.baseT, n.derTT)):
