@@ -86,12 +86,12 @@ class CLay(CBase):  # layer of derivation hierarchy, subset of CG
         if root: root.Et += Et
         return CLay(Et=Et, olp=(_lay.olp+lay.olp*rn)/2, node_=node_, link_=link_, derTT=derTT)
 
-def copy_(N, root=None, init=0):
+def copy_(N, root=None, init=0, frim=1, falt=1):
 
     C = CN(root=root)
     C.N_,C.L_,C.H, N.root = ([N],[],[],C) if init else (list(N.N_),list(N.L_),list(N.H), root)
-    C.rim = copy_(N.rim or CN())
-    C.alt = copy_(N.alt or CN())
+    C.rim = copy_(N.rim or CN(), frim=0) if frim else []   # we need to prevent the next copy_ run copy_ again
+    if falt: C.alt = copy_(N.alt or CN(), falt=0, frim=0)  # same with alt, it creates alts endlessly if we don't use the flag
     C.derH  = [[fork.copy_() if fork else [] for fork in lay] for lay in N.derH]
     C.derTT = deepcopy(N.derTT)
     for attr in ['lH', 'Et', 'baseT', 'yx', 'box', 'angle', 'alt']:
@@ -219,6 +219,8 @@ def cross_comp(iN_, rc, root, fi=1):  # rc: redundancy+olp; (cross-comp, exempla
         # mfork:
         if val_(Et, (len(n__)-1)*Lw, rc+loop_w) > 0:
             if fi:
+                for n in iN_: # we need this init before cluster_C_? Because N__ may not contain all iN_. We discussed this before, rim and N__ are eval differently now
+                    n.C_, n.et_, n._C_ = [], [], []
                 E_,cL_,eEt, fC = get_exemplars(root, n__, rc+loop_w, fi)  # focal nodes
                 if fC:  # E_ is replaced by C_
                     if cL_: L_ = cL_  # not empty if from cluster_NC_
@@ -233,6 +235,10 @@ def cross_comp(iN_, rc, root, fi=1):  # rc: redundancy+olp; (cross-comp, exempla
             if Nt:
                 if val_(Nt.Et, (len(Nt.N_)-1)*Lw, rc+loop_w, _Et=Et) > 0:
                     L_ = cross_comp(Nt.N_, rc, root=Nt)  # agg+ in top Nt
+                    for N in Nt.N_:
+                        sub_Nt = cluster_N_(N.N_, rc, fi,rng, _Nt=[])
+                        if sub_Nt: N.N_ = sub_Nt.N_
+
             elif fC:  # Nt = Ct
                 Nt = CN(N_=E_,L=cL_,Et=eEt)
         # dfork
@@ -538,7 +544,7 @@ def cluster_NC_(_C_, rc, _Nt):  # cluster centroids if pairwise Et + overlap Et
             for _C, Lt in zip(C.rim.N_,C.rim.L_):
                 G.L_+= [Lt[0]]
                 if _C.fin and _C.root is not G:
-                    add_N(G,_C.root, fmerge=1)
+                    add_N(G,_C.root, fmerge=1)  # we may merge G and _C.root here, where their rim is not empty?
                 else: add_N(G,_C); _C.fin=1
             G_ += [G]
         Gt = G_,L_,Et
