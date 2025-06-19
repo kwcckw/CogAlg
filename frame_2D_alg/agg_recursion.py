@@ -151,6 +151,7 @@ def cluster_edge(edge, frame, lev, derlay):  # non-recursive comp_PPm, comp_PPd,
     def comp_PP_(PP_):
         N_,L_,mEt,dEt = [],[],np.zeros(3),np.zeros(3)
 
+        for PP in PP_: PP.rim = CN()  # init rim
         for _G, G in combinations(PP_, r=2):
             dy,dx = np.subtract(_G.yx,G.yx); dist = np.hypot(dy,dx)
             if dist - (G.span+_G.span) < ave_dist / 10:  # very short here
@@ -171,7 +172,7 @@ def cluster_edge(edge, frame, lev, derlay):  # non-recursive comp_PPm, comp_PPd,
             else: G_ = []
             if G_: frame.N_ += G_; lev.N_ += PP_; lev.Et += Et
             else:  frame.N_ += PP_ # PPm_
-        lev.L_+= L_; lev.rim.Et = mEt+dEt  # links between PPms
+        lev.L_+= L_; lev.rim = CN(); lev.rim.Et = mEt+dEt  # links between PPms
         for l in L_:
             derlay[0].add_lay(l.derH[0][0]); frame.baseT+=l.baseT; frame.derTT+=l.derTT; frame.Et += l.Et
         if val_(dEt, (len(L_)-1)*Lw, 2+clust_w, fi=0) > 0:
@@ -245,7 +246,10 @@ def cross_comp(iN_, rc, root, fi=1):  # rc: redundancy+olp; (cross-comp, exempla
                 if LL_: append_dH(derH, sum_H_([L.derH for L in LL_], root))  # optional dfork
             else:  # lower res
                 Lt = cluster_N_(L_, rc+clust_w*2, fi=0, fL=1)
-                if Lt: root.rim.Et += Lt.Et; root.lH += [Lt] + Lt.H  # link graphs, flatten H if recursive?
+                if Lt: 
+                    # Do we really need to accumulate rim.Et here? We are not gonna pack rim.N_ or L_ too
+                    if isinstance(root.rim, list): root.rim = CN()
+                    root.rim.Et += Lt.Et; root.lH += [Lt] + Lt.H  # link graphs, flatten H if recursive?
         append_dH(root.derH, derH)
         if Nt:
             # feedback:
@@ -262,6 +266,7 @@ def comp_node_(_N_, rc):  # rng+ forms layer of rim and extH per N?
     for n in _N_: n.compared_ = []
     N__,L_,ET = [],[],np.zeros(3)  # range banded if frng, default rng=1
     rng, olp_ = 1,[]
+    for N in _N_: N.rim = CN()
     while True:  # _vM
         Gp_ = []  # [G pair + co-positionals], for top-nested Ns, unless cross-nesting comp:
         for _G, G in combinations(_N_, r=2):
@@ -456,14 +461,15 @@ def get_exemplars(root, N_, rc, fi):  # get sparse nodes: non-maximum suppressio
         else:
             break  # the rest of N_ is weaker
     V = val_(Et, (len(exemplars)-1)*Lw, rc+clust_w)
+    N_ = exemplars; L_ = []; fC = 0  # L_ may be filled in cluster_NC_
     if V > 0:
-        N_,L_ = exemplars,[]; fC=0  # L_ may be filled in cluster_NC_
         if fi and V > ave*clust_w:  # high global match, low decay
             for n in root.N_: n.C_, n.et_, n._C_ = [], [], []
             Ct = cluster_C_(root, exemplars, rc+clust_w)  # sub-cluster by mutual similarity,
             if Ct:  # high local cohesion in divisive clustering
                 N_, L_, Et = Ct; fC=1
         return  N_, L_, Et, fC  # C_ if fC, skip rng+ and agg+
+    return  N_,L_,Et, fC  # we still need to return N_ for cluster_N_?
 
 def cluster_C_(root, E_, rc):  # form centroids from exemplar _N_, drifting / competing via rims of new member nodes
 
@@ -533,7 +539,8 @@ def cluster_NC_(_C_, rc, _Nt):  # cluster centroids if pairwise Et + overlap Et
         G_ = []
         for C in C_:
             if C.fin: continue
-            G = copy_(C,init=1); C.fin = 1
+            # G.rim is copied from C, so it may not be empty
+            G = copy_(C,init=1); C.fin = 1  # when init =1, C.root is updated to G here
             for _C, Lt in zip(C.rim.N_,C.rim.L_):
                 G.L_+= [Lt[0]]
                 if _C.fin and _C.root is not G:
@@ -591,7 +598,8 @@ def cluster_N_(N_, rc, fi, rng=1, fL=0, root=None, _Nt=[]):  # connectivity clus
                             node_+= [_R]; Et +=_R.Et; olp += _R.olp; _R.fin = 1; _N.fin = 1
         node_ = list(set(node_))
         nrc = rc + olp  # updated
-        _Et = root.Et if (not fi and root) else None  # or contour comb_alt_(node_,rc).Et: form alt_ here?
+        # _Et can't be None?
+        _Et = root.Et if (not fi and root) else np.zeros(3)  # or contour comb_alt_(node_,rc).Et: form alt_ here?
         if val_(Et, (len(node_)-1)*Lw, nrc, _Et, fi=fi) > 0:
             G_ += [sum2graph(root, node_, link_, llink_, Et, olp, rng, fi)]
     if G_:
@@ -736,10 +744,12 @@ def sum_N_(node_, root_G=None, root=None):  # form cluster G
     G.L_ = list(set(G.L_))
     return G
 
-def add_N(N,n, fmerge=0):
+def add_N(N,n, fmerge=0, frim=0):
 
     if fmerge:
-        for node in n.N_: node.root=N; N.N_ += [node]
+        for node in n.N_: 
+            if not frim: node.root=N
+            N.N_ += [node]
     else: n.root=N; N.N_ += [n]
     rn = n.Et[2] / N.Et[2]
     N.Et += n.Et * rn
@@ -752,7 +762,7 @@ def add_N(N,n, fmerge=0):
     # add norm by rn:
     if n.H: add_NH(N.H, n.H, root=N)
     if n.lH: add_NH(N.lH, n.lH, root=N)
-    if n.rim: add_N(N.rim, n.rim)
+    if n.rim: add_N(N.rim, n.rim, fmerge=1, frim=1)
     if n.alt: N.alt = add_N(N.alt if N.alt else CN(), n.alt)
     if n.derH: add_H(N.derH,n.derH, root=N)
     for Par,par in zip((N.angle, N.baseT, N.derTT), (n.angle, n.baseT, n.derTT)):
