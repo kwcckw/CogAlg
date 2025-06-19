@@ -86,18 +86,16 @@ class CLay(CBase):  # layer of derivation hierarchy, subset of CG
         if root: root.Et += Et
         return CLay(Et=Et, olp=(_lay.olp+lay.olp*rn)/2, node_=node_, link_=link_, derTT=derTT)
 
-def copy_(N, root=None, init=0, frim=1, falt=1):
+def copy_(N, root=None, init=0):
 
     C = CN(root=root)
-    C.N_,C.L_,C.H, N.root = ([N],[],[],C) if init else (list(N.N_),list(N.L_),list(N.H), root)
-    C.rim = copy_(N.rim or CN(), frim=0) if frim else []   # we need to prevent the next copy_ run copy_ again
-    if falt: C.alt = copy_(N.alt or CN(), falt=0, frim=0)  # same with alt, it creates alts endlessly if we don't use the flag
+    C.N_,C.L_,C.H,C.lH, N.root = ([N],[],[],[],C) if init else (list(N.N_),list(N.L_),list(N.H),list(N.lH), root)
+    if N.rim: C.rim = copy_(N.rim)
+    if N.alt: C.alt = copy_(N.alt)
     C.derH  = [[fork.copy_() if fork else [] for fork in lay] for lay in N.derH]
     C.derTT = deepcopy(N.derTT)
-    for attr in ['lH', 'Et', 'baseT', 'yx', 'box', 'angle', 'alt']:
-        setattr(C, attr, copy(getattr(N, attr)))
-    for attr in ['olp', 'rng', 'span', 'fin', 'fi']:
-        setattr(C, attr, getattr(N, attr))
+    for attr in ['Et','baseT','yx','box','angle']: setattr(C, attr, copy(getattr(N, attr)))
+    for attr in ['fi','olp','rng','fin', 'span']:  setattr(C, attr, getattr(N, attr))
     return C
 
 ave, avd, arn, aI, aveB, aveR, Lw, int_w, loop_w, clust_w = 10, 10, 1.2, 100, 100, 3, 5, 2, 5, 10  # value filters + weights
@@ -219,30 +217,24 @@ def cross_comp(iN_, rc, root, fi=1):  # rc: redundancy+olp; (cross-comp, exempla
         # mfork:
         if val_(Et, (len(n__)-1)*Lw, rc+loop_w) > 0:
             if fi:
-                for n in iN_: # we need this init before cluster_C_? Because N__ may not contain all iN_. We discussed this before, rim and N__ are eval differently now
-                    n.C_, n.et_, n._C_ = [], [], []
-                E_,cL_,eEt, fC = get_exemplars(root, n__, rc+loop_w, fi)  # focal nodes
-                if fC:  # E_ is replaced by C_
+                E_,cL_,eEt, fC = get_exemplars(root, n__, rc+loop_w, fi)  # focal nodes, ~ point cloud
+                if fC:  # E_ = C_, no cluster_N_, or refine exemplars by centroid M?
                     if cL_: L_ = cL_  # not empty if from cluster_NC_
                 else:
                     if E_ and val_(eEt, (len(E_)-1)*Lw, rc+clust_w) > 0:
                         for rng, N_ in enumerate(N__,start=1):  # bottom-up rng incr
                             rng_E_ = [n for n in N_ if n.sel]; rc+=clust_w*rng  # cluster via exemplars
-                            if rng_E_ and val_(np.sum([n.Et for n in rng_E_],axis=0), (len(rng_E_)-1)*Lw, rc) > 0:
+                            if rng_E_ and val_(np.sum([n.Et for n in rng_E_], axis=0), (len(rng_E_)-1)*Lw, rc) > 0:
                                 Nt = cluster_N_(rng_E_, rc, fi,rng, _Nt=Nt)  # top G_
             else:
                 Nt = cluster_N_(n__, rc+clust_w, fi, rng=1, _Nt=Nt)  # cluster L_/ nodet
             if Nt:
                 if val_(Nt.Et, (len(Nt.N_)-1)*Lw, rc+loop_w, _Et=Et) > 0:
-                    L_ = cross_comp(Nt.N_, rc, root=Nt)  # agg+ in top Nt
-                    for N in Nt.N_:
-                        sub_Nt = cluster_N_(N.N_, rc, fi,rng, _Nt=[])
-                        if sub_Nt: N.N_ = sub_Nt.N_
-
+                    L_ = cross_comp(Nt.N_, rc, root=Nt)  # top Nt agg+
             elif fC:  # Nt = Ct
-                Nt = CN(N_=E_,L=cL_,Et=eEt)
+                Nt = CN(N_=E_,L=cL_,Et=eEt)  # sum N_,L_ attrs?
         # dfork
-        root.L_ = L_  # top N_ or C_ links
+        root.L_ = L_  # links between top Ns | Cs
         derH = sum_H_([L.derH for L in L_], root)
         root.angle = np.sum([L.angle for L in L_], axis=0)
         dval = val_(Et, (len(L_)-1)*Lw, rc+3+loop_w, fi=0)
@@ -303,7 +295,6 @@ def comp_node_(_N_, rc):  # rng+ forms layer of rim and extH per N?
 
 def comp_link_(iL_, rc):  # comp CLs via directional node-mediated link tracing: der+'rng+ in root.link_ rim_t node rims
 
-    fi = iL_[0].N_[0].fi
     for L in iL_:  # init mL_t: nodet-mediated Ls:
         for rev, N, mL_ in zip((0, 1), L.N_, L.mL_t):  # L.mL_t is empty
             for _L, _rev in get_rim(N):
@@ -466,11 +457,11 @@ def get_exemplars(root, N_, rc, fi):  # get sparse nodes: non-maximum suppressio
             break  # the rest of N_ is weaker
     V = val_(Et, (len(exemplars)-1)*Lw, rc+clust_w)
     if V > 0:
-        N_,L_ = exemplars,[]; fC=0  # L_ is empty unless fC?
-        if fi and V > ave*clust_w:  # high global match: low decay?
-            Ct = cluster_C_(root, exemplars, rc+clust_w)  # refine by mutual similarity
-            if Ct:
-                for n in root.N_: n.C_, n.et_, n._C_ = [], [], []
+        N_,L_ = exemplars,[]; fC=0  # L_ may be filled in cluster_NC_
+        if fi and V > ave*clust_w:  # high global match, low decay
+            for n in root.N_: n.C_, n.et_, n._C_ = [], [], []
+            Ct = cluster_C_(root, exemplars, rc+clust_w)  # sub-cluster by mutual similarity,
+            if Ct:  # high local cohesion in divisive clustering
                 N_, L_, Et = Ct; fC=1
         return  N_, L_, Et, fC  # C_ if fC, skip rng+ and agg+
 
@@ -513,11 +504,13 @@ def cluster_C_(root, E_, rc):  # form centroids from exemplar _N_, drifting / co
         if val_(DEt, mw=(len(C_)-1)*Lw, aw=(loop_w+clust_w+rc)) <= 0:
             break  # converged
         for n in root.N_:
-            n._C_ = n.C_; n.C_ = []
-            # new n.C_s
-    if val_(ET, mw=(len(C_)-1)*Lw, aw=rc+loop_w) > 0:
-
-        return cluster_NC_(C_, rc+clust_w, _Nt = (C_,[],ET))
+            n._C_ = n.C_; n.C_ = []  # new n.C_s
+    V = val_(ET, mw=(len(C_)-1)*Lw, aw=rc+loop_w)
+    if V > 0:
+        Nt = (C_,[],ET)  # empty L_
+        if V > ave * clust_w:  # add filter
+            Nt = cluster_NC_(C_, rc+clust_w, Nt)
+        return Nt
 
 def cluster_NC_(_C_, rc, _Nt):  # cluster centroids if pairwise Et + overlap Et
 
@@ -544,7 +537,7 @@ def cluster_NC_(_C_, rc, _Nt):  # cluster centroids if pairwise Et + overlap Et
             for _C, Lt in zip(C.rim.N_,C.rim.L_):
                 G.L_+= [Lt[0]]
                 if _C.fin and _C.root is not G:
-                    add_N(G,_C.root, fmerge=1)  # we may merge G and _C.root here, where their rim is not empty?
+                    add_N(G,_C.root, fmerge=1)
                 else: add_N(G,_C); _C.fin=1
             G_ += [G]
         Gt = G_,L_,Et
