@@ -247,7 +247,7 @@ def cross_comp(iN_, rc, root, fi=1):  # rc: redundancy+olp; (cross-comp, exempla
                 LL_ = cross_comp(L_, rc+loop_w*2, root, fi=0)  # comp_link_, select exemplars, centroids?
                 if LL_: append_dH(derH, sum_H_([L.derH for L in LL_], root))  # optional dfork
             else:  # lower res
-                Lt = cluster_N_(L_, rc+clust_w*2, fi=0, fL=1)
+                Lt = cluster_N_(L_, rc+clust_w*2, fi=0, fL=1)  # no parsing root here?
                 if Lt: root.Et += Lt.Et; root.lH += [Lt] + Lt.H  # link graphs, flatten H if recursive?
         append_dH(root.derH, derH)
         if Nt:
@@ -446,12 +446,13 @@ def rl_olp(N, L_, fR=0):  # relative N.rim or R.link_ olp eval for clustering
 
 def get_rim(N): return N.rim.L_ if N.fi else N.rim.L_[0] + N.rim.L_[1]
 
-def get_exemplars(root, N_, rc, fi):  # get sparse nodes by multi-layer non-maximum suppression
+# input should be iN_ to prevent overwritten by N_
+def get_exemplars(root, iN_, rc, fi):  # get sparse nodes by multi-layer non-maximum suppression
 
     N_,L_,Et = [],[],np.zeros(3)  # L_ may be filled in cluster_NC_
     _N_ = set()  # stronger-N inhibition zones
     fC = 0
-    for rdn, N in enumerate(sorted(N_, key=lambda n: n.rim.Et[0]/n.rim.Et[2], reverse=True), start=1):
+    for rdn, N in enumerate(sorted(iN_, key=lambda n: n.rim.Et[0]/n.rim.Et[2], reverse=True), start=1):
         # ave *= overlap by stronger-N inhibition zones:
         if val_(N.rim.Et, aw = rc + rdn + loop_w + rn_olp(N, list(_N_), C=0)) > 0:
             Et += N.rim.Et; _N_.update(N.rim.N_)
@@ -473,6 +474,7 @@ def cluster_C_(root, E_, rc):  # form centroids from exemplar _N_, drifting / co
     _C_ = []
     for E in E_:
         C = copy_(E, init=1)  # init centroid
+        C.rim = CN()    # special case for C here? Where their rim should be CN
         C.rim.N_ = list({_n for n in E.rim.N_ for _n in n.rim.N_})  # members and surround for comp to _N_ mean
         _C_ += [C]
     while True:
@@ -480,8 +482,9 @@ def cluster_C_(root, E_, rc):  # form centroids from exemplar _N_, drifting / co
         for _C in sorted(_C_, key=lambda n: n.rim.Et[0]/n.rim.Et[2], reverse=True):
             if val_(_C.Et, clust_w+rc) > 0:
                 # mean cluster members:
-                C = sum_N_(copy(_C.N_), root=root)
+                C = sum_N_(copy(_C.N_), root=root); C.rim = CN()  # we need rim in C here?
                 C.N_ = list(set([_n for n in _C.rim.N_ for _n in n.rim.N_]))
+                # C won't have alt now?
                 if C.alt and isinstance(C.alt, list): C.alt = sum_N_(C.alt)  # internal to C, sum before cluster_NC_?
                 k = len(C.N_)
                 for n in (C, C.alt):
@@ -500,7 +503,7 @@ def cluster_C_(root, E_, rc):  # form centroids from exemplar _N_, drifting / co
                     elif C in n._C_: dEt += et
                 C.Et = Et; C.N_ = list(set(_N_)); C.rim.N_ = list(set(_N__))  # clear rim and alt before cluster_NC_?
                 # add olp per N with stronger Cs,
-                C.olp += rn_olp(_N, inhib_=_N_, C=1)
+                C.olp += rn_olp(_C, inhib_=_N_, C=1)  # should be _C?
                 if val_(C.Et, aw=clust_w+rc+C.olp) > 0:
                     C_ += [C]; DEt += dEt; ET += Et
                 else: ET += _C.rim.Et
@@ -630,6 +633,7 @@ def sum2graph(root, node_,link_,llink_, Et, olp, rng, fi, fC=0):  # sum node and
         graph.Et = np.array([M,D,Et[2]])
     if not fi:  # add mfork as link.node_(CL).root dfork, 1st layer, higher layers are added in cross_comp
         for L in link_:  # LL from comp_link_
+            # if n doesn't form graph,their n.root is pointing fg, and we need to skip that. How to differentiate between fg and graph here?
             LR_ = set([n.root for n in L.N_ if isinstance(n.root,CN)])  # nodet, skip frame, empty roots
             if LR_:
                 dfork = sum_H(L.derH)  # combine lL.derH into single CLay
