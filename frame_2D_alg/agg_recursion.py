@@ -92,7 +92,7 @@ def copy_(N, root=None, init=0):
     if init:  # init G with N
         C.N_,C.L_,C.H,C.lH, N.root = ([N],[],[],[],C)
     else:
-        C.N_,C.L_,C.H,C.lH, N.root = (list(N.N_),list(N.L_),list(N.H),list(N.lH), root)
+        C.N_,C.L_,C.H,C.lH, N.root = (list(N.N_),list(N.L_),list(N.H),list(N.lH), root if root else N.root)
         if N.rim: C.rim = copy_(N.rim)
         if N.alt: C.alt = copy_(N.alt)
     C.derH  = [[fork.copy_() if fork else [] for fork in lay] for lay in N.derH]
@@ -480,6 +480,7 @@ def cluster_C_(root, E_, rc):  # form centroids from exemplar _N_, drifting / co
 
     _C_ = []
     for E in E_:
+        # this copy_ assign None as root to E, so root assignment should be conditional and valid only if there's input root?
         C = copy_(E); C.root=root; C.N_=[E]  # init centroid
         C._N_ = list({_n for n in E.rim.N_ for _n in n.rim.N_})  # members + surround for comp to N_ mean
         _C_ += [C]
@@ -822,9 +823,11 @@ def val_H(H):
 
 def comp_proj_derH(_N,N, ddH, rn, link, angle, span, dec):  # comp combined int proj to actual ddH, add comp x proj_derHs?
 
+    # if angle is zeros?
     _cos_da = angle @ (_N.angle/ (np.hypot(*angle) * np.hypot(*_N.angle))); _rdist = span/_N.span
     cos_da = angle @ (N.angle / (np.hypot(*angle) * np.hypot(*N.angle)));    rdist = span/ N.span
-    dddH = comp_H( add_H( proj_dH(_N.derH[1:], _cos_da*_rdist, _rdist*dec),  # combine proj derHs
+    # we only need dddH and skip derTT and Et? 
+    dddH, _, _ = comp_H( add_H( proj_dH(_N.derH[1:], _cos_da*_rdist, _rdist*dec),  # combine proj derHs
                           proj_dH( N.derH[1:], cos_da* rdist, rdist*dec),
                           link), ddH[:-1], rn, link)
     append_dH(ddH, dddH)  # merged mfork += [merged dfork], keep nesting, H[0]s are aligned above?
@@ -950,7 +953,7 @@ def agg_frame(floc, image, iY, iX, rV=1, rv_t=[], fproj=0):  # search foci withi
                     if val_(pFg.Et, mw=(len(pFg.N_)-1)*Lw, aw=pFg.olp+clust_w*20):
                         project_focus(PV__, y,x, Fg)  # += proj val in PV__
             # no target proj
-            add_N(frame, Fg, fmerge=1)
+            add_N(frame, Fg, fmerge=1)  # Fg may have alt in list form, apply comb_alt_ to Fg first?
             aw = clust_w * 20 * frame.Et[2] * frame.olp
 
     node_ = frame.N_  # merged Fg.N_s
