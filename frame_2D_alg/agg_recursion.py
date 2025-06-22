@@ -267,6 +267,8 @@ def cross_comp(iN_, rc, root, fi=1):  # rc: redundancy+olp; (cross-comp, exempla
             add_NH(root.H, Nt.H+[lev], root)  # same depth?
             if Nt.H:  # lower levs: derH,H if recursion
                 root.N_ = Nt.H.pop().N_  # top lev nodes
+        elif root.alt:
+            comb_alt_([root], rc)  # if Nt is empty, node.root in dfork is still pointing to root and root.alt is updated instead
 
     return L_  # may be LL_ or agg+ L_
 
@@ -323,7 +325,8 @@ def comp_link_(iL_, rc):  # comp CLs via directional node-mediated link tracing:
                 for _L, rev in mL_:  # rev is relative to L
                     if _L in L.compared_: continue
                     dy,dx = np.subtract(_L.yx,L.yx)
-                    Link = comp_N(_L,L, ave*rc, fi=0, angle=[dy,dx], span=np.hypot(dy,dx), dir = -1 if rev else 1)  # d = -d if L is reversed relative to _L
+                    # np.array(angle) for dot product
+                    Link = comp_N(_L,L, ave*rc, fi=0, angle=np.array([dy,dx]), span=np.hypot(dy,dx), dir = -1 if rev else 1)  # d = -d if L is reversed relative to _L
                     Link.med = med
                     LL_ += [Link]; Et += Link.Et  # include -ves, link order: nodet < L < rim, mN.rim || L
                     for l,_l in zip((_L,L),(L,_L)):
@@ -477,7 +480,7 @@ def cluster_C_(root, E_, rc):  # form centroids from exemplar _N_, drifting / co
 
     _C_ = []
     for E in E_:
-        C = copy_(E,root); C.N_=[E]  # init centroid
+        C = copy_(E,root); C.N_=[E]  # init centroid (root is always = E.root here)
         C._N_ = list({_n for n in E.rim.N_ for _n in n.rim.N_})  # members + surround for comp to N_ mean
         _C_ += [C]
     while True:
@@ -512,7 +515,8 @@ def cluster_C_(root, E_, rc):  # form centroids from exemplar _N_, drifting / co
         else: break  # converged
     V = val_(ET, aw=rc+loop_w)
     if V > 0:
-        Nt = (C_,[],ET)  # empty L_
+        # When C_ is empty, ET is actually summed from _C.rim, so we need to form Nt with _C_ instead?
+        Nt = (C_ if C_ else _C_,[],ET)  # empty L_
         if V * ((len(C_)-1)*Lw) > ave*clust_w:
             Nt = cluster_NC_(C_, rc+clust_w, Nt)
         return Nt
@@ -700,7 +704,7 @@ def comp_H(H,h, rn, root, DerTT=None, ET=None):  # one-fork derH if not fi, else
                     if dfork: dlay += [dfork]; derTT = dfork.derTT; Et += dfork.Et
                 else: dlay += [[]]
             derH += [dlay]
-    if DerTT: DerTT += derTT; ET += Et
+    if np.any(DerTT): DerTT += derTT; ET += Et  # np.any to check array
     return derH
 
 def sum_H(H, Lay=CLay()):
