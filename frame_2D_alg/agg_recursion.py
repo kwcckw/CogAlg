@@ -475,10 +475,13 @@ def cluster_C_(root, E_, rc):  # form centroids from exemplar _N_, drifting / co
         C = copy_(E,root); C.N_=[E]  # init centroid
         C._N_ = list({_n for n in E.rim.N_ for _n in n.rim.N_})  # core members + surround for comp to N_ mean
         _C_ += [C]
+
+    init = 1
     while True:
         C_, ET, Olp, Dvo = [],np.zeros(3),0,np.zeros(2)  # per _C_
         for _C in sorted(_C_, key=lambda n: n.rim.Et[0]/n.rim.Et[2], reverse=True):
-            if val_(_C.Et, (len(_C.N_)-1)*Lw, clust_w+rc) > 0:
+            if val_(_C.Et, (len(_C.N_)-1)*Lw, clust_w+rc) > 0 or init:  # C.N_ always have single E in the first loop, so first loop msut be true?
+                init = 0
                 # get mean cluster:
                 C = sum_N_(_C.N_[1:], root_G=copy_(_C.N_[0]), root=root)  # clear rim,alt before cluster_NC_?
                 norm_(C, len(C.N_))
@@ -648,7 +651,7 @@ def sum2graph(root, node_,link_,llink_, Et, olp, rng, fi, fC=0):  # sum node and
                 mG = n.root
                 if isinstance(mG, CN) and mG not in graph.alt:  # root is not frame
                     mG.alt += [graph]  # cross-comp|sum complete alt before next agg+ cross-comp, multi-layered?
-                    graph.alt += [mG]  # not sure
+                    # graph.alt += [mG]  # not sure  (i think this should be skipped, else root is adding back itself later when R is root)
     return graph
 
 def append_dH(H, dH):  # merged mfork += [merged dfork], keep nesting
@@ -687,7 +690,8 @@ def comb_alt_(G_, rc=1): # combine contour G.altG_ into altG (node_ defined by r
             if isinstance(G.alt, list):
                 G.alt = sum_N_(G.alt,root=G)
                 if val_(G.alt.Et, aw=G.olp, _Et=G.Et, fi=0):  # alt D * G rM
-                    cross_comp(G.alt.N_, rc,fi=1, root=G.alt)  # adds nesting
+                    if not G.alt.N_[0].fi: L2N(G.alt.N_)
+                    cross_comp(G.alt.N_, rc,fi=G.alt.N_[0].fi, root=G.alt)  # adds nesting (this fi should follow G.alt.N_'s fi?)
         elif G.H:  # not PP, sum dlinks:
             dL_ = list(set([L for g in G.N_ for L,_ in get_rim(g) if val_(L.Et, aw=G.olp, _Et=G.Et, fi=0) > 0]))
             if dL_ and val_(np.sum([l.Et for l in dL_],axis=0), aw=10+G.olp, _Et=G.Et, fi=0) > 0:
@@ -735,15 +739,15 @@ def add_H(H, h, root, rev=0):  # add fork derHs
 
 def sum_N_(node_, root_G=None, root=None):  # form cluster G
 
-    fi = node_[0].fi
-    if root_G is not None: G = root_G; G.L_ = []
+    if root_G is not None: G = root_G; G.L_ = []; fi = root_G.fi
     else:
+        fi = node_[0].fi
         G = copy_(node_[0], init=1, root=root); G.N_=node_; G.fi=fi
     for n in node_[1:]:
         add_N(G, n)
-        G.L_ += n.rim.L_ if fi else n.rim.N_  # rim else nodet
+        if n.rim: G.L_ += n.rim.L_ if fi else n.rim.N_  # rim else nodet (rim is empty for graph, when we sum Ns to root, so we should ksip it)
     if G.alt and isinstance(G.alt, list): G.alt = sum_N_(G.alt)
-    G.olp /= len(node_)
+    G.olp /= (len(node_)+1)  # the first node might be skipped to form root_G?
     G.L_ = list(set(G.L_))
     return G
 
