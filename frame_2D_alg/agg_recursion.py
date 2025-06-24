@@ -425,6 +425,7 @@ def comp_N(_N,N, ave, fi=1, angle=None, span=None, dir=1, fdeep=0, fproj=0, rng=
         for rev, node, _node in zip((0,1),(N,_N),(_N,N)):  # reverse Link dir in _N.rimt
             node.rim.Et += Et  # or convert in cluster_N_?
             node.rim.N_ += [_node]
+            node.rim.baseT += _node.baseT  # not sure
             if fi: node.rim.L_ += [(Link,rev)]
             else: node.rim.L_[1-rev] += [(Link,rev)]  # rimt opposite to _N,N dir
             add_H(node.rim.derH, Link.derH, root=node, rev=rev)
@@ -465,7 +466,7 @@ def cluster_C_(root, E_, rc):  # form centroids from exemplar _N_, drifting / co
 
     def comp_C(C, n):
         _,et,_ = base_comp(C, n)
-        if C.rim and n.rim: _,_et,_= base_comp(C.rim,n.rim); et +=_et
+        if C.rim and n.rim: _,_et,_= base_comp(C.rim,n.rim); et +=_et  # rim's baseT is empty, so we need to accumulate rim.baseT for comparison?
         if C.alt and n.alt: _,_et,_= base_comp(C.alt,n.alt); et +=_et
         return et
     _C_ = []
@@ -479,6 +480,8 @@ def cluster_C_(root, E_, rc):  # form centroids from exemplar _N_, drifting / co
             if val_(_C.Et, (len(_C._N_)-1)*Lw, clust_w+rc) > 0:
                 # get mean cluster:
                 C = sum_N_(_C.N_, root=root)  # merge rim,alt before cluster_NC_
+                # C is a special case where we need to merge rim with init =1?
+                C.rim = sum_N_([N.rim for N in C.N_])
                 _N_,_N__, Et,O,dvo = [],[], np.zeros(3),0,np.zeros(2)  # per C
                 for n in _C._N_:  # core + surround
                     if C in n.C_: continue
