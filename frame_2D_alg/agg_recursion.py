@@ -223,49 +223,61 @@ Feedback coords to bottom level or prior-level in parallel pipelines, filter upd
 surprise: comp projected node ders x external link ders, conflict: cross-node comp proj -> feedback 
 cluster params in derH? '''
 
-def cross_comp(root, rc):  # rc: redundancy+olp; (cross-comp, exemplar selection, clustering), recursion
+def cross_comp(N_, root, rc, fi=1):  # rc: redundancy+olp; (cross-comp, exemplar selection, clustering), recursion
 
-    N__, L_, Et = comp_node_(root.N_, rc); Nt, n__ = [], []
-    if N__:
-        for n in {N for N_ in N__ for N in N_}: n__ += [n]; n.sel = 0  # for cluster_N_
-        # mfork:
-        if val_(Et, (len(n__)-1)*Lw, rc+loop_w) > 0:
-            E_, eEt = get_exemplars(root, n__, rc+loop_w, fi=1)  # focal nodes, ~ point cloud
-            if isinstance(E_,CN):
-                root = E_; Et = eEt  # Ct
-            elif E_ and val_(eEt, (len(E_)-1)*Lw, rc+clust_w) > 0:
-                for rng, N_ in enumerate(N__, start=1):  # bottom-up rng incr
-                    rng_E_ = [n for n in N_ if n.sel]    # cluster via exemplars
-                    if rng_E_ and val_(np.sum([n.Et for n in rng_E_], axis=0), (len(rng_E_)-1)*Lw, rc) > 0:
-                         Nt = cluster_N_(rng_E_, rc, 1, rng)  # top-rng G_
-                if Nt:
-                    if val_(Nt.Et, (len(Nt.N_)-1)*Lw, rc+loop_w, _Et=Et) > 0:
-                        root, Et = cross_comp(Nt, rc+clust_w)  # agg+
-                    else: root = Nt
-        # post agg+:
-        L_ = root.L_
-        dval = val_(Et, (len(L_)-1)*Lw, rc+3+loop_w, fi=0)  # top Et
-        if dval > 0:
-            Lt = []; L2N(L_)
-            root.angle = np.sum([L.angle for L in L_], axis=0)  # per top L_
-            append_dH(root.derH, sum_H_([L.derH for L in L_], root))
-            # parallel cluster and comp_link_|cross_comp?
-            if dval > ave:
-                L_,LL_,et = comp_link_(L_,rc)  # dfork: recursive derivation -> lH/nLev, not rng-banded?
-                if L_:  # selective?
-                    append_dH(root.derH, sum_H_([L.derH for L in LL_], root))  # ddfork
-                    if val_(et, (len(L_)-1)*Lw, rc+loop_w) > 0:
-                        Lt = cluster_N_(L_, rc+clust_w, fi=0, rng=1)
-                        if Lt and val_(Lt.Et, (len(Lt.N_)-1)*Lw, rc+loop_w, _Et=et) > 0:
-                            Lt,_ = cross_comp(Lt, rc)
-                            # no LLt eval?
-            else:  # lower-res repr
-                Lt = cluster_N_(L_, rc+clust_w*2, fi=0, fL=1, root=sum_N_(L_,root))
-            if Lt:
-                root.Et += Lt.Et  # compb forks
-                root.lH += [Lt] + Lt.H  # L_ graphs, flat H if recursive?
-            if root.alt and isinstance(root.alt,list):
-                root.alt = sum_N_(root.alt)
+    Nt = []
+    if fi:  # mfork
+        N__, L_, Et = comp_node_(N_, rc)
+        n__ = []
+        if N__:
+            for n in {N for N_ in N__ for N in N_}: n__ += [n]; n.sel = 0  # for cluster_N_
+            # mfork:
+            if val_(Et, (len(n__)-1)*Lw, rc+loop_w) > 0:
+                E_, eEt = get_exemplars(root, n__, rc+loop_w, fi=1)  # focal nodes, ~ point cloud
+                if isinstance(E_,CN):
+                    root = E_; Et = eEt  # Ct
+                elif E_ and val_(eEt, (len(E_)-1)*Lw, rc+clust_w) > 0:
+                    for rng, N_ in enumerate(N__, start=1):  # bottom-up rng incr
+                        rng_E_ = [n for n in N_ if n.sel]    # cluster via exemplars
+                        if rng_E_ and val_(np.sum([n.Et for n in rng_E_], axis=0), (len(rng_E_)-1)*Lw, rc) > 0:
+                             Nt = cluster_N_(rng_E_, rc, 1, rng)  # top-rng G_
+    else:  # dfork
+        N_, L_, Et = comp_link_(N_,rc)
+        if N_:
+            Nt = cluster_N_(N_, rc+clust_w, fi, rng=1)  # cluster L_/ nodet
+
+    if Nt:
+        if val_(Nt.Et, (len(Nt.N_)-1)*Lw, rc+loop_w, _Et=Et) > 0:
+            for N in Nt.N_: N.fi = 1  # so N.fi must be 1 here for comp_node in cross_comp?
+            root, Et = cross_comp(Nt.N_, Nt, rc+clust_w)  # agg+
+        else: root = Nt
+
+    # post agg+:
+    dval = val_(Et, (len(L_)-1)*Lw, rc+3+loop_w, fi=0)  # top Et
+    if dval > 0:
+        Lt = []; L2N(L_)
+        root.angle = np.sum([L.angle for L in L_], axis=0)  # per top L_
+        append_dH(root.derH, sum_H_([L.derH for L in L_], root))
+        # parallel cluster and comp_link_|cross_comp?
+        if dval > ave:
+            Lt, Et = cross_comp(L_, root, rc, fi=0)  # dfork: recursive derivation -> lH/nLev, not rng-banded?
+            # with cross_comp above, below can be skipped?
+            '''
+            if L_:  # selective?
+                append_dH(root.derH, sum_H_([L.derH for L in LL_], root))  # ddfork
+                if val_(et, (len(L_)-1)*Lw, rc+loop_w) > 0:
+                    Lt = cluster_N_(L_, rc+clust_w, fi=0, rng=1)
+                    if Lt and val_(Lt.Et, (len(Lt.N_)-1)*Lw, rc+loop_w, _Et=et) > 0:
+                        Lt,_ = cross_comp(Lt, rc)
+                        # no LLt eval?
+            '''
+        else:  # lower-res repr
+            Lt = cluster_N_(L_, rc+clust_w*2, fi=0, fL=1, root=sum_N_(L_,root))
+        if Lt:
+            root.Et += Lt.Et  # compb forks
+            root.lH += [Lt] + Lt.H  # L_ graphs, flat H if recursive?
+        if root.alt and isinstance(root.alt,list):
+            root.alt = sum_N_(root.alt)
     # dfork eval Et:
     return root, Et
 
@@ -329,7 +341,7 @@ def comp_link_(iL_, rc):  # comp CLs via directional node-mediated link tracing:
                         l.compared_ += [_l]
                         if l not in L_ and val_(l.rim.Et, aw= rc+med+loop_w) > 0:  # cost+/ rng
                             L_ += [l]  # for med+ and exemplar eval
-        if L_: L__ += [L_]; ET += Et
+        if L_: L__ += L_; ET += Et
         # extend mL_t per last medL:
         if Et[0] > ave * Et[2] * (rc + loop_w + med*med_w):  # project prior-loop value, med adds fixed cost
             _L_, ext_Et = set(), np.zeros(3)
@@ -352,7 +364,7 @@ def comp_link_(iL_, rc):  # comp CLs via directional node-mediated link tracing:
             if ext_Et[0] > ave * ext_Et[2] * (loop_w + med*med_w): med += 1
             else: break
         else: break
-    return L__, LL_, ET
+    return list(set(L__)), LL_, ET
 
 def base_comp(_N, N, dir=1):  # comp Et, Box, baseT, derTT
     """
@@ -714,7 +726,8 @@ def add_H(H, h, root, rev=0, rn=1):  # add fork derHs
 
 def sum_N_(node_, root=None, fC=0):  # form cluster G
 
-    G = copy_(node_[0], root, init = 0 if fC else 1); G.L_=[]  # also clear other params?
+    G = copy_(node_[0], root, init = 0 if fC else 1)
+    if fC: G.L_, G.N_ = [], []  # also clear other params?  I think this is for C only?
     for n in node_[1:]:
         add_N(G,n,fC)
     if G.alt: # list
@@ -935,7 +948,7 @@ def agg_frame(floc, image, iY, iX, rV=1, rv_t=[], fproj=0):  # search foci withi
             if fproj and val_(Fg.Et, mw=(len(Fg.N_)-1)*Lw, aw=Fg.olp+loop_w*20):
                 pFg = project_N_(Fg, np.array([y,x]))
                 if pFg:
-                    cross_comp(pFg.N_, rc=Fg.olp, root=frame)  # skip compared_ in FG cross_comp
+                    cross_comp(pFg.N_, root=frame, rc=Fg.olp)  # skip compared_ in FG cross_comp
                     if val_(pFg.Et, mw=(len(pFg.N_)-1)*Lw, aw=pFg.olp+clust_w*20):
                         project_focus(PV__, y,x, Fg)  # += proj val in PV__
             # no target proj
