@@ -161,7 +161,7 @@ def cluster_edge(edge, frame, lev, derlay):  # non-recursive comp_PPm, comp_PPd,
                 _eN_ = {*eN_}
             if val_(et, mw=(len(node_)-1)*Lw, aw=2+clust_w) > 0:  # rc=2
                 Et += et
-                G_ += [sum2graph(frame, node_,link_,[], et, olp=1, rng=1, fi=1)]  # single-lay link_derH
+                G_ += [sum2graph(frame, node_,link_,[], et, olp=1, rng=1)]  # single-lay link_derH
         return G_, Et
 
     def comp_PP_(PP_):
@@ -225,7 +225,7 @@ sub-centroids instead of divisive clustering? cluster params in derH? '''
 
 def cross_comp(root, rc, fi=1):  # rc: redundancy+olp; (cross-comp, exemplar selection, clustering), recursion
 
-    N__,L_,Et = comp_node_(root.N_,rc) if fi else comp_link_(root.L_,rc)
+    N__,L_,Et = comp_node_(root.N_,rc) if fi else comp_link_(root.N_,rc)
     if N__:
         dval = val_(Et, (len(L_)-1)*Lw, rc+loop_w, fi=0)  # L_ Et
         if dval > 0:
@@ -233,13 +233,15 @@ def cross_comp(root, rc, fi=1):  # rc: redundancy+olp; (cross-comp, exemplar sel
             append_dH(root.derH, sum_H_([L.derH for L in L_], root))
             L2N(L_) # dfork x L_ of root mfork, m-cluster -> mm,md xcomp.:
             if dval > ave:
-                Lt = cross_comp(sum_N_(L_), rc, fi=0)  # recursive dfork-> Lt.H
+                # we have sum_N_(L_) here, so comp_link_ should be using root.N_ too
+                Lt = cross_comp(sum_N_(L_), rc+clust_w, fi=0)  # recursive dfork-> Lt.H (rc should be incremented here?)
             else:  # lower-res
                 Lt = cluster_N_(L_, rc+clust_w, fi=0, rng=1)  # cluster L_/ nodet
             if Lt:
                 root.Et += Lt.Et; root.lH += [Lt] + Lt.H  # L_ graph levels / root
         # m cluster, recursion:
         n__ = []
+        # revert comp_link_'s L__ to nested? We need to un-nest it here anyway?
         for n in {N for N_ in N__ for N in N_}: n__ += [n]; n.sel = 0  # for cluster_N_
         if val_(Et, (len(n__)-1)*Lw, rc+loop_w) > 0:
             E_, eEt = get_exemplars(root, n__, rc+loop_w, fi=1)  # focal nodes: point cloud
@@ -317,7 +319,7 @@ def comp_link_(iL_, rc):  # comp CLs via directional node-mediated link tracing:
                         l.compared_ += [_l]
                         if l not in L_ and val_(l.rim.Et, aw= rc+med+loop_w) > 0:  # cost+/ rng
                             L_ += [l]  # for med+ and exemplar eval
-        if L_: L__ += L_; ET += Et
+        if L_: L__ += [L_]; ET += Et
         # extend mL_t per last medL:
         if Et[0] > ave * Et[2] * (rc + loop_w + med*med_w):  # project prior-loop value, med adds fixed cost
             _L_, ext_Et = set(), np.zeros(3)
@@ -340,7 +342,7 @@ def comp_link_(iL_, rc):  # comp CLs via directional node-mediated link tracing:
             if ext_Et[0] > ave * ext_Et[2] * (loop_w + med*med_w): med += 1
             else: break
         else: break
-    return list(set(L__)), LL_, ET
+    return L__, LL_, ET
 
 def base_comp(_N, N, dir=1):  # comp Et, Box, baseT, derTT
     """
@@ -442,7 +444,7 @@ def get_exemplars(root, iN_, rc, fi):  # get sparse nodes by multi-layer non-max
         if fi and V > ave*clust_w:  # replace exemplars with centroids if high match: low decay, else no divisive clustering?
             for n in root.N_: n.C_,n.vo_, n._C_,n._vo_ = [],[],[],[]
             Ct = cluster_C_(root, N_, rc+clust_w)  # sub-cluster by rim + group similarity, no groups before
-            if Ct: N_ = Ct, Et = Ct.Et
+            if Ct: N_ = Ct.N_; Et = Ct.Et
     return N_, Et
 
 def cluster_C_(root, E_, rc):  # form centroids from exemplar _N_, drifting / competing via rims of new member nodes
@@ -489,8 +491,8 @@ def cluster_C_(root, E_, rc):  # form centroids from exemplar _N_, drifting / co
         # converged, also break if low ET: no expansion?
     V = val_(ET, aw=rc+loop_w + Olp)  # C_ value
     if V > 0:
-        Nt = sum_N_(E_)
-        Nt.Et = ET  # redundant?
+        Nt = sum_N_(E_)  # So why we need to convert it into CH while it will be unpacked later anyway?
+        # Nt.Et = ET  # redundant? Yes, they should be the same
         if V * ((len(C_)-1)*Lw) > ave*clust_w:
             Nt = cluster_NC_(C_, rc+clust_w, Nt)
         return Nt
@@ -515,15 +517,15 @@ def cluster_NC_(_C_, rc, _Nt):  # cluster centroids if pairwise Et + overlap Et
         G_ = []
         for C in C_:
             if C.fin: continue
-            G = copy_(C,init=1); C.fin = 1
+            G = copy_(C); G.N_ = [C]; G.L_ = []; C.fin = 1  # copy_ should have init = 0 here?
             for _C, Lt in zip(C.rim.N_,C.rim.L_):
                 G.L_+= [Lt[0]]
                 if _C.fin and _C.root is not G:
                     add_N(G,_C.root, fmerge=1)
                 else: add_N(G,_C); _C.fin=1
             G_ += [G]
-        Gt = G_,L_,Et
-        if val_(Et, (len(G_)-1)*Lw, rc+1) > 0:  # new len G_, aw
+        Gt = sum_N_(G_); Gt.L_ = L_
+        if val_(Gt.Et, (len(G_)-1)*Lw, rc+1) > 0:  # new len G_, aw
             Gt = cluster_NC_(G_, rc+1, Gt)  # agg recursion, also return top L_?
         return Gt
     else:
@@ -588,6 +590,7 @@ def cluster_N_(N_, rc, fi, rng=1, fL=0, root=None):  # connectivity cluster exem
 
     return sum_N_(G_ or N_, root)   # root N_|L_ replacement
 
+# where do we need fC?
 def sum2graph(root, node_,link_,llink_, Et, olp, rng, fC=0):  # sum node and link params into graph, aggH in agg+ or player in sub+
 
     n0 = copy_(node_[0]); derH = n0.derH
@@ -612,9 +615,10 @@ def sum2graph(root, node_,link_,llink_, Et, olp, rng, fC=0):  # sum node and lin
         d_,D = centroid_M(graph.derTT[1],ave*olp)
         graph.derTT = np.array([m_,d_])
         graph.Et = np.array([M,D,Et[2]])
-    if fi:
-        alt_ = list(set([L.root for L in link_]))  # individual rims are too weak for contour
-        if alt_: graph.alt = sum_N_(alt_)
+
+    # we still need fi to update alt_?
+    alt_ = list(set([L.root for L in link_]))  # individual rims are too weak for contour
+    if alt_: graph.alt = sum_N_(alt_)
     return graph
 
 def append_dH(H, dH):  # merged mfork += [merged dfork], keep nesting
