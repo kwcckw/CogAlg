@@ -96,7 +96,7 @@ def copy_(N, root=None, init=0):
         C.N_,C.L_,C.H,C.lH, N.root = (list(N.N_),list(N.L_),list(N.H),list(N.lH), root if root else N.root)
         if N.rim: C.rim = copy_(N.rim)
         if N.alt: C.alt = copy_(N.alt)
-    C.derH  = [lay.copy_() for lay in N.derH]
+    C.derH  = [lay.copy_() for lay in N.derH]  # derH is flat now?
     C.derTT = deepcopy(N.derTT)
     for attr in ['Et', 'baseT','yx','box','angle']: setattr(C, attr, copy(getattr(N, attr)))
     for attr in ['olp','rng', 'fi', 'fin', 'span']: setattr(C, attr, getattr(N, attr))
@@ -136,7 +136,7 @@ def vect_root(Fg, rV=1, ww_t=[]):  # init for agg+:
                 Et = comp_slice(edge, rV, ww_t)  # to scale vert
                 if np.any(Et) and Et[0] > ave * Et[2] * clust_w:
                     cluster_edge(edge, Fg, lev, derlay)  # may be skipped
-    Fg.derH = [derlay]
+    Fg.derH = derlay  # derH should be flat now?
     if lev: Fg.H += [lev]
     return Fg
 
@@ -187,7 +187,7 @@ def cluster_edge(edge, frame, lev, derlay):  # non-recursive comp_PPm, comp_PPd,
             else:  frame.N_ += PP_ # PPm_
         lev.L_+= L_; lev.Et = mEt+dEt  # links between PPms
         for l in L_:
-            derlay[0].add_lay(l.derH[0][0]); frame.baseT+=l.baseT; frame.derTT+=l.derTT; frame.Et += l.Et
+            derlay[0].add_lay(l.derH[0]); frame.baseT+=l.baseT; frame.derTT+=l.derTT; frame.Et += l.Et
         if val_(dEt, (len(L_)-1)*Lw, 2+clust_w, fi=0) > 0:
             Lt = cluster_N_(L2N(L_), rc=2, fi=0)
             if Lt:  # L_ graphs
@@ -249,17 +249,19 @@ def cross_comp(root, rc, fi=1):  # rc: redundancy+olp; (cross-comp, exemplar sel
                         Nt = cluster_N_(rng_E_, rc, 1, rng)  # top-rng G_
                 if Nt:
                     if val_(Nt.Et, (len(Nt.N_)-1)*Lw, rc+loop_w, _Et=Et) > 0:
+                        for N in Nt.N_: N.fi = 1  # if we recycle CN, we need to manually set their fi == 1 here
                         NT = cross_comp(Nt, rc+clust_w*rng)  # agg+
             Nt = NT or Nt
         if Lt or Nt:
-           feedback(root, Lt,Nt)  # add two-fork H level?
+            # we have a same function feedback below
+           feedbackr(root, Lt,Nt)  # add two-fork H level?
     return root  # higher feedback?
 
 # draft, unpack?
-def feedback(root, Lt, Nt):
-    # if Lt: root.lH += [Lt]+Lt.H
+def feedbackr(root, Lt, Nt):
+    # if Lt: root.lH += [Lt]+Lt.H (I think we need to add this too?)
     # root.angle = np.sum([L.angle for L in Nt.L_], axis=0)
-    # add_H(root.derH, sum_H_([L.derH for L in Nt.L_]), root)  # *rn?
+    # add_H(root.derH, sum_H_([L.derH for L in Nt.L_]), root)  # *rn? How about ddfork's Lt.L_?
     root.Et += Nt.Et
     root.H += [[Lt,Nt]]  # derH = top derLay only?
 
@@ -589,7 +591,7 @@ def cluster_N_(N_, rc, fi, rng=1, fL=0, root=None):  # connectivity cluster exem
         _Et = root.Et if (not fi and root) else np.zeros(3)  # or contour comb_alt_(node_,rc).Et: form alt_ here?
         if val_(Et, (len(node_)-1)*Lw, nrc, _Et, fi=fi) > 0:
             G_ += [sum2graph(root, node_, link_, llink_, Et, olp, rng)]
-
+    # we recycle N_ now?
     return sum_N_(G_ or N_, root)   # root N_|L_ replacement
 
 
@@ -613,8 +615,9 @@ def sum2graph(root, node_,link_,llink_, Et, olp, rng, fC=0):  # sum node and lin
     graph.angle = np.sum([l.angle for l in link_],axis=0)
     graph.yx = yx
     if node_[0].fi:
-        alt_ = list(set([L.root for L in link_]))  # individual rims are too weak for contour
-        if alt_: graph.alt = sum_N_(alt_)
+        dgraph_ = [L.root for L in link_ if L.root]  # check for empty root in cluster_PP_
+        if dgraph_:
+            graph.alt = sum_N_(list(set(dgraph_)))  # individual rims are too weak for contour
     if fC:
         m_,M = centroid_M(graph.derTT[0],ave*olp)  # weigh by match to mean m|d
         d_,D = centroid_M(graph.derTT[1],ave*olp)
@@ -726,7 +729,7 @@ def PP2N(PP, frame):
     baseT = np.array(latuple[:4])
     [mM,mD,mI,mG,mA,mL], [dM,dD,dI,dG,dA,dL] = vert  # re-pack in derTT:
     derTT = np.array([[mM,mD,mL,1,mI,mG,mA,mL], [dM,dD,dL,1,dI,dG,dA,dL]])
-    derH = [[CLay(node_=P_, link_=link_, derTT=deepcopy(derTT)), CLay()]]  # empty dfork
+    derH = [CLay(node_=P_, link_=link_, derTT=deepcopy(derTT)), CLay()]  # empty dfork  (this is flat too?)
     y,x,Y,X = box; dy,dx = Y-y,X-x  # A = (dy,dx); L = np.hypot(dy,dx), rolp = 1
     et = np.array([*np.sum([L.Et for L in link_],axis=0), 1]) if link_ else np.array([.0,.0,1.])  # n=1
 
