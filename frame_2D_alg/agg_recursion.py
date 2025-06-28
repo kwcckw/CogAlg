@@ -128,7 +128,7 @@ def vect_root(Fg, rV=1, ww_t=[]):  # init for agg+:
         w_t = np.multiply([[wM,wD,wN,wO,wI,wG,wA,wL]], ww_t)  # or dw_ ~= w_/ 2?
         ww_t = np.delete(ww_t,(2,3), axis=1)  #-> comp_slice, = np.array([(*ww_t[0][:2],*ww_t[0][4:]),(*ww_t[0][:2],*ww_t[1][4:])])
     blob_ = unpack_blob_(Fg)
-    Fg.N_,Fg.L_ = [],[]; lev = CN(); derlay = CLay(root=Fg),CLay(root=Fg)
+    Fg.N_,Fg.L_ = [],[]; lev = CN(); derlay = CLay(root=Fg)  # single derlay now
     for blob in blob_:
         if not blob.sign and blob.G > aveB:
             edge = slice_edge(blob, rV)
@@ -228,8 +228,10 @@ def cross_comp(root, rc, fi=1):  # rc: redundancy+olp; (cross-comp, exemplar sel
         if dval > 0:
             root.L_= L_; root.Et += Et  # agg+ L_
             if dval>ave: Lt = cross_comp(CN(N_=L2N(L_)), rc+clust_w, fi=0)  # -> Lt.H, +2 der layers
-            else:        Lt = cluster_N_(L_, rc+clust_w, fi=0, rng=1)  # low-res cluster / nodet, +1 der layer
-            if Lt:       root.lH += Lt.H; root.Et += Lt.Et; root.derH += Lt.derH  # append new lays
+            else:       Lt = cluster_N_(L_, rc+clust_w, fi=0, rng=1)  # low-res cluster / nodet, +1 der layer
+            if Lt:       
+                # we need to include Lt in root.lH too?
+                root.lH += [Lt] + Lt.H; root.Et += Lt.Et; root.derH += Lt.derH  # append new lays
         # m cluster, mm,md xcomp
         if fi: n__ = {N for N_ in N__ for N in N_}
         else:  n__ = N__; N__ = [N__]
@@ -245,14 +247,15 @@ def cross_comp(root, rc, fi=1):  # rc: redundancy+olp; (cross-comp, exemplar sel
                         rng_E_ = [n for n in N_ if n.sel]    # cluster via exemplars
                         if rng_E_ and val_(np.sum([n.Et for n in rng_E_], axis=0), (len(rng_E_)-1)*Lw, rc) > 0:
                             Nt = cluster_N_(rng_E_, rc, 1, rng)  # top-rng G_
-            else: Nt = cluster_N_(n__, rc, 0)
+            else: Nt = cluster_N_(n__, rc, 0)  # n__ are links here, where Nt.N_ could be links with N.fi = 0
             if Nt:
                 if val_(Nt.Et, (len(Nt.N_)-1)*Lw, rc+loop_w, _Et=Et) > 0:
+                    for N in Nt.N_: N.fi = 1
                     NT = cross_comp(Nt, rc+clust_w*rng)
                     # agg recursion
             if (Nt := NT or Nt):
                 _H = root.H; root.H = []
-                Nt.H = _H + [root] + Nt.H  # pack root in Nt.H, has own L_,lH
+                Nt.H = _H + [root] + Nt.H  # pack root in Nt.H, has own L_,lH (flat H and derH now?)
                 root = Nt
     # recursive feedback:
     return root
