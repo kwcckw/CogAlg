@@ -189,7 +189,12 @@ def cluster_edge(edge, frame, lev, derlay):  # non-recursive comp_PPm, comp_PPd,
         for l in L_:
             derlay.add_lay(l.derH[0]); frame.baseT+=l.baseT; frame.derTT+=l.derTT; frame.Et += l.Et
         if val_(dEt, (len(L_)-1)*Lw, 2+clust_w, fi=0) > 0:
-            Lt = cluster_N_(L2N(L_), rc=2, fi=0)
+            L2N(L_)
+            for L in L_:
+                # we need to add their rimt manually here? Else their rim is empty since those Ls are not compared
+                L.rim.L_[0] = list(set(L.N_[0].rim.L_))
+                L.rim.L_[1] = list(set(L.N_[1].rim.L_)) 
+            Lt = cluster_N_(L_, rc=2, fi=0, fL=1)
             if Lt:  # L_ graphs
                 if lev.lH: lev.lH[0].N_ += Lt.N_; lev.lH[0].Et += Lt.Et
                 else:      lev.lH += [Lt]
@@ -226,7 +231,8 @@ def cross_comp(root, rc, fi=1):  # cross-comp, clustering, recursion
     if N__:
         mV,dV = val_(Et, (len(L_)-1)*Lw, rc+loop_w, fi=2)
         if dV > 0:
-            root.lH += [sum_N_(root.L_)]; root.L_= L_; root.Et += Et  # replace L_ with agg+ L_
+            if root.L_: root.lH += [sum_N_(root.L_)]  # root.L_ may empty 
+            root.L_= L_; root.Et += Et  # replace L_ with agg+ L_
             if dV>avd: Lt = cross_comp(CN(N_=L2N(L_)), rc+clust_w, fi=0)  # -> Lt.H, +2 der layers
             else:      Lt = cluster_N_(L_, rc+clust_w, fi=0, rng=1)  # low-res cluster / nodet, +1 layer
             if Lt:     root.lH += [Lt] + Lt.H; root.Et += Lt.Et; root.derH += Lt.derH  # append new der lays
@@ -455,7 +461,7 @@ def cluster_C_(root, E_, rc):  # form centroids from exemplar _N_, drifting / co
         return et
     _C_ = []
     for E in E_:
-        Et = E.rim.Et; C = copy_(E,root); C.N_ = [E]; C.Et = Et  # init centroid, reset some other attrs?
+        Et = E.rim.Et; C = copy_(E,root); C.N_ = [E]; C.Et = Et  # init centroid, reset some other attrs? (E is a subset or part of C, so i think only N_ should be reset?)
         C._N_ = list({_n for n in E.rim.N_ for _n in n.rim.N_})  # core members + surround for comp to N_ mean
         _C_ += [C]
     while True:
@@ -473,7 +479,7 @@ def cluster_C_(root, E_, rc):  # form centroids from exemplar _N_, drifting / co
                         olp = np.sum([vo[0] / v for vo in n.vo_ if vo[0] > v])  # olp: rel n val in stronger Cs, not summed with C
                         vo = np.array([v,olp]); O += olp  # current Cs overlap: norm by n+o
                         if v > ave * olp:
-                            n.C_ += [C]; n.vo_ += [vo]; Et += et; _N_ += [n]; _N__ += n.rim.N_  # no limit to expansion?
+                            n.C_ += [C]; n.vo_ += [vo]; Et += et; _N_ += [n]; _N__ += n.rim.N_  # no limit to expansion? (As long the eval is True? Or limit can be integrated to the eval above?)
                         if C not in n._C_: dvo += vo
                     elif C in n._C_:
                         dvo += n._vo_[n._C_.index(C)]  # old vo_
@@ -677,7 +683,7 @@ def sum_N_(node_, root=None, fC=0):  # form cluster G
     return G   # no rim
 
 def add_N(N,n, fmerge=0, fC=0):
-    # merge with copy_?
+    # merge with copy_? (We only need this fmerge in cluster_NC_)?
     if fmerge:
         for node in n.N_: node.root=N; N.N_ += [node]
         N.L_ += n.L_  # no L.root assign
@@ -874,7 +880,8 @@ def agg_frame(floc, image, iY, iX, rV=1, rv_t=[], fproj=0):  # search foci withi
         if floc:
             Fg = frame_blobs_root( win__[:,:,:,y,x], rV)  # [dert, iY, iX, nY, nX]
             Fg = vect_root(Fg, rV, rv_t)  # focal dert__ clustering
-            FG = cross_comp(Fg, rc=frame.olp); if FG: Fg=FG
+            FG = cross_comp(Fg, rc=frame.olp)
+            if FG: Fg=FG
         else:
             Fg = agg_frame(1, win__[:,:,:,y,x], wY,wX, rV=1, rv_t=[])  # use global wY,wX in nested call
             if Fg and Fg.L_:  # only after cross_comp(PP_)
