@@ -561,7 +561,15 @@ def cluster_NC_(_C_, rc, _Nt):  # cluster centroids if pairwise Et + overlap Et
 def cluster_N_(N_, rc, fi, rng=1, fL=0, root=None):  # connectivity cluster exemplar nodes via rim or links via nodet or rimt
 
     def lolp(N, L_, fR=0):  # relative N.rim or R.link_ olp eval for clustering
-        oL_ = [L for L in (N.L_ if fR else N.rim.L_) if L in L_]
+        if fR:
+            NL_ = N.L_
+        else:
+            if N.fi:
+                NL_ = [L for L, _ in N.rim.L_]
+            else:  # link node
+                NL_ = [L for L, _ in N.rim.L_[0]+N.rim.L_[1]]
+                    
+        oL_ = [L for L in NL_ if L in L_]  # we need to skip rev since their rev are different although they have a common link
         if oL_:
             oEt = np.sum([l.Et for l in oL_], axis=0)
             _Et = N.Et if fR else N.rim.Et
@@ -598,7 +606,7 @@ def cluster_N_(N_, rc, fi, rng=1, fL=0, root=None):  # connectivity cluster exem
                 for _N in L.N_:
                     if _N not in N_ or _N.fin: continue  # connectivity clusters don't overlap
                     if rng==1 or _N.root.rng==1:  # not rng-nested
-                        if lolp(N, get_rim(_N)):
+                        if lolp(N, [l for l,_ in get_rim(_N)]):
                             node_ +=[_N]; Et += _N.Et+_N.rim.Et; olp+=_N.olp; _N.fin=1
                             for l,_ in get_rim(_N):
                                 if l not in link_ and l.rng == rng: link_ += [l]
@@ -627,7 +635,7 @@ def sum2graph(root, node_,link_,llink_, Et, olp, rng, fC=0):  # sum node and lin
     n0.root = graph; yx_ = [n0.yx]; fg = isinstance(n0.N_[0],CN)  # not PPs
     Nt = copy_(n0)  #->CN, comb forks: add_N(Nt,Nt.Lt)?
     for N in node_[1:]:
-        add_H(derH,N.derH,graph); graph.baseT+=N.baseT; graph.derTT+=N.derTT; graph.box=extend_box(graph.box,N.box); yx_+=[N.yx]
+        add_H(derH,N.derH,graph); graph.baseT+=N.baseT; graph.derTT+=N.derTT; graph.box=extend_box(graph.box,N.box); yx_+=[N.yx]; N.root = graph  # looks like we missed out the rest of the root assignment
         if fg: add_N(Nt,N)
     for L in link_[1:]:
         add_H(DerH,L.derH,graph); graph.baseT+=L.baseT; graph.derTT+=L.derTT
@@ -639,6 +647,7 @@ def sum2graph(root, node_,link_,llink_, Et, olp, rng, fC=0):  # sum node and lin
     graph.yx = yx
     if node_[0].fi:
         alt_ = [L.root for L in link_ if L.root]
+        # no cross_comp with graph.alt now?
         if alt_: graph.alt = sum_N_(list(set(alt_)))  # individual rims are too weak for contour
     if fC:
         m_,M = centroid_M(graph.derTT[0],ave*olp)  # weigh by match to mean m|d
