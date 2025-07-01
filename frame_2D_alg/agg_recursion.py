@@ -491,7 +491,7 @@ def cluster_C_(root, E_, rc):  # form centroids from exemplar _N_, drifting / co
         _Ct_ = [[c, c.Et[0]/c.Et[2]] for c in _C_]
         for _C,_m in sorted(_Ct_, key=lambda n: n[1], reverse=True):
             if _m > Ave:
-                C = sum_N_(_C.N_, root=root, fC=1)  # get mean cluster, merge rim,alt before cluster_NC_
+                C = sum_N_(_C.N_, root=root, fC=1); C._N_ =[]  # get mean cluster, merge rim,alt before cluster_NC_
                 _N_,_N__,Et,dvo = [],[], np.zeros(3),np.zeros(2)  # per C
                 for n in _C._N_:  # core + surround
                     if C in n.C_: continue
@@ -500,8 +500,11 @@ def cluster_C_(root, E_, rc):  # form centroids from exemplar _N_, drifting / co
                     et[2] += olp; vo = np.array([v,olp])  # current Cs overlap, works the same as n in Cs?
                     if et[0]/et[2] > Ave:
                         n.C_ += [C]; n.vo_ += [vo]; Et += et; _N_ += [n]; _N__ += n.rim.N_
-                        if C not in n._C_: dvo += vo
+                        if C not in n._C_: 
+                            dvo += vo
+                            if C not in C_: C_ += [C];   # i think we should add C for next iteration as long it's not converged? (Dvo is not empty)
                     elif C in n._C_:
+                        if C not in C_: C_ += [C]
                         dvo += n._vo_[n._C_.index(C)]  # old vo_, or pack in _C_?
                 Dvo += dvo  # new incl or excl
                 if Et[0]/Et[2] > Ave:
@@ -530,8 +533,9 @@ def cluster_NC_(_C_, rc):  # cluster centroids if pairwise Et + overlap Et
         # else connect by overlap + similarity?
         dy,dx = np.subtract(_C.yx,C.yx)
         link = comp_N(_C, C, ave, angle=np.array([dy,dx]), span=np.hypot(dy,dx))
-        oV = val_(np.sum([n.Et for n in oN_],axis=0), rc)
         _V = min(val_(C.Et, rc), val_(_C.Et, rc), 1e-7)
+        if oN_: oV = val_(np.sum([n.Et for n in oN_],axis=0), rc)
+        else:   oV = _V  # placeholder, if no overlap and connect by similarity, we just need to use _V without the /_V?
         link.Et[:2] *= int_w
         link.Et[0] += oV/_V - arn  # or separate connect | centroid eval, re-centering?
         if val_(link.Et, rc) > 0:
@@ -636,7 +640,8 @@ def sum2graph(root, node_,link_,llink_, Et, olp, rng, fC=0):  # sum node and lin
         alt_ = [L.root for L in link_ if L.root]  # if clustered, individual rims are too weak for contour
         if alt_:
             alt = sum_N_(list(set(alt_)))
-            if val_(alt.Et, aw=olp,_Et=Et, fi=0): alt = cross_comp(alt.N_, rc=olp) or alt  # adds nesting
+            if val_(alt.Et, aw=olp * (len(alt.N_)-1),_Et=Et, fi=0):  # scale aw with size of alt.N_?
+                alt = cross_comp(alt, rc=olp) or alt  # adds nesting
             graph.alt = alt
     if fC:
         m_,M = centroid_M(graph.derTT[0],ave*olp)  # weigh by match to mean m|d
