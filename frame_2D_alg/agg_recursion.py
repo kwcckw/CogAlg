@@ -408,7 +408,7 @@ def base_comp(_N, N, dir=1):  # comp Et, Box, baseT, derTT
 
     return DerTT, Et, rn
 
-def comp_N(_N,N, ave, angle=None, span=None, dir=1, fdeep=0, fproj=0, rng=1):  # compare links, relative N direction = 1|-1, no angle,span?
+def comp_N(_N,N, ave, angle=None, span=None, dir=1, fdeep=0, rng=1):  # compare links, relative N direction = 1|-1, no angle,span?
 
     derTT, Et, rn = base_comp(_N, N, dir); fi = N.fi
     # link M,D,A:
@@ -448,7 +448,8 @@ def get_exemplars(root, iN_, rc):  # get sparse nodes by multi-layer non-maximum
     _N_ = set()  # stronger-N inhibition zones
     for rdn, N in enumerate(sorted(iN_, key=lambda n: n.rim.Et[0]/n.rim.Et[2], reverse=True), start=1):
         # ave *= overlap by stronger-N inhibition zones,
-        # comp_prj_dH(N)  # filter rim links by N.derH as sub-centroid, proj = dir norm, no selection?
+        # or this can be for selected exemplar only?
+        comp_prj_dH(N)  # filter rim links by N.derH as sub-centroid, proj = dir norm, no selection?
         if val_(N.rim.Et, aw = rc + rdn + loop_w + nolp(N, list(_N_))) > 0:
             Et += N.rim.Et; _N_.update(N.rim.N_)
             N.sel = 1  # select for cluster_N_, add val to next N olp?
@@ -777,18 +778,47 @@ def prj_dH(_H, proj, dec):
         H += [[lay[0].copy_(), prj_TT(lay[1],proj,dec) if lay[1] else []]]  # two-fork
     return H
 
-def comp_prj_dH(_N,N, ddH, rn, link, angle, span, dec):  # comp combined int proj to actual ddH, as in project_N_
+def comp_prj_dH(N):  # comp combined int proj to actual ddH, as in project_N_
 
-    _cos_da= angle.dot(_N.angle) / (span *_N.span)  # .dot for scalar cos_da
-    cos_da = angle.dot(N.angle) / (span * N.span)
-    _rdist = span/_N.span
-    rdist  = span/ N.span
-    prj_DH = add_H( prj_dH(_N.derH[1:], _cos_da *_rdist, _rdist*dec),  # derH[0] is positionals
-                    prj_dH( N.derH[1:], cos_da * rdist, rdist*dec),
-                    link)  # comb proj dHs | comp dH ) comb ddHs?
-    # Et+= confirm:
-    dddH = comp_H(prj_DH, ddH[1:], rn, link, link.derTT, link.Et)  # ddH[1:] maps to N.derH[1:]
-    add_H(ddH, dddH, link, 0, rn)
+    M,D,_ = N.Et; dec = M / (M+D)  # not sure here, decay based on N and _N now?
+    ET = np.zeros(3); BaseT = np.zeros(4); DerTT = np.zeros((2,8))
+    L_ = [] if N.fi else [[],[]]; N_ = []
+    for link, rev in get_rim(N):
+        
+        Et = np.zeros(3); derTT = np.zeros((2,8))
+        _N = link.N_[0] if link.N_[1] is N else link.N_[1]
+        rn = _N.Et[2] / N.Et[2]
+        dy,dx = np.subtract(_N.yx,N.yx)
+        span = np.hypot(dy,dx)
+        angle = np.array([dy, dx])
+
+        _cos_da= angle.dot(_N.angle) / (span *_N.span)  # .dot for scalar cos_da
+        cos_da = angle.dot(N.angle) / (span * N.span)
+        _rdist = span/_N.span
+        rdist  = span/ N.span
+        prj_DH = add_H( prj_dH(_N.derH[1:], _cos_da *_rdist, _rdist*dec),  # derH[0] is positionals
+                        prj_dH( N.derH[1:], cos_da * rdist, rdist*dec),
+                        link)  # comb proj dHs | comp dH ) comb ddHs?
+        # Et+= confirm:
+        # not sure, compare projected with N.derH?
+        dddH = comp_H(prj_DH, N.derH, rn, link, derTT, Et)  # ddH[1:] maps to N.derH[1:]
+
+        if link.Et[0]+Et[0] > ave * (Et[2]+link.Et[2]):  # not sure, combine eval with link existing Et?
+            # add dddH to link.derH?
+            link.derH += [dddH]
+            
+            L_ += [link]
+            if N.fi: L_ += [(link,rev)]
+            else:  L_[1-rev] += [(link,rev)]  # rimt opposite to _N,N dir
+            N_ += [_N]; BaseT += link.baseT; ET += Et
+            DerTT += derTT  # simplified add_H(node.rim.derH, Link.derH, root=node, rev=rev)?
+
+    # update pruned rim
+    N.rim.L_ = L_
+    N.rim.N_ = N_
+    N.rim.baseT = BaseT
+    N.rim.derTT = DerTT
+    N.rim.Et = ET
 
 def project_N_(Fg, yx):
 
