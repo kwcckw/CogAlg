@@ -131,7 +131,7 @@ def copy_(N, root=None, init=0):
 
 def flatten(_L_):
     L_ = []
-    for L,rev in _L_: L_.extend(flatten([L,rev])) if isinstance(L,list) else L_ += [[L,rev]]
+    for L,rev in _L_: L_ += (flatten([L,rev]) if isinstance(L,list) else [[L,rev]])
     return L_
 
 ave, avd, arn, aI, aveB, aveR, Lw, intw, loopw, centw, contw = 10, 10, 1.2, 100, 100, 3, 5, 2, 5, 10, 15  # value filters + weights
@@ -251,7 +251,7 @@ def cross_comp(root, rc, fi=1):  # two forks of cross-comp and clustering, recur
             if root.L_: root.lH += [sum_N_(root.L_)]  # replace L_ with agg+ L_:
             root.L_=L_; root.Et += Et
             if dV >avd: Lt = cross_comp(CN(N_=L2N(L_)), rc+contw, fi=0)  # -> Lt.nH, +2 der layers
-            else:       Lt = cluster(root, N_, rc+contw, fi=1)  # cluster N rims, +1 layer
+            else:       Lt = cluster(root, N_, rc+contw, fi=fi)  # cluster N rims, +1 layer (this fi should follow the input fi?)
             if Lt: root.lH += [Lt] + Lt.nH; root.Et += Lt.Et; root.derH += Lt.derH  # append new der lays
         if mV > 0:
             Nt = cluster(root, N_, rc+loopw, fi)  # with get_exemplars, cluster_C_, rng-banded if fi
@@ -408,7 +408,7 @@ def comp_N(_N,N, ave, angle=None, span=None, dir=1, fdeep=0, rng=1):  # compare 
     if fdeep and (val_(Et, len(N.derH)-2, o) > 0 or fi==0):  # else derH is dext,vert
         Link.derH += comp_H(_N.derH, N.derH, rn, Link, derTT,Et)  # append flat
     Link.Et = Et
-    if Et[0] > ave * Et[2]:
+    if Et[0] > ave * Et[2]:  # for negative link, this is always true?
         for rev, node, _node in zip((0,1),(N,_N),(_N,N)):  # reverse Link dir in _N.rimt
             # simplified sum_N_:
             if fi: node.rim.L_ += [(Link,rev)]
@@ -420,14 +420,16 @@ def comp_N(_N,N, ave, angle=None, span=None, dir=1, fdeep=0, rng=1):  # compare 
 
 def cluster(root, N_, rc, fi):  # generic root
 
-    E_,Et = get_exemplars(root, N_, rc, fi)
+    # we need a flat iN_ for get_exemplars below?
+    iN_ = list(set([N for n_ in N_ for N in n_])) if fi else N_
+    E_,Et = get_exemplars(root, iN_, rc, fi)
     if val_(Et, (len(E_)-1)*Lw, rc+centw) > 0:  # replace exemplars with centroids
         for n in root.N_: n.C_, n.vo_, n._C_, n._vo_ = [], [], [], []
         Ct = cluster_C_(root, E_, rc+centw, fi)
         if Ct:
             return Ct
-        elif val_(Et, (len(E_)-1)*Lw, rc+contw, fi=fi) > 0:
-            for n in {N for n_ in N_ for N in n_} if fi else N_: n.sel=0
+        elif val_(Et, (len(E_)-1)*Lw, rc+contw, fi=fi) > 0:            
+            for n in iN_: n.sel=0
             if fi:
                 Nt = []  # rng-banded clustering:
                 for rng, rN_ in enumerate(N_, start=1):  # bottom-up rng incr
@@ -474,14 +476,16 @@ def cluster_C_(root, E_, rc, fi):  # form centroids from exemplar _N_, drifting 
         if C.rim and n.rim: _,_et,_= base_comp(C.rim,n.rim); et +=_et
         if C.alt and n.alt: _,_et,_= base_comp(C.alt,n.alt); et +=_et
         return et
-    _C_ = []; if not fi: ave = avd
+    _C_ = []
+    if not fi: local_ave = avd
+    else:      local_ave = ave  # not sure here, with the ave assignment with avd above, i'm getting error as ave is not recognized
     for E in E_:
         Et = E.rim.Et; C = copy_(E,root); C.N_=[E]; C.L_=[]; C.Et=Et  # init centroid
         rim = flatten(E.rim.N_ if fi else E.rim.L_)  # same nesting?
         C._N_ = list({_n for n in rim for _n in flatten(n.rim.N_ if fi else n.rim.L_)})  # core members + surround for comp to N_ mean
         _C_ += [C]
     while True:
-        C_, ET, O, Dvo, Ave = [], np.zeros(3), 0, np.zeros(2), ave*rc*loopw
+        C_, ET, O, Dvo, Ave = [], np.zeros(3), 0, np.zeros(2), local_ave*rc*loopw
         _Ct_ = [[c, c.Et[1-fi]/c.Et[2], c.olp] for c in _C_]
         for _C,_v,_o in sorted(_Ct_, key=lambda t: t[1]/t[2], reverse=True):
             if _v > Ave*_o:
@@ -510,7 +514,7 @@ def cluster_C_(root, E_, rc, fi):  # form centroids from exemplar _N_, drifting 
     V = val_(ET, aw=O+rc+loopw, fi=fi)  # C_ value
     if V > 0:
         Nt = sum_N_(E_)
-        if V * ((len(C_)-1)*Lw) > ave*contw: Nt = cluster_NC_(C_, O+rc+contw) or Nt
+        if V * ((len(C_)-1)*Lw) > local_ave*contw: Nt = cluster_NC_(C_, O+rc+contw) or Nt
         return Nt
 
 def cluster_L_(root, N_, E_, rc, fi=1):  # connectivity cluster links from exemplar node.rims
