@@ -132,7 +132,7 @@ def copy_(N, root=None, init=0):
 def flat(_Lt_, fi=0):
     Lt_ = []
     for Lt in _Lt_:  # arbitrarily nested nrim if fi else lrim: list of [L,rev]
-        if isinstance((Lt if fi else Lt[0]), list): Lt_.extend(flat(Lt))
+        if isinstance((Lt if fi else Lt), list): Lt_.extend(flat(Lt))  # we should check Lt instead of Lt[0] since _Lt_ is rimt, and Lt is rim
         else: Lt_ += [Lt]
     return Lt_
 
@@ -414,10 +414,12 @@ def comp_N(_N,N, ave, angle=None, span=None, dir=1, fdeep=0, rng=1):  # compare 
     for rev, node, _node in zip((0,1),(N,_N),(_N,N)):  # reverse Link dir in _N.rimt
         # simplified add_N_(rim):
         if fi: node.rim.L_ += [(Link,rev)]; node.rim.N_ += [_node]
-        else:  node.rim.L_[1-rev] += [(Link,rev)]; node.rim.N_[1-rev] += [_node]  # rimt opposite to _N,N dir
+        else:  
+            # no rev in rim.N_?
+            node.rim.L_[1-rev] += [(Link,rev)]; node.rim.N_ += [_node]  # rimt opposite to _N,N dir
         node.rim.Et += Et; node.rim.baseT += baseT; node.rim.derTT += derTT  # simplified add_H(node.rim.derH, Link.derH, root=node, rev=rev)?
 
-    return
+    return Link
 
 def rolp(N, _N_, fi, E=0, R=0): # rel V of N.rim | L_ overlap with _N_: inhibition or shared zone
     if R:
@@ -440,7 +442,7 @@ def get_exemplars(N_, rc, fi):  # get sparse nodes by multi-layer non-maximum su
     for rdn, N in enumerate(sorted(N_, key=lambda n: n.rim.Et[1-fi]/ n.rim.Et[2], reverse=True), start=1):
         # ave *= overlap by stronger-E inhibition zones
         if val_(N.rim.Et, aw = rc + rdn + loopw + rolp(N, list(_E_), fi, E=1), fi=fi) > 0:  # rolp is cost
-            Et += N.rim.Et; _E_.update(N.rim.N_ if fi else N.rim.L_)
+            Et += N.rim.Et; _E_.update(N.rim.N_ if fi else (N.rim.L_ if N.fi else N.rim.L_[0]+N.rim.L_[1]))  # N could be link here
             N.sel = 1  # select for cluster_N_
             E_ += [N]  # exemplars
         else:
@@ -457,7 +459,7 @@ def cluster(root, N_, rc, fi):  # clustering root
         Ct = cluster_C_(root, E_, rc+centw, fi)
         if Ct:  # or mixed C/G N_?
             return Ct
-        elif val_(Et, (len(E_)-1)*Lw, rc+contw, fi=fi) > 0:
+        elif val_(Et, (len(E_)-1)*Lw, rc+contw, fi=fi) > 0:  # this eval is the same as the eval above?
             for n in Nf_: n.sel=0
             if fi:
                 Nt = []  # bottom-up rng-banded clustering:
@@ -481,7 +483,8 @@ def cluster_C_(root, E_, rc, fi):  # form centroids from exemplar _N_, drifting 
     for E in E_:
         Et = E.rim.Et; C = copy_(E,root); C.N_=[E]; C.L_=[]; C.Et=Et  # init centroid
         rim = flat(E.rim.N_ if fi else E.rim.L_, fi)  # same nesting?
-        C._N_ = list({_n for n in rim for _n in flat(n.rim.N_ if fi else n.rim.L_, fi)})  # core members + surround for comp to N_ mean
+        # if not fi, n is (n,rev)
+        C._N_ = list({_n for n in rim for _n in flat(n.rim.N_ if fi else n[0].rim.L_, fi)})  # core members + surround for comp to N_ mean
         _C_ += [C]
     while True:
         C_, ET, O, Dvo, Ave = [], np.zeros(3), 0, np.zeros(2), av*rc*loopw
