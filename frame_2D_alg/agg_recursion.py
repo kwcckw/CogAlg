@@ -133,8 +133,20 @@ def flat(rim):
     L_ = []
     for L in rim:  # arbitrarily deep binary tree of nrim if fi else lrim, in shape of nodet
         if isinstance(L, list): L_.extend(flat(L))
+        else:  L_ += [L]
+    return L_
+
+
+def flat2(rim):
+    L_ = []
+    for L in rim:  # arbitrarily deep binary tree of nrim if fi else lrim, in shape of nodet
+        if isinstance(L, list):
+            for Lt in L:
+                L_ += [Lt]
+                L_ += [flat2(Lt[1].rim)]  # we need unpack L.rim recursively to get all child from binary tree?
         else: L_ += [L]
     return L_
+
 
 ave, avd, arn, aI, aveB, aveR, Lw, intw, loopw, centw, contw = 10, 10, 1.2, 100, 100, 3, 5, 2, 5, 10, 15  # value filters + weights
 adist, amed, distw, medw = 10, 3, 2, 2  # cost filters + weights
@@ -213,7 +225,7 @@ def cluster_edge(edge, frame, lev, derlay):  # non-recursive comp_PPm, comp_PPd,
         for l in L_:
             derlay.add_lay(l.derH[0]); frame.baseT+=l.baseT; frame.derTT+=l.derTT; frame.Et += l.Et
         if val_(dEt, (len(L_)-1)*Lw, 2+contw, fi=0) > 0:
-            Lt = cluster(frame, L2N(L_), rc=2,fi=0)
+            Lt = cluster(frame, L2N(L_), rc=2,fi=0)  # nothing to cluster here since L's rim is empty, unless we retrieve their nodet as rim
             if Lt:  # L_ graphs
                 if lev.lH: lev.lH[0].N_ += Lt.N_; lev.lH[0].Et += Lt.Et
                 else:      lev.lH += [Lt]
@@ -440,7 +452,7 @@ def get_exemplars(N_, rc, fi):  # get sparse nodes by multi-layer non-maximum su
     for rdn, N in enumerate(sorted(N_, key=lambda n: n.rim.Et[1-fi]/ n.rim.Et[2], reverse=True), start=1):
         # ave *= overlap by stronger-E inhibition zones
         if val_(N.rim.Et, aw = rc + rdn + loopw + rolp(N, list(_E_), fi, E=1), fi=fi) > 0:  # rolp is cost
-            Et += N.rim.Et; _E_.update(N.rim.N_ if fi else flat(N.rim.L))
+            Et += N.rim.Et; _E_.update(N.rim.N_ if fi else flat(N.rim.L_))  # should be L_
             N.sel = 1  # select for cluster_N_
             E_ += [N]  # exemplars
         else:
@@ -539,10 +551,10 @@ def eval_merge(N,_N, rc):  # eval _N.c_ merge in N.c_, may overlap
 # draft
 def reform(_C, root, rc, fi=0):
 
-    C = sum_N_(_C.N_, root=root, fC=1)  # merge rim,alt before cluster_NC_
+    C = sum_N_(_C.N_, root=root, fC=1)  # merge rim,alt before cluster_NC_ (or just copy _C?)
     N_,_N__,o,Et,dvo = [],[],0, np.zeros(3),np.zeros(2)  # per C
     for n in _C._N_:  # core + surround
-        if C in n.C_: continue  # clear/ loop?
+        if C in n.C_: continue  # clear/ loop?  # this is not possible? n.C_ is added below, unless we have section to merge Cs below
         et = comp_C(C,n); v = val_(et,aw=rc,fi=fi)
         olp = np.sum([vo[0] / v for vo in n.vo_ if vo[0] > v])  # olp: rel n val in stronger Cs, not summed with C
         vo = np.array([v,olp])  # val, overlap per current root C
@@ -787,7 +799,7 @@ def extend_box(_box, box):
     return min(y0,_y0), min(x0,_x0), max(yn,_yn), max(xn,_xn)
 
 def L2N(link_):
-    for L in link_: L.mL_t = [[],[]]; L.compared_,L.visited_ = [],[]; L.rim = CN(L_=[[],[]])
+    for L in link_: L.mL_t = [[],[]]; L.compared_,L.visited_ = [],[]; L.rim = CN(N_=[[],[]],L_=[[],[]])  # same N_ and L_ structure in rim
     return link_
 
 def PP2N(PP, frame):
