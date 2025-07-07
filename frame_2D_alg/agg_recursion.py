@@ -408,7 +408,8 @@ def comp_N(_N,N, ave, angle=None, span=None, dir=1, fdeep=0, rng=1):  # compare 
         # each: separate overlap, may be CN or list: default individual cross_comp, same for rim and alt?
         if (_N.alt and N.alt) and val_(_N.alt.Et+N.alt.Et, aw=2+o, fi=0) > 0:  # contour
             Link.alt = comp_N(_N.alt, N.alt, ave*2, angle,span); Et += Link.alt.Et
-        if (_N.Ct and N.Ct) and val_(_N.Ct.Et+N.Ct.Et, aw=2+o) > 0:  # sub-centroids
+        # not all N has Ct
+        if hasattr(_N, 'Ct') and hasattr(N, 'Ct') and (_N.Ct and N.Ct) and val_(_N.Ct.Et+N.Ct.Et, aw=2+o) > 0:  # sub-centroids
             Link.Ct = comp_N(_N.Ct, N.Ct, ave); Et += Link.Ct.Et  # merge,refine iCt_ in new G, in addition to new N_ Ct?
         # + cross_comp N.N_, comp rim, as in cluster_C_?
     Link.Et = Et
@@ -424,7 +425,7 @@ def rolp(N, _N_, fi, E=0, R=0): # rel V of N.rim | L_ overlap with _N_: inhibiti
     if R:
         olp_ = [n for n in (N.N_ if fi else N.L_) if n in _N_]  # fi=0 currently not used
     else:
-        olp_ = [L for L, _ in flat(N.rim.N_ if fi else N.rim.L_)
+        olp_ = [L for L in (N.rim.N_ if fi else [l for l,_ in flat(N.rim.L_)])  # N.rim.N_ is not nested when fi=1
                 if any(n in _N_ for n in L.N_)]
     if olp_:
         oEt = np.sum([i.Et for i in olp_], axis=0)
@@ -461,10 +462,78 @@ def cluster(root, N_, rc, fi):  # clustering root
                 rE_ = [n for n in rN_ if n.sel]
                 aw = rc * rng + contw  # cluster Nf_ via rng exemplars:
                 if rE_ and val_(np.sum([n.Et for n in rE_], axis=0), (len(rE_)-1)*Lw, aw) > 0:
-                    Nt = cluster_N_(root, rE_, aw, rng) or Nt  # keep top-rng Gt
+                    Nt = cluster_(root, root.N_, rE_, aw, fi=1, rng=rng) or Nt  # keep top-rng Gt
         else:
-            Nt = cluster_L_(root, N_, E_, rc)
+            Nt = cluster_(root, N_, list(E_), rc, fi=0, rng=1)
         return Nt
+
+# draft
+def cluster_(root, N_, E_, rc, fi=1, rng=1):
+    
+    G_ = []  # flood-fill Gs, exclusive per fork,ave, only centroid-based can be fuzzy
+    lfi = not E_[0].rim  # empty in base L_
+    for n in N_: n.fin = 0
+    for N in E_:
+        if N.fin: continue
+        # init N cluster with rim | root:
+        # both m and fork
+        if rng==1 or N.root.rng==1: # N is not rng-nested
+            node_,link_,llink_,Et, olp = [N],[],[], N.Et+N.rim.Et, N.olp
+            for l,_ in flat(N.rim.L_):  # +ve
+                if l.rng==rng and val_(l.Et,aw=rc+contw)>0: link_ += [l]
+                elif l.rng>rng: llink_ += [l]  # longer-rng rim
+
+            # for dfork when lfi =1
+            if not fi and lfi:  # cluster Ls by L diff
+                for _N in N.rim.N_:  # links here
+                    if _N.fin: continue
+                    _N.fin = 1
+                    for n in _N.N_:  # L.nodet
+                        for L,_ in flat(n.rim.L_):
+                            if L not in node_ and _N.Et[1] > avd * _N.Et[2] * (rc+olp):  # diff
+                                link_+= [_N]; node_+= [L]; Et += L.Et; olp+= L.olp  # /= len node_
+        else:
+            n = N; R = n.root  # N.rng=1, R.rng > 1, cluster top-rng roots instead
+            while R.root and R.root.rng > n.rng: n = R; R = R.root
+            if R.fin: continue
+            node_,link_,llink_,Et, olp = [R],R.L_,R.hL_,copy(R.Et),R.olp
+            R.fin = 1
+        nrc = rc+olp; N.fin = 1  # extend N cluster:
+        for L in link_[:]:  # cluster nodes via links
+            for _N in L.N_:
+                if _N not in N_ or _N.fin: continue  # connectivity clusters don't overlap
+                if rng==1 or _N.root.rng==1:  # not rng-nested
+                    if rolp(N, [l for l,_ in flat(N.rim.L_)], fi=fi) > ave*nrc:
+                        node_ +=[_N]; Et += _N.Et+_N.rim.Et; olp+=_N.olp; _N.fin=1
+                        for l,_ in flat(N.rim.L_):
+                            if l not in link_ and l.rng == rng: link_ += [l]
+                            elif l not in llink_ and l.rng>rng: llink_+= [l]  # longer-rng rim
+                else:
+                    _n =_N; _R=_n.root  # _N.rng=1, _R.rng > 1, cluster top-rng roots if rim intersect:
+                    while _R.root and _R.root.rng > _n.rng: _n=_R; _R=_R.root
+                    if not _R.fin and rolp(N,link_,fi=1, R=1) > ave*nrc:
+                        # cluster by N_|L_ connectivity: oN_ = list(set(N.N_) & set(_N.N_))  # exclude from comp and merge?
+                        link_ = list(set(link_+_R.link_)); llink_ = list(set(llink_+_R.hL_))
+                        node_+= [_R]; Et +=_R.Et; olp += _R.olp; _R.fin = 1; _N.fin = 1
+                nrc = rc+olp
+        node_ = list(set(node_))
+        
+        _Et = np.zeros(3)
+        if fi:
+            alt = [L.root for L in link_ if L.root]  # get link clusters, individual rims are too weak for contour
+            if alt:
+                alt = sum_N_(list(set(alt)))
+                if val_(alt.Et, (len(alt.N_)-1)*Lw, olp, _Et=Et, fi=0):
+                    alt = cross_comp(alt, olp) or alt
+                _Et = alt.Et
+
+        V = val_(Et, (len(node_)-1)*Lw, nrc, _Et, fi=fi)
+        if V > 0:
+            if V > ave*centw: Ct = cluster_C_(root, node_, rc+centw)  # form N.c_, doesn't affect clustering?
+            else:             Ct = []   # option to keep as list, same for alt and rim?
+            G_ += [sum2graph(root, node_, link_, llink_, Et, olp, rng, Ct, alt)]
+        if G_:
+            return sum_N_(G_, root)   # root N_|L_ replacement
 
 def cluster_N_(root, E_, rc, rng=1):  # connectivity cluster exemplar nodes via rim or links via nodet or rimt
 
@@ -596,7 +665,7 @@ def cluster_C_(root, E_, rc, fi=1):  # form centroids from exemplar _N_, driftin
     if val_(ET, aw=O+rc+loopw, fi=fi) > 0:  # C_ value, no _Et?
         return sum_N_(E_)
 
-def sum2graph(root, node_,link_,llink_, Et, olp, rng, Ct, alt=[], fC=0):  # sum node,link attrs in graph, aggH in agg+ or player in sub+
+def sum2graph(root, node_,link_,llink_, Et, olp, rng, Ct=[], alt=[], fC=0):  # sum node,link attrs in graph, aggH in agg+ or player in sub+
 
     n0 = copy_(node_[0]); derH = n0.derH
     l0 = copy_(link_[0]); DerH = l0.derH
