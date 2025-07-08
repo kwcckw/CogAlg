@@ -132,6 +132,7 @@ def copy_(N, root=None, init=0):
 
 def flat(rim):
     L_ = []
+    # if we have rimt in L now, we need a separated if loop to check for rimt
     for L in rim:  # leaves of deep binary L_|N_ tree, or unpack nodet rim[fi]?
         if isinstance(L, list): L_.extend(flat(L))
         else: L_ += [L]
@@ -212,7 +213,7 @@ def cluster_edge(edge, frame, lev, derlay):  # non-recursive comp_PPm, comp_PPd,
         lev.L_+= L_; lev.Et = mEt+dEt  # links between PPms
         for l in L_: derlay.add_lay(l.derH[0]); frame.baseT+=l.baseT; frame.derTT+=l.derTT; frame.Et += l.Et
         if val_(dEt, (len(L_)-1)*Lw, 2+contw, fi=0) > 0:
-            Lt = cluster(frame, PP_, rc=2,fi=0)
+            Lt = cluster(frame, PP_, list(PP_), rc=2,fi=0)
             if Lt:  # L_ graphs
                 if lev.lH: lev.lH[0].N_ += Lt.N_; lev.lH[0].Et += Lt.Et
                 else:      lev.lH += [Lt]
@@ -255,7 +256,8 @@ def cross_comp(root, rc, fi=1):  # rng+ and der+ cross-comp and clustering, + re
             else:       Lt = cluster(root, N_, rc+contw, fi=0)  # cluster N.rim.L_s, +1 layer
             if Lt: root.lH += [Lt] + Lt.nH; root.Et += Lt.Et; root.derH += Lt.derH  # append new der lays
         if mV > 0:
-            Nt = cluster(root, N_, rc+loopw, fi)  # with get_exemplars, cluster_C_, rng-banded if fi
+            fN_ = list(set([n for n_ in N_ for n in n_])) if fi else N_  # N_ is nested for fi == 1 here
+            Nt = cluster(root, fN_, fN_, rc+loopw, fi)  # with get_exemplars, cluster_C_, rng-banded if fi
             if Nt and val_(Nt.Et, (len(Nt.N_)-1)*Lw, rc+loopw+Nt.rng, _Et=Et) > 0:
                 Nt = cross_comp(Nt, rc+loopw) or Nt  # agg+
             if Nt:
@@ -393,20 +395,27 @@ def base_comp(_N, N, dir=1):  # comp Et, Box, baseT, derTT
 
     return DerTT, Et, rn
 
-def comp_N(_N,N, angle=None, span=None, dir=1, fdeep=0, flist=0, rng=1):  # compare links, relative N direction = 1|-1, no angle,span?
+# so we need ave in comp_N_?
+def comp_N(_N,N, ave, angle=None, span=None, dir=1, fdeep=0, flist=0, rng=1):  # compare links, relative N direction = 1|-1, no angle,span?
 
+    # from comp spec
+    if angle is None:
+        dy,dx = np.subtract(_N.yx,N.yx); span = np.hypot(dy,dx); angle = np.array([dy, dx])
+        
     derTT, Et, rn = base_comp(_N, N, dir); fi = N.fi
     # link M,D,A:
     baseT = np.array([*(_N.baseT[:2] + N.baseT[:2]*rn) / 2, *angle])  # redundant angle for generic base_comp, also span-> density?
     _y,_x = _N.yx; y,x = N.yx; box = np.array([min(_y,y),min(_x,x),max(_y,y),max(_x,x)])
     o = (_N.olp+N.olp) / 2
-    Link = CN(rng=rng, olp=o, N_=[_N,N], baseT=baseT, derTT=derTT, yx=np.add(_N.yx,N.yx)/2, span=span, angle=angle, box=box, fi=0)
+    Link = CN(rng=rng, olp=o, baseT=baseT, derTT=derTT, yx=np.add(_N.yx,N.yx)/2, span=span, angle=angle, box=box, fi=0)
+    Link.nodet = [_N,N]; Link.rimt = [[],[]]
     Link.derH = [CLay(root=Link, Et=Et, node_=[_N,N],link_=[Link], derTT=copy(derTT))]
     if fdeep:
         if val_(Et, len(N.derH)-2, o) > 0 or fi==0:  # else derH is dext,vert
             Link.derH += comp_H(_N.derH, N.derH, rn, Link, derTT,Et)  # append
         if fi:
-            for _spec, spec, Lspec in zip((_N.N_,_N.rim,_N.alt,_N.cent), (N.N_,N.rim,N.alt,N.cent), (Link.n_,Link.r_,Link.alt,Link.cent)):
+            # we compare their rim CN now too?
+            for _spec, spec, Lspec in zip((_N.N_,_N.rim,_N.alt,_N.cent), (N.N_,N.rim,N.alt,N.cent), (Link.nodet,Link.rimt,Link.alt,Link.cent)):
                 if _spec and spec:  # add spec overlap ws, fill empty or absent attrs?
                     comp_spec(_spec, spec, Link.Et, Lspec, flist)
     Link.Et = Et
@@ -535,7 +544,7 @@ def cluster(root, N_, E_, rc, fi, rng=1):  # unified clustering for nodes and li
         else:  # link cluster+
             if fli:  # cluster Ls by L diff, rim empty in base L
                 for L in link_[:]:
-                    for _N in L.N_:
+                    for _N in L.N_:  # should be L.nodet here now when rimt is empty?
                         if _N in N_ and not _N.fin and rolp(E, [l for l,_ in flat(_N.rim.L_)], fi=0) > ave * nrc:
                             node_ += [_N]; Et += _N.Et+_N.rim.Et; olp += _N.olp; _N.fin = 1
                             for l,_ in flat(_N.rim.L_):
@@ -544,15 +553,16 @@ def cluster(root, N_, E_, rc, fi, rng=1):  # unified clustering for nodes and li
                 for _N in E.rim.N_:
                     if _N.fin: continue
                     _N.fin = 1
-                    for n in _N.N_:
-                        for L,_ in flat(n.rim.L_):
+                    for n in _N.rim.N_:  # should be rim.N_ here?
+                        for L,_ in flat(n.rim.L_):  # should be rimt here now?
                             if L not in node_ and _N.Et[1] > avd * _N.Et[2] * nrc:
                                 link_ += [_N]; node_ += [L]; Et += L.Et; olp += L.olp
             alt = []; _Et = root.Et
         node_ = list(set(node_))
         V = val_(Et, (len(node_)-1)*Lw, nrc, _Et)
         if V > 0:
-            if V > ave*centw: cent = cluster_C_(root, node_, rc+centw, fi=fi)  # form N.c_, doesn't affect clustering?
+            # do we need cluster_C_ for PPs too? or skip it?
+            if V > ave*centw and node_[0].rim: cent = cluster_C_(root, node_, rc+centw, fi=fi)  # form N.c_, doesn't affect clustering?
             else:             cent = []   # option to keep as list, same for alt and rim?
             G_ += [sum2graph(root, node_, link_, llink_, Et, olp, rng, cent, alt)]
     if G_:
@@ -611,7 +621,7 @@ def sum2graph(root, node_,link_,llink_, Et, olp, rng, cent, alt, fC=0):  # sum n
     graph = CN(root=root, fi=1,rng=rng, N_=node_,L_=link_,olp=olp, Et=Et, alt=alt, box=n0.box, baseT=n0.baseT+l0.baseT, derTT=n0.derTT+l0.derTT)
     if cent: graph.cent = cent
     graph.hL_ = llink_
-    n0.root = graph; yx_ = [n0.yx]; fg = isinstance(n0.N_[0],CN)  # not PPs
+    n0.root = graph; yx_ = [n0.yx]; fg = any(n0.N_) or (n0.N_ and isinstance(n0.N_[0],CN))  # not PPs
     Nt = copy_(n0)  #->CN, comb forks: add_N(Nt,Nt.Lt)?
     for N in node_[1:]:
         add_H(derH,N.derH,graph); graph.baseT+=N.baseT; graph.derTT+=N.derTT; graph.box=extend_box(graph.box,N.box); yx_+=[N.yx]; N.root = graph
