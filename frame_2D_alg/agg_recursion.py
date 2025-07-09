@@ -125,19 +125,25 @@ def copy_(N, root=None, init=0):
         C.N_,C.L_,C.nH,C.lH, N.root = (list(N.N_),list(N.L_),list(N.nH),list(N.lH), root if root else N.root)
         for name in ('rim','alt','cent'):
             val = getattr(N, name)
-            if val: setattr(C, name, copy_(val))
+            if val: 
+                if isinstance(val, list):  # nodet rim
+                    setattr(C, name, copy(val))
+                else:
+                    setattr(C, name, copy_(val))
     C.derH  = [lay.copy_() for lay in N.derH]
     C.derTT = deepcopy(N.derTT)
     for attr in ['Et', 'baseT','yx','box','angle']: setattr(C, attr, copy(getattr(N, attr)))
     for attr in ['olp','rng', 'fi', 'fin', 'span']: setattr(C, attr, getattr(N, attr))
     return C
 
-def rim_(N, fi):
-    Rim = []  # rim N_|L_
-    rim = (N.rim[fi] if isinstance(N.rim,list) else (N.rim.N_,N.rim.L_)[fi]) if fi else N.rim  # rim is nodet in link
+def rim_(N, fi, Rim=[]):  # Rim = rim N_|L_
+    # We can remove that "if fi else N.rim"? Because in the if fi secton, fi is always 1?
+    rim = (N.rim[fi].rim.L_ if isinstance(N.rim,list) else (N.rim.L_,N.rim.N_)[fi])  # rim is nodet in link
     for r in rim:
-        if isinstance(r,CN): Rim.extend(rim_(r,fi))  # rim element is nodet[i], keep unpacking
-        else:                Rim += [r]  # Lt|N: terminal rim element
+        if r not in Rim:
+            Rim += [r]
+            if isinstance(r,CN): Rim.extend(rim_(r,fi))  # rim element is nodet[i], keep unpacking (this is actually cyclic since each of them might be mediated with each other)
+            # else:                Rim += [r]  # Lt|N: terminal rim element
     return Rim
 
 ave, avd, arn, aI, aveB, aveR, Lw, intw, loopw, centw, contw = 10, 10, 1.2, 100, 100, 3, 5, 2, 5, 10, 15  # value filters + weights
@@ -259,6 +265,7 @@ def cross_comp(root, rc, fi=1):  # rng+ and der+ cross-comp and clustering
         if mV > 0:
             Nt = Cluster(root, N_, rc+loopw, fi)  # with get_exemplars, cluster_C_, rng-banded if fi
             if Nt and val_(Nt.Et, (len(Nt.N_)-1)*Lw, rc+loopw+Nt.rng, _Et=Et) > 0:
+            if Nt and len(Nt.N_)>1 and rc <8:
                 Nt = cross_comp(Nt, rc+loopw) or Nt  # agg+
             if Nt:
                 _H = root.nH; root.nH = []
@@ -488,7 +495,7 @@ def Cluster(root, N_, rc, fi):  # clustering root
                 if rE_ and val_(np.sum([n.Et for n in rE_], axis=0), (len(rE_)-1)*Lw, aw) > 0:
                     Nt = cluster(root, Nf_, rE_, aw, 1, rng) or Nt  # keep top-rng Gt
         else:
-            Nt = cluster(root, N_, E_, rc, fi=0)
+            Nt = cluster(root, N_, list(E_), rc, fi=0)
         return Nt
 
 def cluster(root, N_, E_, rc, fi, rng=1):  # flood-fill node | link clusters
@@ -547,7 +554,7 @@ def cluster(root, N_, E_, rc, fi, rng=1):  # flood-fill node | link clusters
                             node_ += [n]; Et += n.Et+n.rim.Et; olp += n.olp; n.fin = 1
                             link_ += [l for l,_ in rim_(n,0) if l not in link_]
             else:  # cluster by rim match
-                for _L in rim_(E,0):
+                for _L,_ in rim_(E,0):
                     if _L.fin: continue
                     _L.fin = 1
                     for n in _L.rim:  # nodet
@@ -576,7 +583,11 @@ def cluster_C_(root, E_, rc, fi=1):  # form centroids from exemplar _N_, driftin
     for n in root.N_: n.C_, n.vo_, n._C_, n._vo_ = [], [], [], []
     _C_ = []; av = ave if fi else avd
     for E in E_:
-        Et = E.rim.Et; C = copy_(E,root); C.N_=[E]; C.L_=[]; C.Et=Et  # init centroid
+        if isinstance(E.rim, list):  # nodet
+            Et = np.sum([n.Et for n in E.rim],axis=0)
+        else: Et = E.rim.Et;
+        C = copy_(E,root); C.N_=[E]; C.L_=[]; C.Et=Et  # init centroid
+        # rim_ here may return link instead of N? Then we may pack link into _N_
         C._N_ = list({n for N in rim_(E,fi) for n in rim_(N,fi)})  # core members + surround for comp to N_ mean
         _C_ += [C]
     while True:  # recompute C, refine C.N_
