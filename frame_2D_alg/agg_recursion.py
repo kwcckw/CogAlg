@@ -181,7 +181,7 @@ def cluster_edge(edge, frame, lev, derlay):  # non-recursive comp_PPm, comp_PPd,
                 eN_ = []
                 for eN in _eN_:  # rim-connected ext Ns
                     node_ += [eN]
-                    for L,_ in eN.rim.L_:  # all +ve, *= density?
+                    for L,_ in eN.rim[0]:  # all +ve, *= density?
                         if L not in link_:
                             for eN in L.N_:
                                 if eN in PP_: eN_ += [eN]; PP_.remove(eN)  # merged
@@ -194,7 +194,6 @@ def cluster_edge(edge, frame, lev, derlay):  # non-recursive comp_PPm, comp_PPd,
 
     def comp_PP_(PP_):
         N_,L_,mEt,dEt = [],[],np.zeros(3),np.zeros(3)
-        for PP in PP_: PP.rim = CN()
         for _G, G in combinations(PP_, r=2):
             dy,dx = np.subtract(_G.yx,G.yx); dist = np.hypot(dy,dx)
             if dist - (G.span+_G.span) < adist / 10:  # very short here
@@ -306,11 +305,15 @@ def comp_node_(_N_, rc):  # rng+ forms layer of rim and extH per N?
 def comp_link_(iL_, rc):  # comp CLs via directional node-mediated link tracing: der+'rng+ in root.link_ rim_t node rims
 
     for L in iL_:  # init mL_t: nodet-mediated Ls:
-        for rev, N, mL_ in zip((0, 1), L.N_, L.mL_t):  # L.mL_t is empty
+        for rev, N, mL_ in zip((0, 1), L.rim, L.mL_t):  # L.mL_t is empty  (nodet should be L.rim now)
             for _L,_rev in rim_(N,0):
                 if _L is not L and _L in iL_:
                     if val_(L.Et,0,aw=loopw) > 0:
                         mL_ += [(_L, rev ^ _rev)]  # direction of L relative to _L
+                        
+    for L in iL_: 
+        L.N_ = L.rim  # move nodet from n.rim to n.N_ so that n.rim can be used to pack Link?
+        L.rim = [[[],[]],[[],[]]]  # convert to [L_, N_]
     med = 1; _L_ = iL_
     L__,LL_,ET = [],[],np.zeros(3)
     while True:  # xcomp _L_
@@ -335,19 +338,19 @@ def comp_link_(iL_, rc):  # comp CLs via directional node-mediated link tracing:
                 mL_t, lEt = [set(),set()], np.zeros(3)  # __Ls per L
                 for mL_,_mL_ in zip(mL_t, L.mL_t):
                     for _L, rev in _mL_:
-                        for _rev, N in zip((0,1), _L.N_):
+                        for _rev, N in zip((0,1), _L.N_):  # _L.nodet
                             rim = rim_(N,0)
-                            if len(rim) == med:  # rim should not be nested?
-                                for __L,__rev in rim:
-                                    if __L in L.visited_ or __L not in iL_: continue
-                                    L.visited_ += [__L]; __L.visited_ += [L]
-                                    if val_(__L.Et,aw=loopw) > 0:
-                                        mL_.add((__L, rev ^_rev ^__rev))  # combine reversals: 2 * 2 mLs, but 1st 2 are pre-combined
-                                        lEt += __L.Et
+                            # if len(rim) == med:  # rim should not be nested? (this is no longer needed? Unless we preserve each level rim)
+                            for __L,__rev in rim:
+                                if __L in L.visited_ or __L not in iL_: continue
+                                L.visited_ += [__L]; __L.visited_ += [L]
+                                if val_(__L.Et,aw=loopw) > 0:
+                                    mL_.add((__L, rev ^_rev ^__rev))  # combine reversals: 2 * 2 mLs, but 1st 2 are pre-combined
+                                    lEt += __L.Et
                 if lEt[0] > ave * lEt[2]:  # L rng+, vs. L comp above, add coef
                     L.mL_t = mL_t; _L_.add(L); ext_Et += lEt
             # refine eval by extension D:
-            if val_(ext_Et, aw=rc+loopw+med*medw) > 0: med += 1
+            if val_(ext_Et, aw=rc+loopw+med*medw) > 0: med += 1  # so we need to preserve each med's rim? Then L.rim = [rimt1, rimt2,...] here?
             else: break
         else: break
     return list(set(L__)), LL_, ET
@@ -375,7 +378,7 @@ def base_comp(_N,N, rc, dir=1):  # comp Et, Box, baseT, derTT
     G*=rn; dG = _G - G; mG = min(_G,G) / max(_G,G)
     mA, dA = comp_angle((_Dy,_Dx),(Dy*rn,Dx*rn))  # current angle if CL
     # comp dimension:
-    if isinstance(N,CN): # dimension is n nodes
+    if isinstance(N,CN) and N.fi: # dimension is n nodes (we need to check N.fi since link doesn't have .N_)
         _L,L = len(_N.N_), len(N.N_)
         mL,dL = min(_L,L)/ max(_L,L), _L - L
     else:  # dimension is distance
@@ -417,8 +420,10 @@ def comp_N(_N,N, rc, angle=None, span=None, dir=1, fdeep=0, flist=0, rng=1):  # 
         if fi:
             n.rim[0] += [(Link,rev)]; n.rim[1] += [_n]  # n is node else link:
         else:
-            if n.N_: n = CN(root=n, rim=[Link]); Link.rim = [n,_n]  # der+: replace n with pseudo-node with higher rim?
-            n.rim[1-rev][0] += [(Link,rev)]; n.rim[1-rev][1] += [_n]
+            # if n.N_: n = CN(root=n, rim=[Link]); Link.rim = [n,_n]  # der+: replace n with pseudo-node with higher rim?
+            # n.rim[1-rev][0] += [(Link,rev)]; n.rim[1-rev][1] += [_n]
+            # the 2 lines above are no longer relevant?
+            n.rim[0][1-rev] += [(Link,rev)]; n.rim[1][1-rev] += [_n]
             # in rimt opposite to _N,N dir
     return Link
 
@@ -429,7 +434,7 @@ def comp_spec(_spec,spec, rc, LEt,Lspec, flist):
         Lspec += [dspec]; LEt += dspec.Et
         return
     elif flist:
-        dspec_,dEt = [], np.zeros(3)
+        dspec_,dEt = [], np.zeros(3)  # dEt is not used here?
         for _e in _spec if isinstance(_spec,list) else _spec.N_:
             for e in spec if isinstance(spec,list) else spec.N_:
                 if _e is e: LEt += e.Et  # not sure
@@ -449,7 +454,7 @@ def rolp(N, _N_, fi, E=0, R=0): # rV of N.rim |L_ overlap with _N_: inhibition|s
     else: olp_ = [L for L,_ in rim_(N,fi) if any(n in _N_ for n in L.N_)]
     if olp_:
         oEt = np.sum([i.Et for i in olp_], axis=0)
-        _Et = N.Et if (R or E) else N.rim.Et  # not sure
+        _Et = N.Et if (R or E) else N.et  # not sure
         rV = (oEt[1-fi]/oEt[2]) / (_Et[1-fi]/_Et[2])
         return rV * val_(N.Et, fi, aw=centw)  # contw for cluster?
     else:
@@ -459,9 +464,10 @@ def get_exemplars(N_, rc, fi):  # get sparse nodes by multi-layer non-maximum su
 
     E_, Et = [], np.zeros(3)  # ~ point cloud of focal nodes
     _E_ = set()  # prior = stronger:
-    for rdn, N in enumerate(sorted(N_, key=lambda n: n.rim.Et[1-fi]/ n.rim.Et[2], reverse=True), start=1):
+    for rdn, N in enumerate(sorted(N_, key=lambda n: n.et[1-fi]/ n.et[2], reverse=True), start=1):
         # ave *= overlap by stronger-E inhibition zones
-        et = np.sum([l.Et for l in N.rim[fi] if val_(l.Et,fi,aw=rc)], axis=0)  # L_|N_
+        rim = N.rim[fi] if fi else [l for l,_ in N.rim[fi]]  # use a flat function to remove rev?
+        et = np.sum([l.Et for l in rim if val_(l.Et,fi,aw=rc)], axis=0)  # L_|N_
         roV = rolp(N, list(_E_), fi, E=1)  # roV is cost:
         if val_(et, fi, aw = rc + rdn + loopw + roV) > 0:
             Et += et; _E_.update( rim_(N,fi)); N.sel = 1  # in cluster
