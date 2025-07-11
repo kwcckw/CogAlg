@@ -305,36 +305,43 @@ def comp_node_(_N_, rc):  # rng+ forms layer of rim and extH per N?
 
 def comp_link_(iL_, rc):  # comp CLs via directional node-mediated link tracing: der+'rng+ in root.link_ rim_t node rims
 
-    for L in iL_:
-        rim = []  # replace L.rim with lower L.rim N_ rims:
-        for n in L.rim:  # nodet
-            lrim, nrim = [],[]
-            for _n in n.rim[1]:
-                lrim += _n.rim[0]; nrim += _n.rim[1]
-            rim += [CN(root=n, rim=[list({lrim}), list({nrim})])]
-        L.rim = rim
-        ''' no eval 
-            for _L,_rev in rim_(N,0):
-                if _L is not L and _L in iL_:
-                    if val_(L.Et,0,aw=loopw) > 0:
-                        mL_ += [(_L, rev ^ _rev)]  # direction of L relative to _L '''
     # not revised:
     med = 1; _L_ = iL_
     L__,LL_,ET = [],[],np.zeros(3)
     while True:  # xcomp _L_
+    
+        for L in _L_:
+            rim = []  # replace L.rim with lower L.rim N_ rims:
+            for n in L.rim:  # nodet
+                lrim, nrim = [],[]
+                for _n in n.rim[1]:
+                    lrim += _n.rim[0]; nrim += _n.rim[1]
+                rim += [CN(root=n, rim=[list(set(lrim)), list(set(nrim))])]
+            L.rim = rim
+            ''' no eval 
+                for _L,_rev in rim_(N,0):
+                    if _L is not L and _L in iL_:
+                        if val_(L.Et,0,aw=loopw) > 0:
+                            mL_ += [(_L, rev ^ _rev)]  # direction of L relative to _L '''
+
         L_, Et = [], np.zeros(3)
         for L in _L_:
-            for mL_ in L.mL_t:
+            # both rev direction?
+            for _rev, mL_ in zip((0,1), [L.rim[0].rim[0], L.rim[1].rim[0]]):  # each L.rim is nodet
                 for _L, rev in mL_:  # rev is relative to L
+                    if _L not in iL_: L2N([_L])
                     if _L in L.compared_: continue
                     dy,dx = np.subtract(_L.yx,L.yx)
-                    Link = comp_N(_L,L, rc, np.array([dy,dx]), np.hypot(dy,dx), -1 if rev else 1)  # d = -d if L is reversed relative to _L
+                    # not sure on the _rev and rev here
+                    Link = comp_N(_L,L, rc, np.array([dy,dx]), np.hypot(dy,dx), -1 if (_rev^rev) else 1)  # d = -d if L is reversed relative to _L
                     Link.med = med
                     LL_ += [Link]; Et += Link.Et  # include -ves, link order: nodet < L < rim, mN.rim || L
                     for l,_l in zip((_L,L),(L,_L)):
                         l.compared_ += [_l]
                         if l not in L_ and val_(l.et, aw=rc+med+loopw) > 0:  # cost+/ rng
                             L_ += [l]  # for med+ and exemplar eval
+                            
+        # below is no longer needed with current rim structure?
         if L_: L__ += L_; ET += Et
         # extend mL_t per last medL:
         if val_(Et,aw=rc+loopw+med*medw) > 0:  # project prior-loop value, med adds fixed cost
