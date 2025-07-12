@@ -136,9 +136,12 @@ def copy_(N, root=None, init=0):
 def rim_(N, Rim=[]):  # unpack terminal rt_s, or specific-med rt_s?
 
     for r in N.rim:  # n if link, [] if nested n.rim, else rt: (l,rev,_n)
-        if r not in Rim:
+        if r and r not in Rim:  # skip empty list
             if isinstance(r,tuple): Rim += [r]  # terminal rim (l,rev,_n)
-            elif isinstance(r, CN): Rim.extend(rim_(r.rim))
+            elif isinstance(r, CN):
+                Rim.extend(rim_(r))  # should be rim_(r) here? r.rim maybe a nested list for link
+            elif isinstance(r, list):  # rim from rimt
+                Rim.extend(r) 
             else:
                 Rim.extend(rim_(r[-1]))  # get top layer, or flatten rim?
     return Rim
@@ -182,7 +185,7 @@ def cluster_edge(edge, frame, lev, derlay):  # non-recursive comp_PPm, comp_PPd,
                 eN_ = []
                 for eN in _eN_:  # rim-connected ext Ns
                     node_ += [eN]
-                    for L,_ in eN.rim[0]:  # all +ve, *= density?
+                    for L,_,_ in eN._rim:  # all +ve, *= density?
                         if L not in link_:
                             for eN in L.N_:
                                 if eN in PP_: eN_ += [eN]; PP_.remove(eN)  # merged
@@ -216,7 +219,7 @@ def cluster_edge(edge, frame, lev, derlay):  # non-recursive comp_PPm, comp_PPd,
         else:  frame.N_ += PP_  # PPm_
         lev.L_+= L_; lev.Et = mEt+dEt  # links between PPms
         for l in L_: derlay.add_lay(l.derH[0]); frame.baseT+=l.baseT; frame.derTT+=l.derTT; frame.Et += l.Et
-        if val_(dEt,0, (len(L_)-1)*Lw, 2+contw) > 0:
+        if val_(dEt,0, (len(L_)-1)*Lw, 2+contw) > 0:  # looks like we are getting a same problem here where negative Lw gives positive val
             Lt = Cluster(frame, PP_, rc=2,fi=0)
             if Lt:  # L_ graphs
                 if lev.lH: lev.lH[0].N_ += Lt.N_; lev.lH[0].Et += Lt.Et
@@ -252,7 +255,7 @@ def cross_comp(root, rc, fi=1):  # rng+ and der+ cross-comp and clustering
     N_,L_,Et = comp_node_(root.N_,rc) if fi else comp_link_(root.N_,rc)  # rc: redundancy+olp
     if len(L_) > 1:
         for n in [n for N in N_ for n in N] if fi else N_:
-            for l,_ in rim_(n,0): n.et += l.Et  # any fork, n.olp+=l.olp | fixed?
+            for l,_ in rim_(n): n.et += l.Et  # any fork, n.olp+=l.olp | fixed?
         mV,dV = val_(Et,2, (len(L_)-1)*Lw, rc+loopw)
         if dV > 0:
             if root.L_: root.lH += [sum_N_(root.L_)]  # replace L_ with agg+ L_:
@@ -287,7 +290,7 @@ def comp_node_(_N_, rc):  # rng+ forms layer of rim and extH per N?
             (_m,_,_n),(m,_,n) = _G.Et,G.Et; olp = (_G.olp+G.olp)/2; _m = _m * intw +_G.et[0]; m = m * intw + G.et[0]
             # density / comp_N: et|M, 0/rng=1?
             max_dist = adist * (radii/aveR) * ((_m+m)/(ave*(_n+n+0))/ intw)  # ave_dist * radii * induction
-            if max_dist > dist or set(_G.rim[1]) & set(G.rim[1]):
+            if max_dist > dist or set(_G._rim) & set(G.rim):
                 # comp if close or share matching mediators: add to inhibited?
                 Link = comp_N(_G,G, rc, angle=np.array([dy,dx]), span=dist, fdeep = dist < max_dist/2, rng=rng)
                 L_ += [Link]  # include -ve links
@@ -315,8 +318,8 @@ def comp_link_(iL_, rc):  # comp links via directional node-mediated _link traci
         for n,_rev in zip(L.rim, (0,1)):
             if n.med: continue  # already extended
             _rim, rim = [],[]  # extended rim = _rim _n rims
-            for rt in n.rim:  # not yet nested
-                if rt not in _rim and val_(rt[0],0, aw=rc) > 0:  # high-d only?
+            for rt in n._rim:  # not yet nested
+                if rt not in _rim and val_(rt[0].Et,0, aw=rc) > 0:  # high-d only?
                     l,rev,_n = rt; _rim += [rt]; rim += [(l, rev^_rev, _n)]  # direction of l relative to L
             if rim: n.rim = [n.rim, rim]; n.med=1; n._rim = []  # new rt_
     while _L_ and med < 4:
@@ -333,13 +336,13 @@ def comp_link_(iL_, rc):  # comp links via directional node-mediated _link traci
                     l.compared_ += [_l]
                     if l not in L_ and val_(l.et,0, aw=rc+med+loopw) > 0:  # cost+/ rng
                         rimt = []
-                        for n,_rev in zip(l.rim, (0,1)):
+                        for n,_rev in zip(l._rim, (0,1)):
                             _rim, rim = [], []  # extend by one layer:
                             for rt in rim_(n):  # terminal rt_
-                                if rt not in _rim and val_(rt[0],0, aw=rc+med) > 0:  # high-d only?
+                                if rt not in _rim and val_(rt[0].Et,0, aw=rc+med) > 0:  # high-d only?
                                     __l,_rev,_n = rt; _rim += [rt]; rim += [(__l, rev^_rev, _n)]  # direction of l relative to L
                             if rim:  # new rt_
-                                n.rim += [[rim]]; n.med=med; n._rim = []; rimt += rim
+                                n.rim += [[rim]]; n.med=med; n._rim = []; rimt += rim  # i guess is fine here, so far I don't see n is reset twice
                         if rimt: L_ += [l]  # for med+ and exemplar eval
         L__+= L_; _L_ = L_
 
@@ -408,7 +411,11 @@ def comp_N(_N,N, rc, angle=None, span=None, dir=1, fdeep=0, flist=0, rng=1):  # 
     Link.Et = Et
     for rev, n,_n in zip((0,1),(N,_N),(_N,N)):
         # reverse Link dir in _N.rim
-        if fi: n._rim += [(Link,rev,_n)]  # n is node else link:
+        if fi:
+            # Or init n._rim in CN although it's temporary?
+            if not hasattr(n, '_rim'): n._rim = []
+            if not hasattr(_n, '_rim'): _n._rim = []
+            n._rim += [(Link,rev,_n)]  # n is node else link:
         else:  n._rim[1-rev].rim += [(Link,rev,_n)]  # nodet-mediated rim opposite to _N,N dir
     return Link
 
@@ -436,7 +443,7 @@ def comp_spec(_spec,spec, rc, LEt,Lspec, flist):
 def rolp(N, _N_, fi, E=0, R=0): # rV of N.rim |L_ overlap with _N_: inhibition|shared zone, oN_ = list(set(N.N_) & set(_N.N_)), no comp?
 
     if R: olp_ = [n for n in (N.N_ if fi else N.L_) if n in _N_]  # current fi=1
-    else: olp_ = [L for L,_ in rim_(N,fi) if any(n in _N_ for n in L.N_)]
+    else: olp_ = [L for L,_,_ in rim_(N) if any(n in _N_ for n in L.N_)]
     if olp_:
         oEt = np.sum([i.Et for i in olp_], axis=0)
         _Et = N.Et if (R or E) else N.et  # not sure
@@ -720,7 +727,7 @@ def extend_box(_box, box):
     return min(y0,_y0), min(x0,_x0), max(yn,_yn), max(xn,_xn)
 
 def L2N(link_):
-    for L in link_: L.mL_t = [[],[]]; L.compared_,L.visited_ = [],[]
+    for L in link_: L.mL_t = [[],[]]; L.compared_,L.visited_ = [],[]; L.rim[0].med = 0; L.rim[1].med = 0; L._rim = [CN(rim=[[],[]]), CN(rim=[[],[]])]
     return link_
 
 def PP2N(PP, frame):
