@@ -97,7 +97,7 @@ class CN(CBase):
         n.Et = kwargs.get('Et',np.zeros(3))  # sum from L_
         n.et = kwargs.get('et',np.zeros(3))  # sum from rim
         n.olp = kwargs.get('olp',1)  # overlap to ext Gs, ave in links? separate olp for rim, or internally overlapping?
-        n.med = kwargs.get('med',1)  # = rim nesting for both nodes and links?
+        n.med = kwargs.get('med',0)  # = rim nesting for both nodes and links? Why med is init as 1? We need 0 to check for mediation in comp_link_?
         n.rim = kwargs.get('rim',[])  # [(L,rev,N)], sum attrs from links?
         n._rim = kwargs.get('_rim',[])  # new rim before merging
         # nested CN | lists, too much overlap
@@ -137,11 +137,12 @@ def copy_(N, root=None, init=0):
 
 def rim_(N, Rim=[]):  # unpack terminal rt_s, or specific-med rt_s?
 
-    for r in N.rim:  # n if link, [] if nested n.rim, else rt: (l,rev,_n)
-        if r not in Rim:
-            if isinstance(r,tuple): Rim += [r]  # terminal rim (l,rev,_n)
-            elif isinstance(r, CN): Rim.extend(rim_(r))  # may be nested
-            else: Rim.extend(rim_(r[-1]))  # get top layer | flatten all?
+    if N._rim:  # level rim may empty for first level, check here instead of checking it in every rim_ call?
+        for r in N._rim[-1]:  # n if link, [] if nested n.rim, else rt: (l,rev,_n)
+            if r not in Rim:
+                if isinstance(r,tuple): Rim += [r]  # terminal rim (l,rev,_n)
+                elif isinstance(r, CN): Rim.extend(rim_(r))  # may be nested
+                else: Rim.extend(rim_(r[-1]))  # get top layer | flatten all?
     return Rim
 
 ave, avd, arn, aI, aveB, aveR, Lw, intw, loopw, centw, contw = 10, 10, 1.2, 100, 100, 3, 5, 2, 5, 10, 15  # value filters + weights
@@ -273,12 +274,13 @@ def cross_comp(root, rc, fi=1):  # rng+ and der+ cross-comp and clustering
                 # recursive feedback:
                 return Nt
 
-def comp_node_(_N_, rc):  # rng+ forms layer of rim and extH per N?
+def comp_node_(iN_, rc):  # rng+ forms layer of rim and extH per N?
 
-    N__,L_,ET = [],[],np.zeros(3); rng,olp_ = 1,[]  # range banded if frng only?
+    N__,L_,ET = [],[],np.zeros(3); rng,olp_ = 1,[]; _N_ = copy(iN_)  # range banded if frng only?
     for n in _N_:
         n.compared_ = []; n._rim = []
-        if isinstance(n.rim[0], tuple): n.rim = [n.rim]
+        if n.rim and isinstance(n.rim[0], tuple): 
+            n._rim = [n.rim]; n.rim = []
     while True:  # _vM
         Gp_ = []  # [G pair + co-positionals], for top-nested Ns, unless cross-nesting comp:
         for _G, G in combinations(_N_, r=2):
@@ -308,8 +310,8 @@ def comp_node_(_N_, rc):  # rng+ forms layer of rim and extH per N?
                 _N_ = N_; rng += 1; olp_ = []  # reset
             else: break  # low projected rng+ vM
         else: break
-    for n in _N_:
-        n.rim += [n._rim] or []; n._rim=[]  # merge new rim
+    for n in iN_:
+        n._rim += [copy(n.rim)]  # merge new rim  (pack new rim level, or this should be done per rng level?)
     return N__, L_, ET
 
 def comp_link_(iL_, rc):  # comp links via directional node-mediated _link tracing with incr mediation
@@ -322,8 +324,8 @@ def comp_link_(iL_, rc):  # comp links via directional node-mediated _link traci
             for rt in n.rim:  # not yet nested
                 if rt not in _rim and val_(rt[0].Et,0, aw=rc) > 0:  # high-d only?
                     l,rev,_n = rt; _rim += [rt]; rim += [(l, rev^_rev, _n)]  # direction of l relative to L
-            if rim: n.med=1; n.rim = []  # new rt_
-            if isinstance(n.rim[0],tuple): n.rim = [n.rim]
+            if rim: n.med=1;  #  n.rim = []  # new rt_
+        if isinstance(L.rim[0],tuple): L._rim = [copy(L.rim)]; L.rim = []  # should packing L's rim into level _rim here?
     med = 1
     L__,LL_,ET,_L_ = [],[], np.zeros(3), iL_
     while _L_ and med < 4:
@@ -340,14 +342,17 @@ def comp_link_(iL_, rc):  # comp links via directional node-mediated _link traci
                         rimt = []
                         for n,_rev in zip(l.rim, (0,1)):
                             _rim, rim = [], []  # extend by one layer:
+                            # below no longer valid since we need to get same level L instead?
                             for rt in rim_(n):  # terminal rt_
                                 if rt not in _rim and val_(rt[0].Et,0, aw=rc+med) > 0:  # high-d only?
                                     __l,_rev,_n = rt; _rim += [rt]; rim += [(__l, rev^_rev, _n)]  # direction of l relative to L
                             if rim:  # new rt_
                                 n._rim += [rim]; n.med=med; rimt += rim
                         if rimt: L_ += [l]  # for med+ and exemplar eval
-        for L in _L_:
-            for n in L.rim: n.rim += [n._rim] or []; n._rim = []  # merge new rim per med
+        for L in iL_:
+            if L.rim: 
+                L._rim += [copy(L.rim)]; L.rim = []  # pack L.rim to level _rim?
+            # for n in L.rim: n.rim += [n._rim] or []; n._rim = []  # merge new rim per med
         L__ += L_; _L_ = L_
         med += 1
     return list(set(L__)), LL_, ET
@@ -414,7 +419,7 @@ def comp_N(_N,N, rc, angle=None, span=None, dir=1, fdeep=0, flist=0, rng=1):  # 
                     comp_spec(_S,S, rc, Link.Et, LS, flist)
     Link.Et = Et
     for n, _n, rev in zip((N,_N),(_N,N),(0,1)):  # reverse Link dir in _N.rim:
-        n._rim += [(Link,rev,_n)]
+        n.rim += [(Link,rev,_n)]  # should be rim now
     return Link
 
 # revise all specs as lists:
