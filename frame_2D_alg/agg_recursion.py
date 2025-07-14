@@ -75,7 +75,7 @@ class CLay(CBase):  # layer of derivation hierarchy, subset of CG
         i_ = lay.derTT[1] * rn * dir; _i_ = _lay.derTT[1]  # i_ is ds, scale and direction- normalized
         d_ = _i_ - i_
         a_ = np.abs(i_); _a_ = np.abs(_i_)
-        m_ = np.minimum(_a_,a_) / np.maximum.reduce([_a_,a_,1e-7])  # match = min/max comparands
+        m_ = np.minimum(_a_,a_) / np.maximum.reduce([_a_,a_,np.zeros_like(a_) + 1e-7])  # match = min/max comparands
         m_ *= np.where((_i_<0) != (i_<0), -1,1)  # match is negative if comparands have opposite sign
         derTT = np.array([m_,d_])
         node_ = list(set(_lay.node_+ lay.node_))  # concat, or redundant to nodet?
@@ -101,8 +101,8 @@ class CN(CBase):
         n.rim = kwargs.get('rim',[])  # [(_N.N)] for links, [(L,rev,N)], nested with mediation
         n._rim = kwargs.get('_rim',[])  # temporary new rim, merge after cross-comp
         # nested int,ext cluster refs:
-        n.cntr = kwargs.get('cntr',[])  # adjacent (contour) gap+overlap alt-fork graphs, converted to CG, empty alt.cntr_: select+?
-        n.cent = kwargs.get('cent',[])  # sub-centroids
+        n.cntr = kwargs.get('cntr',[[]])  # adjacent (contour) gap+overlap alt-fork graphs, converted to CG, empty alt.cntr_: select+?
+        n.cent = kwargs.get('cent',[[]])  # sub-centroids
         n.derH = kwargs.get('derH',[])  # sum from L_ or rims
         n.derTT = kwargs.get('derTT',np.zeros((2,8)))  # sum derH
         n.baseT = kwargs.get('baseT',np.zeros(4))
@@ -122,8 +122,8 @@ def Copy_(N, root=None, init=0):
     if init:  # init G with N
         C.N_,C.nH,C.lH, N.root = ([N],[],[],C)
         if N.rim:  N.L_ = rim_(N,fi=0)  #< nesting than int,ext Gs:
-        if N.cntr: C.cntr = [N.cntr]  # not internalized as rim, or same nesting?
-        if N.cent: C.cent = [N.cent]  # merge later?
+        if N.cntr: C.cntr = [copy(ctnr) for ctnr in N.cntr]  # not internalized as rim, or same nesting?
+        if N.cent: C.cent = [copy(cent) for cent in N.cent]  # merge later?
     else:
         C.N_,C.L_,C.nH,C.lH, N.root = (list(N.N_),list(N.L_),list(N.nH),list(N.lH), root if root else N.root)
         for name in ('cntr','cent'):
@@ -137,13 +137,16 @@ def Copy_(N, root=None, init=0):
 
 def rim_(N, fi=None):  # unpack terminal rt_s, or med rt_s?
     Rim = []
-    for r in N.rim:  # n if link, [] if nested n.rim, else rt: (l,rev,_n)
+    for r in (N.rim if isinstance(N, CN) else N):  # n if link, [] if nested n.rim, else rt: (l,rev,_n)
         if r not in Rim:
             if isinstance(r,tuple):  # final rim: l,rev,_n
                 Rim += [r if fi is None else r[2] if fi else r[0]]  # if val_(fi): always selective?
             elif isinstance(r, CN):
                 Rim.extend(rim_(r,fi))  # may be nested
-            else: Rim.extend(rim_(r[-1],fi))  # get top layer | flatten all?
+            else: 
+                # this r is a list, so we should get N.rim[-1] and break after that
+                Rim.extend(rim_(N.rim[-1],fi))  # get top layer | flatten all?
+                break
     return Rim
 
 ave, avd, arn, aI, aveB, aveR, Lw, intw, loopw, centw, contw = 10, 10, 1.2, 100, 100, 3, 5, 2, 5, 10, 15  # value filters + weights
@@ -309,6 +312,7 @@ def comp_node_(iN_, rc):  # rng+ forms layer of rim and extH per N?
             else: break  # low projected rng+ vM
         else: break
     for n in iN_:
+        if isinstance(n.rim[0], tuple): n.rim = [n.rim]  # convert to nested list since PP.rim is flat
         n.rim += [n._rim] or []; n._rim=[]  # merge new rim
     return N__, L_, ET
 
@@ -319,7 +323,7 @@ def comp_link_(iL_, rc):  # comp links via directional node-mediated _link traci
         for n,_rev in zip(L.rim, (0,1)):
             if n.med: continue  # already extended
             _rim, rim = [],[]  # extended rim = _rim _n rims
-            for rt in n.rim:  # not yet nested
+            for rt in n.rim[-1]:  # not yet nested (this should be nested because we might nest it in the end of comp_node_?)
                 if rt not in _rim and val_(rt[0].Et,0, aw=rc) > 0:  # high-d only?
                     l,rev,_n = rt; _rim += [rt]; rim += [(l, rev^_rev, _n)]  # direction of l relative to L
             if rim:
@@ -389,7 +393,7 @@ def base_comp(_N,N, rc, dir=1):  # comp Et, Box, baseT, derTT
     _i_ = _N.derTT[1]; i_ = N.derTT[1] * rn  # normalize by compared accum span
     d_ = (_i_ - i_ * dir)  # np.arrays
     _a_,a_ = np.abs(_i_),np.abs(i_)
-    m_ = np.divide( np.minimum(_a_,a_), np.maximum.reduce([_a_,a_,1e-7]))  # rms
+    m_ = np.divide( np.minimum(_a_,a_), np.maximum.reduce([_a_,a_,np.zeros_like(a_) + 1e-7]))  # rms (we need a same shape 1e-7)
     m_ *= np.where((_i_<0) != (i_<0), -1,1)  # match is negative if comparands have opposite sign
     m_ += _m_; d_ += _d_
     DerTT = np.array([m_,d_])  # [M,D,n,o, I,G,A,L], weigh by centroid_M?
@@ -570,6 +574,7 @@ def cluster_C_(root, E_, rc, fi=1):  # form centroids from exemplar _N_, driftin
         # if all(x.rim and isinstance(x.rim, CN) for x in (C, n)): _,_et,_= base_comp(C.rim,n.rim, rc); et +=_et
         for L,l in [(L,l) for L in rim_(C,0) for l in rim_(n,0)]:  # not sure
             if L is l: et += l.Et  # overlap
+        # if cntr is nested list, we compare CN in last list, which is same as comapre Ns? Or form a pair of temporary CN for comparison?
         if all(x.cntr and isinstance(x.cntr, CN) for x in (C, n)): _,_et,_= base_comp(C.cntr,n.cntr, rc); et +=_et
         # +C.cent?  base_comp for c in cntr, etc?
         return et
@@ -604,7 +609,7 @@ def cluster_C_(root, E_, rc, fi=1):  # form centroids from exemplar _N_, driftin
             else: break  # the rest is weaker
         if np.sum(Dvo) > Ave*O:  # both V and O represent change, comeasurable?
             _C_ = C_
-            for n in root.N_: n._C_ = n.C_; n._vo_= n.vo_; n.C_,n.vo_ = [],[]  # new n.C_s, combine with vo_ in Ct_?
+            for n in root.N_: n._C_ = n.C_; n._vo_= n.vo_; n.C_,n.vo_ = [],[]; n.cntr += [[]]  # new n.C_s, combine with vo_ in Ct_?  (pack new cntr per refinement loop?)
         else:
             break  # converged
     if val_(ET,fi, aw=O+rc+loopw) > 0:  # C_ value, no _Et?
@@ -685,9 +690,10 @@ def sum_N_(node_, root=None, fC=0):  # form cluster G
     for n in node_[1:]:
         add_N(G,n,fC)
     if G.cntr: # list
-        G.cntr = sum_N_(G.cntr)  # internal
-        if not fC and val_(G.cntr.Et,0, aw=G.olp, _Et=G.Et):
-            cross_comp(G.cntr, G.olp+contw)
+        # if cntr is a list, get last layer?
+        cntr = sum_N_(G.cntr[-1])  # internal
+        if not fC and val_(cntr.Et,0, aw=G.olp, _Et=G.Et):
+            cross_comp(cntr, G.olp+contw)  # if G.cntr is a list, we need feedback this cntr back to G?
     G.olp /= len(node_)
     for L in G.L_:
         if L not in G.L_: G.Et += L.Et; G.L_+=[L]
@@ -701,7 +707,7 @@ def add_N(N,n, fmerge=0, fC=0):
     else:
         n.root=N; N.N_ += [n]
         if n.rim: N.L_ += rim_(n,0)  # not nodet?
-    if n.cntr: N.cntr += [n.cntr]
+    if n.cntr: N.cntr[-1] += n.cntr[-1]
     if n.nH: add_NH(N.nH, n.nH, root=N)
     if n.lH: add_NH(N.lH, n.lH, root=N)
     rn = n.Et[2]/N.Et[2]
