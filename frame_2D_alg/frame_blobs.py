@@ -87,6 +87,9 @@ class CN(CBase):
         n.span  = kwargs.get('span',0) # distance in nodet or aRad, comp with baseT and len(N_) but not additive?
         n.angle = kwargs.get('angle',np.zeros(2))  # dy,dx
         # nested CNs:
+        # all params here should be the same with CN in agg_recursion?
+        n.cent = kwargs.get('cent',[])  # sub-centroids
+        n.outn = kwargs.get('outn',[])  # adjacent (contour) gap+overlap alt-fork graphs, converted to CG, empty alt.outn_: select+?
         n.root= kwargs.get('root',[])  # not in ext_
         n.rim = kwargs.get('rim') if 'rim' in kwargs else CN(rim=[])   # nrim, rim and their attrs, replaces CG
         n.alt = kwargs.get('alt',[])  # adjacent (contour) gap+overlap alt-fork graphs, converted to CG, empty alt.alt_: select+?

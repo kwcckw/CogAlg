@@ -102,7 +102,8 @@ class CN(CBase):
         n._rim = kwargs.get('_rim',[])  # temporary new rim, merge after cross-comp
         # int,ext clusters:
         n.cent = kwargs.get('cent',[])  # sub-centroids
-        n.outn = kwargs.get('outl',[])  # adjacent (contour) gap+overlap alt-fork graphs, converted to CG, empty alt.outn_: select+?
+        # should be outn here?
+        n.outn = kwargs.get('outn',[])  # adjacent (contour) gap+overlap alt-fork graphs, converted to CG, empty alt.outn_: select+?
         n.derH = kwargs.get('derH',[])  # sum from L_ or rims
         n.derTT = kwargs.get('derTT',np.zeros((2,8)))  # sum derH
         n.baseT = kwargs.get('baseT',np.zeros(4))
@@ -129,7 +130,7 @@ def Copy_(N, root=None, init=0):
         C.N_,C.L_,C.nH,C.lH, N.root = (list(N.N_),list(N.L_),list(N.nH),list(N.lH), root if root else N.root)
     C.derH  = [lay.copy_() for lay in N.derH]
     C.derTT = deepcopy(N.derTT)
-    for attr in ['Et', 'baseT','yx','box','angle','rim','outl','cent']: setattr(C, attr, copy(getattr(N, attr)))
+    for attr in ['Et', 'baseT','yx','box','angle','rim','outn','cent']: setattr(C, attr, copy(getattr(N, attr)))  # should be outn?
     for attr in ['olp','rng', 'fi', 'fin', 'span']: setattr(C, attr, getattr(N, attr))
     return C
 
@@ -207,7 +208,7 @@ def cluster_edge(edge, frame, lev, derlay):  # non-recursive comp_PPm, comp_PPd,
                 if d > avd * n * _G.olp * loopw: dEt += L.Et  # dL_ += [L]
                 L_ += [L]
         dEt[2] = dEt[2] or 1e-7
-        for PP in PP_: PP.rim = PP._rim; PP._rim = []  # initial rim is not nested
+        # for PP in PP_: PP.rim = PP._rim; PP._rim = []  # initial rim is not nested (this is no longer needed now)
         return list(set(N_)),L_,mEt,dEt  # can't be empty
 
     PP_ = edge.node_
@@ -332,7 +333,7 @@ def comp_link_(iL_, rc):  # comp links via directional node-mediated _link traci
                 if _L in L.compared_ or _L not in iL_: continue  # new links only, can't be outside iL_ anyway?
                 dy, dx = np.subtract(_L.yx, L.yx)
                 Link = comp_N(_L,L, rc, np.array([dy,dx]), np.hypot(dy,dx), -1 if _rev else 1)  # d = -d if L is reversed relative to _L
-                LL_ += [Link]; Link.med = med; Et += Link.Et
+                Link.med = med; Et += Link.Et
                 for l,_l in zip((_L,L),(L,_L)):
                     l.compared_ += [_l]
                     if l not in L_ and val_(l.et,0, aw=rc+med+loopw) > 0:  # cost+/ rng
@@ -345,6 +346,7 @@ def comp_link_(iL_, rc):  # comp links via directional node-mediated _link traci
                             if rim:  # new rt_
                                 n._rim += [rim]; n.med=med; rimt += rim
                         if rimt: L_ += [l]  # for med+ and exemplar eval
+                if (L in L_) or (_L in L_): LL_ += [Link]  # we should pack L only if any of the link node is packed in L_?
         for L in _L_:
             for n in L.rim: n.rim += [n._rim] or []; n._rim = []  # merge new rim per med
         L__ += L_; _L_ = L_
@@ -409,23 +411,25 @@ def comp_N(_N,N, rc, angle=None, span=None, dir=1, fdeep=0, flist=0, rng=1):  # 
             Link.derH += comp_H(_N.derH,N.derH, rn, Et, derTT, Link)  # append
         if fi:
             _N_,N_ = (_N.cent,N.cent) if (_N.cent and N.cent) else (_N.N_,N.N_)  # or cent replaces N_? no rims, outl in top nodes
-            spec(_N_,N_, rc,Et, Link.N_)
+            if isinstance(N_[0], CN):  # skip CP from comP_PP
+                spec(_N_,N_, rc,Et, Link.angle, Link.N_m)  # what is this N_m?
     Link.Et = Et
     for n, _n, rev in zip((N,_N),(_N,N),(0,1)):  # reverse Link dir in _N.rim:
         rim = n.rim if fi else n._rim
         rim += [(Link,rev,_n)]
     return Link
 
-def spec(_spe,spe, rc, Et, dspe=None, fdeep=0):  # N_|cent | outl
+# what is this dspe?
+def spec(_spe,spe, rc, Et, angle, dspe=None, fdeep=0):  # N_|cent | outl
     for _N in _spe:
         for N in spe:
             if _N is not N:
-                dN = comp_N(_N, N, rc); Et += dN.Et
+                dN = comp_N(_N, N, rc, angle=angle); Et += dN.Et  # we need angle here
                 if dspe is not None: dspe += [dN];
                 if fdeep:
                     for L,l in [(L,l) for L in rim_(_N,0) for l in rim_(N,0)]:
                         if L is l: Et += l.Et  # overlap val
-                    if _N.outn and N.outn: spec(_N.outn,N.outn, rc, Et)
+                    if _N.outn and N.outn: spec(_N.outn,N.outn, rc, Et)  # how about angle here?
 
 def rolp(N, _N_, fi, E=0, R=0): # rV of N.rim |L_ overlap with _N_: inhibition|shared zone, oN_ = list(set(N.N_) & set(_N.N_)), no comp?
 
@@ -452,7 +456,7 @@ def get_exemplars(N_, rc, fi):  # get sparse nodes by multi-layer non-maximum su
             E_ += [N]  # exemplars
         else:
             break  # the rest of N_ is weaker, trace via rims
-    return N_, Et
+    return E_, Et  # should be returning E_ here?
 
 def Cluster(root, N_, rc, fi):  # clustering root
 
@@ -560,12 +564,14 @@ def cluster_C_(root, E_, rc, fi=1, fdeep=0):  # form centroids by clustering sur
             for L,l in [(L,l) for L in rim_(C,0) for l in rim_(n,0)]:
                 if L is l: et += l.Et  # overlap val
         return et
-    for n in root.N_: n.C_, n.vo_, n._C_, n._vo_ = [], [], [], []
-    _C_ = []; av = ave if fi else avd
+    _C_ = []; av = ave if fi else avd; n_ = []
     for E in E_:
-        C = Copy_(E,root, init=fi+2)  # init centroid
+        C = Copy_(E,root, init=fi+1)  # init centroid  (fi +1? Otherwise we get 2 and 3 here)
         C._N_ = list({n for N in rim_(E,fi) for n in rim_(N,fi)})  # core members + surround for comp to N_ mean
+        n_ += C._N_
         _C_ += [C]
+    for n in root.N_ + n_ : n.C_, n.vo_, n._C_, n._vo_ = [], [], [], []  # some _N_ not in root.N_
+        
     while True:  # recompute C, refine C.N_
         C_, ET, O, Dvo, Ave = [], np.zeros(3), 0, np.zeros(2), av*rc*loopw
         _Ct_ = [[c, c.Et[1-fi]/c.Et[2], c.olp] for c in _C_]
@@ -648,7 +654,8 @@ def comp_H(H,h, rn, ET=None, DerTT=None, root=None):  # one-fork derH
         if _lay and lay:
             dlay = _lay.comp_lay(lay, rn, root=root)
             derH += [dlay]; derTT = dlay.derTT; Et += dlay.Et
-    if Et[2]: DerTT += derTT; ET += Et
+    if Et[2]:  ET += Et
+    if np.any(DerTT): DerTT += derTT
     return derH
 
 def sum_H_(Q):  # sum derH in link_|node_, not used
