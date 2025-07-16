@@ -209,7 +209,7 @@ def cluster_edge(edge, frame, lev, derlay):  # non-recursive comp_PPm, comp_PPd,
 
     PP_ = edge.node_
     if val_(edge.Et, (len(PP_)-edge.rng)*Lw, loopw) > 0:
-        PP_,L_,mEt,dEt = comp_PP_([PP2N(PP,frame) for PP in PP_])
+        PP_,L_,mEt,dEt = comp_PP_([PP2N(PP,frame) for PP in PP_])  # if remove N_ from PP, looks like their L is empty and causing another problem
         if not L_: return
         if val_(mEt,1, (len(PP_)-1)*Lw, contw) > 0:
             G_, Et = cluster_PP_(copy(PP_))  # can't be empty
@@ -312,31 +312,33 @@ def comp_link_(iL_, rc):  # comp links via directional node-mediated _link traci
     for L in iL_:  # init conversion
         L.compared_, L.visited_ = [],[]  # rim: [(_n,n)] in links, [[(l,rev,_n)]] in nodes, nested by mediation:
         for n in L.rim:
+            # this is packing nodet's rim? Why we want to do that? We pack new links in L._rim within comp_N only? 
             if not n.med: n.med = 1; n.rim = [n.rim]; n._rim = []  # init for mediated links, add in comp
+        L.rim = [L.rim]; L._rim = []  # we need this instead
     med = 1
     L__,LL_,ET,_L_ = [],[], np.zeros(3), iL_
     while _L_ and med < 4:
         L_, Et = [], np.zeros(3)
         for L in _L_:
             for _L,_rev,_ in rim_(L):  # top-med n.rim Ls
-                if _L not in L.compared_ and val_(_L.Et,0, aw=rc+med) > 0:  # high-d, new links can't be outside iL_
+                if _L not in L.compared_ and _L in iL_ and val_(_L.Et,0, aw=rc+med) > 0:  # high-d, new links can't be outside iL_
                     dy, dx = np.subtract(_L.yx, L.yx)
                     Link = comp_N(_L,L, rc, np.array([dy,dx]), np.hypot(dy,dx), -1 if _rev else 1)  # d = -d if L is reversed relative to _L
                     Link.med = med; Et += Link.Et; LL_ += [Link]
                     for l,_l in zip((_L,L),(L,_L)): l.compared_ += [_l]
                     if val_(Link.Et,1, aw=rc+med) > 0:  # high-m, recycle Ls
                         L_ += [L,_L]
+        L_ = list(set(L_))  # remove duplicates
         for L in _L_:
-            for n in L.rim: n.rim += [n._rim] or []; n._rim = []  # merge new rim per med loop
+            if L._rim: L.rim += [L._rim]; L._rim = []  # merge new rim per med loop
         if L_:
             L__ += L_; _L_ = []
             for l in L_:
                 l.compared_ = []
                 if val_(l.Et,0, aw=rc+med) > 0:  # high-d only?
-                    for n in l.rim:
-                        if len(n.rim) > med and l not in _L_: _L_ += [l]  # has extended rim
+                    if len(l.rim) > med and l not in _L_: _L_ += [l]  # has extended rim
         med += 1
-    return list({L__}), LL_, ET
+    return list(set(L__)), LL_, ET
 
 def base_comp(_N,N, rc, dir=1):  # comp Et, Box, baseT, derTT
     """
@@ -532,8 +534,11 @@ def cluster(root, N_, E_, rc, fi, rng=1):  # flood-fill node | link clusters
         if mV > 0:
             # replace with val_(nEt,0)
             if dV > ave * centw:  # divisive clustering eval by variance, seed CC_ = E_, may extend beyond node_?
-                cent_, et = cluster_C_(root, E_, rc+centw, fi=fi)
-                Et += et  # add cross_comp if low search olp, replace node_ with cent_?
+                cent_et = cluster_C_(root, E_, rc+centw, fi=fi)
+                if cent_et:
+                    cent_, et = cent_et
+                    Et += et  # add cross_comp if low search olp, replace node_ with cent_?
+                else: cent_ = []
             else: cent_ = []
             G_ += [sum2graph(root, node_, link_, llink_, Et, olp, rng, cent_,outn_)]
     if G_:
@@ -556,7 +561,7 @@ def cluster_C_(root, E_, rc, fi=1, fdeep=0):  # form centroids by clustering exe
         C._N_ = list({n for N in rim_(E,fi) for n in rim_(N,fi)})  # core members + surround for comp to N_ mean
         _N_ += C._N_  # reset C attrs per root:
         _C_ += [C]
-    for n in {root.N_+_N_}: n.C_, n.vo_, n._C_, n._vo_ = [], [], [], []
+    for n in set(root.N_+_N_): n.C_, n.vo_, n._C_, n._vo_ = [], [], [], []
     # recompute C, refine / extend C.N_:
     while True:
         C_, ET, O, Dvo, Ave = [], np.zeros(3), 0, np.zeros(2), av*rc*loopw
@@ -585,8 +590,8 @@ def cluster_C_(root, E_, rc, fi=1, fdeep=0):  # form centroids by clustering exe
             for n in root.N_: n._C_ = n.C_; n._vo_= n.vo_; n.C_,n.vo_ = [],[]  # new n.C_s, combine with vo_ in Ct_?
         else:
             break  # converged
-    if val_(ET,fi, aw=O+rc+loopw) > 0:  # C_ value, no _Et?
-        return C_
+    if val_(ET,fi, aw=O+rc+loopw) > 0:  # C_ value, no _Et? 
+        return C_, ET  # I think its better if we return this as default? Then we can skip the checking after calling cluster_C_
 
 def sum2graph(root, node_,link_,llink_, Et, olp, rng, cent_, outn_, fC=0):  # sum node,link attrs in graph, aggH in agg+ or player in sub+
 
