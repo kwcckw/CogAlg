@@ -134,7 +134,7 @@ def rim_(rim, fi=None):  # unpack terminal rt_s in L.rim
     Rim = []
     for r in rim:  # n or rt: (l,rev,_n), root-nested?
         if r not in Rim:
-            if isinstance(r,CN): Rim.extend(rim_(r.rim[-1], fi))  # r is nodet[i], get last rim:
+            if isinstance(r,CN): Rim.extend(rim_(r.rim[-1] if isinstance(r.rim[0], list) else r.rim, fi))  # r is nodet[i], get last rim:  r.rim could be flat(mfork) or nested(dfork) here, so we need check and get the last rim?
             else:                Rim += [r if fi is None else r[2] if fi else r[0]]  # (LL,rev,_L)
     return Rim
 
@@ -193,7 +193,7 @@ def cluster_edge(edge, frame, lev, derlay):  # non-recursive comp_PPm, comp_PPd,
         for _G, G in combinations(PP_, r=2):
             dy,dx = np.subtract(_G.yx,G.yx); dist = np.hypot(dy,dx)
             if dist - (G.span+_G.span) < adist / 10:  # very short here
-                L = comp_N(_G,G, 2, angle=np.array([dy,dx]), span=dist, fdeep=1)
+                L = comp_N(_G,G, 2, angle=np.array([dy,dx]), span=dist, fdeep=0)  # fdeep = 0 for PP
                 m, d, n = L.Et
                 if m > ave * n * _G.olp * loopw: mEt += L.Et; N_ += [_G,G]  # mL_ += [L]
                 if d > avd * n * _G.olp * loopw: dEt += L.Et  # dL_ += [L]
@@ -308,7 +308,8 @@ def comp_link_(iL_, rc):  # comp links via directional node-mediated _link traci
     while _L_ and med < 4:
         L_, Et = [], np.zeros(3)
         for L in _L_:
-            for _L,_rev,_ in rim_(L.rim):  # top-med n.rim Ls, add _rev ^= lower-med revs?
+            # always rim[-1] here before pack new _rim? Because L.rim is nested
+            for _L,_rev,_ in rim_(L.rim[-1]):  # top-med n.rim Ls, add _rev ^= lower-med revs?
                 if _L not in L.compared_ and _L in iL_ and val_(_L.Et,0, aw=rc+med) > 0:  # high-d, new links can't be outside iL_
                     dy, dx = np.subtract(_L.yx, L.yx)
                     Link = comp_N(_L,L, rc, med, LL_, np.array([dy,dx]), np.hypot(dy,dx), -1 if _rev else 1)  # d = -d if L is reversed relative to _L
@@ -377,10 +378,11 @@ def comp_N(_N,N, rc, med=1, L_=None, angle=None, span=None, dir=1, fdeep=0, rng=
     o = (_N.olp+N.olp) / 2
     Link = CN(rng=rng, Et=Et, olp=o, rim=[_N,N], baseT=baseT, derTT=derTT, yx=np.add(_N.yx,N.yx)/2, span=span, angle=angle, box=box, med=med, fi=0)
     Link.derH = [CLay( root=Link, Et=Et, node_=[_N,N],link_=[Link], derTT=copy(derTT))]
-    if fdeep:
+    if fdeep and rc>1:
         if val_(Et,1, len(N.derH)-2, o) > 0 or fi==0:  # else derH is dext,vert
             Link.derH += comp_H(_N.derH,N.derH, rn, Et, derTT, Link)  # append
         if fi:
+            # the first cross_comp's N_ is converted PP and their N_ is CPs, so we can skip them by checking rc>1 above?
             _N_,N_ = (_N.cent_,N.cent_) if (_N.cent_ and N.cent_) else (_N.N_,N.N_)  # or cent_ replaces N_? no rims, outl in top nodes
             spec(_N_,N_, rc,Et, Link.N_)
     if L_ is not None:
@@ -388,7 +390,7 @@ def comp_N(_N,N, rc, med=1, L_=None, angle=None, span=None, dir=1, fdeep=0, rng=
     for n, _n, rev in zip((N,_N),(_N,N),(0,1)):  # reverse Link dir in _N.rim:
         rim = n.rim if fi else n._rim
         rim += [(Link, rev,_n)]  # rev-nested?
-        n.compared_.update(_n)
+        if hasattr(n, 'compared_'): n.compared_.add(_n)  # PP doesn't need compared_ and does not have compared_
     return Link
 
 def spec(_spe,spe, rc, Et, dspe=None, fdeep=0):  # for N_|cent_ | outn_
