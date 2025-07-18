@@ -121,8 +121,8 @@ def Copy_(N, root=None, init=0):
         if init != 2: C.N_ = [N]  # init G or fi centroid
         C.nH, C.lH, N.root = [],[],C
         if N.rim:
-            if init>1: N.N_ += rim_(N.rim,fi=1)  # init centroid
-            else:      N.L_ += rim_(N.rim,fi=0)  # init G
+            if init>1: N.N_ += rim_(N,fi=1)  # init centroid
+            else:      N.L_ += rim_(N,fi=0)  # init G
     else:
         C.N_,C.L_,C.nH,C.lH, N.root = (list(N.N_),list(N.L_),list(N.nH),list(N.lH), root if root else N.root)
     C.derH  = [lay.copy_() for lay in N.derH]
@@ -172,13 +172,14 @@ def cluster_edge(edge, frame, lev, derlay):  # non-recursive comp_PPm, comp_PPd,
                     node_ += [eN]
                     for L,_,_ in eN.rim:  # all +ve, *= density?
                         if L not in link_:
-                            for eN in L.N_:
+                            L_N_ = [N for _, _, N in (L.rim[0].rim + L.rim[1].rim)]  # N_ is in rim of nodet now
+                            for eN in L_N_: 
                                 if eN in PP_: eN_ += [eN]; PP_.remove(eN)  # merged
                             link_ += [L]; et += L.Et
                 _eN_ = {*eN_}
             if val_(et, mw=(len(node_)-1)*Lw, aw=2+contw) > 0:  # rc=2
                 Et += et
-                G_ += [sum2graph(frame, node_,link_,[],et, olp=1,rng=1, outn_=[],cent_=[])]  # single-lay link_derH
+                G_ += [sum2graph(frame, node_, node_,link_,[],et, olp=1,rng=1, outn_=[])]  # single-lay link_derH
         return G_, Et
 
     def comp_PP_(PP_):
@@ -214,7 +215,17 @@ def cluster_edge(edge, frame, lev, derlay):  # non-recursive comp_PPm, comp_PPd,
 
 def rim_(N, fi=None):
     # get max-med [(L,rev,_N)], rev: L dir relative to N
-    return [r if fi is None else r[2] if fi else r[0] for r in (N.rim if N.fi else N.rim[-1])]
+    if N.fi:
+        rim = [(r if fi is None else (r[2] if fi else r[0])) for r in N.rim]
+        return rim
+    else:
+        if isinstance(N.rim[0], CN):  # base nodet - in comp_PP
+            rt_ = N.rim[0].rim + N.rim[1].rim
+        elif isinstance(N.rim[-1][0], CN):  # base nested level - packing nodet
+            rt_ = N.rim[-1][0].rim + N.rim[-1][1].rim  # get rim from each node in nodet  
+        else:  # higher layer - packing rt
+            rt_ = N.rim[-1]
+        return [r if fi is None else r[2] if fi else r[0] for r in rt_]
 
 def val_(Et, fi=1, mw=1, aw=1, _Et=np.zeros(3)):  # m,d eval per cluster or cross_comp
 
@@ -305,7 +316,7 @@ def comp_link_(iL_, rc):  # comp links via directional node-mediated _link traci
     while _L_ and med < 4:
         L_, Et = [], np.zeros(3)
         for L in _L_:
-            for _L,rev,_ in L.rim[-1]:  # top-med Ls, _rev^rev in comp_N
+            for _L,rev,_ in rim_(L):  # top-med Ls, _rev^rev in comp_N
                 if _L not in L.compared_ and _L in iL_ and val_(_L.Et,0, aw=rc+med) > 0:  # high-d, new links can't be outside iL_
                     dy, dx = np.subtract(_L.yx, L.yx)
                     Link = comp_N(_L,L, rc, med, LL_, np.array([dy,dx]), np.hypot(dy,dx), rev)  # d = -d if L is reversed relative to _L
@@ -369,6 +380,7 @@ def comp_N(_N,N, rc, med=1, L_=None, angle=None, span=None, _rev=0, fdeep=0, rng
 
     derTT, Et, rn = base_comp(_N,N, rc, -1 if _rev else 1); fi = N.fi  # d = -d if L is reversed relative to _L
     # link M,D,A:
+    # if angle is None from spec with fdeep=1, compute angle from _N and N.yx?
     baseT = np.array([*(_N.baseT[:2] + N.baseT[:2]*rn) / 2, *angle])  # redundant angle for generic base_comp, also span-> density?
     _y,_x = _N.yx; y,x = N.yx; box = np.array([min(_y,y),min(_x,x),max(_y,y),max(_x,x)])
     o = (_N.olp+N.olp) / 2
@@ -385,7 +397,7 @@ def comp_N(_N,N, rc, med=1, L_=None, angle=None, span=None, _rev=0, fdeep=0, rng
     for n, _n, rev in zip((N,_N),(_N,N),(0,1)):  # reverse Link dir in _N.rim:
         rim = n.rim if fi else n._rim
         rim += [(Link, rev^_rev, _n)]  # combine _rev from irim
-        n.compared_.update(_n)
+        n.compared_.add(_n)  # should be add here, update is concatenate instead of append
     return Link
 
 def spec(_spe,spe, rc, Et, dspe=None, fdeep=0):  # for N_|cent_ | outn_
@@ -558,12 +570,12 @@ def sum2graph(root, E_, node_,link_,llink_, Et, olp, rng, outn_, fC=0):  # sum n
 
 def slope(link_):  # get ave 2nd rate of change with distance in cluster
 
-    Link_ = sorted(link_, key=lambda x: x.dist)
-    dists = np.array([l.dist for l in Link_])
+    Link_ = sorted(link_, key=lambda x: x.span)  # dist in span in link?
+    dists = np.array([l.span for l in Link_])
     diffs = np.array([l.Et[1]/l.Et[2] for l in Link_])
     rates = diffs / dists
     # ave rate of change incr per unit dist: d(rate)/d(distance):
-    return (np.diff(rates) / np.diff(dists)).mean
+    return (np.diff(rates) / np.diff(dists)).mean()
 
 def cluster_C_(root, E_, rc, fi=1, fdeep=0):  # form centroids by clustering exemplar surround, drifting via rims of new member nodes
 
@@ -712,8 +724,9 @@ def PP2N(PP, frame):
     derH = [CLay(node_=P_, link_=link_, derTT=deepcopy(derTT))]
     y,x,Y,X = box; dy,dx = Y-y,X-x  # A = (dy,dx); L = np.hypot(dy,dx), rolp = 1
     et = np.array([*np.sum([L.Et for L in link_],axis=0), 1]) if link_ else np.array([.0,.0,1.])  # n=1
-
-    return CN(root=frame, fi=1, Et=Et+et, N_=P_, L_=link_, baseT=baseT, derTT=derTT, derH=derH, box=box, yx=yx, span=np.hypot(dy/2,dx/2))
+    PP = CN(root=frame, fi=1, Et=Et+et, N_=P_, L_=link_, baseT=baseT, derTT=derTT, derH=derH, box=box, yx=yx, span=np.hypot(dy/2,dx/2))
+    PP.compared_ = set()
+    return  PP
 
 # not used, make H a centroid of layers, same for nH?
 def sort_H(H, fi):  # re-assign olp and form priority indices for comp_tree, if selective and aligned
