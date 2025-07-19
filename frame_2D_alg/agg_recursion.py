@@ -309,20 +309,20 @@ def comp_node_(iN_, rc):  # rng+ forms layer of rim and extH per N?
 
 def comp_link_(iL_, rc):  # comp links via directional node-mediated _link tracing with incr mediation
 
-    for L in iL_:
-        L.rim = [L.rim]; L._rim = []  # _rim append in comp
+    for L in iL_: L._rim = []  # _rim append in comp
     L__,LL_,ET,_L_ = [],[],np.zeros(3),iL_
     med = 1
     while _L_ and med < 4:
         L_, Et = [], np.zeros(3)
         for L in _L_:
-            for _L,rev,_ in L.rim[-1]:  # top-med Ls, _rev^rev in comp_N
+            for _L,rev,_ in rim_(L):  # top-med Ls, _rev^rev in comp_N (fi = None to get rev)
                 if _L not in L.compared_ and _L in iL_ and val_(_L.Et,0, aw=rc+med) > 0:  # high-d, new links can't be outside iL_
                     dy, dx = np.subtract(_L.yx, L.yx)
                     Link = comp_N(_L,L, rc, med, LL_, np.array([dy,dx]), np.hypot(dy,dx), rev)  # d = -d if L is reversed relative to _L
                     if val_(Link.Et,1, aw=rc+med) > 0:  # recycle Ls if high m
                         L_ += [L,_L]; Et += Link.Et
         for L in _L_:
+            if med == 1: L.rim = [L.rim]  # nest nodet
             if L._rim: L.rim += [L._rim]; L._rim = []  # merge new rim per med loop
         if L_:
             L_ = list(set(L_)); L__ += L_; _L_ = []
@@ -380,7 +380,8 @@ def comp_N(_N,N, rc, med=1, L_=None, angle=None, span=None, _rev=0, fdeep=0, rng
 
     derTT, Et, rn = base_comp(_N,N, rc, -1 if _rev else 1); fi = N.fi  # d = -d if L is reversed relative to _L
     # link M,D,A:
-    baseT = np.array([*(_N.baseT[:2] + N.baseT[:2]*rn) / 2, *angle])  # redundant angle for generic base_comp, also span-> density?
+    # pack A as None now, this may cause error if we need to use dN in dspe
+    baseT = np.array([*(_N.baseT[:2] + N.baseT[:2]*rn) / 2, *(angle if np.any(angle) else [None])])  # redundant angle for generic base_comp, also span-> density?
     _y,_x = _N.yx; y,x = N.yx; box = np.array([min(_y,y),min(_x,x),max(_y,y),max(_x,x)])
     o = (_N.olp+N.olp) / 2
     Link = CN(Et=Et,olp=o, rng=rng,rim=[_N,N], baseT=baseT, derTT=derTT, yx=np.add(_N.yx,N.yx)/2, span=span, angle=angle, box=box, med=med, fi=0)
@@ -516,6 +517,7 @@ def cluster(root, N_, E_, rc, fi, rng=1):  # flood-fill node | link clusters
         for n in node_:
             Et += n.et; olp += n.olp  # not fork-specific
 
+        # for dfork, L is nodet, root is actually mgraph in prior layer
         outn_ = [L.root for L in link_ if L.root]  # contour if fi else core, individual rims are too weak
         _Et = np.sum([o.Et for o in outn_]) if outn_ else np.zeros(3)
 
@@ -563,7 +565,7 @@ def sum2graph(root, E_, node_,link_,llink_, Et, olp, rng, outn_, fC=0):  # sum n
 def slope(link_):  # get ave 2nd rate of change with distance in cluster
 
     Link_ = sorted(link_, key=lambda x: x.span)
-    dists = np.array([l.spen for l in Link_])
+    dists = np.array([l.span for l in Link_])  # typo
     diffs = np.array([l.Et[1]/l.Et[2] for l in Link_])
     rates = diffs / dists
     # ave rate of change incr per unit dist: d(rate)/d(distance):
