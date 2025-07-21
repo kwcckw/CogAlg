@@ -172,7 +172,7 @@ def cluster_edge(edge, frame, lev, derlay):  # non-recursive comp_PPm, comp_PPd,
                     node_ += [_eN]
                     for L in rim_(_eN,0):  # all +ve, *= density?
                         if L not in link_:
-                            for eN in rim_(L,1):
+                            for eN in L.rim:  # should be just L.rim here since L.rim is always nodet here in cluster_PP_
                                 if eN in PP_: eN_ += [eN]; PP_.remove(eN)  # merged
                             link_ += [L]; et += L.Et
                 _eN_ = {*eN_}
@@ -212,14 +212,14 @@ def cluster_edge(edge, frame, lev, derlay):  # non-recursive comp_PPm, comp_PPd,
                 else:      lev.lH += [Lt]
                 lev.Et += Lt.Et
 
-def rim_(N, fi=None, f0=0):  # get max-med [(L,rev,_N)], rev: L dir relative to N
+def rim_(N, fi=None):  # get max-med [(L,rev,_N)], rev: L dir relative to N
 
     if N.fi: rt_ = N.rim
     elif isinstance(N.rim[0], CN):
         n_ = N.rim
         while isinstance(n_[0], CN) and not n_[0].fi:  # unpack n_: terminal L.[n,_n] tree branches
             n_ = [n for L in n_ for n in L.rim]  # if L.rim is not nested
-        rt_ = [n.rim for n in n_]  # n.fi=1
+        rt_ = [rt for n in n_ for rt in n.rim]  # n.fi=1 (added loop to get flat rt_)
     else:
         rt_ = N.rim[-1]  # med-nested L.rim
     return [r if fi is None else r[2] if fi else r[0] for r in rt_]
@@ -450,7 +450,7 @@ def get_exemplars(N_, rc, fi):  # get sparse nodes by multi-layer non-maximum su
 def Cluster(root, N_, rc, fi):  # clustering root
 
     Nflat_ = list(set([N for n_ in N_ for N in n_])) if fi else N_
-    if N_[0].fi: E_, Et = get_exemplars(N_, rc, fi)
+    if Nflat_[0].fi: E_, Et = get_exemplars(Nflat_, rc, fi)  # should be Nflat_ here?
     else:        E_, Et = N_, root.Et  # also fi=0?
 
     if val_(Et,fi, (len(Nflat_)-1)*Lw, rc+contw, root.Et) > 0:
@@ -516,7 +516,7 @@ def cluster(root, N_, E_, rc, fi, rng=1):  # flood-fill node | link clusters
                             node_ = [l for l in rim_(n,0) if l not in node_ and  val_(l.Et,0,aw=rc) > 0]
             else:
                 # cluster Ls by LL m, via flat E.rim if E.fi else max med Ls?
-                for _L in rim_(E,0):
+                for _L in rim_(E,1):  # fi should b 1 here? Because we are getting link node, else it's getting LL
                     if _L.fin: continue
                     _L.fin = 1
                     for LL in rim_(_L,0):
@@ -532,7 +532,7 @@ def cluster(root, N_, E_, rc, fi, rng=1):  # flood-fill node | link clusters
         _Et = np.sum([o.Et for o in altg_], axis=0) if altg_ else np.zeros(3)
 
         if val_(Et,1, (len(node_)-1)*Lw, rc+olp, _Et) > 0:
-            G_ += [sum2graph(root, E_, node_, link_, llink_, Et, olp, rng, altg_)]
+            G_ += [sum2graph(root, E_, node_, link_, llink_, Et, olp, rng, list(altg_))]
     if G_:
         return sum_N_(G_, root)
 
