@@ -106,7 +106,7 @@ class CN(CBase):
         n.angle = kwargs.get('angle',np.zeros(2))  # dy,dx
         n.root  = kwargs.get('root',[])  # immediate only
         n.cent_ = kwargs.get('cent_', [])  # int centroid Gs, replace/combine N_?
-        n.altg_ = kwargs.get('altg_',set())  # ext contour Gs, replace/combine rim?
+        n.altg_ = kwargs.get('altg_') if 'altg_' in kwargs else CN(altg_=[])  # ext contour Gs, replace/combine rim?
         n.fin = kwargs.get('fin',0)  # in cluster, temporary
         n.compared_ = set()
         # n.fork_tree: list =z([[]])  # indices in all layers(forks, if no fback merge, G.fback_=[] # node fb buffer, n in fb[-1]
@@ -272,6 +272,7 @@ def cross_comp(root, rc, fi=1):  # rng+ and der+ cross-comp and clustering
 def comb_altg_(nG, rc):  # cross_comp contour/background per node:
 
     for L in nG.L_:  # convert to [(core,rnd)], for N.altg_ eval only
+        # not sure here, so if altg_ is CN, we just need to get their Et here?
         L.altg_ = [(core,rdn) for rdn,core in enumerate(sorted(L.altg_, key=lambda x: (x.Et[0]/x.Et[2]), reverse=True), start=1)]
     for N in nG.N_:
         alt_ = N.altg_  # or N.altg_.N_?
@@ -449,11 +450,12 @@ def get_exemplars(N_, rc, fi):  # get sparse nodes by multi-layer non-maximum su
 def Cluster(root, N_, rc, fi):  # clustering root
 
     Nflat_ = list(set([N for n_ in N_ for N in n_])) if fi else N_
-    if N_[0].fi: E_, Et = get_exemplars(Nflat_, rc, fi)
+    if fi: 
+        for n in Nflat_: n.sel=0  # this should be here, else it's reset to 0
+        E_, Et = get_exemplars(Nflat_, rc, fi)
     else:        E_, Et = N_, root.Et  # also fi=0?
 
     if val_(Et,fi, (len(Nflat_)-1)*Lw, rc+contw, root.Et) > 0:
-        for n in Nflat_: n.sel=0
         if fi:
             Nt = []  # bottom-up rng-banded clustering:
             for rng, rN_ in enumerate(N_, start=1):
@@ -529,10 +531,10 @@ def cluster(root, N_, E_, rc, fi, rng=1):  # flood-fill node | link clusters
         else:  altg_ = {n.root for N in node_ for n in N.rim[0] if n.root}  # node_ is Ls, get nodet roots
         _Et = np.sum([o.Et for o in altg_], axis=0) if altg_ else np.zeros(3)
 
-        if val_(Et,1, (len(node_)-1)*Lw, rc+olp, _Et) > 0:
-            G_ += [sum2graph(root, E_, node_, link_, llink_, Et, olp, rng, altg_)]
+        if val_(Et,1, (max(0, len(node_)-1))*Lw, rc+olp, _Et) > 0:  # mw shouldn'tbe negative here? Else we are getting positive val even with empty Et and N_
+            G_ += [sum2graph(root, E_, node_, link_, llink_, Et, olp, rng, sum_N_(list(altg_)) if altg_ else [])]
     if G_:
-        return sum_N_(G_, root)
+        return sum_N_(G_, root)  # right now the summed N doesn't have L_, suppose it should be summed from Gs'L_?
 
 def sum2graph(root, E_, node_,link_,llink_, Et, olp, rng, altg_, fC=0):  # sum node,link attrs in graph, aggH in agg+ or player in sub+
 
@@ -670,7 +672,7 @@ def sum_N_(node_, root=None, fC=0):  # form cluster G
     if fC: G.L_=[]; G.N_= [node_[0]]
     for n in node_[1:]:
         add_N(G,n,fC)
-    G.et += np.sum([n.Et for n in G.altg_])  # cross_comp in cluster
+    if G.altg_: G.et += G.altg_.Et  # cross_comp in cluster
     G.olp /= len(node_)
     for L in G.L_:
         if L not in G.L_: G.Et += L.Et; G.L_+=[L]
@@ -684,7 +686,7 @@ def add_N(N,n, fmerge=0, fC=0):
     else:
         n.root=N; N.N_ += [n]
         if n.rim: N.L_ += rim_(N,0)  # not nodet?
-    if n.altg_: N.update(n.altg_)  # extra
+    if n.altg_: add_N(N.altg_, n.altg_)  # extra
     if n.cent_: N.cent_+= n.cent_  # intra
     if n.nH: add_NH(N.nH, n.nH, root=N)
     if n.lH: add_NH(N.lH, n.lH, root=N)
