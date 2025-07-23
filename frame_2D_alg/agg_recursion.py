@@ -260,8 +260,9 @@ def cross_comp(root, rc, fi=1):  # rng+ and der+ cross-comp and clustering
             if dV >avd: lG = cross_comp(CN(N_=L_), rc+contw, fi=0)  # -> Lt.nH, +2 der layers
             else:       lG = Cluster(root, N_, rc+contw, fi=0)  # cluster N.rim Ls, +1 layer
             if lG:
-                lG.altg_ = [(core,rdn) for rdn,core in enumerate(sorted(lG.altg_, key=lambda x:(x.Et[0]/x.Et[2]), reverse=True), start=1)]
-                comb_altg_(N_,rc)  # pack, cross_comp in N.altg_
+                # add rdn from core.Et[2]?
+                lG.altg_ = [(core,rdn) for rdn,core in enumerate(sorted(lG.altg_[0], key=lambda x:(x.Et[0]/x.Et[2]), reverse=True), start=1)]
+                comb_altg_([n for N in N_ for n in N] if fi else N_,rc)  # pack, cross_comp in N.altg_  (N_ is nested when fi = 1)
                 root.lH += [lG] + lG.nH; root.Et +=lG.Et; root.derH += lG.derH  # new der lays
         if mV > 0:
             nG = Cluster(root, N_, rc+loopw, fi)   # get_exemplars, cluster_C_, rng-banded if fi
@@ -278,11 +279,13 @@ def comb_altg_(N_, rc):  # cross_comp contour/background per node:
         alt_ = N.altg_  # or N.altg_.N_?
         if not alt_: continue
         Et, Rdn = np.zeros(3), 0
-        for core, rdn in [cr for cntr in alt_ for cr in cntr.altg_ if cr[0] is N]:  # map contour rdns to core N
+        cntr_ = [(cr for cr in cntr.altg_[0] if cr is N) for cntr, _rdn in alt_ if cntr.altg_]
+        for core, rdn in enumerate(sorted(cntr_, key=lambda x:(x.Et[0]/x.Et[2]), reverse=True), start=1):  # map contour rdns to core N
             Et += core.Et; Rdn += rdn  # add to Et[2]?
         N.altg_ = CN(N_=alt_, Et=Et)
         if val_(Et,0,(len(alt_)-1)*Lw, rc+Rdn+N.olp+loopw) > 0:  # norm by core_ rdn
             N.altg_ = cross_comp(N.altg_, rc=N.olp) or N.altg_
+        N.altg_ = (N.altg_.N_, N.altg_.Et)  # convert to tuple
 
 def comp_node_(iN_, rc):  # rng+ forms layer of rim and extH per N?
 
@@ -524,17 +527,19 @@ def cluster(root, N_, E_, rc, fi, rng=1):  # flood-fill node | link clusters
                     for LL in rim_(_L,0):
                         if LL not in link_ and val_(_L.Et,0,aw=rc) > 0:
                            node_ += [_L]; link_ += [LL]
-        node_ = list(set(node_))
-        Et, olp = np.zeros(3),0  # sum node_:
-        for n in node_:
-            Et += n.et; olp += n.olp  # not fork-specific
-
-        if fi: altg_ = {L.root for L in link_ if L.root}  # contour if fi else cores, individual rims are too weak
-        else:  altg_ = {n for N in node_ for n in N.rim}  # node_ is Ls, assign nodets
-        _Et = np.sum([i.Et for i in altg_], axis=0) if altg_ else np.zeros(3)
-
-        if val_(Et,1, (len(node_)-1)*Lw, rc+olp, _Et) > 0:
-            G_ += [sum2graph(root, E_, node_, link_, llink_, Et, olp, rng, [altg_,_Et] if altg_ else [])]
+        # skip if there's no clustered node_, since ndoe_ mayempty when fi = 0       
+        if node_:
+            node_ = list(set(node_))
+            Et, olp = np.zeros(3),0  # sum node_:
+            for n in node_:
+                Et += n.et; olp += n.olp  # not fork-specific
+    
+            if fi: altg_ = {L.root for L in link_ if L.root}  # contour if fi else cores, individual rims are too weak
+            else:  altg_ = {n for N in node_ for n in N.rim[0]}  # node_ is Ls, assign nodets (for link node, their rim has multi-layers, use first layer nodet)
+            _Et = np.sum([i.Et for i in altg_], axis=0) if altg_ else np.zeros(3)
+    
+            if val_(Et,1, (len(node_)-1)*Lw, rc+olp, _Et) > 0:
+                G_ += [sum2graph(root, E_, node_, link_, llink_, Et, olp, rng, [altg_,_Et] if altg_ else [])]
     if G_:
         return sum_N_(G_, root)
 
@@ -681,7 +686,7 @@ def sum_N_(node_, root=None, fC=0):  # form cluster G
     return G   # no rim
 
 def add_sett(Sett,sett):
-    N_,n_,Et,et = Sett.N_,sett.N_,Sett.Et,sett.Et
+    N_, Et = Sett; n_,et = sett  # so et is not used?
     N_.update(n_); Et += np.sum([t.Et for t in n_-N_])
 
 def add_N(N,n, fmerge=0, fC=0):
