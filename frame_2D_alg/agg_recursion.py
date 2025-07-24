@@ -488,12 +488,13 @@ def cluster(root, N_, E_, rc, fi, rng=1):  # flood-fill node | link clusters
                 if R.fin: continue
                 node_,_link_,llink_ = [R], R.L_, R.hL_; R.fin = 1
         else:  # link clustering
-            node_,llink_ = [],[]; _link_ = rim_(E, 1 if fln else 0)  # nodet or lrim
+            node_,llink_ = [],[]; _link_ = rim_(E, 1 if (fln and rc!= 2) else 0)  # nodet or lrim  (special case for PP, when input fi = 0, we cluster PP instead of link)
         L_ = copy(_link_)
-        link_ = []
+
         while _link_:  # extend cluster node_
+            link_ = []  # this should be init within the while loop?
             if fi:     # cluster nodes via rng-specific links
-                for L in _link_[:]:  # snapshot
+                for L in _link_:  # snapshot  (why we need [:]? We are not modify _link_ here?)
                     for _N in L.rim if fln else L.rim[-1]:  # med-nested?
                         if _N not in N_ or _N.fin:
                             continue
@@ -511,12 +512,13 @@ def cluster(root, N_, E_, rc, fi, rng=1):  # flood-fill node | link clusters
                                 link_ += _R.link_; L_ += _R.link_; llink_+= _R.hL_
             else:  # cluster links via rim
                 if fln:  # by L diff
-                    for L in link_[:]:
+                    for L in _link_:  # should be _link_ here? link_ is init empty
                         for n in L.rim:  # in nodet, no eval
                             if n in N_ and not n.fin and rolp(E, set(rim_(n,0)), fi) > ave*rc:
                                 node_ += [l for l in rim_(n,0) if l not in node_ and  val_(l.Et,0,aw=rc) > 0]
                                 link_ += [n]; L_ += [n]; n.fin = 1  # no link eval?
                 else:  # by LL match
+                    # the while loop is not necessary for this section? We have a same E in every loop?
                     for _L in rim_(E,1):  # via E.rim if E.fi else E.rim[-1]
                         if _L.fin: continue
                         _L.fin = 1
@@ -526,6 +528,7 @@ def cluster(root, N_, E_, rc, fi, rng=1):  # flood-fill node | link clusters
             _link_ = list(set(link_))
             L_ = list(set(L_))
         if node_:
+            if not link_: link_ = _link_  # get last link_ if current link_ is empty?
             node_ = list(set(node_))
             Et, olp = np.zeros(3),0  # sum node_:
             for n in node_:
