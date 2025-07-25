@@ -204,7 +204,7 @@ def cluster_edge(edge, frame, lev, derlay):  # non-recursive comp_PPm, comp_PPd,
         lev.L_+= L_; lev.Et = mEt+dEt  # links between PPms
         for l in L_: derlay.add_lay(l.derH[0]); frame.baseT+=l.baseT; frame.derTT+=l.derTT; frame.Et += l.Et
         if val_(dEt,0, (len(L_)-1)*Lw, 2+contw) > 0:
-            Lt = cluster(frame, PP_, [n for PP in PP_ for n in PP.rim], rc=2,fi=0)
+            Lt = cluster(frame, PP_, [rt[0] for PP in PP_ for rt in PP.rim], rc=2,fi=0)  # PP.rim is rt_, so we should use rt[0] to get links
             if Lt:  # L_ graphs
                 if lev.lH: lev.lH[0].N_ += Lt.N_; lev.lH[0].Et += Lt.Et
                 else:      lev.lH += [Lt]
@@ -216,10 +216,10 @@ def rim_(N, fi=None):  # get max-med [(L,rev,_N)], rev: L dir relative to N
     elif isinstance(N.rim[0], list):
         rt_ = N.rim[-1]  # max-med layer in nested L.rim
     else:
-        n_ = N.rim
-        while isinstance(n_[0], CN) and not n_[0].fi:  # unpack n_: terminal L.[n,_n] tree branches
-            n_ = [n for L in n_ for n in L.rim]  # L.rim is not nested
-        rt_ = [rt for n in n_ for rt in n.rim]  # n.fi = 1
+        return [r for n in N.rim for r in rim_(n, fi=fi)]
+        # while isinstance(n_[0], CN) and not n_[0].fi:  # unpack n_: terminal L.[n,_n] tree branches
+        #     n_ = [n for L in n_ for n in L.rim]  # L.rim is not nested
+        # rt_ = [rt for n in n_ for rt in n.rim]  # n.fi = 1
     return [r if fi is None else r[2] if fi else r[0] for r in rt_]
 
 def val_(Et, fi=1, mw=1, aw=1, _Et=np.zeros(3)):  # m,d eval per cluster or cross_comp
@@ -514,6 +514,7 @@ def cluster(root, iN_, E_, rc, fi, rng=1):  # flood-fill node | link clusters
                                     N_ += [_R]; _R.fin = 1; _N.fin = 1
                                     link_+=_R.link_; long_+=_R.hL_
                 else:  # cluster links via rim
+                    # this fln section is not relevant now? dfork always have fln = 0 now since we use link as E for PPs now
                     if fln:  # by L diff
                        for n in L.rim:  # in nodet, no eval
                             if n in iN_ and not n.fin:
@@ -525,7 +526,7 @@ def cluster(root, iN_, E_, rc, fi, rng=1):  # flood-fill node | link clusters
                         for _L in rim_(L,1):  # via E.rim if E.fi else E.rim[-1]
                             if _L.fin: continue
                             for LL in rim_(_L,0):
-                                seen_.add(LL)
+                                seen_ += [LL]
                                 if val_(_L.Et,0,aw=rc) > 0:
                                     N_ += [_L]; _L.fin = 1; link_+=[LL]
             link_ = list(set(link_)-Seen_)
@@ -536,8 +537,13 @@ def cluster(root, iN_, E_, rc, fi, rng=1):  # flood-fill node | link clusters
             for n in N_:
                 Et += n.et; olp += n.olp
                 # any fork
-            if fi: altg_ = {L.root for L in L_ if L.root}  # contour if fi else cores, individual rims are too weak
-            else:  altg_ = {n for N in N_ for n in (N.rim if fln else N.rim[0])}  # N_ is Ls, assign nodets
+            if fi:
+                altg_ = {L.root for L in L_ if L.root}  # contour if fi else cores, individual rims are too weak
+            else:  
+                if rc == 2:
+                    altg_ =  {N.root for N in N_ if N.root}  # for PP, we get root of PP clustered from prior cluster_PP_?           
+                else:
+                    altg_ = {n for N in N_ for n in (N.rim if fln else N.rim[0])}  # N_ is Ls, assign nodets
             _Et  = np.sum([i.Et for i in altg_], axis=0) if altg_ else np.zeros(3)
 
             if val_(Et,1, (len(N_)-1)*Lw, rc+olp, _Et) > 0:
