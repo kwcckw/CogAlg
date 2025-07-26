@@ -450,11 +450,17 @@ def get_exemplars(N_, rc, fi):  # get sparse nodes by multi-layer non-maximum su
 
 def Cluster(root, N_, rc, fi):  # clustering root
 
-    Nflat_ = list(set([N for n_ in N_ for N in n_])) if fi else N_
+    Nflat_ = list(set([N for n_ in N_ for N in n_])) if (fi or isinstance(N_[0], list)) else N_
     if fi:
         for n in Nflat_: n.sel=0
         E_, Et = get_exemplars(Nflat_, rc, fi)
-    else: E_, Et = N_, root.Et  # fi=0?
+    else: 
+        # if call from cross_comp mfork, N_ is layered nodes
+        if isinstance(N_[0], CN):
+            E_ = N_
+        else:
+            E_, N_ = Nflat_, Nflat_
+        Et =root.Et  # fi=0?
 
     if val_(Et,fi, (len(Nflat_)-1)*Lw, rc+contw, root.Et) > 0:
         if fi:
@@ -490,7 +496,7 @@ def cluster(root, iN_, E_, rc, fi, rng=1):  # flood-fill node | link clusters
                 if R.fin: continue
                 N_,link_,long_ = [R], R.L_, R.hL_; R.fin = 1; seen_+=R.link_
         else: # link clustering
-            N_,long_ = [],[]; link_ = rim_(E, 1 if fln else 0)  # nodet or lrim
+            N_,long_ = [],[]; link_ = rim_(E, 1 if fln else 0)  # nodet or lrim (For PP, this rim_ is geting back the link in N_ or E_)
         Seen_ = set(link_)  # all visited
         L_ = []
         while link_:  # extend cluster N_
@@ -516,6 +522,7 @@ def cluster(root, iN_, E_, rc, fi, rng=1):  # flood-fill node | link clusters
                                     link_+=_R.link_; long_+=_R.hL_
                 else:  # cluster links via rim
                     if fln:  # by L diff
+                       # if we are gonna get nodet from rim here, the rim_ of fln = 1 above should have fi = 0 to get link?
                        for n in L.rim:  # in nodet, no eval
                             if n in iN_ and not n.fin:
                                 seen_+=[n]
