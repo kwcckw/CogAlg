@@ -218,9 +218,10 @@ def rim_(N, fi=None):  # get max-med [(L,rev,_N)], rev: L dir relative to N
         rt_ = N.rim[-1]  # max-med layer in nested L.rim
     else:
         n_ = N.rim  # flat L.rim = nodet
-        while isinstance(n_[0], CN) and not n_[0].fi:  # unpack n_: terminal L.[n,_n] tree branches
-           n_ = [n for L in n_ for n in L.rim]  # L.rims stay flat
-        rt_ = [rt for n in n_ for rt in n.rim]  # n.fi = 1
+        return list(set([_n for n in N.rim for _n in rim_(n, fi=fi)]))  # recursively retrieve rim
+        # while isinstance(n_[0], CN) and not n_[0].fi:  # unpack n_: terminal L.[n,_n] tree branches
+        #    n_ = [n for L in n_ for n in L.rim]  # L.rims stay flat
+        # rt_ = [rt for n in n_ for rt in n.rim]  # n.fi = 1
     return [r if fi is None else r[2] if fi else r[0] for r in rt_]
 
 def val_(Et, fi=1, mw=1, aw=1, _Et=np.zeros(3)):  # m,d eval per cluster or cross_comp
@@ -490,7 +491,7 @@ def cluster(root, iN_, N_, rc, fi, rng=1):  # flood-fill node | link clusters
             L_+=link_; _link_=link_; link_=[]; seen_=[]
             for L in _link_:  # buffer
                 if fi: # cluster nodes via rng (density) - specific links
-                    for _N in L.rim if fln else L.rim[-1]:
+                    for _N in (L.rim if isinstance(L.rim[0], CN) else L.rim[0]):  # should be just nodet here, L maybe nested from the the prior dfork 
                         if _N not in iN_ or _N.fin: continue
                         if rng==1 or _N.root.rng==1:  # not rng-banded
                             if rolp(N, set(rim_(N,0)), fi=1) > ave*rc:  # N_,L_ += full-rim connected _N,_L
@@ -510,7 +511,7 @@ def cluster(root, iN_, N_, rc, fi, rng=1):  # flood-fill node | link clusters
                 else:  # cluster links via rim
                     if fln:  # by L diff
                        for n in L.rim:  # in nodet, no eval
-                            if n in iN_ and not n.fin:
+                            if not n.fin:  # if iN_ is link, n will never in iN_, i think n in iN_ can be removed
                                 seen_+=[n]
                                 if rolp(N, set(rim_(n,0)), fi) > ave*rc:
                                     N_ += [l for l in rim_(n,0) if val_(l.Et,0,aw=rc) > 0]; n.fin = 1
