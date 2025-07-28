@@ -205,11 +205,34 @@ def cluster_edge(edge, frame, lev, derlay):  # non-recursive comp_PPm, comp_PPd,
         lev.L_+= L_; lev.Et = mEt+dEt  # links between PPms
         for l in L_: derlay.add_lay(l.derH[0]); frame.baseT+=l.baseT; frame.derTT+=l.derTT; frame.Et += l.Et
         if val_(dEt,0, (len(L_)-1)*Lw, 2+contw) > 0:
-            Lt = cluster(frame, L_,L_, rc=2, fi=0)
-            if Lt:  # L_ graphs
-                if lev.lH: lev.lH[0].N_ += Lt.N_; lev.lH[0].Et += Lt.Et
-                else:      lev.lH += [Lt]
-                lev.Et += Lt.Et
+
+            # cluster L of PPs:
+            for L in L_: L.fin = 0
+            for L in L_:
+                if not L.fin: L.fin = 1
+                node_ = [L]; link_ = []
+                for n in L.rim:  # L.nodet: n is link of L
+                    for _L,_,_ in n.rim:
+                        if not _L.fin and val_(_L.Et,aw=2) > 0:
+                            node_ += [_L]; link_ += [n]; _L.fin = 1  # nodet is link here?
+                                
+                node_ = list(set(node_))
+                Et, olp = np.zeros(3),0  # sum node_:
+                for n in node_:
+                    Et += n.et; olp += n.olp
+   
+                altg_ = {n for N in node_ for n in N.rim}  # N_ is Ls, assign nodets
+                _Et  = np.sum([i.Et for i in altg_], axis=0) if altg_ else np.zeros(3)
+            
+                G_ = []
+                if val_(Et,1, (len(node_)-1)*Lw, 2+olp, _Et) > 0:
+                    G_ += [sum2graph(edge, node_,link_,[],Et, olp,1,altg_)]  # altg_ shouldn't be empty here since nodet can't be empty
+
+                if G_:  # L_ graphs
+                    Lt = sum_N_(G_, edge)
+                    if lev.lH: lev.lH[0].N_ += Lt.N_; lev.lH[0].Et += Lt.Et
+                    else:      lev.lH += [Lt]
+                    lev.Et += Lt.Et
 
 def rim_(N, fi=None, fln=0):  # get nodet or [(L,rev,_N)], rev: L dir relative to N
     if N.fi:
@@ -217,7 +240,7 @@ def rim_(N, fi=None, fln=0):  # get nodet or [(L,rev,_N)], rev: L dir relative t
     elif isinstance(N.rim[0],list) and not fln:  # get all rim layers except nodet
         rt_ = [rt for lay in N.rim[1:] for rt in lay]
     else:  # get nodet tree
-        n_ = N.rim if isinstance(N.rim[0],CN) else N.rim[0]
+        n_ = N.rim[0]
         return list(set([_n for n in n_ for _n in rim_(n, fi, fln=1)]))  # all nodet tree leaves
 
     return [r if fi is None else r[2] if fi else r[0] for r in rt_]
@@ -320,7 +343,8 @@ def comp_node_(iN_, rc):  # rng+ forms layer of rim and extH per N?
 
 def comp_link_(iL_, rc):  # comp links via directional node-mediated _link tracing with incr mediation
 
-    for L in iL_: L._rim = []  # _rim append in comp
+    for L in iL_: 
+        L._rim = []; rim = L.rim[0].rim+L.rim[1].rim; L.rim = [L.rim, rim]  # nest nodet, rim  (why this edit is not included?)
     L__,LL_,ET,_L_ = [],[],np.zeros(3),iL_
     med = 1
     while _L_ and med < 4:
@@ -456,7 +480,7 @@ def Cluster(root, N_, rc, fi):  # clustering root
     for rng, rN_ in enumerate(N_, start=1):  # bottom-up rng-banded clustering
         aw = rc * rng +contw
         Et = Et if Et is not None else np.sum([n.Et for n in rN_], axis=0)
-        if rN_ and val_(rN_, Et, fi, (len(rN_)-1)*Lw, aw) > 0:
+        if rN_ and val_(Et, fi, (len(rN_)-1)*Lw, aw) > 0:  # why parse rN_ to val_?
             nG = cluster(root, root.N_ if  fi else Nf_, rN_, aw, fi, rng) or nG
             # last valid nG
         return nG
@@ -464,7 +488,7 @@ def Cluster(root, N_, rc, fi):  # clustering root
 def cluster(root, iN_, N_, rc, fi, rng=1):  # flood-fill node | link clusters
 
     G_ = []  # exclusive per fork,ave, only centroids can be fuzzy
-    fln = isinstance(N_[0].rim[0], CN)  # flat nodet
+    fln = isinstance(N_[0].rim[0], CN)  # flat nodet (fln is not parse to rim_ below?)
     for n in iN_: n.fin = 0
     for N in N_:  # init
         if not N.exe or N.fin: continue  # exemplars or all
