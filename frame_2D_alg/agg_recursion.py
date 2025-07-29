@@ -202,13 +202,14 @@ def cluster_edge(edge, frame, lev, derlay):  # light non-recursive version of cr
             L.fin = 1; node_ = [L]
             for n in L.rim:  # nodet PPs
                 for _L,_,_ in n.rim:
+                    # not sure but all _L in n.rim must be in L_? 
                     if not _L.fin and val_(_L.Et,aw=2) > 0: node_ += [_L]; _L.fin = 1
             node_ = list(set(node_)); Et, olp = np.zeros(3),0  # sum node_:
             for n in node_:
                 Et += n.et; olp += n.olp
             altg_ = {PP.root for L in node_ for PP in rim_(L,1,1) if PP.root.root}  # rdn core Gs, exclude frame
             _Et = np.sum([i.Et for i in altg_], axis=0) if altg_ else np.zeros(3)
-            altg_ = [(core,rdn) for rdn,core in enumerate(sorted(altg_, key=lambda x:(x.Et[0]/x.Et[2]), reverse=True), start=1)]
+            altg_ = comb_altg_(altg_,rc=2)  # convert it into the structure of (altg_, Et)
             if val_(Et,1, (len(node_)-1)*Lw, 2+olp, _Et) > 0:
                 lG_ += [sum2graph(root, node_,[],[],Et, olp,1,altg_)]
         return lG_
@@ -536,15 +537,12 @@ def cluster(root, iN_, N_, rc, fi, rng=1):  # flood-fill node | link clusters
             Et, olp = np.zeros(3),0  # sum node_:
             for n in N_:
                 Et += n.et; olp += n.olp  # any fork
-            if fi:
-                altg_ = {L.root for n in N_ for L,_,_ in n.rim if L.root}  # lGs, individual rims are too weak
-                if altg_: altg_ = comb_altg_(altg_, rc)  # pack, cross_comp -> contour
-            else:
-                altg_ = {n.root for N in N_ for n in rim_(N,1,1) if n.root.root}  # rdn core Gs, exclude frame
-                altg_ = [(core,rdn) for rdn,core in enumerate(sorted(altg_, key=lambda x:(x.Et[0]/x.Et[2]), reverse=True), start=1)]
+            if fi: altg_ = {L.root for n in N_ for L,_,_ in n.rim if L.root}  # lGs, individual rims are too weak
+            else:  altg_ = {n.root for N in N_ for n in rim_(N,1,1) if n.root.root}  # rdn core Gs, exclude frame
             _Et = np.sum([i.Et if fi else i[0].Et for i in altg_], axis=0) if altg_ else np.zeros(3)
 
             if val_(Et,1, (len(N_)-1)*Lw, rc+olp, _Et) > 0:
+                if altg_: altg_ = comb_altg_(altg_, rc)  # pack, cross_comp -> contour
                 G_ += [sum2graph(root, N_,L_,long_,Et, olp,rng, ([altg_,_Et] if fi else altg_) if altg_ else [])]
     if G_:
         return sum_N_(G_, root)
@@ -552,18 +550,26 @@ def cluster(root, iN_, N_, rc, fi, rng=1):  # flood-fill node | link clusters
 def comb_altg_(altg_, rc):  # cross_comp contour/background per node:
 
     Et, Rdn = np.zeros(3), 0
-    for core,rdn in [cr for core_t in altg_ for cr in core_t[0]]:  # map contour rdns to core N
+    altgt_ = [(core,rdn) for rdn,core in enumerate(sorted(altg_, key=lambda x:(x.Et[0]/x.Et[2]), reverse=True), start=1)]  # i think we can move the sorting here?
+    for core,rdn in altgt_:  # map contour rdns to core N (the structure now is a flat list of (altg, rdn)?)
         Et += core.Et; Rdn += rdn  # add to Et[2]?
     aG = CN(N_=altg_, Et=Et)
     nG = []
     if val_(Et,0,(len(altg_)-1)*Lw, rc+Rdn+loopw) > 0:  # norm by core_ rdn
+        for N in altg_:  # N is lG
+            for L in N.N_:  
+                if not L.fi:
+                    L._rim = []; L.rim = [L.rim, L.rim[0].rim+L.rim[1].rim]  # init, they maybe compared later in comp_spec later
         nG = cross_comp(aG, rc)
-    return (nG.N_,nG.Et) if nG else (altg_,Et)
+    return (set(nG.N_),nG.Et) if nG else (altg_,Et)
 
 def sum2graph(root, node_,link_,long_, Et, olp, rng, altg_, fC=0):  # sum node,link attrs in graph, aggH in agg+ or player in sub+
 
     n0 = Copy_(node_[0]); derH = n0.derH
     graph = CN(root=root, fi=1,rng=rng, N_=node_,L_=link_,olp=olp, Et=Et, altg_=altg_,box=n0.box, baseT=n0.baseT, derTT=n0.derTT)
+    if graph.id == 1386:
+        aa = 1
+    
     graph.hL_ = long_
     n0.root = graph; yx_ = [n0.yx]; fg = n0.fi and isinstance(n0.N_[0],CN)   # not PPs
     Nt = Copy_(n0); DerH = []  #->CN, comb forks: add_N(Nt,Nt.Lt)?
