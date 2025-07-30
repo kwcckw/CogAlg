@@ -208,7 +208,8 @@ def cluster_edge(edge, frame, lev, derlay):  # light non-recursive version of cr
                 Et += n.et; olp += n.olp
             altg_ = {PP.root for L in node_ for PP in rim_(L,1,1) if PP.root.root}  # rdn core Gs, exclude frame
             _Et = np.sum([i.Et for i in altg_], axis=0) if altg_ else np.zeros(3)
-            altg_ = [(core,rdn) for rdn,core in enumerate(sorted(altg_, key=lambda x:(x.Et[0]/x.Et[2]), reverse=True), start=1)]
+            altg_ = [[(core,rdn) for rdn,core in enumerate(sorted(altg_, key=lambda x:(x.Et[0]/x.Et[2]), reverse=True), start=1)], _Et]
+            altg_ = [altg_, _Et]  # follows a same (altg_, Et) structure
             if val_(Et,1, (len(node_)-1)*Lw, 2+olp, _Et) > 0:
                 lG_ += [sum2graph(root, node_,[],[],Et, olp,1,altg_)]
         return lG_
@@ -221,7 +222,7 @@ def cluster_edge(edge, frame, lev, derlay):  # light non-recursive version of cr
             G_, Et = cluster_PP_(copy(PP_))  # can't be empty
         else: G_ = []
         if G_: frame.N_ += G_; lev.N_ += PP_; lev.Et += Et
-        else:  frame.N_ += PP_  # PPm_
+        else:  frame.N_ += PP_  # PPm_ (do we really need to recycle PPs? Their N_ is CP and we may need to skip them in spec later)
         lev.L_+= L_; lev.Et = mEt+dEt  # links between PPms
         for l in L_: derlay.add_lay(l.derH[0]); frame.baseT+=l.baseT; frame.derTT+=l.derTT; frame.Et += l.Et
         if val_(dEt,0, (len(L_)-1)*Lw, 2+contw) > 0:
@@ -233,7 +234,7 @@ def cluster_edge(edge, frame, lev, derlay):  # light non-recursive version of cr
                 lev.Et += lG.Et
                 for G in G_:
                     altg_ = {L.root for N in G.N_ for L,_,_ in N.rim if L.root}
-                    if altg_: G.altg_ = comb_altg_(altg_,rc=3)  # pack, cross_comp
+                    if altg_: G.altg_ = comb_altg_(G, altg_,rc=3)  # pack, cross_comp
 
 def rim_(N, fi=None, fln=0):
 
@@ -359,6 +360,7 @@ def comp_N(_N,N, rc, med=1, L_=None, angle=np.zeros(2), span=None, _rev=0, fdeep
     baseT = np.array([*(_N.baseT[:2] + N.baseT[:2]*rn) / 2, *angle])  # redundant angle for generic base_comp, span->density?
     _y,_x = _N.yx; y,x = N.yx; box = np.array([min(_y,y),min(_x,x),max(_y,y),max(_x,x)])
     o = (_N.olp+N.olp) / 2
+    # but their N.et is empty before the summation from links?
     Link = CN(Et=Et,olp=o, et=_N.et+N.et, rng=rng,rim=[_N,N], baseT=baseT, derTT=derTT, yx=np.add(_N.yx,N.yx)/2, span=span, angle=angle, box=box, med=med, fi=0)
     Link.derH = [CLay(Et=copy(Et), node_=[_N,N],link_=[Link], derTT=copy(derTT), root=Link)]
     if fdeep:
@@ -423,6 +425,9 @@ def spec(_spe,spe, rc, Et, dspe=None, fdeep=0):  # for N_|cent_ | altg_
     for _N in _spe:
         for N in spe:
             if _N is not N:
+                for L in N, _N:  # init rim for link
+                    if not L.fi and isinstance(L.rim[0], CN):
+                        L._rim = []; L.rim = [L.rim, L.rim[0].rim+L.rim[1].rim]  # nest nodet, rim  
                 dN = comp_N(_N, N, rc); Et += dN.Et  # may be d=cent_?
                 if dspe is not None: dspe += [dN]
                 if fdeep:
@@ -482,7 +487,8 @@ def cluster(root, iN_, N_, rc, fi, rng=1):  # flood-fill node | link clusters
                 N_,link_,long_ = [],[],[]
                 for l in rim_(N,0):  # lrim
                     seen_ += [l]
-                    if l.rng==rng and val_(l.Et+ (l.rim[0].et+l.rim[1].et)*intw, aw=rc+1) > 0: link_+=[l]; N_ += [N]  # l.Et+ density term
+                    let = (l.rim[0].et+l.rim[1].et) if isinstance(l.rim[0], CN) else (l.rim[0][0].et+l.rim[0][1].et)  # l may form multi rims in prior dfork
+                    if l.rng==rng and val_(l.Et+let*intw, aw=rc+1) > 0: link_+=[l]; N_ += [N]  # l.Et+ density term
                     elif l.rng>rng: long_+=[l]
             else: # N is rng-banded, cluster top-rng roots
                 n = N; R = n.root
@@ -500,7 +506,8 @@ def cluster(root, iN_, N_, rc, fi, rng=1):  # flood-fill node | link clusters
                     for _N in rim_(L,1):  #
                         if _N not in iN_ or _N.fin: continue
                         if rng==1 or _N.root.rng==1:  # not rng-banded
-                            if val_(L.Et+ (L.rim[0].et+L.rim[1].et)*intw, aw=rc+1) > 0:  # N_,L_ += density-weighted _N,_L
+                            let = (L.rim[0].et+L.rim[1].et) if isinstance(L.rim[0], CN) else (L.rim[0][0].et+L.rim[0][1].et)
+                            if val_(L.Et+ let*intw, aw=rc+1) > 0:  # N_,L_ += density-weighted _N,_L
                                 N_ += [_N]; _N.fin = 1  # conditional
                                 for l in rim_(_N,0):
                                     seen_+=[l]
@@ -581,9 +588,10 @@ def sum2graph(root, node_,link_,long_, Et, olp, rng, altg_, fC=0):  # sum node,l
         d_,D = centroid_M(graph.derTT[1],ave*olp)
         graph.derTT = np.array([m_,d_])
         graph.Et = np.array([M,D,Et[2]])
+    # my prior understanding is wrong?
     if altg_:
         if fi: graph.altg_ = comb_altg_(graph, altg_, olp)  # pack, cross_comp -> contour
-        else:  graph.altg_ = [[(core,rdn) for rdn,core in enumerate(sorted(altg_[0], key=lambda x:(x.Et[0]/x.Et[2]), reverse=True), start=1)], altg_[1]]
+        else:  graph.altg_ = [set([(core,rdn) for rdn,core in enumerate(sorted(altg_[0], key=lambda x:(x.Et[0]/x.Et[2]), reverse=True), start=1)]), altg_[1]]
     # divisive centroid clustering if projected internal variance:
     if val_(Et,0, mw = graph.span * 2 * slope(link_), aw = olp + centw) > 0:
         cluster_C_(graph, node_, olp + centw, fi=node_[0].fi)
@@ -703,7 +711,10 @@ def sum_N_(node_, root=None, fC=0):  # form cluster G
     return G   # no rim
 
 def add_sett(Sett,sett):
-    N_,Et = Sett; n_ = sett[0]; N_.update(n_); Et += np.sum([t.Et for t in n_-N_])
+    if Sett:
+        N_,Et = Sett; n_ = sett[0]; N_.update(n_); Et += np.sum([t.Et for t in n_-N_])
+    else:
+        Sett += [copy(par) for par in sett]  # copy altg_ and Et
 
 def add_N(N,n, fmerge=0, fC=0):
 
