@@ -112,6 +112,7 @@ class CN(CBase):
         n.fin = kwargs.get('fin',0)  # clustered, temporary
         n.exe = kwargs.get('exe',1)  # exemplar, temporary
         n.compared_ = set()
+        n.seen_ = set()
         # n.fork_tree: list =z([[]])  # indices in all layers(forks, if no fback merge, G.fback_=[] # node fb buffer, n in fb[-1]
     def __bool__(n): return bool(n.N_)
 
@@ -264,7 +265,7 @@ def cross_comp(root, rc, fi=1):  # rng+ and der+ cross-comp and clustering
 
     N_,L_,Et = comp_(root.N_, rc, fi)  # rc: redundancy+olp, lG.N_ is Ls
     if len(L_) > 1:
-        for n in [n for N in N_ for n in N] if fi else N_:
+        for n in [n for N in N_ for n in N]:
             for l,_,_ in n.rim: n.et+=l.Et  # ext olp
         mV,dV = val_(Et,2, (len(L_)-1)*Lw, rc+loopw)
         if dV > 0:
@@ -322,15 +323,16 @@ def comp_N(_N,N, rc, med=1, L_=None, angle=np.zeros(2), span=None, _rev=0, fdeep
     baseT = np.array([*(_N.baseT[:2] + N.baseT[:2]*rn) / 2, *angle])  # redundant angle for generic base_comp, span->density?
     _y,_x = _N.yx; y,x = N.yx; box = np.array([min(_y,y),min(_x,x),max(_y,y),max(_x,x)])
     o = (_N.olp+N.olp) / 2
-    # but their N.et is empty before the summation from links?
+
     Link = CN(Et=Et,olp=o, et=_N.et+N.et, N_=[_N,N], baseT=baseT,derTT=derTT, yx=np.add(_N.yx,N.yx)/2,box=box, span=span,angle=angle, rng=rng,med=med, fi=0)
-    Link.derH = [CLay(Et=copy(Et), node_=[_N,N],link_=[Link], derTT=copy(derTT), root=Link)]
+    Link.derH = [CLay(Et=copy(Et), N_=[_N,N],L_=[Link], derTT=copy(derTT), root=Link)]
     if fdeep:
         if val_(Et,1, len(N.derH)-2, o) > 0 or fi==0:  # else derH is dext,vert
             Link.derH += comp_H(_N.derH,N.derH, rn, Et, derTT, Link)  # append
         if fi:
             _N_,N_ = (_N.cent_,N.cent_) if (_N.cent_ and N.cent_) else (_N.N_,N.N_)  # or N_= cent_? no rim,altg_ in top nodes
-            spec(_N_,N_, rc,Et, Link.N_)
+            if isinstance(N_[0], CN):  # skip CP
+                spec(_N_,N_, rc,Et, Link.N_)
     if fdeep==2: return Link  # or just Et?
     if L_ is not None:
         L_ += [Link]
@@ -438,7 +440,6 @@ def Cluster(root, N_, rc, fi):  # clustering root
 def cluster(root, iN_, N_, rc, fi, rng=1):  # flood-fill node | link clusters
 
     G_ = []  # exclusive per fork,ave, only centroids can be fuzzy
-    fln = isinstance(N_[0].rim[0], CN)  # flat nodet
     for n in iN_: n.fin = 0
     for N in N_:  # init
         if not N.exe or N.fin: continue  # exemplars or all N_
@@ -456,7 +457,7 @@ def cluster(root, iN_, N_, rc, fi, rng=1):  # flood-fill node | link clusters
                 if R.fin: continue
                 N_,link_,long_ = [R], R.L_, R.hL_; R.fin = 1; seen_+=R.link_
         else: # link clustering
-            N_,long_ = [],[]; link_ = [l for l,_,_ in N.rim]  # nodet or lrim
+            N_,long_ = [],[]; link_ = [l for l,_,_ in (N.rim)] if N.rim else N.N_  # nodet or lrim  (if N.rim is empty, get nodet as rim )
         Seen_ = set(link_)  # all visited
         L_ = []
         while link_:  # extend cluster N_
@@ -481,13 +482,12 @@ def cluster(root, iN_, N_, rc, fi, rng=1):  # flood-fill node | link clusters
                                     N_ += [_R]; _R.fin = 1; _N.fin = 1
                                     link_+=_R.link_; long_+=_R.hL_
                 else:  # cluster links via rim
-                    if fln:  # by L diff
-                       for n in L.N_:
-                            if n.fin: continue
-                            seen_ += [n]
-                            if val_(L.Et+ett(L),0, aw=rc+1) > 0:
-                                N_ += [_n for _,_,_n in n.rim if val_(_n.Et,0,aw=rc) > 0]; n.fin = 1
-                                link_ += [n]
+                    if not iN_[0].rim:  # by L diff (for L in mfork, where L.rim is empty, and L is nodet)
+                        for _L,_,_ in L.rim:  # below is actually the same with LL, merge them?
+                            if _L.fin: continue
+                            seen_ += [_L]
+                            if val_(_L.Et+ett(_L),0, aw=rc+1) > 0:
+                                N_ += [_L]; _L.fin = 1; link_ += [_L]
                     else:  # by LL match
                         for _,_,_L in L.rim:  # via E.rim if E.fi else E.rim[-1]
                             if _L.fin: continue
@@ -504,7 +504,7 @@ def cluster(root, iN_, N_, rc, fi, rng=1):  # flood-fill node | link clusters
                 Et += n.et; olp += n.olp  # any fork
 
             if fi: altg_ = {L.root for n in N_ for L,_,_ in n.rim if L.root}  # lGs, individual rims are too weak
-            else:  altg_ = {n.root for N in N_ for n in N.N_ if n.root.root}  # rdn core Gs, exclude frame
+            else:  altg_ = {n.root for N in N_ for n in N.N_ if n.root and n.root.root}  # rdn core Gs, exclude frame
             _Et = np.sum([i.Et if fi else i[0].Et for i in altg_], axis=0) if altg_ else np.zeros(3)
 
             if val_(Et,1, (len(N_)-1)*Lw, rc+olp, _Et) > 0:
@@ -524,7 +524,7 @@ def comb_altg_(nG, altg_, rc):  # cross_comp contour/background per node:
     return (nG.N_,nG.Et) if nG else (altg_,Et)
 
 def ett(L):
-    _N,N = L.rim if isinstance(L.rim[0],CN) else L.rim[0]
+    _N,N = L.N_
     return (_N.et+N.et) * intw
 
 def sum2graph(root, node_,link_,long_, Et, olp, rng, altg_, fC=0):  # sum node,link attrs in graph, aggH in agg+ or player in sub+
@@ -568,7 +568,7 @@ def cluster_C_(root, N_, rc, fi=1, fdeep=0):  # form centroids by clustering exe
         if fdeep:
             if val_(Et,1,len(n.derH)-2,rc):
                 comp_H(C.derH, n.derH, n.Et[2]/C.Et[2], Et)
-            for L,l in [(L,l) for L in rim_(C,0) for l in rim_(n,0)]:
+            for L,l in [(L,l) for L,_,_ in C.rim for l,_,_ in n.rim]:
                 if L is l: et += l.Et  # overlap
         return et
 
@@ -576,7 +576,7 @@ def cluster_C_(root, N_, rc, fi=1, fdeep=0):  # form centroids by clustering exe
     for N in N_:
         if not N.exe: continue  # exemplars or all
         C = Copy_(N,root, init=fi+2)  # init centroid
-        C._N_ = list({n for N in rim_(N,fi) for n in rim_(N,fi)})  # core members + surround for comp to N_ mean
+        C._N_ = list({n for _,_,N in N.rim for _,_,n in N.rim})  # core members + surround for comp to N_ mean
         _N_ += C._N_; _C_ += [C]
     # reset per root:
     for n in set(root.N_+_N_): n.C_, n.vo_, n._C_, n._vo_ = [], [], [], []
@@ -595,7 +595,7 @@ def cluster_C_(root, N_, rc, fi=1, fdeep=0):  # form centroids by clustering exe
                     vo = np.array([v,olp])  # val, overlap per current root C
                     if et[1-fi]/et[2] > Ave*olp:
                         n.C_ += [C]; n.vo_ += [vo]; Et += et; o+=olp; _N_ += [n]
-                        _N__ += rim_(n,fi)
+                        _N__ += [_n for _,_,_n, in n.rim]
                         if C not in n._C_: dvo += vo
                     elif C in n._C_:
                         dvo += n._vo_[n._C_.index(C)]  # old vo_, or pack in _C_?
