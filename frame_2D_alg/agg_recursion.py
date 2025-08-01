@@ -184,7 +184,7 @@ def cluster_edge(edge, frame, lev, derlay):  # light non-recursive version of cr
                 eN_ = []
                 for _eN in _eN_:  # rim-connected ext Ns
                     node_ += [_eN]
-                    for L,_,_ in _eN.rim:  # all +ve, *= density?
+                    for L,_ in _eN.rim:  # all +ve, *= density?
                         if L not in link_:
                             for eN in L.rim:
                                 if eN in PP_: eN_ += [eN]; PP_.remove(eN)  # merged
@@ -201,7 +201,7 @@ def cluster_edge(edge, frame, lev, derlay):  # light non-recursive version of cr
             if L.fin: continue
             L.fin = 1; node_ = [L]
             for n in L.rim:  # nodet PPs
-                for _L,_,_ in n.rim:
+                for _L,_ in n.rim:
                     if not _L.fin and val_(_L.Et,aw=2) > 0: node_ += [_L]; _L.fin = 1
             node_ = list(set(node_)); Et, olp = np.zeros(3),0  # sum node_:
             for n in node_:
@@ -298,7 +298,7 @@ def comp_(iN_, rc, fi):  # rng+ forms layer of rim and extH per N?
             vett = _N.et[1-fi]/_N.et[2] + N.et[1-fi]/_N.et[2]  # partial density?
             mA, dA = comp_angle(_N.angle, N.angle)
             # pre-compare angle, norm by n nodes -> 1 for links:
-            aL = ((len(_N.N_)+len(N.N_)-2) /2); ma = mA/aL; da = dA/aL  # not for single-N Gs?
+            aL = max(((len(_N.N_)+len(N.N_)-2) /2),1e-7); ma = mA/aL; da = dA/aL  # not for single-N Gs?
             if fi: V = ((_m+m+ma) *intw + vett) / (ave*(_n+n))
             else:  V = ((_d+d+ma) *intw + vett) / (avd*(_n+n))  # if high d and ma, invert angle to align signs?
             max_dist = adist * (radii/aveR) * V  # ave_dist * radii * induction
@@ -400,7 +400,7 @@ def spec(_spe,spe, rc, Et, dspe=None, fdeep=0):  # for N_|cent_ | altg_
 def rolp(N, _N_, fi, R=0): # rel V of L_|N.rim overlap with _N_: inhibition|shared zone, oN_ = list(set(N.N_) & set(_N.N_)), no comp?
 
     if R: n_ = (N.N_ if fi else N.L_)
-    else: n_ = set(n if fi else l for l,_,n in N.rim)
+    else: n_ = set((n if fi else l) for l,n in N.rim)
     olp_ = n_ & _N_
     if olp_:
         oEt = np.sum([i.Et for i in olp_], axis=0)
@@ -418,7 +418,7 @@ def get_exemplars(N_, rc, fi):  # get sparse nodes by multi-layer non-maximum su
         # ave *= relV of overlap by stronger-E inhibition zones
         roV = rolp(N, _E_, fi)
         if val_(N.et, fi, aw = rc + rdn + loopw + roV) > 0:  # cost
-            n_ = [n if fi else l for l,_,n in N.rim]
+            n_ = [(n if fi else l) for l,n in N.rim]
             _E_.update([n for n in n_ if val_(n.Et, fi,aw=rc) > 0])  # selective nrim|lrim
             N.exe = 1  # in point cloud of focal nodes
         else:
@@ -448,7 +448,7 @@ def cluster(root, iN_, N_, rc, fi, rng=1):  # flood-fill node | link clusters
         if fi: # node clustering
             if rng==1 or N.root.rng==1:  # E is not rng-banded
                 N_,link_,long_ = [],[],[]
-                for l,_,_ in N.rim:
+                for l,_ in N.rim:
                     seen_ += [l]
                     if l.rng==rng and val_(l.Et+ett(l), aw=rc+1) > 0: link_+=[l]; N_ += [N]  # l.Et+ density term
                     elif l.rng>rng: long_+=[l]
@@ -458,19 +458,19 @@ def cluster(root, iN_, N_, rc, fi, rng=1):  # flood-fill node | link clusters
                 if R.fin: continue
                 N_,link_,long_ = [R], R.L_, R.hL_; R.fin = 1; seen_+=R.link_
         else: # link clustering
-            N_,long_ = [],[]; link_ = [l for l,_,_ in N.rim]
+            N_,long_ = [],[]; link_ = [l for l,_ in N.rim]
         Seen_ = set(link_)  # all visited
         L_ = []
         while link_:  # extend cluster N_
             L_+=link_; _link_=link_; link_=[]; seen_=[]
             for L in _link_:  # buffer
                 if fi: # cluster nodes via rng (density) - specific links
-                    for _,_,_N in N.rim:
+                    for _,_N in N.rim:
                         if _N not in iN_ or _N.fin: continue
                         if rng==1 or _N.root.rng==1:  # not rng-banded
                             if val_(L.Et+ ett(L), aw=rc+1) > 0:  # N_,L_ += density-weighted _N,_L
                                 N_ += [_N]; _N.fin = 1  # conditional
-                                for l,_,_ in N.rim:
+                                for l,_ in N.rim:
                                     seen_+=[l]
                                     if l.rng==rng and val_(l.Et, aw=rc) > 0: link_+=[l]
                                     elif l.rng>rng: long_ += [l]
@@ -483,9 +483,9 @@ def cluster(root, iN_, N_, rc, fi, rng=1):  # flood-fill node | link clusters
                                     N_ += [_R]; _R.fin = 1; _N.fin = 1
                                     link_+=_R.link_; long_+=_R.hL_
                 else:  # cluster links via rim
-                    for _,_,_L in L.rim:  # or also rng-banded, merge with fi fork?
+                    for _L in L.N_:  # or also rng-banded, merge with fi fork? (should be nodet here, L.rim is always empty since L is LL)
                         if _L.fin: continue
-                        for LL,_,_ in _L.rim:
+                        for LL,_ in _L.rim:
                             seen_ += [LL]
                             if val_(_L.Et+ett(_L),1, aw=rc+1) > 0:
                                 N_ += [_L]; _L.fin = 1; link_ += [LL]
@@ -497,7 +497,7 @@ def cluster(root, iN_, N_, rc, fi, rng=1):  # flood-fill node | link clusters
             for n in N_:
                 Et += n.et; olp += n.olp  # any fork
 
-            if fi: altg_ = {L.root for n in N_ for L,_,_ in n.rim if L.root}  # lGs, individual rims are too weak
+            if fi: altg_ = {L.root for n in N_ for L,_ in n.rim if L.root}  # lGs, individual rims are too weak
             else:  altg_ = {n.root for N in N_ for n in N.N_ if n.root and n.root.root}  # rdn core Gs, exclude frame
             _Et = np.sum([i.Et if fi else i[0].Et for i in altg_], axis=0) if altg_ else np.zeros(3)
 
@@ -510,8 +510,9 @@ def comb_altg_(nG, altg_, rc):  # cross_comp contour/background per node:
 
     Et, Rdn = np.zeros(3), 0
     for lG in altg_:
-        for core,rdn in lG.altg_[0]:  # map contour rdns to core N:
-            if core is nG: Et += core.Et; Rdn += rdn  # add to Et[2]?
+        if lG.altg_:  # lG.altg_ may empty
+            for core,rdn in lG.altg_[0]:  # map contour rdns to core N:
+                if core is nG: Et += core.Et; Rdn += rdn  # add to Et[2]?
     aG = CN(N_=altg_, Et=Et); nG = []
     if val_(Et,0,(len(altg_)-1)*Lw, rc+Rdn+loopw) > 0:  # norm by core_ rdn
         nG = cross_comp(aG, rc)
@@ -545,7 +546,7 @@ def sum2graph(root, node_,link_,long_, Et, olp, rng, altg_, fC=0):  # sum node,l
         graph.Et = np.array([M,D,Et[2]])
     # my prior understanding is wrong?
     if altg_:
-        if fi: graph.altg_ = comb_altg_(graph, altg_, olp)  # pack, cross_comp -> contour
+        if fi: graph.altg_ = comb_altg_(graph, altg_[0], olp)  # pack, cross_comp -> contour
         else:  graph.altg_ = [{(core,rdn) for rdn,core in enumerate(sorted(altg_[0], key=lambda x:(x.Et[0]/x.Et[2]), reverse=True), start=1)}, altg_[1]]
     # divisive centroid clustering if projected internal variance:
     if val_(Et,0, mw = graph.span * 2 * slope(link_), aw = olp + centw) > 0:
