@@ -147,14 +147,14 @@ def vect_root(Fg, rV=1, ww_t=[]):  # init for agg+:
             np.array([ave,avd,arn,aveB,aveR, Lw, adist, amed, intw, loopw, centw, contw]) / rV)  # projected value change
         w_t = np.multiply([[wM,wD,wN,wO,wI,wG,wA,wL]], ww_t)  # or dw_ ~= w_/ 2?
         ww_t = np.delete(ww_t,(2,3), axis=1)  #-> comp_slice, = np.array([(*ww_t[0][:2],*ww_t[0][4:]),(*ww_t[0][:2],*ww_t[1][4:])])
-    blob_ = unpack_blob_(Fg)
+    blob_ = unpack_blob_(Fg); N_ = []
     for blob in blob_:
         if not blob.sign and blob.G > aveB:
             edge = slice_edge(blob, rV)
             if edge.G*((len(edge.P_)-1)*Lw) > ave * sum([P.latuple[4] for P in edge.P_]):
-                Fg.N_ += comp_slice(edge, rV, ww_t)
-    for PP in Fg.N_:
-        PP2N(PP,frame)
+                N_ += comp_slice(edge, rV, ww_t)
+    for i, PP in enumerate(N_): N_[i] = PP2N(PP,Fg)
+    if N_: Fg.N_ = N_  # replaces blobs with PPts, or replaces with empty list so that we can differentiate between blobs and PPt? Skip cross_comp if Fg.N_ is blobs
 
 def val_(Et, fi=1, mw=1, aw=1, _Et=np.zeros(3)):  # m,d eval per cluster or cross_comp
 
@@ -185,6 +185,7 @@ def cross_comp(root, rc, fi=1):  # rng+ and der+ cross-comp and clustering
     N_,L_,Et = comp_(root.N_, rc, fi)  # rc: redundancy+olp, lG.N_ is Ls
     if len(L_) > 1:
         mV,dV = val_(Et,2, (len(L_)-1)*Lw, rc+loopw)
+        lG = []  # we need lG to eval for mfork later
         if dV > 0:
             if root.L_: root.lH += [sum_N_(root.L_)]  # replace L_ with agg+ L_:
             root.L_ =L_; root.Et += Et
@@ -203,11 +204,12 @@ def cross_comp(root, rc, fi=1):  # rng+ and der+ cross-comp and clustering
 
 def comb_altg_(nG, lG, rc):  # cross_comp contour/background per node:
 
-    for Lg in lG.N_:
+    for Lg in lG.N_:  # if lG is from deepest cross_comp, they will not be the same from Ng.N_'s rim's root
         altg_ = {n.root for L in Lg.N_ for n in L.N_ if n.root and n.root.root}  # rdn core Gs, exclude frame
         if altg_:
-            altg_ = {(core, rdn) for rdn, core in enumerate(sorted(altg_[0], key=lambda x: (x.Et[0] / x.Et[2]), reverse=True), start=1)}
-            Lg.altg_ = [altg_, np.sum([i.Et for i in altg_], axis=0)]
+            # altg_ is flat, [0] can be removed
+            altg_ = {(core, rdn) for rdn, core in enumerate(sorted(altg_, key=lambda x: (x.Et[0] / x.Et[2]), reverse=True), start=1)}
+            Lg.altg_ = [altg_, np.sum([i.Et for i,_ in altg_], axis=0)]
     for Ng in nG.N_:
         Et, Rdn = np.zeros(3), 0  # contour/core clustering
         altl_ = {L.root for n in Ng.N_ for L in n.rim if L.root}  # lGs, individual rims are too weak
@@ -625,7 +627,7 @@ def extend_box(_box, box):
 
 def PP2N(PP, frame):
 
-    P_, link_, vert, latuple, A, S, box, yx, Et = PP
+    P_, link_, vert, latuple, A, box, yx, Et = PP
     baseT = np.array(latuple[:4])
     [mM,mD,mI,mG,mA,mL], [dM,dD,dI,dG,dA,dL] = vert  # re-pack in derTT:
     derTT = np.array([[mM,mD,mL,1,mI,mG,mA,mL], [dM,dD,dL,1,dI,dG,dA,dL]])
@@ -633,7 +635,7 @@ def PP2N(PP, frame):
     y,x,Y,X = box; dy,dx = Y-y,X-x  # A = (dy,dx); L = np.hypot(dy,dx), rolp = 1
     et = np.array([*np.sum([L.Et for L in link_],axis=0), 1]) if link_ else np.array([.0,.0,1.])  # n=1
 
-    return CN(root=frame, fi=1, Et=Et+et, N_=P_, L_=link_, baseT=baseT, derTT=derTT, derH=derH, box=box, yx=yx, span=np.hypot(dy/2,dx/2))
+    return CN(root=frame, fi=1, Et=Et+et, N_=P_, L_=link_, baseT=baseT, derTT=derTT, derH=derH, box=box, yx=yx, angle=A, span=np.hypot(dy/2,dx/2))  # angle is useful for comp_angle?
 
 # not used, make H a centroid of layers, same for nH?
 def sort_H(H, fi):  # re-assign olp and form priority indices for comp_tree, if selective and aligned
@@ -779,8 +781,8 @@ def agg_frame(foc, image, iY, iX, rV=1, rv_t=[], fproj=0):  # search foci within
         PV__[y,x] = -np.inf  # to skip, | separate in__?
         if foc:
             Fg = frame_blobs_root( win__[:,:,:,y,x], rV)  # [dert, iY, iX, nY, nX]
-            Fg = vect_root(Fg, rV, rv_t)  # focal dert__ clustering
-            Fg = cross_comp(Fg, rc=frame.olp) or Fg
+            vect_root(Fg, rV, rv_t); Fg.L_ = []  # focal dert__ clustering  (reset Fg.L_ from image to list)
+            cross_comp(Fg, rc=frame.olp)
         else:
             Fg = agg_frame(1, win__[:,:,:,y,x], wY,wX, rV=1, rv_t=[])  # use global wY,wX in nested call
             if Fg and Fg.L_:  # only after cross_comp(PP_)

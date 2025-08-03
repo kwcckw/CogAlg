@@ -78,7 +78,7 @@ def comp_slice(edge, rV=1, ww_t=None):  # root function
         edge.link_, dvert, dEt = form_PP_(edge.dP_, fd=1)
         edge.vert = mvert + dvert
         edge.Et = Et = mEt + dEt
-        return Et  # for eval
+    return PPt  
 
 def form_PP_(iP_, fd):  # form PPs of dP.valt[fd] + connected Ps val
 
@@ -162,14 +162,14 @@ def sum2PP(P_, dP_, Et):  # sum links in Ps and Ps in PP
     vert = np.zeros((2,6))
     link_ = []
     if dP_:  # add uplinks:
-        S,A = 0,[0,0]
+        A = [0,0]
         for dP in dP_:
             if dP.nodet[0] not in P_ or dP.nodet[1] not in P_: continue  # peripheral link
             link_ += [dP]
             vert += dP.vertuple
-            a = dP.angle; A = np.add(A,a); S += np.hypot(*a)  # span, links are contiguous but slanted
+            a = dP.angle; A = np.add(A,a)  # links are contiguous but slanted
     else:  # single P PP
-        S,A = (P_[0].angle, P_[0].span) if fd else P_[0].latuple[2:4]  # [I, G, Dy, Dx, M, D, L]
+        A = P_[0].angle if fd else P_[0].latuple[2:4]  # [I, G, Dy, Dx, M, D, L]
     box = [np.inf,np.inf,0,0]
     for P in P_:
         if not fd:  # else summed from P_ nodets on top
@@ -178,7 +178,7 @@ def sum2PP(P_, dP_, Et):  # sum links in Ps and Ps in PP
         for y,x in P.yx_ if isinstance(P, CP) else [P.nodet[0].yx, P.nodet[1].yx]:  # CdP
             box = accum_box(box,y,x)
     y0,x0,yn,xn = box
-    PPt = [P_, link_, vert, lat, A, S, box, np.array([(y0+yn)/2,(x0+xn)/2]), Et]
+    PPt = [P_, link_, vert, lat, A, box, np.array([(y0+yn)/2,(x0+xn)/2]), Et]
     for P in P_: P.root = PPt
     return PPt
 
@@ -288,8 +288,8 @@ if __name__ == "__main__":
 
         print("Drawing PPm boxes...")
         for PPm in PPm_:
-            # P_, link_, vert, lat, A, S, box, yx, Et = PPm
-            _, _, _, _, _, _, (y0, x0, yn, xn), _, _ = PPm
+            # P_, link_, vert, lat, A, box, yx, Et = PPm
+            _, _, _, _, _, (y0, x0, yn, xn), _, _ = PPm
             (y0, x0), (yn, xn) = ((y0, x0), (yn, xn)) - yx0
             y0, yn = min_dist(y0, yn)
             x0, xn = min_dist(x0, xn)
@@ -297,7 +297,7 @@ if __name__ == "__main__":
 
         print("Drawing PPd boxes...")
         for PPd in PPd_:
-            _, _, _, _, _, _, (y0, x0, yn, xn), _, _ = PPd
+            _, _, _, _, _, (y0, x0, yn, xn), _, _ = PPd
             (y0, x0), (yn, xn) = ((y0, x0), (yn, xn)) - yx0
             y0, yn = min_dist(y0, yn)
             x0, xn = min_dist(x0, xn)
