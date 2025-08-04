@@ -153,7 +153,7 @@ def vect_root(Fg, rV=1, ww_t=[]):  # init for agg+:
             edge = slice_edge(blob, rV)
             if edge.G * ((len(edge.P_) - 1) * Lw) > ave * sum([P.latuple[4] for P in edge.P_]):
                 N_ += comp_slice(edge, rV, ww_t)
-    Fg.N_ = [PP2N(PP, frame) for PP in N_]
+    Fg.N_ = [PP2N(PP, Fg) for PP in N_]
 
 def val_(Et, fi=1, mw=1, aw=1, _Et=np.zeros(3)):  # m,d eval per cluster or cross_comp
 
@@ -209,7 +209,16 @@ def comb_altg_(nG, lG, rc):  # cross_comp contour/background per node:
             Lg.altg_ = [altg_, np.sum([i.Et for i,_ in altg_], axis=0)]
     for Ng in nG.N_:
         Et, Rdn = np.zeros(3), 0  # contour/core clustering
-        altl_ = {L.root for n in Ng.N_ for L in n.rim if L.root}  # lGs, individual rims are too weak
+
+        # lGs, individual rims are too weak
+        altl_ = set()
+        for n in Ng.N_:
+            for L in n.rim:
+                if L.root and L.root is not lG:
+                    root = L.root
+                    while root.root and root.root is not lG:  # get top L from N's rim (stop when root is lG)
+                       root = root.root
+                    altl_.add(root)
         if altl_:
             for Lg in altl_:
                 if Lg.altg_:  # eval Lg.altg_[1]?
@@ -486,7 +495,7 @@ def cluster_C_(root, N_, rc, fi=1, fdeep=0):  # form centroids by clustering exe
         if not N.exe: continue  # exemplars or all
         C = Copy_(N,root, init=fi+2)  # init centroid
         C._N_ = [n for l in N.rim for n in l.N_ if n is not N]  # core members + surround for comp to N_ mean
-        C.N_ = copy(C._N_)  # a same N_ and _N_?
+        C.N_ = [N]  # init with N
         _N_ += C._N_; _C_ += [C]
     # reset per root:
     for n in set(root.N_+_N_): n.C_, n.vo_, n._C_, n._vo_ = [], [], [], []
@@ -502,7 +511,8 @@ def cluster_C_(root, N_, rc, fi=1, fdeep=0):  # form centroids by clustering exe
                     if C in n.C_: continue  # clear/ loop?
                     et = comp_C(C,n)
                     v = val_(et,fi, aw=rc+_o)  # _o: combined _C overlap, update for next loop:
-                    o = np.sum([vo[0] / v for vo in n.vo_ if vo[0] > v])  # overlap = rel n val in stronger Cs, add to et[2]?
+                    # should be n._vo_?  n.vo_ is always empty
+                    o = np.sum([vo[0] / v for vo in n._vo_ if vo[0] > v])  # overlap = rel n val in stronger Cs, add to et[2]?
                     vo = np.array([v,o])  # val, overlap per current root C
                     if et[1-fi] /et[2] > Ave * olp:
                         n.C_ += [C]; n.vo_ += [vo]; Et+=et; O+=o; _N_ += [n]
@@ -794,7 +804,7 @@ def agg_frame(foc, image, iY, iX, rV=1, rv_t=[], fproj=0):  # search foci within
                     if pFg and val_(pFg.Et, (len(pFg.N_)-1)*Lw, pFg.olp+contw*20):
                         project_focus(PV__, y,x, Fg)  # += proj val in PV__
             # no target proj
-            add_N(frame, Fg, fmerge=1)
+            add_N(frame, Fg, fmerge=1)  # or init frame with Fg?
             aw = contw *20 * frame.Et[2] * frame.olp
 
     if frame.N_ and val_(frame.Et, (len(frame.N_)-1)*Lw, frame.olp+loopw*20) > 0:
