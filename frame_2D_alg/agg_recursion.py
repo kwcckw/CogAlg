@@ -504,17 +504,18 @@ def cluster_C_(root, N_, rc, fi=1, fdeep=0):  # form centroids by clustering exe
                     if C in n.C_: continue  # clear/ loop?
                     et = comp_C(C,n)
                     v = val_(et,fi, aw=rc+_o)  # _o: combined _C overlap, update for next loop:
-                    o = np.sum([vo[0] /v for vo in n._vo_ if vo[0] > v])  # overlap = rel n val in stronger Cs, add to et[2]?
+                    # in the first iteration, n._vo_ is empty, so o is always 0 in the first iteration
+                    o = np.sum([vo[0] /v for vo in n._vo_ if vo[0] >= v])  # overlap = rel n val in stronger Cs, add to et[2]?
                     vo = np.array([v,o])  # val, overlap per current root C
-                    if et[1-fi] /et[2] > Ave * olp:
+                    if et[1-fi] /et[2] > Ave * o:  # this olp should be o?
                         n.C_ += [C]; n.vo_ += [vo]; Et+=et; O+=o; _N_ += [n]
                         _N__ += [_n for l in n.rim for _n in l.N_ if _n is not n]
-                        if C not in n._C_: dv += v; do += o
-                    elif C in n._C_:
+                        if C not in n._C_: dv += v; do += o  # C will  never in n._C_?
+                    elif C in n._C_: # C is a new CN init in current iteration, so it will never be in n._C_?
                         __v,__o = n._vo_[n._C_.index(C)]; dv +=__v; do +=__o
                 if Et[1-fi]/Et[2] > Ave*O:
                     C.Et = Et; C.N_ = list(set(_N_)); C._N_ = list(set(_N__))  # core, surround elements
-                    C_+=[C]; ET+=Et; Dv+=dv; Do+=do  # new incl or excl
+                    C_+=[C]; ET+=Et; Dv+=dv; Do+=do; olp += O  # new incl or excl (increase olp with O here?)
             else: break  # the rest is weaker
         if Dv > Ave * Do:  # Dv: C_ value change, Do: overlap increases as Cs may expand in each loop?
             _C_ = C_
@@ -796,7 +797,7 @@ def agg_frame(foc, image, iY, iX, rV=1, rv_t=[], fproj=0):  # search foci within
                     if pFg and val_(pFg.Et, (len(pFg.N_)-1)*Lw, pFg.olp+contw*20):
                         project_focus(PV__, y,x, Fg)  # += proj val in PV__
             # no target proj
-            add_N(frame, Fg, fmerge=1)
+            frame = add_N(frame, Fg, fmerge=1) if frame else Copy_(Fg)
             aw = contw *20 * frame.Et[2] * frame.olp
 
     if frame.N_ and val_(frame.Et, (len(frame.N_)-1)*Lw, frame.olp+loopw*20) > 0:
