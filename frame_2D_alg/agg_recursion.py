@@ -479,11 +479,12 @@ def cluster_C_(root, N_, rc, fdeep=0):  # form centroids by clustering exemplar 
             for L in C.rim:
                 if L in n.rim: et += L.Et  # overlap
         return et
-    _C_, _N_ = [], []
+    _C_, _N_, N__ = [], [], set(N_)
     for N in N_:
         if not N.exe: continue  # exemplars or all
         C = Copy_(N,root, init=2)  # init centroid
         C._N_ = [n for l in N.rim for n in l.N_ if n is not N]  # core members + surround for comp to N_ mean
+        N__.update(C._N_)  # we need N__ since some _N_ not in input N_
         _N_ += C._N_; C.N_ = [N]
         _C_ += [C]
     # reset:
@@ -499,8 +500,8 @@ def cluster_C_(root, N_, rc, fdeep=0):  # form centroids by clustering exemplar 
                 for n in _C._N_:  # core + surround
                     if C in n.C_: continue
                     et = comp_C(C,n)
-                    v = et[0]/et[2]; if v==0: v=1e-7
-                    o = np.sum([vo[0] / v for vo in n._vo_ if vo[0] > v])
+                    v =  1e-7 if et[0] == 0 else et[0]/et[2]
+                    o = np.sum([vo[0] / v for vo in n._vo_ if vo[0] > v])  # not sure why all n._vo_ is the sme with v
                     # overlap = higher-C inclusion vals / C val?
                     vo = np.array([v,o])  # val,olp / C
                     if v > Ave * o:
@@ -515,7 +516,8 @@ def cluster_C_(root, N_, rc, fdeep=0):  # form centroids by clustering exemplar 
             else: break  # the rest is weaker
         if Dv > Ave * Do:  # value vs. overlap change, or dET,dolp? overlap increases as Cs may expand in each loop?
             _C_ = C_
-            for n in root.N_: n._C_ = n.C_; n._vo_= n.vo_; n.C_,n.vo_ = [],[]  # new n.C_s, combine with vo_ in Ct_?
+            for n in N__:  # udate all Ns 
+                n._C_ = n.C_; n._vo_= n.vo_; n.C_,n.vo_ = [],[]  # new n.C_s, combine with vo_ in Ct_?
         else:  # converged
             break
     if  ET[0]/ET[2] > Ave*olp:  # no _Et?
