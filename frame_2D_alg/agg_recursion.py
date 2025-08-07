@@ -207,7 +207,7 @@ def comb_cent_(nG, rc):
     cent_, node_, cM = [], [], 0
     for g in nG.N_:
         if g.cent_:
-            node_.extend({c.N_ for c in cent_[0]})
+            node_.extend({n for c in g.cent_[0] for n in c.N_})
             cent_.extend(g.cent_[0]); cM += g.cent_[1]
     if cM > ave * rc * loopw:
         comp_(node_, rc, fC=1)  # extend rims of mo_-reinforced nodes, if not in seen_
@@ -497,13 +497,13 @@ def cluster_C_(root, N_, rc, fdeep=0, fext=0):  # form centroids by clustering e
                 if L in n.rim: et += L.Et  # overlap
         return et[0]/et[2] if et[0]!=0 else 1e-7
 
-    _C_, _N_ = [], []
+    _C_, _N_, N__, _mat = [], [], set(), 0  # when fext, N_ is certainly not in root.N_ since N_ is centroid, so we need N__ to pack all Ns
     for N in N_:
         if not N.exe: continue  # exemplars or all
         C = N if fext else Copy_(N,root, init=2)  # extend or init centroid
         if fext: C._N_ = [n for _N in C.N_ for l in _N.rim for n in l.N_ if n is not _N and l not in C.L_]  # draft
-        else:    C._N_ = [n for l in N.rim for n in l.N_ if n is not N]  # core members + surround for comp to N_ mean
-        _N_ += C._N_; C.N_ = [N]
+        else:    C._N_ = [n for l in N.rim for n in l.N_ if n is not N]  # core members + surround for comp to N_ mean  (this may extend beyond graph?)
+        _N_ += C._N_; C.N_ = [N]; N__.update(C._N_)
         _C_ += [C]
     # reset:
     for n in set(root.N_+_N_): n.C_,n.mo_, n._C_,n._mo_ = [],[], [],[]  # aligned pairs
@@ -531,9 +531,12 @@ def cluster_C_(root, N_, rc, fdeep=0, fext=0):  # form centroids by clustering e
                     C_+=[C]; mat+=M; olp+=O; Dm+=dm; Do+=do   # new incl or excl
             else: break  # the rest is weaker
         if Dm > Ave * cnt * Do:  # value vs. overlap change, or dET,dolp? overlap increases as Cs may expand in each loop?
-            _C_ = C_
-            for n in root.N_: n._C_ = n.C_; n._mo_= n.mo_; n.C_,n.mo_ = [],[]  # new n.C_s, combine with vo_ in Ct_?
+            _C_ = C_; _mat = mat
+            for n in N__: n._C_ = n.C_; n._mo_= n.mo_; n.C_,n.mo_ = [],[]  # new n.C_s, combine with vo_ in Ct_?
         else:  # converged
+            if not C_: 
+                C_ = _C_  # get last good C_ ? C_ mostly is empty here since Dm is low
+                mat = _mat
             break
     if  mat > Ave * cnt * olp:
         root.cent_ = (set(C_),mat)
