@@ -211,7 +211,7 @@ def comb_cent_(nG, rc):
             cent_.extend(g.cent_[0]); cM += g.cent_[1]
     if cM > ave * rc * loopw:
         comp_(node_, rc, fC=1)  # extend rims of mo_-reinforced nodes, if not in seen_
-        cluster_C_(nG, cent_,rc)  # use combined cent_ as iN_
+        cluster_C_(nG, cent_, rc, fext=1)  # use combined cent_ as iN_
 
 def comb_altg_(nG, lG, rc):  # cross_comp contour/background per node:
 
@@ -474,7 +474,7 @@ def sum2graph(root, node_,link_,long_, Et, olp, rng, fC=0):  # sum node,link att
     graph.span = dist_.mean()  # node centers distance to graph center
     graph.angle = np.sum([l.angle for l in link_],axis=0)
     graph.yx = yx
-    if fC:
+    if fC:  # fC never be true here?
         m_,M = centroid_M(graph.derTT[0],ave*olp)  # weigh by match to mean m|d
         d_,D = centroid_M(graph.derTT[1],ave*olp)
         graph.derTT = np.array([m_,d_])
@@ -502,7 +502,7 @@ def cluster_C_(root, N_, rc, fdeep=0, fext=0):  # form centroids by clustering e
         if not N.exe: continue  # exemplars or all
         if fext:
             C = N  # extend centroid
-            C._N_ = [n for _N in C.N_ for l in _N.rim for n in l.N_ if n is not _N and l not in C.L_]  # links outside of C.N_?
+            C._N_ = [n for _N in C.N_ for l in _N.rim for n in l.N_ if n is not _N and l not in C._L_]  # links outside of C.N_?
         else:  # init centroid
             C = Copy_(N,root, init=2); C.N_ = [N]
             C._N_ = [n for l in N.rim for n in l.N_ if n is not N]  # core members + surround for comp to N_ mean
@@ -530,7 +530,8 @@ def cluster_C_(root, N_, rc, fdeep=0, fext=0):  # form centroids by clustering e
                         __m,__o = n._mo_[n._C_.index(_C)]; dm +=__m; do +=__o
                 if M > Ave * len(_N_) * O:
                     # L_ should be assigned after testing C._N_:
-                    C.M = M; C.L = C._L_; C._L_ = list(set(L_)); C.N_ = list(set(_N_)); C._N_ = list(set(_N__))  # core, surround elements
+                        # C._L_ should be updated from C.L_ and C.L_ assign with L_?
+                    C.M = M; C._L_ = C.L_; C.L_ = list(set(L_)); C.N_ = list(set(_N_)); C._N_ = list(set(_N__))  # core, surround elements
                     C_+=[C]; mat+=M; olp+=O; Dm+=dm; Do+=do   # new incl or excl
             else: break  # the rest is weaker
         if Dm > Ave * cnt * Do:  # value vs. overlap change, or dET,dolp? overlap increases as Cs may expand in each loop?
@@ -600,11 +601,18 @@ def sum_N_(node_, root=None, fC=0):  # form cluster G
 
     G = Copy_(node_[0], root, init = 0 if fC else 1)
     if fC:
-        G.L_=[]; G.N_= [node_[0]]
+        G.L_,G._L_=[],[]; G.N_= [node_[0]]
     for n in node_[1:]:
         add_N(G,n,1, fC)
     G.olp /= len(node_)
-    if not fC:
+    if fC:
+        # this centroid_M should be here when we form C with node_?
+        m_,M = centroid_M(G.derTT[0],ave*G.olp)  # weigh by match to mean m|d
+        d_,D = centroid_M(G.derTT[1],ave*G.olp)
+        G.derTT = np.array([m_,d_])
+        G.Et = np.array([M,D,G.Et[2]])
+    else:
+        
         for L in G.L_: G.Et += L.Et
     return G   # no rim
 
