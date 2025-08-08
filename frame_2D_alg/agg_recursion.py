@@ -195,7 +195,7 @@ def cross_comp(root, rc, fi=1):  # rng+ and der+ cross-comp and clustering
             nG = Cluster(root, N_, rc+loopw, fi)  # get_exemplars, rng-band, local cluster_C_
             if nG:
                 comb_cent_(nG, rc)  # extend cross_comp, global centroid clustering
-                if lG: comb_altg_(nG, lG, rc+2)  # both fork altg_s are clustered
+                if lG: comb_altg_(nG, lG, rc+2)  # both fork alt Ns are clustered
                 if val_(nG.Et,1, (len(nG.N_)-1)*Lw, rc+loopw+nG.rng, Et) > 0:
                     nG = cross_comp(nG, rc+loopw) or nG  # agg+
                 _H = root.nH; root.nH = []
@@ -497,14 +497,16 @@ def cluster_C_(root, N_, rc, fdeep=0, fext=0):  # form centroids by clustering e
                 if L in n.rim: et += L.Et  # overlap
         return et[0]/et[2] if et[0]!=0 else 1e-7
 
-    _C_, _N_, N__, _mat = [], [], set(), 0  # when fext, N_ is certainly not in root.N_ since N_ is centroid, so we need N__ to pack all Ns
+    _C_, _N_ = [], []
     for N in N_:
         if not N.exe: continue  # exemplars or all
-        C = N if fext else Copy_(N,root, init=2)  # extend or init centroid
-        if fext: C._N_ = [n for _N in C.N_ for l in _N.rim for n in l.N_ if n is not _N and l not in C.L_]  # draft
-        else:    C._N_ = [n for l in N.rim for n in l.N_ if n is not N]  # core members + surround for comp to N_ mean  (this may extend beyond graph?)
-        _N_ += C._N_; C.N_ = [N]; N__.update(C._N_)
-        _C_ += [C]
+        if fext:
+            C = N  # extend centroid
+            C._N_ = [n for _N in C.N_ for l in _N.rim for n in l.N_ if n is not _N and l not in C.L_]  # links outside of C.N_?
+        else:  # init centroid
+            C = Copy_(N,root, init=2); C.N_ = [N]
+            C._N_ = [n for l in N.rim for n in l.N_ if n is not N]  # core members + surround for comp to N_ mean
+        _N_ += C._N_; _C_ += [C]
     # reset:
     for n in set(root.N_+_N_): n.C_,n.mo_, n._C_,n._mo_ = [],[], [],[]  # aligned pairs
     # reform C_, refine C.N_s, which may extend beyond root:
@@ -514,29 +516,27 @@ def cluster_C_(root, N_, rc, fdeep=0, fext=0):  # form centroids by clustering e
         for _C,_m,_o in sorted(_Ct_, key=lambda t: t[1]/t[2], reverse=True):
             if _m > Ave*_o:
                 C = sum_N_(_C.N_, root=root, fC=1)  # add olp in N.mo_ to C.olp?
-                _N_,_N__,M,O,dm,do = [],[],0,0,0,0  # /C
+                _N_,_N__,L_, M,O, dm,do = [],[],[],0,0,0,0  # per C
                 for n in _C._N_:  # core+ surround
                     if C in n.C_: continue
                     m = comp_C(C,n)  # val,olp / C:
                     o = np.sum([mo[0]/ m for mo in n._mo_ if mo[0]>m])  # overlap = higher-C inclusion vals / current C val
                     cnt += 1  # count comps per loop
                     if m > Ave * o:
-                        n.C_+=[C]; _N_+=[n]; M+=m; O+=o; n.mo_ += [np.array([m,o])]  # n.o for convergence eval
-                        _N__ += [_n for l in n.rim for _n in l.N_ if _n is not n and _n in root.N_]  # +|-ls for comp C
+                        n.C_+=[C]; _N_+=[n]; L_+=n.rim; M+=m; O+=o; n.mo_ += [np.array([m,o])]  # n.o for convergence eval
+                        _N__ += [_n for l in n.rim for _n in l.N_ if _n is not n]  # +|-ls for comp C
                         if _C not in n._C_: dm += m; do += o  # not in extended _N__
                     elif _C in n._C_:
                         __m,__o = n._mo_[n._C_.index(_C)]; dm +=__m; do +=__o
                 if M > Ave * len(_N_) * O:
-                    C.M = M; C.N_ = list(set(_N_)); C._N_ = list(set(_N__))  # core, surround elements
+                    # L_ should be assigned after testing C._N_:
+                    C.M = M; C.L = C._L_; C._L_ = list(set(L_)); C.N_ = list(set(_N_)); C._N_ = list(set(_N__))  # core, surround elements
                     C_+=[C]; mat+=M; olp+=O; Dm+=dm; Do+=do   # new incl or excl
             else: break  # the rest is weaker
         if Dm > Ave * cnt * Do:  # value vs. overlap change, or dET,dolp? overlap increases as Cs may expand in each loop?
-            _C_ = C_; _mat = mat
-            for n in N__: n._C_ = n.C_; n._mo_= n.mo_; n.C_,n.mo_ = [],[]  # new n.C_s, combine with vo_ in Ct_?
+            _C_ = C_
+            for n in root.N_: n._C_ = n.C_; n._mo_= n.mo_; n.C_,n.mo_ = [],[]  # new n.C_s, combine with vo_ in Ct_?
         else:  # converged
-            if not C_: 
-                C_ = _C_  # get last good C_ ? C_ mostly is empty here since Dm is low
-                mat = _mat
             break
     if  mat > Ave * cnt * olp:
         root.cent_ = (set(C_),mat)
@@ -599,21 +599,23 @@ def add_sett(Sett,sett):
 def sum_N_(node_, root=None, fC=0):  # form cluster G
 
     G = Copy_(node_[0], root, init = 0 if fC else 1)
-    if fC: G.L_=[]; G.N_= [node_[0]]
+    if fC:
+        G.L_=[]; G.N_= [node_[0]]
     for n in node_[1:]:
-        add_N(G,n,fC)
+        add_N(G,n,1, fC)
     G.olp /= len(node_)
-    for L in G.L_:
-        if L not in G.L_: G.Et += L.Et; G.L_+=[L]
+    if not fC:
+        for L in G.L_: G.Et += L.Et
     return G   # no rim
 
 def add_N(N,n, fmerge=0, fC=0):
 
-    if fmerge:  # add option for set N_ in altg_ and cent_?
+    if fmerge and not fC:  # different in altg_?
         for node in n.N_: node.root=N; N.N_ += [node]
         N.L_ += n.L_  # no L.root assign
     else:
-        n.root=N; N.N_ += [n]; N.L_ += N.rim
+        n.root=N; N.N_ += [n]
+        N.L_ += [l for l in n.rim if val_(l.Et)>0]
     if n.altg_: add_sett(N.altg_,n.altg_)  # ext clusters
     if n.cent_: add_sett(N.cent_,n.cent_)  # int clusters
     if n.nH: add_NH(N.nH,n.nH, root=N)
@@ -623,7 +625,7 @@ def add_N(N,n, fmerge=0, fC=0):
     for Par,par in zip((N.angle, N.baseT, N.derTT), (n.angle, n.baseT, n.derTT)):
         Par += par * rn
     N.Et += n.Et * rn
-    if fC: N.olp += np.sum([vo[1] for vo in n._vo_])
+    if fC: N.olp += np.sum([mo[1] for mo in n._mo_])
     else:  N.olp = (N.olp + n.olp * rn) / 2  # ave?
     N.yx = (N.yx + n.yx * rn) / 2
     N.span = max(N.span,n.span)
