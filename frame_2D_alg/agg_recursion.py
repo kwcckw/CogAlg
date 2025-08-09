@@ -347,7 +347,7 @@ def base_comp(_N,N, rc, wTT=None):  # comp Et, Box, baseT, derTT
     md_ = np.divide( np.minimum(_a_,a_), np.maximum.reduce([_a_,a_, np.zeros(8) + 1e-7]))  # rms
     md_ *= np.where((_id_<0)!=(id_<0), -1,1)  # match is negative if comparands have opposite sign
     m_ += md_; d_ += dd_
-    if wTT: m_ *= wTT[0]; d_ *= wTT[1]
+    if wTT is not None: m_ *= wTT[0]; d_ *= wTT[1]
     DerTT = np.array([m_,d_])  # [M,D,n,o, I,G,A,L], weigh by centroid_M?
     Et = np.array([np.sum(m_* w_t[0] * rc), np.sum(np.abs(d_* w_t[1] * rc)), min(_n,n)])
     # feedback*rc -weighted sum of m,d between comparands
@@ -499,9 +499,10 @@ def cluster_C_(root, N_, rc, fdeep=0, fext=0):  # form centroids by clustering e
             C = N  # extend centroid
             C._N_ = [n for _N in C.N_ for l in _N.rim for n in l.N_ if n is not _N and l not in C.L_]  # not tested links
         else:  # init centroid
-            C = cent_attr(Copy_(N,root, init=2), rc); C.N_ = [N]; C.wTT = np.ones((2,8))
+            C = cent_attr(Copy_(N,root, init=2), rc); C.N_ = [N]; # C.wTT = np.ones((2,8)) why we are init wTT to 1 again?
             C._N_ = [n for l in N.rim for n in l.N_ if n is not N]  # core members + surround for comp to N_ mean
         _N_ += C._N_; _C_ += [C]
+    N__ = copy(set(_N_))  # pack all possible ns, including those out of graph's ns
     # reset:
     for n in set(root.N_+_N_): n.C_,n.mo_, n._C_,n._mo_ = [],[], [],[]  # aligned pairs
     # reform C_, refine C.N_s, which may extend beyond root:
@@ -510,12 +511,12 @@ def cluster_C_(root, N_, rc, fdeep=0, fext=0):  # form centroids by clustering e
         _Ct_ = [[c, c.Et[0]/c.Et[2] if c.Et[0] !=0 else 1e-7, c.olp] for c in _C_]
         for _C,_m,_o in sorted(_Ct_, key=lambda t: t[1]/t[2], reverse=True):
             if _m > Ave*_o:
-                C = sum_N_(_C.N_, root=root, fC=1)  # add olp in N.mo_ to C.olp?
+                C = sum_N_(_C.N_, root=root, fC=1, rc=rc)  # add olp in N.mo_ to C.olp?
                 _N_,_N__,L_, mo_, M,O, dm,do = [],[],[],[],0,0,0,0  # per C
                 for n in _C._N_:  # core+ surround
                     if C in n.C_: continue
                     m = comp_C(C,n)  # val,olp / C:
-                    o = np.sum([mo[0]/ m for mo in n._mo_ if mo[0]>m])  # overlap = higher-C inclusion vals / current C val
+                    o = np.sum([mo[0]/ m for mo in n._mo_ if mo[0]>m/3])  # overlap = higher-C inclusion vals / current C val
                     cnt += 1  # count comps per loop
                     if m > Ave * o:
                         _N_+=[n]; L_+=n.rim; M+=m; O+=o; mo_ += [np.array([m,o])]  # n.o for convergence eval
@@ -524,9 +525,11 @@ def cluster_C_(root, N_, rc, fdeep=0, fext=0):  # form centroids by clustering e
                     elif _C in n._C_:
                         __m,__o = n._mo_[n._C_.index(_C)]; dm +=__m; do +=__o
                 if M > Ave * len(_N_) * O:
-                    for n, mo in zip(_N_,mo_): n.m_ += [mo]; n.C_ += [C]
+                    for n, mo in zip(_N_,mo_): n.mo_ += [mo]; n.C_ += [C]
+                    # we need to init C._L_ in sum_N?  Since we pack need to pack it into C.L_
                     C.M = M; C.L_+= C._L_; C._L_= list(set(L_)); C.N_+= _N_; C._N_= list(set(_N__))  # core, surround elements
                     C_+=[C]; mat+=M; olp+=O; Dm+=dm; Do+=do   # new incl or excl
+                    for n in _N_: add_N(C, n, fC=1)  # we need this to update C params? Else their derTT won't be updated too
                 else:
                     for n in _C._N_:
                         for i, c in enumerate(n.C_):
@@ -534,7 +537,7 @@ def cluster_C_(root, N_, rc, fdeep=0, fext=0):  # form centroids by clustering e
             else: break  # the rest is weaker
         if Dm > Ave * cnt * Do:  # dval vs. dolp, overlap increases as Cs may expand in each loop?
             _C_ = [cent_attr(C,rc) for C  in C_]
-            for n in root.N_: n._C_ = n.C_; n._mo_= n.mo_; n.C_,n.mo_ = [],[]  # new n.C_s, combine with vo_ in Ct_?
+            for n in N__: n._C_ = n.C_; n._mo_= n.mo_; n.C_,n.mo_ = [],[]  # new n.C_s, combine with vo_ in Ct_?
         else:  # converged
             break
     if  mat > Ave * cnt * olp:
@@ -561,6 +564,7 @@ def cent_attr(C, rc):  # weight attr matches | diffs by their match to the sum, 
                 break  # weight convergence
         wTT += [_w_]
     C.wTT = np.array(wTT)
+    return C
 
 def slope(link_):  # get ave 2nd rate of change with distance in cluster
 
@@ -598,15 +602,18 @@ def add_sett(Sett,sett):
     if Sett: N_,Et = Sett; n_ = sett[0]; N_.update(n_); Et += np.sum([t.Et for t in n_-N_])
     else:    Sett += [copy(par) for par in sett]  # altg_, Et
 
-def sum_N_(node_, root=None, fC=0):  # form cluster G
+def sum_N_(node_, root=None, fC=0, rc=0):  # form cluster G
 
     G = Copy_(node_[0], root, init = 0 if fC else 1)
     if fC:
-        G.L_=[]; G.N_= [node_[0]]
+        G.L_=[]; G._L_=[]; G.N_= [node_[0]]
     for n in node_[1:]:
         add_N(G,n,0, fC)
     G.olp /= len(node_)
-    if not fC:
+    
+    if fC:
+        cent_attr(G, rc)  # we can init wTT here?
+    else:
         for L in G.L_: G.Et += L.Et
     return G   # no rim
 
