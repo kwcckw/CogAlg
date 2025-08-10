@@ -390,26 +390,25 @@ def Cluster(root, N_, rc, fi):  # clustering root
         Et = Et if Et is not None else np.sum([n.Et for n in rN_], axis=0)
         if rN_ and val_(Et,1, (len(rN_)-1)*Lw, aw) > 0:
             nG = cluster(root, Nf_, rN_, aw, rng) or nG
-            # last valid nG
-        return nG
+    # last valid nG
+    return nG  # indentation should be here if last nG should be returned?
 
 def cluster(root, iN_, rN_, rc, rng=1):  # flood-fill node | link clusters
 
     def rroot(n):
         if n.root and n.root.rng > n.rng: return rroot(n.root) if n.root.root else n.root
         else:                             return None
-    G_= []  # exclusive per fork,ave, only centroids can be fuzzy
+    G_, cent_ = [], []  # exclusive per fork,ave, only centroids can be fuzzy
     for n in iN_: n.fin = 0
     for N in rN_:  # init
         if not N.exe or N.fin: continue  # exemplars or all N_
-        N.fin = 1; seen_ = []
-        if rng==1 or N.root.rng==1:  # not rng-banded
-            N_,link_,long_ = [],[],[]
+        N.fin = 1; seen_ = []; N_,link_,long_ = [],[],[]  # prevent L_ is not initialized
+        if rng==1 or (N.root and N.root.rng==1):  # not rng-banded (L doesn't have root)
             for l in N.rim:
                 seen_ += [l]
                 if l.rng==rng and val_(l.Et+ett(l), aw=rc+1) > 0: link_+=[l]; N_ += [N]  # l.Et potentiated by density term
                 elif l.rng>rng: long_+=[l]
-        else: # N is rng-banded, cluster top-rng roots
+        else: # N is rng-banded, cluster top-rng roots 
             n = N; R = rroot(n)
             if R and not R.fin: N_,link_,long_ = [R], R.L_, R.hL_; R.fin = 1; seen_+=R.link_
         Seen_ = set(link_)  # all visited
@@ -419,7 +418,7 @@ def cluster(root, iN_, rN_, rc, rng=1):  # flood-fill node | link clusters
             for L in _link_:  # buffer
                 for _N in L.N_:
                     if _N not in iN_ or _N.fin: continue  # or always in iN_ now?
-                    if rng==1 or _N.root.rng==1:  # not rng-banded
+                    if rng==1 or (_N.root and _N.root.rng==1):  # not rng-banded
                         N_ += [_N]; _N.fin = 1  # conditional
                         for l in N.rim:
                             if l in seen_: continue  # we should skip l if it's in seen_, added from prior link?
@@ -440,9 +439,14 @@ def cluster(root, iN_, rN_, rc, rng=1):  # flood-fill node | link clusters
             for n in N_:
                 Et += n.et; olp += n.olp  # any fork
             if val_(Et,1, (len(N_)-1)*Lw, rc+olp, root.Et) > 0:
-                G_ += [sum2graph(root, N_,L_, long_,Et, olp, rng)]
+                G = sum2graph(root, N_,L_, long_,Et, olp, rng); G_ += [G]
+                # if variance:
+                if val_(Et, fi=0, mw = G.span * 2 * slope(L_), aw = olp + centw) > 0:  
+                    cent_ += [n for n in N_ if n.exe]  # exemplars for extend cross_comp, cluster_C_ per frame?
     if G_:
-        return sum_N_(G_, root)
+        nG = sum_N_(G_, root)
+        nG.cent_ = cent_
+        return nG
 
 def cluster_C_(root, rc, fdeep=0, fext=0):  # form centroids by clustering exemplar surround, drifting via rims of new member nodes
 
@@ -457,7 +461,7 @@ def cluster_C_(root, rc, fdeep=0, fext=0):  # form centroids by clustering exemp
 
     _C_, _N_ = [], []
     for E in root.cent_:
-        C = cent_attr( Copy_(E,root, init=2), rc); C.N_ = [C]
+        C = cent_attr(Copy_(E,root, init=2), rc); C.N_ = [C]
         C._N_ = [n for l in E.rim for n in l.N_ if n is not E]  # core members + surround for comp to N_ mean
         _N_ += C._N_; _C_ += [C]
     # reset:
@@ -519,6 +523,7 @@ def cent_attr(C, rc):  # weight attr matches | diffs by their match to the sum, 
                 break  # weight convergence
         wTT += [_w_]
     C.wTT = np.array(wTT)
+    return C  # from the structure in cluster_C_, we need to return C
 
 def ett(L): return (L.N_[0].et + L.N_[1].et) * intw
 
@@ -542,8 +547,8 @@ def sum2graph(root, node_,link_,long_, Et, olp, rng, fC=0):  # sum node,link att
     graph.angle = np.sum([l.angle for l in link_], axis=0)
     graph.yx = yx
     # if variance:
-    if val_(Et, fi=0, mw = graph.span * 2 * slope(link_), aw = olp + centw) > 0:
-        root.cent_ += [n for n in node_ if n.exe]  # exemplars for extend cross_comp, cluster_C_ per frame?
+    # if val_(Et, fi=0, mw = graph.span * 2 * slope(link_), aw = olp + centw) > 0:
+    #     root.cent_ = [n for n in node_ if n.exe]  # exemplars for extend cross_comp, cluster_C_ per frame?
     return graph
 
 def slope(link_):  # get ave 2nd rate of change with distance in cluster or frame?
