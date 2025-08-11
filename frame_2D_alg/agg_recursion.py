@@ -138,6 +138,10 @@ adist, amed, distw, medw = 10, 3, 2, 2  # cost filters + weights, add alen?
 wM, wD, wN, wO, wI, wG, wA, wL = 10, 10, 20, 20, 1, 1, 20, 20  # der params higher-scope weights = reversed relative estimated ave?
 wTTf = np.ones((2,8))  # fb weights per derTT, adjust in agg+
 wY = wX = 64; wYX = np.hypot(wY,wX)  # focus dimensions
+gperp = 1  # reach when perfectly aligned (gamma perpendicular？)
+gpara = 0.25  # baseline lateral reach  (gamma parallel？)
+p = 2     # cone sharpness (the power)
+
 '''
 initial PP_ cross_comp and connectivity clustering to initialize focal frame graph, no recursion:
 '''
@@ -227,6 +231,23 @@ def comb_altg_(nG, lG, rc):  # cross_comp contour/background per node:
                 aG = cross_comp(aG, rc) or aG
             Ng.altg_ = (aG.N_,aG.Et)
 
+
+def proj_reach(link, dir_vec):
+
+    vn = link.angle / max(np.linalg.norm(link.angle), + 1e-7)  # normalize
+    c = max(np.dot(vn, dir_vec), 0)   # no backward reach    (this c could be zero (when vn is negative), since we project both directions, suppose only one of the direction could be zero?)
+    return link.span * (gperp + (gpara - gperp) * (c ** p))
+
+def directional_radii(_N, N, dy, dx):
+    
+    if _N.fi == 0 and N.fi == 0:   # both are links
+        u = np.array([dy, dx], dtype=float)
+        uh = u / max(np.linalg.norm(u), 1e-7)  # normalize to unit vector?
+        # _N looks forward along +uh, N looks forward along -uh (can be either direction as long in opposit direction?)
+        return proj_reach(_N,  uh) + proj_reach(N, -uh)
+    else:
+        return _N.span + N.span
+
 def comp_(iN_, rc, fi=1, fC=0):  # comp pairs of nodes or links within max_dist
 
     N__,L_, ET = [],[], np.zeros(3); rng,olp_,_N_ = 1,[],copy(iN_)
@@ -236,7 +257,8 @@ def comp_(iN_, rc, fi=1, fC=0):  # comp pairs of nodes or links within max_dist
         for _N, N in combinations(_N_, r=2):
             if _N in N.seen_ or len(_N.nH) != len(N.nH):  # | root.nH: comp top nodes only
                 continue
-            radii = _N.span+N.span; dy,dx = np.subtract(_N.yx,N.yx); dist = np.hypot(dy,dx)  # need to make radii directional
+            dy,dx = np.subtract(_N.yx,N.yx); dist = np.hypot(dy,dx)  # need to make radii directional
+            radii = directional_radii(_N, N, dy, dx)
             Np_ += [(_N,N, dy,dx, radii, dist)]
         N_,Et = [],np.zeros(3)
         for Np in Np_:
@@ -610,11 +632,11 @@ def add_N(N,n, fmerge=0, fC=0):
     if n.lH: add_NH(N.lH,n.lH, root=N)
     for Par,par in zip((N.angle, N.baseT, N.derTT, N.Et), (n.angle, n.baseT, n.derTT, n.Et)):
         Par += par  # *rn for comp
-    n,_n = n.Et[2], N.Et[2]; rn = n/_n
+    nr,_nr = n.Et[2], N.Et[2]; rn = nr/_nr  # we need a different name for n since it overwrites the input n
     if n.derH: add_H(N.derH,n.derH, N, rn)
     if fC: N.olp += np.sum([mo[1] for mo in n._mo_])
-    else:  N.olp = (N.olp*_n + n.olp*n) / (n+_n)  # ave of aves
-    N.yx = (N.yx*_n + n.yx*n) / (n+_n)
+    else:  N.olp = (N.olp*_nr + n.olp*nr) / (nr+_nr)  # ave of aves
+    N.yx = (N.yx*_nr + n.yx*nr) / (nr+_nr)
     N.span = max(N.span,n.span)
     N.box = extend_box(N.box, n.box)
     if hasattr(n,'C_') and hasattr(N,'C_'):
