@@ -130,7 +130,7 @@ def Copy_(N, root=None, init=0):
         C.N_,C.L_,C.nH,C.lH, N.root = (list(N.N_),list(N.L_),list(N.nH),list(N.lH), root if root else N.root)
     C.derH  = [lay.copy_() for lay in N.derH]
     C.derTT = deepcopy(N.derTT)
-    for attr in ['Et', 'baseT','yx','box','angle','rim','altg_','cent_']: setattr(C, attr, copy(getattr(N, attr)))
+    for attr in ['Et', 'baseT','yx','box','angl','rim','altg_','cent_']: setattr(C, attr, copy(getattr(N, attr)))
     for attr in ['olp','rng', 'fi', 'fin', 'span']: setattr(C, attr, getattr(N, attr))
     return C
 
@@ -230,8 +230,8 @@ def comb_altg_(nG, lG, rc):  # cross_comp contour/background per node:
 
 def proj_span(N, dir_vec):  # project N.span in link direction, in proportion to internal collinearity N.mang
 
-    cos_angle = np.dot(N.angl, dir_vec) / (np.linalg.norm(N.angl) * np.linalg.norm(dir_vec))
-    oriented = (1 - N.mang) + (N.mang * 2 * abs(cos_angle))  # from 1/span to 2?
+    cos_angle = np.dot(N.angl, dir_vec) / (np.linalg.norm(N.angl) * np.linalg.norm(dir_vec))  # cos angle = (a⋅b) / (||a||⋅||b||) 
+    oriented = (1 - N.mang) + (N.mang * 2 * abs(cos_angle))  # from 1/span to 2? I think the 2 can be removed?
     #          (1 - N.mang) * N.span + N.mang * (1 + (2 * N.span - 1) * abs(cos_angle)) ?
     return N.span * oriented  # from 1 to 2*N.span?
 
@@ -244,8 +244,8 @@ def comp_(iN_, rc, fi=1, fC=0):  # comp pairs of nodes or links within max_dist
         for _N, N in combinations(_N_, r=2):
             if _N in N.seen_ or len(_N.nH) != len(N.nH):  # | root.nH: comp top nodes only
                 continue
-            dy,dx = np.subtract(_N.yx,N.yx); dist = np.hypot(*dy,dx); dy_dx = np.array([dy,dx])
-            radii = proj_span(_N, dy_dx) + proj_span(N, dy_dx)  # directionally projected
+            dy,dx = np.subtract(_N.yx,N.yx); dist = np.hypot(dy,dx); dy_dx = np.array([dy,dx])  # the * is not necessary here
+            radii = proj_span(_N, dy_dx) + proj_span(N, dy_dx)  # directionally projected (now this is for both forks?)
             Np_ += [(_N,N, dy,dx, radii, dist)]
         N_,Et = [],np.zeros(3)
         for Np in Np_:
@@ -260,7 +260,7 @@ def comp_(iN_, rc, fi=1, fC=0):  # comp pairs of nodes or links within max_dist
             max_dist = adist * (radii / aveR) * V
             # min induction distance:
             if max_dist > dist or set(_N.rim) & set(N.rim):  # close or share matching mediators
-                Link = comp_N(_N,N, rc, L_=L_, angle=dy_dx, span=dist, dang=[mA,dA], et=np.array([mA,dA,1]), fdeep = dist < max_dist/2, rng=rng)
+                Link = comp_N(_N,N, rc, L_=L_, angl=dy_dx, span=dist, dang=[mA,dA], et=np.array([mA,dA,1]), fdeep = dist < max_dist/2, rng=rng)
                 if val_(Link.Et, aw=loopw*olp) > 0:
                     Et += Link.Et; olp_ += [olp]  # link.olp is the same with o
                     for n in _N,N:
@@ -274,14 +274,14 @@ def comp_(iN_, rc, fi=1, fC=0):  # comp pairs of nodes or links within max_dist
         else: break
     return N__, L_, ET
 
-def comp_N(_N,N, rc, med=1, L_=None, angle=np.zeros(2), span=None, dang=np.zeros(2), et=np.zeros(3), fdeep=0, rng=1):  # compare links, no angle,span?
+def comp_N(_N,N, rc, med=1, L_=None, angl=np.zeros(2), span=None, dang=np.zeros(2), et=np.zeros(3), fdeep=0, rng=1):  # compare links, no angle,span?
 
     derTT, Et, rn = base_comp(_N,N, rc); fi = N.fi  # -1 if _rev else 1, d = -d if L is reversed relative to _L, obsoleted by sign in angle?
     Et += et  # from comp_angle
     baseT = np.array([*(_N.baseT[:2]+ N.baseT[:2]*rn /2), *dang])
     _y,_x = _N.yx; y,x = N.yx; box = np.array([min(_y,y),min(_x,x),max(_y,y),max(_x,x)]); o = (_N.olp+N.olp) / 2
 
-    Link = CN(Et=Et,olp=o, et=_N.et+N.et, N_=[_N,N], baseT=baseT,derTT=derTT, yx=np.add(_N.yx,N.yx)/2,box=box, span=span,angle=angle, rng=rng,med=med, fi=0)
+    Link = CN(Et=Et,olp=o, et=_N.et+N.et, N_=[_N,N], baseT=baseT,derTT=derTT, yx=np.add(_N.yx,N.yx)/2,box=box, span=span,angl=angl, rng=rng,med=med, fi=0)
     Link.derH = [CLay(Et=copy(Et),node_=[_N,N],link_=[Link],derTT=copy(derTT), root=Link)]
     if fdeep:
         if val_(Et,1, len(N.derH)-2, o) > 0 or fi==0:  # else derH is dext,vert
@@ -472,8 +472,8 @@ def cluster_C_(root, rc, fdeep=0):  # form centroids by clustering exemplar surr
         C = cent_attr( Copy_(E,root, init=2), rc); C.N_ = [E]  # rims can't extend beyond root?
         C._N_ = [n for l in E.rim for n in l.N_ if n is not E]  # core members + surround for comp to N_ mean
         _N_ += C._N_; _C_ += [C]
-    # reset:
-    for n in set(root.N_+_N_): n.C_,n.mo_, n._C_,n._mo_ = [],[], [],[]  # aligned pairs
+    # reset: (root is nG, so we need to reset it from root.root, which is a higher level Fg)
+    for n in set(root.root.N_+_N_ ): n.C_,n.mo_, n._C_,n._mo_ = [],[], [],[]  # aligned pairs
     # reform C_, refine C.N_s, which may extend beyond root:
     while True:
         C_, cnt,mat,olp, Dm,Do = [],0,0,0,0,0; Ave = ave * rc * loopw
@@ -504,7 +504,7 @@ def cluster_C_(root, rc, fdeep=0):  # form centroids by clustering exemplar surr
             else: break  # the rest is weaker
         if Dm > Ave * cnt * Do:  # dval vs. dolp, overlap increases as Cs may expand in each loop?
             _C_ = C_
-            for n in root.N_: n._C_ = n.C_; n._mo_= n.mo_; n.C_,n.mo_ = [],[]  # new n.C_s, combine with vo_ in Ct_?
+            for n in root.root.N_: n._C_ = n.C_; n._mo_= n.mo_; n.C_,n.mo_ = [],[]  # new n.C_s, combine with vo_ in Ct_?
         else:  # converged
             break
     if  mat > Ave * cnt * olp:
