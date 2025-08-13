@@ -462,13 +462,21 @@ def cluster(root, iN_, rN_, rc, rng=1):  # flood-fill node | link clusters
 
 def comp_cos(C, n):
     # draft
+    '''
     def wcos(_d, d, w):
         _wd, wd = _d * w, d * w
         cos = (_wd @ wd) / (np.linalg.norm(_wd) * np.linalg.norm(wd) + 1e-12)
-        return 0.5 * (cos + 1.0)
+        return 0.5 * (cos + 1.0)  # if we scale it to 0- 1 here, then we need to reduce/scale the ave too
         # [-1,1] -> [0,1]
     # * wTT from cent_attr?
     return sum([ wcos(_d, d, w) for _d, d, w in zip(C.derTT[1], n.derTT[1], wTTf[1]) ]) / 8
+    '''
+    
+    # it should be array based multiplication and normalization?
+    _wd, wd = C.derTT[1] *  wTTf[1],  n.derTT[1] *  wTTf[1]
+    cos = (_wd @ wd) / (np.linalg.norm(_wd) * np.linalg.norm(wd) + 1e-12)
+    return 0.5 * (cos + 1.0)
+
 
 def cluster_C_(root, rc, fdeep=0):  # form centroids by clustering exemplar surround, drifting via rims of new member nodes
 
@@ -537,8 +545,8 @@ def cent_attr(C, rc):  # weight attr matches | diffs by their match to the sum, 
         while True:
             mean = max(V / max(np.sum(_w_), 1e-7), 1e-7)
             inverse_dev_ = np.minimum(val_/mean, mean/val_)  # rational deviation from mean rm in range 0:1, if m=mean
-            w_ = inverse_dev_ / .5  # 2/ m=mean, 0/ inf max/min, 1 / mid_rng | ave_dev?
-            w_ *= 8 / np.sum(w_)  # mean w = 1, M shouldn't change?
+            w_ = inverse_dev_ / .5  # 2/ m=mean, 0/ inf max/min, 1 / mid_rng | ave_dev?  (why /2 here?)
+            w_ *= 8 / np.sum(w_)  # mean w = 1, M shouldn't change?  (max of w_ sum is 8, but why * 8 / sum again?)
             if np.sum(np.abs(w_-_w_)) > ave*rc:
                 V = np.sum(val_ * w_)
                 _w_ = w_
