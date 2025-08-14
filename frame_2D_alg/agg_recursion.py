@@ -355,24 +355,28 @@ def cos_comp(C, N, fdeep=0):  # eval cosine similarity for centroid clustering
     
 
     mw_ = wTTf[0] * np.sqrt(C.wTT[0])  # wTT is derTT correlation term from cent_attr, same for base attrs?
+    dw_ = wTTf[1] * np.sqrt(C.wTT[1])
     _M,_D,_n = C.Et; M,D,n = N.Et  # for comp only
     rn = _n / n  # size ratio, add _o/o?
     o,_o = N.olp, C.olp
     _I,_G,_Dy,_Dx = C.baseT; I,G,Dy,Dx = N.baseT  # I, G|D, angle
     _L,L = (len(C.N_), len(N.N_)) if N.fi else (C.span, N.span)   # dimension, no angl? positive?
-    BaseT = np.array([_M,_D,_n,_o,_I,_G,_L]); wD_ = BaseT * mw_[0,1,2,3,4,5,7]  # exclude angw
-    baseT = np.array([ M, D, n, o, I, G, L]); wd_ = baseT * mw_[0,1,2,3,4,5,7]
-    denom = np.linalg.norm(wD_) * np.linalg.norm(wd_) + 1e-12
+    BaseT = np.array([_M,_D,_n,_o,_I,_G,_L]); wD_ = BaseT * dw_[[0,1,2,3,4,5,7]]  # exclude angw  (additional bracket to select based on indices)
+    baseT = np.array([ M, D, n, o, I, G, L]); wd_ = baseT * dw_[[0,1,2,3,4,5,7]]
+    denom = np.linalg.norm(wD_) * np.linalg.norm(wd_*rn) + 1e-12  # we need wd_ * rn here to make sure MT is within 0 - 1 later
     MT = 0.5 * ((wD_ @ (wd_*rn)) / denom + 1.0)  # [-1,1]→[0,1]
     # separate:
     mA,_ = comp_angle((_Dy,_Dx),(Dy*rn,Dx*rn))
-    MT = (MT + (mA * mw_[6] / 7)) / 2  # combine for weighted ave cos?
+    # MT = (MT + (mA * mw_[6] / 7)) / 2  # combine for weighted ave cos?  
+    # the new looks correct, the old method always give values close to 0.5 instead
+    MT = (MT * 7 + mA * mw_[6]) / (7 + mw_[6]) # mw_ because mA is after comp 
+
     # comp derT:
     dw_ = wTTf[1] * np.sqrt(C.wTT[1])
     wD_ = C.derTT[1] * dw_; wd_ = N.derTT[1] * dw_
-    denom = np.linalg.norm(wD_) * np.linalg.norm(wd_) + 1e-12
+    denom = np.linalg.norm(wD_) * np.linalg.norm(wd_ * rn ) + 1e-12
     MT += 0.5 * ((wD_ @ (wd_*rn)) / denom + 1.0)  # [-1,1]→[0,1]
-    MT /= 2  # equal-weight ave baseT+derT?
+    MT /= 2  # equal-weight ave baseT+derT? (is derT has higher priority than baseT? Else i think we can stick with an even weight)
     if fdeep:
         if M * (len(n.derH)-2) > ave * ((o+_o)/2):
             M += comp_H_cos(C.derH, N.derH, N.Et[2]/C.Et[2], C.wTT)  # draft
