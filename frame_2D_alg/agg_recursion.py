@@ -236,6 +236,31 @@ def proj_span(N, dir_vec):  # project N.span in link direction, in proportion to
     #          (1 - N.mang) * N.span + N.mang * (1 + (2 * N.span - 1) * abs(cos_angle)), * elongation?
     return N.span * oriented  # from 1 to N.span * len L_?
 
+
+def proj_L_(_N, N):
+    
+    pL_tV  = 0
+    for _L in _N.rim + _N.L_:  # include both internal and external links
+        for L in N.rim + N.L_:
+            
+            # dir_vec is just simply difference between yx?
+            dir_vec= np.subtract(_L.yx,L.yx)
+            
+            # range from 0 - 1, the closer to 1 means the better they align ?
+            _cos_proj = np.dot(_L.angl, dir_vec) / (np.linalg.norm(_L.angl) * np.linalg.norm(dir_vec)) 
+            cos_proj = np.dot(L.angl, dir_vec) / (np.linalg.norm(L.angl) * np.linalg.norm(dir_vec))
+        
+            # right now oriented range from 0 - 2, that *2 can be removed?
+            _oriented = (1 - _N.mang) + (_N.mang * 2 * abs(_cos_proj)) 
+            oriented = (1 - N.mang) + (N.mang * 2 * abs(cos_proj)) 
+        
+            if abs(_oriented - oriented) < 0.1:  # same orientation
+                pL_tV += _L.Et[0] + L.Et[0]  # add M     
+
+    # how to compute max dist from here?
+
+    return pL_tV
+
 def comp_(iN_, rc, fi=1, fC=0, fdeep=0):  # comp pairs of nodes or links within max_dist
 
     N__,L_, ET = [],[], np.zeros(3); rng,olp_,_N_ = 1,[],copy(iN_)
