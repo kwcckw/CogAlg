@@ -183,7 +183,7 @@ Feedback coords to bottom level or prior-level in parallel pipelines, filter upd
 
 def cross_comp(root, rc, fi=1):  # rng+ and der+ cross-comp and clustering
 
-    N_,L_,Et = comp_(root.N_, rc, fi)  # rc: redundancy+olp, lG.N_ is Ls
+    N_,L_,Et = comp_(root.N_, rc)  # rc: redundancy+olp, lG.N_ is Ls
     if len(L_) > 1:
         mV,dV = val_(Et,2, (len(L_)-1)*Lw, rc+loopw); lG = []
         if dV > 0:
@@ -228,15 +228,21 @@ def comb_altg_(nG, lG, rc):  # cross_comp contour/background per node:
                 aG = cross_comp(aG, rc) or aG
             Ng.altg_ = (aG.N_,aG.Et)
 
-def proj_V(_N, N, angle, fC=0):
+def proj_V(_N, N, angle, mW, fC=0):
 
     def proj_L_(L_, int_w=1):
         v = 0
         for L in L_:
             cos = (L.angl @ angle) / (np.hypot(*L.angl) * np.hypot(*angle))  # angl is [dy,dx]
             mang = (cos + abs(cos)) / 2  # = max(0, cos): 0 at 90°/180°, 1 at 0°
-            m,d,_ = L.Et
-            v += m / (m + d) * mang * int_w * mW  # convert to cosine similarity
+            m,d = L.Et[:2]
+
+            # this doesn't scale to 0 - 1
+            s = (m - d) / (m + d)                     # [-1, 1]
+            s = (s + abs(s)) / 2                      # keep positive half: [0, 1]
+           
+            # m / m_d doesn't work on Et, because it's not ranged from -1 to 1
+            v += m / (m + d) * mang * int_w * mW  # convert to cosine similarity  (so right now we shoudl follow the m/(m+d) method to remove negative or the abs(cos) method? )
             # proj rim-mediated nodes? no dfork for comp eval? add decay per link.span / l.span?
         return v
     V, O = 0, 0

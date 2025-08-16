@@ -40,7 +40,7 @@ class CdP(CBase):  # produced by comp_P, comp_slice version of Clink
         l.nodet = nodet  # e_ in kernels, else replaces _node,node: not used in kernels?
         l.L = 1  # min nodet
         l.vertuple = vertuple  # m_,d_
-        l.angle = angle  # dy,dx between node centers
+        l.angl = angle  # dy,dx between node centers (for PP's internal L_)
         l.span = span  # distance between node centers
         l.yx = yx  # sum node_
         l.Et = Et
@@ -168,10 +168,10 @@ def sum2PP(P_, dP_, Et):  # sum links in Ps and Ps in PP
             if dP.nodet[0] not in P_ or dP.nodet[1] not in P_: continue  # peripheral link
             link_ += [dP]
             vert += dP.vertuple
-            a = dP.angle; A = np.add(A,a); S += np.hypot(*a)  # span, links are contiguous but slanted
+            a = dP.angl; A = np.add(A,a); S += np.hypot(*a)  # span, links are contiguous but slanted
     else:  # single P PP
         S = P_[0].span if fd else 0  # no distance between nodes
-        A = P_[0].angle if fd else P_[0].latuple[2:4]  # [I, G, Dy, Dx, M, D, L] or zeros?
+        A = P_[0].angl if fd else P_[0].latuple[2:4]  # [I, G, Dy, Dx, M, D, L] or zeros?
     box = [np.inf,np.inf,0,0]
     for P in P_:
         if not fd:  # else summed from P_ nodets on top
