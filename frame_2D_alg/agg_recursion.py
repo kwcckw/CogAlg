@@ -173,7 +173,7 @@ def val_(Et, fi=1, mw=1, aw=1, _Et=np.zeros(3)):  # m,d eval per cluster or cros
     return val
 
 def cosv(Et, fi=1):  # convert Et to cosine-like similarity, add aw?
-    m, d,_ = Et
+    m, d = Et[:2]  # skip o, because PP.Et doesn't have o
     return m / (m+d) if fi else d / (m+d)  # m is redundant to d?
 
 ''' Core process per agg level, as described in top docstring:
@@ -187,7 +187,7 @@ Feedback coords to bottom level or prior-level in parallel pipelines, filter upd
 
 def cross_comp(root, rc, fi=1):  # rng+ and der+ cross-comp and clustering
 
-    N_,L_,Et = comp_(root.N_, rc, fi)  # rc: redundancy+olp, lG.N_ is Ls
+    N_,L_,Et = comp_(root.N_, rc)  # rc: redundancy+olp, lG.N_ is Ls  (fi is not necessary here)
     if len(L_) > 1:
         mV,dV = val_(Et,2, (len(L_)-1)*Lw, rc+loopw); lG = []
         if dV > 0:
@@ -289,7 +289,7 @@ def comp_N(_N,N, o,rc, L_=None, angl=np.zeros(2), span=None, dang=np.zeros(2), f
     derTT, Et, rn = min_comp(_N,N, rc); fi = N.fi  # -1 if _rev else 1, d = -d if L is reversed relative to _L, obsoleted by sign in angle?
     baseT = np.array([*(_N.baseT[:2]+ N.baseT[:2]*rn /2), *dang])
     _y,_x = _N.yx; y,x = N.yx; box = np.array([min(_y,y),min(_x,x),max(_y,y),max(_x,x)])
-    if (_N.angl and N.angl) and (_N.mang and N.mang):
+    if np.any(_N.angl) and np.any(N.angl) and np.any(_N.mang) and np.any(N.mang):  # np.any to check non-empty array
         mA, dA = comp_angle(_N.angl, N.angl); conf = (_N.mang + N.mang) / 2  # N.L_ collinearity / angle confidence, or mostly for fi=0?
         Et += np.array([mA*conf,dA*conf, 1])
     else: mA = 0
@@ -513,7 +513,8 @@ def cluster_C_(root, rc, fdeep=0):  # form centroids by clustering exemplar surr
         _Ct_ = [[c, c.Et[0]/c.Et[2] if c.Et[0] !=0 else 1e-7, c.olp] for c in _C_]
         for _C,_m,_o in sorted(_Ct_, key=lambda t: t[1]/t[2], reverse=True):
             if _m > Ave*_o:
-                C = cent_attr( sum_N_(_C.N_, root=root, fC=1), rc)  # C update lags behind N_; non-local C.olp += N.mo_ os?
+                # i think Ns reference from C is more suggestive if we use C.cN_?
+                C = cent_attr( sum_N_(_C.N_, root=root, fC=1), rc); C.cN_ = []  # C update lags behind N_; non-local C.olp += N.mo_ os?
                 _N_,_N__, mo_, M,O, dm,do = [],[],[],0,0,0,0  # per C
                 for n in _C._N_:  # core+ surround
                     if C in n.C_: continue
@@ -524,6 +525,7 @@ def cluster_C_(root, rc, fdeep=0):  # form centroids by clustering exemplar surr
                         _N_+=[n]; M+=m; O+=o; mo_ += [np.array([m,o])]  # n.o for convergence eval
                         _N__ += [_n for l in n.rim for _n in l.N_ if _n is not n]  # +|-ls for comp C
                         if _C not in n._C_: dm += m; do += o  # not in extended _N__
+                        C.cN_ += [n]
                     elif _C in n._C_:
                         __m,__o = n._mo_[n._C_.index(_C)]; dm +=__m; do +=__o
                 if M > Ave * len(_N_) * O:
@@ -533,7 +535,7 @@ def cluster_C_(root, rc, fdeep=0):  # form centroids by clustering exemplar surr
                 else:
                     for n in _C._N_:
                         for i, c in enumerate(n.C_):
-                            if c is _C: n.mo_.pop(i); n.C_.pop(i); break  # remove mo mapping to culled _C
+                            if c is _C: n.mo_.pop(i); n.C_.pop(i); c.cN_.remove(n); break  # remove mo mapping to culled _C
             else: break  # the rest is weaker
         if Dm > Ave * cnt * Do:  # dval vs. dolp, overlap increases as Cs may expand in each loop?
             _C_ = C_
@@ -695,7 +697,7 @@ def PP2N(PP, frame):
     derTT = np.array([[mM,mD,mL,1,mI,mG,mA,mL], [dM,dD,dL,1,dI,dG,dA,dL]])
     derH = [CLay(node_=P_, link_=link_, derTT=deepcopy(derTT))]
     y,x,Y,X = box; dy,dx = Y-y,X-x  # A = (dy,dx); L = np.hypot(dy,dx), rolp = 1
-    et = np.array([*np.sum([L.Et for L in link_],axis=0), 1]) if link_ else np.array([.0,.0,1.])  # n=1
+    et = np.array([*np.sum([L.Et for L in link_],axis=0), 1]) if link_ else np.array([.0,.0,1.]); et[1] = np.abs(et[1])  # n=1   (looks like we need to apply abs in et[1] too)
 
     return CN(root=frame, fi=1, Et=Et+et, N_=P_, L_=link_, baseT=baseT, derTT=derTT, derH=derH, box=box, yx=yx, angl=A, span=np.hypot(dy/2,dx/2))
 
