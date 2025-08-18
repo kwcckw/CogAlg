@@ -47,7 +47,7 @@ class CLay(CBase):  # layer of derivation hierarchy, subset of CG
         l.olp = kwargs.get('olp', 1)  # ave nodet overlap
         l.node_ = kwargs.get('node_', [])  # concat across fork tree
         l.link_ = kwargs.get('link_', [])
-        l.derTT = kwargs.get('derTT', np.zeros((2,8)))  # m_,d_ [M,D,n,o, I,G,A,L], sum across fork tree, centroid_M?
+        l.derTT = kwargs.get('derTT', np.zeros((2,10)))  # m_,d_ [M,D,n,o, I,G,A,L], sum across fork tree, centroid_M?
         # i: lay index in root node_,link_, to revise olp; i_: m,d priority indices in comp node|link H
         # ni: exemplar in node_, trace in both directions?
     def __bool__(l): return bool(l.node_)
@@ -55,7 +55,7 @@ class CLay(CBase):  # layer of derivation hierarchy, subset of CG
     def copy_(lay, rev=0, i=None):  # comp direction may be reversed to -1
 
         if i:  # reuse self
-            C = lay; lay = i; C.node_=copy(i.node_); C.link_ = copy(i.link_); C.derTT=np.zeros((2,8))
+            C = lay; lay = i; C.node_=copy(i.node_); C.link_ = copy(i.link_); C.derTT=np.zeros((2,10))
         else:  # init new C
             C = CLay(node_=copy(lay.node_), link_=copy(lay.link_))
         C.Et = copy(lay.Et)
@@ -139,7 +139,7 @@ def Copy_(N, root=None, init=0):
 ave, avd, cav, arn, aI, aveB, aveR, Lw, intw, loopw, centw, contw = 10, 10, .7, 1.2, 100, 100, 3, 5, 2, 5, 10, 15  # value filters + weights
 adist, amed, distw, medw = 10, 3, 2, 2  # cost filters + weights, add alen?
 wM, wD, wN, wO, wI, wG, wA, wL = 10, 10, 20, 20, 1, 1, 20, 20  # der params higher-scope weights = reversed relative estimated ave?
-mW = dW = 8; wTTf = np.ones((2,8))  # fb weights per derTT, adjust in agg+
+mW = dW = 8; wTTf = np.ones((2,10))  # fb weights per derTT, adjust in agg+
 wY = wX = 64; wYX = np.hypot(wY,wX)  # focus dimensions
 '''
 initial PP_ cross_comp and connectivity clustering to initialize focal frame graph, no recursion:
@@ -288,7 +288,8 @@ def comp_N(_N,N, o,rc, L_=None, angl=np.zeros(2), span=None, dang=np.zeros(2), f
     baseT = np.array([*(_N.baseT[:2]+ N.baseT[:2]*rn /2), *dang])
     _y,_x = _N.yx; y,x = N.yx
     box = np.array([min(_y,y),min(_x,x),max(_y,y),max(_x,x)])
-    Link = CN(Et=Et, olp=o, et=_N.et+N.et, N_=[_N,N], baseT=baseT, derTT=derTT, yx=np.add(_N.yx,N.yx)/2,box=box, span=span,angl=angl, rng=rng, fi=0)
+    # N.N_+_N.N_ in L_ to pack nodet's N_
+    Link = CN(Et=Et, olp=o, et=_N.et+N.et, N_=[_N,N], baseT=baseT, derTT=derTT, L_=N.N_+_N.N_,yx=np.add(_N.yx,N.yx)/2,box=box, span=span,angl=angl, rng=rng, fi=0)
     Link.derH = [CLay(Et=copy(Et), node_=[_N,N],link_=[Link],derTT=copy(derTT), root=Link)]
     if fdeep:
         if val_(Et,1, len(N.derH)-2, o+rc) > 0 or fi==0:  # else derH is dext,vert
@@ -315,27 +316,28 @@ def min_comp(_N,N, rc):  # comp L,A, Et, baseT, derTT
         # rot = 1 if dy * _dx - dx * _dy >= 0 else -1  # +1 CW, −1 CCW?
     else: mang,dang = 0,0
     fi = N.fi
-    _M,_D,_n =_N.Et; _o =_N.olp; _I,_G,_Dy,_Dx =_N.baseT; _L = len(_N.N_) if fi else _N.L_  # len nodet.N_s
-    M, D, n = N.Et;  o = N.olp;  I, G, Dy, Dx = N.baseT;  L = len(N.N_) if fi else N.L_
+    _M,_D,_n =_N.Et; _o =_N.olp; _I,_G,_Dy,_Dx =_N.baseT; _L = len(_N.N_) if fi else len(_N.L_)  # len nodet.N_s
+    M, D, n = N.Et;  o = N.olp;  I, G, Dy, Dx = N.baseT;  L = len(N.N_) if fi else len(N.L_)
     rn = _n / n  # size ratio, add _o/o?
-    m_,d_ = np.array,np.array
+    m_,d_ = [], []  # it's better to convert them later? Else we need to use np.append to append ms or ds
     M, D = 0,0
     for _par,par in zip((_M,_D,_n,_o,_L,_G), (M,D,n,o,L,G)):  # all +ve, add t? L is 1st: not derived?
         par*=rn; t = max(_par+par, 1e-7)
         m = min(_par,par)/t; m_+=[m]; M+=m; d=_par-par; d_+=[d]; D+=abs(d)/t
     I*=rn; dI = _I - I;  mI = aI - dI / max(_I,I, 1e-7)  # vI = mI - ave
-    m_+=mI; M+=mI; d_+=dI; D+=dI  # not final
+    m_+=[mI]; M+=mI; d_+=[dI]; D+=dI  # not final
     mA, dA = comp_angle((_Dy,_Dx),(Dy*rn,Dx*rn))
-    m_+=mA; M+=mA; d_+=dA; D+=dA  # norm
-    m_+=mang; M+=mang; d_+=dang; D+=dang  # new
+    m_+=[mA]; M+=mA; d_+=[dA]; D+=dA  # norm
+    m_+=[mang]; M+=mang; d_+=[dang]; D+=dang  # new
+    m_ += [m_[0]+m_[1]]; d_ += [d_[0]+d_[1]]  # t = m+d
     # comp depth (len nH), span?
     _id_ = _N.derTT[1]; id_ = N.derTT[1] * rn  # norm by span
     dd_ = np.abs(_id_-id_) * np.sign(_id_) * np.sign(id_)  # * ((1-cos_da)/2) * rot?
     _a_,a_ = np.abs(_id_),np.abs(id_)
-    md_ = np.divide( np.minimum(_a_,a_), np.maximum.reduce([_a_,a_, np.zeros(8) + 1e-7]))  # rms
+    md_ = np.divide( np.minimum(_a_,a_), np.maximum.reduce([_a_,a_, np.zeros(10) + 1e-7]))  # rms
     md_ *= np.where((_id_<0)!=(id_<0), -1,1)  # match is negative if comparands have opposite sign
     m_ += md_; d_ += dd_
-    DerTT = np.array([m_,d_])  # [M,D,n,o, L,G,I,A,nA]  # 9 attrs, add t for 10?
+    DerTT = np.array([mp.array(m_),np.array(d_)])  # [M,D,n,o, L,G,I,A,nA]  # 9 attrs, add t for 10?
     Et = np.array([np.sum(m_* wTTf[0] * rc),
                    np.sum(np.abs(d_ * wTTf[1] * rc)), # frame ffeedback * correlation
                    min(_n, n)])  # shared scope?
@@ -448,7 +450,8 @@ def cluster(root, iN_, rN_, rc, rng=1):  # flood-fill node | link clusters
 def cluster_C_(root, rc):  # form centroids by clustering exemplar surround, drifting via rims of new member nodes
 
     _C_, _N_ = [], []
-    for E in root.cent_.pop():  # replace with C_ in the end
+    while root.cent_:
+        E = root.cent_.pop()  # replace with C_ in the end
         C = cent_attr( Copy_(E,root, init=2), rc); C.N_ = [E]   # all rims are within root
         C._N_ = [n for l in E.rim for n in l.N_ if n is not E]  # core members + surround -> comp_C
         _N_ += C._N_; _C_ += [C]
@@ -460,7 +463,8 @@ def cluster_C_(root, rc):  # form centroids by clustering exemplar surround, dri
         _Ct_ = [[c, c.Et[0]/c.Et[2] if c.Et[0] !=0 else 1e-7, c.olp] for c in _C_]
         for _C,_m,_o in sorted(_Ct_, key=lambda t: t[1]/t[2], reverse=True):
             if _m > Ave*_o:
-                C = cent_attr( sum_N_(_C.N_, root=root, fC=1), rc)  # C update lags behind N_; non-local C.olp += N.mo_ os?
+                # init C.C_
+                C = cent_attr( sum_N_(_C.N_, root=root, fC=1), rc); C.C_ = []  # C update lags behind N_; non-local C.olp += N.mo_ os?
                 _N_,_N__, mo_, M,O, dm,do = [],[],[],0,0,0,0  # per C
                 for n in _C._N_:  # core+ surround
                     if C in n.C_: continue
@@ -497,14 +501,14 @@ def cent_attr(C, rc):  # weight attr matches | diffs by their match to the sum, 
 
     for derT, wT in zip(C.derTT, wTTf):
         # weigh values by feedback before cross-correlation
-        _w_ = np.ones(8)
+        _w_ = np.ones(10)
         val_ = np.abs(derT) * wT  # m|d are signed, but their contribution is absolute
         V = np.sum(val_)
         while True:
             mean = max(V / max(np.sum(_w_), 1e-7), 1e-7)
             inverse_dev_ = np.minimum(val_/mean, mean/val_)  # rational deviation from mean rm in range 0:1, if m=mean
             w_ = inverse_dev_ / .5  # 2/ m=mean, 0/ inf max/min, 1 / mid_rng | ave_dev?
-            w_ *= 8 / np.sum(w_)  # mean w = 1, M shouldn't change?
+            w_ *= 10 / np.sum(w_)  # mean w = 1, M shouldn't change?
             if np.sum(np.abs(w_-_w_)) > ave*rc:
                 V = np.sum(val_ * w_)
                 _w_ = w_
@@ -549,7 +553,7 @@ def slope(link_):  # get ave 2nd rate of change with distance in cluster or fram
 
 def comp_H(H,h, rn, ET=None, DerTT=None, root=None):  # one-fork derH
 
-    derH, derTT, Et = [], np.zeros((2,8)), np.zeros(3)
+    derH, derTT, Et = [], np.zeros((2,10)), np.zeros(3)
     for _lay, lay in zip_longest(H,h):  # selective
         if _lay and lay:
             dlay = _lay.comp_lay(lay, rn, root=root)
@@ -639,7 +643,7 @@ def PP2N(PP, frame):
     P_, link_, vert, latuple, A, S, box, yx, Et = PP
     baseT = np.array(latuple[:4])
     [mM,mD,mI,mG,mA,mL], [dM,dD,dI,dG,dA,dL] = vert  # re-pack in derTT:
-    derTT = np.array([[mM,mD,mL,1,mI,mG,mA,mL], [dM,dD,dL,1,dI,dG,dA,dL]])
+    derTT = np.array([[mM,mD,mL,1,mI,mG,mA,mL,0,mM+mD], [dM,dD,dL,1,dI,dG,dA,dL,0,dM+dD]])  # 0 mang and dang for PPs
     derH = [CLay(node_=P_, link_=link_, derTT=deepcopy(derTT))]
     y,x,Y,X = box; dy,dx = Y-y,X-x  # A = (dy,dx); L = np.hypot(dy,dx), rolp = 1
     et = np.array([*np.sum([L.Et for L in link_],axis=0), 1]) if link_ else np.array([.0,.0,1.])  # n=1
@@ -666,7 +670,7 @@ def eval(V, weights):  # conditional progressive eval, with default ave in weigh
     return 1
 
 def val_H(H):
-    derTT = np.zeros((2,8)); Et = np.zeros(3)
+    derTT = np.zeros((2,10)); Et = np.zeros(3)
     for lay in H:
         for fork in lay:
             if fork: derTT += fork.derTT; Et += fork.Et
@@ -724,7 +728,7 @@ def project_N_(Fg, yx):
 
 def ffeedback(root):  # adjust filters: all aves *= rV, ultimately differential backprop per ave?
 
-    wTTf = np.ones((2,8))  # sum derTT coefs: m_,d_ [M,D,n,o, I,G,A,L] / Et, baseT, dimension
+    wTTf = np.ones((2,10))  # sum derTT coefs: m_,d_ [M,D,n,o, I,G,A,L] / Et, baseT, dimension
     rM, rD, rVd = 1, 1, 0
     hLt = sum_N_(root.L_)  # links between top nodes
     _derTT = np.sum([l.derTT for l in hLt.N_])  # _derTT[np.where(derTT==0)] = 1e-7
