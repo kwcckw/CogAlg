@@ -311,8 +311,9 @@ def min_comp(_N,N, rc):  # comp Et, baseT, extT, derTT
     _M,_D,_n,_t =_N.Et; _I,_G,_Dy,_Dx =_N.baseT; _L = len(_N.N_) if fi else _N.L_  # len nodet.N_s
     M, D, n, t  = N.Et;  I, G, Dy, Dx = N.baseT;  L = len(N.N_) if fi else N.L_
     rn = _n / n  # size ratio, add _o/o?
-    m_,d_,t_ = comp(np.abs([_M,_D,_n,_t,_I,_G,[_Dy,_Dx],_L,_N.span]),  # Et, baseT, extT
-                    np.abs([M,D,n,t, [I,aI], G,[Dy, Dx], L, [N.span,aS]]) * rn)
+    # if we don't want to convert them into np.array, we may need to apply abs and rn individually
+    m_,d_,t_ = comp(np.abs(np.array([_M,_D,_n,_t,_I,_G,np.array([_Dy,_Dx]),_L,_N.span],dtype=object)),  # Et, baseT, extT
+                    np.array([M,D,n,t, np.array([I,aI]), G, np.array([Dy, Dx]), L, np.array([N.span,aS])],dtype=object) * rn)
     if (np.any(_N.angl) and np.any(N.angl)) and (_N.mang and N.mang):
         mA,dA = comp_A(_N.angl, N.angl*rn)
         conf = _N.mang * (N.mang/rn)  # fractional
@@ -336,11 +337,11 @@ def comp(_pars, pars):
 
     m_,d_,t_ = [],[],[]
     for _p, p in zip(_pars, pars):
-        if isinstance(_p, list):
+        if isinstance(_p, np.ndarray):
             mA, dA = comp_A(_p,p)  # mA in 0:1, dA in -.5:.5
             m_+= [mA]; d_+= [dA]; t_ += [mA+ abs(dA)]
-        elif isinstance(p, list):  # massless I|S avd in p only
-            avd = p[1]; _p=_p[0]; p=p[0]
+        elif isinstance(p, np.ndarray):  # massless I|S avd in p only
+            avd = p[1]; p=p[0]  # _p should be a scalar here
             t = max(_p,p,1e-7); t_+= [t]
             d = _p - p
             m_+= [avd- abs(d)/t]
@@ -353,7 +354,7 @@ def comp(_pars, pars):
 
 def comp_A(_A,A):
 
-        dA = atan2(_A) - atan2(A)
+        dA = atan2(*_A) - atan2(*A)
         if   dA > pi: dA -= 2 * pi  # rotate CW
         elif dA <-pi: dA += 2 * pi  # rotate CCW
         mA = (cos(dA)+1)/2  # in 0:1
@@ -644,11 +645,11 @@ def extend_box(_box, box):
 
 # not revised
 def PP2N(PP, frame):
-
+    
     P_, link_, verT, latT, A, S, box, yx, Et = PP
     baseT = np.array(latT[:4])
     [mM,mD,mI,mG,mA,mL], [dM,dD,dI,dG,dA,dL] = verT  # re-pack in derTT:
-    derTT = np.array([[mM,mD,mL,1,mI,mG,mA,mL,0,0], [dM,dD,dL,1,dI,dG,dA,dL,0,0]])
+    derTT = np.array([[mM,mD,mL,Et[3],mI,mG,mA,mL,mL/2,1], [dM,dD,dL,Et[3],dI,dG,dA,dL,dL/2,1]])
     derH = [CLay(node_=P_, link_=link_, derTT=deepcopy(derTT))]
     y,x,Y,X = box; dy,dx = Y-y,X-x
     et = np.insert(np.array([*np.sum([L.Et for L in link_],axis=0)]), 2,1) if link_ else np.array([.0,.0,1.,1.])  # n=1

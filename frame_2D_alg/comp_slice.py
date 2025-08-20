@@ -2,6 +2,8 @@ import numpy as np
 from frame_blobs import CBase, frame_blobs_root, intra_blob_root, imread, unpack_blob_
 from slice_edge import CP, slice_edge, comp_angle
 from functools import reduce
+from math import atan2, cos, floor, pi  
+
 '''
 comp_slice traces edge axis by cross-comparing vertically adjacent Ps: horizontal slices across an edge blob.
 These are low-M high-Ma blobs, vectorized into outlines of adjacent flat (high internal match) blobs.
@@ -190,6 +192,11 @@ def comp_latuple(_latuple, latuple, _n,n):  # 0der params, add dir?
     I, G, Dy, Dx, M, D, L = latuple
     rn = _n / n; T = 0
 
+    # same as min_comp
+    m_,d_,t_ = comp(np.abs(np.array([_M,_D,_I,_G,np.array([_Dy,_Dx]),_L],dtype=object)),  # Et, baseT, extT
+                    np.array([M,D, np.array([I,aI]), G, np.array([Dy, Dx]), L],dtype=object) * rn)
+
+    '''
     I*=rn; dI = _I - I;  T += _I + I; mI = aI - dI / max(_I,I, 1e-7)  # vI = mI - ave
     G*=rn; dG = _G - G;  T += _G + G; mG = min(_G, G) / max(_G,G, 1e-7)  # vG = mG - ave_mG
     M*=rn; dM = _M - M;  T += _M + M; mM = min(_M, M) / max(_M,M, 1e-7)  # vM = mM - ave_mM
@@ -199,8 +206,39 @@ def comp_latuple(_latuple, latuple, _n,n):  # 0der params, add dir?
 
     d_ = np.array([dM, dD, dI, dG, dA, dL])  # derTT[:3], Et
     m_ = np.array([mM, mD, mI, mG, mA, mL])
+    '''
     M = sum(m_ * w_t[0]); D = sum(d_ * w_t[1])
     return np.array([m_,d_]), np.array([M,D,T])
+
+
+def comp(_pars, pars):
+
+    m_,d_,t_ = [],[],[]
+    for _p, p in zip(_pars, pars):
+        if isinstance(_p, np.ndarray):
+            mA, dA = comp_A(_p,p)  # mA in 0:1, dA in -.5:.5
+            m_+= [mA]; d_+= [dA]; t_ += [mA+ abs(dA)]
+        elif isinstance(p, np.ndarray):  # massless I|S avd in p only
+            avd = p[1]; p=p[0]  # _p should be a scalar here
+            t = max(_p,p,1e-7); t_+= [t]
+            d = _p - p
+            m_+= [avd- abs(d)/t]
+            d_+= [d/t]
+        else:  # massive
+            t = max(_p,p,1e-7); t_+=[t]
+            m_+= [min(_p,p) /t]
+            d_+= [(_p-p) /t]
+    return m_,d_,t_
+
+
+def comp_A(_A,A):
+
+        dA = atan2(*_A) - atan2(*A)
+        if   dA > pi: dA -= 2 * pi  # rotate CW
+        elif dA <-pi: dA += 2 * pi  # rotate CCW
+        mA = (cos(dA)+1)/2  # in 0:1
+        dA = dA / (2 * pi)  # in -.5:.5
+        return mA, dA
 
 def comp_vert(_i_,i_, rn=.1, dir=1):  # i_ is ds, dir may be -1
 
@@ -211,6 +249,9 @@ def comp_vert(_i_,i_, rn=.1, dir=1):  # i_ is ds, dir may be -1
     m_[(_i_<0) != (d_<0)] *= -1  # m is negative if comparands have opposite sign
     M = m_ @ w_t[0]; D = np.abs(d_) @ w_t[1]  # M = sum(m_ * w_t[0]); D = sum(d_ * w_t[1])
     T = sum(_i_) + sum(i_)
+
+    # same as min_comp
+    # m_,d_,t_ = comp(_i_, i_ * rn)  # or it can be just like this?
 
     return np.array([m_,d_]), np.array([M, D, T])  # Et
 ''' 
