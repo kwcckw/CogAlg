@@ -3,6 +3,8 @@ from frame_blobs import CBase, frame_blobs_root, intra_blob_root, imread, unpack
 from slice_edge import CP, slice_edge, comp_angle
 from functools import reduce
 from math import atan2, cos, floor, pi
+from itertools import zip_longest
+from copy import copy
 
 '''
 comp_slice traces edge axis by cross-comparing vertically adjacent Ps: horizontal slices across an edge blob.
@@ -151,7 +153,12 @@ def convert_to_dP(_P,P, derLay, angle, distance, Et):
 
     link = CdP(nodet=[_P,P], Et=Et, vertuple=derLay, angle=angle, span=distance, yx=np.add(_P.yx, P.yx)/2)
     # bilateral, regardless of clustering:
-    _P.vertuple += link.vertuple; P.vertuple += link.vertuple
+    _P.vertuple += link.vertuple[:2]; P.vertuple += link.vertuple[:2]  # link.vertuple has t_ now, do we need to pack it into P.vertuple too? P.vertuple only have m_, d_
+
+    # pack t_ version
+    # for p in _P, P:
+    #     p.vertuple = np.array([_v_ + v_ for _v_, v_ in zip_longest(p.vertuple, link.vertuple, fillvalue=np.zeros(6))])
+
     _P.lrim += [link]; P.lrim += [link]
     _P.prim += [P];    P.prim +=[_P]  # all Ps are dPs if fd
     link.L = min(_P.latuple[-1],P.latuple[-1]) if isinstance(_P,CP) else min(_P.L,P.L)  # P is CdP
@@ -213,8 +220,11 @@ def comp(_pars, pars):
             d_+= [d/t]
         else:  # massive
             t = max(_p,p,1e-7); t_+=[t]
-            m_+= [min(_p,p) /t]
-            d_+= [(_p-p) /t]
+            m = min(_p,p) /t
+            d = (_p-p) /t
+            if _p<0 != p<0: m *= -1  # we need this in I and S too?
+            m_+= [m]
+            d_+= [d]
     return m_,d_,t_
 
 def comp_A(_A,A):
@@ -230,10 +240,10 @@ def comp_vert(_i_,i_, rn=.1, dir=1):  # i_ is ds, dir may be -1, ~ comp_lay
 
     i_ = i_ * rn  # normalize by compared accum span
     _a_,a_ = np.abs(_i_), np.abs(i_)  # d_ s
-    t_ = np.maximum.reduce([_a_,a_, np.zeros(10)+1e-7])
+    t_ = np.maximum.reduce([_a_,a_, np.zeros(6)+1e-7])  # only 6 elements in vert (I, G, A, M, D, L)
     d_ = (_i_- i_*dir) / t_  # np.array d[I,G,A,M,D,L]
     m_ = np.minimum(_a_,a_) / t_  # in 0:1
-    m_[(_i_<0) != (d_<0)] *= -1  # m is negative if comparands have opposite sign
+    m_[(_i_<0) != (d_<0)] *= -1  # m is negative if comparands have opposite sign (shouldn't it be _i_ and i_ here?)
     return (np.array([m_,d_,t_]),
             np.array([m_@ w_t[0], np.abs(d_)@ w_t[1], t_@ w_t[0]]))  # Et
 ''' 
