@@ -71,23 +71,23 @@ def comp_slice(edge, rV=1, ww_t=None):  # root function
         w_t = [[wM, wD, wI, wG, wA, wL]] * ww_t
         # der weights
     for P in edge.P_:  # add higher links
-        P.derTT = np.zeros((2,6))
+        P.derTT = np.zeros((3,6))
         P.rim = []; P.lrim = []; P.prim = []
     edge.dP_ = []
     comp_P_(edge)  # vertical P cross-comp -> PP clustering, if lateral overlap
-    PPt, mvert, mEt = form_PP_(edge.P_, fd=0)  # all Ps are converted to PPs
+    PPt, mderTT, mEt = form_PP_(edge.P_, fd=0)  # all Ps are converted to PPs
     if PPt:
         edge.node_ = PPt
         comp_dP_(edge, mEt)
-        edge.link_, dvert, dEt = form_PP_(edge.dP_, fd=1)
+        edge.link_, dderTT, dEt = form_PP_(edge.dP_, fd=1)
         # not needed:?
-        edge.derTT = mvert + dvert
+        edge.derTT = mderTT + dderTT
         edge.Et = mEt + dEt
     return PPt
 
 def form_PP_(iP_, fd):  # form PPs of dP.valt[fd] + connected Ps val
 
-    PPt_ = []; ET = np.zeros(4); VerT = np.zeros((2,6))
+    PPt_ = []; ET = np.zeros(4); DerTT = np.zeros((3,6))
 
     for P in iP_: P.merged = 0
     for P in iP_:  # dP from link_ if fd
@@ -96,14 +96,14 @@ def form_PP_(iP_, fd):  # form PPs of dP.valt[fd] + connected Ps val
         if fd: Et = P.Et  # summed derTT, min L in dP
         else:  I,G,Dy,Dx,M,D,L = P.latuple; Et = np.array([M, G+abs(D), L, I])
         _P_ = {P}; link_ = set()
-        verT = np.zeros((2,6))
+        derTT = np.zeros((3,6))
         while _prim_:
             prim_,lrim_ = set(),set()
             for _P,_link in zip(_prim_,_lrim_):
                 if _link.Et[fd] < [ave,avd][fd] or _P.merged:
                     continue
                 _P_.add(_P); link_.add(_link)
-                verT += _link.derTT
+                derTT += _link.derTT
                 if fd: _Et = _P.Et
                 else: _I,_G,_Dy,_Dx,_M,_D,_L = _P.latuple; _Et = np.array([_M,_G+abs(_D),_L,_I])
                 Et += _Et  # intra-P similarity and variance
@@ -111,10 +111,10 @@ def form_PP_(iP_, fd):  # form PPs of dP.valt[fd] + connected Ps val
                 lrim_.update(set(_P.lrim) - link_)
                 _P.merged = 1
             _prim_, _lrim_ = prim_, lrim_
-        ET += Et; VerT += verT
+        ET += Et; DerTT += derTT
         PPt_ += [sum2PP(list(_P_), list(link_), Et)]
 
-    return PPt_, VerT, ET
+    return PPt_, DerTT, ET
 
 def comp_P_(edge):  # form links from prelinks
 
@@ -141,7 +141,7 @@ def comp_dP_(edge, mEt):  # node_- mediated: comp node.rim dPs, call from form_P
             rn = len(P.dert_) / len(_P.dert_)
             for dP in P.rim:  # higher links
                 if dP not in edge.dP_: continue  # skip removed node links
-                derTT, et = comp_vert(_dP.derTT[1], dP.derTT[1], rn)
+                derTT, et = comp_derT(_dP.derTT[1], dP.derTT[1], rn)
                 angle = np.subtract(dP.yx,_dP.yx)  # dy,dx of node centers
                 distance = np.hypot(*angle)  # between node centers
                 # up only:
@@ -152,6 +152,7 @@ def convert_to_dP(_P,P, derTT, angle, distance, Et):
 
     link = CdP(nodet=[_P,P], Et=Et, derTT=derTT, angle=angle, span=distance, yx=np.add(_P.yx, P.yx)/2)
     # Ps are dPs
+    for p in _P, P: p.derTT = np.array([_der_ + der_ for _der_, der_ in zip_longest(p.derTT, link.derTT, fillvalue=np.zeros(6))])
     _P.derTT+= link.derTT; P.derTT += link.derTT
     _P.lrim += [link]; P.lrim += [link]
     _P.prim += [P];    P.prim +=[_P]
@@ -163,14 +164,14 @@ def sum2PP(P_, dP_, Et):  # sum links in Ps and Ps in PP
     fd = isinstance(P_[0],CdP)
     if fd: latT = np.sum([n.latuple for n in set([n for dP in P_ for n in  dP.nodet])], axis=0)
     else:  latT = np.zeros(7)
-    verT = np.zeros((2,6))
+    derTT = np.zeros((3,6))
     link_ = []
     if dP_:  # add uplinks:
         S,A = 0,[0,0]
         for dP in dP_:
             if dP.nodet[0] not in P_ or dP.nodet[1] not in P_: continue  # peripheral link
             link_ += [dP]
-            verT += dP.derTT
+            derTT += dP.derTT
             a = dP.angl; A = np.add(A,a); S += np.hypot(*a)  # span, links are contiguous but slanted
     else:  # single P PP
         S = P_[0].span if fd else 0  # no distance between nodes
@@ -179,11 +180,11 @@ def sum2PP(P_, dP_, Et):  # sum links in Ps and Ps in PP
     for P in P_:
         if not fd:  # else summed from P_ nodets on top
             latT += P.latuple
-        verT += P.derTT
+        derTT += P.derTT
         for y,x in P.yx_ if isinstance(P, CP) else [P.nodet[0].yx, P.nodet[1].yx]:  # CdP
             box = accum_box(box,y,x)
     y0,x0,yn,xn = box
-    PPt = [P_, link_, verT, latT, A, S, box, np.array([(y0+yn)/2,(x0+xn)/2]), Et]
+    PPt = [P_, link_, derTT, latT, A, S, box, np.array([(y0+yn)/2,(x0+xn)/2]), Et]
     for P in P_: P.root = PPt
     return PPt
 
@@ -197,7 +198,7 @@ def comp_latuple(_latuple, latuple, _n,n):  # 0der params, add dir?
     pars[2] = [pars[2],aI]  # no avd*rn: d/=t
     m_,d_,t_ = comp(_pars,pars)
     return (np.array([m_,d_,t_]),  # derTT
-            np.array([sum(m_* w_t[0]), sum(abs(d_)* w_t[1]),  min(L,_L), sum(t_* w_t[0])]))
+            np.array([sum(m_* w_t[0]), sum(np.abs(d_)* w_t[1]),  min(L,_L), sum(t_* w_t[0])]))
 
 def comp(_pars, pars):
 
@@ -210,7 +211,9 @@ def comp(_pars, pars):
             p, avd = p
             t = max(_p,p,1e-7); t_+= [t]
             d = _p - p
-            m_+= [avd- abs(d)/t]
+            m = avd- abs(d)/t
+            if _p<0 != p<0: m *= -1
+            m_+= [m]
             d_+= [d/t]
         else:  # massive
             t = max(_p,p,1e-7); t_+=[t]
@@ -230,7 +233,8 @@ def comp_A(_A,A):
         dA = dA / (2 * pi)  # in -.5:.5
         return mA, dA
 
-def comp_vert(_i_,i_, rn=.1, dir=1):  # i_ is ds, dir may be -1, ~ comp_lay
+# we can rename this now?
+def comp_derT(_i_,i_, rn=.1, dir=1):  # i_ is ds, dir may be -1, ~ comp_lay
 
     i_ = i_ * rn  # normalize by compared accum span
     _a_,a_ = np.abs(_i_), np.abs(i_)  # d_ s

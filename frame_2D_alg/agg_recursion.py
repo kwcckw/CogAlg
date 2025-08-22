@@ -342,13 +342,19 @@ def comp(_pars, pars):
             p, avd = p
             t = max(_p,p,1e-7); t_+= [t]
             d = _p - p
-            m_+= [avd- abs(d)/t]
+            m = avd- abs(d)/t
+            if _p<0 != p<0: m *= -1
+            m_+= [m]
             d_+= [d/t]
         else:  # massive
             t = max(_p,p,1e-7); t_+=[t]
-            m_+= [min(_p,p) /t]
-            d_+= [(_p-p) /t]
+            m = min(_p,p) /t
+            if _p<0 != p<0: m *= -1
+            d = (_p - p) / t
+            m_+= [m]
+            d_+= [d]
     return m_,d_,t_
+
 
 def comp_A(_A,A):
 
@@ -643,16 +649,17 @@ def extend_box(_box, box):
 
 def PP2N(PP, frame):
 
-    P_, link_, verT, latT, A, S, box, yx, Et = PP
+    P_, link_, derTT, latT, A, S, box, yx, Et = PP
     baseT = np.array(latT[:4])
-    [mM,mD,mI,mG,mA,mL], [dM,dD,dI,dG,dA,dL] = verT  # re-pack in derTT:
+    [mM,mD,mI,mG,mA,mL], [dM,dD,dI,dG,dA,dL], [tM,tD,tI,tG,tA,tL] = derTT  # re-pack in derTT:
     mT = np.array([mM,mD,mL,mM+mD, mI,mG,mA, mL,mL/2, 0])  # 0 extA
     dT = np.array([dM,dD,dL,dM+dD, dI,dG,dA, dL,dL/2, 0])
-    derTT = np.array([mT, dT, mT+dT])
-    derH = [CLay(node_=P_, link_=link_, derTT=deepcopy(derTT))]
+    tT = np.array([tM,tD,tL,mM+mD+dM+dD, tI,tG,tA, tL,tL/2, 0])  # it's more accurate to get T from PP.derTT now?
+    DerTT = np.array([mT, dT, tT])
+    derH = [CLay(node_=P_, link_=link_, derTT=deepcopy(DerTT))]
     y,x,Y,X = box; dy,dx = Y-y,X-x
 
-    return CN(root=frame, fi=1, Et=Et, N_=P_, L_=link_, baseT=baseT, derTT=derTT, derH=derH, box=box, yx=yx, angl=A, span=np.hypot(dy/2,dx/2))
+    return CN(root=frame, fi=1, Et=Et, N_=P_, L_=link_, baseT=baseT, derTT=DerTT, derH=derH, box=box, yx=yx, angl=A, span=np.hypot(dy/2,dx/2))
 
 # not used, make H a centroid of layers, same for nH?
 def sort_H(H, fi):  # re-assign olp and form priority indices for comp_tree, if selective and aligned
