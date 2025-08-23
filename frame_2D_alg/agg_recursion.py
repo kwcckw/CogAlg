@@ -239,9 +239,11 @@ def proj_V(_N, N, angle, dist, fC=0):  # estimate cross-induction between N and 
     def proj_L_(L_, int_w=1):
         V = 0
         for L in L_:
-            cos = (L.angl @ angle) / (np.hypot(*L.angl) * np.hypot(*angle))  # angl is [dy,dx]
+            # add 1e-7 to prevent zero division? I checked and different link node may get a same yx
+            # for eg, L1.nodet yx = (8, 33), (10, 46), L2.nodet yx = (9, 33), (9, 46), both Ls have a same yx of (9, 39.5)
+            cos = (L.angl @ angle) / ((np.hypot(*L.angl) * np.hypot(*angle))+1e-7)  # angl is [dy,dx]
             mang = (cos+ abs(cos)) / 2  # = max(0, cos): 0 at 90°/180°, 1 at 0°
-            V += L.Et[1-fi] * mang * int_w * mW * (L.span/dist * av)  # decay = link.span / l.span * cosine ave?
+            V += L.Et[1-fi] * mang * int_w * mW * (L.span/(dist + 1e-7) * av)  # decay = link.span / l.span * cosine ave?
             # += proj rim-mediated nodes?
         return V
     V = 0; fi = N.fi; av = ave if fi else avd
@@ -320,10 +322,10 @@ def min_comp(_N,N, rc):  # comp Et, baseT, extT, derTT
     if (np.any(_N.angl) and np.any(N.angl)) and (_N.mang and N.mang):
         mA,dA = comp_A(_N.angl, N.angl*rn)
         conf = _N.mang * (N.mang/rn)  # fractional
-        m_ += [mA*conf]  # only affects Et, no rot = 1 if dy * _dx - dx * _dy >= 0 else -1  # +1 CW, −1 CCW, ((1-cos_da)/2) * rot?
-        d_ += [dA*conf]; t_ += [mA +abs(dA)]
+        m_=np.append(m_, [mA*conf])  # only affects Et, no rot = 1 if dy * _dx - dx * _dy >= 0 else -1  # +1 CW, −1 CCW, ((1-cos_da)/2) * rot?
+        d_=np.append(d_, [dA*conf]); t_=np.append(t_, [mA +abs(dA)])  # we need to use np.append for np array now
     else:
-        m_+=[0]; d_+=[0]; t_+=[1]
+        m_=np.append(m_, 0); d_=np.append(d_, 0); t_=np.append(t_, 0)
     # 3 x M,D,n,t, I,G,A, L,S,eA:
     (md_,dd_,td_), (M,D,_,T) = comp_derT(_N.derTT[1], N.derTT[1] * rn)  # no dir?
     DerTT = np.array([m_+md_, d_+dd_, t_+td_])
@@ -466,7 +468,9 @@ def cluster(root, iN_, rN_, rc, rng=1):  # flood-fill node | link clusters
 def cluster_C_(root, rc):  # form centroids by clustering exemplar surround via rims of new member nodes, within root
 
     _C_, _N_ = [], []
-    for E in root.cent_.pop():  # replace with C_ in the end
+    # we should use a while loop to pop instead
+    while root.cent_:  # replace with C_ in the end
+        E = root.cent_.pop()
         C = cent_attr( Copy_(E,root, init=2), rc); C.N_ = [E]   # all rims are within root
         C._N_ = [n for l in E.rim for n in l.N_ if n is not E]  # core members + surround -> comp_C
         _N_ += C._N_; _C_ += [C]
@@ -520,7 +524,7 @@ def cent_attr(C, rc):  # weight attr matches | diffs by their match to the sum, 
         V = np.sum(val_)
         while True:
             mean = max(V / max(np.sum(_w_), 1e-7), 1e-7)
-            inverse_dev_ = np.minimum(val_/mean, mean/val_)  # rational deviation from mean rm in range 0:1, if m=mean
+            inverse_dev_ = np.minimum(val_/mean, mean/np.maximum(val_, 1e-7))  # rational deviation from mean rm in range 0:1, if m=mean  (prevent the zero division within the array)
             w_ = inverse_dev_ / .5  # 2/ m=mean, 0/ inf max/min, 1 / mid_rng | ave_dev?
             w_ *= 10 / np.sum(w_)  # mean w = 1, M shouldn't change?
             if np.sum(np.abs(w_-_w_)) > ave*rc:
@@ -596,7 +600,9 @@ def sum_N_(node_, root=None, fC=0):  # form cluster G
 
     G = Copy_(node_[0], root, init = 0 if fC else 1)
     if fC:
-        G.L_=[]; G.N_= [node_[0]]
+        G.N_= [node_[0]]
+        if G.fi: G.L_=[]
+        else:    G.L_=len(node_)  # L_ should be length when fi == 0 too?
     for n in node_[1:]:
         add_N(G,n,0, fC)
     G.olp /= len(node_)
