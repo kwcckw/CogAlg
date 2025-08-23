@@ -340,21 +340,15 @@ def comp(_pars, pars):
             m_+= [mA]; d_+= [dA]; t_ += [mA+ abs(dA)]
         elif isinstance(p, list):  # massless I|S avd in p only
             p, avd = p
-            t = max(_p,p,1e-7); t_+= [t]
-            d = _p - p
-            m = avd- abs(d)/t
-            if _p<0 != p<0: m *= -1
-            m_+= [m]
-            d_+= [d/t]
+            d = _p - p; ad = abs(d)
+            t = max(avd,ad,1e-7); t_+= [t]
+            m_ += [(avd-ad) /t]
+            d_ += [d/t]
         else:  # massive
             t = max(_p,p,1e-7); t_+=[t]
-            m = min(_p,p) /t
-            if _p<0 != p<0: m *= -1
-            d = (_p - p) / t
-            m_+= [m]
-            d_+= [d]
-    return m_,d_,t_
-
+            m_ += [(min(_p,p) if _p<0 == p<0 else -min(_p,p)) / t]
+            d_ += [(_p-p) /t]
+    return np.array(m_), np.array(d_), np.array(t_)
 
 def comp_A(_A,A):
 
@@ -649,17 +643,18 @@ def extend_box(_box, box):
 
 def PP2N(PP, frame):
 
-    P_, link_, derTT, latT, A, S, box, yx, Et = PP
+    P_, link_, verT, latT, A, S, box, yx, Et = PP
     baseT = np.array(latT[:4])
-    [mM,mD,mI,mG,mA,mL], [dM,dD,dI,dG,dA,dL], [tM,tD,tI,tG,tA,tL] = derTT  # re-pack in derTT:
-    mT = np.array([mM,mD,mL,mM+mD, mI,mG,mA, mL,mL/2, 0])  # 0 extA
-    dT = np.array([dM,dD,dL,dM+dD, dI,dG,dA, dL,dL/2, 0])
-    tT = np.array([tM,tD,tL,mM+mD+dM+dD, tI,tG,tA, tL,tL/2, 0])  # it's more accurate to get T from PP.derTT now?
-    DerTT = np.array([mT, dT, tT])
-    derH = [CLay(node_=P_, link_=link_, derTT=deepcopy(DerTT))]
+    [mM,mD,mI,mG,mA,mL], [dM,dD,dI,dG,dA,dL], [tM,tD,tI,tG,tA,tL] = verT  # re-pack in derTT:
+    derTT = np.array([
+        np.array([mM,mD,mL,mM+abs(mD), mI,mG,mA, mL,mL/2, 0]),  # 0 extA
+        np.array([dM,dD,dL,dM+abs(dD), dI,dG,dA, dL,dL/2, 0]),
+        np.array([tM,tD,tL,tM+abs(tD), tI,tG,tA, tL,tL/2, 0])
+    ])
+    derH = [CLay(node_=P_,link_=link_, derTT=deepcopy(derTT))]
     y,x,Y,X = box; dy,dx = Y-y,X-x
 
-    return CN(root=frame, fi=1, Et=Et, N_=P_, L_=link_, baseT=baseT, derTT=DerTT, derH=derH, box=box, yx=yx, angl=A, span=np.hypot(dy/2,dx/2))
+    return CN(root=frame, fi=1, Et=Et, N_=P_, L_=link_, baseT=baseT, derTT=derTT, derH=derH, box=box, yx=yx, angl=A, span=np.hypot(dy/2,dx/2))
 
 # not used, make H a centroid of layers, same for nH?
 def sort_H(H, fi):  # re-assign olp and form priority indices for comp_tree, if selective and aligned
@@ -798,7 +793,7 @@ def agg_frame(foc, image, iY, iX, rV=1, wTTf=[], fproj=0):  # search foci within
     frame = CN(box=np.array([0,0,Y,X]), yx=np.array([Y//2,X//2]))
     dert__= dert__[:,:Y,:X]  # drop partial rows/cols
     win__ = dert__.reshape(dert__.shape[0], iY,iX, nY,nX).swapaxes(1,2)  # dert=5, wY=64, wX=64, nY=13, nX=20
-    PV__  = win__[3].sum( axis=(0,1)) * intw  # init proj vals = sum G in dert[3],       shape: nY=13, nX=20
+    PV__  = win__[3].sum( axis=(0,1)) * intw  # init proj vals = sum G in dert[3],        shape: nY=13, nX=20
     aw = contw * 20
     while np.max(PV__) > ave * aw:  # max G * int_w + pV
         # max win index:
