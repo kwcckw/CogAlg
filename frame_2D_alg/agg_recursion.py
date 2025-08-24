@@ -131,7 +131,9 @@ def Copy_(N, root=None, init=0):
     C = CN(root=root)
     if init:  # init G|C with N
         C.N_ = [N]; C.nH, C.lH, N.root = [],[],C
-        if init==1: N.L_ += N.rim  # empty in centroid
+        if init==1 and N.rim:
+            if isinstance(N.L_, list): N.L_ += N.rim  # empty in centroid
+            else:                      N.L_ = copy(N.rim)  # convert from int to list
     else:
         C.N_,C.nH,C.lH, N.root = (list(N.N_),list(N.nH),list(N.lH), root if root else N.root)
         C.L_ = list(N.L_) if N.fi else N.L_
@@ -321,10 +323,10 @@ def min_comp(_N,N, rc):  # comp Et, baseT, extT, derTT
     if (np.any(_N.angl) and np.any(N.angl)) and (_N.mang and N.mang):
         mA,dA = comp_A(_N.angl, N.angl*rn)
         conf = _N.mang * (N.mang/rn)  # fractional
-        np.append(m_, mA*conf)  # only affects Et, no rot = 1 if dy * _dx - dx * _dy >= 0 else -1  # +1 CW, −1 CCW, ((1-cos_da)/2) * rot?
-        np.append(d_, dA*conf); np.append(t_, mA+abs(dA))
+        m_ = np.append(m_, mA*conf)  # only affects Et, no rot = 1 if dy * _dx - dx * _dy >= 0 else -1  # +1 CW, −1 CCW, ((1-cos_da)/2) * rot?
+        d_ = np.append(d_, dA*conf); t_ = np.append(t_, 1e-7 if mA+abs(dA) == 0 else mA+abs(dA))  # mA + abs(dA) may == 0 (we need to reassign with np.append)
     else:
-        m_=np.append(m_,0); d_=np.append(d_,0); t_=np.append(t_,0)
+        m_=np.append(m_,1e-7); d_=np.append(d_,1e-7); t_=np.append(t_,1e-7)
     # 3 x M,D,n,t, I,G,A, L,S,eA:
     (md_,dd_,td_), (M,D,_,T) = comp_derT(_N.derTT[1], N.derTT[1] * rn)  # no dir?
     DerTT = np.array([m_+md_, d_+dd_, t_+td_])
@@ -481,6 +483,7 @@ def cluster_C_(root, rc):  # form centroids by clustering exemplar surround via 
         _Ct_ = [[c, c.Et[0]/c.Et[2] if c.Et[0] !=0 else 1e-7, c.olp] for c in _C_]
         for _C,_m,_o in sorted(_Ct_, key=lambda t: t[1]/t[2], reverse=True):
             if _m > Ave*_o:
+                # C.L_ should be int or list? It it should be depends on their fd?
                 C = cent_attr( sum_N_(_C.N_, root=root, fC=1), rc); C.C_ = []  # C update lags behind N_; non-local C.olp += N.mo_ os?
                 _N_,_N__, mo_, M,O, dm,do = [],[],[],0,0,0,0  # per C
                 for n in _C._N_:  # core+ surround
@@ -615,7 +618,9 @@ def add_N(N,n, fmerge=0, fC=0):
     else:
         n.root=N; N.N_ += [n]
         if hasattr(N,"wTT"): N.L_ += n.L_  # for extend C, wTT is recomputed
-        else:                N.L_ += [l for l in n.rim if val_(l.Et)>0]
+        else:     
+            if not isinstance(N.L_, list): N.L_ = []  # if N is in int, convert it? Because it may copy the numeric L_ from the first node_[0]
+            N.L_ += [l for l in n.rim if val_(l.Et)>0]
     if n.altg_: add_sett(N.altg_,n.altg_)  # ext clusters
     if n.cent_: add_sett(N.cent_,n.cent_)  # int clusters
     if n.nH: add_NH(N.nH,n.nH, root=N)
