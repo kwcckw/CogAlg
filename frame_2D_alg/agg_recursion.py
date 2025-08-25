@@ -61,15 +61,15 @@ class CLay(CBase):  # layer of derivation hierarchy, subset of CG
             C = CLay(node_=copy(lay.node_), link_=copy(lay.link_))
         C.Et = copy(lay.Et)
         for fd, tt in enumerate(lay.derTT):  # nested array tuples
-            C.derTT[fd] += tt * -1 if (rev and fd) else deepcopy(tt)
+            C.derTT[fd] += tt * -1 if (rev and fd == 1) else deepcopy(tt)  # rev should be not relevant to t_? 
 
         if not i: return C
 
     def add_lay(Lay, lay, rev=0, rn=1):  # merge lays, including mlay + dlay
 
         # rev = dir==-1, to sum/subtract numericals in m_,d_
-        for fd, Fork_, fork_ in zip((0,1), Lay.derTT, lay.derTT):
-            Fork_ += (fork_ * -1 if (rev and fd) else fork_) * rn  # m_| d_
+        for fd, Fork_, fork_ in zip((0,1,0), Lay.derTT, lay.derTT):  # add t_
+            Fork_ += (fork_ * -1 if (rev and fd) else fork_) * rn  # m_| d_ | t_
         # concat node_,link_:
         Lay.node_ += [n for n in lay.node_ if n not in Lay.node_]
         Lay.link_ += lay.link_
@@ -90,7 +90,7 @@ def comp_derT(_i_, i_):  # all normalized diffs
     _a_, a_ = np.abs(_i_), np.abs(i_)
     d_ = _i_ - i_  # signed id s
     m_ = np.minimum(_a_,a_); m_[(_i_<0) != (i_<0)] *= -1  # m is negative if comparands have opposite sign
-    t_ = np.maximum.reduce([_a_,a_, np.full(10, eps)])  # or signed max?
+    t_ = np.maximum.reduce([_a_,a_, np.full(10, eps)])  # or signed max? (If we recompute t_ here, derTT[2], t_ is actually redundant?)
     return (np.array([m_, d_, t_]),  # derTT
             np.array([(m_/t_ +1)/2 @ wTTf[0], (d_/t_ +2)/4 @ wTTf[1], 10, t_ @ wTTf[0]]))  # Et: M, D, n=10, T
 
@@ -264,7 +264,8 @@ def comp_(iN_, rc):  # comp pairs of nodes or links within max_dist
         for _N, N in combinations(_N_, r=2):  # sort-> proximity-order ders?
             if _N in N.seen_ or len(_N.nH) != len(N.nH):  # | root.nH: comp top nodes only, or comp depth
                 continue
-            dy_dx = _N.yx-N.yx; dist = np.hypot(*dy_dx); olp = (N.olp+_N.olp) / 2
+            # It's possible to get a same average yx from links
+            dy_dx = np.maximum(_N.yx-N.yx, 1e-7); dist = max(np.hypot(*dy_dx), 1e-7); olp = (N.olp+_N.olp) / 2
             if {l for l in _N.rim if l.Et[0]>ave} & {l for l in N.rim if l.Et[0]>ave}:  # +ve rim
                 fcomp = 1  # connected by common match, which means prior bilateral proj eval
             else:
@@ -350,7 +351,7 @@ def comp(_pars, pars):  # raw inputs or derivatives, norm to 0:1 in eval only
             t_ += [max(_p,p,eps)]
             m_ += [(min(_p,p) if _p<0 == p<0 else -min(_p,p))]
             d_ += [_p - p]
-    return np.array(m_), np.array(d_), np.array(t_)
+    return np.array(m_), np.array(d_), np.abs(t_)  # so we can use abs t_ here
 
 def comp_A(_A,A):
 
@@ -602,7 +603,7 @@ def sum_N_(node_, root=None, fC=0):  # form cluster G
     for n in node_[1:]:
         add_N(G,n,0, fC)
     G.olp /= len(node_)
-    if not fC:
+    if not fC and G.fi:  # when G.fi == 0, L_ is just the length 
         for L in G.L_: G.Et += L.Et
     return G   # no rim
 
@@ -613,8 +614,8 @@ def add_N(N,n, fmerge=0, fC=0):
         N.L_ += n.L_  # no L.root assign
     else:
         n.root=N; N.N_ += [n]
-        if hasattr(N,"wTT"): N.L_ += n.L_  # for extend C, wTT is recomputed
-        else:                N.L_ += [l for l in n.rim if val_(l.Et)>0]
+        if hasattr(N,"wTT") or not N.fi: N.L_ += n.L_  # for extend C, wTT is recomputed (we need or not N.fi for lG?)
+        else:                            N.L_ += [l for l in n.rim if val_(l.Et)>0]
     if n.altg_: add_sett(N.altg_,n.altg_)  # ext clusters
     if n.cent_: add_sett(N.cent_,n.cent_)  # int clusters
     if n.nH: add_NH(N.nH,n.nH, root=N)
