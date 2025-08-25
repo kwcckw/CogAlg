@@ -191,12 +191,12 @@ def comp_vert(_i_,i_, rn, minn, dir=1):  # i_ is ds, dir may be -1, ~ comp_lay
 
     i_ = i_ * rn  # normalize by compared accum span
     _a_,a_ = np.abs(_i_), np.abs(i_)  # d_ s
-    d_ = (_i_- i_*dir)  # np.array d[I,G,A,M,D,L]
-    m_ = np.minimum(_a_,a_)
-    m_[(_i_<0) != (i_<0)] *= -1  # m is negative if comparands have opposite sign  # no np.where?
-    t_ = np.maximum.reduce([_a_,a_, np.full(6,1e-7)])  # or signed?  I, G, A, M, D, L
+    d_ = (_i_- i_*dir)  # dd_
+    m_ = np.minimum(_a_,a_); m_[(_i_<0) != (i_<0)] *= -1  # m is negative if comparands have opposite sign
+    t_ = np.maximum.reduce([_a_,a_, np.full(6,1e-7)])
+    # I, G, A, M, D, L
     return (np.array([m_,d_,t_]),
-            np.array([(m_/t_ +1)/2 @ w_t[0], (d_/t_ +1)/2 @ w_t[1], minn, t_@ w_t[0]]))  # Et
+            np.array([(m_/t_ +1)/2 @ w_t[0], (d_/t_ +2)/4 @ w_t[1], minn, t_@ w_t[0]]))  # Et
 
 def comp_latuple(_latuple, latuple, _n,n):  # 0der params, add dir?
 
