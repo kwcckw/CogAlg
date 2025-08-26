@@ -119,7 +119,7 @@ class CN(CBase):
         n.root  = kwargs.get('root', [])  # immediate only
         n.altg_ = kwargs.get('altg_',[])  # ext contour Gs, replace/combine rim?
         n.cent_ = kwargs.get('cent_',[])  # int centroid Gs, replace/combine N_?
-        n.C_    = kwargs.get('C_',set())  # root centroids
+        n.C_    = kwargs.get('C_', [])  # root centroids  (Should be list here?)
         n.fin = kwargs.get('fin',0)  # clustered, temporary
         n.exe = kwargs.get('exe',1)  # exemplar, temporary
         n.seen_ = set()
@@ -405,7 +405,7 @@ def Cluster(root, N_, rc):  # clustering root
     if isinstance(N_[0],CN): Nf_ = N_; N_ = [N_]; Et = root.Et  # nest N_ as rng-banded
     else:                    Nf_ = list(set([N for n_ in N_ for N in n_])); Et = None
     E_ = get_exemplars(Nf_,rc)
-    if val_(np.sum([g.Et for g in E_]), N_[0].fi, (len(E_)-1)*Lw, rc+centw, Et) > 0:
+    if val_(np.sum([g.Et for g in E_]), Nf_[0].fi, (len(E_)-1)*Lw, rc+centw, Et) > 0:
         cluster_C(E_, root, rc)  # any rng
     nG = []
     for rng, rN_ in enumerate(N_, start=1):  # bottom-up rng-banded clustering
@@ -477,7 +477,8 @@ def cluster_C(E_, root, rc):  # form centroids by clustering exemplar surround v
         C._N_ = [n for l in E.rim for n in l.N_ if n is not E]  # core members + surround -> comp_C
         _N_ += C._N_; _C_ += [C]
     # reset:
-    for n in set(root.root.N_+_N_ ): n.C_,n.mo_, n._C_,n._mo_ = [],[], [],[]  # aligned pairs, in cross_comp root
+    # should be root.N_ since N_ is root.N_ now
+    for n in set(root.N_+_N_ ): n.C_,n.mo_, n._C_,n._mo_ = [],[], [],[]  # aligned pairs, in cross_comp root
     # reform C_, refine C.N_s
     while True:
         C_, cnt,mat,olp, Dm,Do = [],0,0,0,0,0; Ave = ave * rc * loopw
@@ -508,13 +509,13 @@ def cluster_C(E_, root, rc):  # form centroids by clustering exemplar surround v
             else: break  # the rest is weaker
         if Dm > Ave * cnt * Do:  # dval vs. dolp, overlap increases as Cs may expand in each loop?
             _C_ = C_
-            for n in root.root.N_: n._C_ = n.C_; n._mo_= n.mo_; n.C_,n.mo_ = [],[]  # new n.C_s, combine with vo_ in Ct_?
+            for n in root.N_: n._C_ = n.C_; n._mo_= n.mo_; n.C_,n.mo_ = [],[]  # new n.C_s, combine with vo_ in Ct_?
         else:  # converged
             break
     if  C_:
         C_ = set(C_)
-        for C in C_:
-            for n in C.N_: n.exe = n.m * (C.M/ave) > ave  # draft, node is exemplar if it represents the cluster?
+        for n in [N for C in C_ for N in C.N_]:
+            n.exe = any([n.Et[0] * (C.M/ave) > ave for C in n.C_])  # draft, node is exemplar if it represents the cluster?
         root.cent_ = (C_, mat)
         # cross_comp, low overlap eval in comp_node_?
 
@@ -634,7 +635,7 @@ def add_N(N,n, fmerge=0, fC=0):
     N.yx = (N.yx*_en + n.yx*en) /(en+_en)
     N.span = max(N.span,n.span)
     N.box = extend_box(N.box, n.box)
-    if hasattr(n,'C_') and hasattr(N,'C_'):
+    if hasattr(n,'mo_') and hasattr(N,'mo_'):  # C_ is default params? So we need to check mo_
         N.C_ += n.C_; N.mo_ += n.mo_  # not sure
     return N
 
