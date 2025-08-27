@@ -401,16 +401,16 @@ def get_exemplars(N_, rc):  # get sparse nodes by multi-layer non-maximum suppre
 
 def Cluster(root, N_, rc):  # clustering root
 
-    if isinstance(N_[0],CN): Nf_ = N_; N_ = [N_]; Et = root.Et  # nest N_ as rng-banded
-    else:                    Nf_ = list(set([N for n_ in N_ for N in n_])); Et = None
+    # N_ is always nested now since we have a same comp_ for both forks
+    Nf_ = list(set([N for n_ in N_ for N in n_]))
 
     E_ = get_exemplars(Nf_,rc)  # from flattened N_
-    if val_(np.sum([g.Et for g in E_]), Nf_[0].fi, (len(E_)-1)*Lw, rc+centw, Et) > 0:
+    if val_(np.sum([g.Et for g in E_]), Nf_[0].fi, (len(E_)-1)*Lw, rc+centw,  np.sum([n.Et for n in Nf_], axis=0)) > 0:
         cluster_C(E_, root, rc)  # any rng
     nG = []
     for rng, rN_ in enumerate(N_, start=1):  # bottom-up rng-banded clustering
         aw = rc * rng +contw
-        Et = Et if Et is not None else np.sum([n.Et for n in rN_], axis=0)
+        Et = np.sum([n.Et for n in rN_], axis=0)
         if rN_ and val_(Et,1, (len(rN_)-1)*Lw, aw) > 0:
             nG = cluster(root, Nf_, rN_, aw, rng) or nG
     # top valid nG:
@@ -444,7 +444,7 @@ def cluster(root, iN_, rN_, rc, rng=1):  # flood-fill node | link clusters
             L_+=link_; _link_=link_; link_=[]; seen_=[]
             for L in _link_:  # buffer
                 for _N in L.N_:
-                    if _N not in iN_ or _N.fin: continue  # or always in iN_ now?
+                    if _N not in iN_ or _N.fin: continue  # or always in iN_ now? Nope, we eval the packing of rim and N_ differently in comp_, so N might be packed in rim, but not N_
                     if rng==1 or (not _N.root or _N.root.rng==1):  # not rng-banded
                         N_ += [_N]; cent_ += N.C_; _N.fin = 1
                         for l in N.rim:
@@ -489,7 +489,7 @@ def cluster_C(E_, root, rc):  # form centroids by clustering exemplar surround v
                 _N_,_N__, mo_, M,O, dm,do = [],[],[],0,0,0,0  # per C
                 for n in _C._N_:  # core+ surround
                     if C in n.C_: continue
-                    m = min_comp(C,n, rc)[1][0]  # val,olp / C:
+                    m = min_comp(C,n)[1][0]  # val,olp / C:
                     o = np.sum([mo[0] /m for mo in n._mo_ if mo[0]>m])  # overlap = higher-C inclusion vals / current C val
                     cnt += 1  # count comps per loop
                     if m > Ave * o:
@@ -517,6 +517,7 @@ def cluster_C(E_, root, rc):  # form centroids by clustering exemplar surround v
         C_ = set(C_)
         for n in [N for C in C_ for N in C.N_]:
             # exemplar V increased by summed n match to root C * rel C Match:
+            # we probably need to set different weight for et and m from centroid? Because high et and 0 m from centroid will be still selected as exemplar
             n.exe = n.et[1-n.fi] + np.sum([n.mo_[i][0] * (C.M/(ave * n.mo_[i][0])) for i,C in enumerate(n.C_)]) > ave
         # cross_comp(C_)?
         root.cent_ = (C_, mat)
