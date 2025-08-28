@@ -55,7 +55,7 @@ class CLay(CBase):  # layer of derivation hierarchy, subset of CG
 
     def copy_(lay, rev=0, i=None):  # comp direction may be reversed to -1, currently not used
         if i:  # reuse self
-            C = lay; lay = i; C.node_=copy(i.node_); C.link_ = copy(i.link_); C.derTT=np.zeros((3,10))
+            C = lay; lay = i; C.node_=copy(i.node_); C.link_ = copy(i.link_); C.derTT=np.zeros((3,9))
         else:  # init new C
             C = CLay(node_=copy(lay.node_), link_=copy(lay.link_))
         C.Et = copy(lay.Et)
@@ -135,7 +135,7 @@ def Copy_(N, root=None, init=0):
 ave, avd, arn, aI, aS, aveB, aveR, Lw, intw, loopw, centw, contw = 10, 10, 1.2, 100, 5, 100, 3, 5, 2, 5, 10, 15  # value filters + weights
 adist, amed, distw, medw = 10, 3, 2, 2  # cost filters + weights, add alen?
 wM, wD, wN, wO, wG, wL, wI, wS, wa, wA = 10, 10, 20, 10, 20, 5, 20, 2, 1, 1  # der params higher-scope weights = reversed relative estimated ave?
-mW = dW = 10; wTTf = np.ones((2,10))  # fb weights per derTT, adjust in agg+
+mW = dW = 10; wTTf = np.ones((2,9))  # fb weights per derTT, adjust in agg+
 wY = wX = 64; wYX = np.hypot(wY,wX)  # focus dimensions
 '''
 initial PP_ cross_comp and connectivity clustering to initialize focal frame graph, no recursion:
@@ -317,8 +317,8 @@ def min_comp(_N,N):  # comp Et, baseT, extT, derTT
         '''
     else: mA,dA,conf = 0,0,0
     # M,D,n, I,G,A, L,S,eA:
-    m_, d_ = comp(_pars,pars, [mA, dA, conf])
-    (md_,dd_), (M,D) = comp_derT(_N.derTT[1], N.derTT[1] * rn,)  # else no impact
+    m_, d_ = comp(_pars,pars, mA, dA, conf)
+    (md_,dd_), (M,D) = comp_derT(_N.derTT[1], N.derTT[1] * rn, [mA, dA, conf])  # else no impact
     m_+= md_; d_+= dd_
     DerTT = np.array([m_,d_])
     Et = np.array([m_@wTTf[0] +M, d_@wTTf[1] +D, min(_n,n)])  # include prior M,D, n: shared scope?
@@ -330,13 +330,16 @@ def comp_derT(_i_, i_, ext_At):  # diffs if angles
     align = mA * conf if conf else 1
     d_ = _i_ - i_  # signed id s, or abs / mA to incr?
     m_ = np.minimum(np.abs(_i_), np.abs(i_)) * align  # in 0:1
-    d_ = np.append(d_,dA)
-    m_ = np.append(m_,mA)
+    # d_ = np.append(d_,dA)
+    # m_ = np.append(m_,mA)
+    d_[-1] = dA  # derTT[1] should have all 9 params? so this should replace the existing extA?
+    m_[-1] = mA
     return (np.array([m_, d_]),  # derTT
             np.array([m_@ wTTf[0], d_@ wTTf[1]]))  # Et: M, D
 
 def comp(_pars, pars, meA, deA, conf):  # raw inputs or derivatives, norm to 0:1 in eval only
 
+    # align angle?
     align = meA * conf if conf else 1  # reduce m by valid ext A divergence?
     m_,d_ = [],[]
     for _p, p in zip(_pars, pars):
@@ -577,7 +580,7 @@ def slope(link_):  # get ave 2nd rate of change with distance in cluster or fram
 
 def comp_H(H,h, rn, ET=None, DerTT=None, root=None):  # one-fork derH
 
-    derH, derTT, Et = [], np.zeros((3,10)), np.zeros(4)
+    derH, derTT, Et = [], np.zeros((3,9)), np.zeros(4)
     for _lay, lay in zip_longest(H,h):  # selective
         if _lay and lay:
             dlay = _lay.comp_lay(lay, rn, root=root)
@@ -656,8 +659,8 @@ def PP2N(PP, frame):
     baseT = np.array(latT[:4])
     [mM,mD,mI,mG,mA,mL], [dM,dD,dI,dG,dA,dL], [tM,tD,tI,tG,tA,tL] = verT  # re-pack in derTT:
     derTT = np.array([
-        np.array([mM,mD,mL,mM+abs(mD), mI,mG,mA, mL,mL/2, eps]),  # 0 extA
-        np.array([dM,dD,dL,dM+abs(dD), dI,dG,dA, dL,dL/2, eps]) ])
+        np.array([mM,mD,mL, mI,mG,mA, mL,mL/2, eps]),  # 0 extA (t is removed)
+        np.array([dM,dD,dL, dI,dG,dA, dL,dL/2, eps]) ])
     derH = [CLay(node_=P_,link_=link_, derTT=deepcopy(derTT))]
     y,x,Y,X = box; dy,dx = Y-y,X-x
 

@@ -86,14 +86,14 @@ def comp_slice(edge, rV=1, ww_t=None):  # root function
 
 def form_PP_(iP_, fd):  # form PPs of dP.valt[fd] + connected Ps val
 
-    PPt_ = []; ET = np.full(4,1e-7); VerT = np.full((3,6),1e-7)
+    PPt_ = []; ET = np.full(3,1e-7); VerT = np.full((3,6),1e-7)
 
     for P in iP_: P.merged = 0
     for P in iP_:  # dP from link_ if fd
         if P.merged: continue
         _prim_ = P.prim; _lrim_ = P.lrim
         if fd: Et = P.Et  # summed verT, min L in dP
-        else:  I,G,Dy,Dx,M,D,L = P.latuple; Et = np.array([M, G+abs(D), L, I])
+        else:  I,G,Dy,Dx,M,D,L = P.latuple; Et = np.array([M, G+abs(D), L])  # revert and remove T
         _P_ = {P}; link_ = set()
         verT = np.full((3,6),1e-7)
         while _prim_:
@@ -104,7 +104,7 @@ def form_PP_(iP_, fd):  # form PPs of dP.valt[fd] + connected Ps val
                 _P_.add(_P); link_.add(_link)
                 verT += _link.verT
                 if fd: _Et = _P.Et
-                else: _I,_G,_Dy,_Dx,_M,_D,_L = _P.latuple; _Et = np.array([_M,_G+abs(_D),_L,_I])
+                else: _I,_G,_Dy,_Dx,_M,_D,_L = _P.latuple; _Et = np.array([_M,_G+abs(_D),_L])
                 Et += _Et  # intra-P similarity and variance
                 prim_.update(set(_P.prim) - _P_)
                 lrim_.update(set(_P.lrim) - link_)
@@ -131,11 +131,11 @@ def comp_P_(edge):  # form links from prelinks
 
 def comp_dP_(edge, mEt):  # node_- mediated: comp node.rim dPs, call from form_PP_
 
-    M,_,n,_ = mEt
+    M,_,n = mEt
     rM = M/n / ave  # dP D borrows from normalized PP M
     for _dP in edge.dP_: _dP.prim = []; _dP.lrim = []
     for _dP in edge.dP_:
-        _,D,_n,_ = _dP.Et
+        _,D,_n = _dP.Et
         if D/_n * rM > avd:
             _P, P = _dP.nodet  # _P is lower
             rn = n/_n; minn = min(_n,n)
@@ -208,7 +208,7 @@ def comp_latuple(_latuple, latuple, _n,n):  # 0der params, add dir?
     pars[2] = [pars[2],aI]  # no avd*rn: d/=t
     m_,d_,t_ = comp(_pars,pars)
     return (np.array([m_,d_,t_]),  # verT
-            np.array([(m_/t_ +1)/2 @ w_t[0], (d_/t_ +1)/2 @ w_t[1], min(L,_L), t_@ w_t[0]]))  # Et
+            np.array([(m_/t_ +1)/2 @ w_t[0], (d_/t_ +1)/2 @ w_t[1], min(L,_L)]))  # Et
 
 def comp(_pars, pars):  # raw inputs or derivatives, norm to 0:1 in eval only
 
