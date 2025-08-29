@@ -135,7 +135,7 @@ def Copy_(N, root=None, init=0):
 ave, avd, arn, aI, aS, aveB, aveR, Lw, intw, loopw, centw, contw = 10, 10, 1.2, 100, 5, 100, 3, 5, 2, 5, 10, 15  # value filters + weights
 adist, amed, distw, medw = 10, 3, 2, 2  # cost filters + weights, add alen?
 wM, wD, wN, wO, wG, wL, wI, wS, wa, wA = 10, 10, 20, 10, 20, 5, 20, 2, 1, 1  # der params higher-scope weights = reversed relative estimated ave?
-mW = dW = 10; wTTf = np.ones((2,9))  # fb weights per derTT, adjust in agg+
+mW = dW = 9; wTTf = np.ones((2,9))  # fb weights per derTT, adjust in agg+
 wY = wX = 64; wYX = np.hypot(wY,wX)  # focus dimensions
 '''
 initial PP_ cross_comp and connectivity clustering to initialize focal frame graph, no recursion:
@@ -224,7 +224,7 @@ def comb_altg_(nG, lG, rc):  # cross_comp contour/background per node:
             aG = CN(N_=altl_, Et=Et)
             if val_(Et,0,(len(altl_)-1)*Lw, rc+Rdn+loopw) > 0:  # norm by core_ rdn
                 aG = cross_comp(aG, rc) or aG
-            Ng.altg_ = (aG.N_,aG.Et)
+            Ng.altg_ = (set(aG.N_),aG.Et)
 
 def proj_V(_N, N, angle, dist, fC=0):  # estimate cross-induction between N and _N before comp
 
@@ -333,7 +333,7 @@ def comp(_pars, pars, meA=0, deA=0):  # raw inputs or derivatives, norm to 0:1 i
         if isinstance(_p, np.ndarray):
             mA, dA = comp_A(_p, p)
             m_ += [mA]; d_ += [dA]
-        elif isinstance(p, list):  # massless I|S avd in p only
+        elif isinstance(p, tuple):  # massless I|S avd in p only (should be tuple now)
             p, avd = p
             d = _p - p; ad = abs(d)
             m_ += [avd-ad]  # +|- or avd / (avd+ad)?
@@ -395,7 +395,7 @@ def Cluster(root, N_, rc):  # clustering root
 
     F_ = list(set([N for n_ in N_ for N in n_]))  # flat N_
     E_ = get_exemplars(F_,rc)
-    if val_(np.sum([g.Et for g in E_]), F_[0].fi, (len(E_)-1)*Lw, rc+centw, root.Et) > 0:
+    if E_ and val_(np.sum([g.Et for g in E_],axis=0), F_[0].fi, (len(E_)-1)*Lw, rc+centw, root.Et) > 0:  # skip if E_ is empty ,else np.sum return a 0, which gets error in val_
         cluster_C(E_, root, rc)  # any rng, eval root Et instead?
     nG = []
     for rng, rN_ in enumerate(N_, start=1):  # bottom-up rng-banded clustering
@@ -513,6 +513,7 @@ def cluster_C(E_, root, rc):  # form centroids by clustering exemplar surround v
 def cent_attr(C, rc):  # weight attr matches | diffs by their match to the sum, recompute to convergence
 
     wTT = []  # Cs can be fuzzy only to the extent that their correlation weights are different?
+    # t_ is removed from derTT now?
     t_ = C.derTT[0] + np.abs(C.derTT[1])  # m_* align, d_* 2-align for comp only?
 
     for fd, derT, wT in zip((0,1), C.derTT, wTTf):
@@ -615,7 +616,7 @@ def add_N(N,n, fmerge=0, fC=0):
         n.root=N; N.N_ += [n]
         if not fC: N.L_ += [l for l in n.rim if l.Et[0]>ave] if n.fi else n.L_  # len
     if n.altg_: add_sett(N.altg_,n.altg_)  # ext clusters
-    if n.cent_: add_sett(N.cent_,n.cent_)  # int clusters
+    if n.cent_: N.cent_.update(n.cent_)  # int clusters  (cent is just a set now)
     if n.nH: add_NH(N.nH,n.nH, root=N)
     if n.lH: add_NH(N.lH,n.lH, root=N)
     en,_en = n.Et[2],N.Et[2]; rn = en/_en
