@@ -79,8 +79,8 @@ class CLay(CBase):  # layer of derivation hierarchy, subset of CG
     def comp_lay(_lay, lay, rn, root):  # unpack derH trees down to numericals and compare them
 
         derTT = comp_derT(_lay.derTT[1], lay.derTT[1] * rn)  # ext A align replaced dir/rev
-        Et = np.array([derTT[0] @ wTTf[0], derTT[1] @ wTTf[1]])
-        if root: root.Et[:2] += Et  # no separate n
+        Et = np.array([derTT[0] @ wTTf[0], derTT[1] @ wTTf[1], len(derTT[0])])  # we need to add n here? Because lay should have their n too
+        if root: root.Et[:2] += Et[:2]  # no separate n
         node_ = list(set(_lay.node_+ lay.node_))  # concat, or redundant to nodet?
         link_ = _lay.link_ + lay.link_
         return CLay(Et=Et, olp=(_lay.olp+lay.olp*rn)/2, node_=node_, link_=link_, derTT=derTT)
@@ -291,6 +291,7 @@ def comp_N(_N,N, o,rc, L_=None, angl=np.zeros(2), span=None, fdeep=0, rng=1):  #
         if fi:
             _N_,N_ = (_N.cent_,N.cent_) if (_N.cent_ and N.cent_) else (_N.N_,N.N_)  # or both? no rim,altg_ in top nodes
             if isinstance(N_[0],CN) and isinstance(_N_[0],CN):  # not PP
+                # Link.L_ is always a int now, so we need to pack it into Ns or just increment the L_?
                 spec(_N_,N_,o,rc,Et, Link.L_)  # use L_ for dspe?
     if fdeep==2: return Link  # or Et?
     if L_ is not None:
@@ -307,12 +308,13 @@ def min_comp(_N,N):  # comp Et, baseT, extT, derTT
     _pars = np.array([_M,_D,_n,_I,_G, np.array([_Dy,_Dx]),_L,_N.span], dtype=object)  # Et, baseT, extT
     pars = np.array([M,D,n, (I,aI),G, np.array([Dy,Dx]), L,(N.span,aS)], dtype=object)
     rn = _n/n
-    if fi: mA = dA = 0 # skip for now:
-       # if np.hypot(*_N.angl)*_N.mang + np.hypot(*N.angl)*N.mang > ave* wA:  # aligned L_'As, mang *= (len_nH)+fi+1
-       # mang = (rn*_N.mang + N.mang) / (1 + rn)  # ave, weight each side by rn
-       # align = 1 - mang* (1-mA)  # in 0:1, if Ns are aligned and oriented
-    else:
-        mA, dA = comp_A(rn*_N.angl, N.angl)  # single L
+    
+    # skip for now:
+    # if np.hypot(*_N.angl)*_N.mang + np.hypot(*N.angl)*N.mang > ave* wA:  # aligned L_'As, mang *= (len_nH)+fi+1
+    # mang = (rn*_N.mang + N.mang) / (1 + rn)  # ave, weight each side by rn
+    # align = 1 - mang* (1-mA)  # in 0:1, if Ns are aligned and oriented
+
+    mA, dA = comp_A(rn*_N.angl, N.angl)  # single L
     m_, d_ = comp(rn*_pars,pars, mA,dA)  # -> M,D,n, I,G,A, L,S,eA
     md_,dd_ = comp_derT(rn*_N.derTT[1], N.derTT[1])
     m_+= md_; d_+= dd_
@@ -360,7 +362,7 @@ def spec(_spe,spe, o,rc, Et, dspe=None, fdeep=0):  # for N_|cent_ | altg_
         for N in spe:
             if _N is not N:
                 dN = comp_N(_N, N, o,rc, fdeep=2); Et += dN.Et  # may be d=cent_?
-                if dspe is not None: dspe += [dN]
+                if dspe is not None: dspe += 1  # [dN]
                 if fdeep:
                     for L,l in [(L,l) for L in _N.rim for l in N.rim]:  # l nested in L
                         if L is l: Et += l.Et  # overlap val
@@ -515,6 +517,7 @@ def cluster_C(E_, root, rc):  # form centroids by clustering exemplar surround v
 def cent_attr(C, rc):  # weight attr matches | diffs by their match to the sum, recompute to convergence
 
     wTT = []  # Cs can be fuzzy only to the extent that their correlation weights are different?
+    # when we accumulating derTT, they may cancel out each other, so the resulting derT/t_ may not be in range of 0 - 1
     t_ = C.derTT[0] + np.abs(C.derTT[1])  # m_* align, d_* 2-align for comp only?
 
     for fd, derT, wT in zip((0,1), C.derTT, wTTf):
@@ -571,7 +574,7 @@ def slope(link_):  # get ave 2nd rate of change with distance in cluster or fram
 
 def comp_H(H,h, rn, ET=None, DerTT=None, root=None):  # one-fork derH
 
-    derH, derTT, Et = [], np.zeros((3,9)), np.zeros(4)
+    derH, derTT, Et = [], np.zeros((2,9)), np.zeros(3)
     for _lay, lay in zip_longest(H,h):  # selective
         if _lay and lay:
             dlay = _lay.comp_lay(lay, rn, root=root)
