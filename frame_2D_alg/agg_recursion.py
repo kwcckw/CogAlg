@@ -44,7 +44,7 @@ class CLay(CBase):  # layer of derivation hierarchy, subset of CG
     name = "lay"
     def __init__(l, **kwargs):
         super().__init__()
-        l.Et = kwargs.get('Et', np.zeros(3))
+        l.Et = kwargs.get('Et', np.zeros(2))
         l.olp = kwargs.get('olp', 1)  # ave nodet overlap
         l.node_ = kwargs.get('node_', [])  # concat across fork tree
         l.link_ = kwargs.get('link_', [])
@@ -79,8 +79,8 @@ class CLay(CBase):  # layer of derivation hierarchy, subset of CG
     def comp_lay(_lay, lay, rn, root):  # unpack derH trees down to numericals and compare them
 
         derTT = comp_derT(_lay.derTT[1], lay.derTT[1] * rn)  # ext A align replaced dir/rev
-        Et = np.array([derTT[0] @ wTTf[0], derTT[1] @ wTTf[1], len(derTT[0])])  # we need to add n here? Because lay should have their n too
-        if root: root.Et[:2] += Et[:2]  # no separate n
+        Et = np.array([derTT[0] @ wTTf[0], derTT[1] @ wTTf[1]])
+        if root: root.Et[:2] += Et  # no separate n
         node_ = list(set(_lay.node_+ lay.node_))  # concat, or redundant to nodet?
         link_ = _lay.link_ + lay.link_
         return CLay(Et=Et, olp=(_lay.olp+lay.olp*rn)/2, node_=node_, link_=link_, derTT=derTT)
@@ -178,7 +178,7 @@ def val_(Et, fi=1, mw=1, aw=1, _Et=np.zeros(3)):  # m,d eval per cluster or cros
 - Connectivity-cluster select exemplars/centroids by >ave match links, correlation-cluster links by >ave diff.
 - Form complemented (core+contour) clusters for recursive higher-composition cross_comp. 
 
-- Forward: extend cross-comp and clustering of top clusters across frames, may reorder them by eigenvalues.
+- Forward: extend cross-comp and clustering of top clusters across frames, re-order centroids by eigenvalues.
 - Feedback coords to bottom level or prior-level in parallel pipelines, filter updates in more coarse cycles '''
 
 def cross_comp(root, rc):  # rng+ and der+ cross-comp and clustering
@@ -280,7 +280,7 @@ def comp_Q(iN_, rc):  # comp pairs of nodes or links within max_dist
 def comp_N(_N,N, o,rc, L_=None, angl=np.zeros(2), span=None, fdeep=0, rng=1):  # compare links, optional angl,span,dang?
 
     derTT, Et, rn = min_comp(_N,N)  # -1 if _rev else 1, d = -d if L is reversed relative to _L, obsoleted by angle?
-    baseT = (_N.baseT+ N.baseT*rn) /2  # not derived
+    baseT = (rn*_N.baseT+ N.baseT) /2  # not derived
     yx = np.add(_N.yx,N.yx) /2; _y,_x = _N.yx; y,x = N.yx; box = np.array([min(_y,y),min(_x,x),max(_y,y),max(_x,x)])  # primary ext attrs
     fi = N.fi
     Link = CN(Et=Et,olp=o, N_=[_N,N], L_=len(_N.N_+N.N_), et=_N.et+N.et, baseT=baseT,derTT=derTT, yx=yx,box=box, span=span,angl=angl, rng=rng, fi=0)
@@ -291,7 +291,6 @@ def comp_N(_N,N, o,rc, L_=None, angl=np.zeros(2), span=None, fdeep=0, rng=1):  #
         if fi:
             _N_,N_ = (_N.cent_,N.cent_) if (_N.cent_ and N.cent_) else (_N.N_,N.N_)  # or both? no rim,altg_ in top nodes
             if isinstance(N_[0],CN) and isinstance(_N_[0],CN):  # not PP
-                # Link.L_ is always a int now, so we need to pack it into Ns or just increment the L_?
                 spec(_N_,N_,o,rc,Et, Link.L_)  # use L_ for dspe?
     if fdeep==2: return Link  # or Et?
     if L_ is not None:
@@ -308,25 +307,21 @@ def min_comp(_N,N):  # comp Et, baseT, extT, derTT
     _pars = np.array([_M,_D,_n,_I,_G, np.array([_Dy,_Dx]),_L,_N.span], dtype=object)  # Et, baseT, extT
     pars = np.array([M,D,n, (I,aI),G, np.array([Dy,Dx]), L,(N.span,aS)], dtype=object)
     rn = _n/n
-    
-    # skip for now:
-    # if np.hypot(*_N.angl)*_N.mang + np.hypot(*N.angl)*N.mang > ave* wA:  # aligned L_'As, mang *= (len_nH)+fi+1
-    # mang = (rn*_N.mang + N.mang) / (1 + rn)  # ave, weight each side by rn
-    # align = 1 - mang* (1-mA)  # in 0:1, if Ns are aligned and oriented
-
-    mA, dA = comp_A(rn*_N.angl, N.angl)  # single L
+    mA, dA = comp_A(rn*_N.angl, N.angl)
     m_, d_ = comp(rn*_pars,pars, mA,dA)  # -> M,D,n, I,G,A, L,S,eA
-    md_,dd_ = comp_derT(rn*_N.derTT[1], N.derTT[1])
+    md_,dd_= comp_derT(rn*_N.derTT[1], N.derTT[1])
     m_+= md_; d_+= dd_
     DerTT = np.array([m_,d_])
-    mAm, mAd = (1, 1) if fi else (mA, 2-mA)
-    Et = np.array([m_* mAm @ wTTf[0], d_* mAd @ wTTf[1], min(_n,n)])  # n: shared scope?
+    Et = np.array([m_* (1,mA)[fi] @ wTTf[0], d_* (1,2-mA)[fi] @ wTTf[1], min(_n,n)])  # n: shared scope?
+    '''
+    if np.hypot(*_N.angl)*_N.mang + np.hypot(*N.angl)*N.mang > ave*wA:  # aligned L_'As, mang *= (len_nH)+fi+1
+    mang = (rn*_N.mang + N.mang) / (1+rn)  # ave, weight each side by rn
+    align = 1 - mang* (1-mA)  # in 0:1, weigh mA '''
     return DerTT, Et, rn
 
-def comp_derT(_i_, i_):  # m ext A
-
+def comp_derT(_i_,i_):
     m_ = np.minimum(np.abs(_i_), np.abs(i_))  # native vals
-    d_ = _i_ - i_  # next comp, from signed _i_,i_
+    d_ = _i_ - i_  # for next comp, from signed _i_,i_
     return np.array([m_,d_])
 
 def comp(_pars, pars, meA=0, deA=0):  # raw inputs or derivatives, norm to 0:1 in eval only
@@ -348,13 +343,14 @@ def comp(_pars, pars, meA=0, deA=0):  # raw inputs or derivatives, norm to 0:1 i
     return np.array(m_+[meA]), np.array(d_+[deA])
 
 def comp_A(_A,A):
-    # or den = np.hypot(*_A) * np.hypot(*A) + eps,
-    # mA = (_A @ A / den +1) / 2  # cos_da in 0:1, no rot = 1 if dy * _dx - dx * _dy >= 0 else -1  # +1 CW, −1 CCW, ((1-cos_da)/2) * rot?
 
     dA = atan2(*_A) - atan2(*A)
     if   dA > pi: dA -= 2 * pi  # rotate CW
     elif dA <-pi: dA += 2 * pi  # rotate CCW
-
+    '''  or 
+    den = np.hypot(*_A) * np.hypot(*A) + eps
+    mA = (_A @ A / den +1) / 2  # cos_da in 0:1, no rot = 1 if dy * _dx - dx * _dy >= 0 else -1  # +1 CW, −1 CCW, ((1-cos_da)/2) * rot?
+    '''
     return (cos(dA)+1) /2, dA/pi  # mA in 0:1, dA in -1:1
 
 def spec(_spe,spe, o,rc, Et, dspe=None, fdeep=0):  # for N_|cent_ | altg_
@@ -362,7 +358,7 @@ def spec(_spe,spe, o,rc, Et, dspe=None, fdeep=0):  # for N_|cent_ | altg_
         for N in spe:
             if _N is not N:
                 dN = comp_N(_N, N, o,rc, fdeep=2); Et += dN.Et  # may be d=cent_?
-                if dspe is not None: dspe += 1  # [dN]
+                if dspe is not None: dspe += [dN]
                 if fdeep:
                     for L,l in [(L,l) for L in _N.rim for l in N.rim]:  # l nested in L
                         if L is l: Et += l.Et  # overlap val
@@ -510,14 +506,20 @@ def cluster_C(E_, root, rc):  # form centroids by clustering exemplar surround v
         for n in [N for C in C_ for N in C.N_]:
             # exemplar V increased by summed n match to root C * rel C Match:
             n.exe = n.et[1-n.fi] + np.sum([n.mo_[i][0] * (C.M/(ave * n.mo_[i][0])) for i,C in enumerate(n.C_)]) > ave
-        # global cross_comp(C_):
-        # comp wTT, min_comp, merge if match, else spectral clustering by diff?
+        if mat > ave:
+            xcomp_C_(C_, root)
         root.cent_ = (C_, mat)
+
+def xcomp_C_(C_, root):  # draft
+    # dC_ = comp_C_: global comp wTT, min_comp, merge if match, else spectral clustering:
+    # ddC_= comp_dC_: sort remaining dCs by comb_D, compare along that new dimension, spatial distances don't matter
+    # dCH = cluster_dC_: similar to cluster(1-fi)?
+    # root.cent_ = CN(N_=C_, L_=dC_, nH=[], lH=dCH, etc?)
+    pass
 
 def cent_attr(C, rc):  # weight attr matches | diffs by their match to the sum, recompute to convergence
 
     wTT = []  # Cs can be fuzzy only to the extent that their correlation weights are different?
-    # when we accumulating derTT, they may cancel out each other, so the resulting derT/t_ may not be in range of 0 - 1
     t_ = C.derTT[0] + np.abs(C.derTT[1])  # m_* align, d_* 2-align for comp only?
 
     for fd, derT, wT in zip((0,1), C.derTT, wTTf):
