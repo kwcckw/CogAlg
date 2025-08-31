@@ -55,7 +55,7 @@ class CLay(CBase):  # layer of derivation hierarchy, subset of CG
 
     def copy_(lay, rev=0, i=None):  # comp direction may be reversed to -1, currently not used
         if i:  # reuse self
-            C = lay; lay = i; C.node_=copy(i.node_); C.link_ = copy(i.link_); C.derTT=np.zeros((3,9))
+            C = lay; lay = i; C.node_=copy(i.node_); C.link_ = copy(i.link_); C.derTT=np.zeros((2,9))
         else:  # init new C
             C = CLay(node_=copy(lay.node_), link_=copy(lay.link_))
         C.Et = copy(lay.Et)
@@ -284,7 +284,7 @@ def comp_N(_N,N, o,rc, L_=None, angl=np.zeros(2), span=None, fdeep=0, rng=1):  #
     yx = np.add(_N.yx,N.yx) /2; _y,_x = _N.yx; y,x = N.yx; box = np.array([min(_y,y),min(_x,x),max(_y,y),max(_x,x)])  # primary ext attrs
     fi = N.fi
     Link = CN(Et=Et,olp=o, N_=[_N,N], L_=len(_N.N_+N.N_), et=_N.et+N.et, baseT=baseT,derTT=derTT, yx=yx,box=box, span=span,angl=angl, rng=rng, fi=0)
-    Link.derH = [CLay(Et=copy(Et), node_=[_N,N],link_=[Link],derTT=copy(derTT), root=Link)]
+    Link.derH = [CLay(Et=Et[:2], node_=[_N,N],link_=[Link],derTT=copy(derTT), root=Link)]
     if fdeep:
         if val_(Et,1, len(N.derH)-2, o+rc) > 0 or fi==0:  # else derH is dext,vert
             Link.derH += comp_H(_N.derH,N.derH, rn, Et, derTT, Link)  # append
@@ -499,6 +499,7 @@ def cluster_C(E_, root, rc):  # form centroids by clustering exemplar surround v
         if Dm > Ave * cnt * Do:  # dval vs. dolp, overlap increases as Cs may expand in each loop?
             _C_ = C_
             for n in root.N_: n._C_=n.C_; n._mo_=n.mo_; n.C_,n.mo_ = [],[]  # new n.C_s, combine with vo_ in Ct_?
+            break
         else:  # converged
             break
     if  C_:
@@ -507,15 +508,52 @@ def cluster_C(E_, root, rc):  # form centroids by clustering exemplar surround v
             # exemplar V increased by summed n match to root C * rel C Match:
             n.exe = n.et[1-n.fi] + np.sum([n.mo_[i][0] * (C.M/(ave * n.mo_[i][0])) for i,C in enumerate(n.C_)]) > ave
         if mat > ave:
-            xcomp_C_(C_, root)
+            xcomp_C_(C_, root, rc)
         root.cent_ = (C_, mat)
 
-def xcomp_C_(C_, root):  # draft
-    # dC_ = comp_C_: global comp wTT, min_comp, merge if match, else spectral clustering:
-    # ddC_= comp_dC_: sort remaining dCs by comb_D, compare along that new dimension, spatial distances don't matter
-    # dCH = cluster_dC_: similar to cluster(1-fi)?
-    # root.cent_ = CN(N_=C_, L_=dC_, nH=[], lH=dCH, etc?)
-    pass
+def xcomp_C_(C_, root, rc):  # draft
+
+    # same as min_comp, except no range
+    def comp_C_(C_):
+        
+        dC_ = []
+        for _C, C in combinations(C_, r=2):  # sort-> proximity-order ders?
+            dy_dx = _C.yx-C.yx; dist = np.hypot(*dy_dx); olp = (C.olp +_C.olp) / 2
+            if {l for l in _C.rim if l.Et[0]>ave} & {l for l in C.rim if l.Et[0]>ave}:  # +ve rim
+                fcomp = 1  # connected by common match, which means prior bilateral proj eval
+            else:
+                V = proj_V(_C,C, dy_dx, dist)  # eval _N,N cross-induction for comp
+                fcomp = adist * V/olp > dist  # min induction
+            if fcomp:
+                link = comp_N(_C, C, olp, rc, L_=[], angl=dy_dx, span=dist, rng=1)
+                if val_(link.Et, aw=rc+loopw+olp) > 0: 
+                    dC = sum_N_([_C, C], root=root)  # merge if match?
+                    dC_ += [dC]  
+        return dC_
+    
+    # eval with D instead of dist?
+    def comp_dC_(dC_):
+        
+        dC_ =  sorted(dC_, key=lambda C: C.Et[1], reverse=True)  # sort by highest D first
+        
+        ddC_ = []
+        for _dC, dC in combinations(dC_, r=2):  
+            
+            if _dC.Et[1] + dC.Et[1] > ave:  # using combined D, not sure
+                dy_dx = _dC.yx-dC.yx; dist = np.hypot(*dy_dx); olp = (dC.olp +_dC.olp) / 2
+                
+                link = comp_N(_dC, dC, olp, rc, L_=[], angl=dy_dx, span=dist, rng=1)
+                
+                for dc in _dC, dC:
+                    if val_(dc.et, aw=rc+loopw+olp) > 0 and dc not in ddC_: 
+                        ddC_ += [dc]
+        return ddC_
+
+    dC_ = comp_C_(C_)  # global comp wTT, min_comp, merge if match, else spectral clustering:
+    ddC_= comp_dC_(dC_)  # : sort remaining dCs by comb_D, compare along that new dimension, spatial distances don't matter
+    dCH = cluster(root, ddC_, ddC_, rc, rng=1) # similar to cluster(1-fi)?
+    root.cent_ = CN(N_=C_, L_=dC_, nH=[], lH=dCH)
+
 
 def cent_attr(C, rc):  # weight attr matches | diffs by their match to the sum, recompute to convergence
 
@@ -594,7 +632,7 @@ def add_H(H, h, root=0, rn=1, rev=0):  #  layer-wise add|append derH
         if lay:
             if Lay: Lay.add_lay(lay, rn)
             else:   H += [lay.copy_(rev)]  # * rn?
-            if root: root.derTT += lay.derTT*rn; root.Et += lay.Et*rn
+            if root: root.derTT += lay.derTT*rn; root.Et[:2] += lay.Et*rn
     return H
 
 def add_sett(Sett,sett):
@@ -657,7 +695,7 @@ def PP2N(PP, frame):
     derTT = np.array([
         np.array([mM,mD,mL, mI,mG,mA, mL,mL/2, eps]), # extA=eps
         np.array([dM,dD,dL, dI,dG,dA, dL,dL/2, eps]) ])
-    derH = [CLay(node_=P_,link_=link_, derTT=deepcopy(derTT))]
+    derH = [CLay(node_=P_,link_=link_, derTT=deepcopy(derTT),Et=np.array([sum(derTT[0]),sum(derTT[1])]))]  # we need to sum derTT into Et in lay?
     y,x,Y,X = box; dy,dx = Y-y,X-x
 
     return CN(root=frame, fi=1, Et=Et, N_=P_, L_=link_, baseT=baseT, derTT=derTT, derH=derH, box=box, yx=yx, angl=A, span=np.hypot(dy/2,dx/2))
