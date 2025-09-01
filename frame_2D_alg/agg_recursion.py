@@ -195,9 +195,10 @@ def cross_comp(root, rc):  # rng+ and der+ cross-comp and clustering
         if mV > 0:
             nG = Cluster(root, N_, rc+loopw)  # get_exemplars, cluster_C, rng connectivity cluster
             if nG:
-                if lG: comb_altg_(nG,lG, rc+2)  # both fork alt Ns are clustered
+                rc += nG.olp  # incr in cluster_C and cluster_N
+                if lG: rc += 1+lG.olp; comb_altg_(nG,lG, rc)  # both fork alt Ns are clustered
                 if val_(nG.Et,1, (len(nG.N_)-1)*Lw, rc+loopw+nG.rng, Et) > 0:
-                    nG = cross_comp(nG, rc+loopw) or nG  # agg+, -> cross-frame? cross-comp C_?
+                    nG = cross_comp(nG, rc+nG.olp) or nG  # agg+, -> cross-frame? cross-comp C_?
                 _H = root.nH; root.nH = []
                 nG.nH = _H + [root] + nG.nH  # pack root in Nt.nH, has own L_,lH
                 return nG  # recursive feedback
@@ -312,7 +313,9 @@ def min_comp(_N,N):  # comp Et, baseT, extT, derTT
     md_,dd_= comp_derT(rn*_N.derTT[1], N.derTT[1])
     m_+= md_; d_+= dd_
     DerTT = np.array([m_,d_])
-    Et = np.array([m_* (1,mA)[fi] @ wTTf[0], d_* (1,2-mA)[fi] @ wTTf[1], min(_n,n)])  # n: shared scope?
+    t_ = m_+ np.abs(d_) + eps
+    Et = np.array([m_* (1, mA)[fi] / t_ @ wTTf[0],
+                   d_* (1, 2-mA)[fi] / t_ @ wTTf[1], min(_n,n)])  # n: shared scope?
     '''
     if np.hypot(*_N.angl)*_N.mang + np.hypot(*N.angl)*N.mang > ave*wA:  # aligned L_'As, mang *= (len_nH)+fi+1
     mang = (rn*_N.mang + N.mang) / (1+rn)  # ave, weight each side by rn
@@ -333,9 +336,8 @@ def comp(_pars, pars, meA=0, deA=0):  # raw inputs or derivatives, norm to 0:1 i
             m_ += [mA]; d_ += [dA]
         elif isinstance(p, tuple):  # massless I|S avd in p only
             p, avd = p
-            d = _p - p; ad = abs(d)
-            m_ += [avd-ad]  # +|- or avd / (avd+ad)?
-            d_ += [d]
+            m_ += [avd]  # placeholder for avd / (avd+ad), no separate match
+            d_ += [_p - p]
         else:  # massive
             m_ += [min(abs(_p),abs(p))]
             d_ += [_p - p]
@@ -400,11 +402,11 @@ def Cluster(root, N_, rc):  # clustering root
     for rng, rN_ in enumerate(N_, start=1):  # bottom-up rng-banded clustering
         aw = rc*rng +contw
         if rN_ and val_(np.sum([n.Et for n in rN_], axis=0),1, (len(rN_)-1)*Lw, aw) > 0:
-            nG = cluster(root, F_, rN_, aw, rng) or nG
+            nG = cluster_N(root, F_, rN_, aw, rng) or nG
     # top valid nG:
     return nG
 
-def cluster(root, iN_, rN_, rc, rng=1):  # flood-fill node | link clusters
+def cluster_N(root, iN_, rN_, rc, rng=1):  # flood-fill node | link clusters
 
     def rroot(n):
         if n.root and n.root.rng > n.rng: return rroot(n.root) if n.root.root else n.root
@@ -499,7 +501,6 @@ def cluster_C(E_, root, rc):  # form centroids by clustering exemplar surround v
         if Dm > Ave * cnt * Do:  # dval vs. dolp, overlap increases as Cs may expand in each loop?
             _C_ = C_
             for n in root.N_: n._C_=n.C_; n._mo_=n.mo_; n.C_,n.mo_ = [],[]  # new n.C_s, combine with vo_ in Ct_?
-            break
         else:  # converged
             break
     if  C_:
@@ -513,46 +514,38 @@ def cluster_C(E_, root, rc):  # form centroids by clustering exemplar surround v
 
 def xcomp_C_(C_, root, rc):  # draft
 
-    # same as min_comp, except no range
-    def comp_C_(C_):
-        
-        dC_ = []
-        for _C, C in combinations(C_, r=2):  # sort-> proximity-order ders?
-            dy_dx = _C.yx-C.yx; dist = np.hypot(*dy_dx); olp = (C.olp +_C.olp) / 2
-            if {l for l in _C.rim if l.Et[0]>ave} & {l for l in C.rim if l.Et[0]>ave}:  # +ve rim
-                fcomp = 1  # connected by common match, which means prior bilateral proj eval
-            else:
-                V = proj_V(_C,C, dy_dx, dist)  # eval _N,N cross-induction for comp
-                fcomp = adist * V/olp > dist  # min induction
-            if fcomp:
-                link = comp_N(_C, C, olp, rc, L_=[], angl=dy_dx, span=dist, rng=1)
-                if val_(link.Et, aw=rc+loopw+olp) > 0: 
-                    dC = sum_N_([_C, C], root=root)  # merge if match?
-                    dC_ += [dC]  
-        return dC_
-    
-    # eval with D instead of dist?
-    def comp_dC_(dC_):
-        
-        dC_ =  sorted(dC_, key=lambda C: C.Et[1], reverse=True)  # sort by highest D first
-        
-        ddC_ = []
-        for _dC, dC in combinations(dC_, r=2):  
-            
-            if _dC.Et[1] + dC.Et[1] > ave:  # using combined D, not sure
-                dy_dx = _dC.yx-dC.yx; dist = np.hypot(*dy_dx); olp = (dC.olp +_dC.olp) / 2
-                
-                link = comp_N(_dC, dC, olp, rc, L_=[], angl=dy_dx, span=dist, rng=1)
-                
-                for dc in _dC, dC:
-                    if val_(dc.et, aw=rc+loopw+olp) > 0 and dc not in ddC_: 
-                        ddC_ += [dc]
-        return ddC_
+    _dC_ = []
+    for _C, C in combinations(C_, r=2):
+        dy_dx = _C.yx-C.yx; dist = np.hypot(*dy_dx); olp = (C.olp+_C.olp) / 2
+        _dC_ = [comp_N(_C,C, olp, rc, L_=[], angl=dy_dx, span=dist)]  # add comp wTT?
+    dC_, re_C_ = [], []
+    # from min D:
+    for dC in sorted(dC_, key=lambda dC: dC.Et[1]):
+        _C,C = dC.N_
+        if _C.fin or C.fin: continue  # was merged,
+        # or if C.root: C = C,root: compare C.root set in merging, not compared yet?
+        if val_(dC.Et, fi=0, aw=rc + loopw) < 0:
+            C.fin = 1  # or C.root = _C
+            sum_N_(_C,C); re_C_ += [_C]  # merge centroids, re_C only if we re-compare them, probably not needed
+        else:
+            dC_ += [dC]  # distinct dCs
+    dCt_ = []  # linear (dC,ddC) list
+    _dC = _dC_.pop(0)
+    for dC in _dC_:  # comp remaining dCs in D spectrum, no spatial distance
+        ddC = comp_N(_dC, dC, (dC.olp+_dC.olp)/2, rc)  # += ddC in dC.rim
+        dCt_ += [(_dC,ddC)]; _dC = dC
+    dCt_ += [(_dC, None)]  # no ddC in last dC
+    dCGt_ = []
+    _dC,_ddC = dCt_.pop(0); dC_ = [_dC]; ddC_ = []
+    for dC,ddC in dCt_:
+        if _ddC.Et[0] > ave:  # cluster, maybe simpler
+            dC_ += [dC]; ddC_ += [_ddC]
+        else:
+            dCGt_ += [(dC_,ddC_)]; dC_ = [dC]; ddC_ = []  # term old, init new CGt, or no need for ddC_?
+        _dC, _ddC = dC, ddC
+    dCGt_ += [(dC_, ddC_)]  # last
 
-    dC_ = comp_C_(C_)  # global comp wTT, min_comp, merge if match, else spectral clustering:
-    ddC_= comp_dC_(dC_)  # : sort remaining dCs by comb_D, compare along that new dimension, spatial distances don't matter
-    dCH = cluster(root, ddC_, ddC_, rc, rng=1) # similar to cluster(1-fi)?
-    root.cent_ = CN(N_=C_, L_=dC_, nH=[], lH=dCH)
+    root.cent_ = CN(N_=C_, L_=_dC_, lH =[sum_N_([dCGt[0] for dCGt in dCGt_])])  # single level lH, add Et?
 
 
 def cent_attr(C, rc):  # weight attr matches | diffs by their match to the sum, recompute to convergence
@@ -695,7 +688,7 @@ def PP2N(PP, frame):
     derTT = np.array([
         np.array([mM,mD,mL, mI,mG,mA, mL,mL/2, eps]), # extA=eps
         np.array([dM,dD,dL, dI,dG,dA, dL,dL/2, eps]) ])
-    derH = [CLay(node_=P_,link_=link_, derTT=deepcopy(derTT),Et=np.array([sum(derTT[0]),sum(derTT[1])]))]  # we need to sum derTT into Et in lay?
+    derH = [CLay(node_=P_,link_=link_, derTT=deepcopy(derTT), Et=np.array([sum(derTT[0]), sum(np.abs(derTT[1]))]) )]
     y,x,Y,X = box; dy,dx = Y-y,X-x
 
     return CN(root=frame, fi=1, Et=Et, N_=P_, L_=link_, baseT=baseT, derTT=derTT, derH=derH, box=box, yx=yx, angl=A, span=np.hypot(dy/2,dx/2))
