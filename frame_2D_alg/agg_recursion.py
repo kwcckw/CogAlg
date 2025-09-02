@@ -292,7 +292,7 @@ def comp_N(_N,N, o,rc, L_=None, angl=np.zeros(2), span=None, fdeep=0, rng=1):  #
         if fi:
             _N_,N_ = (_N.cent_,N.cent_) if (_N.cent_ and N.cent_) else (_N.N_,N.N_)  # or both? no rim,altg_ in top nodes
             if isinstance(N_[0],CN) and isinstance(_N_[0],CN):  # not PP
-                spec(_N_,N_,o,rc,Et, Link.L_)  # use L_ for dspe?
+                spec(_N_,N_,o,rc,Et, Link.L_)  # use L_ for dspe? (Link。L_ is always a int since we init it above)
     if fdeep==2: return Link  # or Et?
     if L_ is not None:
         L_ += [Link]
@@ -360,7 +360,7 @@ def spec(_spe,spe, o,rc, Et, dspe=None, fdeep=0):  # for N_|cent_ | altg_
         for N in spe:
             if _N is not N:
                 dN = comp_N(_N, N, o,rc, fdeep=2); Et += dN.Et  # may be d=cent_?
-                if dspe is not None: dspe += [dN]
+                if dspe is not None: dspe += [dN]  # this problem is still persists, dspe is int for links
                 if fdeep:
                     for L,l in [(L,l) for L in _N.rim for l in N.rim]:  # l nested in L
                         if L is l: Et += l.Et  # overlap val
@@ -530,20 +530,20 @@ def xcomp_C_(C_, root, rc):  # draft
             add_N(_C,C, fmerge=1)  # set C fin,root
         else:
             L_ = dC_[i:]  # distinct dCs
-            if L_:
+            if len(L_)>1:  # we need at least 2 L for ocmparison?
                 if val_(np.sum([l.Et for l in L_], axis=0), fi=0, mw=(len(L_)-1)*Lw, aw=rc+loopw) > 0:
                     dCt_ = []  # [(dC_,ddC_)]
                     for _dC, dC in zip(L_,L_[1:]):  # comp consecutive dCs in D spectrum, not spatial
                         ddC = comp_N(_dC,dC, (dC.olp+_dC.olp)/2, rc)  # += ddC in dC.rim
-                        dCt_ += [(_dC,ddC)]; _dC = dC
-                    dCt_ += [(_dC, None)]  # no ddC in last dCt
+                        dCt_ += [(_dC,ddC)]  # _dC = dC (this _dC = dC is not necessary?)
+                    dCt_ += [(dC, None)]  # no ddC in last dCt
                     dCG_ = []
                     for (_dC,_ddC), (dC, ddC) in zip(dCt_, dCt_[1:]):
                         if _ddC.Et[0] > ave:
                             dC_ += [dC]  # pre-cluster
                         else:
-                            dCG_ += [dC]; dC_ = [dC]  # term old, init new dCG; ddCs in rims
-                    dCG_ = [sum_N_(dC_) for dC_ in dCG_ + [dC_]]  # last
+                            dCG_ += [dC_]; dC_ = [dC]  # term old, init new dCG; ddCs in rims  (should be packing dC_ into dCG_ here)
+                    dCG_ = [sum_N_(dC_) for dC_ in dCG_ + [dC_]]  # last (use 2 steps to form dc graph first before forming lH?)
                     lH = [sum_N_(dCG_)]  # single-level lH
             break
     root.cent_ = CN(N_=list({merged(C) for C in C_}), L_=L_, lH=lH)  # add Et, + mat?
@@ -583,7 +583,7 @@ def sum2graph(root, node_,link_,long_,cent_, Et, olp, rng):  # sum node,link att
     Nt = Copy_(n0); DerH = []  #->CN, comb forks: add_N(Nt,Nt.Lt)?
     for N in node_:
         add_H(derH,N.derH,graph); graph.baseT+=N.baseT; graph.derTT+=N.derTT; graph.box=extend_box(graph.box,N.box); yx_+=[N.yx]; N.root = graph
-        if fg: add_N(Nt,N)
+        if fg: add_N(Nt,N)  # N's root should be point to graph instead of Nt here?
     for L in link_:
         add_H(DerH,L.derH,graph); graph.baseT+=L.baseT; graph.derTT+=L.derTT
     if DerH: add_H(derH,DerH, graph)  # * rn?
@@ -612,7 +612,7 @@ def comp_H(H,h, rn, ET=None, DerTT=None, root=None):  # one-fork derH
     for _lay, lay in zip_longest(H,h):  # selective
         if _lay and lay:
             dlay = _lay.comp_lay(lay, rn, root=root)
-            derH += [dlay]; derTT = dlay.derTT; Et += dlay.Et
+            derH += [dlay]; derTT = dlay.derTT; Et[:2] += dlay.Et  # dlay doesn't have n in Et now
     if Et[2]: DerTT += derTT; ET += Et
     return derH
 
@@ -650,10 +650,11 @@ def add_N(N,n, fmerge=0, fC=0):
     if fmerge:  # different in altg_?
         for node in n.N_: node.root=N; N.N_ += [node]
         N.L_ += n.L_  # list or len, no L.root assign
+        n.root = N
     else:
         N.N_ += [n]
         if not fC: N.L_ += [l for l in n.rim if l.Et[0]>ave] if n.fi else n.L_  # len
-    n.fin = 1; n.root = N
+    n.fin = 1
     if n.altg_: add_sett(N.altg_,n.altg_)  # ext clusters
     if n.cent_: N.cent_.update(n.cent_)  # int clusters, maybe cG?
     if n.nH: add_NH(N.nH,n.nH, root=N)
@@ -675,7 +676,7 @@ def add_NH(H, h, root, rn=1):
 
     for Lev, lev in zip_longest(H, h, fillvalue=None):  # always aligned?
         if lev:
-            if Lev: add_N(Lev,lev)
+            if Lev: add_N(Lev,lev)  # lev.root shouldn't be updated to Lev
             else:   H += [Copy_(lev, root)]
 
 def extend_box(_box, box):
