@@ -510,46 +510,43 @@ def cluster_C(E_, root, rc):  # form centroids by clustering exemplar surround v
             n.exe = n.et[1-n.fi] + np.sum([n.mo_[i][0] * (C.M/(ave * n.mo_[i][0])) for i,C in enumerate(n.C_)]) > ave
         if mat > ave:
             xcomp_C_(C_, root, rc)
-        root.cent_ = (C_, mat)
+        else: root.cent_ = (C_,mat)  # tuple vs CN?
 
 def xcomp_C_(C_, root, rc):  # draft
 
-    _dC_ = []
+    def merged(C): # get final C merge targets
+        while C.fin: C = C.root
+        return C
+    dC_ = []
     for _C, C in combinations(C_, r=2):
         dy_dx = _C.yx-C.yx; dist = np.hypot(*dy_dx); olp = (C.olp+_C.olp) / 2
-        _dC_ += [comp_N(_C,C, olp, rc, L_=[], angl=dy_dx, span=dist)]  # add comp wTT? (should be += here to append)
-    dC_, re_C_ = [], []
-    # from min D:
-    _sdC_ = sorted(_dC_, key=lambda dC: dC.Et[1])
-    for i, dC in enumerate(_sdC_):  # should be _dC_ here
-        _C,C = dC.N_
-        if _C.fin or C.fin: continue  # was merged,
-        # or if C.root: C = C,root: compare C.root set in merging, not compared yet? (but all Cs have a same root?)
-        if val_(dC.Et, fi=0, aw=rc + loopw) < 0:
-            C.fin = 1  # or C.root = _C
-            # we didn't use the merged centroid? Or pack merged centroids into dC_?
-            CC = sum_N_([_C,C]); re_C_ += [_C]  # merge centroids, re_C only if we re-compare them, probably not needed
+        dC_ += [comp_N(_C,C, olp, rc, L_=[], angl=dy_dx, span=dist)]  # add comp wTT?
+    L_, lH = [], []
+    dC_ = sorted(dC_, key=lambda dC: dC.Et[1])  # from min D
+    for i, dC in enumerate(dC_):
+        if val_(dC.Et, fi=0, aw=rc+loopw) < 0:  # merge centroids, no re-comp: merged is similar
+            _C,C = dC.N_; _C,C = merged(_C), merged(C)  # final merges
+            if _C is C: continue   # already merged
+            add_N(_C,C, fmerge=1)  # set C fin,root
         else:
-            dC_ += _sdC_[i:]  # rest of the distinct dCs
+            L_ = dC_[i:]  # distinct dCs
+            if L_:
+                if val_(np.sum([l.Et for l in L_], axis=0), fi=0, mw=(len(L_)-1)*Lw, aw=rc+loopw) > 0:
+                    dCt_ = []  # [(dC_,ddC_)]
+                    for _dC, dC in zip(L_,L_[1:]):  # comp consecutive dCs in D spectrum, not spatial
+                        ddC = comp_N(_dC,dC, (dC.olp+_dC.olp)/2, rc)  # += ddC in dC.rim
+                        dCt_ += [(_dC,ddC)]; _dC = dC
+                    dCt_ += [(_dC, None)]  # no ddC in last dCt
+                    dCG_ = []
+                    for (_dC,_ddC), (dC, ddC) in zip(dCt_, dCt_[1:]):
+                        if _ddC.Et[0] > ave:
+                            dC_ += [dC]  # pre-cluster
+                        else:
+                            dCG_ += [dC]; dC_ = [dC]  # term old, init new dCG; ddCs in rims
+                    dCG_ = [sum_N_(dC_) for dC_ in dCG_ + [dC_]]  # last
+                    lH = [sum_N_(dCG_)]  # single-level lH
             break
-            
-    # if there's at least 2 distinct dCs, else there's nothing to compare
-    if len(dC_)>1:
-        dCt_ = []  # linear (dC,ddC) list
-        for _dC, dC in zip(dC_, dC_[1:]):  # comp remaining dCs in D spectrum, no spatial distance
-            ddC = comp_N(_dC, dC, (dC.olp+_dC.olp)/2, rc)  # += ddC in dC.rim
-            dCt_ += [(_dC,ddC)]; _dC = dC
-        dCt_ += [(_dC,None)]  # no ddC in last dC
-        
-        dCGt_, dC_, ddC_ = [], [dCt_[0][0]], []
-        for (_dC,_ddC), (dC, ddC) in zip(dCt_, dCt_[1:]):
-            if _ddC.Et[0] > ave:  # cluster, maybe simpler
-                dC_ += [dC]; ddC_ += [_ddC]  
-            else:
-                dCGt_ += [(dC_,ddC_)]; dC_ = [dC]; ddC_ = []  # term old, init new CGt, or no need for ddC_?
-        dCGt_ += [(dC_, ddC_)]  # last
-
-        root.cent_ = CN(N_=C_, L_=_dC_, lH =[sum_N_([dC for dCGt in dCGt_ for dC in dCGt[0]])])  # single level lH, add Et?
+    root.cent_ = CN(N_=list({merged(C) for C in C_}), L_=L_, lH=lH)  # add Et, + mat?
 
 
 def cent_attr(C, rc):  # weight attr matches | diffs by their match to the sum, recompute to convergence
@@ -654,10 +651,11 @@ def add_N(N,n, fmerge=0, fC=0):
         for node in n.N_: node.root=N; N.N_ += [node]
         N.L_ += n.L_  # list or len, no L.root assign
     else:
-        n.root=N; N.N_ += [n]
+        N.N_ += [n]
         if not fC: N.L_ += [l for l in n.rim if l.Et[0]>ave] if n.fi else n.L_  # len
+    n.fin = 1; n.root = N
     if n.altg_: add_sett(N.altg_,n.altg_)  # ext clusters
-    if n.cent_: N.cent_.update(n.cent_)  # int clusters
+    if n.cent_: N.cent_.update(n.cent_)  # int clusters, maybe cG?
     if n.nH: add_NH(N.nH,n.nH, root=N)
     if n.lH: add_NH(N.lH,n.lH, root=N)
     en,_en = n.Et[2],N.Et[2]; rn = en/_en
