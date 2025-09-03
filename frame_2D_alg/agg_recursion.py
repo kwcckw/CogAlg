@@ -264,7 +264,7 @@ def comp_Q(iN_, rc):  # comp pairs of nodes or links within max_dist
                 V = proj_V(_N,N, dy_dx, dist)  # eval _N,N cross-induction for comp
                 fcomp = adist * V/olp > dist  # min induction
             if fcomp:
-                Link = comp_N(_N,N, olp, rc, L_=L_, angl=dy_dx, span=dist, rng=rng)
+                Link = comp_N(_N,N, olp, rc, lH=L_, angl=dy_dx, span=dist, rng=rng)
                 if val_(Link.Et, aw=loopw*olp) > 0:
                     Et += Link.Et; olp_ += [olp]  # link.olp is the same with o
                     for n in _N,N:
@@ -522,7 +522,7 @@ def xcomp_C_(C_, root, rc):  # draft
 
         dert_ = np.array([dC.derTT[1] for dC in L_])  # arr(len(C_),dert), compute deviations from pairwise diffs
         meanT = np.mean(dert_, axis=0)  # mean attrs
-        mad_T = np.mean( np.abs(dert_-meanT), axis=0)  # 9 MADs
+        mad_T = np.abs(dert_)  # 9 MADs
         norm_ = (dert_ - meanT) / (mad_T + eps)
         cov_T = np.cov(norm_, rowvar=False)  # 9x9 covariance matrix
         eig_, eig__ = np.linalg.eigh(cov_T)  # eigenvalues, eigenvectors
@@ -535,15 +535,16 @@ def xcomp_C_(C_, root, rc):  # draft
     dC_ = []
     for _C, C in combinations(C_, r=2):
         dy_dx = _C.yx-C.yx; dist = np.hypot(*dy_dx); olp = (C.olp+_C.olp) / 2
-        dC_ += [comp_N(_C,C, olp, rc, nH=[], angl=dy_dx, span=dist)]
+        dC_ += [comp_N(_C,C, olp, rc, lH=[], angl=dy_dx, span=dist)]
         # add comp wTT?
     L_, lH = [], []
     dC_ = sorted(dC_, key=lambda dC: dC.Et[1])  # from min D
     for i, dC in enumerate(dC_):
+        # we actually can use proj to merge them too
         if val_(dC.Et, fi=0, aw=rc+loopw) < 0:  # merge centroids, no re-comp: merged is similar
             _C,C = dC.N_; _C,C = merged(_C), merged(C)  # final merges
             if _C is C: continue  # was merged
-            add_N(_C,C, fmerge=1)  # +fin,root
+            add_N(_C,C, fmerge=1, froot=1)  # +fin,root
             C_.remove(C)
         else:
             L_ = dC_[i:]  # distinct dCs
@@ -601,7 +602,7 @@ def sum2graph(root, node_,link_,long_,cent_, Et, olp, rng):  # sum node,link att
     Nt = Copy_(n0); DerH = []  #->CN, comb forks: add_N(Nt,Nt.Lt)?
     for N in node_:
         add_H(derH,N.derH,graph); graph.baseT+=N.baseT; graph.derTT+=N.derTT; graph.box=extend_box(graph.box,N.box); yx_+=[N.yx]; N.root = graph
-        if fg: add_N(Nt,N)  # N's root should be point to graph instead of Nt here?
+        if fg: add_N(Nt,N)  # froot = 0, so that N.root points to graph instead of Nt
     for L in link_:
         add_H(DerH,L.derH,graph); graph.baseT+=L.baseT; graph.derTT+=L.derTT
     if DerH: add_H(derH,DerH, graph)  # * rn?
@@ -657,13 +658,13 @@ def sum_N_(node_, root=None, fC=0):  # form cluster G
     if fC:
         G.N_= [node_[0]]; G.L_ = [] if G.fi else len(node_)
     for n in node_[1:]:
-        add_N(G,n,0, fC)
+        add_N(G,n,0, fC, froot=1)
     G.olp /= len(node_)
     if not fC and G.fi:
         for L in G.L_: G.Et += L.Et  # avoid redundant Ls in rims
     return G  # no rim
 
-def add_N(N,n, fmerge=0, fC=0):
+def add_N(N,n, fmerge=0, fC=0, froot=0):
 
     if fmerge:  # different in altg_?
         for node in n.N_: node.root=N; N.N_ += [node]
@@ -671,7 +672,9 @@ def add_N(N,n, fmerge=0, fC=0):
     else:
         N.N_ += [n]
         if not fC: N.L_ += [l for l in n.rim if l.Et[0]>ave] if n.fi else n.L_  # len
-    n.fin = 1; n.root = N
+    if froot: 
+        n.fin = 1
+        n.root = N
     if n.altg_: add_sett(N.altg_,n.altg_)  # ext clusters
     if n.cent_: N.cent_.update(n.cent_)  # int clusters, maybe cG?
     if n.nH: add_NH(N.nH,n.nH, root=N)
@@ -693,7 +696,7 @@ def add_NH(H, h, root, rn=1):
 
     for Lev, lev in zip_longest(H, h, fillvalue=None):  # always aligned?
         if lev:
-            if Lev: add_N(Lev,lev)  # lev.root shouldn't be updated to Lev
+            if Lev: add_N(Lev,lev)  # lev.root shouldn't be updated to Lev, so froot = 0
             else:   H += [Copy_(lev, root)]
 
 def extend_box(_box, box):
@@ -879,7 +882,7 @@ def agg_frame(foc, image, iY, iX, rV=1, wTTf=[], fproj=0):  # search foci within
                     if pFg and val_(pFg.Et,1, (len(pFg.N_)-1)*Lw, pFg.olp+contw*20):
                         project_focus(PV__, y,x, Fg)  # += proj val in PV__
             # no target proj
-            frame = add_N(frame, Fg, fmerge=1) if frame else Copy_(Fg)
+            frame = add_N(frame, Fg, fmerge=1, froot=1) if frame else Copy_(Fg)
             aw = contw *20 * frame.Et[2] * frame.olp
 
     if frame.N_ and val_(frame.Et, (len(frame.N_)-1)*Lw, frame.olp+loopw*20) > 0:
