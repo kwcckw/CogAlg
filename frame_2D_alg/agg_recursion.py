@@ -533,17 +533,20 @@ def xcomp_C_(C_, root, rc, first=1):  # draft
             m_,d_ = comp_derT(_C.derTT[1], C.derTT[1])
             ad_ = np.abs(d_); t_ = m_+ ad_+ eps
             Et = np.array([m_/t_ @ wTTf[0], ad_/t_ @ wTTf[1], min(_C.Et[2],C.Et[2])])
-            dC_ += [CN(N_= [_C,C], Et=Et)]
-    L_ = []
+            dC_ += [CN(N_=[_C, C], Et=Et, baseT=_C.baseT+C.baseT, derH=sum_H_([_C.derH, C.derH]))]  # we need to sum their params too? Or use sum_N_? But we need to preserve their root when use sum_N_
+            # _croot=_C.root; croot=C.root; dC = sum_N_([_C,C]); dC.Et = Et; dC_ += [dC]; dC.fin= 0; _C.root = _croot; C.root = croot   
+                       
+    L_ = []; removed = []
     dC_ = sorted(dC_, key=lambda dC: dC.Et[1])  # from min D
     for i, dC in enumerate(dC_):
         if val_(dC.Et, fi=0, aw=rc+loopw) < 0:  # merge centroids, no re-comp: merged is similar
-            _C,C = dC.N_; _C,C = merged(_C), merged(C)  # final merges
+            _C,C = dC.N_; _C,C = merged(_C), merged(C)  # final merges (we need to merge dC too?)
             if _C is C: continue  # was merged
             add_N(_C,C, fmerge=1, froot=1)  # +fin,root
-            C_.remove(C)
+            C_.remove(C); removed += [C]
         elif first:  # for dCs, no recursion for ddCs
-            L_ = dC_[i:]  # distinct dCs
+            # we should skip those Ls if both of their Cs are already merged in prior loops?
+            L_ = [L for L in dC_[i:] if (L.N_[0] not in removed or L.N_[1] not in removed)]  # distinct dCs
             if L_ and val_(np.sum([l.Et for l in L_], axis=0), fi=0, mw=(len(L_)-1)*Lw, aw=rc+loopw) > 0:
                 xcomp_C_(L_, root, rc+1, first=0)  # merge dCs in L_, no ddC_
                 L_ = list({merged(L) for L in L_})
@@ -620,8 +623,12 @@ def comp_H(H,h, rn, ET=None, DerTT=None, root=None):  # one-fork derH
     return derH
 
 def sum_H_(Q):  # sum derH in link_|node_, not used
-    H = Q[0]; [add_H(H,h) for h in Q[1:]]
-    return H
+    oH = [[qq.copy_() for qq in q] for q in Q ]  # copy the first
+
+    for H, h in zip_longest(oH, Q, fillvalue=None):
+        if H is None:  H = []; oH += [H]  # init H if has lesser elements  
+        add_H(H,h)    
+    return oH
 
 def add_H(H, h, root=0, rn=1, rev=0):  #  layer-wise add|append derH
 
