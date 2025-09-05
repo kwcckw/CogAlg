@@ -341,7 +341,7 @@ def comp(_pars, pars, meA=0, deA=0):  # compute +ve m_, signed d_ from raw input
             m_ += [mA]; d_ += [dA]
         elif isinstance(p, tuple):  # massless I|S avd in p only
             p, avd = p
-            d = [_p- p]; ad = abs(d)
+            d = _p- p; ad = abs(d)  # square bracket is not necessary here
             m_ += [avd - ad + max(avd,ad)]  # complement
             d_ += [d]
         else:  # massive
@@ -521,9 +521,6 @@ def cluster_C(E_, root, rc):  # form centroids by clustering exemplar surround v
 
 def xcomp_C_(C_, root, rc, first=1):  # draft
 
-    def merged(C):  # get final C merge targets
-        while C.fin: C = C.root
-        return C
     dC_ = []
     for _C, C in combinations(C_, r=2):
         if first:
@@ -534,23 +531,23 @@ def xcomp_C_(C_, root, rc, first=1):  # draft
             m_,d_ = comp_derT(_C.derTT[1], C.derTT[1])
             ad_ = np.abs(d_); t_ = m_+ ad_+ eps  # = max comparand
             Et = np.array([m_/t_ @ wTTf[0], ad_/t_ @ wTTf[1], min(_C.Et[2],C.Et[2])])
-            dC_ += [CN(N_= [_C,C], Et=Et)]
+            ddC = CN(N_= [_C,C], Et=Et); _C.rim += [ddC]; C.rim += [ddC]; dC_ += [ddC]
+    
     L_ = []
     dC_ = sorted(dC_, key=lambda dC: dC.Et[1])  # from min D
     for i, dC in enumerate(dC_):
         if val_(dC.Et, fi=0, aw=rc+loopw) < 0:  # merge centroids, no re-comp: merged is similar
-            _C,C = dC.N_; _C,C = merged(_C), merged(C)  # final merges
+            _C,C = dC.N_
             if _C is C: continue  # was merged
             add_N(_C,C, fmerge=1, froot=1)  # +fin,root
-            C_.remove(C)
+            if C in C_: C_.remove(C)
+            for dc in C.rim: dc.N_ =  [(_C if n is C else n) for n in dc.N_]  # replaces N in dC, then merged can be removed
         elif first:  # for dCs, no recursion for ddCs
             L_ = dC_[i:]  # distinct dCs
             if L_ and val_(np.sum([l.Et for l in L_], axis=0), fi=0, mw=(len(L_)-1)*Lw, aw=rc+loopw) > 0:
                 xcomp_C_(L_, root, rc+1, first=0)  # merge dCs in L_, no ddC_
-                L_ = list({merged(L) for L in L_})
             break
-    if first:
-        root.cent_ = CN(N_=list({merged(C) for C in C_}), L_= L_)  # add Et, + mat?
+    if first: root.cent_ = CN(N_=C_, L_= L_)  # add Et, + mat?
 
 
 def cent_attr(C, rc):  # weight attr matches | diffs by their match to the sum, recompute to convergence
@@ -637,7 +634,7 @@ def sum_N_(node_, root=None, fC=0):  # form cluster G
 
     G = Copy_(node_[0], root, init = 0 if fC else 1)
     if fC:
-        G.N_= [node_[0]]; G.L_ = [] if G.fi else len(node_)
+        G.N_= [node_[0]]; G.L_ = [] if G.fi else len(node_); G.rim = []
     for n in node_[1:]:
         add_N(G,n,0, fC, froot=1)
     G.olp /= len(node_)
