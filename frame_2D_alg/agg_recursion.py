@@ -313,9 +313,9 @@ def min_comp(_N,N):  # comp Et, baseT, extT, derTT
     md_,dd_= comp_derT(rn*_N.derTT[1], N.derTT[1])
     m_+= md_; d_+= dd_
     DerTT = np.array([m_,d_])
-    ad_ = np.abs(d_); t_ = m_+ ad_+ eps
-    Et = np.array([m_* (1, mA)[fi] /t_ @ wTTf[0],  # norm, abs?
-                   ad_*(1, 2-mA)[fi] /t_ @ wTTf[1], min(_n,n)])  # n: shared scope?
+    ad_ = np.abs(d_); t_ = m_+ ad_+ eps  # max comparand
+    Et = np.array([m_* (1, mA)[fi] /t_ @ wTTf[0],  # norm, abs | sign?
+                   ad_* (1, 2-mA)[fi] /t_ @ wTTf[1], min(_n,n)])  # n: shared scope?
     '''
     if np.hypot(*_N.angl)*_N.mang + np.hypot(*N.angl)*N.mang > ave*wA:  # aligned L_'As, mang *= (len_nH)+fi+1
     mang = (rn*_N.mang + N.mang) / (1+rn)  # ave, weight each side by rn
@@ -323,17 +323,16 @@ def min_comp(_N,N):  # comp Et, baseT, extT, derTT
     return DerTT, Et, rn
 
 def comp_derT(_i_,i_):
-    '''
+
+    d_ = _i_ - i_
     _a_, a_ = np.abs(_i_), np.abs(i_)
-    d_ = _i_ - i_  # signed id s
-    m_ = np.minimum(_a_,a_); m_[(_i_<0) != (i_<0)] *= -1  # m is negative if comparands have opposite sign
-    t_ = np.maximum.reduce([_a_,a_, np.full(9, eps)])  # no signed max?
-    '''
-    m_ = np.minimum(np.abs(_i_), np.abs(i_))  # native vals, probably need to be signed as before?
-    d_ = _i_-i_  # for next comp, from signed _i_,i_
+    m_ = np.minimum(_a_, a_)
+    m_[(_i_<0)!=(i_<0)] *= -1  # negate opposite signs in-place
+    m_ += np.maximum(_a_, a_)  # add complement?
+
     return np.array([m_,d_])
 
-def comp(_pars, pars, meA=0, deA=0):  # raw inputs or derivatives, norm to 0:1 in eval only
+def comp(_pars, pars, meA=0, deA=0):  # compute +ve m_, signed d_ from raw inputs or derivatives
 
     m_,d_ = [],[]
     for _p, p in zip(_pars, pars):
@@ -342,10 +341,12 @@ def comp(_pars, pars, meA=0, deA=0):  # raw inputs or derivatives, norm to 0:1 i
             m_ += [mA]; d_ += [dA]
         elif isinstance(p, tuple):  # massless I|S avd in p only
             p, avd = p
-            m_ += [avd]  # placeholder for avd / (avd+ad), no separate match, or keep signed?
-            d_ += [_p - p]
+            d = [_p- p]; ad = abs(d)
+            m_ += [avd - ad + max(avd,ad)]  # complement
+            d_ += [d]
         else:  # massive
-            m_ += [min(abs(_p),abs(p))]
+            _a,a = abs(_p), abs(p)
+            m_ += [(min(_a,a) if _p<0==p<0 else -min(_a,a)) + max(_a,a)]  # +max for all +ve
             d_ += [_p - p]
     # add ext A:
     return np.array(m_+[meA]), np.array(d_+[deA])
@@ -531,22 +532,19 @@ def xcomp_C_(C_, root, rc, first=1):  # draft
             # add comp wTT?
         else:  # recursion: C_ = L_
             m_,d_ = comp_derT(_C.derTT[1], C.derTT[1])
-            ad_ = np.abs(d_); t_ = m_+ ad_+ eps
+            ad_ = np.abs(d_); t_ = m_+ ad_+ eps  # = max comparand
             Et = np.array([m_/t_ @ wTTf[0], ad_/t_ @ wTTf[1], min(_C.Et[2],C.Et[2])])
-            dC_ += [CN(N_=[_C, C], Et=Et, baseT=_C.baseT+C.baseT, derH=sum_H_([_C.derH, C.derH]))]  # we need to sum their params too? Or use sum_N_? But we need to preserve their root when use sum_N_
-            # _croot=_C.root; croot=C.root; dC = sum_N_([_C,C]); dC.Et = Et; dC_ += [dC]; dC.fin= 0; _C.root = _croot; C.root = croot   
-                       
-    L_ = []; removed = []
+            dC_ += [CN(N_= [_C,C], Et=Et)]
+    L_ = []
     dC_ = sorted(dC_, key=lambda dC: dC.Et[1])  # from min D
     for i, dC in enumerate(dC_):
         if val_(dC.Et, fi=0, aw=rc+loopw) < 0:  # merge centroids, no re-comp: merged is similar
-            _C,C = dC.N_; _C,C = merged(_C), merged(C)  # final merges (we need to merge dC too?)
+            _C,C = dC.N_; _C,C = merged(_C), merged(C)  # final merges
             if _C is C: continue  # was merged
             add_N(_C,C, fmerge=1, froot=1)  # +fin,root
-            C_.remove(C); removed += [C]
+            C_.remove(C)
         elif first:  # for dCs, no recursion for ddCs
-            # we should skip those Ls if both of their Cs are already merged in prior loops?
-            L_ = [L for L in dC_[i:] if (L.N_[0] not in removed or L.N_[1] not in removed)]  # distinct dCs
+            L_ = dC_[i:]  # distinct dCs
             if L_ and val_(np.sum([l.Et for l in L_], axis=0), fi=0, mw=(len(L_)-1)*Lw, aw=rc+loopw) > 0:
                 xcomp_C_(L_, root, rc+1, first=0)  # merge dCs in L_, no ddC_
                 L_ = list({merged(L) for L in L_})
@@ -622,15 +620,7 @@ def comp_H(H,h, rn, ET=None, DerTT=None, root=None):  # one-fork derH
     if Et[2]: DerTT += derTT; ET += Et
     return derH
 
-def sum_H_(Q):  # sum derH in link_|node_, not used
-    oH = [[qq.copy_() for qq in q] for q in Q ]  # copy the first
-
-    for H, h in zip_longest(oH, Q, fillvalue=None):
-        if H is None:  H = []; oH += [H]  # init H if has lesser elements  
-        add_H(H,h)    
-    return oH
-
-def add_H(H, h, root=0, rn=1, rev=0):  #  layer-wise add|append derH
+def add_H(H, h, root=0, rn=1, rev=0):  # layer-wise add|append derH
 
     for Lay, lay in zip_longest(H,h):  # different len if lay-selective comp
         if lay:
