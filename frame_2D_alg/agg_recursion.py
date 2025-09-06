@@ -471,26 +471,28 @@ def cluster_N(root, iN_, rN_, rc, rng=1):  # flood-fill node | link clusters
 
 def cluster_n(root, C_, rc, rng=1):  # simplified flood-fill for C_, etc.
 
-    def extend_G(_link_, node_,cent_,link_,seen_):
+    def extend_G(_link_, node_,cent_,link_,seen_, Et):
+
         for L in _link_:  # spliced rim
+            if L in seen_: continue  # L should be added to seen_ when we test their L.N_?
+            seen_.add(L)
             for _N in L.N_:
                 if not _N.fin and _N in C_:
-                    node_ += [_N]; cent_ += _N.C_; C.fin = 1
+                    node_ += [_N]; cent_ += _N.C_; _N.fin = 1  # should be _N.fin here
                     for l in _N.rim:
                         if l in seen_: continue
-                        if val_(l.Et+ett(l), aw=rc) > 0: link_ += [l]  # l.Et potentiated by density term
-                        seen_ += [l]
+                        # i think we need to use a combination of Links' Et and l.Et here? Since l.Et is the same for every cluster
+                        if val_(Et+l.Et+ett(l), aw=rc) > 0: link_ += [l]  # l.Et potentiated by density term
     G_ = []
     for C in C_: C.fin = 0
-    seen_ = []  # global exclusive?
-    for C in C_:  # form G per remaining C
-        node_,cent_, Link_,link_ = [C],C.cent_[:], [],[]
+    for C in C_:  # form G per remaining C   
+        node_,cent_, Link_,link_, seen_ = [C],C.cent_[:], [],[],set()  # i think this seen_ should be per C, because they might be used for mediation
         _link_ = [l for l in C.rim if val_(l.Et+ett(l), aw=rc) > 0]
         while _link_:
-            extend_G(_link_, node_,cent_,link_,seen_)  # select rims to extend G
+            extend_G(_link_, node_, cent_, link_, seen_, np.sum([L.Et for L in Link_], axis=0))  # select rims to extend G
             if link_:
-                Link_ += _link_
-                _link_ = list(set(link_) - set(seen_))  # all visited
+                Link_ += _link_; _link_ = link_; link_ = []  # reassign and reset link_
+                # _link_ = list(set(link_) - set(seen_))  # all visited (we are getting empty _link_ since we pack a same l into link_ and seen_ )
             else: break
         if node_:
             N_ = list(set(node_)); L_ = list(set(Link_))
@@ -585,7 +587,7 @@ def xcomp_C(C_, root, rc, first=1):  # draft
             if L_:
                 # ~ cross_comp, reconcile? no recursive cluster_C or agg+?
                 mV,dV = val_(np.sum([l.Et for l in L_], axis=0), fi=2, mw=(len(L_)-1)*Lw, aw=rc+loopw)
-                if dV > 0:
+                if first and dV > 0:
                     lH = [xcomp_C(L_, root, rc+1, first=0)]  # merge dCs in L_, no ddC_, lH = [lG]?
                 if mV > ave * contw:
                     cG = cluster_n(root, C_,rc)  # by connectivity between Cs in feature space
