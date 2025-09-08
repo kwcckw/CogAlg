@@ -113,7 +113,7 @@ class CN(CBase):
         n.C_    = kwargs.get('C_', [])  # root centroids
         n.fin = kwargs.get('fin',0)  # clustered, temporary
         n.exe = kwargs.get('exe',0)  # exemplar, temporary
-        n.compared = kwargs.get('compared',0)  # temporary
+        n.compared = set()  # temporary (always init here?)
         # n.fork_tree: list =z([[]])  # indices in all layers(forks, if no fback merge, G.fback_=[] # node fb buffer, n in fb[-1]
     def __bool__(n): return bool(n.N_)
 
@@ -207,7 +207,8 @@ def cross_comp(root, rc, fC=0):  # rng+ and der+ cross-comp and clustering
 def comb_altg_(nG, lG, rc):  # cross_comp contour/background per node:
 
     for Lg in lG.N_:
-        altg_ = {n.root for L in Lg.N_ for n in L.N_ if n.root and n.root.root}  # rdn core Gs, exclude frame
+        # skip CP and this is possible when we recycle nodes (G_ += node_) in cluster_N
+        altg_ = {n.root for L in Lg.N_ for n in L.N_ if isinstance(n, CN) and n.root and n.root.root}  # rdn core Gs, exclude frame
         if altg_:
             altg_ = {(core,rdn) for rdn,core in enumerate(sorted(altg_, key=lambda x:(x.Et[0]/x.Et[2]), reverse=True), start=1)}
             Lg.altg_ = [altg_, np.sum([i.Et for i,_ in altg_], axis=0)]
@@ -216,7 +217,7 @@ def comb_altg_(nG, lG, rc):  # cross_comp contour/background per node:
         else:      return None
     for Ng in nG.N_:
         Et, Rdn, altl_ = np.zeros(3), 0, []  # contour/core clustering
-        LR_ = {R(L) for n in Ng.N_ for L in n.rim}  # lGs, individual rims are too weak
+        LR_ = {R(L) for n in Ng.N_ if isinstance(n, CN) for L in n.rim}  # lGs, individual rims are too weak
         for LR in LR_:
             if LR and LR.altg_:  # not None, eval Lg.altg_[1]?
                 for core, rdn in LR.altg_[0]:  # map contour rdns to core N:
@@ -414,8 +415,9 @@ def Cluster(root, N_, rc, fC):  # generic root for clustering
         L_, lG = [], []
         dC_ = sorted(list({L for C in N_ for L in  C.rim}), key=lambda dC: dC.Et[1])  # from min D
         for i, dC in enumerate(dC_):
+            # dC = merged(dC)  # dC maybe merged in prior dfork, or use those dCs before the merging? But dC.root maybe point to the new lgraph too
             if val_(dC.Et, fi=0, aw=rc+loopw) < 0:  # merge similar centroids, no recomp
-                _C,C = dC.N_; _C,C = merged(_C), merged(C)  # final merges
+                _C,C = dC.N_[:2]; _C,C = merged(_C), merged(C)  # final merges  (dC may have more than 2 nodet after merged)
                 if _C is C: continue  # was merged
                 add_N(_C,C, fmerge=1, froot=1)  # fin,root
             else:
