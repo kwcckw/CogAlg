@@ -184,20 +184,22 @@ def val_(Et, fi=1, mw=1, aw=1, _Et=np.zeros(3)):  # m,d eval per cluster or cros
 
 def cross_comp(root, rc, fC=0):  # rng+ and der+ cross-comp and clustering
 
-    N_,L_,Et = comp_Q(root.N_ if fC else root.cent_[0], rc, fC)  # rc: redundancy+olp, lG.N_ is Ls
+    N_,L_,Et = comp_Q(root.cent_[0] if fC else root.N_, rc, fC)  # rc: redundancy+olp, lG.N_ is Ls (inverted)
     if len(L_) > 1:
         mV,dV = val_(Et,2, (len(L_)-1)*Lw, rc+loopw); lG = []
         if dV > 0:
-            if root.L_: root.lH += [sum_N_(root.L_)]  # replace L_ with agg+ L_:
+            # skip lG.L_? Their L_ is int anyway
+            if root.L_ and isinstance(root.L_, list): root.lH += [sum_N_(root.L_)]  # replace L_ with agg+ L_:
             root.L_=L_; root.Et += Et
             if fC < 2 and dV > avd:  # no comp ddCs
-                lG = cross_comp(CN(N_=L_), rc+1, fC*2)  # dfork
+                lG = cross_comp(CN(cent_=[L_, Et]), rc+1, fC*2)  # dfork
                 if lG:
                     rc+=lG.rc; root.lH += [lG]+lG.nH; root.Et+=lG.Et; root.derH+=lG.derH  # new lays
         if mV > 0:
             nG = Cluster(root, N_, rc, fC)  # get_exemplars, cluster_C, rng connectivity cluster
             if nG:
-                rc+=nG.rc; comb_altg_(nG,lG, rc+1)  # redundant clustering layers
+                rc+=nG.rc
+                if lG: comb_altg_(nG,lG, rc+1)  # redundant clustering layers
                 if val_(nG.Et,1, (len(nG.N_)-1)*Lw, rc+loopw, Et) > 0:
                     nG = cross_comp(nG, rc) or nG  # agg+, -> cross-frame? cross-comp C_?
                 _H = root.nH; root.nH = []
@@ -413,7 +415,8 @@ def Cluster(root, N_, rc, fC):  # generic root for clustering
         dC_ = sorted(list({L for C in N_ for L in  C.rim}), key=lambda dC: dC.Et[1])  # from min D
         for i, dC in enumerate(dC_):
             if val_(dC.Et, fi=0, aw=rc+loopw) < 0:  # merge similar centroids, no recomp
-                _C,C = dC.N_
+                _C,C = dC.N_[:2]  # after the merging, N_ has more than 2 Ns now, so getting only the first two?
+                if _C is C: continue  # they maybe the same after replacment
                 add_N(_C,C, fmerge=1,froot=1)  # fin,root.rim
                 for l in C.rim: l.N_ = [_C if n is C else n for n in l.N_]
             else:
@@ -519,7 +522,7 @@ def cluster_n(root, C_, rc, rng=1):  # simplified flood-fill for C_, etc, redund
             for l in L_: Et += l.Et
             if val_(Et,1, (len(N_)-1)*Lw, rc+olp, root.Et) > 0:
                 G_ += [sum2graph(root, N_,L_,[], set(cent_), Et,olp, rng)]
-            else:
+            elif n.fi:  # follow cluster_N
                 G_ += N_
     if G_: return sum_N_(G_,root)  # nG
 
@@ -571,9 +574,11 @@ def cluster_C(E_, root, rc):  # form centroids by clustering exemplar surround v
             # exemplar V increased by summed n match to root C * rel C Match:
             n.exe = n.et[1-n.fi]+ np.sum([n.mo_[i][0] * (C.M / (ave*n.mo_[i][0])) for i, C in enumerate(n.C_)]) > ave
         if mat > ave:
-            cG = cross_comp(sum_N_(C_), rc, fC=1)  # Cs may be distant, match by different attrs and weights
+            # cent_[1] is Et, but 0 for d and n here?
+            cG = sum_N_(C_); cG.cent_ = [C_, [mat, 0, 1]]  # we need to assign their cent_ since sum_N_ packs to N_
+            cG = cross_comp(cG, rc, fC=1)  # Cs may be distant, match by different attrs and weights
 
-        root.cent_ = [cG.N_, cG.Et] if cG else [C_, mat]  # convert mat to Et?
+        root.cent_ = [cG.N_, cG.Et] if cG else [C_, [mat, 0, 1]]  # convert mat to Et?
 
 def cent_attr(C, rc):  # weight attr matches | diffs by their match to the sum, recompute to convergence
 
@@ -603,7 +608,8 @@ def ett(L): return (L.N_[0].et + L.N_[1].et) * intw
 def sum2graph(root, node_,link_,long_,cent_, Et, olp, rng):  # sum node,link attrs in graph, aggH in agg+ or player in sub+
 
     n0 = Copy_(node_[0]); derH = n0.derH; fi = n0.fi
-    graph = CN(root=root, fi=1,rng=rng, N_=node_,L_=link_,cent_=cent_, Et=Et,rc=olp, box=n0.box, baseT=n0.baseT, derTT=n0.derTT)
+    # fi should follows n's fi? why always 1 here? and L_ should be int if fi = 0?
+    graph = CN(root=root, fi=fi,rng=rng, N_=node_,L_=link_,cent_=cent_, Et=Et,rc=olp, box=n0.box, baseT=n0.baseT, derTT=n0.derTT)
     graph.hL_ = long_
     n0.root = graph; yx_ = [n0.yx]; fg = fi and isinstance(n0.N_[0],CN)   # not PPs
     Nt = Copy_(n0); DerH = [] # CN, add_N(Nt,Nt.Lt)?
