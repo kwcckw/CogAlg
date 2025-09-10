@@ -184,7 +184,7 @@ def val_(Et, fi=1, mw=1, aw=1, _Et=np.zeros(3)):  # m,d eval per cluster or cros
 
 def cross_comp(root, rc, fC=0):  # rng+ and der+ cross-comp and clustering
 
-    N_,L_,Et = comp_Q(root.N_, rc, fC)  # rc: redundancy+olp, lG.N_ is Ls
+    N_,L_,Et = comp_Q(root.N_, rc, fC)  # rc: redundancy+olp, lG.N_ is Ls (why cent_ is not comp here?)
     if len(L_) > 1:
         mV,dV = val_(Et,2, (len(L_)-1)*Lw, rc+loopw); lG = []
         if dV > 0:
@@ -199,7 +199,7 @@ def cross_comp(root, rc, fC=0):  # rng+ and der+ cross-comp and clustering
             nG = Cluster(root, N_, rc, fC)  # get_exemplars, cluster_C, rng connectivity cluster
             if nG:  # batched nH extension
                 rc+=nG.rc  # redundant clustering layers
-                comb_altg_(nG,lG, rc+1)  # assign G contours
+                if lG: comb_altg_(nG,lG, rc+1)  # assign G contours (skip if lG is empty)
                 if val_(nG.Et,1, (len(nG.N_)-1)*Lw, rc+loopw, Et) > 0:
                     nG = cross_comp(nG, rc) or nG  # agg+, -> cross-frame? cross-comp C_?
                 _H = root.nH; root.nH = []
@@ -777,7 +777,7 @@ def project_N_(Fg, yx):
     Fdist = np.hypot(dy,dx)   # external dist
     rdist = Fdist / Fg.span
     Angle = np.array([dy,dx]) # external angle
-    angle = np.sum([L.angl for L in Fg.L_])
+    angle = np.sum([L.angl for L in Fg.L_],axis=0)  # axis = 0 to preserve the vector
     cos_d = angle.dot(Angle) / (np.hypot(*angle) * Fdist)
     # difference between external and internal angles, *= rdist
     ET = np.zeros(3); DerTT = np.zeros((2,9))
@@ -901,36 +901,69 @@ def agg_frame(foc, image, iY, iX, rV=1, wTTf=[], fproj=0):  # search foci within
 frame expansion / level: cross_comp lower-frames N_,C_, forward results to next lev, project feedback to scan new lower frames
 draft 
 '''
-def frame_H(image, iY,iX, Ly,Lx, rV=1, wTTf=[]):  # all initial args are set manually
 
-    def base_frame(img):  # 1st level, higher levels get Fg s
+def frame_global(image, iY, iX, rV):
 
-        Fg = frame_blobs_root( comp_pixel(img), rV)  # dert__
-        vect_root(Fg, rV, wTTf)  # clustering
-        return cross_comp(Fg, rc=frame.rc)
+    def frame_H(image, Ly,Lx, rV=1, wTTf=[]):  # all initial args are set manually
+    
+        def base_frame(img):  # 1st level, higher levels get Fg s
+    
+            Fg = frame_blobs_root( comp_pixel(img), rV)  # dert__
+            vect_root(Fg, rV, wTTf); Fg.L_ = []  # clustering (reset L_ into list)
+            return cross_comp(Fg, rc=frame.rc)
+    
+        y,x = np.unravel_index(PV__.argmax(), PV__.shape)
+        Fg  = base_frame( image[y: y+Ly, x: x+Lx])
+        lev = []  # init base frames
+        H = [lev]  # frame expansion levels
+        while Fg:  # Fg may empty after base_frame
+            lev += [Fg]  # extend base frame laterally, single-level:
+            PV__[y, x] = -np.inf  # to skip?
+            if val_(Fg.Et,1, (len(Fg.N_)-1)*Lw, Fg.rc+loopw*20):
+                pFg = project_N_(Fg, np.array([y,x]))
+                if pFg:
+                    PFg = cross_comp(pFg, rc=Fg.rc)
+                    if val_(pFg.Et,1, (len(pFg.N_)-1)*Lw, pFg.rc+contw*20):
+                        project_focus(PV__, y,x, Fg)  # += proj val in PV__
+                    if PFg:
+                        frame.N_ += PFg.N_; frame.L_ += PFg.L_  # splice N_ and L_?
+                
+                y, x = np.unravel_index(PV__.argmax(), PV__.shape)
+                y0 = y * Ly; x0 = x * Lx; yn = y0 + Ly; xn = x0 + Lx  # this is actually backward, why we didn't use win__?
+                Fg = base_frame(image[y0:yn, x0:xn])  # limit to base_frame ** 2  (should apply base_frame here?)
 
-    y,x = iY, iX
-    Fg  = base_frame( image[y: y+Ly, x: x+Lx])
-    lev = []  # init base frames
-    H = [lev]  # frame expansion levels
-    while True:
-        lev += [Fg]  # extend base frame laterally, single-level:
-        PV__[y, x] = -np.inf  # to skip?
-        if val_(Fg.Et,1, (len(Fg.N_)-1)*Lw, Fg.rc+loopw*20):
-            pFg = project_N_(Fg, np.array([y,x]))
-            if pFg:
-                cross_comp(pFg, rc=Fg.rc)
-                if val_(pFg.Et,1, (len(pFg.N_)-1)*Lw, pFg.rc+contw*20):
-                    project_focus(PV__, y,x, Fg)  # += proj val in PV__
-            y0,yn, x0,xn = np.max(PV__)
-            Fg = image[y0:yn, x0:xn]  # limit to base_frame ** 2
-        else:
-            break
-        # add feedforward and feedback
-        # when the level frame is exhaused, we need to forward it the next level, where the process repeats
+            
+            # add feedforward and feedback  （feedforward should be based on spliced N_ in frame.N_?
+            # when the level frame is exhaused, we need to forward it the next level, where the process repeats
+
+            # feedback based on Fg or frame now?
+            '''
+            rV, wTTf = ffeedback(Fg)  # adjust filters
+            Fg = cent_attr(Fg,2)  # compute Fg.wTT: correlation weights in frame derTT?
+            wTTf *= Fg.wTT; mW = np.sum(wTTf[0]); dW = np.sum(wTTf[1])  # global?
+            wTTf[0] *= 9/mW; wTTf[1] *= 9/dW  # Fg.wTT is redundant?
+            '''
+
+    # temporary for debug, not sure
+    dert__ = comp_pixel(image) # global
+    global ave, Lw, intw, loopw, centw, contw, adist, amed, medw, mW, dW
+    ave, Lw, intw, loopw, centw, contw, adist, amed, medw = np.array([ave, Lw, intw, loopw, centw, contw, adist, amed, medw]) / rV
+    # fb rws: ~rvs
+    nY,nX = dert__.shape[-2] // iY, dert__.shape[-1] // iX  # n complete blocks
+    Y, X  = nY * iY, nX * iX  # sub-frame dims
+    frame = CN(box=np.array([0,0,Y,X]), yx=np.array([Y//2,X//2]))
+    dert__= dert__[:,:Y,:X]  # drop partial rows/cols
+    win__ = dert__.reshape(dert__.shape[0], iY,iX, nY,nX).swapaxes(1,2)  # dert=5, wY=64, wX=64, nY=13, nX=20
+    PV__  = win__[3].sum( axis=(0,1)) * intw  # init prj_V = sum G, shape: nY=13, nX=20
+    aw = contw * 20
+    
+    frame_H(image, iY,iX, rV, wTTf=np.ones(10,dtype="float"))
+
+
 
 if __name__ == "__main__":  # './images/toucan_small.jpg' './images/raccoon_eye.jpeg', add larger global image
 
     iY,iX = imread('./images/toucan_small.jpg').shape
-    frame = agg_frame(0, image=imread('./images/toucan.jpg'), iY=iY, iX=iX)
+    # frame = agg_frame(0, image=imread('./images/toucan.jpg'), iY=iY, iX=iX)
+    frame = frame_global(image=imread('./images/toucan.jpg'), iY=iY, iX=iX, rV=1)
     # search frames ( foci inside image
