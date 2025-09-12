@@ -134,7 +134,7 @@ def Copy_(N, root=None, init=0):
 
 ave, avd, arn, aI, aS, aveB, aveR, Lw, intw, loopw, centw, contw = 10, 10, 1.2, 100, 5, 100, 3, 5, 2, 5, 10, 15  # value filters + weights
 adist, amed, distw, medw = 10, 3, 2, 2  # cost filters + weights, add alen?
-wM, wD, wN, wO, wG, wL, wI, wS, wa, wA = 10, 10, 20, 10, 20, 5, 20, 2, 1, 1  # der params higher-scope weights = reversed relative estimated ave?
+wM, wD, wN, wG, wL, wI, wS, wa, wA = 10, 10, 20, 20, 5, 20, 2, 1, 1  # der params higher-scope weights = reversed relative estimated ave?
 mW = dW = 9; wTTf = np.ones((2,9))  # fb weights per derTT, adjust in agg+
 wY = wX = 64; wYX = np.hypot(wY,wX)  # focus dimensions
 '''
@@ -145,8 +145,9 @@ def vect_root(Fg, rV=1, wTTf=[]):  # init for agg+:
         global ave, avd, arn, aveB, aveR, Lw, adist, amed, intw, loopw, centw, contw, wM, wD, wN, wO, wG, wL, wI, wS, wa, wA
         ave, avd, arn, aveB, aveR, Lw, adist, amed, intw, loopw, centw, contw = (
             np.array([ave,avd, arn,aveB,aveR, Lw, adist, amed, intw, loopw, centw, contw]) / rV)  # projected value change
-        wTTf = np.multiply([[wM, wD, wN, wO, wG, wL, wI, wS, wa, wA]], wTTf)  # or dw_ ~= w_/ 2?
-        wTTf = np.delete(wTTf,(2,3), axis=1)  #-> comp_slice, = np.array([(*wTTf[0][:2],*wTTf[0][4:]),(*wTTf[0][:2],*wTTf[1][4:])])
+        # Follow this sequence? M,D,n,I,G,A,L,S,eA
+        wTTf = np.multiply([[wM, wD, wN, wI, wG, wL,  wS, wa, wA]], wTTf)  # or dw_ ~= w_/ 2?
+        wTTf = np.delete(wTTf,(2), axis=1)  #-> comp_slice, = np.array([(*wTTf[0][:2],*wTTf[0][4:]),(*wTTf[0][:2],*wTTf[1][4:])])
     blob_ = unpack_blob_(Fg); N_ = []
     for blob in blob_:
         if not blob.sign and blob.G > aveB:
@@ -486,12 +487,13 @@ def cluster_N(root, iN_, rN_, rc, rng=1):  # flood-fill node | link clusters
         if node_:
             N_, L_, long_ = list(set(node_)), list(set(Link_)), list(set(long_))
             Et, olp = np.zeros(3), 0
-            for n in node_: olp += n.rc  # from Ns, vs. Et from Ls?
-            for l in Link_: Et += l.Et
-            if val_(Et, 1, (len(node_)-1)*Lw, rc+olp, root.Et) > 0:
+            # below should be using non-duplicated N_ and L_?
+            for n in N_: olp += n.rc  # from Ns, vs. Et from Ls?
+            for l in L_: Et += l.Et
+            if val_(Et, 1, (len(N_)-1)*Lw, rc+olp, root.Et) > 0:
                 G_ += [sum2graph(root, N_,L_, long_, set(cent_), Et, olp, rng)]
             elif n.fi:  # L_ is preserved anyway
-                G_ += node_
+                G_ += N_
     if G_: return sum_N_(G_, root)  # nG
 
 def cluster_n(root, C_, rc, rng=1):  # simplified flood-fill for C_, etc
@@ -937,6 +939,7 @@ def frame_H(image, iY,iX, Ly,Lx, Y,X, rV, max_elev=4, wTTf=np.ones(9,dtype="floa
                     project_focus(PV__,y,x, Fg)  # add proj vals into PV__
                     y, x = np.unravel_index(PV__.argmax(),PV__.shape)
                     if PV__[y,x] > ave:
+                        # this is temporary? Because this always scale iy to bottom and ix to right
                         iy = y* Ly**elev; ix = x* Lx**elev  # new win by feedback to image, scale y,x with elevation
                         win = frame_H(image, iy,ix, Ly,Lx, Y,X, rV, elev)  # up to current level
                     else: break
@@ -950,10 +953,10 @@ def frame_H(image, iY,iX, Ly,Lx, Y,X, rV, max_elev=4, wTTf=np.ones(9,dtype="floa
     elev = 0; _win = []
     while True and elev < max_elev:
         win = expand_lev(iY,iX, elev, _win)  # fixed focal point
-        if win:
+        if np.any(win):  # we need np.any for 2D array
             frame.H += [win]; _win=win; elev+=1  # feedforward extends H
         else: break
-    return _win
+    return frame  # should be returning frame here?
 ''' 
     global ave, Lw, intw, loopw, centw, contw, adist, amed, medw, mW, dW
     ave, Lw, intw, loopw, centw, contw, adist, amed, medw = np.array([ave, Lw, intw, loopw, centw, contw, adist, amed, medw]) / rV
