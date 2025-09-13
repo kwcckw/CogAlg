@@ -128,7 +128,7 @@ def Copy_(N, root=None, init=0):
         C.L_ = list(N.L_) if N.fi else N.L_
     C.derH  = [lay.copy_() for lay in N.derH]
     C.derTT = deepcopy(N.derTT)
-    for attr in ['Et','baseT','yx','box','angl','rim','altg_','C_']: setattr(C, attr, copy(getattr(N, attr)))
+    for attr in ['Et','baseT','yx','box','angl','rim','B_','Rb_','C_']: setattr(C, attr, copy(getattr(N, attr)))
     for attr in ['rc','rng', 'fi', 'fin', 'span', 'mang']: setattr(C, attr, getattr(N, attr))  # add centroid attrs?
     return C
 
@@ -188,7 +188,8 @@ def cross_comp(root, rc, fC=0):  # rng+ and der+ cross-comp and clustering
     if len(L_) > 1:
         mV,dV = val_(Et,2, (len(L_)-1)*Lw, rc+loopw); lG = []
         if dV > 0:
-            if root.L_: root.lH += [sum_N_(root.L_)]  # replace L_ with agg+ L_:
+            # skip when fi = 0? Because root.L_ is int
+            if root.fi and root.L_: root.lH += [sum_N_(root.L_)]  # replace L_ with agg+ L_:
             root.L_=L_; root.Et += Et
             if fC < 2 and dV > avd:  # no comp ddCs
                 lG = CN(cent_=L_) if fC else CN(N_=L_)
@@ -201,9 +202,9 @@ def cross_comp(root, rc, fC=0):  # rng+ and der+ cross-comp and clustering
                 rc+=nG.rc  # redundant clustering layers
                 if lG: comb_altg_(nG,lG, rc+1)  # assign G contours (skip if lG is empty)
                 if val_(nG.Et,1, (len(nG.N_)-1)*Lw, rc+loopw, Et) > 0:
-                    nG = cross_comp(nG, rc) or nG  # agg+, -> cross-frame? cross-comp C_?
+                    nG = cross_comp(nG, rc+1) or nG  # agg+, -> cross-frame? cross-comp C_? (rc should be incremented here?)
                 _H = root.nH; root.nH = []
-                nG.nH = _H + [root] + nG.nH  # pack root in Nt.nH, has own L_,lH
+                nG.nH = _H + [root] + nG.nH  # pack root in Nt.nH, has own L_,lH (Why merging root.nH and nG.nH here?)
                 return nG  # recursive feedback, add to root
 
 def comb_altg_(nG, lG, rc):  # cross_comp contour/background per node:
@@ -212,7 +213,7 @@ def comb_altg_(nG, lG, rc):  # cross_comp contour/background per node:
         altg_ = {n.root for L in Lg.N_ for n in L.N_ if n.root and n.root.root}  # rdn core Gs, exclude frame
         if altg_:
             altg_ = {(core,rdn) for rdn,core in enumerate(sorted(altg_, key=lambda x:(x.Et[0]/x.Et[2]), reverse=True), start=1)}
-            Lg.B_ = [altg_, np.sum([i.Et for i,_ in altg_], axis=0)]
+            Lg.Rb_ = [altg_, np.sum([i.Et for i,_ in altg_], axis=0)]  # so lG has Rb_ here? Their B_ is llG
     def R(L):
         if L.root: return L.root if L.root.root is lG else R(L.root)
         else:      return None
@@ -220,8 +221,8 @@ def comb_altg_(nG, lG, rc):  # cross_comp contour/background per node:
         Et, Rdn, altl_ = np.zeros(3), 0, []  # contour/core clustering
         LR_ = {R(L) for n in Ng.N_ for L in n.rim}  # lGs, individual rims are too weak
         for LR in LR_:
-            if LR and LR.B_:  # not None, eval Lg.B_[1]?
-                for core, rdn in LR.B_[0]:  # map contour rdns to core N:
+            if LR and LR.Rb_:  # not None, eval Lg.B_[1]?
+                for core, rdn in LR.Rb_[0]:  # map contour rdns to core N:
                     if core is Ng:
                         altl_ += [LR]; Et += core.Et; Rdn += rdn  # add to Et[2]?
         if altl_:
@@ -951,20 +952,21 @@ def frame_H(image, iY,iX, Ly,Lx, Y,X, rV, max_elev=4, wTTf=np.ones((2,9),dtype="
     ave, Lw, intw, loopw, centw, contw, adist, amed, medw = np.array([ave, Lw, intw, loopw, centw, contw, adist, amed, medw]) / rV
 
     frame = CN(box=np.array([0,0,Y,X]), yx=np.array([Y//2, X//2]))
-    elev = 0; win = []
-    while True and elev < max_elev:
+    elev = 0; win = []; _Fg = []
+    while elev <= max_elev:
         # same center in all levels
         Tile = expand_lev(iY, iX, elev, win)
-        if Tile:  # higher-scope tile
+        if np.any(Tile):  # higher-scope tile (Tile is really a 2D array: Tile = np.empty((Ly,Lx), dtype=object)  # output G__)
             Fg = cross_comp_(Tile, rc=elev)  # cross_comp per N_,C_,L_ in the window?
             win = Fg; elev += 1
             frame.nH += [Fg]  # feedforward processed seed tile
-            if max_elev == 4:  # seed H, not from expand_lev
-                rV, wTTf = ffeedback(Fg)  # set filters
-                Fg = cent_attr(Fg,2)  # set Fg.derTT correlation weights
+            _Fg = Fg
+        else:  # seed H, not from expand_lev (feedback should be when elev = max_elev or break?)
+            if _Fg:
+                rV, wTTf = ffeedback(_Fg)  # set filters
+                Fg = cent_attr(_Fg,2)  # set Fg.derTT correlation weights
                 wTTf *= Fg.wTT; mW = np.sum(wTTf[0]); dW = np.sum(wTTf[1])
                 wTTf[0] *= 9/(mW+eps); wTTf[1] *= 9/(dW+eps)  # lev.wTTf
-        else:
             break
     return frame  # for intra-lev feedback
 
