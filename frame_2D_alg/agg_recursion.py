@@ -228,8 +228,8 @@ def comb_altg_(nG, lG, rc):  # cross_comp contour/background per node:
         if altl_:
             aG = CN(N_=altl_, Et=Et)
             if val_(Et,0,(len(altl_)-1)*Lw, rc+Rdn+loopw) > 0:  # norm by core_ rdn
-                aG = cross_comp(aG, rc)
-            Ng.B_ = [list(set(aG.N_)), aG.Et]
+                aG = cross_comp(aG, rc) or aG  # prevent empty aG
+            Ng.B_ = [set(aG.N_), aG.Et]  # cores or boundaries should be a set
 
 def proj_V(_N, N, angle, dist, fC=0):  # estimate cross-induction between N and _N before comp
 
@@ -493,7 +493,7 @@ def cluster_N(root, iN_, rN_, rc, rng=1):  # flood-fill node | link clusters
                 G_ += [sum2graph(root, N_,L_, long_, set(cent_), Et, olp, rng)]
             elif n.fi:  # L_ is preserved anyway
                 G_ += N_
-    if G_: return sum_N_(G_, root)  # nG
+    if G_: return sum_N_(G_, root)  # nG (need to pack L_ too?)
 
 def cluster_n(root, C_, rc, rng=1):  # simplified flood-fill for C_, etc
 
@@ -670,6 +670,7 @@ def sum_N_(node_, root=None, fC=0):  # form cluster G
         add_N(G,n,0, fC, froot=1)
     G.rc /= len(node_)
     if not fC and G.fi:
+        G.L_ = list(set([L for n in node_ for L in n.L_]))  # n's L should be G's L? Since both of them are internal
         for L in G.L_: G.Et += L.Et  # avoid redundant Ls in rims
     return G  # no rim
 
@@ -918,7 +919,7 @@ def frame_H(image, iY,iX, Ly,Lx, Y,X, rV, max_elev=4, wTTf=np.ones((2,9),dtype="
             if g: n_ += g.N_; l_ += g.L_; c_ += g.C_  # + dC_?
         nG, lG, cG = cross_comp(CN(N_=n_),rc), cross_comp(CN(N_=l_),rc+1), cross_comp(CN(N_=c_),rc+2,fC=1)
 
-        Et = np.sum([g.Et for g in (nG,lG,cG) if g]); rc = np.mean([g.rc for g in (nG,lG,cG) if g])
+        Et = np.sum([g.Et for g in (nG,lG,cG) if g],axis=0); rc = np.mean([g.rc for g in (nG,lG,cG) if g])
 
         return CN(Et=Et, rc=rc, N_= nG.N_ if nG else [], L_= lG.N_ if lG else [], C_= cG.N_ if cG else [])
 
