@@ -104,8 +104,8 @@ class CN(CBase):
         n.span = kwargs.get('span',0) # distance in nodet or aRad, comp with baseT and len(N_) but not additive?
         n.angl = kwargs.get('angl',np.zeros(2))  # dy,dx, sum from L_
         n.mang = kwargs.get('mang',1)  # ave match of angles in L_, =1 in links
-        n.B_ = kwargs.get('S_', [])  # excluded boundary Ns, add dB_?
-        n.rB_= kwargs.get('rS_',[])  # reciprocal core clusters, of lower composition?
+        n.B_ = kwargs.get('B_', [])  # excluded boundary Ns, add dB_?
+        n.rB_= kwargs.get('rB_',[])  # reciprocal core clusters, of lower composition?
         n.C_ = kwargs.get('C_', [])  # int centroid Gs, add dC_?
         n.rC_= kwargs.get('rC_',[])  # reciprocal root centroids
         n.nH = kwargs.get('nH', [])  # top-down hierarchy of sub-node_s: CN(sum_N_(Nt_))/ lev, with single added-layer derH, empty nH
@@ -300,8 +300,8 @@ def comp_N(_N,N, olp,rc, lH=None, angl=np.zeros(2), span=None, fdeep=0, rng=1): 
         if val_(Et,1, len(N.derH)-2, olp+rc) > 0 or fi==0:  # else derH is dext,vert
             Link.derH += comp_H(_N.derH,N.derH, rn,Et, derTT, Link)  # append
         if fi:
-            for falt, _N_,N_ in (0,1), (_N.N_,N.N_), (_N.B_,N.B_):  # nodes or boundary, cent_s overlap, use for cross-ref only?
-                if falt: _N_,N_ = _N_[0],N_[0]  # eval Et?
+            for falt, (_N_,N_) in zip((0,1), ((_N.N_,N.N_), (_N.B_,N.B_))):  # nodes or boundary, cent_s overlap, use for cross-ref only?
+                if falt and _N_ and N_: _N_,N_ = _N_[0],N_[0]  # eval Et? (skip empty B_)
                 if (_N_ and N_) and isinstance(N_[0],CN) and isinstance(_N_[0],CN):  # not PP
                     spec(_N_,N_, olp,rc,Et, Link.lH)  # for dspe?
     if fdeep==2: return Link  # or Et?
@@ -420,7 +420,7 @@ def Cluster(root, N_, rc, fC):  # generic root for clustering
                     add_N(_C,C, fmerge=1,froot=1)  # fin,root.rim
                     for l in C.rim: l.N_ = [_C if n is C else n for n in l.N_]
             else:
-                root.L_ = [l for l in root.L_ if l not in dC_[:i]]  # cleanup
+                if root.fi: root.L_ = [l for l in root.L_ if l not in dC_[:i]]  # cleanup (this should be applicable when root.fi = 1? Else root.L_ is int)
                 L_ = dC_[i:]; C_ = list({n for L in L_ for n in L.N_})  # remaining Cs and dCs
                 if L_ and val_(np.sum([l.Et for l in L_], axis=0), mw=(len(L_)-1)*Lw, aw=rc+contw) > 0:
                     nG = cluster_n(root, C_,rc)  # by connectivity in feature space
@@ -670,7 +670,6 @@ def sum_N_(node_, root=None, fC=0):  # form cluster G
         add_N(G,n,0, fC, froot=1)
     G.rc /= len(node_)
     if not fC and G.fi:
-        G.L_ = list(set([L for n in node_ for L in n.L_]))  # n's L should be G's L? Since both of them are internal
         for L in G.L_: G.Et += L.Et  # avoid redundant Ls in rims
     return G  # no rim
 
@@ -780,13 +779,13 @@ def project_N_(Fg, yx):
     dy,dx = Fg.yx - yx
     Fdist = np.hypot(dy,dx)  # external dist
     rdist = Fdist / Fg.span
-    Angle = np.array([dy,dx]); angle = Fg.angle  # external and internal angles
+    Angle = np.array([dy,dx]); angle = Fg.angl  # external and internal angles
     cos_d = angle.dot(Angle) / (np.hypot(*angle) * Fdist)
     # difference between external and internal angles, *= rdist
     ET = np.zeros(3); DerTT = np.zeros((2,9))
     N_ = []
     for _N in Fg.N_:  # sum _N-specific projections for cross_comp
-        if len(_N.derH) < 2: continue
+        if len(_N.derH) < 2: continue  # this is always true
         M,D,n = _N.Et
         dec = rdist * (M/(M+D))  # match decay rate, * ddecay for ds?
         prj_H = prj_dH(_N.derH[1:], cos_d * rdist, dec)  # derH[0] is positionals
