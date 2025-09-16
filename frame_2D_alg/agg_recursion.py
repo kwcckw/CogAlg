@@ -308,9 +308,10 @@ def comp_N(_N,N, olp,rc, lH=None, angl=np.zeros(2), span=None, rng=1):  # compar
             if (_n_ and n_) and isinstance(n_[0],CN) and isinstance(_n_[0],CN):  # not PP
                 spec(_n_,n_, olp,rc,Et, Link.lH)  # for dspe?
     if lH is not None:  lH += [Link]
-    for n, _n, rev in zip((N,_N),(_N,N),(0,1)):  # if rim-mediated comp: reverse dir in _N.rim: rev^_rev
-        n.rim += [Link]; n.et += Et
-        n.compared.add(_n)
+    if span is not None:  # for comp_N called from spec, skip the rim assignment below? Since we only need to Link
+        for n, _n, rev in zip((N,_N),(_N,N),(0,1)):  # if rim-mediated comp: reverse dir in _N.rim: rev^_rev
+            n.rim += [Link]; n.et += Et
+            n.compared.add(_n)
     return Link
 
 def min_comp(_N,N):  # comp Et, baseT, extT, derTT
@@ -524,7 +525,7 @@ def cluster_n(root, C_, rc, rng=1):  # simplified flood-fill, currently for for 
             for l in L_: Et += l.Et
             if val_(Et,1, (len(N_)-1)*Lw, rc+olp, root.Et) > 0:
                 G_ += [sum2graph(root, N_,L_,[], set(cent_), Et,olp, rng)]
-            else:
+            elif n.fi:  # this should follow cluster_N? Else we may get a combination of G_ with fi = 1 (from sum2graph) and fi = 0 (recycled link node)
                 G_ += N_
     if G_: return sum_N_(G_,root)  # nG
 
@@ -579,7 +580,8 @@ def cluster_C(E_, root, rc):  # form centroids by clustering exemplar surround v
     C_ = [C for C in C_ if val_(C.ET, aw=rc)]  # prune C_
     if C_:
         for n in [N for C in C_ for N in C.N_]:
-            n.exe = n.et[1-n.fi] + np.sum(n.mo_[0] - ave * n.mo_[1]) - ave  # exemplar V + summed n match_dev to Cs
+            # should be summing each mo[0] - mo[1] - ave?
+            n.exe = n.et[1-n.fi] + np.sum([mo[0] - ave * mo[1] for mo in n.mo_]) - ave  # exemplar V + summed n match_dev to Cs
             # m * corr C rvals?
         if val_(Et,1,(len(C_)-1)*Lw, rc+olp, root.Et) > 0:
             cG = cross_comp(sum_N_(C_), rc, fC=1)  # distant Cs or with different attrs
@@ -606,6 +608,7 @@ def cent_attr(C, rc):  # weight attr matches | diffs by their match to the sum, 
             else: break  # weight convergence
         wTT += [_w_]
     C.wTT = np.array(wTT)  # replace wTTf
+    C.ET = np.zeros(3)  # init C.ET
     return C
 
 def ett(L): return (L.N_[0].et + L.N_[1].et) * intw
@@ -684,7 +687,9 @@ def add_N(N,n, fmerge=0, fC=0, froot=0):
         N.L_ += n.L_; N.rim += n.rim  # L is list or len, no L.root assign, rims can't overlap
     else:
         N.N_ += [n]
-        if not fC: N.L_ += [l for l in n.rim if l.Et[0]>ave] if n.fi else n.L_  # len
+        if not fC:
+            if isinstance(N.L_, list): N.L_ += [l for l in n.rim if l.Et[0]>ave]  # pack N.L_ with n.rim as long N.L_ is a list, including lG with fi = 0
+            else:                      N.L_ += n.L_  # int
     if froot:
         n.fin = 1; n.root = N
     if n.B_: add_sett(N.B_,n.B_)  # silhouette: ext clusters
@@ -698,7 +703,7 @@ def add_N(N,n, fmerge=0, fC=0, froot=0):
     if fC: N.rc += np.sum([mo[1] for mo in n._mo_])
     else:  N.rc = (N.rc*_en + n.rc*en) / (en+_en)  # ave of aves
     N.yx = (N.yx*_en + n.yx*en) /(en+_en)
-    N.span = max(N.span,n.span)
+    if N.span and n.span: N.span = max(N.span,n.span)  # skip when span is None, that is when L is computed from spec
     N.box = extend_box(N.box, n.box)
     if hasattr(n,'mo_') and hasattr(N,'mo_'):
         N.rC_ += n.rC_; N.mo_ += n.mo_  # not sure
@@ -957,13 +962,13 @@ def frame_H(image, iY,iX, Ly,Lx, Y,X, rV, max_elev=4, wTTf=np.ones((2,9),dtype="
 
     frame = CN(box=np.array([0,0,Y,X]), yx=np.array([Y//2, X//2]))
     Fg=[]; elev=0
-    while True and elev < max_elev:  # same center in all levels
+    while elev < max_elev:  # same center in all levels (we can skip the while True here)
         Fg_ = expand_lev(iY,iX, elev, Fg)
         if Fg_:  # higher-scope tile
             Fg = cross_comp_(Fg_, rc=elev)  # cross_comp per N_,C_,L_ in the window?
             if Fg:
                 frame.nH += [Fg]; elev += 1  # forward comped tile
-                if max_elev == 4:  # seed, not from expand_lev
+                if max_elev == 4 and Fg.L_:  # seed, not from expand_lev  (feedback is actually applied at every level)
                     rV, wTTf = ffeedback(Fg)  # set filters
                     Fg = cent_attr(Fg,2)  # set Fg.derTT correlation weights
                     wTTf *= Fg.wTT; mW = np.sum(wTTf[0]); dW = np.sum(wTTf[1])
