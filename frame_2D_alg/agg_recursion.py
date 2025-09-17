@@ -221,7 +221,8 @@ def comb_B_(nG, lG, rc):  # cross_comp boundary / background per node:
         else:      return None
     for Ng in nG.N_:
         Et, Rdn, lB_ = np.zeros(3), 0, []  # contour/core clustering
-        LR_ = {R(L) for n in Ng.N_ for L in n.rim}  # lGs, individual rims are too weak
+        N_ = Ng.N_ if isinstance(Ng.N_[0], CN) else [Ng]   # for recycled nodes, use their rim directly
+        LR_ = {R(L) for n in N_ for L in n.rim}  # lGs, individual rims are too weak
         for LR in LR_:
             if LR and LR.rB_:  # not None, eval Lg.B_[1]?
                 for core, rdn in LR.rB_[0]:  # map contour rdns to core N:
@@ -750,10 +751,9 @@ def eval(V, weights):  # conditional progressive eval, with default ave in weigh
     return 1
 
 def val_H(H):
-    derTT = np.zeros((2,9)); Et = np.zeros(3)
+    derTT = np.zeros((2,9)); Et = np.zeros(2)  # Lay.Et has m and d only now
     for lay in H:
-        for fork in lay:
-            if fork: derTT += fork.derTT; Et += fork.Et
+        derTT += lay.derTT; Et += lay.Et
     return derTT, Et
 
 def prj_TT(_Lay, proj, dec):
@@ -761,10 +761,16 @@ def prj_TT(_Lay, proj, dec):
     return Lay
 
 def prj_dH(_H, proj, dec):
+    '''
     H = []
     for lay in _H:
         H += [[lay[0].copy_(), prj_TT(lay[1],proj,dec) if lay[1] else []]]  # two-fork
+    
     return H
+    
+    '''
+    # derH is single layer now?
+    return [prj_TT(lay,proj,dec) for lay in _H]
 
 def comp_prj_dH(_N,N, ddH, rn, link, angl, span, dec):  # comp combined int proj to actual ddH, as in project_N_
 
@@ -773,7 +779,7 @@ def comp_prj_dH(_N,N, ddH, rn, link, angl, span, dec):  # comp combined int proj
     cos_da = angl.dot(N.angl) / (span * N.span)
     _rdist = span/_N.span
     rdist  = span/ N.span
-    prj_DH = add_H( prj_dH(_N.derH[1:], _cos_da *_rdist, _rdist*dec),  # derH[0] is positionals
+    prj_DH = add_H( prj_dH(_N.derH[1:], _cos_da *_rdist, _rdist*dec),  # derH[0] is positionals (what is positionals means here?)
                     prj_dH( N.derH[1:], cos_da * rdist, rdist*dec),
                     link)  # comb proj dHs | comp dH ) comb ddHs?
     # Et+= confirm:
@@ -796,11 +802,12 @@ def project_N_(Fg, yx):
         dec = rdist * (M/(M+D))  # match decay rate, * ddecay for ds?
         prj_H = prj_dH(_N.derH[1:], cos_d * rdist, dec)  # derH[0] is positionals
         prjTT, pEt = val_H(prj_H)  # sum only ds here?
-        pD = pEt[1]*dec; dM = M*dec
+        pD = pEt[1]*dec; dM = M*dec  # we only need pEt[1] here? Then val_H can return D instead of pEt
         pM = dM - pD * (dM/(ave*n))  # -= borrow, regardless of surprise?
         pEt = np.array([pM, pD, n])
         if val_(pEt, aw=contw):
             ET+=pEt; DerTT+=prjTT
+            # why not copy _N and replaces the params below? We need to reassign projected root before return the projected root?
             N_ += [CN(N_=_N.N_, Et=pEt, derTT=prjTT, derH=prj_H, root=CN())]  # same target position?
     # proj Fg:
     if val_(ET, mw=len(N_)*Lw, aw=contw):
