@@ -55,7 +55,8 @@ def copy_(dH, i=None, rn=1):
 
     if i: C = dH; lay = i  # reuse self
     else: C = CdH()
-    C.H = [copy_(d, rn) for d in dH.H]; C.Et = dH.Et * rn; C.derTT=dH.derTT * rn; C.root=dH.root
+    # we need to specify the argument rn, else it will be parsed as i
+    C.H = [copy_(d, rn=rn) for d in dH.H]; C.Et = dH.Et * rn; C.derTT=dH.derTT * rn; C.root=dH.root
     if not i: return C
 
 def add_dH(DH, dH):  # rn = n/mean, no rev, merge/append lays
@@ -73,9 +74,9 @@ def comp_dH(_dH, dH, rn, root):  # unpack derH trees down to numericals and comp
 
     H = []
     if _dH.H and dH.H:  # 2 or more layers each
-        Et = np.zeros(2); derTT = np.zeros((2,9))
+        Et = np.zeros(3); derTT = np.zeros((2,9))
         for D, d in zip(_dH.H, dH.H):
-            ddH = comp_dH(D, d, rn, root)
+            ddH = comp_dH(D, d, rn, root); ddH.Et = np.append(ddH.Et, min([_dH.Et[2], dH.Et[2]]))  # add n
             H += [ddH]; Et += ddH.Et; derTT += ddH.derTT
     else:
         derTT = comp_derT(_dH.derTT[1], dH.derTT[1] * rn)  # ext A align replaced dir/rev
@@ -304,13 +305,13 @@ def comp_N(_N,N, olp,rc, angl=np.zeros(2), span=None, rng=1, lH=None):  # compar
             H += dH.H; dTT = dH.derTT; dEt = dH.Et
         else:
             m_,d_ = comp_derT(rn*_N.derTT[1], N.derTT[1])
-            dEt = np.array([np.sum(m_),np.sum(d_)]); dTT = np.array([m_,d_])
+            dEt = np.array([np.sum(m_),np.sum(d_),min([_N.Et[2]+N.Et[2]])]); dTT = np.array([m_,d_])
             H += [CdH(Et=dEt, derTT=dTT, root=Link)]
         Et += dEt; derTT += dTT
         Link.derH = CdH(H=H, Et=Et, derTT=derTT, root=Link)  # same as Link Et,derTT
     if fi and V > ave * compw:
         for falt, (_n_,n_) in zip((0,1), ((_N.N_,N.N_), (_N.B_,N.B_))):  # nodes|boundary, C_ M,D = overlap,offset vals?
-            if falt and _n_ and n_: _n_,n_ = _n_[0],n_[0]  # skip Et
+            if falt and _n_ and n_: _n_,n_ = list(_n_[0]),list(n_[0])  # skip Et (convert to list for indexing)
             if (_n_ and n_) and isinstance(n_[0],CN) and isinstance(_n_[0],CN):  # not PP
                 spec(_n_,n_, olp,rc,Et, Link.lH)  # for dspe?
     if lH is not None:
@@ -326,11 +327,12 @@ def base_comp(_N,N, fC=0):  # comp Et, baseT, extT, derTT
     fi = N.fi
     _M,_D,_n =_N.Et; _I,_G,_Dy,_Dx =_N.baseT; _L = len(_N.N_) if fi else _N.L_  # len nodet.N_s
     M, D, n  = N.Et; I, G, Dy, Dx = N.baseT; L = len(N.N_) if fi else N.L_
-    _pars = np.array([_M,_D,_n,_I,_G, np.array([_Dy,_Dx]),_L,_N.span], dtype=object)  # Et, baseT, extT
+    rn = _n/n  # this is inverted so that it can be applied to _pars?
+    # skip rn on intensive: A and span
+    _pars = np.array([_M*rn,_D*rn,_n*rn,_I*rn,_G*rn, np.array([_Dy,_Dx]),_L*rn,_N.span], dtype=object)  # Et, baseT, extT
     pars = np.array([M,D,n, (I,aI),G, np.array([Dy,Dx]), L,(N.span,aS)], dtype=object)
-    rn = _n/n
-    mA,dA = comp_A(rn*_N.angl, N.angl)  # ext angle
-    m_,d_ = comp(rn*_pars,pars, mA,dA)  # -> M,D,n, I,G,A, L,S,eA
+    mA,dA = comp_A(_N.angl, N.angl)  # ext angle  (skip rn on intensive)
+    m_,d_ = comp(_pars,pars, mA,dA)  # -> M,D,n, I,G,A, L,S
     if fC:
         dm_,dd_ = comp_derT(rn*_N.derTT[1], N.derTT[1])
         m_+= dm_; d_+= dd_
@@ -391,7 +393,7 @@ def spec(_spe,spe, olp,rc, Et, dspe=None):  # for N_|B_
                 if dspe is not None: dspe += [dN]
                 for L,l in [(L,l) for L in _N.rim for l in N.rim]:  # l nested in L
                     if L is l: Et += l.Et  # overlap val?
-                if _N.B_ and N.B_: spec(_N.B_,N.B_, olp,rc, Et)
+                if _N.B_ and N.B_: spec(_N.B_[0],N.B_[0], olp,rc, Et)  # We beed B_[0] to get Ns
 
 def rolp(N, _N_, R=0): # rel V of L_|N.rim overlap with _N_: inhibition|shared zone, oN_ = list(set(N.N_) & set(_N.N_)), no comp?
 
@@ -626,15 +628,11 @@ def sum2graph(root, node_,link_,long_,cent_, Et, olp, rng):  # sum node,link att
     graph.hL_ = long_
     n0.root = graph; yx_ = [n0.yx]; fg = fi and isinstance(n0.N_[0],CN)   # not PPs
     Nt = Copy_(n0)  # CN, add_N(Nt,Nt.Lt)?
-    meann = np.mean([n.Et[2] for n in node_])
     for N in node_:
-        rn = N.Et[2]/meann
-        add_dH(derH,N.derH,rn); graph.baseT+=N.baseT*rn; graph.derTT+=N.derTT*rn; graph.box=extend_box(graph.box,N.box); yx_+=[N.yx]; N.root = graph
+        add_dH(derH,N.derH); graph.baseT+=N.baseT; graph.derTT+=N.derTT; graph.box=extend_box(graph.box,N.box); yx_+=[N.yx]; N.root = graph
         if fg: add_N(Nt,N)  # froot = 0
-    lmeann = np.mean([l.Et[2] for l in link_])  # same for L?
     for L in link_:
-        rn = L.Et[2]/lmeann
-        add_dH(derH,L.derH,rn); graph.baseT+=L.baseT*rn; graph.derTT+=L.derTT*rn
+        add_dH(derH,L.derH); graph.baseT+=L.baseT; graph.derTT+=L.derTT
     graph.derH = derH
     if fg: graph.nH = Nt.nH + [Nt]  # pack prior top level
     yx = np.mean(yx_, axis=0); dy_,dx_ = (yx_-yx).T; dist_ = np.hypot(dy_,dx_)
@@ -699,7 +697,7 @@ def add_N(N,n, fmerge=0, fC=0, froot=0):  # rn = n.n / mean.n
     rc = np.sum([mo[1] for mo in n._mo_]) if fC else n.rc
     Intensive_,intensive_ = [N.rc,N.yx,N.angl,N.mang,N.span], [rc,n.yx,n.angl,n.mang,n.span]
     for i, (Par,par) in enumerate(zip(Intensive_,intensive_)):
-        if Par and par:
+        if np.any(Par) and np.any(par):  # we need np.any to check np.array
             Intensive_[i] = (Par*_cnt + par*cnt) / Cnt
     N.box = extend_box(N.box, n.box)
     if hasattr(n,'mo_') and hasattr(N,'mo_'):
