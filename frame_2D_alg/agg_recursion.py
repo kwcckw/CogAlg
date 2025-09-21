@@ -64,8 +64,9 @@ def add_dH(DH, dH):  # rn = n/mean, no rev, merge/append lays
     DH.derTT += dH.derTT
     off_H = []
     for D, d in zip_longest(DH.H, dH.H):
-        if D and d: add_dH(D, d)
-        elif d:     off_H += [copy_(d)]
+        if d is not None:   # we need to check None here, else depeest CdH.H is empty and its returning false too
+            if D is not None: add_dH(D, d)
+            else:             off_H += [copy_(d)] 
     DH.H += off_H
     return DH
 
@@ -75,11 +76,11 @@ def comp_dH(_dH, dH, rn, root):  # unpack derH trees down to numericals and comp
     if _dH.H and dH.H:  # 2 or more layers each
         Et = np.zeros(3); derTT = np.zeros((2,9))
         for D, d in zip(_dH.H, dH.H):
-            ddH = comp_dH(D, d, rn, root); ddH.Et = np.append(ddH.Et, min([_dH.Et[2],dH.Et[2]]))
+            ddH = comp_dH(D, d, rn, root)
             H += [ddH]; Et += ddH.Et; derTT += ddH.derTT
     else:
         derTT = comp_derT(_dH.derTT[1], dH.derTT[1] * rn)  # ext A align replaced dir/rev
-        Et = np.array([np.sum(derTT[0]), np.sum(np.abs(derTT[1]))])
+        Et = np.array([np.sum(derTT[0]), np.sum(np.abs(derTT[1])), min([_dH.Et[2],dH.Et[2]])])
 
     return CdH(H=H, Et=Et, derTT=derTT, root=root)
 
@@ -294,7 +295,9 @@ def comp_sorted(C_, rc):  # comp_Q for centroids via max attr sort-and-scan
 
     L_, ET = [], np.zeros(3)
     for C in C_: C.compared = set()
-    i = np.argmax(wTTf[0]+ wTTf[1])
+    # we probably need to normalize them before getting the max since each of them are in different scale
+    # for example, angle range from 0 - 2, so their value is very low
+    i = np.argmax(wTTf[0]+ wTTf[1]) 
     C_ = sorted(C_, key=lambda C: C.derTT[0][i])
     # K top attrs, overlap along C_?
     for j in range( len(C_) - 1):
@@ -318,7 +321,8 @@ def comp_N(_N,N, olp,rc, angl=np.zeros(2), span=None, rng=1, lH=None):  # compar
     Link = CN(Et=Et,rc=olp, N_=[_N,N], L_=len(_N.N_+N.N_), et=_N.et+N.et, baseT=baseT,derTT=derTT, yx=yx,box=box, span=span,angl=angl, rng=rng, fi=0)
     V = val_(Et, aw=olp+rc)
     if V > 0:  # or V * (1 - 1/ (min(len(N.derH),len(_N.derH)) or eps)) > ave:  # derH rdn to derTT
-        H = [CdH(Et=Et[:2], derTT=copy(derTT), root=Link)]  # + 2nd | higher layers:
+        # we shouldn't skip n now?
+        H = [CdH(Et=Et, derTT=copy(derTT), root=Link)]  # + 2nd | higher layers:
         if _N.derH and N.derH:
             dH = comp_dH(_N.derH, N.derH, rn, Link)
             H += dH.H; dTT = dH.derTT; dEt = dH.Et
@@ -328,7 +332,7 @@ def comp_N(_N,N, olp,rc, angl=np.zeros(2), span=None, rng=1, lH=None):  # compar
             H += [CdH(Et=dEt, derTT=dTT, root=Link)]
         Et += dEt; derTT += dTT
         Link.derH = CdH(H=H, Et=Et, derTT=derTT, root=Link)  # same as Link Et,derTT
-    if fi and V > ave * compw:
+    if fi and lH is not None and V > ave * compw:
         if N.L_: spec(_N.N_, N.N_, olp,rc, Et, Link.lH)  # skip PP
         if (_N.B_ and _N.B_[0]) and (N.B_ and N.B_[0]):  # boundary, skip Et
             spec(_N.B_[0],N.B_[0], olp,rc, Et, Link.lH)  # for dspe; add C_ overlap,offset?
@@ -406,7 +410,7 @@ def spec(_spe,spe, olp,rc, Et, dspe=None):  # for N_|B_
     for _N in _spe:
         for N in spe:
             if _N is not N:
-                dN = comp_N(_N, N, olp,rc); Et += dN.Et
+                dN = comp_N(_N, N, olp,rc); Et += dN.Et  # this comp_N should skip spec within when comparing _N and N?
                 if dspe is not None: dspe += [dN]
                 for _l,l in [(_l,l) for _l in _N.rim for l in N.rim]:  # l nested in _l
                     if _l is l: Et += l.Et  # overlap val?
@@ -517,7 +521,7 @@ def cluster_N(root, iN_, rN_, rc, rng=1):  # flood-fill node | link clusters
             for n in N_: olp += n.rc  # from Ns, vs. Et from Ls?
             for l in L_: Et += l.Et
             if val_(Et, 1, (len(N_)-1)*Lw, rc+olp, root.Et) > 0:
-                G_ += [sum2graph(root, N_,L_, long_, set(cent_), Et, olp, rng)]
+                G_ += [sum2graph(root, N_,L_, long_, list(set(cent_)), Et, olp, rng)]  # C_ should be a list?
             elif n.fi:  # L_ is preserved anyway
                 for n in N_: n.depth += 1
                 G_ += N_
@@ -670,7 +674,7 @@ def slope(link_):  # get ave 2nd rate of change with distance in cluster or fram
     return (np.diff(rates) / np.diff(dists)).mean()
 
 def sum_H(H):  # use add_dH?
-    derTT = np.zeros((2,9)); Et = np.zeros(2)
+    derTT = np.zeros((2,9)); Et = np.zeros(3)  # Lay has n now
     for lay in H:
         derTT += lay.derTT; Et += lay.Et
     return derTT, Et
