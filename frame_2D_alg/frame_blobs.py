@@ -77,7 +77,7 @@ class CdH(CBase):  # derivation hierarchy or a layer thereof, subset of CG
         d.derTT = kwargs.get('derTT', np.zeros((2,9)))  # m_,d_ [M,D,n, I,G,A, L,S,eA]: single layer or sum derH
         d.root = kwargs.get('root', [])  # to pass Et, derTT
     def __bool__(d): return bool(d.H)
-    
+
 class CN(CBase):
     name = "node"
     def __init__(n, **kwargs):
