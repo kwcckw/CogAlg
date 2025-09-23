@@ -291,36 +291,57 @@ def comp_Q(iN_, rc, fC):  # comp pairs of nodes or links within max_dist
 
 def comp_seq(iN_, rc, fC):  # comp consecutive nodes along or links within max_dist
 
-    N_,L_,Et,_N_ = [],[], np.zeros(3),copy(iN_)
-    for N in N_: N._rim = []
-    for _N, N in combinations(_N_, r=2):  # proximity-order for min ders
+    N_,L_,Et = copy(iN_),[], np.zeros(3)  # we only need N_?
+    for N in N_: N._rim = []  # we should init with N_ or iN_
+    for _N, N in combinations(N_, r=2):  # proximity-order for min ders
         if _N in N.compared: continue
-        dy_dx = _N.yx-N.yx; dist = np.hypot(*dy_dx)
+        dy_dx = _N.yx-N.yx; dist = np.hypot(*dy_dx)  # we probably can eval with dist here to filter those N pairs first?
         L = [dist,dy_dx,_N,N]; N._rim += [L]; _N._rim += [L]
     oN_,G_ = [],[]
-    for N in N_: N.compared=0
+    # for N in N_: N.compared=0  (why we need this?)
     for N in N_:
-        for Li in np.argsort([_L[0] for _L in N._rim][:2]):  # two shortest links, one in each direction?
+        for Li in np.argsort([_L[0] for _L in N._rim])[:2]:  # two shortest links, one in each direction? (why 2 nearest pair of nodes? Their direction may not necessary in opposite?)
             dist,dy_dx,_n,n = N._rim[Li]
             if n in _n.compared: continue  # only one direction may be open?
-            V = proj_V(_n,n, dy_dx, dist)  # eval _N,N cross-induction for comp
+            V = proj_V(_n,n, dy_dx, dist)  # eval _N,N cross-induction for comp (proj_V eval with et, but n.et is empty before the comp, so we need to use Et in proj_V?)
             o = (n.rc+_n.rc) / 2
             if adist * V/(rc+o) > dist:  # min induction
                 Link = comp_N(_n,n, o,rc, angl=dy_dx, span=dist, lH=L_)
                 if val_(Link.Et, aw=compw+o+rc) > 0:
                     oN_ += [_n,n]; Et += Link.Et
-        oN_ = list(set(N_))
-    for N in N_: N.root = [N]  # temporary?
-    for N in N_:
+        oN_ = list(set(oN_))
+    Gt_ = [[N] for N in oN_]
+    for N, Gt in zip(oN_, Gt_):
+        if N.fin: continue
+        N.fin = 1
         for L in N.rim:  # 1|2 links per rim
             if val_(L.Et,aw=contw+rc):
+                 # get the other _N params
+                _N = L.N_[0] if L.N_[1] is N else L.N_[1]  # the other _N from link   
+                _N_ = Gt_[oN_.index(_N)]  # get all Ns of other _N's Gt
+                
+                # recursively merge all the other _N's Gt
+                while _N_: 
+                    N_ = []
+                    for _N in _N_:  
+                        _i = oN_.index(_N)
+                        _Gt = Gt_[_i] 
+                        if _Gt is not Gt:  # not in current Gt yet
+                            _N.fin = 1
+                            N_ += list(set(_Gt) - set(Gt))  # to check in the next loop
+                            Gt += [_N]     # merge node into Gt
+                            Gt_[_i] = Gt   # replaces Gt after the merging, so that it points to the new Gt
+                    _N_ = N_  # for next loop
+                    
+                # L.N_ always have 2 Ns here? why we need to check?
+                '''
                 nt = L.N_
-                if len(nt) == 2: Gt = nt[0].root if nt[0] is N else nt[0].root; Gt += [N]; N.fin = 1
-            else: N.fin=0  # singleton
-    for N in N_:
-        Gt = N.root
-        if len(Gt) > 1: G = sum_N_(N.root); N.root=G; G_ += [G]
-        else: N.root=[]; N.sub+=1; G_ += [N]  # singleton
+                if len(nt) == 2:  Gt = nt[0].root if nt[0] is N else nt[0].root; Gt += [N]; N.fin = 1
+                '''
+        if len(Gt) == 1: N.fin=0  # singleton (this should be after all N.rim are checked? And we can check with Gt here)
+    for Gt in set([tuple(Gt) for Gt in Gt_]):  # remove duplicates after the merging
+        if len(Gt) > 1: G_ += [sum_N_(Gt)]  # N.root assignment is done in add_N_ within the sum_N_
+        else:           N=Gt[0]; N.root=[]; N.sub+=1; G_ += [N]  # singleton
     return G_
 
 def comp_sorted(C_, rc):  # max attr sort to constrain search in 1D, add K attrs and overlap?
