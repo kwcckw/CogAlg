@@ -291,35 +291,64 @@ def comp_Q(iN_, rc, fC):  # comp pairs of nodes or links within max_dist
 
 def comp_seq(N_, rc):  # comp consecutive nodes along each direction in the edge
 
-    L_, Et = [], np.zeros(3)
+    def cluster_links(irim):
+        
+        cluster_ = []
+        rim = sorted(irim, key=lambda l:l[0])  # min distance first
+        for i, _L in enumerate(rim):
+            if _L[-1]: continue  # already clustered in prior loops
+            if _L[0] < adist:  # cut-off dist with adist
+                cluster = [_L]; _L[-1] = cluster
+                _angle = _L[1]
+                for L in rim[1+1:]:  # check the rest of the links
+                    if L[-1]: continue  # skip if the other link is clustered, or merge them?
+                    angle = L[1]
+                    mA, _ = comp_A(_angle, angle)
+                    if mA>0.5:   # mA range from 0-1, so use 0.5? Or init an aveA?
+                       L[-1] = cluster
+                       cluster += [L]
+                cluster_ += [cluster]  
+            else:
+                # the rest of the links form their own single-link cluster?
+                cluster_ += [[L] for L in rim] 
+                break
+        # replaces N._rim with link clusters
+        irim[:] = cluster_
+
+    Et = np.zeros(3)
     for N in N_: N._rim = []
     for _N, N in combinations(N_,r=2):  # get proximity only
         if _N in N.compared: continue
-        N.compared +=[_N]; _N.compared +=[N]
+        N.compared.add(_N); _N.compared.add(N)
         dy_dx = _N.yx-N.yx; dist = np.hypot(*dy_dx)
-        L = [dist,dy_dx,_N,N]; N._rim += [L]; _N._rim += [L]
+        L = [dist,dy_dx,_N,N,None]; N._rim += [L]; _N._rim += [L]  # added link cluster reference in L[-1]
     G_ = []
-    for N in N_: N.compared=0
+    for N in N_: cluster_links(N._rim)
     for N in N_:
         for dir in N._rim:  # _rim should pre-link directions clustered by mA, as in proj_V
             Li = np.argmin([l[0] for l in dir])
-            dist,dy_dx,_n,n = dir[Li]
-            if n in _n.compared: continue
+            dist,dy_dx,_n,n,_ = dir[Li]
+            # if n in _n.compared: continue  (this is not necessary? We already added compared_ when getting prelinks)
             o = n.rc+_n.rc  # V = proj_V(_n,n, dy_dx, dist)  # eval _N,N cross-induction for comp
             if adist * (val_(n.Et+_n.Et, aw=o) / ave*rc) > dist:  # min induction
                 Link = comp_N(_n,n, o,rc, angl=dy_dx, span=dist)
                 if val_(Link.Et, aw=compw+o+rc) > 0:
-                    L_ += Link; Et += Link.Et
+                    Et += Link.Et  # L_ is not necessary here?
         N.Gt = [N]
     for N in N_:
+        if N.fin: continue
         for L in N.rim:  # one min dist L per direction
             if val_(L.Et, aw=contw+rc):
-                nt=L.N_; Gt = nt[0].Gt if nt[0] is N else nt[0].Gt
-                N.fin=1; Gt += [N]
+                # nt=L.N_; Gt = nt[0].Gt if nt[0] is N else nt[1].Gt  # it should be nt[1] in else section? 
+                _N = L.N_[1] if L.N_[0] is N else L.N_[0]
+                if _N.Gt is not Gt and not _N.fin:  # _N not cluster before (need to merge Gt, as in my prior version?)
+                    _N.fin=1; N.Gt += [_N]; _N.Gt = N.Gt
+        if len(N.Gt)>1: N.fin = 1  # set N.fin = 1 if there's more than 1 N
     for N in N_:
+        if not hasattr(N, 'Gt'): continue  # N is summed in prior loop
         if len(N.Gt)>1: G = sum_N_(N.Gt); G.root=N.root; N.root=G; G_+=[G]
         elif not N.fin: N.sub+=1; G_ += [N]  # singleton
-        delattr(N,"Gt")
+        for n in G.N_: delattr(n, 'Gt')
     return G_
 
 def comp_sorted(C_, rc):  # max attr sort to constrain search in 1D, add K attrs and overlap?
