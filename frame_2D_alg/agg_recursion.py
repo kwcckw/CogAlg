@@ -172,18 +172,19 @@ def trace_edge(N_, rc):  # cluster contiguous shapes via PPs in edge blobs or li
         dir_ = []  # [ave_angle, [pre_links]]
         for pL in N._rim:
             dist, angl, _N = pL
-            imax = -1; max_mA = -1
-            for i, (Angl, pL_) in enumerate(dir_):
+            max_cluster = []; max_mA = -1
+            for i, cluster in enumerate(dir_):   # this is comparing each link with each of the existing clusters
+                Angl, pL_ = cluster    
                 mA,_ = comp_A(angl, Angl)
                 if mA > .5 and mA > max_mA:
-                    max_mA = mA; imax = i
+                    max_mA = mA; max_cluster = cluster
             # dir clustering:
-            if imax != -1:
-                dir_[imax][0] = np.add(dir_[imax][0], angl)  # update Angl
-                dir_[imax][1] += [pL]
-            else:
+            if max_cluster:  # pack current pL into the cluster with max mA
+                max_cluster[0] += angl  # update Angl
+                max_cluster[1] += [pL]  # update pL
+            else:  # new cluster
                 dir_ += [[angl,[pL]]]
-        for Angl, pL_ in dir_:
+        for _, pL_ in dir_:
             dist, dy_dx, _N = pL_[np.argmin([pL[0] for pL in pL_])]
             key = tuple(sorted((N.id,_N.id)))
             if key in compT_: continue
@@ -195,7 +196,7 @@ def trace_edge(N_, rc):  # cluster contiguous shapes via PPs in edge blobs or li
                 if val_(Link.Et, aw=compw+o+rc) > 0:
                     L_ += [Link]; Et += Link.Et
     # floodfill
-    L_ = {L for L in L_ if val_(L.Et, aw=contw+rc) > 0}
+    # L_ = {L for L in L_ if val_(L.Et, aw=contw+rc) > 0}  This eval should be already done when we add L into L_?
     G_ = []; root = N_[0].root
     for N in N_:
         if N.fin: continue
