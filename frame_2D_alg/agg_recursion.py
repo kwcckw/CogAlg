@@ -163,7 +163,7 @@ def trace_edge(N_, rc):  # cluster contiguous shapes via PPs in edge blobs or lG
     # dist pairs:
     for _N, N in combinations(N_, r=2):
         dy_dx = _N.yx - N.yx; dist = np.hypot(*dy_dx)
-        N._rim += [[dist, dy_dx, _N]]
+        N._rim += [[dist, dy_dx, _N]]  # we still need to manually assign sign here? N will never be a link here
         _N._rim +=[[dist, -dy_dx, N]]
     cT_ = set()  # comp pairs
     for N in N_:
@@ -174,7 +174,7 @@ def trace_edge(N_, rc):  # cluster contiguous shapes via PPs in edge blobs or lG
             max_pL_t = []; max_mA = -1
             for i, pL_t in enumerate(dir_):
                 Angl,pL_ = pL_t
-                mA,_ = comp_A(angl, Angl)
+                mA,_ = comp_A(angl, Angl)  # this is comparing the sum of angle, Angl isntead of each individual links of cluster?
                 if mA > .5 and mA > max_mA:
                     max_mA = mA; max_pL_t = pL_t
             if max_pL_t:
@@ -196,14 +196,16 @@ def trace_edge(N_, rc):  # cluster contiguous shapes via PPs in edge blobs or lG
     for N in N_:
         if N.fin: continue
         N.fin =1; Gt = [N]; _N_ = [N]
+        link_, Et, olp = [], np.zeros(3), 0
         while _N_:
             _N = _N_.pop(0)
             for L in _N.rim:
                 if L in L_:
                     n = L.N_[0] if L.N_[1] is _N else L.N_[1]
-                    if n in N_ and not n.fin: n.fin = 1; Gt += [n]; _N_ += [n]
+                    if n in N_ and not n.fin: 
+                        n.fin = 1; Gt += [n]; _N_ += [n]; link_ += [L]; olp += n.rc; Et += L.Et
         if len(Gt) > 1:
-            G = sum_N_(Gt,root); G_ += [G]
+            G_ += [sum2graph(root, Gt,link_,[],[], Et, olp, 1)]  # using sum2graph is more accurate here?
         else:
             N.sub += 1; G_ += [N]
     for N in N_: delattr(N,'_rim'); N.fin = 0
@@ -382,7 +384,7 @@ def comp_N(_N,N, olp,rc, angl=np.zeros(2), span=None, rng=1, lH=None):  # compar
         if (_N.B_ and _N.B_[0]) and (N.B_ and N.B_[0]):  # boundary, skip Et
             spec(_N.B_[0],N.B_[0], olp,rc,Et, Link.lH)  # for dspe; add C_ overlap,offset?
     # dir-> +ve diff:
-    Link.dir = derTT[1] @ wTTf[1] > 0  # to invert angl in comp_A, or compute in comp_Q_fi=0)
+    Link.dir = 1 if derTT[1] @ wTTf[1] > 0 else -1  # to invert angl in comp_A, or compute in comp_Q_fi=0)
     if lH is not None:
         lH += [Link]
     if span is not None:  # not from spec
@@ -392,14 +394,14 @@ def comp_N(_N,N, olp,rc, angl=np.zeros(2), span=None, rng=1, lH=None):  # compar
 
 def base_comp(_N,N, fC=0):  # comp Et, baseT, extT, derTT
 
-    fi = N.fi
+    fi = N.fi; dir = 1 if fi else N.dir  # direction based on link.dir when fi = 0
     _M,_D,_n =_N.Et; _I,_G,_Dy,_Dx =_N.baseT; _L = len(_N.N_) if fi else _N.L_  # len nodet.N_s
     M, D, n  = N.Et; I, G, Dy, Dx = N.baseT; L = len(N.N_) if fi else N.L_
     rn = _n/n
     _pars = np.array([_M*rn,_D*rn,_n*rn,_I*rn,_G*rn, np.array([_Dy,_Dx]),_L*rn,_N.span], dtype=object)  # Et, baseT, extT
     pars = np.array([M,D,n, (I,aI),G, np.array([Dy,Dx]), L,(N.span,aS)], dtype=object)
-    mA,dA = comp_A(_N.angl, N.angl)  # ext angle
-    m_,d_ = comp(_pars,pars, mA,dA)  # M,D,n, I,G,A, L,S,eA
+    mA,dA = comp_A(_N.angl, N.angl*dir)  # ext angle
+    m_,d_ = comp(_pars,pars, mA,dA, dir)  # M,D,n, I,G,A, L,S,eA
     if fC:
         dm_,dd_ = comp_derT(rn*_N.derTT[1], N.derTT[1])
         m_+= dm_; d_+= dd_
@@ -423,12 +425,12 @@ def comp_derT(_i_,i_):
 
     return np.array([m_,d_])
 
-def comp(_pars, pars, meA,deA):  # compute m_,d_ from inputs or derivatives
+def comp(_pars, pars, meA,deA, dir):  # compute m_,d_ from inputs or derivatives
 
     m_,d_ = [],[]
     for _p, p in zip(_pars, pars):
         if isinstance(_p, np.ndarray):  # vector angle
-            mA, dA = comp_A(_p, p)
+            mA, dA = comp_A(_p, p*dir)
             m_ += [mA]; d_ += [dA]
         elif isinstance(p, tuple):  # massless I|S avd in p only
             p, avd = p
@@ -709,7 +711,7 @@ def sum2graph(root, node_,link_,cent_,long_, Et, olp, rng):  # sum node,link att
     graph.span = dist_.mean()  # node centers distance to graph center
     graph.angl = np.sum([l.angl for l in link_], axis=0)
     if fi and len(link_) > 1:  # else default mang = 1
-        graph.mang = np.sum([comp_A(graph.angl, l.angl)[0] for l in link_]) / len(link_)
+        graph.mang = np.sum([comp_A(graph.angl if graph.derTT[1] @ wTTf[1] > 0 else -graph.angl , l.angl*l.dir)[0] for l in link_]) / len(link_)
     graph.yx=yx
     return graph
 
