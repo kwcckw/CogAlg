@@ -156,41 +156,63 @@ def vect_root(Fg, rV=1, wTTf=[]):  # init for agg+:
                 N_ += comp_slice(edge, rV,wTTf)
     Fg.N_ = [PP2N(PP, Fg) for PP in N_]
 
-def trace_edge(N_, rc):  # cluster contiguous shapes via PPs in edge blobs or lGs in boundary / skeleton?
 
-    Et = np.zeros(3); L_ = []
-    for N in N_: N._rim = []; N.fin = 0
-    # dist pairs:
-    for _N, N in combinations(N_, r=2):
-        dy_dx = _N.yx - N.yx; dist = np.hypot(*dy_dx)
-        N._rim += [[dist, dy_dx, _N]]
-        _N._rim +=[[dist, -dy_dx, N]]
-    cT_ = set()  # comp pairs
-    for N in N_:
-        if not N._rim: continue
-        dir_ = []  # [ave_angle, [pre_links]]
-        for pL in N._rim:
-            dist, angl, _N = pL
-            max_pL_t = []; max_mA = -1
-            for i, pL_t in enumerate(dir_):
-                Angl,pL_ = pL_t
-                mA,_ = comp_A(angl, Angl)
-                if mA > .5 and mA > max_mA: max_mA = mA; max_pL_t = pL_t
-            if max_pL_t:
-                max_pL_t[0] += angl; max_pL_t[1] += [pL]  # add prelink
-            else: dir_ += [[copy(angl),[pL]]]  # new link cluster
-        for _,pL_ in dir_:
-            dist, dy_dx, _N = pL_[np.argmin([pL[0] for pL in pL_])]
+def dir_cluster(_N_, L_, rng_olp_, Et, rng, rc, fC=0, fang_sel=1):
+    
+    N_ = []
+    for N in _N_: N._pL_ = []; N.fin = 0
+    for _N, N in combinations(_N_, r=2):
+        if _N in N.compared or _N.sub != N.sub: continue
+        dy_dx = _N.yx - N.yx; dist = np.hypot(*dy_dx); olp = (N.rc + _N.rc) / 2
+        fcomp = 0; V = 0
+        if fC or ({l for l in _N.rim if l.Et[0] > ave} & {l for l in N.rim if l.Et[0] > ave}):  # has mutual connection
+            fcomp = 1
+            if fang_sel and V==0: V = 1  # fill in proj_V
+        else:
+            V = proj_V(_N, N, dy_dx, dist)
+            if adist * V / olp > dist: fcomp = 1
+        if fcomp:
+            N._pL_ += [[V, dist, dy_dx, olp, _N]]
+            _N._pL_ += [[V, dist, -dy_dx, olp, N]]
+    cT_ = set()  # compared pairs per loop
+    for N in _N_:
+        if not hasattr(N, '_pL_') or (hasattr(N, '_pL_') and not N._pL_): continue
+        _pL_ = []
+        if fang_sel and len(N._pL_) > 1:
+            dir_ = []  # [Angle, [pL]]
+            for pL in N._pL_:
+                V, dist, angl, olp, _N = pL
+                max_pL_t = None; max_mA = -1
+                for pL_t in dir_:
+                    Angl, pL_ = pL_t
+                    mA,_ = comp_A(angl, Angl)
+                    if mA > .8 and mA > max_mA: max_mA = mA; max_pL_t = pL_t
+                if max_pL_t:
+                    max_pL_t[0] += angl; max_pL_t[1] += [pL]
+                else:
+                    dir_ += [[copy(angl), [pL]]]
+            for _,pL_ in dir_:
+                max_pL = pL_[np.argmax([pL[0] for pL in pL_])]  # should be pL_ here
+                _pL_ += [max_pL]
+        else:
+            _pL_ = N._pL_  # compare all pre-filtered links
+        for V, dist, dy_dx, olp, _N in _pL_:
             cT = tuple(sorted((N.id,_N.id)))
             if cT in cT_: continue
             cT_.add(cT)
-            o = (N.rc + _N.rc) / 2
-            V = proj_V(_N,N, dy_dx, dist)
-            if adist * V/o > dist:  # min induction
-                Link = comp_N(_N,N, o,rc, angl=dy_dx, span=dist)
-                if val_(Link.Et, aw=contw+o+rc) > 0:
-                    L_ += [Link]; Et += Link.Et
-    if not N_:
+            Link = comp_N(_N, N, olp, rc, angl=dy_dx, span=dist, rng=rng, lH=L_)
+            if val_(Link.Et, aw=contw + olp) > 0:
+                N_ += [_N, N]; Et += Link.Et; rng_olp_ += [olp]; L_ += [Link]
+                
+    for N in _N_:
+        if hasattr(N,'_pL_'): delattr(N,'_pL_')
+
+def trace_edge(N_, rc):  # cluster contiguous shapes via PPs in edge blobs or lGs in boundary / skeleton?
+
+    L_, Et = [], np.zeros(3)
+    dir_cluster(_N_=N_, L_=[], rng_olp_=[], Et=Et, rng=1, rc=rc, fC=0, fang_sel=1)
+
+    if not N_:  # N_ must not be empty when we call trace_edge? why we need this?
         return [], Et
     G_ = []; root = N_[0].root
     for N in N_:  # flood-fill G per seed N
@@ -207,7 +229,7 @@ def trace_edge(N_, rc):  # cluster contiguous shapes via PPs in edge blobs or lG
             G_ += [sum2graph(root, Gt,link_,[],[],et,olp,1)]
         else:
             N.sub += 1; G_ += [N]
-    for N in N_: delattr(N,'_rim'); N.fin = 0
+    for N in N_: N.fin = 0
     return G_, Et
 
 def val_(Et, fi=1, mw=1, aw=1, _Et=np.zeros(3)):  # m,d eval per cluster or cross_comp
@@ -324,52 +346,8 @@ def comp_Q1(iN_, rc, fC):  # comp pairs of nodes or links within max_dist
                 for n in _N, N:
                     N_ += [n]; n.rim += [dC]; n.et += et
         else:  # spatial, val NMS
-            for N in _N_: N._pL_ = []
-            for _N, N in combinations(_N_, r=2):
-                if _N in N.compared or _N.sub != N.sub: continue
-                dy_dx = _N.yx - N.yx; dist = np.hypot(*dy_dx); olp = (N.rc + _N.rc) / 2
-                fcomp = 0; V = 0
-                if fC or ({l for l in _N.rim if l.Et[0] > ave} & {l for l in N.rim if l.Et[0] > ave}):  # has mutual connection
-                    fcomp = 1
-                    if fang_sel and V==0: V = 1  # fill in proj_V
-                if not fcomp:
-                    V = proj_V(_N, N, dy_dx, dist)
-                    if adist * V / olp > dist:
-                        fcomp = 1
-                if fcomp:
-                    N._pL_ += [[V, dist, dy_dx, olp, _N]]
-                    _N._pL_ += [[V, dist, -dy_dx, olp, N]]
-            cT_ = set()  # compared pairs per loop
-            for N in _N_:
-                if not hasattr(N, '_pL_') or not N._pL_: continue
-                _pL_ = []
-                if fang_sel and len(N._pL_) > 1:
-                    dir_ = []  # [Angle, [pL]]
-                    for pL in N._pL_:
-                        V, dist, angl, olp, _N = pL
-                        max_pL_t = None; max_mA = -1
-                        for pL_t in dir_:
-                            Angl, pL_ = pL_t
-                            mA,_ = comp_A(angl, Angl)
-                            if mA > .8 and mA > max_mA: max_mA = mA; max_pL_t = pL_t
-                        if max_pL_t:
-                            max_pL_t[0] += angl; max_pL_t[1] += [pL]
-                        else:
-                            dir_ += [[copy(angl), [pL]]]
-                    for _,pL_ in dir_:
-                        max_pL = _pL_[np.argmax([pL[0] for pL in pL_])]
-                        _pL_ += [max_pL]
-                else:
-                    _pL_ = N._pL_  # compare all pre-filtered links
-                for V, dist, dy_dx, olp, _N in _pL_:
-                    cT = tuple(sorted((N.id,_N.id)))
-                    if cT in cT_: continue
-                    cT_.add(cT)
-                    Link = comp_N(_N, N, olp, rc, angl=dy_dx, span=dist, rng=rng, lH=L_)
-                    if val_(Link.Et, aw=contw + olp) > 0:
-                        N_ += [_N, N]; Et += Link.Et; rng_olp_ += [olp]
-            for N in _N_:
-                if hasattr(N,'_pL_'): delattr(N,'_pL_')
+           dir_cluster(_N_=N_, L_=L_, rng_olp_=rng_olp_, Et=Et, rng=1, rc=rc, fC=fC, fang_sel=fang_sel)
+        
         N_ = list(set(N_))
         if fC:
             N__ = N_; ET = Et; break  # no rng-banding
@@ -476,7 +454,7 @@ def base_comp(_N,N, fC=0):  # comp Et, baseT, extT, derTT
     rn = _n/n
     _pars = np.array([_M*rn,_D*rn,_n*rn,_I*rn,_G*rn, np.array([_Dy,_Dx]),_L*rn,_N.span], dtype=object)  # Et, baseT, extT
     pars = np.array([M,D,n, (I,aI),G, np.array([Dy,Dx]), L,(N.span,aS)], dtype=object)
-    mA,dA = comp_A(_N.angl*_N.dir, N.angl*N.dir)  # ext angle
+    mA,dA = comp_A(*((_N.angl, N.angl) if fi else (_N.angl*_N.dir, N.angl*N.dir)))  # ext angle (should be L only now? So we need to check fi)
     m_,d_ = comp(_pars,pars, mA,dA)  # M,D,n, I,G,A, L,S,eA
     if fC:
         dm_,dd_ = comp_derT(rn*_N.derTT[1], N.derTT[1])
