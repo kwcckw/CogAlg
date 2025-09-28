@@ -169,13 +169,14 @@ def dir_cluster(N):
         else:        dir_ += [[copy(angl), [pL]]]  # init dir
     sel_pL_ = []
     for _,pL_ in dir_:
-        sel_pL_ += [pL_[ np.argmin([pL[0] for pL in pL_])][1]]  # nearest pL per direction
+        # this is selecting single nearest pL per direction, and for the expansion with flood fill, we need to do the same?
+        sel_pL_ += [pL_[ np.argmin([pL[0] for pL in pL_])]]  # nearest pL per direction (why there's a [1] here? [1] is selecting dy_dx from pL_ )
     N.pL_ = sel_pL_
 
 def trace_edge(N_, rc):  # cluster contiguous shapes via PPs in edge blobs or lGs in boundary / skeleton?
 
     Et = np.zeros(3); L_ = []
-    for N in N_: N._rim = []; N.fin = 0
+    for N in N_: N.pL_ = []; N.fin = 0
     # dist pairs:
     for _N, N in combinations(N_, r=2):
         dy_dx = _N.yx - N.yx; dist = np.hypot(*dy_dx)
@@ -185,7 +186,7 @@ def trace_edge(N_, rc):  # cluster contiguous shapes via PPs in edge blobs or lG
     for N in N_:
         if not N.pL_: continue
         if len(N.pL_) > 1: dir_cluster(N)
-        for dist, dy_dx, _N in N.pL_:  # nearest pL per direction
+        for (dist, dy_dx, _N) in N.pL_:  # nearest pL per direction
             cT = tuple(sorted((N.id,_N.id)))
             if cT in cT_: continue
             cT_.add(cT); o = (N.rc+_N.rc) / 2
@@ -348,33 +349,31 @@ def comp_Q(iN_, rc, fC):  # comp pairs of nodes or links within max_dist
                 dy_dx = _N.yx - N.yx; dist = np.hypot(*dy_dx); olp = (N.rc + _N.rc) / 2
                 fcomp = 0
                 if fC or ({l for l in _N.rim if l.Et[0] > ave} & {l for l in N.rim if l.Et[0] > ave}):
-                    fcomp = 1  # x all Cs, or connected by common match, which means prior bilateral proj eval
-                else:
-                    V = proj_V(_N, N, dy_dx, dist)
-                    if adist * V/olp > dist: fcomp = 1
-                if fcomp:
+                    # fcomp = 1  # x all Cs, or connected by common match, which means prior bilateral proj eval
                     Link = comp_N(_N,N, olp, rc, angl=dy_dx, span=dist, rng=rng, lH=L_)
                     if val_(Link.Et, aw=contw+olp+rc) > 0:
                         N_ += [_N,N]; Et+=Link.Et; o+=olp
-            '''
-            draft:
-                if fcomp and not fC:
-                    N.pL_ += [[dist, dy_dx, olp, _N]]
-                    _N.pL_ += [[dist,-dy_dx, olp, N]]
-            cT_ = set()  # compared pairs per loop
-            for N in _N_:
-                if not fC and len(N.pL_) > 1:
-                    dir_cluster(N, fV=1)  # select max V or min dist pL per direction?
-                    for dist, dy_dx, olp, _N in N.pL_:
-                        cT = tuple(sorted((N.id,_N.id)))
-                        if cT in cT_: continue
-                        cT_.add(cT)
-                        Link = comp_N(_N, N, olp, rc, angl=dy_dx, span=dist, rng=rng, lH=L_)
-                        if val_(Link.Et, aw=contw+rc+olp) > 0:
-                            N_ += [_N, N]; Et += Link.Et; o += olp
-            for N in _N_:
-                delattr(N,'pL_')
-            '''
+                else: 
+                    V = proj_V(_N, N, dy_dx, dist)
+                    if adist * V/olp > dist:
+                        N.pL_ += [[dist, dy_dx, olp, _N]]
+                        _N.pL_ += [[dist,-dy_dx, olp, N]]
+
+            if not fC:  
+                cT_ = set()  # compared pairs per loop
+                for N in _N_:
+                    if len(N.pL_) > 1:
+                        dir_cluster(N)  # select max V or min dist pL per direction?
+                        for dist, dy_dx, olp, _N in N.pL_:
+                            cT = tuple(sorted((N.id,_N.id)))
+                            if cT in cT_: continue
+                            cT_.add(cT)
+                            Link = comp_N(_N, N, olp, rc, angl=dy_dx, span=dist, rng=rng, lH=L_)
+                            if val_(Link.Et, aw=contw+rc+olp) > 0:
+                                N_ += [_N, N]; Et += Link.Et; o += olp
+                for N in _N_:
+                    delattr(N,'pL_')
+      
         N_ = list(set(N_))
         if fC:
             N__ = N_; ET = Et; break  # no rng-banding
@@ -818,8 +817,9 @@ def PP2N(PP, frame):
         np.array([mM,mD,mL, mI,mG,mA, mL,mL/2, eps]), # extA=eps
         np.array([dM,dD,dL, dI,dG,dA, dL,dL/2, eps]) ])
     y,x,Y,X = box; dy,dx = Y-y,X-x
-
-    return CN(root=frame, fi=1, Et=Et, N_=P_, baseT=baseT, derTT=derTT, box=box, yx=yx, angl=A, span=np.hypot(dy/2,dx/2))
+    G = CN(root=frame, fi=1, Et=Et, N_=P_, baseT=baseT, derTT=derTT, box=box, yx=yx, angl=A, span=np.hypot(dy/2,dx/2))
+    G.dir = np.sign(derTT[1] @ wTTf[1]) # init dir for PP
+    return G
 
 # not used, make H a centroid of layers, same for nH?
 def sort_H(H, fi):  # re-assign olp and form priority indices for comp_tree, if selective and aligned
