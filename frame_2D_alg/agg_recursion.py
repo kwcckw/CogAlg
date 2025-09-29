@@ -193,13 +193,13 @@ def cross_comp(root, rc, fC=0):  # rng+ and der+ cross-comp and clustering
 def comb_B_(nG, lG, rc):  # cross_comp boundary / background per node:
 
     for Lg in lG.N_:
-        B_ = {n.root for L in Lg.N_ for n in L.N_ if n.root and n.root.root}  # rdn core Gs, exclude frame
+        B_ = {n.root for L in Lg.N_ for n in L.N_ if n.root and isinstance(n.root.root, CN)}  # rdn core Gs, exclude frame (Fg (n.root.root) is empty when we call it the first time)
         if B_:
             B_ = {(core,rdn) for rdn,core in enumerate(sorted(B_, key=lambda x:(x.Et[0]/x.Et[2]), reverse=True), start=1)}
             Lg.rB_ = [B_, np.sum([i.Et for i,_ in B_], axis=0)]
     def R(L):
-        if L.root: return L.root if L.root.root is lG else R(L.root)
-        else:      return None
+        if L.root and isinstance(L.root, CN): return L.root if L.root.root is lG else R(L.root)
+        else: return None
     for Ng in nG.N_:
         Et, Rdn, B_ = np.zeros(3), 0, []  # core boundary clustering
         LR_ = {R(L) for n in Ng.N_ for L in n.rim}  # lGs for nGs, individual nodes and rims are too weak to bound
@@ -906,27 +906,39 @@ def vect_edge(tile, rV=1, wTTf=[]):  # PP_ cross_comp and floodfill to init foca
         ave, avd, arn, aveB, aveR, Lw, adist, amed, intw, compw, centw, contw = (
             np.array([ave,avd, arn,aveB,aveR, Lw, adist, amed, intw, compw, centw, contw]) / rV)  # projected value change
         wTTf = np.multiply([[wM, wD, wN, wI, wG, wL,  wS, wa, wA]], wTTf)  # or dw_ ~= w_/ 2?
-        wTTf = np.delete(wTTf,(2), axis=1)  #-> comp_slice, = np.array([(*wTTf[0][:2],*wTTf[0][4:]),(*wTTf[0][:2],*wTTf[1][4:])])
+        # N is removed in comp_slice now
     Fg = CN()
-    for blob in tile.blob_:
+    for blob in tile.N_:  # blobs is packed in N_ now
         if not blob.sign and blob.G > aveB:
             edge = slice_edge(blob, rV)
             if edge.G * ((len(edge.P_)-1)*Lw) > ave * sum([P.latT[4] for P in edge.P_]):
-                G_ = []; ET = np.zeros(3)
-                for PPm in comp_slice(edge, rV,wTTf):  # PP_ per edge
-                    P_, link_, B_, verT, latT, A, S, box, yx, Et = PPm
-                    baseT = np.array(latT[:4])
-                    [mM, mD, mI, mG, mA, mL], [dM, dD, dI, dG, dA, dL] = verT  # re-pack in derTT:
-                    derTT = np.array([ np.array([mM, mD, mL, mI, mG, mA, mL, mL / 2, eps]),  # extA=eps
-                                       np.array([dM, dD, dL, dI, dG, dA, dL, dL / 2, eps])])
-                    y,x,Y,X = box; dy,dx = Y-y, X-x
-                    A = [A, np.sign(derTT[1] @ wTTf[1])]  # append angl
-                    PP = CN(root=Fg, fi=1, Et=Et, N_=P_, baseT=baseT, derTT=derTT, box=box, yx=yx, angl=A, span=np.hypot(dy/2, dx/2))
-                    comb_B_(PP, CN(N_=B_), rc=3)
-                    G_ += [PP]; ET += Et
+                G_ = []; ET = np.zeros(3); Gd_ = []
+                for PPm in comp_slice(edge, rV, wTTf ):  # PP_ per edge
+                    PP = PP2N(PPm, Fg) 
+                    converted_ = []
+                    for dP in PPm[2]:
+                        if dP.root and dP.root not in converted_ and isinstance(dP.root, list):  # get PPd and convert to CN
+                            converted_ += [dP.root]
+                            PPd = PP2N(dP.root, Fg)
+                            Gd_ += [PPd]; ET += PPd.Et
+                    G_ += [PP]; ET += PP.Et
+                comb_B_(CN(N_=G_), CN(N_=Gd_), rc=3)  # actually comb_B_ takes nG and lG as input, so nG.N_ should be PPm_ and lG.N_ should be PPd_    
                 if val_(ET, mw=(len(G_)-1)*Lw, aw=2) > 0:
                     trace_edge(G_, Fg, rc=3)
     return Fg
+
+def PP2N(PP, root):
+
+    P_, link_, B_, verT, latT, A, S, box, yx, Et = PP
+    baseT = np.array(latT[:4])
+    [mM, mD, mI, mG, mA, mL], [dM, dD, dI, dG, dA, dL] = verT  # re-pack in derTT:
+    derTT = np.array([ np.array([mM, mD, mL, mI, mG, mA, mL, mL / 2, eps]),  # extA=eps
+                       np.array([dM, dD, dL, dI, dG, dA, dL, dL / 2, eps])])
+    y,x,Y,X = box; dy,dx = Y-y, X-x
+    A = [A, np.sign(derTT[1] @ wTTf[1])]  # append angl
+    PP = CN(root=root, fi=1, Et=Et, N_=P_, baseT=baseT, derTT=derTT, box=box, yx=yx, angl=A, span=np.hypot(dy/2, dx/2))
+    for P in PP.N_: P.root = PP  # update root
+    return PP
 
 def trace_edge(N_, root, rc):  # cluster contiguous shapes via PPs in edge blobs or lGs in boundary / skeleton?
 
