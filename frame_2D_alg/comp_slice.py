@@ -80,7 +80,7 @@ def comp_slice(edge, rV=1, ww_t=None):  # root function
     if PPt:
         edge.node_ = PPt
         comp_dP_(edge, mEt)
-        edge.link_, dverT, dEt = form_PP_(edge.dP_, fd=1)  # separate PPd_ per edge, PPds in
+        edge.link_, dverT, dEt = form_PP_(edge.dP_, fd=1)  # separate PPd_ per edge
         edge.verT = mverT + dverT
         edge.Et = mEt + dEt
     return PPt
@@ -113,7 +113,6 @@ def form_PP_(iP_, fd):  # form PPs of dP.valt[fd] + connected Ps val
                 else: B_ += [_link]  # PP boundary-> comb_B
             _prim_, _lrim_ = prim_, lrim_
         ET += Et; VerT += verT
-        # if not fd:  # PPds are accessed as B_ roots (we still need to apply sum2PP to dPs and form PPds? If we skip when fd = 1 here, no PPd will be formed at all)
         PPt_ += [sum2PP(list(_P_), list(link_), list(set(B_)), Et)]
 
     return PPt_, VerT, ET
