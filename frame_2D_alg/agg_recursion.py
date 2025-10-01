@@ -286,7 +286,7 @@ def comp_N(_N,N, olp,rc, A=np.zeros(2), span=None, rng=1, lH=None):  # compare l
     baseT = (rn*_N.baseT + N.baseT) / 2  # not new
     yx = np.add(_N.yx,N.yx) /2; _y,_x = _N.yx; y,x = N.yx; box = np.array([min(_y,y),min(_x,x),max(_y,y),max(_x,x)])  # ext
     fi = N.fi
-    angl = np.array([A, np.sign(derTT[1] @ wTTf[1])])  # preserve canonic direction
+    angl = np.array([A, np.sign(derTT[1] @ wTTf[1])],dtype=object)  # preserve canonic direction
     Link = CN(Et=Et,rc=olp, N_=[_N,N], L_=len(_N.N_+N.N_), et=_N.et+N.et, baseT=baseT,derTT=derTT, yx=yx,box=box, span=span, angl=angl, rng=rng, fi=0)
     V = val_(Et, aw=olp+rc)
     if V * (1 - 1 / (min(len(N.derH.H),len(_N.derH.H)) or eps)) > ave:  # rdn to derTT, else derH is empty
@@ -326,7 +326,8 @@ def base_comp(_N,N, fC=0):  # comp Et, baseT, extT, derTT
         m_+= dm_; d_+= dd_
     DerTT = np.array([m_,d_])
     ad_= np.abs(d_)
-    t_ = m_ + ad_ + eps  # max comparand
+    t_ = (m_ + ad_) + eps * ((m_ + ad_) == 0)  # max comparand (apply eps only if m_ + ad_ == 0, else they may cancel out each other)
+
     Et = np.array([m_ * (1, mA)[fi] /t_ @ wTTf[0],  # norm, signed?
                    ad_* (1, 2-mA)[fi] /t_ @ wTTf[1], min(_n,n)])  # shared?
     '''
@@ -618,7 +619,7 @@ def sum2graph(root, N_,L_,C_,long_, Et, olp, rng):  # sum node,link attrs in gra
     fi = n0.fi; fg = fi and n0.L_  # not PPs
     for L in L_:
         add_dH(derH,L.derH); derTT+=L.derTT; A += L.angl[0]
-    A = np.array([A, np.sign(derTT[1] @ wTTf[1])])  # canonical dir = summed diff sign
+    A = np.array([A, np.sign(derTT[1] @ wTTf[1])],dtype=object)  # canonical dir = summed diff sign
     if fg: Nt = Copy_(n0)  # add_N(Nt,Nt.Lt)?
     derTT += n0.derTT
     for N in N_[1:]:
@@ -630,7 +631,7 @@ def sum2graph(root, N_,L_,C_,long_, Et, olp, rng):  # sum node,link attrs in gra
     graph.hL_ = long_
     if fg: graph.nH = Nt.nH + [Nt]  # pack prior top level
     if fi and len(L_) > 1:  # else default mang = 1
-        graph.mang = np.sum([ comp_A(A, l.angl[0]) for l in L_]) / len(L_)
+        graph.mang = np.sum([comp_A(A[0], l.angl[0]) for l in L_]) / len(L_)
         # no direction, the links are internal
     return graph
 
@@ -906,7 +907,7 @@ def vect_edge(tile, rV=1, wTTf=[]):  # PP_ cross_comp and floodfill to init foca
             edge = slice_edge(blob, rV)
             if edge.G * ((len(edge.P_)-1)*Lw) > ave * sum([P.latT[4] for P in edge.P_]):
                 PPm_ = comp_slice(edge, rV, wTTf)
-                PPd_ = [PP2N(PP,lG) for PP in edge.link_]; ET = np.zeros(3); lG = CN(N_=PPd_)  # lG is PPd.root in form_B_
+                lG=CN(); PPd_ = [PP2N(PP,lG) for PP in edge.link_]; ET = np.zeros(3); lG.N_=PPd_  # lG is PPd.root in form_B_ (we need to init lG first?)
                 for PP in PPm_:
                     N = PP2N(PP, Fg); ET += N.Et; Fg.N_ += [N]
                 form_B_(Fg, lG, rc=2)  # trace_edge
@@ -920,7 +921,7 @@ def PP2N(PP, root):
     derTT = np.array([ np.array([mM, mD, mL, mI, mG, mA, mL, mL / 2, eps]),  # extA=eps
                        np.array([dM, dD, dL, dI, dG, dA, dL, dL / 2, eps])])
     y,x,Y,X = box; dy,dx = Y-y, X-x
-    A = np.array([A, np.sign(derTT[1] @ wTTf[1])])  # append angl
+    A = np.array([np.array(A), np.sign(derTT[1] @ wTTf[1])],dtype=object)  # append angl
     PP = CN(root=root, fi=1, Et=Et, N_=P_, baseT=baseT, derTT=derTT, box=box, yx=yx, angl=A, span=np.hypot(dy/2, dx/2))
     for P in PP.N_: P.root = PP  # update root
     return PP
@@ -929,7 +930,15 @@ def trace_edge(N_, root, rc):  # cluster contiguous shapes via PPs in edge blobs
 
     L_ = []; cT_ = set()  # comp pairs
     for N in N_:
-        for _N in list({rB for rB, rdn in N.rB_[0] if rB is not N}):  # _Ns share boundary with N (each rB is (core, rdn))
+        # N_ is edges, so we need to cluster contiguous edges, we need to find the edges that share the same core from N instead?
+        shared_edges = set()
+        for core, rdn in N.rB_[0]:  # check each core
+            for n in core.N_:
+                for dP in n.rim:
+                    if isinstance(dP.root, CN):  # get the edges that share a same core
+                        shared_edges.add(dP.root)
+     
+        for _N in shared_edges:  # _Ns share boundary with N (each rB is (core, rdn))
             cT = tuple(sorted((N.id,_N.id)))
             if cT in cT_: continue
             cT_.add(cT)
