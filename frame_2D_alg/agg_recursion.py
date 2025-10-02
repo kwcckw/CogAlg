@@ -304,7 +304,8 @@ def comp_N(_N,N, olp,rc, A=np.zeros(2), span=None, rng=1, lH=None):  # compare l
     if fi and V > ave * rc+1 + compw:
         if N.L_: spec(_N.N_, N.N_, olp, rc+1, Et,Link.lH)  # skip PP
         if (_N.B_ and _N.B_[0]) and (N.B_ and N.B_[0]):  # boundary, skip Et
-            spec(_N.B_[0],N.B_[0], olp,rc,Et, Link.lH)  # for dspe
+            _B_ = [_B for _B,_ in _N.B_[0]]; B_ = [B for B,_ in N.B_[0]]  # skip rdn in B_[0]
+            spec(_B_,B_, olp,rc,Et, Link.lH)  # for dspe
             # +C_ overlap,offset?
     if lH is not None:
         lH += [Link]
@@ -930,26 +931,30 @@ def vect_edge(tile, rV=1, wTTf=[]):  # PP_ cross_comp and floodfill to init foca
 def form_B__(nG, lG):  # form and trace edge / boundary / background per node:
 
     for Lg in lG.N_:  # in frame or blob?
-        B_ = {n.root for L in Lg.N_ for n in L.N_ if n.root and n.root.root is not None}  # rdn core Gs, exclude frame
-        if B_:
-            B_ = {(core,rdn) for rdn,core in enumerate(sorted(B_, key=lambda x:(x.Et[0]/x.Et[2]), reverse=True), start=1)}
-            Lg.rB_ = [B_, np.sum([i.Et for i,_ in B_], axis=0)]  # reciprocal boundary
+        rB_ = {n.root for L in Lg.N_ for n in L.N_ if n.root and n.root.root is not None}  # rdn core Gs, exclude frame
+        if rB_:
+            rB_ = {(core,rdn) for rdn,core in enumerate(sorted(rB_, key=lambda x:(x.Et[0]/x.Et[2]), reverse=True), start=1)}
+            Lg.rB_ = [rB_, np.sum([i.Et for i,_ in rB_], axis=0)]  # reciprocal boundary
     def R(L):
         return L.root if L.root is None or L.root.root is lG else R(L.root)
     for Ng in nG.N_:
-        Et, Rdn, B_ = np.zeros(3), 0, []  # core boundary clustering
+        Et, B_ = np.zeros(3), []  # core boundary clustering
         LR_ = {R(L) for n in Ng.N_ for L in n.rim}  # lGs for nGs, individual nodes and rims are too weak to bound
         for LR in LR_:
             if LR and LR.rB_:  # not None, eval Lg.B_[1]?
                 for core, rdn in LR.rB_[0]:  # map contour rdns to core N:
                     if core is Ng:
-                        B_ += [LR]; Et += core.Et; Rdn += rdn  # add to Et[2]?
+                        B_ += [LR]; Et += core.Et  # add to Et[2]?
+        # instead of using rdn from LR, we recompute it per Ng here again?      
+        B_ = {(core,rdn) for rdn,core in enumerate(sorted(B_, key=lambda x:(x.Et[0]/x.Et[2]), reverse=True), start=1)}          
+        Ng.B_ = [B_, Et]  # this is missed out? Rdn is redundant here since there's no eval for trace_edge now
 
 def trace_edge(root, rc):  # cluster contiguous shapes via PPs in edge blobs or lGs in boundary / skeleton?
 
     N_ = root.N_; L_ = []; cT_ = set()  # comp pairs
     for N in root.N_:
-        for _N in list({rB for rB, rdn in N.rB_[0] if rB is not N}):  # _Ns share boundary with N (each rB is (core, rdn))
+        # we need to get the shared rB from N.B_ here
+        for _N in list({rB for (B, rdn) in N.B_[0] for (rB, rdn) in B.rB_[0] if rB is not N}):  # _Ns share boundary with N (each B is (edge, rdn))
             cT = tuple(sorted((N.id,_N.id)))
             if cT in cT_: continue
             cT_.add(cT)
@@ -966,7 +971,7 @@ def trace_edge(root, rc):  # cluster contiguous shapes via PPs in edge blobs or 
             for L in _N.rim:
                 if L in L_:
                     n = L.N_[0] if L.N_[1] is _N else L.N_[1]
-                    if n in N_ and not n.fin:
+                    if n in N_ and not n.fin:  # if n fin and n.root has existing graph, do we need to merge them?
                         n.fin = 1; Gt += [n]; _N_ += [n]; link_ += [L]; et += L.Et; olp += L.rc
         if len(Gt) > 1:
             G_ += [sum2graph(root, Gt,link_,[],[],et,olp,1)]
