@@ -305,8 +305,7 @@ def comp_N(_N,N, olp,rc, A=np.zeros(2), span=None, rng=1, lH=None):  # compare l
     if fi and V > ave * rc+1 + compw:
         if N.L_: spec(_N.N_, N.N_, olp, rc+1, Et,Link.lH)  # skip PP
         if (_N.B_ and _N.B_[0]) and (N.B_ and N.B_[0]):  # boundary, skip Et
-            _B_ = [_B for _B,_ in _N.B_[0]]; B_ = [B for B,_ in N.B_[0]]  # skip rdn
-            spec(_B_,B_, olp,rc,Et, Link.lH)  # for dspe
+            spec(_N.B_[0],N.B_[0], olp,rc,Et, Link.lH)  # for dspe
             # +C_ overlap,offset?
     if lH is not None:
         lH += [Link]
@@ -922,6 +921,7 @@ def vect_edge(tile, rV=1, wTTf=[]):  # PP_ cross_comp and floodfill to init foca
                 for PP in PPm_:
                     N = PP2N(PP, Fg); ET += N.Et; Fg.N_ += [N]
                 form_B__(Fg, lG)
+                # eval with Fg.N_' B_'s rdn before calling trace_edge?
                 trace_edge(Fg, rc=2)  # contiguous boundary-mediated xcomp,cluster complemented Ns
     return Fg
 
@@ -947,8 +947,9 @@ def form_B__(nG, lG):  # form and trace edge / boundary / background per node:
 def trace_edge(root, rc):  # cluster contiguous shapes via PPs in edge blobs or lGs in boundary / skeleton?
 
     N_ = root.N_; L_ = []; cT_ = set()  # comp pairs
+    for N in N_: N.rim = []; N.fin = 0  # we need to reset rim and fin since root.N_ might be those recycled nodes
     for N in root.N_:
-        for _N in list({rB for (B,rdn) in N.B_[0] for (rB,rdn) in B.rB_[0] if rB is not N}):  # _Ns share boundary with N
+        for _N in list({rB for B in N.B_[0] for (rB,rdn) in B.rB_[0] if rB is not N}):  # _Ns share boundary with N
             cT = tuple(sorted((N.id,_N.id)))
             if cT in cT_: continue
             cT_.add(cT)
@@ -959,7 +960,7 @@ def trace_edge(root, rc):  # cluster contiguous shapes via PPs in edge blobs or 
     Gt_ = []
     for N in N_:  # flood-fill G per seed N
         if N.fin: continue
-        N.fin =1; Gt = []; _N_=[N]; n_,l_,et,olp = [],[],np.zeros(3),0
+        N.fin =1; Gt = []; _N_=[N]; N.root = Gt; n_,l_,et,olp = [N],[],np.zeros(3),0  # we need to assign N.root here? And pack N into _N_ and n_?
         while _N_:
             _N = _N_.pop(0)
             for L in _N.rim:
