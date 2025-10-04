@@ -450,7 +450,7 @@ def cluster_N(root, iN_, rN_, rc, rng=1):  # flood-fill node | link clusters
         if n.root and n.root.rng > n.rng: return rroot(n.root) if n.root.root else n.root
         else: return None
 
-    def extend_Gt(_link_, node_, cent_, link_, long_, in_):
+    def extend_Gt(_link_, node_, cent_, link_, long_, b_, in_):
         for L in _link_:  # spliced rim
             if L in in_: continue  # already clustered
             in_.add(L)
@@ -460,8 +460,9 @@ def cluster_N(root, iN_, rN_, rc, rng=1):  # flood-fill node | link clusters
                     node_ += [_N]; cent_ += _N.rC_; _N.fin = 1
                     for l in _N.rim:
                         if l in in_: continue  # cluster by link+density:
-                        if l.rng==rng and val_(ett(l), aw=rc) > 0:
-                            link_ += [l]
+                        if l.rng==rng:
+                            if val_(ett(l), aw=rc) > 0: link_ += [l]
+                            else:                       b_ += [l]                    
                         elif l.rng > rng: long_ += [l]
                 else:  # cluster top-rng roots
                     _n = _N; _R = rroot(_n)
@@ -473,20 +474,21 @@ def cluster_N(root, iN_, rN_, rc, rng=1):  # flood-fill node | link clusters
     for n in rN_: n.fin = 0
     for N in rN_:  # form G per remaining rng N
         if not N.exe or N.fin: continue
-        node_,cent_,Link_,_link_,long_ = [N],[],[],[],[]
+        node_,cent_,Link_,_link_,long_, B_ = [N],[],[],[],[],[]
         if rng==1 or (not N.root or N.root.rng==1):  # not rng-banded
             cent_ = N.rC_[:]
             for l in N.rim:
                 if val_(ett(l), aw=rc+1) > 0:
                     if l.rng==rng: _link_ += [l]
                     elif l.rng>rng: long_ += [l]
+            else: B_ += [l]
         else:  # N is rng-banded, cluster top-rng roots
             n = N; R = rroot(n)
             if R and not R.fin: node_,_link_,long_,cent_ = [R], R.L_[:], R.hL_[:], R.rC_[:]; R.fin = 1
         N.fin = 1; link_ = []
         while _link_:
             Link_ += _link_
-            extend_Gt(_link_, node_, cent_, link_, long_, in_)
+            extend_Gt(_link_, node_, cent_, link_, long_, B_, in_)
             if link_: _link_ = list(set(link_)); link_ = []  # extended rim
             else:     break
         if node_:
@@ -495,7 +497,7 @@ def cluster_N(root, iN_, rN_, rc, rng=1):  # flood-fill node | link clusters
             for n in N_: olp += n.rc  # from Ns, vs. Et from Ls?
             for l in L_: Et += l.Et
             if val_(Et, 1, (len(N_)-1)*Lw, rc+olp, root.Et) > 0:
-                G_ += [sum2graph(root, N_,L_, [C_,np.sum([c.ET for c in C_],axis=0)] if C_ else [[],np.zeros(3)], long_,Et,olp,rng)]
+                G_ += [sum2graph(root, N_,L_, [C_,np.sum([c.ET for c in C_],axis=0)] if C_ else [[],np.zeros(3)], list(set(B_)), long_,Et,olp,rng)]
             elif n.fi:  # L_ is preserved anyway
                 for n in N_: n.sub += 1
                 G_ += N_
@@ -517,11 +519,11 @@ def cluster_n(root, C_, rc, rng=1):  # simplified flood-fill, currently for for 
     G_, in_ = [],set()
     for C in C_: C.fin = 0
     for C in C_:  # form G per remaining C
-        node_,cent_,Link_,link_,B_,b_ = [C],C.C_[0][:] if C.C_ else [], [],[],[],[]
+        node_,cent_,Link_,link_,B_ = [C],C.C_[0][:] if C.C_ else [], [],[],[]
         _link_ = [l for l in C.rim if val_(ett(l), aw=rc) > 0]
         while _link_:
-            extend_G(_link_, node_, cent_, link_, b_, in_)  # _link_: select rims to extend G
-            if link_: Link_ += _link_; B_ += b_; _link_ = list(set(link_)); link_ = []
+            extend_G(_link_, node_, cent_, link_, B_, in_)  # _link_: select rims to extend G (We don't use b_ anywhere, it could be just B_ here?)
+            if link_: Link_ += _link_; _link_ = list(set(link_)); link_ = []
             else:     break
         if node_:
             N_= list(set(node_)); L_= list(set(Link_)); c_ = list(set(cent_))  # prevent a same name with input C_
@@ -529,7 +531,7 @@ def cluster_n(root, C_, rc, rng=1):  # simplified flood-fill, currently for for 
             for n in N_: olp += n.rc  # from Ns, vs. Et from Ls?
             for l in L_: Et += l.Et
             if val_(Et,1, (len(N_)-1)*Lw, rc+olp, root.Et) > 0:
-                G_ += [sum2graph(root, N_,L_,[c_,np.sum([c.ET for c in c_],axis=0)] if c_ else [[],np.zeros(3)],B_, [],Et,olp, rng)]
+                G_ += [sum2graph(root, N_,L_,[c_,np.sum([c.ET for c in c_],axis=0)] if c_ else [[],np.zeros(3)],list(set(B_)), [],Et,olp, rng)]
             elif n.fi:
                 G_ += N_
     if G_: return sum_N_(G_,root)  # nG
@@ -919,41 +921,34 @@ def vect_edge(tile, rV=1, wTTf=[]):  # PP_ cross_comp and floodfill to init foca
         if not blob.sign and blob.G > aveB:
             edge = slice_edge(blob, rV)
             if edge.G * ((len(edge.P_)-1)*Lw) > ave * sum([P.latT[4] for P in edge.P_]):
-                PPm_ = comp_slice(edge, rV, wTTf); lG=CN()
-                PPd_ = [PP2N(PP,lG) for PP in edge.link_]; ET = np.zeros(3); lG.N_=PPd_  # lG is PPd.root in clust_B_
+                PPm_ = comp_slice(edge, rV, wTTf)
+                # we need to assign PPd as Fg.B_ here?
+                PPd_ = [PP2N(PP,Fg) for PP in edge.link_]; ET = np.zeros(3); Fg.B_=PPd_  # lG is PPd.root in clust_B_
                 for PP in PPm_:
                     N = PP2N(PP, Fg); ET += N.Et; Fg.N_ += [N]
-                clust_B__(Fg,lG,2)
+                clust_B__(Fg,2)
                 if val_(ET, mw=(len(Fg.B_[0])-1)*Lw, aw=2) > 0:  # internal B_
                     trace_edge(Fg, rc=2, fB_= 1)  # contiguous boundary-mediated xcomp,cluster of complemented Ns
     return Fg
 
 def clust_B__(G, rc):  # form and trace edge / boundary / background per node:
 
-    def R(L): return L.root if L.root is None or L.root.root is G else R(L.root)  # G is probably wrong now
+    def R(L): return L if L.root is None or L.root is G else R(L.root)  # G is probably wrong now
 
     for N in G.N_:
         Et, Rdn, B_ = np.zeros(3), 0, []  # core boundary clustering, Rdn = stronger cores sharing same B cluster
-        for L in G.B_:  # neg Ls, may be clustered?
-            R = R(L); B_ += [R if R else L]  # increase L,sub?
+        for L in N.B_:  # neg Ls, may be clustered?
+            r = R(L); r = r if r else L  # increase L,sub? (prevent a same name with R function)
+            Et += r.Et; B_ += [r]; Rdn += 1  # not sure on Rdn here, increment it per number of shared Bs?
+            
+            if not r.rB_: r.rB_ = [[], np.zeros(3), 0]  # init
+            if r.rB_ and isinstance(r.rB_[0], CN): r.rB_ = [r.rB_, np.sum([rb.Et for rb in r.rB_],axis=0), len(r.rB_)]  # convert to nested
+            r.rB_[0] += [N]; r.rB_[1] += N.Et; r.rB_[2] += 1  # reciprocal assignment        
 
-        # below is not revised:
+        N.B_ = [B_, Et, Rdn]
+        if val_(Et,0, (len(N.B_)-1)*Lw, rc+Rdn+compw) > 0:  # norm by core_ rdn
+            trace_edge(N, rc)
 
-        LR_ = {R(L) for n in N.N_ for L in n.rim}  # lGs for nGs, individual nodes and rims are too weak to bound
-        for LR in LR_:
-            if LR and LR.rB_:  # not None, eval Lg.B_[1]?
-                for core, rdn in LR.rB_[0]:  # map contour rdns to core N:
-                    if core is N:
-                        B_ += [LR]; Et += core.Et; Rdn += rdn
-        if B_:
-            N.B_ = [B_,Et,Rdn]
-            if val_(Et,0, (len(B_)-1)*Lw, rc+Rdn+compw) > 0:  # norm by core_ rdn
-                trace_edge(N, rc)
-
-        rB_ = {n.root for L in Lg.N_ for n in L.N_ if n.root and n.root.root is not None}  # core Gs, exclude frame
-        if rB_:
-            rB_ = {(core,rdn) for rdn,core in enumerate(sorted(rB_, key=lambda x:(x.Et[0]/x.Et[2]), reverse=True), start=1)}
-            Lg.rB_ = [rB_, np.sum([i.Et for i,_ in rB_], axis=0)]  # reciprocal boundary
 
 def trace_edge(root, rc, fB_=0):  # cluster contiguous shapes via PPs in edge blobs or lGs in boundary / skeleton?
 
