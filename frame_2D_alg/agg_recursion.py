@@ -805,7 +805,7 @@ def agg_frame(foc, image, iY, iX, rV=1, wTTf=[], fproj=0):  # search foci within
 
 def PP2N(PP, root):
 
-    P_, link_, B_, verT, latT, A, S, box, yx, Et = PP
+    P_, link_, B_, verT, latT, A, S, box, yx, Et = PP  # B_ from PP is useless now?
     baseT = np.array(latT[:4])
     [mM, mD, mI, mG, mA, mL], [dM, dD, dI, dG, dA, dL] = verT  # re-pack in derTT:
     derTT = np.array([ np.array([mM, mD, mL, mI, mG, mA, mL, mL / 2, eps]),  # extA=eps
@@ -916,11 +916,12 @@ def vect_edge(tile, rV=1, wTTf=[]):  # PP_ cross_comp and floodfill to init foca
         ave, avd, arn, aveB, aveR, Lw, adist, amed, intw, compw, centw, contw = (
             np.array([ave,avd, arn,aveB,aveR, Lw, adist, amed, intw, compw, centw, contw]) / rV)  # projected value change
         wTTf = np.multiply([[wM, wD, wN, wI, wG, wL,  wS, wa, wA]], wTTf)  # or dw_ ~= w_/ 2?
-    Fg = CN()
-    for blob in tile.N_:  # blobs is packed in N_ now
+    Fg_ = []
+    for blob in tile.N_:  # blobs is packed in N_ now     
         if not blob.sign and blob.G > aveB:
             edge = slice_edge(blob, rV)
             if edge.G * ((len(edge.P_)-1)*Lw) > ave * sum([P.latT[4] for P in edge.P_]):
+                Fg = CN(angl=[np.zeros(2), 0])
                 PPm_ = comp_slice(edge, rV, wTTf)
                 PPd_ = [PP2N(PP,Fg) for PP in edge.link_]; Et = np.zeros(3)  # lG is PPd.root in clust_B_
                 for PP in PPm_:
@@ -928,7 +929,8 @@ def vect_edge(tile, rV=1, wTTf=[]):  # PP_ cross_comp and floodfill to init foca
                 clust_B__(Fg, CN(N_=PPd_),2)
                 if val_(Et, mw=(len(PPm_)-1)*Lw, aw=2) > 0:  # internal B_
                     trace_edge(Fg, rc=2, fB_= 1)  # contiguous boundary-mediated xcomp,cluster of complemented Ns
-    return Fg
+                Fg_ += [Fg]
+    return sum_N_(Fg_)
 
 def clust_B__(G, lG, rc):  # trace edge / boundary / background per node:
 
@@ -949,10 +951,11 @@ def clust_B__(G, lG, rc):  # trace edge / boundary / background per node:
             trace_edge(N, rc)
 
 # revise:
-def trace_edge_dist(N_, root, rc):  # cluster contiguous shapes via PPs in edge blobs or lGs in boundary / skeleton?
+def trace_edge(root, rc, fB_):  # cluster contiguous shapes via PPs in edge blobs or lGs in boundary / skeleton?
 
+    N_ = root.N_ if fB_ else root.B_[0]  # fB_: cluster B_-mediated N_, else rB_-mediated B_
     for N in N_: N.pL_ = []; N.fin = 0
-    L_ = []
+    L_ = []; B_ = []
     for _N, N in combinations(N_, r=2):  # dist pairs
         dy_dx = _N.yx - N.yx; dist = np.hypot(*dy_dx)
         N.pL_ += [[dist, dy_dx, _N]]
@@ -960,35 +963,48 @@ def trace_edge_dist(N_, root, rc):  # cluster contiguous shapes via PPs in edge 
     cT_ = set()  # comp pairs
     for N in N_:
         if not N.pL_: continue
-        if len(N.pL_) > 1: dir_cluster(N)
+        # if len(N.pL_) > 1: dir_cluster(N)  # do we still need this now?
         for (dist, dy_dx, _N) in N.pL_:  # nearest pL per direction
             cT = tuple(sorted((N.id,_N.id)))
             if cT in cT_: continue
             cT_.add(cT); o = (N.rc+_N.rc) / 2
             V = proj_V(_N,N, dy_dx, dist)
             if adist * V/o > dist:  # min induction
-                Link = comp_N(_N,N, o,rc, angl=dy_dx, span=dist)
+                Link = comp_N(_N,N, o,rc, A=dy_dx, span=dist)
                 if val_(Link.Et, aw=contw+o+rc) > 0:
                     L_ += [Link]; root.Et += Link.Et
-    G_ = []; root = N_[0].root
+    Gt_ = []
     for N in N_:  # flood-fill G per seed N
         if N.fin: continue
-        N.fin =1; Gt=[N]; _N_=[N]; link_,et,olp = [],np.zeros(3),0
+        N.fin=1; _N_=[N]; Gt=[]; N.root=Gt; n_,l_,b_,et,olp = [N],[],[],np.zeros(3),0;
         while _N_:
             _N = _N_.pop(0)
             for L in _N.rim:
                 if L in L_:
                     n = L.N_[0] if L.N_[1] is _N else L.N_[1]
-                    if n in N_ and not n.fin:
-                        n.fin = 1; Gt += [n]; _N_ += [n]; link_ += [L]; et += L.Et; olp += L.rc
-        if len(Gt) > 1:
-            G_ += [sum2graph(root, Gt,link_,[],[],et,olp,1)]
+                    if n in N_:
+                        if n.root is Gt: continue
+                        if n.fin:
+                            _root = n.root; n_+=_root[0]; l_+=_root[1]; b_ += _root[2]; et+=_root[3]; olp+=_root[4]; _root[5] = 1
+                            for _n in _root[0]: _n.root = Gt
+                        else:
+                            n.fin=1; _N_ += [n]; n_+=[n]; l_+=[L]; et+=L.Et; olp+=L.rc
+                        n.root = Gt
+                else: b_ += [L]  # neg rim
+        Gt += [n_,l_,b_,et,olp,0]; Gt_ += [Gt]              
+                 
+    G_= []
+    for n_,l_,b_,et,olp,merged in Gt_:
+        if merged: continue
+        if val_(et, mw=(len(n_)-1)*Lw, aw=rc) > 0:
+            G_ += [sum2graph(root,n_,l_,[],b_,[],et,olp,1)]
         else:
-            N.sub += 1; G_ += [N]
-    for N in N_: delattr(N,'pL_'); N.fin = 0; root.N_+= [N]
-
+            for N in n_: N.sub += 1; G_ += [N]
+    for N in N_: N.fin = 0
+    root.N_ = G_          
+                    
 # old
-def trace_edge(root, rc, fB_=0):  # cluster contiguous shapes via PPs in edge blobs or lGs in boundary / skeleton?
+def trace_edge_old(root, rc, fB_=0):  # cluster contiguous shapes via PPs in edge blobs or lGs in boundary / skeleton?
 
     N_ = root.N_ if fB_ else root.B_[0]  # fB_: cluster B_-mediated N_, else rB_-mediated B_
     L_ = []; cT_ = set()  # comp pairs
