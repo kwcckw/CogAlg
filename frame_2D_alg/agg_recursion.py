@@ -255,29 +255,60 @@ def comp_sorted(C_, rc):  # max attr sort to constrain C_ search in 1D, add K at
     N_ = list({N for L in L_ for N in L.N_})
     return N_, L_, ET
 
-def comp_q(iN_, rc):  # comp pairs of nodes or links if proj_V per dir
+def comp_q(iN_, rc, fC):  # comp pairs of nodes or links if proj_V per dir
 
-    for i, N in enumerate(iN_):
-        N.pL_ = []
-        for _N in iN_[i:]:  # get unique pairs
-            if _N.sub == N.sub:  # check max dist?
-                dy_dx = _N.yx- N.yx; dist = np.hypot(*dy_dx)  # * angl in comp_A, for canonical links in L_
-                N.pL_ += [[dist,dy_dx,_N]]  # no reciprocal?
-    N_,L_, Et,o = [],[],np.zeros(3),1  # rng=1
-    for N in iN_:
-        if not N.pL_: continue
-        dir_sort(N)  # get rng_ pre-links per direction
-        for dir in N.pL_:
-            for dist,dy_dx,_N in dir:  # enumerate rng?
-                V = proj_V(_N, N, dy_dx, dist)
-                olp = (N.rc + _N.rc) / 2
-                if adist * V/olp > dist:
-                    Link = comp_N(_N,N, olp, rc, A=dy_dx, span=dist, lH=L_)
-                    if val_(Link.Et, aw=olp+rc) > 0:
-                        N_+= [_N,N]; Et+=Link.Et; o+=olp
-                else:
-                    break  # no proj for more distant pairs?
-    return list(set(N_)), L_, Et,o
+    N__,L_, ET,O = [],[],np.zeros(3),1  # rng=1
+    if fC:
+        for _N, N in combinations(iN_, r=2):  # no olp for dCs?
+            m_, d_ = comp_derT(_N.derTT[1], N.derTT[1])
+            ad_ = np.abs(d_); t_ = m_ + ad_ + eps  # ~ max comparand
+            et = np.array([m_ / t_ @ wTTf[0], ad_ / t_ @ wTTf[1], min(_N.Et[2], N.Et[2])])  # signed
+            dC = CN(N_=[_N,N], Et=et); L_ += [dC]; ET += et
+            for n in _N, N:
+                N__ += [n]; n.rim += [dC]; n.et += et
+        N__ = list(set(N__))
+    else:
+        for i, N in enumerate(iN_):
+            N.pL_ = []
+            for _N in iN_[i:]:  # get unique pairs
+                if _N.sub == N.sub:  # check max dist?
+                    dy_dx = _N.yx- N.yx; dist = np.hypot(*dy_dx)  # * angl in comp_A, for canonical links in L_
+                    N.pL_ += [[dist,dy_dx,_N]]  # no reciprocal?
+        _N_ = []
+        for N in iN_:
+            if not N.pL_: continue
+            dir_sort(N)  # get rng_ pre-links per direction
+            _N_ += [N]
+        
+        rng = 1; cT_ = set() 
+        while True:
+            N_, Et, o = [], np.zeros(3), 0
+            for N in _N_:
+                for dir in N.pL_:
+                    for dist,dy_dx,_N in dir[1]:  # enumerate rng?             
+                        cT = tuple(sorted((N.id,_N.id)))
+                        if cT in cT_: continue  # skip previously compared _N from prior rng?
+                        V = proj_V(_N, N, dy_dx, dist)
+                        olp = (N.rc + _N.rc) / 2
+                        if adist * V/olp > dist:
+                            Link = comp_N(_N,N, olp, rc, A=dy_dx, span=dist, lH=L_)
+                            cT_.add(cT)  # add cT only if adist eval is true?
+                            if val_(Link.Et, aw=olp+rc) > 0:
+                                N_+= [_N,N]; Et+=Link.Et; o+=olp
+                        else:
+                            break  # no proj for more distant pairs?
+
+            N_ = list(set(N_))
+            if N_:
+                N__+= [N_]; ET+=Et; O+=o  # rng+ eval / loop
+                if val_(Et, mw=(len(N_)-1)*Lw, aw=compw+rc+o) > 0:  # current-rng vM
+                    _N_ = N_; rng +=1
+                else: break
+            else: break              
+        [delattr(N,'pL_') for N in _N_ if hasattr(N, 'pL')]
+       
+                            
+    return list(set(N_)), L_, ET,O
 
 def dir_sort(N):  # get rng_ pre-links per direction
 
@@ -288,7 +319,7 @@ def dir_sort(N):  # get rng_ pre-links per direction
             mA,_ = comp_A(angl, dir[0])
             if mA > .8 and mA > max_mA:
                 max_mA = mA; max_dir = dir
-        if max_dir: max_dir[1] += angl; max_dir[1] += [[dist,angl,_N]]
+        if max_dir: max_dir[0] += angl; max_dir[1] += [[dist,angl,_N]]  # angl is max_dir[0]
         else:       dir_+= [[copy(angl), [[dist,angl,_N]]]]  # new dir
     for _,pL_ in dir_:
         pL_[:] = sorted(pL_, key=lambda x: x[0])  # by distance
@@ -383,7 +414,7 @@ def base_comp(_N,N, fC=0):  # comp Et, baseT, extT, derTT
     rn = _n/n
     _pars = np.array([_M*rn,_D*rn,_n*rn,_I*rn,_G*rn, [_Dy,_Dx],_L*rn,_N.span], dtype=object)  # Et, baseT, extT
     pars = np.array([M,D,n, (I,aI),G, [Dy,Dx], L,(N.span,aS)], dtype=object)
-    mA,dA = comp_A(np.prod(_N.angl), np.prod(N.angl))  # ext angle
+    mA,dA = comp_A(_N.angl[0]*_N.angl[1], N.angl[0]*N.angl[1])  # ext angle  (looks like the prior code got syntax error))
     m_,d_ = comp(_pars,pars, mA,dA)  # M,D,n, I,G,A, L,S,eA
     if fC:
         dm_,dd_ = comp_derT(rn*_N.derTT[1], N.derTT[1])
@@ -851,7 +882,8 @@ def PP2N(PP, root):
                        np.array([dM, dD, dL, dI, dG, dA, dL, dL / 2, eps])])
     y,x,Y,X = box; dy,dx = Y-y, X-x
     A = np.array([np.array(A), np.sign(derTT[1] @ wTTf[1])], dtype=object)  # append sign
-    PP = CN(root=root, fi=1, Et=Et, N_=P_, baseT=baseT, derTT=derTT, box=box, yx=yx, angl=A, span=np.hypot(dy/2, dx/2))
+    # we need to assign L_ as link_? So that proj_V can get L's Et in the first call
+    PP = CN(root=root, fi=1, Et=Et, N_=P_, L_=link_, baseT=baseT, derTT=derTT, box=box, yx=yx, angl=A, span=np.hypot(dy/2, dx/2))
     for P in PP.N_: P.root = PP  # update root
     return PP
 
