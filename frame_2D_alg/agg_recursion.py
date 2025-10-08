@@ -141,9 +141,10 @@ def Copy_(N, root=None, init=0):
 
     C = CN(root=root)
     if init:  # init G with N
-        C.N_ = [N]; C.nH, C.lH, N.root = [],[],C
+        C.N_ = [N]; C.nH, C.lH = [],[]
         C.L_ = [l for l in N.rim if l.Et[0]>ave] if N.fi else []
-        C.fi = N.fi if init==2 else 1  # G, not centroid
+        if init == 2: C.fi = N.fi  # skip root assignment when fC
+        else:         C.fi = 1; N.root = C  # G, not centroid
     else:
         C.N_,C.nH,C.lH = list(N.N_),list(N.nH),list(N.lH); N.root = root or N.root
         C.L_ = list(N.L_) if N.fi else N.L_
@@ -204,9 +205,14 @@ def cross_comp(root, rc, fC=0):  # rng+ and der+ cross-comp and clustering
                 rc += nG.rc  # redundant clustering layers
                 if lG:
                     form_B__(nG,lG, rc+O+2)  # assign boundary per N, O += B_[-1] |1?
+                    # there's a problem with section below
+                    # right now we never form B_ and rB_ in nG and lG, but only form them in mgraphs and dgraph
+                    # so only nested trace_edge is relevant now?
+                    '''
                     mv,dv = val_(Et,2,(len(nG.B_[0])-1)*Lw, rc+O+3+contw)
                     if mv > 0: trace_edge(nG, rc+O+3, fN_=1)  # comp Ns via B_, alt B clustering:
                     if dv>ave: trace_edge(nG, rc+O+4, fN_=0)  # comp Bs via rB_, = lG with fN_ = 1?
+                    '''
                     root.Et += lG.Et
                 if val_(nG.Et,1, (len(nG.N_)-1)*Lw, rc+O+compw+3, Et) > 0:
                     nG = cross_comp(nG, rc+O+3) or nG  # agg+
@@ -220,7 +226,7 @@ def proj_V(_N, N, angle, dist, fC=0):  # estimate cross-induction between N and 
     def proj_L_(L_, int_w=1):
         V = 0
         for L in L_:
-            cos = (np.prod(L.angl) @ angle) / np.hypot(*np.prod(L.angl) * np.hypot(*angle))  # angl: [[dy,dx],dir]
+            cos = ((L.angl[0]*L.angl[1]) @ angle) / np.hypot(*(L.angl[0]*L.angl[1]) * np.hypot(*angle))  # angl: [[dy,dx],dir]
             mang = (cos+ abs(cos)) / 2  # = max(0, cos): 0 at 90°/180°, 1 at 0°
             V += L.Et[1-fi] * mang * int_w * mW * (L.span/dist * av)  # decay = link.span / l.span * cosine ave?
             # += proj rim-mediated nodes?
@@ -453,7 +459,7 @@ def Cluster(root, iL_, rc, fC):  # generic root for clustering
         for _L,L in zip(L_, L_[1:]):  # segment by ddist:
             if L.span -_L.span < adist: Lseg += [L]  # or short seg?
             else:                       L__ += [Lseg]; Lseg = [L]
-        L_ += [Lseg]
+        L__ += [Lseg]  # should be L__ here
         for rng, rL_ in enumerate(L__,start=1):  # bottom-up rng-banded clustering
             aw = rc + rng + contw
             if rL_ and val_(np.sum([l.Et for l in rL_], axis=0),1, (len(rL_)-1)*Lw, aw) > 0:
@@ -463,7 +469,7 @@ def Cluster(root, iL_, rc, fC):  # generic root for clustering
 def cluster_N(root, rL_, rc, rng=1):  # flood-fill node | link clusters
 
     def rroot(n):
-        if n.root != root: return rroot(n.root) if n.root.root else n.root
+        return rroot(n.root) if n.root and n.root != root else n  # skip the main if loop, else it return None when if loop in deeper call is false
 
     def extend_Gt(_link_, node_, cent_, link_, b_, in_):
         for L in _link_:  # spliced rim
@@ -490,7 +496,7 @@ def cluster_N(root, rL_, rc, rng=1):  # flood-fill node | link clusters
     for N in rN_:  # form G per remaining rng N
         if not N.exe or N.fin: continue
         node_,cent_,Link_,_link_,B_ = [N],[],[],[],[]
-        if rng==1 or (not N.root or N.root.rng==1):  # not rng-banded
+        if rng==1 or not N.root or N.root==root:  # not rng-banded  (looks like i was wrong earlier, when N is link node, their root is None and empty)
             cent_ = N.rC_[:]  # c_roots
             for l in N.rim:
                 if l in rL_:
@@ -902,7 +908,7 @@ def vect_edge(tile, rV=1, wTTf=[]):  # PP_ cross_comp and floodfill to init foca
                 PPm_ = comp_slice(edge, rV, wTTf)
                 PPd_ = [PP2N(PP,Bg) for PP in edge.link_]; Et = np.zeros(3)  # lG is PPd.root in clust_B_
                 for PP in PPm_:
-                    N = PP2N(PP,Bg); Et += N.Et; Bg.N_ += [N]
+                    N = PP2N(PP,Bg); Et += N.Et; Bg.N_ += [N]; Bg.Et += N.Et  # Bg.Et should be accumulated too?
                 form_B__(Bg, CN(N_=PPd_),2)
                 if val_(Et, mw=(len(PPm_)-1)*Lw, aw=2) > 0:  # internal B_
                     trace_edge(Bg, rc=2, fN_=1)  # contiguous boundary-mediated xcomp,cluster of complemented Ns
