@@ -205,7 +205,7 @@ def cross_comp(root, rc, fC=0):  # rng+ and der+ cross-comp and clustering
                 rc += nG.rc  # redundant clustering layers
                 if lG:
                     form_B__(nG,lG, rc+O+2)  # assign boundary per N, O += B_[-1] |1?
-                    mv,dv = val_(Et,2,(len(nG.B_[0])-1)*Lw, rc+O+3+contw)
+                    mv,dv = val_(Et,2,(len(nG.N_)-1)*Lw, rc+O+3+contw)  # dV should be based on lG?
                     if mv > 0: trace_edge(nG, rc+O+3)  # comp Ns via B_, alt B clustering:
                     if dv>ave: trace_edge(lG, rc+O+4)  # comp Bs via rB_, = lG with fN_ = 1?
                     root.Et += lG.Et
@@ -921,8 +921,9 @@ def form_B__(G, lG, rc):  # trace edge / boundary / background per node:
     def R(L): return L.root if L.root is None or L.root.root is lG else R(L.root)
 
     for N in G.N_:  # replace boundary Ls with RLs
+        if not N.B_: continue
         B_, Et, rdn = [], np.zeros(3), 0
-        for L in N.B_:  # neg Ls may be clustered
+        for L in (N.B_ if isinstance(N.B_[0], CN) else N.B_[0]):  # neg Ls may be clustered (recycled N may have B_ init as [B_, Et, Rdn])
             RL = R(L)
             if RL: B_ += [RL]; Et += RL.Et; rdn += RL.rB_.index(N) + 1  # rdn = n stronger cores of RL
         N.B_ = [B_, Et, rdn]
@@ -933,6 +934,7 @@ def trace_edge(root, rc):  # cluster contiguous shapes via PPs in edge blobs or 
     L_ = []; cT_ = set()  # comp pairs
     for N in N_: N.fin = 0
     for N in N_:
+        if not N.B_ or N.B_ and isinstance(N.B_[0], CN): continue  # empty B_ or non-converted B_, where their B's rB_ is empty since lG is empty
         for _N in list({rB for B in N.B_[0] for rB in B.rB_ if rB is not N}):  # _Ns share boundary with N
             cT = tuple(sorted((N.id,_N.id)))
             if cT in cT_: continue
