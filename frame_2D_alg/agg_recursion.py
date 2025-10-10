@@ -4,7 +4,7 @@ from math import atan2, cos, floor, pi  # from functools import reduce
 from itertools import zip_longest, combinations, chain, product;  from multiprocessing import Pool, Manager
 from frame_blobs import frame_blobs_root, imread, comp_pixel, CBase
 from slice_edge import slice_edge
-from comp_slice import comp_slice
+from comp_slice import comp_slice, CP
 '''
 Lower modules start with cross-comp and clustering image pixels, here the initial input is PPs: segments of matching blob slices or Ps.
 
@@ -810,7 +810,7 @@ def PP2N(PP, root):
                        np.array([dM, dD, dL, dI, dG, dA, dL, dL / 2, eps])])
     y,x,Y,X = box; dy,dx = Y-y, X-x
     A = np.array([np.array(A), np.sign(derTT[1] @ wTTf[1])], dtype=object)  # append sign
-    PP = CN(root=root, fi=1, Et=Et, N_=P_, baseT=baseT, derTT=derTT, box=box, yx=yx, angl=A, span=np.hypot(dy/2, dx/2))
+    PP = CN(root=root, fi=1, Et=Et, N_=P_, B_=B_, baseT=baseT, derTT=derTT, box=box, yx=yx, angl=A, span=np.hypot(dy/2, dx/2))
     for P in PP.N_: P.root = PP  # update root
     return PP
 
@@ -827,6 +827,7 @@ def project_N_(Fg, yx):
     for _N in Fg.N_:  # sum _N-specific projections for cross_comp
         if not _N.derH: continue
         M,D,n = _N.Et
+        # no global decay?
         dec = rdist * (M/(M+D))  # match decay rate, * ddecay for ds?
         prj_H = proj_dH(_N.derH.H, cos_d * rdist, dec)
         prjTT, pEt = sum_H( prj_H)
@@ -870,6 +871,7 @@ def project_focus(PV__, y,x, Fg):  # radial accum of projected focus value in PV
     m,d,n = Fg.Et
     V = (m-ave*n) + (d-avd*n)
     dy,dx = Fg.angl[0]; a = dy/ max(dx,eps)  # average link_ orientation, projection
+    # no global decay here?
     decay = (ave / (Fg.baseT[0]/n)) * (wYX / adist)  # base decay = ave_match / ave_template * rel dist (ave_dist is a placeholder)
     H, W = PV__.shape  # = win__
     n = 1  # radial distance
@@ -903,11 +905,11 @@ def vect_edge(tile, rV=1, wTTf=[]):  # PP_ cross_comp and floodfill to init foca
         if not blob.sign and blob.G > aveB:
             edge = slice_edge(blob, rV)
             if edge.G * ((len(edge.P_)-1)*Lw) > ave * sum([P.latT[4] for P in edge.P_]):
-                PPm_ = comp_slice(edge, rV, wTTf); Bg = CN()
-                PPd_ = [PP2N(PP,Bg) for PP in edge.link_]  # lG is PPd.root in clust_B_
+                PPm_ = comp_slice(edge, rV, wTTf); Bg = CN(); lG = CN()  # init lG as root of PPd, we need it in R function later
+                PPd_ = [PP2N(PP,lG) for PP in edge.link_]; lG.N_ = PPd_  # lG is PPd.root in clust_B_
                 for PP in PPm_:
                     N = PP2N(PP,Bg); Bg.Et += N.Et; Bg.N_ += [N]
-                form_B__(Bg, CN(N_=PPd_),2)
+                form_B__(Bg,lG,2)
                 if val_(Bg.Et, mw=(len(PPm_)-1)*Lw, aw=2) > 0:
                     trace_edge(Bg, rc=2)  # cluster complemented Gs via G.B_
                     # trace_edge(Bg.lH[0], rc=3): lG.N_?
@@ -917,7 +919,8 @@ def vect_edge(tile, rV=1, wTTf=[]):  # PP_ cross_comp and floodfill to init foca
 def form_B__(G, lG, rc):  # trace edge / boundary / background per node:
 
     for Lg in lG.N_:  # form rB_, in Fg?
-        rB_ = {n.root for L in Lg.N_ for n in L.N_ if n.root and n.root.root is not None}  # core Gs, exclude frame
+        # skip list when P.root is list if they do not form PPm
+        rB_ = {n.root for L in Lg.N_ for n in L.N_ if n.root and isinstance(n.root, CN) and n.root.root is not None}  # core Gs, exclude frame
         Lg.rB_ = sorted(rB_, key=lambda x:(x.Et[0]/x.Et[2]), reverse=True)  # N rdn = index+1
 
     def R(L): return L.root if L.root is None or L.root.root is lG else R(L.root)
@@ -927,7 +930,7 @@ def form_B__(G, lG, rc):  # trace edge / boundary / background per node:
         B_, Et, rdn = [], np.zeros(3), 0
         for L in N.B_:  # replace boundary Ls with their roots
             RL = R(L)
-            if RL: B_ += [RL]; Et += RL.Et; rdn += RL.rB_.index(N) + 1  # rdn = n stronger cores of RL
+            if RL and N in RL.rB_: B_ += [RL]; Et += RL.Et; rdn += RL.rB_.index(N) + 1  # rdn = n stronger cores of RL
         N.B_ = [B_, Et, rdn]
 
 def trace_edge(root, rc):  # cluster contiguous shapes via PPs in edge blobs or lGs in boundary / skeleton?
@@ -936,8 +939,9 @@ def trace_edge(root, rc):  # cluster contiguous shapes via PPs in edge blobs or 
     L_ = []; cT_ = set()  # comp pairs
     for N in N_: N.fin = 0
     for N in N_:
-        _N_ = list({ [rB for B in N.B_[0] for rB in B.rB_ if rB is not N]
-                    + [B for rB in N.rB_ for B in rB.B_ if B is not N] })
+        if not N.B_: continue  # N.B_ is not nested and hence empty, skip it
+        _N_ = list(set([rB for B in N.B_[0] for rB in B.rB_ if rB is not N]
+                    + [B for rB in N.rB_ for B in rB.B_ if B is not N] ))  # syntax error with {}
         for _N in _N_:  # share boundary or cores if lG with N, same val?
             cT = tuple(sorted((N.id,_N.id)))
             if cT in cT_: continue

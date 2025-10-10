@@ -89,7 +89,9 @@ def form_PP_(iP_, fd):  # form PPs of dP.valt[fd] + connected Ps val
 
     PPt_ = []; ET = np.full(3,1e-7); VerT = np.full((2,6),1e-7)
 
-    for P in iP_: P.merged = 0
+    for P in iP_:
+        P.merged = 0
+        for L in P.lrim: L.merged = 0
     for P in iP_:  # dP from link_ if fd
         if P.merged: continue
         _prim_ = P.prim; _lrim_ = P.lrim; B_ = []
@@ -100,7 +102,7 @@ def form_PP_(iP_, fd):  # form PPs of dP.valt[fd] + connected Ps val
         while _prim_:
             prim_,lrim_ = set(),set()
             for _P,_link in zip(_prim_,_lrim_):
-                if _P.merged: continue
+                if _P.merged or _link.merged: continue  # link shouldn't be shared as well?
                 if _link.Et[fd] > [ave,avd][fd]:
                     _P_.add(_P); link_.add(_link)
                     verT += _link.verT
@@ -109,8 +111,9 @@ def form_PP_(iP_, fd):  # form PPs of dP.valt[fd] + connected Ps val
                     Et += _Et  # intra-P similarity and variance
                     prim_.update(set(_P.prim) - _P_)
                     lrim_.update(set(_P.lrim) - link_)
-                    _P.merged = 1
-                else: B_ += [_link]  # PP boundary-> comb_B
+                    _P.merged = 1; _link.merged = 1
+                else: 
+                    B_ += [_link]  # PP boundary-> comb_B (if link is added as B_, do we need to skip them in other PP.B_ later? Else this link may present in multiple PP.B_ )
             _prim_, _lrim_ = prim_, lrim_
         ET += Et; VerT += verT
         PPt_ += [sum2PP(list(_P_), list(link_), list(set(B_)), Et)]
