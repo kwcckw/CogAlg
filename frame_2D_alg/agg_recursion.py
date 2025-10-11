@@ -264,6 +264,7 @@ def comp_Q(iN_, rc, fC):
             dC = CN(N_=[_N,N], Et=et); L_ += [dC]; Et += et  # add o?
             for n in _N, N:
                 N_ += [n]; n.rim += [dC]; n.et += et
+            L_ = [L_]  # convert to nested, to  enable a same unpacking sequence in Cluster
     else: # spatial
         for i, N in enumerate(iN_):  # get unique pre-links per N, not _N
             N.pL_ = []
@@ -443,8 +444,8 @@ def Cluster(root, iL_, rc, fC):  # generic root for clustering
                 if not nG: nG = CN(N_=C_,L_=L_)
                 break
     else:
-        N_ = list({N for L in iL_ for N in L.N_})  # newly connected only
-        E_ = get_exemplars(root.N_, rc)
+        N_ = list({N for L in iL_ for N in L.N_ if N.et[2]})  # newly connected only (skip non-compared Ns)
+        E_ = get_exemplars(N_, rc)  # should be N_ here? skip those non-compared Ns
         if E_ and val_(np.sum([g.Et for g in E_],axis=0), N_[0].fi, (len(E_)-1)*Lw, rc+centw, root.Et) > 0:
             cluster_C(E_, root, rc)
         L_ = sorted(iL_, key=lambda l: l.span)
@@ -906,7 +907,7 @@ def vect_edge(tile, rV=1, wTTf=[]):  # PP_ cross_comp and floodfill to init foca
                     form_B__(Bg, lG,2)
                     if val_(Bg.Et, mw=(len(PPm_)-1)*Lw, aw=2) > 0:
                         trace_edge(Bg, rc=2)  # cluster complemented Gs via G.B_
-                        # trace_edge(lG, rc=3), separate cross_comp in frame_H?
+                        # if val_(lG.Et, mw=(len(lG.N_)-1)*Lw, aw=2): trace_edge(lG, rc=3)  # separate cross_comp in frame_H?
                 add_N(Fg, Bg, fmerge=1)
     return Fg
 
@@ -923,6 +924,7 @@ def form_B__(G, lG, rc):  # trace edge / boundary / background per node:
         B_, Et, rdn = [], np.zeros(3), 0
         for L in N.B_:  # replace boundary Ls with their roots
             RL = R(L)
+            # N may not in RL.rB_ when G and lG are in different depth?
             if RL: B_ += [RL]; Et += RL.Et; rdn += RL.rB_.index(N) + 1  # rdn = n stronger cores of RL
         N.B_ = [B_, Et, rdn]
 
@@ -932,7 +934,7 @@ def trace_edge(root, rc):  # cluster contiguous shapes via PPs in edge blobs or 
     L_ = []; cT_ = set()  # comp pairs
     for N in N_: N.fin = 0
     for N in N_:
-        _N_ = [B for rB in N.rB_ for B in rB.B_ if B is not N]
+        _N_ = [B for rB in N.rB_ for B in rB.B_[0] if B is not N]  # should be rB.B_[0]
         if N.B_: _N_ += [rB for B in N.B_[0] for rB in B.rB_ if rB is not N]
         for _N in list(set(_N_)):  # share boundary or cores if lG with N, same val?
             cT = tuple(sorted((N.id,_N.id)))
@@ -966,7 +968,7 @@ def trace_edge(root, rc):  # cluster contiguous shapes via PPs in edge blobs or 
         if val_(et, mw=(len(n_)-1)*Lw, aw=rc) > 0:
             G_ += [sum2graph(root,n_,l_,[],[],et,olp,1)]
         else:
-            for N in n_: N.sub += 1; G_ += [N]
+            for N in n_: N.sub += 1; G_ += [N]; N.root = root  # we need to reassign root from Gt back to root here
     for N in N_: N.fin = 0
     root.N_ = G_
 
