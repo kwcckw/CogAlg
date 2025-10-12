@@ -266,11 +266,11 @@ def comp_N_(iN_, rc):
         N.pL_.sort(key=lambda x: x[0])  # global distance sort
     for N in iN_:
         pVt_ = []  # [dist, dy_dx, _N, V]
-        specw = 9  # spec cost, different per loop?
+        specw = 2  # spec cost, different per loop?  (Ave is 10, probably use much lower value? 9 is too tight)
         for dist, dy_dx, _N in N.pL_:  # angl is not canonic in rim?
             O = (N.rc+_N.rc) / 2; Ave=ave*O; Dec = dec**(dist/adist)  # if dec per adist
-            V = val_((_N.et+N.et) * Dec, aw=rc+O)
-            fcomp = 1 if V>Ave else 0 if V<specw else 2  # uncertainty
+            V = val_((_N.et+N.et+_N.Et+N.Et) * Dec, aw=rc+O)  # N.et is empty before the comp_N below?
+            fcomp = 1 if V>Ave else (0 if V<specw else 2)  # uncertainty (added bracket, probably clearer)
             if fcomp==2:
                 V = 0  # recompute from individual ext Ls
                 for _dist,_dy_dx,__N,_V in pVt_:  # * link ext miss value?
@@ -278,11 +278,11 @@ def comp_N_(iN_, rc):
                     ldist = np.hypot(*(_N.yx-__N.yx)) /2  # between link midpoints
                     rdist = ldist / ((_dist+dist)/2)
                     V += _V * (dec** (rdist/adist)) * ((mA*wA + dist/_dist*distw) / (wA+distw))
-                fcomp = 1 if V>Ave else 0 if V<specw else 2
+                fcomp = 1 if V>Ave else (0 if V<specw else 2)
                 if fcomp==2:
                     cV = V + val_((_N.Et+N.Et) * intw * Dec, aw=rc+O)
-                    fcomp = 1 if cV>Ave else 0 if cV<specw else 2
-                    if fcomp==2 and _N.L_ and N.L_:  # spec / int L
+                    fcomp = 1 if cV>Ave else (0 if cV<specw else 2)
+                    if fcomp==2 and isinstance(N.L_, list) and _N.L_ and N.L_:  # spec / int L (when N is link node, their L_ is int, so this is for mfork only? Or use their N_?)
                         V += proj_L_(_N,N, dy_dx, dist)  # recompute from individual int Ls
                     else: V = cV
                     fcomp = V > Ave  # no further spec
@@ -432,12 +432,14 @@ def Cluster(root, iL_, rc, fC):  # generic root for clustering
         L_, nG = [], []
         dC_ = sorted(list({L for L in iL_}), key=lambda dC: dC.Et[1])  # from min D
         for i, dC in enumerate(dC_):
+            fbreak = 1
             if val_(dC.Et, fi=0, aw=rc+compw) < 0:  # merge similar centroids, no recomp
-                _C,C = dC.N_
+                fbreak = 0
+                _C,C = dC.N_[:2]  # dC may have added N from add_N below, during fc's dfork, so get the first 2 nodet
                 if _C is not C:  # not merged
                     add_N(_C,C, fmerge=1,froot=1)  # fin,root.rim
                     for l in C.rim: l.N_ = [_C if n is C else n for n in l.N_]
-            else:
+            if i == len(dC_)-1 or fbreak:  # looks like the previous code skipped the section below when all val_'s eval are true
                 root.L_ = [l for l in root.L_ if l not in dC_[:i]]  # cleanup
                 L_ = dC_[i:]; C_ = list({n for L in L_ for n in L.N_})  # remaining Cs and dCs
                 if L_ and val_(np.sum([l.Et for l in L_], axis=0), mw=(len(L_)-1)*Lw, aw=rc+contw) > 0:
@@ -546,7 +548,7 @@ def cluster_n(root, iC_, rc):  # simplified flood-fill, currently for for C_ onl
             for n in N_: olp += n.rc  # from Ns, vs. Et from Ls?
             for l in L_: Et += l.Et
             if val_(Et,1, (len(N_)-1)*Lw, rc+olp, root.Et) > 0:
-                G_ += [sum2graph(root, N_,L_,[C_,np.sum([c.ET for c in C_],axis=0)] if C_ else [[],np.zeros(3)],list(set(B_)),[], Et,olp,1)]
+                G_ += [sum2graph(root, N_,L_,[C_,np.sum([c.ET for c in C_],axis=0)] if C_ else [[],np.zeros(3)],list(set(B_)), Et,olp,1)]
             elif n.fi:
                 G_ += N_
     if G_: return sum_N_(G_,root)  # nG
@@ -934,7 +936,7 @@ def trace_edge(root, rc):  # cluster contiguous shapes via PPs in edge blobs or 
     L_ = []; cT_ = set()  # comp pairs
     for N in N_: N.fin = 0
     for N in N_:
-        _N_ = [B for rB in N.rB_ for B in rB.B_[0] if B is not N]
+        _N_ = [B for rB in N.rB_ if rB.B_ for B in rB.B_[0] if B is not N]
         if N.B_: _N_ += [rB for B in N.B_[0] for rB in B.rB_ if rB is not N]
         for _N in list(set(_N_)):  # share boundary or cores if lG with N, same val?
             cT = tuple(sorted((N.id,_N.id)))
