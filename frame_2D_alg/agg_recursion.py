@@ -404,8 +404,8 @@ def spec(_spe,spe, Et, olp, dspe=None):  # for N_|B_
 
 def rolp(N, _N_, R=0): # rel V of L_|N.rim overlap with _N_: inhibition|shared zone, oN_ = list(set(N.N_) & set(_N.N_)), no comp?
 
-    n_ = N.N_ if R else {n for l in N.rim for n in l.N_ if n is not N}  # nrim
-    olp_ = n_ & _N_
+    n_ = set(N.N_) if R else {n for l in N.rim for n in l.N_ if n is not N}  # nrim
+    olp_ = n_ & set(_N_)  # _N_ may not be a set
     if olp_:
         oEt = np.sum([i.Et for i in olp_], axis=0)
         _Et = N.Et if R else N.et  # not sure
@@ -430,7 +430,7 @@ def Cluster(root, iL_, rc, fC):  # generic clustering root
 
     nG = []
     if fC:  # centroids, primary connectivity clustering
-        C_, i = [], 0
+        C_, L_, i = [], [], 0
         if fC < 2:  # merge similar Cs, not dCs, no recomp
             dC_ = sorted(list({L for L in iL_}), key=lambda dC: dC.Et[1])  # from min D
             for i, dC in enumerate(dC_):
@@ -441,10 +441,11 @@ def Cluster(root, iL_, rc, fC):  # generic clustering root
                         for l in C.rim: l.N_ = [_C if n is C else n for n in l.N_]
                         C_ += [_C]
                 else:
-                    root.L_ = [l for l in root.L_ if l not in dC_[:i]]; break  # cleanup
-            L_ = dC_[i:]
-        else: L_ = iL_  # no merging
-        C_ += list({n for L in L_ for n in L.N_})  # C_ was merged Cs, if any
+                    L_ = dC_[i:]; root.L_ = [l for l in root.L_ if l not in L_]  # cleanup
+                    C_ += list({n for L in L_ for n in L.N_})  # C_ was merged Cs, if any
+                    break  
+            # L_ = dC_[i:]  # if every Cs are merged, L_ should be empty anyway? So L_ can be updated in else loop 
+        else: L_ = iL_  # no merging 
         if val_(root.Et, mw=(len(C_)-1)*Lw, aw=rc+contw) > 0:
             nG = cluster_n(root, C_, rc)  # in feature space
         if not nG: nG = CN(N_=C_,L_=L_)
@@ -807,7 +808,7 @@ def PP2N(PP, root):  # update root locally?
     [mM, mD, mI, mG, mA, mL], [dM, dD, dI, dG, dA, dL] = verT  # re-pack in derTT:
     derTT = np.array([ np.array([mM, mD, mL, mI, mG, mA, mL, mL / 2, eps]),  # extA=eps
                        np.array([dM, dD, dL, dI, dG, dA, dL, dL / 2, eps])])
-    y,x,Y,X = box; dy,dx = Y-y, X-x
+    y,x,Y,X = box; dy,dx = Y+1-y, X+1-x  # the X and Y shouldn't be inclusive and we need + 1 here, else we missed out a single pixel
     A = np.array([np.array(A), np.sign(derTT[1] @ wTTf[1])], dtype=object)  # append sign
     PP = CN(root=root, fi=1, Et=Et, N_=P_, B_=B_, baseT=baseT, derTT=derTT, box=box, yx=yx, angl=A, span=np.hypot(dy/2, dx/2))
     for P in PP.N_: P.root = PP
@@ -815,6 +816,22 @@ def PP2N(PP, root):  # update root locally?
 
 def project_N_(Fg, yx):
 
+    def proj(N, N_, ET, DerTT, fd):
+        if _N.derH: 
+            M,D,n = _N.Et
+            if fd:
+                dec = rdist * (M/(M+D))  # tentative, directional projection when fd = 1 in links?
+            else:
+                dec = rdist * (M/(M+D))  # match decay rate, * ddecay for ds?
+            prj_H = proj_dH(_N.derH.H, cos_d * rdist, dec)
+            prjTT, pEt = sum_H( prj_H)
+            pD = pEt[1]*dec; dM = M*dec
+            pM = dM - pD * (dM/(ave*n))  # -= borrow, regardless of surprise?
+            pEt = np.array([pM, pD, n])
+            if val_(pEt, aw=contw):
+                ET+=pEt; DerTT+=prjTT
+                N_ += [CN(N_=_N.N_, Et=pEt, derTT=prjTT, derH=prj_H, root=CN())]  # same target position?
+            
     dy,dx = Fg.yx - yx
     Fdist = np.hypot(dy,dx)  # external dist
     rdist = Fdist / Fg.span
@@ -823,18 +840,11 @@ def project_N_(Fg, yx):
     # difference between external and internal angles, *= rdist
     ET = np.zeros(3); DerTT = np.zeros((2,9))
     N_ = []
-    for _N in Fg.N_:  # sum _N-specific projections for cross_comp
-        if not _N.derH: continue
-        M,D,n = _N.Et
-        dec = rdist * (M/(M+D))  # match decay rate, * ddecay for ds?
-        prj_H = proj_dH(_N.derH.H, cos_d * rdist, dec)
-        prjTT, pEt = sum_H( prj_H)
-        pD = pEt[1]*dec; dM = M*dec
-        pM = dM - pD * (dM/(ave*n))  # -= borrow, regardless of surprise?
-        pEt = np.array([pM, pD, n])
-        if val_(pEt, aw=contw):
-            ET+=pEt; DerTT+=prjTT
-            N_ += [CN(N_=_N.N_, Et=pEt, derTT=prjTT, derH=prj_H, root=CN())]  # same target position?
+    # Ns
+    for _N in Fg.N_: proj(_N, N_, ET, DerTT)  # sum _N-specific projections for cross_comp
+    # Ls
+    for _L in Fg.L_: proj(_L, N_, ET, DerTT, fi=1)  # Fg.L_ is always link here because lG is packed in Fg.lH
+        
     # proj Fg:
     if val_(ET, mw=len(N_)*Lw, aw=contw):
         return CN(N_=N_,L_=Fg.L_,Et=ET, derTT=DerTT)  # proj Fg, add Prj_H?
