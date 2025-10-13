@@ -191,7 +191,7 @@ def val_(Et, fi=1, mw=1, aw=1, _Et=np.zeros(3)):  # m,d eval per cluster or cros
 
 def cross_comp(root, rc, fC=0):  # rng+ and der+ cross-comp and clustering
 
-    if fC: N_,L_,Et = comp_C_(root.N_,rc); O = 1  #?
+    if fC: N_,L_,Et = comp_C_(root.N_,rc); O = 0  # no alt rep is formed
     else:  N_,L_,Et,O = comp_N_(root.N_,rc)  # rc: redundancy+olp, lG.N_ is Ls
     if len(L_) > 1:
         mV,dV = val_(Et,2,(len(L_)-1)*Lw, O+rc+compw); lG = []
@@ -218,7 +218,7 @@ def cross_comp(root, rc, fC=0):  # rng+ and der+ cross-comp and clustering
 
 def comp_C_(C_, rc, fall=1):  # max attr sort to constrain C_ search in 1D, add K attrs and overlap?
 
-    L_,Et = [], np.zeros(3)
+    L_,Et = [], np.zeros(3)  # O = (C.rc +_C.rc) / 2?
     if fall:
         for _N, N in combinations(C_, r=2):  # no olp for dCs?
             m_, d_ = comp_derT(_N.derTT[1], N.derTT[1])
@@ -255,9 +255,28 @@ def comp_N_(iN_, rc):
                 V += L.Et[1-fi] * mang * intw * mW * (L.span/dist * av)  # decay = link.span / l.span * cosine ave?
                 # not revised
         return V
-    N_,L_,Et,olp = [],[],np.zeros(3),1
-    # prox prior
-    for i, N in enumerate(iN_):  # get unique pre-links per N, not _N
+
+    def proj_V(_N, N, dist, dy_dx, Ave, specw, pVt_):
+            # _N x N induction
+        iV = (_N.Et[0]+N.Et[0]) * dec**(dist/((_N.span+N.span)/2)) - Ave
+        eV = (_N.et[0]+N.et[0]) * dec**(dist/np.mean([l.span for l in _N.rim+N.rim])) - Ave  # ave rim span
+        V = iV + eV
+        if V > Ave or V < specw: return V
+        if eV > specw:
+            eV = 0
+            for _dist, _dy_dx, __N, _V in pVt_:
+                mA, _ = comp_A(dy_dx, _dy_dx)
+                ldist = np.hypot(*(_N.yx-__N.yx)) /2
+                rdist = ldist / ((_dist + dist) / 2)
+                eV += _V * (dec**(rdist/adist)) * ((mA*wA + dist/_dist*distw) / (wA+distw))
+            V = iV + eV  # specific eV from prox links
+        if V > Ave: return V
+        if N.fi and _N.L_ and N.L_ and iV > specw:
+            V = eV + proj_L_(_N,N, dy_dx, dist)  # specific iV from L_s
+        return V
+
+    N_,L_, Et,olp = [],[], np.zeros(3),1
+    for i, N in enumerate(iN_):  # get unique pre-links per N, not _N, prox prior
         N.pL_ = []
         for _N in iN_[i+1:]:
             if _N.sub != N.sub: continue  # not sure
@@ -266,34 +285,16 @@ def comp_N_(iN_, rc):
         N.pL_.sort(key=lambda x: x[0])  # global distance sort
     for N in iN_:
         pVt_ = []  # [dist, dy_dx, _N, V]
-        specw = 2  # spec cost, different per loop?  (Ave is 10, probably use much lower value? 9 is too tight)
-        for dist, dy_dx, _N in N.pL_:  # angl is not canonic in rim?
-            O = (N.rc+_N.rc) / 2; Ave=ave*O; Dec = dec**(dist/adist)  # if dec per adist
-            V = val_((_N.et+N.et+_N.Et+N.Et) * Dec, aw=rc+O)  # N.et is empty before the comp_N below?
-            fcomp = 1 if V>Ave else (0 if V<specw else 2)  # uncertainty (added bracket, probably clearer)
-            if fcomp==2:
-                V = 0  # recompute from individual ext Ls
-                for _dist,_dy_dx,__N,_V in pVt_:  # * link ext miss value?
-                    mA, _ = comp_A(dy_dx,_dy_dx)  # mA and rel dist in 0:1:
-                    ldist = np.hypot(*(_N.yx-__N.yx)) /2  # between link midpoints
-                    rdist = ldist / ((_dist+dist)/2)
-                    V += _V * (dec** (rdist/adist)) * ((mA*wA + dist/_dist*distw) / (wA+distw))
-                fcomp = 1 if V>Ave else (0 if V<specw else 2)
-                if fcomp==2:
-                    cV = V + val_((_N.Et+N.Et) * intw * Dec, aw=rc+O)
-                    fcomp = 1 if cV>Ave else (0 if cV<specw else 2)
-                    if fcomp==2 and isinstance(N.L_, list) and _N.L_ and N.L_:  # spec / int L (when N is link node, their L_ is int, so this is for mfork only? Or use their N_?)
-                        V += proj_L_(_N,N, dy_dx, dist)  # recompute from individual int Ls
-                    else: V = cV
-                    fcomp = V > Ave  # no further spec
-            if fcomp:
+        for dist, dy_dx, _N in N.pL_:  # rim angl not canonic
+            O = (N.rc +_N.rc) / 2; Ave = ave * rc * O
+            V = proj_V(_N,N, dist, dy_dx, Ave,2, pVt_)
+            if V > Ave:
                 Link = comp_N(_N,N, O,rc, A=dy_dx, span=dist, lH=L_)
                 if val_(Link.Et, aw=contw+O+rc) > 0:
-                    N_ += [_N,N]; Et+= Link.Et; olp+=O
-                V = val_(Link.Et, aw=rc+O)  # else keep V
-            else: break
-            pVt_ += [[dist, dy_dx, _N, V]]
-
+                    N_ += [_N, N]; Et += Link.Et; olp += O
+                pVt_ += [[dist, dy_dx, _N, val_(Link.Et, aw=rc+O)]]
+            else:
+                break  # no induction
     return list(set(N_)), L_, Et, olp
 
 def comp_N(_N,N, olp,rc, A=np.zeros(2), span=None, rng=1, lH=None):  # compare links, optional angl,span,dang?
@@ -425,27 +426,28 @@ def get_exemplars(N_, rc):  # get sparse nodes by multi-layer non-maximum suppre
             break  # the rest of N_ is weaker, trace via rims
     return E_
 
-def Cluster(root, iL_, rc, fC):  # generic root for clustering
+def Cluster(root, iL_, rc, fC):  # generic clustering root
 
     nG = []
-    if fC:  # centroids -> primary connectivity clustering
-        L_, nG = [], []
-        dC_ = sorted(list({L for L in iL_}), key=lambda dC: dC.Et[1])  # from min D
-        for i, dC in enumerate(dC_):
-            fbreak = 1
-            if val_(dC.Et, fi=0, aw=rc+compw) < 0:  # merge similar centroids, no recomp
-                fbreak = 0
-                _C,C = dC.N_[:2]  # dC may have added N from add_N below, during fc's dfork, so get the first 2 nodet
-                if _C is not C:  # not merged
-                    add_N(_C,C, fmerge=1,froot=1)  # fin,root.rim
-                    for l in C.rim: l.N_ = [_C if n is C else n for n in l.N_]
-            if i == len(dC_)-1 or fbreak:  # looks like the previous code skipped the section below when all val_'s eval are true
-                root.L_ = [l for l in root.L_ if l not in dC_[:i]]  # cleanup
-                L_ = dC_[i:]; C_ = list({n for L in L_ for n in L.N_})  # remaining Cs and dCs
-                if L_ and val_(np.sum([l.Et for l in L_], axis=0), mw=(len(L_)-1)*Lw, aw=rc+contw) > 0:
-                    nG = cluster_n(root, C_,rc)  # by connectivity in feature space
-                if not nG: nG = CN(N_=C_,L_=L_)
-                break
+    if fC:  # centroids, primary connectivity clustering
+        C_, i = [], 0
+        if fC < 2:  # merge similar Cs, not dCs, no recomp
+            dC_ = sorted(list({L for L in iL_}), key=lambda dC: dC.Et[1])  # from min D
+            for i, dC in enumerate(dC_):
+                if val_(dC.Et, fi=0, aw=rc+compw) < 0:  # merge
+                    _C, C = dC.N_  # get roots if merged?
+                    if _C is not C:  # not merged
+                        add_N(_C,C, fmerge=1, froot=1)  # fin,root.rim
+                        for l in C.rim: l.N_ = [_C if n is C else n for n in l.N_]
+                        C_ += [_C]
+                else:
+                    root.L_ = [l for l in root.L_ if l not in dC_[:i]]; break  # cleanup
+            L_ = dC_[i:]
+        else: L_ = iL_  # no merging
+        C_ += list({n for L in L_ for n in L.N_})  # C_ was merged Cs, if any
+        if val_(root.Et, mw=(len(C_)-1)*Lw, aw=rc+contw) > 0:
+            nG = cluster_n(root, C_, rc)  # in feature space
+        if not nG: nG = CN(N_=C_,L_=L_)
     else:
         N_ = list({N for L in iL_ for N in L.N_})  # newly connected only
         E_ = get_exemplars(N_,rc)
@@ -456,7 +458,7 @@ def Cluster(root, iL_, rc, fC):  # generic root for clustering
         for _L,L in zip(L_, L_[1:]):  # segment by ddist:
             if L.span -_L.span < adist: Lseg += [L]  # or short seg?
             else:                       L__ += [Lseg]; Lseg = [L]
-        L__ += [Lseg]  # should be L__ here
+        L__ += [Lseg]
         for rng, rL_ in enumerate(L__,start=1):  # bottom-up rng-banded clustering
             aw = rc + rng + contw
             if rL_ and val_(np.sum([l.Et for l in rL_], axis=0),1, (len(rL_)-1)*Lw, aw) > 0:
