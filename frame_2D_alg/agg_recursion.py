@@ -210,7 +210,7 @@ def cross_comp(root, rc, fC=0):  # rng+ and der+ cross-comp and clustering
                     if val_(Et,1,(len(nG.N_)-1)*Lw, rc+O+3+contw) > 0:
                         trace_edge(nG, rc+O+3)  # comp adjacent Ns via B_
                 if val_(nG.Et,1, (len(nG.N_)-1)*Lw, rc+O+compw+3, Et) > 0:
-                    nG = cross_comp(nG, rc+O+3) or nG  # agg+, if not fC?
+                    nG = cross_comp(nG, rc+O+3, fC) or nG  # agg+, if not fC?  (we need to parse fC too?)
                 root.Et += nG.Et; root.N_ = nG.N_
                 _H = root.nH; root.nH = []  # nG has own L_,lH
                 nG.nH = _H+ [root] + nG.nH  # pack root.nH in higher-composition nG.nH
@@ -224,7 +224,7 @@ def comp_C_(C_, rc, fall=1):  # max attr sort to constrain C_ search in 1D, add 
             m_, d_ = comp_derT(_N.derTT[1], N.derTT[1])
             ad_ = np.abs(d_); t_ = m_ + ad_ + eps  # ~ max comparand
             et = np.array([m_ / t_ @ wTTf[0], ad_ / t_ @ wTTf[1], min(_N.Et[2], N.Et[2])])  # signed
-            dC = CN(N_=[_N,N], Et=et); L_ += [dC]; Et += et  # add o?
+            dC = CN(N_=[_N,N], Et=et, span=(_N.span+N.span)/2); L_ += [dC]; Et += et  # add o? (or calculate span from their distance?)
             for n in _N, N:
                 n.rim += [dC]; n.et += et
     else:   # sort, select
@@ -254,6 +254,7 @@ def comp_N_(iN_, rc):
                 mang = (cos + abs(cos)) / 2  # = max(0, cos): 0 at 90°/180°, 1 at 0°
                 V += L.Et[1-fi] * mang * intw * mW * (L.span/dist * av)  # decay = link.span / l.span * cosine ave?
                 # not revised
+                # follow angle projection workflow in proj_N?
         return V
 
     def proj_V(_N, N, dist, dy_dx, Ave, specw, pVt_):
@@ -821,11 +822,11 @@ def proj_Fg(Fg, yx):
         rdist = Ndist / N.span
         Angle = np.array([dy, dx]); angle = N.angl[0] * N.angl[1]  # external and internal angles
         cos_d = N.angl[0].dot(Angle) / (np.hypot(*angle) * Ndist)  # N-specific alignment, * N.angl[1]?
-        M,D,n = N.Et
+        M,D,n = N.Et  # add N.et? Because Fg.Et is summed from graph.Et, which summed from link.Et, and it's summed in N.et too
         dec = rdist * (M/(M+D))  # match decay rate, * ddecay for ds?
         prj_H = proj_dH(N.derH.H, cos_d * rdist, dec)
         prjTT, pEt = sum_H( prj_H)
-        pD = pEt[1]*dec; dM = M*dec
+        pD = pEt[1]*dec; dM = M*dec  # pD should be absolute value?
         pM = dM - pD * (dM/(ave*n))  # -= borrow, regardless of surprise?
         return np.array([pM,pD,n]), prjTT, prj_H
 
@@ -1025,7 +1026,7 @@ def frame_H(image, iY,iX, Ly,Lx, Y,X, rV, max_elev=4, wTTf=np.ones((2,9),dtype="
                     else: break
                 else: break
             else: break
-        if Fg_ and val_(np.sum([g.Et for g in Fg_]),1,(len(Fg_)-1)*Lw, np.mean([g.rc for g in Fg_])+elev) > 0:
+        if Fg_ and val_(np.sum([g.Et for g in Fg_],axis=0),1,(len(Fg_)-1)*Lw, np.mean([g.rc for g in Fg_])+elev) > 0:
             return Fg_
 
     global ave, Lw, intw, compw, centw, contw, adist, amed, medw, mW, dW
