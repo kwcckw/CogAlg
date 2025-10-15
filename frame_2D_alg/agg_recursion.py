@@ -231,10 +231,20 @@ def comp_N_(iN_, rc):
         V = 0; fi = N.fi; av = ave if fi else avd
         for edir, node in zip((1,-1),(_N,N)):
             for L in node.L_:
+                '''
                 cos = ((L.angl[0] *edir *L.angl[1]) @ angle) / (np.hypot(*L.angl[0]) * np.hypot(*angle))  # angl: [[dy,dx],dir]
                 mang = (cos + abs(cos)) / 2  # = max(0, cos): 0 at 90°/180°, 1 at 0°
                 V += L.Et[1-fi] * mang * intw * mW * (L.span/dist * av)  # decay = link.span / l.span * cosine ave?
-                # not revised
+                '''    
+                dy, dx = L.yx - node.yx
+                Ndist = np.hypot(dy, dx)  # external dist
+                rdist = Ndist / L.span
+                Angle = node.angl[0] * node.angl[1]; angle = L.angl[0] * L.angl[1]  # external and internal angles
+                cos_d = angle.dot(Angle) / (np.hypot(*angle) * Ndist)  # N-to-yx alignment
+                M, D, cnt = L.Et
+                dec = rdist * (M / (M+D))  # match decay rate, * ddecay for ds?
+                NEt, NTT, NH = proj_dH(L.derH.H, cos_d, dec, M, cnt)
+                V += val_(NEt, mw=(len(L.N_)-1)*Lw, aw=contw)   # not sure on L.N_ here since it's always 2, but node.N_ is fixed across all Ls
         return V
 
     def proj_V(_N, N, dist, dy_dx, Ave, specw, pVt_):
@@ -794,19 +804,19 @@ def PP2N(PP, root):  # update root locally?
     for P in PP.N_: P.root = PP
     return PP
 
-def proj_N(N, yx, specw):  # recursively specified projection of N to yx, separate proj internal M?
+def proj_dH(_H, cos_d, dec, M, cnt):
+    pH = CdH()
+    for _lay in _H:
+        lay = copy_(_lay)
+        lay.derTT[1] *= cos_d * dec  # proj ds
+        pH.H += [lay]; pH.Et += lay.Et; pH.derTT += lay.derTT
+    pTT, pEt = pH.derTT, pH.Et
+    pD = pEt[1] * dec; dM = M * dec
+    pM = dM - pD * (dM / (ave * cnt))  # -= borrow, regardless of surprise?
+    pEt = np.array([pM, pD, cnt])
+    return pEt, pTT, pH
 
-    def proj_dH(_H, cos_d, dec):
-        pH = []
-        for _lay in _H:
-            lay = copy_(_lay)
-            lay.derTT[1] *= cos_d * dec  # proj ds
-            pH += [lay]
-        pTT, pEt = sum_H(pH)
-        pD = pEt[1] * dec; dM = M * dec
-        pM = dM - pD * (dM / (ave * cnt))  # -= borrow, regardless of surprise?
-        pEt = np.array([pM, pD, cnt])
-        return pEt, pTT, pH
+def proj_N(N, yx, specw):  # recursively specified projection of N to yx, separate proj internal M?
 
     dy, dx = N.yx - yx
     Ndist = np.hypot(dy, dx)  # external dist
@@ -815,37 +825,42 @@ def proj_N(N, yx, specw):  # recursively specified projection of N to yx, separa
     cos_d = angle.dot(Angle) / (np.hypot(*angle) * Ndist)  # N-to-yx alignment
     M, D, cnt = N.Et
     dec = rdist * (M / (M+D))  # match decay rate, * ddecay for ds?
-    NEt, NTT, NH = proj_dH(N.derH.H, cos_d, dec)
+    NEt, NTT, NH = proj_dH(N.derH.H, cos_d, dec, M, cnt)
     iV = val_(NEt, mw=(len(N.N_)-1)*Lw, aw=contw)
-    pEt=copy(NEt); pTT=copy(NTT); pH = copy_(NH)
-    if N.L_:  # terminal, project separately?
-        LEt, LTT, LH = proj_dH(N.topH.H, cos_d, dec)
+    pEt=copy(NEt); pTT=deepcopy(NTT); pH = copy_(NH)
+    if N.L_ and isinstance(N.L_, list):  # terminal, project separately?  (skip link's L_?)
+        LEt, LTT, LH = proj_dH(N.topH.H, cos_d, dec, M, cnt)
         pEt+=LEt; pTT+=LTT; add_dH(pH,LH)  # no adding in cross_comp
         eV = val_(LEt, mw=(len(N.L_)-1)*Lw, aw=contw)
     else: eV = 0
     if iV + eV > ave:
         return CN(N_=N.N_,L_=N.L_, Et=pEt, derTT=pTT, derH=pH)
-    if eV > specw:  # get L_ eV
+    if eV > specw and isinstance(N.L_, list):  # get L_ eV
         LEt = np.zeros(3); LTT = np.zeros((2,9)); LH = CdH(); N_ = []
         for l in N.L_:  # sum L-specific projections
-            lEt, lTT, lH = proj_N(l, yx, specw)  # same as for N?
-            if val_(lEt, aw=contw):
-                LEt+=lEt; LTT+=lTT; add_dH(LH,lH); N_+= [CN(N_=l.N_,Et=lEt,derTT=lTT,derH=lH,root=CN())]  # same target position?
+            pl = proj_N(l, yx, specw)
+            if pl:  # proj_N may not return anything at all
+                lEt, lTT, lH = pl.Et, pl.derTT, pl.derH   # same as for N?
+                if val_(lEt, aw=contw):
+                    LEt+=lEt; LTT+=lTT; add_dH(LH,lH); N_+= [CN(N_=l.N_,Et=lEt,derTT=lTT,derH=lH,root=CN())]  # same target position?
         eV = val_(LEt, mw=(len(N.L_)-1)*Lw, aw=contw)
     if iV > specw:  # get N_ iV
         NEt = np.zeros(3); NTT = np.zeros((2,9)); NH = CdH(); N_ = []
         for n in N.N_:  # sum _N-specific projections
             if n.derH:
-                nEt, nTT, nH = proj_N(n, yx, specw)
-                if val_(nEt, aw=contw):
-                    NEt+=nEt; NTT+=nTT; add_dH(NH,nH); N_+= [CN(N_=n.N_,Et=nEt,derTT=nTT,derH=nH,root=CN())]
+                pn = proj_N(n, yx, specw)
+                if pn:
+                    nEt, nTT, nH  = pn.Et, pn.derTT, pn.derH
+                    if val_(nEt, aw=contw):
+                        NEt+=nEt; NTT+=nTT; add_dH(NH,nH); N_+= [CN(N_=n.N_,Et=nEt,derTT=nTT,derH=nH,root=CN())]
         iV = val_(NEt, mw=(len(N.N_)-1)*Lw, aw=contw)
     # recomputed from individual Ls and Ns:
     if iV + eV > ave:
-        if N.L_: pEt = NEt+LEt; pTT = NTT+LTT; pH = add_dH(NH,LH)
+        if N.L_ and isinstance(N.L_, list): pEt = NEt+LEt; pTT = NTT+LTT; pH = add_dH(NH,LH)
         else:    pEt=copy(NEt); pTT=copy(NTT); pH = copy_(NH)
         return CN(N_=N_,L_=N.L_,Et=pEt,derTT=pTT,derH=pH)
-
+    
+    # this is not needed now?
     def comp_prj_dH(_N, N, ddH, rn, link, angl, span, dec):
         # comp proj MD to actual MD, not used
         _cos_da = angl.dot(_N.angl) / (span * _N.span)  # .dot for scalar cos_da
@@ -1027,7 +1042,7 @@ def frame_H(image, iY,iX, Ly,Lx, Y,X, rV, max_elev=4, wTTf=np.ones((2,9),dtype="
             if not elev: Fg = base_tile(iy,ix)  # 1st level or cross_comped arg tile
             if Fg and val_(Fg.Et,1, (len(Fg.N_)-1)*Lw, Fg.rc+compw+elev) > 0:
                 tile[y,x] = Fg; Fg_ += [Fg]
-                pFg = proj_N(Fg, np.array([y,x]))  # extend lev by feedback within current tile
+                pFg = proj_N(Fg, np.array([y,x]),2)  # extend lev by feedback within current tile
                 if pFg and val_(pFg.Et,1,(len(pFg.N_)-1)*Lw, pFg.rc+elev) > 0:
                     project_focus(PV__,y,x,Fg)  # PV__+= pV__
                     pv__ = PV__.copy(); pv__[tile!=None] = 0  # exclude processed
