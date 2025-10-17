@@ -128,7 +128,7 @@ def Copy_(N, root=None, init=0):
         if init==2: C.fi = fi  # centroid is not root
         else:       C.fi = 1; N.root = C  # G, not centroid
     else:
-        C.N_,C.L_,C.nH,C.lH = list(N.N_) if N.fi else N.nt,list(N.L_),list(N.nH),list(N.lH); N.root = root or N.root
+        C.N_,C.L_,C.nH,C.lH = list(N.N_) if N.fi else N.nt,list(N.L_) if N.fi else N.L_,list(N.nH),list(N.lH); N.root = root or N.root
         C.fi = fi
     if N.derH: C.derH  = copy_(N.derH)
     C.derTT = deepcopy(N.derTT)
@@ -181,7 +181,7 @@ def cross_comp(root, rc, fC=0):  # rng+ and der+ cross-comp and clustering
             root.L_=L_; root.Et += Et; root.rc += O
             if fC < 2 and dV > avd:  # may be dC_, no comp ddC_
                 lG = cross_comp(CN(N_=L_), O+rc+compw+1, fC*2)  # trace_edge via rB_|B_
-                if lG: rc+=lG.rc; root.lH += [lG]+lG.nH; root.Et+=lG.Et; add_dH(root.dLay, lG.derH)  # lH extension
+                if lG: rc+=lG.rc; root.lH += [lG]+lG.nH; root.Et+=lG.Et; add_dH(root.dLay, lG.derH)  # lH extension (but lG.derH maybe summed from deeper recursion? We should sum from L_.derH instead?)
         if mV > 0:
             nG = Cluster(root, L_, rc+O, fC)  # get_exemplars, cluster_C, rng connectivity cluster
             if nG:  # batched nH extension
@@ -235,8 +235,10 @@ def comp_N_(iN_, rc):
         elif eV * ((len(pVt_)-1)*Lw) > specw:  # spec over rim, nested spec N_, not L_
             eV = 0; Et = np.zeros(3)
             for _dist,_dy_dx,__N,_V in pVt_:
-                pN = proj_N(N,_dist,_dy_dx); if pN: Et += pN.Et
-                _pN = proj_N(N,_dist,-_dy_dx); if _pN: Et += _pN.Et
+                pN = proj_N(N,_dist,_dy_dx)  # syntax error if place in a same line
+                if pN: Et += pN.Et
+                _pN = proj_N(N,_dist,-_dy_dx)
+                if _pN: Et += _pN.Et
                 if Et[2]: eV += val_(Et)
             return iV + eV
         else: return V
@@ -284,7 +286,7 @@ def comp_N(_N,N, olp,rc, A=np.zeros(2), span=None, rng=1, lH=None):  # compare l
             H += [CdH(Et=dEt, derTT=dTT, root=Link)]
         Et += dEt; derTT += dTT
         Link.derH = CdH(H=H, Et=Et, derTT=derTT, root=Link)  # same as Link Et,derTT
-    if fi and V > ave * rc+1 + compw:
+    if fi and V > ave * rc+1 + compw:  # nt shouldn't be relevant here since if fi only
         if N.L_: spec(_N.N_, N.N_, Et, olp+rc+1,Link.lH)  # skip PP, nt spec for links
         if _N.B_ and N.B_:
             _B_,_bEt,_bO = _N.B_; B_,bEt,bO = N.B_
@@ -403,7 +405,7 @@ def Cluster(root, iL_, rc, fC):  # generic clustering root
             dC_ = sorted(list({L for L in iL_}), key=lambda dC: dC.Et[1])  # from min D
             for i, dC in enumerate(dC_):
                 if val_(dC.Et, fi=0, aw=rc+compw) < 0:  # merge
-                    _C, C = dC.N_
+                    _C, C = dC.nt
                     if _C is not C:  # not merged
                         add_N(_C,C, fmerge=1, froot=1)  # fin,root.rim
                         for l in C.rim: l.nt = [_C if n is C else n for n in l.nt]
@@ -535,7 +537,7 @@ def cluster_C(E_, root, rc):  # form centroids by clustering exemplar surround v
     for n in set(root.N_+_N_ ): n.rC_,n.mo_, n._C_,n._mo_ = [],[], [],[]  # aligned pairs, in cross_comp root
     # reform C_, refine C.N_s
     while True:
-        C_,cnt,olp, mat,dif, Dm,Do = [],0,0,0,0,0,0; Ave = ave * (rc+compw)
+        C_,cnt,olp, mat,dif, Dm,Do = [],0,0,0,0,0,1e-12; Ave = ave * (rc+compw)  # prevent zero division
         _Ct_ = [[c, c.Et[0]/c.Et[2] if c.Et[0] !=0 else eps, c.rc] for c in _C_]
         for _C,_m,_o in sorted(_Ct_, key=lambda t: t[1]/t[2], reverse=True):
             if _m > Ave * _o:
@@ -801,8 +803,9 @@ def ffeedback(root):  # adjust filters: all aves *= rV, ultimately differential 
         wTTf += np.abs((_derTT /_n) / (derTT / n))
         if lev.lH:
             # intra-level recursion in dfork
-            rvd, wttf = ffeedback(lev.Lt)
-            rVd += rvd; wTTf += wttf
+            for lH in lev.lH:
+                rvd, wttf = ffeedback(lH)
+                rVd += rvd; wTTf += wttf
         _Et, _derTT = Et, derTT
     return rM+rD+rVd, wTTf
 
@@ -998,7 +1001,7 @@ def frame_H(image, iY,iX, Ly,Lx, Y,X, rV, max_elev=4, wTTf=np.ones((2,9),dtype="
         Et = np.sum([g.Et for g in (nG,lG,cG) if g], axis=0)
         rc = np.mean([g.rc for g in (nG,lG,cG) if g])
 
-        return CN(Et=Et, rc=rc, N_= nG.N_ if nG else [], L_= lG.N_ if lG else [], C_= cG.N_ if cG else [])
+        return CN(Et=Et, rc=rc, N_= nG.N_ if nG else [], L_= lG.N_ if lG else [], C_= cG.N_ if cG else [], nH=nG.nH if nG else [], lH=lG.nH if lG else [])  # we need to assign nH and lH for feedback too?
 
     def expand_lev(_iy,_ix, elev, Fg):  # seed tile is pixels in 1st lev, or Fg in higher levs
 
