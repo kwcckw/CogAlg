@@ -87,14 +87,14 @@ class CN(CBase):
     name = "node"
     def __init__(n, **kwargs):
         super().__init__()
-        n.fi = kwargs.get('fi', 1)  # if G else 0, fd_: list of forks forming G?
-        n.nt = kwargs.get('nt',[])  # nodet, empty if fi
-        n.N_ = kwargs.get('N_',[])  # nodes, or ders in links
-        n.L_ = kwargs.get('L_',[])  # internal links if fi else len nodet.N_s?
-        n.Et = kwargs.get('Et',np.zeros(3))  # sum from L_
-        n.rim= kwargs.get('rim',[])  # external links, rng-nested?
-        n.et = kwargs.get('et',np.zeros(3))  # sum from rim
-        n.rc = kwargs.get('rc',1)  # redundancy to ext Gs, ave in links? separate rc for rim, or internally overlapping?
+        n.fi  = kwargs.get('fi', 1)  # if G else 0, fd_: list of forks forming G?
+        n.nt  = kwargs.get('nt',[])  # nodet, empty if fi
+        n.N_  = kwargs.get('N_',[])  # nodes, concat in links
+        n.L_  = kwargs.get('L_',[])  # internal links, +|- if failed?
+        n.rim = kwargs.get('rim',[])  # external links, rng-nest?
+        n.Et  = kwargs.get('Et',np.zeros(3))  # sum from L_
+        n.et  = kwargs.get('et',np.zeros(3))  # sum from rim
+        n.rc  = kwargs.get('rc',1)  # redundancy to ext Gs, ave in links? separate rc for rim, or internally overlapping?
         n.baseT = kwargs.get('baseT', np.zeros(4))  # I,G,A: not ders
         n.derTT = kwargs.get('derTT',np.zeros((2,9)))  # sum derH -> m_,d_ [M,D,n, I,G,A, L,S,eA], dertt: comp rims + overlap test?
         n.derH  = kwargs.get('derH', CdH())  # sum from clustered L_s
@@ -103,7 +103,7 @@ class CN(CBase):
         n.rng = kwargs.get('rng',1)  # or med: loop count in comp_node_|link_
         n.box = kwargs.get('box',np.array([np.inf, np.inf, -np.inf, -np.inf]))  # y0, x0, yn, xn
         n.span = kwargs.get('span',0) # distance in nodet or aRad, comp with baseT and len(N_) but not additive?
-        n.angl = kwargs.get('angl',[np.zeros(2),0])  # dy,dx, sum from L_
+        n.angl = kwargs.get('angl',[np.zeros(2),0])  # (dy,dx),dir, sum from L_
         n.mang = kwargs.get('mang',1)  # ave match of angles in L_, =1 in links
         n.B_ = kwargs.get('B_', [])  # ext boundary Ns: [B_,Et,R], add dB_?
         n.rB_= kwargs.get('rB_',[])  # reciprocal cores for lG
@@ -117,7 +117,7 @@ class CN(CBase):
         n.exe  = kwargs.get('exe',0)  # exemplar, temporary
         n.compared = set()
         # n.fork_tree: list =z([[]])  # indices in all layers(forks, if no fback merge, G.fback_=[] # node fb buffer, n in fb[-1]
-    def __bool__(n): return bool(n.N_) if n.fi else n.nt  # not sure, if L.nt is not empty, L.N_ must not empty too?
+    def __bool__(n): return bool(n.N_)
 
 def Copy_(N, root=None, init=0):
 
@@ -177,7 +177,7 @@ def cross_comp(root, rc, fC=0):  # rng+ and der+ cross-comp and clustering
     if len(L_) > 1:
         mV,dV = val_(Et,2,(len(L_)-1)*Lw, O+rc+compw); lG = []
         if dV > 0:
-            if root.fi and root.L_: root.lH += [sum_N_(root.L_)]
+            if root.fi and root.L_: root.lH += [sum_N_(root.L_)]  # or agglomeration root is always Fg?
             root.L_=L_; root.Et += Et; root.rc += O
             if fC < 2 and dV > avd:  # may be dC_, no comp ddC_
                 lG = cross_comp(CN(N_=L_), O+rc+compw+1, fC*2)  # trace_edge via rB_|B_
@@ -226,29 +226,28 @@ def comp_C_(C_, rc, fall=1):  # max attr sort to constrain C_ search in 1D, add 
 
 def comp_N_(iN_, rc):
 
-    def proj_V(_N, N, dist, Ave, pVt_):
-            # _N x N induction
+    def proj_V(_N, N, dist, Ave, pVt_):  # _N x N induction
+
         iV = (_N.Et[0]+N.Et[0]) * dec**(dist/((_N.span+N.span)/2)) - Ave
         eV = (_N.et[0]+N.et[0]) * dec**(dist/np.mean([l.span for l in _N.rim+N.rim])) - Ave  # ave rim span
         V = iV + eV
         if V > Ave: return V
-        elif eV * ((len(pVt_)-1)*Lw) > specw:  # spec rim, nested spec L_,N_?
+        elif eV * ((len(pVt_)-1)*Lw) > specw:  # spec over rim, nested spec N_, not L_
             eV = 0; Et = np.zeros(3)
-            for _dist, _dy_dx, __N, _V in pVt_:
-                pN = proj_N(N,_dist,_dy_dx); _pN = proj_N(N,_dist,-_dy_dx)
-                if pN: Et += pN.Et
-                if pN: Et += _pN.Et
-                if np.any(Et): eV += val_(Et)
-            return iV+eV
+            for _dist,_dy_dx,__N,_V in pVt_:
+                pN = proj_N(N,_dist,_dy_dx); if pN: Et += pN.Et
+                _pN = proj_N(N,_dist,-_dy_dx); if _pN: Et += _pN.Et
+                if Et[2]: eV += val_(Et)
+            return iV + eV
         else: return V
 
-    # get all-to-all pre-links per N, not _N, prox prior:
+    # get all-to-all pre-links per N, not _N, proximity prior:
     N_,L_, Et,olp = [],[], np.zeros(3),1
     for i, N in enumerate(iN_):
         N.pL_ = []
         for _N in iN_[i+1:]:
-            if _N.sub != N.sub: continue  # not sure
-            dy_dx = _N.yx - N.yx; dist = np.hypot(*dy_dx)
+            if _N.sub != N.sub: continue  # or comp x composition?
+            dy_dx = _N.yx-N.yx; dist = np.hypot(*dy_dx)
             N.pL_ += [[dist, dy_dx, _N]]
         N.pL_.sort(key=lambda x: x[0])  # global distance sort
     for N in iN_:
@@ -270,10 +269,10 @@ def comp_N(_N,N, olp,rc, A=np.zeros(2), span=None, rng=1, lH=None):  # compare l
     derTT, Et, rn = base_comp(_N,N)
     baseT = (rn*_N.baseT + N.baseT) / 2  # not new
     yx = np.add(_N.yx,N.yx) /2; _y,_x = _N.yx; y,x = N.yx; box = np.array([min(_y,y),min(_x,x),max(_y,y),max(_x,x)])  # ext
-    fi = not N.nt
+    fi = N.fi
     angl = [A, np.sign(derTT[1] @ wTTf[1])]  # preserve canonic direction
-    # should be _N.nt+N.nt if fd? Else it's packing a lower level of Ns
-    Link = CN(Et=Et,rc=olp, nt=[_N,N], N_=_N.N_+N.N_ if fi else _N.nt+N.nt, L_=_N.L_+N.L_, et=_N.et+N.et, baseT=baseT,derTT=derTT, yx=yx,box=box, span=span, angl=angl, rng=rng)
+    Link = CN(fi=0, Et=Et, rc=olp, nt=[_N,N], N_=_N.N_+N.N_ if fi else _N.nt+N.nt, L_=_N.L_+N.L_, et=_N.et+N.et, baseT=baseT,derTT=derTT,
+              yx=yx, box=box, span=span, angl=angl, rng=rng)
     V = val_(Et, aw=olp+rc)
     if V * (1 - 1 / (min(len(N.derH.H),len(_N.derH.H)) or eps)) > ave:  # rdn to derTT, else derH is empty
         H = [CdH(Et=Et, derTT=copy(derTT), root=Link)]  # + 2nd | higher layers:
@@ -286,11 +285,11 @@ def comp_N(_N,N, olp,rc, A=np.zeros(2), span=None, rng=1, lH=None):  # compare l
         Et += dEt; derTT += dTT
         Link.derH = CdH(H=H, Et=Et, derTT=derTT, root=Link)  # same as Link Et,derTT
     if fi and V > ave * rc+1 + compw:
-        if N.L_: spec(_N.N_, N.N_, Et, olp+rc+1,Link.lH)  # skip PP
+        if N.L_: spec(_N.N_, N.N_, Et, olp+rc+1,Link.lH)  # skip PP, nt spec for links
         if _N.B_ and N.B_:
             _B_,_bEt,_bO = _N.B_; B_,bEt,bO = N.B_
             if val_(_bEt+bEt,1,(min(len(_B_),len(B_))-1)*Lw, bO+bO+rc+compw) > 0:
-                spec(_B_,B_,_bEt+bEt,_bO+bO, Link.lH)  # lH = dspe; spec C_: overlap, offset?
+                spec(_B_,B_,_bEt+bEt,_bO+bO, Link.lH)  # lH = dspe; spec C_: overlap,offset?
     if lH is not None:
         lH += [Link]
     if span is not None:  # not from spec
@@ -545,7 +544,7 @@ def cluster_C(E_, root, rc):  # form centroids by clustering exemplar surround v
                 for n in _C._N_:  # core+ surround
                     if C in n.rC_: continue
                     _,(m,d,_),_ = base_comp(C,n, fC=1)  # val,olp / C:
-                    o = np.sum([mo[0] /m for mo in n._mo_ if mo[0]>m])  # overlap = higher-C inclusion vals / current C val
+                    o = np.sum([m/mo[0] for mo in n._mo_ if mo[0]>m])  # overlap = higher-C inclusion vals / current C val
                     comp += 1  # comps per C
                     if m > Ave * o:
                         _N_+=[n]; M+=m; O+=o; mo_ += [np.array([m,o])]  # n.o for convergence eval
@@ -567,7 +566,7 @@ def cluster_C(E_, root, rc):  # form centroids by clustering exemplar surround v
                             if c is _C: # remove mo mapping to culled _C
                                 n.mo_.pop(i); n.rC_.pop(i); break
             else: break  # the rest is weaker
-        if Dm > Ave * cnt * Do:  # dval vs. dolp, overlap increases as Cs may expand in each loop?
+        if Dm/Do > Ave:  # dval vs. dolp, overlap increases as Cs may expand in each loop?
             _C_ = C_
             for n in root.N_: n._C_=n.rC_; n._mo_=n.mo_; n.rC_,n.mo_ = [],[]  # new n.rC_s, combine with vo_ in Ct_?
         else:  # converged
@@ -834,18 +833,16 @@ def proj_focus(PV__, y,x, Fg):  # radial accum of projected focus value in PV__
         n += 1
 
 def proj_H(cH, cos_d, dec):
-
     pH = CdH()
-    for _lay in cH.H:
-        pTT = np.array([_lay.derTT[0], _lay.derTT[1] * cos_d * dec])
-        pEt = np.array([_lay.Et[0], np.sum(pTT[1]), _lay.Et[2]])  # or _lay Et is recomputed from proj_H:?
-        lay = CdH(H=[proj_H(l, cos_d, dec) for l in _lay.H], Et=pEt, derTT=pTT, root=pH)
-        pH.H += [lay]; pH.Et += pEt; pH.derTT += pTT
-    pD = pH.Et[1]  # already *= dec
-    dM = cH.Et[0] * dec
-    n  = cH.Et[2]
-    pM = dM - pD * (dM / (ave*n))  # -= borrow, scaled by rV of normalized decayed M
-    pH.Et = np.array([pM, pD, n])
+    if cH.H:  # recursion
+        for lay in cH.H:
+            play = proj_H(lay, cos_d, dec); pH.H += [play]; pH.Et += play.Et; pH.derTT += play.derTT
+    else:   # proj terminal derTT
+        pH.derTT = np.array([cH.derTT[0] * dec, cH.derTT[1] * cos_d * dec])  # same dec for M and D?
+        pH.Et = np.array([np.sum(pH.derTT[0]), np.sum( np.abs(pH.derTT[1])), cH.Et[2]])
+    M,D,n = pH.Et
+    pM = M - D * (M / (ave * n))  # -= borrow, scaled by rV of normalized decayed M, no effect on D?
+    pH.Et = np.array([pM, D, n])
     return pH
 
 def proj_N(N, dist, A):  # recursively specified N projection, rim proj is currently macro in comp_N_?
@@ -864,7 +861,7 @@ def proj_N(N, dist, A):  # recursively specified N projection, rim proj is curre
     if iV + eV > ave:
         return CN(N_=N.N_,L_=N.L_, Et=pH.Et, derTT=pH.derTT, derH=pH)
     LH,L_,NH,N_ = CdH(),[],CdH(),[]
-    if eV * ((len(N.L_)-1)*Lw) > specw:
+    if not N.root and eV * ((len(N.L_)-1)*Lw) > specw:  # only for Fg?
         for l in N.L_:  # sum L-specific projections
             lA = A - (N.yx-l.yx); ldist = np.hypot(*lA)
             pl = proj_N(l,ldist,lA)
@@ -883,13 +880,13 @@ def proj_N(N, dist, A):  # recursively specified N projection, rim proj is curre
 
     def comp_prj_dH(_N, N, ddH, rn, link, angl, span, dec):
         # comp proj dH to actual dH-> surprise, not used
-        # add imagination: cross_comp projected derHs?
         _cos_da = angl.dot(_N.angl) / (span * _N.span)  # .dot for scalar cos_da
         cos_da = angl.dot(N.angl) / (span * N.span)
         _rdist = span / _N.span
         rdist = span / N.span
         prj_DH = add_dH(proj_H(_N.derH, _cos_da, _rdist * dec),
-                        proj_H(N.derH, cos_da, rdist * dec))  # comb proj dHs | comp dH ) comb ddHs?
+                        proj_H(N.derH, cos_da, rdist * dec))  # comb proj dHs
+        # add imagination: cross_comp proj derHs?
         # Et+= confirm:
         dddH = comp_dH(prj_DH, ddH, rn, link)
         link.Et += dddH.Et; link.derTT += dddH.derTT
