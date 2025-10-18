@@ -54,8 +54,8 @@ class CdH(CBase):  # derivation hierarchy or a layer thereof, subset of CG
 
 def copy_(dH, i=None):
 
-    if i: C = dH; lay = i  # reuse self
-    else: C = CdH()
+    # if i: C = dH; lay = i  # reuse self (this i is not needed now?)
+    C = CdH()
     C.H = [copy_(d) for d in dH.H]; C.Et = dH.Et; C.derTT=dH.derTT; C.root=dH.root
     if not i: return C
 
@@ -180,7 +180,7 @@ def cross_comp(root, rc, fC=0):  # rng+ and der+ cross-comp and clustering
             if root.fi and root.L_: root.lH += [sum_N_(root.L_)]  # or agglomeration root is always Fg?
             root.L_=L_; root.Et += Et; root.rc += O
             if fC < 2 and dV > avd:  # may be dC_, no comp ddC_
-                lG = cross_comp(CN(N_=L_), O+rc+compw+1, fC*2)  # trace_edge via rB_|B_
+                lG = cross_comp(sum_N_(L_, root=root), O+rc+compw+1, fC*2)  # trace_edge via rB_|B_ (assign root, prevent cluster_F?)
                 if lG: rc+=lG.rc; root.lH += [lG]+lG.nH; root.Et+=lG.Et; add_dH(root.dLay, lG.derH)  # lH extension
         if mV > 0:
             nG = Cluster(root, L_, rc+O, fC) if root.root else Cluster_F(root, L_, rc+O)  # root is frame, splice L_ dN_,dL_,dC_
@@ -905,8 +905,12 @@ def proj_N(N, dist, A):  # recursively specified N projection, rim proj is curre
 
 def Cluster_F(root, iL_, rc):  # called from cross_comp(Fg_)
 
-    dN_, dL_, dC_ = [], [], []  # spliced from links between Fgs
-    for Link in iL_: dN_ += Link.N_; dL_ += Link.L_; dC_ += Link.C_
+    dN_, dL_, dC_ = set(), set(), set()  # spliced from links between Fgs
+    for Link in iL_: 
+        if Link.root: 
+            dN_.update(Link.root.N_)
+            dL_.update(Link.root.L_)
+            dC_.update(Link.root.C_[0])
 
     Et = np.zeros(3); N_L_C_ = {}
     for key, diff_, clust_f, fC in ('N_',dN_, cluster_N,0), ('L_',dL_, cluster_N,0),('C_',dC_, cluster_n,1):
