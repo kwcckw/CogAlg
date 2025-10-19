@@ -54,7 +54,7 @@ class CdH(CBase):  # derivation hierarchy or a layer thereof, subset of CG
 
 def copy_(dH, root):
     cH = CdH(Et=copy(dH.Et), derTT=deepcopy(dH.derTT), root=root)
-    cH.H = [copy_(lay, cH) for lay in dH]
+    cH.H = [copy_(lay, cH) for lay in dH.H]
     return cH
 
 def add_dH(DH, dH):  # rn = n/mean, no rev, merge/append lays
@@ -271,7 +271,8 @@ def comp_N(_N,N, olp,rc, A=np.zeros(2), span=None, rng=1, lH=None):  # compare l
     yx = np.add(_N.yx,N.yx) /2; _y,_x = _N.yx; y,x = N.yx; box = np.array([min(_y,y),min(_x,x),max(_y,y),max(_x,x)])  # ext
     fi = N.fi
     angl = [A, np.sign(derTT[1] @ wTTf[1])]  # preserve canonic direction
-    Link = CN(fi=0, Et=Et,rc=olp, nt=[_N,N], N_=_N.N_+N.N_, L_=_N.L_+N.L_, baseT=baseT,derTT=derTT, yx=yx, box=box, span=span, angl=angl, rng=rng)
+    # skip CPs, else they may be used in clust_f later 
+    Link = CN(fi=0, Et=Et,rc=olp, nt=[_N,N], N_=(_N.N_+N.N_) if (N.N_+_N.N_) and isinstance((N.N_+_N.N_)[0], CN) else [], L_=_N.L_+N.L_, baseT=baseT,derTT=derTT, yx=yx, box=box, span=span, angl=angl, rng=rng)
     V = val_(Et, aw=olp+rc)
     if fN and V * (1- 1/(min(len(N.derH.H),len(_N.derH.H)) or eps)) > ave:  # rdn to derTT, else derH is empty
         H = [CdH(Et=Et, derTT=copy(derTT), root=Link)]  # + 2nd | higher layers:
@@ -289,7 +290,7 @@ def comp_N(_N,N, olp,rc, A=np.zeros(2), span=None, rng=1, lH=None):  # compare l
             if _N.B_ and N.B_:
                 _B_,_bEt,_bO = _N.B_; B_,bEt,bO = N.B_; bO = _bO+bO
                 if val_(_bEt+bEt,1,(min(len(_B_),len(B_))-1)*Lw, bO+rc+compw) > 0:
-                    rc+=1; spec(_B_,B_,bO, Link.lH)  # lH = dspe; spec C_: overlap,offset?
+                    rc+=1; spec(_B_,B_,np.zeros(3), bO, Link.lH)  # lH = dspe; spec C_: overlap,offset? (dummy Et, required by spec )
         else:
             # Fg, global C_, -+L_, lower arg rc, splice Link N_,L_,C_ globally, no clustering?
             if V * (min(len(_N.L_),len(N.L_))-1)*Lw > ave*rc:
@@ -913,6 +914,7 @@ def Fcluster(root, iL_, rc):  # called from cross_comp(Fg_)
     Et = np.zeros(3); N_L_C_ = [[],[],[]]
     for i, (diff_,clust_f, fC) in enumerate([(dN_,cluster_N,0),(dL_,cluster_N,0),(dC_,cluster_n,1)]):
         if len(diff_) > 1:
+            if i<2:  diff_ = get_exemplars(diff_,rc)  # we need to update exe for cluster_N?
             G = clust_f(root, diff_, rc)
             if G:
                 rc+=1; N_L_C_[i] = G.N_; Et += G.Et
@@ -951,6 +953,7 @@ def vect_edge(tile, rV=1, wTTf=[]):  # PP_ cross_comp and floodfill to init foca
 def form_B__(G, lG, rc):  # trace edge / boundary / background per node:
 
     for Lg in lG.N_:  # form rB_, in Fg?
+        # we need to change CdP.N_ to nt so that we can retrieve n here
         rB_ = {n.root for L in Lg.N_ for n in L.nt if n.root and n.root.root is not None}  # core Gs, exclude frame
         Lg.rB_ = sorted(rB_, key=lambda x:(x.Et[0]/x.Et[2]), reverse=True)  # N rdn = index+1
 
@@ -996,7 +999,8 @@ def trace_edge(root, rc):  # cluster contiguous shapes via PPs in edge blobs or 
                             for _n in _root[0]: _n.root = Gt
                         else:
                             n.fin=1; _N_ += [n]; n_+=[n]; l_+=[L]; et+=L.Et; olp+=L.rc
-                        n.root = Gt
+                            n.root = Gt  # root assignment should be before break
+                            break
         Gt += [n_,l_,et,olp,0]; Gt_ += [Gt]
     G_= []
     for n_,l_,et,olp,merged in Gt_:
